@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>M&T Bedrijfstool v4</title>
+<script src="https://alcdn.msauth.net/browser/3.18.0/js/msal-browser.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Figtree:wght@300;400;500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -212,12 +213,43 @@ textarea{resize:vertical;min-height:60px}
 .kpi-card.gold{border-left:3px solid var(--gold)}
 .kpi-card.green{border-left:3px solid var(--green)}
 
+/* ── LOGIN SCHERM ── */
+#login-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
+.login-box{text-align:center;padding:3rem 4rem;background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-lg)}
+.login-logo{font-family:var(--serif);font-size:38px;font-weight:300;margin-bottom:0.25rem;color:var(--text)}
+.login-logo span{color:var(--gold-mid);font-style:italic}
+.login-sub{font-family:var(--mono);font-size:10px;letter-spacing:0.15em;color:var(--text-faint);margin-bottom:2.5rem;text-transform:uppercase}
+.ms-login-btn{display:inline-flex;align-items:center;gap:12px;padding:12px 24px;background:#fff;border:1px solid #d0d0d0;border-radius:4px;cursor:pointer;font-family:var(--sans);font-size:15px;font-weight:500;color:#1C1A16;box-shadow:0 1px 4px rgba(0,0,0,0.1);transition:box-shadow 0.15s}
+.ms-login-btn:hover{box-shadow:0 2px 10px rgba(0,0,0,0.15)}
+.ms-login-btn svg{flex-shrink:0}
+#login-error{color:var(--red);font-size:12px;margin-top:1rem;font-family:var(--mono)}
+/* ── GEBRUIKER IN HEADER ── */
+.user-chip{display:flex;align-items:center;gap:8px;font-size:12px;font-family:var(--mono);opacity:0.8;cursor:pointer}
+.user-chip:hover{opacity:1}
+.user-avatar{width:26px;height:26px;border-radius:50%;background:var(--gold);color:#1C1A16;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:var(--sans)}
+
 /* ── GESCHIEDENIS ── */
 .geschiedenis-item{display:flex;align-items:center;gap:1rem;padding:0.875rem 0;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
 .geschiedenis-item:last-child{border-bottom:none}
 </style>
 </head>
 <body>
+
+<!-- ═══ LOGIN SCHERM ═══ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">Mortise <span>&amp;</span> Tenon</div>
+    <div class="login-sub">Bedrijfstool v4</div>
+    <button class="ms-login-btn" onclick="msLogin()">
+      <svg width="20" height="20" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Inloggen met Microsoft
+    </button>
+    <div id="login-error" class="hidden"></div>
+  </div>
+</div>
+
+<!-- ═══ APP (verborgen tot ingelogd) ═══ -->
+<div id="app-wrap" style="display:none">
 
 <header>
   <div class="header-left">
@@ -227,6 +259,10 @@ textarea{resize:vertical;min-height:60px}
   <div class="header-right">
     <span id="api-dot" class="api-dot warn"></span>
     <span id="api-label" class="api-label">verbinden...</span>
+    <div class="user-chip" onclick="msLogout()" title="Uitloggen">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span id="user-name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    </div>
   </div>
 </header>
 
@@ -498,7 +534,7 @@ textarea{resize:vertical;min-height:60px}
           <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem;background:var(--orange-light);padding:10px 12px;border-radius:6px;border-left:3px solid var(--orange)">
             ⚠ Tokens opgeslagen in localStorage van je browser.
           </p>
-          <div class="field"><label>Moneybird API Token</label><input type="password" id="s-mb-token"></div>
+          <div class="field"><label>Moneybird API Token</label><div class="status-bar ok" style="margin:0"><span class="dot"></span> Veilig opgeslagen in Cloudflare Worker</div></div>
           <div class="field"><label>Moneybird Administratie ID</label><input type="text" id="s-mb-admin"></div>
           <div class="flex mt2">
             <button class="btn btn-primary" onclick="saveSettings()">Opslaan</button>
@@ -641,7 +677,7 @@ let leveranciers=JSON.parse(localStorage.getItem('mt_leveranciers')||'[]');
 let editLevIndex=-1;
 
 // ═══ HELPERS ═══
-function getMbToken(){return localStorage.getItem('mt_mb_token')||'';}
+function getMbToken(){return '';} // token zit nu veilig in Cloudflare Worker
 function getAdmin(){return localStorage.getItem('mt_mb_admin')||ADMIN_DEFAULT;}
 function getToeslag(naam){
   const lower=(naam||'').toLowerCase();
@@ -655,10 +691,10 @@ function slaProjectenOp(){localStorage.setItem('mt_projecten',JSON.stringify(PRO
 function fmt(n){return`€ ${n.toFixed(2).replace('.',',')}`;}
 function fmtDatum(d){return d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'—';}
 
-function mbGet(path){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}&token=${encodeURIComponent(getMbToken())}`);}
-function mbPost(path,body){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}&token=${encodeURIComponent(getMbToken())}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
-function mbPatch(path,body){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}&token=${encodeURIComponent(getMbToken())}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
-function mbDelete(path){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}&token=${encodeURIComponent(getMbToken())}`,{method:'DELETE'});}
+function mbGet(path){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`);}
+function mbPost(path,body){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+function mbPatch(path,body){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+function mbDelete(path){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'DELETE'});}
 function claudeCall(messages,maxTokens=1800){
   return fetch(`${WORKER}?target=claude`,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTokens,messages})}).then(r=>r.json());
@@ -713,16 +749,13 @@ function periodePresetGewijzigd(){
 
 // ═══ SETTINGS ═══
 function saveSettings(){
-  const mb=document.getElementById('s-mb-token').value.trim();
   const admin=document.getElementById('s-mb-admin').value.trim();
-  if(mb) localStorage.setItem('mt_mb_token',mb);
   if(admin) localStorage.setItem('mt_mb_admin',admin);
   document.getElementById('settings-status').textContent='✓ Opgeslagen';
   setTimeout(()=>document.getElementById('settings-status').textContent='',2000);
   updateApiStatus();
 }
 function loadSavedSettings(){
-  document.getElementById('s-mb-token').value=getMbToken();
   document.getElementById('s-mb-admin').value=getAdmin();
 }
 function saveToeslagen(){
@@ -738,7 +771,6 @@ async function testApi(){
 }
 async function updateApiStatus(){
   const dot=document.getElementById('api-dot'),lbl=document.getElementById('api-label');
-  if(!getMbToken()){dot.className='api-dot warn';lbl.textContent='geen token';return;}
   try{
     const r=await mbGet(`${getAdmin()}/ledger_accounts`);
     if(r.ok){dot.className='api-dot';lbl.textContent='verbonden';}
@@ -963,7 +995,7 @@ async function boekInMoneybird(){
     const result=await r.json();const invoiceId=result.id;
     if(currentFile){
       status.innerHTML='<span class="spinner"></span> PDF uploaden...';
-      try{const fd=new FormData();fd.append('file',currentFile,currentFile.name);await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+invoiceId+'/attachments')}&token=${encodeURIComponent(getMbToken())}`,{method:'POST',body:fd});}catch(e){}
+      try{const fd=new FormData();fd.append('file',currentFile,currentFile.name);await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+invoiceId+'/attachments')}`,{method:'POST',body:fd});}catch(e){}
     }
     if(due){
       try{const dD=new Date(due);const pD=new Date(dD);pD.setDate(pD.getDate()-1);
@@ -1844,7 +1876,6 @@ async function maakProjectAan(){
 // ═══ DASHBOARD ═══
 let dashboardGeladen=false;
 async function laadDashboard(){
-  if(!getMbToken()) return;
   if(dashboardGeladen) return;
   dashboardGeladen=true;
   try{
@@ -2302,7 +2333,7 @@ async function analyseerdControleFactuur(){
     const jsonInstructie=`Geef ALLEEN een JSON object terug, geen uitleg, geen markdown:
 {"project_code":"${PROJECT_CODES.map(p=>p.code).join('|')} of null","project_zeker":true,"uitleg":"max 10 woorden","regels":[{"omschrijving":"","grootboek":"inkoop materiaal","grootboek_zeker":true,"aantal":1,"stukprijs":0,"btw_pct":21}]}`;
     if(pdfBijlage){
-      const r=await fetch(`${WORKER}?target=moneybird_download&factuur_id=${encodeURIComponent(f.id)}&bijlage_id=${encodeURIComponent(pdfBijlage.id)}&token=${encodeURIComponent(getMbToken())}`);
+      const r=await fetch(`${WORKER}?target=moneybird_download&factuur_id=${encodeURIComponent(f.id)}&bijlage_id=${encodeURIComponent(pdfBijlage.id)}`);
       if(!r.ok) throw new Error('PDF download mislukt');
       const{base64}=await r.json();
       messages=[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},{type:'text',text:jsonInstructie}]}];
@@ -2442,6 +2473,58 @@ async function openFactuurInControle(factuurId){
     }
   }
 }
+
+// ═══ MICROSOFT LOGIN (MSAL) ═══
+const msalInstance = new msal.PublicClientApplication({
+  auth: {
+    clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
+    authority: 'https://login.microsoftonline.com/common',
+    redirectUri: window.location.origin + window.location.pathname,
+    postLogoutRedirectUri: window.location.origin + window.location.pathname
+  },
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
+});
+
+async function initAuth() {
+  await msalInstance.initialize();
+  try { await msalInstance.handleRedirectPromise(); } catch(e) {}
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    toonApp(accounts[0]);
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+}
+
+function toonApp(account) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-wrap').style.display = 'block';
+  const naam = account.name || account.username;
+  const initiaal = naam.charAt(0).toUpperCase();
+  document.getElementById('user-name').textContent = naam;
+  document.getElementById('user-avatar').textContent = initiaal;
+  updateApiStatus();
+}
+
+async function msLogin() {
+  const errEl = document.getElementById('login-error');
+  errEl.classList.add('hidden');
+  try {
+    await msalInstance.loginRedirect({ scopes: ['openid','profile','email'] });
+  } catch(e) {
+    errEl.textContent = 'Inloggen mislukt: ' + e.message;
+    errEl.classList.remove('hidden');
+  }
+}
+
+async function msLogout() {
+  if (!confirm('Uitloggen?')) return;
+  await msalInstance.logoutRedirect();
+}
+
+initAuth();
 </script>
+
+</div><!-- /app-wrap -->
 </body>
 </html>
