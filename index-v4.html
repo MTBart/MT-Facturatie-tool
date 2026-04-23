@@ -691,12 +691,14 @@ function slaProjectenOp(){localStorage.setItem('mt_projecten',JSON.stringify(PRO
 function fmt(n){return`€ ${n.toFixed(2).replace('.',',')}`;}
 function fmtDatum(d){return d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'—';}
 
-function mbGet(path){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`);}
-function mbPost(path,body){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
-function mbPatch(path,body){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
-function mbDelete(path){return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'DELETE'});}
-function claudeCall(messages,maxTokens=1800){
-  return fetch(`${WORKER}?target=claude`,{method:'POST',headers:{'Content-Type':'application/json'},
+async function authHeader(){const t=typeof getAuthToken==='function'?await getAuthToken():null;return t?{'X-Auth-Token':t}:{};}
+async function mbGet(path){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{headers:h});}
+async function mbPost(path,body){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});}
+async function mbPatch(path,body){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'PATCH',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});}
+async function mbDelete(path){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'DELETE',headers:h});}
+async function claudeCall(messages,maxTokens=1800){
+  const h=await authHeader();
+  return fetch(`${WORKER}?target=claude`,{method:'POST',headers:{...h,'Content-Type':'application/json'},
     body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTokens,messages})}).then(r=>r.json());
 }
 function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});}
@@ -995,7 +997,7 @@ async function boekInMoneybird(){
     const result=await r.json();const invoiceId=result.id;
     if(currentFile){
       status.innerHTML='<span class="spinner"></span> PDF uploaden...';
-      try{const fd=new FormData();fd.append('file',currentFile,currentFile.name);await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+invoiceId+'/attachments')}`,{method:'POST',body:fd});}catch(e){}
+      try{const fd=new FormData();fd.append('file',currentFile,currentFile.name);const uh=await authHeader();await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+invoiceId+'/attachments')}`,{method:'POST',headers:uh,body:fd});}catch(e){}
     }
     if(due){
       try{const dD=new Date(due);const pD=new Date(dD);pD.setDate(pD.getDate()-1);
@@ -2333,7 +2335,7 @@ async function analyseerdControleFactuur(){
     const jsonInstructie=`Geef ALLEEN een JSON object terug, geen uitleg, geen markdown:
 {"project_code":"${PROJECT_CODES.map(p=>p.code).join('|')} of null","project_zeker":true,"uitleg":"max 10 woorden","regels":[{"omschrijving":"","grootboek":"inkoop materiaal","grootboek_zeker":true,"aantal":1,"stukprijs":0,"btw_pct":21}]}`;
     if(pdfBijlage){
-      const r=await fetch(`${WORKER}?target=moneybird_download&factuur_id=${encodeURIComponent(f.id)}&bijlage_id=${encodeURIComponent(pdfBijlage.id)}`);
+      const r=await fetch(`${WORKER}?target=moneybird_download&factuur_id=${encodeURIComponent(f.id)}&bijlage_id=${encodeURIComponent(pdfBijlage.id)}`,{headers:await authHeader()});
       if(!r.ok) throw new Error('PDF download mislukt');
       const{base64}=await r.json();
       messages=[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},{type:'text',text:jsonInstructie}]}];
@@ -2481,6 +2483,16 @@ async function openFactuurInControle(factuurId){
 <script>
 // ═══ MICROSOFT LOGIN (MSAL) ═══
 let _msal = null;
+
+window.getAuthToken = async function() {
+  if (!_msal) return null;
+  const accounts = _msal.getAllAccounts();
+  if (!accounts.length) return null;
+  try {
+    const result = await _msal.acquireTokenSilent({ scopes: ['openid','profile'], account: accounts[0] });
+    return result.idToken;
+  } catch(e) { return null; }
+};
 
 function toonApp(account) {
   document.getElementById('login-screen').style.display = 'none';
