@@ -3081,6 +3081,12 @@ initMsal();
           pagina++;
         }
 
+        // DEBUG: log eerste factuur raw JSON zodat we de veldstructuur zien
+        if (cnRegels.length === 0 && factuurIds.length > 0) {
+          const debugF = await mbGet(`/${admin}/sales_invoices/${factuurIds[0].id}`);
+          console.log('🔍 Eerste factuur raw JSON:', JSON.stringify(debugF, null, 2));
+        }
+
         // Stap 2: haal details parallel op in batches van 10
         const BATCH = 10;
         for (let start = 0; start < factuurIds.length; start += BATCH) {
