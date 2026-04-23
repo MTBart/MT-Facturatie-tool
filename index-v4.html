@@ -971,7 +971,14 @@ function updateBetaling(){
   const totaal=document.getElementById('totaal-incl')?.textContent||'';
   prev.innerHTML=`<strong>Betalen voor:</strong> ${fmtL(payDate)}<br><strong>Begunstigde:</strong> ${contact||'—'}<br><strong>Bedrag:</strong> ${totaal}<br><strong>Vervaldatum:</strong> ${fmtL(dueDate)}`;
 }
-function resetFormulier(){currentFile=null;renderFactuurFormulier();document.getElementById('ai-result')?.classList.add('hidden');}
+function resetFormulier(){
+  currentFile=null;
+  window._factuurTotalen=null;
+  renderFactuurFormulier();
+  document.getElementById('ai-result')?.classList.add('hidden');
+  const v=document.getElementById('pdf-viewer-verwerk');
+  if(v) v.innerHTML='<div class="pdf-placeholder">📄 Laad een PDF om hem hier te bekijken</div>';
+}
 
 // ═══ PDF ANALYSE ═══
 // ═══ E-MAIL FACTUREN ═══
@@ -1028,43 +1035,58 @@ async function scanEmailFacturen(forceer=false) {
 
 function emailRij(i, dimmed=false) {
   const datum = new Date(i.datum).toLocaleDateString('nl-NL', {day:'numeric',month:'short'});
-  return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);${dimmed?'opacity:0.5':''}">
+  const mid = i.mailId.replace(/'/g,"\\'"), aid = i.attId.replace(/'/g,"\\'"), nam = i.naam.replace(/'/g,"\\'");
+  return `<div style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;transition:background 0.1s;${dimmed?'opacity:0.55':''}"
+    onclick="bekijkEmailPDF('${mid}','${aid}','${nam}')"
+    onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
     <div style="flex:1;min-width:0">
       <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.van}</div>
-      <div style="font-size:11px;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.naam}</div>
+      <div style="font-size:11px;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.naam} · ${i.onderwerp}</div>
     </div>
     <div style="font-size:11px;color:var(--text-faint);white-space:nowrap">${datum}</div>
-    <button class="btn btn-primary btn-xs" onclick="laadEmailPDF('${i.mailId}','${i.attId}','${i.naam.replace(/'/g,"\\'")}')">Laden →</button>
+    <button class="btn btn-gold btn-xs" title="Analyseren met Claude" onclick="event.stopPropagation();laadEmailPDF('${mid}','${aid}','${nam}')">✨ Analyseren</button>
   </div>`;
 }
 
-async function laadEmailPDF(mailId, attId, filename) {
-  const el = document.getElementById('ai-result');
-  el.classList.remove('hidden');
-  el.innerHTML = '<span class="spinner"></span> PDF ophalen uit e-mail...';
-  // Scroll naar upload sectie
-  document.getElementById('drop-zone').scrollIntoView({behavior:'smooth', block:'center'});
+// Hulpfunctie: PDF downloaden uit mail → File object
+async function _haalEmailPDFOp(mailId, attId, filename) {
+  const token = await window.getGraphToken();
+  const r = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mailId}/attachments/${attId}`, {headers:{'Authorization':`Bearer ${token}`}});
+  if (!r.ok) throw new Error('Download mislukt');
+  const att = await r.json();
+  const binStr = atob(att.contentBytes);
+  const bytes = new Uint8Array(binStr.length);
+  for (let i=0;i<binStr.length;i++) bytes[i]=binStr.charCodeAt(i);
+  return new File([bytes], filename, {type:'application/pdf'});
+}
+
+// Klik op rij: alleen tonen, geen Claude-analyse
+async function bekijkEmailPDF(mailId, attId, filename) {
+  const rd = document.getElementById('ai-result');
+  rd.classList.remove('hidden');
+  rd.innerHTML = '<span class="spinner"></span> PDF ophalen...';
   try {
-    const token = await window.getGraphToken();
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/me/messages/${mailId}/attachments/${attId}`,
-      { headers: { 'Authorization': `Bearer ${token}` } }
-    );
-    if (!r.ok) throw new Error('Download mislukt');
-    const att = await r.json();
-    // Base64 → Blob → File
-    const binStr = atob(att.contentBytes);
-    const bytes = new Uint8Array(binStr.length);
-    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
-    const file = new File([bytes], filename, { type: 'application/pdf' });
-    // Markeer als verwerkt
+    const file = await _haalEmailPDFOp(mailId, attId, filename);
+    currentFile = file;
+    toonPdfInViewer('pdf-viewer-verwerk', URL.createObjectURL(file));
+    rd.innerHTML = `<span style="font-size:12px;color:var(--text-dim)">📄 ${filename}</span>
+      <button class="btn btn-gold btn-sm" style="margin-left:10px" onclick="laadEmailPDF('${mailId}','${attId}','${filename.replace(/'/g,"\\'")}')">✨ Analyseren met Claude</button>`;
+  } catch(e) { rd.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${e.message}</p>`; }
+}
+
+// Knop: analyseren met Claude (markeert ook als verwerkt)
+async function laadEmailPDF(mailId, attId, filename) {
+  const rd = document.getElementById('ai-result');
+  rd.classList.remove('hidden');
+  try {
+    let file = currentFile?.name === filename ? currentFile : await _haalEmailPDFOp(mailId, attId, filename);
+    toonPdfInViewer('pdf-viewer-verwerk', URL.createObjectURL(file));
     const verwerkt = new Set(JSON.parse(localStorage.getItem('mt_email_verwerkt') || '[]'));
     verwerkt.add(mailId + '_' + attId);
     localStorage.setItem('mt_email_verwerkt', JSON.stringify([...verwerkt].slice(-200)));
     await handleFile(file);
-    // Herlaad scan lijst
     scanEmailFacturen(true);
-  } catch(e) { el.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${e.message}</p>`; }
+  } catch(e) { rd.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${e.message}</p>`; }
 }
 
 async function handleFile(file){
@@ -1080,10 +1102,9 @@ async function handleFile(file){
 {"leverancier":"naam","factuurnummer":"nr","datum":"YYYY-MM-DD","vervaldatum":"YYYY-MM-DD","project_code":"${PROJECT_CODES.map(p=>p.code).join('|')} of null","project_zeker":true,"totaal_excl_btw":0.00,"totaal_btw":0.00,"totaal_incl_btw":0.00,"regels":[{"omschrijving":"tekst","grootboek":"inkoop materiaal","grootboek_zeker":true,"aantal":1,"stukprijs":0.00,"btw_pct":21}]}
 
 Regels voor factuurregels:
-- Gebruik EXACT de hoeveelheid en stukprijs zoals op de factuur staat — reken NOOIT om (bijv. 4 dozen à €1,76 per doos = aantal:4 stukprijs:1.76, NIET 400 stuks à €0,0176)
-- De stukprijs is altijd de prijs van de vermelde eenheid op de factuur, ongeacht of dat een stuk, doos, rol of meter is
-- totaal_excl_btw, totaal_btw en totaal_incl_btw zijn de EINDTOTALEN van de hele factuur — lees ze exact af
-- Controleer: som van (aantal × stukprijs) per regel moet overeenkomen met totaal_excl_btw
+- Neem aantal en stukprijs exact over zoals vermeld op de factuur, zonder te converteren
+- totaal_excl_btw, totaal_btw en totaal_incl_btw zijn de eindtotalen van de factuur — lees ze exact af
+- Controleer: som van (aantal × stukprijs) per regel moet kloppen met totaal_excl_btw
 Projectcodes: ${PROJECT_CODES.map(p=>p.code).join(', ')}. BTW: 21, 9 of 0.`}
     ]}]);
     const rawText=data.content?.[0]?.text||'{}';
