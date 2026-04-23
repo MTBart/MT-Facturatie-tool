@@ -3065,6 +3065,9 @@ initMsal();
         cnStatus(`Laden: ${c.naam} (${i+1}/${actief.length})`);
         cnProgress(5 + (i / actief.length) * 90);
 
+        // Kleine vertraging tussen contacten om rate limiting te voorkomen
+        if (i > 0) await new Promise(r => setTimeout(r, 150));
+
         const admin = getAdmin();
         // Stap 1: haal de factuurlijst op (alleen ID's en basistinfo)
         const factuurIds = [];
@@ -3076,14 +3079,17 @@ initMsal();
           for (const f of lijst) factuurIds.push({ id: f.id, invoice_id: f.invoice_id, datum: f.invoice_date || f.date || '' });
           if (lijst.length < 100) break;
           pagina++;
+          // Vertraging tussen pagina's
+          if (pagina > 1) await new Promise(r => setTimeout(r, 100));
         }
 
-        // Stap 2: haal details parallel op in batches van 10
+        // Stap 2: haal details parallel op in kleinere batches (5 tegelijk)
         if (factuurIds.length > 0) {
           console.log(`📋 ${c.naam}: ${factuurIds.length} facturen gevonden`);
         }
-        const BATCH = 10;
+        const BATCH = 5;
         for (let start = 0; start < factuurIds.length; start += BATCH) {
+          if (start > 0) await new Promise(r => setTimeout(r, 200));
           const batch = factuurIds.slice(start, start + BATCH);
           cnStatus(`${c.naam}: ${Math.min(start+BATCH, factuurIds.length)}/${factuurIds.length} facturen`);
           const resultaten = await Promise.allSettled(
