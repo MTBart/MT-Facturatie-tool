@@ -3030,20 +3030,16 @@ initMsal();
       const zoekterm = (document.getElementById('cn-zoekterm').value || '').trim().toLowerCase();
       if (!zoekterm) { cnStatus('Vul een zoekterm in.', 'err'); document.getElementById('cnBtnStart').disabled=false; return; }
 
-      // Hergebruik gecachede klanten als beschikbaar, anders alles ophalen
+      // Zorg dat we een geldig token hebben
+      const tok = await getAuthToken();
+      if (!tok) { cnStatus('Niet ingelogd — klik eerst op "Inloggen" bovenin.', 'err'); document.getElementById('cnBtnStart').disabled=false; return; }
+
+      // Hergebruik gecachede klanten als beschikbaar, anders zelf laden via laadKlanten()
       cnStatus('Contacten laden...');
-      let bronLijst = alleKlanten && alleKlanten.length ? alleKlanten : [];
-      if (!bronLijst.length) {
-        let pagina = 1;
-        while (true) {
-          const data = await mbGet(`/${getAdmin()}/contacts?page=${pagina}&per_page=100`);
-          const lijst = Array.isArray(data) ? data : [];
-          if (!lijst.length) break;
-          bronLijst.push(...lijst);
-          if (lijst.length < 100) break;
-          pagina++;
-        }
+      if (!alleKlanten || !alleKlanten.length) {
+        await laadKlanten();
       }
+      const bronLijst = alleKlanten || [];
 
       const gevonden = new Map();
       for (const c of bronLijst) {
@@ -3079,12 +3075,6 @@ initMsal();
           for (const f of lijst) factuurIds.push({ id: f.id, invoice_id: f.invoice_id, datum: f.invoice_date || f.date || '' });
           if (lijst.length < 100) break;
           pagina++;
-        }
-
-        // DEBUG: log eerste factuur raw JSON zodat we de veldstructuur zien
-        if (cnRegels.length === 0 && factuurIds.length > 0) {
-          const debugF = await mbGet(`/${admin}/sales_invoices/${factuurIds[0].id}`);
-          console.log('🔍 Eerste factuur raw JSON:', JSON.stringify(debugF, null, 2));
         }
 
         // Stap 2: haal details parallel op in batches van 10
