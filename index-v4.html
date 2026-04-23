@@ -878,6 +878,7 @@ function renderFactuurFormulier(data={}){
       <span>BTW: <strong id="totaal-btw">€ 0,00</strong></span>
       <span>Incl.: <strong id="totaal-incl">€ 0,00</strong></span>
     </div>
+    <div id="totaal-validatie" style="font-size:11px;margin-top:6px;font-family:var(--mono)"></div>
     <hr class="divider">
     <div class="card-title">Betaalopdracht</div>
     <div class="betaling-preview" id="betaling-preview">Vul een vervaldatum in.</div>`;
@@ -948,6 +949,16 @@ function updateTotalen(){
   document.getElementById('totaal-excl').textContent=fmt(excl);
   document.getElementById('totaal-btw').textContent=fmt(btw);
   document.getElementById('totaal-incl').textContent=fmt(excl+btw);
+  // Valideer tegen factuur-totalen
+  const valEl=document.getElementById('totaal-validatie');
+  if(valEl&&window._factuurTotalen?.incl){
+    const verschil=Math.abs((excl+btw)-window._factuurTotalen.incl);
+    if(verschil<0.02){
+      valEl.innerHTML=`<span style="color:var(--green)">✓ Klopt met factuur (${fmt(window._factuurTotalen.incl)} incl. BTW)</span>`;
+    } else {
+      valEl.innerHTML=`<span style="color:var(--red)">⚠ Verschil met factuur: ingevuld ${fmt(excl+btw)} — factuur ${fmt(window._factuurTotalen.incl)} incl. BTW (verschil: ${fmt(verschil)})</span>`;
+    }
+  }
   updateBetaling();
 }
 function updateBetaling(){
@@ -1066,12 +1077,19 @@ async function handleFile(file){
     const data=await claudeCall([{role:'user',content:[
       {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
       {type:'text',text:`Lees deze inkoopfactuur en geef ALLEEN een JSON object terug, geen tekst eromheen:
-{"leverancier":"naam","factuurnummer":"nr","datum":"YYYY-MM-DD","vervaldatum":"YYYY-MM-DD","project_code":"${PROJECT_CODES.map(p=>p.code).join('|')} of null","project_zeker":true,"regels":[{"omschrijving":"tekst","grootboek":"inkoop materiaal","grootboek_zeker":true,"aantal":1,"stukprijs":0.00,"btw_pct":21}]}
+{"leverancier":"naam","factuurnummer":"nr","datum":"YYYY-MM-DD","vervaldatum":"YYYY-MM-DD","project_code":"${PROJECT_CODES.map(p=>p.code).join('|')} of null","project_zeker":true,"totaal_excl_btw":0.00,"totaal_btw":0.00,"totaal_incl_btw":0.00,"regels":[{"omschrijving":"tekst","grootboek":"inkoop materiaal","grootboek_zeker":true,"aantal":1,"stukprijs":0.00,"btw_pct":21}]}
+
+Regels voor factuurregels:
+- Gebruik EXACT de hoeveelheid en stukprijs zoals op de factuur staat — reken NOOIT om (bijv. 4 dozen à €1,76 per doos = aantal:4 stukprijs:1.76, NIET 400 stuks à €0,0176)
+- De stukprijs is altijd de prijs van de vermelde eenheid op de factuur, ongeacht of dat een stuk, doos, rol of meter is
+- totaal_excl_btw, totaal_btw en totaal_incl_btw zijn de EINDTOTALEN van de hele factuur — lees ze exact af
+- Controleer: som van (aantal × stukprijs) per regel moet overeenkomen met totaal_excl_btw
 Projectcodes: ${PROJECT_CODES.map(p=>p.code).join(', ')}. BTW: 21, 9 of 0.`}
     ]}]);
     const rawText=data.content?.[0]?.text||'{}';
     const jsonMatch=rawText.match(/\{[\s\S]*\}/);
     const parsed=JSON.parse(jsonMatch?jsonMatch[0]:'{}');
+    window._factuurTotalen={excl:parsed.totaal_excl_btw||null,btw:parsed.totaal_btw||null,incl:parsed.totaal_incl_btw||null};
     renderFactuurFormulier(parsed);
     const hints=[];
     if(parsed.project_code) hints.push(parsed.project_zeker?`✓ Project: <strong>${parsed.project_code}</strong>`:`💡 <strong>${parsed.project_code}</strong> — controleer`);
@@ -1079,6 +1097,7 @@ Projectcodes: ${PROJECT_CODES.map(p=>p.code).join(', ')}. BTW: 21, 9 of 0.`}
     const onzeker=parsed.regels?.filter(r=>!r.grootboek_zeker).length||0;
     if(onzeker>0) hints.push(`💡 ${onzeker} grootboek(en) onzeker`);
     if(isVoorraadLeverancier(parsed.leverancier||'')) hints.push('📦 Voorraad-leverancier');
+    if(parsed.totaal_incl_btw) hints.push(`Factuur: <strong>${fmt(parsed.totaal_incl_btw)}</strong> incl.`);
     rd.innerHTML=`✓ Factuur gelezen — ${hints.join(' · ')}`;
   }catch(e){rd.innerHTML=`Analyse mislukt: ${e.message}`;renderFactuurFormulier();}
 }
