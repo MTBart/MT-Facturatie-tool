@@ -983,17 +983,43 @@ function resetFormulier(){
 // ═══ PDF ANALYSE ═══
 // ═══ E-MAIL FACTUREN ═══
 let _emailScanGedaan = false;
+let _mailFolderIds = {};
+let _huidigMailId = null;
+
+async function getMailFolderId(naam) {
+  if (_mailFolderIds[naam]) return _mailFolderIds[naam];
+  const token = await window.getGraphToken();
+  const r = await fetch(`https://graph.microsoft.com/v1.0/me/mailFolders?$filter=displayName eq '${naam}'&$select=id`, {headers:{'Authorization':`Bearer ${token}`}});
+  const data = await r.json();
+  const id = data.value?.[0]?.id || null;
+  if (id) _mailFolderIds[naam] = id;
+  return id;
+}
+
+async function verplaatsMailNaarVerwerkt(mailId) {
+  try {
+    const folderId = await getMailFolderId('Facturen verwerkt');
+    if (!folderId) return;
+    const token = await window.getGraphToken();
+    await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mailId}/move`, {
+      method:'POST', headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body: JSON.stringify({destinationId: folderId})
+    });
+  } catch(e) {}
+}
+
 async function scanEmailFacturen(forceer=false) {
   if (_emailScanGedaan && !forceer) return;
   const el = document.getElementById('email-scan-lijst');
-  el.innerHTML = '<span class="spinner"></span> Inbox scannen...';
+  el.innerHTML = '<span class="spinner"></span> Facturen map scannen...';
   try {
     const token = await window.getGraphToken();
     if (!token) { el.innerHTML = '<p style="font-size:12px;color:var(--text-faint)">Geen toegang tot e-mail.</p>'; return; }
-    // Haal recent e-mails op met bijlagen (laatste 30 dagen)
+    const folderId = await getMailFolderId('Facturen');
+    if (!folderId) { el.innerHTML = '<p style="font-size:12px;color:var(--orange)">Map "Facturen" niet gevonden in mailbox.</p>'; return; }
     const since = new Date(Date.now() - 30*86400000).toISOString().split('.')[0]+'Z';
     const r = await fetch(
-      `https://graph.microsoft.com/v1.0/me/messages?$filter=hasAttachments eq true and receivedDateTime ge ${since}&$top=30&$select=id,subject,from,receivedDateTime`,
+      `https://graph.microsoft.com/v1.0/me/mailFolders/${folderId}/messages?$filter=hasAttachments eq true and receivedDateTime ge ${since}&$top=30&$select=id,subject,from,receivedDateTime`,
       { headers: { 'Authorization': `Bearer ${token}` } }
     );
     if (!r.ok) throw new Error('Graph API fout ' + r.status);
@@ -1062,6 +1088,7 @@ async function _haalEmailPDFOp(mailId, attId, filename) {
 
 // Klik op rij: alleen tonen, geen Claude-analyse
 async function bekijkEmailPDF(mailId, attId, filename) {
+  _huidigMailId = mailId;
   const rd = document.getElementById('ai-result');
   rd.classList.remove('hidden');
   rd.innerHTML = '<span class="spinner"></span> PDF ophalen...';
@@ -1074,18 +1101,15 @@ async function bekijkEmailPDF(mailId, attId, filename) {
   } catch(e) { rd.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${e.message}</p>`; }
 }
 
-// Knop: analyseren met Claude (markeert ook als verwerkt)
+// Knop: analyseren met Claude
 async function laadEmailPDF(mailId, attId, filename) {
+  _huidigMailId = mailId;
   const rd = document.getElementById('ai-result');
   rd.classList.remove('hidden');
   try {
     let file = currentFile?.name === filename ? currentFile : await _haalEmailPDFOp(mailId, attId, filename);
     toonPdfInViewer('pdf-viewer-verwerk', URL.createObjectURL(file));
-    const verwerkt = new Set(JSON.parse(localStorage.getItem('mt_email_verwerkt') || '[]'));
-    verwerkt.add(mailId + '_' + attId);
-    localStorage.setItem('mt_email_verwerkt', JSON.stringify([...verwerkt].slice(-200)));
     await handleFile(file);
-    scanEmailFacturen(true);
   } catch(e) { rd.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${e.message}</p>`; }
 }
 
@@ -1179,6 +1203,8 @@ async function boekInMoneybird(){
     const histItem={id:invoiceId,contact,ref,date,due,payDate:payDateStr,project:hoofdProject,totaal:document.getElementById('totaal-incl').textContent,ts:Date.now()};
     const hist=JSON.parse(localStorage.getItem('mt_history')||'[]');hist.unshift(histItem);
     localStorage.setItem('mt_history',JSON.stringify(hist.slice(0,500)));
+    // Mail verplaatsen naar "Facturen verwerkt" als hij uit mail geladen was
+    if (_huidigMailId) { verplaatsMailNaarVerwerkt(_huidigMailId); _huidigMailId = null; scanEmailFacturen(true); }
     setTimeout(()=>{resetFormulier();status.innerHTML=`✓ Klaar — <a href="https://moneybird.com/${getAdmin()}/documents/${invoiceId}/payment_initiations/new" target="_blank" style="color:var(--green)">💳 Betaling inplannen →</a>`;},1500);
   }catch(e){status.textContent=`✗ ${e.message}`;}
 }
@@ -2344,6 +2370,19 @@ function isVolledigVerwerkt(f,dup){
   const heeftProj=f.reference&&PROJECT_CODES.some(p=>f.reference.startsWith(p.code));
   return heeftProj&&(!dup.has(f.id)||geenDuplicaat.has(f.id));
 }
+async function verwijderControleFactuur(id) {
+  if (!confirm('Factuur verwijderen uit Moneybird? Dit kan niet ongedaan worden.')) return;
+  const r = await mbDelete(getAdmin()+'/documents/purchase_invoices/'+id);
+  if (r.ok) {
+    alleFacturen = alleFacturen.filter(f=>f.id!==id);
+    factuurCache = {filterStr:factuurCache.filterStr, facturen:alleFacturen, ts:Date.now()};
+    localStorage.setItem('mt_cache_facturen', JSON.stringify(factuurCache));
+    renderControleLijst(alleFacturen); filterFacturenActief();
+    document.getElementById('factuur-detail').innerHTML='<p style="color:var(--text-faint);font-size:13px;padding-top:2rem">Factuur verwijderd</p>';
+    document.getElementById('pdf-viewer-controle').classList.add('hidden');
+  } else { alert('Verwijderen mislukt'); }
+}
+
 function renderControleLijst(facturen){
   const dupRaw=detecteerDuplicaten(facturen);
   const dup=new Set([...dupRaw].filter(id=>!geenDuplicaat.has(id)));
@@ -2448,7 +2487,10 @@ function renderControleDetail(f){
         <div style="font-size:11px;color:var(--text-faint)">verval: ${verval}</div>
       </div>
     </div>
-    <a href="https://moneybird.com/${getAdmin()}/documents/${f.id}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none">📎 Openen in Moneybird →</a>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <a href="https://moneybird.com/${getAdmin()}/documents/${f.id}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none">📎 Openen in Moneybird →</a>
+      ${f.state!=='paid'?`<button class="btn btn-danger btn-xs" onclick="verwijderControleFactuur('${f.id}')">🗑 Verwijderen</button>`:''}
+    </div>
     <hr class="divider">
     <div class="grid2" style="margin-bottom:0.75rem">
       <div class="field">
