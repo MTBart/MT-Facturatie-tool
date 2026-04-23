@@ -3078,6 +3078,9 @@ initMsal();
         }
 
         // Stap 2: haal details parallel op in batches van 10
+        if (factuurIds.length > 0) {
+          console.log(`📋 ${c.naam}: ${factuurIds.length} facturen gevonden`);
+        }
         const BATCH = 10;
         for (let start = 0; start < factuurIds.length; start += BATCH) {
           const batch = factuurIds.slice(start, start + BATCH);
@@ -3085,14 +3088,21 @@ initMsal();
           const resultaten = await Promise.allSettled(
             batch.map(meta => mbGet(`/${admin}/sales_invoices/${meta.id}`).then(f => ({ f, meta })))
           );
-          for (const res of resultaten) {
-            if (res.status !== 'fulfilled') continue;
+          for (let ri = 0; ri < resultaten.length; ri++) {
+            const res = resultaten[ri];
+            if (res.status !== 'fulfilled') { console.log(`  ⚠ Factuur ${ri} failed:`, res.reason?.message || res.reason); continue; }
             const { f, meta } = res.value;
             const referentie = (f.reference || '').trim();
             const tekstBronnen = [
               referentie, f.notes || '',
               ...(f.details || []).map(d => d.description || ''),
             ].map(t => t.trim()).filter(Boolean);
+
+            // Debug eerste factuur per contact
+            if (start === 0 && ri === 0 && tekstBronnen.length > 0) {
+              console.log(`  📄 Eerste factuur (${meta.invoice_id}):`, { reference: referentie, notes: f.notes, details_count: (f.details || []).length, tekstBronnen });
+            }
+
             const alleTypen = tekstBronnen.map(cnDetecteer).filter(t => t !== 'overig');
             if (!alleTypen.length) continue;
             const type = alleTypen.includes('pantry') ? 'pantry' : alleTypen.includes('commode') ? 'commode' : alleTypen[0];
