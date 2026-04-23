@@ -351,6 +351,15 @@ textarea{resize:vertical;min-height:60px}
 
   <!-- ═══ TAB: NIEUWE FACTUUR ═══ -->
   <div id="tab-verwerk" class="tab-content">
+    <!-- E-mail facturen -->
+    <div class="card" id="email-scan-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+        <div class="card-title" style="margin:0">📧 Facturen uit e-mail</div>
+        <button class="btn btn-secondary btn-sm" onclick="scanEmailFacturen(true)">↻ Scannen</button>
+      </div>
+      <div id="email-scan-lijst"><p style="font-size:12px;color:var(--text-faint)">Scannen op factuur-PDF's...</p></div>
+    </div>
+
     <div class="card">
       <div class="card-title">Stap 1 — PDF uploaden</div>
       <div class="drop-zone" id="drop-zone"
@@ -735,6 +744,7 @@ function showTab(name,btn){
   if(name==='bestelling') renderBestellijst();
   if(name==='projecten') renderProjectLijst();
   if(name==='klanten') laadKlanten();
+  if(name==='verwerk') scanEmailFacturen();
 }
 function showVtab(name,btn){
   document.querySelectorAll('.vtab-content').forEach(t=>t.classList.remove('active'));
@@ -934,6 +944,92 @@ function updateBetaling(){
 function resetFormulier(){currentFile=null;renderFactuurFormulier();document.getElementById('ai-result')?.classList.add('hidden');}
 
 // ═══ PDF ANALYSE ═══
+// ═══ E-MAIL FACTUREN ═══
+let _emailScanGedaan = false;
+async function scanEmailFacturen(forceer=false) {
+  if (_emailScanGedaan && !forceer) return;
+  const el = document.getElementById('email-scan-lijst');
+  el.innerHTML = '<span class="spinner"></span> Inbox scannen...';
+  try {
+    const token = await window.getGraphToken();
+    if (!token) { el.innerHTML = '<p style="font-size:12px;color:var(--text-faint)">Geen toegang tot e-mail.</p>'; return; }
+    // Haal recent e-mails op met bijlagen (laatste 30 dagen)
+    const since = new Date(Date.now() - 30*86400000).toISOString();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/me/messages?$filter=hasAttachments eq true and receivedDateTime ge ${since}&$top=40&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime&$expand=attachments($select=id,name,contentType,size)`,
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    );
+    if (!r.ok) throw new Error('Graph API fout ' + r.status);
+    const data = await r.json();
+    // Filter op PDF bijlagen, sla al verwerkte op
+    const verwerkt = new Set(JSON.parse(localStorage.getItem('mt_email_verwerkt') || '[]'));
+    const items = [];
+    for (const mail of data.value || []) {
+      const pdfs = (mail.attachments || []).filter(a =>
+        a.name?.toLowerCase().endsWith('.pdf') && a.size < 20000000
+      );
+      if (!pdfs.length) continue;
+      for (const pdf of pdfs) {
+        items.push({ mailId: mail.id, attId: pdf.id, naam: pdf.name, van: mail.from?.emailAddress?.name || mail.from?.emailAddress?.address || '?', onderwerp: mail.subject || '(geen onderwerp)', datum: mail.receivedDateTime, verwerkt: verwerkt.has(mail.id + '_' + pdf.id) });
+      }
+    }
+    _emailScanGedaan = true;
+    if (!items.length) { el.innerHTML = '<p style="font-size:12px;color:var(--text-faint)">Geen onverwerkte factuur-PDF\'s gevonden in de laatste 30 dagen.</p>'; return; }
+    const onverwerkt = items.filter(i => !i.verwerkt);
+    const alvast = items.filter(i => i.verwerkt);
+    let html = '';
+    if (onverwerkt.length) {
+      html += onverwerkt.map(i => emailRij(i)).join('');
+    }
+    if (alvast.length) {
+      html += `<details style="margin-top:8px"><summary style="font-size:11px;color:var(--text-faint);cursor:pointer">${alvast.length} al verwerkt</summary>${alvast.map(i => emailRij(i, true)).join('')}</details>`;
+    }
+    if (!onverwerkt.length && alvast.length) html = `<p style="font-size:12px;color:var(--green);margin-bottom:8px">✓ Alle facturen verwerkt</p>` + html;
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<p style="font-size:12px;color:var(--red)">Scan mislukt: ${e.message}</p>`; }
+}
+
+function emailRij(i, dimmed=false) {
+  const datum = new Date(i.datum).toLocaleDateString('nl-NL', {day:'numeric',month:'short'});
+  return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);${dimmed?'opacity:0.5':''}">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.van}</div>
+      <div style="font-size:11px;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.naam}</div>
+    </div>
+    <div style="font-size:11px;color:var(--text-faint);white-space:nowrap">${datum}</div>
+    <button class="btn btn-primary btn-xs" onclick="laadEmailPDF('${i.mailId}','${i.attId}','${i.naam.replace(/'/g,"\\'")}')">Laden →</button>
+  </div>`;
+}
+
+async function laadEmailPDF(mailId, attId, filename) {
+  const el = document.getElementById('ai-result');
+  el.classList.remove('hidden');
+  el.innerHTML = '<span class="spinner"></span> PDF ophalen uit e-mail...';
+  // Scroll naar upload sectie
+  document.getElementById('drop-zone').scrollIntoView({behavior:'smooth', block:'center'});
+  try {
+    const token = await window.getGraphToken();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/me/messages/${mailId}/attachments/${attId}`,
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    );
+    if (!r.ok) throw new Error('Download mislukt');
+    const att = await r.json();
+    // Base64 → Blob → File
+    const binStr = atob(att.contentBytes);
+    const bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    const file = new File([bytes], filename, { type: 'application/pdf' });
+    // Markeer als verwerkt
+    const verwerkt = new Set(JSON.parse(localStorage.getItem('mt_email_verwerkt') || '[]'));
+    verwerkt.add(mailId + '_' + attId);
+    localStorage.setItem('mt_email_verwerkt', JSON.stringify([...verwerkt].slice(-200)));
+    await handleFile(file);
+    // Herlaad scan lijst
+    scanEmailFacturen(true);
+  } catch(e) { el.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${e.message}</p>`; }
+}
+
 async function handleFile(file){
   if(!file) return;currentFile=file;
   const rd=document.getElementById('ai-result');rd.classList.remove('hidden');rd.innerHTML='<span class="spinner"></span> Claude leest de factuur...';
