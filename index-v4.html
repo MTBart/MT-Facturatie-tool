@@ -3069,45 +3069,43 @@ initMsal();
         cnProgress(5 + (i / actief.length) * 90);
 
         const admin = getAdmin();
+        // Stap 1: haal de factuurlijst op (alleen ID's en basistinfo)
+        const factuurIds = [];
         let pagina = 1;
         while (true) {
           const data = await mbGet(`/${admin}/sales_invoices?filter=contact_id:${c.id}&per_page=100&page=${pagina}`);
           const lijst = Array.isArray(data) ? data : [];
           if (!lijst.length) break;
-
-          for (const f of lijst) {
-            const datum = f.invoice_date || f.date || '';
-            const factuurnr = f.invoice_id || f.id;
-            const referentie = (f.reference || '').trim();
-
-            // Verzamel alle beschikbare tekst van deze factuur
-            const tekstBronnen = [
-              referentie,
-              f.notes || '',
-              ...(f.details || []).map(d => d.description || ''),
-            ].map(t => t.trim()).filter(Boolean);
-
-            if (!tekstBronnen.length) continue;
-
-            // Eén entry per factuur — zoek het meest specifieke type
-            const alleTypen = tekstBronnen.map(cnDetecteer).filter(t => t !== 'overig');
-            if (!alleTypen.length) continue;
-
-            // Prioriteit: pantry > commode > kast
-            const type = alleTypen.includes('pantry') ? 'pantry'
-                        : alleTypen.includes('commode') ? 'commode'
-                        : alleTypen[0];
-            const omschr = tekstBronnen.find(t => cnDetecteer(t) !== 'overig') || tekstBronnen[0];
-
-            cnRegels.push({
-              datum, factuurnr, referentie,
-              vestiging: c.naam,
-              omschrijving: omschr,
-              type,
-            });
-          }
+          for (const f of lijst) factuurIds.push({ id: f.id, invoice_id: f.invoice_id, datum: f.invoice_date || f.date || '' });
           if (lijst.length < 100) break;
           pagina++;
+        }
+
+        // Stap 2: haal per factuur de volledige details op
+        for (let fi = 0; fi < factuurIds.length; fi++) {
+          const meta = factuurIds[fi];
+          cnStatus(`${c.naam}: factuur ${fi+1}/${factuurIds.length}`);
+          const f = await mbGet(`/${admin}/sales_invoices/${meta.id}`);
+
+          const datum = meta.datum;
+          const factuurnr = f.invoice_id || meta.invoice_id;
+          const referentie = (f.reference || '').trim();
+
+          const tekstBronnen = [
+            referentie,
+            f.notes || '',
+            ...(f.details || []).map(d => d.description || ''),
+          ].map(t => t.trim()).filter(Boolean);
+
+          const alleTypen = tekstBronnen.map(cnDetecteer).filter(t => t !== 'overig');
+          if (!alleTypen.length) continue;
+
+          const type = alleTypen.includes('pantry') ? 'pantry'
+                      : alleTypen.includes('commode') ? 'commode'
+                      : alleTypen[0];
+          const omschr = tekstBronnen.find(t => cnDetecteer(t) !== 'overig') || tekstBronnen[0];
+
+          cnRegels.push({ datum, factuurnr, referentie, vestiging: c.naam, omschrijving: omschr, type });
         }
       }
 
