@@ -2474,57 +2474,59 @@ async function openFactuurInControle(factuurId){
   }
 }
 
-// ═══ MICROSOFT LOGIN (MSAL) ═══
-const msalInstance = new msal.PublicClientApplication({
-  auth: {
-    clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
-    authority: 'https://login.microsoftonline.com/common',
-    redirectUri: window.location.origin + window.location.pathname,
-    postLogoutRedirectUri: window.location.origin + window.location.pathname
-  },
-  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
-});
+</script>
 
-async function initAuth() {
+</div><!-- /app-wrap -->
+
+<script>
+// ═══ MICROSOFT LOGIN (MSAL) ═══
+(async function() {
+  const msalInstance = new msal.PublicClientApplication({
+    auth: {
+      clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
+      authority: 'https://login.microsoftonline.com/common',
+      redirectUri: window.location.origin + window.location.pathname,
+      postLogoutRedirectUri: window.location.origin + window.location.pathname
+    },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
+  });
+
   await msalInstance.initialize();
   try { await msalInstance.handleRedirectPromise(); } catch(e) {}
+
+  function toonApp(account) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-wrap').style.display = 'block';
+    const naam = account.name || account.username;
+    document.getElementById('user-name').textContent = naam;
+    document.getElementById('user-avatar').textContent = naam.charAt(0).toUpperCase();
+    updateApiStatus();
+  }
+
+  window.msLogin = async function() {
+    const errEl = document.getElementById('login-error');
+    errEl.classList.add('hidden');
+    try {
+      await msalInstance.loginRedirect({ scopes: ['openid','profile','email'] });
+    } catch(e) {
+      errEl.textContent = 'Inloggen mislukt: ' + e.message;
+      errEl.classList.remove('hidden');
+    }
+  };
+
+  window.msLogout = async function() {
+    if (!confirm('Uitloggen?')) return;
+    await msalInstance.logoutRedirect();
+  };
+
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length > 0) {
     toonApp(accounts[0]);
   } else {
     document.getElementById('login-screen').style.display = 'flex';
   }
-}
-
-function toonApp(account) {
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app-wrap').style.display = 'block';
-  const naam = account.name || account.username;
-  const initiaal = naam.charAt(0).toUpperCase();
-  document.getElementById('user-name').textContent = naam;
-  document.getElementById('user-avatar').textContent = initiaal;
-  updateApiStatus();
-}
-
-async function msLogin() {
-  const errEl = document.getElementById('login-error');
-  errEl.classList.add('hidden');
-  try {
-    await msalInstance.loginRedirect({ scopes: ['openid','profile','email'] });
-  } catch(e) {
-    errEl.textContent = 'Inloggen mislukt: ' + e.message;
-    errEl.classList.remove('hidden');
-  }
-}
-
-async function msLogout() {
-  if (!confirm('Uitloggen?')) return;
-  await msalInstance.logoutRedirect();
-}
-
-initAuth();
+})();
 </script>
 
-</div><!-- /app-wrap -->
 </body>
 </html>
