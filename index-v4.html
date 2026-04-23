@@ -3020,6 +3020,7 @@ initMsal();
   }
 
   async function cnAnalyse() {
+    console.log('🚀 cnAnalyse START');
     document.getElementById('cnBtnStart').disabled = true;
     document.getElementById('cn-progress-wrap').style.display = 'block';
     document.getElementById('cn-resultaten').style.display = 'none';
@@ -3117,8 +3118,10 @@ initMsal();
       cnRenderResultaten();
       document.getElementById('cn-resultaten').style.display = 'block';
     } catch(e) {
+      console.error('❌ cnAnalyse ERROR:', e);
       cnStatus('Fout: ' + e.message, 'err');
     }
+    console.log('🏁 cnAnalyse END - Regelitems gevonden:', cnRegels.length);
     document.getElementById('cnBtnStart').disabled = false;
   }
 
