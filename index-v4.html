@@ -2495,16 +2495,21 @@ async function msLogin() {
   const errEl = document.getElementById('login-error');
   errEl.classList.add('hidden');
   try {
-    await _msal.loginRedirect({ scopes: ['openid','profile','email'] });
+    const result = await _msal.loginPopup({ scopes: ['openid','profile','email'] });
+    if (result && result.account) toonApp(result.account);
   } catch(e) {
-    errEl.textContent = 'Inloggen mislukt: ' + e.message;
-    errEl.classList.remove('hidden');
+    if (e.errorCode !== 'user_cancelled') {
+      errEl.textContent = 'Inloggen mislukt: ' + e.message;
+      errEl.classList.remove('hidden');
+    }
   }
 }
 
 async function msLogout() {
   if (!confirm('Uitloggen?')) return;
-  await _msal.logoutRedirect();
+  await _msal.logoutPopup();
+  document.getElementById('app-wrap').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
 }
 
 async function initMsal() {
