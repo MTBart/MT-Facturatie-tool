@@ -2674,17 +2674,28 @@ window.getAuthToken = async function() {
   } catch(e) { return null; }
 };
 
+const GRAPH_SCOPES = [
+  'https://graph.microsoft.com/Files.ReadWrite',
+  'https://graph.microsoft.com/Sites.ReadWrite.All',
+  'https://graph.microsoft.com/Mail.Read',
+  'https://graph.microsoft.com/Mail.Send',
+  'https://graph.microsoft.com/Calendars.ReadWrite'
+];
+
 window.getGraphToken = async function() {
   if (!_msal) return null;
   const accounts = _msal.getAllAccounts();
   if (!accounts.length) return null;
   try {
-    const result = await _msal.acquireTokenSilent({
-      scopes: ['https://graph.microsoft.com/Files.ReadWrite', 'https://graph.microsoft.com/Sites.ReadWrite.All'],
-      account: accounts[0]
-    });
+    const result = await _msal.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
     return result.accessToken;
-  } catch(e) { return null; }
+  } catch(e) {
+    // Eerste keer: popup voor toestemming nieuwe scopes
+    try {
+      const result = await _msal.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+      return result.accessToken;
+    } catch(e2) { return null; }
+  }
 };
 
 async function toonApp(account) {
