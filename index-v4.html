@@ -954,25 +954,32 @@ async function scanEmailFacturen(forceer=false) {
     const token = await window.getGraphToken();
     if (!token) { el.innerHTML = '<p style="font-size:12px;color:var(--text-faint)">Geen toegang tot e-mail.</p>'; return; }
     // Haal recent e-mails op met bijlagen (laatste 30 dagen)
-    const since = new Date(Date.now() - 30*86400000).toISOString();
+    const since = new Date(Date.now() - 30*86400000).toISOString().split('.')[0]+'Z';
     const r = await fetch(
-      `https://graph.microsoft.com/v1.0/me/messages?$filter=hasAttachments eq true and receivedDateTime ge ${since}&$top=40&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime&$expand=attachments($select=id,name,contentType,size)`,
+      `https://graph.microsoft.com/v1.0/me/messages?$filter=hasAttachments eq true and receivedDateTime ge ${since}&$top=30&$select=id,subject,from,receivedDateTime`,
       { headers: { 'Authorization': `Bearer ${token}` } }
     );
     if (!r.ok) throw new Error('Graph API fout ' + r.status);
     const data = await r.json();
-    // Filter op PDF bijlagen, sla al verwerkte op
+    const mails = (data.value || []).sort((a,b) => new Date(b.receivedDateTime) - new Date(a.receivedDateTime));
+    // Per mail bijlagen ophalen (parallel)
     const verwerkt = new Set(JSON.parse(localStorage.getItem('mt_email_verwerkt') || '[]'));
     const items = [];
-    for (const mail of data.value || []) {
-      const pdfs = (mail.attachments || []).filter(a =>
-        a.name?.toLowerCase().endsWith('.pdf') && a.size < 20000000
-      );
-      if (!pdfs.length) continue;
-      for (const pdf of pdfs) {
-        items.push({ mailId: mail.id, attId: pdf.id, naam: pdf.name, van: mail.from?.emailAddress?.name || mail.from?.emailAddress?.address || '?', onderwerp: mail.subject || '(geen onderwerp)', datum: mail.receivedDateTime, verwerkt: verwerkt.has(mail.id + '_' + pdf.id) });
-      }
-    }
+    await Promise.all(mails.map(async mail => {
+      try {
+        const ar = await fetch(
+          `https://graph.microsoft.com/v1.0/me/messages/${mail.id}/attachments?$select=id,name,contentType,size`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        if (!ar.ok) return;
+        const ad = await ar.json();
+        const pdfs = (ad.value || []).filter(a => a.name?.toLowerCase().endsWith('.pdf') && a.size < 20000000);
+        for (const pdf of pdfs) {
+          items.push({ mailId: mail.id, attId: pdf.id, naam: pdf.name, van: mail.from?.emailAddress?.name || mail.from?.emailAddress?.address || '?', onderwerp: mail.subject || '(geen onderwerp)', datum: mail.receivedDateTime, verwerkt: verwerkt.has(mail.id+'_'+pdf.id) });
+        }
+      } catch(e) {}
+    }));
+    items.sort((a,b) => new Date(b.datum) - new Date(a.datum));
     _emailScanGedaan = true;
     if (!items.length) { el.innerHTML = '<p style="font-size:12px;color:var(--text-faint)">Geen onverwerkte factuur-PDF\'s gevonden in de laatste 30 dagen.</p>'; return; }
     const onverwerkt = items.filter(i => !i.verwerkt);
