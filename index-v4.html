@@ -2496,7 +2496,8 @@ async function msLogin() {
   errEl.classList.add('hidden');
   try {
     const result = await _msal.loginPopup({ scopes: ['openid','profile','email'] });
-    if (result && result.account) toonApp(result.account);
+    const account = (result && result.account) || _msal.getAllAccounts()[0];
+    if (account) toonApp(account);
   } catch(e) {
     if (e.errorCode !== 'user_cancelled') {
       errEl.textContent = 'Inloggen mislukt: ' + e.message;
@@ -2513,6 +2514,8 @@ async function msLogout() {
 }
 
 async function initMsal() {
+  // Wis stale interactievlaggen van vorige sessies
+  Object.keys(sessionStorage).filter(k => k.includes('interaction')).forEach(k => sessionStorage.removeItem(k));
   try {
     _msal = new msal.PublicClientApplication({
       auth: {
