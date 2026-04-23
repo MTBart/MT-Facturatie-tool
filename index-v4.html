@@ -1989,6 +1989,9 @@ let alleKlanten=[], klantenGeladen=false, klantenView='grid';
 async function laadKlanten(){
   const el=document.getElementById('klanten-grid');
   if(klantenGeladen&&alleKlanten.length){renderKlantenGrid(alleKlanten);return;}
+  // Cache: 24 uur geldig
+  const cached=localStorage.getItem('mt_cache_klanten');
+  if(cached){const {data,ts}=JSON.parse(cached);if(Date.now()-ts<86400000){alleKlanten=data;klantenGeladen=true;renderKlantenGrid(alleKlanten);el.insertAdjacentHTML('afterbegin','<p style="font-size:11px;color:var(--text-faint);margin-bottom:8px">Gecached — <a href="#" onclick="event.preventDefault();localStorage.removeItem(\'mt_cache_klanten\');klantenGeladen=false;laadKlanten()">vernieuwen</a></p>');return;}}
   el.innerHTML='<p style="color:var(--text-dim);font-size:13px"><span class="spinner"></span> Klanten laden uit Moneybird...</p>';
   try{
     let page=1,klanten=[];
@@ -2003,6 +2006,7 @@ async function laadKlanten(){
     }
     alleKlanten=klanten.filter(k=>k.company_name||k.firstname);
     klantenGeladen=true;
+    localStorage.setItem('mt_cache_klanten',JSON.stringify({data:alleKlanten,ts:Date.now()}));
     renderKlantenGrid(alleKlanten);
   }catch(e){el.innerHTML=`<p style="color:var(--red);font-size:13px">Fout: ${e.message}</p>`;}
 }
@@ -2130,6 +2134,8 @@ function zoekKlanten(term){
 
 // ═══ FACTUUR CONTROLE ═══
 let factuurCache={filterStr:'',facturen:[]};
+// Herstel factuurcache uit localStorage bij opstarten (15 min geldig)
+(()=>{try{const c=JSON.parse(localStorage.getItem('mt_cache_facturen')||'null');if(c&&Date.now()-c.ts<900000)factuurCache=c;}catch(e){}})();
 async function laadFacturen(){
   const spinner=document.getElementById('laad-spinner'),status=document.getElementById('laad-status');
   const preset=document.getElementById('periode-preset').value;
@@ -2152,7 +2158,8 @@ async function laadFacturen(){
       alleFacturen.push(...batch.filter(f=>f?.id));status.textContent=`${alleFacturen.length} facturen...`;
       if(batch.length<50) break;page++;
     }
-    factuurCache={filterStr,facturen:alleFacturen};
+    factuurCache={filterStr,facturen:alleFacturen,ts:Date.now()};
+    localStorage.setItem('mt_cache_facturen',JSON.stringify(factuurCache));
     status.textContent=`${alleFacturen.length} facturen geladen`;
     document.getElementById('controle-inhoud').classList.remove('hidden');
     renderControleLijst(alleFacturen);filterFacturenActief();
@@ -2478,6 +2485,83 @@ async function openFactuurInControle(factuurId){
 
 </script>
 
+<!-- ═══ SHAREPOINT OPSLAG ═══ -->
+<script>
+const _SP = {
+  SITE: 'mortisetenon.sharepoint.com:/sites/MortiseTenon',
+  FOLDER: 'MT-Bedrijfstool',
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit']),
+  _q: {},
+
+  async read(filename) {
+    try {
+      const token = await window.getGraphToken();
+      if (!token) return null;
+      const r = await fetch(
+        `https://graph.microsoft.com/v1.0/sites/${this.SITE}/drive/root:/${this.FOLDER}/${filename}:/content`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (!r.ok) return null;
+      return await r.json();
+    } catch(e) { return null; }
+  },
+
+  async write(filename, data) {
+    try {
+      const token = await window.getGraphToken();
+      if (!token) return;
+      await fetch(
+        `https://graph.microsoft.com/v1.0/sites/${this.SITE}/drive/root:/${this.FOLDER}/${filename}:/content`,
+        {
+          method: 'PUT',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: typeof data === 'string' ? data : JSON.stringify(data)
+        }
+      );
+    } catch(e) { console.warn('SP write fout:', filename, e.message); }
+  },
+
+  schedule(key, rawValue) {
+    clearTimeout(this._q[key]);
+    this._q[key] = setTimeout(async () => {
+      if (rawValue === null) { await this.write(key + '.json', '[]'); return; }
+      try { await this.write(key + '.json', JSON.parse(rawValue)); }
+      catch(e) { await this.write(key + '.json', rawValue); }
+    }, 2000);
+  }
+};
+
+// Monkey-patch: localStorage schrijft ook naar SharePoint voor persistente keys
+const _lsSet = localStorage.setItem.bind(localStorage);
+const _lsRemove = localStorage.removeItem.bind(localStorage);
+localStorage.setItem = function(key, value) {
+  _lsSet(key, value);
+  if (_SP.KEYS.has(key)) _SP.schedule(key, value);
+};
+localStorage.removeItem = function(key) {
+  _lsRemove(key);
+  if (_SP.KEYS.has(key)) _SP.schedule(key, null);
+};
+
+window.initStorage = async function() {
+  const taken = [..._SP.KEYS].map(async key => {
+    const spData = await _SP.read(key + '.json');
+    if (spData !== null) {
+      // SharePoint heeft data → in localStorage laden (SharePoint wint altijd)
+      _lsSet(key, typeof spData === 'string' ? spData : JSON.stringify(spData));
+    } else {
+      // SharePoint leeg → migreer bestaande localStorage naar SharePoint
+      const lokaal = localStorage.getItem(key);
+      if (lokaal) {
+        try { await _SP.write(key + '.json', JSON.parse(lokaal)); }
+        catch(e) { await _SP.write(key + '.json', lokaal); }
+      }
+    }
+  });
+  await Promise.all(taken);
+};
+</script>
+
 </div><!-- /app-wrap -->
 
 <script>
@@ -2494,12 +2578,26 @@ window.getAuthToken = async function() {
   } catch(e) { return null; }
 };
 
-function toonApp(account) {
+window.getGraphToken = async function() {
+  if (!_msal) return null;
+  const accounts = _msal.getAllAccounts();
+  if (!accounts.length) return null;
+  try {
+    const result = await _msal.acquireTokenSilent({
+      scopes: ['https://graph.microsoft.com/Files.ReadWrite', 'https://graph.microsoft.com/Sites.ReadWrite.All'],
+      account: accounts[0]
+    });
+    return result.accessToken;
+  } catch(e) { return null; }
+};
+
+async function toonApp(account) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-wrap').style.display = 'block';
   const naam = account.name || account.username;
   document.getElementById('user-name').textContent = naam;
   document.getElementById('user-avatar').textContent = naam.charAt(0).toUpperCase();
+  if (window.initStorage) await window.initStorage();
   updateApiStatus();
 }
 
