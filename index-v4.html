@@ -3079,20 +3079,32 @@ initMsal();
             const datum = f.invoice_date || f.date || '';
             const factuurnr = f.invoice_id || f.id;
             const referentie = (f.reference || '').trim();
-            const regels = f.details || [];
-            for (const regel of regels) {
-              const omschr = (regel.description || '').trim();
-              if (!omschr) continue;
-              const type = cnDetecteer(omschr);
-              if (type === 'overig') continue; // sla niet-relevante regels over
-              cnRegels.push({
-                datum, factuurnr, referentie,
-                vestiging: c.naam,
-                omschrijving: omschr,
-                type,
-                bedrag: parseFloat(regel.price||0) * parseFloat(regel.amount||1),
-              });
-            }
+
+            // Verzamel alle beschikbare tekst van deze factuur
+            const tekstBronnen = [
+              referentie,
+              f.notes || '',
+              ...(f.details || []).map(d => d.description || ''),
+            ].map(t => t.trim()).filter(Boolean);
+
+            if (!tekstBronnen.length) continue;
+
+            // Eén entry per factuur — zoek het meest specifieke type
+            const alleTypen = tekstBronnen.map(cnDetecteer).filter(t => t !== 'overig');
+            if (!alleTypen.length) continue;
+
+            // Prioriteit: pantry > commode > kast
+            const type = alleTypen.includes('pantry') ? 'pantry'
+                        : alleTypen.includes('commode') ? 'commode'
+                        : alleTypen[0];
+            const omschr = tekstBronnen.find(t => cnDetecteer(t) !== 'overig') || tekstBronnen[0];
+
+            cnRegels.push({
+              datum, factuurnr, referentie,
+              vestiging: c.naam,
+              omschrijving: omschr,
+              type,
+            });
           }
           if (lijst.length < 100) break;
           pagina++;
