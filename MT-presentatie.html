@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M&T Factuur Tool — Presentatie</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --groen: #2C4A3E;
+  --groen-mid: #3d6456;
+  --groen-licht: #E8F0ED;
+  --goud: #C8923A;
+  --goud-licht: #FDF3E7;
+  --wit: #FDFCFA;
+  --bg: #F5F2ED;
+  --text: #1A1815;
+  --text-dim: #6B6560;
+  --rood: #8B1A1A;
+  --paars: #5a3a8b;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: #111;
+  color: var(--text);
+}
+
+/* ── SLIDE ENGINE ── */
+.slide {
+  width: 100vw;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 5vw;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Navigatie */
+.nav {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  display: flex;
+  gap: 0.5rem;
+  z-index: 100;
+}
+.nav-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+.nav-dot.active { background: var(--goud); transform: scale(1.4); }
+
+.nav-arrows {
+  position: fixed;
+  bottom: 1.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 1rem;
+  z-index: 100;
+}
+.nav-arrow {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center;
+}
+.nav-arrow:hover { background: rgba(255,255,255,0.2); }
+
+/* ── SLIDE 1: TITEL ── */
+#slide-1 {
+  background: var(--groen);
+  color: white;
+}
+#slide-1::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(ellipse at 80% 20%, rgba(200,146,58,0.15) 0%, transparent 60%),
+    radial-gradient(ellipse at 20% 80%, rgba(255,255,255,0.03) 0%, transparent 50%);
+}
+.titel-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: clamp(10px, 1.2vw, 14px);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--goud);
+  margin-bottom: 1.5rem;
+}
+.titel-h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(48px, 7vw, 100px);
+  font-weight: 900;
+  line-height: 1;
+  color: white;
+  margin-bottom: 0.5rem;
+}
+.titel-h1 em {
+  color: var(--goud);
+  font-style: italic;
+}
+.titel-sub {
+  font-size: clamp(14px, 1.8vw, 20px);
+  color: rgba(255,255,255,0.6);
+  max-width: 600px;
+  line-height: 1.6;
+  margin-top: 1.5rem;
+}
+.titel-meta {
+  margin-top: 3rem;
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+.titel-stat {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+}
+.titel-stat-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--goud);
+}
+.titel-stat-lbl {
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 2px;
+}
+
+/* ── SLIDE 2: PROBLEEM ── */
+#slide-2 { background: var(--bg); }
+
+.slide-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--goud);
+  margin-bottom: 1rem;
+}
+.slide-h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(32px, 4.5vw, 60px);
+  font-weight: 700;
+  color: var(--groen);
+  line-height: 1.1;
+  margin-bottom: 2.5rem;
+}
+
+.probleem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+  max-width: 1100px;
+}
+.probleem-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  border-left: 4px solid var(--rood);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+}
+.probleem-icon { font-size: 28px; margin-bottom: 0.75rem; }
+.probleem-titel { font-weight: 600; font-size: 15px; color: var(--text); margin-bottom: 0.4rem; }
+.probleem-tekst { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.probleem-tijd {
+  margin-top: 0.75rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--rood);
+  background: #FDE8E8;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+/* ── SLIDE 3: OPLOSSING ── */
+#slide-3 { background: var(--groen); color: white; }
+
+.oplossing-intro {
+  font-size: clamp(15px, 2vw, 20px);
+  color: rgba(255,255,255,0.7);
+  max-width: 650px;
+  line-height: 1.7;
+  margin-bottom: 3rem;
+}
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  max-width: 1100px;
+}
+.feature-card {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 1.25rem;
+  transition: background 0.2s;
+}
+.feature-card:hover { background: rgba(255,255,255,0.11); }
+.feature-icon { font-size: 24px; margin-bottom: 0.75rem; }
+.feature-naam { font-weight: 600; font-size: 14px; color: white; margin-bottom: 0.3rem; }
+.feature-desc { font-size: 12px; color: rgba(255,255,255,0.55); line-height: 1.5; }
+.feature-winst {
+  margin-top: 0.75rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--goud);
+}
+
+/* ── SLIDE 4: TIJDWINST GRAFIEK ── */
+#slide-4 { background: var(--bg); }
+
+.grafiek-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  align-items: center;
+  max-width: 1100px;
+}
+.bar-chart { display: flex; flex-direction: column; gap: 1rem; }
+.bar-row { display: flex; align-items: center; gap: 1rem; }
+.bar-label { font-size: 13px; color: var(--text-dim); min-width: 160px; text-align: right; }
+.bar-outer { flex: 1; height: 32px; background: #E8E4DF; border-radius: 4px; overflow: hidden; position: relative; }
+.bar-inner {
+  height: 100%;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+  transition: width 1s ease;
+}
+.bar-oud { background: #B85042; }
+.bar-nieuw { background: var(--groen); }
+.bar-waarde { min-width: 50px; font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 600; }
+
+.grafiek-uitleg {
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+}
+.uitleg-titel {
+  font-family: 'Playfair Display', serif;
+  font-size: 28px;
+  color: var(--groen);
+  margin-bottom: 1.5rem;
+}
+.uitleg-stat {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #EEE;
+}
+.uitleg-stat:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.uitleg-getal {
+  font-family: 'Playfair Display', serif;
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--groen);
+  line-height: 1;
+}
+.uitleg-getal span { font-size: 20px; color: var(--goud); }
+.uitleg-omschrijving { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+
+.legende { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
+.legende-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.legende-dot { width: 12px; height: 12px; border-radius: 2px; }
+
+/* ── SLIDE 5: AANPASSINGEN ── */
+#slide-5 { background: #1A1815; color: white; }
+
+.aanpassing-list { max-width: 900px; }
+.aanpassing-item {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 1.5rem;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  align-items: start;
+}
+.aanpassing-item:last-child { border-bottom: none; }
+.aanpassing-nr {
+  font-family: 'Playfair Display', serif;
+  font-size: 36px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.1);
+  line-height: 1;
+  min-width: 48px;
+}
+.aanpassing-oud { }
+.aanpassing-oud-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: #B85042;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.aanpassing-oud-tekst { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.5; }
+.aanpassing-nieuw-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--goud);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.aanpassing-nieuw-tekst { font-size: 14px; color: white; line-height: 1.5; font-weight: 500; }
+
+/* ── SLIDE 6: VOORRAAD ── */
+#slide-6 { background: var(--bg); }
+
+.voorraad-demo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  max-width: 1100px;
+  align-items: start;
+}
+.demo-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+}
+.demo-card-titel {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+}
+.materiaal-kaart {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  border-left: 3px solid var(--paars);
+  cursor: pointer;
+}
+.materiaal-naam { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.materiaal-sub { font-size: 11px; color: var(--text-dim); }
+.materiaal-prijs {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  margin-top: 6px;
+  color: var(--groen);
+}
+.waarschuwing { color: #B85042; font-size: 11px; margin-top: 4px; }
+
+.prijs-tabel { width: 100%; border-collapse: collapse; font-size: 12px; }
+.prijs-tabel th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #EEE; color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; }
+.prijs-tabel td { padding: 8px 8px; border-bottom: 1px solid #EEE; }
+.prijs-tabel tr:first-child td { background: var(--groen-licht); font-weight: 500; }
+.pijl-omhoog { color: #B85042; }
+.pijl-omlaag { color: var(--groen); }
+
+/* ── SLIDE 7: ROADMAP ── */
+#slide-7 { background: var(--groen); color: white; }
+
+.roadmap-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  max-width: 1100px;
+}
+.roadmap-fase {
+  position: relative;
+}
+.roadmap-fase::after {
+  content: '→';
+  position: absolute;
+  right: -0.7rem;
+  top: 1.5rem;
+  color: rgba(255,255,255,0.2);
+  font-size: 20px;
+}
+.roadmap-fase:last-child::after { display: none; }
+.fase-nr {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--goud);
+  letter-spacing: 0.1em;
+  margin-bottom: 0.75rem;
+}
+.fase-box {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 1.25rem;
+  height: 100%;
+}
+.fase-box.actief {
+  background: rgba(200,146,58,0.15);
+  border-color: rgba(200,146,58,0.3);
+}
+.fase-titel { font-size: 14px; font-weight: 600; margin-bottom: 0.5rem; }
+.fase-items { font-size: 12px; color: rgba(255,255,255,0.55); line-height: 1.7; }
+.fase-status {
+  margin-top: 0.75rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  display: inline-block;
+}
+.status-live { background: rgba(44,74,62,0.4); color: #7dd4b0; border: 1px solid rgba(125,212,176,0.3); }
+.status-soon { background: rgba(200,146,58,0.2); color: var(--goud); border: 1px solid rgba(200,146,58,0.3); }
+.status-later { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.1); }
+
+/* ── SLIDE 8: AFSLUITING ── */
+#slide-8 { background: #1A1815; color: white; }
+#slide-8::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 30% 50%, rgba(44,74,62,0.4) 0%, transparent 60%);
+}
+.afsluiting-content { position: relative; z-index: 1; }
+.afsluiting-quote {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(28px, 4vw, 52px);
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.3;
+  color: white;
+  max-width: 800px;
+  margin-bottom: 2rem;
+}
+.afsluiting-quote em { color: var(--goud); font-style: normal; }
+.afsluiting-url {
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
+  margin-bottom: 3rem;
+}
+.afsluiting-stats {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+.afsluiting-stat {
+  border-left: 2px solid var(--goud);
+  padding-left: 1.25rem;
+}
+.afsluiting-getal {
+  font-family: 'Playfair Display', serif;
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--goud);
+}
+.afsluiting-label { font-size: 12px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
+
+/* Animaties */
+.fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease, transform 0.6s ease; }
+.fade-in.visible { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SLIDE 1: TITEL -->
+<!-- ══════════════════════════════════════════ -->
+<section class="slide" id="slide-1">
+  <div class="titel-eyebrow">Mortise &amp; Tenon — Wormerveer · April 2026</div>
+  <div class="titel-h1">Van Excel<br>naar <em>eigen tool</em></div>
+  <div class="titel-sub">Hoe we in een week tijd een volledig boekhoudwerkstation gebouwd hebben dat uren per week gaat besparen.</div>
+  <div class="titel-meta">
+    <div class="titel-stat">
+      <div class="titel-stat-num">~3 uur</div>
+      <div class="titel-stat-lbl">Bouwtijd totaal</div>
+    </div>
+    <div class="titel-stat">
+      <div class="titel-stat-num">218</div>
+      <div class="titel-stat-lbl">Facturen te verwerken</div>
+    </div>
+    <div class="titel-stat">
+      <div class="titel-stat-num">8</div>
+      <div class="titel-stat-lbl">Functies ingebouwd</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SLIDE 2: HET PROBLEEM -->
+<!-- ══════════════════════════════════════════ -->
+<section class="slide" id="slide-2">
+  <div class="slide-label">De situatie voor</div>
+  <div class="slide-h2">Waar ging tijd verloren?</div>
+  <div class="probleem-grid">
+    <div class="probleem-card fade-in">
+      <div class="probleem-icon">📥</div>
+      <div class="probleem-titel">Facturen handmatig invoeren</div>
+      <div class="probleem-tekst">Elke inkoopfactuur handmatig overtikken in Moneybird — leverancier, bedragen, grootboek. Eén factuur kostte al snel 5–8 minuten.</div>
+      <div class="probleem-tijd">±6 min per factuur</div>
+    </div>
+    <div class="probleem-card fade-in" style="border-color: #B85042">
+      <div class="probleem-icon">🗂️</div>
+      <div class="probleem-titel">Geen projectkoppeling</div>
+      <div class="probleem-tekst">Facturen stonden los van projecten. Geen inzicht in welke kosten bij welk project hoorden. Nacalculatie was giswerk.</div>
+      <div class="probleem-tijd">0 inzicht achteraf</div>
+    </div>
+    <div class="probleem-card fade-in" style="border-color: #8B4513">
+      <div class="probleem-icon">📋</div>
+      <div class="probleem-titel">Betaaldatums bijhouden</div>
+      <div class="probleem-tekst">Overzicht van wat wanneer betaald moest worden bijhouden in je hoofd of losse lijstjes. Kans op gemiste betalingen.</div>
+      <div class="probleem-tijd">Foutgevoelig</div>
+    </div>
+    <div class="probleem-card fade-in" style="border-color: #5a3a8b">
+      <div class="probleem-icon">🪵</div>
+      <div class="probleem-titel">Geen voorraadbeheer</div>
+      <div class="probleem-tekst">Materiaalinkoopdata verdween in de boekhouding. Geen idee voor welke prijs je de laatste keer plaatmateriaal kocht.</div>
+      <div class="probleem-tijd">Blinde inkoop</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SLIDE 3: DE OPLOSSING -->
+<!-- ══════════════════════════════════════════ -->
+<section class="slide" id="slide-3">
+  <div class="slide-label" style="color:var(--goud)">Wat we gebouwd hebben</div>
+  <div class="slide-h2" style="color:white">8 functies, één tool</div>
+  <div class="oplossing-intro">Alles draait in de browser — geen installatie, geen abonnement. Rechtstreeks verbonden met Moneybird en aangedreven door Claude AI.</div>
+  <div class="feature-grid">
+    <div class="feature-card fade-in">
+      <div class="feature-icon">🤖</div>
+      <div class="feature-naam">PDF → Moneybird in 30 sec</div>
+      <div class="feature-desc">Sleep een factuur-PDF erin. Claude leest leverancier, datum, regels, aantallen, prijzen én project automatisch uit.</div>
+      <div class="feature-winst">Was: 6 min → Nu: 30 sec</div>
+    </div>
+    <div class="feature-card fade-in">
+      <div class="feature-icon">📁</div>
+      <div class="feature-naam">Project per factuurregel</div>
+      <div class="feature-desc">Elke regel kan een eigen project krijgen. Één factuur voor 3 projecten? Netjes gesplitst.</div>
+      <div class="feature-winst">Directe nacalculatie-basis</div>
+    </div>
+    <div class="feature-card fade-in">
+      <div class="feature-icon">🔍</div>
+      <div class="feature-naam">Factuurcontrole tabblad</div>
+      <div class="feature-desc">Alle 218 facturen in één overzicht. Filter op "aandacht nodig", zoek op naam, spring naar volgende onverwerkte.</div>
+      <div class="feature-winst">218 facturen opschonen</div>
+    </div>
+    <div class="feature-card fade-in">
+      <div class="feature-icon">📦</div>
+      <div class="feature-naam">Voorraadbeheer</div>
+      <div class="feature-desc">Materiaalregels automatisch herkend bij bekende leveranciers. Klik op een materiaal → zie volledige inkoophistorie met prijsontwikkeling.</div>
+      <div class="feature-winst">Prijsvergelijking per inkoop</div>
+    </div>
+    <div class="feature-card fade-in">
+      <div class="feature-icon">💳</div>
+      <div class="feature-naam">Betaaldatum tracking</div>
+      <div class="feature-desc">Automatische berekening "betalen voor" op basis van vervaldatum. Directe link naar betaalscherm Moneybird.</div>
+      <div class="feature-winst">Nooit meer vergeten</div>
+    </div>
+    <div class="feature-card fade-in">
+      <div class="feature-icon">📅</div>
+      <div class="feature-naam">Periode-filter</div>
+      <div class="feature-desc">Laad facturen per periode: dit jaar, vorig jaar, of aangepast datumbereik. Dynamisch — geen limiet aan aantal facturen.</div>
+      <div class="feature-winst">Volledig historisch inzicht</div>
+    </div>
+    <div class="feature-card fade-in">
+      <div class="feature-icon">📊</div>
+      <div class="feature-naam">Voortgangsbalk</div>
+      <div class="feature-desc">Direct zichtbaar hoeveel % van de facturen verwerkt is. Filter "Aandacht" toont alleen wat nog gedaan moet worden.</div>
+      <div class="feature-winst">Focus op wat telt</div>
+    </div>
+    <div class="feature-card fade-in">
+      <div class="feature-icon">🕓</div>
+      <div class="feature-naam">Persistent geschiedenis</div>
+      <div class="feature-desc">Alle geboekte facturen blijven bewaard, ook na sluiten. Zoekbaar op leverancier, project of datum.</div>
+      <div class="feature-winst">Altijd terugvindbaar</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SLIDE 4: TIJDWINST GRAFIEK -->
+<!-- ══════════════════════════════════════════ -->
+<section class="slide" id="slide-4">
+  <div class="slide-label">Tijdwinst in beeld</div>
+  <div class="slide-h2">Wat levert het concreet op?</div>
+  <div class="grafiek-wrap">
+    <div>
+      <div class="legende">
+        <div class="legende-item"><div class="legende-dot" style="background:#B85042"></div> Vroeger</div>
+        <div class="legende-item"><div class="legende-dot" style="background:var(--groen)"></div> Nu</div>
+      </div>
+      <div class="bar-chart">
+        <div class="bar-row">
+          <div class="bar-label">Factuur boeken</div>
+          <div class="bar-outer">
+            <div class="bar-inner bar-oud" style="width:100%">6 min</div>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label"></div>
+          <div class="bar-outer">
+            <div class="bar-inner bar-nieuw" style="width:8%">30s</div>
+          </div>
+        </div>
+        <div class="bar-row" style="margin-top:1rem">
+          <div class="bar-label">Projectkoppeling</div>
+          <div class="bar-outer">
+            <div class="bar-inner bar-oud" style="width:80%">handmatig</div>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label"></div>
+          <div class="bar-outer">
+            <div class="bar-inner bar-nieuw" style="width:5%">auto</div>
+          </div>
+        </div>
+        <div class="bar-row" style="margin-top:1rem">
+          <div class="bar-label">218 facturen verwerken</div>
+          <div class="bar-outer">
+            <div class="bar-inner bar-oud" style="width:100%">~22 uur</div>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label"></div>
+          <div class="bar-outer">
+            <div class="bar-inner bar-nieuw" style="width:15%">~2 uur</div>
+          </div>
+        </div>
+        <div class="bar-row" style="margin-top:1rem">
+          <div class="bar-label">Prijs vorige inkoop vinden</div>
+          <div class="bar-outer">
+            <div class="bar-inner bar-oud" style="width:90%">zoeken in mail</div>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label"></div>
+          <div class="bar-outer">
+            <div class="bar-inner bar-nieuw" style="width:3%">1 klik</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="grafiek-uitleg">
+      <div class="uitleg-titel">De rekening</div>
+      <div class="uitleg-stat">
+        <div class="uitleg-getal">20<span>uur</span></div>
+        <div class="uitleg-omschrijving">Bespaard op het opschonen van 218 historische facturen</div>
+      </div>
+      <div class="uitleg-stat">
+        <div class="uitleg-getal">5.5<span>min/week</span></div>
+        <div class="uitleg-omschrijving">Tijdwinst per nieuwe factuur (gemiddeld 10 facturen/week)</div>
+      </div>
+      <div class="uitleg-stat">
+        <div class="uitleg-getal">1<span>klik</span></div>
+        <div class="uitleg-omschrijving">Om te zien voor welke prijs je een materiaal de laatste keer kocht</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SLIDE 5: WAT ANDERS UITPAKTE -->
+<!-- ══════════════════════════════════════════ -->
+<section class="slide" id="slide-5">
+  <div class="slide-label" style="color:var(--goud)">Leren tijdens het bouwen</div>
+  <div class="slide-h2" style="color:white;margin-bottom:2rem">Wat anders uitpakte<br>dan bedacht</div>
+  <div class="aanpassing-list">
+    <div class="aanpassing-item fade-in">
+      <div class="aanpassing-nr">01</div>
+      <div class="aanpassing-oud">
+        <div class="aanpassing-oud-label">Origineel idee</div>
+        <div class="aanpassing-oud-tekst">Projecten aanmaken in Moneybird en daar alles aan koppelen</div>
+      </div>
+      <div>
+        <div class="aanpassing-nieuw-label">Wat we deden</div>
+        <div class="aanpassing-nieuw-tekst">Projecten leven in de tool + Toggl — Moneybird krijgt alleen een projectcode als referentieveld. Schoner, minder afhankelijk van de boekhouding.</div>
+      </div>
+    </div>
+    <div class="aanpassing-item fade-in">
+      <div class="aanpassing-nr">02</div>
+      <div class="aanpassing-oud">
+        <div class="aanpassing-oud-label">Origineel idee</div>
+        <div class="aanpassing-oud-tekst">Google Sheets als nacalculatie-uitvoer</div>
+      </div>
+      <div>
+        <div class="aanpassing-nieuw-label">Wat we deden</div>
+        <div class="aanpassing-nieuw-tekst">Alles in de tool zelf bouwen. Geen export nodig, data staat al klaar. Nacalculatie wordt een eigen tabblad.</div>
+      </div>
+    </div>
+    <div class="aanpassing-item fade-in">
+      <div class="aanpassing-nr">03</div>
+      <div class="aanpassing-oud">
+        <div class="aanpassing-oud-label">Origineel idee</div>
+        <div class="aanpassing-oud-tekst">Voorraad als toekomstige feature, later aanpakken</div>
+      </div>
+      <div>
+        <div class="aanpassing-nieuw-label">Wat we deden</div>
+        <div class="aanpassing-nieuw-tekst">Direct ingebouwd — bleek makkelijker dan gedacht en levert meteen waarde. Bekende leveranciers worden auto-herkend.</div>
+      </div>
+    </div>
+    <div class="aanpassing-item fade-in">
+      <div class="aanpassing-nr">04</div>
+      <div class="aanpassing-oud">
+        <div class="aanpassing-oud-label">Origineel idee</div>
+        <div class="aanpassing-oud-tekst">Eén project per factuur kiezen</div>
+      </div>
+      <div>
+        <div class="aanpassing-nieuw-label">Wat we deden</div>
+        <div class="aanpassing-nieuw-tekst">Project per factuurregel, met hoofd-project als snelkeuze. Factuur met materiaal voor 3 projecten? Geen probleem.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SLIDE 6: VOORRAAD DEMO -->
+<!-- ══════════════════════════════════════════ -->
+<section class="slide" id="slide-6">
+  <div class="slide-label">Nieuw: Voorraadbeheer</div>
+  <div class="slide-h2">Prijsontwikkeling per materiaal</div>
+  <div class="voorraad-demo">
+    <div class="demo-card">
+      <div class="demo-card-titel">Materiaaloverzicht — klik voor detail</div>
+      <div class="materiaal-kaart">
+        <div class="materiaal-naam">Pantoni Berk 18mm 2-zijdig Nevelwit</div>
+        <div class="materiaal-sub">Drimensa · 4 inkopen</div>
+        <div class="materiaal-prijs">Laatste prijs: € 152,50/plaat</div>
+        <div class="waarschuwing">⚠ Prijsvariatie: € 138,00 – € 152,50</div>
+      </div>
+      <div class="materiaal-kaart" style="border-color: var(--groen)">
+        <div class="materiaal-naam">MDF 18mm wit gelakt</div>
+        <div class="materiaal-sub">Dozon · 6 inkopen</div>
+        <div class="materiaal-prijs">Laatste prijs: € 42,80/plaat</div>
+      </div>
+      <div class="materiaal-kaart" style="border-color: var(--groen)">
+        <div class="materiaal-naam">ABS kantband 0,4mm wit</div>
+        <div class="materiaal-sub">Ostermann · 3 inkopen</div>
+        <div class="materiaal-prijs">Laatste prijs: € 0,42/m</div>
+      </div>
+    </div>
+    <div class="demo-card">
+      <div class="demo-card-titel">Pantoni Berk — inkoophistorie</div>
+      <table class="prijs-tabel">
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Leverancier</th>
+            <th style="text-align:right">Aantal</th>
+            <th style="text-align:right">Stukprijs</th>
+            <th style="text-align:left">Project</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>14 apr '26</td>
+            <td>Drimensa</td>
+            <td style="text-align:right;font-family:'DM Mono',monospace">15</td>
+            <td style="text-align:right;font-family:'DM Mono',monospace">€ 152,50 <span class="pijl-omhoog">▲</span></td>
+            <td><span style="font-family:'DM Mono',monospace;font-size:11px;background:#EEE;padding:1px 5px;border-radius:3px">LGM-OOSTERPARK-26</span></td>
+          </tr>
+          <tr>
+            <td>2 mrt '26</td>
+            <td>Drimensa</td>
+            <td style="text-align:right;font-family:'DM Mono',monospace">10</td>
+            <td style="text-align:right;font-family:'DM Mono',monospace">€ 145,00</td>
+            <td><span style="font-family:'DM Mono',monospace;font-size:11px;background:#EEE;padding:1px 5px;border-radius:3px">CN-RUYSDAEL-26</span></td>
+          </tr>
+          <tr>
+            <td>18 jan '26</td>
+            <td>Drimensa</td>
+            <td style="text-align:right;font-family:'DM Mono',monospace">20</td>
+            <td style="text-align:right;font-family:'DM Mono',monospace">€ 140,00 <span class="pijl-omlaag">▼</span></td>
+            <td><span style="font-family:'DM Mono',monospace;font-size:11px;background:#EEE;padding:1px 5px;border-radius:3px">CN-BREDA-26</span></td>
+          </tr>
+          <tr>
+            <td>5 jan '26</td>
+            <td>Drimensa</td>
+            <td style="text-align:right;font-family:'DM Mono',monospace">8</td>
+            <td style="text-align:right;font-family:'DM Mono',monospace">€ 138,00</td>
+            <td><span style="font-family:'DM Mono',monospace;font-size:11px;background:#EEE;padding:1px 5px;border-radius:3px">MOS-BILTHOVEN-26</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:1rem;padding:0.75rem;background:var(--goud-licht);border-radius:6px;font-size:12px;color:#8B4513">
+        ⚠ Prijs steeg 10,5% in 4 maanden tijd. Overweeg grotere voorraadinkoop bij volgende order.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SLIDE 7: ROADMAP -->
+<!-- ══════════════════════════════════════════ -->
+<section class="slide" id="slide-7">
+  <div class="slide-label" style="color:var(--goud)">Wat staat er nog te bouwen</div>
+  <div class="slide-h2" style="color:white;margin-bottom:2.5rem">Roadmap</div>
+  <div class="roadmap-grid">
+    <div class="roadmap-fase">
+      <div class="fase-nr">FASE 1 — NU</div>
+      <div class="fase-box actief">
+        <div class="fase-titel">Factuur tool v3</div>
+        <div class="fase-items">
+          ✓ PDF analyse<br>
+          ✓ Moneybird koppeling<br>
+          ✓ Voorraadbeheer<br>
+          ✓ 218 facturen opschonen
+        </div>
+        <div class="fase-status status-live">● Live</div>
+      </div>
+    </div>
+    <div class="roadmap-fase">
+      <div class="fase-nr">FASE 2 — Q2</div>
+      <div class="fase-box">
+        <div class="fase-titel">Nacalculatie</div>
+        <div class="fase-items">
+          Uren uit Toggl<br>
+          Inkoop uit Moneybird<br>
+          Marge per project<br>
+          Signalering overschrijding
+        </div>
+        <div class="fase-status status-soon">◐ In planning</div>
+      </div>
+    </div>
+    <div class="roadmap-fase">
+      <div class="fase-nr">FASE 3 — Q3</div>
+      <div class="fase-box">
+        <div class="fase-titel">Automatisering</div>
+        <div class="fase-items">
+          Email → factuur auto<br>
+          Vectorworks koppeling<br>
+          Zaagoptimalisatie data<br>
+          Voorraadstand realtime
+        </div>
+        <div class="fase-status status-later">○ Later</div>
+      </div>
+    </div>
+    <div class="roadmap-fase">
+      <div class="fase-nr">FASE 4 — Q4</div>
+      <div class="fase-box">
+        <div class="fase-titel">Dashboard</div>
+        <div class="fase-items">
+          Uurtarief berekening<br>
+          Marge per klant/type<br>
+          Cashflow overzicht<br>
+          Jaarrapportage
+        </div>
+        <div class="fase-status status-later">○ Later</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- SLIDE 8: AFSLUITING -->
+<!-- ══════════════════════════════════════════ -->
+<section class="slide" id="slide-8">
+  <div class="afsluiting-content">
+    <div class="afsluiting-quote">
+      "We bouwen niet alleen meubels op maat —<br>nu ook <em>software op maat</em>."
+    </div>
+    <div class="afsluiting-url">mtbart.github.io/MT-Facturatie-tool/index-v3.html</div>
+    <div class="afsluiting-stats">
+      <div class="afsluiting-stat">
+        <div class="afsluiting-getal">~20u</div>
+        <div class="afsluiting-label">Direct bespaard</div>
+      </div>
+      <div class="afsluiting-stat">
+        <div class="afsluiting-getal">€ 0</div>
+        <div class="afsluiting-label">Externe kosten</div>
+      </div>
+      <div class="afsluiting-stat">
+        <div class="afsluiting-getal">∞</div>
+        <div class="afsluiting-label">Uitbreidbaar</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- NAVIGATIE -->
+<!-- ══════════════════════════════════════════ -->
+<div class="nav" id="nav-dots"></div>
+<div class="nav-arrows">
+  <button class="nav-arrow" onclick="navigeer(-1)">←</button>
+  <button class="nav-arrow" onclick="navigeer(1)">→</button>
+</div>
+
+<script>
+const slides = Array.from(document.querySelectorAll('.slide'));
+const navDots = document.getElementById('nav-dots');
+let huidig = 0;
+
+// Maak nav dots aan
+slides.forEach((_, i) => {
+  const dot = document.createElement('button');
+  dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+  dot.onclick = () => gaNaar(i);
+  navDots.appendChild(dot);
+});
+
+function gaNaar(index) {
+  huidig = Math.max(0, Math.min(slides.length - 1, index));
+  slides[huidig].scrollIntoView({ behavior: 'smooth' });
+  document.querySelectorAll('.nav-dot').forEach((d, i) => d.classList.toggle('active', i === huidig));
+
+  // Animeer fade-in elementen
+  setTimeout(() => {
+    slides[huidig].querySelectorAll('.fade-in').forEach((el, i) => {
+      setTimeout(() => el.classList.add('visible'), i * 80);
+    });
+  }, 300);
+}
+
+function navigeer(richting) { gaNaar(huidig + richting); }
+
+// Toetsenbord navigatie
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') navigeer(1);
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') navigeer(-1);
+});
+
+// Observer voor scroll
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const idx = slides.indexOf(entry.target);
+      huidig = idx;
+      document.querySelectorAll('.nav-dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+      setTimeout(() => {
+        entry.target.querySelectorAll('.fade-in').forEach((el, i) => {
+          setTimeout(() => el.classList.add('visible'), i * 80);
+        });
+      }, 200);
+    }
+  });
+}, { threshold: 0.5 });
+
+slides.forEach(s => observer.observe(s));
+
+// Start met eerste slide animaties
+setTimeout(() => {
+  slides[0].querySelectorAll('.fade-in').forEach((el, i) => {
+    setTimeout(() => el.classList.add('visible'), i * 80);
+  });
+}, 200);
+</script>
+</body>
+</html>

@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M&T Factuur Tool v3</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F5F2ED;--surface:#FDFCFA;--border:#DDD8D0;--border-strong:#C5BFB5;
+  --text:#1A1815;--text-dim:#6B6560;--text-faint:#A09890;
+  --accent:#2C4A3E;--accent-light:#E8F0ED;
+  --warn:#8B4513;--warn-light:#FDF0E8;
+  --success:#2C4A3E;--success-light:#E8F0ED;
+  --danger:#8B1A1A;--danger-light:#FDE8E8;
+  --info:#1a3a8b;--info-light:#E8EDFB;
+  --voorraad:#5a3a8b;--voorraad-light:#F0EDFB;
+  --mono:'DM Mono',monospace;--serif:'Instrument Serif',serif;--sans:'DM Sans',sans-serif;
+}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5}
+header{background:var(--accent);color:#F5F2ED;padding:1.25rem 2rem;display:flex;align-items:baseline;gap:1rem}
+header h1{font-family:var(--serif);font-size:22px;font-weight:400}
+header span{font-family:var(--mono);font-size:11px;opacity:0.6}
+.main{max-width:100%;margin:0 auto;padding:1.5rem 2rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.5rem;margin-bottom:1.25rem}
+.card-title{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin-bottom:1rem}
+.status-bar{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;padding:0.5rem 0.75rem;border-radius:4px;margin-bottom:1rem}
+.status-bar.ok{background:var(--success-light);color:var(--success)}
+.status-bar.warn{background:var(--warn-light);color:var(--warn)}
+.status-bar.err{background:var(--danger-light);color:var(--danger)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+label{display:block;font-size:12px;font-weight:500;color:var(--text-dim);margin-bottom:4px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:border-color 0.15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:60px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem}
+.grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.75rem}
+.field{margin-bottom:0.875rem}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:4px;border:1px solid transparent;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;transition:all 0.15s}
+.btn-primary{background:var(--accent);color:#F5F2ED}
+.btn-primary:hover{background:#1e3329}
+.btn-secondary{background:transparent;border-color:var(--border-strong);color:var(--text)}
+.btn-secondary:hover{background:var(--bg)}
+.btn-danger{background:var(--danger-light);color:var(--danger);border-color:#f5c5c5}
+.btn-info{background:var(--info-light);color:var(--info);border-color:#b5c5f5}
+.btn-voorraad{background:var(--voorraad-light);color:var(--voorraad);border-color:#c5b5f5}
+.btn-sm{padding:4px 10px;font-size:12px}
+
+/* Regel rij: omschrijving | grootboek | aantal | stukprijs | btw | project | voorraad | verwijder */
+.regel-row{display:grid;grid-template-columns:2.2fr 1.4fr 70px 90px 70px 1.2fr 32px 28px;gap:5px;align-items:start;margin-bottom:6px}
+.regel-header{display:grid;grid-template-columns:2.2fr 1.4fr 70px 90px 70px 1.2fr 32px 28px;gap:5px;margin-bottom:4px}
+.regel-header span{font-size:11px;font-weight:500;color:var(--text-faint);font-family:var(--mono)}
+.ctrl-regel-row{display:grid;grid-template-columns:2.2fr 1.4fr 70px 90px 70px 1.2fr 32px 28px;gap:5px;align-items:start;margin-bottom:6px}
+
+.remove-btn{width:28px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;color:var(--text-faint);font-size:16px;transition:all 0.15s}
+.remove-btn:hover{background:var(--danger-light);color:var(--danger);border-color:#f5c5c5}
+.voorraad-btn{width:32px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;color:var(--text-faint);font-size:14px;transition:all 0.15s;title:'Markeer als voorraad'}
+.voorraad-btn:hover{background:var(--voorraad-light);color:var(--voorraad);border-color:#c5b5f5}
+.voorraad-btn.actief{background:var(--voorraad-light);color:var(--voorraad);border-color:#c5b5f5}
+
+.totaal-row{display:flex;justify-content:flex-end;gap:1.5rem;padding-top:0.75rem;border-top:1px solid var(--border);margin-top:0.5rem;font-family:var(--mono);font-size:12px}
+.badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:10px;font-weight:500}
+.badge-ok{background:var(--success-light);color:var(--success)}
+.badge-warn{background:var(--warn-light);color:var(--warn)}
+.badge-danger{background:var(--danger-light);color:var(--danger)}
+.badge-info{background:var(--info-light);color:var(--info)}
+.badge-voorraad{background:var(--voorraad-light);color:var(--voorraad)}
+.drop-zone{border:2px dashed var(--border-strong);border-radius:8px;padding:2.5rem;text-align:center;cursor:pointer;transition:all 0.2s;color:var(--text-dim)}
+.drop-zone:hover,.drop-zone.over{border-color:var(--accent);background:var(--accent-light);color:var(--accent)}
+.drop-zone .icon{font-size:32px;margin-bottom:0.5rem}
+.drop-zone p{font-size:13px}
+.drop-zone small{font-size:11px;color:var(--text-faint)}
+.ai-extract{background:var(--accent-light);border:1px solid #b8d4c8;border-radius:6px;padding:1rem;margin-top:1rem;font-size:12px;color:var(--accent)}
+.divider{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
+.betaling-preview{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:1rem;font-family:var(--mono);font-size:12px;color:var(--text-dim);line-height:2}
+.betaling-preview strong{color:var(--text)}
+.spinner{width:16px;height:16px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none!important}
+.flex{display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap}
+.mt1{margin-top:0.75rem}
+.mt2{margin-top:1.25rem}
+.code{font-family:var(--mono);font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:1px 5px}
+.tabs{display:flex;gap:2px;margin-bottom:1.5rem;border-bottom:1px solid var(--border)}
+.tab-btn{padding:8px 16px;border:none;background:none;cursor:pointer;font-family:var(--sans);font-size:13px;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:500}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* Controle tabblad */
+.controle-layout{display:grid;grid-template-columns:320px 1fr;gap:1.5rem;min-height:600px}
+.factuur-lijst-wrap{border-right:1px solid var(--border);padding-right:1.5rem;overflow-y:auto;max-height:75vh}
+.factuur-item{padding:10px 8px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;transition:background 0.1s}
+.factuur-item:hover{background:var(--bg)}
+.factuur-item.actief{background:var(--accent-light)}
+.factuur-item-naam{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.factuur-item-sub{display:flex;justify-content:space-between;margin-top:3px;font-size:11px;color:var(--text-faint)}
+.filter-bar{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.filter-btn{font-size:11px;padding:3px 8px;border-radius:12px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-dim)}
+.filter-btn.active{background:var(--accent);color:#F5F2ED;border-color:var(--accent)}
+.stat-bar{display:flex;gap:12px;font-size:11px;padding:8px;background:var(--bg);border-radius:4px;margin-bottom:10px;flex-wrap:wrap}
+.voortgang-bar{height:4px;background:var(--border);border-radius:2px;margin-bottom:8px;overflow:hidden}
+.voortgang-bar-inner{height:100%;background:var(--accent);border-radius:2px;transition:width 0.3s}
+.zoek-input{width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:var(--sans);margin-bottom:8px;background:var(--surface)}
+
+/* Project aanmaken modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal{background:var(--surface);border-radius:10px;padding:1.5rem;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.15)}
+.modal h2{font-family:var(--serif);font-size:18px;font-weight:400;margin-bottom:1rem}
+
+/* Periode filter */
+.periode-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem;padding:0.75rem;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
+.periode-bar label{margin-bottom:0;font-size:12px;white-space:nowrap}
+.periode-bar input{width:140px;padding:5px 8px;font-size:12px}
+.periode-bar select{width:auto;padding:5px 8px;font-size:12px}
+
+/* Voorraad tab */
+.voorraad-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-bottom:1.5rem}
+.voorraad-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem}
+.voorraad-card-titel{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-faint);margin-bottom:4px}
+.voorraad-card-waarde{font-size:22px;font-family:var(--mono);font-weight:500;color:var(--text)}
+.voorraad-card-sub{font-size:11px;color:var(--text-dim);margin-top:2px}
+.mutatie-row{display:flex;gap:1rem;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;align-items:center;flex-wrap:wrap}
+.mutatie-row:last-child{border-bottom:none}
+
+/* Geschiedenis tab */
+.geschiedenis-item{display:flex;align-items:center;gap:1rem;padding:0.75rem 0;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mortise &amp; Tenon</h1>
+  <span>Factuur Tool v3.0</span>
+</header>
+
+<div class="main">
+  <div id="api-status" class="status-bar warn">
+    <span class="dot"></span>
+    <span id="api-status-text">Verbinding controleren...</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('verwerk',this)">Nieuwe factuur</button>
+    <button class="tab-btn" onclick="showTab('controle',this)">Factuur controle</button>
+    <button class="tab-btn" onclick="showTab('voorraad',this)">Voorraad</button>
+    <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
+    <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
+  </div>
+
+  <!-- ═══ TAB: NIEUWE FACTUUR ═══ -->
+  <div id="tab-verwerk" class="tab-content active">
+    <div class="card">
+      <div class="card-title">Stap 1 — PDF uploaden</div>
+      <div class="drop-zone" id="drop-zone"
+        onclick="document.getElementById('pdf-input').click()"
+        ondragover="event.preventDefault();this.classList.add('over')"
+        ondragleave="this.classList.remove('over')"
+        ondrop="handleDrop(event)">
+        <div class="icon">📄</div>
+        <p>Sleep een factuur PDF hier naartoe of klik om te kiezen</p>
+        <small>Claude leest de factuur automatisch uit</small>
+      </div>
+      <input type="file" id="pdf-input" accept=".pdf" class="hidden" onchange="handleFile(this.files[0])">
+      <div id="ai-result" class="ai-extract hidden"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Stap 2 — Factuurgegevens controleren &amp; aanvullen</div>
+      <div id="factuur-form-inhoud"></div>
+      <div class="flex mt2">
+        <button class="btn btn-primary" onclick="boekInMoneybird()">Boeken in Moneybird</button>
+        <button class="btn btn-secondary" onclick="resetFormulier()">Wissen</button>
+        <span id="boek-status" style="font-size:12px;color:var(--text-dim)"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: FACTUUR CONTROLE ═══ -->
+  <div id="tab-controle" class="tab-content">
+    <div class="card">
+      <div class="card-title">Inkoopfacturen — controleer project, grootboek en regeldetails</div>
+
+      <!-- Periode filter -->
+      <div class="periode-bar">
+        <label>Periode:</label>
+        <select id="periode-preset" onchange="periodePresetGewijzigd()">
+          <option value="this_year">Dit jaar</option>
+          <option value="last_year">Vorig jaar</option>
+          <option value="custom">Aangepast</option>
+        </select>
+        <span id="periode-custom" class="hidden" style="display:flex;gap:6px;align-items:center">
+          <label style="margin:0">Van:</label>
+          <input type="date" id="periode-van" style="width:140px">
+          <label style="margin:0">T/m:</label>
+          <input type="date" id="periode-tm" style="width:140px">
+        </span>
+        <button class="btn btn-primary btn-sm" onclick="laadFacturen()">
+          <span id="laad-spinner" class="spinner hidden"></span>
+          Facturen laden
+        </button>
+        <span id="laad-status" style="font-size:12px;color:var(--text-dim)"></span>
+      </div>
+
+      <div id="controle-inhoud" class="hidden">
+        <div class="controle-layout">
+          <!-- Lijst links -->
+          <div class="factuur-lijst-wrap">
+            <div class="stat-bar" id="stat-bar"></div>
+            <div class="voortgang-bar"><div class="voortgang-bar-inner" id="voortgang-inner" style="width:0%"></div></div>
+            <input class="zoek-input" type="text" placeholder="🔍 Zoek op naam, ref of bedrag..." oninput="zoekInLijst(this.value)">
+            <div class="filter-bar">
+              <button class="filter-btn active" onclick="filterFacturen('aandacht',this)">⚠ Aandacht</button>
+              <button class="filter-btn" onclick="filterFacturen('alle',this)">Alle</button>
+              <button class="filter-btn" onclick="filterFacturen('geen_project',this)">Geen project</button>
+              <button class="filter-btn" onclick="filterFacturen('duplicaat',this)">Duplicaten</button>
+              <button class="filter-btn" onclick="filterFacturen('ok',this)">✓ Klaar</button>
+            </div>
+            <div id="factuur-lijst"></div>
+          </div>
+          <!-- Detail rechts -->
+          <div id="factuur-detail">
+            <p style="color:var(--text-faint);font-size:13px;padding-top:2rem">← Selecteer een factuur</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: VOORRAAD ═══ -->
+  <div id="tab-voorraad" class="tab-content">
+    <div class="card">
+      <div class="card-title">Voorraadoverzicht — materialen</div>
+      <div class="flex" style="margin-bottom:1rem">
+        <button class="btn btn-secondary btn-sm" onclick="renderVoorraad()">↻ Vernieuwen</button>
+        <button class="btn btn-danger btn-sm" onclick="wisVoorraad()">⚠ Alles wissen</button>
+      </div>
+      <div id="voorraad-stats" class="voorraad-grid"></div>
+      <hr class="divider">
+      <div class="card-title">Mutatielog</div>
+      <input class="zoek-input" type="text" placeholder="🔍 Zoek op materiaal, leverancier of project..." oninput="zoekVoorraad(this.value)" style="max-width:400px">
+      <div id="voorraad-mutaties"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: GESCHIEDENIS ═══ -->
+  <div id="tab-historie" class="tab-content">
+    <div class="card">
+      <div class="card-title">Verwerkte facturen — opgeslagen lokaal</div>
+      <div class="flex" style="margin-bottom:1rem">
+        <input type="text" placeholder="🔍 Zoek op leverancier, project of datum..." oninput="zoekGeschiedenis(this.value)" style="max-width:340px;padding:6px 10px;font-size:12px">
+        <button class="btn btn-danger btn-sm" onclick="if(confirm('Geschiedenis wissen?')){localStorage.removeItem('mt_history');renderHistory()}">Wissen</button>
+      </div>
+      <div id="history-list" style="font-size:13px;color:var(--text-dim)">Nog geen facturen verwerkt.</div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: INSTELLINGEN ═══ -->
+  <div id="tab-instellingen" class="tab-content">
+    <div class="card">
+      <div class="card-title">API Tokens</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem;background:var(--warn-light);padding:8px 12px;border-radius:4px;border-left:3px solid var(--warn)">
+        ⚠ Tokens worden opgeslagen in localStorage van je browser — niet in de code. Zie instructies hieronder voor de Cloudflare Worker instelling.
+      </p>
+      <div class="field"><label>Moneybird API Token</label><input type="password" id="s-mb-token"></div>
+      <div class="field"><label>Moneybird Administratie ID</label><input type="text" id="s-mb-admin"></div>
+      <div class="flex mt2">
+        <button class="btn btn-primary" onclick="saveSettings()">Opslaan</button>
+        <button class="btn btn-secondary" onclick="testApi()">Verbinding testen</button>
+        <span id="settings-status" style="font-size:12px;color:var(--text-dim)"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cloudflare Worker — token beveiliging</div>
+      <p style="font-size:12px;color:var(--text-dim);line-height:1.8">
+        De Claude API key staat al veilig in de Worker als Secret <code style="font-family:var(--mono);background:var(--bg);padding:1px 4px;border-radius:3px">CLAUDE_KEY</code>.<br>
+        Verplaats ook het Moneybird token naar de Worker:<br><br>
+        1. Ga naar <strong>Cloudflare Dashboard → Workers → mt-claude-proxy</strong><br>
+        2. Tab <strong>Settings → Variables → Add variable</strong><br>
+        3. Naam: <code style="font-family:var(--mono);background:var(--bg);padding:1px 4px;border-radius:3px">MB_TOKEN</code>, waarde: je Moneybird token, aanvinken als <strong>Secret</strong><br>
+        4. Pas de Worker code aan zodat hij <code style="font-family:var(--mono);background:var(--bg);padding:1px 4px;border-radius:3px">env.MB_TOKEN</code> gebruikt i.p.v. de token uit de query parameter
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title">Grootboekrekeningen uit Moneybird</div>
+      <div id="ledger-list" style="font-size:12px;color:var(--text-dim)">Laden...</div>
+      <button class="btn btn-secondary btn-sm mt1" onclick="loadLedgers()">Herladen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project aanmaken modal -->
+<div id="project-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Nieuw project aanmaken</h2>
+    <div class="field">
+      <label>Klantcode</label>
+      <select id="modal-klant">
+        <option value="CN">CN — Compananny</option>
+        <option value="LGM">LGM — LGM Projecten</option>
+        <option value="MOS">MOS — MOS Interiors</option>
+        <option value="STY">STY — Styles Concepts</option>
+        <option value="HWC">HWC — Herman Wesseling College</option>
+        <option value="GBK">GBK — Gerard Bakker</option>
+        <option value="EZ">EZ — Edwin Zwiers</option>
+        <option value="DV">DV — David Viëtor</option>
+        <option value="JAN">JAN — Margret Jans</option>
+        <option value="INT">INT — Intern</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Locatie / omschrijving</label>
+      <input type="text" id="modal-locatie" placeholder="bijv. OOSTERPARK">
+    </div>
+    <div class="field">
+      <label>Jaar</label>
+      <input type="text" id="modal-jaar" value="26">
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:var(--mono);font-size:13px;margin-bottom:1rem" id="modal-preview">—</div>
+    <div class="flex">
+      <button class="btn btn-primary" onclick="maakProjectAan()">Aanmaken</button>
+      <button class="btn btn-secondary" onclick="sluitModal()">Annuleren</button>
+      <span id="modal-status" style="font-size:12px;color:var(--text-dim)"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ CONFIG ═══
+const WORKER = 'https://mt-claude-proxy.bart-a12.workers.dev';
+const ADMIN_DEFAULT = '342968480452052559';
+const BTW_IDS = {'21':'342968481360119428','9':'342968481362216581','0':'348668107652335594'};
+const BANK_ID = '343544076091524743';
+
+// Bekende voorraad-leveranciers
+const VOORRAAD_LEVERANCIERS = ['dozon','ostermann','pd hout','kghn','drimensa','finsa','egger','pfleiderer','kronospan'];
+
+let PROJECT_CODES = [
+  'CN-RUYSDAEL-26','CN-BREDA-26','CN-BACHZAAL-26','CN-UITBESTEDING-26',
+  'LGM-OOSTERPARK-26','LGM-GAASPERDAMSTRAAT-26','LGM-TVMEUBEL-26',
+  'MOS-BILTHOVEN-26','STY-SHIMANO-26','HWC-26','GBK-BANK-26',
+  'EZ-BANK-26','DV-BOEKENKAST-26','JAN-LANDSMEER-26','INT-ADMIN','INT-OVERIG','INT-WERKPLAATS'
+];
+
+// ═══ STATE ═══
+let ledgers = [];
+let sessionHistory = [];
+let regelCount = 0;
+let currentFile = null;
+let alleFacturen = [];
+let geenDuplicaat = new Set();
+let huidigeFactuur = null;
+let huidigFilter = 'aandacht';
+let zoekterm = '';
+
+// ═══ SETTINGS ═══
+function getMbToken() { return localStorage.getItem('mt_mb_token') || ''; }
+function getAdmin()   { return localStorage.getItem('mt_mb_admin') || ADMIN_DEFAULT; }
+
+function saveSettings() {
+  const mb = document.getElementById('s-mb-token').value.trim();
+  const admin = document.getElementById('s-mb-admin').value.trim();
+  if (mb) localStorage.setItem('mt_mb_token', mb);
+  if (admin) localStorage.setItem('mt_mb_admin', admin);
+  document.getElementById('settings-status').textContent = '✓ Opgeslagen';
+  setTimeout(() => document.getElementById('settings-status').textContent = '', 2000);
+  updateApiStatus();
+}
+function loadSavedSettings() {
+  document.getElementById('s-mb-token').value = getMbToken();
+  document.getElementById('s-mb-admin').value = getAdmin();
+}
+async function testApi() {
+  const status = document.getElementById('settings-status');
+  status.textContent = 'Testen...';
+  try {
+    const r = await mbGet(`${getAdmin()}/ledger_accounts`);
+    status.textContent = r.ok ? '✓ Moneybird werkt' : `✗ Fout: ${r.status}`;
+  } catch(e) { status.textContent = '✗ Verbinding mislukt'; }
+}
+async function updateApiStatus() {
+  const bar = document.getElementById('api-status');
+  const txt = document.getElementById('api-status-text');
+  if (!getMbToken()) {
+    bar.className = 'status-bar warn';
+    txt.textContent = 'Geen Moneybird token — vul in bij Instellingen';
+    return;
+  }
+  try {
+    const r = await mbGet(`${getAdmin()}/ledger_accounts`);
+    if (r.ok) { bar.className = 'status-bar ok'; txt.textContent = 'Moneybird + Claude API verbonden — klaar voor gebruik'; }
+    else { bar.className = 'status-bar err'; txt.textContent = `Moneybird fout: ${r.status}`; }
+  } catch(e) { bar.className = 'status-bar err'; txt.textContent = 'Verbinding mislukt'; }
+}
+
+// ═══ API HELPERS ═══
+function mbGet(path) {
+  return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}&token=${encodeURIComponent(getMbToken())}`);
+}
+function mbPost(path, body) {
+  return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}&token=${encodeURIComponent(getMbToken())}`, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+  });
+}
+function mbPatch(path, body) {
+  return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}&token=${encodeURIComponent(getMbToken())}`, {
+    method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+  });
+}
+function mbDelete(path) {
+  return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}&token=${encodeURIComponent(getMbToken())}`, {method:'DELETE'});
+}
+function claudeCall(messages, maxTokens=1800) {
+  return fetch(`${WORKER}?target=claude`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-haiku-4-5-20251001', max_tokens:maxTokens, messages})
+  }).then(r => r.json());
+}
+
+// ═══ INIT ═══
+window.onload = () => {
+  loadSavedSettings();
+  renderFactuurFormulier();
+  updateApiStatus();
+  loadLedgers();
+  renderHistory();
+  renderVoorraad();
+  // Datum defaults voor periode filter
+  const nu = new Date();
+  document.getElementById('periode-van').value = `${nu.getFullYear()}-01-01`;
+  document.getElementById('periode-tm').value = nu.toISOString().split('T')[0];
+};
+
+// ═══ TABS ═══
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'voorraad') renderVoorraad();
+  if (name === 'historie') renderHistory();
+}
+
+// ═══ TABS ═══
+function periodePresetGewijzigd() {
+  const preset = document.getElementById('periode-preset').value;
+  const customDiv = document.getElementById('periode-custom');
+  if (preset === 'custom') customDiv.classList.remove('hidden');
+  else customDiv.classList.add('hidden');
+}
+
+// ═══ LEDGERS ═══
+async function loadLedgers() {
+  try {
+    const r = await mbGet(`${getAdmin()}/ledger_accounts`);
+    if (!r.ok) return;
+    ledgers = await r.json();
+    const inkoopLedgers = ledgers.filter(l => l.account_type === 'expenses');
+    document.getElementById('ledger-list').innerHTML = inkoopLedgers.map(l =>
+      `<div style="padding:3px 0;border-bottom:1px solid var(--border);display:flex;gap:1rem;font-size:12px">
+        <span class="code">${l.account_id || l.id}</span><span>${l.name}</span>
+      </div>`
+    ).join('');
+    updateLedgerDropdowns();
+  } catch(e) {}
+}
+function updateLedgerDropdowns() {
+  document.querySelectorAll('.ledger-select').forEach(sel => {
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— Grootboek —</option>';
+    ledgers.forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = l.id; opt.textContent = l.name;
+      if (l.id === current) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  });
+}
+function getLedgerIdByName(naam) {
+  if (!naam) return ledgers.find(l => l.name.toLowerCase().includes('inkoop materiaal'))?.id || ledgers.find(l => l.account_type === 'expenses')?.id || '';
+  const lower = naam.toLowerCase();
+  let match = ledgers.find(l => l.name.toLowerCase() === lower);
+  if (match) return match.id;
+  match = ledgers.find(l => l.name.toLowerCase().includes(lower) || lower.includes(l.name.toLowerCase()));
+  if (match) return match.id;
+  if (lower.includes('materiaal')||lower.includes('plaat')||lower.includes('hout')||lower.includes('beslag')) return ledgers.find(l=>l.name.toLowerCase().includes('inkoop materiaal'))?.id||'';
+  if (lower.includes('dienst')||lower.includes('montage')||lower.includes('spuit')||lower.includes('lak')) return ledgers.find(l=>l.name.toLowerCase().includes('inkoop diensten'))?.id||'';
+  if (lower.includes('machine')||lower.includes('gereedschap')||lower.includes('zaag')) return ledgers.find(l=>l.name.toLowerCase().includes('kleine aanschaffingen'))?.id||'';
+  if (lower.includes('reparatie')||lower.includes('onderhoud')) return ledgers.find(l=>l.name.toLowerCase().includes('reparatie'))?.id||'';
+  if (lower.includes('vervoer')||lower.includes('transport')) return ledgers.find(l=>l.name.toLowerCase().includes('vervoer'))?.id||'';
+  if (lower.includes('telefoon')||lower.includes('internet')) return ledgers.find(l=>l.name.toLowerCase().includes('telefoon'))?.id||'';
+  if (lower.includes('gas')||lower.includes('elektr')||lower.includes('energie')) return ledgers.find(l=>l.name.toLowerCase().includes('gas'))?.id||'';
+  return ledgers.find(l=>l.name.toLowerCase().includes('inkoop materiaal'))?.id||ledgers.find(l=>l.account_type==='expenses')?.id||'';
+}
+
+// ═══ PROJECT OPTIONS ═══
+function projectOptiesHTML(geselecteerd='') {
+  return `<option value="">— Kies project —</option>` +
+    PROJECT_CODES.map(p=>`<option value="${p}" ${p===geselecteerd?'selected':''}>${p}</option>`).join('') +
+    `<option value="__nieuw__">+ Nieuw project aanmaken</option>`;
+}
+
+// ═══ FORMULIER RENDEREN (nieuwe factuur) ═══
+function renderFactuurFormulier(data={}) {
+  const container = document.getElementById('factuur-form-inhoud');
+  container.innerHTML = `
+    <div class="grid2">
+      <div class="field">
+        <label>Leverancier</label>
+        <input type="text" id="f-contact" placeholder="Naam leverancier" value="${data.leverancier||''}">
+      </div>
+      <div class="field">
+        <label>Hoofd-project (vul alle regels in)</label>
+        <div style="display:flex;gap:6px">
+          <select id="f-project" style="flex:1" onchange="projectGewijzigd(this);pasHoofdprojectToe()">
+            ${projectOptiesHTML(data.project_code||'')}
+          </select>
+        </div>
+        ${data.project_zeker===false?'<small style="color:var(--warn);font-size:11px">💡 Controleer project — onzeker</small>':''}
+      </div>
+    </div>
+    <div class="grid3">
+      <div class="field">
+        <label>Factuurnummer</label>
+        <input type="text" id="f-ref" placeholder="Ref. leverancier" value="${data.factuurnummer||''}">
+      </div>
+      <div class="field">
+        <label>Factuurdatum</label>
+        <input type="date" id="f-date" value="${data.datum||''}" onchange="updateBetaling()">
+      </div>
+      <div class="field">
+        <label>Vervaldatum</label>
+        <input type="date" id="f-due" value="${data.vervaldatum||''}" onchange="updateBetaling()">
+      </div>
+    </div>
+    <hr class="divider">
+    <div class="card-title">Factuurregels</div>
+    <div class="regel-header">
+      <span>Omschrijving</span><span>Grootboek</span><span>Aantal</span><span>Stukprijs</span><span>BTW</span><span>Project</span><span title="Voorraad">📦</span><span></span>
+    </div>
+    <div id="regels-container"></div>
+    <button class="btn btn-secondary btn-sm mt1" onclick="addRegel()">+ Regel toevoegen</button>
+    <div class="totaal-row">
+      <span>Excl.: <strong id="totaal-excl">€ 0,00</strong></span>
+      <span>BTW: <strong id="totaal-btw">€ 0,00</strong></span>
+      <span>Incl.: <strong id="totaal-incl">€ 0,00</strong></span>
+    </div>
+    <hr class="divider">
+    <div class="card-title">Betaalopdracht</div>
+    <div class="betaling-preview" id="betaling-preview">Vul een vervaldatum in.</div>
+  `;
+  regelCount = 0;
+  if (data.regels && data.regels.length) {
+    data.regels.forEach(r => addRegel(r.omschrijving, getLedgerIdByName(r.grootboek), r.aantal||1, r.stukprijs||r.bedrag_excl, r.btw_pct, data.project_code||'', isVoorraadLeverancier(data.leverancier||'')));
+  } else {
+    addRegel();
+  }
+  document.getElementById('f-due').addEventListener('change', updateBetaling);
+  document.getElementById('f-contact').addEventListener('input', () => {
+    updateBetaling();
+    autoVoorraadMarkering(document.getElementById('f-contact').value);
+  });
+  updateBetaling();
+}
+
+function isVoorraadLeverancier(naam) {
+  const lower = naam.toLowerCase();
+  return VOORRAAD_LEVERANCIERS.some(v => lower.includes(v));
+}
+
+function autoVoorraadMarkering(leverancierNaam) {
+  if (!isVoorraadLeverancier(leverancierNaam)) return;
+  document.querySelectorAll('.regel-row .voorraad-btn').forEach(btn => {
+    btn.classList.add('actief');
+    btn.title = 'Voorraad (auto-herkend)';
+  });
+}
+
+function pasHoofdprojectToe() {
+  const project = document.getElementById('f-project')?.value;
+  if (!project || project === '__nieuw__') return;
+  document.querySelectorAll('.regel-row .project-select').forEach(sel => {
+    if (!sel.value) sel.value = project;
+  });
+}
+
+function projectGewijzigd(sel) {
+  if (sel.value === '__nieuw__') { sel.value = ''; openModal(); }
+}
+
+// ═══ REGELS (nieuwe factuur) ═══
+function addRegel(omschrijving='', ledger='', aantal=1, stukprijs='', btw='21', project='', voorraad=false) {
+  regelCount++;
+  const id = regelCount;
+  const container = document.getElementById('regels-container');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'regel-row';
+  div.id = `regel-${id}`;
+  div.innerHTML = `
+    <input type="text" placeholder="Omschrijving" value="${omschrijving}" oninput="updateTotalen()">
+    <select class="ledger-select" onchange="updateTotalen()">
+      <option value="">— Grootboek —</option>
+      ${ledgers.map(l=>`<option value="${l.id}" ${l.id===ledger?'selected':''}>${l.name}</option>`).join('')}
+    </select>
+    <input type="number" step="1" min="0" placeholder="1" value="${aantal}" oninput="updateTotalen()" style="font-family:var(--mono)">
+    <input type="number" step="0.01" placeholder="0,00" value="${stukprijs}" oninput="updateTotalen()" style="font-family:var(--mono)">
+    <select onchange="updateTotalen()">
+      <option value="21" ${btw==21?'selected':''}>21%</option>
+      <option value="9" ${btw==9?'selected':''}>9%</option>
+      <option value="0" ${btw==0?'selected':''}>0%</option>
+    </select>
+    <select class="project-select">
+      ${projectOptiesHTML(project)}
+    </select>
+    <button class="voorraad-btn ${voorraad?'actief':''}" title="Markeer als voorraadmateriaal" onclick="toggleVoorraad(this)">📦</button>
+    <button class="remove-btn" onclick="removeRegel(${id})">×</button>
+  `;
+  container.appendChild(div);
+  // Luister op project change in deze regel
+  div.querySelector('.project-select').addEventListener('change', function() {
+    if (this.value === '__nieuw__') { this.value=''; openModal(); }
+  });
+  updateTotalen();
+}
+
+function toggleVoorraad(btn) { btn.classList.toggle('actief'); }
+
+function removeRegel(id) {
+  document.getElementById(`regel-${id}`)?.remove();
+  updateTotalen();
+}
+
+function updateTotalen() {
+  let excl=0, btw=0;
+  document.querySelectorAll('#regels-container .regel-row').forEach(row => {
+    const inputs = row.querySelectorAll('input[type="number"]');
+    const sel = row.querySelectorAll('select');
+    if (inputs.length >= 2) {
+      const aantal = parseFloat(inputs[0].value)||1;
+      const prijs = parseFloat(inputs[1].value)||0;
+      const totaal = aantal * prijs;
+      excl += totaal;
+      btw += totaal * (parseFloat(sel[1]?.value)||0) / 100;
+    }
+  });
+  const fmt = n=>`€ ${n.toFixed(2).replace('.',',')}`;
+  document.getElementById('totaal-excl').textContent = fmt(excl);
+  document.getElementById('totaal-btw').textContent = fmt(btw);
+  document.getElementById('totaal-incl').textContent = fmt(excl+btw);
+  updateBetaling();
+}
+
+function updateBetaling() {
+  const due = document.getElementById('f-due')?.value;
+  const contact = document.getElementById('f-contact')?.value;
+  const preview = document.getElementById('betaling-preview');
+  if (!preview) return;
+  if (!due) { preview.textContent = 'Vul een vervaldatum in.'; return; }
+  const dueDate = new Date(due);
+  const payDate = new Date(dueDate);
+  payDate.setDate(payDate.getDate()-1);
+  const fmt = d => d.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'});
+  const totaal = document.getElementById('totaal-incl')?.textContent||'';
+  preview.innerHTML = `<strong>Betaalopdracht klaarstaan op:</strong> ${fmt(payDate)}<br><strong>Begunstigde:</strong> ${contact||'—'}<br><strong>Bedrag:</strong> ${totaal}<br><strong>Vervaldatum:</strong> ${fmt(dueDate)}`;
+}
+
+// ═══ PDF ANALYSE ═══
+async function handleFile(file) {
+  if (!file) return;
+  currentFile = file;
+  const resultDiv = document.getElementById('ai-result');
+  resultDiv.classList.remove('hidden');
+  resultDiv.innerHTML = '<span class="spinner"></span> Claude leest de factuur...';
+  try {
+    const base64 = await fileToBase64(file);
+    const data = await claudeCall([{
+      role:'user',
+      content:[
+        {type:'document', source:{type:'base64', media_type:'application/pdf', data:base64}},
+        {type:'text', text:`Lees deze inkoopfactuur en geef ALLEEN een JSON object terug:
+{
+  "leverancier": "naam leverancier",
+  "factuurnummer": "factuurnummer",
+  "datum": "YYYY-MM-DD",
+  "vervaldatum": "YYYY-MM-DD (als niet vermeld: datum + 30 dagen)",
+  "project_code": "meest waarschijnlijke code uit: ${PROJECT_CODES.join(', ')}, of null",
+  "project_zeker": true of false,
+  "regels": [
+    {
+      "omschrijving": "exacte omschrijving zoals op de factuur staat",
+      "grootboek": "kies uit: inkoop materiaal, Inkoop diensten, Kleine aanschaffingen machines/gereedschap, Reparatie en onderhoud machines/inventaris, Vervoerskosten, Telefoon en internet, Kantoorbenodigdheden, Gas water en elektriciteit, Huisvestingskosten",
+      "grootboek_zeker": true of false,
+      "aantal": 1,
+      "stukprijs": 0.00,
+      "bedrag_excl": 0.00,
+      "btw_pct": 21
+    }
+  ]
+}
+BELANGRIJK: aantal en stukprijs altijd invullen. Als er "20 stuks à €152,50" staat, dan aantal=20 en stukprijs=152.50. BTW: 21, 9 of 0.`}
+      ]
+    }]);
+    const text = data.content?.[0]?.text||'';
+    const parsed = JSON.parse(text.replace(/```json|```/g,'').trim());
+    renderFactuurFormulier(parsed);
+    const hints=[];
+    if (parsed.project_code) hints.push(parsed.project_zeker?`✓ Project: <strong>${parsed.project_code}</strong>`:`💡 Project: <strong>${parsed.project_code}</strong> — controleer`);
+    else hints.push('⚠ Project niet herkend');
+    const onzeker = parsed.regels?.filter(r=>!r.grootboek_zeker).length||0;
+    if (onzeker>0) hints.push(`💡 ${onzeker} grootboek(en) onzeker`);
+    if (isVoorraadLeverancier(parsed.leverancier||'')) hints.push('📦 Voorraad-leverancier herkend');
+    resultDiv.innerHTML=`✓ Factuur gelezen — ${hints.join(' · ')}`;
+  } catch(e) {
+    resultDiv.innerHTML=`Analyse mislukt: ${e.message}`;
+    renderFactuurFormulier();
+  }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('over');
+  const file=e.dataTransfer.files[0];
+  if (file?.type==='application/pdf') handleFile(file);
+}
+function fileToBase64(file) {
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+}
+
+// ═══ BOEKEN IN MONEYBIRD ═══
+async function boekInMoneybird() {
+  const status = document.getElementById('boek-status');
+  const contact = document.getElementById('f-contact').value.trim();
+  const ref = document.getElementById('f-ref').value.trim();
+  const date = document.getElementById('f-date').value;
+  const due = document.getElementById('f-due').value;
+  const hoofdProject = document.getElementById('f-project').value;
+  if (!contact||!date) { status.textContent='✗ Leverancier en datum verplicht'; return; }
+
+  const details=[];
+  const voorraadRegels=[];
+  document.querySelectorAll('#regels-container .regel-row').forEach(row=>{
+    const inputs=row.querySelectorAll('input');
+    const selects=row.querySelectorAll('select');
+    const oms=inputs[0]?.value?.trim();
+    const ledger_id=selects[0]?.value;
+    const aantal=parseFloat(inputs[1]?.value)||1;
+    const stukprijs=parseFloat(inputs[2]?.value)||0;
+    const btw=selects[1]?.value||'21';
+    const project=selects[2]?.value||hoofdProject;
+    const isVoorraad=row.querySelector('.voorraad-btn')?.classList.contains('actief');
+    if (oms||stukprijs) {
+      const fallbackLedger=ledgers.find(l=>l.name.toLowerCase().includes('inkoop materiaal'))?.id||'';
+      details.push({
+        description: oms||'—',
+        amount: aantal.toString(),
+        price: stukprijs.toString(),
+        tax_rate_id: BTW_IDS[btw]||BTW_IDS['21'],
+        ledger_account_id: ledger_id||fallbackLedger
+      });
+      if (isVoorraad && oms) {
+        voorraadRegels.push({omschrijving:oms, aantal, stukprijs, btw, project, leverancier:contact, datum:date});
+      }
+    }
+  });
+
+  const ref_volledig = hoofdProject ? `${hoofdProject}${ref?' - '+ref:''}` : ref;
+  status.innerHTML='<span class="spinner"></span> Contact zoeken...';
+  try {
+    const cR=await mbGet(`${getAdmin()}/contacts?query=${encodeURIComponent(contact)}`);
+    const contacts=await cR.json();
+    let contactId=contacts?.[0]?.id;
+    if (!contactId) {
+      const nc=await mbPost(`${getAdmin()}/contacts`,{contact:{company_name:contact}});
+      contactId=(await nc.json()).id;
+    }
+    status.innerHTML='<span class="spinner"></span> Factuur boeken...';
+    const payload={purchase_invoice:{contact_id:contactId,reference:ref_volledig,date,due_date:due||undefined,details_attributes:details}};
+    const r=await mbPost(`${getAdmin()}/documents/purchase_invoices`,payload);
+    if (!r.ok) { const err=await r.json(); status.textContent=`✗ ${JSON.stringify(err)}`; return; }
+    const result=await r.json();
+    const invoiceId=result.id;
+
+    if (currentFile) {
+      status.innerHTML='<span class="spinner"></span> PDF uploaden...';
+      try {
+        const formData=new FormData();
+        formData.append('file',currentFile,currentFile.name);
+        await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+invoiceId+'/attachments')}&token=${encodeURIComponent(getMbToken())}`,{method:'POST',body:formData});
+      } catch(e) {}
+    }
+
+    if (due) {
+      try {
+        const dueDate=new Date(due);const payDate=new Date(dueDate);payDate.setDate(payDate.getDate()-1);
+        const fmtLang=d=>new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'});
+        await mbPost(`${getAdmin()}/documents/purchase_invoices/${invoiceId}/notes`,{note:{note:`Betalen voor: ${fmtLang(payDate.toISOString().split('T')[0])}`}});
+      } catch(e) {}
+    }
+
+    // Sla voorraad op
+    voorraadRegels.forEach(r=>slaVoorraadOp(r));
+
+    let payDateStr='';
+    if (due) { const d=new Date(due);d.setDate(d.getDate()-1);payDateStr=d.toISOString().split('T')[0]; }
+    const fmtDatum=d=>d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'long'}):'—';
+    status.innerHTML=`✓ Geboekt & PDF bijgevoegd — <strong>betaal voor ${fmtDatum(payDateStr)}</strong>${voorraadRegels.length?` · 📦 ${voorraadRegels.length} voorraadmutatie(s) opgeslagen`:''}`;
+
+    // Sla op in geschiedenis
+    const histItem={id:invoiceId,contact,ref,date,due,payDate:payDateStr,project:hoofdProject,totaal:document.getElementById('totaal-incl').textContent,ts:Date.now()};
+    const hist=JSON.parse(localStorage.getItem('mt_history')||'[]');
+    hist.unshift(histItem);
+    localStorage.setItem('mt_history',JSON.stringify(hist.slice(0,500)));
+
+    setTimeout(()=>{
+      resetFormulier();
+      status.innerHTML=`✓ Klaar — <a href="https://moneybird.com/${getAdmin()}/documents/${invoiceId}/payment_initiations/new" target="_blank" style="color:var(--accent)">💳 Betaling inplannen →</a>`;
+    },1500);
+  } catch(e) { status.textContent=`✗ ${e.message}`; }
+}
+
+function resetFormulier() {
+  currentFile=null;
+  renderFactuurFormulier();
+  document.getElementById('ai-result')?.classList.add('hidden');
+}
+
+// ═══ VOORRAAD ═══
+function slaVoorraadOp(regel) {
+  const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
+  voorraad.push({...regel, id:Date.now()+Math.random(), ts:Date.now()});
+  localStorage.setItem('mt_voorraad',JSON.stringify(voorraad));
+}
+
+let voorraadDetailMateriaal = null;
+
+function renderVoorraad(filter='') {
+  const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
+
+  // Groepeer per materiaalomschrijving (genormaliseerd)
+  const perMateriaal={};
+  voorraad.forEach(v=>{
+    const key=(v.omschrijving||'Onbekend').trim();
+    if (!perMateriaal[key]) perMateriaal[key]={regels:[],totaalAantal:0,totaalWaarde:0,leveranciers:new Set(),prijzen:[]};
+    perMateriaal[key].regels.push(v);
+    perMateriaal[key].totaalAantal+=(v.aantal||1);
+    perMateriaal[key].totaalWaarde+=(v.aantal||1)*(v.stukprijs||0);
+    perMateriaal[key].leveranciers.add(v.leverancier||'?');
+    perMateriaal[key].prijzen.push(v.stukprijs||0);
+  });
+
+  const statsEl=document.getElementById('voorraad-stats');
+  const mutatiesEl=document.getElementById('voorraad-mutaties');
+
+  if (!Object.keys(perMateriaal).length) {
+    statsEl.innerHTML='<p style="color:var(--text-faint);font-size:13px">Nog geen voorraadmutaties. Markeer factuurregels met 📦 bij het boeken.</p>';
+    mutatiesEl.innerHTML='';
+    return;
+  }
+
+  // Filter toepassen op materiaalkaarten
+  const gefilterd=filter
+    ? Object.entries(perMateriaal).filter(([k,v])=>
+        k.toLowerCase().includes(filter.toLowerCase())||
+        [...v.leveranciers].some(l=>l.toLowerCase().includes(filter.toLowerCase()))
+      )
+    : Object.entries(perMateriaal);
+
+  statsEl.innerHTML=gefilterd.map(([mat,data])=>{
+    const prijzen=data.prijzen;
+    const minPrijs=Math.min(...prijzen);
+    const maxPrijs=Math.max(...prijzen);
+    const prijsWaarschuwing=maxPrijs>minPrijs*1.05; // >5% verschil = waarschuwing
+    const laatstePrijs=data.regels[data.regels.length-1]?.stukprijs||0;
+    return `<div class="voorraad-card" style="cursor:pointer;transition:box-shadow 0.15s" 
+      onclick="toonVoorraadDetail('${mat.replace(/'/g,"\\'")}')"
+      onmouseenter="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.1)'"
+      onmouseleave="this.style.boxShadow=''">
+      <div class="voorraad-card-titel">${[...data.leveranciers].join(', ')}</div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px;line-height:1.3">${mat}</div>
+      <div class="voorraad-card-waarde" style="font-size:16px">${data.totaalAantal}× ingekocht</div>
+      <div class="voorraad-card-sub">Laatste prijs: € ${laatstePrijs.toFixed(2).replace('.',',')}</div>
+      ${prijsWaarschuwing?`<div style="font-size:11px;color:var(--warn);margin-top:4px">⚠ Prijsvariatie: € ${minPrijs.toFixed(2)} – € ${maxPrijs.toFixed(2)}</div>`:''}
+      <div style="font-size:11px;color:var(--text-faint);margin-top:4px">${data.regels.length} inkoop${data.regels.length!==1?'s':''} — klik voor detail</div>
+    </div>`;
+  }).join('');
+
+  // Detail panel
+  if (voorraadDetailMateriaal && perMateriaal[voorraadDetailMateriaal]) {
+    const data=perMateriaal[voorraadDetailMateriaal];
+    mutatiesEl.innerHTML=`
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem">
+        <strong style="font-size:14px">${voorraadDetailMateriaal}</strong>
+        <button class="btn btn-secondary btn-sm" onclick="voorraadDetailMateriaal=null;renderVoorraad()">✕ Sluiten</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border)">
+            <th style="text-align:left;padding:6px 8px;font-family:var(--mono);font-size:10px;color:var(--text-faint)">Datum</th>
+            <th style="text-align:left;padding:6px 8px;font-family:var(--mono);font-size:10px;color:var(--text-faint)">Leverancier</th>
+            <th style="text-align:right;padding:6px 8px;font-family:var(--mono);font-size:10px;color:var(--text-faint)">Aantal</th>
+            <th style="text-align:right;padding:6px 8px;font-family:var(--mono);font-size:10px;color:var(--text-faint)">Stukprijs</th>
+            <th style="text-align:right;padding:6px 8px;font-family:var(--mono);font-size:10px;color:var(--text-faint)">Totaal</th>
+            <th style="text-align:left;padding:6px 8px;font-family:var(--mono);font-size:10px;color:var(--text-faint)">Project</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.regels.slice().reverse().map((v,i,arr)=>{
+            const vorigPrijs=arr[i+1]?.stukprijs;
+            const prijsDiff=vorigPrijs&&v.stukprijs!==vorigPrijs;
+            const prijsOmhoog=prijsDiff&&v.stukprijs>vorigPrijs;
+            return `<tr style="border-bottom:1px solid var(--border);${i===0?'background:var(--accent-light)':''}">
+              <td style="padding:6px 8px;color:var(--text-dim)">${new Date(v.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'2-digit'})}</td>
+              <td style="padding:6px 8px">${v.leverancier||'—'}</td>
+              <td style="padding:6px 8px;text-align:right;font-family:var(--mono)">${v.aantal||1}</td>
+              <td style="padding:6px 8px;text-align:right;font-family:var(--mono)">
+                € ${(v.stukprijs||0).toFixed(2).replace('.',',')}
+                ${prijsDiff?`<span style="font-size:10px;color:${prijsOmhoog?'var(--danger)':'var(--success)'}">${prijsOmhoog?'▲':'▼'}</span>`:''}
+                ${i===0?'<span style="font-size:10px;color:var(--text-faint)"> (laatste)</span>':''}
+              </td>
+              <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:500">€ ${((v.aantal||1)*(v.stukprijs||0)).toFixed(2).replace('.',',')}</td>
+              <td style="padding:6px 8px"><span class="code">${v.project||'—'}</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  } else {
+    mutatiesEl.innerHTML='<p style="color:var(--text-faint);font-size:13px">Klik op een materiaalkaart om de inkoop-historie te zien.</p>';
+  }
+}
+
+function toonVoorraadDetail(materiaal) {
+  voorraadDetailMateriaal=materiaal;
+  renderVoorraad(document.querySelector('#tab-voorraad .zoek-input')?.value||'');
+  document.getElementById('voorraad-mutaties').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function wisVoorraad() {
+  const bevestiging1=confirm('Weet je zeker dat je alle voorraadmutaties wilt wissen?\n\nDit kan niet ongedaan worden gemaakt.');
+  if (!bevestiging1) return;
+  const bevestiging2=confirm('Dit is je laatste kans — echt alle voorraaddata permanent verwijderen?');
+  if (!bevestiging2) return;
+  localStorage.removeItem('mt_voorraad');
+  voorraadDetailMateriaal=null;
+  renderVoorraad();
+}
+
+function zoekVoorraad(v) { renderVoorraad(v); }
+
+// ═══ GESCHIEDENIS ═══
+function renderHistory(filter='') {
+  const hist=JSON.parse(localStorage.getItem('mt_history')||'[]');
+  const filtered=filter?hist.filter(h=>
+    h.contact?.toLowerCase().includes(filter.toLowerCase())||
+    h.project?.toLowerCase().includes(filter.toLowerCase())||
+    h.date?.includes(filter)||h.ref?.toLowerCase().includes(filter.toLowerCase())
+  ):hist;
+  const list=document.getElementById('history-list');
+  if (!filtered.length){list.innerHTML='<p style="color:var(--text-faint)">Geen facturen gevonden.</p>';return;}
+  const fmt=d=>d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'—';
+  list.innerHTML=filtered.map(h=>`
+    <div class="geschiedenis-item">
+      <span class="badge badge-ok">✓</span>
+      <strong>${h.contact}</strong>
+      <span class="code">${h.project||'—'}</span>
+      <span style="color:var(--text-dim);font-size:11px">${h.ref||''}</span>
+      <span style="color:var(--text-faint);font-size:11px">${fmt(h.date)}</span>
+      <span style="margin-left:auto;font-family:var(--mono);font-weight:500">${h.totaal||''}</span>
+      <span style="color:var(--text-faint);font-size:11px">verval: ${fmt(h.due)}</span>
+      <a href="https://moneybird.com/${getAdmin()}/documents/${h.id}/payment_initiations/new" target="_blank"
+         style="font-size:11px;color:var(--accent);text-decoration:none;padding:2px 8px;border:1px solid var(--accent);border-radius:4px">Betalen →</a>
+    </div>
+  `).join('');
+}
+function zoekGeschiedenis(v) { renderHistory(v); }
+
+// ═══ FACTUUR CONTROLE ═══
+async function laadFacturen() {
+  const spinner=document.getElementById('laad-spinner');
+  const status=document.getElementById('laad-status');
+  spinner.classList.remove('hidden');
+  status.textContent='Laden...';
+  alleFacturen=[];
+
+  // Bouw filter string
+  const preset=document.getElementById('periode-preset').value;
+  let filterStr='';
+  if (preset==='this_year') filterStr='period:this_year';
+  else if (preset==='last_year') filterStr='period:last_year';
+  else {
+    const van=document.getElementById('periode-van').value;
+    const tm=document.getElementById('periode-tm').value;
+    if (van&&tm) filterStr=`period:${van.replace(/-/g,'')}..${tm.replace(/-/g,'')}`;
+    else filterStr='period:this_year';
+  }
+
+  try {
+    let page=1;
+    while (true) {
+      const r=await mbGet(`${getAdmin()}/documents/purchase_invoices?filter=${encodeURIComponent(filterStr)}&page=${page}`);
+      if (!r.ok) break;
+      const batch=await r.json();
+      if (!batch||!batch.length) break;
+      alleFacturen.push(...batch.filter(f=>f?.id));
+      status.textContent=`${alleFacturen.length} facturen geladen...`;
+      if (batch.length<50) break;
+      page++;
+    }
+    status.textContent=`${alleFacturen.length} facturen geladen`;
+    document.getElementById('controle-inhoud').classList.remove('hidden');
+    renderControleLijst(alleFacturen);
+    filterFacturenActief();
+  } catch(e) {
+    status.textContent=`Fout: ${e.message}`;
+  } finally {
+    spinner.classList.add('hidden');
+  }
+}
+
+function detecteerDuplicaten(facturen) {
+  const gezien={};const dup=new Set();
+  facturen.forEach(f=>{
+    const ref=f.reference||'';
+    const key=`${f.contact?.company_name}-${f.total_price_incl_tax}-${f.date}-${ref}`;
+    if (gezien[key]){dup.add(f.id);dup.add(gezien[key]);}
+    else gezien[key]=f.id;
+  });
+  return dup;
+}
+
+function isVolledigVerwerkt(f, dup) {
+  const heeftProj=f.reference&&PROJECT_CODES.some(p=>f.reference.startsWith(p));
+  const isDup=dup.has(f.id)&&!geenDuplicaat.has(f.id);
+  return heeftProj&&!isDup;
+}
+
+function renderControleLijst(facturen) {
+  const dupRaw=detecteerDuplicaten(facturen);
+  const dup=new Set([...dupRaw].filter(id=>!geenDuplicaat.has(id)));
+  const geenProj=facturen.filter(f=>!f.reference||!PROJECT_CODES.some(p=>f.reference.startsWith(p))).length;
+  const aandacht=facturen.filter(f=>!isVolledigVerwerkt(f,dup)).length;
+  const klaar=facturen.length-aandacht;
+
+  document.getElementById('stat-bar').innerHTML=`
+    <span style="color:var(--text-dim)">${facturen.length} facturen</span>
+    ${aandacht>0?`<span style="color:var(--warn)">⚠ ${aandacht} aandacht</span>`:''}
+    ${dup.size>0?`<span style="color:var(--danger)">⚠ ${dup.size} duplicaten</span>`:''}
+    <span style="color:var(--success)">✓ ${klaar} klaar</span>
+  `;
+
+  // Voortgangsbalk
+  const pct=facturen.length?Math.round((klaar/facturen.length)*100):0;
+  document.getElementById('voortgang-inner').style.width=pct+'%';
+
+  const lijst=document.getElementById('factuur-lijst');
+  lijst.innerHTML=facturen.map((f,i)=>{
+    const heeftProj=f.reference&&PROJECT_CODES.some(p=>f.reference.startsWith(p));
+    const isDup=dup.has(f.id);
+    const volledig=isVolledigVerwerkt(f,dup);
+    const datum=new Date(f.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
+    const bedrag=parseFloat(f.total_price_incl_tax).toLocaleString('nl-NL',{style:'currency',currency:'EUR'});
+    const badge=isDup?`<span class="badge badge-danger">Dup</span>`:heeftProj?`<span class="badge badge-ok">✓</span>`:`<span class="badge badge-warn">Project</span>`;
+    const needsAttention=!volledig;
+    const stateIcon=f.state==='paid'?'✓':f.state==='pending_payment'?'⏳':f.state==='open'?'📋':'🆕';
+    return `<div class="factuur-item" data-index="${i}" data-heeft-proj="${heeftProj}" data-is-dup="${isDup}" data-aandacht="${needsAttention}" data-naam="${(f.contact?.company_name||'').toLowerCase()}" data-ref="${(f.reference||'').toLowerCase()}" data-bedrag="${bedrag}" onclick="selecteerControleFactuur(${i},this)">
+      <div class="factuur-item-naam">${f.contact?.company_name||'—'}</div>
+      <div class="factuur-item-sub">
+        <span>${datum} · ${bedrag}</span>
+        <span style="display:flex;gap:3px;align-items:center">${stateIcon}${badge}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  window._controleLijst=facturen;
+  window._controleDup=dup;
+}
+
+function zoekInLijst(term) {
+  zoekterm=term.toLowerCase();
+  document.querySelectorAll('.factuur-item').forEach(item=>{
+    const naam=item.dataset.naam||'';
+    const ref=item.dataset.ref||'';
+    const bedrag=item.dataset.bedrag||'';
+    const match=!zoekterm||naam.includes(zoekterm)||ref.includes(zoekterm)||bedrag.includes(zoekterm);
+    item.style.display=match?'':'none';
+  });
+  // Herstel filter op zichtbare items
+  filterFacturenActief();
+}
+
+function filterFacturen(type, btn) {
+  huidigFilter=type;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  filterFacturenActief();
+}
+
+function filterFacturenActief() {
+  document.querySelectorAll('.factuur-item').forEach(item=>{
+    if (item.style.display==='none'&&zoekterm) return; // zoek heeft al verborgen
+    const heeftProj=item.dataset.heeftProj==='true';
+    const isDup=item.dataset.isDup==='true';
+    const aandacht=item.dataset.aandacht==='true';
+    let toon=true;
+    if (huidigFilter==='aandacht') toon=aandacht;
+    else if (huidigFilter==='geen_project') toon=!heeftProj;
+    else if (huidigFilter==='duplicaat') toon=isDup;
+    else if (huidigFilter==='ok') toon=!aandacht;
+    item.style.display=toon?'':'none';
+  });
+}
+
+async function selecteerControleFactuur(index, el) {
+  document.querySelectorAll('.factuur-item').forEach(d=>d.classList.remove('actief'));
+  el.classList.add('actief');
+  huidigeFactuur=window._controleLijst[index];
+  renderControleDetail(huidigeFactuur);
+}
+
+function renderControleDetail(f) {
+  const dup=window._controleDup;
+  const datum=new Date(f.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'});
+  const verval=f.due_date?new Date(f.due_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'}):'—';
+  const bedragIncl=parseFloat(f.total_price_incl_tax).toLocaleString('nl-NL',{style:'currency',currency:'EUR'});
+  const isDup=dup?.has(f.id);
+  const huidigProject=PROJECT_CODES.find(p=>f.reference?.startsWith(p))||'';
+  const isVoorraadLev=isVoorraadLeverancier(f.contact?.company_name||'');
+
+  document.getElementById('factuur-detail').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1rem">
+      <div>
+        <div style="font-size:16px;font-weight:500">${f.contact?.company_name||'—'}</div>
+        <div style="font-size:12px;color:var(--text-dim)">${f.reference||'Geen referentie'} · ${datum}</div>
+        ${isDup?`<span class="badge badge-danger" style="margin-top:4px">Mogelijk duplicaat</span>
+          <button class="btn btn-secondary btn-sm" style="margin-top:4px;font-size:11px" onclick="markeerGeenDuplicaat('${f.id}')">Geen duplicaat</button>`:''}
+        ${isVoorraadLev?`<span class="badge badge-voorraad" style="margin-top:4px">📦 Voorraad-leverancier</span>`:''}
+        <span class="badge ${f.state==='paid'?'badge-ok':f.state==='pending_payment'?'badge-warn':f.state==='open'?'badge-info':'badge-warn'}" style="margin-top:4px">${f.state==='paid'?'✓ Betaald':f.state==='pending_payment'?'⏳ Wacht':f.state==='open'?'📋 Open':'🆕 Nieuw'}</span>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:var(--mono);font-size:16px;font-weight:500">${bedragIncl}</div>
+        <div style="font-size:11px;color:var(--text-faint)">verval: ${verval}</div>
+      </div>
+    </div>
+    <div class="flex" style="margin-bottom:1rem">
+      <a href="https://moneybird.com/${getAdmin()}/documents/${f.id}" target="_blank" style="font-size:12px;color:var(--accent);text-decoration:none">📎 Openen in Moneybird →</a>
+    </div>
+    <hr class="divider">
+    <div class="card-title">Bijwerken</div>
+    <div class="grid2" style="margin-bottom:0.75rem">
+      <div class="field">
+        <label>Hoofd-project (vul alle regels in)</label>
+        <div style="display:flex;gap:6px">
+          <select id="ctrl-project" style="flex:1" onchange="ctrlProjectGewijzigd(this);ctrlPasHoofdprojectToe()">
+            ${projectOptiesHTML(huidigProject)}
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-end;padding-bottom:0.875rem">
+        <button class="btn btn-info btn-sm" onclick="analyseerdControleFactuur()">
+          <span id="ctrl-spinner" class="spinner hidden"></span>
+          ✨ Analyseer met Claude
+        </button>
+      </div>
+    </div>
+    <div id="ctrl-suggestie" class="ai-extract hidden" style="margin-bottom:1rem"></div>
+    <div id="ctrl-regels-wrap">
+      <div class="card-title">Factuurregels</div>
+      <div class="regel-header">
+        <span>Omschrijving</span><span>Grootboek</span><span>Aantal</span><span>Stukprijs</span><span>BTW</span><span>Project</span><span title="Voorraad">📦</span><span></span>
+      </div>
+      <div id="ctrl-regels-container"></div>
+      <button class="btn btn-secondary btn-sm mt1" onclick="addCtrlRegel()">+ Regel toevoegen</button>
+      <div class="totaal-row" style="margin-top:0.5rem">
+        <span>Excl.: <strong id="ctrl-totaal-excl">€ 0,00</strong></span>
+        <span>BTW: <strong id="ctrl-totaal-btw">€ 0,00</strong></span>
+        <span>Incl.: <strong id="ctrl-totaal-incl">€ 0,00</strong></span>
+      </div>
+    </div>
+    <div class="flex mt2">
+      <button class="btn btn-primary" onclick="slaControleOp(false)">Opslaan</button>
+      <button class="btn btn-primary" onclick="slaControleOp(true)" style="background:#1e3329">Opslaan &amp; volgende →</button>
+      ${f.state!=='paid'?`<a href="https://moneybird.com/${getAdmin()}/documents/${f.id}/payment_initiations/new" target="_blank" class="btn btn-info btn-sm">💳 Betalen →</a>`:''}
+      <button class="btn btn-danger btn-sm" onclick="verwijderControleFactuur()">Verwijderen</button>
+      <span id="ctrl-status" style="font-size:12px;color:var(--text-dim)"></span>
+    </div>
+  `;
+
+  // Vul bestaande regels in
+  let ctrlCount=0;
+  const ctrlContainer=document.getElementById('ctrl-regels-container');
+  (f.details||[]).forEach(d=>{
+    ctrlCount++;
+    const id=ctrlCount;
+    const div=document.createElement('div');
+    div.className='ctrl-regel-row regel-row';
+    div.id=`ctrl-regel-${id}`;
+    const btwVal=d.tax_rate_id===BTW_IDS['9']?'9':d.tax_rate_id===BTW_IDS['0']?'0':'21';
+    const huidigDetailProject=huidigProject;
+    div.innerHTML=`
+      <input type="text" placeholder="Omschrijving" value="${(d.description||'').replace(/"/g,'&quot;')}" oninput="updateCtrlTotalen()">
+      <select class="ctrl-ledger-select" onchange="updateCtrlTotalen()">
+        <option value="">— Grootboek —</option>
+        ${ledgers.map(l=>`<option value="${l.id}" ${l.id===d.ledger_account_id?'selected':''}>${l.name}</option>`).join('')}
+      </select>
+      <input type="number" step="1" min="0" value="${d.amount||1}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
+      <input type="number" step="0.01" value="${d.price||''}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
+      <select onchange="updateCtrlTotalen()">
+        <option value="21" ${btwVal==='21'?'selected':''}>21%</option>
+        <option value="9" ${btwVal==='9'?'selected':''}>9%</option>
+        <option value="0" ${btwVal==='0'?'selected':''}>0%</option>
+      </select>
+      <select class="project-select">
+        ${projectOptiesHTML(huidigDetailProject)}
+      </select>
+      <button class="voorraad-btn ${isVoorraadLev?'actief':''}" title="Markeer als voorraadmateriaal" onclick="toggleVoorraad(this)">📦</button>
+      <button class="remove-btn" onclick="document.getElementById('ctrl-regel-${id}').remove();updateCtrlTotalen()">×</button>
+    `;
+    div.querySelector('.project-select').addEventListener('change',function(){if(this.value==='__nieuw__'){this.value='';openModal();}});
+    ctrlContainer.appendChild(div);
+  });
+  window._ctrlRegelCount=ctrlCount;
+  updateCtrlTotalen();
+}
+
+function ctrlPasHoofdprojectToe() {
+  const project=document.getElementById('ctrl-project')?.value;
+  if (!project||project==='__nieuw__') return;
+  document.querySelectorAll('#ctrl-regels-container .project-select').forEach(sel=>{
+    if (!sel.value||sel.value==='') sel.value=project;
+  });
+}
+
+function ctrlProjectGewijzigd(sel) {
+  if (sel.value==='__nieuw__'){sel.value='';openModal();}
+}
+
+function addCtrlRegel(oms='',ledger='',aantal=1,prijs='',btw='21',project='') {
+  window._ctrlRegelCount=(window._ctrlRegelCount||0)+1;
+  const id=window._ctrlRegelCount;
+  const div=document.createElement('div');
+  div.className='ctrl-regel-row regel-row';
+  div.id=`ctrl-regel-${id}`;
+  div.innerHTML=`
+    <input type="text" placeholder="Omschrijving" value="${oms}" oninput="updateCtrlTotalen()">
+    <select class="ctrl-ledger-select" onchange="updateCtrlTotalen()">
+      <option value="">— Grootboek —</option>
+      ${ledgers.map(l=>`<option value="${l.id}" ${l.id===ledger?'selected':''}>${l.name}</option>`).join('')}
+    </select>
+    <input type="number" step="1" min="0" value="${aantal}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
+    <input type="number" step="0.01" value="${prijs}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
+    <select onchange="updateCtrlTotalen()">
+      <option value="21" ${btw==21?'selected':''}>21%</option>
+      <option value="9" ${btw==9?'selected':''}>9%</option>
+      <option value="0" ${btw==0?'selected':''}>0%</option>
+    </select>
+    <select class="project-select">
+      ${projectOptiesHTML(project)}
+    </select>
+    <button class="voorraad-btn" title="Markeer als voorraadmateriaal" onclick="toggleVoorraad(this)">📦</button>
+    <button class="remove-btn" onclick="document.getElementById('ctrl-regel-${id}').remove();updateCtrlTotalen()">×</button>
+  `;
+  div.querySelector('.project-select').addEventListener('change',function(){if(this.value==='__nieuw__'){this.value='';openModal();}});
+  document.getElementById('ctrl-regels-container').appendChild(div);
+  updateCtrlTotalen();
+}
+
+function updateCtrlTotalen() {
+  let excl=0,btw=0;
+  document.querySelectorAll('#ctrl-regels-container .regel-row').forEach(row=>{
+    const nums=row.querySelectorAll('input[type="number"]');
+    const sels=row.querySelectorAll('select');
+    if (nums.length>=2) {
+      const aantal=parseFloat(nums[0].value)||1;
+      const prijs=parseFloat(nums[1].value)||0;
+      const tot=aantal*prijs;
+      excl+=tot;btw+=tot*(parseFloat(sels[1]?.value)||0)/100;
+    }
+  });
+  const fmt=n=>`€ ${n.toFixed(2).replace('.',',')}`;
+  document.getElementById('ctrl-totaal-excl').textContent=fmt(excl);
+  document.getElementById('ctrl-totaal-btw').textContent=fmt(btw);
+  document.getElementById('ctrl-totaal-incl').textContent=fmt(excl+btw);
+}
+
+async function analyseerdControleFactuur() {
+  const spinner=document.getElementById('ctrl-spinner');
+  const suggestie=document.getElementById('ctrl-suggestie');
+  spinner.classList.remove('hidden');
+  suggestie.classList.remove('hidden');
+  suggestie.textContent='PDF ophalen...';
+  try {
+    const f=huidigeFactuur;
+    const pdfBijlage=f.attachments?.find(a=>a.content_type==='application/pdf');
+    let messages;
+    if (pdfBijlage) {
+      const r=await fetch(`${WORKER}?target=moneybird_download&factuur_id=${encodeURIComponent(f.id)}&bijlage_id=${encodeURIComponent(pdfBijlage.id)}&token=${encodeURIComponent(getMbToken())}`);
+      if (!r.ok) throw new Error('PDF download mislukt');
+      const {base64}=await r.json();
+      suggestie.textContent='Claude analyseert...';
+      messages=[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+        {type:'text',text:`Lees deze inkoopfactuur en geef ALLEEN een JSON object terug:
+{
+  "project_code": "meest waarschijnlijke code uit: ${PROJECT_CODES.join(', ')}, of null",
+  "project_zeker": true of false,
+  "uitleg": "korte uitleg waarom",
+  "regels": [
+    {
+      "omschrijving": "exacte omschrijving zoals op factuur",
+      "grootboek": "kies uit: inkoop materiaal, Inkoop diensten, Kleine aanschaffingen machines/gereedschap, Reparatie en onderhoud machines/inventaris, Vervoerskosten, Telefoon en internet, Kantoorbenodigdheden, Gas water en elektriciteit, Huisvestingskosten",
+      "grootboek_zeker": true of false,
+      "aantal": 1,
+      "stukprijs": 0.00,
+      "bedrag_excl": 0.00,
+      "btw_pct": 21
+    }
+  ]
+}
+BELANGRIJK: aantal en stukprijs altijd invullen als ze op de factuur staan.`}
+      ]}];
+    } else {
+      const regeltekst=(f.details||[]).map(d=>`- ${d.description}: ${d.price}`).join('\n');
+      messages=[{role:'user',content:`Inkoopfactuur ${f.contact?.company_name}, ref: ${f.reference}, regels:\n${regeltekst}\n\nJSON: {"project_code":"...","project_zeker":true,"uitleg":"...","regels":[]}`}];
+    }
+    const data=await claudeCall(messages,1800);
+    const text=data.content?.[0]?.text||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+
+    if (parsed.project_code) {
+      const sel=document.getElementById('ctrl-project');
+      for (let opt of sel.options){if(opt.value===parsed.project_code){opt.selected=true;break;}}
+    }
+
+    const bestaandeRegels=document.querySelectorAll('#ctrl-regels-container .regel-row');
+    const heeftInhoud=Array.from(bestaandeRegels).some(r=>{
+      const input=r.querySelector('input[type="text"]');
+      return input&&input.value.trim()!==''&&input.value.trim()!=='—';
+    });
+
+    if (parsed.regels?.length>0&&!heeftInhoud) {
+      document.getElementById('ctrl-regels-container').innerHTML='';
+      window._ctrlRegelCount=0;
+      parsed.regels.forEach(r=>addCtrlRegel(r.omschrijving,getLedgerIdByName(r.grootboek),r.aantal||1,r.stukprijs||r.bedrag_excl,r.btw_pct,parsed.project_code||''));
+      suggestie.innerHTML=`${parsed.project_zeker?'✓':'💡'} <strong>${parsed.project_code||'Geen project'}</strong> — ${parsed.uitleg}`;
+    } else if (parsed.regels?.length>0&&heeftInhoud) {
+      window._claudeSuggestie=parsed;
+      suggestie.innerHTML=`${parsed.project_zeker?'✓':'💡'} <strong>${parsed.project_code||'Geen project'}</strong> — ${parsed.uitleg}<br>
+        <small style="color:var(--text-dim)">Formulier al ingevuld — ${parsed.regels.length} suggesties beschikbaar</small><br>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="neemSuggestieOver()">Suggestie overnemen</button>
+          <button class="btn btn-secondary btn-sm" onclick="neemAlleenProjectOver()">Alleen project</button>
+        </div>`;
+    } else {
+      suggestie.innerHTML=`${parsed.project_zeker?'✓':'💡'} <strong>${parsed.project_code||'Geen project'}</strong> — ${parsed.uitleg}`;
+    }
+  } catch(e) {
+    suggestie.textContent=`Mislukt: ${e.message}`;
+  } finally {
+    spinner.classList.add('hidden');
+  }
+}
+
+async function slaControleOp(gaNaarVolgende=false) {
+  const status=document.getElementById('ctrl-status');
+  const f=huidigeFactuur;
+  const project=document.getElementById('ctrl-project').value;
+
+  const bestaand=f.reference||'';
+  const heeftAlProj=PROJECT_CODES.some(p=>bestaand.startsWith(p));
+  let nieuweRef=bestaand;
+  if (project&&!heeftAlProj) nieuweRef=`${project}${bestaand?' - '+bestaand:''}`;
+  else if (project&&heeftAlProj) nieuweRef=`${project}${bestaand.includes(' - ')?' - '+bestaand.split(' - ').slice(1).join(' - '):''}`;
+
+  const details=[];
+  const voorraadRegels=[];
+  document.querySelectorAll('#ctrl-regels-container .regel-row').forEach(row=>{
+    const inputs=row.querySelectorAll('input');
+    const selects=row.querySelectorAll('select');
+    const oms=inputs[0]?.value?.trim();
+    const ledger_id=selects[0]?.value;
+    const aantal=parseFloat(inputs[1]?.value)||1;
+    const stukprijs=parseFloat(inputs[2]?.value)||0;
+    const btw=selects[1]?.value||'21';
+    const regelProject=selects[2]?.value||project;
+    const isVoorraad=row.querySelector('.voorraad-btn')?.classList.contains('actief');
+    if (oms||stukprijs) {
+      const fallbackLedger=ledgers.find(l=>l.name.toLowerCase().includes('inkoop materiaal'))?.id||'';
+      const d={description:oms||'—',amount:aantal.toString(),price:stukprijs.toString(),tax_rate_id:BTW_IDS[btw]||BTW_IDS['21'],ledger_account_id:ledger_id||fallbackLedger};
+      const bestaandDetail=f.details?.[details.length];
+      if (bestaandDetail?.id) d.id=bestaandDetail.id;
+      details.push(d);
+      if (isVoorraad&&oms) voorraadRegels.push({omschrijving:oms,aantal,stukprijs,btw,project:regelProject,leverancier:f.contact?.company_name||'',datum:f.date});
+    }
+  });
+
+  status.innerHTML='<span class="spinner"></span> Opslaan...';
+  try {
+    const r=await mbPatch(`${getAdmin()}/documents/purchase_invoices/${f.id}`,{purchase_invoice:{reference:nieuweRef,details_attributes:details}});
+    if (r.ok) {
+      const updated=await r.json();
+      const idx=alleFacturen.findIndex(x=>x.id===f.id);
+      if (idx>=0){alleFacturen[idx]=updated;window._controleLijst[idx]=updated;}
+      huidigeFactuur=updated;
+
+      voorraadRegels.forEach(r=>slaVoorraadOp(r));
+
+      status.textContent=`✓ Opgeslagen${voorraadRegels.length?` · 📦 ${voorraadRegels.length} voorraad`:''}`;
+      renderControleLijst(window._controleLijst);
+      filterFacturenActief();
+
+      if (gaNaarVolgende) {
+        // Zoek volgende factuur die ECHT aandacht nodig heeft
+        const items=Array.from(document.querySelectorAll('.factuur-item')).filter(el=>{
+          if (el.style.display==='none') return false;
+          return el.dataset.aandacht==='true';
+        });
+        const huidigIdx=items.findIndex(el=>el.classList.contains('actief'));
+        const volgende=huidigIdx>=0?items[huidigIdx+1]:items[0];
+        if (volgende) {
+          const idx=parseInt(volgende.dataset.index);
+          selecteerControleFactuur(idx,volgende);
+          volgende.scrollIntoView({behavior:'smooth',block:'nearest'});
+        } else {
+          status.textContent='✓ Opgeslagen — geen volgende factuur met aandacht';
+        }
+      }
+    } else {
+      const err=await r.json();
+      status.textContent=`✗ ${JSON.stringify(err)}`;
+    }
+  } catch(e){status.textContent=`✗ ${e.message}`;}
+}
+
+async function verwijderControleFactuur() {
+  const f=huidigeFactuur;
+  if (!f) return;
+  if (!confirm(`Verwijder factuur van ${f.contact?.company_name} (${parseFloat(f.total_price_incl_tax).toLocaleString('nl-NL',{style:'currency',currency:'EUR'})})?`)) return;
+  const status=document.getElementById('ctrl-status');
+  status.innerHTML='<span class="spinner"></span> Verwijderen...';
+  try {
+    const r=await mbDelete(`${getAdmin()}/documents/purchase_invoices/${f.id}`);
+    if (r.ok||r.status===204) {
+      alleFacturen=alleFacturen.filter(x=>x.id!==f.id);
+      window._controleLijst=window._controleLijst.filter(x=>x.id!==f.id);
+      huidigeFactuur=null;
+      document.getElementById('factuur-detail').innerHTML='<p style="color:var(--text-faint);font-size:13px;padding-top:2rem">← Selecteer een factuur</p>';
+      renderControleLijst(window._controleLijst);
+    } else {status.textContent='✗ Kan niet verwijderen';}
+  } catch(e){status.textContent=`✗ ${e.message}`;}
+}
+
+function markeerGeenDuplicaat(id) {
+  geenDuplicaat.add(id);
+  renderControleLijst(window._controleLijst);
+  filterFacturenActief();
+  if (huidigeFactuur?.id===id) renderControleDetail(huidigeFactuur);
+}
+
+function neemSuggestieOver() {
+  const parsed=window._claudeSuggestie;
+  if (!parsed) return;
+  if (parsed.regels?.length>0) {
+    document.getElementById('ctrl-regels-container').innerHTML='';
+    window._ctrlRegelCount=0;
+    parsed.regels.forEach(r=>addCtrlRegel(r.omschrijving,getLedgerIdByName(r.grootboek),r.aantal||1,r.stukprijs||r.bedrag_excl,r.btw_pct,parsed.project_code||''));
+  }
+  if (parsed.project_code) {
+    const sel=document.getElementById('ctrl-project');
+    for (let opt of sel.options){if(opt.value===parsed.project_code){opt.selected=true;break;}}
+  }
+  document.getElementById('ctrl-suggestie').innerHTML='✓ Suggestie overgenomen';
+  window._claudeSuggestie=null;
+}
+
+function neemAlleenProjectOver() {
+  const parsed=window._claudeSuggestie;
+  if (!parsed?.project_code) return;
+  const sel=document.getElementById('ctrl-project');
+  for (let opt of sel.options){if(opt.value===parsed.project_code){opt.selected=true;break;}}
+  document.getElementById('ctrl-suggestie').innerHTML=`✓ Project ingesteld op <strong>${parsed.project_code}</strong>`;
+  window._claudeSuggestie=null;
+}
+
+// ═══ NIEUW PROJECT MODAL ═══
+function openModal() {
+  document.getElementById('project-modal').classList.remove('hidden');
+  updateModalPreview();
+  document.getElementById('modal-locatie').addEventListener('input',updateModalPreview);
+  document.getElementById('modal-klant').addEventListener('change',updateModalPreview);
+  document.getElementById('modal-jaar').addEventListener('input',updateModalPreview);
+}
+function sluitModal(){document.getElementById('project-modal').classList.add('hidden');}
+function updateModalPreview() {
+  const klant=document.getElementById('modal-klant').value;
+  const loc=document.getElementById('modal-locatie').value.toUpperCase().replace(/\s+/g,'-');
+  const jaar=document.getElementById('modal-jaar').value;
+  document.getElementById('modal-preview').textContent=loc?`${klant}-${loc}-${jaar}`:'—';
+}
+async function maakProjectAan() {
+  const klant=document.getElementById('modal-klant').value;
+  const loc=document.getElementById('modal-locatie').value.toUpperCase().replace(/\s+/g,'-');
+  const jaar=document.getElementById('modal-jaar').value;
+  const status=document.getElementById('modal-status');
+  if (!loc){status.textContent='Vul een locatie in';return;}
+  const code=`${klant}-${loc}-${jaar}`;
+  if (!PROJECT_CODES.includes(code)) PROJECT_CODES.push(code);
+  document.querySelectorAll('#f-project, #ctrl-project, .project-select').forEach(sel=>{
+    if (!Array.from(sel.options).some(o=>o.value===code)) {
+      const opt=document.createElement('option');
+      opt.value=code;opt.textContent=code;
+      sel.insertBefore(opt,sel.lastElementChild);
+    }
+    sel.value=code;
+  });
+  status.textContent=`✓ ${code} aangemaakt`;
+  setTimeout(sluitModal,1000);
+}
+</script>
+</body>
+</html>
