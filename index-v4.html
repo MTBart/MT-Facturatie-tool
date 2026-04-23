@@ -3083,6 +3083,12 @@ initMsal();
           if (pagina > 1) await new Promise(r => setTimeout(r, 100));
         }
 
+        // LOG eerste factuur raw JSON
+        if (factuurIds.length > 0) {
+          const testF = await mbGet(`/${admin}/sales_invoices/${factuurIds[0].id}`);
+          console.log(`📄 ${c.naam} eerste factuur RAW:`, JSON.stringify(testF, null, 2).substring(0, 500));
+        }
+
         // Stap 2: haal details parallel op in kleinere batches (5 tegelijk)
         if (factuurIds.length > 0) {
           console.log(`📋 ${c.naam}: ${factuurIds.length} facturen gevonden`);
