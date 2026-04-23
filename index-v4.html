@@ -228,6 +228,11 @@ textarea{resize:vertical;min-height:60px}
 .user-chip:hover{opacity:1}
 .user-avatar{width:26px;height:26px;border-radius:50%;background:var(--gold);color:#1C1A16;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:var(--sans)}
 
+/* ── PDF VIEWER ── */
+.pdf-viewer-wrap{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center}
+.pdf-viewer-wrap iframe{width:100%;height:650px;border:none;display:block}
+.pdf-viewer-wrap .pdf-placeholder{color:var(--text-faint);font-size:12px;font-family:var(--mono);padding:2rem;text-align:center}
+
 /* ── GESCHIEDENIS ── */
 .geschiedenis-item{display:flex;align-items:center;gap:1rem;padding:0.875rem 0;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
 .geschiedenis-item:last-child{border-bottom:none}
@@ -360,27 +365,36 @@ textarea{resize:vertical;min-height:60px}
       <div id="email-scan-lijst"><p style="font-size:12px;color:var(--text-faint)">Scannen op factuur-PDF's...</p></div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Stap 1 — PDF uploaden</div>
-      <div class="drop-zone" id="drop-zone"
-        onclick="document.getElementById('pdf-input').click()"
-        ondragover="event.preventDefault();this.classList.add('over')"
-        ondragleave="this.classList.remove('over')"
-        ondrop="handleDrop(event)">
-        <span class="icon">📄</span>
-        <p style="font-weight:500;margin-bottom:4px">Sleep een factuur PDF hier naartoe of klik om te kiezen</p>
-        <small style="color:var(--text-faint)">Claude leest de factuur automatisch uit</small>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start">
+      <!-- Links: PDF viewer -->
+      <div>
+        <div class="card">
+          <div class="card-title">Stap 1 — PDF uploaden</div>
+          <div class="drop-zone" id="drop-zone"
+            onclick="document.getElementById('pdf-input').click()"
+            ondragover="event.preventDefault();this.classList.add('over')"
+            ondragleave="this.classList.remove('over')"
+            ondrop="handleDrop(event)">
+            <span class="icon">📄</span>
+            <p style="font-weight:500;margin-bottom:4px">Sleep een factuur PDF hier naartoe of klik om te kiezen</p>
+            <small style="color:var(--text-faint)">Claude leest de factuur automatisch uit</small>
+          </div>
+          <input type="file" id="pdf-input" accept=".pdf" class="hidden" onchange="handleFile(this.files[0])">
+          <div id="ai-result" class="ai-extract hidden" style="margin-top:0.75rem"></div>
+        </div>
+        <div class="pdf-viewer-wrap" id="pdf-viewer-verwerk" style="margin-top:1.25rem">
+          <div class="pdf-placeholder">📄 Laad een PDF om hem hier te bekijken</div>
+        </div>
       </div>
-      <input type="file" id="pdf-input" accept=".pdf" class="hidden" onchange="handleFile(this.files[0])">
-      <div id="ai-result" class="ai-extract hidden"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Stap 2 — Factuurgegevens controleren &amp; aanvullen</div>
-      <div id="factuur-form-inhoud"></div>
-      <div class="flex mt2">
-        <button class="btn btn-primary" onclick="boekInMoneybird()">Boeken in Moneybird</button>
-        <button class="btn btn-secondary" onclick="resetFormulier()">Wissen</button>
-        <span id="boek-status" style="font-size:12px;color:var(--text-dim)"></span>
+      <!-- Rechts: formulier -->
+      <div class="card">
+        <div class="card-title">Stap 2 — Factuurgegevens controleren &amp; aanvullen</div>
+        <div id="factuur-form-inhoud"></div>
+        <div class="flex mt2">
+          <button class="btn btn-primary" onclick="boekInMoneybird()">Boeken in Moneybird</button>
+          <button class="btn btn-secondary" onclick="resetFormulier()">Wissen</button>
+          <span id="boek-status" style="font-size:12px;color:var(--text-dim)"></span>
+        </div>
       </div>
     </div>
   </div>
@@ -420,7 +434,12 @@ textarea{resize:vertical;min-height:60px}
             </div>
             <div id="factuur-lijst"></div>
           </div>
-          <div id="factuur-detail"><p style="color:var(--text-faint);font-size:13px;padding-top:2rem">← Selecteer een factuur</p></div>
+          <div style="display:flex;flex-direction:column;gap:1.25rem">
+            <div id="factuur-detail"><p style="color:var(--text-faint);font-size:13px;padding-top:2rem">← Selecteer een factuur</p></div>
+            <div class="pdf-viewer-wrap hidden" id="pdf-viewer-controle">
+              <div class="pdf-placeholder">PDF wordt geladen...</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1039,6 +1058,8 @@ async function laadEmailPDF(mailId, attId, filename) {
 
 async function handleFile(file){
   if(!file) return;currentFile=file;
+  // Toon PDF direct in viewer
+  if(window.toonPdfInViewer) toonPdfInViewer('pdf-viewer-verwerk', URL.createObjectURL(file));
   const rd=document.getElementById('ai-result');rd.classList.remove('hidden');rd.innerHTML='<span class="spinner"></span> Claude leest de factuur...';
   try{
     const base64=await fileToBase64(file);
@@ -1100,7 +1121,12 @@ async function boekInMoneybird(){
     const result=await r.json();const invoiceId=result.id;
     if(currentFile){
       status.innerHTML='<span class="spinner"></span> PDF uploaden...';
-      try{const fd=new FormData();fd.append('file',currentFile,currentFile.name);const uh=await authHeader();await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+invoiceId+'/attachments')}`,{method:'POST',headers:uh,body:fd});}catch(e){}
+      try{
+        const fd=new FormData();fd.append('file',currentFile,currentFile.name);const uh=await authHeader();
+        await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+invoiceId+'/attachments')}`,{method:'POST',headers:uh,body:fd});
+        // Ook opslaan op SharePoint (NAS)
+        if(window.spUploadPDF){const buf=await currentFile.arrayBuffer();await spUploadPDF(invoiceId+'.pdf',buf);}
+      }catch(e){}
     }
     if(due){
       try{const dD=new Date(due);const pD=new Date(dD);pD.setDate(pD.getDate()-1);
@@ -2332,6 +2358,33 @@ function filterFacturenActief(){
 async function selecteerControleFactuur(index,el){
   document.querySelectorAll('.factuur-item').forEach(d=>d.classList.remove('actief'));el.classList.add('actief');
   huidigeFactuur=window._controleLijst[index];renderControleDetail(huidigeFactuur);
+  laadControlePDF(huidigeFactuur);
+}
+
+async function laadControlePDF(f) {
+  const viewer = document.getElementById('pdf-viewer-controle');
+  viewer.classList.remove('hidden');
+  viewer.innerHTML = '<div class="pdf-placeholder"><span class="spinner"></span> PDF laden...</div>';
+  // Eerst SharePoint proberen
+  if (window.spGetPDF) {
+    const spUrl = await spGetPDF(f.id + '.pdf');
+    if (spUrl) { toonPdfInViewer('pdf-viewer-controle', spUrl); return; }
+  }
+  // Daarna Moneybird bijlage
+  const pdfBijlage = f.attachments?.find(a => a.file_name?.toLowerCase().endsWith('.pdf'));
+  if (!pdfBijlage) { viewer.innerHTML = '<div class="pdf-placeholder">Geen PDF bijlage gevonden</div>'; return; }
+  try {
+    const r = await fetch(`${WORKER}?target=moneybird_download&factuur_id=${encodeURIComponent(f.id)}&bijlage_id=${encodeURIComponent(pdfBijlage.id)}`, {headers: await authHeader()});
+    const data = await r.json();
+    if (!data.base64) throw new Error('Geen data');
+    const bin = atob(data.base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    toonPdfInViewer('pdf-viewer-controle', url);
+    // Sla ook op op SharePoint voor volgende keer
+    if (window.spUploadPDF) spUploadPDF(f.id+'.pdf', bytes.buffer);
+  } catch(e) { viewer.innerHTML = `<div class="pdf-placeholder">PDF laden mislukt: ${e.message}</div>`; }
 }
 function renderControleDetail(f){
   const dup=window._controleDup;
@@ -2644,6 +2697,41 @@ localStorage.setItem = function(key, value) {
 localStorage.removeItem = function(key) {
   _lsRemove(key);
   if (_SP.KEYS.has(key)) _SP.schedule(key, null);
+};
+
+// PDF opslaan op SharePoint
+window.spUploadPDF = async function(filename, arrayBuffer) {
+  try {
+    const token = await window.getGraphToken();
+    if (!token) return;
+    await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_SP.SITE}/drive/root:/${_SP.FOLDER}/facturen/${filename}:/content`,
+      { method:'PUT', headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/pdf'}, body: arrayBuffer }
+    );
+  } catch(e) { console.warn('PDF upload mislukt:', e.message); }
+};
+
+// PDF ophalen van SharePoint → blob URL (of null als niet gevonden)
+window.spGetPDF = async function(filename) {
+  try {
+    const token = await window.getGraphToken();
+    if (!token) return null;
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_SP.SITE}/drive/root:/${_SP.FOLDER}/facturen/${filename}:/content`,
+      { headers: {'Authorization':`Bearer ${token}`} }
+    );
+    if (!r.ok) return null;
+    return URL.createObjectURL(await r.blob());
+  } catch(e) { return null; }
+};
+
+let _huidigeBlob = null;
+window.toonPdfInViewer = function(containerId, blobUrl) {
+  if (_huidigeBlob && _huidigeBlob !== blobUrl) URL.revokeObjectURL(_huidigeBlob);
+  _huidigeBlob = blobUrl;
+  const el = document.getElementById(containerId);
+  el.classList.remove('hidden');
+  el.innerHTML = `<iframe src="${blobUrl}"></iframe>`;
 };
 
 window.initStorage = async function() {
