@@ -2468,9 +2468,10 @@ function renderControleLijst(facturen){
       f.state==='pending_payment'?`<span class="badge" style="background:var(--blue-light);color:var(--blue)">⏳ In betaling</span>`:
       f.due_date&&new Date(f.due_date)<new Date()?`<span class="badge" style="background:var(--red-light);color:var(--red)">⚠ Te laat</span>`:
       `<span class="badge" style="background:var(--orange-light);color:var(--orange)">Open</span>`;
+    const voorraadBadge=isVoorraadLeverancier(f.contact?.company_name||'')?`<span class="badge" style="background:var(--purple-light);color:var(--purple)" title="Voorraadleverancier">📦</span>`:'';
     return`<div class="factuur-item" data-index="${i}" data-heeft-proj="${heeftProj}" data-is-dup="${isDup}" data-aandacht="${!volledig}" data-naam="${(f.contact?.company_name||'').toLowerCase()}" data-ref="${(f.reference||'').toLowerCase()}" data-bedrag="${bedrag}" onclick="selecteerControleFactuur(${i},this)">
       <div class="factuur-item-naam">${f.contact?.company_name||'—'}</div>
-      <div class="factuur-item-sub"><span>${datum} · ${bedrag}</span><span style="display:flex;gap:3px">${betaalStatus}${badge}</span></div>
+      <div class="factuur-item-sub"><span>${datum} · ${bedrag}</span><span style="display:flex;gap:3px">${voorraadBadge}${betaalStatus}${badge}</span></div>
     </div>`;
   }).join('');
   window._controleLijst=facturen;window._controleDup=dup;
