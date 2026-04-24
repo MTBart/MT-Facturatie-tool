@@ -2,41 +2,28 @@
 
 > Dit bestand bijwerken na elke sessie. Bevat wat er nu speelt, niet de stabiele projectinfo (die staat in CLAUDE.md).
 
-## Laatste sessie: 2026-04-24 (nacht)
+## Gedaan deze sessie (2026-04-24)
+- Mapstructuur opgeruimd: `_archief/`, `.claude/` aangemaakt
+- CLAUDE.md volledig herschreven, STATUS.md importeert automatisch bij Code CLI start
+- Memory-bestanden aangemaakt (lokaal + NAS)
+- Claude Desktop MCP-koppeling naar NAS werkend (nas-claude, nas-applicaties)
+- Ollama geïnstalleerd, Qwen2.5:14b model wordt gedownload
+- Permissions ingesteld in `.claude/settings.json` (geen prompts voor lezen/schrijven/git)
+- Desktop Project Instructions bijgewerkt met NAS-leesroutine
 
-### Gedaan
-- End-to-end automation platform plan uitgewerkt (zie `.claude/plans/`)
-- Memory-systeem gestart (user profile Bart opgeslagen)
-- Naamconventie definitief vastgesteld: `KLANT-VESTIGING-PRODUCT`
-- Pre-approvals gegeven: autonome git commits, file writes, API calls
-
-### Mapstructuur opgeruimd (2026-04-24 ochtend)
-- `_archief/` aangemaakt, oude files verplaatst (index-v3, presentaties, sessiesammenvattingen)
-- `CLAUDE.md` volledig bijgewerkt en aangescherpt
-- `STATUS.md` aangemaakt (dit bestand)
-
-## Nu te doen (prioriteit)
-
-### ~~1. MSAL login fix~~ ✅ Al gedaan
-Alle drie wijzigingen staan al in `index-v4.html`. Plan was al uitgevoerd voor deze sessie.
-
-### 1. Data sync voor localStorage
-- Voorraad, bestellijst etc. opslaan buiten browser
-- SharePoint ↔ NAS sync werkt al, maar tool slaat nog op in localStorage
-
-### 3. Toggl koppeling
-- Uren per project tonen in de tool
-- Toggl API token nodig
-
-### 4. Mappenstructuur script
-- PowerShell of Power Automate
-- Automatisch projectmappen aanmaken
-
-### 5. Overig
-- Export/import JSON als tussenoplossing voor data sync
-- Dashboard visueel verbeteren
-- Bestellijst webshop links
+## Roadmap (prioriteit volgorde)
+1. **Voorraad-icoon in factuurlijst** — icoon/tag in controle-lijst als factuur voorraadregels heeft
+2. **Historische facturen opschonen** — 218 inkoopfacturen 2026 doorlopen via factuur controle tabblad
+3. **Nacalculatie tabblad** — uren (Toggl) + inkoop + verkoop per project combineren, marge per project
+4. **Toggl koppeling** — uren ophalen via Toggl API via Cloudflare Worker
+5. **Email integratie** — Outlook facturen automatisch verwerken
+6. **Voorraadbeheer uitbreiden** — koppeling Vectorworks exports, af/opboeken per project
+7. **Uurtarief berekening** — kostprijs per uur via INT-ADMIN/INT-OVERIG overhead
+8. **SEPA verzendlijst** — batch betaalbestand via Moneybird API
 
 ## Blockers
-- Toggl API token — nodig voor Toggl koppeling
-- SharePoint Graph API — nodig voor folder creation
+- Toggl API token — nodig voor item 4
+- SharePoint Graph API — nodig voor mappenstructuur script
+
+## Volgende stap
+Item 1: voorraad-icoon in factuurlijst. Klein, concreet, direct waarde.
