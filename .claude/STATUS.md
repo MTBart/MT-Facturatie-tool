@@ -17,16 +17,10 @@
 
 ## Nu te doen (prioriteit)
 
-### 1. MSAL login fix — lege pagina oplossen (plan klaar ✅)
-Plan staat in `C:\Users\BartWitte\.claude\plans\hashed-questing-fern.md`
+### ~~1. MSAL login fix~~ ✅ Al gedaan
+Alle drie wijzigingen staan al in `index-v4.html`. Plan was al uitgevoerd voor deze sessie.
 
-Drie wijzigingen in `index-v4.html`:
-- `#login-screen` CSS: `display:none` → `display:flex`
-- `initMsal()`: try-catch toevoegen met leesbare foutmelding
-- CDN URL vervangen door jsDelivr (betrouwbaarder):
-  `https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js`
-
-### 2. Data sync voor localStorage
+### 1. Data sync voor localStorage
 - Voorraad, bestellijst etc. opslaan buiten browser
 - SharePoint ↔ NAS sync werkt al, maar tool slaat nog op in localStorage
 
