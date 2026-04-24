@@ -2,7 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Lees ook `.claude/STATUS.md` bij het starten van een sessie** — daar staat wat er nu speelt.
+@.claude/STATUS.md
+
+---
 
 ---
 
