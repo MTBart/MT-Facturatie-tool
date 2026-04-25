@@ -42,7 +42,8 @@ function Get-MoneyBirdContact {
             $c = $resp | Where-Object {$_.company_name -like "*$Search*"} | Select-Object -First 1
             if (-not $c) {$c = $resp[0]}
             $addr = if ($c.address1) {"$($c.address1), $($c.city)"} else {$c.city}
-            return @{name = $c.company_name; id = $c.id; address = $addr}
+            $custId = if ($c.customer_id) {$c.customer_id} else {$c.id}
+            return @{name = $c.company_name; id = $custId; address = $addr}
         }
     } catch {
         Write-Host "API fout: $_" -ForegroundColor Red
