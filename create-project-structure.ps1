@@ -18,7 +18,7 @@ $MBToken = $config.moneybird_token
 $MBAdminId = "342968480452052559"
 $MBApiUrl = "https://moneybird.com/api/v2/$MBAdminId"
 $TestDir = "C:\Users\BartWitte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Nieuwe mappenstructuur"
-$Subfolders = @("01_Offerte", "02_Ontwerp", "03_Vectorworks", "04_Holzher", "05_Aangeleverd", "06_Fotos", "07_Administratie", "08_Archief")
+$Subfolders = @("01_Offerte", "02_Ontwerp", "03_Vectorworks", "04_Holzher", "05_Aangeleverd", "06_Fotos", "07_Administratie", "08_Archief", "09_Werktekeningen")
 
 $KlantMap = @{
     "CN" = "CompaNanny"
@@ -130,14 +130,15 @@ Adres: $addr
 Datum: $ts
 
 MAPPEN:
-01_Offerte - Offertes
-02_Ontwerp - Ontwerp
-03_Vectorworks - Vectorworks
-04_Holzher - Holzher optimalisatie
-05_Aangeleverd - Eindproduct
-06_Fotos - Foto werk
-07_Administratie - Administratie
-08_Archief - Archief
+01_Offerte - Offertes en aanvragen
+02_Ontwerp - Ontwerpen en concept
+03_Vectorworks - Vectorworks + CSV exports
+04_Holzher - Holzher optimalisatie, HHA, NCR
+05_Aangeleverd - Eindproduct, leveringsdetails
+06_Fotos - Foto's en documentatie
+07_Administratie - Facturen, communicatie
+08_Archief - Gearchiveerde items
+09_Werktekeningen - Werktekeningen en detailtekeningen
 "@
 
 Set-Content -Path $info -Value $txt -Encoding UTF8
