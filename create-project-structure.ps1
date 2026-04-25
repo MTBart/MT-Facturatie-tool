@@ -1,95 +1,147 @@
 # MT Mortise and Tenon - Project Mappenstructuur Generator
-# PowerShell script voor aanmaken van projectmappen met standaard-structuur
+# Met Moneybird API integratie (token uit config.json)
 
 param(
-    [string]$Klant,
-    [string]$Vestiging,
-    [string]$Project,
-    [string]$Adres = ""
+    [string]$Klantcode = "",
+    [string]$Vestiging = "",
+    [string]$Project = ""
 )
 
-# Standaard-instellingen
-$BaseNAS = "C:\Users\BartWitte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Nieuwe mappenstructuur"
+# Laad config
+$configPath = Join-Path $PSScriptRoot "config.json"
+if (-not (Test-Path $configPath)) {
+    Write-Host "Fout: config.json niet gevonden" -ForegroundColor Red
+    exit 1
+}
+$config = Get-Content $configPath -Raw | ConvertFrom-Json
+$MBToken = $config.moneybird_token
+$MBAdminId = "342968480452052559"
+$MBApiUrl = "https://moneybird.com/api/v2/$MBAdminId"
+
+$TestDir = "C:\Users\BartWitte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Nieuwe mappenstructuur"
 $Subfolders = @("01_Offerte", "02_Ontwerp", "03_Vectorworks", "04_Holzher", "05_Aangeleverd", "06_Fotos", "07_Administratie", "08_Archief")
 
-# Moneybird Contact Data (klantcodes naar nummers)
-$Contacts = @{
-    "CN"  = "CompaNanny"
-    "LGM" = "1235"
-    "MOS" = "33"
-    "STY" = "1296"
-    "HWC" = "207"
-    "EZ"  = ""
-    "GBK" = ""
-    "DV"  = "1273"
-    "JAN" = "1285"
+$KlantMap = @{
+    "CN" = "CompaNanny"
+    "LGM" = "LGM"
+    "MOS" = "Meubelinterieur"
+    "STY" = "Styles"
+    "HWC" = "Inter Projecten"
+    "DV" = "David"
+    "JAN" = "Margret Jans"
 }
 
-# Als parameters niet meegegeven: interactief inputvragen
-if (-not $Klant) {
-    Write-Host "MT Mortise and Tenon - Project aanmaken" -ForegroundColor Cyan
+function Get-MoneyBirdContact {
+    param([string]$Search, [string]$Token)
+    try {
+        $headers = @{
+            "Authorization" = "Bearer $Token"
+            "Content-Type" = "application/json"
+        }
+        $url = "$MBApiUrl/contacts.json"
+        Write-Host "Moneybird zoeken: $Search..." -ForegroundColor Gray
+        $resp = Invoke-RestMethod -Uri $url -Method Get -Headers $headers -TimeoutSec 10
+
+        if ($resp -and $resp.Count -gt 0) {
+            $c = $resp | Where-Object { $_.company_name -like "*$Search*" } | Select-Object -First 1
+            if (-not $c) { $c = $resp[0] }
+            $addr = if ($c.address1) { "$($c.address1), $($c.city)" } else { "$($c.city)" }
+            return @{ name = $c.company_name; id = $c.id; address = $addr }
+        }
+    } catch {
+        Write-Host "API fout: $_" -ForegroundColor Red
+    }
+    return $null
+}
+
+function Get-StreetFromAddress {
+    param([string]$Addr)
+    if (-not $Addr) { return "" }
+    $s = ($Addr -split ',')[0] -split "`n" | Select-Object -First 1
+    return $s.Trim()
+}
+
+if (-not $Klantcode) {
     Write-Host ""
-    Write-Host "Beschikbare klanten: CN, LGM, MOS, STY, HWC, EZ, GBK, DV, JAN"
-    $Klant = Read-Host "Klantcode"
+    Write-Host "MT Mortise and Tenon - Nieuw Project" -ForegroundColor Cyan
+    Write-Host ""
+    $Klantcode = Read-Host "Klantcode (CN/LGM/MOS/etc)"
 }
 
-if (-not $Vestiging) {
-    $Vestiging = Read-Host "Vestiging/Locatie (bijv. Prinsengracht, Oosterpark)"
-}
+$search = if ($KlantMap[$Klantcode]) { $KlantMap[$Klantcode] } else { $Klantcode }
+$contact = Get-MoneyBirdContact -Search $search -Token $MBToken
 
-if (-not $Project) {
-    $Project = Read-Host "Projectnaam/Product (bijv. Garderobe, Pantry, Kast)"
-}
-
-# Construct mappennaam: KLANT-VESTIGING-PROJECT
-$ProjectFolder = "$Klant-$Vestiging-$Project"
-$ProjectPath = Join-Path $BaseNAS $ProjectFolder
-
-# Check of map al bestaat
-if (Test-Path $ProjectPath) {
-    Write-Host "Waarschuwing: Map bestaat al: $ProjectPath" -ForegroundColor Yellow
+if (-not $contact) {
+    Write-Host "Fout: Contact niet gevonden: $search" -ForegroundColor Red
     exit 1
 }
 
-# Maak project-map aan
-Write-Host ""
-Write-Host "Mappenstructuur aanmaken:" -ForegroundColor Green
-Write-Host "-> $ProjectPath"
-New-Item -ItemType Directory -Path $ProjectPath -Force | Out-Null
+Write-Host "Gevonden: $($contact.name) (ID: $($contact.id))" -ForegroundColor Green
 
-# Maak subfolders aan
-foreach ($subfolder in $Subfolders) {
-    $subpath = Join-Path $ProjectPath $subfolder
-    New-Item -ItemType Directory -Path $subpath -Force | Out-Null
-    Write-Host "  OK $subfolder"
+if (-not $Vestiging) {
+    $Vestiging = Read-Host "Vestiging"
 }
 
-# Maak info-bestand aan
-$infofile = Join-Path $ProjectPath "PROJECT_INFO.txt"
-$timestamp = Get-Date -Format 'dd-MM-yyyy HH:mm:ss'
+if (-not $Project) {
+    $Project = Read-Host "Projectnaam"
+}
 
-# Bouw info-tekst
-$Lines = @(
-    "Projectnaam: $Klant - $Vestiging - $Project",
-    "Datum aangemaakt: $timestamp",
-    "Adres: $Adres",
-    "",
-    "Mappen:",
-    "01_Offerte       - Offertes en aanvragen",
-    "02_Ontwerp       - Ontwerpen en concept",
-    "03_Vectorworks   - Vectorworks bestanden + CSV exports",
-    "04_Holzher       - Holzher optimalisatie, HHA, NCR bestanden",
-    "05_Aangeleverd   - Eindproduct, leveringsdetails",
-    "06_Fotos         - Foto's (vooraf, werkproces, oplevering)",
-    "07_Administratie - Facturen, communicatie",
-    "08_Archief       - Gearchiveerde items"
-)
+$isCompaNanny = $contact.name -like "*CompaNanny*"
+if ($isCompaNanny) {
+    $street = Get-StreetFromAddress -Addr $contact.address
+    $custFolder = "$($contact.name) - $street - $($contact.id)"
+} else {
+    $custFolder = "$($contact.name) - $($contact.id)"
+}
 
-$infotext = $Lines -join [Environment]::NewLine
-Set-Content -Path $infofile -Value $infotext -Encoding UTF8
-Write-Host "  OK PROJECT_INFO.txt"
+$projFolder = "$Klantcode-$Vestiging-$Project"
+$custPath = Join-Path $TestDir $custFolder
+$projPath = Join-Path $custPath $projFolder
+
+if (Test-Path $projPath) {
+    Write-Host "Fout: Map bestaat al" -ForegroundColor Red
+    exit 1
+}
+
+if (-not (Test-Path $custPath)) {
+    New-Item -ItemType Directory -Path $custPath -Force | Out-Null
+    Write-Host "Klant-map aangemaakt" -ForegroundColor Green
+}
+
+New-Item -ItemType Directory -Path $projPath -Force | Out-Null
+Write-Host "Project-map aangemaakt" -ForegroundColor Green
 
 Write-Host ""
-Write-Host "Klaar! Map aangemaakt:" -ForegroundColor Green
-Write-Host "   $ProjectPath"
+foreach ($sf in $Subfolders) {
+    $sfp = Join-Path $projPath $sf
+    New-Item -ItemType Directory -Path $sfp -Force | Out-Null
+    Write-Host "  + $sf"
+}
+
+$info = Join-Path $projPath "PROJECT_INFO.txt"
+$ts = Get-Date -Format 'dd-MM-yyyy HH:mm:ss'
+$addr = if ($contact.address) { $contact.address } else { "(geen adres)" }
+
+$txt = @"
+PROJECTNAAM: $Klantcode - $Vestiging - $Project
+Klant: $($contact.name)
+Moneybird ID: $($contact.id)
+Adres: $addr
+Datum: $ts
+
+MAPPEN:
+01_Offerte - Offertes
+02_Ontwerp - Ontwerp
+03_Vectorworks - Vectorworks
+04_Holzher - Holzher optimalisatie
+05_Aangeleverd - Eindproduct
+06_Fotos - Foto's
+07_Administratie - Administratie
+08_Archief - Archief
+"@
+
+Set-Content -Path $info -Value $txt -Encoding UTF8
+
 Write-Host ""
+Write-Host "Klaar!" -ForegroundColor Green
+Write-Host "  $projPath"
