@@ -188,6 +188,35 @@ app.get('/', (req, res) => {
 });
 
 // ════════════════════════════════════════════════════
+// MONEYBIRD PROXY (avoid CORS issues)
+// ════════════════════════════════════════════════════
+
+const MONEYBIRD_BASE = 'https://moneybird.com/api/v2/342968480452052559';
+
+async function fetchMoneyBird(endpoint, token) {
+  try {
+    const response = await fetch(`${MONEYBIRD_BASE}${endpoint}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error(`MB ${response.status}`);
+    return await response.json();
+  } catch (err) {
+    console.error(`MB fetch error on ${endpoint}:`, err);
+    return null;
+  }
+}
+
+app.get('/api/moneybird/:endpoint', async (req, res) => {
+  const { endpoint } = req.params;
+  const token = req.query.token;
+
+  if (!token) return res.status(401).json({ error: 'No token' });
+
+  const data = await fetchMoneyBird(`/${endpoint}`, token);
+  res.json(data || []);
+});
+
+// ════════════════════════════════════════════════════
 // API ENDPOINTS
 // ════════════════════════════════════════════════════
 
