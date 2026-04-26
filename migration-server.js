@@ -11,6 +11,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve static files (HTML, JS, CSS)
+app.use(express.static(__dirname));
+
 // ════════════════════════════════════════════════════
 // CONFIGURATIE
 // ════════════════════════════════════════════════════
@@ -174,6 +177,15 @@ async function loadProjectsJson() {
     console.error('Load error:', err);
   }
 }
+
+// ════════════════════════════════════════════════════
+// ROUTES
+// ════════════════════════════════════════════════════
+
+// Root — serve index-v4.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index-v4.html'));
+});
 
 // ════════════════════════════════════════════════════
 // API ENDPOINTS
