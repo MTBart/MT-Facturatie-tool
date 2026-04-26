@@ -59,11 +59,17 @@ class MigrationTool {
   getEstimatesAndInvoicesForContact(contactId) {
     const estimates = this.allEstimates
       .filter(e => e.contact_id === contactId)
-      .map(e => ({ type: 'offerte', number: e.estimate_number, id: e.id }));
+      .map(e => {
+        console.log('Estimate fields:', Object.keys(e));
+        return { type: 'offerte', number: e.estimate_number || e.number, id: e.id };
+      });
 
     const invoices = this.allInvoices
       .filter(i => i.contact_id === contactId)
-      .map(i => ({ type: 'factuur', number: i.invoice_number, id: i.id }));
+      .map(i => {
+        console.log('Invoice fields:', Object.keys(i));
+        return { type: 'factuur', number: i.invoice_number || i.number, id: i.id };
+      });
 
     return [...estimates, ...invoices];
   }
