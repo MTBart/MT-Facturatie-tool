@@ -80,12 +80,11 @@ async function scanOldProjects() {
 // 2. MIGRATIE (KOPIE + NIEUWE STRUCTUUR)
 // ════════════════════════════════════════════════════
 
-async function migrateProject(projectId, contactName, projectName, documents) {
+async function migrateProject(projectId, contactName, projectName, documents, folderMapping) {
   try {
     const project = projectsList.find(p => p.id === projectId);
     if (!project) throw new Error('Project niet gevonden');
 
-    // Bepaal doelpad
     const newCustomerFolder = `${contactName}`;
     const newProjectFolder = projectName;
     const targetPath = path.join(PATHS.newProjects, newCustomerFolder, newProjectFolder);
@@ -100,10 +99,23 @@ async function migrateProject(projectId, contactName, projectName, documents) {
       await fs.ensureDir(path.join(targetPath, folder));
     }
 
-    // Kopie alle bestanden van oude naar nieuwe locatie
-    // Voor nu: kopie alles naar 08_Archief (kan later specifieker)
-    const archiveTarget = path.join(targetPath, '08_Archief');
-    await fs.copy(project.oldPath, archiveTarget, { errorOnExist: false });
+    // Kopieëren met mapping: oude folders → 9 nieuwe subfolders
+    if (folderMapping && Object.keys(folderMapping).length > 0) {
+      const oldFolders = await fs.readdir(project.oldPath);
+      for (const oldFolder of oldFolders) {
+        const oldPath = path.join(project.oldPath, oldFolder);
+        const stat = await fs.stat(oldPath);
+        if (stat.isDirectory()) {
+          const targetSubfolder = folderMapping[oldFolder] || '08_Archief';
+          const newFolderPath = path.join(targetPath, targetSubfolder);
+          await fs.copy(oldPath, newFolderPath, { errorOnExist: false });
+        }
+      }
+    } else {
+      // Fallback: alles naar 08_Archief
+      const archiveTarget = path.join(targetPath, '08_Archief');
+      await fs.copy(project.oldPath, archiveTarget, { errorOnExist: false });
+    }
 
     // Genereer PROJECT_INFO.txt
     const infoContent = `PROJECTNAAM: ${projectName}
@@ -127,7 +139,6 @@ MAPPEN:
 
     await fs.writeFile(path.join(targetPath, 'PROJECT_INFO.txt'), infoContent, 'utf8');
 
-    // Sla metadata op
     const metadata = {
       id: projectId,
       projectName,
@@ -135,6 +146,7 @@ MAPPEN:
       oldPath: project.oldPath,
       newPath: targetPath,
       documents,
+      folderMapping,
       migratedAt: new Date().toISOString(),
       source: project.source
     };
@@ -246,8 +258,8 @@ app.get('/api/projects', async (req, res) => {
 
 // POST /api/migrate — Migreer 1 project
 app.post('/api/migrate', async (req, res) => {
-  const { projectId, contactName, projectName, documents } = req.body;
-  const result = await migrateProject(projectId, contactName, projectName, documents);
+  const { projectId, contactName, projectName, documents, folderMapping } = req.body;
+  const result = await migrateProject(projectId, contactName, projectName, documents, folderMapping);
   res.json(result);
 });
 
