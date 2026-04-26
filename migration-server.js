@@ -43,7 +43,7 @@ async function scanOldProjects() {
       const stat = await fs.stat(fullPath);
       if (stat.isDirectory()) {
         projectsList.push({
-          id: `p_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: fullPath, // Use path as stable ID
           name: dir,
           oldPath: fullPath,
           source: '1_Projecten NAS',
@@ -59,7 +59,7 @@ async function scanOldProjects() {
       const stat = await fs.stat(fullPath);
       if (stat.isDirectory()) {
         projectsList.push({
-          id: `p_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: fullPath, // Use path as stable ID
           name: dir,
           oldPath: fullPath,
           source: '2_Compananny NAS',
