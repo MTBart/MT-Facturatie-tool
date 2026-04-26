@@ -12,7 +12,9 @@ class MigrationTool {
     this.allInvoices = [];
     this.projectList = [];
     this.currentProjectIndex = 0;
-    this.nodeApiBase = 'http://localhost:3456'; // Node.js backend
+    this.nodeApiBase = 'http://localhost:3456';
+    this.scanResults = null;
+    this.folderMapping = {};
   }
 
   // ────────────────────────────────────────────────────
@@ -86,6 +88,23 @@ class MigrationTool {
     }
   }
 
+  async scanProjectStructure(projectId) {
+    try {
+      const response = await fetch(`${this.nodeApiBase}/api/scan-project/${projectId}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      this.scanResults = await response.json();
+      this.folderMapping = {};
+      this.scanResults.subfolders.forEach(f => {
+        this.folderMapping[f.name] = f.suggestion;
+      });
+      return this.scanResults;
+    } catch (err) {
+      console.error('Project scan error:', err);
+      alert(`Fout: ${err.message}`);
+      return null;
+    }
+  }
+
   // ────────────────────────────────────────────────────
   // 3. FORM RENDERING
   // ────────────────────────────────────────────────────
@@ -131,8 +150,8 @@ class MigrationTool {
 
               <!-- Buttons -->
               <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
-                <button class="btn btn-primary" onclick="migrationTool.migrateCurrentProject()">
-                  → Migreren
+                <button class="btn btn-primary" onclick="migrationTool.scanCurrentProject()">
+                  📋 Scan oud project
                 </button>
                 <button class="btn btn-secondary" onclick="migrationTool.nextProject()">
                   Volgende ›
@@ -244,7 +263,61 @@ class MigrationTool {
     document.getElementById('migration-documents').innerHTML = '<div style="color:var(--text-faint); font-size:12px;">Selecteer klant...</div>';
   }
 
-  async migrateCurrentProject() {
+  async scanCurrentProject() {
+    const project = this.projectList[this.currentProjectIndex];
+    document.getElementById('migration-status-text').textContent = 'Scannend...';
+    const result = await this.scanProjectStructure(project.id);
+    if (result) {
+      this.showMappingUI();
+    }
+    document.getElementById('migration-status-text').textContent = `${result?.subfolders.length || 0} folders gevonden`;
+  }
+
+  showMappingUI() {
+    if (!this.scanResults) return;
+
+    const mapContainer = document.getElementById('migration-form');
+    if (!mapContainer) return;
+
+    const newFolders = ['01_Offerte', '02_Ontwerp', '03_Vectorworks', '04_Holzher', '05_Aangeleverd', '06_Fotos', '07_Administratie', '08_Archief', '09_Werktekeningen'];
+
+    let html = `<div class="card" style="margin-top:1.5rem;">
+      <div class="card-title">📋 Mapping-overzicht</div>
+      <div class="card-subtitle">${this.scanResults.subfolders.length} oude folders → 9 nieuwe subfolders</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-top:1.5rem; max-height:500px; overflow-y:auto;">`;
+
+    // Links: oude folders
+    html += '<div style="border-right:2px solid var(--border);"><div style="font-weight:600;margin-bottom:1rem;font-size:12px;color:var(--text-faint);text-transform:uppercase;">Oude folders</div>';
+    this.scanResults.subfolders.forEach(folder => {
+      html += `<div style="padding:8px; background:var(--surface2); border-radius:4px; margin-bottom:8px; font-size:12px;">${folder.name}</div>`;
+    });
+    html += '</div>';
+
+    // Rechts: mapping selecten
+    html += '<div><div style="font-weight:600;margin-bottom:1rem;font-size:12px;color:var(--text-faint);text-transform:uppercase;">Doel subfolder</div>';
+    this.scanResults.subfolders.forEach(folder => {
+      const current = this.folderMapping[folder.name];
+      html += `<select id="map_${folder.name}" style="width:100%;margin-bottom:8px;font-size:12px;" onchange="migrationTool.updateMapping('${folder.name}',this.value)">`;
+      newFolders.forEach(nf => {
+        html += `<option value="${nf}" ${current === nf ? 'selected' : ''}>${nf}</option>`;
+      });
+      html += '</select>';
+    });
+    html += '</div></div>';
+
+    html += `<div style="margin-top:1rem;">
+      <button class="btn btn-primary" onclick="migrationTool.executeMigrateWithMapping()">✓ Migreren met deze mapping</button>
+    </div>
+    </div>`;
+
+    mapContainer.innerHTML += html;
+  }
+
+  updateMapping(folderName, newTarget) {
+    this.folderMapping[folderName] = newTarget;
+  }
+
+  async executeMigrateWithMapping() {
     const project = this.projectList[this.currentProjectIndex];
     const contactId = document.getElementById('migration-contact').value;
     const projectName = document.getElementById('migration-projectname').value;
@@ -254,15 +327,12 @@ class MigrationTool {
       return;
     }
 
-    // Get selected documents
     const selectedDocs = Array.from(document.querySelectorAll('#migration-documents input[type="checkbox"]:checked'))
       .map(el => ({ id: el.value, number: el.dataset.number }));
 
-    // Get contact name
     const contactOption = document.querySelector(`#migration-contact option[value="${contactId}"]`);
     const contactName = contactOption ? contactOption.textContent.split('(')[0].trim() : 'Onbekend';
 
-    // Call Node API to migrate
     try {
       const response = await fetch(`${this.nodeApiBase}/api/migrate`, {
         method: 'POST',
@@ -271,7 +341,8 @@ class MigrationTool {
           projectId: project.id,
           contactName,
           projectName,
-          documents: selectedDocs
+          documents: selectedDocs,
+          folderMapping: this.folderMapping
         })
       });
 
