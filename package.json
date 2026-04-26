@@ -1,0 +1,18 @@
+{
+  "name": "mt-migration-server",
+  "version": "1.0.0",
+  "description": "M&T Migration Server - Project folder migration & metadata management",
+  "main": "migration-server.js",
+  "scripts": {
+    "start": "node migration-server.js",
+    "dev": "node migration-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "fs-extra": "^11.1.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

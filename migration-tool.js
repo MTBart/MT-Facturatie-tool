@@ -12,6 +12,7 @@ class MigrationTool {
     this.allInvoices = [];
     this.projectList = [];
     this.currentProjectIndex = 0;
+    this.nodeApiBase = 'http://localhost:3456'; // Node.js backend
   }
 
   // ────────────────────────────────────────────────────
@@ -71,20 +72,20 @@ class MigrationTool {
   }
 
   // ────────────────────────────────────────────────────
-  // 2. SCAN OUDE PROJECTEN
+  // 2. SCAN OUDE PROJECTEN (NODE API)
   // ────────────────────────────────────────────────────
 
   async scanOldProjects() {
-    // Dit moet later worden aangeroepen vanuit de UI
-    // Voor nu: placeholder list
-    this.projectList = [
-      { name: 'Alie de Pruyssenaere', path: 'Alie de Pruyssenaere', type: 'folder' },
-      { name: 'Arjan', path: 'Arjan', type: 'folder' },
-      { name: 'Bibliotheek Sassenheim', path: 'Bibliotheek Sassenheim', type: 'folder' },
-      { name: 'David Vietor', path: 'David Vietor', type: 'folder' },
-      // ... nog 125+ mappen
-    ];
-    return this.projectList;
+    try {
+      const response = await fetch(`${this.nodeApiBase}/api/projects`);
+      this.projectList = await response.json();
+      console.log(`✓ Scanned ${this.projectList.length} projects`);
+      return this.projectList;
+    } catch (err) {
+      console.error('Scan error:', err);
+      alert('Fout: Node.js server niet bereikbaar. Start migration-server.js eerst.');
+      return [];
+    }
   }
 
   // ────────────────────────────────────────────────────
@@ -247,10 +248,33 @@ class MigrationTool {
     const selectedDocs = Array.from(document.querySelectorAll('#migration-documents input[type="checkbox"]:checked'))
       .map(el => ({ id: el.value, number: el.dataset.number }));
 
-    console.log('Migreren:', { project: project.name, contact: contactId, name: projectName, docs: selectedDocs });
+    // Get contact name
+    const contactOption = document.querySelector(`#migration-contact option[value="${contactId}"]`);
+    const contactName = contactOption ? contactOption.textContent.split('(')[0].trim() : 'Onbekend';
 
-    // TODO: Kopie-logica + JSON opslaan
-    alert(`Gemigreerd: ${projectName}\n(Later implementeren: bestand-kopie + JSON)`);
+    // Call Node API to migrate
+    try {
+      const response = await fetch(`${this.nodeApiBase}/api/migrate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          contactName,
+          projectName,
+          documents: selectedDocs
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        alert(`✓ Gemigreerd: ${projectName}\n→ ${result.path}`);
+      } else {
+        alert(`✗ Fout: ${result.error}`);
+      }
+    } catch (err) {
+      console.error('Migration error:', err);
+      alert(`✗ Fout: ${err.message}`);
+    }
   }
 
   nextProject() {
