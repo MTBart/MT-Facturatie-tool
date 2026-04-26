@@ -192,11 +192,7 @@ class MigrationTool {
     const contactId = document.getElementById('migration-contact').value;
     if (!contactId) return;
 
-    console.log('Contact selected:', contactId);
-    console.log('All estimates:', this.allEstimates.slice(0, 3));
-    console.log('All invoices:', this.allInvoices.slice(0, 3));
     const docs = this.getEstimatesAndInvoicesForContact(contactId);
-    console.log('Docs for contact:', docs);
     const docContainer = document.getElementById('migration-documents');
 
     if (docs.length === 0) {
@@ -204,17 +200,31 @@ class MigrationTool {
       return;
     }
 
-    let html = '<div style="display:flex; flex-direction:column; gap:0.5rem;">';
-    html += '<label style="font-size:11px;"><input type="checkbox" value="nvt"> n.v.t.</label>';
+    let html = '<div style="display:flex; flex-direction:column; gap:0.75rem;">';
 
+    // N.V.T. option
+    html += `<div style="display:flex; align-items:center; gap:8px; padding:8px; background:var(--surface2); border-radius:4px;">
+      <input type="checkbox" value="nvt" style="width:16px; height:16px; cursor:pointer;">
+      <span style="font-size:12px; font-weight:500;">n.v.t. (geen koppeling)</span>
+    </div>`;
+
+    // Documents with better formatting
     docs.forEach(doc => {
-      html += `<label style="font-size:12px; margin:0;">
-        <input type="checkbox" value="${doc.id}" data-number="${doc.number}" data-type="${doc.type}">
-        ${doc.type === 'offerte' ? '📋' : '📄'} ${doc.number}
-      </label>`;
+      const icon = doc.type === 'offerte' ? '📋 Offerte' : '📄 Factuur';
+      html += `<div style="display:flex; align-items:center; gap:8px; padding:8px; background:var(--surface2); border-radius:4px; border-left:3px solid ${doc.type === 'offerte' ? 'var(--gold)' : 'var(--green)'};">
+        <input type="checkbox" value="${doc.id}" data-number="${doc.number}" data-type="${doc.type}" style="width:16px; height:16px; cursor:pointer;">
+        <div style="flex:1;">
+          <div style="font-size:12px; font-weight:500;">${icon}</div>
+          <div style="font-size:11px; color:var(--text-faint);">${doc.number}</div>
+        </div>
+      </div>`;
     });
 
-    html += '<label style="font-size:11px; margin-top:0.5rem;"><input type="text" placeholder="Handmatig invoeren..." id="manual-doc"></label>';
+    // Manual entry
+    html += `<div style="margin-top:0.5rem;">
+      <input type="text" placeholder="📝 Handmatig: offerte/factuur nr..." id="manual-doc" style="font-size:12px;">
+    </div>`;
+
     html += '</div>';
 
     docContainer.innerHTML = html;
