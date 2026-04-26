@@ -212,7 +212,14 @@ app.get('/api/moneybird/:endpoint', async (req, res) => {
 
   if (!token) return res.status(401).json({ error: 'No token' });
 
-  const data = await fetchMoneyBird(`/${endpoint}`, token);
+  // Build full path with query params (except token)
+  const { token: _, ...queryParams } = req.query;
+  const queryString = Object.entries(queryParams)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join('&');
+
+  const path = `/${endpoint}.json${queryString ? '?' + queryString : ''}`;
+  const data = await fetchMoneyBird(path, token);
   res.json(data || []);
 });
 

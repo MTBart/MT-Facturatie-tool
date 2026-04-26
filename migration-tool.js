@@ -21,7 +21,7 @@ class MigrationTool {
 
   async fetchContacts() {
     try {
-      const response = await fetch(`${this.nodeApiBase}/api/moneybird/contacts.json?token=${this.mbToken}`);
+      const response = await fetch(`${this.nodeApiBase}/api/moneybird/contacts?token=${this.mbToken}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       this.allContacts = await response.json();
       return this.allContacts;
@@ -33,7 +33,7 @@ class MigrationTool {
 
   async fetchEstimates() {
     try {
-      const response = await fetch(`${this.nodeApiBase}/api/moneybird/estimates.json?token=${this.mbToken}`);
+      const response = await fetch(`${this.nodeApiBase}/api/moneybird/estimates?token=${this.mbToken}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       this.allEstimates = await response.json();
       return this.allEstimates;
@@ -45,7 +45,7 @@ class MigrationTool {
 
   async fetchInvoices() {
     try {
-      const response = await fetch(`${this.nodeApiBase}/api/moneybird/sales_invoices.json?token=${this.mbToken}`);
+      const response = await fetch(`${this.nodeApiBase}/api/moneybird/sales_invoices?token=${this.mbToken}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       this.allInvoices = await response.json();
       return this.allInvoices;
