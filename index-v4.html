@@ -802,7 +802,7 @@ function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReade
 window.onload=()=>{
   loadSavedSettings();
   renderFactuurFormulier();
-  updateApiStatus();
+  // updateApiStatus(); // TODO: disabled for migration test (404 endpoints)
   loadLedgers();
   renderHistory();
   migreerVoorraadCategorieen(); // Fix bestaande verkeerde categorieën
@@ -810,7 +810,7 @@ window.onload=()=>{
   renderProjectLijst();
   renderBestellijst();
   renderLeveranciersBeheer();
-  laadDashboard();
+  // laadDashboard(); // TODO: disabled for migration test (404 endpoints)
   const nu=new Date();
   document.getElementById('periode-van').value=`${nu.getFullYear()}-01-01`;
   document.getElementById('periode-tm').value=nu.toISOString().split('T')[0];
