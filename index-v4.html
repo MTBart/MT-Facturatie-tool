@@ -787,7 +787,7 @@ function fmt(n){return`€ ${n.toFixed(2).replace('.',',')}`;}
 function fmtDatum(d){return d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'—';}
 
 async function authHeader(){const t=typeof getAuthToken==='function'?await getAuthToken():null;return t?{'X-Auth-Token':t}:{};}
-async function mbGet(path){const token=window.mbToken;if(!token)return{ok:false,status:401};const endpoint=path.split('/').pop();return fetch(`http://localhost:3456/api/moneybird/${endpoint}?token=${token}`);}
+async function mbGet(path){const token=window.mbToken;if(!token)return{ok:false,status:401};const parts=path.split('/').pop().split('?');const endpoint=parts[0];const query=parts.length>1?'&'+parts[1]:'';return fetch(`http://localhost:3456/api/moneybird/${endpoint}?token=${token}${query}`);}
 async function mbPost(path,body){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});}
 async function mbPatch(path,body){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'PATCH',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});}
 async function mbDelete(path){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'DELETE',headers:h});}
