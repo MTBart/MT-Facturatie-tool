@@ -92,7 +92,6 @@ class MigrationTool {
 
   renderMigrationTab() {
     const tabContent = `
-      <div id="tab-migratie" class="tab-content">
         <div class="card">
           <div class="card-title">Project Migratie</div>
           <div class="card-subtitle">Oude mappen → Nieuwe structuur</div>
@@ -150,7 +149,6 @@ class MigrationTool {
             Start Migratie
           </button>
         </div>
-      </div>
     `;
     return tabContent;
   }

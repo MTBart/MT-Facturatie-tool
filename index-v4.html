@@ -3247,12 +3247,20 @@ if (window.initStorage) window.initStorage();
 
     // Initialize migration tool
     const tabDiv = document.getElementById('tab-migratie');
+    console.log('DOMContentLoaded: tabDiv exists?', !!tabDiv, 'migrationTool exists?', typeof migrationTool !== 'undefined');
     if (tabDiv && typeof migrationTool !== 'undefined') {
-      tabDiv.innerHTML = migrationTool.renderMigrationTab();
+      const html = migrationTool.renderMigrationTab();
+      console.log('renderMigrationTab() returned:', html ? 'HTML string (' + html.length + ' chars)' : 'empty');
+      tabDiv.innerHTML = html;
+      console.log('After innerHTML: tabDiv.children.length =', tabDiv.children.length);
+      console.log('tabDiv.innerHTML preview:', tabDiv.innerHTML.substring(0, 200));
       // Set Moneybird token
       if (window.mbToken) {
         migrationTool.mbToken = window.mbToken;
+        console.log('✓ Migration tool initialized with token');
       }
+    } else {
+      console.error('Migration init failed: tabDiv=' + !!tabDiv + ', migrationTool=' + (typeof migrationTool !== 'undefined'));
     }
   });
 </script>
