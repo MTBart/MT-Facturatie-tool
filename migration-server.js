@@ -287,8 +287,14 @@ function smartMatchFolder(folderName) {
 
 app.get('/api/scan-project/:projectId', async (req, res) => {
   const { projectId } = req.params;
+
+  // Scan projecten als niet gedaan
+  if (projectsList.length === 0) {
+    await scanOldProjects();
+  }
+
   const project = projectsList.find(p => p.id === projectId);
-  if (!project) return res.status(404).json({ error: 'Project niet gevonden' });
+  if (!project) return res.status(404).json({ error: `Project ${projectId} niet gevonden` });
 
   try {
     const subfolders = await fs.readdir(project.oldPath);
