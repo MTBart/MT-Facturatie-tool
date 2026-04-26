@@ -257,6 +257,55 @@ app.get('/api/projects-json', (req, res) => {
 });
 
 // ════════════════════════════════════════════════════
+// SMART SCAN: Scan oude project en suggest mapping
+// ════════════════════════════════════════════════════
+
+function smartMatchFolder(folderName) {
+  const lower = folderName.toLowerCase();
+  if (lower.includes('offert') || lower.includes('aanvraag') || lower.includes('quote')) return '01_Offerte';
+  if (lower.includes('ontwerp') || lower.includes('concept') || lower.includes('design') || lower.includes('schets')) return '02_Ontwerp';
+  if (lower.includes('vectorwork') || lower.includes('cad') || lower.includes('dwg') || lower.includes('vwx')) return '03_Vectorworks';
+  if (lower.includes('holzher') || lower.includes('optimize') || lower.includes('nesting') || lower.includes('optim')) return '04_Holzher';
+  if (lower.includes('aangelev') || lower.includes('afgewerkt') || lower.includes('product') || lower.includes('finale')) return '05_Aangeleverd';
+  if (lower.includes('foto') || lower.includes('photo') || lower.includes('beeld') || lower.includes('afbeeld')) return '06_Fotos';
+  if (lower.includes('admin') || lower.includes('email') || lower.includes('mail') || lower.includes('factuur') || lower.includes('invoice') || lower.includes('commun')) return '07_Administratie';
+  if (lower.includes('werk') || lower.includes('detail') || lower.includes('bestek') || lower.includes('uitvoering')) return '09_Werktekeningen';
+  return '08_Archief';
+}
+
+app.get('/api/scan-project/:projectId', async (req, res) => {
+  const { projectId } = req.params;
+  const project = projectsList.find(p => p.id === projectId);
+  if (!project) return res.status(404).json({ error: 'Project niet gevonden' });
+
+  try {
+    const subfolders = await fs.readdir(project.oldPath);
+    const entries = [];
+
+    for (const folder of subfolders) {
+      const fullPath = path.join(project.oldPath, folder);
+      const stat = await fs.stat(fullPath);
+      if (stat.isDirectory()) {
+        entries.push({
+          name: folder,
+          suggestion: smartMatchFolder(folder),
+          path: fullPath
+        });
+      }
+    }
+
+    res.json({
+      projectName: project.name,
+      projectPath: project.oldPath,
+      subfolders: entries.sort((a, b) => a.name.localeCompare(b.name))
+    });
+  } catch (err) {
+    console.error('Scan error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════
 // START SERVER
 // ════════════════════════════════════════════════════
 
