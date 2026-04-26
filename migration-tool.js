@@ -192,7 +192,11 @@ class MigrationTool {
     const contactId = document.getElementById('migration-contact').value;
     if (!contactId) return;
 
+    console.log('Contact selected:', contactId);
+    console.log('All estimates:', this.allEstimates.slice(0, 3));
+    console.log('All invoices:', this.allInvoices.slice(0, 3));
     const docs = this.getEstimatesAndInvoicesForContact(contactId);
+    console.log('Docs for contact:', docs);
     const docContainer = document.getElementById('migration-documents');
 
     if (docs.length === 0) {
