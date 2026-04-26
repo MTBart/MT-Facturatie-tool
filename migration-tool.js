@@ -75,15 +75,16 @@ class MigrationTool {
   // 2. SCAN OUDE PROJECTEN (NODE API)
   // ────────────────────────────────────────────────────
 
-  async scanOldProjects() {
+  async scanOldProjects(limit = 5) {
     try {
-      const response = await fetch(`${this.nodeApiBase}/api/projects`);
-      this.projectList = await response.json();
-      console.log(`✓ Scanned ${this.projectList.length} projects`);
+      const response = await fetch(`${this.nodeApiBase}/api/projects?limit=${limit}`);
+      const data = await response.json();
+      this.projectList = data.projects || [];
+      console.log(`✓ Scanned ${this.projectList.length}/${data.total} projects`);
       return this.projectList;
     } catch (err) {
       console.error('Scan error:', err);
-      alert('Fout: Node.js server niet bereikbaar. Start migration-server.js eerst.');
+      alert('Fout: Node.js server niet bereikbaar.\n\nStart eerst: npm install && npm start');
       return [];
     }
   }
@@ -161,9 +162,9 @@ class MigrationTool {
   // 4. UI INTERACTION
   // ────────────────────────────────────────────────────
 
-  async initializeMigration() {
+  async initializeMigration(limit = 5) {
     document.getElementById('migration-status').style.display = 'flex';
-    document.getElementById('migration-status-text').textContent = 'Laden...';
+    document.getElementById('migration-status-text').textContent = 'Laden (max 5 projecten test-modus)...';
 
     // Fetch Moneybird data
     await this.fetchContacts();
@@ -179,8 +180,8 @@ class MigrationTool {
       contactSelect.appendChild(option);
     });
 
-    // Scan old projects
-    await this.scanOldProjects();
+    // Scan old projects (max 5 for testing)
+    await this.scanOldProjects(limit);
 
     // Hide start button, show form
     document.getElementById('migration-start-btn').style.display = 'none';
@@ -189,7 +190,7 @@ class MigrationTool {
     // Show first project
     this.showCurrentProject();
 
-    document.getElementById('migration-status-text').textContent = 'Gereed';
+    document.getElementById('migration-status-text').textContent = `Gereed! ${this.projectList.length} projecten geladen`;
   }
 
   onContactChanged() {

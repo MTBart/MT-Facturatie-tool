@@ -3224,12 +3224,28 @@ initMsal();
 <!-- Migration Tool -->
 <script src="migration-tool.js"></script>
 <script>
+  // Load Moneybird token from config.json
+  async function loadMBToken() {
+    try {
+      const response = await fetch('config.json');
+      const config = await response.json();
+      window.mbToken = config.moneybird_token;
+      console.log('✓ Moneybird token loaded');
+    } catch (err) {
+      console.warn('⚠️ config.json niet gevonden. Token moet handmatig gezet worden.');
+    }
+  }
+
   // Initialize migration tab content on page load
-  document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('DOMContentLoaded', async function() {
+    // Load token first
+    await loadMBToken();
+
+    // Initialize migration tool
     const tabDiv = document.getElementById('tab-migratie');
     if (tabDiv && typeof migrationTool !== 'undefined') {
       tabDiv.innerHTML = migrationTool.renderMigrationTab();
-      // Set Moneybird token from global scope (if available)
+      // Set Moneybird token
       if (window.mbToken) {
         migrationTool.mbToken = window.mbToken;
       }

@@ -179,12 +179,21 @@ async function loadProjectsJson() {
 // API ENDPOINTS
 // ════════════════════════════════════════════════════
 
-// GET /api/projects — Laad alle projecten
+// GET /api/projects — Laad projecten (optioneel: ?limit=5)
 app.get('/api/projects', async (req, res) => {
   if (projectsList.length === 0) {
     await scanOldProjects();
   }
-  res.json(projectsList);
+
+  const limit = req.query.limit ? parseInt(req.query.limit) : projectsList.length;
+  const result = projectsList.slice(0, limit);
+
+  res.json({
+    total: projectsList.length,
+    limit,
+    count: result.length,
+    projects: result
+  });
 });
 
 // POST /api/migrate — Migreer 1 project
