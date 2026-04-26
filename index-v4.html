@@ -282,6 +282,7 @@ textarea{resize:vertical;min-height:60px}
   <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" onclick="showTab('cn',this)">CompaNanny</button>
+  <button class="tab-btn" onclick="showTab('migratie',this)">📦 Migratie</button>
 </div>
 
 <div class="main">
@@ -663,6 +664,9 @@ textarea{resize:vertical;min-height:60px}
       </div>
     </div>
   </div>
+
+  <!-- ═══ TAB: MIGRATIE ═══ -->
+  <div id="tab-migratie" class="tab-content"></div>
 
 </div>
 
@@ -3215,6 +3219,22 @@ initMsal();
 
   function cnFmt(n) { return isNaN(n)?'0,00':n.toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 })();
+</script>
+
+<!-- Migration Tool -->
+<script src="migration-tool.js"></script>
+<script>
+  // Initialize migration tab content on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    const tabDiv = document.getElementById('tab-migratie');
+    if (tabDiv && typeof migrationTool !== 'undefined') {
+      tabDiv.innerHTML = migrationTool.renderMigrationTab();
+      // Set Moneybird token from global scope (if available)
+      if (window.mbToken) {
+        migrationTool.mbToken = window.mbToken;
+      }
+    }
+  });
 </script>
 
 </body>
