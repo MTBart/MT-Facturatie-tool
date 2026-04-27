@@ -478,8 +478,38 @@ class MigrationTool {
 
   async executeMigration() {
     console.log('Migratie starten...');
-    // TODO: POST naar /api/migrate met folderContents + mapping
-    alert('✓ Migratie gestart! (Work in progress)');
+
+    if (!this.selectedContact || this.projectNames.length === 0) {
+      alert('Klant en projectnamen nog niet ingevuld');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${this.nodeApiBase}/api/migrate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          folderPath: this.selectedFolder,
+          contactId: this.selectedContact.id,
+          contactName: this.selectedContact.company_name,
+          projectNames: this.projectNames,
+          folderMapping: this.folderMapping
+        })
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`✓ Gemigreerd!\n\n${result.files} bestanden naar:\n${result.newPath}`);
+        console.log('Migratie rapport:', result);
+      } else {
+        alert(`✗ Fout: ${result.error}`);
+      }
+    } catch (err) {
+      console.error('Migratie error:', err);
+      alert(`✗ Fout: ${err.message}`);
+    }
   }
 }
 

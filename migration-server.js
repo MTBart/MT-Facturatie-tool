@@ -235,6 +235,96 @@ app.get('/api/moneybird/:endpoint', async (req, res) => {
   res.json(data || []);
 });
 
+// GET /api/all-contacts — Debug: toon alle contactnamen
+app.get('/api/all-contacts', async (req, res) => {
+  const token = req.query.token;
+  if (!token) return res.status(401).json({ error: 'No token' });
+
+  try {
+    let allContacts = [];
+    let seenIds = new Set();
+
+    for (let page = 0; page < 20; page++) {
+      const path = `/contacts.json?limit=100&offset=${page * 100}`;
+      const data = await fetchMoneyBird(path, token);
+      if (!data || data.length === 0) break;
+
+      allContacts = allContacts.concat(data.filter(c => {
+        if (c.id && seenIds.has(c.id)) return false;
+        if (c.id) seenIds.add(c.id);
+        return true;
+      }));
+    }
+
+    // Deduplicate by company_name
+    const uniqueByName = new Map();
+    allContacts.forEach(c => {
+      if (c.company_name && !uniqueByName.has(c.company_name)) {
+        uniqueByName.set(c.company_name, { name: c.company_name, id: c.id, nr: c.customer_id });
+      }
+    });
+
+    const names = Array.from(uniqueByName.values());
+    res.json({ total: allContacts.length, unique: names.length, names });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/search-contacts — Server-side klant zoeken
+app.get('/api/search-contacts', async (req, res) => {
+  const { q, token } = req.query;
+
+  if (!token) return res.status(401).json({ error: 'No token' });
+  if (!q || q.length < 1) return res.json([]);
+
+  try {
+    // Fetch contacts using page-based pagination (like index-v4.html does)
+    let contactMap = new Map(); // ID → contact
+
+    for (let page = 1; page <= 50; page++) {
+      const path = `/contacts.json?page=${page}&per_page=100`;
+      const data = await fetchMoneyBird(path, token);
+
+      if (!data || data.length === 0) {
+        console.log(`Search "${q}": Reached end at page ${page}`);
+        break;
+      }
+
+      data.forEach(c => {
+        if (c.id && !contactMap.has(c.id)) {
+          contactMap.set(c.id, c);
+        }
+      });
+
+      if (data.length < 100) {
+        console.log(`Search "${q}": Page ${page} had ${data.length} < 100, stopping`);
+        break;
+      }
+    }
+
+    const allContacts = Array.from(contactMap.values());
+    console.log(`Search "${q}": ${allContacts.length} unique contacts fetched`);
+
+    // Filter op zoekterm
+    const query = q.toLowerCase();
+    const filtered = allContacts
+      .filter(c => c.company_name && c.company_name.length > 0 && c.company_name.toLowerCase().includes(query))
+      .slice(0, 20); // Max 20 resultaten
+
+    console.log(`Search "${q}": ${filtered.length} unieke resultaten`);
+    if (filtered.length > 0) {
+      filtered.forEach(c => {
+        console.log(`  → "${c.company_name}" (ID: ${c.id})`);
+      });
+    }
+    res.json(filtered);
+  } catch (err) {
+    console.error('Search error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ════════════════════════════════════════════════════
 // API ENDPOINTS
 // ════════════════════════════════════════════════════
@@ -256,7 +346,83 @@ app.get('/api/projects', async (req, res) => {
   });
 });
 
-// POST /api/migrate — Migreer 1 project
+// POST /api/migrate — Kopieert oude map naar nieuwe structuur
+app.post('/api/migrate', async (req, res) => {
+  const { folderPath, contactName, projectNames, folderMapping } = req.body;
+
+  if (!folderPath || !contactName || !projectNames || !folderMapping) {
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  try {
+    // Scan old folder
+    const oldFiles = [];
+    const scanFolder = (dir, prefix = '') => {
+      try {
+        const entries = fs.readdirSync(dir);
+        entries.forEach(entry => {
+          const fullPath = path.join(dir, entry);
+          const stat = fs.statSync(fullPath);
+          const relativePath = prefix ? `${prefix}/${entry}` : entry;
+
+          if (stat.isDirectory()) {
+            scanFolder(fullPath, relativePath);
+          } else {
+            oldFiles.push({ path: fullPath, relative: relativePath });
+          }
+        });
+      } catch (e) {
+        console.error(`Error scanning ${dir}:`, e.message);
+      }
+    };
+
+    scanFolder(folderPath);
+    console.log(`Scanned ${oldFiles.length} files from ${folderPath}`);
+
+    // Build new structure
+    const newBasePath = path.join(PATHS.newProjects, `${contactName}`, `${projectNames[0]}`);
+    let copiedCount = 0;
+
+    // Create all target folders first
+    const newFolders = ['01_Offerte', '02_Ontwerp', '03_Vectorworks', '04_Holzher', '05_CNC Files',
+                       '06_Aangeleverd', '07_Fotos', '08_Administratie', '09_Archief', '10_Werktekeningen'];
+
+    for (const folder of newFolders) {
+      const folderPath = path.join(newBasePath, folder);
+      await fs.ensureDir(folderPath);
+    }
+
+    // Copy files with mapping
+    const sortedFiles = oldFiles.sort((a, b) => a.relative.localeCompare(b.relative));
+
+    for (const file of sortedFiles) {
+      // Determine target folder
+      const oldFolderName = file.relative.split('/')[0];
+      const targetFolder = folderMapping[oldFolderName] || '09_Archief';
+      const targetPath = path.join(newBasePath, targetFolder, path.basename(file.relative));
+
+      try {
+        await fs.ensureDir(path.dirname(targetPath));
+        await fs.copy(file.path, targetPath);
+        copiedCount++;
+      } catch (e) {
+        console.error(`Error copying ${file.relative}:`, e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      files: copiedCount,
+      newPath: newBasePath,
+      total: sortedFiles.length
+    });
+  } catch (err) {
+    console.error('Migration error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/migrate — Migreer 1 project (OLD)
 app.post('/api/migrate', async (req, res) => {
   const { projectId, contactName, projectName, documents, folderMapping } = req.body;
   const result = await migrateProject(projectId, contactName, projectName, documents, folderMapping);
