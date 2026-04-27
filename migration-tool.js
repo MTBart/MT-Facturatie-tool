@@ -25,8 +25,9 @@ class MigrationTool {
 
   async loadContacts() {
     // Load all contacts ONCE and cache in localStorage (like index-v4.html does)
-    const cached = localStorage.getItem('mt_migration_contacts');
-    if (cached) {
+    const cacheKey = 'mt_migration_contacts_v2'; // v2 for fresh load
+    const cached = localStorage.getItem(cacheKey);
+    if (cached && false) { // Disable cache for now
       const { data, ts } = JSON.parse(cached);
       if (Date.now() - ts < 86400000) { // 24 uur geldig
         this.allContacts = data;
@@ -37,34 +38,52 @@ class MigrationTool {
 
     console.log('Laden contacten van Moneybird...');
     let allContacts = [];
-    for (let page = 1; page <= 50; page++) {
+    for (let page = 1; page <= 100; page++) {
       try {
         const response = await fetch(
           `${this.nodeApiBase}/api/moneybird/contacts?page=${page}&per_page=100&token=${this.mbToken}`
         );
-        if (!response.ok) break;
+        if (!response.ok) {
+          console.log(`Page ${page}: HTTP ${response.status}, stopping`);
+          break;
+        }
         const data = await response.json();
-        if (!data || data.length === 0) break;
+        if (!data || data.length === 0) {
+          console.log(`Page ${page}: empty, stopping`);
+          break;
+        }
 
         allContacts = allContacts.concat(data);
-        if (data.length < 100) break;
+        console.log(`Page ${page}: ${data.length} contacten (totaal: ${allContacts.length})`);
+
+        if (data.length < 100) {
+          console.log(`Page ${page}: ${data.length} < 100, stopping`);
+          break;
+        }
       } catch (err) {
-        console.error('Fout ophalen contacten:', err);
+        console.error(`Fout ophalen page ${page}:`, err);
         break;
       }
     }
 
-    // Remove duplicates
+    // Remove duplicates + add full name if company_name is empty
     const unique = new Map();
     allContacts.forEach(c => {
       if (c.id && !unique.has(c.id)) {
-        unique.set(c.id, c);
+        // Add full name if company_name is empty (particuliere klanten)
+        if (!c.company_name || !c.company_name.trim()) {
+          c.company_name = `${c.firstname||''} ${c.lastname||''}`.trim();
+        }
+        // Only add if there's a name
+        if (c.company_name && c.company_name.trim()) {
+          unique.set(c.id, c);
+        }
       }
     });
 
     this.allContacts = Array.from(unique.values());
-    localStorage.setItem('mt_migration_contacts', JSON.stringify({ data: this.allContacts, ts: Date.now() }));
-    console.log(`✓ ${this.allContacts.length} contacten geladen en gecached`);
+    console.log(`✓ ${this.allContacts.length} contacten geladen (schoon)`);
+    localStorage.setItem('mt_migration_contacts_v2', JSON.stringify({ data: this.allContacts, ts: Date.now() }));
     return this.allContacts;
   }
 
@@ -118,19 +137,21 @@ class MigrationTool {
 
     container.innerHTML = html;
 
-    // Re-attach event listeners
-    if (this.workflow === 'step1') {
-      const folderInput = document.getElementById('folder-picker');
-      if (folderInput) {
-        folderInput.addEventListener('change', (e) => {
-          if (e.target.files.length > 0) {
-            this.handleFolderSelect(e.target.files);
-          }
-        });
+    // Re-attach event listeners (wacht tot rendering klaar is)
+    setTimeout(() => {
+      if (this.workflow === 'step1') {
+        const folderInput = document.getElementById('folder-picker');
+        if (folderInput) {
+          folderInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+              this.handleFolderSelect(e.target.files);
+            }
+          });
+        }
+      } else if (this.workflow === 'step2') {
+        this.setupContactAutocomplete();
       }
-    } else if (this.workflow === 'step2') {
-      this.setupContactAutocomplete();
-    }
+    }, 0);
   }
 
   renderStep1() {
@@ -280,67 +301,39 @@ class MigrationTool {
       return;
     }
 
-    console.log('✓ Contact autocomplete setup (server-side search)');
+    console.log(`✓ Contact autocomplete setup (${this.allContacts.length} contacten beschikbaar)`);
+    console.log('First 10:', this.allContacts.slice(0, 10).map(c => c.company_name));
+    console.log('Last 10:', this.allContacts.slice(-10).map(c => c.company_name));
 
     const tool = this;
-    let searchTimeout;
 
-    // Bij input: server-side zoeken
+    // Bij input: lokaal zoeken in gecachete contacten
     searchInput.addEventListener('input', function(e) {
-      const query = e.target.value.trim();
-      console.log('Zoekterm:', query);
-
-      clearTimeout(searchTimeout);
+      const query = e.target.value.toLowerCase();
+      console.log(`Input: "${query}", allContacts: ${tool.allContacts.length}`);
 
       if (!query) {
         dropdown.style.display = 'none';
         return;
       }
 
-      // Debounce: wait 300ms before searching
-      searchTimeout = setTimeout(() => {
-        tool.searchContacts(query);
-      }, 300);
-    });
+      // Lokaal zoeken
+      const filtered = tool.allContacts.filter(c =>
+        c.company_name && c.company_name.toLowerCase().includes(query)
+      ).slice(0, 20);
 
-    // Sluit dropdown op blur
-    searchInput.addEventListener('blur', function() {
-      setTimeout(() => { dropdown.style.display = 'none'; }, 200);
-    });
-  }
+      console.log(`Filtered: ${filtered.length} contacten`);
 
-  async searchContacts(query) {
-    const dropdown = document.getElementById('contact-dropdown');
-    if (!dropdown) return;
-
-    try {
-      dropdown.innerHTML = '<div style="padding:0.75rem; color:var(--text-faint); font-size:12px;">Zoeken...</div>';
-      dropdown.style.display = 'block';
-
-      const response = await fetch(
-        `${this.nodeApiBase}/api/search-contacts?q=${encodeURIComponent(query)}&token=${this.mbToken}`
-      );
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const results = await response.json();
-
-      console.log('Search resultaten:', results.length);
-
-      if (results.length === 0) {
+      if (filtered.length === 0) {
         dropdown.innerHTML = '<div style="padding:0.75rem; color:var(--text-faint);">Geen contacten gevonden</div>';
         dropdown.style.display = 'block';
         return;
       }
 
       let html = '';
-      results.forEach(c => {
-        if (!c.company_name) {
-          console.log('Skipping contact without company_name:', c);
-          return;
-        }
+      filtered.forEach(c => {
         const safeId = String(c.id).replace(/'/g, "\\'");
         const safeName = String(c.company_name).replace(/'/g, "\\'");
-        console.log(`→ ${c.company_name} (ID: ${c.id})`);
         html += `<div style="padding:0.75rem; cursor:pointer; border-bottom:1px solid var(--border); background:white;"
                       onmouseover="this.style.background='#f0f0f0'"
                       onmouseout="this.style.background='white'"
@@ -350,15 +343,16 @@ class MigrationTool {
         </div>`;
       });
 
-      console.log('HTML length:', html.length, 'dropdown exists:', !!dropdown);
       dropdown.innerHTML = html;
       dropdown.style.display = 'block';
-    } catch (err) {
-      console.error('Search error:', err);
-      dropdown.innerHTML = '<div style="padding:0.75rem; color:red;">Fout bij zoeken</div>';
-      dropdown.style.display = 'block';
-    }
+    });
+
+    // Sluit dropdown op blur
+    searchInput.addEventListener('blur', function() {
+      setTimeout(() => { dropdown.style.display = 'none'; }, 200);
+    });
   }
+
 
   selectContact(contactId, contactName) {
     this.selectedContact = this.allContacts.find(c => c.id === contactId);
@@ -420,7 +414,7 @@ class MigrationTool {
     const container = document.getElementById('mapping-container');
     if (!container) return;
 
-    const newFolders = ['01_Offerte', '02_Ontwerp', '03_Vectorworks', '04_Holzher', '05_Aangeleverd', '06_Fotos', '07_Administratie', '08_Archief', '09_Werktekeningen'];
+    const newFolders = ['01_Offerte', '02_Ontwerp', '03_Vectorworks', '04_Holzher', '05_CNC Files', '06_Aangeleverd', '07_Fotos', '08_Administratie', '09_Archief', '10_Werktekeningen'];
 
     // Extract subfolder names from file paths
     const subfolders = new Set();
@@ -433,6 +427,19 @@ class MigrationTool {
 
     let html = '';
     Array.from(subfolders).sort().forEach(folder => {
+      // Smart defaults: guess folder mapping
+      let defaultFolder = '09_Archief'; // fallback
+      const folderLower = folder.toLowerCase();
+      if (folderLower.includes('offerte') || folderLower.includes('quote')) defaultFolder = '01_Offerte';
+      else if (folderLower.includes('ontwerp') || folderLower.includes('design')) defaultFolder = '02_Ontwerp';
+      else if (folderLower.includes('vectorworks')) defaultFolder = '03_Vectorworks';
+      else if (folderLower.includes('holzher')) defaultFolder = '04_Holzher';
+      else if (folderLower.includes('cnc') || folderLower.includes('files')) defaultFolder = '05_CNC Files';
+      else if (folderLower.includes('aangeleverd') || folderLower.includes('delivered')) defaultFolder = '06_Aangeleverd';
+      else if (folderLower.includes('foto') || folderLower.includes('photo')) defaultFolder = '07_Fotos';
+      else if (folderLower.includes('admin')) defaultFolder = '08_Administratie';
+      else if (folderLower.includes('werk') || folderLower.includes('tekening')) defaultFolder = '10_Werktekeningen';
+
       html += `
         <div style="padding:0.75rem; background:white; border:1px solid var(--border); border-radius:4px;">
           <div style="font-weight:600; margin-bottom:0.5rem; font-size:12px;">${folder}</div>
@@ -440,7 +447,8 @@ class MigrationTool {
             <option value="">-- Kies doel --</option>
       `;
       newFolders.forEach(nf => {
-        html += `<option value="${nf}">${nf}</option>`;
+        const selected = nf === defaultFolder ? 'selected' : '';
+        html += `<option value="${nf}" ${selected}>${nf}</option>`;
       });
       html += `</select></div>`;
     });
