@@ -25,9 +25,9 @@ class MigrationTool {
 
   async loadContacts() {
     // Load all contacts ONCE and cache in localStorage (like index-v4.html does)
-    const cacheKey = 'mt_migration_contacts_v2'; // v2 for fresh load
+    const cacheKey = 'mt_migration_contacts';
     const cached = localStorage.getItem(cacheKey);
-    if (cached && false) { // Disable cache for now
+    if (cached) { // Enable cache
       const { data, ts } = JSON.parse(cached);
       if (Date.now() - ts < 86400000) { // 24 uur geldig
         this.allContacts = data;
@@ -82,8 +82,8 @@ class MigrationTool {
     });
 
     this.allContacts = Array.from(unique.values());
-    console.log(`✓ ${this.allContacts.length} contacten geladen (schoon)`);
-    localStorage.setItem('mt_migration_contacts_v2', JSON.stringify({ data: this.allContacts, ts: Date.now() }));
+    console.log(`✓ ${this.allContacts.length} contacten geladen en gecached (24h)`);
+    localStorage.setItem('mt_migration_contacts', JSON.stringify({ data: this.allContacts, ts: Date.now() }));
     return this.allContacts;
   }
 
@@ -384,12 +384,18 @@ class MigrationTool {
   updateProjectCount() {
     const count = parseInt(document.getElementById('project-count').value) || 1;
     this.projectNames = Array(count).fill('');
-    this.renderStep3();
 
-    // Re-populate inputs
-    for (let i = 0; i < count; i++) {
-      const inp = document.getElementById(`project-name-${i}`);
-      if (inp) inp.value = this.projectNames[i];
+    // Re-render step 3 with correct number of inputs
+    const html = this.renderStep3();
+    const container = document.getElementById('migration-container');
+    if (container) {
+      container.innerHTML = html;
+
+      // Wait for DOM update, then focus first input
+      setTimeout(() => {
+        const firstInput = document.getElementById('project-name-0');
+        if (firstInput) firstInput.focus();
+      }, 0);
     }
   }
 
