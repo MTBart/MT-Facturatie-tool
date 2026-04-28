@@ -38,7 +38,7 @@ header h1 span{color:var(--gold-mid);font-style:italic}
 .tab-btn:hover{color:var(--text-dim)}
 .tab-btn.active{color:var(--green);border-bottom-color:var(--gold);font-weight:600}
 .tab-content{display:none}.tab-content.active{display:block}
-.main{padding:1.25rem}
+.main{padding:1rem 1.5rem}
 .hidden{display:none!important}
 .flex{display:flex;align-items:center;gap:0.5rem}
 .btn{padding:9px 18px;border-radius:6px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s}
@@ -91,7 +91,7 @@ body.bord-fs .timer-bar{display:none!important}
 .select-wrap{display:flex;align-items:center;gap:0.4rem}
 
 /* ── TIMER TAB ── */
-.timer-wrap{padding:1.25rem}
+.timer-wrap{padding:1rem 1.5rem}
 .project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.6rem;margin-bottom:1.5rem}
 .project-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:0.9rem 1rem;cursor:pointer;transition:all 0.15s;position:relative;user-select:none}
 .project-card:hover,.project-card:active{border-color:var(--green-mid);background:var(--green-light);transform:translateY(-1px);box-shadow:var(--shadow)}
@@ -336,8 +336,6 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
 }
 @media(min-width:900px){
   .project-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
-  .main{max-width:960px;margin:0 auto}
-  .timer-wrap{max-width:960px;margin:0 auto;padding:1.25rem}
 }
 
 /* ── STATUS BADGES ── */
