@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#2A4A38">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>M&T Uren</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Figtree:wght@300;400;500;600&display=swap');
@@ -18,280 +17,298 @@
   --green:#2A4A38;--green-light:#E6EFE9;--green-mid:#4A7A5C;
   --red:#8B1A1A;--red-light:#FDE8E8;
   --blue:#1a3a8b;--blue-light:#E8EDFB;
-  --purple:#5a3a8b;--purple-light:#F0EDFB;
-  --orange:#8B4513;--orange-light:#FDF0E8;
+  --purple:#5a3a8b;
   --mono:'DM Mono',monospace;--serif:'Fraunces',serif;--sans:'Figtree',sans-serif;
   --radius:10px;--shadow:0 2px 16px rgba(44,40,28,0.08);--shadow-lg:0 8px 40px rgba(44,40,28,0.14);
 }
 body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.55;overscroll-behavior:none}
-
 header{background:linear-gradient(135deg,var(--green) 0%,#1e3829 60%,#162d20 100%);color:#F7F5F0;padding:0 1.25rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(0,0,0,0.2)}
 .header-left{display:flex;align-items:baseline;gap:0.6rem}
-header h1{font-family:var(--serif);font-size:18px;font-weight:400;letter-spacing:0.02em}
+header h1{font-family:var(--serif);font-size:18px;font-weight:400}
 header h1 span{color:var(--gold-mid);font-style:italic}
 .header-version{font-family:var(--mono);font-size:10px;opacity:0.4}
 .header-right{display:flex;align-items:center;gap:0.75rem}
-.user-chip{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:4px 12px;font-size:12px;font-family:var(--mono);cursor:pointer;transition:background 0.15s}
+.user-chip{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:4px 12px;font-size:12px;font-family:var(--mono);cursor:pointer;color:#fff;transition:background 0.15s}
 .user-chip:hover{background:rgba(255,255,255,0.25)}
-.icon-btn{background:none;border:none;cursor:pointer;color:#F7F5F0;opacity:0.7;font-size:18px;padding:4px;line-height:1;transition:opacity 0.15s}
+.icon-btn{background:none;border:none;cursor:pointer;color:#F7F5F0;opacity:0.7;font-size:18px;padding:4px;transition:opacity 0.15s}
 .icon-btn:hover{opacity:1}
-
-.tabs-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:0 1.25rem;display:flex;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tabs-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:0 1.25rem;display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .tabs-wrap::-webkit-scrollbar{display:none}
 .tab-btn{padding:13px 16px;border:none;background:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--text-faint);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.18s;white-space:nowrap}
 .tab-btn:hover{color:var(--text-dim)}
 .tab-btn.active{color:var(--green);border-bottom-color:var(--gold);font-weight:600}
-.tab-content{display:none}
-.tab-content.active{display:block}
-.main{padding:1.25rem;max-width:100%}
+.tab-content{display:none}.tab-content.active{display:block}
+.main{padding:1.25rem}
+.hidden{display:none!important}
+.flex{display:flex;align-items:center;gap:0.5rem}
+.btn{padding:9px 18px;border-radius:6px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s}
+.btn-primary{background:var(--green);color:#fff}.btn-primary:hover{background:var(--green-mid)}
+.btn-secondary{background:var(--surface);border:1px solid var(--border);color:var(--text-dim)}.btn-secondary:hover{border-color:var(--green-mid);color:var(--green)}
+.btn-danger{background:var(--red-light);border:1px solid var(--red);color:var(--red)}
+.btn-sm{padding:6px 12px;font-size:12px}
+.section-label{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint);margin-bottom:0.75rem}
 
-/* ── TIMER TAB ── */
-.running-bar{background:var(--green);color:#fff;padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
+/* ── RUNNING BAR ── */
+.running-bar{background:var(--green);color:#fff;padding:0.85rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
 .running-bar.hidden{display:none}
 .running-info{display:flex;flex-direction:column;gap:2px;min-width:0}
-.running-project{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.running-desc{font-size:12px;opacity:0.75}
+.running-project{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.running-task{font-size:11px;opacity:0.75}
 .running-right{display:flex;align-items:center;gap:0.75rem;flex-shrink:0}
-.running-clock{font-family:var(--mono);font-size:22px;font-weight:500;letter-spacing:0.05em}
-.pulse{width:10px;height:10px;border-radius:50%;background:#4caf50;box-shadow:0 0 0 0 rgba(76,175,80,0.4);animation:pulse 1.5s infinite}
+.running-clock{font-family:var(--mono);font-size:20px;font-weight:500;letter-spacing:0.05em}
+.pulse{width:9px;height:9px;border-radius:50%;background:#4caf50;box-shadow:0 0 0 0 rgba(76,175,80,0.4);animation:pulse 1.5s infinite;flex-shrink:0}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(76,175,80,0.5)}70%{box-shadow:0 0 0 8px rgba(76,175,80,0)}100%{box-shadow:0 0 0 0 rgba(76,175,80,0)}}
-.stop-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.35);border-radius:8px;color:#fff;font-family:var(--sans);font-weight:600;font-size:13px;padding:8px 16px;cursor:pointer;transition:background 0.15s;white-space:nowrap}
+.stop-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.35);border-radius:8px;color:#fff;font-weight:600;font-size:13px;padding:7px 14px;cursor:pointer;white-space:nowrap}
 .stop-btn:hover{background:rgba(255,255,255,0.3)}
 
-.timer-section{padding:1.25rem}
-.section-label{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint);margin-bottom:0.75rem}
-.project-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.6rem}
-.project-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:1rem 1rem 0.85rem;cursor:pointer;transition:all 0.15s;position:relative;overflow:hidden}
+/* ── TIMER TAB ── */
+.timer-wrap{padding:1.25rem}
+.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.6rem;margin-bottom:1.5rem}
+.project-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:0.9rem 1rem;cursor:pointer;transition:all 0.15s;position:relative;user-select:none}
 .project-card:hover,.project-card:active{border-color:var(--green-mid);background:var(--green-light);transform:translateY(-1px);box-shadow:var(--shadow)}
-.project-card-code{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.project-card-naam{font-size:13px;font-weight:500;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.project-card-uren{font-family:var(--mono);font-size:11px;color:var(--text-faint);margin-top:6px}
 .project-card.actief{border-color:var(--green);background:var(--green-light)}
-.project-card.actief::after{content:'▶';position:absolute;bottom:8px;right:10px;font-size:10px;color:var(--green)}
-.no-projects{padding:2rem;text-align:center;color:var(--text-faint);font-size:13px}
-
-.desc-bar{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:0.75rem 1.25rem;display:flex;gap:0.75rem;align-items:center}
-.desc-bar.hidden{display:none}
-.desc-input{flex:1;padding:8px 11px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;outline:none}
-.desc-input:focus{border-color:var(--green-mid)}
-.desc-save{background:var(--green);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer}
+.pc-code{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-naam{font-size:13px;font-weight:500;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:3px}
+.pc-meta{font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:5px;display:flex;gap:6px;flex-wrap:wrap}
+.pc-taken-count{font-size:10px;color:var(--text-faint);font-family:var(--mono)}
 
 /* ── DAG TAB ── */
 .dag-header{display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;flex-wrap:wrap}
-.dag-nav{display:flex;align-items:center;gap:0.5rem}
-.dag-nav button{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;font-family:var(--sans);color:var(--text-dim);transition:all 0.15s}
+.dag-nav button{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;color:var(--text-dim);font-family:var(--sans);transition:all 0.15s}
 .dag-nav button:hover{border-color:var(--green-mid);color:var(--green)}
-.dag-datum{font-family:var(--serif);font-size:18px;font-weight:300;color:var(--text)}
+.dag-datum-label{font-family:var(--serif);font-size:18px;font-weight:300}
 .dag-input{padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px;outline:none;cursor:pointer}
-.dag-input:focus{border-color:var(--green-mid)}
 .teamlid-blok{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.75rem;overflow:hidden;box-shadow:var(--shadow)}
-.teamlid-header{display:flex;align-items:center;justify-content:space-between;padding:0.85rem 1rem;border-bottom:1px solid var(--border);gap:0.5rem}
-.teamlid-naam{display:flex;align-items:center;gap:0.6rem;font-weight:600;font-size:14px}
-.teamlid-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.teamlid-totaal{font-family:var(--mono);font-size:13px;color:var(--text-dim)}
-.teamlid-add{background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--text-faint);font-family:var(--sans);transition:all 0.15s}
-.teamlid-add:hover{border-color:var(--green-mid);color:var(--green)}
-.entries-lijst{padding:0.5rem 0}
-.entry-row{display:flex;align-items:center;gap:0.75rem;padding:0.5rem 1rem;border-bottom:1px solid var(--border);transition:background 0.12s}
+.teamlid-header{display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;border-bottom:1px solid var(--border)}
+.tl-naam{display:flex;align-items:center;gap:0.6rem;font-weight:600;font-size:14px}
+.tl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.tl-totaal{font-family:var(--mono);font-size:13px;color:var(--text-dim)}
+.entry-row{display:flex;align-items:center;gap:0.6rem;padding:0.5rem 1rem;border-bottom:1px solid var(--border);transition:background 0.12s}
 .entry-row:last-child{border-bottom:none}
 .entry-row:hover{background:var(--surface2)}
-.entry-tijd{font-family:var(--mono);font-size:12px;color:var(--text-faint);flex-shrink:0;width:90px}
-.entry-project{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500;flex-shrink:0;width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.entry-tijd{font-family:var(--mono);font-size:12px;color:var(--text-faint);flex-shrink:0;width:88px}
+.entry-project{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500;flex-shrink:0;width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.entry-taak{font-size:11px;color:var(--text-faint);flex-shrink:0;width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .entry-desc{font-size:13px;color:var(--text-dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.entry-duur{font-family:var(--mono);font-size:12px;color:var(--text);font-weight:500;flex-shrink:0;width:48px;text-align:right}
-.entry-actions{display:flex;gap:4px;flex-shrink:0}
-.entry-btn{background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:13px;padding:3px;border-radius:4px;transition:all 0.12s}
+.entry-duur{font-family:var(--mono);font-size:12px;font-weight:500;flex-shrink:0;width:46px;text-align:right}
+.entry-actions{display:flex;gap:3px;flex-shrink:0}
+.entry-btn{background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:13px;padding:3px 5px;border-radius:4px;transition:all 0.12s}
 .entry-btn:hover{background:var(--surface2);color:var(--text)}
 .entry-btn.del:hover{background:var(--red-light);color:var(--red)}
-.geen-entries{padding:1rem 1rem;font-size:13px;color:var(--text-faint);font-style:italic}
+.geen-entries{padding:1rem;font-size:13px;color:var(--text-faint);font-style:italic}
 
-/* ── PLANNING TAB ── */
-.planning-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem}
-.week-label{font-family:var(--serif);font-size:18px;font-weight:300}
-.week-nav{display:flex;gap:0.5rem}
-.week-nav button{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;font-family:var(--sans);color:var(--text-dim);transition:all 0.15s}
-.week-nav button:hover{border-color:var(--green-mid);color:var(--green)}
-.week-grid{display:grid;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);box-shadow:var(--shadow)}
-.week-col-headers{display:grid;border-bottom:1px solid var(--border);background:var(--surface2)}
-.week-col-header{padding:0.6rem 0.5rem;font-size:11px;font-family:var(--mono);font-weight:500;color:var(--text-faint);text-align:center;border-right:1px solid var(--border)}
-.week-col-header:last-child{border-right:none}
-.week-col-header.dag-header-cel{color:var(--text-dim);font-size:12px}
-.week-row{display:grid;border-bottom:1px solid var(--border)}
-.week-row:last-child{border-bottom:none}
-.week-dag-label{padding:0.6rem 0.75rem;font-size:12px;font-family:var(--mono);color:var(--text-dim);background:var(--surface2);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:2px}
-.week-dag-dag{font-weight:500;color:var(--text)}
-.week-dag-datum{font-size:10px;color:var(--text-faint)}
-.week-cel{padding:0.4rem;border-right:1px solid var(--border);min-height:60px;cursor:pointer;transition:background 0.12s;vertical-align:top;position:relative}
-.week-cel:last-child{border-right:none}
-.week-cel:hover{background:var(--green-light)}
-.week-cel.weekend{background:var(--surface2)}
-.week-cel.weekend:hover{background:var(--green-light)}
-.plan-blok{background:var(--green-light);border:1px solid var(--green-mid);border-radius:6px;padding:3px 6px;margin-bottom:3px;font-size:11px;cursor:pointer;position:relative}
-.plan-blok-code{font-family:var(--mono);color:var(--green);font-weight:500;font-size:10px}
-.plan-blok-uren{font-family:var(--mono);color:var(--text-dim);font-size:10px}
-.plan-blok-del{position:absolute;top:2px;right:4px;background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:11px;padding:0;line-height:1}
-.plan-blok-del:hover{color:var(--red)}
-.plan-realisatie{background:var(--blue-light);border:1px solid #90a4d4;border-radius:6px;padding:3px 6px;margin-bottom:3px;font-size:10px;font-family:var(--mono);color:var(--blue)}
+/* ── TIMELINE TAB ── */
+.tl-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem}
+.tl-nav{display:flex;gap:0.4rem}
+.tl-nav button{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-family:var(--sans);color:var(--text-dim);transition:all 0.15s}
+.tl-nav button:hover{border-color:var(--green-mid);color:var(--green)}
+.tl-range{font-family:var(--serif);font-size:16px;font-weight:300}
+.tl-view-toggle{display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.tl-vt-btn{padding:6px 14px;border:none;background:none;cursor:pointer;font-size:12px;font-family:var(--sans);color:var(--text-dim);transition:all 0.15s}
+.tl-vt-btn.active{background:var(--green);color:#fff}
 
-/* ── PROJECTEN TAB ── */
-.filter-row{display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
-.periode-btn{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;font-family:var(--sans);cursor:pointer;color:var(--text-dim);transition:all 0.15s}
+/* Grid */
+.tl-grid-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);box-shadow:var(--shadow)}
+.tl-grid{display:grid}
+.tl-header-row{display:grid;background:var(--surface2);border-bottom:2px solid var(--border)}
+.tl-header-cel{padding:0.6rem 0.5rem;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-faint);border-right:1px solid var(--border);text-align:center}
+.tl-header-cel:first-child{text-align:left;padding-left:0.75rem}
+.tl-header-cel:last-child{border-right:none}
+.tl-header-cel.vandaag{color:var(--green);font-weight:700}
+.tl-rij{display:grid;border-bottom:1px solid var(--border)}
+.tl-rij:last-child{border-bottom:none}
+.tl-rij:hover{background:rgba(42,74,56,0.02)}
+.tl-label{padding:0.75rem;background:var(--surface2);border-right:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0}
+.tl-label-code{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-label-naam{font-size:11px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-label-naam.persoon{font-size:13px;color:var(--text);font-weight:500;font-family:var(--sans)}
+.tl-dag-cel{border-right:1px solid var(--border);min-height:64px;padding:0.3rem;position:relative;cursor:pointer;transition:background 0.12s;vertical-align:top}
+.tl-dag-cel:last-child{border-right:none}
+.tl-dag-cel:hover{background:var(--green-light)}
+.tl-dag-cel.vandaag{background:rgba(184,150,46,0.05)}
+.tl-dag-cel.vandaag:hover{background:var(--green-light)}
+.tl-dag-cel.weekend{background:var(--surface2);cursor:default}
+.tl-dag-cel.weekend:hover{background:var(--surface2)}
+.tl-dag-cel.drag-over{background:var(--gold-light)!important;outline:2px dashed var(--gold)}
+
+/* Blokken in timeline */
+.tl-blok{border-radius:6px;padding:4px 7px;margin-bottom:3px;font-size:11px;cursor:pointer;position:relative;transition:opacity 0.12s}
+.tl-blok:hover{opacity:0.85}
+.tl-blok-plan{background:var(--surface2);border:1.5px dashed var(--border-strong)}
+.tl-blok-act{border:none}
+.tl-blok-label{font-family:var(--mono);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-blok-sub{font-size:10px;opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-blok-del{position:absolute;top:2px;right:3px;background:rgba(0,0,0,0.15);border:none;border-radius:3px;color:#fff;font-size:10px;padding:0 3px;cursor:pointer;opacity:0;transition:opacity 0.12s;line-height:14px}
+.tl-blok:hover .tl-blok-del{opacity:1}
+.tl-blok-plan .tl-blok-del{color:var(--text-dim);background:var(--border)}
+
+/* Drag selection indicator */
+.drag-select-indicator{position:fixed;background:var(--gold-light);border:2px solid var(--gold);border-radius:6px;pointer-events:none;z-index:50;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--gold);opacity:0}
+.drag-select-indicator.show{opacity:1}
+
+/* ── PROJECTEN RAPPORT ── */
+.filter-row{display:flex;gap:0.4rem;margin-bottom:1rem;flex-wrap:wrap}
+.periode-btn{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 13px;font-size:12px;cursor:pointer;color:var(--text-dim);transition:all 0.15s}
 .periode-btn:hover,.periode-btn.active{background:var(--green-light);border-color:var(--green-mid);color:var(--green)}
-.project-rapport-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:0.6rem;cursor:pointer;transition:all 0.15s;box-shadow:var(--shadow)}
-.project-rapport-item:hover{border-color:var(--green-mid)}
-.pr-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem}
+.pr-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:0.6rem;box-shadow:var(--shadow)}
+.pr-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem}
 .pr-code{font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:500}
-.pr-naam{font-size:13px;color:var(--text-dim)}
-.pr-totaal{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--text)}
-.pr-bar-wrap{height:6px;background:var(--surface2);border-radius:3px;margin-bottom:0.5rem;overflow:hidden}
-.pr-bar{height:6px;border-radius:3px;background:var(--green-mid);transition:width 0.4s}
-.pr-breakdown{display:flex;gap:0.75rem;flex-wrap:wrap}
+.pr-naam{font-size:12px;color:var(--text-dim)}
+.pr-totaal{font-family:var(--mono);font-size:16px;font-weight:500}
+.pr-bar-wrap{height:5px;background:var(--surface2);border-radius:3px;margin-bottom:0.5rem;overflow:hidden}
+.pr-bar{height:5px;border-radius:3px;background:var(--green-mid);transition:width 0.4s}
+.pr-breakdown{display:flex;gap:0.6rem;flex-wrap:wrap}
 .pr-persoon{display:flex;align-items:center;gap:4px;font-size:11px;font-family:var(--mono);color:var(--text-faint)}
-.pr-persoon-dot{width:8px;height:8px;border-radius:50%}
+.pr-dot{width:8px;height:8px;border-radius:50%}
 
-/* ── MODAL ── */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,26,22,0.5);z-index:200;align-items:flex-end;justify-content:center}
+/* ── BORD (muurscherm) ── */
+body.bord-fs{background:#1C1A16}
+body.bord-fs header,body.bord-fs .tabs-wrap,body.bord-fs .running-bar{display:none!important}
+body.bord-fs #tab-bord{background:#1C1A16;color:#F7F5F0;min-height:100vh}
+.bord-wrap{padding:1.5rem 2rem}
+body.bord-fs .bord-wrap{padding:2.5rem 3rem}
+.bord-topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:2rem}
+.bord-titel{font-family:var(--serif);font-size:26px;font-weight:300;color:var(--text)}
+body.bord-fs .bord-titel{color:#F7F5F0;font-size:40px}
+.bord-klok{font-family:var(--mono);font-size:16px;color:var(--text-faint);margin-top:4px}
+body.bord-fs .bord-klok{color:rgba(255,255,255,0.4);font-size:22px}
+.bord-fs-btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;color:var(--text-dim);transition:all 0.15s}
+.bord-fs-btn:hover{border-color:var(--green-mid);color:var(--green)}
+body.bord-fs .bord-fs-btn{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.5)}
+.bord-sectie{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-faint);margin-bottom:1rem}
+body.bord-fs .bord-sectie{color:rgba(255,255,255,0.3);font-size:13px}
+/* Actief grid */
+.bord-actief-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem}
+body.bord-fs .bord-actief-grid{grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1.5rem}
+.bord-kaart{background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:1.25rem;position:relative;overflow:hidden;cursor:pointer;transition:all 0.2s}
+.bord-kaart:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+body.bord-fs .bord-kaart{background:#2a2720;border-color:rgba(255,255,255,0.1);border-radius:18px;padding:1.75rem}
+.bord-kaart.loopt{border-color:var(--green-mid)}
+body.bord-fs .bord-kaart.loopt{border-color:#4A7A5C}
+.bord-kaart-glow{position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--green),var(--gold));opacity:0;transition:opacity 0.3s}
+.bord-kaart.loopt .bord-kaart-glow{opacity:1}
+.bord-kaart-persoon{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem}
+.bk-dot{width:10px;height:10px;border-radius:50%}
+.bk-naam{font-size:12px;font-family:var(--mono);color:var(--text-faint)}
+body.bord-fs .bk-naam{color:rgba(255,255,255,0.4);font-size:14px}
+.bk-pulse{width:8px;height:8px;border-radius:50%;background:#4caf50;animation:pulse 1.5s infinite;margin-left:auto}
+.bk-project{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--gold);margin-bottom:2px}
+body.bord-fs .bk-project{font-size:22px}
+.bk-taak{font-size:12px;color:var(--text-faint);margin-bottom:0.75rem}
+body.bord-fs .bk-taak{font-size:15px;color:rgba(255,255,255,0.45)}
+.bk-bottom{display:flex;align-items:flex-end;justify-content:space-between}
+.bk-timer{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--text)}
+body.bord-fs .bk-timer{font-size:38px;color:#F7F5F0}
+.bk-vandaag{font-family:var(--mono);font-size:11px;color:var(--text-faint)}
+body.bord-fs .bk-vandaag{font-size:14px;color:rgba(255,255,255,0.3)}
+.bord-start-hint{font-size:11px;color:var(--text-faint);margin-top:0.5rem;font-style:italic}
+body.bord-fs .bord-start-hint{color:rgba(255,255,255,0.2);font-size:13px}
+/* Bord week grid */
+.bord-week-grid{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);box-shadow:var(--shadow)}
+body.bord-fs .bord-week-grid{border-color:rgba(255,255,255,0.08);background:#1e1c1a;border-radius:16px}
+.bord-wh{display:grid;background:var(--surface2);border-bottom:1px solid var(--border)}
+body.bord-fs .bord-wh{background:#181614;border-color:rgba(255,255,255,0.06)}
+.bord-wh-cel{padding:0.65rem 0.75rem;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-faint);border-right:1px solid var(--border);text-align:center}
+body.bord-fs .bord-wh-cel{color:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.06);padding:0.9rem 1rem;font-size:12px}
+.bord-wh-cel:last-child{border-right:none}
+.bord-wh-cel.vandaag{color:var(--gold);font-weight:700}
+.bord-rij{display:grid;border-bottom:1px solid var(--border)}
+body.bord-fs .bord-rij{border-color:rgba(255,255,255,0.05)}
+.bord-rij:last-child{border-bottom:none}
+.bord-pl{padding:0.6rem 0.75rem;background:var(--surface2);border-right:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;gap:2px;cursor:pointer;transition:background 0.15s}
+.bord-pl:hover{background:var(--green-light)}
+body.bord-fs .bord-pl{background:#181614;border-color:rgba(255,255,255,0.06)}
+body.bord-fs .bord-pl:hover{background:rgba(42,74,56,0.4)}
+.bord-pl-code{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500}
+body.bord-fs .bord-pl-code{font-size:15px}
+.bord-pl-naam{font-size:10px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.bord-fs .bord-pl-naam{font-size:13px;color:rgba(255,255,255,0.3)}
+.bord-dag-cel{border-right:1px solid var(--border);padding:0.3rem;min-height:52px}
+body.bord-fs .bord-dag-cel{border-color:rgba(255,255,255,0.05);min-height:70px;padding:0.4rem}
+.bord-dag-cel:last-child{border-right:none}
+.bord-dag-cel.vandaag{background:rgba(184,150,46,0.06)}
+body.bord-fs .bord-dag-cel.vandaag{background:rgba(184,150,46,0.12)}
+.bord-blok-plan{background:var(--surface2);border:1px dashed var(--border-strong);border-radius:5px;padding:3px 7px;margin-bottom:2px;font-size:10px;font-family:var(--mono);color:var(--text-faint)}
+body.bord-fs .bord-blok-plan{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.35);font-size:13px;padding:4px 9px;margin-bottom:3px;border-radius:7px}
+.bord-blok-act{border-radius:5px;padding:3px 7px;margin-bottom:2px;font-size:10px;font-family:var(--mono);color:#fff}
+body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;border-radius:7px}
+
+/* ── MODALS ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,26,22,0.55);z-index:200;align-items:flex-end;justify-content:center}
 .modal-overlay.open{display:flex}
 @media(min-width:600px){.modal-overlay{align-items:center}}
-.modal{background:var(--surface);border-radius:16px 16px 0 0;padding:1.5rem;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal{background:var(--surface);border-radius:16px 16px 0 0;padding:1.5rem;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
 @media(min-width:600px){.modal{border-radius:var(--radius)}}
 .modal-title{font-family:var(--serif);font-size:20px;font-weight:300;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between}
-.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-faint);padding:2px}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-faint);padding:2px;line-height:1}
+.modal-actions{display:flex;gap:0.75rem;justify-content:flex-end;margin-top:1.25rem}
 .form-row{margin-bottom:1rem}
 .form-label{display:block;font-size:11px;font-weight:600;color:var(--text-faint);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.06em}
 .form-input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;outline:none}
 .form-input:focus{border-color:var(--green-mid)}
 .form-select{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;outline:none;cursor:pointer}
-.btn{padding:9px 18px;border-radius:6px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s}
-.btn-primary{background:var(--green);color:#fff}
-.btn-primary:hover{background:var(--green-mid)}
-.btn-secondary{background:var(--surface);border:1px solid var(--border);color:var(--text-dim)}
-.btn-secondary:hover{border-color:var(--green-mid);color:var(--green)}
-.btn-danger{background:var(--red-light);border:1px solid var(--red);color:var(--red)}
-.btn-sm{padding:6px 12px;font-size:12px}
-.modal-actions{display:flex;gap:0.75rem;justify-content:flex-end;margin-top:1.25rem}
 
-/* ── INSTELLINGEN ── */
+/* Task selectie in start-timer modal */
+.taak-lijst{margin-top:0.5rem;display:flex;flex-direction:column;gap:0.4rem;max-height:250px;overflow-y:auto}
+.taak-item{border:1.5px solid var(--border);border-radius:8px;padding:0.65rem 1rem;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:space-between}
+.taak-item:hover{border-color:var(--green-mid);background:var(--green-light)}
+.taak-item.actief{border-color:var(--green);background:var(--green-light)}
+.taak-item-naam{font-size:13px;font-weight:500}
+.taak-item-sub{font-size:11px;color:var(--text-faint);margin-top:2px}
+.subtaak-lijst{margin-left:1rem;margin-top:0.3rem;display:flex;flex-direction:column;gap:0.3rem}
+.subtaak-item{border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.75rem;cursor:pointer;font-size:12px;transition:all 0.15s;display:flex;align-items:center;gap:0.5rem}
+.subtaak-item:hover{border-color:var(--green-mid);background:var(--green-light)}
+.subtaak-item.actief{border-color:var(--green);background:var(--green-light)}
+.subtaak-chevron{font-size:10px;color:var(--text-faint)}
+.direct-start{background:none;border:1px dashed var(--border);border-radius:8px;padding:0.6rem 1rem;cursor:pointer;font-size:12px;color:var(--text-faint);width:100%;text-align:left;transition:all 0.15s;font-family:var(--sans);margin-top:0.3rem}
+.direct-start:hover{border-color:var(--text-faint);color:var(--text-dim)}
+
+/* Taken beheer */
+.taken-blok{background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:0.75rem;overflow:hidden}
+.taken-blok-header{padding:0.6rem 0.75rem;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.taken-blok-header:hover{background:var(--green-light)}
+.taken-project-label{font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:500}
+.taak-rij{padding:0.4rem 0.75rem 0.4rem 1.25rem;border-top:1px solid var(--border);display:flex;align-items:center;gap:0.5rem;background:var(--surface)}
+.taak-rij-naam{font-size:13px;flex:1}
+.subtaak-rij{padding:0.3rem 0.75rem 0.3rem 2rem;border-top:1px solid var(--border);display:flex;align-items:center;gap:0.5rem;background:var(--surface);font-size:12px;color:var(--text-dim)}
+.subtaak-rij-naam{flex:1}
+.icon-knop{background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:13px;padding:2px 5px;border-radius:4px;transition:all 0.12s}
+.icon-knop:hover{background:var(--surface2);color:var(--text)}
+.icon-knop.del:hover{background:var(--red-light);color:var(--red)}
+.add-taak-row{padding:0.4rem 0.75rem;border-top:1px solid var(--border);display:flex;gap:0.5rem;background:var(--surface)}
+.add-taak-input{flex:1;padding:6px 9px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--text);outline:none}
+.add-taak-input:focus{border-color:var(--green-mid)}
+.add-taak-btn{background:var(--green);color:#fff;border:none;border-radius:5px;padding:6px 10px;cursor:pointer;font-size:12px}
+
+/* Instellingen */
 .inst-sectie{margin-bottom:1.5rem}
 .inst-sectie-title{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint);margin-bottom:0.75rem;padding-bottom:0.4rem;border-bottom:1px solid var(--border)}
-.teamlid-rij{display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border)}
-.teamlid-rij:last-child{border-bottom:none}
-.tl-kleur{width:20px;height:20px;border-radius:50%;flex-shrink:0;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s}
-.tl-kleur:hover{border-color:var(--border-strong)}
-.tl-naam-inp{flex:1;padding:6px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-family:var(--sans);font-size:13px;color:var(--text);outline:none}
-.tl-rol{padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:12px;font-family:var(--sans);color:var(--text-dim);cursor:pointer}
+.tl-rij{display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;border-bottom:1px solid var(--border)}
+.tl-rij:last-child{border-bottom:none}
+.kleur-input{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);cursor:pointer;flex-shrink:0;padding:0}
+.tl-inp{flex:1;padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-family:var(--sans);font-size:13px;background:var(--bg);color:var(--text);outline:none}
+.tl-sel{padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:12px;color:var(--text-dim);cursor:pointer}
 
-/* ── WELKOM SCHERM ── */
-.welkom{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:2rem;text-align:center;gap:1rem}
-.welkom-title{font-family:var(--serif);font-size:28px;font-weight:300;color:var(--text)}
+/* Welkom */
+.welkom{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70vh;padding:2rem;text-align:center;gap:1rem}
+.welkom-title{font-family:var(--serif);font-size:28px;font-weight:300}
 .welkom-title span{color:var(--gold);font-style:italic}
-.welkom-sub{color:var(--text-faint);font-size:14px;max-width:320px}
-.naam-knoppen{display:flex;flex-direction:column;gap:0.6rem;width:100%;max-width:280px}
-.naam-knop{padding:14px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:var(--sans);font-size:15px;font-weight:500;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:0.75rem}
+.welkom-sub{color:var(--text-faint);font-size:14px;max-width:300px}
+.naam-knoppen{display:flex;flex-direction:column;gap:0.5rem;width:100%;max-width:260px}
+.naam-knop{padding:13px 1rem;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:15px;font-weight:500;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:0.75rem;font-family:var(--sans)}
 .naam-knop:hover{border-color:var(--green-mid);background:var(--green-light);color:var(--green)}
-.naam-knop-dot{width:12px;height:12px;border-radius:50%}
+.naam-knop-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
 
-/* ── RESPONSIVE ── */
 @media(max-width:480px){
-  .project-cards{grid-template-columns:repeat(2,1fr)}
-  .entry-project{width:100px}
-  .entry-row{padding:0.5rem 0.75rem}
-  .week-grid{font-size:10px}
-  .pr-breakdown{gap:0.5rem}
+  .project-grid{grid-template-columns:repeat(2,1fr)}
+  .entry-taak{display:none}
+  .bord-actief-grid{grid-template-columns:1fr 1fr}
 }
 @media(min-width:900px){
-  .project-cards{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+  .project-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
   .main{max-width:960px;margin:0 auto}
-  .timer-section{max-width:960px;margin:0 auto}
+  .timer-wrap{max-width:960px;margin:0 auto;padding:1.25rem}
 }
-.hidden{display:none!important}
-.flex{display:flex;align-items:center;gap:0.5rem}
-.mt-1{margin-top:0.5rem}
-
-/* ── BORD (muurscherm) ── */
-body.bord-fullscreen{background:#1C1A16}
-body.bord-fullscreen header,
-body.bord-fullscreen .tabs-wrap,
-body.bord-fullscreen .running-bar,
-body.bord-fullscreen .desc-bar{display:none!important}
-body.bord-fullscreen #tab-bord{background:#1C1A16;color:#F7F5F0;min-height:100vh}
-.bord-wrap{padding:1.5rem 2rem}
-body.bord-fullscreen .bord-wrap{padding:2rem 2.5rem}
-.bord-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem}
-.bord-datum{font-family:var(--serif);font-size:28px;font-weight:300;color:var(--text)}
-body.bord-fullscreen .bord-datum{color:#F7F5F0;font-size:36px}
-.bord-klok{font-family:var(--mono);font-size:22px;color:var(--text-faint)}
-body.bord-fullscreen .bord-klok{color:rgba(255,255,255,0.5);font-size:28px}
-.bord-controls{display:flex;gap:0.75rem;align-items:center}
-.bord-fs-btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:13px;font-family:var(--sans);cursor:pointer;color:var(--text-dim);transition:all 0.15s}
-.bord-fs-btn:hover{border-color:var(--green-mid);color:var(--green)}
-body.bord-fullscreen .bord-fs-btn{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:rgba(255,255,255,0.7)}
-body.bord-fullscreen .bord-fs-btn:hover{background:rgba(255,255,255,0.2)}
-
-.bord-sectie-label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-faint);margin-bottom:1rem}
-body.bord-fullscreen .bord-sectie-label{color:rgba(255,255,255,0.35);font-size:13px}
-
-/* Lopende timers */
-.bord-actief-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;margin-bottom:2.5rem}
-body.bord-fullscreen .bord-actief-grid{grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1.5rem}
-.bord-actief-kaart{background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:1.25rem 1.5rem;position:relative;overflow:hidden;box-shadow:var(--shadow)}
-body.bord-fullscreen .bord-actief-kaart{background:#2a2720;border-color:rgba(255,255,255,0.12);border-radius:18px;padding:1.75rem 2rem}
-.bord-actief-kaart.loopt{border-color:var(--green-mid)}
-body.bord-fullscreen .bord-actief-kaart.loopt{border-color:#4A7A5C}
-.bord-kaart-glow{position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--green),var(--gold));opacity:0}
-.bord-actief-kaart.loopt .bord-kaart-glow{opacity:1}
-.bord-kaart-persoon{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem}
-.bord-kaart-persoon-dot{width:10px;height:10px;border-radius:50%}
-.bord-kaart-persoon-naam{font-size:13px;font-family:var(--mono);color:var(--text-faint)}
-body.bord-fullscreen .bord-kaart-persoon-naam{color:rgba(255,255,255,0.5);font-size:15px}
-.bord-kaart-project{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--gold);margin-bottom:3px}
-body.bord-fullscreen .bord-kaart-project{font-size:20px}
-.bord-kaart-naam{font-size:14px;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.3}
-body.bord-fullscreen .bord-kaart-naam{font-size:17px;color:rgba(255,255,255,0.6)}
-.bord-kaart-bottom{display:flex;align-items:center;justify-content:space-between}
-.bord-kaart-timer{font-family:var(--mono);font-size:24px;font-weight:500;color:var(--text)}
-body.bord-fullscreen .bord-kaart-timer{font-size:32px;color:#F7F5F0}
-.bord-kaart-vandaag{font-family:var(--mono);font-size:12px;color:var(--text-faint)}
-body.bord-fullscreen .bord-kaart-vandaag{color:rgba(255,255,255,0.35);font-size:14px}
-.bord-pulse{width:8px;height:8px;border-radius:50%;background:#4caf50;animation:pulse 1.5s infinite;flex-shrink:0}
-
-/* Weekplanning bord */
-.bord-week-grid{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);box-shadow:var(--shadow)}
-body.bord-fullscreen .bord-week-grid{border-color:rgba(255,255,255,0.1);background:#242220;border-radius:16px}
-.bord-week-header{display:grid;background:var(--surface2);border-bottom:1px solid var(--border)}
-body.bord-fullscreen .bord-week-header{background:#1e1c1a;border-color:rgba(255,255,255,0.08)}
-.bord-wh-cel{padding:0.75rem 1rem;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);border-right:1px solid var(--border);text-align:center}
-body.bord-fullscreen .bord-wh-cel{color:rgba(255,255,255,0.3);border-color:rgba(255,255,255,0.08);padding:1rem 1.25rem;font-size:13px}
-.bord-wh-cel:last-child{border-right:none}
-.bord-wh-cel.vandaag{color:var(--green);font-weight:600}
-body.bord-fullscreen .bord-wh-cel.vandaag{color:var(--gold)}
-.bord-week-rij{display:grid;border-bottom:1px solid var(--border)}
-body.bord-fullscreen .bord-week-rij{border-color:rgba(255,255,255,0.06)}
-.bord-week-rij:last-child{border-bottom:none}
-.bord-project-label{padding:0.75rem 1rem;background:var(--surface2);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:2px;min-width:0}
-body.bord-fullscreen .bord-project-label{background:#1e1c1a;border-color:rgba(255,255,255,0.08);padding:1rem 1.25rem}
-.bord-pl-code{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-body.bord-fullscreen .bord-pl-code{font-size:14px}
-.bord-pl-naam{font-size:11px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-body.bord-fullscreen .bord-pl-naam{font-size:13px;color:rgba(255,255,255,0.35)}
-.bord-dag-cel{padding:0.4rem;border-right:1px solid var(--border);min-height:52px;position:relative;vertical-align:top}
-body.bord-fullscreen .bord-dag-cel{border-color:rgba(255,255,255,0.06);min-height:70px;padding:0.5rem}
-.bord-dag-cel:last-child{border-right:none}
-.bord-dag-cel.vandaag{background:rgba(42,74,56,0.08)}
-body.bord-fullscreen .bord-dag-cel.vandaag{background:rgba(42,74,56,0.25)}
-.bord-blok{border-radius:6px;padding:3px 8px;margin-bottom:3px;font-size:11px;display:flex;align-items:center;justify-content:space-between;gap:4px}
-body.bord-fullscreen .bord-blok{border-radius:8px;padding:5px 10px;margin-bottom:4px;font-size:13px}
-.bord-blok-plan{background:var(--surface2);border:1px dashed var(--border-strong)}
-body.bord-fullscreen .bord-blok-plan{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.15)}
-.bord-blok-plan-label{font-family:var(--mono);color:var(--text-faint)}
-body.bord-fullscreen .bord-blok-plan-label{color:rgba(255,255,255,0.4)}
-.bord-blok-act{border:none}
-.bord-blok-act-label{font-family:var(--mono);color:#fff;font-weight:500;font-size:10px}
-body.bord-fullscreen .bord-blok-act-label{font-size:12px}
-.bord-blok-act-uren{font-family:var(--mono);color:rgba(255,255,255,0.7);font-size:10px}
-body.bord-fullscreen .bord-blok-act-uren{font-size:12px}
-.bord-leeg{padding:2rem;text-align:center;color:var(--text-faint);font-size:13px}
-body.bord-fullscreen .bord-leeg{color:rgba(255,255,255,0.3)}
 </style>
 </head>
 <body>
@@ -302,182 +319,156 @@ body.bord-fullscreen .bord-leeg{color:rgba(255,255,255,0.3)}
     <span class="header-version">uren</span>
   </div>
   <div class="header-right">
-    <button class="user-chip" id="user-chip" onclick="toggleGebruiker()">— kies jezelf —</button>
-    <button class="icon-btn" onclick="openInstellingen()" title="Instellingen">⚙</button>
+    <button class="user-chip" id="user-chip" onclick="toggleGebruiker()">—</button>
+    <button class="icon-btn" title="Taken beheren" onclick="openModal('taken')">☰</button>
+    <button class="icon-btn" title="Instellingen" onclick="openModal('inst')">⚙</button>
   </div>
 </header>
 
-<!-- Welkom / gebruiker kiezen -->
-<div id="welkom-scherm" class="welkom hidden">
+<!-- Welkomscherm -->
+<div id="welkom" class="welkom hidden">
   <div class="welkom-title">Wie ben <span>jij</span>?</div>
-  <div class="welkom-sub">Kies je naam. Je kunt dit altijd aanpassen via ⚙ instellingen.</div>
+  <div class="welkom-sub">Kies je naam. Aanpassen kan altijd via ⚙.</div>
   <div class="naam-knoppen" id="naam-knoppen"></div>
 </div>
 
-<!-- Hoofdapp -->
+<!-- App -->
 <div id="app" class="hidden">
-  <!-- Lopende timer banner -->
   <div class="running-bar hidden" id="running-bar">
     <div class="running-info">
-      <div class="running-project" id="running-project">—</div>
-      <div class="running-desc" id="running-desc"></div>
+      <div class="running-project" id="run-project">—</div>
+      <div class="running-task" id="run-task"></div>
     </div>
     <div class="running-right">
       <div class="pulse"></div>
-      <div class="running-clock" id="running-clock">00:00:00</div>
+      <div class="running-clock" id="run-clock">00:00:00</div>
       <button class="stop-btn" onclick="stopTimer()">■ Stop</button>
     </div>
-  </div>
-
-  <!-- Beschrijving toevoegen aan lopende timer -->
-  <div class="desc-bar hidden" id="desc-bar">
-    <input class="desc-input" id="desc-input" placeholder="Omschrijving toevoegen (optioneel)…" onkeydown="if(event.key==='Enter')slaDescOp()">
-    <button class="desc-save" onclick="slaDescOp()">Opslaan</button>
   </div>
 
   <div class="tabs-wrap">
     <button class="tab-btn active" onclick="showTab('timer',this)">⏱ Timer</button>
     <button class="tab-btn" onclick="showTab('dag',this)">📋 Dag</button>
-    <button class="tab-btn" onclick="showTab('planning',this)">📅 Planning</button>
-    <button class="tab-btn" onclick="showTab('projecten',this)">📊 Projecten</button>
+    <button class="tab-btn" onclick="showTab('timeline',this)">📅 Planning</button>
+    <button class="tab-btn" onclick="showTab('rapport',this)">📊 Uren</button>
     <button class="tab-btn" onclick="showTab('bord',this)">🖥 Bord</button>
   </div>
 
-  <!-- Tab: Timer -->
+  <!-- TIMER -->
   <div id="tab-timer" class="tab-content active">
-    <div class="timer-section">
-      <div class="section-label" id="timer-label">Kies een project om te starten</div>
-      <div class="project-cards" id="project-cards"></div>
+    <div class="timer-wrap">
+      <div class="section-label" id="timer-label">Kies een project</div>
+      <div class="project-grid" id="project-grid"></div>
     </div>
   </div>
 
-  <!-- Tab: Dag overzicht -->
+  <!-- DAG -->
   <div id="tab-dag" class="tab-content">
     <div class="main">
       <div class="dag-header">
-        <div class="dag-nav">
-          <button onclick="dagNavigeer(-1)">←</button>
-          <button onclick="dagNavigeer(0)">Vandaag</button>
-          <button onclick="dagNavigeer(1)">→</button>
+        <div class="dag-nav flex">
+          <button onclick="dagNav(-1)">←</button>
+          <button onclick="dagNav(0)">Vandaag</button>
+          <button onclick="dagNav(1)">→</button>
         </div>
-        <div class="dag-datum" id="dag-datum-label">—</div>
-        <input type="date" class="dag-input" id="dag-datum-input" onchange="dagSetDatum(this.value)">
+        <div class="dag-datum-label" id="dag-label">—</div>
+        <input type="date" class="dag-input" id="dag-input" onchange="dagSetDatum(this.value)">
+        <button class="btn btn-secondary btn-sm" onclick="openNieuwEntryModal()">+ Entry</button>
       </div>
       <div id="dag-inhoud"></div>
     </div>
   </div>
 
-  <!-- Tab: Planning -->
-  <div id="tab-planning" class="tab-content">
+  <!-- TIMELINE / PLANNING -->
+  <div id="tab-timeline" class="tab-content">
     <div class="main">
-      <div class="planning-header">
-        <div class="week-label" id="week-label">—</div>
-        <div class="week-nav">
-          <button onclick="weekNavigeer(-1)">← Vorige week</button>
-          <button onclick="weekNavigeer(0)">Deze week</button>
-          <button onclick="weekNavigeer(1)">Volgende week →</button>
+      <div class="tl-toolbar">
+        <div class="tl-nav">
+          <button onclick="tlNav(-1)">← Vorige</button>
+          <button onclick="tlNav(0)">Deze week</button>
+          <button onclick="tlNav(1)">Volgende →</button>
+        </div>
+        <div class="tl-range" id="tl-range">—</div>
+        <div class="tl-view-toggle">
+          <button class="tl-vt-btn active" id="tl-btn-persoon" onclick="tlSetView('persoon',this)">Per persoon</button>
+          <button class="tl-vt-btn" id="tl-btn-project" onclick="tlSetView('project',this)">Per project</button>
         </div>
       </div>
-      <div id="week-grid-wrap"></div>
+      <div id="tl-grid-wrap"></div>
+      <div style="margin-top:0.75rem;font-size:11px;color:var(--text-faint);font-family:var(--mono)">Klik op een cel om een planblok toe te voegen</div>
     </div>
   </div>
 
-  <!-- Tab: Projecten rapport -->
-  <div id="tab-projecten" class="tab-content">
+  <!-- RAPPORT -->
+  <div id="tab-rapport" class="tab-content">
     <div class="main">
-      <div class="filter-row" id="periode-filter">
-        <button class="periode-btn active" data-periode="week" onclick="setPeriode('week',this)">Deze week</button>
-        <button class="periode-btn" data-periode="maand" onclick="setPeriode('maand',this)">Deze maand</button>
-        <button class="periode-btn" data-periode="alles" onclick="setPeriode('alles',this)">Alles</button>
-        <button class="periode-btn" data-periode="custom" onclick="setPeriode('custom',this)">Eigen periode</button>
-        <span id="custom-periode-inputs" class="hidden flex" style="gap:0.4rem;align-items:center">
-          <input type="date" class="dag-input" id="custom-van" onchange="renderProjectRapport()">
-          <span style="color:var(--text-faint)">t/m</span>
-          <input type="date" class="dag-input" id="custom-tm" onchange="renderProjectRapport()">
+      <div class="filter-row">
+        <button class="periode-btn active" data-p="week" onclick="setPeriode('week',this)">Deze week</button>
+        <button class="periode-btn" data-p="maand" onclick="setPeriode('maand',this)">Maand</button>
+        <button class="periode-btn" data-p="alles" onclick="setPeriode('alles',this)">Alles</button>
+        <button class="periode-btn" data-p="custom" onclick="setPeriode('custom',this)">Eigen</button>
+        <span id="custom-inputs" class="hidden flex" style="gap:0.4rem">
+          <input type="date" class="dag-input" id="cv" onchange="renderRapport()">
+          <span style="color:var(--text-faint)">–</span>
+          <input type="date" class="dag-input" id="ct" onchange="renderRapport()">
         </span>
       </div>
-      <div id="project-rapport"></div>
+      <div id="rapport-inhoud"></div>
     </div>
   </div>
 
-  <!-- Tab: Bord (muurscherm) -->
+  <!-- BORD -->
   <div id="tab-bord" class="tab-content">
     <div class="bord-wrap">
       <div class="bord-topbar">
         <div>
-          <div class="bord-datum" id="bord-datum"></div>
+          <div class="bord-titel" id="bord-datum">—</div>
           <div class="bord-klok" id="bord-klok"></div>
         </div>
-        <div class="bord-controls">
-          <button class="bord-fs-btn" onclick="toggleFullscreen()">⛶ Volledig scherm</button>
-        </div>
+        <button class="bord-fs-btn" onclick="toggleBordFS()">⛶ Volledig scherm</button>
       </div>
-      <div class="bord-sectie-label">Nu bezig</div>
+      <div class="bord-sectie">Nu bezig — klik op een kaart om timer te starten</div>
       <div class="bord-actief-grid" id="bord-actief"></div>
-      <div class="bord-sectie-label">Deze week</div>
+      <div class="bord-sectie">Deze week</div>
       <div id="bord-week"></div>
     </div>
   </div>
 </div>
 
-<!-- Modal: Instellingen -->
-<div class="modal-overlay" id="modal-instellingen-overlay" onclick="if(event.target===this)sluitModal('instellingen')">
-  <div class="modal">
+<!-- MODAL: Start timer -->
+<div class="modal-overlay" id="modal-start-overlay" onclick="if(event.target===this)sluitModal('start')">
+  <div class="modal" style="max-width:420px">
     <div class="modal-title">
-      Instellingen
-      <button class="modal-close" onclick="sluitModal('instellingen')">✕</button>
+      <span id="start-modal-titel">Start timer</span>
+      <button class="modal-close" onclick="sluitModal('start')">✕</button>
     </div>
-    <div class="inst-sectie">
-      <div class="inst-sectie-title">Team</div>
-      <div id="teamleden-lijst"></div>
-      <div style="margin-top:0.75rem">
-        <button class="btn btn-secondary btn-sm" onclick="voegTeamlidToe()">+ Teamlid toevoegen</button>
-      </div>
+    <div id="start-taak-sectie">
+      <div class="form-label">Taak (optioneel)</div>
+      <div class="taak-lijst" id="start-taak-lijst"></div>
+      <button class="direct-start" onclick="startTimerBevestig(null,null)">▶ Start zonder taak</button>
     </div>
-    <div class="inst-sectie">
-      <div class="inst-sectie-title">Data</div>
-      <button class="btn btn-secondary btn-sm" onclick="exportData()">Exporteer uren (CSV)</button>
-      <button class="btn btn-danger btn-sm" style="margin-left:0.5rem" onclick="wisAllesBevestig()">⚠ Alles wissen</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal: Entry bewerken -->
-<div class="modal-overlay" id="modal-entry-overlay" onclick="if(event.target===this)sluitModal('entry')">
-  <div class="modal">
-    <div class="modal-title">Entry aanpassen <button class="modal-close" onclick="sluitModal('entry')">✕</button></div>
-    <div class="form-row">
-      <label class="form-label">Project</label>
-      <select class="form-select" id="edit-project"></select>
-    </div>
-    <div class="form-row">
+    <div class="form-row" style="margin-top:0.75rem">
       <label class="form-label">Omschrijving</label>
-      <input class="form-input" id="edit-desc" placeholder="Omschrijving…">
-    </div>
-    <div class="form-row flex" style="gap:1rem">
-      <div style="flex:1">
-        <label class="form-label">Start</label>
-        <input class="form-input" type="time" id="edit-start">
-      </div>
-      <div style="flex:1">
-        <label class="form-label">Stop</label>
-        <input class="form-input" type="time" id="edit-stop">
-      </div>
+      <input class="form-input" id="start-desc" placeholder="Optioneel…" onkeydown="if(event.key==='Enter')startTimerBevestig(gekozenTaak,gekozenSubtaak)">
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="sluitModal('entry')">Annuleer</button>
-      <button class="btn btn-primary" onclick="slaEntryOp()">Opslaan</button>
+      <button class="btn btn-secondary" onclick="sluitModal('start')">Annuleer</button>
+      <button class="btn btn-primary" id="start-confirm-btn" onclick="startTimerBevestig(gekozenTaak,gekozenSubtaak)">▶ Start</button>
     </div>
   </div>
 </div>
 
-<!-- Modal: Planblok aanmaken -->
+<!-- MODAL: Plan aanmaken -->
 <div class="modal-overlay" id="modal-plan-overlay" onclick="if(event.target===this)sluitModal('plan')">
-  <div class="modal">
-    <div class="modal-title">Plan aanmaken <button class="modal-close" onclick="sluitModal('plan')">✕</button></div>
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">Planblok <button class="modal-close" onclick="sluitModal('plan')">✕</button></div>
     <div class="form-row">
       <label class="form-label">Project</label>
       <select class="form-select" id="plan-project"></select>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Teamlid</label>
+      <select class="form-select" id="plan-teamlid"></select>
     </div>
     <div class="form-row">
       <label class="form-label">Uren gepland</label>
@@ -490,31 +481,44 @@ body.bord-fullscreen .bord-leeg{color:rgba(255,255,255,0.3)}
   </div>
 </div>
 
-<!-- Modal: Entry handmatig toevoegen -->
-<div class="modal-overlay" id="modal-nieuw-overlay" onclick="if(event.target===this)sluitModal('nieuw')">
+<!-- MODAL: Entry bewerken -->
+<div class="modal-overlay" id="modal-entry-overlay" onclick="if(event.target===this)sluitModal('entry')">
   <div class="modal">
-    <div class="modal-title">Entry toevoegen <button class="modal-close" onclick="sluitModal('nieuw')">✕</button></div>
-    <div class="form-row">
-      <label class="form-label">Teamlid</label>
-      <select class="form-select" id="nieuw-teamlid"></select>
-    </div>
+    <div class="modal-title">Entry aanpassen <button class="modal-close" onclick="sluitModal('entry')">✕</button></div>
     <div class="form-row">
       <label class="form-label">Project</label>
-      <select class="form-select" id="nieuw-project"></select>
+      <select class="form-select" id="edit-project"></select>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Taak</label>
+      <select class="form-select" id="edit-taak"></select>
     </div>
     <div class="form-row">
       <label class="form-label">Omschrijving</label>
-      <input class="form-input" id="nieuw-desc" placeholder="Omschrijving…">
+      <input class="form-input" id="edit-desc">
     </div>
-    <div class="form-row flex" style="gap:1rem">
-      <div style="flex:1">
-        <label class="form-label">Start</label>
-        <input class="form-input" type="time" id="nieuw-start" value="08:00">
-      </div>
-      <div style="flex:1">
-        <label class="form-label">Stop</label>
-        <input class="form-input" type="time" id="nieuw-stop" value="12:00">
-      </div>
+    <div class="flex" style="gap:1rem">
+      <div class="form-row" style="flex:1"><label class="form-label">Start</label><input class="form-input" type="time" id="edit-start"></div>
+      <div class="form-row" style="flex:1"><label class="form-label">Stop</label><input class="form-input" type="time" id="edit-stop"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="sluitModal('entry')">Annuleer</button>
+      <button class="btn btn-primary" onclick="slaEntryOp()">Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Handmatige entry -->
+<div class="modal-overlay" id="modal-nieuw-overlay" onclick="if(event.target===this)sluitModal('nieuw')">
+  <div class="modal">
+    <div class="modal-title">Entry toevoegen <button class="modal-close" onclick="sluitModal('nieuw')">✕</button></div>
+    <div class="form-row"><label class="form-label">Teamlid</label><select class="form-select" id="nieuw-tl"></select></div>
+    <div class="form-row"><label class="form-label">Project</label><select class="form-select" id="nieuw-project" onchange="vulTaakSelect('nieuw-taak',this.value)"></select></div>
+    <div class="form-row"><label class="form-label">Taak</label><select class="form-select" id="nieuw-taak"></select></div>
+    <div class="form-row"><label class="form-label">Omschrijving</label><input class="form-input" id="nieuw-desc" placeholder="Optioneel…"></div>
+    <div class="flex" style="gap:1rem">
+      <div class="form-row" style="flex:1"><label class="form-label">Start</label><input class="form-input" type="time" id="nieuw-start" value="08:00"></div>
+      <div class="form-row" style="flex:1"><label class="form-label">Stop</label><input class="form-input" type="time" id="nieuw-stop" value="12:00"></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="sluitModal('nieuw')">Annuleer</button>
@@ -523,793 +527,806 @@ body.bord-fullscreen .bord-leeg{color:rgba(255,255,255,0.3)}
   </div>
 </div>
 
+<!-- MODAL: Taken beheren -->
+<div class="modal-overlay" id="modal-taken-overlay" onclick="if(event.target===this)sluitModal('taken')">
+  <div class="modal">
+    <div class="modal-title">Taken per project <button class="modal-close" onclick="sluitModal('taken')">✕</button></div>
+    <div id="taken-beheer-inhoud"></div>
+  </div>
+</div>
+
+<!-- MODAL: Instellingen -->
+<div class="modal-overlay" id="modal-inst-overlay" onclick="if(event.target===this)sluitModal('inst')">
+  <div class="modal">
+    <div class="modal-title">Instellingen <button class="modal-close" onclick="sluitModal('inst')">✕</button></div>
+    <div class="inst-sectie">
+      <div class="inst-sectie-title">Team</div>
+      <div id="inst-teamleden"></div>
+      <div style="margin-top:0.75rem"><button class="btn btn-secondary btn-sm" onclick="voegTlToe()">+ Teamlid</button></div>
+    </div>
+    <div class="inst-sectie">
+      <div class="inst-sectie-title">Data</div>
+      <button class="btn btn-secondary btn-sm" onclick="exportCSV()">↓ Export CSV</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:0.5rem" onclick="wisAlles()">⚠ Alles wissen</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ── STANDAARD TEAMLEDEN ──
-const STANDAARD_TEAMLEDEN = [
+// ════════════════════════════════════════════
+// DEFAULTS & STATE
+// ════════════════════════════════════════════
+const STD_TEAMLEDEN = [
   {naam:'bart',    label:'Bart',    kleur:'#2A4A38', rol:'admin'},
   {naam:'mathijs', label:'Mathijs', kleur:'#B8962E', rol:'admin'},
   {naam:'arjan',   label:'Arjan',   kleur:'#5a3a8b', rol:'medewerker'},
   {naam:'maarten', label:'Maarten', kleur:'#1a3a8b', rol:'medewerker'},
 ];
 
-// ── STATE ──
-let IK = null; // ingelogde gebruiker (naam string)
-let actieveTab = 'timer';
-let timerInterval = null;
+let IK = null;
+let actTab = 'timer';
+let klokInterval = null;
 let dagDatum = vandaagStr();
-let weekOffset = 0;
+let tlWeekOffset = 0;
+let tlView = 'persoon';
 let activePeriode = 'week';
 let editEntryId = null;
-let planContext = null; // {datum, teamlid} voor modal
-let huidigProject = null; // project waarop timer gestart gaat worden
+let planContext = null; // {datum, teamlid}
+let startModalProject = null;
+let gekozenTaak = null;
+let gekozenSubtaak = null;
+let bordInterval = null;
+let bordKlokInt = null;
 
-// ── HELPERS ──
-function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+// ════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 function vandaagStr(){return new Date().toISOString().slice(0,10)}
 function datumStr(d){return d.toISOString().slice(0,10)}
 function fmtTijd(iso){if(!iso)return'—';const d=new Date(iso);return d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})}
-function fmtDuur(sec){if(!sec&&sec!==0)return'—';const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h>0?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`}
-function fmtUren(sec){const h=(sec/3600).toFixed(1);return h+'u'}
-function fmtDatumNL(str){return new Date(str+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'})}
+function fmtDuur(sec){if(!sec&&sec!==0)return'—';const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h>0?`${h}:${pad(m)}:${pad(s)}`:`${m}:${pad(s)}`}
+function fmtUren(sec){return(sec/3600).toFixed(1)+'u'}
+function pad(n){return String(n).padStart(2,'0')}
+function fmtDatumLang(str){return new Date(str+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'})}
 function weekdagKort(str){return new Date(str+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short'})}
+function weekNr(d){const s=new Date(d.getFullYear(),0,1);return Math.ceil(((d-s)/86400000+s.getDay()+1)/7)}
+function maandagVan(offset=0){const n=new Date();const diff=n.getDay()===0?-6:1-n.getDay();n.setDate(n.getDate()+diff+offset*7);return datumStr(n)}
 
-// ── LOCALSTORAGE ──
+// ════════════════════════════════════════════
+// LOCALSTORAGE
+// ════════════════════════════════════════════
 function getEntries(){return JSON.parse(localStorage.getItem('mt_uren_entries')||'[]')}
 function setEntries(e){localStorage.setItem('mt_uren_entries',JSON.stringify(e))}
 function getPlanning(){return JSON.parse(localStorage.getItem('mt_uren_planning')||'[]')}
 function setPlanning(p){localStorage.setItem('mt_uren_planning',JSON.stringify(p))}
-function getTeamleden(){return JSON.parse(localStorage.getItem('mt_uren_teamleden')||'null')||STANDAARD_TEAMLEDEN}
+function getTeamleden(){return JSON.parse(localStorage.getItem('mt_uren_teamleden')||'null')||STD_TEAMLEDEN}
 function setTeamleden(t){localStorage.setItem('mt_uren_teamleden',JSON.stringify(t))}
-function getProjecten(){
-  // Gebruik mt_projecten van de v4-tool (zelfde localStorage origin)
-  const raw = JSON.parse(localStorage.getItem('mt_projecten')||'null');
-  if(raw&&raw.length) return raw;
-  // Fallback eigen lijst
-  return JSON.parse(localStorage.getItem('mt_uren_projecten_eigen')||'[]');
-}
+function getTaken(){return JSON.parse(localStorage.getItem('mt_uren_taken')||'{}')}
+function setTaken(t){localStorage.setItem('mt_uren_taken',JSON.stringify(t))}
 function getLopende(){return JSON.parse(localStorage.getItem('mt_uren_lopend')||'null')}
-function setLopende(e){if(e)localStorage.setItem('mt_uren_lopend',JSON.stringify(e));else localStorage.removeItem('mt_uren_lopend')}
+function setLopende(e){e?localStorage.setItem('mt_uren_lopend',JSON.stringify(e)):localStorage.removeItem('mt_uren_lopend')}
+function getProjecten(){
+  const raw=JSON.parse(localStorage.getItem('mt_projecten')||'null');
+  if(raw&&raw.length) return raw;
+  return JSON.parse(localStorage.getItem('mt_uren_projecten')||'[]');
+}
 
-// ── OPSTARTEN ──
+// ════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════
 function init(){
-  IK = localStorage.getItem('mt_uren_ik');
-  if(!IK){
-    toonWelkom();
-  } else {
-    toonApp();
-  }
+  IK=localStorage.getItem('mt_uren_ik');
+  if(!IK){showWelkom();}else{showApp();}
 }
-
-function toonWelkom(){
-  document.getElementById('welkom-scherm').classList.remove('hidden');
+function showWelkom(){
+  document.getElementById('welkom').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
-  const tl = getTeamleden();
-  const wrap = document.getElementById('naam-knoppen');
-  wrap.innerHTML = tl.map(t=>`
-    <button class="naam-knop" onclick="kiesGebruiker('${t.naam}')">
-      <span class="naam-knop-dot" style="background:${t.kleur}"></span>
-      ${t.label}
-    </button>
-  `).join('');
+  const tl=getTeamleden();
+  document.getElementById('naam-knoppen').innerHTML=tl.map(t=>`
+    <button class="naam-knop" onclick="kiesIk('${t.naam}')">
+      <span class="naam-knop-dot" style="background:${t.kleur}"></span>${t.label}
+    </button>`).join('');
 }
-
-function kiesGebruiker(naam){
+function kiesIk(naam){
   localStorage.setItem('mt_uren_ik',naam);
-  IK = naam;
-  document.getElementById('welkom-scherm').classList.add('hidden');
-  toonApp();
+  IK=naam;
+  document.getElementById('welkom').classList.add('hidden');
+  showApp();
 }
-
-function toggleGebruiker(){
-  const tl = getTeamleden();
-  const idx = tl.findIndex(t=>t.naam===IK);
-  const volgende = tl[(idx+1)%tl.length];
-  kiesGebruiker(volgende.naam);
-}
-
-function toonApp(){
+function showApp(){
   document.getElementById('app').classList.remove('hidden');
-  document.getElementById('welkom-scherm').classList.add('hidden');
-  updateUserChip();
+  document.getElementById('welkom').classList.add('hidden');
+  updateChip();
   herstelLopende();
   renderTimer();
-  renderDag();
-  renderProjectRapport();
+}
+function updateChip(){
+  const t=getTeamleden().find(x=>x.naam===IK)||{label:'?'};
+  document.getElementById('user-chip').textContent=t.label;
+}
+function toggleGebruiker(){
+  const tl=getTeamleden();
+  const idx=tl.findIndex(t=>t.naam===IK);
+  kiesIk(tl[(idx+1)%tl.length].naam);
 }
 
-function updateUserChip(){
-  const tl = getTeamleden();
-  const t = tl.find(x=>x.naam===IK)||{label:'?',kleur:'#999'};
-  const chip = document.getElementById('user-chip');
-  chip.textContent = t.label;
-  chip.style.borderColor = t.kleur+'66';
-}
-
-// ── TIMER ──
+// ════════════════════════════════════════════
+// TIMER
+// ════════════════════════════════════════════
 function renderTimer(){
-  const projecten = getProjecten();
-  const lopend = getLopende();
-  const label = document.getElementById('timer-label');
-  const cards = document.getElementById('project-cards');
-
-  if(lopend){
-    label.textContent = 'Timer loopt — klik op een ander project om te wisselen';
-  } else {
-    label.textContent = 'Kies een project om te starten';
-  }
-
+  const projecten=getProjecten();
+  const lopend=getLopende();
+  const lbl=document.getElementById('timer-label');
+  lbl.textContent=lopend?`Timer loopt — klik project om te wisselen`:`Kies een project`;
   if(!projecten.length){
-    cards.innerHTML = `<div class="no-projects">Geen projecten gevonden. Maak projecten aan in de <a href="index-v4.html" style="color:var(--green)">M&T Bedrijfstool</a>.</div>`;
+    document.getElementById('project-grid').innerHTML=`<div style="grid-column:1/-1;padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen projecten. Maak ze aan in de <a href="index-v4.html" style="color:var(--green)">M&T tool</a>.</div>`;
     return;
   }
-
-  // Bereken uren vandaag per project
-  const entries = getEntries();
-  const vandaag = vandaagStr();
-  const urenVandaag = {};
-  entries.filter(e=>e.teamlid===IK&&e.datum===vandaag&&e.duur).forEach(e=>{
-    urenVandaag[e.project_code] = (urenVandaag[e.project_code]||0) + e.duur;
-  });
-
-  cards.innerHTML = projecten.map(p=>{
-    const actief = lopend && lopend.project_code === p.code;
-    const uren = urenVandaag[p.code];
-    const urenTekst = uren ? fmtUren(uren)+' vandaag' : '';
-    return `<div class="project-card${actief?' actief':''}" onclick="startTimer('${p.code}')">
-      <div class="project-card-code">${p.code}</div>
-      <div class="project-card-naam">${p.naam||p.code}</div>
-      ${urenTekst?`<div class="project-card-uren">${urenTekst}</div>`:''}
+  const taken=getTaken();
+  const vandaag=vandaagStr();
+  const entries=getEntries();
+  const urenV={};
+  entries.filter(e=>e.teamlid===IK&&e.datum===vandaag&&e.duur).forEach(e=>{urenV[e.project_code]=(urenV[e.project_code]||0)+e.duur});
+  document.getElementById('project-grid').innerHTML=projecten.map(p=>{
+    const actief=lopend&&lopend.project_code===p.code;
+    const takenLijst=taken[p.code]||[];
+    const uren=urenV[p.code];
+    return `<div class="project-card${actief?' actief':''}" onclick="openStartModal('${p.code}')">
+      <div class="pc-code">${p.code}</div>
+      <div class="pc-naam">${p.naam||p.code}</div>
+      <div class="pc-meta">
+        ${takenLijst.length?`<span class="pc-taken-count">${takenLijst.length} taken</span>`:''}
+        ${uren?`<span>${fmtUren(uren)} vandaag</span>`:''}
+      </div>
     </div>`;
   }).join('');
 }
 
-function startTimer(projectCode){
-  const lopend = getLopende();
+function openStartModal(projectCode){
+  startModalProject=projectCode;
+  gekozenTaak=null;
+  gekozenSubtaak=null;
+  const p=getProjecten().find(x=>x.code===projectCode);
+  document.getElementById('start-modal-titel').textContent=`▶  ${projectCode}`;
+  document.getElementById('start-desc').value='';
+  renderStartTaakLijst();
+  openModal('start');
+  setTimeout(()=>document.getElementById('start-desc').focus(),100);
+}
 
-  // Als al iets loopt, stop dat eerst
-  if(lopend){
-    stopTimerIntern(lopend);
-  }
+function renderStartTaakLijst(){
+  const taken=getTaken()[startModalProject]||[];
+  const wrap=document.getElementById('start-taak-lijst');
+  if(!taken.length){wrap.innerHTML='';return;}
+  wrap.innerHTML=taken.map(t=>`
+    <div class="taak-item${gekozenTaak===t.id&&!gekozenSubtaak?' actief':''}" onclick="kiesTaak('${t.id}')">
+      <div>
+        <div class="taak-item-naam">${t.naam}</div>
+        ${t.subtaken?.length?`<div class="taak-item-sub">${t.subtaken.length} subtaken</div>`:''}
+      </div>
+      <span style="color:var(--text-faint);font-size:12px">${gekozenTaak===t.id?'✓':''}</span>
+    </div>
+    ${gekozenTaak===t.id&&t.subtaken?.length?`<div class="subtaak-lijst">${t.subtaken.map(s=>`
+      <div class="subtaak-item${gekozenSubtaak===s.id?' actief':''}" onclick="event.stopPropagation();kiesSubtaak('${s.id}')">
+        <span class="subtaak-chevron">↳</span>${s.naam}
+        ${gekozenSubtaak===s.id?'<span style="margin-left:auto;font-size:11px;color:var(--green)">✓</span>':''}
+      </div>`).join('')}</div>`:''}`).join('');
+}
 
-  const entry = {
-    id: uid(),
-    teamlid: IK,
-    project_code: projectCode,
-    omschrijving: '',
-    start: new Date().toISOString(),
-    stop: null,
-    duur: null,
-    datum: vandaagStr()
+function kiesTaak(id){
+  if(gekozenTaak===id){gekozenTaak=null;gekozenSubtaak=null;}else{gekozenTaak=id;gekozenSubtaak=null;}
+  renderStartTaakLijst();
+}
+function kiesSubtaak(id){
+  gekozenSubtaak=gekozenSubtaak===id?null:id;
+  renderStartTaakLijst();
+}
+
+function startTimerBevestig(taakId,subtaakId){
+  if(!startModalProject) return;
+  const lopend=getLopende();
+  if(lopend) stopTimerIntern(lopend);
+  const taken=getTaken()[startModalProject]||[];
+  const taak=taakId?taken.find(t=>t.id===taakId):null;
+  const subtaak=subtaakId&&taak?taak.subtaken?.find(s=>s.id===subtaakId):null;
+  const entry={
+    id:uid(), teamlid:IK, project_code:startModalProject,
+    taak_id:taakId||null, subtaak_id:subtaakId||null,
+    taak_naam:subtaak?`${taak.naam} / ${subtaak.naam}`:taak?taak.naam:null,
+    omschrijving:document.getElementById('start-desc').value.trim(),
+    start:new Date().toISOString(), stop:null, duur:null, datum:vandaagStr()
   };
-
   setLopende(entry);
+  sluitModal('start');
   toonRunningBar(entry);
   startKlok();
   renderTimer();
-
-  // Toon beschrijving-balk
-  document.getElementById('desc-bar').classList.remove('hidden');
-  document.getElementById('desc-input').value = '';
-  document.getElementById('desc-input').focus();
 }
 
 function stopTimer(){
-  const lopend = getLopende();
+  const lopend=getLopende();
   if(!lopend) return;
   stopTimerIntern(lopend);
   setLopende(null);
   stopKlok();
   document.getElementById('running-bar').classList.add('hidden');
-  document.getElementById('desc-bar').classList.add('hidden');
   renderTimer();
-  if(actieveTab==='dag') renderDag();
-  if(actieveTab==='projecten') renderProjectRapport();
+  if(actTab==='dag') renderDag();
+  if(actTab==='rapport') renderRapport();
 }
 
 function stopTimerIntern(lopend){
-  const nu = new Date().toISOString();
-  const duur = Math.round((new Date(nu)-new Date(lopend.start))/1000);
-  const entry = {...lopend, stop: nu, duur};
-  const entries = getEntries();
-  entries.push(entry);
+  const nu=new Date().toISOString();
+  const duur=Math.round((new Date(nu)-new Date(lopend.start))/1000);
+  const entries=getEntries();
+  entries.push({...lopend,stop:nu,duur});
   setEntries(entries);
 }
 
-function slaDescOp(){
-  const lopend = getLopende();
-  if(!lopend) return;
-  lopend.omschrijving = document.getElementById('desc-input').value.trim();
-  setLopende(lopend);
-  document.getElementById('running-desc').textContent = lopend.omschrijving||'';
-  document.getElementById('desc-bar').classList.add('hidden');
-}
-
 function herstelLopende(){
-  const lopend = getLopende();
+  const lopend=getLopende();
   if(!lopend) return;
   toonRunningBar(lopend);
   startKlok();
-  document.getElementById('desc-bar').classList.remove('hidden');
-  document.getElementById('desc-input').value = lopend.omschrijving||'';
 }
 
 function toonRunningBar(entry){
-  const projecten = getProjecten();
-  const p = projecten.find(x=>x.code===entry.project_code);
-  document.getElementById('running-project').textContent = entry.project_code + (p&&p.naam?' — '+p.naam:'');
-  document.getElementById('running-desc').textContent = entry.omschrijving||'';
+  const p=getProjecten().find(x=>x.code===entry.project_code);
+  document.getElementById('run-project').textContent=entry.project_code+(p&&p.naam?' — '+p.naam:'');
+  document.getElementById('run-task').textContent=entry.taak_naam||entry.omschrijving||'';
   document.getElementById('running-bar').classList.remove('hidden');
   updateKlok(entry.start);
 }
 
 function startKlok(){
   stopKlok();
-  timerInterval = setInterval(()=>{
-    const lopend = getLopende();
-    if(lopend) updateKlok(lopend.start);
-  },1000);
+  klokInterval=setInterval(()=>{const l=getLopende();if(l)updateKlok(l.start);},1000);
 }
+function stopKlok(){if(klokInterval){clearInterval(klokInterval);klokInterval=null;}}
+function updateKlok(startIso){document.getElementById('run-clock').textContent=fmtDuur(Math.round((Date.now()-new Date(startIso))/1000));}
 
-function stopKlok(){
-  if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
-}
-
-function updateKlok(startIso){
-  const sec = Math.round((Date.now()-new Date(startIso))/1000);
-  document.getElementById('running-clock').textContent = fmtDuur(sec);
-}
-
-// ── DAG OVERZICHT ──
+// ════════════════════════════════════════════
+// DAG OVERZICHT
+// ════════════════════════════════════════════
 function renderDag(){
-  const datum = dagDatum;
-  document.getElementById('dag-datum-label').textContent = fmtDatumNL(datum);
-  document.getElementById('dag-datum-input').value = datum;
-
-  const entries = getEntries();
-  const tl = getTeamleden();
-  const dagEntries = entries.filter(e=>e.datum===datum);
-
-  const wrap = document.getElementById('dag-inhoud');
-  const isAdmin = tl.find(t=>t.naam===IK)?.rol==='admin';
-
-  // Admin ziet iedereen, medewerker ziet zichzelf
-  const zichtbaar = isAdmin ? tl : tl.filter(t=>t.naam===IK);
-
-  wrap.innerHTML = zichtbaar.map(t=>{
-    const mijnEntries = dagEntries.filter(e=>e.teamlid===t.naam).sort((a,b)=>new Date(a.start)-new Date(b.start));
-    const totaal = mijnEntries.reduce((s,e)=>s+(e.duur||0),0);
+  const datum=dagDatum;
+  document.getElementById('dag-label').textContent=fmtDatumLang(datum);
+  document.getElementById('dag-input').value=datum;
+  const entries=getEntries();
+  const tl=getTeamleden();
+  const isAdmin=tl.find(t=>t.naam===IK)?.rol==='admin';
+  const zichtbaar=isAdmin?tl:tl.filter(t=>t.naam===IK);
+  const dagEntries=entries.filter(e=>e.datum===datum);
+  document.getElementById('dag-inhoud').innerHTML=zichtbaar.map(t=>{
+    const mine=dagEntries.filter(e=>e.teamlid===t.naam).sort((a,b)=>new Date(a.start)-new Date(b.start));
+    const totaal=mine.reduce((s,e)=>s+(e.duur||0),0);
     return `<div class="teamlid-blok">
       <div class="teamlid-header">
-        <div class="teamlid-naam">
-          <span class="teamlid-dot" style="background:${t.kleur}"></span>
-          ${t.label}
-        </div>
-        <div class="flex" style="gap:0.5rem">
-          <span class="teamlid-totaal">${totaal?fmtUren(totaal):''}</span>
-          ${isAdmin?`<button class="teamlid-add" onclick="openNieuwEntry('${t.naam}')">+ Entry</button>`:''}
-        </div>
+        <div class="tl-naam"><span class="tl-dot" style="background:${t.kleur}"></span>${t.label}</div>
+        <span class="tl-totaal">${totaal?fmtUren(totaal):''}</span>
       </div>
-      <div class="entries-lijst">
-        ${mijnEntries.length ? mijnEntries.map(e=>entryRowHTML(e)).join('') : `<div class="geen-entries">Geen uren geregistreerd</div>`}
+      <div>
+        ${mine.length?mine.map(e=>entryRowHTML(e)).join(''):`<div class="geen-entries">Geen uren</div>`}
       </div>
     </div>`;
   }).join('');
 }
 
 function entryRowHTML(e){
-  return `<div class="entry-row" id="er-${e.id}">
+  return `<div class="entry-row">
     <div class="entry-tijd">${fmtTijd(e.start)}–${fmtTijd(e.stop)||'…'}</div>
     <div class="entry-project">${e.project_code}</div>
-    <div class="entry-desc">${e.omschrijving||'<span style="color:var(--text-faint);font-style:italic">—</span>'}</div>
+    <div class="entry-taak">${e.taak_naam||''}</div>
+    <div class="entry-desc">${e.omschrijving||''}</div>
     <div class="entry-duur">${e.duur?fmtUren(e.duur):''}</div>
     <div class="entry-actions">
-      <button class="entry-btn" onclick="openEditEntry('${e.id}')" title="Bewerken">✏</button>
-      <button class="entry-btn del" onclick="verwijderEntry('${e.id}')" title="Verwijderen">✕</button>
+      <button class="entry-btn" onclick="openEditEntry('${e.id}')">✏</button>
+      <button class="entry-btn del" onclick="verwijderEntry('${e.id}')">✕</button>
     </div>
   </div>`;
 }
 
-function dagNavigeer(richting){
-  if(richting===0){dagDatum=vandaagStr();}
-  else{
-    const d=new Date(dagDatum+'T12:00:00');
-    d.setDate(d.getDate()+richting);
-    dagDatum=datumStr(d);
-  }
+function dagNav(r){
+  if(r===0){dagDatum=vandaagStr();}
+  else{const d=new Date(dagDatum+'T12:00:00');d.setDate(d.getDate()+r);dagDatum=datumStr(d);}
   renderDag();
 }
-
-function dagSetDatum(val){dagDatum=val;renderDag();}
-
-// ── PLANNING ──
-function renderPlanning(){
-  const ma = maandagVanWeek(weekOffset);
-  const dagen = [];
-  for(let i=0;i<7;i++){const d=new Date(ma);d.setDate(d.getDate()+i);dagen.push(datumStr(d));}
-
-  const van = dagen[0], tm = dagen[6];
-  document.getElementById('week-label').textContent =
-    `Week ${weekNummer(new Date(ma+'T12:00:00'))} — ${new Date(van+'T12:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} t/m ${new Date(tm+'T12:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})}`;
-
-  const tl = getTeamleden();
-  const planning = getPlanning();
-  const entries = getEntries();
-  const projecten = getProjecten();
-
-  // Bouw grid
-  const colCount = tl.length + 1; // +1 voor dag-label kolom
-  const colTemplate = `80px repeat(${tl.length},1fr)`;
-
-  let html = `<div class="week-grid">
-    <div class="week-col-headers" style="grid-template-columns:${colTemplate}">
-      <div class="week-col-header"></div>
-      ${tl.map(t=>`<div class="week-col-header" style="color:${t.kleur}">${t.label}</div>`).join('')}
-    </div>`;
-
-  dagen.forEach((datum,di)=>{
-    const isWeekend = di>=5;
-    html += `<div class="week-row" style="grid-template-columns:${colTemplate}">
-      <div class="week-dag-label${isWeekend?' weekend':''}">
-        <span class="week-dag-dag">${weekdagKort(datum)}</span>
-        <span class="week-dag-datum">${new Date(datum+'T12:00:00').getDate()} ${new Date(datum+'T12:00:00').toLocaleDateString('nl-NL',{month:'short'})}</span>
-      </div>`;
-
-    tl.forEach(t=>{
-      const planBlokken = planning.filter(p=>p.datum===datum&&p.teamlid===t.naam);
-      const dagEntries = entries.filter(e=>e.datum===datum&&e.teamlid===t.naam);
-      const gerealiseerd = dagEntries.reduce((s,e)=>s+(e.duur||0),0);
-
-      html += `<div class="week-cel${isWeekend?' weekend':''}" onclick="openPlanModal('${datum}','${t.naam}')">
-        ${planBlokken.map(pb=>{
-          const p = projecten.find(x=>x.code===pb.project_code);
-          return `<div class="plan-blok" onclick="event.stopPropagation()">
-            <div class="plan-blok-code">${pb.project_code}</div>
-            <div class="plan-blok-uren">${pb.uren_gepland}u gepland</div>
-            <button class="plan-blok-del" onclick="event.stopPropagation();verwijderPlan('${pb.id}')">✕</button>
-          </div>`;
-        }).join('')}
-        ${gerealiseerd>0?`<div class="plan-realisatie">✓ ${fmtUren(gerealiseerd)}</div>`:''}
-      </div>`;
-    });
-
-    html += `</div>`;
-  });
-
-  html += `</div>`;
-  document.getElementById('week-grid-wrap').innerHTML = html;
-}
-
-function weekNavigeer(richting){
-  if(richting===0)weekOffset=0;else weekOffset+=richting;
-  renderPlanning();
-}
-
-function maandagVanWeek(offset=0){
-  const nu=new Date();
-  const dag=nu.getDay();
-  const diff=dag===0?-6:1-dag;
-  nu.setDate(nu.getDate()+diff+offset*7);
-  return datumStr(nu);
-}
-
-function weekNummer(d){
-  const start=new Date(d.getFullYear(),0,1);
-  return Math.ceil(((d-start)/86400000+start.getDay()+1)/7);
-}
-
-// ── PROJECT RAPPORT ──
-function renderProjectRapport(){
-  const [van, tm] = getPeriodeDatums();
-  const entries = getEntries().filter(e=>e.duur&&e.datum>=van&&e.datum<=tm);
-  const tl = getTeamleden();
-  const projecten = getProjecten();
-
-  // Groepeer per project
-  const perProject = {};
-  entries.forEach(e=>{
-    if(!perProject[e.project_code]) perProject[e.project_code]={code:e.project_code,totaal:0,per_persoon:{}};
-    perProject[e.project_code].totaal += e.duur;
-    perProject[e.project_code].per_persoon[e.teamlid] = (perProject[e.project_code].per_persoon[e.teamlid]||0)+e.duur;
-  });
-
-  const gesorteerd = Object.values(perProject).sort((a,b)=>b.totaal-a.totaal);
-  const max = gesorteerd[0]?.totaal||1;
-
-  const wrap = document.getElementById('project-rapport');
-  if(!gesorteerd.length){
-    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen uren in deze periode</div>';
-    return;
-  }
-
-  wrap.innerHTML = gesorteerd.map(pr=>{
-    const p = projecten.find(x=>x.code===pr.code);
-    const breakdown = tl.filter(t=>pr.per_persoon[t.naam]).map(t=>`
-      <span class="pr-persoon">
-        <span class="pr-persoon-dot" style="background:${t.kleur}"></span>
-        ${t.label} ${fmtUren(pr.per_persoon[t.naam])}
-      </span>`).join('');
-    return `<div class="project-rapport-item">
-      <div class="pr-header">
-        <div>
-          <div class="pr-code">${pr.code}</div>
-          <div class="pr-naam">${p?.naam||''}</div>
-        </div>
-        <div class="pr-totaal">${fmtUren(pr.totaal)}</div>
-      </div>
-      <div class="pr-bar-wrap"><div class="pr-bar" style="width:${Math.round(pr.totaal/max*100)}%"></div></div>
-      <div class="pr-breakdown">${breakdown}</div>
-    </div>`;
-  }).join('');
-}
-
-function getPeriodeDatums(){
-  const nu = new Date();
-  if(activePeriode==='week'){
-    const ma = maandagVanWeek(0);
-    const zo = datumStr(new Date(new Date(ma+'T12:00:00').setDate(new Date(ma+'T12:00:00').getDate()+6)));
-    return [ma, zo];
-  }
-  if(activePeriode==='maand'){
-    const van = `${nu.getFullYear()}-${String(nu.getMonth()+1).padStart(2,'0')}-01`;
-    const tm = datumStr(new Date(nu.getFullYear(),nu.getMonth()+1,0));
-    return [van, tm];
-  }
-  if(activePeriode==='custom'){
-    const van = document.getElementById('custom-van')?.value||'2000-01-01';
-    const tm = document.getElementById('custom-tm')?.value||vandaagStr();
-    return [van, tm];
-  }
-  return ['2000-01-01', '2099-12-31'];
-}
-
-function setPeriode(periode, btn){
-  activePeriode = periode;
-  document.querySelectorAll('.periode-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  const cust = document.getElementById('custom-periode-inputs');
-  if(periode==='custom') cust.classList.remove('hidden'); else cust.classList.add('hidden');
-  renderProjectRapport();
-}
-
-// ── MODALS ──
-function openEditEntry(id){
-  editEntryId = id;
-  const e = getEntries().find(x=>x.id===id);
-  if(!e) return;
-  const startTime = e.start ? new Date(e.start).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',hour12:false}) : '';
-  const stopTime = e.stop ? new Date(e.stop).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',hour12:false}) : '';
-  document.getElementById('edit-desc').value = e.omschrijving||'';
-  document.getElementById('edit-start').value = startTime;
-  document.getElementById('edit-stop').value = stopTime;
-  vulProjectSelect('edit-project', e.project_code);
-  openModal('entry');
-}
-
-function slaEntryOp(){
-  if(!editEntryId) return;
-  const entries = getEntries();
-  const idx = entries.findIndex(x=>x.id===editEntryId);
-  if(idx<0) return;
-  const e = entries[idx];
-  const startStr = document.getElementById('edit-start').value;
-  const stopStr = document.getElementById('edit-stop').value;
-  const datum = e.datum;
-  const startIso = startStr ? new Date(`${datum}T${startStr}:00`).toISOString() : e.start;
-  const stopIso = stopStr ? new Date(`${datum}T${stopStr}:00`).toISOString() : e.stop;
-  const duur = startIso&&stopIso ? Math.round((new Date(stopIso)-new Date(startIso))/1000) : e.duur;
-  entries[idx] = {...e, project_code: document.getElementById('edit-project').value, omschrijving: document.getElementById('edit-desc').value.trim(), start: startIso, stop: stopIso, duur};
-  setEntries(entries);
-  sluitModal('entry');
-  renderDag();
-  if(actieveTab==='projecten') renderProjectRapport();
-}
-
-function verwijderEntry(id){
-  if(!confirm('Entry verwijderen?')) return;
-  setEntries(getEntries().filter(e=>e.id!==id));
-  renderDag();
-  if(actieveTab==='projecten') renderProjectRapport();
-  renderTimer();
-}
-
-function openNieuwEntry(teamlid){
-  vulProjectSelect('nieuw-project');
-  const tlSel = document.getElementById('nieuw-teamlid');
-  tlSel.innerHTML = getTeamleden().map(t=>`<option value="${t.naam}" ${t.naam===teamlid?'selected':''}>${t.label}</option>`).join('');
-  document.getElementById('nieuw-desc').value = '';
+function dagSetDatum(v){dagDatum=v;renderDag();}
+function openNieuwEntryModal(){
+  vulSelect('nieuw-tl',getTeamleden().map(t=>({v:t.naam,l:t.label})),IK);
+  vulSelect('nieuw-project',getProjecten().map(p=>({v:p.code,l:`${p.code}${p.naam?' — '+p.naam:''}`})));
+  vulTaakSelect('nieuw-taak',document.getElementById('nieuw-project').value);
+  document.getElementById('nieuw-desc').value='';
   openModal('nieuw');
 }
-
 function slaHandmatigOp(){
-  const teamlid = document.getElementById('nieuw-teamlid').value;
-  const project_code = document.getElementById('nieuw-project').value;
-  const omschrijving = document.getElementById('nieuw-desc').value.trim();
-  const startStr = document.getElementById('nieuw-start').value;
-  const stopStr = document.getElementById('nieuw-stop').value;
-  if(!project_code||!startStr||!stopStr){alert('Vul project, start en stop in.');return;}
-  const startIso = new Date(`${dagDatum}T${startStr}:00`).toISOString();
-  const stopIso = new Date(`${dagDatum}T${stopStr}:00`).toISOString();
-  const duur = Math.round((new Date(stopIso)-new Date(startIso))/1000);
+  const tl=document.getElementById('nieuw-tl').value;
+  const pc=document.getElementById('nieuw-project').value;
+  const taakId=document.getElementById('nieuw-taak').value||null;
+  const omschr=document.getElementById('nieuw-desc').value.trim();
+  const s=document.getElementById('nieuw-start').value;
+  const st=document.getElementById('nieuw-stop').value;
+  if(!pc||!s||!st){alert('Vul project, start en stop in.');return;}
+  const startIso=new Date(`${dagDatum}T${s}:00`).toISOString();
+  const stopIso=new Date(`${dagDatum}T${st}:00`).toISOString();
+  const duur=Math.round((new Date(stopIso)-new Date(startIso))/1000);
   if(duur<=0){alert('Stop moet na start liggen.');return;}
-  const entries = getEntries();
-  entries.push({id:uid(),teamlid,project_code,omschrijving,start:startIso,stop:stopIso,duur,datum:dagDatum});
-  setEntries(entries);
+  const taakNaam=taakId?((getTaken()[pc]||[]).find(t=>t.id===taakId)||{}).naam||null:null;
+  getEntries().push&&setEntries([...getEntries(),{id:uid(),teamlid:tl,project_code:pc,taak_id:taakId,taak_naam:taakNaam,omschrijving:omschr,start:startIso,stop:stopIso,duur,datum:dagDatum}]);
   sluitModal('nieuw');
   renderDag();
 }
 
-function openPlanModal(datum, teamlid){
-  planContext = {datum, teamlid};
-  vulProjectSelect('plan-project');
-  document.getElementById('plan-uren').value = '4';
+// ════════════════════════════════════════════
+// TIMELINE / PLANNING
+// ════════════════════════════════════════════
+function renderTimeline(){
+  const ma=maandagVan(tlWeekOffset);
+  const dagen=[];
+  for(let i=0;i<5;i++){const d=new Date(ma+'T12:00:00');d.setDate(d.getDate()+i);dagen.push(datumStr(d));}
+  const dObj=new Date(ma+'T12:00:00');
+  document.getElementById('tl-range').textContent=`Week ${weekNr(dObj)} — ${dObj.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} t/m ${new Date(dagen[4]+'T12:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})}`;
+  const vandaag=vandaagStr();
+  const tl=getTeamleden();
+  const planning=getPlanning();
+  const entries=getEntries();
+  const projecten=getProjecten();
+  const labelW=150;
+  const cols=`${labelW}px repeat(5,1fr)`;
+
+  let rows=[];
+  if(tlView==='persoon'){
+    rows=tl.map(t=>({id:t.naam,label:t.label,kleur:t.kleur,isPersoon:true}));
+  } else {
+    const rel=new Set();
+    planning.filter(p=>dagen.includes(p.datum)).forEach(p=>rel.add(p.project_code));
+    entries.filter(e=>dagen.includes(e.datum)&&e.duur).forEach(e=>rel.add(e.project_code));
+    if(!rel.size){
+      document.getElementById('tl-grid-wrap').innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen projecten met uren of planning deze week</div>`;
+      return;
+    }
+    rows=[...rel].sort().map(code=>{const p=projecten.find(x=>x.code===code);return{id:code,label:code,sub:p?.naam||'',kleur:var2hex(code),isPersoon:false}});
+  }
+
+  let html=`<div class="tl-grid-wrap"><div class="tl-grid">
+    <div class="tl-header-row" style="grid-template-columns:${cols}">
+      <div class="tl-header-cel">${tlView==='persoon'?'Teamlid':'Project'}</div>
+      ${dagen.map(d=>`<div class="tl-header-cel${d===vandaag?' vandaag':''}">${weekdagKort(d)}<br><span style="font-size:10px;font-weight:400">${new Date(d+'T12:00:00').getDate()} ${new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{month:'short'})}</span></div>`).join('')}
+    </div>`;
+
+  rows.forEach(row=>{
+    html+=`<div class="tl-rij" style="grid-template-columns:${cols}">
+      <div class="tl-label">
+        <div class="tl-label-code" style="color:${row.kleur||'var(--gold)'}">
+          ${row.isPersoon?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${row.kleur};margin-right:5px"></span>`:''}${row.label}
+        </div>
+        ${row.sub?`<div class="tl-label-naam">${row.sub}</div>`:''}
+      </div>`;
+
+    dagen.forEach(dag=>{
+      let planBlokken,actBlokken;
+      if(tlView==='persoon'){
+        planBlokken=planning.filter(p=>p.datum===dag&&p.teamlid===row.id);
+        actBlokken=[{teamlid:row.id,som:entries.filter(e=>e.datum===dag&&e.teamlid===row.id&&e.duur).reduce((s,e)=>s+(e.duur||0),0)}].filter(b=>b.som>0);
+      } else {
+        planBlokken=planning.filter(p=>p.datum===dag&&p.project_code===row.id);
+        actBlokken=tl.map(t=>({teamlid:t.naam,kleur:t.kleur,label:t.label,som:entries.filter(e=>e.datum===dag&&e.project_code===row.id&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
+      }
+
+      html+=`<div class="tl-dag-cel${dag===vandaag?' vandaag':''}" onclick="tlCelKlik('${dag}','${row.id}')">
+        ${planBlokken.map(pb=>{
+          const klr=tlView==='persoon'?row.kleur:(tl.find(t=>t.naam===pb.teamlid)||{kleur:'#999'}).kleur;
+          const naam=tlView==='project'?(tl.find(t=>t.naam===pb.teamlid)||{label:pb.teamlid}).label:'';
+          return `<div class="tl-blok tl-blok-plan" style="border-color:${klr}55" onclick="event.stopPropagation()">
+            <div class="tl-blok-label" style="color:${klr}">${naam||pb.uren_gepland+'u gepland'}</div>
+            ${naam?`<div class="tl-blok-sub">${pb.uren_gepland}u gepland</div>`:''}
+            <button class="tl-blok-del" onclick="event.stopPropagation();verwijderPlan('${pb.id}')">✕</button>
+          </div>`;
+        }).join('')}
+        ${actBlokken.map(b=>{
+          const klr=b.kleur||row.kleur;
+          const lab=tlView==='project'?b.label:fmtUren(b.som);
+          return `<div class="tl-blok tl-blok-act" style="background:${klr}">
+            <div class="tl-blok-label" style="color:#fff">${lab}</div>
+            ${tlView==='project'?`<div class="tl-blok-sub" style="color:rgba(255,255,255,0.7)">${fmtUren(b.som)}</div>`:''}
+          </div>`;
+        }).join('')}
+      </div>`;
+    });
+    html+=`</div>`;
+  });
+
+  html+=`</div></div>`;
+  document.getElementById('tl-grid-wrap').innerHTML=html;
+}
+
+function var2hex(str){
+  // Genereer stabiele kleur op basis van string
+  let h=0;for(let c of str)h=(Math.imul(31,h)+c.charCodeAt(0))|0;
+  const hue=Math.abs(h)%360;
+  return `hsl(${hue},45%,45%)`;
+}
+
+function tlNav(r){if(r===0)tlWeekOffset=0;else tlWeekOffset+=r;renderTimeline();}
+function tlSetView(v,btn){
+  tlView=v;
+  document.querySelectorAll('.tl-vt-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTimeline();
+}
+function tlCelKlik(datum,rowId){
+  planContext={datum,rowId};
+  vulSelect('plan-project',getProjecten().map(p=>({v:p.code,l:`${p.code}${p.naam?' — '+p.naam:''}`})));
+  const tlSel=document.getElementById('plan-teamlid');
+  if(tlView==='persoon'){
+    vulSelect('plan-teamlid',getTeamleden().map(t=>({v:t.naam,l:t.label})),rowId);
+  } else {
+    vulSelect('plan-teamlid',getTeamleden().map(t=>({v:t.naam,l:t.label})),IK);
+    // Pre-select project
+    document.getElementById('plan-project').value=rowId;
+  }
+  document.getElementById('plan-uren').value='4';
   openModal('plan');
 }
-
 function slaPlanblocOp(){
   if(!planContext) return;
-  const project_code = document.getElementById('plan-project').value;
-  const uren_gepland = parseFloat(document.getElementById('plan-uren').value)||0;
-  if(!project_code||uren_gepland<=0){alert('Vul project en uren in.');return;}
-  const planning = getPlanning();
-  planning.push({id:uid(), ...planContext, project_code, uren_gepland});
+  const pc=document.getElementById('plan-project').value;
+  const tl=document.getElementById('plan-teamlid').value;
+  const uren=parseFloat(document.getElementById('plan-uren').value)||0;
+  if(!pc||uren<=0){alert('Vul project en uren in.');return;}
+  const planning=getPlanning();
+  planning.push({id:uid(),datum:planContext.datum,teamlid:tl,project_code:pc,uren_gepland:uren});
   setPlanning(planning);
   sluitModal('plan');
-  renderPlanning();
+  renderTimeline();
 }
+function verwijderPlan(id){setPlanning(getPlanning().filter(p=>p.id!==id));renderTimeline();}
 
-function verwijderPlan(id){
-  setPlanning(getPlanning().filter(p=>p.id!==id));
-  renderPlanning();
-}
-
-function vulProjectSelect(elId, geselecteerd=''){
-  const sel = document.getElementById(elId);
-  const projecten = getProjecten();
-  sel.innerHTML = `<option value="">— Kies project —</option>` +
-    projecten.map(p=>`<option value="${p.code}" ${p.code===geselecteerd?'selected':''}>${p.code}${p.naam?' — '+p.naam:''}</option>`).join('');
-}
-
-function openModal(naam){document.getElementById(`modal-${naam}-overlay`).classList.add('open')}
-function sluitModal(naam){document.getElementById(`modal-${naam}-overlay`).classList.remove('open')}
-
-// ── INSTELLINGEN ──
-function openInstellingen(){
-  renderTeamledenLijst();
-  openModal('instellingen');
-}
-
-function renderTeamledenLijst(){
-  const tl = getTeamleden();
-  document.getElementById('teamleden-lijst').innerHTML = tl.map((t,i)=>`
-    <div class="teamlid-rij">
-      <input type="color" class="tl-kleur" value="${t.kleur}" onchange="updateTlKleur(${i},this.value)">
-      <input class="tl-naam-inp" value="${t.label}" onchange="updateTlLabel(${i},this.value)">
-      <select class="tl-rol" onchange="updateTlRol(${i},this.value)">
-        <option ${t.rol==='admin'?'selected':''} value="admin">Admin</option>
-        <option ${t.rol==='medewerker'?'selected':''} value="medewerker">Medewerker</option>
-      </select>
-      ${tl.length>1?`<button class="btn btn-danger btn-sm" onclick="verwijderTl(${i})">✕</button>`:''}
-    </div>`).join('');
-}
-
-function updateTlKleur(i,v){const tl=getTeamleden();tl[i].kleur=v;setTeamleden(tl);}
-function updateTlLabel(i,v){const tl=getTeamleden();tl[i].label=v;setTeamleden(tl);updateUserChip();}
-function updateTlRol(i,v){const tl=getTeamleden();tl[i].rol=v;setTeamleden(tl);}
-function verwijderTl(i){const tl=getTeamleden();tl.splice(i,1);setTeamleden(tl);renderTeamledenLijst();}
-function voegTeamlidToe(){
+// ════════════════════════════════════════════
+// RAPPORT
+// ════════════════════════════════════════════
+function renderRapport(){
+  const [van,tm]=getPeriodeDatums();
+  const entries=getEntries().filter(e=>e.duur&&e.datum>=van&&e.datum<=tm);
   const tl=getTeamleden();
-  const naam='nieuw'+Date.now();
-  tl.push({naam,label:'Nieuw teamlid',kleur:'#888888',rol:'medewerker'});
-  setTeamleden(tl);
-  renderTeamledenLijst();
-}
-
-function exportData(){
-  const entries = getEntries();
-  const rows = [['Datum','Teamlid','Project','Omschrijving','Start','Stop','Uren']];
-  entries.filter(e=>e.duur).forEach(e=>{
-    rows.push([e.datum,e.teamlid,e.project_code,e.omschrijving||'',fmtTijd(e.start),fmtTijd(e.stop),(e.duur/3600).toFixed(2)]);
+  const projecten=getProjecten();
+  const per={};
+  entries.forEach(e=>{
+    if(!per[e.project_code])per[e.project_code]={totaal:0,pp:{}};
+    per[e.project_code].totaal+=e.duur;
+    per[e.project_code].pp[e.teamlid]=(per[e.project_code].pp[e.teamlid]||0)+e.duur;
   });
-  const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);
-  a.download=`mt-uren-${vandaagStr()}.csv`;a.click();
+  const sorted=Object.entries(per).sort((a,b)=>b[1].totaal-a[1].totaal);
+  const max=sorted[0]?.[1]?.totaal||1;
+  const wrap=document.getElementById('rapport-inhoud');
+  if(!sorted.length){wrap.innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen uren in deze periode</div>`;return;}
+  wrap.innerHTML=sorted.map(([code,data])=>{
+    const p=projecten.find(x=>x.code===code);
+    const breakdown=tl.filter(t=>data.pp[t.naam]).map(t=>`<span class="pr-persoon"><span class="pr-dot" style="background:${t.kleur}"></span>${t.label} ${fmtUren(data.pp[t.naam])}</span>`).join('');
+    return `<div class="pr-item">
+      <div class="pr-header">
+        <div><div class="pr-code">${code}</div><div class="pr-naam">${p?.naam||''}</div></div>
+        <div class="pr-totaal">${fmtUren(data.totaal)}</div>
+      </div>
+      <div class="pr-bar-wrap"><div class="pr-bar" style="width:${Math.round(data.totaal/max*100)}%"></div></div>
+      <div class="pr-breakdown">${breakdown}</div>
+    </div>`;
+  }).join('');
+}
+function getPeriodeDatums(){
+  const nu=new Date();
+  if(activePeriode==='week'){const ma=maandagVan(0);const zo=datumStr(new Date(new Date(ma+'T12:00:00').setDate(new Date(ma+'T12:00:00').getDate()+6)));return[ma,zo];}
+  if(activePeriode==='maand'){const v=`${nu.getFullYear()}-${pad(nu.getMonth()+1)}-01`;const t=datumStr(new Date(nu.getFullYear(),nu.getMonth()+1,0));return[v,t];}
+  if(activePeriode==='custom'){return[document.getElementById('cv')?.value||'2000-01-01',document.getElementById('ct')?.value||vandaagStr()];}
+  return['2000-01-01','2099-12-31'];
+}
+function setPeriode(p,btn){
+  activePeriode=p;
+  document.querySelectorAll('.periode-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('custom-inputs').classList.toggle('hidden',p!=='custom');
+  renderRapport();
 }
 
-function wisAllesBevestig(){
-  if(confirm('Alle uren en planning wissen? Dit kan niet ongedaan worden gemaakt.')){
-    localStorage.removeItem('mt_uren_entries');
-    localStorage.removeItem('mt_uren_planning');
-    localStorage.removeItem('mt_uren_lopend');
-    sluitModal('instellingen');
-    toonApp();
-  }
-}
-
-// ── BORD ──
-let bordInterval = null;
-let bordKlokInterval = null;
-let bordTikerInterval = null;
-
+// ════════════════════════════════════════════
+// BORD
+// ════════════════════════════════════════════
 function renderBord(){
   renderBordActief();
   renderBordWeek();
 }
-
 function renderBordActief(){
-  const tl = getTeamleden();
-  const projecten = getProjecten();
-  const lopend = getLopende();
-  const entries = getEntries();
-  const vandaag = vandaagStr();
-  const wrap = document.getElementById('bord-actief');
+  const tl=getTeamleden();
+  const projecten=getProjecten();
+  const lopend=getLopende();
+  const entries=getEntries();
+  const vandaag=vandaagStr();
+  const wrap=document.getElementById('bord-actief');
   if(!wrap) return;
-
-  // Bouw kaarten: één per teamlid (ook als ze niets doen = grijze kaart)
-  const kaarten = tl.map(t=>{
-    const isIk = lopend && lopend.teamlid === t.naam;
-    const dagEntries = entries.filter(e=>e.teamlid===t.naam&&e.datum===vandaag&&e.duur);
-    const vandaagTotaal = dagEntries.reduce((s,e)=>s+(e.duur||0),0);
-    const lopendEntry = isIk ? lopend : null;
-    const huidigProject = lopendEntry ? projecten.find(p=>p.code===lopendEntry.project_code) : null;
-    const timerSec = lopendEntry ? Math.round((Date.now()-new Date(lopendEntry.start))/1000) : 0;
-
-    return {t, lopendEntry, huidigProject, vandaagTotaal, timerSec};
-  });
-
-  wrap.innerHTML = kaarten.map(({t, lopendEntry, huidigProject, vandaagTotaal, timerSec})=>`
-    <div class="bord-actief-kaart${lopendEntry?' loopt':''}">
+  wrap.innerHTML=tl.map(t=>{
+    const isLopend=lopend&&lopend.teamlid===t.naam;
+    const entry=isLopend?lopend:null;
+    const p=entry?projecten.find(x=>x.code===entry.project_code):null;
+    const dagTotaal=entries.filter(e=>e.teamlid===t.naam&&e.datum===vandaag&&e.duur).reduce((s,e)=>s+(e.duur||0),0);
+    const sec=entry?Math.round((Date.now()-new Date(entry.start))/1000):0;
+    return `<div class="bord-kaart${entry?' loopt':''}" onclick="bordKaartKlik('${t.naam}')">
       <div class="bord-kaart-glow"></div>
       <div class="bord-kaart-persoon">
-        <span class="bord-kaart-persoon-dot" style="background:${t.kleur}"></span>
-        <span class="bord-kaart-persoon-naam">${t.label}</span>
-        ${lopendEntry?'<span class="bord-pulse" style="margin-left:auto"></span>':''}
+        <span class="bk-dot" style="background:${t.kleur}"></span>
+        <span class="bk-naam">${t.label}</span>
+        ${entry?'<span class="bk-pulse"></span>':''}
       </div>
-      ${lopendEntry
-        ? `<div class="bord-kaart-project">${lopendEntry.project_code}</div>
-           <div class="bord-kaart-naam">${huidigProject?.naam||''}</div>
-           <div class="bord-kaart-bottom">
-             <div class="bord-kaart-timer" data-start="${lopendEntry.start}" data-id="bord-timer-${t.naam}">${fmtDuur(timerSec)}</div>
-             <div class="bord-kaart-vandaag">Vandaag ${fmtUren(vandaagTotaal)}</div>
-           </div>`
-        : `<div class="bord-kaart-naam" style="font-style:italic;margin-top:0.25rem">${vandaagTotaal?'Gestopt':'Geen timer actief'}</div>
-           <div class="bord-kaart-bottom">
-             <div class="bord-kaart-timer" style="opacity:0.3">—</div>
-             <div class="bord-kaart-vandaag">${vandaagTotaal?'Vandaag '+fmtUren(vandaagTotaal):''}</div>
-           </div>`
+      ${entry
+        ?`<div class="bk-project">${entry.project_code}</div>
+          <div class="bk-taak">${entry.taak_naam||entry.omschrijving||'—'}</div>
+          <div class="bk-bottom">
+            <div class="bk-timer" data-start="${entry.start}">${fmtDuur(sec)}</div>
+            <div class="bk-vandaag">${dagTotaal?fmtUren(dagTotaal)+' vandaag':''}</div>
+          </div>`
+        :`<div class="bk-taak" style="font-style:italic">${dagTotaal?'Gestopt':'Geen timer'}</div>
+          <div class="bk-bottom">
+            <div class="bk-timer" style="opacity:0.25">—</div>
+            <div class="bk-vandaag">${dagTotaal?fmtUren(dagTotaal)+' vandaag':''}</div>
+          </div>`
       }
-    </div>`).join('');
+      <div class="bord-start-hint">${IK===t.naam?'Tik om timer te starten':'Tik om timer te starten als '+t.label}</div>
+    </div>`;
+  }).join('');
 }
-
-function tickBordTimers(){
-  // Update alle lopende timer-displays op het bord zonder de DOM opnieuw op te bouwen
-  document.querySelectorAll('[data-start][data-id]').forEach(el=>{
-    const sec = Math.round((Date.now()-new Date(el.dataset.start))/1000);
-    el.textContent = fmtDuur(sec);
-  });
-  // Update klok
-  const klok = document.getElementById('bord-klok');
-  if(klok) klok.textContent = new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+function bordKaartKlik(naam){
+  const orig=IK;
+  if(IK!==naam) IK=naam;
+  openStartModal(null); // null = open project kiezer eerst
+  if(IK!==orig) IK=orig; // herstel na modal open
+  // Alternatief: switch naar timer tab
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{if(b.textContent.includes('Timer'))b.click();});
 }
 
 function renderBordWeek(){
-  const wrap = document.getElementById('bord-week');
+  const wrap=document.getElementById('bord-week');
   if(!wrap) return;
-  const ma = maandagVanWeek(0);
-  const dagen = [];
+  const ma=maandagVan(0);
+  const dagen=[];
   for(let i=0;i<5;i++){const d=new Date(ma+'T12:00:00');d.setDate(d.getDate()+i);dagen.push(datumStr(d));}
-  const vandaag = vandaagStr();
-  const tl = getTeamleden();
-  const projecten = getProjecten();
-  const planning = getPlanning();
-  const entries = getEntries();
-
-  // Bepaal welke projecten relevant zijn deze week
-  const relevante = new Set();
-  planning.filter(p=>dagen.includes(p.datum)).forEach(p=>relevante.add(p.project_code));
-  entries.filter(e=>dagen.includes(e.datum)&&e.duur).forEach(e=>relevante.add(e.project_code));
-
-  if(!relevante.size){
-    wrap.innerHTML = `<div class="bord-leeg">Geen projecten ingepland of geregistreerd deze week</div>`;
-    return;
-  }
-
-  const labelBreedte = 140;
-  const colTemplate = `${labelBreedte}px repeat(5,1fr)`;
-
-  let html = `<div class="bord-week-grid">
-    <div class="bord-week-header" style="grid-template-columns:${colTemplate}">
-      <div class="bord-wh-cel"></div>
-      ${dagen.map(d=>{
-        const dObj = new Date(d+'T12:00:00');
-        const dag = dObj.toLocaleDateString('nl-NL',{weekday:'short'});
-        const datum = dObj.toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
-        return `<div class="bord-wh-cel${d===vandaag?' vandaag':''}">${dag}<br><span style="font-size:10px;opacity:0.7">${datum}</span></div>`;
-      }).join('')}
-    </div>`;
-
-  [...relevante].sort().forEach(code=>{
-    const p = projecten.find(x=>x.code===code);
-    html += `<div class="bord-week-rij" style="grid-template-columns:${colTemplate}">
-      <div class="bord-project-label">
+  const vandaag=vandaagStr();
+  const tl=getTeamleden();
+  const projecten=getProjecten();
+  const planning=getPlanning();
+  const entries=getEntries();
+  const rel=new Set();
+  planning.filter(p=>dagen.includes(p.datum)).forEach(p=>rel.add(p.project_code));
+  entries.filter(e=>dagen.includes(e.datum)&&e.duur).forEach(e=>rel.add(e.project_code));
+  if(!rel.size){wrap.innerHTML=`<div class="bord-leeg">Geen planning of uren deze week</div>`;return;}
+  const labelW=130;
+  const cols=`${labelW}px repeat(5,1fr)`;
+  let html=`<div class="bord-week-grid"><div class="bord-wh" style="grid-template-columns:${cols}">
+    <div class="bord-wh-cel"></div>
+    ${dagen.map(d=>{
+      const dO=new Date(d+'T12:00:00');
+      return`<div class="bord-wh-cel${d===vandaag?' vandaag':''}">${weekdagKort(d)}<br><span style="font-size:9px;opacity:0.7">${dO.getDate()} ${dO.toLocaleDateString('nl-NL',{month:'short'})}</span></div>`;
+    }).join('')}
+  </div>`;
+  [...rel].sort().forEach(code=>{
+    const p=projecten.find(x=>x.code===code);
+    html+=`<div class="bord-rij" style="grid-template-columns:${cols}">
+      <div class="bord-pl" onclick="openStartModal('${code}')">
         <div class="bord-pl-code">${code}</div>
         <div class="bord-pl-naam">${p?.naam||''}</div>
       </div>`;
-
     dagen.forEach(dag=>{
-      html += `<div class="bord-dag-cel${dag===vandaag?' vandaag':''}">`;
-
-      // Planblokken (gestippeld)
-      planning.filter(pb=>pb.datum===dag&&pb.project_code===code).forEach(pb=>{
-        const tlid = tl.find(t=>t.naam===pb.teamlid);
-        html += `<div class="bord-blok bord-blok-plan" style="border-color:${tlid?.kleur||'#999'}44">
-          <span class="bord-blok-plan-label">${tlid?.label||pb.teamlid} ${pb.uren_gepland}u plan</span>
-        </div>`;
-      });
-
-      // Gerealiseerde uren per persoon (kleur-blok)
-      tl.forEach(t=>{
-        const som = entries.filter(e=>e.datum===dag&&e.project_code===code&&e.teamlid===t.naam&&e.duur)
-                          .reduce((s,e)=>s+(e.duur||0),0);
-        if(som>0){
-          html += `<div class="bord-blok bord-blok-act" style="background:${t.kleur}">
-            <span class="bord-blok-act-label">${t.label}</span>
-            <span class="bord-blok-act-uren">${fmtUren(som)}</span>
-          </div>`;
-        }
-      });
-
-      html += `</div>`;
+      const plans=planning.filter(pb=>pb.datum===dag&&pb.project_code===code);
+      const acts=tl.map(t=>({...t,som:entries.filter(e=>e.datum===dag&&e.project_code===code&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
+      html+=`<div class="bord-dag-cel${dag===vandaag?' vandaag':''}">
+        ${plans.map(pb=>{const tlid=tl.find(t=>t.naam===pb.teamlid);return`<div class="bord-blok-plan">${tlid?.label||pb.teamlid} ${pb.uren_gepland}u</div>`;}).join('')}
+        ${acts.map(b=>`<div class="bord-blok-act" style="background:${b.kleur}">${b.label} ${fmtUren(b.som)}</div>`).join('')}
+      </div>`;
     });
-
-    html += `</div>`;
+    html+=`</div>`;
   });
-
-  html += `</div>`;
-  wrap.innerHTML = html;
+  html+=`</div>`;
+  wrap.innerHTML=html;
 }
 
 function startBord(){
-  // Datum header
-  const datum = document.getElementById('bord-datum');
-  if(datum) datum.textContent = new Date().toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const d=document.getElementById('bord-datum');
+  if(d) d.textContent=new Date().toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   renderBord();
-  // Klok tikt elke seconde
-  if(bordKlokInterval) clearInterval(bordKlokInterval);
-  bordKlokInterval = setInterval(tickBordTimers, 1000);
-  // Volledig bord herlaadt elke 30 seconden (nieuwe entries van anderen)
+  if(bordKlokInt) clearInterval(bordKlokInt);
+  bordKlokInt=setInterval(()=>{
+    document.querySelectorAll('[data-start]').forEach(el=>{
+      el.textContent=fmtDuur(Math.round((Date.now()-new Date(el.dataset.start))/1000));
+    });
+    const kl=document.getElementById('bord-klok');
+    if(kl) kl.textContent=new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  },1000);
   if(bordInterval) clearInterval(bordInterval);
-  bordInterval = setInterval(()=>{
-    renderBordActief();
-    renderBordWeek();
-  }, 30000);
+  bordInterval=setInterval(()=>{renderBordActief();renderBordWeek();},30000);
 }
-
 function stopBord(){
-  if(bordKlokInterval){clearInterval(bordKlokInterval);bordKlokInterval=null;}
+  if(bordKlokInt){clearInterval(bordKlokInt);bordKlokInt=null;}
   if(bordInterval){clearInterval(bordInterval);bordInterval=null;}
 }
-
-function toggleFullscreen(){
-  const fs = document.body.classList.toggle('bord-fullscreen');
-  const btn = document.querySelector('.bord-fs-btn');
-  if(btn) btn.textContent = fs ? '✕ Verlaat volledig scherm' : '⛶ Volledig scherm';
-  if(fs){
-    document.documentElement.requestFullscreen?.().catch(()=>{});
-  } else {
-    document.exitFullscreen?.().catch(()=>{});
-  }
+function toggleBordFS(){
+  const fs=document.body.classList.toggle('bord-fs');
+  document.querySelector('.bord-fs-btn').textContent=fs?'✕ Sluit volledig scherm':'⛶ Volledig scherm';
+  fs?document.documentElement.requestFullscreen?.().catch(()=>{}):document.exitFullscreen?.().catch(()=>{});
 }
 
-// ── TABS ──
-function showTab(naam, btn){
+// ════════════════════════════════════════════
+// ENTRY BEWERKEN
+// ════════════════════════════════════════════
+function openEditEntry(id){
+  editEntryId=id;
+  const e=getEntries().find(x=>x.id===id);
+  if(!e) return;
+  vulSelect('edit-project',getProjecten().map(p=>({v:p.code,l:`${p.code}${p.naam?' — '+p.naam:''}`})),e.project_code);
+  vulTaakSelect('edit-taak',e.project_code,e.taak_id);
+  document.getElementById('edit-desc').value=e.omschrijving||'';
+  document.getElementById('edit-start').value=e.start?new Date(e.start).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+  document.getElementById('edit-stop').value=e.stop?new Date(e.stop).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+  openModal('entry');
+}
+function slaEntryOp(){
+  const entries=getEntries();
+  const idx=entries.findIndex(x=>x.id===editEntryId);
+  if(idx<0) return;
+  const e=entries[idx];
+  const s=document.getElementById('edit-start').value;
+  const st=document.getElementById('edit-stop').value;
+  const pc=document.getElementById('edit-project').value;
+  const taakId=document.getElementById('edit-taak').value||null;
+  const taakNaam=taakId?((getTaken()[pc]||[]).find(t=>t.id===taakId)||{}).naam||null:null;
+  const startIso=s?new Date(`${e.datum}T${s}:00`).toISOString():e.start;
+  const stopIso=st?new Date(`${e.datum}T${st}:00`).toISOString():e.stop;
+  const duur=startIso&&stopIso?Math.round((new Date(stopIso)-new Date(startIso))/1000):e.duur;
+  entries[idx]={...e,project_code:pc,taak_id:taakId,taak_naam:taakNaam,omschrijving:document.getElementById('edit-desc').value.trim(),start:startIso,stop:stopIso,duur};
+  setEntries(entries);
+  sluitModal('entry');
+  renderDag();
+}
+function verwijderEntry(id){
+  if(!confirm('Entry verwijderen?')) return;
+  setEntries(getEntries().filter(e=>e.id!==id));
+  renderDag();
+  renderTimer();
+}
+
+// ════════════════════════════════════════════
+// TAKEN BEHEER
+// ════════════════════════════════════════════
+function openTakenBeheer(){
+  renderTakenBeheer();
+  openModal('taken');
+}
+function renderTakenBeheer(){
+  const projecten=getProjecten();
+  const taken=getTaken();
+  document.getElementById('taken-beheer-inhoud').innerHTML=projecten.map(p=>`
+    <div class="taken-blok">
+      <div class="taken-blok-header" onclick="toggleTakenBlok('tb-${p.code}')">
+        <span class="taken-project-label">${p.code}</span>
+        <span style="font-size:11px;color:var(--text-faint)">${(taken[p.code]||[]).length} taken ▾</span>
+      </div>
+      <div id="tb-${p.code.replace(/[^a-z0-9]/gi,'_')}" style="display:none">
+        ${(taken[p.code]||[]).map(t=>`
+          <div class="taak-rij">
+            <span class="taak-rij-naam">${t.naam}</span>
+            <button class="icon-knop" onclick="voegSubtaakToe('${p.code}','${t.id}')">+ sub</button>
+            <button class="icon-knop del" onclick="verwijderTaak('${p.code}','${t.id}')">✕</button>
+          </div>
+          ${(t.subtaken||[]).map(s=>`
+            <div class="subtaak-rij">
+              <span class="subtaak-rij-naam">↳ ${s.naam}</span>
+              <button class="icon-knop del" onclick="verwijderSubtaak('${p.code}','${t.id}','${s.id}')">✕</button>
+            </div>`).join('')}
+          <div class="add-taak-row" style="padding-left:2rem">
+            <input class="add-taak-input" id="sub-inp-${t.id}" placeholder="Subtaak toevoegen…" onkeydown="if(event.key==='Enter')voegSubtaakToeInp('${p.code}','${t.id}')">
+            <button class="add-taak-btn" onclick="voegSubtaakToeInp('${p.code}','${t.id}')">+</button>
+          </div>`).join('')}
+        <div class="add-taak-row">
+          <input class="add-taak-input" id="taak-inp-${p.code.replace(/[^a-z0-9]/gi,'_')}" placeholder="Taak toevoegen…" onkeydown="if(event.key==='Enter')voegTaakToe('${p.code}')">
+          <button class="add-taak-btn" onclick="voegTaakToe('${p.code}')">+</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+function toggleTakenBlok(id){
+  const el=document.getElementById(id.replace(/[^a-z0-9_]/gi,'_').replace('tb-','tb_'));
+  // Find by searching children
+  const allBloks=document.querySelectorAll('.taken-blok');
+  allBloks.forEach(b=>{
+    if(b.querySelector('.taken-project-label')?.textContent===id.replace('tb-','')){
+      const inner=b.querySelector('[id^="tb_"]')||b.querySelectorAll('div')[1];
+      if(inner) inner.style.display=inner.style.display==='none'?'block':'none';
+    }
+  });
+}
+function voegTaakToe(projectCode){
+  const key=projectCode.replace(/[^a-z0-9]/gi,'_');
+  const inp=document.getElementById('taak-inp-'+key);
+  if(!inp||!inp.value.trim()) return;
+  const taken=getTaken();
+  if(!taken[projectCode]) taken[projectCode]=[];
+  taken[projectCode].push({id:uid(),naam:inp.value.trim(),subtaken:[]});
+  setTaken(taken);
+  inp.value='';
+  renderTakenBeheer();
+}
+function voegSubtaakToeInp(pc,taakId){
+  const inp=document.getElementById('sub-inp-'+taakId);
+  if(!inp||!inp.value.trim()) return;
+  const taken=getTaken();
+  const t=(taken[pc]||[]).find(x=>x.id===taakId);
+  if(!t) return;
+  if(!t.subtaken) t.subtaken=[];
+  t.subtaken.push({id:uid(),naam:inp.value.trim()});
+  setTaken(taken);
+  inp.value='';
+  renderTakenBeheer();
+}
+function verwijderTaak(pc,id){const taken=getTaken();taken[pc]=(taken[pc]||[]).filter(t=>t.id!==id);setTaken(taken);renderTakenBeheer();}
+function verwijderSubtaak(pc,taakId,subId){const taken=getTaken();const t=(taken[pc]||[]).find(x=>x.id===taakId);if(t)t.subtaken=(t.subtaken||[]).filter(s=>s.id!==subId);setTaken(taken);renderTakenBeheer();}
+
+// ════════════════════════════════════════════
+// INSTELLINGEN
+// ════════════════════════════════════════════
+function renderInstTeamleden(){
+  const tl=getTeamleden();
+  document.getElementById('inst-teamleden').innerHTML=tl.map((t,i)=>`
+    <div class="tl-rij">
+      <input type="color" class="kleur-input" value="${t.kleur}" onchange="tlUpdate(${i},'kleur',this.value)">
+      <input class="tl-inp" value="${t.label}" onchange="tlUpdate(${i},'label',this.value)">
+      <select class="tl-sel" onchange="tlUpdate(${i},'rol',this.value)">
+        <option ${t.rol==='admin'?'selected':''} value="admin">Admin</option>
+        <option ${t.rol==='medewerker'?'selected':''} value="medewerker">Medewerker</option>
+      </select>
+      ${tl.length>1?`<button class="icon-knop del" onclick="tlVerwijder(${i})">✕</button>`:''}
+    </div>`).join('');
+}
+function tlUpdate(i,k,v){const tl=getTeamleden();tl[i][k]=v;setTeamleden(tl);updateChip();}
+function tlVerwijder(i){const tl=getTeamleden();tl.splice(i,1);setTeamleden(tl);renderInstTeamleden();}
+function voegTlToe(){const tl=getTeamleden();tl.push({naam:'nieuw'+Date.now(),label:'Nieuw teamlid',kleur:'#888',rol:'medewerker'});setTeamleden(tl);renderInstTeamleden();}
+function exportCSV(){
+  const rows=[['Datum','Teamlid','Project','Taak','Omschrijving','Start','Stop','Uren']];
+  getEntries().filter(e=>e.duur).forEach(e=>rows.push([e.datum,e.teamlid,e.project_code,e.taak_naam||'',e.omschrijving||'',fmtTijd(e.start),fmtTijd(e.stop),(e.duur/3600).toFixed(2)]));
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);a.download=`mt-uren-${vandaagStr()}.csv`;a.click();
+}
+function wisAlles(){if(confirm('Alle uren en planning wissen?')){['mt_uren_entries','mt_uren_planning','mt_uren_lopend'].forEach(k=>localStorage.removeItem(k));sluitModal('inst');showApp();}}
+
+// ════════════════════════════════════════════
+// MODAL HELPERS
+// ════════════════════════════════════════════
+function openModal(naam){
+  if(naam==='inst') renderInstTeamleden();
+  if(naam==='taken') renderTakenBeheer();
+  document.getElementById(`modal-${naam}-overlay`).classList.add('open');
+}
+function sluitModal(naam){document.getElementById(`modal-${naam}-overlay`).classList.remove('open');}
+function vulSelect(elId,opties,geselecteerd=''){
+  const sel=document.getElementById(elId);
+  if(!sel) return;
+  sel.innerHTML=`<option value="">— Kies —</option>`+opties.map(o=>`<option value="${o.v}"${o.v===geselecteerd?' selected':''}>${o.l}</option>`).join('');
+}
+function vulTaakSelect(elId,projectCode,geselecteerd=''){
+  const taken=(getTaken()[projectCode]||[]);
+  const opties=[{v:'',l:'— Geen taak —'},...taken.map(t=>({v:t.id,l:t.naam}))];
+  vulSelect(elId,opties,geselecteerd);
+}
+
+// ════════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════════
+function showTab(naam,btn){
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+naam).classList.add('active');
   if(btn) btn.classList.add('active');
-  actieveTab = naam;
+  actTab=naam;
   if(naam==='dag') renderDag();
-  if(naam==='planning') renderPlanning();
-  if(naam==='projecten') renderProjectRapport();
+  if(naam==='timeline') renderTimeline();
+  if(naam==='rapport') renderRapport();
   if(naam==='timer') renderTimer();
   if(naam==='bord'){startBord();}else{stopBord();}
 }
