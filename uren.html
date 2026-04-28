@@ -206,6 +206,7 @@ body.bord-fs .bord-klok{color:rgba(255,255,255,0.4);font-size:22px}
 body.bord-fs .bord-fs-btn{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.5)}
 .bord-sectie{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-faint);margin-bottom:1rem}
 body.bord-fs .bord-sectie{color:rgba(255,255,255,0.3);font-size:13px}
+body.bord-fs #bord-werkdruk-label{margin-top:2.5rem}
 /* Actief grid */
 .bord-actief-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem}
 body.bord-fs .bord-actief-grid{grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1.5rem}
@@ -338,6 +339,81 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
   .main{max-width:960px;margin:0 auto}
   .timer-wrap{max-width:960px;margin:0 auto;padding:1.25rem}
 }
+
+/* ── STATUS BADGES ── */
+.status-badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:12px;font-weight:600;letter-spacing:0.02em;border:1px solid transparent;white-space:nowrap}
+.s-offerte{background:#FBF5E0;color:#7a6010;border-color:#E8D48A}
+.s-werkvoorbereiding{background:#E8EDFB;color:#1a3a8b;border-color:#b5c5f5}
+.s-productie{background:#E6EFE9;color:#2A4A38;border-color:#c0d8c8}
+.s-levering{background:#F0EDFB;color:#5a3a8b;border-color:#c5b5f5}
+.s-klaar{background:#d4edd9;color:#1a3a28;border-color:#a0c8a8}
+.s-archief{background:#F2EFE8;color:#A8A090;border-color:#C8C0B0}
+
+/* ── FULLSCREEN ALLE TABS ── */
+body.tab-fs header,body.tab-fs .tabs-wrap,body.tab-fs .timer-bar{display:none!important}
+body.tab-fs .tab-content.active{height:100vh;overflow-y:auto;box-sizing:border-box}
+body.tab-fs .main{max-width:100%!important;margin:0;padding:2rem 2.5rem}
+body.tab-fs .timer-wrap{max-width:100%!important;margin:0;padding:2rem 2.5rem}
+.tab-fs-btn{position:fixed;bottom:1.25rem;right:1.25rem;z-index:80;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;color:var(--text-dim);box-shadow:var(--shadow);transition:all 0.15s;display:flex;align-items:center;gap:5px}
+.tab-fs-btn:hover{border-color:var(--green-mid);color:var(--green)}
+body.bord-fs .tab-fs-btn{display:none!important}
+
+/* ── PROJECT DETAIL MODAL ── */
+.modal-xl{max-width:680px!important;width:95vw}
+.proj-detail-head{display:flex;align-items:flex-start;gap:1rem;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+.proj-detail-code{font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:500}
+.proj-detail-naam{font-family:var(--serif);font-size:20px;font-weight:300;margin-top:2px}
+.detail-section{margin-bottom:1.25rem}
+.detail-section-title{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint);margin-bottom:0.75rem;padding-bottom:0.4rem;border-bottom:1px solid var(--border)}
+.status-kiezer{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:0.5rem}
+.status-opt{padding:4px 11px;border-radius:20px;border:1.5px solid var(--border);background:transparent;cursor:pointer;font-size:11px;font-weight:600;font-family:var(--mono);transition:all 0.15s}
+.status-opt:hover{opacity:0.8}
+.status-opt.actief{border-width:2px}
+/* Taken in detail */
+.pd-taak{border:1px solid var(--border);border-radius:8px;margin-bottom:0.5rem;overflow:hidden}
+.pd-taak-bar{display:flex;align-items:center;gap:0.5rem;padding:0.6rem 0.75rem;background:var(--surface2);cursor:pointer;transition:background 0.12s}
+.pd-taak-bar:hover{background:var(--gold-light)}
+.pd-taak-naam{font-size:13px;font-weight:500;flex:1}
+.pd-taak-est{font-family:var(--mono);font-size:11px;color:var(--text-faint);padding:2px 6px;border-radius:4px;background:var(--surface);border:1px solid var(--border)}
+.pd-assignee-chip{display:inline-flex;align-items:center;gap:3px;font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:12px;background:var(--surface);border:1px solid var(--border);margin-left:3px}
+.pd-assignee-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.pd-subtaak-rij{padding:0.4rem 0.75rem 0.4rem 2rem;border-top:1px solid var(--border);display:flex;align-items:center;gap:0.5rem;font-size:12px;color:var(--text-dim);background:var(--surface)}
+.pd-sub-naam{flex:1}
+.pd-body{display:none}
+.pd-body.open{display:block}
+.pd-taak-form{padding:0.6rem 0.75rem;border-top:1px solid var(--border);background:var(--surface)}
+.pd-row{display:flex;gap:0.4rem;margin-bottom:0.4rem;flex-wrap:wrap;align-items:center}
+.pd-inp{padding:6px 9px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--text);outline:none}
+.pd-inp:focus{border-color:var(--green-mid)}
+.pd-inp-est{width:70px;font-family:var(--mono);text-align:right}
+.pd-inp-sel{background:var(--bg);color:var(--text);cursor:pointer;font-size:12px;border:1px solid var(--border);border-radius:5px;padding:4px 6px}
+.pd-btn-sm{padding:5px 10px;border-radius:5px;border:none;cursor:pointer;font-size:11px;font-weight:600;background:var(--green);color:#fff}
+.pd-add-taak-form{margin-top:0.5rem;padding:0.6rem 0;display:flex;gap:0.4rem}
+
+/* ── WERKDRUK / CAPACITEIT ── */
+.werkdruk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem}
+body.bord-fs .werkdruk-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1.25rem}
+.werkdruk-kaart{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0.9rem 1rem;box-shadow:var(--shadow)}
+body.bord-fs .werkdruk-kaart{background:#2a2720;border-color:rgba(255,255,255,0.1);border-radius:14px;padding:1.25rem}
+.wk-naam{font-size:12px;font-weight:600;margin-bottom:0.6rem;display:flex;align-items:center;gap:0.5rem}
+body.bord-fs .wk-naam{font-size:14px;color:#F7F5F0}
+.wk-bar-wrap{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:4px 0;position:relative}
+body.bord-fs .wk-bar-wrap{background:rgba(255,255,255,0.08);height:8px}
+.wk-bar-gepland{position:absolute;top:0;left:0;height:100%;border-radius:3px;background:var(--gold);opacity:0.7;transition:width 0.4s}
+.wk-bar-geboekt{position:absolute;top:0;left:0;height:100%;border-radius:3px;background:var(--green-mid);transition:width 0.4s}
+.wk-stats{font-family:var(--mono);font-size:10px;color:var(--text-faint);display:flex;gap:0.6rem;flex-wrap:wrap;margin-top:4px}
+body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
+.wk-over{color:var(--red)!important}
+
+/* ── PROJ ITEM ENHANCED ── */
+.proj-item{cursor:pointer;transition:background 0.12s}
+.proj-item:hover{background:var(--gold-light)}
+.proj-status-col{flex-shrink:0;min-width:90px}
+/* Project card info knop */
+.pc-info-btn{position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:12px;padding:2px 5px;border-radius:4px;transition:all 0.12s;opacity:0;line-height:1}
+.project-card:hover .pc-info-btn{opacity:1}
+.project-card{position:relative}
+.pc-info-btn:hover{background:var(--surface2);color:var(--green)}
 </style>
 </head>
 <body>
@@ -498,9 +574,14 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
       <div class="bord-actief-grid" id="bord-actief"></div>
       <div class="bord-sectie">Deze week</div>
       <div id="bord-week"></div>
+      <div class="bord-sectie" style="margin-top:2rem" id="bord-werkdruk-label">Werkdruk deze week</div>
+      <div id="bord-werkdruk"></div>
     </div>
   </div>
 </div>
+
+<!-- FLOATING FULLSCREEN KNOP (alle tabs behalve Bord) -->
+<button class="tab-fs-btn" id="tab-fs-btn" onclick="toggleTabFS()" style="display:none">⛶ Volledig scherm</button>
 
 <!-- MODAL: Start timer -->
 <div class="modal-overlay" id="modal-start-overlay" onclick="if(event.target===this)sluitModal('start')">
@@ -644,6 +725,21 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
   </div>
 </div>
 
+<!-- MODAL: Project detail -->
+<div class="modal-overlay" id="modal-proj-detail-overlay" onclick="if(event.target===this)sluitModal('proj-detail')">
+  <div class="modal modal-xl" style="max-height:90vh;overflow-y:auto">
+    <div class="modal-title">
+      <span id="proj-detail-title">Project</span>
+      <button class="modal-close" onclick="sluitModal('proj-detail')">✕</button>
+    </div>
+    <div id="proj-detail-inhoud"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="sluitModal('proj-detail')">Sluiten</button>
+      <button class="btn btn-primary" onclick="openStartModal(projDetailCode);sluitModal('proj-detail')">▶ Timer starten</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Instellingen -->
 <div class="modal-overlay" id="modal-inst-overlay" onclick="if(event.target===this)sluitModal('inst')">
   <div class="modal">
@@ -652,6 +748,10 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
       <div class="inst-sectie-title">Team</div>
       <div id="inst-teamleden"></div>
       <div style="margin-top:0.75rem"><button class="btn btn-secondary btn-sm" onclick="voegTlToe()">+ Teamlid</button></div>
+    </div>
+    <div class="inst-sectie">
+      <div class="inst-sectie-title">Capaciteit (uren per week)</div>
+      <div id="inst-capaciteit"></div>
     </div>
     <div class="inst-sectie">
       <div class="inst-sectie-title">Data</div>
@@ -671,6 +771,21 @@ const STD_TEAMLEDEN = [
   {naam:'arjan',   label:'Arjan',   kleur:'#5a3a8b', rol:'medewerker'},
   {naam:'maarten', label:'Maarten', kleur:'#1a3a8b', rol:'medewerker'},
 ];
+
+const PROJ_STATUS = {
+  offerte:           {label:'Offerte',            c:'#7a6010', bg:'#FBF5E0', bc:'#E8D48A'},
+  werkvoorbereiding: {label:'Werkvoorbereiding',  c:'#1a3a8b', bg:'#E8EDFB', bc:'#b5c5f5'},
+  productie:         {label:'Productie',          c:'#2A4A38', bg:'#E6EFE9', bc:'#c0d8c8'},
+  levering:          {label:'Klaar voor levering',c:'#5a3a8b', bg:'#F0EDFB', bc:'#c5b5f5'},
+  klaar:             {label:'Geleverd',           c:'#1a3a28', bg:'#d4edd9', bc:'#a0c8a8'},
+  archief:           {label:'Archief',            c:'#A8A090', bg:'#F2EFE8', bc:'#C8C0B0'},
+};
+
+function statusBadge(status){
+  const s=PROJ_STATUS[status];
+  if(!s) return '';
+  return `<span class="status-badge" style="background:${s.bg};color:${s.c};border-color:${s.bc}">${s.label}</span>`;
+}
 
 let IK = null;
 let actTab = 'timer';
@@ -713,6 +828,8 @@ function getTeamleden(){return JSON.parse(localStorage.getItem('mt_uren_teamlede
 function setTeamleden(t){localStorage.setItem('mt_uren_teamleden',JSON.stringify(t))}
 function getTaken(){return JSON.parse(localStorage.getItem('mt_uren_taken')||'{}')}
 function setTaken(t){localStorage.setItem('mt_uren_taken',JSON.stringify(t))}
+function getCapaciteit(){return JSON.parse(localStorage.getItem('mt_uren_capaciteit')||'null')||{};}
+function setCapaciteit(c){localStorage.setItem('mt_uren_capaciteit',JSON.stringify(c));}
 function getLopende(){return JSON.parse(localStorage.getItem('mt_uren_lopend')||'null')}
 function setLopende(e){e?localStorage.setItem('mt_uren_lopend',JSON.stringify(e)):localStorage.removeItem('mt_uren_lopend')}
 function getProjecten(){
@@ -784,9 +901,11 @@ function renderTimer(){
     const takenLijst=taken[p.code]||[];
     const uren=urenV[p.code];
     return `<div class="project-card${actief?' actief':''}" onclick="openStartModal('${p.code}')">
+      <button class="pc-info-btn" onclick="event.stopPropagation();openProjectDetail('${p.code}')" title="Project details">ℹ</button>
       <div class="pc-code">${p.code}</div>
       <div class="pc-naam">${p.naam||p.code}</div>
       <div class="pc-meta">
+        ${p.status?statusBadge(p.status):''}
         ${takenLijst.length?`<span class="pc-taken-count">${takenLijst.length} taken</span>`:''}
         ${uren?`<span>${fmtUren(uren)} vandaag</span>`:''}
       </div>
@@ -1134,6 +1253,49 @@ function setPeriode(p,btn){
 function renderBord(){
   renderBordActief();
   renderBordWeek();
+  renderBordWerkdruk();
+}
+
+function renderBordWerkdruk(){
+  const wrap=document.getElementById('bord-werkdruk');
+  if(!wrap) return;
+  const tl=getTeamleden();
+  const cap=getCapaciteit();
+  const planning=getPlanning();
+  const entries=getEntries();
+  const taken=getTaken();
+  const ma=maandagVan(0);
+  const dagen=[];
+  for(let i=0;i<5;i++){const d=new Date(ma+'T12:00:00');d.setDate(d.getDate()+i);dagen.push(datumStr(d));}
+  wrap.innerHTML=`<div class="werkdruk-grid">${tl.map(t=>{
+    const capUren=cap[t.naam]||40;
+    const gepland=planning.filter(p=>dagen.includes(p.datum)&&p.teamlid===t.naam).reduce((s,p)=>s+p.uren_gepland,0);
+    const geboekt=entries.filter(e=>dagen.includes(e.datum)&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur/3600),0);
+    let estTotaal=0;
+    Object.values(taken).forEach(lijst=>lijst.forEach(taak=>{
+      if((taak.toegewezen||[]).includes(t.naam)&&taak.estimate_uren) estTotaal+=taak.estimate_uren;
+    }));
+    const gepPct=Math.min(gepland/capUren*100,100);
+    const gbkPct=Math.min(geboekt/capUren*100,100);
+    const isOver=gepland>capUren||geboekt>capUren;
+    return `<div class="werkdruk-kaart">
+      <div class="wk-naam">
+        <span style="width:9px;height:9px;border-radius:50%;background:${t.kleur};display:inline-block;flex-shrink:0"></span>
+        ${t.label}
+        ${isOver?'<span style="color:var(--red);font-size:10px;margin-left:auto">⚠ vol</span>':''}
+      </div>
+      <div class="wk-bar-wrap">
+        <div class="wk-bar-gepland" style="width:${gepPct}%"></div>
+        <div class="wk-bar-geboekt" style="width:${gbkPct}%"></div>
+      </div>
+      <div class="wk-stats">
+        <span style="color:var(--gold)">▬ ${gepland.toFixed(1)}u gepland</span>
+        <span style="color:var(--green-mid)">▬ ${geboekt.toFixed(1)}u geboekt</span>
+        <span>/ ${capUren}u cap</span>
+        ${estTotaal?`<span style="color:var(--blue)">≈ ${estTotaal}u estimate</span>`:''}
+      </div>
+    </div>`;
+  }).join('')}</div>`;
 }
 function renderBordActief(){
   const tl=getTeamleden();
@@ -1209,9 +1371,10 @@ function renderBordWeek(){
   [...rel].sort().forEach(code=>{
     const p=projecten.find(x=>x.code===code);
     html+=`<div class="bord-rij" style="grid-template-columns:${cols}">
-      <div class="bord-pl" onclick="openStartModal('${code}')">
+      <div class="bord-pl" onclick="openProjectDetail('${code}')">
         <div class="bord-pl-code">${code}</div>
         <div class="bord-pl-naam">${p?.naam||''}</div>
+        ${p?.status?`<div style="margin-top:3px">${statusBadge(p.status)}</div>`:''}
       </div>`;
     dagen.forEach(dag=>{
       const plans=planning.filter(pb=>pb.datum===dag&&pb.project_code===code);
@@ -1240,7 +1403,7 @@ function startBord(){
     if(kl) kl.textContent=new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   },1000);
   if(bordInterval) clearInterval(bordInterval);
-  bordInterval=setInterval(()=>{renderBordActief();renderBordWeek();},30000);
+  bordInterval=setInterval(()=>{renderBordActief();renderBordWeek();renderBordWerkdruk();},30000);
 }
 function stopBord(){
   if(bordKlokInt){clearInterval(bordKlokInt);bordKlokInt=null;}
@@ -1384,9 +1547,34 @@ function renderInstTeamleden(){
       ${tl.length>1?`<button class="icon-knop del" onclick="tlVerwijder(${i})">✕</button>`:''}
     </div>`).join('');
 }
-function tlUpdate(i,k,v){const tl=getTeamleden();tl[i][k]=v;setTeamleden(tl);updateChip();}
-function tlVerwijder(i){const tl=getTeamleden();tl.splice(i,1);setTeamleden(tl);renderInstTeamleden();}
-function voegTlToe(){const tl=getTeamleden();tl.push({naam:'nieuw'+Date.now(),label:'Nieuw teamlid',kleur:'#888',rol:'medewerker'});setTeamleden(tl);renderInstTeamleden();}
+function tlUpdate(i,k,v){const tl=getTeamleden();tl[i][k]=v;setTeamleden(tl);updateChip();renderInstCapaciteit();}
+function tlVerwijder(i){const tl=getTeamleden();tl.splice(i,1);setTeamleden(tl);renderInstTeamleden();renderInstCapaciteit();}
+function voegTlToe(){const tl=getTeamleden();tl.push({naam:'nieuw'+Date.now(),label:'Nieuw teamlid',kleur:'#888',rol:'medewerker'});setTeamleden(tl);renderInstTeamleden();renderInstCapaciteit();}
+
+function renderInstCapaciteit(){
+  const tl=getTeamleden();
+  const cap=getCapaciteit();
+  const el=document.getElementById('inst-capaciteit');
+  if(!el) return;
+  el.innerHTML=tl.map(t=>`
+    <div class="tl-rij">
+      <span style="display:flex;align-items:center;gap:6px;flex:1;font-size:13px">
+        <span style="width:10px;height:10px;border-radius:50%;background:${t.kleur};display:inline-block;flex-shrink:0"></span>
+        ${t.label}
+      </span>
+      <input class="tl-inp" type="number" style="width:70px;flex:none;text-align:right;font-family:var(--mono)"
+        value="${cap[t.naam]||40}" min="1" max="80" step="1"
+        onchange="setCapPersoon('${t.naam}',this.value)">
+      <span style="font-size:12px;color:var(--text-faint);flex-shrink:0">u/week</span>
+    </div>`).join('');
+}
+
+function setCapPersoon(naam,val){
+  const cap=getCapaciteit();
+  cap[naam]=parseFloat(val)||40;
+  setCapaciteit(cap);
+  if(actTab==='bord') renderBordWerkdruk();
+}
 function exportCSV(){
   const rows=[['Datum','Teamlid','Project','Taak','Omschrijving','Start','Stop','Uren']];
   getEntries().filter(e=>e.duur).forEach(e=>rows.push([e.datum,e.teamlid,e.project_code,e.taak_naam||'',e.omschrijving||'',fmtTijd(e.start),fmtTijd(e.stop),(e.duur/3600).toFixed(2)]));
@@ -1399,9 +1587,194 @@ function wisAlles(){if(confirm('Alle uren en planning wissen?')){['mt_uren_entri
 // MODAL HELPERS
 // ════════════════════════════════════════════
 function openModal(naam){
-  if(naam==='inst') renderInstTeamleden();
+  if(naam==='inst'){renderInstTeamleden();renderInstCapaciteit();}
   if(naam==='taken') renderTakenBeheer();
   document.getElementById(`modal-${naam}-overlay`).classList.add('open');
+}
+
+// ════════════════════════════════════════════
+// PROJECT DETAIL
+// ════════════════════════════════════════════
+let projDetailCode=null;
+
+function openProjectDetail(code){
+  if(!code) return;
+  projDetailCode=code;
+  const p=getProjecten().find(x=>x.code===code);
+  document.getElementById('proj-detail-title').textContent=code+(p?.naam?' — '+p.naam:'');
+  renderProjectDetail();
+  openModal('proj-detail');
+}
+
+function renderProjectDetail(){
+  const code=projDetailCode;
+  const projecten=getProjecten();
+  const p=projecten.find(x=>x.code===code);
+  if(!p) return;
+  const taken=getTaken()[code]||[];
+  const entries=getEntries().filter(e=>e.project_code===code&&e.duur);
+  const totalSec=entries.reduce((s,e)=>s+e.duur,0);
+  const tl=getTeamleden();
+
+  const statusHtml=Object.entries(PROJ_STATUS).map(([k,v])=>`
+    <button class="status-opt${p.status===k?' actief':''}"
+      style="${p.status===k?`background:${v.bg};color:${v.c};border-color:${v.bc}`:''}"
+      onclick="setProjectStatus('${code}','${k}')">${v.label}</button>`).join('');
+
+  const takenHtml=taken.map(t=>{
+    const assigneeChips=(t.toegewezen||[]).map(naam=>{
+      const tm=tl.find(x=>x.naam===naam);
+      return tm?`<span class="pd-assignee-chip"><span class="pd-assignee-dot" style="background:${tm.kleur}"></span>${tm.label}</span>`:'';
+    }).join('');
+    const subtakenHtml=(t.subtaken||[]).map(s=>`
+      <div class="pd-subtaak-rij">
+        <span class="pd-sub-naam">↳ ${s.naam}</span>
+        <button class="icon-knop del" onclick="pdVerwijderSubtaak('${code}','${t.id}','${s.id}')">✕</button>
+      </div>`).join('');
+    const tlOptions=tl.map(tm=>`<option value="${tm.naam}"${(t.toegewezen||[]).includes(tm.naam)?' selected':''}>${tm.label}</option>`).join('');
+    return `<div class="pd-taak">
+      <div class="pd-taak-bar" onclick="togglePdTaak('pdb-${t.id}')">
+        <span class="pd-taak-naam">${t.naam}</span>
+        ${t.estimate_uren?`<span class="pd-taak-est">${t.estimate_uren}u</span>`:''}
+        ${assigneeChips}
+        <button class="icon-knop del" onclick="event.stopPropagation();pdVerwijderTaak('${code}','${t.id}')">✕</button>
+      </div>
+      <div class="pd-body" id="pdb-${t.id}">
+        ${subtakenHtml}
+        <div class="pd-taak-form">
+          <div class="pd-row">
+            <label style="font-size:11px;color:var(--text-faint);width:70px;flex-shrink:0">Estimate</label>
+            <input class="pd-inp pd-inp-est" type="number" step="0.5" min="0" placeholder="uren"
+              value="${t.estimate_uren||''}" onchange="pdSetEstimate('${code}','${t.id}',this.value)">
+            <span style="font-size:11px;color:var(--text-faint)">uur</span>
+          </div>
+          <div class="pd-row" style="align-items:flex-start">
+            <label style="font-size:11px;color:var(--text-faint);width:70px;flex-shrink:0;padding-top:5px">Toegewezen</label>
+            <select class="pd-inp-sel" multiple size="${Math.min(tl.length,4)}" style="flex:1"
+              onchange="pdSetToegewezen('${code}','${t.id}',this)">${tlOptions}</select>
+          </div>
+          <div class="pd-row" style="margin-top:0.3rem">
+            <input class="pd-inp" id="sub-inp-pd-${t.id}" placeholder="Subtaak toevoegen…" style="flex:1"
+              onkeydown="if(event.key==='Enter')pdVoegSubtaakToe('${code}','${t.id}')">
+            <button class="pd-btn-sm" onclick="pdVoegSubtaakToe('${code}','${t.id}')">+</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('proj-detail-inhoud').innerHTML=`
+    <div class="proj-detail-head">
+      <div style="flex:1">
+        <div class="proj-detail-code">${p.code}${p.klant?' · '+p.klant:''}</div>
+        <div class="proj-detail-naam">${p.naam||p.code}</div>
+      </div>
+      <div>${p.status?statusBadge(p.status):''}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Status</div>
+      <div class="status-kiezer">${statusHtml}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1.25rem">
+      <div>
+        <label class="form-label">Deadline</label>
+        <input class="form-input" type="date" value="${p.deadline||''}"
+          onchange="pdSetVeld('${code}','deadline',this.value)">
+      </div>
+      <div>
+        <label class="form-label">Geboekte uren (totaal)</label>
+        <div style="font-family:var(--mono);font-size:18px;font-weight:500;padding:8px 0;color:var(--text)">${fmtUren(totalSec)}</div>
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Omschrijving</div>
+      <textarea class="form-input" rows="2" placeholder="Project omschrijving…"
+        onchange="pdSetVeld('${code}','omschrijving',this.value)">${p.omschrijving||''}</textarea>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Taken — klik om uit te klappen en in te stellen</div>
+      ${takenHtml||'<div style="font-size:13px;color:var(--text-faint);font-style:italic;padding:0.5rem 0">Geen taken. Voeg hieronder een taak toe.</div>'}
+      <div class="pd-add-taak-form">
+        <input class="pd-inp" id="pd-add-taak-inp" placeholder="Nieuwe taak toevoegen…" style="flex:1"
+          onkeydown="if(event.key==='Enter')pdVoegTaakToe('${code}')">
+        <button class="pd-btn-sm" onclick="pdVoegTaakToe('${code}')">+ Taak</button>
+      </div>
+    </div>`;
+}
+
+function togglePdTaak(id){
+  const el=document.getElementById(id);
+  if(el) el.classList.toggle('open');
+}
+
+function setProjectStatus(code,status){
+  const lijst=getProjecten();
+  const p=lijst.find(x=>x.code===code);
+  if(p){p.status=status;setProjecten(lijst);}
+  renderProjectDetail();
+  if(actTab==='projecten') renderProjectenTab();
+  if(actTab==='timer') renderTimer();
+  if(actTab==='bord') renderBordWeek();
+}
+
+function pdSetVeld(code,veld,val){
+  const lijst=getProjecten();
+  const p=lijst.find(x=>x.code===code);
+  if(p){p[veld]=val;setProjecten(lijst);}
+}
+
+function pdSetEstimate(code,taakId,val){
+  const taken=getTaken();
+  const t=(taken[code]||[]).find(x=>x.id===taakId);
+  if(t){t.estimate_uren=parseFloat(val)||0;setTaken(taken);}
+  renderBordWerkdruk();
+}
+
+function pdSetToegewezen(code,taakId,sel){
+  const taken=getTaken();
+  const t=(taken[code]||[]).find(x=>x.id===taakId);
+  if(t){t.toegewezen=Array.from(sel.selectedOptions).map(o=>o.value);setTaken(taken);}
+  renderBordWerkdruk();
+}
+
+function pdVoegTaakToe(code){
+  const inp=document.getElementById('pd-add-taak-inp');
+  if(!inp||!inp.value.trim()) return;
+  const taken=getTaken();
+  if(!taken[code]) taken[code]=[];
+  taken[code].push({id:uid(),naam:inp.value.trim(),estimate_uren:0,toegewezen:[],subtaken:[]});
+  setTaken(taken);
+  inp.value='';
+  renderProjectDetail();
+}
+
+function pdVoegSubtaakToe(code,taakId){
+  const inp=document.getElementById('sub-inp-pd-'+taakId);
+  if(!inp||!inp.value.trim()) return;
+  const taken=getTaken();
+  const t=(taken[code]||[]).find(x=>x.id===taakId);
+  if(t){if(!t.subtaken)t.subtaken=[];t.subtaken.push({id:uid(),naam:inp.value.trim()});}
+  setTaken(taken);
+  inp.value='';
+  renderProjectDetail();
+  const body=document.getElementById('pdb-'+taakId);
+  if(body) body.classList.add('open');
+}
+
+function pdVerwijderTaak(code,id){
+  if(!confirm('Taak verwijderen?')) return;
+  const taken=getTaken();
+  taken[code]=(taken[code]||[]).filter(t=>t.id!==id);
+  setTaken(taken);
+  renderProjectDetail();
+}
+
+function pdVerwijderSubtaak(code,taakId,subId){
+  const taken=getTaken();
+  const t=(taken[code]||[]).find(x=>x.id===taakId);
+  if(t) t.subtaken=(t.subtaken||[]).filter(s=>s.id!==subId);
+  setTaken(taken);
+  renderProjectDetail();
 }
 function sluitModal(naam){document.getElementById(`modal-${naam}-overlay`).classList.remove('open');}
 function vulSelect(elId,opties,geselecteerd=''){
@@ -1447,12 +1820,30 @@ function showTab(naam,btn){
   document.getElementById('tab-'+naam).classList.add('active');
   if(btn) btn.classList.add('active');
   actTab=naam;
+  // Reset fullscreen bij wisselen
+  if(document.body.classList.contains('tab-fs')){
+    document.body.classList.remove('tab-fs');
+    const fb=document.getElementById('tab-fs-btn');
+    if(fb) fb.textContent='⛶ Volledig scherm';
+  }
+  // Floating FS knop: zichtbaar op alle tabs behalve Bord (die heeft eigen knop)
+  const fsBtn=document.getElementById('tab-fs-btn');
+  if(fsBtn) fsBtn.style.display=naam==='bord'?'none':'flex';
   if(naam==='dag') renderDag();
   if(naam==='timeline') renderTimeline();
   if(naam==='rapport') renderRapport();
   if(naam==='timer') renderTimer();
   if(naam==='projecten') renderProjectenTab();
   if(naam==='bord'){startBord();}else{stopBord();}
+}
+
+function toggleTabFS(){
+  if(actTab==='bord'){toggleBordFS();return;}
+  const fs=document.body.classList.toggle('tab-fs');
+  const btn=document.getElementById('tab-fs-btn');
+  if(btn) btn.textContent=fs?'✕ Sluiten':'⛶ Volledig scherm';
+  if(fs) document.documentElement.requestFullscreen?.().catch(()=>{});
+  else document.exitFullscreen?.().catch(()=>{});
 }
 
 // ════════════════════════════════════════════
@@ -1558,11 +1949,12 @@ function renderProjectenTab(){
     return;
   }
   wrap.innerHTML=projecten.map((p,i)=>`
-    <div class="proj-item">
+    <div class="proj-item" onclick="openProjectDetail('${p.code}')">
       <div class="proj-code">${p.code}</div>
       <div class="proj-naam">${p.naam||'—'}</div>
       <div class="proj-klant">${p.klant||''}</div>
-      <div class="proj-acties">
+      <div class="proj-status-col">${p.status?statusBadge(p.status):''}</div>
+      <div class="proj-acties" onclick="event.stopPropagation()">
         <button class="entry-btn" onclick="bewerkProject(${i})" title="Bewerken">✏</button>
         <button class="entry-btn del" onclick="verwijderProject(${i})" title="Verwijderen">✕</button>
       </div>
