@@ -48,18 +48,47 @@ header h1 span{color:var(--gold-mid);font-style:italic}
 .btn-sm{padding:6px 12px;font-size:12px}
 .section-label{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint);margin-bottom:0.75rem}
 
-/* ── RUNNING BAR ── */
-.running-bar{background:var(--green);color:#fff;padding:0.85rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
-.running-bar.hidden{display:none}
-.running-info{display:flex;flex-direction:column;gap:2px;min-width:0}
-.running-project{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.running-task{font-size:11px;opacity:0.75}
-.running-right{display:flex;align-items:center;gap:0.75rem;flex-shrink:0}
-.running-clock{font-family:var(--mono);font-size:20px;font-weight:500;letter-spacing:0.05em}
+/* ── VASTE TIMERBALK ── */
+.timer-bar{background:var(--green);color:#fff;padding:0.7rem 1.25rem;display:flex;align-items:center;gap:0.75rem;position:sticky;top:56px;z-index:90;box-shadow:0 2px 8px rgba(0,0,0,0.15);flex-wrap:wrap}
+body.bord-fs .timer-bar{display:none!important}
+/* Idle staat */
+.tb-idle{display:flex;align-items:center;gap:0.6rem;flex:1;flex-wrap:wrap}
+.tb-idle.hidden{display:none}
+.tb-select{padding:6px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:7px;background:rgba(255,255,255,0.12);color:#fff;font-family:var(--sans);font-size:13px;outline:none;cursor:pointer;min-width:150px;max-width:220px}
+.tb-select option{background:var(--green);color:#fff}
+.tb-select-sm{min-width:120px;max-width:160px}
+.tb-start-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:8px;color:#fff;font-weight:700;font-size:14px;padding:7px 18px;cursor:pointer;white-space:nowrap;transition:background 0.15s;letter-spacing:0.03em}
+.tb-start-btn:hover{background:rgba(255,255,255,0.32)}
+/* Lopende staat */
+.tb-running{display:flex;align-items:center;gap:0.75rem;flex:1;min-width:0}
+.tb-running.hidden{display:none}
+.tb-run-info{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.tb-run-project{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-run-task{font-size:11px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-clock{font-family:var(--mono);font-size:22px;font-weight:500;letter-spacing:0.05em;flex-shrink:0}
+.tb-stop-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.35);border-radius:8px;color:#fff;font-weight:600;font-size:13px;padding:7px 14px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.tb-stop-btn:hover{background:rgba(255,255,255,0.3)}
 .pulse{width:9px;height:9px;border-radius:50%;background:#4caf50;box-shadow:0 0 0 0 rgba(76,175,80,0.4);animation:pulse 1.5s infinite;flex-shrink:0}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(76,175,80,0.5)}70%{box-shadow:0 0 0 8px rgba(76,175,80,0)}100%{box-shadow:0 0 0 0 rgba(76,175,80,0)}}
-.stop-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.35);border-radius:8px;color:#fff;font-weight:600;font-size:13px;padding:7px 14px;cursor:pointer;white-space:nowrap}
-.stop-btn:hover{background:rgba(255,255,255,0.3)}
+
+/* ── PROJECTEN TAB ── */
+.proj-lijst{display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem}
+.proj-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:0.85rem 1rem;display:flex;align-items:center;gap:0.75rem;box-shadow:var(--shadow)}
+.proj-code{font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:500;flex-shrink:0;width:140px}
+.proj-naam{font-size:13px;font-weight:500;color:var(--text);flex:1}
+.proj-klant{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex-shrink:0;width:60px}
+.proj-acties{display:flex;gap:4px;flex-shrink:0}
+.nieuw-project-form{background:var(--surface);border:2px dashed var(--green-mid);border-radius:var(--radius);padding:1rem;margin-bottom:1rem}
+.nieuw-project-form .flex{flex-wrap:wrap;gap:0.5rem}
+.proj-inp{padding:8px 11px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;outline:none;text-transform:uppercase}
+.proj-inp::placeholder{text-transform:none;font-family:var(--sans);font-size:12px}
+.proj-inp:focus{border-color:var(--green-mid)}
+.proj-inp-naam{font-family:var(--sans);text-transform:none;flex:1;min-width:160px}
+
+/* Inline nieuw-knop in selects */
+.inline-nieuw-btn{background:none;border:none;cursor:pointer;color:var(--gold);font-size:12px;font-family:var(--sans);padding:2px 6px;border-radius:4px;transition:all 0.12s;white-space:nowrap}
+.inline-nieuw-btn:hover{background:var(--gold-light)}
+.select-wrap{display:flex;align-items:center;gap:0.4rem}
 
 /* ── TIMER TAB ── */
 .timer-wrap{padding:1.25rem}
@@ -334,15 +363,28 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
 
 <!-- App -->
 <div id="app" class="hidden">
-  <div class="running-bar hidden" id="running-bar">
-    <div class="running-info">
-      <div class="running-project" id="run-project">—</div>
-      <div class="running-task" id="run-task"></div>
+
+  <!-- VASTE TIMERBALK — altijd zichtbaar -->
+  <div class="timer-bar" id="timer-bar">
+    <!-- Idle: project + taak kiezen en starten -->
+    <div class="tb-idle" id="tb-idle">
+      <select class="tb-select" id="tb-project-sel" onchange="tbProjectChange()">
+        <option value="">— Kies project —</option>
+      </select>
+      <select class="tb-select tb-select-sm hidden" id="tb-taak-sel">
+        <option value="">— Taak (opt.) —</option>
+      </select>
+      <button class="tb-start-btn" onclick="tbStart()">▶ Start</button>
     </div>
-    <div class="running-right">
+    <!-- Lopend: info + klok + stop -->
+    <div class="tb-running hidden" id="tb-running">
       <div class="pulse"></div>
-      <div class="running-clock" id="run-clock">00:00:00</div>
-      <button class="stop-btn" onclick="stopTimer()">■ Stop</button>
+      <div class="tb-run-info">
+        <div class="tb-run-project" id="tb-run-project">—</div>
+        <div class="tb-run-task" id="tb-run-task"></div>
+      </div>
+      <div class="tb-clock" id="tb-clock">00:00:00</div>
+      <button class="tb-stop-btn" onclick="stopTimer()">■ Stop</button>
     </div>
   </div>
 
@@ -351,6 +393,7 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
     <button class="tab-btn" onclick="showTab('dag',this)">📋 Dag</button>
     <button class="tab-btn" onclick="showTab('timeline',this)">📅 Planning</button>
     <button class="tab-btn" onclick="showTab('rapport',this)">📊 Uren</button>
+    <button class="tab-btn" onclick="showTab('projecten',this)">🗂 Projecten</button>
     <button class="tab-btn" onclick="showTab('bord',this)">🖥 Bord</button>
   </div>
 
@@ -414,6 +457,30 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
         </span>
       </div>
       <div id="rapport-inhoud"></div>
+    </div>
+  </div>
+
+  <!-- PROJECTEN -->
+  <div id="tab-projecten" class="tab-content">
+    <div class="main">
+      <div class="nieuw-project-form" id="nieuw-proj-form" style="display:none">
+        <div class="section-label" style="margin-bottom:0.6rem">Nieuw project aanmaken</div>
+        <div class="flex" style="flex-wrap:wrap;gap:0.6rem;margin-bottom:0.6rem">
+          <input class="proj-inp" id="np-code" placeholder="CODE bijv. CN-PRINSENGRACHT-KAD" style="flex:1;min-width:180px;max-width:280px" oninput="this.value=this.value.toUpperCase()">
+          <input class="proj-inp proj-inp-naam" id="np-naam" placeholder="Volledige naam" style="flex:2;min-width:180px">
+          <input class="proj-inp" id="np-klant" placeholder="Klantcode bijv. CN" style="width:90px" oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div class="flex" style="gap:0.5rem">
+          <button class="btn btn-primary btn-sm" onclick="slaProjectOp()">Aanmaken</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='none'">Annuleer</button>
+        </div>
+      </div>
+      <div class="flex" style="justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
+        <div class="section-label" style="margin-bottom:0">Projecten — gesynchroniseerd met M&T Bedrijfstool</div>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='block';document.getElementById('np-code').focus()">+ Nieuw project</button>
+      </div>
+      <div class="proj-lijst" id="proj-lijst"></div>
+      <div style="font-size:11px;color:var(--text-faint);font-family:var(--mono);padding-top:0.5rem">Projecten worden automatisch gesynchroniseerd met de <a href="index-v4.html" style="color:var(--green)">M&T Bedrijfstool</a> via gedeelde opslag.</div>
     </div>
   </div>
 
@@ -535,6 +602,48 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
   </div>
 </div>
 
+<!-- MODAL: Snel project aanmaken (vanuit dropdown) -->
+<div class="modal-overlay" id="modal-snel-project-overlay" onclick="if(event.target===this)sluitModal('snel-project')">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">Nieuw project <button class="modal-close" onclick="sluitModal('snel-project')">✕</button></div>
+    <div class="form-row">
+      <label class="form-label">Code <span style="font-size:10px;font-weight:400;text-transform:none">(bijv. CN-PRINSENGRACHT-KEUKEN)</span></label>
+      <input class="form-input" id="sp-code" placeholder="KLANT-LOCATIE-PRODUCT" oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Naam</label>
+      <input class="form-input" id="sp-naam" placeholder="Volledige projectnaam">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Klantcode</label>
+      <input class="form-input" id="sp-klant" placeholder="bijv. CN" style="width:120px" oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="sluitModal('snel-project')">Annuleer</button>
+      <button class="btn btn-primary" onclick="slaSnelProjectOp()">Aanmaken</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Snel taak aanmaken (vanuit dropdown) -->
+<div class="modal-overlay" id="modal-snel-taak-overlay" onclick="if(event.target===this)sluitModal('snel-taak')">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-title">Nieuwe taak <button class="modal-close" onclick="sluitModal('snel-taak')">✕</button></div>
+    <div class="form-row">
+      <label class="form-label">Project</label>
+      <div id="st-project-label" style="font-family:var(--mono);font-size:13px;color:var(--gold);padding:6px 0"></div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Taaknaam</label>
+      <input class="form-input" id="st-naam" placeholder="bijv. Ontwerp, Productie, Montage…" onkeydown="if(event.key==='Enter')slaSnelTaakOp()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="sluitModal('snel-taak')">Annuleer</button>
+      <button class="btn btn-primary" onclick="slaSnelTaakOp()">Aanmaken</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Instellingen -->
 <div class="modal-overlay" id="modal-inst-overlay" onclick="if(event.target===this)sluitModal('inst')">
   <div class="modal">
@@ -639,6 +748,8 @@ function showApp(){
   document.getElementById('welkom').classList.add('hidden');
   updateChip();
   herstelLopende();
+  renderTimerBar();
+  startTbKlok();
   renderTimer();
 }
 function updateChip(){
@@ -739,8 +850,8 @@ function startTimerBevestig(taakId,subtaakId){
   };
   setLopende(entry);
   sluitModal('start');
-  toonRunningBar(entry);
-  startKlok();
+  renderTimerBar();
+  startTbKlok();
   renderTimer();
 }
 
@@ -749,8 +860,7 @@ function stopTimer(){
   if(!lopend) return;
   stopTimerIntern(lopend);
   setLopende(null);
-  stopKlok();
-  document.getElementById('running-bar').classList.add('hidden');
+  renderTimerBar();
   renderTimer();
   if(actTab==='dag') renderDag();
   if(actTab==='rapport') renderRapport();
@@ -766,25 +876,16 @@ function stopTimerIntern(lopend){
 
 function herstelLopende(){
   const lopend=getLopende();
-  if(!lopend) return;
-  toonRunningBar(lopend);
-  startKlok();
+  if(lopend) toonRunningBar(lopend);
 }
 
 function toonRunningBar(entry){
-  const p=getProjecten().find(x=>x.code===entry.project_code);
-  document.getElementById('run-project').textContent=entry.project_code+(p&&p.naam?' — '+p.naam:'');
-  document.getElementById('run-task').textContent=entry.taak_naam||entry.omschrijving||'';
-  document.getElementById('running-bar').classList.remove('hidden');
-  updateKlok(entry.start);
+  renderTimerBar();
 }
 
-function startKlok(){
-  stopKlok();
-  klokInterval=setInterval(()=>{const l=getLopende();if(l)updateKlok(l.start);},1000);
-}
+function startKlok(){startTbKlok();}
 function stopKlok(){if(klokInterval){clearInterval(klokInterval);klokInterval=null;}}
-function updateKlok(startIso){document.getElementById('run-clock').textContent=fmtDuur(Math.round((Date.now()-new Date(startIso))/1000));}
+function updateKlok(startIso){const el=document.getElementById('tb-clock');if(el)el.textContent=fmtDuur(Math.round((Date.now()-new Date(startIso))/1000));}
 
 // ════════════════════════════════════════════
 // DAG OVERZICHT
@@ -835,9 +936,10 @@ function dagNav(r){
 function dagSetDatum(v){dagDatum=v;renderDag();}
 function openNieuwEntryModal(){
   vulSelect('nieuw-tl',getTeamleden().map(t=>({v:t.naam,l:t.label})),IK);
-  vulSelect('nieuw-project',getProjecten().map(p=>({v:p.code,l:`${p.code}${p.naam?' — '+p.naam:''}`})));
-  vulTaakSelect('nieuw-taak',document.getElementById('nieuw-project').value);
+  vulProjectSelect('nieuw-project');
+  vulTaakSelect('nieuw-taak','');
   document.getElementById('nieuw-desc').value='';
+  document.getElementById('nieuw-project').onchange=function(){vulTaakSelect('nieuw-taak',this.value);};
   openModal('nieuw');
 }
 function slaHandmatigOp(){
@@ -957,14 +1059,11 @@ function tlSetView(v,btn){
 }
 function tlCelKlik(datum,rowId){
   planContext={datum,rowId};
-  vulSelect('plan-project',getProjecten().map(p=>({v:p.code,l:`${p.code}${p.naam?' — '+p.naam:''}`})));
-  const tlSel=document.getElementById('plan-teamlid');
+  vulProjectSelect('plan-project', tlView==='project'?rowId:'');
   if(tlView==='persoon'){
     vulSelect('plan-teamlid',getTeamleden().map(t=>({v:t.naam,l:t.label})),rowId);
   } else {
     vulSelect('plan-teamlid',getTeamleden().map(t=>({v:t.naam,l:t.label})),IK);
-    // Pre-select project
-    document.getElementById('plan-project').value=rowId;
   }
   document.getElementById('plan-uren').value='4';
   openModal('plan');
@@ -1160,8 +1259,9 @@ function openEditEntry(id){
   editEntryId=id;
   const e=getEntries().find(x=>x.id===id);
   if(!e) return;
-  vulSelect('edit-project',getProjecten().map(p=>({v:p.code,l:`${p.code}${p.naam?' — '+p.naam:''}`})),e.project_code);
+  vulProjectSelect('edit-project',e.project_code);
   vulTaakSelect('edit-taak',e.project_code,e.taak_id);
+  document.getElementById('edit-project').onchange=function(){vulTaakSelect('edit-taak',this.value);};
   document.getElementById('edit-desc').value=e.omschrijving||'';
   document.getElementById('edit-start').value=e.start?new Date(e.start).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
   document.getElementById('edit-stop').value=e.stop?new Date(e.stop).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
@@ -1309,10 +1409,33 @@ function vulSelect(elId,opties,geselecteerd=''){
   if(!sel) return;
   sel.innerHTML=`<option value="">— Kies —</option>`+opties.map(o=>`<option value="${o.v}"${o.v===geselecteerd?' selected':''}>${o.l}</option>`).join('');
 }
+function vulProjectSelect(elId, geselecteerd=''){
+  const sel=document.getElementById(elId);
+  if(!sel) return;
+  const projecten=getProjecten();
+  sel.innerHTML=`<option value="">— Kies project —</option>`
+    +projecten.map(p=>`<option value="${p.code}"${p.code===geselecteerd?' selected':''}>${p.code}${p.naam?' — '+p.naam:''}</option>`).join('')
+    +`<option value="__nieuw__">＋ Nieuw project aanmaken</option>`;
+  sel.onchange=function(){
+    if(this.value==='__nieuw__'){
+      this.value=geselecteerd;
+      openSnelProject(null,(code)=>{vulProjectSelect(elId,code);});
+    }
+  };
+}
 function vulTaakSelect(elId,projectCode,geselecteerd=''){
-  const taken=(getTaken()[projectCode]||[]);
-  const opties=[{v:'',l:'— Geen taak —'},...taken.map(t=>({v:t.id,l:t.naam}))];
-  vulSelect(elId,opties,geselecteerd);
+  const sel=document.getElementById(elId);
+  if(!sel) return;
+  const taken=getTaken()[projectCode]||[];
+  sel.innerHTML=`<option value="">— Geen taak —</option>`
+    +taken.map(t=>`<option value="${t.id}"${t.id===geselecteerd?' selected':''}>${t.naam}</option>`).join('')
+    +(projectCode?`<option value="__nieuwe_taak__">＋ Nieuwe taak aanmaken</option>`:'');
+  sel.onchange=function(){
+    if(this.value==='__nieuwe_taak__'){
+      this.value='';
+      openSnelTaak(projectCode,(id)=>{vulTaakSelect(elId,projectCode,id);});
+    }
+  };
 }
 
 // ════════════════════════════════════════════
@@ -1328,7 +1451,228 @@ function showTab(naam,btn){
   if(naam==='timeline') renderTimeline();
   if(naam==='rapport') renderRapport();
   if(naam==='timer') renderTimer();
+  if(naam==='projecten') renderProjectenTab();
   if(naam==='bord'){startBord();}else{stopBord();}
+}
+
+// ════════════════════════════════════════════
+// VASTE TIMERBALK
+// ════════════════════════════════════════════
+function renderTimerBar(){
+  const lopend=getLopende();
+  const idle=document.getElementById('tb-idle');
+  const running=document.getElementById('tb-running');
+  if(!idle||!running) return;
+  if(lopend){
+    idle.classList.add('hidden');
+    running.classList.remove('hidden');
+    const p=getProjecten().find(x=>x.code===lopend.project_code);
+    document.getElementById('tb-run-project').textContent=lopend.project_code+(p&&p.naam?' — '+p.naam:'');
+    document.getElementById('tb-run-task').textContent=lopend.taak_naam||lopend.omschrijving||'';
+  } else {
+    idle.classList.remove('hidden');
+    running.classList.add('hidden');
+    vulTbProjectSelect();
+  }
+}
+
+function vulTbProjectSelect(){
+  const sel=document.getElementById('tb-project-sel');
+  if(!sel) return;
+  const huidig=sel.value;
+  const projecten=getProjecten();
+  sel.innerHTML=`<option value="">— Kies project —</option>`
+    +projecten.map(p=>`<option value="${p.code}"${p.code===huidig?' selected':''}>${p.code}${p.naam?' — '+p.naam:''}</option>`).join('')
+    +`<option value="__nieuw__">＋ Nieuw project aanmaken</option>`;
+  tbProjectChange();
+}
+
+function tbProjectChange(){
+  const sel=document.getElementById('tb-project-sel');
+  if(!sel) return;
+  if(sel.value==='__nieuw__'){
+    sel.value='';
+    openSnelProject(null, (code)=>{
+      vulTbProjectSelect();
+      document.getElementById('tb-project-sel').value=code;
+      tbProjectChange();
+    });
+    return;
+  }
+  const taakSel=document.getElementById('tb-taak-sel');
+  if(!taakSel) return;
+  if(sel.value){
+    const taken=getTaken()[sel.value]||[];
+    taakSel.innerHTML=`<option value="">— Taak (optioneel) —</option>`
+      +taken.map(t=>`<option value="${t.id}">${t.naam}</option>`).join('')
+      +`<option value="__nieuwe_taak__">＋ Nieuwe taak aanmaken</option>`;
+    taakSel.classList.remove('hidden');
+  } else {
+    taakSel.classList.add('hidden');
+  }
+}
+
+function tbStart(){
+  const pc=document.getElementById('tb-project-sel').value;
+  if(!pc){alert('Kies eerst een project.');return;}
+  const taakId=document.getElementById('tb-taak-sel').value;
+  if(taakId==='__nieuwe_taak__'){
+    openSnelTaak(pc, (tid)=>{
+      document.getElementById('tb-taak-sel').value=tid;
+      tbStart();
+    });
+    return;
+  }
+  startModalProject=pc;
+  gekozenTaak=taakId||null;
+  gekozenSubtaak=null;
+  startTimerBevestig(taakId||null, null);
+}
+
+// Klok voor timerbalk
+function startTbKlok(){
+  if(klokInterval) clearInterval(klokInterval);
+  klokInterval=setInterval(()=>{
+    const l=getLopende();
+    if(l){
+      const sec=Math.round((Date.now()-new Date(l.start))/1000);
+      const el=document.getElementById('tb-clock');
+      if(el) el.textContent=fmtDuur(sec);
+    }
+  },1000);
+}
+
+// ════════════════════════════════════════════
+// PROJECTEN BEHEER
+// ════════════════════════════════════════════
+function setProjecten(lijst){
+  localStorage.setItem('mt_projecten',JSON.stringify(lijst));
+}
+
+function renderProjectenTab(){
+  const projecten=getProjecten();
+  const wrap=document.getElementById('proj-lijst');
+  if(!wrap) return;
+  if(!projecten.length){
+    wrap.innerHTML=`<div style="padding:1rem;color:var(--text-faint);font-size:13px;font-style:italic">Nog geen projecten. Maak het eerste aan.</div>`;
+    return;
+  }
+  wrap.innerHTML=projecten.map((p,i)=>`
+    <div class="proj-item">
+      <div class="proj-code">${p.code}</div>
+      <div class="proj-naam">${p.naam||'—'}</div>
+      <div class="proj-klant">${p.klant||''}</div>
+      <div class="proj-acties">
+        <button class="entry-btn" onclick="bewerkProject(${i})" title="Bewerken">✏</button>
+        <button class="entry-btn del" onclick="verwijderProject(${i})" title="Verwijderen">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function slaProjectOp(){
+  const code=document.getElementById('np-code').value.trim().toUpperCase();
+  const naam=document.getElementById('np-naam').value.trim();
+  const klant=document.getElementById('np-klant').value.trim().toUpperCase();
+  if(!code){alert('Vul een projectcode in.');return;}
+  const lijst=getProjecten();
+  if(lijst.find(p=>p.code===code)){alert('Projectcode bestaat al.');return;}
+  lijst.push({code,naam,klant});
+  setProjecten(lijst);
+  document.getElementById('np-code').value='';
+  document.getElementById('np-naam').value='';
+  document.getElementById('np-klant').value='';
+  document.getElementById('nieuw-proj-form').style.display='none';
+  renderProjectenTab();
+  renderTimer();
+  vulTbProjectSelect();
+}
+
+function beverkProject(i){
+  const lijst=getProjecten();
+  const p=lijst[i];
+  const code=prompt('Projectcode:',p.code);
+  if(!code) return;
+  const naam=prompt('Naam:',p.naam);
+  const klant=prompt('Klantcode:',p.klant);
+  lijst[i]={code:code.toUpperCase(),naam:naam||'',klant:(klant||'').toUpperCase()};
+  setProjecten(lijst);
+  renderProjectenTab();
+  renderTimer();
+  vulTbProjectSelect();
+}
+
+function beverkProject(i){ beverkProject(i); } // alias fix
+function beverkProject(i){
+  const lijst=getProjecten();
+  const p=lijst[i];
+  document.getElementById('np-code').value=p.code;
+  document.getElementById('np-naam').value=p.naam||'';
+  document.getElementById('np-klant').value=p.klant||'';
+  document.getElementById('nieuw-proj-form').style.display='block';
+  // Verwijder oud en sla opnieuw op bij submit — quick edit via remove + re-add
+  lijst.splice(i,1);
+  setProjecten(lijst);
+  renderProjectenTab();
+}
+function beworkProject(i){beverkProject(i);}
+function bewerkProject(i){beverkProject(i);}
+
+function verwijderProject(i){
+  if(!confirm('Project verwijderen? Geregistreerde uren blijven bewaard.')) return;
+  const lijst=getProjecten();
+  lijst.splice(i,1);
+  setProjecten(lijst);
+  renderProjectenTab();
+  renderTimer();
+  vulTbProjectSelect();
+}
+
+// Snel project aanmaken vanuit dropdown
+let snelProjectCallback=null;
+function openSnelProject(voorProject, callback){
+  snelProjectCallback=callback||null;
+  document.getElementById('sp-code').value=voorProject||'';
+  document.getElementById('sp-naam').value='';
+  document.getElementById('sp-klant').value='';
+  openModal('snel-project');
+  setTimeout(()=>document.getElementById('sp-code').focus(),100);
+}
+function slaSnelProjectOp(){
+  const code=document.getElementById('sp-code').value.trim().toUpperCase();
+  const naam=document.getElementById('sp-naam').value.trim();
+  const klant=document.getElementById('sp-klant').value.trim().toUpperCase();
+  if(!code){alert('Vul een projectcode in.');return;}
+  const lijst=getProjecten();
+  if(!lijst.find(p=>p.code===code)) lijst.push({code,naam,klant});
+  setProjecten(lijst);
+  sluitModal('snel-project');
+  renderTimer();
+  vulTbProjectSelect();
+  if(snelProjectCallback) snelProjectCallback(code);
+  snelProjectCallback=null;
+}
+
+// Snel taak aanmaken vanuit dropdown
+let snelTaakContext={pc:null,callback:null};
+function openSnelTaak(projectCode, callback){
+  snelTaakContext={pc:projectCode,callback};
+  document.getElementById('st-project-label').textContent=projectCode;
+  document.getElementById('st-naam').value='';
+  openModal('snel-taak');
+  setTimeout(()=>document.getElementById('st-naam').focus(),100);
+}
+function slaSnelTaakOp(){
+  const naam=document.getElementById('st-naam').value.trim();
+  if(!naam){alert('Vul een taaknaam in.');return;}
+  const pc=snelTaakContext.pc;
+  const taken=getTaken();
+  if(!taken[pc]) taken[pc]=[];
+  const nieuw={id:uid(),naam,subtaken:[]};
+  taken[pc].push(nieuw);
+  setTaken(taken);
+  sluitModal('snel-taak');
+  if(snelTaakContext.callback) snelTaakContext.callback(nieuw.id);
+  snelTaakContext={pc:null,callback:null};
 }
 
 // ── START ──
