@@ -347,6 +347,19 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
 .s-klaar{background:#d4edd9;color:#1a3a28;border-color:#a0c8a8}
 .s-archief{background:#F2EFE8;color:#A8A090;border-color:#C8C0B0}
 
+/* ── TOGGL STATUS ── */
+.toggl-dot{width:8px;height:8px;border-radius:50%;background:#aaa;flex-shrink:0;transition:background 0.3s}
+.toggl-dot.ok{background:#E01B00}
+.toggl-dot.sync{background:#ff8c00;animation:pulse 1s infinite}
+.toggl-status{display:flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);opacity:0.7;cursor:pointer}
+.toggl-status:hover{opacity:1}
+/* Toggl sectie in instellingen */
+.toggl-map-rij{display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:12px}
+.toggl-map-rij:last-child{border-bottom:none}
+.toggl-map-naam{flex:1;font-family:var(--mono);font-size:11px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toggl-map-arrow{color:var(--text-faint);font-size:11px;flex-shrink:0}
+.toggl-map-sel{padding:4px 7px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--text);font-size:11px;font-family:var(--sans);cursor:pointer;flex:1}
+
 /* ── FULLSCREEN ALLE TABS ── */
 body.tab-fs header,body.tab-fs .tabs-wrap,body.tab-fs .timer-bar{display:none!important}
 body.tab-fs .tab-content.active{height:100vh;overflow-y:auto;box-sizing:border-box}
@@ -422,6 +435,10 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
     <span class="header-version">uren</span>
   </div>
   <div class="header-right">
+    <div class="toggl-status" onclick="openModal('inst')" title="Toggl status — klik voor instellingen">
+      <span class="toggl-dot" id="toggl-dot"></span>
+      <span id="toggl-status-label">Toggl</span>
+    </div>
     <button class="user-chip" id="user-chip" onclick="toggleGebruiker()">—</button>
     <button class="icon-btn" title="Taken beheren" onclick="openModal('taken')">☰</button>
     <button class="icon-btn" title="Instellingen" onclick="openModal('inst')">⚙</button>
@@ -752,6 +769,30 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
       <div id="inst-capaciteit"></div>
     </div>
     <div class="inst-sectie">
+      <div class="inst-sectie-title">Toggl Track koppeling</div>
+      <div class="form-row">
+        <label class="form-label">API Token (admin — uit Toggl Profiel → API Token)</label>
+        <input class="form-input" id="inst-toggl-token" type="password" placeholder="Jouw Toggl API token…"
+          onchange="slaTogglTokenOp(this.value)">
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem">
+        <button class="btn btn-secondary btn-sm" onclick="testTogglVerbinding()">🔗 Verbinding testen</button>
+        <button class="btn btn-secondary btn-sm" onclick="laadTogglMapping()">↻ Mapping laden</button>
+      </div>
+      <div id="inst-toggl-status" style="font-size:12px;color:var(--text-faint);margin-bottom:0.75rem"></div>
+      <div id="inst-toggl-mapping" style="display:none">
+        <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin-bottom:0.4rem">Toggl projecten → M&T codes</div>
+        <div id="toggl-project-map"></div>
+        <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin:0.75rem 0 0.4rem">Toggl gebruikers → Teamleden</div>
+        <div id="toggl-user-map"></div>
+        <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" onclick="slaTogglMappingOp()">💾 Mapping opslaan</button>
+          <button class="btn btn-primary btn-sm" onclick="syncTogglEntries(30)">⬇ Importeer 30 dagen</button>
+          <button class="btn btn-secondary btn-sm" onclick="syncTogglEntries(7)">⬇ Importeer 7 dagen</button>
+        </div>
+      </div>
+    </div>
+    <div class="inst-sectie">
       <div class="inst-sectie-title">Data</div>
       <button class="btn btn-secondary btn-sm" onclick="exportCSV()">↓ Export CSV</button>
       <button class="btn btn-danger btn-sm" style="margin-left:0.5rem" onclick="wisAlles()">⚠ Alles wissen</button>
@@ -828,6 +869,14 @@ function getTaken(){return JSON.parse(localStorage.getItem('mt_uren_taken')||'{}
 function setTaken(t){localStorage.setItem('mt_uren_taken',JSON.stringify(t))}
 function getCapaciteit(){return JSON.parse(localStorage.getItem('mt_uren_capaciteit')||'null')||{};}
 function setCapaciteit(c){localStorage.setItem('mt_uren_capaciteit',JSON.stringify(c));}
+
+// ── TOGGL STORAGE ──
+function getTogglToken(){return localStorage.getItem('mt_toggl_token')||'';}
+function setTogglToken(t){localStorage.setItem('mt_toggl_token',t);}
+function getTogglProjectMap(){return JSON.parse(localStorage.getItem('mt_toggl_project_map')||'{}');}
+function setTogglProjectMap(m){localStorage.setItem('mt_toggl_project_map',JSON.stringify(m));}
+function getTogglUserMap(){return JSON.parse(localStorage.getItem('mt_toggl_user_map')||'{}');}
+function setTogglUserMap(m){localStorage.setItem('mt_toggl_user_map',JSON.stringify(m));}
 function getLopende(){return JSON.parse(localStorage.getItem('mt_uren_lopend')||'null')}
 function setLopende(e){e?localStorage.setItem('mt_uren_lopend',JSON.stringify(e)):localStorage.removeItem('mt_uren_lopend')}
 function getProjecten(){
@@ -2063,6 +2112,226 @@ function slaSnelTaakOp(){
   sluitModal('snel-taak');
   if(snelTaakContext.callback) snelTaakContext.callback(nieuw.id);
   snelTaakContext={pc:null,callback:null};
+}
+
+// ════════════════════════════════════════════
+// TOGGL API
+// ════════════════════════════════════════════
+const TOGGL_WS = 21258443;
+const TOGGL_BASE = 'https://api.track.toggl.com/api/v9';
+
+function togglHeaders(){
+  const token=getTogglToken();
+  return {
+    'Authorization':'Basic '+btoa(token+':api_token'),
+    'Content-Type':'application/json'
+  };
+}
+
+async function togglFetch(path, opts={}){
+  if(!getTogglToken()) return null;
+  try{
+    const res=await fetch(TOGGL_BASE+path,{
+      ...opts,
+      headers:{...togglHeaders(),...(opts.headers||{})}
+    });
+    if(!res.ok){console.warn('Toggl',res.status,path);return null;}
+    if(res.status===204) return true;
+    return await res.json();
+  }catch(e){
+    console.error('Toggl fetch error:',e);
+    return null;
+  }
+}
+
+function updateTogglDot(staat){
+  const dot=document.getElementById('toggl-dot');
+  const lbl=document.getElementById('toggl-status-label');
+  if(!dot) return;
+  dot.className='toggl-dot'+(staat==='ok'?' ok':staat==='sync'?' sync':'');
+  if(lbl) lbl.textContent=staat==='ok'?'Toggl ✓':staat==='sync'?'Syncing…':'Toggl';
+}
+
+async function testTogglVerbinding(){
+  const el=document.getElementById('inst-toggl-status');
+  if(el) el.textContent='Verbinding testen…';
+  updateTogglDot('sync');
+  const me=await togglFetch('/me');
+  if(!me){
+    if(el) el.textContent='❌ Verbinding mislukt. Controleer het API token.';
+    updateTogglDot('');
+    return false;
+  }
+  if(el) el.textContent=`✓ Verbonden als ${me.fullname||me.email} (workspace ${TOGGL_WS})`;
+  updateTogglDot('ok');
+  return true;
+}
+
+async function laadTogglMapping(){
+  const el=document.getElementById('inst-toggl-status');
+  if(!await testTogglVerbinding()) return;
+  if(el) el.textContent+=' — projecten laden…';
+
+  const [projecten, gebruikers]=await Promise.all([
+    togglFetch(`/workspaces/${TOGGL_WS}/projects?active=true`),
+    togglFetch(`/workspaces/${TOGGL_WS}/workspace_users`)
+  ]);
+
+  const mapWrap=document.getElementById('inst-toggl-mapping');
+  if(mapWrap) mapWrap.style.display='block';
+
+  const mtProjecten=getProjecten();
+  const projectMap=getTogglProjectMap();
+  const userMap=getTogglUserMap();
+  const teamleden=getTeamleden();
+
+  // Project mapping tabel
+  const projEl=document.getElementById('toggl-project-map');
+  if(projEl&&projecten){
+    projEl.innerHTML=(projecten||[]).map(p=>`
+      <div class="toggl-map-rij" data-toggl-proj-id="${p.id}">
+        <span class="toggl-map-naam" title="${p.name}">${p.name}</span>
+        <span class="toggl-map-arrow">→</span>
+        <select class="toggl-map-sel" id="tpm-${p.id}">
+          <option value="">— niet koppelen —</option>
+          ${mtProjecten.map(mp=>`<option value="${mp.code}"${projectMap[p.id]===mp.code?' selected':''}>${mp.code}${mp.naam?' — '+mp.naam:''}</option>`).join('')}
+        </select>
+      </div>`).join('');
+  }
+
+  // User mapping tabel
+  const userEl=document.getElementById('toggl-user-map');
+  if(userEl&&gebruikers){
+    userEl.innerHTML=(gebruikers||[]).map(u=>`
+      <div class="toggl-map-rij" data-toggl-user-id="${u.user_id||u.id}">
+        <span class="toggl-map-naam">${u.name||u.email||u.user_id}</span>
+        <span class="toggl-map-arrow">→</span>
+        <select class="toggl-map-sel" id="tum-${u.user_id||u.id}">
+          <option value="">— niet koppelen —</option>
+          ${teamleden.map(t=>`<option value="${t.naam}"${userMap[u.user_id||u.id]===t.naam?' selected':''}>${t.label}</option>`).join('')}
+        </select>
+      </div>`).join('');
+  }
+
+  if(el) el.textContent=`✓ ${(projecten||[]).length} projecten, ${(gebruikers||[]).length} gebruikers geladen`;
+  // Sla Toggl data op voor sync
+  localStorage.setItem('mt_toggl_projecten_raw',JSON.stringify(projecten||[]));
+  localStorage.setItem('mt_toggl_users_raw',JSON.stringify(gebruikers||[]));
+}
+
+function slaTogglMappingOp(){
+  // Projecten
+  const pm={};
+  document.querySelectorAll('[data-toggl-proj-id]').forEach(row=>{
+    const id=row.dataset.togglProjId;
+    const sel=document.getElementById('tpm-'+id);
+    if(sel&&sel.value) pm[id]=sel.value;
+  });
+  setTogglProjectMap(pm);
+  // Users
+  const um={};
+  document.querySelectorAll('[data-toggl-user-id]').forEach(row=>{
+    const id=row.dataset.togglUserId;
+    const sel=document.getElementById('tum-'+id);
+    if(sel&&sel.value) um[id]=sel.value;
+  });
+  setTogglUserMap(um);
+  const el=document.getElementById('inst-toggl-status');
+  if(el) el.textContent='✓ Mapping opgeslagen!';
+}
+
+async function syncTogglEntries(dagen=30){
+  const el=document.getElementById('inst-toggl-status');
+  if(el) el.textContent=`Toggl entries importeren (${dagen} dagen)…`;
+  updateTogglDot('sync');
+
+  const since=new Date();
+  since.setDate(since.getDate()-dagen);
+  const data=await togglFetch(`/me/time_entries?start_date=${since.toISOString().slice(0,10)}&end_date=${vandaagStr()}`);
+
+  if(!data){
+    if(el) el.textContent='❌ Import mislukt.';
+    updateTogglDot('');
+    return;
+  }
+
+  const projectMap=getTogglProjectMap();
+  const userMap=getTogglUserMap();
+  const entries=getEntries();
+  const bestaandeTogglIds=new Set(entries.filter(e=>e.toggl_id).map(e=>String(e.toggl_id)));
+
+  let nieuw=0, bijgewerkt=0;
+  for(const te of data){
+    if(!te.stop||te.duration<0) continue; // lopende of ongeldige entries overslaan
+    const togglId=String(te.id);
+    const projectCode=projectMap[te.project_id]||null;
+    const teamlid=userMap[te.user_id]||null;
+    if(!teamlid||!projectCode) continue; // niet gekoppeld, overslaan
+
+    const bestaand=entries.findIndex(e=>String(e.toggl_id)===togglId);
+    const entryObj={
+      id:bestaand>=0?entries[bestaand].id:uid(),
+      toggl_id:te.id,
+      teamlid,
+      project_code:projectCode,
+      taak_naam:te.description||null,
+      omschrijving:te.description||'',
+      start:te.start,
+      stop:te.stop,
+      duur:te.duration,
+      datum:te.start.slice(0,10)
+    };
+    if(bestaand>=0){entries[bestaand]=entryObj;bijgewerkt++;}
+    else{entries.push(entryObj);nieuw++;}
+  }
+  setEntries(entries);
+  localStorage.setItem('mt_toggl_last_sync',new Date().toISOString());
+  updateTogglDot('ok');
+  if(el) el.textContent=`✓ Geïmporteerd: ${nieuw} nieuw, ${bijgewerkt} bijgewerkt (${data.length} entries verwerkt)`;
+  // Refresh huidige tab
+  if(actTab==='dag') renderDag();
+  if(actTab==='rapport') renderRapport();
+  if(actTab==='bord') renderBord();
+  sluitModal('inst');
+  setTimeout(()=>openModal('inst'),100);
+}
+
+// Timer start → ook naar Toggl pushen
+async function togglTimerStart(entry){
+  const token=getTogglToken();
+  if(!token) return null;
+  const projectMap=getTogglProjectMap();
+  const togglProjectId=parseInt(Object.entries(projectMap).find(([k,v])=>v===entry.project_code)?.[0])||null;
+  const data=await togglFetch(`/workspaces/${TOGGL_WS}/time_entries`,{
+    method:'POST',
+    body:JSON.stringify({
+      description:entry.omschrijving||entry.taak_naam||'',
+      project_id:togglProjectId,
+      start:entry.start,
+      duration:-1,
+      workspace_id:TOGGL_WS,
+      created_with:'MT-Bedrijfstool'
+    })
+  });
+  return data?.id||null;
+}
+
+// Timer stop → ook Toggl stoppen
+async function togglTimerStop(togglId){
+  if(!togglId||!getTogglToken()) return;
+  await togglFetch(`/workspaces/${TOGGL_WS}/time_entries/${togglId}/stop`,{method:'PATCH'});
+}
+
+function slaTogglTokenOp(val){
+  setTogglToken(val.trim());
+  updateTogglDot(val.trim()?'ok':'');
+}
+
+function togglInitStatus(){
+  const token=getTogglToken();
+  updateTogglDot(token?'ok':'');
+  const inp=document.getElementById('inst-toggl-token');
+  if(inp&&token) inp.value=token;
 }
 
 // ── START ──
