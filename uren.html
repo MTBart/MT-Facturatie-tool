@@ -207,6 +207,91 @@ header h1 span{color:var(--gold-mid);font-style:italic}
 .hidden{display:none!important}
 .flex{display:flex;align-items:center;gap:0.5rem}
 .mt-1{margin-top:0.5rem}
+
+/* ── BORD (muurscherm) ── */
+body.bord-fullscreen{background:#1C1A16}
+body.bord-fullscreen header,
+body.bord-fullscreen .tabs-wrap,
+body.bord-fullscreen .running-bar,
+body.bord-fullscreen .desc-bar{display:none!important}
+body.bord-fullscreen #tab-bord{background:#1C1A16;color:#F7F5F0;min-height:100vh}
+.bord-wrap{padding:1.5rem 2rem}
+body.bord-fullscreen .bord-wrap{padding:2rem 2.5rem}
+.bord-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem}
+.bord-datum{font-family:var(--serif);font-size:28px;font-weight:300;color:var(--text)}
+body.bord-fullscreen .bord-datum{color:#F7F5F0;font-size:36px}
+.bord-klok{font-family:var(--mono);font-size:22px;color:var(--text-faint)}
+body.bord-fullscreen .bord-klok{color:rgba(255,255,255,0.5);font-size:28px}
+.bord-controls{display:flex;gap:0.75rem;align-items:center}
+.bord-fs-btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:13px;font-family:var(--sans);cursor:pointer;color:var(--text-dim);transition:all 0.15s}
+.bord-fs-btn:hover{border-color:var(--green-mid);color:var(--green)}
+body.bord-fullscreen .bord-fs-btn{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:rgba(255,255,255,0.7)}
+body.bord-fullscreen .bord-fs-btn:hover{background:rgba(255,255,255,0.2)}
+
+.bord-sectie-label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-faint);margin-bottom:1rem}
+body.bord-fullscreen .bord-sectie-label{color:rgba(255,255,255,0.35);font-size:13px}
+
+/* Lopende timers */
+.bord-actief-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;margin-bottom:2.5rem}
+body.bord-fullscreen .bord-actief-grid{grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1.5rem}
+.bord-actief-kaart{background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:1.25rem 1.5rem;position:relative;overflow:hidden;box-shadow:var(--shadow)}
+body.bord-fullscreen .bord-actief-kaart{background:#2a2720;border-color:rgba(255,255,255,0.12);border-radius:18px;padding:1.75rem 2rem}
+.bord-actief-kaart.loopt{border-color:var(--green-mid)}
+body.bord-fullscreen .bord-actief-kaart.loopt{border-color:#4A7A5C}
+.bord-kaart-glow{position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--green),var(--gold));opacity:0}
+.bord-actief-kaart.loopt .bord-kaart-glow{opacity:1}
+.bord-kaart-persoon{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem}
+.bord-kaart-persoon-dot{width:10px;height:10px;border-radius:50%}
+.bord-kaart-persoon-naam{font-size:13px;font-family:var(--mono);color:var(--text-faint)}
+body.bord-fullscreen .bord-kaart-persoon-naam{color:rgba(255,255,255,0.5);font-size:15px}
+.bord-kaart-project{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--gold);margin-bottom:3px}
+body.bord-fullscreen .bord-kaart-project{font-size:20px}
+.bord-kaart-naam{font-size:14px;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.3}
+body.bord-fullscreen .bord-kaart-naam{font-size:17px;color:rgba(255,255,255,0.6)}
+.bord-kaart-bottom{display:flex;align-items:center;justify-content:space-between}
+.bord-kaart-timer{font-family:var(--mono);font-size:24px;font-weight:500;color:var(--text)}
+body.bord-fullscreen .bord-kaart-timer{font-size:32px;color:#F7F5F0}
+.bord-kaart-vandaag{font-family:var(--mono);font-size:12px;color:var(--text-faint)}
+body.bord-fullscreen .bord-kaart-vandaag{color:rgba(255,255,255,0.35);font-size:14px}
+.bord-pulse{width:8px;height:8px;border-radius:50%;background:#4caf50;animation:pulse 1.5s infinite;flex-shrink:0}
+
+/* Weekplanning bord */
+.bord-week-grid{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);box-shadow:var(--shadow)}
+body.bord-fullscreen .bord-week-grid{border-color:rgba(255,255,255,0.1);background:#242220;border-radius:16px}
+.bord-week-header{display:grid;background:var(--surface2);border-bottom:1px solid var(--border)}
+body.bord-fullscreen .bord-week-header{background:#1e1c1a;border-color:rgba(255,255,255,0.08)}
+.bord-wh-cel{padding:0.75rem 1rem;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);border-right:1px solid var(--border);text-align:center}
+body.bord-fullscreen .bord-wh-cel{color:rgba(255,255,255,0.3);border-color:rgba(255,255,255,0.08);padding:1rem 1.25rem;font-size:13px}
+.bord-wh-cel:last-child{border-right:none}
+.bord-wh-cel.vandaag{color:var(--green);font-weight:600}
+body.bord-fullscreen .bord-wh-cel.vandaag{color:var(--gold)}
+.bord-week-rij{display:grid;border-bottom:1px solid var(--border)}
+body.bord-fullscreen .bord-week-rij{border-color:rgba(255,255,255,0.06)}
+.bord-week-rij:last-child{border-bottom:none}
+.bord-project-label{padding:0.75rem 1rem;background:var(--surface2);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:2px;min-width:0}
+body.bord-fullscreen .bord-project-label{background:#1e1c1a;border-color:rgba(255,255,255,0.08);padding:1rem 1.25rem}
+.bord-pl-code{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.bord-fullscreen .bord-pl-code{font-size:14px}
+.bord-pl-naam{font-size:11px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.bord-fullscreen .bord-pl-naam{font-size:13px;color:rgba(255,255,255,0.35)}
+.bord-dag-cel{padding:0.4rem;border-right:1px solid var(--border);min-height:52px;position:relative;vertical-align:top}
+body.bord-fullscreen .bord-dag-cel{border-color:rgba(255,255,255,0.06);min-height:70px;padding:0.5rem}
+.bord-dag-cel:last-child{border-right:none}
+.bord-dag-cel.vandaag{background:rgba(42,74,56,0.08)}
+body.bord-fullscreen .bord-dag-cel.vandaag{background:rgba(42,74,56,0.25)}
+.bord-blok{border-radius:6px;padding:3px 8px;margin-bottom:3px;font-size:11px;display:flex;align-items:center;justify-content:space-between;gap:4px}
+body.bord-fullscreen .bord-blok{border-radius:8px;padding:5px 10px;margin-bottom:4px;font-size:13px}
+.bord-blok-plan{background:var(--surface2);border:1px dashed var(--border-strong)}
+body.bord-fullscreen .bord-blok-plan{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.15)}
+.bord-blok-plan-label{font-family:var(--mono);color:var(--text-faint)}
+body.bord-fullscreen .bord-blok-plan-label{color:rgba(255,255,255,0.4)}
+.bord-blok-act{border:none}
+.bord-blok-act-label{font-family:var(--mono);color:#fff;font-weight:500;font-size:10px}
+body.bord-fullscreen .bord-blok-act-label{font-size:12px}
+.bord-blok-act-uren{font-family:var(--mono);color:rgba(255,255,255,0.7);font-size:10px}
+body.bord-fullscreen .bord-blok-act-uren{font-size:12px}
+.bord-leeg{padding:2rem;text-align:center;color:var(--text-faint);font-size:13px}
+body.bord-fullscreen .bord-leeg{color:rgba(255,255,255,0.3)}
 </style>
 </head>
 <body>
@@ -255,6 +340,7 @@ header h1 span{color:var(--gold-mid);font-style:italic}
     <button class="tab-btn" onclick="showTab('dag',this)">📋 Dag</button>
     <button class="tab-btn" onclick="showTab('planning',this)">📅 Planning</button>
     <button class="tab-btn" onclick="showTab('projecten',this)">📊 Projecten</button>
+    <button class="tab-btn" onclick="showTab('bord',this)">🖥 Bord</button>
   </div>
 
   <!-- Tab: Timer -->
@@ -311,6 +397,25 @@ header h1 span{color:var(--gold-mid);font-style:italic}
         </span>
       </div>
       <div id="project-rapport"></div>
+    </div>
+  </div>
+
+  <!-- Tab: Bord (muurscherm) -->
+  <div id="tab-bord" class="tab-content">
+    <div class="bord-wrap">
+      <div class="bord-topbar">
+        <div>
+          <div class="bord-datum" id="bord-datum"></div>
+          <div class="bord-klok" id="bord-klok"></div>
+        </div>
+        <div class="bord-controls">
+          <button class="bord-fs-btn" onclick="toggleFullscreen()">⛶ Volledig scherm</button>
+        </div>
+      </div>
+      <div class="bord-sectie-label">Nu bezig</div>
+      <div class="bord-actief-grid" id="bord-actief"></div>
+      <div class="bord-sectie-label">Deze week</div>
+      <div id="bord-week"></div>
     </div>
   </div>
 </div>
@@ -1020,6 +1125,181 @@ function wisAllesBevestig(){
   }
 }
 
+// ── BORD ──
+let bordInterval = null;
+let bordKlokInterval = null;
+let bordTikerInterval = null;
+
+function renderBord(){
+  renderBordActief();
+  renderBordWeek();
+}
+
+function renderBordActief(){
+  const tl = getTeamleden();
+  const projecten = getProjecten();
+  const lopend = getLopende();
+  const entries = getEntries();
+  const vandaag = vandaagStr();
+  const wrap = document.getElementById('bord-actief');
+  if(!wrap) return;
+
+  // Bouw kaarten: één per teamlid (ook als ze niets doen = grijze kaart)
+  const kaarten = tl.map(t=>{
+    const isIk = lopend && lopend.teamlid === t.naam;
+    const dagEntries = entries.filter(e=>e.teamlid===t.naam&&e.datum===vandaag&&e.duur);
+    const vandaagTotaal = dagEntries.reduce((s,e)=>s+(e.duur||0),0);
+    const lopendEntry = isIk ? lopend : null;
+    const huidigProject = lopendEntry ? projecten.find(p=>p.code===lopendEntry.project_code) : null;
+    const timerSec = lopendEntry ? Math.round((Date.now()-new Date(lopendEntry.start))/1000) : 0;
+
+    return {t, lopendEntry, huidigProject, vandaagTotaal, timerSec};
+  });
+
+  wrap.innerHTML = kaarten.map(({t, lopendEntry, huidigProject, vandaagTotaal, timerSec})=>`
+    <div class="bord-actief-kaart${lopendEntry?' loopt':''}">
+      <div class="bord-kaart-glow"></div>
+      <div class="bord-kaart-persoon">
+        <span class="bord-kaart-persoon-dot" style="background:${t.kleur}"></span>
+        <span class="bord-kaart-persoon-naam">${t.label}</span>
+        ${lopendEntry?'<span class="bord-pulse" style="margin-left:auto"></span>':''}
+      </div>
+      ${lopendEntry
+        ? `<div class="bord-kaart-project">${lopendEntry.project_code}</div>
+           <div class="bord-kaart-naam">${huidigProject?.naam||''}</div>
+           <div class="bord-kaart-bottom">
+             <div class="bord-kaart-timer" data-start="${lopendEntry.start}" data-id="bord-timer-${t.naam}">${fmtDuur(timerSec)}</div>
+             <div class="bord-kaart-vandaag">Vandaag ${fmtUren(vandaagTotaal)}</div>
+           </div>`
+        : `<div class="bord-kaart-naam" style="font-style:italic;margin-top:0.25rem">${vandaagTotaal?'Gestopt':'Geen timer actief'}</div>
+           <div class="bord-kaart-bottom">
+             <div class="bord-kaart-timer" style="opacity:0.3">—</div>
+             <div class="bord-kaart-vandaag">${vandaagTotaal?'Vandaag '+fmtUren(vandaagTotaal):''}</div>
+           </div>`
+      }
+    </div>`).join('');
+}
+
+function tickBordTimers(){
+  // Update alle lopende timer-displays op het bord zonder de DOM opnieuw op te bouwen
+  document.querySelectorAll('[data-start][data-id]').forEach(el=>{
+    const sec = Math.round((Date.now()-new Date(el.dataset.start))/1000);
+    el.textContent = fmtDuur(sec);
+  });
+  // Update klok
+  const klok = document.getElementById('bord-klok');
+  if(klok) klok.textContent = new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function renderBordWeek(){
+  const wrap = document.getElementById('bord-week');
+  if(!wrap) return;
+  const ma = maandagVanWeek(0);
+  const dagen = [];
+  for(let i=0;i<5;i++){const d=new Date(ma+'T12:00:00');d.setDate(d.getDate()+i);dagen.push(datumStr(d));}
+  const vandaag = vandaagStr();
+  const tl = getTeamleden();
+  const projecten = getProjecten();
+  const planning = getPlanning();
+  const entries = getEntries();
+
+  // Bepaal welke projecten relevant zijn deze week
+  const relevante = new Set();
+  planning.filter(p=>dagen.includes(p.datum)).forEach(p=>relevante.add(p.project_code));
+  entries.filter(e=>dagen.includes(e.datum)&&e.duur).forEach(e=>relevante.add(e.project_code));
+
+  if(!relevante.size){
+    wrap.innerHTML = `<div class="bord-leeg">Geen projecten ingepland of geregistreerd deze week</div>`;
+    return;
+  }
+
+  const labelBreedte = 140;
+  const colTemplate = `${labelBreedte}px repeat(5,1fr)`;
+
+  let html = `<div class="bord-week-grid">
+    <div class="bord-week-header" style="grid-template-columns:${colTemplate}">
+      <div class="bord-wh-cel"></div>
+      ${dagen.map(d=>{
+        const dObj = new Date(d+'T12:00:00');
+        const dag = dObj.toLocaleDateString('nl-NL',{weekday:'short'});
+        const datum = dObj.toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
+        return `<div class="bord-wh-cel${d===vandaag?' vandaag':''}">${dag}<br><span style="font-size:10px;opacity:0.7">${datum}</span></div>`;
+      }).join('')}
+    </div>`;
+
+  [...relevante].sort().forEach(code=>{
+    const p = projecten.find(x=>x.code===code);
+    html += `<div class="bord-week-rij" style="grid-template-columns:${colTemplate}">
+      <div class="bord-project-label">
+        <div class="bord-pl-code">${code}</div>
+        <div class="bord-pl-naam">${p?.naam||''}</div>
+      </div>`;
+
+    dagen.forEach(dag=>{
+      html += `<div class="bord-dag-cel${dag===vandaag?' vandaag':''}">`;
+
+      // Planblokken (gestippeld)
+      planning.filter(pb=>pb.datum===dag&&pb.project_code===code).forEach(pb=>{
+        const tlid = tl.find(t=>t.naam===pb.teamlid);
+        html += `<div class="bord-blok bord-blok-plan" style="border-color:${tlid?.kleur||'#999'}44">
+          <span class="bord-blok-plan-label">${tlid?.label||pb.teamlid} ${pb.uren_gepland}u plan</span>
+        </div>`;
+      });
+
+      // Gerealiseerde uren per persoon (kleur-blok)
+      tl.forEach(t=>{
+        const som = entries.filter(e=>e.datum===dag&&e.project_code===code&&e.teamlid===t.naam&&e.duur)
+                          .reduce((s,e)=>s+(e.duur||0),0);
+        if(som>0){
+          html += `<div class="bord-blok bord-blok-act" style="background:${t.kleur}">
+            <span class="bord-blok-act-label">${t.label}</span>
+            <span class="bord-blok-act-uren">${fmtUren(som)}</span>
+          </div>`;
+        }
+      });
+
+      html += `</div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  html += `</div>`;
+  wrap.innerHTML = html;
+}
+
+function startBord(){
+  // Datum header
+  const datum = document.getElementById('bord-datum');
+  if(datum) datum.textContent = new Date().toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  renderBord();
+  // Klok tikt elke seconde
+  if(bordKlokInterval) clearInterval(bordKlokInterval);
+  bordKlokInterval = setInterval(tickBordTimers, 1000);
+  // Volledig bord herlaadt elke 30 seconden (nieuwe entries van anderen)
+  if(bordInterval) clearInterval(bordInterval);
+  bordInterval = setInterval(()=>{
+    renderBordActief();
+    renderBordWeek();
+  }, 30000);
+}
+
+function stopBord(){
+  if(bordKlokInterval){clearInterval(bordKlokInterval);bordKlokInterval=null;}
+  if(bordInterval){clearInterval(bordInterval);bordInterval=null;}
+}
+
+function toggleFullscreen(){
+  const fs = document.body.classList.toggle('bord-fullscreen');
+  const btn = document.querySelector('.bord-fs-btn');
+  if(btn) btn.textContent = fs ? '✕ Verlaat volledig scherm' : '⛶ Volledig scherm';
+  if(fs){
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+  } else {
+    document.exitFullscreen?.().catch(()=>{});
+  }
+}
+
 // ── TABS ──
 function showTab(naam, btn){
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
@@ -1031,6 +1311,7 @@ function showTab(naam, btn){
   if(naam==='planning') renderPlanning();
   if(naam==='projecten') renderProjectRapport();
   if(naam==='timer') renderTimer();
+  if(naam==='bord'){startBord();}else{stopBord();}
 }
 
 // ── START ──
