@@ -262,6 +262,7 @@ textarea{resize:vertical;min-height:60px}
     <span class="header-version">v4.0</span>
   </div>
   <div class="header-right">
+    <a href="uren.html" title="Naar de Uren app" style="color:#F7F5F0;opacity:0.75;font-size:12px;font-family:var(--mono);text-decoration:none;display:flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid rgba(255,255,255,0.2);border-radius:20px;transition:opacity 0.15s" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.75'">🕐 Uren <span id="header-concept-badge" style="display:none;background:#e53935;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:2px"></span></a>
     <span id="api-dot" class="api-dot warn"></span>
     <span id="api-label" class="api-label">verbinden...</span>
     <div class="user-chip" onclick="msLogout()" title="Uitloggen">
@@ -2234,14 +2235,19 @@ function renderTodo(){
   const el=document.getElementById('dash-todo');if(!el) return;
   const bestellen=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]').filter(b=>!b.besteld).length;
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').length;
+  const concepten=JSON.parse(localStorage.getItem('mt_projecten')||'[]').filter(p=>p.status==='concept').length;
+  // Concept-badge bijwerken in header
+  const hBadge=document.getElementById('header-concept-badge');
+  if(hBadge){hBadge.style.display=concepten>0?'inline':'none';hBadge.textContent=concepten;}
   const items=[
-    {label:'Facturen te controleren',count:'→',kleur:'var(--blue)',link:()=>document.querySelector('[onclick*="controle"]').click()},
+    {label:'Facturen te controleren',count:'→',kleur:'var(--blue)'},
     {label:'Items op bestellijst',count:bestellen,kleur:bestellen>0?'var(--orange)':'var(--green)'},
+    {label:'Concept-projecten — activeren',count:concepten,kleur:concepten>0?'var(--red)':'var(--green)',link:concepten>0?()=>document.querySelector('[onclick*="projecten"]').click():null},
     {label:'Voorraadmutaties',count:voorraad,kleur:'var(--text-dim)'},
   ];
   el.innerHTML=items.map(i=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:13px">${i.label}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);${i.link?'cursor:pointer':''}${i.count>0&&i.link?' opacity:1':''}" ${i.link?`onclick="(${i.link.toString()})()"`:''}>
+      <span style="font-size:13px">${i.label}${i.link&&concepten>0?' ↗':''}${i.link&&concepten===0?' ✓':''}</span>
       <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:${i.kleur};background:${i.kleur}22;padding:2px 10px;border-radius:12px">${i.count}</span>
     </div>`).join('');
 }
