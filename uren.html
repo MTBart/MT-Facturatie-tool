@@ -360,6 +360,29 @@ body.bord-fs .bord-blok-plan{background:rgba(255,255,255,0.05);border-color:rgba
 .bord-blok-act{border-radius:5px;padding:3px 7px;margin-bottom:2px;font-size:10px;font-family:var(--mono);color:#fff}
 body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;border-radius:7px}
 
+/* ── TAKEN-TAB (stap 5) ── */
+.taken-filter-bar{display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-left:auto}
+.taken-filter-bar input,.taken-filter-bar select{font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+.taken-filter-bar input{width:180px}
+.taken-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.taken-tbl th{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-faint);padding:0.5rem 0.75rem;border-bottom:2px solid var(--border);text-align:left;cursor:pointer;user-select:none;white-space:nowrap}
+.taken-tbl th:hover{color:var(--text-dim)}
+.taken-tbl th.sort-asc::after{content:' ↑'}
+.taken-tbl th.sort-desc::after{content:' ↓'}
+.taken-tbl td{padding:0.55rem 0.75rem;border-bottom:1px solid var(--border);vertical-align:middle}
+.taken-tbl tr.taken-rij:hover{background:var(--surface2);cursor:pointer}
+.taken-tbl tr.taken-rij:hover .tkn-timer-btn{opacity:1}
+.tkn-status{font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:10px;font-weight:600;white-space:nowrap}
+.tkn-prio-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.tkn-naam{font-weight:500;color:var(--text)}
+.tkn-proj{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:600}
+.tkn-assignees{display:flex;gap:3px;flex-wrap:wrap}
+.tkn-chip{font-size:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1px 7px;font-family:var(--mono);color:var(--text-dim)}
+.tkn-timer-btn{background:none;border:1px solid var(--border);border-radius:12px;padding:2px 8px;font-size:11px;cursor:pointer;color:var(--text-faint);opacity:0;transition:all 0.12s;font-family:var(--mono)}
+.tkn-timer-btn.actief{opacity:1;background:var(--green);border-color:var(--green);color:#fff}
+.tkn-timer-btn:hover{background:var(--green);border-color:var(--green);color:#fff}
+.taken-leeg{text-align:center;padding:3rem;color:var(--text-faint);font-style:italic;font-size:13px}
+
 /* ── KANBAN (stap 4) ── */
 .knb-wrap{display:flex;gap:0.85rem;padding:1rem 1.5rem;overflow-x:auto;flex:1;align-items:flex-start;min-height:0}
 .knb-col{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:270px;flex-shrink:0;display:flex;flex-direction:column;max-height:calc(100vh - 170px);transition:border-color 0.15s}
@@ -780,12 +803,43 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
   </div>
 
   <!-- TAKEN TAB (placeholder voor stap 5) -->
+  <!-- TAKEN (stap 5) -->
   <div id="tab-taken-tab" class="tab-content" style="flex-direction:column">
     <div class="page-topbar">
       <div class="page-topbar-title">Tasks</div>
+      <div class="taken-filter-bar">
+        <input id="tkn-zoek" type="search" placeholder="🔍 Zoek taak…" oninput="renderTaken()">
+        <select id="tkn-fp" onchange="renderTaken()"><option value="">Iedereen</option></select>
+        <select id="tkn-fpr" onchange="renderTaken()"><option value="">Alle projecten</option></select>
+        <select id="tkn-fs" onchange="renderTaken()">
+          <option value="">Alle statussen</option>
+          <option value="todo">Todo</option>
+          <option value="in_progress">In Progress</option>
+          <option value="blocked">Geblokkeerd</option>
+          <option value="review">Klaar voor levering</option>
+          <option value="backlog">Backlog</option>
+          <option value="done">Done</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="tknNieuwe()">+ Taak</button>
+      </div>
     </div>
-    <div class="main" style="display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:13px">
-      Tasks-tabel — komt in stap 5
+    <div class="main" style="padding-top:0.5rem;overflow-y:auto">
+      <table class="taken-tbl">
+        <thead>
+          <tr>
+            <th onclick="tknSort('naam')" id="tkn-th-naam">Naam</th>
+            <th onclick="tknSort('project_code')" id="tkn-th-project_code">Project</th>
+            <th onclick="tknSort('status')" id="tkn-th-status">Status</th>
+            <th onclick="tknSort('prioriteit')" id="tkn-th-prioriteit">Prio</th>
+            <th>Toegewezen</th>
+            <th onclick="tknSort('estimate_h')" id="tkn-th-estimate_h">Estimate</th>
+            <th onclick="tknSort('from_date')" id="tkn-th-from_date">Van</th>
+            <th onclick="tknSort('to_date')" id="tkn-th-to_date">Tot</th>
+            <th style="width:56px"></th>
+          </tr>
+        </thead>
+        <tbody id="tkn-tbody"></tbody>
+      </table>
     </div>
   </div>
 
@@ -2227,6 +2281,118 @@ function toggleBordFS(){
 }
 
 // ════════════════════════════════════════════
+// TAKEN-TAB (stap 5)
+// ════════════════════════════════════════════
+let tknSortKol='aangemaakt', tknSortDir=-1;
+
+function renderTaken(){
+  const tbody=document.getElementById('tkn-tbody');
+  if(!tbody) return;
+  let taken=getTaken();
+  const lopend=getLopende();
+
+  // Vul filter dropdowns
+  tknVulFilters(taken);
+
+  // Filters
+  const zoek=(document.getElementById('tkn-zoek')?.value||'').toLowerCase();
+  const fp=document.getElementById('tkn-fp')?.value||'';
+  const fpr=document.getElementById('tkn-fpr')?.value||'';
+  const fs=document.getElementById('tkn-fs')?.value||'';
+  if(zoek) taken=taken.filter(t=>(t.naam||'').toLowerCase().includes(zoek)||(t.project_code||'').toLowerCase().includes(zoek)||(t.omschrijving||'').toLowerCase().includes(zoek));
+  if(fp) taken=taken.filter(t=>(t.assignees||[]).includes(fp));
+  if(fpr) taken=taken.filter(t=>t.project_code===fpr);
+  if(fs) taken=taken.filter(t=>t.status===fs);
+
+  // Sorteren
+  taken=[...taken].sort((a,b)=>{
+    let av=a[tknSortKol]||'',bv=b[tknSortKol]||'';
+    if(typeof av==='number'&&typeof bv==='number') return (av-bv)*tknSortDir;
+    return String(av).localeCompare(String(bv))*tknSortDir;
+  });
+
+  // Sorteer-header visueel bijwerken
+  document.querySelectorAll('.taken-tbl th').forEach(th=>{th.classList.remove('sort-asc','sort-desc');});
+  const aktTh=document.getElementById(`tkn-th-${tknSortKol}`);
+  if(aktTh) aktTh.classList.add(tknSortDir===1?'sort-asc':'sort-desc');
+
+  if(!taken.length){
+    tbody.innerHTML=`<tr><td colspan="9" class="taken-leeg">Geen taken gevonden</td></tr>`;
+    return;
+  }
+
+  // Status → stijl (hergebruik PROJ_STATUS kleurenkaart)
+  const statusStijl={
+    todo:{label:'Todo',c:'#6B6455',bg:'#F0EDE8'},
+    in_progress:{label:'Bezig',c:'#1a3a8b',bg:'#EEF2FF'},
+    blocked:{label:'Geblokt',c:'#8B1A1A',bg:'#FEE2E2'},
+    review:{label:'Klaar',c:'#B8962E',bg:'#FEF9EA'},
+    backlog:{label:'Backlog',c:'#5a3a8b',bg:'#F5F0FF'},
+    done:{label:'Done',c:'#2A4A38',bg:'#EDFAF1'},
+  };
+  const prioKleur={high:'#e53935',medium:'#f57c00',low:'#9e9e9e'};
+
+  tbody.innerHTML=taken.map(t=>{
+    const isActief=lopend?.taak_id===t.id;
+    const ss=statusStijl[t.status]||{label:t.status,c:'#888',bg:'#eee'};
+    const prio=prioKleur[t.prioriteit]||'transparent';
+    const chips=(t.assignees||[]).map(a=>`<span class="tkn-chip">${a}</span>`).join('');
+    return `<tr class="taken-rij" onclick="openTaakModal('${t.id}')">
+      <td class="tkn-naam">${t.naam||'—'}</td>
+      <td class="tkn-proj">${t.project_code||'—'}</td>
+      <td><span class="tkn-status" style="color:${ss.c};background:${ss.bg}">${ss.label}</span></td>
+      <td><span class="tkn-prio-dot" style="background:${prio}"></span></td>
+      <td><div class="tkn-assignees">${chips||'<span style="color:var(--text-faint);font-size:11px">—</span>'}</div></td>
+      <td style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">${t.estimate_h?t.estimate_h+'h':'—'}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text-faint)">${t.from_date||'—'}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text-faint)">${t.to_date||'—'}</td>
+      <td onclick="event.stopPropagation()">
+        <button class="tkn-timer-btn${isActief?' actief':''}"
+          onclick="tknTimerToggle('${t.id}')">${isActief?'■ Stop':'▶'}</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function tknVulFilters(taken){
+  const pEl=document.getElementById('tkn-fp');
+  const prEl=document.getElementById('tkn-fpr');
+  if(!pEl||!prEl) return;
+  const hP=pEl.value,hPr=prEl.value;
+  const personen=[...new Set(taken.flatMap(t=>t.assignees||[]))].sort();
+  pEl.innerHTML=`<option value="">Iedereen</option>`+personen.map(p=>`<option${p===hP?' selected':''}>${p}</option>`).join('');
+  const projecten=[...new Set(taken.map(t=>t.project_code).filter(Boolean))].sort();
+  prEl.innerHTML=`<option value="">Alle projecten</option>`+projecten.map(p=>`<option${p===hPr?' selected':''}>${p}</option>`).join('');
+}
+
+function tknSort(kol){
+  if(tknSortKol===kol) tknSortDir*=-1; else{tknSortKol=kol;tknSortDir=1;}
+  renderTaken();
+}
+
+function tknTimerToggle(taakId){
+  const lopend=getLopende();
+  if(lopend?.taak_id===taakId){
+    stopTimerIntern(lopend);setLopende(null);renderTimerBar();
+  } else {
+    if(lopend) stopTimerIntern(lopend);
+    const taak=getTaakById(taakId);
+    setLopende({id:uid(),teamlid:IK,project_code:taak?.project_code||'',taak_id:taakId,taak_naam:taak?.naam||'',omschrijving:'',start:new Date().toISOString(),stop:null,duur:null,datum:vandaagStr()});
+    renderTimerBar();
+  }
+  renderTaken();
+}
+
+function tknNieuwe(){
+  const naam=prompt('Naam nieuwe taak:');
+  if(!naam?.trim()) return;
+  const t={id:uid(),project_code:'',naam:naam.trim(),status:'todo',bucket_id:'todo',prioriteit:null,tags:[],estimate_h:null,assignees:IK?[IK]:[],from_date:null,to_date:null,billable:false,omschrijving:'',subtaken:[],aangemaakt:new Date().toISOString(),gewijzigd:new Date().toISOString()};
+  const taken=getTaken();taken.push(t);setTaken(taken);
+  renderTaken();
+  setTimeout(()=>openTaakModal(t.id),60);
+}
+
+// ════════════════════════════════════════════
 // KANBAN (stap 4)
 // ════════════════════════════════════════════
 let knbDragId=null;
@@ -3086,6 +3252,7 @@ function showTab(naam,btn){
   if(naam==='rapport') renderRapport();
   if(naam==='timer') renderKalender();   // nieuwe kalender-view vervangt renderTimer
   if(naam==='kanban') renderKanban();
+  if(naam==='taken-tab') renderTaken();
   if(naam==='projecten') renderProjectenTab();
   if(naam==='bord'){startBord();}else{stopBord();}
 }
