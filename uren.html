@@ -364,6 +364,62 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,26,22,0.55);z-index:200;align-items:flex-end;justify-content:center}
 .modal-overlay.open{display:flex}
 @media(min-width:600px){.modal-overlay{align-items:center}}
+/* ── TAAK-MODAL (breed, 2 kolommen) ── */
+#modal-taak-overlay{z-index:300;align-items:center}
+.taak-modal{background:var(--surface);border-radius:var(--radius);width:100%;max-width:860px;max-height:92vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);overflow:hidden}
+.tm-header{display:flex;align-items:center;gap:0.75rem;padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.tm-breadcrumb{font-size:12px;color:var(--text-faint);cursor:pointer;text-decoration:none;border:none;background:none;padding:0;font-family:var(--sans);transition:color 0.1s}
+.tm-breadcrumb:hover{color:var(--green)}
+.tm-header-close{margin-left:auto;background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-faint);padding:4px;line-height:1;border-radius:4px}
+.tm-header-close:hover{background:var(--surface2);color:var(--text)}
+.tm-body{display:flex;flex:1;overflow:hidden}
+.tm-left{flex:1;padding:1.25rem 1.5rem;overflow-y:auto;border-right:1px solid var(--border)}
+.tm-right{width:240px;flex-shrink:0;padding:1rem 1.25rem;overflow-y:auto;background:var(--surface2)}
+.tm-titel{font-family:var(--serif);font-size:22px;font-weight:300;color:var(--text);border:none;background:transparent;outline:none;width:100%;padding:0;margin-bottom:0.25rem;line-height:1.3;cursor:text}
+.tm-titel:focus{border-bottom:2px solid var(--green-mid)}
+.tm-project-link{font-family:var(--mono);font-size:11px;color:var(--gold);cursor:pointer;text-decoration:none;margin-bottom:1rem;display:inline-block}
+.tm-project-link:hover{text-decoration:underline}
+.tm-omschr{width:100%;border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.75rem;font-family:var(--sans);font-size:13px;color:var(--text);background:var(--bg);resize:vertical;min-height:60px;outline:none}
+.tm-omschr:focus{border-color:var(--green-mid)}
+.tm-sectie-label{font-size:10px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.07em;margin:1rem 0 0.4rem}
+/* Subtaken */
+.tm-subtaak{display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid var(--border)}
+.tm-subtaak:last-child{border-bottom:none}
+.tm-subtaak input[type=checkbox]{width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0}
+.tm-subtaak-naam{flex:1;font-size:13px;cursor:text;border:none;background:none;outline:none;font-family:var(--sans);color:var(--text)}
+.tm-subtaak-naam.gedaan{text-decoration:line-through;color:var(--text-faint)}
+.tm-subtaak-del{background:none;border:none;color:var(--text-faint);cursor:pointer;padding:2px 4px;font-size:12px;border-radius:3px;opacity:0;transition:opacity 0.1s}
+.tm-subtaak:hover .tm-subtaak-del{opacity:1}
+.tm-voortgang{height:4px;background:var(--border);border-radius:2px;margin-bottom:0.5rem;overflow:hidden}
+.tm-voortgang-balk{height:100%;background:var(--green);border-radius:2px;transition:width 0.3s}
+/* Timer-knop in sidebar */
+.tm-timer-btn{display:flex;align-items:center;justify-content:center;gap:0.5rem;width:100%;padding:0.6rem;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:all 0.15s;margin-bottom:1rem}
+.tm-timer-btn.idle{background:var(--green);color:#fff}
+.tm-timer-btn.idle:hover{background:var(--green-mid)}
+.tm-timer-btn.lopend{background:var(--red-light);border:2px solid var(--red);color:var(--red)}
+.tm-timer-btn.lopend:hover{background:var(--red);color:#fff}
+/* Sidebar form-rijen */
+.tm-field{margin-bottom:0.75rem}
+.tm-field-label{font-size:10px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;display:block}
+.tm-select{width:100%;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;font-family:var(--sans);background:var(--surface);color:var(--text);outline:none;cursor:pointer}
+.tm-select:focus{border-color:var(--green-mid)}
+.tm-input-sm{width:100%;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;font-family:var(--sans);background:var(--surface);color:var(--text);outline:none}
+.tm-input-sm:focus{border-color:var(--green-mid)}
+.tm-estimate-row{display:flex;align-items:center;gap:0.4rem;font-size:12px;font-family:var(--mono)}
+.tm-gelogd{color:var(--text-dim)}
+.tm-gelogd.over{color:var(--red);font-weight:600}
+.tm-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:0.35rem 0;font-size:12px;color:var(--text-dim)}
+.tm-toggle{position:relative;display:inline-block;width:32px;height:18px;cursor:pointer}
+.tm-toggle input{opacity:0;width:0;height:0}
+.tm-toggle-slider{position:absolute;inset:0;background:var(--border-strong);border-radius:18px;transition:0.2s}
+.tm-toggle-slider::before{content:'';position:absolute;height:14px;width:14px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:0.2s}
+.tm-toggle input:checked+.tm-toggle-slider{background:var(--green)}
+.tm-toggle input:checked+.tm-toggle-slider::before{transform:translateX(14px)}
+/* Tags */
+.tm-tags{display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.4rem}
+.tm-tag{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2px 8px;font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:3px;cursor:default}
+.tm-tag-del{background:none;border:none;color:var(--text-faint);cursor:pointer;padding:0;font-size:11px;line-height:1}
+@media(max-width:700px){.tm-body{flex-direction:column}.tm-right{width:100%;border-right:none;border-top:1px solid var(--border)}}
 .modal{background:var(--surface);border-radius:16px 16px 0 0;padding:1.5rem;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
 @media(min-width:600px){.modal{border-radius:var(--radius)}}
 .modal-title{font-family:var(--serif);font-size:20px;font-weight:300;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between}
@@ -959,6 +1015,133 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
       <div class="inst-sectie-title">Data</div>
       <button class="btn btn-secondary btn-sm" onclick="exportCSV()">↓ Export CSV</button>
       <button class="btn btn-danger btn-sm" style="margin-left:0.5rem" onclick="wisAlles()">⚠ Alles wissen</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Universele Taak-modal -->
+<div class="modal-overlay" id="modal-taak-overlay" onclick="if(event.target===this)sluitTaakModal()">
+  <div class="taak-modal">
+
+    <!-- Header: breadcrumb + sluiten -->
+    <div class="tm-header">
+      <button class="tm-breadcrumb" id="tm-breadcrumb" onclick="tmNaarProject()">← …</button>
+      <button class="tm-header-close" onclick="sluitTaakModal()" title="Sluiten (Esc)">✕</button>
+    </div>
+
+    <!-- Body: links + rechts -->
+    <div class="tm-body">
+
+      <!-- LINKS: inhoud van de taak -->
+      <div class="tm-left">
+        <input class="tm-titel" id="tm-titel" placeholder="Taaknaam…" oninput="tmAutoSave()" onblur="tmAutoSave()">
+        <a class="tm-project-link" id="tm-project-link" onclick="tmNaarProject()">—</a>
+
+        <div class="tm-sectie-label">Omschrijving</div>
+        <textarea class="tm-omschr" id="tm-omschr" rows="2" placeholder="Notities, context…" oninput="tmAutoSave()"></textarea>
+
+        <!-- Subtaken -->
+        <div class="tm-sectie-label">
+          Subtaken
+          <span id="tm-voortgang-label" style="font-weight:400;margin-left:0.5rem;color:var(--text-faint)"></span>
+        </div>
+        <div class="tm-voortgang"><div class="tm-voortgang-balk" id="tm-voortgang-balk" style="width:0%"></div></div>
+        <div id="tm-subtaken-lijst"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:0.5rem" onclick="tmVoegSubtaakToe()">+ Subtaak</button>
+
+        <!-- Gelogde uren -->
+        <div class="tm-sectie-label">Gelogde uren</div>
+        <div id="tm-entries-lijst" style="font-size:12px;color:var(--text-dim)">—</div>
+
+        <!-- Outlook afspraak (achter feature-flag) -->
+        <div id="tm-outlook-sectie" style="display:none;margin-top:1rem;padding:0.6rem 0.75rem;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">
+          <label style="display:flex;align-items:center;gap:0.6rem;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="tm-outlook-cb" onchange="tmOutlookToggle()">
+            📅 Aanmaken als Outlook-afspraak
+          </label>
+          <div id="tm-outlook-status" style="font-size:11px;color:var(--text-faint);margin-top:0.35rem;margin-left:1.4rem"></div>
+        </div>
+      </div>
+
+      <!-- RECHTS: acties & meta -->
+      <div class="tm-right">
+
+        <!-- Timer-knop -->
+        <button class="tm-timer-btn idle" id="tm-timer-btn" onclick="tmTimerToggle()">▶ Timer starten</button>
+
+        <!-- Status -->
+        <div class="tm-field">
+          <label class="tm-field-label">Status</label>
+          <select class="tm-select" id="tm-status" onchange="tmAutoSave()">
+            <option value="todo">Todo</option>
+            <option value="in_progress">In Progress</option>
+            <option value="blocked">Geblokkeerd</option>
+            <option value="review">Klaar voor levering</option>
+            <option value="backlog">Backlog</option>
+            <option value="done">Done</option>
+          </select>
+        </div>
+
+        <!-- Assignees -->
+        <div class="tm-field">
+          <label class="tm-field-label">Toegewezen aan</label>
+          <div id="tm-assignees"></div>
+        </div>
+
+        <!-- Prioriteit -->
+        <div class="tm-field">
+          <label class="tm-field-label">Prioriteit</label>
+          <select class="tm-select" id="tm-prioriteit" onchange="tmAutoSave()">
+            <option value="">— geen —</option>
+            <option value="low">Laag</option>
+            <option value="medium">Normaal</option>
+            <option value="high">Hoog ⚑</option>
+          </select>
+        </div>
+
+        <!-- Tags -->
+        <div class="tm-field">
+          <label class="tm-field-label">Tags</label>
+          <div class="tm-tags" id="tm-tags"></div>
+          <input class="tm-input-sm" id="tm-tag-input" placeholder="Tag + Enter" style="margin-top:0.3rem"
+            onkeydown="if(event.key==='Enter'&&this.value.trim()){tmVoegTagToe(this.value.trim());this.value='';event.preventDefault()}">
+        </div>
+
+        <!-- Van – Tot -->
+        <div class="tm-field">
+          <label class="tm-field-label">Periode</label>
+          <div style="display:flex;gap:0.4rem;align-items:center;font-size:11px">
+            <input class="tm-input-sm" type="date" id="tm-from" style="flex:1" onchange="tmAutoSave()">
+            <span style="color:var(--text-faint)">–</span>
+            <input class="tm-input-sm" type="date" id="tm-to" style="flex:1" onchange="tmAutoSave()">
+          </div>
+        </div>
+
+        <!-- Estimate vs gelogd -->
+        <div class="tm-field">
+          <label class="tm-field-label">Estimate / Gelogd</label>
+          <div class="tm-estimate-row">
+            <input class="tm-input-sm" type="number" id="tm-estimate" placeholder="0" min="0" step="0.5"
+              style="width:60px;text-align:right" onchange="tmAutoSave()">
+            <span style="color:var(--text-faint)">h /</span>
+            <span class="tm-gelogd" id="tm-gelogd-label">0h</span>
+          </div>
+        </div>
+
+        <!-- Billable toggle -->
+        <div class="tm-toggle-row">
+          <span>Billable</span>
+          <label class="tm-toggle">
+            <input type="checkbox" id="tm-billable" onchange="tmAutoSave()">
+            <span class="tm-toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- Opslaan-knop (fallback bij geen auto-save) -->
+        <div style="margin-top:1.25rem">
+          <button class="btn btn-primary" style="width:100%" onclick="tmSlaOp();sluitTaakModal()">Opslaan & sluiten</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -2198,6 +2381,279 @@ function openModal(naam){
   if(naam==='inst'){renderInstTeamleden();renderInstCapaciteit();}
   if(naam==='taken') renderTakenBeheer();
   document.getElementById(`modal-${naam}-overlay`).classList.add('open');
+}
+
+// ════════════════════════════════════════════
+// TAAK-MODAL (stap 3)
+// ════════════════════════════════════════════
+let tmTaakId=null;
+let tmAutoSaveTimer=null;
+
+function openTaakModal(taakId){
+  const taak=getTaakById(taakId);
+  if(!taak) return;
+  tmTaakId=taakId;
+
+  // Header
+  const proj=getProjecten().find(p=>p.code===taak.project_code);
+  document.getElementById('tm-breadcrumb').textContent=`← ${proj?.naam||taak.project_code||'Project'}`;
+  const pl=document.getElementById('tm-project-link');
+  pl.textContent=taak.project_code||'—';
+  pl.title=proj?.naam||'';
+
+  // Links
+  document.getElementById('tm-titel').value=taak.naam||'';
+  document.getElementById('tm-omschr').value=taak.omschrijving||'';
+  tmRenderSubtaken(taak);
+  tmRenderEntries(taak);
+
+  // Rechts
+  tmUpdateTimerBtn();
+  document.getElementById('tm-status').value=taak.status||'todo';
+  document.getElementById('tm-prioriteit').value=taak.prioriteit||'';
+  document.getElementById('tm-estimate').value=taak.estimate_h||'';
+  document.getElementById('tm-from').value=taak.from_date||'';
+  document.getElementById('tm-to').value=taak.to_date||'';
+  document.getElementById('tm-billable').checked=!!taak.billable;
+  tmRenderAssignees(taak);
+  tmRenderTags(taak);
+
+  // Outlook-sectie tonen/verbergen op basis van feature-flag
+  const inst=JSON.parse(localStorage.getItem('mt_instellingen')||'{}');
+  const outlookSectie=document.getElementById('tm-outlook-sectie');
+  if(outlookSectie) outlookSectie.style.display='block'; // toon altijd, maar geeft melding als niet gekoppeld
+  document.getElementById('tm-outlook-cb').checked=!!taak.outlook_afspraak;
+  document.getElementById('tm-outlook-status').textContent=
+    inst.outlook_token?'Gekoppeld ✓':(inst.outlook_enabled?'Token ontbreekt — stel in via Instellingen':'Outlook niet gekoppeld — stel in via Instellingen');
+
+  document.getElementById('modal-taak-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('tm-titel').focus(),80);
+
+  // Escape-toets sluiten
+  document._tmEscHandler=(e)=>{if(e.key==='Escape')sluitTaakModal();};
+  document.addEventListener('keydown',document._tmEscHandler);
+}
+
+function sluitTaakModal(){
+  tmSlaOp(); // altijd opslaan voor sluiten
+  document.getElementById('modal-taak-overlay').classList.remove('open');
+  tmTaakId=null;
+  clearTimeout(tmAutoSaveTimer);
+  document.removeEventListener('keydown',document._tmEscHandler);
+}
+
+function tmNaarProject(){
+  sluitTaakModal();
+  const taak=getTaakById(tmTaakId)||{project_code:document.getElementById('tm-project-link').textContent};
+  if(taak.project_code) openProjectDetail(taak.project_code);
+}
+
+// Auto-save met debounce
+function tmAutoSave(){
+  clearTimeout(tmAutoSaveTimer);
+  tmAutoSaveTimer=setTimeout(()=>tmSlaOp(),800);
+}
+
+function tmSlaOp(){
+  if(!tmTaakId) return;
+  const taken=getTaken();
+  const idx=taken.findIndex(t=>t.id===tmTaakId);
+  if(idx===-1) return;
+  taken[idx]={
+    ...taken[idx],
+    naam:document.getElementById('tm-titel').value.trim()||taken[idx].naam,
+    omschrijving:document.getElementById('tm-omschr').value,
+    status:document.getElementById('tm-status').value,
+    prioriteit:document.getElementById('tm-prioriteit').value||null,
+    estimate_h:parseFloat(document.getElementById('tm-estimate').value)||null,
+    from_date:document.getElementById('tm-from').value||null,
+    to_date:document.getElementById('tm-to').value||null,
+    billable:document.getElementById('tm-billable').checked,
+    outlook_afspraak:document.getElementById('tm-outlook-cb').checked,
+    gewijzigd:new Date().toISOString()
+  };
+  setTaken(taken);
+  tmTaakId=taken[idx].id; // bewaar na update
+}
+
+function tmRenderSubtaken(taak){
+  const lijst=document.getElementById('tm-subtaken-lijst');
+  const subtaken=taak.subtaken||[];
+  const gedaan=subtaken.filter(s=>s.gedaan).length;
+  const pct=subtaken.length?Math.round(gedaan/subtaken.length*100):0;
+  document.getElementById('tm-voortgang-balk').style.width=pct+'%';
+  document.getElementById('tm-voortgang-label').textContent=subtaken.length?`${gedaan}/${subtaken.length}  (${pct}%)` :'';
+  lijst.innerHTML=subtaken.map((s,i)=>`
+    <div class="tm-subtaak">
+      <input type="checkbox" ${s.gedaan?'checked':''} onchange="tmToggleSubtaak(${i},this.checked)">
+      <input class="tm-subtaak-naam${s.gedaan?' gedaan':''}" value="${s.naam||''}"
+        onblur="tmBewerkSubtaak(${i},this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+      <button class="tm-subtaak-del" onclick="tmVerwijderSubtaak(${i})" title="Verwijderen">✕</button>
+    </div>`).join('');
+}
+
+function tmToggleSubtaak(idx,gedaan){
+  if(!tmTaakId) return;
+  const taken=getTaken();
+  const ti=taken.findIndex(t=>t.id===tmTaakId);
+  if(ti===-1) return;
+  if(taken[ti].subtaken[idx]) taken[ti].subtaken[idx].gedaan=gedaan;
+  taken[ti].gewijzigd=new Date().toISOString();
+  setTaken(taken);
+  tmRenderSubtaken(taken[ti]);
+}
+function tmBewerkSubtaak(idx,naam){
+  if(!tmTaakId) return;
+  const taken=getTaken();
+  const ti=taken.findIndex(t=>t.id===tmTaakId);
+  if(ti===-1) return;
+  if(taken[ti].subtaken[idx]) taken[ti].subtaken[idx].naam=naam;
+  taken[ti].gewijzigd=new Date().toISOString();
+  setTaken(taken);
+}
+function tmVoegSubtaakToe(){
+  if(!tmTaakId) return;
+  const taken=getTaken();
+  const ti=taken.findIndex(t=>t.id===tmTaakId);
+  if(ti===-1) return;
+  taken[ti].subtaken=taken[ti].subtaken||[];
+  taken[ti].subtaken.push({id:uid(),naam:'',gedaan:false,assignee:null});
+  taken[ti].gewijzigd=new Date().toISOString();
+  setTaken(taken);
+  tmRenderSubtaken(taken[ti]);
+  // Focus op nieuwe input
+  const inputs=document.querySelectorAll('.tm-subtaak-naam');
+  if(inputs.length) inputs[inputs.length-1].focus();
+}
+function tmVerwijderSubtaak(idx){
+  if(!tmTaakId) return;
+  const taken=getTaken();
+  const ti=taken.findIndex(t=>t.id===tmTaakId);
+  if(ti===-1) return;
+  taken[ti].subtaken.splice(idx,1);
+  taken[ti].gewijzigd=new Date().toISOString();
+  setTaken(taken);
+  tmRenderSubtaken(taken[ti]);
+}
+
+function tmRenderAssignees(taak){
+  const el=document.getElementById('tm-assignees');
+  const tl=getTeamleden();
+  const assigned=taak.assignees||[];
+  el.innerHTML=tl.map(t=>{
+    const aan=assigned.includes(t.naam);
+    return`<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 4px 2px 0;font-size:12px;cursor:pointer">
+      <input type="checkbox" ${aan?'checked':''} onchange="tmToggleAssignee('${t.naam}',this.checked)">
+      <span style="width:8px;height:8px;border-radius:50%;background:${t.kleur};display:inline-block"></span>
+      ${t.label}
+    </label>`;
+  }).join('');
+}
+function tmToggleAssignee(naam,aan){
+  if(!tmTaakId) return;
+  const taken=getTaken();
+  const ti=taken.findIndex(t=>t.id===tmTaakId);
+  if(ti===-1) return;
+  const a=taken[ti].assignees||[];
+  if(aan&&!a.includes(naam)) a.push(naam);
+  else if(!aan) taken[ti].assignees=a.filter(x=>x!==naam);
+  if(aan) taken[ti].assignees=a;
+  taken[ti].gewijzigd=new Date().toISOString();
+  setTaken(taken);
+}
+
+function tmRenderTags(taak){
+  const el=document.getElementById('tm-tags');
+  const tags=taak.tags||[];
+  el.innerHTML=tags.map((tag,i)=>`
+    <span class="tm-tag">${tag}
+      <button class="tm-tag-del" onclick="tmVerwijderTag(${i})">✕</button>
+    </span>`).join('');
+}
+function tmVoegTagToe(tag){
+  if(!tmTaakId) return;
+  const taken=getTaken();
+  const ti=taken.findIndex(t=>t.id===tmTaakId);
+  if(ti===-1) return;
+  if(!taken[ti].tags.includes(tag)) taken[ti].tags.push(tag);
+  taken[ti].gewijzigd=new Date().toISOString();
+  setTaken(taken);
+  tmRenderTags(taken[ti]);
+}
+function tmVerwijderTag(idx){
+  if(!tmTaakId) return;
+  const taken=getTaken();
+  const ti=taken.findIndex(t=>t.id===tmTaakId);
+  if(ti===-1) return;
+  taken[ti].tags.splice(idx,1);
+  taken[ti].gewijzigd=new Date().toISOString();
+  setTaken(taken);
+  tmRenderTags(taken[ti]);
+}
+
+function tmRenderEntries(taak){
+  const el=document.getElementById('tm-entries-lijst');
+  const entries=getEntries().filter(e=>e.taak_id===taak.id&&e.duur);
+  const totaal=entries.reduce((s,e)=>s+e.duur,0);
+  const estimateH=taak.estimate_h;
+  const totaalH=totaal/3600;
+  const overEstimate=estimateH&&totaalH>estimateH*1.2;
+  document.getElementById('tm-gelogd-label').textContent=totaalH.toFixed(1)+'h';
+  document.getElementById('tm-gelogd-label').className='tm-gelogd'+(overEstimate?' over':'');
+  if(!entries.length){el.innerHTML='<span style="color:var(--text-faint);font-style:italic">Nog geen uren gelogd</span>';return;}
+  el.innerHTML=entries.slice(-5).reverse().map(e=>`
+    <div style="display:flex;gap:0.5rem;padding:0.25rem 0;border-bottom:1px solid var(--border);font-size:11px">
+      <span style="font-family:var(--mono);color:var(--text-dim)">${e.datum}</span>
+      <span style="color:var(--text-dim)">${e.teamlid}</span>
+      <span style="margin-left:auto;font-family:var(--mono)">${fmtUren(e.duur)}</span>
+    </div>`).join('')+
+    (entries.length>5?`<div style="font-size:11px;color:var(--text-faint);padding-top:0.25rem">&hellip; ${entries.length} entries totaal</div>`:'');
+}
+
+function tmUpdateTimerBtn(){
+  const btn=document.getElementById('tm-timer-btn');
+  if(!btn) return;
+  const lopend=getLopende();
+  if(lopend&&lopend.taak_id===tmTaakId){
+    btn.className='tm-timer-btn lopend';
+    btn.textContent='■ Timer stoppen';
+  } else {
+    btn.className='tm-timer-btn idle';
+    btn.textContent='▶ Timer starten';
+  }
+}
+function tmTimerToggle(){
+  if(!tmTaakId) return;
+  const lopend=getLopende();
+  if(lopend&&lopend.taak_id===tmTaakId){
+    stopTimer();
+  } else {
+    const taak=getTaakById(tmTaakId);
+    if(!taak) return;
+    const entry={
+      id:uid(),teamlid:IK,project_code:taak.project_code,
+      taak_id:tmTaakId,taak_naam:taak.naam,
+      omschrijving:'',start:new Date().toISOString(),stop:null,duur:null,datum:vandaagStr()
+    };
+    setLopende(entry);
+    updateTimerTopbar();
+    if(actTab==='timer') renderKalender();
+  }
+  tmUpdateTimerBtn();
+}
+
+function tmOutlookToggle(){
+  const cb=document.getElementById('tm-outlook-cb');
+  const statusEl=document.getElementById('tm-outlook-status');
+  if(!cb.checked){statusEl.textContent='';return;}
+  const inst=JSON.parse(localStorage.getItem('mt_instellingen')||'{}');
+  if(!inst.outlook_token){
+    statusEl.textContent='⚠ Outlook niet gekoppeld — token instellen in index-v4.html → Instellingen';
+    cb.checked=false;
+    return;
+  }
+  statusEl.textContent='Wordt aangemaakt bij opslaan…';
+  tmAutoSave();
 }
 
 // ════════════════════════════════════════════
