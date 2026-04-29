@@ -2559,21 +2559,34 @@ function renderRapport(){
 function renderRapportProject(wrap){
   const [van,tm]=getPeriodeDatums();
   const entries=getEntries().filter(e=>e.duur&&e.datum>=van&&e.datum<=tm);
+  const planning=getPlanning().filter(p=>p.datum>=van&&p.datum<=tm);
   const tl=getTeamleden();
   const projecten=getProjecten();
   const per={};
   entries.forEach(e=>{
-    if(!per[e.project_code])per[e.project_code]={totaal:0,pp:{}};
-    per[e.project_code].totaal+=e.duur;
+    if(!per[e.project_code])per[e.project_code]={geboekt:0,gepland:0,pp:{}};
+    per[e.project_code].geboekt+=e.duur;
     const tlNaam=e.teamlid?.toLowerCase();
     const tlObj=tl.find(t=>t.naam?.toLowerCase()===tlNaam)||{naam:e.teamlid};
     per[e.project_code].pp[tlObj.naam]=(per[e.project_code].pp[tlObj.naam]||0)+e.duur;
   });
-  const sorted=Object.entries(per).sort((a,b)=>b[1].totaal-a[1].totaal);
-  const max=sorted[0]?.[1]?.totaal||1;
+  // Voeg geplande uren toe (ook projecten zonder entries maar mét planning)
+  planning.forEach(p=>{
+    if(!per[p.project_code])per[p.project_code]={geboekt:0,gepland:0,pp:{}};
+    per[p.project_code].gepland+=p.uren_gepland||0;
+  });
+  const sorted=Object.entries(per).sort((a,b)=>b[1].geboekt-a[1].geboekt);
+  const maxGeboekt=Math.max(...sorted.map(([,d])=>d.geboekt),1);
+  const maxGepland=Math.max(...sorted.map(([,d])=>d.gepland*3600),1);
+  const max=Math.max(maxGeboekt,maxGepland);
   if(!sorted.length){wrap.innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen uren in deze periode</div>`;return;}
   wrap.innerHTML=sorted.map(([code,data])=>{
     const p=projecten.find(x=>x.code===code);
+    const gbkPct=Math.round(data.geboekt/max*100);
+    const gepPct=Math.round(data.gepland*3600/max*100);
+    const delta=data.geboekt/3600-data.gepland;
+    const heeftPlan=data.gepland>0;
+    const deltaKleur=delta>1?'var(--red)':delta<-1?'var(--text-faint)':'var(--green)';
     const breakdown=tl.filter(t=>data.pp[t.naam]||data.pp[t.label]).map(t=>{
       const sec=data.pp[t.naam]||data.pp[t.label]||0;
       return sec?`<span class="pr-persoon"><span class="pr-dot" style="background:${t.kleur}"></span>${t.label} ${fmtUren(sec)}</span>`:'';
@@ -2581,12 +2594,23 @@ function renderRapportProject(wrap){
     return `<div class="pr-item" onclick="openProjectDetail('${code}')">
       <div class="pr-header">
         <div><div class="pr-code">${code}</div><div class="pr-naam">${p?.naam||''}</div></div>
-        <div class="pr-totaal">${fmtUren(data.totaal)}</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          ${heeftPlan?`<span style="font-size:11px;font-family:var(--mono);color:var(--text-faint)">${data.gepland}u gepland</span>`:''}
+          <span class="pr-totaal">${fmtUren(data.geboekt)}</span>
+          ${heeftPlan?`<span style="font-size:11px;font-family:var(--mono);color:${deltaKleur}">${delta>=0?'+':''}${delta.toFixed(1)}u</span>`:''}
+        </div>
       </div>
-      <div class="pr-bar-wrap"><div class="pr-bar" style="width:${Math.round(data.totaal/max*100)}%"></div></div>
+      <div class="pr-bar-wrap" style="position:relative;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin:4px 0 6px">
+        ${heeftPlan?`<div style="position:absolute;top:0;left:0;height:100%;width:${gepPct}%;background:var(--gold);opacity:0.35;border-radius:4px"></div>`:''}
+        <div style="position:absolute;top:0;left:0;height:100%;width:${gbkPct}%;background:var(--green);border-radius:4px"></div>
+      </div>
       <div class="pr-breakdown">${breakdown}</div>
     </div>`;
-  }).join('');
+  }).join('')+
+  `<div style="display:flex;gap:1rem;font-size:11px;color:var(--text-faint);padding:4px 2px">
+    <span><span style="display:inline-block;width:10px;height:4px;background:var(--green);border-radius:2px;vertical-align:middle"></span> Geboekt</span>
+    <span><span style="display:inline-block;width:10px;height:4px;background:var(--gold);opacity:0.55;border-radius:2px;vertical-align:middle"></span> Gepland</span>
+  </div>`;
 }
 
 function renderRapportPersoon(wrap){
