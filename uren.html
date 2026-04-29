@@ -582,6 +582,32 @@ body.bord-fs .tab-fs-btn{display:none!important}
 
 /* ── PROJECT DETAIL MODAL ── */
 .modal-xl{max-width:680px!important;width:95vw}
+/* Project slide-in panel */
+.proj-panel-overlay{display:none;position:fixed;inset:0;z-index:250;background:transparent}
+.proj-panel-overlay.open{display:block}
+.proj-panel{position:fixed;top:0;right:-400px;width:380px;height:100vh;background:var(--surface);border-left:1px solid var(--border);box-shadow:-4px 0 24px rgba(0,0,0,0.12);display:flex;flex-direction:column;transition:right 0.28s cubic-bezier(.4,0,.2,1);z-index:251;overflow:hidden}
+.proj-panel-overlay.open .proj-panel{right:0}
+.proj-panel-header{padding:1.1rem 1.25rem 0.9rem;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface2)}
+.proj-panel-code{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:600;letter-spacing:0.04em;margin-bottom:2px}
+.proj-panel-naam{font-family:var(--serif);font-size:18px;font-weight:300;color:var(--text);line-height:1.25}
+.proj-panel-close{position:absolute;top:0.85rem;right:1rem;background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-faint);padding:4px;border-radius:4px}
+.proj-panel-close:hover{background:var(--border);color:var(--text)}
+.proj-panel-body{flex:1;overflow-y:auto;padding:1rem 1.25rem}
+.proj-panel-sectie{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin:1rem 0 0.5rem;padding-bottom:0.3rem;border-bottom:1px solid var(--border)}
+.proj-panel-taken{display:flex;flex-direction:column;gap:0.4rem}
+.proj-panel-taak{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:0.6rem 0.75rem;cursor:pointer;transition:all 0.13s;display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem}
+.proj-panel-taak:hover{border-color:var(--green-mid);background:var(--green-light)}
+.ppt-left{flex:1;min-width:0}
+.ppt-naam{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px}
+.ppt-meta{display:flex;gap:0.35rem;flex-wrap:wrap}
+.ppt-chip{font-size:10px;font-family:var(--mono);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1px 6px;color:var(--text-dim)}
+.ppt-play{background:none;border:1px solid var(--border);border-radius:10px;font-size:11px;padding:2px 8px;cursor:pointer;color:var(--text-faint);flex-shrink:0;transition:all 0.12s}
+.ppt-play:hover{background:var(--green);border-color:var(--green);color:#fff}
+.ppt-play.actief{background:var(--green);border-color:var(--green);color:#fff}
+.proj-uren-row{display:flex;align-items:center;gap:0.5rem;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
+.proj-uren-row:last-child{border-bottom:none}
+.proj-uren-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.proj-panel-footer{padding:0.85rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:0.5rem;flex-shrink:0;background:var(--surface2)}
 .proj-detail-head{display:flex;align-items:flex-start;gap:1rem;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
 .proj-detail-code{font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:500}
 .proj-detail-naam{font-family:var(--serif);font-size:20px;font-weight:300;margin-top:2px}
@@ -1092,18 +1118,29 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
   </div>
 </div>
 
-<!-- MODAL: Project detail -->
-<div class="modal-overlay" id="modal-proj-detail-overlay" onclick="if(event.target===this)sluitModal('proj-detail')">
+<!-- PANEL: Project detail (slide-in rechts) -->
+<div class="proj-panel-overlay" id="panel-proj-overlay" onclick="if(event.target===this)sluitProjectPanel()">
+  <div class="proj-panel">
+    <div class="proj-panel-header">
+      <div class="proj-panel-code" id="pp-code">—</div>
+      <div class="proj-panel-naam" id="pp-naam">Project</div>
+      <button class="proj-panel-close" onclick="sluitProjectPanel()" title="Sluiten (Esc)">✕</button>
+    </div>
+    <div class="proj-panel-body" id="pp-body"></div>
+    <div class="proj-panel-footer">
+      <button class="btn btn-primary btn-sm" onclick="ppNieuweTaak()">+ Taak</button>
+      <button class="btn btn-secondary btn-sm" onclick="ppTimerStarten()">▶ Timer</button>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="sluitProjectPanel()">Sluiten</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Project detail (oud — bewaard voor backward compat) -->
+<div class="modal-overlay" id="modal-proj-detail-overlay" onclick="if(event.target===this)sluitModal('proj-detail')" style="display:none!important">
   <div class="modal modal-xl" style="max-height:90vh;overflow-y:auto">
-    <div class="modal-title">
-      <span id="proj-detail-title">Project</span>
-      <button class="modal-close" onclick="sluitModal('proj-detail')">✕</button>
-    </div>
+    <div class="modal-title"><span id="proj-detail-title">Project</span><button class="modal-close" onclick="sluitModal('proj-detail')">✕</button></div>
     <div id="proj-detail-inhoud"></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="sluitModal('proj-detail')">Sluiten</button>
-      <button class="btn btn-primary" onclick="openStartModal(projDetailCode);sluitModal('proj-detail')">▶ Timer starten</button>
-    </div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="sluitModal('proj-detail')">Sluiten</button></div>
   </div>
 </div>
 
@@ -3189,10 +3226,112 @@ let projDetailCode=null;
 function openProjectDetail(code){
   if(!code) return;
   projDetailCode=code;
+  renderProjectPanel();
+  const overlay=document.getElementById('panel-proj-overlay');
+  overlay.classList.add('open');
+  // Escape handler
+  document._ppEscHandler=(e)=>{if(e.key==='Escape')sluitProjectPanel();};
+  document.addEventListener('keydown',document._ppEscHandler);
+}
+
+function sluitProjectPanel(){
+  document.getElementById('panel-proj-overlay').classList.remove('open');
+  document.removeEventListener('keydown',document._ppEscHandler);
+}
+
+function renderProjectPanel(){
+  const code=projDetailCode;
   const p=getProjecten().find(x=>x.code===code);
-  document.getElementById('proj-detail-title').textContent=code+(p?.naam?' — '+p.naam:'');
-  renderProjectDetail();
-  openModal('proj-detail');
+  const taken=getTaken().filter(t=>t.project_code===code);
+  const entries=getEntries().filter(e=>e.project_code===code&&e.duur);
+  const tl=getTeamleden();
+  const lopend=getLopende();
+
+  // Header
+  document.getElementById('pp-code').textContent=code;
+  document.getElementById('pp-naam').textContent=p?.naam||code;
+
+  // Status row
+  const ss=p?.status?PROJ_STATUS[p.status]:null;
+  const statusHtml=ss?`<span style="font-size:11px;background:${ss.bg};color:${ss.c};border:1px solid ${ss.bc};border-radius:12px;padding:2px 10px;font-family:var(--mono)">${ss.label}</span>`:'';
+
+  // Taken per bucket (gesorteerd)
+  const buckets=getBuckets().sort((a,b)=>a.volgorde-b.volgorde);
+  let takenHtml='';
+  buckets.forEach(b=>{
+    const bTaken=taken.filter(t=>(t.bucket_id||'todo')===b.id);
+    if(!bTaken.length) return;
+    takenHtml+=`<div style="font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:${b.kleur};margin:0.75rem 0 0.3rem;display:flex;align-items:center;gap:0.4rem"><span style="width:6px;height:6px;border-radius:50%;background:${b.kleur};display:inline-block"></span>${b.naam} (${bTaken.length})</div>`;
+    takenHtml+=bTaken.map(t=>{
+      const isActief=lopend?.taak_id===t.id;
+      const sub=t.subtaken||[];
+      const pct=sub.length?Math.round(sub.filter(s=>s.gedaan).length/sub.length*100):null;
+      const chips=[
+        ...(t.assignees||[]).map(a=>`<span class="ppt-chip">${a.charAt(0)}</span>`),
+        t.estimate_h?`<span class="ppt-chip">${t.estimate_h}h</span>`:'',
+        pct!==null?`<span class="ppt-chip">${pct}%✓</span>`:'',
+      ].filter(Boolean).join('');
+      return `<div class="proj-panel-taak" onclick="openTaakModal('${t.id}')">
+        <div class="ppt-left">
+          <div class="ppt-naam">${t.naam}</div>
+          ${chips?`<div class="ppt-meta">${chips}</div>`:''}
+        </div>
+        <button class="ppt-play${isActief?' actief':''}"
+          onclick="event.stopPropagation();ppTimerToggle('${t.id}')">${isActief?'■':'▶'}</button>
+      </div>`;
+    }).join('');
+  });
+  if(!taken.length) takenHtml=`<div style="color:var(--text-faint);font-size:12px;font-style:italic;padding:0.5rem 0">Geen taken</div>`;
+
+  // Uren per persoon
+  const urenPerTl={};
+  entries.forEach(e=>{urenPerTl[e.teamlid]=(urenPerTl[e.teamlid]||0)+(e.duur||0);});
+  const totaalSec=entries.reduce((s,e)=>s+(e.duur||0),0);
+  const urenHtml=Object.entries(urenPerTl).map(([naam,sec])=>{
+    const tm=tl.find(t=>t.naam?.toLowerCase()===naam?.toLowerCase());
+    return `<div class="proj-uren-row">
+      <span class="proj-uren-dot" style="background:${tm?.kleur||'#888'}"></span>
+      <span style="flex:1">${tm?.label||naam}</span>
+      <span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">${(sec/3600).toFixed(1)}h</span>
+    </div>`;
+  }).join('')||`<div style="color:var(--text-faint);font-size:12px;font-style:italic;padding:0.5rem 0">Geen uren gelogd</div>`;
+
+  document.getElementById('pp-body').innerHTML=`
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">
+      ${statusHtml}
+      ${p?.klant?`<span style="font-size:12px;color:var(--text-dim)">${p.klant}</span>`:''}
+    </div>
+    <div class="proj-panel-sectie">Taken (${taken.length})</div>
+    <div class="proj-panel-taken">${takenHtml}</div>
+    <div class="proj-panel-sectie">Gelogde uren — totaal ${(totaalSec/3600).toFixed(1)}h</div>
+    ${urenHtml}
+  `;
+}
+
+function ppNieuweTaak(){
+  const naam=prompt('Naam nieuwe taak:');
+  if(!naam?.trim()) return;
+  const t={id:uid(),project_code:projDetailCode,naam:naam.trim(),status:'todo',bucket_id:'todo',volgorde:9999,prioriteit:null,tags:[],estimate_h:null,assignees:IK?[IK]:[],from_date:null,to_date:null,billable:false,omschrijving:'',subtaken:[],aangemaakt:new Date().toISOString(),gewijzigd:new Date().toISOString()};
+  const taken=getTaken();taken.push(t);setTaken(taken);
+  renderProjectPanel();
+  setTimeout(()=>openTaakModal(t.id),60);
+}
+
+function ppTimerStarten(){
+  openStartModal(projDetailCode);
+}
+
+function ppTimerToggle(taakId){
+  const lopend=getLopende();
+  if(lopend?.taak_id===taakId){
+    stopTimerIntern(lopend);setLopende(null);renderTimerBar();
+  } else {
+    if(lopend) stopTimerIntern(lopend);
+    const taak=getTaakById(taakId);
+    setLopende({id:uid(),teamlid:IK,project_code:taak?.project_code||'',taak_id:taakId,taak_naam:taak?.naam||'',omschrijving:'',start:new Date().toISOString(),stop:null,duur:null,datum:vandaagStr()});
+    renderTimerBar();
+  }
+  renderProjectPanel();
 }
 
 function renderProjectDetail(){
