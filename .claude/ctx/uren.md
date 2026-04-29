@@ -10,9 +10,9 @@
 - [x] **Stap 3** — Taak-modal: universeel, `openTaakModal(taakId)`, subtaken, timer starten, auto-save, Outlook-flag
 - [x] **Stap 4** — Bord-tab (Kanban): drag & drop, buckets, timer-knop per kaart, filters persoon/project
 - [x] **Stap 5** — Taken-tab: tabeloverzicht met filters + sortering per kolom, timer-knop
-- [ ] **Stap 6** — Timeline verbeteringen: capaciteitsbalk, drag-to-create, vrije dagen weergave
-- [ ] **Stap 7** — Project-detail panel: slide-in rechts, `openProjectPanel(projectCode)`
-- [ ] **Stap 8** — Vrije dagen beheer: instellingen + timeline weergave
+- [x] **Stap 6** — Timeline: capaciteitsbalk per persoon (groen/oranje/rood), vrije dagen grijs + beheer in Instellingen
+- [x] **Stap 7** — Project-detail panel: slide-in rechts, taken per bucket, uren per persoon, timer-knop
+- [x] **Stap 8** — Vrije dagen beheer: Instellingen-modal, add/verwijder, live update Timeline
 - [ ] **Stap 9** — Weekafsluiting: rapport + export platte tekst
 - [ ] **Stap 10** — Mobiele optimalisatie: <768px responsive
 - [ ] **Stap 11** — Vectorworks koppeling: knop + functie in index-v4.html
