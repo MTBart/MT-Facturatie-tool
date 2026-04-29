@@ -411,6 +411,7 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
 .knb-card:hover .knb-timer-btn{opacity:1}
 .knb-timer-btn:hover{background:var(--green);border-color:var(--green);color:#fff}
 .knb-timer-btn.actief{opacity:1!important;background:var(--green);border-color:var(--green);color:#fff}
+.knb-card.drag-above{border-top:2px solid var(--green);margin-top:-1px}
 
 /* ── MODALS ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,26,22,0.55);z-index:200;align-items:flex-end;justify-content:center}
@@ -516,6 +517,15 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
 .add-taak-btn{background:var(--green);color:#fff;border:none;border-radius:5px;padding:6px 10px;cursor:pointer;font-size:12px}
 
 /* Instellingen */
+.inst-bucket-rij{display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border)}
+.inst-bucket-rij:last-child{border-bottom:none}
+.inst-bucket-kleur{width:28px;height:28px;border-radius:6px;border:1px solid var(--border);cursor:pointer;padding:0;appearance:auto}
+.inst-bucket-naam{flex:1;border:1px solid transparent;border-radius:5px;padding:4px 8px;font-size:13px;font-family:var(--sans);background:transparent;color:var(--text)}
+.inst-bucket-naam:hover,.inst-bucket-naam:focus{border-color:var(--border);background:var(--bg);outline:none}
+.inst-bucket-ord{background:none;border:1px solid var(--border);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:12px;color:var(--text-faint)}
+.inst-bucket-ord:hover{background:var(--surface2)}
+.inst-bucket-del{background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:13px;padding:2px 5px;border-radius:4px}
+.inst-bucket-del:hover{color:var(--red);background:#fee2e2}
 .inst-sectie{margin-bottom:1.5rem}
 .inst-sectie-title{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint);margin-bottom:0.75rem;padding-bottom:0.4rem;border-bottom:1px solid var(--border)}
 .tl-rij{display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;border-bottom:1px solid var(--border)}
@@ -1100,6 +1110,12 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
     <div class="inst-sectie">
       <div class="inst-sectie-title">Capaciteit (uren per week)</div>
       <div id="inst-capaciteit"></div>
+    </div>
+    <div class="inst-sectie">
+      <div class="inst-sectie-title">Statussen (Kanban kolommen)</div>
+      <div id="inst-buckets" style="margin-bottom:0.75rem"></div>
+      <button class="btn btn-secondary btn-sm" onclick="instBucketNieuw()">+ Nieuwe status</button>
+      <button class="btn btn-secondary btn-sm" style="margin-left:0.5rem" onclick="instBucketReset()">↺ Standaard herstellen</button>
     </div>
     <div class="inst-sectie">
       <div class="inst-sectie-title">Data</div>
@@ -2413,19 +2429,23 @@ function renderKanban(){
   if(fpr) taken=taken.filter(t=>t.project_code===fpr);
 
   wrap.innerHTML=buckets.map(b=>{
-    const cards=taken.filter(t=>(t.bucket_id||'todo')===b.id);
+    // Sorteer kaarten op volgorde (laag getal = boven), daarna aangemaakt
+    const cards=taken
+      .filter(t=>(t.bucket_id||'todo')===b.id)
+      .sort((a,x)=>(a.volgorde??9999)-(x.volgorde??9999)||(new Date(a.aangemaakt)-new Date(x.aangemaakt)));
     return `<div class="knb-col" data-bucket="${b.id}"
-        ondragover="event.preventDefault();this.classList.add('drag-over')"
-        ondragleave="this.classList.remove('drag-over')"
-        ondrop="knbDrop(event,'${b.id}')">
+        ondragover="event.preventDefault()"
+        ondrop="knbDrop(event,'${b.id}',null)">
       <div class="knb-col-header">
         <div class="knb-col-dot" style="background:${b.kleur}"></div>
         <div class="knb-col-naam">${b.naam}</div>
         <span class="knb-col-count">${cards.length}</span>
         <button class="knb-col-add" onclick="knbNieuwe('${b.id}')" title="Nieuwe taak in ${b.naam}">+</button>
       </div>
-      <div class="knb-cards">
-        ${cards.length?cards.map(t=>knbCard(t,lopend)).join(''):'<div class="knb-leeg">Leeg</div>'}
+      <div class="knb-cards" data-bucket="${b.id}">
+        ${cards.length?cards.map(t=>knbCard(t,lopend)).join(''):`<div class="knb-leeg"
+          ondragover="event.preventDefault()"
+          ondrop="knbDrop(event,'${b.id}',null)">Leeg</div>`}
       </div>
     </div>`;
   }).join('');
@@ -2443,8 +2463,11 @@ function knbCard(taak,lopend){
     taak.prioriteit&&taak.prioriteit!=='low'?`<span class="knb-chip ${prioClass}">${taak.prioriteit==='high'?'⚑':taak.prioriteit==='medium'?'●':''}</span>`:'',
   ].filter(Boolean).join('');
   return `<div class="knb-card${isActief?' loopt':''}" draggable="true"
+    data-taak-id="${taak.id}"
     ondragstart="knbDragStart(event,'${taak.id}')"
-    ondragend="document.querySelectorAll('.knb-card').forEach(c=>c.classList.remove('dragging'))"
+    ondragend="document.querySelectorAll('.knb-card').forEach(c=>{c.classList.remove('dragging','drag-above')})"
+    ondragover="event.preventDefault();knbDragOverCard(event,this)"
+    ondrop="event.stopPropagation();knbDrop(event,'${taak.bucket_id||taak.status||'todo'}','${taak.id}')"
     onclick="openTaakModal('${taak.id}')">
     <div class="knb-card-proj">${taak.project_code||'—'}</div>
     ${sub.length?`<div class="knb-progress"><div class="knb-progress-fill" style="width:${pct}%"></div></div>`:''}
@@ -2469,20 +2492,42 @@ function knbVulFilters(taken){
 
 function knbDragStart(event,taakId){
   knbDragId=taakId;
-  event.target.closest('.knb-card').classList.add('dragging');
+  setTimeout(()=>event.target.closest('.knb-card')?.classList.add('dragging'),0);
   event.dataTransfer.effectAllowed='move';
 }
 
-function knbDrop(event,bucketId){
+function knbDragOverCard(event,cardEl){
+  // Visueel: streep boven de kaart waar je overheen sleept
+  document.querySelectorAll('.knb-card.drag-above').forEach(c=>c.classList.remove('drag-above'));
+  if(cardEl.dataset.taakId!==knbDragId) cardEl.classList.add('drag-above');
+}
+
+function knbDrop(event,bucketId,voorTaakId){
   event.preventDefault();
-  document.querySelectorAll('.knb-col').forEach(c=>c.classList.remove('drag-over'));
+  document.querySelectorAll('.knb-card').forEach(c=>c.classList.remove('dragging','drag-above'));
   if(!knbDragId) return;
-  const taken=getTaken();
-  const idx=taken.findIndex(t=>t.id===knbDragId);
-  if(idx===-1){knbDragId=null;return;}
-  taken[idx].bucket_id=bucketId;
-  taken[idx].status=bucketId;
-  taken[idx].gewijzigd=new Date().toISOString();
+
+  let taken=getTaken();
+  const vanIdx=taken.findIndex(t=>t.id===knbDragId);
+  if(vanIdx===-1){knbDragId=null;return;}
+
+  // Bucket wijzigen (ook bij within-column drop)
+  taken[vanIdx].bucket_id=bucketId;
+  taken[vanIdx].status=bucketId;
+  taken[vanIdx].gewijzigd=new Date().toISOString();
+
+  // Volgorde binnen kolom: herschikken als voorTaakId opgegeven
+  if(voorTaakId && voorTaakId!==knbDragId){
+    // Haal de taak eruit en stop hem vóór de doelkaart
+    const taak=taken.splice(vanIdx,1)[0];
+    const naarIdx=taken.findIndex(t=>t.id===voorTaakId);
+    if(naarIdx!==-1) taken.splice(naarIdx,0,taak);
+    else taken.push(taak);
+    // Herteken volgorde-nummers voor deze kolom
+    let vol=0;
+    taken.forEach(t=>{ if(t.bucket_id===bucketId) t.volgorde=vol++; });
+  }
+
   setTaken(taken);
   knbDragId=null;
   renderKanban();
@@ -2721,9 +2766,66 @@ function wisAlles(){if(confirm('Alle uren en planning wissen?')){['mt_uren_entri
 // MODAL HELPERS
 // ════════════════════════════════════════════
 function openModal(naam){
-  if(naam==='inst'){renderInstTeamleden();renderInstCapaciteit();}
+  if(naam==='inst'){renderInstTeamleden();renderInstCapaciteit();renderInstBuckets();}
   if(naam==='taken') renderTakenBeheer();
   document.getElementById(`modal-${naam}-overlay`).classList.add('open');
+}
+
+// ── Bucket beheer in Instellingen ──
+function renderInstBuckets(){
+  const el=document.getElementById('inst-buckets');if(!el) return;
+  const buckets=getBuckets();
+  el.innerHTML=buckets.map((b,i)=>`
+    <div class="inst-bucket-rij">
+      <input type="color" class="inst-bucket-kleur" value="${b.kleur||'#888888'}"
+        onchange="instBucketKleurWijzig(${i},this.value)" title="Kleur">
+      <input class="inst-bucket-naam" value="${b.naam||''}"
+        onblur="instBucketNaamWijzig(${i},this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()">
+      <button class="inst-bucket-ord" onclick="instBucketOmhoog(${i})" title="Omhoog" ${i===0?'disabled':''}>↑</button>
+      <button class="inst-bucket-ord" onclick="instBucketOmlaag(${i})" title="Omlaag" ${i===buckets.length-1?'disabled':''}>↓</button>
+      <button class="inst-bucket-del" onclick="instBucketVerwijder(${i})" title="Verwijderen">✕</button>
+    </div>`).join('');
+}
+
+function _instBucketOpslaan(b){setBuckets(b);renderInstBuckets();if(actTab==='kanban')renderKanban();}
+function instBucketNaamWijzig(idx,naam){
+  const b=getBuckets();if(!b[idx]) return;
+  b[idx].naam=naam.trim()||b[idx].naam;
+  _instBucketOpslaan(b);
+}
+function instBucketKleurWijzig(idx,kleur){
+  const b=getBuckets();if(!b[idx]) return;
+  b[idx].kleur=kleur;_instBucketOpslaan(b);
+}
+function instBucketOmhoog(idx){
+  const b=getBuckets();if(idx===0) return;
+  [b[idx-1],b[idx]]=[b[idx],b[idx-1]];
+  b.forEach((x,i)=>x.volgorde=i);_instBucketOpslaan(b);
+}
+function instBucketOmlaag(idx){
+  const b=getBuckets();if(idx>=b.length-1) return;
+  [b[idx+1],b[idx]]=[b[idx],b[idx+1]];
+  b.forEach((x,i)=>x.volgorde=i);_instBucketOpslaan(b);
+}
+function instBucketVerwijder(idx){
+  const b=getBuckets();
+  const bucket=b[idx];if(!bucket) return;
+  const inGebruik=getTaken().some(t=>t.bucket_id===bucket.id);
+  if(inGebruik&&!confirm(`"${bucket.naam}" is in gebruik door taken. Verwijderen? (taken behouden hun huidige bucket_id)`)) return;
+  b.splice(idx,1);b.forEach((x,i)=>x.volgorde=i);_instBucketOpslaan(b);
+}
+function instBucketNieuw(){
+  const b=getBuckets();
+  const kleuren=['#2A6496','#5a3a8b','#8B1A1A','#2A4A38','#B8962E','#1a5c3a','#6B2D8B','#b85c10'];
+  const kleur=kleuren[b.length%kleuren.length];
+  b.push({id:'bucket_'+uid(),naam:'Nieuwe status',kleur,volgorde:b.length});
+  _instBucketOpslaan(b);
+  setTimeout(()=>{const ins=document.querySelectorAll('.inst-bucket-naam');const l=ins[ins.length-1];if(l){l.select();l.focus();}},50);
+}
+function instBucketReset(){
+  if(confirm('Standaard statussen herstellen? Eigen statussen gaan verloren.'))
+  {setBuckets(DEFAULT_BUCKETS);_instBucketOpslaan(DEFAULT_BUCKETS);}
 }
 
 // ════════════════════════════════════════════
