@@ -256,6 +256,29 @@ body.bord-fs .timer-bar{display:none!important}
 .tl-dag-cel.weekend{background:var(--surface2);cursor:default}
 .tl-dag-cel.weekend:hover{background:var(--surface2)}
 .tl-dag-cel.drag-over{background:var(--gold-light)!important;outline:2px dashed var(--gold)}
+/* ── TIMELINE REDESIGN — sticky namen, doorlopende dagen ── */
+.tl-table{display:table;border-collapse:collapse;min-width:max-content;width:100%}
+.tl-thead{display:table-header-group}
+.tl-tbody{display:table-row-group}
+.tl-tr{display:table-row}
+.tl-th,.tl-td{display:table-cell;vertical-align:top;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.tl-th{background:var(--surface2);padding:0.5rem 0;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text-faint);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;position:sticky;top:0;z-index:3;white-space:nowrap}
+.tl-th.vandaag{color:var(--green);font-weight:700;background:rgba(42,74,56,0.06)}
+.tl-th.vrije-dag-th{background:var(--surface2);color:var(--text-faint)}
+.tl-th.week-start{border-left:2px solid var(--border)}
+/* Sticky label kolom */
+.tl-label-th{position:sticky;left:0;z-index:4;text-align:left;padding-left:0.75rem;min-width:160px;max-width:160px;width:160px;background:var(--surface2);border-right:2px solid var(--border)}
+.tl-label-td{position:sticky;left:0;z-index:2;background:var(--surface2);border-right:2px solid var(--border);min-width:160px;max-width:160px;width:160px;padding:0.6rem 0.75rem;vertical-align:middle}
+.tl-label-naam-row{font-size:13px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:5px}
+.tl-label-sub{font-size:10px;color:var(--text-faint);font-family:var(--mono);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Dag cellen */
+.tl-dag-td{min-width:112px;width:112px;padding:0.3rem 0.25rem;cursor:pointer;transition:background 0.12s;min-height:68px}
+.tl-dag-td:hover{background:var(--green-light)}
+.tl-dag-td.vandaag{background:rgba(184,150,46,0.05)}
+.tl-dag-td.vandaag:hover{background:var(--green-light)}
+.tl-dag-td.vrije-dag{background:var(--surface2)!important;cursor:default}
+.tl-dag-td.week-start{border-left:2px solid var(--border)}
+.tl-tr:last-child .tl-td,.tl-tr:last-child .tl-dag-td,.tl-tr:last-child .tl-label-td{border-bottom:none}
 /* Capaciteitsbalk */
 .tl-cap-wrap{margin-top:5px}
 .tl-cap-track{height:4px;background:var(--border);border-radius:2px;overflow:hidden;width:100%}
@@ -756,6 +779,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
       <button class="kalender-nav-btn" onclick="kalNav(0)">Vandaag</button>
       <button class="kalender-nav-btn" onclick="kalNav(1)">→</button>
       <div class="kalender-datum" id="kal-datum-label">—</div>
+      <div id="kal-persoon-switcher" style="display:flex;gap:4px;align-items:center;margin-left:auto"></div>
       <div class="kalender-view-toggle">
         <button class="kvt-btn active" id="kvt-dag" onclick="kalSetView('dag',this)">Dag</button>
         <button class="kvt-btn" id="kvt-3d" onclick="kalSetView('3d',this)">3 Dagen</button>
@@ -784,7 +808,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
   </div>
 
   <!-- TIMELINE / PLANNING -->
-  <!-- Timeline: bedoeld als WERKPLAATS-MUURSCHERM — alle 4 agenda's in één overzicht (Maarten, Arjan, Bart, Mathijs) -->
+  <!-- Timeline: bedoeld als WERKPLAATS-MUURSCHERM — alle 4 agenda's in één overzicht -->
   <div id="tab-timeline" class="tab-content" style="flex-direction:column">
     <div class="page-topbar">
       <div class="page-topbar-title">Timeline <span style="font-size:10px;font-family:var(--mono);color:var(--text-faint);margin-left:6px;letter-spacing:0.05em">WERKPLAATSSCHERM</span></div>
@@ -792,15 +816,20 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
         <button class="tl-vt-btn active" id="tl-btn-persoon" onclick="tlSetView('persoon',this)">Per persoon</button>
         <button class="tl-vt-btn" id="tl-btn-project" onclick="tlSetView('project',this)">Per project</button>
       </div>
-      <div class="tl-nav" style="display:flex;gap:0.4rem">
-        <button class="kalender-nav-btn" onclick="tlNav(-1)">←</button>
-        <button class="kalender-nav-btn" onclick="tlNav(0)">Deze week</button>
-        <button class="kalender-nav-btn" onclick="tlNav(1)">→</button>
+      <div style="display:flex;gap:0.4rem;align-items:center">
+        <button class="kalender-nav-btn" onclick="tlNav(-1)" title="Vorige week">←</button>
+        <button class="kalender-nav-btn" onclick="tlNav(0)">Vandaag</button>
+        <button class="kalender-nav-btn" onclick="tlNav(1)" title="Volgende week">→</button>
+        <input type="date" id="tl-datum-input" title="Spring naar datum"
+          style="font-size:11px;padding:3px 7px;border-radius:6px;border:1px solid var(--border);font-family:var(--mono);background:var(--surface);color:var(--text)"
+          onchange="tlSpringNaarDatum(this.value)">
       </div>
-      <div class="tl-range" id="tl-range" style="font-size:13px;color:var(--text-dim)">—</div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim)" id="tl-range">—</div>
     </div>
-    <div class="main" style="overflow-x:auto;padding:0.75rem 0">
-      <div id="tl-grid-wrap" style="padding:0 1rem"></div>
+    <div style="flex:1;overflow:hidden;padding:0 0.75rem 0.75rem">
+      <div id="tl-scroll-wrap" style="overflow-x:auto;height:100%;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow)">
+        <div id="tl-grid-wrap"></div>
+      </div>
     </div>
   </div>
 
@@ -1378,6 +1407,7 @@ let bordKlokInt = null;
 let kalOffset = 0;       // dagen offset t.o.v. vandaag
 let kalView = 'dag';     // 'dag' | '3d' | 'week'
 let kalNuLijnInt = null; // interval voor nu-lijn update
+let kalPersoon = null;   // null = IK (ingelogde gebruiker)
 
 // ════════════════════════════════════════════
 // HELPERS
@@ -1650,6 +1680,24 @@ function kalNav(dir){
   renderKalender();
 }
 
+function renderKalenderPersoonSwitcher(){
+  const wrap=document.getElementById('kal-persoon-switcher');
+  if(!wrap) return;
+  const teamleden=getTeamleden();
+  const actief=kalPersoon||IK;
+  let html='';
+  for(const tl of teamleden){
+    const naam=tl.naam||tl.id;
+    const isAct=naam.toLowerCase()===actief.toLowerCase();
+    html+=`<button onclick="kalZetPersoon('${naam}')" style="padding:2px 10px;border-radius:12px;border:1.5px solid ${isAct?'var(--green)':'var(--border)'};background:${isAct?'var(--green)':'transparent'};color:${isAct?'#fff':'var(--text)'};font-size:11px;font-family:var(--body);cursor:pointer;transition:.15s">${naam}</button>`;
+  }
+  wrap.innerHTML=html;
+}
+function kalZetPersoon(naam){
+  kalPersoon=naam;
+  renderKalender();
+}
+
 function renderKalender(){
   const grid=document.getElementById('kal-grid');
   const geplandEl=document.getElementById('kal-gepland');
@@ -1662,6 +1710,10 @@ function renderKalender(){
   const projecten=getProjecten();
   const planning=getPlanning();
   const dagen=getDagenVoorView();
+  const actPersoon=kalPersoon||IK;  // wie we tonen
+
+  // Persoon-switcher
+  renderKalenderPersoonSwitcher();
 
   // Datum label
   if(datumLabel) datumLabel.textContent=datumLabelTekst(dagen);
@@ -1677,11 +1729,11 @@ function renderKalender(){
   let dagenHtml='<div class="kalender-dagen">';
   for(const datum of dagen){
     const isVandaag=datum===vandaag;
-    // Entries voor deze dag van huidige gebruiker
-    const dagsEntries=alle.filter(e=>e.teamlid===IK&&e.datum===datum&&e.stop);
-    // Lopende timer toevoegen als vandaag
+    // Entries voor deze dag (gefilterd op actPersoon)
+    const dagsEntries=alle.filter(e=>e.teamlid?.toLowerCase()===actPersoon.toLowerCase()&&e.datum===datum&&e.stop);
+    // Lopende timer toevoegen als vandaag en zelfde persoon
     const lopendItems=[];
-    if(lopend&&lopend.teamlid===IK&&datum===vandaag) lopendItems.push({...lopend,type:'lopend'});
+    if(lopend&&lopend.teamlid?.toLowerCase()===actPersoon.toLowerCase()&&datum===vandaag) lopendItems.push({...lopend,type:'lopend'});
 
     // Dag-header
     const d=new Date(datum+'T12:00:00');
@@ -1723,15 +1775,15 @@ function renderKalender(){
 
   grid.innerHTML=tijdas+dagenHtml;
 
-  // Gepland vandaag (planning entries voor zichtbare dagen)
+  // Gepland (planning entries voor zichtbare dagen, gefilterd op actPersoon)
   if(geplandEl){
-    const gepland=planning.filter(p=>p.teamlid===IK&&dagen.includes(p.datum));
+    const gepland=planning.filter(p=>p.teamlid?.toLowerCase()===actPersoon.toLowerCase()&&dagen.includes(p.datum));
     if(gepland.length){
       geplandEl.innerHTML='<span class="gepland-label">Gepland:</span>'+gepland.map(p=>{
         const proj=projecten.find(x=>x.code===p.project_code);
         const kleur=proj?.kleur||'var(--gold)';
         const dateLabel=dagen.length>1?` (${weekdagKort(p.datum)})`:'';
-        return `<span style="background:${kleur}20;border:1px solid ${kleur}40;color:${kleur};border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;cursor:pointer" onclick="openPlanModal(null,'${p.datum}','${IK}')" title="${p.datum}">${p.project_code}${p.taak_naam?' · '+p.taak_naam:''}${dateLabel}${p.duur_h?' · '+p.duur_h+'u':''}</span>`;
+        return `<span style="background:${kleur}20;border:1px solid ${kleur}40;color:${kleur};border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;cursor:pointer" onclick="openPlanModal(null,'${p.datum}','${actPersoon}')" title="${p.datum}">${p.project_code}${p.taak_naam?' · '+p.taak_naam:''}${dateLabel}${p.duur_h?' · '+p.duur_h+'u':''}</span>`;
       }).join('');
     } else {
       geplandEl.innerHTML='<span style="color:var(--text-faint);font-size:12px">Geen taken gepland voor zichtbare periode</span>';
@@ -2018,115 +2070,160 @@ function slaHandmatigOp(){
 // ════════════════════════════════════════════
 // TIMELINE / PLANNING
 // ════════════════════════════════════════════
+function tlSpringNaarDatum(datum){
+  if(!datum) return;
+  // Bereken offset in weken t.o.v. huidige maandag
+  const ma=maandagVan(0);
+  const d=new Date(datum+'T12:00:00');
+  const maBase=new Date(ma+'T12:00:00');
+  const diffMs=d-maBase;
+  const diffWeken=Math.round(diffMs/(7*86400000));
+  tlWeekOffset=diffWeken;
+  renderTimeline();
+}
+
+// Navigeer vanuit Timeline dag-header naar Agenda tab op die datum
+function tlNaarAgenda(datum){
+  if(!datum) return;
+  // Zet kalender op die dag (dag-view)
+  const vandaag=vandaagStr();
+  const d=new Date(datum+'T12:00:00');
+  const v=new Date(vandaag+'T12:00:00');
+  const diffDagen=Math.round((d-v)/86400000);
+  kalOffset=diffDagen;
+  kalView='dag';
+  // Update view toggle buttons
+  ['dag','3d','week'].forEach(v=>{
+    const btn=document.getElementById('kvt-'+v);
+    if(btn) btn.classList.toggle('active',v==='dag');
+  });
+  // Reset persoon naar eigen agenda bij navigeren vanuit timeline
+  // (persoon-switcher laat zelf kiezen)
+  showTab('timer',document.querySelector('.sb-item[onclick*="timer"]'));
+}
+
 function renderTimeline(){
+  // 14 dagen: 2 weken vanaf huidige maandagOffset
   const ma=maandagVan(tlWeekOffset);
   const dagen=[];
-  for(let i=0;i<5;i++){const d=new Date(ma+'T12:00:00');d.setDate(d.getDate()+i);dagen.push(datumStr(d));}
+  for(let i=0;i<14;i++){const d=new Date(ma+'T12:00:00');d.setDate(d.getDate()+i);dagen.push(datumStr(d));}
   const dObj=new Date(ma+'T12:00:00');
-  document.getElementById('tl-range').textContent=`Week ${weekNr(dObj)} — ${dObj.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} t/m ${new Date(dagen[4]+'T12:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})}`;
+  const eindeObj=new Date(dagen[13]+'T12:00:00');
+
+  // Range tekst
+  document.getElementById('tl-range').textContent=
+    `${dObj.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} — ${eindeObj.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})}`;
+
+  // Datum input syncen
+  const di=document.getElementById('tl-datum-input');
+  if(di) di.value=ma;
   const vandaag=vandaagStr();
-  const tl=getTeamleden();
+  const tlm=getTeamleden();
   const planning=getPlanning();
   const entries=getEntries();
   const projecten=getProjecten();
-  const vrijeDagen=getVrijeDagen(); // [{datum:'YYYY-MM-DD',naam:'...'}]
-  const labelW=160;
-  const cols=`${labelW}px repeat(5,1fr)`;
+  const vrijeDagen=getVrijeDagen();
 
   let rows=[];
   if(tlView==='persoon'){
-    rows=tl.map(t=>({id:t.naam,label:t.label,kleur:t.kleur,isPersoon:true,cap:t.beschikbaar_h_week||40}));
+    rows=tlm.map(t=>({id:t.naam,label:t.label,kleur:t.kleur,isPersoon:true,cap:t.beschikbaar_h_week||40}));
   } else {
     const rel=new Set();
     planning.filter(p=>dagen.includes(p.datum)).forEach(p=>rel.add(p.project_code));
     entries.filter(e=>dagen.includes(e.datum)&&e.duur).forEach(e=>rel.add(e.project_code));
     if(!rel.size){
-      document.getElementById('tl-grid-wrap').innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen projecten met uren of planning deze week</div>`;
+      document.getElementById('tl-grid-wrap').innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen projecten met uren of planning in deze periode</div>`;
       return;
     }
     rows=[...rel].sort().map(code=>{const p=projecten.find(x=>x.code===code);return{id:code,label:code,sub:p?.naam||'',kleur:var2hex(code),isPersoon:false,cap:null}});
   }
 
-  let html=`<div class="tl-grid-wrap"><div class="tl-grid">
-    <div class="tl-header-row" style="grid-template-columns:${cols}">
-      <div class="tl-header-cel">${tlView==='persoon'?'Teamlid':'Project'}</div>
-      ${dagen.map(d=>{
-        const vd=vrijeDagen.find(v=>v.datum===d);
-        return `<div class="tl-header-cel${d===vandaag?' vandaag':''}${vd?' vrije-dag-header':''}">
-          ${weekdagKort(d)}<br>
-          <span style="font-size:10px;font-weight:400">${new Date(d+'T12:00:00').getDate()} ${new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{month:'short'})}</span>
-          ${vd?`<br><span style="font-size:9px;color:var(--text-faint);font-style:italic">${vd.naam}</span>`:''}
-        </div>`;
-      }).join('')}
-    </div>`;
+  // ── TABLE bouw ──
+  // Koptekst: klikbare dag-headers (→ Agenda tab op die dag)
+  const thCellen=dagen.map((d,i)=>{
+    const vd=vrijeDagen.find(v=>v.datum===d);
+    const isWeekStart=i>0&&new Date(d+'T12:00:00').getDay()===1; // maandag
+    const dObj2=new Date(d+'T12:00:00');
+    const dagNr=dObj2.getDate();
+    const mndKort=dObj2.toLocaleDateString('nl-NL',{month:'short'});
+    return `<th class="tl-th${d===vandaag?' vandaag':''}${vd?' vrije-dag-th':''}${isWeekStart?' week-start':''}"
+      style="cursor:${vd?'default':'pointer'}"
+      ${vd?'':`onclick="tlNaarAgenda('${d}')"`}
+      title="${vd?vd.naam:('Ga naar Agenda — '+d)}">
+      <span style="font-size:11px;font-weight:700">${weekdagKort(d)}</span><br>
+      <span style="font-size:11px;font-weight:400;opacity:0.8">${dagNr} ${mndKort}</span>
+      ${vd?`<br><span style="font-size:9px;font-style:italic;opacity:0.7">${vd.naam}</span>`:''}
+    </th>`;
+  }).join('');
 
-  rows.forEach(row=>{
-    // Capaciteitsbalk (alleen per-persoon view)
+  // Rijen
+  const rijen=rows.map(row=>{
+    // Capaciteitsbalk
     let capHTML='';
-    if(row.isPersoon && row.cap){
-      const rowIdLc=row.id.toLowerCase();
-      const weekEntries=entries.filter(e=>e.teamlid?.toLowerCase()===rowIdLc&&dagen.includes(e.datum)&&e.duur);
-      const geboektSec=weekEntries.reduce((s,e)=>s+(e.duur||0),0);
-      const geboektH=Math.round(geboektSec/360)/10; // 1 decimaal
-      const pct=Math.min(Math.round(geboektH/row.cap*100),100);
-      const kleur=pct>=100?'var(--red)':pct>=85?'var(--orange)':'var(--green)';
-      capHTML=`<div class="tl-cap-wrap">
-        <div class="tl-cap-track"><div class="tl-cap-fill" style="width:${pct}%;background:${kleur}"></div></div>
-        <div class="tl-cap-label">${geboektH}h / ${row.cap}h</div>
-      </div>`;
+    if(row.isPersoon&&row.cap){
+      const idLc=row.id.toLowerCase();
+      const sec=entries.filter(e=>e.teamlid?.toLowerCase()===idLc&&dagen.includes(e.datum)&&e.duur).reduce((s,e)=>s+(e.duur||0),0);
+      const h=Math.round(sec/360)/10;
+      const pct=Math.min(Math.round(h/row.cap*100),100);
+      const kl=pct>=100?'var(--red)':pct>=85?'var(--orange)':'var(--green)';
+      capHTML=`<div class="tl-cap-wrap"><div class="tl-cap-track"><div class="tl-cap-fill" style="width:${pct}%;background:${kl}"></div></div><div class="tl-cap-label">${h}h / ${row.cap}h</div></div>`;
     }
 
-    html+=`<div class="tl-rij" style="grid-template-columns:${cols}">
-      <div class="tl-label">
-        <div class="tl-label-code" style="color:${row.kleur||'var(--gold)'}">
-          ${row.isPersoon?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${row.kleur};margin-right:5px"></span>`:''}${row.label}
-        </div>
-        ${row.sub?`<div class="tl-label-naam">${row.sub}</div>`:''}
-        ${capHTML}
-      </div>`;
+    const labelTd=`<td class="tl-label-td">
+      <div class="tl-label-naam-row">
+        ${row.isPersoon?`<span style="width:9px;height:9px;border-radius:50%;background:${row.kleur};display:inline-block;flex-shrink:0"></span>`:''}
+        <span style="color:${row.isPersoon?'var(--text)':'var(--gold)'};font-weight:${row.isPersoon?600:500};font-family:${row.isPersoon?'var(--sans)':'var(--mono)'};font-size:${row.isPersoon?13:11}px">${row.label}</span>
+      </div>
+      ${row.sub?`<div class="tl-label-sub">${row.sub}</div>`:''}
+      ${capHTML}
+    </td>`;
 
-    dagen.forEach(dag=>{
+    const dagCellen=dagen.map((dag,i)=>{
       const vd=vrijeDagen.find(v=>v.datum===dag);
-      // Vrije dag: grijs, niet klikbaar
-      if(vd){
-        html+=`<div class="tl-dag-cel vrije-dag"><div class="tl-vrije-dag-label">${vd.naam}</div></div>`;
-        return;
-      }
+      const isWeekStart=i>0&&new Date(dag+'T12:00:00').getDay()===1;
+      const extraClass=(dag===vandaag?' vandaag':'')+(vd?' vrije-dag':'')+(isWeekStart?' week-start':'');
+
+      if(vd) return `<td class="tl-dag-td${extraClass}"><div class="tl-vrije-dag-label">${vd.naam}</div></td>`;
 
       let planBlokken,actBlokken;
       if(tlView==='persoon'){
         planBlokken=planning.filter(p=>p.datum===dag&&p.teamlid===row.id);
-        actBlokken=[{teamlid:row.id,som:entries.filter(e=>e.datum===dag&&e.teamlid===row.id&&e.duur).reduce((s,e)=>s+(e.duur||0),0)}].filter(b=>b.som>0);
+        actBlokken=[{kleur:row.kleur,som:entries.filter(e=>e.datum===dag&&e.teamlid===row.id&&e.duur).reduce((s,e)=>s+(e.duur||0),0)}].filter(b=>b.som>0);
       } else {
         planBlokken=planning.filter(p=>p.datum===dag&&p.project_code===row.id);
-        actBlokken=tl.map(t=>({teamlid:t.naam,kleur:t.kleur,label:t.label,som:entries.filter(e=>e.datum===dag&&e.project_code===row.id&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
+        actBlokken=tlm.map(t=>({teamlid:t.naam,kleur:t.kleur,label:t.label,som:entries.filter(e=>e.datum===dag&&e.project_code===row.id&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
       }
 
-      html+=`<div class="tl-dag-cel${dag===vandaag?' vandaag':''}" onclick="tlCelKlik('${dag}','${row.id}')">
-        ${planBlokken.map(pb=>{
-          const klr=tlView==='persoon'?row.kleur:(tl.find(t=>t.naam===pb.teamlid)||{kleur:'#999'}).kleur;
-          const naam=tlView==='project'?(tl.find(t=>t.naam===pb.teamlid)||{label:pb.teamlid}).label:'';
+      const blokken=[
+        ...planBlokken.map(pb=>{
+          const klr=tlView==='persoon'?row.kleur:(tlm.find(t=>t.naam===pb.teamlid)||{kleur:'#999'}).kleur;
+          const naam=tlView==='project'?(tlm.find(t=>t.naam===pb.teamlid)||{label:pb.teamlid}).label:'';
           return `<div class="tl-blok tl-blok-plan" style="border-color:${klr}55" onclick="event.stopPropagation()">
-            <div class="tl-blok-label" style="color:${klr}">${naam||pb.uren_gepland+'u gepland'}</div>
+            <div class="tl-blok-label" style="color:${klr}">${naam||pb.uren_gepland+'u'}</div>
             ${naam?`<div class="tl-blok-sub">${pb.uren_gepland}u gepland</div>`:''}
             <button class="tl-blok-del" onclick="event.stopPropagation();verwijderPlan('${pb.id}')">✕</button>
           </div>`;
-        }).join('')}
-        ${actBlokken.map(b=>{
-          const klr=b.kleur||row.kleur;
-          const lab=tlView==='project'?b.label:fmtUren(b.som);
-          return `<div class="tl-blok tl-blok-act" style="background:${klr}">
-            <div class="tl-blok-label" style="color:#fff">${lab}</div>
+        }),
+        ...actBlokken.map(b=>`<div class="tl-blok tl-blok-act" style="background:${b.kleur||row.kleur}">
+            <div class="tl-blok-label" style="color:#fff">${tlView==='project'?b.label:fmtUren(b.som)}</div>
             ${tlView==='project'?`<div class="tl-blok-sub" style="color:rgba(255,255,255,0.7)">${fmtUren(b.som)}</div>`:''}
-          </div>`;
-        }).join('')}
-      </div>`;
-    });
-    html+=`</div>`;
-  });
+          </div>`)
+      ].join('');
 
-  html+=`</div></div>`;
-  document.getElementById('tl-grid-wrap').innerHTML=html;
+      return `<td class="tl-dag-td${extraClass}" onclick="tlCelKlik('${dag}','${row.id}')">${blokken}</td>`;
+    }).join('');
+
+    return `<tr class="tl-tr">${labelTd}${dagCellen}</tr>`;
+  }).join('');
+
+  document.getElementById('tl-grid-wrap').innerHTML=`
+    <table class="tl-table" cellspacing="0" cellpadding="0">
+      <thead class="tl-thead"><tr class="tl-tr">
+        <th class="tl-label-th tl-th">${tlView==='persoon'?'Teamlid':'Project'}</th>
+        ${thCellen}
+      </tr></thead>
+      <tbody class="tl-tbody">${rijen}</tbody>
+    </table>`;
 }
 
 function var2hex(str){
