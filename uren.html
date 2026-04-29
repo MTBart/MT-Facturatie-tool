@@ -21,24 +21,112 @@
   --mono:'DM Mono',monospace;--serif:'Fraunces',serif;--sans:'Figtree',sans-serif;
   --radius:10px;--shadow:0 2px 16px rgba(44,40,28,0.08);--shadow-lg:0 8px 40px rgba(44,40,28,0.14);
 }
-body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.55;overscroll-behavior:none}
-header{background:linear-gradient(135deg,var(--green) 0%,#1e3829 60%,#162d20 100%);color:#F7F5F0;padding:0 1.25rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(0,0,0,0.2)}
-.header-left{display:flex;align-items:baseline;gap:0.6rem}
-header h1{font-family:var(--serif);font-size:18px;font-weight:400}
-header h1 span{color:var(--gold-mid);font-style:italic}
-.header-version{font-family:var(--mono);font-size:10px;opacity:0.4}
-.header-right{display:flex;align-items:center;gap:0.75rem}
-.user-chip{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:4px 12px;font-size:12px;font-family:var(--mono);cursor:pointer;color:#fff;transition:background 0.15s}
-.user-chip:hover{background:rgba(255,255,255,0.25)}
-.icon-btn{background:none;border:none;cursor:pointer;color:#F7F5F0;opacity:0.7;font-size:18px;padding:4px;transition:opacity 0.15s}
-.icon-btn:hover{opacity:1}
-.tabs-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:0 1.25rem;display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.tabs-wrap::-webkit-scrollbar{display:none}
-.tab-btn{padding:13px 16px;border:none;background:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--text-faint);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.18s;white-space:nowrap}
-.tab-btn:hover{color:var(--text-dim)}
-.tab-btn.active{color:var(--green);border-bottom-color:var(--gold);font-weight:600}
-.tab-content{display:none}.tab-content.active{display:block}
-.main{padding:1rem 1.5rem}
+/* ── LAYOUT ── */
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14px;line-height:1.55;overscroll-behavior:none;display:flex;flex-direction:row}
+
+/* ── SIDEBAR ── */
+.sidebar{width:210px;min-width:210px;background:linear-gradient(180deg,#1e3829 0%,#162d20 100%);color:#F7F5F0;display:flex;flex-direction:column;height:100vh;overflow:hidden;z-index:50;flex-shrink:0}
+.sb-header{padding:1rem 1rem 0.75rem;display:flex;align-items:center;gap:0.6rem;border-bottom:1px solid rgba(255,255,255,0.08)}
+.sb-logo{font-family:var(--serif);font-size:19px;font-weight:400;color:#F7F5F0;white-space:nowrap}
+.sb-logo span{color:var(--gold-mid);font-style:italic}
+.sb-subtitle{font-family:var(--mono);font-size:9px;opacity:0.35;margin-top:1px}
+.sb-nav{flex:1;overflow-y:auto;padding:0.5rem 0;scrollbar-width:none}
+.sb-nav::-webkit-scrollbar{display:none}
+.sb-section{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:rgba(255,255,255,0.3);padding:0.9rem 1rem 0.3rem}
+.sb-item{display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0.75rem 0.55rem 1rem;font-size:13px;cursor:pointer;border-radius:6px;margin:1px 0.4rem;color:rgba(255,255,255,0.65);transition:all 0.12s;border:none;background:none;width:calc(100% - 0.8rem);text-align:left;font-family:var(--sans)}
+.sb-item:hover{background:rgba(255,255,255,0.1);color:#fff}
+.sb-item.active{background:rgba(255,255,255,0.15);color:#fff;font-weight:600}
+.sb-item-icon{width:18px;text-align:center;font-size:14px;flex-shrink:0;opacity:0.8}
+.sb-bottom{padding:0.75rem;border-top:1px solid rgba(255,255,255,0.08)}
+.sb-user-btn{display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0.35rem;cursor:pointer;background:none;border:none;color:rgba(255,255,255,0.75);font-size:12px;font-family:var(--sans);width:100%;border-radius:6px;transition:all 0.12s}
+.sb-user-btn:hover{background:rgba(255,255,255,0.1);color:#fff}
+.sb-user-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sb-user-naam{flex:1;text-align:left;font-size:13px}
+.sb-klok-wrap{font-family:var(--mono);font-size:10px;color:rgba(255,255,255,0.3);padding:0.2rem 0.35rem 0}
+
+/* ── CONTENT AREA ── */
+.content-wrap{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
+.content-topbar{padding:0.7rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.75rem;background:var(--surface);flex-shrink:0;min-height:50px}
+.content-topbar-title{font-family:var(--serif);font-size:17px;font-weight:400;flex:1}
+.tab-content{display:none;flex:1;overflow-y:auto;flex-direction:column}
+.tab-content.active{display:flex}
+.main{padding:1.25rem 1.5rem;flex:1}
+
+/* ── WELKOM FULLSCREEN ── */
+.welkom{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200}
+
+/* ── TIMER (Toggl-stijl kalender) ── */
+.timer-topbar{padding:0.75rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.75rem;background:var(--surface);flex-shrink:0}
+.timer-input-wrap{flex:1;display:flex;align-items:center;gap:0.75rem;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:0.5rem 0.75rem;transition:border-color 0.15s;cursor:text}
+.timer-input-wrap:focus-within{border-color:var(--green-mid)}
+.timer-input-wrap.lopend{border-color:var(--green);background:var(--green-light)}
+.timer-input{flex:1;border:none;background:none;font-family:var(--sans);font-size:14px;color:var(--text);outline:none}
+.timer-input::placeholder{color:var(--text-faint)}
+.timer-project-chip{display:flex;align-items:center;gap:0.35rem;padding:3px 8px;border-radius:20px;font-size:11px;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);cursor:pointer;white-space:nowrap}
+.timer-display{font-family:var(--mono);font-size:18px;font-weight:500;letter-spacing:0.05em;color:var(--text-dim);flex-shrink:0;min-width:80px;text-align:right}
+.timer-display.lopend{color:var(--green);font-weight:600}
+.timer-start-btn{width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;transition:all 0.15s}
+.timer-start-btn.idle{background:var(--green);color:#fff}
+.timer-start-btn.idle:hover{background:var(--green-mid);transform:scale(1.05)}
+.timer-start-btn.lopend{background:var(--red-light);border:2px solid var(--red);color:var(--red)}
+.timer-start-btn.lopend:hover{background:var(--red);color:#fff}
+
+/* Dag-kalender */
+.kalender-wrap{display:flex;flex-direction:column;flex:1;overflow:hidden}
+.kalender-nav{padding:0.6rem 1.5rem;display:flex;align-items:center;gap:0.75rem;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.kalender-nav-btn{background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:13px;color:var(--text-dim);transition:all 0.12s}
+.kalender-nav-btn:hover{border-color:var(--green-mid);color:var(--green)}
+.kalender-datum{font-size:14px;font-weight:500;flex:1}
+.kalender-view-toggle{display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.kvt-btn{padding:4px 12px;border:none;background:none;cursor:pointer;font-size:12px;color:var(--text-dim);transition:all 0.15s}
+.kvt-btn.active{background:var(--green);color:#fff}
+.kalender-gepland{padding:0.5rem 1.5rem;border-bottom:1px solid var(--border);display:flex;gap:0.5rem;flex-wrap:wrap;min-height:36px;align-items:center;flex-shrink:0;background:var(--surface)}
+.gepland-badge{display:flex;align-items:center;gap:0.35rem;padding:3px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--mono);border:1px solid;white-space:nowrap;transition:all 0.12s}
+.gepland-badge:hover{opacity:0.8}
+.gepland-label{font-size:10px;color:var(--text-faint);font-family:var(--mono)}
+.kalender-grid{display:flex;flex:1;overflow-y:auto}
+.kalender-tijdas{width:56px;flex-shrink:0;padding-top:0}
+.kalender-tijdas-item{height:60px;display:flex;align-items:flex-start;justify-content:flex-end;padding:0 8px 0 0;font-family:var(--mono);font-size:10px;color:var(--text-faint);line-height:1}
+.kalender-dagen{flex:1;display:flex;gap:0;border-left:1px solid var(--border)}
+.kalender-dag-col{flex:1;min-width:0;border-right:1px solid var(--border);position:relative}
+.kalender-dag-header{padding:0.4rem 0.75rem;border-bottom:1px solid var(--border);font-size:12px;font-weight:500;background:var(--surface);position:sticky;top:0;z-index:2}
+.kalender-dag-header.vandaag{background:var(--gold-light);color:var(--gold)}
+.kalender-uur-slot{height:60px;border-bottom:1px solid var(--border);position:relative;cursor:pointer}
+.kalender-uur-slot:hover{background:rgba(42,74,56,0.03)}
+.kalender-uur-slot .half{position:absolute;top:50%;left:0;right:0;border-bottom:1px dotted var(--border)}
+.kalender-entry-blok{position:absolute;left:2px;right:2px;border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer;overflow:hidden;border-left:3px solid;transition:opacity 0.12s;z-index:1}
+.kalender-entry-blok:hover{opacity:0.85;z-index:2}
+.kalender-entry-blok.lopend{border-left-width:3px;animation:lopend-puls 2s ease-in-out infinite}
+.keb-project{font-family:var(--mono);font-size:10px;opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.keb-naam{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kalender-nu-lijn{position:absolute;left:0;right:0;border-top:2px solid var(--red);z-index:3;pointer-events:none}
+.kalender-nu-lijn::before{content:'';position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:var(--red)}
+
+/* Achteraf-knop in kalender */
+.kalender-achteraf{padding:0.5rem 1.5rem;border-bottom:1px solid var(--border);background:var(--gold-light);display:flex;align-items:center;gap:0.75rem;flex-shrink:0}
+.kalender-achteraf-btn{background:var(--gold);color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+
+/* Tabbar legacy (hidden) */
+.tabs-wrap{display:none}
+header{display:none}
+.timer-bar{display:none}
+
+/* Topbar per pagina */
+.page-topbar{padding:0.7rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.75rem;background:var(--surface);flex-shrink:0}
+.page-topbar-title{font-size:17px;font-weight:600;flex:1;font-family:var(--serif);font-weight:400}
+
+/* Persoonschips (filter) */
+.persoon-chips{display:flex;gap:0.35rem;flex-wrap:wrap}
+.p-chip{display:flex;align-items:center;gap:0.35rem;padding:4px 10px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;cursor:pointer;background:var(--surface);transition:all 0.12s;font-family:var(--sans)}
+.p-chip:hover{border-color:var(--green-mid)}
+.p-chip.active{border-color:transparent;color:#fff}
+.p-chip-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* Sidebar klok */
+@keyframes puls{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes lopend-puls{0%,100%{opacity:1}50%{opacity:0.7}}
+.sb-klok-active{animation:puls 2s infinite}
 .hidden{display:none!important}
 .flex{display:flex;align-items:center;gap:0.5rem}
 .btn{padding:9px 18px;border-radius:6px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s}
@@ -416,18 +504,6 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 </head>
 <body>
 
-<header>
-  <div class="header-left">
-    <h1>Mortise <span>&</span> Tenon</h1>
-    <span class="header-version">uren</span>
-  </div>
-  <div class="header-right">
-    <button class="user-chip" id="user-chip" onclick="toggleGebruiker()">—</button>
-    <button class="icon-btn" title="Taken beheren" onclick="openModal('taken')">☰</button>
-    <button class="icon-btn" title="Instellingen" onclick="openModal('inst')">⚙</button>
-  </div>
-</header>
-
 <!-- Welkomscherm -->
 <div id="welkom" class="welkom hidden">
   <div class="welkom-title">Wie ben <span>jij</span>?</div>
@@ -436,90 +512,138 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 </div>
 
 <!-- App -->
-<div id="app" class="hidden">
+<div id="app" class="hidden" style="display:flex;flex-direction:row;width:100%;height:100vh">
 
-  <!-- VASTE TIMERBALK — altijd zichtbaar -->
-  <div class="timer-bar" id="timer-bar">
-    <!-- Idle: project + taak kiezen en starten -->
-    <div class="tb-idle" id="tb-idle">
-      <select class="tb-select" id="tb-project-sel" onchange="tbProjectChange()">
-        <option value="">— Kies project —</option>
-      </select>
-      <select class="tb-select tb-select-sm hidden" id="tb-taak-sel">
-        <option value="">— Taak (opt.) —</option>
-      </select>
-      <button class="tb-start-btn" onclick="tbStart()">▶ Start</button>
-    </div>
-    <!-- Lopend: info + klok + stop -->
-    <div class="tb-running hidden" id="tb-running">
-      <div class="pulse"></div>
-      <div class="tb-run-info">
-        <div class="tb-run-project" id="tb-run-project">—</div>
-        <div class="tb-run-task" id="tb-run-task"></div>
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-header">
+      <div>
+        <div class="sb-logo">M<span>&</span>T</div>
+        <div class="sb-subtitle">uren</div>
       </div>
-      <div class="tb-clock" id="tb-clock">00:00:00</div>
-      <button class="tb-stop-btn" onclick="stopTimer()">■ Stop</button>
     </div>
-  </div>
-
-  <div class="tabs-wrap">
-    <button class="tab-btn active" onclick="showTab('timer',this)">⏱ Timer</button>
-    <button class="tab-btn" onclick="showTab('dag',this)">📋 Dag</button>
-    <button class="tab-btn" onclick="showTab('timeline',this)">📅 Planning</button>
-    <button class="tab-btn" onclick="showTab('rapport',this)">📊 Uren</button>
-    <button class="tab-btn" onclick="showTab('projecten',this)">🗂 Projecten</button>
-    <button class="tab-btn" onclick="showTab('bord',this)">🖥 Bord</button>
-  </div>
-
-  <!-- TIMER -->
-  <div id="tab-timer" class="tab-content active">
-    <div class="timer-wrap">
-      <div class="section-label" id="timer-label">Kies een project</div>
-      <div class="project-grid" id="project-grid"></div>
+    <nav class="sb-nav">
+      <div class="sb-section">Track</div>
+      <button class="sb-item active" id="sb-timer" onclick="showTab('timer',this)">
+        <span class="sb-item-icon">⏱</span>Timer
+      </button>
+      <div class="sb-section">Analyze</div>
+      <button class="sb-item" id="sb-rapport" onclick="showTab('rapport',this)">
+        <span class="sb-item-icon">📊</span>Reports
+      </button>
+      <div class="sb-section">Plan</div>
+      <button class="sb-item" id="sb-projecten" onclick="showTab('projecten',this)">
+        <span class="sb-item-icon">📁</span>Projects
+      </button>
+      <button class="sb-item" id="sb-taken" onclick="showTab('taken-tab',this)">
+        <span class="sb-item-icon">✓</span>Tasks
+      </button>
+      <button class="sb-item" id="sb-kanban" onclick="showTab('kanban',this)">
+        <span class="sb-item-icon">⊞</span>Board
+      </button>
+      <button class="sb-item" id="sb-timeline" onclick="showTab('timeline',this)">
+        <span class="sb-item-icon">📅</span>Timeline
+      </button>
+      <div class="sb-section">Manage</div>
+      <button class="sb-item" id="sb-inst" onclick="openModal('inst')">
+        <span class="sb-item-icon">⚙</span>Settings
+      </button>
+    </nav>
+    <div class="sb-bottom">
+      <button class="sb-user-btn" id="user-chip" onclick="toggleGebruiker()">
+        <span class="sb-user-dot" id="sb-user-dot" style="background:var(--gold-mid)"></span>
+        <span class="sb-user-naam" id="sb-user-naam">—</span>
+      </button>
+      <div class="sb-klok-wrap" id="sb-klok">00:00</div>
     </div>
+  </aside>
+
+  <!-- CONTENT AREA -->
+  <div class="content-wrap" id="content-wrap">
+
+  <!-- Legacy hidden elements voor backward compat -->
+  <div style="display:none">
+    <div id="tb-idle"><select id="tb-project-sel" onchange="tbProjectChange()"></select><select id="tb-taak-sel"></select></div>
+    <div id="tb-running"><div id="tb-run-project"></div><div id="tb-run-task"></div><div id="tb-clock"></div></div>
   </div>
 
-  <!-- DAG -->
-  <div id="tab-dag" class="tab-content">
-    <div class="main">
-      <div class="dag-header">
-        <div class="dag-nav flex">
-          <button onclick="dagNav(-1)">←</button>
-          <button onclick="dagNav(0)">Vandaag</button>
-          <button onclick="dagNav(1)">→</button>
+  <!-- TIMER (Toggl-stijl kalender) -->
+  <div id="tab-timer" class="tab-content active" style="flex-direction:column">
+    <!-- Timer input balk -->
+    <div class="timer-topbar">
+      <div class="timer-input-wrap" id="timer-input-wrap" onclick="document.getElementById('timer-omschr').focus()">
+        <input class="timer-input" id="timer-omschr" placeholder="Wat werk je aan?" autocomplete="off">
+        <div class="timer-project-chip" id="timer-project-chip" onclick="event.stopPropagation();openTimerProjectPicker()">
+          <span id="timer-chip-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border)"></span>
+          <span id="timer-chip-label">Project</span>
         </div>
-        <div class="dag-datum-label" id="dag-label">—</div>
-        <input type="date" class="dag-input" id="dag-input" onchange="dagSetDatum(this.value)">
-        <button class="btn btn-secondary btn-sm" onclick="openNieuwEntryModal()">+ Entry</button>
+        <div class="timer-display" id="timer-display">0:00:00</div>
+        <button class="timer-start-btn idle" id="timer-start-btn" onclick="toggleTimer()">▶</button>
       </div>
+    </div>
+    <!-- Achteraf-rij (Arjan-flow) -->
+    <div class="kalender-achteraf">
+      <span style="font-size:12px;color:var(--text-dim)">Uren achteraf invoeren?</span>
+      <button class="kalender-achteraf-btn" onclick="openNieuwEntryModal()">✏ Uren toevoegen</button>
+    </div>
+    <!-- Navigatie + view toggle -->
+    <div class="kalender-nav">
+      <button class="kalender-nav-btn" onclick="kalNav(-1)">←</button>
+      <button class="kalender-nav-btn" onclick="kalNav(0)">Vandaag</button>
+      <button class="kalender-nav-btn" onclick="kalNav(1)">→</button>
+      <div class="kalender-datum" id="kal-datum-label">—</div>
+      <div class="kalender-view-toggle">
+        <button class="kvt-btn active" id="kvt-dag" onclick="kalSetView('dag',this)">Dag</button>
+        <button class="kvt-btn" id="kvt-3d" onclick="kalSetView('3d',this)">3 Dagen</button>
+        <button class="kvt-btn" id="kvt-week" onclick="kalSetView('week',this)">Week</button>
+      </div>
+    </div>
+    <!-- Geplande taken balk -->
+    <div class="kalender-gepland" id="kal-gepland">
+      <span class="gepland-label">Gepland:</span>
+    </div>
+    <!-- Kalender grid -->
+    <div class="kalender-wrap">
+      <div class="kalender-grid" id="kal-grid">
+        <!-- gevuld door renderKalender() -->
+      </div>
+    </div>
+  </div>
+
+  <!-- DAG (legacy, nu verborgen — functionaliteit zit in timer kalender) -->
+  <div id="tab-dag" class="tab-content" style="display:none!important">
+    <div class="main">
       <div id="dag-inhoud"></div>
+      <input type="date" class="dag-input hidden" id="dag-input">
+      <div class="dag-datum-label hidden" id="dag-label">—</div>
     </div>
   </div>
 
   <!-- TIMELINE / PLANNING -->
-  <div id="tab-timeline" class="tab-content">
-    <div class="main">
-      <div class="tl-toolbar">
-        <div class="tl-nav">
-          <button onclick="tlNav(-1)">← Vorige</button>
-          <button onclick="tlNav(0)">Deze week</button>
-          <button onclick="tlNav(1)">Volgende →</button>
-        </div>
-        <div class="tl-range" id="tl-range">—</div>
-        <div class="tl-view-toggle">
-          <button class="tl-vt-btn active" id="tl-btn-persoon" onclick="tlSetView('persoon',this)">Per persoon</button>
-          <button class="tl-vt-btn" id="tl-btn-project" onclick="tlSetView('project',this)">Per project</button>
-        </div>
+  <div id="tab-timeline" class="tab-content" style="flex-direction:column">
+    <div class="page-topbar">
+      <div class="page-topbar-title">Timeline</div>
+      <div class="tl-view-toggle">
+        <button class="tl-vt-btn active" id="tl-btn-persoon" onclick="tlSetView('persoon',this)">Per persoon</button>
+        <button class="tl-vt-btn" id="tl-btn-project" onclick="tlSetView('project',this)">Per project</button>
       </div>
-      <div id="tl-grid-wrap"></div>
-      <div style="margin-top:0.75rem;font-size:11px;color:var(--text-faint);font-family:var(--mono)">Klik op een cel om een planblok toe te voegen</div>
+      <div class="tl-nav" style="display:flex;gap:0.4rem">
+        <button class="kalender-nav-btn" onclick="tlNav(-1)">←</button>
+        <button class="kalender-nav-btn" onclick="tlNav(0)">Deze week</button>
+        <button class="kalender-nav-btn" onclick="tlNav(1)">→</button>
+      </div>
+      <div class="tl-range" id="tl-range" style="font-size:13px;color:var(--text-dim)">—</div>
+    </div>
+    <div class="main" style="overflow-x:auto;padding:0.75rem 0">
+      <div id="tl-grid-wrap" style="padding:0 1rem"></div>
     </div>
   </div>
 
   <!-- RAPPORT -->
-  <div id="tab-rapport" class="tab-content">
-    <div class="main">
-      <div class="filter-row">
+  <div id="tab-rapport" class="tab-content" style="flex-direction:column">
+    <div class="page-topbar">
+      <div class="page-topbar-title">Reports</div>
+      <div class="filter-row" style="display:flex;gap:0.4rem;margin:0">
         <button class="periode-btn active" data-p="week" onclick="setPeriode('week',this)">Deze week</button>
         <button class="periode-btn" data-p="maand" onclick="setPeriode('maand',this)">Maand</button>
         <button class="periode-btn" data-p="alles" onclick="setPeriode('alles',this)">Alles</button>
@@ -530,14 +654,18 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
           <input type="date" class="dag-input" id="ct" onchange="renderRapport()">
         </span>
       </div>
-      <div id="rapport-inhoud"></div>
     </div>
+    <div class="main"><div id="rapport-inhoud"></div></div>
   </div>
 
   <!-- PROJECTEN -->
-  <div id="tab-projecten" class="tab-content">
+  <div id="tab-projecten" class="tab-content" style="flex-direction:column">
+    <div class="page-topbar">
+      <div class="page-topbar-title">Projects</div>
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='block';document.getElementById('np-code').focus()">+ Nieuw project</button>
+    </div>
     <div class="main">
-      <div class="nieuw-project-form" id="nieuw-proj-form" style="display:none">
+      <div class="nieuw-project-form" id="nieuw-proj-form" style="display:none;margin-bottom:1rem">
         <div class="section-label" style="margin-bottom:0.6rem">Nieuw project aanmaken</div>
         <div class="flex" style="flex-wrap:wrap;gap:0.6rem;margin-bottom:0.6rem">
           <input class="proj-inp" id="np-code" placeholder="CODE bijv. CN-PRINSENGRACHT-KAD" style="flex:1;min-width:180px;max-width:280px" oninput="this.value=this.value.toUpperCase()">
@@ -549,17 +677,33 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='none'">Annuleer</button>
         </div>
       </div>
-      <div class="flex" style="justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
-        <div class="section-label" style="margin-bottom:0">Projecten — gesynchroniseerd met M&T Bedrijfstool</div>
-        <button class="btn btn-primary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='block';document.getElementById('np-code').focus()">+ Nieuw project</button>
-      </div>
       <div class="proj-lijst" id="proj-lijst"></div>
-      <div style="font-size:11px;color:var(--text-faint);font-family:var(--mono);padding-top:0.5rem">Projecten worden automatisch gesynchroniseerd met de <a href="index-v4.html" style="color:var(--green)">M&T Bedrijfstool</a> via gedeelde opslag.</div>
+      <div style="font-size:11px;color:var(--text-faint);font-family:var(--mono);padding-top:0.5rem">Gesynchroniseerd met de <a href="index-v4.html" style="color:var(--green)">M&T Bedrijfstool</a> via gedeelde opslag.</div>
     </div>
   </div>
 
-  <!-- BORD -->
-  <div id="tab-bord" class="tab-content">
+  <!-- TAKEN TAB (placeholder voor stap 5) -->
+  <div id="tab-taken-tab" class="tab-content" style="flex-direction:column">
+    <div class="page-topbar">
+      <div class="page-topbar-title">Tasks</div>
+    </div>
+    <div class="main" style="display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:13px">
+      Tasks-tabel — komt in stap 5
+    </div>
+  </div>
+
+  <!-- KANBAN (placeholder voor stap 4) -->
+  <div id="tab-kanban" class="tab-content" style="flex-direction:column">
+    <div class="page-topbar">
+      <div class="page-topbar-title">Board</div>
+    </div>
+    <div class="main" style="display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:13px">
+      Kanban board — komt in stap 4
+    </div>
+  </div>
+
+  <!-- MUUR (was Bord) -->
+  <div id="tab-bord" class="tab-content" style="flex-direction:column">
     <div class="bord-wrap">
       <div class="bord-topbar">
         <div>
@@ -576,9 +720,10 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
       <div id="bord-werkdruk"></div>
     </div>
   </div>
-</div>
 
-<!-- FLOATING FULLSCREEN KNOP (alle tabs behalve Bord) -->
+  </div><!-- /content-wrap -->
+</div><!-- /app -->
+
 <button class="tab-fs-btn" id="tab-fs-btn" onclick="toggleTabFS()" style="display:none">⛶ Volledig scherm</button>
 
 <!-- MODAL: Start timer -->
@@ -764,11 +909,38 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 // DEFAULTS & STATE
 // ════════════════════════════════════════════
 const STD_TEAMLEDEN = [
-  {naam:'bart',    label:'Bart',    kleur:'#2A4A38', rol:'admin'},
-  {naam:'mathijs', label:'Mathijs', kleur:'#B8962E', rol:'admin'},
-  {naam:'arjan',   label:'Arjan',   kleur:'#5a3a8b', rol:'medewerker'},
-  {naam:'maarten', label:'Maarten', kleur:'#1a3a8b', rol:'medewerker'},
+  {naam:'bart',    label:'Bart',    kleur:'#2A4A38', rol:'admin',      beschikbaar_h_week:40, meldingen_aan:true},
+  {naam:'mathijs', label:'Mathijs', kleur:'#B8962E', rol:'admin',      beschikbaar_h_week:40, meldingen_aan:true},
+  {naam:'arjan',   label:'Arjan',   kleur:'#5a3a8b', rol:'medewerker', beschikbaar_h_week:40, meldingen_aan:true},
+  {naam:'maarten', label:'Maarten', kleur:'#1a3a8b', rol:'medewerker', beschikbaar_h_week:40, meldingen_aan:true},
 ];
+
+const DEFAULT_BUCKETS = [
+  {id:'todo',        naam:'Todo',               kleur:'#6B6455', volgorde:0},
+  {id:'in_progress', naam:'In Progress',         kleur:'#1a3a8b', volgorde:1},
+  {id:'blocked',     naam:'Geblokkeerd',         kleur:'#8B1A1A', volgorde:2},
+  {id:'review',      naam:'Klaar voor levering', kleur:'#B8962E', volgorde:3},
+  {id:'backlog',     naam:'Backlog',             kleur:'#5a3a8b', volgorde:4},
+  {id:'done',        naam:'Done',               kleur:'#2A4A38', volgorde:5},
+];
+
+const STD_WERKTIJDEN = {
+  start:'07:15', pauze_1:'10:00', werkoverleg:'10:15',
+  lunch_start:'13:00', lunch_eind:'13:30', einde:'17:00',
+  meldingen_actief:true
+};
+
+const STD_SJABLONEN = [{
+  id:'standaard', naam:'Standaard M&T project', readonly:true,
+  taken:[
+    {naam:'Werkvoorbereiding', estimate_h:8,  tags:['Admin']},
+    {naam:'Inkoop materiaal',  estimate_h:2,  tags:['Inkoop']},
+    {naam:'Productie',         estimate_h:40, tags:['Productie']},
+    {naam:'Afwerking',         estimate_h:8,  tags:['Productie']},
+    {naam:'Montage',           estimate_h:8,  tags:['Montage']},
+    {naam:'Oplevering',        estimate_h:2,  tags:['Admin']},
+  ]
+}];
 
 const PROJ_STATUS = {
   offerte:           {label:'Offerte',            c:'#7a6010', bg:'#FBF5E0', bc:'#E8D48A'},
@@ -799,6 +971,9 @@ let gekozenTaak = null;
 let gekozenSubtaak = null;
 let bordInterval = null;
 let bordKlokInt = null;
+let kalOffset = 0;       // dagen offset t.o.v. vandaag
+let kalView = 'dag';     // 'dag' | '3d' | 'week'
+let kalNuLijnInt = null; // interval voor nu-lijn update
 
 // ════════════════════════════════════════════
 // HELPERS
@@ -824,8 +999,22 @@ function getPlanning(){return JSON.parse(localStorage.getItem('mt_uren_planning'
 function setPlanning(p){localStorage.setItem('mt_uren_planning',JSON.stringify(p))}
 function getTeamleden(){return JSON.parse(localStorage.getItem('mt_uren_teamleden')||'null')||STD_TEAMLEDEN}
 function setTeamleden(t){localStorage.setItem('mt_uren_teamleden',JSON.stringify(t))}
-function getTaken(){return JSON.parse(localStorage.getItem('mt_uren_taken')||'{}')}
+function getTaken(){return JSON.parse(localStorage.getItem('mt_uren_taken')||'[]')}
 function setTaken(t){localStorage.setItem('mt_uren_taken',JSON.stringify(t))}
+// Geeft taken gegroepeerd per project_code terug — compatibel met bestaande render-functies
+function getTakenPerProject(){
+  const taken=getTaken();
+  if(Array.isArray(taken)){
+    return taken.reduce((acc,t)=>{
+      if(!acc[t.project_code]) acc[t.project_code]=[];
+      acc[t.project_code].push(t);
+      return acc;
+    },{});
+  }
+  return taken; // fallback voor ongemigeerde data
+}
+function getTakenVoorProject(pc){return getTaken().filter(t=>t.project_code===pc)}
+function getTaakById(id){return getTaken().find(t=>t.id===id)||null}
 function getCapaciteit(){return JSON.parse(localStorage.getItem('mt_uren_capaciteit')||'null')||{};}
 function setCapaciteit(c){localStorage.setItem('mt_uren_capaciteit',JSON.stringify(c));}
 function getLopende(){return JSON.parse(localStorage.getItem('mt_uren_lopend')||'null')}
@@ -835,11 +1024,84 @@ function getProjecten(){
   if(raw&&raw.length) return raw;
   return JSON.parse(localStorage.getItem('mt_uren_projecten')||'[]');
 }
+function getBuckets(){return JSON.parse(localStorage.getItem('mt_uren_buckets')||'null')||DEFAULT_BUCKETS}
+function setBuckets(b){localStorage.setItem('mt_uren_buckets',JSON.stringify(b))}
+function getWerktijden(){return JSON.parse(localStorage.getItem('mt_uren_werktijden')||'null')||STD_WERKTIJDEN}
+function setWerktijden(w){localStorage.setItem('mt_uren_werktijden',JSON.stringify(w))}
+function getVrijeDagen(){return JSON.parse(localStorage.getItem('mt_uren_vrije_dagen')||'[]')}
+function setVrijeDagen(v){localStorage.setItem('mt_uren_vrije_dagen',JSON.stringify(v))}
+function getSjablonen(){return JSON.parse(localStorage.getItem('mt_uren_sjablonen')||'null')||STD_SJABLONEN}
+function setSjablonen(s){localStorage.setItem('mt_uren_sjablonen',JSON.stringify(s))}
+
+// ════════════════════════════════════════════
+// DATA MIGRATIE
+// ════════════════════════════════════════════
+function migreerTaken(){
+  const raw=JSON.parse(localStorage.getItem('mt_uren_taken')||'null');
+  if(!raw) return;
+  // Al array-formaat? Dan geen migratie nodig
+  if(Array.isArray(raw)) return;
+  // Oud formaat: {project_code: [{id,naam,subtaken}]} → nieuwe array
+  const nu=new Date().toISOString();
+  const nieuw=[];
+  Object.entries(raw).forEach(([pc,taken])=>{
+    (taken||[]).forEach(t=>{
+      nieuw.push({
+        id: t.id||uid(),
+        project_code: pc,
+        naam: t.naam||'Onbekend',
+        status: 'todo',
+        bucket_id: 'todo',
+        prioriteit: null,
+        tags: [],
+        estimate_h: t.estimate_uren||null,
+        assignees: t.toegewezen||[],
+        from_date: null,
+        to_date: null,
+        billable: false,
+        omschrijving: '',
+        subtaken: (t.subtaken||[]).map(s=>({
+          id: s.id||uid(),
+          naam: typeof s==='string'?s:(s.naam||''),
+          gedaan: s.gedaan||false,
+          assignee: s.assignee||null
+        })),
+        notities: '',
+        sjabloon_id: null,
+        aangemaakt: nu,
+        gewijzigd: nu
+      });
+    });
+  });
+  localStorage.setItem('mt_uren_taken', JSON.stringify(nieuw));
+}
+
+function migreerTeamleden(){
+  const tl=JSON.parse(localStorage.getItem('mt_uren_teamleden')||'null');
+  if(!tl) return;
+  let gewijzigd=false;
+  tl.forEach(t=>{
+    if(t.beschikbaar_h_week===undefined){t.beschikbaar_h_week=40;gewijzigd=true;}
+    if(t.meldingen_aan===undefined){t.meldingen_aan=true;gewijzigd=true;}
+  });
+  if(gewijzigd) localStorage.setItem('mt_uren_teamleden',JSON.stringify(tl));
+}
+
+function ruimTogglOp(){
+  ['mt_toggl_token','mt_toggl_mapping','mt_toggl_workspace','mt_toggl_entries']
+    .forEach(k=>localStorage.removeItem(k));
+}
 
 // ════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════
 function init(){
+  ruimTogglOp();
+  migreerTaken();
+  migreerTeamleden();
+  // Zorg dat buckets altijd bestaan
+  if(!localStorage.getItem('mt_uren_buckets')) setBuckets(DEFAULT_BUCKETS);
+  if(!localStorage.getItem('mt_uren_werktijden')) setWerktijden(STD_WERKTIJDEN);
   IK=localStorage.getItem('mt_uren_ik');
   if(!IK){showWelkom();}else{showApp();}
 }
@@ -860,43 +1122,313 @@ function kiesIk(naam){
 }
 function showApp(){
   document.getElementById('app').classList.remove('hidden');
+  document.getElementById('app').style.display='flex';
   document.getElementById('welkom').classList.add('hidden');
   updateChip();
   herstelLopende();
+  startSbKlok();
   renderTimerBar();
-  startTbKlok();
-  renderTimer();
+  renderKalender();
+  showTab('timer', document.getElementById('sb-timer'));
 }
+
 function updateChip(){
-  const t=getTeamleden().find(x=>x.naam===IK)||{label:'?'};
-  document.getElementById('user-chip').textContent=t.label;
+  const t=getTeamleden().find(x=>x.naam===IK)||{label:'?',kleur:'#888',naam:'?'};
+  const btn=document.getElementById('user-chip');
+  const dot=document.getElementById('sb-user-dot');
+  const naam=document.getElementById('sb-user-naam');
+  if(btn) btn.title=t.label;
+  if(dot) dot.style.background=t.kleur;
+  if(naam) naam.textContent=t.label;
 }
+
 function toggleGebruiker(){
   const tl=getTeamleden();
   const idx=tl.findIndex(t=>t.naam===IK);
   kiesIk(tl[(idx+1)%tl.length].naam);
 }
 
+// Sidebar klok
+function startSbKlok(){
+  const el=document.getElementById('sb-klok');
+  if(!el) return;
+  const tick=()=>{
+    const n=new Date();
+    el.textContent=`${pad(n.getHours())}:${pad(n.getMinutes())}`;
+  };
+  tick();
+  if(!klokInterval) klokInterval=setInterval(tick,10000);
+}
+
+// Timer knop (nieuwe kalender-stijl)
+let timerKlokInt=null;
+function toggleTimer(){
+  const lopend=getLopende();
+  if(lopend){stopTimer();}else{startTimerVanTopbar();}
+}
+function startTimerVanTopbar(){
+  const omschr=document.getElementById('timer-omschr')?.value.trim()||'';
+  const pc=timerGekozenProject;
+  const entry={
+    id:uid(),teamlid:IK,project_code:pc||'',
+    taak_id:null,taak_naam:null,
+    omschrijving:omschr,
+    start:new Date().toISOString(),stop:null,duur:null,datum:vandaagStr()
+  };
+  setLopende(entry);
+  updateTimerTopbar();
+  renderKalender();
+}
+function stopTimer(){
+  const lopend=getLopende();
+  if(!lopend) return;
+  stopTimerIntern(lopend);
+  updateTimerTopbar();
+  renderKalender();
+}
+function updateTimerTopbar(){
+  const lopend=getLopende();
+  const wrap=document.getElementById('timer-input-wrap');
+  const btn=document.getElementById('timer-start-btn');
+  const disp=document.getElementById('timer-display');
+  if(!wrap||!btn) return;
+  if(lopend){
+    wrap.classList.add('lopend');
+    btn.className='timer-start-btn lopend';
+    btn.textContent='■';
+    if(!timerKlokInt) timerKlokInt=setInterval(()=>{
+      const sec=Math.floor((Date.now()-new Date(lopend.start).getTime())/1000);
+      if(disp) disp.textContent=fmtDuur(sec);
+    },1000);
+  } else {
+    wrap.classList.remove('lopend');
+    btn.className='timer-start-btn idle';
+    btn.textContent='▶';
+    if(disp) disp.textContent='0:00:00';
+    clearInterval(timerKlokInt);timerKlokInt=null;
+    if(document.getElementById('timer-omschr')) document.getElementById('timer-omschr').value='';
+  }
+}
+
+// Project picker voor timer topbar
+let timerGekozenProject=null;
+function openTimerProjectPicker(){
+  const projecten=getProjecten();
+  if(!projecten.length) return;
+  // Simpele select modal
+  const opts=projecten.map(p=>`<option value="${p.code}"${timerGekozenProject===p.code?' selected':''}>${p.code}${p.naam?' — '+p.naam:''}</option>`).join('');
+  const pc=prompt('Project code (of kies):\n'+projecten.map(p=>p.code).join(', '), timerGekozenProject||'');
+  if(pc===null) return;
+  const gevonden=projecten.find(p=>p.code===pc.trim().toUpperCase());
+  if(gevonden){
+    timerGekozenProject=gevonden.code;
+    document.getElementById('timer-chip-label').textContent=gevonden.code;
+    const t=getTeamleden().find(x=>x.naam===IK);
+    document.getElementById('timer-chip-dot').style.background=gevonden.kleur||t?.kleur||'var(--gold)';
+  }
+}
+
+// ════════════════════════════════════════════
+// KALENDER (Timer-tab — Toggl-stijl dag/week view)
+// ════════════════════════════════════════════
+function kalSetView(view, btnEl){
+  kalView=view;
+  document.querySelectorAll('.kvt-btn').forEach(b=>b.classList.remove('active'));
+  if(btnEl) btnEl.classList.add('active');
+  kalOffset=0;
+  renderKalender();
+}
+
+function kalNav(dir){
+  if(dir===0){kalOffset=0;}
+  else{const stap=kalView==='week'?7:kalView==='3d'?3:1;kalOffset+=dir*stap;}
+  renderKalender();
+}
+
+function renderKalender(){
+  const grid=document.getElementById('kal-grid');
+  const geplandEl=document.getElementById('kal-gepland');
+  const datumLabel=document.getElementById('kal-datum-label');
+  if(!grid) return;
+
+  const vandaag=vandaagStr();
+  const alle=getEntries();
+  const lopend=getLopende();
+  const projecten=getProjecten();
+  const planning=getPlanning();
+  const dagen=getDagenVoorView();
+
+  // Datum label
+  if(datumLabel) datumLabel.textContent=datumLabelTekst(dagen);
+
+  // Tijdas (uren 0-23, 60px per uur)
+  let tijdas='<div class="kalender-tijdas"><div style="height:33px"></div>';
+  for(let u=0;u<24;u++){
+    tijdas+=`<div class="kalender-tijdas-item">${pad(u)}:00</div>`;
+  }
+  tijdas+='</div>';
+
+  // Dag-kolommen
+  let dagenHtml='<div class="kalender-dagen">';
+  for(const datum of dagen){
+    const isVandaag=datum===vandaag;
+    // Entries voor deze dag van huidige gebruiker
+    const dagsEntries=alle.filter(e=>e.teamlid===IK&&e.datum===datum&&e.stop);
+    // Lopende timer toevoegen als vandaag
+    const lopendItems=[];
+    if(lopend&&lopend.teamlid===IK&&datum===vandaag) lopendItems.push({...lopend,type:'lopend'});
+
+    // Dag-header
+    const d=new Date(datum+'T12:00:00');
+    const dagNaam=d.toLocaleDateString('nl-NL',{weekday:'short'});
+    const dagNr=d.getDate();
+    const maandNaam=d.toLocaleDateString('nl-NL',{month:'short'});
+
+    let kol=`<div class="kalender-dag-col">`;
+    kol+=`<div class="kalender-dag-header${isVandaag?' vandaag':''}">${dagNaam} ${dagNr} ${maandNaam}</div>`;
+    kol+=`<div style="position:relative">`;
+
+    // Uur-slots
+    for(let u=0;u<24;u++){
+      kol+=`<div class="kalender-uur-slot" onclick="kalSlotKlik('${datum}',${u})" title="${pad(u)}:00"><div class="half"></div></div>`;
+    }
+
+    // Entry blokken (afgesloten)
+    for(const e of dagsEntries){
+      const blok=entryNaarBlok(e,projecten,false);
+      if(blok) kol+=blok;
+    }
+    // Lopende timer blok
+    for(const e of lopendItems){
+      const blok=entryNaarBlok(e,projecten,true);
+      if(blok) kol+=blok;
+    }
+
+    // Nu-lijn (alleen vandaag)
+    if(isVandaag){
+      const nu=new Date();
+      const topPx=((nu.getHours()*60+nu.getMinutes())/60)*60;
+      kol+=`<div class="kalender-nu-lijn" id="kal-nu-lijn" style="top:${topPx.toFixed(1)}px"></div>`;
+    }
+
+    kol+=`</div></div>`;
+    dagenHtml+=kol;
+  }
+  dagenHtml+='</div>';
+
+  grid.innerHTML=tijdas+dagenHtml;
+
+  // Gepland vandaag (planning entries voor zichtbare dagen)
+  if(geplandEl){
+    const gepland=planning.filter(p=>p.teamlid===IK&&dagen.includes(p.datum));
+    if(gepland.length){
+      geplandEl.innerHTML='<span class="gepland-label">Gepland:</span>'+gepland.map(p=>{
+        const proj=projecten.find(x=>x.code===p.project_code);
+        const kleur=proj?.kleur||'var(--gold)';
+        const dateLabel=dagen.length>1?` (${weekdagKort(p.datum)})`:'';
+        return `<span style="background:${kleur}20;border:1px solid ${kleur}40;color:${kleur};border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;cursor:pointer" onclick="openPlanModal(null,'${p.datum}','${IK}')" title="${p.datum}">${p.project_code}${p.taak_naam?' · '+p.taak_naam:''}${dateLabel}${p.duur_h?' · '+p.duur_h+'u':''}</span>`;
+      }).join('');
+    } else {
+      geplandEl.innerHTML='<span style="color:var(--text-faint);font-size:12px">Geen taken gepland voor zichtbare periode</span>';
+    }
+  }
+
+  // Nu-lijn auto-update elke minuut
+  clearInterval(kalNuLijnInt);
+  if(dagen.includes(vandaag)){
+    kalNuLijnInt=setInterval(()=>{
+      const lijn=document.getElementById('kal-nu-lijn');
+      if(lijn){const nu=new Date();lijn.style.top=((nu.getHours()*60+nu.getMinutes())/60*60).toFixed(1)+'px';}
+    },60000);
+  }
+
+  // Scroll naar werkbegin (7:00) — kalender-grid zelf is scrollbaar
+  setTimeout(()=>{ grid.scrollTop=7*60; },30);
+}
+
+function getDagenVoorView(){
+  const basis=new Date();
+  basis.setDate(basis.getDate()+kalOffset);
+  if(kalView==='dag') return[datumStr(basis)];
+  if(kalView==='3d') return[0,1,2].map(i=>{const d=new Date(basis);d.setDate(basis.getDate()+i);return datumStr(d);});
+  // week: ma-vr
+  const dow=basis.getDay()===0?6:basis.getDay()-1;
+  const ma=new Date(basis);ma.setDate(basis.getDate()-dow);
+  return[0,1,2,3,4].map(i=>{const d=new Date(ma);d.setDate(ma.getDate()+i);return datumStr(d);});
+}
+
+function datumLabelTekst(dagen){
+  if(dagen.length===1) return fmtDatumLang(dagen[0]);
+  if(dagen.length===5){
+    const ma=new Date(dagen[0]+'T12:00:00');
+    return`Week ${weekNr(ma)} — ${ma.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}`;
+  }
+  const van=new Date(dagen[0]+'T12:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
+  const tot=new Date(dagen[dagen.length-1]+'T12:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
+  return`${van} – ${tot}`;
+}
+
+function entryNaarBlok(e,projecten,isLopend){
+  if(!e.start) return null;
+  const startDt=new Date(e.start);
+  // Alleen blokken die op dezelfde dag vallen als e.datum (geen midnight-overlapping)
+  const startMin=startDt.getHours()*60+startDt.getMinutes();
+  let eindMin;
+  if(e.stop){const eindDt=new Date(e.stop);eindMin=eindDt.getHours()*60+eindDt.getMinutes();}
+  else{const nu=new Date();eindMin=nu.getHours()*60+nu.getMinutes();}
+  if(eindMin<=startMin) eindMin=startMin+15;
+  eindMin=Math.min(eindMin,24*60); // niet voorbij middernacht
+
+  const topPx=(startMin/60)*60;
+  const hoogPx=Math.max(((eindMin-startMin)/60)*60,18);
+  const proj=projecten.find(p=>p.code===e.project_code);
+  const kleur=proj?.kleur||(isLopend?'var(--gold)':'var(--green)');
+  const label=e.taak_naam||e.omschrijving||e.project_code||'—';
+  const duurSec=e.duur||(isLopend?Math.floor((Date.now()-new Date(e.start).getTime())/1000):0);
+  const duurTxt=duurSec?fmtDuur(duurSec):(isLopend?'loopt…':'');
+
+  return`<div class="kalender-entry-blok${isLopend?' lopend':''}"
+    style="top:${topPx}px;height:${hoogPx}px;background:${kleur}18;border-left-color:${kleur}"
+    onclick="event.stopPropagation();${isLopend?'updateTimerTopbar()':'openEditEntryModal(\''+e.id+'\')'}">
+    <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${kleur};font-size:11px">${label}</div>
+    ${hoogPx>28?`<div style="color:var(--text-dim);font-size:10px;font-family:var(--mono)">${duurTxt}</div>`:''}
+  </div>`;
+}
+
+function kalSlotKlik(datum,uur){
+  // Klik op leeg tijdslot → open nieuw-entry modal met pre-ingevulde datum+tijd
+  dagDatum=datum;
+  openNieuwEntryModal();
+  // Pre-invullen start/stop tijd
+  setTimeout(()=>{
+    const startEl=document.getElementById('nieuw-start');
+    const stopEl=document.getElementById('nieuw-stop');
+    if(startEl) startEl.value=`${pad(uur)}:00`;
+    if(stopEl) stopEl.value=`${pad(Math.min(uur+1,23))}:00`;
+  },50);
+}
+
 // ════════════════════════════════════════════
 // TIMER
 // ════════════════════════════════════════════
 function renderTimer(){
+  const lbl=document.getElementById('timer-label');
+  if(!lbl) return; // legacy element — niet meer aanwezig in sidebar-layout
   const projecten=getProjecten();
   const lopend=getLopende();
-  const lbl=document.getElementById('timer-label');
   lbl.textContent=lopend?`Timer loopt — klik project om te wisselen`:`Kies een project`;
   if(!projecten.length){
     document.getElementById('project-grid').innerHTML=`<div style="grid-column:1/-1;padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen projecten. Maak ze aan in de <a href="index-v4.html" style="color:var(--green)">M&T tool</a>.</div>`;
     return;
   }
-  const taken=getTaken();
+  const takenPP=getTakenPerProject();
   const vandaag=vandaagStr();
   const entries=getEntries();
   const urenV={};
   entries.filter(e=>e.teamlid===IK&&e.datum===vandaag&&e.duur).forEach(e=>{urenV[e.project_code]=(urenV[e.project_code]||0)+e.duur});
   document.getElementById('project-grid').innerHTML=projecten.map(p=>{
     const actief=lopend&&lopend.project_code===p.code;
-    const takenLijst=taken[p.code]||[];
+    const takenLijst=takenPP[p.code]||[];
     const uren=urenV[p.code];
     return `<div class="project-card${actief?' actief':''}" onclick="openStartModal('${p.code}')">
       <button class="pc-info-btn" onclick="event.stopPropagation();openProjectDetail('${p.code}')" title="Project details">ℹ</button>
@@ -924,7 +1456,7 @@ function openStartModal(projectCode){
 }
 
 function renderStartTaakLijst(){
-  const taken=getTaken()[startModalProject]||[];
+  const taken=getTakenVoorProject(startModalProject);
   const wrap=document.getElementById('start-taak-lijst');
   if(!taken.length){wrap.innerHTML='';return;}
   wrap.innerHTML=taken.map(t=>`
@@ -955,7 +1487,7 @@ function startTimerBevestig(taakId,subtaakId){
   if(!startModalProject) return;
   const lopend=getLopende();
   if(lopend) stopTimerIntern(lopend);
-  const taken=getTaken()[startModalProject]||[];
+  const taken=getTakenVoorProject(startModalProject);
   const taak=taakId?taken.find(t=>t.id===taakId):null;
   const subtaak=subtaakId&&taak?taak.subtaken?.find(s=>s.id===subtaakId):null;
   const entry={
@@ -969,7 +1501,7 @@ function startTimerBevestig(taakId,subtaakId){
   sluitModal('start');
   renderTimerBar();
   startTbKlok();
-  renderTimer();
+  if(actTab==="timer")renderKalender();
 }
 
 function stopTimer(){
@@ -978,7 +1510,7 @@ function stopTimer(){
   stopTimerIntern(lopend);
   setLopende(null);
   renderTimerBar();
-  renderTimer();
+  if(actTab==="timer")renderKalender();
   if(actTab==='dag') renderDag();
   if(actTab==='rapport') renderRapport();
 }
@@ -1071,10 +1603,11 @@ function slaHandmatigOp(){
   const stopIso=new Date(`${dagDatum}T${st}:00`).toISOString();
   const duur=Math.round((new Date(stopIso)-new Date(startIso))/1000);
   if(duur<=0){alert('Stop moet na start liggen.');return;}
-  const taakNaam=taakId?((getTaken()[pc]||[]).find(t=>t.id===taakId)||{}).naam||null:null;
+  const taakNaam=taakId?(getTakenVoorProject(pc).find(t=>t.id===taakId)||{}).naam||null:null;
   getEntries().push&&setEntries([...getEntries(),{id:uid(),teamlid:tl,project_code:pc,taak_id:taakId,taak_naam:taakNaam,omschrijving:omschr,start:startIso,stop:stopIso,duur,datum:dagDatum}]);
   sluitModal('nieuw');
   renderDag();
+  renderKalender();
 }
 
 // ════════════════════════════════════════════
@@ -1266,13 +1799,13 @@ function renderBordWerkdruk(){
   const dagen=[];
   for(let i=0;i<5;i++){const d=new Date(ma+'T12:00:00');d.setDate(d.getDate()+i);dagen.push(datumStr(d));}
   wrap.innerHTML=`<div class="werkdruk-grid">${tl.map(t=>{
-    const capUren=cap[t.naam]||40;
+    const capUren=(t.beschikbaar_h_week)||cap[t.naam]||40;
     const gepland=planning.filter(p=>dagen.includes(p.datum)&&p.teamlid===t.naam).reduce((s,p)=>s+p.uren_gepland,0);
     const geboekt=entries.filter(e=>dagen.includes(e.datum)&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur/3600),0);
     let estTotaal=0;
-    Object.values(taken).forEach(lijst=>lijst.forEach(taak=>{
-      if((taak.toegewezen||[]).includes(t.naam)&&taak.estimate_uren) estTotaal+=taak.estimate_uren;
-    }));
+    taken.forEach(taak=>{
+      if((taak.assignees||taak.toegewezen||[]).includes(t.naam)&&taak.estimate_h) estTotaal+=taak.estimate_h;
+    });
     const gepPct=Math.min(gepland/capUren*100,100);
     const gbkPct=Math.min(geboekt/capUren*100,100);
     const isOver=gepland>capUren||geboekt>capUren;
@@ -1437,7 +1970,7 @@ function slaEntryOp(){
   const st=document.getElementById('edit-stop').value;
   const pc=document.getElementById('edit-project').value;
   const taakId=document.getElementById('edit-taak').value||null;
-  const taakNaam=taakId?((getTaken()[pc]||[]).find(t=>t.id===taakId)||{}).naam||null:null;
+  const taakNaam=taakId?(getTakenVoorProject(pc).find(t=>t.id===taakId)||{}).naam||null:null;
   const startIso=s?new Date(`${e.datum}T${s}:00`).toISOString():e.start;
   const stopIso=st?new Date(`${e.datum}T${st}:00`).toISOString():e.stop;
   const duur=startIso&&stopIso?Math.round((new Date(stopIso)-new Date(startIso))/1000):e.duur;
@@ -1450,7 +1983,7 @@ function verwijderEntry(id){
   if(!confirm('Entry verwijderen?')) return;
   setEntries(getEntries().filter(e=>e.id!==id));
   renderDag();
-  renderTimer();
+  if(actTab==="timer")renderKalender();
 }
 
 // ════════════════════════════════════════════
@@ -1462,15 +1995,15 @@ function openTakenBeheer(){
 }
 function renderTakenBeheer(){
   const projecten=getProjecten();
-  const taken=getTaken();
+  const takenPP=getTakenPerProject();
   document.getElementById('taken-beheer-inhoud').innerHTML=projecten.map(p=>`
     <div class="taken-blok">
       <div class="taken-blok-header" onclick="toggleTakenBlok('tb-${p.code}')">
         <span class="taken-project-label">${p.code}</span>
-        <span style="font-size:11px;color:var(--text-faint)">${(taken[p.code]||[]).length} taken ▾</span>
+        <span style="font-size:11px;color:var(--text-faint)">${(takenPP[p.code]||[]).length} taken ▾</span>
       </div>
       <div id="tb-${p.code.replace(/[^a-z0-9]/gi,'_')}" style="display:none">
-        ${(taken[p.code]||[]).map(t=>`
+        ${(takenPP[p.code]||[]).map(t=>`
           <div class="taak-rij">
             <span class="taak-rij-naam">${t.naam}</span>
             <button class="icon-knop" onclick="voegSubtaakToe('${p.code}','${t.id}')">+ sub</button>
@@ -1507,9 +2040,15 @@ function voegTaakToe(projectCode){
   const key=projectCode.replace(/[^a-z0-9]/gi,'_');
   const inp=document.getElementById('taak-inp-'+key);
   if(!inp||!inp.value.trim()) return;
+  const nu=new Date().toISOString();
   const taken=getTaken();
-  if(!taken[projectCode]) taken[projectCode]=[];
-  taken[projectCode].push({id:uid(),naam:inp.value.trim(),subtaken:[]});
+  taken.push({
+    id:uid(), project_code:projectCode, naam:inp.value.trim(),
+    status:'todo', bucket_id:'todo', prioriteit:null, tags:[],
+    estimate_h:null, assignees:[], from_date:null, to_date:null,
+    billable:false, omschrijving:'', subtaken:[], notities:'',
+    sjabloon_id:null, aangemaakt:nu, gewijzigd:nu
+  });
   setTaken(taken);
   inp.value='';
   renderTakenBeheer();
@@ -1518,16 +2057,26 @@ function voegSubtaakToeInp(pc,taakId){
   const inp=document.getElementById('sub-inp-'+taakId);
   if(!inp||!inp.value.trim()) return;
   const taken=getTaken();
-  const t=(taken[pc]||[]).find(x=>x.id===taakId);
+  const t=taken.find(x=>x.id===taakId&&x.project_code===pc);
   if(!t) return;
   if(!t.subtaken) t.subtaken=[];
-  t.subtaken.push({id:uid(),naam:inp.value.trim()});
+  t.subtaken.push({id:uid(),naam:inp.value.trim(),gedaan:false,assignee:null});
+  t.gewijzigd=new Date().toISOString();
   setTaken(taken);
   inp.value='';
   renderTakenBeheer();
 }
-function verwijderTaak(pc,id){const taken=getTaken();taken[pc]=(taken[pc]||[]).filter(t=>t.id!==id);setTaken(taken);renderTakenBeheer();}
-function verwijderSubtaak(pc,taakId,subId){const taken=getTaken();const t=(taken[pc]||[]).find(x=>x.id===taakId);if(t)t.subtaken=(t.subtaken||[]).filter(s=>s.id!==subId);setTaken(taken);renderTakenBeheer();}
+function verwijderTaak(pc,id){
+  setTaken(getTaken().filter(t=>!(t.id===id&&t.project_code===pc)));
+  renderTakenBeheer();
+}
+function verwijderSubtaak(pc,taakId,subId){
+  const taken=getTaken();
+  const t=taken.find(x=>x.id===taakId&&x.project_code===pc);
+  if(t){t.subtaken=(t.subtaken||[]).filter(s=>s.id!==subId);t.gewijzigd=new Date().toISOString();}
+  setTaken(taken);
+  renderTakenBeheer();
+}
 
 // ════════════════════════════════════════════
 // INSTELLINGEN
@@ -1609,7 +2158,7 @@ function renderProjectDetail(){
   const projecten=getProjecten();
   const p=projecten.find(x=>x.code===code);
   if(!p) return;
-  const taken=getTaken()[code]||[];
+  const taken=getTakenVoorProject(code);
   const entries=getEntries().filter(e=>e.project_code===code&&e.duur);
   const totalSec=entries.reduce((s,e)=>s+e.duur,0);
   const tl=getTeamleden();
@@ -1711,7 +2260,7 @@ function setProjectStatus(code,status){
   if(p){p.status=status;setProjecten(lijst);}
   renderProjectDetail();
   if(actTab==='projecten') renderProjectenTab();
-  if(actTab==='timer') renderTimer();
+  if(actTab==='timer') if(actTab==="timer")renderKalender();
   if(actTab==='bord') renderBordWeek();
 }
 
@@ -1723,24 +2272,30 @@ function pdSetVeld(code,veld,val){
 
 function pdSetEstimate(code,taakId,val){
   const taken=getTaken();
-  const t=(taken[code]||[]).find(x=>x.id===taakId);
-  if(t){t.estimate_uren=parseFloat(val)||0;setTaken(taken);}
+  const t=taken.find(x=>x.id===taakId&&x.project_code===code);
+  if(t){t.estimate_h=parseFloat(val)||null;t.gewijzigd=new Date().toISOString();setTaken(taken);}
   renderBordWerkdruk();
 }
 
 function pdSetToegewezen(code,taakId,sel){
   const taken=getTaken();
-  const t=(taken[code]||[]).find(x=>x.id===taakId);
-  if(t){t.toegewezen=Array.from(sel.selectedOptions).map(o=>o.value);setTaken(taken);}
+  const t=taken.find(x=>x.id===taakId&&x.project_code===code);
+  if(t){t.assignees=Array.from(sel.selectedOptions).map(o=>o.value);t.gewijzigd=new Date().toISOString();setTaken(taken);}
   renderBordWerkdruk();
 }
 
 function pdVoegTaakToe(code){
   const inp=document.getElementById('pd-add-taak-inp');
   if(!inp||!inp.value.trim()) return;
+  const nu=new Date().toISOString();
   const taken=getTaken();
-  if(!taken[code]) taken[code]=[];
-  taken[code].push({id:uid(),naam:inp.value.trim(),estimate_uren:0,toegewezen:[],subtaken:[]});
+  taken.push({
+    id:uid(), project_code:code, naam:inp.value.trim(),
+    status:'todo', bucket_id:'todo', prioriteit:null, tags:[],
+    estimate_h:null, assignees:[], from_date:null, to_date:null,
+    billable:false, omschrijving:'', subtaken:[], notities:'',
+    sjabloon_id:null, aangemaakt:nu, gewijzigd:nu
+  });
   setTaken(taken);
   inp.value='';
   renderProjectDetail();
@@ -1750,8 +2305,12 @@ function pdVoegSubtaakToe(code,taakId){
   const inp=document.getElementById('sub-inp-pd-'+taakId);
   if(!inp||!inp.value.trim()) return;
   const taken=getTaken();
-  const t=(taken[code]||[]).find(x=>x.id===taakId);
-  if(t){if(!t.subtaken)t.subtaken=[];t.subtaken.push({id:uid(),naam:inp.value.trim()});}
+  const t=taken.find(x=>x.id===taakId&&x.project_code===code);
+  if(t){
+    if(!t.subtaken)t.subtaken=[];
+    t.subtaken.push({id:uid(),naam:inp.value.trim(),gedaan:false,assignee:null});
+    t.gewijzigd=new Date().toISOString();
+  }
   setTaken(taken);
   inp.value='';
   renderProjectDetail();
@@ -1761,16 +2320,14 @@ function pdVoegSubtaakToe(code,taakId){
 
 function pdVerwijderTaak(code,id){
   if(!confirm('Taak verwijderen?')) return;
-  const taken=getTaken();
-  taken[code]=(taken[code]||[]).filter(t=>t.id!==id);
-  setTaken(taken);
+  setTaken(getTaken().filter(t=>!(t.id===id&&t.project_code===code)));
   renderProjectDetail();
 }
 
 function pdVerwijderSubtaak(code,taakId,subId){
   const taken=getTaken();
-  const t=(taken[code]||[]).find(x=>x.id===taakId);
-  if(t) t.subtaken=(t.subtaken||[]).filter(s=>s.id!==subId);
+  const t=taken.find(x=>x.id===taakId&&x.project_code===code);
+  if(t){t.subtaken=(t.subtaken||[]).filter(s=>s.id!==subId);t.gewijzigd=new Date().toISOString();}
   setTaken(taken);
   renderProjectDetail();
 }
@@ -1797,7 +2354,7 @@ function vulProjectSelect(elId, geselecteerd=''){
 function vulTaakSelect(elId,projectCode,geselecteerd=''){
   const sel=document.getElementById(elId);
   if(!sel) return;
-  const taken=getTaken()[projectCode]||[];
+  const taken=getTakenVoorProject(projectCode);
   sel.innerHTML=`<option value="">— Geen taak —</option>`
     +taken.map(t=>`<option value="${t.id}"${t.id===geselecteerd?' selected':''}>${t.naam}</option>`).join('')
     +(projectCode?`<option value="__nieuwe_taak__">＋ Nieuwe taak aanmaken</option>`:'');
@@ -1814,9 +2371,12 @@ function vulTaakSelect(elId,projectCode,geselecteerd=''){
 // ════════════════════════════════════════════
 function showTab(naam,btn){
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('tab-'+naam).classList.add('active');
+  document.querySelectorAll('.tab-btn,.sb-item').forEach(b=>b.classList.remove('active'));
+  const tabEl=document.getElementById('tab-'+naam);
+  if(tabEl) tabEl.classList.add('active');
   if(btn) btn.classList.add('active');
+  // Als geen btn meegegeven, activeer sidebar-knop op basis van naam
+  if(!btn){const sbBtn=document.getElementById('sb-'+naam);if(sbBtn) sbBtn.classList.add('active');}
   actTab=naam;
   // Reset fullscreen bij wisselen
   if(document.body.classList.contains('tab-fs')){
@@ -1830,7 +2390,7 @@ function showTab(naam,btn){
   if(naam==='dag') renderDag();
   if(naam==='timeline') renderTimeline();
   if(naam==='rapport') renderRapport();
-  if(naam==='timer') renderTimer();
+  if(naam==='timer') renderKalender();   // nieuwe kalender-view vervangt renderTimer
   if(naam==='projecten') renderProjectenTab();
   if(naam==='bord'){startBord();}else{stopBord();}
 }
@@ -1891,7 +2451,7 @@ function tbProjectChange(){
   const taakSel=document.getElementById('tb-taak-sel');
   if(!taakSel) return;
   if(sel.value){
-    const taken=getTaken()[sel.value]||[];
+    const taken=getTakenVoorProject(sel.value);
     taakSel.innerHTML=`<option value="">— Taak (optioneel) —</option>`
       +taken.map(t=>`<option value="${t.id}">${t.naam}</option>`).join('')
       +`<option value="__nieuwe_taak__">＋ Nieuwe taak aanmaken</option>`;
@@ -1973,7 +2533,7 @@ function slaProjectOp(){
   document.getElementById('np-klant').value='';
   document.getElementById('nieuw-proj-form').style.display='none';
   renderProjectenTab();
-  renderTimer();
+  if(actTab==="timer")renderKalender();
   vulTbProjectSelect();
 }
 
@@ -1987,7 +2547,7 @@ function beverkProject(i){
   lijst[i]={code:code.toUpperCase(),naam:naam||'',klant:(klant||'').toUpperCase()};
   setProjecten(lijst);
   renderProjectenTab();
-  renderTimer();
+  if(actTab==="timer")renderKalender();
   vulTbProjectSelect();
 }
 
@@ -2013,7 +2573,7 @@ function verwijderProject(i){
   lijst.splice(i,1);
   setProjecten(lijst);
   renderProjectenTab();
-  renderTimer();
+  if(actTab==="timer")renderKalender();
   vulTbProjectSelect();
 }
 
@@ -2036,7 +2596,7 @@ function slaSnelProjectOp(){
   if(!lijst.find(p=>p.code===code)) lijst.push({code,naam,klant});
   setProjecten(lijst);
   sluitModal('snel-project');
-  renderTimer();
+  if(actTab==="timer")renderKalender();
   vulTbProjectSelect();
   if(snelProjectCallback) snelProjectCallback(code);
   snelProjectCallback=null;
@@ -2055,10 +2615,15 @@ function slaSnelTaakOp(){
   const naam=document.getElementById('st-naam').value.trim();
   if(!naam){alert('Vul een taaknaam in.');return;}
   const pc=snelTaakContext.pc;
+  const nu=new Date().toISOString();
+  const nieuw={
+    id:uid(), project_code:pc, naam, status:'todo', bucket_id:'todo',
+    prioriteit:null, tags:[], estimate_h:null, assignees:[],
+    from_date:null, to_date:null, billable:false, omschrijving:'',
+    subtaken:[], notities:'', sjabloon_id:null, aangemaakt:nu, gewijzigd:nu
+  };
   const taken=getTaken();
-  if(!taken[pc]) taken[pc]=[];
-  const nieuw={id:uid(),naam,subtaken:[]};
-  taken[pc].push(nieuw);
+  taken.push(nieuw);
   setTaken(taken);
   sluitModal('snel-taak');
   if(snelTaakContext.callback) snelTaakContext.callback(nieuw.id);
