@@ -1,24 +1,28 @@
 # STATUS — 2026-04-29
 
 ## Nu bezig
-index-v4.html — "Ga naar Uren" cross-link + concept-badge op Dashboard
+Stap 6 — Timeline verbeteringen (capaciteitsbalk, vrije dagen)
 
 ## Volgende stap
-Stap 4 — Bord/Kanban tab in uren.html
+Stap 7 — Project-detail panel (slide-in rechts)
 
 ## Gedaan
-- Context-reorganisatie: CLAUDE.md compact, .claude/ctx/ aangemaakt (9 bestanden)
-- Stap 2: renderKalender() — Toggl-stijl kalender, nu-lijn, dag/3d/week toggle, auto-scroll 07:00
-- Concept-projecten flow: snel aanmaken, badge sidebar, activeer-modal met code+MB+sjabloon
-- Agenda-tab (was Timer), cross-link sidebar → index-v4.html
-- Stap 3: openTaakModal() — twee kolommen, subtaken+voortgang, timer-btn, auto-save, Outlook-flag
+- Context-reorganisatie + CLAUDE.md compact
+- Stap 2: renderKalender() — Toggl-stijl kalender, nu-lijn, dag/3d/week toggle
+- Stap 3: openTaakModal() — twee kolommen, subtaken, timer-btn, auto-save, Outlook-flag
+- Stap 4: Kanban board — drag & drop tussen/binnen kolommen, timer per kaart
+- Stap 5: Taken-tab — tabeloverzicht, filters, sorteren, timer-knop
+- Concept-projecten flow + badge in sidebar
+- Eigen statussen/buckets beheerbaar in Instellingen
+- Within-column drag sortering op Kanban
+- index-v4.html: "Uren →" link in header + concept-badge Dashboard
 
 ## Blockers
-- SharePoint/Outlook Graph API token ontbreekt (sync + agenda-koppeling)
+- SharePoint/Outlook Graph API token ontbreekt
 
 ## Live URLs
 - Tool: https://mtbart.github.io/MT-Facturatie-tool/index-v4.html
 - Uren: https://mtbart.github.io/MT-Facturatie-tool/uren.html
 
 ## Actieve context
-`.claude/ctx/uren.md`, `.claude/ctx/tool.md`
+`.claude/ctx/uren.md`

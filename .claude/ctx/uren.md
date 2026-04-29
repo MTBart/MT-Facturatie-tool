@@ -9,7 +9,7 @@
 - [x] **Stap 2** — Vandaag-tab: renderKalender(), nu-lijn, dag/3d/week toggle, auto-scroll 07:00
 - [x] **Stap 3** — Taak-modal: universeel, `openTaakModal(taakId)`, subtaken, timer starten, auto-save, Outlook-flag
 - [x] **Stap 4** — Bord-tab (Kanban): drag & drop, buckets, timer-knop per kaart, filters persoon/project
-- [ ] **Stap 5** — Taken-tab: tabeloverzicht met filters
+- [x] **Stap 5** — Taken-tab: tabeloverzicht met filters + sortering per kolom, timer-knop
 - [ ] **Stap 6** — Timeline verbeteringen: capaciteitsbalk, drag-to-create, vrije dagen weergave
 - [ ] **Stap 7** — Project-detail panel: slide-in rechts, `openProjectPanel(projectCode)`
 - [ ] **Stap 8** — Vrije dagen beheer: instellingen + timeline weergave
