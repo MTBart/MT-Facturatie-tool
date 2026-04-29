@@ -2240,14 +2240,14 @@ function renderTodo(){
   const hBadge=document.getElementById('header-concept-badge');
   if(hBadge){hBadge.style.display=concepten>0?'inline':'none';hBadge.textContent=concepten;}
   const items=[
-    {label:'Facturen te controleren',count:'→',kleur:'var(--blue)'},
-    {label:'Items op bestellijst',count:bestellen,kleur:bestellen>0?'var(--orange)':'var(--green)'},
-    {label:'Concept-projecten — activeren',count:concepten,kleur:concepten>0?'var(--red)':'var(--green)',link:concepten>0?()=>document.querySelector('[onclick*="projecten"]').click():null},
-    {label:'Voorraadmutaties',count:voorraad,kleur:'var(--text-dim)'},
+    {label:'Facturen te controleren',count:'→',kleur:'var(--blue)',onclick:''},
+    {label:'Items op bestellijst',count:bestellen,kleur:bestellen>0?'var(--orange)':'var(--green)',onclick:''},
+    {label:`Concept-projecten — activeren${concepten>0?' ↗':' ✓'}`,count:concepten,kleur:concepten>0?'var(--red)':'var(--green)',onclick:concepten>0?"document.querySelector('.tab-btn[onclick*=projecten]').click()":''},
+    {label:'Voorraadmutaties',count:voorraad,kleur:'var(--text-dim)',onclick:''},
   ];
   el.innerHTML=items.map(i=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);${i.link?'cursor:pointer':''}${i.count>0&&i.link?' opacity:1':''}" ${i.link?`onclick="(${i.link.toString()})()"`:''}>
-      <span style="font-size:13px">${i.label}${i.link&&concepten>0?' ↗':''}${i.link&&concepten===0?' ✓':''}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);${i.onclick?'cursor:pointer':''}" ${i.onclick?`onclick="${i.onclick}"`:''}>
+      <span style="font-size:13px">${i.label}</span>
       <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:${i.kleur};background:${i.kleur}22;padding:2px 10px;border-radius:12px">${i.count}</span>
     </div>`).join('');
 }
