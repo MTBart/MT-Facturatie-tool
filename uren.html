@@ -299,6 +299,12 @@ body.bord-fs .timer-bar{display:none!important}
 .tl-blok-del{position:absolute;top:2px;right:3px;background:rgba(0,0,0,0.15);border:none;border-radius:3px;color:#fff;font-size:10px;padding:0 3px;cursor:pointer;opacity:0;transition:opacity 0.12s;line-height:14px}
 .tl-blok:hover .tl-blok-del{opacity:1}
 .tl-blok-plan .tl-blok-del{color:var(--text-dim);background:var(--border)}
+.tl-reis-strip{font-size:9px;font-family:var(--mono);color:var(--text-faint);background:rgba(0,0,0,0.05);border-radius:3px;padding:1px 4px;margin:1px 0;display:inline-block}
+.tl-blok-locatie{font-size:9px;color:var(--text-dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px}
+.tl-milestone{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:600;color:#fff;margin:1px 2px;cursor:pointer;white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis}
+.tl-milestone:hover{filter:brightness(0.9)}
+.tl-ms-rij .tl-dag-td{cursor:pointer}
+.tl-ms-rij .tl-dag-td:hover{background:var(--surface2)}
 
 /* Drag selection indicator */
 .drag-select-indicator{position:fixed;background:var(--gold-light);border:2px solid var(--gold);border-radius:6px;pointer-events:none;z-index:50;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--gold);opacity:0}
@@ -825,6 +831,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
           onchange="tlSpringNaarDatum(this.value)">
       </div>
       <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim)" id="tl-range">—</div>
+      <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px" onclick="openMilestoneModal()">🚩 Milestone</button>
     </div>
     <div style="flex:1;overflow:hidden;padding:0 0.75rem 0.75rem">
       <div id="tl-scroll-wrap" style="overflow-x:auto;height:100%;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow)">
@@ -982,7 +989,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 
 <!-- MODAL: Plan aanmaken -->
 <div class="modal-overlay" id="modal-plan-overlay" onclick="if(event.target===this)sluitModal('plan')">
-  <div class="modal" style="max-width:380px">
+  <div class="modal" style="max-width:420px">
     <div class="modal-title">Planblok <button class="modal-close" onclick="sluitModal('plan')">✕</button></div>
     <div class="form-row">
       <label class="form-label">Project</label>
@@ -996,9 +1003,72 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
       <label class="form-label">Uren gepland</label>
       <input class="form-input" type="number" id="plan-uren" min="0.5" max="24" step="0.5" value="4">
     </div>
+    <div class="form-row">
+      <label class="form-label">Locatie <span style="color:var(--text-faint);font-size:11px">(plaatsadres)</span></label>
+      <input class="form-input" type="text" id="plan-locatie" placeholder="bijv. Prinsengracht 123, Amsterdam">
+    </div>
+    <div class="form-row" style="gap:0.5rem">
+      <div style="flex:1">
+        <label class="form-label">🚗 Reistijd heen</label>
+        <select class="form-select" id="plan-reis-voor">
+          <option value="0">Geen</option>
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+          <option value="45">45 min</option>
+          <option value="60">1 uur</option>
+          <option value="90">1,5 uur</option>
+          <option value="120">2 uur</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label class="form-label">🚗 Reistijd terug</label>
+        <select class="form-select" id="plan-reis-na">
+          <option value="0">Geen</option>
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+          <option value="45">45 min</option>
+          <option value="60">1 uur</option>
+          <option value="90">1,5 uur</option>
+          <option value="120">2 uur</option>
+        </select>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="sluitModal('plan')">Annuleer</button>
       <button class="btn btn-primary" onclick="slaPlanblocOp()">Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Milestone toevoegen -->
+<div class="modal-overlay" id="modal-milestone-overlay" onclick="if(event.target===this)sluitModal('milestone')">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">🚩 Milestone / Deadline <button class="modal-close" onclick="sluitModal('milestone')">✕</button></div>
+    <div class="form-row">
+      <label class="form-label">Naam</label>
+      <input class="form-input" type="text" id="ms-naam" placeholder="bijv. Oplevering, Plaatsing, Revisie">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Project</label>
+      <select class="form-select" id="ms-project"></select>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Datum</label>
+      <input class="form-input" type="date" id="ms-datum">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Type</label>
+      <select class="form-select" id="ms-type">
+        <option value="deadline">⛔ Deadline</option>
+        <option value="oplevering">🏁 Oplevering</option>
+        <option value="plaatsing">🔧 Plaatsing</option>
+        <option value="revisie">🔄 Revisie</option>
+        <option value="overig">📌 Overig</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="sluitModal('milestone')">Annuleer</button>
+      <button class="btn btn-primary" onclick="slaMilestoneOp()">Opslaan</button>
     </div>
   </div>
 </div>
@@ -1205,6 +1275,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
       <div class="inst-sectie-title">Data</div>
       <button class="btn btn-secondary btn-sm" onclick="exportCSV()">↓ Export CSV</button>
       <button class="btn btn-danger btn-sm" style="margin-left:0.5rem" onclick="wisAlles()">⚠ Alles wissen</button>
+      <button class="btn btn-secondary btn-sm" style="margin-left:0.5rem;opacity:0.7" onclick="seedDummyData()">🧪 Demo-data laden</button>
     </div>
   </div>
 </div>
@@ -1431,6 +1502,8 @@ function getEntries(){return JSON.parse(localStorage.getItem('mt_uren_entries')|
 function setEntries(e){localStorage.setItem('mt_uren_entries',JSON.stringify(e))}
 function getPlanning(){return JSON.parse(localStorage.getItem('mt_uren_planning')||'[]')}
 function setPlanning(p){localStorage.setItem('mt_uren_planning',JSON.stringify(p))}
+function getMilestones(){return JSON.parse(localStorage.getItem('mt_uren_milestones')||'[]')}
+function setMilestones(m){localStorage.setItem('mt_uren_milestones',JSON.stringify(m))}
 function getTeamleden(){return JSON.parse(localStorage.getItem('mt_uren_teamleden')||'null')||STD_TEAMLEDEN}
 function setTeamleden(t){localStorage.setItem('mt_uren_teamleden',JSON.stringify(t))}
 function getTaken(){return JSON.parse(localStorage.getItem('mt_uren_taken')||'[]')}
@@ -2186,21 +2259,30 @@ function renderTimeline(){
       if(vd) return `<td class="tl-dag-td${extraClass}"><div class="tl-vrije-dag-label">${vd.naam}</div></td>`;
 
       let planBlokken,actBlokken;
+      const rowIdLc=row.id.toLowerCase();
       if(tlView==='persoon'){
-        planBlokken=planning.filter(p=>p.datum===dag&&p.teamlid===row.id);
-        actBlokken=[{kleur:row.kleur,som:entries.filter(e=>e.datum===dag&&e.teamlid===row.id&&e.duur).reduce((s,e)=>s+(e.duur||0),0)}].filter(b=>b.som>0);
+        planBlokken=planning.filter(p=>p.datum===dag&&p.teamlid?.toLowerCase()===rowIdLc);
+        actBlokken=[{kleur:row.kleur,som:entries.filter(e=>e.datum===dag&&e.teamlid?.toLowerCase()===rowIdLc&&e.duur).reduce((s,e)=>s+(e.duur||0),0)}].filter(b=>b.som>0);
       } else {
         planBlokken=planning.filter(p=>p.datum===dag&&p.project_code===row.id);
-        actBlokken=tlm.map(t=>({teamlid:t.naam,kleur:t.kleur,label:t.label,som:entries.filter(e=>e.datum===dag&&e.project_code===row.id&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
+        actBlokken=tlm.map(t=>({teamlid:t.naam,kleur:t.kleur,label:t.label,som:entries.filter(e=>e.datum===dag&&e.project_code===row.id&&e.teamlid?.toLowerCase()===t.naam?.toLowerCase()&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
       }
 
       const blokken=[
         ...planBlokken.map(pb=>{
-          const klr=tlView==='persoon'?row.kleur:(tlm.find(t=>t.naam===pb.teamlid)||{kleur:'#999'}).kleur;
-          const naam=tlView==='project'?(tlm.find(t=>t.naam===pb.teamlid)||{label:pb.teamlid}).label:'';
+          const klr=tlView==='persoon'?row.kleur:(tlm.find(t=>t.naam?.toLowerCase()===pb.teamlid?.toLowerCase())||{kleur:'#999'}).kleur;
+          const naam=tlView==='project'?(tlm.find(t=>t.naam?.toLowerCase()===pb.teamlid?.toLowerCase())||{label:pb.teamlid}).label:'';
+          // Reistijd strips
+          const reisVoor=pb.reistijd_voor_min?`<div class="tl-reis-strip" title="🚗 Reistijd heen: ${pb.reistijd_voor_min} min">🚗 ${pb.reistijd_voor_min}′</div>`:'';
+          const reisNa=pb.reistijd_na_min?`<div class="tl-reis-strip" title="🚗 Reistijd terug: ${pb.reistijd_na_min} min">🚗 ${pb.reistijd_na_min}′</div>`:'';
+          // Locatie
+          const locHtml=pb.locatie?`<div class="tl-blok-locatie" title="${pb.locatie}">📍 ${pb.locatie}</div>`:'';
           return `<div class="tl-blok tl-blok-plan" style="border-color:${klr}55" onclick="event.stopPropagation()">
+            ${reisVoor}
             <div class="tl-blok-label" style="color:${klr}">${naam||pb.uren_gepland+'u'}</div>
             ${naam?`<div class="tl-blok-sub">${pb.uren_gepland}u gepland</div>`:''}
+            ${locHtml}
+            ${reisNa}
             <button class="tl-blok-del" onclick="event.stopPropagation();verwijderPlan('${pb.id}')">✕</button>
           </div>`;
         }),
@@ -2216,12 +2298,35 @@ function renderTimeline(){
     return `<tr class="tl-tr">${labelTd}${dagCellen}</tr>`;
   }).join('');
 
+  // Milestone rij — één rij direct onder de dag-headers
+  const milestones=getMilestones();
+  const msRij=`<tr class="tl-tr tl-ms-rij">
+    <td class="tl-label-td" style="font-size:10px;color:var(--text-faint);padding:2px 8px">Milestones</td>
+    ${dagen.map((dag,i)=>{
+      const vd=vrijeDagen.find(v=>v.datum===dag);
+      const isWeekStart=i>0&&new Date(dag+'T12:00:00').getDay()===1;
+      const extraClass=(dag===vandaag?' vandaag':'')+(isWeekStart?' week-start':'');
+      const dagMs=milestones.filter(m=>m.datum===dag);
+      const msHtml=dagMs.map(m=>{
+        const icoon=MS_ICOON[m.type]||'📌';
+        const kleur=MS_KLEUR[m.type]||'#B8962E';
+        return `<div class="tl-milestone" style="background:${kleur}" title="${m.naam}${m.project_code?' · '+m.project_code:''}" onclick="event.stopPropagation();if(confirm('Milestone verwijderen: ${m.naam}?'))verwijderMilestone('${m.id}')">
+          ${icoon} <span>${m.naam}</span>
+        </div>`;
+      }).join('');
+      return `<td class="tl-dag-td${extraClass}" style="padding:2px;height:auto;min-height:28px" onclick="openMilestoneModal('${dag}')">${msHtml}</td>`;
+    }).join('')}
+  </tr>`;
+
   document.getElementById('tl-grid-wrap').innerHTML=`
     <table class="tl-table" cellspacing="0" cellpadding="0">
-      <thead class="tl-thead"><tr class="tl-tr">
-        <th class="tl-label-th tl-th">${tlView==='persoon'?'Teamlid':'Project'}</th>
-        ${thCellen}
-      </tr></thead>
+      <thead class="tl-thead">
+        <tr class="tl-tr">
+          <th class="tl-label-th tl-th">${tlView==='persoon'?'Teamlid':'Project'}</th>
+          ${thCellen}
+        </tr>
+        ${msRij}
+      </thead>
       <tbody class="tl-tbody">${rijen}</tbody>
     </table>`;
 }
@@ -2249,6 +2354,7 @@ function tlCelKlik(datum,rowId){
     vulSelect('plan-teamlid',getTeamleden().map(t=>({v:t.naam,l:t.label})),IK);
   }
   document.getElementById('plan-uren').value='4';
+  tlCelKlikReset();
   openModal('plan');
 }
 function slaPlanblocOp(){
@@ -2257,13 +2363,142 @@ function slaPlanblocOp(){
   const tl=document.getElementById('plan-teamlid').value;
   const uren=parseFloat(document.getElementById('plan-uren').value)||0;
   if(!pc||uren<=0){alert('Vul project en uren in.');return;}
+  const locatie=(document.getElementById('plan-locatie').value||'').trim();
+  const rVoor=parseInt(document.getElementById('plan-reis-voor').value)||0;
+  const rNa=parseInt(document.getElementById('plan-reis-na').value)||0;
   const planning=getPlanning();
-  planning.push({id:uid(),datum:planContext.datum,teamlid:tl,project_code:pc,uren_gepland:uren});
+  planning.push({
+    id:uid(),datum:planContext.datum,teamlid:tl,project_code:pc,uren_gepland:uren,
+    locatie:locatie||null, reistijd_voor_min:rVoor||null, reistijd_na_min:rNa||null
+  });
   setPlanning(planning);
   sluitModal('plan');
   renderTimeline();
 }
+function tlCelKlikReset(){
+  document.getElementById('plan-locatie').value='';
+  document.getElementById('plan-reis-voor').value='0';
+  document.getElementById('plan-reis-na').value='0';
+}
 function verwijderPlan(id){setPlanning(getPlanning().filter(p=>p.id!==id));renderTimeline();}
+
+// ════════════════════════════════════════════
+// MILESTONES
+// ════════════════════════════════════════════
+const MS_ICOON={'deadline':'⛔','oplevering':'🏁','plaatsing':'🔧','revisie':'🔄','overig':'📌'};
+const MS_KLEUR={'deadline':'#c0392b','oplevering':'#2A4A38','plaatsing':'#1a3a8b','revisie':'#B8962E','overig':'#6B6455'};
+
+function openMilestoneModal(datum){
+  vulProjectSelect('ms-project','');
+  document.getElementById('ms-naam').value='';
+  document.getElementById('ms-datum').value=datum||vandaagStr();
+  document.getElementById('ms-type').value='oplevering';
+  openModal('milestone');
+}
+function slaMilestoneOp(){
+  const naam=(document.getElementById('ms-naam').value||'').trim();
+  const pc=document.getElementById('ms-project').value;
+  const datum=document.getElementById('ms-datum').value;
+  const type=document.getElementById('ms-type').value;
+  if(!naam||!datum){alert('Naam en datum zijn verplicht.');return;}
+  const ms=getMilestones();
+  ms.push({id:uid(),naam,project_code:pc||null,datum,type});
+  setMilestones(ms);
+  sluitModal('milestone');
+  renderTimeline();
+}
+function verwijderMilestone(id){
+  if(!confirm('Milestone verwijderen?')) return;
+  setMilestones(getMilestones().filter(m=>m.id!==id));
+  renderTimeline();
+}
+
+// ════════════════════════════════════════════
+// DUMMY DATA SEEDER
+// ════════════════════════════════════════════
+function seedDummyData(){
+  if(!confirm('Demo-data laden? Bestaande planning/entries worden aangevuld (niet gewist).')) return;
+
+  // Datum helpers (vandaag = woensdag 29 april 2026)
+  function d(offset){ const dt=new Date(); dt.setDate(dt.getDate()+offset); return datumStr(dt); }
+
+  // --- Projecten (aanvullen op bestaande) ---
+  const projecten=getProjecten();
+  const nieuweProj=[
+    {code:'CN-PRINS-GARDEROBE', naam:'CompaNanny — Garderobekast Prinsengracht', kleur:'#1a3a8b', status:'actief'},
+    {code:'CN-WEESP-SPEELHOEK', naam:'CompaNanny — Speelhoek Weesp',             kleur:'#2e7d32', status:'actief'},
+    {code:'LGM-SHOW-INBOUW',    naam:'LGM — Showroom inbouw meubels',             kleur:'#B8962E', status:'actief'},
+    {code:'HWC-KANT-TAFEL',     naam:'HWC — Vergadertafel kantoor',               kleur:'#6B6455', status:'actief'},
+  ];
+  nieuweProj.forEach(np=>{ if(!projecten.find(p=>p.code===np.code)) projecten.push({...np,id:uid(),aangemaakt:new Date().toISOString()}); });
+  setProjecten(projecten);
+
+  // --- Planning ---
+  const planning=getPlanning();
+  const planBlokken=[
+    // Bart — plaatsing CN-PRINS maandag + dinsdag, rest LGM
+    {datum:d(-2),teamlid:'Bart',  project_code:'CN-PRINS-GARDEROBE', uren_gepland:8, locatie:'Prinsengracht 89, Amsterdam', reistijd_voor_min:45, reistijd_na_min:45},
+    {datum:d(-1),teamlid:'Bart',  project_code:'CN-PRINS-GARDEROBE', uren_gepland:6, locatie:'Prinsengracht 89, Amsterdam', reistijd_voor_min:45, reistijd_na_min:45},
+    {datum:d(0), teamlid:'Bart',  project_code:'LGM-SHOW-INBOUW',    uren_gepland:8},
+    {datum:d(1), teamlid:'Bart',  project_code:'LGM-SHOW-INBOUW',    uren_gepland:8},
+    {datum:d(2), teamlid:'Bart',  project_code:'LGM-SHOW-INBOUW',    uren_gepland:6},
+    // Mathijs — werkplaats HWC ma-wo, daarna plaatsing Weesp
+    {datum:d(-2),teamlid:'Mathijs',project_code:'HWC-KANT-TAFEL',    uren_gepland:8},
+    {datum:d(-1),teamlid:'Mathijs',project_code:'HWC-KANT-TAFEL',    uren_gepland:8},
+    {datum:d(0), teamlid:'Mathijs',project_code:'HWC-KANT-TAFEL',    uren_gepland:6},
+    {datum:d(1), teamlid:'Mathijs',project_code:'CN-WEESP-SPEELHOEK', uren_gepland:8, locatie:'Middenweg 4, Weesp', reistijd_voor_min:30, reistijd_na_min:30},
+    {datum:d(2), teamlid:'Mathijs',project_code:'CN-WEESP-SPEELHOEK', uren_gepland:8, locatie:'Middenweg 4, Weesp', reistijd_voor_min:30, reistijd_na_min:30},
+    // Maarten — werkplaats CN-PRINS + LGM
+    {datum:d(-2),teamlid:'Maarten',project_code:'CN-PRINS-GARDEROBE', uren_gepland:8},
+    {datum:d(-1),teamlid:'Maarten',project_code:'CN-PRINS-GARDEROBE', uren_gepland:8},
+    {datum:d(0), teamlid:'Maarten',project_code:'LGM-SHOW-INBOUW',    uren_gepland:8},
+    {datum:d(1), teamlid:'Maarten',project_code:'LGM-SHOW-INBOUW',    uren_gepland:8},
+    {datum:d(2), teamlid:'Maarten',project_code:'CN-WEESP-SPEELHOEK', uren_gepland:8},
+    // Arjan — via Inter Projecten, HWC + vrij
+    {datum:d(-2),teamlid:'Arjan', project_code:'HWC-KANT-TAFEL',      uren_gepland:8},
+    {datum:d(-1),teamlid:'Arjan', project_code:'HWC-KANT-TAFEL',      uren_gepland:8},
+    {datum:d(0), teamlid:'Arjan', project_code:'HWC-KANT-TAFEL',      uren_gepland:6},
+    {datum:d(1), teamlid:'Arjan', project_code:'LGM-SHOW-INBOUW',     uren_gepland:8},
+    {datum:d(2), teamlid:'Arjan', project_code:'LGM-SHOW-INBOUW',     uren_gepland:8},
+  ];
+  planBlokken.forEach(pb=>planning.push({id:uid(),...pb}));
+  setPlanning(planning);
+
+  // --- Entries (geboekte uren) ---
+  const entries=getEntries();
+  function sec(h){ return h*3600; }
+  const nieuweEntries=[
+    // Bart — maandag + dinsdag plaatsing CN-PRINS
+    {datum:d(-2),teamlid:'Bart',  project_code:'CN-PRINS-GARDEROBE', omschrijving:'Plaatsing garderobekast',    start:'07:15',stop:'16:00',duur:sec(7.75)},
+    {datum:d(-1),teamlid:'Bart',  project_code:'CN-PRINS-GARDEROBE', omschrijving:'Plaatsing afwerking',        start:'07:15',stop:'14:00',duur:sec(5.75)},
+    // Mathijs — maandag HWC
+    {datum:d(-2),teamlid:'Mathijs',project_code:'HWC-KANT-TAFEL',    omschrijving:'Productie tafelblad',        start:'07:15',stop:'16:30',duur:sec(8.25)},
+    {datum:d(-1),teamlid:'Mathijs',project_code:'HWC-KANT-TAFEL',    omschrijving:'Poten + afwerking',          start:'07:15',stop:'15:45',duur:sec(7.5)},
+    // Maarten
+    {datum:d(-2),teamlid:'Maarten',project_code:'CN-PRINS-GARDEROBE', omschrijving:'Productie kastwanden',      start:'07:15',stop:'16:00',duur:sec(7.75)},
+    {datum:d(-1),teamlid:'Maarten',project_code:'CN-PRINS-GARDEROBE', omschrijving:'Productie deuren',          start:'07:15',stop:'16:00',duur:sec(7.75)},
+    // Arjan
+    {datum:d(-2),teamlid:'Arjan', project_code:'HWC-KANT-TAFEL',      omschrijving:'Werkvoorbereiding',         start:'07:15',stop:'15:30',duur:sec(7.25)},
+    {datum:d(-1),teamlid:'Arjan', project_code:'HWC-KANT-TAFEL',      omschrijving:'Productie onderstel',       start:'07:15',stop:'16:00',duur:sec(7.75)},
+  ];
+  nieuweEntries.forEach(e=>entries.push({id:uid(),...e}));
+  setEntries(entries);
+
+  // --- Milestones ---
+  const ms=getMilestones();
+  const nieuweMs=[
+    {datum:d(3),  naam:'Oplevering CN Prinsengracht', project_code:'CN-PRINS-GARDEROBE', type:'oplevering'},
+    {datum:d(6),  naam:'Oplevering LGM Showroom',     project_code:'LGM-SHOW-INBOUW',    type:'oplevering'},
+    {datum:d(7),  naam:'Plaatsing Weesp',             project_code:'CN-WEESP-SPEELHOEK', type:'plaatsing'},
+    {datum:d(10), naam:'Deadline HWC levering',       project_code:'HWC-KANT-TAFEL',      type:'deadline'},
+  ];
+  nieuweMs.forEach(m=>ms.push({id:uid(),...m}));
+  setMilestones(ms);
+
+  vulTbProjectSelect();
+  renderTimeline();
+  alert('✅ Demo-data geladen! Bekijk de Timeline.');
+}
 
 // ════════════════════════════════════════════
 // RAPPORT
