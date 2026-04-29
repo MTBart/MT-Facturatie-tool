@@ -72,7 +72,16 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14
 .timer-input-wrap.lopend{border-color:var(--green);background:var(--green-light)}
 .timer-input{flex:1;border:none;background:none;font-family:var(--sans);font-size:14px;color:var(--text);outline:none}
 .timer-input::placeholder{color:var(--text-faint)}
-.timer-project-chip{display:flex;align-items:center;gap:0.35rem;padding:3px 8px;border-radius:20px;font-size:11px;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);cursor:pointer;white-space:nowrap}
+.timer-project-chip{display:flex;align-items:center;gap:0.35rem;padding:3px 8px;border-radius:20px;font-size:11px;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);cursor:pointer;white-space:nowrap;position:relative}
+/* Project-picker popover */
+.proj-picker-pop{position:fixed;z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.18);width:280px;max-height:320px;display:flex;flex-direction:column;overflow:hidden}
+.proj-picker-pop input{border:none;border-bottom:1px solid var(--border);padding:8px 12px;font-size:13px;font-family:var(--sans);background:transparent;color:var(--text);outline:none}
+.proj-picker-list{overflow-y:auto;flex:1}
+.proj-picker-item{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:12px;transition:background 0.1s}
+.proj-picker-item:hover,.proj-picker-item.selected{background:var(--green-light)}
+.proj-picker-item .ppi-code{font-family:var(--mono);font-weight:600;color:var(--green);flex-shrink:0}
+.proj-picker-item .ppi-naam{color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj-picker-item .ppi-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .timer-display{font-family:var(--mono);font-size:18px;font-weight:500;letter-spacing:0.05em;color:var(--text-dim);flex-shrink:0;min-width:80px;text-align:right}
 .timer-display.lopend{color:var(--green);font-weight:600}
 .timer-start-btn{width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;transition:all 0.15s}
@@ -477,6 +486,14 @@ body.bord-fs .bord-blok-act{font-size:13px;padding:5px 10px;margin-bottom:3px;bo
 .knb-timer-btn.actief{opacity:1!important;background:var(--green);border-color:var(--green);color:#fff}
 .knb-card.drag-above{border-top:2px solid var(--green);margin-top:-1px}
 
+/* ── TOAST ── */
+#toast-wrap{position:fixed;bottom:1rem;right:1rem;z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.toast{background:var(--green);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-family:var(--sans);box-shadow:0 4px 16px rgba(0,0,0,0.18);max-width:300px;pointer-events:auto;animation:toastIn .2s ease;opacity:1;transition:opacity .3s}
+.toast.fading{opacity:0}
+.toast.error{background:#c0392b}
+.toast.info{background:var(--gold)}
+@keyframes toastIn{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
+
 /* ── MODALS ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,26,22,0.55);z-index:200;align-items:flex-end;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -721,6 +738,9 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 </head>
 <body>
 
+<!-- Toast container -->
+<div id="toast-wrap"></div>
+
 <!-- Welkomscherm -->
 <div id="welkom" class="welkom hidden">
   <div class="welkom-title">Wie ben <span>jij</span>?</div>
@@ -768,9 +788,10 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
       </button>
     </nav>
     <div class="sb-bottom">
-      <button class="sb-user-btn" id="user-chip" onclick="toggleGebruiker()">
+      <button class="sb-user-btn" id="user-chip" onclick="toggleGebruiker()" title="Klik om van persoon te wisselen">
         <span class="sb-user-dot" id="sb-user-dot" style="background:var(--gold-mid)"></span>
         <span class="sb-user-naam" id="sb-user-naam">—</span>
+        <span style="font-size:10px;opacity:0.45;flex-shrink:0">↕</span>
       </button>
       <div class="sb-klok-wrap" id="sb-klok">00:00</div>
       <a href="index-v4.html" class="sb-tool-link" title="Naar M&T Facturatie-tool">🔧 Naar de Tool</a>
@@ -1520,6 +1541,15 @@ let kalPersoon = null;   // null = IK (ingelogde gebruiker)
 // HELPERS
 // ════════════════════════════════════════════
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function showToast(tekst,type='success',duur=3000){
+  const wrap=document.getElementById('toast-wrap');
+  if(!wrap) return;
+  const el=document.createElement('div');
+  el.className='toast'+(type!=='success'?' '+type:'');
+  el.textContent=tekst;
+  wrap.appendChild(el);
+  setTimeout(()=>{el.classList.add('fading');setTimeout(()=>el.remove(),350);},duur);
+}
 function vandaagStr(){return new Date().toISOString().slice(0,10)}
 function datumStr(d){return d.toISOString().slice(0,10)}
 function fmtTijd(iso){if(!iso)return'—';const d=new Date(iso);return d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})}
@@ -1689,7 +1719,9 @@ function updateChip(){
 function toggleGebruiker(){
   const tl=getTeamleden();
   const idx=tl.findIndex(t=>t.naam===IK);
-  kiesIk(tl[(idx+1)%tl.length].naam);
+  const volgende=tl[(idx+1)%tl.length];
+  kiesIk(volgende.naam);
+  showToast(`Je werkt nu als ${volgende.label}`,'info',2000);
 }
 
 // Sidebar klok
@@ -1754,22 +1786,87 @@ function updateTimerTopbar(){
   }
 }
 
-// Project picker voor timer topbar
+// Project picker voor timer topbar — popover versie
 let timerGekozenProject=null;
+let _projPickerEl=null;
+
 function openTimerProjectPicker(){
-  const projecten=getProjecten();
+  // Sluit bestaande popover
+  sluitProjPicker();
+  const chip=document.getElementById('timer-project-chip');
+  if(!chip) return;
+  const projecten=getProjecten().filter(p=>p.status!=='archief');
   if(!projecten.length) return;
-  // Simpele select modal
-  const opts=projecten.map(p=>`<option value="${p.code}"${timerGekozenProject===p.code?' selected':''}>${p.code}${p.naam?' — '+p.naam:''}</option>`).join('');
-  const pc=prompt('Project code (of kies):\n'+projecten.map(p=>p.code).join(', '), timerGekozenProject||'');
-  if(pc===null) return;
-  const gevonden=projecten.find(p=>p.code===pc.trim().toUpperCase());
-  if(gevonden){
-    timerGekozenProject=gevonden.code;
-    document.getElementById('timer-chip-label').textContent=gevonden.code;
-    const t=getTeamleden().find(x=>x.naam===IK);
-    document.getElementById('timer-chip-dot').style.background=gevonden.kleur||t?.kleur||'var(--gold)';
+
+  const pop=document.createElement('div');
+  pop.className='proj-picker-pop';
+  _projPickerEl=pop;
+
+  // Positie onder de chip
+  const r=chip.getBoundingClientRect();
+  pop.style.top=(r.bottom+4)+'px';
+  pop.style.left=r.left+'px';
+
+  // Recente projecten bovenaan (op basis van entries)
+  const entries=getEntries();
+  const recentCodes=[...new Set(entries.slice(-50).map(e=>e.project_code).filter(Boolean).reverse())];
+  const gesorteerd=[
+    ...recentCodes.map(c=>projecten.find(p=>p.code===c)).filter(Boolean),
+    ...projecten.filter(p=>!recentCodes.includes(p.code))
+  ];
+
+  const zoekEl=document.createElement('input');
+  zoekEl.placeholder='🔍 Zoek project…';
+  pop.appendChild(zoekEl);
+
+  const lijst=document.createElement('div');
+  lijst.className='proj-picker-list';
+  pop.appendChild(lijst);
+
+  function renderLijst(filter=''){
+    const lc=filter.toLowerCase();
+    const gefilterd=filter?gesorteerd.filter(p=>p.code.toLowerCase().includes(lc)||p.naam?.toLowerCase().includes(lc)):gesorteerd;
+    lijst.innerHTML=gefilterd.map(p=>`
+      <div class="proj-picker-item${timerGekozenProject===p.code?' selected':''}" onclick="kiesProjTimer('${p.code}')">
+        <span class="ppi-dot" style="background:${p.kleur||'var(--gold)'}"></span>
+        <span class="ppi-code">${p.code}</span>
+        <span class="ppi-naam">${p.naam||''}</span>
+      </div>`).join('');
+    if(!gefilterd.length) lijst.innerHTML=`<div style="padding:12px;text-align:center;color:var(--text-faint);font-size:12px">Geen resultaten</div>`;
   }
+  renderLijst();
+  zoekEl.addEventListener('input',()=>renderLijst(zoekEl.value));
+  zoekEl.addEventListener('keydown',e=>{
+    if(e.key==='Escape') sluitProjPicker();
+    if(e.key==='Enter'){
+      const eerste=lijst.querySelector('.proj-picker-item');
+      if(eerste) eerste.click();
+    }
+  });
+
+  document.body.appendChild(pop);
+  setTimeout(()=>{
+    zoekEl.focus();
+    document.addEventListener('mousedown',_projPickerOutside);
+  },10);
+}
+
+function _projPickerOutside(e){
+  if(_projPickerEl&&!_projPickerEl.contains(e.target)&&!document.getElementById('timer-project-chip')?.contains(e.target)){
+    sluitProjPicker();
+  }
+}
+function sluitProjPicker(){
+  if(_projPickerEl){_projPickerEl.remove();_projPickerEl=null;}
+  document.removeEventListener('mousedown',_projPickerOutside);
+}
+function kiesProjTimer(code){
+  const p=getProjecten().find(x=>x.code===code);
+  if(!p) return;
+  timerGekozenProject=code;
+  document.getElementById('timer-chip-label').textContent=code;
+  document.getElementById('timer-chip-dot').style.background=p.kleur||'var(--gold)';
+  sluitProjPicker();
 }
 
 // ════════════════════════════════════════════
@@ -2164,11 +2261,11 @@ function slaHandmatigOp(){
   const omschr=document.getElementById('nieuw-desc').value.trim();
   const s=document.getElementById('nieuw-start').value;
   const st=document.getElementById('nieuw-stop').value;
-  if(!pc||!s||!st){alert('Vul project, start en stop in.');return;}
+  if(!pc||!s||!st){showToast('Vul project, start en stop in.','error');return;}
   const startIso=new Date(`${dagDatum}T${s}:00`).toISOString();
   const stopIso=new Date(`${dagDatum}T${st}:00`).toISOString();
   const duur=Math.round((new Date(stopIso)-new Date(startIso))/1000);
-  if(duur<=0){alert('Stop moet na start liggen.');return;}
+  if(duur<=0){showToast('Stop moet na start liggen.','error');return;}
   const taakNaam=taakId?(getTakenVoorProject(pc).find(t=>t.id===taakId)||{}).naam||null:null;
   getEntries().push&&setEntries([...getEntries(),{id:uid(),teamlid:tl,project_code:pc,taak_id:taakId,taak_naam:taakNaam,omschrijving:omschr,start:startIso,stop:stopIso,duur,datum:dagDatum}]);
   sluitModal('nieuw');
@@ -2398,7 +2495,7 @@ function slaPlanblocOp(){
   const pc=document.getElementById('plan-project').value;
   const tl=document.getElementById('plan-teamlid').value;
   const uren=parseFloat(document.getElementById('plan-uren').value)||0;
-  if(!pc||uren<=0){alert('Vul project en uren in.');return;}
+  if(!pc||uren<=0){showToast('Vul project en uren in.','error');return;}
   const locatie=(document.getElementById('plan-locatie').value||'').trim();
   const rVoor=parseInt(document.getElementById('plan-reis-voor').value)||0;
   const rNa=parseInt(document.getElementById('plan-reis-na').value)||0;
@@ -2436,7 +2533,7 @@ function slaMilestoneOp(){
   const pc=document.getElementById('ms-project').value;
   const datum=document.getElementById('ms-datum').value;
   const type=document.getElementById('ms-type').value;
-  if(!naam||!datum){alert('Naam en datum zijn verplicht.');return;}
+  if(!naam||!datum){showToast('Naam en datum zijn verplicht.','error');return;}
   const ms=getMilestones();
   ms.push({id:uid(),naam,project_code:pc||null,datum,type});
   setMilestones(ms);
@@ -2533,7 +2630,7 @@ function seedDummyData(){
 
   vulTbProjectSelect();
   renderTimeline();
-  alert('✅ Demo-data geladen! Bekijk de Timeline.');
+  showToast('✅ Demo-data geladen! Bekijk de Timeline.');
 }
 
 // ════════════════════════════════════════════
@@ -2784,7 +2881,7 @@ function exportWeektekst(){
     ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
     document.body.appendChild(ta);ta.select();document.execCommand('copy');
     document.body.removeChild(ta);
-    alert('Tekst gekopieerd naar klembord');
+    showToast('✓ Gekopieerd naar klembord');
   });
 }
 
@@ -3082,10 +3179,18 @@ function tknTimerToggle(taakId){
   renderTaken();
 }
 
+function maakLeegeTaak(overrides={}){
+  return {
+    id:uid(), project_code:'', naam:'', status:'todo', bucket_id:'todo',
+    prioriteit:null, tags:[], estimate_h:null, assignees:IK?[IK]:[],
+    from_date:null, to_date:null, billable:false, omschrijving:'', subtaken:[],
+    aangemaakt:new Date().toISOString(), gewijzigd:new Date().toISOString(),
+    ...overrides
+  };
+}
+
 function tknNieuwe(){
-  const naam=prompt('Naam nieuwe taak:');
-  if(!naam?.trim()) return;
-  const t={id:uid(),project_code:'',naam:naam.trim(),status:'todo',bucket_id:'todo',prioriteit:null,tags:[],estimate_h:null,assignees:IK?[IK]:[],from_date:null,to_date:null,billable:false,omschrijving:'',subtaken:[],aangemaakt:new Date().toISOString(),gewijzigd:new Date().toISOString()};
+  const t=maakLeegeTaak({status:'todo',bucket_id:'todo'});
   const taken=getTaken();taken.push(t);setTaken(taken);
   renderTaken();
   setTimeout(()=>openTaakModal(t.id),60);
@@ -3217,20 +3322,8 @@ function knbDrop(event,bucketId,voorTaakId){
 }
 
 function knbNieuwe(bucketId){
-  const naam=prompt('Naam nieuwe taak:');
-  if(!naam?.trim()) return;
-  const t={
-    id:uid(),project_code:'',naam:naam.trim(),
-    status:bucketId,bucket_id:bucketId,
-    prioriteit:null,tags:[],estimate_h:null,
-    assignees:IK?[IK]:[],
-    from_date:null,to_date:null,billable:false,
-    omschrijving:'',subtaken:[],
-    aangemaakt:new Date().toISOString(),gewijzigd:new Date().toISOString()
-  };
-  const taken=getTaken();
-  taken.push(t);
-  setTaken(taken);
+  const t=maakLeegeTaak({status:bucketId,bucket_id:bucketId});
+  const taken=getTaken();taken.push(t);setTaken(taken);
   renderKanban();
   setTimeout(()=>openTaakModal(t.id),60);
 }
@@ -3469,9 +3562,9 @@ function renderInstVrijeDagen(){
 function vdToevoegen(){
   const datum=document.getElementById('vd-datum')?.value;
   const naam=(document.getElementById('vd-naam')?.value||'').trim();
-  if(!datum||!naam){alert('Vul datum en naam in.');return;}
+  if(!datum||!naam){showToast('Vul datum en naam in.','error');return;}
   const vd=getVrijeDagen();
-  if(vd.some(v=>v.datum===datum)){alert('Deze datum staat al in de lijst.');return;}
+  if(vd.some(v=>v.datum===datum)){showToast('Deze datum staat al in de lijst.','info');return;}
   vd.push({datum,naam});
   setVrijeDagen(vd);
   renderInstVrijeDagen();
@@ -3893,22 +3986,38 @@ function renderProjectPanel(){
     </div>`;
   }).join('')||`<div style="color:var(--text-faint);font-size:12px;font-style:italic;padding:0.5rem 0">Geen uren gelogd</div>`;
 
+  // Milestones voor dit project
+  const ms=getMilestones().filter(m=>m.project_code===code).sort((a,b)=>a.datum.localeCompare(b.datum));
+  const msHtml=ms.length?ms.map(m=>{
+    const icoon=MS_ICOON[m.type]||'📌';
+    const kleur=MS_KLEUR[m.type]||'#6B6455';
+    const verstreken=m.datum<vandaagStr();
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--surface2);font-size:12px;opacity:${verstreken?0.5:1}">
+      <span style="color:${kleur}">${icoon}</span>
+      <span style="flex:1;${verstreken?'text-decoration:line-through':''}">${m.naam}</span>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--text-faint)">${m.datum}</span>
+      <button onclick="verwijderMilestone('${m.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:11px;padding:0 2px" title="Verwijder">✕</button>
+    </div>`;
+  }).join('')+`<button onclick="openMilestoneModal();document.getElementById('ms-project').value='${code}'" style="font-size:11px;color:var(--green);background:none;border:none;cursor:pointer;padding:4px 0;width:100%;text-align:left">+ Milestone toevoegen</button>`
+  :`<div style="color:var(--text-faint);font-size:12px;font-style:italic;padding:2px 0">Geen milestones</div>
+    <button onclick="openMilestoneModal();document.getElementById('ms-project').value='${code}'" style="font-size:11px;color:var(--green);background:none;border:none;cursor:pointer;padding:4px 0">+ Milestone toevoegen</button>`;
+
   document.getElementById('pp-body').innerHTML=`
     <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">
       ${statusHtml}
       ${p?.klant?`<span style="font-size:12px;color:var(--text-dim)">${p.klant}</span>`:''}
     </div>
+    ${ms.length?`<div class="proj-panel-sectie">Milestones</div>${msHtml}`:''}
     <div class="proj-panel-sectie">Taken (${taken.length})</div>
     <div class="proj-panel-taken">${takenHtml}</div>
     <div class="proj-panel-sectie">Gelogde uren — totaal ${(totaalSec/3600).toFixed(1)}h</div>
     ${urenHtml}
+    ${!ms.length?`<div class="proj-panel-sectie">Milestones</div>${msHtml}`:''}
   `;
 }
 
 function ppNieuweTaak(){
-  const naam=prompt('Naam nieuwe taak:');
-  if(!naam?.trim()) return;
-  const t={id:uid(),project_code:projDetailCode,naam:naam.trim(),status:'todo',bucket_id:'todo',volgorde:9999,prioriteit:null,tags:[],estimate_h:null,assignees:IK?[IK]:[],from_date:null,to_date:null,billable:false,omschrijving:'',subtaken:[],aangemaakt:new Date().toISOString(),gewijzigd:new Date().toISOString()};
+  const t=maakLeegeTaak({project_code:projDetailCode,volgorde:9999});
   const taken=getTaken();taken.push(t);setTaken(taken);
   renderProjectPanel();
   setTimeout(()=>openTaakModal(t.id),60);
@@ -4243,7 +4352,7 @@ function tbProjectChange(){
 
 function tbStart(){
   const pc=document.getElementById('tb-project-sel').value;
-  if(!pc){alert('Kies eerst een project.');return;}
+  if(!pc){showToast('Kies eerst een project.','error');return;}
   const taakId=document.getElementById('tb-taak-sel').value;
   if(taakId==='__nieuwe_taak__'){
     openSnelTaak(pc, (tid)=>{
@@ -4318,9 +4427,9 @@ function slaProjectOp(){
   const code=document.getElementById('np-code').value.trim().toUpperCase();
   const naam=document.getElementById('np-naam').value.trim();
   const klant=document.getElementById('np-klant').value.trim().toUpperCase();
-  if(!code){alert('Vul een projectcode in.');return;}
+  if(!code){showToast('Vul een projectcode in.','error');return;}
   const lijst=getProjecten();
-  if(lijst.find(p=>p.code===code)){alert('Projectcode bestaat al.');return;}
+  if(lijst.find(p=>p.code===code)){showToast('Projectcode bestaat al.','error');return;}
   lijst.push({code,naam,klant});
   setProjecten(lijst);
   document.getElementById('np-code').value='';
@@ -4384,7 +4493,7 @@ function openSnelProject(voorProject, callback){
 }
 function slaSnelProjectOp(){
   const naam=document.getElementById('sp-naam').value.trim();
-  if(!naam){alert('Vul een projectnaam in.');return;}
+  if(!naam){showToast('Vul een projectnaam in.','error');return;}
   const klant=document.getElementById('sp-klant').value.trim().toUpperCase();
   let code=document.getElementById('sp-code').value.trim().toUpperCase();
   // Auto-genereer een tijdelijke code als leeg
@@ -4438,9 +4547,9 @@ function genereerActiveerCode(){
 function activeerInMoneybird(){
   const code=document.getElementById('activeer-code').value.trim().toUpperCase();
   const p=getProjecten().find(x=>x.code===activeerHuidigCode);
-  if(!code||!p){alert('Vul eerst een code in.');return;}
+  if(!code||!p){showToast('Vul eerst een code in.','error');return;}
   const tok=JSON.parse(localStorage.getItem('mt_instellingen')||'{}').mb_token;
-  if(!tok){alert('Geen Moneybird API token. Stel deze in via de Tool → Instellingen.');return;}
+  if(!tok){showToast('Geen Moneybird API token. Stel in via Tool → Instellingen.','error');return;}
   const btn=document.getElementById('activeer-mb-btn');
   btn.disabled=true; btn.textContent='Bezig…';
   fetch('https://mt-claude-proxy.bart-a12.workers.dev/mb',{
@@ -4459,14 +4568,14 @@ function slaActiveerOp(){
   const nieuwCode=document.getElementById('activeer-code').value.trim().toUpperCase();
   const status=document.getElementById('activeer-status').value;
   const sjabloon=document.getElementById('activeer-sjabloon').value;
-  if(!nieuwCode){alert('Vul een projectcode in.');return;}
+  if(!nieuwCode){showToast('Vul een projectcode in.','error');return;}
   const lijst=getProjecten();
   const idx=lijst.findIndex(p=>p.code===activeerHuidigCode);
   if(idx===-1) return;
   const oud=lijst[idx];
   // Code updaten (alle entries + taken ook bijwerken)
   if(nieuwCode!==activeerHuidigCode){
-    if(lijst.find((p,i)=>p.code===nieuwCode&&i!==idx)){alert('Code al in gebruik.');return;}
+    if(lijst.find((p,i)=>p.code===nieuwCode&&i!==idx)){showToast('Code al in gebruik.','error');return;}
     // Entries bijwerken
     const entries=getEntries().map(e=>e.project_code===activeerHuidigCode?{...e,project_code:nieuwCode}:e);
     setEntries(entries);
@@ -4517,7 +4626,7 @@ function openSnelTaak(projectCode, callback){
 }
 function slaSnelTaakOp(){
   const naam=document.getElementById('st-naam').value.trim();
-  if(!naam){alert('Vul een taaknaam in.');return;}
+  if(!naam){showToast('Vul een taaknaam in.','error');return;}
   const pc=snelTaakContext.pc;
   const nu=new Date().toISOString();
   const nieuw={
