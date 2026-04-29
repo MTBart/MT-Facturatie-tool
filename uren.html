@@ -44,6 +44,15 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14
 .sb-user-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .sb-user-naam{flex:1;text-align:left;font-size:13px}
 .sb-klok-wrap{font-family:var(--mono);font-size:10px;color:rgba(255,255,255,0.3);padding:0.2rem 0.35rem 0}
+.sb-badge{background:#e53935;color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:auto;min-width:18px;text-align:center;line-height:16px}
+.sb-tool-link{display:flex;align-items:center;gap:0.4rem;padding:0.4rem 0.35rem;color:rgba(255,255,255,0.4);font-size:11px;font-family:var(--mono);text-decoration:none;border-radius:4px;transition:all 0.12s;margin-top:0.15rem}
+.sb-tool-link:hover{color:rgba(255,255,255,0.75);background:rgba(255,255,255,0.07)}
+.proj-item.concept-row{border-left:3px solid #F5C49A;background:#FEF9F5}
+/* Concept-banner in Projecten-tab */
+.concept-banner{background:#FEF3EB;border:1px solid #F5C49A;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:0.75rem}
+.concept-banner-tekst{flex:1;font-size:13px;color:#7a3a0a}
+.concept-activeer-btn{background:#b85c10;color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);white-space:nowrap}
+.concept-activeer-btn:hover{background:#a04a08}
 
 /* ── CONTENT AREA ── */
 .content-wrap{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
@@ -525,7 +534,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
     <nav class="sb-nav">
       <div class="sb-section">Track</div>
       <button class="sb-item active" id="sb-timer" onclick="showTab('timer',this)">
-        <span class="sb-item-icon">⏱</span>Timer
+        <span class="sb-item-icon">📅</span>Agenda
       </button>
       <div class="sb-section">Analyze</div>
       <button class="sb-item" id="sb-rapport" onclick="showTab('rapport',this)">
@@ -534,6 +543,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
       <div class="sb-section">Plan</div>
       <button class="sb-item" id="sb-projecten" onclick="showTab('projecten',this)">
         <span class="sb-item-icon">📁</span>Projects
+        <span id="sb-concept-badge" class="sb-badge" style="display:none">0</span>
       </button>
       <button class="sb-item" id="sb-taken" onclick="showTab('taken-tab',this)">
         <span class="sb-item-icon">✓</span>Tasks
@@ -555,6 +565,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
         <span class="sb-user-naam" id="sb-user-naam">—</span>
       </button>
       <div class="sb-klok-wrap" id="sb-klok">00:00</div>
+      <a href="index-v4.html" class="sb-tool-link" title="Naar M&T Facturatie-tool">🔧 Naar de Tool</a>
     </div>
   </aside>
 
@@ -828,23 +839,71 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 
 <!-- MODAL: Snel project aanmaken (vanuit dropdown) -->
 <div class="modal-overlay" id="modal-snel-project-overlay" onclick="if(event.target===this)sluitModal('snel-project')">
-  <div class="modal" style="max-width:380px">
+  <div class="modal" style="max-width:400px">
     <div class="modal-title">Nieuw project <button class="modal-close" onclick="sluitModal('snel-project')">✕</button></div>
+    <p style="font-size:12px;color:var(--text-faint);margin:-0.25rem 0 0.75rem">Bart/Mathijs ontvangen een melding om het project later te activeren.</p>
     <div class="form-row">
-      <label class="form-label">Code <span style="font-size:10px;font-weight:400;text-transform:none">(bijv. CN-PRINSENGRACHT-KEUKEN)</span></label>
-      <input class="form-input" id="sp-code" placeholder="KLANT-LOCATIE-PRODUCT" oninput="this.value=this.value.toUpperCase()">
+      <label class="form-label">Naam <span style="color:var(--red)">*</span></label>
+      <input class="form-input" id="sp-naam" placeholder="Bijv. CompaNanny Prinsengracht — Garderobe" onkeydown="if(event.key==='Enter')slaSnelProjectOp()">
     </div>
-    <div class="form-row">
-      <label class="form-label">Naam</label>
-      <input class="form-input" id="sp-naam" placeholder="Volledige projectnaam">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Klantcode</label>
-      <input class="form-input" id="sp-klant" placeholder="bijv. CN" style="width:120px" oninput="this.value=this.value.toUpperCase()">
+    <div style="display:flex;gap:0.75rem">
+      <div class="form-row" style="flex:1">
+        <label class="form-label">Klant <span style="font-size:10px;font-weight:400">(optioneel)</span></label>
+        <input class="form-input" id="sp-klant" placeholder="bijv. CN" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')slaSnelProjectOp()">
+      </div>
+      <div class="form-row" style="flex:1">
+        <label class="form-label">Code <span style="font-size:10px;font-weight:400">(auto als leeg)</span></label>
+        <input class="form-input" id="sp-code" placeholder="Auto" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')slaSnelProjectOp()">
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="sluitModal('snel-project')">Annuleer</button>
-      <button class="btn btn-primary" onclick="slaSnelProjectOp()">Aanmaken</button>
+      <button class="btn btn-primary" onclick="slaSnelProjectOp()">Aanmaken als concept ➜</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Activeer concept-project -->
+<div class="modal-overlay" id="modal-activeer-overlay" onclick="if(event.target===this)sluitModal('activeer')">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title">Project activeren <button class="modal-close" onclick="sluitModal('activeer')">✕</button></div>
+    <p style="font-size:12px;color:var(--text-faint);margin:-0.25rem 0 0.75rem" id="activeer-proj-naam">—</p>
+
+    <div class="form-row">
+      <label class="form-label">Projectcode <span style="font-size:10px;font-weight:400">— gegenereerd op basis van naam + klant</span></label>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <input class="form-input" id="activeer-code" style="font-family:var(--mono);text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+        <button class="btn btn-secondary btn-sm" onclick="genereerActiveerCode()" title="Nieuwe suggestie">↻</button>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label">Status na activatie</label>
+      <select class="form-select" id="activeer-status">
+        <option value="offerte">Offerte</option>
+        <option value="werkvoorbereiding">Werkvoorbereiding</option>
+        <option value="productie">Productie</option>
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label">Taaksjabloon toepassen</label>
+      <select class="form-select" id="activeer-sjabloon">
+        <option value="">— geen —</option>
+        <option value="std">Standaard (Werkvoorbereiding, Productie, Montage, Oplevering)</option>
+      </select>
+    </div>
+
+    <div style="background:var(--surface2);border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:0.75rem">
+      <div style="flex:1;font-size:12px;color:var(--text-dim)">
+        <strong style="color:var(--text)">Moneybird</strong> — project aanmaken in de administratie
+      </div>
+      <button class="btn btn-secondary btn-sm" id="activeer-mb-btn" onclick="activeerInMoneybird()">Aanmaken in MB →</button>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="sluitModal('activeer')">Later</button>
+      <button class="btn btn-primary" onclick="slaActiveerOp()">Activeren ✓</button>
     </div>
   </div>
 </div>
@@ -943,6 +1002,7 @@ const STD_SJABLONEN = [{
 }];
 
 const PROJ_STATUS = {
+  concept:           {label:'Concept',            c:'#b85c10', bg:'#FEF3EB', bc:'#F5C49A'},
   offerte:           {label:'Offerte',            c:'#7a6010', bg:'#FBF5E0', bc:'#E8D48A'},
   werkvoorbereiding: {label:'Werkvoorbereiding',  c:'#1a3a8b', bg:'#E8EDFB', bc:'#b5c5f5'},
   productie:         {label:'Productie',          c:'#2A4A38', bg:'#E6EFE9', bc:'#c0d8c8'},
@@ -1125,6 +1185,7 @@ function showApp(){
   document.getElementById('app').style.display='flex';
   document.getElementById('welkom').classList.add('hidden');
   updateChip();
+  updateConceptBadge();
   herstelLopende();
   startSbKlok();
   renderTimerBar();
@@ -2502,17 +2563,32 @@ function renderProjectenTab(){
   const projecten=getProjecten();
   const wrap=document.getElementById('proj-lijst');
   if(!wrap) return;
+
+  // Concept-banner bovenaan als er concepten zijn
+  const concepten=projecten.filter(p=>p.status==='concept');
+  let bannerHtml='';
+  if(concepten.length){
+    bannerHtml=`<div class="concept-banner">
+      <span style="font-size:20px">🟠</span>
+      <div class="concept-banner-tekst">
+        <strong>${concepten.length} concept${concepten.length>1?'en':''}</strong> wacht${concepten.length===1?'':'en'} op activatie — projectcode, Moneybird en taken invullen
+      </div>
+      <button class="concept-activeer-btn" onclick="openActiveerProject('${concepten[0].code}')">Activeer →</button>
+    </div>`;
+  }
+
   if(!projecten.length){
-    wrap.innerHTML=`<div style="padding:1rem;color:var(--text-faint);font-size:13px;font-style:italic">Nog geen projecten. Maak het eerste aan.</div>`;
+    wrap.innerHTML=bannerHtml+`<div style="padding:1rem;color:var(--text-faint);font-size:13px;font-style:italic">Nog geen projecten. Maak het eerste aan.</div>`;
     return;
   }
-  wrap.innerHTML=projecten.map((p,i)=>`
-    <div class="proj-item" onclick="openProjectDetail('${p.code}')">
+  wrap.innerHTML=bannerHtml+projecten.map((p,i)=>`
+    <div class="proj-item${p.status==='concept'?' concept-row':''}" onclick="openProjectDetail('${p.code}')">
       <div class="proj-code">${p.code}</div>
       <div class="proj-naam">${p.naam||'—'}</div>
       <div class="proj-klant">${p.klant||''}</div>
       <div class="proj-status-col">${p.status?statusBadge(p.status):''}</div>
       <div class="proj-acties" onclick="event.stopPropagation()">
+        ${p.status==='concept'?`<button class="concept-activeer-btn" onclick="openActiveerProject('${p.code}')">Activeer →</button>`:''}
         <button class="entry-btn" onclick="bewerkProject(${i})" title="Bewerken">✏</button>
         <button class="entry-btn del" onclick="verwijderProject(${i})" title="Verwijderen">✕</button>
       </div>
@@ -2585,21 +2661,130 @@ function openSnelProject(voorProject, callback){
   document.getElementById('sp-naam').value='';
   document.getElementById('sp-klant').value='';
   openModal('snel-project');
-  setTimeout(()=>document.getElementById('sp-code').focus(),100);
+  setTimeout(()=>document.getElementById('sp-naam').focus(),100);
 }
 function slaSnelProjectOp(){
-  const code=document.getElementById('sp-code').value.trim().toUpperCase();
   const naam=document.getElementById('sp-naam').value.trim();
+  if(!naam){alert('Vul een projectnaam in.');return;}
   const klant=document.getElementById('sp-klant').value.trim().toUpperCase();
-  if(!code){alert('Vul een projectcode in.');return;}
+  let code=document.getElementById('sp-code').value.trim().toUpperCase();
+  // Auto-genereer een tijdelijke code als leeg
+  if(!code) code='CONCEPT-'+Date.now().toString(36).toUpperCase().slice(-5);
   const lijst=getProjecten();
-  if(!lijst.find(p=>p.code===code)) lijst.push({code,naam,klant});
-  setProjecten(lijst);
+  if(!lijst.find(p=>p.code===code)){
+    lijst.push({code, naam, klant, status:'concept', aangemaakt:new Date().toISOString()});
+    setProjecten(lijst);
+  }
+  updateConceptBadge();
   sluitModal('snel-project');
-  if(actTab==="timer")renderKalender();
+  if(actTab==='timer') renderKalender();
+  if(actTab==='projecten') renderProjectenTab();
   vulTbProjectSelect();
   if(snelProjectCallback) snelProjectCallback(code);
   snelProjectCallback=null;
+}
+
+function updateConceptBadge(){
+  const n=getProjecten().filter(p=>p.status==='concept').length;
+  const badge=document.getElementById('sb-concept-badge');
+  if(badge){badge.textContent=n;badge.style.display=n?'inline-block':'none';}
+}
+
+// ─── Activeer concept-project ───
+let activeerHuidigCode=null;
+function openActiveerProject(code){
+  const p=getProjecten().find(x=>x.code===code);
+  if(!p) return;
+  activeerHuidigCode=code;
+  document.getElementById('activeer-proj-naam').textContent=`"${p.naam||code}" — aangemaakt ${p.aangemaakt?new Date(p.aangemaakt).toLocaleDateString('nl-NL'):''}`;
+  // Genereer suggestie-code
+  genereerActiveerCode();
+  document.getElementById('activeer-status').value='offerte';
+  document.getElementById('activeer-sjabloon').value='std';
+  document.getElementById('activeer-mb-btn').textContent='Aanmaken in MB →';
+  document.getElementById('activeer-mb-btn').disabled=false;
+  openModal('activeer');
+}
+function genereerActiveerCode(){
+  const p=getProjecten().find(x=>x.code===activeerHuidigCode);
+  if(!p) return;
+  const klant=(p.klant||'').toUpperCase().slice(0,3);
+  // Naam omzetten naar code-stukken: eerste 2 woorden, max 8 tekens per stuk
+  const woorden=(p.naam||'').toUpperCase()
+    .replace(/[^A-Z0-9\s]/g,'').split(/\s+/).filter(w=>w&&w.length>2).slice(0,3);
+  const delen=[klant,...woorden].filter(Boolean).map(w=>w.slice(0,8));
+  const suggestie=delen.join('-').slice(0,24);
+  document.getElementById('activeer-code').value=suggestie||activeerHuidigCode;
+}
+function activeerInMoneybird(){
+  const code=document.getElementById('activeer-code').value.trim().toUpperCase();
+  const p=getProjecten().find(x=>x.code===activeerHuidigCode);
+  if(!code||!p){alert('Vul eerst een code in.');return;}
+  const tok=JSON.parse(localStorage.getItem('mt_instellingen')||'{}').mb_token;
+  if(!tok){alert('Geen Moneybird API token. Stel deze in via de Tool → Instellingen.');return;}
+  const btn=document.getElementById('activeer-mb-btn');
+  btn.disabled=true; btn.textContent='Bezig…';
+  fetch('https://mt-claude-proxy.bart-a12.workers.dev/mb',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token:tok,path:'/projects',method:'POST',body:{project:{name:`${code} — ${p.naam||''}`}}})
+  })
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.id){btn.textContent='✓ Aangemaakt in MB';btn.style.background='var(--green)';}
+    else{btn.textContent='Fout — probeer opnieuw';btn.disabled=false;console.warn(d);}
+  })
+  .catch(()=>{btn.textContent='Fout — geen verbinding';btn.disabled=false;});
+}
+function slaActiveerOp(){
+  const nieuwCode=document.getElementById('activeer-code').value.trim().toUpperCase();
+  const status=document.getElementById('activeer-status').value;
+  const sjabloon=document.getElementById('activeer-sjabloon').value;
+  if(!nieuwCode){alert('Vul een projectcode in.');return;}
+  const lijst=getProjecten();
+  const idx=lijst.findIndex(p=>p.code===activeerHuidigCode);
+  if(idx===-1) return;
+  const oud=lijst[idx];
+  // Code updaten (alle entries + taken ook bijwerken)
+  if(nieuwCode!==activeerHuidigCode){
+    if(lijst.find((p,i)=>p.code===nieuwCode&&i!==idx)){alert('Code al in gebruik.');return;}
+    // Entries bijwerken
+    const entries=getEntries().map(e=>e.project_code===activeerHuidigCode?{...e,project_code:nieuwCode}:e);
+    setEntries(entries);
+    // Taken bijwerken
+    const taken=getTaken().map(t=>t.project_code===activeerHuidigCode?{...t,project_code:nieuwCode}:t);
+    setTaken(taken);
+  }
+  lijst[idx]={...oud, code:nieuwCode, status};
+  setProjecten(lijst);
+  // Standaard sjabloon toepassen
+  if(sjabloon==='std'){
+    const nu=new Date().toISOString();
+    const stdTaken=[
+      {naam:'Werkvoorbereiding',estimate_h:8,tags:['Admin']},
+      {naam:'Inkoop materiaal',estimate_h:2,tags:['Inkoop']},
+      {naam:'Productie',estimate_h:40,tags:['Productie']},
+      {naam:'Afwerking',estimate_h:8,tags:['Productie']},
+      {naam:'Montage',estimate_h:8,tags:['Montage']},
+      {naam:'Oplevering',estimate_h:2,tags:['Admin']},
+    ];
+    const taken=getTaken();
+    stdTaken.forEach(t=>{
+      if(!taken.find(x=>x.project_code===nieuwCode&&x.naam===t.naam)){
+        taken.push({id:uid(),project_code:nieuwCode,naam:t.naam,status:'todo',bucket_id:'todo',
+          prioriteit:null,tags:t.tags||[],estimate_h:t.estimate_h,assignees:[],
+          from_date:null,to_date:null,billable:false,omschrijving:'',subtaken:[],
+          notities:'',sjabloon_id:'std',aangemaakt:nu,gewijzigd:nu});
+      }
+    });
+    setTaken(taken);
+  }
+  activeerHuidigCode=null;
+  updateConceptBadge();
+  sluitModal('activeer');
+  renderProjectenTab();
+  vulTbProjectSelect();
+  if(actTab==='timer') renderKalender();
 }
 
 // Snel taak aanmaken vanuit dropdown
