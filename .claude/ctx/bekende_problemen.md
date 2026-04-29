@@ -23,6 +23,10 @@
 | Outlook agenda sync | API-integratie, later | Na stap 12 |
 | Mobiele optimalisatie | Desktop eerst af | Stap 10 |
 | Vectorworks CSV → taken koppeling | Vereist beide apps klaar | Stap 11 |
+| **Reistijd in capaciteitsplanning** | Na volledig werkbaar model | Finetuning |
+| **Reistijd in nacalculatie als aparte kolom** | Na volledig werkbaar model | Finetuning |
+
+> **Reistijd-notitie:** `reistijd_voor_min` + `reistijd_na_min` zitten al op planblokken. Bij finetuning: (1) optellen bij capaciteitsbalk in Timeline, (2) als aparte kolom tonen in Rapport/nacalculatie naast de directe werkuren.
 
 ---
 
