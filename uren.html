@@ -324,6 +324,32 @@ body.bord-fs .timer-bar{display:none!important}
 .pr-breakdown{display:flex;gap:0.6rem;flex-wrap:wrap}
 .pr-persoon{display:flex;align-items:center;gap:4px;font-size:11px;font-family:var(--mono);color:var(--text-faint)}
 .pr-dot{width:8px;height:8px;border-radius:50%}
+/* Rapport persoon-view */
+.rp-persoon-kaart{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:0.6rem;box-shadow:var(--shadow)}
+.rp-pk-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rp-pk-naam{font-weight:600;font-size:14px;flex:1}
+.rp-pk-totaal{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--green)}
+.rp-proj-rij{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;border-top:1px solid var(--surface2)}
+.rp-proj-code{font-family:var(--mono);color:var(--gold);font-weight:500;cursor:pointer;white-space:nowrap}
+.rp-proj-code:hover{text-decoration:underline}
+.rp-proj-naam{flex:1;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-proj-uren{font-family:var(--mono);font-weight:600;white-space:nowrap}
+/* Weekafsluiting */
+.wa-header{margin-bottom:1rem}
+.wa-titel{font-family:var(--headings);font-size:18px;color:var(--green);margin-bottom:2px}
+.wa-persoon{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem 1rem;margin-bottom:0.5rem;box-shadow:var(--shadow)}
+.wa-pk-header{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.wa-pk-naam{font-weight:600;font-size:14px;flex:1}
+.wa-pk-totaal{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green)}
+.wa-bar-wrap{height:5px;background:var(--surface2);border-radius:3px;margin-bottom:6px;overflow:hidden}
+.wa-bar-fill{height:100%;border-radius:3px;transition:width 0.3s}
+.wa-proj-rij{display:flex;align-items:start;gap:6px;padding:3px 0;font-size:12px;border-top:1px solid var(--surface2)}
+.wa-proj-code{font-family:var(--mono);color:var(--gold);font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.wa-proj-code:hover{text-decoration:underline}
+.wa-proj-naam{flex:1;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wa-proj-uren{font-family:var(--mono);font-weight:600;white-space:nowrap;flex-shrink:0}
+.wa-section-label{font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-faint);margin:1rem 0 0.3rem}
+.wa-milestone{font-size:13px;padding:4px 0;border-top:1px solid var(--surface2)}
 
 /* ── BORD (muurscherm) ── */
 body.bord-fs{background:#1C1A16}
@@ -842,8 +868,15 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 
   <!-- RAPPORT -->
   <div id="tab-rapport" class="tab-content" style="flex-direction:column">
-    <div class="page-topbar">
+    <div class="page-topbar" style="flex-wrap:wrap;gap:0.5rem">
       <div class="page-topbar-title">Reports</div>
+      <!-- View toggle -->
+      <div style="display:flex;gap:3px">
+        <button class="periode-btn active" id="rview-project" onclick="setRapportView('project',this)">Per project</button>
+        <button class="periode-btn" id="rview-persoon" onclick="setRapportView('persoon',this)">Per persoon</button>
+        <button class="periode-btn" id="rview-week" onclick="setRapportView('weekafsluiting',this)">📋 Weekafsluiting</button>
+      </div>
+      <!-- Periode -->
       <div class="filter-row" style="display:flex;gap:0.4rem;margin:0">
         <button class="periode-btn active" data-p="week" onclick="setPeriode('week',this)">Deze week</button>
         <button class="periode-btn" data-p="maand" onclick="setPeriode('maand',this)">Maand</button>
@@ -855,8 +888,10 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
           <input type="date" class="dag-input" id="ct" onchange="renderRapport()">
         </span>
       </div>
+      <!-- Export knop (zichtbaar in weekafsluiting view) -->
+      <button id="rp-export-btn" class="btn btn-secondary btn-sm" style="display:none" onclick="exportWeektekst()">↗ Kopieer als tekst</button>
     </div>
-    <div class="main"><div id="rapport-inhoud"></div></div>
+    <div class="main" style="overflow-y:auto"><div id="rapport-inhoud"></div></div>
   </div>
 
   <!-- PROJECTEN -->
@@ -1468,6 +1503,7 @@ let dagDatum = vandaagStr();
 let tlWeekOffset = 0;
 let tlView = 'persoon';
 let activePeriode = 'week';
+let rapportView = 'project';   // 'project' | 'persoon' | 'weekafsluiting'
 let editEntryId = null;
 let planContext = null; // {datum, teamlid}
 let startModalProject = null;
@@ -2503,7 +2539,24 @@ function seedDummyData(){
 // ════════════════════════════════════════════
 // RAPPORT
 // ════════════════════════════════════════════
+function setRapportView(v,btn){
+  rapportView=v;
+  document.querySelectorAll('#rview-project,#rview-persoon,#rview-week').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const exportBtn=document.getElementById('rp-export-btn');
+  if(exportBtn) exportBtn.style.display=v==='weekafsluiting'?'':'none';
+  renderRapport();
+}
+
 function renderRapport(){
+  const wrap=document.getElementById('rapport-inhoud');
+  if(!wrap) return;
+  if(rapportView==='project') renderRapportProject(wrap);
+  else if(rapportView==='persoon') renderRapportPersoon(wrap);
+  else renderRapportWeek(wrap);
+}
+
+function renderRapportProject(wrap){
   const [van,tm]=getPeriodeDatums();
   const entries=getEntries().filter(e=>e.duur&&e.datum>=van&&e.datum<=tm);
   const tl=getTeamleden();
@@ -2512,16 +2565,20 @@ function renderRapport(){
   entries.forEach(e=>{
     if(!per[e.project_code])per[e.project_code]={totaal:0,pp:{}};
     per[e.project_code].totaal+=e.duur;
-    per[e.project_code].pp[e.teamlid]=(per[e.project_code].pp[e.teamlid]||0)+e.duur;
+    const tlNaam=e.teamlid?.toLowerCase();
+    const tlObj=tl.find(t=>t.naam?.toLowerCase()===tlNaam)||{naam:e.teamlid};
+    per[e.project_code].pp[tlObj.naam]=(per[e.project_code].pp[tlObj.naam]||0)+e.duur;
   });
   const sorted=Object.entries(per).sort((a,b)=>b[1].totaal-a[1].totaal);
   const max=sorted[0]?.[1]?.totaal||1;
-  const wrap=document.getElementById('rapport-inhoud');
   if(!sorted.length){wrap.innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen uren in deze periode</div>`;return;}
   wrap.innerHTML=sorted.map(([code,data])=>{
     const p=projecten.find(x=>x.code===code);
-    const breakdown=tl.filter(t=>data.pp[t.naam]).map(t=>`<span class="pr-persoon"><span class="pr-dot" style="background:${t.kleur}"></span>${t.label} ${fmtUren(data.pp[t.naam])}</span>`).join('');
-    return `<div class="pr-item">
+    const breakdown=tl.filter(t=>data.pp[t.naam]||data.pp[t.label]).map(t=>{
+      const sec=data.pp[t.naam]||data.pp[t.label]||0;
+      return sec?`<span class="pr-persoon"><span class="pr-dot" style="background:${t.kleur}"></span>${t.label} ${fmtUren(sec)}</span>`:'';
+    }).join('');
+    return `<div class="pr-item" onclick="openProjectDetail('${code}')">
       <div class="pr-header">
         <div><div class="pr-code">${code}</div><div class="pr-naam">${p?.naam||''}</div></div>
         <div class="pr-totaal">${fmtUren(data.totaal)}</div>
@@ -2531,6 +2588,190 @@ function renderRapport(){
     </div>`;
   }).join('');
 }
+
+function renderRapportPersoon(wrap){
+  const [van,tm]=getPeriodeDatums();
+  const entries=getEntries().filter(e=>e.duur&&e.datum>=van&&e.datum<=tm);
+  const planning=getPlanning().filter(p=>p.datum>=van&&p.datum<=tm);
+  const tl=getTeamleden();
+  const projecten=getProjecten();
+  if(!entries.length){wrap.innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen uren in deze periode</div>`;return;}
+  wrap.innerHTML=tl.map(t=>{
+    const tlLc=t.naam?.toLowerCase();
+    const myEntries=entries.filter(e=>e.teamlid?.toLowerCase()===tlLc);
+    if(!myEntries.length) return '';
+    const totaalSec=myEntries.reduce((s,e)=>s+(e.duur||0),0);
+    const gepland=planning.filter(p=>p.teamlid?.toLowerCase()===tlLc).reduce((s,p)=>s+p.uren_gepland,0);
+    const cap=t.beschikbaar_h_week||40;
+    // Per project
+    const perProj={};
+    myEntries.forEach(e=>{
+      if(!perProj[e.project_code]) perProj[e.project_code]=0;
+      perProj[e.project_code]+=e.duur;
+    });
+    const projRijen=Object.entries(perProj).sort((a,b)=>b[1]-a[1]).map(([code,sec])=>{
+      const p=projecten.find(x=>x.code===code);
+      const kleur=p?.kleur||var2hex(code);
+      return `<div class="rp-proj-rij">
+        <span class="rp-proj-dot" style="background:${kleur}"></span>
+        <span class="rp-proj-code" onclick="event.stopPropagation();openProjectDetail('${code}')">${code}</span>
+        <span class="rp-proj-naam">${p?.naam||''}</span>
+        <span class="rp-proj-uren">${fmtUren(sec)}</span>
+      </div>`;
+    }).join('');
+    const totaalH=totaalSec/3600;
+    const gepPct=Math.min(gepland/cap*100,100);
+    const gbkPct=Math.min(totaalH/cap*100,100);
+    const deltaKleur=totaalH>=gepland*0.9?'var(--green)':totaalH<gepland*0.7?'var(--red)':'var(--gold)';
+    return `<div class="rp-persoon-kaart">
+      <div class="rp-pk-header">
+        <span style="width:10px;height:10px;border-radius:50%;background:${t.kleur};display:inline-block"></span>
+        <span class="rp-pk-naam">${t.label}</span>
+        <span class="rp-pk-totaal">${fmtUren(totaalSec)}</span>
+        <span style="font-size:11px;color:${deltaKleur};font-family:var(--mono)">${gepland?`/ ${gepland}u gepland`:''}</span>
+      </div>
+      <div class="pr-bar-wrap" style="margin:6px 0">
+        <div class="wk-bar-gepland" style="width:${gepPct}%"></div>
+        <div class="wk-bar-geboekt" style="width:${gbkPct}%"></div>
+      </div>
+      ${projRijen}
+    </div>`;
+  }).join('');
+}
+
+function renderRapportWeek(wrap){
+  const [van,tm]=getPeriodeDatums();
+  const entries=getEntries().filter(e=>e.duur&&e.datum>=van&&e.datum<=tm);
+  const planning=getPlanning().filter(p=>p.datum>=van&&p.datum<=tm);
+  const tl=getTeamleden();
+  const projecten=getProjecten();
+  const milestones=getMilestones().filter(m=>m.datum>=van&&m.datum<=tm);
+
+  // Periode label
+  const [vanObj,tmObj]=[new Date(van+'T12:00:00'),new Date(tm+'T12:00:00')];
+  const weekNr=getWeekNummer(vanObj);
+  const periodeLabel=`Week ${weekNr} (${vanObj.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} – ${tmObj.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})})`;
+
+  const perPersoon=tl.map(t=>{
+    const tlLc=t.naam?.toLowerCase();
+    const myEntries=entries.filter(e=>e.teamlid?.toLowerCase()===tlLc);
+    const totaalSec=myEntries.reduce((s,e)=>s+(e.duur||0),0);
+    const gepland=planning.filter(p=>p.teamlid?.toLowerCase()===tlLc).reduce((s,p)=>s+p.uren_gepland,0);
+    const cap=t.beschikbaar_h_week||40;
+    const perProj={};
+    myEntries.forEach(e=>{if(!perProj[e.project_code])perProj[e.project_code]=0;perProj[e.project_code]+=e.duur;});
+    return {tl:t,totaalSec,gepland,cap,perProj};
+  }).filter(r=>r.totaalSec>0||r.gepland>0);
+
+  if(!perPersoon.length){wrap.innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen uren in deze periode</div>`;return;}
+
+  const teamTotaal=perPersoon.reduce((s,r)=>s+r.totaalSec,0);
+
+  wrap.innerHTML=`
+  <div class="wa-header">
+    <div class="wa-titel">Weekafsluiting — ${periodeLabel}</div>
+    <div class="wa-subtitel" style="color:var(--text-faint);font-size:12px">Mortise & Tenon — totaal team: ${fmtUren(teamTotaal)}</div>
+  </div>
+
+  ${perPersoon.map(r=>{
+    const tlH=(r.totaalSec/3600);
+    const delta=tlH-r.gepland;
+    const deltaStr=delta>=0?`+${delta.toFixed(1)}u`:`${delta.toFixed(1)}u`;
+    const deltaKleur=delta>=-1?'var(--green)':delta>=-4?'var(--gold)':'var(--red)';
+    const projRijen=Object.entries(r.perProj).sort((a,b)=>b[1]-a[1]).map(([code,sec])=>{
+      const p=projecten.find(x=>x.code===code);
+      const kleur=p?.kleur||var2hex(code);
+      return `<div class="wa-proj-rij">
+        <span style="width:7px;height:7px;border-radius:50%;background:${kleur};display:inline-block;flex-shrink:0;margin-top:3px"></span>
+        <span class="wa-proj-code" onclick="event.stopPropagation();openProjectDetail('${code}')">${code}</span>
+        <span class="wa-proj-naam">${p?.naam||''}</span>
+        <span class="wa-proj-uren">${fmtUren(sec)}</span>
+      </div>`;
+    }).join('');
+    const pct=Math.min(Math.round(tlH/r.cap*100),100);
+    const kleurBar=pct>=100?'var(--red)':pct>=85?'var(--gold)':'var(--green)';
+    return `<div class="wa-persoon">
+      <div class="wa-pk-header">
+        <span style="width:10px;height:10px;border-radius:50%;background:${r.tl.kleur};display:inline-block;flex-shrink:0"></span>
+        <span class="wa-pk-naam">${r.tl.label}</span>
+        <span class="wa-pk-totaal">${tlH.toFixed(1)}u</span>
+        ${r.gepland?`<span style="font-size:11px;font-family:var(--mono);color:${deltaKleur}">${deltaStr} t.o.v. plan</span>`:''}
+        <span style="font-size:11px;font-family:var(--mono);color:var(--text-faint)">/ ${r.cap}u</span>
+      </div>
+      <div class="wa-bar-wrap"><div class="wa-bar-fill" style="width:${pct}%;background:${kleurBar}"></div></div>
+      ${projRijen}
+    </div>`;
+  }).join('')}
+
+  ${milestones.length?`<div class="wa-section-label">Milestones deze periode</div>
+  ${milestones.map(m=>{
+    const icoon=MS_ICOON[m.type]||'📌';
+    const kleur=MS_KLEUR[m.type]||'#6B6455';
+    const p=projecten.find(x=>x.code===m.project_code);
+    return `<div class="wa-milestone"><span style="color:${kleur}">${icoon}</span> <strong>${m.naam}</strong>${p?' — '+p.naam:''} <span style="color:var(--text-faint);font-family:var(--mono);font-size:11px">${m.datum}</span></div>`;
+  }).join('')}`:''}
+  `;
+}
+
+function exportWeektekst(){
+  const [van,tm]=getPeriodeDatums();
+  const entries=getEntries().filter(e=>e.duur&&e.datum>=van&&e.datum<=tm);
+  const planning=getPlanning().filter(p=>p.datum>=van&&p.datum<=tm);
+  const tl=getTeamleden();
+  const projecten=getProjecten();
+  const milestones=getMilestones().filter(m=>m.datum>=van&&m.datum<=tm);
+  const [vanObj]=[ new Date(van+'T12:00:00')];
+  const weekNr=getWeekNummer(vanObj);
+
+  let txt=`WEEKRAPPORT — Week ${weekNr}\nMortise & Tenon\n${'─'.repeat(36)}\n\n`;
+  let teamTotaal=0;
+  tl.forEach(t=>{
+    const tlLc=t.naam?.toLowerCase();
+    const myE=entries.filter(e=>e.teamlid?.toLowerCase()===tlLc);
+    const totaalSec=myE.reduce((s,e)=>s+(e.duur||0),0);
+    const gepland=planning.filter(p=>p.teamlid?.toLowerCase()===tlLc).reduce((s,p)=>s+p.uren_gepland,0);
+    if(!totaalSec&&!gepland) return;
+    teamTotaal+=totaalSec;
+    const tlH=totaalSec/3600;
+    const delta=tlH-gepland;
+    txt+=`${t.label.toUpperCase()}\n`;
+    const perProj={};
+    myE.forEach(e=>{if(!perProj[e.project_code])perProj[e.project_code]=0;perProj[e.project_code]+=e.duur;});
+    Object.entries(perProj).sort((a,b)=>b[1]-a[1]).forEach(([code,sec])=>{
+      const naam=projecten.find(x=>x.code===code)?.naam||'';
+      txt+=`  ${code.padEnd(22)} ${(sec/3600).toFixed(1)}u${naam?' — '+naam:''}\n`;
+    });
+    txt+=`  ${'Totaal:'.padEnd(22)} ${tlH.toFixed(1)}u / ${t.beschikbaar_h_week||40}u`;
+    if(gepland) txt+=` (${delta>=0?'+':''}${delta.toFixed(1)}u t.o.v. plan)`;
+    txt+='\n\n';
+  });
+  txt+=`${'─'.repeat(36)}\nTotaal team: ${(teamTotaal/3600).toFixed(1)}u\n`;
+  if(milestones.length){
+    txt+='\nMilestones:\n';
+    milestones.forEach(m=>{txt+=`  ${MS_ICOON[m.type]||'📌'} ${m.naam}${m.project_code?' ('+m.project_code+')':''} — ${m.datum}\n`;});
+  }
+  navigator.clipboard.writeText(txt).then(()=>{
+    const btn=document.getElementById('rp-export-btn');
+    const orig=btn.textContent;
+    btn.textContent='✓ Gekopieerd!';
+    setTimeout(()=>btn.textContent=orig,2000);
+  }).catch(()=>{
+    const ta=document.createElement('textarea');
+    ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('Tekst gekopieerd naar klembord');
+  });
+}
+
+function getWeekNummer(datum){
+  const d=new Date(Date.UTC(datum.getFullYear(),datum.getMonth(),datum.getDate()));
+  const dag=d.getUTCDay()||7;
+  d.setUTCDate(d.getUTCDate()+4-dag);
+  const jaarStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return Math.ceil((((d-jaarStart)/86400000)+1)/7);
+}
+
 function getPeriodeDatums(){
   const nu=new Date();
   if(activePeriode==='week'){const ma=maandagVan(0);const zo=datumStr(new Date(new Date(ma+'T12:00:00').setDate(new Date(ma+'T12:00:00').getDate()+6)));return[ma,zo];}
