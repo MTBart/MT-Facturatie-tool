@@ -13,8 +13,8 @@
 - [x] **Stap 6** — Timeline: capaciteitsbalk per persoon (groen/oranje/rood), vrije dagen grijs + beheer in Instellingen
 - [x] **Stap 7** — Project-detail panel: slide-in rechts, taken per bucket, uren per persoon, timer-knop
 - [x] **Stap 8** — Vrije dagen beheer: Instellingen-modal, add/verwijder, live update Timeline
-- [ ] **Stap 9** — Weekafsluiting: rapport + export platte tekst
-- [ ] **Stap 10** — Mobiele optimalisatie: <768px responsive
+- [x] **Stap 9** — Weekafsluiting: rapport + export platte tekst
+- [x] **Stap 10** — Mobiele optimalisatie: <768px responsive
 - [ ] **Stap 11** — Vectorworks koppeling: knop + functie in index-v4.html
 - [ ] **Stap 12** — Pauze-meldingen: werktijden instelbaar in admin
 
