@@ -2329,6 +2329,7 @@ function renderTimeline(){
   const entries=getEntries();
   const projecten=getProjecten();
   const vrijeDagen=getVrijeDagen();
+  const taken=getTaken().filter(t=>t.from_date&&t.to_date); // taken met datumbereik
 
   let rows=[];
   if(tlView==='persoon'){
@@ -2368,11 +2369,15 @@ function renderTimeline(){
     let capHTML='';
     if(row.isPersoon&&row.cap){
       const idLc=row.id.toLowerCase();
-      const sec=entries.filter(e=>e.teamlid?.toLowerCase()===idLc&&dagen.includes(e.datum)&&e.duur).reduce((s,e)=>s+(e.duur||0),0);
-      const h=Math.round(sec/360)/10;
-      const pct=Math.min(Math.round(h/row.cap*100),100);
-      const kl=pct>=100?'var(--red)':pct>=85?'var(--orange)':'var(--green)';
-      capHTML=`<div class="tl-cap-wrap"><div class="tl-cap-track"><div class="tl-cap-fill" style="width:${pct}%;background:${kl}"></div></div><div class="tl-cap-label">${h}h / ${row.cap}h</div></div>`;
+      const week1=dagen.slice(0,7), week2=dagen.slice(7);
+      const mkBar=(wkDagen,label)=>{
+        const sec=entries.filter(e=>e.teamlid?.toLowerCase()===idLc&&wkDagen.includes(e.datum)&&e.duur).reduce((s,e)=>s+(e.duur||0),0);
+        const h=Math.round(sec/360)/10;
+        const pct=Math.min(Math.round(h/row.cap*100),100);
+        const kl=pct>=100?'var(--red)':pct>=85?'var(--orange)':'var(--green)';
+        return `<div style="flex:1;min-width:0"><div style="font-family:var(--mono);font-size:8px;color:var(--text-faint);margin-bottom:1px">${label}</div><div class="tl-cap-track"><div class="tl-cap-fill" style="width:${pct}%;background:${kl}"></div></div><div class="tl-cap-label">${h}h/${row.cap}h</div></div>`;
+      };
+      capHTML=`<div class="tl-cap-wrap" style="display:flex;gap:6px">${mkBar(week1,'w1')}${week2.length?mkBar(week2,'w2'):''}</div>`;
     }
 
     const labelTd=`<td class="tl-label-td">
@@ -2400,6 +2405,10 @@ function renderTimeline(){
         planBlokken=planning.filter(p=>p.datum===dag&&p.project_code===row.id);
         actBlokken=tlm.map(t=>({teamlid:t.naam,kleur:t.kleur,label:t.label,som:entries.filter(e=>e.datum===dag&&e.project_code===row.id&&e.teamlid?.toLowerCase()===t.naam?.toLowerCase()&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
       }
+      // Taken met datumbereik die deze dag omvatten
+      const taakBanden=tlView==='persoon'
+        ?taken.filter(t=>dag>=t.from_date&&dag<=t.to_date&&(t.assignees||[]).some(a=>a.toLowerCase()===rowIdLc))
+        :taken.filter(t=>dag>=t.from_date&&dag<=t.to_date&&t.project_code===row.id);
 
       const blokken=[
         ...planBlokken.map(pb=>{
@@ -2422,7 +2431,17 @@ function renderTimeline(){
         ...actBlokken.map(b=>`<div class="tl-blok tl-blok-act" style="background:${b.kleur||row.kleur}">
             <div class="tl-blok-label" style="color:#fff">${tlView==='project'?b.label:fmtUren(b.som)}</div>
             ${tlView==='project'?`<div class="tl-blok-sub" style="color:rgba(255,255,255,0.7)">${fmtUren(b.som)}</div>`:''}
-          </div>`)
+          </div>`),
+        ...taakBanden.map(t=>{
+          const proj=projecten.find(p=>p.code===t.project_code);
+          const kleur=proj?.kleur||var2hex(t.project_code||'');
+          const isStart=dag===t.from_date, isEnd=dag===t.to_date;
+          const radius=`${isStart?'6px':'0'} ${isEnd?'6px':'0'} ${isEnd?'6px':'0'} ${isStart?'6px':'0'}`;
+          return `<div class="tl-blok tl-taak-band" style="background:${kleur}22;border:1.5px solid ${kleur}55;border-radius:${radius};cursor:pointer" onclick="event.stopPropagation();openTaakModal('${t.id}')" title="${t.naam}${t.estimate_h?' · '+t.estimate_h+'h':''}">
+            <div class="tl-blok-label" style="color:${kleur};font-size:10px">${isStart?'📋 '+t.naam:''}</div>
+            ${t.estimate_h&&isStart?`<div class="tl-blok-sub">${t.estimate_h}h</div>`:''}
+          </div>`;
+        })
       ].join('');
 
       return `<td class="tl-dag-td${extraClass}" onclick="tlCelKlik('${dag}','${row.id}')">${blokken}</td>`;
