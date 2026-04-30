@@ -734,6 +734,66 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 .project-card:hover .pc-info-btn{opacity:1}
 .project-card{position:relative}
 .pc-info-btn:hover{background:var(--surface2);color:var(--green)}
+
+/* ── MOBILE TOPBAR ── */
+.mobile-topbar{display:none;align-items:center;justify-content:space-between;padding:0.6rem 1rem;background:linear-gradient(135deg,#1e3829 0%,#162d20 100%);color:#F7F5F0;flex-shrink:0;z-index:100}
+.mob-hamburger{background:none;border:none;color:#F7F5F0;font-size:22px;cursor:pointer;padding:4px 8px;line-height:1;border-radius:6px}
+.mob-hamburger:active{background:rgba(255,255,255,0.15)}
+.mob-brand{font-family:var(--serif);font-size:18px;color:#F7F5F0}
+.mob-brand span{color:var(--gold-mid);font-style:italic}
+.mob-spacer{width:40px}
+
+/* ── SIDEBAR OVERLAY ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:199}
+
+/* ── RESPONSIVE <768px ── */
+@media (max-width:767px){
+  /* Sidebar schuift in vanuit links */
+  .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:200;transform:translateX(-215px);transition:transform 0.24s ease;height:100%}
+  .sidebar.sb-open{transform:translateX(0)}
+  .sb-overlay.sb-open{display:block}
+
+  /* Layout reset */
+  html,body{height:auto;overflow:auto}
+  body{flex-direction:column}
+  #app{flex-direction:column!important;height:auto!important;min-height:100vh}
+  .content-wrap{width:100%;height:auto!important;flex:1;overflow-y:visible}
+
+  /* Topbar zichtbaar */
+  .mobile-topbar{display:flex}
+
+  /* Grotere touch targets in sidebar */
+  .sb-item{padding:0.9rem 0.75rem 0.9rem 1rem;font-size:15px}
+  .sb-item-icon{font-size:17px}
+  .sb-section{padding:1rem 1rem 0.4rem}
+
+  /* Tab content: scrollen op mobiel */
+  .tab-content{padding:0;overflow-y:auto;height:auto!important;max-height:calc(100vh - 52px)}
+
+  /* Timer-tab topbar: verberg 3d/week knoppen op klein scherm */
+  .kvt-btn[data-view="3d"],.kvt-btn[data-view="week"]{display:none}
+
+  /* Kanban: één kolom breed */
+  .kanban-bord{flex-direction:column;gap:0.5rem}
+  .kanban-col{min-width:unset;width:100%}
+
+  /* Timeline: horizontaal scrollen */
+  .tl-wrap{font-size:11px;overflow-x:auto}
+  .tl-label-td{min-width:80px;max-width:80px;font-size:11px}
+
+  /* Taak-modal: neem volledige hoogte */
+  .taak-modal{max-width:100%!important;width:100%!important;border-radius:0!important;max-height:100vh!important;height:100vh}
+
+  /* Project detail panel: full width */
+  #proj-panel{width:100%!important}
+
+  /* Kalender nav: compacter */
+  .kalender-nav{padding:0.5rem 0.6rem;gap:0.4rem;flex-wrap:wrap}
+  .kalender-datum{font-size:13px}
+
+  /* Welkom scherm knoppen */
+  .naam-knop{padding:15px 1rem;font-size:16px}
+}
 </style>
 </head>
 <body>
@@ -751,13 +811,17 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 <!-- App -->
 <div id="app" class="hidden" style="display:flex;flex-direction:row;width:100%;height:100vh">
 
+  <!-- SIDEBAR OVERLAY (mobiel) -->
+  <div class="sb-overlay" id="sb-overlay" onclick="sluitSidebar()"></div>
+
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="sb-header">
-      <div>
+      <div style="flex:1">
         <div class="sb-logo">M<span>&</span>T</div>
         <div class="sb-subtitle">uren</div>
       </div>
+      <button class="mob-hamburger" onclick="sluitSidebar()" title="Menu sluiten" style="margin-right:-4px">✕</button>
     </div>
     <nav class="sb-nav">
       <div class="sb-section">Track</div>
@@ -801,6 +865,13 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
   <!-- CONTENT AREA -->
   <div class="content-wrap" id="content-wrap">
 
+  <!-- Mobile topbar (alleen zichtbaar <768px) -->
+  <div class="mobile-topbar" id="mobile-topbar">
+    <button class="mob-hamburger" onclick="toggleSidebar()" title="Menu openen">☰</button>
+    <div class="mob-brand">M<span>&</span>T <span style="font-family:var(--mono);font-size:11px;opacity:0.5;font-style:normal" id="mob-tab-label">uren</span></div>
+    <div class="mob-spacer"></div>
+  </div>
+
   <!-- Legacy hidden elements voor backward compat -->
   <div style="display:none">
     <div id="tb-idle"><select id="tb-project-sel" onchange="tbProjectChange()"></select><select id="tb-taak-sel"></select></div>
@@ -834,9 +905,9 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
       <div class="kalender-datum" id="kal-datum-label">—</div>
       <div id="kal-persoon-switcher" style="display:flex;gap:4px;align-items:center;margin-left:auto"></div>
       <div class="kalender-view-toggle">
-        <button class="kvt-btn active" id="kvt-dag" onclick="kalSetView('dag',this)">Dag</button>
-        <button class="kvt-btn" id="kvt-3d" onclick="kalSetView('3d',this)">3 Dagen</button>
-        <button class="kvt-btn" id="kvt-week" onclick="kalSetView('week',this)">Week</button>
+        <button class="kvt-btn active" id="kvt-dag" data-view="dag" onclick="kalSetView('dag',this)">Dag</button>
+        <button class="kvt-btn" id="kvt-3d" data-view="3d" onclick="kalSetView('3d',this)">3 Dagen</button>
+        <button class="kvt-btn" id="kvt-week" data-view="week" onclick="kalSetView('week',this)">Week</button>
       </div>
     </div>
     <!-- Geplande taken balk -->
@@ -1541,6 +1612,20 @@ let kalPersoon = null;   // null = IK (ingelogde gebruiker)
 // HELPERS
 // ════════════════════════════════════════════
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+// ── MOBIELE SIDEBAR TOGGLE ──
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  const ov=document.getElementById('sb-overlay');
+  const open=sb.classList.toggle('sb-open');
+  if(ov) ov.classList.toggle('sb-open',open);
+}
+function sluitSidebar(){
+  const sb=document.getElementById('sidebar');
+  const ov=document.getElementById('sb-overlay');
+  if(sb) sb.classList.remove('sb-open');
+  if(ov) ov.classList.remove('sb-open');
+}
+
 function showToast(tekst,type='success',duur=3000){
   const wrap=document.getElementById('toast-wrap');
   if(!wrap) return;
@@ -1905,6 +1990,11 @@ function kalZetPersoon(naam){
 }
 
 function renderKalender(){
+  // Mobiel: altijd dag-view
+  if(window.innerWidth<768&&kalView!=='dag'){
+    kalView='dag';
+    document.querySelectorAll('.kvt-btn').forEach(b=>b.classList.toggle('active',b.dataset.view==='dag'));
+  }
   const grid=document.getElementById('kal-grid');
   const geplandEl=document.getElementById('kal-gepland');
   const datumLabel=document.getElementById('kal-datum-label');
@@ -4293,6 +4383,15 @@ function showTab(naam,btn){
   // Floating FS knop: zichtbaar op alle tabs behalve Bord (die heeft eigen knop)
   const fsBtn=document.getElementById('tab-fs-btn');
   if(fsBtn) fsBtn.style.display=naam==='bord'?'none':'flex';
+  // Op mobiel: sluit sidebar + update tab-label
+  if(window.innerWidth<768){
+    sluitSidebar();
+    const labels={'timer':'Agenda','rapport':'Reports','projecten':'Projects','taken-tab':'Tasks','kanban':'Board','timeline':'Timeline','bord':'Board'};
+    const lbl=document.getElementById('mob-tab-label');
+    if(lbl) lbl.textContent=labels[naam]||naam;
+    // Forceer dag-view op kleine schermen
+    if(naam==='timer'&&kalView!=='dag'){kalView='dag';document.querySelectorAll('.kvt-btn').forEach(b=>{b.classList.toggle('active',b.dataset.view==='dag');});}
+  }
   if(naam==='dag') renderDag();
   if(naam==='timeline') renderTimeline();
   if(naam==='rapport') renderRapport();
