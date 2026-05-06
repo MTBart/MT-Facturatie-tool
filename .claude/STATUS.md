@@ -2,13 +2,19 @@
 
 > Dit bestand bijwerken na elke sessie. Bevat wat er nu speelt, niet de stabiele projectinfo (die staat in CLAUDE.md).
 
-## Gedaan (2026-05-06)
-- **API errors opgelost** — tool werkt weer volledig online
-  - `mbGet` belde localhost:3456 → nu via Cloudflare Worker
-  - MSAL login was uitgeschakeld + script tag verwijderd → beide hersteld (jsdelivr msal-browser@2)
-  - Dashboard + loadLedgers verplaatst naar `toonApp()` zodat ze pas na login draaien
-  - Migratietab verborgen op GitHub Pages
-- `worker.js` opgeslagen in SharePoint + GitHub repo
+## Gedaan (2026-05-06) — sessie vanuit Lotte's computer (Oostenrijk)
+- **Alle API errors opgelost** — tool werkt weer volledig online na inloggen met MS-account
+  - `mbGet` (regel ~790) belde `localhost:3456` → nu via Cloudflare Worker (zoals POST/PATCH/DELETE al deden)
+  - MSAL was uitgeschakeld voor testing (`initMsal()` commented out, script tag verwijderd)
+  - MSAL script tag teruggezet: `cdn.jsdelivr.net/npm/@azure/msal-browser@2/lib/msal-browser.min.js`
+  - `loadLedgers()` + `laadDashboard()` verplaatst naar `toonApp()` — draaien nu pas ná login
+  - Migratietab verborgen op GitHub Pages (werkt alleen lokaal met Node server)
+- `worker.js` opgeslagen in SharePoint + GitHub repo (stond alleen lokaal op Bart's machine)
+- Werkplek voor Claude Code = SharePoint: `C:\Users\<naam>\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Applicaties\Claude\`
+- Git commits altijd via de SharePoint repo, niet via een losse kloon
+
+## Volgende stap (gepland, niet gestart)
+- **Restylen naar Claude-design** — Lotte wil de tool een nieuwe look geven geïnspireerd op claude.ai. Nog niet besproken welke variant (volledig of alleen kleuren/fonts).
 
 ## Gedaan (2026-04-28)
 - `uren.html` gebouwd, herbouwd en live — standalone M&T tijdsregistratie app (geen Toggl nodig)

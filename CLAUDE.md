@@ -37,7 +37,7 @@ Bart Witte en Mathijs Zwiers runnen **Mortise & Tenon**, een maatwerkmeubelbedri
 - **GitHub repo:** mtbart/MT-Facturatie-tool
 - **Huidig bestand:** `index-v4.html` (in deze map, ~2500 regels, één groot HTML-bestand)
 - **Cloudflare Worker (proxy):** mt-claude-proxy.bart-a12.workers.dev
-- **Worker broncode:** `C:\Users\BartWitte\worker.js`
+- **Worker broncode:** `worker.js` (staat in deze map + GitHub repo)
 
 ### Tabbladen
 1. **Dashboard** — KPI's live uit Moneybird (omzet, debiteuren, crediteuren, winst)
@@ -146,5 +146,7 @@ Bart Witte en Mathijs Zwiers runnen **Mortise & Tenon**, een maatwerkmeubelbedri
 
 ## Bestandspaden
 - **NAS (werk):** `//B5-NAS/B5-Applicaties/Claude/`
-- **Thuis:** `C:\Users\BartWitte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Applicaties\Claude\`
-- Beide locaties synchroniseren live via SharePoint ↔ NAS
+- **Bart thuis:** `C:\Users\BartWitte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Applicaties\Claude\`
+- **Lotte thuis:** `C:\Users\lotte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Applicaties\Claude\`
+- Alle locaties synchroniseren via SharePoint ↔ NAS
+- **Git commits altijd vanuit de SharePoint map** — nooit vanuit een losse kloon

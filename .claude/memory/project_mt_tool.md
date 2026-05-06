@@ -17,10 +17,21 @@ Mortise & Tenon facturatie- en bedrijfstool. Volledig gedocumenteerd in CLAUDE.m
 - Moneybird (boekhouding) + Toggl (uren) + Anthropic API (PDF lezen)
 - Data in localStorage browser — data sync is prioriteit
 
-**Lopende prioriteit (2026-04-24):**
-1. localStorage data sync → SharePoint/NAS
-2. Toggl koppeling (wacht op API token)
-3. Mappenstructuur script
+**Technische architectuur:**
+- `mbGet/mbPost/mbPatch/mbDelete` gaan allemaal via Cloudflare Worker (`mt-claude-proxy.bart-a12.workers.dev`)
+- Worker valideert Microsoft-token (`X-Auth-Token`) — tool is alleen toegankelijk na inloggen met `@mortiseandtenon.nl` account
+- MSAL v2 via jsdelivr CDN — `initMsal()` aanroepen in apart script-blok onderaan de pagina
+- `worker.js` staat nu in de repo + SharePoint (was alleen lokaal op Bart's machine)
+- Auth-afhankelijke functies (`loadLedgers`, `laadDashboard`, `updateApiStatus`) draaien in `toonApp()` na login
+
+**Werkplek voor Claude Code:**
+- SharePoint (thuis/werk): `C:\Users\<naam>\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Applicaties\Claude\`
+- Git commits altijd via de SharePoint repo — niet via losse klonen
+
+**Lopende prioriteit (2026-05-06):**
+1. Restylen naar Claude-design (nog niet gestart, scope nog te bepalen)
+2. localStorage data sync → SharePoint/NAS
+3. Nacalculatie tabblad (uren + inkoop + verkoop per project)
 
 **Why:** Zie STATUS.md voor actuele stand.
 **How to apply:** Check STATUS.md aan het begin van elke sessie.
