@@ -282,7 +282,7 @@ textarea{resize:vertical;min-height:60px}
   <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" onclick="showTab('cn',this)">CompaNanny</button>
-  <button class="tab-btn" onclick="showTab('migratie',this)">📦 Migratie</button>
+  <button class="tab-btn" id="btn-migratie" onclick="showTab('migratie',this)">📦 Migratie</button>
 </div>
 
 <div class="main">
@@ -787,7 +787,7 @@ function fmt(n){return`€ ${n.toFixed(2).replace('.',',')}`;}
 function fmtDatum(d){return d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'—';}
 
 async function authHeader(){const t=typeof getAuthToken==='function'?await getAuthToken():null;return t?{'X-Auth-Token':t}:{};}
-async function mbGet(path){const token=window.mbToken;if(!token)return{ok:false,status:401};const parts=path.split('/').pop().split('?');const endpoint=parts[0];const query=parts.length>1?'&'+parts[1]:'';return fetch(`http://localhost:3456/api/moneybird/${endpoint}?token=${token}${query}`);}
+async function mbGet(path){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{headers:h});}
 async function mbPost(path,body){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});}
 async function mbPatch(path,body){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'PATCH',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});}
 async function mbDelete(path){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'DELETE',headers:h});}
@@ -802,20 +802,24 @@ function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReade
 window.onload=()=>{
   loadSavedSettings();
   renderFactuurFormulier();
-  // updateApiStatus(); // TODO: disabled for migration test (404 endpoints)
+  updateApiStatus();
   loadLedgers();
   renderHistory();
-  migreerVoorraadCategorieen(); // Fix bestaande verkeerde categorieën
+  migreerVoorraadCategorieen();
   renderVoorraadActief();
   renderProjectLijst();
   renderBestellijst();
   renderLeveranciersBeheer();
-  // laadDashboard(); // TODO: disabled for migration test (404 endpoints)
+  laadDashboard();
   const nu=new Date();
   document.getElementById('periode-van').value=`${nu.getFullYear()}-01-01`;
   document.getElementById('periode-tm').value=nu.toISOString().split('T')[0];
   document.getElementById('s-toeslag-lak').value=localStorage.getItem('mt_toeslag_lak')||'50';
   document.getElementById('s-toeslag-spuit').value=localStorage.getItem('mt_toeslag_spuit')||'80';
+  if(location.hostname !== 'localhost' && location.hostname !== '127.0.0.1'){
+    const btn=document.getElementById('btn-migratie');
+    if(btn) btn.style.display='none';
+  }
 };
 
 // ═══ TABS ═══
