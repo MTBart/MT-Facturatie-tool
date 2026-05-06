@@ -2,6 +2,14 @@
 
 > Dit bestand bijwerken na elke sessie. Bevat wat er nu speelt, niet de stabiele projectinfo (die staat in CLAUDE.md).
 
+## Gedaan (2026-05-06)
+- **API errors opgelost** — tool werkt weer volledig online
+  - `mbGet` belde localhost:3456 → nu via Cloudflare Worker
+  - MSAL login was uitgeschakeld + script tag verwijderd → beide hersteld (jsdelivr msal-browser@2)
+  - Dashboard + loadLedgers verplaatst naar `toonApp()` zodat ze pas na login draaien
+  - Migratietab verborgen op GitHub Pages
+- `worker.js` opgeslagen in SharePoint + GitHub repo
+
 ## Gedaan (2026-04-28)
 - `uren.html` gebouwd, herbouwd en live — standalone M&T tijdsregistratie app (geen Toggl nodig)
 - **Timer tab:** projectkaartjes → taakkeuze-modal → subtaak → start. Live klok in banner.
