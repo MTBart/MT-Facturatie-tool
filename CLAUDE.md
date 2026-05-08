@@ -1,152 +1,86 @@
-# CLAUDE.md
+# CLAUDE.md — Mortise & Tenon
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Dit is de instructiehub voor Claude (Cowork, Claude Code, Claude Desktop, Claude Mobile).
+Klein gehouden zodat het in elke chat past zonder tokens te vreten.
+Specifieke kennis staat één laag dieper in `Claude-context/` — daar lezen op aanvraag.
 
-@.claude/STATUS.md
+@Claude-context/STATUS.md
+@.claude/memory/user_bart.md
+@.claude/memory/feedback_werkafspraken.md
 
 ---
 
+## Bedrijf in één zin
+Bart Witte en Mathijs Zwiers runnen **Mortise & Tenon**, maatwerkmeubelbedrijf in Wormerveer. Team: Bart (eigenaar), Mathijs (eigenaar), Lotte (medewerker), Arjan Janssen (zelfstandig via Inter Projecten).
+
+## Communicatie
+- Aanspreken met **je/jij**, antwoord in **Nederlands**
+- Vriendelijk en informeel, Bart als slimme collega
+- Korte antwoorden default, uitgebreid alleen als de vraag dat verdient
+- Geen samenvatting aan het einde — Bart leest de output zelf
+- Eindig met de volgende stap of een gerichte vraag
+- Bij risico's: waarschuwen. Bij meerdere opties: beste 3.
+- Voor klantcommunicatie (offertes, mails): zakelijk + vriendelijk, professioneel maar toegankelijk
+
+## Pre-approvals (niet vragen, gewoon doen)
+- Autonome git commits op de NAS-repo
+- File writes naar bestanden in deze folder
+- API calls via de Cloudflare Worker / Moneybird MCP
+- Kleine wijzigingen in `index-v4.html` en `uren.html`
+- STATUS.md tussentijds updaten als er iets belangrijks verandert
+
+**Wel vragen voor:**
+- Bestanden permanent verwijderen
+- Grote refactors of structuurwijzigingen
+- Push naar GitHub van iets wat klanten zien
+- Dingen die Mathijs of klanten direct raken
+
 ---
 
-## Communicatiestijl
-- Gewone taal, geen jargon tenzij uitgelegd
-- Kort uitleggen wat je doet en waarom, beknopt
-- Vriendelijk en informeel — Bart als slimme collega, niet als klant
-- Bij twijfel over context: vragen, niet gissen
-- Geef af en toe een korte technische uitleg zodat Bart langzaam bijleert
-- **Waarschuw als je werkt met mogelijk verouderde info uit dit bestand**
+## Index — waar vind je wat
 
-## Pre-approvals (hoeft niet gevraagd te worden)
-- Autonome git commits op de NAS repo
-- File writes naar bestanden in deze map
-- API calls via de Cloudflare Worker
-
-## Over het bedrijf
-Bart Witte en Mathijs Zwiers runnen **Mortise & Tenon**, een maatwerkmeubelbedrijf in Wormerveer.
-
-**Team:**
-- Bart Witte — eigenaar/vennoot
-- Mathijs Zwiers — eigenaar/vennoot
-- Lotte — medewerker (eigen computer thuis)
-- Arjan Janssen — zelfstandig meubelmaker via zijn bedrijf **Inter Projecten**
-
-**Vaste klanten:** CompaNanny (grootste, kinderopvangketen door heel NL), Inter Projecten, LGM Projecten, PT Bouw & Meubel, Aannemers Verkaik
-
-## De tool
-- **Live URL:** https://mtbart.github.io/MT-Facturatie-tool/index-v4.html
-- **GitHub repo:** mtbart/MT-Facturatie-tool
-- **Huidig bestand:** `index-v4.html` (in deze map, ~2500 regels, één groot HTML-bestand)
-- **Cloudflare Worker (proxy):** mt-claude-proxy.bart-a12.workers.dev
-- **Worker broncode:** `worker.js` (staat in deze map + GitHub repo)
-
-### Tabbladen
-1. **Dashboard** — KPI's live uit Moneybird (omzet, debiteuren, crediteuren, winst)
-2. **Nieuwe factuur** — PDF uploaden, Claude leest uit, boeken in Moneybird
-3. **Factuur controle** — inkoopfacturen reviewen op project/grootboek
-4. **Projecten** — projectbeheer, NCR upload, Vectorworks CSV import
-5. **Klanten** — live uit Moneybird, grid/lijst toggle
-6. **Voorraad** — platen/kantenband/overig, sorteerbaar, leverancier matching
-7. **Bestellijst** — te bestellen items, handmatig toevoegen, exporteren
-8. **Geschiedenis** — verwerkte facturen, klikbaar naar factuur controle
-9. **Instellingen** — API tokens, leveranciers, toeslagen, altijd-bestellen lijst
-
-### Werkwijze
-- Aanpassingen via Edit tool (str_replace), **nooit het hele bestand herschrijven**
-- Git push via:
-  ```
-  git -C "//B5-NAS/B5-Applicaties/Claude" add index-v4.html
-  git -C "//B5-NAS/B5-Applicaties/Claude" commit -m "beschrijving"
-  git -C "//B5-NAS/B5-Applicaties/Claude" push
-  ```
-
-## Moneybird
-**Administratie ID:** `342968480452052559`
-
-**BTW-tarieven:**
-| Tarief | ID |
+| Vraag gaat over | Lees |
 |---|---|
-| 21% | `342968481360119428` |
-| 9% | `342968481362216581` |
-| 0% | `348668107652335594` |
+| Facturen, BTW, grootboek, klanten in Moneybird, leveranciers-categorie, debiteuren | `Claude-context/moneybird.md` |
+| Project aanmaken, naamgeving, klantcodes, vaste klanten, mapstructuur 01..09, migratie | `Claude-context/projecten.md` |
+| uren.html, planning, kanban, timeline, taken, weekafsluiting, Vectorworks-import | `Claude-context/uren-tool.md` |
+| Platen, kantenband, lak/spuit, voorraad, bestellijst, "altijd bestellen" lijst | `Claude-context/materiaal.md` |
+| Vectorworks → Holzher flow, NCR/PGMX/HHA, plaattelling, CNC, stickers | `Claude-context/productie.md` |
+| Welke scripts/servers er zijn, wat doen ze, wat is dood, wat moet weg | `Claude-context/tooling.md` |
+| Wat doen we nu, openstaand werk, recente wijzigingen | `Claude-context/STATUS.md` |
+| Hoe Bart aangesproken wil worden, ADHD-omgang, werkstijl | `.claude/memory/user_bart.md` |
+| Werkafspraken (autonomie, geen samenvattingen, edits ipv writes) | `.claude/memory/feedback_werkafspraken.md` |
 
-**Bankrekening ING:** `343544076091524743`
+**Regel:** zodra een vraag duidelijk in een bovenstaande categorie valt → eerst de ctx lezen, dán antwoorden. Niet uit eigen geheugen putten — de IDs/codes/lijsten daar zijn de bron van waarheid. Waarschuw als je werkt met info die mogelijk verouderd is.
 
-**Grootboekrekeningen:**
-| Categorie | ID |
-|---|---|
-| Inkoop materiaal | `351738073531286726` |
-| Inkoop diensten | `351738642447730607` |
-| Gas, water, elektriciteit | `351738264777918163` |
-| Telefoon en internet | `351738264578688716` |
-| Lunch | `351739212387583097` |
-| Machines klein | `432299803558282794` |
-| Personeel | `351148230758630548` |
-| Reparatie machines | `360028029971334640` |
-| Verzekeringen | `395517976421337081` |
-| Reiskosten | `432376927951521570` |
-| Containers/afval | `351739087727626209` |
-| Huisvesting | `342968480722585190` |
-| Auto | `345530103038478074` |
-| Cursussen | `469151338989618681` |
-| Algemeen | `342968480723633768` |
+---
 
-**API endpoints** (base: `https://moneybird.com/api/v2/342968480452052559`):
-- Inkoopfacturen: `/documents/purchase_invoices`
-- Verkoopfacturen: `/sales_invoices`
-- Projecten: `/projects` — Inter Projecten ID: `387471524102145459`
-- Grootboekrekeningen: `/ledger_accounts`
-- Contacten: `/contacts`
+## Token- en model-discipline
 
-**Bekende leveranciers → categorie:**
-- Gas: Vattenfall
-- Telefoon: KPN, Odido, Delta Fiber
-- Reiskosten: Easypark
-- Verzekeringen: Nationale-Nederlanden
-- Administratie: Moneybird, Mollie
-- Materiaal: Drimensa, Ostermann, PontMeyer, Van Laere, J. Kisch, VKF Renzel, Beemer Glas, IKEA, Beltraco, Dozon
-- Diensten: Inter Projecten, Merlijn Meubel, Transportbedrijf Van Rooyen, Interpaint
-- Machines: Memax, HGB-Trading, De Groot Bewerkingsmachines
-- Reparatie: Becker, Technisch Bureau De Breuk
-- Containers: Roele De Vries, Union Container, Renewi
-- Personeel: Person Plus, Stichting Sociaal Fonds, BPF Meubel
-- Lunches: Picnic, Bakkerswinkel, Albert Heijn
+**Default model: Sonnet.**
+- **Haiku** voor: snelle samenvattingen, classificatie, simpele lookup-vragen, tekstcorrectie.
+- **Sonnet** voor: gewone code-edits, ctx-bestanden lezen + samenvatten, gewone gesprekken.
+- **Opus** alleen voor: zware synthese, architectuur-beslissingen, complexe debugging, strategische voorstellen.
 
-## Toggl
-- **Workspace:** `21258443`
-- Bart, Arjan en Maarten registreren uren via Toggl Track
+**Werkwijze die tokens spaart:**
+1. **Bestand >500 regels lezen** → delegeer naar Sonnet-subagent (Agent tool), laat die samenvatten, doe synthese zelf.
+2. **Edits** → altijd `Edit` (str_replace), nooit `Write` op grote files. `index-v4.html` en `uren.html` zijn beide te groot om te herschrijven.
+3. **Onbekend probleem** → eerst STATUS.md + relevante ctx, daarna pas de bron.
+4. **Skills/scheduled tasks** voor herhaalbaar werk — niet elke keer de wielen opnieuw uitvinden.
+5. **Status tussentijds updaten** zodat de volgende sessie het weet.
 
-## Projectnaamgeving
-- **Formaat:** `KLANT-VESTIGING-PRODUCT` (geen datum, zo uitgebreid mogelijk)
-- **Zaaglijst-code:** max 20 tekens (bijv. `CN-PRINSENGRACHT-GAR`)
-- **Voorbeelden:** `CN-PRINSENGRACHT-GARDEROBE`, `LGM-OOSTERPARK-PANTRY-GROOT`
-- **Klantcodes:** CN, LGM, MOS, STY, HWC, EZ, GBK, DV, JAN
-- HWC en GBK lopen via Inter Projecten
-
-## Productieflow
-1. Vectorworks → CSV + PGMX bestanden → map: Vectorworks Export
-2. CSV inladen in Holzher optimalisatiesoftware
-3. Holzher → HHA + NCR bestanden → map: Holzher Optimalisatie/data
-4. Zaagmachine + tablet + stickerprinter
-5. Stickers met QR code → verwijzing naar PGMX bij CNC machine
-
-**NCR bestanden:** plaattellingen via **P-parameter** in A0-regels (hoogste P = aantal platen). Platenmaat via M1-regel (L en B in 1/10mm). Nooit de A0-regels tellen — dat zijn snijbewegingen.
-
-## Materiaallogica
-- Platen altijd in **stuks** (nooit m²) — aantallen uit NCR
-- m² alleen voor lak/spuit toeslagberekening: lak €50/m², spuit €80/m²
-- Herkenning: "lak", "gelakt", "spuit", "fineer" in materiaalnaam
-- Kantenband: alleen als "kantenband" expliciet in naam staat
-- Platen: egger, spaan, mdf, hpl, multiplex, berken, eiken + afmetingspatroon
-- **Altijd bestellen (nooit op voorraad):** legrabox, blumotion, sensys, tip-on, varianta, keku, axilo, kastophanger, hettich, grass, blum, häfele
-
-## Data & opslag
-- Alles in **localStorage** van de browser
-- Bestandssync: SharePoint ↔ NAS werkt al
-- Python bulk-update script: `Moneybird/moneybird_update.py` (API token zelf invullen)
+---
 
 ## Bestandspaden
-- **NAS (werk):** `//B5-NAS/B5-Applicaties/Claude/`
-- **Bart thuis:** `C:\Users\BartWitte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Applicaties\Claude\`
-- **Lotte thuis:** `C:\Users\lotte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Applicaties\Claude\`
-- Alle locaties synchroniseren via SharePoint ↔ NAS
-- **Git commits altijd vanuit de SharePoint map** — nooit vanuit een losse kloon
+
+Alles staat op **NAS / SharePoint** — gesynchroniseerd via Microsoft 365.
+- **NAS:** `\\B5-NAS\B5-Applicaties\Claude\`
+- **SharePoint mount (lokaal pad varieert per gebruiker):** `...\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Applicaties\Claude\`
+- **Geen kopieën** meer op Bart-thuis of Lotte-thuis-only — alles centraal, anders raken we synchroon.
+- **Git commits altijd vanuit deze SharePoint-map** — nooit vanuit een losse kloon.
+
+## De live tool
+- **GitHub repo:** `mtbart/MT-Facturatie-tool`
+- **Live URL:** https://mtbart.github.io/MT-Facturatie-tool/index-v4.html
+- **uren-tool live:** https://mtbart.github.io/MT-Facturatie-tool/uren.html
+- **Worker (deprecated):** `mt-claude-proxy.bart-a12.workers.dev`
