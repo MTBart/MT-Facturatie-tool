@@ -55,9 +55,12 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // Valideer Microsoft-token
+    // Valideer: Microsoft-token OF Claude-server-key
     const authToken = request.headers.get('X-Auth-Token');
-    if (!authToken || !(await validateToken(authToken))) {
+    const claudeKey = request.headers.get('X-Claude-Key');
+    const validClaude = claudeKey && env.CLAUDE_SECRET && claudeKey === env.CLAUDE_SECRET;
+    const validMs = authToken && (await validateToken(authToken));
+    if (!validClaude && !validMs) {
       return new Response(JSON.stringify({ error: 'Niet geautoriseerd' }), {
         status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
@@ -144,6 +147,22 @@ export default {
         const response = await fetch(`https://api.track.toggl.com/api/v9/${togglPath}`, {
           method,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${token}` },
+          body
+        });
+        const text = await response.text();
+        return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+
+      } else if (target === 'toggl_focus') {
+        // Toggl Focus API — Bearer auth, aparte base URL
+        const focusPath = url.searchParams.get('path');
+        const method = request.method;
+        const body = ['POST','PATCH','PUT'].includes(method) ? await request.text() : undefined;
+        const response = await fetch(`https://focus.toggl.com/api/${focusPath}`, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${env.TOGGL_FOCUS_KEY}`
+          },
           body
         });
         const text = await response.text();

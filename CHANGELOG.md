@@ -1,9 +1,12 @@
 # CHANGELOG — Mortise & Tenon Claude Tools
 
 Automatisch bijgehouden via git. Elke commit verschijnt hier.
-Grote bestanden (index-v4.html, uren.html) worden ook gebackupt in `_backups/` bij elke commit.
+Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij elke commit.
 
 ---
+
+## 2026-05-11 — docs: CHANGELOG.md toegevoegd + pre-commit hook voor auto-backup grote bestanden
+- Commit: `20c3fef` | Auteur: Bart Witte
 
 ## 2026-05-08 — structuur: kennisbestanden naar Claude-context/, CLAUDE.md afgeslankt
 - Commit: `413ba4e` | Auteur: MTBart
