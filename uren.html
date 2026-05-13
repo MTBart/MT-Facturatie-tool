@@ -425,6 +425,58 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 .project-card:hover .pc-info-btn{opacity:1}
 .project-card{position:relative}
 .pc-info-btn:hover{background:var(--surface2);color:var(--green)}
+/* ── DAGGRAFIEK (rapport) ── */
+.dag-chart{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1rem 0.6rem;margin-bottom:1rem;box-shadow:var(--shadow)}
+.dag-chart-titel{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin-bottom:0.75rem;display:flex;justify-content:space-between;align-items:center}
+.dag-chart-totaal{font-size:14px;font-weight:600;color:var(--text);font-family:var(--sans);text-transform:none;letter-spacing:0}
+.dag-bars{display:flex;align-items:flex-end;gap:6px;height:70px}
+.dag-bar-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:0}
+.dag-bar-val{font-family:var(--mono);font-size:9px;color:var(--text-dim);white-space:nowrap}
+.dag-bar{width:100%;border-radius:3px 3px 0 0;background:var(--green-mid);transition:height 0.3s;min-height:2px}
+.dag-bar.vandaag{background:var(--gold)}
+.dag-bar.over{background:var(--red)}
+.dag-bar-label{font-family:var(--mono);font-size:9px;color:var(--text-faint);white-space:nowrap}
+/* ── UREN IN PROJECTENLIJST ── */
+.proj-uren-col{flex-shrink:0;min-width:70px;display:flex;flex-direction:column;align-items:flex-end}
+.proj-uren{font-family:var(--mono);font-size:11px;color:var(--green-mid);font-weight:500}
+.proj-uren-balk-wrap{width:60px;height:3px;background:var(--surface2);border-radius:2px;margin-top:3px;overflow:hidden}
+.proj-uren-balk{height:3px;background:var(--green-mid);border-radius:2px}
+/* ── RECENTE ENTRIES (timer tab) ── */
+.recent-sectie{margin-bottom:1.25rem}
+.recent-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin-bottom:0.5rem}
+.recent-list{display:flex;flex-direction:column;gap:4px}
+.recent-item{display:flex;align-items:center;gap:0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.75rem;cursor:pointer;transition:all 0.12s}
+.recent-item:hover{border-color:var(--green-mid);background:var(--green-light)}
+.recent-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.recent-info{flex:1;min-width:0}
+.recent-code{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500}
+.recent-taak{font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-tijd{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex-shrink:0}
+.recent-start-btn{background:var(--green-light);border:1px solid var(--green-mid);color:var(--green);font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;cursor:pointer;flex-shrink:0}
+.recent-start-btn:hover{background:var(--green);color:#fff}
+/* ── FACTUURSTATUS ── */
+.factuur-badge{display:inline-flex;align-items:center;font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:12px;border:1px solid;cursor:pointer;transition:all 0.15s;white-space:nowrap;font-weight:600;letter-spacing:0.02em}
+.factuur-badge:hover{filter:brightness(0.93)}
+.proj-factuur-col{flex-shrink:0;min-width:90px}
+/* ── MIJN TAKEN (timer tab) ── */
+.mijn-taken-sectie{margin-bottom:1.5rem}
+.mt-sectie-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem}
+.mt-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint)}
+.mt-count{font-family:var(--mono);font-size:10px;color:var(--text-faint);background:var(--surface2);border-radius:10px;padding:1px 7px}
+.mt-list{display:flex;flex-direction:column;gap:4px}
+.mt-item{display:flex;align-items:center;gap:0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.75rem;cursor:pointer;transition:all 0.12s}
+.mt-item:hover{border-color:var(--green-mid);background:var(--green-light)}
+.mt-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.mt-proj{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:500;flex-shrink:0;width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mt-taak{font-size:12px;color:var(--text-dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mt-est{font-family:var(--mono);font-size:10px;color:var(--text-faint);flex-shrink:0}
+.mt-start-btn{background:var(--green-light);border:1px solid var(--green-mid);color:var(--green);font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;cursor:pointer;flex-shrink:0}
+.mt-start-btn:hover{background:var(--green);color:#fff}
+/* ── DEADLINE URGENTIE ── */
+.deadline-badge{display:inline-flex;align-items:center;gap:3px;font-family:var(--mono);font-size:10px;border-radius:10px;padding:1px 7px;white-space:nowrap}
+.deadline-badge.urgent{background:#FDE8E8;color:var(--red);font-weight:600}
+.deadline-badge.bijna{background:#FBF5E0;color:#7a6010;font-weight:500}
+.deadline-badge.ok{background:var(--surface2);color:var(--text-faint)}
 </style>
 </head>
 <body>
@@ -491,6 +543,17 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
   <!-- TIMER -->
   <div id="tab-timer" class="tab-content active">
     <div class="timer-wrap">
+      <div id="recent-sectie" class="recent-sectie hidden">
+        <div class="recent-label">Recent</div>
+        <div class="recent-list" id="recent-list"></div>
+      </div>
+      <div id="mijn-taken-sectie" class="mijn-taken-sectie hidden">
+        <div class="mt-sectie-header">
+          <div class="mt-label">Mijn taken</div>
+          <span class="mt-count" id="mt-count"></span>
+        </div>
+        <div class="mt-list" id="mt-list"></div>
+      </div>
       <div class="section-label" id="timer-label">Kies een project</div>
       <div class="project-grid" id="project-grid"></div>
     </div>
@@ -826,6 +889,38 @@ function statusBadge(status){
   return `<span class="status-badge" style="background:${s.bg};color:${s.c};border-color:${s.bc}">${s.label}</span>`;
 }
 
+const FACTUUR_STATUS = {
+  geen:      {label:'Geen factuur', c:'#A8A090', bg:'#F2EFE8', bc:'#C8C0B0', next:'concept'},
+  concept:   {label:'Concept',      c:'#1a3a8b', bg:'#E8EDFB', bc:'#b5c5f5', next:'verzonden'},
+  verzonden: {label:'Verzonden',     c:'#7a6010', bg:'#FBF5E0', bc:'#E8D48A', next:'betaald'},
+  betaald:   {label:'Betaald ✓',    c:'#1a3a28', bg:'#d4edd9', bc:'#a0c8a8', next:'geen'},
+};
+function factuurBadge(status,code,stopProp){
+  const k=status||'geen';
+  const s=FACTUUR_STATUS[k]||FACTUUR_STATUS.geen;
+  const onclick=code?`cycleFactuurStatus('${code}',event)`:'';
+  return `<span class="factuur-badge" style="background:${s.bg};color:${s.c};border-color:${s.bc}" onclick="${onclick}" title="Klik om factuurstatus te wijzigen">${s.label}</span>`;
+}
+function cycleFactuurStatus(code,event){
+  if(event) event.stopPropagation();
+  const lijst=getProjecten();
+  const p=lijst.find(x=>x.code===code);
+  if(!p) return;
+  const huidig=p.factuur_status||'geen';
+  p.factuur_status=FACTUUR_STATUS[huidig]?.next||'concept';
+  setProjecten(lijst);
+  if(actTab==='projecten') renderProjectenTab();
+  if(actTab==='timer') renderTimer();
+}
+function deadlineBadge(deadline){
+  if(!deadline) return '';
+  const diff=Math.round((new Date(deadline+'T12:00:00')-new Date())/86400000);
+  if(diff<0) return `<span class="deadline-badge urgent">⚠ ${Math.abs(diff)}d over</span>`;
+  if(diff<=7) return `<span class="deadline-badge bijna">📅 ${diff}d</span>`;
+  if(diff<=14) return `<span class="deadline-badge ok">📅 ${diff}d</span>`;
+  return '';
+}
+
 let IK = null;
 let actTab = 'timer';
 let klokInterval = null;
@@ -929,11 +1024,94 @@ function toggleGebruiker(){
 // ════════════════════════════════════════════
 // TIMER
 // ════════════════════════════════════════════
+function renderRecentEntries(){
+  const sectie=document.getElementById('recent-sectie');
+  const lijst=document.getElementById('recent-list');
+  if(!sectie||!lijst) return;
+  const entries=getEntries().filter(e=>e.teamlid===IK&&e.duur).sort((a,b)=>new Date(b.stop||b.start)-new Date(a.stop||a.start));
+  const projecten=getProjecten();
+  const gezien=new Set();
+  const recents=[];
+  for(const e of entries){
+    const key=e.project_code+'|'+(e.taak_id||'');
+    if(!gezien.has(key)){
+      gezien.add(key);
+      recents.push(e);
+      if(recents.length>=5) break;
+    }
+  }
+  if(!recents.length){sectie.classList.add('hidden');return;}
+  sectie.classList.remove('hidden');
+  lijst.innerHTML=recents.map(e=>{
+    const p=projecten.find(x=>x.code===e.project_code);
+    const kleur=p?var2hex(e.project_code):'var(--gold)';
+    const tijdGel=fmtTijdGel(e.stop||e.start);
+    return `<div class="recent-item" onclick="recentStart('${e.project_code}','${e.taak_id||''}','${(e.taak_naam||'').replace(/'/g,'\\\'')}')" >
+      <div class="recent-dot" style="background:${kleur}"></div>
+      <div class="recent-info">
+        <div class="recent-code">${e.project_code}</div>
+        <div class="recent-taak">${e.taak_naam||e.omschrijving||'Geen taak'}</div>
+      </div>
+      <div class="recent-tijd">${tijdGel}</div>
+      <button class="recent-start-btn" onclick="event.stopPropagation();recentStart('${e.project_code}','${e.taak_id||''}','${(e.taak_naam||'').replace(/'/g,'\\\'')}')" >▶</button>
+    </div>`;
+  }).join('');
+}
+function recentStart(projectCode,taakId,taakNaam){
+  const lopend=getLopende();
+  if(lopend) stopTimer();
+  const startIso=new Date().toISOString();
+  const nu=vandaagStr();
+  setLopende({id:uid(),teamlid:IK,project_code:projectCode,taak_id:taakId||null,taak_naam:taakNaam||null,omschrijving:'',start:startIso,datum:nu});
+  updateTbRunning();
+  startKlok();
+  renderTimer();
+}
+function fmtTijdGel(isoStr){
+  if(!isoStr) return '';
+  const diff=Math.round((Date.now()-new Date(isoStr))/60000);
+  if(diff<60) return diff+'m geleden';
+  if(diff<1440) return Math.round(diff/60)+'u geleden';
+  return Math.round(diff/1440)+'d geleden';
+}
+
+function renderMijnTaken(){
+  const sectie=document.getElementById('mijn-taken-sectie');
+  const lijst=document.getElementById('mt-list');
+  const countEl=document.getElementById('mt-count');
+  if(!sectie||!lijst) return;
+  const taken=getTaken();
+  const projecten=getProjecten();
+  const mijnTaken=[];
+  Object.entries(taken).forEach(([pc,takenLijst])=>{
+    const p=projecten.find(x=>x.code===pc);
+    if(!p||p.status==='archief') return;
+    (takenLijst||[]).forEach(t=>{
+      if((t.toegewezen||[]).map(n=>n.toLowerCase()).includes((IK||'').toLowerCase())){
+        mijnTaken.push({pc,taak:t,p,kleur:var2hex(pc)});
+      }
+    });
+  });
+  if(!mijnTaken.length){sectie.classList.add('hidden');return;}
+  sectie.classList.remove('hidden');
+  if(countEl) countEl.textContent=mijnTaken.length;
+  lijst.innerHTML=mijnTaken.slice(0,8).map(({pc,taak,p,kleur})=>`
+    <div class="mt-item" onclick="recentStart('${pc}','${taak.id}','${(taak.naam||'').replace(/'/g,"\\'")}')">
+      <div class="mt-dot" style="background:${kleur}"></div>
+      <div class="mt-proj">${pc}</div>
+      <div class="mt-taak">${taak.naam}</div>
+      ${taak.estimate_uren?`<span class="mt-est">${taak.estimate_uren}u</span>`:''}
+      <button class="mt-start-btn" onclick="event.stopPropagation();recentStart('${pc}','${taak.id}','${(taak.naam||'').replace(/'/g,"\\'")}')">▶</button>
+    </div>`).join('');
+}
+
 function renderTimer(){
   const projecten=getProjecten();
   const lopend=getLopende();
   const lbl=document.getElementById('timer-label');
   lbl.textContent=lopend?`Timer loopt — klik project om te wisselen`:`Kies een project`;
+  renderRecentEntries();
+  renderMijnTaken();
   if(!projecten.length){
     document.getElementById('project-grid').innerHTML=`<div style="grid-column:1/-1;padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen projecten. Maak ze aan in de <a href="index-v4.html" style="color:var(--green)">M&T tool</a>.</div>`;
     return;
@@ -947,14 +1125,19 @@ function renderTimer(){
     const actief=lopend&&lopend.project_code===p.code;
     const takenLijst=taken[p.code]||[];
     const uren=urenV[p.code];
-    return `<div class="project-card${actief?' actief':''}" onclick="openStartModal('${p.code}')">
+    const dl=p.deadline?Math.round((new Date(p.deadline+'T12:00:00')-new Date())/86400000):null;
+    const dlBadge=dl!==null?(dl<0?`<span class="deadline-badge urgent">⚠ ${Math.abs(dl)}d over</span>`:dl<=7?`<span class="deadline-badge bijna">📅 ${dl}d</span>`:dl<=14?`<span class="deadline-badge ok">📅 ${dl}d</span>`:null):null;
+    // Rode rand als deadline overschreden of urgent
+    const urgentStyle=dl!==null&&dl<0?';border-color:var(--red);background:#FDE8E8':dl!==null&&dl<=3?';border-color:#E8A020':''
+    return `<div class="project-card${actief?' actief':''}" style="--proj-kleur:${var2hex(p.code)}${urgentStyle}" onclick="openStartModal('${p.code}')">
       <button class="pc-info-btn" onclick="event.stopPropagation();openProjectDetail('${p.code}')" title="Project details">ℹ</button>
-      <div class="pc-code">${p.code}</div>
+      <div class="pc-code" style="color:${var2hex(p.code)}">${p.code}</div>
       <div class="pc-naam">${p.naam||p.code}</div>
       <div class="pc-meta">
         ${p.status?statusBadge(p.status):''}
         ${takenLijst.length?`<span class="pc-taken-count">${takenLijst.length} taken</span>`:''}
         ${uren?`<span>${fmtUren(uren)} vandaag</span>`:''}
+        ${dlBadge||''}
       </div>
     </div>`;
   }).join('');
@@ -1266,7 +1449,37 @@ function renderRapport(){
   const max=sorted[0]?.[1]?.totaal||1;
   const wrap=document.getElementById('rapport-inhoud');
   if(!sorted.length){wrap.innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen uren in deze periode</div>`;return;}
-  wrap.innerHTML=sorted.map(([code,data])=>{
+
+  // ── DAGGRAFIEK ──
+  const perDag={};
+  entries.forEach(e=>{perDag[e.datum]=(perDag[e.datum]||0)+e.duur;});
+  const dagKeys=Object.keys(perDag).sort();
+  const totaalSec=entries.reduce((s,e)=>s+e.duur,0);
+  const vandaag=vandaagStr();
+  let dagChartHtml='';
+  if(dagKeys.length>1){
+    const maxDag=dagKeys.reduce((m,d)=>Math.max(m,perDag[d]),1);
+    const BAR_H=60; // px hoogte max-balk
+    const bars=dagKeys.map(d=>{
+      const h=Math.max(Math.round(perDag[d]/maxDag*BAR_H),2);
+      const isVandaag=d===vandaag;
+      const isOver=perDag[d]/3600>10; // >10u = rood
+      const cls=isVandaag?'vandaag':isOver?'over':'';
+      const lbl=new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric'});
+      const val=(perDag[d]/3600).toFixed(1)+'u';
+      return `<div class="dag-bar-col">
+        <div class="dag-bar-val">${val}</div>
+        <div class="dag-bar ${cls}" style="height:${h}px"></div>
+        <div class="dag-bar-label">${lbl}</div>
+      </div>`;
+    }).join('');
+    dagChartHtml=`<div class="dag-chart">
+      <div class="dag-chart-titel">Uren per dag <span class="dag-chart-totaal">${fmtUren(totaalSec)} totaal</span></div>
+      <div class="dag-bars">${bars}</div>
+    </div>`;
+  }
+
+  wrap.innerHTML=dagChartHtml+sorted.map(([code,data])=>{
     const p=projecten.find(x=>x.code===code);
     const breakdown=tl.filter(t=>data.pp[t.naam]).map(t=>`<span class="pr-persoon"><span class="pr-dot" style="background:${t.kleur}"></span>${t.label} ${fmtUren(data.pp[t.naam])}</span>`).join('');
     return `<div class="pr-item">
@@ -1722,6 +1935,13 @@ function renderProjectDetail(){
       <div class="detail-section-title">Status</div>
       <div class="status-kiezer">${statusHtml}</div>
     </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Factuurstatus</div>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap">${Object.entries(FACTUUR_STATUS).map(([k,v])=>`
+        <button class="factuur-badge${(p.factuur_status||'geen')===k?' actief':''}"
+          style="background:${v.bg};color:${v.c};border-color:${v.bc};${(p.factuur_status||'geen')===k?'box-shadow:0 0 0 2px '+v.bc+';font-weight:700':''}"
+          onclick="pdSetVeld('${code}','factuur_status','${k}');renderProjectDetail();if(actTab==='projecten')renderProjectenTab()">${v.label}</button>`).join('')}</div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1.25rem">
       <div>
         <label class="form-label">Deadline</label>
@@ -1995,17 +2215,31 @@ function renderProjectenTab(){
     wrap.innerHTML=`<div style="padding:1rem;color:var(--text-faint);font-size:13px;font-style:italic">Nog geen projecten. Maak het eerste aan.</div>`;
     return;
   }
-  wrap.innerHTML=projecten.map((p,i)=>`
-    <div class="proj-item" onclick="openProjectDetail('${p.code}')">
-      <div class="proj-code">${p.code}</div>
+  // Bereken totale uren per project (alle tijd)
+  const urenPP={};
+  getEntries().filter(e=>e.duur).forEach(e=>{urenPP[e.project_code]=(urenPP[e.project_code]||0)+e.duur;});
+  const maxU=Math.max(1,...Object.values(urenPP));
+  wrap.innerHTML=projecten.map((p,i)=>{
+    const sec=urenPP[p.code]||0;
+    const pct=Math.round(sec/maxU*100);
+    const urenHtml=sec?`<div class="proj-uren-col">
+      <div class="proj-uren">${fmtUren(sec)}</div>
+      <div class="proj-uren-balk-wrap"><div class="proj-uren-balk" style="width:${pct}%"></div></div>
+    </div>`:`<div class="proj-uren-col"></div>`;
+    const dl=deadlineBadge(p.deadline);
+    return `<div class="proj-item" onclick="openProjectDetail('${p.code}')">
+      <div class="proj-code">${p.code}${dl?' '+dl:''}</div>
       <div class="proj-naam">${p.naam||'—'}</div>
       <div class="proj-klant">${p.klant||''}</div>
       <div class="proj-status-col">${p.status?statusBadge(p.status):''}</div>
+      ${urenHtml}
+      <div class="proj-factuur-col">${factuurBadge(p.factuur_status,p.code)}</div>
       <div class="proj-acties" onclick="event.stopPropagation()">
         <button class="entry-btn" onclick="bewerkProject(${i})" title="Bewerken">✏</button>
         <button class="entry-btn del" onclick="verwijderProject(${i})" title="Verwijderen">✕</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function slaProjectOp(){

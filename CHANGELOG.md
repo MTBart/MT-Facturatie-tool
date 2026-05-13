@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-05-11 — feat: Toggl Focus endpoint + X-Claude-Key server auth
+- Commit: `8c487f8` | Auteur: Bart Witte
+
 ## 2026-05-11 — docs: CHANGELOG.md toegevoegd + pre-commit hook voor auto-backup grote bestanden
 - Commit: `20c3fef` | Auteur: Bart Witte
 
