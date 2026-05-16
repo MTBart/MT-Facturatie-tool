@@ -24,6 +24,8 @@ Agents/dagelijkse_analyse.md
 Agents/smart_inbox_research.md
 Agents/opdrachten/historie.json
 Agents/voorstellen/voorstel_*.md
+Agents/voorstellen/nabouw_*.md
+Agents/kennis/
 Agents/opdrachten/inbox/*.md
 Agents/opdrachten/inbox/*.txt
 Agents/opdrachten/verwerkt/

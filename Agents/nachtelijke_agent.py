@@ -775,8 +775,12 @@ def fase4():
             f.write(f"### RSS-nieuws (score ≥{CONFIG['score_drempel_digest']})\n\n")
             for item in sorted(rss_items, key=lambda x: -x.get("score", 0)):
                 f.write(f"**[{item['titel']}]({item['link']})** — {item['score']}/10\n")
-                duiding = item.get("duiding") or (item.get("beschrijving", "")[:140] + "…")
-                f.write(f"_{item['bron']}_\n{duiding}\n\n")
+                diep = (item.get("analyse_diep") or "").strip()
+                if diep:
+                    f.write(f"_{item['bron']}_\n\n{diep}\n\n")
+                else:
+                    duiding = item.get("duiding") or (item.get("beschrijving", "")[:140] + "…")
+                    f.write(f"_{item['bron']}_\n{duiding}\n\n")
                 if item.get("vervolg_links"):
                     for link in item["vervolg_links"]:
                         f.write(f"  - {link}\n")

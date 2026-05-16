@@ -29,13 +29,14 @@ $start = Get-Date
 # BELANGRIJK: script en fase apart houden - nooit samenvoegen en splitsen,
 # want de paden bevatten spaties en een '&'.
 $stappen = @(
-  @{ naam = "fase0-opdrachten"; script = (Join-Path $AgentsDir "opdracht_verwerker.py");  fase = $null },
-  @{ naam = "fase1-research";   script = $Agent; fase = "fase1" },
-  @{ naam = "fase2-github";     script = $Agent; fase = "fase2" },
-  @{ naam = "fase3-analyse";    script = $Agent; fase = "fase3" },
-  @{ naam = "fase4-digest";     script = $Agent; fase = "fase4" },
-  @{ naam = "fase5-verbeteren"; script = $Agent; fase = "fase5" },
-  @{ naam = "fase6-dashboard";  script = (Join-Path $AgentsDir "dashboard_generator.py"); fase = $null }
+  @{ naam = "fase0-opdrachten";  script = (Join-Path $AgentsDir "opdracht_verwerker.py");  fase = $null },
+  @{ naam = "fase1-research";    script = $Agent; fase = "fase1" },
+  @{ naam = "fase1b-broninhoud"; script = (Join-Path $AgentsDir "bron_analyse.py"); fase = $null },
+  @{ naam = "fase2-github";      script = $Agent; fase = "fase2" },
+  @{ naam = "fase3-analyse";     script = $Agent; fase = "fase3" },
+  @{ naam = "fase4-digest";      script = $Agent; fase = "fase4" },
+  @{ naam = "fase5-verbeteren";  script = $Agent; fase = "fase5" },
+  @{ naam = "fase6-dashboard";   script = (Join-Path $AgentsDir "dashboard_generator.py"); fase = $null }
 )
 
 $mislukt = @()
@@ -52,7 +53,7 @@ foreach ($s in $stappen) {
 $duur = [int]((Get-Date) - $start).TotalSeconds
 if ($mislukt.Count -eq 0) {
   $status = "klaar"
-  $samenvatting = "Alle 7 fases OK in $duur sec"
+  $samenvatting = "Alle $($stappen.Count) fases OK in $duur sec"
 } else {
   $status = "deels-mislukt"
   $samenvatting = "Mislukt: " + ($mislukt -join ', ') + " (in $duur sec)"

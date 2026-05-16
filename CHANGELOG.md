@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-05-16 — feat(agents): duiding per digest-item
+- Commit: `35bfb3b` | Auteur: Bart Witte
+
 ## 2026-05-16 — fix(agents): ASCII-only ps1, GPU-context, fase5 zonder dubbele blokken
 - Commit: `1910019` | Auteur: Bart Witte
 

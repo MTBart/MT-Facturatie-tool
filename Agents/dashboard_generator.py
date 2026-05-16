@@ -209,8 +209,10 @@ panelen['Nieuws & scans'] = () => {
       <h3><span class="score ${scoreKlasse(r.score)}">${r.score}</span>
         <a href="${esc(r.link)}" target="_blank">${esc(r.titel)}</a></h3>
       <div class="meta-r">${esc(r.bron)} · ${esc(r.categorie||'')}</div>
-      <div>${esc(r.duiding || (r.beschrijving||'').slice(0,220))}</div>
-      ${r.score>=7?`<div class="opvolg"><b>Opvolging:</b> ${esc(r.kernterm||'bekijken')} — interessant genoeg om te lezen / uit te proberen.</div>`:''}
+      ${r.analyse_diep
+        ? `<pre>${esc(r.analyse_diep)}</pre>`
+        : `<div>${esc(r.duiding || (r.beschrijving||'').slice(0,220))}</div>`}
+      ${r.nabouw_waarde>=4?`<div class="opvolg"><b>Nabouw-kandidaat (${r.nabouw_waarde}/5):</b> voorstel staat klaar voor de Claude-review.</div>`:''}
     </div>`).join('');
 };
 

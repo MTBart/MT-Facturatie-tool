@@ -69,8 +69,9 @@ Alles staat in `Agents/`:
 |---|---|
 | `nachtelijke_agent.py` | fase 1-5: research, GitHub, analyse, digest, zelf-verbeteren |
 | `opdracht_verwerker.py` | fase 0: opdrachten ophalen (map + e-mail), classificeren, uitvoeren |
+| `bron_analyse.py` | fase 1b: leest video-transcripts/artikelen, distilleert nabouw-plannen |
 | `dashboard_generator.py` | fase 6: bouwt `agent_dashboard.html` |
-| `run_agent.ps1` | orchestrator nachtrun — alle 7 fases |
+| `run_agent.ps1` | orchestrator nachtrun — alle 8 fases |
 | `run_opdrachten.ps1` | snelle cyclus — alleen fase 0 + dashboard |
 | `run_claude_review.ps1` | start de headless Claude-review |
 | `claude_review.md` | instructie die de Claude-review uitvoert |
@@ -117,9 +118,13 @@ Je wilde een systeem dat zichzelf voedt en verbetert. Dat kan — veilig — zo:
 
 **Wat de agent zelf mag (laag risico, omkeerbaar):**
 - Nieuwe RSS-bronnen toevoegen aan `bronnen.json` (fase 5).
-- `STATUS.md` en `HANDOFF.md` bijwerken met wat het gevonden heeft.
+- `STATUS.md` bijwerken met wat het gevonden heeft.
 - De score-drempels in `agent_config.json` bijstellen binnen vaste grenzen.
 - Een geheugen opbouwen van wat het al gezien heeft (`seen_urls.json`).
+- **Bronnen écht lezen** (fase 1b): video-transcripts en artikelen volledig
+  lokaal verwerken, het beschreven systeem reverse-engineeren en de kennis
+  opbouwen in `kennis/kennis.md`. Lange transcripts worden lokaal in chunks
+  samengevat — nul Claude-tokens. Sterke vondsten worden een `nabouw_*`-voorstel.
 
 **Wat via een voorstel + review gaat (hoger risico):**
 - Eigen code of prompts wijzigen → de agent schrijft een **voorstel** in

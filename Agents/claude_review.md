@@ -39,6 +39,15 @@ Voor elk bestand in `Agents/voorstellen/` met status `open`:
 - **Afwijzen** → zet status op `afgewezen` met een reden.
 - Bij twijfel of grote impact → status `voor-bart`, laat het voor Bart liggen.
 
+**Nabouw-voorstellen** (bestandsnaam `nabouw_*.md`) zijn AI-systemen die de
+lokale agent uit video's/artikelen heeft gereverse-engineerd — Bart wil zulke
+systemen zelf bouwen i.p.v. de cursus van de maker te kopen. Voor een
+nabouw-voorstel met waarde 4-5/5 dat bij M&T past: bouw een **prototype** van
+een M&T-versie binnen `Agents/` (een script of skill), zet de status op
+`toegepast` met een verwijzing naar wat je bouwde, en noem het in de dagmail.
+Twijfel je over de scope → `voor-bart`. Bouw nooit direct in productie. Gebruik
+ook de kennisbank `Agents/kennis/kennis.md` als achtergrond.
+
 ### 4. Tune de agent indien nodig
 - Als de digest structureel te weinig óf te veel items doorlaat, pas
   `Agents/agent_config.json` aan (`score_drempel_digest` / `score_drempel_ddg`),
