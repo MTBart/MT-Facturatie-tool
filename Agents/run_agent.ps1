@@ -1,9 +1,12 @@
 # ============================================================================
-#  MT Night Agent — orchestrator
+#  MT Night Agent - orchestrator
 #  Draait de volledige keten: opdrachten -> research -> analyse -> digest ->
-#  zelf-verbeteren -> dashboard. Aangestuurd door de scheduled task MT_Agent.
+#  zelf-verbeteren -> dashboard. Aangestuurd door scheduled task MT_Agent_Nacht.
 #
 #  Handmatig draaien:  powershell -ExecutionPolicy Bypass -File run_agent.ps1
+#
+#  LET OP: dit bestand bewust ASCII-only houden. PowerShell 5.1 leest .ps1
+#  zonder BOM als ANSI; non-ASCII tekens (em-dash e.d.) breken de parser.
 # ============================================================================
 
 $ErrorActionPreference = "Continue"
@@ -13,62 +16,53 @@ $env:PYTHONIOENCODING = "utf-8"
 
 $AgentsDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $AgentsDir
-$Log = Join-Path $AgentsDir "agent_log.txt"
+$Log   = Join-Path $AgentsDir "agent_log.txt"
 $Agent = Join-Path $AgentsDir "nachtelijke_agent.py"
 
 $start = Get-Date
 "" | Out-File -LiteralPath $Log -Append -Encoding utf8
 "============================================================" | Out-File -LiteralPath $Log -Append -Encoding utf8
-"  MT Night Agent run — $($start.ToString('yyyy-MM-dd HH:mm:ss'))" | Out-File -LiteralPath $Log -Append -Encoding utf8
+("MT Night Agent run - " + $start.ToString('yyyy-MM-dd HH:mm:ss')) | Out-File -LiteralPath $Log -Append -Encoding utf8
 "============================================================" | Out-File -LiteralPath $Log -Append -Encoding utf8
 
-# Stappen: naam + commando. fase0 en fase6 zijn aparte scripts.
+# Elke stap: script-pad (mag spaties bevatten) + optionele fase-argument.
+# BELANGRIJK: script en fase apart houden - nooit samenvoegen en splitsen,
+# want de paden bevatten spaties en een '&'.
 $stappen = @(
-  @{ naam = "fase0-opdrachten"; arg = (Join-Path $AgentsDir "opdracht_verwerker.py") },
-  @{ naam = "fase1-research";   arg = "$Agent fase1" },
-  @{ naam = "fase2-github";     arg = "$Agent fase2" },
-  @{ naam = "fase3-analyse";    arg = "$Agent fase3" },
-  @{ naam = "fase4-digest";     arg = "$Agent fase4" },
-  @{ naam = "fase5-verbeteren"; arg = "$Agent fase5" },
-  @{ naam = "fase6-dashboard";  arg = (Join-Path $AgentsDir "dashboard_generator.py") }
+  @{ naam = "fase0-opdrachten"; script = (Join-Path $AgentsDir "opdracht_verwerker.py");  fase = $null },
+  @{ naam = "fase1-research";   script = $Agent; fase = "fase1" },
+  @{ naam = "fase2-github";     script = $Agent; fase = "fase2" },
+  @{ naam = "fase3-analyse";    script = $Agent; fase = "fase3" },
+  @{ naam = "fase4-digest";     script = $Agent; fase = "fase4" },
+  @{ naam = "fase5-verbeteren"; script = $Agent; fase = "fase5" },
+  @{ naam = "fase6-dashboard";  script = (Join-Path $AgentsDir "dashboard_generator.py"); fase = $null }
 )
 
 $mislukt = @()
 foreach ($s in $stappen) {
-  "--- $($s.naam) ---" | Out-File -LiteralPath $Log -Append -Encoding utf8
-  $argList = $s.arg -split ' ', 2
-  if ($argList.Count -eq 1) {
-    python $argList[0] *>&1 | Out-File -LiteralPath $Log -Append -Encoding utf8
+  ("--- " + $s.naam + " ---") | Out-File -LiteralPath $Log -Append -Encoding utf8
+  if ($null -eq $s.fase) {
+    python $s.script *>&1 | Out-File -LiteralPath $Log -Append -Encoding utf8
   } else {
-    python $argList[0] $argList[1] *>&1 | Out-File -LiteralPath $Log -Append -Encoding utf8
+    python $s.script $s.fase *>&1 | Out-File -LiteralPath $Log -Append -Encoding utf8
   }
   if ($LASTEXITCODE -ne 0) { $mislukt += $s.naam }
 }
 
-$eind = Get-Date
-$duur = [int]($eind - $start).TotalSeconds
-$status = if ($mislukt.Count -eq 0) { "klaar" } else { "deels-mislukt" }
-$samenvatting = if ($mislukt.Count -eq 0) {
-  "Alle 7 fases OK ($duur s)"
+$duur = [int]((Get-Date) - $start).TotalSeconds
+if ($mislukt.Count -eq 0) {
+  $status = "klaar"
+  $samenvatting = "Alle 7 fases OK in $duur sec"
 } else {
-  "Mislukt: $($mislukt -join ', ') ($duur s)"
+  $status = "deels-mislukt"
+  $samenvatting = "Mislukt: " + ($mislukt -join ', ') + " (in $duur sec)"
 }
-"=== Run $status — $samenvatting ===" | Out-File -LiteralPath $Log -Append -Encoding utf8
+("=== Run " + $status + " - " + $samenvatting + " ===") | Out-File -LiteralPath $Log -Append -Encoding utf8
 
-# Run-historie bijwerken (voedt het dashboard)
-$histPad = Join-Path $AgentsDir "run_historie.json"
-$hist = @()
-if (Test-Path -LiteralPath $histPad) {
-  try { $hist = @(Get-Content -LiteralPath $histPad -Raw | ConvertFrom-Json) } catch { $hist = @() }
-}
-$hist += [pscustomobject]@{
-  tijd         = $start.ToString('yyyy-MM-dd HH:mm')
-  status       = $status
-  samenvatting = $samenvatting
-}
-if ($hist.Count -gt 60) { $hist = $hist[-60..-1] }
-,$hist | ConvertTo-Json -Depth 4 | Out-File -LiteralPath $histPad -Encoding utf8
+# Run-historie bijwerken via Python (betrouwbare JSON, geen BOM).
+python (Join-Path $AgentsDir "run_log.py") $start.ToString('yyyy-MM-dd HH:mm') $status $samenvatting *>&1 |
+  Out-File -LiteralPath $Log -Append -Encoding utf8
 
-# Dashboard nogmaals draaien zodat deze run erin staat
+# Dashboard nogmaals draaien zodat deze run in run_historie zichtbaar is.
 python (Join-Path $AgentsDir "dashboard_generator.py") *>&1 |
   Out-File -LiteralPath $Log -Append -Encoding utf8

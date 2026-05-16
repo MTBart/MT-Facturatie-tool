@@ -59,6 +59,7 @@ _CONFIG_DEFAULTS = {
     "score_drempel_digest": 6,
     "score_drempel_ddg": 7,
     "max_ollama_seconden": 120,
+    "ollama_context": 8192,
 }
 
 
@@ -97,7 +98,10 @@ def ollama(prompt: str, max_tokens: int = 500) -> str:
         "model": MODEL,
         "prompt": prompt,
         "stream": False,
-        "options": {"num_predict": max_tokens},
+        # num_ctx beperkt het context-venster zodat het model volledig op de
+        # GPU past (16GB VRAM) i.p.v. deels naar systeem-RAM te spillen.
+        "options": {"num_predict": max_tokens,
+                    "num_ctx": CONFIG.get("ollama_context", 8192)},
     }
     try:
         r = requests.post(OLLAMA_URL, json=payload, timeout=CONFIG["max_ollama_seconden"])
@@ -833,10 +837,10 @@ def fase5():
     if update_status():
         verbeteringen.append("STATUS.md bijgewerkt met activiteit van vannacht")
 
-    # 3. HANDOFF.md TODOs schrijven
-    todos = schrijf_handoff_todos()
+    # 3. Voorstellen schrijven voor de Claude-review
+    todos = schrijf_voorstel()
     if todos:
-        verbeteringen.append(f"{len(todos)} TODOs toegevoegd aan HANDOFF.md")
+        verbeteringen.append(f"{len(todos)} voorstel(len) in voorstellen/")
 
     # 4. Digest aanvullen
     if DIGEST_PATH.exists():
@@ -892,51 +896,62 @@ def voeg_bronnen_toe(urls: list) -> None:
 
 
 def update_status() -> bool:
+    """Voeg één regel toe aan het changelog van STATUS.md. Idempotent: ook bij
+    meerdere runs op een dag blijft het één regel — geen dubbele blokken."""
     if not STATUS_PATH.exists():
         return False
 
     tekst = STATUS_PATH.read_text(encoding="utf-8")
-    entry = (
-        f"\n### {VANDAAG}\n"
-        f"- Night Agent gedraaid: RSS gescand, GitHub doorzocht, bedrijfsanalyse uitgevoerd.\n"
-        f"- Digest beschikbaar: `Agents/digest_{VANDAAG}.md`.\n"
-    )
+    regel = (f"- Night Agent {VANDAAG}: RSS gescand, GitHub doorzocht, "
+             f"bedrijfsanalyse + digest (`Agents/digest_{VANDAAG}.md`).")
+    if regel in tekst:
+        return False  # vandaag al genoteerd
 
-    if "## Wijzigingen op de structuur" in tekst:
-        marker = "## Wijzigingen op de structuur (changelog)"
-        tekst = tekst.replace(marker, marker + entry, 1)
+    marker = "## Wijzigingen (changelog)"
+    if marker in tekst:
+        tekst = tekst.replace(marker, marker + "\n\n" + regel, 1)
     else:
-        tekst += f"\n## Wijzigingen{entry}"
+        tekst = tekst.rstrip() + "\n\n" + regel + "\n"
 
     STATUS_PATH.write_text(tekst, encoding="utf-8")
     return True
 
 
-def schrijf_handoff_todos() -> list:
-    if not HANDOFF_PATH.exists() or not REPOS_PATH.exists():
+def schrijf_voorstel() -> list:
+    """Schrijf de technische suggesties van vannacht als voorstel in
+    voorstellen/. De Claude-review beoordeelt ze (zie claude_review.md).
+    Dit vervangt het oude direct-in-HANDOFF-schrijven — minder ruis."""
+    if not REPOS_PATH.exists():
         return []
 
     repos_tekst = REPOS_PATH.read_text(encoding="utf-8")
     if len(repos_tekst) < 50:
         return []
 
-    prompt = f"""Op basis van deze interessante repos: welke concrete technische TODOs zijn er voor Claude Code?
+    prompt = f"""Op basis van deze interessante repos: welke concrete technische verbeteringen zijn er voor Mortise & Tenon?
 
 {repos_tekst[:800]}
 
-Max 2 TODOs. Formaat: "TODO: <actie>". Alleen TODOs, geen uitleg."""
+Max 3 voorstellen. Formaat: "- <concreet voorstel>". Alleen de voorstellen, geen uitleg."""
 
-    antwoord = ollama(prompt, max_tokens=100)
-    todos = [r.strip() for r in antwoord.splitlines() if r.strip().upper().startswith("TODO:")]
+    antwoord = ollama(prompt, max_tokens=160)
+    items = [re.sub(r'^[-*]\s*', '', r).strip()
+             for r in antwoord.splitlines() if r.strip().startswith(("-", "*"))]
+    items = [i for i in items if len(i) > 10][:3]
+    if not items:
+        return []
 
-    if todos:
-        handoff = HANDOFF_PATH.read_text(encoding="utf-8")
-        sectie  = f"\n\n## [NIGHT AGENT — {VANDAAG}]\nStatus: wacht-op-code\n\n"
-        sectie += "\n".join(f"- {t}" for t in todos[:2])
-        sectie += "\n"
-        HANDOFF_PATH.write_text(handoff + sectie, encoding="utf-8")
-
-    return todos[:2]
+    voorstel_dir = AGENTS_DIR / "voorstellen"
+    voorstel_dir.mkdir(exist_ok=True)
+    pad = voorstel_dir / f"voorstel_{VANDAAG}.md"
+    pad.write_text(
+        f"# Voorstellen uit GitHub-scan {VANDAAG}\n"
+        f"status: open\n\n"
+        f"De Night Agent vond deze repos relevant. Beoordeel of er iets "
+        f"bruikbaars tussen zit:\n\n"
+        + "\n".join(f"- {i}" for i in items) + "\n",
+        encoding="utf-8")
+    return items
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────

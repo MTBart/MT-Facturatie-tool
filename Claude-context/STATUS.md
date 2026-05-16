@@ -77,6 +77,8 @@ Cowork volledig ingericht als standaard Claude-werkomgeving. Beide werkplekken w
 
 ## Wijzigingen (changelog)
 
+- Night Agent 2026-05-16: RSS gescand, GitHub doorzocht, bedrijfsanalyse + digest (`Agents/digest_2026-05-16.md`).
+
 ### 2026-05-16 (Claude Code — MT Autonomy)
 - **Night Agent gefixt:** `MT_Agent`-task draaide nog de oude kapotte `cmd.exe`-actie
   (`&`-bug). Vervangen door PowerShell-tasks. Scoring-prompt herschreven — Ollama
@@ -166,9 +168,3 @@ Cowork volledig ingericht als standaard Claude-werkomgeving. Beide werkplekken w
 - `config.json` met Moneybird-token als platte tekst — beveiligen via env vars zodra mogelijk
 - `uren.html` data alleen in localStorage — browser cache wissen = data weg → cloud sync prio
 - Dispatch op werkplaats-pc werkt niet (Mathijs deelt Bart's account) — Mathijs eigen account nodig
-- Night Agent draait nog niet betrouwbaar — SETUP.bat moet vanavond gedraaid worden
-
-## Wijzigingen
-### 2026-05-16
-- Night Agent gedraaid: RSS gescand, GitHub doorzocht, bedrijfsanalyse uitgevoerd.
-- Digest beschikbaar: `Agents/digest_2026-05-16.md`.

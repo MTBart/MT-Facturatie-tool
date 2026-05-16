@@ -67,7 +67,9 @@ def ollama(prompt: str, max_tokens: int = 600) -> str:
     try:
         r = requests.post(OLLAMA_URL, json={
             "model": MODEL, "prompt": prompt, "stream": False,
-            "options": {"num_predict": max_tokens},
+            # num_ctx beperkt het context-venster zodat het model volledig op
+            # de GPU past (16GB VRAM) i.p.v. deels naar systeem-RAM te spillen.
+            "options": {"num_predict": max_tokens, "num_ctx": 8192},
         }, timeout=180)
         r.raise_for_status()
         return r.json().get("response", "").strip()
