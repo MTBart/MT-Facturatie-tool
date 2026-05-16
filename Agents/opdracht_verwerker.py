@@ -291,7 +291,11 @@ def verwerk() -> None:
             continue
         print(f"\n  Opdracht ({opdr['bron']}): {tekst[:70]}...")
 
-        soort = classificeer(tekst)
+        # E-mail-opdrachten gaan ALTIJD naar Claude (Opus 4.7). De lokale Ollama
+        # is prima voor research en scoring, maar niet voor het beantwoorden van
+        # Barts echte vragen - die verdienen het sterkste model. Alleen de lokale
+        # inbox-map gebruikt nog de lokaal/Claude-classificatie.
+        soort = "claude" if opdr["bron"] == "email" else classificeer(tekst)
         record = {
             "id": datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3],
             "bron": opdr["bron"],
@@ -325,9 +329,9 @@ def verwerk() -> None:
             record["wachtrij_pad"] = wachtrij
             if opdr["bron"] == "email" and token:
                 email_antwoord(token, opdr["mail_id"],
-                               "<b>In wachtrij gezet voor Claude.</b><br>"
-                               "Deze opdracht vereist code/externe acties en wordt "
-                               "in de eerstvolgende Claude-review opgepakt.")
+                               "<b>Ontvangen.</b><br>Je vraag wordt door Claude "
+                               "(Opus 4.7) beantwoord in de eerstvolgende review. "
+                               "Je krijgt het antwoord per mail.")
 
         # Lokaal bestand naar verwerkt/ verplaatsen
         if opdr["bron"] == "map":

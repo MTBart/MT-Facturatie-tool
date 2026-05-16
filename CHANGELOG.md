@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-05-16 — feat(agents): fase 1b - bronnen echt lezen en nabouwen
+- Commit: `2ae6a47` | Auteur: Bart Witte
+
 ## 2026-05-16 — feat(agents): duiding per digest-item
 - Commit: `35bfb3b` | Auteur: Bart Witte
 
