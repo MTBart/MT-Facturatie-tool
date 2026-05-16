@@ -256,14 +256,16 @@ Alleen JSON, geen uitleg."""
     # ── Stap 6: DuckDuckGo voor items met score ≥ 7 ──────────────────────────
     drempel_ddg = CONFIG["score_drempel_ddg"]
     hoog = [i for i in alle_items if i["score"] >= drempel_ddg]
-    print(f"\n  {len(hoog)} items ≥{drempel_ddg} — vervolgonderzoek via DuckDuckGo...")
+    print(f"\n  {len(hoog)} items ≥{drempel_ddg} — vervolgonderzoek via Brave Search...")
+    if hoog and not os.getenv("BRAVE_API_KEY", "").strip():
+        print("    [info] geen BRAVE_API_KEY in CRM/.env — vervolgonderzoek overgeslagen")
 
     for item in hoog:
         term = item["kernterm"] or item["titel"][:50]
-        links = duckduckgo_zoek(term)
+        links = brave_zoek(term)
         item["vervolg_links"] = links[:3]
-        print(f"    DDG '{term[:45]}' → {len(links)} links")
-        time.sleep(2)
+        print(f"    Brave '{term[:45]}' → {len(links)} links")
+        time.sleep(1)
 
     FASE1_JSON.write_text(json.dumps(alle_items, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -299,24 +301,29 @@ def _beschrijving(tag) -> str:
     return ""
 
 
-def duckduckgo_zoek(query: str) -> list:
-    url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
+def brave_zoek(query: str) -> list:
+    """Vervolgonderzoek via de Brave Search API.
+
+    Vereist BRAVE_API_KEY in CRM/.env (gratis sleutel: brave.com/search/api).
+    Zonder sleutel geeft dit een lege lijst terug — de agent draait gewoon door.
+    """
+    key = os.getenv("BRAVE_API_KEY", "").strip()
+    if not key:
+        return []
     try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(r.text, "html.parser")
-        links = []
-        for a in soup.select("a.result__url"):
-            href = a.get("href", "")
-            if href.startswith("http"):
-                links.append(href)
-        if not links:
-            for a in soup.select(".result__title a"):
-                href = a.get("href", "")
-                if href and "duckduckgo.com" not in href:
-                    links.append(href)
-        return links[:5]
+        r = requests.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            headers={"X-Subscription-Token": key, "Accept": "application/json"},
+            params={"q": query, "count": 5},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            print(f"    Brave fout {r.status_code}: {r.text[:120]}")
+            return []
+        resultaten = r.json().get("web", {}).get("results", [])
+        return [res["url"] for res in resultaten if res.get("url")][:5]
     except Exception as e:
-        print(f"    DDG fout: {e}")
+        print(f"    Brave fout: {e}")
         return []
 
 
@@ -776,8 +783,14 @@ def fase4():
     print(f"  Fase 4 klaar — digest: {DIGEST_PATH.name}")
 
     # ── Mail-notificatie ───────────────────────────────────────────────────────
-    digest_tekst = DIGEST_PATH.read_text(encoding="utf-8")
-    stuur_digest_mail(digest_tekst, VANDAAG)
+    # Standaard UIT: de dagelijkse Claude-review stuurt om ~05:30 één
+    # samengevoegde statusmail. Zet digest_mail_sturen op true in
+    # agent_config.json als je tóch een losse digest-mail wilt.
+    if CONFIG.get("digest_mail_sturen", False):
+        digest_tekst = DIGEST_PATH.read_text(encoding="utf-8")
+        stuur_digest_mail(digest_tekst, VANDAAG)
+    else:
+        print("  Digest-mail overgeslagen — de Claude-review stuurt de dagmail.")
 
 
 def genereer_acties(rss_items: list, repos: list, analyse: str) -> list:

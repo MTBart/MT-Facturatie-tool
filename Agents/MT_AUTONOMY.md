@@ -22,8 +22,8 @@ ingezet waar echt verstand of code nodig is.
 
 | Laag | Wie | Wanneer | Kosten | Doet |
 |------|-----|---------|--------|------|
-| **Lokaal** | Ollama (`qwen2.5:14b`) op de PC | elke 20 min + 23:00 | gratis | research, scoren, analyseren, simpele opdrachten, dashboard |
-| **Strategisch** | Claude Code (headless) | dagelijks 07:30 | abonnement | wachtrij afhandelen, voorstellen beoordelen, agent bijsturen, Bart informeren |
+| **Lokaal** | Ollama (`qwen2.5:14b`) op de PC | elke 20 min + 04:00 | gratis | research, scoren, analyseren, simpele opdrachten, dashboard |
+| **Strategisch** | Claude Code headless (Opus 4.7) | dagelijks 05:00 | abonnement | wachtrij afhandelen, voorstellen beoordelen, agent bijsturen, Bart informeren |
 
 Het idee: **zoveel mogelijk lokaal**, Claude alleen als hefboom. De lokale agent
 draait door ook als er geen internet of Claude-tegoed is.
@@ -88,8 +88,8 @@ Mappen: `opdrachten/inbox` · `opdrachten/verwerkt` · `opdrachten/voor_claude`
 | Task | Wanneer | Doet |
 |---|---|---|
 | `MT_Agent_Opdrachten` | elke 20 min, 24/7 | opdrachten oppakken + dashboard verversen |
-| `MT_Agent_Nacht` | dagelijks 23:00 | volledige keten + digest-mail |
-| `MT_Claude_Review` | dagelijks 07:30 | strategische Claude-review |
+| `MT_Agent_Nacht` | dagelijks 04:00 | volledige keten — research, analyse, digest |
+| `MT_Claude_Review` | dagelijks 05:00 | strategische review (Opus 4.7) + dagstatusmail rond 05:30 |
 
 De agent slaat een run stil over als Ollama al bezig is, dus de PC wordt nooit
 overbelast. Opnieuw instellen na een herinstallatie: draai elk `run_*.ps1` één
@@ -153,8 +153,11 @@ Wil je tussendoor sturen: geef een opdracht via kanaal A-D hierboven, of pas
 
 ## 9. Bekende aandachtspunten
 
-- **DuckDuckGo-vervolgonderzoek** levert nu 0 links (DDG blokkeert scrapers).
-  Niet kritiek; staat op de lijst om te vervangen door een betere bron.
+- **Vervolgonderzoek** draait op de Brave Search API. Werkt zodra er een
+  `BRAVE_API_KEY` in `CRM/.env` staat (gratis sleutel: brave.com/search/api).
+  Zonder sleutel slaat de agent die stap netjes over — geen fout.
 - **GitHub-scan** werkt via HTML-scraping; kan wisselen. Een GitHub-token zou
   het stabieler maken.
-- De **digest-mail** gaat 1×/dag (23:00). Vaker mailen = de oude bug; niet doen.
+- Eén **dagstatusmail** per dag, rond 05:30, verstuurd door de Claude-review.
+  Codeervragen die je instuurt krijgen daarnaast een eigen antwoord-mail zodra
+  ze af zijn. Vaker mailen = de oude bug; niet doen.

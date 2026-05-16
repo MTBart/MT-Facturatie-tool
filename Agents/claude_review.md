@@ -21,10 +21,16 @@ Werkmap: `C:\Users\BartWitte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Appl
 
 ### 2. Handel de opdracht-wachtrij af
 Voor elk bestand in `Agents/opdrachten/voor_claude/` met status `wacht-op-claude`:
-- Voer de opdracht uit (dit zijn opdrachten die de lokale agent niet zelf kon).
+- Voer de opdracht uit (dit zijn coderings-/strategische opdrachten die de lokale
+  agent niet zelf kon). Doe dit grondig — je draait op Opus 4.7.
 - Schrijf het resultaat onder `## Resultaat` in datzelfde bestand.
 - Zet de status bovenin op `klaar`.
 - Verplaats het bestand daarna naar `Agents/opdrachten/verwerkt/`.
+- **Mail Bart het antwoord.** Stuur per afgeronde opdracht een aparte mail naar
+  `Bart@mortiseandtenon.nl` met onderwerp `Antwoord: <korte opdracht>` en het
+  resultaat in de body. Dit staat los van de dagmail in stap 6 — een codeervraag
+  die Bart instuurt verdient een eigen, concreet antwoord zodra hij af is.
+  Gebruik de Graph-scripts in `CRM/` (token in `CRM/token_cache.json`).
 
 ### 3. Beoordeel de zelf-verbeter-voorstellen
 Voor elk bestand in `Agents/voorstellen/` met status `open`:
@@ -42,10 +48,15 @@ Voor elk bestand in `Agents/voorstellen/` met status `open`:
 - Vat de review samen in `Claude-context/STATUS.md` (changelog-blok bovenaan).
 - Commit alle wijzigingen in de git-repo van de Claude-map met een nette message.
 
-### 6. Informeer Bart
-- Stuur Bart een korte mail met de uitkomst: wat de agent vond, wat is afgehandeld,
-  wat open staat. Gebruik de Graph-scripts in `CRM/` (token in `CRM/token_cache.json`).
-- Hou het kort: 5-8 regels, Nederlands, jij/je.
+### 6. Stuur de dagelijkse statusmail
+- Stuur Bart **één** samengevoegde statusmail (onderwerp `M&T Dagstatus — <datum>`).
+  Dit is de enige vaste dagmail; hij landt rond 05:30.
+- Inhoud, kort en concreet (8-12 regels, Nederlands, jij/je):
+  - de belangrijkste vondsten uit de digest van vannacht (top 2-3 nieuwsitems/tools);
+  - wat je deze review hebt afgehandeld (wachtrij, voorstellen, tuning);
+  - wat open staat of aandacht van Bart nodig heeft.
+- De losse antwoord-mails op codeervragen (stap 2) staan hier los van — die niet
+  herhalen, alleen kort noemen dat ze beantwoord zijn.
 
 ## Harde grenzen — NIET doen zonder Bart
 - **Geen** `git push` naar GitHub (klantzichtbare code).

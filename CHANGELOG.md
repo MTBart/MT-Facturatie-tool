@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-05-16 — chore(agents): dode bestanden weg + Claude-review op Opus 4.7
+- Commit: `f3d285a` | Auteur: Bart Witte
+
 ## 2026-05-16 — feat(agents): MT Autonomy — zelfsturend agent-systeem
 - Commit: `d20ae03` | Auteur: Bart Witte
 
