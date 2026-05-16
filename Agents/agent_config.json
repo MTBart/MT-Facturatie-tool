@@ -1,0 +1,11 @@
+{
+  "_uitleg": "Tunable instellingen voor de MT Night Agent. fase5 (zelf-verbeteren) mag deze waarden voorzichtig bijstellen binnen de min/max grenzen. Bart mag alles handmatig wijzigen.",
+  "ollama_model": "qwen2.5:14b",
+  "score_drempel_digest": 6,
+  "score_drempel_ddg": 7,
+  "score_drempel_grenzen": { "min": 4, "max": 8 },
+  "github_zoektermen": ["claude mcp", "claude agent", "anthropic tools", "ollama integration"],
+  "max_ollama_seconden": 120,
+  "zelf_verbeteren_aan": true,
+  "voorstellen_auto_toepassen": false
+}

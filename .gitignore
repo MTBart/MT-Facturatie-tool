@@ -5,3 +5,26 @@ Moneybird/
 Facturatie tool/
 config.json
 _backups/
+
+# Secrets — nooit committen
+CRM/.env
+CRM/token_cache.json
+
+# MT Agent — runtime-artefacten (regenereren zichzelf)
+Agents/__pycache__/
+Agents/agent_log.txt
+Agents/claude_review_log.txt
+Agents/fase*_resultaat.json
+Agents/seen_urls.json
+Agents/digest_*.md
+Agents/run_historie.json
+Agents/agent_dashboard.html
+Agents/interessante_repos.md
+Agents/dagelijkse_analyse.md
+Agents/smart_inbox_research.md
+Agents/opdrachten/historie.json
+Agents/opdrachten/inbox/*.md
+Agents/opdrachten/inbox/*.txt
+Agents/opdrachten/verwerkt/
+Agents/opdrachten/voor_claude/
+!Agents/opdrachten/inbox/README.md

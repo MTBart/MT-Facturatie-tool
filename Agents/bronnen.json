@@ -1,0 +1,109 @@
+{
+  "trefwoorden": [
+    "claude", "mcp", "agent", "ollama", "automatisering",
+    "keuken", "meubel", "hout", "mkb", "planning", "capaciteit", "inkoop",
+    "smart inbox", "email client", "mail ui", "inbox zero", "email dashboard",
+    "bijlage", "attachment", "document management", "dms", "klantdossier",
+    "skill chaining", "n8n", "workflow automation", "web scraping", "data collection", "ai agents", "agentic"
+  ],
+  "feeds": [
+    {
+      "naam": "Nate Herk",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC2ojq-nuP8ceeHqiroeKhBA",
+      "type": "youtube",
+      "categorie": "ai",
+      "prioriteit": "hoog",
+      "trefwoorden": ["ai automation", "n8n", "make", "zapier", "workflow", "business automation", "ai tools", "mkb", "kosten besparen", "agentic"],
+      "notitie": "Nate Herk — AI automation voor bedrijven, focust op praktische implementatie van AI-tools voor MKB. Vergelijkbaar met Simon Scrapes maar meer business-gericht.",
+      "max_items": 10
+    },
+    {
+      "naam": "Simon Scrapes",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCdCR4-uYOg5ju-IUuDnfnQA",
+      "type": "youtube",
+      "categorie": "ai",
+      "prioriteit": "hoog",
+      "trefwoorden": ["skill chaining", "agent workflows", "mcp", "claude", "n8n", "ollama", "lokale ai", "scraping", "automation", "web scraping", "data collection", "agentic"],
+      "notitie": "Simon Coton (Simon Scrapes) — AI automation creator, focust op Claude Code + n8n + agent workflows. Zie ook: Claude-context/simon_scrapes_videos.md",
+      "max_items": 10
+    },
+    {
+      "naam": "HackerNews - Show HN",
+      "url": "https://hnrss.org/show",
+      "categorie": "tech",
+      "max_items": 10
+    },
+    {
+      "naam": "HackerNews - Ask HN",
+      "url": "https://hnrss.org/ask",
+      "categorie": "tech",
+      "max_items": 10
+    },
+    {
+      "naam": "Dev.to - webdev",
+      "url": "https://dev.to/feed/tag/webdev",
+      "categorie": "tech",
+      "max_items": 8
+    },
+    {
+      "naam": "Anthropic Blog",
+      "url": "https://www.anthropic.com/rss.xml",
+      "categorie": "ai",
+      "max_items": 8
+    },
+    {
+      "naam": "Simon Willison's Weblog",
+      "url": "https://simonwillison.net/atom/everything/",
+      "categorie": "ai",
+      "max_items": 8
+    },
+    {
+      "naam": "The Batch (DeepLearning.AI)",
+      "url": "https://www.deeplearning.ai/the-batch/feed/",
+      "categorie": "ai",
+      "max_items": 8
+    },
+    {
+      "naam": "Hacker News (top stories)",
+      "url": "https://hnrss.org/frontpage",
+      "categorie": "tech",
+      "max_items": 8
+    },
+    {
+      "naam": "GitHub Blog",
+      "url": "https://github.blog/feed/",
+      "categorie": "tech",
+      "max_items": 8
+    },
+    {
+      "naam": "Houtwereld",
+      "url": "https://www.houtwereld.nl/feed/",
+      "categorie": "hout",
+      "max_items": 8
+    },
+    {
+      "naam": "Woodworking Network",
+      "url": "https://www.woodworkingnetwork.com/rss.xml",
+      "categorie": "hout",
+      "max_items": 8
+    },
+    {
+      "naam": "MKB Nederland",
+      "url": "https://www.mkb.nl/rss",
+      "categorie": "mkb",
+      "max_items": 8
+    },
+    {
+      "naam": "Tweakers (NL tech)",
+      "url": "https://tweakers.net/feeds/nieuws.xml",
+      "categorie": "tech",
+      "max_items": 8
+    },
+    {
+      "naam": "Ollama Blog",
+      "url": "https://ollama.com/blog/rss",
+      "categorie": "ai",
+      "max_items": 8
+    }
+  ]
+}

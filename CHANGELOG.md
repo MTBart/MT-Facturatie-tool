@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-05-13 — docs: HANDOFF.md bijgewerkt — uren.html commit gemaakt, merge conflict rapportage
+- Commit: `1af9fd5` | Auteur: Bart Witte
+
 ## 2026-05-13 — feat(uren): 6 Toggl-features — factuurstatus, mijn taken, deadline urgentie, daggrafiek, uren in projectlijst, recente entries
 - Commit: `0fbc4a6` | Auteur: Bart Witte
 
