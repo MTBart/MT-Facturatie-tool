@@ -271,6 +271,28 @@ Alleen JSON, geen uitleg."""
         print(f"    Brave '{term[:45]}' → {len(links)} links")
         time.sleep(1)
 
+    # ── Stap 6b: korte duiding per digest-waardig item ───────────────────────
+    # Hierdoor is het geen lijst losse links meer, maar echte duiding:
+    # wat is het + wat kan M&T ermee.
+    drempel_digest = CONFIG["score_drempel_digest"]
+    teduiden = [i for i in alle_items if i["score"] >= drempel_digest]
+    print(f"\n  Duiding schrijven voor {len(teduiden)} digest-items...")
+    for item in teduiden:
+        prompt = f"""Nieuwsitem voor Mortise & Tenon - maatwerkmeubelbedrijf dat AI inzet om kantoorwerk te automatiseren (offertes, planning, mail, productie).
+
+Titel: {item['titel']}
+Beschrijving: {item['beschrijving'][:200]}
+
+Negeer reclame/sponsortekst in de beschrijving (cursusaanbiedingen, kortingscodes,
+"free resources" e.d.). Baseer je vooral op de titel.
+
+Schrijf precies 2 korte, concrete zinnen in het Nederlands:
+1. Wat dit onderwerp is.
+2. Wat Mortise & Tenon er concreet mee zou kunnen - of waarom het niet relevant is.
+Geen intro, geen opsomming - alleen die 2 zinnen."""
+        item["duiding"] = ollama(prompt, max_tokens=140).strip()
+        print(f"    geduid: {item['titel'][:55]}")
+
     FASE1_JSON.write_text(json.dumps(alle_items, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # ── Stap 7: seen_urls bijwerken ───────────────────────────────────────────
@@ -753,7 +775,8 @@ def fase4():
             f.write(f"### RSS-nieuws (score ≥{CONFIG['score_drempel_digest']})\n\n")
             for item in sorted(rss_items, key=lambda x: -x.get("score", 0)):
                 f.write(f"**[{item['titel']}]({item['link']})** — {item['score']}/10\n")
-                f.write(f"_{item['bron']}_ — {item['beschrijving'][:140]}…\n\n")
+                duiding = item.get("duiding") or (item.get("beschrijving", "")[:140] + "…")
+                f.write(f"_{item['bron']}_\n{duiding}\n\n")
                 if item.get("vervolg_links"):
                     for link in item["vervolg_links"]:
                         f.write(f"  - {link}\n")
