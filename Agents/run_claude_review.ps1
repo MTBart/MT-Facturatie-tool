@@ -17,9 +17,10 @@ $Log = Join-Path $ClaudeDir "Agents\claude_review_log.txt"
 $prompt = "Lees Agents/claude_review.md volledig en voer de dagelijkse review " +
           "exact uit zoals daar beschreven. Houd je strikt aan de harde grenzen."
 
-# Headless run. bypassPermissions staat al als default in settings.local.json;
-# de vlag staat er voor de zekerheid expliciet bij zodat de run nooit blijft hangen.
-claude -p $prompt --permission-mode bypassPermissions --model sonnet *>&1 |
+# Headless run met Opus 4.7 — coderings- en strategische opdrachten verdienen
+# het sterkste model. bypassPermissions staat al als default in settings.local.json;
+# de vlag staat er expliciet bij zodat de run nooit blijft hangen.
+claude -p $prompt --permission-mode bypassPermissions --model opus *>&1 |
   Out-File -LiteralPath $Log -Append -Encoding utf8
 
 "=== review klaar — exit $LASTEXITCODE ===" |

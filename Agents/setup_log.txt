@@ -1,8 +1,0 @@
-SETUP gestart: vr 15-05-2026 22:51:08,29 
-SUCCESS: The scheduled task "MT_NightAgent" was successfully deleted.
-SUCCESS: The scheduled task "MortiseTenon_NachtAgent" was successfully deleted.
-'Tenon' is not recognized as an internal or external command,
-operable program or batch file.
-FOUT bij aanmaken task! 
- 
-ERROR: Het systeem kan het opgegeven bestand niet vinden.

@@ -1,9 +1,14 @@
 # Dagelijkse Claude-review — instructie
 
 Dit bestand wordt elke ochtend gelezen door een headless Claude Code-sessie
-(scheduled task `MT_Claude_Review`). Het is de **strategische laag** boven de
-lokale Night Agent: de agent doet 's nachts het lokale werk, Claude stuurt bij
-en handelt af wat een lokaal model niet kan.
+op **Opus 4.7** (scheduled task `MT_Claude_Review`). Het is de **strategische
+laag** boven de lokale Night Agent: de agent doet 's nachts het lokale werk,
+Claude stuurt bij en handelt af wat een lokaal model niet kan.
+
+**Coderings- en strategische vragen** die Bart via de Outlook-map `MT-Agent`
+(of via dispatch) instuurt, worden door de lokale agent als `wacht-op-claude`
+in de wachtrij gezet. Stap 2 hieronder handelt ze af — met Opus 4.7, voor de
+beste resultaten.
 
 Werkmap: `C:\Users\BartWitte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Applicaties\Claude\`
 

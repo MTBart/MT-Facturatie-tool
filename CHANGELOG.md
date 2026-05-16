@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-05-16 — feat(agents): MT Autonomy — zelfsturend agent-systeem
+- Commit: `d20ae03` | Auteur: Bart Witte
+
 ## 2026-05-13 — docs: HANDOFF.md bijgewerkt — uren.html commit gemaakt, merge conflict rapportage
 - Commit: `1af9fd5` | Auteur: Bart Witte
 
