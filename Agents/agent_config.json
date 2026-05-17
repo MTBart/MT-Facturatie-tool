@@ -7,7 +7,7 @@
   "github_zoektermen": ["claude mcp", "claude agent", "anthropic tools", "ollama integration"],
   "max_ollama_seconden": 120,
   "ollama_context": 8192,
-  "digest_mail_sturen": false,
+  "digest_mail_sturen": true,
   "zelf_verbeteren_aan": true,
   "voorstellen_auto_toepassen": false
 }

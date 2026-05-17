@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-05-17 — review(agents): dagelijkse Claude-review 2026-05-17
+- Commit: `a32abfd` | Auteur: Bart Witte
+
 ## 2026-05-16 — fix(agents): e-mailvragen door Opus laten beantwoorden ipv lokale Ollama
 - Commit: `7ee5408` | Auteur: Bart Witte
 
