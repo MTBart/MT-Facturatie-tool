@@ -77,6 +77,23 @@ Cowork volledig ingericht als standaard Claude-werkomgeving. Beide werkplekken w
 
 ## Wijzigingen (changelog)
 
+### 2026-05-17 (Claude-review — Opus 4.7)
+- **Opdracht-wachtrij:** leeg, geen codeervragen open.
+- **19 voorstellen beoordeeld** (alle `open`): 13× afgewezen, 2× voor-bart, 4× toegepast.
+  - `voor-bart`: Hermes Agent VPS (kost een betaalde server), Stoic AgentOS 5/5
+    (grote SDK/API-scope) — Bart beslist.
+  - `toegepast`: QR-generator (`Agents/qr_generator.py`, bestond al) en CLI-tooling
+    (`Agents/mt_cli.py` + `CLI.md`, bestond al) geverifieerd; nieuw gebouwd:
+    prompt-bibliotheek (`Agents/prompts/mt_prompts.md`) en agent-governance-audit
+    (`Agents/agent_governance.md`).
+  - Afgewezen: vooral geheugen-/agent-OS-voorstellen die MT Autonomy al dekt, plus
+    voorstellen die niet bij een meubelbedrijf passen (datahandel, productsuites).
+- **agent_governance.md** signaleert het belangrijkste gat: geen kostenlimiet per
+  agent-run (economische governance) — aanbeveling staat erin voor Bart.
+- **agent_config.json** ongewijzigd — digest laat een gezonde hoeveelheid door.
+
+- Night Agent 2026-05-17: RSS gescand, GitHub doorzocht, bedrijfsanalyse + digest (`Agents/digest_2026-05-17.md`).
+
 - Night Agent 2026-05-16: RSS gescand, GitHub doorzocht, bedrijfsanalyse + digest (`Agents/digest_2026-05-16.md`).
 
 ### 2026-05-16 (Claude Code — MT Autonomy)
