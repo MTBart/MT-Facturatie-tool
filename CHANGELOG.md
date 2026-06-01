@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-06-01 — Fase A fix: klant-registry tegen Moneybird gecorrigeerd
+- Commit: `d439614` | Auteur: Bart Witte
+
 ## 2026-06-01 — Fase A: projectcode-generator KLANT-LOC-PROD
 - Commit: `c2f8647` | Auteur: Bart Witte
 

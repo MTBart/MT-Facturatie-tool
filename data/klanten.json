@@ -46,6 +46,22 @@
       "locaties": []
     },
     {
+      "code": "PT",
+      "naam": "PT Bouw & Meubel B.V.",
+      "aliassen": ["pt bouw", "ptbouwenmeubel"],
+      "mb_contact_id": "414898677638760123",
+      "opmerking": "Meubel-/interieurbouw Amsterdam. KvK 84594500 (ouder 34217901).",
+      "locaties": []
+    },
+    {
+      "code": "VK",
+      "naam": "Aannemers- en Installatiebedrijf Verkaik",
+      "aliassen": ["verkaik"],
+      "mb_contact_id": "422963124634650333",
+      "opmerking": "Aannemer/installatie Landsmeer. KvK 33258868.",
+      "locaties": []
+    },
+    {
       "code": "INT",
       "naam": "Intern — Mortise & Tenon",
       "aliassen": ["intern", "mortise"],
