@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-06-01 — Test-projecten opgeruimd: lege start voor echte KLANT-LOC-PROD-projecten
+- Commit: `58feb63` | Auteur: Bart Witte
+
 ## 2026-06-01 — Repo-hygiene: negeer .claude/worktrees + .wrangler cache
 - Commit: `7699109` | Auteur: Bart Witte
 

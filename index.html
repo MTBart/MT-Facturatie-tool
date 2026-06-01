@@ -1630,6 +1630,7 @@ function renderProjectDetail(proj){
       <div style="display:flex;align-items:center;gap:0.5rem;font-size:12px;color:var(--text-dim);margin-bottom:1rem">
         <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${mbNrBlok}
       </div>
+      ${projectTijdlijn(proj)}
       <hr class="divider">
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
         <div class="card-title" style="margin:0">Kostenberekening — Vectorworks CSV</div>
@@ -1694,6 +1695,47 @@ function bewerkProjectMbNr(code){
   p.mb_nr=v.trim()||null;
   slaProjectenOp();
   renderProjectDetail(huidigProject);
+}
+// ── Projecttijdlijn: alleen echte events (aanmaak, inkoop, bestellingen) ──
+function projectTijdlijn(proj){
+  const events=[];
+  if(proj.created) events.push({datum:proj.created,icon:'🏷️',kleur:'var(--gold)',label:'Project aangemaakt',detail:`${proj.code}`});
+  // Materiaalinkoop uit facturen — gegroepeerd per factuurdatum
+  const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>v.project===proj.code);
+  const perDatum={};
+  voorraad.forEach(v=>{const d=v.datum||'?';(perDatum[d]=perDatum[d]||[]).push(v);});
+  Object.entries(perDatum).forEach(([d,rows])=>{
+    const tot=rows.reduce((s,v)=>s+(v.aantal||1)*(v.stukprijs||0),0);
+    const levs=[...new Set(rows.map(v=>v.leverancier).filter(Boolean))];
+    const corr=rows.some(v=>v.correctie);
+    events.push({datum:d,icon:corr?'✏️':'📦',kleur:'var(--green)',
+      label:corr?'Voorraadcorrectie':'Materiaal geboekt',
+      detail:`${rows.length} regel${rows.length>1?'s':''}${tot?` · ${fmt(tot)}`:''}${levs.length?` · ${levs.join(', ')}`:''}`});
+  });
+  // Bestellingen op de bestellijst — gegroepeerd per datum
+  const bestel=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]').filter(b=>b.project===proj.code);
+  const perBdatum={};
+  bestel.forEach(b=>{const d=b.datum||'?';(perBdatum[d]=perBdatum[d]||[]).push(b);});
+  Object.entries(perBdatum).forEach(([d,rows])=>{
+    const besteld=rows.filter(b=>b.besteld).length;
+    events.push({datum:d,icon:'🛒',kleur:'var(--blue)',label:'Op bestellijst gezet',
+      detail:`${rows.length} materia${rows.length>1?'len':'al'}${besteld?` · ${besteld} besteld`:''}`});
+  });
+  if(!events.length) return '';
+  events.sort((a,b)=>(a.datum||'').localeCompare(b.datum||''));
+  const rij=e=>`<div style="display:flex;gap:0.6rem;align-items:flex-start;padding:0.35rem 0">
+      <div style="font-size:13px;line-height:1.4">${e.icon}</div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:600;color:var(--text)">${e.label}
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-faint);font-weight:400;margin-left:6px">${fmtDatum(e.datum)}</span></div>
+        <div style="font-size:11px;color:var(--text-dim)">${e.detail}</div>
+      </div>
+    </div>`;
+  return `<hr class="divider">
+    <div class="card-title" style="margin-bottom:0.5rem">Tijdlijn</div>
+    <div style="border-left:2px solid var(--border);padding-left:0.75rem;margin-bottom:0.5rem">
+      ${events.map(rij).join('')}
+    </div>`;
 }
 
 // ═══ NCR IMPORT ═══

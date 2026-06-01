@@ -33,10 +33,14 @@
    en opent `bewerkLeverancier`/info als de naam in `leveranciers[]` matcht
    (anders platte tekst, geen dode link).
 
-## Increment 2 — projecttijdlijn uit echte data
-- Afleidbare events: `created` (projectaanmaak), factuur-/inkoopdatums uit `mt_voorraad`
-  (per `v.datum`), NCR-upload-momenten, CSV-upload. Chronologisch, compacte lijst.
-- Geen verzonnen mijlpalen.
+## Increment 2 — projecttijdlijn uit echte data  ← KLAAR (2026-06-01)
+- `projectTijdlijn(proj)` rendert chronologisch, alleen echte events:
+  - 🏷️ Project aangemaakt (`proj.created`)
+  - 📦 Materiaal geboekt / ✏️ Voorraadcorrectie — uit `mt_voorraad` gegroepeerd per `datum`
+    (aantal regels · totaal · leverancier(s))
+  - 🛒 Op bestellijst gezet — uit `mt_bestellijst` gegroepeerd per `datum` (aantal · #besteld)
+- Geen verzonnen mijlpalen; lege lijst → sectie verschijnt niet.
+- NCR-import schrijft naar bestellijst (niet voorraad) → verschijnt als 🛒-event.
 
 ## Increment 3 — voorraad-item-detail + terug-links
 - Voorraad-item klikbaar → toont: prijsverloop (mouseover/hist), gekoppelde bestellingen,
