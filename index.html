@@ -674,45 +674,53 @@ textarea{resize:vertical;min-height:60px}
 <div id="project-modal" class="modal-overlay hidden">
   <div class="modal" style="width:520px">
     <h2>Nieuw project aanmaken</h2>
-    <div class="grid3">
-      <div class="field">
-        <label>Klant</label>
-        <select id="modal-klant" onchange="updateModalPreview()">
-          <option value="CN">CN</option><option value="LGM">LGM</option><option value="MOS">MOS</option>
-          <option value="STY">STY</option><option value="HWC">HWC</option><option value="GBK">GBK</option>
-          <option value="EZ">EZ</option><option value="DV">DV</option><option value="JAN">JAN</option>
-          <option value="INT">INT</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Locatie (kort)</label>
-        <input type="text" id="modal-locatie" placeholder="BN" oninput="updateModalPreview()">
-      </div>
-      <div class="field">
-        <label>Product (kort)</label>
-        <input type="text" id="modal-product" placeholder="KEUKEN" oninput="updateModalPreview()">
-      </div>
-    </div>
-    <hr class="divider" style="margin:0.75rem 0">
-    <div class="card-title" style="margin-bottom:0.5rem">Volledige naam (voor intern gebruik)</div>
-    <div class="grid3" style="margin-bottom:0.75rem">
+
+    <div class="card-title" style="margin-bottom:0.5rem">1 — Volledige naam <span style="font-weight:400;text-transform:none;color:var(--text-faint)">(zoals in mail, mappen &amp; Moneybird)</span></div>
+    <div class="grid3" style="margin-bottom:0.4rem">
       <div class="field" style="margin-bottom:0">
-        <label>Klantnaam</label>
-        <input type="text" id="modal-naam-klant" placeholder="CompaNanny">
+        <label>Klant</label>
+        <input type="text" id="modal-naam-klant" placeholder="CompaNanny" oninput="autoCode()" list="klant-namen" autocomplete="off">
+        <datalist id="klant-namen"></datalist>
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Locatie</label>
-        <input type="text" id="modal-naam-locatie" placeholder="Benoorderhout">
+        <input type="text" id="modal-naam-locatie" placeholder="Bajeskwartier" oninput="autoCode()" autocomplete="off">
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Product</label>
-        <input type="text" id="modal-naam-product" placeholder="Keuken">
+        <input type="text" id="modal-naam-product" placeholder="Keuken" oninput="autoCode()" autocomplete="off">
       </div>
     </div>
-    <div class="modal-preview" id="modal-preview">—</div>
     <div style="font-size:11px;color:var(--text-faint);margin-bottom:1rem" id="modal-naam-preview"></div>
+
+    <div class="card-title" style="margin-bottom:0.5rem">2 — Projectcode <span style="font-weight:400;text-transform:none;color:var(--text-faint)">(sticker · Toggl · freesbestand — pas gerust aan)</span></div>
+    <div class="grid3" style="margin-bottom:0.75rem">
+      <div class="field" style="margin-bottom:0">
+        <label>Klant (2-4)</label>
+        <input type="text" id="modal-klant" placeholder="CN" oninput="updateModalPreview()" list="klant-codes" maxlength="4" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
+        <datalist id="klant-codes"><option value="CN"><option value="LGM"><option value="MOS"><option value="STY"><option value="HWC"><option value="GBK"><option value="EZ"><option value="DV"><option value="JAN"><option value="INT"></datalist>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>Locatie (≤8)</label>
+        <input type="text" id="modal-locatie" placeholder="BAJES" oninput="updateModalPreview()" maxlength="8" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>Product</label>
+        <input type="text" id="modal-product" placeholder="KEUKEN" oninput="updateModalPreview()" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
+      </div>
+    </div>
+
+    <div style="margin-bottom:1rem">
+      <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin-bottom:4px">Sticker-preview</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div id="sticker-preview" style="font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:0.04em;background:#fff;border:1px dashed var(--border-strong);border-radius:6px;padding:10px 16px;color:var(--text)">—</div>
+        <span id="sticker-count" style="font-family:var(--mono);font-size:12px;color:var(--text-faint)"></span>
+      </div>
+      <div id="sticker-warn" style="font-size:11px;color:var(--orange);margin-top:6px"></div>
+    </div>
+
     <div class="flex">
-      <button class="btn btn-gold btn-sm" onclick="genereerProjectSuggestie()">✨ Suggestie</button>
+      <button class="btn btn-gold btn-sm" onclick="autoCode(true)">✨ Genereer code</button>
       <button class="btn btn-primary" onclick="maakProjectAan()">Aanmaken</button>
       <button class="btn btn-secondary" onclick="sluitModal()">Annuleren</button>
       <span id="modal-status" style="font-size:12px;color:var(--text-dim)"></span>
@@ -2077,35 +2085,73 @@ function slaLeverancierOp(){
 function sluitLevModal(){document.getElementById('lev-modal').classList.add('hidden');}
 
 // ═══ PROJECTEN MODAL ═══
-function openModal(){document.getElementById('project-modal').classList.remove('hidden');updateModalPreview();}
-function sluitModal(){document.getElementById('project-modal').classList.add('hidden');}
-function updateModalPreview(){
-  const k=document.getElementById('modal-klant').value;
-  const l=document.getElementById('modal-locatie').value.toUpperCase().replace(/\s+/g,'-');
-  const p=document.getElementById('modal-product').value.toUpperCase().replace(/\s+/g,'-');
-  document.getElementById('modal-preview').textContent=(l&&p)?`${k}-${l}-${p}`:l?`${k}-${l}-???`:'—';
-  const nk=document.getElementById('modal-naam-klant').value;
-  const nl=document.getElementById('modal-naam-locatie').value;
-  const np=document.getElementById('modal-naam-product').value;
-  const preview=document.getElementById('modal-naam-preview');
-  if(nk||nl||np) preview.textContent=`Naam: ${[nk,nl,np].filter(Boolean).join(' — ')}`;
-  else preview.textContent='';
+// ── Projectcode-systeem (Fase A) — KLANT-LOC-PROD, ≤32 tekens (sticker-limiet 35)
+const STICKER_MAX=32, STICKER_HARD=35;
+// Bekende klant-namen → code. Aanvulbaar; valt anders terug op acroniem.
+const KLANT_REGISTRY={
+  'compananny':'CN','lgm':'LGM','mos interior':'MOS','mos':'MOS',
+  'styqx':'STY','hwc':'HWC','intern':'INT','mortise':'INT'
+};
+function _clean(s){return (s||'').toUpperCase().normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]','g'),'');}
+function afkortKlant(naam){
+  const key=(naam||'').toLowerCase().trim(); if(!key) return '';
+  for(const [k,v] of Object.entries(KLANT_REGISTRY)) if(key.includes(k)) return v;
+  const w=naam.trim().split(/\s+/);
+  if(w.length>1) return _clean(w.map(x=>x[0]).join('')).replace(/[^A-Z0-9]/g,'').slice(0,4);
+  return _clean(naam).replace(/[^A-Z0-9]/g,'').slice(0,4);
 }
-function genereerProjectSuggestie(){
-  // Maak suggestie op basis van de lange naam velden
+function afkortLoc(naam,max=8){
+  let s=_clean(naam).replace(/[^A-Z0-9]/g,''); if(s.length<=max) return s;
+  const first=s[0], rest=s.slice(1).replace(/[AEIOU]/g,''); // klinkers weg, eerste letter blijft
+  return (first+rest).slice(0,max);
+}
+function afkortProduct(naam,max=40){
+  return _clean(naam).replace(/\s+/g,'-').replace(/[^A-Z0-9-]/g,'').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,max);
+}
+function openModal(){
+  ['modal-naam-klant','modal-naam-locatie','modal-naam-product','modal-klant','modal-locatie','modal-product'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
+  // datalist met bekende klantnamen
+  const dl=document.getElementById('klant-namen');
+  if(dl) dl.innerHTML=[...new Set(PROJECT_CODES.map(p=>p.klant_naam).filter(Boolean))].map(n=>`<option value="${n}">`).join('');
+  document.getElementById('project-modal').classList.remove('hidden');
+  updateModalPreview();
+}
+function sluitModal(){document.getElementById('project-modal').classList.add('hidden');}
+// Vul code-segmenten vanuit de volledige namen. force=true overschrijft, anders alleen lege velden.
+function autoCode(force){
   const nk=document.getElementById('modal-naam-klant').value.trim();
   const nl=document.getElementById('modal-naam-locatie').value.trim();
   const np=document.getElementById('modal-naam-product').value.trim();
-  if(!nk&&!nl&&!np){document.getElementById('modal-status').textContent='Vul eerst de naam velden in';return;}
-  // Genereer afkortingen
-  const kAfk=nk?nk.split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,3):'';
-  const lAfk=nl?nl.split(/[-\s]+/).map(w=>w[0]).join('').toUpperCase().slice(0,4):'';
-  const pAfk=np?np.toUpperCase().replace(/\s+/g,'-').slice(0,10):'';
-  if(kAfk) document.getElementById('modal-klant').value=kAfk;
-  if(lAfk) document.getElementById('modal-locatie').value=lAfk;
-  if(pAfk) document.getElementById('modal-product').value=pAfk;
+  const ek=document.getElementById('modal-klant'), el=document.getElementById('modal-locatie'), ep=document.getElementById('modal-product');
+  if((force||!ek.value)&&nk) ek.value=afkortKlant(nk);
+  if((force||!el.value)&&nl) el.value=afkortLoc(nl);
+  if((force||!ep.value)&&np){
+    const rest=Math.max(8, STICKER_MAX-(ek.value.length+el.value.length+2));
+    ep.value=afkortProduct(np, rest);
+  }
   updateModalPreview();
-  document.getElementById('modal-status').textContent='✓ Suggestie gegenereerd — pas aan indien nodig';
+}
+function updateModalPreview(){
+  const ek=document.getElementById('modal-klant'), el=document.getElementById('modal-locatie'), ep=document.getElementById('modal-product');
+  const k=_clean(ek.value).replace(/[^A-Z0-9]/g,''); ek.value=k;
+  const l=_clean(el.value).replace(/[^A-Z0-9]/g,''); el.value=l;
+  const p=afkortProduct(ep.value);
+  const code=[k,l,p].filter(Boolean).join('-');
+  const prev=document.getElementById('sticker-preview'); prev.textContent=code||'—';
+  const cnt=document.getElementById('sticker-count'), warn=document.getElementById('sticker-warn');
+  const len=code.length;
+  cnt.textContent=`${len} / ${STICKER_MAX} tekens`;
+  let col='var(--green)', w='', bc='var(--border-strong)';
+  if(len>STICKER_HARD){col='var(--red)';bc='var(--red)';w='⚠ Te lang voor de sticker — kort het product of de locatie in.';}
+  else if(len>STICKER_MAX){col='var(--orange)';bc='var(--orange)';w='Krap — net binnen de sticker, maar korter is veiliger.';}
+  cnt.style.color=col; prev.style.borderColor=bc; warn.textContent=w;
+  // volledige naam preview
+  const nk=document.getElementById('modal-naam-klant').value.trim();
+  const nl=document.getElementById('modal-naam-locatie').value.trim();
+  const np=document.getElementById('modal-naam-product').value.trim();
+  const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim();
+  document.getElementById('modal-naam-preview').textContent=naam?`Volledige naam: ${naam}`:'';
 }
 function verwijderProject(code){
   if(!confirm(`Project ${code} verwijderen?`)) return;
@@ -2113,27 +2159,34 @@ function verwijderProject(code){
   slaProjectenOp();huidigProject=null;
   document.getElementById('project-detail').innerHTML='';renderProjectLijst();
 }
-async function maakProjectAan(){
-  const k=document.getElementById('modal-klant').value;
-  const l=document.getElementById('modal-locatie').value.toUpperCase().replace(/\s+/g,'-');
-  const p=document.getElementById('modal-product').value.toUpperCase().replace(/\s+/g,'-');
+function maakProjectAan(){
+  const k=_clean(document.getElementById('modal-klant').value).replace(/[^A-Z0-9]/g,'');
+  const l=_clean(document.getElementById('modal-locatie').value).replace(/[^A-Z0-9]/g,'');
+  const p=afkortProduct(document.getElementById('modal-product').value);
   const nk=document.getElementById('modal-naam-klant').value.trim();
   const nl=document.getElementById('modal-naam-locatie').value.trim();
   const np=document.getElementById('modal-naam-product').value.trim();
-  const naam=nk&&nl&&np?`${nk} ${nl} — ${np}`:(nk||'');
   const status=document.getElementById('modal-status');
-  if(!l||!p){status.textContent='Vul locatie en product in';return;}
-  const code=`${k}-${l}-${p}`;
-  if(PROJECT_CODES.find(x=>x.code===code)){status.textContent='Code bestaat al';return;}
-  PROJECT_CODES.push({code,naam:naam||code,klant:k});
+  if(!k||!p){status.style.color='var(--red)';status.textContent='Vul minimaal klant en product in';return;}
+  let code=[k,l,p].filter(Boolean).join('-');
+  if(code.length>STICKER_HARD){status.style.color='var(--red)';status.textContent='Code te lang voor sticker — kort product of locatie in';return;}
+  // collision → volgnummer -02, -03 … (alleen bij botsing, schone codes blijven schoon)
+  if(PROJECT_CODES.find(x=>x.code===code)){
+    let n=2; const base=code;
+    while(PROJECT_CODES.find(x=>x.code===`${base}-${String(n).padStart(2,'0')}`)) n++;
+    code=`${base}-${String(n).padStart(2,'0')}`;
+  }
+  const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim()||code;
+  PROJECT_CODES.push({code,naam,klant:k,klant_naam:nk,loc:l,loc_naam:nl,product:p,product_naam:np,mb_nr:null,created:new Date().toISOString().slice(0,10)});
   slaProjectenOp();
   document.querySelectorAll('#f-project,#ctrl-project,.project-select').forEach(sel=>{
     if(!Array.from(sel.options).some(o=>o.value===code)){
-      const opt=document.createElement('option');opt.value=code;opt.textContent=code;sel.insertBefore(opt,sel.lastElementChild);
+      const opt=document.createElement('option');opt.value=code;opt.textContent=code;
+      if(sel.lastElementChild) sel.insertBefore(opt,sel.lastElementChild); else sel.appendChild(opt);
     }
     sel.value=code;
   });
-  status.textContent=`✓ ${code} aangemaakt`;
+  status.style.color='var(--green)';status.textContent=`✓ ${code} aangemaakt`;
   renderProjectLijst();
   setTimeout(sluitModal,1000);
 }

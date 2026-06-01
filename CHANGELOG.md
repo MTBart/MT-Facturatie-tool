@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-06-01 — feat: nieuwe versie op root index.html — gebruikt zelfde MSAL redirect als oude tool
+- Commit: `428b93f` | Auteur: Bart Witte
+
 ## 2026-06-01 — feat(voorraad): kopie van index-v4 naar voorraad/ als basis voor online tool
 - Commit: `596f3d9` | Auteur: Bart Witte
 

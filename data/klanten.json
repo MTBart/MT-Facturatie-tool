@@ -1,0 +1,57 @@
+{
+  "_doc": "Klant-registry voor het projectcode-systeem (KLANT-LOC-PROD). code = stabiele 2-4 letter sleutel die in stickers/Toggl/mappen verschijnt. naam = volledige naam (mail/MB/UI). aliassen = strings die in een vrije klantnaam matchen op deze code. locaties = per klant afgekorte locatiecodes (LOC ≤8). Bewerkt door de codegenerator in index.html; Fase B leest dit als single source of truth i.p.v. localStorage.",
+  "_versie": 1,
+  "_bijgewerkt": "2026-06-01",
+  "klanten": [
+    {
+      "code": "CN",
+      "naam": "CompaNanny",
+      "aliassen": ["compananny"],
+      "mb_contact_id": null,
+      "locaties": [
+        {"code": "RY", "naam": "Ruysdael"},
+        {"code": "BR", "naam": "Breda"}
+      ]
+    },
+    {
+      "code": "LGM",
+      "naam": "LGM Projecten B.V.",
+      "aliassen": ["lgm"],
+      "mb_contact_id": null,
+      "locaties": [
+        {"code": "OP", "naam": "Oosterpark"}
+      ]
+    },
+    {
+      "code": "MOS",
+      "naam": "MOS Interior",
+      "aliassen": ["mos interior", "mos"],
+      "mb_contact_id": null,
+      "locaties": []
+    },
+    {
+      "code": "STY",
+      "naam": "StyQX",
+      "aliassen": ["styqx"],
+      "mb_contact_id": null,
+      "locaties": []
+    },
+    {
+      "code": "HWC",
+      "naam": "HWC",
+      "aliassen": ["hwc"],
+      "mb_contact_id": null,
+      "locaties": []
+    },
+    {
+      "code": "INT",
+      "naam": "Intern — Mortise & Tenon",
+      "aliassen": ["intern", "mortise"],
+      "mb_contact_id": null,
+      "locaties": [
+        {"code": "ADMIN", "naam": "Administratie"},
+        {"code": "WERKPL", "naam": "Werkplaats"}
+      ]
+    }
+  ]
+}
