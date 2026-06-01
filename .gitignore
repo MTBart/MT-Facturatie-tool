@@ -10,6 +10,10 @@ _backups/
 CRM/.env
 CRM/token_cache.json
 
+# Claude Code & tooling runtime-artefacten (nooit committen)
+.claude/worktrees/
+.wrangler/
+
 # MT Agent — runtime-artefacten (regenereren zichzelf)
 Agents/__pycache__/
 Agents/agent_log.txt
