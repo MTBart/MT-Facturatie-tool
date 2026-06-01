@@ -779,6 +779,28 @@ let huidigProject=null, voorraadActiefTab='platen';
 let leveranciers=JSON.parse(localStorage.getItem('mt_leveranciers')||'[]');
 let editLevIndex=-1;
 
+// ═══ KLANT-REGISTRY (Fase B) — single source of truth = data/klanten.json ═══
+// Hardcoded fallback zodat het offline / zonder fetch blijft werken.
+let KLANTEN=[
+  {code:'CN',naam:'CompaNanny',mb_contact_id:null},
+  {code:'LGM',naam:'LGM Projecten B.V.',mb_contact_id:'463646635183834931'},
+  {code:'MOS',naam:'MOS Interiors',mb_contact_id:'443177514160883428'},
+  {code:'STY',naam:'Styles Concepts B.V.',mb_contact_id:'480850314306520356'},
+  {code:'HWC',naam:'Hermann Wesselink College',mb_contact_id:null},
+  {code:'PT',naam:'PT Bouw & Meubel B.V.',mb_contact_id:'414898677638760123'},
+  {code:'VK',naam:'Aannemers- en Installatiebedrijf Verkaik',mb_contact_id:'422963124634650333'},
+  {code:'INT',naam:'Intern — Mortise & Tenon',mb_contact_id:null}
+];
+function klantByCode(code){return KLANTEN.find(k=>k.code===(code||'').toUpperCase())||null;}
+async function laadKlantRegistry(){
+  try{
+    const r=await fetch('data/klanten.json',{cache:'no-store'});
+    if(!r.ok) return;
+    const d=JSON.parse((await r.text()).replace(/^﻿/,''));
+    if(Array.isArray(d?.klanten)&&d.klanten.length) KLANTEN=d.klanten;
+  }catch(e){/* fallback blijft staan */}
+}
+
 // ═══ HELPERS ═══
 function getMbToken(){return '';} // token zit nu veilig in Cloudflare Worker
 function getAdmin(){return localStorage.getItem('mt_mb_admin')||ADMIN_DEFAULT;}
@@ -807,12 +829,13 @@ async function claudeCall(messages,maxTokens=1800){
 function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});}
 
 // ═══ INIT ═══
-window.onload=()=>{
+window.onload=async()=>{
   loadSavedSettings();
   renderFactuurFormulier();
   renderHistory();
   migreerVoorraadCategorieen();
   renderVoorraadActief();
+  await laadKlantRegistry();
   renderProjectLijst();
   renderBestellijst();
   renderLeveranciersBeheer();
@@ -1569,6 +1592,18 @@ function renderProjectDetail(proj){
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
   const projItems=voorraad.filter(v=>v.project===proj.code);
   const totaalInkoop=projItems.reduce((s,v)=>s+(v.aantal||1)*(v.stukprijs||0),0);
+  // ── Klant resolven via registry (Fase B bidirectionele link) ──
+  const kReg=klantByCode(proj.klant);
+  const klantNaam=kReg?.naam||proj.klant_naam||proj.klant||'—';
+  const klantChip=proj.klant
+    ? (kReg?.mb_contact_id
+        ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${kReg.mb_contact_id}" target="_blank" style="color:var(--gold);text-decoration:none" title="Open in Moneybird">${klantNaam} ↗</a>`
+        : `<a href="#" onclick="event.preventDefault();document.querySelector('.tab-btn[onclick*=\\'klanten\\']')?.click()" style="color:var(--gold);text-decoration:none" title="Naar Klanten">${klantNaam} →</a>`)
+    : '—';
+  // ── Moneybird-nr inline bewerkbaar ──
+  const mbNrBlok=proj.mb_nr
+    ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${proj.mb_nr}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${proj.mb_nr} ↗</a> <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')">✏</button>`
+    : `<button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')">+ koppelen</button>`;
   document.getElementById('project-detail').innerHTML=`
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1.25rem">
@@ -1583,7 +1618,10 @@ function renderProjectDetail(proj){
       <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:1rem">
         <div class="kpi-card green"><div class="kpi-label">Materiaalinkoop</div><div class="kpi-waarde" style="font-size:20px">${fmt(totaalInkoop)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Materiaalregels</div><div class="kpi-waarde" style="font-size:20px">${projItems.length}</div></div>
-        <div class="kpi-card gold"><div class="kpi-label">Klant</div><div class="kpi-waarde" style="font-size:20px">${proj.klant||'—'}</div></div>
+        <div class="kpi-card gold"><div class="kpi-label">Klant</div><div class="kpi-waarde" style="font-size:15px;line-height:1.3">${klantChip}</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.5rem;font-size:12px;color:var(--text-dim);margin-bottom:1rem">
+        <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${mbNrBlok}
       </div>
       <hr class="divider">
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
@@ -1617,7 +1655,7 @@ function renderProjectDetail(proj){
         </tr></thead>
         <tbody>${projItems.slice().reverse().map(v=>`<tr>
           <td style="font-size:12px">${v.omschrijving}</td>
-          <td style="font-size:11px;color:var(--text-dim)">${v.leverancier||'—'}</td>
+          <td style="font-size:11px;color:var(--text-dim)">${levLink(v.leverancier)}</td>
           <td style="text-align:right;font-family:var(--mono)">${v.aantal||1}</td>
           <td style="text-align:right;font-family:var(--mono)">€ ${(v.stukprijs||0).toFixed(2)}</td>
           <td style="text-align:right;font-family:var(--mono);font-weight:600">€ ${((v.aantal||1)*(v.stukprijs||0)).toFixed(2)}</td>
@@ -1626,6 +1664,29 @@ function renderProjectDetail(proj){
         </tr>`).join('')}</tbody>
       </table>`:'<p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}
     </div>`;
+}
+// ── Leverancier-cel → link naar Leveranciers-tab als bekend, anders platte tekst ──
+function levLink(naam){
+  if(!naam) return '—';
+  const match=leveranciers.find(l=>l.naam.toLowerCase()===naam.toLowerCase());
+  if(!match) return naam;
+  return `<a href="#" onclick="event.preventDefault();gaNaarLeverancier('${naam.replace(/'/g,"\\'")}')" style="color:var(--green);text-decoration:none">${naam} →</a>`;
+}
+function gaNaarLeverancier(naam){
+  const btn=document.querySelector(".tab-btn[onclick*=\"'instellingen'\"]");
+  if(btn){btn.click();}
+  const i=leveranciers.findIndex(l=>l.naam.toLowerCase()===naam.toLowerCase());
+  if(i>=0) setTimeout(()=>{document.getElementById('leveranciers-beheer')?.scrollIntoView({behavior:'smooth',block:'center'});bewerkLeverancier(i);},60); else toonLeverancierInfo(naam);
+}
+// ── Moneybird-contact koppelen aan project (inline, geen write naar MB) ──
+function bewerkProjectMbNr(code){
+  const p=PROJECT_CODES.find(x=>x.code===code);if(!p) return;
+  const huidig=p.mb_nr||'';
+  const v=prompt('Moneybird-contact-ID voor dit project\n(leeg = ontkoppelen):',huidig);
+  if(v===null) return;
+  p.mb_nr=v.trim()||null;
+  slaProjectenOp();
+  renderProjectDetail(huidigProject);
 }
 
 // ═══ NCR IMPORT ═══
