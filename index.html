@@ -786,6 +786,26 @@ let KLANTEN=[
   {code:'INT',naam:'Intern — Mortise & Tenon',mb_contact_id:null}
 ];
 function klantByCode(code){return KLANTEN.find(k=>k.code===(code||'').toUpperCase())||null;}
+// Resolveert MB-contact voor een project: eerst locatie-niveau (CN-vestiging), dan klant-niveau.
+function resolveMbContact(proj){
+  if(!proj) return null;
+  const k=klantByCode(proj.klant);
+  if(!k) return null;
+  if(proj.loc && Array.isArray(k.locaties)){
+    const loc=k.locaties.find(l=>l.code===(proj.loc||'').toUpperCase());
+    if(loc?.mb_contact_id) return loc.mb_contact_id;
+  }
+  return k.mb_contact_id||null;
+}
+function resolveKlantNaam(proj){
+  const k=klantByCode(proj.klant);
+  if(!k) return proj.klant_naam||proj.klant||'—';
+  if(proj.loc && Array.isArray(k.locaties)){
+    const loc=k.locaties.find(l=>l.code===(proj.loc||'').toUpperCase());
+    if(loc) return `${k.naam} — ${loc.naam}`;
+  }
+  return k.naam;
+}
 async function laadKlantRegistry(){
   try{
     const r=await fetch('data/klanten.json',{cache:'no-store'});
@@ -1600,17 +1620,21 @@ function renderProjectDetail(proj){
   const projItems=voorraad.filter(v=>v.project===proj.code);
   const totaalInkoop=projItems.reduce((s,v)=>s+(v.aantal||1)*(v.stukprijs||0),0);
   // ── Klant resolven via registry (Fase B bidirectionele link) ──
-  const kReg=klantByCode(proj.klant);
-  const klantNaam=kReg?.naam||proj.klant_naam||proj.klant||'—';
+  // resolveMbContact: locatie-niveau eerst (CN-vestiging), dan klant-niveau.
+  // proj.mb_nr = handmatige override (heeft voorrang). Anders auto via registry.
+  const autoMb=resolveMbContact(proj);
+  const effectiveMb=proj.mb_nr||autoMb;
+  const klantNaam=resolveKlantNaam(proj);
   const klantChip=proj.klant
-    ? (kReg?.mb_contact_id
-        ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${kReg.mb_contact_id}" target="_blank" style="color:var(--gold);text-decoration:none" title="Open in Moneybird">${klantNaam} ↗</a>`
+    ? (effectiveMb
+        ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${effectiveMb}" target="_blank" style="color:var(--gold);text-decoration:none" title="Open in Moneybird">${klantNaam} ↗</a>`
         : `<a href="#" onclick="event.preventDefault();document.querySelector('.tab-btn[onclick*=\\'klanten\\']')?.click()" style="color:var(--gold);text-decoration:none" title="Naar Klanten">${klantNaam} →</a>`)
     : '—';
-  // ── Moneybird-nr inline bewerkbaar ──
-  const mbNrBlok=proj.mb_nr
-    ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${proj.mb_nr}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${proj.mb_nr} ↗</a> <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')">✏</button>`
-    : `<button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')">+ koppelen</button>`;
+  // ── Moneybird-contact: auto via registry of handmatig overschreven ──
+  const mbBron=proj.mb_nr?'handmatig':(autoMb?'auto via klantregistry':null);
+  const mbNrBlok=effectiveMb
+    ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${effectiveMb}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${effectiveMb} ↗</a> <span style="font-size:10px;color:var(--text-faint)">(${mbBron})</span> <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')" title="Handmatig overschrijven">✏</button>`
+    : `<span style="color:var(--text-faint)">geen — </span><button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')">+ handmatig koppelen</button>`;
   document.getElementById('project-detail').innerHTML=`
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1.25rem">
