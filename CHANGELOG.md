@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-05-17 — feat(agents): QR + CLI + video-analyse tools, digest-mail weer aan
+- Commit: `f6a20f7` | Auteur: Bart Witte
+
 ## 2026-05-17 — review(agents): dagelijkse Claude-review 2026-05-17
 - Commit: `a32abfd` | Auteur: Bart Witte
 
