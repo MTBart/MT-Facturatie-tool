@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-06-01 — Repo-hygiene: negeer .claude/worktrees + .wrangler cache
+- Commit: `7699109` | Auteur: Bart Witte
+
 ## 2026-06-01 — Fase B increment 1: project-detail bidirectionele links
 - Commit: `22fbae0` | Auteur: Bart Witte
 

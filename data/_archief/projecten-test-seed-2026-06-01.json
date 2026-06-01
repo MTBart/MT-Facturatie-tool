@@ -1,0 +1,11 @@
+{
+  "_doc": "Gearchiveerde test-projecten uit de oude tool (vóór Fase B). Puur testdata, grotendeels incompleet — door Bart afgekeurd 2026-06-01 ('archiveer maar of ruim op'). De live tool start nu met een lege projectenlijst; nieuwe projecten via de KLANT-LOC-PROD-codegenerator. Bewaard voor het geval er ooit iets uit teruggehaald moet worden.",
+  "_gearchiveerd": "2026-06-01",
+  "projecten": [
+    {"code": "CN-RY-KEUKEN", "naam": "CompaNanny Ruysdael — Keuken", "klant": "CN"},
+    {"code": "CN-BR-MEUBEL", "naam": "CompaNanny Breda — Meubel", "klant": "CN"},
+    {"code": "LGM-OP-KAST", "naam": "LGM Oosterpark — Kast", "klant": "LGM"},
+    {"code": "INT-ADMIN", "naam": "Intern — Administratie", "klant": "INT"},
+    {"code": "INT-WERKPLAATS", "naam": "Intern — Werkplaats", "klant": "INT"}
+  ]
+}

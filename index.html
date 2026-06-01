@@ -763,13 +763,7 @@ const BANK_ID = '343544076091524743';
 const VOORRAAD_LEVERANCIERS = ['dozon','ostermann','pd hout','kghn','drimensa','finsa','egger','pfleiderer','kronospan'];
 
 // Projecten zonder jaarsuffix
-let PROJECT_CODES = JSON.parse(localStorage.getItem('mt_projecten') || 'null') || [
-  {code:'CN-RY-KEUKEN',naam:'CompaNanny Ruysdael — Keuken',klant:'CN'},
-  {code:'CN-BR-MEUBEL',naam:'CompaNanny Breda — Meubel',klant:'CN'},
-  {code:'LGM-OP-KAST',naam:'LGM Oosterpark — Kast',klant:'LGM'},
-  {code:'INT-ADMIN',naam:'Intern — Administratie',klant:'INT'},
-  {code:'INT-WERKPLAATS',naam:'Intern — Werkplaats',klant:'INT'},
-];
+let PROJECT_CODES = JSON.parse(localStorage.getItem('mt_projecten') || '[]');
 
 // ═══ STATE ═══
 let ledgers=[], regelCount=0, currentFile=null;
@@ -799,6 +793,18 @@ async function laadKlantRegistry(){
     const d=JSON.parse((await r.text()).replace(/^﻿/,''));
     if(Array.isArray(d?.klanten)&&d.klanten.length) KLANTEN=d.klanten;
   }catch(e){/* fallback blijft staan */}
+}
+// Eenmalige opruiming: oude test-projecten uit de localStorage halen (Bart 2026-06-01).
+// Archiveert eerst naar mt_projecten_archief_<datum> zodat niets onomkeerbaar weg is.
+function ruimTestProjectenOp(){
+  if(localStorage.getItem('mt_projecten_test_geruimd')) return;
+  const huidig=JSON.parse(localStorage.getItem('mt_projecten')||'[]');
+  if(huidig.length){
+    localStorage.setItem('mt_projecten_archief_20260601',JSON.stringify(huidig));
+  }
+  localStorage.setItem('mt_projecten','[]');
+  PROJECT_CODES=[];
+  localStorage.setItem('mt_projecten_test_geruimd','1');
 }
 
 // ═══ HELPERS ═══
@@ -836,6 +842,7 @@ window.onload=async()=>{
   migreerVoorraadCategorieen();
   renderVoorraadActief();
   await laadKlantRegistry();
+  ruimTestProjectenOp();
   renderProjectLijst();
   renderBestellijst();
   renderLeveranciersBeheer();
