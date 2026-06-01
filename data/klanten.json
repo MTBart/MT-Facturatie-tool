@@ -1,6 +1,6 @@
 {
-  "_doc": "Klant-registry voor het projectcode-systeem (KLANT-LOC-PROD). code = stabiele 2-4 letter sleutel die in stickers/Toggl/mappen verschijnt. naam = volledige naam (mail/MB/UI). aliassen = strings die in een vrije klantnaam matchen op deze code. locaties = per klant afgekorte locatiecodes (LOC ≤8). Bewerkt door de codegenerator in index.html; Fase B leest dit als single source of truth i.p.v. localStorage.",
-  "_versie": 1,
+  "_doc": "Klant-registry voor het projectcode-systeem (KLANT-LOC-PROD). code = stabiele 2-4 letter sleutel die in stickers/Toggl/mappen verschijnt. naam = volledige naam (mail/MB/UI). aliassen = strings die in een vrije klantnaam matchen op deze code. locaties = per klant afgekorte locatiecodes (LOC ≤8). mb_contact_id = Moneybird contact (CN heeft per vestiging een eigen contact, dus null op klantniveau). Bewerkt door de codegenerator in index.html; Fase B leest dit als single source of truth i.p.v. localStorage.",
+  "_versie": 2,
   "_bijgewerkt": "2026-06-01",
   "klanten": [
     {
@@ -8,39 +8,41 @@
       "naam": "CompaNanny",
       "aliassen": ["compananny"],
       "mb_contact_id": null,
+      "opmerking": "Kinderopvangketen; 53 vestigingen elk met eigen MB-contact. LOC = vestiging.",
       "locaties": [
-        {"code": "RY", "naam": "Ruysdael"},
-        {"code": "BR", "naam": "Breda"}
+        {"code": "RY", "naam": "Ruysdaelkade"},
+        {"code": "BAJES", "naam": "Bajeskwartier", "mb_contact_id": "473636381414918021"},
+        {"code": "BENOORD", "naam": "Benoordenhout", "mb_contact_id": "457832877499876599"}
       ]
     },
     {
       "code": "LGM",
       "naam": "LGM Projecten B.V.",
       "aliassen": ["lgm"],
-      "mb_contact_id": null,
-      "locaties": [
-        {"code": "OP", "naam": "Oosterpark"}
-      ]
+      "mb_contact_id": "463646635183834931",
+      "locaties": []
     },
     {
       "code": "MOS",
-      "naam": "MOS Interior",
+      "naam": "MOS Interiors",
       "aliassen": ["mos interior", "mos"],
-      "mb_contact_id": null,
+      "mb_contact_id": "443177514160883428",
       "locaties": []
     },
     {
       "code": "STY",
-      "naam": "StyQX",
-      "aliassen": ["styqx"],
-      "mb_contact_id": null,
+      "naam": "Styles Concepts B.V.",
+      "aliassen": ["styles", "styqx"],
+      "mb_contact_id": "480850314306520356",
+      "opmerking": "Creatief/event-bureau; eindklant-werk (bv. Shimano flightcase).",
       "locaties": []
     },
     {
       "code": "HWC",
-      "naam": "HWC",
-      "aliassen": ["hwc"],
+      "naam": "Hermann Wesselink College",
+      "aliassen": ["wesselink", "wisselink", "hwc"],
       "mb_contact_id": null,
+      "opmerking": "Middelbare school Amstelveen. Geen eigen MB-contact — facturatie via inter-projecten (zie Klanten/Hermann-wesselink-college.md).",
       "locaties": []
     },
     {

@@ -698,7 +698,7 @@ textarea{resize:vertical;min-height:60px}
       <div class="field" style="margin-bottom:0">
         <label>Klant (2-4)</label>
         <input type="text" id="modal-klant" placeholder="CN" oninput="updateModalPreview()" list="klant-codes" maxlength="4" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
-        <datalist id="klant-codes"><option value="CN"><option value="LGM"><option value="MOS"><option value="STY"><option value="HWC"><option value="GBK"><option value="EZ"><option value="DV"><option value="JAN"><option value="INT"></datalist>
+        <datalist id="klant-codes"><option value="CN"><option value="LGM"><option value="MOS"><option value="STY"><option value="HWC"><option value="INT"></datalist>
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Locatie (≤8)</label>
@@ -2090,7 +2090,8 @@ const STICKER_MAX=32, STICKER_HARD=35;
 // Bekende klant-namen → code. Aanvulbaar; valt anders terug op acroniem.
 const KLANT_REGISTRY={
   'compananny':'CN','lgm':'LGM','mos interior':'MOS','mos':'MOS',
-  'styqx':'STY','hwc':'HWC','intern':'INT','mortise':'INT'
+  'styles':'STY','styqx':'STY','wesselink':'HWC','wisselink':'HWC','hwc':'HWC',
+  'intern':'INT','mortise':'INT'
 };
 function _clean(s){return (s||'').toUpperCase().normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]','g'),'');}
 function afkortKlant(naam){
