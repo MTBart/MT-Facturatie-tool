@@ -1,0 +1,86 @@
+#!/bin/bash
+# Mortise & Tenon — pre-commit hook (VERSION-CONTROLLED via core.hooksPath=githooks)
+# SLOT 1: secret/PII-guard  (blokkeert commit bij verboden bestand of token)
+# SLOT 2: backup grote bestanden + CHANGELOG bijwerken
+# Overzicht: zie REPO-VEILIGHEID.md
+#
+# Activeren na re-clone (eenmalig):  git config core.hooksPath githooks
+
+REPO_DIR="$(git rev-parse --show-toplevel)"
+
+# ============================================================
+#  SECRET / PII GUARD — harde stop. Repo is PUBLIC.
+# ============================================================
+STAGED="$(git diff --cached --name-only --diff-filter=ACM)"
+VIOLATIONS=""
+
+# ---- 1a. verboden bestandspaden (naam/extensie) ----
+PATH_RE='(^|/)\.env($|\.)|secret|(^|/)\.mt-secret/|token.*\.json$|token_cache\.json$|google-(token|client)\.json$|(^|/)moneybird\.json$|(^|/)toggl\.json$|\.(key|pem|pfx|p12)$|id_rsa|credentials.*\.json$|client_secret|auth_.*\.txt$|_tmp\.txt$|_result\.txt$|login_instructie|(^|/)config\.json$|moneybird-contacten\.|(^|/)(CRM|Toggl|Vergaderingen|Moneybird)/'
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    *.env.example|*.example.json|*-template.json|inbox-sorter-config-template.json) continue ;;
+  esac
+  if echo "$f" | grep -Eiq "$PATH_RE"; then
+    VIOLATIONS="${VIOLATIONS}  [bestand] $f\n"
+  fi
+done <<< "$STAGED"
+
+# ---- 1b. content-scan: token-achtige literals in staged blobs ----
+CONTENT_RE='ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ0eXAiOiJKV1Q|"refresh_token"[[:space:]]*:[[:space:]]*"[A-Za-z0-9]'
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    *.png|*.jpg|*.jpeg|*.gif|*.pdf|*.xlsx|*.ico|*.woff*|*.ttf) continue ;;
+    # security-infra bevat de detectie-patronen zelf als documentatie:
+    githooks/pre-commit|REPO-VEILIGHEID.md) continue ;;
+  esac
+  if git show ":$f" 2>/dev/null | grep -Eq "$CONTENT_RE"; then
+    VIOLATIONS="${VIOLATIONS}  [inhoud] $f bevat een token-achtige string\n"
+  fi
+done <<< "$STAGED"
+
+if [ -n "$VIOLATIONS" ]; then
+  echo ""
+  echo "🛑 COMMIT GEBLOKKEERD — secret/PII gedetecteerd (repo is PUBLIC):"
+  echo -e "$VIOLATIONS"
+  echo "Fix: 'git restore --staged <bestand>' en voeg het toe aan .gitignore."
+  echo "Bewust tóch committen? Eenmalig:  git commit --no-verify   (zeer ongebruikelijk)"
+  echo ""
+  exit 1
+fi
+echo "✓ Secret-guard: schoon"
+
+# ============================================================
+#  BACKUP grote bestanden + CHANGELOG
+# ============================================================
+BACKUP_DIR="$REPO_DIR/_backups"
+TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
+mkdir -p "$BACKUP_DIR"
+
+for FILE in index-v4.html uren.html; do
+  if [ -f "$REPO_DIR/$FILE" ]; then
+    BASENAME="${FILE%.*}"
+    EXT="${FILE##*.}"
+    BACKUP="$BACKUP_DIR/${BASENAME}_${TIMESTAMP}.${EXT}"
+    cp "$REPO_DIR/$FILE" "$BACKUP"
+    echo "✓ Backup: $BACKUP"
+    ls -t "$BACKUP_DIR/${BASENAME}_"*.${EXT} 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null
+  fi
+done
+
+{
+  echo "# CHANGELOG — Mortise & Tenon Claude Tools"
+  echo ""
+  echo "Automatisch bijgehouden via git. Elke commit verschijnt hier."
+  echo "Grote bestanden (index-v4.html, uren.html) worden gebackupt in \`_backups/\` bij elke commit."
+  echo ""
+  echo "---"
+  echo ""
+  git log --pretty=format:"## %ad — %s%n- Commit: \`%h\` | Auteur: %an%n" --date=format:"%Y-%m-%d"
+} > "$REPO_DIR/CHANGELOG.md"
+
+git add "$REPO_DIR/CHANGELOG.md"
+echo "✓ CHANGELOG.md bijgewerkt"

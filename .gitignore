@@ -1,16 +1,54 @@
+# ============================================================
+#  MT-Facturatie-tool — .gitignore
+#  REPO IS PUBLIC. Alles hieronder mag NOOIT live.
+#  Zie REPO-VEILIGHEID.md voor het overzicht-in-één-oogopslag.
+#  Tweede slot: .git/hooks/pre-commit blokkeert de commit zelf.
+# ============================================================
+
+# ---------- 1. SECRETS / CREDENTIALS (hard, breed) ----------
+# Tokens, keys, env-files — elke variant, overal in de tree.
+*.env
+.env
+.env.*
+!.env.example
+!*.env.example
+*secret*
+*Secret*
+.mt-secret/
+*token*.json
+token_cache.json
+*_token.json
+google-token.json
+google-client.json
+moneybird.json
+toggl.json
+*.key
+*.pem
+*.pfx
+*.p12
+id_rsa*
+credentials*.json
+client_secret*.json
+auth_*.txt
+*_tmp.txt
+*_result.txt
+login_instructie*.txt
+config.json
+
+# ---------- 2. KLANT-PII / BEDRIJFSDATA ----------
+moneybird-contacten.json
+moneybird-contacten.md
+Moneybird/
+CRM/
+Toggl/
+Vergaderingen/
+Facturatie tool/
 *.xlsx
 *.pdf
 projectinstructies_claude.md
-Moneybird/
-Facturatie tool/
-config.json
+
+# ---------- 3. RUNTIME / BACKUPS / TOOLING-ARTEFACTEN ----------
 _backups/
-
-# Secrets — nooit committen
-CRM/.env
-CRM/token_cache.json
-
-# Claude Code & tooling runtime-artefacten (nooit committen)
 .claude/worktrees/
 .wrangler/
 

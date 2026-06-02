@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-06-02 — @ #21: auto-mappenstructuur + echte klantnamen bij project-aanmaak
+- Commit: `d46b2bf` | Auteur: Bart Witte
+
 ## 2026-06-01 — Fase B: auto-match Moneybird-contact op project-detail
 - Commit: `2a8e6ee` | Auteur: Bart Witte
 
