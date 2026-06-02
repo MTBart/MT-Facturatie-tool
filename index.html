@@ -2247,9 +2247,17 @@ function afkortProduct(naam,max=40){
 function openModal(){
   ['modal-naam-klant','modal-naam-locatie','modal-naam-product','modal-klant','modal-locatie','modal-product'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
-  // datalist met bekende klantnamen
+  // datalist met klantnamen: ECHTE registry-namen eerst (single source = klanten.json),
+  // aangevuld met namen uit bestaande projecten. Zo stelt het typeveld de echte
+  // bedrijfsnaam voor (bv. "Styles Concepts B.V.") en mapt autoCode die naar de code.
   const dl=document.getElementById('klant-namen');
-  if(dl) dl.innerHTML=[...new Set(PROJECT_CODES.map(p=>p.klant_naam).filter(Boolean))].map(n=>`<option value="${n}">`).join('');
+  if(dl){
+    const namen=[...new Set([
+      ...KLANTEN.map(k=>k.naam).filter(Boolean),
+      ...PROJECT_CODES.map(p=>p.klant_naam).filter(Boolean)
+    ])];
+    dl.innerHTML=namen.map(n=>`<option value="${n}">`).join('');
+  }
   document.getElementById('project-modal').classList.remove('hidden');
   updateModalPreview();
 }
@@ -2295,7 +2303,7 @@ function verwijderProject(code){
   slaProjectenOp();huidigProject=null;
   document.getElementById('project-detail').innerHTML='';renderProjectLijst();
 }
-function maakProjectAan(){
+async function maakProjectAan(){
   const k=_clean(document.getElementById('modal-klant').value).replace(/[^A-Z0-9]/g,'');
   const l=_clean(document.getElementById('modal-locatie').value).replace(/[^A-Z0-9]/g,'');
   const p=afkortProduct(document.getElementById('modal-product').value);
@@ -2313,7 +2321,8 @@ function maakProjectAan(){
     code=`${base}-${String(n).padStart(2,'0')}`;
   }
   const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim()||code;
-  PROJECT_CODES.push({code,naam,klant:k,klant_naam:nk,loc:l,loc_naam:nl,product:p,product_naam:np,mb_nr:null,created:new Date().toISOString().slice(0,10)});
+  const nieuwProj={code,naam,klant:k,klant_naam:nk,loc:l,loc_naam:nl,product:p,product_naam:np,mb_nr:null,created:new Date().toISOString().slice(0,10)};
+  PROJECT_CODES.push(nieuwProj);
   slaProjectenOp();
   document.querySelectorAll('#f-project,#ctrl-project,.project-select').forEach(sel=>{
     if(!Array.from(sel.options).some(o=>o.value===code)){
@@ -2324,7 +2333,17 @@ function maakProjectAan(){
   });
   status.style.color='var(--green)';status.textContent=`✓ ${code} aangemaakt`;
   renderProjectLijst();
-  setTimeout(sluitModal,1000);
+  // Mappenstructuur op SharePoint aanmaken (mkdir-p, idempotent)
+  try{
+    status.textContent=`✓ ${code} aangemaakt — mappen aanmaken…`;
+    await genereerProjectMappen(nieuwProj);
+    status.textContent=`✓ ${code} aangemaakt + mappen op SharePoint`;
+  }catch(e){
+    console.warn('mappen aanmaken faalde:',e);
+    status.style.color='var(--amber,#d97706)';
+    status.textContent=`✓ ${code} aangemaakt — ⚠ mappen niet aangemaakt: ${e.message||e}`;
+  }
+  setTimeout(sluitModal,1600);
 }
 
 // ═══ DASHBOARD ═══
@@ -3024,7 +3043,110 @@ const _SP = {
       try { await this.write(key + '.json', JSON.parse(rawValue)); }
       catch(e) { await this.write(key + '.json', rawValue); }
     }, 2000);
+  },
+
+  // Aparte On-Prem-Data document-library (NIET de site-default "Documenten" drive).
+  // Hier leeft "Nieuwe mappenstructuur". Drive-id via Graph bevestigd 2026-06-02.
+  PROJ_DRIVE: 'b!lTex941J7USVCgvB3IzGjgLtfqmMmeJBvKGym8WK_yoejLeBeRL4SJ3YbCz59r4c',
+
+  _norm(s) {
+    return (s||'').toLowerCase()
+      .replace(/\bb\.?\s*v\.?\b/g,'')   // " B.V." weg
+      .replace(/[.,]/g,'')
+      .replace(/\s+/g,' ').trim();
+  },
+
+  async listChildren(path) {
+    const token = await window.getGraphToken();
+    if (!token) throw new Error('Niet ingelogd op Microsoft 365');
+    const url = `https://graph.microsoft.com/v1.0/drives/${this.PROJ_DRIVE}/root:/${encodeURI(path)}:/children?$select=id,name,folder&$top=999`;
+    const r = await fetch(url, { headers: {'Authorization':`Bearer ${token}`} });
+    if (r.status === 404) return [];
+    if (!r.ok) throw new Error(`list "${path}" HTTP ${r.status}`);
+    return (await r.json()).value || [];
+  },
+
+  async rename(itemId, newName) {
+    const token = await window.getGraphToken();
+    const url = `https://graph.microsoft.com/v1.0/drives/${this.PROJ_DRIVE}/items/${itemId}`;
+    const r = await fetch(url, {
+      method: 'PATCH',
+      headers: {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body: JSON.stringify({ name: newName })
+    });
+    if (!r.ok) {
+      const txt = await r.text().catch(()=>'');
+      throw new Error(`rename -> "${newName}" HTTP ${r.status}: ${txt.slice(0,200)}`);
+    }
+    return newName;
+  },
+
+  // mkdir-p met canonieke naam. wantedName = de ECHTE naam (registry), bv.
+  // "Styles Concepts B.V.". Gedrag:
+  //   1. exacte match  -> hergebruiken
+  //   2. genorm. match maar andere schrijfwijze -> HERNOEMEN naar wantedName
+  //      (zo convergeren oude afwijkende mappen "Styles Concepts" /
+  //       "Herman Wesselink College" naar de echte naam) — tenzij rename=false
+  //   3. niets -> aanmaken met wantedName
+  // Returnt de werkelijk gebruikte (echte) mapnaam.
+  async ensureFolder(parentPath, wantedName, rename = true) {
+    // SharePoint verbiedt deze tekens + een naam mag niet eindigen op '.' of spatie
+    // ("Styles Concepts B.V." -> "Styles Concepts B.V").
+    const safe = wantedName.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'');
+    let existing = [];
+    try { existing = await this.listChildren(parentPath); } catch(e) { existing = []; }
+    // 1. exacte match (case-sensitive op werkelijke naam)
+    const exact = existing.find(c => c.folder && c.name === safe);
+    if (exact) return exact.name;
+    // 2. genormaliseerde match met afwijkende schrijfwijze -> hernoemen naar echte naam
+    const want = this._norm(safe);
+    const near = existing.find(c => c.folder && this._norm(c.name) === want);
+    if (near) {
+      if (!rename) return near.name;
+      try { return await this.rename(near.id, safe); }
+      catch(e) { console.warn('rename faalde, hergebruik oude naam:', e); return near.name; }
+    }
+    // 3. aanmaken
+    const token = await window.getGraphToken();
+    const url = `https://graph.microsoft.com/v1.0/drives/${this.PROJ_DRIVE}/root:/${encodeURI(parentPath)}:/children`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body: JSON.stringify({ name: safe, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' })
+    });
+    if (r.status === 409) return safe;   // race — bestaat nu
+    if (!r.ok) {
+      const txt = await r.text().catch(()=>'');
+      throw new Error(`mkdir "${parentPath}/${safe}" HTTP ${r.status}: ${txt.slice(0,200)}`);
+    }
+    return safe;
   }
+};
+
+// Mappenstructuur op SharePoint voor nieuw project (mkdir-p, idempotent)
+window.genereerProjectMappen = async function(proj) {
+  const ROOT = 'Nieuwe mappenstructuur';
+  const SUBS = ['01_Offerte','02_Ontwerp','03_Vectorworks','04_Holzher',
+                '05_Aangeleverd','06_Fotos','07_Administratie','08_Archief',
+                '09_Werktekeningen','10_CNC'];
+  const k = (typeof klantByCode === 'function') ? klantByCode(proj.klant) : null;
+  const klantNaam = (k && k.naam) || proj.klant_naam || proj.klant;
+  const klantFolder = await _SP.ensureFolder(ROOT, klantNaam);
+  let parent = `${ROOT}/${klantFolder}`;
+  if (proj.loc) {
+    let locNaam = proj.loc_naam || proj.loc;
+    if (k && Array.isArray(k.locaties)) {
+      const lc = k.locaties.find(x => x.code === (proj.loc||'').toUpperCase());
+      if (lc && lc.naam) locNaam = lc.naam;
+    }
+    const locFolder = await _SP.ensureFolder(parent, locNaam);
+    parent = `${parent}/${locFolder}`;
+  }
+  const projNaam = (proj.product_naam || proj.naam || proj.code);
+  const projFolder = await _SP.ensureFolder(parent, `${proj.code} - ${projNaam}`, false);
+  const projPath = `${parent}/${projFolder}`;
+  for (const sub of SUBS) await _SP.ensureFolder(projPath, sub, false);
+  return projPath;
 };
 
 // Monkey-patch: localStorage schrijft ook naar SharePoint voor persistente keys
