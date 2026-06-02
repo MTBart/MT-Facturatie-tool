@@ -1,0 +1,10 @@
+{
+  "tenant_id": "",
+  "client_id": "",
+  "client_secret": "",
+  "moneybird_token": "",
+  "moneybird_admin_id": "",
+  "shared_mailbox": "info@mortiseandtenon.nl",
+  "contacts_cache": "C:\\Users\\BartWitte\\Mortise & Tenon\\Mortise & Tenon - On-Prem-Data\\Applicaties\\Claude\\moneybird-contacten.json",
+  "log_file": "C:\\Users\\BartWitte\\Mortise & Tenon\\Mortise & Tenon - On-Prem-Data\\Applicaties\\Claude\\inbox-sort-log.json"
+}
