@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-06-02 — @ Fix De Verbouwer-bug + SharePoint-canonieke klantregistry
+- Commit: `b3b519f` | Auteur: Bart Witte
+
 ## 2026-06-02 — #20: Excel-upload (.xlsx/.xls) naast CSV bij VW-kostenimport
 - Commit: `56d064a` | Auteur: Bart Witte
 
