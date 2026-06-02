@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-06-02 — Tooling: VW-Excel vendor (SheetJS), nieuw-project skill, inbox/VW-sorter scripts + config-template
+- Commit: `e07c13b` | Auteur: Bart Witte
+
 ## 2026-06-02 — Security: geharde .gitignore + pre-commit secret-guard + REPO-VEILIGHEID overzicht
 - Commit: `5e4e673` | Auteur: Bart Witte
 

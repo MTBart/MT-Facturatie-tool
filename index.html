@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>M&T Bedrijfstool v4</title>
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2/lib/msal-browser.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Figtree:wght@300;400;500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1657,9 +1658,9 @@ function renderProjectDetail(proj){
       ${projectTijdlijn(proj)}
       <hr class="divider">
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
-        <div class="card-title" style="margin:0">Kostenberekening — Vectorworks CSV</div>
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('csv-input-${proj.code.replace(/-/g,'')}').click()">📊 CSV uploaden</button>
-        <input type="file" id="csv-input-${proj.code.replace(/-/g,'')}" class="hidden" accept=".csv" onchange="verwerKostenCSV(this.files[0],'${proj.code}')">
+        <div class="card-title" style="margin:0">Kostenberekening — Vectorworks CSV / Excel</div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('csv-input-${proj.code.replace(/-/g,'')}').click()">📊 CSV / Excel uploaden</button>
+        <input type="file" id="csv-input-${proj.code.replace(/-/g,'')}" class="hidden" accept=".csv,.xlsx,.xls" onchange="verwerKostenCSV(this.files[0],'${proj.code}')">
         <span id="csv-status-${proj.code.replace(/-/g,'')}" style="font-size:12px;color:var(--text-dim)"></span>
       </div>
       <div id="csv-resultaat-${proj.code.replace(/-/g,'')}" class="hidden"></div>
@@ -2009,9 +2010,31 @@ function verwerKostenCSV(file, projectCode){
   const status=document.getElementById(`csv-status-${safeId}`);
   const resultaat=document.getElementById(`csv-resultaat-${safeId}`);
   status.innerHTML='<span class="spinner"></span> Verwerken...';
+  const naamLower=(file.name||'').toLowerCase();
+  const isExcel=naamLower.endsWith('.xlsx')||naamLower.endsWith('.xls');
+  // robuuste getal-parser: pakt zowel "€ 1.234,56" (NL) als "1234.56" (Excel raw)
+  const _num=(v)=>{
+    if(typeof v==='number') return v;
+    let s=String(v==null?'':v).replace(/[€\s]/g,'').trim();
+    if(!s) return 0;
+    const lc=s.lastIndexOf(','), ld=s.lastIndexOf('.');
+    if(lc>-1&&ld>-1){ s = lc>ld ? s.replace(/\./g,'').replace(',','.') : s.replace(/,/g,''); }
+    else if(lc>-1){ s=s.replace(/\./g,'').replace(',','.'); }
+    return parseFloat(s)||0;
+  };
   const reader=new FileReader();
   reader.onload=e=>{
-    const lines=e.target.result.replace(/\r\n/g,'\n').split('\n');
+    let tekst;
+    if(isExcel){
+      try{
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        tekst=XLSX.utils.sheet_to_csv(ws,{FS:';'});
+      }catch(err){ status.textContent='⚠ Excel lezen mislukt: '+err.message; return; }
+    } else {
+      tekst=e.target.result;
+    }
+    const lines=tekst.replace(/\r\n/g,'\n').split('\n');
     const secties={platen:[],kanten:[],beslag:[]};
     let huidigeSectie=null;
     // Sla prijzen op voor terugkoppeling (opgeslagen per project)
@@ -2027,10 +2050,10 @@ function verwerKostenCSV(file, projectCode){
       if(!huidigeSectie) return;
       const artikel=cols[0];const omschrijving=cols[1];const hoeveelheid=cols[2];const eenheid=cols[3];
       if(!artikel||!omschrijving||artikel===''||hoeveelheid==='') return;
-      const hoeveelheidNum=parseFloat(hoeveelheid.replace(',','.'))||0;
+      const hoeveelheidNum=_num(hoeveelheid);
       if(hoeveelheidNum===0) return;
       // Prijzen: kolom 7=eenheidsprijs, 8=totaalprijs
-      const eenheidsPrijs=parseFloat((cols[7]||'').replace(/[€\s.]/g,'').replace(',','.'))||0;
+      const eenheidsPrijs=_num(cols[7]||'');
       secties[huidigeSectie].push({artikel,omschrijving,hoeveelheid:hoeveelheidNum,eenheid:eenheid||'',eenheidsPrijs,werkelijkePrijs:opgeslagenPrijzen[artikel]||''});
     });
 
@@ -2133,7 +2156,7 @@ function verwerKostenCSV(file, projectCode){
       ${renderSectie(secties.beslag,'beslag','🔩','stuks')}`;
     status.textContent=`✓ ${secties.platen.length} platen · ${secties.kanten.length} kanten · ${secties.beslag.length} beslag`;
   };
-  reader.readAsText(file,'utf-8');
+  if(isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file,'utf-8');
 }
 
 function updateCsvTotaal(id, basis){
