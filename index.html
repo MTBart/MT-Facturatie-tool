@@ -787,16 +787,30 @@ let KLANTEN=[
   {code:'INT',naam:'Intern — Mortise & Tenon',mb_contact_id:null}
 ];
 function klantByCode(code){return KLANTEN.find(k=>k.code===(code||'').toUpperCase())||null;}
+// Verrijkte registry (651 MB-contacten) — PRIVE, geladen uit SharePoint ná login
+// (MT-Bedrijfstool/klanten-registry-vol.json). Niet in publieke repo. Voedt
+// modal-suggesties + auto-koppeling mb_contact_id. Leeg tot login → publieke
+// KLANTEN blijft fallback.
+let KLANTEN_VOL=[];
+function _normNaam(s){return (s||'').toLowerCase().replace(/\bb\.?\s*v\.?\b/g,'').replace(/[.,]/g,'').replace(/\s+/g,' ').trim();}
+function klantVolByNaam(naam){
+  const n=_normNaam(naam); if(!n) return null;
+  return KLANTEN_VOL.find(k=>_normNaam(k.naam)===n)||null;
+}
 // Resolveert MB-contact voor een project: eerst locatie-niveau (CN-vestiging), dan klant-niveau.
 function resolveMbContact(proj){
   if(!proj) return null;
   const k=klantByCode(proj.klant);
-  if(!k) return null;
-  if(proj.loc && Array.isArray(k.locaties)){
-    const loc=k.locaties.find(l=>l.code===(proj.loc||'').toUpperCase());
-    if(loc?.mb_contact_id) return loc.mb_contact_id;
+  if(k){
+    if(proj.loc && Array.isArray(k.locaties)){
+      const loc=k.locaties.find(l=>l.code===(proj.loc||'').toUpperCase());
+      if(loc?.mb_contact_id) return loc.mb_contact_id;
+    }
+    if(k.mb_contact_id) return k.mb_contact_id;
   }
-  return k.mb_contact_id||null;
+  // Geen publieke-registry-match → val terug op de auto-gekoppelde contact-id
+  // die bij project-aanmaak uit de verrijkte registry is gehaald.
+  return proj.mb_contact_id||null;
 }
 function resolveKlantNaam(proj){
   const k=klantByCode(proj.klant);
@@ -818,14 +832,13 @@ async function laadKlantRegistry(){
 // Eenmalige opruiming: oude test-projecten uit de localStorage halen (Bart 2026-06-01).
 // Archiveert eerst naar mt_projecten_archief_<datum> zodat niets onomkeerbaar weg is.
 function ruimTestProjectenOp(){
-  if(localStorage.getItem('mt_projecten_test_geruimd')) return;
-  const huidig=JSON.parse(localStorage.getItem('mt_projecten')||'[]');
-  if(huidig.length){
-    localStorage.setItem('mt_projecten_archief_20260601',JSON.stringify(huidig));
-  }
-  localStorage.setItem('mt_projecten','[]');
-  PROJECT_CODES=[];
-  localStorage.setItem('mt_projecten_test_geruimd','1');
+  // 2026-06-02: GEDEACTIVEERD — niet heractiveren.
+  // Deze eenmalige opschoning (1-6) deed localStorage.setItem('mt_projecten','[]').
+  // Sinds de SharePoint-sync-hook gaat élke setItem óók naar mt_projecten.json,
+  // dus dit schreef '[]' naar SharePoint en wiste projecten op ALLE origins/
+  // apparaten tegelijk (o.a. "De Verbouwer"). De guard-flag is bovendien per-origin,
+  // dus op elke nieuwe URL/cache-clear vuurde hij opnieuw. Bewust no-op.
+  return;
 }
 
 // ═══ HELPERS ═══
@@ -2275,11 +2288,14 @@ function openModal(){
   // bedrijfsnaam voor (bv. "Styles Concepts B.V.") en mapt autoCode die naar de code.
   const dl=document.getElementById('klant-namen');
   if(dl){
+    // Volledige MB-registry (651) eerst — zo verschijnt élke bestaande klant als
+    // suggestie tijdens typen; aangevuld met publieke KLANTEN + projectnamen.
     const namen=[...new Set([
+      ...KLANTEN_VOL.filter(k=>k.soort!=='leverancier').map(k=>k.naam).filter(Boolean),
       ...KLANTEN.map(k=>k.naam).filter(Boolean),
       ...PROJECT_CODES.map(p=>p.klant_naam).filter(Boolean)
     ])];
-    dl.innerHTML=namen.map(n=>`<option value="${n}">`).join('');
+    dl.innerHTML=namen.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('');
   }
   document.getElementById('project-modal').classList.remove('hidden');
   updateModalPreview();
@@ -2291,7 +2307,9 @@ function autoCode(force){
   const nl=document.getElementById('modal-naam-locatie').value.trim();
   const np=document.getElementById('modal-naam-product').value.trim();
   const ek=document.getElementById('modal-klant'), el=document.getElementById('modal-locatie'), ep=document.getElementById('modal-product');
-  if((force||!ek.value)&&nk) ek.value=afkortKlant(nk);
+  // Registry-klant herkend? Gebruik diens vaste code (bv. "Styles Concepts B.V."→STY),
+  // anders een afgeleide afkorting.
+  if((force||!ek.value)&&nk){ const kv=klantVolByNaam(nk); ek.value=(kv&&kv.code)?kv.code:afkortKlant(nk); }
   if((force||!el.value)&&nl) el.value=afkortLoc(nl);
   if((force||!ep.value)&&np){
     const rest=Math.max(8, STICKER_MAX-(ek.value.length+el.value.length+2));
@@ -2344,7 +2362,10 @@ async function maakProjectAan(){
     code=`${base}-${String(n).padStart(2,'0')}`;
   }
   const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim()||code;
-  const nieuwProj={code,naam,klant:k,klant_naam:nk,loc:l,loc_naam:nl,product:p,product_naam:np,mb_nr:null,created:new Date().toISOString().slice(0,10)};
+  // Auto-koppeling Moneybird-contact: getypte klantnaam tegen verrijkte registry.
+  const kv=klantVolByNaam(nk);
+  const mbContact=(kv&&kv.mb_contact_id)||null;
+  const nieuwProj={code,naam,klant:k,klant_naam:nk,loc:l,loc_naam:nl,product:p,product_naam:np,mb_contact_id:mbContact,mb_nr:null,created:new Date().toISOString().slice(0,10)};
   PROJECT_CODES.push(nieuwProj);
   slaProjectenOp();
   document.querySelectorAll('#f-project,#ctrl-project,.project-select').forEach(sel=>{
@@ -3235,6 +3256,26 @@ window.initStorage = async function() {
     }
   });
   await Promise.all(taken);
+  // Verrijkte klant/leverancier-registry uit SharePoint laden (privé, niet publiek).
+  // Voedt modal-suggesties + auto-koppeling. Faalt stil → publieke KLANTEN blijft.
+  try {
+    const vol = await _SP.read('klanten-registry-vol.json');
+    if (vol && Array.isArray(vol.klanten) && vol.klanten.length) {
+      KLANTEN_VOL = vol.klanten;
+      console.log('registry-vol geladen uit SharePoint:', KLANTEN_VOL.length);
+    }
+  } catch(e) { console.warn('registry-vol laden faalde:', e); }
+  // Na hydrate uit SharePoint: in-memory state + UI verversen. Anders toont de
+  // pagina de stale versie van vóór de sync (PROJECT_CODES is op regel ~767
+  // synchroon uit localStorage geladen, vóór deze async hydrate).
+  try {
+    PROJECT_CODES = JSON.parse(localStorage.getItem('mt_projecten') || '[]');
+    leveranciers  = JSON.parse(localStorage.getItem('mt_leveranciers') || '[]');
+    if (typeof renderProjectLijst === 'function') renderProjectLijst();
+    if (typeof renderVoorraadActief === 'function') renderVoorraadActief();
+    if (typeof renderBestellijst === 'function') renderBestellijst();
+    if (typeof renderLeveranciersBeheer === 'function') renderLeveranciersBeheer();
+  } catch(e) { console.warn('rehydrate na initStorage faalde:', e); }
 };
 </script>
 

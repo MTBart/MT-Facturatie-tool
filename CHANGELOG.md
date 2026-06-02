@@ -5,6 +5,9 @@ Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij e
 
 ---
 
+## 2026-06-02 — #20: Excel-upload (.xlsx/.xls) naast CSV bij VW-kostenimport
+- Commit: `56d064a` | Auteur: Bart Witte
+
 ## 2026-06-02 — Tooling: VW-Excel vendor (SheetJS), nieuw-project skill, inbox/VW-sorter scripts + config-template
 - Commit: `e07c13b` | Auteur: Bart Witte
 
