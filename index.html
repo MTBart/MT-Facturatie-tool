@@ -54,6 +54,21 @@ header h1 span{color:var(--gold-mid);font-style:italic}
 .api-dot.warn{background:var(--gold);box-shadow:0 0 6px var(--gold)}
 .api-dot.err{background:#e53935;box-shadow:0 0 6px #e53935}
 .api-label{font-size:11px;font-family:var(--mono);opacity:0.6}
+/* ── Topbalk Larry-chat ── */
+.header-center{position:absolute;left:50%;transform:translateX(-50%);z-index:101}
+.tbchat-btn{background:rgba(255,255,255,0.12);color:#F7F5F0;border:1px solid rgba(255,255,255,0.25);border-radius:18px;padding:6px 16px;font-size:12px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;transition:background .15s}
+.tbchat-btn:hover{background:rgba(255,255,255,0.24)}
+.tbchat-panel{position:absolute;top:44px;left:50%;transform:translateX(-50%);width:460px;max-width:92vw;height:540px;max-height:78vh;background:#fff;border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,0.32);display:flex;flex-direction:column;overflow:hidden;color:#222}
+.tbchat-head{background:linear-gradient(135deg,var(--green),#1e3829);color:#F7F5F0;padding:11px 14px;font-size:13px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.tbchat-x{background:none;border:none;color:#F7F5F0;cursor:pointer;font-size:14px;line-height:1}
+.tbchat-log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:13px;background:#faf9f6}
+.tbchat-log .u{align-self:flex-end;background:var(--green);color:#fff;padding:7px 11px;border-radius:12px 12px 2px 12px;max-width:82%;white-space:pre-wrap;word-break:break-word}
+.tbchat-log .b{align-self:flex-start;background:#fff;border:1px solid #e5e2da;padding:7px 11px;border-radius:12px 12px 12px 2px;max-width:88%;white-space:pre-wrap;word-break:break-word}
+.tbchat-log .act{align-self:center;font-size:11px;color:#7a8a7e;font-style:italic}
+.tbchat-input{display:flex;gap:6px;padding:10px;border-top:1px solid #eee;background:#fff;flex-shrink:0}
+.tbchat-input textarea{flex:1;resize:none;border:1px solid #ddd;border-radius:8px;padding:8px;font-family:inherit;font-size:13px;max-height:90px}
+.tbchat-input button{background:var(--green);color:#fff;border:none;border-radius:8px;width:40px;cursor:pointer;font-size:15px}
+@media(max-width:760px){.header-center{position:static;transform:none}.tbchat-panel{position:fixed;top:60px;left:50%}}
 
 /* ── TABS ── */
 .tabs-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;gap:0;overflow-x:auto}
@@ -261,6 +276,17 @@ textarea{resize:vertical;min-height:60px}
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
     <span class="header-version">v4.0</span>
+  </div>
+  <div class="header-center">
+    <button id="tbchat-btn" class="tbchat-btn" onclick="tbChatToggle()">✨ Vraag Larry</button>
+    <div id="tbchat-panel" class="tbchat-panel" style="display:none">
+      <div class="tbchat-head"><span>✨ Larry — vraag iets of laat iets doen</span><button class="tbchat-x" onclick="tbChatToggle()">✕</button></div>
+      <div id="tbchat-log" class="tbchat-log"></div>
+      <div class="tbchat-input">
+        <textarea id="tbchat-q" rows="1" placeholder="Vraag iets of geef een opdracht…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();tbChatSend();}"></textarea>
+        <button onclick="tbChatSend()" title="Versturen">➤</button>
+      </div>
+    </div>
   </div>
   <div class="header-right">
     <span id="api-dot" class="api-dot warn"></span>
@@ -4118,6 +4144,56 @@ async function inboxChat(){
     tmp.textContent=txt;
   }catch(e){tmp.textContent='fout: '+e.message;}
   log.scrollTop=log.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOPBALK LARRY-CHAT — globaal chatvenster: vragen beantwoorden + acties
+// uitvoeren in de tool (tab openen, sync starten, herladen). Via Worker→claude.
+// ═══════════════════════════════════════════════════════════════════════════
+let _tbHist=[], _tbBound=false;
+function tbBubble(cls,txt){const log=document.getElementById('tbchat-log');const d=document.createElement('div');d.className=cls;d.textContent=txt;log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
+function tbChatToggle(){
+  const p=document.getElementById('tbchat-panel');
+  const open=p.style.display==='none';
+  p.style.display=open?'flex':'none';
+  if(open){
+    if(!_tbHist.length) tbBubble('b','Hoi, ik ben Larry 👋 Vraag me iets, of geef een opdracht — bijv. "open de agenda", "ga naar facturen", "ververs de uren".');
+    document.getElementById('tbchat-q').focus();
+    if(!_tbBound){_tbBound=true;document.addEventListener('click',e=>{const pn=document.getElementById('tbchat-panel');const bt=document.getElementById('tbchat-btn');if(pn.style.display!=='none'&&!pn.contains(e.target)&&!bt.contains(e.target))pn.style.display='none';});}
+  }
+}
+const TB_TABS=['dashboard','inbox','verwerk','controle','projecten','klanten','voorraad','bestelling','historie','agenda','instellingen','cn','migratie'];
+function tbDoTab(v){const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+v+"'"));if(btn){btn.click();return 'tabblad "'+v+'" geopend';}return 'tab "'+v+'" niet gevonden';}
+function tbExec(key,val){
+  switch(key){
+    case 'tab': return tbDoTab(val);
+    case 'sync-agenda': tbDoTab('agenda'); if(window.agendaSyncNu){agendaSyncNu();return 'uren-sync gestart';} return 'agenda geopend';
+    case 'sync-inbox': tbDoTab('inbox'); if(window.inboxReload){inboxReload();return 'inbox herladen';} return 'inbox geopend';
+    case 'refresh': setTimeout(()=>location.reload(),400); return 'pagina wordt herladen…';
+    default: return 'onbekende actie: '+key;
+  }
+}
+async function tbChatSend(){
+  const inp=document.getElementById('tbchat-q');const q=(inp.value||'').trim();if(!q)return;
+  inp.value='';tbBubble('u',q);_tbHist.push({role:'user',content:q});
+  const wait=tbBubble('b','…');
+  const sys=`Je bent Larry, de orchestrator in de M&T-cockpit (interne tool van Mortise & Tenon). Antwoord kort en concreet in het Nederlands.
+Je kunt ACTIES in de tool uitvoeren door aan het EIND van je antwoord directives op een eigen regel te zetten, exact zo: [[ACTIE:sleutel=waarde]].
+Beschikbare acties:
+- [[ACTIE:tab=NAAM]] open een tabblad. Geldige namen: ${TB_TABS.join(', ')}.
+- [[ACTIE:sync-agenda]] open de agenda en ververs de uren.
+- [[ACTIE:sync-inbox]] open en herlaad de inbox.
+- [[ACTIE:refresh]] herlaad de hele pagina.
+Gebruik een actie ALLEEN als de gebruiker iets wil openen of doen. Benoem in gewone taal wat je doet; de directives zelf ziet de gebruiker niet.`;
+  try{
+    const conv=_tbHist.slice(-8).map(m=>(m.role==='user'?'Gebruiker: ':'Larry: ')+m.content).join('\n');
+    const r=await claudeCall([{role:'user',content:sys+'\n\n— Gesprek —\n'+conv+'\n\nLarry:'}],700);
+    let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+    const acts=[...txt.matchAll(/\[\[ACTIE:([a-z-]+)(?:=([^\]]+))?\]\]/gi)];
+    const clean=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim();
+    wait.textContent=clean||'(klaar)';_tbHist.push({role:'assistant',content:clean});
+    for(const a of acts){tbBubble('act','⚙ '+tbExec(a[1].toLowerCase(),(a[2]||'').trim()));}
+  }catch(e){wait.textContent='fout: '+e.message;}
 }
 </script>
 

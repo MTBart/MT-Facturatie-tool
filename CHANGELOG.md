@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-04 — Smart-inbox Fase A: live 2-weg info@-inbox tab (folders/lijst/reader/move+undo/Larry-chat)
+- Commit: `4e746a7` | Auteur: Bart Witte
+
 ## 2026-06-04 — agenda: filters als multi-select dropdowns (project + persoon) + namen i.p.v. ID-stubs
 - Commit: `353f672` | Auteur: Bart Witte
 
