@@ -8,6 +8,8 @@ Specifieke kennis staat één laag dieper in `Claude-context/` — daar lezen op
 @.claude/memory/user_bart.md
 @.claude/memory/feedback_werkafspraken.md
 
+> **Routes (repo-paden, push, Worker-deploy, PC-namen):** zie [`ROUTES.md`](ROUTES.md).
+
 ---
 
 ## Bedrijf in één zin
@@ -55,7 +57,7 @@ Gebruik altijd de beste omgeving voor de taak. Bij twijfel: kijk of de taak vast
 - Autonome git commits op de NAS-repo
 - File writes naar bestanden in deze folder
 - API calls via de Cloudflare Worker / Moneybird MCP
-- Kleine wijzigingen in `index-v4.html` en `uren.html`
+- Kleine wijzigingen in `index.html` en `uren.html`
 - STATUS.md tussentijds updaten als er iets belangrijks verandert
 
 **Wel vragen voor:**
@@ -93,7 +95,7 @@ Gebruik altijd de beste omgeving voor de taak. Bij twijfel: kijk of de taak vast
 
 **Werkwijze die tokens spaart:**
 1. **Bestand >500 regels lezen** → delegeer naar Sonnet-subagent (Agent tool), laat die samenvatten, doe synthese zelf.
-2. **Edits** → altijd `Edit` (str_replace), nooit `Write` op grote files. `index-v4.html` en `uren.html` zijn beide te groot om te herschrijven.
+2. **Edits** → altijd `Edit` (str_replace), nooit `Write` op grote files. `index.html` en `uren.html` zijn beide te groot om te herschrijven.
 3. **Onbekend probleem** → eerst STATUS.md + relevante ctx, daarna pas de bron.
 4. **Skills/scheduled tasks** voor herhaalbaar werk — niet elke keer de wielen opnieuw uitvinden.
 5. **Status tussentijds updaten** zodat de volgende sessie het weet.
@@ -110,6 +112,7 @@ Alles staat op **NAS / SharePoint** — gesynchroniseerd via Microsoft 365.
 
 ## De live tool
 - **GitHub repo:** `mtbart/MT-Facturatie-tool`
-- **Live URL:** https://mtbart.github.io/MT-Facturatie-tool/index-v4.html
+- **Live URL (= `index.html`):** https://mtbart.github.io/MT-Facturatie-tool/
+- **Oude versies** (`index-v4.html` 13-5, `index-v3.html`, voorraad-FastAPI) → gearchiveerd in `_archief/oude-tool-2026-06-04/` sinds 4-6-2026. Niet meer bewerken.
 - **uren-tool live:** https://mtbart.github.io/MT-Facturatie-tool/uren.html
 - **Worker (deprecated):** `mt-claude-proxy.bart-a12.workers.dev`

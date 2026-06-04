@@ -634,7 +634,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
         <button class="btn btn-primary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='block';document.getElementById('np-code').focus()">+ Nieuw project</button>
       </div>
       <div class="proj-lijst" id="proj-lijst"></div>
-      <div style="font-size:11px;color:var(--text-faint);font-family:var(--mono);padding-top:0.5rem">Projecten worden automatisch gesynchroniseerd met de <a href="index-v4.html" style="color:var(--green)">M&T Bedrijfstool</a> via gedeelde opslag.</div>
+      <div style="font-size:11px;color:var(--text-faint);font-family:var(--mono);padding-top:0.5rem">Projecten worden automatisch gesynchroniseerd met de <a href="index.html" style="color:var(--green)">M&T Bedrijfstool</a> via gedeelde opslag.</div>
     </div>
   </div>
 
@@ -1113,7 +1113,7 @@ function renderTimer(){
   renderRecentEntries();
   renderMijnTaken();
   if(!projecten.length){
-    document.getElementById('project-grid').innerHTML=`<div style="grid-column:1/-1;padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen projecten. Maak ze aan in de <a href="index-v4.html" style="color:var(--green)">M&T tool</a>.</div>`;
+    document.getElementById('project-grid').innerHTML=`<div style="grid-column:1/-1;padding:2rem;text-align:center;color:var(--text-faint);font-size:13px">Geen projecten. Maak ze aan in de <a href="index.html" style="color:var(--green)">M&T tool</a>.</div>`;
     return;
   }
   const taken=getTaken();

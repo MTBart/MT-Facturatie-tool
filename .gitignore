@@ -49,6 +49,7 @@ projectinstructies_claude.md
 
 # ---------- 3. RUNTIME / BACKUPS / TOOLING-ARTEFACTEN ----------
 _backups/
+_archief/
 .claude/worktrees/
 .wrangler/
 

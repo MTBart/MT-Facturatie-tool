@@ -60,7 +60,7 @@ BACKUP_DIR="$REPO_DIR/_backups"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
 mkdir -p "$BACKUP_DIR"
 
-for FILE in index-v4.html uren.html; do
+for FILE in index.html uren.html; do
   if [ -f "$REPO_DIR/$FILE" ]; then
     BASENAME="${FILE%.*}"
     EXT="${FILE##*.}"
@@ -75,7 +75,7 @@ done
   echo "# CHANGELOG — Mortise & Tenon Claude Tools"
   echo ""
   echo "Automatisch bijgehouden via git. Elke commit verschijnt hier."
-  echo "Grote bestanden (index-v4.html, uren.html) worden gebackupt in \`_backups/\` bij elke commit."
+  echo "Grote bestanden (index.html, uren.html) worden gebackupt in \`_backups/\` bij elke commit."
   echo ""
   echo "---"
   echo ""

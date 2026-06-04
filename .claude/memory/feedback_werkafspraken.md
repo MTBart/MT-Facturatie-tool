@@ -18,7 +18,7 @@ Geen samenvattingen aan het einde van een antwoord als dat niet nodig is — Bar
 
 ---
 
-index-v4.html aanpassen via Edit tool (str_replace), nooit het hele bestand herschrijven.
+index.html (de live tool) aanpassen via Edit tool (str_replace), nooit het hele bestand herschrijven.
 
-**Why:** Het bestand is ~2500 regels en volledig herschrijven kost veel tokens en introduceert fouten.
+**Why:** Het bestand is ~3700 regels en volledig herschrijven kost veel tokens en introduceert fouten.
 **How to apply:** Altijd targeted edits, nooit Write() op het hele HTML-bestand.

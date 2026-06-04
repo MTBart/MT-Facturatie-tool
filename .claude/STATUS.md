@@ -25,18 +25,18 @@
 - **Bord tab:** fullscreen muurscherm voor werkplaats, live timers per kaart, week-timeline klikbaar, projectrijen klikbaar om timer te starten
 - **☰ Taken beheer:** Project > Taak > Subtaak hiërarchie, volledig CRUD
 - **⚙ Instellingen:** teamleden beheren (naam, kleur, rol), CSV export
-- Leest `mt_projecten` uit gedeelde localStorage met index-v4.html (zelfde GitHub Pages origin)
+- Leest `mt_projecten` uit gedeelde localStorage met index.html (zelfde GitHub Pages origin)
 - Memory gesynchroniseerd (Desktop + C--Users-BartWitte)
 - `.claude/settings.json` uitgebreid met find/grep/dir permissies
 
 ## Volgende stappen uren.html
-1. **Sync tussen apparaten** — `mt_uren_entries` + `mt_uren_planning` via SharePoint (zelfde monkey-patch als index-v4.html)
+1. **Sync tussen apparaten** — `mt_uren_entries` + `mt_uren_planning` via SharePoint (zelfde monkey-patch als index.html)
 2. **PWA installeerbaar** — manifest.json zodat app als echt icoontje op telefoon staat
 3. **Drag-to-create** op timeline — sleep over meerdere dagen voor multi-dag planblok
 4. **Capaciteitsbalken** — per persoon tonen of ze over/onderbezet zijn die week
 5. **Bord auto-refresh polling** — nu elke 30s, verbeteren met storage event voor direct sync
 
-## Roadmap index-v4.html
+## Roadmap index.html (de live tool)
 1. **Voorraad-icoon in factuurlijst** — tag als factuur voorraadregels heeft
 2. **Historische facturen opschonen** — 218 inkoopfacturen 2026
 3. **Nacalculatie tabblad** — uren (eigen app) + inkoop + verkoop per project, marge
@@ -44,7 +44,7 @@
 5. **SEPA verzendlijst** — batch betaalbestand via Moneybird API
 
 ## Live URLs
-- Bedrijfstool: https://mtbart.github.io/MT-Facturatie-tool/index-v4.html
+- Bedrijfstool: https://mtbart.github.io/MT-Facturatie-tool/ (= index.html)
 - Uren app: https://mtbart.github.io/MT-Facturatie-tool/uren.html
 
 ## Blocker

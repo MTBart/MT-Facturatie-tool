@@ -1,9 +1,12 @@
 # CHANGELOG — Mortise & Tenon Claude Tools
 
 Automatisch bijgehouden via git. Elke commit verschijnt hier.
-Grote bestanden (index-v4.html, uren.html) worden gebackupt in `_backups/` bij elke commit.
+Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke commit.
 
 ---
+
+## 2026-06-02 — @ Bijlagen per project: opslaan in projectmap op SharePoint, tool linkt alleen
+- Commit: `1e09848` | Auteur: Bart Witte
 
 ## 2026-06-02 — @ Fix De Verbouwer-bug + SharePoint-canonieke klantregistry
 - Commit: `b3b519f` | Auteur: Bart Witte

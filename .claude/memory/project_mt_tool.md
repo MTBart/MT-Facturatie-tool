@@ -4,15 +4,16 @@ description: Bedrijfscontext, de MT Facturatie Tool, lopende prioriteiten
 type: project
 originSessionId: defd1734-9f80-4ab6-b833-011932614a97
 ---
-Mortise & Tenon facturatie- en bedrijfstool. Volledig gedocumenteerd in CLAUDE.md op de NAS.
+Mortise & Tenon facturatie- en bedrijfstool. Volledig gedocumenteerd in `CLAUDE.md` + `ROUTES.md` in de repo-root.
 
-**Why:** Lees altijd `\\B5-NAS\B5-Applicaties\Claude\CLAUDE.md` voor volledige context en `\\B5-NAS\B5-Applicaties\Claude\.claude\STATUS.md` voor huidige prioriteiten.
+**Why:** Lees altijd `C:\MT\CLAUDE.md` (= repo-root) voor volledige context, `C:\MT\ROUTES.md` voor paden/deploy en `C:\MT\Claude-context\STATUS.md` voor huidige prioriteiten. (Oude `\\B5-NAS\...`-paden zijn dood; alles staat nu in de SharePoint-repo `C:\MT`.)
 
 **How to apply:** Dit project heeft zijn eigen CLAUDE.md — die is leidend boven deze memory.
 
 **Kernpunten:**
-- Tool is `index-v4.html` (~2500 regels), één groot HTML-bestand
-- Live: https://mtbart.github.io/MT-Facturatie-tool/index-v4.html
+- Tool is **`index.html`** (~3700 regels), repo-root, één groot HTML-bestand. De actuele cockpit.
+- Live: https://mtbart.github.io/MT-Facturatie-tool/ (Pages serveert index.html standaard)
+- ⚠️ Oude versies (`index-v4.html` 13-5, `index-v3.html`, `MT-presentatie.html`, voorraad-FastAPI) → gearchiveerd in `_archief/oude-tool-2026-06-04/` sinds 4-6-2026. Niet meer bewerken.
 - Backend: Cloudflare Worker op mt-claude-proxy.bart-a12.workers.dev
 - Moneybird (boekhouding) + Toggl (uren) + Anthropic API (PDF lezen)
 - Data in localStorage browser — data sync is prioriteit

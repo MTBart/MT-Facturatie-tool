@@ -22,7 +22,7 @@ Bart Witte, eigenaar/vennoot van Mortise & Tenon (maatwerkmeubelbedrijf, Wormerv
 - Autonome git commits op de NAS repo
 - File writes in projectmap
 - API calls via Cloudflare Worker
-- Kleine wijzigingen in index-v4.html
+- Kleine wijzigingen in index.html (de live tool)
 
 **Technische omgeving:**
 - Windows 11, goede GPU (relevant voor lokale AI)
