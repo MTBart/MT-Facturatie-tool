@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-04 — Agenda zelfvoorzienend: namen-fallback ipv entries droppen
+- Commit: `61b0e02` | Auteur: Bart Witte
+
 ## 2026-06-04 — wrangler.toml: minimale config voor mt-claude-proxy deploy
 - Commit: `2d7847b` | Auteur: Bart Witte
 

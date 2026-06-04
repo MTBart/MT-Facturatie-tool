@@ -675,6 +675,19 @@ textarea{resize:vertical;min-height:60px}
         background:#fff;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:5px;transition:.12s}
       #tab-agenda .ag-chip.uit{opacity:.4}
       #tab-agenda .ag-chip .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+      #tab-agenda .ag-drop{position:relative;display:inline-block}
+      #tab-agenda .ag-dropbtn{display:inline-flex;align-items:center;gap:6px}
+      #tab-agenda .ag-droppanel{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:230px;max-height:320px;
+        overflow:auto;background:var(--bg-card,#fff);border:1px solid var(--border,#ddd);border-radius:8px;
+        box-shadow:0 6px 18px rgba(0,0,0,.14);padding:6px}
+      #tab-agenda .ag-droppanel.hidden{display:none}
+      #tab-agenda .ag-opt{display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:6px;font-size:12px;cursor:pointer}
+      #tab-agenda .ag-opt:hover{background:#f5f5f5}
+      #tab-agenda .ag-opt input{margin:0;cursor:pointer}
+      #tab-agenda .ag-opt .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 auto}
+      #tab-agenda .ag-optbar{display:flex;gap:10px;padding:2px 6px 6px;border-bottom:1px solid #eee;margin-bottom:4px}
+      #tab-agenda .ag-optbar a{font-size:11px;color:var(--gold,#B8962E);cursor:pointer}
+      #tab-agenda .ag-optbar a:hover{text-decoration:underline}
       #tab-agenda .ag-tot{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:8px;
         background:#fff;border:1px solid var(--border,#eee);margin:0 6px 6px 0}
       #tab-agenda .ag-tot b{font-variant-numeric:tabular-nums}
@@ -708,14 +721,15 @@ textarea{resize:vertical;min-height:60px}
           <button class="btn btn-sm btn-secondary" onclick="focusOpen()" title="Toggl Focus aansturen">🎯 Focus</button>
         </div>
       </div>
-      <div class="flex" style="gap:1.5rem;margin-top:10px;flex-wrap:wrap">
-        <div style="flex:1;min-width:200px">
-          <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Projecten</div>
-          <div id="agenda-filter-projecten" class="ag-chips"></div>
+      <div class="flex" style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;color:var(--text-faint)">Filter:</span>
+        <div class="ag-drop" id="ag-drop-proj">
+          <button class="btn btn-sm btn-secondary ag-dropbtn" onclick="agDrop('proj')"><span id="ag-drop-proj-lbl">Projecten (alle)</span> ▾</button>
+          <div class="ag-droppanel hidden" id="ag-drop-proj-panel"></div>
         </div>
-        <div style="flex:1;min-width:200px">
-          <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Personen</div>
-          <div id="agenda-filter-personen" class="ag-chips"></div>
+        <div class="ag-drop" id="ag-drop-pers">
+          <button class="btn btn-sm btn-secondary ag-dropbtn" onclick="agDrop('pers')"><span id="ag-drop-pers-lbl">Personen (alle)</span> ▾</button>
+          <div class="ag-droppanel hidden" id="ag-drop-pers-panel"></div>
         </div>
       </div>
     </div>
@@ -1020,6 +1034,8 @@ function periodePresetGewijzigd(){
 const AG_STD_TEAM=[{naam:'bart',label:'Bart',kleur:'#2A4A38'},{naam:'mathijs',label:'Mathijs',kleur:'#B8962E'},{naam:'arjan',label:'Arjan',kleur:'#5a3a8b'},{naam:'maarten',label:'Maarten',kleur:'#1a3a8b'}];
 const AG_START=6, AG_EIND=22, AG_UURPX=46;
 let _agenda={weekStart:null,kleurOp:'project',fProj:new Set(),fPers:new Set()};
+const AG_NONE='__none__';            // sentinel: lege set = "alle"; AG_NONE = "niets"
+let _agNamesTried=false, _agOutsideBound=false;
 
 function agEntries(){try{return JSON.parse(localStorage.getItem('mt_uren_entries')||'[]');}catch(e){return [];}}
 function agTeam(){try{return JSON.parse(localStorage.getItem('mt_uren_teamleden')||'null')||AG_STD_TEAM;}catch(e){return AG_STD_TEAM;}}
@@ -1027,41 +1043,93 @@ function agMaandag(d){const x=new Date(d);const dag=(x.getDay()+6)%7;x.setDate(x
 function agFmt(d){return d.toLocaleDateString('nl-NL',{day:'numeric',month:'short'});}
 function agHash(s){let h=0;s=String(s||'');for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 function agProjKleur(c){if(!c)return '#9a9a9a';return `hsl(${agHash(c)%360},52%,42%)`;}
-function agPersKleur(n){const t=agTeam().find(x=>x.naam===n);return t?t.kleur:'#777';}
-function agPersLabel(n){const t=agTeam().find(x=>x.naam===n);return t?t.label:(n||'?');}
+function agPersKleur(n){const t=agTeam().find(x=>x.naam===n);return t?t.kleur:`hsl(${agHash(n)%360},45%,45%)`;}
+// id→naam-cache (sync uit localStorage; gevuld door agNamen()). Resolvet ook
+// de id-stubs die de sync soms wegschrijft ("Toggl 123" / "User 456").
+function agNames(){let pn={},un={};try{pn=JSON.parse(localStorage.getItem('mt_toggl_proj_names')||'{}');}catch(e){}try{un=JSON.parse(localStorage.getItem('mt_toggl_user_names')||'{}');}catch(e){}return {pn,un};}
+function agProjLabel(c){if(!c)return '—';const {pn}=agNames();if(pn[c])return pn[c];const m=/^Toggl (\d+)$/.exec(c);if(m&&pn[m[1]])return pn[m[1]];return c;}
+function agPersLabel(n){const t=agTeam().find(x=>x.naam===n);if(t)return t.label;const {un}=agNames();if(un[n])return un[n];const m=/^User (\d+)$/.exec(n||'');if(m&&un[m[1]])return un[m[1]];return n||'?';}
 function agKleur(e){return _agenda.kleurOp==='persoon'?agPersKleur(e.teamlid):agProjKleur(e.project_code);}
 function agUur(sec){return (sec/3600).toFixed(1).replace('.',',');}
 
 function renderAgenda(){
   if(!_agenda.weekStart) _agenda.weekStart=agMaandag(new Date());
+  agEnsureNames();
+  agBindOutside();
   const ko=document.getElementById('agenda-kleurop'); if(ko) ko.value=_agenda.kleurOp;
   agRenderFilters();
   agRenderGrid();
 }
+// Haalt project-/persoon-namen één keer op als de cache leeg is (bv. eerste
+// render vóór een sync). Daarna her-rendert het zodat ID-stubs namen worden.
+function agEnsureNames(){
+  if(_agNamesTried) return; _agNamesTried=true;
+  const {pn,un}=agNames();
+  if(Object.keys(pn).length&&Object.keys(un).length) return;
+  if(typeof agNamen==='function') agNamen(true).then(r=>{if(r&&(Object.keys(r.pn||{}).length||Object.keys(r.un||{}).length))renderAgenda();}).catch(()=>{});
+}
+// Sluit de filter-dropdowns bij een klik buiten een .ag-drop.
+function agBindOutside(){
+  if(_agOutsideBound) return; _agOutsideBound=true;
+  document.addEventListener('click',e=>{
+    if(e.target.closest&&e.target.closest('.ag-drop')) return;
+    document.querySelectorAll('#tab-agenda .ag-droppanel').forEach(p=>p.classList.add('hidden'));
+  });
+}
 function agendaNav(dw){_agenda.weekStart=new Date(_agenda.weekStart.getTime()+dw*7*864e5);renderAgenda();}
 function agendaVandaag(){_agenda.weekStart=agMaandag(new Date());renderAgenda();}
 function agendaZetKleur(v){_agenda.kleurOp=v;renderAgenda();}
-function agToggle(set,val){set.has(val)?set.delete(val):set.add(val);renderAgenda();}
+// ── Filter-dropdowns met checkboxen ────────────────────────────────────────
+// Conventie: lege set = "alle zichtbaar". AG_NONE in de set = "niets zichtbaar".
+// Project én persoon filteren onafhankelijk (beide worden ge-AND in agZichtbaar).
+function agSet(which){return which==='proj'?_agenda.fProj:_agenda.fPers;}
+function agOpts(which){
+  const all=agEntries();
+  const key=which==='proj'?'project_code':'teamlid';
+  const lbl=which==='proj'?agProjLabel:agPersLabel;
+  return [...new Set(all.map(e=>e[key]).filter(Boolean))].sort((a,b)=>lbl(a).localeCompare(lbl(b),'nl'));
+}
+function agOptLabel(which,v){return which==='proj'?agProjLabel(v):agPersLabel(v);}
+function agOptKleur(which,v){return which==='proj'?agProjKleur(v):agPersKleur(v);}
 
 function agRenderFilters(){
-  const all=agEntries();
-  const projs=[...new Set(all.map(e=>e.project_code).filter(Boolean))].sort();
-  const pers=[...new Set(all.map(e=>e.teamlid).filter(Boolean))].sort();
-  const pEl=document.getElementById('agenda-filter-projecten');
-  if(pEl) pEl.innerHTML=projs.length?projs.map(c=>{
-    const aan=_agenda.fProj.size===0||_agenda.fProj.has(c);
-    return `<span class="ag-chip${aan?'':' uit'}" onclick="agToggle(_agenda.fProj,'${c.replace(/'/g,"\\'")}')"><span class="dot" style="background:${agProjKleur(c)}"></span>${c}</span>`;
-  }).join(''):'<span style="font-size:11px;color:#aaa">geen projecten in data</span>';
-  const uEl=document.getElementById('agenda-filter-personen');
-  if(uEl) uEl.innerHTML=pers.length?pers.map(n=>{
-    const aan=_agenda.fPers.size===0||_agenda.fPers.has(n);
-    return `<span class="ag-chip${aan?'':' uit'}" onclick="agToggle(_agenda.fPers,'${n.replace(/'/g,"\\'")}')"><span class="dot" style="background:${agPersKleur(n)}"></span>${agPersLabel(n)}</span>`;
-  }).join(''):'<span style="font-size:11px;color:#aaa">geen personen in data</span>';
+  ['proj','pers'].forEach(which=>{
+    const set=agSet(which), opts=agOpts(which);
+    const naam=which==='proj'?'Projecten':'Personen';
+    const lblEl=document.getElementById('ag-drop-'+which+'-lbl');
+    if(lblEl){const cnt=set.has(AG_NONE)?'0':(set.size?String(set.size):'alle');lblEl.textContent=`${naam} (${cnt})`;}
+    const panel=document.getElementById('ag-drop-'+which+'-panel');
+    if(!panel) return;
+    if(!opts.length){panel.innerHTML='<div style="font-size:11px;color:#aaa;padding:6px">geen data</div>';return;}
+    let h=`<div class="ag-optbar"><a onclick="agFilterAll('${which}',true)">alles</a><a onclick="agFilterAll('${which}',false)">niets</a></div>`;
+    h+=opts.map(v=>{
+      const aan=set.size===0||(!set.has(AG_NONE)&&set.has(v));
+      const vv=String(v).replace(/"/g,'&quot;');
+      return `<label class="ag-opt"><input type="checkbox" ${aan?'checked':''} data-v="${vv}" onchange="agFilterSet('${which}',this.dataset.v,this.checked)">`
+        +`<span class="dot" style="background:${agOptKleur(which,v)}"></span>${agOptLabel(which,v)}</label>`;
+    }).join('');
+    panel.innerHTML=h;
+  });
 }
+function agDrop(which){
+  const p=document.getElementById('ag-drop-'+which+'-panel');
+  const o=document.getElementById('ag-drop-'+(which==='proj'?'pers':'proj')+'-panel');
+  if(o) o.classList.add('hidden');
+  if(p) p.classList.toggle('hidden');
+}
+function agFilterSet(which,val,checked){
+  const set=agSet(which), opts=agOpts(which);
+  if(set.has(AG_NONE)) set.delete(AG_NONE);              // vanuit "niets" opbouwen
+  if(set.size===0&&!checked){opts.forEach(o=>set.add(o));set.delete(val);} // vanuit "alle": eentje uit
+  else if(checked){set.add(val);if(set.size>=opts.length)set.clear();}     // alles aan = terug naar "alle"
+  else {set.delete(val);if(set.size===0)set.add(AG_NONE);}                 // laatste uit = "niets"
+  renderAgenda();
+}
+function agFilterAll(which,on){const set=agSet(which);set.clear();if(!on)set.add(AG_NONE);renderAgenda();}
 
 function agZichtbaar(e){
-  if(_agenda.fProj.size&&!_agenda.fProj.has(e.project_code)) return false;
-  if(_agenda.fPers.size&&!_agenda.fPers.has(e.teamlid)) return false;
+  if(_agenda.fProj.size){if(_agenda.fProj.has(AG_NONE))return false;if(!_agenda.fProj.has(e.project_code))return false;}
+  if(_agenda.fPers.size){if(_agenda.fPers.has(AG_NONE))return false;if(!_agenda.fPers.has(e.teamlid))return false;}
   return true;
 }
 
@@ -1130,8 +1198,8 @@ function agBlokkenHtml(entries){
     const w=100/lanes, left=it.lane*w;
     const titel=(e.omschrijving||e.taak_naam||'').replace(/"/g,'&quot;');
     return `<div class="ag-blok" style="top:${top}px;height:${h}px;left:calc(${left}% + 1px);width:calc(${w}% - 2px);background:${agKleur(e)}"
-      title="${agPersLabel(e.teamlid)} · ${e.project_code||'-'} · ${agUur(e.duur)}u&#10;${titel}"
-      onclick="agBlokDetail('${e.id||e.toggl_id}')"><b>${e.project_code||'—'}</b> ${agUur(e.duur)}u<br>${titel}</div>`;
+      title="${agPersLabel(e.teamlid)} · ${agProjLabel(e.project_code)} · ${agUur(e.duur)}u&#10;${titel}"
+      onclick="agBlokDetail('${e.id||e.toggl_id}')"><b>${agProjLabel(e.project_code)}</b> ${agUur(e.duur)}u<br>${titel}</div>`;
   }).join('');
 }
 
@@ -1140,7 +1208,7 @@ function agRenderTotalen(wk){
   if(!wk.length){el.innerHTML='';return;}
   const perP={}, perT={}; let tot=0;
   wk.forEach(e=>{tot+=e.duur;perP[e.project_code||'—']=(perP[e.project_code||'—']||0)+e.duur;perT[e.teamlid||'?']=(perT[e.teamlid||'?']||0)+e.duur;});
-  const proj=Object.entries(perP).sort((a,b)=>b[1]-a[1]).map(([c,s])=>`<span class="ag-tot"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${agProjKleur(c)}"></span>${c} <b>${agUur(s)}u</b></span>`).join('');
+  const proj=Object.entries(perP).sort((a,b)=>b[1]-a[1]).map(([c,s])=>`<span class="ag-tot"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${agProjKleur(c)}"></span>${agProjLabel(c)} <b>${agUur(s)}u</b></span>`).join('');
   const pers=Object.entries(perT).sort((a,b)=>b[1]-a[1]).map(([n,s])=>`<span class="ag-tot"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${agPersKleur(n)}"></span>${agPersLabel(n)} <b>${agUur(s)}u</b></span>`).join('');
   el.innerHTML=`<div class="card" style="padding:.7rem 1rem"><div style="font-weight:600;margin-bottom:6px">Totaal deze week: ${agUur(tot)}u</div>
     <div style="margin-bottom:4px">${proj}</div><div>${pers}</div></div>`;
@@ -1150,7 +1218,7 @@ function agBlokDetail(id){
   const e=agEntries().find(x=>String(x.id)===String(id)||String(x.toggl_id)===String(id));
   if(!e) return;
   const s=new Date(e.start);
-  alert(`${agPersLabel(e.teamlid)}\nProject: ${e.project_code||'—'}\nTaak: ${e.taak_naam||'—'}\n${e.omschrijving||''}\n${s.toLocaleString('nl-NL')} · ${agUur(e.duur)} uur`);
+  alert(`${agPersLabel(e.teamlid)}\nProject: ${agProjLabel(e.project_code)}\nTaak: ${e.taak_naam||'—'}\n${e.omschrijving||''}\n${s.toLocaleString('nl-NL')} · ${agUur(e.duur)} uur`);
 }
 
 // Sync: leest Track /me/time_entries (Basic auth, gedeelde token) → mt_uren_entries.
