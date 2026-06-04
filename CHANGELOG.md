@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-04 — Topbalk: centrale uitklapbare Larry-chat (vragen + acties uitvoeren in de tool)
+- Commit: `71c3fad` | Auteur: Bart Witte
+
 ## 2026-06-04 — Smart-inbox Fase A: live 2-weg info@-inbox tab (folders/lijst/reader/move+undo/Larry-chat)
 - Commit: `4e746a7` | Auteur: Bart Witte
 

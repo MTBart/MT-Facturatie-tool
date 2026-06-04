@@ -56,9 +56,10 @@ header h1 span{color:var(--gold-mid);font-style:italic}
 .api-label{font-size:11px;font-family:var(--mono);opacity:0.6}
 /* ── Topbalk Larry-chat ── */
 .header-center{position:absolute;left:50%;transform:translateX(-50%);z-index:101}
-.tbchat-btn{background:rgba(255,255,255,0.12);color:#F7F5F0;border:1px solid rgba(255,255,255,0.25);border-radius:18px;padding:6px 16px;font-size:12px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;transition:background .15s}
-.tbchat-btn:hover{background:rgba(255,255,255,0.24)}
-.tbchat-panel{position:absolute;top:44px;left:50%;transform:translateX(-50%);width:460px;max-width:92vw;height:540px;max-height:78vh;background:#fff;border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,0.32);display:flex;flex-direction:column;overflow:hidden;color:#222}
+.tbchat-field{width:340px;max-width:44vw;background:#fff;color:#222;border:1px solid rgba(255,255,255,0.5);border-radius:20px;padding:8px 16px;font-size:13px;font-family:inherit;outline:none;box-shadow:0 2px 8px rgba(0,0,0,0.12)}
+.tbchat-field::placeholder{color:#9a9a9a}
+.tbchat-field:focus{border-color:var(--gold,#B8962E);box-shadow:0 2px 12px rgba(0,0,0,0.18)}
+.tbchat-panel{position:absolute;top:46px;left:50%;transform:translateX(-50%);width:460px;max-width:92vw;height:480px;max-height:74vh;background:#fff;border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,0.32);display:flex;flex-direction:column;overflow:hidden;color:#222}
 .tbchat-head{background:linear-gradient(135deg,var(--green),#1e3829);color:#F7F5F0;padding:11px 14px;font-size:13px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .tbchat-x{background:none;border:none;color:#F7F5F0;cursor:pointer;font-size:14px;line-height:1}
 .tbchat-log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:13px;background:#faf9f6}
@@ -278,14 +279,11 @@ textarea{resize:vertical;min-height:60px}
     <span class="header-version">v4.0</span>
   </div>
   <div class="header-center">
-    <button id="tbchat-btn" class="tbchat-btn" onclick="tbChatToggle()">✨ Vraag Larry</button>
+    <input id="tbchat-field" class="tbchat-field" placeholder="stel me een vraag?" autocomplete="off"
+      onfocus="tbChatOpen()" onkeydown="if(event.key==='Enter'){event.preventDefault();tbChatSend();}">
     <div id="tbchat-panel" class="tbchat-panel" style="display:none">
-      <div class="tbchat-head"><span>✨ Larry — vraag iets of laat iets doen</span><button class="tbchat-x" onclick="tbChatToggle()">✕</button></div>
+      <div class="tbchat-head"><span>✨ Larry — vraag iets of laat iets doen</span><button class="tbchat-x" onclick="tbChatClose()">✕</button></div>
       <div id="tbchat-log" class="tbchat-log"></div>
-      <div class="tbchat-input">
-        <textarea id="tbchat-q" rows="1" placeholder="Vraag iets of geef een opdracht…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();tbChatSend();}"></textarea>
-        <button onclick="tbChatSend()" title="Versturen">➤</button>
-      </div>
     </div>
   </div>
   <div class="header-right">
@@ -704,16 +702,22 @@ textarea{resize:vertical;min-height:60px}
       #tab-agenda .ag-chip .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
       #tab-agenda .ag-drop{position:relative;display:inline-block}
       #tab-agenda .ag-dropbtn{display:inline-flex;align-items:center;gap:6px}
-      #tab-agenda .ag-droppanel{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:230px;max-height:320px;
-        overflow:auto;background:var(--bg-card,#fff);border:1px solid var(--border,#ddd);border-radius:8px;
-        box-shadow:0 6px 18px rgba(0,0,0,.14);padding:6px}
+      #tab-agenda .ag-droppanel{position:absolute;z-index:30;top:calc(100% + 4px);left:0;width:250px;
+        background:var(--bg-card,#fff);border:1px solid var(--border,#ddd);border-radius:8px;
+        box-shadow:0 6px 18px rgba(0,0,0,.14);padding:0;display:flex;flex-direction:column;overflow:hidden}
       #tab-agenda .ag-droppanel.hidden{display:none}
-      #tab-agenda .ag-opt{display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:6px;font-size:12px;cursor:pointer}
+      #tab-agenda .ag-search{padding:7px;border-bottom:1px solid #eee}
+      #tab-agenda .ag-search input{width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;border:1px solid var(--border,#ddd);border-radius:6px;outline:none}
+      #tab-agenda .ag-search input:focus{border-color:var(--gold,#B8962E)}
+      #tab-agenda .ag-optlist{overflow-y:auto;max-height:230px;padding:5px;transition:max-height .18s ease}
+      #tab-agenda .ag-drop:hover .ag-optlist{max-height:340px}
+      #tab-agenda .ag-opt{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:6px;font-size:12px;cursor:pointer}
       #tab-agenda .ag-opt:hover{background:#f5f5f5}
-      #tab-agenda .ag-opt input{margin:0;cursor:pointer}
+      #tab-agenda .ag-opt input{margin:0;cursor:pointer;flex:0 0 auto}
       #tab-agenda .ag-opt .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 auto}
-      #tab-agenda .ag-optbar{display:flex;gap:10px;padding:2px 6px 6px;border-bottom:1px solid #eee;margin-bottom:4px}
-      #tab-agenda .ag-optbar a{font-size:11px;color:var(--gold,#B8962E);cursor:pointer}
+      #tab-agenda .ag-opt .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #tab-agenda .ag-optbar{display:flex;gap:14px;padding:8px 10px;border-bottom:1px solid #eee;background:#faf9f6}
+      #tab-agenda .ag-optbar a{font-size:11px;font-weight:600;color:var(--gold,#B8962E);cursor:pointer}
       #tab-agenda .ag-optbar a:hover{text-decoration:underline}
       #tab-agenda .ag-tot{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:8px;
         background:#fff;border:1px solid var(--border,#eee);margin:0 6px 6px 0}
@@ -798,14 +802,16 @@ textarea{resize:vertical;min-height:60px}
       #tab-inbox .inbox-ract{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
       #tab-inbox .inbox-ract select{font-size:12px;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:6px;background:#fff}
       #tab-inbox .inbox-att{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#f3f0e8;border:1px solid #e6e0d0;border-radius:6px;padding:3px 8px;margin:3px 4px 0 0;cursor:pointer}
-      #tab-inbox .inbox-body{flex:1;border:0;width:100%;background:#fff}
+      #tab-inbox .inbox-body{flex:1 1 auto;min-height:0;border:0;width:100%;background:#fff}
       #tab-inbox .inbox-empty{padding:2.5rem;text-align:center;color:var(--text-faint,#999)}
-      #tab-inbox .inbox-chat{border-top:1px solid var(--border,#eee);background:#faf9f6;max-height:40%;display:flex;flex-direction:column}
-      #tab-inbox .inbox-chatlog{overflow:auto;padding:8px 10px;font-size:12px;display:flex;flex-direction:column;gap:6px}
-      #tab-inbox .inbox-chatlog .b{background:#fff;border:1px solid var(--border,#eee);border-radius:8px;padding:6px 9px;align-self:flex-start;max-width:90%}
-      #tab-inbox .inbox-chatlog .u{background:#FBF5E0;border-radius:8px;padding:6px 9px;align-self:flex-end;max-width:90%}
-      #tab-inbox .inbox-chatin{display:flex;gap:6px;padding:8px;border-top:1px solid var(--border,#eee)}
-      #tab-inbox .inbox-chatin input{flex:1;font-size:12px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px}
+      #tab-inbox .inbox-chat{border-top:1px solid var(--border,#eee);background:#fff;flex:0 0 auto;display:flex;flex-direction:column}
+      #tab-inbox .inbox-chatlog{overflow:auto;max-height:170px;font-size:12px;display:none;flex-direction:column;gap:6px;padding:0 10px}
+      #tab-inbox .inbox-chatlog.actief{display:flex;padding:8px 10px}
+      #tab-inbox .inbox-chatlog .b{background:#faf9f6;border:1px solid var(--border,#eee);border-radius:8px;padding:6px 9px;align-self:flex-start;max-width:90%;white-space:pre-wrap}
+      #tab-inbox .inbox-chatlog .u{background:var(--green,#23402e);color:#fff;border-radius:8px;padding:6px 9px;align-self:flex-end;max-width:90%;white-space:pre-wrap}
+      #tab-inbox .inbox-chatin{display:flex;gap:6px;padding:7px 8px;border-top:1px solid var(--border,#eee);align-items:flex-end}
+      #tab-inbox .inbox-chatin textarea{flex:1;font-size:12.5px;padding:7px 9px;border:1px solid var(--border,#ddd);border-radius:8px;resize:none;font-family:inherit;line-height:1.35;max-height:120px;overflow-y:auto}
+      #tab-inbox .inbox-chatin button{flex:0 0 auto;height:34px}
       #inbox-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;
         border-radius:8px;font-size:13px;display:none;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);align-items:center;gap:14px}
       #inbox-toast button{background:var(--gold,#B8962E);color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px}
@@ -830,7 +836,7 @@ textarea{resize:vertical;min-height:60px}
         <div class="inbox-chat" id="inbox-chatwrap" style="display:none">
           <div class="inbox-chatlog" id="inbox-chatlog"></div>
           <div class="inbox-chatin">
-            <input id="inbox-chatq" placeholder="Vraag Larry over deze mail…" onkeydown="if(event.key==='Enter')inboxChat()">
+            <textarea id="inbox-chatq" rows="1" placeholder="Vraag Larry over deze mail…" oninput="ibAutoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();inboxChat();}"></textarea>
             <button class="btn btn-sm btn-gold" onclick="inboxChat()">➤</button>
           </div>
         </div>
@@ -1201,15 +1207,22 @@ function agRenderFilters(){
     if(lblEl){const cnt=set.has(AG_NONE)?'0':(set.size?String(set.size):'alle');lblEl.textContent=`${naam} (${cnt})`;}
     const panel=document.getElementById('ag-drop-'+which+'-panel');
     if(!panel) return;
-    if(!opts.length){panel.innerHTML='<div style="font-size:11px;color:#aaa;padding:6px">geen data</div>';return;}
+    if(!opts.length){panel.innerHTML='<div style="font-size:11px;color:#aaa;padding:10px">geen data</div>';return;}
     let h=`<div class="ag-optbar"><a onclick="agFilterAll('${which}',true)">alles</a><a onclick="agFilterAll('${which}',false)">niets</a></div>`;
-    h+=opts.map(v=>{
+    h+=`<div class="ag-search"><input type="text" placeholder="🔍 zoeken…" oninput="agSearchOpts('${which}',this.value)" onclick="event.stopPropagation()"></div>`;
+    h+=`<div class="ag-optlist">`+opts.map(v=>{
       const aan=set.size===0||(!set.has(AG_NONE)&&set.has(v));
       const vv=String(v).replace(/"/g,'&quot;');
       return `<label class="ag-opt"><input type="checkbox" ${aan?'checked':''} data-v="${vv}" onchange="agFilterSet('${which}',this.dataset.v,this.checked)">`
-        +`<span class="dot" style="background:${agOptKleur(which,v)}"></span>${agOptLabel(which,v)}</label>`;
-    }).join('');
+        +`<span class="dot" style="background:${agOptKleur(which,v)}"></span><span class="lbl">${agOptLabel(which,v)}</span></label>`;
+    }).join('')+`</div>`;
     panel.innerHTML=h;
+  });
+}
+function agSearchOpts(which,term){
+  const t=(term||'').toLowerCase();
+  document.querySelectorAll('#ag-drop-'+which+'-panel .ag-optlist .ag-opt').forEach(el=>{
+    const lbl=el.querySelector('.lbl');el.style.display=(!t||(lbl&&lbl.textContent.toLowerCase().includes(t)))?'':'none';
   });
 }
 function agDrop(which){
@@ -4053,7 +4066,12 @@ async function inboxOpenMail(id){
         <div class="inbox-rmeta"><span><b>Van:</b> ${ibEsc(van)}</span><span>${dt}</span></div>
         ${attHtml}
         <div class="inbox-ract">
-          <label style="font-size:11px;color:var(--text-dim)">Verplaats naar:</label>
+          <button class="btn btn-sm btn-gold" onclick="inboxMaakProject()">📁 Maak project</button>
+          <button class="btn btn-sm btn-secondary" onclick="inboxKoppelProject()">🔗 Koppel aan project</button>
+          <button class="btn btn-sm btn-secondary" onclick="inboxBijlagenNaarMap()">⬇ Bijlagen → klantmap</button>
+        </div>
+        <div class="inbox-ract" style="margin-top:6px">
+          <label style="font-size:11px;color:var(--text-dim)">Verplaats in Outlook:</label>
           <select id="inbox-moveto"><option value="">— kies map —</option>${folderOpts}</select>
           <button class="btn btn-sm btn-secondary" onclick="inboxMove(document.getElementById('inbox-moveto').value)">Verplaats</button>
           <a href="${ibEsc(m.webLink||'#')}" target="_blank" class="btn btn-sm btn-secondary" style="text-decoration:none">↗ Outlook</a>
@@ -4123,15 +4141,37 @@ async function inboxReloadBadges(){
     _inbox.folders.forEach(f=>{if(map[f.id]!=null)f.unreadItemCount=map[f.id];});inboxRenderTree();}catch(e){}
 }
 
+function ibAutoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
+
+// ── Knoppen die de inbox "smart" maken — volle uitwerking in ultra-vervolg.
+//    (mail→project-tag, namen-generator+map-gen, bijlagen→klantmap). Nu stubs
+//    die de affordance tonen en niets breken; spec in tool-restyle-en-features-OPDRACHT.md
+function inboxMaakProject(){
+  if(!_inbox.cur){alert('Open eerst een mail.');return;}
+  const onderw=_inbox.cur.subject||'';
+  tbDoTab&&tbDoTab('projecten');
+  ibStatus('Projecten-tab geopend — namen-generator-koppeling volgt in volgende stap.');
+  inboxToast('Stap "maak project" wordt in het ultra-vervolg gekoppeld aan de klant-DB ('+(onderw.slice(0,40))+'…)');
+}
+function inboxKoppelProject(){
+  if(!_inbox.cur){alert('Open eerst een mail.');return;}
+  inboxToast('Mail→project taggen (zonder Outlook-move) komt in het ultra-vervolg.');
+}
+function inboxBijlagenNaarMap(){
+  if(!_inbox.cur){alert('Open eerst een mail.');return;}
+  inboxToast('Bijlagen → klantmap (Nieuwe mappenstructuur) komt in het ultra-vervolg.');
+}
+
 // ── Larry-chat per mail (via Worker target=claude). Mailcontext alleen runtime.
 function inboxChatReset(){
-  document.getElementById('inbox-chatwrap').style.display='flex';
-  document.getElementById('inbox-chatlog').innerHTML='<div class="b">Vraag me iets over deze mail — samenvatten, welke klant/leverancier, of welke map past.</div>';
+  const w=document.getElementById('inbox-chatwrap'),log=document.getElementById('inbox-chatlog');
+  w.style.display='flex';log.innerHTML='';log.classList.remove('actief');
+  const q=document.getElementById('inbox-chatq');if(q){q.value='';q.style.height='auto';}
 }
 async function inboxChat(){
   const inp=document.getElementById('inbox-chatq');const q=(inp.value||'').trim();if(!q||!_inbox.cur)return;
-  const log=document.getElementById('inbox-chatlog');
-  log.innerHTML+=`<div class="u">${ibEsc(q)}</div>`;inp.value='';log.scrollTop=log.scrollHeight;
+  const log=document.getElementById('inbox-chatlog');log.classList.add('actief');
+  log.innerHTML+=`<div class="u">${ibEsc(q)}</div>`;inp.value='';inp.style.height='auto';log.scrollTop=log.scrollHeight;
   const m=_inbox.cur;
   const van=(m.from&&m.from.emailAddress)?`${m.from.emailAddress.name||''} <${m.from.emailAddress.address||''}>`:'';
   const ctx=`Mail in de M&T info@-inbox.\nVan: ${van}\nOnderwerp: ${m.subject||''}\nInhoud (preview):\n${(m.bodyPreview||'').slice(0,1500)}`;
@@ -4152,16 +4192,14 @@ async function inboxChat(){
 // ═══════════════════════════════════════════════════════════════════════════
 let _tbHist=[], _tbBound=false;
 function tbBubble(cls,txt){const log=document.getElementById('tbchat-log');const d=document.createElement('div');d.className=cls;d.textContent=txt;log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
-function tbChatToggle(){
+function tbChatOpen(){
   const p=document.getElementById('tbchat-panel');
-  const open=p.style.display==='none';
-  p.style.display=open?'flex':'none';
-  if(open){
-    if(!_tbHist.length) tbBubble('b','Hoi, ik ben Larry 👋 Vraag me iets, of geef een opdracht — bijv. "open de agenda", "ga naar facturen", "ververs de uren".');
-    document.getElementById('tbchat-q').focus();
-    if(!_tbBound){_tbBound=true;document.addEventListener('click',e=>{const pn=document.getElementById('tbchat-panel');const bt=document.getElementById('tbchat-btn');if(pn.style.display!=='none'&&!pn.contains(e.target)&&!bt.contains(e.target))pn.style.display='none';});}
-  }
+  if(p.style.display!=='none')return;
+  p.style.display='flex';
+  if(!_tbHist.length) tbBubble('b','Hoi, ik ben Larry 👋 Vraag me iets, of geef een opdracht — bijv. "open de agenda", "ga naar facturen", "ververs de uren".');
+  if(!_tbBound){_tbBound=true;document.addEventListener('click',e=>{const pn=document.getElementById('tbchat-panel');const fld=document.getElementById('tbchat-field');if(pn.style.display!=='none'&&!pn.contains(e.target)&&e.target!==fld)pn.style.display='none';});}
 }
+function tbChatClose(){document.getElementById('tbchat-panel').style.display='none';}
 const TB_TABS=['dashboard','inbox','verwerk','controle','projecten','klanten','voorraad','bestelling','historie','agenda','instellingen','cn','migratie'];
 function tbDoTab(v){const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+v+"'"));if(btn){btn.click();return 'tabblad "'+v+'" geopend';}return 'tab "'+v+'" niet gevonden';}
 function tbExec(key,val){
@@ -4174,8 +4212,8 @@ function tbExec(key,val){
   }
 }
 async function tbChatSend(){
-  const inp=document.getElementById('tbchat-q');const q=(inp.value||'').trim();if(!q)return;
-  inp.value='';tbBubble('u',q);_tbHist.push({role:'user',content:q});
+  const inp=document.getElementById('tbchat-field');const q=(inp.value||'').trim();if(!q)return;
+  tbChatOpen();inp.value='';tbBubble('u',q);_tbHist.push({role:'user',content:q});
   const wait=tbBubble('b','…');
   const sys=`Je bent Larry, de orchestrator in de M&T-cockpit (interne tool van Mortise & Tenon). Antwoord kort en concreet in het Nederlands.
 Je kunt ACTIES in de tool uitvoeren door aan het EIND van je antwoord directives op een eigen regel te zetten, exact zo: [[ACTIE:sleutel=waarde]].
