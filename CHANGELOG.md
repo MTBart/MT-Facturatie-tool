@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — UX-batch: inbox-layout (groter leesvenster, 1 chat-input auto-grow, actie-knoppen), topbalk wit zoekveld, agenda-dropdown zoekbalk+uitlijning+hover
+- Commit: `f6a87ad` | Auteur: Bart Witte
+
 ## 2026-06-04 — Topbalk: centrale uitklapbare Larry-chat (vragen + acties uitvoeren in de tool)
 - Commit: `71c3fad` | Auteur: Bart Witte
 

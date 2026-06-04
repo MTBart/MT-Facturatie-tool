@@ -733,13 +733,22 @@ textarea{resize:vertical;min-height:60px}
         font-size:10px;line-height:1.15;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.15)}
       #tab-agenda .ag-blok b{font-weight:600}
       #tab-agenda .ag-leeg{padding:3rem;text-align:center;color:var(--text-faint,#999)}
+      /* Bladerpijlen: dof als er die kant op geen uren staan, oplichtend als wel. */
+      #tab-agenda .ag-nav{opacity:.35;transition:opacity .15s,box-shadow .15s}
+      #tab-agenda .ag-nav.heeft{opacity:1;border-color:var(--gold,#c9a227);box-shadow:0 0 0 2px rgba(201,162,39,.25)}
+      #tab-agenda .ag-totblok{display:flex;flex-direction:column;gap:8px}
+      #tab-agenda .ag-totrij{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+      #tab-agenda .ag-tot{display:inline-flex;align-items:center;gap:5px;font-size:12px}
+      #tab-agenda .ag-tot .dot{display:inline-block}
+      #tab-agenda .ag-totkop{font-weight:600;margin:2px 0 1px}
+      #tab-agenda .ag-totsub{font-size:11px;color:var(--text-faint,#999);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:6px}
     </style>
     <div class="card" style="padding:1rem;margin-bottom:1rem">
       <div class="flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div class="flex" style="gap:6px;align-items:center">
-          <button class="btn btn-sm btn-secondary" onclick="agendaNav(-1)">◀</button>
+          <button class="btn btn-sm btn-secondary ag-nav" id="agenda-prev" onclick="agendaNav(-1)" title="Vorige week met uren">◀</button>
           <button class="btn btn-sm btn-secondary" onclick="agendaVandaag()">Vandaag</button>
-          <button class="btn btn-sm btn-secondary" onclick="agendaNav(1)">▶</button>
+          <button class="btn btn-sm btn-secondary ag-nav" id="agenda-next" onclick="agendaNav(1)" title="Volgende week met uren">▶</button>
           <span id="agenda-weeklabel" style="font-weight:600;margin-left:8px"></span>
         </div>
         <div class="flex" style="gap:6px;align-items:center">
@@ -1284,6 +1293,16 @@ function agRenderGrid(){
   html+='</div>';
   const g=document.getElementById('agenda-grid');
   if(g) g.innerHTML=html;
+  // Bladerpijlen oplichten als er — binnen de huidige filters — uren vóór/na deze week staan.
+  let voor=false,na=false;
+  for(const e of agEntries()){
+    if(!e.start||!e.duur||e.duur<0||!agZichtbaar(e)) continue;
+    const t=new Date(e.start).getTime();
+    if(t<ws.getTime()) voor=true; else if(t>=we.getTime()) na=true;
+    if(voor&&na) break;
+  }
+  const pv=document.getElementById('agenda-prev'); if(pv) pv.classList.toggle('heeft',voor);
+  const nx=document.getElementById('agenda-next'); if(nx) nx.classList.toggle('heeft',na);
   agRenderTotalen(wk);
   const st=document.getElementById('agenda-status');
   if(st){const ls=localStorage.getItem('mt_toggl_last_sync');st.textContent=`${wk.length} entries in beeld${ls?' · laatste sync '+new Date(ls).toLocaleString('nl-NL'):' · nog niet gesynct'}`;}
@@ -1317,15 +1336,28 @@ function agBlokkenHtml(entries){
   }).join('');
 }
 
+function agProjChip(c,s){return `<span class="ag-tot"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${agProjKleur(c)}"></span>${agProjLabel(c)} <b>${agUur(s)}u</b></span>`;}
+function agPersChip(n,s){return `<span class="ag-tot"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${agPersKleur(n)}"></span>${agPersLabel(n)} <b>${agUur(s)}u</b></span>`;}
 function agRenderTotalen(wk){
   const el=document.getElementById('agenda-totalen'); if(!el) return;
-  if(!wk.length){el.innerHTML='';return;}
+  // ── Deze week ───────────────────────────────────────────────────────
   const perP={}, perT={}; let tot=0;
   wk.forEach(e=>{tot+=e.duur;perP[e.project_code||'—']=(perP[e.project_code||'—']||0)+e.duur;perT[e.teamlid||'?']=(perT[e.teamlid||'?']||0)+e.duur;});
-  const proj=Object.entries(perP).sort((a,b)=>b[1]-a[1]).map(([c,s])=>`<span class="ag-tot"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${agProjKleur(c)}"></span>${agProjLabel(c)} <b>${agUur(s)}u</b></span>`).join('');
-  const pers=Object.entries(perT).sort((a,b)=>b[1]-a[1]).map(([n,s])=>`<span class="ag-tot"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${agPersKleur(n)}"></span>${agPersLabel(n)} <b>${agUur(s)}u</b></span>`).join('');
-  el.innerHTML=`<div class="card" style="padding:.7rem 1rem"><div style="font-weight:600;margin-bottom:6px">Totaal deze week: ${agUur(tot)}u</div>
-    <div style="margin-bottom:4px">${proj}</div><div>${pers}</div></div>`;
+  const proj=Object.entries(perP).sort((a,b)=>b[1]-a[1]).map(([c,s])=>agProjChip(c,s)).join('');
+  const pers=Object.entries(perT).sort((a,b)=>b[1]-a[1]).map(([n,s])=>agPersChip(n,s)).join('');
+  // ── Alle weken (zelfde filters) — zo zie je bv. "bank joris" z'n volledige opbouw ──
+  const aP={}, aT={}; let aTot=0;
+  agEntries().forEach(e=>{
+    if(!e.start||!e.duur||e.duur<0||!agZichtbaar(e)) return;
+    aTot+=e.duur;aP[e.project_code||'—']=(aP[e.project_code||'—']||0)+e.duur;aT[e.teamlid||'?']=(aT[e.teamlid||'?']||0)+e.duur;
+  });
+  const aProj=Object.entries(aP).sort((a,b)=>b[1]-a[1]).map(([c,s])=>agProjChip(c,s)).join('');
+  const aPers=Object.entries(aT).sort((a,b)=>b[1]-a[1]).map(([n,s])=>agPersChip(n,s)).join('');
+  const wkBlok=wk.length?`<div class="ag-totkop">Deze week: ${agUur(tot)}u</div>
+      <div class="ag-totrij">${proj}</div><div class="ag-totrij">${pers}</div>`:'<div class="ag-totkop" style="color:var(--text-faint)">Geen uren in deze week</div>';
+  const allBlok=aTot?`<div class="ag-totsub">Totaal alle weken (huidige filters): ${agUur(aTot)}u</div>
+      <div class="ag-totrij">${aProj}</div><div class="ag-totrij">${aPers}</div>`:'';
+  el.innerHTML=`<div class="card ag-totblok" style="padding:.7rem 1rem">${wkBlok}${allBlok}</div>`;
 }
 
 function agBlokDetail(id){
@@ -1371,12 +1403,20 @@ async function agSyncAlleMedewerkers(since,tot){
   const {pn,un}=await agNamen();
   const h=await authHeader();
   if(!h['X-Auth-Token']) throw new Error('geen MS-login (Worker vereist Microsoft-token)');
-  const res=await fetch(`${WORKER}?target=toggl_reports&path=${encodeURIComponent(`workspace/${AG_WS}/search/time_entries`)}`,{
-    method:'POST',headers:{...h,'Content-Type':'application/json'},
-    body:JSON.stringify({start_date:since,end_date:tot,page_size:1000})});
-  if(!res.ok) throw new Error('Worker/Reports HTTP '+res.status);
-  const rows=await res.json();
-  if(!Array.isArray(rows)) throw new Error('onverwacht reports-antwoord');
+  // Pagineer: Reports v3 geeft max page_size regels per call. Loop met
+  // first_row_number tot een pagina minder dan page_size teruggeeft (max 20 pagina's).
+  const PAGE=1000; let rows=[]; let firstRow=1;
+  for(let p=0;p<20;p++){
+    const res=await fetch(`${WORKER}?target=toggl_reports&path=${encodeURIComponent(`workspace/${AG_WS}/search/time_entries`)}`,{
+      method:'POST',headers:{...h,'Content-Type':'application/json'},
+      body:JSON.stringify({start_date:since,end_date:tot,page_size:PAGE,first_row_number:firstRow})});
+    if(!res.ok) throw new Error('Worker/Reports HTTP '+res.status);
+    const chunk=await res.json();
+    if(!Array.isArray(chunk)) throw new Error('onverwacht reports-antwoord');
+    rows=rows.concat(chunk);
+    if(chunk.length<PAGE) break;
+    firstRow+=PAGE;
+  }
   const entries=agEntries(); let nieuw=0,n=0,fallback=0;
   for(const row of rows){
     // Nooit droppen: handmatige MT-koppeling > auto Toggl-naam > id-stub.
@@ -1421,9 +1461,11 @@ async function agSyncEigen(since,tot){
 async function agendaSyncNu(){
   const st=document.getElementById('agenda-status');
   const btn=document.getElementById('agenda-syncbtn');
-  if(btn)btn.disabled=true; if(st)st.textContent='Syncing… (alle medewerkers)';
-  const since=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
-  const tot=new Date().toISOString().slice(0,10);
+  if(btn)btn.disabled=true; if(st)st.textContent='Syncing… (alle medewerkers, 12 mnd)';
+  // Ruim venster: 365 dagen terug — anders mist een project z'n historische uren
+  // (bv. "bank joris" loopt over meer dan 30 dagen → totaal viel veel te laag uit).
+  const since=new Date(Date.now()-365*864e5).toISOString().slice(0,10);
+  const tot=new Date(Date.now()+864e5).toISOString().slice(0,10);
   try{
     let r;
     try{ r=await agSyncAlleMedewerkers(since,tot); }
