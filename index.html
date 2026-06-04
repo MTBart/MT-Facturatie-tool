@@ -1118,40 +1118,79 @@ function agBlokDetail(id){
 // Sync: leest Track /me/time_entries (Basic auth, gedeelde token) → mt_uren_entries.
 // Read-from-Toggl → write-localStorage; muteert Toggl NIET. Vereist token+mapping
 // (in te stellen via uren.html). Faalt vriendelijk (bv. CORS) met verwijzing.
+const AG_WS=21258443, AG_TBASE='https://api.track.toggl.com/api/v9';
+function agMaps(){let pmap={},umap={};try{pmap=JSON.parse(localStorage.getItem('mt_toggl_project_map')||'{}');umap=JSON.parse(localStorage.getItem('mt_toggl_user_map')||'{}');}catch(e){}return {pmap,umap};}
+function agMergeEntry(entries,o){const idx=entries.findIndex(e=>String(e.toggl_id)===String(o.toggl_id));if(idx>=0){entries[idx]=o;return 0;}entries.push(o);return 1;}
+
+// Fase 2 — álle medewerkers via Track Reports v3 (admin-token server-side), via de Worker-proxy.
+// Reports-API stuurt geen CORS-headers → kan niet direct uit de browser, daarom via WORKER.
+async function agSyncAlleMedewerkers(since,tot){
+  const {pmap,umap}=agMaps();
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('geen MS-login (Worker vereist Microsoft-token)');
+  const res=await fetch(`${WORKER}?target=toggl_reports&path=${encodeURIComponent(`workspace/${AG_WS}/search/time_entries`)}`,{
+    method:'POST',headers:{...h,'Content-Type':'application/json'},
+    body:JSON.stringify({start_date:since,end_date:tot,page_size:1000})});
+  if(!res.ok) throw new Error('Worker/Reports HTTP '+res.status);
+  const rows=await res.json();
+  if(!Array.isArray(rows)) throw new Error('onverwacht reports-antwoord');
+  const entries=agEntries(); let nieuw=0,n=0,ongekoppeld=0;
+  for(const row of rows){
+    const pc=pmap[row.project_id]||null, tl=umap[row.user_id]||null;
+    const tes=Array.isArray(row.time_entries)?row.time_entries:[row];
+    for(const te of tes){
+      if(!te.stop) continue; n++;
+      if(!pc||!tl){ongekoppeld++;continue;}
+      nieuw+=agMergeEntry(entries,{id:'ag'+te.id,toggl_id:te.id,teamlid:tl,project_code:pc,
+        taak_naam:row.description||null,omschrijving:row.description||'',start:te.start,stop:te.stop,
+        duur:te.seconds!=null?te.seconds:(te.duration||0),datum:(te.start||'').slice(0,10)});
+    }
+  }
+  localStorage.setItem('mt_uren_entries',JSON.stringify(entries));
+  localStorage.setItem('mt_toggl_last_sync',new Date().toISOString());
+  return {nieuw,verwerkt:n,ongekoppeld,bron:'alle-medewerkers'};
+}
+
+// Fallback — alleen Barts eigen entries, rechtstreeks Track v9 (werkt zonder Worker/MS-login).
+async function agSyncEigen(since,tot){
+  const token=localStorage.getItem('mt_toggl_token')||'';
+  if(!token) throw new Error('geen Toggl-token (stel in via de uren-app)');
+  const {pmap,umap}=agMaps();
+  const res=await fetch(`${AG_TBASE}/me/time_entries?start_date=${since}&end_date=${tot}`,
+    {headers:{'Authorization':'Basic '+btoa(token+':api_token'),'Content-Type':'application/json'}});
+  if(!res.ok) throw new Error('Track HTTP '+res.status);
+  const data=await res.json(); const entries=agEntries(); let nieuw=0,n=0;
+  for(const te of (data||[])){
+    if(!te.stop||te.duration<0) continue; n++;
+    const pc=pmap[te.project_id]||null, tl=umap[te.user_id]||null;
+    if(!pc||!tl) continue;
+    nieuw+=agMergeEntry(entries,{id:'ag'+te.id,toggl_id:te.id,teamlid:tl,project_code:pc,
+      taak_naam:te.description||null,omschrijving:te.description||'',start:te.start,stop:te.stop,
+      duur:te.duration,datum:te.start.slice(0,10)});
+  }
+  localStorage.setItem('mt_uren_entries',JSON.stringify(entries));
+  localStorage.setItem('mt_toggl_last_sync',new Date().toISOString());
+  return {nieuw,verwerkt:n,bron:'eigen'};
+}
+
 async function agendaSyncNu(){
   const st=document.getElementById('agenda-status');
   const btn=document.getElementById('agenda-syncbtn');
-  const token=localStorage.getItem('mt_toggl_token')||'';
-  if(!token){if(st)st.textContent='⚠ Geen Toggl-token. Stel in via de uren-app (Instellingen → Toggl).';return;}
-  let pmap={},umap={};
-  try{pmap=JSON.parse(localStorage.getItem('mt_toggl_project_map')||'{}');umap=JSON.parse(localStorage.getItem('mt_toggl_user_map')||'{}');}catch(e){}
-  if(btn)btn.disabled=true; if(st)st.textContent='Syncing…';
-  const WS=21258443, BASE='https://api.track.toggl.com/api/v9';
+  if(btn)btn.disabled=true; if(st)st.textContent='Syncing… (alle medewerkers)';
   const since=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
   const tot=new Date().toISOString().slice(0,10);
   try{
-    const res=await fetch(`${BASE}/me/time_entries?start_date=${since}&end_date=${tot}`,
-      {headers:{'Authorization':'Basic '+btoa(token+':api_token'),'Content-Type':'application/json'}});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const data=await res.json();
-    const entries=agEntries();
-    let nieuw=0,bij=0;
-    for(const te of (data||[])){
-      if(!te.stop||te.duration<0) continue;
-      const pc=pmap[te.project_id]||null, tl=umap[te.user_id]||null;
-      if(!pc||!tl) continue;
-      const idx=entries.findIndex(e=>String(e.toggl_id)===String(te.id));
-      const obj={id:idx>=0?entries[idx].id:('ag'+te.id),toggl_id:te.id,teamlid:tl,project_code:pc,
-        taak_naam:te.description||null,omschrijving:te.description||'',start:te.start,stop:te.stop,
-        duur:te.duration,datum:te.start.slice(0,10)};
-      if(idx>=0){entries[idx]=obj;bij++;}else{entries.push(obj);nieuw++;}
+    let r;
+    try{ r=await agSyncAlleMedewerkers(since,tot); }
+    catch(e1){
+      if(st)st.textContent=`⚠ Alle-medewerkers-sync faalde (${e1.message}); val terug op eigen uren…`;
+      r=await agSyncEigen(since,tot);
     }
-    localStorage.setItem('mt_uren_entries',JSON.stringify(entries));
-    localStorage.setItem('mt_toggl_last_sync',new Date().toISOString());
-    if(st)st.textContent=`✓ ${nieuw} nieuw, ${bij} bijgewerkt (${(data||[]).length} verwerkt)`;
+    const extra=r.bron==='alle-medewerkers'?`alle medewerkers${r.ongekoppeld?`, ${r.ongekoppeld} ongekoppeld`:''}`:'alleen eigen uren';
+    if(st)st.textContent=`✓ ${r.nieuw} nieuw/bijgewerkt van ${r.verwerkt} (${extra})`;
     renderAgenda();
   }catch(err){
-    if(st)st.textContent=`❌ Sync mislukt (${err.message}). Tip: sync via de uren-app of later via de Worker-proxy.`;
+    if(st)st.textContent=`❌ Sync mislukt (${err.message}). Tip: log in (Microsoft) of sync via de uren-app.`;
   }finally{if(btn)btn.disabled=false;}
 }
 

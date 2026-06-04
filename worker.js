@@ -167,6 +167,22 @@ export default {
         });
         const text = await response.text();
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+
+      } else if (target === 'toggl_reports') {
+        // Toggl Track Reports API v3 — Basic auth, aparte base. Aggregeert over ALLE
+        // workspace-gebruikers (admin-token = TOGGL_KEY). Browser kan dit niet direct
+        // (Reports-API stuurt geen CORS-headers) → daarom via deze proxy.
+        const repPath = url.searchParams.get('path');
+        const method = request.method;
+        const body = ['POST','PATCH','PUT'].includes(method) ? await request.text() : undefined;
+        const token = btoa(`${env.TOGGL_KEY}:api_token`);
+        const response = await fetch(`https://api.track.toggl.com/reports/api/v3/${repPath}`, {
+          method,
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${token}` },
+          body
+        });
+        const text = await response.text();
+        return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
       return new Response('Bad request', { status: 400, headers: corsHeaders });
