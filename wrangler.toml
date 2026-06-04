@@ -1,0 +1,9 @@
+name = "mt-claude-proxy"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# Bewust GEEN [assets] / [site] — anders bundelt wrangler de hele repo-map
+# (index.html etc.) als statische assets en faalt op grootte. Dit is een
+# pure module-worker: alleen worker.js. Secrets (CLAUDE_KEY, CLAUDE_SECRET,
+# MONEYBIRD_KEY, TOGGL_KEY, TOGGL_FOCUS_KEY) staan al via `wrangler secret put`
+# in Cloudflare en blijven bij deploy behouden — niet hier zetten.

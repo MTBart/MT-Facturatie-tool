@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-04 — Toggl Focus Fase 3: 1-op-1 aansturing vanuit agenda-tab (NIET gepusht)
+- Commit: `910248d` | Auteur: Bart Witte
+
 ## 2026-06-04 — Toggl agenda Fase 2 + secret-guard: toggl_sk_
 - Commit: `9b72564` | Auteur: Bart Witte
 
