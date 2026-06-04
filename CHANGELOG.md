@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-04 — Toggl agenda Fase 2 + secret-guard: toggl_sk_
+- Commit: `9b72564` | Auteur: Bart Witte
+
 ## 2026-06-04 — Agenda-tab: Toggl week-kalender (tijdblokken) in index.html
 - Commit: `abd5e0f` | Auteur: Bart Witte
 

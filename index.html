@@ -705,6 +705,7 @@ textarea{resize:vertical;min-height:60px}
             <option value="persoon">Persoon</option>
           </select>
           <button class="btn btn-sm btn-gold" onclick="agendaSyncNu()" id="agenda-syncbtn">⬇ Sync nu</button>
+          <button class="btn btn-sm btn-secondary" onclick="focusOpen()" title="Toggl Focus aansturen">🎯 Focus</button>
         </div>
       </div>
       <div class="flex" style="gap:1.5rem;margin-top:10px;flex-wrap:wrap">
@@ -728,6 +729,43 @@ textarea{resize:vertical;min-height:60px}
   <!-- ═══ TAB: MIGRATIE ═══ -->
   <div id="tab-migratie" class="tab-content"></div>
 
+</div>
+
+<!-- Toggl Focus aansturen modal -->
+<div id="focus-modal" class="modal-overlay hidden">
+  <div class="modal" style="width:560px">
+    <h2>🎯 Toggl Focus aansturen</h2>
+    <div style="font-size:12px;color:var(--text-faint);margin-bottom:0.75rem">
+      Live acties op Toggl Focus (via de Worker-proxy). Elke schrijf-actie vraagt eerst bevestiging.
+      Vereist Microsoft-login.
+    </div>
+
+    <div class="field">
+      <label>Taak <button class="btn btn-sm btn-secondary" style="margin-left:6px" onclick="focusLaadTaken()">↻ Taken laden</button></label>
+      <select id="focus-taak" class="zoek-input" style="width:100%"><option value="">— eerst taken laden —</option></select>
+    </div>
+
+    <div class="card-title" style="margin:0.75rem 0 0.4rem">Status zetten</div>
+    <div class="flex" style="gap:6px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-secondary" onclick="focusZetStatus(300785)">Todo</button>
+      <button class="btn btn-sm btn-secondary" onclick="focusZetStatus(300788)">In Progress</button>
+      <button class="btn btn-sm btn-gold" onclick="focusZetStatus(300786)">✓ Done</button>
+    </div>
+
+    <div class="card-title" style="margin:1rem 0 0.4rem">Tijd-entry op deze taak</div>
+    <div class="grid3" style="margin-bottom:0.5rem">
+      <div class="field" style="margin-bottom:0"><label>Datum</label><input type="date" id="focus-datum"></div>
+      <div class="field" style="margin-bottom:0"><label>Start</label><input type="time" id="focus-start" value="09:00"></div>
+      <div class="field" style="margin-bottom:0"><label>Duur (min)</label><input type="number" id="focus-duur" value="60" min="1" step="5"></div>
+    </div>
+    <div class="field"><label>Omschrijving</label><input type="text" id="focus-oms" placeholder="optioneel"></div>
+    <button class="btn btn-sm btn-gold" onclick="focusMaakEntry()">+ Entry aanmaken in Focus</button>
+
+    <div id="focus-status" style="font-size:12px;margin-top:0.75rem;min-height:18px"></div>
+    <div class="flex" style="justify-content:flex-end;margin-top:0.75rem">
+      <button class="btn btn-secondary" onclick="document.getElementById('focus-modal').classList.add('hidden')">Sluiten</button>
+    </div>
+  </div>
 </div>
 
 <!-- Project aanmaken modal -->
@@ -1192,6 +1230,82 @@ async function agendaSyncNu(){
   }catch(err){
     if(st)st.textContent=`❌ Sync mislukt (${err.message}). Tip: log in (Microsoft) of sync via de uren-app.`;
   }finally{if(btn)btn.disabled=false;}
+}
+
+// ═══ TOGGL FOCUS — 1-op-1 aansturen (Fase 3) ═══
+// Live writes via de Worker (target=toggl_focus, Bearer server-side). Org+ws vast.
+const FOCUS_ORG=21259253, FOCUS_WS=21258443;
+const FOCUS_BASE_PATH=`organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/`;
+async function focusFetch(path,method='GET',body=null){
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('Microsoft-login vereist (log in via de tool)');
+  const opts={method,headers:{...h,'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const res=await fetch(`${WORKER}?target=toggl_focus&path=${encodeURIComponent(FOCUS_BASE_PATH+path)}`,opts);
+  if(res.status===204) return true;
+  const txt=await res.text();
+  if(!res.ok) throw new Error('Focus HTTP '+res.status+(txt?(' — '+txt.slice(0,120)):''));
+  try{return JSON.parse(txt);}catch(e){return txt;}
+}
+function focusStatus(msg,kleur){const el=document.getElementById('focus-status');if(el){el.textContent=msg;el.style.color=kleur||'var(--text-faint)';}}
+function focusOpen(){
+  const dt=document.getElementById('focus-datum'); if(dt&&!dt.value) dt.value=new Date().toISOString().slice(0,10);
+  document.getElementById('focus-modal').classList.remove('hidden');
+  focusStatus('');
+}
+async function focusLaadTaken(){
+  focusStatus('Taken laden…');
+  try{
+    let alle=[],page=1;
+    while(page<=10){
+      const r=await focusFetch(`tasks?page=${page}`);
+      const data=Array.isArray(r)?r:(r&&r.data)||[];
+      if(!data.length) break;
+      alle=alle.concat(data); page++;
+      if(data.length<20) break;
+    }
+    const sel=document.getElementById('focus-taak');
+    if(!alle.length){sel.innerHTML='<option value="">— geen taken gevonden —</option>';focusStatus('Geen taken.');return;}
+    sel.innerHTML=alle.map(t=>`<option value="${t.id}">${(t.name||'taak '+t.id).replace(/</g,'&lt;')}</option>`).join('');
+    focusStatus(`✓ ${alle.length} taken geladen`,'var(--text-faint)');
+  }catch(e){focusStatus('❌ '+e.message,'#c0392b');}
+}
+async function focusZetStatus(statusId){
+  const sel=document.getElementById('focus-taak'); const taskId=sel&&sel.value;
+  if(!taskId){focusStatus('⚠ Kies eerst een taak.','#b8962e');return;}
+  const naam=sel.options[sel.selectedIndex].text;
+  const labels={300785:'Todo',300788:'In Progress',300786:'Done'};
+  if(!confirm(`Taak "${naam}" → status ${labels[statusId]||statusId} in Toggl Focus?`)) return;
+  focusStatus('Status zetten…');
+  try{ await focusFetch(`tasks/${taskId}`,'PATCH',{status_id:statusId});
+    focusStatus(`✓ "${naam}" → ${labels[statusId]||statusId}`,'#2A4A38');
+  }catch(e){focusStatus('❌ '+e.message,'#c0392b');}
+}
+async function focusMaakEntry(){
+  const sel=document.getElementById('focus-taak'); const taskId=sel&&sel.value;
+  if(!taskId){focusStatus('⚠ Kies eerst een taak.','#b8962e');return;}
+  const datum=document.getElementById('focus-datum').value;
+  const tijd=document.getElementById('focus-start').value||'09:00';
+  const min=parseInt(document.getElementById('focus-duur').value)||0;
+  const oms=document.getElementById('focus-oms').value||'';
+  if(!datum||min<=0){focusStatus('⚠ Datum + duur (min) invullen.','#b8962e');return;}
+  const startLocal=new Date(`${datum}T${tijd}:00`);
+  const startISO=startLocal.toISOString().replace(/\.\d{3}Z$/,'Z');
+  const dur=min*60; const naam=sel.options[sel.selectedIndex].text;
+  if(!confirm(`Entry van ${min} min op "${naam}" (${datum} ${tijd}) aanmaken in Toggl Focus?`)) return;
+  focusStatus('Entry aanmaken…');
+  try{
+    // POST dropt task_id silently → daarna PATCH om te koppelen.
+    const made=await focusFetch('time-entries','POST',{start:startISO,duration:dur,description:oms,type:'activity'});
+    const id=made&&(made.id||(made.data&&made.data.id));
+    if(id){ try{await focusFetch(`time-entries/${id}`,'PATCH',{task_id:parseInt(taskId)});}catch(e){} }
+    focusStatus(`✓ Entry aangemaakt${id?' (id '+id+')':''}. Undo: verwijder 'm in Focus of klik hieronder.`,'#2A4A38');
+    if(id){ const el=document.getElementById('focus-status');
+      const b=document.createElement('button'); b.className='btn btn-sm btn-secondary'; b.style.marginLeft='8px'; b.textContent='↩ Verwijder deze entry';
+      b.onclick=async()=>{ if(!confirm('Deze zojuist gemaakte entry verwijderen?'))return; try{await focusFetch(`time-entries/${id}`,'DELETE');focusStatus('✓ Entry verwijderd (undo).','var(--text-faint)');}catch(e){focusStatus('❌ '+e.message,'#c0392b');} };
+      el.appendChild(b);
+    }
+  }catch(e){focusStatus('❌ '+e.message,'#c0392b');}
 }
 
 // ═══ SETTINGS ═══
