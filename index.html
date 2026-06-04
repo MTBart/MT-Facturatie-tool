@@ -1159,11 +1159,34 @@ function agBlokDetail(id){
 const AG_WS=21258443, AG_TBASE='https://api.track.toggl.com/api/v9';
 function agMaps(){let pmap={},umap={};try{pmap=JSON.parse(localStorage.getItem('mt_toggl_project_map')||'{}');umap=JSON.parse(localStorage.getItem('mt_toggl_user_map')||'{}');}catch(e){}return {pmap,umap};}
 function agMergeEntry(entries,o){const idx=entries.findIndex(e=>String(e.toggl_id)===String(o.toggl_id));if(idx>=0){entries[idx]=o;return 0;}entries.push(o);return 1;}
+// id→naam fallback-maps, rechtstreeks uit Toggl (via Worker, admin-token server-side).
+// Zo is de agenda zelfvoorzienend: geen handmatige mapping in de uren-app nodig.
+// Gecachet in localStorage; ververst als leeg of force=true.
+async function agNamen(force){
+  let pn={},un={};
+  try{pn=JSON.parse(localStorage.getItem('mt_toggl_proj_names')||'{}');}catch(e){}
+  try{un=JSON.parse(localStorage.getItem('mt_toggl_user_names')||'{}');}catch(e){}
+  if(!force&&Object.keys(pn).length&&Object.keys(un).length) return {pn,un};
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) return {pn,un};
+  try{
+    const [pr,us]=await Promise.all([
+      fetch(`${WORKER}?target=toggl&path=${encodeURIComponent(`workspaces/${AG_WS}/projects`)}`,{headers:h}).then(r=>r.ok?r.json():[]),
+      fetch(`${WORKER}?target=toggl&path=${encodeURIComponent(`workspaces/${AG_WS}/workspace_users`)}`,{headers:h}).then(r=>r.ok?r.json():[])
+    ]);
+    (Array.isArray(pr)?pr:[]).forEach(p=>{if(p&&p.id!=null)pn[p.id]=p.name;});
+    (Array.isArray(us)?us:[]).forEach(u=>{const uid=u.user_id||u.id;if(uid!=null)un[uid]=u.name||u.email||('User '+uid);});
+    localStorage.setItem('mt_toggl_proj_names',JSON.stringify(pn));
+    localStorage.setItem('mt_toggl_user_names',JSON.stringify(un));
+  }catch(e){}
+  return {pn,un};
+}
 
 // Fase 2 — álle medewerkers via Track Reports v3 (admin-token server-side), via de Worker-proxy.
 // Reports-API stuurt geen CORS-headers → kan niet direct uit de browser, daarom via WORKER.
 async function agSyncAlleMedewerkers(since,tot){
   const {pmap,umap}=agMaps();
+  const {pn,un}=await agNamen();
   const h=await authHeader();
   if(!h['X-Auth-Token']) throw new Error('geen MS-login (Worker vereist Microsoft-token)');
   const res=await fetch(`${WORKER}?target=toggl_reports&path=${encodeURIComponent(`workspace/${AG_WS}/search/time_entries`)}`,{
@@ -1172,13 +1195,15 @@ async function agSyncAlleMedewerkers(since,tot){
   if(!res.ok) throw new Error('Worker/Reports HTTP '+res.status);
   const rows=await res.json();
   if(!Array.isArray(rows)) throw new Error('onverwacht reports-antwoord');
-  const entries=agEntries(); let nieuw=0,n=0,ongekoppeld=0;
+  const entries=agEntries(); let nieuw=0,n=0,fallback=0;
   for(const row of rows){
-    const pc=pmap[row.project_id]||null, tl=umap[row.user_id]||null;
+    // Nooit droppen: handmatige MT-koppeling > auto Toggl-naam > id-stub.
+    const pc=pmap[row.project_id]||pn[row.project_id]||(row.project_id?('Toggl '+row.project_id):'(geen project)');
+    const tl=umap[row.user_id]||un[row.user_id]||(row.user_id?('User '+row.user_id):'(onbekend)');
+    if(!(pmap[row.project_id]&&umap[row.user_id])) fallback++;
     const tes=Array.isArray(row.time_entries)?row.time_entries:[row];
     for(const te of tes){
       if(!te.stop) continue; n++;
-      if(!pc||!tl){ongekoppeld++;continue;}
       nieuw+=agMergeEntry(entries,{id:'ag'+te.id,toggl_id:te.id,teamlid:tl,project_code:pc,
         taak_naam:row.description||null,omschrijving:row.description||'',start:te.start,stop:te.stop,
         duur:te.seconds!=null?te.seconds:(te.duration||0),datum:(te.start||'').slice(0,10)});
@@ -1186,7 +1211,7 @@ async function agSyncAlleMedewerkers(since,tot){
   }
   localStorage.setItem('mt_uren_entries',JSON.stringify(entries));
   localStorage.setItem('mt_toggl_last_sync',new Date().toISOString());
-  return {nieuw,verwerkt:n,ongekoppeld,bron:'alle-medewerkers'};
+  return {nieuw,verwerkt:n,fallback,bron:'alle-medewerkers'};
 }
 
 // Fallback — alleen Barts eigen entries, rechtstreeks Track v9 (werkt zonder Worker/MS-login).
@@ -1224,11 +1249,11 @@ async function agendaSyncNu(){
       if(st)st.textContent=`⚠ Alle-medewerkers-sync faalde (${e1.message}); val terug op eigen uren…`;
       r=await agSyncEigen(since,tot);
     }
-    const extra=r.bron==='alle-medewerkers'?`alle medewerkers${r.ongekoppeld?`, ${r.ongekoppeld} ongekoppeld`:''}`:'alleen eigen uren';
+    const extra=r.bron==='alle-medewerkers'?`alle medewerkers${r.fallback?`, ${r.fallback} via Toggl-naam (nog niet MT-gekoppeld)`:''}`:'alleen eigen uren';
     if(st)st.textContent=`✓ ${r.nieuw} nieuw/bijgewerkt van ${r.verwerkt} (${extra})`;
     renderAgenda();
   }catch(err){
-    if(st)st.textContent=`❌ Sync mislukt (${err.message}). Tip: log in (Microsoft) of sync via de uren-app.`;
+    if(st)st.textContent=`❌ Sync mislukt (${err.message}). Tip: log eerst in via Microsoft (knop rechtsboven).`;
   }finally{if(btn)btn.disabled=false;}
 }
 

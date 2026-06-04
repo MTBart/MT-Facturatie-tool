@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-04 — wrangler.toml: minimale config voor mt-claude-proxy deploy
+- Commit: `2d7847b` | Auteur: Bart Witte
+
 ## 2026-06-04 — Toggl Focus Fase 3: 1-op-1 aansturing vanuit agenda-tab (NIET gepusht)
 - Commit: `910248d` | Auteur: Bart Witte
 
