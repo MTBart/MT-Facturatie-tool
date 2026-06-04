@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-04 — agenda: filters als multi-select dropdowns (project + persoon) + namen i.p.v. ID-stubs
+- Commit: `353f672` | Auteur: Bart Witte
+
 ## 2026-06-04 — Agenda zelfvoorzienend: namen-fallback ipv entries droppen
 - Commit: `61b0e02` | Auteur: Bart Witte
 

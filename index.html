@@ -274,6 +274,7 @@ textarea{resize:vertical;min-height:60px}
 
 <div class="tabs-wrap">
   <button class="tab-btn active" onclick="showTab('dashboard',this)">📊 Dashboard</button>
+  <button class="tab-btn" onclick="showTab('inbox',this)">📥 Inbox</button>
   <button class="tab-btn" onclick="showTab('verwerk',this)">Nieuwe factuur</button>
   <button class="tab-btn" onclick="showTab('controle',this)">Factuur controle</button>
   <button class="tab-btn" onclick="showTab('projecten',this)">Projecten</button>
@@ -740,6 +741,79 @@ textarea{resize:vertical;min-height:60px}
     <div id="agenda-status" style="font-size:11px;color:var(--text-faint);margin-top:6px"></div>
   </div>
 
+  <!-- ═══ TAB: INBOX (smart-inbox, live 2-weg op info@) ═══ -->
+  <div id="tab-inbox" class="tab-content">
+    <style>
+      #tab-inbox .inbox-wrap{display:grid;grid-template-columns:210px 320px 1fr;gap:0;height:76vh;
+        border:1px solid var(--border,#e3e3e3);border-radius:10px;overflow:hidden;background:var(--bg-card,#fff)}
+      #tab-inbox .inbox-col{overflow:auto;min-width:0}
+      #tab-inbox .inbox-folders{border-right:1px solid var(--border,#eee);background:#faf9f6}
+      #tab-inbox .inbox-list{border-right:1px solid var(--border,#eee)}
+      #tab-inbox .inbox-mbx{display:flex;gap:5px;padding:8px;border-bottom:1px solid var(--border,#eee);align-items:center}
+      #tab-inbox .inbox-mbx select{flex:1;min-width:0;font-size:12px;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:6px;background:#fff}
+      #tab-inbox .inbox-fold{padding:6px 10px;font-size:12.5px;cursor:pointer;display:flex;justify-content:space-between;gap:6px;border-radius:6px;margin:1px 5px}
+      #tab-inbox .inbox-fold:hover{background:#f0ece0}
+      #tab-inbox .inbox-fold.actief{background:#FBF5E0;font-weight:600}
+      #tab-inbox .inbox-fold.kind{padding-left:24px;font-size:12px;color:var(--text-dim,#666)}
+      #tab-inbox .inbox-fold .badge{font-size:10px;color:#fff;background:var(--gold,#B8962E);border-radius:9px;padding:0 6px;min-width:16px;text-align:center}
+      #tab-inbox .inbox-listhdr{padding:8px 10px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border,#eee);position:sticky;top:0;background:var(--bg-card,#fff);z-index:1}
+      #tab-inbox .inbox-msg{padding:8px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:12px;line-height:1.35}
+      #tab-inbox .inbox-msg:hover{background:#fafafa}
+      #tab-inbox .inbox-msg.actief{background:#FBF5E0}
+      #tab-inbox .inbox-msg.ongelezen{border-left:3px solid var(--gold,#B8962E)}
+      #tab-inbox .inbox-msg .van{font-weight:600;display:flex;justify-content:space-between;gap:6px}
+      #tab-inbox .inbox-msg .van .dt{font-weight:400;color:var(--text-faint,#999);font-size:10.5px;white-space:nowrap}
+      #tab-inbox .inbox-msg .onderw{color:var(--text,#222)}
+      #tab-inbox .inbox-msg .prev{color:var(--text-faint,#999);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #tab-inbox .inbox-reader{display:flex;flex-direction:column}
+      #tab-inbox .inbox-rhdr{padding:10px 12px;border-bottom:1px solid var(--border,#eee)}
+      #tab-inbox .inbox-rhdr h3{margin:0 0 4px;font-size:15px}
+      #tab-inbox .inbox-rmeta{font-size:11.5px;color:var(--text-dim,#666);display:flex;flex-wrap:wrap;gap:4px 12px}
+      #tab-inbox .inbox-ract{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
+      #tab-inbox .inbox-ract select{font-size:12px;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:6px;background:#fff}
+      #tab-inbox .inbox-att{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#f3f0e8;border:1px solid #e6e0d0;border-radius:6px;padding:3px 8px;margin:3px 4px 0 0;cursor:pointer}
+      #tab-inbox .inbox-body{flex:1;border:0;width:100%;background:#fff}
+      #tab-inbox .inbox-empty{padding:2.5rem;text-align:center;color:var(--text-faint,#999)}
+      #tab-inbox .inbox-chat{border-top:1px solid var(--border,#eee);background:#faf9f6;max-height:40%;display:flex;flex-direction:column}
+      #tab-inbox .inbox-chatlog{overflow:auto;padding:8px 10px;font-size:12px;display:flex;flex-direction:column;gap:6px}
+      #tab-inbox .inbox-chatlog .b{background:#fff;border:1px solid var(--border,#eee);border-radius:8px;padding:6px 9px;align-self:flex-start;max-width:90%}
+      #tab-inbox .inbox-chatlog .u{background:#FBF5E0;border-radius:8px;padding:6px 9px;align-self:flex-end;max-width:90%}
+      #tab-inbox .inbox-chatin{display:flex;gap:6px;padding:8px;border-top:1px solid var(--border,#eee)}
+      #tab-inbox .inbox-chatin input{flex:1;font-size:12px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px}
+      #inbox-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;
+        border-radius:8px;font-size:13px;display:none;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);align-items:center;gap:14px}
+      #inbox-toast button{background:var(--gold,#B8962E);color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px}
+    </style>
+    <div class="inbox-wrap">
+      <div class="inbox-col inbox-folders">
+        <div class="inbox-mbx">
+          <select id="inbox-mailbox" onchange="inboxSwitchMbx(this.value)">
+            <option value="info@mortiseandtenon.nl">📬 info@ (gedeeld)</option>
+            <option value="me">👤 Mijn postbus</option>
+          </select>
+          <button class="btn btn-sm btn-secondary" onclick="inboxReload()" title="Vernieuwen">⟳</button>
+        </div>
+        <div id="inbox-foldertree"><div class="inbox-empty" style="padding:1rem;font-size:12px">laden…</div></div>
+      </div>
+      <div class="inbox-col inbox-list">
+        <div class="inbox-listhdr" id="inbox-listtitle">—</div>
+        <div id="inbox-messages"></div>
+      </div>
+      <div class="inbox-reader">
+        <div id="inbox-readbody" class="inbox-empty">Kies links een mail om te lezen.</div>
+        <div class="inbox-chat" id="inbox-chatwrap" style="display:none">
+          <div class="inbox-chatlog" id="inbox-chatlog"></div>
+          <div class="inbox-chatin">
+            <input id="inbox-chatq" placeholder="Vraag Larry over deze mail…" onkeydown="if(event.key==='Enter')inboxChat()">
+            <button class="btn btn-sm btn-gold" onclick="inboxChat()">➤</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="inbox-status" style="font-size:11px;color:var(--text-faint);margin-top:6px"></div>
+  </div>
+  <div id="inbox-toast"><span id="inbox-toast-msg"></span><button onclick="inboxUndo()">Ongedaan maken</button></div>
+
   <!-- ═══ TAB: MIGRATIE ═══ -->
   <div id="tab-migratie" class="tab-content"></div>
 
@@ -1016,6 +1090,7 @@ function showTab(name,btn){
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
   if(name==='agenda') renderAgenda();
+  if(name==='inbox') inboxOpen();
 }
 function showVtab(name,btn){
   document.querySelectorAll('.vtab-content').forEach(t=>t.classList.remove('active'));
@@ -3839,6 +3914,213 @@ window.initStorage = async function() {
 };
 </script>
 
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// SMART-INBOX (Fase A) — live 2-weg op de gedeelde info@-mailbox via Graph.
+// Bron van waarheid = de live mailbox (geen lokale kopie). Verplaatsen muteert
+// direct in Outlook; undo-stack maakt elke move omkeerbaar. NOOIT verwijderen.
+// PUBLIC repo: geen mailinhoud/PII wordt opgeslagen of gecommit — alles runtime.
+// ═══════════════════════════════════════════════════════════════════════════
+const INBOX_DEFAULT='info@mortiseandtenon.nl';
+let _inbox={mbx:INBOX_DEFAULT,folderId:null,folderName:'',folders:[],msgs:[],cur:null,undo:null,loaded:false};
+
+function ibEsc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function ibBase(){return _inbox.mbx==='me'?'https://graph.microsoft.com/v1.0/me':`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(_inbox.mbx)}`;}
+async function ibFetch(path,opts){
+  const token=await window.getGraphToken();
+  if(!token) throw new Error('niet ingelogd bij Microsoft');
+  const o=opts||{};
+  const r=await fetch(ibBase()+path,{...o,headers:{'Authorization':`Bearer ${token}`,...(o.headers||{})}});
+  if(!r.ok){const t=await r.text().catch(()=>'');const e=new Error('HTTP '+r.status+(t?' '+t.slice(0,160):''));e.status=r.status;throw e;}
+  return r.status===204?null:r.json();
+}
+function ibStatus(m,kleur){const s=document.getElementById('inbox-status');if(s){s.textContent=m;s.style.color=kleur||'var(--text-faint)';}}
+function ibFlat(fs){const out=[];(fs||[]).forEach(f=>{out.push(f);(f.children||[]).forEach(c=>out.push(c));});return out;}
+
+function inboxOpen(){ if(!_inbox.loaded) inboxReload(); }
+function inboxSwitchMbx(v){
+  _inbox.mbx=v;_inbox.loaded=false;_inbox.folderId=null;_inbox.cur=null;
+  document.getElementById('inbox-messages').innerHTML='';
+  document.getElementById('inbox-readbody').innerHTML='<div class="inbox-empty">Kies links een mail om te lezen.</div>';
+  document.getElementById('inbox-chatwrap').style.display='none';
+  inboxReload();
+}
+
+async function inboxReload(){
+  ibStatus('Mappen laden…');
+  const tree=document.getElementById('inbox-foldertree');
+  try{
+    const data=await ibFetch('/mailFolders?$top=100&$select=id,displayName,childFolderCount,unreadItemCount,totalItemCount');
+    let folders=(data&&data.value)||[];
+    for(const f of folders.filter(x=>x.childFolderCount>0)){
+      try{const c=await ibFetch(`/mailFolders/${f.id}/childFolders?$top=100&$select=id,displayName,unreadItemCount`);f.children=(c&&c.value)||[];}catch(e){f.children=[];}
+    }
+    _inbox.folders=folders;_inbox.loaded=true;
+    inboxRenderTree();
+    const inbox=ibFlat(folders).find(f=>/^(inbox|postvak in)$/i.test(f.displayName))||folders[0];
+    if(inbox) inboxOpenFolder(inbox.id,inbox.displayName);
+    ibStatus(`${_inbox.mbx} · ${ibFlat(folders).length} mappen`);
+  }catch(e){
+    _inbox.loaded=false;
+    let hint='';
+    if(e.status===403){hint=_inbox.mbx==='me'?'Geen toegang tot je postbus.':'Geen toegang tot info@. Je account heeft "Volledige toegang" op info@ nodig in Exchange — of kies rechtsboven je eigen postbus.';}
+    else if(/niet ingelogd/.test(e.message)) hint='Log eerst in bij Microsoft.';
+    else if(e.status===401) hint='Sessie verlopen — herlaad de pagina en log opnieuw in.';
+    tree.innerHTML=`<div class="inbox-empty" style="padding:1rem;font-size:12px">⚠ Mappen laden mislukt.<br>${ibEsc(e.message)}<br><br>${ibEsc(hint)}</div>`;
+    ibStatus('Fout: '+e.message,'#c0392b');
+  }
+}
+
+function inboxRenderTree(){
+  const el=document.getElementById('inbox-foldertree');
+  const row=(f,kind)=>{
+    const act=f.id===_inbox.folderId?' actief':'';
+    const b=f.unreadItemCount?`<span class="badge">${f.unreadItemCount}</span>`:'';
+    return `<div class="inbox-fold${kind?' kind':''}${act}" onclick="inboxOpenFolder('${f.id}','${ibEsc(f.displayName).replace(/'/g,'')}')"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(f.displayName)}</span>${b}</div>`;
+  };
+  el.innerHTML=_inbox.folders.map(f=>row(f,false)+(f.children||[]).map(c=>row(c,true)).join('')).join('')||'<div class="inbox-empty" style="font-size:12px">geen mappen</div>';
+}
+
+function inboxOpenFolder(id,name){
+  _inbox.folderId=id;_inbox.folderName=name;
+  document.getElementById('inbox-listtitle').textContent=name;
+  inboxRenderTree();
+  inboxLoadMessages();
+}
+async function inboxLoadMessages(){
+  const cont=document.getElementById('inbox-messages');
+  cont.innerHTML='<div class="inbox-empty" style="font-size:12px">laden…</div>';
+  try{
+    const d=await ibFetch(`/mailFolders/${_inbox.folderId}/messages?$top=50&$select=id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview&$orderby=receivedDateTime desc`);
+    _inbox.msgs=(d&&d.value)||[];
+    cont.innerHTML=_inbox.msgs.length?_inbox.msgs.map(inboxMsgRow).join(''):'<div class="inbox-empty" style="font-size:12px">geen berichten</div>';
+  }catch(e){cont.innerHTML=`<div class="inbox-empty" style="font-size:12px">fout: ${ibEsc(e.message)}</div>`;}
+}
+function inboxMsgRow(m){
+  const van=(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'(onbekend)';
+  const dt=m.receivedDateTime?new Date(m.receivedDateTime).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+  const clip=m.hasAttachments?' 📎':'';
+  const act=m.id===(_inbox.cur&&_inbox.cur.id)?' actief':'';
+  return `<div class="inbox-msg${m.isRead?'':' ongelezen'}${act}" onclick="inboxOpenMail('${m.id}')">
+    <div class="van"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(van)}</span><span class="dt">${dt}</span></div>
+    <div class="onderw">${ibEsc(m.subject||'(geen onderwerp)')}${clip}</div>
+    <div class="prev">${ibEsc(m.bodyPreview||'')}</div></div>`;
+}
+
+async function inboxOpenMail(id){
+  const rb=document.getElementById('inbox-readbody');
+  rb.classList.add('inbox-empty');rb.textContent='laden…';
+  try{
+    const m=await ibFetch(`/messages/${id}?$select=id,subject,from,toRecipients,receivedDateTime,body,bodyPreview,hasAttachments,webLink,internetMessageId`);
+    _inbox.cur=m;
+    inboxRenderMsgListActief();
+    let att=[];
+    if(m.hasAttachments){try{const a=await ibFetch(`/messages/${id}/attachments?$select=id,name,size,contentType`);att=(a&&a.value)||[];}catch(e){}}
+    const van=(m.from&&m.from.emailAddress)?`${m.from.emailAddress.name||''} <${m.from.emailAddress.address||''}>`:'(onbekend)';
+    const dt=m.receivedDateTime?new Date(m.receivedDateTime).toLocaleString('nl-NL'):'';
+    const folderOpts=ibFlat(_inbox.folders).filter(f=>f.id!==_inbox.folderId)
+      .map(f=>`<option value="${f.id}">${ibEsc(f.displayName)}</option>`).join('');
+    const attHtml=att.length?('<div style="margin-top:8px">'+att.map(a=>`<span class="inbox-att" onclick="inboxAtt('${m.id}','${a.id}','${ibEsc(a.name).replace(/'/g,'')}')">📎 ${ibEsc(a.name)} <span style="color:#999">(${Math.round((a.size||0)/1024)} kB)</span></span>`).join('')+'</div>'):'';
+    rb.classList.remove('inbox-empty');
+    rb.innerHTML=`<div class="inbox-rhdr">
+        <h3>${ibEsc(m.subject||'(geen onderwerp)')}</h3>
+        <div class="inbox-rmeta"><span><b>Van:</b> ${ibEsc(van)}</span><span>${dt}</span></div>
+        ${attHtml}
+        <div class="inbox-ract">
+          <label style="font-size:11px;color:var(--text-dim)">Verplaats naar:</label>
+          <select id="inbox-moveto"><option value="">— kies map —</option>${folderOpts}</select>
+          <button class="btn btn-sm btn-secondary" onclick="inboxMove(document.getElementById('inbox-moveto').value)">Verplaats</button>
+          <a href="${ibEsc(m.webLink||'#')}" target="_blank" class="btn btn-sm btn-secondary" style="text-decoration:none">↗ Outlook</a>
+        </div>
+      </div>
+      <iframe class="inbox-body" id="inbox-bodyframe" sandbox="" referrerpolicy="no-referrer"></iframe>`;
+    const frame=document.getElementById('inbox-bodyframe');
+    const isHtml=m.body&&m.body.contentType&&/html/i.test(m.body.contentType);
+    const content=(m.body&&m.body.content)||m.bodyPreview||'';
+    frame.srcdoc=isHtml?content:`<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:13px;padding:10px">${ibEsc(content)}</pre>`;
+    inboxChatReset();
+  }catch(e){
+    rb.classList.add('inbox-empty');rb.textContent='Mail laden mislukt: '+e.message;
+  }
+}
+function inboxRenderMsgListActief(){
+  document.querySelectorAll('#inbox-messages .inbox-msg').forEach(el=>el.classList.remove('actief'));
+  // hermarkeren gebeurt bij volgende render; lichte aanpak: niets zwaars nodig
+}
+
+async function inboxAtt(mailId,attId,naam){
+  try{
+    ibStatus('Bijlage ophalen…');
+    const a=await ibFetch(`/messages/${mailId}/attachments/${attId}`);
+    if(a&&a.contentBytes){
+      const bin=atob(a.contentBytes);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+      const blob=new Blob([arr],{type:a.contentType||'application/octet-stream'});
+      const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=naam||a.name||'bijlage';link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+      ibStatus('Bijlage gedownload');
+    }else ibStatus('Bijlage heeft geen inhoud','#c0392b');
+  }catch(e){ibStatus('Bijlage-fout: '+e.message,'#c0392b');}
+}
+
+// ── Verplaatsen (mutatie) — confirm-gated, met undo. Eén mail per keer, geen bulk.
+async function inboxMove(targetId){
+  if(!_inbox.cur||!targetId){if(!targetId)alert('Kies eerst een doelmap.');return;}
+  const m=_inbox.cur,from=_inbox.folderId;
+  const naar=ibFlat(_inbox.folders).find(f=>f.id===targetId);
+  if(!confirm(`Mail "${m.subject||'(geen onderwerp)'}" verplaatsen naar "${naar?naar.displayName:'?'}"?`)) return;
+  try{
+    const moved=await ibFetch(`/messages/${m.id}/move`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destinationId:targetId})});
+    _inbox.undo={id:(moved&&moved.id)||m.id,to:from,subject:m.subject};
+    _inbox.cur=null;
+    document.getElementById('inbox-readbody').className='inbox-empty';
+    document.getElementById('inbox-readbody').innerHTML='<div class="inbox-empty">Mail verplaatst.</div>';
+    document.getElementById('inbox-chatwrap').style.display='none';
+    inboxLoadMessages();inboxReloadBadges();
+    inboxToast(`Verplaatst naar ${naar?naar.displayName:'map'}`);
+  }catch(e){alert('Verplaatsen mislukt: '+e.message+(e.status===403?'\n\n(Mail.ReadWrite-toestemming nog niet verleend? Log opnieuw in.)':''));}
+}
+async function inboxUndo(){
+  if(!_inbox.undo)return;const u=_inbox.undo;_inbox.undo=null;
+  document.getElementById('inbox-toast').style.display='none';
+  try{await ibFetch(`/messages/${u.id}/move`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destinationId:u.to})});
+    inboxLoadMessages();ibStatus('Verplaatsing ongedaan gemaakt');}
+  catch(e){alert('Ongedaan maken mislukt: '+e.message);}
+}
+let _ibToastT=null;
+function inboxToast(msg){
+  const t=document.getElementById('inbox-toast');document.getElementById('inbox-toast-msg').textContent=msg;
+  t.style.display='flex';clearTimeout(_ibToastT);_ibToastT=setTimeout(()=>{t.style.display='none';},9000);
+}
+async function inboxReloadBadges(){
+  try{const data=await ibFetch('/mailFolders?$top=100&$select=id,displayName,childFolderCount,unreadItemCount');
+    const map={};((data&&data.value)||[]).forEach(f=>map[f.id]=f.unreadItemCount);
+    _inbox.folders.forEach(f=>{if(map[f.id]!=null)f.unreadItemCount=map[f.id];});inboxRenderTree();}catch(e){}
+}
+
+// ── Larry-chat per mail (via Worker target=claude). Mailcontext alleen runtime.
+function inboxChatReset(){
+  document.getElementById('inbox-chatwrap').style.display='flex';
+  document.getElementById('inbox-chatlog').innerHTML='<div class="b">Vraag me iets over deze mail — samenvatten, welke klant/leverancier, of welke map past.</div>';
+}
+async function inboxChat(){
+  const inp=document.getElementById('inbox-chatq');const q=(inp.value||'').trim();if(!q||!_inbox.cur)return;
+  const log=document.getElementById('inbox-chatlog');
+  log.innerHTML+=`<div class="u">${ibEsc(q)}</div>`;inp.value='';log.scrollTop=log.scrollHeight;
+  const m=_inbox.cur;
+  const van=(m.from&&m.from.emailAddress)?`${m.from.emailAddress.name||''} <${m.from.emailAddress.address||''}>`:'';
+  const ctx=`Mail in de M&T info@-inbox.\nVan: ${van}\nOnderwerp: ${m.subject||''}\nInhoud (preview):\n${(m.bodyPreview||'').slice(0,1500)}`;
+  const tmp=document.createElement('div');tmp.className='b';tmp.textContent='…';log.appendChild(tmp);log.scrollTop=log.scrollHeight;
+  try{
+    const r=await claudeCall([
+      {role:'user',content:`Je bent Larry, de M&T-assistent. Antwoord kort en concreet in het Nederlands.\n\n${ctx}\n\nVraag: ${q}`}
+    ],700);
+    const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+    tmp.textContent=txt;
+  }catch(e){tmp.textContent='fout: '+e.message;}
+  log.scrollTop=log.scrollHeight;
+}
+</script>
+
 </div><!-- /app-wrap -->
 
 <script>
@@ -3859,6 +4141,7 @@ const GRAPH_SCOPES = [
   'https://graph.microsoft.com/Files.ReadWrite',
   'https://graph.microsoft.com/Sites.ReadWrite.All',
   'https://graph.microsoft.com/Mail.Read',
+  'https://graph.microsoft.com/Mail.ReadWrite',
   'https://graph.microsoft.com/Mail.Send',
   'https://graph.microsoft.com/Calendars.ReadWrite'
 ];

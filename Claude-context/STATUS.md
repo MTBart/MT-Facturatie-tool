@@ -181,7 +181,7 @@ Cowork volledig ingericht als standaard Claude-werkomgeving. Beide werkplekken w
 - Moneybird MCP onderzocht en config klaar
 
 ## Risico's die nog open staan
-- **🔴 Azure CLIENT_SECRET blootgesteld** in chathistory — roteren in portal.azure.com → MT-Outlook-Agent. Vanavond doen!
+- ✅ **Azure CLIENT_SECRET — opgelost** (2026-05-17, Bart verwijderd in Azure). Werd door niets gebruikt: alle scripts loggen in via device-code flow (public client), geen secret nodig.
 - `config.json` met Moneybird-token als platte tekst — beveiligen via env vars zodra mogelijk
 - `uren.html` data alleen in localStorage — browser cache wissen = data weg → cloud sync prio
 - Dispatch op werkplaats-pc werkt niet (Mathijs deelt Bart's account) — Mathijs eigen account nodig
