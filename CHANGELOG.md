@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-04 — Archiveer oude tool (index-v4/v3, migratie, voorraad-FastAPI) -> index.html is canoniek
+- Commit: `2d161bf` | Auteur: Bart Witte
+
 ## 2026-06-02 — @ Bijlagen per project: opslaan in projectmap op SharePoint, tool linkt alleen
 - Commit: `1e09848` | Auteur: Bart Witte
 

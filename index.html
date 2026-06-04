@@ -281,6 +281,7 @@ textarea{resize:vertical;min-height:60px}
   <button class="tab-btn" onclick="showTab('voorraad',this)">Voorraad</button>
   <button class="tab-btn" onclick="showTab('bestelling',this)">Bestellijst</button>
   <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
+  <button class="tab-btn" onclick="showTab('agenda',this)">📅 Agenda</button>
   <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" onclick="showTab('cn',this)">CompaNanny</button>
   <button class="tab-btn" id="btn-migratie" onclick="showTab('migratie',this)">📦 Migratie</button>
@@ -666,6 +667,64 @@ textarea{resize:vertical;min-height:60px}
     </div>
   </div>
 
+  <!-- ═══ TAB: AGENDA (Toggl week-kalender) ═══ -->
+  <div id="tab-agenda" class="tab-content">
+    <style>
+      #tab-agenda .ag-chips{display:flex;flex-wrap:wrap;gap:5px}
+      #tab-agenda .ag-chip{font-size:11px;padding:3px 9px;border-radius:12px;border:1px solid var(--border,#ddd);
+        background:#fff;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:5px;transition:.12s}
+      #tab-agenda .ag-chip.uit{opacity:.4}
+      #tab-agenda .ag-chip .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+      #tab-agenda .ag-tot{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:8px;
+        background:#fff;border:1px solid var(--border,#eee);margin:0 6px 6px 0}
+      #tab-agenda .ag-tot b{font-variant-numeric:tabular-nums}
+      #tab-agenda .ag-grid{display:grid;grid-template-columns:54px repeat(7,1fr);min-width:780px}
+      #tab-agenda .ag-hcell{padding:8px 4px;text-align:center;font-size:12px;border-left:1px solid var(--border,#eee);
+        position:sticky;top:0;background:var(--bg-card,#fff);z-index:2}
+      #tab-agenda .ag-hcell.vandaag{background:#FBF5E0}
+      #tab-agenda .ag-gutter .gh{height:var(--aguur,46px);font-size:10px;color:var(--text-faint,#999);text-align:right;
+        padding-right:6px;transform:translateY(-6px)}
+      #tab-agenda .ag-daycol{position:relative;border-left:1px solid var(--border,#eee)}
+      #tab-agenda .ag-blok{position:absolute;border-radius:5px;padding:2px 5px;overflow:hidden;color:#fff;
+        font-size:10px;line-height:1.15;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+      #tab-agenda .ag-blok b{font-weight:600}
+      #tab-agenda .ag-leeg{padding:3rem;text-align:center;color:var(--text-faint,#999)}
+    </style>
+    <div class="card" style="padding:1rem;margin-bottom:1rem">
+      <div class="flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div class="flex" style="gap:6px;align-items:center">
+          <button class="btn btn-sm btn-secondary" onclick="agendaNav(-1)">◀</button>
+          <button class="btn btn-sm btn-secondary" onclick="agendaVandaag()">Vandaag</button>
+          <button class="btn btn-sm btn-secondary" onclick="agendaNav(1)">▶</button>
+          <span id="agenda-weeklabel" style="font-weight:600;margin-left:8px"></span>
+        </div>
+        <div class="flex" style="gap:6px;align-items:center">
+          <label style="font-size:12px">Kleur op:</label>
+          <select id="agenda-kleurop" class="zoek-input" style="width:auto" onchange="agendaZetKleur(this.value)">
+            <option value="project">Project</option>
+            <option value="persoon">Persoon</option>
+          </select>
+          <button class="btn btn-sm btn-gold" onclick="agendaSyncNu()" id="agenda-syncbtn">⬇ Sync nu</button>
+        </div>
+      </div>
+      <div class="flex" style="gap:1.5rem;margin-top:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Projecten</div>
+          <div id="agenda-filter-projecten" class="ag-chips"></div>
+        </div>
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Personen</div>
+          <div id="agenda-filter-personen" class="ag-chips"></div>
+        </div>
+      </div>
+    </div>
+    <div id="agenda-totalen" style="margin-bottom:1rem"></div>
+    <div class="card" style="padding:0;overflow:auto;max-height:74vh">
+      <div id="agenda-grid"></div>
+    </div>
+    <div id="agenda-status" style="font-size:11px;color:var(--text-faint);margin-top:6px"></div>
+  </div>
+
   <!-- ═══ TAB: MIGRATIE ═══ -->
   <div id="tab-migratie" class="tab-content"></div>
 
@@ -904,6 +963,7 @@ function showTab(name,btn){
   if(name==='projecten') renderProjectLijst();
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
+  if(name==='agenda') renderAgenda();
 }
 function showVtab(name,btn){
   document.querySelectorAll('.vtab-content').forEach(t=>t.classList.remove('active'));
@@ -916,6 +976,183 @@ function showVtab(name,btn){
 function periodePresetGewijzigd(){
   const p=document.getElementById('periode-preset').value;
   document.getElementById('periode-custom').classList[p==='custom'?'remove':'add']('hidden');
+}
+
+// ═══ AGENDA (Toggl week-kalender, leest gedeelde mt_uren_entries) ═══
+const AG_STD_TEAM=[{naam:'bart',label:'Bart',kleur:'#2A4A38'},{naam:'mathijs',label:'Mathijs',kleur:'#B8962E'},{naam:'arjan',label:'Arjan',kleur:'#5a3a8b'},{naam:'maarten',label:'Maarten',kleur:'#1a3a8b'}];
+const AG_START=6, AG_EIND=22, AG_UURPX=46;
+let _agenda={weekStart:null,kleurOp:'project',fProj:new Set(),fPers:new Set()};
+
+function agEntries(){try{return JSON.parse(localStorage.getItem('mt_uren_entries')||'[]');}catch(e){return [];}}
+function agTeam(){try{return JSON.parse(localStorage.getItem('mt_uren_teamleden')||'null')||AG_STD_TEAM;}catch(e){return AG_STD_TEAM;}}
+function agMaandag(d){const x=new Date(d);const dag=(x.getDay()+6)%7;x.setDate(x.getDate()-dag);x.setHours(0,0,0,0);return x;}
+function agFmt(d){return d.toLocaleDateString('nl-NL',{day:'numeric',month:'short'});}
+function agHash(s){let h=0;s=String(s||'');for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
+function agProjKleur(c){if(!c)return '#9a9a9a';return `hsl(${agHash(c)%360},52%,42%)`;}
+function agPersKleur(n){const t=agTeam().find(x=>x.naam===n);return t?t.kleur:'#777';}
+function agPersLabel(n){const t=agTeam().find(x=>x.naam===n);return t?t.label:(n||'?');}
+function agKleur(e){return _agenda.kleurOp==='persoon'?agPersKleur(e.teamlid):agProjKleur(e.project_code);}
+function agUur(sec){return (sec/3600).toFixed(1).replace('.',',');}
+
+function renderAgenda(){
+  if(!_agenda.weekStart) _agenda.weekStart=agMaandag(new Date());
+  const ko=document.getElementById('agenda-kleurop'); if(ko) ko.value=_agenda.kleurOp;
+  agRenderFilters();
+  agRenderGrid();
+}
+function agendaNav(dw){_agenda.weekStart=new Date(_agenda.weekStart.getTime()+dw*7*864e5);renderAgenda();}
+function agendaVandaag(){_agenda.weekStart=agMaandag(new Date());renderAgenda();}
+function agendaZetKleur(v){_agenda.kleurOp=v;renderAgenda();}
+function agToggle(set,val){set.has(val)?set.delete(val):set.add(val);renderAgenda();}
+
+function agRenderFilters(){
+  const all=agEntries();
+  const projs=[...new Set(all.map(e=>e.project_code).filter(Boolean))].sort();
+  const pers=[...new Set(all.map(e=>e.teamlid).filter(Boolean))].sort();
+  const pEl=document.getElementById('agenda-filter-projecten');
+  if(pEl) pEl.innerHTML=projs.length?projs.map(c=>{
+    const aan=_agenda.fProj.size===0||_agenda.fProj.has(c);
+    return `<span class="ag-chip${aan?'':' uit'}" onclick="agToggle(_agenda.fProj,'${c.replace(/'/g,"\\'")}')"><span class="dot" style="background:${agProjKleur(c)}"></span>${c}</span>`;
+  }).join(''):'<span style="font-size:11px;color:#aaa">geen projecten in data</span>';
+  const uEl=document.getElementById('agenda-filter-personen');
+  if(uEl) uEl.innerHTML=pers.length?pers.map(n=>{
+    const aan=_agenda.fPers.size===0||_agenda.fPers.has(n);
+    return `<span class="ag-chip${aan?'':' uit'}" onclick="agToggle(_agenda.fPers,'${n.replace(/'/g,"\\'")}')"><span class="dot" style="background:${agPersKleur(n)}"></span>${agPersLabel(n)}</span>`;
+  }).join(''):'<span style="font-size:11px;color:#aaa">geen personen in data</span>';
+}
+
+function agZichtbaar(e){
+  if(_agenda.fProj.size&&!_agenda.fProj.has(e.project_code)) return false;
+  if(_agenda.fPers.size&&!_agenda.fPers.has(e.teamlid)) return false;
+  return true;
+}
+
+function agRenderGrid(){
+  const ws=_agenda.weekStart, we=new Date(ws.getTime()+7*864e5);
+  const lbl=document.getElementById('agenda-weeklabel');
+  if(lbl) lbl.textContent=`${agFmt(ws)} – ${agFmt(new Date(we.getTime()-864e5))}`;
+  const dagen=['Ma','Di','Wo','Do','Vr','Za','Zo'];
+  const vandaag=agMaandag(new Date()).getTime();
+  // entries deze week + zichtbaar
+  const wk=agEntries().filter(e=>{
+    if(!e.start||!e.duur||e.duur<0) return false;
+    const t=new Date(e.start).getTime();
+    return t>=ws.getTime()&&t<we.getTime()&&agZichtbaar(e);
+  });
+  // per dag groeperen
+  const perDag=[[],[],[],[],[],[],[]];
+  wk.forEach(e=>{const di=(new Date(e.start).getDay()+6)%7;perDag[di].push(e);});
+  const hoogte=(AG_EIND-AG_START)*AG_UURPX;
+  // header
+  let html='<div class="ag-grid">';
+  html+='<div class="ag-hcell"></div>';
+  for(let i=0;i<7;i++){
+    const dd=new Date(ws.getTime()+i*864e5);
+    const isV=agMaandag(dd).getTime()===vandaag && dd.toDateString()===new Date().toDateString();
+    html+=`<div class="ag-hcell${isV?' vandaag':''}">${dagen[i]} ${dd.getDate()}</div>`;
+  }
+  // body row: gutter + 7 daycols
+  html+='<div class="ag-gutter">';
+  for(let u=AG_START;u<AG_EIND;u++) html+=`<div class="gh" style="--aguur:${AG_UURPX}px">${String(u).padStart(2,'0')}:00</div>`;
+  html+='</div>';
+  const lijn=`repeating-linear-gradient(to bottom,transparent,transparent ${AG_UURPX-1}px,#eee ${AG_UURPX-1}px,#eee ${AG_UURPX}px)`;
+  for(let i=0;i<7;i++){
+    html+=`<div class="ag-daycol" style="height:${hoogte}px;background:${lijn}">`;
+    html+=agBlokkenHtml(perDag[i]);
+    html+='</div>';
+  }
+  html+='</div>';
+  const g=document.getElementById('agenda-grid');
+  if(g) g.innerHTML=html;
+  agRenderTotalen(wk);
+  const st=document.getElementById('agenda-status');
+  if(st){const ls=localStorage.getItem('mt_toggl_last_sync');st.textContent=`${wk.length} entries in beeld${ls?' · laatste sync '+new Date(ls).toLocaleString('nl-NL'):' · nog niet gesynct'}`;}
+}
+
+function agBlokkenHtml(entries){
+  if(!entries.length) return '';
+  // lane-toewijzing (greedy interval partitioning) voor overlap naast elkaar
+  const items=entries.map(e=>{
+    const s=new Date(e.start);
+    let su=s.getHours()+s.getMinutes()/60;
+    let eu=su+e.duur/3600;
+    return {e,su,eu};
+  }).sort((a,b)=>a.su-b.su);
+  const laneEnd=[];
+  items.forEach(it=>{
+    let lane=laneEnd.findIndex(end=>end<=it.su+1e-6);
+    if(lane<0){lane=laneEnd.length;laneEnd.push(it.eu);}else{laneEnd[lane]=it.eu;}
+    it.lane=lane;
+  });
+  const lanes=laneEnd.length;
+  return items.map(it=>{
+    const e=it.e;
+    const top=Math.max(0,(it.su-AG_START))*AG_UURPX;
+    const h=Math.max(14,(Math.min(it.eu,AG_EIND)-Math.max(it.su,AG_START))*AG_UURPX-2);
+    const w=100/lanes, left=it.lane*w;
+    const titel=(e.omschrijving||e.taak_naam||'').replace(/"/g,'&quot;');
+    return `<div class="ag-blok" style="top:${top}px;height:${h}px;left:calc(${left}% + 1px);width:calc(${w}% - 2px);background:${agKleur(e)}"
+      title="${agPersLabel(e.teamlid)} · ${e.project_code||'-'} · ${agUur(e.duur)}u&#10;${titel}"
+      onclick="agBlokDetail('${e.id||e.toggl_id}')"><b>${e.project_code||'—'}</b> ${agUur(e.duur)}u<br>${titel}</div>`;
+  }).join('');
+}
+
+function agRenderTotalen(wk){
+  const el=document.getElementById('agenda-totalen'); if(!el) return;
+  if(!wk.length){el.innerHTML='';return;}
+  const perP={}, perT={}; let tot=0;
+  wk.forEach(e=>{tot+=e.duur;perP[e.project_code||'—']=(perP[e.project_code||'—']||0)+e.duur;perT[e.teamlid||'?']=(perT[e.teamlid||'?']||0)+e.duur;});
+  const proj=Object.entries(perP).sort((a,b)=>b[1]-a[1]).map(([c,s])=>`<span class="ag-tot"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${agProjKleur(c)}"></span>${c} <b>${agUur(s)}u</b></span>`).join('');
+  const pers=Object.entries(perT).sort((a,b)=>b[1]-a[1]).map(([n,s])=>`<span class="ag-tot"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${agPersKleur(n)}"></span>${agPersLabel(n)} <b>${agUur(s)}u</b></span>`).join('');
+  el.innerHTML=`<div class="card" style="padding:.7rem 1rem"><div style="font-weight:600;margin-bottom:6px">Totaal deze week: ${agUur(tot)}u</div>
+    <div style="margin-bottom:4px">${proj}</div><div>${pers}</div></div>`;
+}
+
+function agBlokDetail(id){
+  const e=agEntries().find(x=>String(x.id)===String(id)||String(x.toggl_id)===String(id));
+  if(!e) return;
+  const s=new Date(e.start);
+  alert(`${agPersLabel(e.teamlid)}\nProject: ${e.project_code||'—'}\nTaak: ${e.taak_naam||'—'}\n${e.omschrijving||''}\n${s.toLocaleString('nl-NL')} · ${agUur(e.duur)} uur`);
+}
+
+// Sync: leest Track /me/time_entries (Basic auth, gedeelde token) → mt_uren_entries.
+// Read-from-Toggl → write-localStorage; muteert Toggl NIET. Vereist token+mapping
+// (in te stellen via uren.html). Faalt vriendelijk (bv. CORS) met verwijzing.
+async function agendaSyncNu(){
+  const st=document.getElementById('agenda-status');
+  const btn=document.getElementById('agenda-syncbtn');
+  const token=localStorage.getItem('mt_toggl_token')||'';
+  if(!token){if(st)st.textContent='⚠ Geen Toggl-token. Stel in via de uren-app (Instellingen → Toggl).';return;}
+  let pmap={},umap={};
+  try{pmap=JSON.parse(localStorage.getItem('mt_toggl_project_map')||'{}');umap=JSON.parse(localStorage.getItem('mt_toggl_user_map')||'{}');}catch(e){}
+  if(btn)btn.disabled=true; if(st)st.textContent='Syncing…';
+  const WS=21258443, BASE='https://api.track.toggl.com/api/v9';
+  const since=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const tot=new Date().toISOString().slice(0,10);
+  try{
+    const res=await fetch(`${BASE}/me/time_entries?start_date=${since}&end_date=${tot}`,
+      {headers:{'Authorization':'Basic '+btoa(token+':api_token'),'Content-Type':'application/json'}});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const entries=agEntries();
+    let nieuw=0,bij=0;
+    for(const te of (data||[])){
+      if(!te.stop||te.duration<0) continue;
+      const pc=pmap[te.project_id]||null, tl=umap[te.user_id]||null;
+      if(!pc||!tl) continue;
+      const idx=entries.findIndex(e=>String(e.toggl_id)===String(te.id));
+      const obj={id:idx>=0?entries[idx].id:('ag'+te.id),toggl_id:te.id,teamlid:tl,project_code:pc,
+        taak_naam:te.description||null,omschrijving:te.description||'',start:te.start,stop:te.stop,
+        duur:te.duration,datum:te.start.slice(0,10)};
+      if(idx>=0){entries[idx]=obj;bij++;}else{entries.push(obj);nieuw++;}
+    }
+    localStorage.setItem('mt_uren_entries',JSON.stringify(entries));
+    localStorage.setItem('mt_toggl_last_sync',new Date().toISOString());
+    if(st)st.textContent=`✓ ${nieuw} nieuw, ${bij} bijgewerkt (${(data||[]).length} verwerkt)`;
+    renderAgenda();
+  }catch(err){
+    if(st)st.textContent=`❌ Sync mislukt (${err.message}). Tip: sync via de uren-app of later via de Worker-proxy.`;
+  }finally{if(btn)btn.disabled=false;}
 }
 
 // ═══ SETTINGS ═══
