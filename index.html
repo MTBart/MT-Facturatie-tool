@@ -1327,7 +1327,8 @@ function agendaZetView(v){_agenda.view=v;renderAgenda();}
 function agEnsureNames(){
   if(_agNamesTried) return; _agNamesTried=true;
   const {pn,un}=agNames();
-  if(Object.keys(pn).length&&Object.keys(un).length) return;
+  const verOk=localStorage.getItem('mt_toggl_names_ver')===AG_NAMES_V;
+  if(verOk&&Object.keys(pn).length&&Object.keys(un).length) return;
   if(typeof agNamen==='function') agNamen(true).then(r=>{if(r&&(Object.keys(r.pn||{}).length||Object.keys(r.un||{}).length))renderAgenda();}).catch(()=>{});
 }
 // Sluit de filter-dropdowns bij een klik buiten een .ag-drop.
@@ -1574,22 +1575,36 @@ function agMergeEntry(entries,o){const idx=entries.findIndex(e=>String(e.toggl_i
 // id→naam fallback-maps, rechtstreeks uit Toggl (via Worker, admin-token server-side).
 // Zo is de agenda zelfvoorzienend: geen handmatige mapping in de uren-app nodig.
 // Gecachet in localStorage; ververst als leeg of force=true.
+// Cache-versie: bump dit als de naam-mapping-logica wijzigt, dan negeert agNamen
+// de oude (verkeerd gemapte) localStorage-cache en haalt opnieuw op.
+const AG_NAMES_V='2';
 async function agNamen(force){
   let pn={},un={};
   try{pn=JSON.parse(localStorage.getItem('mt_toggl_proj_names')||'{}');}catch(e){}
   try{un=JSON.parse(localStorage.getItem('mt_toggl_user_names')||'{}');}catch(e){}
-  if(!force&&Object.keys(pn).length&&Object.keys(un).length) return {pn,un};
+  const verOk=localStorage.getItem('mt_toggl_names_ver')===AG_NAMES_V;
+  if(!force&&verOk&&Object.keys(pn).length&&Object.keys(un).length) return {pn,un};
   const h=await authHeader();
   if(!h['X-Auth-Token']) return {pn,un};
+  // Naam-resolutie moet matchen met de user_id's die Reports v3 teruggeeft
+  // (= echte Toggl user-id, ~13M-bereik). Track `/users` heeft die id in `id`;
+  // `/workspace_users` heeft 'm in `uid` (NIET `user_id`/`id` = membership-record).
+  // Beide ophalen en defensief mergen zodat de echte user-id altijd een naam krijgt.
   try{
-    const [pr,us]=await Promise.all([
-      fetch(`${WORKER}?target=toggl&path=${encodeURIComponent(`workspaces/${AG_WS}/projects`)}`,{headers:h}).then(r=>r.ok?r.json():[]),
-      fetch(`${WORKER}?target=toggl&path=${encodeURIComponent(`workspaces/${AG_WS}/workspace_users`)}`,{headers:h}).then(r=>r.ok?r.json():[])
+    const get=p=>fetch(`${WORKER}?target=toggl&path=${encodeURIComponent(p)}`,{headers:h}).then(r=>r.ok?r.json():[]).catch(()=>[]);
+    const [pr,wu,us]=await Promise.all([
+      get(`workspaces/${AG_WS}/projects`),
+      get(`workspaces/${AG_WS}/workspace_users`),
+      get(`workspaces/${AG_WS}/users`)
     ]);
     (Array.isArray(pr)?pr:[]).forEach(p=>{if(p&&p.id!=null)pn[p.id]=p.name;});
-    (Array.isArray(us)?us:[]).forEach(u=>{const uid=u.user_id||u.id;if(uid!=null)un[uid]=u.name||u.email||('User '+uid);});
+    // /users: id = echte user-id, naam in fullname/name
+    (Array.isArray(us)?us:[]).forEach(u=>{const uid=u&&u.id;const nm=u&&(u.fullname||u.name||u.email);if(uid!=null&&nm)un[uid]=nm;});
+    // /workspace_users: uid = echte user-id (fallback, niet overschrijven)
+    (Array.isArray(wu)?wu:[]).forEach(u=>{const uid=u&&(u.uid||u.user_id);const nm=u&&(u.name||u.fullname||u.email);if(uid!=null&&nm&&!un[uid])un[uid]=nm;});
     localStorage.setItem('mt_toggl_proj_names',JSON.stringify(pn));
     localStorage.setItem('mt_toggl_user_names',JSON.stringify(un));
+    localStorage.setItem('mt_toggl_names_ver',AG_NAMES_V);
   }catch(e){}
   return {pn,un};
 }

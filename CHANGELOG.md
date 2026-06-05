@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Agenda-filter dropdown: breed genoeg voor volledige namen
+- Commit: `b784389` | Auteur: Bart Witte
+
 ## 2026-06-05 — Toggl-tab: board-kaarten tonen prioriteit+assignee; Beheer client/tag verwijderen
 - Commit: `dc0b6c2` | Auteur: Bart Witte
 
