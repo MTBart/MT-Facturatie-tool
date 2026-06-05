@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Agenda: los persoon-id naar naam op via Track /users (uid-veld)
+- Commit: `f6518c8` | Auteur: Bart Witte
+
 ## 2026-06-05 — Agenda-filter dropdown: breed genoeg voor volledige namen
 - Commit: `b784389` | Auteur: Bart Witte
 
