@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Planning→Toggl-brug: maak Toggl-project + Focus-taak per fase
+- Commit: `43f8672` | Auteur: Bart Witte
+
 ## 2026-06-05 — Projectplanning-engine: schuifbare Gantt-light in Projecten-tab
 - Commit: `f545786` | Auteur: Bart Witte
 
