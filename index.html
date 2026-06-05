@@ -1114,15 +1114,8 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
     </div>
 
     <div id="inbox-pane-taken" class="inbox-pane">
-      <div id="taken-body" style="max-width:680px;font-size:13px;line-height:1.55;color:var(--text,#222)">
-        <div style="border:1px solid var(--border,#e3e3e3);border-radius:10px;padding:16px 18px;background:#fff">
-          <strong style="font-size:14px">✓ Taken — Microsoft To&nbsp;Do ↔ Toggl</strong>
-          <p style="margin:.6rem 0">Dit blok komt eraan. To&nbsp;Do leest/schrijft via dezelfde Microsoft-login, maar
-          heeft <em>één keer</em> extra toestemming nodig (<code>Tasks.ReadWrite</code>) — die vraag ik straks
-          aan bij het inbouwen. Daarna kun je hier taken zien, afvinken en aanmaken, en maakt elke nieuwe
-          To&nbsp;Do-taak automatisch óók een Toggl-taak aan (1-op-1).</p>
-          <p style="margin:.4rem 0 0;color:var(--text-faint,#999);font-size:12px">Mail en Agenda werken hiernaast al volledig.</p>
-        </div>
+      <div id="taken-body" style="max-width:680px;font-size:13px;line-height:1.5;color:var(--text,#222)">
+        <div class="inbox-empty" style="font-size:12px">open dit tabblad om je taken te laden…</div>
       </div>
     </div>
   </div>
@@ -4978,6 +4971,7 @@ function inboxSub(name){
   const pane=document.getElementById('inbox-pane-'+name); if(pane)pane.classList.add('actief');
   if(name==='mail'&&!_inbox.loaded)inboxReload();
   if(name==='agenda')inboxLoadAgenda();
+  if(name==='taken')inboxLoadTaken();
 }
 
 // ── Agenda — spiegel van de Outlook-kalender (Graph /calendarView, week-overzicht) ──
@@ -5018,6 +5012,98 @@ function inboxRenderAgenda(maandag,evs){
   }
   grid.innerHTML=html;
 }
+
+// ── Taken — Microsoft To Do (Graph /me/todo) + 1-op-1 Toggl-taak ──
+// To Do is altijd persoonlijk → /me, ongeacht de gekozen mailbox.
+const TODO_BASE='https://graph.microsoft.com/v1.0/me/todo';
+let _todo={lists:[],listId:null,tasks:[],loaded:false};
+async function inboxLoadTaken(){
+  const wrap=document.getElementById('taken-body');if(!wrap)return;
+  if(!_todo.loaded){
+    wrap.innerHTML='<div class="inbox-empty" style="font-size:12px">To Do laden… (eerste keer vraagt Microsoft om toestemming)</div>';
+    try{
+      const d=await ibFetch(TODO_BASE+'/lists?$top=50');
+      _todo.lists=(d&&d.value)||[];
+      _todo.loaded=true;
+      const def=_todo.lists.find(l=>l.wellknownListName==='defaultList')||_todo.lists[0];
+      _todo.listId=def?def.id:null;
+    }catch(e){
+      wrap.innerHTML=`<div class="inbox-empty" style="font-size:12.5px;line-height:1.5">To Do laden mislukt: ${ibEsc(e.message)}`
+        +`${e.status===403?'<br><br>Toestemming nog niet verleend — herlaad de pagina (Ctrl+Shift+R) en log opnieuw in; klik dan op "Toestaan".':''}</div>`;
+      return;
+    }
+  }
+  inboxRenderTakenShell();
+  inboxLoadTodoTasks();
+}
+function inboxRenderTakenShell(){
+  const wrap=document.getElementById('taken-body');if(!wrap)return;
+  const opts=_todo.lists.map(l=>`<option value="${l.id}"${l.id===_todo.listId?' selected':''}>${ibEsc(l.displayName)}</option>`).join('');
+  wrap.innerHTML=`
+    <div class="agenda-toolbar">
+      <select id="todo-list" onchange="todoSwitchList(this.value)" style="font-size:13px;padding:5px 8px;border:1px solid var(--border,#ddd);border-radius:6px;background:#fff">${opts||'<option>geen lijsten</option>'}</select>
+      <button class="btn btn-sm btn-secondary" onclick="inboxLoadTodoTasks()" title="Vernieuwen">⟳</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+      <input id="todo-new" type="text" placeholder="Nieuwe taak…" style="flex:1;min-width:170px;height:32px;padding:0 10px;border:1px solid var(--border,#ddd);border-radius:7px;font-size:13px" onkeydown="if(event.key==='Enter')todoAdd()">
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="todo-toggl" checked> ook in Toggl</label>
+      <button class="btn btn-sm btn-gold" onclick="todoAdd()">+ Taak</button>
+    </div>
+    <div id="todo-list-body"></div>`;
+}
+function todoSwitchList(id){_todo.listId=id;inboxLoadTodoTasks();}
+async function inboxLoadTodoTasks(){
+  const body=document.getElementById('todo-list-body');if(!body)return;
+  if(!_todo.listId){body.innerHTML='<div class="inbox-empty" style="font-size:12px">geen lijst gekozen</div>';return;}
+  body.innerHTML='<div class="inbox-empty" style="font-size:12px">laden…</div>';
+  try{
+    const d=await ibFetch(`${TODO_BASE}/lists/${_todo.listId}/tasks?$top=100&$orderby=createdDateTime desc`);
+    _todo.tasks=(d&&d.value)||[];
+    // openstaand bovenaan, afgevinkt onderaan
+    _todo.tasks.sort((a,b)=>(a.status==='completed'?1:0)-(b.status==='completed'?1:0));
+    body.innerHTML=_todo.tasks.length?_todo.tasks.map(todoRow).join(''):'<div class="inbox-empty" style="font-size:12px">geen taken</div>';
+  }catch(e){body.innerHTML=`<div class="inbox-empty" style="font-size:12px">fout: ${ibEsc(e.message)}</div>`;}
+}
+function todoRow(t){
+  const done=t.status==='completed';
+  const due=(t.dueDateTime&&t.dueDateTime.dateTime)?new Date(t.dueDateTime.dateTime).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'';
+  const imp=t.importance==='high'?'<span title="hoog" style="color:#c0392b">‼</span> ':'';
+  return `<div style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid #f0f0f0">
+    <input type="checkbox" ${done?'checked':''} onchange="todoToggle('${t.id}',this.checked)" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto">
+    <span style="flex:1;font-size:13px;${done?'text-decoration:line-through;color:#aaa':''}">${imp}${ibEsc(t.title||'(geen titel)')}</span>
+    ${due?`<span style="font-size:11px;color:var(--text-faint,#999);white-space:nowrap">📅 ${due}</span>`:''}
+  </div>`;
+}
+async function todoToggle(id,checked){
+  try{
+    await ibFetch(`${TODO_BASE}/lists/${_todo.listId}/tasks/${id}`,
+      {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:checked?'completed':'notStarted'})});
+    inboxToast(checked?'Taak afgevinkt':'Taak heropend');
+  }catch(e){alert('Lukt niet: '+e.message);inboxLoadTodoTasks();}
+}
+async function todoAdd(){
+  const inp=document.getElementById('todo-new');if(!inp)return;
+  const titel=(inp.value||'').trim();if(!titel)return;
+  if(!_todo.listId){alert('Geen To Do-lijst gevonden.');return;}
+  const ookToggl=document.getElementById('todo-toggl').checked;
+  inp.disabled=true;
+  try{
+    await ibFetch(`${TODO_BASE}/lists/${_todo.listId}/tasks`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:titel})});
+    let extra='';
+    if(ookToggl){
+      try{ const made=await focusFetch('tasks','POST',{name:titel,status_id:300785});
+        const tid=made&&(made.id||(made.data&&made.data.id));
+        extra=' + Toggl'+(tid?(' (#'+tid+')'):''); }
+      catch(e){ extra=' — Toggl mislukt: '+e.message; }
+    }
+    inp.value='';
+    inboxToast('Taak toegevoegd'+extra);
+    inboxLoadTodoTasks();
+  }catch(e){alert('Taak aanmaken mislukt: '+e.message);}
+  finally{inp.disabled=false;}
+}
+
 function inboxSwitchMbx(v){
   _inbox.mbx=v;_inbox.loaded=false;_inbox.folderId=null;_inbox.cur=null;
   document.getElementById('inbox-messages').innerHTML='';
@@ -5450,7 +5536,8 @@ const GRAPH_SCOPES = [
   'https://graph.microsoft.com/Mail.Read',
   'https://graph.microsoft.com/Mail.ReadWrite',
   'https://graph.microsoft.com/Mail.Send',
-  'https://graph.microsoft.com/Calendars.ReadWrite'
+  'https://graph.microsoft.com/Calendars.ReadWrite',
+  'https://graph.microsoft.com/Tasks.ReadWrite'
 ];
 
 window.getGraphToken = async function() {

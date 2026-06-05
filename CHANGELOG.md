@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Inbox: sub-tabs Mail/Agenda/Taken + werkende Agenda (Outlook-kalender via Graph)
+- Commit: `358bacc` | Auteur: Bart Witte
+
 ## 2026-06-05 — Inbox: zoeken doorzoekt hele postbus (Outlook-spiegel) + mail-koppelingen syncen over alle PC's
 - Commit: `32f531d` | Auteur: Bart Witte
 
