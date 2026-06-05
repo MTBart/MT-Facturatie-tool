@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Agenda: timer-lijst-view (zoals Toggl) naast week-rooster — grid/lijst-toggle
+- Commit: `f6f9591` | Auteur: Bart Witte
+
 ## 2026-06-05 — Toggl-tab: volledig tabblad — Timer/Projecten/Taken/Board/Reports/Clients+Tags
 - Commit: `06137e6` | Auteur: Bart Witte
 

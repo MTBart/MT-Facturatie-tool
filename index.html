@@ -857,6 +857,7 @@ textarea{resize:vertical;min-height:60px}
     <div id="tg-sub-timer" class="tg-subcontent active">
       <div class="tg-toolbar">
         <button class="btn btn-sm btn-secondary" onclick="tgLaadRecent()">↻ Ververs</button>
+        <button class="btn btn-sm btn-gold" onclick="tgHandmatig()">+ Handmatige entry</button>
         <span class="tg-sub">Eigen recente entries (laatste 14 dagen). Voor álle medewerkers → tab Agenda.</span>
       </div>
       <div class="card" style="padding:0"><div id="tg-timer-recent"><div class="tg-leeg">Laden…</div></div></div>
@@ -1907,7 +1908,9 @@ async function tgLaadRecent(){
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tgEsc(e.description||'(geen omschrijving)')}
         <span class="tg-sub"> · ${p?tgEsc(p.name):'geen project'} · ${d.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} ${d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})}</span></span>
         <span class="tg-dur">${tgSec2hms(dur)}</span>
-        <button class="btn btn-sm btn-secondary" title="Opnieuw starten" onclick="tgHervat(${i})">▶</button></div>`;
+        <button class="btn btn-sm btn-secondary" title="Opnieuw starten" onclick="tgHervat(${i})">▶</button>
+        <button class="btn btn-sm btn-secondary" title="Bewerken" onclick="tgEditEntry(${i})">✎</button>
+        <button class="btn btn-sm btn-secondary" title="Verwijderen" onclick="tgDelEntry(${i})">🗑</button></div>`;
     }).join('');
   }catch(e){ if(box) box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
 }
@@ -1916,6 +1919,53 @@ function tgHervat(i){
   document.getElementById('tg-desc').value=e.description||'';
   const sel=document.getElementById('tg-proj-select'); if(sel&&e.project_id) sel.value=e.project_id;
   tgTimerToggle();
+}
+// Entry bewerken: omschrijving + project (Track PUT). Tijden bewerken kan via
+// handmatige-entry-route; hier de twee meest-gebruikte velden.
+async function tgEditEntry(i){
+  const e=_tgRecent[i]; if(!e) return;
+  const desc=prompt('Omschrijving:',e.description||''); if(desc===null) return;
+  const ps=await tgStore.projecten(); const act=ps.filter(p=>!p.archived_at);
+  const huidig=act.find(p=>p.id===e.project_id);
+  const lijst=act.map((p,n)=>`${n+1}. ${p.name}`).join('\n');
+  const keuze=prompt(`Projectnummer (leeg = ongewijzigd${huidig?', "0" = geen project':''}):\nHuidig: ${huidig?huidig.name:'geen'}\n\n${lijst}`);
+  let project_id=e.project_id;
+  if(keuze==='0') project_id=null;
+  else if(keuze&&act[parseInt(keuze)-1]) project_id=act[parseInt(keuze)-1].id;
+  if(!confirm('Entry opslaan in Toggl Track?')) return;
+  tgStatus('Entry opslaan…');
+  try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'PUT',{description:desc,project_id:project_id,workspace_id:TG_WS});
+    tgStatus('✓ Entry bijgewerkt.','#2A4A38'); tgLaadRecent();
+  }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
+}
+async function tgDelEntry(i){
+  const e=_tgRecent[i]; if(!e) return;
+  if(!confirm(`Entry verwijderen?\n"${e.description||'(geen omschrijving)'}"`)) return;
+  tgStatus('Entry verwijderen…');
+  try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'DELETE');
+    tgStatus('✓ Entry verwijderd.','#2A4A38'); tgLaadRecent();
+  }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
+}
+// Handmatige entry: datum + start + duur (minuten) + omschrijving + project.
+async function tgHandmatig(){
+  const datum=prompt('Datum (JJJJ-MM-DD):',new Date().toISOString().slice(0,10)); if(!datum) return;
+  const start=prompt('Starttijd (UU:MM):','09:00'); if(!start) return;
+  const min=prompt('Duur in minuten:','60'); if(!min) return;
+  const duurMin=parseInt(min); if(!(duurMin>0)){ tgStatus('Ongeldige duur.','#c0392b'); return; }
+  const desc=prompt('Omschrijving:',''); if(desc===null) return;
+  const ps=await tgStore.projecten(); const act=ps.filter(p=>!p.archived_at);
+  const lijst=act.map((p,n)=>`${n+1}. ${p.name}`).join('\n');
+  const keuze=prompt(`Projectnummer (leeg = geen):\n${lijst}`);
+  let project_id=null; if(keuze&&act[parseInt(keuze)-1]) project_id=act[parseInt(keuze)-1].id;
+  const startISO=new Date(`${datum}T${start.length===5?start+':00':start}`).toISOString().replace(/\.\d{3}Z$/,'Z');
+  if(startISO==='Invalid Date'||isNaN(new Date(startISO))){ tgStatus('Ongeldige datum/tijd.','#c0392b'); return; }
+  if(!confirm(`Handmatige entry aanmaken?\n${datum} ${start} · ${duurMin} min${desc?(' · '+desc):''}`)) return;
+  tgStatus('Entry aanmaken…');
+  const body={created_with:'MT-cockpit',description:desc,workspace_id:TG_WS,start:startISO,duration:duurMin*60};
+  if(project_id) body.project_id=project_id;
+  try{ await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body);
+    tgStatus('✓ Handmatige entry aangemaakt.','#2A4A38'); tgLaadRecent();
+  }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
 }
 
 // ── PROJECTEN (Focus, met totalen) ──
