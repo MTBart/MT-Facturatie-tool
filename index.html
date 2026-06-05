@@ -743,6 +743,17 @@ textarea{resize:vertical;min-height:60px}
       #tab-agenda .ag-tot .dot{display:inline-block}
       #tab-agenda .ag-totkop{font-weight:600;margin:2px 0 1px}
       #tab-agenda .ag-totsub{font-size:11px;color:var(--text-faint,#999);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:6px}
+      #tab-agenda .ag-lijst{min-width:520px}
+      #tab-agenda .ag-ldag{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:#faf9f6;border-bottom:1px solid var(--border,#eee);font-weight:600;font-size:12.5px;position:sticky;top:0;z-index:1}
+      #tab-agenda .ag-ldag span:last-child{font-variant-numeric:tabular-nums;color:var(--green,#2A4A38)}
+      #tab-agenda .ag-lrow{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid #f1f0ec;font-size:13px;cursor:pointer}
+      #tab-agenda .ag-lrow:hover{background:#fbf9f2}
+      #tab-agenda .ag-lrow .dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto}
+      #tab-agenda .ag-ldesc{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #tab-agenda .ag-lsub{color:var(--text-faint,#999);font-size:11px}
+      #tab-agenda .ag-lpers{flex:0 0 auto;font-size:11.5px;color:var(--text-dim,#666);background:#f0ede4;border-radius:9px;padding:2px 9px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #tab-agenda .ag-ltijd{flex:0 0 auto;font-size:11.5px;color:var(--text-faint,#999);font-variant-numeric:tabular-nums}
+      #tab-agenda .ag-ldur{flex:0 0 auto;font-weight:600;font-variant-numeric:tabular-nums;min-width:48px;text-align:right}
     </style>
     <div class="card" style="padding:1rem;margin-bottom:1rem">
       <div class="flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -753,6 +764,10 @@ textarea{resize:vertical;min-height:60px}
           <span id="agenda-weeklabel" style="font-weight:600;margin-left:8px"></span>
         </div>
         <div class="flex" style="gap:6px;align-items:center">
+          <div class="ag-viewtog" style="display:inline-flex;border:1px solid var(--border,#ddd);border-radius:7px;overflow:hidden">
+            <button class="btn btn-sm" id="agenda-view-grid" onclick="agendaZetView('grid')" title="Week-rooster" style="border:0;border-radius:0;padding:5px 10px">▦ Rooster</button>
+            <button class="btn btn-sm" id="agenda-view-lijst" onclick="agendaZetView('lijst')" title="Timer-lijst (zoals Toggl)" style="border:0;border-radius:0;padding:5px 10px">≣ Lijst</button>
+          </div>
           <label style="font-size:12px">Kleur op:</label>
           <select id="agenda-kleurop" class="zoek-input" style="width:auto" onchange="agendaZetKleur(this.value)">
             <option value="project">Project</option>
@@ -1266,7 +1281,7 @@ function periodePresetGewijzigd(){
 // ═══ AGENDA (Toggl week-kalender, leest gedeelde mt_uren_entries) ═══
 const AG_STD_TEAM=[{naam:'bart',label:'Bart',kleur:'#2A4A38'},{naam:'mathijs',label:'Mathijs',kleur:'#B8962E'},{naam:'arjan',label:'Arjan',kleur:'#5a3a8b'},{naam:'maarten',label:'Maarten',kleur:'#1a3a8b'}];
 const AG_START=6, AG_EIND=22, AG_UURPX=46;
-let _agenda={weekStart:null,kleurOp:'project',fProj:new Set(),fPers:new Set()};
+let _agenda={weekStart:null,kleurOp:'project',fProj:new Set(),fPers:new Set(),view:'grid'};
 const AG_NONE='__none__';            // sentinel: lege set = "alle"; AG_NONE = "niets"
 let _agNamesTried=false, _agOutsideBound=false;
 
@@ -1290,9 +1305,13 @@ function renderAgenda(){
   agEnsureNames();
   agBindOutside();
   const ko=document.getElementById('agenda-kleurop'); if(ko) ko.value=_agenda.kleurOp;
+  const gb=document.getElementById('agenda-view-grid'), lb=document.getElementById('agenda-view-lijst');
+  if(gb) gb.classList.toggle('btn-gold',_agenda.view==='grid'), gb.classList.toggle('btn-secondary',_agenda.view!=='grid');
+  if(lb) lb.classList.toggle('btn-gold',_agenda.view==='lijst'), lb.classList.toggle('btn-secondary',_agenda.view!=='lijst');
   agRenderFilters();
-  agRenderGrid();
+  if(_agenda.view==='lijst') agRenderLijst(); else agRenderGrid();
 }
+function agendaZetView(v){_agenda.view=v;renderAgenda();}
 // Haalt project-/persoon-namen één keer op als de cache leeg is (bv. eerste
 // render vóór een sync). Daarna her-rendert het zodat ID-stubs namen worden.
 function agEnsureNames(){
@@ -1411,6 +1430,58 @@ function agRenderGrid(){
   const g=document.getElementById('agenda-grid');
   if(g) g.innerHTML=html;
   // Bladerpijlen oplichten als er — binnen de huidige filters — uren vóór/na deze week staan.
+  let voor=false,na=false;
+  for(const e of agEntries()){
+    if(!e.start||!e.duur||e.duur<0||!agZichtbaar(e)) continue;
+    const t=new Date(e.start).getTime();
+    if(t<ws.getTime()) voor=true; else if(t>=we.getTime()) na=true;
+    if(voor&&na) break;
+  }
+  const pv=document.getElementById('agenda-prev'); if(pv) pv.classList.toggle('heeft',voor);
+  const nx=document.getElementById('agenda-next'); if(nx) nx.classList.toggle('heeft',na);
+  agRenderTotalen(wk);
+  const st=document.getElementById('agenda-status');
+  if(st){const ls=localStorage.getItem('mt_toggl_last_sync');st.textContent=`${wk.length} entries in beeld${ls?' · laatste sync '+new Date(ls).toLocaleString('nl-NL'):' · nog niet gesynct'}`;}
+}
+
+// Timer-lijst-view (zoals Toggl Track): entries per dag, project-kleur, omschrijving,
+// collega-kolom (zo zie je ieders tijd, niet alleen die van jezelf), tijd + duur rechts.
+// Zelfde week-window + filters als de grid; deelt totalen en bladerpijl-logica.
+function agRenderLijst(){
+  const ws=_agenda.weekStart, we=new Date(ws.getTime()+7*864e5);
+  const lbl=document.getElementById('agenda-weeklabel');
+  if(lbl) lbl.textContent=`${agFmt(ws)} – ${agFmt(new Date(we.getTime()-864e5))}`;
+  const dagen=['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'];
+  const wk=agEntries().filter(e=>{
+    if(!e.start||!e.duur||e.duur<0) return false;
+    const t=new Date(e.start).getTime();
+    return t>=ws.getTime()&&t<we.getTime()&&agZichtbaar(e);
+  });
+  const perDag=[[],[],[],[],[],[],[]];
+  wk.forEach(e=>{const di=(new Date(e.start).getDay()+6)%7;perDag[di].push(e);});
+  let html='<div class="ag-lijst">';
+  for(let i=0;i<7;i++){
+    const rows=perDag[i].sort((a,b)=>new Date(a.start)-new Date(b.start));
+    if(!rows.length) continue;
+    const dd=new Date(ws.getTime()+i*864e5);
+    const dagTot=rows.reduce((s,e)=>s+e.duur,0);
+    html+=`<div class="ag-ldag"><span>${dagen[i]} ${dd.getDate()}/${dd.getMonth()+1}</span><span>${agUur(dagTot)}u</span></div>`;
+    html+=rows.map(e=>{
+      const s=new Date(e.start), eind=new Date(s.getTime()+e.duur*1000);
+      const hhmm=d=>d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+      const titel=(e.omschrijving||e.taak_naam||'(geen omschrijving)');
+      return `<div class="ag-lrow" onclick="agBlokDetail('${e.id||e.toggl_id}')">
+        <span class="dot" style="background:${agProjKleur(e.project_code)}"></span>
+        <span class="ag-ldesc">${titel.replace(/</g,'&lt;')}<span class="ag-lsub"> · ${agProjLabel(e.project_code)}</span></span>
+        <span class="ag-lpers">${agPersLabel(e.teamlid)}</span>
+        <span class="ag-ltijd">${hhmm(s)}–${hhmm(eind)}</span>
+        <span class="ag-ldur">${agUur(e.duur)}u</span></div>`;
+    }).join('');
+  }
+  if(!wk.length) html+='<div style="padding:24px;text-align:center;color:var(--text-faint)">Geen uren in deze week (met huidige filters).</div>';
+  html+='</div>';
+  const g=document.getElementById('agenda-grid'); if(g) g.innerHTML=html;
+  // bladerpijlen + totalen (zelfde logica als grid)
   let voor=false,na=false;
   for(const e of agEntries()){
     if(!e.start||!e.duur||e.duur<0||!agZichtbaar(e)) continue;
