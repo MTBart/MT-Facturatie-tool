@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Inbox: leesvenster toont mail-body weer (iframe-hoogte fix)
+- Commit: `bd6ac02` | Auteur: Bart Witte
+
 ## 2026-06-05 — Agenda: los persoon-id naar naam op via Track /users (uid-veld)
 - Commit: `f6518c8` | Auteur: Bart Witte
 
