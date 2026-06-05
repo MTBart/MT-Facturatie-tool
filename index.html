@@ -1063,6 +1063,26 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
       #tab-inbox .agenda-ev.allday{background:#fdf3df;border-left-color:var(--gold,#B8962E)}
       #tab-inbox .agenda-ev .t{color:var(--text-dim,#666);font-size:10px}
       @media(max-width:720px){#tab-inbox .agenda-week{grid-template-columns:1fr}}
+      /* Projectplanning — schuifbare Gantt-light */
+      .plan-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:13px}
+      .plan-banner{background:#fdecea;border:1px solid #f5b7b1;color:#922b21;border-radius:8px;padding:8px 12px;font-size:12.5px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .plan-gantt{border:1px solid var(--border,#eee);border-radius:10px;background:#fff;padding:8px 8px 12px;overflow-x:auto}
+      .plan-axis{position:relative;height:18px;margin-left:150px;border-bottom:1px solid var(--border,#eee);margin-bottom:6px;min-width:260px}
+      .plan-tick{position:absolute;top:0;font-size:9.5px;color:var(--text-faint,#999);transform:translateX(-50%);white-space:nowrap}
+      .plan-tick:before{content:'';position:absolute;left:50%;top:13px;height:6px;border-left:1px solid var(--border,#eee)}
+      .plan-row{display:flex;align-items:center;gap:0;height:30px}
+      .plan-rowlabel{width:150px;flex:0 0 150px;font-size:11.5px;line-height:1.2;padding-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .plan-rowlabel .u{color:var(--text-faint,#999);font-size:10px}
+      .plan-track{position:relative;flex:1;height:24px;min-width:260px;background:repeating-linear-gradient(90deg,transparent,transparent 13px,rgba(0,0,0,.025) 13px,rgba(0,0,0,.025) 14px);border-radius:4px}
+      .plan-bar{position:absolute;top:2px;height:20px;border-radius:5px;color:#fff;font-size:10.5px;line-height:20px;padding:0 7px;white-space:nowrap;overflow:hidden;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.15);touch-action:none;user-select:none}
+      .plan-bar.sleep{cursor:grabbing;opacity:.85;z-index:5}
+      .plan-bar.mijlpaal{border-radius:50%;width:18px!important;padding:0;text-align:center}
+      .plan-bar .dt{opacity:.85;font-size:9.5px}
+      .plan-editor{border:1px solid var(--border,#eee);border-radius:10px;background:#faf9f6;padding:12px;margin-top:10px;font-size:13px}
+      .plan-editor .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:8px 0}
+      .plan-editor label{display:block;font-size:11px;color:var(--text-dim,#666);margin-bottom:3px}
+      .plan-editor input,.plan-editor select{width:100%;height:30px;padding:0 7px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;background:#fff}
+      @media(max-width:720px){.plan-axis,.plan-rowlabel{margin-left:0}.plan-rowlabel{width:96px;flex-basis:96px;font-size:10.5px}}
     </style>
     <div class="inbox-subnav">
       <button class="inbox-subtab actief" data-sub="mail" onclick="inboxSub('mail')">📥 Mail</button>
@@ -3175,6 +3195,7 @@ function renderProjectDetail(proj){
       <div style="display:flex;align-items:center;gap:0.5rem;font-size:12px;color:var(--text-dim);margin-bottom:1rem">
         <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${mbNrBlok}
       </div>
+      ${projectPlanning(proj)}
       ${projectTijdlijn(proj)}
       <hr class="divider">
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
@@ -3321,6 +3342,321 @@ function bewerkProjectMbNr(code){
   slaProjectenOp();
   renderProjectDetail(huidigProject);
 }
+// ══════════════════════════════════════════════════════════════════════
+// PROJECTPLANNING — fasen met afhankelijkheden, werkdag-rekenen, schuifbare Gantt
+// Datamodel: mt_planning[code] = {code, anker:{type,datum}, togglProjectId, fases:[...]}
+// Reken in werkdagen (ma–vr). Anker = vooruit vanaf start OF achteruit vanaf oplever.
+// ══════════════════════════════════════════════════════════════════════
+const PLAN_FASES=[
+  {key:'budget',   naam:'Budgetbepaling',                duur:2, gap:0,  effort:3,  mijlpaal:false},
+  {key:'tekening', naam:'Tekening / schets',             duur:3, gap:1,  effort:8,  mijlpaal:false},
+  {key:'offerte',  naam:'Offerte',                       duur:2, gap:1,  effort:4,  mijlpaal:false},
+  {key:'akkoord',  naam:'Offerte-akkoord',               duur:0, gap:10, effort:0,  mijlpaal:true},
+  {key:'wvb',      naam:'Werkvoorbereiding / tek.',      duur:10,gap:1,  effort:24, mijlpaal:false},
+  {key:'inkoop',   naam:'Inkoop (order plaatsen)',       duur:2, gap:1,  effort:4,  mijlpaal:false, besteldatum:true},
+  {key:'productie',naam:'Productie',                     duur:10,gap:15, effort:0,  mijlpaal:false},
+  {key:'levering', naam:'Levering',                      duur:1, gap:1,  effort:4,  mijlpaal:false},
+  {key:'oplever',  naam:'Oplevering',                    duur:1, gap:1,  effort:6,  mijlpaal:false}
+];
+const PLAN_STATUS_KLEUR={todo:'#8e9aaf',bezig:'#3b82f6',klaar:'#22a06b'};
+
+// ── Datum-helpers (werkdagen) ──
+function _planD(s){const d=new Date(s+'T00:00:00');return isNaN(d)?new Date():d;}
+function _planYmd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function _planWeekend(d){const g=d.getDay();return g===0||g===6;}
+function _planNaarWerkdag(d,vooruit){const r=new Date(d);while(_planWeekend(r))r.setDate(r.getDate()+(vooruit?1:-1));return r;}
+// schuif n werkdagen vanaf d (n kan negatief); resultaat valt nooit in weekend
+function addWerkdagen(d,n){
+  let r=_planNaarWerkdag(new Date(d), n>=0);
+  let stap=n>=0?1:-1, te=Math.abs(n);
+  while(te>0){ r.setDate(r.getDate()+stap); if(!_planWeekend(r)) te--; }
+  return r;
+}
+// werkdagen tussen twee datums (eind - start), beide inclusief richting
+function _planWerkdagenTussen(a,b){
+  let s=new Date(a), e=new Date(b), n=0, stap=e>=s?1:-1;
+  while(_planYmd(s)!==_planYmd(e)){ s.setDate(s.getDate()+stap); if(!_planWeekend(s)) n+=stap; }
+  return n;
+}
+
+// ── Mini-toast (zelfstandig, werkt op elk tabblad) ──
+let _planToastT=null;
+function planToast(msg){
+  let t=document.getElementById('plan-toast');
+  if(!t){ t=document.createElement('div'); t.id='plan-toast';
+    t.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.25);opacity:0;transition:opacity .2s';
+    document.body.appendChild(t); }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(_planToastT); _planToastT=setTimeout(()=>{t.style.opacity='0';},3000);
+}
+
+// ── Storage ──
+function planAll(){try{return JSON.parse(localStorage.getItem('mt_planning')||'{}');}catch(e){return {};}}
+function planVoor(code){return planAll()[code]||null;}
+function planSave(code,plan){const a=planAll();a[code]=plan;localStorage.setItem('mt_planning',JSON.stringify(a));}
+function planVerwijder(code){const a=planAll();delete a[code];localStorage.setItem('mt_planning',JSON.stringify(a));}
+
+// ── Engine ──
+// Bereken start/eind voor elke fase. gepinde fasen behouden hun start; downstream
+// wordt voorwaarts herberekend met respect voor gap-werkdagen en de keten-volgorde.
+function planBerekenDatums(plan){
+  const f=plan.fases;
+  if(plan.anker && plan.anker.type==='oplever'){
+    // achteruit vanaf opleverdatum
+    let cursor=_planNaarWerkdag(_planD(plan.anker.datum),false); // laatste fase eindigt op anker
+    for(let i=f.length-1;i>=0;i--){
+      const fa=f[i];
+      fa.eind=_planYmd(cursor);
+      fa.start=_planYmd(addWerkdagen(cursor, -Math.max(0,fa.duur-1)));
+      // vorige fase eindigt (gap+1) werkdagen vóór deze start
+      cursor=addWerkdagen(_planD(fa.start), -(fa.gap+1));
+    }
+  } else {
+    // vooruit vanaf startdatum (default)
+    let startDat=addWerkdagen(_planD((plan.anker&&plan.anker.datum)||_planYmd(new Date())),0);
+    let cursor=startDat;
+    for(let i=0;i<f.length;i++){
+      const fa=f[i];
+      let s;
+      if(fa.gepind && fa.start){ s=_planD(fa.start); }
+      else if(i===0){ s=cursor; }
+      else { s=addWerkdagen(_planD(f[i-1].eind), fa.gap+1); }
+      // keten nooit teruglopen
+      if(i>0){ const minS=addWerkdagen(_planD(f[i-1].eind),1); if(s<minS && !fa.gepind) s=minS; }
+      s=_planNaarWerkdag(s,true);
+      fa.start=_planYmd(s);
+      fa.eind=_planYmd(addWerkdagen(s, Math.max(0,fa.duur-1)));
+    }
+  }
+  return plan;
+}
+
+function planGenereer(code, ankerType, ankerDatum){
+  const fases=PLAN_FASES.map((t,i)=>({
+    id:'f'+i+'_'+t.key, key:t.key, naam:t.naam, volgorde:i,
+    duur:t.duur, gap:t.gap, effort:t.effort, mijlpaal:!!t.mijlpaal, besteldatum:!!t.besteldatum,
+    status:'todo', start:'', eind:'', gepind:false, togglTaskId:null
+  }));
+  const plan={code, anker:{type:ankerType||'start', datum:ankerDatum||_planYmd(new Date())}, togglProjectId:null, fases};
+  planBerekenDatums(plan);
+  planSave(code,plan);
+  return plan;
+}
+
+// Verschuif één fase naar een nieuwe startdatum: pin 'm, herbereken downstream vooruit.
+function planSchuifFase(code, faseId, nieuweStart){
+  const plan=planVoor(code); if(!plan) return;
+  const idx=plan.fases.findIndex(x=>x.id===faseId); if(idx<0) return;
+  // bij oplever-anker eerst omzetten naar concrete data, dan in start-modus verder schuiven
+  if(plan.anker.type==='oplever'){ plan.anker={type:'start',datum:plan.fases[0].start}; }
+  const fa=plan.fases[idx];
+  fa.gepind=true;
+  fa.start=_planYmd(_planNaarWerkdag(_planD(nieuweStart),true));
+  fa.eind=_planYmd(addWerkdagen(_planD(fa.start),Math.max(0,fa.duur-1)));
+  // downstream voorwaarts herrekenen, gepinde latere fasen blijven indien ze niet botsen
+  for(let i=idx+1;i<plan.fases.length;i++){
+    const cur=plan.fases[i], prev=plan.fases[i-1];
+    let s=addWerkdagen(_planD(prev.eind), cur.gap+1);
+    if(cur.gepind && _planD(cur.start)>=s){ /* blijft staan */ }
+    else { cur.gepind=false; cur.start=_planYmd(s); cur.eind=_planYmd(addWerkdagen(s,Math.max(0,cur.duur-1))); }
+  }
+  planSave(code,plan);
+}
+
+// Besteldatum-bewaking: ligt inkoop-start in verleden en is inkoop nog niet klaar?
+function planCheckBesteldatum(code){
+  const plan=planVoor(code); if(!plan) return null;
+  const ink=plan.fases.find(x=>x.besteldatum); if(!ink||ink.status==='klaar') return null;
+  const vandaag=_planNaarWerkdag(new Date(),true);
+  if(_planD(ink.start) < vandaag){
+    const teLaat=_planWerkdagenTussen(_planD(ink.start), vandaag);
+    return {fase:ink, teLaatWerkdagen:teLaat, besteldatum:ink.start};
+  }
+  return null;
+}
+// Herplan inkoop vanaf vandaag → cascade productie→oplevering vooruit (levertijd behouden)
+function planHerplanVanafVandaag(code){
+  const plan=planVoor(code); if(!plan) return;
+  const ink=plan.fases.find(x=>x.besteldatum); if(!ink) return;
+  planSchuifFase(code, ink.id, _planYmd(_planNaarWerkdag(new Date(),true)));
+  renderProjectDetail(huidigProject);
+}
+
+// ── Render ──
+function _planCid(code){return code.replace(/[^a-zA-Z0-9]/g,'');}
+function projectPlanning(proj){
+  const plan=planVoor(proj.code);
+  const cid=_planCid(proj.code);
+  if(!plan){
+    const vandaag=_planYmd(new Date());
+    return `<hr class="divider">
+    <div class="card-title" style="margin:0 0 .5rem">📅 Projectplanning</div>
+    <div style="background:#faf9f6;border:1px solid var(--border,#eee);border-radius:10px;padding:14px">
+      <div style="font-size:13px;color:var(--text-dim,#666);margin-bottom:10px">Nog geen planning. Genereer het standaard-fasenplan (9 fasen met levertijden) en schuif daarna intuïtief.</div>
+      <div class="plan-toolbar">
+        <label style="display:flex;align-items:center;gap:5px">Anker:
+          <select id="plan-anker-${cid}">
+            <option value="oplever">achteruit vanaf opleverdatum</option>
+            <option value="start">vooruit vanaf startdatum</option>
+          </select>
+        </label>
+        <input type="date" id="plan-datum-${cid}" value="${vandaag}" style="height:30px;border:1px solid var(--border,#ddd);border-radius:6px;padding:0 7px">
+        <button class="btn btn-primary" onclick="planGenereerUI('${proj.code}')">Genereer standaardplan</button>
+      </div>
+    </div>`;
+  }
+  // bestaand plan
+  const waarsch=planCheckBesteldatum(proj.code);
+  const f=plan.fases;
+  // tijd-as: van eerste start tot laatste eind, +marge
+  const minD=_planD(f[0].start), maxD=_planD(f[f.length-1].eind);
+  const totDagen=Math.max(1,Math.round((maxD-minD)/86400000)+2);
+  const pct=(d)=>((_planD(d)-minD)/86400000)/totDagen*100;
+  const breedte=(s,e)=>Math.max(2,((_planD(e)-_planD(s))/86400000+1)/totDagen*100);
+  // week-ticks
+  let ticks='';
+  let tw=new Date(minD); tw.setDate(tw.getDate()-tw.getDay()+1); // maandag
+  while(tw<=maxD){ const p=((tw-minD)/86400000)/totDagen*100; if(p>=0&&p<=100) ticks+=`<span class="plan-tick" style="left:${p}%">${String(tw.getDate()).padStart(2,'0')}/${String(tw.getMonth()+1).padStart(2,'0')}</span>`; tw.setDate(tw.getDate()+7); }
+  const totEffort=f.reduce((a,x)=>a+(x.effort||0),0);
+  let rows='';
+  f.forEach(fa=>{
+    const kleur=PLAN_STATUS_KLEUR[fa.status]||'#8e9aaf';
+    const l=pct(fa.start), w=fa.mijlpaal?0:breedte(fa.start,fa.eind);
+    const dt=`${String(_planD(fa.start).getDate()).padStart(2,'0')}/${String(_planD(fa.start).getMonth()+1).padStart(2,'0')}`;
+    rows+=`<div class="plan-row">
+      <div class="plan-rowlabel" title="${fa.naam}">${fa.gepind?'📌 ':''}${fa.naam}<br><span class="u">${fa.effort?fa.effort+'u · ':''}${dt}</span></div>
+      <div class="plan-track" data-code="${proj.code}" data-span="${totDagen}">
+        ${fa.mijlpaal
+          ? `<span class="plan-bar mijlpaal" style="left:${l}%;background:#d4a017" title="${fa.naam} — ${fa.start}" onpointerdown="planDragStart(event,'${proj.code}','${fa.id}')"></span>`
+          : `<span class="plan-bar" style="left:${l}%;width:${w}%;background:${kleur}" title="${fa.naam}: ${fa.start} → ${fa.eind} (${fa.duur} wd, ${fa.effort}u)" onpointerdown="planDragStart(event,'${proj.code}','${fa.id}')">${fa.naam}</span>`}
+      </div>
+    </div>`;
+  });
+  const ankerLbl=plan.anker.type==='oplever'?`oplever ${plan.anker.datum}`:`start ${plan.anker.datum}`;
+  return `<hr class="divider">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
+    <div class="card-title" style="margin:0">📅 Projectplanning <span style="font-weight:400;font-size:12px;color:var(--text-dim,#888)">· anker: ${ankerLbl} · ${totEffort}u totaal</span></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-sm" onclick="planAnkerWissel('${proj.code}')">↔ wissel anker</button>
+      <button class="btn btn-sm" onclick="planHerstel('${proj.code}')">↺ herstel template</button>
+      <button class="btn btn-sm" onclick="planWisUI('${proj.code}')">🗑</button>
+    </div>
+  </div>
+  ${waarsch?`<div class="plan-banner">⚠️ Besteldatum overschreden: <b>Inkoop</b> stond op ${waarsch.besteldatum} (${waarsch.teLaatWerkdagen} werkdagen geleden). <button class="btn btn-sm" onclick="planHerplanVanafVandaag('${proj.code}')">herplan vanaf vandaag</button></div>`:''}
+  <div class="plan-gantt">
+    <div class="plan-axis">${ticks}</div>
+    ${rows}
+  </div>
+  <div style="font-size:11px;color:var(--text-faint,#999);margin-top:6px">Sleep een balk om te verschuiven — alle latere fasen schuiven mee (levertijden blijven behouden). Klik een balk voor details.</div>
+  <div id="plan-editor-${cid}"></div>`;
+}
+
+// ── UI-acties ──
+function planGenereerUI(code){
+  const cid=_planCid(code);
+  const anker=document.getElementById('plan-anker-'+cid).value;
+  const datum=document.getElementById('plan-datum-'+cid).value || _planYmd(new Date());
+  planGenereer(code, anker, datum);
+  renderProjectDetail(huidigProject); planToast('Standaardplan gegenereerd');
+}
+function planAnkerWissel(code){
+  const plan=planVoor(code); if(!plan) return;
+  if(plan.anker.type==='oplever'){ plan.anker={type:'start',datum:plan.fases[0].start}; }
+  else { plan.anker={type:'oplever',datum:plan.fases[plan.fases.length-1].eind}; }
+  plan.fases.forEach(x=>x.gepind=false);
+  planBerekenDatums(plan); planSave(code,plan); renderProjectDetail(huidigProject);
+}
+function planHerstel(code){
+  const plan=planVoor(code); if(!plan) return;
+  if(!confirm('Plan terugzetten naar standaard-template? Verschoven fasen gaan verloren.')) return;
+  planGenereer(code, plan.anker.type, plan.anker.datum); renderProjectDetail(huidigProject);
+}
+function planWisUI(code){ if(!confirm('Planning verwijderen?'))return; planVerwijder(code); renderProjectDetail(huidigProject); }
+
+// ── Sleep-logica (pointer, met dag-snapping) ──
+let _planDrag=null;
+function planDragStart(ev,code,faseId){
+  ev.preventDefault();
+  const bar=ev.currentTarget, track=bar.closest('.plan-track');
+  _planDrag={code,faseId,bar,track,startX:ev.clientX,trackW:track.getBoundingClientRect().width,
+    span:parseFloat(track.dataset.span)||30, startLeftPct:parseFloat(bar.style.left)||0, moved:false};
+  bar.setPointerCapture(ev.pointerId);
+  bar.classList.add('sleep');
+  bar.addEventListener('pointermove',planDragMove);
+  bar.addEventListener('pointerup',planDragEnd);
+  bar.addEventListener('pointercancel',planDragEnd);
+}
+function planDragMove(ev){
+  if(!_planDrag) return;
+  const dx=ev.clientX-_planDrag.startX;
+  if(Math.abs(dx)>4) _planDrag.moved=true;
+  const dPct=dx/_planDrag.trackW*100;
+  _planDrag.bar.style.left=Math.max(0,_planDrag.startLeftPct+dPct)+'%';
+}
+function planDragEnd(ev){
+  if(!_planDrag) return;
+  const d=_planDrag; _planDrag=null;
+  d.bar.classList.remove('sleep');
+  d.bar.removeEventListener('pointermove',planDragMove);
+  d.bar.removeEventListener('pointerup',planDragEnd);
+  d.bar.removeEventListener('pointercancel',planDragEnd);
+  if(!d.moved){ planOpenEditor(d.code,d.faseId); return; }
+  // pixel → dag-verschuiving snappen
+  const dx=ev.clientX-d.startX;
+  const dagenPerPx=d.span/d.trackW;
+  const verschuifKalenderdagen=Math.round(dx*dagenPerPx);
+  const plan=planVoor(d.code); const fa=plan&&plan.fases.find(x=>x.id===d.faseId);
+  if(!fa){renderProjectDetail(huidigProject);return;}
+  const nieuweStart=new Date(_planD(fa.start)); nieuweStart.setDate(nieuweStart.getDate()+verschuifKalenderdagen);
+  planSchuifFase(d.code,d.faseId,_planYmd(nieuweStart));
+  renderProjectDetail(huidigProject);
+}
+
+// ── Mini-editor per fase ──
+function planOpenEditor(code,faseId){
+  const plan=planVoor(code); if(!plan) return;
+  const fa=plan.fases.find(x=>x.id===faseId); if(!fa) return;
+  const cid=_planCid(code), box=document.getElementById('plan-editor-'+cid); if(!box) return;
+  box.innerHTML=`<div class="plan-editor">
+    <div style="font-weight:600;margin-bottom:4px">${fa.naam} ${fa.gepind?'📌':''}</div>
+    <div class="grid">
+      <div><label>Naam</label><input id="pe-naam" value="${(fa.naam||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>Status</label><select id="pe-status">
+        <option value="todo"${fa.status==='todo'?' selected':''}>Te doen</option>
+        <option value="bezig"${fa.status==='bezig'?' selected':''}>Bezig</option>
+        <option value="klaar"${fa.status==='klaar'?' selected':''}>Klaar</option></select></div>
+      <div><label>Duur (werkdagen)</label><input id="pe-duur" type="number" min="0" value="${fa.duur}"></div>
+      <div><label>Wachttijd vóór (wd)</label><input id="pe-gap" type="number" min="0" value="${fa.gap}"></div>
+      <div><label>Effort (uren)</label><input id="pe-effort" type="number" min="0" value="${fa.effort}"></div>
+      <div><label>Startdatum</label><input id="pe-start" type="date" value="${fa.start}"></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="planEditorOpslaan('${code}','${faseId}')">Opslaan</button>
+      ${fa.gepind?`<button class="btn btn-sm" onclick="planFaseUnpin('${code}','${faseId}')">📌 losmaken</button>`:''}
+      <button class="btn btn-sm" onclick="document.getElementById('plan-editor-${cid}').innerHTML=''">Sluiten</button>
+    </div>
+  </div>`;
+}
+function planEditorOpslaan(code,faseId){
+  const plan=planVoor(code); if(!plan) return;
+  const fa=plan.fases.find(x=>x.id===faseId); if(!fa) return;
+  fa.naam=document.getElementById('pe-naam').value||fa.naam;
+  fa.status=document.getElementById('pe-status').value;
+  fa.duur=Math.max(0,parseInt(document.getElementById('pe-duur').value)||0);
+  fa.gap=Math.max(0,parseInt(document.getElementById('pe-gap').value)||0);
+  fa.effort=Math.max(0,parseInt(document.getElementById('pe-effort').value)||0);
+  const nieuweStart=document.getElementById('pe-start').value;
+  planSave(code,plan);
+  if(nieuweStart && nieuweStart!==fa.start){ planSchuifFase(code,faseId,nieuweStart); }
+  else { const p=planVoor(code); planBerekenDatums(p); planSave(code,p); }
+  renderProjectDetail(huidigProject); planToast('Fase bijgewerkt');
+}
+function planFaseUnpin(code,faseId){
+  const plan=planVoor(code); if(!plan) return;
+  const fa=plan.fases.find(x=>x.id===faseId); if(fa) fa.gepind=false;
+  planBerekenDatums(plan); planSave(code,plan); renderProjectDetail(huidigProject);
+}
+
 // ── Projecttijdlijn: alleen echte events (aanmaak, inkoop, bestellingen) ──
 function projectTijdlijn(proj){
   const events=[];
@@ -4639,7 +4975,7 @@ const _SP = {
   FOLDER: 'MT-Bedrijfstool',
   // mt_mail_links synct mee zodat mail↔project-koppelingen op élke PC zichtbaar zijn.
   // Opslag = privé SharePoint-tenant (alleen @mortiseandtenon.nl), NOOIT de publieke git-repo.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning']),
   _q: {},
   ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
   lastSync: null,           // {ts, ok, key, error} — voedt de zichtbare sync-status
