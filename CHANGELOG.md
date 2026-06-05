@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Projectplanning-engine: schuifbare Gantt-light in Projecten-tab
+- Commit: `f545786` | Auteur: Bart Witte
+
 ## 2026-06-05 — Inbox Taken-tab: Microsoft To Do live + 1-op-1 Toggl-taak
 - Commit: `a3de335` | Auteur: Bart Witte
 

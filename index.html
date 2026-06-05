@@ -3474,6 +3474,45 @@ function planCheckBesteldatum(code){
   }
   return null;
 }
+// ── Brug naar Toggl: maak een Track-project + Focus-taak per fase ──
+// Reuse van de bestaande tg*-infra (tgTrack/focusFetch). Best-effort, niet-fataal
+// per fase; id's worden teruggeschreven in mt_planning zodat we later kunnen syncen.
+const _PLAN_TG_STATUS={todo:300785,bezig:300788,klaar:300786};
+async function planNaarToggl(code){
+  const plan=planVoor(code); if(!plan){return;}
+  const proj=(typeof PROJECT_CODES!=='undefined'&&PROJECT_CODES.find)?PROJECT_CODES.find(p=>p.code===code):null;
+  const projNaam=(proj&&(proj.naam||proj.klant_naam))?`${proj.naam||proj.klant_naam} [${code}]`:code;
+  if(plan.togglProjectId){
+    if(!confirm(`Dit project is al gekoppeld aan Toggl-project ${plan.togglProjectId}.\nOpnieuw de fasen als Focus-taken aanmaken? (kan dubbelen geven — bestaande blijven staan)`)) return;
+  } else {
+    if(!confirm(`Toggl-project "${projNaam}" aanmaken met een Focus-taak per fase?`)) return;
+  }
+  planToast('Toggl: project aanmaken…');
+  try{
+    if(!plan.togglProjectId){
+      const made=await tgTrack(`workspaces/${TG_WS}/projects`,'POST',{name:projNaam,active:true,workspace_id:TG_WS});
+      const pid=made&&(made.id||(made.data&&made.data.id));
+      if(!pid) throw new Error('geen project-id terug van Toggl');
+      plan.togglProjectId=pid; planSave(code,plan);
+      if(typeof _tgCache!=='undefined') _tgCache.projecten=null;
+    }
+  }catch(e){ planToast('❌ Toggl-project mislukt: '+e.message); return; }
+  // Focus-taken per fase (sequentieel, best-effort)
+  let ok=0, fout=0;
+  for(const fa of plan.fases){
+    try{
+      const body={name:fa.naam, status_id:_PLAN_TG_STATUS[fa.status]||300785, project_id:plan.togglProjectId};
+      const made=await focusFetch('tasks','POST',body);
+      const tid=made&&(made.id||(made.data&&made.data.id));
+      if(tid){ fa.togglTaskId=tid; ok++; } else { fout++; }
+    }catch(e){ fout++; }
+  }
+  planSave(code,plan);
+  if(typeof _tgCache!=='undefined') _tgCache.taken=null;
+  planToast(`Toggl klaar: ${ok} taken aangemaakt${fout?`, ${fout} mislukt`:''}.`);
+  renderProjectDetail(huidigProject);
+}
+
 // Herplan inkoop vanaf vandaag → cascade productie→oplevering vooruit (levertijd behouden)
 function planHerplanVanafVandaag(code){
   const plan=planVoor(code); if(!plan) return;
@@ -3537,6 +3576,7 @@ function projectPlanning(proj){
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
     <div class="card-title" style="margin:0">📅 Projectplanning <span style="font-weight:400;font-size:12px;color:var(--text-dim,#888)">· anker: ${ankerLbl} · ${totEffort}u totaal</span></div>
     <div style="display:flex;gap:6px">
+      <button class="btn btn-sm" onclick="planNaarToggl('${proj.code}')" title="${plan.togglProjectId?'Gekoppeld aan Toggl-project '+plan.togglProjectId:'Maak een Toggl-project met een Focus-taak per fase'}">${plan.togglProjectId?'↻ sync naar Toggl':'📤 naar Toggl'}</button>
       <button class="btn btn-sm" onclick="planAnkerWissel('${proj.code}')">↔ wissel anker</button>
       <button class="btn btn-sm" onclick="planHerstel('${proj.code}')">↺ herstel template</button>
       <button class="btn btn-sm" onclick="planWisUI('${proj.code}')">🗑</button>
