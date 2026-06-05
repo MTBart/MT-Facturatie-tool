@@ -137,9 +137,9 @@ header h1 span{color:var(--gold-mid);font-style:italic}
 @media(max-width:760px){.header-center{position:static;transform:none}.tbchat-panel{position:fixed;top:60px;left:50%}}
 
 /* ── TABS ── */
-.tabs-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;gap:0;overflow-x:auto}
-.tab-btn{padding:14px 18px;border:none;background:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--text-faint);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.18s;white-space:nowrap;letter-spacing:0.01em}
-.tab-btn:hover{color:var(--text-dim)}
+.tabs-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:0 var(--space-6);display:flex;gap:0;overflow-x:auto;position:sticky;top:60px;z-index:90}
+.tab-btn{padding:var(--space-4) var(--space-4);border:none;background:none;cursor:pointer;font-family:var(--sans);font-size:var(--text-sm);font-weight:500;color:var(--text-faint);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color 0.15s,border-color 0.15s;white-space:nowrap;letter-spacing:0.01em}
+.tab-btn:hover{color:var(--n-800)}
 .tab-btn.active{color:var(--green);border-bottom-color:var(--gold);font-weight:600}
 .tab-content{display:none}
 .tab-content.active{display:block}
@@ -152,9 +152,9 @@ header h1 span{color:var(--gold-mid);font-style:italic}
 
 /* ── STATUS ── */
 .status-bar{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;padding:0.6rem 1rem;border-radius:6px;margin-bottom:1.25rem}
-.status-bar.ok{background:var(--green-light);color:var(--green);border:1px solid #c0d8c8}
-.status-bar.warn{background:var(--gold-light);color:#7a6010;border:1px solid var(--gold-mid)}
-.status-bar.err{background:var(--red-light);color:var(--red);border:1px solid #f5c5c5}
+.status-bar.ok{background:var(--success-50);color:var(--success);border:1px solid var(--green-100)}
+.status-bar.warn{background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid)}
+.status-bar.err{background:var(--error-50);color:var(--error);border:1px solid #f5c5c5}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
 
 /* ── FORMS ── */
@@ -215,7 +215,7 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
 .drop-zone{border:2px dashed var(--border-strong);border-radius:var(--radius);padding:2.5rem;text-align:center;cursor:pointer;transition:all 0.2s;color:var(--text-dim);background:var(--surface2)}
 .drop-zone:hover,.drop-zone.over{border-color:var(--gold);background:var(--gold-light);color:var(--green)}
 .drop-zone .icon{font-size:36px;margin-bottom:0.5rem;display:block}
-.ai-extract{background:var(--green-light);border:1px solid #b8d4c8;border-radius:6px;padding:1rem;margin-top:1rem;font-size:12px;color:var(--green)}
+.ai-extract{background:var(--green-50);border:1px solid var(--green-100);border-radius:var(--radius-sm);padding:1rem;margin-top:1rem;font-size:12px;color:var(--green)}
 
 /* ── FACTUUR REGELS ── */
 .regel-row{display:grid;grid-template-columns:2fr 1.3fr 60px 85px 55px 1.1fr 80px 32px 28px;gap:5px;align-items:start;margin-bottom:6px}
@@ -286,7 +286,7 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
 
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(28,26,22,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
-.modal{background:var(--surface);border-radius:14px;padding:2rem;width:460px;box-shadow:var(--shadow-lg);border:1px solid var(--border)}
+.modal{background:var(--surface-overlay);border-radius:var(--radius-lg);padding:var(--space-6);width:480px;max-width:calc(100vw - var(--space-8));box-shadow:var(--shadow-pop);border:1px solid var(--border)}
 .modal h2{font-family:var(--serif);font-size:20px;font-weight:300;margin-bottom:1.25rem;font-style:italic}
 .modal-preview{background:var(--green-light);border:1px solid #b8d4c8;border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:15px;margin-bottom:1rem;color:var(--green);letter-spacing:0.05em;font-weight:500}
 

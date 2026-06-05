@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — redesign: token-ladder + globale dropdown-fix, knoppen, kaarten, tabellen
+- Commit: `d476eba` | Auteur: Bart Witte
+
 ## 2026-06-05 — Inbox: leesvenster toont mail-body weer (iframe-hoogte fix)
 - Commit: `bd6ac02` | Auteur: Bart Witte
 
