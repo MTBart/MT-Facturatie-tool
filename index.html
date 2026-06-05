@@ -817,6 +817,8 @@ textarea{resize:vertical;min-height:60px}
       #tab-toggl .tg-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
       #tab-toggl .tg-card{background:var(--bg-card,#fff);border:1px solid var(--border,#e6e6e6);border-radius:10px;padding:14px;position:relative}
       #tab-toggl .tg-card h4{margin:0 0 4px;font-size:14px;display:flex;align-items:center;gap:7px}
+      #tab-toggl .tg-cardacts{position:absolute;top:8px;right:8px;display:flex;gap:3px;opacity:0;transition:opacity .15s}
+      #tab-toggl .tg-card:hover .tg-cardacts{opacity:1}
       #tab-toggl .tg-card .tg-bar{height:6px;border-radius:3px;background:#eee;overflow:hidden;margin:8px 0 4px}
       #tab-toggl .tg-card .tg-bar>span{display:block;height:100%}
       #tab-toggl .tg-sub{font-size:11px;color:var(--text-faint,#999)}
@@ -1986,6 +1988,10 @@ async function tgLaadProjecten(){
         <div class="tg-bar"><span style="width:${pct}%;background:${kl}"></span></div>
         <div class="tg-sub"><b>${tgSec2u(sec)}</b>${est}</div>
         ${(p.tags||[]).slice(0,6).map(t=>`<span class="tg-pill">${tgEsc(t.name||t)}</span>`).join('')}
+        <div class="tg-cardacts">
+          <button class="btn btn-sm btn-secondary" title="Bewerken" onclick="tgEditProject(${p.id})">✎</button>
+          <button class="btn btn-sm btn-secondary" title="Archiveren" onclick="tgArchiveProject(${p.id})">📦</button>
+        </div>
       </div>`;
     }).join('')+'</div>';
   }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
@@ -1996,6 +2002,27 @@ async function tgNieuwProject(){
   tgStatus('Project aanmaken…');
   try{ await tgTrack(`workspaces/${TG_WS}/projects`,'POST',{name:naam,active:true,workspace_id:TG_WS});
     _tgCache.projecten=null; tgStatus('✓ Project aangemaakt.','#2A4A38'); tgLaadProjecten(); tgVulProjectSelect();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+function _tgProjById(id){return (_tgCache.projecten||[]).find(p=>p.id===id);}
+async function tgEditProject(id){
+  const p=_tgProjById(id); if(!p) return;
+  const naam=prompt('Projectnaam:',p.name||''); if(naam===null) return;
+  const kleur=prompt('Kleur (hex, bv. #e36a00):',p.color||'#888888'); if(kleur===null) return;
+  if(!/^#?[0-9a-fA-F]{6}$/.test(kleur.trim())){ tgStatus('Ongeldige hex-kleur.','#c0392b'); return; }
+  const hex=kleur.trim().startsWith('#')?kleur.trim():'#'+kleur.trim();
+  if(!confirm(`Project "${naam}" opslaan in Toggl Track?`)) return;
+  tgStatus('Project opslaan…');
+  try{ await tgTrack(`workspaces/${TG_WS}/projects/${id}`,'PUT',{name:naam,color:hex,workspace_id:TG_WS});
+    _tgCache.projecten=null; tgStatus('✓ Project bijgewerkt.','#2A4A38'); tgLaadProjecten(); tgVulProjectSelect();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+async function tgArchiveProject(id){
+  const p=_tgProjById(id); if(!p) return;
+  if(!confirm(`Project "${p.name}" archiveren?\n(Het verdwijnt uit de actieve lijst; in Toggl terug te halen.)`)) return;
+  tgStatus('Project archiveren…');
+  try{ await tgTrack(`workspaces/${TG_WS}/projects/${id}`,'PUT',{active:false,workspace_id:TG_WS});
+    _tgCache.projecten=null; tgStatus('✓ Project gearchiveerd.','#2A4A38'); tgLaadProjecten(); tgVulProjectSelect();
   }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
 }
 
