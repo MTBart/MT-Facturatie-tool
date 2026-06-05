@@ -307,6 +307,7 @@ textarea{resize:vertical;min-height:60px}
   <button class="tab-btn" onclick="showTab('bestelling',this)">Bestellijst</button>
   <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" onclick="showTab('agenda',this)">📅 Agenda</button>
+  <button class="tab-btn" onclick="showTab('toggl',this)">⏱️ Toggl</button>
   <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" onclick="showTab('cn',this)">CompaNanny</button>
   <button class="tab-btn" id="btn-migratie" onclick="showTab('migratie',this)">📦 Migratie</button>
@@ -780,6 +781,121 @@ textarea{resize:vertical;min-height:60px}
     <div id="agenda-status" style="font-size:11px;color:var(--text-faint);margin-top:6px"></div>
   </div>
 
+  <!-- ═══ TAB: TOGGL (volledige Track + Focus aansturing via Worker) ═══ -->
+  <div id="tab-toggl" class="tab-content">
+    <style>
+      #tab-toggl .tg-timerbar{background:#2A4A38;color:#fff;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+      #tab-toggl .tg-timerbar input.tg-desc{flex:1;min-width:160px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:9px 11px;font-size:13px;outline:none}
+      #tab-toggl .tg-timerbar input.tg-desc::placeholder{color:rgba(255,255,255,.6)}
+      #tab-toggl .tg-timerbar select{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:8px;font-size:12px;max-width:200px}
+      #tab-toggl .tg-timerbar select option{color:#222}
+      #tab-toggl .tg-clock{font-family:var(--mono,'DM Mono',monospace);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.02em;min-width:104px;text-align:center}
+      #tab-toggl .tg-bigbtn{width:46px;height:46px;border-radius:50%;border:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;color:#fff}
+      #tab-toggl .tg-start{background:#B8962E}
+      #tab-toggl .tg-stop{background:#c0392b}
+      #tab-toggl .tg-subtabs{display:flex;gap:2px;border-bottom:1px solid var(--border,#e2e2e2);margin-bottom:14px;flex-wrap:wrap}
+      #tab-toggl .tg-subtab{padding:9px 15px;border:none;background:none;cursor:pointer;font-size:12.5px;font-weight:500;color:var(--text-faint,#999);border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s}
+      #tab-toggl .tg-subtab:hover{color:var(--text-dim,#666)}
+      #tab-toggl .tg-subtab.active{color:var(--green,#2A4A38);border-bottom-color:var(--gold,#B8962E);font-weight:600}
+      #tab-toggl .tg-subcontent{display:none}
+      #tab-toggl .tg-subcontent.active{display:block}
+      #tab-toggl .tg-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+      #tab-toggl .tg-card{background:var(--bg-card,#fff);border:1px solid var(--border,#e6e6e6);border-radius:10px;padding:14px;position:relative}
+      #tab-toggl .tg-card h4{margin:0 0 4px;font-size:14px;display:flex;align-items:center;gap:7px}
+      #tab-toggl .tg-card .tg-bar{height:6px;border-radius:3px;background:#eee;overflow:hidden;margin:8px 0 4px}
+      #tab-toggl .tg-card .tg-bar>span{display:block;height:100%}
+      #tab-toggl .tg-sub{font-size:11px;color:var(--text-faint,#999)}
+      #tab-toggl .tg-pill{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;background:#f0ede4;color:#7a6a2e;margin:2px 3px 0 0}
+      #tab-toggl .tg-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border,#f0f0f0);font-size:13px}
+      #tab-toggl .tg-row:hover{background:#faf9f6}
+      #tab-toggl .tg-row .tg-dur{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}
+      #tab-toggl .tg-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;display:inline-block}
+      #tab-toggl .tg-board{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px}
+      #tab-toggl .tg-col{flex:0 0 252px;background:#f6f5f1;border-radius:10px;padding:8px}
+      #tab-toggl .tg-col h5{margin:4px 6px 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#666);display:flex;justify-content:space-between}
+      #tab-toggl .tg-tile{background:#fff;border:1px solid var(--border,#e6e6e6);border-radius:8px;padding:9px 10px;margin-bottom:7px;font-size:12.5px;cursor:grab}
+      #tab-toggl .tg-tile.drag{opacity:.5}
+      #tab-toggl .tg-col.over{outline:2px dashed var(--gold,#B8962E)}
+      #tab-toggl .tg-leeg{padding:2.5rem;text-align:center;color:var(--text-faint,#999)}
+      #tab-toggl .tg-status{font-size:11px;color:var(--text-faint,#999);margin-top:10px}
+      #tab-toggl .tg-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+      #tab-toggl table.tg-tbl{width:100%;border-collapse:collapse;font-size:13px}
+      #tab-toggl table.tg-tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint,#999);padding:6px 8px;border-bottom:1px solid var(--border,#e6e6e6)}
+      #tab-toggl table.tg-tbl td{padding:7px 8px;border-bottom:1px solid var(--border,#f2f2f2)}
+      #tab-toggl table.tg-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+    </style>
+    <!-- sticky timerbar (Track) -->
+    <div class="tg-timerbar">
+      <input type="text" class="tg-desc" id="tg-desc" placeholder="Waar werk je aan?">
+      <select id="tg-proj-select"><option value="">— project —</option></select>
+      <span class="tg-clock" id="tg-clock">0:00:00</span>
+      <button class="tg-bigbtn tg-start" id="tg-startstop" onclick="tgTimerToggle()" title="Start/stop timer">▶</button>
+    </div>
+    <div class="tg-subtabs">
+      <button class="tg-subtab active" onclick="tgSub('timer',this)">⏱ Timer</button>
+      <button class="tg-subtab" onclick="tgSub('projecten',this)">📁 Projecten</button>
+      <button class="tg-subtab" onclick="tgSub('taken',this)">✓ Taken</button>
+      <button class="tg-subtab" onclick="tgSub('board',this)">📋 Board</button>
+      <button class="tg-subtab" onclick="tgSub('reports',this)">📊 Reports</button>
+      <button class="tg-subtab" onclick="tgSub('beheer',this)">🏷 Clients &amp; Tags</button>
+    </div>
+    <div id="tg-sub-timer" class="tg-subcontent active">
+      <div class="tg-toolbar">
+        <button class="btn btn-sm btn-secondary" onclick="tgLaadRecent()">↻ Ververs</button>
+        <span class="tg-sub">Eigen recente entries (laatste 14 dagen). Voor álle medewerkers → tab Agenda.</span>
+      </div>
+      <div class="card" style="padding:0"><div id="tg-timer-recent"><div class="tg-leeg">Laden…</div></div></div>
+    </div>
+    <div id="tg-sub-projecten" class="tg-subcontent">
+      <div class="tg-toolbar">
+        <button class="btn btn-sm btn-secondary" onclick="tgLaadProjecten()">↻ Ververs</button>
+        <button class="btn btn-sm btn-gold" onclick="tgNieuwProject()">+ Project</button>
+        <span class="tg-sub" id="tg-proj-tel"></span>
+      </div>
+      <div id="tg-proj-lijst"><div class="tg-leeg">Laden…</div></div>
+    </div>
+    <div id="tg-sub-taken" class="tg-subcontent">
+      <div class="tg-toolbar">
+        <button class="btn btn-sm btn-secondary" onclick="tgLaadTaken()">↻ Ververs</button>
+        <button class="btn btn-sm btn-gold" onclick="tgNieuweTaak()">+ Taak</button>
+        <span class="tg-sub" id="tg-taken-tel"></span>
+      </div>
+      <div class="card" style="padding:0"><div id="tg-taken-lijst"><div class="tg-leeg">Laden…</div></div></div>
+    </div>
+    <div id="tg-sub-board" class="tg-subcontent">
+      <div class="tg-toolbar">
+        <button class="btn btn-sm btn-secondary" onclick="tgLaadBoard()">↻ Ververs</button>
+        <span class="tg-sub">Sleep een kaart naar een andere kolom om de status te zetten (met bevestiging).</span>
+      </div>
+      <div id="tg-board"><div class="tg-leeg">Laden…</div></div>
+    </div>
+    <div id="tg-sub-reports" class="tg-subcontent">
+      <div class="tg-toolbar">
+        <label class="tg-sub">Van <input type="date" id="tg-rep-van" class="zoek-input" style="width:auto"></label>
+        <label class="tg-sub">t/m <input type="date" id="tg-rep-tot" class="zoek-input" style="width:auto"></label>
+        <select id="tg-rep-group" class="zoek-input" style="width:auto">
+          <option value="project">Per project</option>
+          <option value="user">Per persoon</option>
+          <option value="dag">Per dag</option>
+        </select>
+        <button class="btn btn-sm btn-gold" onclick="tgLaadReport()">Genereer</button>
+      </div>
+      <div id="tg-report"><div class="tg-leeg">Kies een periode en klik Genereer.</div></div>
+    </div>
+    <div id="tg-sub-beheer" class="tg-subcontent">
+      <div class="tg-toolbar">
+        <button class="btn btn-sm btn-secondary" onclick="tgLaadBeheer()">↻ Ververs</button>
+        <button class="btn btn-sm btn-gold" onclick="tgNieuweClient()">+ Client</button>
+        <button class="btn btn-sm btn-gold" onclick="tgNieuweTag()">+ Tag</button>
+      </div>
+      <div class="tg-cards" style="grid-template-columns:1fr 1fr;align-items:start">
+        <div class="card"><h4 style="margin-top:0">Clients</h4><div id="tg-clients"><div class="tg-leeg">Laden…</div></div></div>
+        <div class="card"><h4 style="margin-top:0">Tags</h4><div id="tg-tags"><div class="tg-leeg">Laden…</div></div></div>
+      </div>
+    </div>
+    <div class="tg-status" id="tg-status"></div>
+  </div>
+
   <!-- ═══ TAB: INBOX (smart-inbox, live 2-weg op info@) ═══ -->
   <div id="tab-inbox" class="tab-content">
     <style>
@@ -1131,6 +1247,7 @@ function showTab(name,btn){
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
   if(name==='agenda') renderAgenda();
+  if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
 }
 function showVtab(name,btn){
@@ -1555,6 +1672,358 @@ async function focusMaakEntry(){
       el.appendChild(b);
     }
   }catch(e){focusStatus('❌ '+e.message,'#c0392b');}
+}
+
+// ═══ TOGGL-TAB — volledige Track + Focus aansturing via de Worker ═══
+// Data-laag tgStore: nu backend 'toggl' (Track api/v9 + Reports v3 + Focus),
+// later 'lokaal' (SharePoint/localStorage) als config-switch (tgLokaal = stub).
+// Geen Toggl-tokens in de browser: alles loopt via de Worker (MS-login volstaat).
+const TG_WS=21258443, TG_ORG=21259253;
+const TG_STATUS=[ // Focus-statussen (id→label+kleur); volgorde = board-kolommen
+  {id:300785,label:'Todo',kleur:'#6b7280'},
+  {id:314194,label:'Backlog',kleur:'#9ca3af'},
+  {id:300788,label:'In Progress',kleur:'#2563eb'},
+  {id:300787,label:'Blocked',kleur:'#c0392b'},
+  {id:309790,label:'Klaar voor levering',kleur:'#B8962E'},
+  {id:300786,label:'Done',kleur:'#2A4A38'}
+];
+let _tgTimer={entry:null,tick:null};      // lopende Track-timer
+let _tgCache={projecten:null,taken:null}; // licht sessie-cachen
+let _tgRecent=[];                          // laatst geladen eigen entries (voor "hervat")
+let _tgDrag=null;                          // board drag-state
+
+// — laag-niveau transports (alle via Worker) —
+async function tgTrack(path,method='GET',body=null){
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('Microsoft-login vereist (log in via de tool)');
+  const opts={method,headers:{...h}};
+  if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
+  const res=await fetch(`${WORKER}?target=toggl&path=${encodeURIComponent(path)}`,opts);
+  if(res.status===204) return true;
+  const txt=await res.text();
+  if(!res.ok) throw new Error('Track HTTP '+res.status+(txt?(' — '+txt.slice(0,140)):''));
+  try{return JSON.parse(txt);}catch(e){return txt;}
+}
+async function tgReports(body){
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('Microsoft-login vereist');
+  const res=await fetch(`${WORKER}?target=toggl_reports&path=${encodeURIComponent(`workspace/${TG_WS}/search/time_entries`)}`,
+    {method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!res.ok) throw new Error('Reports HTTP '+res.status);
+  return res.json();
+}
+async function tgFocusPaged(resource){
+  let alle=[],page=1;
+  while(page<=30){
+    const r=await focusFetch(`${resource}?page=${page}`);
+    const data=(r&&r.data)||(Array.isArray(r)?r:[]);
+    if(!data.length) break;
+    alle=alle.concat(data);
+    if(data.length<20) break;
+    page++;
+  }
+  return alle;
+}
+// — tgStore: hoog-niveau, backend-onafhankelijk —
+const tgStore={
+  backend:'toggl',
+  async projecten(){ return this.backend==='lokaal'?tgLokaal.projecten():tgFocusPaged('projects'); },
+  async taken(){ return this.backend==='lokaal'?tgLokaal.taken():tgFocusPaged('tasks'); },
+  async clients(){ return this.backend==='lokaal'?tgLokaal.clients():((await tgTrack(`workspaces/${TG_WS}/clients`))||[]); },
+  async tags(){ return this.backend==='lokaal'?tgLokaal.tags():((await tgTrack(`workspaces/${TG_WS}/tags`))||[]); },
+  async lopendeTimer(){ return this.backend==='lokaal'?tgLokaal.lopendeTimer():tgTrack('me/time_entries/current'); },
+  async eigenEntries(since,tot){ return this.backend==='lokaal'?tgLokaal.eigenEntries(since,tot):((await tgTrack(`me/time_entries?start_date=${since}&end_date=${tot}`))||[]); }
+};
+// stub voor latere standalone-modus (Toggl wordt dan optionele sync i.p.v. bron)
+const tgLokaal={
+  projecten(){return [];}, taken(){return [];}, clients(){return [];}, tags(){return [];},
+  lopendeTimer(){return null;}, eigenEntries(){return [];}
+  /* TODO standalone: lees/schrijf SharePoint-privé of localStorage; sync-laag naar Toggl. */
+};
+
+// — helpers —
+function tgStatus(msg,kleur){const el=document.getElementById('tg-status');if(el){el.textContent=msg||'';el.style.color=kleur||'var(--text-faint)';}}
+function tgEsc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
+function tgSec2hms(sec){sec=Math.max(0,Math.round(sec));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+function tgSec2u(sec){return (sec/3600).toFixed(1).replace('.',',')+'u';}
+function tgStatusById(id){return TG_STATUS.find(s=>s.id===id)||{label:'?',kleur:'#9a9a9a'};}
+
+function tgOpen(){
+  tgSub('timer',document.querySelector('#tab-toggl .tg-subtab'));
+  const van=document.getElementById('tg-rep-van'), tot=document.getElementById('tg-rep-tot');
+  if(van&&!van.value) van.value=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  if(tot&&!tot.value) tot.value=new Date().toISOString().slice(0,10);
+  tgVulProjectSelect();
+  tgTimerSync();
+  tgLaadRecent();
+}
+function tgSub(name,btn){
+  document.querySelectorAll('#tab-toggl .tg-subcontent').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('#tab-toggl .tg-subtab').forEach(b=>b.classList.remove('active'));
+  const c=document.getElementById('tg-sub-'+name); if(c) c.classList.add('active');
+  if(btn) btn.classList.add('active');
+  if(name==='projecten' && !_tgCache.projecten) tgLaadProjecten();
+  if(name==='taken' && !_tgCache.taken) tgLaadTaken();
+  if(name==='board') tgLaadBoard();
+  if(name==='beheer') tgLaadBeheer();
+}
+
+// ── TIMER (Track) ──
+async function tgVulProjectSelect(){
+  try{
+    const ps=await tgStore.projecten();
+    const sel=document.getElementById('tg-proj-select'); if(!sel)return;
+    const huidig=sel.value;
+    sel.innerHTML='<option value="">— project —</option>'+ps.filter(p=>p.active!==false&&!p.archived_at)
+      .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+      .map(p=>`<option value="${p.id}">${tgEsc(p.name||('project '+p.id))}</option>`).join('');
+    if(huidig) sel.value=huidig;
+  }catch(e){/* stil; select blijft leeg */}
+}
+async function tgTimerSync(){
+  try{ const cur=await tgStore.lopendeTimer(); _tgTimer.entry=(cur&&cur.id)?cur:null; tgTimerPaint(); }
+  catch(e){ tgStatus('Timer-status: '+e.message,'#c0392b'); }
+}
+function tgTimerPaint(){
+  const btn=document.getElementById('tg-startstop'), clk=document.getElementById('tg-clock');
+  if(!btn||!clk) return;
+  if(_tgTimer.tick){clearInterval(_tgTimer.tick);_tgTimer.tick=null;}
+  if(_tgTimer.entry){
+    const desc=document.getElementById('tg-desc'); if(desc&&document.activeElement!==desc) desc.value=_tgTimer.entry.description||'';
+    const sel=document.getElementById('tg-proj-select'); if(sel&&_tgTimer.entry.project_id) sel.value=_tgTimer.entry.project_id;
+    btn.classList.remove('tg-start'); btn.classList.add('tg-stop'); btn.textContent='■';
+    const start=new Date(_tgTimer.entry.start).getTime();
+    const upd=()=>{ clk.textContent=tgSec2hms((Date.now()-start)/1000); };
+    upd(); _tgTimer.tick=setInterval(upd,1000);
+  }else{
+    btn.classList.remove('tg-stop'); btn.classList.add('tg-start'); btn.textContent='▶'; clk.textContent='0:00:00';
+  }
+}
+async function tgTimerToggle(){
+  if(_tgTimer.entry){
+    if(!confirm('Lopende timer stoppen?')) return;
+    tgStatus('Timer stoppen…');
+    try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${_tgTimer.entry.id}/stop`,'PATCH');
+      _tgTimer.entry=null; tgTimerPaint(); tgStatus('✓ Timer gestopt.','#2A4A38'); tgLaadRecent();
+    }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }else{
+    const desc=document.getElementById('tg-desc').value.trim();
+    const pid=document.getElementById('tg-proj-select').value;
+    if(!confirm(`Nieuwe timer starten${desc?(' voor "'+desc+'"'):''}?`)) return;
+    tgStatus('Timer starten…');
+    const body={created_with:'MT-cockpit',description:desc,workspace_id:TG_WS,
+      start:new Date().toISOString().replace(/\.\d{3}Z$/,'Z'),duration:-1};
+    if(pid) body.project_id=parseInt(pid);
+    try{ const made=await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body);
+      _tgTimer.entry=(made&&made.id)?made:null; tgTimerPaint(); tgStatus('✓ Timer loopt.','#2A4A38');
+    }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }
+}
+async function tgLaadRecent(){
+  const box=document.getElementById('tg-timer-recent'); if(box) box.innerHTML='<div class="tg-leeg">Laden…</div>';
+  try{
+    const since=new Date(Date.now()-14*864e5).toISOString().slice(0,10);
+    const tot=new Date(Date.now()+864e5).toISOString().slice(0,10);
+    const es=await tgStore.eigenEntries(since,tot);
+    const ps=await tgStore.projecten(); const pmap={}; ps.forEach(p=>pmap[p.id]=p);
+    _tgRecent=es.filter(e=>e.stop).sort((a,b)=>new Date(b.start)-new Date(a.start)).slice(0,80);
+    if(!_tgRecent.length){ box.innerHTML='<div class="tg-leeg">Geen entries in de laatste 14 dagen.</div>'; return; }
+    box.innerHTML=_tgRecent.map((e,i)=>{
+      const p=pmap[e.project_id]; const kl=p?(p.color||'#9a9a9a'):'#cfcfcf';
+      const dur=e.duration>0?e.duration:((new Date(e.stop)-new Date(e.start))/1000);
+      const d=new Date(e.start);
+      return `<div class="tg-row"><span class="tg-dot" style="background:${kl}"></span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tgEsc(e.description||'(geen omschrijving)')}
+        <span class="tg-sub"> · ${p?tgEsc(p.name):'geen project'} · ${d.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} ${d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})}</span></span>
+        <span class="tg-dur">${tgSec2hms(dur)}</span>
+        <button class="btn btn-sm btn-secondary" title="Opnieuw starten" onclick="tgHervat(${i})">▶</button></div>`;
+    }).join('');
+  }catch(e){ if(box) box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+}
+function tgHervat(i){
+  const e=_tgRecent[i]; if(!e) return;
+  document.getElementById('tg-desc').value=e.description||'';
+  const sel=document.getElementById('tg-proj-select'); if(sel&&e.project_id) sel.value=e.project_id;
+  tgTimerToggle();
+}
+
+// ── PROJECTEN (Focus, met totalen) ──
+async function tgLaadProjecten(){
+  const box=document.getElementById('tg-proj-lijst'); box.innerHTML='<div class="tg-leeg">Laden…</div>';
+  try{
+    const ps=await tgStore.projecten(); _tgCache.projecten=ps;
+    const act=ps.filter(p=>!p.archived_at);
+    document.getElementById('tg-proj-tel').textContent=`${act.length} actieve projecten`;
+    const maxSec=Math.max(1,...act.map(p=>p.total_tracked_secs||0));
+    box.innerHTML='<div class="tg-cards">'+act.sort((a,b)=>(b.total_tracked_secs||0)-(a.total_tracked_secs||0)).map(p=>{
+      const sec=p.total_tracked_secs||0, kl=p.color||'#9a9a9a';
+      const est=p.estimated_mins?(' / '+tgSec2u(p.estimated_mins*60)+' geraamd'):'';
+      const pct=Math.round(sec/maxSec*100);
+      return `<div class="tg-card">
+        <h4><span class="tg-dot" style="background:${kl}"></span>${tgEsc(p.name||('project '+p.id))}</h4>
+        <div class="tg-sub">${p.total_tasks||0} taken · ${p.billable?'billable':'niet-billable'}</div>
+        <div class="tg-bar"><span style="width:${pct}%;background:${kl}"></span></div>
+        <div class="tg-sub"><b>${tgSec2u(sec)}</b>${est}</div>
+        ${(p.tags||[]).slice(0,6).map(t=>`<span class="tg-pill">${tgEsc(t.name||t)}</span>`).join('')}
+      </div>`;
+    }).join('')+'</div>';
+  }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+}
+async function tgNieuwProject(){
+  const naam=prompt('Naam van het nieuwe project (Toggl Track):'); if(!naam) return;
+  if(!confirm(`Project "${naam}" aanmaken in Toggl Track?`)) return;
+  tgStatus('Project aanmaken…');
+  try{ await tgTrack(`workspaces/${TG_WS}/projects`,'POST',{name:naam,active:true,workspace_id:TG_WS});
+    _tgCache.projecten=null; tgStatus('✓ Project aangemaakt.','#2A4A38'); tgLaadProjecten(); tgVulProjectSelect();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+
+// ── TAKEN (Focus) ──
+async function tgLaadTaken(){
+  const box=document.getElementById('tg-taken-lijst'); box.innerHTML='<div class="tg-leeg">Laden…</div>';
+  try{
+    const ts=await tgStore.taken(); _tgCache.taken=ts;
+    document.getElementById('tg-taken-tel').textContent=`${ts.length} taken`;
+    if(!ts.length){ box.innerHTML='<div class="tg-leeg">Geen taken.</div>'; return; }
+    box.innerHTML=ts.map(t=>{
+      const st=tgStatusById(t.status_id), kl=(t.project&&t.project.color)||'#9a9a9a', sec=t.total_tracked_time||0;
+      return `<div class="tg-row">
+        <span class="tg-dot" style="background:${kl}"></span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tgEsc(t.name||('taak '+t.id))}
+        <span class="tg-sub"> · ${t.project?tgEsc(t.project.name):'geen project'}${t.client?(' · '+tgEsc(t.client.name)):''}</span></span>
+        <span class="tg-pill" style="background:${st.kleur}22;color:${st.kleur}">${st.label}</span>
+        <span class="tg-dur">${tgSec2u(sec)}</span>
+        <select class="zoek-input" style="width:auto;font-size:11px" onchange="tgZetTaakStatus(${t.id},this.value)">
+          ${TG_STATUS.map(s=>`<option value="${s.id}"${s.id===t.status_id?' selected':''}>${s.label}</option>`).join('')}
+        </select></div>`;
+    }).join('');
+  }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+}
+async function tgZetTaakStatus(taskId,statusId){
+  if(!statusId) return;
+  const lbl=tgStatusById(parseInt(statusId)).label;
+  if(!confirm(`Taak-status → ${lbl} in Toggl Focus?`)){ tgLaadTaken(); return; }
+  tgStatus('Status zetten…');
+  try{ await focusFetch(`tasks/${taskId}`,'PATCH',{status_id:parseInt(statusId)});
+    _tgCache.taken=null; tgStatus(`✓ Status → ${lbl}`,'#2A4A38'); tgLaadTaken();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+async function tgNieuweTaak(){
+  const naam=prompt('Naam van de nieuwe taak (Focus):'); if(!naam) return;
+  const ps=_tgCache.projecten||await tgStore.projecten(); const act=ps.filter(p=>!p.archived_at);
+  const lijst=act.map((p,i)=>`${i+1}. ${p.name}`).join('\n');
+  const keuze=prompt(`Projectnummer voor de taak (leeg = geen):\n${lijst}`);
+  let project_id=null;
+  if(keuze){ const idx=parseInt(keuze)-1; if(act[idx]) project_id=act[idx].id; }
+  if(!confirm(`Taak "${naam}" aanmaken${project_id?' in gekozen project':''} (Focus)?`)) return;
+  tgStatus('Taak aanmaken…');
+  try{ const body={name:naam,status_id:300785}; if(project_id) body.project_id=project_id;
+    await focusFetch('tasks','POST',body);
+    _tgCache.taken=null; tgStatus('✓ Taak aangemaakt.','#2A4A38'); tgLaadTaken();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+
+// ── BOARD (Focus kanban) ──
+async function tgLaadBoard(){
+  const box=document.getElementById('tg-board'); box.innerHTML='<div class="tg-leeg">Laden…</div>';
+  try{
+    const ts=_tgCache.taken||await tgStore.taken(); _tgCache.taken=ts;
+    const cols=TG_STATUS.map(s=>{
+      const taken=ts.filter(t=>t.status_id===s.id);
+      const tiles=taken.map(t=>{
+        const kl=(t.project&&t.project.color)||'#9a9a9a';
+        return `<div class="tg-tile" draggable="true" data-id="${t.id}" data-naam="${tgEsc(t.name)}"
+          ondragstart="tgDragStart(event)" ondragend="tgDragEnd(event)">
+          <span class="tg-dot" style="background:${kl}"></span> ${tgEsc(t.name||('taak '+t.id))}
+          ${t.project?`<div class="tg-sub">${tgEsc(t.project.name)}</div>`:''}</div>`;
+      }).join('')||'<div class="tg-sub" style="padding:6px">—</div>';
+      return `<div class="tg-col" data-status="${s.id}" ondragover="tgDragOver(event)" ondragleave="tgDragLeave(event)" ondrop="tgDrop(event)">
+        <h5><span>${s.label}</span><span>${taken.length}</span></h5>${tiles}</div>`;
+    }).join('');
+    box.innerHTML='<div class="tg-board">'+cols+'</div>';
+  }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+}
+function tgDragStart(ev){_tgDrag={id:ev.target.dataset.id,naam:ev.target.dataset.naam};ev.target.classList.add('drag');}
+function tgDragEnd(ev){ev.target.classList.remove('drag');}
+function tgDragOver(ev){ev.preventDefault();ev.currentTarget.classList.add('over');}
+function tgDragLeave(ev){ev.currentTarget.classList.remove('over');}
+async function tgDrop(ev){
+  ev.preventDefault(); ev.currentTarget.classList.remove('over');
+  if(!_tgDrag) return;
+  const statusId=parseInt(ev.currentTarget.dataset.status), lbl=tgStatusById(statusId).label;
+  const d=_tgDrag; _tgDrag=null;
+  if(!confirm(`Taak "${d.naam}" → ${lbl}?`)) return;
+  tgStatus('Status zetten…');
+  try{ await focusFetch(`tasks/${d.id}`,'PATCH',{status_id:statusId});
+    _tgCache.taken=null; tgStatus(`✓ "${d.naam}" → ${lbl}`,'#2A4A38'); tgLaadBoard();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+
+// ── REPORTS (Reports v3, alle medewerkers) ──
+async function tgLaadReport(){
+  const van=document.getElementById('tg-rep-van').value, tot=document.getElementById('tg-rep-tot').value;
+  const group=document.getElementById('tg-rep-group').value, box=document.getElementById('tg-report');
+  if(!van||!tot){ box.innerHTML='<div class="tg-leeg">Kies begin- en einddatum.</div>'; return; }
+  box.innerHTML='<div class="tg-leeg">Laden…</div>';
+  try{
+    const PAGE=1000; let rows=[]; let firstRow=1;
+    for(let p=0;p<20;p++){
+      const chunk=await tgReports({start_date:van,end_date:tot,page_size:PAGE,first_row_number:firstRow});
+      if(!Array.isArray(chunk)) break;
+      rows=rows.concat(chunk);
+      if(chunk.length<PAGE) break;
+      firstRow+=PAGE;
+    }
+    const ps=await tgStore.projecten(); const pmap={}; ps.forEach(p=>pmap[p.id]=p);
+    const {un}=agNames();
+    const agg={}; let totaal=0;
+    rows.forEach(r=>{
+      const tes=Array.isArray(r.time_entries)?r.time_entries:[r];
+      tes.forEach(te=>{
+        const sec=te.seconds!=null?te.seconds:(te.duration||0); if(sec<0) return;
+        let key,kl='#9a9a9a';
+        if(group==='project'){ const p=pmap[r.project_id]; key=p?p.name:(r.project_id?('project '+r.project_id):'(geen project)'); kl=p?(p.color||kl):kl; }
+        else if(group==='user'){ key=un[r.user_id]||('user '+r.user_id); }
+        else { key=(te.start||'').slice(0,10); }
+        agg[key]=agg[key]||{sec:0,kl}; agg[key].sec+=sec; totaal+=sec;
+      });
+    });
+    const items=Object.entries(agg).sort((a,b)=> group==='dag'?a[0].localeCompare(b[0]):b[1].sec-a[1].sec);
+    const maxSec=Math.max(1,...items.map(([,v])=>v.sec));
+    box.innerHTML=`<div class="card" style="padding:14px">
+      <div style="font-weight:600;margin-bottom:10px">Totaal: ${tgSec2u(totaal)} · ${rows.length} regels</div>
+      <table class="tg-tbl"><thead><tr><th>${group==='project'?'Project':group==='user'?'Persoon':'Dag'}</th><th class="num">Uren</th><th style="width:40%">&nbsp;</th></tr></thead><tbody>
+      ${items.map(([k,v])=>`<tr><td><span class="tg-dot" style="background:${v.kl};margin-right:6px"></span>${tgEsc(k)}</td>
+        <td class="num">${tgSec2u(v.sec)}</td>
+        <td><div class="tg-bar" style="margin:0"><span style="width:${Math.round(v.sec/maxSec*100)}%;background:${v.kl}"></span></div></td></tr>`).join('')}
+      </tbody></table></div>`;
+  }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+}
+
+// ── CLIENTS & TAGS (Track) ──
+async function tgLaadBeheer(){
+  const cb=document.getElementById('tg-clients'), tb=document.getElementById('tg-tags');
+  cb.innerHTML='<div class="tg-leeg">Laden…</div>'; tb.innerHTML='<div class="tg-leeg">Laden…</div>';
+  try{ const cs=await tgStore.clients();
+    cb.innerHTML=cs.length?cs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<div class="tg-row">${tgEsc(c.name)}</div>`).join(''):'<div class="tg-leeg">Geen clients.</div>';
+  }catch(e){ cb.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+  try{ const ts=await tgStore.tags();
+    tb.innerHTML=ts.length?ts.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(t=>`<span class="tg-pill" style="font-size:12px">${tgEsc(t.name)}</span>`).join(' '):'<div class="tg-leeg">Geen tags.</div>';
+  }catch(e){ tb.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+}
+async function tgNieuweClient(){
+  const naam=prompt('Naam van de nieuwe client (Track):'); if(!naam) return;
+  if(!confirm(`Client "${naam}" aanmaken in Toggl Track?`)) return;
+  tgStatus('Client aanmaken…');
+  try{ await tgTrack(`workspaces/${TG_WS}/clients`,'POST',{name:naam,wid:TG_WS}); tgStatus('✓ Client aangemaakt.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+async function tgNieuweTag(){
+  const naam=prompt('Naam van de nieuwe tag (Track):'); if(!naam) return;
+  if(!confirm(`Tag "${naam}" aanmaken in Toggl Track?`)) return;
+  tgStatus('Tag aanmaken…');
+  try{ await tgTrack(`workspaces/${TG_WS}/tags`,'POST',{name:naam,workspace_id:TG_WS}); tgStatus('✓ Tag aangemaakt.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
 }
 
 // ═══ SETTINGS ═══

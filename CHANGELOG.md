@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Agenda: all-time projecttotalen + bladerpijlen die oplichten + 365d-window + Reports-paginatie
+- Commit: `0bdad77` | Auteur: Bart Witte
+
 ## 2026-06-05 — UX-batch: inbox-layout (groter leesvenster, 1 chat-input auto-grow, actie-knoppen), topbalk wit zoekveld, agenda-dropdown zoekbalk+uitlijning+hover
 - Commit: `f6a87ad` | Auteur: Bart Witte
 
