@@ -3194,7 +3194,7 @@ function renderProjectDetail(proj){
       </table>`:'<p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}
     </div>`;
 }
-// ── Gekoppelde mails van een project (mt_mail_links, device-lokaal) ──
+// ── Gekoppelde mails van een project (mt_mail_links — synct via privé SharePoint, zichtbaar op alle PC's) ──
 function gekoppeldeMailsHtml(proj){
   const arr=(typeof mailLinksVoor==='function')?mailLinksVoor(proj.code):[];
   if(!arr.length) return '<p style="color:var(--text-faint);font-size:13px;margin:0 0 0.5rem">Nog geen mails gekoppeld aan dit project.</p>';
@@ -4597,7 +4597,9 @@ const _SP = {
   SITE: 'mortisetenon.sharepoint.com:/sites/MortiseTenon',
   SITE_ID: null,            // resolved site-id (cache) — colon-path chaining geeft HTTP 400
   FOLDER: 'MT-Bedrijfstool',
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit']),
+  // mt_mail_links synct mee zodat mail↔project-koppelingen op élke PC zichtbaar zijn.
+  // Opslag = privé SharePoint-tenant (alleen @mortiseandtenon.nl), NOOIT de publieke git-repo.
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links']),
   _q: {},
   ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
   lastSync: null,           // {ts, ok, key, error} — voedt de zichtbare sync-status
@@ -4916,6 +4918,7 @@ async function ibFetch(path,opts){
 }
 function ibStatus(m,kleur){const s=document.getElementById('inbox-status');if(s){s.textContent=m;s.style.color=kleur||'var(--text-faint)';}}
 function ibFlat(fs){const out=[];(fs||[]).forEach(f=>{out.push(f);(f.children||[]).forEach(c=>out.push(c));});return out;}
+function ibFolderName(id){const f=ibFlat(_inbox.folders).find(x=>x.id===id);return f?f.displayName:'';}
 
 function inboxOpen(){ if(!_inbox.loaded) inboxReload(); }
 function inboxSwitchMbx(v){
@@ -4969,16 +4972,20 @@ function inboxOpenFolder(id,name){
   inboxLoadMessages();
 }
 function inboxMsgUrl(){
-  const sel='id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview';
-  let u=`/mailFolders/${_inbox.folderId}/messages?$top=50&$select=${sel}`;
-  if(_inbox.q){u+='&$search='+encodeURIComponent('"'+_inbox.q.replace(/"/g,'')+'"');}
-  else{u+='&$orderby=receivedDateTime desc';}
-  return u;
+  const sel='id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview,parentFolderId';
+  // Zoeken = HELE postbus (alle mappen, ook body) net als Outlook-zoeken.
+  // Geen zoekterm = alleen de geopende map, op datum gesorteerd.
+  if(_inbox.q){
+    return `/messages?$top=50&$select=${sel}&$search=`+encodeURIComponent('"'+_inbox.q.replace(/"/g,'')+'"');
+  }
+  return `/mailFolders/${_inbox.folderId}/messages?$top=50&$select=${sel}&$orderby=receivedDateTime desc`;
 }
 async function inboxLoadMessages(){
   const cont=document.getElementById('inbox-messages');
   cont.innerHTML='<div class="inbox-empty" style="font-size:12px">laden…</div>';
   _inbox.nextLink=null;_inbox.msgs=[];_inbox.loadingMore=false;
+  const titel=document.getElementById('inbox-listtitle');
+  if(titel)titel.textContent=_inbox.q?`🔍 "${_inbox.q}" · hele postbus`:_inbox.folderName;
   try{
     const d=await ibFetch(inboxMsgUrl());
     _inbox.msgs=(d&&d.value)||[];
@@ -5019,6 +5026,8 @@ function inboxMsgRow(m){
   const dt=m.receivedDateTime?new Date(m.receivedDateTime).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
   const clip=m.hasAttachments?' 📎':'';
   const act=m.id===(_inbox.cur&&_inbox.cur.id)?' actief':'';
+  const fnaam=(_inbox.q&&m.parentFolderId)?ibFolderName(m.parentFolderId):'';
+  const fchip=fnaam?`<span style="font-size:10px;color:#777;background:rgba(0,0,0,.06);border-radius:3px;padding:0 4px;margin-left:6px;white-space:nowrap">${ibEsc(fnaam)}</span>`:'';
   return `<div class="inbox-msg${m.isRead?'':' ongelezen'}${act}" onclick="inboxOpenMail('${m.id}')">
     <div class="van"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(van)}</span><span class="dt">${dt}</span></div>
     <div class="onderw">${ibEsc(m.subject||'(geen onderwerp)')}${clip}</div>

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — feat(inbox): koppel-knop toont link-status + ontkoppelen met waarschuwing
+- Commit: `ba4abb1` | Auteur: Bart Witte
+
 ## 2026-06-05 — fix(sync): SharePoint-I/O via site-id i.p.v. colon-path (HTTP 400 weg)
 - Commit: `6737870` | Auteur: Bart Witte
 
