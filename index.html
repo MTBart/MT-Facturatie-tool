@@ -71,7 +71,7 @@
   --text-label:11px;--lh-label:1.4;
 
   /* ── LAYOUT / CONTROLS / TABEL-RITME ── */
-  --container-max:1400px;--container-narrow:920px;
+  --container-max:100%;--container-narrow:920px;
   --control-h:38px;--control-h-sm:30px;
   --cell-py:12px;--cell-px:12px;--row-min-h:44px;
 
@@ -1013,7 +1013,10 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
       #tab-inbox .inbox-fold.actief{background:#FBF5E0;font-weight:600}
       #tab-inbox .inbox-fold.kind{padding-left:24px;font-size:12px;color:var(--text-dim,#666)}
       #tab-inbox .inbox-fold .badge{font-size:10px;color:#fff;background:var(--gold,#B8962E);border-radius:9px;padding:0 6px;min-width:16px;text-align:center}
-      #tab-inbox .inbox-listhdr{padding:8px 10px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border,#eee);position:sticky;top:0;background:var(--bg-card,#fff);z-index:1}
+      #tab-inbox .inbox-listhdr{padding:8px 10px;border-bottom:1px solid var(--border,#eee);position:sticky;top:0;background:var(--surface,#fff);z-index:2;display:flex;flex-direction:column;gap:6px}
+      #tab-inbox .inbox-listhdr #inbox-listtitle{font-weight:600;font-size:13px}
+      #tab-inbox #inbox-search{width:100%;height:30px;font-size:12px;padding:0 9px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--n-0,#fff)}
+      #tab-inbox #inbox-search:focus{outline:none;border-color:var(--green-mid);box-shadow:var(--focus-ring)}
       #tab-inbox .inbox-msg{padding:8px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:12px;line-height:1.35}
       #tab-inbox .inbox-msg:hover{background:#fafafa}
       #tab-inbox .inbox-msg.actief{background:#FBF5E0}
@@ -1055,8 +1058,11 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
         </div>
         <div id="inbox-foldertree"><div class="inbox-empty" style="padding:1rem;font-size:12px">laden…</div></div>
       </div>
-      <div class="inbox-col inbox-list">
-        <div class="inbox-listhdr" id="inbox-listtitle">—</div>
+      <div class="inbox-col inbox-list" id="inbox-listcol" onscroll="inboxMaybeMore()">
+        <div class="inbox-listhdr">
+          <div id="inbox-listtitle">—</div>
+          <input id="inbox-search" type="search" placeholder="🔍 Zoek in deze map…" oninput="inboxSearchInput()" onsearch="inboxSearchInput()">
+        </div>
         <div id="inbox-messages"></div>
       </div>
       <div class="inbox-reader">
@@ -4824,7 +4830,7 @@ window.initStorage = async function() {
 // PUBLIC repo: geen mailinhoud/PII wordt opgeslagen of gecommit — alles runtime.
 // ═══════════════════════════════════════════════════════════════════════════
 const INBOX_DEFAULT='info@mortiseandtenon.nl';
-let _inbox={mbx:INBOX_DEFAULT,folderId:null,folderName:'',folders:[],msgs:[],cur:null,undo:null,loaded:false};
+let _inbox={mbx:INBOX_DEFAULT,folderId:null,folderName:'',folders:[],msgs:[],cur:null,undo:null,loaded:false,q:'',nextLink:null,loadingMore:false};
 
 function ibEsc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function ibBase(){return _inbox.mbx==='me'?'https://graph.microsoft.com/v1.0/me':`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(_inbox.mbx)}`;}
@@ -4832,7 +4838,8 @@ async function ibFetch(path,opts){
   const token=await window.getGraphToken();
   if(!token) throw new Error('niet ingelogd bij Microsoft');
   const o=opts||{};
-  const r=await fetch(ibBase()+path,{...o,headers:{'Authorization':`Bearer ${token}`,...(o.headers||{})}});
+  const url=/^https?:\/\//.test(path)?path:ibBase()+path;
+  const r=await fetch(url,{...o,headers:{'Authorization':`Bearer ${token}`,...(o.headers||{})}});
   if(!r.ok){const t=await r.text().catch(()=>'');const e=new Error('HTTP '+r.status+(t?' '+t.slice(0,160):''));e.status=r.status;throw e;}
   return r.status===204?null:r.json();
 }
@@ -4884,19 +4891,57 @@ function inboxRenderTree(){
 }
 
 function inboxOpenFolder(id,name){
-  _inbox.folderId=id;_inbox.folderName=name;
+  _inbox.folderId=id;_inbox.folderName=name;_inbox.q='';
+  const sb=document.getElementById('inbox-search');if(sb)sb.value='';
   document.getElementById('inbox-listtitle').textContent=name;
   inboxRenderTree();
   inboxLoadMessages();
 }
+function inboxMsgUrl(){
+  const sel='id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview';
+  let u=`/mailFolders/${_inbox.folderId}/messages?$top=50&$select=${sel}`;
+  if(_inbox.q){u+='&$search='+encodeURIComponent('"'+_inbox.q.replace(/"/g,'')+'"');}
+  else{u+='&$orderby=receivedDateTime desc';}
+  return u;
+}
 async function inboxLoadMessages(){
   const cont=document.getElementById('inbox-messages');
   cont.innerHTML='<div class="inbox-empty" style="font-size:12px">laden…</div>';
+  _inbox.nextLink=null;_inbox.msgs=[];_inbox.loadingMore=false;
   try{
-    const d=await ibFetch(`/mailFolders/${_inbox.folderId}/messages?$top=50&$select=id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview&$orderby=receivedDateTime desc`);
+    const d=await ibFetch(inboxMsgUrl());
     _inbox.msgs=(d&&d.value)||[];
-    cont.innerHTML=_inbox.msgs.length?_inbox.msgs.map(inboxMsgRow).join(''):'<div class="inbox-empty" style="font-size:12px">geen berichten</div>';
+    _inbox.nextLink=(d&&d['@odata.nextLink'])||null;
+    cont.innerHTML=_inbox.msgs.length?_inbox.msgs.map(inboxMsgRow).join('')
+      :`<div class="inbox-empty" style="font-size:12px">${_inbox.q?'geen resultaten':'geen berichten'}</div>`;
   }catch(e){cont.innerHTML=`<div class="inbox-empty" style="font-size:12px">fout: ${ibEsc(e.message)}</div>`;}
+}
+async function inboxMaybeMore(){
+  if(!_inbox.nextLink||_inbox.loadingMore)return;
+  const col=document.getElementById('inbox-listcol');
+  if(!col||col.scrollTop+col.clientHeight<col.scrollHeight-140)return;
+  _inbox.loadingMore=true;
+  const cont=document.getElementById('inbox-messages');
+  const ld=document.createElement('div');ld.className='inbox-empty';ld.style.cssText='font-size:11px;padding:10px';ld.textContent='meer laden…';
+  cont.appendChild(ld);
+  try{
+    const d=await ibFetch(_inbox.nextLink);
+    const more=(d&&d.value)||[];
+    _inbox.nextLink=(d&&d['@odata.nextLink'])||null;
+    _inbox.msgs=_inbox.msgs.concat(more);
+    ld.remove();
+    if(more.length) cont.insertAdjacentHTML('beforeend',more.map(inboxMsgRow).join(''));
+  }catch(e){ld.textContent='meer laden mislukt: '+e.message;}
+  _inbox.loadingMore=false;
+  // ketting: vul de viewport als er nog ruimte is
+  if(_inbox.nextLink){const col2=document.getElementById('inbox-listcol');if(col2&&col2.scrollHeight<=col2.clientHeight+140)inboxMaybeMore();}
+}
+let _ibSearchT=null;
+function inboxSearchInput(){
+  const sb=document.getElementById('inbox-search');if(!sb)return;
+  const v=(sb.value||'').trim();
+  clearTimeout(_ibSearchT);
+  _ibSearchT=setTimeout(()=>{if(v===_inbox.q)return;_inbox.q=v;inboxLoadMessages();},350);
 }
 function inboxMsgRow(m){
   const van=(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'(onbekend)';
