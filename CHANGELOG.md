@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — redesign: tab-nav sticky + modals/status-bars/drop-zone op tokens
+- Commit: `c13a975` | Auteur: Bart Witte
+
 ## 2026-06-05 — redesign: token-ladder + globale dropdown-fix, knoppen, kaarten, tabellen
 - Commit: `d476eba` | Auteur: Bart Witte
 
