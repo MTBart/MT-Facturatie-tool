@@ -1047,7 +1047,29 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
         border-radius:8px;font-size:13px;display:none;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);align-items:center;gap:14px}
       #inbox-toast button{background:var(--gold,#B8962E);color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px}
       .kp-row:hover{background:var(--surface-sunken,#f2efe8)}
+      /* Sub-tabs binnen Inbox: Mail / Agenda / Taken */
+      #tab-inbox .inbox-subnav{display:flex;gap:5px;margin-bottom:9px;flex-wrap:wrap}
+      #tab-inbox .inbox-subtab{font-size:13px;padding:6px 15px;border:1px solid var(--border,#e3e3e3);background:#faf9f6;border-radius:8px;cursor:pointer;color:var(--text-dim,#555)}
+      #tab-inbox .inbox-subtab:hover{background:#f0ece0}
+      #tab-inbox .inbox-subtab.actief{background:var(--green,#2e7d32);color:#fff;border-color:transparent;font-weight:600}
+      #tab-inbox .inbox-pane{display:none}
+      #tab-inbox .inbox-pane.actief{display:block}
+      #tab-inbox .agenda-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+      #tab-inbox .agenda-week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+      #tab-inbox .agenda-day{border:1px solid var(--border,#eee);border-radius:10px;background:#fff;min-height:130px;display:flex;flex-direction:column;overflow:hidden}
+      #tab-inbox .agenda-day .dhdr{padding:6px 8px;font-size:11.5px;font-weight:600;border-bottom:1px solid var(--border,#f0f0f0);background:#faf9f6}
+      #tab-inbox .agenda-day.vandaag .dhdr{background:#FBF5E0;color:var(--gold,#B8962E)}
+      #tab-inbox .agenda-ev{margin:5px 6px 0;padding:5px 7px;border-radius:7px;background:#eef5ee;border-left:3px solid var(--green,#2e7d32);font-size:11px;line-height:1.3}
+      #tab-inbox .agenda-ev.allday{background:#fdf3df;border-left-color:var(--gold,#B8962E)}
+      #tab-inbox .agenda-ev .t{color:var(--text-dim,#666);font-size:10px}
+      @media(max-width:720px){#tab-inbox .agenda-week{grid-template-columns:1fr}}
     </style>
+    <div class="inbox-subnav">
+      <button class="inbox-subtab actief" data-sub="mail" onclick="inboxSub('mail')">📥 Mail</button>
+      <button class="inbox-subtab" data-sub="agenda" onclick="inboxSub('agenda')">📅 Agenda</button>
+      <button class="inbox-subtab" data-sub="taken" onclick="inboxSub('taken')">✓ Taken</button>
+    </div>
+    <div id="inbox-pane-mail" class="inbox-pane actief">
     <div class="inbox-wrap">
       <div class="inbox-col inbox-folders">
         <div class="inbox-mbx">
@@ -1078,6 +1100,31 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
       </div>
     </div>
     <div id="inbox-status" style="font-size:11px;color:var(--text-faint);margin-top:6px"></div>
+    </div><!-- /inbox-pane-mail -->
+
+    <div id="inbox-pane-agenda" class="inbox-pane">
+      <div class="agenda-toolbar">
+        <button class="btn btn-sm btn-secondary" onclick="inboxAgendaWeek(-1)">‹ vorige</button>
+        <button class="btn btn-sm btn-secondary" onclick="_agenda.weekOffset=0;inboxLoadAgenda()">vandaag</button>
+        <button class="btn btn-sm btn-secondary" onclick="inboxAgendaWeek(1)">volgende ›</button>
+        <strong id="agenda-weeklabel" style="font-size:13px;margin-left:6px"></strong>
+        <button class="btn btn-sm btn-secondary" style="margin-left:auto" onclick="inboxLoadAgenda()" title="Vernieuwen">⟳</button>
+      </div>
+      <div id="agenda-grid" class="agenda-week"></div>
+    </div>
+
+    <div id="inbox-pane-taken" class="inbox-pane">
+      <div id="taken-body" style="max-width:680px;font-size:13px;line-height:1.55;color:var(--text,#222)">
+        <div style="border:1px solid var(--border,#e3e3e3);border-radius:10px;padding:16px 18px;background:#fff">
+          <strong style="font-size:14px">✓ Taken — Microsoft To&nbsp;Do ↔ Toggl</strong>
+          <p style="margin:.6rem 0">Dit blok komt eraan. To&nbsp;Do leest/schrijft via dezelfde Microsoft-login, maar
+          heeft <em>één keer</em> extra toestemming nodig (<code>Tasks.ReadWrite</code>) — die vraag ik straks
+          aan bij het inbouwen. Daarna kun je hier taken zien, afvinken en aanmaken, en maakt elke nieuwe
+          To&nbsp;Do-taak automatisch óók een Toggl-taak aan (1-op-1).</p>
+          <p style="margin:.4rem 0 0;color:var(--text-faint,#999);font-size:12px">Mail en Agenda werken hiernaast al volledig.</p>
+        </div>
+      </div>
+    </div>
   </div>
   <div id="inbox-toast"><span id="inbox-toast-msg"></span><button onclick="inboxUndo()">Ongedaan maken</button></div>
 
@@ -4921,6 +4968,56 @@ function ibFlat(fs){const out=[];(fs||[]).forEach(f=>{out.push(f);(f.children||[
 function ibFolderName(id){const f=ibFlat(_inbox.folders).find(x=>x.id===id);return f?f.displayName:'';}
 
 function inboxOpen(){ if(!_inbox.loaded) inboxReload(); }
+
+// ── Sub-tabs binnen Inbox: Mail / Agenda / Taken ──
+let _ibSub='mail';
+function inboxSub(name){
+  _ibSub=name;
+  document.querySelectorAll('#tab-inbox .inbox-subtab').forEach(b=>b.classList.toggle('actief',b.dataset.sub===name));
+  document.querySelectorAll('#tab-inbox .inbox-pane').forEach(p=>p.classList.remove('actief'));
+  const pane=document.getElementById('inbox-pane-'+name); if(pane)pane.classList.add('actief');
+  if(name==='mail'&&!_inbox.loaded)inboxReload();
+  if(name==='agenda')inboxLoadAgenda();
+}
+
+// ── Agenda — spiegel van de Outlook-kalender (Graph /calendarView, week-overzicht) ──
+let _agenda={weekOffset:0};
+function _agMaandag(offset){const d=new Date();const wd=(d.getDay()+6)%7;d.setHours(0,0,0,0);d.setDate(d.getDate()-wd+offset*7);return d;}
+function inboxAgendaWeek(delta){_agenda.weekOffset+=delta;inboxLoadAgenda();}
+async function inboxLoadAgenda(){
+  const grid=document.getElementById('agenda-grid');if(!grid)return;
+  const ma=_agMaandag(_agenda.weekOffset);
+  const zo=new Date(ma);zo.setDate(zo.getDate()+7);
+  const lbl=document.getElementById('agenda-weeklabel');
+  if(lbl)lbl.textContent=ma.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})+' – '+new Date(zo.getTime()-1).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
+  grid.innerHTML='<div class="inbox-empty" style="grid-column:1/-1">laden…</div>';
+  try{
+    const u=`/calendarView?startDateTime=${ma.toISOString()}&endDateTime=${zo.toISOString()}`
+      +`&$select=subject,start,end,location,isAllDay&$orderby=start/dateTime&$top=200`;
+    const d=await ibFetch(u,{headers:{Prefer:'outlook.timezone="W. Europe Standard Time"'}});
+    inboxRenderAgenda(ma,(d&&d.value)||[]);
+  }catch(e){grid.innerHTML=`<div class="inbox-empty" style="grid-column:1/-1">agenda laden mislukt: ${ibEsc(e.message)}</div>`;}
+}
+function inboxRenderAgenda(maandag,evs){
+  const grid=document.getElementById('agenda-grid');
+  const dagen=['ma','di','wo','do','vr','za','zo'];
+  const vandaag=new Date();vandaag.setHours(0,0,0,0);
+  const perDag={};
+  evs.forEach(ev=>{const s=new Date((ev.start&&ev.start.dateTime)||ev.start);const k=s.toDateString();(perDag[k]=perDag[k]||[]).push(ev);});
+  let html='';
+  for(let i=0;i<7;i++){
+    const d=new Date(maandag);d.setDate(d.getDate()+i);
+    const isVandaag=d.getTime()===vandaag.getTime();
+    const lijst=(perDag[d.toDateString()]||[]).map(ev=>{
+      const s=new Date((ev.start&&ev.start.dateTime)||ev.start);
+      const t=ev.isAllDay?'hele dag':s.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+      const loc=(ev.location&&ev.location.displayName)?' · '+ibEsc(ev.location.displayName):'';
+      return `<div class="agenda-ev${ev.isAllDay?' allday':''}"><div class="t">${t}${loc}</div>${ibEsc(ev.subject||'(geen titel)')}</div>`;
+    }).join('')||'<div style="font-size:10px;color:#bbb;padding:6px 8px">—</div>';
+    html+=`<div class="agenda-day${isVandaag?' vandaag':''}"><div class="dhdr">${dagen[i]} ${d.getDate()}/${d.getMonth()+1}</div>${lijst}</div>`;
+  }
+  grid.innerHTML=html;
+}
 function inboxSwitchMbx(v){
   _inbox.mbx=v;_inbox.loaded=false;_inbox.folderId=null;_inbox.cur=null;
   document.getElementById('inbox-messages').innerHTML='';
