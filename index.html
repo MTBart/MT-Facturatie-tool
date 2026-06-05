@@ -1046,6 +1046,7 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
       #inbox-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;
         border-radius:8px;font-size:13px;display:none;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);align-items:center;gap:14px}
       #inbox-toast button{background:var(--gold,#B8962E);color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px}
+      .kp-row:hover{background:var(--surface-sunken,#f2efe8)}
     </style>
     <div class="inbox-wrap">
       <div class="inbox-col inbox-folders">
@@ -3161,6 +3162,13 @@ function renderProjectDetail(proj){
         <span id="bijlage-status-${proj.code.replace(/-/g,'')}" style="font-size:12px;color:var(--text-dim)"></span>
       </div>
       ${bijlagenHtml(proj)}
+      <hr class="divider">
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
+        <div class="card-title" style="margin:0">Gekoppelde mails</div>
+        <button class="btn btn-secondary btn-sm" onclick="tbDoTab('inbox')">📥 Naar inbox</button>
+        <span style="font-size:11px;color:var(--text-faint)">Koppelen doe je in de Inbox met 🔗 “Koppel aan project”</span>
+      </div>
+      ${gekoppeldeMailsHtml(proj)}
       ${projItems.length?`
       <hr class="divider">
       <div class="card-title">Materiaalinkoop uit facturen</div>
@@ -3185,6 +3193,26 @@ function renderProjectDetail(proj){
         </tr>`).join('')}</tbody>
       </table>`:'<p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}
     </div>`;
+}
+// ── Gekoppelde mails van een project (mt_mail_links, device-lokaal) ──
+function gekoppeldeMailsHtml(proj){
+  const arr=(typeof mailLinksVoor==='function')?mailLinksVoor(proj.code):[];
+  if(!arr.length) return '<p style="color:var(--text-faint);font-size:13px;margin:0 0 0.5rem">Nog geen mails gekoppeld aan dit project.</p>';
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  return `<table class="materiaal-lijst" style="margin-bottom:0.5rem"><tbody>${arr.slice().reverse().map(x=>{
+    const i=arr.indexOf(x);
+    return `<tr>
+    <td style="font-size:12px">✉ <a href="#" onclick="event.preventDefault();openGekoppeldeMail('${proj.code}',${i})" style="color:var(--green);text-decoration:none" title="Open in inbox">${esc(x.subject||'(geen onderwerp)')}</a></td>
+    <td style="font-size:11px;color:var(--text-dim)">${esc(x.from||'')}</td>
+    <td style="font-size:11px;color:var(--text-faint)">${x.date?fmtDatum(x.date):''}</td>
+    <td style="white-space:nowrap;text-align:right">${x.webLink?`<a href="${esc(x.webLink)}" target="_blank" class="btn btn-xs btn-secondary" style="text-decoration:none" title="Open in Outlook">↗</a> `:''}<button class="btn btn-xs btn-danger" title="Ontkoppelen (mail blijft in Outlook)" onclick="ontkoppelMail('${proj.code}',${i})">×</button></td>
+  </tr>`;}).join('')}</tbody></table>`;
+}
+function ontkoppelMail(code,idx){
+  const all=mailLinksAll();const arr=all[code]||[];if(!arr[idx])return;
+  if(!confirm('Mail "'+(arr[idx].subject||'')+'" ontkoppelen van '+code+'?\nDe mail zelf blijft in Outlook staan.'))return;
+  arr.splice(idx,1);all[code]=arr;mailLinksSave(all);
+  if(huidigProject&&huidigProject.code===code)renderProjectDetail(huidigProject);
 }
 // ── Bijlagen van een project: enkel verwijzingen (item-id + SharePoint web-URL).
 //    Bestanden zelf staan in de projectmap op SharePoint; we tonen alleen links. ──
@@ -5061,9 +5089,67 @@ function inboxMaakProject(){
   ibStatus('Projecten-tab geopend — namen-generator-koppeling volgt in volgende stap.');
   inboxToast('Stap "maak project" wordt in het ultra-vervolg gekoppeld aan de klant-DB ('+(onderw.slice(0,40))+'…)');
 }
+// ── Mail ↔ project-koppeling (localStorage, device-lokaal; géén PII in repo) ──
+function mailLinksAll(){try{return JSON.parse(localStorage.getItem('mt_mail_links')||'{}');}catch(e){return {};}}
+function mailLinksSave(o){localStorage.setItem('mt_mail_links',JSON.stringify(o));}
+function mailLinksVoor(code){return mailLinksAll()[code]||[];}
+
 function inboxKoppelProject(){
   if(!_inbox.cur){alert('Open eerst een mail.');return;}
-  inboxToast('Mail→project taggen (zonder Outlook-move) komt in het ultra-vervolg.');
+  if(!PROJECT_CODES.length){alert('Er zijn nog geen projecten om aan te koppelen.');return;}
+  const oud=document.getElementById('koppel-overlay');if(oud)oud.remove();
+  const ov=document.createElement('div');ov.id='koppel-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(28,26,22,.45);z-index:10000;display:flex;align-items:center;justify-content:center';
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  const lijst=PROJECT_CODES.map(p=>`<div class="kp-row" data-zoek="${ibEsc((p.code+' '+(p.naam||'')+' '+(p.klant||'')).toLowerCase())}" onclick="inboxKoppelProjectDo('${ibEsc(p.code).replace(/'/g,'')}')" style="padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer">
+      <div style="font-weight:600;font-size:13px">${ibEsc(p.naam||p.code)}</div>
+      <div style="font-size:11px;color:var(--text-dim)"><span style="font-family:var(--mono)">${ibEsc(p.code)}</span>${p.klant?' · '+ibEsc(p.klant):''}</div>
+    </div>`).join('');
+  ov.innerHTML=`<div style="background:var(--surface-overlay,#fff);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);width:440px;max-width:calc(100vw - 32px);max-height:80vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:700;font-size:15px;margin-bottom:2px">🔗 Mail koppelen aan project</div>
+      <div style="font-size:11.5px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(_inbox.cur.subject||'(geen onderwerp)')}</div>
+      <input id="kp-zoek" type="search" placeholder="Zoek project op naam, code of klant…" oninput="inboxKoppelFilter()" style="margin-top:10px;width:100%;height:34px">
+    </div>
+    <div id="kp-lijst" style="overflow:auto;padding:6px">${lijst}</div>
+  </div>`;
+  document.body.appendChild(ov);
+  const z=document.getElementById('kp-zoek');if(z)setTimeout(()=>z.focus(),30);
+}
+function inboxKoppelFilter(){
+  const q=(document.getElementById('kp-zoek').value||'').toLowerCase().trim();
+  document.querySelectorAll('#kp-lijst .kp-row').forEach(r=>{r.style.display=(!q||r.dataset.zoek.includes(q))?'':'none';});
+}
+function inboxKoppelProjectDo(code){
+  const m=_inbox.cur;if(!m)return;
+  const all=mailLinksAll();const arr=all[code]||[];
+  const imid=m.internetMessageId||m.id;
+  if(arr.some(x=>(x.internetMessageId||x.id)===imid)){inboxToast('Deze mail was al gekoppeld aan '+code);}
+  else{
+    arr.push({id:m.id,internetMessageId:m.internetMessageId||'',subject:m.subject||'',
+      from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'',
+      date:m.receivedDateTime||'',webLink:m.webLink||'',mbx:_inbox.mbx,ts:Date.now()});
+    all[code]=arr;mailLinksSave(all);
+    inboxToast('✓ Mail gekoppeld aan '+code+' ('+arr.length+' mail'+(arr.length>1?'s':'')+')');
+    if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
+  }
+  const ov=document.getElementById('koppel-overlay');if(ov)ov.remove();
+}
+// Vanuit het project terug naar de gekoppelde mail in de inbox.
+async function openGekoppeldeMail(code,idx){
+  const x=mailLinksVoor(code)[idx];if(!x)return;
+  tbDoTab('inbox');
+  if(_inbox.mbx!==x.mbx){const sel=document.getElementById('inbox-mailbox');if(sel)sel.value=x.mbx;_inbox.mbx=x.mbx;_inbox.loaded=false;}
+  if(!_inbox.loaded){await inboxReload();}
+  try{await inboxOpenMail(x.id);}
+  catch(e){
+    if(x.internetMessageId){try{
+      const d=await ibFetch('/messages?$filter='+encodeURIComponent("internetMessageId eq '"+x.internetMessageId+"'")+'&$select=id&$top=1');
+      const hit=d&&d.value&&d.value[0];
+      if(hit){await inboxOpenMail(hit.id);return;}
+    }catch(e2){}}
+    inboxToast('Mail niet te openen (verplaatst/verwijderd?) — gebruik ↗ Outlook.');
+  }
 }
 function inboxBijlagenNaarMap(){
   if(!_inbox.cur){alert('Open eerst een mail.');return;}
