@@ -4595,39 +4595,59 @@ async function openFactuurInControle(factuurId){
 <script>
 const _SP = {
   SITE: 'mortisetenon.sharepoint.com:/sites/MortiseTenon',
+  SITE_ID: null,            // resolved site-id (cache) — colon-path chaining geeft HTTP 400
   FOLDER: 'MT-Bedrijfstool',
   KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit']),
   _q: {},
+  ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
+  lastSync: null,           // {ts, ok, key, error} — voedt de zichtbare sync-status
+
+  // Graph weigert twee colon-paths in één URL (sites/host:/... én drive/root:/...:/content).
+  // Daarom de site éérst naar zijn id resolven en dáármee /sites/{id}/drive/... bouwen.
+  async _driveBase() {
+    const token = await window.getGraphToken();
+    if (!token) throw new Error('geen Graph-token (Microsoft-login/toestemming vereist)');
+    if (!this.SITE_ID) {
+      const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${this.SITE}`,
+        { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!sr.ok) throw new Error(`site-resolve HTTP ${sr.status}`);
+      this.SITE_ID = (await sr.json()).id;
+    }
+    return { base: `https://graph.microsoft.com/v1.0/sites/${this.SITE_ID}/drive`, token };
+  },
 
   async read(filename) {
     try {
-      const token = await window.getGraphToken();
-      if (!token) return null;
-      const r = await fetch(
-        `https://graph.microsoft.com/v1.0/sites/${this.SITE}/drive/root:/${this.FOLDER}/${filename}:/content`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      if (!r.ok) return null;
+      const { base, token } = await this._driveBase();
+      const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
+        { headers: { 'Authorization': `Bearer ${token}` } });
+      if (r.status === 404) return null;        // bestaat nog niet → geen fout
+      if (!r.ok) { console.warn('SP read faalde:', filename, 'HTTP', r.status); return null; }
       return await r.json();
-    } catch(e) { return null; }
+    } catch(e) { console.warn('SP read fout:', filename, e.message); return null; }
   },
 
   async write(filename, data) {
     try {
-      const token = await window.getGraphToken();
-      if (!token) return;
-      await fetch(
-        `https://graph.microsoft.com/v1.0/sites/${this.SITE}/drive/root:/${this.FOLDER}/${filename}:/content`,
-        {
-          method: 'PUT',
+      const { base, token } = await this._driveBase();
+      const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
+        { method: 'PUT',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: typeof data === 'string' ? data : JSON.stringify(data)
-        }
-      );
-    } catch(e) { console.warn('SP write fout:', filename, e.message); }
+          body: typeof data === 'string' ? data : JSON.stringify(data) });
+      this.lastSync = { ts: Date.now(), ok: r.ok, key: filename, error: r.ok ? null : `HTTP ${r.status}` };
+      if (!r.ok) console.warn('SP write faalde:', filename, 'HTTP', r.status);
+      if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
+      return r.ok;
+    } catch(e) {
+      this.lastSync = { ts: Date.now(), ok: false, key: filename, error: e.message };
+      console.warn('SP write fout:', filename, e.message);
+      if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
+      return false;
+    }
   },
 
   schedule(key, rawValue) {
+    if (!this.ready) return;   // hydrate nog niet klaar → niet schrijven (anti-clobber)
     clearTimeout(this._q[key]);
     this._q[key] = setTimeout(async () => {
       if (rawValue === null) { await this.write(key + '.json', '[]'); return; }
@@ -4752,13 +4772,33 @@ localStorage.removeItem = function(key) {
   if (_SP.KEYS.has(key)) _SP.schedule(key, null);
 };
 
+// Zichtbare SharePoint-sync-status (zwevend badge, zelfstandig — geen markup nodig).
+// Groen = laatste schrijf gelukt, rood = mislukt (met reden), grijs = nog niets.
+window.updateSyncStatus = function() {
+  let el = document.getElementById('spSyncBadge');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'spSyncBadge';
+    el.style.cssText = 'position:fixed;bottom:10px;right:12px;z-index:9999;font:11px/1.4 system-ui,sans-serif;'
+      + 'padding:4px 9px;border-radius:9px;cursor:default;opacity:.85;user-select:none;'
+      + 'box-shadow:0 1px 4px rgba(0,0,0,.25)';
+    document.body.appendChild(el);
+  }
+  const s = _SP.lastSync;
+  if (!s) { el.textContent = '○ SharePoint'; el.style.background = '#e5e7eb'; el.style.color = '#374151'; return; }
+  const t = new Date(s.ts).toLocaleTimeString('nl-NL', {hour:'2-digit',minute:'2-digit'});
+  if (s.ok) { el.textContent = `✓ SharePoint ${t}`; el.style.background = '#dcfce7'; el.style.color = '#166534';
+    el.title = `laatst gesynct: ${s.key} om ${t}`; }
+  else { el.textContent = `✕ SharePoint-sync mislukt`; el.style.background = '#fee2e2'; el.style.color = '#991b1b';
+    el.title = `${s.key}: ${s.error} (data staat nog lokaal — niet verloren)`; }
+};
+
 // PDF opslaan op SharePoint
 window.spUploadPDF = async function(filename, arrayBuffer) {
   try {
-    const token = await window.getGraphToken();
-    if (!token) return;
+    const { base, token } = await _SP._driveBase();
     await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${_SP.SITE}/drive/root:/${_SP.FOLDER}/facturen/${filename}:/content`,
+      `${base}/root:/${_SP.FOLDER}/facturen/${filename}:/content`,
       { method:'PUT', headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/pdf'}, body: arrayBuffer }
     );
   } catch(e) { console.warn('PDF upload mislukt:', e.message); }
@@ -4791,10 +4831,9 @@ window.spUploadProjectBijlage = async function(proj, file) {
 // PDF ophalen van SharePoint → blob URL (of null als niet gevonden)
 window.spGetPDF = async function(filename) {
   try {
-    const token = await window.getGraphToken();
-    if (!token) return null;
+    const { base, token } = await _SP._driveBase();
     const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${_SP.SITE}/drive/root:/${_SP.FOLDER}/facturen/${filename}:/content`,
+      `${base}/root:/${_SP.FOLDER}/facturen/${filename}:/content`,
       { headers: {'Authorization':`Bearer ${token}`} }
     );
     if (!r.ok) return null;
@@ -4818,15 +4857,18 @@ window.initStorage = async function() {
       // SharePoint heeft data → in localStorage laden (SharePoint wint altijd)
       _lsSet(key, typeof spData === 'string' ? spData : JSON.stringify(spData));
     } else {
-      // SharePoint leeg → migreer bestaande localStorage naar SharePoint
+      // SharePoint leeg → migreer bestaande localStorage naar SharePoint.
+      // Een lege/triviale waarde NIET migreren: anders schrijft een lege PC '[]'
+      // naar SP en dat "wint" later van de PC die de echte data heeft.
       const lokaal = localStorage.getItem(key);
-      if (lokaal) {
+      if (lokaal && lokaal.replace(/[\s\[\]{}]/g,'') !== '') {
         try { await _SP.write(key + '.json', JSON.parse(lokaal)); }
         catch(e) { await _SP.write(key + '.json', lokaal); }
       }
     }
   });
   await Promise.all(taken);
+  _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan
   // Verrijkte klant/leverancier-registry uit SharePoint laden (privé, niet publiek).
   // Voedt modal-suggesties + auto-koppeling. Faalt stil → publieke KLANTEN blijft.
   try {
@@ -4847,6 +4889,7 @@ window.initStorage = async function() {
     if (typeof renderBestellijst === 'function') renderBestellijst();
     if (typeof renderLeveranciersBeheer === 'function') renderLeveranciersBeheer();
   } catch(e) { console.warn('rehydrate na initStorage faalde:', e); }
+  if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
 };
 </script>
 

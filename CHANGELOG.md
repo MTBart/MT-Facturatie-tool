@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — cleanup: legacy inbox-sorter.ps1 naar _archief (vervangen door email-forward pijplijn)
+- Commit: `fb2eaf3` | Auteur: Bart Witte
+
 ## 2026-06-05 — security: platte secrets uit HANDOFF.md + SKILL.md halen (redact)
 - Commit: `1c2f580` | Auteur: Bart Witte
 
