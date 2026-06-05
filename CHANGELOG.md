@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Mail koppelen aan project: projectkiezer + gekoppelde-mails in projectview met terug-naar-inbox
+- Commit: `88426fe` | Auteur: Bart Witte
+
 ## 2026-06-05 — Inbox: zoekregel + oneindig doorscrollen (Graph search + nextLink-paginatie)
 - Commit: `bfd583b` | Auteur: Bart Witte
 

@@ -86,7 +86,7 @@ function api(method, path, body) {
   const xhr = new XMLHttpRequest();
   xhr.open(method, path, false);
   xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.setRequestHeader('Authorization', 'Bearer toggl_sk_a2294e278965fd2a90af360a3e7ffd58');
+  xhr.setRequestHeader('Authorization', 'Bearer <TOGGL_FOCUS_KEY>'); // nooit hardcoden — uit ~/.mt-secret
   xhr.send(body ? JSON.stringify(body) : null);
   try { return JSON.parse(xhr.responseText || '{}'); }
   catch(e) { return { error: xhr.responseText }; }

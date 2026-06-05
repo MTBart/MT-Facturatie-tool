@@ -210,8 +210,8 @@ De URL `https://claude.ai/api/desktop/win32/x64/setup/latest/redirect` geeft een
 ✅ **Cloudflare Worker secrets succesvol ingevoerd via wrangler CLI.**
 
 ```
-✅ TOGGL_FOCUS_KEY = toggl_sk_a2294e278965fd2a90af360a3e7ffd58
-✅ CLAUDE_SECRET = mt_claude_secret_2026_MnT
+✅ TOGGL_FOCUS_KEY = <geredacteerd — zie ~/.mt-secret, MOET geroteerd worden>
+✅ CLAUDE_SECRET = <geredacteerd — zie ~/.mt-secret, MOET geroteerd worden>
 ```
 
 Beide secrets zijn nu live op `mt-claude-proxy`. Worker kan nu:
