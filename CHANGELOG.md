@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Toggl-tab Projecten: project bewerken (naam+kleur) en archiveren
+- Commit: `0f16b1e` | Auteur: Bart Witte
+
 ## 2026-06-05 — Toggl-tab Timer: entry bewerken/verwijderen + handmatige entry toevoegen
 - Commit: `5835aba` | Auteur: Bart Witte
 

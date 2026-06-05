@@ -2153,11 +2153,25 @@ async function tgLaadBeheer(){
   const cb=document.getElementById('tg-clients'), tb=document.getElementById('tg-tags');
   cb.innerHTML='<div class="tg-leeg">Laden…</div>'; tb.innerHTML='<div class="tg-leeg">Laden…</div>';
   try{ const cs=await tgStore.clients();
-    cb.innerHTML=cs.length?cs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<div class="tg-row">${tgEsc(c.name)}</div>`).join(''):'<div class="tg-leeg">Geen clients.</div>';
+    cb.innerHTML=cs.length?cs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<div class="tg-row"><span style="flex:1">${tgEsc(c.name)}</span><button class="btn btn-sm btn-secondary" title="Hernoemen" onclick="tgRenameClient(${c.id},this.parentNode.querySelector('span').textContent)">✎</button></div>`).join(''):'<div class="tg-leeg">Geen clients.</div>';
   }catch(e){ cb.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
   try{ const ts=await tgStore.tags();
-    tb.innerHTML=ts.length?ts.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(t=>`<span class="tg-pill" style="font-size:12px">${tgEsc(t.name)}</span>`).join(' '):'<div class="tg-leeg">Geen tags.</div>';
+    tb.innerHTML=ts.length?ts.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(t=>`<span class="tg-pill" style="font-size:12px;cursor:pointer" title="Klik om te hernoemen" onclick="tgRenameTag(${t.id},'${tgEsc(t.name).replace(/'/g,"\\'")}')">${tgEsc(t.name)} ✎</span>`).join(' '):'<div class="tg-leeg">Geen tags.</div>';
   }catch(e){ tb.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+}
+async function tgRenameClient(id,huidig){
+  const naam=prompt('Nieuwe clientnaam:',huidig||''); if(naam===null||!naam.trim()) return;
+  if(!confirm(`Client hernoemen naar "${naam}"?`)) return;
+  tgStatus('Client hernoemen…');
+  try{ await tgTrack(`workspaces/${TG_WS}/clients/${id}`,'PUT',{name:naam.trim(),wid:TG_WS}); tgStatus('✓ Client hernoemd.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+async function tgRenameTag(id,huidig){
+  const naam=prompt('Nieuwe tagnaam:',huidig||''); if(naam===null||!naam.trim()) return;
+  if(!confirm(`Tag hernoemen naar "${naam}"?`)) return;
+  tgStatus('Tag hernoemen…');
+  try{ await tgTrack(`workspaces/${TG_WS}/tags/${id}`,'PUT',{name:naam.trim(),workspace_id:TG_WS}); tgStatus('✓ Tag hernoemd.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
 }
 async function tgNieuweClient(){
   const naam=prompt('Naam van de nieuwe client (Track):'); if(!naam) return;
