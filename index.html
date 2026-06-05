@@ -825,7 +825,13 @@ textarea{resize:vertical;min-height:60px}
       #tab-toggl .tg-pill{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;background:#f0ede4;color:#7a6a2e;margin:2px 3px 0 0}
       #tab-toggl .tg-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border,#f0f0f0);font-size:13px}
       #tab-toggl .tg-row:hover{background:#faf9f6}
-      #tab-toggl .tg-row .tg-dur{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}
+      #tab-toggl .tg-row .tg-dur{font-variant-numeric:tabular-nums;font-weight:600}
+      #tab-toggl .tg-rowacts{display:flex;gap:1px;opacity:0;transition:opacity .15s;margin-left:6px}
+      #tab-toggl .tg-row:hover .tg-rowacts{opacity:1}
+      #tab-toggl .tg-ib{border:none;background:none;cursor:pointer;font-size:13px;line-height:1;padding:3px 4px;border-radius:4px;color:var(--text-dim,#666)}
+      #tab-toggl .tg-ib:hover{background:#ececec}
+      #tab-toggl .tg-prio{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:3px;cursor:pointer;letter-spacing:.3px}
+      #tab-toggl .tg-asg{font-size:10.5px;color:var(--text-faint,#999);cursor:pointer;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       #tab-toggl .tg-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;display:inline-block}
       #tab-toggl .tg-board{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px}
       #tab-toggl .tg-col{flex:0 0 252px;background:#f6f5f1;border-radius:10px;padding:8px}
@@ -1761,6 +1767,14 @@ const TG_STATUS=[ // Focus-statussen (id→label+kleur); volgorde = board-kolomm
   {id:309790,label:'Klaar voor levering',kleur:'#B8962E'},
   {id:300786,label:'Done',kleur:'#2A4A38'}
 ];
+// Focus-prioriteit: API-veld = string (P1/P2/P3 in de UI). null/'' = geen.
+const TG_PRIO=[
+  {v:'',label:'—',kort:'',kleur:'#c8c8c8'},
+  {v:'low',label:'P3 Laag',kort:'P3',kleur:'#6b7280'},
+  {v:'medium',label:'P2 Middel',kort:'P2',kleur:'#B8962E'},
+  {v:'high',label:'P1 Hoog',kort:'P1',kleur:'#c0392b'}
+];
+function tgPrioById(v){return TG_PRIO.find(p=>p.v===(v||''))||{label:String(v),kort:String(v),kleur:'#6b7280'};}
 let _tgTimer={entry:null,tick:null};      // lopende Track-timer
 let _tgCache={projecten:null,taken:null}; // licht sessie-cachen
 let _tgRecent=[];                          // laatst geladen eigen entries (voor "hervat")
@@ -2030,22 +2044,86 @@ async function tgArchiveProject(id){
 async function tgLaadTaken(){
   const box=document.getElementById('tg-taken-lijst'); box.innerHTML='<div class="tg-leeg">Laden…</div>';
   try{
+    await agNamen();                       // medewerker-namen cachen (assignee-resolve, PII uit runtime)
     const ts=await tgStore.taken(); _tgCache.taken=ts;
     document.getElementById('tg-taken-tel').textContent=`${ts.length} taken`;
     if(!ts.length){ box.innerHTML='<div class="tg-leeg">Geen taken.</div>'; return; }
+    const {un}=agNames();
     box.innerHTML=ts.map(t=>{
       const st=tgStatusById(t.status_id), kl=(t.project&&t.project.color)||'#9a9a9a', sec=t.total_tracked_time||0;
+      const pr=tgPrioById(t.priority);
+      const asg=(t.assignee_user_ids||[]).map(id=>un[String(id)]||('#'+id));
+      const sub=t.sub_task_total_count?` <span class="tg-sub">(${t.sub_task_done_count||0}/${t.sub_task_total_count} sub)</span>`:'';
       return `<div class="tg-row">
         <span class="tg-dot" style="background:${kl}"></span>
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tgEsc(t.name||('taak '+t.id))}
-        <span class="tg-sub"> · ${t.project?tgEsc(t.project.name):'geen project'}${t.client?(' · '+tgEsc(t.client.name)):''}</span></span>
+        <span class="tg-sub"> · ${t.project?tgEsc(t.project.name):'geen project'}${t.client?(' · '+tgEsc(t.client.name)):''}</span>${sub}</span>
+        <span class="tg-prio" title="Prioriteit wijzigen" style="background:${pr.kleur}22;color:${pr.kleur}" onclick="tgZetPriority(${t.id})">${pr.kort||'—'}</span>
+        <span class="tg-asg" title="Toewijzing wijzigen" onclick="tgZetAssignee(${t.id})">👤 ${asg.length?tgEsc(asg.join(', ')):'—'}</span>
         <span class="tg-pill" style="background:${st.kleur}22;color:${st.kleur}">${st.label}</span>
         <span class="tg-dur">${tgSec2u(sec)}</span>
         <select class="zoek-input" style="width:auto;font-size:11px" onchange="tgZetTaakStatus(${t.id},this.value)">
           ${TG_STATUS.map(s=>`<option value="${s.id}"${s.id===t.status_id?' selected':''}>${s.label}</option>`).join('')}
-        </select></div>`;
+        </select>
+        <span class="tg-rowacts">
+          <button class="tg-ib" title="Subtaak toevoegen" onclick="tgNieuweSubtaak(${t.id})">＋</button>
+          <button class="tg-ib" title="Hernoemen" onclick="tgHernoemTaak(${t.id})">✎</button>
+          <button class="tg-ib" title="Verwijderen" onclick="tgVerwijderTaak(${t.id})">🗑</button>
+        </span></div>`;
     }).join('');
   }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+}
+async function tgZetPriority(taskId){
+  const t=(_tgCache.taken||[]).find(x=>x.id===taskId);
+  const huidig=t?tgPrioById(t.priority).label:'?';
+  const keuze=prompt(`Prioriteit (nu: ${huidig})\n`+TG_PRIO.map((p,i)=>`${i}. ${p.label}`).join('\n'));
+  if(keuze===null||keuze.trim()==='') return;
+  const p=TG_PRIO[parseInt(keuze)]; if(!p){ tgStatus('Ongeldige keuze.','#c0392b'); return; }
+  if(!confirm(`Prioriteit → ${p.label} (Focus)?`)) return;
+  tgStatus('Prioriteit zetten…');
+  try{ await focusFetch(`tasks/${taskId}`,'PATCH',{priority:p.v||null});
+    _tgCache.taken=null; tgStatus('✓ Prioriteit → '+p.label,'#2A4A38'); tgLaadTaken();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+async function tgZetAssignee(taskId){
+  await agNamen(); const {un}=agNames(); const ids=Object.keys(un);
+  if(!ids.length){ tgStatus('Geen medewerkerslijst — open eerst de Agenda (laadt namen).','#c0392b'); return; }
+  const t=(_tgCache.taken||[]).find(x=>x.id===taskId);
+  const huidig=((t&&t.assignee_user_ids)||[]).map(id=>un[String(id)]||('#'+id)).join(', ')||'—';
+  const keuze=prompt(`Toewijzen aan (nu: ${huidig})\nNummers met komma, leeg = niemand:\n`+ids.map((id,i)=>`${i+1}. ${un[id]}`).join('\n'));
+  if(keuze===null) return;
+  const sel=keuze.split(',').map(s=>parseInt(s.trim())-1).filter(i=>i>=0&&ids[i]).map(i=>parseInt(ids[i]));
+  const namen=sel.map(id=>un[String(id)]).join(', ')||'niemand';
+  if(!confirm(`Taak toewijzen aan ${namen} (Focus)?`)) return;
+  tgStatus('Toewijzen…');
+  try{ await focusFetch(`tasks/${taskId}`,'PATCH',{assignee_user_ids:sel});
+    _tgCache.taken=null; tgStatus('✓ Toegewezen aan '+namen,'#2A4A38'); tgLaadTaken();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+async function tgNieuweSubtaak(parentId){
+  const naam=prompt('Naam van de subtaak (Focus):'); if(!naam) return;
+  if(!confirm(`Subtaak "${naam}" toevoegen onder deze taak (Focus)?`)) return;
+  tgStatus('Subtaak aanmaken…');
+  try{ await focusFetch('tasks','POST',{name:naam,status_id:300785,parent_task_id:parentId});
+    _tgCache.taken=null; tgStatus('✓ Subtaak aangemaakt.','#2A4A38'); tgLaadTaken();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+async function tgHernoemTaak(taskId){
+  const t=(_tgCache.taken||[]).find(x=>x.id===taskId);
+  const naam=prompt('Nieuwe naam:',t?t.name:''); if(!naam||naam===(t&&t.name)) return;
+  if(!confirm(`Taak hernoemen naar "${naam}" (Focus)?`)) return;
+  tgStatus('Hernoemen…');
+  try{ await focusFetch(`tasks/${taskId}`,'PATCH',{name:naam});
+    _tgCache.taken=null; tgStatus('✓ Hernoemd.','#2A4A38'); tgLaadTaken();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+async function tgVerwijderTaak(taskId){
+  const t=(_tgCache.taken||[]).find(x=>x.id===taskId);
+  if(!confirm(`Taak "${t?t.name:taskId}" definitief verwijderen uit Toggl Focus?\nDit kan niet ongedaan worden.`)) return;
+  tgStatus('Verwijderen…');
+  try{ await focusFetch(`tasks/${taskId}`,'DELETE');
+    _tgCache.taken=null; tgStatus('✓ Taak verwijderd.','#2A4A38'); tgLaadTaken();
+  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
 }
 async function tgZetTaakStatus(taskId,statusId){
   if(!statusId) return;
