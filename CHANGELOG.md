@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-05 — Toggl-tab Taken: prioriteit, assignee, subtaak, hernoemen, verwijderen
+- Commit: `eae0acd` | Auteur: Bart Witte
+
 ## 2026-06-05 — Toggl-tab Beheer: clients en tags hernoemen (Track PUT)
 - Commit: `b606630` | Auteur: Bart Witte
 

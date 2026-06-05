@@ -2153,15 +2153,21 @@ async function tgNieuweTaak(){
 async function tgLaadBoard(){
   const box=document.getElementById('tg-board'); box.innerHTML='<div class="tg-leeg">Laden…</div>';
   try{
+    await agNamen(); const {un}=agNames();
     const ts=_tgCache.taken||await tgStore.taken(); _tgCache.taken=ts;
     const cols=TG_STATUS.map(s=>{
       const taken=ts.filter(t=>t.status_id===s.id);
       const tiles=taken.map(t=>{
         const kl=(t.project&&t.project.color)||'#9a9a9a';
+        const pr=tgPrioById(t.priority);
+        const prB=pr.kort?`<span class="tg-prio" style="background:${pr.kleur}22;color:${pr.kleur}">${pr.kort}</span> `:'';
+        const asg=(t.assignee_user_ids||[]).map(id=>un[String(id)]||('#'+id));
+        const asgB=asg.length?`<span class="tg-sub" style="display:block">👤 ${tgEsc(asg.join(', '))}</span>`:'';
+        const subB=t.sub_task_total_count?`<span class="tg-sub"> · ${t.sub_task_done_count||0}/${t.sub_task_total_count} sub</span>`:'';
         return `<div class="tg-tile" draggable="true" data-id="${t.id}" data-naam="${tgEsc(t.name)}"
           ondragstart="tgDragStart(event)" ondragend="tgDragEnd(event)">
-          <span class="tg-dot" style="background:${kl}"></span> ${tgEsc(t.name||('taak '+t.id))}
-          ${t.project?`<div class="tg-sub">${tgEsc(t.project.name)}</div>`:''}</div>`;
+          <span class="tg-dot" style="background:${kl}"></span> ${prB}${tgEsc(t.name||('taak '+t.id))}
+          ${t.project?`<div class="tg-sub">${tgEsc(t.project.name)}${subB}</div>`:subB}${asgB}</div>`;
       }).join('')||'<div class="tg-sub" style="padding:6px">—</div>';
       return `<div class="tg-col" data-status="${s.id}" ondragover="tgDragOver(event)" ondragleave="tgDragLeave(event)" ondrop="tgDrop(event)">
         <h5><span>${s.label}</span><span>${taken.length}</span></h5>${tiles}</div>`;
@@ -2231,11 +2237,23 @@ async function tgLaadBeheer(){
   const cb=document.getElementById('tg-clients'), tb=document.getElementById('tg-tags');
   cb.innerHTML='<div class="tg-leeg">Laden…</div>'; tb.innerHTML='<div class="tg-leeg">Laden…</div>';
   try{ const cs=await tgStore.clients();
-    cb.innerHTML=cs.length?cs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<div class="tg-row"><span style="flex:1">${tgEsc(c.name)}</span><button class="btn btn-sm btn-secondary" title="Hernoemen" onclick="tgRenameClient(${c.id},this.parentNode.querySelector('span').textContent)">✎</button></div>`).join(''):'<div class="tg-leeg">Geen clients.</div>';
+    cb.innerHTML=cs.length?cs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<div class="tg-row"><span style="flex:1">${tgEsc(c.name)}</span><button class="btn btn-sm btn-secondary" title="Hernoemen" onclick="tgRenameClient(${c.id},this.parentNode.querySelector('span').textContent)">✎</button><button class="btn btn-sm btn-secondary" title="Verwijderen" onclick="tgVerwijderClient(${c.id},'${tgEsc(c.name).replace(/'/g,"\\'")}')">🗑</button></div>`).join(''):'<div class="tg-leeg">Geen clients.</div>';
   }catch(e){ cb.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
   try{ const ts=await tgStore.tags();
-    tb.innerHTML=ts.length?ts.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(t=>`<span class="tg-pill" style="font-size:12px;cursor:pointer" title="Klik om te hernoemen" onclick="tgRenameTag(${t.id},'${tgEsc(t.name).replace(/'/g,"\\'")}')">${tgEsc(t.name)} ✎</span>`).join(' '):'<div class="tg-leeg">Geen tags.</div>';
+    tb.innerHTML=ts.length?ts.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(t=>`<span class="tg-pill" style="font-size:12px"><span style="cursor:pointer" title="Klik om te hernoemen" onclick="tgRenameTag(${t.id},'${tgEsc(t.name).replace(/'/g,"\\'")}')">${tgEsc(t.name)} ✎</span> <span style="cursor:pointer;color:#c0392b" title="Verwijderen" onclick="tgVerwijderTag(${t.id},'${tgEsc(t.name).replace(/'/g,"\\'")}')">✕</span></span>`).join(' '):'<div class="tg-leeg">Geen tags.</div>';
   }catch(e){ tb.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
+}
+async function tgVerwijderClient(id,naam){
+  if(!confirm(`Client "${naam}" verwijderen uit Toggl Track?\nProjecten verliezen hun client-koppeling.`)) return;
+  tgStatus('Client verwijderen…');
+  try{ await tgTrack(`workspaces/${TG_WS}/clients/${id}`,'DELETE'); tgStatus('✓ Client verwijderd.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+async function tgVerwijderTag(id,naam){
+  if(!confirm(`Tag "${naam}" verwijderen uit Toggl Track?\nDe tag verdwijnt van alle entries.`)) return;
+  tgStatus('Tag verwijderen…');
+  try{ await tgTrack(`workspaces/${TG_WS}/tags/${id}`,'DELETE'); tgStatus('✓ Tag verwijderd.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
 }
 async function tgRenameClient(id,huidig){
   const naam=prompt('Nieuwe clientnaam:',huidig||''); if(naam===null||!naam.trim()) return;
