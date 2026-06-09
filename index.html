@@ -1316,6 +1316,23 @@ function klantVolByNaam(naam){
   const n=_normNaam(naam); if(!n) return null;
   return KLANTEN_VOL.find(k=>_normNaam(k.naam)===n)||null;
 }
+// ── Zelflerende klant-code-overrides ──────────────────────────────────────────
+// Kiest Bart een eigen KLANT-code (bv. VBWR i.p.v. de auto-afgeleide DV2), dan
+// onthoudt de tool die per klant. Sleutel = mb_contact_id (stabiel) of anders de
+// genormaliseerde naam. Synct mee naar SharePoint (key staat in _SP.KEYS), dus
+// duurzaam over apparaten. Wint in autoCode() boven de registry-default en wordt
+// bij het laden óók over KLANTEN_VOL gelegd, zodat de hele tool de gekozen code ziet.
+function klantCodesAll(){try{return JSON.parse(localStorage.getItem('mt_klant_codes')||'{}');}catch(e){return {};}}
+function klantCodesSave(o){localStorage.setItem('mt_klant_codes',JSON.stringify(o));}
+function _klantCodeKey(kv){ if(!kv) return null; return kv.mb_contact_id?('mb:'+kv.mb_contact_id):('naam:'+_normNaam(kv.naam||'')); }
+function klantCodeOverride(kv){ const k=_klantCodeKey(kv); if(!k) return null; return klantCodesAll()[k]||null; }
+// Onthoud (of wis) de gekozen code. Gelijk aan de registry-default → override weg.
+function klantCodeOnthoud(kv,code){
+  const k=_klantCodeKey(kv); if(!k) return;
+  const o=klantCodesAll(); const def=(kv&&kv.code)||'';
+  if(code && code!==def){ if(o[k]!==code){o[k]=code; klantCodesSave(o);} }
+  else if(o[k]!==undefined){ delete o[k]; klantCodesSave(o); }
+}
 // Resolveert MB-contact voor een project: eerst locatie-niveau (CN-vestiging), dan klant-niveau.
 function resolveMbContact(proj){
   if(!proj) return null;
@@ -4280,7 +4297,7 @@ function autoCode(force){
   const ek=document.getElementById('modal-klant'), el=document.getElementById('modal-locatie'), ep=document.getElementById('modal-product');
   // Registry-klant herkend? Gebruik diens vaste code (bv. "Styles Concepts B.V."→STY),
   // anders een afgeleide afkorting.
-  if((force||!ek.value)&&nk){ const kv=klantVolByNaam(nk); ek.value=(kv&&kv.code)?kv.code:afkortKlant(nk); }
+  if((force||!ek.value)&&nk){ const kv=klantVolByNaam(nk); const ov=klantCodeOverride(kv); ek.value= ov || ((kv&&kv.code)?kv.code:afkortKlant(nk)); }
   if((force||!el.value)&&nl) el.value=afkortLoc(nl);
   if((force||!ep.value)&&np){
     const rest=Math.max(8, STICKER_MAX-(ek.value.length+el.value.length+2));
@@ -4336,6 +4353,8 @@ async function maakProjectAan(){
   // Auto-koppeling Moneybird-contact: getypte klantnaam tegen verrijkte registry.
   const kv=klantVolByNaam(nk);
   const mbContact=(kv&&kv.mb_contact_id)||null;
+  // Koos Bart een eigen KLANT-code (≠ registry-default)? Onthoud die voor deze klant.
+  klantCodeOnthoud(kv,k);
   // XML-klaar record: klant-adresvelden uit de verrijkte registry meenemen zodat
   // de latere interiorcad-"projectgegevens"-export alles bij de hand heeft
   // (schema niet gokken — dat bouwen we pas op een echt interiorcad-XML-voorbeeld).
@@ -5045,7 +5064,7 @@ const _SP = {
   FOLDER: 'MT-Bedrijfstool',
   // mt_mail_links synct mee zodat mail↔project-koppelingen op élke PC zichtbaar zijn.
   // Opslag = privé SharePoint-tenant (alleen @mortiseandtenon.nl), NOOIT de publieke git-repo.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes']),
   _q: {},
   ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
   lastSync: null,           // {ts, ok, key, error} — voedt de zichtbare sync-status
@@ -5323,6 +5342,20 @@ window.initStorage = async function() {
     const vol = await _SP.read('klanten-registry-vol.json');
     if (vol && Array.isArray(vol.klanten) && vol.klanten.length) {
       KLANTEN_VOL = vol.klanten;
+      // Zelfgekozen klant-codes (mt_klant_codes) overheen de registry leggen, zodat
+      // de HÉLE tool de gekozen code ziet (niet alleen het modal). Sleutel = mb:<id>
+      // of naam:<genormaliseerd>. Zo blijft Barts keuze en de DB in sync.
+      try{
+        const ov=klantCodesAll();
+        if(ov && Object.keys(ov).length){
+          let n=0;
+          KLANTEN_VOL.forEach(k=>{
+            const key=k.mb_contact_id?('mb:'+k.mb_contact_id):('naam:'+_normNaam(k.naam||''));
+            if(ov[key] && ov[key]!==k.code){ k.code=ov[key]; n++; }
+          });
+          if(n) console.log('klant-code-overrides toegepast op registry:', n);
+        }
+      }catch(e){ console.warn('klant-code-overrides toepassen faalde:', e); }
       console.log('registry-vol geladen uit SharePoint:', KLANTEN_VOL.length);
     }
   } catch(e) { console.warn('registry-vol laden faalde:', e); }

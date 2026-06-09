@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-09 — @ Inbox "Maak project" vult de project-modal nu voor uit de mail
+- Commit: `e5a9a97` | Auteur: Bart Witte
+
 ## 2026-06-09 — @ feat: globale klik-feedback op alle knoppen (:active indruk-animatie)
 - Commit: `c8830e4` | Auteur: Bart Witte
 
