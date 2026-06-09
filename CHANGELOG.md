@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-06 — fix(toggl): dropdown-opties witte achtergrond in donkere timerbar
+- Commit: `b8330c4` | Auteur: Bart Witte
+
 ## 2026-06-05 — Planning→Toggl-brug: maak Toggl-project + Focus-taak per fase
 - Commit: `43f8672` | Auteur: Bart Witte
 
