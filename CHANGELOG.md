@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-09 — @ fix: hernoem inbox-agenda _agenda naar _ibAg (dubbele let-declaratie)
+- Commit: `d545788` | Auteur: Bart Witte
+
 ## 2026-06-06 — fix(toggl): dropdown-opties witte achtergrond in donkere timerbar
 - Commit: `b8330c4` | Auteur: Bart Witte
 

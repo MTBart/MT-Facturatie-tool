@@ -177,6 +177,13 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--control-h);padding:0 var(--space-4);border-radius:var(--radius-sm);border:1px solid transparent;cursor:pointer;font-family:var(--sans);font-size:var(--text-sm);font-weight:600;transition:all 0.15s;letter-spacing:0.01em;line-height:1}
 .btn:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+/* Globale klik-feedback: elke knop drukt zichtbaar in bij indrukken — zo zie je
+   meteen of 'ie reageert (vs. trage pc). Pure CSS, geen logica geraakt. */
+button:active,.btn:active,.tab-btn:active,.vtab-btn:active,.tg-subtab:active,
+.filter-btn:active,.bestellen-btn:active,.remove-btn:active,.voorraad-btn:active,
+.tg-ib:active,.tg-bigbtn:active,.lev-chip:active,.ms-login-btn:active,
+[role="button"]:active{transform:scale(.94);filter:brightness(.92)}
+button{transition:transform .07s ease,filter .07s ease}
 .btn-primary{background:var(--green);color:var(--n-100);box-shadow:var(--shadow-sm)}
 .btn-primary:hover{background:var(--green-700)}
 .btn-gold{background:var(--gold);color:var(--n-900);box-shadow:var(--shadow-sm)}
