@@ -4251,6 +4251,7 @@ function afkortProduct(naam,max=40){
   return _clean(naam).replace(/\s+/g,'-').replace(/[^A-Z0-9-]/g,'').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,max);
 }
 function openModal(){
+  _ibProjBron=null;   // schone start; inboxMaakProject() zet 'm daarna evt. opnieuw
   ['modal-naam-klant','modal-naam-locatie','modal-naam-product','modal-klant','modal-locatie','modal-product'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
   // datalist met klantnamen: ECHTE registry-namen eerst (single source = klanten.json),
@@ -4335,9 +4336,31 @@ async function maakProjectAan(){
   // Auto-koppeling Moneybird-contact: getypte klantnaam tegen verrijkte registry.
   const kv=klantVolByNaam(nk);
   const mbContact=(kv&&kv.mb_contact_id)||null;
-  const nieuwProj={code,naam,klant:k,klant_naam:nk,loc:l,loc_naam:nl,product:p,product_naam:np,mb_contact_id:mbContact,mb_nr:null,created:new Date().toISOString().slice(0,10)};
+  // XML-klaar record: klant-adresvelden uit de verrijkte registry meenemen zodat
+  // de latere interiorcad-"projectgegevens"-export alles bij de hand heeft
+  // (schema niet gokken — dat bouwen we pas op een echt interiorcad-XML-voorbeeld).
+  const nieuwProj={code,naam,klant:k,klant_naam:nk,loc:l,loc_naam:nl,product:p,product_naam:np,
+    mb_contact_id:mbContact,mb_nr:null,
+    klant_plaats:(kv&&kv.plaats)||'',klant_email:(kv&&kv.email)||'',
+    klant_telefoon:(kv&&kv.telefoon)||'',klant_kvk:(kv&&kv.kvk)||'',
+    klant_btw:(kv&&kv.btw)||'',klant_customer_id:(kv&&kv.customer_id)||null,
+    created:new Date().toISOString().slice(0,10)};
+  // Kwam dit project uit een mail (inbox → "Maak project")? Leg de bron vast.
+  if(_ibProjBron) nieuwProj.bron_mail={internetMessageId:_ibProjBron.internetMessageId,
+    subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,mbx:_ibProjBron.mbx};
   PROJECT_CODES.push(nieuwProj);
   slaProjectenOp();
+  // Bron-mail automatisch aan het verse project koppelen (zoals de inbox-knop "koppel project").
+  if(_ibProjBron){
+    try{
+      const ml=mailLinksAll(); (ml[code]=ml[code]||[]).push({
+        id:_ibProjBron.id,internetMessageId:_ibProjBron.internetMessageId,
+        subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,
+        webLink:_ibProjBron.webLink,mbx:_ibProjBron.mbx,ts:Date.now()});
+      mailLinksSave(ml);
+    }catch(e){console.warn('bron-mail koppelen faalde:',e);}
+    _ibProjBron=null;
+  }
   document.querySelectorAll('#f-project,#ctrl-project,.project-select').forEach(sel=>{
     if(!Array.from(sel.options).some(o=>o.value===code)){
       const opt=document.createElement('option');opt.value=code;opt.textContent=code;
@@ -5700,12 +5723,44 @@ function ibAutoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrol
 // ── Knoppen die de inbox "smart" maken — volle uitwerking in ultra-vervolg.
 //    (mail→project-tag, namen-generator+map-gen, bijlagen→klantmap). Nu stubs
 //    die de affordance tonen en niets breken; spec in tool-restyle-en-features-OPDRACHT.md
+// Bron-mail waaruit het huidige open project-modal is voorgevuld (device-lokaal,
+// geen PII in repo). Wordt na aanmaken automatisch aan het project gekoppeld.
+let _ibProjBron=null;
+// Klant herkennen uit het afzender-domein: match tegen de verrijkte registry
+// (655 records met e-mail). Leveranciers uitgesloten. null = geen treffer.
+function _ibKlantUitMail(m){
+  const adr=((m&&m.from&&m.from.emailAddress&&m.from.emailAddress.address)||'').toLowerCase();
+  const dom=adr.split('@')[1]||''; if(!dom) return null;
+  return KLANTEN_VOL.find(k=>k.soort!=='leverancier'&&k.email&&k.email.toLowerCase().split('@')[1]===dom)||null;
+}
+// Onderwerp opschonen: Re:/Fw:-prefixen weg (max 2 lagen), trimmen.
+function _ibOnderwerpSchoon(s){
+  return (s||'')
+    .replace(/^\s*(re|fw|fwd|antw|aw)\s*:\s*/gi,'')
+    .replace(/^\s*(re|fw|fwd|antw|aw)\s*:\s*/gi,'')
+    .trim();
+}
 function inboxMaakProject(){
   if(!_inbox.cur){alert('Open eerst een mail.');return;}
-  const onderw=_inbox.cur.subject||'';
+  const m=_inbox.cur;
+  const kv=_ibKlantUitMail(m);
+  const onderw=_ibOnderwerpSchoon(m.subject||'');
   tbDoTab&&tbDoTab('projecten');
-  ibStatus('Projecten-tab geopend — namen-generator-koppeling volgt in volgende stap.');
-  inboxToast('Stap "maak project" wordt in het ultra-vervolg gekoppeld aan de klant-DB ('+(onderw.slice(0,40))+'…)');
+  openModal();   // wist de velden + _ibProjBron
+  // Onthoud de bron-mail zodat het project er straks aan gekoppeld wordt.
+  _ibProjBron={id:m.id,internetMessageId:m.internetMessageId||'',subject:m.subject||'',
+    from:(m.from&&m.from.emailAddress)?(m.from.emailAddress.name||m.from.emailAddress.address):'',
+    date:m.receivedDateTime||'',webLink:m.webLink||'',mbx:_inbox.mbx};
+  const nk=document.getElementById('modal-naam-klant'); if(nk) nk.value=kv?kv.naam:'';
+  const np=document.getElementById('modal-naam-product'); if(np) np.value=onderw.slice(0,60);
+  autoCode(true);   // leidt code-segmenten af (registry-klant → vaste code)
+  const st=document.getElementById('modal-status');
+  if(st){
+    st.style.color='var(--text-dim)';
+    st.textContent=kv
+      ? `Klant herkend uit ${m.from.emailAddress.address}: ${kv.naam}. Vul de locatie aan en controleer de code.`
+      : `Afzender niet in klant-registry — vul de klantnaam zelf in.`;
+  }
 }
 // ── Mail ↔ project-koppeling (localStorage, device-lokaal; géén PII in repo) ──
 function mailLinksAll(){try{return JSON.parse(localStorage.getItem('mt_mail_links')||'{}');}catch(e){return {};}}
