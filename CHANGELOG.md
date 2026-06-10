@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-10 — R2: componentenbibliotheek (data-table, toolbar, split-view, chip, mt-row, detail-pane, empty-state, modal-head, status-dot)
+- Commit: `72f95b4` | Auteur: Bart Witte
+
 ## 2026-06-09 — Zelflerende klant-code-override: eigen KLANT-code blijft per klant onthouden
 - Commit: `6409cef` | Auteur: Bart Witte
 
