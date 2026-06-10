@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-10 — Facturatie tool v2 (v2.html): fris/modern restyle, workflow-tabvolgorde, voorraad-interiorcad koppeling - naast v1 voor side-by-side test
+- Commit: `b4b3fdf` | Auteur: Bart Witte
+
 ## 2026-06-10 — R2: componentenbibliotheek (data-table, toolbar, split-view, chip, mt-row, detail-pane, empty-state, modal-head, status-dot)
 - Commit: `72f95b4` | Auteur: Bart Witte
 
