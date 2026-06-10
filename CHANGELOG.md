@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-09 — Zelflerende klant-code-override: eigen KLANT-code blijft per klant onthouden
+- Commit: `6409cef` | Auteur: Bart Witte
+
 ## 2026-06-09 — @ Inbox "Maak project" vult de project-modal nu voor uit de mail
 - Commit: `e5a9a97` | Auteur: Bart Witte
 

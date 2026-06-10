@@ -209,6 +209,77 @@ button{transition:transform .07s ease,filter .07s ease}
 .badge-info{background:var(--info-50);color:var(--info)}
 .badge-purple{background:var(--info-50);color:var(--info)}
 
+/* ── R2 COMPONENTS (additief; restyle per tab = R3) ── */
+/* data-table: dichte, leesbare tabel-stijl (Iris B3) */
+.data-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;color:var(--n-900)}
+.data-table thead th{position:sticky;top:0;z-index:1;background:var(--surface);font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-faint);text-align:left;padding:var(--cell-py,8px) var(--cell-px,10px);border-bottom:1px solid var(--border)}
+.data-table tbody td{padding:var(--cell-py,8px) var(--cell-px,10px);border-bottom:1px solid var(--border);vertical-align:middle;min-height:var(--row-min-h,38px)}
+.data-table tbody tr:hover td{background:var(--surface-sunken)}
+.data-table tbody tr.is-selected td{background:var(--gold-50)}
+.data-table .num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.data-table .muted{color:var(--text-dim)}
+.data-table--compact{--cell-py:5px;--cell-px:8px;--row-min-h:30px;font-size:12px}
+.data-table--zebra tbody tr:nth-child(even) td{background:var(--surface2)}
+
+/* toolbar: filter/zoek/actie-balk boven lijst (Outlook/Toggl/Jortt-pariteit) */
+.toolbar{display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:center;padding:var(--space-3) var(--space-4);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:var(--space-4)}
+.toolbar .toolbar-spacer{flex:1}
+.toolbar .toolbar-group{display:flex;gap:var(--space-2);align-items:center}
+.toolbar input[type=search],.toolbar input[type=text]{height:var(--control-h-sm);padding:0 var(--space-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--n-0);color:var(--n-900);font-size:13px;min-width:180px}
+.toolbar label{font-size:12px;color:var(--text-dim);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em}
+
+/* filterbar + chips: aan/uit-filters voor agenda/inbox */
+.filterbar{display:flex;flex-wrap:wrap;gap:var(--space-2);padding:var(--space-2) 0;margin-bottom:var(--space-3)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;background:var(--surface-sunken);border:1px solid var(--border);color:var(--text-dim);font-size:12px;cursor:pointer;user-select:none;transition:all 0.15s}
+.chip:hover{background:var(--surface2);color:var(--n-900)}
+.chip.is-active{background:var(--gold-50);color:var(--gold-text);border-color:var(--gold-mid)}
+.chip .chip-dot{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:0.7}
+.chip--ghost{background:transparent}
+
+/* mt-row: lijst-rij voor Outlook-stijl inbox/dossier-lijsten */
+.mt-row{display:flex;align-items:flex-start;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.12s}
+.mt-row:hover{background:var(--surface-sunken)}
+.mt-row.is-active{background:var(--gold-50);box-shadow:inset 3px 0 0 var(--gold)}
+.mt-row.is-unread{font-weight:600}
+.mt-row .mt-row-main{flex:1;min-width:0}
+.mt-row .mt-row-title{font-size:13px;color:var(--n-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mt-row .mt-row-sub{font-size:12px;color:var(--text-dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mt-row .mt-row-meta{font-family:var(--mono);font-size:11px;color:var(--text-faint);white-space:nowrap;flex-shrink:0}
+
+/* detail-pane: leespaneel naast lijst (Outlook) of cards (Jortt) */
+.detail-pane{background:var(--n-0);border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4);min-height:300px}
+.detail-pane--empty{align-items:center;justify-content:center;color:var(--text-faint);font-style:italic;background:var(--surface-sunken);border-style:dashed}
+
+/* split-view: lijst | detail (Outlook-pariteit Inbox-tab) */
+.split-view{display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:var(--space-4);height:calc(100vh - 220px);min-height:480px}
+.split-view .split-list{background:var(--n-0);border:1px solid var(--border);border-radius:var(--radius);overflow-y:auto}
+.split-view .split-detail{overflow-y:auto}
+@media (max-width:980px){.split-view{grid-template-columns:1fr;height:auto}}
+
+/* empty-state: nette lege state (geen mails, geen facturen, etc.) */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:var(--space-8) var(--space-4);text-align:center;color:var(--text-dim);gap:var(--space-2)}
+.empty-state .empty-icon{font-size:32px;opacity:0.5;margin-bottom:var(--space-2)}
+.empty-state .empty-title{font-size:14px;font-weight:600;color:var(--n-900)}
+.empty-state .empty-sub{font-size:12px;color:var(--text-faint);max-width:320px}
+
+/* modal-head: uniforme modal-header */
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border);background:var(--surface)}
+.modal-head .modal-title{font-size:14px;font-weight:600;color:var(--n-900);margin:0}
+.modal-head .modal-close{background:transparent;border:0;font-size:18px;color:var(--text-faint);cursor:pointer;padding:0 6px;line-height:1}
+.modal-head .modal-close:hover{color:var(--n-900)}
+
+/* card varianten */
+.card--tight{padding:var(--space-3)}
+.card--empty{background:var(--surface-sunken);border-style:dashed;color:var(--text-faint);text-align:center}
+
+/* status-dot: kleine bron-/status-indicator (agenda-bron, Toggl-running, etc.) */
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-faint);vertical-align:middle;margin-right:6px}
+.status-dot--ok{background:var(--success)}
+.status-dot--warn{background:var(--warning)}
+.status-dot--err{background:var(--error)}
+.status-dot--info{background:var(--info)}
+.status-dot--gold{background:var(--gold)}
+
 /* ── MISC ── */
 .divider{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
 .flex{display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap}
@@ -388,6 +459,7 @@ button{transition:transform .07s ease,filter .07s ease}
   <button class="tab-btn" onclick="showTab('projecten',this)">Projecten</button>
   <button class="tab-btn" onclick="showTab('klanten',this)">Klanten</button>
   <button class="tab-btn" onclick="showTab('voorraad',this)">Voorraad</button>
+  <button class="tab-btn" onclick="showTab('materialen',this)">🧱 Materialen</button>
   <button class="tab-btn" onclick="showTab('bestelling',this)">Bestellijst</button>
   <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" onclick="showTab('agenda',this)">📅 Agenda</button>
@@ -619,6 +691,30 @@ button{transition:transform .07s ease,filter .07s ease}
       <div class="card">
         <div id="voorraad-detail-inhoud"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: MATERIALEN (interiorcad-catalogus, READ-ONLY uit SharePoint) ═══ -->
+  <div id="tab-materialen" class="tab-content">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <div class="card-subtitle">interiorcad materialen-catalogus
+          <span id="mat-bron" style="font-size:11px;color:var(--text-dim);font-weight:normal"></span></div>
+        <div class="flex">
+          <button class="btn btn-secondary btn-sm" onclick="laadMaterialen(true)">↻ Vernieuwen</button>
+        </div>
+      </div>
+      <div class="kpi-grid" id="mat-kpi"></div>
+      <div class="voorraad-tabs">
+        <button class="vtab-btn active" onclick="showMtab('platen',this)">🪵 Plaatmateriaal</button>
+        <button class="vtab-btn" onclick="showMtab('kantenband',this)">📏 Kantenband</button>
+      </div>
+      <div class="flex" style="gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">
+        <input class="zoek-input" type="text" id="mat-zoek" placeholder="🔍 Zoek op omschrijving of artikelnummer..." oninput="renderMaterialen()" style="max-width:420px;margin:0">
+        <select id="mat-lev" onchange="renderMaterialen()" style="max-width:240px"><option value="">Alle leveranciers</option></select>
+      </div>
+      <p style="font-size:11px;color:var(--text-dim);margin-bottom:1rem">Bron = interiorcad (Vectorworks). Verkoop = inkoop × (1 + afval%) × (1 + marge%). Alleen-lezen spiegel; wijzig in interiorcad zelf.</p>
+      <div id="mat-tabel"></div>
     </div>
   </div>
 
@@ -1320,8 +1416,7 @@ function klantVolByNaam(naam){
 // Kiest Bart een eigen KLANT-code (bv. VBWR i.p.v. de auto-afgeleide DV2), dan
 // onthoudt de tool die per klant. Sleutel = mb_contact_id (stabiel) of anders de
 // genormaliseerde naam. Synct mee naar SharePoint (key staat in _SP.KEYS), dus
-// duurzaam over apparaten. Wint in autoCode() boven de registry-default en wordt
-// bij het laden óók over KLANTEN_VOL gelegd, zodat de hele tool de gekozen code ziet.
+// duurzaam over apparaten. Wint in autoCode() boven de registry-default.
 function klantCodesAll(){try{return JSON.parse(localStorage.getItem('mt_klant_codes')||'{}');}catch(e){return {};}}
 function klantCodesSave(o){localStorage.setItem('mt_klant_codes',JSON.stringify(o));}
 function _klantCodeKey(kv){ if(!kv) return null; return kv.mb_contact_id?('mb:'+kv.mb_contact_id):('naam:'+_normNaam(kv.naam||'')); }
@@ -1443,6 +1538,7 @@ function showTab(name,btn){
   if(name==='agenda') renderAgenda();
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
+  if(name==='materialen') renderMaterialen();
 }
 function showVtab(name,btn){
   document.querySelectorAll('.vtab-content').forEach(t=>t.classList.remove('active'));
@@ -1452,6 +1548,104 @@ function showVtab(name,btn){
   voorraadActiefTab=name;
   renderVoorraadActief();
 }
+// ═══ MATERIALEN (interiorcad-catalogus, READ-ONLY spiegel uit privé SharePoint) ═══
+// Data komt uit MT-Bedrijfstool/interiorcad-materialen.json (bevat inkoop+marge → privé,
+// nooit in de publieke repo). Geladen ná login in initStorage. interiorcad blijft de
+// bron van waarheid; schrijven gaat via interiorcads TXT-import, niet hier.
+let MATERIALEN_IC = {boards:[], edgebandings:[], suppliers:[], meta:{}};
+let materialenActiefTab = 'platen';
+
+function matEuro(n){ return (n==null||n===''||isNaN(n))?'—':'€'+Number(n).toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function matVerkoop(m){
+  const cost=Number(m.cost)||0, markup=Number(m.markup)||0, waste=Number(m.waste)||0;
+  if(!cost) return null;
+  return cost*(1+waste/100)*(1+markup/100);
+}
+
+async function laadMaterialen(force){
+  try{
+    const d = await _SP.read('interiorcad-materialen.json');
+    if(d && (Array.isArray(d.boards)||Array.isArray(d.edgebandings))){
+      MATERIALEN_IC = {boards:d.boards||[], edgebandings:d.edgebandings||[], suppliers:d.suppliers||[], meta:d.meta||{}};
+      console.log('interiorcad-materialen geladen:', MATERIALEN_IC.boards.length, 'platen /', MATERIALEN_IC.edgebandings.length, 'kantenband');
+    }
+  }catch(e){ console.warn('interiorcad-materialen laden faalde:', e); }
+  if(force || document.getElementById('tab-materialen').classList.contains('active')) renderMaterialen();
+}
+
+function showMtab(name,btn){
+  materialenActiefTab=name;
+  document.querySelectorAll('#tab-materialen .vtab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  renderMaterialen();
+}
+
+function renderMaterialen(){
+  const m=MATERIALEN_IC;
+  const bron=document.getElementById('mat-bron');
+  if(bron) bron.textContent = (m.meta && m.meta.gegenereerd) ? '· bijgewerkt '+String(m.meta.gegenereerd).slice(0,10) : '';
+
+  // KPI-balk
+  const kpi=document.getElementById('mat-kpi');
+  if(kpi){
+    const levSet=new Set([...m.boards,...m.edgebandings].map(x=>x.supplier).filter(Boolean));
+    kpi.innerHTML=`
+      <div class="kpi-card green"><div class="kpi-label">Plaatmateriaal</div><div class="kpi-waarde">${m.boards.length}</div><div class="kpi-sub">artikelen</div></div>
+      <div class="kpi-card"><div class="kpi-label">Kantenband</div><div class="kpi-waarde">${m.edgebandings.length}</div><div class="kpi-sub">artikelen</div></div>
+      <div class="kpi-card"><div class="kpi-label">Leveranciers</div><div class="kpi-waarde">${levSet.size}</div></div>`;
+  }
+
+  const lijst = materialenActiefTab==='kantenband' ? m.edgebandings : m.boards;
+
+  // Leverancier-filter vullen (selectie behouden)
+  const sel=document.getElementById('mat-lev');
+  if(sel){
+    const cur=sel.value;
+    const levs=[...new Set(lijst.map(x=>x.supplier).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'nl'));
+    sel.innerHTML='<option value="">Alle leveranciers</option>'+levs.map(l=>`<option value="${l}">${l}</option>`).join('');
+    if(levs.includes(cur)) sel.value=cur;
+  }
+  const fLev = sel ? sel.value : '';
+  const q = (document.getElementById('mat-zoek')?.value||'').toLowerCase().trim();
+
+  let rows = lijst.filter(x=>{
+    if(fLev && x.supplier!==fLev) return false;
+    if(q){
+      const hay=((x.description||'')+' '+(x.id||'')+' '+(x.supplier||'')).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const tabel=document.getElementById('mat-tabel');
+  if(!tabel) return;
+  if(!lijst.length){
+    tabel.innerHTML='<p style="color:var(--text-dim);font-size:13px">Nog geen materialen geladen. Log in (data komt uit privé SharePoint) en klik ↻ Vernieuwen.</p>';
+    return;
+  }
+  if(!rows.length){ tabel.innerHTML='<p style="color:var(--text-dim);font-size:13px">Geen materialen gevonden voor dit filter.</p>'; return; }
+
+  const isEdge = materialenActiefTab==='kantenband';
+  const head = isEdge
+    ? '<tr><th>Artikel</th><th>Omschrijving</th><th>Dikte</th><th>Breedte</th><th>Leverancier</th><th style="text-align:right">Inkoop</th><th style="text-align:right">Marge</th><th style="text-align:right">Verkoop</th></tr>'
+    : '<tr><th>Artikel</th><th>Omschrijving</th><th>Dikte</th><th>Leverancier</th><th style="text-align:right">Inkoop</th><th style="text-align:right">Marge</th><th style="text-align:right">Verkoop</th></tr>';
+  const body = rows.map(x=>{
+    const vk=matVerkoop(x);
+    const marge = (x.markup==null||x.markup==='')?'—':Number(x.markup).toLocaleString('nl-NL')+'%';
+    const common = `<td style="font-family:var(--mono);font-size:12px">${x.id||''}</td>`+
+      `<td>${x.description||''}</td>`+
+      `<td>${x.thickness??''}</td>`+
+      (isEdge?`<td>${x.width??''}</td>`:'')+
+      `<td>${x.supplier||'<span style="color:var(--text-dim)">—</span>'}</td>`+
+      `<td style="text-align:right;font-family:var(--mono)">${matEuro(x.cost)}</td>`+
+      `<td style="text-align:right;font-family:var(--mono)">${marge}</td>`+
+      `<td style="text-align:right;font-family:var(--mono);font-weight:600">${matEuro(vk)}</td>`;
+    return '<tr>'+common+'</tr>';
+  }).join('');
+  tabel.innerHTML = `<p style="font-size:12px;color:var(--text-dim);margin-bottom:.5rem">${rows.length} van ${lijst.length} getoond</p>`+
+    `<div style="overflow-x:auto"><table class="v-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
 function periodePresetGewijzigd(){
   const p=document.getElementById('periode-preset').value;
   document.getElementById('periode-custom').classList[p==='custom'?'remove':'add']('hidden');
@@ -5359,6 +5553,8 @@ window.initStorage = async function() {
       console.log('registry-vol geladen uit SharePoint:', KLANTEN_VOL.length);
     }
   } catch(e) { console.warn('registry-vol laden faalde:', e); }
+  // interiorcad materialen-catalogus (privé, bevat inkoop+marge). Faalt stil.
+  try { await laadMaterialen(false); } catch(e) { console.warn('interiorcad-materialen laden faalde:', e); }
   // Na hydrate uit SharePoint: in-memory state + UI verversen. Anders toont de
   // pagina de stale versie van vóór de sync (PROJECT_CODES is op regel ~767
   // synchroon uit localStorage geladen, vóór deze async hydrate).
