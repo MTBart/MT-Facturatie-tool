@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — v2: MSAL redirect-URI naar geregistreerde index.html-URL (fix AADSTS50011 bij login op v2.html)
+- Commit: `0055863` | Auteur: Bart Witte
+
 ## 2026-06-11 — v1-header: 'v2 beta' knop naar v2.html (side-by-side test)
 - Commit: `23e02a8` | Auteur: Bart Witte
 
