@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — mobiel: login-fix block_nested_popups — stale msal-vensternaam wissen + redirect-fallback
+- Commit: `e4bdd4f` | Auteur: Bart Witte
+
 ## 2026-06-11 — mobiel: F1-slice live — MSAL-login, echte projecten + taken direct naar Toggl 2.0, echte timer
 - Commit: `1fc5d15` | Auteur: Bart Witte
 
