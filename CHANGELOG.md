@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — v2: login-scherm toont 'v2 beta' i.p.v. geerfd 'v4' - onderscheid met v1 voor login
+- Commit: `09b78bf` | Auteur: Bart Witte
+
 ## 2026-06-10 — Facturatie tool v2 (v2.html): fris/modern restyle, workflow-tabvolgorde, voorraad-interiorcad koppeling - naast v1 voor side-by-side test
 - Commit: `b4b3fdf` | Auteur: Bart Witte
 
