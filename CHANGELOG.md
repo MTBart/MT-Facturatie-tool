@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — v2: Admin-tab (logboek/team-lock/verlof-saldo/vrije dagen/notificaties) + planning-laag in Agenda + uren-lock
+- Commit: `69ba526` | Auteur: Bart Witte
+
 ## 2026-06-11 — mobiel: F0.5 dry-test-uitbreidingen (mock/localStorage)
 - Commit: `0095c24` | Auteur: Bart Witte
 

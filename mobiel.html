@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>M&T Mobiel</title>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2/lib/msal-browser.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Manrope:wght@300;400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -616,16 +617,92 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--n-300);border-radius:2px}
+
+/* ── LOGIN SCREEN ── */
+#login-screen{
+  position:fixed;inset:0;z-index:9999;
+  background:linear-gradient(160deg,var(--green) 0%,var(--green-900) 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;
+}
+.login-logo{font-family:var(--serif);font-size:48px;font-weight:400;color:#fff;letter-spacing:.04em;margin-bottom:4px}
+.login-logo span{color:var(--gold-mid);font-style:italic}
+.login-sub{font-family:var(--mono);font-size:12px;color:rgba(255,255,255,.6);letter-spacing:.08em;text-transform:uppercase;margin-bottom:48px}
+.login-card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:var(--radius-lg);padding:28px 22px;width:100%;max-width:360px}
+.login-card-title{font-family:var(--serif);font-size:20px;color:#fff;margin-bottom:6px;font-weight:400}
+.login-card-sub{font-size:13px;color:rgba(255,255,255,.65);margin-bottom:24px;line-height:1.5}
+.btn-ms{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  background:#fff;color:#1a1a1a;border:none;border-radius:var(--radius);
+  padding:0 18px;min-height:50px;width:100%;
+  font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;
+  transition:opacity .15s;
+}
+.btn-ms:active{opacity:.85}
+.btn-ms-icon{font-size:20px}
+.login-demo{
+  margin-top:16px;text-align:center;
+  font-size:12px;color:rgba(255,255,255,.45);cursor:pointer;
+  padding:8px;
+}
+.login-demo:active{color:rgba(255,255,255,.7)}
+#login-error{color:var(--error);background:#fde8e8;border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;margin-top:12px;display:none}
+
+/* ── DEMO BADGE ── */
+.demo-badge{
+  background:var(--gold);color:#fff;
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  padding:2px 7px;border-radius:10px;letter-spacing:.04em;
+  margin-left:6px;
+}
+
+/* ── USER AVATAR in header ── */
+.user-avatar-btn{
+  background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);
+  border-radius:50%;width:32px;height:32px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:#fff;font-size:14px;font-weight:700;
+  font-family:var(--mono);
+  transition:background .15s;
+}
+.user-avatar-btn:active{background:rgba(255,255,255,.3)}
+
+/* ── SYNC DOT ── */
+.sync-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-left:5px;flex:0 0 auto}
+.sync-dot.ok{background:#4CAF50}
+.sync-dot.pending{background:var(--gold);animation:pulse 1.5s infinite}
+.sync-dot.off{background:var(--n-400)}
+
+/* ── TASK SYNC INDICATOR ── */
+.task-sync-dot{width:6px;height:6px;border-radius:50%;background:var(--n-300);flex:0 0 auto;display:inline-block;margin-right:4px;vertical-align:middle}
+.task-sync-dot.synced{background:#4CAF50}
 </style>
 </head>
 <body>
 
+<!-- ── LOGIN SCREEN ── -->
+<div id="login-screen">
+  <div class="login-logo">M<span>&amp;</span>T</div>
+  <div class="login-sub">Mortise &amp; Tenon · Mobiel</div>
+  <div class="login-card">
+    <div class="login-card-title">Inloggen vereist</div>
+    <div class="login-card-sub">Log in met je @mortiseandtenon.nl-account om de app te gebruiken. Timer, projecten en taken worden gesynchroniseerd met Toggl 2.0.</div>
+    <button class="btn-ms" onclick="msLogin()">
+      <span class="btn-ms-icon">⊞</span>
+      Inloggen met Microsoft
+    </button>
+    <div id="login-error"></div>
+    <div class="login-demo" onclick="startDemoMode()">Doorgaan zonder inloggen (demo)</div>
+  </div>
+</div>
+
 <!-- ── APP HEADER ── -->
 <header class="app-header">
-  <div class="app-title">M<span>&amp;</span>T</div>
+  <div class="app-title" style="display:flex;align-items:center">M<span>&amp;</span>T<span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></div>
   <div class="header-btns">
     <button class="header-info-btn notif-btn" onclick="openNotifs()" aria-label="Notificaties">🔔<span class="notif-badge" id="notifBadge" style="display:none">0</span></button>
     <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
+    <button class="user-avatar-btn" id="userAvatarBtn" style="display:none" onclick="msLogout()" title="Uitloggen"></button>
   </div>
 </header>
 
@@ -979,6 +1056,216 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 
 <script>
 /* =====================================================================
+   ═══ AUTH + API LAAG ═══
+   ===================================================================== */
+const WORKER = 'https://mt-claude-proxy.bart-a12.workers.dev';
+const TG_WS  = 21258443;
+const TG_ORG = 21259253;
+const FOCUS_BASE_PATH = `organizations/${TG_ORG}/workspaces/${TG_WS}/`;
+const _PLAN_TG_STATUS = {todo:300785, bezig:300788, klaar:300786};
+// Mapping terug van Focus status_id → lokale status-string
+const _STATUS_FROM_ID = {300785:'todo', 300788:'bezig', 300786:'klaar'};
+
+let _msal = null;
+let _msAccount = null;   // ingelogd account
+let _demoMode = false;   // true = niet ingelogd, alles lokaal
+
+/* Auth-token helpers — identiek aan v2.html patroon */
+window.getAuthToken = async function() {
+  if (!_msal) return null;
+  const accounts = _msal.getAllAccounts();
+  if (!accounts.length) return null;
+  try {
+    const result = await _msal.acquireTokenSilent({ scopes: ['openid','profile'], account: accounts[0] });
+    return result.idToken;
+  } catch(e) { return null; }
+};
+
+const GRAPH_SCOPES = [
+  'https://graph.microsoft.com/Files.ReadWrite',
+  'https://graph.microsoft.com/Sites.ReadWrite.All'
+];
+window.getGraphToken = async function() {
+  if (!_msal) return null;
+  const accounts = _msal.getAllAccounts();
+  if (!accounts.length) return null;
+  try {
+    const result = await _msal.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+    return result.accessToken;
+  } catch(e) {
+    try {
+      const result = await _msal.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+      return result.accessToken;
+    } catch(e2) { return null; }
+  }
+};
+
+async function authHeader() {
+  const t = typeof getAuthToken === 'function' ? await getAuthToken() : null;
+  return t ? {'X-Auth-Token': t} : {};
+}
+
+/* ── Track v9 via Worker ── */
+async function tgTrack(path, method='GET', body=null) {
+  const h = await authHeader();
+  if (!h['X-Auth-Token']) throw new Error('Niet ingelogd bij Microsoft');
+  const opts = {method, headers:{...h}};
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const res = await fetch(`${WORKER}?target=toggl&path=${encodeURIComponent(path)}`, opts);
+  if (res.status === 204) return true;
+  const txt = await res.text();
+  if (!res.ok) throw new Error('Track HTTP ' + res.status + (txt ? ' — ' + txt.slice(0,140) : ''));
+  try { return JSON.parse(txt); } catch(e) { return txt; }
+}
+
+/* ── Toggl 2.0 (Focus) via Worker ── */
+async function focusFetch(path, method='GET', body=null) {
+  const h = await authHeader();
+  if (!h['X-Auth-Token']) throw new Error('Niet ingelogd bij Microsoft');
+  const opts = {method, headers:{...h, 'Content-Type':'application/json'}};
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`${WORKER}?target=toggl_focus&path=${encodeURIComponent(FOCUS_BASE_PATH + path)}`, opts);
+  if (res.status === 204) return true;
+  const txt = await res.text();
+  if (!res.ok) throw new Error('Focus HTTP ' + res.status + (txt ? ' — ' + txt.slice(0,120) : ''));
+  try { return JSON.parse(txt); } catch(e) { return txt; }
+}
+
+/* ── SharePoint mini-laag (MT-Bedrijfstool/) ── */
+const _SP = {
+  SITE: 'mortisetenon.sharepoint.com:/sites/MortiseTenon',
+  SITE_ID: null,
+  FOLDER: 'MT-Bedrijfstool',
+
+  async _driveBase() {
+    const token = await window.getGraphToken();
+    if (!token) throw new Error('Geen Graph-token');
+    if (!this.SITE_ID) {
+      const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${this.SITE}`,
+        {headers:{'Authorization':`Bearer ${token}`}});
+      if (!sr.ok) throw new Error(`site-resolve HTTP ${sr.status}`);
+      this.SITE_ID = (await sr.json()).id;
+    }
+    return {base:`https://graph.microsoft.com/v1.0/sites/${this.SITE_ID}/drive`, token};
+  },
+
+  async read(filename) {
+    try {
+      const {base, token} = await this._driveBase();
+      const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
+        {headers:{'Authorization':`Bearer ${token}`}});
+      if (r.status === 404) return null;
+      if (!r.ok) { console.warn('SP read faalde:', filename, 'HTTP', r.status); return null; }
+      return await r.json();
+    } catch(e) { console.warn('SP read fout:', filename, e.message); return null; }
+  },
+
+  async write(filename, data) {
+    try {
+      const {base, token} = await this._driveBase();
+      const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`, {
+        method: 'PUT',
+        headers: {'Authorization':`Bearer ${token}`, 'Content-Type':'application/json'},
+        body: typeof data === 'string' ? data : JSON.stringify(data)
+      });
+      if (!r.ok) console.warn('SP write faalde:', filename, 'HTTP', r.status);
+      return r.ok;
+    } catch(e) { console.warn('SP write fout:', filename, e.message); return false; }
+  }
+};
+
+/* ── MSAL init ── */
+async function initMsal() {
+  Object.keys(sessionStorage).filter(k => k.includes('interaction')).forEach(k => sessionStorage.removeItem(k));
+  try {
+    _msal = new msal.PublicClientApplication({
+      auth: {
+        clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
+        authority: 'https://login.microsoftonline.com/15b652c3-ff53-433f-a29d-e9626cbafb41',
+        redirectUri: window.location.origin + window.location.pathname.replace(/mobiel\.html$/, ''),
+        postLogoutRedirectUri: window.location.origin + window.location.pathname.replace(/mobiel\.html$/, '')
+      },
+      cache: {cacheLocation: 'localStorage', storeAuthStateInCookie: false}
+    });
+    await _msal.initialize();
+    const accounts = _msal.getAllAccounts();
+    if (accounts.length > 0) {
+      await toonApp(accounts[0]);
+    }
+    // Anders: login-screen blijft zichtbaar
+  } catch(e) {
+    console.warn('MSAL init fout:', e);
+    // MSAL niet beschikbaar (offline, CDN fout) — toon login-scherm met foutmelding
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = 'Microsoft-login niet beschikbaar. Probeer opnieuw of ga door in demomodus.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function msLogin() {
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  if (!_msal) {
+    errEl.textContent = 'Fout: Microsoft-authenticatie kon niet laden. Herlaad de pagina of gebruik demomodus.';
+    errEl.style.display = 'block';
+    return;
+  }
+  try {
+    const result = await _msal.loginPopup({scopes: ['openid','profile','email']});
+    const account = (result && result.account) || _msal.getAllAccounts()[0];
+    if (account) await toonApp(account);
+  } catch(e) {
+    if (e.errorCode === 'popup_window_error') {
+      errEl.textContent = 'Popup geblokkeerd door de browser. Sta popups toe voor deze pagina en probeer opnieuw.';
+      errEl.style.display = 'block';
+    } else if (e.errorCode !== 'user_cancelled') {
+      errEl.textContent = 'Inloggen mislukt: ' + e.message;
+      errEl.style.display = 'block';
+    }
+  }
+}
+
+async function msLogout() {
+  if (!confirm('Uitloggen?')) return;
+  try { await _msal.logoutPopup(); } catch(e) { /* beste poging */ }
+  _msAccount = null;
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('userAvatarBtn').style.display = 'none';
+  document.getElementById('demoBadge').style.display = 'none';
+}
+
+async function toonApp(account) {
+  // Valideer domein — alleen @mortiseandtenon.nl
+  const email = account.username || '';
+  if (!email.toLowerCase().endsWith('@mortiseandtenon.nl')) {
+    try { await _msal.logoutPopup(); } catch(e) {}
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = `Account ${email} is niet toegestaan. Gebruik je @mortiseandtenon.nl-account.`;
+    errEl.style.display = 'block';
+    return;
+  }
+  _msAccount = account;
+  _demoMode = false;
+  document.getElementById('login-screen').style.display = 'none';
+  const naam = account.name || account.username;
+  const avatar = document.getElementById('userAvatarBtn');
+  avatar.textContent = naam.charAt(0).toUpperCase();
+  avatar.style.display = 'flex';
+  document.getElementById('demoBadge').style.display = 'none';
+  // Laad echte data na login
+  await loadRealProjects();
+}
+
+function startDemoMode() {
+  _demoMode = true;
+  _msAccount = null;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('demoBadge').style.display = 'inline-block';
+  document.getElementById('userAvatarBtn').style.display = 'none';
+  showToast('Demo-modus: projecten en taken worden alleen lokaal opgeslagen');
+}
+
+/* =====================================================================
    MOCK DATA
    ===================================================================== */
 const PROJECTS = [
@@ -1102,10 +1389,42 @@ const BASE_MONDAY = new Date(2026,5,9);   // maandag van week 24 (mock)
    DATA-LAAG: gebruikersdata in localStorage (overleeft refresh)
    ===================================================================== */
 // — Punt 1: door gebruiker aangemaakte projecten, gemerged met mock-lijst —
+// USER_PROJECTS = eigen projects (lokaal aangemaakt)
+// REAL_PROJECTS = geladen van Track/Toggl na login
 let USER_PROJECTS = [];
+let REAL_PROJECTS = [];  // Track-projecten (na login)
 try { USER_PROJECTS = JSON.parse(localStorage.getItem("mt_user_projects") || "[]"); } catch(e) { USER_PROJECTS = []; }
-function allProjects() { return PROJECTS.concat(USER_PROJECTS); }
+
+// allProjects(): echte projecten bovenaan, dan mock (alleen tonen als geen echte), dan USER_PROJECTS
+function allProjects() {
+  if (REAL_PROJECTS.length) {
+    // Echte Track-projecten + user-projecten; mock-projecten verbergen
+    return REAL_PROJECTS.concat(USER_PROJECTS);
+  }
+  return PROJECTS.concat(USER_PROJECTS);
+}
 function saveUserProjects() { localStorage.setItem("mt_user_projects", JSON.stringify(USER_PROJECTS)); }
+
+// SP-sync voor user projects (best-effort, na login)
+async function spSyncUserProjects() {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const remote = await _SP.read('mt_user_projects.json') || [];
+    // Merge: remote wint bij conflict op id
+    const merged = [...remote];
+    USER_PROJECTS.forEach(lp => {
+      if (!merged.some(r => r.id === lp.id)) merged.push(lp);
+    });
+    USER_PROJECTS = merged;
+    saveUserProjects();
+    await _SP.write('mt_user_projects.json', merged);
+  } catch(e) { console.warn('SP sync user projects fout:', e.message); }
+}
+
+async function spWriteUserProjects() {
+  if (_demoMode || !_msAccount) return;
+  try { await _SP.write('mt_user_projects.json', USER_PROJECTS); } catch(e) {}
+}
 
 // — Punt 2: taken per projectcode —
 let TASKS = null;
@@ -1129,10 +1448,161 @@ function addTaskToProject(code, task) {
   saveTasks();
 }
 
+// SP-sync voor taken (mt_app_taken.json)
+async function spSyncTaken() {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const remote = await _SP.read('mt_app_taken.json') || [];
+    // Merge remote taken terug in lokale TASKS
+    remote.forEach(rt => {
+      if (!rt.project_code || !rt.id) return;
+      if (!TASKS[rt.project_code]) TASKS[rt.project_code] = [];
+      const existing = TASKS[rt.project_code].find(t => t.id === rt.id);
+      if (existing) {
+        // Remote togglTaskId wint als het er is
+        if (rt.togglTaskId) existing.togglTaskId = rt.togglTaskId;
+      } else {
+        TASKS[rt.project_code].push({id:rt.id, name:rt.naam, status:rt.status||'todo', togglTaskId:rt.togglTaskId||null, tag:null, note:''});
+      }
+    });
+    saveTasks();
+  } catch(e) { console.warn('SP sync taken fout:', e.message); }
+}
+
+async function spWriteTaken(code, task) {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const remote = await _SP.read('mt_app_taken.json') || [];
+    const email = _msAccount ? _msAccount.username : 'bart@mortiseandtenon.nl';
+    const entry = {
+      id: task.id,
+      project_code: code,
+      naam: task.name,
+      status: task.status,
+      togglTaskId: task.togglTaskId || null,
+      ts: new Date().toISOString(),
+      door: email
+    };
+    const idx = remote.findIndex(r => r.id === task.id);
+    if (idx >= 0) remote[idx] = entry; else remote.push(entry);
+    await _SP.write('mt_app_taken.json', remote);
+  } catch(e) { console.warn('SP write taken fout:', e.message); }
+}
+
 // — Punt 3: eigen agenda-blokken —
 let EIGEN_BLOKKEN = [];
 try { EIGEN_BLOKKEN = JSON.parse(localStorage.getItem("mt_agenda_blocks") || "[]"); } catch(e) { EIGEN_BLOKKEN = []; }
 function saveEigenBlokken() { localStorage.setItem("mt_agenda_blocks", JSON.stringify(EIGEN_BLOKKEN)); }
+
+/* =====================================================================
+   ECHTE PROJECTEN LADEN (Track v9 + Toggl 2.0)
+   ===================================================================== */
+async function loadRealProjects() {
+  try {
+    // Track projecten van workspace
+    const raw = await tgTrack(`workspaces/${TG_WS}/projects?active=true`);
+    const list = Array.isArray(raw) ? raw : (raw && raw.data ? raw.data : []);
+    REAL_PROJECTS = list.map(p => ({
+      id: 'tg-' + p.id,
+      togglProjectId: p.id,
+      code: p.name.match(/\[([A-Z0-9\-]+)\]$/)?.[1] || ('TG-' + p.id),
+      name: p.name.replace(/\s*\[[A-Z0-9\-]+\]$/, ''),
+      addr: '–',
+      status: 'in-uitvoering',
+      assigned: true,
+      lastActivity: '–',
+      contact: '–',
+      checklist: ['Eindcontrole uitgevoerd'],
+      source: 'track'
+    }));
+    // Sync user-projecten van SP (merge)
+    await spSyncUserProjects();
+    // Herrender
+    renderPickerList(allProjects());
+    renderProjectCards();
+    populateOpleverSelect();
+    showToast(`✓ ${REAL_PROJECTS.length} projecten geladen van Toggl 2.0`);
+  } catch(e) {
+    console.warn('loadRealProjects fout:', e.message);
+    showToast('Projecten laden mislukt — lokale data gebruikt');
+    await spSyncUserProjects();
+    renderPickerList(allProjects());
+    renderProjectCards();
+    populateOpleverSelect();
+  }
+}
+
+/* =====================================================================
+   TOGGL 2.0-TAKEN LADEN & MERGEN voor een project
+   ===================================================================== */
+async function loadAndMergeTasksForProject(proj) {
+  if (_demoMode || !proj.togglProjectId) return;
+  try {
+    // Haal taken op uit Toggl 2.0 Focus
+    let page = 1, alle = [];
+    while (page <= 5) {
+      const r = await focusFetch(`tasks?project_id=${proj.togglProjectId}&page=${page}`);
+      const data = Array.isArray(r) ? r : (r && r.data ? r.data : []);
+      if (!data.length) break;
+      alle = alle.concat(data);
+      if (data.length < 20) break;
+      page++;
+    }
+    if (!alle.length) return;
+    // Merge: Toggl wint bij conflict (togglTaskId match)
+    if (!TASKS[proj.code]) TASKS[proj.code] = [];
+    alle.forEach(ft => {
+      const existing = TASKS[proj.code].find(t => t.togglTaskId === ft.id);
+      if (existing) {
+        existing.name = ft.name;
+        existing.status = _STATUS_FROM_ID[ft.status_id] || existing.status;
+        existing.togglTaskId = ft.id;
+      } else {
+        // Nieuw taak van Focus die we lokaal nog niet kennen
+        TASKS[proj.code].push({
+          id: 'ft-' + ft.id,
+          name: ft.name,
+          status: _STATUS_FROM_ID[ft.status_id] || 'todo',
+          togglTaskId: ft.id,
+          tag: null, note: '', date: null, est: null
+        });
+      }
+    });
+    saveTasks();
+  } catch(e) { console.warn('loadAndMergeTasksForProject fout:', e.message); }
+}
+
+/* =====================================================================
+   TIMER — echt klokken (best-effort, alleen bij ingelogd + echt project)
+   ===================================================================== */
+let _togglTimerEntryId = null;  // lopende Track time-entry id
+
+async function startTimerOnToggl(proj, description) {
+  if (_demoMode || !_msAccount || !proj || !proj.togglProjectId) return false;
+  try {
+    const startISO = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const body = {
+      description: description || proj.name,
+      project_id: proj.togglProjectId,
+      start: startISO,
+      duration: -1,
+      created_with: 'mt-mobiel',
+      workspace_id: TG_WS
+    };
+    const made = await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', body);
+    const id = made && (made.id || (made.data && made.data.id));
+    if (id) { _togglTimerEntryId = id; return true; }
+    return false;
+  } catch(e) { console.warn('startTimerOnToggl fout:', e.message); return false; }
+}
+
+async function stopTimerOnToggl() {
+  if (!_togglTimerEntryId) return;
+  try {
+    await tgTrack(`workspaces/${TG_WS}/time_entries/${_togglTimerEntryId}/stop`, 'PATCH');
+    _togglTimerEntryId = null;
+  } catch(e) { console.warn('stopTimerOnToggl fout:', e.message); }
+}
 
 /* =====================================================================
    STATE
@@ -1169,6 +1639,8 @@ document.addEventListener("DOMContentLoaded", () => {
   renderCaptureProject();
   renderNotes();
   renderNotifBadge();
+  // MSAL: probeer stil in te loggen; login-screen blijft zichtbaar totdat login slaagt of demo gekozen wordt
+  initMsal();
 });
 
 /* =====================================================================
@@ -1238,6 +1710,8 @@ function startTimer() {
   updateTimerUI();
   renderCaptureProject();
   updateSpMockPath();
+  // Best-effort: start echt klokkende entry op Track (alleen bij ingelogd + echt project)
+  startTimerOnToggl(activeProject, activeProject.name).catch(() => {});
 }
 
 function stopTimer() {
@@ -1248,6 +1722,8 @@ function stopTimer() {
   saveTimerState();
   updateTimerUI();
   renderCaptureProject();
+  // Best-effort: stop Track time entry
+  stopTimerOnToggl().catch(() => {});
 }
 
 function startTickInterval() {
@@ -1415,6 +1891,10 @@ function openProjectSheet(id) {
   editingTaskId = null;
   addingTask = false;
   const p = currentSheetProject;
+  // Ingelogd + echt project: taken laden/mergen uit Toggl 2.0 op de achtergrond
+  if (!_demoMode && _msAccount && p.togglProjectId) {
+    loadAndMergeTasksForProject(p).then(() => renderSheetTasks()).catch(() => {});
+  }
   const [cls,label] = STATUS_MAP[p.status] || ["badge-gray","–"];
   document.getElementById("sheetTitle").textContent = p.name;
   document.getElementById("sheetSub").textContent = p.code;
@@ -1994,13 +2474,29 @@ function herstelNaarTaak(idx) {
   if (!p) return;
   const note = (document.getElementById(`herstel-note-${idx}`) || {}).value || checklistNotes[idx] || "";
   checklistNotes[idx] = note;
-  addTaskToProject(p.code, {
-    id:"t"+Date.now(),
-    name:"Herstel: " + p.checklist[idx],
-    status:"todo", date:null, est:null,
-    tag:"herstelpunt", note:note
-  });
+  const taskName = "Herstel: " + p.checklist[idx];
+  const task = {
+    id: "t"+Date.now(),
+    name: taskName,
+    status: "todo", date: null, est: null,
+    tag: "herstelpunt", note: note, togglTaskId: null
+  };
+  addTaskToProject(p.code, task);
   showToast(`✓ Taak aangemaakt in ${p.code}`);
+
+  // Sync naar Toggl 2.0 als project een echte Toggl-ID heeft
+  if (!_demoMode && _msAccount && p.togglProjectId) {
+    focusFetch('tasks', 'POST', {name: taskName, status_id: _PLAN_TG_STATUS.todo, project_id: p.togglProjectId})
+      .then(res => {
+        const focusId = res && (res.id || (res.data && res.data.id));
+        if (focusId) {
+          task.togglTaskId = focusId;
+          saveTasks();
+          spWriteTaken(p.code, task).catch(() => {});
+        }
+      })
+      .catch(e => console.warn('herstelNaarTaak sync fout:', e.message));
+  }
 }
 
 function showRapport() {
@@ -2180,10 +2676,13 @@ function renderSheetTasks() {
       return;
     }
     const meta = [t.date, t.est].filter(Boolean).join(" · ");
+    const syncDot = (currentSheetProject && currentSheetProject.togglProjectId && !_demoMode)
+      ? `<span class="task-sync-dot ${t.togglTaskId ? 'synced' : 'unsynced'}" title="${t.togglTaskId ? 'Gesynchroniseerd met Toggl 2.0' : 'Nog niet gesynchroniseerd'}"></span>`
+      : '';
     html += `<div class="task-row">
       <button class="task-toggle ${t.status}" onclick="toggleTaskStatus('${t.id}')" aria-label="Status wisselen">${TASK_ICON[t.status]||"○"}</button>
       <div class="task-main" onclick="editTask('${t.id}')">
-        <div class="task-name ${t.status==='klaar'?'klaar':''}">${escHtml(t.name)} ${t.tag?`<span class="task-tag">${escHtml(t.tag)}</span>`:""}</div>
+        <div class="task-name ${t.status==='klaar'?'klaar':''}">${escHtml(t.name)} ${t.tag?`<span class="task-tag">${escHtml(t.tag)}</span>`:""} ${syncDot}</div>
         ${meta ? `<div class="task-meta">${escHtml(meta)}</div>` : ""}
         ${t.note ? `<div class="task-meta">📝 ${escHtml(t.note)}</div>` : ""}
       </div>
@@ -2215,6 +2714,15 @@ function toggleTaskStatus(id) {
   t.status = TASK_NEXT[t.status] || "todo";
   saveTasks();
   renderSheetTasks();
+  // Sync naar Toggl 2.0 (best-effort)
+  if (!_demoMode && _msAccount && t.togglTaskId) {
+    const statusId = _PLAN_TG_STATUS[t.status];
+    if (statusId) {
+      focusFetch(`tasks/${t.togglTaskId}`, 'PATCH', {status_id: statusId})
+        .then(() => spWriteTaken(currentSheetProject.code, t))
+        .catch(e => console.warn('toggleTaskStatus sync fout:', e.message));
+    }
+  }
 }
 
 function editTask(id) {
@@ -2233,12 +2741,19 @@ function saveTaskEdit(id) {
   if (!t) return;
   const name = document.getElementById("tfName").value.trim();
   if (!name) { alert("Taaknaam mag niet leeg zijn."); return; }
+  const nameChanged = (t.name !== name);
   t.name = name;
   t.date = document.getElementById("tfDate").value.trim() || null;
   t.est = document.getElementById("tfEst").value.trim() || null;
   saveTasks();
   editingTaskId = null;
   renderSheetTasks();
+  // Sync naam-wijziging naar Toggl 2.0 (best-effort)
+  if (!_demoMode && _msAccount && t.togglTaskId && nameChanged) {
+    focusFetch(`tasks/${t.togglTaskId}`, 'PATCH', {name})
+      .then(() => spWriteTaken(currentSheetProject.code, t))
+      .catch(e => console.warn('saveTaskEdit sync fout:', e.message));
+  }
 }
 
 function deleteTask(id) {
@@ -2266,15 +2781,35 @@ function cancelNewTask() {
 function saveNewTask() {
   const name = document.getElementById("tfNewName").value.trim();
   if (!name) { alert("Geef de taak een naam."); return; }
-  addTaskToProject(currentSheetProject.code, {
-    id:"t"+Date.now(), name,
-    status:"todo",
+  const task = {
+    id: "t"+Date.now(), name,
+    status: "todo",
     date: document.getElementById("tfNewDate").value.trim() || null,
     est: document.getElementById("tfNewEst").value.trim() || null,
-    tag:null, note:""
-  });
+    tag: null, note: "", togglTaskId: null
+  };
+  addTaskToProject(currentSheetProject.code, task);
   addingTask = false;
   renderSheetTasks();
+
+  // Sync naar Toggl 2.0 Focus als project een echte Toggl-ID heeft
+  const proj = currentSheetProject;
+  if (!_demoMode && _msAccount && proj.togglProjectId) {
+    focusFetch('tasks', 'POST', {name, status_id: _PLAN_TG_STATUS.todo, project_id: proj.togglProjectId})
+      .then(res => {
+        const focusId = res && (res.id || (res.data && res.data.id));
+        if (focusId) {
+          task.togglTaskId = focusId;
+          saveTasks();
+          renderSheetTasks();
+          spWriteTaken(proj.code, task).catch(() => {});
+        }
+      })
+      .catch(e => {
+        console.warn('saveNewTask Focus sync fout:', e.message);
+        showToast('Taak lokaal opgeslagen — sync naar Toggl 2.0 later');
+      });
+  }
 }
 
 /* =====================================================================
@@ -2307,7 +2842,7 @@ function closeNewProject() {
   npReturnToBlok = false;
 }
 
-function saveNewProject() {
+async function saveNewProject() {
   const name = document.getElementById("npName").value.trim();
   const k = sanCode(document.getElementById("npKlant").value);
   const l = sanCode(document.getElementById("npLoc").value);
@@ -2318,14 +2853,49 @@ function saveNewProject() {
   if (allProjects().some(p => p.code === code)) { alert(`Projectcode ${code} bestaat al.`); return; }
 
   const proj = {
-    id:"u"+Date.now(), code, name,
-    addr:"–",
-    status:"concept",
-    assigned:true,
-    lastActivity:"Zojuist · Bart",
-    contact:"–",
-    checklist:["Eindcontrole uitgevoerd"]
+    id: "u"+Date.now(), code, name,
+    addr: "–",
+    status: "concept",
+    assigned: true,
+    lastActivity: "Zojuist · Bart",
+    contact: "–",
+    checklist: ["Eindcontrole uitgevoerd"],
+    togglProjectId: null,
+    pending: false
   };
+
+  // ── Echte aanmaak via Toggl 2.0 (alleen bij ingelogd) ──
+  if (!_demoMode && _msAccount) {
+    try {
+      const trackName = `${name} [${code}]`;
+      const made = await tgTrack(`workspaces/${TG_WS}/projects`, 'POST', {
+        name: trackName, active: true, workspace_id: TG_WS
+      });
+      const togglProjectId = made && (made.id || (made.data && made.data.id));
+      if (togglProjectId) {
+        proj.togglProjectId = togglProjectId;
+        // Ook aan REAL_PROJECTS toevoegen zodat taken direct gesynchroniseerd kunnen worden
+        REAL_PROJECTS.push({...proj, source: 'track'});
+      }
+    } catch(e) {
+      console.warn('Track project aanmaak fout:', e.message);
+      proj.pending = true;
+    }
+
+    // SP read-merge-write mt_user_projects.json
+    try {
+      const email = _msAccount ? _msAccount.username : 'bart@mortiseandtenon.nl';
+      const remote = await _SP.read('mt_user_projects.json') || [];
+      remote.push({
+        id: proj.id, code: proj.code, naam: proj.name,
+        klantcode: k, togglProjectId: proj.togglProjectId || null,
+        ts: new Date().toISOString(), door: email,
+        pending: proj.pending
+      });
+      await _SP.write('mt_user_projects.json', remote);
+    } catch(e) { console.warn('SP write project fout:', e.message); }
+  }
+
   USER_PROJECTS.push(proj);
   saveUserProjects();
 
@@ -2335,7 +2905,14 @@ function saveNewProject() {
   populateOpleverSelect();
 
   document.getElementById("newProjectSheet").classList.remove("visible");
-  showToast(`✓ Project ${code} aangemaakt`);
+
+  if (proj.pending) {
+    showToast(`✓ Project ${code} lokaal bewaard — sync naar Toggl 2.0 volgt later`);
+  } else if (proj.togglProjectId) {
+    showToast(`✓ Project ${code} live aangemaakt (Toggl 2.0 + gedeeld)`);
+  } else {
+    showToast(`✓ Project ${code} aangemaakt`);
+  }
 
   if (npReturnToBlok) {
     npReturnToBlok = false;
