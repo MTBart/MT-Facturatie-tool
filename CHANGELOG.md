@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — v1-header: 'v2 beta' knop naar v2.html (side-by-side test)
+- Commit: `23e02a8` | Auteur: Bart Witte
+
 ## 2026-06-11 — v2: login-scherm toont 'v2 beta' i.p.v. geerfd 'v4' - onderscheid met v1 voor login
 - Commit: `09b78bf` | Auteur: Bart Witte
 
