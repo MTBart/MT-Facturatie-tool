@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2A4A38">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>M&T Mobiel</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Manrope:wght@300;400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --green:#2A4A38;
+  --green-700:#1E3829;
+  --green-900:#162D20;
+  --green-mid:#4A7A5C;
+  --green-50:#E6EFE9;
+  --green-100:#D3E4DA;
+  --gold:#B8962E;
+  --gold-700:#9A7D24;
+  --gold-mid:#E8D48A;
+  --gold-50:#FBF5E0;
+  --gold-text:#7A6010;
+  --n-0:#FFFFFF;
+  --n-50:#FBFDFC;
+  --n-100:#F4F7F6;
+  --n-150:#EDF1F0;
+  --n-200:#E3E9E7;
+  --n-300:#D6DEDB;
+  --n-400:#B7C2BE;
+  --n-500:#8B9893;
+  --n-600:#5A6862;
+  --n-800:#2D3833;
+  --n-900:#172521;
+  --success:#2F6B45;--success-50:#E6EFE9;
+  --warning:#B8762E;--warning-50:#FBF0E0;
+  --error:#8B1A1A;--error-50:#FDE8E8;
+  --info:#1A3A8B;--info-50:#E8EDFB;
+  --surface:var(--n-50);
+  --surface-sunken:var(--n-150);
+  --border:var(--n-300);
+  --border-strong:var(--n-400);
+  --text:var(--n-900);
+  --text-dim:var(--n-600);
+  --text-faint:var(--n-500);
+  --shadow-sm:0 1px 2px rgba(44,40,28,.05);
+  --shadow-card:0 1px 3px rgba(44,40,28,.06);
+  --shadow-pop:0 8px 28px rgba(44,40,28,.12);
+  --radius-sm:6px;--radius:8px;--radius-lg:12px;
+  --mono:'DM Mono',monospace;
+  --serif:'Fraunces',serif;
+  --sans:'Manrope',sans-serif;
+  --nav-h:64px;
+  --header-h:56px;
+  --bar-h:44px;
+}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--sans);
+  background:var(--n-100);
+  color:var(--text);
+  font-size:14px;
+  line-height:1.55;
+  display:flex;
+  flex-direction:column;
+  -webkit-tap-highlight-color:transparent;
+  overscroll-behavior:none;
+}
+
+/* ── HEADER ── */
+.app-header{
+  flex:0 0 var(--header-h);
+  background:linear-gradient(135deg,var(--green) 0%,var(--green-700) 100%);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 16px;
+  padding-top:env(safe-area-inset-top,0);
+  position:relative;
+  z-index:100;
+  box-shadow:0 2px 8px rgba(0,0,0,.18);
+}
+.app-header::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:linear-gradient(90deg,var(--green-mid) 0%,var(--gold) 100%);
+}
+.app-title{font-family:var(--serif);font-size:18px;font-weight:400;color:#fff;letter-spacing:.02em}
+.app-title span{color:var(--gold-mid);font-style:italic}
+.header-info-btn{
+  background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);
+  border-radius:50%;width:36px;height:36px;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;color:#fff;font-size:16px;
+  transition:background .15s;
+}
+.header-info-btn:active{background:rgba(255,255,255,.3)}
+
+/* ── TIMER BAR (sticky, elke tab) ── */
+.timer-bar{
+  flex:0 0 var(--bar-h);
+  background:linear-gradient(90deg,var(--green-900) 0%,var(--green-700) 100%);
+  color:#fff;
+  display:none;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 14px;
+  font-size:13px;
+  z-index:90;
+  gap:10px;
+  border-bottom:1px solid rgba(255,255,255,.1);
+}
+.timer-bar.visible{display:flex}
+.timer-bar-label{display:flex;flex-direction:column;min-width:0;flex:1}
+.timer-bar-project{font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.95}
+.timer-bar-code{font-family:var(--mono);font-size:10px;opacity:.65;margin-top:1px}
+.timer-bar-time{font-family:var(--mono);font-size:16px;font-weight:500;letter-spacing:.05em;flex:0 0 auto}
+.timer-bar-stop{
+  flex:0 0 auto;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);
+  border-radius:6px;padding:5px 12px;color:#fff;font-size:12px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+}
+.timer-bar-stop:active{background:rgba(255,255,255,.3);transform:scale(.95)}
+
+/* ── SCROLLABLE CONTENT ── */
+.app-content{
+  flex:1;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  position:relative;
+}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{
+  flex:0 0 var(--nav-h);
+  background:var(--n-0);
+  border-top:1px solid var(--n-200);
+  display:flex;
+  align-items:stretch;
+  padding-bottom:env(safe-area-inset-bottom,0);
+  box-shadow:0 -2px 12px rgba(0,0,0,.06);
+  z-index:100;
+}
+.nav-btn{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:3px;
+  border:none;
+  background:none;
+  cursor:pointer;
+  color:var(--text-faint);
+  font-family:var(--sans);
+  font-size:10px;
+  font-weight:500;
+  padding:8px 4px;
+  transition:color .15s;
+  position:relative;
+  min-height:48px;
+  -webkit-tap-highlight-color:transparent;
+}
+.nav-btn.active{color:var(--green)}
+.nav-btn.active .nav-icon{color:var(--green)}
+.nav-btn::before{
+  content:"";position:absolute;top:0;left:12px;right:12px;height:2px;
+  background:linear-gradient(90deg,var(--green),var(--gold));
+  border-radius:0 0 2px 2px;opacity:0;transition:opacity .15s;
+}
+.nav-btn.active::before{opacity:1}
+.nav-btn:active{transform:scale(.92)}
+.nav-icon{font-size:22px;line-height:1;color:var(--text-faint)}
+.nav-btn.active .nav-icon{filter:drop-shadow(0 1px 3px rgba(42,74,56,.3))}
+
+/* ── TABS ── */
+.tab{display:none;padding:16px;min-height:100%}
+.tab.active{display:block}
+
+/* ── CARDS ── */
+.card{
+  background:var(--n-0);border:1px solid var(--n-200);
+  border-radius:var(--radius-lg);padding:16px;
+  margin-bottom:12px;box-shadow:var(--shadow-sm);
+}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-label{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint)}
+
+/* ── BUTTONS ── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border-radius:var(--radius);border:1px solid transparent;cursor:pointer;
+  font-family:var(--sans);font-weight:600;transition:all .15s;
+  min-height:48px;padding:0 18px;font-size:14px;
+}
+.btn:active{transform:scale(.95);filter:brightness(.92)}
+.btn-primary{background:linear-gradient(135deg,var(--green) 0%,var(--green-700) 100%);color:#fff}
+.btn-primary:active{background:var(--green-700)}
+.btn-gold{background:linear-gradient(135deg,var(--gold) 0%,var(--gold-700) 100%);color:#fff}
+.btn-secondary{background:var(--n-0);border-color:var(--border-strong);color:var(--n-900)}
+.btn-ghost{background:transparent;color:var(--text-dim);border-color:transparent}
+.btn-danger{background:var(--error-50);color:var(--error);border-color:#f5c5c5}
+.btn-sm{min-height:36px;padding:0 12px;font-size:13px}
+.btn-full{width:100%}
+.btn-icon{min-height:48px;width:48px;padding:0;border-radius:50%}
+
+/* ── BADGE / STATUS ── */
+.badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 9px;border-radius:20px;font-weight:500;letter-spacing:.03em}
+.badge-ok{background:var(--success-50);color:var(--success)}
+.badge-warn{background:var(--warning-50);color:var(--warning)}
+.badge-gold{background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid)}
+.badge-info{background:var(--info-50);color:var(--info)}
+.badge-gray{background:var(--n-150);color:var(--text-faint)}
+
+/* ── FORMS ── */
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--text-faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em}
+input,select,textarea{
+  width:100%;padding:10px 12px;border:1px solid var(--border);
+  border-radius:var(--radius-sm);background:var(--n-0);color:var(--n-900);
+  font-family:var(--sans);font-size:14px;outline:none;
+  transition:border-color .15s,box-shadow .15s;
+  min-height:48px;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(42,74,56,.12)}
+textarea{min-height:90px;resize:vertical;padding:12px}
+input::placeholder,textarea::placeholder{color:var(--n-500)}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B6455' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px}
+
+/* ── DIVIDER ── */
+.divider{border:none;border-top:1px solid var(--n-200);margin:16px 0}
+
+/* ── SECTION HEAD ── */
+.section-head{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;margin-top:4px}
+
+/* ============================
+   TAB 1: TIMER
+   ============================ */
+.timer-main{display:flex;flex-direction:column;align-items:center;padding:24px 0 8px}
+.timer-circle{
+  position:relative;width:160px;height:160px;
+  border-radius:50%;
+  background:var(--n-0);
+  border:3px solid var(--n-200);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(0,0,0,.08),inset 0 2px 8px rgba(0,0,0,.03);
+  cursor:pointer;
+  transition:all .2s;
+  margin-bottom:8px;
+  flex-direction:column;
+  gap:4px;
+}
+.timer-circle.running{
+  border-color:var(--green);
+  box-shadow:0 0 0 8px var(--green-50),0 4px 20px rgba(42,74,56,.15);
+}
+.timer-circle:active{transform:scale(.96)}
+.timer-circle-icon{font-size:36px;line-height:1;transition:all .2s}
+.timer-circle-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);transition:color .2s}
+.timer-circle.running .timer-circle-icon{filter:drop-shadow(0 0 8px rgba(42,74,56,.4))}
+.timer-circle.running .timer-circle-label{color:var(--green)}
+.timer-display{font-family:var(--mono);font-size:28px;font-weight:500;color:var(--green);margin-bottom:4px;letter-spacing:.05em}
+.timer-project-name{font-size:13px;font-weight:600;color:var(--text-dim);text-align:center;max-width:220px;line-height:1.3}
+.timer-project-code{font-family:var(--mono);font-size:11px;color:var(--text-faint);text-align:center;margin-top:2px}
+
+.project-picker{
+  background:var(--n-0);border:1px solid var(--n-200);
+  border-radius:var(--radius-lg);overflow:hidden;
+  box-shadow:var(--shadow-sm);
+}
+.picker-search{border:none;border-bottom:1px solid var(--n-200);border-radius:0;min-height:44px;padding:10px 14px}
+.picker-search:focus{box-shadow:none;border-bottom-color:var(--green)}
+.picker-group-label{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);padding:8px 14px 4px;background:var(--n-50)}
+.picker-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--n-100);
+  transition:background .12s;gap:10px;
+}
+.picker-item:last-child{border-bottom:none}
+.picker-item:active{background:var(--green-50)}
+.picker-item.selected{background:var(--green-50)}
+.picker-item.selected .picker-item-code{color:var(--green)}
+.picker-item-name{font-size:14px;font-weight:500;color:var(--n-900);flex:1;min-width:0}
+.picker-item-code{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:0 0 auto}
+.picker-item-check{color:var(--green);font-size:16px;flex:0 0 auto}
+
+.recent-entry{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 0;border-bottom:1px solid var(--n-100);cursor:pointer;
+}
+.recent-entry:last-child{border-bottom:none}
+.recent-entry:active{opacity:.7}
+.recent-dot{width:8px;height:8px;border-radius:50%;background:var(--green-mid);flex:0 0 auto}
+.recent-info{flex:1;min-width:0}
+.recent-name{font-size:13px;font-weight:500;color:var(--n-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-meta{font-family:var(--mono);font-size:10px;color:var(--text-faint)}
+
+/* ============================
+   TAB 2: PROJECTEN
+   ============================ */
+.project-card{
+  background:var(--n-0);border:1px solid var(--n-200);
+  border-radius:var(--radius-lg);padding:14px;
+  margin-bottom:10px;cursor:pointer;
+  transition:box-shadow .15s,border-color .15s;
+  box-shadow:var(--shadow-sm);
+}
+.project-card:active{transform:scale(.99);box-shadow:var(--shadow-card)}
+.project-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px}
+.project-card-name{font-size:15px;font-weight:600;color:var(--n-900);line-height:1.3;flex:1}
+.project-card-code{font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-bottom:4px}
+.project-card-addr{font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px}
+.project-card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid var(--n-100)}
+.project-last{font-size:11px;color:var(--text-faint)}
+
+/* Project detail sheet */
+.sheet-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;
+  display:none;align-items:flex-end;
+  animation:fadeIn .18s ease;
+}
+.sheet-overlay.visible{display:flex}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.sheet{
+  background:var(--n-0);width:100%;border-radius:24px 24px 0 0;
+  max-height:88vh;overflow-y:auto;
+  animation:slideUp .22s cubic-bezier(.22,.61,.36,1);
+  padding-bottom:env(safe-area-inset-bottom,16px);
+}
+@keyframes slideUp{from{transform:translateY(60px);opacity:.7}to{transform:none;opacity:1}}
+.sheet-handle{width:40px;height:4px;background:var(--n-300);border-radius:2px;margin:12px auto 4px}
+.sheet-head{padding:12px 16px 8px;border-bottom:1px solid var(--n-100)}
+.sheet-title{font-size:17px;font-weight:700;color:var(--n-900)}
+.sheet-sub{font-family:var(--mono);font-size:11px;color:var(--text-faint);margin-top:2px}
+.sheet-body{padding:16px}
+.sheet-close{position:absolute;top:16px;right:16px;background:var(--n-150);border:none;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;color:var(--text-dim)}
+.sheet-actions{display:flex;flex-direction:column;gap:8px;padding:0 16px 16px}
+.sheet-action-btn{
+  display:flex;align-items:center;gap:12px;
+  background:var(--n-50);border:1px solid var(--n-200);
+  border-radius:var(--radius);padding:14px;cursor:pointer;
+  transition:background .12s;
+}
+.sheet-action-btn:active{background:var(--green-50);border-color:var(--green-100)}
+.sheet-action-icon{font-size:22px;flex:0 0 auto}
+.sheet-action-label{flex:1}
+.sheet-action-title{font-size:14px;font-weight:600;color:var(--n-900)}
+.sheet-action-sub{font-size:12px;color:var(--text-dim)}
+.sheet-action-arrow{color:var(--text-faint);font-size:16px}
+
+/* ============================
+   TAB 3: AGENDA
+   ============================ */
+.week-strip{
+  display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;
+  scrollbar-width:none;
+}
+.week-strip::-webkit-scrollbar{display:none}
+.day-pill{
+  flex:0 0 auto;display:flex;flex-direction:column;align-items:center;
+  gap:3px;padding:8px 14px;border-radius:var(--radius-lg);
+  background:var(--n-0);border:1px solid var(--n-200);cursor:pointer;
+  transition:all .15s;min-width:56px;
+}
+.day-pill.today{background:var(--green);border-color:var(--green)}
+.day-pill.today .day-name,.day-pill.today .day-num{color:#fff}
+.day-pill.selected{border-color:var(--gold);background:var(--gold-50)}
+.day-pill.selected .day-name,.day-pill.selected .day-num{color:var(--gold-text)}
+.day-pill.holiday{border-color:var(--info);background:var(--info-50)}
+.day-name{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint)}
+.day-num{font-size:18px;font-weight:700;color:var(--n-900);line-height:1}
+.day-dot{width:5px;height:5px;border-radius:50%;background:var(--green-mid)}
+
+.agenda-block{
+  background:var(--n-0);border-left:3px solid var(--green);
+  border-radius:0 var(--radius) var(--radius) 0;
+  padding:10px 12px;margin-bottom:8px;
+  border:1px solid var(--n-200);border-left-width:3px;
+  box-shadow:var(--shadow-sm);
+}
+.agenda-block.bart{border-left-color:var(--green)}
+.agenda-block.mathijs{border-left-color:var(--gold)}
+.agenda-block-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.agenda-block-name{font-size:14px;font-weight:600;color:var(--n-900)}
+.agenda-block-time{font-family:var(--mono);font-size:12px;color:var(--text-dim)}
+.agenda-block-meta{font-size:12px;color:var(--text-faint);display:flex;align-items:center;gap:6px}
+.agenda-who{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500}
+.agenda-who.bart{background:var(--green-50);color:var(--green)}
+.agenda-who.mathijs{background:var(--gold-50);color:var(--gold-text)}
+
+.holiday-banner{
+  background:var(--info-50);border:1px solid var(--info);
+  border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;
+  font-size:13px;color:var(--info);display:flex;align-items:center;gap:8px;
+}
+
+/* ============================
+   TAB 4: CAPTURE
+   ============================ */
+.capture-active-project{
+  background:linear-gradient(135deg,var(--green) 0%,var(--green-700) 100%);
+  border-radius:var(--radius-lg);padding:12px 14px;
+  color:#fff;margin-bottom:12px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.cap-proj-name{font-size:15px;font-weight:600}
+.cap-proj-code{font-family:var(--mono);font-size:11px;opacity:.7;margin-top:2px}
+.cap-change-btn{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:5px 10px;color:#fff;font-size:12px;cursor:pointer}
+.cap-change-btn:active{background:rgba(255,255,255,.35)}
+
+.note-list{margin-top:8px}
+.note-item{
+  background:var(--n-0);border:1px solid var(--n-200);border-radius:var(--radius);
+  padding:10px 12px;margin-bottom:6px;
+  display:flex;align-items:flex-start;justify-content:space-between;gap:8px;
+}
+.note-item-text{font-size:13px;color:var(--n-900);flex:1;line-height:1.4}
+.note-item-meta{font-family:var(--mono);font-size:10px;color:var(--text-faint);flex:0 0 auto}
+.note-del{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:16px;padding:2px;line-height:1}
+.note-del:active{color:var(--error)}
+
+.photo-input-wrap{position:relative;overflow:hidden;display:inline-block}
+.photo-input-wrap input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+
+.opname-block{
+  background:var(--green-50);border:1px solid var(--green-100);
+  border-radius:var(--radius-lg);padding:14px;margin-top:12px;
+}
+.opname-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.opname-title{font-size:14px;font-weight:600;color:var(--green-700)}
+.opname-count{font-family:var(--mono);font-size:12px;color:var(--text-dim)}
+.thumbs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.thumb-cell{
+  aspect-ratio:1;border-radius:var(--radius-sm);overflow:hidden;
+  background:var(--n-200);position:relative;
+}
+.thumb-cell img{width:100%;height:100%;object-fit:cover}
+.thumb-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text-faint)}
+.sp-mock{font-family:var(--mono);font-size:10px;color:var(--green-700);background:rgba(42,74,56,.08);border-radius:4px;padding:3px 6px;margin-top:4px;word-break:break-all}
+
+/* ============================
+   TAB 5: OPLEVERING
+   ============================ */
+.checklist-item{
+  background:var(--n-0);border:1px solid var(--n-200);
+  border-radius:var(--radius);padding:12px;margin-bottom:8px;
+  transition:border-color .15s;
+}
+.checklist-item.ok{border-color:var(--success);background:var(--success-50)}
+.checklist-item.herstel{border-color:var(--warning);background:var(--warning-50)}
+.checklist-top{display:flex;align-items:center;gap:10px}
+.checklist-name{flex:1;font-size:14px;font-weight:500;color:var(--n-900)}
+.checklist-btns{display:flex;gap:6px;flex:0 0 auto}
+.check-btn{
+  min-height:40px;min-width:40px;border-radius:var(--radius-sm);
+  border:1px solid var(--n-300);background:var(--n-0);
+  cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.check-btn:active{transform:scale(.92)}
+.check-btn.active-ok{background:var(--success-50);border-color:var(--success);color:var(--success)}
+.check-btn.active-herstel{background:var(--warning-50);border-color:var(--warning);color:var(--warning)}
+.herstel-extra{margin-top:10px;padding-top:10px;border-top:1px solid var(--warning);display:none}
+.herstel-extra.visible{display:block}
+.herstel-extra textarea{min-height:60px;font-size:13px}
+.herstel-foto-btn{
+  display:inline-flex;align-items:center;gap:6px;background:var(--warning-50);
+  border:1px solid var(--warning);color:var(--warning);border-radius:6px;
+  padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;margin-top:8px;
+}
+
+/* Canvas handtekening */
+.sig-canvas{
+  border:2px dashed var(--n-300);border-radius:var(--radius);
+  background:#fff;cursor:crosshair;display:block;touch-action:none;
+  width:100%;height:180px;
+}
+.sig-canvas.has-sig{border-color:var(--green);border-style:solid}
+
+/* Rapport preview */
+.rapport-preview{
+  background:#fff;border:1px solid var(--n-200);border-radius:var(--radius-lg);
+  padding:20px;font-family:var(--serif);
+}
+.rapport-title{font-size:20px;font-weight:400;color:var(--green);margin-bottom:4px}
+.rapport-sub{font-family:var(--mono);font-size:11px;color:var(--text-faint);margin-bottom:16px}
+.rapport-item{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--n-100)}
+.rapport-item:last-child{border-bottom:none}
+.rapport-item-icon{font-size:16px;flex:0 0 auto;margin-top:1px}
+.rapport-item-content{flex:1;font-size:13px}
+.rapport-item-name{font-weight:600;color:var(--n-900);font-family:var(--sans)}
+.rapport-item-note{color:var(--text-dim);font-family:var(--sans);font-size:12px;margin-top:2px}
+.rapport-section{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin:14px 0 6px}
+
+/* ── LARRY HELP SHEET ── */
+.larry-sheet{
+  position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;
+  display:none;align-items:flex-end;
+}
+.larry-sheet.visible{display:flex}
+.larry-inner{
+  background:var(--n-0);width:100%;border-radius:24px 24px 0 0;
+  max-height:80vh;overflow-y:auto;
+  padding:0 0 env(safe-area-inset-bottom,16px);
+  animation:slideUp .22s cubic-bezier(.22,.61,.36,1);
+}
+.larry-head{
+  background:linear-gradient(135deg,var(--green),var(--green-700));
+  color:#fff;padding:16px;border-radius:24px 24px 0 0;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.larry-head-title{font-family:var(--serif);font-size:17px;font-weight:400}
+.larry-head-close{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center}
+.larry-body{padding:16px}
+.larry-tab-help{padding:12px 0;border-bottom:1px solid var(--n-100)}
+.larry-tab-help:last-child{border-bottom:none}
+.larry-tab-name{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--green);margin-bottom:4px}
+.larry-tab-desc{font-size:14px;color:var(--n-900);line-height:1.5}
+
+/* ── SUCCESS / MODAL VIEWS ── */
+.view-hidden{display:none}
+.done-screen{text-align:center;padding:40px 20px}
+.done-icon{font-size:64px;margin-bottom:16px}
+.done-title{font-family:var(--serif);font-size:22px;color:var(--green);margin-bottom:8px}
+.done-sub{font-size:14px;color:var(--text-dim);margin-bottom:24px;line-height:1.5}
+
+/* ── STEP DOTS ── */
+.step-dots{display:flex;gap:6px;justify-content:center;margin:12px 0}
+.step-dot{width:8px;height:8px;border-radius:50%;background:var(--n-300);transition:background .15s}
+.step-dot.active{background:var(--green)}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:32px 20px;color:var(--text-faint)}
+.empty-icon{font-size:40px;margin-bottom:8px}
+.empty-text{font-size:14px}
+
+/* ── ANIMATIONS ── */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.recording{animation:pulse 1.5s ease infinite}
+
+/* Scrollbar styling */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--n-300);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- ── APP HEADER ── -->
+<header class="app-header">
+  <div class="app-title">M<span>&amp;</span>T</div>
+  <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
+</header>
+
+<!-- ── LOPENDE TIMER BAR ── -->
+<div class="timer-bar" id="timerBar">
+  <div class="timer-bar-label">
+    <div class="timer-bar-project" id="timerBarProject">–</div>
+    <div class="timer-bar-code" id="timerBarCode">–</div>
+  </div>
+  <div class="timer-bar-time" id="timerBarTime">00:00:00</div>
+  <button class="timer-bar-stop" onclick="stopTimer()">⏹ Stop</button>
+</div>
+
+<!-- ── SCROLLABLE CONTENT ── -->
+<div class="app-content">
+
+  <!-- TAB: TIMER -->
+  <div class="tab active" id="tab-timer">
+    <div class="timer-main">
+      <div class="timer-circle" id="timerCircle" onclick="toggleTimer()">
+        <div class="timer-display" id="timerDisplay" style="display:none">00:00:00</div>
+        <div class="timer-circle-icon" id="timerIcon">▶</div>
+        <div class="timer-circle-label" id="timerLabel">START</div>
+      </div>
+      <div class="timer-project-name" id="timerProjectName">Geen project geselecteerd</div>
+      <div class="timer-project-code" id="timerProjectCode"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-head">Project kiezen</div>
+    <div class="project-picker">
+      <input class="picker-search" type="search" placeholder="Zoek project of code…" oninput="filterPicker(this.value)" id="pickerSearch">
+      <div id="pickerList"></div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="card-label">Recente activiteit</div>
+      <div id="recentList"></div>
+    </div>
+  </div>
+
+  <!-- TAB: PROJECTEN -->
+  <div class="tab" id="tab-projecten">
+    <div class="section-head">Jouw projecten</div>
+    <div id="projectCardList"></div>
+  </div>
+
+  <!-- TAB: AGENDA -->
+  <div class="tab" id="tab-agenda">
+    <div class="section-head">Week 24 · Juni 2026</div>
+    <div class="week-strip" id="weekStrip"></div>
+    <div id="agendaContent"></div>
+  </div>
+
+  <!-- TAB: CAPTURE -->
+  <div class="tab" id="tab-capture">
+    <!-- actief project -->
+    <div id="captureProjectBanner"></div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-label">Snelle notitie</div>
+      </div>
+      <div class="field">
+        <textarea id="noteInput" placeholder="Typ een notitie voor dit project…" rows="3"></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="saveNote()" style="min-height:44px">💾 Notitie opslaan</button>
+    </div>
+
+    <div id="noteListWrap" style="display:none">
+      <div class="section-head">Opgeslagen notities</div>
+      <div id="noteList" class="note-list"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- camera / foto's -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-label">Foto's opnemen</div>
+        <span class="badge badge-info" id="photoCount">0 foto's</span>
+      </div>
+      <div class="photo-input-wrap" style="display:block">
+        <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
+          <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📷 Camera openen</button>
+          <input type="file" accept="image/*" capture="environment" onchange="addPhoto(this)" multiple>
+        </label>
+      </div>
+    </div>
+
+    <!-- opname sessie -->
+    <div id="opnameBlock" style="display:none">
+      <div class="opname-block">
+        <div class="opname-header">
+          <div class="opname-title">📸 Actieve opname</div>
+          <div class="opname-count" id="opnameCount">0 foto's</div>
+        </div>
+        <div class="thumbs-grid" id="thumbsGrid"></div>
+        <div class="sp-mock" id="spMockPath">→ SP: /Projecten/–/Opname/</div>
+        <button class="btn btn-gold btn-full" onclick="sluitOpname()" style="margin-top:8px">✅ Opname afronden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: OPLEVERING -->
+  <div class="tab" id="tab-oplevering">
+    <div id="opleverView">
+      <div class="section-head">Project kiezen</div>
+      <div class="field">
+        <select id="opleverProjectSelect" onchange="loadChecklist()">
+          <option value="">— selecteer project —</option>
+        </select>
+      </div>
+      <div id="checklistWrap" style="display:none">
+        <div class="section-head" id="checklistProjectLabel"></div>
+        <div id="checklistItems"></div>
+        <div style="margin-top:12px">
+          <button class="btn btn-primary btn-full" onclick="showRapport()">📋 Rapport maken</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RAPPORT PREVIEW -->
+    <div id="rapportView" class="view-hidden">
+      <div class="section-head">Opleverrapport</div>
+      <div class="rapport-preview" id="rapportContent"></div>
+      <div style="margin-top:12px">
+        <button class="btn btn-gold btn-full" onclick="showHandtekening()">✍️ Laat opdrachtgever aftekenen</button>
+        <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="backToChecklist()">← Terug naar checklist</button>
+      </div>
+    </div>
+
+    <!-- HANDTEKENING -->
+    <div id="handtekeningView" class="view-hidden">
+      <div class="section-head">Handtekening opdrachtgever</div>
+      <div class="card">
+        <div class="card-label" style="margin-bottom:8px">Teken hieronder met uw vinger</div>
+        <canvas class="sig-canvas" id="sigCanvas" width="360" height="180"></canvas>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-secondary btn-sm" onclick="clearCanvas()" style="flex:1">🗑 Wissen</button>
+          <button class="btn btn-primary btn-sm" onclick="bevestigHandtekening()" style="flex:2">✅ Bevestig handtekening</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KLAAR -->
+    <div id="opleverDoneView" class="view-hidden">
+      <div class="done-screen">
+        <div class="done-icon">✅</div>
+        <div class="done-title">Rapport klaar</div>
+        <div class="done-sub">Het opleverrapport met handtekening wordt gemaild naar de opdrachtgever.<br><br><em>(mock — in productie via Graph /sendMail)</em></div>
+        <button class="btn btn-primary" onclick="resetOplevering()">← Nieuwe oplevering</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /app-content -->
+
+<!-- ── BOTTOM NAV ── -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" onclick="switchTab('timer',this)" id="nav-timer">
+    <div class="nav-icon">⏱</div>
+    <span>Timer</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('projecten',this)" id="nav-projecten">
+    <div class="nav-icon">📁</div>
+    <span>Projecten</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('agenda',this)" id="nav-agenda">
+    <div class="nav-icon">📅</div>
+    <span>Agenda</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('capture',this)" id="nav-capture">
+    <div class="nav-icon">📷</div>
+    <span>Capture</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('oplevering',this)" id="nav-oplevering">
+    <div class="nav-icon">✅</div>
+    <span>Oplevering</span>
+  </button>
+</nav>
+
+<!-- ── PROJECT DETAIL SHEET ── -->
+<div class="sheet-overlay" id="projectSheet" onclick="closeSheet(event)">
+  <div class="sheet" id="sheetInner">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="closeProjectSheet()">×</button>
+      <div class="sheet-title" id="sheetTitle">–</div>
+      <div class="sheet-sub" id="sheetSub">–</div>
+    </div>
+    <div class="sheet-body">
+      <div class="section-head">Status</div>
+      <div id="sheetStatus" style="margin-bottom:10px"></div>
+      <div class="section-head">Adres</div>
+      <div id="sheetAddr" style="font-size:14px;color:var(--text-dim);margin-bottom:4px"></div>
+      <div class="section-head" style="margin-top:10px">Laatste activiteit</div>
+      <div id="sheetActivity" style="font-size:13px;color:var(--text-faint);margin-bottom:4px"></div>
+    </div>
+    <div class="sheet-actions" id="sheetActions"></div>
+  </div>
+</div>
+
+<!-- ── LARRY HELP SHEET ── -->
+<div class="larry-sheet" id="larrySheet" onclick="closeLarryOuter(event)">
+  <div class="larry-inner">
+    <div class="larry-head">
+      <div class="larry-head-title">ⓘ Larry helpt</div>
+      <button class="larry-head-close" onclick="closeLarry()">×</button>
+    </div>
+    <div class="larry-body">
+      <div class="larry-tab-help">
+        <div class="larry-tab-name">⏱ Timer</div>
+        <div class="larry-tab-desc">Tik de grote knop om te starten of stoppen. Kies je project in de lijst; de lopende timer blijft zichtbaar op elke tab als smalle balk.</div>
+      </div>
+      <div class="larry-tab-help">
+        <div class="larry-tab-name">📁 Projecten</div>
+        <div class="larry-tab-desc">Overzicht van jouw toegewezen projecten. Tik op een kaart voor details en snelkoppelingen naar Timer, Capture en Oplevering.</div>
+      </div>
+      <div class="larry-tab-help">
+        <div class="larry-tab-name">📅 Agenda</div>
+        <div class="larry-tab-desc">Lees de weekplanning: wie werkt waar, hoeveel uur. Aanpassen doe je op het groot scherm in de cockpit.</div>
+      </div>
+      <div class="larry-tab-help">
+        <div class="larry-tab-name">📷 Capture</div>
+        <div class="larry-tab-desc">Sla snel een notitie of foto op voor het lopende project. Foto's gaan straks automatisch naar de SharePoint-projectmap.</div>
+      </div>
+      <div class="larry-tab-help">
+        <div class="larry-tab-name">✅ Oplevering</div>
+        <div class="larry-tab-desc">Loop de checklist af, markeer herstelpunten, maak het rapport en laat de opdrachtgever ter plekke aftekenen op het scherm.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   MOCK DATA
+   ===================================================================== */
+const PROJECTS = [
+  {
+    id:"p1",code:"CN-AMS-KEUKEN",
+    name:"CompaNanny Amsterdam – Keuken",
+    addr:"Parnassusweg 819, Amsterdam",
+    status:"in-uitvoering",
+    assigned:true,
+    lastActivity:"Gisteren 14:32 · Bart",
+    contact:"Marieke de Wit",
+    checklist:[
+      "Frontjes uitgelijnd","Lades soepel","Plinten afgekit",
+      "Grepen aangebracht","Kraan aangesloten","Opleverschade gecontroleerd"
+    ]
+  },
+  {
+    id:"p2",code:"HWC-HRLM-KAST",
+    name:"Heemstede Woning – Inbouwkast slaapkamer",
+    addr:"Zandvoortselaan 22, Haarlem",
+    status:"gepland",
+    assigned:true,
+    lastActivity:"Ma 9 jun · Mathijs",
+    contact:"J. van den Berg",
+    checklist:[
+      "Deuren passen goed","Scharnieren afgesteld","Binnenzijde afgewerkt",
+      "Plinthoogte correct","Wandbevestiging stabiel"
+    ]
+  },
+  {
+    id:"p3",code:"INT-AMS-BUREAU",
+    name:"Interieurbouw Centrum – Directiemeubel",
+    addr:"Keizersgracht 141, Amsterdam",
+    status:"in-uitvoering",
+    assigned:true,
+    lastActivity:"Vandaag 09:15 · Bart",
+    contact:"M. Brouwer",
+    checklist:[
+      "Blad vlak en waterpas","Lades werken soepel","Kabeldoorvoer aanwezig",
+      "Zijpanelen strak","Afwerklak egaal","Stellager correct"
+    ]
+  },
+  {
+    id:"p4",code:"MOS-UTR-BADKAMER",
+    name:"Mosterd & Co Utrecht – Badkamermeubel",
+    addr:"Maliebaan 34, Utrecht",
+    status:"gereed",
+    assigned:false,
+    lastActivity:"Vr 6 jun · Mathijs",
+    contact:"T. Mosterd",
+    checklist:[
+      "Wastafelblad waterpas","Sifon aangesloten","Deurtjes sluiten goed",
+      "Siliconen naden afgewerkt"
+    ]
+  },
+  {
+    id:"p5",code:"STY-RTD-WANDKAST",
+    name:"Styling Concepts Rotterdam – Wandkast",
+    addr:"Wijnhaven 88, Rotterdam",
+    status:"gepland",
+    assigned:true,
+    lastActivity:"Di 10 jun · Bart",
+    contact:"L. van Stijl",
+    checklist:[
+      "Panelen recht","Bodemplaatjes vastgezet","Verlichting werkt","Deurbuffer aangebracht"
+    ]
+  },
+  {
+    id:"p6",code:"CN-EIN-SPEEL",
+    name:"CompaNanny Eindhoven – Speelhoek",
+    addr:"Dommelseweg 12, Eindhoven",
+    status:"concept",
+    assigned:false,
+    lastActivity:"Ma 8 jun · –",
+    contact:"R. Jansen",
+    checklist:[
+      "Rondingen afgewerkt","Verf/lak vlekvrij","Verbindingen stabiel"
+    ]
+  }
+];
+
+const STATUS_MAP = {
+  "in-uitvoering":["badge-warn","In uitvoering"],
+  "gepland":["badge-info","Gepland"],
+  "gereed":["badge-ok","Gereed"],
+  "concept":["badge-gray","Concept"]
+};
+
+const AGENDA_DATA = {
+  // monday = index 0 relative to week start (Mon 9 Jun 2026)
+  0:[
+    {proj:"CN-AMS-KEUKEN",name:"CompaNanny Keuken",uren:"8u",who:"bart",start:"07:30",end:"15:30"},
+    {proj:"HWC-HRLM-KAST",name:"Heemstede Kast",uren:"4u",who:"mathijs",start:"08:00",end:"12:00"}
+  ],
+  1:[
+    {proj:"INT-AMS-BUREAU",name:"Directiemeubel",uren:"8u",who:"bart",start:"07:30",end:"15:30"},
+    {proj:"STY-RTD-WANDKAST",name:"Wandkast Rotterdam",uren:"6u",who:"mathijs",start:"09:00",end:"15:00"}
+  ],
+  2:[
+    {proj:"CN-AMS-KEUKEN",name:"CompaNanny Keuken",uren:"6u",who:"bart",start:"07:30",end:"13:30"},
+    {proj:"INT-AMS-BUREAU",name:"Directiemeubel",uren:"4u",who:"mathijs",start:"10:00",end:"14:00"}
+  ],
+  3:[
+    {proj:"STY-RTD-WANDKAST",name:"Wandkast Rotterdam",uren:"8u",who:"bart",start:"07:30",end:"15:30"}
+  ],
+  4:[
+    {proj:"HWC-HRLM-KAST",name:"Heemstede Kast",uren:"4u",who:"bart",start:"08:00",end:"12:00"},
+    {proj:"INT-AMS-BUREAU",name:"Directiemeubel",uren:"6u",who:"mathijs",start:"09:00",end:"15:00"}
+  ]
+};
+
+// Today = Thursday 11 June 2026 → index 3 in week
+const WEEK_DAYS = ["Ma","Di","Wo","Do","Vr"];
+const WEEK_DATES = [9,10,11,12,13]; // June 2026
+const TODAY_IDX = 2; // Wednesday 11 June (0=Mon)
+const HOLIDAY = {idx:null,name:null}; // no holiday this week
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+let timerRunning = false;
+let timerStart = null;
+let timerInterval = null;
+let activeProject = null;  // full project object
+let selectedDayIdx = TODAY_IDX;
+let opnamePhotos = [];
+let captureProject = null;
+let checklistState = {}; // {itemIndex: "ok"|"herstel"|null}
+let checklistNotes = {};
+let currentOpleverProject = null;
+
+/* =====================================================================
+   INIT
+   ===================================================================== */
+document.addEventListener("DOMContentLoaded", () => {
+  loadFromStorage();
+  renderPickerList(PROJECTS);
+  renderRecentList();
+  renderProjectCards();
+  renderWeekStrip();
+  renderAgenda(selectedDayIdx);
+  populateOpleverSelect();
+  renderCaptureProject();
+  renderNotes();
+});
+
+/* =====================================================================
+   TAB NAVIGATION
+   ===================================================================== */
+function switchTab(name, btn) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("tab-"+name).classList.add("active");
+  btn.classList.add("active");
+  if (name === "capture") renderCaptureProject();
+}
+
+/* =====================================================================
+   TIMER
+   ===================================================================== */
+function loadFromStorage() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("mt_timer") || "null");
+    if (saved && saved.running && saved.projectId) {
+      const proj = PROJECTS.find(p => p.id === saved.projectId);
+      if (proj) {
+        activeProject = proj;
+        timerStart = saved.start;
+        timerRunning = true;
+        captureProject = proj;
+        startTickInterval();
+        updateTimerUI();
+      }
+    }
+    const savedNotes = JSON.parse(localStorage.getItem("mt_notes") || "[]");
+    window._notes = savedNotes;
+  } catch(e) {
+    window._notes = [];
+  }
+  if (!window._notes) window._notes = [];
+}
+
+function saveTimerState() {
+  if (timerRunning && activeProject) {
+    localStorage.setItem("mt_timer", JSON.stringify({
+      running:true,projectId:activeProject.id,start:timerStart
+    }));
+  } else {
+    localStorage.removeItem("mt_timer");
+  }
+}
+
+function toggleTimer() {
+  if (timerRunning) {
+    stopTimer();
+  } else {
+    startTimer();
+  }
+}
+
+function startTimer() {
+  if (!activeProject) {
+    alert("Selecteer eerst een project.");
+    return;
+  }
+  timerRunning = true;
+  timerStart = timerStart || Date.now();
+  captureProject = activeProject;
+  saveTimerState();
+  startTickInterval();
+  updateTimerUI();
+  renderCaptureProject();
+  updateSpMockPath();
+}
+
+function stopTimer() {
+  timerRunning = false;
+  clearInterval(timerInterval);
+  timerInterval = null;
+  timerStart = null;
+  saveTimerState();
+  updateTimerUI();
+  renderCaptureProject();
+}
+
+function startTickInterval() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(tickTimer, 1000);
+  tickTimer();
+}
+
+function tickTimer() {
+  if (!timerStart) return;
+  const elapsed = Math.floor((Date.now() - timerStart) / 1000);
+  const h = String(Math.floor(elapsed/3600)).padStart(2,"0");
+  const m = String(Math.floor((elapsed%3600)/60)).padStart(2,"0");
+  const s = String(elapsed%60).padStart(2,"0");
+  const str = `${h}:${m}:${s}`;
+  document.getElementById("timerDisplay").textContent = str;
+  document.getElementById("timerBarTime").textContent = str;
+  // also update bar display in other tabs
+  const barDisplay = document.querySelectorAll(".timer-bar-time");
+  barDisplay.forEach(el => el.textContent = str);
+}
+
+function updateTimerUI() {
+  const circle = document.getElementById("timerCircle");
+  const icon = document.getElementById("timerIcon");
+  const label = document.getElementById("timerLabel");
+  const display = document.getElementById("timerDisplay");
+  const bar = document.getElementById("timerBar");
+  const barProject = document.getElementById("timerBarProject");
+  const barCode = document.getElementById("timerBarCode");
+  const projName = document.getElementById("timerProjectName");
+  const projCode = document.getElementById("timerProjectCode");
+
+  if (timerRunning && activeProject) {
+    circle.classList.add("running");
+    icon.textContent = "⏸";
+    label.textContent = "STOP";
+    display.style.display = "block";
+    bar.classList.add("visible");
+    barProject.textContent = activeProject.name;
+    barCode.textContent = activeProject.code;
+    projName.textContent = activeProject.name;
+    projCode.textContent = activeProject.code;
+  } else {
+    circle.classList.remove("running");
+    icon.textContent = "▶";
+    label.textContent = activeProject ? "START" : "KIES PROJECT";
+    display.style.display = "none";
+    if (!timerRunning) {
+      bar.classList.remove("visible");
+      if (activeProject) {
+        projName.textContent = activeProject.name;
+        projCode.textContent = activeProject.code;
+      }
+    }
+  }
+
+  // highlight selected in picker
+  document.querySelectorAll(".picker-item").forEach(el => {
+    el.classList.toggle("selected", activeProject && el.dataset.id === activeProject.id);
+    const check = el.querySelector(".picker-item-check");
+    if (check) check.style.display = (activeProject && el.dataset.id === activeProject.id) ? "block" : "none";
+  });
+}
+
+/* =====================================================================
+   PROJECT PICKER
+   ===================================================================== */
+function renderPickerList(list) {
+  const container = document.getElementById("pickerList");
+  if (!list.length) {
+    container.innerHTML = `<div style="padding:14px;text-align:center;color:var(--text-faint);font-size:13px">Geen projecten gevonden</div>`;
+    return;
+  }
+  const assigned = list.filter(p => p.assigned);
+  const rest = list.filter(p => !p.assigned);
+  let html = "";
+  if (assigned.length) {
+    html += `<div class="picker-group-label">Toegewezen</div>`;
+    html += assigned.map(p => pickerItemHtml(p)).join("");
+  }
+  if (rest.length) {
+    html += `<div class="picker-group-label">Alle projecten</div>`;
+    html += rest.map(p => pickerItemHtml(p)).join("");
+  }
+  container.innerHTML = html;
+}
+
+function pickerItemHtml(p) {
+  return `<div class="picker-item" data-id="${p.id}" onclick="selectProject('${p.id}')">
+    <div>
+      <div class="picker-item-name">${p.name}</div>
+    </div>
+    <div class="picker-item-code">${p.code}</div>
+    <div class="picker-item-check" style="display:none">✓</div>
+  </div>`;
+}
+
+function selectProject(id) {
+  activeProject = PROJECTS.find(p => p.id === id);
+  captureProject = activeProject;
+  if (timerRunning) {
+    // update running project
+    saveTimerState();
+    document.getElementById("timerBarProject").textContent = activeProject.name;
+    document.getElementById("timerBarCode").textContent = activeProject.code;
+  }
+  updateTimerUI();
+  updateSpMockPath();
+  // scroll picker item into view
+  const el = document.querySelector(`.picker-item[data-id="${id}"]`);
+  if (el) el.scrollIntoView({block:"nearest"});
+}
+
+function filterPicker(q) {
+  const lower = q.toLowerCase();
+  const filtered = lower
+    ? PROJECTS.filter(p => p.name.toLowerCase().includes(lower) || p.code.toLowerCase().includes(lower))
+    : PROJECTS;
+  renderPickerList(filtered);
+  updateTimerUI();
+}
+
+function renderRecentList() {
+  const el = document.getElementById("recentList");
+  const recents = PROJECTS.filter(p => p.assigned).slice(0,3);
+  if (!recents.length) { el.innerHTML = `<div class="empty-state"><div class="empty-text">Geen recente activiteit</div></div>`; return; }
+  el.innerHTML = recents.map(p => `
+    <div class="recent-entry" onclick="selectProject('${p.id}')">
+      <div class="recent-dot"></div>
+      <div class="recent-info">
+        <div class="recent-name">${p.name}</div>
+        <div class="recent-meta">${p.code} · ${p.lastActivity}</div>
+      </div>
+      <div style="font-size:13px;color:var(--text-faint)">▶</div>
+    </div>
+  `).join("");
+}
+
+/* =====================================================================
+   PROJECTEN TAB
+   ===================================================================== */
+function renderProjectCards() {
+  const el = document.getElementById("projectCardList");
+  el.innerHTML = PROJECTS.map(p => {
+    const [cls,label] = STATUS_MAP[p.status] || ["badge-gray","–"];
+    return `<div class="project-card" onclick="openProjectSheet('${p.id}')">
+      <div class="project-card-code">${p.code}</div>
+      <div class="project-card-top">
+        <div class="project-card-name">${p.name}</div>
+        <span class="badge ${cls}">${label}</span>
+      </div>
+      <div class="project-card-addr">📍 ${p.addr}</div>
+      <div class="project-card-footer">
+        <div class="project-last">🕐 ${p.lastActivity}</div>
+        ${p.assigned ? '<span class="badge badge-ok">Toegewezen</span>' : ''}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+let currentSheetProject = null;
+function openProjectSheet(id) {
+  currentSheetProject = PROJECTS.find(p => p.id === id);
+  const p = currentSheetProject;
+  const [cls,label] = STATUS_MAP[p.status] || ["badge-gray","–"];
+  document.getElementById("sheetTitle").textContent = p.name;
+  document.getElementById("sheetSub").textContent = p.code;
+  document.getElementById("sheetStatus").innerHTML = `<span class="badge ${cls}">${label}</span>`;
+  document.getElementById("sheetAddr").textContent = p.addr;
+  document.getElementById("sheetActivity").textContent = p.lastActivity;
+  document.getElementById("sheetActions").innerHTML = `
+    <div class="sheet-action-btn" onclick="sheetStartTimer('${p.id}')">
+      <div class="sheet-action-icon">⏱</div>
+      <div class="sheet-action-label">
+        <div class="sheet-action-title">Start timer</div>
+        <div class="sheet-action-sub">Klokt op ${p.code}</div>
+      </div>
+      <div class="sheet-action-arrow">›</div>
+    </div>
+    <div class="sheet-action-btn" onclick="sheetGoCapture('${p.id}')">
+      <div class="sheet-action-icon">📷</div>
+      <div class="sheet-action-label">
+        <div class="sheet-action-title">Foto's / notitie</div>
+        <div class="sheet-action-sub">Ga naar Capture voor dit project</div>
+      </div>
+      <div class="sheet-action-arrow">›</div>
+    </div>
+    <div class="sheet-action-btn" onclick="sheetGoOplevering('${p.id}')">
+      <div class="sheet-action-icon">✅</div>
+      <div class="sheet-action-label">
+        <div class="sheet-action-title">Oplevering starten</div>
+        <div class="sheet-action-sub">Checklist voor dit project</div>
+      </div>
+      <div class="sheet-action-arrow">›</div>
+    </div>
+  `;
+  document.getElementById("projectSheet").classList.add("visible");
+}
+
+function sheetStartTimer(id) {
+  closeProjectSheet();
+  selectProject(id);
+  startTimer();
+  switchTab("timer", document.getElementById("nav-timer"));
+}
+
+function sheetGoCapture(id) {
+  closeProjectSheet();
+  selectProject(id);
+  captureProject = PROJECTS.find(p => p.id === id);
+  switchTab("capture", document.getElementById("nav-capture"));
+}
+
+function sheetGoOplevering(id) {
+  closeProjectSheet();
+  switchTab("oplevering", document.getElementById("nav-oplevering"));
+  document.getElementById("opleverProjectSelect").value = id;
+  loadChecklist();
+}
+
+function closeProjectSheet() {
+  document.getElementById("projectSheet").classList.remove("visible");
+}
+
+function closeSheet(e) {
+  if (e.target === document.getElementById("projectSheet")) closeProjectSheet();
+}
+
+/* =====================================================================
+   AGENDA TAB
+   ===================================================================== */
+function renderWeekStrip() {
+  const strip = document.getElementById("weekStrip");
+  strip.innerHTML = WEEK_DAYS.map((day,i) => {
+    let cls = "day-pill";
+    if (i === TODAY_IDX) cls += " today";
+    else if (i === selectedDayIdx) cls += " selected";
+    if (HOLIDAY.idx === i) cls += " holiday";
+    const hasDots = AGENDA_DATA[i] && AGENDA_DATA[i].length > 0;
+    return `<div class="${cls}" onclick="selectDay(${i})">
+      <div class="day-name">${day}</div>
+      <div class="day-num">${WEEK_DATES[i]}</div>
+      ${hasDots ? '<div class="day-dot"></div>' : ''}
+    </div>`;
+  }).join("");
+}
+
+function selectDay(idx) {
+  selectedDayIdx = idx;
+  renderWeekStrip();
+  renderAgenda(idx);
+}
+
+function renderAgenda(idx) {
+  const el = document.getElementById("agendaContent");
+  const blocks = AGENDA_DATA[idx] || [];
+  let html = "";
+  if (HOLIDAY.idx === idx) {
+    html += `<div class="holiday-banner">🏖 ${HOLIDAY.name}</div>`;
+  }
+  if (!blocks.length) {
+    html += `<div class="empty-state"><div class="empty-icon">😌</div><div class="empty-text">Geen planningsblokken op ${WEEK_DAYS[idx]} ${WEEK_DATES[idx]} juni</div></div>`;
+  } else {
+    const dayLabel = `${WEEK_DAYS[idx]} ${WEEK_DATES[idx]} juni 2026`;
+    html += `<div class="section-head">${dayLabel}</div>`;
+    blocks.forEach(b => {
+      html += `<div class="agenda-block ${b.who}">
+        <div class="agenda-block-top">
+          <div class="agenda-block-name">${b.name}</div>
+          <div class="agenda-block-time">${b.start}–${b.end}</div>
+        </div>
+        <div class="agenda-block-meta">
+          <span class="agenda-who ${b.who}">${b.who === "bart" ? "Bart" : "Mathijs"}</span>
+          <span>${b.uren}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">${b.proj}</span>
+        </div>
+      </div>`;
+    });
+    // simple capacity bar
+    const bartUren = blocks.filter(b=>b.who==="bart").reduce((a,b)=>a+parseFloat(b.uren),0);
+    const mathijsUren = blocks.filter(b=>b.who==="mathijs").reduce((a,b)=>a+parseFloat(b.uren),0);
+    if (bartUren || mathijsUren) {
+      html += `<div class="card" style="margin-top:8px">
+        <div class="card-label">Capaciteit overzicht</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+          ${bartUren ? capacityBar("Bart",bartUren,8,"bart") : ""}
+          ${mathijsUren ? capacityBar("Mathijs",mathijsUren,8,"mathijs") : ""}
+        </div>
+      </div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+function capacityBar(name,uren,max,who) {
+  const pct = Math.min(100, (uren/max)*100);
+  const color = who === "bart" ? "var(--green)" : "var(--gold)";
+  const over = uren > max;
+  return `<div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+      <span style="font-size:12px;font-weight:600;color:var(--text-dim)">${name}</span>
+      <span style="font-family:var(--mono);font-size:11px;color:${over?"var(--error)":"var(--text-faint)"}">${uren}u${over?" ⚠️ overboeking":""}</span>
+    </div>
+    <div style="height:6px;background:var(--n-200);border-radius:3px;overflow:hidden">
+      <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
+    </div>
+  </div>`;
+}
+
+/* =====================================================================
+   CAPTURE TAB
+   ===================================================================== */
+function renderCaptureProject() {
+  const el = document.getElementById("captureProjectBanner");
+  const proj = captureProject || activeProject;
+  if (proj) {
+    el.innerHTML = `<div class="capture-active-project">
+      <div>
+        <div class="cap-proj-name">${proj.name}</div>
+        <div class="cap-proj-code">${proj.code}</div>
+      </div>
+      <button class="cap-change-btn" onclick="changeCaptureProject()">Wijzigen</button>
+    </div>`;
+  } else {
+    el.innerHTML = `<div class="capture-active-project" style="background:var(--n-800)">
+      <div>
+        <div class="cap-proj-name" style="color:rgba(255,255,255,.6)">Geen project actief</div>
+        <div class="cap-proj-code">Selecteer een project in Timer of Projecten</div>
+      </div>
+    </div>`;
+  }
+  updateSpMockPath();
+}
+
+function changeCaptureProject() {
+  const sel = prompt("Projectcode invoeren (bv. CN-AMS-KEUKEN):");
+  if (sel) {
+    const found = PROJECTS.find(p => p.code.toLowerCase() === sel.toLowerCase());
+    if (found) { captureProject = found; renderCaptureProject(); }
+    else alert("Project niet gevonden: " + sel);
+  }
+}
+
+function saveNote() {
+  const ta = document.getElementById("noteInput");
+  const text = ta.value.trim();
+  if (!text) return;
+  const proj = captureProject || activeProject;
+  const note = {
+    text,
+    project: proj ? proj.code : "–",
+    time: new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"})
+  };
+  window._notes.unshift(note);
+  localStorage.setItem("mt_notes", JSON.stringify(window._notes));
+  ta.value = "";
+  renderNotes();
+}
+
+function renderNotes() {
+  const wrap = document.getElementById("noteListWrap");
+  const list = document.getElementById("noteList");
+  if (!window._notes || !window._notes.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "block";
+  list.innerHTML = window._notes.map((n,i) => `
+    <div class="note-item">
+      <div>
+        <div class="note-item-text">${escHtml(n.text)}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:3px">${n.project} · ${n.time}</div>
+      </div>
+      <button class="note-del" onclick="deleteNote(${i})">×</button>
+    </div>
+  `).join("");
+}
+
+function deleteNote(idx) {
+  window._notes.splice(idx,1);
+  localStorage.setItem("mt_notes", JSON.stringify(window._notes));
+  renderNotes();
+}
+
+function addPhoto(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  const block = document.getElementById("opnameBlock");
+  block.style.display = "block";
+  files.forEach(file => {
+    const url = URL.createObjectURL(file);
+    opnamePhotos.push({url, name:file.name});
+  });
+  renderOpname();
+  input.value = "";
+}
+
+function renderOpname() {
+  const grid = document.getElementById("thumbsGrid");
+  const count = document.getElementById("opnameCount");
+  const photoCount = document.getElementById("photoCount");
+  count.textContent = `${opnamePhotos.length} foto's`;
+  photoCount.textContent = `${opnamePhotos.length} foto's`;
+  grid.innerHTML = opnamePhotos.slice(0,6).map(p =>
+    `<div class="thumb-cell"><img src="${p.url}" alt="foto"></div>`
+  ).join("");
+  if (opnamePhotos.length > 6) {
+    grid.innerHTML += `<div class="thumb-cell"><div class="thumb-placeholder">+${opnamePhotos.length-6}</div></div>`;
+  }
+  updateSpMockPath();
+}
+
+function updateSpMockPath() {
+  const proj = captureProject || activeProject;
+  const code = proj ? proj.code : "–";
+  const el = document.getElementById("spMockPath");
+  if (el) el.textContent = `→ SP: /Projecten/${code}/Opname/${new Date().toISOString().slice(0,10)}/`;
+}
+
+function sluitOpname() {
+  const proj = captureProject || activeProject;
+  const code = proj ? proj.code : "–";
+  alert(`Opname afgerond — ${opnamePhotos.length} foto('s) worden gesynchroniseerd naar:\nSP: /Projecten/${code}/Opname/\n\n(mock — in productie via Graph-upload)`);
+  opnamePhotos = [];
+  document.getElementById("opnameBlock").style.display = "none";
+  document.getElementById("photoCount").textContent = "0 foto's";
+}
+
+/* =====================================================================
+   OPLEVERING TAB
+   ===================================================================== */
+function populateOpleverSelect() {
+  const sel = document.getElementById("opleverProjectSelect");
+  PROJECTS.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = `${p.code} — ${p.name}`;
+    sel.appendChild(opt);
+  });
+}
+
+function loadChecklist() {
+  const sel = document.getElementById("opleverProjectSelect");
+  const id = sel.value;
+  if (!id) { document.getElementById("checklistWrap").style.display = "none"; return; }
+  currentOpleverProject = PROJECTS.find(p => p.id === id);
+  checklistState = {};
+  checklistNotes = {};
+  document.getElementById("checklistWrap").style.display = "block";
+  document.getElementById("checklistProjectLabel").textContent = currentOpleverProject.code + " · Checklist";
+  renderChecklist();
+}
+
+function renderChecklist() {
+  const p = currentOpleverProject;
+  const el = document.getElementById("checklistItems");
+  el.innerHTML = p.checklist.map((item,i) => {
+    const state = checklistState[i] || null;
+    const okActive = state === "ok" ? "active-ok" : "";
+    const herstelActive = state === "herstel" ? "active-herstel" : "";
+    const itemCls = state === "ok" ? "ok" : state === "herstel" ? "herstel" : "";
+    return `<div class="checklist-item ${itemCls}" id="cl-item-${i}">
+      <div class="checklist-top">
+        <div class="checklist-name">${escHtml(item)}</div>
+        <div class="checklist-btns">
+          <button class="check-btn ${okActive}" onclick="setCheck(${i},'ok')" title="OK">✅</button>
+          <button class="check-btn ${herstelActive}" onclick="setCheck(${i},'herstel')" title="Herstelpunt">⚠️</button>
+        </div>
+      </div>
+      <div class="herstel-extra ${state==='herstel'?'visible':''}" id="herstel-${i}">
+        <textarea placeholder="Omschrijf het herstelpunt…" id="herstel-note-${i}" onchange="setHerstelNote(${i},this.value)" style="font-size:13px;min-height:60px">${checklistNotes[i]||""}</textarea>
+        <div class="photo-input-wrap" style="display:inline-block">
+          <label style="margin:0;font-weight:400;text-transform:none">
+            <div class="herstel-foto-btn" style="pointer-events:none">📷 Foto toevoegen</div>
+            <input type="file" accept="image/*" capture="environment" onchange="herstelFoto(${i},this)" style="position:absolute;inset:0;opacity:0;width:100%;cursor:pointer">
+          </label>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function setCheck(idx, state) {
+  checklistState[idx] = checklistState[idx] === state ? null : state;
+  renderChecklist();
+}
+
+function setHerstelNote(idx, val) {
+  checklistNotes[idx] = val;
+}
+
+function herstelFoto(idx, input) {
+  if (input.files.length) {
+    alert(`Foto voor herstelpunt "${currentOpleverProject.checklist[idx]}" opgeslagen.\n(mock — in productie geüpload naar SP)`);
+    input.value = "";
+  }
+}
+
+function showRapport() {
+  const p = currentOpleverProject;
+  const allDone = p.checklist.every((_,i) => checklistState[i]);
+  if (!allDone) {
+    const missing = p.checklist.filter((_,i) => !checklistState[i]);
+    if (!confirm(`Nog ${missing.length} punt(en) niet beoordeeld. Toch doorgaan?`)) return;
+  }
+  const oks = p.checklist.filter((_,i) => checklistState[i] === "ok");
+  const herstels = p.checklist.filter((_,i) => checklistState[i] === "herstel");
+  const open = p.checklist.filter((_,i) => !checklistState[i]);
+  const now = new Date().toLocaleDateString("nl-NL",{day:"2-digit",month:"long",year:"numeric"});
+  let html = `<div class="rapport-title">Opleveringsrapport</div>
+    <div class="rapport-sub">${p.code} · ${p.name} · ${now}</div>`;
+  if (oks.length) {
+    html += `<div class="rapport-section">✅ Goedgekeurd (${oks.length})</div>`;
+    html += oks.map(item => `<div class="rapport-item">
+      <div class="rapport-item-icon">✅</div>
+      <div class="rapport-item-content"><div class="rapport-item-name">${escHtml(item)}</div></div>
+    </div>`).join("");
+  }
+  if (herstels.length) {
+    html += `<div class="rapport-section">⚠️ Herstelpunten (${herstels.length})</div>`;
+    herstels.forEach(item => {
+      const idx = p.checklist.indexOf(item);
+      const note = checklistNotes[idx] || "";
+      html += `<div class="rapport-item">
+        <div class="rapport-item-icon">⚠️</div>
+        <div class="rapport-item-content">
+          <div class="rapport-item-name">${escHtml(item)}</div>
+          ${note ? `<div class="rapport-item-note">${escHtml(note)}</div>` : ""}
+        </div>
+      </div>`;
+    });
+  }
+  if (open.length) {
+    html += `<div class="rapport-section">⬜ Niet beoordeeld (${open.length})</div>`;
+    html += open.map(item => `<div class="rapport-item">
+      <div class="rapport-item-icon">⬜</div>
+      <div class="rapport-item-content"><div class="rapport-item-name">${escHtml(item)}</div></div>
+    </div>`).join("");
+  }
+  html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${now} · M&T</div>`;
+  document.getElementById("rapportContent").innerHTML = html;
+  document.getElementById("opleverView").classList.add("view-hidden");
+  document.getElementById("rapportView").classList.remove("view-hidden");
+  document.getElementById("handtekeningView").classList.add("view-hidden");
+  document.getElementById("opleverDoneView").classList.add("view-hidden");
+}
+
+function showHandtekening() {
+  document.getElementById("rapportView").classList.add("view-hidden");
+  document.getElementById("handtekeningView").classList.remove("view-hidden");
+  initCanvas();
+}
+
+function backToChecklist() {
+  document.getElementById("opleverView").classList.remove("view-hidden");
+  document.getElementById("rapportView").classList.add("view-hidden");
+}
+
+function resetOplevering() {
+  checklistState = {};
+  checklistNotes = {};
+  currentOpleverProject = null;
+  document.getElementById("opleverProjectSelect").value = "";
+  document.getElementById("checklistWrap").style.display = "none";
+  document.getElementById("opleverView").classList.remove("view-hidden");
+  document.getElementById("rapportView").classList.add("view-hidden");
+  document.getElementById("handtekeningView").classList.add("view-hidden");
+  document.getElementById("opleverDoneView").classList.add("view-hidden");
+}
+
+/* =====================================================================
+   CANVAS HANDTEKENING
+   ===================================================================== */
+let sigCtx = null;
+let sigDrawing = false;
+let sigHasMark = false;
+
+function initCanvas() {
+  const canvas = document.getElementById("sigCanvas");
+  // Set canvas pixel size to match display size
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * (window.devicePixelRatio || 1);
+  canvas.height = rect.height * (window.devicePixelRatio || 1);
+  sigCtx = canvas.getContext("2d");
+  sigCtx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+  sigCtx.strokeStyle = "#172521";
+  sigCtx.lineWidth = 2;
+  sigCtx.lineCap = "round";
+  sigCtx.lineJoin = "round";
+  canvas.classList.remove("has-sig");
+  sigHasMark = false;
+
+  canvas.onpointerdown = (e) => {
+    sigDrawing = true;
+    const pos = getCanvasPos(canvas, e);
+    sigCtx.beginPath();
+    sigCtx.moveTo(pos.x, pos.y);
+    canvas.setPointerCapture(e.pointerId);
+  };
+  canvas.onpointermove = (e) => {
+    if (!sigDrawing) return;
+    const pos = getCanvasPos(canvas, e);
+    sigCtx.lineTo(pos.x, pos.y);
+    sigCtx.stroke();
+    if (!sigHasMark) { sigHasMark = true; canvas.classList.add("has-sig"); }
+  };
+  canvas.onpointerup = canvas.onpointercancel = () => { sigDrawing = false; };
+}
+
+function getCanvasPos(canvas, e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function clearCanvas() {
+  const canvas = document.getElementById("sigCanvas");
+  sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+  canvas.classList.remove("has-sig");
+  sigHasMark = false;
+}
+
+function bevestigHandtekening() {
+  if (!sigHasMark) { alert("Teken eerst de handtekening."); return; }
+  document.getElementById("handtekeningView").classList.add("view-hidden");
+  document.getElementById("opleverDoneView").classList.remove("view-hidden");
+}
+
+/* =====================================================================
+   LARRY HELP
+   ===================================================================== */
+function openLarry() { document.getElementById("larrySheet").classList.add("visible"); }
+function closeLarry() { document.getElementById("larrySheet").classList.remove("visible"); }
+function closeLarryOuter(e) { if (e.target === document.getElementById("larrySheet")) closeLarry(); }
+
+/* =====================================================================
+   UTIL
+   ===================================================================== */
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+</body>
+</html>

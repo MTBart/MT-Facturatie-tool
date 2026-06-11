@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — v2: per-tab help-knop + Larry feedback-chat (read-only guardrails) + gebruiks-log naar SharePoint
+- Commit: `6be434e` | Auteur: Bart Witte
+
 ## 2026-06-11 — v2: MSAL redirect-URI naar kale map-URL (geregistreerde vorm zonder index.html)
 - Commit: `72ac86a` | Auteur: Bart Witte
 
