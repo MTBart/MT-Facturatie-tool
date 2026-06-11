@@ -541,6 +541,77 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 .recording{animation:pulse 1.5s ease infinite}
 
+/* ============================
+   TAKEN PER PROJECT
+   ============================ */
+.task-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--n-100)}
+.task-row:last-child{border-bottom:none}
+.task-toggle{flex:0 0 auto;width:42px;height:42px;border-radius:50%;border:1px solid var(--n-300);background:var(--n-0);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-faint);transition:all .15s}
+.task-toggle:active{transform:scale(.9)}
+.task-toggle.bezig{background:var(--gold-50);border-color:var(--gold);color:var(--gold-text)}
+.task-toggle.klaar{background:var(--success-50);border-color:var(--success);color:var(--success)}
+.task-main{flex:1;min-width:0;cursor:pointer}
+.task-name{font-size:14px;font-weight:500;color:var(--n-900)}
+.task-name.klaar{text-decoration:line-through;color:var(--text-faint)}
+.task-tag{display:inline-block;background:var(--warning-50);color:var(--warning);border:1px solid var(--warning);border-radius:10px;padding:0 7px;font-size:9px;font-family:var(--mono);vertical-align:middle}
+.task-meta{font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:1px}
+.task-form{background:var(--n-50);border:1px solid var(--n-200);border-radius:var(--radius);padding:12px;margin:8px 0}
+.task-form input{min-height:44px;margin-bottom:8px;font-size:13px}
+
+/* ============================
+   AGENDA TOOLBAR + TIJD-GRID
+   ============================ */
+.agenda-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.view-switch{display:flex;background:var(--n-150);border-radius:var(--radius);padding:3px;gap:2px}
+.view-switch button{border:none;background:transparent;border-radius:6px;padding:8px 12px;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text-dim);cursor:pointer;min-height:38px;white-space:nowrap}
+.view-switch button.active{background:var(--n-0);color:var(--green);box-shadow:var(--shadow-sm)}
+.week-search{flex:1;min-width:100px;display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.week-search input{min-height:42px;font-size:13px;padding:6px 10px;max-width:80px;text-align:center}
+.week-label{font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap;font-weight:500}
+.tijd-grid{display:flex;background:var(--n-0);border:1px solid var(--n-200);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
+.tg-times{flex:0 0 38px;border-right:1px solid var(--n-150);padding-top:30px}
+.tg-time-cell{height:48px;font-family:var(--mono);font-size:9px;color:var(--text-faint);text-align:right;padding-right:4px;transform:translateY(-6px)}
+.tg-col{flex:1;min-width:0;border-right:1px solid var(--n-150)}
+.tg-col:last-child{border-right:none}
+.tg-col-head{height:30px;display:flex;align-items:center;justify-content:center;gap:4px;font-family:var(--mono);font-size:10px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--n-150);background:var(--n-50);text-transform:uppercase}
+.tg-col-head.today{color:var(--green);background:var(--green-50)}
+.tg-body{position:relative;height:528px;cursor:pointer}
+.tg-hourline{position:absolute;left:0;right:0;height:1px;background:var(--n-100);pointer-events:none}
+.tg-block{position:absolute;left:3px;right:3px;border-radius:6px;padding:3px 5px;font-size:10px;line-height:1.25;overflow:hidden;cursor:pointer;border:1px solid transparent}
+.tg-block:active{filter:brightness(.93)}
+.tg-block.bart{background:var(--green-50);border-color:var(--green-100);color:var(--green-700)}
+.tg-block.mathijs{background:var(--gold-50);border-color:var(--gold-mid);color:var(--gold-text)}
+.tg-block.eigen{background:var(--info-50);border-color:#b5c5f5;color:var(--info)}
+.tg-block-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg-block-time{font-family:var(--mono);font-size:9px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ============================
+   NOTIFICATIES
+   ============================ */
+.header-btns{display:flex;align-items:center;gap:8px}
+.notif-btn{position:relative}
+.notif-badge{position:absolute;top:-4px;right:-4px;background:#C0392B;color:#fff;font-family:var(--mono);font-size:9px;font-weight:700;min-width:17px;height:17px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid var(--green-700);line-height:1}
+.notif-item{display:flex;gap:10px;padding:12px 0;border-bottom:1px solid var(--n-100);cursor:pointer}
+.notif-item:last-child{border-bottom:none}
+.notif-item:active{opacity:.7}
+.notif-dot{flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:var(--gold);margin-top:5px}
+.notif-item.read .notif-dot{background:var(--n-300)}
+.notif-content{flex:1;min-width:0}
+.notif-title{font-size:14px;font-weight:700;color:var(--n-900)}
+.notif-item.read .notif-title{font-weight:500;color:var(--text-dim)}
+.notif-text{font-size:12px;color:var(--text-dim);margin-top:1px;line-height:1.4}
+.notif-time{font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:3px}
+.notif-banner{position:fixed;top:8px;left:8px;right:8px;z-index:400;background:linear-gradient(135deg,var(--green),var(--green-700));color:#fff;border-radius:var(--radius-lg);padding:12px 14px;box-shadow:var(--shadow-pop);display:none;cursor:pointer;border:1px solid rgba(255,255,255,.15)}
+.notif-banner.visible{display:block;animation:bannerIn .25s ease}
+@keyframes bannerIn{from{transform:translateY(-30px);opacity:0}to{transform:none;opacity:1}}
+.notif-banner-title{font-size:13px;font-weight:700}
+.notif-banner-text{font-size:12px;opacity:.85;margin-top:1px}
+.notif-banner-hint{font-family:var(--mono);font-size:9px;opacity:.6;margin-top:4px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:calc(var(--nav-h) + 16px);left:50%;transform:translateX(-50%) translateY(20px);background:var(--n-900);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:500;z-index:500;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:90vw;text-align:center}
+.toast.visible{opacity:1;transform:translateX(-50%) translateY(0)}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -552,7 +623,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 <!-- ── APP HEADER ── -->
 <header class="app-header">
   <div class="app-title">M<span>&amp;</span>T</div>
-  <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
+  <div class="header-btns">
+    <button class="header-info-btn notif-btn" onclick="openNotifs()" aria-label="Notificaties">🔔<span class="notif-badge" id="notifBadge" style="display:none">0</span></button>
+    <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
+  </div>
 </header>
 
 <!-- ── LOPENDE TIMER BAR ── -->
@@ -596,13 +670,24 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 
   <!-- TAB: PROJECTEN -->
   <div class="tab" id="tab-projecten">
+    <button class="btn btn-secondary btn-full" style="margin-bottom:14px" onclick="openNewProject()">＋ Nieuw project</button>
     <div class="section-head">Jouw projecten</div>
     <div id="projectCardList"></div>
   </div>
 
   <!-- TAB: AGENDA -->
   <div class="tab" id="tab-agenda">
-    <div class="section-head">Week 24 · Juni 2026</div>
+    <div class="agenda-toolbar">
+      <div class="view-switch" id="viewSwitch">
+        <button class="active" onclick="setAgendaView('dag',this)">Dag</button>
+        <button onclick="setAgendaView('3d',this)">3 dagen</button>
+        <button onclick="setAgendaView('week',this)">Week</button>
+      </div>
+      <div class="week-search">
+        <span class="week-label" id="weekLabel">W24</span>
+        <input type="search" id="weekSearch" placeholder="W24" aria-label="Spring naar weeknummer" onchange="searchWeek(this.value)">
+      </div>
+    </div>
     <div class="week-strip" id="weekStrip"></div>
     <div id="agendaContent"></div>
   </div>
@@ -680,7 +765,9 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div class="section-head">Opleverrapport</div>
       <div class="rapport-preview" id="rapportContent"></div>
       <div style="margin-top:12px">
-        <button class="btn btn-gold btn-full" onclick="showHandtekening()">✍️ Laat opdrachtgever aftekenen</button>
+        <div class="section-head">Hoe afronden?</div>
+        <button class="btn btn-gold btn-full" onclick="showHandtekening()">✍️ Ter plekke aftekenen</button>
+        <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="rapportOpsturen()">📧 Rapport opsturen</button>
         <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="backToChecklist()">← Terug naar checklist</button>
       </div>
     </div>
@@ -704,6 +791,16 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <div class="done-icon">✅</div>
         <div class="done-title">Rapport klaar</div>
         <div class="done-sub">Het opleverrapport met handtekening wordt gemaild naar de opdrachtgever.<br><br><em>(mock — in productie via Graph /sendMail)</em></div>
+        <button class="btn btn-primary" onclick="resetOplevering()">← Nieuwe oplevering</button>
+      </div>
+    </div>
+
+    <!-- RAPPORT OPGESTUURD (grote projecten) -->
+    <div id="opleverMailView" class="view-hidden">
+      <div class="done-screen">
+        <div class="done-icon">📧</div>
+        <div class="done-title">Rapport wordt gemaild</div>
+        <div class="done-sub">Het opleverrapport wordt gemaild naar de opdrachtgever.<br>De opdrachtgever kan op afstand akkoord geven.<br><br><em>(mock — in productie via Graph /sendMail)</em></div>
         <button class="btn btn-primary" onclick="resetOplevering()">← Nieuwe oplevering</button>
       </div>
     </div>
@@ -751,6 +848,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div id="sheetAddr" style="font-size:14px;color:var(--text-dim);margin-bottom:4px"></div>
       <div class="section-head" style="margin-top:10px">Laatste activiteit</div>
       <div id="sheetActivity" style="font-size:13px;color:var(--text-faint);margin-bottom:4px"></div>
+      <div class="section-head" style="margin-top:12px">Taken</div>
+      <div id="sheetTasks"></div>
     </div>
     <div class="sheet-actions" id="sheetActions"></div>
   </div>
@@ -787,6 +886,96 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     </div>
   </div>
 </div>
+
+<!-- ── NIEUW PROJECT SHEET ── -->
+<div class="sheet-overlay" id="newProjectSheet" onclick="if(event.target===this)closeNewProject()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="closeNewProject()">×</button>
+      <div class="sheet-title">Nieuw project</div>
+      <div class="sheet-sub" id="npCodePreview">KLANT-LOC-PROD</div>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label>Projectnaam</label>
+        <input id="npName" placeholder="bv. CompaNanny Den Haag – Garderobe">
+      </div>
+      <div class="field">
+        <label>Klantcode</label>
+        <input id="npKlant" list="klantCodes" placeholder="bv. CN" maxlength="6" autocapitalize="characters" oninput="updateNpPreview()">
+        <datalist id="klantCodes"></datalist>
+      </div>
+      <div class="field">
+        <label>Locatie-afkorting</label>
+        <input id="npLoc" placeholder="bv. DH" maxlength="8" autocapitalize="characters" oninput="updateNpPreview()">
+      </div>
+      <div class="field">
+        <label>Product-slug</label>
+        <input id="npProd" placeholder="bv. GARDEROBE" maxlength="12" autocapitalize="characters" oninput="updateNpPreview()">
+      </div>
+      <button class="btn btn-primary btn-full" onclick="saveNewProject()">💾 Project aanmaken</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── AGENDA BLOK SHEET (nieuw / bewerken) ── -->
+<div class="sheet-overlay" id="blokSheet" onclick="if(event.target===this)closeBlokSheet()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="closeBlokSheet()">×</button>
+      <div class="sheet-title" id="blokSheetTitle">Nieuw blok</div>
+      <div class="sheet-sub" id="blokSheetSub">–</div>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label>Project</label>
+        <select id="blokProject" onchange="onBlokProjectChange()"></select>
+      </div>
+      <div class="field">
+        <label>Taak</label>
+        <select id="blokTask" onchange="onBlokTaskChange()"></select>
+      </div>
+      <div class="field" id="blokNewTaskField" style="display:none">
+        <label>Nieuwe taak</label>
+        <input id="blokNewTaskName" placeholder="Taaknaam…">
+      </div>
+      <div style="display:flex;gap:10px">
+        <div class="field" style="flex:1"><label>Van</label><input type="time" id="blokVan" step="900"></div>
+        <div class="field" style="flex:1"><label>Tot</label><input type="time" id="blokTot" step="900"></div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="saveBlok()">💾 Blok opslaan</button>
+      <button class="btn btn-danger btn-full" id="blokDeleteBtn" style="margin-top:8px;display:none" onclick="deleteBlok()">🗑 Blok verwijderen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NOTIFICATIE PANEL ── -->
+<div class="sheet-overlay" id="notifSheet" onclick="if(event.target===this)closeNotifs()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="closeNotifs()">×</button>
+      <div class="sheet-title">🔔 Notificaties</div>
+      <div class="sheet-sub" id="notifSheetSub">–</div>
+    </div>
+    <div class="sheet-body">
+      <div id="notifList"></div>
+      <button class="btn btn-secondary btn-full" style="margin-top:14px" onclick="demoNotif()">▶ Demo: ontvang notificatie</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NOTIFICATIE BANNER (tijdelijk, boven in beeld) ── -->
+<div class="notif-banner" id="notifBanner" onclick="bannerTap()">
+  <div class="notif-banner-title" id="notifBannerTitle">–</div>
+  <div class="notif-banner-text" id="notifBannerText">–</div>
+  <div class="notif-banner-hint">Tik om te openen</div>
+</div>
+
+<!-- ── TOAST ── -->
+<div class="toast" id="toast"></div>
 
 <script>
 /* =====================================================================
@@ -906,6 +1095,44 @@ const WEEK_DAYS = ["Ma","Di","Wo","Do","Vr"];
 const WEEK_DATES = [9,10,11,12,13]; // June 2026
 const TODAY_IDX = 2; // Wednesday 11 June (0=Mon)
 const HOLIDAY = {idx:null,name:null}; // no holiday this week
+const CURRENT_WEEK_NR = 24;               // week van vandaag (mock)
+const BASE_MONDAY = new Date(2026,5,9);   // maandag van week 24 (mock)
+
+/* =====================================================================
+   DATA-LAAG: gebruikersdata in localStorage (overleeft refresh)
+   ===================================================================== */
+// — Punt 1: door gebruiker aangemaakte projecten, gemerged met mock-lijst —
+let USER_PROJECTS = [];
+try { USER_PROJECTS = JSON.parse(localStorage.getItem("mt_user_projects") || "[]"); } catch(e) { USER_PROJECTS = []; }
+function allProjects() { return PROJECTS.concat(USER_PROJECTS); }
+function saveUserProjects() { localStorage.setItem("mt_user_projects", JSON.stringify(USER_PROJECTS)); }
+
+// — Punt 2: taken per projectcode —
+let TASKS = null;
+try { TASKS = JSON.parse(localStorage.getItem("mt_tasks") || "null"); } catch(e) { TASKS = null; }
+if (!TASKS) {
+  TASKS = {
+    "CN-AMS-KEUKEN":[
+      {id:"t1",name:"Plinten afkitten",status:"bezig",date:"12-06",est:"2u",tag:null,note:""},
+      {id:"t2",name:"Grepen monteren",status:"todo",date:"13-06",est:"1u",tag:null,note:""}
+    ],
+    "INT-AMS-BUREAU":[
+      {id:"t3",name:"Kabeldoorvoer boren",status:"klaar",date:"10-06",est:"1u",tag:null,note:""}
+    ]
+  };
+}
+function tasksFor(code) { return TASKS[code] || []; }
+function saveTasks() { localStorage.setItem("mt_tasks", JSON.stringify(TASKS)); }
+function addTaskToProject(code, task) {
+  if (!TASKS[code]) TASKS[code] = [];
+  TASKS[code].push(task);
+  saveTasks();
+}
+
+// — Punt 3: eigen agenda-blokken —
+let EIGEN_BLOKKEN = [];
+try { EIGEN_BLOKKEN = JSON.parse(localStorage.getItem("mt_agenda_blocks") || "[]"); } catch(e) { EIGEN_BLOKKEN = []; }
+function saveEigenBlokken() { localStorage.setItem("mt_agenda_blocks", JSON.stringify(EIGEN_BLOKKEN)); }
 
 /* =====================================================================
    STATE
@@ -920,20 +1147,28 @@ let captureProject = null;
 let checklistState = {}; // {itemIndex: "ok"|"herstel"|null}
 let checklistNotes = {};
 let currentOpleverProject = null;
+let agendaView = "dag";          // 'dag' | '3d' | 'week'
+let currentWeek = CURRENT_WEEK_NR;
+let editingTaskId = null;        // taak in bewerk-modus in project-sheet
+let addingTask = false;          // "+ Taak"-formulier open
+let editingBlokId = null;        // eigen agenda-blok in bewerk-modus
+let blokCtx = {week:CURRENT_WEEK_NR, dayIdx:TODAY_IDX};
+let npReturnToBlok = false;      // nieuw-project-sheet geopend vanuit blok-sheet
 
 /* =====================================================================
    INIT
    ===================================================================== */
 document.addEventListener("DOMContentLoaded", () => {
   loadFromStorage();
-  renderPickerList(PROJECTS);
+  renderPickerList(allProjects());
   renderRecentList();
   renderProjectCards();
   renderWeekStrip();
-  renderAgenda(selectedDayIdx);
+  renderAgenda();
   populateOpleverSelect();
   renderCaptureProject();
   renderNotes();
+  renderNotifBadge();
 });
 
 /* =====================================================================
@@ -954,7 +1189,7 @@ function loadFromStorage() {
   try {
     const saved = JSON.parse(localStorage.getItem("mt_timer") || "null");
     if (saved && saved.running && saved.projectId) {
-      const proj = PROJECTS.find(p => p.id === saved.projectId);
+      const proj = allProjects().find(p => p.id === saved.projectId);
       if (proj) {
         activeProject = proj;
         timerStart = saved.start;
@@ -1112,7 +1347,7 @@ function pickerItemHtml(p) {
 }
 
 function selectProject(id) {
-  activeProject = PROJECTS.find(p => p.id === id);
+  activeProject = allProjects().find(p => p.id === id);
   captureProject = activeProject;
   if (timerRunning) {
     // update running project
@@ -1130,15 +1365,15 @@ function selectProject(id) {
 function filterPicker(q) {
   const lower = q.toLowerCase();
   const filtered = lower
-    ? PROJECTS.filter(p => p.name.toLowerCase().includes(lower) || p.code.toLowerCase().includes(lower))
-    : PROJECTS;
+    ? allProjects().filter(p => p.name.toLowerCase().includes(lower) || p.code.toLowerCase().includes(lower))
+    : allProjects();
   renderPickerList(filtered);
   updateTimerUI();
 }
 
 function renderRecentList() {
   const el = document.getElementById("recentList");
-  const recents = PROJECTS.filter(p => p.assigned).slice(0,3);
+  const recents = allProjects().filter(p => p.assigned).slice(0,3);
   if (!recents.length) { el.innerHTML = `<div class="empty-state"><div class="empty-text">Geen recente activiteit</div></div>`; return; }
   el.innerHTML = recents.map(p => `
     <div class="recent-entry" onclick="selectProject('${p.id}')">
@@ -1157,7 +1392,7 @@ function renderRecentList() {
    ===================================================================== */
 function renderProjectCards() {
   const el = document.getElementById("projectCardList");
-  el.innerHTML = PROJECTS.map(p => {
+  el.innerHTML = allProjects().map(p => {
     const [cls,label] = STATUS_MAP[p.status] || ["badge-gray","–"];
     return `<div class="project-card" onclick="openProjectSheet('${p.id}')">
       <div class="project-card-code">${p.code}</div>
@@ -1176,7 +1411,9 @@ function renderProjectCards() {
 
 let currentSheetProject = null;
 function openProjectSheet(id) {
-  currentSheetProject = PROJECTS.find(p => p.id === id);
+  currentSheetProject = allProjects().find(p => p.id === id);
+  editingTaskId = null;
+  addingTask = false;
   const p = currentSheetProject;
   const [cls,label] = STATUS_MAP[p.status] || ["badge-gray","–"];
   document.getElementById("sheetTitle").textContent = p.name;
@@ -1210,6 +1447,7 @@ function openProjectSheet(id) {
       <div class="sheet-action-arrow">›</div>
     </div>
   `;
+  renderSheetTasks();
   document.getElementById("projectSheet").classList.add("visible");
 }
 
@@ -1223,7 +1461,7 @@ function sheetStartTimer(id) {
 function sheetGoCapture(id) {
   closeProjectSheet();
   selectProject(id);
-  captureProject = PROJECTS.find(p => p.id === id);
+  captureProject = allProjects().find(p => p.id === id);
   switchTab("capture", document.getElementById("nav-capture"));
 }
 
@@ -1243,68 +1481,166 @@ function closeSheet(e) {
 }
 
 /* =====================================================================
-   AGENDA TAB
+   AGENDA TAB — interactief (punt 3)
+   Dag / 3 dagen / Week + weeknummer-zoek + tijd-grid 07:00–18:00
    ===================================================================== */
+const TG_START = 7, TG_END = 18, TG_PX = 48; // uur-raster: 48px per uur
+
+function toMin(t) { const [h,m] = t.split(":").map(Number); return h*60 + m; }
+function fmtUren(min) {
+  const u = min/60;
+  return (u % 1 === 0 ? u : u.toFixed(1)).toString().replace(".",",") + "u";
+}
+
+// Maandag-datum van een weeknummer (mock-kalender: W24 = ma 9 juni 2026)
+function mondayOfWeek(week) {
+  const d = new Date(BASE_MONDAY);
+  d.setDate(d.getDate() + (week - CURRENT_WEEK_NR) * 7);
+  return d;
+}
+function weekDates(week) {
+  return WEEK_DAYS.map((_,i) => {
+    const d = new Date(mondayOfWeek(week));
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+}
+const MAAND_KORT = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+// Alle blokken (mock cockpit-planning + eigen blokken) voor week/dag
+function blocksFor(week, dayIdx) {
+  const out = [];
+  if (week === CURRENT_WEEK_NR) {
+    (AGENDA_DATA[dayIdx] || []).forEach((b,i) => {
+      out.push({id:`mock-${dayIdx}-${i}`, mock:true, who:b.who, name:b.name, proj:b.proj, start:b.start, end:b.end});
+    });
+  }
+  EIGEN_BLOKKEN.filter(b => b.week === week && b.dayIdx === dayIdx).forEach(b => {
+    out.push({id:b.id, mock:false, who:"eigen", name:b.projName, proj:b.projCode, taskName:b.taskName, start:b.start, end:b.end});
+  });
+  return out.sort((a,b) => toMin(a.start) - toMin(b.start));
+}
+
 function renderWeekStrip() {
   const strip = document.getElementById("weekStrip");
+  const dates = weekDates(currentWeek);
   strip.innerHTML = WEEK_DAYS.map((day,i) => {
     let cls = "day-pill";
-    if (i === TODAY_IDX) cls += " today";
+    const isToday = (currentWeek === CURRENT_WEEK_NR && i === TODAY_IDX);
+    if (isToday) cls += " today";
     else if (i === selectedDayIdx) cls += " selected";
-    if (HOLIDAY.idx === i) cls += " holiday";
-    const hasDots = AGENDA_DATA[i] && AGENDA_DATA[i].length > 0;
+    if (currentWeek === CURRENT_WEEK_NR && HOLIDAY.idx === i) cls += " holiday";
+    const hasDots = blocksFor(currentWeek, i).length > 0;
     return `<div class="${cls}" onclick="selectDay(${i})">
       <div class="day-name">${day}</div>
-      <div class="day-num">${WEEK_DATES[i]}</div>
+      <div class="day-num">${dates[i].getDate()}</div>
       ${hasDots ? '<div class="day-dot"></div>' : ''}
     </div>`;
   }).join("");
+  // weeklabel: altijd het huidige weeknummer erbij tonen
+  const lbl = document.getElementById("weekLabel");
+  lbl.textContent = currentWeek === CURRENT_WEEK_NR
+    ? `W${currentWeek} · deze week`
+    : `W${currentWeek} · nu: W${CURRENT_WEEK_NR}`;
 }
 
 function selectDay(idx) {
   selectedDayIdx = idx;
   renderWeekStrip();
-  renderAgenda(idx);
+  renderAgenda();
 }
 
-function renderAgenda(idx) {
+function setAgendaView(view, btn) {
+  agendaView = view;
+  document.querySelectorAll("#viewSwitch button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  renderAgenda();
+}
+
+function searchWeek(val) {
+  const m = String(val).trim().match(/(\d{1,2})/);
+  if (!m) { showToast("Voer een weeknummer in, bv. 25 of W25"); return; }
+  let w = parseInt(m[1],10);
+  if (w < 1 || w > 53) { showToast("Weeknummer moet tussen 1 en 53 liggen"); return; }
+  currentWeek = w;
+  renderWeekStrip();
+  renderAgenda();
+  document.getElementById("weekSearch").value = "";
+}
+
+function agendaCols() {
+  if (agendaView === "week") return [0,1,2,3,4];
+  if (agendaView === "3d") {
+    const s = Math.min(selectedDayIdx, WEEK_DAYS.length - 3);
+    return [s, s+1, s+2];
+  }
+  return [selectedDayIdx];
+}
+
+function renderAgenda() {
   const el = document.getElementById("agendaContent");
-  const blocks = AGENDA_DATA[idx] || [];
+  const cols = agendaCols();
+  const dates = weekDates(currentWeek);
+  const monday = dates[0];
   let html = "";
-  if (HOLIDAY.idx === idx) {
+
+  if (currentWeek === CURRENT_WEEK_NR && HOLIDAY.idx !== null && cols.includes(HOLIDAY.idx)) {
     html += `<div class="holiday-banner">🏖 ${HOLIDAY.name}</div>`;
   }
-  if (!blocks.length) {
-    html += `<div class="empty-state"><div class="empty-icon">😌</div><div class="empty-text">Geen planningsblokken op ${WEEK_DAYS[idx]} ${WEEK_DATES[idx]} juni</div></div>`;
-  } else {
-    const dayLabel = `${WEEK_DAYS[idx]} ${WEEK_DATES[idx]} juni 2026`;
-    html += `<div class="section-head">${dayLabel}</div>`;
-    blocks.forEach(b => {
-      html += `<div class="agenda-block ${b.who}">
-        <div class="agenda-block-top">
-          <div class="agenda-block-name">${b.name}</div>
-          <div class="agenda-block-time">${b.start}–${b.end}</div>
-        </div>
-        <div class="agenda-block-meta">
-          <span class="agenda-who ${b.who}">${b.who === "bart" ? "Bart" : "Mathijs"}</span>
-          <span>${b.uren}</span>
-          <span style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">${b.proj}</span>
-        </div>
+
+  html += `<div class="section-head">Week ${currentWeek} · ${monday.getDate()}–${dates[4].getDate()} ${MAAND_KORT[dates[4].getMonth()]} ${dates[4].getFullYear()} · tik een leeg vak voor een nieuw blok</div>`;
+
+  // tijdkolom
+  let timesHtml = "";
+  for (let h = TG_START; h < TG_END; h++) {
+    timesHtml += `<div class="tg-time-cell">${String(h).padStart(2,"0")}:00</div>`;
+  }
+
+  // dagkolommen
+  let colsHtml = "";
+  cols.forEach(i => {
+    const isToday = (currentWeek === CURRENT_WEEK_NR && i === TODAY_IDX);
+    let body = "";
+    for (let h = TG_START+1; h < TG_END; h++) {
+      body += `<div class="tg-hourline" style="top:${(h-TG_START)*TG_PX}px"></div>`;
+    }
+    blocksFor(currentWeek, i).forEach(b => {
+      const top = (toMin(b.start) - TG_START*60) / 60 * TG_PX;
+      const height = Math.max(20, (toMin(b.end) - toMin(b.start)) / 60 * TG_PX - 2);
+      const cls = b.mock ? b.who : "eigen";
+      body += `<div class="tg-block ${cls}" style="top:${top}px;height:${height}px"
+        onclick="event.stopPropagation();tapBlok('${b.id}')">
+        <div class="tg-block-name">${escHtml(b.name)}</div>
+        <div class="tg-block-time">${b.start}–${b.end}${b.taskName ? " · " + escHtml(b.taskName) : ""}</div>
       </div>`;
     });
-    // simple capacity bar
-    const bartUren = blocks.filter(b=>b.who==="bart").reduce((a,b)=>a+parseFloat(b.uren),0);
-    const mathijsUren = blocks.filter(b=>b.who==="mathijs").reduce((a,b)=>a+parseFloat(b.uren),0);
-    if (bartUren || mathijsUren) {
-      html += `<div class="card" style="margin-top:8px">
-        <div class="card-label">Capaciteit overzicht</div>
+    colsHtml += `<div class="tg-col">
+      <div class="tg-col-head ${isToday?"today":""}">${WEEK_DAYS[i]} ${dates[i].getDate()}</div>
+      <div class="tg-body" onclick="gridTap(event,${i})">${body}</div>
+    </div>`;
+  });
+
+  html += `<div class="tijd-grid">
+    <div class="tg-times">${timesHtml}</div>
+    ${colsHtml}
+  </div>`;
+
+  // capaciteit (alleen dag-weergave)
+  if (agendaView === "dag") {
+    const blocks = blocksFor(currentWeek, selectedDayIdx);
+    const bartMin = blocks.filter(b => !b.mock || b.who === "bart").reduce((a,b)=>a+(toMin(b.end)-toMin(b.start)),0);
+    const mathijsMin = blocks.filter(b => b.mock && b.who === "mathijs").reduce((a,b)=>a+(toMin(b.end)-toMin(b.start)),0);
+    if (bartMin || mathijsMin) {
+      html += `<div class="card" style="margin-top:10px">
+        <div class="card-label">Capaciteit ${WEEK_DAYS[selectedDayIdx]} ${dates[selectedDayIdx].getDate()} ${MAAND_KORT[dates[selectedDayIdx].getMonth()]}</div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-          ${bartUren ? capacityBar("Bart",bartUren,8,"bart") : ""}
-          ${mathijsUren ? capacityBar("Mathijs",mathijsUren,8,"mathijs") : ""}
+          ${bartMin ? capacityBar("Bart", bartMin/60, 8, "bart") : ""}
+          ${mathijsMin ? capacityBar("Mathijs", mathijsMin/60, 8, "mathijs") : ""}
         </div>
       </div>`;
     }
   }
+
   el.innerHTML = html;
 }
 
@@ -1312,15 +1648,152 @@ function capacityBar(name,uren,max,who) {
   const pct = Math.min(100, (uren/max)*100);
   const color = who === "bart" ? "var(--green)" : "var(--gold)";
   const over = uren > max;
+  const urenStr = (uren % 1 === 0 ? uren : uren.toFixed(1)).toString().replace(".",",");
   return `<div>
     <div style="display:flex;justify-content:space-between;margin-bottom:3px">
       <span style="font-size:12px;font-weight:600;color:var(--text-dim)">${name}</span>
-      <span style="font-family:var(--mono);font-size:11px;color:${over?"var(--error)":"var(--text-faint)"}">${uren}u${over?" ⚠️ overboeking":""}</span>
+      <span style="font-family:var(--mono);font-size:11px;color:${over?"var(--error)":"var(--text-faint)"}">${urenStr}u${over?" ⚠️ overboeking":""}</span>
     </div>
     <div style="height:6px;background:var(--n-200);border-radius:3px;overflow:hidden">
       <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
     </div>
   </div>`;
+}
+
+/* — Nieuw blok via tik op leeg vak — */
+function gridTap(e, dayIdx) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const y = e.clientY - rect.top;
+  let hour = TG_START + Math.floor(y / TG_PX);
+  hour = Math.max(TG_START, Math.min(TG_END - 1, hour));
+  openBlokSheet(dayIdx, `${String(hour).padStart(2,"0")}:00`, `${String(hour+1).padStart(2,"0")}:00`);
+}
+
+function tapBlok(id) {
+  if (String(id).startsWith("mock-")) {
+    showToast("Planningsblok uit de cockpit — alleen-lezen in dit prototype");
+    return;
+  }
+  openBlokEdit(id);
+}
+
+function openBlokSheet(dayIdx, van, tot) {
+  editingBlokId = null;
+  blokCtx = {week: currentWeek, dayIdx};
+  const dates = weekDates(currentWeek);
+  document.getElementById("blokSheetTitle").textContent = "Nieuw blok";
+  document.getElementById("blokSheetSub").textContent =
+    `${WEEK_DAYS[dayIdx]} ${dates[dayIdx].getDate()} ${MAAND_KORT[dates[dayIdx].getMonth()]} · W${currentWeek}`;
+  document.getElementById("blokDeleteBtn").style.display = "none";
+  fillBlokProjectSelect("");
+  fillBlokTaskSelect("");
+  document.getElementById("blokVan").value = van;
+  document.getElementById("blokTot").value = tot;
+  document.getElementById("blokNewTaskField").style.display = "none";
+  document.getElementById("blokNewTaskName").value = "";
+  document.getElementById("blokSheet").classList.add("visible");
+}
+
+function openBlokEdit(id) {
+  const b = EIGEN_BLOKKEN.find(x => x.id === id);
+  if (!b) return;
+  editingBlokId = id;
+  blokCtx = {week: b.week, dayIdx: b.dayIdx};
+  const dates = weekDates(b.week);
+  document.getElementById("blokSheetTitle").textContent = "Blok bewerken";
+  document.getElementById("blokSheetSub").textContent =
+    `${WEEK_DAYS[b.dayIdx]} ${dates[b.dayIdx].getDate()} ${MAAND_KORT[dates[b.dayIdx].getMonth()]} · W${b.week}`;
+  document.getElementById("blokDeleteBtn").style.display = "block";
+  fillBlokProjectSelect(b.projCode);
+  fillBlokTaskSelect(b.taskName || "");
+  document.getElementById("blokVan").value = b.start;
+  document.getElementById("blokTot").value = b.end;
+  document.getElementById("blokNewTaskField").style.display = "none";
+  document.getElementById("blokNewTaskName").value = "";
+  document.getElementById("blokSheet").classList.add("visible");
+}
+
+function closeBlokSheet() {
+  document.getElementById("blokSheet").classList.remove("visible");
+}
+
+function fillBlokProjectSelect(selectedCode) {
+  const sel = document.getElementById("blokProject");
+  sel.innerHTML = `<option value="">— kies project —</option>` +
+    allProjects().map(p => `<option value="${p.code}" ${p.code===selectedCode?"selected":""}>${p.code} — ${escHtml(p.name)}</option>`).join("") +
+    `<option value="__new">＋ Nieuw project…</option>`;
+}
+
+function fillBlokTaskSelect(selectedName) {
+  const code = document.getElementById("blokProject").value;
+  const sel = document.getElementById("blokTask");
+  const tasks = (code && code !== "__new") ? tasksFor(code) : [];
+  sel.innerHTML = `<option value="">— geen taak —</option>` +
+    tasks.map(t => `<option value="${escHtml(t.name)}" ${t.name===selectedName?"selected":""}>${escHtml(t.name)}</option>`).join("") +
+    `<option value="__new">＋ Nieuwe taak…</option>`;
+  if (selectedName && !tasks.some(t => t.name === selectedName)) sel.value = "";
+}
+
+function onBlokProjectChange() {
+  const v = document.getElementById("blokProject").value;
+  if (v === "__new") {
+    npReturnToBlok = true;
+    closeBlokSheet();
+    openNewProject();
+    return;
+  }
+  fillBlokTaskSelect("");
+  document.getElementById("blokNewTaskField").style.display = "none";
+}
+
+function onBlokTaskChange() {
+  const isNew = document.getElementById("blokTask").value === "__new";
+  document.getElementById("blokNewTaskField").style.display = isNew ? "block" : "none";
+  if (isNew) document.getElementById("blokNewTaskName").focus();
+}
+
+function saveBlok() {
+  const code = document.getElementById("blokProject").value;
+  if (!code || code === "__new") { alert("Kies eerst een project."); return; }
+  const van = document.getElementById("blokVan").value;
+  const tot = document.getElementById("blokTot").value;
+  if (!van || !tot || toMin(tot) <= toMin(van)) { alert("Vul een geldige tijd in (tot ná van)."); return; }
+  const proj = allProjects().find(p => p.code === code);
+
+  let taskName = document.getElementById("blokTask").value;
+  if (taskName === "__new") {
+    const newName = document.getElementById("blokNewTaskName").value.trim();
+    if (!newName) { alert("Geef de nieuwe taak een naam."); return; }
+    addTaskToProject(code, {id:"t"+Date.now(), name:newName, status:"todo", date:null, est:null, tag:null, note:""});
+    taskName = newName;
+  }
+
+  if (editingBlokId) {
+    const b = EIGEN_BLOKKEN.find(x => x.id === editingBlokId);
+    Object.assign(b, {projCode:code, projName:proj.name, taskName:taskName||null, start:van, end:tot});
+  } else {
+    EIGEN_BLOKKEN.push({
+      id:"b"+Date.now(), week:blokCtx.week, dayIdx:blokCtx.dayIdx,
+      projCode:code, projName:proj.name, taskName:taskName||null, start:van, end:tot
+    });
+  }
+  saveEigenBlokken();
+  closeBlokSheet();
+  renderWeekStrip();
+  renderAgenda();
+  showToast(editingBlokId ? "Blok bijgewerkt" : `Blok toegevoegd · ${code}`);
+  editingBlokId = null;
+}
+
+function deleteBlok() {
+  if (!editingBlokId) return;
+  EIGEN_BLOKKEN = EIGEN_BLOKKEN.filter(b => b.id !== editingBlokId);
+  saveEigenBlokken();
+  editingBlokId = null;
+  closeBlokSheet();
+  renderWeekStrip();
+  renderAgenda();
+  showToast("Blok verwijderd");
 }
 
 /* =====================================================================
@@ -1351,7 +1824,7 @@ function renderCaptureProject() {
 function changeCaptureProject() {
   const sel = prompt("Projectcode invoeren (bv. CN-AMS-KEUKEN):");
   if (sel) {
-    const found = PROJECTS.find(p => p.code.toLowerCase() === sel.toLowerCase());
+    const found = allProjects().find(p => p.code.toLowerCase() === sel.toLowerCase());
     if (found) { captureProject = found; renderCaptureProject(); }
     else alert("Project niet gevonden: " + sel);
   }
@@ -1444,19 +1917,22 @@ function sluitOpname() {
    ===================================================================== */
 function populateOpleverSelect() {
   const sel = document.getElementById("opleverProjectSelect");
-  PROJECTS.forEach(p => {
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">— selecteer project —</option>`;
+  allProjects().forEach(p => {
     const opt = document.createElement("option");
     opt.value = p.id;
     opt.textContent = `${p.code} — ${p.name}`;
     sel.appendChild(opt);
   });
+  sel.value = cur;
 }
 
 function loadChecklist() {
   const sel = document.getElementById("opleverProjectSelect");
   const id = sel.value;
   if (!id) { document.getElementById("checklistWrap").style.display = "none"; return; }
-  currentOpleverProject = PROJECTS.find(p => p.id === id);
+  currentOpleverProject = allProjects().find(p => p.id === id);
   checklistState = {};
   checklistNotes = {};
   document.getElementById("checklistWrap").style.display = "block";
@@ -1482,11 +1958,14 @@ function renderChecklist() {
       </div>
       <div class="herstel-extra ${state==='herstel'?'visible':''}" id="herstel-${i}">
         <textarea placeholder="Omschrijf het herstelpunt…" id="herstel-note-${i}" onchange="setHerstelNote(${i},this.value)" style="font-size:13px;min-height:60px">${checklistNotes[i]||""}</textarea>
-        <div class="photo-input-wrap" style="display:inline-block">
-          <label style="margin:0;font-weight:400;text-transform:none">
-            <div class="herstel-foto-btn" style="pointer-events:none">📷 Foto toevoegen</div>
-            <input type="file" accept="image/*" capture="environment" onchange="herstelFoto(${i},this)" style="position:absolute;inset:0;opacity:0;width:100%;cursor:pointer">
-          </label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <div class="photo-input-wrap" style="display:inline-block">
+            <label style="margin:0;font-weight:400;text-transform:none">
+              <div class="herstel-foto-btn" style="pointer-events:none">📷 Foto toevoegen</div>
+              <input type="file" accept="image/*" capture="environment" onchange="herstelFoto(${i},this)" style="position:absolute;inset:0;opacity:0;width:100%;cursor:pointer">
+            </label>
+          </div>
+          <button class="herstel-foto-btn" style="margin-top:8px" onclick="herstelNaarTaak(${i})">＋ Maak taak aan in project</button>
         </div>
       </div>
     </div>`;
@@ -1507,6 +1986,21 @@ function herstelFoto(idx, input) {
     alert(`Foto voor herstelpunt "${currentOpleverProject.checklist[idx]}" opgeslagen.\n(mock — in productie geüpload naar SP)`);
     input.value = "";
   }
+}
+
+// Punt 4a: herstelpunt → taak in het project (met tag 'herstelpunt')
+function herstelNaarTaak(idx) {
+  const p = currentOpleverProject;
+  if (!p) return;
+  const note = (document.getElementById(`herstel-note-${idx}`) || {}).value || checklistNotes[idx] || "";
+  checklistNotes[idx] = note;
+  addTaskToProject(p.code, {
+    id:"t"+Date.now(),
+    name:"Herstel: " + p.checklist[idx],
+    status:"todo", date:null, est:null,
+    tag:"herstelpunt", note:note
+  });
+  showToast(`✓ Taak aangemaakt in ${p.code}`);
 }
 
 function showRapport() {
@@ -1564,6 +2058,12 @@ function showHandtekening() {
   initCanvas();
 }
 
+// Punt 4b: grote projecten — rapport per mail i.p.v. ter plekke aftekenen
+function rapportOpsturen() {
+  document.getElementById("rapportView").classList.add("view-hidden");
+  document.getElementById("opleverMailView").classList.remove("view-hidden");
+}
+
 function backToChecklist() {
   document.getElementById("opleverView").classList.remove("view-hidden");
   document.getElementById("rapportView").classList.add("view-hidden");
@@ -1579,6 +2079,7 @@ function resetOplevering() {
   document.getElementById("rapportView").classList.add("view-hidden");
   document.getElementById("handtekeningView").classList.add("view-hidden");
   document.getElementById("opleverDoneView").classList.add("view-hidden");
+  document.getElementById("opleverMailView").classList.add("view-hidden");
 }
 
 /* =====================================================================
@@ -1644,6 +2145,348 @@ function bevestigHandtekening() {
 function openLarry() { document.getElementById("larrySheet").classList.add("visible"); }
 function closeLarry() { document.getElementById("larrySheet").classList.remove("visible"); }
 function closeLarryOuter(e) { if (e.target === document.getElementById("larrySheet")) closeLarry(); }
+
+/* =====================================================================
+   TAKEN PER PROJECT (punt 2) — in project-detail-sheet
+   ===================================================================== */
+const TASK_ICON = {todo:"○", bezig:"◐", klaar:"✓"};
+const TASK_NEXT = {todo:"bezig", bezig:"klaar", klaar:"todo"};
+
+function renderSheetTasks() {
+  const p = currentSheetProject;
+  const el = document.getElementById("sheetTasks");
+  if (!p) { el.innerHTML = ""; return; }
+  const tasks = tasksFor(p.code);
+  let html = "";
+
+  if (!tasks.length && !addingTask) {
+    html += `<div style="font-size:13px;color:var(--text-faint);padding:4px 0 8px">Nog geen taken voor dit project.</div>`;
+  }
+
+  tasks.forEach(t => {
+    if (editingTaskId === t.id) {
+      html += `<div class="task-form">
+        <input id="tfName" value="${escHtml(t.name)}" placeholder="Taaknaam…">
+        <div style="display:flex;gap:8px">
+          <input id="tfDate" value="${t.date||""}" placeholder="Datum (bv. 12-06)" style="flex:1">
+          <input id="tfEst" value="${t.est||""}" placeholder="Schatting (bv. 2u)" style="flex:1">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn btn-primary btn-sm" style="flex:2" onclick="saveTaskEdit('${t.id}')">💾 Opslaan</button>
+          <button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteTask('${t.id}')">🗑</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="cancelTaskEdit()">×</button>
+        </div>
+      </div>`;
+      return;
+    }
+    const meta = [t.date, t.est].filter(Boolean).join(" · ");
+    html += `<div class="task-row">
+      <button class="task-toggle ${t.status}" onclick="toggleTaskStatus('${t.id}')" aria-label="Status wisselen">${TASK_ICON[t.status]||"○"}</button>
+      <div class="task-main" onclick="editTask('${t.id}')">
+        <div class="task-name ${t.status==='klaar'?'klaar':''}">${escHtml(t.name)} ${t.tag?`<span class="task-tag">${escHtml(t.tag)}</span>`:""}</div>
+        ${meta ? `<div class="task-meta">${escHtml(meta)}</div>` : ""}
+        ${t.note ? `<div class="task-meta">📝 ${escHtml(t.note)}</div>` : ""}
+      </div>
+    </div>`;
+  });
+
+  if (addingTask) {
+    html += `<div class="task-form">
+      <input id="tfNewName" placeholder="Taaknaam…">
+      <div style="display:flex;gap:8px">
+        <input id="tfNewDate" placeholder="Datum (bv. 12-06)" style="flex:1">
+        <input id="tfNewEst" placeholder="Schatting (bv. 2u)" style="flex:1">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-primary btn-sm" style="flex:2" onclick="saveNewTask()">💾 Taak toevoegen</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="cancelNewTask()">×</button>
+      </div>
+    </div>`;
+  } else {
+    html += `<button class="btn btn-secondary btn-sm btn-full" style="margin-top:8px" onclick="startNewTask()">＋ Taak</button>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function toggleTaskStatus(id) {
+  const t = tasksFor(currentSheetProject.code).find(x => x.id === id);
+  if (!t) return;
+  t.status = TASK_NEXT[t.status] || "todo";
+  saveTasks();
+  renderSheetTasks();
+}
+
+function editTask(id) {
+  editingTaskId = id;
+  addingTask = false;
+  renderSheetTasks();
+}
+
+function cancelTaskEdit() {
+  editingTaskId = null;
+  renderSheetTasks();
+}
+
+function saveTaskEdit(id) {
+  const t = tasksFor(currentSheetProject.code).find(x => x.id === id);
+  if (!t) return;
+  const name = document.getElementById("tfName").value.trim();
+  if (!name) { alert("Taaknaam mag niet leeg zijn."); return; }
+  t.name = name;
+  t.date = document.getElementById("tfDate").value.trim() || null;
+  t.est = document.getElementById("tfEst").value.trim() || null;
+  saveTasks();
+  editingTaskId = null;
+  renderSheetTasks();
+}
+
+function deleteTask(id) {
+  const code = currentSheetProject.code;
+  TASKS[code] = tasksFor(code).filter(x => x.id !== id);
+  saveTasks();
+  editingTaskId = null;
+  renderSheetTasks();
+  showToast("Taak verwijderd");
+}
+
+function startNewTask() {
+  addingTask = true;
+  editingTaskId = null;
+  renderSheetTasks();
+  const inp = document.getElementById("tfNewName");
+  if (inp) inp.focus();
+}
+
+function cancelNewTask() {
+  addingTask = false;
+  renderSheetTasks();
+}
+
+function saveNewTask() {
+  const name = document.getElementById("tfNewName").value.trim();
+  if (!name) { alert("Geef de taak een naam."); return; }
+  addTaskToProject(currentSheetProject.code, {
+    id:"t"+Date.now(), name,
+    status:"todo",
+    date: document.getElementById("tfNewDate").value.trim() || null,
+    est: document.getElementById("tfNewEst").value.trim() || null,
+    tag:null, note:""
+  });
+  addingTask = false;
+  renderSheetTasks();
+}
+
+/* =====================================================================
+   NIEUW PROJECT (punt 1) — KLANT-LOC-PROD code-generator
+   ===================================================================== */
+function sanCode(s) { return s.toUpperCase().replace(/[^A-Z0-9]/g,""); }
+
+function buildNpCode() {
+  const k = sanCode(document.getElementById("npKlant").value);
+  const l = sanCode(document.getElementById("npLoc").value);
+  const p = sanCode(document.getElementById("npProd").value);
+  return [k||"KLANT", l||"LOC", p||"PROD"].join("-");
+}
+
+function updateNpPreview() {
+  document.getElementById("npCodePreview").textContent = buildNpCode();
+}
+
+function openNewProject() {
+  // datalist vullen met bestaande klantcodes (CN/HWC/INT/MOS/STY + eigen)
+  const codes = [...new Set(allProjects().map(p => p.code.split("-")[0]))].sort();
+  document.getElementById("klantCodes").innerHTML = codes.map(c => `<option value="${c}">`).join("");
+  ["npName","npKlant","npLoc","npProd"].forEach(id => document.getElementById(id).value = "");
+  updateNpPreview();
+  document.getElementById("newProjectSheet").classList.add("visible");
+}
+
+function closeNewProject() {
+  document.getElementById("newProjectSheet").classList.remove("visible");
+  npReturnToBlok = false;
+}
+
+function saveNewProject() {
+  const name = document.getElementById("npName").value.trim();
+  const k = sanCode(document.getElementById("npKlant").value);
+  const l = sanCode(document.getElementById("npLoc").value);
+  const pr = sanCode(document.getElementById("npProd").value);
+  if (!name) { alert("Vul een projectnaam in."); return; }
+  if (!k || !l || !pr) { alert("Vul klantcode, locatie én product in voor de projectcode."); return; }
+  const code = `${k}-${l}-${pr}`;
+  if (allProjects().some(p => p.code === code)) { alert(`Projectcode ${code} bestaat al.`); return; }
+
+  const proj = {
+    id:"u"+Date.now(), code, name,
+    addr:"–",
+    status:"concept",
+    assigned:true,
+    lastActivity:"Zojuist · Bart",
+    contact:"–",
+    checklist:["Eindcontrole uitgevoerd"]
+  };
+  USER_PROJECTS.push(proj);
+  saveUserProjects();
+
+  // overal mee laten doen: picker (timer), kaarten, oplever-select
+  renderPickerList(allProjects());
+  renderProjectCards();
+  populateOpleverSelect();
+
+  document.getElementById("newProjectSheet").classList.remove("visible");
+  showToast(`✓ Project ${code} aangemaakt`);
+
+  if (npReturnToBlok) {
+    npReturnToBlok = false;
+    // terug naar blok-sheet met nieuw project voorgeselecteerd
+    if (editingBlokId) { openBlokEdit(editingBlokId); }
+    else {
+      openBlokSheet(blokCtx.dayIdx, document.getElementById("blokVan").value || "08:00", document.getElementById("blokTot").value || "09:00");
+    }
+    fillBlokProjectSelect(code);
+    fillBlokTaskSelect("");
+  }
+}
+
+/* =====================================================================
+   NOTIFICATIES (punt 5)
+   =====================================================================
+   TODO F1: echte aanvoer — app pollt mt_notificaties.json op SharePoint via de Worker; admin verstuurt vanuit de cockpit; later Web Push via service worker / TWA.
+   ===================================================================== */
+const NOTIF_SEED = [
+  {id:"n1", title:"Herstelpunt toegevoegd", text:"Mathijs zette een herstelpunt op Badkamermeubel Utrecht — bekijk de checklist.", time:"Vandaag 09:12", doel:{type:"oplevering", projId:"p4"}},
+  {id:"n2", title:"Planning gewijzigd", text:"Je staat donderdag op Wandkast Rotterdam (07:30–15:30).", time:"Vandaag 08:05", doel:{type:"agenda", week:CURRENT_WEEK_NR, day:3}},
+  {id:"n3", title:"Nieuwe taak voor jou", text:"“Plinten afkitten” staat klaar bij CompaNanny Keuken.", time:"Gisteren 16:40", doel:{type:"taak", projId:"p1"}}
+];
+let notifs = NOTIF_SEED.slice();
+let notifRead = [];
+try { notifRead = JSON.parse(localStorage.getItem("mt_notif_read") || "[]"); } catch(e) { notifRead = []; }
+function saveNotifRead() { localStorage.setItem("mt_notif_read", JSON.stringify(notifRead)); }
+function unreadCount() { return notifs.filter(n => !notifRead.includes(n.id)).length; }
+
+function renderNotifBadge() {
+  const badge = document.getElementById("notifBadge");
+  const n = unreadCount();
+  badge.textContent = n;
+  badge.style.display = n ? "flex" : "none";
+}
+
+function openNotifs() {
+  renderNotifList();
+  document.getElementById("notifSheet").classList.add("visible");
+}
+function closeNotifs() {
+  document.getElementById("notifSheet").classList.remove("visible");
+}
+
+function renderNotifList() {
+  const el = document.getElementById("notifList");
+  document.getElementById("notifSheetSub").textContent =
+    unreadCount() ? `${unreadCount()} ongelezen` : "Alles gelezen";
+  if (!notifs.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔕</div><div class="empty-text">Geen notificaties</div></div>`;
+    return;
+  }
+  el.innerHTML = notifs.map(n => `
+    <div class="notif-item ${notifRead.includes(n.id) ? "read" : ""}" onclick="tapNotif('${n.id}')">
+      <div class="notif-dot"></div>
+      <div class="notif-content">
+        <div class="notif-title">${escHtml(n.title)}</div>
+        <div class="notif-text">${escHtml(n.text)}</div>
+        <div class="notif-time">${escHtml(n.time)}</div>
+      </div>
+      <div style="align-self:center;color:var(--text-faint)">›</div>
+    </div>
+  `).join("");
+}
+
+function markNotifRead(id) {
+  if (!notifRead.includes(id)) { notifRead.push(id); saveNotifRead(); }
+  renderNotifBadge();
+}
+
+function tapNotif(id) {
+  const n = notifs.find(x => x.id === id);
+  if (!n) return;
+  markNotifRead(id);
+  closeNotifs();
+  openNotifDoel(n.doel);
+}
+
+// open het doel van een notificatie: juiste tab + juiste sheet/item
+function openNotifDoel(doel) {
+  if (!doel) return;
+  if (doel.type === "project" || doel.type === "taak") {
+    switchTab("projecten", document.getElementById("nav-projecten"));
+    openProjectSheet(doel.projId);
+  } else if (doel.type === "oplevering") {
+    switchTab("oplevering", document.getElementById("nav-oplevering"));
+    document.getElementById("opleverProjectSelect").value = doel.projId;
+    loadChecklist();
+  } else if (doel.type === "agenda") {
+    switchTab("agenda", document.getElementById("nav-agenda"));
+    currentWeek = doel.week || CURRENT_WEEK_NR;
+    selectDay(typeof doel.day === "number" ? doel.day : TODAY_IDX);
+  }
+}
+
+/* — Demo: nieuwe notificatie na ~3s, met tijdelijke banner — */
+let bannerNotifId = null;
+let bannerTimeout = null;
+
+function demoNotif() {
+  showToast("Demo gestart — notificatie volgt over ±3 sec…");
+  setTimeout(() => {
+    const n = {
+      id:"n"+Date.now(),
+      title:"Opdrachtgever reageerde",
+      text:"CompaNanny bevestigt de oplevering: vrijdag 10:00 op locatie.",
+      time:"Zojuist",
+      doel:{type:"project", projId:"p1"}
+    };
+    notifs.unshift(n);
+    renderNotifBadge();
+    if (document.getElementById("notifSheet").classList.contains("visible")) renderNotifList();
+    showBanner(n);
+  }, 3000);
+}
+
+function showBanner(n) {
+  bannerNotifId = n.id;
+  document.getElementById("notifBannerTitle").textContent = n.title;
+  document.getElementById("notifBannerText").textContent = n.text;
+  const banner = document.getElementById("notifBanner");
+  banner.classList.add("visible");
+  clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(hideBanner, 6000);
+}
+
+function hideBanner() {
+  document.getElementById("notifBanner").classList.remove("visible");
+  bannerNotifId = null;
+}
+
+function bannerTap() {
+  const n = notifs.find(x => x.id === bannerNotifId);
+  hideBanner();
+  if (!n) return;
+  markNotifRead(n.id);
+  closeNotifs();
+  openNotifDoel(n.doel);
+}
+
+/* =====================================================================
+   TOAST
+   ===================================================================== */
+let toastTimeout = null;
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("visible");
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => t.classList.remove("visible"), 2600);
+}
 
 /* =====================================================================
    UTIL

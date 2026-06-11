@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — mobiel: F0-prototype Android-app (mock) — timer+projectkiezer, projecten, agenda, capture, oplevering+aftekenen
+- Commit: `ba51abe` | Auteur: Bart Witte
+
 ## 2026-06-11 — v2: per-tab help-knop + Larry feedback-chat (read-only guardrails) + gebruiks-log naar SharePoint
 - Commit: `6be434e` | Auteur: Bart Witte
 
