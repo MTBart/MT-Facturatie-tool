@@ -147,6 +147,23 @@ header h1 span{color:var(--gold);font-style:italic}
 .tbchat-input button{background:var(--green);color:#fff;border:none;border-radius:8px;width:40px;cursor:pointer;font-size:15px}
 @media(max-width:760px){.header-center{position:static;transform:none}.tbchat-panel{position:fixed;top:60px;left:50%}}
 
+/* ── Per-tab help ("wat is dit?") + feedback-chat ── */
+.tab-help-btn{margin-left:auto;align-self:center;flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:none;border:1px solid var(--border);border-radius:14px;padding:4px 11px;font-family:var(--sans);font-size:12px;color:var(--text-faint);cursor:pointer;white-space:nowrap}
+.tab-help-btn:hover{color:var(--gold,#B8962E);border-color:var(--gold,#B8962E)}
+.help-modal{width:560px;max-width:calc(100vw - 24px);max-height:84vh;display:flex;flex-direction:column;padding:0;overflow:hidden}
+.help-modal-head{background:linear-gradient(135deg,var(--green),var(--green-700));color:var(--n-0);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.help-modal-head .t{font-size:14px;font-weight:600}
+.help-modal-uitleg{padding:14px 16px;font-size:13px;line-height:1.55;color:var(--n-900);border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;max-height:38vh;overflow-y:auto}
+.help-modal-uitleg p{margin:0 0 8px}
+.help-modal-uitleg p:last-child{margin-bottom:0}
+.help-chat-label{padding:9px 16px 0;font-size:11px;font-family:var(--mono);letter-spacing:0.05em;text-transform:uppercase;color:var(--text-faint)}
+.help-chatlog{flex:1;min-height:90px;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:7px;font-size:13px;background:var(--n-50,#faf9f6)}
+.help-chatlog .u{align-self:flex-end;background:var(--green);color:#fff;padding:6px 10px;border-radius:11px 11px 2px 11px;max-width:84%;white-space:pre-wrap;word-break:break-word}
+.help-chatlog .b{align-self:flex-start;background:#fff;border:1px solid #e5e2da;padding:6px 10px;border-radius:11px 11px 11px 2px;max-width:88%;white-space:pre-wrap;word-break:break-word}
+.help-chatin{display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:#fff;flex-shrink:0}
+.help-chatin textarea{flex:1;resize:none;border:1px solid #ddd;border-radius:8px;padding:8px;font-family:inherit;font-size:13px;max-height:90px}
+.help-chatin button{background:var(--green);color:#fff;border:none;border-radius:8px;width:40px;cursor:pointer;font-size:15px}
+
 /* ── TABS ── */
 .tabs-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:0 var(--space-6);display:flex;gap:0;overflow-x:auto;position:sticky;top:60px;z-index:90}
 .tab-btn{padding:var(--space-4) var(--space-4);border:none;background:none;cursor:pointer;font-family:var(--sans);font-size:var(--text-sm);font-weight:500;color:var(--text-faint);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color 0.15s,border-color 0.15s;white-space:nowrap;letter-spacing:0.01em}
@@ -486,6 +503,7 @@ button{transition:transform .07s ease,filter .07s ease}
   <button class="tab-btn" onclick="showTab('klanten',this)">Klanten</button>
   <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
+  <button class="tab-help-btn" onclick="helpOpen()" title="Korte uitleg van dit tabblad + feedback geven aan Larry">ⓘ wat is dit?</button>
 </div>
 
 <div class="main">
@@ -6194,6 +6212,7 @@ async function inboxChat(){
     ],700);
     const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
     tmp.textContent=txt;
+    if(window._LOG)_LOG.add('inbox-chat','inbox',`[${m.subject||''}] ${q}`,txt);
   }catch(e){tmp.textContent='fout: '+e.message;}
   log.scrollTop=log.scrollHeight;
 }
@@ -6220,6 +6239,7 @@ function tbExec(key,val){
     case 'sync-agenda': tbDoTab('agenda'); if(window.agendaSyncNu){agendaSyncNu();return 'uren-sync gestart';} return 'agenda geopend';
     case 'sync-inbox': tbDoTab('inbox'); if(window.inboxReload){inboxReload();return 'inbox herladen';} return 'inbox geopend';
     case 'refresh': setTimeout(()=>location.reload(),400); return 'pagina wordt herladen…';
+    case 'nieuw-project': tbDoTab('projecten'); if(window.openModal){openModal();return 'projectaanmaker geopend';} return 'projecten geopend';
     default: return 'onbekende actie: '+key;
   }
 }
@@ -6234,7 +6254,9 @@ Beschikbare acties:
 - [[ACTIE:sync-agenda]] open de agenda en ververs de uren.
 - [[ACTIE:sync-inbox]] open en herlaad de inbox.
 - [[ACTIE:refresh]] herlaad de hele pagina.
-Gebruik een actie ALLEEN als de gebruiker iets wil openen of doen. Benoem in gewone taal wat je doet; de directives zelf ziet de gebruiker niet.`;
+- [[ACTIE:nieuw-project]] open de projectaanmaker (nieuw project starten).
+Gebruik een actie ALLEEN als de gebruiker iets wil openen of doen. Benoem in gewone taal wat je doet; de directives zelf ziet de gebruiker niet.
+HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of mappen — geen facturen boeken, niets verwijderen, niets hernoemen. Je acties zijn uitsluitend navigatie/verversen plus het openen van de projectaanmaker (het aanmaken doet de gebruiker daar zelf). Als iemand iets anders vraagt: leg uit dat dat via Bart/Larry in de terminal loopt.`;
   try{
     const conv=_tbHist.slice(-8).map(m=>(m.role==='user'?'Gebruiker: ':'Larry: ')+m.content).join('\n');
     const r=await claudeCall([{role:'user',content:sys+'\n\n— Gesprek —\n'+conv+'\n\nLarry:'}],700);
@@ -6243,7 +6265,118 @@ Gebruik een actie ALLEEN als de gebruiker iets wil openen of doen. Benoem in gew
     const clean=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim();
     wait.textContent=clean||'(klaar)';_tbHist.push({role:'assistant',content:clean});
     for(const a of acts){tbBubble('act','⚙ '+tbExec(a[1].toLowerCase(),(a[2]||'').trim()));}
-  }catch(e){wait.textContent='fout: '+e.message;}
+    if(window._LOG)_LOG.add('tbchat',helpActieveTab(),q,clean);
+  }catch(e){wait.textContent='fout: '+e.message;if(window._LOG)_LOG.add('tbchat-fout',helpActieveTab(),q,e.message);}
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// PER-TAB HELP ("wat is dit?") + FEEDBACK-CHAT + GEBRUIKS-LOG
+// - ⓘ-knop in de tab-balk toont uitleg van het ACTIEVE tabblad + Larry-feedbackchat.
+// - Guardrail: deze chat kan NIETS uitvoeren of wijzigen (geen acties, geen data,
+//   geen bestanden/mappen) — puur uitleg + feedback in ontvangst nemen.
+// - Al het chat-/feedback-gebruik (ook topbalk- en inbox-chat) gaat naar _LOG:
+//   localStorage-buffer → maandbestand mt_chatlog-YYYY-MM.json op SharePoint
+//   (MT-Bedrijfstool/), read-merge-write zodat twee PC's elkaar niet wissen.
+//   Larry leest die bestanden via Graph voor het verbeterplan.
+// ═══════════════════════════════════════════════════════════════════════════
+const TAB_HELP={
+  dashboard:{naam:'Dashboard',uitleg:'Het overzicht: omzet dit jaar, openstaande debiteuren en crediteuren en netto resultaat — live uit Moneybird. Daaronder de ouderdom van openstaande posten, de top-leveranciers qua uitgaven en de "nog te doen"-lijst. Alles is klikbaar waar een cijfer dieper gaat.'},
+  inbox:{naam:'Inbox',uitleg:'De smart-inbox van info@. Mails lezen, aan een project of klant koppelen, factuur-bijlagen direct laten analyseren (✨) en per mail met Larry chatten. Verplaatsingen die je hier doet leren het sorteersysteem bij.'},
+  projecten:{naam:'Projecten',uitleg:'Alle lopende projecten met hun projectcode (KLANT-LOCATIE-PRODUCT). Via "+ Nieuw project" opent de projectaanmaker: die stelt de code voor en maakt de SharePoint-mappenstructuur aan. De code is de sleutel die overal terugkomt: stickers, uren, mail, Moneybird.'},
+  agenda:{naam:'Agenda',uitleg:'De gezamenlijke agenda: afspraken uit Outlook plus geplande taken. Slepen om te plannen; de uren-sync haalt de actuele stand op.'},
+  toggl:{naam:'Uren',uitleg:'Geklokte uren uit Toggl, per persoon en per project, met weektotalen en rapporten. Dit groeit uit tot onze eigen urenregistratie met planning én capaciteit (hoeveel uur per persoon nog vrij is).'},
+  voorraad:{naam:'Voorraad',uitleg:'De voorraad plaatmateriaal en hardware, gevoed vanuit ingelezen facturen. FIFO-herkomst per artikel zodat nacalculatie klopt.'},
+  materialen:{naam:'Materialen',uitleg:'De materialen die we écht inkopen (gematcht op facturen en voorraad), met de factuurnaam als canonieke naam. Niet de hele interiorcad-catalogus.'},
+  bestelling:{naam:'Bestellijst',uitleg:'Wat besteld moet worden, per leverancier. Vanaf hier groeit de inkoopketen: bestelling → factuur → voorraad → nacalculatie.'},
+  klanten:{naam:'Klanten',uitleg:'De volledige klantregistry uit Moneybird (650+), met zoekfunctie en de klant-codes die in projectcodes terugkomen. Eigen code-keuzes worden onthouden en gesynct.'},
+  historie:{naam:'Geschiedenis',uitleg:'Alles wat verwerkt is: ingelezen facturen, aangemaakte projecten en eerdere acties, terug te zoeken op datum en naam.'},
+  instellingen:{naam:'Instellingen',uitleg:'Sync-status (SharePoint), en de ingangen naar Nieuwe factuur, Factuurcontrole, CompaNanny-analyse en Data-migratie.'},
+  verwerk:{naam:'Nieuwe factuur',uitleg:'Upload of kies een factuur-PDF; Claude leest leverancier, regels en bedragen uit en zet alles klaar voor Moneybird. Jij controleert en bevestigt — er wordt nooit zonder jou geboekt.'},
+  controle:{naam:'Factuurcontrole',uitleg:'Vergelijkt onze uitgelezen factuurregels met wat er in Moneybird staat en markeert verschillen, zodat foute autoherkenning eruit gevist wordt.'},
+  cn:{naam:'CompaNanny-analyse',uitleg:'Aparte analyse voor CompaNanny: omzet en facturen per locatie (53 locatie-contacten in Moneybird).'},
+  migratie:{naam:'Data-migratie',uitleg:'Eenmalige hulpmiddelen om oude data naar de nieuwe structuur te verhuizen. Alleen gebruiken als je weet wat je doet.'}
+};
+function helpActieveTab(){const el=document.querySelector('.tab-content.active');return el?el.id.replace('tab-',''):'?';}
+
+// ── Gebruiks-log: buffer lokaal, flush met merge naar SharePoint ──
+const _LOG={
+  BUF:'mt_chatlog_buffer',_t:null,
+  bestand(){const d=new Date();return `mt_chatlog-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}.json`;},
+  gebruiker(){try{const a=_msal&&_msal.getAllAccounts();return (a&&a[0]&&a[0].username)||'?';}catch(e){return '?';}},
+  add(kind,tab,vraag,antwoord){
+    try{
+      const buf=JSON.parse(localStorage.getItem(this.BUF)||'[]');
+      buf.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),ts:new Date().toISOString(),
+        gebruiker:this.gebruiker(),kind,tab,vraag:(vraag||'').slice(0,2000),antwoord:(antwoord||'').slice(0,4000)});
+      localStorage.setItem(this.BUF,JSON.stringify(buf));
+      clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),3000);
+    }catch(e){console.warn('chatlog add:',e.message);}
+  },
+  async flush(){
+    let buf;try{buf=JSON.parse(localStorage.getItem(this.BUF)||'[]');}catch(e){buf=[];}
+    if(!buf.length)return;
+    try{
+      const naam=this.bestand();
+      const bestaand=(await _SP.read(naam))||[];
+      const ids=new Set(bestaand.map(e=>e.id));
+      const merged=bestaand.concat(buf.filter(e=>!ids.has(e.id)));
+      if(await _SP.write(naam,merged))localStorage.setItem(this.BUF,'[]');
+    }catch(e){console.warn('chatlog flush:',e.message);} // buffer blijft staan, volgende add probeert opnieuw
+  }
+};
+window._LOG=_LOG;
+setInterval(()=>_LOG.flush(),120000); // vangnet: achtergebleven buffer (bv. na offline) alsnog wegschrijven
+
+// ── Help-paneel ──
+let _helpHist=[];
+function helpOpen(){
+  const tab=helpActieveTab();
+  const info=TAB_HELP[tab]||{naam:tab,uitleg:'Voor dit tabblad is nog geen uitleg geschreven — zeg het hieronder, dan komt die er.'};
+  _helpHist=[];
+  let ov=document.getElementById('help-overlay');
+  if(!ov){
+    ov=document.createElement('div');ov.id='help-overlay';ov.className='modal-overlay';
+    ov.addEventListener('click',e=>{if(e.target===ov)helpClose();});
+    ov.innerHTML=`<div class="modal help-modal">
+      <div class="help-modal-head"><span class="t" id="help-titel"></span><button class="tbchat-x" onclick="helpClose()">✕</button></div>
+      <div class="help-modal-uitleg" id="help-uitleg"></div>
+      <div class="help-chat-label">Feedback of vraag — Larry legt het vast voor het verbeterplan</div>
+      <div class="help-chatlog" id="help-chatlog"></div>
+      <div class="help-chatin">
+        <textarea id="help-chatq" rows="1" placeholder="Wat kan hier beter? Of stel een vraag…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();helpChatSend();}"></textarea>
+        <button onclick="helpChatSend()">➤</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+  }
+  document.getElementById('help-titel').textContent='ⓘ '+info.naam+' — wat is dit?';
+  document.getElementById('help-uitleg').innerHTML='<p>'+info.uitleg+'</p>';
+  document.getElementById('help-chatlog').innerHTML='';
+  document.getElementById('help-chatq').value='';
+  ov.dataset.tab=tab;ov.classList.remove('hidden');ov.style.display='flex';
+  _LOG.add('help-open',tab,'','');
+}
+function helpClose(){const ov=document.getElementById('help-overlay');if(ov)ov.style.display='none';}
+function helpBubble(cls,txt){const log=document.getElementById('help-chatlog');const d=document.createElement('div');d.className=cls;d.textContent=txt;log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
+async function helpChatSend(){
+  const inp=document.getElementById('help-chatq');const q=(inp.value||'').trim();if(!q)return;
+  const ov=document.getElementById('help-overlay');const tab=ov.dataset.tab||helpActieveTab();
+  const info=TAB_HELP[tab]||{naam:tab,uitleg:''};
+  inp.value='';helpBubble('u',q);_helpHist.push({role:'user',content:q});
+  const wait=helpBubble('b','…');
+  const sys=`Je bent Larry in uitleg- en feedback-modus voor het tabblad "${info.naam}" van de M&T-cockpit. Antwoord kort en concreet in het Nederlands.
+Uitleg van dit tabblad: ${info.uitleg}
+Je taken: (1) vragen over dit tabblad beantwoorden, (2) feedback en verbeterwensen in ontvangst nemen — vat die kort samen en bevestig dat het is vastgelegd voor het verbeterplan.
+HARDE GRENS: je kunt hier NIETS uitvoeren of wijzigen — geen acties, geen data, geen bestanden of mappen. Wil de gebruiker een nieuw project? Verwijs naar de projectaanmaker (tabblad Projecten → "+ Nieuw project"). Al het andere doe-werk loopt via Larry in de terminal.`;
+  try{
+    const conv=_helpHist.slice(-8).map(m=>(m.role==='user'?'Gebruiker: ':'Larry: ')+m.content).join('\n');
+    const r=await claudeCall([{role:'user',content:sys+'\n\n— Gesprek —\n'+conv+'\n\nLarry:'}],600);
+    let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+    txt=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim(); // dubbele borging: hier nooit acties
+    wait.textContent=txt;_helpHist.push({role:'assistant',content:txt});
+    _LOG.add('help-feedback',tab,q,txt);
+  }catch(e){wait.textContent='fout: '+e.message;_LOG.add('help-feedback-fout',tab,q,e.message);}
 }
 </script>
 
