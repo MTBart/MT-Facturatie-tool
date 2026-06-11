@@ -503,6 +503,7 @@ button{transition:transform .07s ease,filter .07s ease}
   <button class="tab-btn" onclick="showTab('klanten',this)">Klanten</button>
   <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
+  <button class="tab-btn" id="tab-btn-admin" style="display:none" onclick="showTab('admin',this)">⚙ Admin</button>
   <button class="tab-help-btn" onclick="helpOpen()" title="Korte uitleg van dit tabblad + feedback geven aan Larry">ⓘ wat is dit?</button>
 </div>
 
@@ -1002,6 +1003,7 @@ button{transition:transform .07s ease,filter .07s ease}
           <div class="ag-viewtog" style="display:inline-flex;border:1px solid var(--border,#ddd);border-radius:7px;overflow:hidden">
             <button class="btn btn-sm" id="agenda-view-grid" onclick="agendaZetView('grid')" title="Week-rooster" style="border:0;border-radius:0;padding:5px 10px">▦ Rooster</button>
             <button class="btn btn-sm" id="agenda-view-lijst" onclick="agendaZetView('lijst')" title="Timer-lijst (zoals Toggl)" style="border:0;border-radius:0;padding:5px 10px">≣ Lijst</button>
+            <button class="btn btn-sm" id="agenda-view-plan" onclick="agendaZetView('plan')" title="Planning-blokken" style="border:0;border-radius:0;padding:5px 10px">📋 Planning</button>
           </div>
           <label style="font-size:12px">Kleur op:</label>
           <select id="agenda-kleurop" class="zoek-input" style="width:auto" onchange="agendaZetKleur(this.value)">
@@ -1024,11 +1026,189 @@ button{transition:transform .07s ease,filter .07s ease}
         </div>
       </div>
     </div>
+    <div id="agenda-plan-toolbar" style="display:none;margin-bottom:8px;display:none">
+      <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="agenda-plan-actuals" onchange="agPlanRender()"> ✓ toon geklokt (semi-transparant)</label>
+    </div>
+    <div id="agenda-cap-balk" style="display:none;margin-bottom:8px"></div>
     <div id="agenda-totalen" style="margin-bottom:1rem"></div>
     <div class="card" style="padding:0;overflow:auto;max-height:74vh">
       <div id="agenda-grid"></div>
     </div>
     <div id="agenda-status" style="font-size:11px;color:var(--text-faint);margin-top:6px"></div>
+  </div>
+
+  <!-- ═══ TAB: ADMIN ═══ -->
+  <div id="tab-admin" class="tab-content">
+    <style>
+      #tab-admin .adm-subtabs{display:flex;gap:2px;border-bottom:1px solid var(--border,#e2e2e2);margin-bottom:14px;flex-wrap:wrap}
+      #tab-admin .adm-subtab{padding:9px 15px;border:none;background:none;cursor:pointer;font-size:12.5px;font-weight:500;color:var(--text-faint,#999);border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s}
+      #tab-admin .adm-subtab:hover{color:var(--text-dim,#666)}
+      #tab-admin .adm-subtab.active{color:var(--green,#2A4A38);border-bottom-color:var(--gold,#B8962E);font-weight:600}
+      #tab-admin .adm-subcontent{display:none}
+      #tab-admin .adm-subcontent.active{display:block}
+      #tab-admin table.adm-tbl{width:100%;border-collapse:collapse;font-size:13px}
+      #tab-admin table.adm-tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint,#999);padding:6px 8px;border-bottom:1px solid var(--border,#e6e6e6)}
+      #tab-admin table.adm-tbl td{padding:7px 8px;border-bottom:1px solid var(--border,#f2f2f2);vertical-align:middle}
+      #tab-admin .adm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+      #tab-admin .adm-saldo-neg{color:#c0392b;font-weight:600}
+      #tab-admin .adm-saldo-pos{color:var(--green,#2A4A38)}
+      #tab-admin .adm-notif-item{padding:10px 12px;border-bottom:1px solid var(--border);font-size:12.5px}
+      #tab-admin .adm-notif-item .adm-notif-meta{font-size:11px;color:var(--text-faint);margin-top:3px}
+      #tab-admin input.adm-inp{padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;width:100%;box-sizing:border-box}
+      #tab-admin select.adm-sel{padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;width:100%;box-sizing:border-box;background:#fff}
+      #tab-admin .adm-row-form{display:grid;gap:8px;margin-bottom:12px}
+      #tab-admin .adm-row-form label{font-size:12px;color:var(--text-dim,#666);display:block;margin-bottom:2px}
+      #tab-admin .adm-search{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+      #tab-admin .adm-verlof-blok{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);font-size:12.5px}
+      #tab-admin .adm-verlof-blok .adm-del-btn{opacity:0;transition:opacity .15s;border:none;background:none;color:#c0392b;cursor:pointer;font-size:13px;padding:2px 5px}
+      #tab-admin .adm-verlof-blok:hover .adm-del-btn{opacity:1}
+      #tab-admin .cap-balk-wrap{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+      #tab-admin .adm-log-row{font-size:12px;padding:6px 8px;border-bottom:1px solid var(--border,#f2f2f2)}
+      #tab-admin .adm-log-row:nth-child(even){background:var(--surface-sunken)}
+    </style>
+    <div class="adm-subtabs">
+      <button class="adm-subtab active" onclick="admSub('logboek',this)">📒 Logboek</button>
+      <button class="adm-subtab" onclick="admSub('team',this)">⚙️ Team &amp; lock</button>
+      <button class="adm-subtab" onclick="admSub('verlof',this)">🏖 Verlof &amp; saldo</button>
+      <button class="adm-subtab" onclick="admSub('vrijdagen',this)">📅 Vrije dagen</button>
+      <button class="adm-subtab" onclick="admSub('notificaties',this)">🔔 Notificaties</button>
+    </div>
+
+    <!-- A1: Logboek -->
+    <div id="adm-sub-logboek" class="adm-subcontent active">
+      <div class="adm-search">
+        <select id="adm-log-pers" class="adm-sel" style="width:auto" onchange="admRenderLog()">
+          <option value="">Alle personen</option>
+          <option value="bart">Bart</option>
+          <option value="mathijs">Mathijs</option>
+          <option value="arjan">Arjan</option>
+          <option value="maarten">Maarten</option>
+        </select>
+        <input type="text" id="adm-log-zoek" class="adm-inp" style="max-width:260px" placeholder="Zoek in logboek…" oninput="admRenderLog()">
+        <button class="btn btn-sm btn-secondary" onclick="admLaadLog()">↻ Ververs</button>
+      </div>
+      <div class="card" style="padding:0;overflow:auto;max-height:62vh">
+        <table class="adm-tbl" id="adm-log-tbl">
+          <thead><tr><th>Tijd</th><th>Wie</th><th>Actie</th><th>Doel</th><th>Oud → Nieuw</th><th>Reden</th></tr></thead>
+          <tbody id="adm-log-tbody"><tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-faint)">Laden…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- A2: Team & lock -->
+    <div id="adm-sub-team" class="adm-subcontent">
+      <div class="adm-grid2">
+        <div class="card">
+          <h4 style="margin-top:0">Werkuren per week</h4>
+          <div id="adm-werkuren-form"></div>
+          <button class="btn btn-sm btn-gold" style="margin-top:10px" onclick="admSlaWerkurenOp()">Opslaan</button>
+        </div>
+        <div class="card">
+          <h4 style="margin-top:0">Uren-lock</h4>
+          <p style="font-size:12.5px;color:var(--text-dim)">Entries ouder dan N dagen zijn vergrendeld voor niet-admins. Admins moeten een reden opgeven.</p>
+          <label style="font-size:12px">Lock-drempel (dagen): <input type="number" id="adm-lock-dagen" min="0" max="365" value="14" style="width:70px;margin-left:8px" class="adm-inp"></label>
+          <div style="margin-top:10px"><button class="btn btn-sm btn-gold" onclick="admSlaLockOp()">Opslaan</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- A3: Verlof & saldo -->
+    <div id="adm-sub-verlof" class="adm-subcontent">
+      <div class="adm-grid2" style="margin-bottom:1rem">
+        <div class="card">
+          <h4 style="margin-top:0">Jaarbudgetten (verlofdagen)</h4>
+          <div id="adm-budgetten-form"></div>
+          <button class="btn btn-sm btn-gold" style="margin-top:10px" onclick="admSlaBudgettenOp()">Opslaan</button>
+        </div>
+        <div class="card">
+          <h4 style="margin-top:0">Verlof boeken</h4>
+          <div class="adm-row-form" style="grid-template-columns:1fr 1fr">
+            <div><label>Persoon</label><select id="adm-verl-pers" class="adm-sel"><option value="bart">Bart</option><option value="mathijs">Mathijs</option><option value="arjan">Arjan</option><option value="maarten">Maarten</option></select></div>
+            <div><label>Van</label><input type="date" id="adm-verl-van" class="adm-inp"></div>
+            <div><label>T/m</label><input type="date" id="adm-verl-tm" class="adm-inp"></div>
+            <div><label>Dagen (auto = werkdagen)</label><input type="number" id="adm-verl-dagen" class="adm-inp" min="0" step="0.5" placeholder="auto"></div>
+          </div>
+          <div class="adm-row-form">
+            <div><label>Opmerking</label><input type="text" id="adm-verl-opm" class="adm-inp" placeholder="Bijv. vakantie Italië"></div>
+          </div>
+          <button class="btn btn-sm btn-gold" onclick="admBoekVerlof()">Verlof boeken</button>
+        </div>
+      </div>
+      <div class="adm-grid2">
+        <div class="card" style="padding:0">
+          <div style="padding:10px 12px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Verlofregistratie</div>
+          <div id="adm-verlof-lijst"></div>
+        </div>
+        <div class="card">
+          <h4 style="margin-top:0">Saldo
+            <select id="adm-saldo-jaar" class="adm-sel" style="width:auto;font-size:12px;margin-left:8px" onchange="admRenderSaldo()"></select>
+          </h4>
+          <div id="adm-saldo-tbl"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- A4: Vrije dagen -->
+    <div id="adm-sub-vrijdagen" class="adm-subcontent">
+      <div class="adm-grid2">
+        <div class="card">
+          <h4 style="margin-top:0">Vrije dag toevoegen</h4>
+          <div class="adm-row-form">
+            <div><label>Datum</label><input type="date" id="adm-vd-datum" class="adm-inp"></div>
+            <div><label>Naam</label><input type="text" id="adm-vd-naam" class="adm-inp" placeholder="Bijv. Koningsdag"></div>
+            <div><label>Type</label>
+              <select id="adm-vd-type" class="adm-sel">
+                <option value="verplicht">Verplicht (afgesloten in agenda)</option>
+                <option value="optioneel">Optioneel (halftransparant)</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-gold" onclick="admVoegVrijeDagToe()">Toevoegen</button>
+        </div>
+        <div class="card" style="padding:0">
+          <div style="padding:10px 12px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Vrije dagen (gesorteerd)</div>
+          <div id="adm-vd-lijst"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- A5: Notificaties -->
+    <div id="adm-sub-notificaties" class="adm-subcontent">
+      <div class="adm-grid2">
+        <div class="card">
+          <h4 style="margin-top:0">Notificatie versturen</h4>
+          <div class="adm-row-form">
+            <div><label>Aan</label>
+              <select id="adm-notif-aan" class="adm-sel">
+                <option value="allen">Allen</option>
+                <option value="bart@mortiseandtenon.nl">Bart</option>
+                <option value="mathijs@mortiseandtenon.nl">Mathijs</option>
+                <option value="arjan@mortiseandtenon.nl">Arjan</option>
+                <option value="maarten@mortiseandtenon.nl">Maarten</option>
+              </select>
+            </div>
+            <div><label>Titel</label><input type="text" id="adm-notif-titel" class="adm-inp" placeholder="Kort onderwerp"></div>
+            <div><label>Tekst</label><textarea id="adm-notif-tekst" rows="3" class="adm-inp" placeholder="Inhoud van de notificatie"></textarea></div>
+            <div><label>Deep-link tab</label>
+              <select id="adm-notif-tab" class="adm-sel">
+                <option value="">— geen —</option>
+                <option value="timer">Timer</option>
+                <option value="projecten">Projecten</option>
+                <option value="agenda">Agenda</option>
+                <option value="capture">Capture</option>
+                <option value="oplevering">Oplevering</option>
+              </select>
+            </div>
+            <div><label>Deep-link item (optioneel)</label><input type="text" id="adm-notif-item" class="adm-inp" placeholder="ID of code"></div>
+          </div>
+          <button class="btn btn-sm btn-gold" onclick="admVerstuurNotificatie()">Versturen</button>
+        </div>
+        <div class="card" style="padding:0">
+          <div style="padding:10px 12px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Verzonden notificaties</div>
+          <div id="adm-notif-lijst" style="max-height:50vh;overflow:auto"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ═══ TAB: TOGGL (volledige Track + Focus aansturing via Worker) ═══ -->
@@ -1593,6 +1773,7 @@ function showTab(name,btn){
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
   if(name==='materialen') renderMaterialen();
+  if(name==='admin') adminOpen();
 }
 function showVtab(name,btn){
   document.querySelectorAll('#tab-voorraad .vtab-content').forEach(t=>t.classList.remove('active'));
@@ -1761,11 +1942,15 @@ function renderAgenda(){
   agEnsureNames();
   agBindOutside();
   const ko=document.getElementById('agenda-kleurop'); if(ko) ko.value=_agenda.kleurOp;
-  const gb=document.getElementById('agenda-view-grid'), lb=document.getElementById('agenda-view-lijst');
+  const gb=document.getElementById('agenda-view-grid'), lb=document.getElementById('agenda-view-lijst'), pb=document.getElementById('agenda-view-plan');
   if(gb) gb.classList.toggle('btn-gold',_agenda.view==='grid'), gb.classList.toggle('btn-secondary',_agenda.view!=='grid');
   if(lb) lb.classList.toggle('btn-gold',_agenda.view==='lijst'), lb.classList.toggle('btn-secondary',_agenda.view!=='lijst');
+  if(pb) pb.classList.toggle('btn-gold',_agenda.view==='plan'), pb.classList.toggle('btn-secondary',_agenda.view!=='plan');
+  const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
+  if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
+  if(capBalk) capBalk.style.display=_agenda.view==='plan'?'block':'none';
   agRenderFilters();
-  if(_agenda.view==='lijst') agRenderLijst(); else agRenderGrid();
+  if(_agenda.view==='lijst') agRenderLijst(); else if(_agenda.view==='plan') agPlanRender(); else agRenderGrid();
 }
 function agendaZetView(v){_agenda.view=v;renderAgenda();}
 // Haalt project-/persoon-namen één keer op als de cache leeg is (bv. eerste
@@ -2398,10 +2583,46 @@ function tgHervat(i){
   const sel=document.getElementById('tg-proj-select'); if(sel&&e.project_id) sel.value=e.project_id;
   tgTimerToggle();
 }
+// ── Uren-lock helper ──
+function urenLock(startIso){
+  const cfg=admCfg(); const lockDagen=cfg.lockDagen??14;
+  if(!startIso) return {locked:false,dagen:lockDagen};
+  const start=new Date(startIso);
+  const nu=new Date(); const diffDagen=(nu-start)/(1000*3600*24);
+  return {locked:diffDagen>lockDagen,dagen:lockDagen,diffDagen:Math.floor(diffDagen)};
+}
+
 // Entry bewerken: omschrijving + project (Track PUT). Tijden bewerken kan via
 // handmatige-entry-route; hier de twee meest-gebruikte velden.
 async function tgEditEntry(i){
   const e=_tgRecent[i]; if(!e) return;
+  const lock=urenLock(e.start);
+  if(lock.locked){
+    if(!mtIsAdmin()){
+      alert(`🔒 Vergrendeld: entries ouder dan ${lock.dagen} dagen kunnen alleen door een admin worden aangepast.`);
+      auditLog('edit-geweigerd',e.description||e.id,null,null,`entry ouder dan ${lock.dagen}d`);
+      return;
+    }
+    const reden=prompt(`Admin: reden voor wijziging van vergrendelde entry (${lock.diffDagen}d oud):`,'');
+    if(reden===null||reden.trim()==='') return;
+    const desc=prompt('Omschrijving:',e.description||''); if(desc===null) return;
+    const ps=await tgStore.projecten(); const act=ps.filter(p=>!p.archived_at);
+    const huidig=act.find(p=>p.id===e.project_id);
+    const lijst=act.map((p,n)=>`${n+1}. ${p.name}`).join('\n');
+    const keuze=prompt(`Projectnummer (leeg = ongewijzigd${huidig?', "0" = geen project':''}):\nHuidig: ${huidig?huidig.name:'geen'}\n\n${lijst}`);
+    let project_id=e.project_id;
+    if(keuze==='0') project_id=null;
+    else if(keuze&&act[parseInt(keuze)-1]) project_id=act[parseInt(keuze)-1].id;
+    if(!confirm('Entry opslaan in Toggl Track?')) return;
+    tgStatus('Entry opslaan…');
+    try{
+      await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'PUT',{description:desc,project_id:project_id,workspace_id:TG_WS});
+      auditLog('unlock-edit',e.description||e.id,e.description,desc,reden);
+      tgStatus('✓ Entry bijgewerkt.','#2A4A38'); tgLaadRecent();
+    }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
+    return;
+  }
+  // Niet vergrendeld — normaal flow
   const desc=prompt('Omschrijving:',e.description||''); if(desc===null) return;
   const ps=await tgStore.projecten(); const act=ps.filter(p=>!p.archived_at);
   const huidig=act.find(p=>p.id===e.project_id);
@@ -2413,14 +2634,33 @@ async function tgEditEntry(i){
   if(!confirm('Entry opslaan in Toggl Track?')) return;
   tgStatus('Entry opslaan…');
   try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'PUT',{description:desc,project_id:project_id,workspace_id:TG_WS});
+    auditLog('uren-edit',e.description||e.id,e.description,desc,'');
     tgStatus('✓ Entry bijgewerkt.','#2A4A38'); tgLaadRecent();
   }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
 }
 async function tgDelEntry(i){
   const e=_tgRecent[i]; if(!e) return;
+  const lock=urenLock(e.start);
+  if(lock.locked){
+    if(!mtIsAdmin()){
+      alert(`🔒 Vergrendeld: entries ouder dan ${lock.dagen} dagen kunnen alleen door een admin worden aangepast.`);
+      auditLog('edit-geweigerd',e.description||e.id,null,null,`delete geweigerd, ouder dan ${lock.dagen}d`);
+      return;
+    }
+    const reden=prompt(`Admin: reden voor verwijdering van vergrendelde entry (${lock.diffDagen}d oud):`,'');
+    if(reden===null||reden.trim()==='') return;
+    if(!confirm(`Entry verwijderen?\n"${e.description||'(geen omschrijving)'}"`)) return;
+    tgStatus('Entry verwijderen…');
+    try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'DELETE');
+      auditLog('unlock-delete',e.description||e.id,e.description,null,reden);
+      tgStatus('✓ Entry verwijderd.','#2A4A38'); tgLaadRecent();
+    }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
+    return;
+  }
   if(!confirm(`Entry verwijderen?\n"${e.description||'(geen omschrijving)'}"`)) return;
   tgStatus('Entry verwijderen…');
   try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'DELETE');
+    auditLog('uren-delete',e.description||e.id,e.description,null,'');
     tgStatus('✓ Entry verwijderd.','#2A4A38'); tgLaadRecent();
   }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
 }
@@ -6272,6 +6512,623 @@ HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of map
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
+// ADMIN MODULE — team, lock, verlof, vrije dagen, notificaties, logboek
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MT_TEAM=[
+  {email:'bart@mortiseandtenon.nl',    naam:'Bart',    slug:'bart',    admin:true},
+  {email:'mathijs@mortiseandtenon.nl', naam:'Mathijs', slug:'mathijs', admin:true},
+  {email:'arjan@mortiseandtenon.nl',   naam:'Arjan',   slug:'arjan',   admin:false},
+  {email:'maarten@mortiseandtenon.nl', naam:'Maarten', slug:'maarten', admin:false}
+];
+
+function mtMijEmail(){
+  try{const a=_msal&&_msal.getAllAccounts();return (a&&a[0]&&a[0].username||'').toLowerCase();}catch(e){return '';}
+}
+function mtIsAdmin(){
+  const e=mtMijEmail(); if(!e) return false;
+  const lid=MT_TEAM.find(m=>m.email.toLowerCase()===e);
+  return lid?lid.admin:false;
+}
+
+// ── SP-caches ──
+let _admConfig=null, _admVerlof=null, _admVrijdagen=null, _admAudit=null, _admNotifs=null, _admPlanblokken=null;
+const ADM_CFG_DEF={lockDagen:14,werkuren:{bart:40,mathijs:40,arjan:40,maarten:40},budgetten:{'2026':{bart:25,mathijs:25,arjan:25,maarten:25}}};
+
+// Hulpfunctie: werkdagen ma–vr tussen twee datums (inclusief)
+function admWerkdagen(vanStr,tmStr){
+  let d=new Date(vanStr+'T00:00:00'), e=new Date(tmStr+'T00:00:00'), n=0;
+  while(d<=e){const g=d.getDay();if(g>0&&g<6)n++;d.setDate(d.getDate()+1);}
+  return n;
+}
+
+function admId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+
+// ── SP read-merge-write helpers ──
+async function admLoadConfig(){
+  const d=await _SP.read('mt_adminconfig.json');
+  _admConfig=d||(JSON.parse(JSON.stringify(ADM_CFG_DEF)));
+  _admConfig.lockDagen=_admConfig.lockDagen??14;
+  _admConfig.werkuren=_admConfig.werkuren||{};
+  _admConfig.budgetten=_admConfig.budgetten||{};
+  try{localStorage.setItem('mt_adminconfig',JSON.stringify(_admConfig));}catch(e){}
+}
+async function admSaveConfig(){
+  try{localStorage.setItem('mt_adminconfig',JSON.stringify(_admConfig));}catch(e){}
+  await _SP.write('mt_adminconfig.json',_admConfig);
+}
+function admCfg(){if(_admConfig)return _admConfig;try{return JSON.parse(localStorage.getItem('mt_adminconfig')||'null')||JSON.parse(JSON.stringify(ADM_CFG_DEF));}catch(e){return JSON.parse(JSON.stringify(ADM_CFG_DEF));}}
+
+async function admLoadVerlof(){
+  const d=await _SP.read('mt_verlof.json');
+  _admVerlof=Array.isArray(d)?d:[];
+  try{localStorage.setItem('mt_verlof',JSON.stringify(_admVerlof));}catch(e){}
+}
+function admVerlof(){if(_admVerlof)return _admVerlof;try{return JSON.parse(localStorage.getItem('mt_verlof')||'[]');}catch(e){return [];}}
+async function admSaveVerlof(){
+  try{localStorage.setItem('mt_verlof',JSON.stringify(_admVerlof));}catch(e){}
+  // read-merge-write op id
+  const remote=await _SP.read('mt_verlof.json')||[];
+  const ids=new Set(_admVerlof.map(v=>v.id));
+  const merged=[..._admVerlof,...remote.filter(v=>!ids.has(v.id))];
+  _admVerlof=merged;
+  try{localStorage.setItem('mt_verlof',JSON.stringify(_admVerlof));}catch(e){}
+  await _SP.write('mt_verlof.json',_admVerlof);
+}
+
+async function admLoadVrijdagen(){
+  const d=await _SP.read('mt_vrijedagen.json');
+  _admVrijdagen=Array.isArray(d)?d:[];
+  try{localStorage.setItem('mt_vrijedagen',JSON.stringify(_admVrijdagen));}catch(e){}
+}
+function admVrijdagen(){if(_admVrijdagen)return _admVrijdagen;try{return JSON.parse(localStorage.getItem('mt_vrijedagen')||'[]');}catch(e){return [];}}
+async function admSaveVrijdagen(){
+  try{localStorage.setItem('mt_vrijedagen',JSON.stringify(_admVrijdagen));}catch(e){}
+  const remote=await _SP.read('mt_vrijedagen.json')||[];
+  const ids=new Set(_admVrijdagen.map(v=>v.id));
+  const merged=[..._admVrijdagen,...remote.filter(v=>!ids.has(v.id))];
+  _admVrijdagen=merged.sort((a,b)=>a.datum.localeCompare(b.datum));
+  try{localStorage.setItem('mt_vrijedagen',JSON.stringify(_admVrijdagen));}catch(e){}
+  await _SP.write('mt_vrijedagen.json',_admVrijdagen);
+}
+
+async function admLoadAudit(){
+  const d=await _SP.read('mt_auditlog.json');
+  _admAudit=Array.isArray(d)?d:[];
+  try{localStorage.setItem('mt_auditlog',JSON.stringify(_admAudit));}catch(e){}
+}
+function admAudit(){if(_admAudit)return _admAudit;try{return JSON.parse(localStorage.getItem('mt_auditlog')||'[]');}catch(e){return [];}}
+
+async function admLoadNotifs(){
+  const d=await _SP.read('mt_notificaties.json');
+  _admNotifs=Array.isArray(d)?d:[];
+  try{localStorage.setItem('mt_notificaties',JSON.stringify(_admNotifs));}catch(e){}
+}
+function admNotifs(){if(_admNotifs)return _admNotifs;try{return JSON.parse(localStorage.getItem('mt_notificaties')||'[]');}catch(e){return [];}}
+
+// ── Globale auditLog helper (fire-and-forget) ──
+function auditLog(actie,doel,oud,nieuw,reden){
+  try{
+    const entry={id:admId(),ts:new Date().toISOString(),wie:mtMijEmail()||'?',actie,doel:String(doel||''),
+      oud:oud!==undefined&&oud!==null?String(oud):'',nieuw:nieuw!==undefined&&nieuw!==null?String(nieuw):'',reden:reden||''};
+    // lokaal append
+    const arr=admAudit(); arr.push(entry); _admAudit=arr;
+    try{localStorage.setItem('mt_auditlog',JSON.stringify(arr));}catch(e){}
+    // async remote append (lees-merge-schrijf)
+    _SP.read('mt_auditlog.json').then(remote=>{
+      const rem=Array.isArray(remote)?remote:[];
+      const ids=new Set(rem.map(e=>e.id));
+      rem.push(...arr.filter(e=>!ids.has(e.id)));
+      _SP.write('mt_auditlog.json',rem).catch(()=>{});
+    }).catch(()=>{});
+  }catch(e){/* stil falen */}
+}
+window.auditLog=auditLog;
+
+// ── Tab open ──
+async function adminOpen(){
+  // Laad alle data in parallel
+  admLoadConfig().then(()=>{admRenderTeam();admRenderBudgetten();});
+  admLoadVerlof().then(()=>{admRenderVerlofLijst();admRenderSaldo();});
+  admLoadVrijdagen().then(()=>admRenderVrijdagenLijst());
+  admLoadAudit().then(()=>admRenderLog());
+  admLoadNotifs().then(()=>admRenderNotifLijst());
+}
+
+function admSub(name,btn){
+  document.querySelectorAll('#tab-admin .adm-subcontent').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('#tab-admin .adm-subtab').forEach(b=>b.classList.remove('active'));
+  const c=document.getElementById('adm-sub-'+name); if(c) c.classList.add('active');
+  if(btn) btn.classList.add('active');
+}
+
+// ── A1: Logboek ──
+async function admLaadLog(){await admLoadAudit();admRenderLog();}
+function admRenderLog(){
+  const pers=document.getElementById('adm-log-pers')?.value||'';
+  const zoek=(document.getElementById('adm-log-zoek')?.value||'').toLowerCase();
+  let arr=[...admAudit()].reverse();
+  if(pers) arr=arr.filter(e=>e.wie&&e.wie.toLowerCase().includes(pers));
+  if(zoek) arr=arr.filter(e=>JSON.stringify(e).toLowerCase().includes(zoek));
+  const tbody=document.getElementById('adm-log-tbody');
+  if(!tbody) return;
+  if(!arr.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text-faint)">Geen logboek-entries gevonden.</td></tr>';return;}
+  tbody.innerHTML=arr.slice(0,200).map(e=>`<tr class="adm-log-row">
+    <td style="white-space:nowrap;color:var(--text-faint);font-size:11px">${e.ts?e.ts.replace('T',' ').slice(0,16):''}</td>
+    <td>${e.wie||''}</td>
+    <td><strong>${e.actie||''}</strong></td>
+    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.doel||''}">${e.doel||''}</td>
+    <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.oud?e.oud+' → ':''} ${e.nieuw||''}</td>
+    <td style="font-size:11px;color:var(--text-dim)">${e.reden||''}</td>
+  </tr>`).join('');
+}
+
+// ── A2: Team & lock ──
+function admRenderTeam(){
+  const cfg=admCfg();
+  const form=document.getElementById('adm-werkuren-form'); if(!form) return;
+  form.innerHTML=MT_TEAM.map(m=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <span style="min-width:80px;font-size:13px">${m.naam}${m.admin?' <span style="font-size:10px;color:var(--gold);font-weight:600">admin</span>':''}</span>
+    <input type="number" id="adm-wu-${m.slug}" class="adm-inp" style="width:70px" min="0" max="80" value="${cfg.werkuren[m.slug]||40}">
+    <span style="font-size:12px;color:var(--text-faint)">uur/week</span>
+  </div>`).join('');
+  const ld=document.getElementById('adm-lock-dagen'); if(ld) ld.value=cfg.lockDagen??14;
+}
+async function admSlaWerkurenOp(){
+  const cfg=admCfg(); _admConfig=cfg;
+  cfg.werkuren=cfg.werkuren||{};
+  MT_TEAM.forEach(m=>{const el=document.getElementById('adm-wu-'+m.slug);if(el)cfg.werkuren[m.slug]=parseInt(el.value)||40;});
+  await admSaveConfig();
+  auditLog('config-werkuren','team',null,JSON.stringify(cfg.werkuren),'');
+  planToast('✓ Werkuren opgeslagen');
+}
+async function admSlaLockOp(){
+  const cfg=admCfg(); _admConfig=cfg;
+  const el=document.getElementById('adm-lock-dagen');
+  const oud=cfg.lockDagen;
+  cfg.lockDagen=parseInt(el?.value)||14;
+  await admSaveConfig();
+  auditLog('config-lockdagen','admin',String(oud),String(cfg.lockDagen),'');
+  planToast('✓ Lock-drempel opgeslagen: '+cfg.lockDagen+' dagen');
+}
+
+// ── A3: Verlof & saldo ──
+function admRenderBudgetten(){
+  const cfg=admCfg(); const form=document.getElementById('adm-budgetten-form'); if(!form) return;
+  const jaren=['2025','2026','2027'];
+  form.innerHTML=`<table class="adm-tbl"><thead><tr><th>Persoon</th>${jaren.map(j=>`<th>${j}</th>`).join('')}</tr></thead><tbody>`+
+    MT_TEAM.map(m=>`<tr><td>${m.naam}</td>${jaren.map(j=>`<td><input type="number" id="adm-bud-${m.slug}-${j}" class="adm-inp" style="width:60px" value="${cfg.budgetten[j]?.[m.slug]??25}"></td>`).join('')}</tr>`).join('')+
+    '</tbody></table>';
+}
+async function admSlaBudgettenOp(){
+  const cfg=admCfg(); _admConfig=cfg; cfg.budgetten=cfg.budgetten||{};
+  const jaren=['2025','2026','2027'];
+  jaren.forEach(j=>{cfg.budgetten[j]=cfg.budgetten[j]||{};MT_TEAM.forEach(m=>{const el=document.getElementById('adm-bud-'+m.slug+'-'+j);if(el)cfg.budgetten[j][m.slug]=parseFloat(el.value)||25;});});
+  await admSaveConfig();
+  auditLog('config-budgetten','verlof',null,JSON.stringify(cfg.budgetten),'');
+  planToast('✓ Budgetten opgeslagen');
+}
+async function admBoekVerlof(){
+  const pers=document.getElementById('adm-verl-pers')?.value;
+  const van=document.getElementById('adm-verl-van')?.value;
+  const tm=document.getElementById('adm-verl-tm')?.value;
+  if(!pers||!van||!tm){planToast('Vul persoon, van-datum en t/m-datum in');return;}
+  if(van>tm){planToast('Van-datum moet voor t/m-datum liggen');return;}
+  const dagenEl=document.getElementById('adm-verl-dagen');
+  const dagen=dagenEl?.value?parseFloat(dagenEl.value):admWerkdagen(van,tm);
+  const opm=document.getElementById('adm-verl-opm')?.value||'';
+  const entry={id:admId(),persoon:pers,van,tm,dagen,opm,ts:new Date().toISOString(),door:mtMijEmail()};
+  const arr=admVerlof(); arr.push(entry); _admVerlof=arr;
+  await admSaveVerlof();
+  auditLog('verlof-boeken',pers,null,`${van}→${tm} (${dagen}d)`,opm);
+  if(dagenEl)dagenEl.value='';
+  admRenderVerlofLijst();admRenderSaldo();
+  planToast('✓ Verlof geboekt');
+}
+function admRenderVerlofLijst(){
+  const el=document.getElementById('adm-verlof-lijst'); if(!el) return;
+  const arr=[...admVerlof()].sort((a,b)=>b.van.localeCompare(a.van));
+  if(!arr.length){el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--text-faint)">Geen verlof geboekt.</div>';return;}
+  el.innerHTML=arr.map(v=>`<div class="adm-verlof-blok">
+    <span style="min-width:70px;font-size:12px;font-weight:600">${MT_TEAM.find(m=>m.slug===v.persoon)?.naam||v.persoon}</span>
+    <span style="flex:1;font-size:12px">${v.van} → ${v.tm} (${v.dagen}d)</span>
+    <span style="font-size:11px;color:var(--text-faint)">${v.opm||''}</span>
+    <button class="adm-del-btn" onclick="admVerwijderVerlof('${v.id}')" title="Verwijderen">✕</button>
+  </div>`).join('');
+}
+async function admVerwijderVerlof(id){
+  if(!confirm('Verlof-boeking verwijderen?')) return;
+  const arr=admVerlof(); const v=arr.find(x=>x.id===id);
+  _admVerlof=arr.filter(x=>x.id!==id);
+  await admSaveVerlof();
+  auditLog('verlof-verwijder',v?.persoon,`${v?.van}→${v?.tm}`,null,'');
+  admRenderVerlofLijst();admRenderSaldo();
+  planToast('✓ Verlof verwijderd');
+}
+function admRenderSaldo(){
+  // jaar-select vullen
+  const js=document.getElementById('adm-saldo-jaar');
+  if(js&&!js.options.length){['2025','2026','2027'].forEach(j=>{const o=document.createElement('option');o.value=j;o.textContent=j;if(j===String(new Date().getFullYear()))o.selected=true;js.appendChild(o);});}
+  const jaar=js?.value||String(new Date().getFullYear());
+  const cfg=admCfg(); const verlof=admVerlof();
+  const vandaag=new Date().toISOString().slice(0,10);
+  const el=document.getElementById('adm-saldo-tbl'); if(!el) return;
+  el.innerHTML=`<table class="adm-tbl"><thead><tr><th>Persoon</th><th>Budget</th><th>Opgenomen</th><th>Ingepland</th><th>Open</th></tr></thead><tbody>`+
+    MT_TEAM.map(m=>{
+      const budget=(cfg.budgetten[jaar]?.[m.slug]??0);
+      const verl=verlof.filter(v=>v.persoon===m.slug&&v.van.startsWith(jaar));
+      const opgenomen=verl.filter(v=>v.tm<=vandaag).reduce((s,v)=>s+v.dagen,0);
+      const ingepland=verl.filter(v=>v.van>vandaag).reduce((s,v)=>s+v.dagen,0);
+      const open=budget-opgenomen-ingepland;
+      return `<tr>
+        <td>${m.naam}</td><td>${budget}d</td>
+        <td>${opgenomen}d</td><td style="color:var(--gold,#B8962E)">${ingepland}d</td>
+        <td class="${open<0?'adm-saldo-neg':'adm-saldo-pos'}">${open}d${open<0?' ⚠':''}</td>
+      </tr>`;
+    }).join('')+'</tbody></table>';
+}
+
+// ── A4: Vrije dagen ──
+async function admVoegVrijeDagToe(){
+  const datum=document.getElementById('adm-vd-datum')?.value;
+  const naam=document.getElementById('adm-vd-naam')?.value?.trim();
+  const type=document.getElementById('adm-vd-type')?.value||'verplicht';
+  if(!datum||!naam){planToast('Vul datum en naam in');return;}
+  const arr=admVrijdagen();
+  if(arr.find(v=>v.datum===datum)){planToast('Die datum staat al in de lijst');return;}
+  const entry={id:admId(),datum,naam,type,ts:new Date().toISOString(),door:mtMijEmail()};
+  arr.push(entry);arr.sort((a,b)=>a.datum.localeCompare(b.datum));_admVrijdagen=arr;
+  await admSaveVrijdagen();
+  auditLog('vrijdag-toevoegen',naam,null,`${datum} (${type})`,'');
+  document.getElementById('adm-vd-datum').value='';
+  document.getElementById('adm-vd-naam').value='';
+  admRenderVrijdagenLijst();
+  planToast('✓ Vrije dag toegevoegd');
+}
+function admRenderVrijdagenLijst(){
+  const el=document.getElementById('adm-vd-lijst'); if(!el) return;
+  const arr=admVrijdagen();
+  if(!arr.length){el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--text-faint)">Geen vrije dagen.</div>';return;}
+  el.innerHTML=arr.map(v=>`<div class="adm-verlof-blok">
+    <span style="min-width:100px;font-size:12px;color:var(--text-faint)">${v.datum}</span>
+    <span style="flex:1;font-size:13px;font-weight:500">${v.naam}</span>
+    <span style="font-size:11px;padding:2px 8px;border-radius:8px;background:${v.type==='verplicht'?'#fde8e8':'#fef3cd'};color:${v.type==='verplicht'?'#c0392b':'#856404'}">${v.type}</span>
+    <button class="adm-del-btn" onclick="admVerwijderVrijeDag('${v.id}')" title="Verwijderen">✕</button>
+  </div>`).join('');
+}
+async function admVerwijderVrijeDag(id){
+  if(!confirm('Vrije dag verwijderen?')) return;
+  const arr=admVrijdagen(); const v=arr.find(x=>x.id===id);
+  _admVrijdagen=arr.filter(x=>x.id!==id);
+  await admSaveVrijdagen();
+  auditLog('vrijdag-verwijder',v?.naam,`${v?.datum} (${v?.type})`,null,'');
+  admRenderVrijdagenLijst();
+  planToast('✓ Vrije dag verwijderd');
+}
+
+// ── A5: Notificaties ──
+async function admVerstuurNotificatie(){
+  const aan=document.getElementById('adm-notif-aan')?.value||'allen';
+  const titel=document.getElementById('adm-notif-titel')?.value?.trim();
+  const tekst=document.getElementById('adm-notif-tekst')?.value?.trim();
+  const tabDeep=document.getElementById('adm-notif-tab')?.value||'';
+  const itemDeep=document.getElementById('adm-notif-item')?.value?.trim()||'';
+  if(!titel||!tekst){planToast('Vul titel en tekst in');return;}
+  const remote=await _SP.read('mt_notificaties.json')||[];
+  const entry={id:admId(),ts:new Date().toISOString(),van:mtMijEmail(),aan,titel,tekst,
+    deeplink:{tab:tabDeep,item:itemDeep},gelezen:[]};
+  remote.unshift(entry);_admNotifs=remote;
+  try{localStorage.setItem('mt_notificaties',JSON.stringify(remote));}catch(e){}
+  await _SP.write('mt_notificaties.json',remote);
+  auditLog('notificatie-sturen',aan,null,titel,'');
+  document.getElementById('adm-notif-titel').value='';
+  document.getElementById('adm-notif-tekst').value='';
+  admRenderNotifLijst();
+  planToast('✓ Notificatie verstuurd');
+}
+function admRenderNotifLijst(){
+  const el=document.getElementById('adm-notif-lijst'); if(!el) return;
+  const arr=admNotifs();
+  if(!arr.length){el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--text-faint)">Nog geen notificaties verstuurd.</div>';return;}
+  el.innerHTML=arr.slice(0,50).map(n=>`<div class="adm-notif-item">
+    <strong>${n.titel||''}</strong> → <em>${n.aan||''}</em>
+    <div>${n.tekst||''}</div>
+    <div class="adm-notif-meta">${n.ts?n.ts.replace('T',' ').slice(0,16):''} · van ${n.van||''} · gelezen: ${n.gelezen?.length||0}${n.deeplink?.tab?' · 🔗 '+n.deeplink.tab:''}</div>
+  </div>`).join('');
+}
+
+// ── Zichtbaarheid Admin-knop (na login) ──
+// Wordt aangeroepen vanuit toonApp (bestaande login-flow) — zie onderaan dit blok.
+function admInitKnop(){
+  const btn=document.getElementById('tab-btn-admin');
+  if(btn) btn.style.display=mtIsAdmin()?'':'none';
+  // Laad ook budgetten-form zodra tab wordt geopend
+  const verlofSub=document.getElementById('adm-sub-verlof');
+  if(verlofSub) admRenderBudgetten();
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// PLANNING MODULE — planblokken in Agenda-tab (view 'plan')
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── State & storage ──
+let _planblokken=null;
+function agPlanBlokken(){if(_planblokken)return _planblokken;try{return JSON.parse(localStorage.getItem('mt_planblokken')||'[]');}catch(e){return [];}}
+
+async function agPlanLoad(){
+  const d=await _SP.read('mt_planblokken.json');
+  _planblokken=Array.isArray(d)?d:[];
+  try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
+}
+
+async function agPlanSave(){
+  try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
+  const remote=await _SP.read('mt_planblokken.json')||[];
+  const ids=new Set((_planblokken||[]).map(b=>b.id));
+  const merged=[...(_planblokken||[]),...remote.filter(b=>!ids.has(b.id))];
+  _planblokken=merged;
+  try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
+  await _SP.write('mt_planblokken.json',_planblokken);
+}
+
+// ── Render Planning-view ──
+async function agPlanRender(){
+  // Zorg dat planblokken geladen zijn
+  if(!_planblokken) await agPlanLoad();
+  const grid=document.getElementById('agenda-grid');
+  if(!grid) return;
+
+  const ws=_agenda.weekStart;
+  const dagen=[];
+  for(let i=0;i<7;i++){const d=new Date(ws);d.setDate(d.getDate()+i);dagen.push(d);}
+
+  const vandaag=new Date().toISOString().slice(0,10);
+  const vrijdagen=admVrijdagen();
+  const verlof=admVerlof();
+  const showActuals=document.getElementById('agenda-plan-actuals')?.checked;
+  const actuals=showActuals?agEntries():[];
+  const agUurPx=AG_UURPX;
+  const agStart=AG_START, agEind=AG_EIND;
+  const totalH=(agEind-agStart)*agUurPx;
+
+  // filter planblokken op persoon/project
+  let blokken=agPlanBlokken().filter(b=>{
+    const datum=b.datum;
+    return dagen.some(d=>_planYmd(d)===datum);
+  });
+  if(_agenda.fPers.size&&!_agenda.fPers.has(AG_NONE)) blokken=blokken.filter(b=>_agenda.fPers.has(b.persoon));
+  if(_agenda.fProj.size&&!_agenda.fProj.has(AG_NONE)) blokken=blokken.filter(b=>_agenda.fProj.has(b.project_code));
+
+  // Capaciteits-balk
+  agPlanCapBalk(dagen,blokken,verlof,vrijdagen);
+
+  // Bouw grid HTML
+  let html='<div class="ag-grid" style="--aguur:'+agUurPx+'px">';
+
+  // Gutter (uur-labels)
+  html+='<div class="ag-gutter">';
+  for(let u=agStart;u<agEind;u++) html+=`<div class="gh">${u}:00</div>`;
+  html+='</div>';
+
+  // Dag-kolommen
+  const weekdagnamen=['Ma','Di','Wo','Do','Vr','Za','Zo'];
+  for(let di=0;di<7;di++){
+    const dag=dagen[di];
+    const ymd=_planYmd(dag);
+    const isVandaag=ymd===vandaag;
+    const vd=vrijdagen.find(v=>v.datum===ymd);
+    const dagBlokken=blokken.filter(b=>b.datum===ymd);
+    const dagActuals=showActuals?actuals.filter(e=>{
+      const s=e.start?new Date(e.start):null;
+      return s&&_planYmd(s)===ymd;
+    }):[];
+
+    html+=`<div style="display:flex;flex-direction:column">`;
+    html+=`<div class="ag-hcell${isVandaag?' vandaag':''}" style="position:sticky;top:0;background:${isVandaag?'#FBF5E0':'var(--bg-card,#fff)'};z-index:2">
+      <div style="font-weight:600;font-size:12px">${weekdagnamen[di]} ${agFmt(dag)}</div>
+    </div>`;
+    html+=`<div class="ag-daycol" id="agplan-dag-${ymd}" style="height:${totalH}px;position:relative;box-sizing:border-box"
+      onclick="agPlanDagKlik(event,'${ymd}')" data-datum="${ymd}">`;
+
+    // Verplichte vrije dag overlay
+    if(vd&&vd.type==='verplicht'){
+      html+=`<div style="position:absolute;inset:0;background:rgba(220,220,220,0.55);z-index:5;display:flex;align-items:center;justify-content:center;pointer-events:none">
+        <span style="font-size:11px;color:#666;font-weight:600;writing-mode:horizontal-tb">🔒 ${vd.naam}</span></div>`;
+    } else if(vd&&vd.type==='optioneel'){
+      html+=`<div style="position:absolute;inset:0;background:rgba(255,243,205,0.5);z-index:1;pointer-events:none">
+        <span style="position:absolute;top:4px;left:4px;font-size:10px;color:#856404">${vd.naam}</span></div>`;
+    }
+
+    // Planblokken
+    dagBlokken.forEach(blok=>{
+      const lid=MT_TEAM.find(m=>m.slug===blok.persoon||m.email===blok.persoon);
+      const kleur=agProjKleur(blok.project_code);
+      const startMin=blok.start?parseInt(blok.start.split(':')[0])*60+parseInt(blok.start.split(':')[1]):agStart*60;
+      const topPx=((startMin/60)-agStart)*agUurPx;
+      const hPx=(blok.duurMin/60)*agUurPx;
+      html+=`<div class="ag-blok" data-planid="${blok.id}"
+        style="top:${topPx}px;height:${Math.max(hPx,18)}px;left:4px;right:4px;background:${kleur};z-index:6;cursor:pointer"
+        onclick="event.stopPropagation();agPlanBlokMenu(event,'${blok.id}')"
+        draggable="true" ondragstart="agPlanDragStart(event,'${blok.id}')"
+        ondragend="agPlanDragEnd(event)">
+        <b>${blok.taak||blok.project_code||'?'}</b><br>
+        <span style="font-size:9px;opacity:.85">${lid?lid.naam:blok.persoon} · ${blok.start||''} ${blok.duurMin?'('+Math.round(blok.duurMin/60*10)/10+'u)':''}</span>
+      </div>`;
+    });
+
+    // Actuals (semi-transparant, smalle blokken rechterhelft)
+    dagActuals.forEach(e=>{
+      const s=new Date(e.start);
+      const startMin=s.getHours()*60+s.getMinutes();
+      const duurMin=e.duration>0?(e.duration/60):0;
+      if(!duurMin) return;
+      const topPx=((startMin/60)-agStart)*agUurPx;
+      const hPx=(duurMin/60)*agUurPx;
+      const kleur=agKleur(e);
+      html+=`<div style="position:absolute;top:${topPx}px;height:${Math.max(hPx,10)}px;left:52%;right:2px;background:${kleur};opacity:0.38;border-radius:4px;z-index:4;overflow:hidden;font-size:9px;color:#fff;padding:2px 3px;border:1px solid rgba(0,0,0,.12)"
+        title="${e.description||''}">${e.description||''}</div>`;
+    });
+
+    // Drop-zone receptors
+    html+=`<div style="position:absolute;inset:0;z-index:3;pointer-events:none" id="agplan-drop-${ymd}"
+      ondragover="event.preventDefault();document.getElementById('agplan-drop-${ymd}').style.background='rgba(184,150,46,0.08)'"
+      ondragleave="document.getElementById('agplan-drop-${ymd}').style.background=''"
+      ondrop="agPlanDrop(event,'${ymd}')" style="pointer-events:auto"></div>`;
+
+    html+='</div></div>';
+  }
+  html+='</div>';
+  grid.innerHTML=html;
+
+  // Activeer drag-over op drop zones
+  grid.querySelectorAll('[ondragover]').forEach(el=>el.style.pointerEvents='auto');
+}
+
+// ── Capaciteits-balk ──
+function agPlanCapBalk(dagen,blokken,verlof,vrijdagen){
+  const el=document.getElementById('agenda-cap-balk'); if(!el) return;
+  const cfg=admCfg();
+  const weekStart=_planYmd(dagen[0]);
+  const weekEind=_planYmd(dagen[6]);
+  let html='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">';
+  MT_TEAM.forEach(m=>{
+    // filter op persoon-filter
+    if(_agenda.fPers.size&&!_agenda.fPers.has(AG_NONE)&&!_agenda.fPers.has(m.slug)&&!_agenda.fPers.has(m.email)) return;
+    const werkurenWk=cfg.werkuren[m.slug]||40;
+    // Verplichte vrije dagen in week → −8u per dag (1 dag = 8u)
+    const verplichtUit=dagen.filter(d=>{
+      const ymd=_planYmd(d);
+      return vrijdagen.find(v=>v.datum===ymd&&v.type==='verplicht');
+    }).length*8;
+    // Verlofuren in week
+    const verlofUren=verlof.filter(v=>v.persoon===m.slug).reduce((s,v)=>{
+      let uren=0;
+      for(let i=0;i<7;i++){const ymd=_planYmd(dagen[i]);if(ymd>=v.van&&ymd<=v.tm){const g=dagen[i].getDay();if(g>0&&g<6)uren+=8;}}
+      return s+uren;
+    },0);
+    const capaciteit=Math.max(0,werkurenWk-verplichtUit-verlofUren);
+    const gepland=blokken.filter(b=>b.persoon===m.slug||b.persoon===m.email).reduce((s,b)=>s+(b.duurMin/60),0);
+    const pct=capaciteit>0?gepland/capaciteit:gepland>0?2:0;
+    const kleur=pct<0.9?'#2A4A38':pct<=1?'#B8962E':'#c0392b';
+    const breedte=Math.min(pct*100,100).toFixed(0);
+    html+=`<div style="cursor:pointer;min-width:120px;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;padding:6px 10px"
+      onclick="agTogglPersFilter('${m.slug}','${m.email}')">
+      <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:600;margin-bottom:4px">
+        <span>${m.naam}</span>
+        <span style="color:${kleur}">${gepland.toFixed(1)}u/${capaciteit}u${pct>1?' ⚠ +'+((gepland-capaciteit).toFixed(1))+'u':''}</span>
+      </div>
+      <div style="height:6px;border-radius:3px;background:#eee"><div style="height:100%;width:${breedte}%;background:${kleur};border-radius:3px;transition:width .3s"></div></div>
+    </div>`;
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function agTogglPersFilter(slug,email){
+  // Gebruik slug of email al naargelang wat in de filter zit
+  const match=_agenda.fPers.has(slug)?slug:(_agenda.fPers.has(email)?email:slug);
+  if(_agenda.fPers.has(match)){_agenda.fPers.delete(match);}
+  else{_agenda.fPers.add(match);}
+  renderAgenda();
+}
+
+// ── Klik op lege dagkolom → nieuw planblok modal ──
+function agPlanDagKlik(evt,datum){
+  if(evt.target.closest('[data-planid]')) return; // klik op blok zelf
+  const vd=admVrijdagen().find(v=>v.datum===datum);
+  if(vd&&vd.type==='verplicht'){planToast('🔒 Verplichte vrije dag — plannen geblokkeerd');return;}
+  // Bereken starttijd uit klik-positie
+  const col=evt.currentTarget;
+  const rect=col.getBoundingClientRect();
+  const relY=evt.clientY-rect.top;
+  const uur=AG_START+Math.floor(relY/AG_UURPX);
+  const min=Math.round(((relY%AG_UURPX)/AG_UURPX)*4)*15;
+  const startStr=`${String(Math.min(uur,AG_EIND-1)).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
+  agPlanNieuwFormulier(datum,startStr);
+}
+
+// ── Nieuw planblok formulier (inline prompt) ──
+function agPlanNieuwFormulier(datum,start){
+  const persOpties=MT_TEAM.map(m=>`${m.naam}=${m.slug}`).join(',');
+  const persKeuze=prompt(`Nieuw planblok op ${datum}\n\nPersoon (${MT_TEAM.map(m=>m.naam).join('/')}):`,'Bart');
+  if(!persKeuze) return;
+  const persSlug=persKeuze.trim().toLowerCase();
+  const persLid=MT_TEAM.find(m=>m.naam.toLowerCase()===persSlug||m.slug===persSlug);
+  if(!persLid){planToast('Onbekend teamlid: '+persKeuze);return;}
+
+  // Verlof-check
+  const verlof=admVerlof();
+  const heeftVerlof=verlof.find(v=>v.persoon===persLid.slug&&datum>=v.van&&datum<=v.tm);
+  if(heeftVerlof){planToast(`${persLid.naam} heeft verlof op ${datum}`);return;}
+
+  const projs=[...new Set(agPlanBlokken().map(b=>b.project_code).filter(Boolean)),...(PROJECT_CODES||[]).map(p=>p.code)];
+  const projStr=projs.slice(0,20).join(', ');
+  const proj=prompt(`Project-code${projStr?'\n(bijv. '+projStr.slice(0,60)+')':''}:`,'');
+  const taak=prompt('Taak / omschrijving:','');
+  const startI=prompt('Starttijd (HH:MM):',start||'09:00');
+  if(!startI) return;
+  const duurStr=prompt('Duur in minuten:','60');
+  if(!duurStr) return;
+  const duurMin=parseInt(duurStr);
+  if(!(duurMin>0)){planToast('Ongeldige duur');return;}
+
+  const blok={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+    persoon:persLid.slug,project_code:proj||'',taak:taak||'',
+    datum,start:startI,duurMin,notitie:'',ts:new Date().toISOString(),door:mtMijEmail()};
+  const arr=agPlanBlokken(); arr.push(blok); _planblokken=arr;
+  agPlanSave().then(()=>{agPlanRender();planToast('✓ Planblok aangemaakt');});
+}
+
+// ── Blok-menu (bewerken / verwijderen) ──
+function agPlanBlokMenu(evt,id){
+  const actie=prompt('Planblok:\n1. Verwijderen\n2. Annuleren (niets doen)','2');
+  if(!actie||actie.trim()==='2') return;
+  if(actie.trim()==='1'){
+    const arr=agPlanBlokken();
+    const b=arr.find(x=>x.id===id);
+    _planblokken=arr.filter(x=>x.id!==id);
+    agPlanSave().then(()=>{agPlanRender();planToast('✓ Planblok verwijderd');});
+  }
+}
+
+// ── Drag & drop (verplaatsen naar andere dag) ──
+let _planDragId=null;
+function agPlanDragStart(evt,id){_planDragId=id;evt.dataTransfer.effectAllowed='move';}
+function agPlanDragEnd(evt){_planDragId=null;document.querySelectorAll('[id^=agplan-drop-]').forEach(el=>{el.style.background='';});}
+function agPlanDrop(evt,datum){
+  evt.preventDefault();
+  const id=_planDragId; if(!id) return;
+  const el=document.getElementById('agplan-drop-'+datum); if(el) el.style.background='';
+  // Verlof check
+  const verlof=admVerlof();
+  const blok=agPlanBlokken().find(b=>b.id===id);
+  if(!blok) return;
+  const heeftVerlof=verlof.find(v=>v.persoon===blok.persoon&&datum>=v.van&&datum<=v.tm);
+  if(heeftVerlof){planToast(`${blok.persoon} heeft verlof op ${datum}`);return;}
+  const vd=admVrijdagen().find(v=>v.datum===datum);
+  if(vd&&vd.type==='verplicht'){planToast('🔒 Verplichte vrije dag — plannen geblokkeerd');return;}
+
+  // Bereken nieuwe starttijd uit drop-positie
+  const dropEl=evt.currentTarget;
+  const rect=dropEl.getBoundingClientRect();
+  const relY=evt.clientY-rect.top;
+  const uur=AG_START+Math.floor(relY/AG_UURPX);
+  const minRaw=Math.round(((relY%AG_UURPX)/AG_UURPX)*4)*15;
+  const startStr=`${String(Math.min(uur,AG_EIND-1)).padStart(2,'0')}:${String(minRaw).padStart(2,'0')}`;
+
+  const arr=agPlanBlokken().map(b=>{
+    if(b.id!==id) return b;
+    return {...b,datum,start:startStr,ts:new Date().toISOString(),door:mtMijEmail()};
+  });
+  _planblokken=arr;
+  agPlanSave().then(()=>{agPlanRender();planToast('✓ Planblok verplaatst');});
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
 // PER-TAB HELP ("wat is dit?") + FEEDBACK-CHAT + GEBRUIKS-LOG
 // - ⓘ-knop in de tab-balk toont uitleg van het ACTIEVE tabblad + Larry-feedbackchat.
 // - Guardrail: deze chat kan NIETS uitvoeren of wijzigen (geen acties, geen data,
@@ -6285,7 +7142,8 @@ const TAB_HELP={
   dashboard:{naam:'Dashboard',uitleg:'Het overzicht: omzet dit jaar, openstaande debiteuren en crediteuren en netto resultaat — live uit Moneybird. Daaronder de ouderdom van openstaande posten, de top-leveranciers qua uitgaven en de "nog te doen"-lijst. Alles is klikbaar waar een cijfer dieper gaat.'},
   inbox:{naam:'Inbox',uitleg:'De smart-inbox van info@. Mails lezen, aan een project of klant koppelen, factuur-bijlagen direct laten analyseren (✨) en per mail met Larry chatten. Verplaatsingen die je hier doet leren het sorteersysteem bij.'},
   projecten:{naam:'Projecten',uitleg:'Alle lopende projecten met hun projectcode (KLANT-LOCATIE-PRODUCT). Via "+ Nieuw project" opent de projectaanmaker: die stelt de code voor en maakt de SharePoint-mappenstructuur aan. De code is de sleutel die overal terugkomt: stickers, uren, mail, Moneybird.'},
-  agenda:{naam:'Agenda',uitleg:'De gezamenlijke agenda: afspraken uit Outlook plus geplande taken. Slepen om te plannen; de uren-sync haalt de actuele stand op.'},
+  agenda:{naam:'Agenda',uitleg:'De gezamenlijke agenda: week-rooster, lijstweergave én planning-view (📋). In de planning-view maak je planblokken per persoon/project aan, zie je verlof en vrije dagen en vergelijk je plan vs geklokt. Capaciteitsbalk toont direct of iemand overboekt is.'},
+  admin:{naam:'Admin',uitleg:'Beheerpaneel voor admins (Bart en Mathijs). Bevat: 📒 Logboek (alle wijzigingen), ⚙️ Team & lock (werkuren, uren-lock-drempel), 🏖 Verlof & saldo (jaarbudgetten, boeken, saldo-check), 📅 Vrije dagen (verplicht/optioneel) en 🔔 Notificaties (push naar mobiele app). Alle acties worden geauditeerd.'},
   toggl:{naam:'Uren',uitleg:'Geklokte uren uit Toggl, per persoon en per project, met weektotalen en rapporten. Dit groeit uit tot onze eigen urenregistratie met planning én capaciteit (hoeveel uur per persoon nog vrij is).'},
   voorraad:{naam:'Voorraad',uitleg:'De voorraad plaatmateriaal en hardware, gevoed vanuit ingelezen facturen. FIFO-herkomst per artikel zodat nacalculatie klopt.'},
   materialen:{naam:'Materialen',uitleg:'De materialen die we écht inkopen (gematcht op facturen en voorraad), met de factuurnaam als canonieke naam. Niet de hele interiorcad-catalogus.'},
@@ -6432,6 +7290,7 @@ async function toonApp(account) {
   updateApiStatus();
   loadLedgers();
   laadDashboard();
+  if(typeof admInitKnop==='function') admInitKnop();
 }
 
 async function msLogin() {

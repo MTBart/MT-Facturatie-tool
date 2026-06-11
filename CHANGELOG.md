@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — mobiel: F0.5 dry-test-uitbreidingen (mock/localStorage)
+- Commit: `0095c24` | Auteur: Bart Witte
+
 ## 2026-06-11 — mobiel: F0-prototype Android-app (mock) — timer+projectkiezer, projecten, agenda, capture, oplevering+aftekenen
 - Commit: `ba51abe` | Auteur: Bart Witte
 
