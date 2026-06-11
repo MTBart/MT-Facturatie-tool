@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — mobiel: F1-slice live — MSAL-login, echte projecten + taken direct naar Toggl 2.0, echte timer
+- Commit: `1fc5d15` | Auteur: Bart Witte
+
 ## 2026-06-11 — v2: Admin-tab (logboek/team-lock/verlof-saldo/vrije dagen/notificaties) + planning-laag in Agenda + uren-lock
 - Commit: `69ba526` | Auteur: Bart Witte
 

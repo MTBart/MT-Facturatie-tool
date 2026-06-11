@@ -1176,6 +1176,9 @@ const _SP = {
 
 /* ── MSAL init ── */
 async function initMsal() {
+  // Tab kan een overgebleven MSAL-popupvenster zijn (window.name 'msal.…');
+  // MSAL weigert daarin elke nieuwe popup (block_nested_popups) — naam wissen.
+  if (typeof window.name === 'string' && window.name.indexOf('msal.') === 0) window.name = '';
   Object.keys(sessionStorage).filter(k => k.includes('interaction')).forEach(k => sessionStorage.removeItem(k));
   try {
     _msal = new msal.PublicClientApplication({
@@ -1188,6 +1191,11 @@ async function initMsal() {
       cache: {cacheLocation: 'localStorage', storeAuthStateInCookie: false}
     });
     await _msal.initialize();
+    // Terugkeer uit redirect-login afhandelen (fallback-route als popup niet kan)
+    try {
+      const redir = await _msal.handleRedirectPromise();
+      if (redir && redir.account) { await toonApp(redir.account); return; }
+    } catch(eR) { console.warn('MSAL redirect-afhandeling:', eR); }
     const accounts = _msal.getAllAccounts();
     if (accounts.length > 0) {
       await toonApp(accounts[0]);
@@ -1215,9 +1223,17 @@ async function msLogin() {
     const account = (result && result.account) || _msal.getAllAccounts()[0];
     if (account) await toonApp(account);
   } catch(e) {
-    if (e.errorCode === 'popup_window_error') {
-      errEl.textContent = 'Popup geblokkeerd door de browser. Sta popups toe voor deze pagina en probeer opnieuw.';
-      errEl.style.display = 'block';
+    if (e.errorCode === 'popup_window_error' || e.errorCode === 'block_nested_popups' || e.errorCode === 'empty_window_error') {
+      // Popup kan niet → redirect-login (vereist mobiel.html als SPA redirect-URI in Azure)
+      try {
+        await _msal.loginRedirect({scopes: ['openid','profile','email'],
+          redirectUri: window.location.origin + window.location.pathname});
+        return;
+      } catch(e2) {
+        errEl.textContent = 'Popup geblokkeerd én redirect-login mislukt: ' + e2.message +
+          ' — open de app in een nieuw browsertabblad en probeer opnieuw.';
+        errEl.style.display = 'block';
+      }
     } else if (e.errorCode !== 'user_cancelled') {
       errEl.textContent = 'Inloggen mislukt: ' + e.message;
       errEl.style.display = 'block';
