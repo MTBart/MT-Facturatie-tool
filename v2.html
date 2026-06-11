@@ -6336,10 +6336,10 @@ async function initMsal() {
       auth: {
         clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
         authority: 'https://login.microsoftonline.com/15b652c3-ff53-433f-a29d-e9626cbafb41',
-        // v2.html staat niet als redirect-URI in de Azure-app; gebruik de
-        // geregistreerde index.html-URL (zelfde origin, popup-flow vangt de hash)
-        redirectUri: window.location.origin + window.location.pathname.replace(/v2\.html$/, 'index.html'),
-        postLogoutRedirectUri: window.location.origin + window.location.pathname.replace(/v2\.html$/, 'index.html')
+        // v2.html staat niet als redirect-URI in de Azure-app; geregistreerd is de
+        // kale map-URL (…/MT-Facturatie-tool/) — popup-flow vangt de hash daar af
+        redirectUri: window.location.origin + window.location.pathname.replace(/v2\.html$/, ''),
+        postLogoutRedirectUri: window.location.origin + window.location.pathname.replace(/v2\.html$/, '')
       },
       cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
     });
