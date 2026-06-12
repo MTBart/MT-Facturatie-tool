@@ -19,28 +19,42 @@ function b64urlDecode(str) {
   return Uint8Array.from(atob(pad), c => c.charCodeAt(0));
 }
 
+// Valideert het MSAL-token en geeft de JWT-payload terug (of null).
+// De payload is nodig voor per-user token-mapping (F1): e-mailclaim → secret.
 async function validateToken(token) {
   try {
     const parts = token.split('.');
-    if (parts.length !== 3) return false;
+    if (parts.length !== 3) return null;
     const header  = JSON.parse(new TextDecoder().decode(b64urlDecode(parts[0])));
     const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(parts[1])));
-    if (payload.exp * 1000 < Date.now()) return false;
-    if (payload.tid !== TENANT_ID) return false;
-    if (payload.aud !== CLIENT_ID) return false;
+    if (payload.exp * 1000 < Date.now()) return null;
+    if (payload.tid !== TENANT_ID) return null;
+    if (payload.aud !== CLIENT_ID) return null;
     const keys = await getJwks();
     const jwk = keys.find(k => k.kid === header.kid);
-    if (!jwk) return false;
+    if (!jwk) return null;
     const cryptoKey = await crypto.subtle.importKey(
       'jwk', jwk,
       { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
       false, ['verify']
     );
     const data = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
-    return await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, b64urlDecode(parts[2]), data);
+    const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, b64urlDecode(parts[2]), data);
+    return ok ? payload : null;
   } catch(e) {
-    return false;
+    return null;
   }
+}
+
+// F1: per-user Toggl-token. E-mail uit het MSAL-token → Worker-secret
+// `<prefix>_<NAAM>` (bv. TOGGL_KEY_ARJAN voor arjan@mortiseandtenon.nl).
+// Geen persoonlijk secret gezet (of geen MS-login, bv. X-Claude-Key) →
+// fallback naar het gedeelde secret. toggl_reports blijft bewust op het
+// admin-token (aggregeert over alle workspace-gebruikers).
+function userKey(env, prefix, fallback, payload) {
+  const email = (payload && (payload.preferred_username || payload.upn || payload.email)) || '';
+  const name = email.split('@')[0].replace(/[^a-z0-9]/gi, '').toUpperCase();
+  return (name && env[`${prefix}_${name}`]) || fallback;
 }
 
 export default {
@@ -59,7 +73,8 @@ export default {
     const authToken = request.headers.get('X-Auth-Token');
     const claudeKey = request.headers.get('X-Claude-Key');
     const validClaude = claudeKey && env.CLAUDE_SECRET && claudeKey === env.CLAUDE_SECRET;
-    const validMs = authToken && (await validateToken(authToken));
+    const msPayload = authToken ? await validateToken(authToken) : null;
+    const validMs = !!msPayload;
     if (!validClaude && !validMs) {
       return new Response(JSON.stringify({ error: 'Niet geautoriseerd' }), {
         status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -143,7 +158,7 @@ export default {
         const togglPath = url.searchParams.get('path');
         const method = request.method;
         const body = ['POST','PATCH','PUT'].includes(method) ? await request.text() : undefined;
-        const token = btoa(`${env.TOGGL_KEY}:api_token`);
+        const token = btoa(`${userKey(env, 'TOGGL_KEY', env.TOGGL_KEY, msPayload)}:api_token`);
         const response = await fetch(`https://api.track.toggl.com/api/v9/${togglPath}`, {
           method,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${token}` },
@@ -161,7 +176,7 @@ export default {
           method,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${env.TOGGL_FOCUS_KEY}`
+            'Authorization': `Bearer ${userKey(env, 'TOGGL_FOCUS_KEY', env.TOGGL_FOCUS_KEY, msPayload)}`
           },
           body
         });

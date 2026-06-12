@@ -913,6 +913,29 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     </div>
   </div>
 
+  <!-- ══════════ TAB: FEEDBACK ══════════ -->
+  <div class="tab" id="tab-feedback">
+    <div class="section-head" style="margin-top:6px">Feedback</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:14px">
+      Idee, bug of opmerking over de app? Alles wordt verzameld zodat we ervan kunnen leren.
+    </div>
+    <div class="field">
+      <label>Type</label>
+      <select id="fbType">
+        <option value="idee">💡 Idee / verzoek</option>
+        <option value="bug">🐛 Bug / werkt niet</option>
+        <option value="opmerking">💬 Opmerking</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Jouw feedback</label>
+      <textarea id="fbText" placeholder="Beschrijf zo concreet mogelijk wat je opviel of wat je mist…"></textarea>
+    </div>
+    <button class="btn btn-primary" id="fbSendBtn" onclick="sendFeedback()" style="width:100%">Versturen</button>
+    <div class="section-head" style="margin-top:20px">Eerder verstuurd</div>
+    <div id="fbList"></div>
+  </div>
+
 </div><!-- /app-content -->
 
 <!-- ── BOTTOM NAV ── -->
@@ -936,6 +959,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <button class="nav-btn" onclick="switchTab('oplevering',this)" id="nav-oplevering">
     <div class="nav-icon">✅</div>
     <span>Oplevering</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('feedback',this)" id="nav-feedback">
+    <div class="nav-icon">💬</div>
+    <span>Feedback</span>
   </button>
 </nav>
 
@@ -1363,6 +1390,9 @@ async function toonApp(account) {
   await loadRealProjects();
   // Agenda voor deze week alvast warm laden (Toggl 2.0 logged + planned)
   loadAgendaWeek(currentWeek).then(() => { renderWeekStrip(); renderAgenda(); }).catch(() => {});
+  // F1: echte notificaties pollen + wachtende offline-items alsnog versturen
+  startNotifPolling();
+  _RQ.flush();
 }
 
 function startDemoMode() {
@@ -1371,6 +1401,9 @@ function startDemoMode() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('demoBadge').style.display = 'inline-block';
   document.getElementById('userAvatarBtn').style.display = 'none';
+  // Demo: voorbeeldnotificaties zodat de 🔔-flow demobaar blijft
+  notifs = NOTIF_SEED.slice();
+  renderNotifBadge();
   showToast('Demo-modus: projecten en taken worden alleen lokaal opgeslagen');
 }
 
@@ -1949,6 +1982,7 @@ function switchTab(name, btn) {
   document.getElementById("tab-"+name).classList.add("active");
   btn.classList.add("active");
   if (name === "capture") renderCaptureProject();
+  if (name === "feedback") renderFbList();
 }
 
 /* =====================================================================
@@ -3587,16 +3621,76 @@ async function saveNewProject() {
 }
 
 /* =====================================================================
-   NOTIFICATIES (punt 5)
+   NOTIFICATIES (F1: echte aanvoer via SharePoint)
    =====================================================================
-   TODO F1: echte aanvoer — app pollt mt_notificaties.json op SharePoint via de Worker; admin verstuurt vanuit de cockpit; later Web Push via service worker / TWA.
+   Ingelogd: app pollt `mt_notificaties.json` in MT-Bedrijfstool/ (via
+   _SP.read, Graph delegated). Admin (cockpit) schrijft daar items in:
+     {id, ts, title, text, voor, doel}
+   - `voor`: weglaten of "*" = iedereen; anders e-mailprefix ("arjan") of
+     array van prefixen — alleen die gebruikers zien de notificatie.
+   - `doel`: deep-link, zelfde vorm als de mock (type project/taak/
+     oplevering/agenda + projId of code).
+   Gelezen-status blijft lokaal (mt_notif_read). Later: Web Push via TWA.
+   Demo-modus: NOTIF_SEED hieronder.
    ===================================================================== */
+const NOTIF_FILE = "mt_notificaties.json";
 const NOTIF_SEED = [
   {id:"n1", title:"Herstelpunt toegevoegd", text:"Mathijs zette een herstelpunt op Badkamermeubel Utrecht — bekijk de checklist.", time:"Vandaag 09:12", doel:{type:"oplevering", projId:"p4"}},
   {id:"n2", title:"Planning gewijzigd", text:"Je staat donderdag op Wandkast Rotterdam (07:30–15:30).", time:"Vandaag 08:05", doel:{type:"agenda", week:CURRENT_WEEK_NR, day:3}},
   {id:"n3", title:"Nieuwe taak voor jou", text:"“Plinten afkitten” staat klaar bij CompaNanny Keuken.", time:"Gisteren 16:40", doel:{type:"taak", projId:"p1"}}
 ];
-let notifs = NOTIF_SEED.slice();
+let notifs = [];
+let _notifPollTimer = null;
+let _notifPolledOnce = false;
+
+async function pollNotifs() {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const data = await _SP.read(NOTIF_FILE);
+    const list = Array.isArray(data) ? data : (data && data.items) || [];
+    const me = (_msAccount.username || "").toLowerCase().split("@")[0];
+    const mine = list.filter(n => {
+      if (!n || !n.id) return false;
+      if (!n.voor || n.voor === "*") return true;
+      const wie = (Array.isArray(n.voor) ? n.voor : [n.voor]).map(v => String(v).toLowerCase());
+      return wie.includes(me);
+    });
+    mine.sort((a, b) => String(b.ts || "").localeCompare(String(a.ts || "")));
+    const prevIds = new Set(notifs.map(n => n.id));
+    notifs = mine.map(n => ({...n, time: n.time || fmtNotifTime(n.ts)}));
+    renderNotifBadge();
+    if (document.getElementById("notifSheet").classList.contains("visible")) renderNotifList();
+    // Banner alleen voor écht nieuwe, ongelezen items (niet bij eerste load)
+    if (_notifPolledOnce) {
+      const fresh = notifs.find(n => !prevIds.has(n.id) && !notifRead.includes(n.id));
+      if (fresh) showBanner(fresh);
+    }
+    _notifPolledOnce = true;
+  } catch(e) { console.warn("notif-poll fout:", e.message); }
+}
+
+function fmtNotifTime(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d)) return "";
+  const hh = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return "Vandaag " + hh;
+  const gist = new Date(today); gist.setDate(gist.getDate() - 1);
+  if (d.toDateString() === gist.toDateString()) return "Gisteren " + hh;
+  return d.getDate() + "-" + (d.getMonth() + 1) + " " + hh;
+}
+
+function startNotifPolling() {
+  _notifPolledOnce = false;
+  pollNotifs();
+  clearInterval(_notifPollTimer);
+  _notifPollTimer = setInterval(pollNotifs, 90000); // elke 90s
+}
+// direct verversen als de app weer naar de voorgrond komt
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && !_demoMode && _msAccount) { pollNotifs(); _RQ.flush(); }
+});
 let notifRead = [];
 try { notifRead = JSON.parse(localStorage.getItem("mt_notif_read") || "[]"); } catch(e) { notifRead = []; }
 function saveNotifRead() { localStorage.setItem("mt_notif_read", JSON.stringify(notifRead)); }
@@ -3654,6 +3748,11 @@ function tapNotif(id) {
 // open het doel van een notificatie: juiste tab + juiste sheet/item
 function openNotifDoel(doel) {
   if (!doel) return;
+  // admin mag een projectcode meegeven i.p.v. een intern id
+  if (doel.code && !doel.projId) {
+    const p = allProjects().find(x => x.code === doel.code);
+    if (p) doel = {...doel, projId: p.id};
+  }
   if (doel.type === "project" || doel.type === "taak") {
     switchTab("projecten", document.getElementById("nav-projecten"));
     openProjectSheet(doel.projId);
@@ -3712,6 +3811,122 @@ function bannerTap() {
   closeNotifs();
   openNotifDoel(n.doel);
 }
+
+/* =====================================================================
+   FEEDBACK (F1) — input verzamelen om van te leren
+   =====================================================================
+   Versturen = read-merge-write naar `mt_feedback.json` in MT-Bedrijfstool/
+   (zelfde _SP-laag als mt_user_projects.json). Offline of demo → item in
+   de retry-queue; gaat automatisch alsnog weg zodra er verbinding/login is.
+   Lokale kopie van eigen inzendingen in localStorage (mt_fb_sent).
+   ===================================================================== */
+const FB_FILE = "mt_feedback.json";
+let _fbSent = [];
+try { _fbSent = JSON.parse(localStorage.getItem("mt_fb_sent") || "[]"); } catch(e) { _fbSent = []; }
+function saveFbSent() { localStorage.setItem("mt_fb_sent", JSON.stringify(_fbSent.slice(-30))); }
+
+async function sendFeedback() {
+  const text = document.getElementById("fbText").value.trim();
+  if (!text) { showToast("Schrijf eerst je feedback"); return; }
+  const entry = {
+    id: "fb-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+    ts: new Date().toISOString(),
+    user: _msAccount ? (_msAccount.username || "").toLowerCase() : "demo",
+    type: document.getElementById("fbType").value,
+    tekst: text,
+    bron: "mobiel",
+    status: "nieuw"
+  };
+  const btn = document.getElementById("fbSendBtn");
+  btn.disabled = true; btn.textContent = "Versturen…";
+  let ok = false;
+  if (!_demoMode && _msAccount) ok = await fbUpload(entry);
+  if (!ok) {
+    _RQ.push({type: "feedback", entry});
+    showToast(_demoMode ? "Bewaard — wordt verstuurd na inloggen" : "Geen verbinding? Bewaard — gaat automatisch alsnog weg");
+  } else {
+    showToast("Feedback verstuurd — dank!");
+  }
+  document.getElementById("fbText").value = "";
+  btn.disabled = false; btn.textContent = "Versturen";
+  renderFbList();
+}
+
+// read-merge-write; dedupe op id zodat een retry nooit dubbel insert
+async function fbUpload(entry) {
+  try {
+    const cur = await _SP.read(FB_FILE);
+    const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
+    if (!list.some(e => e && e.id === entry.id)) list.push(entry);
+    const ok = await _SP.write(FB_FILE, list);
+    if (ok && !_fbSent.some(e => e.id === entry.id)) { _fbSent.push(entry); saveFbSent(); }
+    return ok;
+  } catch(e) { return false; }
+}
+
+function renderFbList() {
+  const el = document.getElementById("fbList");
+  const pending = _RQ.items().filter(t => t.type === "feedback").map(t => ({...t.entry, _pending: true}));
+  const all = [...pending.slice().reverse(), ..._fbSent.slice().reverse()];
+  if (!all.length) {
+    el.innerHTML = `<div style="font-size:13px;color:var(--text-faint)">Nog niets verstuurd vanaf dit toestel.</div>`;
+    return;
+  }
+  const ico = {idee: "💡", bug: "🐛", opmerking: "💬"};
+  el.innerHTML = all.slice(0, 20).map(e => `
+    <div style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--n-0)">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-faint)">
+        <span>${ico[e.type] || "💬"} ${escHtml(e.type || "")}</span>
+        <span>${e._pending ? "⏳ wacht op verbinding" : "✓ verstuurd"}</span>
+      </div>
+      <div style="font-size:14px;margin-top:4px">${escHtml(e.tekst || "")}</div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:4px">${escHtml(String(e.ts || "").replace("T", " ").slice(0, 16))}</div>
+    </div>`).join("");
+}
+
+/* =====================================================================
+   OFFLINE-RETRY-QUEUE (F1)
+   =====================================================================
+   Mislukte writes (nu: feedback; uitbreidbaar per task.type) komen in
+   localStorage `mt_retry_queue` en worden geflusht bij: login, online-
+   event, terug-naar-voorgrond en elke 60s. Toggl-writes zitten hier
+   bewust NIET in (retry van een timer-POST kan dubbele entries maken).
+   ===================================================================== */
+const _RQ = {
+  KEY: "mt_retry_queue",
+  _busy: false,
+  items() { try { return JSON.parse(localStorage.getItem(this.KEY) || "[]"); } catch(e) { return []; } },
+  _save(list) { localStorage.setItem(this.KEY, JSON.stringify(list)); },
+  push(task) {
+    const l = this.items();
+    task.qid = task.qid || "q-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+    l.push(task);
+    this._save(l);
+  },
+  async flush() {
+    if (this._busy || _demoMode || !_msAccount || !navigator.onLine) return;
+    const l = this.items();
+    if (!l.length) return;
+    this._busy = true;
+    try {
+      const rest = [];
+      for (const task of l) {
+        let ok = false;
+        try {
+          if (task.type === "feedback") ok = await fbUpload(task.entry);
+        } catch(e) { ok = false; }
+        if (!ok) rest.push(task);
+      }
+      this._save(rest);
+      if (rest.length < l.length) {
+        showToast(`${l.length - rest.length} wachtend item(s) alsnog verstuurd`);
+        renderFbList();
+      }
+    } finally { this._busy = false; }
+  }
+};
+window.addEventListener("online", () => _RQ.flush());
+setInterval(() => _RQ.flush(), 60000);
 
 /* =====================================================================
    TOAST

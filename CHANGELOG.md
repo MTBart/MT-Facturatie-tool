@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — feat(timer): starttijd lopende timer aanpassen + handmatige entry
+- Commit: `17cc955` | Auteur: Bart Witte
+
 ## 2026-06-12 — fix(timer): lopende Toggl-entry overleeft app-herstart
 - Commit: `58bf3b5` | Auteur: Bart Witte
 
