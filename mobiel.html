@@ -855,7 +855,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <div id="captureResult" style="display:none"></div>
   </div>
 
-  <!-- TAB: OPLEVERING -->
+  <!-- TAB: RAPPORTAGE (intern blijven de oplever-id's bestaan) -->
   <div class="tab" id="tab-oplevering">
     <div id="opleverView">
       <div class="section-head">Project kiezen</div>
@@ -864,24 +864,74 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           <option value="">— selecteer project —</option>
         </select>
       </div>
+
+      <!-- Rapporttype: opname (inmeten) of oplevering -->
+      <div id="rapTypeWrap" style="display:none">
+        <div class="section-head">Rapporttype</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" id="rapTypeOpname" onclick="kiesRapType('opname')" style="flex:1;min-height:48px">📐 Opname<br><span style="font-size:11px;font-weight:400">inmeten</span></button>
+          <button class="btn btn-secondary" id="rapTypeOplevering" onclick="kiesRapType('oplevering')" style="flex:1;min-height:48px">✅ Oplevering<br><span style="font-size:11px;font-weight:400">checklist + aftekenen</span></button>
+        </div>
+      </div>
+
+      <!-- OPNAME / INMETEN -->
+      <div id="opnameRapWrap" style="display:none">
+        <div class="section-head" id="opnameRapLabel" style="margin-top:14px"></div>
+        <div class="photo-input-wrap" style="display:block">
+          <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
+            <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📷 Foto's toevoegen</button>
+            <input type="file" accept="image/*" capture="environment" onchange="inmFoto(this)" multiple>
+          </label>
+        </div>
+        <div id="inmFotoList" style="margin-top:10px"></div>
+        <div class="field" style="margin-top:8px">
+          <label>Omschrijving / maten / afspraken</label>
+          <textarea id="inmNotitie" rows="3" placeholder="Wat is ingemeten, bijzonderheden van de situatie, afspraken met de klant…"></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="showOpnameRapport()">📋 Opnamerapport maken</button>
+      </div>
+
+      <!-- OPLEVERING -->
       <div id="checklistWrap" style="display:none">
-        <div class="section-head" id="checklistProjectLabel"></div>
+        <div class="section-head" id="checklistProjectLabel" style="margin-top:14px"></div>
         <div id="checklistItems"></div>
+        <div class="section-head" style="margin-top:14px">📷 Aangetroffen situatie</div>
+        <div class="thumbs-grid" id="oplVoorGrid"></div>
+        <div class="photo-input-wrap" style="display:block">
+          <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
+            <button class="btn btn-secondary btn-full" style="pointer-events:none">📷 Foto's — hoe troffen we het aan</button>
+            <input type="file" accept="image/*" capture="environment" onchange="oplFoto('voor',this)" multiple>
+          </label>
+        </div>
+        <div class="section-head" style="margin-top:14px">📷 Opgeleverd resultaat</div>
+        <div class="thumbs-grid" id="oplNaGrid"></div>
+        <div class="photo-input-wrap" style="display:block">
+          <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
+            <button class="btn btn-secondary btn-full" style="pointer-events:none">📷 Foto's — zoals opgeleverd</button>
+            <input type="file" accept="image/*" capture="environment" onchange="oplFoto('na',this)" multiple>
+          </label>
+        </div>
         <div style="margin-top:12px">
-          <button class="btn btn-primary btn-full" onclick="showRapport()">📋 Rapport maken</button>
+          <button class="btn btn-secondary btn-full" id="rapDraftBtn" onclick="rapDraftSave()">💾 Tussentijds opslaan</button>
+          <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="showRapport()">📋 Definitief opleverrapport maken</button>
+          <div id="rapDraftInfo" style="font-size:11px;color:var(--text-faint);margin-top:6px"></div>
         </div>
       </div>
     </div>
 
     <!-- RAPPORT PREVIEW -->
     <div id="rapportView" class="view-hidden">
-      <div class="section-head">Opleverrapport</div>
+      <div class="section-head" id="rapportHead">Opleverrapport</div>
       <div class="rapport-preview" id="rapportContent"></div>
-      <div style="margin-top:12px">
+      <div style="margin-top:12px" id="rapportActiesOplevering">
         <div class="section-head">Hoe afronden?</div>
         <button class="btn btn-gold btn-full" onclick="showHandtekening()">✍️ Ter plekke aftekenen</button>
         <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="rapportOpsturen()">📧 Rapport opsturen</button>
         <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="backToChecklist()">← Terug naar checklist</button>
+      </div>
+      <div style="margin-top:12px" id="rapportActiesOpname" class="view-hidden">
+        <button class="btn btn-gold btn-full" id="opnameRapAfrondBtn" onclick="opnameRapportAfronden()">✅ Opnamerapport opslaan</button>
+        <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="backToChecklist()">← Terug naar opname</button>
       </div>
     </div>
 
@@ -902,9 +952,9 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <div id="opleverDoneView" class="view-hidden">
       <div class="done-screen">
         <div class="done-icon">✅</div>
-        <div class="done-title">Rapport klaar</div>
-        <div class="done-sub">Het opleverrapport met handtekening wordt gemaild naar de opdrachtgever.<br><br><em>(mock — in productie via Graph /sendMail)</em></div>
-        <button class="btn btn-primary" onclick="resetOplevering()">← Nieuwe oplevering</button>
+        <div class="done-title" id="opleverDoneTitle">Rapport klaar</div>
+        <div class="done-sub" id="opleverDoneSub">Het opleverrapport met handtekening wordt gemaild naar de opdrachtgever.<br><br><em>(mock — in productie via Graph /sendMail)</em></div>
+        <button class="btn btn-primary" onclick="resetOplevering()">← Nieuw rapport</button>
       </div>
     </div>
 
@@ -914,7 +964,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <div class="done-icon">📧</div>
         <div class="done-title">Rapport wordt gemaild</div>
         <div class="done-sub">Het opleverrapport wordt gemaild naar de opdrachtgever.<br>De opdrachtgever kan op afstand akkoord geven.<br><br><em>(mock — in productie via Graph /sendMail)</em></div>
-        <button class="btn btn-primary" onclick="resetOplevering()">← Nieuwe oplevering</button>
+        <button class="btn btn-primary" onclick="resetOplevering()">← Nieuw rapport</button>
       </div>
     </div>
   </div>
@@ -963,8 +1013,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <span>Capture</span>
   </button>
   <button class="nav-btn" onclick="switchTab('oplevering',this)" id="nav-oplevering">
-    <div class="nav-icon">✅</div>
-    <span>Oplevering</span>
+    <div class="nav-icon">📋</div>
+    <span>Rapportage</span>
   </button>
   <button class="nav-btn" onclick="switchTab('feedback',this)" id="nav-feedback">
     <div class="nav-icon">💬</div>
@@ -1013,7 +1063,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       </div>
       <div class="larry-tab-help">
         <div class="larry-tab-name">📁 Projecten</div>
-        <div class="larry-tab-desc">Overzicht van jouw toegewezen projecten. Tik op een kaart voor details en snelkoppelingen naar Timer, Capture en Oplevering.</div>
+        <div class="larry-tab-desc">Overzicht van jouw toegewezen projecten. Tik op een kaart voor details en snelkoppelingen naar Timer, Capture en Rapportage.</div>
       </div>
       <div class="larry-tab-help">
         <div class="larry-tab-name">📅 Agenda</div>
@@ -1024,8 +1074,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <div class="larry-tab-desc">Sla snel een notitie of foto op voor het lopende project. Foto's gaan straks automatisch naar de SharePoint-projectmap.</div>
       </div>
       <div class="larry-tab-help">
-        <div class="larry-tab-name">✅ Oplevering</div>
-        <div class="larry-tab-desc">Loop de checklist af, markeer herstelpunten, maak het rapport en laat de opdrachtgever ter plekke aftekenen op het scherm.</div>
+        <div class="larry-tab-name">📋 Rapportage</div>
+        <div class="larry-tab-desc">Twee rapporttypes: een <b>opnamerapport</b> (inmeten — foto's met bijschrift + omschrijving van de situatie) en een <b>opleverrapport</b> (checklist aflopen, herstelpunten markeren, foto's van aangetroffen situatie en opgeleverd resultaat, ter plekke laten aftekenen).</div>
       </div>
     </div>
   </div>
@@ -1993,6 +2043,9 @@ let captureProject = null;
 let checklistState = {}; // {itemIndex: "ok"|"herstel"|null}
 let checklistNotes = {};
 let currentOpleverProject = null;
+let rapType = null;              // 'opname' | 'oplevering' — gekozen rapporttype
+let inmFotos = [];               // opname/inmeten: [{url,name,file,bijschrift}]
+let oplFotos = {voor: [], na: []}; // oplevering: aangetroffen / opgeleverd [{url,name,file}]
 let agendaView = "dag";          // 'dag' | '3d' | 'week'
 let currentWeek = CURRENT_WEEK_NR;
 let editingTaskId = null;        // taak in bewerk-modus in project-sheet
@@ -2371,10 +2424,10 @@ function openProjectSheet(id) {
       <div class="sheet-action-arrow">›</div>
     </div>
     <div class="sheet-action-btn" onclick="sheetGoOplevering('${p.id}')">
-      <div class="sheet-action-icon">✅</div>
+      <div class="sheet-action-icon">📋</div>
       <div class="sheet-action-label">
-        <div class="sheet-action-title">Oplevering starten</div>
-        <div class="sheet-action-sub">Checklist voor dit project</div>
+        <div class="sheet-action-title">Rapportage starten</div>
+        <div class="sheet-action-sub">Opname- of opleverrapport</div>
       </div>
       <div class="sheet-action-arrow">›</div>
     </div>
@@ -2501,9 +2554,9 @@ function renderSheetNas(p) {
 
 async function _nasFolders(code) {
   const projPath = await findProjectFolder(code);
-  if (!projPath) return `<div style="font-size:12px;color:var(--text-faint)">Nog geen projectmap op de NAS — maak 'm aan via Capture › Opname afronden.</div>`;
+  if (!projPath) return `<div style="font-size:12px;color:var(--text-faint)">Nog geen projectmap op de NAS of SharePoint — maak 'm aan via Capture › Opname afronden.</div>`;
   const token = await window.getGraphToken();
-  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root:/${encodeURI(projPath)}:/children?$select=name,webUrl,folder&$top=50`,
+  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_projDrive(code)}/root:/${_encPath(projPath)}:/children?$select=name,webUrl,folder&$top=50`,
     { headers: {'Authorization': `Bearer ${token}`} });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const mappen = ((await r.json()).value || []).filter(it => it.folder);
@@ -3073,7 +3126,7 @@ async function _projFolderUrl(code, sub, knownProjPath) {
   const token = await window.getGraphToken();
   if (!token) return null;
   const dest = sub ? `${projPath}/${sub}` : projPath;
-  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root:/${encodeURI(dest)}?$select=webUrl`,
+  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_projDrive(code)}/root:/${_encPath(dest)}?$select=webUrl`,
     { headers: {'Authorization':`Bearer ${token}`} });
   if (!r.ok) return null;
   const item = await r.json();
@@ -3274,17 +3327,36 @@ async function genereerProjectMappenMobiel(proj) {
 
 // Bestaande projectmap zoeken op de NAS via Graph-search op projectcode.
 // Returnt het pad (string) of null als de map er nog niet is.
+// Graph-search kan hits uit een ÁNDERE bibliotheek teruggeven (site-search
+// onder water) — de echte driveId per project onthouden, anders 404't elke
+// pad-call op de verkeerde drive (bug 12-6: "NAS niet bereikbaar: HTTP 404").
+const _projDriveMap = {};   // CODE → driveId waar de projectmap echt leeft
+function _projDrive(code) { return _projDriveMap[(code || '').toUpperCase()] || _SPProj.DRIVE; }
+// encodeURI laat # en ? staan — die breken Graph-pad-adressering
+function _encPath(p) { return encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F'); }
+
 async function findProjectFolder(code) {
   const token = await window.getGraphToken();
   if (!token) throw new Error('Niet ingelogd op Microsoft 365');
-  const url = `https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root/search(q='${encodeURIComponent(code)}')?$select=id,name,folder,parentReference&$top=50`;
-  const r = await fetch(url, { headers: {'Authorization':`Bearer ${token}`} });
-  if (!r.ok) throw new Error(`search HTTP ${r.status}`);
-  const hits = ((await r.json()).value || []).filter(it =>
+  const filter = arr => arr.filter(it =>
     it.folder && (it.name === code || it.name.toUpperCase().startsWith(code.toUpperCase() + ' ')));
+  const zoek = async base => {
+    const r = await fetch(`${base}/root/search(q='${encodeURIComponent(code)}')?$select=id,name,folder,parentReference&$top=50`,
+      { headers: {'Authorization':`Bearer ${token}`} });
+    if (!r.ok) throw new Error(`search HTTP ${r.status}`);
+    return filter((await r.json()).value || []);
+  };
+  let hits = await zoek(`https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}`);
+  // Niets op de NAS-drive → óók de site-default bibliotheek (SharePoint
+  // "Documenten") doorzoeken; oudere projectmappen leven daar nog.
+  if (!hits.length) {
+    try { const {base} = await _SP._driveBase(); hits = await zoek(base); } catch(e) {}
+  }
   if (!hits.length) return null;
   // Voorkeur voor hits binnen "Nieuwe mappenstructuur"
   const best = hits.find(h => (h.parentReference && h.parentReference.path || '').includes('Nieuwe mappenstructuur')) || hits[0];
+  if (best.parentReference && best.parentReference.driveId)
+    _projDriveMap[code.toUpperCase()] = best.parentReference.driveId;
   const rawPath = (best.parentReference && best.parentReference.path || '').split('root:')[1] || '';
   let parentPath = rawPath.replace(/^\//,'');
   try { parentPath = decodeURIComponent(parentPath); } catch(e) {}
@@ -3303,7 +3375,7 @@ async function uploadOpnamePhotos(proj, projPath) {
   // Bestaande bestanden in 06_Fotos ophalen voor de dedupe-check (best-effort)
   let bestaand = {};
   try {
-    const cr = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root:/${encodeURI(projPath + '/06_Fotos')}:/children?$select=name,size&$top=999`,
+    const cr = await fetch(`https://graph.microsoft.com/v1.0/drives/${_projDrive(proj.code)}/root:/${_encPath(projPath + '/06_Fotos')}:/children?$select=name,size&$top=999`,
       { headers: {'Authorization':`Bearer ${token}`} });
     if (cr.ok) ((await cr.json()).value || []).forEach(it => { bestaand[it.name] = it.size; });
   } catch(e) { /* dedupe-check optioneel; upload gaat gewoon door */ }
@@ -3315,7 +3387,7 @@ async function uploadOpnamePhotos(proj, projPath) {
         skip++; uploaded.push(veilig); continue;  // al op de NAS — niet nogmaals
       }
       const dest = `${projPath}/06_Fotos/${veilig}`;
-      const url = `https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root:/${encodeURI(dest)}:/content?@microsoft.graph.conflictBehavior=rename`;
+      const url = `https://graph.microsoft.com/v1.0/drives/${_projDrive(proj.code)}/root:/${_encPath(dest)}:/content?@microsoft.graph.conflictBehavior=rename`;
       const r = await fetch(url, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': p.file.type || 'image/jpeg' },
@@ -3462,13 +3534,306 @@ function loadChecklist() {
     openNewProject();
     return;
   }
-  if (!id) { document.getElementById("checklistWrap").style.display = "none"; return; }
+  const typeWrap = document.getElementById("rapTypeWrap");
+  const opnWrap = document.getElementById("opnameRapWrap");
+  const clWrap = document.getElementById("checklistWrap");
+  if (!id) {
+    typeWrap.style.display = "none";
+    opnWrap.style.display = "none";
+    clWrap.style.display = "none";
+    currentOpleverProject = null;
+    return;
+  }
   currentOpleverProject = allProjects().find(p => p.id === id);
+  rapType = null;
   checklistState = {};
   checklistNotes = {};
-  document.getElementById("checklistWrap").style.display = "block";
-  document.getElementById("checklistProjectLabel").textContent = currentOpleverProject.code + " · Checklist";
+  inmFotos = [];
+  oplFotos = {voor: [], na: []};
+  _oplUploaded = {voor: [], na: []};
+  document.getElementById("inmNotitie").value = "";
+  _setDraftInfo(null);
+  setRapTypeButtons();
+  typeWrap.style.display = "block";
+  opnWrap.style.display = "none";
+  clWrap.style.display = "none";
+}
+
+function setRapTypeButtons() {
+  const bo = document.getElementById("rapTypeOpname");
+  const bl = document.getElementById("rapTypeOplevering");
+  if (bo) bo.className = "btn " + (rapType === "opname" ? "btn-gold" : "btn-secondary");
+  if (bl) bl.className = "btn " + (rapType === "oplevering" ? "btn-gold" : "btn-secondary");
+}
+
+function kiesRapType(t) {
+  const p = currentOpleverProject;
+  if (!p) return;
+  rapType = t;
+  setRapTypeButtons();
+  const opnWrap = document.getElementById("opnameRapWrap");
+  const clWrap = document.getElementById("checklistWrap");
+  if (t === "opname") {
+    opnWrap.style.display = "block";
+    clWrap.style.display = "none";
+    document.getElementById("opnameRapLabel").textContent = p.code + " · Opname / inmeten";
+    renderInmFotos();
+  } else {
+    opnWrap.style.display = "none";
+    clWrap.style.display = "block";
+    document.getElementById("checklistProjectLabel").textContent = p.code + " · Checklist";
+    renderChecklist();
+    renderOplFotos();
+    rapDraftLoad(p.code);   // concept van eerdere dag(en) terughalen (async, best-effort)
+  }
+}
+
+/* ── Opname / inmeten: foto's met bijschrift per foto ── */
+function inmFoto(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  files.forEach(f => inmFotos.push({url: URL.createObjectURL(f), name: f.name, file: f, bijschrift: ""}));
+  input.value = "";
+  renderInmFotos();
+}
+
+function setInmBijschrift(i, v) { if (inmFotos[i]) inmFotos[i].bijschrift = v; }
+function delInmFoto(i) { inmFotos.splice(i, 1); renderInmFotos(); }
+
+function renderInmFotos() {
+  const el = document.getElementById("inmFotoList");
+  el.innerHTML = inmFotos.map((p, i) => `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <img src="${p.url}" alt="foto" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex-shrink:0">
+      <input type="text" value="${escHtml(p.bijschrift)}" placeholder="Bijschrift bij deze foto…"
+        onchange="setInmBijschrift(${i},this.value)" style="flex:1;min-width:0">
+      <button class="note-del" onclick="delInmFoto(${i})">×</button>
+    </div>`).join("");
+}
+
+/* ── Oplevering: foto's aangetroffen situatie / opgeleverd resultaat ── */
+let _oplUploaded = {voor: [], na: []};  // al op SP staande foto's (uit tussentijds concept)
+
+function oplFoto(soort, input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  files.forEach(f => oplFotos[soort].push({url: URL.createObjectURL(f), name: f.name, file: f}));
+  input.value = "";
+  renderOplFotos();
+}
+
+function delOplFoto(soort, i) { oplFotos[soort].splice(i, 1); renderOplFotos(); }
+
+function renderOplFotos() {
+  ["voor", "na"].forEach(soort => {
+    const grid = document.getElementById(soort === "voor" ? "oplVoorGrid" : "oplNaGrid");
+    if (!grid) return;
+    let html = _oplUploaded[soort].map(naam =>
+      `<div class="thumb-cell" title="${escHtml(naam)}"><div class="thumb-placeholder">📷<div style="font-size:8px;line-height:1.2">opgeslagen</div></div></div>`).join("");
+    html += oplFotos[soort].map((p, i) =>
+      `<div class="thumb-cell" style="position:relative"><img src="${p.url}" alt="foto"><button class="note-del" style="position:absolute;top:2px;right:2px" onclick="delOplFoto('${soort}',${i})">×</button></div>`).join("");
+    grid.innerHTML = html;
+  });
+}
+
+/* ── Generieke rapportfoto-upload: <projectmap>/06_Fotos/ met prefix ── */
+async function _rapFotosUpload(proj, fotos, prefix) {
+  const out = {namen: [], fail: 0};
+  if (!fotos.length) return out;
+  let token = null;
+  try { token = await window.getGraphToken(); } catch(e) {}
+  if (!token) { out.fail = fotos.length; showToast("Niet ingelogd — foto's niet geüpload"); return out; }
+  let projPath = null;
+  try { projPath = await findProjectFolder(proj.code); } catch(e) { console.warn('rapFotos zoeken fout:', e.message); }
+  if (!projPath) { out.fail = fotos.length; showToast(`⚠ Projectmap ${proj.code} niet gevonden — foto's niet geüpload`); return out; }
+  const datum = new Date().toISOString().slice(0, 10);
+  let nr = 0;
+  for (const p of fotos) {
+    nr++;
+    try {
+      const veilig = (p.name || "foto.jpg").replace(/[\\\/:*?"<>|]/g, "_").trim().replace(/[. ]+$/, "") || "foto.jpg";
+      const naam = `${prefix}_${datum}_${String(nr).padStart(2, "0")}_${veilig}`;
+      const dest = `${projPath}/06_Fotos/${naam}`;
+      const url = `https://graph.microsoft.com/v1.0/drives/${_projDrive(proj.code)}/root:/${_encPath(dest)}:/content?@microsoft.graph.conflictBehavior=rename`;
+      const r = await fetch(url, {
+        method: "PUT",
+        headers: {"Authorization": `Bearer ${token}`, "Content-Type": p.file.type || "image/jpeg"},
+        body: await p.file.arrayBuffer()
+      });
+      if (r.ok) out.namen.push(naam);
+      else { out.fail++; console.warn(`rapFoto ${naam} HTTP ${r.status}`); }
+    } catch(e) { out.fail++; console.warn("rapFoto upload fout:", e.message); }
+  }
+  return out;
+}
+
+/* ── Tussentijds opslaan (meerdaagse plaatsing) ──
+   Beginstand dag 1, eindstand later, definitief rapport als laatste.
+   Foto's gaan bij elk tussentijds opslaan al naar SP; checklist-stand +
+   notities + fotonamen in een concept dat dagen én apparaten overleeft
+   (localStorage als cache, SP mt_rapport_concepten.json als bron). */
+function _draftLocalKey(code) { return "mt_rapdraft_" + code; }
+
+async function rapDraftSave() {
+  const p = currentOpleverProject;
+  if (!p) return;
+  const btn = document.getElementById("rapDraftBtn");
+  if (btn && btn.disabled) return;
+  if (btn) { btn.disabled = true; btn.textContent = "💾 Opslaan…"; }
+  try {
+    if (!_demoMode && _msAccount) {
+      for (const [soort, prefix] of [["voor", "aangetroffen"], ["na", "opgeleverd"]]) {
+        if (!oplFotos[soort].length) continue;
+        const res = await _rapFotosUpload(p, oplFotos[soort], prefix);
+        _oplUploaded[soort].push(...res.namen);
+        // gelukte foto's uit de lokale lijst; mislukte blijven staan voor retry
+        oplFotos[soort] = res.fail ? oplFotos[soort].slice(res.namen.length) : [];
+      }
+      renderOplFotos();
+    }
+    const draft = {
+      projectCode: p.code, ts: new Date().toISOString(),
+      door: _msAccount ? (_msAccount.username || "").toLowerCase() : "demo",
+      checklistState, checklistNotes,
+      fotosVoor: _oplUploaded.voor, fotosNa: _oplUploaded.na
+    };
+    localStorage.setItem(_draftLocalKey(p.code), JSON.stringify(draft));
+    if (!_demoMode && _msAccount) {
+      try {
+        const cur = await _SP.read("mt_rapport_concepten.json");
+        const map = (cur && !Array.isArray(cur)) ? cur : {};
+        map[p.code] = draft;
+        await _SP.write("mt_rapport_concepten.json", map);
+      } catch(e) { console.warn("concept naar SP fout:", e.message); }
+    }
+    _setDraftInfo(draft);
+    showToast("💾 Concept opgeslagen — volgende keer verder waar je bleef");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "💾 Tussentijds opslaan"; }
+  }
+}
+
+function _setDraftInfo(draft) {
+  const el = document.getElementById("rapDraftInfo");
+  if (!el) return;
+  if (!draft) { el.textContent = ""; return; }
+  const d = new Date(draft.ts).toLocaleString("nl-NL", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
+  el.textContent = `Concept van ${d} — ${(draft.fotosVoor||[]).length} foto('s) aangetroffen, ${(draft.fotosNa||[]).length} opgeleverd staan al op SP.`;
+}
+
+async function rapDraftLoad(code) {
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem(_draftLocalKey(code)) || "null"); } catch(e) {}
+  if (!draft && !_demoMode && _msAccount) {
+    try {
+      const map = await _SP.read("mt_rapport_concepten.json");
+      if (map && !Array.isArray(map) && map[code]) draft = map[code];
+    } catch(e) {}
+  }
+  if (!draft) return;
+  // gebruiker kan tijdens de (async) SP-read al verder geklikt zijn
+  if (!currentOpleverProject || currentOpleverProject.code !== code || rapType !== "oplevering") return;
+  checklistState = draft.checklistState || {};
+  checklistNotes = draft.checklistNotes || {};
+  _oplUploaded = {voor: draft.fotosVoor || [], na: draft.fotosNa || []};
   renderChecklist();
+  renderOplFotos();
+  _setDraftInfo(draft);
+  showToast("📂 Concept geladen — verder waar je bleef");
+}
+
+async function rapDraftClear(code) {
+  localStorage.removeItem(_draftLocalKey(code));
+  _setDraftInfo(null);
+  if (!_demoMode && _msAccount) {
+    try {
+      const map = await _SP.read("mt_rapport_concepten.json");
+      if (map && !Array.isArray(map) && map[code]) {
+        delete map[code];
+        await _SP.write("mt_rapport_concepten.json", map);
+      }
+    } catch(e) {}
+  }
+}
+
+/* ── Opnamerapport (inmeten) ── */
+function showOpnameRapport() {
+  const p = currentOpleverProject;
+  if (!p) return;
+  const notitie = document.getElementById("inmNotitie").value.trim();
+  if (!inmFotos.length && !notitie) { alert("Voeg minstens één foto of een omschrijving toe."); return; }
+  const now = new Date().toLocaleDateString("nl-NL", {day:"2-digit", month:"long", year:"numeric"});
+  const door = _msAccount ? (_msAccount.name || _msAccount.username) : "Demo";
+  let html = `<div class="rapport-title">Opnamerapport</div>
+    <div class="rapport-sub">${p.code} · ${p.name} · ${now} · ingemeten door ${escHtml(door)}</div>`;
+  if (notitie) {
+    html += `<div class="rapport-section">📝 Omschrijving / maten / afspraken</div>
+      <div class="rapport-item"><div class="rapport-item-content"><div class="rapport-item-name" style="white-space:pre-wrap">${escHtml(notitie)}</div></div></div>`;
+  }
+  if (inmFotos.length) {
+    html += `<div class="rapport-section">📷 Foto's (${inmFotos.length})</div>`;
+    inmFotos.forEach(f => {
+      html += `<div style="margin-bottom:10px"><img src="${f.url}" alt="foto" style="width:100%;border-radius:8px">${f.bijschrift ? `<div class="rapport-item-note" style="margin-top:4px">${escHtml(f.bijschrift)}</div>` : ""}</div>`;
+    });
+  }
+  html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${now} · ${escHtml(door)} · M&T</div>`;
+  document.getElementById("rapportContent").innerHTML = html;
+  document.getElementById("rapportHead").textContent = "Opnamerapport";
+  document.getElementById("rapportActiesOpname").classList.remove("view-hidden");
+  document.getElementById("rapportActiesOplevering").classList.add("view-hidden");
+  document.getElementById("opleverView").classList.add("view-hidden");
+  document.getElementById("rapportView").classList.remove("view-hidden");
+}
+
+async function opnameRapportAfronden() {
+  const p = currentOpleverProject;
+  if (!p) return;
+  const btn = document.getElementById("opnameRapAfrondBtn");
+  if (btn && btn.disabled) return;
+  if (btn) { btn.disabled = true; btn.textContent = "⬆ Opslaan…"; }
+  try {
+    let namen = [];
+    if (!_demoMode && _msAccount && inmFotos.length) {
+      const res = await _rapFotosUpload(p, inmFotos, "opname");
+      namen = res.namen;
+      if (res.fail) {
+        showToast(`⚠ ${res.fail} foto('s) niet geüpload — probeer het nogmaals`);
+        return;
+      }
+    }
+    const entry = {
+      id: "opn-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      ts: new Date().toISOString(),
+      door: _msAccount ? (_msAccount.username || "").toLowerCase() : "demo",
+      doorNaam: _msAccount ? (_msAccount.name || "") : "Demo",
+      projectCode: p.code, projectNaam: p.name,
+      type: "opname",
+      notitie: document.getElementById("inmNotitie").value.trim(),
+      fotos: inmFotos.map((f, i) => ({bestand: namen[i] || f.name, bijschrift: f.bijschrift || ""}))
+    };
+    let ok = false;
+    if (!_demoMode && _msAccount) {
+      ok = await opnUpload(entry);
+      if (!ok) _RQ.push({type: "opname", entry});
+    }
+    document.getElementById("rapportView").classList.add("view-hidden");
+    document.getElementById("opleverDoneTitle").textContent = "Opnamerapport klaar";
+    document.getElementById("opleverDoneSub").innerHTML =
+      `Foto's staan in de projectmap (${escHtml(p.code)} › 06_Fotos) en het rapport is gelogd.<br>De cockpit kan hier verder mee.`;
+    document.getElementById("opleverDoneView").classList.remove("view-hidden");
+    showToast(`✅ Opnamerapport opgeslagen — ${p.code}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "✅ Opnamerapport opslaan"; }
+  }
+}
+
+async function opnUpload(entry) {
+  try {
+    const cur = await _SP.read("mt_opnames.json");
+    const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
+    if (!list.some(e => e && e.id === entry.id)) list.push(entry);
+    return await _SP.write("mt_opnames.json", list);
+  } catch(e) { return false; }
 }
 
 function renderChecklist() {
@@ -3592,8 +3957,23 @@ function showRapport() {
       <div class="rapport-item-content"><div class="rapport-item-name">${escHtml(item)}</div></div>
     </div>`).join("");
   }
+  const fVoor = _oplUploaded.voor.length + oplFotos.voor.length;
+  const fNa = _oplUploaded.na.length + oplFotos.na.length;
+  if (fVoor) {
+    html += `<div class="rapport-section">📷 Aangetroffen situatie (${fVoor})</div>`;
+    if (_oplUploaded.voor.length) html += `<div class="rapport-item-note">${_oplUploaded.voor.length} foto('s) eerder opgeslagen op SharePoint</div>`;
+    html += oplFotos.voor.map(f => `<img src="${f.url}" style="width:100%;border-radius:8px;margin-top:8px">`).join("");
+  }
+  if (fNa) {
+    html += `<div class="rapport-section">📷 Opgeleverd resultaat (${fNa})</div>`;
+    if (_oplUploaded.na.length) html += `<div class="rapport-item-note">${_oplUploaded.na.length} foto('s) eerder opgeslagen op SharePoint</div>`;
+    html += oplFotos.na.map(f => `<img src="${f.url}" style="width:100%;border-radius:8px;margin-top:8px">`).join("");
+  }
   html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${now} · ${escHtml(door)} · M&T</div>`;
   document.getElementById("rapportContent").innerHTML = html;
+  document.getElementById("rapportHead").textContent = "Opleverrapport";
+  document.getElementById("rapportActiesOplevering").classList.remove("view-hidden");
+  document.getElementById("rapportActiesOpname").classList.add("view-hidden");
   document.getElementById("opleverView").classList.add("view-hidden");
   document.getElementById("rapportView").classList.remove("view-hidden");
   document.getElementById("handtekeningView").classList.add("view-hidden");
@@ -3623,6 +4003,12 @@ async function logOplevering(wijze) {
   p.checklist.forEach((item, i) => {
     if (checklistState[i] === "herstel") herstel.push({item, notitie: checklistNotes[i] || ""});
   });
+  // Foto's: eerder via tussentijds-opslaan geüploade + nu resterende lokale
+  let fotosVoor = _oplUploaded.voor.slice(), fotosNa = _oplUploaded.na.slice();
+  if (!_demoMode && _msAccount) {
+    if (oplFotos.voor.length) { const r = await _rapFotosUpload(p, oplFotos.voor, "aangetroffen"); fotosVoor.push(...r.namen); }
+    if (oplFotos.na.length) { const r = await _rapFotosUpload(p, oplFotos.na, "opgeleverd"); fotosNa.push(...r.namen); }
+  }
   const entry = {
     id: "opl-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
     ts: new Date().toISOString(),
@@ -3631,13 +4017,17 @@ async function logOplevering(wijze) {
     projectCode: p.code,
     projectNaam: p.name,
     wijze, // "afgetekend" (ter plekke) | "gemaild" (akkoord op afstand)
+    type: "oplevering",
     ok: p.checklist.filter((_, i) => checklistState[i] === "ok"),
     herstel,
-    nietBeoordeeld: p.checklist.filter((_, i) => !checklistState[i])
+    nietBeoordeeld: p.checklist.filter((_, i) => !checklistState[i]),
+    fotosAangetroffen: fotosVoor,
+    fotosOpgeleverd: fotosNa
   };
   let ok = false;
   if (!_demoMode && _msAccount) ok = await oplUpload(entry);
   if (!ok) _RQ.push({type: "oplevering", entry});
+  rapDraftClear(p.code).catch(() => {});
 }
 
 async function oplUpload(entry) {
@@ -3658,8 +4048,19 @@ function resetOplevering() {
   checklistState = {};
   checklistNotes = {};
   currentOpleverProject = null;
+  rapType = null;
+  inmFotos = [];
+  oplFotos = {voor: [], na: []};
+  _oplUploaded = {voor: [], na: []};
+  document.getElementById("inmNotitie").value = "";
   document.getElementById("opleverProjectSelect").value = "";
+  document.getElementById("rapTypeWrap").style.display = "none";
+  document.getElementById("opnameRapWrap").style.display = "none";
   document.getElementById("checklistWrap").style.display = "none";
+  _setDraftInfo(null);
+  setRapTypeButtons();
+  document.getElementById("opleverDoneTitle").textContent = "Rapport klaar";
+  document.getElementById("opleverDoneSub").innerHTML = "Het opleverrapport met handtekening wordt gemaild naar de opdrachtgever.<br><br><em>(mock — in productie via Graph /sendMail)</em>";
   document.getElementById("opleverView").classList.remove("view-hidden");
   document.getElementById("rapportView").classList.add("view-hidden");
   document.getElementById("handtekeningView").classList.add("view-hidden");
@@ -3720,6 +4121,8 @@ function clearCanvas() {
 
 function bevestigHandtekening() {
   if (!sigHasMark) { alert("Teken eerst de handtekening."); return; }
+  document.getElementById("opleverDoneTitle").textContent = "Rapport klaar";
+  document.getElementById("opleverDoneSub").innerHTML = "Het opleverrapport met handtekening wordt gemaild naar de opdrachtgever.<br><br><em>(mock — in productie via Graph /sendMail)</em>";
   document.getElementById("handtekeningView").classList.add("view-hidden");
   document.getElementById("opleverDoneView").classList.remove("view-hidden");
   logOplevering("afgetekend");
@@ -4332,6 +4735,7 @@ const _RQ = {
           if (task.type === "feedback") ok = await fbUpload(task.entry);
           else if (task.type === "oplevering") ok = await oplUpload(task.entry);
           else if (task.type === "notitie") ok = await noteUpload(task.entry);
+          else if (task.type === "opname") ok = await opnUpload(task.entry);
         } catch(e) { ok = false; }
         if (!ok) rest.push(task);
       }
