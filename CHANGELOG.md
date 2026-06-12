@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — App+Worker: alle projecten zichtbaar voor iedereen + filter toegewezen/niet + A-Z
+- Commit: `548a5bb` | Auteur: Bart Witte
+
 ## 2026-06-12 — App: Oplevering wordt Rapportage — opnamerapport, oplever-foto's, tussentijds concept, NAS-404-fix
 - Commit: `1c9e1b2` | Auteur: Bart Witte
 
