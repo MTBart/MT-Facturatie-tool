@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — Mobiel: project aanmaken vanuit oplevertab + oplever-log met ingevuld-door
+- Commit: `b45d17c` | Auteur: Bart Witte
+
 ## 2026-06-12 — F1: per-user Toggl-tokens (Worker) + echte notificatie-poll + feedback-tab + offline-queue
 - Commit: `15fb84c` | Auteur: Bart Witte
 

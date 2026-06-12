@@ -852,6 +852,13 @@ button{transition:transform .07s ease,filter .07s ease}
           <span id="toeslag-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
         </div>
         <div class="card">
+          <div class="card-title">Uurtarieven (nacalculatie)</div>
+          <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">€ per uur excl. btw, per teamlid. Gebruikt in de nacalculatie-tabel in het projectvenster.</p>
+          <div class="grid2" id="uurtarief-velden"></div>
+          <button class="btn btn-secondary btn-sm" onclick="saveUurtarieven()">Opslaan</button>
+          <span id="uurtarief-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
+        </div>
+        <div class="card">
           <div class="card-title">Gearchiveerde schermen</div>
           <p style="font-size:12px;color:var(--text-dim);margin-bottom:var(--space-4)">
             Schermen die uit de hoofdbalk zijn gehaald maar nog volledig werken. Open ze hier wanneer nodig.
@@ -1736,6 +1743,7 @@ function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReade
 // ═══ INIT ═══
 window.onload=async()=>{
   loadSavedSettings();
+  renderUurtarieven();
   renderFactuurFormulier();
   renderHistory();
   migreerVoorraadCategorieen();
@@ -3772,6 +3780,7 @@ function renderProjectDetail(proj){
         <span style="font-size:11px;color:var(--text-faint)">Koppelen doe je in de Inbox met 🔗 “Koppel aan project”</span>
       </div>
       ${gekoppeldeMailsHtml(proj)}
+      ${nacalcHtml(proj,totaalInkoop,effectiveMb)}
       ${projItems.length?`
       <hr class="divider">
       <div class="card-title">Materiaalinkoop uit facturen</div>
@@ -3796,6 +3805,7 @@ function renderProjectDetail(proj){
         </tr>`).join('')}</tbody>
       </table>`:'<p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}
     </div>`;
+  nacalcLaadOfferte(proj.code,effectiveMb);
 }
 // ── Gekoppelde mails van een project (mt_mail_links — synct via privé SharePoint, zichtbaar op alle PC's) ──
 function gekoppeldeMailsHtml(proj){
@@ -3816,6 +3826,138 @@ function ontkoppelMail(code,idx){
   if(!confirm('Mail "'+(arr[idx].subject||'')+'" ontkoppelen van '+code+'?\nDe mail zelf blijft in Outlook staan.'))return;
   arr.splice(idx,1);all[code]=arr;mailLinksSave(all);
   if(huidigProject&&huidigProject.code===code)renderProjectDetail(huidigProject);
+}
+
+// ═══ NACALCULATIE — uren × tarief + materiaal, t.o.v. MB-offerte ═══
+// Uren komen uit mt_uren_entries (Toggl-sync via Uren-tab), materiaal uit
+// mt_voorraad, tarieven uit mt_uurtarieven (Instellingen). "Maak factuur"
+// gebruikt MB's officiële offerte→factuur-conversie (bill_estimate) als er
+// een offerte ligt, anders een concept-factuur met de nacalc-regels.
+// Altijd CONCEPT — versturen doet Bart zelf in Moneybird.
+function uurtarieven(){try{return JSON.parse(localStorage.getItem('mt_uurtarieven')||'{}');}catch(e){return{};}}
+function uurtariefVoor(naam){
+  const t=uurtarieven();const k=String(naam||'').toLowerCase().trim();
+  const k1=k.split(/[ @.]/)[0]; // "bart witte" / "bart@…" → "bart"
+  const v=t[k]!=null?t[k]:(t[k1]!=null?t[k1]:t._std);
+  return Number(v!=null?v:55);
+}
+function renderUurtarieven(){
+  const el=document.getElementById('uurtarief-velden');if(!el)return;
+  const t=uurtarieven();
+  el.innerHTML=agTeam().map(m=>`<div class="field"><label>${m.label||m.naam} (€/u)</label><input type="number" id="s-tarief-${m.naam}" value="${t[m.naam]!=null?t[m.naam]:55}" step="2.5"></div>`).join('')
+    +`<div class="field"><label>Standaard / overig (€/u)</label><input type="number" id="s-tarief-std" value="${t._std!=null?t._std:55}" step="2.5"></div>`;
+}
+function saveUurtarieven(){
+  const t=uurtarieven();
+  agTeam().forEach(m=>{const v=document.getElementById('s-tarief-'+m.naam);if(v)t[m.naam]=Number(v.value)||0;});
+  const s=document.getElementById('s-tarief-std');if(s)t._std=Number(s.value)||0;
+  localStorage.setItem('mt_uurtarieven',JSON.stringify(t));
+  const st=document.getElementById('uurtarief-status');
+  if(st){st.textContent='✓ Opgeslagen';setTimeout(()=>st.textContent='',2000);}
+  if(huidigProject)renderProjectDetail(huidigProject);
+}
+function nacalcData(proj){
+  const per={};
+  agEntries().filter(e=>e.project_code===proj.code).forEach(e=>{const n=e.teamlid||'?';per[n]=(per[n]||0)+(e.duur||0);});
+  const rijen=Object.keys(per).sort().map(n=>{const uren=per[n]/3600;const tarief=uurtariefVoor(n);return{naam:n,uren,tarief,kosten:uren*tarief};});
+  return {rijen,urenTotaal:rijen.reduce((s,r)=>s+r.uren,0),arbeid:rijen.reduce((s,r)=>s+r.kosten,0)};
+}
+function nacalcMatTotaal(code){
+  try{return JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>v.project===code).reduce((s,v)=>s+(v.aantal||1)*(v.stukprijs||0),0);}catch(e){return 0;}
+}
+function nacalcHtml(proj,totaalInkoop,effectiveMb){
+  const nc=nacalcData(proj);
+  const totaal=nc.arbeid+totaalInkoop;
+  const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
+  const sid=proj.code.replace(/-/g,'');
+  const urenRijen=nc.rijen.length?nc.rijen.map(r=>`<tr>
+          <td style="font-size:12px">⏱ Arbeid — ${cap(r.naam)}</td>
+          <td style="text-align:right;font-family:var(--mono)">${r.uren.toFixed(1)} u</td>
+          <td style="text-align:right;font-family:var(--mono)">€ ${r.tarief.toFixed(2)}/u</td>
+          <td style="text-align:right;font-family:var(--mono);font-weight:600">${fmt(r.kosten)}</td>
+        </tr>`).join(''):`<tr><td colspan="4" style="font-size:12px;color:var(--text-faint)">Geen uren gevonden voor ${proj.code} — sync de Uren-tab of check de Toggl-projectnaam.</td></tr>`;
+  return `
+      <hr class="divider">
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
+        <div class="card-title" style="margin:0">Nacalculatie</div>
+        <button class="btn btn-gold btn-sm" onclick="nacalcMaakFactuur('${proj.code}')">🧾 Maak factuur</button>
+        <span style="font-size:11px;color:var(--text-faint)">Altijd als concept in Moneybird — versturen doe je zelf</span>
+        <span id="nacalc-status-${sid}" style="font-size:12px;color:var(--text-dim)"></span>
+      </div>
+      <table class="materiaal-lijst">
+        <thead><tr><th>Post</th><th style="text-align:right">Hoeveelheid</th><th style="text-align:right">Tarief</th><th style="text-align:right">Kosten</th></tr></thead>
+        <tbody>
+          ${urenRijen}
+          <tr>
+            <td style="font-size:12px">📦 Materiaalinkoop (uit facturen)</td>
+            <td style="text-align:right;font-family:var(--mono)">—</td>
+            <td style="text-align:right;font-family:var(--mono)">—</td>
+            <td style="text-align:right;font-family:var(--mono);font-weight:600">${fmt(totaalInkoop)}</td>
+          </tr>
+          <tr style="border-top:2px solid var(--border)">
+            <td style="font-weight:600">Totaal werkelijk</td>
+            <td style="text-align:right;font-family:var(--mono)">${nc.urenTotaal.toFixed(1)} u</td>
+            <td></td>
+            <td style="text-align:right;font-family:var(--mono);font-weight:700">${fmt(totaal)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div id="nacalc-offerte-${sid}" style="font-size:12px;color:var(--text-dim);margin-top:0.5rem">${effectiveMb?'Offerte ophalen uit Moneybird…':'Geen Moneybird-contact gekoppeld — koppel een contact voor de begroot-kolom en de factuurknop.'}</div>`;
+}
+const _nacalcOfferte={};
+async function nacalcLaadOfferte(code,mbId){
+  const el=document.getElementById('nacalc-offerte-'+code.replace(/-/g,''));
+  if(!el||!mbId) return;
+  try{
+    const r=await mbGet(`${getAdmin()}/estimates?filter=contact_id:${mbId},state:all`);
+    if(!r.ok){el.textContent='Offertes ophalen mislukt (HTTP '+r.status+')';return;}
+    const est=((await r.json())||[]).filter(e=>String(e.contact_id)===String(mbId)&&!['archived','rejected'].includes(e.state));
+    if(!est.length){_nacalcOfferte[code]=null;el.innerHTML='Geen offerte bij dit contact — “Maak factuur” maakt dan een concept-factuur met de nacalculatieregels.';return;}
+    est.sort((a,b)=>String(b.estimate_date||b.created_at||'').localeCompare(String(a.estimate_date||a.created_at||'')));
+    const o=est[0];_nacalcOfferte[code]=o;
+    const beg=Number(o.total_price_excl_tax||0);
+    const proj=PROJECT_CODES.find(p=>p.code===code);
+    const werk=(proj?nacalcData(proj).arbeid:0)+nacalcMatTotaal(code);
+    const diff=beg-werk;
+    el.innerHTML=`📄 Offerte <a href="https://moneybird.com/${getAdmin()}/estimates/${o.id}" target="_blank" style="color:var(--gold)">${o.estimate_id||o.id} ↗</a>
+      <span class="badge badge-ok">${o.state}</span> — begroot <b style="font-family:var(--mono)">${fmt(beg)}</b> excl. btw ·
+      werkelijk <b style="font-family:var(--mono)">${fmt(werk)}</b> ·
+      marge <b style="font-family:var(--mono);color:${diff>=0?'var(--green)':'#c0392b'}">${fmt(diff)}</b>
+      ${est.length>1?`<span style="color:var(--text-faint)">(${est.length} offertes, nieuwste getoond)</span>`:''}`;
+  }catch(e){el.textContent='Offerte-check mislukt: '+e.message;}
+}
+async function nacalcMaakFactuur(code){
+  const proj=PROJECT_CODES.find(p=>p.code===code);if(!proj)return;
+  const st=document.getElementById('nacalc-status-'+code.replace(/-/g,''));
+  const mbId=proj.mb_nr||resolveMbContact(proj);
+  if(!mbId){alert('Geen Moneybird-contact gekoppeld aan dit project.\nKoppel eerst een contact via ✏ bij "Moneybird-contact".');return;}
+  const off=_nacalcOfferte[code];
+  if(off){
+    if(!confirm(`Offerte ${off.estimate_id||off.id} (${off.state}) omzetten naar een CONCEPT-factuur in Moneybird?\n\nDe offerteregels worden overgenomen. Nacalculatie-meerwerk voeg je daarna toe in Moneybird.`))return;
+    if(st)st.textContent='Offerte omzetten…';
+    try{
+      const r=await mbPatch(`${getAdmin()}/estimates/${off.id}/bill_estimate`,{});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const inv=await r.json();
+      if(st)st.innerHTML=`✓ Concept-factuur aangemaakt — <a href="https://moneybird.com/${getAdmin()}/sales_invoices/${inv.id}" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>`;
+    }catch(e){if(st)st.textContent='❌ Omzetten mislukt: '+e.message;}
+    return;
+  }
+  // Geen offerte → concept-factuur met de nacalculatieregels zelf
+  const nc=nacalcData(proj);
+  const mat=nacalcMatTotaal(code);
+  if(!nc.rijen.length&&!(mat>0)){alert('Geen uren en geen materiaal gevonden — niets om te factureren.');return;}
+  const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
+  const details=nc.rijen.filter(r=>r.uren>0.01).map(r=>({description:`Arbeid ${cap(r.naam)} — nacalculatie ${code}`,amount:`${r.uren.toFixed(2)} x`,price:r.tarief.toFixed(2)}));
+  if(mat>0)details.push({description:`Materiaal — nacalculatie ${code}`,amount:'1 x',price:mat.toFixed(2)});
+  if(!confirm(`Geen offerte gevonden.\nCONCEPT-factuur maken met ${details.length} nacalculatieregel(s)?\nTotaal € ${(nc.arbeid+mat).toFixed(2)} excl. btw.`))return;
+  if(st)st.textContent='Concept-factuur maken…';
+  try{
+    const r=await mbPost(`${getAdmin()}/sales_invoices`,{sales_invoice:{contact_id:mbId,reference:code,details_attributes:details}});
+    if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+' '+t.slice(0,120));}
+    const inv=await r.json();
+    if(st)st.innerHTML=`✓ Concept-factuur aangemaakt — <a href="https://moneybird.com/${getAdmin()}/sales_invoices/${inv.id}" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>`;
+  }catch(e){if(st)st.textContent='❌ Factuur maken mislukt: '+e.message;}
 }
 // ── Bijlagen van een project: enkel verwijzingen (item-id + SharePoint web-URL).
 //    Bestanden zelf staan in de projectmap op SharePoint; we tonen alleen links. ──
