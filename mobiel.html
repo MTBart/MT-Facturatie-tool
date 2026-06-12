@@ -266,6 +266,9 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .timer-circle-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);transition:color .2s}
 .timer-circle.running .timer-circle-icon{filter:drop-shadow(0 0 8px rgba(42,74,56,.4))}
 .timer-circle.running .timer-circle-label{color:var(--green)}
+.timer-quick-actions{display:flex;gap:10px;margin-top:14px;justify-content:center}
+.timer-mini-btn{background:none;border:1px solid var(--border-strong);border-radius:18px;padding:7px 14px;font-size:12px;font-weight:600;color:var(--text-dim);min-height:34px}
+.timer-mini-btn:active{transform:scale(.96)}
 .timer-display{font-family:var(--mono);font-size:28px;font-weight:500;color:var(--green);margin-bottom:4px;letter-spacing:.05em}
 .timer-project-name{font-size:13px;font-weight:600;color:var(--text-dim);text-align:center;max-width:220px;line-height:1.3}
 .timer-project-code{font-family:var(--mono);font-size:11px;color:var(--text-faint);text-align:center;margin-top:2px}
@@ -742,6 +745,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       </div>
       <div class="timer-project-name" id="timerProjectName">Geen project geselecteerd</div>
       <div class="timer-project-code" id="timerProjectCode"></div>
+      <div class="timer-quick-actions">
+        <button class="timer-mini-btn" id="timerEditStartBtn" style="display:none" onclick="openTimerEdit()">✎ Starttijd</button>
+        <button class="timer-mini-btn" onclick="openManualEntry()">＋ Handmatige entry</button>
+      </div>
     </div>
 
     <div class="divider"></div>
@@ -1047,6 +1054,50 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       </div>
       <button class="btn btn-primary btn-full" onclick="saveBlok()">💾 Blok opslaan</button>
       <button class="btn btn-danger btn-full" id="blokDeleteBtn" style="margin-top:8px;display:none" onclick="deleteBlok()">🗑 Blok verwijderen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TIMER: STARTTIJD AANPASSEN ── -->
+<div class="sheet-overlay" id="timerEditSheet" onclick="if(event.target===this)closeTimerEdit()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="closeTimerEdit()">×</button>
+      <div class="sheet-title">Starttijd aanpassen</div>
+      <div class="sheet-sub" id="timerEditSub">–</div>
+    </div>
+    <div class="sheet-body">
+      <div class="field"><label>Gestart om</label><input type="time" id="timerEditStart" step="60"></div>
+      <button class="btn btn-primary btn-full" onclick="saveTimerEdit()">💾 Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── HANDMATIGE ENTRY ── -->
+<div class="sheet-overlay" id="manualSheet" onclick="if(event.target===this)closeManualEntry()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="closeManualEntry()">×</button>
+      <div class="sheet-title">Handmatige entry</div>
+      <div class="sheet-sub">Achteraf uren boeken</div>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label>Project</label>
+        <select id="manProject"></select>
+      </div>
+      <div class="field">
+        <label>Omschrijving (optioneel)</label>
+        <input id="manDesc" placeholder="Waar heb je aan gewerkt?">
+      </div>
+      <div class="field"><label>Datum</label><input type="date" id="manDate"></div>
+      <div style="display:flex;gap:10px">
+        <div class="field" style="flex:1"><label>Van</label><input type="time" id="manVan" step="900"></div>
+        <div class="field" style="flex:1"><label>Tot</label><input type="time" id="manTot" step="900"></div>
+      </div>
+      <button class="btn btn-primary btn-full" id="manSaveBtn" onclick="saveManualEntry()">💾 Entry boeken</button>
     </div>
   </div>
 </div>
@@ -1756,6 +1807,100 @@ async function stopTimerOnToggl() {
   } catch(e) { console.warn('stopTimerOnToggl fout:', e.message); }
 }
 
+/* ── Starttijd van de lopende timer aanpassen ── */
+function openTimerEdit() {
+  if (!timerRunning || !timerStart) return;
+  const st = new Date(timerStart);
+  const hhmm = `${String(st.getHours()).padStart(2,"0")}:${String(st.getMinutes()).padStart(2,"0")}`;
+  document.getElementById("timerEditSub").textContent =
+    (activeProject ? activeProject.code + " · " : "") + "gestart om " + hhmm;
+  document.getElementById("timerEditStart").value = hhmm;
+  document.getElementById("timerEditSheet").classList.add("visible");
+}
+function closeTimerEdit() {
+  document.getElementById("timerEditSheet").classList.remove("visible");
+}
+async function saveTimerEdit() {
+  const val = document.getElementById("timerEditStart").value;
+  if (!val) return;
+  const [h, m] = val.split(":").map(Number);
+  const d = new Date(timerStart);   // zelfde dag als de oorspronkelijke start
+  d.setHours(h, m, 0, 0);
+  if (d.getTime() > Date.now()) { alert("Starttijd kan niet in de toekomst liggen."); return; }
+  timerStart = d.getTime();
+  saveTimerState();
+  tickTimer();
+  closeTimerEdit();
+  showToast("Starttijd aangepast");
+  // server-side meeschuiven (best-effort)
+  if (_togglTimerEntryId && !_demoMode && _msAccount) {
+    try {
+      const startISO = d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+      await tgTrack(`workspaces/${TG_WS}/time_entries/${_togglTimerEntryId}`, 'PUT', {start: startISO, duration: -1});
+    } catch(e) { console.warn('saveTimerEdit Toggl fout:', e.message); }
+  }
+}
+
+/* ── Handmatige entry (achteraf uren boeken) ── */
+function openManualEntry() {
+  const sel = document.getElementById("manProject");
+  sel.innerHTML = `<option value="">— kies project —</option>` +
+    allProjects().map(p => `<option value="${p.code}" ${activeProject && p.code===activeProject.code ? "selected" : ""}>${p.code} — ${escHtml(p.name)}</option>`).join("");
+  document.getElementById("manDesc").value = "";
+  document.getElementById("manDate").value = _isoDate(new Date());
+  // standaard: het afgelopen uur, op kwartieren afgerond
+  const now = new Date();
+  const totM = Math.floor((now.getHours()*60 + now.getMinutes()) / 15) * 15;
+  const vanM = Math.max(0, totM - 60);
+  const fmt = mins => `${String(Math.floor(mins/60)).padStart(2,"0")}:${String(mins%60).padStart(2,"0")}`;
+  document.getElementById("manVan").value = fmt(vanM);
+  document.getElementById("manTot").value = fmt(totM);
+  document.getElementById("manualSheet").classList.add("visible");
+}
+function closeManualEntry() {
+  document.getElementById("manualSheet").classList.remove("visible");
+}
+async function saveManualEntry() {
+  const code = document.getElementById("manProject").value;
+  if (!code) { alert("Kies eerst een project."); return; }
+  const proj = allProjects().find(p => p.code === code);
+  const dateVal = document.getElementById("manDate").value;
+  const van = document.getElementById("manVan").value;
+  const tot = document.getElementById("manTot").value;
+  if (!dateVal || !van || !tot || toMin(tot) <= toMin(van)) { alert("Vul een geldige datum en tijd in (tot ná van)."); return; }
+  if (_demoMode || !_msAccount || !proj || !proj.togglProjectId) {
+    alert("Handmatige entries werken alleen ingelogd, met een echt Toggl-project.");
+    return;
+  }
+  const start = new Date(`${dateVal}T${van}:00`);
+  const stop  = new Date(`${dateVal}T${tot}:00`);
+  if (start.getTime() > Date.now()) { alert("Entry kan niet in de toekomst liggen."); return; }
+  const iso = d => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const btn = document.getElementById("manSaveBtn");
+  btn.disabled = true; btn.textContent = "Bezig…";
+  try {
+    await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', {
+      description: document.getElementById("manDesc").value.trim() || proj.name,
+      project_id: proj.togglProjectId,
+      start: iso(start), stop: iso(stop),
+      duration: Math.round((stop - start) / 1000),
+      created_with: 'mt-mobiel',
+      workspace_id: TG_WS
+    });
+    // agenda-cache van die week verversen zodat de entry meteen zichtbaar is
+    const diffDays = Math.round((mondayOf(start) - BASE_MONDAY) / 86400000);
+    const wk = CURRENT_WEEK_NR + Math.round(diffDays / 7);
+    delete AGENDA_CACHE[wk];
+    loadAgendaWeek(wk).then(() => { renderWeekStrip(); renderAgenda(); }).catch(() => {});
+    closeManualEntry();
+    showToast(`Entry geboekt · ${code} · ${van}–${tot}`);
+  } catch(e) {
+    alert("Boeken mislukt: " + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "💾 Entry boeken";
+  }
+}
+
 /* =====================================================================
    STATE
    ===================================================================== */
@@ -1910,6 +2055,7 @@ function updateTimerUI() {
   const barCode = document.getElementById("timerBarCode");
   const projName = document.getElementById("timerProjectName");
   const projCode = document.getElementById("timerProjectCode");
+  document.getElementById("timerEditStartBtn").style.display = (timerRunning && timerStart) ? "" : "none";
 
   if (timerRunning && activeProject) {
     circle.classList.add("running");

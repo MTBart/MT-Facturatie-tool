@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — fix(timer): lopende Toggl-entry overleeft app-herstart
+- Commit: `58bf3b5` | Auteur: Bart Witte
+
 ## 2026-06-12 — fix(agenda): RFC3339Z-datums voor Focus stream-endpoints (lege agenda)
 - Commit: `b1f011c` | Auteur: Bart Witte
 
