@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-11 — PWA: manifest + M&T-app-icoon voor mobiel.html (startscherm-snelkoppeling opent fullscreen)
+- Commit: `886f0bc` | Auteur: Bart Witte
+
 ## 2026-06-11 — mobiel: login-fix block_nested_popups — stale msal-vensternaam wissen + redirect-fallback
 - Commit: `e4bdd4f` | Auteur: Bart Witte
 

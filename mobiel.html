@@ -571,6 +571,11 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .view-switch button.active{background:var(--n-0);color:var(--green);box-shadow:var(--shadow-sm)}
 .week-search{flex:1;min-width:100px;display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .week-search input{min-height:42px;font-size:13px;padding:6px 10px;max-width:80px;text-align:center}
+.week-search input[type="date"]{max-width:150px;text-align:left;font-family:var(--mono);font-size:12px}
+.week-strip-row{display:flex;align-items:center;gap:4px;margin-bottom:10px}
+.week-strip-row .week-strip{flex:1;min-width:0;margin-bottom:0}
+.agenda-arrow{flex:0 0 auto;width:40px;min-height:56px;border:1px solid var(--n-200);background:var(--n-0);border-radius:var(--radius);font-size:20px;color:var(--green);cursor:pointer;box-shadow:var(--shadow-sm)}
+.agenda-arrow:active{background:var(--n-100)}
 .week-label{font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap;font-weight:500}
 .tijd-grid{display:flex;background:var(--n-0);border:1px solid var(--n-200);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
 .tg-times{flex:0 0 38px;border-right:1px solid var(--n-150);padding-top:30px}
@@ -586,6 +591,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .tg-block.bart{background:var(--green-50);border-color:var(--green-100);color:var(--green-700)}
 .tg-block.mathijs{background:var(--gold-50);border-color:var(--gold-mid);color:var(--gold-text)}
 .tg-block.eigen{background:var(--info-50);border-color:#b5c5f5;color:var(--info)}
+.tg-block.logged{background:var(--green-50);border-color:var(--green-100);color:var(--green-700)}
+.tg-block.planned{background:var(--gold-50);border-color:var(--gold-mid);color:var(--gold-text);opacity:.85}
 .tg-block-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tg-block-time{font-family:var(--mono);font-size:9px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
@@ -751,6 +758,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <!-- TAB: PROJECTEN -->
   <div class="tab" id="tab-projecten">
     <button class="btn btn-secondary btn-full" style="margin-bottom:14px" onclick="openNewProject()">＋ Nieuw project</button>
+    <div class="field" style="margin-bottom:12px">
+      <input type="search" id="projectSearch" list="projSuggest" placeholder="🔍 Zoek project (naam, code, adres)…" autocomplete="off" oninput="filterProjectCards(this.value)">
+      <datalist id="projSuggest"></datalist>
+    </div>
     <div class="section-head">Jouw projecten</div>
     <div id="projectCardList"></div>
   </div>
@@ -766,9 +777,14 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div class="week-search">
         <span class="week-label" id="weekLabel">W24</span>
         <input type="search" id="weekSearch" placeholder="W24" aria-label="Spring naar weeknummer" onchange="searchWeek(this.value)">
+        <input type="date" id="agendaDate" aria-label="Spring naar datum" onchange="jumpToDate(this.value)">
       </div>
     </div>
-    <div class="week-strip" id="weekStrip"></div>
+    <div class="week-strip-row">
+      <button class="agenda-arrow" onclick="stepAgenda(-1)" aria-label="Vorige">‹</button>
+      <div class="week-strip" id="weekStrip"></div>
+      <button class="agenda-arrow" onclick="stepAgenda(1)" aria-label="Volgende">›</button>
+    </div>
     <div id="agendaContent"></div>
   </div>
 
@@ -1031,6 +1047,23 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   </div>
 </div>
 
+<!-- ── NAS: PROJECTMAP ONTBREEKT ── -->
+<div class="sheet-overlay" id="nasSheet" onclick="if(event.target===this)closeNasSheet()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="closeNasSheet()">×</button>
+      <div class="sheet-title">📁 Projectmap ontbreekt</div>
+      <div class="sheet-sub" id="nasSheetSub">–</div>
+    </div>
+    <div class="sheet-body">
+      <p id="nasSheetText" style="font-size:14px;line-height:1.5;color:var(--text-dim);margin:0 0 16px">–</p>
+      <button class="btn btn-primary btn-full" id="nasCreateBtn" onclick="nasCreateAndUpload()">📁 Mappenstructuur aanmaken + uploaden</button>
+      <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="closeNasSheet()">Later</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── NOTIFICATIE PANEL ── -->
 <div class="sheet-overlay" id="notifSheet" onclick="if(event.target===this)closeNotifs()">
   <div class="sheet">
@@ -1273,6 +1306,8 @@ async function toonApp(account) {
   document.getElementById('demoBadge').style.display = 'none';
   // Laad echte data na login
   await loadRealProjects();
+  // Agenda voor deze week alvast warm laden (Toggl 2.0 logged + planned)
+  loadAgendaWeek(currentWeek).then(() => { renderWeekStrip(); renderAgenda(); }).catch(() => {});
 }
 
 function startDemoMode() {
@@ -1396,13 +1431,25 @@ const AGENDA_DATA = {
   ]
 };
 
-// Today = Thursday 11 June 2026 → index 3 in week
+// Echte kalender — dynamisch berekend (Ma–Vr-raster; weekend → vrijdag)
 const WEEK_DAYS = ["Ma","Di","Wo","Do","Vr"];
-const WEEK_DATES = [9,10,11,12,13]; // June 2026
-const TODAY_IDX = 2; // Wednesday 11 June (0=Mon)
-const HOLIDAY = {idx:null,name:null}; // no holiday this week
-const CURRENT_WEEK_NR = 24;               // week van vandaag (mock)
-const BASE_MONDAY = new Date(2026,5,9);   // maandag van week 24 (mock)
+function isoWeekNr(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t - y0) / 86400000 + 1) / 7);
+}
+function mondayOf(d) {
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  return m;
+}
+const _NOW = new Date();
+const CURRENT_WEEK_NR = isoWeekNr(_NOW);          // echte ISO-week van vandaag
+const BASE_MONDAY = mondayOf(_NOW);               // echte maandag van deze week
+const TODAY_IDX = Math.min(4, (_NOW.getDay() + 6) % 7); // za/zo → vrijdag
+const HOLIDAY = {idx:null,name:null};
 
 /* =====================================================================
    DATA-LAAG: gebruikersdata in localStorage (overleeft refresh)
@@ -1514,6 +1561,72 @@ try { EIGEN_BLOKKEN = JSON.parse(localStorage.getItem("mt_agenda_blocks") || "[]
 function saveEigenBlokken() { localStorage.setItem("mt_agenda_blocks", JSON.stringify(EIGEN_BLOKKEN)); }
 
 /* =====================================================================
+   ECHTE AGENDA-DATA (Toggl 2.0) — logged time-entries + planned time-blocks
+   ===================================================================== */
+const AGENDA_CACHE = {};       // weekNr → {ts, days:{0..4:[blok,…]}}
+const _agendaLoading = {};     // weekNr → Promise (dedup gelijktijdige loads)
+
+function _isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function _hhmm(iso) {
+  const d = new Date(iso);
+  return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+}
+function _projByTgId(id) {
+  return REAL_PROJECTS.find(p => p.togglProjectId === id) || USER_PROJECTS.find(p => p.togglProjectId === id) || null;
+}
+
+// Tolerante normalisatie: veldnamen kunnen per endpoint verschillen
+function _normAgendaItem(it, kind, monday) {
+  const startISO = it.start || it.start_time || it.from || null;
+  const endISO   = it.stop || it.end || it.end_time || it.to || null;
+  if (!startISO) return null;
+  const sd = new Date(startISO);
+  if (isNaN(sd)) return null;
+  const dayIdx = Math.round((mondayOf(sd) - monday) / 86400000) === 0 ? (sd.getDay() + 6) % 7 : -1;
+  if (dayIdx < 0 || dayIdx > 4) return null;   // weekend/buiten week → niet in Ma–Vr-raster
+  let end;
+  if (endISO && !isNaN(new Date(endISO))) end = _hhmm(endISO);
+  else if (kind === "logged" && (!it.duration || it.duration < 0)) end = _hhmm(new Date().toISOString()); // lopende timer
+  else return null;
+  const proj = _projByTgId(it.project_id);
+  const naam = it.description || it.name || it.title || (proj ? proj.name : "Zonder omschrijving");
+  return {
+    id: `tg-${kind}-${it.id}`, real: true, kind, mock: false, who: kind,
+    name: naam, proj: proj ? proj.code : "", start: _hhmm(startISO), end, dayIdx
+  };
+}
+
+async function loadAgendaWeek(week) {
+  if (_demoMode || !_msAccount) return;
+  const c = AGENDA_CACHE[week];
+  if (c && Date.now() - c.ts < 60000) return;          // 60s vers genoeg
+  if (_agendaLoading[week]) return _agendaLoading[week];
+  _agendaLoading[week] = (async () => {
+    const monday = mondayOfWeek(week);
+    const zondag = new Date(monday); zondag.setDate(zondag.getDate() + 6);
+    const range = `date_from=${_isoDate(monday)}&date_to=${_isoDate(zondag)}`;
+    const [logged, planned] = await Promise.all([
+      focusFetch(`time-entries/stream?${range}&order_by=start&include_taskless=true`).catch(e => { console.warn("time-entries:", e.message); return []; }),
+      focusFetch(`time-blocks/stream?${range}&order_by=start`).catch(e => { console.warn("time-blocks:", e.message); return []; })
+    ]);
+    const days = {0:[],1:[],2:[],3:[],4:[]};
+    const verwerk = (raw, kind) => {
+      const list = Array.isArray(raw) ? raw : (raw && (raw.data || raw.items)) || [];
+      list.forEach(it => {
+        const b = _normAgendaItem(it, kind, monday);
+        if (b) days[b.dayIdx].push(b);
+      });
+    };
+    verwerk(logged, "logged");
+    verwerk(planned, "planned");
+    AGENDA_CACHE[week] = {ts: Date.now(), days};
+  })().finally(() => { delete _agendaLoading[week]; });
+  return _agendaLoading[week];
+}
+
+/* =====================================================================
    ECHTE PROJECTEN LADEN (Track v9 + Toggl 2.0)
    ===================================================================== */
 async function loadRealProjects() {
@@ -1554,19 +1667,29 @@ async function loadRealProjects() {
 /* =====================================================================
    TOGGL 2.0-TAKEN LADEN & MERGEN voor een project
    ===================================================================== */
+// Focus-API ondersteunt GEEN project_id-filter op GET tasks → alles ophalen
+// (gecachet, 60s) en client-side filteren. Zelfde patroon als v2.html.
+let _focusTasksCache = {ts: 0, list: []};
+async function fetchAllFocusTasks(force) {
+  if (!force && Date.now() - _focusTasksCache.ts < 60000) return _focusTasksCache.list;
+  let page = 1, alle = [];
+  while (page <= 10) {
+    const r = await focusFetch(`tasks?page=${page}`);
+    const data = Array.isArray(r) ? r : (r && r.data ? r.data : []);
+    if (!data.length) break;
+    alle = alle.concat(data);
+    if (data.length < 20) break;
+    page++;
+  }
+  _focusTasksCache = {ts: Date.now(), list: alle};
+  return alle;
+}
+
 async function loadAndMergeTasksForProject(proj) {
   if (_demoMode || !proj.togglProjectId) return;
   try {
-    // Haal taken op uit Toggl 2.0 Focus
-    let page = 1, alle = [];
-    while (page <= 5) {
-      const r = await focusFetch(`tasks?project_id=${proj.togglProjectId}&page=${page}`);
-      const data = Array.isArray(r) ? r : (r && r.data ? r.data : []);
-      if (!data.length) break;
-      alle = alle.concat(data);
-      if (data.length < 20) break;
-      page++;
-    }
+    // Haal alle taken op uit Toggl 2.0 Focus en filter op dit project
+    const alle = (await fetchAllFocusTasks()).filter(t => t.project_id === proj.togglProjectId);
     if (!alle.length) return;
     // Merge: Toggl wint bij conflict (togglTaskId match)
     if (!TASKS[proj.code]) TASKS[proj.code] = [];
@@ -1885,9 +2008,32 @@ function renderRecentList() {
 /* =====================================================================
    PROJECTEN TAB
    ===================================================================== */
+let projectFilter = "";
+function filterProjectCards(q) {
+  projectFilter = String(q || "").trim().toLowerCase();
+  renderProjectCards();
+}
 function renderProjectCards() {
   const el = document.getElementById("projectCardList");
-  el.innerHTML = allProjects().map(p => {
+  let lijst = allProjects();
+  // Autocomplete-suggesties (datalist) vullen met code + naam
+  const dl = document.getElementById("projSuggest");
+  if (dl) {
+    dl.innerHTML = lijst.map(p =>
+      `<option value="${(p.code || "").replace(/"/g,"&quot;")}">${(p.name || "").replace(/</g,"&lt;")}</option>`
+    ).join("");
+  }
+  if (projectFilter) {
+    lijst = lijst.filter(p =>
+      (p.name || "").toLowerCase().includes(projectFilter) ||
+      (p.code || "").toLowerCase().includes(projectFilter) ||
+      (p.addr || "").toLowerCase().includes(projectFilter));
+  }
+  if (!lijst.length) {
+    el.innerHTML = `<div class="card" style="text-align:center;color:var(--text-dim);padding:24px">Geen projecten gevonden${projectFilter ? ` voor “${projectFilter.replace(/</g,"&lt;")}”` : ""}</div>`;
+    return;
+  }
+  el.innerHTML = lijst.map(p => {
     const [cls,label] = STATUS_MAP[p.status] || ["badge-gray","–"];
     return `<div class="project-card" onclick="openProjectSheet('${p.id}')">
       <div class="project-card-code">${p.code}</div>
@@ -2006,10 +2152,13 @@ function weekDates(week) {
 }
 const MAAND_KORT = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
 
-// Alle blokken (mock cockpit-planning + eigen blokken) voor week/dag
+// Alle blokken voor week/dag: ingelogd = echte Toggl 2.0-data; demo = mock
 function blocksFor(week, dayIdx) {
   const out = [];
-  if (week === CURRENT_WEEK_NR) {
+  if (!_demoMode && _msAccount) {
+    const c = AGENDA_CACHE[week];
+    if (c) (c.days[dayIdx] || []).forEach(b => out.push(b));
+  } else if (week === CURRENT_WEEK_NR) {
     (AGENDA_DATA[dayIdx] || []).forEach((b,i) => {
       out.push({id:`mock-${dayIdx}-${i}`, mock:true, who:b.who, name:b.name, proj:b.proj, start:b.start, end:b.end});
     });
@@ -2036,11 +2185,12 @@ function renderWeekStrip() {
       ${hasDots ? '<div class="day-dot"></div>' : ''}
     </div>`;
   }).join("");
-  // weeklabel: altijd het huidige weeknummer erbij tonen
+  // weeklabel: echte ISO-weeknummer van de getoonde week (klopt ook over jaargrens)
   const lbl = document.getElementById("weekLabel");
+  const isoW = isoWeekNr(mondayOfWeek(currentWeek));
   lbl.textContent = currentWeek === CURRENT_WEEK_NR
-    ? `W${currentWeek} · deze week`
-    : `W${currentWeek} · nu: W${CURRENT_WEEK_NR}`;
+    ? `W${isoW} · deze week`
+    : `W${isoW} · nu: W${CURRENT_WEEK_NR}`;
 }
 
 function selectDay(idx) {
@@ -2067,6 +2217,33 @@ function searchWeek(val) {
   document.getElementById("weekSearch").value = "";
 }
 
+// Pijltjes: ±1 dag (dag-view), ±3 dagen (3d-view), ±1 week (week-view)
+function stepAgenda(dir) {
+  if (agendaView === "week") {
+    currentWeek += dir;
+  } else {
+    const step = agendaView === "3d" ? 3 : 1;
+    let idx = selectedDayIdx + dir * step;
+    while (idx < 0) { currentWeek--; idx += 5; }
+    while (idx > 4) { currentWeek++; idx -= 5; }
+    selectedDayIdx = idx;
+  }
+  renderWeekStrip();
+  renderAgenda();
+}
+
+// Datumkiezer: spring naar willekeurige datum (weekend → maandag erna valt op vrijdag-clamp)
+function jumpToDate(val) {
+  if (!val) return;
+  const d = new Date(val + "T12:00:00");
+  if (isNaN(d)) return;
+  const diffDays = Math.round((mondayOf(d) - BASE_MONDAY) / 86400000);
+  currentWeek = CURRENT_WEEK_NR + Math.round(diffDays / 7);
+  selectedDayIdx = Math.min(4, (d.getDay() + 6) % 7);
+  renderWeekStrip();
+  renderAgenda();
+}
+
 function agendaCols() {
   if (agendaView === "week") return [0,1,2,3,4];
   if (agendaView === "3d") {
@@ -2077,6 +2254,16 @@ function agendaCols() {
 }
 
 function renderAgenda() {
+  // Ingelogd + week (nog) niet vers in cache → echte data laden en opnieuw renderen
+  if (!_demoMode && _msAccount) {
+    const c = AGENDA_CACHE[currentWeek];
+    if (!c || Date.now() - c.ts >= 60000) {
+      const w = currentWeek;
+      loadAgendaWeek(w).then(() => {
+        if (currentWeek === w) { renderWeekStrip(); renderAgenda(); }
+      }).catch(() => {});
+    }
+  }
   const el = document.getElementById("agendaContent");
   const cols = agendaCols();
   const dates = weekDates(currentWeek);
@@ -2106,7 +2293,7 @@ function renderAgenda() {
     blocksFor(currentWeek, i).forEach(b => {
       const top = (toMin(b.start) - TG_START*60) / 60 * TG_PX;
       const height = Math.max(20, (toMin(b.end) - toMin(b.start)) / 60 * TG_PX - 2);
-      const cls = b.mock ? b.who : "eigen";
+      const cls = b.real ? b.kind : (b.mock ? b.who : "eigen");
       body += `<div class="tg-block ${cls}" style="top:${top}px;height:${height}px"
         onclick="event.stopPropagation();tapBlok('${b.id}')">
         <div class="tg-block-name">${escHtml(b.name)}</div>
@@ -2127,15 +2314,23 @@ function renderAgenda() {
   // capaciteit (alleen dag-weergave)
   if (agendaView === "dag") {
     const blocks = blocksFor(currentWeek, selectedDayIdx);
-    const bartMin = blocks.filter(b => !b.mock || b.who === "bart").reduce((a,b)=>a+(toMin(b.end)-toMin(b.start)),0);
-    const mathijsMin = blocks.filter(b => b.mock && b.who === "mathijs").reduce((a,b)=>a+(toMin(b.end)-toMin(b.start)),0);
-    if (bartMin || mathijsMin) {
+    const som = f => blocks.filter(f).reduce((a,b)=>a+(toMin(b.end)-toMin(b.start)),0);
+    let bars = "";
+    if (!_demoMode && _msAccount) {
+      const logMin = som(b => b.real && b.kind === "logged");
+      const planMin = som(b => (b.real && b.kind === "planned") || (!b.real && !b.mock));
+      if (logMin) bars += capacityBar("Gelogd", logMin/60, 8, "bart");
+      if (planMin) bars += capacityBar("Gepland", planMin/60, 8, "mathijs");
+    } else {
+      const bartMin = som(b => !b.mock || b.who === "bart");
+      const mathijsMin = som(b => b.mock && b.who === "mathijs");
+      if (bartMin) bars += capacityBar("Bart", bartMin/60, 8, "bart");
+      if (mathijsMin) bars += capacityBar("Mathijs", mathijsMin/60, 8, "mathijs");
+    }
+    if (bars) {
       html += `<div class="card" style="margin-top:10px">
         <div class="card-label">Capaciteit ${WEEK_DAYS[selectedDayIdx]} ${dates[selectedDayIdx].getDate()} ${MAAND_KORT[dates[selectedDayIdx].getMonth()]}</div>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-          ${bartMin ? capacityBar("Bart", bartMin/60, 8, "bart") : ""}
-          ${mathijsMin ? capacityBar("Mathijs", mathijsMin/60, 8, "mathijs") : ""}
-        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">${bars}</div>
       </div>`;
     }
   }
@@ -2169,8 +2364,18 @@ function gridTap(e, dayIdx) {
 }
 
 function tapBlok(id) {
-  if (String(id).startsWith("mock-")) {
+  const sid = String(id);
+  if (sid.startsWith("mock-")) {
     showToast("Planningsblok uit de cockpit — alleen-lezen in dit prototype");
+    return;
+  }
+  if (sid.startsWith("tg-")) {
+    // Echt Toggl 2.0-item: detail tonen, (nog) alleen-lezen op mobiel
+    const c = AGENDA_CACHE[currentWeek];
+    let b = null;
+    if (c) Object.values(c.days).forEach(arr => { b = b || arr.find(x => x.id === sid); });
+    if (b) showToast(`${b.kind === "logged" ? "⏱ Gelogd" : "📋 Gepland"}: ${b.name} · ${b.start}–${b.end}${b.proj ? " · " + b.proj : ""}`);
+    else showToast("Toggl 2.0-item — alleen-lezen op mobiel");
     return;
   }
   openBlokEdit(id);
@@ -2374,7 +2579,7 @@ function addPhoto(input) {
   block.style.display = "block";
   files.forEach(file => {
     const url = URL.createObjectURL(file);
-    opnamePhotos.push({url, name:file.name});
+    opnamePhotos.push({url, name:file.name, file});  // File-ref nodig voor NAS-upload
   });
   renderOpname();
   input.value = "";
@@ -2399,16 +2604,201 @@ function updateSpMockPath() {
   const proj = captureProject || activeProject;
   const code = proj ? proj.code : "–";
   const el = document.getElementById("spMockPath");
-  if (el) el.textContent = `→ SP: /Projecten/${code}/Opname/${new Date().toISOString().slice(0,10)}/`;
+  if (el) el.textContent = `→ NAS: ${code} › 06_Fotos/`;
 }
 
-function sluitOpname() {
-  const proj = captureProject || activeProject;
-  const code = proj ? proj.code : "–";
-  alert(`Opname afgerond — ${opnamePhotos.length} foto('s) worden gesynchroniseerd naar:\nSP: /Projecten/${code}/Opname/\n\n(mock — in productie via Graph-upload)`);
+/* =====================================================================
+   NAS (On-Prem-Data SharePoint-drive) — projectmappen + foto-upload
+   Zelfde machinerie als v2.html (genereerProjectMappen), lean geport.
+   ===================================================================== */
+const _SPProj = {
+  // On-Prem-Data document-library (NIET de site-default "Documenten").
+  // Hier leeft "Nieuwe mappenstructuur". Drive-id via Graph bevestigd 2026-06-02.
+  DRIVE: 'b!lTex941J7USVCgvB3IzGjgLtfqmMmeJBvKGym8WK_yoejLeBeRL4SJ3YbCz59r4c',
+
+  _norm(s) {
+    return (s||'').toLowerCase()
+      .replace(/\bb\.?\s*v\.?\b/g,'')
+      .replace(/[.,]/g,'')
+      .replace(/\s+/g,' ').trim();
+  },
+
+  async listChildren(path) {
+    const token = await window.getGraphToken();
+    if (!token) throw new Error('Niet ingelogd op Microsoft 365');
+    const url = `https://graph.microsoft.com/v1.0/drives/${this.DRIVE}/root:/${encodeURI(path)}:/children?$select=id,name,folder&$top=999`;
+    const r = await fetch(url, { headers: {'Authorization':`Bearer ${token}`} });
+    if (r.status === 404) return [];
+    if (!r.ok) throw new Error(`list "${path}" HTTP ${r.status}`);
+    return (await r.json()).value || [];
+  },
+
+  // mkdir-p: exacte match hergebruiken; genormaliseerde match hergebruiken
+  // (mobiel hernoemt NOOIT — dat doet alleen de pc-tool); anders aanmaken.
+  async ensureFolder(parentPath, wantedName) {
+    const safe = wantedName.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'map';
+    let existing = [];
+    try { existing = await this.listChildren(parentPath); } catch(e) { existing = []; }
+    const exact = existing.find(c => c.folder && c.name === safe);
+    if (exact) return exact.name;
+    const want = this._norm(safe);
+    const near = existing.find(c => c.folder && this._norm(c.name) === want);
+    if (near) return near.name;
+    const token = await window.getGraphToken();
+    const url = `https://graph.microsoft.com/v1.0/drives/${this.DRIVE}/root:/${encodeURI(parentPath)}:/children`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body: JSON.stringify({ name: safe, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' })
+    });
+    if (r.status === 409) return safe;   // race — bestaat nu
+    if (!r.ok) {
+      const txt = await r.text().catch(()=>'');
+      throw new Error(`mkdir "${parentPath}/${safe}" HTTP ${r.status}: ${txt.slice(0,200)}`);
+    }
+    return safe;
+  }
+};
+
+// Klant-registry (zelfde data/klanten.json als pc-tool; same-origin fetch)
+let _KLANTEN = null;
+async function loadKlantRegistry() {
+  if (_KLANTEN) return _KLANTEN;
+  try {
+    const r = await fetch('data/klanten.json');
+    if (r.ok) { const j = await r.json(); _KLANTEN = j.klanten || []; }
+  } catch(e) { console.warn('klanten.json laden mislukt:', e.message); }
+  return _KLANTEN || [];
+}
+
+// Mappenstructuur op de NAS voor dit project (mkdir-p, idempotent).
+// Klant-mapnaam = ECHTE registry-naam (Bart-besluit 2026-06-02).
+async function genereerProjectMappenMobiel(proj) {
+  const ROOT = 'Nieuwe mappenstructuur';
+  const SUBS = ['01_Offerte','02_Ontwerp','03_Vectorworks','04_Holzher',
+                '05_Aangeleverd','06_Fotos','07_Administratie','08_Archief',
+                '09_Werktekeningen','10_CNC'];
+  const seg = String(proj.code || '').split('-');
+  const klantCode = (seg[0] || '').toUpperCase();
+  const reg = await loadKlantRegistry();
+  const k = reg.find(x => (x.code || '').toUpperCase() === klantCode);
+  const klantNaam = (k && k.naam) || klantCode || proj.name;
+  const klantFolder = await _SPProj.ensureFolder(ROOT, klantNaam);
+  let parent = `${ROOT}/${klantFolder}`;
+  if (seg.length >= 3 && seg[1]) {
+    let locNaam = seg[1];
+    if (k && Array.isArray(k.locaties)) {
+      const lc = k.locaties.find(x => ((x.code || x) + '').toUpperCase() === seg[1].toUpperCase());
+      if (lc && lc.naam) locNaam = lc.naam;
+    }
+    const locFolder = await _SPProj.ensureFolder(parent, locNaam);
+    parent = `${parent}/${locFolder}`;
+  }
+  const projFolder = await _SPProj.ensureFolder(parent, `${proj.code} - ${proj.name || proj.code}`);
+  const projPath = `${parent}/${projFolder}`;
+  for (const sub of SUBS) await _SPProj.ensureFolder(projPath, sub);
+  return projPath;
+}
+
+// Bestaande projectmap zoeken op de NAS via Graph-search op projectcode.
+// Returnt het pad (string) of null als de map er nog niet is.
+async function findProjectFolder(code) {
+  const token = await window.getGraphToken();
+  if (!token) throw new Error('Niet ingelogd op Microsoft 365');
+  const url = `https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root/search(q='${encodeURIComponent(code)}')?$select=id,name,folder,parentReference&$top=50`;
+  const r = await fetch(url, { headers: {'Authorization':`Bearer ${token}`} });
+  if (!r.ok) throw new Error(`search HTTP ${r.status}`);
+  const hits = ((await r.json()).value || []).filter(it =>
+    it.folder && (it.name === code || it.name.toUpperCase().startsWith(code.toUpperCase() + ' ')));
+  if (!hits.length) return null;
+  // Voorkeur voor hits binnen "Nieuwe mappenstructuur"
+  const best = hits.find(h => (h.parentReference && h.parentReference.path || '').includes('Nieuwe mappenstructuur')) || hits[0];
+  const rawPath = (best.parentReference && best.parentReference.path || '').split('root:')[1] || '';
+  let parentPath = rawPath.replace(/^\//,'');
+  try { parentPath = decodeURIComponent(parentPath); } catch(e) {}
+  return parentPath ? `${parentPath}/${best.name}` : best.name;
+}
+
+// Foto's uploaden naar <projPath>/06_Fotos/ (conflict → automatisch hernummeren)
+async function uploadOpnamePhotos(proj, projPath) {
+  const token = await window.getGraphToken();
+  if (!token) { showToast('Niet ingelogd — foto’s niet geüpload'); return; }
+  const fotos = opnamePhotos.filter(p => p.file);
+  let ok = 0, fail = 0;
+  showToast(`⬆ ${fotos.length} foto's uploaden…`);
+  for (const p of fotos) {
+    try {
+      const veilig = (p.name || 'foto.jpg').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'foto.jpg';
+      const dest = `${projPath}/06_Fotos/${veilig}`;
+      const url = `https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root:/${encodeURI(dest)}:/content?@microsoft.graph.conflictBehavior=rename`;
+      const r = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': p.file.type || 'image/jpeg' },
+        body: await p.file.arrayBuffer()
+      });
+      if (r.ok) ok++; else { fail++; console.warn(`upload ${veilig} HTTP ${r.status}`); }
+    } catch(e) { fail++; console.warn('upload fout:', e.message); }
+  }
+  if (fail) showToast(`⚠ ${ok} foto's geüpload, ${fail} mislukt — probeer later opnieuw`);
+  else { showToast(`✅ ${ok} foto's op de NAS in ${proj.code} › 06_Fotos`); _resetOpname(); }
+}
+
+function _resetOpname() {
   opnamePhotos = [];
   document.getElementById("opnameBlock").style.display = "none";
   document.getElementById("photoCount").textContent = "0 foto's";
+}
+
+// Popup "projectmap ontbreekt" → mappenstructuur aanmaken + uploaden
+let _nasProj = null;
+function openNasSheet(proj) {
+  _nasProj = proj;
+  const n = opnamePhotos.filter(p => p.file).length;
+  document.getElementById("nasSheetSub").textContent = `${proj.code} — ${proj.name || ''}`;
+  document.getElementById("nasSheetText").textContent =
+    `Dit project heeft nog geen map op de NAS. Maak de mappenstructuur aan, dan komen de ${n} foto('s) meteen in 06_Fotos terecht.`;
+  const btn = document.getElementById("nasCreateBtn");
+  btn.disabled = false;
+  btn.textContent = "📁 Mappenstructuur aanmaken + uploaden";
+  document.getElementById("nasSheet").classList.add("visible");
+}
+function closeNasSheet() {
+  document.getElementById("nasSheet").classList.remove("visible");
+}
+async function nasCreateAndUpload() {
+  if (!_nasProj) return;
+  const btn = document.getElementById("nasCreateBtn");
+  btn.disabled = true;
+  btn.textContent = "⏳ Mappen aanmaken…";
+  try {
+    const projPath = await genereerProjectMappenMobiel(_nasProj);
+    closeNasSheet();
+    await uploadOpnamePhotos(_nasProj, projPath);
+  } catch(e) {
+    console.warn('nasCreateAndUpload fout:', e.message);
+    showToast('⚠ Mappen aanmaken mislukt: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = "📁 Mappenstructuur aanmaken + uploaden";
+  }
+}
+
+async function sluitOpname() {
+  const proj = captureProject || activeProject;
+  const code = proj ? proj.code : "–";
+  // Demo / niet ingelogd: oude mock-melding
+  if (_demoMode || !_msAccount || !proj) {
+    alert(`Opname afgerond — ${opnamePhotos.length} foto('s) zouden gesynchroniseerd worden naar:\nNAS: ${code}/06_Fotos/\n\n(demo — log in voor echte upload)`);
+    _resetOpname();
+    return;
+  }
+  const fotos = opnamePhotos.filter(p => p.file);
+  if (!fotos.length) { showToast("Geen foto's om te uploaden"); _resetOpname(); return; }
+  showToast("Projectmap zoeken op de NAS…");
+  let projPath = null;
+  try { projPath = await findProjectFolder(proj.code); }
+  catch(e) { console.warn('findProjectFolder fout:', e.message); showToast('⚠ NAS-zoeken mislukt: ' + e.message); return; }
+  if (projPath) await uploadOpnamePhotos(proj, projPath);
+  else openNasSheet(proj);
 }
 
 /* =====================================================================
@@ -2817,6 +3207,7 @@ function saveNewTask() {
     focusFetch('tasks', 'POST', {name, status_id: _PLAN_TG_STATUS.todo, project_id: proj.togglProjectId})
       .then(res => {
         const focusId = res && (res.id || (res.data && res.data.id));
+        _focusTasksCache.ts = 0; // cache verversen na nieuwe taak
         if (focusId) {
           task.togglTaskId = focusId;
           saveTasks();
