@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — mobiel: agenda echt (Toggl 2.0 logged+planned), pijl-navigatie + datumkiezer, projecten-zoekbalk, taken-fix, NAS-foto-upload met mappenstructuur-popup
+- Commit: `63d98fc` | Auteur: Bart Witte
+
 ## 2026-06-11 — PWA: manifest + M&T-app-icoon voor mobiel.html (startscherm-snelkoppeling opent fullscreen)
 - Commit: `886f0bc` | Auteur: Bart Witte
 

@@ -1,0 +1,2091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>toggl — Mortise and Tenon</title>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════════
+   TOGGL 2.0 — M&T Edition  (licht thema)
+   ═══════════════════════════════════════════════════ */
+:root{
+  --bg:#ffffff;
+  --sidebar-bg:#F5F3F7;
+  --sidebar-hover:#EDE9F3;
+  --sidebar-active:#E2DCF0;
+  --brand:#2C1338;        /* donkerpaars */
+  --accent:#E57CD8;       /* Toggl roze */
+  --accent-hover:#D96BCF;
+  --accent-dim:#F3D6F0;
+  --text:#1a1a2e;
+  --text-dim:#555;
+  --text-faint:#999;
+  --border:#e5e1ee;
+  --border-light:#f0edf8;
+  --card:#fff;
+  --topbar-h:56px;
+  --sidebar-w:220px;
+  --chip-bg:#ede9f3;
+  --chip-text:#4a3060;
+  --green:#1A6E4A;
+  --red:#c0392b;
+  --gold:#B8962E;
+  --blue:#2563eb;
+  --gray:#6b7280;
+  --shadow:0 1px 4px rgba(44,19,56,.10);
+  --shadow-md:0 4px 16px rgba(44,19,56,.14);
+  --radius:8px;
+  --radius-sm:5px;
+  --radius-lg:12px;
+  font-family:-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-size:14px;}
+
+/* ── Scrollbar (licht) ── */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* ══════════════════════════════════════════════════
+   LOGIN SCREEN
+   ══════════════════════════════════════════════════ */
+#login-screen{
+  display:flex;align-items:center;justify-content:center;
+  height:100vh;background:var(--sidebar-bg);
+}
+.login-card{
+  background:#fff;border-radius:var(--radius-lg);padding:48px 40px;
+  max-width:400px;width:100%;box-shadow:var(--shadow-md);text-align:center;
+}
+.login-logo{
+  font-size:32px;font-weight:800;color:var(--brand);letter-spacing:-1px;margin-bottom:6px;
+}
+.login-sub{font-size:13px;color:var(--text-faint);margin-bottom:32px;}
+.login-btn{
+  width:100%;padding:12px;background:var(--accent);color:#fff;
+  border:none;border-radius:var(--radius);font-size:15px;font-weight:600;
+  cursor:pointer;transition:background .15s;
+}
+.login-btn:hover{background:var(--accent-hover);}
+.login-err{color:var(--red);font-size:13px;margin-top:12px;min-height:18px;}
+
+/* ══════════════════════════════════════════════════
+   APP WRAP — sidebar + main
+   ══════════════════════════════════════════════════ */
+#app-wrap{display:none;height:100vh;flex-direction:row;}
+
+/* ── Sidebar ── */
+.sidebar{
+  width:var(--sidebar-w);min-width:var(--sidebar-w);
+  background:var(--sidebar-bg);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;height:100vh;overflow-y:auto;
+  position:fixed;left:0;top:0;z-index:50;
+}
+.sidebar-logo{
+  padding:18px 16px 12px;
+  display:flex;flex-direction:column;gap:2px;border-bottom:1px solid var(--border);
+}
+.sidebar-logo-text{font-size:22px;font-weight:800;color:var(--brand);letter-spacing:-0.5px;}
+.sidebar-ws{
+  font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer;
+}
+.sidebar-ws:hover{color:var(--brand);}
+.sidebar-ws-arrow{font-size:10px;}
+
+.sidebar-section{margin-top:8px;}
+.sidebar-section-label{
+  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text-faint);padding:6px 16px 2px;
+}
+.sidebar-item{
+  display:flex;align-items:center;gap:10px;padding:7px 16px;
+  border-radius:6px;margin:1px 6px;cursor:pointer;
+  font-size:13px;font-weight:500;color:var(--text-dim);
+  text-decoration:none;transition:background .12s,color .12s;
+  user-select:none;
+}
+.sidebar-item:hover{background:var(--sidebar-hover);color:var(--brand);}
+.sidebar-item.active{background:var(--sidebar-active);color:var(--brand);font-weight:600;}
+.sidebar-item .si-icon{width:18px;height:18px;flex-shrink:0;opacity:.7;}
+.sidebar-item.active .si-icon{opacity:1;}
+
+.sidebar-footer{
+  margin-top:auto;padding:10px 16px 14px;border-top:1px solid var(--border);
+}
+.sidebar-mt-badge{
+  font-size:10px;color:var(--text-faint);cursor:default;
+}
+.sidebar-mt-badge:hover{color:var(--accent);}
+
+/* ── Main area ── */
+.main{
+  margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;
+  height:100vh;overflow:hidden;
+}
+
+/* ── Top bar ── */
+.topbar{
+  height:var(--topbar-h);background:#fff;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;padding:0 16px;
+  position:sticky;top:0;z-index:40;flex-shrink:0;
+}
+.topbar-input{
+  flex:1;min-width:0;padding:8px 12px;
+  border:1px solid var(--border);border-radius:var(--radius);
+  font-size:14px;color:var(--text);background:#fff;outline:none;
+  transition:border-color .12s;
+}
+.topbar-input:focus{border-color:var(--accent);}
+.topbar-input::placeholder{color:var(--text-faint);}
+.topbar-chip{
+  padding:5px 10px;border:1px solid var(--border);border-radius:20px;
+  font-size:12px;color:var(--chip-text);background:var(--chip-bg);
+  cursor:pointer;white-space:nowrap;user-select:none;
+  transition:border-color .12s,background .12s;
+}
+.topbar-chip:hover{border-color:var(--accent);background:var(--accent-dim);}
+.topbar-timer-display{
+  font-size:16px;font-weight:600;color:var(--brand);font-variant-numeric:tabular-nums;
+  white-space:nowrap;min-width:70px;text-align:center;
+}
+.topbar-start-btn{
+  padding:8px 18px;background:var(--accent);color:#fff;
+  border:none;border-radius:var(--radius);font-size:14px;font-weight:600;
+  cursor:pointer;white-space:nowrap;transition:background .12s;
+  display:flex;align-items:center;gap:6px;
+}
+.topbar-start-btn:hover{background:var(--accent-hover);}
+.topbar-start-btn.running{background:#e53e3e;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.user-avatar{
+  width:30px;height:30px;border-radius:50%;background:var(--brand);
+  color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;flex-shrink:0;
+}
+.user-name-display{font-size:12px;color:var(--text-dim);}
+
+/* ── Screen container ── */
+.screen{
+  flex:1;overflow-y:auto;display:none;
+  background:var(--bg);
+}
+.screen.active{display:block;}
+
+/* ══════════════════════════════════════════════════
+   SHARED COMPONENTS
+   ══════════════════════════════════════════════════ */
+.toolbar{
+  display:flex;align-items:center;gap:8px;padding:12px 20px;
+  border-bottom:1px solid var(--border-light);background:#fff;
+  flex-wrap:wrap;
+}
+.toolbar-title{font-size:16px;font-weight:700;color:var(--brand);}
+.btn{
+  padding:6px 14px;border-radius:var(--radius-sm);font-size:13px;
+  font-weight:500;cursor:pointer;border:1px solid var(--border);
+  background:#fff;color:var(--text);transition:all .12s;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.btn:hover{border-color:var(--accent);color:var(--brand);}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);}
+.btn-sm{padding:4px 10px;font-size:12px;}
+.btn-icon{padding:5px 8px;border-radius:var(--radius-sm);cursor:pointer;
+  border:1px solid transparent;background:transparent;color:var(--text-dim);
+  transition:all .12s;font-size:14px;
+}
+.btn-icon:hover{background:var(--sidebar-hover);color:var(--brand);}
+.btn-icon.active{background:var(--sidebar-active);color:var(--brand);}
+.select-styled{
+  padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  font-size:13px;color:var(--text);background:#fff;cursor:pointer;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;
+  padding-right:26px;
+}
+.select-styled:focus{outline:none;border-color:var(--accent);}
+.search-input{
+  padding:5px 10px 5px 28px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  font-size:13px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") no-repeat 8px center;
+  color:var(--text);
+}
+.search-input:focus{outline:none;border-color:var(--accent);}
+.tag-chip{
+  display:inline-flex;align-items:center;gap:3px;
+  padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;
+  background:var(--chip-bg);color:var(--chip-text);
+}
+.color-dot{
+  width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0;
+}
+.progress-bar-wrap{
+  height:6px;background:var(--border-light);border-radius:3px;overflow:hidden;min-width:80px;
+}
+.progress-bar-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s;}
+.spacer{flex:1;}
+
+/* toast */
+.toast-wrap{position:fixed;bottom:20px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:6px;}
+.toast{
+  background:var(--brand);color:#fff;padding:10px 18px;border-radius:var(--radius);
+  font-size:13px;box-shadow:var(--shadow-md);animation:slideup .2s ease;
+}
+@keyframes slideup{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+
+/* coming soon placeholder */
+.coming-soon{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:60vh;gap:12px;color:var(--text-faint);
+}
+.coming-soon-icon{font-size:40px;}
+.coming-soon h3{font-size:18px;color:var(--text-dim);}
+
+/* ══════════════════════════════════════════════════
+   TIMER / CALENDAR SCREEN
+   ══════════════════════════════════════════════════ */
+.cal-toolbar{
+  display:flex;align-items:center;gap:8px;padding:10px 20px;
+  border-bottom:1px solid var(--border-light);background:#fff;
+}
+.cal-period-nav{display:flex;align-items:center;gap:4px;}
+.cal-period-label{font-size:14px;font-weight:600;color:var(--brand);padding:0 8px;}
+.cal-nav-btn{
+  width:28px;height:28px;border:1px solid var(--border);border-radius:6px;
+  background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:var(--text-dim);transition:all .12s;font-size:16px;
+}
+.cal-nav-btn:hover{border-color:var(--accent);color:var(--brand);}
+.cal-today-btn{
+  padding:4px 10px;border:1px solid var(--border);border-radius:6px;
+  background:#fff;cursor:pointer;font-size:12px;color:var(--text-dim);
+  transition:all .12s;
+}
+.cal-today-btn:hover{border-color:var(--accent);color:var(--brand);}
+.cal-logged-summary{
+  font-size:13px;color:var(--text-dim);display:flex;align-items:center;gap:5px;
+}
+.cal-logged-total{font-weight:600;color:var(--brand);}
+.cal-view-icons{margin-left:auto;display:flex;gap:2px;}
+
+/* Calendar grid */
+.cal-grid-wrap{display:flex;overflow:auto;background:#fff;}
+.cal-time-col{
+  width:50px;flex-shrink:0;border-right:1px solid var(--border-light);
+  background:#fff;padding-top:40px;user-select:none;
+}
+.cal-time-label{
+  height:60px;display:flex;align-items:flex-start;justify-content:flex-end;
+  padding-right:8px;font-size:10px;color:var(--text-faint);margin-top:-7px;
+}
+.cal-days-wrap{flex:1;display:flex;}
+.cal-day-col{
+  flex:1;border-right:1px solid var(--border-light);min-width:100px;
+  position:relative;
+}
+.cal-day-header{
+  height:40px;border-bottom:1px solid var(--border-light);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:#fff;position:sticky;top:0;z-index:5;
+}
+.cal-day-name{font-size:10px;color:var(--text-faint);text-transform:uppercase;font-weight:600;}
+.cal-day-num{
+  font-size:18px;font-weight:700;color:var(--text-dim);width:30px;height:30px;
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+}
+.cal-day-num.today{background:var(--accent);color:#fff;}
+.cal-day-body{position:relative;height:1440px;} /* 24 * 60px */
+.cal-hour-line{
+  position:absolute;left:0;right:0;height:1px;background:var(--border-light);
+}
+.cal-half-line{
+  position:absolute;left:0;right:0;height:1px;background:var(--border-light);
+  opacity:.4;border-style:dashed;
+}
+.cal-now-line{
+  position:absolute;left:0;right:0;height:2px;background:var(--accent);z-index:3;
+}
+.cal-entry-block{
+  position:absolute;left:2px;right:2px;border-radius:5px;
+  padding:3px 5px;font-size:11px;cursor:pointer;overflow:hidden;
+  transition:filter .1s;z-index:2;
+  color:#fff;
+}
+.cal-entry-block:hover{filter:brightness(.9);}
+.cal-entry-block.planned{
+  opacity:.6;border:1.5px dashed;background:transparent!important;
+}
+.cal-entry-block.planned .cal-entry-proj{color:var(--text-dim);}
+.cal-entry-proj{font-weight:600;font-size:10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.cal-entry-title{font-size:10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.cal-day-total{
+  position:absolute;bottom:0;left:0;right:0;padding:3px 6px;
+  font-size:10px;color:var(--text-faint);background:rgba(245,243,247,.85);
+  border-top:1px solid var(--border-light);display:flex;gap:4px;
+}
+
+/* List view */
+.list-day-group{border-bottom:1px solid var(--border-light);}
+.list-day-header{
+  padding:10px 20px 6px;font-size:12px;font-weight:700;color:var(--text-dim);
+  display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--border-light);background:#fafafa;
+}
+.list-day-total{font-weight:400;color:var(--text-faint);margin-left:auto;}
+.list-entry-row{
+  display:flex;align-items:center;gap:10px;padding:8px 20px;
+  border-bottom:1px solid var(--border-light);transition:background .1s;cursor:pointer;
+}
+.list-entry-row:hover{background:var(--sidebar-bg);}
+.list-entry-desc{flex:1;font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.list-entry-proj-chip{
+  padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;
+  white-space:nowrap;flex-shrink:0;color:#fff;
+}
+.list-entry-time{font-size:12px;color:var(--text-faint);white-space:nowrap;}
+.list-entry-dur{font-size:12px;font-weight:600;color:var(--text-dim);min-width:50px;text-align:right;}
+
+/* ══════════════════════════════════════════════════
+   TASKS SCREEN
+   ══════════════════════════════════════════════════ */
+.tasks-toolbar{
+  display:flex;align-items:center;gap:8px;padding:10px 20px;
+  border-bottom:1px solid var(--border-light);background:#fff;flex-wrap:wrap;
+}
+/* List view */
+.task-group-header{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 20px 4px;font-size:11px;font-weight:700;
+  color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;
+  background:var(--sidebar-bg);border-bottom:1px solid var(--border-light);
+}
+.task-group-count{
+  font-weight:400;color:var(--text-faint);
+}
+.task-row{
+  display:flex;align-items:center;gap:10px;padding:8px 20px;
+  border-bottom:1px solid var(--border-light);transition:background .1s;
+  cursor:pointer;
+}
+.task-row:hover{background:var(--sidebar-bg);}
+.task-status-btn{
+  width:18px;height:18px;border-radius:50%;border:2px solid var(--border);
+  flex-shrink:0;cursor:pointer;background:#fff;transition:all .12s;
+}
+.task-status-btn:hover{border-color:var(--accent);}
+.task-name{flex:1;font-size:13px;color:var(--text);}
+.task-proj-chip{
+  padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;
+  background:var(--chip-bg);color:var(--chip-text);white-space:nowrap;flex-shrink:0;
+}
+.task-prio-icon{font-size:11px;color:var(--text-faint);}
+.task-date{font-size:11px;color:var(--text-faint);white-space:nowrap;}
+
+/* Board view */
+.board-wrap{display:flex;gap:12px;padding:16px 20px;overflow-x:auto;align-items:flex-start;}
+.board-col{
+  min-width:260px;width:260px;flex-shrink:0;
+  background:var(--sidebar-bg);border-radius:var(--radius);
+  display:flex;flex-direction:column;max-height:calc(100vh - 160px);
+}
+.board-col-header{
+  padding:10px 12px 8px;display:flex;align-items:center;gap:6px;
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--text-dim);border-bottom:1px solid var(--border);
+}
+.board-col-count{font-weight:400;color:var(--text-faint);}
+.board-cards{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px;}
+.board-card{
+  background:#fff;border-radius:var(--radius-sm);padding:10px 12px;
+  box-shadow:0 1px 3px rgba(44,19,56,.07);cursor:pointer;
+  border:1px solid var(--border-light);transition:box-shadow .12s;
+}
+.board-card:hover{box-shadow:var(--shadow);}
+.board-card-name{font-size:13px;font-weight:500;margin-bottom:6px;}
+.board-card-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.board-card-date{font-size:11px;color:var(--text-faint);}
+.board-card.drag-over{border:2px dashed var(--accent);}
+.board-add-card{
+  margin:6px 8px 10px;padding:6px 10px;border-radius:var(--radius-sm);
+  border:1px dashed var(--border);font-size:12px;color:var(--text-faint);
+  cursor:pointer;text-align:center;background:transparent;
+  transition:all .12s;
+}
+.board-add-card:hover{border-color:var(--accent);color:var(--accent);}
+
+/* Task detail slide-over */
+.slide-over-backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:200;display:none;
+}
+.slide-over-backdrop.open{display:block;}
+.slide-over{
+  position:fixed;right:0;top:0;bottom:0;width:440px;background:#fff;
+  box-shadow:-4px 0 24px rgba(44,19,56,.15);z-index:201;
+  display:flex;flex-direction:column;transform:translateX(100%);
+  transition:transform .2s ease;overflow:hidden;
+}
+.slide-over.open{transform:translateX(0);}
+.slide-over-header{
+  display:flex;align-items:center;gap:8px;padding:14px 16px;
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.slide-over-title-input{
+  flex:1;font-size:16px;font-weight:600;color:var(--brand);
+  border:none;outline:none;background:transparent;
+}
+.slide-over-body{flex:1;overflow-y:auto;padding:16px;}
+.detail-field{margin-bottom:14px;}
+.detail-label{
+  font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;
+  letter-spacing:.04em;margin-bottom:4px;display:flex;align-items:center;gap:4px;
+}
+.detail-value{
+  font-size:13px;color:var(--text);padding:6px 10px;
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:#fff;min-height:32px;cursor:text;
+}
+.detail-value:focus{outline:none;border-color:var(--accent);}
+.detail-select{
+  width:100%;padding:6px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-sm);font-size:13px;color:var(--text);
+  background:#fff;cursor:pointer;appearance:none;-webkit-appearance:none;
+}
+.detail-select:focus{outline:none;border-color:var(--accent);}
+.detail-row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.time-block-row{
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;
+  margin-bottom:14px;
+}
+.time-block-item{
+  text-align:center;padding:10px 6px;background:var(--sidebar-bg);
+  border-radius:var(--radius-sm);
+}
+.time-block-val{font-size:15px;font-weight:700;color:var(--brand);}
+.time-block-lab{font-size:10px;color:var(--text-faint);margin-top:2px;}
+.slide-over-start-btn{
+  width:100%;padding:9px;background:var(--accent);color:#fff;
+  border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;
+  cursor:pointer;transition:background .12s;margin-top:8px;
+}
+.slide-over-start-btn:hover{background:var(--accent-hover);}
+.detail-status-chip{
+  display:inline-flex;align-items:center;gap:5px;padding:4px 10px;
+  border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;border:none;
+}
+
+/* ══════════════════════════════════════════════════
+   PROJECTS SCREEN
+   ══════════════════════════════════════════════════ */
+.proj-table{width:100%;border-collapse:collapse;}
+.proj-table th{
+  font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;
+  letter-spacing:.04em;padding:8px 16px;border-bottom:2px solid var(--border);
+  text-align:left;white-space:nowrap;
+}
+.proj-table td{
+  padding:9px 16px;border-bottom:1px solid var(--border-light);
+  font-size:13px;vertical-align:middle;
+}
+.proj-table tr:hover td{background:var(--sidebar-bg);}
+.proj-name-cell{display:flex;align-items:center;gap:8px;}
+.proj-color-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.proj-name-text{font-weight:500;color:var(--text);}
+.proj-client{font-size:12px;color:var(--text-faint);}
+.proj-dates{font-size:12px;color:var(--text-faint);white-space:nowrap;}
+.proj-time-status{display:flex;flex-direction:column;gap:3px;min-width:140px;}
+.proj-time-label{font-size:11px;color:var(--text-faint);}
+.proj-tag-list{display:flex;gap:3px;flex-wrap:wrap;}
+.proj-add-row{
+  padding:10px 16px;font-size:13px;color:var(--text-faint);cursor:pointer;
+  border-top:1px solid var(--border-light);
+  transition:color .12s,background .12s;
+}
+.proj-add-row:hover{color:var(--accent);background:var(--accent-dim);}
+
+/* ══════════════════════════════════════════════════
+   MEMBERS SCREEN
+   ══════════════════════════════════════════════════ */
+.members-table{width:100%;border-collapse:collapse;}
+.members-table th{
+  font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;
+  letter-spacing:.04em;padding:8px 20px;border-bottom:2px solid var(--border);
+  text-align:left;
+}
+.members-table td{
+  padding:10px 20px;border-bottom:1px solid var(--border-light);font-size:13px;
+}
+.members-table tr:hover td{background:var(--sidebar-bg);}
+.member-cell{display:flex;align-items:center;gap:10px;}
+.member-avatar{
+  width:32px;height:32px;border-radius:50%;background:var(--brand);
+  color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;
+}
+.member-name{font-weight:500;}
+.member-email{font-size:11px;color:var(--text-faint);}
+.role-badge{
+  display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;
+  font-weight:600;background:var(--chip-bg);color:var(--chip-text);
+}
+.role-badge.admin{background:#f3e8ff;color:#7c3aed;}
+.workhours-col{display:flex;align-items:center;gap:4px;}
+.workhours-badge{font-size:11px;color:var(--text-faint);}
+
+/* ══════════════════════════════════════════════════
+   POPOVER (entry detail)
+   ══════════════════════════════════════════════════ */
+.popover{
+  position:fixed;z-index:300;background:#fff;border-radius:var(--radius);
+  box-shadow:var(--shadow-md);padding:14px;min-width:240px;max-width:320px;
+  border:1px solid var(--border);display:none;
+}
+.popover.open{display:block;}
+.popover-title{font-size:14px;font-weight:600;color:var(--brand);margin-bottom:4px;}
+.popover-sub{font-size:12px;color:var(--text-faint);margin-bottom:10px;}
+.popover-actions{display:flex;gap:6px;margin-top:10px;}
+.popover-lock{font-size:11px;color:var(--text-faint);margin-top:6px;display:flex;align-items:center;gap:4px;}
+
+/* ══════════════════════════════════════════════════
+   NEW PROJECT MODAL
+   ══════════════════════════════════════════════════ */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:400;
+  display:none;align-items:center;justify-content:center;
+}
+.modal-backdrop.open{display:flex;}
+.modal-box{
+  background:#fff;border-radius:var(--radius-lg);padding:28px;
+  width:420px;max-width:90vw;box-shadow:var(--shadow-md);
+}
+.modal-title{font-size:16px;font-weight:700;color:var(--brand);margin-bottom:16px;}
+.modal-field{margin-bottom:12px;}
+.modal-label{font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:4px;}
+.modal-input{
+  width:100%;padding:7px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-sm);font-size:13px;color:var(--text);
+}
+.modal-input:focus{outline:none;border-color:var(--accent);}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+
+/* ══════════════════════════════════════════════════
+   MISC UTILITIES
+   ══════════════════════════════════════════════════ */
+.hidden{display:none!important;}
+.spin{animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.mt-logo-badge{font-size:11px;color:var(--text-faint);}
+.prio-high{color:#c0392b;}
+.prio-medium{color:var(--gold);}
+.prio-low{color:var(--gray);}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     LOGIN SCREEN
+     ══════════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">toggl</div>
+    <div class="login-sub">Sign in with your Mortise and Tenon account</div>
+    <button class="login-btn" onclick="msLogin()">Sign in with Microsoft</button>
+    <div id="login-error" class="login-err"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     APP WRAP
+     ══════════════════════════════════════════════════ -->
+<div id="app-wrap" style="display:flex;">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-text">toggl</div>
+      <div class="sidebar-ws">
+        <span>Mortise and Tenon</span>
+        <span class="sidebar-ws-arrow">▾</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Track</div>
+      <div class="sidebar-item active" data-screen="timer" onclick="showScreen('timer',this)">
+        <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Timer
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Analyze</div>
+      <div class="sidebar-item" data-screen="reports" onclick="showScreen('reports',this)">
+        <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        Reports
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Plan</div>
+      <div class="sidebar-item" data-screen="projects" onclick="showScreen('projects',this)">
+        <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
+        Projects
+      </div>
+      <div class="sidebar-item" data-screen="tasks" onclick="showScreen('tasks',this)">
+        <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        Tasks
+      </div>
+      <div class="sidebar-item" data-screen="timeline" onclick="showScreen('timeline',this)">
+        <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        Timeline
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Manage</div>
+      <div class="sidebar-item" data-screen="members" onclick="showScreen('members',this)">
+        <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        Members
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Admin</div>
+      <div class="sidebar-item" data-screen="settings" onclick="showScreen('settings',this)">
+        <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-mt-badge" title="Mortise &amp; Tenon — powered by MT-tool">M&amp;T edition ✦</div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+      <input id="topbar-desc" class="topbar-input" placeholder="What are you working on?" type="text">
+      <div class="topbar-chip" id="chip-task" onclick="chipTask()">@ Task</div>
+      <div class="topbar-chip" id="chip-project" onclick="chipProject()">+ Project</div>
+      <div class="topbar-chip" id="chip-tags">&#35; Tags</div>
+      <div class="topbar-timer-display" id="timer-display">0:00:00</div>
+      <button class="topbar-start-btn" id="topbar-start-btn" onclick="toggleTimer()">&#9654; Start</button>
+      <div class="topbar-right">
+        <div class="user-name-display" id="user-name"></div>
+        <div class="user-avatar" id="user-avatar" onclick="msLogout()"></div>
+      </div>
+    </div>
+
+    <!-- TIMER SCREEN -->
+    <div id="screen-timer" class="screen active">
+      <div class="cal-toolbar">
+        <div class="cal-period-nav">
+          <button class="cal-nav-btn" onclick="calNav(-1)">&#8249;</button>
+          <span class="cal-period-label" id="cal-period-label">This week • W24</span>
+          <button class="cal-nav-btn" onclick="calNav(1)">&#8250;</button>
+        </div>
+        <button class="cal-today-btn" onclick="calGoToday()">Today</button>
+        <div class="cal-logged-summary">
+          <span>&#9200;</span>
+          <span>Logged</span>
+          <span class="cal-logged-total" id="cal-logged-total">0h 0m</span>
+          <span style="color:var(--text-faint)">|</span>
+          <span>&#128197;</span>
+          <span>Planned</span>
+          <span id="cal-planned-total" style="color:var(--text-faint)">0h 0m</span>
+        </div>
+        <div class="cal-view-icons">
+          <button class="btn-icon active" id="cal-view-cal" onclick="calSetView('cal',this)" title="Calendar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </button>
+          <button class="btn-icon" id="cal-view-list" onclick="calSetView('list',this)" title="List">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+          <button class="btn-icon" title="Split view — Coming soon" style="opacity:.4;cursor:not-allowed">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="9" height="18" rx="1"/><rect x="13" y="3" width="9" height="18" rx="1"/></svg>
+          </button>
+          <button class="btn-icon" title="Timesheet — Coming soon" style="opacity:.4;cursor:not-allowed">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Calendar view -->
+      <div id="cal-calendar-view">
+        <div class="cal-grid-wrap" id="cal-grid-wrap">
+          <div class="cal-time-col" id="cal-time-col"></div>
+          <div class="cal-days-wrap" id="cal-days-wrap"></div>
+        </div>
+      </div>
+
+      <!-- List view -->
+      <div id="cal-list-view" class="hidden">
+        <div id="cal-list-body"></div>
+      </div>
+    </div>
+
+    <!-- TASKS SCREEN -->
+    <div id="screen-tasks" class="screen">
+      <div class="tasks-toolbar">
+        <select class="select-styled" id="tasks-preset" onchange="tasksApplyPreset()">
+          <option value="my">My tasks</option>
+          <option value="today">Today</option>
+          <option value="upcoming">Upcoming</option>
+          <option value="done">Done</option>
+        </select>
+        <select class="select-styled" id="tasks-groupby" onchange="tasksRender()">
+          <option value="date">Group by: Date</option>
+          <option value="status">Group by: Status</option>
+          <option value="project">Group by: Project</option>
+          <option value="none">Group by: None</option>
+        </select>
+        <select class="select-styled" id="tasks-sortby">
+          <option value="priority">Sort by: Priority</option>
+          <option value="name">Sort by: Name</option>
+          <option value="date">Sort by: Date</option>
+        </select>
+        <input class="search-input" id="tasks-search" placeholder="Search tasks…" oninput="tasksRender()">
+        <div class="spacer"></div>
+        <button class="btn-icon active" id="tasks-view-list" onclick="tasksSetView('list',this)" title="List">&#9776;</button>
+        <button class="btn-icon" id="tasks-view-board" onclick="tasksSetView('board',this)" title="Board">&#11036;</button>
+        <button class="btn btn-primary btn-sm" onclick="addTaskModal()">+ Add task</button>
+      </div>
+
+      <!-- Task list view -->
+      <div id="tasks-list-view">
+        <div id="tasks-list-body"></div>
+      </div>
+
+      <!-- Task board view -->
+      <div id="tasks-board-view" class="hidden">
+        <div class="board-wrap" id="tasks-board-body"></div>
+      </div>
+    </div>
+
+    <!-- PROJECTS SCREEN -->
+    <div id="screen-projects" class="screen">
+      <div class="toolbar">
+        <div class="toolbar-title">Projects</div>
+        <select class="select-styled" style="margin-left:8px">
+          <option>Show: Active</option>
+          <option>Show: Archived</option>
+          <option>Show: All</option>
+        </select>
+        <input class="search-input" id="proj-search" placeholder="Find projects by title" oninput="projRender()" style="min-width:200px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary btn-sm" onclick="openAddProjectModal()">+ ADD PROJECT</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="proj-table" id="proj-table">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Client</th>
+              <th>Dates</th>
+              <th>Time status</th>
+              <th>Tags</th>
+            </tr>
+          </thead>
+          <tbody id="proj-tbody"></tbody>
+        </table>
+        <div class="proj-add-row" onclick="openAddProjectModal()">+ ADD PROJECT</div>
+      </div>
+    </div>
+
+    <!-- MEMBERS SCREEN -->
+    <div id="screen-members" class="screen">
+      <div class="toolbar">
+        <div class="toolbar-title">Members</div>
+        <div class="spacer"></div>
+        <button class="btn btn-sm">+ Invite members</button>
+      </div>
+      <div style="overflow-x:auto;padding:0 0 20px">
+        <table class="members-table">
+          <thead>
+            <tr>
+              <th>Member</th>
+              <th>Role</th>
+              <th>Work Hours <span style="color:var(--accent)">✦</span></th>
+            </tr>
+          </thead>
+          <tbody id="members-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- REPORTS — coming soon -->
+    <div id="screen-reports" class="screen">
+      <div class="coming-soon">
+        <div class="coming-soon-icon">📊</div>
+        <h3>Reports</h3>
+        <p style="color:var(--text-faint)">Coming soon in slice 2</p>
+      </div>
+    </div>
+
+    <!-- TIMELINE — coming soon -->
+    <div id="screen-timeline" class="screen">
+      <div class="coming-soon">
+        <div class="coming-soon-icon">📅</div>
+        <h3>Timeline</h3>
+        <p style="color:var(--text-faint)">Coming soon in slice 2 — Barts core screen</p>
+      </div>
+    </div>
+
+    <!-- SETTINGS — coming soon -->
+    <div id="screen-settings" class="screen">
+      <div class="coming-soon">
+        <div class="coming-soon-icon">⚙️</div>
+        <h3>Settings</h3>
+        <p style="color:var(--text-faint)">Coming soon in slice 2</p>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app-wrap -->
+
+<!-- ENTRY POPOVER -->
+<div class="popover" id="entry-popover">
+  <div class="popover-title" id="pop-title">—</div>
+  <div class="popover-sub" id="pop-sub">—</div>
+  <div id="pop-lock" class="popover-lock hidden">🔒 <span>&#10022;</span> Locked entry</div>
+  <div id="pop-lock-msg" class="hidden" style="font-size:12px;color:var(--text-faint);margin-top:4px;"></div>
+  <div class="popover-actions" id="pop-actions">
+    <button class="btn btn-sm" id="pop-edit-btn" onclick="popoverEdit()">Edit</button>
+    <button class="btn btn-sm" style="color:var(--red);border-color:var(--red)" id="pop-delete-btn" onclick="popoverDelete()">Delete</button>
+    <button class="btn btn-sm" onclick="closePopover()">Close</button>
+  </div>
+</div>
+
+<!-- TASK SLIDE-OVER -->
+<div class="slide-over-backdrop" id="slideover-backdrop" onclick="closeSlideOver()"></div>
+<div class="slide-over" id="task-slideover">
+  <div class="slide-over-header">
+    <input class="slide-over-title-input" id="so-title" placeholder="Task name" onblur="soSaveField('name',this.value)">
+    <button class="btn-icon" onclick="closeSlideOver()" style="font-size:18px;line-height:1">&#10005;</button>
+  </div>
+  <div class="slide-over-body">
+    <div class="detail-field">
+      <div class="detail-label">Description</div>
+      <div class="detail-value" contenteditable="true" id="so-desc" onblur="soSaveField('description',this.innerText)" style="min-height:60px">Add task description</div>
+    </div>
+    <div class="detail-row-2">
+      <div class="detail-field">
+        <div class="detail-label">Project</div>
+        <select class="detail-select" id="so-project" onchange="soSaveField('project_id',this.value)">
+          <option value="">Empty</option>
+        </select>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Status</div>
+        <select class="detail-select" id="so-status" onchange="soSaveField('status_id',this.value)"></select>
+      </div>
+    </div>
+    <div class="detail-row-2">
+      <div class="detail-field">
+        <div class="detail-label">From</div>
+        <input type="date" class="detail-select" id="so-from" onchange="soSaveField('start_date',this.value)">
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">To</div>
+        <input type="date" class="detail-select" id="so-to" onchange="soSaveField('end_date',this.value)">
+      </div>
+    </div>
+    <div class="detail-row-2">
+      <div class="detail-field">
+        <div class="detail-label">Estimate</div>
+        <input type="text" class="detail-select" id="so-estimate" placeholder="0h" onblur="soSaveEstimate(this.value)">
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Priority</div>
+        <select class="detail-select" id="so-priority" onchange="soSaveField('priority',this.value)">
+          <option value="">None</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+    </div>
+    <div class="detail-field">
+      <div class="detail-label">Assignee</div>
+      <div id="so-assignees" style="font-size:13px;color:var(--text-faint)">—</div>
+    </div>
+    <div class="detail-field">
+      <div class="detail-label">Time</div>
+      <div class="time-block-row">
+        <div class="time-block-item">
+          <div class="time-block-val" id="so-time-logged">0h</div>
+          <div class="time-block-lab">Logged</div>
+        </div>
+        <div class="time-block-item">
+          <div class="time-block-val" id="so-time-planned">0h</div>
+          <div class="time-block-lab">Planned</div>
+        </div>
+        <div class="time-block-item">
+          <div class="time-block-val" id="so-time-estimate">0h</div>
+          <div class="time-block-lab">Estimate</div>
+        </div>
+      </div>
+      <button class="slide-over-start-btn" onclick="soStartTimer()">&#9654; Start timer on this task</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD PROJECT MODAL -->
+<div class="modal-backdrop" id="add-proj-modal">
+  <div class="modal-box">
+    <div class="modal-title">New project</div>
+    <div class="modal-field">
+      <div class="modal-label">Project name</div>
+      <input class="modal-input" id="new-proj-name" placeholder="Project name">
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Client</div>
+      <input class="modal-input" id="new-proj-client" placeholder="Client name">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeAddProjectModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createProject()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════
+// INFRA — Worker, MSAL, Focus, Track, SP, MT_TEAM
+// ═══════════════════════════════════════════════════════════════
+const WORKER='https://mt-claude-proxy.bart-a12.workers.dev';
+const FOCUS_ORG=21259253, FOCUS_WS=21258443;
+const FOCUS_BASE=`organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/`;
+const TG_WS=21258443;
+const FOCUS_STATUS=[
+  {id:300785,label:'Todo',color:'#6b7280'},
+  {id:300788,label:'In Progress',color:'#2563eb'},
+  {id:300787,label:'Blocked',color:'#c0392b'},
+  {id:309790,label:'Klaar voor levering',color:'#B8962E'},
+  {id:300786,label:'Done',color:'#1A6E4A'},
+  {id:314194,label:'Backlog',color:'#9ca3af'}
+];
+const FOCUS_PRIO=[
+  {v:'',label:'None',color:'#c8c8c8'},
+  {v:'low',label:'Low',color:'#6b7280'},
+  {v:'medium',label:'Medium',color:'#B8962E'},
+  {v:'high',label:'High',color:'#c0392b'}
+];
+
+// MT team (matches v2.html)
+const MT_TEAM=[
+  {email:'bart@mortiseandtenon.nl',    name:'Bart',    slug:'bart',    admin:true,  togglId:7289555},
+  {email:'mathijs@mortiseandtenon.nl', name:'Mathijs', slug:'mathijs', admin:true,  togglId:null},
+  {email:'arjan@mortiseandtenon.nl',   name:'Arjan',   slug:'arjan',   admin:false, togglId:null},
+  {email:'maarten@mortiseandtenon.nl', name:'Maarten', slug:'maarten', admin:false, togglId:null},
+  {email:'jade@mortiseandtenon.nl',    name:'Jade',    slug:'jade',    admin:false, togglId:null}
+];
+function mtMyEmail(){try{const a=_msal&&_msal.getAllAccounts();return(a&&a[0]&&a[0].username||'').toLowerCase();}catch(e){return '';}}
+function mtIsAdmin(){const e=mtMyEmail();if(!e) return false;const m=MT_TEAM.find(x=>x.email.toLowerCase()===e);return m?m.admin:false;}
+function mtMe(){const e=mtMyEmail();return MT_TEAM.find(x=>x.email.toLowerCase()===e)||null;}
+
+// ── MSAL ──
+let _msal=null;
+async function initMsal(){
+  Object.keys(sessionStorage).filter(k=>k.includes('interaction')).forEach(k=>sessionStorage.removeItem(k));
+  try{
+    _msal=new msal.PublicClientApplication({
+      auth:{
+        clientId:'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
+        authority:'https://login.microsoftonline.com/15b652c3-ff53-433f-a29d-e9626cbafb41',
+        redirectUri:window.location.origin+window.location.pathname.replace(/toggl2\.html$/,''),
+        postLogoutRedirectUri:window.location.origin+window.location.pathname.replace(/toggl2\.html$/,'')
+      },
+      cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}
+    });
+    await _msal.initialize();
+    const accounts=_msal.getAllAccounts();
+    if(accounts.length>0) await showApp(accounts[0]);
+  }catch(e){
+    const el=document.getElementById('login-error');
+    el.textContent='Could not connect to Microsoft: '+e.message;
+  }
+}
+
+window.getAuthToken=async function(){
+  if(!_msal) return null;
+  const accounts=_msal.getAllAccounts();
+  if(!accounts.length) return null;
+  try{const r=await _msal.acquireTokenSilent({scopes:['openid','profile'],account:accounts[0]});return r.idToken;}
+  catch(e){return null;}
+};
+
+const GRAPH_SCOPES=[
+  'https://graph.microsoft.com/Files.ReadWrite',
+  'https://graph.microsoft.com/Sites.ReadWrite.All'
+];
+window.getGraphToken=async function(){
+  if(!_msal) return null;
+  const accounts=_msal.getAllAccounts();
+  if(!accounts.length) return null;
+  try{const r=await _msal.acquireTokenSilent({scopes:GRAPH_SCOPES,account:accounts[0]});return r.accessToken;}
+  catch(e){
+    try{const r=await _msal.acquireTokenPopup({scopes:GRAPH_SCOPES});return r.accessToken;}
+    catch(e2){return null;}
+  }
+};
+
+async function authHeader(){
+  const t=typeof window.getAuthToken==='function'?await window.getAuthToken():null;
+  return t?{'X-Auth-Token':t}:{};
+}
+
+async function msLogin(){
+  const errEl=document.getElementById('login-error');
+  errEl.textContent='';
+  if(!_msal){errEl.textContent='Auth not loaded. Reload page.';return;}
+  try{
+    const result=await _msal.loginPopup({scopes:['openid','profile','email']});
+    const account=(result&&result.account)||_msal.getAllAccounts()[0];
+    if(account) await showApp(account);
+  }catch(e){
+    if(e.errorCode!=='user_cancelled'){errEl.textContent='Login failed: '+e.message;}
+  }
+}
+async function msLogout(){
+  if(!confirm('Sign out?')) return;
+  await _msal.logoutPopup();
+  document.getElementById('app-wrap').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+}
+
+// ── Focus fetch ──
+async function focusFetch(path,method='GET',body=null){
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('Microsoft login required');
+  const opts={method,headers:{...h,'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const res=await fetch(`${WORKER}?target=toggl_focus&path=${encodeURIComponent(FOCUS_BASE+path)}`,opts);
+  if(res.status===204) return true;
+  const txt=await res.text();
+  if(!res.ok) throw new Error('Focus HTTP '+res.status+(txt?' — '+txt.slice(0,120):''));
+  try{return JSON.parse(txt);}catch(e){return txt;}
+}
+// Focus fetch with workspace-only base (e.g. statuses, tags)
+async function focusFetchWs(path,method='GET',body=null){
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('Microsoft login required');
+  const opts={method,headers:{...h,'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const wsBase=`workspaces/${FOCUS_WS}/`;
+  const res=await fetch(`${WORKER}?target=toggl_focus&path=${encodeURIComponent(wsBase+path)}`,opts);
+  if(res.status===204) return true;
+  const txt=await res.text();
+  if(!res.ok) throw new Error('Focus HTTP '+res.status+(txt?' — '+txt.slice(0,120):''));
+  try{return JSON.parse(txt);}catch(e){return txt;}
+}
+
+// ── Track v9 fetch ──
+async function tgTrack(path,method='GET',body=null){
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('Microsoft login required');
+  const opts={method,headers:{...h}};
+  if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
+  const res=await fetch(`${WORKER}?target=toggl&path=${encodeURIComponent(path)}`,opts);
+  if(res.status===204) return true;
+  const txt=await res.text();
+  if(!res.ok) throw new Error('Track HTTP '+res.status+(txt?' — '+txt.slice(0,140):''));
+  try{return JSON.parse(txt);}catch(e){return txt;}
+}
+
+// ── SP mini ──
+const _SP={
+  SITE:'mortisetenon.sharepoint.com:/sites/MortiseTenon',
+  SITE_ID:null,
+  FOLDER:'MT-Bedrijfstool',
+  async _driveBase(){
+    const token=await window.getGraphToken();
+    if(!token) throw new Error('No Graph token');
+    if(!this.SITE_ID){
+      const sr=await fetch(`https://graph.microsoft.com/v1.0/sites/${this.SITE}`,{headers:{'Authorization':'Bearer '+token}});
+      if(!sr.ok) throw new Error('site-resolve HTTP '+sr.status);
+      this.SITE_ID=(await sr.json()).id;
+    }
+    return{base:`https://graph.microsoft.com/v1.0/sites/${this.SITE_ID}/drive`,token};
+  },
+  async read(filename){
+    try{
+      const{base,token}=await this._driveBase();
+      const r=await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,{headers:{'Authorization':'Bearer '+token}});
+      if(r.status===404) return null;
+      if(!r.ok){console.warn('SP read fail:',filename,'HTTP',r.status);return null;}
+      return await r.json();
+    }catch(e){console.warn('SP read error:',filename,e.message);return null;}
+  },
+  async write(filename,data){
+    try{
+      const{base,token}=await this._driveBase();
+      const r=await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,{
+        method:'PUT',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:typeof data==='string'?data:JSON.stringify(data)
+      });
+      if(!r.ok) console.warn('SP write fail:',filename,'HTTP',r.status);
+      return r.ok;
+    }catch(e){console.warn('SP write error:',filename,e.message);return false;}
+  }
+};
+
+// ── Admin config (lockDagen etc.) ──
+const ADM_CFG_DEF={lockDagen:14,werkuren:{bart:40,mathijs:38,arjan:45,maarten:40,jade:40}};
+let _admConfig=null;
+async function admLoadConfig(){
+  const d=await _SP.read('mt_adminconfig.json');
+  _admConfig=d||JSON.parse(JSON.stringify(ADM_CFG_DEF));
+  _admConfig.lockDagen=_admConfig.lockDagen??14;
+  _admConfig.werkuren=_admConfig.werkuren||{};
+}
+function admCfg(){
+  if(_admConfig) return _admConfig;
+  try{return JSON.parse(localStorage.getItem('mt_adminconfig')||'null')||JSON.parse(JSON.stringify(ADM_CFG_DEF));}
+  catch(e){return JSON.parse(JSON.stringify(ADM_CFG_DEF));}
+}
+
+// Audit log
+function admId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function auditLog(actie,doel,oud,nieuw,reden){
+  try{
+    const entry={id:admId(),ts:new Date().toISOString(),wie:mtMyEmail()||'?',actie,doel:String(doel||''),
+      oud:oud!=null?String(oud):'',nieuw:nieuw!=null?String(nieuw):'',reden:reden||''};
+    let arr=[];try{arr=JSON.parse(localStorage.getItem('mt_auditlog')||'[]');}catch(e){}
+    arr.push(entry);try{localStorage.setItem('mt_auditlog',JSON.stringify(arr));}catch(e){}
+    _SP.read('mt_auditlog.json').then(remote=>{
+      const rem=Array.isArray(remote)?remote:[];
+      const ids=new Set(rem.map(e=>e.id));
+      rem.push(...arr.filter(e=>!ids.has(e.id)));
+      _SP.write('mt_auditlog.json',rem).catch(()=>{});
+    }).catch(()=>{});
+  }catch(e){}
+}
+
+// ── Toast ──
+function showToast(msg,ms=2800){
+  const wrap=document.getElementById('toast-wrap');
+  const div=document.createElement('div');div.className='toast';div.textContent=msg;
+  wrap.appendChild(div);setTimeout(()=>{div.remove();},ms);
+}
+
+// ── Format helpers ──
+function fmtDur(secs){
+  if(!secs||secs<0) secs=0;
+  const h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60;
+  return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function fmtHM(secs){
+  if(!secs||secs<0) secs=0;
+  const h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60);
+  return m?`${h}h ${m}m`:`${h}h`;
+}
+function fmtDate(iso){
+  if(!iso) return '';
+  const d=new Date(iso);return d.toLocaleDateString('en-GB',{month:'short',day:'numeric'});
+}
+function statusById(id){return FOCUS_STATUS.find(s=>s.id===id)||{label:'Todo',color:'#6b7280'};}
+function prioByVal(v){return FOCUS_PRIO.find(p=>p.v===(v||'')||FOCUS_PRIO[0]);}
+
+// Project color palette (Toggl uses named colors)
+const PROJ_COLORS=['#e57cd8','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#dc2626','#7c2d12'];
+function projColor(p,idx){return(p&&p.color)||PROJ_COLORS[idx%PROJ_COLORS.length];}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// APP SHELL — navigation, app startup
+// ═══════════════════════════════════════════════════════════════
+function showScreen(name,clickedEl){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(s=>s.classList.remove('active'));
+  const sc=document.getElementById('screen-'+name);
+  if(sc) sc.classList.add('active');
+  if(clickedEl) clickedEl.classList.add('active');
+  // lazy-load
+  if(name==='timer') calLoad();
+  else if(name==='tasks') tasksLoad();
+  else if(name==='projects') projLoad();
+  else if(name==='members') membersRender();
+}
+
+async function showApp(account){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-wrap').style.display='flex';
+  const naam=account.name||account.username;
+  document.getElementById('user-name').textContent=naam;
+  document.getElementById('user-avatar').textContent=(naam.charAt(0)||'?').toUpperCase();
+  // Load admin config in background
+  admLoadConfig().catch(()=>{});
+  // Start on Timer screen
+  showScreen('timer',document.querySelector('.sidebar-item[data-screen="timer"]'));
+  // Start timer polling
+  timerInit();
+}
+
+initMsal();
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// TOPBAR TIMER
+// ═══════════════════════════════════════════════════════════════
+let _timerState={running:false,entry:null,startMs:null,tick:null,taskId:null,projectId:null};
+
+function timerInit(){
+  timerLoadCurrent();
+  setInterval(timerLoadCurrent,60000);
+}
+
+async function timerLoadCurrent(){
+  try{
+    const r=await focusFetch('tracking/current');
+    if(r===true||!r||!r.id){timerStop(false);return;}
+    // running
+    _timerState.running=true;
+    _timerState.entry=r;
+    _timerState.startMs=new Date(r.start).getTime();
+    _timerState.taskId=r.task_id||null;
+    _timerState.projectId=r.project_id||null;
+    const desc=r.description||'';
+    if(desc) document.getElementById('topbar-desc').value=desc;
+    timerStartTick();
+    const btn=document.getElementById('topbar-start-btn');
+    btn.classList.add('running');btn.innerHTML='&#9632; Stop';
+  }catch(e){/* silent */}
+}
+
+function timerStartTick(){
+  clearInterval(_timerState.tick);
+  _timerState.tick=setInterval(()=>{
+    if(!_timerState.startMs) return;
+    const secs=Math.floor((Date.now()-_timerState.startMs)/1000);
+    document.getElementById('timer-display').textContent=fmtDur(secs);
+  },1000);
+}
+
+async function toggleTimer(){
+  if(_timerState.running) await timerDoStop();
+  else await timerDoStart();
+}
+
+async function timerDoStart(){
+  const desc=document.getElementById('topbar-desc').value.trim()||'';
+  const body={duration:-1,created_with:'mt-toggl2',start:new Date().toISOString().replace(/\.\d{3}Z$/,'Z')};
+  if(desc) body.description=desc;
+  if(_timerState.projectId) body.project_id=_timerState.projectId;
+  try{
+    const made=await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body);
+    if(made&&made.id){
+      _timerState.running=true;_timerState.entry=made;
+      _timerState.startMs=new Date(made.start).getTime();
+      timerStartTick();
+      const btn=document.getElementById('topbar-start-btn');
+      btn.classList.add('running');btn.innerHTML='&#9632; Stop';
+      showToast('Timer started');
+    }
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+async function timerDoStop(){
+  if(!_timerState.entry) return;
+  try{
+    await tgTrack(`workspaces/${TG_WS}/time_entries/${_timerState.entry.id}/stop`,'PATCH');
+    timerStop(true);
+    showToast('Timer stopped');
+    calLoad(); // refresh calendar
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+function timerStop(doReset){
+  clearInterval(_timerState.tick);
+  _timerState.running=false;_timerState.entry=null;_timerState.startMs=null;
+  if(doReset) document.getElementById('timer-display').textContent='0:00:00';
+  const btn=document.getElementById('topbar-start-btn');
+  btn.classList.remove('running');btn.innerHTML='&#9654; Start';
+}
+
+function chipTask(){/* future: pick task from popover */showToast('Task picker — coming in slice 2');}
+function chipProject(){showToast('Project picker — coming in slice 2');}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CALENDAR / TIMER SCREEN
+// ═══════════════════════════════════════════════════════════════
+const CAL_START=7,CAL_END=20,CAL_PX=60; // 7:00–20:00, 60px/hour
+let _calWeekOffset=0, _calEntries=[], _calBlocks=[], _calProjects={};
+let _calView='cal'; // 'cal'|'list'
+let _calDragState=null;
+
+function calWeekDates(offset){
+  const now=new Date();
+  const mon=new Date(now);
+  const day=now.getDay();
+  mon.setDate(now.getDate()-((day+6)%7)+offset*7);
+  return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});
+}
+
+function isoDate(d){return d.toISOString().slice(0,10);}
+function weekNum(d){
+  const jan4=new Date(d.getFullYear(),0,4);
+  return Math.ceil(((d-jan4)/864e5+jan4.getDay()+1)/7);
+}
+
+function calSetView(v,btn){
+  _calView=v;
+  document.querySelectorAll('.cal-view-icons .btn-icon').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.getElementById('cal-calendar-view').style.display=v==='cal'?'':'none';
+  document.getElementById('cal-list-view').style.display=v==='list'?'':'none';
+  calRender();
+}
+function calNav(d){_calWeekOffset+=d;calLoad();}
+function calGoToday(){_calWeekOffset=0;calLoad();}
+
+async function calLoad(){
+  const dates=calWeekDates(_calWeekOffset);
+  const from=isoDate(dates[0]),to=isoDate(dates[6]);
+  // update period label
+  const wn=weekNum(dates[0]);
+  document.getElementById('cal-period-label').textContent=`This week • W${wn}`;
+  // load projects for colors (cache)
+  if(!Object.keys(_calProjects).length){
+    try{
+      const pr=await tgTrack(`workspaces/${TG_WS}/projects`);
+      if(Array.isArray(pr)) pr.forEach((p,i)=>{_calProjects[p.id]={name:p.name,color:projColor(p,i)};});
+    }catch(e){}
+  }
+  // load time entries (logged)
+  try{
+    const enc=encodeURIComponent;
+    const r=await focusFetch(`time-entries/stream?date_from=${from}&date_to=${to}&order_by=start&include_taskless=true`);
+    _calEntries=Array.isArray(r)?r:(r&&Array.isArray(r.data)?r.data:[]);
+  }catch(e){_calEntries=[];}
+  // load time blocks (planned)
+  try{
+    const r=await focusFetch(`time-blocks/stream?date_from=${from}&date_to=${to}&order_by=start`);
+    _calBlocks=Array.isArray(r)?r:(r&&Array.isArray(r.data)?r.data:[]);
+  }catch(e){_calBlocks=[];}
+  calRender();
+  calUpdateTotals();
+}
+
+function calRender(){
+  if(_calView==='cal') calRenderGrid();
+  else calRenderList();
+}
+
+function calRenderGrid(){
+  const dates=calWeekDates(_calWeekOffset);
+  const timeCol=document.getElementById('cal-time-col');
+  const daysWrap=document.getElementById('cal-days-wrap');
+  // Time column
+  let tcHtml='';
+  for(let h=CAL_START;h<=CAL_END;h++){
+    tcHtml+=`<div class="cal-time-label">${h}:00</div>`;
+  }
+  timeCol.innerHTML=tcHtml;
+  // Day columns
+  const today=isoDate(new Date());
+  daysWrap.innerHTML=dates.map(d=>{
+    const ds=isoDate(d);
+    const dayEntries=_calEntries.filter(e=>e.start&&e.start.slice(0,10)===ds);
+    const dayBlocks=_calBlocks.filter(b=>b.start&&b.start.slice(0,10)===ds);
+    const loggedSecs=dayEntries.reduce((sum,e)=>sum+(e.duration||0),0);
+    const plannedSecs=dayBlocks.reduce((sum,b)=>sum+((b.duration||0)),0);
+    const dayName=d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase();
+    const dayNum=d.getDate();
+    const isToday=ds===today;
+    let blocksHtml=calBuildBlocks(dayEntries,false)+calBuildBlocks(dayBlocks,true);
+    // hour lines
+    let linesHtml='';
+    for(let h=CAL_START;h<=CAL_END;h++){
+      const top=(h-CAL_START)*CAL_PX;
+      linesHtml+=`<div class="cal-hour-line" style="top:${top}px"></div>`;
+      if(h<CAL_END) linesHtml+=`<div class="cal-half-line" style="top:${top+CAL_PX/2}px"></div>`;
+    }
+    // now-line
+    let nowHtml='';
+    if(isToday){
+      const now=new Date();
+      const nowH=now.getHours()+now.getMinutes()/60;
+      if(nowH>=CAL_START&&nowH<=CAL_END){
+        nowHtml=`<div class="cal-now-line" style="top:${(nowH-CAL_START)*CAL_PX}px"></div>`;
+      }
+    }
+    const bodyH=(CAL_END-CAL_START)*CAL_PX;
+    return `<div class="cal-day-col" data-date="${ds}">
+      <div class="cal-day-header">
+        <span class="cal-day-name">${dayName}</span>
+        <span class="cal-day-num${isToday?' today':''}">${dayNum}</span>
+      </div>
+      <div class="cal-day-body" style="height:${bodyH}px" ondragover="event.preventDefault()" ondrop="calDrop(event,'${ds}')">
+        ${linesHtml}${nowHtml}${blocksHtml}
+        <div class="cal-day-total">
+          <span>⏱ ${fmtHM(loggedSecs)}</span>
+          <span style="color:var(--accent-hover)">📅 ${fmtHM(plannedSecs)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  // drag to create
+  daysWrap.querySelectorAll('.cal-day-body').forEach(col=>{
+    col.addEventListener('mousedown',calDragStart);
+  });
+}
+
+function calBuildBlocks(entries,planned){
+  return entries.map(e=>{
+    const s=new Date(e.start);
+    const sh=s.getHours()+s.getMinutes()/60;
+    if(sh<CAL_START||sh>CAL_END) return '';
+    const dur=(e.duration||0)/3600;
+    const top=(sh-CAL_START)*CAL_PX;
+    const h=Math.max(16,Math.min(dur,CAL_END-sh)*CAL_PX-2);
+    const proj=e.project_id&&_calProjects[e.project_id];
+    const color=proj?proj.color:'#9ca3af';
+    const projName=proj?proj.name:'';
+    const desc=e.description||e.name||'';
+    const cls='cal-entry-block'+(planned?' planned':'');
+    const style=planned
+      ?`top:${top}px;height:${h}px;left:2px;right:2px;border-color:${color};color:${color}`
+      :`top:${top}px;height:${h}px;left:2px;right:2px;background:${color}`;
+    return `<div class="${cls}" style="${style}"
+      onclick="showEntryPopover(event,'${e.id}','${planned?'block':'entry'}')"
+      draggable="true" ondragstart="calDragEntry(event,'${e.id}','${planned?'block':'entry'}')">
+      <div class="cal-entry-proj">${projName}</div>
+      <div class="cal-entry-title">${desc}</div>
+    </div>`;
+  }).join('');
+}
+
+function calUpdateTotals(){
+  const logSecs=_calEntries.reduce((s,e)=>s+(e.duration||0),0);
+  const planSecs=_calBlocks.reduce((s,b)=>s+(b.duration||0),0);
+  document.getElementById('cal-logged-total').textContent=fmtHM(logSecs);
+  document.getElementById('cal-planned-total').textContent=fmtHM(planSecs);
+}
+
+function calRenderList(){
+  const dates=calWeekDates(_calWeekOffset);
+  const today=isoDate(new Date());
+  let html='';
+  dates.forEach(d=>{
+    const ds=isoDate(d);
+    const dayEntries=_calEntries.filter(e=>e.start&&e.start.slice(0,10)===ds);
+    if(!dayEntries.length) return;
+    const totalSecs=dayEntries.reduce((s,e)=>s+(e.duration||0),0);
+    const dayLabel=d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+    html+=`<div class="list-day-group">
+      <div class="list-day-header">
+        <span>${dayLabel}${ds===today?' — Today':''}</span>
+        <span class="list-day-total">${fmtHM(totalSecs)}</span>
+      </div>`;
+    dayEntries.forEach(e=>{
+      const s=new Date(e.start);
+      const en=e.stop?new Date(e.stop):null;
+      const proj=e.project_id&&_calProjects[e.project_id];
+      const color=proj?proj.color:'#9ca3af';
+      const projName=proj?proj.name:'';
+      const timeStr=s.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+(en?' – '+en.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'');
+      html+=`<div class="list-entry-row" onclick="showEntryPopover(event,'${e.id}','entry')">
+        <div class="list-entry-desc">${e.description||'—'}</div>
+        ${projName?`<span class="list-entry-proj-chip" style="background:${color}">${projName}</span>`:''}
+        <span class="list-entry-time">${timeStr}</span>
+        <span class="list-entry-dur">${fmtHM(e.duration||0)}</span>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  if(!html) html='<div style="padding:40px;text-align:center;color:var(--text-faint)">No entries this week</div>';
+  document.getElementById('cal-list-body').innerHTML=html;
+}
+
+// ── Drag to create new entry ──
+let _calDragCreate={active:false,date:null,startY:null,startH:null};
+function calDragStart(ev){
+  if(ev.target.classList.contains('cal-entry-block')) return;
+  const col=ev.currentTarget;
+  const ds=col.closest('.cal-day-col').dataset.date;
+  const rect=col.getBoundingClientRect();
+  const relY=ev.clientY-rect.top;
+  const hour=CAL_START+relY/CAL_PX;
+  _calDragCreate={active:true,date:ds,startH:hour,startY:ev.clientY};
+  document.addEventListener('mouseup',calDragEnd,{once:true});
+}
+function calDragEnd(ev){
+  if(!_calDragCreate.active) return;
+  const relY=ev.clientY;
+  const diffPx=relY-_calDragCreate.startY;
+  if(Math.abs(diffPx)<10){_calDragCreate.active=false;return;}
+  const durH=Math.max(0.25,Math.abs(diffPx)/CAL_PX);
+  const startH=diffPx<0?_calDragCreate.startH-durH:_calDragCreate.startH;
+  calCreateEntryAt(_calDragCreate.date,startH,durH);
+  _calDragCreate.active=false;
+}
+async function calCreateEntryAt(dateStr,startHour,durationH){
+  const d=new Date(dateStr+'T00:00:00');
+  const hh=Math.floor(startHour),mm=Math.round((startHour-hh)*60);
+  d.setHours(hh,mm,0,0);
+  const startISO=d.toISOString().replace(/\.\d{3}Z$/,'Z');
+  const durationSecs=Math.round(durationH*3600);
+  const desc=document.getElementById('topbar-desc').value.trim()||'';
+  const body={duration:durationSecs,created_with:'mt-toggl2',start:startISO,description:desc};
+  try{
+    await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body);
+    showToast('Entry created');calLoad();
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+// Drag existing entry
+function calDragEntry(ev,id,type){ev.dataTransfer.setData('text/plain',JSON.stringify({id,type}));}
+async function calDrop(ev,ds){
+  ev.preventDefault();
+  try{
+    const{id,type}=JSON.parse(ev.dataTransfer.getData('text/plain'));
+    const col=ev.currentTarget;
+    const rect=col.getBoundingClientRect();
+    const relY=ev.clientY-rect.top;
+    const hour=CAL_START+relY/CAL_PX;
+    const hh=Math.floor(hour),mm=Math.round((hour-hh)*60);
+    const d=new Date(ds+'T00:00:00');d.setHours(hh,mm,0,0);
+    const newStart=d.toISOString().replace(/\.\d{3}Z$/,'Z');
+    if(type==='entry'){
+      const entry=_calEntries.find(e=>String(e.id)===String(id));
+      if(!entry) return;
+      const dur=entry.duration||3600;
+      const stop=new Date(d.getTime()+dur*1000).toISOString().replace(/\.\d{3}Z$/,'Z');
+      await tgTrack(`workspaces/${TG_WS}/time_entries/${id}`,'PUT',{start:newStart,stop,duration:dur,workspace_id:TG_WS});
+      showToast('Entry moved');calLoad();
+    }
+  }catch(e){showToast('Error moving entry: '+e.message);}
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// ENTRY POPOVER (with lock check)
+// ═══════════════════════════════════════════════════════════════
+let _popEntry=null;
+function showEntryPopover(ev,id,type){
+  ev.stopPropagation();
+  const entry=_calEntries.find(e=>String(e.id)===String(id))||_calBlocks.find(b=>String(b.id)===String(id));
+  if(!entry) return;
+  _popEntry={...entry,_type:type};
+  const pop=document.getElementById('entry-popover');
+  const proj=entry.project_id&&_calProjects[entry.project_id];
+  document.getElementById('pop-title').textContent=entry.description||entry.name||'(no description)';
+  const s=new Date(entry.start);const e2=entry.stop?new Date(entry.stop):null;
+  document.getElementById('pop-sub').textContent=
+    (proj?proj.name+' · ':'')+s.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+(e2?' – '+e2.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):' (running)')
+    +' · '+fmtHM(entry.duration||0);
+  // Lock check
+  const lockEl=document.getElementById('pop-lock');
+  const lockMsg=document.getElementById('pop-lock-msg');
+  const acts=document.getElementById('pop-actions');
+  const editBtn=document.getElementById('pop-edit-btn');
+  const delBtn=document.getElementById('pop-delete-btn');
+  lockEl.classList.add('hidden');lockMsg.classList.add('hidden');
+  editBtn.style.display='';delBtn.style.display='';
+  const cfg=admCfg();
+  const lockDays=cfg.lockDagen??14;
+  const entryDate=new Date(entry.start);
+  const ageDays=Math.floor((Date.now()-entryDate.getTime())/86400000);
+  if(ageDays>=lockDays&&type==='entry'){
+    lockEl.classList.remove('hidden');
+    if(!mtIsAdmin()){
+      lockMsg.textContent='Locked entries can only be changed by an admin.';
+      lockMsg.classList.remove('hidden');
+      editBtn.style.display='none';delBtn.style.display='none';
+    }
+  }
+  // Position
+  pop.style.display='block';
+  pop.classList.add('open');
+  const x=Math.min(ev.clientX+8,window.innerWidth-340);
+  const y=Math.min(ev.clientY+8,window.innerHeight-200);
+  pop.style.left=x+'px';pop.style.top=y+'px';
+  document.addEventListener('click',closePopover,{once:true});
+}
+function closePopover(){
+  const pop=document.getElementById('entry-popover');
+  pop.classList.remove('open');pop.style.display='none';
+  _popEntry=null;
+}
+async function popoverEdit(){
+  if(!_popEntry) return;
+  if(_popEntry._type!=='entry') return;
+  const ageDays=Math.floor((Date.now()-new Date(_popEntry.start).getTime())/86400000);
+  const lockDays=admCfg().lockDagen??14;
+  let reden='';
+  if(ageDays>=lockDays&&mtIsAdmin()){
+    reden=prompt('Admin override — reason for editing this locked entry:');
+    if(reden===null) return;
+    if(!reden.trim()){showToast('Reason required for locked entry.');return;}
+  }
+  const newDesc=prompt('Description:',_popEntry.description||'');
+  if(newDesc===null) return;
+  try{
+    await tgTrack(`workspaces/${TG_WS}/time_entries/${_popEntry.id}`,'PUT',{
+      description:newDesc,workspace_id:TG_WS,
+      start:_popEntry.start,stop:_popEntry.stop,duration:_popEntry.duration
+    });
+    if(reden) auditLog('edit-locked-entry',_popEntry.id,_popEntry.description,newDesc,reden);
+    else auditLog('edit-entry',_popEntry.id,_popEntry.description,newDesc,'');
+    showToast('Entry updated');closePopover();calLoad();
+  }catch(e){showToast('Error: '+e.message);}
+}
+async function popoverDelete(){
+  if(!_popEntry) return;
+  if(!confirm('Delete this entry?')) return;
+  const ageDays=Math.floor((Date.now()-new Date(_popEntry.start).getTime())/86400000);
+  const lockDays=admCfg().lockDagen??14;
+  let reden='';
+  if(ageDays>=lockDays&&mtIsAdmin()){
+    reden=prompt('Admin override — reason for deleting this locked entry:');
+    if(reden===null) return;
+    if(!reden.trim()){showToast('Reason required for locked entry.');return;}
+  }
+  try{
+    await tgTrack(`workspaces/${TG_WS}/time_entries/${_popEntry.id}`,'DELETE');
+    if(reden) auditLog('delete-locked-entry',_popEntry.id,_popEntry.description,'deleted',reden);
+    else auditLog('delete-entry',_popEntry.id,_popEntry.description,'deleted','');
+    showToast('Entry deleted');closePopover();calLoad();
+  }catch(e){showToast('Error: '+e.message);}
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// TASKS SCREEN
+// ═══════════════════════════════════════════════════════════════
+let _tasks=[], _taskStatuses=[], _taskProjects=[], _tasksLoaded=false;
+let _tasksView='list';
+let _openTaskId=null;
+
+async function tasksLoad(){
+  if(_tasksLoaded&&_tasks.length) {tasksRender();return;}
+  // Load statuses from API (live)
+  try{
+    const r=await focusFetchWs('statuses?page=1&order_by=position');
+    _taskStatuses=Array.isArray(r)?r:(r&&Array.isArray(r.data)?r.data:FOCUS_STATUS);
+  }catch(e){_taskStatuses=FOCUS_STATUS;}
+  // Load projects for dropdown
+  try{
+    const r=await focusFetch('projects?page=1&per_page=100');
+    _taskProjects=Array.isArray(r)?r:(r&&Array.isArray(r.data)?r.data:[]);
+  }catch(e){_taskProjects=[];}
+  // Load tasks
+  await tasksRefresh();
+}
+
+async function tasksRefresh(){
+  try{
+    let all=[],page=1;
+    while(page<=20){
+      const r=await focusFetch(`tasks?page=${page}&per_page=50`);
+      const data=Array.isArray(r)?r:(r&&Array.isArray(r.data)?r.data:[]);
+      if(!data.length) break;
+      all=all.concat(data);page++;
+      if(data.length<50) break;
+    }
+    _tasks=all;_tasksLoaded=true;
+    tasksRender();
+  }catch(e){showToast('Error loading tasks: '+e.message);}
+}
+
+function tasksSetView(v,btn){
+  _tasksView=v;
+  document.querySelectorAll('.tasks-toolbar .btn-icon').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.getElementById('tasks-list-view').style.display=v==='list'?'':'none';
+  document.getElementById('tasks-board-view').style.display=v==='board'?'':'none';
+  tasksRender();
+}
+
+function tasksApplyPreset(){tasksRender();}
+
+function tasksGetFiltered(){
+  const preset=document.getElementById('tasks-preset').value;
+  const search=(document.getElementById('tasks-search').value||'').toLowerCase();
+  const today=isoDate(new Date());
+  let arr=_tasks;
+  if(preset==='my'){const me=mtMe();if(me)arr=arr.filter(t=>(t.assignee_user_ids||[]).includes(me.togglId)||!t.assignee_user_ids?.length);}
+  else if(preset==='today') arr=arr.filter(t=>t.end_date===today||t.start_date===today);
+  else if(preset==='upcoming') arr=arr.filter(t=>t.end_date&&t.end_date>=today);
+  else if(preset==='done') arr=arr.filter(t=>t.status_id===300786);
+  else arr=arr.filter(t=>t.status_id!==300786); // default my tasks excludes done
+  if(search) arr=arr.filter(t=>(t.name||'').toLowerCase().includes(search));
+  return arr;
+}
+
+function tasksRender(){
+  if(_tasksView==='list') tasksRenderList();
+  else tasksRenderBoard();
+}
+
+function tasksGroupByDate(arr){
+  const today=isoDate(new Date());
+  const nextWeek=new Date();nextWeek.setDate(nextWeek.getDate()+7);
+  const groups={overdue:[],today:[],upcoming:[],nodate:[]};
+  arr.forEach(t=>{
+    if(!t.end_date){groups.nodate.push(t);return;}
+    if(t.end_date<today) groups.overdue.push(t);
+    else if(t.end_date===today) groups.today.push(t);
+    else groups.upcoming.push(t);
+  });
+  return groups;
+}
+
+function taskProjColor(t,idx){
+  const p=_taskProjects.find(x=>x.id===t.project_id);
+  return p?projColor(p,_taskProjects.indexOf(p)):'#9ca3af';
+}
+function taskProjName(t){
+  const p=_taskProjects.find(x=>x.id===t.project_id);return p?p.name:'';
+}
+function taskStatusLabel(t){
+  const s=_taskStatuses.find(x=>x.id===t.status_id)||statusById(t.status_id);
+  return{label:s.label||s.name||'Todo',color:s.color||'#6b7280'};
+}
+
+function taskRowHtml(t){
+  const{label:statusLabel,color:statusColor}=taskStatusLabel(t);
+  const projName=taskProjName(t);
+  const projColor2=taskProjColor(t,0);
+  const prio=FOCUS_PRIO.find(p=>p.v===(t.priority||''))||FOCUS_PRIO[0];
+  const dueStr=t.end_date?fmtDate(t.end_date):'';
+  return `<div class="task-row" onclick="openSlideOver('${t.id}')">
+    <div class="task-status-btn" style="border-color:${statusColor};background:${statusColor}22"
+      title="${statusLabel}" onclick="event.stopPropagation();taskNextStatus('${t.id}')"></div>
+    <div class="task-name">${(t.name||'').replace(/</g,'&lt;')}</div>
+    ${projName?`<span class="task-proj-chip" style="background:${projColor2}22;color:${projColor2}">${projName}</span>`:''}
+    ${prio.v?`<span class="task-prio-icon" style="color:${prio.color}" title="${prio.label}">●</span>`:''}
+    <span class="task-date">${dueStr}</span>
+  </div>`;
+}
+
+function tasksRenderList(){
+  const groupby=document.getElementById('tasks-groupby').value;
+  const arr=tasksGetFiltered();
+  const body=document.getElementById('tasks-list-body');
+  if(!arr.length){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-faint)">No tasks found</div>';return;}
+  let html='';
+  if(groupby==='date'){
+    const groups=tasksGroupByDate(arr);
+    const sections=[['Overdue',groups.overdue],['Today',groups.today],['Upcoming',groups.upcoming],['No date',groups.nodate]];
+    sections.forEach(([label,tasks])=>{
+      if(!tasks.length) return;
+      html+=`<div class="task-group-header">${label} <span class="task-group-count">· ${tasks.length}</span></div>`;
+      html+=tasks.map(taskRowHtml).join('');
+    });
+  }else if(groupby==='status'){
+    _taskStatuses.forEach(s=>{
+      const sId=s.id||s.status_id;
+      const tasks=arr.filter(t=>t.status_id===sId);
+      if(!tasks.length) return;
+      html+=`<div class="task-group-header"><span class="color-dot" style="background:${s.color||'#6b7280'}"></span>${s.label||s.name} <span class="task-group-count">· ${tasks.length}</span></div>`;
+      html+=tasks.map(taskRowHtml).join('');
+    });
+  }else if(groupby==='project'){
+    const byProj={};
+    arr.forEach(t=>{const k=t.project_id||'__none__';(byProj[k]=byProj[k]||[]).push(t);});
+    Object.entries(byProj).forEach(([pid,tasks])=>{
+      const p=_taskProjects.find(x=>x.id===parseInt(pid)||x.id===pid);
+      const label=p?p.name:'No project';
+      const color=p?projColor(p,_taskProjects.indexOf(p)):'#9ca3af';
+      html+=`<div class="task-group-header"><span class="color-dot" style="background:${color}"></span>${label} <span class="task-group-count">· ${tasks.length}</span></div>`;
+      html+=tasks.map(taskRowHtml).join('');
+    });
+  }else{
+    html=arr.map(taskRowHtml).join('');
+  }
+  body.innerHTML=html;
+}
+
+function tasksRenderBoard(){
+  const arr=tasksGetFiltered();
+  const wrap=document.getElementById('tasks-board-body');
+  let html='';
+  (_taskStatuses.length?_taskStatuses:FOCUS_STATUS).forEach(s=>{
+    const sId=s.id||s.status_id;
+    const cards=arr.filter(t=>t.status_id===sId);
+    html+=`<div class="board-col" data-status="${sId}" ondragover="event.preventDefault()" ondrop="boardDrop(event,${sId})">
+      <div class="board-col-header">
+        <span class="color-dot" style="background:${s.color||'#6b7280'}"></span>
+        ${s.label||s.name} <span class="board-col-count">· ${cards.length}</span>
+      </div>
+      <div class="board-cards">
+        ${cards.map(t=>{
+          const projName=taskProjName(t);
+          const projColor2=taskProjColor(t,0);
+          const dueStr=t.end_date?fmtDate(t.end_date):'';
+          return `<div class="board-card" draggable="true"
+            ondragstart="event.dataTransfer.setData('text/plain','${t.id}')"
+            onclick="openSlideOver('${t.id}')">
+            <div class="board-card-name">${(t.name||'').replace(/</g,'&lt;')}</div>
+            <div class="board-card-meta">
+              ${projName?`<span class="tag-chip" style="background:${projColor2}22;color:${projColor2}">${projName}</span>`:''}
+              ${dueStr?`<span class="board-card-date">${dueStr}</span>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="board-add-card" onclick="addTaskInStatus(${sId})">+ Add card</div>
+    </div>`;
+  });
+  wrap.innerHTML=html;
+}
+
+async function boardDrop(ev,statusId){
+  ev.preventDefault();
+  const taskId=ev.dataTransfer.getData('text/plain');
+  if(!taskId) return;
+  try{
+    await focusFetch(`tasks/${taskId}`,'PATCH',{status_id:parseInt(statusId)});
+    const t=_tasks.find(x=>String(x.id)===String(taskId));
+    if(t) t.status_id=parseInt(statusId);
+    tasksRenderBoard();
+    showToast('Status updated');
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+async function taskNextStatus(taskId){
+  const t=_tasks.find(x=>String(x.id)===String(taskId));if(!t) return;
+  const statuses=_taskStatuses.length?_taskStatuses:FOCUS_STATUS;
+  const idx=statuses.findIndex(s=>s.id===t.status_id);
+  const nextS=statuses[(idx+1)%statuses.length];
+  try{
+    await focusFetch(`tasks/${taskId}`,'PATCH',{status_id:nextS.id});
+    t.status_id=nextS.id;tasksRender();showToast(nextS.label||nextS.name);
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+function addTaskModal(){
+  const name=prompt('New task name:');if(!name) return;
+  focusFetch('tasks','POST',{name,status_id:300785}).then(t=>{
+    if(t&&t.id){_tasks.unshift(t);tasksRender();showToast('Task created');}
+  }).catch(e=>showToast('Error: '+e.message));
+}
+
+function addTaskInStatus(statusId){
+  const name=prompt('New task name:');if(!name) return;
+  focusFetch('tasks','POST',{name,status_id:statusId}).then(t=>{
+    if(t&&t.id){_tasks.unshift(t);tasksRender();showToast('Task created');}
+  }).catch(e=>showToast('Error: '+e.message));
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// TASK SLIDE-OVER
+// ═══════════════════════════════════════════════════════════════
+function openSlideOver(taskId){
+  _openTaskId=taskId;
+  const t=_tasks.find(x=>String(x.id)===String(taskId));if(!t) return;
+  // fill fields
+  document.getElementById('so-title').value=t.name||'';
+  document.getElementById('so-desc').innerText=t.description||'';
+  document.getElementById('so-from').value=t.start_date||'';
+  document.getElementById('so-to').value=t.end_date||'';
+  document.getElementById('so-estimate').value=t.estimate_duration?Math.round(t.estimate_duration/3600)+'h':'';
+  document.getElementById('so-priority').value=t.priority||'';
+  // status select
+  const statSel=document.getElementById('so-status');
+  statSel.innerHTML=(_taskStatuses.length?_taskStatuses:FOCUS_STATUS).map(s=>
+    `<option value="${s.id}"${s.id===t.status_id?' selected':''}>${s.label||s.name}</option>`).join('');
+  // project select
+  const projSel=document.getElementById('so-project');
+  projSel.innerHTML='<option value="">Empty</option>'+_taskProjects.map(p=>
+    `<option value="${p.id}"${p.id===t.project_id?' selected':''}>${p.name}</option>`).join('');
+  // assignees
+  const assigneeNames=(t.assignee_user_ids||[]).map(uid=>{
+    const m=MT_TEAM.find(x=>x.togglId===uid);return m?m.name:'User '+uid;
+  }).join(', ');
+  document.getElementById('so-assignees').textContent=assigneeNames||'—';
+  // time
+  document.getElementById('so-time-logged').textContent=t.logged_duration?fmtHM(t.logged_duration):'0h';
+  document.getElementById('so-time-planned').textContent=t.planned_duration?fmtHM(t.planned_duration):'0h';
+  document.getElementById('so-time-estimate').textContent=t.estimate_duration?fmtHM(t.estimate_duration):'0h';
+  // open
+  document.getElementById('slideover-backdrop').classList.add('open');
+  document.getElementById('task-slideover').classList.add('open');
+}
+
+function closeSlideOver(){
+  document.getElementById('slideover-backdrop').classList.remove('open');
+  document.getElementById('task-slideover').classList.remove('open');
+  _openTaskId=null;
+}
+
+async function soSaveField(field,value){
+  if(!_openTaskId) return;
+  const body={};
+  if(field==='project_id') body.project_id=value?parseInt(value):null;
+  else if(field==='status_id') body.status_id=parseInt(value);
+  else body[field]=value||null;
+  try{
+    await focusFetch(`tasks/${_openTaskId}`,'PATCH',body);
+    const t=_tasks.find(x=>String(x.id)===String(_openTaskId));
+    if(t) Object.assign(t,body);
+    tasksRender();
+  }catch(e){showToast('Error saving: '+e.message);}
+}
+
+function soSaveEstimate(val){
+  const h=parseFloat(val)||0;
+  soSaveField('estimate_duration',h*3600);
+}
+
+function soStartTimer(){
+  if(!_openTaskId) return;
+  const t=_tasks.find(x=>String(x.id)===String(_openTaskId));
+  if(t) document.getElementById('topbar-desc').value=t.name||'';
+  _timerState.taskId=parseInt(_openTaskId);
+  _timerState.projectId=t?t.project_id:null;
+  closeSlideOver();
+  timerDoStart();
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// PROJECTS SCREEN
+// ═══════════════════════════════════════════════════════════════
+let _projects=[], _projClients=[];
+
+async function projLoad(){
+  try{
+    const r=await focusFetch('projects?page=1&per_page=100&order_by=name&include_drafts=false');
+    _projects=Array.isArray(r)?r:(r&&Array.isArray(r.data)?r.data:[]);
+    // Also get from track for colors
+    try{
+      const tp=await tgTrack(`workspaces/${TG_WS}/projects`);
+      if(Array.isArray(tp)) tp.forEach(tp2=>{
+        const fp=_projects.find(p=>p.id===tp2.id||String(p.name)===String(tp2.name));
+        if(fp&&!fp.color) fp.color=tp2.color;
+      });
+    }catch(e){}
+  }catch(e){showToast('Error loading projects: '+e.message);}
+  // Get clients
+  try{
+    const r=await tgTrack(`workspaces/${TG_WS}/clients`);
+    _projClients=Array.isArray(r)?r:[];
+  }catch(e){_projClients=[];}
+  projRender();
+}
+
+function clientName(clientId){
+  const c=_projClients.find(x=>x.id===clientId);return c?c.name:'—';
+}
+
+function projRender(){
+  const search=(document.getElementById('proj-search')&&document.getElementById('proj-search').value||'').toLowerCase();
+  let arr=_projects;
+  if(search) arr=arr.filter(p=>(p.name||'').toLowerCase().includes(search)||(clientName(p.client_id)||'').toLowerCase().includes(search));
+  const tbody=document.getElementById('proj-tbody');
+  tbody.innerHTML=arr.map((p,i)=>{
+    const color=projColor(p,i);
+    const client=clientName(p.client_id);
+    const startDate=p.start_date?fmtDate(p.start_date):'—';
+    const endDate=p.end_date?fmtDate(p.end_date):'—';
+    const dates=`${startDate} – ${endDate}`;
+    // Time status from project data
+    const logged=p.logged_duration||0;
+    const estimate=p.estimated_duration||0;
+    const pct=estimate>0?Math.round(logged/estimate*100):0;
+    const loggedH=fmtHM(logged);
+    const estimateH=estimate?fmtHM(estimate):'—';
+    const tags=(p.tags||[]).map(t=>`<span class="tag-chip">${t.name||t}</span>`).join('');
+    return `<tr>
+      <td><div class="proj-name-cell">
+        <span class="proj-color-dot" style="background:${color}"></span>
+        <span class="proj-name-text">${(p.name||'').replace(/</g,'&lt;')}</span>
+      </div></td>
+      <td class="proj-client">${client}</td>
+      <td class="proj-dates">${dates}</td>
+      <td>
+        ${estimate>0?`<div class="proj-time-status">
+          <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${Math.min(pct,100)}%;background:${pct>100?'var(--red)':color}"></div></div>
+          <div class="proj-time-label">${loggedH} of ${estimateH} • ${pct}%</div>
+        </div>`:`<span class="proj-time-label">${loggedH} logged</span>`}
+      </td>
+      <td><div class="proj-tag-list">${tags}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function openAddProjectModal(){document.getElementById('add-proj-modal').classList.add('open');}
+function closeAddProjectModal(){document.getElementById('add-proj-modal').classList.remove('open');}
+
+async function createProject(){
+  const name=(document.getElementById('new-proj-name').value||'').trim();
+  const clientName2=(document.getElementById('new-proj-client').value||'').trim();
+  if(!name){showToast('Project name required');return;}
+  try{
+    const body={name,active:true,workspace_id:TG_WS};
+    // find or create client
+    if(clientName2){
+      let client=_projClients.find(c=>c.name.toLowerCase()===clientName2.toLowerCase());
+      if(!client){
+        const nc=await tgTrack(`workspaces/${TG_WS}/clients`,'POST',{name:clientName2,workspace_id:TG_WS});
+        if(nc&&nc.id){_projClients.push(nc);client=nc;}
+      }
+      if(client) body.client_id=client.id;
+    }
+    const np=await tgTrack(`workspaces/${TG_WS}/projects`,'POST',body);
+    if(np&&np.id){
+      _projects.unshift(np);
+      projRender();
+      showToast('Project created');
+      closeAddProjectModal();
+      document.getElementById('new-proj-name').value='';
+      document.getElementById('new-proj-client').value='';
+    }
+  }catch(e){showToast('Error: '+e.message);}
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// MEMBERS SCREEN
+// ═══════════════════════════════════════════════════════════════
+function membersRender(){
+  const cfg=admCfg();
+  const tbody=document.getElementById('members-tbody');
+  const members=[
+    {name:'Arjan',email:'arjan@mortiseandtenon.nl',role:'Member',admin:false,initials:'A'},
+    {name:'Bart',email:'bart@mortiseandtenon.nl',role:'Tool admin',admin:true,initials:'B'},
+    {name:'Jade',email:'jade@mortiseandtenon.nl',role:'Member',admin:false,initials:'J'},
+    {name:'Maarten',email:'maarten@mortiseandtenon.nl',role:'Manager',admin:false,initials:'M'},
+    {name:'Mathijs',email:'mathijs@mortiseandtenon.nl',role:'Organization Owner',admin:true,initials:'Ma'}
+  ];
+  tbody.innerHTML=members.map(m=>{
+    const slug=m.name.toLowerCase();
+    const wh=cfg.werkuren[slug]||40;
+    const isAdmin=m.admin;
+    return `<tr>
+      <td><div class="member-cell">
+        <div class="member-avatar" style="${isAdmin?'background:var(--brand)':'background:#7c3aed'}">${m.initials}</div>
+        <div><div class="member-name">${m.name}</div><div class="member-email">${m.email}</div></div>
+      </div></td>
+      <td><span class="role-badge${isAdmin?' admin':''}">${m.role}</span></td>
+      <td><div class="workhours-col"><span>${wh}h / week</span><span class="workhours-badge">✦</span></div></td>
+    </tr>`;
+  }).join('');
+}
+</script>
+
+</body>
+</html>
