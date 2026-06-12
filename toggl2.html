@@ -1355,7 +1355,7 @@ function calGoToday(){_calWeekOffset=0;calLoad();}
 
 async function calLoad(){
   const dates=calWeekDates(_calWeekOffset);
-  const from=isoDate(dates[0]),to=isoDate(dates[6]);
+  const from=isoDate(dates[0])+'T00:00:00Z',to=isoDate(dates[6])+'T23:59:59Z';
   // update period label
   const wn=weekNum(dates[0]);
   document.getElementById('cal-period-label').textContent=`This week • W${wn}`;

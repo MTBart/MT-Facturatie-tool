@@ -1610,7 +1610,7 @@ async function loadAgendaWeek(week) {
   _agendaLoading[week] = (async () => {
     const monday = mondayOfWeek(week);
     const zondag = new Date(monday); zondag.setDate(zondag.getDate() + 6);
-    const range = `date_from=${_isoDate(monday)}&date_to=${_isoDate(zondag)}`;
+    const range = `date_from=${_isoDate(monday)}T00:00:00Z&date_to=${_isoDate(zondag)}T23:59:59Z`;
     const [logged, planned] = await Promise.all([
       focusFetch(`time-entries/stream?${range}&order_by=start&include_taskless=true`).catch(e => { console.warn("time-entries:", e.message); return []; }),
       focusFetch(`time-blocks/stream?${range}&order_by=start`).catch(e => { console.warn("time-blocks:", e.message); return []; })

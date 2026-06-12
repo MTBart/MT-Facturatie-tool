@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — mobiel: agenda-toolbar compact + pills schakelen mee per view (dag/3dg/week)
+- Commit: `448d32f` | Auteur: Bart Witte
+
 ## 2026-06-12 — ﻿mobiel: agenda-strip fix — pills passen op schermbreedte, actieve datum centraal
 - Commit: `e6d4e86` | Auteur: Bart Witte
 
