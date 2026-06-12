@@ -565,18 +565,21 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 /* ============================
    AGENDA TOOLBAR + TIJD-GRID
    ============================ */
-.agenda-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
-.view-switch{display:flex;background:var(--n-150);border-radius:var(--radius);padding:3px;gap:2px}
-.view-switch button{border:none;background:transparent;border-radius:6px;padding:8px 12px;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text-dim);cursor:pointer;min-height:38px;white-space:nowrap}
+.agenda-toolbar{display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.view-switch{display:flex;background:var(--n-150);border-radius:var(--radius);padding:3px;gap:2px;flex:0 0 auto}
+.view-switch button{border:none;background:transparent;border-radius:6px;padding:8px 10px;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text-dim);cursor:pointer;min-height:36px;white-space:nowrap}
 .view-switch button.active{background:var(--n-0);color:var(--green);box-shadow:var(--shadow-sm)}
-.week-search{flex:1;min-width:100px;display:flex;align-items:center;gap:8px;justify-content:flex-end}
-.week-search input{min-height:42px;font-size:13px;padding:6px 10px;max-width:80px;text-align:center}
-.week-search input[type="date"]{max-width:150px;text-align:left;font-family:var(--mono);font-size:12px}
+.week-search{flex:1;min-width:0;display:flex;align-items:center;gap:6px;justify-content:flex-end;position:relative}
+.week-search input[type="search"]{flex:0 0 auto;width:54px;min-height:38px;font-size:12px;padding:4px 6px;text-align:center}
+.agenda-cal-btn{flex:0 0 auto;width:38px;min-height:38px;padding:0;border:1px solid var(--n-200);background:var(--n-0);border-radius:var(--radius);font-size:16px;cursor:pointer;box-shadow:var(--shadow-sm)}
+.cal-hidden{position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0;min-height:0}
 .week-strip-row{display:flex;align-items:center;gap:4px;margin-bottom:10px}
 .week-strip-row .week-strip{flex:1;min-width:0;margin-bottom:0}
 .agenda-arrow{flex:0 0 auto;width:32px;min-height:52px;padding:0;border:1px solid var(--n-200);background:var(--n-0);border-radius:var(--radius);font-size:18px;color:var(--green);cursor:pointer;box-shadow:var(--shadow-sm)}
 .agenda-arrow:active{background:var(--n-100)}
-.week-label{font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap;font-weight:500}
+.week-label{font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap;font-weight:500;cursor:pointer}
+.day-pill.range .day-name{font-size:10px}
+.day-pill.range .day-num{font-size:12px;letter-spacing:0}
 .tijd-grid{display:flex;background:var(--n-0);border:1px solid var(--n-200);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
 .tg-times{flex:0 0 38px;border-right:1px solid var(--n-150);padding-top:30px}
 .tg-time-cell{height:48px;font-family:var(--mono);font-size:9px;color:var(--text-faint);text-align:right;padding-right:4px;transform:translateY(-6px)}
@@ -771,13 +774,14 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <div class="agenda-toolbar">
       <div class="view-switch" id="viewSwitch">
         <button class="active" onclick="setAgendaView('dag',this)">Dag</button>
-        <button onclick="setAgendaView('3d',this)">3 dagen</button>
+        <button onclick="setAgendaView('3d',this)">3 dg</button>
         <button onclick="setAgendaView('week',this)">Week</button>
       </div>
       <div class="week-search">
-        <span class="week-label" id="weekLabel">W24</span>
-        <input type="search" id="weekSearch" placeholder="W24" aria-label="Spring naar weeknummer" onchange="searchWeek(this.value)">
-        <input type="date" id="agendaDate" aria-label="Spring naar datum" onchange="jumpToDate(this.value)">
+        <span class="week-label" id="weekLabel" onclick="jumpToToday()" title="Tik om naar vandaag te springen">W24</span>
+        <input type="search" id="weekSearch" placeholder="W#" aria-label="Spring naar weeknummer" onchange="searchWeek(this.value)">
+        <button class="agenda-cal-btn" onclick="openDatePicker()" aria-label="Spring naar datum">📅</button>
+        <input type="date" id="agendaDate" class="cal-hidden" tabindex="-1" aria-hidden="true" onchange="jumpToDate(this.value)">
       </div>
     </div>
     <div class="week-strip-row">
@@ -2169,38 +2173,101 @@ function blocksFor(week, dayIdx) {
   return out.sort((a,b) => toMin(a.start) - toMin(b.start));
 }
 
+// Lineaire dag-index (week*5 + dagIdx, alleen werkdagen) → {week, dagIdx, datum}
+function agLin(l) {
+  const w = Math.floor(l / 5);
+  const i = ((l % 5) + 5) % 5;
+  const date = new Date(mondayOfWeek(w));
+  date.setDate(date.getDate() + i);
+  return {w, i, date};
+}
+
 function renderWeekStrip() {
   const strip = document.getElementById("weekStrip");
-  // venster van 5 werkdagen, actieve datum altijd in het midden;
-  // schuift over weekgrenzen heen via lineaire dag-index (week*5 + dagIdx)
   const lin = currentWeek * 5 + selectedDayIdx;
-  const pills = [];
-  for (let off = -2; off <= 2; off++) {
-    const l = lin + off;
-    const w = Math.floor(l / 5);
-    const i = ((l % 5) + 5) % 5;
-    const date = new Date(mondayOfWeek(w));
-    date.setDate(date.getDate() + i);
-    pills.push({w, i, date});
+  const TODAY_LIN = CURRENT_WEEK_NR * 5 + TODAY_IDX;
+  let pillsHtml;
+
+  if (agendaView === "week") {
+    // 5 week-pills, actieve week centraal
+    pillsHtml = [-2,-1,0,1,2].map(off => {
+      const w = currentWeek + off;
+      const ma = agLin(w*5), vr = agLin(w*5 + 4);
+      let cls = "day-pill range";
+      if (off === 0) cls += " selected";
+      else if (w === CURRENT_WEEK_NR) cls += " today";
+      if (w === CURRENT_WEEK_NR && HOLIDAY.idx !== null) cls += " holiday";
+      const hasDots = [0,1,2,3,4].some(i => blocksFor(w, i).length > 0);
+      return `<div class="${cls}" onclick="selectWeekAbs(${w})">
+        <div class="day-name">W${isoWeekNr(mondayOfWeek(w))}</div>
+        <div class="day-num">${ma.date.getDate()}–${vr.date.getDate()}</div>
+        ${hasDots ? '<div class="day-dot"></div>' : ''}
+      </div>`;
+    }).join("");
+  } else if (agendaView === "3d") {
+    // 5 pills van elk 3 werkdagen, actieve periode centraal; schuift over weekgrenzen
+    pillsHtml = [-2,-1,0,1,2].map(off => {
+      const a = agLin(lin + off*3), z = agLin(lin + off*3 + 2);
+      let cls = "day-pill range";
+      if (off === 0) cls += " selected";
+      else if (TODAY_LIN >= lin + off*3 && TODAY_LIN <= lin + off*3 + 2) cls += " today";
+      const hasDots = [0,1,2].some(k => { const c = agLin(lin + off*3 + k); return blocksFor(c.w, c.i).length > 0; });
+      return `<div class="${cls}" onclick="selectDayAbs(${a.w},${a.i})">
+        <div class="day-name">${WEEK_DAYS[a.i]}–${WEEK_DAYS[z.i]}</div>
+        <div class="day-num">${a.date.getDate()}–${z.date.getDate()}</div>
+        ${hasDots ? '<div class="day-dot"></div>' : ''}
+      </div>`;
+    }).join("");
+  } else {
+    // dag-view: 5 dag-pills, actieve datum centraal
+    pillsHtml = [-2,-1,0,1,2].map(off => {
+      const p = agLin(lin + off);
+      let cls = "day-pill";
+      if (off === 0) cls += " selected";
+      else if (p.w === CURRENT_WEEK_NR && p.i === TODAY_IDX) cls += " today";
+      if (p.w === CURRENT_WEEK_NR && HOLIDAY.idx === p.i) cls += " holiday";
+      const hasDots = blocksFor(p.w, p.i).length > 0;
+      return `<div class="${cls}" onclick="selectDayAbs(${p.w},${p.i})">
+        <div class="day-name">${WEEK_DAYS[p.i]}</div>
+        <div class="day-num">${p.date.getDate()}</div>
+        ${hasDots ? '<div class="day-dot"></div>' : ''}
+      </div>`;
+    }).join("");
   }
-  strip.innerHTML = pills.map(p => {
-    let cls = "day-pill";
-    if (p.w === currentWeek && p.i === selectedDayIdx) cls += " selected";
-    else if (p.w === CURRENT_WEEK_NR && p.i === TODAY_IDX) cls += " today";
-    if (p.w === CURRENT_WEEK_NR && HOLIDAY.idx === p.i) cls += " holiday";
-    const hasDots = blocksFor(p.w, p.i).length > 0;
-    return `<div class="${cls}" onclick="selectDayAbs(${p.w},${p.i})">
-      <div class="day-name">${WEEK_DAYS[p.i]}</div>
-      <div class="day-num">${p.date.getDate()}</div>
-      ${hasDots ? '<div class="day-dot"></div>' : ''}
-    </div>`;
-  }).join("");
-  // weeklabel: echte ISO-weeknummer van de getoonde week (klopt ook over jaargrens)
+  strip.innerHTML = pillsHtml;
+
+  // weeklabel: echte ISO-weeknummer; buiten de huidige week wordt het een terug-knop
   const lbl = document.getElementById("weekLabel");
   const isoW = isoWeekNr(mondayOfWeek(currentWeek));
-  lbl.textContent = currentWeek === CURRENT_WEEK_NR
-    ? `W${isoW} · deze week`
-    : `W${isoW} · nu: W${CURRENT_WEEK_NR}`;
+  lbl.textContent = currentWeek === CURRENT_WEEK_NR ? `W${isoW}` : `W${isoW} ↩`;
+}
+
+function selectWeekAbs(w) {
+  if (w !== currentWeek) {
+    currentWeek = w;
+    if (!_demoMode && _msAccount) {
+      loadAgendaWeek(w).then(() => { renderWeekStrip(); renderAgenda(); }).catch(()=>{});
+    }
+  }
+  renderWeekStrip();
+  renderAgenda();
+}
+
+function jumpToToday() {
+  currentWeek = CURRENT_WEEK_NR;
+  selectedDayIdx = TODAY_IDX;
+  renderWeekStrip();
+  renderAgenda();
+}
+
+function openDatePicker() {
+  const el = document.getElementById("agendaDate");
+  try { el.showPicker(); }
+  catch(e) {
+    el.style.pointerEvents = "auto";
+    el.focus(); el.click();
+    el.style.pointerEvents = "none";
+  }
 }
 
 function selectDayAbs(w, i) {
@@ -2225,6 +2292,7 @@ function setAgendaView(view, btn) {
   agendaView = view;
   document.querySelectorAll("#viewSwitch button").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
+  renderWeekStrip();
   renderAgenda();
 }
 
@@ -2266,37 +2334,42 @@ function jumpToDate(val) {
   renderAgenda();
 }
 
+// Kolommen als {w, i, date} — 3-daags schuift over de weekgrens heen
 function agendaCols() {
-  if (agendaView === "week") return [0,1,2,3,4];
-  if (agendaView === "3d") {
-    const s = Math.min(selectedDayIdx, WEEK_DAYS.length - 3);
-    return [s, s+1, s+2];
-  }
-  return [selectedDayIdx];
+  const lin = currentWeek * 5 + selectedDayIdx;
+  if (agendaView === "week") return [0,1,2,3,4].map(i => agLin(currentWeek*5 + i));
+  if (agendaView === "3d")  return [0,1,2].map(k => agLin(lin + k));
+  return [agLin(lin)];
 }
 
 function renderAgenda() {
-  // Ingelogd + week (nog) niet vers in cache → echte data laden en opnieuw renderen
-  if (!_demoMode && _msAccount) {
-    const c = AGENDA_CACHE[currentWeek];
-    if (!c || Date.now() - c.ts >= 60000) {
-      const w = currentWeek;
-      loadAgendaWeek(w).then(() => {
-        if (currentWeek === w) { renderWeekStrip(); renderAgenda(); }
-      }).catch(() => {});
-    }
-  }
   const el = document.getElementById("agendaContent");
   const cols = agendaCols();
-  const dates = weekDates(currentWeek);
-  const monday = dates[0];
+
+  // Ingelogd + betrokken we(e)k(en) niet vers in cache → echte data laden en opnieuw renderen
+  if (!_demoMode && _msAccount) {
+    [...new Set(cols.map(c => c.w))].forEach(w => {
+      const c = AGENDA_CACHE[w];
+      if (!c || Date.now() - c.ts >= 60000) {
+        loadAgendaWeek(w).then(() => { renderWeekStrip(); renderAgenda(); }).catch(() => {});
+      }
+    });
+  }
   let html = "";
 
-  if (currentWeek === CURRENT_WEEK_NR && HOLIDAY.idx !== null && cols.includes(HOLIDAY.idx)) {
+  if (HOLIDAY.idx !== null && cols.some(c => c.w === CURRENT_WEEK_NR && c.i === HOLIDAY.idx)) {
     html += `<div class="holiday-banner">🏖 ${HOLIDAY.name}</div>`;
   }
 
-  html += `<div class="section-head">Week ${currentWeek} · ${monday.getDate()}–${dates[4].getDate()} ${MAAND_KORT[dates[4].getMonth()]} ${dates[4].getFullYear()} · tik een leeg vak voor een nieuw blok</div>`;
+  const d0 = cols[0].date, dN = cols[cols.length-1].date;
+  const isoA = isoWeekNr(mondayOfWeek(cols[0].w)), isoZ = isoWeekNr(mondayOfWeek(cols[cols.length-1].w));
+  const wkLbl = isoA === isoZ ? `Week ${isoA}` : `Week ${isoA}/${isoZ}`;
+  const rangeLbl = cols.length === 1
+    ? `${WEEK_DAYS[cols[0].i]} ${d0.getDate()} ${MAAND_KORT[d0.getMonth()]}`
+    : (d0.getMonth() === dN.getMonth()
+      ? `${d0.getDate()}–${dN.getDate()} ${MAAND_KORT[dN.getMonth()]}`
+      : `${d0.getDate()} ${MAAND_KORT[d0.getMonth()]} – ${dN.getDate()} ${MAAND_KORT[dN.getMonth()]}`);
+  html += `<div class="section-head">${wkLbl} · ${rangeLbl} ${dN.getFullYear()} · tik een leeg vak voor een nieuw blok</div>`;
 
   // tijdkolom
   let timesHtml = "";
@@ -2306,13 +2379,13 @@ function renderAgenda() {
 
   // dagkolommen
   let colsHtml = "";
-  cols.forEach(i => {
-    const isToday = (currentWeek === CURRENT_WEEK_NR && i === TODAY_IDX);
+  cols.forEach(c => {
+    const isToday = (c.w === CURRENT_WEEK_NR && c.i === TODAY_IDX);
     let body = "";
     for (let h = TG_START+1; h < TG_END; h++) {
       body += `<div class="tg-hourline" style="top:${(h-TG_START)*TG_PX}px"></div>`;
     }
-    blocksFor(currentWeek, i).forEach(b => {
+    blocksFor(c.w, c.i).forEach(b => {
       const top = (toMin(b.start) - TG_START*60) / 60 * TG_PX;
       const height = Math.max(20, (toMin(b.end) - toMin(b.start)) / 60 * TG_PX - 2);
       const cls = b.real ? b.kind : (b.mock ? b.who : "eigen");
@@ -2323,8 +2396,8 @@ function renderAgenda() {
       </div>`;
     });
     colsHtml += `<div class="tg-col">
-      <div class="tg-col-head ${isToday?"today":""}">${WEEK_DAYS[i]} ${dates[i].getDate()}</div>
-      <div class="tg-body" onclick="gridTap(event,${i})">${body}</div>
+      <div class="tg-col-head ${isToday?"today":""}">${WEEK_DAYS[c.i]} ${c.date.getDate()}</div>
+      <div class="tg-body" onclick="gridTap(event,${c.w},${c.i})">${body}</div>
     </div>`;
   });
 
@@ -2351,7 +2424,7 @@ function renderAgenda() {
     }
     if (bars) {
       html += `<div class="card" style="margin-top:10px">
-        <div class="card-label">Capaciteit ${WEEK_DAYS[selectedDayIdx]} ${dates[selectedDayIdx].getDate()} ${MAAND_KORT[dates[selectedDayIdx].getMonth()]}</div>
+        <div class="card-label">Capaciteit ${WEEK_DAYS[cols[0].i]} ${cols[0].date.getDate()} ${MAAND_KORT[cols[0].date.getMonth()]}</div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">${bars}</div>
       </div>`;
     }
@@ -2377,12 +2450,12 @@ function capacityBar(name,uren,max,who) {
 }
 
 /* — Nieuw blok via tik op leeg vak — */
-function gridTap(e, dayIdx) {
+function gridTap(e, week, dayIdx) {
   const rect = e.currentTarget.getBoundingClientRect();
   const y = e.clientY - rect.top;
   let hour = TG_START + Math.floor(y / TG_PX);
   hour = Math.max(TG_START, Math.min(TG_END - 1, hour));
-  openBlokSheet(dayIdx, `${String(hour).padStart(2,"0")}:00`, `${String(hour+1).padStart(2,"0")}:00`);
+  openBlokSheet(week, dayIdx, `${String(hour).padStart(2,"0")}:00`, `${String(hour+1).padStart(2,"0")}:00`);
 }
 
 function tapBlok(id) {
@@ -2393,9 +2466,10 @@ function tapBlok(id) {
   }
   if (sid.startsWith("tg-")) {
     // Echt Toggl 2.0-item: detail tonen, (nog) alleen-lezen op mobiel
-    const c = AGENDA_CACHE[currentWeek];
     let b = null;
-    if (c) Object.values(c.days).forEach(arr => { b = b || arr.find(x => x.id === sid); });
+    Object.values(AGENDA_CACHE).forEach(c => {
+      Object.values(c.days).forEach(arr => { b = b || arr.find(x => x.id === sid); });
+    });
     if (b) showToast(`${b.kind === "logged" ? "⏱ Gelogd" : "📋 Gepland"}: ${b.name} · ${b.start}–${b.end}${b.proj ? " · " + b.proj : ""}`);
     else showToast("Toggl 2.0-item — alleen-lezen op mobiel");
     return;
@@ -2403,13 +2477,13 @@ function tapBlok(id) {
   openBlokEdit(id);
 }
 
-function openBlokSheet(dayIdx, van, tot) {
+function openBlokSheet(week, dayIdx, van, tot) {
   editingBlokId = null;
-  blokCtx = {week: currentWeek, dayIdx};
-  const dates = weekDates(currentWeek);
+  blokCtx = {week, dayIdx};
+  const dates = weekDates(week);
   document.getElementById("blokSheetTitle").textContent = "Nieuw blok";
   document.getElementById("blokSheetSub").textContent =
-    `${WEEK_DAYS[dayIdx]} ${dates[dayIdx].getDate()} ${MAAND_KORT[dates[dayIdx].getMonth()]} · W${currentWeek}`;
+    `${WEEK_DAYS[dayIdx]} ${dates[dayIdx].getDate()} ${MAAND_KORT[dates[dayIdx].getMonth()]} · W${isoWeekNr(mondayOfWeek(week))}`;
   document.getElementById("blokDeleteBtn").style.display = "none";
   fillBlokProjectSelect("");
   fillBlokTaskSelect("");
@@ -3351,7 +3425,7 @@ async function saveNewProject() {
     // terug naar blok-sheet met nieuw project voorgeselecteerd
     if (editingBlokId) { openBlokEdit(editingBlokId); }
     else {
-      openBlokSheet(blokCtx.dayIdx, document.getElementById("blokVan").value || "08:00", document.getElementById("blokTot").value || "09:00");
+      openBlokSheet(blokCtx.week, blokCtx.dayIdx, document.getElementById("blokVan").value || "08:00", document.getElementById("blokTot").value || "09:00");
     }
     fillBlokProjectSelect(code);
     fillBlokTaskSelect("");
