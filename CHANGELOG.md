@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — F1: per-user Toggl-tokens (Worker) + echte notificatie-poll + feedback-tab + offline-queue
+- Commit: `15fb84c` | Auteur: Bart Witte
+
 ## 2026-06-12 — feat(timer): starttijd lopende timer aanpassen + handmatige entry
 - Commit: `17cc955` | Auteur: Bart Witte
 

@@ -1954,6 +1954,7 @@ let addingTask = false;          // "+ Taak"-formulier open
 let editingBlokId = null;        // eigen agenda-blok in bewerk-modus
 let blokCtx = {week:CURRENT_WEEK_NR, dayIdx:TODAY_IDX};
 let npReturnToBlok = false;      // nieuw-project-sheet geopend vanuit blok-sheet
+let npReturnToOplever = false;   // nieuw-project-sheet geopend vanuit oplever-tab
 
 /* =====================================================================
    INIT
@@ -3098,12 +3099,21 @@ function populateOpleverSelect() {
     opt.textContent = `${p.code} — ${p.name}`;
     sel.appendChild(opt);
   });
+  // project staat soms al wel in Toggl maar nog niet in de tool →
+  // direct vanuit de oplevertab aan te maken (rapport moet in de goede map)
+  sel.innerHTML += `<option value="__new">＋ Nieuw project…</option>`;
   sel.value = cur;
 }
 
 function loadChecklist() {
   const sel = document.getElementById("opleverProjectSelect");
   const id = sel.value;
+  if (id === "__new") {
+    sel.value = "";
+    npReturnToOplever = true;
+    openNewProject();
+    return;
+  }
   if (!id) { document.getElementById("checklistWrap").style.display = "none"; return; }
   currentOpleverProject = allProjects().find(p => p.id === id);
   checklistState = {};
@@ -3203,8 +3213,9 @@ function showRapport() {
   const herstels = p.checklist.filter((_,i) => checklistState[i] === "herstel");
   const open = p.checklist.filter((_,i) => !checklistState[i]);
   const now = new Date().toLocaleDateString("nl-NL",{day:"2-digit",month:"long",year:"numeric"});
+  const door = _msAccount ? (_msAccount.name || _msAccount.username) : "Demo";
   let html = `<div class="rapport-title">Opleveringsrapport</div>
-    <div class="rapport-sub">${p.code} · ${p.name} · ${now}</div>`;
+    <div class="rapport-sub">${p.code} · ${p.name} · ${now} · ingevuld door ${escHtml(door)}</div>`;
   if (oks.length) {
     html += `<div class="rapport-section">✅ Goedgekeurd (${oks.length})</div>`;
     html += oks.map(item => `<div class="rapport-item">
@@ -3233,7 +3244,7 @@ function showRapport() {
       <div class="rapport-item-content"><div class="rapport-item-name">${escHtml(item)}</div></div>
     </div>`).join("");
   }
-  html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${now} · M&T</div>`;
+  html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${now} · ${escHtml(door)} · M&T</div>`;
   document.getElementById("rapportContent").innerHTML = html;
   document.getElementById("opleverView").classList.add("view-hidden");
   document.getElementById("rapportView").classList.remove("view-hidden");
@@ -3251,6 +3262,43 @@ function showHandtekening() {
 function rapportOpsturen() {
   document.getElementById("rapportView").classList.add("view-hidden");
   document.getElementById("opleverMailView").classList.remove("view-hidden");
+  logOplevering("gemaild");
+}
+
+/* ── Oplever-log: wie vulde wélk rapport in (SP mt_opleveringen.json) ──
+   Volledige snapshot (ok/herstel/open + notities) zodat we het later in
+   de logs kunnen terugvinden en de pc-tool/nacalculatie erop verder kan. */
+async function logOplevering(wijze) {
+  const p = currentOpleverProject;
+  if (!p) return;
+  const herstel = [];
+  p.checklist.forEach((item, i) => {
+    if (checklistState[i] === "herstel") herstel.push({item, notitie: checklistNotes[i] || ""});
+  });
+  const entry = {
+    id: "opl-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+    ts: new Date().toISOString(),
+    door: _msAccount ? (_msAccount.username || "").toLowerCase() : "demo",
+    doorNaam: _msAccount ? (_msAccount.name || "") : "Demo",
+    projectCode: p.code,
+    projectNaam: p.name,
+    wijze, // "afgetekend" (ter plekke) | "gemaild" (akkoord op afstand)
+    ok: p.checklist.filter((_, i) => checklistState[i] === "ok"),
+    herstel,
+    nietBeoordeeld: p.checklist.filter((_, i) => !checklistState[i])
+  };
+  let ok = false;
+  if (!_demoMode && _msAccount) ok = await oplUpload(entry);
+  if (!ok) _RQ.push({type: "oplevering", entry});
+}
+
+async function oplUpload(entry) {
+  try {
+    const cur = await _SP.read("mt_opleveringen.json");
+    const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
+    if (!list.some(e => e && e.id === entry.id)) list.push(entry);
+    return await _SP.write("mt_opleveringen.json", list);
+  } catch(e) { return false; }
 }
 
 function backToChecklist() {
@@ -3326,6 +3374,7 @@ function bevestigHandtekening() {
   if (!sigHasMark) { alert("Teken eerst de handtekening."); return; }
   document.getElementById("handtekeningView").classList.add("view-hidden");
   document.getElementById("opleverDoneView").classList.remove("view-hidden");
+  logOplevering("afgetekend");
 }
 
 /* =====================================================================
@@ -3534,6 +3583,7 @@ function openNewProject() {
 function closeNewProject() {
   document.getElementById("newProjectSheet").classList.remove("visible");
   npReturnToBlok = false;
+  npReturnToOplever = false;
 }
 
 async function saveNewProject() {
@@ -3617,6 +3667,14 @@ async function saveNewProject() {
     }
     fillBlokProjectSelect(code);
     fillBlokTaskSelect("");
+  }
+
+  if (npReturnToOplever) {
+    npReturnToOplever = false;
+    // terug naar de oplevertab met het nieuwe project voorgeselecteerd
+    switchTab("oplevering", document.getElementById("nav-oplevering"));
+    document.getElementById("opleverProjectSelect").value = proj.id;
+    loadChecklist();
   }
 }
 
@@ -3914,6 +3972,7 @@ const _RQ = {
         let ok = false;
         try {
           if (task.type === "feedback") ok = await fbUpload(task.entry);
+          else if (task.type === "oplevering") ok = await oplUpload(task.entry);
         } catch(e) { ok = false; }
         if (!ok) rest.push(task);
       }
