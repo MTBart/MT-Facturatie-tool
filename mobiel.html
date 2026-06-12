@@ -364,10 +364,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 }
 .week-strip::-webkit-scrollbar{display:none}
 .day-pill{
-  flex:0 0 auto;display:flex;flex-direction:column;align-items:center;
-  gap:3px;padding:8px 14px;border-radius:var(--radius-lg);
+  flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;
+  gap:3px;padding:8px 2px;border-radius:var(--radius-lg);
   background:var(--n-0);border:1px solid var(--n-200);cursor:pointer;
-  transition:all .15s;min-width:56px;
+  transition:all .15s;
 }
 .day-pill.today{background:var(--green);border-color:var(--green)}
 .day-pill.today .day-name,.day-pill.today .day-num{color:#fff}
@@ -574,7 +574,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .week-search input[type="date"]{max-width:150px;text-align:left;font-family:var(--mono);font-size:12px}
 .week-strip-row{display:flex;align-items:center;gap:4px;margin-bottom:10px}
 .week-strip-row .week-strip{flex:1;min-width:0;margin-bottom:0}
-.agenda-arrow{flex:0 0 auto;width:40px;min-height:56px;border:1px solid var(--n-200);background:var(--n-0);border-radius:var(--radius);font-size:20px;color:var(--green);cursor:pointer;box-shadow:var(--shadow-sm)}
+.agenda-arrow{flex:0 0 auto;width:32px;min-height:52px;padding:0;border:1px solid var(--n-200);background:var(--n-0);border-radius:var(--radius);font-size:18px;color:var(--green);cursor:pointer;box-shadow:var(--shadow-sm)}
 .agenda-arrow:active{background:var(--n-100)}
 .week-label{font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap;font-weight:500}
 .tijd-grid{display:flex;background:var(--n-0);border:1px solid var(--n-200);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
@@ -2171,17 +2171,27 @@ function blocksFor(week, dayIdx) {
 
 function renderWeekStrip() {
   const strip = document.getElementById("weekStrip");
-  const dates = weekDates(currentWeek);
-  strip.innerHTML = WEEK_DAYS.map((day,i) => {
+  // venster van 5 werkdagen, actieve datum altijd in het midden;
+  // schuift over weekgrenzen heen via lineaire dag-index (week*5 + dagIdx)
+  const lin = currentWeek * 5 + selectedDayIdx;
+  const pills = [];
+  for (let off = -2; off <= 2; off++) {
+    const l = lin + off;
+    const w = Math.floor(l / 5);
+    const i = ((l % 5) + 5) % 5;
+    const date = new Date(mondayOfWeek(w));
+    date.setDate(date.getDate() + i);
+    pills.push({w, i, date});
+  }
+  strip.innerHTML = pills.map(p => {
     let cls = "day-pill";
-    const isToday = (currentWeek === CURRENT_WEEK_NR && i === TODAY_IDX);
-    if (isToday) cls += " today";
-    else if (i === selectedDayIdx) cls += " selected";
-    if (currentWeek === CURRENT_WEEK_NR && HOLIDAY.idx === i) cls += " holiday";
-    const hasDots = blocksFor(currentWeek, i).length > 0;
-    return `<div class="${cls}" onclick="selectDay(${i})">
-      <div class="day-name">${day}</div>
-      <div class="day-num">${dates[i].getDate()}</div>
+    if (p.w === currentWeek && p.i === selectedDayIdx) cls += " selected";
+    else if (p.w === CURRENT_WEEK_NR && p.i === TODAY_IDX) cls += " today";
+    if (p.w === CURRENT_WEEK_NR && HOLIDAY.idx === p.i) cls += " holiday";
+    const hasDots = blocksFor(p.w, p.i).length > 0;
+    return `<div class="${cls}" onclick="selectDayAbs(${p.w},${p.i})">
+      <div class="day-name">${WEEK_DAYS[p.i]}</div>
+      <div class="day-num">${p.date.getDate()}</div>
       ${hasDots ? '<div class="day-dot"></div>' : ''}
     </div>`;
   }).join("");
@@ -2193,10 +2203,22 @@ function renderWeekStrip() {
     : `W${isoW} · nu: W${CURRENT_WEEK_NR}`;
 }
 
-function selectDay(idx) {
-  selectedDayIdx = idx;
+function selectDayAbs(w, i) {
+  if (w !== currentWeek) {
+    currentWeek = w;
+    selectedDayIdx = i;
+    if (!_demoMode && _msAccount) {
+      loadAgendaWeek(currentWeek).then(() => { renderWeekStrip(); renderAgenda(); }).catch(()=>{});
+    }
+  } else {
+    selectedDayIdx = i;
+  }
   renderWeekStrip();
   renderAgenda();
+}
+
+function selectDay(idx) {
+  selectDayAbs(currentWeek, idx);
 }
 
 function setAgendaView(view, btn) {

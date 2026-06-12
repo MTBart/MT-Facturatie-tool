@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — toggl2: Toggl 2.0-kloon slice 1 (Timer/Tasks/Projects/Members) - aparte UI voor Mathijs, Toggl-look, M&T edition-badge
+- Commit: `6949135` | Auteur: Bart Witte
+
 ## 2026-06-12 — mobiel: agenda echt (Toggl 2.0 logged+planned), pijl-navigatie + datumkiezer, projecten-zoekbalk, taken-fix, NAS-foto-upload met mappenstructuur-popup
 - Commit: `63d98fc` | Auteur: Bart Witte
 
