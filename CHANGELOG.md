@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — fix(agenda): RFC3339Z-datums voor Focus stream-endpoints (lege agenda)
+- Commit: `b1f011c` | Auteur: Bart Witte
+
 ## 2026-06-12 — mobiel: agenda-toolbar compact + pills schakelen mee per view (dag/3dg/week)
 - Commit: `448d32f` | Auteur: Bart Witte
 

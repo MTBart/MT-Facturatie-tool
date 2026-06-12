@@ -1737,15 +1737,21 @@ async function startTimerOnToggl(proj, description) {
     };
     const made = await tgTrack(`workspaces/${TG_WS}/time_entries`, 'POST', body);
     const id = made && (made.id || (made.data && made.data.id));
-    if (id) { _togglTimerEntryId = id; return true; }
+    if (id) { _togglTimerEntryId = id; saveTimerState(); return true; }
     return false;
   } catch(e) { console.warn('startTimerOnToggl fout:', e.message); return false; }
 }
 
 async function stopTimerOnToggl() {
-  if (!_togglTimerEntryId) return;
   try {
-    await tgTrack(`workspaces/${TG_WS}/time_entries/${_togglTimerEntryId}/stop`, 'PATCH');
+    let id = _togglTimerEntryId;
+    if (!id) {
+      // app herstart: id kwijt → lopende entry server-side opvragen
+      const cur = await tgTrack(`me/time_entries/current`);
+      if (cur && cur.id && cur.duration < 0) id = cur.id;
+    }
+    if (!id) return;
+    await tgTrack(`workspaces/${TG_WS}/time_entries/${id}/stop`, 'PATCH');
     _togglTimerEntryId = null;
   } catch(e) { console.warn('stopTimerOnToggl fout:', e.message); }
 }
@@ -1813,6 +1819,7 @@ function loadFromStorage() {
         timerStart = saved.start;
         timerRunning = true;
         captureProject = proj;
+        _togglTimerEntryId = saved.togglEntryId || null;
         startTickInterval();
         updateTimerUI();
       }
@@ -1828,7 +1835,8 @@ function loadFromStorage() {
 function saveTimerState() {
   if (timerRunning && activeProject) {
     localStorage.setItem("mt_timer", JSON.stringify({
-      running:true,projectId:activeProject.id,start:timerStart
+      running:true,projectId:activeProject.id,start:timerStart,
+      togglEntryId:_togglTimerEntryId
     }));
   } else {
     localStorage.removeItem("mt_timer");
