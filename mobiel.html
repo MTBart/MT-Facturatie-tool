@@ -3394,9 +3394,22 @@ async function findProjectFolder(code) {
   if (!hits.length) return null;
   // Voorkeur voor hits binnen "Nieuwe mappenstructuur"
   const best = hits.find(h => (h.parentReference && h.parentReference.path || '').includes('Nieuwe mappenstructuur')) || hits[0];
-  if (best.parentReference && best.parentReference.driveId)
-    _projDriveMap[code.toUpperCase()] = best.parentReference.driveId;
-  const rawPath = (best.parentReference && best.parentReference.path || '').split('root:')[1] || '';
+  const driveId = (best.parentReference && best.parentReference.driveId) || _SPProj.DRIVE;
+  _projDriveMap[code.toUpperCase()] = driveId;
+  // Drive-scoped search geeft GÉÉN parentReference.path terug (bug 12-6 deel 2:
+  // de map werd als root-item behandeld → elke pad-call 404). Het item op id
+  // ophalen geeft het pad wél — dat is de enige betrouwbare bron.
+  let rawPath = (best.parentReference && best.parentReference.path || '').split('root:')[1] || '';
+  if (!rawPath && best.id) {
+    try {
+      const ir = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${best.id}?$select=name,parentReference`,
+        { headers: {'Authorization':`Bearer ${token}`} });
+      if (ir.ok) {
+        const item = await ir.json();
+        rawPath = (item.parentReference && item.parentReference.path || '').split('root:')[1] || '';
+      }
+    } catch(e) {}
+  }
   let parentPath = rawPath.replace(/^\//,'');
   try { parentPath = decodeURIComponent(parentPath); } catch(e) {}
   return parentPath ? `${parentPath}/${best.name}` : best.name;
