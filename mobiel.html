@@ -724,7 +724,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 
 <!-- ── LOPENDE TIMER BAR ── -->
 <div class="timer-bar" id="timerBar">
-  <div class="timer-bar-label">
+  <div class="timer-bar-label" onclick="timerBarOpenProject()" style="cursor:pointer" title="Tik om het project te openen">
     <div class="timer-bar-project" id="timerBarProject">–</div>
     <div class="timer-bar-code" id="timerBarCode">–</div>
   </div>
@@ -843,10 +843,16 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           <div class="opname-count" id="opnameCount">0 foto's</div>
         </div>
         <div class="thumbs-grid" id="thumbsGrid"></div>
+        <div class="field" style="margin-top:8px">
+          <textarea id="opnameBijschrift" placeholder="Bijschrift bij deze foto's (optioneel) — wordt als notitie aan het project gekoppeld…" rows="2"></textarea>
+        </div>
         <div class="sp-mock" id="spMockPath">→ SP: /Projecten/–/Opname/</div>
-        <button class="btn btn-gold btn-full" onclick="sluitOpname()" style="margin-top:8px">✅ Opname afronden</button>
+        <button class="btn btn-gold btn-full" id="opnameAfrondBtn" onclick="sluitOpname()" style="margin-top:8px">✅ Opname afronden</button>
       </div>
     </div>
+
+    <!-- blijvende upload-bevestiging (blijft staan tot volgende opname) -->
+    <div id="captureResult" style="display:none"></div>
   </div>
 
   <!-- TAB: OPLEVERING -->
@@ -982,6 +988,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div id="sheetAddr" style="font-size:14px;color:var(--text-dim);margin-bottom:4px"></div>
       <div class="section-head" style="margin-top:10px">Laatste activiteit</div>
       <div id="sheetActivity" style="font-size:13px;color:var(--text-faint);margin-bottom:4px"></div>
+      <div class="section-head" style="margin-top:12px">Notities</div>
+      <div id="sheetNotes" style="margin-bottom:4px"></div>
+      <div class="section-head" style="margin-top:12px">Projectmap (NAS)</div>
+      <div id="sheetNas" style="margin-bottom:4px"></div>
       <div class="section-head" style="margin-top:12px">Taken</div>
       <div id="sheetTasks"></div>
     </div>
@@ -1559,6 +1569,34 @@ function allProjects() {
 }
 function saveUserProjects() { localStorage.setItem("mt_user_projects", JSON.stringify(USER_PROJECTS)); }
 
+// — Adres-overlay per projectcode (Toggl-projecten hebben geen adresveld) —
+// Lokaal in mt_proj_adressen, gedeeld via SP mt_proj_adressen.json.
+let ADDR_OVERRIDES = {};
+try { ADDR_OVERRIDES = JSON.parse(localStorage.getItem("mt_proj_adressen") || "{}") || {}; } catch(e) { ADDR_OVERRIDES = {}; }
+function addrFor(p) {
+  return ADDR_OVERRIDES[p.code] || ((p.addr && p.addr !== "–") ? p.addr : "");
+}
+async function spSyncAddr() {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const remote = await _SP.read("mt_proj_adressen.json");
+    if (remote && typeof remote === "object" && !Array.isArray(remote)) {
+      ADDR_OVERRIDES = {...ADDR_OVERRIDES, ...remote};
+      localStorage.setItem("mt_proj_adressen", JSON.stringify(ADDR_OVERRIDES));
+    }
+  } catch(e) {}
+}
+async function spWriteAddr() {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const remote = await _SP.read("mt_proj_adressen.json") || {};
+    const merged = {...remote, ...ADDR_OVERRIDES};  // net-ingevuld adres wint
+    ADDR_OVERRIDES = merged;
+    localStorage.setItem("mt_proj_adressen", JSON.stringify(merged));
+    await _SP.write("mt_proj_adressen.json", merged);
+  } catch(e) { console.warn("adres-sync fout:", e.message); }
+}
+
 // SP-sync voor user projects (best-effort, na login)
 async function spSyncUserProjects() {
   if (_demoMode || !_msAccount) return;
@@ -1735,8 +1773,9 @@ async function loadRealProjects() {
       checklist: ['Eindcontrole uitgevoerd'],
       source: 'track'
     }));
-    // Sync user-projecten van SP (merge)
+    // Sync user-projecten + adres-overlay van SP (merge)
     await spSyncUserProjects();
+    spSyncAddr().then(() => renderProjectCards());
     // Herrender
     renderPickerList(allProjects());
     renderProjectCards();
@@ -1746,6 +1785,7 @@ async function loadRealProjects() {
     console.warn('loadRealProjects fout:', e.message);
     showToast('Projecten laden mislukt — lokale data gebruikt');
     await spSyncUserProjects();
+    spSyncAddr().then(() => renderProjectCards());
     renderPickerList(allProjects());
     renderProjectCards();
     populateOpleverSelect();
@@ -2220,10 +2260,13 @@ function renderProjectCards() {
     lijst = lijst.filter(p =>
       (p.name || "").toLowerCase().includes(projectFilter) ||
       (p.code || "").toLowerCase().includes(projectFilter) ||
-      (p.addr || "").toLowerCase().includes(projectFilter));
+      (addrFor(p) || "").toLowerCase().includes(projectFilter));
   }
   if (!lijst.length) {
-    el.innerHTML = `<div class="card" style="text-align:center;color:var(--text-dim);padding:24px">Geen projecten gevonden${projectFilter ? ` voor “${projectFilter.replace(/</g,"&lt;")}”` : ""}</div>`;
+    el.innerHTML = `<div class="card" style="text-align:center;color:var(--text-dim);padding:24px">
+      Geen projecten gevonden${projectFilter ? ` voor “${projectFilter.replace(/</g,"&lt;")}”` : ""}
+      <button class="btn btn-secondary btn-full" style="margin-top:14px" onclick="openNewProjectPrefill()">＋ Project aanmaken met de projectaanmaker</button>
+    </div>`;
     return;
   }
   el.innerHTML = lijst.map(p => {
@@ -2234,7 +2277,7 @@ function renderProjectCards() {
         <div class="project-card-name">${p.name}</div>
         <span class="badge ${cls}">${label}</span>
       </div>
-      <div class="project-card-addr">📍 ${p.addr}</div>
+      <div class="project-card-addr">📍 ${addrFor(p) || "– adres ontbreekt"}</div>
       <div class="project-card-footer">
         <div class="project-last">🕐 ${p.lastActivity}</div>
         ${p.assigned ? '<span class="badge badge-ok">Toegewezen</span>' : ''}
@@ -2257,7 +2300,9 @@ function openProjectSheet(id) {
   document.getElementById("sheetTitle").textContent = p.name;
   document.getElementById("sheetSub").textContent = p.code;
   document.getElementById("sheetStatus").innerHTML = `<span class="badge ${cls}">${label}</span>`;
-  document.getElementById("sheetAddr").textContent = p.addr;
+  renderSheetAddr(p);
+  renderSheetNotes(p);
+  renderSheetNas(p);
   document.getElementById("sheetActivity").textContent = p.lastActivity;
   document.getElementById("sheetActions").innerHTML = `
     <div class="sheet-action-btn" onclick="sheetStartTimer('${p.id}')">
@@ -2316,6 +2361,109 @@ function closeProjectSheet() {
 
 function closeSheet(e) {
   if (e.target === document.getElementById("projectSheet")) closeProjectSheet();
+}
+
+// Tik op de projectnaam in de timerbalk → project-sheet naar voren
+function timerBarOpenProject() {
+  if (activeProject) openProjectSheet(activeProject.id);
+}
+
+/* ── Project-sheet: adres (missend → invullen, aanwezig → navigeren) ── */
+function renderSheetAddr(p) {
+  const el = document.getElementById("sheetAddr");
+  if (!el) return;
+  const adres = addrFor(p);
+  if (adres) {
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>📍 ${escHtml(adres)}</span>
+      <a class="btn btn-secondary btn-sm" style="text-decoration:none" target="_blank" rel="noopener"
+         href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adres)}">🧭 Navigeer</a>
+    </div>`;
+  } else {
+    el.innerHTML = `<div style="color:var(--text-faint);font-size:12px;margin-bottom:6px">⚠ Adres ontbreekt nog — vul aan:</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="sheetAddrInput" placeholder="Straat huisnr, plaats" style="flex:1;min-width:0">
+        <button class="btn btn-secondary btn-sm" onclick="saveSheetAddr('${p.id}')">Opslaan</button>
+      </div>`;
+  }
+}
+
+function saveSheetAddr(pid) {
+  const inp = document.getElementById("sheetAddrInput");
+  const val = inp ? inp.value.trim() : "";
+  if (!val) { showToast("Vul eerst een adres in"); return; }
+  const p = allProjects().find(x => x.id === pid);
+  if (!p) return;
+  ADDR_OVERRIDES[p.code] = val;
+  localStorage.setItem("mt_proj_adressen", JSON.stringify(ADDR_OVERRIDES));
+  renderSheetAddr(p);
+  renderProjectCards();
+  showToast(`✓ Adres bewaard voor ${p.code}`);
+  spWriteAddr(); // best-effort gedeeld via SP
+}
+
+/* ── Project-sheet: notities van dit project (lokaal + SP-merge) ── */
+function renderSheetNotes(p) {
+  const el = document.getElementById("sheetNotes");
+  if (!el) return;
+  const lokaal = (window._notes || []).filter(n => n.project === p.code);
+  el.innerHTML = _sheetNotesHtml(lokaal);
+  if (_demoMode || !_msAccount) return;
+  // Asynchroon de gedeelde notities erbij mergen (collega's, andere telefoons)
+  _SP.read("mt_notities.json").then(list => {
+    if (!Array.isArray(list)) return;
+    const alle = [...lokaal];
+    list.filter(n => n && n.project === p.code).forEach(n => {
+      if (!alle.some(m => m.id && m.id === n.id)) alle.push(n);
+    });
+    alle.sort((a, b) => String(b.ts || "").localeCompare(String(a.ts || "")));
+    if (currentSheetProject && currentSheetProject.code === p.code) el.innerHTML = _sheetNotesHtml(alle);
+  }).catch(() => {});
+}
+
+function _sheetNotesHtml(list) {
+  if (!list.length) return `<div style="font-size:12px;color:var(--text-faint)">Nog geen notities — maak er één via 📷 Capture.</div>`;
+  return list.slice(0, 10).map(n => `
+    <div style="padding:8px 10px;background:var(--n-800);border-radius:8px;margin-bottom:6px">
+      <div style="font-size:13px;color:#fff">${escHtml(n.text || "")}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:3px">${noteStamp(n)}${n.doorNaam ? " · " + escHtml(n.doorNaam) : ""}${n.fotos && n.fotos.length ? ` · 📷 ${n.fotos.length} foto('s)` : ""}</div>
+    </div>`).join("");
+}
+
+/* ── Project-sheet: snelkoppelingen naar de NAS-projectmap ── */
+const _nasCache = {};
+function renderSheetNas(p) {
+  const el = document.getElementById("sheetNas");
+  if (!el) return;
+  if (_demoMode || !_msAccount) {
+    el.innerHTML = `<div style="font-size:12px;color:var(--text-faint)">Log in om de projectmap te openen.</div>`;
+    return;
+  }
+  if (_nasCache[p.code]) { el.innerHTML = _nasCache[p.code]; return; }
+  el.innerHTML = `<div style="font-size:12px;color:var(--text-faint)">⏳ Projectmap zoeken…</div>`;
+  _nasFolders(p.code).then(html => {
+    _nasCache[p.code] = html;
+    if (currentSheetProject && currentSheetProject.code === p.code) el.innerHTML = html;
+  }).catch(e => {
+    if (currentSheetProject && currentSheetProject.code === p.code)
+      el.innerHTML = `<div style="font-size:12px;color:var(--text-faint)">⚠ NAS niet bereikbaar: ${escHtml(e.message)}</div>`;
+  });
+}
+
+async function _nasFolders(code) {
+  const projPath = await findProjectFolder(code);
+  if (!projPath) return `<div style="font-size:12px;color:var(--text-faint)">Nog geen projectmap op de NAS — maak 'm aan via Capture › Opname afronden.</div>`;
+  const token = await window.getGraphToken();
+  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root:/${encodeURI(projPath)}:/children?$select=name,webUrl,folder&$top=50`,
+    { headers: {'Authorization': `Bearer ${token}`} });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const mappen = ((await r.json()).value || []).filter(it => it.folder);
+  if (!mappen.length) return `<div style="font-size:12px;color:var(--text-faint)">Projectmap gevonden, maar nog zonder submappen.</div>`;
+  mappen.sort((a, b) => a.name.localeCompare(b.name));
+  const icoon = n => /foto/i.test(n) ? "📷" : /ontwerp|werkteken|teken/i.test(n) ? "📐" : /offerte|contract/i.test(n) ? "📄" : /cnc/i.test(n) ? "⚙" : "📁";
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px">` + mappen.map(m =>
+    `<a href="${m.webUrl}" target="_blank" rel="noopener" style="text-decoration:none;font-size:12px;padding:6px 10px;border-radius:8px;background:var(--n-800);color:#fff;border:1px solid rgba(255,255,255,.1)">${icoon(m.name)} ${escHtml(m.name)}</a>`
+  ).join("") + `</div>`;
 }
 
 /* =====================================================================
@@ -2819,20 +2967,58 @@ function changeCaptureProject() {
   }
 }
 
+// Notitie-object met datumstempel; gaat lokaal (mt_notes) ÉN naar SP
+// (MT-Bedrijfstool/mt_notities.json) zodat de cockpit en collega's ze zien.
+function _noteEntry(text, fotos) {
+  const proj = captureProject || activeProject;
+  return {
+    id: "not-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+    ts: new Date().toISOString(),
+    door: _msAccount ? (_msAccount.username || "").toLowerCase() : "demo",
+    doorNaam: _msAccount ? (_msAccount.name || "") : "Demo",
+    project: proj ? proj.code : "–",
+    projectNaam: proj ? (proj.name || "") : "",
+    text,
+    fotos: fotos || []   // bestandsnamen in 06_Fotos waar deze notitie bij hoort
+  };
+}
+
+async function _noteSync(note) {
+  if (_demoMode || !_msAccount) return;
+  let ok = false;
+  try { ok = await noteUpload(note); } catch(e) { ok = false; }
+  if (!ok) _RQ.push({type: "notitie", entry: note});
+}
+
+async function noteUpload(entry) {
+  try {
+    const cur = await _SP.read("mt_notities.json");
+    const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
+    if (!list.some(e => e && e.id === entry.id)) list.push(entry);
+    return await _SP.write("mt_notities.json", list);
+  } catch(e) { return false; }
+}
+
 function saveNote() {
   const ta = document.getElementById("noteInput");
   const text = ta.value.trim();
   if (!text) return;
-  const proj = captureProject || activeProject;
-  const note = {
-    text,
-    project: proj ? proj.code : "–",
-    time: new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"})
-  };
+  const note = _noteEntry(text, []);
   window._notes.unshift(note);
   localStorage.setItem("mt_notes", JSON.stringify(window._notes));
   ta.value = "";
   renderNotes();
+  _noteSync(note); // best-effort, fout → retry-queue
+}
+
+// Datum + tijd voor weergave; oude notities (zonder ts) tonen hun oude time-veld
+function noteStamp(n) {
+  if (n.ts) {
+    const d = new Date(n.ts);
+    return d.toLocaleDateString("nl-NL", {day:"2-digit", month:"2-digit", year:"numeric"}) +
+      " " + d.toLocaleTimeString("nl-NL", {hour:"2-digit", minute:"2-digit"});
+  }
+  return n.time || "";
 }
 
 function renderNotes() {
@@ -2844,7 +3030,7 @@ function renderNotes() {
     <div class="note-item">
       <div>
         <div class="note-item-text">${escHtml(n.text)}</div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:3px">${n.project} · ${n.time}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:3px">${n.project} · ${noteStamp(n)}${n.fotos && n.fotos.length ? ` · 📷 ${n.fotos.length}` : ""}</div>
       </div>
       <button class="note-del" onclick="deleteNote(${i})">×</button>
     </div>
@@ -3004,16 +3190,29 @@ async function findProjectFolder(code) {
   return parentPath ? `${parentPath}/${best.name}` : best.name;
 }
 
-// Foto's uploaden naar <projPath>/06_Fotos/ (conflict → automatisch hernummeren)
+// Foto's uploaden naar <projPath>/06_Fotos/.
+// Dedupe-vangnet: bestaat er al een bestand met dezelfde naam ÉN grootte,
+// dan slaan we 'm over (dubbel "Opname afronden" maakt dan geen " 1"-kopie meer).
 async function uploadOpnamePhotos(proj, projPath) {
   const token = await window.getGraphToken();
   if (!token) { showToast('Niet ingelogd — foto’s niet geüpload'); return; }
   const fotos = opnamePhotos.filter(p => p.file);
-  let ok = 0, fail = 0;
+  let ok = 0, fail = 0, skip = 0;
+  const uploaded = [];
+  // Bestaande bestanden in 06_Fotos ophalen voor de dedupe-check (best-effort)
+  let bestaand = {};
+  try {
+    const cr = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root:/${encodeURI(projPath + '/06_Fotos')}:/children?$select=name,size&$top=999`,
+      { headers: {'Authorization':`Bearer ${token}`} });
+    if (cr.ok) ((await cr.json()).value || []).forEach(it => { bestaand[it.name] = it.size; });
+  } catch(e) { /* dedupe-check optioneel; upload gaat gewoon door */ }
   showToast(`⬆ ${fotos.length} foto's uploaden…`);
   for (const p of fotos) {
     try {
       const veilig = (p.name || 'foto.jpg').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'foto.jpg';
+      if (bestaand[veilig] !== undefined && bestaand[veilig] === p.file.size) {
+        skip++; uploaded.push(veilig); continue;  // al op de NAS — niet nogmaals
+      }
       const dest = `${projPath}/06_Fotos/${veilig}`;
       const url = `https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root:/${encodeURI(dest)}:/content?@microsoft.graph.conflictBehavior=rename`;
       const r = await fetch(url, {
@@ -3021,17 +3220,54 @@ async function uploadOpnamePhotos(proj, projPath) {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': p.file.type || 'image/jpeg' },
         body: await p.file.arrayBuffer()
       });
-      if (r.ok) ok++; else { fail++; console.warn(`upload ${veilig} HTTP ${r.status}`); }
+      if (r.ok) { ok++; uploaded.push(veilig); } else { fail++; console.warn(`upload ${veilig} HTTP ${r.status}`); }
     } catch(e) { fail++; console.warn('upload fout:', e.message); }
   }
-  if (fail) showToast(`⚠ ${ok} foto's geüpload, ${fail} mislukt — probeer later opnieuw`);
-  else { showToast(`✅ ${ok} foto's op de NAS in ${proj.code} › 06_Fotos`); _resetOpname(); }
+  // Bijschrift → notitie gekoppeld aan deze foto's (met datumstempel)
+  const bs = document.getElementById("opnameBijschrift");
+  const bijschrift = bs ? bs.value.trim() : "";
+  if (bijschrift && (uploaded.length || !fail)) {
+    const note = _noteEntry(bijschrift, uploaded);
+    window._notes.unshift(note);
+    localStorage.setItem("mt_notes", JSON.stringify(window._notes));
+    renderNotes();
+    _noteSync(note);
+  }
+  // Blijvende bevestiging in de capture-tab (toast verdwijnt, dit blok niet)
+  if (fail) {
+    showToast(`⚠ ${ok} foto's geüpload, ${fail} mislukt — probeer later opnieuw`);
+    _captureResult(false, `⚠ ${ok} geüpload, ${fail} mislukt voor ${proj.code}. De mislukte foto's staan nog in de opname — tik nogmaals op "Opname afronden" om opnieuw te proberen.`);
+  } else {
+    showToast(`✅ Opname afgerond — ${proj.code}`);
+    const delen = [];
+    if (ok) delen.push(`${ok} foto('s) geüpload`);
+    if (skip) delen.push(`${skip} stond(en) er al (overgeslagen)`);
+    if (bijschrift) delen.push(`bijschrift opgeslagen als notitie`);
+    _captureResult(true, `✅ ${delen.join(" · ")} → NAS: ${proj.code} › 06_Fotos`);
+    _resetOpname();
+  }
+}
+
+function _captureResult(succes, msg) {
+  const el = document.getElementById("captureResult");
+  if (!el) return;
+  const stamp = new Date().toLocaleString("nl-NL", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
+  el.style.display = "block";
+  el.innerHTML = `<div style="margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13px;line-height:1.45;
+    background:${succes ? 'rgba(46,160,67,.15)' : 'rgba(255,166,0,.12)'};
+    border:1px solid ${succes ? 'rgba(46,160,67,.5)' : 'rgba(255,166,0,.5)'};
+    color:${succes ? '#3fb950' : '#e3a008'}">
+    ${escHtml(msg)}
+    <div style="font-size:10px;color:var(--text-faint);margin-top:4px">${stamp}</div>
+  </div>`;
 }
 
 function _resetOpname() {
   opnamePhotos = [];
   document.getElementById("opnameBlock").style.display = "none";
   document.getElementById("photoCount").textContent = "0 foto's";
+  const bs = document.getElementById("opnameBijschrift");
+  if (bs) bs.value = "";
 }
 
 // Popup "projectmap ontbreekt" → mappenstructuur aanmaken + uploaden
@@ -3078,12 +3314,22 @@ async function sluitOpname() {
   }
   const fotos = opnamePhotos.filter(p => p.file);
   if (!fotos.length) { showToast("Geen foto's om te uploaden"); _resetOpname(); return; }
-  showToast("Projectmap zoeken op de NAS…");
-  let projPath = null;
-  try { projPath = await findProjectFolder(proj.code); }
-  catch(e) { console.warn('findProjectFolder fout:', e.message); showToast('⚠ NAS-zoeken mislukt: ' + e.message); return; }
-  if (projPath) await uploadOpnamePhotos(proj, projPath);
-  else openNasSheet(proj);
+  // Knop op slot tijdens de hele upload — tweede tik kan geen dubbele run starten
+  const btn = document.getElementById("opnameAfrondBtn");
+  if (btn && btn.disabled) return;
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Bezig met uploaden…"; }
+  const res = document.getElementById("captureResult");
+  if (res) res.style.display = "none";
+  try {
+    showToast("Projectmap zoeken op de NAS…");
+    let projPath = null;
+    try { projPath = await findProjectFolder(proj.code); }
+    catch(e) { console.warn('findProjectFolder fout:', e.message); showToast('⚠ NAS-zoeken mislukt: ' + e.message); return; }
+    if (projPath) await uploadOpnamePhotos(proj, projPath);
+    else openNasSheet(proj);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "✅ Opname afronden"; }
+  }
 }
 
 /* =====================================================================
@@ -3586,6 +3832,15 @@ function closeNewProject() {
   npReturnToOplever = false;
 }
 
+// Vanuit de projecten-tab: zoekterm zonder resultaat → projectaanmaker
+// met de zoekterm alvast als projectnaam ingevuld.
+function openNewProjectPrefill() {
+  const q = document.getElementById("projectSearch");
+  const naam = q ? q.value.trim() : "";
+  openNewProject();
+  if (naam) { document.getElementById("npName").value = naam; updateNpPreview(); }
+}
+
 async function saveNewProject() {
   const name = document.getElementById("npName").value.trim();
   const k = sanCode(document.getElementById("npKlant").value);
@@ -3973,6 +4228,7 @@ const _RQ = {
         try {
           if (task.type === "feedback") ok = await fbUpload(task.entry);
           else if (task.type === "oplevering") ok = await oplUpload(task.entry);
+          else if (task.type === "notitie") ok = await noteUpload(task.entry);
         } catch(e) { ok = false; }
         if (!ok) rest.push(task);
       }
