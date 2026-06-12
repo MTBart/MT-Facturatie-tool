@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — App-icoon: M&T op een regel, M/T wit en & goud (zoals het app-logo)
+- Commit: `b130a01` | Auteur: Bart Witte
+
 ## 2026-06-12 — App: notities naar SP + bijschrift bij foto's, project-sheet uitgebreid, upload-bevestiging + dedupe
 - Commit: `4666634` | Auteur: Bart Witte
 

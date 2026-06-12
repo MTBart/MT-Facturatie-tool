@@ -844,7 +844,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         </div>
         <div class="thumbs-grid" id="thumbsGrid"></div>
         <div class="field" style="margin-top:8px">
-          <textarea id="opnameBijschrift" placeholder="Bijschrift bij deze foto's (optioneel) — wordt als notitie aan het project gekoppeld…" rows="2"></textarea>
+          <textarea id="opnameBijschrift" placeholder="Bijschrift bij deze foto's (optioneel) — wordt als notitie + afvinkbare taak aan het project gekoppeld…" rows="2"></textarea>
         </div>
         <div class="sp-mock" id="spMockPath">→ SP: /Projecten/–/Opname/</div>
         <button class="btn btn-gold btn-full" id="opnameAfrondBtn" onclick="sluitOpname()" style="margin-top:8px">✅ Opname afronden</button>
@@ -1398,6 +1398,9 @@ async function toonApp(account) {
   document.getElementById('demoBadge').style.display = 'none';
   // Laad echte data na login
   await loadRealProjects();
+  // Timer herstellen nu de echte projecten er zijn (PWA-herstart-fix)
+  restoreTimer();
+  syncTimerWithToggl();
   // Agenda voor deze week alvast warm laden (Toggl 2.0 logged + planned)
   loadAgendaWeek(currentWeek).then(() => { renderWeekStrip(); renderAgenda(); }).catch(() => {});
   // F1: echte notificaties pollen + wachtende offline-items alsnog versturen
@@ -1653,8 +1656,9 @@ async function spSyncTaken() {
       if (existing) {
         // Remote togglTaskId wint als het er is
         if (rt.togglTaskId) existing.togglTaskId = rt.togglTaskId;
+        if (rt.link && !existing.link) existing.link = rt.link;
       } else {
-        TASKS[rt.project_code].push({id:rt.id, name:rt.naam, status:rt.status||'todo', togglTaskId:rt.togglTaskId||null, tag:null, note:''});
+        TASKS[rt.project_code].push({id:rt.id, name:rt.naam, status:rt.status||'todo', togglTaskId:rt.togglTaskId||null, tag:rt.tag||null, note:'', link:rt.link||null});
       }
     });
     saveTasks();
@@ -1672,6 +1676,8 @@ async function spWriteTaken(code, task) {
       naam: task.name,
       status: task.status,
       togglTaskId: task.togglTaskId || null,
+      tag: task.tag || null,
+      link: task.link || null,
       ts: new Date().toISOString(),
       door: email
     };
@@ -2012,6 +2018,10 @@ document.addEventListener("DOMContentLoaded", () => {
   renderNotifBadge();
   // MSAL: probeer stil in te loggen; login-screen blijft zichtbaar totdat login slaagt of demo gekozen wordt
   initMsal();
+  // Terug uit de achtergrond: timer-herstel nogmaals proberen + klok bijwerken
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { restoreTimer(); if (timerRunning) tickTimer(); }
+  });
 });
 
 /* =====================================================================
@@ -2030,26 +2040,65 @@ function switchTab(name, btn) {
    TIMER
    ===================================================================== */
 function loadFromStorage() {
+  restoreTimer();
   try {
-    const saved = JSON.parse(localStorage.getItem("mt_timer") || "null");
-    if (saved && saved.running && saved.projectId) {
-      const proj = allProjects().find(p => p.id === saved.projectId);
-      if (proj) {
-        activeProject = proj;
-        timerStart = saved.start;
-        timerRunning = true;
-        captureProject = proj;
-        _togglTimerEntryId = saved.togglEntryId || null;
-        startTickInterval();
-        updateTimerUI();
-      }
-    }
     const savedNotes = JSON.parse(localStorage.getItem("mt_notes") || "[]");
     window._notes = savedNotes;
   } catch(e) {
     window._notes = [];
   }
   if (!window._notes) window._notes = [];
+}
+
+// Timer-uitval-fix (Bart 12-6: "mn timer gaat wel steeds uit"): de PWA wordt
+// op mobiel vaak uit het geheugen gezet; bij heropenen draaide het herstel
+// vóórdat de Toggl-projecten geladen waren (REAL_PROJECTS leeg) → project op
+// id "tg-…" niet gevonden → timer leek uit, terwijl de Track-entry doorliep.
+// restoreTimer() is daarom herbruikbaar: hij draait nogmaals zodra de echte
+// projecten er zijn, en bij terugkeren uit de achtergrond.
+function restoreTimer() {
+  if (timerRunning) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem("mt_timer") || "null");
+    if (!(saved && saved.running && saved.projectId)) return;
+    const proj = allProjects().find(p => p.id === saved.projectId);
+    if (!proj) return;   // projecten mogelijk nog niet geladen — volgende poging pakt 'm
+    activeProject = proj;
+    captureProject = proj;
+    timerStart = saved.start;
+    timerRunning = true;
+    _togglTimerEntryId = saved.togglEntryId || null;
+    startTickInterval();
+    updateTimerUI();
+    renderCaptureProject();
+  } catch(e) {}
+}
+
+// Vangnet: klokt Track server-side nog maar staat de timer hier "uit"
+// (mt_timer kwijt of ander toestel), herstel dan uit de lopende entry.
+async function syncTimerWithToggl() {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const cur = await tgTrack('me/time_entries/current');
+    const entry = (cur && cur.id) ? cur : (cur && cur.data);
+    if (!(entry && entry.id && entry.duration < 0)) return;
+    if (timerRunning) {
+      if (!_togglTimerEntryId) { _togglTimerEntryId = entry.id; saveTimerState(); }
+      return;
+    }
+    const proj = allProjects().find(p => p.togglProjectId === entry.project_id);
+    if (!proj) return;
+    activeProject = proj;
+    captureProject = proj;
+    timerStart = new Date(entry.start).getTime();
+    timerRunning = true;
+    _togglTimerEntryId = entry.id;
+    saveTimerState();
+    startTickInterval();
+    updateTimerUI();
+    renderCaptureProject();
+    showToast('⏱ Lopende timer hersteld: ' + proj.code);
+  } catch(e) { console.warn('syncTimerWithToggl fout:', e.message); }
 }
 
 function saveTimerState() {
@@ -3009,6 +3058,58 @@ function saveNote() {
   ta.value = "";
   renderNotes();
   _noteSync(note); // best-effort, fout → retry-queue
+  noteToTask(note).catch(() => {});
+}
+
+// Notitie → óók een afvinkbare taak op het project (Bart 12-6). De taak
+// verwijst naar de bronmap op SharePoint (geen Toggl-attachments) en loopt
+// mee in de gewone taak-sync: Toggl 2.0 Focus + mt_app_taken.json.
+const _folderUrlCache = {};
+async function _projFolderUrl(code, sub, knownProjPath) {
+  const key = code + "/" + (sub || "");
+  if (_folderUrlCache[key]) return _folderUrlCache[key];
+  const projPath = knownProjPath || await findProjectFolder(code);
+  if (!projPath) return null;
+  const token = await window.getGraphToken();
+  if (!token) return null;
+  const dest = sub ? `${projPath}/${sub}` : projPath;
+  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SPProj.DRIVE}/root:/${encodeURI(dest)}?$select=webUrl`,
+    { headers: {'Authorization':`Bearer ${token}`} });
+  if (!r.ok) return null;
+  const item = await r.json();
+  if (item.webUrl) _folderUrlCache[key] = item.webUrl;
+  return item.webUrl || null;
+}
+
+async function noteToTask(note, knownProjPath) {
+  const proj = allProjects().find(p => p.code === note.project);
+  if (!proj) return;
+  const name = note.text.length > 80 ? note.text.slice(0, 77) + "…" : note.text;
+  const task = {
+    id: "nt-" + note.id, name, status: "todo",
+    date: null, est: null, tag: "notitie", note: "", link: null
+  };
+  // Bronmap-verwijzing (best-effort); bij foto's direct naar 06_Fotos
+  if (!_demoMode && _msAccount) {
+    try {
+      task.link = await _projFolderUrl(note.project, (note.fotos && note.fotos.length) ? "06_Fotos" : "", knownProjPath);
+    } catch(e) {}
+  }
+  addTaskToProject(proj.code, task);
+  if (currentSheetProject && currentSheetProject.code === proj.code) renderSheetTasks();
+  // Toggl 2.0 Focus + SP (zelfde route als saveNewTask)
+  if (!_demoMode && _msAccount && proj.togglProjectId) {
+    focusFetch('tasks', 'POST', {name, status_id: _PLAN_TG_STATUS.todo, project_id: proj.togglProjectId})
+      .then(r => {
+        const id = r && (r.id || (r.data && r.data.id));
+        if (id) { task.togglTaskId = id; saveTasks(); }
+        spWriteTaken(proj.code, task);
+        if (currentSheetProject && currentSheetProject.code === proj.code) renderSheetTasks();
+      })
+      .catch(e => { console.warn('noteToTask Focus sync fout:', e.message); spWriteTaken(proj.code, task); });
+  } else {
+    spWriteTaken(proj.code, task);
+  }
 }
 
 // Datum + tijd voor weergave; oude notities (zonder ts) tonen hun oude time-veld
@@ -3232,6 +3333,7 @@ async function uploadOpnamePhotos(proj, projPath) {
     localStorage.setItem("mt_notes", JSON.stringify(window._notes));
     renderNotes();
     _noteSync(note);
+    noteToTask(note, projPath).catch(() => {});
   }
   // Blijvende bevestiging in de capture-tab (toast verdwijnt, dit blok niet)
   if (fail) {
@@ -3242,7 +3344,7 @@ async function uploadOpnamePhotos(proj, projPath) {
     const delen = [];
     if (ok) delen.push(`${ok} foto('s) geüpload`);
     if (skip) delen.push(`${skip} stond(en) er al (overgeslagen)`);
-    if (bijschrift) delen.push(`bijschrift opgeslagen als notitie`);
+    if (bijschrift) delen.push(`bijschrift opgeslagen als notitie + taak`);
     _captureResult(true, `✅ ${delen.join(" · ")} → NAS: ${proj.code} › 06_Fotos`);
     _resetOpname();
   }
@@ -3673,6 +3775,7 @@ function renderSheetTasks() {
         <div class="task-name ${t.status==='klaar'?'klaar':''}">${escHtml(t.name)} ${t.tag?`<span class="task-tag">${escHtml(t.tag)}</span>`:""} ${syncDot}</div>
         ${meta ? `<div class="task-meta">${escHtml(meta)}</div>` : ""}
         ${t.note ? `<div class="task-meta">📝 ${escHtml(t.note)}</div>` : ""}
+        ${t.link ? `<div class="task-meta"><a href="${t.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-mid);text-decoration:none">📂 Bronmap op SharePoint</a></div>` : ""}
       </div>
     </div>`;
   });
