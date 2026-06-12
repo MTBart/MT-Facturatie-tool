@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — App: Oplevering wordt Rapportage — opnamerapport, oplever-foto's, tussentijds concept, NAS-404-fix
+- Commit: `1c9e1b2` | Auteur: Bart Witte
+
 ## 2026-06-12 — App: notitie wordt afvinkbare taak + bronmap-link, timer-uitval gefixt
 - Commit: `75c5094` | Auteur: Bart Witte
 

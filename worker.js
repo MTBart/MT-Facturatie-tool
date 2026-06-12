@@ -183,6 +183,23 @@ export default {
         const text = await response.text();
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 
+      } else if (target === 'toggl_admin_projects') {
+        // Volledige workspace-projectenlijst met het admin-token. Gewone
+        // gebruikers zien met hun eigen token geen privé-projecten waar ze
+        // geen lid van zijn (Mathijs miste daardoor projecten in de app).
+        // Bewust GET-only + pad-whitelist: alléén de projectenlijst, geen
+        // andere admin-rechten via deze route.
+        const apPath = url.searchParams.get('path') || '';
+        if (request.method !== 'GET' || !/^workspaces\/\d+\/projects(\?[\w=&%.\-]*)?$/.test(apPath)) {
+          return new Response('Forbidden', { status: 403, headers: corsHeaders });
+        }
+        const apToken = btoa(`${env.TOGGL_KEY}:api_token`);
+        const apResp = await fetch(`https://api.track.toggl.com/api/v9/${apPath}`, {
+          headers: { 'Authorization': `Basic ${apToken}` }
+        });
+        const apText = await apResp.text();
+        return new Response(apText, { status: apResp.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+
       } else if (target === 'toggl_reports') {
         // Toggl Track Reports API v3 — Basic auth, aparte base. Aggregeert over ALLE
         // workspace-gebruikers (admin-token = TOGGL_KEY). Browser kan dit niet direct

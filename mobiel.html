@@ -772,7 +772,12 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <input type="search" id="projectSearch" list="projSuggest" placeholder="🔍 Zoek project (naam, code, adres)…" autocomplete="off" oninput="filterProjectCards(this.value)">
       <datalist id="projSuggest"></datalist>
     </div>
-    <div class="section-head">Jouw projecten</div>
+    <div class="view-switch" id="projAssignSwitch" style="margin-bottom:12px">
+      <button class="active" style="flex:1" onclick="setProjAssignFilter('alle', this)">Alle</button>
+      <button style="flex:1" onclick="setProjAssignFilter('mijn', this)">Toegewezen</button>
+      <button style="flex:1" onclick="setProjAssignFilter('niet', this)">Niet toegewezen</button>
+    </div>
+    <div class="section-head">Projecten</div>
     <div id="projectCardList"></div>
   </div>
 
@@ -1296,6 +1301,18 @@ async function tgTrack(path, method='GET', body=null) {
   try { return JSON.parse(txt); } catch(e) { return txt; }
 }
 
+/* ── Volledige projectenlijst via admin-route (GET-only Worker-target;
+      gewone tokens zien privé-projecten zonder lidmaatschap niet) ── */
+async function tgTrackAdminProjects() {
+  const h = await authHeader();
+  if (!h['X-Auth-Token']) throw new Error('Niet ingelogd bij Microsoft');
+  const pad = `workspaces/${TG_WS}/projects?active=true`;
+  const res = await fetch(`${WORKER}?target=toggl_admin_projects&path=${encodeURIComponent(pad)}`, {headers: {...h}});
+  const txt = await res.text();
+  if (!res.ok) throw new Error('Track admin HTTP ' + res.status);
+  return JSON.parse(txt);
+}
+
 /* ── Toggl 2.0 (Focus) via Worker ── */
 async function focusFetch(path, method='GET', body=null) {
   const h = await authHeader();
@@ -1813,9 +1830,21 @@ async function loadAgendaWeek(week) {
    ===================================================================== */
 async function loadRealProjects() {
   try {
-    // Track projecten van workspace
-    const raw = await tgTrack(`workspaces/${TG_WS}/projects?active=true`);
+    // Volledige workspace-lijst via de admin-route (privé-projecten waar je
+    // geen lid van bent zie je met je eigen token NIET — daardoor miste
+    // Mathijs projecten) + eigen lidmaatschappen via me/projects om
+    // wel/niet-toegewezen te bepalen. Admin-route weg? → oude per-user call.
+    let raw, mine = null;
+    try {
+      [raw, mine] = await Promise.all([
+        tgTrackAdminProjects(),
+        tgTrack('me/projects').catch(() => null)
+      ]);
+    } catch(e) {
+      raw = await tgTrack(`workspaces/${TG_WS}/projects?active=true`);
+    }
     const list = Array.isArray(raw) ? raw : (raw && raw.data ? raw.data : []);
+    const mijnIds = Array.isArray(mine) ? new Set(mine.map(p => p.id)) : null;
     REAL_PROJECTS = list.map(p => ({
       id: 'tg-' + p.id,
       togglProjectId: p.id,
@@ -1823,12 +1852,13 @@ async function loadRealProjects() {
       name: p.name.replace(/\s*\[[A-Z0-9\-]+\]$/, ''),
       addr: '–',
       status: 'in-uitvoering',
-      assigned: true,
+      assigned: mijnIds ? mijnIds.has(p.id) : true,
       lastActivity: '–',
       contact: '–',
       checklist: ['Eindcontrole uitgevoerd'],
       source: 'track'
     }));
+    REAL_PROJECTS.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nl'));
     // Sync user-projecten + adres-overlay van SP (merge)
     await spSyncUserProjects();
     spSyncAddr().then(() => renderProjectCards());
@@ -2344,13 +2374,22 @@ function renderRecentList() {
    PROJECTEN TAB
    ===================================================================== */
 let projectFilter = "";
+let projAssignFilter = "alle"; // alle | mijn | niet
 function filterProjectCards(q) {
   projectFilter = String(q || "").trim().toLowerCase();
   renderProjectCards();
 }
+function setProjAssignFilter(f, btn) {
+  projAssignFilter = f;
+  document.querySelectorAll("#projAssignSwitch button").forEach(b => b.classList.toggle("active", b === btn));
+  renderProjectCards();
+}
 function renderProjectCards() {
   const el = document.getElementById("projectCardList");
-  let lijst = allProjects();
+  let lijst = allProjects().slice()
+    .sort((a, b) => (b.assigned ? 1 : 0) - (a.assigned ? 1 : 0) || (a.name || "").localeCompare(b.name || "", "nl"));
+  if (projAssignFilter === "mijn") lijst = lijst.filter(p => p.assigned);
+  else if (projAssignFilter === "niet") lijst = lijst.filter(p => !p.assigned);
   // Autocomplete-suggesties (datalist) vullen met code + naam
   const dl = document.getElementById("projSuggest");
   if (dl) {
@@ -3513,7 +3552,9 @@ function populateOpleverSelect() {
   const sel = document.getElementById("opleverProjectSelect");
   const cur = sel.value;
   sel.innerHTML = `<option value="">— selecteer project —</option>`;
-  allProjects().forEach(p => {
+  allProjects().slice()
+    .sort((a, b) => (b.assigned ? 1 : 0) - (a.assigned ? 1 : 0) || (a.name || "").localeCompare(b.name || "", "nl"))
+    .forEach(p => {
     const opt = document.createElement("option");
     opt.value = p.id;
     opt.textContent = `${p.code} — ${p.name}`;
