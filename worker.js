@@ -2,6 +2,11 @@ const TENANT_ID = '15b652c3-ff53-433f-a29d-e9626cbafb41';
 const CLIENT_ID = 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb';
 const JWKS_URL = `https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys`;
 
+// Usage-/presence-tracking: alleen deze e-mail mag de admin-leesroutes
+// (/track/online, /track/usage). Schrijfroutes (/track, /track/heartbeat)
+// mogen alle ingelogde @mortiseandtenon.nl-gebruikers.
+const TRACK_ADMIN = 'bart@mortiseandtenon.nl';
+
 let jwksCache = null;
 let jwksCacheTime = 0;
 
@@ -57,6 +62,150 @@ function userKey(env, prefix, fallback, payload) {
   return (name && env[`${prefix}_${name}`]) || fallback;
 }
 
+// E-mail uit het MSAL-token (lowercased). Leeg bij server-key/geen login.
+function tokenEmail(payload) {
+  return ((payload && (payload.preferred_username || payload.upn || payload.email)) || '').toLowerCase();
+}
+
+// Kapt een string af zodat payloads klein blijven (data-minimalisme).
+function clip(v, n) {
+  if (v == null) return null;
+  const s = String(v);
+  return s.length > n ? s.slice(0, n) : s;
+}
+
+// ── Tracking-routes ───────────────────────────────────────────────────────────
+// Pad-gebaseerd (/track, /track/heartbeat, /track/online, /track/usage) i.t.t. de
+// ?target=-routes hierboven. Zelfde auth (MSAL of server-key) is al gevalideerd
+// vóór dit punt. Schrijfroutes: alle ingelogde gebruikers. Leesroutes: admin-only.
+// Faalt nooit hard op ontbrekende bindings — tracking mag de tool niet ophouden.
+async function handleTrack(pathname, request, env, msPayload, cors) {
+  const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
+    status, headers: { 'Content-Type': 'application/json', ...cors }
+  });
+  const email = tokenEmail(msPayload);
+  const isAdmin = email === TRACK_ADMIN;
+
+  // POST /track — batch events wegschrijven naar D1.
+  if (pathname === '/track' && request.method === 'POST') {
+    if (!env.TRACK_DB) return json({ ok: false, skipped: 'no-d1' });
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'bad-json' }, 400); }
+    const events = Array.isArray(payload?.events) ? payload.events : [];
+    if (!events.length) return json({ ok: true, written: 0 });
+    const recv = Date.now();
+    // Server bepaalt de user (uit het token) — client mag dit niet vervalsen.
+    const user = email || clip(payload.user, 120) || 'onbekend';
+    const ua = clip(request.headers.get('User-Agent') || '', 200);
+    const stmt = env.TRACK_DB.prepare(
+      `INSERT INTO events (ts, recv_ts, session_id, user, event, action, detail, ok, ms, app_version, ua)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    );
+    const batch = events.slice(0, 200).map(e => stmt.bind(
+      Number(e.ts) || recv,
+      recv,
+      clip(e.sessionId, 80) || 'geen-sessie',
+      user,
+      clip(e.event, 40) || 'onbekend',
+      clip(e.action, 80),
+      clip(e.detail, 200),
+      e.ok === true ? 1 : (e.ok === false ? 0 : null),
+      (e.ms == null || isNaN(e.ms)) ? null : Math.round(Number(e.ms)),
+      clip(e.appVersion || payload.appVersion, 60),
+      ua
+    ));
+    try { await env.TRACK_DB.batch(batch); return json({ ok: true, written: batch.length }); }
+    catch (err) { return json({ ok: false, error: clip(err.message, 200) }, 500); }
+  }
+
+  // POST /track/heartbeat — presence in KV met TTL.
+  if (pathname === '/track/heartbeat' && request.method === 'POST') {
+    if (!env.TRACK_KV) return json({ ok: false, skipped: 'no-kv' });
+    let body = {};
+    try { body = await request.json(); } catch {}
+    const user = email || clip(body.user, 120) || 'onbekend';
+    const value = JSON.stringify({
+      tab: clip(body.tab, 40) || '?',
+      sessionId: clip(body.sessionId, 80) || '?',
+      at: Date.now(),
+      ua: clip(request.headers.get('User-Agent') || '', 120)
+    });
+    try { await env.TRACK_KV.put(`presence:${user}`, value, { expirationTtl: 90 }); }
+    catch (err) { return json({ ok: false, error: clip(err.message, 200) }, 500); }
+    return json({ ok: true });
+  }
+
+  // GET /track/online — wie is nu online (KV-scan). Admin-only.
+  if (pathname === '/track/online' && request.method === 'GET') {
+    if (!isAdmin) return json({ error: 'admin-only' }, 403);
+    if (!env.TRACK_KV) return json({ online: [], skipped: 'no-kv' });
+    const list = await env.TRACK_KV.list({ prefix: 'presence:' });
+    const online = [];
+    for (const k of list.keys) {
+      const v = await env.TRACK_KV.get(k.name);
+      if (!v) continue;
+      try {
+        const d = JSON.parse(v);
+        online.push({ user: k.name.slice('presence:'.length), tab: d.tab, sinds: d.at });
+      } catch {}
+    }
+    return json({ online });
+  }
+
+  // GET /track/usage?range=today|7d|30d — aggregaties uit D1. Admin-only.
+  if (pathname === '/track/usage' && request.method === 'GET') {
+    if (!isAdmin) return json({ error: 'admin-only' }, 403);
+    if (!env.TRACK_DB) return json({ skipped: 'no-d1' });
+    const url = new URL(request.url);
+    const range = url.searchParams.get('range') || '7d';
+    const now = Date.now();
+    const since = range === 'today'
+      ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
+      : range === '30d' ? now - 30 * 864e5 : now - 7 * 864e5;
+    const db = env.TRACK_DB;
+    const q = (sql, ...b) => db.prepare(sql).bind(...b).all();
+    try {
+      const [perFunctie, perUser, perDag, sessies, mislukt, totaal] = await Promise.all([
+        // Gebruik per functie (action), met mislukt-percentage.
+        q(`SELECT event, action,
+                  COUNT(*) AS n,
+                  SUM(CASE WHEN ok=0 THEN 1 ELSE 0 END) AS fout,
+                  CAST(AVG(ms) AS INT) AS gem_ms
+             FROM events WHERE ts>=? AND action IS NOT NULL
+            GROUP BY event, action ORDER BY n DESC LIMIT 100`, since),
+        // Gebruik per gebruiker.
+        q(`SELECT user, COUNT(*) AS n, COUNT(DISTINCT session_id) AS sessies
+             FROM events WHERE ts>=? GROUP BY user ORDER BY n DESC`, since),
+        // Events per dag.
+        q(`SELECT date(ts/1000,'unixepoch','localtime') AS dag, COUNT(*) AS n,
+                  COUNT(DISTINCT user) AS users, COUNT(DISTINCT session_id) AS sessies
+             FROM events WHERE ts>=? GROUP BY dag ORDER BY dag`, since),
+        // Sessies + gem. sessieduur (laatste-eerste event per sessie).
+        q(`SELECT COUNT(*) AS aantal, CAST(AVG(duur) AS INT) AS gem_duur_ms FROM (
+              SELECT session_id, MAX(ts)-MIN(ts) AS duur
+                FROM events WHERE ts>=? GROUP BY session_id
+           )`, since),
+        // Top mislukte/afgebroken acties = de usability-hotspots.
+        q(`SELECT event, action, detail, COUNT(*) AS n
+             FROM events WHERE ts>=? AND (ok=0 OR event='error')
+            GROUP BY event, action, detail ORDER BY n DESC LIMIT 25`, since),
+        q(`SELECT COUNT(*) AS n FROM events WHERE ts>=?`, since)
+      ]);
+      return json({
+        range, since,
+        perFunctie: perFunctie.results,
+        perUser: perUser.results,
+        perDag: perDag.results,
+        sessies: sessies.results?.[0] || { aantal: 0, gem_duur_ms: 0 },
+        mislukt: mislukt.results,
+        totaal: totaal.results?.[0]?.n || 0
+      });
+    } catch (err) { return json({ error: clip(err.message, 200) }, 500); }
+  }
+
+  return json({ error: 'unknown-track-route' }, 404);
+}
+
 export default {
   async fetch(request, env) {
     const corsHeaders = {
@@ -83,6 +232,12 @@ export default {
 
     try {
       const url = new URL(request.url);
+
+      // Pad-gebaseerde tracking-routes (los van de ?target=-proxy hieronder).
+      if (url.pathname === '/track' || url.pathname.startsWith('/track/')) {
+        return await handleTrack(url.pathname, request, env, msPayload, corsHeaders);
+      }
+
       const target = url.searchParams.get('target');
 
      if (target === 'claude') {

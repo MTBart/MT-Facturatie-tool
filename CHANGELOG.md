@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-12 — Fix: NAS-404 deel 2 — drive-search geeft geen parentReference.path
+- Commit: `a0baefb` | Auteur: Bart Witte
+
 ## 2026-06-12 — Docs: ROUTES.md ververst — wegen-kaart cockpit + app + Worker + SP-data
 - Commit: `b47fcbd` | Auteur: Bart Witte
 

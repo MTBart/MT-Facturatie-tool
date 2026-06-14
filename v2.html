@@ -504,6 +504,7 @@ button{transition:transform .07s ease,filter .07s ease}
   <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" id="tab-btn-admin" style="display:none" onclick="showTab('admin',this)">⚙ Admin</button>
+  <button class="tab-btn" id="tab-btn-activiteit" style="display:none" onclick="showTab('activiteit',this)">📊 Activiteit</button>
   <button class="tab-help-btn" onclick="helpOpen()" title="Korte uitleg van dit tabblad + feedback geven aan Larry">ⓘ wat is dit?</button>
 </div>
 
@@ -1485,6 +1486,56 @@ button{transition:transform .07s ease,filter .07s ease}
   </div>
   <div id="inbox-toast"><span id="inbox-toast-msg"></span><button onclick="inboxUndo()">Ongedaan maken</button></div>
 
+  <!-- ═══ TAB: ACTIVITEIT (usage-/presence-tracking, alleen Bart) ═══ -->
+  <div id="tab-activiteit" class="tab-content">
+    <style>
+      #tab-activiteit .act-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+      #tab-activiteit .act-range{display:flex;gap:2px}
+      #tab-activiteit .act-range button{padding:6px 13px;border:1px solid var(--border,#ddd);background:#fff;cursor:pointer;font-size:12.5px;color:var(--text-dim,#666)}
+      #tab-activiteit .act-range button:first-child{border-radius:6px 0 0 6px}
+      #tab-activiteit .act-range button:last-child{border-radius:0 6px 6px 0}
+      #tab-activiteit .act-range button.active{background:var(--green,#2A4A38);color:#fff;border-color:var(--green,#2A4A38)}
+      #tab-activiteit .act-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+      #tab-activiteit .act-stat{background:var(--surface,#fff);border:1px solid var(--border,#eee);border-radius:10px;padding:13px 15px}
+      #tab-activiteit .act-stat .v{font-size:24px;font-weight:700;color:var(--green,#2A4A38);font-variant-numeric:tabular-nums}
+      #tab-activiteit .act-stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint,#999);margin-top:3px}
+      #tab-activiteit .act-online{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
+      #tab-activiteit .act-chip{display:flex;align-items:center;gap:7px;background:var(--surface-sunken,#f6f6f4);border:1px solid var(--border,#eee);border-radius:20px;padding:5px 13px 5px 10px;font-size:13px}
+      #tab-activiteit .act-dot{width:9px;height:9px;border-radius:50%;background:#2ecc71;box-shadow:0 0 0 3px rgba(46,204,113,.18)}
+      #tab-activiteit .act-chip .sub{font-size:11px;color:var(--text-faint,#999)}
+      #tab-activiteit h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#666);margin:20px 0 8px}
+      #tab-activiteit table.act-tbl{width:100%;border-collapse:collapse;font-size:13px}
+      #tab-activiteit table.act-tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint,#999);padding:6px 8px;border-bottom:1px solid var(--border,#e6e6e6)}
+      #tab-activiteit table.act-tbl td{padding:6px 8px;border-bottom:1px solid var(--border,#f2f2f2)}
+      #tab-activiteit table.act-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+      #tab-activiteit .act-bad{color:#c0392b;font-weight:600}
+      #tab-activiteit .act-empty{color:var(--text-faint,#999);font-size:13px;padding:10px 0}
+    </style>
+    <div class="act-head">
+      <strong style="font-size:16px;color:var(--green,#2A4A38)">📊 Activiteit &amp; gebruik</strong>
+      <div class="act-range" id="act-range">
+        <button data-r="today" onclick="actSetRange('today',this)">Vandaag</button>
+        <button data-r="7d" class="active" onclick="actSetRange('7d',this)">7 dagen</button>
+        <button data-r="30d" onclick="actSetRange('30d',this)">30 dagen</button>
+      </div>
+      <button onclick="activiteitOpen(true)" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border,#ddd);background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px">↻ Verversen</button>
+    </div>
+
+    <h3 style="margin-top:0">Nu online</h3>
+    <div class="act-online" id="act-online"><span class="act-empty">laden…</span></div>
+
+    <div class="act-cards" id="act-stats"></div>
+
+    <h3>Gebruik per functie</h3>
+    <div id="act-functies"><div class="act-empty">laden…</div></div>
+
+    <h3>Per gebruiker</h3>
+    <div id="act-users"><div class="act-empty">laden…</div></div>
+
+    <h3>Usability-hotspots — mislukte / afgebroken acties</h3>
+    <div id="act-hotspots"><div class="act-empty">laden…</div></div>
+  </div>
+
   <!-- ═══ TAB: MIGRATIE ═══ -->
   <div id="tab-migratie" class="tab-content"></div>
 
@@ -1614,6 +1665,11 @@ button{transition:transform .07s ease,filter .07s ease}
 <script>
 // ═══ CONFIG ═══
 const WORKER = 'https://mt-claude-proxy.bart-a12.workers.dev';
+window.WORKER = WORKER; // track.js leest window.WORKER
+// Versie-stempel voor usage-tracking. Handmatig bumpen bij grotere wijzigingen
+// (of via build-hook vervangen). Verschijnt als app_version op elk event.
+const APP_VERSION = '2026-06-14-track1';
+window.APP_VERSION = APP_VERSION;
 const ADMIN_DEFAULT = '342968480452052559';
 const BTW_IDS = {'21':'342968481360119428','9':'342968481362216581','0':'348668107652335594'};
 const BANK_ID = '343544076091524743';
@@ -1729,10 +1785,24 @@ function fmt(n){return`€ ${n.toFixed(2).replace('.',',')}`;}
 function fmtDatum(d){return d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'—';}
 
 async function authHeader(){const t=typeof getAuthToken==='function'?await getAuthToken():null;return t?{'X-Auth-Token':t}:{};}
-async function mbGet(path){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{headers:h});}
-async function mbPost(path,body){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});}
-async function mbPatch(path,body){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'PATCH',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});}
-async function mbDelete(path){const h=await authHeader();return fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'DELETE',headers:h});}
+// Wikkelt een MB-fetch en logt latency + faal-status (alleen pad/methode, geen
+// body/inhoud). Gefaalde API-calls = usability-frictie → zichtbaar in Activiteit.
+async function _mbTrack(method,path,doFetch){
+  const t0=(typeof performance!=='undefined'?performance.now():Date.now());
+  try{
+    const r=await doFetch();
+    try{ if(window.track){ const fn=String(path).split('?')[0].split('/').slice(0,3).join('/');
+      track('api','mb_'+method,{detail:fn,ok:r.ok,ms:(typeof performance!=='undefined'?performance.now():Date.now())-t0}); } }catch(e){}
+    return r;
+  }catch(err){
+    try{ if(window.track) track('api','mb_'+method,{detail:String(path).split('?')[0],ok:false}); }catch(e){}
+    throw err;
+  }
+}
+async function mbGet(path){const h=await authHeader();return _mbTrack('get',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{headers:h}));}
+async function mbPost(path,body){const h=await authHeader();return _mbTrack('post',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)}));}
+async function mbPatch(path,body){const h=await authHeader();return _mbTrack('patch',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'PATCH',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)}));}
+async function mbDelete(path){const h=await authHeader();return _mbTrack('delete',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'DELETE',headers:h}));}
 async function claudeCall(messages,maxTokens=1800){
   const h=await authHeader();
   return fetch(`${WORKER}?target=claude`,{method:'POST',headers:{...h,'Content-Type':'application/json'},
@@ -1765,7 +1835,18 @@ window.onload=async()=>{
 };
 
 // ═══ TABS ═══
+// Dwell-tracking: hoe lang bleef een tab open vóór de gebruiker wegklikte.
+let _tabHuidig='dashboard', _tabSinds=Date.now();
 function showTab(name,btn){
+  // Vorige tab afsluiten met dwell-tijd, nieuwe tab loggen + presence verversen.
+  try{
+    if(window.track && name!==_tabHuidig){
+      track('tab','tab_dwell',{detail:_tabHuidig,ms:Date.now()-_tabSinds});
+      track('tab','tab_open',{detail:name});
+      _tabHuidig=name; _tabSinds=Date.now();
+      if(window.trackHeartbeat) trackHeartbeat(name);
+    }
+  }catch(e){}
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
@@ -1782,6 +1863,7 @@ function showTab(name,btn){
   if(name==='inbox') inboxOpen();
   if(name==='materialen') renderMaterialen();
   if(name==='admin') adminOpen();
+  if(name==='activiteit') activiteitOpen();
 }
 function showVtab(name,btn){
   document.querySelectorAll('#tab-voorraad .vtab-content').forEach(t=>t.classList.remove('active'));
@@ -3397,7 +3479,9 @@ async function boekInMoneybird(){
     if(!contactId){const nc=await mbPost(`${getAdmin()}/contacts`,{contact:{company_name:contact}});contactId=(await nc.json()).id;}
     status.innerHTML='<span class="spinner"></span> Boeken...';
     const r=await mbPost(`${getAdmin()}/documents/purchase_invoices`,{purchase_invoice:{contact_id:contactId,reference:refVolledig,date,due_date:due||undefined,details_attributes:details}});
-    if(!r.ok){const err=await r.json();status.textContent=`✗ ${JSON.stringify(err)}`;return;}
+    if(!r.ok){const err=await r.json();status.textContent=`✗ ${JSON.stringify(err)}`;
+      try{ if(window.track) track('action','factuur_boeken',{detail:'mb_reject_'+r.status,ok:false}); }catch(e){}
+      return;}
     const result=await r.json();const invoiceId=result.id;
     if(currentFile){
       status.innerHTML='<span class="spinner"></span> PDF uploaden...';
@@ -3421,8 +3505,11 @@ async function boekInMoneybird(){
     localStorage.setItem('mt_history',JSON.stringify(hist.slice(0,500)));
     // Mail verplaatsen naar "Facturen verwerkt" als hij uit mail geladen was
     if (_huidigMailId) { verplaatsMailNaarVerwerkt(_huidigMailId); _huidigMailId = null; scanEmailFacturen(true); }
+    try{ if(window.track) track('action','factuur_boeken',{detail:hoofdProject?('proj:'+hoofdProject):'geen_project',ok:true}); }catch(e){}
     setTimeout(()=>{resetFormulier();status.innerHTML=`✓ Klaar — <a href="https://moneybird.com/${getAdmin()}/documents/${invoiceId}/payment_initiations/new" target="_blank" style="color:var(--green)">💳 Betaling inplannen →</a>`;},1500);
-  }catch(e){status.textContent=`✗ ${e.message}`;}
+  }catch(e){status.textContent=`✗ ${e.message}`;
+    try{ if(window.track) track('action','factuur_boeken',{detail:'exception',ok:false}); }catch(_){}
+  }
 }
 
 // ═══ VOORRAAD ═══
@@ -6393,7 +6480,10 @@ async function inboxMove(targetId){
     document.getElementById('inbox-chatwrap').style.display='none';
     inboxLoadMessages();inboxReloadBadges();
     inboxToast(`Verplaatst naar ${naar?naar.displayName:'map'}`);
-  }catch(e){alert('Verplaatsen mislukt: '+e.message+(e.status===403?'\n\n(Mail.ReadWrite-toestemming nog niet verleend? Log opnieuw in.)':''));}
+    try{ if(window.track) track('action','inbox_move',{ok:true}); }catch(e){}
+  }catch(e){alert('Verplaatsen mislukt: '+e.message+(e.status===403?'\n\n(Mail.ReadWrite-toestemming nog niet verleend? Log opnieuw in.)':''));
+    try{ if(window.track) track('action','inbox_move',{detail:'status_'+(e.status||'?'),ok:false}); }catch(_){}
+  }
 }
 async function inboxUndo(){
   if(!_inbox.undo)return;const u=_inbox.undo;_inbox.undo=null;
@@ -6984,6 +7074,9 @@ function admRenderNotifLijst(){
 function admInitKnop(){
   const btn=document.getElementById('tab-btn-admin');
   if(btn) btn.style.display=mtIsAdmin()?'':'none';
+  // Activiteit-tab: alléén voor Bart (worker dwingt dit ook af op de leesroutes).
+  const actBtn=document.getElementById('tab-btn-activiteit');
+  if(actBtn) actBtn.style.display=(mtMijEmail()==='bart@mortiseandtenon.nl')?'':'none';
   // Laad ook budgetten-form zodra tab wordt geopend
   const verlofSub=document.getElementById('adm-sub-verlof');
   if(verlofSub) admRenderBudgetten();
@@ -7356,6 +7449,7 @@ function helpOpen(){
   document.getElementById('help-chatq').value='';
   ov.dataset.tab=tab;ov.classList.remove('hidden');ov.style.display='flex';
   _LOG.add('help-open',tab,'','');
+  try{ if(window.track) track('chat','help_open',{detail:tab}); }catch(e){}
 }
 function helpClose(){const ov=document.getElementById('help-overlay');if(ov)ov.style.display='none';}
 function helpBubble(cls,txt){const log=document.getElementById('help-chatlog');const d=document.createElement('div');d.className=cls;d.textContent=txt;log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
@@ -7376,7 +7470,10 @@ HARDE GRENS: je kunt hier NIETS uitvoeren of wijzigen — geen acties, geen data
     txt=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim(); // dubbele borging: hier nooit acties
     wait.textContent=txt;_helpHist.push({role:'assistant',content:txt});
     _LOG.add('help-feedback',tab,q,txt);
-  }catch(e){wait.textContent='fout: '+e.message;_LOG.add('help-feedback-fout',tab,q,e.message);}
+    try{ if(window.track) track('chat','feedback_verstuur',{detail:tab,ok:true}); }catch(e){}
+  }catch(e){wait.textContent='fout: '+e.message;_LOG.add('help-feedback-fout',tab,q,e.message);
+    try{ if(window.track) track('chat','feedback_verstuur',{detail:tab,ok:false}); }catch(_){}
+  }
 }
 </script>
 
@@ -7710,6 +7807,103 @@ initMsal();
 })();
 </script>
 
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// ACTIVITEIT-TAB — leest de tracking-aggregaties uit de Worker (admin-only: Bart)
+// ═══════════════════════════════════════════════════════════════════════════
+let _actRange='7d', _actOnlineTimer=null;
+
+async function actFetch(pad){
+  try{
+    const h=await authHeader();
+    const r=await fetch(`${WORKER}${pad}`,{headers:h});
+    if(!r.ok) return {__err:r.status};
+    return await r.json();
+  }catch(e){ return {__err:e.message}; }
+}
+
+function actSetRange(r,btn){
+  _actRange=r;
+  document.querySelectorAll('#act-range button').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  actLoadUsage();
+}
+
+function _actDuur(ms){
+  if(!ms||isNaN(ms)) return '—';
+  const s=Math.round(ms/1000); if(s<60) return s+'s';
+  const m=Math.floor(s/60); return m+'m '+(s%60)+'s';
+}
+function _actGeleden(ts){
+  const s=Math.round((Date.now()-ts)/1000);
+  if(s<60) return s+'s geleden'; const m=Math.floor(s/60);
+  return m<60?(m+'m geleden'):(Math.floor(m/60)+'u geleden');
+}
+function _esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+async function actLoadOnline(){
+  const el=document.getElementById('act-online'); if(!el) return;
+  const d=await actFetch('/track/online');
+  if(d.__err){ el.innerHTML=`<span class="act-empty">online-lijst niet beschikbaar (${_esc(d.__err)})</span>`; return; }
+  const on=d.online||[];
+  if(!on.length){ el.innerHTML='<span class="act-empty">niemand online op dit moment</span>'; return; }
+  el.innerHTML=on.map(u=>`<span class="act-chip"><span class="act-dot"></span>${_esc((u.user||'').split('@')[0])}<span class="sub">${_esc(u.tab||'')} · ${_esc(_actGeleden(u.sinds))}</span></span>`).join('');
+}
+
+async function actLoadUsage(){
+  const d=await actFetch(`/track/usage?range=${_actRange}`);
+  const statsEl=document.getElementById('act-stats');
+  const fnEl=document.getElementById('act-functies');
+  const usEl=document.getElementById('act-users');
+  const hsEl=document.getElementById('act-hotspots');
+  if(d.__err || d.skipped){
+    const msg=d.skipped?'Tracking-database nog niet gekoppeld (zie TRACKING.md / uitrol-checklist).':('niet beschikbaar ('+_esc(d.__err)+')');
+    statsEl.innerHTML=`<div class="act-empty">${msg}</div>`;
+    fnEl.innerHTML=usEl.innerHTML=hsEl.innerHTML='';
+    return;
+  }
+  const s=d.sessies||{};
+  statsEl.innerHTML=[
+    ['Events',d.totaal||0],
+    ['Sessies',s.aantal||0],
+    ['Gem. sessieduur',_actDuur(s.gem_duur_ms)],
+    ['Actieve gebruikers',(d.perUser||[]).length]
+  ].map(([l,v])=>`<div class="act-stat"><div class="v">${_esc(v)}</div><div class="l">${_esc(l)}</div></div>`).join('');
+
+  const fn=d.perFunctie||[];
+  fnEl.innerHTML=fn.length?`<table class="act-tbl"><thead><tr><th>Functie</th><th>Categorie</th><th class="num">Keer</th><th class="num">Mislukt</th><th class="num">Gem. ms</th></tr></thead><tbody>${
+    fn.map(r=>{const pct=r.n?Math.round((r.fout/r.n)*100):0;return `<tr><td>${_esc(r.action)}</td><td style="color:var(--text-faint)">${_esc(r.event)}</td><td class="num">${r.n}</td><td class="num ${pct>0?'act-bad':''}">${r.fout||0}${pct>0?` (${pct}%)`:''}</td><td class="num">${r.gem_ms!=null?r.gem_ms:'—'}</td></tr>`;}).join('')
+  }</tbody></table>`:'<div class="act-empty">geen events in deze periode</div>';
+
+  const us=d.perUser||[];
+  usEl.innerHTML=us.length?`<table class="act-tbl"><thead><tr><th>Gebruiker</th><th class="num">Events</th><th class="num">Sessies</th></tr></thead><tbody>${
+    us.map(u=>`<tr><td>${_esc((u.user||'').split('@')[0])}</td><td class="num">${u.n}</td><td class="num">${u.sessies}</td></tr>`).join('')
+  }</tbody></table>`:'<div class="act-empty">geen gebruikers in deze periode</div>';
+
+  const hs=d.mislukt||[];
+  hsEl.innerHTML=hs.length?`<table class="act-tbl"><thead><tr><th>Categorie</th><th>Actie</th><th>Detail</th><th class="num">Keer</th></tr></thead><tbody>${
+    hs.map(r=>`<tr><td style="color:var(--text-faint)">${_esc(r.event)}</td><td>${_esc(r.action)}</td><td style="color:var(--text-dim)">${_esc(r.detail)}</td><td class="num act-bad">${r.n}</td></tr>`).join('')
+  }</tbody></table>`:'<div class="act-empty">geen mislukte acties — strak 👍</div>';
+}
+
+function activiteitOpen(force){
+  // Vangnet: tab is alleen voor Bart; worker dwingt het ook af.
+  if(typeof mtMijEmail==='function' && mtMijEmail()!=='bart@mortiseandtenon.nl'){
+    document.getElementById('act-stats').innerHTML='<div class="act-empty">Deze weergave is alleen voor de beheerder.</div>';
+    return;
+  }
+  actLoadOnline();
+  actLoadUsage();
+  // Online-lijst elke 30s verversen zolang de tab open is.
+  if(_actOnlineTimer) clearInterval(_actOnlineTimer);
+  _actOnlineTimer=setInterval(()=>{
+    const tab=document.getElementById('tab-activiteit');
+    if(tab && tab.classList.contains('active')) actLoadOnline();
+    else { clearInterval(_actOnlineTimer); _actOnlineTimer=null; }
+  },30000);
+}
+</script>
+
 <!-- Migration Tool -->
 <script src="../_archief/Claude/migration-tool.js"></script>
 <script>
@@ -7749,6 +7943,10 @@ initMsal();
     }
   });
 </script>
+
+<!-- Usage-/presence-tracking. Laadt als laatste zodat window.WORKER / getAuthToken
+     al gedefinieerd zijn. Faalt altijd stil — mag de tool nooit ophouden. -->
+<script src="track.js"></script>
 
 </body>
 </html>

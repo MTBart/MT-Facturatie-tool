@@ -69,6 +69,25 @@ tegen tenant `15b652c3…` + client `a091db96…`) óf **`X-Claude-Key`**
 | `toggl_admin_projects` | volledige workspace-projectenlijst; **GET-only + pad-whitelist** (alleen `workspaces/<id>/projects`) — gewone tokens zien privé-projecten zonder lidmaatschap niet | admin `TOGGL_KEY` |
 | `toggl_reports` | Reports API v3 (aggregeert over álle gebruikers) | admin `TOGGL_KEY` |
 
+#### Tracking-routes (pad-gebaseerd, niet `?target=`)
+
+Usage-/presence-tracking. Auth = zelfde Worker-auth (MSAL-token of server-key).
+Server bepaalt de `user` uit het MSAL-token (client kan niet als iemand anders
+loggen). Schema + privacy-grens: zie `TRACKING.md`. Opslag: **D1** (`TRACK_DB`,
+tabel `events`) + **KV** (`TRACK_KV`, presence met 90s TTL) — server-side,
+nooit in de repo.
+
+| Route | Methode | Doet | Wie |
+|---|---|---|---|
+| `/track` | POST | batch events → D1 (`{events:[{sessionId,event,action,detail,ok,ms,ts,appVersion}]}`) | alle ingelogde gebruikers |
+| `/track/heartbeat` | POST | presence in KV (`presence:<user>`, TTL 90s, laatste tab) | alle ingelogde gebruikers |
+| `/track/online` | GET | wie nu online is (KV-scan) | **admin-only** (Bart) |
+| `/track/usage?range=today\|7d\|30d` | GET | aggregaties uit D1 (per functie/gebruiker/dag, sessies, mislukt-%) | **admin-only** (Bart) |
+
+Admin-gate = e-mailclaim `bart@mortiseandtenon.nl` (`TRACK_ADMIN` in `worker.js`).
+Front-end: `track.js` (batcht + heartbeat) + Activiteit-tab in de cockpit
+(alleen voor Bart zichtbaar).
+
 Per-user mapping (`userKey()`): e-mailprefix uit het MSAL-token →
 `TOGGL_KEY_MATHIJS` enz. Zo klokt iedereen op eigen naam; geen token client-side.
 

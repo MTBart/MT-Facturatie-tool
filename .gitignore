@@ -46,6 +46,10 @@ Facturatie tool/
 *.xlsx
 *.pdf
 projectinstructies_claude.md
+# Vaste-lasten = échte bedragen (boekhouder/lease/pensioen) → privé, hoort op
+# SharePoint en wordt na login geladen, net als de klant-registry. Nooit public.
+data/vaste-lasten.json
+vaste-lasten.json
 
 # ---------- 3. RUNTIME / BACKUPS / TOOLING-ARTEFACTEN ----------
 _backups/

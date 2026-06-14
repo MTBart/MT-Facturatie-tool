@@ -13,3 +13,28 @@ compatibility_date = "2024-09-23"
 #   TOGGL_KEY_MAARTEN en idem TOGGL_FOCUS_KEY_<NAAM>.
 #   Naam = e-mailprefix in hoofdletters (bart@mortiseandtenon.nl → BART).
 #   toggl_reports blijft altijd op het admin-TOGGL_KEY (aggregatie).
+#
+# ─── Usage-/presence-tracking (D1 + KV) ───────────────────────────────────────
+# VOORSTEL — Bart vult de id's in NA de creates en haalt dan de # weg.
+# Zolang dit uitgecommentarieerd staat, faalt de Worker NIET (de /track-routes
+# detecteren ontbrekende bindings en slaan stil over). Uitrol-stappen staan in
+# TRACKING.md. NIET door Claude uitgevoerd — Bart draait de creates zelf.
+#
+# 1) D1-database:
+#      wrangler d1 create mt-tracking
+#    → kopieer de geprinte database_id hieronder.
+#
+# 2) KV-namespace (presence):
+#      wrangler kv namespace create TRACK_KV
+#    → kopieer de geprinte id hieronder.
+#
+# Aangemaakt + ingevuld door Larry 2026-06-14 (Bart-akkoord voor deploy).
+
+[[d1_databases]]
+binding = "TRACK_DB"
+database_name = "mt-tracking"
+database_id = "ad68c685-d15b-403e-882f-232ed594691c"
+
+[[kv_namespaces]]
+binding = "TRACK_KV"
+id = "c2ccdda50c59470d99ca885acecaff20"
