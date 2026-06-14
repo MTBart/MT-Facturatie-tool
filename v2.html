@@ -511,8 +511,8 @@ button{transition:transform .07s ease,filter .07s ease}
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v4.0</span>
-    <span class="header-badge">v2 bèta</span>
+    <span class="header-version">v2.1</span>
+    <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
     <input id="tbchat-field" class="tbchat-field" placeholder="stel me een vraag?" autocomplete="off"
@@ -1440,6 +1440,47 @@ button{transition:transform .07s ease,filter .07s ease}
       #tab-toggl table.tg-tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint,#999);padding:6px 8px;border-bottom:1px solid var(--border,#e6e6e6)}
       #tab-toggl table.tg-tbl td{padding:7px 8px;border-bottom:1px solid var(--border,#f2f2f2)}
       #tab-toggl table.tg-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+      /* ── Dag-overzicht (Toggl-rebuild DNA, vertaald naar v2-huisstijl) ── */
+      #tab-toggl .tg-daysum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+      #tab-toggl .tg-stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:13px 15px;box-shadow:var(--shadow-card)}
+      #tab-toggl .tg-stat.hero{background:var(--green);border-color:var(--green-700);color:#fff}
+      #tab-toggl .tg-stat .lbl{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-faint)}
+      #tab-toggl .tg-stat.hero .lbl{color:rgba(255,255,255,.7)}
+      #tab-toggl .tg-stat .val{font-family:var(--mono);font-size:26px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:4px;color:var(--text)}
+      #tab-toggl .tg-stat.hero .val{color:#fff}
+      #tab-toggl .tg-stat .sub2{font-size:11px;color:var(--text-faint);margin-top:3px}
+      #tab-toggl .tg-stat.hero .sub2{color:rgba(255,255,255,.65)}
+      #tab-toggl .tg-daygroup{margin-bottom:6px}
+      #tab-toggl .tg-dayhdr{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:11px 12px 7px;border-bottom:1px solid var(--border)}
+      #tab-toggl .tg-dayhdr .dname{font-family:var(--serif);font-size:15px;color:var(--text);text-transform:capitalize}
+      #tab-toggl .tg-dayhdr .dname small{font-family:var(--sans);font-size:11px;color:var(--text-faint);text-transform:none;margin-left:6px}
+      #tab-toggl .tg-dayhdr .dtot{font-family:var(--mono);font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--text-dim)}
+      #tab-toggl .tg-code{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--gold-text);background:var(--gold-50);border-radius:5px;padding:1px 6px;letter-spacing:.01em;white-space:nowrap}
+      #tab-toggl .tg-row .tg-time{font-family:var(--mono);font-size:11px;color:var(--text-faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+      #tab-toggl .tg-bill{color:var(--gold);font-size:11px;font-weight:700}
+      #tab-toggl .tg-row .tg-resume{opacity:0;transition:opacity .15s}
+      #tab-toggl .tg-row:hover .tg-resume{opacity:1}
+      /* ── Toggl-2.0 shell: mini-sidebar + main (huisstijl, met M&T-add-on-merkjes) ── */
+      #tab-toggl .tg-timerbar{position:sticky;top:0;z-index:6}
+      #tab-toggl .tg-shell{display:flex;gap:16px;align-items:flex-start}
+      #tab-toggl .tg-side{flex:0 0 186px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:8px;position:sticky;top:74px;box-shadow:var(--shadow-card)}
+      #tab-toggl .tg-side-brand{font-family:var(--serif);font-size:14px;color:var(--text);padding:5px 8px 9px;border-bottom:1px solid var(--border);margin-bottom:6px;display:flex;align-items:center;gap:7px}
+      #tab-toggl .tg-navitem{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:none;background:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--text-dim);padding:8px 9px;border-radius:var(--radius-sm);border-left:3px solid transparent;margin-bottom:1px;transition:.12s}
+      #tab-toggl .tg-navitem:hover{background:var(--surface-sunken);color:var(--text)}
+      #tab-toggl .tg-navitem.active{background:var(--green-50);color:var(--green);font-weight:600;border-left-color:var(--gold)}
+      #tab-toggl .tg-navitem .tg-mtbadge{margin-left:auto}
+      #tab-toggl .tg-side-grp{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-faint);padding:11px 9px 4px}
+      #tab-toggl .tg-mtbadge{font-family:var(--mono);font-size:8.5px;font-weight:500;color:var(--gold-text);background:var(--gold-50);border:1px solid var(--gold-mid);border-radius:4px;padding:0 4px;letter-spacing:.03em;line-height:1.6;white-space:nowrap}
+      #tab-toggl .tg-main{flex:1;min-width:0}
+      #tab-toggl .tg-mtnote{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-faint);margin-left:8px}
+      @media(max-width:760px){
+        #tab-toggl .tg-shell{flex-direction:column}
+        #tab-toggl .tg-side{position:static;flex:none;width:100%;display:flex;flex-wrap:wrap;gap:2px;box-sizing:border-box}
+        #tab-toggl .tg-side-brand{width:100%}
+        #tab-toggl .tg-side-grp{width:100%;padding-top:6px}
+        #tab-toggl .tg-navitem{width:auto;border-left:none;border-bottom:3px solid transparent}
+        #tab-toggl .tg-navitem.active{border-left:none;border-bottom-color:var(--gold)}
+      }
     </style>
     <!-- sticky timerbar (Track) -->
     <div class="tg-timerbar">
@@ -1448,20 +1489,26 @@ button{transition:transform .07s ease,filter .07s ease}
       <span class="tg-clock" id="tg-clock">0:00:00</span>
       <button class="tg-bigbtn tg-start" id="tg-startstop" onclick="tgTimerToggle()" title="Start/stop timer">▶</button>
     </div>
-    <div class="tg-subtabs">
-      <button class="tg-subtab active" onclick="tgSub('timer',this)">⏱ Timer</button>
-      <button class="tg-subtab" onclick="tgSub('projecten',this)">📁 Projecten</button>
-      <button class="tg-subtab" onclick="tgSub('taken',this)">✓ Taken</button>
-      <button class="tg-subtab" onclick="tgSub('board',this)">📋 Board</button>
-      <button class="tg-subtab" onclick="tgSub('reports',this)">📊 Reports</button>
-      <button class="tg-subtab" onclick="tgSub('beheer',this)">🏷 Clients &amp; Tags</button>
-    </div>
+    <div class="tg-shell">
+    <aside class="tg-side">
+      <div class="tg-side-brand">⏱ M&amp;T Uren</div>
+      <button class="tg-navitem active" onclick="tgSub('timer',this)">⏱ Timer</button>
+      <button class="tg-navitem" onclick="tgSub('reports',this)">📊 Reports</button>
+      <div class="tg-side-grp">Beheer</div>
+      <button class="tg-navitem" onclick="tgSub('projecten',this)">📁 Projecten</button>
+      <button class="tg-navitem" onclick="tgSub('beheer',this)">🏷 Clients &amp; Tags</button>
+      <div class="tg-side-grp">M&amp;T extra</div>
+      <button class="tg-navitem" onclick="tgSub('taken',this)">✓ Taken <span class="tg-mtbadge">M&amp;T</span></button>
+      <button class="tg-navitem" onclick="tgSub('board',this)">📋 Board <span class="tg-mtbadge">M&amp;T</span></button>
+    </aside>
+    <div class="tg-main">
     <div id="tg-sub-timer" class="tg-subcontent active">
       <div class="tg-toolbar">
         <button class="btn btn-sm btn-secondary" onclick="tgLaadRecent()">↻ Ververs</button>
         <button class="btn btn-sm btn-gold" onclick="tgHandmatig()">+ Handmatige entry</button>
         <span class="tg-sub">Eigen recente entries (laatste 14 dagen). Voor álle medewerkers → tab Agenda.</span>
       </div>
+      <div id="tg-timer-summary"></div>
       <div class="card" style="padding:0"><div id="tg-timer-recent"><div class="tg-leeg">Laden…</div></div></div>
     </div>
     <div id="tg-sub-projecten" class="tg-subcontent">
@@ -1476,6 +1523,7 @@ button{transition:transform .07s ease,filter .07s ease}
       <div class="tg-toolbar">
         <button class="btn btn-sm btn-secondary" onclick="tgLaadTaken()">↻ Ververs</button>
         <button class="btn btn-sm btn-gold" onclick="tgNieuweTaak()">+ Taak</button>
+        <span class="tg-mtnote"><span class="tg-mtbadge">M&amp;T</span> extra t.o.v. Toggl</span>
         <span class="tg-sub" id="tg-taken-tel"></span>
       </div>
       <div class="card" style="padding:0"><div id="tg-taken-lijst"><div class="tg-leeg">Laden…</div></div></div>
@@ -1483,6 +1531,7 @@ button{transition:transform .07s ease,filter .07s ease}
     <div id="tg-sub-board" class="tg-subcontent">
       <div class="tg-toolbar">
         <button class="btn btn-sm btn-secondary" onclick="tgLaadBoard()">↻ Ververs</button>
+        <span class="tg-mtnote"><span class="tg-mtbadge">M&amp;T</span> extra t.o.v. Toggl</span>
         <span class="tg-sub">Sleep een kaart naar een andere kolom om de status te zetten (met bevestiging).</span>
       </div>
       <div id="tg-board"><div class="tg-leeg">Laden…</div></div>
@@ -1512,6 +1561,8 @@ button{transition:transform .07s ease,filter .07s ease}
       </div>
     </div>
     <div class="tg-status" id="tg-status"></div>
+    </div><!-- /tg-main -->
+    </div><!-- /tg-shell -->
   </div>
 
   <!-- ═══ TAB: INBOX (smart-inbox, live 2-weg op info@) ═══ -->
@@ -2755,7 +2806,7 @@ function tgOpen(){
 }
 function tgSub(name,btn){
   document.querySelectorAll('#tab-toggl .tg-subcontent').forEach(c=>c.classList.remove('active'));
-  document.querySelectorAll('#tab-toggl .tg-subtab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#tab-toggl .tg-navitem').forEach(b=>b.classList.remove('active'));
   const c=document.getElementById('tg-sub-'+name); if(c) c.classList.add('active');
   if(btn) btn.classList.add('active');
   if(name==='projecten' && !_tgCache.projecten) tgLaadProjecten();
@@ -2817,6 +2868,7 @@ async function tgTimerToggle(){
 }
 async function tgLaadRecent(){
   const box=document.getElementById('tg-timer-recent'); if(box) box.innerHTML='<div class="tg-leeg">Laden…</div>';
+  const sumClr=document.getElementById('tg-timer-summary'); if(sumClr) sumClr.innerHTML='';
   try{
     const since=new Date(Date.now()-14*864e5).toISOString().slice(0,10);
     const tot=new Date(Date.now()+864e5).toISOString().slice(0,10);
@@ -2824,18 +2876,54 @@ async function tgLaadRecent(){
     const ps=await tgStore.projecten(); const pmap={}; ps.forEach(p=>pmap[p.id]=p);
     _tgRecent=es.filter(e=>e.stop).sort((a,b)=>new Date(b.start)-new Date(a.start)).slice(0,80);
     if(!_tgRecent.length){ box.innerHTML='<div class="tg-leeg">Geen entries in de laatste 14 dagen.</div>'; return; }
-    box.innerHTML=_tgRecent.map((e,i)=>{
-      const p=pmap[e.project_id]; const kl=p?(p.color||'#9a9a9a'):'#cfcfcf';
-      const dur=e.duration>0?e.duration:((new Date(e.stop)-new Date(e.start))/1000);
-      const d=new Date(e.start);
-      return `<div class="tg-row"><span class="tg-dot" style="background:${kl}"></span>
-        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tgEsc(e.description||'(geen omschrijving)')}
-        <span class="tg-sub"> · ${p?tgEsc(p.name):'geen project'} · ${d.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} ${d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})}</span></span>
-        <span class="tg-dur">${tgSec2hms(dur)}</span>
-        <button class="btn btn-sm btn-secondary" title="Opnieuw starten" onclick="tgHervat(${i})">▶</button>
-        <button class="btn btn-sm btn-secondary" title="Bewerken" onclick="tgEditEntry(${i})">✎</button>
-        <button class="btn btn-sm btn-secondary" title="Verwijderen" onclick="tgDelEntry(${i})">🗑</button></div>`;
-    }).join('');
+    const durOf=e=>e.duration>0?e.duration:((new Date(e.stop)-new Date(e.start))/1000);
+    const dagKey=d=>d.toISOString().slice(0,10);
+    // week-grens (maandag) voor "deze week"-totaal
+    const nu=new Date(); const wkStart=new Date(nu); const wd=(nu.getDay()+6)%7;
+    wkStart.setHours(0,0,0,0); wkStart.setDate(wkStart.getDate()-wd);
+    const vandaagKey=dagKey(new Date()); const gisteren=new Date(); gisteren.setDate(gisteren.getDate()-1);
+    const gisterenKey=dagKey(gisteren);
+    let totVandaag=0, totWeek=0;
+    _tgRecent.forEach(e=>{ const d=new Date(e.start); const s=durOf(e);
+      if(dagKey(d)===vandaagKey) totVandaag+=s; if(d>=wkStart) totWeek+=s; });
+    // groepeer op kalenderdag (behoud platte index i voor de actie-handlers)
+    const groepen=[]; const idx={};
+    _tgRecent.forEach((e,i)=>{ const k=dagKey(new Date(e.start));
+      if(!(k in idx)){ idx[k]=groepen.length; groepen.push({k,items:[],tot:0}); }
+      const g=groepen[idx[k]]; g.items.push({e,i}); g.tot+=durOf(e); });
+    const hero=`<div class="tg-daysum">
+      <div class="tg-stat hero"><div class="lbl">Vandaag</div><div class="val">${tgSec2hms(totVandaag)}</div><div class="sub2">geboekte tijd</div></div>
+      <div class="tg-stat"><div class="lbl">Deze week</div><div class="val">${tgSec2hms(totWeek)}</div><div class="sub2">sinds maandag</div></div>
+      <div class="tg-stat"><div class="lbl">Entries</div><div class="val">${_tgRecent.length}</div><div class="sub2">laatste 14 dagen</div></div>
+    </div>`;
+    const dagRender=g=>{
+      const d=new Date(g.k+'T00:00:00');
+      let naam=d.toLocaleDateString('nl-NL',{weekday:'long'});
+      if(g.k===vandaagKey) naam='Vandaag'; else if(g.k===gisterenKey) naam='Gisteren';
+      const datum=d.toLocaleDateString('nl-NL',{day:'numeric',month:'long'});
+      const rijen=g.items.map(({e,i})=>{
+        const p=pmap[e.project_id]; const kl=p?(p.color||'#9a9a9a'):'#cfcfcf';
+        const dur=durOf(e); const ds=new Date(e.start); const de=new Date(e.stop);
+        const tijd=ds.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})+'–'+de.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+        const code=p?`<span class="tg-code">${tgEsc(p.name)}</span>`:'<span class="tg-sub">geen project</span>';
+        const bill=e.billable?'<span class="tg-bill" title="Facturabel">€</span>':'';
+        return `<div class="tg-row"><span class="tg-dot" style="background:${kl}"></span>
+          <span style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden">
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tgEsc(e.description||'(geen omschrijving)')}</span>
+            ${code}${bill}</span>
+          <span class="tg-time">${tijd}</span>
+          <span class="tg-dur">${tgSec2hms(dur)}</span>
+          <span class="tg-rowacts">
+          <button class="tg-ib tg-resume" title="Opnieuw starten" onclick="tgHervat(${i})">▶</button>
+          <button class="tg-ib" title="Bewerken" onclick="tgEditEntry(${i})">✎</button>
+          <button class="tg-ib" title="Verwijderen" onclick="tgDelEntry(${i})">🗑</button></span></div>`;
+      }).join('');
+      return `<div class="tg-daygroup"><div class="tg-dayhdr">
+        <span class="dname">${naam}<small>${datum}</small></span>
+        <span class="dtot">${tgSec2hms(g.tot)}</span></div>${rijen}</div>`;
+    };
+    const sumBox=document.getElementById('tg-timer-summary'); if(sumBox) sumBox.innerHTML=hero;
+    box.innerHTML=groepen.map(dagRender).join('');
   }catch(e){ if(box) box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
 }
 function tgHervat(i){
@@ -2959,13 +3047,16 @@ async function tgLaadProjecten(){
       const sec=p.total_tracked_secs||0, kl=p.color||'#9a9a9a';
       const est=p.estimated_mins?(' / '+tgSec2u(p.estimated_mins*60)+' geraamd'):'';
       const pct=Math.round(sec/maxSec*100);
+      const mt=_mtProjVoorToggl(p);
+      const mtbadge=mt?` <span class="tg-mtbadge" title="Gekoppeld M&T-project ${tgEsc(mt.code)}">M&amp;T</span>`:'';
       return `<div class="tg-card">
-        <h4><span class="tg-dot" style="background:${kl}"></span>${tgEsc(p.name||('project '+p.id))}</h4>
+        <h4 style="cursor:pointer" title="Project openen" onclick="tgOpenProject(${p.id})"><span class="tg-dot" style="background:${kl}"></span>${tgEsc(p.name||('project '+p.id))}${mtbadge}</h4>
         <div class="tg-sub">${p.total_tasks||0} taken · ${p.billable?'billable':'niet-billable'}</div>
         <div class="tg-bar"><span style="width:${pct}%;background:${kl}"></span></div>
         <div class="tg-sub"><b>${tgSec2u(sec)}</b>${est}</div>
         ${(p.tags||[]).slice(0,6).map(t=>`<span class="tg-pill">${tgEsc(t.name||t)}</span>`).join('')}
         <div class="tg-cardacts">
+          <button class="btn btn-sm btn-gold" title="Openen" onclick="tgOpenProject(${p.id})">📂 Openen</button>
           <button class="btn btn-sm btn-secondary" title="Bewerken" onclick="tgEditProject(${p.id})">✎</button>
           <button class="btn btn-sm btn-secondary" title="Archiveren" onclick="tgArchiveProject(${p.id})">📦</button>
         </div>
@@ -2973,13 +3064,25 @@ async function tgLaadProjecten(){
     }).join('')+'</div>';
   }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
 }
-async function tgNieuwProject(){
-  const naam=prompt('Naam van het nieuwe project (Toggl Track):'); if(!naam) return;
-  if(!confirm(`Project "${naam}" aanmaken in Toggl Track?`)) return;
-  tgStatus('Project aanmaken…');
-  try{ await tgTrack(`workspaces/${TG_WS}/projects`,'POST',{name:naam,active:true,workspace_id:TG_WS});
-    _tgCache.projecten=null; tgStatus('✓ Project aangemaakt.','#2A4A38'); tgLaadProjecten(); tgVulProjectSelect();
-  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+function tgNieuwProject(){
+  // M&T-verweving: i.p.v. een kale Toggl-prompt openen we de volwaardige
+  // M&T-projectaanmaker (genereert KLANT-LOC-PROD-code, maakt SharePoint-mappen,
+  // koppelt het Moneybird-contact) en die maakt aan het eind óók het Toggl-project
+  // aan met de projectcode als naam — zo is de code de sleutel, ook in Toggl.
+  if(window.openModal){ openModal(); tgStatus('M&T-projectaanmaker geopend — de code wordt straks ook het Toggl-project.','#7A6010'); }
+  else { tgStatus('Projectaanmaker niet gevonden.','#c0392b'); }
+}
+// Maakt het Toggl-project bij een verse M&T-projectcode (best-effort, niet-blokkerend).
+// Genoemd vanuit maakProjectAan(); geeft het Toggl-project-id terug of null.
+async function tgMaakProjectVoorCode(code, billable){
+  if(typeof tgTrack!=='function'||typeof TG_WS==='undefined'||!TG_WS) return null;
+  try{
+    const r=await tgTrack(`workspaces/${TG_WS}/projects`,'POST',
+      {name:code,active:true,billable:billable!==false,workspace_id:TG_WS});
+    _tgCache.projecten=null;
+    if(typeof tgVulProjectSelect==='function') tgVulProjectSelect();
+    return (r&&(r.id||(r.data&&r.data.id)))||true;
+  }catch(e){ console.warn('Toggl-project voor',code,'aanmaken faalde:',e); return null; }
 }
 function _tgProjById(id){return (_tgCache.projecten||[]).find(p=>p.id===id);}
 async function tgEditProject(id){
@@ -3001,6 +3104,79 @@ async function tgArchiveProject(id){
   try{ await tgTrack(`workspaces/${TG_WS}/projects/${id}`,'PUT',{active:false,workspace_id:TG_WS});
     _tgCache.projecten=null; tgStatus('✓ Project gearchiveerd.','#2A4A38'); tgLaadProjecten(); tgVulProjectSelect();
   }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+}
+
+// ── M&T-verweving: koppel een Toggl-project aan een M&T-projectcode ──
+// Match-volgorde: 1) opgeslagen tg_project_id, 2) Toggl-naam === code, 3) naam-match.
+function _mtProjVoorToggl(p){
+  if(!p||typeof PROJECT_CODES==='undefined') return null;
+  const byId=PROJECT_CODES.find(x=>x.tg_project_id&&String(x.tg_project_id)===String(p.id));
+  if(byId) return byId;
+  const nm=(p.name||'').trim().toUpperCase();
+  return PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===nm)
+       ||PROJECT_CODES.find(x=>(x.naam||'').trim().toUpperCase()===nm)||null;
+}
+// Toggl-2.0-achtige project-detailweergave binnen de Uren-tab — Toggl-stijl maar
+// uitgebreid met de M&T-data die we al hebben (klant, Moneybird, gekoppelde mails).
+function tgOpenProject(id){
+  const p=_tgProjById(id); if(!p) return;
+  const box=document.getElementById('tg-proj-lijst'); if(!box) return;
+  const mt=_mtProjVoorToggl(p), kl=p.color||'#9a9a9a', sec=p.total_tracked_secs||0;
+  let mtBlok;
+  if(mt){
+    const klantNaam=(typeof resolveKlantNaam==='function')?resolveKlantNaam(mt):(mt.klant_naam||'');
+    const autoMb=(typeof resolveMbContact==='function')?resolveMbContact(mt):null;
+    const effMb=mt.mb_nr||autoMb;
+    const mbChip=effMb
+      ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${effMb}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${effMb} ↗</a>`
+      : '<span style="color:var(--text-faint)">geen MB-contact</span>';
+    const mails=(typeof gekoppeldeMailsHtml==='function')?gekoppeldeMailsHtml(mt):'';
+    mtBlok=`
+      <div class="tg-daysum" style="margin-bottom:12px">
+        <div class="tg-stat"><div class="lbl">Projectcode</div><div class="val"><span class="tg-code">${tgEsc(mt.code)}</span></div></div>
+        <div class="tg-stat"><div class="lbl">Klant</div><div class="val" style="font-size:14px">${tgEsc(klantNaam)||'—'}</div></div>
+        <div class="tg-stat"><div class="lbl">Moneybird</div><div class="val" style="font-size:14px">${mbChip}</div></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div class="card-title" style="margin:0">Gekoppelde mails</div>
+          <span class="tg-mtbadge">M&amp;T</span>
+        </div>
+        ${mails}
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-sm btn-gold" onclick="tgNaarVolledigProject('${tgEsc(mt.code)}')">→ Volledig project openen</button>
+      </div>`;
+  } else {
+    mtBlok=`<div class="card">
+      <p style="color:var(--text-dim);font-size:13px;margin:0 0 .6rem">
+        Dit Toggl-project is nog niet gekoppeld aan een M&amp;T-project (geen projectcode, mappen of Moneybird-koppeling).</p>
+      <button class="btn btn-sm btn-gold" onclick="tgNieuwProject()">📁 M&amp;T-project aanmaken</button>
+      <span class="tg-mtnote"><span class="tg-mtbadge">M&amp;T</span> code · mappen · Moneybird in één stap</span>
+    </div>`;
+  }
+  box.innerHTML=`
+    <div style="margin-bottom:12px">
+      <button class="btn btn-sm btn-secondary" onclick="tgLaadProjecten()">← Projecten</button>
+    </div>
+    <h3 style="display:flex;align-items:center;gap:8px;margin:0 0 12px;font-family:var(--serif)">
+      <span class="tg-dot" style="background:${kl};width:12px;height:12px"></span>${tgEsc(p.name||('project '+p.id))}
+      <span class="tg-sub" style="font-weight:400">· ${tgSec2u(sec)} geboekt · ${p.billable?'billable':'niet-billable'}</span>
+    </h3>
+    ${mtBlok}`;
+}
+function tgNaarVolledigProject(code){
+  if(typeof PROJECT_CODES==='undefined') return;
+  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
+  if(typeof tbDoTab==='function') tbDoTab('projecten');
+  // Even wachten tot de Projecten-tab gerenderd is, dan het project selecteren
+  // via de bestaande lijst-flow (zet huidigProject + renderProjectDetail).
+  setTimeout(()=>{
+    if(typeof renderProjectLijst==='function') renderProjectLijst();
+    const el=document.querySelector(`#project-lijst .factuur-item[onclick*="selecteerProject('${code}'"]`);
+    if(el&&typeof selecteerProject==='function'){ selecteerProject(code,el); el.scrollIntoView({block:'center'}); }
+    else if(typeof renderProjectDetail==='function'){ huidigProject=mt; renderProjectDetail(mt); }
+  },120);
 }
 
 // ── TAKEN (Focus) ──
@@ -4038,6 +4214,7 @@ function renderProjectDetail(proj){
         <span style="font-size:11px;color:var(--text-faint)">Koppelen doe je in de Inbox met 🔗 “Koppel aan project”</span>
       </div>
       ${gekoppeldeMailsHtml(proj)}
+      ${projectTakenHtml(proj)}
       ${nacalcHtml(proj,totaalInkoop,effectiveMb)}
       ${projItems.length?`
       <hr class="divider">
@@ -4084,6 +4261,153 @@ function ontkoppelMail(code,idx){
   if(!confirm('Mail "'+(arr[idx].subject||'')+'" ontkoppelen van '+code+'?\nDe mail zelf blijft in Outlook staan.'))return;
   arr.splice(idx,1);all[code]=arr;mailLinksSave(all);
   if(huidigProject&&huidigProject.code===code)renderProjectDetail(huidigProject);
+}
+
+// ═══ PROJECT-TAKEN (M&T-extra) — AI-geholpen, met afhankelijkheid, gespiegeld naar Toggl ═══
+// Lokale store per projectcode (mt_project_taken). Taken kunnen onderling afhankelijk
+// zijn (M&T-extra; Toggl Focus kent geen deps) en worden als Focus-taak met project_id
+// naar het Toggl-project gespiegeld zodat ze daar voor het team zichtbaar zijn.
+function projTakenAll(){try{return JSON.parse(localStorage.getItem('mt_project_taken')||'{}');}catch(e){return{};}}
+function projTakenSave(o){localStorage.setItem('mt_project_taken',JSON.stringify(o));}
+function projTaken(code){return projTakenAll()[code]||[];}
+function projTakenZet(code,arr){const all=projTakenAll();all[code]=arr;projTakenSave(all);}
+function _ptId(){return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+const _PT_PRIO={low:{l:'P3',c:'#6b7280'},medium:{l:'P2',c:'#B8962E'},high:{l:'P1',c:'#c0392b'}};
+const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},klaar:{l:'Klaar',c:'#2A4A38'}};
+const _PT_STAT_TG={todo:300785,bezig:300788,klaar:300786};
+
+function projectTakenHtml(proj){
+  const arr=projTaken(proj.code), sid=proj.code.replace(/-/g,'');
+  const naamById={}; arr.forEach(t=>naamById[t.id]=t.naam);
+  const esc=s=>(typeof tgEsc==='function')?tgEsc(s):String(s==null?'':s);
+  const rows=arr.length?arr.map(t=>{
+    const pr=_PT_PRIO[t.prioriteit], stt=_PT_STAT[t.status]||_PT_STAT.todo;
+    const deps=(t.afhankelijk_van||[]).map(id=>naamById[id]).filter(Boolean);
+    return `<tr>
+      <td><span class="badge" style="background:${stt.c}22;color:${stt.c}">${stt.l}</span></td>
+      <td style="font-size:13px">${esc(t.naam)}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
+      <td>${pr?`<span class="badge" style="background:${pr.c}22;color:${pr.c}">${pr.l}</span>`:''}</td>
+      <td style="text-align:right;font-family:var(--mono)">${t.duur_uur?t.duur_uur+'u':''}</td>
+      <td style="white-space:nowrap;text-align:right">
+        ${t.tg_task_id?'<span class="badge badge-ok" title="Zichtbaar in Toggl-project">Toggl ✓</span>':`<button class="btn btn-xs btn-secondary" title="Naar Toggl-project sturen" onclick="projTaakNaarToggl('${proj.code}','${t.id}').then(()=>renderProjectDetail(huidigProject))">→ Toggl</button>`}
+        <button class="btn btn-xs btn-secondary" title="Status wisselen" onclick="projTaakStatus('${proj.code}','${t.id}')">⟳</button>
+        <button class="btn btn-xs btn-danger" title="Verwijderen" onclick="projTaakVerwijder('${proj.code}','${t.id}')">×</button>
+      </td></tr>`;
+  }).join(''):'<tr><td colspan="5" style="color:var(--text-faint);font-size:13px;padding:.5rem">Nog geen taken — gebruik ✨ AI-voorstel of + Taak.</td></tr>';
+  const onbesp=arr.filter(t=>!t.tg_task_id).length;
+  return `
+    <hr class="divider">
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
+      <div class="card-title" style="margin:0">Taken <span class="badge" style="background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid)">M&amp;T</span></div>
+      <button class="btn btn-gold btn-sm" onclick="aiTakenVoorstel('${proj.code}')">✨ AI-taken voorstellen</button>
+      <button class="btn btn-secondary btn-sm" onclick="nieuweProjectTaak('${proj.code}')">+ Taak</button>
+      ${onbesp&&arr.length?`<button class="btn btn-secondary btn-sm" onclick="projTakenSpiegelAlles('${proj.code}')">→ Alles naar Toggl (${onbesp})</button>`:''}
+      <span id="pt-status-${sid}" style="font-size:12px;color:var(--text-dim)"></span>
+    </div>
+    <table class="materiaal-lijst"><tbody>${rows}</tbody></table>`;
+}
+function _ptStatus(code,msg,kleur){const el=document.getElementById('pt-status-'+code.replace(/-/g,''));if(el){el.textContent=msg;el.style.color=kleur||'var(--text-dim)';}}
+
+function nieuweProjectTaak(code){
+  const naam=prompt('Taaknaam:'); if(!naam) return;
+  const duur=parseFloat((prompt('Geschatte duur in uren (leeg = geen):')||'').replace(',','.'))||0;
+  const prioIn=(prompt('Prioriteit: low / medium / high (leeg = geen):')||'').trim().toLowerCase();
+  const prioriteit=['low','medium','high'].includes(prioIn)?prioIn:'';
+  const arr=projTaken(code); let afhankelijk_van=[];
+  if(arr.length){
+    const lijst=arr.map((t,i)=>`${i+1}. ${t.naam}`).join('\n');
+    const dep=prompt(`Afhankelijk van welke taak? (nummer, leeg = geen)\n${lijst}`);
+    if(dep){ const idx=parseInt(dep)-1; if(arr[idx]) afhankelijk_van=[arr[idx].id]; }
+  }
+  const t={id:_ptId(),naam,omschrijving:'',duur_uur:duur,prioriteit,afhankelijk_van,status:'todo',tg_task_id:null,bron:'handmatig'};
+  arr.push(t); projTakenZet(code,arr); renderProjectDetail(huidigProject);
+  // mens maakte 'm expliciet aan → meteen naar Toggl spiegelen
+  projTaakNaarToggl(code,t.id).then(()=>renderProjectDetail(huidigProject)).catch(()=>{});
+}
+function projTaakStatus(code,id){
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
+  const order=['todo','bezig','klaar']; t.status=order[(order.indexOf(t.status||'todo')+1)%3];
+  projTakenZet(code,arr);
+  if(t.tg_task_id){ try{ focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:_PT_STAT_TG[t.status]}).catch(()=>{}); }catch(e){} }
+  renderProjectDetail(huidigProject);
+}
+function projTaakVerwijder(code,id){
+  if(!confirm('Taak hier verwijderen?\n(Een eventueel gespiegelde Toggl-taak verwijder je in Toggl.)')) return;
+  projTakenZet(code,projTaken(code).filter(x=>x.id!==id));
+  renderProjectDetail(huidigProject);
+}
+// Toggl-projectid voor een M&T-project (opgeslagen, anders match op naam=code).
+async function _tgProjectIdVoorMt(mt){
+  if(mt.tg_project_id) return mt.tg_project_id;
+  try{ const ps=(_tgCache&&_tgCache.projecten)||await tgStore.projecten(); if(_tgCache)_tgCache.projecten=ps;
+    const hit=ps.find(p=>(p.name||'').toUpperCase()===(mt.code||'').toUpperCase());
+    if(hit){ mt.tg_project_id=hit.id; slaProjectenOp(); return hit.id; }
+  }catch(e){}
+  return null;
+}
+async function projTaakNaarToggl(code,id){
+  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return false;
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||t.tg_task_id) return false;
+  _ptStatus(code,'Naar Toggl…');
+  let pid=await _tgProjectIdVoorMt(mt);
+  if(!pid){
+    if(!confirm(`Project ${code} heeft nog geen Toggl-project. Nu aanmaken zodat de taak in Toggl zichtbaar wordt?`)){_ptStatus(code,'');return false;}
+    const made=await tgMaakProjectVoorCode(code,true);
+    if(made&&made!==true){ mt.tg_project_id=made; slaProjectenOp(); pid=made; }
+    else pid=await _tgProjectIdVoorMt(mt);
+  }
+  try{
+    const body={name:t.naam,status_id:_PT_STAT_TG[t.status]||300785}; if(pid) body.project_id=pid;
+    if(t.prioriteit) body.priority=t.prioriteit;
+    const r=await focusFetch('tasks','POST',body);
+    const tid=r&&(r.id||(r.data&&r.data.id));
+    if(tid){ t.tg_task_id=tid; projTakenZet(code,arr); }
+    if(typeof _tgCache!=='undefined') _tgCache.taken=null;
+    _ptStatus(code,'✓ In Toggl-project','var(--green)');
+    return true;
+  }catch(e){ _ptStatus(code,'❌ '+e.message,'#c0392b'); return false; }
+}
+async function projTakenSpiegelAlles(code){
+  const arr=projTaken(code).filter(t=>!t.tg_task_id);
+  if(!arr.length) return;
+  if(!confirm(`${arr.length} taken naar het Toggl-project sturen (zichtbaar voor het team)?`)) return;
+  for(const t of arr){ await projTaakNaarToggl(code,t.id); }
+  renderProjectDetail(huidigProject);
+}
+// AI-voorstel: Claude (Haiku via Worker) stelt een logische takenlijst met
+// afhankelijkheden voor; wordt lokaal toegevoegd en optioneel naar Toggl gespiegeld.
+async function aiTakenVoorstel(code){
+  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
+  _ptStatus(code,'✨ AI denkt na…','var(--gold-text)');
+  const klant=(typeof resolveKlantNaam==='function')?resolveKlantNaam(mt):'';
+  const vraag=`Je bent werkvoorbereider bij een interieurbouwer (maatwerk meubels & interieur).
+Stel een beknopte, logische takenlijst op voor dit project. Geef UITSLUITEND geldige JSON terug:
+een array van objecten met velden: naam (kort), omschrijving (max 1 zin), duur_uur (getal),
+prioriteit ("low"|"medium"|"high"), na (array van 0-based indexen van eerdere taken in deze
+lijst waar deze taak van afhangt). Logische keten: ontwerp/tekenen → materiaal/hardware
+bestellen → zagen/CNC → kantenband/afwerken → assemblage → montage bij klant → oplevering.
+Geef 6 tot 10 taken. Geen tekst buiten de JSON.
+Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.product||''}", klant "${klant||mt.klant_naam||''}".`;
+  try{
+    const r=await claudeCall([{role:'user',content:vraag}],1300);
+    let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'';
+    const m=txt.match(/\[[\s\S]*\]/);
+    if(!m) throw new Error('geen bruikbaar AI-antwoord');
+    const voorstel=JSON.parse(m[0]);
+    if(!Array.isArray(voorstel)||!voorstel.length) throw new Error('leeg voorstel');
+    const nieuwe=voorstel.map(v=>({id:_ptId(),naam:String(v.naam||'taak').slice(0,80),
+      omschrijving:String(v.omschrijving||'').slice(0,160),duur_uur:parseFloat(v.duur_uur)||0,
+      prioriteit:['low','medium','high'].includes(v.prioriteit)?v.prioriteit:'',
+      afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'ai'}));
+    voorstel.forEach((v,i)=>{ if(Array.isArray(v.na)) nieuwe[i].afhankelijk_van=v.na.map(j=>nieuwe[j]&&nieuwe[j].id).filter(Boolean); });
+    projTakenZet(code,projTaken(code).concat(nieuwe));
+    renderProjectDetail(huidigProject);
+    _ptStatus(code,`✓ ${nieuwe.length} AI-taken toegevoegd`,'var(--green)');
+    if(confirm(`${nieuwe.length} taken toegevoegd. Ook naar het Toggl-project sturen (zichtbaar voor het team)?`)){
+      for(const t of nieuwe){ await projTaakNaarToggl(code,t.id); }
+      renderProjectDetail(huidigProject);
+    }
+  }catch(e){ _ptStatus(code,'❌ AI-voorstel faalde: '+e.message,'#c0392b'); }
 }
 
 // ═══ NACALCULATIE — uren × tarief + materiaal, t.o.v. MB-offerte ═══
@@ -5316,6 +5640,19 @@ async function maakProjectAan(){
     console.warn('mappen aanmaken faalde:',e);
     status.style.color='var(--amber,#d97706)';
     status.textContent=`✓ ${code} aangemaakt — ⚠ mappen niet aangemaakt: ${e.message||e}`;
+  }
+  // M&T-verweving: meteen het Toggl-project aanmaken met de code als naam, zodat de
+  // projectcode één-op-één in Toggl terugkomt. Best-effort — faalt het, dan blijft
+  // het M&T-project gewoon bestaan en kan Toggl later handmatig.
+  if(typeof tgMaakProjectVoorCode==='function'){
+    try{
+      const tgId=await tgMaakProjectVoorCode(code, true);
+      if(tgId){
+        nieuwProj.tg_project_id=(tgId===true?null:tgId);
+        slaProjectenOp();
+        status.textContent=status.textContent.replace(/^✓/,'✓')+ ' + Toggl';
+      }
+    }catch(e){ console.warn('Toggl-koppeling faalde:',e); }
   }
   setTimeout(sluitModal,1600);
 }
