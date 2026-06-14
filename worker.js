@@ -206,6 +206,399 @@ async function handleTrack(pathname, request, env, msPayload, cors) {
   return json({ error: 'unknown-track-route' }, 404);
 }
 
+// ── Moneybird admin-ID (hardcoded; zit ook in v2.html als ADMIN_DEFAULT) ──
+const MB_ADMIN = '342968480452052559';
+
+// ── Dashboard-routes ───────────────────────────────────────────────────────────
+// Pad-gebaseerd: /dashboard/cashflow, /dashboard/vrij-te-besteden,
+// /dashboard/btw-pot, /dashboard/te-factureren, /dashboard/onderhanden,
+// /dashboard/config, /dashboard/anker, /dashboard/doelen.
+// Auth = MSAL-token (alle ingelogde gebruikers). Geen server-key-toegang
+// (dashboarddata is persoonlijk/financieel; vereist echte user-context).
+// KV-caching: financiële aggregaten 1 uur (key 'dash:...<user>'), config geen TTL.
+async function handleDashboard(pathname, request, env, msPayload, cors) {
+  const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
+    status, headers: { 'Content-Type': 'application/json', ...cors }
+  });
+  if (!msPayload) return json({ error: 'MSAL-login vereist' }, 401);
+
+  const email = tokenEmail(msPayload);
+  const MB_AUTH = { 'Authorization': `Bearer ${env.MONEYBIRD_KEY}`, 'Content-Type': 'application/json' };
+  const TTL_1H = 3600; // seconden
+
+  // ── Hulpfunctie: haal MB-lijst op met paginering (per_page=100) ──────────────
+  async function mbList(endpoint) {
+    const results = [];
+    let page = 1;
+    while (true) {
+      const sep = endpoint.includes('?') ? '&' : '?';
+      const resp = await fetch(
+        `https://moneybird.com/api/v2/${MB_ADMIN}/${endpoint}${sep}per_page=100&page=${page}`,
+        { headers: MB_AUTH }
+      );
+      if (!resp.ok) break;
+      const data = await resp.json();
+      if (!Array.isArray(data) || data.length === 0) break;
+      results.push(...data);
+      if (data.length < 100) break;
+      page++;
+    }
+    return results;
+  }
+
+  // ── Hulpfunctie: mutations voor 1 bankrekeningperiode ophalen (max 14d per call) ──
+  async function mbMutations(bankId, vanDate, tmDate) {
+    // Splits periode in blokken van max 12 dagen (veiligheidsmarges voor MB-400).
+    const MS_DAY = 86400000;
+    const results = [];
+    let cur = new Date(vanDate + 'T00:00:00Z');
+    const end = new Date(tmDate + 'T00:00:00Z');
+    while (cur <= end) {
+      const blokEind = new Date(Math.min(cur.getTime() + 11 * MS_DAY, end.getTime()));
+      const van = cur.toISOString().slice(0, 10).replace(/-/g, '');
+      const tm  = blokEind.toISOString().slice(0, 10).replace(/-/g, '');
+      const resp = await fetch(
+        `https://moneybird.com/api/v2/${MB_ADMIN}/financial_mutations?filter=financial_account_id:${bankId},period:${van}..${tm}&per_page=100`,
+        { headers: MB_AUTH }
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data)) results.push(...data);
+      }
+      cur = new Date(blokEind.getTime() + MS_DAY);
+    }
+    return results;
+  }
+
+  // ── KV helpers ────────────────────────────────────────────────────────────────
+  async function kvGet(key) {
+    if (!env.TRACK_KV) return null;
+    try { const v = await env.TRACK_KV.get(key); return v ? JSON.parse(v) : null; } catch { return null; }
+  }
+  async function kvPut(key, val, ttl) {
+    if (!env.TRACK_KV) return;
+    const opts = ttl ? { expirationTtl: ttl } : {};
+    try { await env.TRACK_KV.put(key, JSON.stringify(val), opts); } catch {}
+  }
+
+  // ── GET /dashboard/config ─────────────────────────────────────────────────────
+  if (pathname === '/dashboard/config' && request.method === 'GET') {
+    const vasten  = await kvGet('cfg:vaste-lasten');
+    const anker   = await kvGet('cfg:anker-saldo');
+    const doelen  = await kvGet(`cfg:doelen:${email}`) || await kvGet('cfg:doelen:default');
+    const uurtarief = await kvGet('cfg:uurtarief') || { bedrag: 95 };
+    return json({ vasten, anker, doelen, uurtarief });
+  }
+
+  // ── POST /dashboard/anker ─────────────────────────────────────────────────────
+  if (pathname === '/dashboard/anker' && request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'bad-json' }, 400); }
+    const { bedrag, datum } = body || {};
+    if (typeof bedrag !== 'number' || !datum) return json({ error: 'bedrag (number) en datum (YYYY-MM-DD) zijn verplicht' }, 400);
+    await kvPut('cfg:anker-saldo', { bedrag, datum, opgeslagen_door: email, opgeslagen_op: new Date().toISOString() });
+    return json({ ok: true });
+  }
+
+  // ── POST /dashboard/doelen ────────────────────────────────────────────────────
+  if (pathname === '/dashboard/doelen' && request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'bad-json' }, 400); }
+    const { salaris, buffer: buf } = body || {};
+    await kvPut(`cfg:doelen:${email}`, { salaris: salaris || 0, buffer: buf || 0, opgeslagen_op: new Date().toISOString() });
+    return json({ ok: true });
+  }
+
+  // ── GET /dashboard/vrij-te-besteden ──────────────────────────────────────────
+  if (pathname === '/dashboard/vrij-te-besteden' && request.method === 'GET') {
+    const cacheKey = `dash:vrij:${email}`;
+    const cached = await kvGet(cacheKey);
+    if (cached) return json({ ...cached, cached: true });
+
+    const [anker, vasten, inkoopFacturen] = await Promise.all([
+      kvGet('cfg:anker-saldo'),
+      kvGet('cfg:vaste-lasten'),
+      mbList('documents/purchase_invoices?filter=state:open|late')
+    ]);
+
+    // Huidig saldo = anker + mutaties t/m gisteren
+    const gisteren = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    let saldoHuidig = anker?.bedrag || 0;
+    if (anker?.datum && anker.datum <= gisteren) {
+      const mutaties = await mbMutations('343544076091524743', anker.datum, gisteren);
+      const delta = mutaties.reduce((s, m) => s + parseFloat(m.amount || 0), 0);
+      saldoHuidig = (anker.bedrag || 0) + delta;
+    }
+
+    // Resterende vaste lasten deze maand
+    const nu = new Date();
+    const dagVandaag = nu.getDate();
+    const vastenActief = (vasten?.actief || []).filter(v => v.actief !== false);
+    let vasteResterend = 0;
+    vastenActief.forEach(v => {
+      if (v.cadans === 'maandelijks' && (v.dag_van_maand || 28) >= dagVandaag) {
+        vasteResterend += v.bedrag || 0;
+      }
+      if (v.cadans === 'jaarlijks') {
+        // Alleen als de dag-van-maand nog komt in de resterende maanden t/m 31 dec
+        const jaarDag = new Date(nu.getFullYear(), nu.getMonth(), v.dag_van_maand || 1);
+        if (jaarDag >= nu) vasteResterend += v.bedrag || 0;
+      }
+    });
+
+    // Openstaande inkoop
+    const inkoopOpen = (Array.isArray(inkoopFacturen) ? inkoopFacturen : [])
+      .reduce((s, f) => s + parseFloat(f.total_unpaid || 0), 0);
+
+    const vrij = saldoHuidig - vasteResterend - inkoopOpen;
+    const result = { vrij, saldo_huidig: saldoHuidig, vaste_resterend: vasteResterend, inkoop_open: inkoopOpen, anker_datum: anker?.datum || null };
+    await kvPut(cacheKey, result, TTL_1H);
+    return json(result);
+  }
+
+  // ── GET /dashboard/btw-pot ────────────────────────────────────────────────────
+  if (pathname === '/dashboard/btw-pot' && request.method === 'GET') {
+    const cacheKey = `dash:btw:${email}`;
+    const cached = await kvGet(cacheKey);
+    if (cached) return json({ ...cached, cached: true });
+
+    const [salesFacturen, offertes] = await Promise.all([
+      mbList('sales_invoices?filter=state:open|late'),
+      mbList('estimates?filter=state:accepted|open|late')
+    ]);
+
+    function taxSum(items) {
+      return (Array.isArray(items) ? items : []).reduce((s, item) => {
+        const btw = (item.tax_totals || []).reduce((t, x) => t + parseFloat(x.tax_amount || 0), 0);
+        return s + btw;
+      }, 0);
+    }
+
+    const hard = taxSum(salesFacturen);
+    const verwacht = taxSum(offertes);
+    const result = { hard, verwacht, totaal: hard + verwacht };
+    await kvPut(cacheKey, result, TTL_1H);
+    return json(result);
+  }
+
+  // ── GET /dashboard/te-factureren ─────────────────────────────────────────────
+  if (pathname === '/dashboard/te-factureren' && request.method === 'GET') {
+    const cacheKey = `dash:tefact:${email}`;
+    const cached = await kvGet(cacheKey);
+    if (cached) return json({ items: cached, cached: true });
+
+    const [offertes, salesFacturen] = await Promise.all([
+      mbList('estimates?filter=state:accepted'),
+      mbList('sales_invoices?filter=state:open|late|paid')
+    ]);
+
+    // Heuristiek: offerte is al gefactureerd als er een salesfactuur bestaat
+    // voor hetzelfde contact met een bedrag dat op ≤10% afwijkt.
+    const gefactureerdeContacten = new Map();
+    (Array.isArray(salesFacturen) ? salesFacturen : []).forEach(sf => {
+      const cid = sf.contact_id;
+      if (!gefactureerdeContacten.has(cid)) gefactureerdeContacten.set(cid, []);
+      gefactureerdeContacten.get(cid).push(parseFloat(sf.total_price_incl_tax || 0));
+    });
+
+    const nu = Date.now();
+    const items = (Array.isArray(offertes) ? offertes : [])
+      .filter(o => {
+        const bedrag = parseFloat(o.total_price_incl_tax || 0);
+        const sfBedragen = gefactureerdeContacten.get(o.contact_id) || [];
+        // Beschouw als niet-gefactureerd als er geen SF is met vergelijkbaar bedrag
+        const alGefactureerd = sfBedragen.some(b => Math.abs(b - bedrag) / Math.max(bedrag, 1) < 0.10);
+        return !alGefactureerd;
+      })
+      .map(o => ({
+        offerte_id: o.id,
+        contact: o.contact?.company_name || o.contact?.firstname || '?',
+        bedrag_excl: parseFloat(o.total_price_excl_tax || 0),
+        bedrag_incl: parseFloat(o.total_price_incl_tax || 0),
+        days_since_accepted: o.updated_at ? Math.floor((nu - new Date(o.updated_at).getTime()) / 86400000) : null,
+        due_date: o.due_date || null
+      }))
+      .sort((a, b) => (b.days_since_accepted || 0) - (a.days_since_accepted || 0));
+
+    await kvPut(cacheKey, items, TTL_1H);
+    return json({ items });
+  }
+
+  // ── GET /dashboard/onderhanden ────────────────────────────────────────────────
+  if (pathname === '/dashboard/onderhanden' && request.method === 'GET') {
+    const cacheKey = `dash:onderhanden:${email}`;
+    const cached = await kvGet(cacheKey);
+    if (cached) return json({ items: cached, cached: true });
+
+    // Toggl Reports API: uren van afgelopen 90 dagen, alle gebruikers, via admin-key.
+    const uurtarief = (await kvGet('cfg:uurtarief'))?.bedrag || 95;
+    const tot = new Date().toISOString().slice(0, 10);
+    const van = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    const WS = 21258443;
+
+    let togglItems = [];
+    try {
+      const token = btoa(`${env.TOGGL_KEY}:api_token`);
+      const resp = await fetch(
+        `https://api.track.toggl.com/reports/api/v3/workspace/${WS}/summary/time_entries`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${token}` },
+          body: JSON.stringify({ start_date: van, end_date: tot, grouping: 'projects', sub_grouping: 'time_entries' })
+        }
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        togglItems = (data.groups || []).map(g => ({
+          project: g.title?.project || 'Geen project',
+          seconden: g.seconds || 0,
+          uren: Math.round((g.seconds || 0) / 36) / 100,
+          geschat_bedrag: Math.round((g.seconds || 0) / 3600 * uurtarief * 100) / 100
+        })).filter(i => i.seconden > 0).sort((a, b) => b.seconden - a.seconden).slice(0, 20);
+      }
+    } catch {}
+
+    await kvPut(cacheKey, togglItems, TTL_1H);
+    return json({ items: togglItems });
+  }
+
+  // ── GET /dashboard/cashflow?horizon=90d|kwartaal|jaar ─────────────────────────
+  if (pathname === '/dashboard/cashflow' && request.method === 'GET') {
+    const url2 = new URL(request.url);
+    const horizon = url2.searchParams.get('horizon') || '90d';
+    const cacheKey = `dash:cf:${email}:${horizon}`;
+    const cached = await kvGet(cacheKey);
+    if (cached) return json({ ...cached, cached: true });
+
+    const [anker, vasten, doelen, salesFacturen, offertes, inkoopFacturen] = await Promise.all([
+      kvGet('cfg:anker-saldo'),
+      kvGet('cfg:vaste-lasten'),
+      kvGet(`cfg:doelen:${email}`) || kvGet('cfg:doelen:default'),
+      mbList('sales_invoices?filter=state:open|late'),
+      mbList('estimates?filter=state:accepted|open|late'),
+      mbList('documents/purchase_invoices?filter=state:open|late')
+    ]);
+
+    // Huidig saldo berekenen
+    const vandaag = new Date(); vandaag.setHours(0,0,0,0);
+    const vandaagStr = vandaag.toISOString().slice(0,10);
+    let saldoAanker = anker?.bedrag || 0;
+    if (anker?.datum && anker.datum < vandaagStr) {
+      const mutaties = await mbMutations('343544076091524743', anker.datum, vandaagStr);
+      const delta = mutaties.reduce((s,m) => s + parseFloat(m.amount||0), 0);
+      saldoAanker += delta;
+    }
+
+    // Bepaal horizon
+    let horizonDagen = 90;
+    if (horizon === 'kwartaal') horizonDagen = 90;
+    else if (horizon === 'jaar') horizonDagen = 365;
+    else horizonDagen = 90;
+
+    // Bepaal bucket-grootte: 90d = dag, kwartaal = week, jaar = week
+    const bucketDagen = horizon === '90d' ? 1 : 7;
+
+    // Helpers
+    const MS_DAY = 86400000;
+    function dateStr(ms) { return new Date(ms).toISOString().slice(0,10); }
+    function addDays(d, n) { return d + n * MS_DAY; }
+    function bucketIndex(ms) { return Math.floor((ms - vandaag.getTime()) / (bucketDagen * MS_DAY)); }
+
+    const nBuckets = Math.ceil(horizonDagen / bucketDagen);
+    const buckets = Array.from({ length: nBuckets }, (_, i) => ({
+      datum: dateStr(addDays(vandaag.getTime(), i * bucketDagen)),
+      saldo_verwacht: 0,
+      in_hard: 0,
+      in_verwacht: 0,
+      uit_vast: 0,
+      uit_inkoop: 0,
+      btw_pot_hard: 0,
+      btw_pot_verwacht: 0
+    }));
+
+    // IN hard: openstaande verkoopfacturen op due_date
+    (Array.isArray(salesFacturen) ? salesFacturen : []).forEach(sf => {
+      const dueMs = sf.due_date ? new Date(sf.due_date).getTime() : vandaag.getTime() + 30 * MS_DAY;
+      const idx = bucketIndex(dueMs);
+      if (idx >= 0 && idx < nBuckets) {
+        const bedrag = parseFloat(sf.total_unpaid || 0);
+        const btw = (sf.tax_totals || []).reduce((t, x) => t + parseFloat(x.tax_amount || 0), 0);
+        buckets[idx].in_hard += bedrag;
+        buckets[idx].btw_pot_hard += btw;
+      }
+    });
+
+    // IN verwacht: geaccepteerde/openstaande/late offertes
+    (Array.isArray(offertes) ? offertes : []).forEach(o => {
+      const dueMs = o.due_date ? new Date(o.due_date).getTime() : vandaag.getTime() + 45 * MS_DAY;
+      const idx = bucketIndex(dueMs);
+      if (idx >= 0 && idx < nBuckets) {
+        const bedrag = parseFloat(o.total_price_incl_tax || 0);
+        const btw = (o.tax_totals || []).reduce((t, x) => t + parseFloat(x.tax_amount || 0), 0);
+        buckets[idx].in_verwacht += bedrag;
+        buckets[idx].btw_pot_verwacht += btw;
+      }
+    });
+
+    // UIT inkoop: openstaande inkoopfacturen op due_date
+    (Array.isArray(inkoopFacturen) ? inkoopFacturen : []).forEach(pf => {
+      const dueMs = pf.due_date ? new Date(pf.due_date).getTime() : vandaag.getTime() + 30 * MS_DAY;
+      const idx = bucketIndex(dueMs);
+      if (idx >= 0 && idx < nBuckets) {
+        buckets[idx].uit_inkoop += parseFloat(pf.total_unpaid || 0);
+      }
+    });
+
+    // UIT vast: vaste lasten verdelen over hun dag_van_maand
+    const vastenActief = (vasten?.actief || []).filter(v => v.actief !== false);
+    for (let i = 0; i < nBuckets; i++) {
+      const bucketStart = new Date(addDays(vandaag.getTime(), i * bucketDagen));
+      vastenActief.forEach(v => {
+        const dag = v.dag_van_maand || 1;
+        // Controleer of de incassodag in dit bucket valt
+        for (let d = 0; d < bucketDagen; d++) {
+          const check = new Date(addDays(bucketStart.getTime(), d));
+          if (check.getDate() !== dag) continue;
+          // Maandelijks: elke maand
+          if (v.cadans === 'maandelijks') { buckets[i].uit_vast += v.bedrag || 0; }
+          // Jaarlijks: alleen als maand klopt (dag_van_maand + de oorspronkelijke maand — we nemen een benadering: 1x per jaar op die dag)
+          if (v.cadans === 'jaarlijks') {
+            // Voeg toe als de dag van deze check overeen komt
+            buckets[i].uit_vast += v.bedrag || 0;
+          }
+        }
+      });
+    }
+
+    // Saldo rolling berekenen (start bij huidig saldo, projecteer forward)
+    let lopendSaldo = saldoAanker;
+    buckets.forEach(b => {
+      lopendSaldo += b.in_hard - b.uit_vast - b.uit_inkoop;
+      b.saldo_verwacht = Math.round(lopendSaldo * 100) / 100;
+      b.in_hard = Math.round(b.in_hard * 100) / 100;
+      b.in_verwacht = Math.round(b.in_verwacht * 100) / 100;
+      b.uit_vast = Math.round(b.uit_vast * 100) / 100;
+      b.uit_inkoop = Math.round(b.uit_inkoop * 100) / 100;
+      b.btw_pot_hard = Math.round(b.btw_pot_hard * 100) / 100;
+      b.btw_pot_verwacht = Math.round(b.btw_pot_verwacht * 100) / 100;
+    });
+
+    const doelLijn = ((doelen?.salaris || 0) + (doelen?.buffer || 0));
+    const result = {
+      horizon,
+      bucket_dagen: bucketDagen,
+      saldo_aanvang: Math.round(saldoAanker * 100) / 100,
+      doel_lijn: doelLijn,
+      anker_datum: anker?.datum || null,
+      buckets
+    };
+    await kvPut(cacheKey, result, TTL_1H);
+    return json(result);
+  }
+
+  return json({ error: 'unknown-dashboard-route' }, 404);
+}
+
 export default {
   async fetch(request, env) {
     const corsHeaders = {
@@ -236,6 +629,11 @@ export default {
       // Pad-gebaseerde tracking-routes (los van de ?target=-proxy hieronder).
       if (url.pathname === '/track' || url.pathname.startsWith('/track/')) {
         return await handleTrack(url.pathname, request, env, msPayload, corsHeaders);
+      }
+
+      // Dashboard-routes
+      if (url.pathname.startsWith('/dashboard/')) {
+        return await handleDashboard(url.pathname, request, env, msPayload, corsHeaders);
       }
 
       const target = url.searchParams.get('target');

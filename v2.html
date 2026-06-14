@@ -444,6 +444,47 @@ button{transition:transform .07s ease,filter .07s ease}
 .pdf-viewer-wrap iframe{width:100%;height:650px;border:none;display:block}
 .pdf-viewer-wrap .pdf-placeholder{color:var(--text-faint);font-size:12px;font-family:var(--mono);padding:2rem;text-align:center}
 
+/* ── CASHFLOW DASHBOARD ── */
+.cf-section{margin-bottom:1.5rem}
+.cf-horizon-bar{display:flex;gap:4px;margin-bottom:0.75rem}
+.cf-horizon-btn{padding:5px 14px;border:1px solid var(--border);border-radius:14px;background:transparent;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-dim);font-family:var(--sans);transition:all 0.15s}
+.cf-horizon-btn.active{background:var(--green);color:#fff;border-color:var(--green)}
+.cf-canvas-wrap{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1rem 0.5rem;box-shadow:var(--shadow-sm);overflow:hidden}
+.cf-canvas-wrap canvas{display:block;width:100%!important}
+.cf-tooltip{position:absolute;background:var(--n-900);color:#fff;border-radius:6px;padding:8px 12px;font-size:12px;font-family:var(--mono);pointer-events:none;white-space:nowrap;z-index:20;display:none;line-height:1.7}
+.cf-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:0.5rem;padding:0.5rem 0;font-size:11px;font-family:var(--mono)}
+.cf-legend-item{display:flex;align-items:center;gap:5px;color:var(--text-dim)}
+.cf-legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.cf-vrij-chip{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;display:flex;align-items:center;gap:1.25rem;box-shadow:var(--shadow-sm);margin-bottom:1.5rem}
+.cf-vrij-bedrag{font-family:var(--serif);font-size:32px;font-weight:300;line-height:1}
+.cf-vrij-bedrag.positief{color:var(--success)}
+.cf-vrij-bedrag.negatief{color:var(--error)}
+.cf-vrij-sub{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text-dim);font-family:var(--mono)}
+.cf-vrij-divider{width:1px;height:48px;background:var(--border);flex-shrink:0}
+.cf-vrij-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin-bottom:4px}
+.cf-2col{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+@media(max-width:800px){.cf-2col{grid-template-columns:1fr}}
+.cf-pipe-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-hair);font-size:13px}
+.cf-pipe-row:last-child{border-bottom:none}
+.cf-pipe-kans{font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:10px;font-weight:600}
+.cf-pipe-kans.zeker{background:var(--success-50);color:var(--success)}
+.cf-pipe-kans.verwacht{background:var(--gold-50);color:var(--gold-text)}
+.cf-pipe-kans.onzeker{background:var(--error-50);color:var(--error)}
+.cf-kpi-strip{display:flex;gap:0;margin-bottom:1.5rem;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+.cf-kpi-item{flex:1;padding:0.75rem 1rem;border-right:1px solid var(--border);text-align:center}
+.cf-kpi-item:last-child{border-right:none}
+.cf-kpi-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-faint);margin-bottom:3px}
+.cf-kpi-val{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--n-900)}
+.cf-kpi-val.pos{color:var(--success)}
+.cf-kpi-val.neg{color:var(--error)}
+.cf-settings-toggle{width:100%;background:transparent;border:none;cursor:pointer;text-align:left;padding:0.75rem 0;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text-dim);border-top:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.cf-settings-toggle:hover{color:var(--n-900)}
+.cf-settings-body{display:none;padding:1rem 0}
+.cf-settings-body.open{display:block}
+.cf-anker-warn{background:var(--warning-50);border:1px solid var(--gold-mid);border-radius:6px;padding:8px 12px;font-size:12px;color:var(--warning);font-family:var(--mono);margin-bottom:0.75rem}
+.cf-doellijn-wrap{font-size:12px;color:var(--text-dim);font-family:var(--mono);margin-top:6px}
+.cf-extra-nodig{display:inline-block;background:var(--info-50);color:var(--info);border:1px solid #b5c5f5;border-radius:8px;padding:4px 12px;font-size:12px;font-family:var(--mono);font-weight:600;margin-left:8px}
+
 /* ── GESCHIEDENIS ── */
 .geschiedenis-item{display:flex;align-items:center;gap:1rem;padding:0.875rem 0;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
 .geschiedenis-item:last-child{border-bottom:none}
@@ -562,6 +603,136 @@ button{transition:transform .07s ease,filter .07s ease}
         <div id="dash-todo"><p style="color:var(--text-faint);font-size:13px">Laden...</p></div>
       </div>
     </div>
+
+    <!-- ═══ CASHFLOW SECTIE (start onder bestaande KPI's) ═══ -->
+    <div id="cf-root" style="display:none">
+      <hr class="divider" style="margin:1.5rem 0">
+
+      <!-- A. Cashflow-tijdlijn -->
+      <div class="cf-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:8px">
+          <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint)">Cashflow-tijdlijn</div>
+          <div class="cf-horizon-bar">
+            <button class="cf-horizon-btn active" data-h="90d" onclick="cfSetHorizon('90d',this)">90 dagen</button>
+            <button class="cf-horizon-btn" data-h="kwartaal" onclick="cfSetHorizon('kwartaal',this)">Kwartaal</button>
+            <button class="cf-horizon-btn" data-h="jaar" onclick="cfSetHorizon('jaar',this)">Jaar</button>
+          </div>
+        </div>
+        <div class="cf-canvas-wrap">
+          <canvas id="cf-chart" height="260" aria-label="Cashflow-tijdlijn grafiek" role="img"></canvas>
+          <div id="cf-tooltip" class="cf-tooltip"></div>
+        </div>
+        <div class="cf-legend">
+          <div class="cf-legend-item"><div class="cf-legend-dot" style="background:#2A4A38"></div> IN hard (facturen)</div>
+          <div class="cf-legend-item"><div class="cf-legend-dot" style="background:#4A7A5C;opacity:.5;border:1px dashed #2A4A38"></div> IN verwacht (offertes)</div>
+          <div class="cf-legend-item"><div class="cf-legend-dot" style="background:#8B1A1A"></div> UIT vast</div>
+          <div class="cf-legend-item"><div class="cf-legend-dot" style="background:#c0392b;opacity:.65"></div> UIT inkoop</div>
+          <div class="cf-legend-item"><div class="cf-legend-dot" style="background:#B8962E;opacity:.4"></div> BTW-pot</div>
+          <div class="cf-legend-item"><div class="cf-legend-dot" style="background:none;border:2px solid #2A4A38;border-radius:50%"></div> Lopend saldo</div>
+          <div class="cf-legend-item"><div class="cf-legend-dot" style="background:none;border:2px dashed #B8962E;border-radius:50%"></div> Doellijn</div>
+        </div>
+        <div id="cf-doellijn-info" class="cf-doellijn-wrap"></div>
+      </div>
+
+      <!-- B. Vrij te besteden -->
+      <div class="cf-vrij-chip">
+        <div>
+          <div class="cf-vrij-label">Vrij te besteden</div>
+          <div class="cf-vrij-bedrag" id="cf-vrij-bedrag">—</div>
+        </div>
+        <div class="cf-vrij-divider"></div>
+        <div class="cf-vrij-sub">
+          <span>Huidig saldo: <strong id="cf-vrij-saldo">—</strong></span>
+          <span>− Vaste lasten resterend: <strong id="cf-vrij-vast">—</strong></span>
+          <span>− Openstaande inkoop: <strong id="cf-vrij-inkoop">—</strong></span>
+        </div>
+        <div style="margin-left:auto;font-size:11px;color:var(--text-faint);font-family:var(--mono);text-align:right">
+          <div id="cf-anker-info" style="font-size:11px"></div>
+        </div>
+      </div>
+
+      <!-- KPI-strip -->
+      <div class="cf-kpi-strip" id="cf-kpi-strip">
+        <div class="cf-kpi-item">
+          <div class="cf-kpi-label">Omzet MTD</div>
+          <div class="cf-kpi-val" id="cf-kpi-mtd">—</div>
+        </div>
+        <div class="cf-kpi-item">
+          <div class="cf-kpi-label">Omzet YTD</div>
+          <div class="cf-kpi-val" id="cf-kpi-ytd">—</div>
+        </div>
+        <div class="cf-kpi-item">
+          <div class="cf-kpi-label">Debiteuren open</div>
+          <div class="cf-kpi-val" id="cf-kpi-deb">—</div>
+        </div>
+        <div class="cf-kpi-item">
+          <div class="cf-kpi-label">Crediteuren open</div>
+          <div class="cf-kpi-val" id="cf-kpi-cred">—</div>
+        </div>
+        <div class="cf-kpi-item">
+          <div class="cf-kpi-label">BTW-pot</div>
+          <div class="cf-kpi-val" id="cf-kpi-btw">—</div>
+        </div>
+      </div>
+
+      <!-- C. Te factureren + Onderhanden werk -->
+      <div class="cf-2col">
+        <div class="card" style="margin-bottom:0">
+          <div class="card-title">Te factureren (geaccepteerde offertes)</div>
+          <div id="cf-tefact-lijst"><p style="color:var(--text-faint);font-size:12px">Laden...</p></div>
+        </div>
+        <div class="card" style="margin-bottom:0">
+          <div class="card-title">Onderhanden werk (Toggl, 90d)</div>
+          <div id="cf-onderhanden-lijst"><p style="color:var(--text-faint);font-size:12px">Laden...</p></div>
+        </div>
+      </div>
+
+      <!-- D. Offerte-pijplijn -->
+      <div class="card cf-section" style="margin-top:1rem">
+        <div class="card-title">Offerte-pijplijn</div>
+        <div id="cf-pijplijn-lijst"><p style="color:var(--text-faint);font-size:12px">Laden...</p></div>
+      </div>
+
+      <!-- F. Instellingen (opvouwbaar) -->
+      <div class="card" style="margin-top:1rem">
+        <button class="cf-settings-toggle" onclick="cfToggleInstellingen(this)">
+          <span id="cf-settings-arrow">▶</span> Instellingen liquiditeitsdashboard
+        </button>
+        <div id="cf-settings-body" class="cf-settings-body">
+          <div id="cf-anker-warn" class="cf-anker-warn hidden">Anker-saldo is ouder dan 7 dagen — actualiseer het voor een betrouwbare tijdlijn.</div>
+          <div class="grid2" style="gap:1rem;margin-bottom:1rem">
+            <div>
+              <div class="card-title" style="margin-bottom:0.5rem">Anker-saldo</div>
+              <div class="field">
+                <label>Datum</label>
+                <input type="date" id="cf-anker-datum" style="height:var(--control-h-sm)">
+              </div>
+              <div class="field">
+                <label>Saldo (€)</label>
+                <input type="number" id="cf-anker-bedrag" placeholder="12500.00" step="0.01" style="height:var(--control-h-sm)">
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="cfSlaAnkerOp()">Saldo opslaan</button>
+              <span id="cf-anker-status" style="font-size:11px;color:var(--text-dim);margin-left:8px"></span>
+            </div>
+            <div>
+              <div class="card-title" style="margin-bottom:0.5rem">Doelen</div>
+              <div class="field">
+                <label>Doel salaris/opname per maand (€)</label>
+                <input type="number" id="cf-doel-salaris" placeholder="4000" step="100" style="height:var(--control-h-sm)">
+              </div>
+              <div class="field">
+                <label>Gewenste buffer op rekening (€)</label>
+                <input type="number" id="cf-doel-buffer" placeholder="10000" step="500" style="height:var(--control-h-sm)">
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="cfSlaDoelenOp()">Doelen opslaan</button>
+              <span id="cf-doelen-status" style="font-size:11px;color:var(--text-dim);margin-left:8px"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ═══ EINDE CASHFLOW SECTIE ═══ -->
+
   </div>
 
   <!-- ═══ TAB: KLANTEN ═══ -->
@@ -5203,6 +5374,8 @@ async function laadDashboard(){
     // Nog te doen
     renderTodo();
   }catch(e){console.log('Dashboard fout:',e);}
+  // Cashflow sectie parallel laden (faalt nooit hard)
+  laadCashflowDashboard();
 }
 function renderAgingBars(elId,items){
   const el=document.getElementById(elId);if(!el) return;
@@ -5256,6 +5429,377 @@ function renderTodo(){
       <span style="font-size:13px">${i.label}</span>
       <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:${i.kleur};background:${i.kleur}22;padding:2px 10px;border-radius:12px">${i.count}</span>
     </div>`).join('');
+}
+
+// ═══ CASHFLOW DASHBOARD ═══
+// Interne staat
+let _cfHorizon='90d';
+let _cfChart=null;        // canvas-renderer (zelfgebouwd, geen externe dep)
+let _cfData=null;         // laatste cashflow-response van Worker
+let _cfConfig=null;       // config (anker, doelen, vasten)
+let _cfGeladen=false;
+
+// Hulp: bedrag opmaken
+function cfFmt(n){return'€ '+(n||0).toLocaleString('nl-NL',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function cfFmt2(n){return'€ '+(n||0).toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+// Worker-fetch voor /dashboard/* routes
+async function cfFetch(pad,opties){
+  try{
+    const h=await authHeader();
+    const r=await fetch(`${WORKER}${pad}`,{...opties,headers:{...h,'Content-Type':'application/json',...(opties?.headers||{})}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }catch(e){
+    console.warn('[CF]',pad,e.message);
+    return null;
+  }
+}
+
+async function laadCashflowDashboard(){
+  try{
+    // Config ophalen (vasten, anker, doelen)
+    _cfConfig = await cfFetch('/dashboard/config');
+    if(_cfConfig) _cfVulInstellingenUI(_cfConfig);
+
+    // Toon sectie zodra config er is
+    const root=document.getElementById('cf-root');
+    if(root) root.style.display='';
+
+    // Alle datapunten parallel laden
+    const [cfData, vrijData, btwData, teFact, onderhanden] = await Promise.all([
+      cfFetch(`/dashboard/cashflow?horizon=${_cfHorizon}`),
+      cfFetch('/dashboard/vrij-te-besteden'),
+      cfFetch('/dashboard/btw-pot'),
+      cfFetch('/dashboard/te-factureren'),
+      cfFetch('/dashboard/onderhanden')
+    ]);
+
+    if(cfData){ _cfData=cfData; _cfTekenGrafiek(cfData); }
+    if(vrijData) _cfRenderVrij(vrijData);
+    if(btwData) _cfRenderBtw(btwData);
+    if(teFact) _cfRenderTeFact(teFact.items||[]);
+    if(onderhanden) _cfRenderOnderhanden(onderhanden.items||[]);
+    if(cfData) _cfRenderPijplijn(cfData);
+    _cfRenderKpiStrip();
+    _cfGeladen=true;
+    if(window.track) try{track('cashflow','laden',{ok:true});}catch{}
+  }catch(e){
+    console.warn('[CF] laadCashflowDashboard fout:',e);
+    if(window.trackError) try{trackError('cf_laden',e.message);}catch{}
+  }
+}
+
+async function cfSetHorizon(h,btn){
+  _cfHorizon=h;
+  document.querySelectorAll('.cf-horizon-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  if(window.track) try{track('cashflow','horizon_switch',{detail:h});}catch{}
+  const data=await cfFetch(`/dashboard/cashflow?horizon=${h}`);
+  if(data){_cfData=data;_cfTekenGrafiek(data);}
+}
+
+// ── Kaartgrafiek: zelfgebouwd op <canvas> ────────────────────────────────────
+function _cfTekenGrafiek(data){
+  const canvas=document.getElementById('cf-chart');
+  if(!canvas) return;
+  const buckets=data.buckets||[];
+  if(!buckets.length){canvas.closest('.cf-canvas-wrap').innerHTML='<p style="padding:1rem;color:var(--text-faint);font-size:12px">Geen data beschikbaar.</p>';return;}
+
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.parentElement.clientWidth-32;
+  const H=260;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+
+  // Marges
+  const mx=50,mr=10,mt=12,mb=36;
+  const gW=W-mx-mr, gH=H-mt-mb;
+
+  // Datareeksen
+  const n=buckets.length;
+  const saldo=buckets.map(b=>b.saldo_verwacht||0);
+  const inH=buckets.map(b=>b.in_hard||0);
+  const inV=buckets.map(b=>b.in_verwacht||0);
+  const uitVast=buckets.map(b=>b.uit_vast||0);
+  const uitInk=buckets.map(b=>b.uit_inkoop||0);
+  const btwPot=buckets.map(b=>(b.btw_pot_hard||0)+(b.btw_pot_verwacht||0));
+
+  // Schaal
+  const allVals=[...saldo,...inH,...inV,...btwPot,0,data.doel_lijn||0];
+  const minV=Math.min(...allVals,...uitVast.map(v=>-v),...uitInk.map(v=>-v));
+  const maxV=Math.max(...allVals,1);
+  const range=maxV-Math.min(minV,0)||1;
+  function yPx(v){return mt+gH*(1-(v-Math.min(minV,0))/range);}
+  function xPx(i){return mx+i*(gW/(n-1||1));}
+
+  // Y=0 lijn
+  ctx.strokeStyle='rgba(44,40,28,.12)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(mx,yPx(0));ctx.lineTo(mx+gW,yPx(0));ctx.stroke();
+
+  // Balkjes per bucket (breedte = 60% van slot)
+  const slotW=gW/(n||1);
+  const bW=Math.max(slotW*0.55,1);
+
+  function drawBar(i,topV,botV,kleur,alpha){
+    const x=mx+i*slotW+slotW*0.225;
+    const yTop=yPx(topV);const yBot=yPx(Math.min(topV,botV));
+    const h=Math.abs(yBot-yTop);
+    if(h<0.5) return;
+    ctx.save();ctx.globalAlpha=alpha||1;
+    ctx.fillStyle=kleur;
+    ctx.fillRect(x-bW/2,yTop,bW,h);
+    ctx.restore();
+  }
+
+  // IN hard
+  inH.forEach((v,i)=>drawBar(i,v,0,'#2A4A38'));
+  // IN verwacht (gestippeld = lagere alpha)
+  inV.forEach((v,i)=>drawBar(i,v,0,'#4A7A5C',0.42));
+  // UIT vast (negatief)
+  uitVast.forEach((v,i)=>drawBar(i,-v,0,'#8B1A1A'));
+  // UIT inkoop
+  uitInk.forEach((v,i)=>drawBar(i,-(v+uitVast[i]),0-uitVast[i],'#c0392b',0.6));
+  // BTW-pot (band)
+  btwPot.forEach((v,i)=>{if(v>0) drawBar(i,v,0,'#B8962E',0.3);});
+
+  // Doellijn
+  if(data.doel_lijn>0){
+    const yDoel=yPx(data.doel_lijn);
+    ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle='#B8962E';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(mx,yDoel);ctx.lineTo(mx+gW,yDoel);ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle='#B8962E';ctx.font='10px monospace';
+    ctx.fillText('doel',mx+4,yDoel-3);
+  }
+
+  // Saldo lijn
+  ctx.beginPath();ctx.strokeStyle='#2A4A38';ctx.lineWidth=2;ctx.setLineDash([]);
+  saldo.forEach((v,i)=>{
+    const x=mx+i*slotW+slotW*0.5;
+    const y=yPx(v);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  // Rode markers bij saldo < doellijn
+  if(data.doel_lijn>0){
+    saldo.forEach((v,i)=>{
+      if(v<data.doel_lijn){
+        ctx.save();ctx.fillStyle='rgba(139,26,26,.25)';
+        const x=mx+i*slotW;ctx.fillRect(x,mt,slotW,gH);ctx.restore();
+      }
+    });
+  }
+
+  // Dots op saldo
+  saldo.forEach((v,i)=>{
+    const x=mx+i*slotW+slotW*0.5;
+    ctx.beginPath();ctx.arc(x,yPx(v),3,0,Math.PI*2);
+    ctx.fillStyle=v<(data.doel_lijn||0)?'#8B1A1A':'#2A4A38';ctx.fill();
+  });
+
+  // Y-as labels
+  ctx.fillStyle='#8B9893';ctx.font='10px monospace';ctx.textAlign='right';
+  const nTicks=4;
+  for(let t=0;t<=nTicks;t++){
+    const v=Math.min(minV,0)+range*t/nTicks;
+    ctx.fillText(cfFmt(Math.round(v)),mx-5,yPx(v)+4);
+    ctx.save();ctx.strokeStyle='rgba(44,40,28,.06)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(mx,yPx(v));ctx.lineTo(mx+gW,yPx(v));ctx.stroke();ctx.restore();
+  }
+
+  // X-as labels (maximaal 8 labels)
+  ctx.textAlign='center';
+  const step=Math.ceil(n/8);
+  buckets.forEach((b,i)=>{
+    if(i%step!==0&&i!==n-1) return;
+    const x=mx+i*slotW+slotW*0.5;
+    const d=new Date(b.datum);
+    const lbl=`${d.getDate()}/${d.getMonth()+1}`;
+    ctx.fillText(lbl,x,H-mb+16);
+  });
+
+  // Tooltip via mouse
+  const wrap=canvas.parentElement;
+  const tip=document.getElementById('cf-tooltip');
+  function onMove(e){
+    const rect=canvas.getBoundingClientRect();
+    const px=(e.clientX-rect.left);
+    const i=Math.round((px-mx)/slotW);
+    if(i<0||i>=n||!tip) return;
+    const b=buckets[i];
+    tip.style.display='block';
+    tip.style.left=(e.clientX-wrap.getBoundingClientRect().left+10)+'px';
+    tip.style.top='12px';
+    tip.innerHTML=[
+      `<strong>${b.datum}</strong>`,
+      `Saldo: ${cfFmt2(b.saldo_verwacht)}`,
+      `IN hard: ${cfFmt2(b.in_hard)}`,
+      `IN verwacht: ${cfFmt2(b.in_verwacht)}`,
+      `UIT vast: ${cfFmt2(b.uit_vast)}`,
+      `UIT inkoop: ${cfFmt2(b.uit_inkoop)}`,
+      `BTW-pot: ${cfFmt2(b.btw_pot_hard+b.btw_pot_verwacht)}`
+    ].join('<br>');
+  }
+  function onLeave(){if(tip) tip.style.display='none';}
+  canvas.removeEventListener('mousemove',canvas._cfMove||null);
+  canvas.removeEventListener('mouseleave',canvas._cfLeave||null);
+  canvas._cfMove=onMove;canvas._cfLeave=onLeave;
+  canvas.addEventListener('mousemove',onMove);
+  canvas.addEventListener('mouseleave',onLeave);
+
+  // Doellijn info-tekst: wat is nodig?
+  _cfUpdateDoelInfo(data);
+}
+
+function _cfUpdateDoelInfo(data){
+  const el=document.getElementById('cf-doellijn-info');if(!el||!data) return;
+  if(!data.doel_lijn){el.innerHTML='';return;}
+  const tekortDagen=(data.buckets||[]).filter(b=>b.saldo_verwacht<data.doel_lijn);
+  if(!tekortDagen.length){el.innerHTML='Saldo blijft boven de doellijn in de hele horizon.';return;}
+  const eersteKnap=tekortDagen[0]?.datum||'?';
+  const tekort=data.doel_lijn-Math.min(...tekortDagen.map(b=>b.saldo_verwacht));
+  el.innerHTML=`Saldo daalt onder de doellijn (${cfFmt(data.doel_lijn)}) vanaf <strong>${eersteKnap}</strong>. Extra omzet nodig: <span class="cf-extra-nodig">${cfFmt2(tekort)}</span>`;
+}
+
+function _cfRenderVrij(d){
+  const el=id=>document.getElementById(id);
+  const vrij=d.vrij||0;
+  const chip=document.getElementById('cf-vrij-bedrag');
+  if(chip){chip.textContent=cfFmt2(vrij);chip.className='cf-vrij-bedrag '+(vrij>=0?'positief':'negatief');}
+  if(el('cf-vrij-saldo')) el('cf-vrij-saldo').textContent=cfFmt2(d.saldo_huidig||0);
+  if(el('cf-vrij-vast')) el('cf-vrij-vast').textContent=cfFmt2(d.vaste_resterend||0);
+  if(el('cf-vrij-inkoop')) el('cf-vrij-inkoop').textContent=cfFmt2(d.inkoop_open||0);
+  const info=document.getElementById('cf-anker-info');
+  if(info&&d.anker_datum){
+    const dagen=Math.floor((Date.now()-new Date(d.anker_datum).getTime())/86400000);
+    info.textContent=`Saldo-anker: ${d.anker_datum} (${dagen}d geleden)`;
+    const warn=document.getElementById('cf-anker-warn');
+    if(warn) warn.classList.toggle('hidden',dagen<=7);
+  }
+}
+
+function _cfRenderBtw(d){
+  const el=document.getElementById('cf-kpi-btw');
+  if(el) el.textContent=cfFmt(d.totaal||0);
+}
+
+function _cfRenderKpiStrip(){
+  // Hergebruik bestaande dash-waarden (al geladen door laadDashboard)
+  const omzetEl=document.getElementById('dash-omzet');
+  const debEl=document.getElementById('dash-debiteuren');
+  const credEl=document.getElementById('dash-crediteuren');
+  const setKpi=(id,src)=>{const el=document.getElementById(id);if(el&&src) el.textContent=src.textContent;};
+  setKpi('cf-kpi-ytd',omzetEl);
+  setKpi('cf-kpi-deb',debEl);
+  setKpi('cf-kpi-cred',credEl);
+  // MTD: apart te laden (vereenvoudiging: toon YTD als indicator)
+  const mtd=document.getElementById('cf-kpi-mtd');
+  if(mtd) mtd.textContent='zie Omzet YTD';
+}
+
+function _cfRenderTeFact(items){
+  const el=document.getElementById('cf-tefact-lijst');if(!el) return;
+  if(!items.length){el.innerHTML='<p style="color:var(--text-faint);font-size:12px">Geen geaccepteerde offertes zonder factuur.</p>';return;}
+  el.innerHTML=`<table class="data-table data-table--compact" style="margin-top:0.25rem">
+    <thead><tr><th>Klant</th><th class="num">Excl. BTW</th><th>Dagen</th></tr></thead>
+    <tbody>${items.map(i=>`<tr>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.contact||'—'}</td>
+      <td class="num">${cfFmt2(i.bedrag_excl)}</td>
+      <td class="num" style="color:${(i.days_since_accepted||0)>30?'var(--error)':'var(--text-dim)'}">${i.days_since_accepted!=null?i.days_since_accepted+'d':'—'}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function _cfRenderOnderhanden(items){
+  const el=document.getElementById('cf-onderhanden-lijst');if(!el) return;
+  if(!items.length){el.innerHTML='<p style="color:var(--text-faint);font-size:12px">Geen Toggl-uren gevonden (90 dagen).</p>';return;}
+  el.innerHTML=`<table class="data-table data-table--compact">
+    <thead><tr><th>Project</th><th class="num">Uren</th><th class="num">Geschat</th></tr></thead>
+    <tbody>${items.map(i=>`<tr>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.project}</td>
+      <td class="num">${i.uren}u</td>
+      <td class="num">${cfFmt2(i.geschat_bedrag)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function _cfRenderPijplijn(cfData){
+  // Gebruik de offerte-pijplijn via aparte call (te-factureren geeft accepted; hier breder)
+  cfFetch('/dashboard/te-factureren').then(d=>{
+    const el=document.getElementById('cf-pijplijn-lijst');if(!el) return;
+    const items=(d?.items||[]);
+    if(!items.length){el.innerHTML='<p style="color:var(--text-faint);font-size:12px">Geen openstaande offertes.</p>';return;}
+    el.innerHTML=`<table class="data-table data-table--compact">
+      <thead><tr><th>Klant</th><th>Verwacht</th><th class="num">Incl. BTW</th><th>Kans</th></tr></thead>
+      <tbody>${items.map(i=>{
+        const kans=i.days_since_accepted!=null?'zeker':'verwacht';
+        return`<tr>
+          <td>${i.contact||'—'}</td>
+          <td style="font-family:var(--mono);font-size:11px">${i.due_date||'—'}</td>
+          <td class="num">${cfFmt2(i.bedrag_incl)}</td>
+          <td><span class="cf-pipe-kans ${kans}">${kans}</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  }).catch(()=>{});
+}
+
+function _cfVulInstellingenUI(config){
+  if(config.anker){
+    const d=document.getElementById('cf-anker-datum');
+    const b=document.getElementById('cf-anker-bedrag');
+    if(d) d.value=config.anker.datum||'';
+    if(b) b.value=config.anker.bedrag!=null?config.anker.bedrag:'';
+  }
+  if(config.doelen){
+    const s=document.getElementById('cf-doel-salaris');
+    const b=document.getElementById('cf-doel-buffer');
+    if(s) s.value=config.doelen.salaris||'';
+    if(b) b.value=config.doelen.buffer||'';
+  }
+}
+
+async function cfSlaAnkerOp(){
+  const datum=document.getElementById('cf-anker-datum')?.value;
+  const bedrag=parseFloat(document.getElementById('cf-anker-bedrag')?.value);
+  const st=document.getElementById('cf-anker-status');
+  if(!datum||isNaN(bedrag)){if(st) st.textContent='Vul datum én bedrag in.';return;}
+  if(st) st.textContent='Opslaan...';
+  const r=await cfFetch('/dashboard/anker',{method:'POST',body:JSON.stringify({datum,bedrag})});
+  if(st) st.textContent=r?.ok?'✓ Opgeslagen':'✗ Fout';
+  if(r?.ok){
+    if(window.track) try{track('cashflow','anker_opslaan',{ok:true});}catch{}
+    // Herlaad cashflow (anker is gewijzigd)
+    _cfGeladen=false; dashboardGeladen=false;
+    laadCashflowDashboard();
+  }
+}
+
+async function cfSlaDoelenOp(){
+  const salaris=parseFloat(document.getElementById('cf-doel-salaris')?.value)||0;
+  const buffer=parseFloat(document.getElementById('cf-doel-buffer')?.value)||0;
+  const st=document.getElementById('cf-doelen-status');
+  if(st) st.textContent='Opslaan...';
+  const r=await cfFetch('/dashboard/doelen',{method:'POST',body:JSON.stringify({salaris,buffer})});
+  if(st) st.textContent=r?.ok?'✓ Opgeslagen':'✗ Fout';
+  if(r?.ok){
+    if(window.track) try{track('cashflow','doelen_opslaan',{ok:true});}catch{}
+    _cfGeladen=false; dashboardGeladen=false;
+    laadCashflowDashboard();
+  }
+}
+
+function cfToggleInstellingen(btn){
+  const body=document.getElementById('cf-settings-body');
+  const arrow=document.getElementById('cf-settings-arrow');
+  if(!body) return;
+  const open=body.classList.toggle('open');
+  if(arrow) arrow.textContent=open?'▼':'▶';
+  if(window.track) try{track('cashflow','instellingen_toggle',{detail:open?'open':'dicht'});}catch{}
 }
 
 // ═══ KLANTEN ═══

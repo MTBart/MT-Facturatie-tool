@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-14 — Usage-/presence-tracking: Worker-routes + D1/KV + front-end haakjes
+- Commit: `b54cb6e` | Auteur: Bart Witte
+
 ## 2026-06-12 — Fix: NAS-404 deel 2 — drive-search geeft geen parentReference.path
 - Commit: `a0baefb` | Auteur: Bart Witte
 
