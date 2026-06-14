@@ -3069,6 +3069,7 @@ function tgNieuwProject(){
   // M&T-projectaanmaker (genereert KLANT-LOC-PROD-code, maakt SharePoint-mappen,
   // koppelt het Moneybird-contact) en die maakt aan het eind óók het Toggl-project
   // aan met de projectcode als naam — zo is de code de sleutel, ook in Toggl.
+  try{ if(window.track) track('toggl','project_aanmaker_open',{detail:'vanuit_toggl'}); }catch(e){}
   if(window.openModal){ openModal(); tgStatus('M&T-projectaanmaker geopend — de code wordt straks ook het Toggl-project.','#7A6010'); }
   else { tgStatus('Projectaanmaker niet gevonden.','#c0392b'); }
 }
@@ -3122,6 +3123,7 @@ function tgOpenProject(id){
   const p=_tgProjById(id); if(!p) return;
   const box=document.getElementById('tg-proj-lijst'); if(!box) return;
   const mt=_mtProjVoorToggl(p), kl=p.color||'#9a9a9a', sec=p.total_tracked_secs||0;
+  try{ if(window.track) track('toggl','project_open',{detail:mt?'gekoppeld':'ongekoppeld'}); }catch(e){}
   let mtBlok;
   if(mt){
     const klantNaam=(typeof resolveKlantNaam==='function')?resolveKlantNaam(mt):(mt.klant_naam||'');
@@ -3168,6 +3170,7 @@ function tgOpenProject(id){
 function tgNaarVolledigProject(code){
   if(typeof PROJECT_CODES==='undefined') return;
   const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
+  try{ if(window.track) track('toggl','naar_volledig_project',{detail:code}); }catch(e){}
   if(typeof tbDoTab==='function') tbDoTab('projecten');
   // Even wachten tot de Projecten-tab gerenderd is, dan het project selecteren
   // via de bestaande lijst-flow (zet huidigProject + renderProjectDetail).
@@ -4321,6 +4324,7 @@ function nieuweProjectTaak(code){
   }
   const t={id:_ptId(),naam,omschrijving:'',duur_uur:duur,prioriteit,afhankelijk_van,status:'todo',tg_task_id:null,bron:'handmatig'};
   arr.push(t); projTakenZet(code,arr); renderProjectDetail(huidigProject);
+  try{ if(window.track) track('taken','taak_handmatig',{detail:code,ok:true}); }catch(e){}
   // mens maakte 'm expliciet aan → meteen naar Toggl spiegelen
   projTaakNaarToggl(code,t.id).then(()=>renderProjectDetail(huidigProject)).catch(()=>{});
 }
@@ -4328,11 +4332,13 @@ function projTaakStatus(code,id){
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   const order=['todo','bezig','klaar']; t.status=order[(order.indexOf(t.status||'todo')+1)%3];
   projTakenZet(code,arr);
+  try{ if(window.track) track('taken','status',{detail:t.status}); }catch(e){}
   if(t.tg_task_id){ try{ focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:_PT_STAT_TG[t.status]}).catch(()=>{}); }catch(e){} }
   renderProjectDetail(huidigProject);
 }
 function projTaakVerwijder(code,id){
   if(!confirm('Taak hier verwijderen?\n(Een eventueel gespiegelde Toggl-taak verwijder je in Toggl.)')) return;
+  try{ if(window.track) track('taken','verwijder',{detail:code}); }catch(e){}
   projTakenZet(code,projTaken(code).filter(x=>x.id!==id));
   renderProjectDetail(huidigProject);
 }
@@ -4364,13 +4370,17 @@ async function projTaakNaarToggl(code,id){
     if(tid){ t.tg_task_id=tid; projTakenZet(code,arr); }
     if(typeof _tgCache!=='undefined') _tgCache.taken=null;
     _ptStatus(code,'✓ In Toggl-project','var(--green)');
+    try{ if(window.track) track('taken','naar_toggl',{detail:t.bron||'handmatig',ok:true}); }catch(e){}
     return true;
-  }catch(e){ _ptStatus(code,'❌ '+e.message,'#c0392b'); return false; }
+  }catch(e){ _ptStatus(code,'❌ '+e.message,'#c0392b');
+    try{ if(window.track) track('taken','naar_toggl',{detail:e.message,ok:false}); }catch(_){}
+    return false; }
 }
 async function projTakenSpiegelAlles(code){
   const arr=projTaken(code).filter(t=>!t.tg_task_id);
   if(!arr.length) return;
   if(!confirm(`${arr.length} taken naar het Toggl-project sturen (zichtbaar voor het team)?`)) return;
+  try{ if(window.track) track('taken','spiegel_alles',{detail:arr.length+' taken'}); }catch(e){}
   for(const t of arr){ await projTaakNaarToggl(code,t.id); }
   renderProjectDetail(huidigProject);
 }
@@ -4379,6 +4389,7 @@ async function projTakenSpiegelAlles(code){
 async function aiTakenVoorstel(code){
   const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
   _ptStatus(code,'✨ AI denkt na…','var(--gold-text)');
+  const _t0=(typeof performance!=='undefined'?performance.now():Date.now());
   const klant=(typeof resolveKlantNaam==='function')?resolveKlantNaam(mt):'';
   const vraag=`Je bent werkvoorbereider bij een interieurbouwer (maatwerk meubels & interieur).
 Stel een beknopte, logische takenlijst op voor dit project. Geef UITSLUITEND geldige JSON terug:
@@ -4403,11 +4414,14 @@ Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.
     projTakenZet(code,projTaken(code).concat(nieuwe));
     renderProjectDetail(huidigProject);
     _ptStatus(code,`✓ ${nieuwe.length} AI-taken toegevoegd`,'var(--green)');
+    try{ if(window.track) track('taken','ai_voorstel',{detail:nieuwe.length+' taken',ok:true,ms:(typeof performance!=='undefined'?performance.now():Date.now())-_t0}); }catch(e){}
     if(confirm(`${nieuwe.length} taken toegevoegd. Ook naar het Toggl-project sturen (zichtbaar voor het team)?`)){
       for(const t of nieuwe){ await projTaakNaarToggl(code,t.id); }
       renderProjectDetail(huidigProject);
     }
-  }catch(e){ _ptStatus(code,'❌ AI-voorstel faalde: '+e.message,'#c0392b'); }
+  }catch(e){ _ptStatus(code,'❌ AI-voorstel faalde: '+e.message,'#c0392b');
+    try{ if(window.track) track('taken','ai_voorstel',{detail:e.message,ok:false,ms:(typeof performance!=='undefined'?performance.now():Date.now())-_t0}); }catch(_){}
+  }
 }
 
 // ═══ NACALCULATIE — uren × tarief + materiaal, t.o.v. MB-offerte ═══

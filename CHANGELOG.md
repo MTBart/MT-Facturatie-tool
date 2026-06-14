@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-14 — Uren-tab symbiose: AI-taken met afhankelijkheid + gespiegeld naar Toggl-project
+- Commit: `68a3c13` | Auteur: Bart Witte
+
 ## 2026-06-14 — Cockpit: cashflow-/liquiditeitsdashboard op Dashboard-tab. Worker: 7 nieuwe /dashboard/* routes (cashflow, vrij-te-besteden, btw-pot, te-factureren, onderhanden, config, anker, doelen), KV-cache 1u, MB-mutations in blokken van max 12d. v2.html: tijdlijn (canvas, geen externe dep), vrij-te-besteden-chip, KPI-strip, pijplijn, instellingen anker+doelen, track()-haakjes op alle acties. seed_vaste_lasten.js: eenmalig seed naar TRACK_KV. Additief - geen bestaande functie aangeraakt. Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 - Commit: `06dabd6` | Auteur: Bart Witte
 
