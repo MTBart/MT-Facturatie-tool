@@ -1684,6 +1684,10 @@ button{transition:transform .07s ease,filter .07s ease}
       .plan-editor .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:8px 0}
       .plan-editor label{display:block;font-size:11px;color:var(--text-dim,#666);margin-bottom:3px}
       .plan-editor input,.plan-editor select{width:100%;height:30px;padding:0 7px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;background:#fff}
+      .plan-rowlabel.koppelbaar{cursor:pointer}
+      .plan-rowlabel.koppelbaar:hover{color:var(--gold-text,#8a6d1a)}
+      .mt-flash{animation:mtflash 1.6s ease-out}
+      @keyframes mtflash{0%{outline:2px solid var(--gold,#B8962E);outline-offset:-1px;background:var(--gold-50,#f6edd5)}80%{outline:2px solid var(--gold,#B8962E);outline-offset:-1px}100%{outline:2px solid transparent;background:transparent}}
       @media(max-width:720px){.plan-axis,.plan-rowlabel{margin-left:0}.plan-rowlabel{width:96px;flex-basis:96px;font-size:10.5px}}
     </style>
     <div class="inbox-subnav">
@@ -4450,13 +4454,17 @@ function projectTakenHtml(proj){
   const arr=projTaken(proj.code), sid=proj.code.replace(/-/g,'');
   const naamById={}; arr.forEach(t=>naamById[t.id]=t.naam);
   const esc=s=>(typeof tgEsc==='function')?tgEsc(s):String(s==null?'':s);
+  // Welke taken staan al in de uit-taken-planning (Gantt)? → kruisverwijzing.
+  const _pl=(typeof planVoor==='function')?planVoor(proj.code):null;
+  const inPlan=new Set((_pl&&_pl.vanTaken&&_pl.fases?_pl.fases:[]).map(fa=>fa.bronTaakId).filter(Boolean));
   const rows=arr.length?arr.map(t=>{
     const pr=_PT_PRIO[t.prioriteit], stt=_PT_STAT[t.status]||_PT_STAT.todo;
     const deps=(t.afhankelijk_van||[]).map(id=>naamById[id]).filter(Boolean);
-    return `<tr>
+    const planLink=inPlan.has(t.id)?` <a href="#" onclick="event.preventDefault();taakNaarPlan('${proj.code}','${t.id}')" title="Toon in de planning hierboven" style="text-decoration:none">📅</a>`:'';
+    return `<tr id="pt-row-${sid}-${t.id}">
       <td style="width:24px;text-align:center"><input type="checkbox" class="pt-check" value="${t.id}" title="Selecteer om in één keer te verwijderen"></td>
       <td><span class="badge" style="background:${stt.c}22;color:${stt.c}">${stt.l}</span></td>
-      <td style="font-size:13px">${esc(t.naam)}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
+      <td style="font-size:13px">${esc(t.naam)}${planLink}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
       <td>${pr?`<span class="badge" style="background:${pr.c}22;color:${pr.c}">${pr.l}</span>`:''}</td>
       <td style="white-space:nowrap;text-align:right;font-family:var(--mono)">
         <button class="btn btn-xs btn-secondary" title="−1 uur" onclick="projTaakUur('${proj.code}','${t.id}',-1)">−</button>
@@ -4508,6 +4516,8 @@ function projTaakStatus(code,id){
   projTakenZet(code,arr);
   try{ if(window.track) track('taken','status',{detail:t.status}); }catch(e){}
   if(t.tg_task_id){ try{ focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:_PT_STAT_TG[t.status]}).catch(()=>{}); }catch(e){} }
+  // Twee-weg-sync: spiegel de status naar de bijbehorende planning-fase.
+  try{ const plan=planVoor(code); if(plan&&plan.vanTaken&&plan.fases){ const fa=plan.fases.find(f=>f.bronTaakId===id); if(fa){ fa.status=t.status; planSave(code,plan); } } }catch(e){}
   renderProjectDetail(huidigProject);
 }
 // ── Uren bewerken (− / + / vrij typen) ──────────────────────────────────
@@ -5158,6 +5168,7 @@ function _takenTopoSort(arr){
 function takenNaarPlanning(code,opts){
   opts=opts||{};
   const stil=!!opts.stil;
+  const herbouw=!!opts.herbouw; // expliciete "↻ tijdlijn bijwerken"-knop
   const arr=projTaken(code);
   if(!arr.length){ if(!stil) planToast('Geen taken om om te zetten.'); return; }
   const bestaand=planVoor(code);
@@ -5166,6 +5177,10 @@ function takenNaarPlanning(code,opts){
       // Automatisch (vanuit AI-voorstel): alleen een uit-taken-gegenereerd plan
       // mag stil worden overschreven; een handmatig Gantt-plan laten we staan.
       if(!bestaand.vanTaken) return;
+    } else if(herbouw){
+      // "Tijdlijn bijwerken": een uit-taken-plan zonder vragen herbouwen;
+      // alleen bij een handmatig Gantt-plan eerst bevestigen.
+      if(!bestaand.vanTaken && !confirm('Deze planning is handmatig gemaakt.\nVervangen door de '+arr.length+' taken hieronder? Verschoven fasen gaan verloren.')) return;
     } else {
       if(!confirm('Er is al een planning voor '+code+'.\nDie wordt vervangen door deze '+arr.length+' taken. Doorgaan?')) return;
     }
@@ -5191,7 +5206,25 @@ function takenNaarPlanning(code,opts){
   planBerekenDatums(plan);
   planSave(code,plan);
   try{ if(window.track) track('taken','naar_planning',{detail:code+' · '+fases.length+' fasen'+(stil?' · auto':''),ok:true}); }catch(e){}
-  if(!stil){ planToast('📅 '+fases.length+' taken → planning ('+code+')'); renderProjectDetail(huidigProject); }
+  if(!stil){ planToast((herbouw?'↻ Tijdlijn bijgewerkt — ':'📅 ')+fases.length+' taken → planning ('+code+')'); renderProjectDetail(huidigProject); }
+}
+
+// ── Kruisverwijzing planning ⇄ taken (scroll + oplichten) ──
+function _mtFlash(el){
+  if(!el) return;
+  try{ el.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){}
+  el.classList.remove('mt-flash'); void el.offsetWidth; el.classList.add('mt-flash');
+  setTimeout(()=>el.classList.remove('mt-flash'),1700);
+}
+// Gantt-balk → bijbehorende taakrij
+function planNaarTaak(code,taakId){
+  const sid=code.replace(/-/g,'');
+  _mtFlash(document.getElementById('pt-row-'+sid+'-'+taakId));
+}
+// Taakrij → bijbehorende Gantt-fase (alleen bij een uit-taken-plan)
+function taakNaarPlan(code,taakId){
+  const cid=_planCid(code);
+  _mtFlash(document.getElementById('plan-row-'+cid+'-'+taakId));
 }
 
 // Besteldatum-bewaking: ligt inkoop-start in verleden en is inkoop nog niet klaar?
@@ -5293,8 +5326,12 @@ function projectPlanning(proj){
     const kleur=PLAN_STATUS_KLEUR[fa.status]||'#8e9aaf';
     const l=pct(fa.start), w=fa.mijlpaal?0:breedte(fa.start,fa.eind);
     const dt=`${String(_planD(fa.start).getDate()).padStart(2,'0')}/${String(_planD(fa.start).getMonth()+1).padStart(2,'0')}`;
-    rows+=`<div class="plan-row">
-      <div class="plan-rowlabel" title="${fa.naam}">${fa.gepind?'📌 ':''}${fa.naam}<br><span class="u">${fa.effort?fa.effort+'u · ':''}${dt}</span></div>
+    const bron=fa.bronTaakId||'';
+    const rowId=bron?` id="plan-row-${cid}-${bron}"`:'';
+    const koppel=bron?` koppelbaar`:'';
+    const naarTaak=bron?` onclick="planNaarTaak('${proj.code}','${bron}')" title="${fa.naam} — klik: spring naar de taak"`:` title="${fa.naam}"`;
+    rows+=`<div class="plan-row"${rowId}>
+      <div class="plan-rowlabel${koppel}"${naarTaak}>${bron?'🔗 ':''}${fa.gepind?'📌 ':''}${fa.naam}<br><span class="u">${fa.effort?fa.effort+'u · ':''}${dt}</span></div>
       <div class="plan-track" data-code="${proj.code}" data-span="${totDagen}">
         ${fa.mijlpaal
           ? `<span class="plan-bar mijlpaal" style="left:${l}%;background:#d4a017" title="${fa.naam} — ${fa.start}" onpointerdown="planDragStart(event,'${proj.code}','${fa.id}')"></span>`
@@ -5307,6 +5344,7 @@ function projectPlanning(proj){
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
     <div class="card-title" style="margin:0">📅 Projectplanning <span style="font-weight:400;font-size:12px;color:var(--text-dim,#888)">· anker: ${ankerLbl} · ${totEffort}u totaal</span></div>
     <div style="display:flex;gap:6px">
+      ${(plan.vanTaken&&projTaken(proj.code).length)?`<button class="btn btn-sm" onclick="takenNaarPlanning('${proj.code}',{herbouw:true})" title="Werk deze tijdlijn opnieuw bij vanuit de taken hieronder (na bewerken/toevoegen/verwijderen)">↻ tijdlijn bijwerken</button>`:''}
       <button class="btn btn-sm" onclick="planNaarToggl('${proj.code}')" title="${plan.togglProjectId?'Gekoppeld aan Toggl-project '+plan.togglProjectId:'Maak een Toggl-project met een Focus-taak per fase'}">${plan.togglProjectId?'↻ sync naar Toggl':'📤 naar Toggl'}</button>
       <button class="btn btn-sm" onclick="planAnkerWissel('${proj.code}')">↔ wissel anker</button>
       <button class="btn btn-sm" onclick="planHerstel('${proj.code}')">↺ herstel template</button>
@@ -5417,10 +5455,18 @@ function planEditorOpslaan(code,faseId){
   fa.gap=Math.max(0,parseInt(document.getElementById('pe-gap').value)||0);
   fa.effort=Math.max(0,parseInt(document.getElementById('pe-effort').value)||0);
   const nieuweStart=document.getElementById('pe-start').value;
+  // Twee-weg-sync: een uit-een-taak gegenereerde fase schrijft naam/status/uren
+  // terug naar die taak, zodat planning en takenlijst dezelfde bron delen.
+  if(fa.bronTaakId){
+    const tarr=projTaken(code), bt=tarr.find(x=>x.id===fa.bronTaakId);
+    if(bt){ bt.naam=fa.naam; bt.status=fa.status; bt.duur_uur=fa.effort; projTakenZet(code,tarr);
+      if(bt.tg_task_id){ try{ focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:_PT_STAT_TG[fa.status]||300785}).catch(()=>{}); }catch(e){} }
+    }
+  }
   planSave(code,plan);
   if(nieuweStart && nieuweStart!==fa.start){ planSchuifFase(code,faseId,nieuweStart); }
   else { const p=planVoor(code); planBerekenDatums(p); planSave(code,p); }
-  renderProjectDetail(huidigProject); planToast('Fase bijgewerkt');
+  renderProjectDetail(huidigProject); planToast('Fase bijgewerkt'+(fa.bronTaakId?' (taak mee bijgewerkt)':''));
 }
 function planFaseUnpin(code,faseId){
   const plan=planVoor(code); if(!plan) return;

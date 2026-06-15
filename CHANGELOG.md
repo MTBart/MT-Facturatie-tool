@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-15 — Taken: AI niet auto-naar-Toggl, project-create robuust, Toggl-delete sync, checkbox-multidelete
+- Commit: `2372d66` | Auteur: Bart Witte
+
 ## 2026-06-15 — Toggl-mirror: project één keer aanmaken (met klant), taken in één keer, AI maakt ook planning
 - Commit: `4a6f18d` | Auteur: Bart Witte
 
