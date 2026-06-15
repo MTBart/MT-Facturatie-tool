@@ -4416,7 +4416,11 @@ function projectTakenHtml(proj){
       <td><span class="badge" style="background:${stt.c}22;color:${stt.c}">${stt.l}</span></td>
       <td style="font-size:13px">${esc(t.naam)}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
       <td>${pr?`<span class="badge" style="background:${pr.c}22;color:${pr.c}">${pr.l}</span>`:''}</td>
-      <td style="text-align:right;font-family:var(--mono)">${t.duur_uur?t.duur_uur+'u':''}</td>
+      <td style="white-space:nowrap;text-align:right;font-family:var(--mono)">
+        <button class="btn btn-xs btn-secondary" title="−1 uur" onclick="projTaakUur('${proj.code}','${t.id}',-1)">−</button>
+        <input type="text" inputmode="decimal" value="${t.duur_uur||0}" onchange="projTaakUurZet('${proj.code}','${t.id}',this.value)" onfocus="this.select()" title="Vrij typen (uren, decimaal mag)" style="width:42px;text-align:right;font-family:var(--mono);padding:2px 3px;margin:0 2px">u
+        <button class="btn btn-xs btn-secondary" title="+1 uur" onclick="projTaakUur('${proj.code}','${t.id}',1)">+</button>
+      </td>
       <td style="white-space:nowrap;text-align:right">
         ${t.tg_task_id?'<span class="badge badge-ok" title="Zichtbaar in Toggl-project">Toggl ✓</span>':`<button class="btn btn-xs btn-secondary" title="Naar Toggl-project sturen" onclick="projTaakNaarToggl('${proj.code}','${t.id}').then(()=>renderProjectDetail(huidigProject))">→ Toggl</button>`}
         <button class="btn btn-xs btn-secondary" title="Status wisselen" onclick="projTaakStatus('${proj.code}','${t.id}')">⟳</button>
@@ -4463,6 +4467,33 @@ function projTaakStatus(code,id){
   try{ if(window.track) track('taken','status',{detail:t.status}); }catch(e){}
   if(t.tg_task_id){ try{ focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:_PT_STAT_TG[t.status]}).catch(()=>{}); }catch(e){} }
   renderProjectDetail(huidigProject);
+}
+// ── Uren bewerken (− / + / vrij typen) ──────────────────────────────────
+// Houdt scrollpositie vast en synct een uit-deze-taken-gegenereerde planning.
+function _rerenderDetailKeepScroll(){
+  const y=window.scrollY;
+  if(typeof renderProjectDetail==='function' && typeof huidigProject!=='undefined' && huidigProject) renderProjectDetail(huidigProject);
+  try{ window.scrollTo(0,y); }catch(e){}
+}
+function _planSyncTaakUur(code,id,uren){
+  const plan=planVoor(code); if(!plan||!plan.vanTaken||!plan.fases) return;
+  const fa=plan.fases.find(f=>f.bronTaakId===id); if(!fa) return;
+  fa.effort=uren; fa.duur=uren>0?Math.max(1,Math.ceil(uren/8)):0; fa.mijlpaal=uren===0;
+  planBerekenDatums(plan); planSave(code,plan);
+}
+function projTaakUurZet(code,id,val){
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
+  let n=parseFloat(String(val==null?'':val).replace(',','.')); if(!isFinite(n)||n<0) n=0;
+  n=Math.round(n*100)/100;
+  t.duur_uur=n; projTakenZet(code,arr);
+  _planSyncTaakUur(code,id,n);
+  try{ if(window.track) track('taken','uur_edit',{detail:code,ms:n}); }catch(e){}
+  _rerenderDetailKeepScroll();
+}
+function projTaakUur(code,id,delta){
+  const t=projTaken(code).find(x=>x.id===id); if(!t) return;
+  const cur=parseFloat(t.duur_uur)||0;
+  projTaakUurZet(code,id,Math.max(0,Math.round((cur+delta)*100)/100));
 }
 function projTaakVerwijder(code,id){
   if(!confirm('Taak hier verwijderen?\n(Een eventueel gespiegelde Toggl-taak verwijder je in Toggl.)')) return;
