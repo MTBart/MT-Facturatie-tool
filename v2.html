@@ -5262,18 +5262,18 @@ async function planNaarToggl(code){
     }
   }catch(e){ planToast('❌ Toggl-project mislukt: '+e.message); return; }
   // Focus-taken per fase (sequentieel, best-effort)
-  let ok=0, fout=0;
+  let ok=0, fout=0, eersteFout='';
   for(const fa of plan.fases){
     try{
       const body={name:fa.naam, status_id:_PLAN_TG_STATUS[fa.status]||300785, project_id:plan.togglProjectId};
       const made=await focusFetch('tasks','POST',body);
       const tid=made&&(made.id||(made.data&&made.data.id));
-      if(tid){ fa.togglTaskId=tid; ok++; } else { fout++; }
-    }catch(e){ fout++; }
+      if(tid){ fa.togglTaskId=tid; ok++; } else { fout++; if(!eersteFout) eersteFout='geen task-id terug'; }
+    }catch(e){ fout++; if(!eersteFout) eersteFout=e.message; console.warn('Focus-taak faalde:',fa.naam,e); }
   }
   planSave(code,plan);
   if(typeof _tgCache!=='undefined') _tgCache.taken=null;
-  planToast(`Toggl klaar: ${ok} taken aangemaakt${fout?`, ${fout} mislukt`:''}.`);
+  planToast(`Toggl klaar: ${ok} taken aangemaakt${fout?`, ${fout} mislukt — ${eersteFout}`:''}.`);
   renderProjectDetail(huidigProject);
 }
 
