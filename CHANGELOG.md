@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-14 — Usage-logging op taken- en Toggl-symbiose-functies
+- Commit: `d130923` | Auteur: Bart Witte
+
 ## 2026-06-14 — Uren-tab symbiose: AI-taken met afhankelijkheid + gespiegeld naar Toggl-project
 - Commit: `68a3c13` | Auteur: Bart Witte
 
