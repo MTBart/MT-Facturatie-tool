@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-15 — Fix: AI-voorstel SSE-parse + bijlagen-upload naar projectmap robuust
+- Commit: `543bb76` | Auteur: Bart Witte
+
 ## 2026-06-15 — inbox: mail↔project zichtbaar + doorklik + bijlagen-automatiek
 - Commit: `4a7a395` | Auteur: Bart Witte
 

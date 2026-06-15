@@ -546,6 +546,7 @@ button{transition:transform .07s ease,filter .07s ease}
   <button class="tab-btn" id="tab-btn-admin" style="display:none" onclick="showTab('admin',this)">⚙ Admin</button>
   <button class="tab-btn" id="tab-btn-activiteit" style="display:none" onclick="showTab('activiteit',this)">📊 Activiteit</button>
   <button class="tab-help-btn" onclick="helpOpen()" title="Korte uitleg van dit tabblad + feedback geven aan Larry">ⓘ wat is dit?</button>
+  <button class="tab-help-btn" onclick="tbOpenInNieuwVenster()" title="Open dit tabblad in een apart venster — sleep het naar je tweede scherm">↗ apart venster</button>
 </div>
 
 <div class="main">
@@ -2144,6 +2145,22 @@ function showTab(name,btn){
   if(name==='materialen') renderMaterialen();
   if(name==='admin') adminOpen();
   if(name==='activiteit') activiteitOpen();
+  // Houd de URL-hash gelijk aan de actieve tab → deep-link + "apart venster".
+  try{ history.replaceState(null,'','#tab='+name); }catch(e){}
+}
+// Multi-monitor: open de (huidige) tab in een nieuw browservenster met #tab-deeplink.
+function tbOpenInNieuwVenster(naam){
+  const t=naam||_tbHashTab()||_tabHuidig||'dashboard';
+  const url=location.origin+location.pathname+location.search+'#tab='+t;
+  window.open(url,'_blank');
+}
+function _tbHashTab(){ const m=(location.hash||'').match(/[#&]tab=([a-z]+)/i); return m?m[1]:''; }
+// Past een #tab=<naam>-deeplink toe zodra de app klaar is (na login).
+function tbApplyHashTab(){
+  const t=_tbHashTab(); if(!t) return false;
+  const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+t+"'"));
+  if(btn){ btn.click(); return true; }
+  return false;
 }
 function showVtab(name,btn){
   document.querySelectorAll('#tab-voorraad .vtab-content').forEach(t=>t.classList.remove('active'));
@@ -4292,6 +4309,7 @@ function renderProjectDetail(proj){
         <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${mbNrBlok}
       </div>
       ${projectPlanning(proj)}
+      ${projectTakenHtml(proj)}
       ${projectTijdlijn(proj)}
       <hr class="divider">
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
@@ -4326,7 +4344,6 @@ function renderProjectDetail(proj){
         <span style="font-size:11px;color:var(--text-faint)">Koppelen doe je in de Inbox met 🔗 “Koppel aan project”</span>
       </div>
       ${gekoppeldeMailsHtml(proj)}
-      ${projectTakenHtml(proj)}
       ${nacalcHtml(proj,totaalInkoop,effectiveMb)}
       ${projItems.length?`
       <hr class="divider">
@@ -4412,7 +4429,9 @@ function projectTakenHtml(proj){
     <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
       <div class="card-title" style="margin:0">Taken <span class="badge" style="background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid)">M&amp;T</span></div>
       <button class="btn btn-gold btn-sm" onclick="aiTakenVoorstel('${proj.code}')">✨ AI-taken voorstellen</button>
+      <button class="btn btn-secondary btn-sm" onclick="projTaakTemplateKies('${proj.code}')" title="Standaard takenketen invoegen (keuken, kast, wandpaneel, maatwerk)">📋 Template</button>
       <button class="btn btn-secondary btn-sm" onclick="nieuweProjectTaak('${proj.code}')">+ Taak</button>
+      ${arr.length?`<button class="btn btn-secondary btn-sm" onclick="takenNaarPlanning('${proj.code}')" title="Zet deze taken om in de fasen-planning (Gantt) hierboven">📅 → Planning</button>`:''}
       ${onbesp&&arr.length?`<button class="btn btn-secondary btn-sm" onclick="projTakenSpiegelAlles('${proj.code}')">→ Alles naar Toggl (${onbesp})</button>`:''}
       <span id="pt-status-${sid}" style="font-size:12px;color:var(--text-dim)"></span>
     </div>
@@ -5006,6 +5025,61 @@ function planSchuifFase(code, faseId, nieuweStart){
     else { cur.gepind=false; cur.start=_planYmd(s); cur.eind=_planYmd(addWerkdagen(s,Math.max(0,cur.duur-1))); }
   }
   planSave(code,plan);
+}
+
+// ── Taken → Planning-brug ──────────────────────────────────────────────
+// Zet de AI/handmatige taken (met afhankelijkheden) om naar de fasen-planning
+// (Gantt) hierboven. Topologisch geordend zodat een taak nooit vóór z'n
+// voorganger komt. duur_uur → werkdagen (~8u/dag); effort = uren; status blijft.
+function _takenTopoSort(arr){
+  const byId={}; arr.forEach(t=>byId[t.id]=t);
+  const klaar=new Set(), uit=[];
+  // alleen deps die echt in de lijst staan tellen mee
+  const deps=t=>(t.afhankelijk_van||[]).filter(id=>byId[id]);
+  let veilig=arr.length*arr.length+5;
+  while(uit.length<arr.length && veilig-->0){
+    let progressie=false;
+    for(const t of arr){
+      if(klaar.has(t.id)) continue;
+      if(deps(t).every(id=>klaar.has(id))){ uit.push(t); klaar.add(t.id); progressie=true; }
+    }
+    if(!progressie){ // cyclus of dangling → rest in originele volgorde toevoegen
+      for(const t of arr){ if(!klaar.has(t.id)){ uit.push(t); klaar.add(t.id); } }
+      break;
+    }
+  }
+  return uit;
+}
+function takenNaarPlanning(code){
+  const arr=projTaken(code);
+  if(!arr.length){ planToast('Geen taken om om te zetten.'); return; }
+  const bestaand=planVoor(code);
+  if(bestaand && bestaand.fases && bestaand.fases.length){
+    if(!confirm('Er is al een planning voor '+code+'.\nDie wordt vervangen door deze '+arr.length+' taken. Doorgaan?')) return;
+  }
+  const geordend=_takenTopoSort(arr);
+  const fases=geordend.map((t,i)=>{
+    const uren=parseFloat(t.duur_uur)||0;
+    const duur=uren>0?Math.max(1,Math.ceil(uren/8)):0;
+    return {
+      id:'f'+i+'_taak', key:'taak'+i, naam:t.naam, volgorde:i,
+      duur, gap:0, effort:uren, mijlpaal:uren===0, besteldatum:false,
+      status:t.status||'todo', start:'', eind:'', gepind:false,
+      togglTaskId:t.tg_task_id||null, bronTaakId:t.id
+    };
+  });
+  const anker = (bestaand && bestaand.anker) ? bestaand.anker
+              : {type:'start', datum:_planYmd(new Date())};
+  const plan={
+    code, anker,
+    togglProjectId:(bestaand && bestaand.togglProjectId)||null,
+    fases, vanTaken:true
+  };
+  planBerekenDatums(plan);
+  planSave(code,plan);
+  try{ if(window.track) track('taken','naar_planning',{detail:code+' · '+fases.length+' fasen',ok:true}); }catch(e){}
+  planToast('📅 '+fases.length+' taken → planning ('+code+')');
+  renderProjectDetail(huidigProject);
 }
 
 // Besteldatum-bewaking: ligt inkoop-start in verleden en is inkoop nog niet klaar?
@@ -8781,6 +8855,8 @@ async function toonApp(account) {
   loadLedgers();
   laadDashboard();
   if(typeof admInitKnop==='function') admInitKnop();
+  // Deep-link uit de URL-hash honoreren (bv. een "apart venster" met #tab=inbox).
+  try{ tbApplyHashTab(); }catch(e){}
 }
 
 async function msLogin() {
