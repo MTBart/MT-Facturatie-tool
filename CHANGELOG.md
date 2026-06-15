@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-15 — Cockpit wordt dé tool: v4 gearchiveerd, root->v2, Timeline in Uren-tab
+- Commit: `218d8fd` | Auteur: Bart Witte
+
 ## 2026-06-14 — Usage-logging op taken- en Toggl-symbiose-functies
 - Commit: `d130923` | Auteur: Bart Witte
 

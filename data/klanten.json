@@ -1,7 +1,7 @@
 {
   "_doc": "Klant-registry voor het projectcode-systeem (KLANT-LOC-PROD). code = stabiele 2-4 letter sleutel die in stickers/Toggl/mappen verschijnt. naam = volledige naam (mail/MB/UI). aliassen = strings die in een vrije klantnaam matchen op deze code. locaties = per klant afgekorte locatiecodes (LOC ≤8). mb_contact_id = Moneybird contact (CN heeft per vestiging een eigen contact, dus null op klantniveau). Bewerkt door de codegenerator in index.html; Fase B leest dit als single source of truth i.p.v. localStorage.",
   "_versie": 2,
-  "_bijgewerkt": "2026-06-01",
+  "_bijgewerkt": "2026-06-12",
   "klanten": [
     {
       "code": "CN",
@@ -20,7 +20,9 @@
       "naam": "LGM Projecten B.V.",
       "aliassen": ["lgm"],
       "mb_contact_id": "463646635183834931",
-      "locaties": []
+      "locaties": [
+        {"code": "KINSEL", "naam": "Kinselmeer"}
+      ]
     },
     {
       "code": "MOS",

@@ -1618,6 +1618,10 @@ button{transition:transform .07s ease,filter .07s ease}
       #tab-inbox .inbox-msg:hover{background:var(--surface-sunken)}
       #tab-inbox .inbox-msg.actief{background:#FBF5E0}
       #tab-inbox .inbox-msg.ongelezen{border-left:3px solid var(--gold,#B8962E)}
+      #tab-inbox .inbox-msg.gekoppeld{background:rgba(46,125,50,.07)}
+      #tab-inbox .inbox-msg.gekoppeld:hover{background:rgba(46,125,50,.13)}
+      #tab-inbox .inbox-msg.gekoppeld.actief{background:#EAF3EA}
+      #tab-inbox .inbox-msg .kpchip{display:inline-flex;align-items:center;gap:2px;font-size:9.5px;font-family:var(--mono,monospace);color:#1b5e20;background:rgba(46,125,50,.14);border-radius:3px;padding:0 4px;margin-left:6px;white-space:nowrap;vertical-align:middle}
       #tab-inbox .inbox-msg .van{font-weight:600;display:flex;justify-content:space-between;gap:6px}
       #tab-inbox .inbox-msg .van .dt{font-weight:400;color:var(--text-faint,#999);font-size:10.5px;white-space:nowrap}
       #tab-inbox .inbox-msg .onderw{color:var(--text,#222)}
@@ -4465,13 +4469,49 @@ async function projTakenSpiegelAlles(code){
   for(const t of arr){ await projTaakNaarToggl(code,t.id); }
   renderProjectDetail(huidigProject);
 }
+// Haalt de inhoud van de gekoppelde mails op (Graph, plaintext) zodat het
+// AI-taakvoorstel zich op de échte correspondentie kan baseren. Hooguit de 5
+// recentste; valt terug op internetMessageId als de mail verplaatst/verwijderd is.
+async function aiMailContext(code){
+  const mails=(typeof mailLinksVoor==='function')?mailLinksVoor(code):[];
+  if(!mails.length) return {tekst:'',n:0};
+  const sel='$select=subject,from,receivedDateTime,bodyPreview,body';
+  const pref={headers:{'Prefer':'outlook.body-content-type="text"'}};
+  const stuks=[];
+  for(const x of mails.slice(-5)){
+    let m=null;
+    try{ m=await ibFetch(`/messages/${x.id}?${sel}`,pref); }
+    catch(e){
+      if(x.internetMessageId){ try{
+        const d=await ibFetch('/messages?$filter='+encodeURIComponent("internetMessageId eq '"+x.internetMessageId+"'")+'&$select=id&$top=1');
+        const hit=d&&d.value&&d.value[0];
+        if(hit) m=await ibFetch(`/messages/${hit.id}?${sel}`,pref);
+      }catch(e2){} }
+    }
+    if(!m) continue;
+    let inhoud=String((m.body&&m.body.content)||m.bodyPreview||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,1400);
+    const van=(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||x.from||'';
+    const dt=m.receivedDateTime?new Date(m.receivedDateTime).toLocaleDateString('nl-NL'):(x.date?fmtDatum(x.date):'');
+    stuks.push(`--- Mail ${stuks.length+1} (${dt}, van ${van})\nOnderwerp: ${m.subject||x.subject||''}\n${inhoud}`);
+  }
+  return {tekst:stuks.join('\n\n'),n:stuks.length};
+}
 // AI-voorstel: Claude (Haiku via Worker) stelt een logische takenlijst met
-// afhankelijkheden voor; wordt lokaal toegevoegd en optioneel naar Toggl gespiegeld.
+// afhankelijkheden voor; baseert zich op de gekoppelde mails als die er zijn;
+// wordt lokaal toegevoegd en optioneel naar Toggl gespiegeld.
 async function aiTakenVoorstel(code){
   const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
-  _ptStatus(code,'✨ AI denkt na…','var(--gold-text)');
   const _t0=(typeof performance!=='undefined'?performance.now():Date.now());
   const klant=(typeof resolveKlantNaam==='function')?resolveKlantNaam(mt):'';
+  // Eerst de gekoppelde mails inlezen zodat de taken op de echte aanvraag steunen.
+  _ptStatus(code,'✨ AI leest de gekoppelde mails…','var(--gold-text)');
+  let ctx={tekst:'',n:0};
+  try{ ctx=await aiMailContext(code); }catch(e){ ctx={tekst:'',n:0}; }
+  _ptStatus(code,ctx.n?`✨ AI denkt na (${ctx.n} mail${ctx.n>1?'s':''} gelezen)…`:'✨ AI denkt na…','var(--gold-text)');
+  const mailBlok=ctx.tekst?`\n\nCORRESPONDENTIE met de klant over dit project — baseer de taken hierop.
+Gebruik concrete details (afmetingen, aantallen, materiaal/kleur, lever- of montagedatum,
+specifieke wensen) in de taaknamen en omschrijvingen. Verzin niets dat niet in de mail staat
+of niet logisch in het productieproces hoort:\n${ctx.tekst}`:'';
   const vraag=`Je bent werkvoorbereider bij een interieurbouwer (maatwerk meubels & interieur).
 Stel een beknopte, logische takenlijst op voor dit project. Geef UITSLUITEND geldige JSON terug:
 een array van objecten met velden: naam (kort), omschrijving (max 1 zin), duur_uur (getal),
@@ -4479,9 +4519,9 @@ prioriteit ("low"|"medium"|"high"), na (array van 0-based indexen van eerdere ta
 lijst waar deze taak van afhangt). Logische keten: ontwerp/tekenen → materiaal/hardware
 bestellen → zagen/CNC → kantenband/afwerken → assemblage → montage bij klant → oplevering.
 Geef 6 tot 10 taken. Geen tekst buiten de JSON.
-Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.product||''}", klant "${klant||mt.klant_naam||''}".`;
+Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.product||''}", klant "${klant||mt.klant_naam||''}".${mailBlok}`;
   try{
-    const r=await claudeCall([{role:'user',content:vraag}],1300);
+    const r=await claudeCall([{role:'user',content:vraag}],1500);
     let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'';
     const m=txt.match(/\[[\s\S]*\]/);
     if(!m) throw new Error('geen bruikbaar AI-antwoord');
@@ -4495,7 +4535,7 @@ Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.
     projTakenZet(code,projTaken(code).concat(nieuwe));
     renderProjectDetail(huidigProject);
     _ptStatus(code,`✓ ${nieuwe.length} AI-taken toegevoegd`,'var(--green)');
-    try{ if(window.track) track('taken','ai_voorstel',{detail:nieuwe.length+' taken',ok:true,ms:(typeof performance!=='undefined'?performance.now():Date.now())-_t0}); }catch(e){}
+    try{ if(window.track) track('taken','ai_voorstel',{detail:nieuwe.length+' taken · '+ctx.n+' mails',ok:true,ms:(typeof performance!=='undefined'?performance.now():Date.now())-_t0}); }catch(e){}
     if(confirm(`${nieuwe.length} taken toegevoegd. Ook naar het Toggl-project sturen (zichtbaar voor het team)?`)){
       for(const t of nieuwe){ await projTaakNaarToggl(code,t.id); }
       renderProjectDetail(huidigProject);
@@ -4582,6 +4622,10 @@ function nacalcHtml(proj,totaalInkoop,effectiveMb){
       <div id="nacalc-offerte-${sid}" style="font-size:12px;color:var(--text-dim);margin-top:0.5rem">${effectiveMb?'Offerte ophalen uit Moneybird…':'Geen Moneybird-contact gekoppeld — koppel een contact voor de begroot-kolom en de factuurknop.'}</div>`;
 }
 const _nacalcOfferte={};
+// Per project onthouden welke voorgestelde offerte klopt (gekozen) of niet
+// (afgewezen). Synct via mt_offerte_keuze mee naar de andere PC's.
+function offerteKeuze(){try{return JSON.parse(localStorage.getItem('mt_offerte_keuze')||'{}');}catch(e){return{};}}
+function offerteKeuzeSave(o){localStorage.setItem('mt_offerte_keuze',JSON.stringify(o));}
 async function nacalcLaadOfferte(code,mbId){
   const el=document.getElementById('nacalc-offerte-'+code.replace(/-/g,''));
   if(!el||!mbId) return;
@@ -4591,17 +4635,56 @@ async function nacalcLaadOfferte(code,mbId){
     const est=((await r.json())||[]).filter(e=>String(e.contact_id)===String(mbId)&&!['archived','rejected'].includes(e.state));
     if(!est.length){_nacalcOfferte[code]=null;el.innerHTML='Geen offerte bij dit contact — “Maak factuur” maakt dan een concept-factuur met de nacalculatieregels.';return;}
     est.sort((a,b)=>String(b.estimate_date||b.created_at||'').localeCompare(String(a.estimate_date||a.created_at||'')));
-    const o=est[0];_nacalcOfferte[code]=o;
+    const keuze=offerteKeuze()[code]||{};
+    const afgewezen=new Set((keuze.afgewezen||[]).map(String));
+    const over=est.filter(e=>!afgewezen.has(String(e.id)));
+    if(!over.length){
+      _nacalcOfferte[code]=null;
+      el.innerHTML=`Alle ${est.length} offerte(s) bij dit contact afgewezen — “Maak factuur” maakt een concept-factuur met de nacalculatieregels.
+        <button class="btn btn-xs btn-secondary" style="margin-left:6px" onclick="nacalcOfferteHerstel('${code}')">↩ herstel</button>`;
+      return;
+    }
+    const o=over.find(e=>String(e.id)===String(keuze.gekozen))||over[0];
+    _nacalcOfferte[code]=o;
+    const goedgekeurd=String(keuze.gekozen)===String(o.id);
     const beg=Number(o.total_price_excl_tax||0);
     const proj=PROJECT_CODES.find(p=>p.code===code);
     const werk=(proj?nacalcData(proj).arbeid:0)+nacalcMatTotaal(code);
     const diff=beg-werk;
     el.innerHTML=`📄 Offerte <a href="https://moneybird.com/${getAdmin()}/estimates/${o.id}" target="_blank" style="color:var(--gold)">${o.estimate_id||o.id} ↗</a>
-      <span class="badge badge-ok">${o.state}</span> — begroot <b style="font-family:var(--mono)">${fmt(beg)}</b> excl. btw ·
+      <span class="badge ${goedgekeurd?'badge-ok':''}">${goedgekeurd?'✓ goedgekeurd':o.state}</span> — begroot <b style="font-family:var(--mono)">${fmt(beg)}</b> excl. btw ·
       werkelijk <b style="font-family:var(--mono)">${fmt(werk)}</b> ·
       marge <b style="font-family:var(--mono);color:${diff>=0?'var(--green)':'#c0392b'}">${fmt(diff)}</b>
-      ${est.length>1?`<span style="color:var(--text-faint)">(${est.length} offertes, nieuwste getoond)</span>`:''}`;
+      ${over.length>1?`<span style="color:var(--text-faint)">(${over.length} van ${est.length} offertes)</span>`:''}
+      <div style="margin-top:5px;display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+        ${goedgekeurd?'':`<button class="btn btn-xs btn-secondary" title="Deze offerte hoort bij dit project" onclick="nacalcOfferteGoedkeuren('${code}','${o.id}')">✓ Klopt</button>`}
+        <button class="btn btn-xs btn-danger" title="Deze offerte hoort NIET bij dit project — overslaan" onclick="nacalcOfferteAfwijzen('${code}','${o.id}')">✗ Klopt niet${over.length>1?' (toon volgende)':''}</button>
+        ${(afgewezen.size||keuze.gekozen)?`<button class="btn btn-xs btn-secondary" onclick="nacalcOfferteHerstel('${code}')">↩ herstel</button>`:''}
+      </div>`;
   }catch(e){el.textContent='Offerte-check mislukt: '+e.message;}
+}
+function _nacalcHerlaadOfferte(code){
+  const proj=PROJECT_CODES.find(p=>p.code===code);if(!proj)return;
+  const mbId=proj.mb_nr||(typeof resolveMbContact==='function'?resolveMbContact(proj):null);
+  if(mbId) nacalcLaadOfferte(code,mbId);
+}
+function nacalcOfferteGoedkeuren(code,estId){
+  const all=offerteKeuze();const k=all[code]||{};k.gekozen=estId;
+  k.afgewezen=(k.afgewezen||[]).filter(id=>String(id)!==String(estId));all[code]=k;offerteKeuzeSave(all);
+  try{ if(window.track) track('nacalc','offerte_goedgekeurd',{detail:code}); }catch(e){}
+  _nacalcHerlaadOfferte(code);
+}
+function nacalcOfferteAfwijzen(code,estId){
+  const all=offerteKeuze();const k=all[code]||{};k.afgewezen=(k.afgewezen||[]);
+  if(!k.afgewezen.map(String).includes(String(estId)))k.afgewezen.push(estId);
+  if(String(k.gekozen)===String(estId))k.gekozen=null;all[code]=k;offerteKeuzeSave(all);
+  try{ if(window.track) track('nacalc','offerte_afgewezen',{detail:code}); }catch(e){}
+  _nacalcHerlaadOfferte(code);
+}
+function nacalcOfferteHerstel(code){
+  const all=offerteKeuze();delete all[code];offerteKeuzeSave(all);
+  try{ if(window.track) track('nacalc','offerte_herstel',{detail:code}); }catch(e){}
+  _nacalcHerlaadOfferte(code);
 }
 async function nacalcMaakFactuur(code){
   const proj=PROJECT_CODES.find(p=>p.code===code);if(!proj)return;
@@ -6787,7 +6870,7 @@ const _SP = {
   FOLDER: 'MT-Bedrijfstool',
   // mt_mail_links synct mee zodat mail↔project-koppelingen op élke PC zichtbaar zijn.
   // Opslag = privé SharePoint-tenant (alleen @mortiseandtenon.nl), NOOIT de publieke git-repo.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken']),
   _q: {},
   ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
   lastSync: null,           // {ts, ok, key, error} — voedt de zichtbare sync-status
@@ -7016,6 +7099,27 @@ window.spUploadProjectBijlage = async function(proj, file) {
   }
   const item = await r.json();
   return { id: item.id, webUrl: item.webUrl, naam: veilig, grootte: item.size || file.size || 0 };
+};
+
+// Ruwe bytes uploaden naar een submap van de projectmap (On-Prem-Data-drive).
+// Gebruikt door de inbox om mailbijlagen in 05_Aangeleverd te zetten.
+// conflictBehavior=replace → idempotent (zelfde bijlage overschrijft, geen "(1)").
+window.spUploadProjectBytes = async function(proj, naam, bytes, contentType, subfolder) {
+  const token = await window.getGraphToken();
+  if (!token) throw new Error('Niet ingelogd op Microsoft 365');
+  const projPath = await window.genereerProjectMappen(proj);
+  const sub = subfolder || '05_Aangeleverd';
+  const veilig = String(naam||'bijlage').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'bijlage';
+  const dest = `${projPath}/${sub}/${veilig}`;
+  const url = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${encodeURI(dest)}:/content?@microsoft.graph.conflictBehavior=replace`;
+  const r = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': contentType || 'application/octet-stream' },
+    body: bytes
+  });
+  if (!r.ok) { const txt = await r.text().catch(()=> ''); throw new Error(`upload HTTP ${r.status}: ${txt.slice(0,160)}`); }
+  const item = await r.json();
+  return { id: item.id, webUrl: item.webUrl, naam: veilig, grootte: item.size || 0 };
 };
 
 // PDF ophalen van SharePoint → blob URL (of null als niet gevonden)
@@ -7375,9 +7479,12 @@ function inboxMsgRow(m){
   const act=m.id===(_inbox.cur&&_inbox.cur.id)?' actief':'';
   const fnaam=(_inbox.q&&m.parentFolderId)?ibFolderName(m.parentFolderId):'';
   const fchip=fnaam?`<span style="font-size:10px;color:#777;background:rgba(0,0,0,.06);border-radius:3px;padding:0 4px;margin-left:6px;white-space:nowrap">${ibEsc(fnaam)}</span>`:'';
-  return `<div class="inbox-msg${m.isRead?'':' ongelezen'}${act}" onclick="inboxOpenMail('${m.id}')">
+  const link=(typeof mailLinkInfo==='function')?mailLinkInfo(m):null;
+  const kpcls=link?' gekoppeld':'';
+  const kpchip=link?`<span class="kpchip" title="Gekoppeld aan project ${ibEsc(link.code)}">🔗 ${ibEsc(link.code)}</span>`:'';
+  return `<div class="inbox-msg${m.isRead?'':' ongelezen'}${kpcls}${act}" onclick="inboxOpenMail('${m.id}')">
     <div class="van"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(van)}</span><span class="dt">${dt}</span></div>
-    <div class="onderw">${ibEsc(m.subject||'(geen onderwerp)')}${clip}</div>
+    <div class="onderw">${ibEsc(m.subject||'(geen onderwerp)')}${clip}${kpchip}${fchip}</div>
     <div class="prev">${ibEsc(m.bodyPreview||'')}</div></div>`;
 }
 
@@ -7402,8 +7509,8 @@ async function inboxOpenMail(id){
         ${attHtml}
         <div class="inbox-ract">
           <button class="btn btn-sm btn-gold" onclick="inboxMaakProject()">📁 Maak project</button>
-          ${inboxKoppelKnopHtml(m)}
-          <button class="btn btn-sm btn-secondary" onclick="inboxBijlagenNaarMap()">⬇ Bijlagen → klantmap</button>
+          <span id="inbox-koppelwrap">${inboxKoppelKnopHtml(m)}</span>
+          <button class="btn btn-sm btn-secondary" onclick="inboxBijlagenNaarMap()" title="Bijlagen van deze mail naar de map van het gekoppelde project (05_Aangeleverd)">⬇ Bijlagen → projectmap</button>
         </div>
         <div class="inbox-ract" style="margin-top:6px">
           <label style="font-size:11px;color:var(--text-dim)">Verplaats in Outlook:</label>
@@ -7545,17 +7652,32 @@ function mailLinkInfo(m){
 function inboxKoppelKnopHtml(m){
   const info=mailLinkInfo(m);
   if(info){
-    return `<button class="btn btn-sm" id="inbox-koppelknop" onclick="inboxOntkoppelHuidige()"`
+    const c=ibEsc(info.code).replace(/'/g,'');
+    return `<button class="btn btn-sm" id="inbox-naarproject" onclick="inboxNaarProject('${c}')"`
       +` style="background:var(--green,#2e7d32);color:#fff;border-color:transparent"`
-      +` title="Gekoppeld aan ${ibEsc(info.code)} — klik om te ontkoppelen of te wijzigen">🔗 Gekoppeld: ${ibEsc(info.code)} ✕</button>`;
+      +` title="Open project ${ibEsc(info.code)}">📁 ${ibEsc(info.code)} →</button>`
+      +` <button class="btn btn-sm btn-secondary" id="inbox-koppelknop" onclick="inboxOntkoppelHuidige()"`
+      +` title="Ontkoppelen of wijzigen">🔗 ✕</button>`;
   }
   return `<button class="btn btn-sm btn-secondary" id="inbox-koppelknop" onclick="inboxKoppelProject()">🔗 Koppel aan project</button>`;
+}
+// Vanuit de geopende mail door naar het gekoppelde project (Projecten-tab).
+function inboxNaarProject(code){
+  try{ if(window.track) track('inbox','naar_project',{detail:code}); }catch(e){}
+  if(typeof tgNaarVolledigProject==='function'){ tgNaarVolledigProject(code); return; }
+  if(typeof tbDoTab==='function') tbDoTab('projecten');
 }
 
 // Ververst alleen de koppel-knop in de geopende mail (na (ont)koppelen).
 function inboxRefreshKoppelKnop(){
-  const b=document.getElementById('inbox-koppelknop');
-  if(b&&_inbox.cur) b.outerHTML=inboxKoppelKnopHtml(_inbox.cur);
+  const w=document.getElementById('inbox-koppelwrap');
+  if(w&&_inbox.cur){w.innerHTML=inboxKoppelKnopHtml(_inbox.cur);}
+  else{const b=document.getElementById('inbox-koppelknop');if(b&&_inbox.cur)b.outerHTML=inboxKoppelKnopHtml(_inbox.cur);}
+  // Lijst-rij(en) opnieuw tekenen zodat de 🔗-chip + tint meteen kloppen.
+  const cont=document.getElementById('inbox-messages');
+  if(cont&&Array.isArray(_inbox.msgs)&&_inbox.msgs.length){
+    cont.innerHTML=_inbox.msgs.map(inboxMsgRow).join('');
+  }
 }
 
 // Ontkoppelen of wijzigen — altijd eerst waarschuwen.
@@ -7616,6 +7738,8 @@ function inboxKoppelProjectDo(code){
     inboxToast('✓ Mail gekoppeld aan '+code+' ('+arr.length+' mail'+(arr.length>1?'s':'')+')');
     inboxRefreshKoppelKnop();
     if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
+    // Bijlagen automatisch naar de klantmap (05_Aangeleverd) — stil, best-effort.
+    if(m.hasAttachments) inboxBijlagenNaarProject(m.id,code,true);
   }
   const ov=document.getElementById('koppel-overlay');if(ov)ov.remove();
 }
@@ -7635,9 +7759,38 @@ async function openGekoppeldeMail(code,idx){
     inboxToast('Mail niet te openen (verplaatst/verwijderd?) — gebruik ↗ Outlook.');
   }
 }
+// Bijlagen van de geopende mail naar de map van het gekoppelde project.
 function inboxBijlagenNaarMap(){
-  if(!_inbox.cur){alert('Open eerst een mail.');return;}
-  inboxToast('Bijlagen → klantmap (Nieuwe mappenstructuur) komt in het ultra-vervolg.');
+  const m=_inbox.cur; if(!m){alert('Open eerst een mail.');return;}
+  const info=mailLinkInfo(m);
+  if(!info){alert('Koppel deze mail eerst aan een project (🔗) — dan weet ik in welke klantmap de bijlagen horen.');return;}
+  if(!m.hasAttachments){inboxToast('Deze mail heeft geen bijlagen.');return;}
+  inboxBijlagenNaarProject(m.id,info.code,false);
+}
+
+// Kern: haal file-bijlagen op en upload ze naar 05_Aangeleverd van het project.
+// stil=true → geen toasts behalve fouten (gebruikt bij auto-koppel).
+async function inboxBijlagenNaarProject(mailId,code,stil){
+  const proj=PROJECT_CODES.find(p=>p.code===code);
+  if(!proj){if(!stil)inboxToast('Project '+code+' niet gevonden.');return;}
+  if(typeof window.spUploadProjectBytes!=='function'){if(!stil)inboxToast('SharePoint-upload niet beschikbaar (ingelogd op M365?).');return;}
+  try{
+    if(!stil)ibStatus('Bijlagen ophalen…');
+    const a=await ibFetch(`/messages/${mailId}/attachments?$select=id,name,size,contentType,contentBytes,isInline`);
+    const items=((a&&a.value)||[]).filter(x=>(x['@odata.type']||'').includes('fileAttachment')&&x.contentBytes&&!x.isInline);
+    if(!items.length){if(!stil)inboxToast('Geen op te slaan bijlagen (alleen inline/embedded).');return;}
+    let ok=0,fout=0;
+    for(const x of items){
+      try{
+        const bin=atob(x.contentBytes);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+        await window.spUploadProjectBytes(proj,x.name,arr,x.contentType,'05_Aangeleverd');
+        ok++;
+      }catch(e){fout++;console.warn('bijlage-upload mislukt:',x.name,e.message);}
+    }
+    try{ if(window.track) track('inbox','bijlagen_naar_map',{detail:code+' · '+ok+'/'+items.length,ok:fout===0}); }catch(e){}
+    const msg=`📎 ${ok} bijlage${ok===1?'':'s'} → ${code}/05_Aangeleverd`+(fout?` (${fout} mislukt)`:'');
+    if(stil){if(ok||fout)inboxToast(msg);} else {inboxToast(msg);ibStatus('');}
+  }catch(e){ if(!stil)ibStatus('Bijlagen-fout: '+e.message,'#c0392b'); else console.warn('auto-bijlagen mislukt:',e.message); }
 }
 
 // ── Larry-chat per mail (via Worker target=claude). Mailcontext alleen runtime.

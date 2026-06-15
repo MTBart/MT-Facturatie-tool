@@ -123,6 +123,38 @@ Als Bart wakker is moet hij idealiter alleen hoeven te zeggen: "push maar" →
 en dan staat het volledige Toggl-tabblad live. Alles daarvóór doe je autonoom:
 analyse, bouw, lokaal testen, lokaal committen, verslag schrijven.
 
+## 6b. Agenda timer-view (Barts wens 2026-06-04, deels al gedaan)
+
+Bart wil de agenda eruit laten zien als de **Toggl-timer-view**, maar met de
+toevoeging dat je niet alleen je eigen tijd maar ook die van collega's terugziet.
+Dit hoort bij dit Toggl-tabblad (de agenda integreren als onderdeel, niet apart).
+
+**AL GEDAAN vanavond (commit `0bdad77`, lokaal, niet gepusht):**
+- Sync-window 30 → **365 dagen** (`agendaSyncNu`). Reden: "bank joris" stond op
+  81u39m in Focus maar veel minder in de agenda → 30-daags venster kapte
+  historische uren af.
+- **Reports v3 paginatie** in `agSyncAlleMedewerkers` (`first_row_number`, max 20
+  pagina's à 1000) — een vol jaar past niet in één page.
+- **All-time projecttotalen**: `agRenderTotalen` toont nu "deze week" ÉN "totaal
+  alle weken (huidige filters)" met per-project + per-persoon chips. Zo zie je de
+  volledige opbouw van een project (bank joris → volledige ~81u).
+- **Bladerpijlen ◀/▶** lichten op (`.heeft`, goud-glow) als er met de huidige
+  filters uren vóór/na de zichtbare week bestaan.
+
+**NOG TE DOEN vannacht:**
+1. **Verifieer de bank-joris-discrepantie**: na een sync met 365d+paginatie moet
+   het all-time projecttotaal van "bank joris" ~81u39m matchen met Toggl Focus.
+   Doe een READ-ONLY Reports-call en tel de seconden per project_id; vergelijk.
+   Als het nóg afwijkt: check of Focus-uren (taak-entries) wel in Track Reports
+   zitten — mogelijk staan sommige uren alleen in Focus en moet je die er via
+   `target=toggl_focus` bij halen. Documenteer de bevinding.
+2. **Timer-view-look**: bouw de agenda/timeline zó dat hij de Toggl-timer-view
+   spiegelt (lijst van entries per dag met start-stop, project-kleur, beschrijving,
+   duur rechts) — maar met collega-kolom/-filter zodat je ieders tijd ziet. Mag
+   de bestaande week-grid vervangen of als extra view-toggle (grid ↔ lijst).
+3. Houd de filters (project/persoon, zoekbalk, alles/niets, hover-expand) werkend
+   in de nieuwe view.
+
 ## 7. Pointers
 
 - Routes/deploy: `ROUTES.md` in repo-root. Repo-veiligheid: `REPO-VEILIGHEID.md`.
