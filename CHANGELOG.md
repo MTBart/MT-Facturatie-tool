@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-15 — @ fix(toggl): projectnaam zonder klant-prefix — klant blijft Toggl-client
+- Commit: `59717ea` | Auteur: Bart Witte
+
 ## 2026-06-15 — @ Cashflow-dashboard: grafiek bovenaan + filterbare vaste lasten doorgepland
 - Commit: `7176791` | Auteur: Bart Witte
 

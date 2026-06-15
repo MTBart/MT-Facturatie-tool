@@ -3236,11 +3236,10 @@ async function tgMaakProjectVoorCode(code, billable){
   let pid=null;
   try{
     const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase());
-    // Projectnaam = ALLEEN het product-deel + [code]. De klant ("Kobalt 5013")
-    // hoort als Toggl-CLIENT, niet in de projectnaam (anders dubbel). Daarom
-    // product_naam/product vóór naam — naam bevat klant+locatie en is hier ongewenst.
-    const projDeel=(mt&&(mt.product_naam||mt.product||mt.naam))||'';
-    const projNaam=projDeel?`${projDeel} [${code}]`:code;
+    // Projectnaam = de PROJECTCODE zelf (Bart 2026-06-15). De code is de sleutel
+    // door sticker/Toggl/mail/MB/mappen heen. De klant ("Kobalt 5013") hoort als
+    // Toggl-CLIENT, niet in de projectnaam.
+    const projNaam=code;
     // 1) Project éérst aanmaken — gegarandeerd, zonder dat klant-gedoe dit blokkeert.
     const r=await tgTrack(`workspaces/${TG_WS}/projects`,'POST',
       {name:projNaam,active:true,billable:billable!==false,workspace_id:TG_WS});
@@ -3249,7 +3248,9 @@ async function tgMaakProjectVoorCode(code, billable){
     if(typeof tgVulProjectSelect==='function') tgVulProjectSelect();
     // 2) Klant als Toggl-CLIENT koppelen (best-effort, mag niet falen → niet-fataal).
     if(pid){
-      const klantNaam=mt&&typeof resolveKlantNaam==='function'?resolveKlantNaam(mt):((mt&&(mt.klant_naam||mt.klant))||'');
+      // Client = de klant zoals ingevuld (bv. "Kobalt 5013"); klant_naam vóór de
+      // registry-resolve zodat exact staat wat Bart typte.
+      const klantNaam=(mt&&(mt.klant_naam||(typeof resolveKlantNaam==='function'?resolveKlantNaam(mt):mt.klant)))||'';
       const clientId=await tgVindOfMaakClient(klantNaam);
       if(clientId){
         try{ await tgTrack(`workspaces/${TG_WS}/projects/${pid}`,'PUT',{client_id:clientId,workspace_id:TG_WS}); _tgCache.projecten=null; }
