@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-15 — fix(toggl): Focus-taken aanmaken met minimale body {name, project_id}
+- Commit: `7bd39b1` | Auteur: Bart Witte
+
 ## 2026-06-15 — @ planNaarToggl: toon de échte Focus-foutmelding bij mislukte taken
 - Commit: `7f43537` | Auteur: Bart Witte
 

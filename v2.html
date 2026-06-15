@@ -477,6 +477,13 @@ button{transition:transform .07s ease,filter .07s ease}
 .cf-kpi-val{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--n-900)}
 .cf-kpi-val.pos{color:var(--success)}
 .cf-kpi-val.neg{color:var(--error)}
+.cf-vasten-filter{display:flex;flex-direction:column;gap:2px;margin-top:0.25rem}
+.cf-vast-row{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;font-size:12px;cursor:pointer}
+.cf-vast-row:hover{background:rgba(44,40,28,.04)}
+.cf-vast-row.uit{opacity:.45}
+.cf-vast-naam{flex:1}
+.cf-vast-bedrag{font-family:var(--mono);color:var(--text-dim);white-space:nowrap}
+.cf-vast-totaal{font-family:var(--mono);font-size:11px;color:var(--text-faint);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);display:flex;justify-content:space-between}
 .cf-settings-toggle{width:100%;background:transparent;border:none;cursor:pointer;text-align:left;padding:0.75rem 0;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text-dim);border-top:1px solid var(--border);display:flex;align-items:center;gap:6px}
 .cf-settings-toggle:hover{color:var(--n-900)}
 .cf-settings-body{display:none;padding:1rem 0}
@@ -728,6 +735,9 @@ button{transition:transform .07s ease,filter .07s ease}
               <span id="cf-doelen-status" style="font-size:11px;color:var(--text-dim);margin-left:8px"></span>
             </div>
           </div>
+          <div class="card-title" style="margin:0.75rem 0 0.25rem">Vaste lasten — filterbaar (in/uit projectie)</div>
+          <div style="font-size:11px;color:var(--text-faint);margin-bottom:0.4rem">Vink uit om een last buiten de cashflow-grafiek te laten. Doorgepland tot het einde van de horizon.</div>
+          <div id="cf-vasten-filter" class="cf-vasten-filter"><p style="color:var(--text-faint);font-size:12px">Laden...</p></div>
         </div>
       </div>
     </div>
@@ -6319,6 +6329,19 @@ async function laadCashflowDashboard(){
     const root=document.getElementById('cf-root');
     if(root) root.style.display='';
 
+    // Cashflow-grafiek naar de top van het dashboard (Bart 15-6) — eenmalig
+    try{
+      const dash=document.getElementById('tab-dashboard');
+      const chartSec=document.querySelector('#cf-root .cf-section');
+      if(dash&&chartSec&&dash.dataset.cfBoven!=='1'){
+        dash.insertBefore(chartSec,dash.firstElementChild);
+        dash.dataset.cfBoven='1';
+      }
+    }catch(e){}
+
+    // Filterbare vaste-lasten-lijst tekenen
+    _cfRenderVastenFilter();
+
     // Alle datapunten parallel laden
     const [cfData, vrijData, btwData, teFact, onderhanden] = await Promise.all([
       cfFetch(`/dashboard/cashflow?horizon=${_cfHorizon}`),
@@ -6328,7 +6351,7 @@ async function laadCashflowDashboard(){
       cfFetch('/dashboard/onderhanden')
     ]);
 
-    if(cfData){ _cfData=cfData; _cfTekenGrafiek(cfData); }
+    if(cfData){ _cfData=cfData; _cfPasVastenToe(_cfData); _cfTekenGrafiek(_cfData); }
     if(vrijData) _cfRenderVrij(vrijData);
     if(btwData) _cfRenderBtw(btwData);
     if(teFact) _cfRenderTeFact(teFact.items||[]);
@@ -6349,7 +6372,78 @@ async function cfSetHorizon(h,btn){
   if(btn) btn.classList.add('active');
   if(window.track) try{track('cashflow','horizon_switch',{detail:h});}catch{}
   const data=await cfFetch(`/dashboard/cashflow?horizon=${h}`);
-  if(data){_cfData=data;_cfTekenGrafiek(data);}
+  if(data){_cfData=data;_cfPasVastenToe(_cfData);_cfTekenGrafiek(_cfData);}
+}
+
+// ── Vaste lasten: client-side projectie + filter ──────────────────────────────
+// Bron = _cfConfig.vasten.actief (uit /dashboard/config). We berekenen uit_vast
+// per bucket zelf zodat (a) de filter direct werkt zonder Worker-call, (b) lasten
+// tot het einde van de horizon doorlopen, (c) jaarlijkse lasten op de JUISTE maand
+// vallen i.p.v. elke maand, en (d) einddatum wordt gerespecteerd. Overschrijft de
+// uit_vast/saldo uit de Worker-response.
+function _cfVastenKey(v){return (v.leverancier||'')+'|'+(v.omschrijving||'');}
+function _cfFilterUit(){ try{return new Set(JSON.parse(localStorage.getItem('mt_cf_vasten_uit')||'[]'));}catch(e){return new Set();} }
+function _cfFilterUitOpslaan(set){ try{localStorage.setItem('mt_cf_vasten_uit',JSON.stringify([...set]));}catch(e){} }
+
+function _cfPasVastenToe(data){
+  if(!data||!Array.isArray(data.buckets)) return;
+  const vasten=(_cfConfig&&_cfConfig.vasten&&_cfConfig.vasten.actief)||[];
+  const uit=_cfFilterUit();
+  const bucketDagen=data.bucket_dagen||1;
+  data.buckets.forEach(b=>{
+    const start=new Date(b.datum+'T00:00:00');
+    let som=0;
+    vasten.forEach(v=>{
+      if(v.actief===false) return;
+      if(uit.has(_cfVastenKey(v))) return;
+      const bedrag=v.bedrag||0;
+      const dag=v.dag_van_maand||1;
+      const eind=v.einddatum?new Date(v.einddatum+'T00:00:00'):null;
+      for(let d=0;d<bucketDagen;d++){
+        const dt=new Date(start.getTime()+d*86400000);
+        if(eind&&dt>eind) continue;
+        if(dt.getDate()!==dag) continue;
+        if(v.cadans==='jaarlijks'){
+          if(v.maand && (dt.getMonth()+1)!==v.maand) continue;
+          som+=bedrag;
+        }else{ som+=bedrag; }
+      }
+    });
+    b.uit_vast=Math.round(som*100)/100;
+  });
+  // Saldo opnieuw oprollen vanaf saldo_aanvang (zelfde formule als Worker)
+  let lopend=data.saldo_aanvang||0;
+  data.buckets.forEach(b=>{
+    lopend+=(b.in_hard||0)-(b.uit_vast||0)-(b.uit_inkoop||0);
+    b.saldo_verwacht=Math.round(lopend*100)/100;
+  });
+}
+
+function _cfRenderVastenFilter(){
+  const host=document.getElementById('cf-vasten-filter'); if(!host) return;
+  const vasten=((_cfConfig&&_cfConfig.vasten&&_cfConfig.vasten.actief)||[]).filter(v=>v.actief!==false);
+  if(!vasten.length){host.innerHTML='<p style="color:var(--text-faint);font-size:12px">Geen vaste lasten geconfigureerd.</p>';return;}
+  const uit=_cfFilterUit();
+  let totMnd=0;
+  const rows=vasten.map(v=>{
+    const key=_cfVastenKey(v); const aan=!uit.has(key);
+    const perMnd=v.cadans==='jaarlijks'?(v.bedrag||0)/12:(v.bedrag||0);
+    if(aan) totMnd+=perMnd;
+    const cad=v.cadans==='jaarlijks'?'/jaar':'/mnd';
+    const naam=(v.leverancier||'?')+(v.omschrijving?' — '+v.omschrijving:'');
+    const safeKey=key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<label class="cf-vast-row${aan?'':' uit'}"><input type="checkbox" ${aan?'checked':''} onchange="cfToggleVasteLast(this,'${safeKey}')"><span class="cf-vast-naam">${naam}</span><span class="cf-vast-bedrag">${cfFmt(v.bedrag||0)}${cad}</span></label>`;
+  }).join('');
+  host.innerHTML=rows+`<div class="cf-vast-totaal"><span>Meegenomen (≈ per maand)</span><span>${cfFmt(Math.round(totMnd))}</span></div>`;
+}
+
+function cfToggleVasteLast(cb,key){
+  const uit=_cfFilterUit();
+  if(cb.checked) uit.delete(key); else uit.add(key);
+  _cfFilterUitOpslaan(uit);
+  if(_cfData){ _cfPasVastenToe(_cfData); _cfTekenGrafiek(_cfData); }
+  _cfRenderVastenFilter();
+  if(window.track) try{track('cashflow','vaste_last_filter',{detail:cb.checked?'aan':'uit'});}catch(e){}
 }
 
 // ── Kaartgrafiek: zelfgebouwd op <canvas> ────────────────────────────────────

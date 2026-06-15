@@ -50,7 +50,8 @@ try {
   const tmpFile = path.join(REPO_ROOT, '_seed_tmp.json');
   fs.writeFileSync(tmpFile, value, 'utf8');
 
-  const cmd = `wrangler kv key put --namespace-id="${KV_NAMESPACE_ID}" "${KV_KEY}" --path="${tmpFile}"`;
+  // --remote = schrijf naar PRODUCTIE-KV (wrangler 4.x default = lokaal!)
+  const cmd = `wrangler kv key put --remote --namespace-id="${KV_NAMESPACE_ID}" "${KV_KEY}" --path="${tmpFile}"`;
   execSync(cmd, { cwd: REPO_ROOT, stdio: 'inherit' });
 
   fs.unlinkSync(tmpFile);
