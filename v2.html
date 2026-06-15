@@ -3201,15 +3201,47 @@ function tgNieuwProject(){
 }
 // Maakt het Toggl-project bij een verse M&T-projectcode (best-effort, niet-blokkerend).
 // Genoemd vanuit maakProjectAan(); geeft het Toggl-project-id terug of null.
+// Zoekt een bestaande Toggl-client op naam (case-insensitief) of maakt 'm aan.
+// Geeft het client-id terug of null. Best-effort.
+async function tgVindOfMaakClient(naam){
+  naam=String(naam||'').trim(); if(!naam||naam==='—') return null;
+  if(typeof tgTrack!=='function'||typeof TG_WS==='undefined'||!TG_WS) return null;
+  try{
+    const lijst=(await tgTrack(`workspaces/${TG_WS}/clients`))||[];
+    const best=(Array.isArray(lijst)?lijst:[]).find(c=>(c.name||'').trim().toLowerCase()===naam.toLowerCase());
+    if(best) return best.id;
+    const r=await tgTrack(`workspaces/${TG_WS}/clients`,'POST',{name:naam,wid:TG_WS});
+    return (r&&(r.id||(r.data&&r.data.id)))||null;
+  }catch(e){ console.warn('Toggl-client',naam,'aanmaken faalde:',e); return null; }
+}
+// Maakt het Toggl-project bij een M&T-projectcode (best-effort, niet-blokkerend).
+// Projectnaam = leesbare naam + code; klant wordt als Toggl-CLIENT gekoppeld
+// (apart veld in Toggl). Geeft het Toggl-project-id terug of null.
 async function tgMaakProjectVoorCode(code, billable){
   if(typeof tgTrack!=='function'||typeof TG_WS==='undefined'||!TG_WS) return null;
   try{
-    const r=await tgTrack(`workspaces/${TG_WS}/projects`,'POST',
-      {name:code,active:true,billable:billable!==false,workspace_id:TG_WS});
+    const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase());
+    const klantNaam=mt&&typeof resolveKlantNaam==='function'?resolveKlantNaam(mt):((mt&&(mt.klant_naam||mt.klant))||'');
+    const projNaam=mt&&(mt.naam||mt.product_naam||mt.product)?`${mt.naam||mt.product_naam||mt.product} [${code}]`:code;
+    const clientId=await tgVindOfMaakClient(klantNaam);
+    const body={name:projNaam,active:true,billable:billable!==false,workspace_id:TG_WS};
+    if(clientId) body.client_id=clientId;
+    const r=await tgTrack(`workspaces/${TG_WS}/projects`,'POST',body);
     _tgCache.projecten=null;
     if(typeof tgVulProjectSelect==='function') tgVulProjectSelect();
     return (r&&(r.id||(r.data&&r.data.id)))||true;
   }catch(e){ console.warn('Toggl-project voor',code,'aanmaken faalde:',e); return null; }
+}
+// Zorgt dat er één Toggl-project bestaat voor deze code — STIL (geen dialogen).
+// Geeft het project-id terug (of null). Schrijft tg_project_id op het M&T-record.
+async function _tgZorgProjectVoorCode(code){
+  const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase());
+  if(!mt) return null;
+  let pid=await _tgProjectIdVoorMt(mt);
+  if(pid) return pid;
+  const made=await tgMaakProjectVoorCode(code,true);
+  if(made&&made!==true){ mt.tg_project_id=made; if(typeof slaProjectenOp==='function') slaProjectenOp(); return made; }
+  return await _tgProjectIdVoorMt(mt);
 }
 function _tgProjById(id){return (_tgCache.projecten||[]).find(p=>p.id===id);}
 async function tgEditProject(id){
@@ -4591,13 +4623,7 @@ async function projTaakNaarToggl(code,id){
   const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return false;
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||t.tg_task_id) return false;
   _ptStatus(code,'Naar Toggl…');
-  let pid=await _tgProjectIdVoorMt(mt);
-  if(!pid){
-    if(!confirm(`Project ${code} heeft nog geen Toggl-project. Nu aanmaken zodat de taak in Toggl zichtbaar wordt?`)){_ptStatus(code,'');return false;}
-    const made=await tgMaakProjectVoorCode(code,true);
-    if(made&&made!==true){ mt.tg_project_id=made; slaProjectenOp(); pid=made; }
-    else pid=await _tgProjectIdVoorMt(mt);
-  }
+  const pid=await _tgZorgProjectVoorCode(code);
   try{
     const body={name:t.naam,status_id:_PT_STAT_TG[t.status]||300785}; if(pid) body.project_id=pid;
     if(t.prioriteit) body.priority=t.prioriteit;
@@ -4615,9 +4641,17 @@ async function projTaakNaarToggl(code,id){
 async function projTakenSpiegelAlles(code){
   const arr=projTaken(code).filter(t=>!t.tg_task_id);
   if(!arr.length) return;
-  if(!confirm(`${arr.length} taken naar het Toggl-project sturen (zichtbaar voor het team)?`)) return;
   try{ if(window.track) track('taken','spiegel_alles',{detail:arr.length+' taken'}); }catch(e){}
-  for(const t of arr){ await projTaakNaarToggl(code,t.id); }
+  _ptStatus(code,'Toggl: project klaarzetten…','var(--gold-text)');
+  // Project éénmalig aanmaken (stil), daarna alle taken er stil aan hangen.
+  await _tgZorgProjectVoorCode(code);
+  let ok=0,fout=0;
+  for(let i=0;i<arr.length;i++){
+    _ptStatus(code,`Toggl: taak ${i+1}/${arr.length}…`,'var(--gold-text)');
+    const r=await projTaakNaarToggl(code,arr[i].id);
+    if(r) ok++; else fout++;
+  }
+  _ptStatus(code,`✓ ${ok} taken in Toggl${fout?`, ${fout} mislukt`:''}`, fout?'#c0392b':'var(--green)');
   renderProjectDetail(huidigProject);
 }
 // Haalt de inhoud van de gekoppelde mails op (Graph, plaintext) zodat het
@@ -4684,13 +4718,20 @@ Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.
       afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'ai'}));
     voorstel.forEach((v,i)=>{ if(Array.isArray(v.na)) nieuwe[i].afhankelijk_van=v.na.map(j=>nieuwe[j]&&nieuwe[j].id).filter(Boolean); });
     projTakenZet(code,projTaken(code).concat(nieuwe));
-    renderProjectDetail(huidigProject);
-    _ptStatus(code,`✓ ${nieuwe.length} AI-taken toegevoegd`,'var(--green)');
     try{ if(window.track) track('taken','ai_voorstel',{detail:nieuwe.length+' taken · '+ctx.n+' mails',ok:true,ms:(typeof performance!=='undefined'?performance.now():Date.now())-_t0}); }catch(e){}
-    if(confirm(`${nieuwe.length} taken toegevoegd. Ook naar het Toggl-project sturen (zichtbaar voor het team)?`)){
-      for(const t of nieuwe){ await projTaakNaarToggl(code,t.id); }
-      renderProjectDetail(huidigProject);
+    // 1) Planning automatisch genereren uit de nieuwe takenketen (geen extra klik).
+    try{ takenNaarPlanning(code,{stil:true}); }catch(e){ console.warn('auto-planning faalde:',e); }
+    // 2) In één keer een Toggl-project + alle taken aanmaken — geen losse meldingen.
+    _ptStatus(code,'Toggl: project + taken klaarzetten…','var(--gold-text)');
+    await _tgZorgProjectVoorCode(code);
+    let ok=0,fout=0;
+    for(let i=0;i<nieuwe.length;i++){
+      _ptStatus(code,`Toggl: taak ${i+1}/${nieuwe.length}…`,'var(--gold-text)');
+      const r=await projTaakNaarToggl(code,nieuwe[i].id);
+      if(r) ok++; else fout++;
     }
+    _ptStatus(code,`✓ ${nieuwe.length} taken + planning · ${ok} in Toggl${fout?`, ${fout} mislukt`:''}`, fout?'#c0392b':'var(--green)');
+    renderProjectDetail(huidigProject);
   }catch(e){ _ptStatus(code,'❌ AI-voorstel faalde: '+e.message,'#c0392b');
     try{ if(window.track) track('taken','ai_voorstel',{detail:e.message,ok:false,ms:(typeof performance!=='undefined'?performance.now():Date.now())-_t0}); }catch(_){}
   }
@@ -5081,12 +5122,20 @@ function _takenTopoSort(arr){
   }
   return uit;
 }
-function takenNaarPlanning(code){
+function takenNaarPlanning(code,opts){
+  opts=opts||{};
+  const stil=!!opts.stil;
   const arr=projTaken(code);
-  if(!arr.length){ planToast('Geen taken om om te zetten.'); return; }
+  if(!arr.length){ if(!stil) planToast('Geen taken om om te zetten.'); return; }
   const bestaand=planVoor(code);
   if(bestaand && bestaand.fases && bestaand.fases.length){
-    if(!confirm('Er is al een planning voor '+code+'.\nDie wordt vervangen door deze '+arr.length+' taken. Doorgaan?')) return;
+    if(stil){
+      // Automatisch (vanuit AI-voorstel): alleen een uit-taken-gegenereerd plan
+      // mag stil worden overschreven; een handmatig Gantt-plan laten we staan.
+      if(!bestaand.vanTaken) return;
+    } else {
+      if(!confirm('Er is al een planning voor '+code+'.\nDie wordt vervangen door deze '+arr.length+' taken. Doorgaan?')) return;
+    }
   }
   const geordend=_takenTopoSort(arr);
   const fases=geordend.map((t,i)=>{
@@ -5108,9 +5157,8 @@ function takenNaarPlanning(code){
   };
   planBerekenDatums(plan);
   planSave(code,plan);
-  try{ if(window.track) track('taken','naar_planning',{detail:code+' · '+fases.length+' fasen',ok:true}); }catch(e){}
-  planToast('📅 '+fases.length+' taken → planning ('+code+')');
-  renderProjectDetail(huidigProject);
+  try{ if(window.track) track('taken','naar_planning',{detail:code+' · '+fases.length+' fasen'+(stil?' · auto':''),ok:true}); }catch(e){}
+  if(!stil){ planToast('📅 '+fases.length+' taken → planning ('+code+')'); renderProjectDetail(huidigProject); }
 }
 
 // Besteldatum-bewaking: ligt inkoop-start in verleden en is inkoop nog niet klaar?

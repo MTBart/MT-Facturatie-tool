@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-15 — @ Cockpit: taak-uren bewerkbaar (− / + / vrij typen) + plan-sync
+- Commit: `11ab941` | Auteur: Bart Witte
+
 ## 2026-06-15 — @ Cockpit: taken→planning-brug, tasks-blok bij plan, multi-monitor
 - Commit: `e7555b5` | Auteur: Bart Witte
 
