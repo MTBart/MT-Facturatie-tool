@@ -3236,7 +3236,11 @@ async function tgMaakProjectVoorCode(code, billable){
   let pid=null;
   try{
     const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase());
-    const projNaam=mt&&(mt.naam||mt.product_naam||mt.product)?`${mt.naam||mt.product_naam||mt.product} [${code}]`:code;
+    // Projectnaam = ALLEEN het product-deel + [code]. De klant ("Kobalt 5013")
+    // hoort als Toggl-CLIENT, niet in de projectnaam (anders dubbel). Daarom
+    // product_naam/product vóór naam — naam bevat klant+locatie en is hier ongewenst.
+    const projDeel=(mt&&(mt.product_naam||mt.product||mt.naam))||'';
+    const projNaam=projDeel?`${projDeel} [${code}]`:code;
     // 1) Project éérst aanmaken — gegarandeerd, zonder dat klant-gedoe dit blokkeert.
     const r=await tgTrack(`workspaces/${TG_WS}/projects`,'POST',
       {name:projNaam,active:true,billable:billable!==false,workspace_id:TG_WS});
