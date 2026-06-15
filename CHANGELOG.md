@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-15 — @ planNaarToggl: toon de échte Focus-foutmelding bij mislukte taken
+- Commit: `7f43537` | Auteur: Bart Witte
+
 ## 2026-06-15 — @ Planning ⇄ taken: unify, cross-link en "tijdlijn bijwerken"-knop
 - Commit: `8a31b19` | Auteur: Bart Witte
 

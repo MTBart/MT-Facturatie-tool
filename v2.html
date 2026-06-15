@@ -3456,7 +3456,7 @@ async function tgNieuweTaak(){
   if(keuze){ const idx=parseInt(keuze)-1; if(act[idx]) project_id=act[idx].id; }
   if(!confirm(`Taak "${naam}" aanmaken${project_id?' in gekozen project':''} (Focus)?`)) return;
   tgStatus('Taak aanmaken…');
-  try{ const body={name:naam,status_id:300785}; if(project_id) body.project_id=project_id;
+  try{ const body=project_id?{name:naam,project_id}:{name:naam,status_id:300785};
     await focusFetch('tasks','POST',body);
     _tgCache.taken=null; tgStatus('✓ Taak aangemaakt.','#2A4A38'); tgLaadTaken();
   }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
@@ -4675,8 +4675,9 @@ async function projTaakNaarToggl(code,id){
     try{ if(window.track) track('taken','naar_toggl',{detail:'geen project_id',ok:false}); }catch(e){}
     return false; }
   try{
-    const body={name:t.naam,status_id:_PT_STAT_TG[t.status]||300785,project_id:pid};
-    if(t.prioriteit) body.priority=t.prioriteit;
+    // Minimale body: project heeft eigen bord-status-id's; generieke id's geven
+    // validatie-fout. Focus default'et de status. (status/prioriteit-sync = follow-up.)
+    const body={name:t.naam,project_id:pid};
     const r=await focusFetch('tasks','POST',body);
     const tid=r&&(r.id||(r.data&&r.data.id));
     if(tid){ t.tg_task_id=tid; projTakenZet(code,arr); }
@@ -5265,7 +5266,11 @@ async function planNaarToggl(code){
   let ok=0, fout=0, eersteFout='';
   for(const fa of plan.fases){
     try{
-      const body={name:fa.naam, status_id:_PLAN_TG_STATUS[fa.status]||300785, project_id:plan.togglProjectId};
+      // Een net aangemaakt project heeft een eigen Focus-bord met eigen status-id's;
+      // de generieke status_id's (300785…) horen bij een ánder bord → validatie-fout.
+      // Geverifieerd werkend (2026-05-26, HTTP 201): minimale body {name, project_id};
+      // Focus zet de taak dan op de standaard-status van het project.
+      const body={name:fa.naam, project_id:plan.togglProjectId};
       const made=await focusFetch('tasks','POST',body);
       const tid=made&&(made.id||(made.data&&made.data.id));
       if(tid){ fa.togglTaskId=tid; ok++; } else { fout++; if(!eersteFout) eersteFout='geen task-id terug'; }
