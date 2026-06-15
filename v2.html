@@ -2061,8 +2061,32 @@ async function mbPatch(path,body){const h=await authHeader();return _mbTrack('pa
 async function mbDelete(path){const h=await authHeader();return _mbTrack('delete',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'DELETE',headers:h}));}
 async function claudeCall(messages,maxTokens=1800){
   const h=await authHeader();
-  return fetch(`${WORKER}?target=claude`,{method:'POST',headers:{...h,'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTokens,messages})}).then(r=>r.json());
+  const resp=await fetch(`${WORKER}?target=claude`,{method:'POST',headers:{...h,'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTokens,messages})});
+  const raw=await resp.text();
+  // De Worker stuurt het Claude-antwoord als SSE-stream (text/event-stream).
+  // Bouw daaruit het normale non-stream antwoord-object terug op, zodat alle
+  // callers gewoon r.content[0].text kunnen blijven lezen. Valt terug op JSON
+  // als de Worker ooit weer een gebufferd antwoord stuurt.
+  if(raw.trimStart().startsWith('{')){ try{ return JSON.parse(raw); }catch(e){} }
+  return _claudeFromSSE(raw);
+}
+function _claudeFromSSE(raw){
+  let text='',stop_reason=null,usage=null,errObj=null;
+  for(const line of String(raw||'').split('\n')){
+    const s=line.trim();
+    if(!s.startsWith('data:')) continue;
+    const payload=s.slice(5).trim();
+    if(!payload||payload==='[DONE]') continue;
+    let ev; try{ ev=JSON.parse(payload); }catch(e){ continue; }
+    if(ev.type==='content_block_delta'&&ev.delta&&typeof ev.delta.text==='string') text+=ev.delta.text;
+    else if(ev.type==='content_block_start'&&ev.content_block&&typeof ev.content_block.text==='string') text+=ev.content_block.text;
+    else if(ev.type==='message_delta'&&ev.delta){ if(ev.delta.stop_reason) stop_reason=ev.delta.stop_reason; if(ev.usage) usage=ev.usage; }
+    else if(ev.type==='message_start'&&ev.message&&ev.message.usage) usage=ev.message.usage;
+    else if(ev.type==='error') errObj=ev.error||ev;
+  }
+  if(errObj&&!text) return {error:errObj,content:[{type:'text',text:''}]};
+  return {content:[{type:'text',text}],stop_reason,usage,_sse:true};
 }
 function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});}
 
@@ -4426,6 +4450,83 @@ function projTaakVerwijder(code,id){
   try{ if(window.track) track('taken','verwijder',{detail:code}); }catch(e){}
   projTakenZet(code,projTaken(code).filter(x=>x.id!==id));
   renderProjectDetail(huidigProject);
+}
+// ── Standaard taak-templates (snelstart naast AI). na = 0-based index in eigen lijst. ──
+const _PT_TEMPLATES={
+  maatwerk:{label:'Maatwerkmeubel (standaard)',taken:[
+    {naam:'Definitief ontwerp & maatvoering',uur:4,prio:'high'},
+    {naam:'Werktekening in Vectorworks',uur:6,prio:'high',na:[0]},
+    {naam:'Materiaal & hardware bestellen',uur:1,prio:'high',na:[1]},
+    {naam:'Plaatmateriaal zagen (Holzher)',uur:3,na:[2]},
+    {naam:'CNC-bewerking',uur:3,na:[3]},
+    {naam:'Kantenband & afwerken',uur:4,na:[4]},
+    {naam:'Assemblage in de werkplaats',uur:6,na:[5]},
+    {naam:'Montage bij klant',uur:6,prio:'high',na:[6]},
+    {naam:'Oplevering & nazorg',uur:1,na:[7]}]},
+  keuken:{label:'Keuken',taken:[
+    {naam:'Inmeten op locatie',uur:3,prio:'high'},
+    {naam:'Definitief ontwerp & klant-akkoord',uur:5,prio:'high',na:[0]},
+    {naam:'Werktekening + apparatuur-inbouwmaten',uur:8,prio:'high',na:[1]},
+    {naam:'Kasten, fronten & werkblad bestellen',uur:2,prio:'high',na:[2]},
+    {naam:'Plaatmateriaal zagen (Holzher)',uur:4,na:[3]},
+    {naam:'CNC + boringen',uur:4,na:[4]},
+    {naam:'Kantenband & afwerken',uur:5,na:[5]},
+    {naam:'Korpussen assembleren',uur:8,na:[6]},
+    {naam:'Montage keuken bij klant',uur:12,prio:'high',na:[7]},
+    {naam:'Werkblad plaatsen & aansluiten',uur:5,na:[8]},
+    {naam:'Oplevering & restpunten',uur:2,na:[9]}]},
+  kast:{label:'Inbouwkast',taken:[
+    {naam:'Inmeten op locatie',uur:2,prio:'high'},
+    {naam:'Ontwerp indeling & klant-akkoord',uur:3,prio:'high',na:[0]},
+    {naam:'Werktekening in Vectorworks',uur:5,prio:'high',na:[1]},
+    {naam:'Materiaal & beslag bestellen',uur:1,na:[2]},
+    {naam:'Zagen (Holzher) + CNC',uur:5,na:[3]},
+    {naam:'Kantenband & afwerken',uur:3,na:[4]},
+    {naam:'Voormonteren werkplaats',uur:4,na:[5]},
+    {naam:'Montage bij klant',uur:6,prio:'high',na:[6]},
+    {naam:'Oplevering',uur:1,na:[7]}]},
+  wandpaneel:{label:'Wandpaneel / achterwand',taken:[
+    {naam:'Inmeten / maatvoering controleren',uur:2,prio:'high'},
+    {naam:'Ontwerp & materiaal-/kleurkeuze klant',uur:3,prio:'high',na:[0]},
+    {naam:'Werktekening in Vectorworks',uur:4,prio:'high',na:[1]},
+    {naam:'Plaatmateriaal bestellen',uur:1,na:[2]},
+    {naam:'Zagen (Holzher) op maat',uur:2,na:[3]},
+    {naam:'CNC / freeswerk',uur:2,na:[4]},
+    {naam:'Kantenband & afwerken',uur:3,na:[5]},
+    {naam:'Montage bij klant',uur:4,prio:'high',na:[6]},
+    {naam:'Oplevering',uur:1,na:[7]}]}
+};
+function projTaakTemplateKies(code){
+  const oud=document.getElementById('tpl-overlay');if(oud)oud.remove();
+  const ov=document.createElement('div');ov.id='tpl-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(28,26,22,.45);z-index:10000;display:flex;align-items:center;justify-content:center';
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  const esc=s=>(typeof tgEsc==='function')?tgEsc(s):String(s==null?'':s);
+  const rows=Object.keys(_PT_TEMPLATES).map(k=>{const t=_PT_TEMPLATES[k];const u=t.taken.reduce((s,x)=>s+(x.uur||0),0);
+    return `<div class="kp-row" onclick="projTaakTemplateInvoeg('${code}','${k}')" style="padding:9px 11px;border-radius:var(--radius-sm);cursor:pointer">
+      <div style="font-weight:600;font-size:13px">${esc(t.label)}</div>
+      <div style="font-size:11px;color:var(--text-dim)">${t.taken.length} taken · ~${u} u, met afhankelijkheden</div></div>`;}).join('');
+  ov.innerHTML=`<div style="background:var(--surface-overlay,#fff);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);width:420px;max-width:calc(100vw - 32px);max-height:80vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:700;font-size:15px">📋 Taken uit template</div>
+      <div style="font-size:11.5px;color:var(--text-dim)">Voegt een standaard takenketen toe — pas daarna aan of vul aan met ✨ AI.</div>
+    </div>
+    <div style="overflow:auto;padding:6px">${rows}</div></div>`;
+  document.body.appendChild(ov);
+}
+function projTaakTemplateInvoeg(code,key){
+  const ov=document.getElementById('tpl-overlay');if(ov)ov.remove();
+  const tpl=_PT_TEMPLATES[key];if(!tpl)return;
+  const nieuwe=tpl.taken.map(v=>({id:_ptId(),naam:v.naam,omschrijving:v.omschrijving||'',duur_uur:v.uur||0,
+    prioriteit:['low','medium','high'].includes(v.prio)?v.prio:'',afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'template'}));
+  tpl.taken.forEach((v,i)=>{ if(Array.isArray(v.na)) nieuwe[i].afhankelijk_van=v.na.map(j=>nieuwe[j]&&nieuwe[j].id).filter(Boolean); });
+  projTakenZet(code,projTaken(code).concat(nieuwe));
+  renderProjectDetail(huidigProject);
+  _ptStatus(code,`✓ ${nieuwe.length} taken uit "${tpl.label}" toegevoegd`,'var(--green)');
+  try{ if(window.track) track('taken','template',{detail:key+' · '+nieuwe.length,ok:true}); }catch(e){}
+  if(confirm(`${nieuwe.length} taken toegevoegd. Ook naar het Toggl-project sturen (zichtbaar voor het team)?`)){
+    (async()=>{ for(const t of nieuwe){ await projTaakNaarToggl(code,t.id); } renderProjectDetail(huidigProject); })();
+  }
 }
 // Toggl-projectid voor een M&T-project (opgeslagen, anders match op naam=code).
 async function _tgProjectIdVoorMt(mt){
@@ -7773,24 +7874,45 @@ function inboxBijlagenNaarMap(){
 async function inboxBijlagenNaarProject(mailId,code,stil){
   const proj=PROJECT_CODES.find(p=>p.code===code);
   if(!proj){if(!stil)inboxToast('Project '+code+' niet gevonden.');return;}
-  if(typeof window.spUploadProjectBytes!=='function'){if(!stil)inboxToast('SharePoint-upload niet beschikbaar (ingelogd op M365?).');return;}
+  if(typeof window.spUploadProjectBytes!=='function'){inboxToast('SharePoint-upload niet beschikbaar (ingelogd op M365?).');return;}
   try{
     if(!stil)ibStatus('Bijlagen ophalen…');
-    const a=await ibFetch(`/messages/${mailId}/attachments?$select=id,name,size,contentType,contentBytes,isInline`);
-    const items=((a&&a.value)||[]).filter(x=>(x['@odata.type']||'').includes('fileAttachment')&&x.contentBytes&&!x.isInline);
-    if(!items.length){if(!stil)inboxToast('Geen op te slaan bijlagen (alleen inline/embedded).');return;}
-    let ok=0,fout=0;
+    // Lijst zonder $select → @odata.type + contentBytes komen standaard mee.
+    const a=await ibFetch(`/messages/${mailId}/attachments`);
+    const all=(a&&a.value)||[];
+    // file-bijlagen = niet inline, en geen item-/reference-attachment. We leunen
+    // op de aanwezigheid van contentBytes i.p.v. alleen op @odata.type (dat soms
+    // ontbreekt). reference-attachments (OneDrive-links) hebben geen bytes → skip.
+    const items=all.filter(x=>{
+      const t=String(x['@odata.type']||'');
+      if(x.isInline) return false;
+      if(t.includes('itemAttachment')||t.includes('referenceAttachment')) return false;
+      return true; // contentBytes halen we zo nodig per stuk op
+    });
+    if(!items.length){if(!stil)inboxToast(all.length?'Alleen inline/embedded bijlagen — niets op te slaan.':'Deze mail heeft geen bijlagen.');else ibStatus&&ibStatus('');return;}
+    let ok=0,fout=0,laatsteFout='';
     for(const x of items){
       try{
-        const bin=atob(x.contentBytes);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+        let b64=x.contentBytes;
+        if(!b64){ // grote bijlage of $select-projectie: per stuk ophalen
+          const one=await ibFetch(`/messages/${mailId}/attachments/${x.id}`);
+          b64=one&&one.contentBytes;
+        }
+        if(!b64){ fout++; laatsteFout='geen bytes ('+(x.name||'?')+')'; continue; }
+        const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
         await window.spUploadProjectBytes(proj,x.name,arr,x.contentType,'05_Aangeleverd');
         ok++;
-      }catch(e){fout++;console.warn('bijlage-upload mislukt:',x.name,e.message);}
+      }catch(e){fout++;laatsteFout=e.message;console.warn('bijlage-upload mislukt:',x.name,e.message);}
     }
     try{ if(window.track) track('inbox','bijlagen_naar_map',{detail:code+' · '+ok+'/'+items.length,ok:fout===0}); }catch(e){}
-    const msg=`📎 ${ok} bijlage${ok===1?'':'s'} → ${code}/05_Aangeleverd`+(fout?` (${fout} mislukt)`:'');
-    if(stil){if(ok||fout)inboxToast(msg);} else {inboxToast(msg);ibStatus('');}
-  }catch(e){ if(!stil)ibStatus('Bijlagen-fout: '+e.message,'#c0392b'); else console.warn('auto-bijlagen mislukt:',e.message); }
+    if(ok){
+      const msg=`📎 ${ok} bijlage${ok===1?'':'s'} → ${code}/05_Aangeleverd`+(fout?` (${fout} mislukt)`:'');
+      inboxToast(msg);
+    } else if(fout){
+      inboxToast('⚠ Bijlagen niet opgeslagen: '+(laatsteFout||'onbekende fout'));
+    }
+    if(!stil)ibStatus('');
+  }catch(e){ ibStatus&&ibStatus(''); inboxToast('⚠ Bijlagen-fout: '+e.message); console.warn('auto-bijlagen mislukt:',e.message); }
 }
 
 // ── Larry-chat per mail (via Worker target=claude). Mailcontext alleen runtime.
