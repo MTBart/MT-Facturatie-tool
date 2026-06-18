@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-18 — feat(inbox): conversation-threading in smart-inbox (read-only)
+- Commit: `7e49729` | Auteur: Bart Witte
+
 ## 2026-06-18 — Projecten-koppeling cockpit<->app tolerant maken (geen migratie)
 - Commit: `1bac7f2` | Auteur: Bart Witte
 

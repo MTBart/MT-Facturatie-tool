@@ -1222,7 +1222,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     </div>
     <div class="sheet-body">
       <div id="notifList"></div>
-      <button class="btn btn-secondary btn-full" style="margin-top:14px" onclick="demoNotif()">▶ Demo: ontvang notificatie</button>
+      <button id="demoNotifBtn" class="btn btn-secondary btn-full" style="margin-top:14px;display:none" onclick="demoNotif()">▶ Demo: ontvang notificatie</button>
     </div>
   </div>
 </div>
@@ -1248,6 +1248,10 @@ const FOCUS_BASE_PATH = `organizations/${TG_ORG}/workspaces/${TG_WS}/`;
 const _PLAN_TG_STATUS = {todo:300785, bezig:300788, klaar:300786};
 // Mapping terug van Focus status_id → lokale status-string
 const _STATUS_FROM_ID = {300785:'todo', 300788:'bezig', 300786:'klaar'};
+
+// DEV_MODE: zet alleen handmatig op true tijdens ontwikkelen. Standaard UIT in
+// productie. Stuurt demo-seeds (taken/notificaties) die echte gebruikers niet horen te zien.
+const DEV_MODE = false;
 
 let _msal = null;
 let _msAccount = null;   // ingelogd account
@@ -1692,7 +1696,9 @@ async function spWriteUserProjects() {
 let TASKS = null;
 try { TASKS = JSON.parse(localStorage.getItem("mt_tasks") || "null"); } catch(e) { TASKS = null; }
 if (!TASKS) {
-  TASKS = {
+  // Lege fallback: bij gefaalde SP-sync ziet een echte gebruiker geen nep-taken.
+  // (Demo-seed alleen onder DEV_MODE; zie startDemoMode.)
+  TASKS = DEV_MODE ? {
     "CN-AMS-KEUKEN":[
       {id:"t1",name:"Plinten afkitten",status:"bezig",date:"12-06",est:"2u",tag:null,note:""},
       {id:"t2",name:"Grepen monteren",status:"todo",date:"13-06",est:"1u",tag:null,note:""}
@@ -1700,7 +1706,7 @@ if (!TASKS) {
     "INT-AMS-BUREAU":[
       {id:"t3",name:"Kabeldoorvoer boren",status:"klaar",date:"10-06",est:"1u",tag:null,note:""}
     ]
-  };
+  } : {};
 }
 function tasksFor(code) { return TASKS[code] || []; }
 function saveTasks() { localStorage.setItem("mt_tasks", JSON.stringify(TASKS)); }
@@ -2111,6 +2117,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderCaptureProject();
   renderNotes();
   renderNotifBadge();
+  if (DEV_MODE) { const _db = document.getElementById("demoNotifBtn"); if (_db) _db.style.display = ""; }
   // MSAL: probeer stil in te loggen; login-screen blijft zichtbaar totdat login slaagt of demo gekozen wordt
   initMsal();
   // Terug uit de achtergrond: timer-herstel nogmaals proberen + klok bijwerken
@@ -4657,6 +4664,7 @@ let bannerNotifId = null;
 let bannerTimeout = null;
 
 function demoNotif() {
+  if (!DEV_MODE) return;   // demo-notificatie alleen tijdens ontwikkelen, niet in productie
   showToast("Demo gestart — notificatie volgt over ±3 sec…");
   setTimeout(() => {
     const n = {

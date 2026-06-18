@@ -1819,7 +1819,18 @@ button{transition:transform .07s ease,filter .07s ease}
   </div>
 
   <!-- ═══ TAB: MIGRATIE ═══ -->
-  <div id="tab-migratie" class="tab-content"></div>
+  <!-- Buiten gebruik: het oude migration-tool.js (gitignored _archief) + config.json-token
+       zijn verwijderd. Tab toont een statische melding i.p.v. een lege witte vlakte. -->
+  <div id="tab-migratie" class="tab-content">
+    <div style="max-width:560px;margin:48px auto;padding:28px 32px;border:1px solid var(--border,#e2e2e2);border-radius:12px;background:var(--card,#fff);text-align:center">
+      <div style="font-size:32px;margin-bottom:10px">🛠️</div>
+      <h2 style="margin:0 0 8px;font-size:18px">Data-migratie buiten gebruik</h2>
+      <p style="margin:0;color:var(--text-dim,#666);font-size:14px;line-height:1.5">
+        Dit was een eenmalig hulpmiddel om oude data naar de nieuwe structuur te verhuizen.
+        Het is uitgeschakeld en niet langer beschikbaar in productie.
+      </p>
+    </div>
+  </div>
 
 </div>
 
@@ -4251,11 +4262,11 @@ function wisVoorraad(){
 function toonLeverancierInfo(naam){
   const info=leveranciers.find(l=>l.naam.toLowerCase()===naam.toLowerCase());
   if(!info) return;
-  let msg=`📦 ${info.naam}`;
-  if(info.website) msg+=`\n🌐 ${info.website}`;
-  if(info.email) msg+=`\n📧 ${info.email}`;
-  if(info.telefoon) msg+=`\n📞 ${info.telefoon}`;
-  alert(msg);// TODO: mooi popup
+  let parts=[`📦 ${info.naam}`];
+  if(info.website) parts.push(`🌐 ${info.website}`);
+  if(info.email) parts.push(`📧 ${info.email}`);
+  if(info.telefoon) parts.push(`📞 ${info.telefoon}`);
+  planToast(parts.join('   ·   '));
 }
 
 // ═══ BESTELLIJST ═══
@@ -9670,45 +9681,11 @@ function activiteitOpen(force){
 }
 </script>
 
-<!-- Migration Tool -->
-<script src="../_archief/Claude/migration-tool.js"></script>
-<script>
-  // Load Moneybird token from config.json
-  async function loadMBToken() {
-    try {
-      const response = await fetch('config.json');
-      const config = await response.json();
-      window.mbToken = config.moneybird_token;
-      console.log('✓ Moneybird token loaded');
-    } catch (err) {
-      console.warn('⚠️ config.json niet gevonden. Token moet handmatig gezet worden.');
-    }
-  }
-
-  // Initialize migration tab content on page load
-  document.addEventListener('DOMContentLoaded', async function() {
-    // Load token first
-    await loadMBToken();
-
-    // Initialize migration tool
-    const tabDiv = document.getElementById('tab-migratie');
-    console.log('DOMContentLoaded: tabDiv exists?', !!tabDiv, 'migrationTool exists?', typeof migrationTool !== 'undefined');
-    if (tabDiv && typeof migrationTool !== 'undefined') {
-      const html = migrationTool.renderMigrationTab();
-      console.log('renderMigrationTab() returned:', html ? 'HTML string (' + html.length + ' chars)' : 'empty');
-      tabDiv.innerHTML = html;
-      console.log('After innerHTML: tabDiv.children.length =', tabDiv.children.length);
-      console.log('tabDiv.innerHTML preview:', tabDiv.innerHTML.substring(0, 200));
-      // Set Moneybird token
-      if (window.mbToken) {
-        migrationTool.mbToken = window.mbToken;
-        console.log('✓ Migration tool initialized with token');
-      }
-    } else {
-      console.error('Migration init failed: tabDiv=' + !!tabDiv + ', migrationTool=' + (typeof migrationTool !== 'undefined'));
-    }
-  });
-</script>
+<!-- Migration Tool — BUITEN GEBRUIK (2026-06-18).
+     De ../_archief/Claude/migration-tool.js-scriptref en de config.json-token-laadpoging
+     zijn verwijderd: het script staat niet in de repo (gitignored) en config.json bevatte
+     een hardcoded Moneybird-token buiten de Worker. De tab toont nu een statische
+     "buiten gebruik"-melding (zie #tab-migratie). Tab-infrastructuur blijft intact. -->
 
 <!-- Usage-/presence-tracking. Laadt als laatste zodat window.WORKER / getAuthToken
      al gedefinieerd zijn. Faalt altijd stil — mag de tool nooit ophouden. -->
