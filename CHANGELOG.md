@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-18 — Projecten-koppeling cockpit<->app tolerant maken (geen migratie)
+- Commit: `1bac7f2` | Auteur: Bart Witte
+
 ## 2026-06-15 — @ fix(toggl): projectnaam = de projectcode; client = de klant
 - Commit: `bdf988d` | Auteur: Bart Witte
 

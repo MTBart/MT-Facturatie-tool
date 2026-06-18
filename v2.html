@@ -1635,6 +1635,14 @@ button{transition:transform .07s ease,filter .07s ease}
       #tab-inbox .inbox-msg .kpchip{display:inline-flex;align-items:center;gap:2px;font-size:9.5px;font-family:var(--mono,monospace);color:#1b5e20;background:rgba(46,125,50,.14);border-radius:3px;padding:0 4px;margin-left:6px;white-space:nowrap;vertical-align:middle}
       #tab-inbox .inbox-msg .van{font-weight:600;display:flex;justify-content:space-between;gap:6px}
       #tab-inbox .inbox-msg .van .dt{font-weight:400;color:var(--text-faint,#999);font-size:10.5px;white-space:nowrap}
+      #tab-inbox .inbox-threadtoggle{font-size:11px;color:var(--text-dim,#666);display:flex;align-items:center;gap:3px;white-space:nowrap;cursor:pointer;user-select:none}
+      #tab-inbox .inbox-threadtoggle input{margin:0}
+      #tab-inbox .inbox-msg .thrcount{display:inline-flex;align-items:center;font-size:10px;font-weight:600;color:#fff;background:var(--green-mid,#4a7a5a);border-radius:9px;padding:0 6px;min-width:16px;text-align:center;margin-left:6px;white-space:nowrap}
+      #tab-inbox .inbox-thread-item{border:1px solid var(--border,#eee);border-radius:8px;margin:0 12px 10px;overflow:hidden}
+      #tab-inbox .inbox-thread-hdr{padding:8px 11px;background:var(--surface-sunken,#f6f6f4);font-size:11.5px;display:flex;justify-content:space-between;gap:8px}
+      #tab-inbox .inbox-thread-hdr b{font-size:12px}
+      #tab-inbox .inbox-thread-body{border-top:1px solid var(--border,#f0f0f0);background:#fff}
+      #tab-inbox .inbox-thread-body iframe{width:100%;border:0;min-height:220px;background:#fff}
       #tab-inbox .inbox-msg .onderw{color:var(--text,#222)}
       #tab-inbox .inbox-msg .prev{color:var(--text-faint,#999);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       #tab-inbox .inbox-reader{display:flex;flex-direction:column;min-height:0;overflow:hidden}
@@ -1719,7 +1727,10 @@ button{transition:transform .07s ease,filter .07s ease}
       </div>
       <div class="inbox-col inbox-list" id="inbox-listcol" onscroll="inboxMaybeMore()">
         <div class="inbox-listhdr">
-          <div id="inbox-listtitle">—</div>
+          <div style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+            <div id="inbox-listtitle">—</div>
+            <label class="inbox-threadtoggle" title="Mailwisselingen als één gesprek tonen (zoals Outlook)"><input type="checkbox" id="inbox-threadtoggle" onchange="inboxToggleThread(this.checked)"> 💬 Gesprekken</label>
+          </div>
           <input id="inbox-search" type="search" placeholder="🔍 Zoek in deze map…" oninput="inboxSearchInput()" onsearch="inboxSearchInput()">
         </div>
         <div id="inbox-messages"></div>
@@ -7696,7 +7707,7 @@ window.initStorage = async function() {
 // PUBLIC repo: geen mailinhoud/PII wordt opgeslagen of gecommit — alles runtime.
 // ═══════════════════════════════════════════════════════════════════════════
 const INBOX_DEFAULT='info@mortiseandtenon.nl';
-let _inbox={mbx:INBOX_DEFAULT,folderId:null,folderName:'',folders:[],msgs:[],cur:null,undo:null,loaded:false,q:'',nextLink:null,loadingMore:false};
+let _inbox={mbx:INBOX_DEFAULT,folderId:null,folderName:'',folders:[],msgs:[],cur:null,undo:null,loaded:false,q:'',nextLink:null,loadingMore:false,threadMode:false,curThread:null};
 
 function ibEsc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function ibBase(){return _inbox.mbx==='me'?'https://graph.microsoft.com/v1.0/me':`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(_inbox.mbx)}`;}
@@ -7901,14 +7912,14 @@ function inboxRenderTree(){
 }
 
 function inboxOpenFolder(id,name){
-  _inbox.folderId=id;_inbox.folderName=name;_inbox.q='';
+  _inbox.folderId=id;_inbox.folderName=name;_inbox.q='';_inbox.curThread=null;
   const sb=document.getElementById('inbox-search');if(sb)sb.value='';
   document.getElementById('inbox-listtitle').textContent=name;
   inboxRenderTree();
   inboxLoadMessages();
 }
 function inboxMsgUrl(){
-  const sel='id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview,parentFolderId';
+  const sel='id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview,parentFolderId,conversationId';
   // Zoeken = HELE postbus (alle mappen, ook body) net als Outlook-zoeken.
   // Geen zoekterm = alleen de geopende map, op datum gesorteerd.
   if(_inbox.q){
@@ -7926,9 +7937,36 @@ async function inboxLoadMessages(){
     const d=await ibFetch(inboxMsgUrl());
     _inbox.msgs=(d&&d.value)||[];
     _inbox.nextLink=(d&&d['@odata.nextLink'])||null;
-    cont.innerHTML=_inbox.msgs.length?_inbox.msgs.map(inboxMsgRow).join('')
-      :`<div class="inbox-empty" style="font-size:12px">${_inbox.q?'geen resultaten':'geen berichten'}</div>`;
+    inboxRenderList();
   }catch(e){cont.innerHTML=`<div class="inbox-empty" style="font-size:12px">fout: ${ibEsc(e.message)}</div>`;}
+}
+// Eén render-pad voor de berichtenlijst — respecteert de gespreksmodus (threadMode).
+// READ-ONLY: groepeert alleen wat al geladen is op conversationId; geen mutaties.
+function inboxRenderList(){
+  const cont=document.getElementById('inbox-messages');if(!cont)return;
+  if(!_inbox.msgs.length){
+    cont.innerHTML=`<div class="inbox-empty" style="font-size:12px">${_inbox.q?'geen resultaten':'geen berichten'}</div>`;return;
+  }
+  if(_inbox.threadMode){
+    cont.innerHTML=inboxGroupThreads(_inbox.msgs).map(inboxThreadRow).join('');
+  }else{
+    cont.innerHTML=_inbox.msgs.map(inboxMsgRow).join('');
+  }
+}
+// Groepeer geladen berichten op conversationId; nieuwste per gesprek bovenaan.
+// Berichten zonder conversationId vallen terug op hun eigen id (één-bericht-thread).
+function inboxGroupThreads(msgs){
+  const map=new Map();
+  for(const m of msgs){
+    const cid=m.conversationId||('solo:'+m.id);
+    let g=map.get(cid);
+    if(!g){g={cid,items:[],newest:m};map.set(cid,g);}
+    g.items.push(m);
+    if(new Date(m.receivedDateTime||0)>new Date(g.newest.receivedDateTime||0))g.newest=m;
+  }
+  const groups=[...map.values()];
+  groups.sort((a,b)=>new Date(b.newest.receivedDateTime||0)-new Date(a.newest.receivedDateTime||0));
+  return groups;
 }
 async function inboxMaybeMore(){
   if(!_inbox.nextLink||_inbox.loadingMore)return;
@@ -7944,7 +7982,12 @@ async function inboxMaybeMore(){
     _inbox.nextLink=(d&&d['@odata.nextLink'])||null;
     _inbox.msgs=_inbox.msgs.concat(more);
     ld.remove();
-    if(more.length) cont.insertAdjacentHTML('beforeend',more.map(inboxMsgRow).join(''));
+    if(more.length){
+      // In gespreksmodus kan een nieuw bericht bij een bestaand gesprek horen →
+      // hele lijst opnieuw groeperen i.p.v. los appenden. Anders gewoon appenden.
+      if(_inbox.threadMode){inboxRenderList();}
+      else cont.insertAdjacentHTML('beforeend',more.map(inboxMsgRow).join(''));
+    }
   }catch(e){ld.textContent='meer laden mislukt: '+e.message;}
   _inbox.loadingMore=false;
   // ketting: vul de viewport als er nog ruimte is
@@ -7973,12 +8016,100 @@ function inboxMsgRow(m){
     <div class="prev">${ibEsc(m.bodyPreview||'')}</div></div>`;
 }
 
+// ── Gespreksmodus (conversation-threading), READ-ONLY ──────────────────────
+function inboxToggleThread(on){
+  _inbox.threadMode=!!on;
+  inboxRenderList();
+  try{ if(window.track) track('action','inbox_threadmode',{detail:on?'on':'off',ok:true}); }catch(e){}
+}
+// Rij voor één gesprek: toont het nieuwste bericht + een teller (#berichten).
+// Klik opent de hele gesprekweergave in het leesvenster.
+function inboxThreadRow(g){
+  const m=g.newest;
+  const van=(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'(onbekend)';
+  const dt=m.receivedDateTime?new Date(m.receivedDateTime).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+  const anyClip=g.items.some(x=>x.hasAttachments)?' 📎':'';
+  const anyUnread=g.items.some(x=>!x.isRead);
+  const act=(_inbox.curThread&&_inbox.curThread===g.cid)?' actief':'';
+  const count=g.items.length>1?`<span class="thrcount" title="${g.items.length} berichten in dit gesprek">${g.items.length}</span>`:'';
+  const link=(typeof mailLinkInfo==='function')?mailLinkInfo(m):null;
+  const kpcls=link?' gekoppeld':'';
+  const kpchip=link?`<span class="kpchip" title="Gekoppeld aan project ${ibEsc(link.code)}">🔗 ${ibEsc(link.code)}</span>`:'';
+  const onderw=_ibOnderwerpSchoon(m.subject||'')||'(geen onderwerp)';
+  return `<div class="inbox-msg${anyUnread?' ongelezen':''}${kpcls}${act}" onclick="inboxOpenThread('${ibEsc(g.cid).replace(/'/g,"\\'")}','${m.id}')">
+    <div class="van"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(van)}</span><span class="dt">${dt}</span></div>
+    <div class="onderw">${ibEsc(onderw)}${anyClip}${count}${kpchip}</div>
+    <div class="prev">${ibEsc(m.bodyPreview||'')}</div></div>`;
+}
+// Open de volledige gesprekweergave. Haalt alle berichten van het gesprek op
+// over de héle postbus ($filter op conversationId) — read-only, Mail.Read.
+async function inboxOpenThread(cid,fallbackId){
+  _inbox.curThread=cid;_inbox.cur=null;
+  const rb=document.getElementById('inbox-readbody');
+  rb.classList.add('inbox-empty');rb.textContent='gesprek laden…';
+  document.getElementById('inbox-chatwrap').style.display='none';
+  inboxRenderList();
+  try{
+    let items=[];
+    if(cid&&cid.indexOf('solo:')!==0){
+      const sel='id,subject,from,toRecipients,receivedDateTime,bodyPreview,hasAttachments,isRead,webLink';
+      const d=await ibFetch(`/messages?$filter=`+encodeURIComponent("conversationId eq '"+cid.replace(/'/g,"''")+"'")+`&$select=${sel}&$top=50`);
+      items=(d&&d.value)||[];
+    }
+    if(!items.length){
+      // Geen treffer via filter (of solo-thread) → val terug op het ene bericht.
+      return inboxOpenMail(fallbackId);
+    }
+    // Oudste → nieuwste, zoals Outlook een gesprek toont.
+    items.sort((a,b)=>new Date(a.receivedDateTime||0)-new Date(b.receivedDateTime||0));
+    inboxRenderThread(items);
+  }catch(e){
+    rb.classList.add('inbox-empty');rb.textContent='Gesprek laden mislukt: '+e.message;
+  }
+}
+function inboxRenderThread(items){
+  const rb=document.getElementById('inbox-readbody');
+  rb.classList.remove('inbox-empty');
+  const titel=_ibOnderwerpSchoon(items[items.length-1].subject||'')||'(geen onderwerp)';
+  const head=`<div class="inbox-rhdr"><h3>💬 ${ibEsc(titel)}</h3>
+    <div class="inbox-rmeta"><span>${items.length} berichten in dit gesprek</span></div></div>`;
+  const blocks=items.map((m,i)=>{
+    const van=(m.from&&m.from.emailAddress)?`${m.from.emailAddress.name||''} <${m.from.emailAddress.address||''}>`:'(onbekend)';
+    const dt=m.receivedDateTime?new Date(m.receivedDateTime).toLocaleString('nl-NL'):'';
+    const clip=m.hasAttachments?' 📎':'';
+    const fid=`ibthr-${i}`;
+    return `<div class="inbox-thread-item">
+      <div class="inbox-thread-hdr"><span><b>${ibEsc(van)}</b>${clip}</span><span>${dt}</span></div>
+      <div class="inbox-thread-body"><button class="btn btn-sm btn-secondary" style="margin:8px 11px" onclick="inboxThreadExpand('${m.id}','${fid}')">📖 Volledig bericht openen</button>
+        <div style="padding:0 11px 10px;font-size:12.5px;color:var(--text-dim,#666)">${ibEsc(m.bodyPreview||'')}</div>
+        <div id="${fid}"></div></div>
+    </div>`;
+  }).join('');
+  rb.innerHTML=head+`<div style="padding:10px 0">${blocks}</div>`;
+}
+// Lazy-load de volledige HTML-body van één bericht binnen de gesprekweergave.
+async function inboxThreadExpand(id,slot){
+  const host=document.getElementById(slot);if(!host)return;
+  if(host.dataset.loaded){host.innerHTML='';host.dataset.loaded='';return;}
+  host.innerHTML='<div style="padding:0 11px 8px;font-size:12px;color:#999">laden…</div>';
+  try{
+    const m=await ibFetch(`/messages/${id}?$select=id,body,bodyPreview`);
+    const isHtml=m.body&&m.body.contentType&&/html/i.test(m.body.contentType);
+    const content=(m.body&&m.body.content)||m.bodyPreview||'';
+    const frame=document.createElement('iframe');
+    frame.setAttribute('sandbox','');frame.setAttribute('referrerpolicy','no-referrer');
+    host.innerHTML='';host.appendChild(frame);
+    frame.srcdoc=isHtml?content:`<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:13px;padding:10px">${ibEsc(content)}</pre>`;
+    host.dataset.loaded='1';
+  }catch(e){host.innerHTML=`<div style="padding:0 11px 8px;font-size:12px;color:#c0392b">openen mislukt: ${ibEsc(e.message)}</div>`;}
+}
+
 async function inboxOpenMail(id){
   const rb=document.getElementById('inbox-readbody');
   rb.classList.add('inbox-empty');rb.textContent='laden…';
   try{
     const m=await ibFetch(`/messages/${id}?$select=id,subject,from,toRecipients,receivedDateTime,body,bodyPreview,hasAttachments,webLink,internetMessageId`);
-    _inbox.cur=m;
+    _inbox.cur=m;_inbox.curThread=null;
     inboxRenderMsgListActief();
     let att=[];
     if(m.hasAttachments){try{const a=await ibFetch(`/messages/${id}/attachments?$select=id,name,size,contentType`);att=(a&&a.value)||[];}catch(e){}}
@@ -8159,10 +8290,8 @@ function inboxRefreshKoppelKnop(){
   if(w&&_inbox.cur){w.innerHTML=inboxKoppelKnopHtml(_inbox.cur);}
   else{const b=document.getElementById('inbox-koppelknop');if(b&&_inbox.cur)b.outerHTML=inboxKoppelKnopHtml(_inbox.cur);}
   // Lijst-rij(en) opnieuw tekenen zodat de 🔗-chip + tint meteen kloppen.
-  const cont=document.getElementById('inbox-messages');
-  if(cont&&Array.isArray(_inbox.msgs)&&_inbox.msgs.length){
-    cont.innerHTML=_inbox.msgs.map(inboxMsgRow).join('');
-  }
+  // Via het centrale render-pad zodat ook de gespreksmodus correct blijft.
+  if(Array.isArray(_inbox.msgs)&&_inbox.msgs.length){ inboxRenderList(); }
 }
 
 // Ontkoppelen of wijzigen — altijd eerst waarschuwen.
@@ -9010,7 +9139,7 @@ function agPlanDrop(evt,datum){
 // ═══════════════════════════════════════════════════════════════════════════
 const TAB_HELP={
   dashboard:{naam:'Dashboard',uitleg:'Het overzicht: omzet dit jaar, openstaande debiteuren en crediteuren en netto resultaat — live uit Moneybird. Daaronder de ouderdom van openstaande posten, de top-leveranciers qua uitgaven en de "nog te doen"-lijst. Alles is klikbaar waar een cijfer dieper gaat.'},
-  inbox:{naam:'Inbox',uitleg:'De smart-inbox van info@. Mails lezen, aan een project of klant koppelen, factuur-bijlagen direct laten analyseren (✨) en per mail met Larry chatten. Verplaatsingen die je hier doet leren het sorteersysteem bij.'},
+  inbox:{naam:'Inbox',uitleg:'De smart-inbox van info@. Mappenboom, zoeken over de hele postbus en — met de schakelaar "💬 Gesprekken" — mailwisselingen gebundeld als één thread (zoals Outlook). Mails lezen, aan een project of klant koppelen, factuur-bijlagen direct laten analyseren (✨) en per mail met Larry chatten. Verplaatsingen die je hier doet leren het sorteersysteem bij.'},
   projecten:{naam:'Projecten',uitleg:'Alle lopende projecten met hun projectcode (KLANT-LOCATIE-PRODUCT). Via "+ Nieuw project" opent de projectaanmaker: die stelt de code voor en maakt de SharePoint-mappenstructuur aan. De code is de sleutel die overal terugkomt: stickers, uren, mail, Moneybird.'},
   agenda:{naam:'Agenda',uitleg:'De gezamenlijke agenda: week-rooster, lijstweergave én planning-view (📋). In de planning-view maak je planblokken per persoon/project aan, zie je verlof en vrije dagen en vergelijk je plan vs geklokt. Capaciteitsbalk toont direct of iemand overboekt is.'},
   admin:{naam:'Admin',uitleg:'Beheerpaneel voor admins (Bart en Mathijs). Bevat: 📒 Logboek (alle wijzigingen), ⚙️ Team & lock (werkuren, uren-lock-drempel), 🏖 Verlof & saldo (jaarbudgetten, boeken, saldo-check), 📅 Vrije dagen (verplicht/optioneel) en 🔔 Notificaties (push naar mobiele app). Alle acties worden geauditeerd.'},
