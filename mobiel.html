@@ -1828,6 +1828,18 @@ async function loadAgendaWeek(week) {
 /* =====================================================================
    ECHTE PROJECTEN LADEN (Track v9 + Toggl 2.0)
    ===================================================================== */
+// Trekt de projectcode uit een Toggl-projectnaam, tolerant voor BEIDE conventies:
+//  • app-stijl  "naam [KOBALT-5013-KEUKEN]"  → bracket-suffix
+//  • cockpit-stijl "KOBALT-5013-KEUKEN"       → kale code (hele naam is een geldige code,
+//    Barts 15-6-besluit). Zo herkent de app ook in de cockpit aangemaakte projecten i.p.v.
+//    ze als los 'TG-<id>' te tonen. Geeft UPPERCASE code terug, of '' als er niets in zit.
+function codeUitTogglNaam(name){
+  const s=String(name||'').trim();
+  const m=s.match(/\[([A-Z0-9\-]+)\]$/);
+  if(m) return m[1].toUpperCase();
+  if(/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(s.toUpperCase())) return s.toUpperCase();
+  return '';
+}
 async function loadRealProjects() {
   try {
     // Volledige workspace-lijst via de admin-route (privé-projecten waar je
@@ -1848,7 +1860,7 @@ async function loadRealProjects() {
     REAL_PROJECTS = list.map(p => ({
       id: 'tg-' + p.id,
       togglProjectId: p.id,
-      code: p.name.match(/\[([A-Z0-9\-]+)\]$/)?.[1] || ('TG-' + p.id),
+      code: codeUitTogglNaam(p.name) || ('TG-' + p.id),
       name: p.name.replace(/\s*\[[A-Z0-9\-]+\]$/, ''),
       addr: '–',
       status: 'in-uitvoering',

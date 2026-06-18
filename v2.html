@@ -2051,7 +2051,10 @@ function getToeslag(naam){
 }
 function isLakMateriaal(naam){const l=(naam||'').toLowerCase();return l.includes('lak')||l.includes('gelakt')||l.includes('spuit')||l.includes('fineer');}
 function isVoorraadLeverancier(naam){const l=naam.toLowerCase();return VOORRAAD_LEVERANCIERS.some(v=>l.includes(v));}
-function slaProjectenOp(){localStorage.setItem('mt_projecten',JSON.stringify(PROJECT_CODES));}
+// Persisteert ALLEEN de cockpit-eigen projecten. Read-only meegelezen app-projecten
+// (bron:'app', uit mt_user_projects.json) worden NOOIT teruggeschreven — de app blijft
+// de enige schrijver van die records (ROUTES.md). Zo lekt de cockpit-write niet in de app.
+function slaProjectenOp(){localStorage.setItem('mt_projecten',JSON.stringify(PROJECT_CODES.filter(p=>p&&p.bron!=='app')));}
 function fmt(n){return`€ ${n.toFixed(2).replace('.',',')}`;}
 function fmtDatum(d){return d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'—';}
 
@@ -3293,12 +3296,31 @@ async function tgArchiveProject(id){
   }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
 }
 
+// Trekt de projectcode uit een Toggl-projectnaam, tolerant voor BEIDE conventies:
+//  • app-stijl  "naam [KOBALT-5013-KEUKEN]"  → bracket-suffix (dezelfde regex als de app, mobiel.html)
+//  • cockpit-stijl "KOBALT-5013-KEUKEN"       → kale code (hele naam is een geldige code)
+// Geeft de code in UPPERCASE terug, of '' als er geen code in zit. Puur lezen, geen mutatie.
+function codeUitTogglNaam(name){
+  const s=String(name||'').trim();
+  const m=s.match(/\[([A-Z0-9\-]+)\]$/);
+  if(m) return m[1].toUpperCase();
+  // Geen brackets → is de hele naam zelf een kale projectcode (hoofdletters/cijfers/streepjes)?
+  if(/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(s.toUpperCase())) return s.toUpperCase();
+  return '';
+}
 // ── M&T-verweving: koppel een Toggl-project aan een M&T-projectcode ──
-// Match-volgorde: 1) opgeslagen tg_project_id, 2) Toggl-naam === code, 3) naam-match.
+// Match-volgorde: 1) opgeslagen tg_project_id, 2) code uit Toggl-naam (kale code óf [CODE]),
+// 3) naam-match. De code-uit-naam-tak herkent zowel cockpit- (kale code) als app-projecten
+// ("naam [CODE]") zonder iets te hernoemen — puur tolerant lezen.
 function _mtProjVoorToggl(p){
   if(!p||typeof PROJECT_CODES==='undefined') return null;
   const byId=PROJECT_CODES.find(x=>x.tg_project_id&&String(x.tg_project_id)===String(p.id));
   if(byId) return byId;
+  const code=codeUitTogglNaam(p.name);
+  if(code){
+    const byCode=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===code);
+    if(byCode) return byCode;
+  }
   const nm=(p.name||'').trim().toUpperCase();
   return PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===nm)
        ||PROJECT_CODES.find(x=>(x.naam||'').trim().toUpperCase()===nm)||null;
@@ -7631,6 +7653,32 @@ window.initStorage = async function() {
   try {
     PROJECT_CODES = JSON.parse(localStorage.getItem('mt_projecten') || '[]');
     leveranciers  = JSON.parse(localStorage.getItem('mt_leveranciers') || '[]');
+    // App-projecten (in het veld aangemaakt) READ-ONLY meelezen. De app is en blijft de
+    // schrijver van mt_user_projects.json (ROUTES.md) — wij voegen hier alleen records toe
+    // die de cockpit nog niet kent (dedup op code), zonder ooit terug te schrijven.
+    // Zo verschijnen veld-projecten in de cockpit-Projecten-tab + Uren-koppeling.
+    try {
+      const userProj = await _SP.read('mt_user_projects.json');
+      if (Array.isArray(userProj) && userProj.length) {
+        const bekend = new Set(PROJECT_CODES.map(p => (p.code||'').toUpperCase()));
+        let toegevoegd = 0;
+        userProj.forEach(u => {
+          const code = (u && u.code || '').toUpperCase();
+          if (!code || bekend.has(code)) return;   // leeg of al bekend → niet aanraken
+          bekend.add(code);
+          PROJECT_CODES.push({
+            code: u.code,
+            naam: u.naam || u.code,
+            klant: u.klantcode || '',
+            tg_project_id: u.togglProjectId || null,
+            bron: 'app',                            // herkomst-vlag (cockpit schrijft dit niet terug)
+            created: (u.ts ? String(u.ts).slice(0,10) : '')
+          });
+          toegevoegd++;
+        });
+        if (toegevoegd) console.log('app-projecten (mt_user_projects.json) read-only gemerged:', toegevoegd);
+      }
+    } catch(e) { console.warn('mt_user_projects.json read-only merge faalde:', e); }
     if (typeof renderProjectLijst === 'function') renderProjectLijst();
     if (typeof renderVoorraadActief === 'function') renderVoorraadActief();
     if (typeof renderBestellijst === 'function') renderBestellijst();
