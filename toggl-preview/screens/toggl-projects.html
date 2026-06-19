@@ -1,0 +1,316 @@
+<!-- @dsCard group="Uren (Toggl)" name="Projects (lijst + M&T-detail)" subtitle="2.0-shell · projectlijst Client/Billable/Rate/Dates/Time-status/Fixed fee/Variance · Group by als vast element · rechter paneel = projectdetail met M&T-uitbreidingen (KLANT-LOC-PROD · Moneybird · gekoppelde mails · nacalculatie)" viewport="1560x900" -->
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M&T Uren — Projects</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     M&T Uren — Projects. Getrouwe Toggl-2.0-projectlijst (kolommen
+     Project · Client · Billable · Rate · Dates · Time status[balk] ·
+     Fixed fee · Variance) met Group-by als vast element. Rechts geen
+     Toggl-"Unplanned" maar het projectdetail met onze M&T-uitbreidingen
+     (KLANT-LOC-PROD-code, Moneybird-contact, gekoppelde mails,
+     nacalculatie, "→ Volledig project"). Shell identiek aan toggl-shell.
+     ───────────────────────────────────────────────────────────── */
+  :root{
+    --accent:#2A4A38; --accent-dark:#1E3829; --accent-soft:#E6EFE9;
+    --ink:#172521; --ink-dim:#5A6862; --ink-faint:#8B9893;
+    --line:#E3E9E7; --line-soft:#EDF1F0;
+    --bg:#F4F7F6; --surface:#ffffff; --hover:#EDF1F0; --sel:#E6EFE9;
+    --mt-green:#2A4A38; --mt-green-soft:rgba(42,74,56,.08);
+    --mt-gold:#B8962E; --mt-gold-soft:#FBF5E0; --mt-gold-text:#7A6010;
+    --tg-pink:#E1338C; --tg-pink-dark:#C2287A; --tg-run:#E94F4F;
+    --pos:#3E8E5A; --neg:#D6492F;
+    --radius:6px;
+    font-family:'Segoe UI','Segoe UI Web (West European)',-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-size:14px}
+  .app{display:flex;height:100vh;min-height:760px}
+
+  /* ── Far-left 2.0-icoonrail ───────────────────────────────── */
+  .rail{width:54px;flex:none;background:var(--accent-dark);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:6px}
+  .rail .mark{width:34px;height:34px;border-radius:9px;background:var(--tg-pink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;letter-spacing:-.5px;box-shadow:0 2px 6px rgba(225,51,140,.4);margin-bottom:6px}
+  .rail .ri{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.62);cursor:pointer}
+  .rail .ri:hover{background:rgba(255,255,255,.10);color:#fff}
+  .rail .ri.on{background:rgba(255,255,255,.16);color:#fff}
+  .rail .ri svg{width:20px;height:20px}
+  .rail .sp{flex:1}
+
+  /* ── Sidebar ──────────────────────────────────────────────── */
+  .side{width:208px;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;flex:none}
+  .ws{margin:12px 12px 6px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:600}
+  .ws:hover{background:var(--hover)}
+  .ws .wsdot{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#2e7d32,#B8962E);flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:800}
+  .ws .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ws svg{width:14px;height:14px;color:var(--ink-faint)}
+  .nav{flex:1;overflow:auto;padding:4px 8px}
+  .nav-grp{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.10em;color:var(--ink-faint);padding:12px 10px 4px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius);font-size:13.5px;font-weight:500;color:var(--ink-dim);cursor:pointer;margin:1px 0;border-left:3px solid transparent}
+  .nav-item:hover{background:var(--hover);color:var(--ink)}
+  .nav-item.actief{background:var(--accent-soft);color:var(--accent);font-weight:600;border-left-color:var(--mt-gold)}
+  .nav-item svg{width:18px;height:18px;flex:none}
+  .nav-item .mtbadge{margin-left:auto}
+  .mtbadge{font-size:9px;font-weight:700;color:var(--mt-gold-text);background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.35);border-radius:4px;padding:1px 5px;letter-spacing:.02em}
+  .nav-feedback{margin:6px 10px 4px;font-size:12px;color:var(--ink-faint);display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0}
+  .nav-feedback:hover{color:var(--ink-dim)}
+  .nav-feedback svg{width:15px;height:15px}
+  .side-foot{border-top:1px solid var(--line);padding:10px 12px;display:flex;align-items:center;gap:9px}
+  .side-foot .av{width:30px;height:30px;border-radius:50%;background:var(--mt-green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none}
+  .side-foot .who{font-size:12.5px;line-height:1.25}
+  .side-foot .who b{font-weight:600}
+  .side-foot .who small{color:var(--ink-faint)}
+
+  /* ── Main ─────────────────────────────────────────────────── */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+  .topbar{background:var(--surface);border-bottom:1px solid var(--line);padding:13px 22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .ttl{font-size:17px;font-weight:700;margin-right:6px}
+  .fchip{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;border:1px solid var(--line);border-radius:var(--radius);font-size:12.5px;color:var(--ink-dim);background:#fff;cursor:pointer}
+  .fchip:hover{background:var(--hover)}
+  .fchip b{color:var(--ink);font-weight:600}
+  .fchip svg{width:12px;height:12px;color:var(--ink-faint)}
+  .fchip.grp{color:var(--accent);border-color:var(--accent-soft);background:var(--accent-soft);font-weight:600}
+  .fchip.grp b{color:var(--accent)}
+  .fchip.saved{color:var(--mt-gold-text);border-color:rgba(184,150,46,.4);background:var(--mt-gold-soft)}
+  .sp{flex:1}
+  .addbtn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:var(--radius);border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+  .addbtn svg{width:14px;height:14px}
+
+  /* ── Projectlijst (tabel) ─────────────────────────────────── */
+  .listwrap{flex:1;overflow:auto;padding:14px 22px 22px}
+  table.pl{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .pl thead th{text-align:left;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);padding:11px 12px;border-bottom:1px solid var(--line);background:#FAFBFB;white-space:nowrap}
+  .pl thead th.r{text-align:right}
+  .pl tbody td{padding:12px 12px;border-bottom:1px solid var(--line-soft);font-size:13px;vertical-align:middle}
+  .pl tbody tr:last-child td{border-bottom:none}
+  .pl tbody tr{cursor:pointer}
+  .pl tbody tr:hover{background:var(--hover)}
+  .pl tbody tr.sel{background:var(--accent-soft)}
+  .grp-row td{background:#F2F5F4;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);padding:7px 12px}
+  .pname{display:flex;align-items:center;gap:9px;font-weight:600;color:var(--ink)}
+  .pdot{width:10px;height:10px;border-radius:50%;flex:none}
+  .pcode{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:10px;color:var(--mt-gold-text);background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.3);border-radius:4px;padding:1px 5px;margin-top:3px;display:inline-block}
+  .pcell .sub{display:block}
+  .bill{display:inline-flex;align-items:center;justify-content:center;width:24px;height:18px;border-radius:4px;font-size:11px;font-weight:800}
+  .bill.on{background:var(--accent-soft);color:var(--accent)}
+  .bill.off{background:var(--line-soft);color:var(--ink-faint)}
+  .num{font-variant-numeric:tabular-nums;color:var(--ink-dim)}
+  .num.r{text-align:right}
+  .tstat{min-width:140px}
+  .tbar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-bottom:4px}
+  .tbar i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+  .tbar i.over{background:var(--neg)}
+  .tlbl{font-size:11px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+  .var{font-weight:700;font-variant-numeric:tabular-nums;font-size:12.5px}
+  .var.pos{color:var(--pos)}
+  .var.neg{color:var(--neg)}
+  .fee{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+
+  /* ── Rechter projectdetail-paneel (M&T) ───────────────────── */
+  .rpanel{width:320px;flex:none;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:auto}
+  .pd-head{padding:16px 16px 12px;border-bottom:1px solid var(--line)}
+  .pd-top{display:flex;align-items:center;gap:9px}
+  .pd-top .pdot{width:13px;height:13px}
+  .pd-name{font-size:15px;font-weight:700;color:var(--ink);line-height:1.25}
+  .pd-client{font-size:12px;color:var(--ink-dim);margin-top:2px}
+  .pd-subtabs{display:flex;gap:2px;margin-top:12px;flex-wrap:wrap}
+  .pd-subtabs span{font-size:11.5px;color:var(--ink-dim);padding:5px 8px;border-radius:5px;cursor:pointer}
+  .pd-subtabs span.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .pd-sec{padding:13px 16px;border-bottom:1px solid var(--line-soft)}
+  .pd-sec .h{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);margin-bottom:9px;display:flex;align-items:center;gap:6px}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0}
+  .kv .k{color:var(--ink-dim)}
+  .kv .v{color:var(--ink);font-weight:600;text-align:right}
+  .codebig{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:12px;color:var(--mt-gold-text);background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.35);border-radius:6px;padding:6px 9px;display:flex;align-items:center;justify-content:space-between;font-weight:700}
+  .mtsec .h{color:var(--mt-gold-text)}
+  .lnk{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:12.5px;color:var(--ink);cursor:pointer;border-top:1px solid var(--line-soft)}
+  .lnk:first-of-type{border-top:none}
+  .lnk:hover{color:var(--accent)}
+  .lnk svg{width:15px;height:15px;color:var(--ink-faint);flex:none}
+  .lnk .meta{margin-left:auto;font-size:11px;color:var(--ink-faint)}
+  .mailrow{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid var(--line-soft);font-size:12px}
+  .mailrow:first-of-type{border-top:none}
+  .mailrow .mi{width:14px;height:14px;color:var(--ink-faint);margin-top:2px;flex:none}
+  .mailrow .mt{color:var(--ink);line-height:1.3}
+  .mailrow .md{font-size:10.5px;color:var(--ink-faint);margin-top:1px}
+  /* nacalculatie mini-tabel */
+  .nac{font-size:12px}
+  .nac .row{display:flex;justify-content:space-between;padding:4px 0}
+  .nac .row.tot{border-top:1px solid var(--line);margin-top:3px;padding-top:7px;font-weight:700}
+  .nac .pos{color:var(--pos);font-weight:700}
+  .pd-cta{margin:14px 16px;display:flex;align-items:center;justify-content:center;gap:8px;height:38px;border-radius:var(--radius);background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+  .pd-cta svg{width:15px;height:15px}
+  .pd-cta.gold{background:#fff;color:var(--mt-gold-text);border:1px solid rgba(184,150,46,.5)}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <nav class="rail">
+    <div class="mark" title="Toggl 2.0">2.0</div>
+    <div class="ri" title="Tijd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></div>
+    <div class="ri" title="Rapporten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+    <div class="ri on" title="Planning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
+    <div class="sp"></div>
+    <div class="ri" title="Help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01"/></svg></div>
+  </nav>
+
+  <aside class="side">
+    <div class="ws"><span class="wsdot">M</span><span class="nm">Mortise &amp; Tenon</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+    <nav class="nav">
+      <div class="nav-grp">Track</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg> Timer</div>
+      <div class="nav-grp">Analyze</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Reports</div>
+      <div class="nav-grp">Plan</div>
+      <div class="nav-item actief"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7h6l2 2h10v10H3z"/></svg> Projects</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg> Tasks</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Timeline</div>
+      <div class="nav-grp">Manage</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5.5a3 3 0 0 1 0 5.5M21 20c0-2.4-1.3-4-3.5-4.6"/></svg> Members</div>
+      <div class="nav-grp">M&amp;T koppelingen</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h16v5H4zM4 13h10v7H4zM18 13h2v7h-2z"/></svg> Capaciteit <span class="mtbadge">M&amp;T</span></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Larry-assist <span class="mtbadge">M&amp;T</span></div>
+      <div class="nav-grp">Admin</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.5H9.7l-.3 2.5a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.5h4.6l.3-2.5a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z"/></svg> Settings</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg> Import data</div>
+    </nav>
+    <div class="nav-feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Share feedback</div>
+    <div class="side-foot"><div class="av">AR</div><div class="who"><b>Arjan de Vries</b><br><small>Freelancer</small></div></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="ttl">Projects</span>
+      <div class="fchip grp">Group by <b>Client</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="fchip saved">Weergave <b>· Actief</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="fchip">Facturabel <b>· alle</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="fchip">Sorteer <b>· naam</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      <span class="sp"></span>
+      <button class="addbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg> Project</button>
+    </div>
+
+    <div class="listwrap">
+      <table class="pl">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>Client</th>
+            <th>Bill.</th>
+            <th class="r">Tarief</th>
+            <th>Datums</th>
+            <th class="tstat">Time status</th>
+            <th class="r">Vaste prijs</th>
+            <th class="r">Variance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="grp-row"><td colspan="8">CompaNanny &nbsp;·&nbsp; 2 projecten</td></tr>
+          <tr class="sel">
+            <td class="pcell"><span class="pname"><span class="pdot" style="background:#038387"></span>Balie Amstelveen</span><span class="pcode">CN-AMSTELVEEN-BALIE</span></td>
+            <td class="num">CompaNanny Amstelveen</td>
+            <td><span class="bill on">$</span></td>
+            <td class="num r">€ 67,50</td>
+            <td class="num">2–24 jun</td>
+            <td class="tstat"><div class="tbar"><i style="width:48%"></i></div><div class="tlbl">19,3 van 40 u · 48%</div></td>
+            <td class="fee num r">€ 4.250</td>
+            <td class="num r"><span class="var pos">−5,2 u</span></td>
+          </tr>
+          <tr>
+            <td class="pcell"><span class="pname"><span class="pdot" style="background:#7719aa"></span>Keuken Zuidas</span><span class="pcode">CN-ZUIDAS-KEUKEN</span></td>
+            <td class="num">CompaNanny Zuidas</td>
+            <td><span class="bill on">$</span></td>
+            <td class="num r">€ 67,50</td>
+            <td class="num">9–30 jun</td>
+            <td class="tstat"><div class="tbar"><i style="width:82%"></i></div><div class="tlbl">26,1 van 32 u · 82%</div></td>
+            <td class="fee num r">€ 3.600</td>
+            <td class="num r"><span class="var pos">−1,4 u</span></td>
+          </tr>
+
+          <tr class="grp-row"><td colspan="8">Kobalt &nbsp;·&nbsp; 1 project</td></tr>
+          <tr>
+            <td class="pcell"><span class="pname"><span class="pdot" style="background:#B8962E"></span>Tribune zijpanelen</span><span class="pcode">KB2-FREESBESTANDEN-TRIBUNE-ZIJP</span></td>
+            <td class="num">Kobalt 5013</td>
+            <td><span class="bill on">$</span></td>
+            <td class="num r">€ 72,00</td>
+            <td class="num">11–27 jun</td>
+            <td class="tstat"><div class="tbar"><i class="over" style="width:100%"></i></div><div class="tlbl">22,4 van 18 u · 124%</div></td>
+            <td class="fee num r">€ 2.150</td>
+            <td class="num r"><span class="var neg">+4,4 u</span></td>
+          </tr>
+
+          <tr class="grp-row"><td colspan="8">LGM Projecten &nbsp;·&nbsp; 1 project</td></tr>
+          <tr>
+            <td class="pcell"><span class="pname"><span class="pdot" style="background:#2A4A38"></span>Keuken 2e Oosterparkstraat</span><span class="pcode">LGM-2EOOSTERPARK-KEUKEN</span></td>
+            <td class="num">LGM Projecten B.V.</td>
+            <td><span class="bill on">$</span></td>
+            <td class="num r">€ 67,50</td>
+            <td class="num">5–23 jun</td>
+            <td class="tstat"><div class="tbar"><i style="width:71%"></i></div><div class="tlbl">28,6 van 40 u · 71%</div></td>
+            <td class="fee num r">€ 5.100</td>
+            <td class="num r"><span class="var pos">−11,4 u</span></td>
+          </tr>
+
+          <tr class="grp-row"><td colspan="8">Styling &nbsp;·&nbsp; 1 project</td></tr>
+          <tr>
+            <td class="pcell"><span class="pname"><span class="pdot" style="background:#c43e1c"></span>Balie HQ</span><span class="pcode">STY-HQ-BALIE</span></td>
+            <td class="num">Styling HQ</td>
+            <td><span class="bill off">—</span></td>
+            <td class="num r">—</td>
+            <td class="num">3–20 jun</td>
+            <td class="tstat"><div class="tbar"><i style="width:93%"></i></div><div class="tlbl">14,9 van 16 u · 93%</div></td>
+            <td class="fee num r">€ 1.480</td>
+            <td class="num r"><span class="var pos">−1,1 u</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Rechter functiepaneel = projectdetail met M&T-uitbreidingen -->
+  <aside class="rpanel">
+    <div class="pd-head">
+      <div class="pd-top"><span class="pdot" style="background:#038387"></span><div><div class="pd-name">Balie Amstelveen</div><div class="pd-client">CompaNanny Amstelveen</div></div></div>
+      <div class="pd-subtabs"><span class="on">Overview</span><span>Tasks</span><span>Board</span><span>Timeline</span><span>Members</span></div>
+    </div>
+
+    <div class="pd-sec">
+      <div class="h">Voortgang &amp; facturatie</div>
+      <div class="kv"><span class="k">Besteed / begroot</span><span class="v">19,3 / 40 u</span></div>
+      <div class="kv"><span class="k">Tarief</span><span class="v">€ 67,50 / u</span></div>
+      <div class="kv"><span class="k">Vaste prijs</span><span class="v">€ 4.250</span></div>
+      <div class="kv"><span class="k">Facturabel tot nu</span><span class="v">€ 1.302,75</span></div>
+    </div>
+
+    <div class="pd-sec mtsec">
+      <div class="h"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> M&amp;T-koppeling <span class="mtbadge" style="margin-left:auto">M&amp;T</span></div>
+      <div class="codebig">CN-AMSTELVEEN-BALIE <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></div>
+      <div style="height:6px"></div>
+      <div class="lnk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/></svg> CompaNanny Amstelveen <span class="meta">Moneybird ↗</span></div>
+      <div class="lnk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7h6l2 2h10v10H3z"/></svg> Projectmap SharePoint <span class="meta">↗</span></div>
+      <div class="lnk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7l8 6 8-6M4 7v10h16V7M4 7l8-4 8 4"/></svg> 3 offertes / facturen <span class="meta">€ 4.250</span></div>
+    </div>
+
+    <div class="pd-sec mtsec">
+      <div class="h">Gekoppelde mails <span class="mtbadge" style="margin-left:auto">M&amp;T</span></div>
+      <div class="mailrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16v12H4zM4 7l8 6 8-6"/></svg><div><div class="mt">Akkoord op revisie balie-tekening</div><div class="md">m.bos@compananny.nl · 16 jun</div></div></div>
+      <div class="mailrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16v12H4zM4 7l8 6 8-6M16 3l5 3-5 3" /></svg><div><div class="mt">Orderbevestiging kantenband — Ostermann</div><div class="md">via facturen@ → Moneybird · 12 jun</div></div></div>
+    </div>
+
+    <div class="pd-sec mtsec">
+      <div class="h">Nacalculatie <span class="mtbadge" style="margin-left:auto">M&amp;T</span></div>
+      <div class="nac">
+        <div class="row"><span>Materiaal (Holzher + Ostermann)</span><span class="num">€ 812</span></div>
+        <div class="row"><span>Uren 19,3 × € 67,50</span><span class="num">€ 1.303</span></div>
+        <div class="row tot"><span>Marge t.o.v. vaste prijs</span><span class="pos">+ € 2.135</span></div>
+      </div>
+    </div>
+
+    <div class="pd-cta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Volledig project openen</div>
+    <div class="pd-cta gold" style="margin-top:-6px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Taak toevoegen aan dit project</div>
+  </aside>
+</div>
+</body>
+</html>

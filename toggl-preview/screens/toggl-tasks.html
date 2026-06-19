@@ -1,0 +1,320 @@
+<!-- @dsCard group="Uren (Toggl)" name="Tasks (Board · buckets)" subtitle="2.0-shell · List/Board-toggle · Group by Status=buckets · subtaak-tellers · parent↗-kaart · prioriteit/estimate/projectcode · rechter ongeplande-taken-paneel" viewport="1560x900" -->
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M&T Uren — Tasks</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     M&T Uren — Tasks. Getrouwe Toggl-2.0-Tasks: List/Board-toggle,
+     Group by Status = onze eigen stuurbare buckets (Todo · In progress ·
+     Blocked · Klaar voor levering[M&T] · Backlog), kaarten met status/
+     prioriteit/datum/estimate/projectcode/klant/assignee/tag/subtaak-
+     teller, en een gepromoveerde subtask als losse kaart met "Parent↗"-
+     verwijzing (precies Barts wens). Group-by-chip vast element. Shell
+     identiek aan toggl-shell. ───────────────────────────────────── */
+  :root{
+    --accent:#2A4A38; --accent-dark:#1E3829; --accent-soft:#E6EFE9;
+    --ink:#172521; --ink-dim:#5A6862; --ink-faint:#8B9893;
+    --line:#E3E9E7; --line-soft:#EDF1F0;
+    --bg:#F4F7F6; --surface:#ffffff; --hover:#EDF1F0; --sel:#E6EFE9;
+    --mt-green:#2A4A38; --mt-green-soft:rgba(42,74,56,.08);
+    --mt-gold:#B8962E; --mt-gold-soft:#FBF5E0; --mt-gold-text:#7A6010;
+    --tg-pink:#E1338C; --tg-pink-dark:#C2287A; --tg-run:#E94F4F;
+    --prio-high:#D6492F; --prio-med:#C2871A; --prio-low:#5A8A6A;
+    --radius:6px;
+    font-family:'Segoe UI','Segoe UI Web (West European)',-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-size:14px}
+  .app{display:flex;height:100vh;min-height:760px}
+
+  /* ── Far-left 2.0-icoonrail ───────────────────────────────── */
+  .rail{width:54px;flex:none;background:var(--accent-dark);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:6px}
+  .rail .mark{width:34px;height:34px;border-radius:9px;background:var(--tg-pink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;letter-spacing:-.5px;box-shadow:0 2px 6px rgba(225,51,140,.4);margin-bottom:6px}
+  .rail .ri{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.62);cursor:pointer}
+  .rail .ri:hover{background:rgba(255,255,255,.10);color:#fff}
+  .rail .ri.on{background:rgba(255,255,255,.16);color:#fff}
+  .rail .ri svg{width:20px;height:20px}
+  .rail .sp{flex:1}
+
+  /* ── Sidebar ──────────────────────────────────────────────── */
+  .side{width:208px;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;flex:none}
+  .ws{margin:12px 12px 6px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:600}
+  .ws:hover{background:var(--hover)}
+  .ws .wsdot{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#2e7d32,#B8962E);flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:800}
+  .ws .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ws svg{width:14px;height:14px;color:var(--ink-faint)}
+  .nav{flex:1;overflow:auto;padding:4px 8px}
+  .nav-grp{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.10em;color:var(--ink-faint);padding:12px 10px 4px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius);font-size:13.5px;font-weight:500;color:var(--ink-dim);cursor:pointer;margin:1px 0;border-left:3px solid transparent}
+  .nav-item:hover{background:var(--hover);color:var(--ink)}
+  .nav-item.actief{background:var(--accent-soft);color:var(--accent);font-weight:600;border-left-color:var(--mt-gold)}
+  .nav-item svg{width:18px;height:18px;flex:none}
+  .nav-item .mtbadge{margin-left:auto}
+  .mtbadge{font-size:9px;font-weight:700;color:var(--mt-gold-text);background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.35);border-radius:4px;padding:1px 5px;letter-spacing:.02em}
+  .nav-feedback{margin:6px 10px 4px;font-size:12px;color:var(--ink-faint);display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0}
+  .nav-feedback:hover{color:var(--ink-dim)}
+  .nav-feedback svg{width:15px;height:15px}
+  .side-foot{border-top:1px solid var(--line);padding:10px 12px;display:flex;align-items:center;gap:9px}
+  .side-foot .av{width:30px;height:30px;border-radius:50%;background:var(--mt-green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none}
+  .side-foot .who{font-size:12.5px;line-height:1.25}
+  .side-foot .who b{font-weight:600}
+  .side-foot .who small{color:var(--ink-faint)}
+
+  /* ── Main ─────────────────────────────────────────────────── */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+  .topbar{background:var(--surface);border-bottom:1px solid var(--line);padding:13px 22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .ttl{font-size:17px;font-weight:700;margin-right:6px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .seg span{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--ink-dim);cursor:pointer}
+  .seg span svg{width:14px;height:14px}
+  .seg span.on{background:var(--accent-soft);color:var(--accent)}
+  .fchip{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;border:1px solid var(--line);border-radius:var(--radius);font-size:12.5px;color:var(--ink-dim);background:#fff;cursor:pointer}
+  .fchip:hover{background:var(--hover)}
+  .fchip b{color:var(--ink);font-weight:600}
+  .fchip svg{width:12px;height:12px;color:var(--ink-faint)}
+  .fchip.grp{color:var(--accent);border-color:var(--accent-soft);background:var(--accent-soft);font-weight:600}
+  .fchip.grp b{color:var(--accent)}
+  .fchip.saved{color:var(--mt-gold-text);border-color:rgba(184,150,46,.4);background:var(--mt-gold-soft)}
+  .sp{flex:1}
+  .addbtn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:var(--radius);border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+  .addbtn svg{width:14px;height:14px}
+
+  /* ── Board ────────────────────────────────────────────────── */
+  .board{flex:1;display:flex;gap:14px;overflow-x:auto;padding:16px 22px 22px;align-items:flex-start}
+  .bucket{width:262px;flex:none;background:var(--bg);border:1px solid var(--line);border-radius:9px;display:flex;flex-direction:column;max-height:100%}
+  .bk-head{display:flex;align-items:center;gap:8px;padding:11px 12px 9px}
+  .bk-dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .bk-name{font-size:12.5px;font-weight:700;color:var(--ink)}
+  .bk-ct{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fff;border:1px solid var(--line);color:var(--ink-dim);font-size:10.5px;font-weight:700}
+  .bk-head .sp{flex:1}
+  .bk-head .ic{color:var(--ink-faint);cursor:pointer;display:flex}
+  .bk-head .ic svg{width:15px;height:15px}
+  .bk-body{padding:0 9px 9px;overflow:auto;display:flex;flex-direction:column;gap:9px}
+  .bk-add{margin:0 9px 10px;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-faint);cursor:pointer;padding:6px 4px;border-radius:var(--radius)}
+  .bk-add:hover{background:var(--hover);color:var(--ink-dim)}
+  .bk-add svg{width:13px;height:13px}
+
+  .tc{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 11px;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .tc:hover{border-color:var(--ink-faint);box-shadow:0 2px 6px rgba(0,0,0,.07)}
+  .tc .prio{height:3px;border-radius:2px;margin:-2px -2px 8px;width:38px}
+  .tc .tt{font-size:13px;font-weight:600;color:var(--ink);line-height:1.32}
+  .tc .meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px}
+  .pdot{width:8px;height:8px;border-radius:50%;flex:none}
+  .code{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:10px;color:var(--mt-gold-text);background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.3);border-radius:4px;padding:0 4px}
+  .tag{font-size:10.5px;color:var(--ink-dim);background:var(--line-soft);border-radius:9px;padding:1px 7px}
+  .est{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:10.5px;color:var(--ink-dim);display:inline-flex;align-items:center;gap:3px}
+  .est svg{width:11px;height:11px}
+  .tc .foot{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid var(--line-soft)}
+  .date{font-size:11px;color:var(--ink-faint);display:inline-flex;align-items:center;gap:4px}
+  .date svg{width:11px;height:11px}
+  .date.due{color:var(--tg-run);font-weight:600}
+  .subc{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--ink-dim);font-weight:600}
+  .subc svg{width:12px;height:12px}
+  .av{width:22px;height:22px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;flex:none}
+  .tc .foot .sp{flex:1}
+  /* parent-verwijzing op gepromoveerde subtask */
+  .parent{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--accent);background:var(--accent-soft);border-radius:5px;padding:2px 6px;font-weight:600;margin-bottom:7px}
+  .parent svg{width:11px;height:11px}
+  .tc.promoted{border-left:3px solid var(--accent)}
+  /* subtask progress mini */
+  .subbar{height:4px;border-radius:2px;background:var(--line);margin-top:9px;overflow:hidden}
+  .subbar i{display:block;height:100%;background:var(--accent);border-radius:2px}
+  .mtcard{border-color:rgba(184,150,46,.45);background:linear-gradient(#fff,#fffdf6)}
+
+  /* ── Rechter functie-paneel ───────────────────────────────── */
+  .rpanel{width:280px;flex:none;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .rp-head{display:flex;align-items:center;gap:8px;padding:14px 16px 8px}
+  .rp-head .t{font-size:13.5px;font-weight:700;color:var(--ink)}
+  .rp-head .ct{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:9px;background:var(--line-soft);color:var(--ink-dim);font-size:11px;font-weight:700}
+  .rp-head .sp{flex:1}
+  .rp-head .add{width:26px;height:26px;border-radius:var(--radius);border:1px solid var(--line);background:#fff;color:var(--ink-dim);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .rp-head .add svg{width:15px;height:15px}
+  .rp-hint{padding:0 16px 8px;font-size:11px;color:var(--ink-faint)}
+  .rp-list{flex:1;overflow:auto;padding:2px 12px 16px}
+  .ucard{display:flex;align-items:flex-start;gap:9px;padding:10px 11px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;margin-bottom:8px;cursor:grab}
+  .ucard:hover{border-color:var(--ink-faint);box-shadow:0 1px 4px rgba(0,0,0,.05)}
+  .ucard .grip{color:var(--ink-faint);font-size:13px;line-height:1.1;letter-spacing:-1px;margin-top:1px;flex:none}
+  .ucard .body{flex:1;min-width:0}
+  .ucard .ut{font-size:13px;color:var(--ink);font-weight:500;line-height:1.3}
+  .ucard .um{display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap}
+  .rp-sub{display:flex;align-items:center;gap:8px;padding:12px 16px 8px;border-top:1px solid var(--line-soft);margin-top:4px}
+  .rp-sub .t{font-size:12px;font-weight:700;color:var(--mt-gold-text)}
+  .larry-av{width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#2e7d32,#B8962E);flex:none}
+  .ucard.larry{border-color:rgba(184,150,46,.4);background:var(--mt-gold-soft)}
+  .ucard.larry .plan{margin-top:7px;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--mt-gold-text);background:#fff;border:1px solid rgba(184,150,46,.4);border-radius:5px;padding:3px 8px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <nav class="rail">
+    <div class="mark" title="Toggl 2.0">2.0</div>
+    <div class="ri" title="Tijd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></div>
+    <div class="ri" title="Rapporten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+    <div class="ri on" title="Planning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
+    <div class="sp"></div>
+    <div class="ri" title="Help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01"/></svg></div>
+  </nav>
+
+  <aside class="side">
+    <div class="ws"><span class="wsdot">M</span><span class="nm">Mortise &amp; Tenon</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+    <nav class="nav">
+      <div class="nav-grp">Track</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg> Timer</div>
+      <div class="nav-grp">Analyze</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Reports</div>
+      <div class="nav-grp">Plan</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7h6l2 2h10v10H3z"/></svg> Projects</div>
+      <div class="nav-item actief"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg> Tasks</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Timeline</div>
+      <div class="nav-grp">Manage</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5.5a3 3 0 0 1 0 5.5M21 20c0-2.4-1.3-4-3.5-4.6"/></svg> Members</div>
+      <div class="nav-grp">M&amp;T koppelingen</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h16v5H4zM4 13h10v7H4zM18 13h2v7h-2z"/></svg> Capaciteit <span class="mtbadge">M&amp;T</span></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Larry-assist <span class="mtbadge">M&amp;T</span></div>
+      <div class="nav-grp">Admin</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.5H9.7l-.3 2.5a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.5h4.6l.3-2.5a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z"/></svg> Settings</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg> Import data</div>
+    </nav>
+    <div class="nav-feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Share feedback</div>
+    <div class="side-foot"><div class="av">AR</div><div class="who"><b>Arjan de Vries</b><br><small>Freelancer</small></div></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="ttl">Tasks</span>
+      <div class="seg">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg> List</span>
+        <span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="5" height="16"/><rect x="10" y="4" width="5" height="11"/><rect x="17" y="4" width="4" height="14"/></svg> Board</span>
+      </div>
+      <div class="fchip grp">Group by <b>Status</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="fchip saved">Weergave <b>· Pipeline</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="fchip">Persoon <b>· alle</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="fchip">Sorteer <b>· prioriteit</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      <span class="sp"></span>
+      <button class="addbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg> Taak</button>
+    </div>
+
+    <div class="board">
+      <!-- Todo -->
+      <div class="bucket">
+        <div class="bk-head"><span class="bk-dot" style="background:#8B9893"></span><span class="bk-name">Todo</span><span class="bk-ct">3</span><span class="sp"></span><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span></div>
+        <div class="bk-body">
+          <div class="tc">
+            <div class="prio" style="background:var(--prio-high)"></div>
+            <div class="tt">Werkbladen opmeten balie</div>
+            <div class="meta"><span class="pdot" style="background:#7719aa"></span><span class="code">CN-ZUIDAS-KEUKEN</span><span class="est"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/></svg>2h</span></div>
+            <div class="foot"><span class="date due"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>vandaag</span><span class="subc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/></svg>0/2</span><span class="sp"></span><span class="av" style="background:#7719aa">BW</span></div>
+          </div>
+          <div class="tc">
+            <div class="prio" style="background:var(--prio-med)"></div>
+            <div class="tt">Kantenband bestellen Ostermann</div>
+            <div class="meta"><span class="pdot" style="background:#038387"></span><span class="code">CN-AMSTELVEEN-BALIE</span><span class="tag">inkoop</span></div>
+            <div class="foot"><span class="date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>vr 20 jun</span><span class="sp"></span><span class="av" style="background:#2e7d32">AR</span></div>
+          </div>
+          <div class="tc mtcard">
+            <div class="prio" style="background:var(--prio-low)"></div>
+            <div class="tt">Restmateriaal terugboeken naar voorraad <span class="mtbadge">M&amp;T</span></div>
+            <div class="meta"><span class="pdot" style="background:#B8962E"></span><span class="code">KB2-…-ZIJP</span><span class="est"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/></svg>15m</span></div>
+            <div class="foot"><span class="date">geen datum</span><span class="sp"></span><span class="larry-av" title="Larry stelde voor"></span></div>
+          </div>
+        </div>
+        <div class="bk-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Taak toevoegen</div>
+      </div>
+
+      <!-- In progress -->
+      <div class="bucket">
+        <div class="bk-head"><span class="bk-dot" style="background:#0f6cbd"></span><span class="bk-name">In progress</span><span class="bk-ct">2</span><span class="sp"></span><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span></div>
+        <div class="bk-body">
+          <div class="tc">
+            <div class="prio" style="background:var(--prio-high)"></div>
+            <div class="tt">Meubilair CompaNanny Amstelveen</div>
+            <div class="meta"><span class="pdot" style="background:#038387"></span><span class="code">CN-AMSTELVEEN-BALIE</span><span class="est"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/></svg>16h</span></div>
+            <div class="subbar"><i style="width:62%"></i></div>
+            <div class="foot"><span class="date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>16–24 jun</span><span class="subc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/></svg>8/9</span><span class="sp"></span><span class="av" style="background:#2e7d32">AR</span></div>
+          </div>
+          <div class="tc">
+            <div class="prio" style="background:var(--prio-med)"></div>
+            <div class="tt">CNC nesten tribune zijpanelen</div>
+            <div class="meta"><span class="pdot" style="background:#B8962E"></span><span class="code">KB2-FREESBESTANDEN-TRIBUNE-ZIJP</span></div>
+            <div class="subbar"><i style="width:40%"></i></div>
+            <div class="foot"><span class="date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>wo 18 jun</span><span class="subc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/></svg>2/5</span><span class="sp"></span><span class="av" style="background:#2e7d32">AR</span></div>
+          </div>
+        </div>
+        <div class="bk-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Taak toevoegen</div>
+      </div>
+
+      <!-- Blocked -->
+      <div class="bucket">
+        <div class="bk-head"><span class="bk-dot" style="background:#D6492F"></span><span class="bk-name">Blocked</span><span class="bk-ct">1</span><span class="sp"></span><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span></div>
+        <div class="bk-body">
+          <!-- gepromoveerde subtask met parent-verwijzing (Barts wens) -->
+          <div class="tc promoted">
+            <div class="parent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H9M17 7v8"/></svg> Meubilair ↗</div>
+            <div class="tt">Kapstokken — wacht op levering haken</div>
+            <div class="meta"><span class="pdot" style="background:#038387"></span><span class="code">CN-AMSTELVEEN-BALIE</span><span class="tag">levering</span></div>
+            <div class="foot"><span class="date due"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>te laat</span><span class="sp"></span><span class="av" style="background:#0f6cbd">MK</span></div>
+          </div>
+        </div>
+        <div class="bk-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Taak toevoegen</div>
+      </div>
+
+      <!-- Klaar voor levering (eigen M&T-bucket) -->
+      <div class="bucket">
+        <div class="bk-head"><span class="bk-dot" style="background:var(--mt-gold)"></span><span class="bk-name">Klaar voor levering</span><span class="bk-ct">2</span><span class="mtbadge">M&amp;T</span><span class="sp"></span><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span></div>
+        <div class="bk-body">
+          <div class="tc">
+            <div class="prio" style="background:var(--prio-med)"></div>
+            <div class="tt">Keukenblok Oosterpark — afmonteren</div>
+            <div class="meta"><span class="pdot" style="background:#2A4A38"></span><span class="code">LGM-2EOOSTERPARK-KEUKEN</span></div>
+            <div class="foot"><span class="date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>ma 23 jun</span><span class="subc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/></svg>4/4</span><span class="sp"></span><span class="av" style="background:#0f6cbd">MK</span></div>
+          </div>
+          <div class="tc">
+            <div class="prio" style="background:var(--prio-low)"></div>
+            <div class="tt">Balie Styling HQ — eindcontrole</div>
+            <div class="meta"><span class="pdot" style="background:#c43e1c"></span><span class="code">STY-HQ-BALIE</span></div>
+            <div class="foot"><span class="date">geen datum</span><span class="subc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/></svg>3/3</span><span class="sp"></span><span class="av" style="background:#7719aa">BW</span></div>
+          </div>
+        </div>
+        <div class="bk-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Taak toevoegen</div>
+      </div>
+
+      <!-- Backlog -->
+      <div class="bucket">
+        <div class="bk-head"><span class="bk-dot" style="background:#C9D2CE"></span><span class="bk-name">Backlog</span><span class="bk-ct">2</span><span class="sp"></span><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span></div>
+        <div class="bk-body">
+          <div class="tc">
+            <div class="prio" style="background:var(--prio-low)"></div>
+            <div class="tt">Offerte tribune fase 2 uitwerken</div>
+            <div class="meta"><span class="pdot" style="background:#B8962E"></span><span class="code">KB2-FREESBESTANDEN-TRIBUNE-ZIJP</span></div>
+            <div class="foot"><span class="date">geen datum</span><span class="sp"></span><span class="av" style="background:#7719aa">BW</span></div>
+          </div>
+          <div class="tc">
+            <div class="prio" style="background:var(--prio-low)"></div>
+            <div class="tt">Showroom-samples bijwerken</div>
+            <div class="meta"><span class="pdot" style="background:#5A6862"></span><span class="tag">intern</span></div>
+            <div class="foot"><span class="date">geen datum</span><span class="sp"></span><span class="av" style="background:#2e7d32">AR</span></div>
+          </div>
+        </div>
+        <div class="bk-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Taak toevoegen</div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="rpanel">
+    <div class="rp-head"><span class="t">Ongeplande taken</span><span class="ct">4</span><span class="sp"></span><button class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button></div>
+    <div class="rp-hint">Sleep op een bucket of de Timeline om in te plannen.</div>
+    <div class="rp-list">
+      <div class="ucard"><span class="grip">⋮⋮</span><div class="body"><div class="ut">Freesbestanden controleren vóór nesten</div><div class="um"><span class="pdot" style="background:#B8962E"></span><span class="code">KB2-…-ZIJP</span><span class="est">~1:00</span></div></div></div>
+      <div class="ucard"><span class="grip">⋮⋮</span><div class="body"><div class="ut">Montage inplannen met Mathijs</div><div class="um"><span class="pdot" style="background:#2A4A38"></span><span class="code">LGM-…-KEUKEN</span><span class="est">~0:30</span></div></div></div>
+      <div class="rp-sub"><span class="larry-av"></span><span class="t">Larry stelt voor</span><span class="mtbadge" style="margin-left:auto">M&amp;T</span></div>
+      <div class="ucard larry"><span class="grip">⋮⋮</span><div class="body"><div class="ut">Offerte balie opvolgen — 5 dagen open</div><div class="um"><span class="pdot" style="background:#c43e1c"></span><span class="code">STY-HQ-BALIE</span><span class="est">~0:20</span></div><span class="plan"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Inplannen</span></div></div>
+      <div class="ucard larry"><span class="grip">⋮⋮</span><div class="body"><div class="ut">Levering haken Kapstokken nabellen</div><div class="um"><span class="pdot" style="background:#038387"></span><span class="code">CN-AMSTELVEEN-BALIE</span><span class="est">~0:10</span></div><span class="plan"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Inplannen</span></div></div>
+    </div>
+  </aside>
+</div>
+</body>
+</html>

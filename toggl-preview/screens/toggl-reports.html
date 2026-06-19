@@ -1,0 +1,341 @@
+<!-- @dsCard group="Uren (Toggl)" name="Reports (best-of-both)" subtitle="2.0-shell · Summary/Time logs · hero billable-split · staaf per dag · Track-donut · 2.0 Project&task-breakdown · M&T weektotalen per projectcode" viewport="1440x900" -->
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M&T Uren — Reports</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     M&T Uren — Reports. Best-of-both: Toggl-2.0-Summary als basis
+     (hero + staaf per dag + Project&task-breakdown met Breakdown-by-
+     dropdowns), verrijkt met de waardevolle Track-Reports-elementen
+     (donut/verdeling per project, facturabel-splitsing). Onze eigen
+     toevoegingen (weektotalen per projectcode, nacalculatie) met
+     M&T-merkje. Shell = identiek aan toggl-shell (2.0-icoonrail +
+     gelabelde sidebar). ───────────────────────────────────────── */
+  :root{
+    --accent:#2A4A38; --accent-dark:#1E3829; --accent-soft:#E6EFE9;
+    --ink:#172521; --ink-dim:#5A6862; --ink-faint:#8B9893;
+    --line:#E3E9E7; --line-soft:#EDF1F0;
+    --bg:#F4F7F6; --surface:#ffffff; --hover:#EDF1F0; --sel:#E6EFE9;
+    --mt-green:#2A4A38; --mt-green-soft:rgba(42,74,56,.08);
+    --mt-gold:#B8962E; --mt-gold-soft:#FBF5E0; --mt-gold-text:#7A6010;
+    --tg-pink:#E1338C; --tg-pink-dark:#C2287A; --tg-run:#E94F4F;
+    --radius:6px;
+    font-family:'Segoe UI','Segoe UI Web (West European)',-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-size:14px}
+  .app{display:flex;height:100vh;min-height:760px}
+  .mono{font-family:ui-monospace,'Cascadia Code',Consolas,monospace}
+
+  /* ── Far-left 2.0-icoonrail ───────────────────────────────── */
+  .rail{width:54px;flex:none;background:var(--accent-dark);display:flex;flex-direction:column;
+    align-items:center;padding:10px 0;gap:6px}
+  .rail .mark{width:34px;height:34px;border-radius:9px;background:var(--tg-pink);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;letter-spacing:-.5px;
+    box-shadow:0 2px 6px rgba(225,51,140,.4);margin-bottom:6px}
+  .rail .ri{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    color:rgba(255,255,255,.62);cursor:pointer}
+  .rail .ri:hover{background:rgba(255,255,255,.10);color:#fff}
+  .rail .ri.on{background:rgba(255,255,255,.16);color:#fff}
+  .rail .ri svg{width:20px;height:20px}
+  .rail .sp{flex:1}
+
+  /* ── Sidebar ──────────────────────────────────────────────── */
+  .side{width:208px;background:var(--surface);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;flex:none}
+  .ws{margin:12px 12px 6px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:600}
+  .ws:hover{background:var(--hover)}
+  .ws .wsdot{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#2e7d32,#B8962E);
+    flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:800}
+  .ws .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ws svg{width:14px;height:14px;color:var(--ink-faint)}
+  .nav{flex:1;overflow:auto;padding:4px 8px}
+  .nav-grp{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.10em;
+    color:var(--ink-faint);padding:12px 10px 4px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius);
+    font-size:13.5px;font-weight:500;color:var(--ink-dim);cursor:pointer;margin:1px 0;
+    border-left:3px solid transparent}
+  .nav-item:hover{background:var(--hover);color:var(--ink)}
+  .nav-item.actief{background:var(--accent-soft);color:var(--accent);font-weight:600;
+    border-left-color:var(--mt-gold)}
+  .nav-item svg{width:18px;height:18px;flex:none}
+  .nav-item .mtbadge{margin-left:auto}
+  .mtbadge{font-size:9px;font-weight:700;color:var(--mt-gold-text);background:var(--mt-gold-soft);
+    border:1px solid rgba(184,150,46,.35);border-radius:4px;padding:1px 5px;letter-spacing:.02em}
+  .nav-feedback{margin:6px 10px 4px;font-size:12px;color:var(--ink-faint);display:flex;align-items:center;gap:8px;
+    cursor:pointer;padding:6px 0}
+  .nav-feedback:hover{color:var(--ink-dim)}
+  .nav-feedback svg{width:15px;height:15px}
+  .side-foot{border-top:1px solid var(--line);padding:10px 12px;display:flex;align-items:center;gap:9px}
+  .side-foot .av{width:30px;height:30px;border-radius:50%;background:var(--mt-green);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none}
+  .side-foot .who{font-size:12.5px;line-height:1.25}
+  .side-foot .who b{font-weight:600}
+  .side-foot .who small{color:var(--ink-faint)}
+
+  /* ── Main ─────────────────────────────────────────────────── */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:auto}
+  .topbar{background:var(--surface);border-bottom:1px solid var(--line);padding:14px 24px;position:sticky;top:0;z-index:4}
+  .tabs{display:flex;gap:4px;margin-bottom:14px}
+  .tab{padding:7px 14px;border-radius:var(--radius);font-size:13.5px;font-weight:600;color:var(--ink-dim);cursor:pointer}
+  .tab.on{background:var(--accent-soft);color:var(--accent)}
+  .filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fchip{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border:1px solid var(--line);border-radius:var(--radius);font-size:13px;color:var(--ink-dim);background:#fff;cursor:pointer}
+  .fchip:hover{background:var(--hover)}
+  .fchip b{color:var(--ink);font-weight:600}
+  .fchip svg{width:13px;height:13px;color:var(--ink-faint)}
+  .fchip.period{color:var(--accent);border-color:var(--accent-soft);background:var(--accent-soft);font-weight:600}
+  .fchip.grp{color:var(--mt-gold-text);border-color:rgba(184,150,46,.4);background:var(--mt-gold-soft)}
+  .sp{flex:1}
+  .exp{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:var(--radius);border:1px solid var(--line);background:#fff;font-size:13px;font-weight:600;color:var(--ink-dim);cursor:pointer}
+
+  .content{padding:22px 24px 40px}
+  .heroline{display:flex;gap:16px;margin-bottom:20px}
+  .hero{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px}
+  .hero .lbl{font-size:12px;color:var(--ink-faint);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .hero .val{font-size:26px;font-weight:700;margin-top:6px;font-family:ui-monospace,'Cascadia Code',Consolas,monospace}
+  .hero .val.bill{color:var(--accent)}
+  .hero .sub{font-size:12px;color:var(--ink-faint);margin-top:3px}
+
+  .panes{display:flex;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px}
+  .card h3{margin:0 0 16px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .bars{flex:2}
+  .donut{flex:1.1}
+  /* bar chart */
+  .chart{display:flex;align-items:flex-end;gap:14px;height:200px;padding:0 4px;border-bottom:1px solid var(--line);position:relative}
+  .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+  .bar{width:60%;border-radius:5px 5px 0 0;background:var(--accent);position:relative}
+  .bar .b2{position:absolute;left:0;right:0;bottom:0;border-radius:0 0 0 0;background:var(--mt-gold);opacity:.85}
+  .xlabels{display:flex;gap:14px;margin-top:8px}
+  .xlabels span{flex:1;text-align:center;font-size:11.5px;color:var(--ink-faint)}
+  .legend{display:flex;gap:18px;margin-top:14px;font-size:12px;color:var(--ink-dim)}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  /* donut legend rows */
+  .pleg{margin-top:4px}
+  .pleg .r{display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px solid var(--line-soft);font-size:12.5px}
+  .pleg .r:first-child{border-top:none}
+  .pleg .dot{width:10px;height:10px;border-radius:3px;flex:none}
+  .pleg .nm{flex:1;color:var(--ink)}
+  .pleg .code{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:10.5px;color:var(--mt-gold-text);background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.3);border-radius:4px;padding:0 5px}
+  .pleg .h{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-weight:600;color:var(--ink)}
+
+  /* 2.0 Project & task breakdown */
+  .bd{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px}
+  .bd .bdhead{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .bd .bdhead h3{margin:0;font-size:14px;font-weight:700;margin-right:auto}
+  .bd .bdsel{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-dim)}
+  .bd .bdsel .pick{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;font-weight:600;color:var(--ink);cursor:pointer}
+  .bd .bdsel .pick svg{width:12px;height:12px;color:var(--ink-faint)}
+  .exrow td{cursor:pointer}
+  .twirl{display:inline-block;width:0;height:0;border-left:5px solid var(--ink-faint);border-top:4px solid transparent;border-bottom:4px solid transparent;margin-right:8px;transform:rotate(90deg);vertical-align:1px}
+  tr.child td.first{padding-left:30px;color:var(--ink-dim)}
+  .barcell{position:relative}
+  .barcell .mini{position:absolute;left:10px;right:10px;bottom:5px;height:4px;border-radius:2px;background:var(--accent-soft)}
+  .barcell .mini i{display:block;height:100%;border-radius:2px;background:var(--accent)}
+
+  /* M&T extra weektotalen */
+  .mtblock{margin-top:18px;background:var(--surface);border:1px solid rgba(184,150,46,.4);border-radius:8px;padding:16px 18px}
+  .mtblock .hd{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+  .mtblock .hd h3{margin:0;font-size:13.5px;color:var(--mt-gold-text)}
+  .larry-av{width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#2e7d32,#B8962E);flex:none}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);font-weight:700;padding:6px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid var(--line-soft)}
+  td.code{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:11.5px;color:var(--mt-gold-text)}
+  td.num{text-align:right;font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-weight:600}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:8px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Far-left 2.0-icoonrail ─────────────────────────────── -->
+  <nav class="rail">
+    <div class="mark" title="Toggl 2.0">2.0</div>
+    <div class="ri" title="Tijd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></div>
+    <div class="ri on" title="Rapporten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+    <div class="ri" title="Planning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
+    <div class="sp"></div>
+    <div class="ri" title="Help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01"/></svg></div>
+  </nav>
+
+  <!-- ── Sidebar (Toggl-2.0-indeling) ───────────────────────── -->
+  <aside class="side">
+    <div class="ws">
+      <span class="wsdot">M</span>
+      <span class="nm">Mortise &amp; Tenon</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+    <nav class="nav">
+      <div class="nav-grp">Track</div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>
+        Timer
+      </div>
+
+      <div class="nav-grp">Analyze</div>
+      <div class="nav-item actief">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        Reports
+      </div>
+
+      <div class="nav-grp">Plan</div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7h6l2 2h10v10H3z"/></svg>
+        Projects
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg>
+        Tasks
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+        Timeline
+      </div>
+
+      <div class="nav-grp">Manage</div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5.5a3 3 0 0 1 0 5.5M21 20c0-2.4-1.3-4-3.5-4.6"/></svg>
+        Members
+      </div>
+
+      <div class="nav-grp">M&amp;T koppelingen</div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h16v5H4zM4 13h10v7H4zM18 13h2v7h-2z"/></svg>
+        Capaciteit <span class="mtbadge">M&amp;T</span>
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Larry-assist <span class="mtbadge">M&amp;T</span>
+      </div>
+
+      <div class="nav-grp">Admin</div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.5H9.7l-.3 2.5a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.5h4.6l.3-2.5a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z"/></svg>
+        Settings
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+        Import data
+      </div>
+    </nav>
+    <div class="nav-feedback">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Share feedback
+    </div>
+    <div class="side-foot">
+      <div class="av">AR</div>
+      <div class="who"><b>Arjan de Vries</b><br><small>Freelancer</small></div>
+    </div>
+  </aside>
+
+  <!-- ── Main ───────────────────────────────────────────────── -->
+  <div class="main">
+    <div class="topbar">
+      <div class="tabs">
+        <div class="tab on">Summary</div>
+        <div class="tab">Time logs</div>
+      </div>
+      <div class="filters">
+        <div class="fchip period">Deze week · 16–22 jun <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+        <div class="fchip">Team <b>· iedereen</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+        <div class="fchip">Client <b>· alle</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+        <div class="fchip">Project <b>· alle</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+        <div class="fchip">Facturabel <b>· alle</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+        <span class="sp"></span>
+        <div class="exp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg> Exporteren</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="heroline">
+        <div class="hero"><div class="lbl">Totaal</div><div class="val">38:15:00</div><div class="sub">5 projecten · 3 personen</div></div>
+        <div class="hero"><div class="lbl">Facturabel</div><div class="val bill">31:45:00</div><div class="sub">83% · € 2.857,50</div></div>
+        <div class="hero"><div class="lbl">Niet-facturabel</div><div class="val">6:30:00</div><div class="sub">17%</div></div>
+        <div class="hero"><div class="lbl">Gem. per dag</div><div class="val">7:39:00</div><div class="sub">5 werkdagen</div></div>
+      </div>
+
+      <div class="panes">
+        <div class="card bars">
+          <h3>Uren per dag</h3>
+          <div class="chart">
+            <div class="col"><div class="bar" style="height:62%"><div class="b2" style="height:18%"></div></div></div>
+            <div class="col"><div class="bar" style="height:88%"><div class="b2" style="height:12%"></div></div></div>
+            <div class="col"><div class="bar" style="height:74%"><div class="b2" style="height:22%"></div></div></div>
+            <div class="col"><div class="bar" style="height:95%"><div class="b2" style="height:10%"></div></div></div>
+            <div class="col"><div class="bar" style="height:56%"><div class="b2" style="height:26%"></div></div></div>
+            <div class="col"><div class="bar" style="height:20%"></div></div>
+            <div class="col"><div class="bar" style="height:0%"></div></div>
+          </div>
+          <div class="xlabels"><span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span><span>za</span><span>zo</span></div>
+          <div class="legend"><span><i style="background:var(--accent)"></i>Facturabel</span><span><i style="background:var(--mt-gold)"></i>Niet-facturabel</span></div>
+        </div>
+
+        <div class="card donut">
+          <h3>Verdeling per project</h3>
+          <div style="display:flex;justify-content:center;padding:6px 0 4px">
+            <svg width="170" height="170" viewBox="0 0 42 42">
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--line)" stroke-width="6"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#038387" stroke-width="6" stroke-dasharray="34 66" stroke-dashoffset="25"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#7719aa" stroke-width="6" stroke-dasharray="24 76" stroke-dashoffset="91"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#B8962E" stroke-width="6" stroke-dasharray="20 80" stroke-dashoffset="67"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#c43e1c" stroke-width="6" stroke-dasharray="14 86" stroke-dashoffset="47"/>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#2A4A38" stroke-width="6" stroke-dasharray="8 92" stroke-dashoffset="33"/>
+              <text x="21" y="20.5" text-anchor="middle" font-size="6" font-weight="700" fill="#172521">38:15</text>
+              <text x="21" y="26" text-anchor="middle" font-size="2.6" fill="#8B9893">totaal</text>
+            </svg>
+          </div>
+          <div class="pleg">
+            <div class="r"><span class="dot" style="background:#038387"></span><span class="nm">CompaNanny Amstelveen</span><span class="code">CN-AMSTELVEEN-BALIE</span><span class="h">13:00</span></div>
+            <div class="r"><span class="dot" style="background:#7719aa"></span><span class="nm">CompaNanny Zuidas</span><span class="code">CN-ZUIDAS-KEUKEN</span><span class="h">9:10</span></div>
+            <div class="r"><span class="dot" style="background:#B8962E"></span><span class="nm">Kobalt 5013</span><span class="code">KB2-…-ZIJP</span><span class="h">7:40</span></div>
+            <div class="r"><span class="dot" style="background:#c43e1c"></span><span class="nm">Styling HQ</span><span class="code">STY-HQ-BALIE</span><span class="h">5:20</span></div>
+            <div class="r"><span class="dot" style="background:#2A4A38"></span><span class="nm">LGM 2e Oosterparkstr.</span><span class="code">LGM-…-KEUKEN</span><span class="h">3:05</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2.0 Project & task breakdown — getrouwe Toggl-2.0-tabel met Breakdown-by-dropdowns -->
+      <div class="bd">
+        <div class="bdhead">
+          <h3>Project- en taakverdeling</h3>
+          <span class="bdsel">Verdeel op: <span class="pick">Project <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></span></span>
+          <span class="bdsel">en: <span class="pick">Taak <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></span></span>
+        </div>
+        <table>
+          <thead><tr><th>Project / Taak</th><th>Client</th><th style="width:34%">Verdeling</th><th style="text-align:right">Tijd</th></tr></thead>
+          <tbody>
+            <tr class="exrow"><td class="first"><span class="twirl"></span><span class="dot" style="background:#038387"></span>CompaNanny Amstelveen</td><td>CompaNanny</td><td class="barcell"><span class="mini"><i style="width:100%"></i></span></td><td class="num">13:00:00</td></tr>
+            <tr class="child"><td class="first">Montage</td><td>CompaNanny</td><td class="barcell"><span class="mini"><i style="width:64%"></i></span></td><td class="num">8:20:00</td></tr>
+            <tr class="child"><td class="first">Inmeten</td><td>CompaNanny</td><td class="barcell"><span class="mini"><i style="width:36%"></i></span></td><td class="num">4:40:00</td></tr>
+            <tr class="exrow"><td class="first"><span class="twirl"></span><span class="dot" style="background:#7719aa"></span>CompaNanny Zuidas</td><td>CompaNanny</td><td class="barcell"><span class="mini"><i style="width:70%"></i></span></td><td class="num">9:10:00</td></tr>
+            <tr class="exrow"><td class="first"><span class="twirl"></span><span class="dot" style="background:#B8962E"></span>Kobalt 5013</td><td>Kobalt</td><td class="barcell"><span class="mini"><i style="width:59%"></i></span></td><td class="num">7:40:00</td></tr>
+            <tr class="exrow"><td class="first"><span class="twirl"></span><span class="dot" style="background:#c43e1c"></span>Styling HQ</td><td>Styling HQ</td><td class="barcell"><span class="mini"><i style="width:41%"></i></span></td><td class="num">5:20:00</td></tr>
+            <tr class="exrow"><td class="first"><span class="twirl"></span><span class="dot" style="background:#2A4A38"></span>LGM 2e Oosterparkstraat</td><td>LGM</td><td class="barcell"><span class="mini"><i style="width:24%"></i></span></td><td class="num">3:05:00</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- M&T-extra: weektotalen per projectcode (nacalculatie) -->
+      <div class="mtblock">
+        <div class="hd"><span class="larry-av"></span><h3>Weektotalen per projectcode — nacalculatie-klaar</h3><span class="mtbadge" style="margin-left:auto">M&amp;T</span></div>
+        <table>
+          <thead><tr><th>Projectcode</th><th>Klant</th><th style="text-align:right">Begroot</th><th style="text-align:right">Besteed</th><th style="text-align:right">Δ</th><th style="text-align:right">Facturabel €</th></tr></thead>
+          <tbody>
+            <tr><td class="code">CN-AMSTELVEEN-BALIE</td><td>CompaNanny</td><td class="num">16:00</td><td class="num">13:00</td><td class="num" style="color:var(--accent)">−3:00</td><td class="num">€ 1.170</td></tr>
+            <tr><td class="code">CN-ZUIDAS-KEUKEN</td><td>CompaNanny</td><td class="num">8:00</td><td class="num">9:10</td><td class="num" style="color:var(--tg-run)">+1:10</td><td class="num">€ 825</td></tr>
+            <tr><td class="code">KB2-FREESBESTANDEN-TRIBUNE-ZIJP</td><td>Kobalt 5013</td><td class="num">10:00</td><td class="num">7:40</td><td class="num" style="color:var(--accent)">−2:20</td><td class="num">€ 690</td></tr>
+            <tr><td class="code">STY-HQ-BALIE</td><td>Styling HQ</td><td class="num">4:00</td><td class="num">5:20</td><td class="num" style="color:var(--tg-run)">+1:20</td><td class="num">€ 172</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

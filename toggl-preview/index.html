@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M&T · Toggl-2.0 skin — preview naast de huidige tool</title>
+<style>
+  :root{
+    --accent:#2A4A38; --accent-dark:#1E3829; --accent-soft:#E6EFE9;
+    --ink:#172521; --ink-dim:#5A6862; --ink-faint:#8B9893;
+    --line:#E3E9E7; --line-soft:#EDF1F0; --bg:#F4F7F6; --surface:#fff;
+    --hover:#EDF1F0; --mt-gold:#B8962E; --mt-gold-soft:#FBF5E0; --mt-gold-text:#7A6010;
+    --tg-pink:#E1338C; --radius:7px;
+    font-family:'Segoe UI','Segoe UI Web (West European)',-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-size:14px}
+  .wrap{display:flex;height:100vh}
+
+  /* ── Linker selectie-paneel ── */
+  .side{width:296px;flex:none;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column}
+  .brand{padding:18px 20px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:11px}
+  .brand .mk{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--mt-gold));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none}
+  .brand .bt{font-size:14.5px;font-weight:700;line-height:1.25}
+  .brand .bt small{display:block;font-size:11.5px;color:var(--ink-faint);font-weight:500}
+  .intro{padding:14px 20px;font-size:12.5px;color:var(--ink-dim);line-height:1.5;border-bottom:1px solid var(--line-soft)}
+  .intro b{color:var(--ink)}
+  .legend{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;color:var(--mt-gold-text);background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.35);border-radius:4px;padding:1px 6px}
+  .nav{flex:1;overflow:auto;padding:8px}
+  .nav-h{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-faint);padding:12px 12px 5px}
+  .item{display:block;padding:10px 12px;border-radius:var(--radius);cursor:pointer;margin:2px 0;border-left:3px solid transparent;text-decoration:none;color:inherit}
+  .item:hover{background:var(--hover)}
+  .item.on{background:var(--accent-soft);border-left-color:var(--mt-gold)}
+  .item .nm{font-size:13.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:7px}
+  .item.on .nm{color:var(--accent)}
+  .item .sb{font-size:11.5px;color:var(--ink-faint);margin-top:3px;line-height:1.4}
+  .item .nm .num{width:18px;height:18px;border-radius:5px;background:var(--bg);color:var(--ink-dim);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
+  .item.on .nm .num{background:var(--accent);color:#fff}
+  .mini{margin-left:auto;font-size:9px}
+
+  /* ── Hoofd ── */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .bar{background:var(--surface);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:14px}
+  .bar .scr-t{font-size:16px;font-weight:700}
+  .bar .scr-d{font-size:12.5px;color:var(--ink-faint)}
+  .bar .sp{flex:1}
+  .cmp{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 15px;border-radius:var(--radius);border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer}
+  .cmp svg{width:15px;height:15px}
+  .cmp.ghost{background:#fff;color:var(--accent);border-color:var(--accent-soft)}
+  .stage{flex:1;overflow:auto;padding:18px;background:repeating-linear-gradient(45deg,#eef2f1,#eef2f1 12px,#f4f7f6 12px,#f4f7f6 24px)}
+  .framewrap{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.09);overflow:hidden;margin:0 auto;max-width:1580px}
+  .changed{background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.35);border-radius:8px;padding:11px 15px;margin:0 auto 16px;max-width:1580px;font-size:12.5px;color:var(--ink-dim);line-height:1.5;display:flex;gap:10px;align-items:flex-start}
+  .changed b{color:var(--mt-gold-text)}
+  .changed svg{width:16px;height:16px;color:var(--mt-gold-text);flex:none;margin-top:1px}
+  iframe{width:100%;height:902px;border:none;display:block}
+
+  /* split */
+  .split .framewrap{max-width:none;display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .split .pane{position:relative;min-width:0}
+  .split .pane+.pane{border-left:2px solid var(--mt-gold)}
+  .split .plabel{position:absolute;top:8px;left:8px;z-index:2;font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;color:#fff;background:var(--accent)}
+  .split .pane.cur .plabel{background:var(--ink-dim)}
+  .split iframe{height:760px}
+  .split .changed,.split .framewrap{max-width:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside class="side">
+    <div class="brand"><div class="mk">M&amp;T</div><div class="bt">Toggl-2.0 skin<small>preview · 19 jun · vóór inbouw</small></div></div>
+    <div class="intro">Dit is de <b>nieuwe Toggl-2.0-look</b> voor de Uren-tab — nog niet in de live tool. Doel: dat collega's (Arjan/Mathijs) het 1-op-1 als Toggl herkennen. Alles wat we <b>boven Toggl</b> toevoegen draagt het merkje <span class="legend">M&amp;T</span>. Klik rechtsboven op <b>Open huidige tool</b> om ernaast te vergelijken.</div>
+    <nav class="nav" id="nav">
+      <div class="nav-h">Track</div>
+      <a class="item on" data-i="0"><div class="nm"><span class="num">1</span> Shell &amp; Timer</div><div class="sb">Het 2.0-frame: icoonrail + gelabelde sidebar + dag-entries</div></a>
+      <div class="nav-h">Analyze</div>
+      <a class="item" data-i="1"><div class="nm"><span class="num">2</span> Reports</div><div class="sb">Versimpelde 2.0-summary + breakdown <span class="mini legend">M&amp;T-splits</span></div></a>
+      <div class="nav-h">Plan</div>
+      <a class="item" data-i="2"><div class="nm"><span class="num">3</span> Projects</div><div class="sb">Projectlijst + M&amp;T-projectdetail (Moneybird/mails/nacalc)</div></a>
+      <a class="item" data-i="3"><div class="nm"><span class="num">4</span> Tasks (Board)</div><div class="sb">List/Board · buckets · subtaak-tellers · parent↗</div></a>
+      <a class="item" data-i="4"><div class="nm"><span class="num">5</span> Timeline</div><div class="sb">Capaciteit per medewerker (People-grouping) <span class="mini legend">kernpunt</span></div></a>
+      <div class="nav-h">Bewerken &amp; beheer</div>
+      <a class="item" data-i="5"><div class="nm"><span class="num">6</span> Entry bewerken</div><div class="sb">Tijdregel-popover: project/tijd/tags/billable + M&amp;T-code</div></a>
+      <a class="item" data-i="6"><div class="nm"><span class="num">7</span> Clients &amp; tags</div><div class="sb">Beheer + client↔Moneybird-koppeling</div></a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="bar">
+      <div><div class="scr-t" id="scrT">Shell &amp; Timer</div></div>
+      <span class="sp"></span>
+      <a class="cmp ghost" id="splitBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg> Naast elkaar</a>
+      <a class="cmp" href="../v2.html" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3h7v7M21 3l-9 9M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/></svg> Open huidige tool</a>
+    </div>
+    <div class="stage" id="stage">
+      <div class="changed" id="changed"></div>
+      <div class="framewrap" id="fw"><iframe id="frame" src="screens/toggl-shell.html"></iframe></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SCREENS = [
+    {f:"toggl-shell.html",       t:"Shell & Timer",     note:"<b>Wat verandert:</b> de Uren-tab krijgt het echte Toggl-2.0-frame — dunne icoonrail links + gelabelde sidebar (Track / Analyze / Plan / Manage / Admin) + dag-entries met dagtotalen. De huidige tool heeft een platte sub-tab-balk; dit voelt direct als Toggl."},
+    {f:"toggl-reports.html",     t:"Reports",           note:"<b>Wat verandert:</b> Toggl-2.0 Summary-hero + dag-staaf + project/task-breakdown. <b>M&T-extra:</b> billable-splits en per-projectcode-weektotalen, gebadged."},
+    {f:"toggl-projects.html",    t:"Projects",          note:"<b>Wat verandert:</b> Toggl-projectlijst (Client/Billable/Rate/Datums/Time-status/Fixed fee/Variance). <b>M&T-extra:</b> rechts een projectdetail met KLANT-LOC-PROD-code, Moneybird-contact, gekoppelde mails en nacalculatie."},
+    {f:"toggl-tasks.html",       t:"Tasks (Board)",     note:"<b>Wat verandert:</b> echte 2.0 Tasks — List/Board-toggle, Group by Status = stuurbare buckets, subtaak-tellers, en een gepromoveerde subtaak als losse kaart met 'Parent ↗'. Rechts ongeplande taken + Larry-voorstellen."},
+    {f:"toggl-timeline.html",    t:"Timeline (capaciteit)", note:"<b>Kernpunt:</b> Group by People = capaciteitsplanning — je ziet hoe vol elke medewerker zit (bezetting%). Taakbalken + milestones op het weekraster. Larry stelt herverdeling voor bij overbezetting."},
+    {f:"toggl-entry-edit.html",  t:"Entry bewerken",    note:"<b>Wat verandert:</b> de bewerk-popover voor een tijdregel — omschrijving, project+client, tijdrange, datum, duur, tags, billable. <b>M&T-extra:</b> koppeling aan de projectcode zodat uren in de nacalculatie en het projectdossier landen."},
+    {f:"toggl-clients-tags.html",t:"Clients & tags",    note:"<b>Wat verandert:</b> Toggl-beheerschermen (hernoemen/archiveren/verwijderen). <b>M&T-extra:</b> elke client koppelt aan het Moneybird-contact + cockpit-klantdossier."},
+  ];
+  let cur=0, split=false;
+  const frame=document.getElementById('frame'), changed=document.getElementById('changed'),
+        scrT=document.getElementById('scrT'), fw=document.getElementById('fw'),
+        stage=document.getElementById('stage'), splitBtn=document.getElementById('splitBtn');
+
+  function render(){
+    const s=SCREENS[cur];
+    scrT.innerHTML=s.t;
+    changed.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><div>'+s.note+'</div>';
+    if(split){
+      stage.classList.add('split');
+      fw.innerHTML='<div class="pane"><span class="plabel">Nieuw · Toggl-2.0 skin</span><iframe src="screens/'+s.f+'"></iframe></div>'+
+                   '<div class="pane cur"><span class="plabel">Huidige tool</span><iframe src="../v2.html"></iframe></div>';
+    }else{
+      stage.classList.remove('split');
+      fw.innerHTML='<iframe id="frame" src="screens/'+s.f+'"></iframe>';
+    }
+    document.querySelectorAll('.item').forEach((el,i)=>el.classList.toggle('on',i===cur));
+  }
+  document.getElementById('nav').addEventListener('click',e=>{
+    const it=e.target.closest('.item'); if(!it)return;
+    cur=+it.dataset.i; render();
+  });
+  splitBtn.addEventListener('click',()=>{
+    split=!split;
+    splitBtn.classList.toggle('ghost',!split);
+    splitBtn.innerHTML = split
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/></svg> Alleen nieuw'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg> Naast elkaar';
+    render();
+  });
+  render();
+</script>
+</body>
+</html>

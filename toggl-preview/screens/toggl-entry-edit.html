@@ -1,0 +1,340 @@
+<!-- @dsCard group="Uren (Toggl)" name="Entry bewerken (popover)" subtitle="2.0-shell · Timer-daglijst eronder · bewerk/handmatige-entry popover: omschrijving/project+client/tags/billable/tijdrange/datum/duur · projectcode-koppeling als M&T-extra" viewport="1560x900" -->
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M&T Uren — Entry bewerken</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     M&T Uren — Entry bewerken / handmatige entry. Getrouwe Toggl-2.0
+     Timer-daglijst (entries per dag, dagtotaal, lopende timer) met de
+     bewerk-popover eroverheen: omschrijving, project+client-picker,
+     tags, billable-toggle, tijdrange (start–stop), datum, duur. M&T-
+     extra: projectcode-koppeling (KLANT-LOC-PROD) onder het project,
+     met merkje. Shell identiek aan toggl-shell. ────────────────── */
+  :root{
+    --accent:#2A4A38; --accent-dark:#1E3829; --accent-soft:#E6EFE9;
+    --ink:#172521; --ink-dim:#5A6862; --ink-faint:#8B9893;
+    --line:#E3E9E7; --line-soft:#EDF1F0;
+    --bg:#F4F7F6; --surface:#ffffff; --hover:#EDF1F0; --sel:#E6EFE9;
+    --mt-green:#2A4A38; --mt-green-soft:rgba(42,74,56,.08);
+    --mt-gold:#B8962E; --mt-gold-soft:#FBF5E0; --mt-gold-text:#7A6010;
+    --tg-pink:#E1338C; --tg-pink-dark:#C2287A; --tg-run:#E94F4F;
+    --bill:#3E8E5A;
+    --radius:6px;
+    font-family:'Segoe UI','Segoe UI Web (West European)',-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-size:14px}
+  .app{display:flex;height:100vh;min-height:760px;position:relative}
+
+  /* ── Far-left 2.0-icoonrail ───────────────────────────────── */
+  .rail{width:54px;flex:none;background:var(--accent-dark);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:6px}
+  .rail .mark{width:34px;height:34px;border-radius:9px;background:var(--tg-pink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;letter-spacing:-.5px;box-shadow:0 2px 6px rgba(225,51,140,.4);margin-bottom:6px}
+  .rail .ri{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.62);cursor:pointer}
+  .rail .ri:hover{background:rgba(255,255,255,.10);color:#fff}
+  .rail .ri.on{background:rgba(255,255,255,.16);color:#fff}
+  .rail .ri svg{width:20px;height:20px}
+  .rail .sp{flex:1}
+
+  /* ── Sidebar ──────────────────────────────────────────────── */
+  .side{width:208px;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;flex:none}
+  .ws{margin:12px 12px 6px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:600}
+  .ws:hover{background:var(--hover)}
+  .ws .wsdot{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#2e7d32,#B8962E);flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:800}
+  .ws .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ws svg{width:14px;height:14px;color:var(--ink-faint)}
+  .nav{flex:1;overflow:auto;padding:4px 8px}
+  .nav-grp{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.10em;color:var(--ink-faint);padding:12px 10px 4px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius);font-size:13.5px;font-weight:500;color:var(--ink-dim);cursor:pointer;margin:1px 0;border-left:3px solid transparent}
+  .nav-item:hover{background:var(--hover);color:var(--ink)}
+  .nav-item.actief{background:var(--accent-soft);color:var(--accent);font-weight:600;border-left-color:var(--mt-gold)}
+  .nav-item svg{width:18px;height:18px;flex:none}
+  .nav-item .mtbadge{margin-left:auto}
+  .mtbadge{font-size:9px;font-weight:700;color:var(--mt-gold-text);background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.35);border-radius:4px;padding:1px 5px;letter-spacing:.02em}
+  .nav-feedback{margin:6px 10px 4px;font-size:12px;color:var(--ink-faint);display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0}
+  .nav-feedback:hover{color:var(--ink-dim)}
+  .nav-feedback svg{width:15px;height:15px}
+  .side-foot{border-top:1px solid var(--line);padding:10px 12px;display:flex;align-items:center;gap:9px}
+  .side-foot .av{width:30px;height:30px;border-radius:50%;background:var(--mt-green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none}
+  .side-foot .who{font-size:12.5px;line-height:1.25}
+  .side-foot .who b{font-weight:600}
+  .side-foot .who small{color:var(--ink-faint)}
+
+  /* ── Main ─────────────────────────────────────────────────── */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+
+  /* sticky timerbar */
+  .timerbar{background:var(--surface);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:12px}
+  .timerbar .desc{flex:1;font-size:15px;color:var(--ink-faint)}
+  .timerbar .tb-proj{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink-dim);padding:7px 11px;border:1px solid var(--line);border-radius:var(--radius);cursor:pointer}
+  .timerbar .tb-proj .pdot{width:9px;height:9px;border-radius:50%}
+  .timerbar .tb-ic{width:34px;height:34px;border-radius:var(--radius);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-dim);cursor:pointer}
+  .timerbar .tb-ic svg{width:16px;height:16px}
+  .timerbar .clock{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:18px;font-weight:600;color:var(--ink);min-width:78px;text-align:right}
+  .timerbar .play{width:44px;height:44px;border-radius:50%;border:none;background:var(--tg-run);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(233,79,79,.35)}
+  .timerbar .play svg{width:18px;height:18px}
+
+  .body{flex:1;overflow:auto;padding:18px 22px 30px}
+  .wk-hero{display:flex;gap:10px;margin-bottom:16px}
+  .hcard{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:12px 15px}
+  .hcard .hl{font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  .hcard .hv{font-size:22px;font-weight:700;margin-top:3px}
+  .hcard .hv small{font-size:13px;color:var(--ink-faint);font-weight:500}
+  .hcard.bill .hv{color:var(--bill)}
+
+  .day{margin-bottom:8px}
+  .day-head{display:flex;align-items:center;gap:10px;padding:9px 4px 7px}
+  .day-head .dt{font-size:13px;font-weight:700;color:var(--ink)}
+  .day-head .dd{font-size:12px;color:var(--ink-faint)}
+  .day-head .sp{flex:1}
+  .day-head .dtot{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:13px;font-weight:600;color:var(--ink-dim)}
+  .elist{background:var(--surface);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .erow{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line-soft);cursor:pointer}
+  .erow:last-child{border-bottom:none}
+  .erow:hover{background:var(--hover)}
+  .erow.editing{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--mt-gold)}
+  .erow .etext{flex:1;min-width:0}
+  .erow .etitle{font-size:13.5px;font-weight:500;color:var(--ink)}
+  .erow .emeta{display:flex;align-items:center;gap:7px;margin-top:4px;flex-wrap:wrap}
+  .pdot{width:9px;height:9px;border-radius:50%;flex:none}
+  .pname{font-size:12px;color:var(--ink-dim);font-weight:600}
+  .code{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:10px;color:var(--mt-gold-text);background:var(--mt-gold-soft);border:1px solid rgba(184,150,46,.3);border-radius:4px;padding:0 4px}
+  .tag{font-size:10.5px;color:var(--ink-dim);background:var(--line-soft);border-radius:9px;padding:1px 7px}
+  .erow .bill-dot{width:7px;height:7px;border-radius:50%;background:var(--bill);flex:none}
+  .erow .erange{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:12px;color:var(--ink-faint)}
+  .erow .edur{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:14px;font-weight:600;color:var(--ink);min-width:62px;text-align:right}
+  .erow .eact{display:flex;align-items:center;gap:4px;opacity:.5}
+  .erow:hover .eact{opacity:1}
+  .erow .eact .ic{width:28px;height:28px;border-radius:var(--radius);display:flex;align-items:center;justify-content:center;color:var(--ink-dim)}
+  .erow .eact .ic:hover{background:#fff;border:1px solid var(--line)}
+  .erow .eact .ic svg{width:15px;height:15px}
+
+  /* ── Bewerk-popover ───────────────────────────────────────── */
+  .scrim{position:absolute;inset:0;background:rgba(23,37,33,.34);backdrop-filter:blur(1px);display:flex;align-items:flex-start;justify-content:center;padding-top:96px;z-index:20}
+  .pop{width:540px;background:var(--surface);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.30);overflow:hidden;border:1px solid var(--line)}
+  .pop-head{display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--line)}
+  .pop-head .ph-t{font-size:15px;font-weight:700}
+  .pop-head .ph-badge{font-size:11px;color:var(--ink-faint);background:var(--line-soft);border-radius:9px;padding:2px 9px}
+  .pop-head .sp{flex:1}
+  .pop-head .x{width:30px;height:30px;border-radius:var(--radius);display:flex;align-items:center;justify-content:center;color:var(--ink-dim);cursor:pointer}
+  .pop-head .x:hover{background:var(--hover)}
+  .pop-head .x svg{width:17px;height:17px}
+  .pop-body{padding:16px 18px}
+  .f-desc{width:100%;border:1px solid var(--line);border-radius:var(--radius);padding:11px 13px;font-size:14.5px;font-weight:500;color:var(--ink);font-family:inherit}
+  .f-desc:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .f-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:13px}
+  .fld label{display:block;font-size:11px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+  .fld .ctrl{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--radius);padding:9px 11px;font-size:13.5px;color:var(--ink);cursor:pointer;background:#fff}
+  .fld .ctrl:hover{background:var(--hover)}
+  .fld .ctrl svg{width:14px;height:14px;color:var(--ink-faint)}
+  .fld .ctrl .pdot{width:10px;height:10px}
+  .fld .ctrl .gv{flex:1}
+  .fld .ctrl .chev{margin-left:auto}
+  .fld.full{grid-column:1 / -1}
+  .mono{font-family:ui-monospace,'Cascadia Code',Consolas,monospace}
+
+  /* project picker (open) */
+  .proj-sel{position:relative}
+  .proj-menu{position:absolute;top:calc(100% + 5px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.16);z-index:5;overflow:hidden}
+  .pm-search{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line-soft);color:var(--ink-faint)}
+  .pm-search svg{width:14px;height:14px}
+  .pm-search input{border:none;outline:none;font-size:13px;font-family:inherit;color:var(--ink);flex:1;background:transparent}
+  .pm-grp{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);padding:8px 12px 3px}
+  .pm-opt{display:flex;align-items:center;gap:9px;padding:8px 12px;font-size:13px;cursor:pointer}
+  .pm-opt:hover{background:var(--hover)}
+  .pm-opt.cur{background:var(--accent-soft)}
+  .pm-opt .pname{color:var(--ink);font-weight:600}
+  .pm-opt .pclient{font-size:11px;color:var(--ink-faint);margin-left:auto}
+  .pm-opt .code{margin-left:6px}
+
+  /* tijdregel */
+  .timerow{display:grid;grid-template-columns:1fr auto 1fr auto auto;gap:9px;align-items:end;margin-top:13px}
+  .timerow .arrow{align-self:center;color:var(--ink-faint);padding-bottom:9px}
+  .timerow .arrow svg{width:16px;height:16px}
+  .dur-fld .ctrl{font-weight:700;background:var(--accent-soft);border-color:var(--accent-soft);color:var(--accent);justify-content:center}
+
+  /* billable + tags row */
+  .tagrow{display:flex;align-items:center;gap:10px;margin-top:13px;flex-wrap:wrap}
+  .tg-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-dim);background:var(--line-soft);border-radius:14px;padding:4px 10px}
+  .tg-chip .x{cursor:pointer;color:var(--ink-faint);font-weight:700}
+  .tg-add{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-faint);border:1px dashed var(--line);border-radius:14px;padding:4px 10px;cursor:pointer}
+  .tg-add svg{width:12px;height:12px}
+  .toggle{display:inline-flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;color:var(--ink);cursor:pointer}
+  .sw{width:38px;height:22px;border-radius:11px;background:var(--bill);position:relative;flex:none}
+  .sw::after{content:"";position:absolute;top:2px;left:18px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .toggle .bl{font-weight:600;color:var(--bill);display:inline-flex;align-items:center;gap:5px}
+  .toggle .bl svg{width:14px;height:14px}
+
+  /* M&T koppel-strook */
+  .mtlink{margin-top:14px;border:1px solid rgba(184,150,46,.4);background:var(--mt-gold-soft);border-radius:8px;padding:11px 13px;display:flex;align-items:center;gap:11px}
+  .mtlink .mi{width:30px;height:30px;border-radius:7px;background:#fff;border:1px solid rgba(184,150,46,.4);display:flex;align-items:center;justify-content:center;color:var(--mt-gold-text);flex:none}
+  .mtlink .mi svg{width:16px;height:16px}
+  .mtlink .ml-body{flex:1;min-width:0}
+  .mtlink .ml-t{font-size:12.5px;font-weight:700;color:var(--mt-gold-text);display:flex;align-items:center;gap:7px}
+  .mtlink .ml-s{font-size:11.5px;color:var(--ink-dim);margin-top:2px}
+  .mtlink .ml-s b{color:var(--ink);font-weight:600}
+
+  .pop-foot{display:flex;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--line);background:var(--bg)}
+  .pop-foot .del{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--tg-run);cursor:pointer;font-weight:500}
+  .pop-foot .del svg{width:15px;height:15px}
+  .pop-foot .sp{flex:1}
+  .btn-ghost{height:36px;padding:0 16px;border-radius:var(--radius);border:1px solid var(--line);background:#fff;font-size:13.5px;font-weight:600;color:var(--ink-dim);cursor:pointer}
+  .btn-prim{height:36px;padding:0 18px;border-radius:var(--radius);border:none;background:var(--accent);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <nav class="rail">
+    <div class="mark" title="Toggl 2.0">2.0</div>
+    <div class="ri on" title="Tijd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></div>
+    <div class="ri" title="Rapporten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+    <div class="ri" title="Planning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
+    <div class="sp"></div>
+    <div class="ri" title="Help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01"/></svg></div>
+  </nav>
+
+  <aside class="side">
+    <div class="ws"><span class="wsdot">M</span><span class="nm">Mortise &amp; Tenon</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+    <nav class="nav">
+      <div class="nav-grp">Track</div>
+      <div class="nav-item actief"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg> Timer</div>
+      <div class="nav-grp">Analyze</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Reports</div>
+      <div class="nav-grp">Plan</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7h6l2 2h10v10H3z"/></svg> Projects</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg> Tasks</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Timeline</div>
+      <div class="nav-grp">Manage</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 5.5a3 3 0 0 1 0 5.5M21 20c0-2.4-1.3-4-3.5-4.6"/></svg> Members</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="7" r="4"/><path d="M5 21c0-4 3-6 7-6s7 2 7 6"/></svg> Clients &amp; tags</div>
+      <div class="nav-grp">Admin</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.5H9.7l-.3 2.5a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.5h4.6l.3-2.5a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z"/></svg> Settings</div>
+    </nav>
+    <div class="nav-feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Share feedback</div>
+    <div class="side-foot"><div class="av">AR</div><div class="who"><b>Arjan de Vries</b><br><small>Freelancer</small></div></div>
+  </aside>
+
+  <div class="main">
+    <div class="timerbar">
+      <input class="desc" placeholder="Waar werk je aan?" disabled>
+      <div class="tb-proj"><span class="pdot" style="background:#038387"></span> CompaNanny Amstelveen</div>
+      <div class="tb-ic" title="Tags"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7v5l9 9 7-7-9-9z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg></div>
+      <div class="tb-ic" title="Facturabel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="clock">0:00:00</div>
+      <button class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l13 7-13 7z"/></svg></button>
+    </div>
+
+    <div class="body">
+      <div class="wk-hero">
+        <div class="hcard"><div class="hl">Vandaag</div><div class="hv">5:48 <small>uur</small></div></div>
+        <div class="hcard"><div class="hl">Deze week</div><div class="hv">31:12 <small>/ 40:00</small></div></div>
+        <div class="hcard bill"><div class="hl">Facturabel deze week</div><div class="hv">26:30 <small>uur</small></div></div>
+      </div>
+
+      <div class="day">
+        <div class="day-head"><span class="dt">Vandaag</span><span class="dd">do 19 jun</span><span class="sp"></span><span class="dtot">5:48</span></div>
+        <div class="elist">
+          <div class="erow editing">
+            <span class="bill-dot"></span>
+            <div class="etext"><div class="etitle">Werkbladen opmeten en inmeten balie</div>
+              <div class="emeta"><span class="pdot" style="background:#038387"></span><span class="pname">CompaNanny Amstelveen</span><span class="code">CN-AMSTELVEEN-BALIE</span><span class="tag">opmeten</span></div></div>
+            <span class="erange">09:15 – 11:45</span>
+            <span class="edur">2:30:00</span>
+            <div class="eact"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 5l11 7-11 7z"/></svg></span></div>
+          </div>
+          <div class="erow">
+            <span class="bill-dot"></span>
+            <div class="etext"><div class="etitle">CNC nesten tribune zijpanelen</div>
+              <div class="emeta"><span class="pdot" style="background:#B8962E"></span><span class="pname">Kobalt 5013</span><span class="code">KB2-FREESBESTANDEN-TRIBUNE-ZIJP</span></div></div>
+            <span class="erange">13:00 – 15:18</span>
+            <span class="edur">2:18:00</span>
+            <div class="eact"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 5l11 7-11 7z"/></svg></span></div>
+          </div>
+          <div class="erow">
+            <span class="bill-dot" style="background:var(--ink-faint)"></span>
+            <div class="etext"><div class="etitle">Werkoverleg + planning</div>
+              <div class="emeta"><span class="pdot" style="background:#5A6862"></span><span class="pname">Intern</span><span class="tag">overleg</span></div></div>
+            <span class="erange">15:30 – 16:30</span>
+            <span class="edur">1:00:00</span>
+            <div class="eact"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 5l11 7-11 7z"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="day">
+        <div class="day-head"><span class="dt">Gisteren</span><span class="dd">wo 18 jun</span><span class="sp"></span><span class="dtot">7:42</span></div>
+        <div class="elist">
+          <div class="erow">
+            <span class="bill-dot"></span>
+            <div class="etext"><div class="etitle">Meubilair afmonteren werkplaats</div>
+              <div class="emeta"><span class="pdot" style="background:#038387"></span><span class="pname">CompaNanny Amstelveen</span><span class="code">CN-AMSTELVEEN-BALIE</span></div></div>
+            <span class="erange">08:30 – 12:00</span>
+            <span class="edur">3:30:00</span>
+            <div class="eact"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 5l11 7-11 7z"/></svg></span></div>
+          </div>
+          <div class="erow">
+            <span class="bill-dot"></span>
+            <div class="etext"><div class="etitle">Keukenblok montage op locatie</div>
+              <div class="emeta"><span class="pdot" style="background:#2A4A38"></span><span class="pname">LGM 2e Oosterparkstraat</span><span class="code">LGM-2EOOSTERPARK-KEUKEN</span></div></div>
+            <span class="erange">13:00 – 17:12</span>
+            <span class="edur">4:12:00</span>
+            <div class="eact"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 5l11 7-11 7z"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Bewerk-popover ─────────────────────────────────────── -->
+  <div class="scrim">
+    <div class="pop">
+      <div class="pop-head"><span class="ph-t">Tijdregel bewerken</span><span class="ph-badge">do 19 jun</span><span class="sp"></span><span class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+      <div class="pop-body">
+        <input class="f-desc" value="Werkbladen opmeten en inmeten balie">
+
+        <div class="f-grid">
+          <div class="fld full proj-sel">
+            <label>Project &amp; client</label>
+            <div class="ctrl"><span class="pdot" style="background:#038387"></span><span class="gv">CompaNanny Amstelveen <span style="color:var(--ink-faint);font-weight:400">· CompaNanny</span></span><span class="code" style="margin-left:6px">CN-AMSTELVEEN-BALIE</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+          </div>
+        </div>
+
+        <!-- tijdregel -->
+        <div class="timerow">
+          <div class="fld"><label>Start</label><div class="ctrl mono"><span class="gv">09:15</span></div></div>
+          <span class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+          <div class="fld"><label>Stop</label><div class="ctrl mono"><span class="gv">11:45</span></div></div>
+          <div class="fld"><label>Datum</label><div class="ctrl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span class="gv">19 jun</span></div></div>
+          <div class="fld dur-fld"><label>Duur</label><div class="ctrl mono"><span class="gv">2:30:00</span></div></div>
+        </div>
+
+        <!-- tags + billable -->
+        <div class="tagrow">
+          <span class="tg-chip">opmeten <span class="x">×</span></span>
+          <span class="tg-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Tag</span>
+          <label class="toggle"><span class="bl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Facturabel</span><span class="sw"></span></label>
+        </div>
+
+        <!-- M&T koppel-strook -->
+        <div class="mtlink">
+          <div class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></div>
+          <div class="ml-body">
+            <div class="ml-t">Gekoppeld aan projectcode <span class="mtbadge">M&amp;T</span></div>
+            <div class="ml-s"><b class="mono">CN-AMSTELVEEN-BALIE</b> · uren tellen mee in nacalculatie &amp; cockpit-projectdossier</div>
+          </div>
+        </div>
+      </div>
+      <div class="pop-foot">
+        <span class="del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> Verwijderen</span>
+        <span class="sp"></span>
+        <button class="btn-ghost">Annuleren</button>
+        <button class="btn-prim">Opslaan</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
