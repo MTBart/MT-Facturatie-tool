@@ -169,6 +169,7 @@ header h1 span{color:var(--gold);font-style:italic}
 .tab-btn{padding:var(--space-4) var(--space-4);border:none;background:none;cursor:pointer;font-family:var(--sans);font-size:var(--text-sm);font-weight:500;color:var(--text-faint);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color 0.15s,border-color 0.15s;white-space:nowrap;letter-spacing:0.01em}
 .tab-btn:hover{color:var(--n-800)}
 .tab-btn.active{color:var(--green);border-bottom-color:var(--gold);font-weight:600}
+.tab-badge{display:inline-block;min-width:17px;height:17px;line-height:17px;padding:0 5px;margin-left:6px;border-radius:9px;background:#d97706;color:#fff;font-size:10px;font-weight:700;text-align:center;vertical-align:middle}
 .tab-content{display:none}
 .tab-content.active{display:block}
 /* ── FANCY: georkestreerde laad-reveal bij tab-activatie (staggered) ── */
@@ -542,6 +543,7 @@ button{transition:transform .07s ease,filter .07s ease}
 <div class="tabs-wrap">
   <button class="tab-btn active" onclick="showTab('dashboard',this)">Dashboard</button>
   <button class="tab-btn" onclick="showTab('inbox',this)">Inbox</button>
+  <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
   <button class="tab-btn" onclick="showTab('projecten',this)">Projecten</button>
   <button class="tab-btn" onclick="showTab('agenda',this)">Agenda</button>
   <button class="tab-btn" onclick="showTab('toggl',this)">Uren</button>
@@ -1015,6 +1017,23 @@ button{transition:transform .07s ease,filter .07s ease}
       </div>
       <div id="history-list" style="font-size:13px;color:var(--text-dim)">Nog geen facturen verwerkt.</div>
     </div>
+  </div>
+
+  <!-- ═══ TAB: VEREIST AANDACHT ═══ -->
+  <div id="tab-attentie" class="tab-content">
+    <div class="card" style="margin-bottom:1rem">
+      <div class="flex" style="justify-content:space-between;align-items:center">
+        <div>
+          <div class="card-title" style="margin-bottom:2px">⚠ Vereist aandacht</div>
+          <div style="font-size:12px;color:var(--text-dim)" id="attentie-subtitel">Items die Larry voor je heeft klaargezet — loop ze één voor één na.</div>
+        </div>
+        <div class="flex" style="gap:6px">
+          <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="attentie-toon-verwerkt" onchange="renderAttentie()"> ook verwerkte tonen</label>
+          <button class="btn btn-sm btn-secondary" onclick="renderAttentie()">↻ Verversen</button>
+        </div>
+      </div>
+    </div>
+    <div id="attentie-lijst"><div style="font-size:13px;color:var(--text-dim);padding:1rem">Laden…</div></div>
   </div>
 
   <!-- ═══ TAB: INSTELLINGEN ═══ -->
@@ -2222,6 +2241,7 @@ function showTab(name,btn){
   if(name==='agenda') renderAgenda();
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
+  if(name==='attentie') renderAttentie();
   if(name==='materialen') renderMaterialen();
   if(name==='admin') adminOpen();
   if(name==='activiteit') activiteitOpen();
@@ -4175,16 +4195,23 @@ function slaVoorraadOp(regel){
   voorraad.push({...regel,categorie:regel.categorie||bestaandeCat||categoriseerMateriaal(regel.omschrijving),id:Date.now()+Math.random(),ts:Date.now()});
   localStorage.setItem('mt_voorraad',JSON.stringify(voorraad));
 }
-function renderVoorraadActief(){
+async function renderVoorraadActief(){
   const zoek=(document.getElementById('voorraad-zoek')?.value||'').toLowerCase();
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
   renderVoorraadKPI(voorraad);
+  // Eerst de openstaande voorstellen laden (vult _voorraadCorrecties) zodat de
+  // tabel per item een ⏳-badge kan tonen — voorkomt dubbel corrigeren.
+  await renderVoorraadCorrecties();
   VOORRAAD_CAT_KEYS.forEach(cat=>{
     // Gebruik de opgeslagen categorie op het item zelf, niet automatisch berekend
     const items=voorraad.filter(v=>(v.categorie||categoriseerMateriaal(v.omschrijving))===cat);
     renderVoorraadTabel(cat,items,zoek);
   });
-  renderVoorraadCorrecties();
+}
+// Open (nog niet geakkordeerde) correctie voor dit materiaal, of null
+function _openCorrectieVoor(materiaal){
+  const k=(materiaal||'').trim().toLowerCase();
+  return (_voorraadCorrecties||[]).find(c=>c&&c.status==='open'&&(c.omschrijving||'').trim().toLowerCase()===k)||null;
 }
 function renderVoorraadKPI(voorraad){
   const kpiEl=document.getElementById('voorraad-kpi');
@@ -4237,8 +4264,10 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
       const opBestelling=bestellijst.some(b=>b.materiaal===mat&&!b.besteld);
       const levs=[...data.leveranciers];
       const andereCats=VOORRAAD_CAT_KEYS.filter(c=>c!==cat);
-      return`<tr>
-        <td><strong style="font-size:12px">${mat}</strong>${prijsWarn?`<br><small style="color:var(--orange)">⚠ prijsvariatie €${minP.toFixed(2)}–€${maxP.toFixed(2)}</small>`:''}</td>
+      const openC=_openCorrectieVoor(mat);
+      const pendBadge=openC?`<br><small style="color:var(--orange,#d97706)" title="Er staat een app-voorstel klaar — handel het af in het paneel bovenaan i.p.v. hier handmatig">⏳ voorstel in afwachting${openC.type==='telling'?` (${openC.huidigAantal??0}→${openC.geteld??0})`:''}</small>`:'';
+      return`<tr${openC?' style="background:rgba(217,119,6,0.06)"':''}>
+        <td><strong style="font-size:12px">${mat}</strong>${prijsWarn?`<br><small style="color:var(--orange)">⚠ prijsvariatie €${minP.toFixed(2)}–€${maxP.toFixed(2)}</small>`:''}${pendBadge}</td>
         <td style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${data.artikelnummer||'—'}</td>
         <td>${levs.map(l=>{
           const info=leveranciers.find(lv=>lv.naam.toLowerCase()===l.toLowerCase());
@@ -4452,6 +4481,99 @@ async function _verwerkCorrectie(id,akkoord){
 }
 function akkordeerCorrectie(id){ _verwerkCorrectie(id,true); }
 function wijsCorrectieAf(id){ _verwerkCorrectie(id,false); }
+
+// ═══ VEREIST AANDACHT (review-wachtrij) ═══
+// Larry's pijplijn-scripts schrijven bevindingen naar mt_attentie.json (NIET via _SP.KEYS
+// auto-mirror — losse read-merge-write, zelfde beveiligde patroon als voorraad-correcties).
+// De cockpit toont ze hier gesorteerd op prioriteit; Bart akkordeert of wijst af.
+// Akkoord → status 'akkoord' terug naar SP; een pijplijn-consumer voert het daadwerkelijk uit
+// (en zet 'm op 'verwerkt'). Voor handmatige items = akkoord simpelweg "afgehandeld".
+let _attentieItems=[];
+const ATT_PRIO={1:{label:'HOOG',kleur:'#dc2626',bg:'#fef2f2'},2:{label:'MIDDEL',kleur:'#d97706',bg:'#fffbeb'},3:{label:'LAAG',kleur:'#64748b',bg:'#f8fafc'}};
+function _attPrio(p){ const n=Number(p)||3; return ATT_PRIO[n]||ATT_PRIO[3]; }
+function _escAtt(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+async function attentieBadge(){
+  // Alleen de open-teller verversen (voor het tab-label) zonder de hele tab te tekenen.
+  let lijst=null;
+  try{ lijst=await _SP.read('mt_attentie.json'); }catch(e){ lijst=null; }
+  const n=Array.isArray(lijst)?lijst.filter(c=>c.status==='open').length:0;
+  const b=document.getElementById('attentie-badge');
+  if(b){ if(n>0){ b.textContent=n; b.style.display=''; } else { b.style.display='none'; } }
+}
+async function renderAttentie(){
+  const el=document.getElementById('attentie-lijst');
+  if(!el) return;
+  el.innerHTML=`<div style="font-size:13px;color:var(--text-dim);padding:1rem">Laden…</div>`;
+  let lijst=null;
+  try{ lijst=await _SP.read('mt_attentie.json'); }catch(e){ lijst=null; }
+  if(!Array.isArray(lijst)) lijst=[];
+  _attentieItems=lijst;
+  const toonVerwerkt=document.getElementById('attentie-toon-verwerkt')?.checked;
+  let items=lijst.filter(c=>toonVerwerkt?true:c.status==='open');
+  // sorteer op prioriteit (1=hoog eerst), daarna nieuwste eerst
+  items.sort((a,b)=>((Number(a.prioriteit)||3)-(Number(b.prioriteit)||3))||((b.ts||0)-(a.ts||0)));
+  const open=lijst.filter(c=>c.status==='open').length;
+  const sub=document.getElementById('attentie-subtitel');
+  if(sub) sub.textContent=open?`${open} ${open===1?'item vereist':'items vereisen'} je aandacht — gesorteerd op prioriteit.`:'Niets openstaand — alles afgehandeld. ✓';
+  attentieBadge();
+  if(!items.length){ el.innerHTML=`<div class="card" style="text-align:center;padding:2rem;color:var(--text-dim)"><div style="font-size:28px;margin-bottom:8px">✓</div>Geen openstaande aandachtspunten.</div>`; return; }
+  el.innerHTML=items.map((c,i)=>{
+    const P=_attPrio(c.prioriteit);
+    const verwerkt=c.status&&c.status!=='open';
+    const links=(Array.isArray(c.links)?c.links:[]).map(l=>
+      `<button class="btn btn-xs btn-secondary" onclick="attentieGa('${_escAtt(l.url).replace(/'/g,"\\'")}')">${_escAtt(l.label||'open')} ↗</button>`).join(' ');
+    const statusBadge=verwerkt?`<span style="font-size:11px;font-weight:700;color:${c.status==='afgewezen'?'#dc2626':'#059669'}">${c.status==='afgewezen'?'✕ afgewezen':(c.status==='verwerkt'?'✓ verwerkt':'✓ akkoord')}</span>`:'';
+    return `<div class="card" style="border-left:4px solid ${P.kleur};margin-bottom:0.9rem;${verwerkt?'opacity:.6':''}">
+      <div class="flex" style="justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
+            <span style="font-size:10px;font-weight:700;color:${P.kleur};background:${P.bg};padding:2px 7px;border-radius:4px">${P.label}</span>
+            ${c.categorie?`<span style="font-size:11px;color:var(--text-dim)">${_escAtt(c.categorie)}</span>`:''}
+            ${statusBadge}
+          </div>
+          <div style="font-weight:600;font-size:14px;margin-bottom:6px">${i+1}. ${_escAtt(c.titel||'(geen titel)')}</div>
+        </div>
+      </div>
+      ${c.bevinding?`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 11px;font-size:12.5px;margin-bottom:6px"><strong style="color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:.03em">Bevinding</strong><br>${_escAtt(c.bevinding).replace(/\n/g,'<br>')}</div>`:''}
+      ${c.voorstel?`<div style="background:${P.bg};border:1px solid ${P.kleur}33;border-radius:6px;padding:8px 11px;font-size:12.5px;margin-bottom:8px"><strong style="color:${P.kleur};font-size:11px;text-transform:uppercase;letter-spacing:.03em">Larry's voorstel</strong><br>${_escAtt(c.voorstel).replace(/\n/g,'<br>')}</div>`:''}
+      ${links?`<div style="margin-bottom:8px;display:flex;gap:5px;flex-wrap:wrap">${links}</div>`:''}
+      <div class="flex" style="justify-content:space-between;align-items:center;gap:8px">
+        <small style="color:var(--text-dim);font-size:10.5px">${c.bron?'via '+_escAtt(c.bron):''}${c.ts?' · '+new Date(c.ts).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):''}${c.actie_type==='pijplijn'?' · akkoord = Larry voert uit':''}</small>
+        ${verwerkt?'':`<div style="display:flex;gap:6px">
+          <button class="btn btn-xs btn-primary" onclick="akkordeerAttentie('${_escAtt(c.id)}')">✓ Akkoord</button>
+          <button class="btn btn-xs btn-danger" onclick="wijsAttentieAf('${_escAtt(c.id)}')">✕ Afwijzen</button>
+        </div>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+function attentieGa(url){
+  if(!url) return;
+  if(url.charAt(0)==='#'){
+    // interne deep-link, bv. #tab=voorraad
+    const m=url.match(/tab=([a-z]+)/i);
+    if(m){ const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+m[1]+"'")); if(btn){ btn.click(); return; } }
+    location.hash=url; return;
+  }
+  window.open(url,'_blank','noopener');
+}
+async function _verwerkAttentie(id,akkoord){
+  // Lees ACTUELE SP-staat (read-merge-write — niet de mogelijk verouderde lokale kopie).
+  let lijst=null;
+  try{ lijst=await _SP.read('mt_attentie.json'); }catch(e){ lijst=null; }
+  if(!Array.isArray(lijst)){ planToast('Kon aandachtspunten niet laden — probeer opnieuw'); return; }
+  const c=lijst.find(x=>String(x.id)===String(id));
+  if(!c||c.status!=='open'){ renderAttentie(); return; }
+  c.status=akkoord?'akkoord':'afgewezen';
+  c.verwerkt_op=new Date().toISOString();
+  c.verwerkt_door='cockpit';
+  const ok=await _SP.write('mt_attentie.json',lijst);
+  if(!ok){ planToast('Opslaan mislukt — probeer opnieuw'); return; }
+  planToast(akkoord?'✓ Akkoord — klaargezet voor verwerking':'Afgewezen');
+  renderAttentie();
+}
+function akkordeerAttentie(id){ _verwerkAttentie(id,true); }
+function wijsAttentieAf(id){ _verwerkAttentie(id,false); }
 
 // ═══ BESTELLIJST ═══
 function toggleBestellijst(mat,cat,lev,prijs,btn){
@@ -7950,6 +8072,7 @@ window.initStorage = async function() {
     if (typeof renderVoorraadActief === 'function') renderVoorraadActief();
     if (typeof renderBestellijst === 'function') renderBestellijst();
     if (typeof renderLeveranciersBeheer === 'function') renderLeveranciersBeheer();
+    if (typeof attentieBadge === 'function') attentieBadge();
   } catch(e) { console.warn('rehydrate na initStorage faalde:', e); }
   if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
 };

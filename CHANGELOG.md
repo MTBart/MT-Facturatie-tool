@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-19 — Voorraad: Gereedschap/Verbruik-categorieën + beveiligde app-telling
+- Commit: `9aaa4b2` | Auteur: Bart Witte
+
 ## 2026-06-18 — feat(nacalc): client-side CSV + PDF export per project
 - Commit: `ba7e3c6` | Auteur: Bart Witte
 
