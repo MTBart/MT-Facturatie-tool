@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-19 — Vereist-aandacht: splits akkoord-actie in twee knoppen
+- Commit: `b18e3c1` | Auteur: Bart Witte
+
 ## 2026-06-19 — Cockpit: Vereist-aandacht-tab — review-wachtrij gesorteerd op prioriteit
 - Commit: `becc4cd` | Auteur: Bart Witte
 

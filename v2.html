@@ -4537,6 +4537,9 @@ async function renderAttentie(){
       ${c.bevinding?`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 11px;font-size:12.5px;margin-bottom:6px"><strong style="color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:.03em">Bevinding</strong><br>${_escAtt(c.bevinding).replace(/\n/g,'<br>')}</div>`:''}
       ${c.voorstel?`<div style="background:${P.bg};border:1px solid ${P.kleur}33;border-radius:6px;padding:8px 11px;font-size:12.5px;margin-bottom:8px"><strong style="color:${P.kleur};font-size:11px;text-transform:uppercase;letter-spacing:.03em">Larry's voorstel</strong><br>${_escAtt(c.voorstel).replace(/\n/g,'<br>')}</div>`:''}
       ${links?`<div style="margin-bottom:8px;display:flex;gap:5px;flex-wrap:wrap">${links}</div>`:''}
+      ${verwerkt?'':`<div style="margin-bottom:8px">
+        <textarea data-att-id="${_escAtt(c.id)}" placeholder="Hoe wil je dit aangepakt hebben? Typ hier je reactie — Larry pakt het zo aan. (optioneel)" style="width:100%;min-height:52px;font-size:12.5px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:6px;resize:vertical;font-family:inherit;box-sizing:border-box">${c.reactie?_escAtt(c.reactie):''}</textarea>
+      </div>`}
       <div class="flex" style="justify-content:space-between;align-items:center;gap:8px">
         <small style="color:var(--text-dim);font-size:10.5px">${c.bron?'via '+_escAtt(c.bron):''}${c.ts?' · '+new Date(c.ts).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):''}${c.actie_type==='pijplijn'?' · akkoord = Larry voert uit':''}</small>
         ${verwerkt?'':`<div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -4545,6 +4548,8 @@ async function renderAttentie(){
           <button class="btn btn-xs btn-danger" onclick="wijsAttentieAf('${_escAtt(c.id)}')">✕ Afwijzen</button>
         </div>`}
       </div>
+      ${verwerkt&&c.reactie?`<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:7px 10px;font-size:12px;margin-top:8px"><strong style="color:#4338ca;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em">Jouw reactie</strong><br>${_escAtt(c.reactie).replace(/\n/g,'<br>')}</div>`:''}
+      ${verwerkt&&c.resultaat?`<div style="color:var(--text-dim);font-size:11.5px;margin-top:6px">↳ ${_escAtt(c.resultaat).replace(/\n/g,'<br>')}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -4568,12 +4573,17 @@ async function _verwerkAttentie(id,nieuweStatus){
   if(!Array.isArray(lijst)){ planToast('Kon aandachtspunten niet laden — probeer opnieuw'); return; }
   const c=lijst.find(x=>String(x.id)===String(id));
   if(!c||c.status!=='open'){ renderAttentie(); return; }
+  // Vrije reactie meenemen (als Bart iets typte). Markeer 'reactie aanwezig' zodat de
+  // pijplijn-consumer NIET blind auto-uitvoert maar het aan Larry overlaat.
+  const ta=document.querySelector('textarea[data-att-id="'+((window.CSS&&CSS.escape)?CSS.escape(id):id)+'"]');
+  const reactie=ta?(ta.value||'').trim():'';
+  if(reactie){ c.reactie=reactie; c.gereageerd_op=new Date().toISOString(); c.larry_afhandeling=true; }
   c.status=nieuweStatus;
   c.verwerkt_op=new Date().toISOString();
   c.verwerkt_door=nieuweStatus==='verwerkt'?'bart-handmatig':'cockpit';
   const ok=await _SP.write('mt_attentie.json',lijst);
   if(!ok){ planToast('Opslaan mislukt — probeer opnieuw'); return; }
-  const toasts={akkoord:'✓ Akkoord — op de stapel; Larry verwerkt het',verwerkt:'✓ Genoteerd als zelf gecorrigeerd',afgewezen:'Afgewezen'};
+  const toasts={akkoord:reactie?'✓ Reactie genoteerd — Larry pakt het zo aan':'✓ Akkoord — op de stapel; Larry verwerkt het',verwerkt:'✓ Genoteerd als zelf gecorrigeerd',afgewezen:'Afgewezen'};
   planToast(toasts[nieuweStatus]||'Bijgewerkt');
   renderAttentie();
 }
