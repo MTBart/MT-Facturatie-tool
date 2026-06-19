@@ -4539,8 +4539,9 @@ async function renderAttentie(){
       ${links?`<div style="margin-bottom:8px;display:flex;gap:5px;flex-wrap:wrap">${links}</div>`:''}
       <div class="flex" style="justify-content:space-between;align-items:center;gap:8px">
         <small style="color:var(--text-dim);font-size:10.5px">${c.bron?'via '+_escAtt(c.bron):''}${c.ts?' · '+new Date(c.ts).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):''}${c.actie_type==='pijplijn'?' · akkoord = Larry voert uit':''}</small>
-        ${verwerkt?'':`<div style="display:flex;gap:6px">
-          <button class="btn btn-xs btn-primary" onclick="akkordeerAttentie('${_escAtt(c.id)}')">✓ Akkoord</button>
+        ${verwerkt?'':`<div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-xs btn-primary" onclick="akkordeerAttentie('${_escAtt(c.id)}')">✓ Akkoord — Larry doet het</button>
+          <button class="btn btn-xs btn-secondary" onclick="handmatigKlaarAttentie('${_escAtt(c.id)}')">✎ Zelf gecorrigeerd</button>
           <button class="btn btn-xs btn-danger" onclick="wijsAttentieAf('${_escAtt(c.id)}')">✕ Afwijzen</button>
         </div>`}
       </div>
@@ -4557,23 +4558,28 @@ function attentieGa(url){
   }
   window.open(url,'_blank','noopener');
 }
-async function _verwerkAttentie(id,akkoord){
+async function _verwerkAttentie(id,nieuweStatus){
   // Lees ACTUELE SP-staat (read-merge-write — niet de mogelijk verouderde lokale kopie).
+  // status: 'akkoord'   = op Larry's stapel; de pijplijn-consumer voert het uit → 'verwerkt'
+  //         'verwerkt'  = Bart heeft het zelf al in Moneybird gecorrigeerd (geen pijplijn-actie)
+  //         'afgewezen' = niet doen
   let lijst=null;
   try{ lijst=await _SP.read('mt_attentie.json'); }catch(e){ lijst=null; }
   if(!Array.isArray(lijst)){ planToast('Kon aandachtspunten niet laden — probeer opnieuw'); return; }
   const c=lijst.find(x=>String(x.id)===String(id));
   if(!c||c.status!=='open'){ renderAttentie(); return; }
-  c.status=akkoord?'akkoord':'afgewezen';
+  c.status=nieuweStatus;
   c.verwerkt_op=new Date().toISOString();
-  c.verwerkt_door='cockpit';
+  c.verwerkt_door=nieuweStatus==='verwerkt'?'bart-handmatig':'cockpit';
   const ok=await _SP.write('mt_attentie.json',lijst);
   if(!ok){ planToast('Opslaan mislukt — probeer opnieuw'); return; }
-  planToast(akkoord?'✓ Akkoord — klaargezet voor verwerking':'Afgewezen');
+  const toasts={akkoord:'✓ Akkoord — op de stapel; Larry verwerkt het',verwerkt:'✓ Genoteerd als zelf gecorrigeerd',afgewezen:'Afgewezen'};
+  planToast(toasts[nieuweStatus]||'Bijgewerkt');
   renderAttentie();
 }
-function akkordeerAttentie(id){ _verwerkAttentie(id,true); }
-function wijsAttentieAf(id){ _verwerkAttentie(id,false); }
+function akkordeerAttentie(id){ _verwerkAttentie(id,'akkoord'); }
+function handmatigKlaarAttentie(id){ _verwerkAttentie(id,'verwerkt'); }
+function wijsAttentieAf(id){ _verwerkAttentie(id,'afgewezen'); }
 
 // ═══ BESTELLIJST ═══
 function toggleBestellijst(mat,cat,lev,prijs,btn){
