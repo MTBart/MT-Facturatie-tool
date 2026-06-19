@@ -882,16 +882,39 @@ button{transition:transform .07s ease,filter .07s ease}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
         <div class="card-subtitle">Voorraadoverzicht</div>
         <div class="flex">
+          <button class="btn btn-primary btn-sm" onclick="toggleVoorraadItemForm()">＋ Item toevoegen</button>
           <button class="btn btn-secondary btn-sm" onclick="renderVoorraadActief()">↻ Vernieuwen</button>
           <button class="btn btn-danger btn-sm" onclick="wisVoorraad()">⚠ Wissen</button>
         </div>
       </div>
+      <!-- Handmatig item toevoegen (gereedschap/verbruik/overig handmatig invoeren) -->
+      <div id="voorraad-item-form" class="hidden" style="background:var(--bg-soft,#f7f4ef);border:1px solid var(--border,#e0d6cc);border-radius:8px;padding:1rem;margin-bottom:1rem">
+        <div class="card-title" style="margin-bottom:0.6rem">Handmatig voorraad-item toevoegen</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.6rem">
+          <label style="font-size:11px">Omschrijving*<input id="vi-omschrijving" type="text" placeholder="bv. Schaftfrees Ø8 HM" style="width:100%"></label>
+          <label style="font-size:11px">Artikelnummer<input id="vi-artikelnummer" type="text" placeholder="leverancier-code" style="width:100%"></label>
+          <label style="font-size:11px">Leverancier<input id="vi-leverancier" type="text" list="vi-lev-list" placeholder="Glas Klooster…" style="width:100%"><datalist id="vi-lev-list"></datalist></label>
+          <label style="font-size:11px">Categorie<select id="vi-categorie" style="width:100%"></select></label>
+          <label style="font-size:11px">Aantal<input id="vi-aantal" type="number" value="1" min="0" step="1" style="width:100%"></label>
+          <label style="font-size:11px">Stukprijs €<input id="vi-stukprijs" type="number" value="0" min="0" step="0.01" style="width:100%"></label>
+          <label style="font-size:11px">Eenheid<input id="vi-eenheid" type="text" placeholder="stuk" style="width:100%"></label>
+          <label style="font-size:11px">Opmerking<input id="vi-opmerking" type="text" placeholder="optioneel" style="width:100%"></label>
+        </div>
+        <div class="flex" style="margin-top:0.8rem">
+          <button class="btn btn-primary btn-sm" onclick="voegVoorraadItemToe()">Opslaan</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleVoorraadItemForm()">Annuleren</button>
+        </div>
+      </div>
+      <!-- Te akkorderen voorraad-correcties uit de app -->
+      <div id="voorraad-correcties-paneel"></div>
       <!-- KPI balk -->
       <div class="kpi-grid" id="voorraad-kpi"></div>
       <!-- Sub-tabs per categorie -->
       <div class="voorraad-tabs" id="voorraad-subtabs">
         <button class="vtab-btn active" onclick="showVtab('platen',this)">Platen</button>
         <button class="vtab-btn" onclick="showVtab('kantenband',this)">Kantenband</button>
+        <button class="vtab-btn" onclick="showVtab('gereedschap',this)">🛠️ Gereedschap</button>
+        <button class="vtab-btn" onclick="showVtab('verbruik',this)">🧴 Verbruik</button>
         <button class="vtab-btn" onclick="showVtab('overig',this)">Overig</button>
         <button class="vtab-btn" onclick="openVoorraadIC(this)">interiorcad</button>
       </div>
@@ -902,6 +925,12 @@ button{transition:transform .07s ease,filter .07s ease}
       </div>
       <div id="vtab-kantenband" class="vtab-content">
         <div id="voorraad-kantenband-tabel"></div>
+      </div>
+      <div id="vtab-gereedschap" class="vtab-content">
+        <div id="voorraad-gereedschap-tabel"></div>
+      </div>
+      <div id="vtab-verbruik" class="vtab-content">
+        <div id="voorraad-verbruik-tabel"></div>
       </div>
       <div id="vtab-overig" class="vtab-content">
         <div id="voorraad-overig-tabel"></div>
@@ -1967,6 +1996,18 @@ const ADMIN_DEFAULT = '342968480452052559';
 const BTW_IDS = {'21':'342968481360119428','9':'342968481362216581','0':'348668107652335594'};
 const BANK_ID = '343544076091524743';
 const VOORRAAD_LEVERANCIERS = ['dozon','ostermann','pd hout','kghn','drimensa','finsa','egger','pfleiderer','kronospan'];
+// Voorraad-taxonomie (één bron). platen/kantenband uit facturen; gereedschap/verbruik handmatig (Glas Klooster, Veldman Slijptechniek e.a.); overig = restbak.
+const VOORRAAD_CATS = [
+  {key:'platen',     label:'Platen',      icon:'🪵'},
+  {key:'kantenband', label:'Kantenband',  icon:'📏'},
+  {key:'gereedschap',label:'Gereedschap', icon:'🛠️'},
+  {key:'verbruik',   label:'Verbruik',    icon:'🧴'},
+  {key:'overig',     label:'Overig',      icon:'🔩'},
+];
+const VOORRAAD_CAT_KEYS = VOORRAAD_CATS.map(c=>c.key);
+const VOORRAAD_CAT_LABEL = Object.fromEntries(VOORRAAD_CATS.map(c=>[c.key,(c.icon+' '+c.label)]));
+// Winkels/leveranciers voor handmatige gereedschap/verbruik-invoer (datalist).
+const VOORRAAD_HANDMATIG_LEVERANCIERS = ['Glas Klooster','Veldman Slijptechniek','Ostermann','Dozon','PD Hout','KGHN','Drimensa'];
 
 // Projecten zonder jaarsuffix
 let PROJECT_CODES = JSON.parse(localStorage.getItem('mt_projecten') || '[]');
@@ -4104,6 +4145,14 @@ function categoriseerMateriaal(naam){
      l.includes('eiken')||l.includes('beuken')||l.includes('melamine')||l.includes('laminaat')||
      // Formaat-patroon: iets met mm afmetingen (typisch voor plaatmateriaal)
      l.match(/\d{3,4}\s*x\s*\d{3,4}/)) return 'platen';
+  // Gereedschap — CNC-frezen, boren, zaagbladen, slijp/schuurschijven (Glas Klooster, Veldman Slijptechniek)
+  if(l.includes('frees')||l.includes('freze')||l.match(/\bboor\b/)||l.includes('zaagblad')||l.includes('schijf')||
+     l.includes('slijp')||l.includes('diamant')||l.includes('hardmetaal')||l.includes('spaanbreker')||l.includes('collet')||l.includes('spantang'))
+    return 'gereedschap';
+  // Verbruik — lijm, schroeven, spuitbussen, schuurpapier, doeken, etc.
+  if(l.includes('lijm')||l.includes('schroef')||l.includes('schroev')||l.includes('spuitbus')||l.includes('schuurpapier')||
+     l.includes('schuurschijf')||l.includes('doek')||l.includes('handschoen')||l.includes('kwast')||l.includes('reiniger')||l.includes('verbruik'))
+    return 'verbruik';
   return 'overig';
 }
 
@@ -4130,11 +4179,12 @@ function renderVoorraadActief(){
   const zoek=(document.getElementById('voorraad-zoek')?.value||'').toLowerCase();
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
   renderVoorraadKPI(voorraad);
-  ['platen','kantenband','overig'].forEach(cat=>{
+  VOORRAAD_CAT_KEYS.forEach(cat=>{
     // Gebruik de opgeslagen categorie op het item zelf, niet automatisch berekend
     const items=voorraad.filter(v=>(v.categorie||categoriseerMateriaal(v.omschrijving))===cat);
     renderVoorraadTabel(cat,items,zoek);
   });
+  renderVoorraadCorrecties();
 }
 function renderVoorraadKPI(voorraad){
   const kpiEl=document.getElementById('voorraad-kpi');
@@ -4153,11 +4203,13 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
   const per={};
   items.forEach(v=>{
     const key=(v.omschrijving||'Onbekend').trim();
-    if(!per[key]) per[key]={regels:[],totaalAantal:0,leveranciers:new Set(),prijzen:[],categorie:cat};
+    if(!per[key]) per[key]={regels:[],totaalAantal:0,leveranciers:new Set(),prijzen:[],categorie:cat,artikelnummer:'',eenheid:''};
     per[key].regels.push(v);per[key].totaalAantal+=(v.aantal||1);
     per[key].leveranciers.add(v.leverancier||'?');per[key].prijzen.push(v.stukprijs||0);
+    if(v.artikelnummer&&!per[key].artikelnummer) per[key].artikelnummer=v.artikelnummer;
+    if(v.eenheid&&!per[key].eenheid) per[key].eenheid=v.eenheid;
   });
-  let gefilterd=Object.entries(per).filter(([k,v])=>!zoek||k.toLowerCase().includes(zoek)||[...v.leveranciers].some(l=>l.toLowerCase().includes(zoek)));
+  let gefilterd=Object.entries(per).filter(([k,v])=>!zoek||k.toLowerCase().includes(zoek)||[...v.leveranciers].some(l=>l.toLowerCase().includes(zoek))||(v.artikelnummer||'').toLowerCase().includes(zoek));
   // Sorteren
   gefilterd.sort((a,b)=>{
     let va,vb;
@@ -4174,7 +4226,7 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
   const th=(k,label,align='left')=>`<th style="text-align:${align};${thS}" onclick="renderVoorraadTabel('${cat}',JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>(v.categorie||categoriseerMateriaal(v.omschrijving))==='${cat}'),(document.getElementById('voorraad-zoek')?.value||'').toLowerCase(),'${k}',${sortK==='${k}'?!sortA:true})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
   el.innerHTML=`<table class="v-table">
     <thead><tr>
-      ${th('materiaal','Materiaal')}${th('leverancier','Leverancier')}${th('stuks','Stuks','right')}
+      ${th('materiaal','Materiaal')}<th>Art.nr</th>${th('leverancier','Leverancier')}${th('stuks','Stuks','right')}
       ${th('prijs','Laatste prijs','right')}<th style="text-align:right">Correctie</th>
       <th>Categorie</th><th>Bestellen</th><th></th>
     </tr></thead>
@@ -4184,9 +4236,10 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
       const prijsWarn=maxP>minP*1.05;
       const opBestelling=bestellijst.some(b=>b.materiaal===mat&&!b.besteld);
       const levs=[...data.leveranciers];
-      const andereCats=['platen','kantenband','overig'].filter(c=>c!==cat);
+      const andereCats=VOORRAAD_CAT_KEYS.filter(c=>c!==cat);
       return`<tr>
         <td><strong style="font-size:12px">${mat}</strong>${prijsWarn?`<br><small style="color:var(--orange)">⚠ prijsvariatie €${minP.toFixed(2)}–€${maxP.toFixed(2)}</small>`:''}</td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${data.artikelnummer||'—'}</td>
         <td>${levs.map(l=>{
           const info=leveranciers.find(lv=>lv.naam.toLowerCase()===l.toLowerCase());
           return info?`<span class="lev-chip" onclick="toonLeverancierInfo('${l}')" title="${info.website||''}">${l} 🔗</span>`:`<span style="font-size:11px">${l}</span>`;
@@ -4195,8 +4248,8 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
         <td style="text-align:right;font-family:var(--mono)">€ ${lastPrijs.toFixed(2)}</td>
         <td style="text-align:right"><input class="correctie-input" type="number" placeholder="0" title="Handmatige correctie" onchange="corrigeerVoorraad('${mat}',this.value,'${cat}')"></td>
         <td><select onchange="verplaatsVoorraadCategorie('${mat.replace(/'/g,"\\'")}','${cat}',this.value)" style="font-size:11px;padding:3px 6px;width:auto">
-          <option value="${cat}">${cat}</option>
-          ${andereCats.map(c=>`<option value="${c}">${c}</option>`).join('')}
+          <option value="${cat}">${VOORRAAD_CAT_LABEL[cat]||cat}</option>
+          ${andereCats.map(c=>`<option value="${c}">${VOORRAAD_CAT_LABEL[c]||c}</option>`).join('')}
         </select></td>
         <td><button class="bestellen-btn ${opBestelling?'besteld':''}" onclick="toggleBestellijst('${mat}','${cat}','${levs[0]||''}',${lastPrijs},this)">${opBestelling?'✓ Op lijst':'+ Bestellen'}</button></td>
         <td style="display:flex;gap:4px">
@@ -4269,6 +4322,137 @@ function toonLeverancierInfo(naam){
   planToast(parts.join('   ·   '));
 }
 
+// ═══ HANDMATIG VOORRAAD-ITEM TOEVOEGEN (gereedschap/verbruik/overig) ═══
+function toggleVoorraadItemForm(){
+  const el=document.getElementById('voorraad-item-form');
+  if(!el) return;
+  const wordtZichtbaar=el.classList.contains('hidden');
+  el.classList.toggle('hidden');
+  if(wordtZichtbaar){
+    // Categorie-select vullen + leverancier-datalist (één keer)
+    const sel=document.getElementById('vi-categorie');
+    if(sel&&!sel.options.length){
+      sel.innerHTML=VOORRAAD_CATS.map(c=>`<option value="${c.key}">${c.icon} ${c.label}</option>`).join('');
+      sel.value='gereedschap';
+    }
+    const dl=document.getElementById('vi-lev-list');
+    if(dl&&!dl.options.length){
+      const namen=[...new Set([...VOORRAAD_HANDMATIG_LEVERANCIERS,...leveranciers.map(l=>l.naam)])];
+      dl.innerHTML=namen.map(n=>`<option value="${n}">`).join('');
+    }
+    document.getElementById('vi-omschrijving')?.focus();
+  }
+}
+function voegVoorraadItemToe(){
+  const omschrijving=(document.getElementById('vi-omschrijving').value||'').trim();
+  if(!omschrijving){document.getElementById('vi-omschrijving').focus();return;}
+  const regel={
+    omschrijving,
+    artikelnummer:(document.getElementById('vi-artikelnummer').value||'').trim(),
+    leverancier:(document.getElementById('vi-leverancier').value||'').trim()||'Handmatig',
+    categorie:document.getElementById('vi-categorie').value||'gereedschap',
+    categorieManueel:true,
+    aantal:parseFloat(document.getElementById('vi-aantal').value)||0,
+    stukprijs:parseFloat(document.getElementById('vi-stukprijs').value)||0,
+    eenheid:(document.getElementById('vi-eenheid').value||'').trim()||'stuk',
+    opmerking:(document.getElementById('vi-opmerking').value||'').trim(),
+    handmatig:true,
+    project:'',
+    datum:new Date().toISOString().split('T')[0]
+  };
+  slaVoorraadOp(regel); // krijgt id+ts; mt_voorraad mirrort auto naar SharePoint
+  // Reset
+  ['vi-omschrijving','vi-artikelnummer','vi-leverancier','vi-opmerking'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('vi-aantal').value='1';
+  document.getElementById('vi-stukprijs').value='0';
+  document.getElementById('vi-eenheid').value='';
+  planToast(`✓ "${omschrijving}" toegevoegd aan ${VOORRAAD_CAT_LABEL[regel.categorie]||regel.categorie}`);
+  // Naar de juiste sub-tab springen zodat het item meteen zichtbaar is
+  const knop=[...document.querySelectorAll('#voorraad-subtabs .vtab-btn')].find(b=>b.getAttribute('onclick')?.includes(`'${regel.categorie}'`));
+  if(knop) showVtab(regel.categorie,knop);
+  renderVoorraadActief();
+}
+
+// ═══ BEVEILIGDE APP→COCKPIT VOORRAAD-CORRECTIES ═══
+// De app schrijft alleen VOORSTELLEN naar mt_voorraad_correcties.json (read-merge-write,
+// NIET via _SP.KEYS auto-mirror). De cockpit leest ze hier, Bart akkordeert of wijst af.
+// Akkoord → correctie-mutatie in mt_voorraad (telt richting de echte voorraad).
+let _voorraadCorrecties=[];
+async function renderVoorraadCorrecties(){
+  const el=document.getElementById('voorraad-correcties-paneel');
+  if(!el) return;
+  let lijst=[];
+  try{ lijst=await _SP.read('mt_voorraad_correcties.json'); }catch(e){ lijst=null; }
+  if(!Array.isArray(lijst)) lijst=[];
+  _voorraadCorrecties=lijst;
+  const open=lijst.filter(c=>c.status==='open');
+  if(!open.length){ el.innerHTML=''; return; }
+  el.innerHTML=`<div class="card" style="border-left:4px solid var(--orange,#d97706);margin-bottom:1rem">
+    <div class="card-title" style="margin-bottom:0.6rem">📲 Te akkorderen vanuit de app <span style="font-size:11px;color:var(--text-dim)">(${open.length})</span></div>
+    <table class="v-table">
+      <thead><tr><th>Item</th><th>Categorie</th><th style="text-align:right">Huidig</th><th style="text-align:right">Geteld</th><th style="text-align:right">Δ</th><th>Door</th><th>Wanneer</th><th></th></tr></thead>
+      <tbody>${open.map(c=>{
+        const delta=(c.geteld??c.nieuwAantal??0)-(c.huidigAantal??0);
+        const nieuwItem=c.type==='nieuw';
+        return`<tr>
+          <td><strong style="font-size:12px">${(c.omschrijving||'?')}</strong>${c.artikelnummer?`<br><small style="font-family:var(--mono);color:var(--text-dim)">${c.artikelnummer}</small>`:''}${nieuwItem?'<br><small style="color:var(--green)">＋ nieuw item</small>':''}${c.opmerking?`<br><small style="color:var(--text-dim)">${c.opmerking}</small>`:''}</td>
+          <td style="font-size:11px">${VOORRAAD_CAT_LABEL[c.categorie]||c.categorie||'—'}</td>
+          <td style="text-align:right;font-family:var(--mono)">${nieuwItem?'—':(c.huidigAantal??0)}</td>
+          <td style="text-align:right;font-family:var(--mono);font-weight:600">${c.geteld??c.nieuwAantal??0}</td>
+          <td style="text-align:right;font-family:var(--mono);color:${delta>0?'var(--green)':delta<0?'var(--red)':'inherit'}">${nieuwItem?'+'+(c.nieuwAantal??0):(delta>0?'+':'')+delta}</td>
+          <td style="font-size:11px">${c.door||'app'}</td>
+          <td style="font-size:11px;color:var(--text-dim)">${c.ts?new Date(c.ts).toLocaleDateString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''}</td>
+          <td style="display:flex;gap:4px">
+            <button class="btn btn-xs btn-primary" onclick="akkordeerCorrectie('${c.id}')">✓ Akkoord</button>
+            <button class="btn btn-xs btn-danger" onclick="wijsCorrectieAf('${c.id}')">✕</button>
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div style="font-size:11px;color:var(--text-dim);margin-top:0.5rem">Akkoord boekt een correctie-mutatie in de voorraad. Afwijzen verwerkt het voorstel zonder wijziging.</div>
+  </div>`;
+}
+async function _verwerkCorrectie(id,akkoord){
+  // Lees ACTUELE SP-staat (read-merge-write — niet de mogelijk verouderde lokale kopie)
+  let lijst=[];
+  try{ lijst=await _SP.read('mt_voorraad_correcties.json'); }catch(e){ lijst=null; }
+  if(!Array.isArray(lijst)){ planToast('Kon correcties niet laden — probeer opnieuw'); return; }
+  const c=lijst.find(x=>String(x.id)===String(id));
+  if(!c||c.status!=='open'){ renderVoorraadCorrecties(); return; }
+  if(akkoord){
+    const huidig=c.type==='nieuw'?0:(c.huidigAantal??0);
+    const doel=c.geteld??c.nieuwAantal??0;
+    const delta=doel-huidig;
+    if(delta!==0||c.type==='nieuw'){
+      const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
+      voorraad.push({
+        omschrijving:c.omschrijving,
+        artikelnummer:c.artikelnummer||'',
+        aantal:c.type==='nieuw'?(c.nieuwAantal??0):delta,
+        stukprijs:c.stukprijs||0,
+        eenheid:c.eenheid||'stuk',
+        leverancier:c.leverancier||'Telling (app)',
+        categorie:c.categorie||'overig',
+        categorieManueel:!!c.categorie,
+        project:'',
+        opmerking:`Telling ${c.door||'app'}${c.opmerking?' — '+c.opmerking:''}`,
+        correctie:true,
+        datum:new Date().toISOString().split('T')[0],
+        ts:Date.now(),id:Date.now()+Math.random()
+      });
+      localStorage.setItem('mt_voorraad',JSON.stringify(voorraad)); // mirrort auto naar SP
+    }
+  }
+  c.status=akkoord?'verwerkt':'afgewezen';
+  c.verwerkt_op=new Date().toISOString();
+  c.verwerkt_door='cockpit';
+  await _SP.write('mt_voorraad_correcties.json',lijst);
+  planToast(akkoord?'✓ Correctie doorgevoerd':'Voorstel afgewezen');
+  renderVoorraadActief();
+}
+function akkordeerCorrectie(id){ _verwerkCorrectie(id,true); }
+function wijsCorrectieAf(id){ _verwerkCorrectie(id,false); }
+
 // ═══ BESTELLIJST ═══
 function toggleBestellijst(mat,cat,lev,prijs,btn){
   const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]');
@@ -4285,7 +4469,7 @@ function renderBestellijst(sortK='materiaal',sortA=true){
   const perCat={};lijst.forEach(b=>{if(!perCat[b.categorie]) perCat[b.categorie]=[];perCat[b.categorie].push(b);});
   const thS='cursor:pointer;user-select:none;white-space:nowrap';
   const th=(k,label,align='left')=>`<th style="text-align:${align};${thS}" onclick="renderBestellijst('${k}',${sortK==='${k}'?!sortA:true})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
-  const catVolgorde=['platen','kantenband','overig'];
+  const catVolgorde=VOORRAAD_CAT_KEYS;
   const gesorteerdeEntries=catVolgorde.filter(c=>perCat[c]).map(c=>[c,perCat[c]]);
   // Voeg andere categorieën toe die niet in volgorde staan
   Object.entries(perCat).forEach(([c,items])=>{if(!catVolgorde.includes(c)) gesorteerdeEntries.push([c,items]);});
@@ -4296,7 +4480,7 @@ function renderBestellijst(sortK='materiaal',sortA=true){
       return sortA?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va));
     });
     return`<div style="margin-bottom:1.5rem">
-      <div class="card-title" style="margin-bottom:0.5rem">${cat==='platen'?'🪵 Platen':cat==='kantenband'?'📏 Kantenband':'🔩 Overig'}</div>
+      <div class="card-title" style="margin-bottom:0.5rem">${VOORRAAD_CAT_LABEL[cat]||('🔩 '+cat)}</div>
       <table class="v-table">
         <thead><tr><th>✓</th>${th('materiaal','Materiaal')}${th('leverancier','Leverancier')}<th style="text-align:right">Aantal</th>${th('prijsLaatst','Laatste prijs','right')}${th('datum','Datum','left')}<th></th></tr></thead>
         <tbody>${gesorteerd.map(b=>`<tr style="${b.besteld?'opacity:0.5;text-decoration:line-through':''}">

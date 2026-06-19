@@ -997,6 +997,32 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <div id="fbList"></div>
   </div>
 
+  <div class="tab" id="tab-voorraad">
+    <div class="section-head" style="margin-top:6px">Voorraad tellen</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+      Tel wat er werkelijk ligt en dien een correctie in. Je past de voorraad <strong>niet</strong> direct aan —
+      Bart akkordeert vanaf de cockpit, dán wordt het doorgevoerd.
+    </div>
+    <div class="field">
+      <label>Categorie</label>
+      <select id="vraCat" onchange="renderVoorraadApp()"></select>
+    </div>
+    <div class="field">
+      <input type="text" id="vraZoek" placeholder="🔍 Zoek op naam of artikelnummer…" oninput="renderVoorraadApp()">
+    </div>
+    <div id="vraLijst"></div>
+    <div class="section-head" style="margin-top:20px">Nieuw item melden</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Staat iets nog niet in de lijst? Meld het — Bart voegt het toe na akkoord.</div>
+    <div class="field"><label>Omschrijving</label><input type="text" id="vraNieuwNaam" placeholder="bv. Schaftfrees Ø8 HM"></div>
+    <div class="field"><label>Artikelnummer (optioneel)</label><input type="text" id="vraNieuwArt" placeholder="leverancier-code"></div>
+    <div class="field" style="display:flex;gap:8px">
+      <div style="flex:1"><label>Aantal geteld</label><input type="number" id="vraNieuwAantal" value="1" min="0" step="1"></div>
+      <div style="flex:1"><label>Leverancier</label><input type="text" id="vraNieuwLev" placeholder="Glas Klooster…"></div>
+    </div>
+    <button class="btn btn-secondary" onclick="meldNieuwVoorraadItem()" style="width:100%;margin-top:4px">＋ Nieuw item melden</button>
+    <div id="vraSamenvatting" style="margin-top:16px"></div>
+  </div>
+
 </div><!-- /app-content -->
 
 <!-- ── BOTTOM NAV ── -->
@@ -1020,6 +1046,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <button class="nav-btn" onclick="switchTab('oplevering',this)" id="nav-oplevering">
     <div class="nav-icon">📋</div>
     <span>Rapportage</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('voorraad',this)" id="nav-voorraad">
+    <div class="nav-icon">📦</div>
+    <span>Voorraad</span>
   </button>
   <button class="nav-btn" onclick="switchTab('feedback',this)" id="nav-feedback">
     <div class="nav-icon">💬</div>
@@ -2136,6 +2166,7 @@ function switchTab(name, btn) {
   btn.classList.add("active");
   if (name === "capture") renderCaptureProject();
   if (name === "feedback") renderFbList();
+  if (name === "voorraad") initVoorraadApp();
 }
 
 /* =====================================================================
@@ -4810,6 +4841,7 @@ const _RQ = {
           else if (task.type === "oplevering") ok = await oplUpload(task.entry);
           else if (task.type === "notitie") ok = await noteUpload(task.entry);
           else if (task.type === "opname") ok = await opnUpload(task.entry);
+          else if (task.type === "voorraadcorrectie") ok = await vcUpload(task.entry);
         } catch(e) { ok = false; }
         if (!ok) rest.push(task);
       }
@@ -4823,6 +4855,169 @@ const _RQ = {
 };
 window.addEventListener("online", () => _RQ.flush());
 setInterval(() => _RQ.flush(), 60000);
+
+/* =====================================================================
+   VOORRAAD TELLEN (beveiligd: app dient alleen VOORSTELLEN in)
+   - Leest mt_voorraad.json READ-ONLY (de echte voorraad uit de cockpit).
+   - Schrijft uitsluitend naar mt_voorraad_correcties.json (read-merge-write),
+     status 'open'. De cockpit akkordeert; pas dán verandert de echte voorraad.
+   - Schrijft NOOIT mt_voorraad. Geen clobber-risico.
+   ===================================================================== */
+const VC_FILE = "mt_voorraad_correcties.json";
+const VRA_CATS = [
+  {key:'platen',label:'🪵 Platen'},{key:'kantenband',label:'📏 Kantenband'},
+  {key:'gereedschap',label:'🛠️ Gereedschap'},{key:'verbruik',label:'🧴 Verbruik'},
+  {key:'overig',label:'🔩 Overig'}
+];
+let _vraVoorraad = null;     // geaggregeerd uit mt_voorraad.json
+let _vraGeladen = false;
+
+async function initVoorraadApp() {
+  const sel = document.getElementById("vraCat");
+  if (sel && !sel.options.length) {
+    sel.innerHTML = `<option value="">Alle categorieën</option>` +
+      VRA_CATS.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
+    sel.value = 'gereedschap';
+  }
+  if (!_vraGeladen) await laadVoorraadApp();
+  renderVoorraadApp();
+}
+async function laadVoorraadApp() {
+  const el = document.getElementById("vraLijst");
+  if (el) el.innerHTML = `<div style="font-size:13px;color:var(--text-faint)">Voorraad laden…</div>`;
+  let raw = null;
+  try { raw = await _SP.read("mt_voorraad.json"); } catch(e) { raw = null; }
+  if (!Array.isArray(raw)) {
+    _vraVoorraad = [];
+    _vraGeladen = true;
+    if (el) el.innerHTML = _demoMode
+      ? `<div style="font-size:13px;color:var(--text-faint)">Log in op Microsoft 365 om de voorraad te laden.</div>`
+      : `<div style="font-size:13px;color:var(--text-faint)">Nog geen voorraad gevonden.</div>`;
+    return;
+  }
+  // Aggregeren per omschrijving (zelfde sleutel als de cockpit)
+  const per = {};
+  raw.forEach(v => {
+    const key = (v.omschrijving || "Onbekend").trim();
+    if (!per[key]) per[key] = {omschrijving:key, aantal:0, categorie:v.categorie||'overig', artikelnummer:'', leverancier:'', eenheid:''};
+    per[key].aantal += (v.aantal || 0);
+    if (v.categorie) per[key].categorie = v.categorie;
+    if (v.artikelnummer && !per[key].artikelnummer) per[key].artikelnummer = v.artikelnummer;
+    if (v.leverancier && !per[key].leverancier && !/correctie|telling/i.test(v.leverancier)) per[key].leverancier = v.leverancier;
+    if (v.eenheid && !per[key].eenheid) per[key].eenheid = v.eenheid;
+  });
+  _vraVoorraad = Object.values(per).sort((a,b)=>a.omschrijving.localeCompare(b.omschrijving));
+  _vraGeladen = true;
+}
+function renderVoorraadApp() {
+  const el = document.getElementById("vraLijst");
+  if (!el || !_vraVoorraad) return;
+  const cat = document.getElementById("vraCat")?.value || "";
+  const zoek = (document.getElementById("vraZoek")?.value || "").toLowerCase().trim();
+  let items = _vraVoorraad.filter(v =>
+    (!cat || v.categorie === cat) &&
+    (!zoek || v.omschrijving.toLowerCase().includes(zoek) || (v.artikelnummer||"").toLowerCase().includes(zoek)));
+  if (!items.length) {
+    el.innerHTML = `<div style="font-size:13px;color:var(--text-faint)">Geen items in deze categorie.${_vraVoorraad.length?'':' Voeg ze toe via "Nieuw item melden" hieronder.'}</div>`;
+    return;
+  }
+  el.innerHTML = items.map(v => {
+    const safeId = "vc_" + btoa(unescape(encodeURIComponent(v.omschrijving))).replace(/[^A-Za-z0-9]/g,'');
+    return `<div style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--n-0)">
+      <div style="font-weight:600;font-size:13px">${escHtml(v.omschrijving)}</div>
+      <div style="font-size:11px;color:var(--text-faint);margin:2px 0 8px">
+        ${v.artikelnummer?escHtml(v.artikelnummer)+' · ':''}${escHtml(v.leverancier||'—')} · voorraad nu: <strong>${v.aantal}</strong>${v.eenheid?' '+escHtml(v.eenheid):''}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:12px;color:var(--text-dim)">Geteld:</label>
+        <input type="number" id="${safeId}" data-oms="${escHtml(v.omschrijving)}" data-huidig="${v.aantal}" data-cat="${v.categorie}" data-art="${escHtml(v.artikelnummer||'')}"
+          placeholder="${v.aantal}" min="0" step="1" style="width:90px" oninput="vraUpdateSamenvatting()">
+      </div>
+    </div>`;
+  }).join('');
+  vraUpdateSamenvatting();
+}
+function _vraOpenTellingen() {
+  // Verzamel alle ingevulde tellingen die afwijken van het huidige aantal
+  const out = [];
+  document.querySelectorAll('#vraLijst input[type=number]').forEach(inp => {
+    if (inp.value === "") return;
+    const geteld = parseFloat(inp.value);
+    const huidig = parseFloat(inp.dataset.huidig) || 0;
+    if (isNaN(geteld) || geteld === huidig) return;
+    out.push({omschrijving:inp.dataset.oms, huidigAantal:huidig, geteld, categorie:inp.dataset.cat, artikelnummer:inp.dataset.art||''});
+  });
+  return out;
+}
+function vraUpdateSamenvatting() {
+  const el = document.getElementById("vraSamenvatting");
+  if (!el) return;
+  const tellingen = _vraOpenTellingen();
+  if (!tellingen.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div style="border:1px solid var(--accent,#b8860b);border-radius:12px;padding:12px;background:var(--n-0)">
+    <div style="font-weight:600;font-size:13px;margin-bottom:6px">${tellingen.length} correctie(s) klaar om in te dienen</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${tellingen.map(t=>`${escHtml(t.omschrijving)}: ${t.huidigAantal} → <strong>${t.geteld}</strong>`).join('<br>')}</div>
+    <button class="btn btn-primary" onclick="dienVoorraadCorrectiesIn()" style="width:100%">📤 Indienen ter akkoord</button>
+  </div>`;
+}
+async function _vcVerstuur(entry) {
+  let ok = false;
+  if (!_demoMode && _msAccount) ok = await vcUpload(entry);
+  if (!ok) { _RQ.push({type:"voorraadcorrectie", entry}); }
+  return ok;
+}
+async function dienVoorraadCorrectiesIn() {
+  const tellingen = _vraOpenTellingen();
+  if (!tellingen.length) { showToast("Vul eerst een geteld aantal in"); return; }
+  const user = _msAccount ? (_msAccount.username || "").toLowerCase() : "app";
+  let online = 0, queued = 0;
+  for (const t of tellingen) {
+    const entry = {
+      id: "vc-" + Date.now() + "-" + Math.random().toString(36).slice(2,7),
+      ts: new Date().toISOString(),
+      type: "telling",
+      omschrijving: t.omschrijving, artikelnummer: t.artikelnummer,
+      categorie: t.categorie, huidigAantal: t.huidigAantal, geteld: t.geteld,
+      door: user, bron: "mobiel", status: "open"
+    };
+    const ok = await _vcVerstuur(entry);
+    ok ? online++ : queued++;
+  }
+  showToast(queued ? `${online} verstuurd, ${queued} wacht op verbinding` : `${online} correctie(s) ingediend — wacht op akkoord`);
+  // Reset invulvelden en herlaad de (ongewijzigde) voorraad
+  document.querySelectorAll('#vraLijst input[type=number]').forEach(i => i.value = "");
+  vraUpdateSamenvatting();
+}
+async function meldNieuwVoorraadItem() {
+  const naam = (document.getElementById("vraNieuwNaam").value || "").trim();
+  if (!naam) { showToast("Vul een omschrijving in"); document.getElementById("vraNieuwNaam").focus(); return; }
+  const cat = document.getElementById("vraCat")?.value || "gereedschap";
+  const entry = {
+    id: "vc-" + Date.now() + "-" + Math.random().toString(36).slice(2,7),
+    ts: new Date().toISOString(),
+    type: "nieuw",
+    omschrijving: naam,
+    artikelnummer: (document.getElementById("vraNieuwArt").value || "").trim(),
+    categorie: cat || "gereedschap",
+    nieuwAantal: parseFloat(document.getElementById("vraNieuwAantal").value) || 0,
+    leverancier: (document.getElementById("vraNieuwLev").value || "").trim(),
+    door: _msAccount ? (_msAccount.username || "").toLowerCase() : "app",
+    bron: "mobiel", status: "open"
+  };
+  const ok = await _vcVerstuur(entry);
+  showToast(ok ? `"${naam}" gemeld — wacht op akkoord` : `"${naam}" bewaard — gaat weg na inloggen`);
+  ["vraNieuwNaam","vraNieuwArt","vraNieuwLev"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("vraNieuwAantal").value = "1";
+}
+// read-merge-write; dedupe op id zodat een retry nooit dubbel insert
+async function vcUpload(entry) {
+  try {
+    const cur = await _SP.read(VC_FILE);
+    const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
+    if (!list.some(e => e && e.id === entry.id)) list.push(entry);
+    return await _SP.write(VC_FILE, list);
+  } catch(e) { return false; }
+}
 
 /* =====================================================================
    TOAST
