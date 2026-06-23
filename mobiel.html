@@ -832,9 +832,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <div class="card-label">Foto's opnemen</div>
         <span class="badge badge-info" id="photoCount">0 foto's</span>
       </div>
-      <div class="photo-input-wrap" style="display:block">
+      <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>addPhoto(f))">📷 Camera openen</button>
+      <div class="photo-input-wrap" style="display:block;margin-top:8px">
         <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
-          <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📷 Camera openen</button>
+          <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Bestand kiezen</button>
           <input type="file" accept="image/*" capture="environment" onchange="addPhoto(this)" multiple>
         </label>
       </div>
@@ -882,9 +883,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <!-- OPNAME / INMETEN -->
       <div id="opnameRapWrap" style="display:none">
         <div class="section-head" id="opnameRapLabel" style="margin-top:14px"></div>
-        <div class="photo-input-wrap" style="display:block">
+        <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>inmFoto(f))">📷 Camera openen</button>
+        <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
-            <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📷 Foto's toevoegen</button>
+            <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Bestand kiezen</button>
             <input type="file" accept="image/*" capture="environment" onchange="inmFoto(this)" multiple>
           </label>
         </div>
@@ -902,17 +904,19 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <div id="checklistItems"></div>
         <div class="section-head" style="margin-top:14px">📷 Aangetroffen situatie</div>
         <div class="thumbs-grid" id="oplVoorGrid"></div>
-        <div class="photo-input-wrap" style="display:block">
+        <button class="btn btn-primary btn-full" onclick="openCamera(f=>oplFoto('voor',f))">📷 Camera — hoe troffen we het aan</button>
+        <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
-            <button class="btn btn-secondary btn-full" style="pointer-events:none">📷 Foto's — hoe troffen we het aan</button>
+            <button class="btn btn-secondary btn-full" style="pointer-events:none">📁 Bestand kiezen</button>
             <input type="file" accept="image/*" capture="environment" onchange="oplFoto('voor',this)" multiple>
           </label>
         </div>
         <div class="section-head" style="margin-top:14px">📷 Opgeleverd resultaat</div>
         <div class="thumbs-grid" id="oplNaGrid"></div>
-        <div class="photo-input-wrap" style="display:block">
+        <button class="btn btn-primary btn-full" onclick="openCamera(f=>oplFoto('na',f))">📷 Camera — zoals opgeleverd</button>
+        <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
-            <button class="btn btn-secondary btn-full" style="pointer-events:none">📷 Foto's — zoals opgeleverd</button>
+            <button class="btn btn-secondary btn-full" style="pointer-events:none">📁 Bestand kiezen</button>
             <input type="file" accept="image/*" capture="environment" onchange="oplFoto('na',this)" multiple>
           </label>
         </div>
@@ -1267,11 +1271,85 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 <!-- ── TOAST ── -->
 <div class="toast" id="toast"></div>
 
+<!-- ── IN-APP CAMERA (getUserMedia — werkt op telefoon én Windows-tablet) ── -->
+<div id="camModal" style="display:none;position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column">
+  <video id="camVideo" autoplay playsinline muted style="flex:1;width:100%;object-fit:cover;background:#000"></video>
+  <canvas id="camCanvas" style="display:none"></canvas>
+  <div id="camErr" style="display:none;color:#fff;padding:20px;text-align:center;font-size:14px"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#000;padding-bottom:max(14px,env(safe-area-inset-bottom))">
+    <button onclick="closeCamera()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:12px 16px;font-size:15px">Sluiten</button>
+    <button id="camShotBtn" onclick="camSnap()" style="width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid #bbb;flex-shrink:0"></button>
+    <div id="camCount" style="color:#fff;font-size:13px;min-width:64px;text-align:right">0 foto's</div>
+  </div>
+</div>
+
 <script>
 /* =====================================================================
    ═══ AUTH + API LAAG ═══
    ===================================================================== */
 const WORKER = 'https://mt-claude-proxy.bart-a12.workers.dev';
+
+/* =====================================================================
+   ═══ IN-APP CAMERA (getUserMedia) ═══
+   Werkt op telefoon én Windows-tablet, waar de <input capture> door de
+   browser genegeerd wordt en alleen de Verkenner opent. Maakt een echte
+   File en voert die in dezelfde handler (addPhoto/inmFoto/oplFoto) als de
+   bestandskiezer, zodat de upload-pijplijn ongewijzigd blijft.
+   ===================================================================== */
+let _camStream = null, _camCb = null, _camN = 0;
+
+async function openCamera(cb) {
+  _camCb = cb; _camN = 0;
+  const modal = document.getElementById("camModal");
+  const err = document.getElementById("camErr");
+  const video = document.getElementById("camVideo");
+  document.getElementById("camCount").textContent = "0 foto's";
+  err.style.display = "none"; video.style.display = "block";
+  modal.style.display = "flex";
+  try {
+    _camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    video.srcObject = _camStream;
+  } catch (e) {
+    video.style.display = "none";
+    err.style.display = "block";
+    err.innerHTML = "Kon de camera niet openen.<br><br>" +
+      (e && e.name === "NotAllowedError"
+        ? "Geef de pagina toestemming voor de camera (slotje-icoon in de adresbalk) en probeer opnieuw."
+        : "Controleer of er een camera is en geen andere app hem gebruikt.") +
+      "<br><br>Je kunt ook 'Sluiten' kiezen en de knop \"📁 Bestand kiezen\" gebruiken.";
+  }
+}
+
+function camSnap() {
+  const video = document.getElementById("camVideo");
+  if (!video.videoWidth) return;
+  const canvas = document.getElementById("camCanvas");
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0);
+  canvas.toBlob(blob => {
+    if (!blob || !_camCb) return;
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const file = new File([blob], `foto-${ts}.jpg`, { type: "image/jpeg" });
+    _camCb({ files: [file], value: "" });   // zelfde vorm als een <input type=file>
+    _camN++;
+    document.getElementById("camCount").textContent = `${_camN} foto${_camN === 1 ? "" : "'s"}`;
+    const btn = document.getElementById("camShotBtn");
+    btn.style.borderColor = "#c9a24b";
+    setTimeout(() => { btn.style.borderColor = "#bbb"; }, 150);
+    if (window.showToast) showToast(`Foto ${_camN} toegevoegd`);
+  }, "image/jpeg", 0.92);
+}
+
+function closeCamera() {
+  if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
+  const video = document.getElementById("camVideo");
+  if (video) video.srcObject = null;
+  document.getElementById("camModal").style.display = "none";
+  _camCb = null;
+}
 const TG_WS  = 21258443;
 const TG_ORG = 21259253;
 const FOCUS_BASE_PATH = `organizations/${TG_ORG}/workspaces/${TG_WS}/`;
@@ -4871,6 +4949,26 @@ const VRA_CATS = [
 ];
 let _vraVoorraad = null;     // geaggregeerd uit mt_voorraad.json
 let _vraGeladen = false;
+let _vraOpen = {};           // open voorstellen per omschrijving (lowercase) → [entry,…]
+
+// Lees de open (nog niet geakkordeerde) voorstellen zodat we ze zichtbaar maken
+// en dubbel indienen kunnen voorkomen.
+async function laadOpenVoorstellen() {
+  _vraOpen = {};
+  if (_demoMode || !_msAccount) return;
+  let cur = null;
+  try { cur = await _SP.read(VC_FILE); } catch(e) { cur = null; }
+  const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
+  list.forEach(e => {
+    if (!e || e.status !== "open") return;
+    const k = (e.omschrijving || "").trim().toLowerCase();
+    if (!k) return;
+    (_vraOpen[k] = _vraOpen[k] || []).push(e);
+  });
+}
+function _openVoorstelVoor(oms) {
+  return (_vraOpen[(oms || "").trim().toLowerCase()] || [])[0] || null;
+}
 
 async function initVoorraadApp() {
   const sel = document.getElementById("vraCat");
@@ -4880,6 +4978,7 @@ async function initVoorraadApp() {
     sel.value = 'gereedschap';
   }
   if (!_vraGeladen) await laadVoorraadApp();
+  await laadOpenVoorstellen();
   renderVoorraadApp();
 }
 async function laadVoorraadApp() {
@@ -4921,18 +5020,37 @@ function renderVoorraadApp() {
     el.innerHTML = `<div style="font-size:13px;color:var(--text-faint)">Geen items in deze categorie.${_vraVoorraad.length?'':' Voeg ze toe via "Nieuw item melden" hieronder.'}</div>`;
     return;
   }
-  el.innerHTML = items.map(v => {
+  // Open 'nieuw'-meldingen die nog niet in de voorraad zitten — tonen zodat we ze niet opnieuw melden
+  const bekend = new Set(_vraVoorraad.map(v => v.omschrijving.toLowerCase()));
+  const nieuweOpen = Object.values(_vraOpen).flat().filter(e =>
+    e.type === "nieuw" && !bekend.has((e.omschrijving||"").toLowerCase()) &&
+    (!cat || e.categorie === cat) &&
+    (!zoek || (e.omschrijving||"").toLowerCase().includes(zoek) || (e.artikelnummer||"").toLowerCase().includes(zoek)));
+  const nieuweHtml = nieuweOpen.map(e =>
+    `<div style="border:1px dashed var(--accent,#b8860b);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--n-0);opacity:.85">
+      <div style="font-weight:600;font-size:13px">${escHtml(e.omschrijving)} <span style="font-size:10px;color:var(--accent,#b8860b)">⏳ nieuw, in afwachting</span></div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:2px">
+        ${e.artikelnummer?escHtml(e.artikelnummer)+' · ':''}${escHtml(e.leverancier||'—')} · gemeld aantal: <strong>${e.nieuwAantal||0}</strong> · wacht op akkoord
+      </div>
+    </div>`).join('');
+  el.innerHTML = nieuweHtml + items.map(v => {
     const safeId = "vc_" + btoa(unescape(encodeURIComponent(v.omschrijving))).replace(/[^A-Za-z0-9]/g,'');
-    return `<div style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--n-0)">
+    const open = _openVoorstelVoor(v.omschrijving);
+    const pendBadge = open
+      ? `<div style="font-size:11px;color:var(--accent,#b8860b);margin:0 0 6px">⏳ Voorstel in afwachting van akkoord${open.type==='telling'?`: ${open.huidigAantal} → <strong>${open.geteld}</strong>`:''} — niet opnieuw indienen</div>`
+      : '';
+    const inputBlok = open
+      ? `<div style="font-size:12px;color:var(--text-faint)">Geteld voorstel staat al klaar in de cockpit.</div>`
+      : `<div style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:12px;color:var(--text-dim)">Geteld:</label>
+        <input type="number" id="${safeId}" data-oms="${escHtml(v.omschrijving)}" data-huidig="${v.aantal}" data-cat="${v.categorie}" data-art="${escHtml(v.artikelnummer||'')}"
+          placeholder="${v.aantal}" min="0" step="1" style="width:90px" oninput="vraUpdateSamenvatting()"></div>`;
+    return `<div style="border:1px solid ${open?'var(--accent,#b8860b)':'var(--border)'};border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--n-0)">
       <div style="font-weight:600;font-size:13px">${escHtml(v.omschrijving)}</div>
       <div style="font-size:11px;color:var(--text-faint);margin:2px 0 8px">
         ${v.artikelnummer?escHtml(v.artikelnummer)+' · ':''}${escHtml(v.leverancier||'—')} · voorraad nu: <strong>${v.aantal}</strong>${v.eenheid?' '+escHtml(v.eenheid):''}
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="font-size:12px;color:var(--text-dim)">Geteld:</label>
-        <input type="number" id="${safeId}" data-oms="${escHtml(v.omschrijving)}" data-huidig="${v.aantal}" data-cat="${v.categorie}" data-art="${escHtml(v.artikelnummer||'')}"
-          placeholder="${v.aantal}" min="0" step="1" style="width:90px" oninput="vraUpdateSamenvatting()">
-      </div>
+      ${pendBadge}${inputBlok}
     </div>`;
   }).join('');
   vraUpdateSamenvatting();
@@ -4984,13 +5102,18 @@ async function dienVoorraadCorrectiesIn() {
     ok ? online++ : queued++;
   }
   showToast(queued ? `${online} verstuurd, ${queued} wacht op verbinding` : `${online} correctie(s) ingediend — wacht op akkoord`);
-  // Reset invulvelden en herlaad de (ongewijzigde) voorraad
-  document.querySelectorAll('#vraLijst input[type=number]').forEach(i => i.value = "");
-  vraUpdateSamenvatting();
+  // Herlaad de open voorstellen zodat de ⏳-badges meteen verschijnen (geen dubbele indiening)
+  await laadOpenVoorstellen();
+  renderVoorraadApp();
 }
 async function meldNieuwVoorraadItem() {
   const naam = (document.getElementById("vraNieuwNaam").value || "").trim();
   if (!naam) { showToast("Vul een omschrijving in"); document.getElementById("vraNieuwNaam").focus(); return; }
+  // Dubbele melding voorkomen: staat er al een open voorstel of bestaat het item al?
+  if (_openVoorstelVoor(naam)) { showToast(`"${naam}" staat al in afwachting van akkoord`); return; }
+  if (_vraVoorraad && _vraVoorraad.some(v => v.omschrijving.toLowerCase() === naam.toLowerCase())) {
+    showToast(`"${naam}" bestaat al — gebruik "Geteld" in de lijst hierboven`); return;
+  }
   const cat = document.getElementById("vraCat")?.value || "gereedschap";
   const entry = {
     id: "vc-" + Date.now() + "-" + Math.random().toString(36).slice(2,7),
@@ -5008,6 +5131,9 @@ async function meldNieuwVoorraadItem() {
   showToast(ok ? `"${naam}" gemeld — wacht op akkoord` : `"${naam}" bewaard — gaat weg na inloggen`);
   ["vraNieuwNaam","vraNieuwArt","vraNieuwLev"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("vraNieuwAantal").value = "1";
+  // Herlaad zodat de nieuwe melding meteen als "⏳ in afwachting" bovenaan verschijnt
+  await laadOpenVoorstellen();
+  renderVoorraadApp();
 }
 // read-merge-write; dedupe op id zodat een retry nooit dubbel insert
 async function vcUpload(entry) {

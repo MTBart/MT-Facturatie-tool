@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-19 — @ Toggl-2.0 skin preview-galerij naast de live tool
+- Commit: `3e80d67` | Auteur: Bart Witte
+
 ## 2026-06-19 — Vereist-aandacht: reactie-tekstveld per open item
 - Commit: `345be11` | Auteur: Bart Witte
 
