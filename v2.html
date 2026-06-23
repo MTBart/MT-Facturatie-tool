@@ -170,6 +170,23 @@ header h1 span{color:var(--gold);font-style:italic}
 .tab-btn:hover{color:var(--n-800)}
 .tab-btn.active{color:var(--green);border-bottom-color:var(--gold);font-weight:600}
 .tab-badge{display:inline-block;min-width:17px;height:17px;line-height:17px;padding:0 5px;margin-left:6px;border-radius:9px;background:#d97706;color:#fff;font-size:10px;font-weight:700;text-align:center;vertical-align:middle}
+/* ── Mobiele meldingen ── */
+.mobiel-bell-btn{position:relative;background:none;border:none;cursor:pointer;font-size:18px;padding:4px 6px;border-radius:6px;line-height:1;transition:background .15s}
+.mobiel-bell-btn:hover{background:rgba(0,0,0,.07)}
+.mobiel-bell-badge{position:absolute;top:-1px;right:-2px;min-width:16px;height:16px;line-height:16px;padding:0 4px;border-radius:8px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;text-align:center;display:none}
+.mobiel-melding-rij{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#fffbeb,#fff);border:1px solid #fbbf24;border-radius:8px;padding:8px 12px;margin-bottom:6px;cursor:pointer;font-size:13px;transition:background .15s}
+.mobiel-melding-rij:hover{background:linear-gradient(90deg,#fef3c7,#fffbeb)}
+.mobiel-melding-rij .mm-icon{font-size:18px;flex-shrink:0}
+.mobiel-melding-rij .mm-tekst{flex:1;line-height:1.35}
+.mobiel-melding-rij .mm-code{font-weight:700;color:var(--green)}
+.mobiel-melding-rij .mm-pijl{color:var(--gold);font-size:16px;flex-shrink:0}
+/* Aanvul-modal */
+#mobiel-aanvul-modal .modal{width:560px;max-width:96vw}
+#mobiel-aanvul-modal .aanvul-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:14px}
+#mobiel-aanvul-modal .aanvul-grid label{display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px}
+#mobiel-aanvul-modal .aanvul-grid input,#mobiel-aanvul-modal .aanvul-grid select{width:100%;box-sizing:border-box}
+#mobiel-aanvul-modal .aanvul-full{grid-column:1/-1}
+#mobiel-aanvul-modal .aanvul-status{font-size:12px;min-height:18px;margin-top:6px}
 .tab-content{display:none}
 .tab-content.active{display:block}
 /* ── FANCY: georkestreerde laad-reveal bij tab-activatie (staggered) ── */
@@ -533,6 +550,7 @@ button{transition:transform .07s ease,filter .07s ease}
   <div class="header-right">
     <span id="api-dot" class="api-dot warn"></span>
     <span id="api-label" class="api-label">verbinden...</span>
+    <button class="mobiel-bell-btn" id="mobiel-bell-btn" onclick="showTab('projecten',document.querySelector('.tab-btn[onclick*=\\'projecten\\']'));scrollMobielMeldingen()" title="Nieuwe projecten vanaf mobiel">📱<span class="mobiel-bell-badge" id="mobiel-bell-badge"></span></button>
     <div class="user-chip" onclick="msLogout()" title="Uitloggen">
       <div class="user-avatar" id="user-avatar">?</div>
       <span id="user-name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
@@ -864,6 +882,7 @@ button{transition:transform .07s ease,filter .07s ease}
             <button class="btn btn-gold btn-sm" onclick="openModal()" style="flex:1">+ Nieuw project</button>
           </div>
           <input class="zoek-input" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
+          <div id="mobiel-meldingen-container"></div>
           <div id="project-lijst"></div>
         </div>
       </div>
@@ -1977,6 +1996,48 @@ button{transition:transform .07s ease,filter .07s ease}
   </div>
 </div>
 
+<!-- Mobiel project aanvul-modal -->
+<div id="mobiel-aanvul-modal" class="modal-overlay hidden">
+  <div class="modal" style="width:560px;max-width:96vw">
+    <h2>📱 Project aanvullen vanuit mobiel</h2>
+    <div id="mobiel-aanvul-bron" style="font-size:12px;color:var(--text-faint);margin-bottom:1rem"></div>
+    <div class="aanvul-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:14px">
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Code (huidig / tijdelijk)</label>
+        <input type="text" id="aanvul-code-oud" readonly style="background:var(--n-100,#f3f4f6);cursor:default;width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Nieuwe code <span style="color:var(--text-faint)">(vervang tijdelijke code)</span></label>
+        <input type="text" id="aanvul-code-nieuw" placeholder="bijv. CN-BAJES-KEUKEN" style="text-transform:uppercase;font-family:var(--mono);width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Projectnaam</label>
+        <input type="text" id="aanvul-naam" placeholder="bijv. CompaNanny Bajeskwartier Keuken" style="width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Klant</label>
+        <input type="text" id="aanvul-klant" placeholder="bijv. CN" list="klant-codes-aanvul" style="width:100%;box-sizing:border-box" autocomplete="off">
+        <datalist id="klant-codes-aanvul"></datalist>
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Locatie / adres</label>
+        <input type="text" id="aanvul-locatie" placeholder="bijv. Bajeskwartier Amsterdam" style="width:100%;box-sizing:border-box">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Omschrijving</label>
+        <input type="text" id="aanvul-omschrijving" placeholder="Korte omschrijving van het project" style="width:100%;box-sizing:border-box">
+      </div>
+    </div>
+    <div id="mobiel-aanvul-pad" style="font-size:11px;color:var(--text-faint);margin-bottom:10px"></div>
+    <div class="flex" style="flex-wrap:wrap;gap:8px;align-items:center">
+      <button class="btn btn-primary" onclick="mobielAanvulOpslaan()">✓ Opslaan &amp; sluiten</button>
+      <button class="btn btn-gold btn-sm" id="aanvul-mappen-btn" onclick="mobielMapprenCompleet()">📁 Mappenstructuur compleet maken</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('mobiel-aanvul-modal').classList.add('hidden')">Annuleren</button>
+    </div>
+    <div id="mobiel-aanvul-status" class="aanvul-status" style="font-size:12px;min-height:18px;margin-top:6px"></div>
+  </div>
+</div>
+
 <!-- Leverancier modal -->
 <div id="lev-modal" class="modal-overlay hidden">
   <div class="modal">
@@ -2212,6 +2273,9 @@ window.onload=async()=>{
     const btn=document.getElementById('btn-migratie');
     if(btn) btn.style.display='none';
   }
+  // Mobiele projectmeldingen: eerste load na kort uitstel (SP-login moet klaar zijn),
+  // daarna elke 3 minuten pollen (180.000 ms).
+  setTimeout(async()=>{ await mobielMeldingenLaad(); setInterval(mobielMeldingenLaad, 180000); }, 3500);
 };
 
 // ═══ TABS ═══
@@ -7728,6 +7792,9 @@ async function openFactuurInControle(factuurId){
 
 <!-- ═══ SHAREPOINT OPSLAG ═══ -->
 <script>
+// Bugfix: encodeURI laat '#' en '?' staan → Graph-URL breekt bij projectnamen zoals "#519617 CN Bajeskwartier"
+function _encPath(p){ return encodeURI(p).replace(/#/g,'%23').replace(/\?/g,'%3F'); }
+
 const _SP = {
   SITE: 'mortisetenon.sharepoint.com:/sites/MortiseTenon',
   SITE_ID: null,            // resolved site-id (cache) — colon-path chaining geeft HTTP 400
@@ -7807,7 +7874,7 @@ const _SP = {
   async listChildren(path) {
     const token = await window.getGraphToken();
     if (!token) throw new Error('Niet ingelogd op Microsoft 365');
-    const url = `https://graph.microsoft.com/v1.0/drives/${this.PROJ_DRIVE}/root:/${encodeURI(path)}:/children?$select=id,name,folder&$top=999`;
+    const url = `https://graph.microsoft.com/v1.0/drives/${this.PROJ_DRIVE}/root:/${_encPath(path)}:/children?$select=id,name,folder&$top=999`;
     const r = await fetch(url, { headers: {'Authorization':`Bearer ${token}`} });
     if (r.status === 404) return [];
     if (!r.ok) throw new Error(`list "${path}" HTTP ${r.status}`);
@@ -7856,7 +7923,7 @@ const _SP = {
     }
     // 3. aanmaken
     const token = await window.getGraphToken();
-    const url = `https://graph.microsoft.com/v1.0/drives/${this.PROJ_DRIVE}/root:/${encodeURI(parentPath)}:/children`;
+    const url = `https://graph.microsoft.com/v1.0/drives/${this.PROJ_DRIVE}/root:/${_encPath(parentPath)}:/children`;
     const r = await fetch(url, {
       method: 'POST',
       headers: {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
@@ -7896,6 +7963,198 @@ window.genereerProjectMappen = async function(proj) {
   for (const sub of SUBS) await _SP.ensureFolder(projPath, sub, false);
   return projPath;
 };
+
+// Kleine HTML-escape helper (ook gebruikt door latere modules — geen conflict met _esc op r.10259)
+function _escH(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// ═══ MOBIELE PROJECTMELDINGEN ═══
+// Leest mt_mobiel_projecten.json van SharePoint en toont entries met status==='nieuw'.
+// Poll elke 3 minuten; instapknop in header-bel + rijen boven de projectlijst.
+let _mobielMeldingen = [];          // entries met status==='nieuw'
+let _mobielAlleItems = [];          // volledige array (nodig voor terugschrijven)
+let _mobielHuidigeMelding = null;   // melding die nu open staat in aanvul-modal
+
+async function mobielMeldingenLaad() {
+  try {
+    const data = await _SP.read('mt_mobiel_projecten.json');
+    _mobielAlleItems = Array.isArray(data) ? data : [];
+    _mobielMeldingen = _mobielAlleItems.filter(m => m.status === 'nieuw');
+    mobielMeldingenRender();
+  } catch(e) { console.warn('mobiel meldingen laden faalde:', e); }
+}
+
+function mobielMeldingenRender() {
+  // Bell-badge bijwerken
+  const badge = document.getElementById('mobiel-bell-badge');
+  const bellBtn = document.getElementById('mobiel-bell-btn');
+  const n = _mobielMeldingen.length;
+  if (badge) {
+    badge.textContent = n;
+    badge.style.display = n > 0 ? 'inline-block' : 'none';
+  }
+  if (bellBtn) bellBtn.title = n > 0 ? `${n} nieuw project${n>1?'en':''} vanaf mobiel` : 'Geen nieuwe mobiele projecten';
+
+  // Rijen boven project-lijst
+  const container = document.getElementById('mobiel-meldingen-container');
+  if (!container) return;
+  if (n === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = _mobielMeldingen.map(m => {
+    const dt = m.ts ? new Date(m.ts).toLocaleDateString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+    const door = m.door ? m.door.replace(/@.*$/,'') : '';
+    return `<div class="mobiel-melding-rij" onclick="mobielAanvulOpen(${JSON.stringify(m.code)})" title="Klik om gegevens aan te vullen">
+      <span class="mm-icon">🆕</span>
+      <span class="mm-tekst">
+        <span class="mm-code">${_escH(m.code)}</span>
+        ${m.naam ? ` — ${_escH(m.naam)}` : ''}
+        <span style="color:var(--text-faint);font-size:11px"> · ${_escH(door)}${dt?' · '+dt:''}</span>
+        ${m.aangevuld ? `<span style="color:var(--text-dim);font-size:11px"> · ${m.aangevuld} mappen aangemaakt</span>` : ''}
+      </span>
+      <span class="mm-pijl">→ gegevens aanvullen</span>
+    </div>`;
+  }).join('');
+}
+
+function scrollMobielMeldingen() {
+  // Scroll de meldingen-container in beeld nadat de Projecten-tab actief is
+  setTimeout(() => {
+    const c = document.getElementById('mobiel-meldingen-container');
+    if (c && c.firstChild) c.firstChild.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }, 80);
+}
+
+function mobielAanvulOpen(code) {
+  const melding = _mobielMeldingen.find(m => m.code === code);
+  if (!melding) return;
+  _mobielHuidigeMelding = melding;
+
+  // Zoek bestaand project in PROJECT_CODES op (de tijdelijke code)
+  let proj = PROJECT_CODES.find(p => p.code === code);
+
+  // Datalist vullen vanuit klant-codes (hergebruik bestaande datalist als die er is)
+  const dl = document.getElementById('klant-codes-aanvul');
+  if (dl) {
+    dl.innerHTML = PROJECT_CODES.map(p => p.klant).filter(Boolean)
+      .filter((v,i,a)=>a.indexOf(v)===i)
+      .map(k=>`<option value="${_escH(k)}">`).join('');
+  }
+
+  // Velden voorinvullen
+  document.getElementById('aanvul-code-oud').value = code;
+  document.getElementById('aanvul-code-nieuw').value = (proj && proj.code !== code) ? proj.code : '';
+  document.getElementById('aanvul-naam').value = proj?.naam || melding.naam || '';
+  document.getElementById('aanvul-klant').value = proj?.klant || melding.klant || '';
+  document.getElementById('aanvul-locatie').value = proj?.loc_naam || proj?.loc || '';
+  document.getElementById('aanvul-omschrijving').value = proj?.omschrijving || '';
+
+  // Bron-info tonen
+  const door = melding.door ? melding.door.replace(/@.*$/,'') : '?';
+  const dt = melding.ts ? new Date(melding.ts).toLocaleString('nl-NL') : '';
+  document.getElementById('mobiel-aanvul-bron').textContent = `Ontvangen van ${door}${dt?' op '+dt:''} · SharePoint-pad: ${melding.pad||'—'}`;
+  document.getElementById('mobiel-aanvul-pad').textContent = melding.pad ? `📂 Projectmap: ${melding.pad}` : '';
+  document.getElementById('mobiel-aanvul-status').textContent = '';
+
+  document.getElementById('mobiel-aanvul-modal').classList.remove('hidden');
+}
+
+async function mobielAanvulOpslaan() {
+  if (!_mobielHuidigeMelding) return;
+  const statusEl = document.getElementById('mobiel-aanvul-status');
+  statusEl.style.color = 'var(--text-dim)';
+  statusEl.textContent = 'Opslaan…';
+
+  const oudeCode = _mobielHuidigeMelding.code;
+  const nieuweCode = (document.getElementById('aanvul-code-nieuw').value.trim().toUpperCase() || oudeCode);
+  const naam = document.getElementById('aanvul-naam').value.trim();
+  const klant = document.getElementById('aanvul-klant').value.trim();
+  const locNaam = document.getElementById('aanvul-locatie').value.trim();
+  const omschrijving = document.getElementById('aanvul-omschrijving').value.trim();
+
+  // Bestaand record bijwerken of nieuw aanmaken
+  let proj = PROJECT_CODES.find(p => p.code === oudeCode);
+  if (proj) {
+    // Code vervangen (rename)
+    if (nieuweCode && nieuweCode !== oudeCode) proj.code = nieuweCode;
+    if (naam) proj.naam = naam;
+    if (klant) proj.klant = klant;
+    if (locNaam) proj.loc_naam = locNaam;
+    if (omschrijving) proj.omschrijving = omschrijving;
+    proj.bron = proj.bron || 'mobiel';
+  } else {
+    // Nieuw record — niet via maakProjectAan() want die heeft UI-velden nodig
+    proj = {
+      code: nieuweCode,
+      naam: naam || nieuweCode,
+      klant: klant || '',
+      klant_naam: klant || '',
+      loc: '',
+      loc_naam: locNaam || '',
+      product: '',
+      product_naam: '',
+      mb_contact_id: null,
+      mb_nr: null,
+      klant_plaats: '',
+      klant_email: '',
+      klant_telefoon: '',
+      klant_kvk: '',
+      klant_btw: '',
+      klant_customer_id: null,
+      omschrijving: omschrijving || '',
+      bron: 'mobiel',
+      created: new Date().toISOString().slice(0,10)
+    };
+    PROJECT_CODES.push(proj);
+  }
+  slaProjectenOp();
+
+  // Melding als verwerkt markeren
+  const idx = _mobielAlleItems.findIndex(m => m.code === oudeCode);
+  if (idx !== -1) {
+    _mobielAlleItems[idx].status = 'verwerkt';
+    if (nieuweCode !== oudeCode) _mobielAlleItems[idx].code_definitief = nieuweCode;
+    await _SP.write('mt_mobiel_projecten.json', _mobielAlleItems);
+  }
+
+  // State + UI verversen
+  _mobielMeldingen = _mobielAlleItems.filter(m => m.status === 'nieuw');
+  mobielMeldingenRender();
+  renderProjectLijst();
+
+  document.getElementById('mobiel-aanvul-modal').classList.add('hidden');
+  _mobielHuidigeMelding = null;
+}
+
+async function mobielMapprenCompleet() {
+  if (!_mobielHuidigeMelding) return;
+  const statusEl = document.getElementById('mobiel-aanvul-status');
+  const btn = document.getElementById('aanvul-mappen-btn');
+  statusEl.style.color = 'var(--text-dim)';
+  statusEl.textContent = '📁 Mappen aanmaken…';
+  if (btn) btn.disabled = true;
+
+  // Haal veldwaarden op voor een zo compleet mogelijk proj-object
+  const oudeCode = _mobielHuidigeMelding.code;
+  const nieuweCode = (document.getElementById('aanvul-code-nieuw').value.trim().toUpperCase() || oudeCode);
+  const naam = document.getElementById('aanvul-naam').value.trim() || oudeCode;
+  const klant = document.getElementById('aanvul-klant').value.trim();
+  const locNaam = document.getElementById('aanvul-locatie').value.trim();
+
+  // Probeer bestaand proj-record te vinden; anders tijdelijk object bouwen
+  let proj = PROJECT_CODES.find(p => p.code === oudeCode || p.code === nieuweCode);
+  if (!proj) {
+    proj = { code: nieuweCode, naam, klant, klant_naam: klant, loc: '', loc_naam: locNaam, product: '', product_naam: naam };
+  }
+
+  try {
+    const pad = await window.genereerProjectMappen(proj);
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `✓ Mappen aangemaakt: ${pad}`;
+    document.getElementById('mobiel-aanvul-pad').textContent = `📂 Projectmap: ${pad}`;
+  } catch(e) {
+    statusEl.style.color = 'var(--red,#dc2626)';
+    statusEl.textContent = `✕ Mappen mislukt: ${e.message}`;
+  }
+  if (btn) btn.disabled = false;
+}
 
 // Monkey-patch: localStorage schrijft ook naar SharePoint voor persistente keys
 const _lsSet = localStorage.setItem.bind(localStorage);
@@ -7951,7 +8210,7 @@ window.spUploadProjectBijlage = async function(proj, file) {
   const projPath = await window.genereerProjectMappen(proj);
   const veilig = file.name.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'bijlage';
   const dest = `${projPath}/07_Administratie/${veilig}`;
-  const url = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${encodeURI(dest)}:/content`;
+  const url = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(dest)}:/content`;
   const r = await fetch(url, {
     method: 'PUT',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': file.type || 'application/octet-stream' },
@@ -7975,7 +8234,7 @@ window.spUploadProjectBytes = async function(proj, naam, bytes, contentType, sub
   const sub = subfolder || '05_Aangeleverd';
   const veilig = String(naam||'bijlage').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'bijlage';
   const dest = `${projPath}/${sub}/${veilig}`;
-  const url = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${encodeURI(dest)}:/content?@microsoft.graph.conflictBehavior=replace`;
+  const url = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(dest)}:/content?@microsoft.graph.conflictBehavior=replace`;
   const r = await fetch(url, {
     method: 'PUT',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': contentType || 'application/octet-stream' },

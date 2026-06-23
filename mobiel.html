@@ -3415,10 +3415,10 @@ const _SPProj = {
       .replace(/\s+/g,' ').trim();
   },
 
-  async listChildren(path) {
+  async listChildren(path, drive) {
     const token = await window.getGraphToken();
     if (!token) throw new Error('Niet ingelogd op Microsoft 365');
-    const url = `https://graph.microsoft.com/v1.0/drives/${this.DRIVE}/root:/${_encPath(path)}:/children?$select=id,name,folder&$top=999`;
+    const url = `https://graph.microsoft.com/v1.0/drives/${drive || this.DRIVE}/root:/${_encPath(path)}:/children?$select=id,name,folder&$top=999`;
     const r = await fetch(url, { headers: {'Authorization':`Bearer ${token}`} });
     if (r.status === 404) return [];
     if (!r.ok) throw new Error(`list "${path}" HTTP ${r.status}`);
@@ -3427,17 +3427,17 @@ const _SPProj = {
 
   // mkdir-p: exacte match hergebruiken; genormaliseerde match hergebruiken
   // (mobiel hernoemt NOOIT — dat doet alleen de pc-tool); anders aanmaken.
-  async ensureFolder(parentPath, wantedName) {
+  async ensureFolder(parentPath, wantedName, drive) {
     const safe = wantedName.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'map';
     let existing = [];
-    try { existing = await this.listChildren(parentPath); } catch(e) { existing = []; }
+    try { existing = await this.listChildren(parentPath, drive); } catch(e) { existing = []; }
     const exact = existing.find(c => c.folder && c.name === safe);
     if (exact) return exact.name;
     const want = this._norm(safe);
     const near = existing.find(c => c.folder && this._norm(c.name) === want);
     if (near) return near.name;
     const token = await window.getGraphToken();
-    const url = `https://graph.microsoft.com/v1.0/drives/${this.DRIVE}/root:/${_encPath(parentPath)}:/children`;
+    const url = `https://graph.microsoft.com/v1.0/drives/${drive || this.DRIVE}/root:/${_encPath(parentPath)}:/children`;
     const r = await fetch(url, {
       method: 'POST',
       headers: {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
@@ -3463,13 +3463,61 @@ async function loadKlantRegistry() {
   return _KLANTEN || [];
 }
 
+// Vaste projectmappenstructuur (één bron van waarheid; gebruikt door zowel het
+// aanmaken van een nieuw project als de self-heal van een bestaand project).
+const PROJECT_SUBS = ['01_Offerte','02_Ontwerp','03_Vectorworks','04_Holzher',
+                      '05_Aangeleverd','06_Fotos','07_Administratie','08_Archief',
+                      '09_Werktekeningen','10_CNC'];
+
+// Vult ontbrekende submappen aan onder een BESTAANDE projectmap (idempotent).
+// Eén list-call, daarna alleen de echt ontbrekende mappen aanmaken — zo blijft
+// het licht (geen 10 mkdir-pogingen per opname). Returnt het aantal nieuw
+// aangemaakte mappen (0 = structuur was al compleet).
+async function ensureFullStructure(projPath, drive) {
+  let existing = [];
+  try { existing = await _SPProj.listChildren(projPath, drive); } catch(e) { existing = []; }
+  const have = new Set(existing.filter(c => c.folder).map(c => c.name));
+  let gemaakt = 0;
+  for (const sub of PROJECT_SUBS) {
+    if (have.has(sub)) continue;
+    try { await _SPProj.ensureFolder(projPath, sub, drive); gemaakt++; }
+    catch(e) { console.warn('substructuur aanmaken faalde:', sub, e.message); }
+  }
+  return gemaakt;
+}
+
+// Nieuw-project-signaal voor de cockpit (PC). De cockpit pollt
+// MT-Bedrijfstool/mt_mobiel_projecten.json en toont een melding "nieuw project
+// vanaf mobiel — gegevens aanvullen". Best-effort: faalt dit, dan blijft de
+// opname/foto-upload gewoon doorgaan (de structuur is het belangrijkste).
+async function signaleerNieuwProject(proj, projPath, extra) {
+  try {
+    const lijst = (await _SP.read('mt_mobiel_projecten.json')) || [];
+    const code = String(proj.code || '');
+    // dedupe op code: nooit twee open meldingen voor hetzelfde project
+    let m = lijst.find(x => x && x.code === code && x.status === 'nieuw');
+    if (!m) {
+      m = {
+        code,
+        naam: proj.name || '',
+        ts: new Date().toISOString(),
+        door: (_msAccount && _msAccount.username) || '',
+        bron: 'opname',
+        status: 'nieuw'
+      };
+      lijst.unshift(m);
+    }
+    m.pad = projPath || m.pad || '';
+    if (extra && typeof extra === 'object') Object.assign(m, extra);
+    await _SP.write('mt_mobiel_projecten.json', lijst.slice(0, 200));
+  } catch(e) { console.warn('nieuw-project-signaal faalde:', e.message); }
+}
+
 // Mappenstructuur op de NAS voor dit project (mkdir-p, idempotent).
 // Klant-mapnaam = ECHTE registry-naam (Bart-besluit 2026-06-02).
 async function genereerProjectMappenMobiel(proj) {
   const ROOT = 'Nieuwe mappenstructuur';
-  const SUBS = ['01_Offerte','02_Ontwerp','03_Vectorworks','04_Holzher',
-                '05_Aangeleverd','06_Fotos','07_Administratie','08_Archief',
-                '09_Werktekeningen','10_CNC'];
+  const SUBS = PROJECT_SUBS;
   const seg = String(proj.code || '').split('-');
   const klantCode = (seg[0] || '').toUpperCase();
   const reg = await loadKlantRegistry();
@@ -3489,6 +3537,8 @@ async function genereerProjectMappenMobiel(proj) {
   const projFolder = await _SPProj.ensureFolder(parent, `${proj.code} - ${proj.name || proj.code}`);
   const projPath = `${parent}/${projFolder}`;
   for (const sub of SUBS) await _SPProj.ensureFolder(projPath, sub);
+  // Nieuw project vanaf mobiel → cockpit-melding zodat Bart de gegevens aanvult.
+  signaleerNieuwProject(proj, projPath, { klant: klantNaam }).catch(()=>{});
   return projPath;
 }
 
@@ -3679,8 +3729,18 @@ async function sluitOpname() {
     let projPath = null;
     try { projPath = await findProjectFolder(proj.code); }
     catch(e) { console.warn('findProjectFolder fout:', e.message); showToast('⚠ NAS-zoeken mislukt: ' + e.message); return; }
-    if (projPath) await uploadOpnamePhotos(proj, projPath);
-    else openNasSheet(proj);
+    if (projPath) {
+      // Bestaande projectmap kan onvolledig zijn (bv. alleen 06_Fotos uit een
+      // eerdere partiële upload). Ontbrekende submappen alsnog aanvullen.
+      let gemaakt = 0;
+      try { gemaakt = await ensureFullStructure(projPath, _projDrive(proj.code)); }
+      catch(e) { console.warn('self-heal structuur faalde:', e.message); }
+      // Was de structuur incompleet? Dan dit project ook aan de cockpit melden.
+      if (gemaakt > 0) signaleerNieuwProject(proj, projPath, { aangevuld: gemaakt }).catch(()=>{});
+      await uploadOpnamePhotos(proj, projPath);
+    } else {
+      openNasSheet(proj);
+    }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "✅ Opname afronden"; }
   }

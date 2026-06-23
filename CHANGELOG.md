@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-23 — Mobiel: fix HTTP 400 bij mappen aanmaken met # in projectnaam
+- Commit: `762b0da` | Auteur: Bart Witte
+
 ## 2026-06-23 — @ Mobiel: in-app camera (getUserMedia) op Capture + Opname/Oplevering
 - Commit: `a4257c0` | Auteur: Bart Witte
 
