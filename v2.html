@@ -2275,7 +2275,7 @@ window.onload=async()=>{
   }
   // Mobiele projectmeldingen: eerste load na kort uitstel (SP-login moet klaar zijn),
   // daarna elke 3 minuten pollen (180.000 ms).
-  setTimeout(async()=>{ await mobielMeldingenLaad(); setInterval(mobielMeldingenLaad, 180000); }, 3500);
+  setTimeout(async()=>{ await mobielMeldingenLaad(); setInterval(()=>{ if(document.visibilityState==='visible') mobielMeldingenLaad(); }, 180000); }, 3500);
 };
 
 // ═══ TABS ═══
@@ -10318,7 +10318,9 @@ function activiteitOpen(force){
   if(_actOnlineTimer) clearInterval(_actOnlineTimer);
   _actOnlineTimer=setInterval(()=>{
     const tab=document.getElementById('tab-activiteit');
-    if(tab && tab.classList.contains('active')) actLoadOnline();
+    if(tab && tab.classList.contains('active')){
+      if(document.visibilityState==='visible') actLoadOnline();
+    }
     else { clearInterval(_actOnlineTimer); _actOnlineTimer=null; }
   },30000);
 }

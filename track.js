@@ -26,8 +26,23 @@
   var WORKER = (typeof window.WORKER === 'string') ? window.WORKER : '';
   var FLUSH_MS = 8000;        // periodieke flush
   var FLUSH_N = 20;           // of zodra de buffer dit aantal bereikt
-  var HEARTBEAT_MS = 30000;   // presence-ping interval
+  var HEARTBEAT_MS = 120000;  // presence-ping interval (2 min; was 30s)
+  var IDLE_MS = 10 * 60000;   // na 10 min zonder interactie: geen heartbeats meer
+  var ERR_THROTTLE_MS = 60000;// zelfde fout max 1×/min (anti-storm)
   var MAX_DETAIL = 180;       // detail-veld afkappen
+
+  // Laatste gebruikers-interactie (voor idle-detectie van de heartbeat).
+  var lastActivity = Date.now();
+  function markActivity() { lastActivity = Date.now(); }
+
+  // Throttle-geheugen voor herhalende fouten: key → laatste-ts.
+  var errSeen = Object.create(null);
+  function errAllowed(key) {
+    var now = Date.now();
+    if (errSeen[key] && (now - errSeen[key]) < ERR_THROTTLE_MS) return false;
+    errSeen[key] = now;
+    return true;
+  }
 
   // Sessie-id per page-load. Sessieduur = max(ts)-min(ts) server-side.
   var SESSION_ID = 's_' + Date.now().toString(36) + '_' +
@@ -143,27 +158,41 @@
     started = true;
 
     // Gevangen JS-errors → usability-frictie zichtbaar maken.
+    // Throttle per unieke fout: een loopende fout mag de Worker niet platleggen.
     window.addEventListener('error', function (ev) {
       try {
         var where = (ev.filename || '').split('/').pop() + ':' + (ev.lineno || '?');
+        if (!errAllowed('e:' + (ev.message || 'error') + '@' + where)) return;
         trackError('window_error', (ev.message || 'error') + ' @' + where);
       } catch (e) {}
     });
     window.addEventListener('unhandledrejection', function (ev) {
       try {
         var msg = (ev.reason && (ev.reason.message || ev.reason)) || 'rejection';
+        if (!errAllowed('r:' + String(msg))) return;
         trackError('unhandled_rejection', String(msg));
       } catch (e) {}
     });
 
+    // Interactie-listeners (passief, goedkoop) voor idle-detectie.
+    ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(function (evt) {
+      window.addEventListener(evt, markActivity, { passive: true, capture: true });
+    });
+
     // Periodieke flush + heartbeat.
+    // Heartbeat alleen als de tab zichtbaar is én er recent interactie was.
+    // Een vergeten achtergrond-tab op een andere PC pingt zo niet 24/7 door.
     setInterval(flush, FLUSH_MS);
-    setInterval(function () { trackHeartbeat(); }, HEARTBEAT_MS);
+    setInterval(function () {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastActivity > IDLE_MS) return;
+      trackHeartbeat();
+    }, HEARTBEAT_MS);
 
     // Tab/venster naar achtergrond → flush + heartbeat (presence + geen verlies).
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') { beaconFlush(); }
-      else { trackHeartbeat(); }
+      else { markActivity(); trackHeartbeat(); }
     });
     window.addEventListener('pagehide', beaconFlush);
 
