@@ -9085,6 +9085,7 @@ async function inboxOpenMail(id){
         ${attHtml}
         <div class="inbox-ract">
           <button class="btn btn-sm btn-gold" onclick="inboxMaakProject()">📁 Maak project</button>
+          <button class="btn btn-sm btn-primary" onclick="inboxMaakOfferte()" title="Maak een offerte-calculatie met deze mail als context (klant voor-ingevuld als herkend)">📄 Maak offerte</button>
           <span id="inbox-koppelwrap">${inboxKoppelKnopHtml(m)}</span>
           <button class="btn btn-sm btn-secondary" onclick="inboxBijlagenNaarMap()" title="Bijlagen van deze mail naar de map van het gekoppelde project (05_Aangeleverd)">⬇ Bijlagen → projectmap</button>
         </div>
@@ -11174,6 +11175,24 @@ function activiteitOpen(force){
     const key='OFF-'+Date.now().toString(36).toUpperCase();
     const o=getOfferte(key); o.titel='Nieuwe offerte'; saveCalc('off');
     openStandalone(key);
+  };
+  // Vanuit een geopende mail (inbox) → nieuwe offerte-calculatie met die mail als context.
+  // Klant wordt voor-ingevuld als de mail al aan een project gekoppeld is (of registry-match).
+  window.inboxMaakOfferte=async function(){
+    if(typeof _inbox==='undefined' || !_inbox.cur){ alert('Open eerst een mail.'); return; }
+    const m=_inbox.cur;
+    await hydrateCalc();
+    const key='OFF-'+Date.now().toString(36).toUpperCase();
+    const o=getOfferte(key);
+    const onderw=(typeof _ibOnderwerpSchoon==='function')?_ibOnderwerpSchoon(m.subject||''):(m.subject||'');
+    o.titel=(onderw||'Offerte uit mail').slice(0,80);
+    o.mail_context={id:m.id, subject:m.subject||'', from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'', received:(m.receivedDateTime||'').slice(0,10), preview:(m.bodyPreview||'')};
+    // Al aan een project gekoppeld? Koppel de offerte aan datzelfde project (klant prefill via _mbCtx).
+    try{ const info=(typeof mailLinkInfo==='function')?mailLinkInfo(m):null; if(info&&info.code) o.project_code=info.code; }catch(e){}
+    saveCalc('off');
+    if(typeof track==='function'){ try{ track('inbox','maak_offerte',{detail:key}); }catch(e){} }
+    if(typeof tbDoTab==='function') tbDoTab('projecten');
+    setTimeout(()=>{ openStandalone(key); },140);
   };
   function openStandalone(key){
     const host=document.getElementById('project-detail'); if(!host) return;
