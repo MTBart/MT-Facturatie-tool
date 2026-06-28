@@ -10822,6 +10822,77 @@ function activiteitOpen(force){
     } else { flash(key,'geen match in materialen-DB — vul prijs handmatig uit factuur'); }
   };
 
+  // ---- materiaal-autocomplete (eigen dropdown) ------------------------------
+  // Zoekt over (1) Barts eigen voorraad — echte Nederlandse namen + factuurprijs —
+  // en (2) de interiorcad-catalogus. Substring-match op alle getypte woorden, dus
+  // "berken" toont elk materiaal met "berken" in de naam.
+  function _matIndex(){
+    const out=[], seen=new Set();
+    try{
+      const vr=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
+      (Array.isArray(vr)?vr:[]).forEach(v=>{
+        const d=(v.omschrijving||'').trim(); if(!d)return; const k=d.toLowerCase(); if(seen.has(k))return; seen.add(k);
+        out.push({desc:d, id:v.artikelnummer||'', bron:'voorraad', prijs:(v.stukprijs!=null&&v.stukprijs!=='')?Number(v.stukprijs):null});
+      });
+    }catch(e){}
+    allMat().forEach(x=>{
+      const d=(x.description||'').trim(); if(!d)return; const k=d.toLowerCase(); if(seen.has(k))return; seen.add(k);
+      out.push({desc:d, id:x.id||'', bron:'interiorcad', prijs:(x.cost!=null&&x.cost!=='')?Number(x.cost):null, ic:true});
+    });
+    return out;
+  }
+  function _matddBox(){
+    let b=document.getElementById('calc-matdd');
+    if(!b){ b=document.createElement('div'); b.id='calc-matdd'; b.className='calc-matdd'; b.style.display='none'; document.body.appendChild(b); }
+    return b;
+  }
+  window.calcMatSuggest=function(inp,key,rid){
+    const box=_matddBox();
+    box.dataset.key=key; box.dataset.rid=rid;
+    const q=(inp.value||'').toLowerCase().trim();
+    if(!MATERIALEN_IC.boards.length && typeof laadMaterialen==='function'){ try{laadMaterialen();}catch(e){} }
+    const toks=q.split(/\s+/).filter(Boolean);
+    const all=_matIndex();
+    const hits=(toks.length? all.filter(o=>{const d=o.desc.toLowerCase(); return toks.every(t=>d.includes(t));}) : all).slice(0,60);
+    if(!hits.length){ box.style.display='none'; box.innerHTML=''; box._hits=null; return; }
+    box._hits=hits; box._sel=-1;
+    box.innerHTML=hits.map((h,i)=>{
+      const pr = h.prijs!=null ? (h.bron==='voorraad'? '€'+h.prijs.toFixed(2) : '⚠VW €'+h.prijs.toFixed(2)) : '';
+      const tag = h.bron==='voorraad' ? '<span class="calc-dd-tag vr">voorraad</span>' : '<span class="calc-dd-tag ic">catalogus</span>';
+      return '<div class="calc-dd-item" data-i="'+i+'" onmousedown="calcMatPick(event,'+i+')">'
+        +'<span class="calc-dd-desc">'+esc(h.desc)+'</span>'
+        +'<span class="calc-dd-meta">'+tag+(h.id?'<span class="calc-dd-art">'+esc(h.id)+'</span>':'')+(pr?'<span class="calc-dd-pr">'+pr+'</span>':'')+'</span></div>';
+    }).join('');
+    const r=inp.getBoundingClientRect();
+    box.style.left=r.left+'px'; box.style.top=(r.bottom+2)+'px'; box.style.width=Math.max(r.width,320)+'px';
+    box.style.display='block';
+  };
+  window.calcMatPick=function(ev,i){
+    if(ev) ev.preventDefault();   // mousedown vóór blur → input behoudt selectie
+    const box=_matddBox(); const h=box._hits&&box._hits[i]; if(!h)return;
+    const key=box.dataset.key, rid=box.dataset.rid;
+    const o=getOfferte(key); const m=o.materiaal.find(x=>x.id===rid); if(!m)return;
+    m.omschrijving=h.desc; m.artikel=h.id||'';
+    if(h.bron==='voorraad' && h.prijs!=null){ m.inkoop_stuk=h.prijs; m.ic_indicatief=null; }   // echte factuurprijs → inkoop
+    else if(h.ic && h.prijs!=null){ m.ic_indicatief=h.prijs; }                                  // catalogus = enkel indicatieve hint
+    saveCalc('off'); box.style.display='none'; box.innerHTML=''; box._hits=null;
+    renderOfferteCalc(key);
+  };
+  window.calcMatBlur=function(){ setTimeout(()=>{const b=document.getElementById('calc-matdd'); if(b){b.style.display='none';}},160); };
+  window.calcMatKey=function(ev){
+    const box=document.getElementById('calc-matdd'); if(!box||box.style.display==='none'||!box._hits) return;
+    const items=box.querySelectorAll('.calc-dd-item'); if(!items.length) return;
+    if(ev.key==='ArrowDown'||ev.key==='ArrowUp'){
+      ev.preventDefault();
+      box._sel=(box._sel==null?-1:box._sel)+(ev.key==='ArrowDown'?1:-1);
+      if(box._sel<0)box._sel=items.length-1; if(box._sel>=items.length)box._sel=0;
+      items.forEach((el,i)=>el.classList.toggle('sel',i===box._sel));
+      items[box._sel].scrollIntoView({block:'nearest'});
+    } else if(ev.key==='Enter'){
+      if(box._sel>=0){ ev.preventDefault(); calcMatPick(null,box._sel); }
+    } else if(ev.key==='Escape'){ box.style.display='none'; }
+  };
+
   window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u)return;u[field]=val;saveCalc('off');recalcView(key);};
   window.calcAddUur=function(key){const o=getOfferte(key);o.uren.push({id:uid('u'),omschrijving:'',uren:'',uurtarief:CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:45,marge:2});saveCalc('off');renderOfferteCalc(key);};
   window.calcDelUur=function(key,rid){const o=getOfferte(key);o.uren=o.uren.filter(u=>u.id!==rid);saveCalc('off');renderOfferteCalc(key);};
@@ -10869,7 +10940,7 @@ function activiteitOpen(force){
     const r=mRow(m);
     return `<tr>
       <td><div style="display:flex;gap:4px;align-items:center">
-        <input id="calc-mo-${m.id}" class="calc-inp" list="calc-mat-list" style="flex:1;min-width:150px" value="${esc(m.omschrijving)}" placeholder="materiaal (typ voor suggesties)…" onchange="calcSetMat('${key}','${m.id}','omschrijving',this.value)">
+        <input id="calc-mo-${m.id}" class="calc-inp" autocomplete="off" style="flex:1;min-width:150px" value="${esc(m.omschrijving)}" placeholder="materiaal (typ voor suggesties)…" oninput="calcMatSuggest(this,'${key}','${m.id}')" onfocus="calcMatSuggest(this,'${key}','${m.id}')" onblur="calcMatBlur()" onkeydown="calcMatKey(event)" onchange="calcSetMat('${key}','${m.id}','omschrijving',this.value)">
         <button class="btn btn-xs btn-secondary" title="Zoek inkoopprijs in materialen-DB" onclick="calcZoekPrijs('${key}','${m.id}')">🔍 prijs</button>
       </div></td>
       <td style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${esc(m.artikel||'')}</td>
@@ -10990,7 +11061,6 @@ function activiteitOpen(force){
       </div>
       <div id="calc-status-${c}" style="font-size:11px;min-height:16px;margin-top:0.3rem"></div>
       ${defaultsPaneel(key)}
-      ${matDatalist()}
       <p style="font-size:10px;color:var(--text-faint);margin:0.5rem 0 0">Inkoopprijzen/marges staan privé op SharePoint — nooit in de publieke repo. "🔍 prijs" vult omschrijving + artikelnummer uit de interiorcad-materialen-DB. <b>Let op:</b> de DB-prijs is <span style="color:var(--gold)">indicatief uit Vectorworks</span> (geen echte inkoop) en wordt enkel als ⚠-hint getoond — vul de werkelijke inkoop uit de factuur. Fase 2 koppelt dit live aan inkoop.db/voorraad.</p>
     </div>`;
   };
@@ -11000,6 +11070,17 @@ function activiteitOpen(force){
   .calc-wrap{font-size:13px}
   .calc-inp{background:var(--n-0,#fff);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 6px;font-size:12px;font-family:inherit;}
   .calc-inp:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 2px rgba(42,74,56,.12);}
+  .calc-matdd{position:fixed;z-index:9999;max-height:320px;overflow-y:auto;background:var(--n-0,#fff);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.16);font-size:12px;}
+  .calc-dd-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--border);}
+  .calc-dd-item:last-child{border-bottom:none;}
+  .calc-dd-item:hover,.calc-dd-item.sel{background:var(--surface-sunken,#f1f3f2);}
+  .calc-dd-desc{color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .calc-dd-meta{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+  .calc-dd-tag{font-size:9px;text-transform:uppercase;letter-spacing:.04em;padding:1px 5px;border-radius:8px;}
+  .calc-dd-tag.vr{background:rgba(42,74,56,.12);color:var(--green);}
+  .calc-dd-tag.ic{background:rgba(160,130,60,.14);color:var(--gold);}
+  .calc-dd-art{font-family:var(--mono);font-size:10px;color:var(--text-dim);}
+  .calc-dd-pr{font-size:11px;color:var(--text-dim);}
   .calc-sec{background:var(--green);color:#fff;font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:7px 11px;border-radius:6px 6px 0 0;}
   .calc-tbl{width:100%;border-collapse:collapse;background:var(--surface);font-size:12px}
   .calc-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint);text-align:left;padding:6px;border-bottom:1px solid var(--border);font-weight:600;white-space:nowrap}

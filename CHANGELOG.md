@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — fix(offerte-calc): +materiaal/+uur-regel niet opgegeten door re-render
+- Commit: `7765da3` | Auteur: Bart Witte
+
 ## 2026-06-28 — Voorraad: parser voor rommelige materiaalregels + per-regel factuur/chat
 - Commit: `77a1aaf` | Auteur: Bart Witte
 
