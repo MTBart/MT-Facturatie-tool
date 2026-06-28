@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-24 — Worker-overbelasting structureel fixen: heartbeat + polls visibility-gated, error-storm afgevangen
+- Commit: `f5de3b5` | Auteur: Bart Witte
+
 ## 2026-06-23 — Mobiel→cockpit: volledige mappenstructuur + nieuw-project-melding
 - Commit: `beb6d0a` | Auteur: Bart Witte
 
