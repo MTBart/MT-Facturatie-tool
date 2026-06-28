@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — Offerte-calculator fase 1: UI in Projecten-tab (voorcalculatie)
+- Commit: `aadde6c` | Auteur: Bart Witte
+
 ## 2026-06-28 — Offerte-calculator fase 0: reken-engine (coach-sheet → cockpit)
 - Commit: `4e98352` | Auteur: Bart Witte
 
