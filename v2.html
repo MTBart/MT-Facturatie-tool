@@ -906,6 +906,7 @@ button{transition:transform .07s ease,filter .07s ease}
         <div class="card-subtitle">Voorraadoverzicht</div>
         <div class="flex">
           <button class="btn btn-primary btn-sm" onclick="toggleVoorraadItemForm()">＋ Item toevoegen</button>
+          <button class="btn btn-secondary btn-sm" onclick="importeerVoorraadUitFacturen()" title="Haal materiaalnamen uit de Moneybird-inkoopfacturen en zet ze (aantal 0) in de voorraad — aantallen vul je daarna handmatig in">📥 Uit facturen</button>
           <button class="btn btn-secondary btn-sm" onclick="renderVoorraadActief()">↻ Vernieuwen</button>
           <button class="btn btn-danger btn-sm" onclick="wisVoorraad()">⚠ Wissen</button>
         </div>
@@ -4465,6 +4466,74 @@ function voegVoorraadItemToe(){
   // Naar de juiste sub-tab springen zodat het item meteen zichtbaar is
   const knop=[...document.querySelectorAll('#voorraad-subtabs .vtab-btn')].find(b=>b.getAttribute('onclick')?.includes(`'${regel.categorie}'`));
   if(knop) showVtab(regel.categorie,knop);
+  renderVoorraadActief();
+}
+
+// ═══ MATERIALEN UIT INKOOPFACTUREN IMPORTEREN ═══
+// Haalt materiaal-regels uit de Moneybird-inkoopfacturen (f.details[].description)
+// en zet ze met aantal 0 in de voorraad. Aantallen vult Bart daarna handmatig in;
+// prijzen komen uit de échte factuur (geen indicatieve VW-prijzen). Niet-materiaal
+// regels (verzendkosten, brandstoftoeslag, arbeid → categorie 'overig') worden
+// overgeslagen, en bestaande materialen worden niet gedupliceerd.
+async function importeerVoorraadUitFacturen(){
+  // 1. Facturen vinden — gebruik wat al geladen/gecached is, anders ophalen uit MB
+  let facturen=(typeof alleFacturen!=='undefined'&&alleFacturen&&alleFacturen.length)?alleFacturen:[];
+  if(!facturen.length){
+    try{const c=JSON.parse(localStorage.getItem('mt_cache_facturen')||'null');if(c&&c.facturen?.length)facturen=c.facturen;}catch(e){}
+  }
+  if(!facturen.length){
+    if(!confirm('Nog geen facturen geladen.\n\nNu alle inkoopfacturen van dit jaar ophalen uit Moneybird?')) return;
+    planToast('📥 Inkoopfacturen laden uit Moneybird…');
+    facturen=[];
+    try{
+      let page=1;
+      while(true){
+        const r=await mbGet(`${getAdmin()}/documents/purchase_invoices?filter=${encodeURIComponent('period:this_year')}&page=${page}`);
+        if(!r.ok) break;const batch=await r.json();if(!batch?.length) break;
+        facturen.push(...batch.filter(f=>f?.id));if(batch.length<50) break;page++;
+      }
+    }catch(e){alert('Facturen ophalen mislukt: '+e.message);return;}
+  }
+  if(!facturen.length){alert('Geen inkoopfacturen gevonden om uit te lezen.');return;}
+  // 2. Bestaande voorraad-omschrijvingen (lowercase) om dubbels te voorkomen
+  const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
+  const bestaand=new Set(voorraad.map(v=>(v.omschrijving||'').trim().toLowerCase()));
+  // 3. Alleen regels die als écht materiaal/gereedschap/verbruik classificeren
+  const MATERIAAL_CATS=new Set(['platen','kantenband','gereedschap','verbruik']);
+  const kandidaten=new Map(); // key = lowercase omschrijving → meest recente regel
+  facturen.forEach(f=>{
+    const lev=f.contact?.company_name||f.contact?.firstname||f.contact?.lastname||'?';
+    const datum=f.date||'';
+    (f.details||[]).forEach(d=>{
+      const oms=(d.description||'').trim().replace(/\s+/g,' ');
+      if(!oms||oms.length<3) return;
+      const cat=categoriseerMateriaal(oms);
+      if(!MATERIAAL_CATS.has(cat)) return; // verzendkosten/toeslagen/arbeid → overig → overslaan
+      const key=oms.toLowerCase();
+      if(bestaand.has(key)) return; // staat al in voorraad
+      const prijs=parseFloat(d.price)||0;
+      const prev=kandidaten.get(key);
+      if(!prev||(datum>prev.datum)) kandidaten.set(key,{omschrijving:oms,categorie:cat,leverancier:lev,stukprijs:prijs,datum});
+    });
+  });
+  const lijst=[...kandidaten.values()];
+  if(!lijst.length){alert('Geen nieuwe materialen gevonden in de facturen.\n\n(Alles staat al in de voorraad, of er waren geen materiaal-regels.)');return;}
+  // 4. Bevestiging met telling per categorie
+  const perCat={};lijst.forEach(x=>perCat[x.categorie]=(perCat[x.categorie]||0)+1);
+  const samenvatting=Object.entries(perCat).sort((a,b)=>b[1]-a[1]).map(([c,n])=>`  • ${VOORRAAD_CAT_LABEL[c]||c}: ${n}`).join('\n');
+  if(!confirm(`${lijst.length} nieuwe materialen gevonden in ${facturen.length} facturen:\n\n${samenvatting}\n\nAlle toevoegen aan de voorraad met aantal 0?\n(De aantallen vul je daarna handmatig in. De prijzen komen uit de facturen.)`)) return;
+  // 5. Toevoegen — aantal 0, prijs uit factuur, herkenbaar als import
+  const nu=new Date().toISOString().split('T')[0];
+  lijst.forEach(x=>{
+    voorraad.push({
+      omschrijving:x.omschrijving,categorie:x.categorie,categorieManueel:false,
+      leverancier:x.leverancier,aantal:0,stukprijs:x.stukprijs,eenheid:'',
+      datum:x.datum||nu,project:'',geimporteerd:true,handmatig:false,
+      id:Date.now()+Math.random(),ts:Date.now()
+    });
+  });
+  localStorage.setItem('mt_voorraad',JSON.stringify(voorraad)); // mirrort auto naar SharePoint
+  planToast(`✓ ${lijst.length} materialen geïmporteerd (aantal 0 — vul de voorraad handmatig aan)`);
   renderVoorraadActief();
 }
 

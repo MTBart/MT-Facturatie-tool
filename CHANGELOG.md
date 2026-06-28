@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — Offerte-calc rebuild: licht thema, Google-Doc-aanzicht, vrije materiaalregels
+- Commit: `0f93a8e` | Auteur: Bart Witte
+
 ## 2026-06-28 — Offerte-calculator fase 1: UI in Projecten-tab (voorcalculatie)
 - Commit: `aadde6c` | Auteur: Bart Witte
 
