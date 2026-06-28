@@ -907,6 +907,7 @@ button{transition:transform .07s ease,filter .07s ease}
         <div class="flex">
           <button class="btn btn-primary btn-sm" onclick="toggleVoorraadItemForm()">＋ Item toevoegen</button>
           <button class="btn btn-secondary btn-sm" onclick="importeerVoorraadUitFacturen()" title="Haal materiaalnamen uit de Moneybird-inkoopfacturen en zet ze (aantal 0) in de voorraad — aantallen vul je daarna handmatig in">📥 Uit facturen</button>
+          <button class="btn btn-secondary btn-sm" id="vrd-artnr-toggle" onclick="toggleVoorraadArtnr()" title="Toon of verberg de kolom met bestel-/artikelnummers">🔢 Art.nr tonen</button>
           <button class="btn btn-secondary btn-sm" onclick="renderVoorraadActief()">↻ Vernieuwen</button>
           <button class="btn btn-danger btn-sm" onclick="wisVoorraad()">⚠ Wissen</button>
         </div>
@@ -4221,26 +4222,85 @@ async function boekInMoneybird(){
 }
 
 // ═══ VOORRAAD ═══
-function categoriseerMateriaal(naam){
+// Categorie bepalen uit de (schone) materiaalnaam + optioneel de leverancier.
+// Volgorde is bewust: gereedschap → verbruik/beslag → kantenband → platen →
+// leverancier-hint. Zo belandt Ostermann-lijm/deuvels/scharnieren NIET in platen
+// (Bart 28-6: "alles wordt bij platen gezet, Ostermann is vaak kantenband of
+// verbruik — lijm, deuvels, scharnieren etc.").
+function categoriseerMateriaal(naam,leverancier){
   const l=(naam||'').toLowerCase();
-  // Kantenband — alleen als het echt kantenband/afdekstrip is, niet als "kant" in materiaalnaam zit
-  if(l.includes('kantenband')||l.includes('afdekstrip')||l.includes('edge band')||l.includes('edgeband')||(l.includes('kant') && (l.includes('band') || l.includes('mm x') || l.includes('x ')&&l.match(/\d+\s*x\s*\d+/)))) return 'kantenband';
-  // Platen — brede categorie
-  if(l.includes('spaanplaat')||l.includes('spaan')||l.includes('mdf')||l.includes('multiplex')||
-     l.includes('hpl')||l.includes('fineer')||l.includes('plaat')||l.includes('egger')||
-     l.includes('pfleiderer')||l.includes('kronospan')||l.includes('finsa')||l.includes('berken')||
-     l.includes('eiken')||l.includes('beuken')||l.includes('melamine')||l.includes('laminaat')||
-     // Formaat-patroon: iets met mm afmetingen (typisch voor plaatmateriaal)
-     l.match(/\d{3,4}\s*x\s*\d{3,4}/)) return 'platen';
-  // Gereedschap — CNC-frezen, boren, zaagbladen, slijp/schuurschijven (Glas Klooster, Veldman Slijptechniek)
+  const lev=(leverancier||'').toLowerCase();
+  // 1. Gereedschap — CNC-frezen, boren, zaagbladen, slijp/schuurschijven
   if(l.includes('frees')||l.includes('freze')||l.match(/\bboor\b/)||l.includes('zaagblad')||l.includes('schijf')||
      l.includes('slijp')||l.includes('diamant')||l.includes('hardmetaal')||l.includes('spaanbreker')||l.includes('collet')||l.includes('spantang'))
     return 'gereedschap';
-  // Verbruik — lijm, schroeven, spuitbussen, schuurpapier, doeken, etc.
-  if(l.includes('lijm')||l.includes('schroef')||l.includes('schroev')||l.includes('spuitbus')||l.includes('schuurpapier')||
-     l.includes('schuurschijf')||l.includes('doek')||l.includes('handschoen')||l.includes('kwast')||l.includes('reiniger')||l.includes('verbruik'))
+  // 2. Verbruik / beslag / hardware — lijm, schroeven, deuvels, scharnieren, beslag…
+  if(l.includes('lijm')||l.includes('schroef')||l.includes('schroev')||l.includes('deuvel')||l.includes('dowel')||
+     l.includes('scharnier')||l.includes('beslag')||l.includes('verbinder')||l.includes('excenter')||l.includes('rastex')||
+     l.includes('minifix')||l.includes('plug')||l.includes('nagel')||l.includes('spuitbus')||l.includes('schuurpapier')||
+     l.includes('schuurschijf')||l.includes('doek')||l.includes('handschoen')||l.includes('kwast')||l.includes('reiniger')||
+     l.includes('verbruik')||l.includes('greep')||l.includes('pootje')||l.includes('demper')||l.includes('geleider')||
+     l.includes('ladegeleider')||l.includes('blum')||l.includes('hettich')||l.includes('hängung'))
     return 'verbruik';
+  // 3. Kantenband
+  if(l.includes('kantenband')||l.includes('afdekstrip')||l.includes('edge band')||l.includes('edgeband')||l.includes('randband')||
+     l.includes(' abs ')||l.startsWith('abs ')||
+     (l.includes('kant') && (l.includes('band')||l.match(/\d+\s*[x×]\s*\d+(?:[.,]\d+)?\s*mm/))))
+    return 'kantenband';
+  // 4. Platen — expliciete plaatwoorden of een groot-formaat afmeting (≥3-cijferig, zonder punt)
+  if(l.includes('spaanplaat')||l.includes('spaan')||l.includes('mdf')||l.includes('multiplex')||l.includes('multipl')||
+     l.includes('hpl')||l.includes('fineer')||l.includes('plaat')||l.includes('egger')||l.includes('pfleiderer')||
+     l.includes('kronospan')||l.includes('finsa')||l.includes('berken')||l.includes('eiken')||l.includes('beuken')||
+     l.includes('melamine')||l.includes('laminaat')||l.includes('mfc')||l.includes('osb')||
+     l.match(/\b\d{3,4}\s*[x×]\s*\d{3,4}\b/))
+    return 'platen';
+  // 5. Leverancier-hint als de naam zelf niets prijsgeeft
+  if(lev.includes('ostermann')) return 'kantenband';
   return 'overig';
+}
+
+// ── Parser: samengestelde factuur-/voorraadregel → nette velden ───────────────
+// Voorbeeld:
+//  "8000-003-444 — EGGER … Afmeting: 2.800 x 2.070 mm × 18.0 mm dikte
+//   Tarief: €7.5/m² Aantal: 10.0 m² · Regel-totaal: €434.7 (Pos 10)"
+// →  artikelnummer "8000-003-444"  ·  naam "EGGER … × 18.0 mm"
+//    tarief 7.5 (/m²)  ·  aantal 10 → stuks  ·  stukprijs 43.47 (= 434.7 / 10)
+function _eurNum(s){
+  if(s==null) return null;
+  let t=String(s).trim().replace(/[€\s]/g,'');
+  if(t.includes(',')) t=t.replace(/\./g,'').replace(',','.'); // EU-notatie 1.234,56
+  const n=parseFloat(t); return isNaN(n)?null:n;
+}
+// Ziet een omschrijving er "rauw" (nog niet geparset) uit?
+function voorraadRegelIsRauw(s){
+  return /(?:Tarief|Aantal|Regel-?totaal)\s*:/i.test(s||'') || /^\s*[0-9][\w.\/-]*\s+—\s+\S/.test(s||'');
+}
+function parseVoorraadOmschrijving(raw){
+  const out={artikelnummer:'',naam:'',tarief:null,tariefEenheid:'',aantal:null,eenheid:'',stukprijs:null};
+  let s=String(raw||'').replace(/\s+/g,' ').trim();
+  if(!s) return out;
+  // velden uit de hele string trekken
+  const mt=s.match(/Tarief\s*:\s*€?\s*([\d.,]+)\s*\/?\s*(m²|m2|stuks?|stk|st|kg|m|l)?/i);
+  if(mt){out.tarief=_eurNum(mt[1]); out.tariefEenheid=(mt[2]||'').toLowerCase().replace('m2','m²');}
+  const ma=s.match(/Aantal\s*:\s*([\d.,]+)\s*(m²|m2|stuks?|stk|st|kg|m|l)?/i);
+  if(ma){out.aantal=_eurNum(ma[1]); out.eenheid=(ma[2]||'').toLowerCase().replace('m2','m²');}
+  const mr=s.match(/Regel-?totaal\s*:\s*€?\s*([\d.,]+)/i);
+  const totaal=mr?_eurNum(mr[1]):null;
+  if(totaal!=null && out.aantal && out.aantal!==0) out.stukprijs=Math.round((totaal/out.aantal)*100)/100;
+  // naam = alles vóór het eerste meta-label (Tarief/Aantal/Regel-totaal)
+  let cut=s.length;
+  [/\bTarief\s*:/i,/\bAantal\s*:/i,/\bRegel-?totaal\s*:/i].forEach(re=>{const m=s.match(re);if(m&&m.index<cut)cut=m.index;});
+  let naam=s.slice(0,cut).trim();
+  // leidend artikel-/bestelnummer "CODE — rest" afsplitsen
+  let m1=naam.match(/^([0-9][0-9A-Za-z.\-\/]{2,})\s*[—–]\s*(.+)$/);
+  if(!m1) m1=naam.match(/^([0-9][0-9.\-\/]{4,})\s+-\s+(.+)$/);
+  if(m1){out.artikelnummer=m1[1].trim(); naam=m1[2].trim();}
+  // trailing "(Pos N)", losse "dikte" en scheidingstekens wegpoetsen
+  naam=naam.replace(/\(Pos\.?\s*\d+\)\s*$/i,'').trim();
+  naam=naam.replace(/\bdikte\b\s*$/i,'').trim();
+  naam=naam.replace(/[·\/|,;:\-\s]+$/,'').trim();
+  out.naam=naam;
+  return out;
 }
 
 // Migreer bestaande voorraad items met verkeerde categorie
@@ -4249,11 +4309,37 @@ function migreerVoorraadCategorieen(){
   let gewijzigd=false;
   voorraad.forEach(v=>{
     if(!v.categorieManueel){ // Alleen auto-gecategoriseerde items
-      const nieuw=categoriseerMateriaal(v.omschrijving);
+      const nieuw=categoriseerMateriaal(v.omschrijving,v.leverancier);
       if(nieuw!==v.categorie){v.categorie=nieuw;gewijzigd=true;}
     }
   });
   if(gewijzigd) localStorage.setItem('mt_voorraad',JSON.stringify(voorraad));
+}
+
+// Eenmalige opschoning van rauwe factuur-omschrijvingen → schone naam +
+// artikelnummer + tarief/m² + aantal(stuks) + stukprijs (regel-totaal ÷ aantal).
+// Bewaart het origineel in omschrijving_raw zodat niets verloren gaat. Loopt
+// idempotent (vlag `geparsed`) elke render mee — net als de categorie-migratie.
+function migreerVoorraadOmschrijvingen(){
+  const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
+  let gewijzigd=false;
+  voorraad.forEach(v=>{
+    if(v.geparsed) return;
+    if(!voorraadRegelIsRauw(v.omschrijving)) return;
+    const p=parseVoorraadOmschrijving(v.omschrijving);
+    if(!p.naam) return;
+    v.omschrijving_raw=v.omschrijving_raw||v.omschrijving;
+    v.omschrijving=p.naam;
+    if(p.artikelnummer) v.artikelnummer=p.artikelnummer;
+    if(p.tarief!=null){v.tarief_m2=p.tarief; if(p.tariefEenheid)v.tarief_eenheid=p.tariefEenheid;}
+    if(p.aantal!=null) v.aantal=p.aantal;
+    if(p.eenheid) v.eenheid=p.eenheid;
+    if(p.stukprijs!=null) v.stukprijs=p.stukprijs;
+    if(!v.categorieManueel) v.categorie=categoriseerMateriaal(p.naam,v.leverancier); // herclassificeren op schone naam
+    v.geparsed=true; gewijzigd=true;
+  });
+  if(gewijzigd) localStorage.setItem('mt_voorraad',JSON.stringify(voorraad));
+  return gewijzigd;
 }
 function slaVoorraadOp(regel){
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
@@ -4264,6 +4350,11 @@ function slaVoorraadOp(regel){
 }
 async function renderVoorraadActief(){
   const zoek=(document.getElementById('voorraad-zoek')?.value||'').toLowerCase();
+  // Eenmalige opschoning vóór render: rauwe factuur-omschrijvingen → schone naam +
+  // artikelnummer + tarief/m² + stuks + stukprijs; daarna categorie herijken op de
+  // schone naam (+ leverancier-hint). Beide migraties zijn idempotent.
+  migreerVoorraadOmschrijvingen();
+  migreerVoorraadCategorieen();
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
   renderVoorraadKPI(voorraad);
   // Eerst de openstaande voorstellen laden (vult _voorraadCorrecties) zodat de
@@ -4292,16 +4383,25 @@ function renderVoorraadKPI(voorraad){
     <div class="kpi-card"><div class="kpi-label">Leveranciers</div><div class="kpi-waarde">${leveranciers}</div></div>
     ${bestellen>0?`<div class="kpi-card gold"><div class="kpi-label">Te bestellen</div><div class="kpi-waarde">${bestellen}</div><div class="kpi-sub">items op bestellijst</div></div>`:''}`;
 }
+// Art.nr-kolom standaard ingeklapt (Bart 28-6: "die mag standaard ingeklapt zijn").
+let _voorraadToonArtnr=false;
+function toggleVoorraadArtnr(){
+  _voorraadToonArtnr=!_voorraadToonArtnr;
+  const b=document.getElementById('vrd-artnr-toggle');
+  if(b) b.textContent=_voorraadToonArtnr?'🔢 Art.nr verbergen':'🔢 Art.nr tonen';
+  renderVoorraadActief();
+}
 function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
   const el=document.getElementById(`voorraad-${cat}-tabel`);if(!el) return;
   const per={};
   items.forEach(v=>{
     const key=(v.omschrijving||'Onbekend').trim();
-    if(!per[key]) per[key]={regels:[],totaalAantal:0,leveranciers:new Set(),prijzen:[],categorie:cat,artikelnummer:'',eenheid:''};
+    if(!per[key]) per[key]={regels:[],totaalAantal:0,leveranciers:new Set(),prijzen:[],categorie:cat,artikelnummer:'',eenheid:'',tarief_m2:null,tarief_eenheid:''};
     per[key].regels.push(v);per[key].totaalAantal+=(v.aantal||1);
     per[key].leveranciers.add(v.leverancier||'?');per[key].prijzen.push(v.stukprijs||0);
     if(v.artikelnummer&&!per[key].artikelnummer) per[key].artikelnummer=v.artikelnummer;
     if(v.eenheid&&!per[key].eenheid) per[key].eenheid=v.eenheid;
+    if(v.tarief_m2!=null&&per[key].tarief_m2==null){per[key].tarief_m2=v.tarief_m2;per[key].tarief_eenheid=v.tarief_eenheid||'m²';}
   });
   let gefilterd=Object.entries(per).filter(([k,v])=>!zoek||k.toLowerCase().includes(zoek)||[...v.leveranciers].some(l=>l.toLowerCase().includes(zoek))||(v.artikelnummer||'').toLowerCase().includes(zoek));
   // Sorteren
@@ -4320,8 +4420,8 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
   const th=(k,label,align='left')=>`<th style="text-align:${align};${thS}" onclick="renderVoorraadTabel('${cat}',JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>(v.categorie||categoriseerMateriaal(v.omschrijving))==='${cat}'),(document.getElementById('voorraad-zoek')?.value||'').toLowerCase(),'${k}',${sortK==='${k}'?!sortA:true})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
   el.innerHTML=`<table class="v-table">
     <thead><tr>
-      ${th('materiaal','Materiaal')}<th>Art.nr</th>${th('leverancier','Leverancier')}${th('stuks','Stuks','right')}
-      ${th('prijs','Laatste prijs','right')}<th style="text-align:right">Correctie</th>
+      ${th('materiaal','Materiaal')}${_voorraadToonArtnr?'<th>Art.nr</th>':''}${th('leverancier','Leverancier')}${th('stuks','Stuks','right')}
+      ${th('prijs','Laatste prijs','right')}<th style="text-align:right" title="Tarief per m² uit de factuur — dubbelcheck">€/m²</th><th style="text-align:right">Correctie</th>
       <th>Categorie</th><th>Bestellen</th><th></th>
     </tr></thead>
     <tbody>${gefilterd.map(([mat,data])=>{
@@ -4335,13 +4435,14 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
       const pendBadge=openC?`<br><small style="color:var(--orange,#d97706)" title="Er staat een app-voorstel klaar — handel het af in het paneel bovenaan i.p.v. hier handmatig">⏳ voorstel in afwachting${openC.type==='telling'?` (${openC.huidigAantal??0}→${openC.geteld??0})`:''}</small>`:'';
       return`<tr${openC?' style="background:rgba(217,119,6,0.06)"':''}>
         <td><strong style="font-size:12px">${mat}</strong>${prijsWarn?`<br><small style="color:var(--orange)">⚠ prijsvariatie €${minP.toFixed(2)}–€${maxP.toFixed(2)}</small>`:''}${pendBadge}</td>
-        <td style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${data.artikelnummer||'—'}</td>
+        ${_voorraadToonArtnr?`<td style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${data.artikelnummer||'—'}</td>`:''}
         <td>${levs.map(l=>{
           const info=leveranciers.find(lv=>lv.naam.toLowerCase()===l.toLowerCase());
           return info?`<span class="lev-chip" onclick="toonLeverancierInfo('${l}')" title="${info.website||''}">${l} 🔗</span>`:`<span style="font-size:11px">${l}</span>`;
         }).join(' ')}</td>
         <td style="text-align:right;font-family:var(--mono);font-weight:600">${data.totaalAantal}</td>
         <td style="text-align:right;font-family:var(--mono)">€ ${lastPrijs.toFixed(2)}</td>
+        <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-dim)" title="Tarief per ${data.tarief_eenheid||'m²'} uit factuur">${data.tarief_m2!=null?'€ '+data.tarief_m2.toFixed(2):'—'}</td>
         <td style="text-align:right"><input class="correctie-input" type="number" placeholder="0" title="Handmatige correctie" onchange="corrigeerVoorraad('${mat}',this.value,'${cat}')"></td>
         <td><select onchange="verplaatsVoorraadCategorie('${mat.replace(/'/g,"\\'")}','${cat}',this.value)" style="font-size:11px;padding:3px 6px;width:auto">
           <option value="${cat}">${VOORRAAD_CAT_LABEL[cat]||cat}</option>
@@ -4376,32 +4477,152 @@ function corrigeerVoorraad(materiaal,delta,cat){
   localStorage.setItem('mt_voorraad',JSON.stringify(voorraad));
   renderVoorraadActief();
 }
+// Facturen-bron voor het matchen van een voorraadregel aan zijn Moneybird-factuur
+function _voorraadFacturen(){
+  let f=(typeof alleFacturen!=='undefined'&&alleFacturen&&alleFacturen.length)?alleFacturen:[];
+  if(!f.length){try{const c=JSON.parse(localStorage.getItem('mt_cache_facturen')||'null');if(c&&c.facturen?.length)f=c.facturen;}catch(e){}}
+  return f;
+}
+// Best-effort: vind het Moneybird-factuur-id bij een voorraadregel. Direct als de
+// regel al factuur_id heeft, anders matchen op leverancier + artikelnummer/omschrijving.
+function _vindFactuurVoor(regel){
+  if(!regel) return null;
+  if(regel.factuur_id) return regel.factuur_id;
+  const lev=(regel.leverancier||'').toLowerCase().trim();
+  const art=(regel.artikelnummer||'').toLowerCase().trim();
+  const oms=(regel.omschrijving||'').toLowerCase().trim();
+  const ruw=(regel.omschrijving_raw||'').toLowerCase().trim();
+  let beste=null;
+  _voorraadFacturen().forEach(f=>{
+    const cn=(f.contact?.company_name||f.contact?.firstname||f.contact?.lastname||'').toLowerCase();
+    if(lev&&cn&&!(cn.includes(lev)||lev.includes(cn))) return;
+    const raak=(f.details||[]).some(d=>{
+      const dd=(d.description||'').toLowerCase();
+      if(!dd) return false;
+      if(art&&dd.includes(art)) return true;
+      if(ruw&&dd.includes(ruw.slice(0,40))) return true;
+      if(oms&&oms.length>6&&dd.includes(oms.slice(0,Math.min(oms.length,40)))) return true;
+      return false;
+    });
+    if(!raak) return;
+    if(!beste||(regel.datum&&f.date===regel.datum)||(f.date>(beste.date||''))) beste=f;
+  });
+  return beste?beste.id:null;
+}
+function gaNaarVoorraadFactuur(id){
+  const v=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').find(x=>String(x.id)===String(id));
+  const fid=_vindFactuurVoor(v);
+  if(fid){window.open(`https://moneybird.com/${getAdmin()}/documents/${fid}`,'_blank');return;}
+  if(typeof planToast==='function') planToast('⚠ Factuur niet automatisch gevonden — open Moneybird en zoek op '+(v?.leverancier||'leverancier'));
+  window.open(`https://moneybird.com/${getAdmin()}/documents/purchase_invoices/filter/period:this_year`,'_blank');
+}
 function toonVoorraadDetail(mat){
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
   const regels=voorraad.filter(v=>v.omschrijving===mat).slice().reverse();
   const panel=document.getElementById('voorraad-detail-panel');
   const inhoud=document.getElementById('voorraad-detail-inhoud');
   panel.classList.remove('hidden');
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const matJs=mat.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const art=regels.map(r=>r.artikelnummer).find(Boolean);
+  const fid=_vindFactuurVoor(regels[0]);
   inhoud.innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-      <div><div class="card-title">Inkoop-historie</div><strong style="font-size:14px">${mat}</strong></div>
+      <div><div class="card-title">Inkoop-historie</div><strong style="font-size:14px">${esc(mat)}</strong>${art?` <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">· art.nr ${esc(art)}</span>`:''}</div>
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('voorraad-detail-panel').classList.add('hidden')">✕ Sluiten</button>
     </div>
     <table class="v-table">
-      <thead><tr><th>Datum</th><th>Leverancier</th><th style="text-align:right">Aantal</th><th style="text-align:right">Stukprijs</th><th style="text-align:right">Totaal</th><th>Project</th></tr></thead>
+      <thead><tr><th>Datum</th><th>Leverancier</th><th style="text-align:right">Aantal</th><th style="text-align:right">Stukprijs</th><th style="text-align:right">Totaal</th><th>Project</th><th></th></tr></thead>
       <tbody>${regels.map((v,i,arr)=>{
         const vP=arr[i+1]?.stukprijs;const diff=vP&&v.stukprijs!==vP;const omhoog=diff&&v.stukprijs>vP;
-        return`<tr style="${i===0?'background:var(--green-light)':''}${v.correctie?'font-style:italic;opacity:0.7':''}">
-          <td>${new Date(v.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'2-digit'})}</td>
-          <td>${v.leverancier||'—'}</td>
+        return`<tr data-vrow="${v.id}" style="${i===0?'background:var(--green-light)':''}${v.correctie?'font-style:italic;opacity:0.7':''}">
+          <td>${v.datum?new Date(v.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'2-digit'}):'—'}</td>
+          <td>${esc(v.leverancier)||'—'}</td>
           <td style="text-align:right;font-family:var(--mono)">${v.aantal||1}</td>
           <td style="text-align:right;font-family:var(--mono)">€ ${(v.stukprijs||0).toFixed(2)}${diff?`<span style="color:${omhoog?'var(--red)':'var(--green)'};font-size:10px"> ${omhoog?'▲':'▼'}</span>`:''}${i===0?' <small style="opacity:0.5">(laatste)</small>':''}</td>
           <td style="text-align:right;font-family:var(--mono);font-weight:600">€ ${((v.aantal||1)*(v.stukprijs||0)).toFixed(2)}</td>
-          <td><span class="code">${v.project||'—'}</span></td>
+          <td><span class="code">${esc(v.project)||'—'}</span></td>
+          <td style="white-space:nowrap;text-align:right">
+            <button class="btn btn-xs btn-secondary" title="Deze regel aanpassen" onclick="bewerkVoorraadRegel('${v.id}')">✏</button>
+            <button class="btn btn-xs btn-secondary" title="Open de bijbehorende factuur in Moneybird" onclick="gaNaarVoorraadFactuur('${v.id}')">→ Factuur</button>
+          </td>
         </tr>`;
       }).join('')}</tbody>
-    </table>`;
+    </table>
+    <!-- Larry-chat: zeg live wat er aan dit materiaal anders moet; de juiste factuur zit er al bij -->
+    <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:0.8rem">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem">
+        <strong style="font-size:12px;color:var(--green)">💬 Vraag Larry over dit materiaal</strong>
+        ${fid?`<a href="https://moneybird.com/${getAdmin()}/documents/${fid}" target="_blank" style="font-size:11px;color:var(--gold)">🧾 factuur erbij ↗</a>`:'<span style="font-size:11px;color:var(--text-faint)">(geen factuur gekoppeld)</span>'}
+      </div>
+      <div id="vrd-chatlog" style="max-height:220px;overflow:auto;font-size:12px;display:flex;flex-direction:column;gap:6px;margin-bottom:0.5rem"></div>
+      <div style="display:flex;gap:6px">
+        <input id="vrd-chatq" type="text" placeholder="bv. 'de naam moet korter' of 'stukprijs klopt niet, check de factuur'" style="flex:1" onkeydown="if(event.key==='Enter')voorraadChatSend('${matJs}')">
+        <button class="btn btn-primary btn-sm" onclick="voorraadChatSend('${matJs}')">Vraag</button>
+      </div>
+    </div>`;
   panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+// Inline bewerken van één voorraad-mutatie (op id)
+function bewerkVoorraadRegel(id){
+  const tr=document.querySelector(`#voorraad-detail-inhoud tr[data-vrow="${id}"]`);
+  const v=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').find(x=>String(x.id)===String(id));
+  if(!tr||!v) return;
+  const esc=s=>String(s||'').replace(/"/g,'&quot;');
+  tr.innerHTML=`
+    <td><input type="date" id="ve-datum-${id}" value="${(v.datum||'').slice(0,10)}" style="font-size:11px;width:130px"></td>
+    <td><input type="text" id="ve-lev-${id}" value="${esc(v.leverancier)}" style="font-size:11px;width:120px"></td>
+    <td style="text-align:right"><input type="number" step="any" id="ve-aantal-${id}" value="${v.aantal!=null?v.aantal:1}" style="font-size:11px;width:70px;text-align:right"></td>
+    <td style="text-align:right"><input type="number" step="0.01" id="ve-prijs-${id}" value="${v.stukprijs!=null?v.stukprijs:0}" style="font-size:11px;width:80px;text-align:right"></td>
+    <td colspan="2"><input type="text" id="ve-oms-${id}" value="${esc(v.omschrijving)}" title="Schone naam (zoals je 'm wilt zien)" style="font-size:11px;width:100%"></td>
+    <td style="white-space:nowrap;text-align:right">
+      <button class="btn btn-xs btn-primary" onclick="slaVoorraadRegelOp('${id}')">✓ Opslaan</button>
+      <button class="btn btn-xs btn-secondary" onclick="toonVoorraadDetail('${(v.omschrijving||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">✕</button>
+    </td>`;
+}
+function slaVoorraadRegelOp(id){
+  const g=s=>document.getElementById(s);
+  const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
+  const v=voorraad.find(x=>String(x.id)===String(id));
+  if(!v) return;
+  const nieuweOms=(g('ve-oms-'+id)?.value||'').trim();
+  if(g('ve-datum-'+id)) v.datum=g('ve-datum-'+id).value||v.datum;
+  if(g('ve-lev-'+id)) v.leverancier=g('ve-lev-'+id).value.trim();
+  if(g('ve-aantal-'+id)) v.aantal=parseFloat(g('ve-aantal-'+id).value)||0;
+  if(g('ve-prijs-'+id)) v.stukprijs=parseFloat(g('ve-prijs-'+id).value)||0;
+  if(nieuweOms) v.omschrijving=nieuweOms;
+  v.handmatig=true; // door Bart aangeraakt → niet meer auto-herparsen
+  localStorage.setItem('mt_voorraad',JSON.stringify(voorraad)); // mirrort naar SharePoint
+  renderVoorraadActief();
+  toonVoorraadDetail(nieuweOms||v.omschrijving);
+  if(typeof planToast==='function') planToast('✓ Regel bijgewerkt');
+}
+// Larry-chat over één materiaal — context (regels + gekoppelde factuur) gaat automatisch mee
+async function voorraadChatSend(mat){
+  const inp=document.getElementById('vrd-chatq');const log=document.getElementById('vrd-chatlog');
+  const q=(inp?.value||'').trim();if(!q||!log) return;
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  log.innerHTML+=`<div style="align-self:flex-end;background:var(--green-light);padding:5px 9px;border-radius:9px;max-width:85%">${esc(q)}</div>`;
+  inp.value='';log.scrollTop=log.scrollHeight;
+  const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>v.omschrijving===mat);
+  const fid=_vindFactuurVoor(voorraad[voorraad.length-1]);
+  const fact=fid?_voorraadFacturen().find(f=>String(f.id)===String(fid)):null;
+  const ruw=voorraad.map(v=>v.omschrijving_raw).find(Boolean);
+  const ctx=`Materiaal in de M&T-voorraad: "${mat}".
+Categorie: ${voorraad[0]?.categorie||'?'} · leverancier: ${voorraad[0]?.leverancier||'?'} · artikelnummer: ${voorraad.map(v=>v.artikelnummer).find(Boolean)||'—'}.
+Mutaties (datum · aantal · stukprijs): ${voorraad.map(v=>`${(v.datum||'').slice(0,10)} · ${v.aantal} · €${v.stukprijs}`).join(' | ')||'geen'}.
+Ruwe factuuromschrijving: ${ruw||'—'}.
+${fact?`Gekoppelde factuur: ${fact.contact?.company_name||''} ${fact.date||''} (regels: ${(fact.details||[]).map(d=>d.description).filter(Boolean).slice(0,6).join(' ; ')}).`:'Geen factuur gekoppeld.'}`;
+  const tmp=document.createElement('div');tmp.style.cssText='align-self:flex-start;background:var(--surface);border:1px solid var(--border);padding:5px 9px;border-radius:9px;max-width:90%';tmp.textContent='…';log.appendChild(tmp);log.scrollTop=log.scrollHeight;
+  try{
+    const r=await claudeCall([
+      {role:'user',content:`Je bent Larry, de M&T-assistent. Bart bekijkt de voorraad en wil iets aan dit materiaal aanpassen of checken. Antwoord kort en concreet in het Nederlands. Als hij een wijziging vraagt (naam, prijs, aantal, categorie), zeg precies wat je zou aanpassen en waarom; hij past het zelf aan met de ✏-knop.\n\n${ctx}\n\nVraag: ${q}`}
+    ],600);
+    const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+    tmp.textContent=txt;
+    if(window._LOG)_LOG.add('voorraad-chat','voorraad',`[${mat}] ${q}`,txt);
+  }catch(e){tmp.textContent='fout: '+e.message;}
+  log.scrollTop=log.scrollHeight;
 }
 function wisVoorraad(){
   if(!confirm('Alle voorraadmutaties wissen?')) return;
@@ -4505,15 +4726,19 @@ async function importeerVoorraadUitFacturen(){
     const lev=f.contact?.company_name||f.contact?.firstname||f.contact?.lastname||'?';
     const datum=f.date||'';
     (f.details||[]).forEach(d=>{
-      const oms=(d.description||'').trim().replace(/\s+/g,' ');
-      if(!oms||oms.length<3) return;
-      const cat=categoriseerMateriaal(oms);
+      const ruw=(d.description||'').trim().replace(/\s+/g,' ');
+      if(!ruw||ruw.length<3) return;
+      // Parse meteen → schone naam + artikelnummer + tarief/m²; classificeer op de
+      // schone naam + leverancier (Ostermann→kantenband i.p.v. alles naar platen).
+      const p=parseVoorraadOmschrijving(ruw);
+      const oms=p.naam||ruw;
+      const cat=categoriseerMateriaal(oms,lev);
       if(!MATERIAAL_CATS.has(cat)) return; // verzendkosten/toeslagen/arbeid → overig → overslaan
       const key=oms.toLowerCase();
       if(bestaand.has(key)) return; // staat al in voorraad
-      const prijs=parseFloat(d.price)||0;
+      const prijs=parseFloat(d.price)||0; // MB-regelprijs = al stukprijs ex btw
       const prev=kandidaten.get(key);
-      if(!prev||(datum>prev.datum)) kandidaten.set(key,{omschrijving:oms,categorie:cat,leverancier:lev,stukprijs:prijs,datum});
+      if(!prev||(datum>prev.datum)) kandidaten.set(key,{omschrijving:oms,omschrijving_raw:ruw,artikelnummer:p.artikelnummer||'',tarief_m2:p.tarief,tarief_eenheid:p.tariefEenheid||'',categorie:cat,leverancier:lev,stukprijs:prijs,datum,factuur_id:f.id});
     });
   });
   const lijst=[...kandidaten.values()];
@@ -4526,8 +4751,10 @@ async function importeerVoorraadUitFacturen(){
   const nu=new Date().toISOString().split('T')[0];
   lijst.forEach(x=>{
     voorraad.push({
-      omschrijving:x.omschrijving,categorie:x.categorie,categorieManueel:false,
+      omschrijving:x.omschrijving,omschrijving_raw:x.omschrijving_raw,categorie:x.categorie,categorieManueel:false,
       leverancier:x.leverancier,aantal:0,stukprijs:x.stukprijs,eenheid:'',
+      artikelnummer:x.artikelnummer||'',tarief_m2:x.tarief_m2,tarief_eenheid:x.tarief_eenheid||'',
+      factuur_id:x.factuur_id||'',geparsed:true,
       datum:x.datum||nu,project:'',geimporteerd:true,handmatig:false,
       id:Date.now()+Math.random(),ts:Date.now()
     });

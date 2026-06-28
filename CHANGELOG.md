@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — Voorraad: importeer materialen uit inkoopfacturen (aantal 0)
+- Commit: `aad952d` | Auteur: Bart Witte
+
 ## 2026-06-28 — Offerte-calc rebuild: licht thema, Google-Doc-aanzicht, vrije materiaalregels
 - Commit: `0f93a8e` | Auteur: Bart Witte
 
