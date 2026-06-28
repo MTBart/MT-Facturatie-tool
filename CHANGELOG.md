@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — Offerte-calculator fase 0: reken-engine (coach-sheet → cockpit)
+- Commit: `4e98352` | Auteur: Bart Witte
+
 ## 2026-06-24 — Worker-overbelasting structureel fixen: heartbeat + polls visibility-gated, error-storm afgevangen
 - Commit: `f5de3b5` | Auteur: Bart Witte
 

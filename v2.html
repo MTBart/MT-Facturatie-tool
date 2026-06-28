@@ -6,6 +6,7 @@
 <title>M&T Bedrijfstool v2 bèta</title>
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2/lib/msal-browser.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
+<script src="calc-engine.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Manrope:wght@300;400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -4834,6 +4835,8 @@ function renderProjectDetail(proj){
         <span style="font-size:11px;color:var(--text-faint)">Koppelen doe je in de Inbox met 🔗 “Koppel aan project”</span>
       </div>
       ${gekoppeldeMailsHtml(proj)}
+      <hr class="divider">
+      <div id="offerte-calc-${proj.code.replace(/[^A-Za-z0-9]/g,'')}"><p style="color:var(--text-faint);font-size:13px">Offerte-calculator laden…</p></div>
       ${nacalcHtml(proj,totaalInkoop,effectiveMb)}
       ${projItems.length?`
       <hr class="divider">
@@ -4860,6 +4863,7 @@ function renderProjectDetail(proj){
       </table>`:'<p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}
     </div>`;
   nacalcLaadOfferte(proj.code,effectiveMb);
+  if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
 }
 // ── Gekoppelde mails van een project (mt_mail_links — synct via privé SharePoint, zichtbaar op alle PC's) ──
 function gekoppeldeMailsHtml(proj){
@@ -10334,6 +10338,279 @@ function activiteitOpen(force){
 
 <!-- Usage-/presence-tracking. Laadt als laatste zodat window.WORKER / getAuthToken
      al gedefinieerd zijn. Faalt altijd stil — mag de tool nooit ophouden. -->
+<script>
+/* ============================================================================
+ * Offerte-calculator (Fase 1) — UI-laag boven calc-engine.js (window.MTCalc)
+ * ----------------------------------------------------------------------------
+ * Rebuild van de coach-sheet-keten [16]Inkooplijst → [17]Kostprijzen →
+ * [18]Verkoopprijzen, ingebouwd in de Projecten-tab (offerte = voorcalculatie).
+ *
+ * Opslag = privé SharePoint-JSON (bevat inkoopprijzen+marges → NOOIT publiek):
+ *   mt_calc_materialen.json  (gedeelde materiaalbibliotheek)
+ *   mt_calc_defaults.json    (standaardwaarden voor een leeg rekenblad)
+ *   mt_calc_offertes.json    (per projectcode de offerteregels)
+ * localStorage spiegelt elke key voor snelle/offline herlaad.
+ *
+ * Alle rekenvelden zijn inline bewerkbaar (Barts eis 28-6): marge/doelmarge,
+ * uurloon, btw, extra's, hoeveelheden, inkoopprijzen. Een aanpassing in het
+ * lege rekenblad kan als standaard worden opgeslagen.
+ * ========================================================================== */
+(function(){
+  'use strict';
+  const LS = { mat:'mt_calc_materialen', def:'mt_calc_defaults', off:'mt_calc_offertes' };
+  const SP = { mat:'mt_calc_materialen.json', def:'mt_calc_defaults.json', off:'mt_calc_offertes.json' };
+  const DEFAULT_DEFAULTS = { uurloon:45, btw_tarief:0.21, scenario:'B2B', verpakking:0, import:0, transport:0, overig:0 };
+
+  const CALC = window.CALC = {
+    loaded:false, hydrating:null,
+    materialen:[],                       // [{id,leverancier,product,inhoud,eenheid,inkoopprijs_ex_btw}]
+    defaults:Object.assign({},DEFAULT_DEFAULTS),
+    offertes:{},                         // { [projectcode]: { regels:[...] } }
+  };
+  const _saveTimers = {};
+
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function uid(p){return (p||'r')+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36);}
+  function n(v){const x=typeof v==='string'?Number(v.replace(',','.')):Number(v);return isNaN(x)?null:x;}
+  function eur(v){return (v==null||isNaN(v))?'—':('€ '+Number(v).toFixed(2).replace('.',','));}
+  function pct(v){return (v==null||isNaN(v))?'—':((v*100).toFixed(1).replace('.',','))+'%';}
+  function cid(code){return String(code).replace(/[^A-Za-z0-9]/g,'');}
+
+  // ---- persistentie ---------------------------------------------------------
+  function lsLoad(key,fallback){try{const v=localStorage.getItem(key);return v?JSON.parse(v):fallback;}catch(e){return fallback;}}
+  function lsSave(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
+
+  function payloadFor(which){
+    if(which==='mat') return {versie:1,items:CALC.materialen};
+    if(which==='def') return CALC.defaults;
+    return {versie:1,offertes:CALC.offertes};
+  }
+  function saveCalc(which){
+    // localStorage meteen (snel + offline), SP gedebounced (privé)
+    lsSave(LS[which], payloadFor(which));
+    clearTimeout(_saveTimers[which]);
+    _saveTimers[which]=setTimeout(async()=>{
+      if(window._SP&&typeof _SP.write==='function'){ try{ await _SP.write(SP[which], payloadFor(which)); }catch(e){} }
+    },1500);
+  }
+
+  async function hydrateCalc(){
+    if(CALC.loaded) return;
+    if(CALC.hydrating) return CALC.hydrating;
+    CALC.hydrating=(async()=>{
+      // 1) localStorage als snelle basis
+      const lm=lsLoad(LS.mat,null), ld=lsLoad(LS.def,null), lo=lsLoad(LS.off,null);
+      if(lm&&lm.items) CALC.materialen=lm.items;
+      if(ld) CALC.defaults=Object.assign({},DEFAULT_DEFAULTS,ld);
+      if(lo&&lo.offertes) CALC.offertes=lo.offertes;
+      // 2) SharePoint = bron van waarheid (overschrijft als aanwezig)
+      if(window._SP&&typeof _SP.read==='function'){
+        try{
+          const [sm,sd,so]=await Promise.all([_SP.read(SP.mat),_SP.read(SP.def),_SP.read(SP.off)]);
+          if(sm&&sm.items){CALC.materialen=sm.items; lsSave(LS.mat,sm);}
+          if(sd){CALC.defaults=Object.assign({},DEFAULT_DEFAULTS,sd); lsSave(LS.def,CALC.defaults);}
+          if(so&&so.offertes){CALC.offertes=so.offertes; lsSave(LS.off,so);}
+        }catch(e){}
+      }
+      CALC.loaded=true;
+    })();
+    return CALC.hydrating;
+  }
+
+  // ---- model-helpers --------------------------------------------------------
+  function getOfferte(code){
+    if(!CALC.offertes[code]) CALC.offertes[code]={regels:[]};
+    return CALC.offertes[code];
+  }
+  function getRegel(code,rid){return getOfferte(code).regels.find(r=>r.id===rid);}
+  function nieuweRegel(){
+    const d=CALC.defaults;
+    return { id:uid('r'), naam:'', productietijd_min:'', uurloon:d.uurloon,
+      verpakking:d.verpakking, import:d.import, transport:d.transport, overig:d.overig,
+      btw_tarief:d.btw_tarief, scenario:d.scenario, verkoopprijs:'', doelmarge_pct:'',
+      grondstoffen:[] };
+  }
+
+  // berekening per regel via de geteste engine
+  function berekenRegel(r){
+    const product={ naam:r.naam, productietijd_min:r.productietijd_min, uurloon:r.uurloon,
+      regels:(r.grondstoffen||[]).map(g=>({materiaal_id:g.materiaal_id, hoeveelheid:g.hoeveelheid})) };
+    const vp={ verpakking:r.verpakking, import:r.import, transport:r.transport, overig:r.overig,
+      btw_tarief:r.btw_tarief, scenarios:{ [r.scenario]: r.verkoopprijs } };
+    const out=window.MTCalc.berekenOfferteRegel(product, vp, CALC.materialen);
+    return { kost:out.kost, verkoop:out.verkoop, sc:out.verkoop.scenarios[r.scenario] };
+  }
+  // inverse: verkoopprijs die een doelmarge (% op verkoop-ex) haalt
+  function verkoopUitMarge(tki, margePct, scenario, btw){
+    const m=n(margePct); if(m===null) return null;
+    const f=m/100; if(f>=1) return null;
+    const ex=tki/(1-f);
+    return scenario==='B2C' ? ex*(1+(n(btw)||0)) : ex;
+  }
+
+  // ---- mutaties (alle velden bewerkbaar) ------------------------------------
+  window.calcSetRegel=function(code,rid,field,val){const r=getRegel(code,rid);if(!r)return;
+    r[field]= field==='btw_tarief' ? (n(val)===null?'':n(val)/100) : val;
+    saveCalc('off'); renderOfferteCalc(code);};
+  window.calcSetGrondstof=function(code,rid,gid,field,val){const r=getRegel(code,rid);if(!r)return;
+    const g=r.grondstoffen.find(x=>x.id===gid);if(!g)return; g[field]=val; saveCalc('off'); renderOfferteCalc(code);};
+  window.calcAddRegel=function(code){getOfferte(code).regels.push(nieuweRegel());saveCalc('off');renderOfferteCalc(code);};
+  window.calcDelRegel=function(code,rid){const o=getOfferte(code);o.regels=o.regels.filter(r=>r.id!==rid);saveCalc('off');renderOfferteCalc(code);};
+  window.calcAddGrondstof=function(code,rid){const r=getRegel(code,rid);if(!r)return;
+    r.grondstoffen.push({id:uid('g'),materiaal_id:(CALC.materialen[0]&&CALC.materialen[0].id)||'',hoeveelheid:''});saveCalc('off');renderOfferteCalc(code);};
+  window.calcDelGrondstof=function(code,rid,gid){const r=getRegel(code,rid);if(!r)return;
+    r.grondstoffen=r.grondstoffen.filter(g=>g.id!==gid);saveCalc('off');renderOfferteCalc(code);};
+  window.calcVulUitMarge=function(code,rid){const r=getRegel(code,rid);if(!r)return;
+    const b=berekenRegel(r); const v=verkoopUitMarge(b.verkoop.totale_kostprijs_incl, r.doelmarge_pct, r.scenario, r.btw_tarief);
+    if(v!=null) r.verkoopprijs=Number(v.toFixed(2)); saveCalc('off'); renderOfferteCalc(code);};
+
+  // standaardwaarden
+  window.calcSetDefaultField=function(field,val){
+    CALC.defaults[field]= field==='btw_tarief' ? (n(val)===null?0:n(val)/100) : (field==='scenario'?val:(n(val)===null?'':n(val)));
+  };
+  window.calcSaveDefaults=function(code){saveCalc('def');
+    const el=document.getElementById('calc-def-status-'+cid(code)); if(el){el.textContent='✓ opgeslagen als standaard';setTimeout(()=>el.textContent='',2500);}};
+
+  // materiaalbibliotheek
+  window.calcSetMat=function(code,mid,field,val){const m=CALC.materialen.find(x=>x.id===mid);if(!m)return;m[field]=val;saveCalc('mat');renderOfferteCalc(code);};
+  window.calcAddMat=function(code){CALC.materialen.push({id:uid('m'),leverancier:'',product:'',inhoud:'',eenheid:'stuk(s)',inkoopprijs_ex_btw:''});saveCalc('mat');renderOfferteCalc(code);};
+  window.calcDelMat=function(code,mid){CALC.materialen=CALC.materialen.filter(m=>m.id!==mid);saveCalc('mat');renderOfferteCalc(code);};
+
+  // ---- render ---------------------------------------------------------------
+  function matOpties(sel){
+    const leeg='<option value="">— kies materiaal —</option>';
+    return leeg+CALC.materialen.map(m=>'<option value="'+esc(m.id)+'"'+(m.id===sel?' selected':'')+'>'+esc(m.product||m.leverancier||m.id)+'</option>').join('');
+  }
+  function eenheidOpties(sel){return (window.MTCalc.EENHEDEN||[]).map(e=>'<option'+(e===sel?' selected':'')+'>'+esc(e)+'</option>').join('');}
+  function scenarioOpties(sel){return ['B2C','B2B','SalesAgent'].map(s=>'<option value="'+s+'"'+(s===sel?' selected':'')+'>'+s+'</option>').join('');}
+
+  function regelKaart(code,r){
+    const b=berekenRegel(r);
+    const scLabel = r.scenario==='B2C' ? 'Verkoopprijs incl. btw' : 'Verkoopprijs excl. btw';
+    const gron=(r.grondstoffen||[]).map(g=>{
+      const m=CALC.materialen.find(x=>x.id===g.materiaal_id);
+      const ppe=m?window.MTCalc.prijsPerEenheid(m):null;
+      const hoev=n(g.hoeveelheid);
+      const rk=(ppe==null||hoev==null)?null:ppe*hoev;
+      return `<tr>
+        <td><select class="calc-inp" onchange="calcSetGrondstof('${code}','${r.id}','${g.id}','materiaal_id',this.value)">${matOpties(g.materiaal_id)}</select></td>
+        <td style="text-align:right"><input class="calc-inp" style="width:70px;text-align:right" value="${esc(g.hoeveelheid)}" onchange="calcSetGrondstof('${code}','${r.id}','${g.id}','hoeveelheid',this.value)" placeholder="0"></td>
+        <td style="font-size:11px;color:var(--text-faint)">${esc(m?m.eenheid:'')}</td>
+        <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-dim)">${ppe==null?'—':eur(ppe)}/e</td>
+        <td style="text-align:right;font-family:var(--mono)">${eur(rk)}</td>
+        <td><button class="btn btn-xs btn-danger" onclick="calcDelGrondstof('${code}','${r.id}','${g.id}')">×</button></td>
+      </tr>`;
+    }).join('');
+    const margeKleur = b.sc.marge_pct==null?'var(--text-faint)':(b.sc.marge_pct<0.15?'var(--red,#c0392b)':(b.sc.marge_pct<0.3?'var(--gold)':'var(--green)'));
+    return `<div class="card" style="background:var(--bg-elev,#1b1f24);padding:0.9rem;margin-bottom:0.75rem">
+      <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin-bottom:0.6rem">
+        <input class="calc-inp" style="flex:1;min-width:160px;font-weight:600" value="${esc(r.naam)}" placeholder="Omschrijving (bv. Onderkast 60cm)" onchange="calcSetRegel('${code}','${r.id}','naam',this.value)">
+        <label style="font-size:11px;color:var(--text-dim)">Scenario
+          <select class="calc-inp" onchange="calcSetRegel('${code}','${r.id}','scenario',this.value)">${scenarioOpties(r.scenario)}</select></label>
+        <button class="btn btn-xs btn-danger" onclick="calcDelRegel('${code}','${r.id}')" title="Regel verwijderen">verwijder</button>
+      </div>
+      <table class="materiaal-lijst" style="margin-bottom:0.4rem">
+        <thead><tr><th>Grondstof</th><th style="text-align:right">Hoeveelheid</th><th>Eenheid</th><th style="text-align:right">Prijs/eenh.</th><th style="text-align:right">Regelkost</th><th></th></tr></thead>
+        <tbody>${gron||''}</tbody>
+      </table>
+      <button class="btn btn-xs btn-secondary" onclick="calcAddGrondstof('${code}','${r.id}')" style="margin-bottom:0.6rem">+ grondstof</button>
+      <div style="display:flex;gap:0.8rem;flex-wrap:wrap;font-size:11px;color:var(--text-dim);margin-bottom:0.5rem">
+        <label>Productietijd (min)<br><input class="calc-inp" style="width:80px" value="${esc(r.productietijd_min)}" onchange="calcSetRegel('${code}','${r.id}','productietijd_min',this.value)"></label>
+        <label>Uurloon €<br><input class="calc-inp" style="width:70px" value="${esc(r.uurloon)}" onchange="calcSetRegel('${code}','${r.id}','uurloon',this.value)"></label>
+        <label>Verpakking €<br><input class="calc-inp" style="width:70px" value="${esc(r.verpakking)}" onchange="calcSetRegel('${code}','${r.id}','verpakking',this.value)"></label>
+        <label>Import €<br><input class="calc-inp" style="width:70px" value="${esc(r.import)}" onchange="calcSetRegel('${code}','${r.id}','import',this.value)"></label>
+        <label>Transport €<br><input class="calc-inp" style="width:70px" value="${esc(r.transport)}" onchange="calcSetRegel('${code}','${r.id}','transport',this.value)"></label>
+        <label>Overig €<br><input class="calc-inp" style="width:70px" value="${esc(r.overig)}" onchange="calcSetRegel('${code}','${r.id}','overig',this.value)"></label>
+        <label>Btw %<br><input class="calc-inp" style="width:60px" value="${esc(r.btw_tarief===''?'':Math.round((n(r.btw_tarief)||0)*1000)/10)}" onchange="calcSetRegel('${code}','${r.id}','btw_tarief',this.value)"></label>
+      </div>
+      <div style="display:flex;gap:0.8rem;flex-wrap:wrap;align-items:flex-end;font-size:11px;color:var(--text-dim)">
+        <label>${scLabel}<br><input class="calc-inp" style="width:110px;font-weight:600" value="${esc(r.verkoopprijs)}" onchange="calcSetRegel('${code}','${r.id}','verkoopprijs',this.value)"></label>
+        <label>Doelmarge %<br><input class="calc-inp" style="width:80px" value="${esc(r.doelmarge_pct)}" onchange="calcSetRegel('${code}','${r.id}','doelmarge_pct',this.value)"></label>
+        <button class="btn btn-xs btn-secondary" onclick="calcVulUitMarge('${code}','${r.id}')" title="Bereken verkoopprijs uit doelmarge">↳ vul prijs uit marge</button>
+      </div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-top:0.7rem;gap:0.5rem">
+        <div class="kpi-card"><div class="kpi-label">Kostprijs (mat.+uren)</div><div class="kpi-waarde" style="font-size:15px">${eur(b.kost.totale_kostprijs)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Totale kostprijs incl.</div><div class="kpi-waarde" style="font-size:15px">${eur(b.verkoop.totale_kostprijs_incl)}</div></div>
+        <div class="kpi-card green"><div class="kpi-label">Verkoop ex. btw</div><div class="kpi-waarde" style="font-size:15px">${eur(b.sc.verkoopprijs_ex)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Brutowinst / marge</div><div class="kpi-waarde" style="font-size:15px;color:${margeKleur}">${eur(b.sc.brutowinst)} · ${pct(b.sc.marge_pct)}</div></div>
+      </div>
+    </div>`;
+  }
+
+  function defaultsPaneel(code){
+    const d=CALC.defaults, c=cid(code);
+    return `<details style="margin-top:0.5rem"><summary style="cursor:pointer;color:var(--text-dim);font-size:12px">⚙ Standaardwaarden (leeg rekenblad)</summary>
+      <div style="display:flex;gap:0.8rem;flex-wrap:wrap;font-size:11px;color:var(--text-dim);margin:0.5rem 0;align-items:flex-end">
+        <label>Uurloon €<br><input class="calc-inp" style="width:70px" value="${esc(d.uurloon)}" onchange="calcSetDefaultField('uurloon',this.value)"></label>
+        <label>Btw %<br><input class="calc-inp" style="width:60px" value="${esc(Math.round((n(d.btw_tarief)||0)*1000)/10)}" onchange="calcSetDefaultField('btw_tarief',this.value)"></label>
+        <label>Scenario<br><select class="calc-inp" onchange="calcSetDefaultField('scenario',this.value)">${scenarioOpties(d.scenario)}</select></label>
+        <label>Verpakking €<br><input class="calc-inp" style="width:70px" value="${esc(d.verpakking)}" onchange="calcSetDefaultField('verpakking',this.value)"></label>
+        <label>Import €<br><input class="calc-inp" style="width:70px" value="${esc(d.import)}" onchange="calcSetDefaultField('import',this.value)"></label>
+        <label>Transport €<br><input class="calc-inp" style="width:70px" value="${esc(d.transport)}" onchange="calcSetDefaultField('transport',this.value)"></label>
+        <label>Overig €<br><input class="calc-inp" style="width:70px" value="${esc(d.overig)}" onchange="calcSetDefaultField('overig',this.value)"></label>
+        <button class="btn btn-xs btn-gold" onclick="calcSaveDefaults('${code}')">Opslaan als standaard</button>
+        <span id="calc-def-status-${c}" style="color:var(--green);font-size:11px"></span>
+      </div>
+      <p style="font-size:10px;color:var(--text-faint);margin:0">Nieuwe offerteregels starten met deze waarden. Bestaande regels veranderen niet.</p>
+    </details>`;
+  }
+
+  function bibliotheekPaneel(code){
+    const rows=CALC.materialen.map(m=>{
+      const ppe=window.MTCalc.prijsPerEenheid(m);
+      return `<tr>
+        <td><input class="calc-inp" style="width:110px" value="${esc(m.leverancier)}" onchange="calcSetMat('${code}','${m.id}','leverancier',this.value)" placeholder="leverancier"></td>
+        <td><input class="calc-inp" style="width:140px" value="${esc(m.product)}" onchange="calcSetMat('${code}','${m.id}','product',this.value)" placeholder="product"></td>
+        <td style="text-align:right"><input class="calc-inp" style="width:60px;text-align:right" value="${esc(m.inhoud)}" onchange="calcSetMat('${code}','${m.id}','inhoud',this.value)" placeholder="inhoud"></td>
+        <td><select class="calc-inp" onchange="calcSetMat('${code}','${m.id}','eenheid',this.value)">${eenheidOpties(m.eenheid)}</select></td>
+        <td style="text-align:right"><input class="calc-inp" style="width:80px;text-align:right" value="${esc(m.inkoopprijs_ex_btw)}" onchange="calcSetMat('${code}','${m.id}','inkoopprijs_ex_btw',this.value)" placeholder="€ ex"></td>
+        <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-dim)">${ppe==null?'—':eur(ppe)}</td>
+        <td><button class="btn btn-xs btn-danger" onclick="calcDelMat('${code}','${m.id}')">×</button></td>
+      </tr>`;
+    }).join('');
+    return `<details style="margin-top:0.4rem"><summary style="cursor:pointer;color:var(--text-dim);font-size:12px">📦 Materiaalbibliotheek (${CALC.materialen.length}) — gedeeld over alle projecten</summary>
+      <table class="materiaal-lijst" style="margin:0.5rem 0">
+        <thead><tr><th>Leverancier</th><th>Product</th><th style="text-align:right">Inhoud</th><th>Eenheid</th><th style="text-align:right">Inkoop ex.</th><th style="text-align:right">Prijs/eenh.</th><th></th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="7" style="color:var(--text-faint);font-size:12px">Nog geen materialen — voeg er een toe.</td></tr>'}</tbody>
+      </table>
+      <button class="btn btn-xs btn-secondary" onclick="calcAddMat('${code}')">+ materiaal</button>
+      <p style="font-size:10px;color:var(--text-faint);margin:0.3rem 0 0">Privé op SharePoint (inkoopprijzen) — komt nooit in de publieke repo. Fase 2 koppelt dit live aan inkoop.db.</p>
+    </details>`;
+  }
+
+  window.renderOfferteCalc=async function(code){
+    const host=document.getElementById('offerte-calc-'+cid(code));
+    if(!host) return;
+    if(!CALC.loaded){ await hydrateCalc(); const h2=document.getElementById('offerte-calc-'+cid(code)); if(!h2) return; }
+    const host2=document.getElementById('offerte-calc-'+cid(code)); if(!host2) return;
+    const o=getOfferte(code);
+    // offerte-totalen
+    let totKost=0,totEx=0,heeftPrijs=false;
+    o.regels.forEach(r=>{const b=berekenRegel(r);totKost+=b.verkoop.totale_kostprijs_incl||0;if(b.sc.verkoopprijs_ex!=null){totEx+=b.sc.verkoopprijs_ex;heeftPrijs=true;}});
+    const totMarge = (heeftPrijs&&totEx>0)?(totEx-totKost)/totEx:null;
+    const regelsHtml=o.regels.map(r=>regelKaart(code,r)).join('') ||
+      '<p style="color:var(--text-faint);font-size:13px">Nog geen offerteregels. Voeg er een toe om te beginnen.</p>';
+    host2.innerHTML=`
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem">
+        <div class="card-title" style="margin:0">Offerte-calculator <span style="font-size:11px;color:var(--text-faint);font-weight:400">— voorcalculatie</span></div>
+        <button class="btn btn-gold btn-sm" onclick="calcAddRegel('${code}')">+ offerteregel</button>
+      </div>
+      ${o.regels.length?`<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:0.75rem">
+        <div class="kpi-card"><div class="kpi-label">Totale kostprijs incl.</div><div class="kpi-waarde" style="font-size:18px">${eur(totKost)}</div></div>
+        <div class="kpi-card green"><div class="kpi-label">Totaal verkoop ex. btw</div><div class="kpi-waarde" style="font-size:18px">${heeftPrijs?eur(totEx):'—'}</div></div>
+        <div class="kpi-card gold"><div class="kpi-label">Gem. marge</div><div class="kpi-waarde" style="font-size:18px">${pct(totMarge)}</div></div>
+      </div>`:''}
+      ${regelsHtml}
+      ${defaultsPaneel(code)}
+      ${bibliotheekPaneel(code)}`;
+  };
+})();
+</script>
+<style>
+  .calc-inp{background:var(--bg-input,#11151a);border:1px solid var(--border,#2a2f36);color:var(--text,#e8eaed);
+    border-radius:5px;padding:3px 6px;font-size:12px;font-family:inherit;}
+  .calc-inp:focus{outline:none;border-color:var(--green);}
+</style>
 <script src="track.js"></script>
 
 </body>
