@@ -10810,22 +10810,78 @@ function activiteitOpen(force){
   window.calcSetMat=function(key,rid,field,val){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m)return;m[field]=val;saveCalc('off');recalcView(key);};
   window.calcAddMat=function(key){const o=getOfferte(key);o.materiaal.push({id:uid('m'),omschrijving:'',artikel:'',aantal:'',inkoop_stuk:'',marge:CALC.defaults.materiaal_marge});saveCalc('off');renderOfferteCalc(key);};
   window.calcDelMat=function(key,rid){const o=getOfferte(key);o.materiaal=o.materiaal.filter(m=>m.id!==rid);saveCalc('off');renderOfferteCalc(key);};
+  // Vectorworks/interiorcad materiaallijst → tabelregels voor-invullen + echte inkoop opzoeken.
+  // Plak-import (geen vaste bestandslocatie): één regel per materiaal, "omschrijving" of
+  // "omschrijving <tab/;/,> aantal". Per regel proberen we de echte voorraadprijs te vinden.
+  window.calcImportVW=function(key){
+    const o=getOfferte(key);
+    const raw=prompt('Plak hier de Vectorworks/interiorcad materiaallijst.\n\nEén regel per materiaal — "omschrijving" of "omschrijving <tab/;/,> aantal".\nIk vul de regels in en zoek meteen je echte inkoopprijs uit voorraad/facturen.');
+    if(raw===null) return;
+    const lines=raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    if(!lines.length){ flash(key,'geen regels geplakt'); return; }
+    let added=0, prijsHits=0;
+    lines.forEach(ln=>{
+      let desc=ln, aantal='';
+      const cols=ln.split(/\t|;/);
+      if(cols.length>=2){ desc=cols[0].trim(); const a=n(cols[cols.length-1]); if(a!=null) aantal=a; }
+      else { const tail=ln.match(/^(.*?)[\s,]+(\d+(?:[.,]\d+)?)\s*(?:st|stuks|stk|x)?$/i); if(tail){ desc=tail[1].trim(); const a=n(tail[2]); if(a!=null) aantal=a; } }
+      if(!desc) return;
+      const row={id:uid('m'),omschrijving:desc,artikel:'',aantal:(aantal===''?'':aantal),inkoop_stuk:'',marge:CALC.defaults.materiaal_marge};
+      const vh=_voorraadPrijs(desc);
+      if(vh){ if(vh.desc) row.omschrijving=vh.desc; if(vh.id) row.artikel=vh.id; row.inkoop_stuk=vh.prijs; prijsHits++; }
+      o.materiaal.push(row); added++;
+    });
+    saveCalc('off'); renderOfferteCalc(key);
+    flash(key,'✓ '+added+' materiaalregel(s) uit VW-lijst toegevoegd — '+prijsHits+' met echte inkoopprijs uit voorraad/facturen; rest handmatig invullen.',true);
+  };
+  // Zoekt de ECHTE inkoopprijs voor een omschrijving in je eigen voorraad/factuur-historie
+  // (Drimensa, Ostermann, …). Geen open leverancier-API beschikbaar (Pax-onderzoek 28-6),
+  // dus de factuur-afgeleide voorraad is de bron van waarheid. Geeft {desc,id,prijs,bron} of null.
+  function _voorraadPrijs(q){
+    q=(q||'').toLowerCase().trim(); if(!q) return null;
+    const rows=_matIndex().filter(o=>o.bron==='voorraad' && o.prijs!=null && isFinite(o.prijs) && o.prijs>0);
+    if(!rows.length) return null;
+    // 1) exacte match op artikelnummer of omschrijving
+    let hit=rows.find(r=>String(r.id||'').toLowerCase()===q) || rows.find(r=>r.desc.toLowerCase()===q);
+    // 2) fuzzy: scoor op alle getypte woorden
+    if(!hit){
+      const toks=q.split(/\s+/).filter(Boolean);
+      const scored=rows.map(r=>{const d=r.desc.toLowerCase(),id=String(r.id||'').toLowerCase();
+        let s=0; toks.forEach(t=>{ if(d.includes(t))s+=2; if(id&&id.includes(t))s+=1; }); return {r,s};})
+        .filter(x=>x.s>0).sort((a,b)=>b.s-a.s);
+      if(scored.length) hit=scored[0].r;
+    }
+    return hit?{desc:hit.desc,id:hit.id||'',prijs:hit.prijs}:null;
+  }
   window.calcZoekPrijs=function(key,rid){
     const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m)return;
     const inp=document.getElementById('calc-mo-'+rid); if(inp) m.omschrijving=inp.value;
-    if(!m.omschrijving||!m.omschrijving.trim()){flash(key,'typ eerst een materiaal-omschrijving');return;}
-    const hit=zoekMateriaal(m.omschrijving);
+    const q=(m.omschrijving||'').trim();
+    if(!q){flash(key,'typ eerst een materiaal-omschrijving');return;}
+    // 1) ECHTE inkoop uit eigen voorraad/facturen → dit zetten we wél als inkoopprijs
+    const vh=_voorraadPrijs(q);
+    if(vh){
+      if(vh.desc) m.omschrijving=vh.desc;
+      if(vh.id) m.artikel=vh.id;
+      m.inkoop_stuk=vh.prijs; m.ic_indicatief=null;
+      saveCalc('off'); renderOfferteCalc(key);
+      flash(key,'✓ Echte inkoopprijs gevonden in voorraad/facturen: '+eur(vh.prijs)+(vh.id?(' · art '+vh.id):'')+' — gezet als inkoop.',true);
+      return;
+    }
+    // 2) geen echte inkoop → hooguit een INDICATIEVE interiorcad/VW-match (omschrijving+artikelnr,
+    //    prijs alleen als ⚠-hint, nooit als echte inkoop)
+    const hit=zoekMateriaal(q);
     if(hit){
-      // interiorcad-prijzen zijn INDICATIEF uit Vectorworks → NIET als echte inkoop
-      // gebruiken. Vul alleen omschrijving + artikelnummer; toon DB-prijs als gewaarschuwde
-      // hint. Echte inkoop komt uit factuur/voorraad.
       m.artikel=hit.id||'';
       if(hit.description) m.omschrijving=hit.description;
       m.ic_indicatief = (hit.cost!=null&&hit.cost!=='') ? Number(hit.cost) : null;
       saveCalc('off'); renderOfferteCalc(key);
-      const hintPrijs = m.ic_indicatief!=null ? (' · VW-richtprijs '+eur(m.ic_indicatief)+' ⚠ indicatief — vul echte inkoop uit factuur') : '';
-      flash(key,'✓ '+(hit.description||hit.id)+' · artikelnr '+(hit.id||'?')+hintPrijs,true);
-    } else { flash(key,'geen match in materialen-DB — vul prijs handmatig uit factuur'); }
+      const hintPrijs = m.ic_indicatief!=null ? (' (VW-richtprijs '+eur(m.ic_indicatief)+' indicatief — vul echte inkoop uit factuur)') : '';
+      flash(key,'⚠ Geen echte inkoopprijs gevonden — wel catalogus-match: '+(hit.description||hit.id)+hintPrijs+'. Zoek de inkoop handmatig.',false);
+      return;
+    }
+    // 3) niets gevonden
+    flash(key,'❌ Geen prijs gevonden voor "'+esc(q)+'". Zoek de inkoopprijs handmatig (factuur/leverancier-shop Drimensa/Ostermann) en vul \'m in.',false);
   };
 
   // ---- materiaal-autocomplete (eigen dropdown) ------------------------------
@@ -10988,7 +11044,11 @@ function activiteitOpen(force){
     const ctx=_mbCtx(key); const o=ctx.o;
     const {lijnen,total}=_offRegels(o);
     let tekst=(o._mbPreview&&o._mbPreview.tekst)||'';
-    let regels=_normRegels(lijnen.map(l=>({description:l.description,price:l.price})),total);
+    // Bart al regels getweakt? Bouw verder op die aangepaste regels, anders deterministisch uit de calc.
+    const getweakt=o._mbPreview&&Array.isArray(o._mbPreview.regels)&&o._mbPreview.regels.some(r=>(r&&r.description||'').trim());
+    let regels=getweakt
+      ? _normRegels(o._mbPreview.regels.map(l=>({description:l.description,price:l.price})),total)
+      : _normRegels(lijnen.map(l=>({description:l.description,price:l.price})),total);
     if(typeof claudeCall==='function'){
       const wat=((o.meta&&o.meta.offerte_tekst)||'').trim();
       const matLijst=o.materiaal.filter(m=>(m.omschrijving||'').trim()).map(m=>'- '+m.omschrijving+(m.aantal?(' ×'+m.aantal):'')).join('\n');
@@ -11014,28 +11074,76 @@ function activiteitOpen(force){
     o._mbPreview={tekst,regels,total};
     saveCalc('off');
   }
+  // delta/som-regel onderaan de preview (los renderbaar zodat typen niet de focus steelt)
+  function _prevDeltaHtml(key){
+    const o=getOfferte(key); const p=o._mbPreview; if(!p) return '';
+    const som=(p.regels||[]).reduce((s,r)=>s+(+r.price||0),0);
+    const doel=p.total||0; const delta=Math.round((som-doel)*100)/100;
+    if(Math.abs(delta)>0.005){
+      return '<span style="color:var(--gold)" title="De som van de regels wijkt af van het offertebedrag in de calculatie">⚠ som '+eur(som)+' vs calculatie '+eur(doel)+'</span> '
+        +'<button class="btn btn-xs btn-secondary" onclick="calcPrevHerschaal(\''+key+'\')">⚖ herschaal naar '+eur(doel)+'</button>';
+    }
+    return '<span style="color:var(--green)">✓ sluit aan op de calculatie ('+eur(doel)+')</span>';
+  }
+  function _prevSumUpdate(key){
+    const c=cid(key); const o=getOfferte(key); const p=o._mbPreview; if(!p) return;
+    const som=(p.regels||[]).reduce((s,r)=>s+(+r.price||0),0);
+    const se=document.getElementById('calc-prevsom-'+c); if(se) se.textContent=eur(som);
+    const de=document.getElementById('calc-prevdelta-'+c); if(de) de.innerHTML=_prevDeltaHtml(key);
+  }
   function _mbPreviewHtml(key){
     const c=cid(key); const o=getOfferte(key); const p=o._mbPreview;
     if(!p) return '';
     if(p.loading) return '<div class="calc-mbprev"><div class="calc-mbprev-h">📄 Offerte-preview</div><div style="padding:10px;color:var(--text-dim)">⏳ '+esc(p.loading)+'</div></div>';
-    const regelsH=(p.regels||[]).map(r=>'<tr><td>'+esc(r.description)+'</td><td class="calc-num" style="white-space:nowrap">'+eur(+r.price)+'</td></tr>').join('');
-    const som=(p.regels||[]).reduce((s,r)=>s+(+r.price),0);
+    const regels=p.regels||[];
+    const regelsH=regels.map((r,i)=>'<tr>'
+      +'<td><input class="calc-inp calc-prev-desc" value="'+esc(r.description)+'" onchange="calcPrevSetRegel(\''+key+'\','+i+',\'description\',this.value)"></td>'
+      +'<td class="calc-num"><input class="calc-inp calc-num calc-prev-pr" value="'+esc(inval((+r.price).toFixed(2)))+'" onchange="calcPrevSetRegel(\''+key+'\','+i+',\'price\',this.value)"></td>'
+      +'<td><button class="btn btn-xs btn-secondary" title="regel verwijderen" onmousedown="event.preventDefault()" onclick="calcPrevDelRegel(\''+key+'\','+i+')">×</button></td>'
+      +'</tr>').join('');
+    const som=regels.reduce((s,r)=>s+(+r.price||0),0);
     return '<div class="calc-mbprev">'
-      +'<div class="calc-mbprev-h">📄 Offerte-preview <span style="font-weight:400;color:var(--text-dim)">— controleer & verfijn vóór je doorzet naar Moneybird</span></div>'
-      +'<div class="calc-mbprev-tekst">'+esc(p.tekst||'(geen begeleidende tekst)')+'</div>'
-      +'<table class="calc-mbprev-tbl"><tbody>'+regelsH+'</tbody>'
-      +'<tfoot><tr><td style="text-align:right;font-weight:600">Totaal ex. btw</td><td class="calc-num" style="font-weight:700">'+eur(som)+'</td></tr></tfoot></table>'
+      +'<div class="calc-mbprev-h">📄 Offerte-preview <span style="font-weight:400;color:var(--text-dim)">— pas de tekst & regels aan; daarna naar Moneybird</span></div>'
+      +'<label class="calc-prev-lbl">Begeleidende tekst (klant ziet dit)</label>'
+      +'<textarea id="calc-prevtekst-'+c+'" class="calc-inp" style="width:100%;min-height:46px;resize:vertical;font-family:inherit" onchange="calcPrevSetTekst(\''+key+'\',this.value)">'+esc(p.tekst||'')+'</textarea>'
+      +'<table class="calc-mbprev-tbl"><thead><tr><th>Omschrijving (klant ziet dit)</th><th class="calc-num">Prijs ex. btw</th><th></th></tr></thead><tbody>'+regelsH+'</tbody>'
+      +'<tfoot><tr><td style="text-align:right;font-weight:600">Totaal ex. btw</td><td class="calc-num" style="font-weight:700" id="calc-prevsom-'+c+'">'+eur(som)+'</td><td></td></tr></tfoot></table>'
+      +'<div class="calc-prev-toolrow"><button class="btn btn-xs btn-secondary" onmousedown="event.preventDefault()" onclick="calcPrevAddRegel(\''+key+'\')">+ regel</button>'
+      +'<span id="calc-prevdelta-'+c+'" style="font-size:11px">'+_prevDeltaHtml(key)+'</span></div>'
       +'<div class="calc-mbprev-chat">'
-      +'<input id="calc-prevchat-'+c+'" class="calc-inp" style="flex:1" placeholder="bv. \'splits productie en montage\' of \'maak de tekst korter\'" onkeydown="if(event.key===\'Enter\')calcPreviewChat(\''+key+'\')">'
+      +'<input id="calc-prevchat-'+c+'" class="calc-inp" style="flex:1" placeholder="laat Larry bijschaven, bv. \'splits productie en montage\' of \'maak de tekst korter\'" onkeydown="if(event.key===\'Enter\')calcPreviewChat(\''+key+'\')">'
       +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewChat(\''+key+'\')">↻ Pas aan</button>'
-      +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewRegen(\''+key+'\')">🔄 Opnieuw</button>'
+      +'<button class="btn btn-xs btn-secondary" title="Hergenereer de tekst & regels op basis van je huidige aanpassingen" onclick="calcPreviewRegen(\''+key+'\')">🔄 Hergenereer</button>'
       +'</div>'
-      +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">'
+      +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap;align-items:center">'
       +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewSluit(\''+key+'\')">✕ Sluiten</button>'
-      +'<button class="btn btn-sm btn-primary" onclick="calcPreviewDoorzetten(\''+key+'\')">✓ Doorzetten naar Moneybird</button>'
+      +'<span style="flex:1"></span>'
+      +'<button class="btn btn-sm btn-secondary" title="Volgende stap: maak van deze regels een concept-verkoopfactuur in Moneybird" onclick="calcPreviewNaarFactuur(\''+key+'\')">🧾 Omzetten naar factuur</button>'
+      +'<button class="btn btn-sm btn-primary" onclick="calcPreviewDoorzetten(\''+key+'\')">✓ Maak definitief in Moneybird</button>'
       +'</div></div>';
   }
   function _renderMbPrev(key){ const el=document.getElementById('calc-mbprev-'+cid(key)); if(el) el.innerHTML=_mbPreviewHtml(key); }
+  // ── preview tweaken (regels/tekst handmatig bijschaven vóór Moneybird) ──────
+  window.calcPrevSetTekst=function(key,val){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.tekst=val; saveCalc('off'); } };
+  window.calcPrevSetRegel=function(key,idx,field,val){
+    const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels||!p.regels[idx]) return;
+    if(field==='price'){ const x=n(val); p.regels[idx].price=(x==null?0:Math.max(0,x)); } else { p.regels[idx].description=val; }
+    saveCalc('off'); _prevSumUpdate(key);
+  };
+  window.calcPrevDelRegel=function(key,idx){
+    const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels) return;
+    p.regels.splice(idx,1);
+    if(!p.regels.length) p.regels.push({description:'Maatwerk conform offerte',price:Math.round((p.total||0)*100)/100});
+    saveCalc('off'); _renderMbPrev(key);
+  };
+  window.calcPrevAddRegel=function(key){
+    const o=getOfferte(key); const p=o._mbPreview; if(!p) return; p.regels=p.regels||[];
+    p.regels.push({description:'',price:0}); saveCalc('off'); _renderMbPrev(key);
+  };
+  window.calcPrevHerschaal=function(key){
+    const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels||!p.regels.length) return;
+    p.regels=_normRegels(p.regels,p.total||0); saveCalc('off'); _renderMbPrev(key);
+  };
   // Knop "Offerte aanmaken in Moneybird" → bouwt EERST een preview die Bart kan bijsturen/hergenereren.
   window.calcMaakOfferteMB=async function(key){
     const ctx=_mbCtx(key); const o=ctx.o;
@@ -11047,7 +11155,7 @@ function activiteitOpen(force){
     o._mbPreview={loading:'Larry stelt nette offerteregels op…'}; saveCalc('off'); _renderMbPrev(key);
     await _calcGenPreview(key); _renderMbPrev(key);
   };
-  window.calcPreviewRegen=async function(key){ const o=getOfferte(key); const prev=o._mbPreview||{}; o._mbPreview={tekst:'',loading:'Opnieuw genereren…'}; saveCalc('off'); _renderMbPrev(key); await _calcGenPreview(key); _renderMbPrev(key); };
+  window.calcPreviewRegen=async function(key){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.loading='Hergenereren op basis van je aanpassingen…'; } else { o._mbPreview={loading:'Genereren…'}; } saveCalc('off'); _renderMbPrev(key); await _calcGenPreview(key); _renderMbPrev(key); };
   window.calcPreviewChat=async function(key){
     const inp=document.getElementById('calc-prevchat-'+cid(key)); const instr=inp?inp.value.trim():''; if(!instr) return;
     const o=getOfferte(key); o._mbPreview=Object.assign({},o._mbPreview||{},{loading:'Aanpassen: '+instr}); saveCalc('off'); _renderMbPrev(key);
@@ -11076,6 +11184,28 @@ function activiteitOpen(force){
       window.open(url,'_blank');
     }catch(e){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt('❌ Offerte aanmaken mislukt: '+(e.message||e),false); }
   };
+  // Volgende stap: dezelfde (getweakte) regels als CONCEPT-VERKOOPFACTUUR in Moneybird.
+  window.calcPreviewNaarFactuur=async function(key){
+    const ctx=_mbCtx(key); const o=ctx.o; const p=o._mbPreview;
+    const setSt=(h,ok)=>{const st=document.getElementById('calc-status-'+cid(key)); if(st){st.innerHTML=h;st.style.color=(ok===false)?'#c0392b':(ok?'var(--green)':'var(--text-dim)');}};
+    if(!p||!p.regels||!p.regels.length){ setSt('⚠ Geen preview om door te zetten.',false); return; }
+    if(ctx.err||!ctx.mbId){ setSt('⚠ Geen Moneybird-klant gekoppeld — koppel de offerte aan een project mét klant.',false); return; }
+    const som=p.regels.reduce((s,r)=>s+(+r.price),0);
+    if(!confirm('CONCEPT-FACTUUR aanmaken in Moneybird?\n\nDit slaat de offerte-stap over en maakt direct een verkoopfactuur (concept) van deze regels.\n\nReferentie: '+ctx.ref+'\nTotaal: € '+som.toFixed(2)+' excl. btw\n\nDe factuur komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.')) return;
+    o._mbPreview.loading='Concept-factuur aanmaken in Moneybird…'; _renderMbPrev(key);
+    const details=[];
+    if(p.tekst) details.push({description:p.tekst});
+    p.regels.forEach(r=>details.push({description:r.description,amount:'1 x',price:(+r.price).toFixed(2)}));
+    try{
+      const r=await mbPost(getAdmin()+'/sales_invoices',{sales_invoice:{contact_id:ctx.mbId,reference:ctx.ref,details_attributes:details}});
+      if(!r.ok){const tx=await r.text().catch(()=> ''); throw new Error('HTTP '+r.status+' '+tx.slice(0,160));}
+      const inv=await r.json();
+      o.mb_invoice_id=inv.id; delete o._mbPreview; saveCalc('off'); _renderMbPrev(key);
+      const url='https://moneybird.com/'+getAdmin()+'/sales_invoices/'+inv.id;
+      setSt('✓ Concept-factuur aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);
+      window.open(url,'_blank');
+    }catch(e){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt('❌ Factuur aanmaken mislukt: '+(e.message||e),false); }
+  };
 
   // ── Mail koppelen aan de offerte (context voor de offertetekst) ────────────
   window.calcKoppelMail=async function(key){
@@ -11103,12 +11233,17 @@ function activiteitOpen(force){
       if(keuze===null) return;
       const idx=parseInt(keuze,10)-1; const m=msgs[idx];
       if(!m){ setSt('Ongeldige keuze.',false); return; }
-      o.mail_context={id:m.id, subject:m.subject||'', from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'', received:(m.receivedDateTime||'').slice(0,10), preview:(m.bodyPreview||'')};
-      saveCalc('off'); renderOfferteCalc(key);
+      let bodyHtml='';
+      try{
+        const bm=await fetch(base+'/messages/'+encodeURIComponent(m.id)+'?$select=body',{headers:{Authorization:'Bearer '+token,'ConsistencyLevel':'eventual'}});
+        if(bm.ok){ const bj=await bm.json(); const bc=(bj.body&&bj.body.content)||''; const isH=bj.body&&/html/i.test(bj.body.contentType||''); if(bc) bodyHtml=isH?String(bc):('<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:12px;padding:8px;margin:0">'+esc(bc)+'</pre>'); }
+      }catch(e){}
+      o.mail_context={id:m.id, subject:m.subject||'', from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'', received:(m.receivedDateTime||'').slice(0,16).replace('T',' '), preview:(m.bodyPreview||''), body_html:bodyHtml};
+      saveCalc('off'); renderOfferteCalc(key); _toonMailNaast(key);
       setSt('✓ Mail gekoppeld — de offertetekst krijgt nu context uit deze mail.',true);
     }catch(e){ setSt('⚠ Mail zoeken mislukt: '+(e.message||e),false); }
   };
-  window.calcOntkoppelMail=function(key){ const o=getOfferte(key); delete o.mail_context; saveCalc('off'); renderOfferteCalc(key); };
+  window.calcOntkoppelMail=function(key){ const o=getOfferte(key); delete o.mail_context; saveCalc('off'); renderOfferteCalc(key); _toonMailNaast(key); };
 
   // ── Offerte opslaan in de projectmap (07_Administratie, idempotent) ────────
   async function _bewaarOfferteInMap(proj,o,key){
@@ -11186,7 +11321,9 @@ function activiteitOpen(force){
     const o=getOfferte(key);
     const onderw=(typeof _ibOnderwerpSchoon==='function')?_ibOnderwerpSchoon(m.subject||''):(m.subject||'');
     o.titel=(onderw||'Offerte uit mail').slice(0,80);
-    o.mail_context={id:m.id, subject:m.subject||'', from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'', received:(m.receivedDateTime||'').slice(0,10), preview:(m.bodyPreview||'')};
+    let bodyHtml='';
+    try{ const bc=(m.body&&m.body.content)||''; const isH=m.body&&/html/i.test(m.body.contentType||''); if(bc) bodyHtml=isH?String(bc):('<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:12px;padding:8px;margin:0">'+esc(bc)+'</pre>'); }catch(e){}
+    o.mail_context={id:m.id, subject:m.subject||'', from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'', received:(m.receivedDateTime||'').slice(0,16).replace('T',' '), preview:(m.bodyPreview||''), body_html:bodyHtml, weblink:(m.webLink||'')};
     // Al aan een project gekoppeld? Koppel de offerte aan datzelfde project (klant prefill via _mbCtx).
     try{ const info=(typeof mailLinkInfo==='function')?mailLinkInfo(m):null; if(info&&info.code) o.project_code=info.code; }catch(e){}
     saveCalc('off');
@@ -11201,8 +11338,30 @@ function activiteitOpen(force){
       +'<button class="btn btn-secondary btn-sm" onclick="sluitOfferte()">← terug</button></div>'
       +'<div id="offerte-calc-'+cid(key)+'"><p style="color:var(--text-faint);font-size:13px">Laden…</p></div></div>';
     renderOfferteCalc(key);
+    _toonMailNaast(key);
+  }
+  // Gekoppelde mail in de linker kolom (i.p.v. de projectenlijst) tonen, zodat Bart
+  // er doorheen kan scrollen tijdens het offreren. Zet de lijst terug via sluitOfferte.
+  function _toonMailNaast(key){
+    const lijst=document.getElementById('project-lijst'); if(!lijst) return;
+    const o=getOfferte(key); const mc=o&&o.mail_context;
+    if(!mc){ if(window._calcMailPaneelActief){ window._calcMailPaneelActief=false; if(typeof renderProjectLijst==='function') renderProjectLijst(); } return; }
+    window._calcMailPaneelActief=true;
+    const wl=mc.weblink?('<a href="'+esc(mc.weblink)+'" target="_blank" style="color:var(--gold);font-size:11px">openen in Outlook ↗</a>'):'';
+    lijst.innerHTML='<div class="calc-mailpaneel">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px">'
+        +'<span style="font-weight:700;font-size:12px;color:var(--green)">📧 Gekoppelde mail</span>'
+        +'<button class="btn btn-xs btn-secondary" title="terug naar projectenlijst" onclick="(function(){window._calcMailPaneelActief=false; if(typeof renderProjectLijst===\'function\') renderProjectLijst();})()">← lijst</button>'
+      +'</div>'
+      +'<div style="font-size:12px;color:var(--text);font-weight:600">'+esc(mc.subject||'(geen onderwerp)')+'</div>'
+      +'<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">'+esc(mc.from||'')+(mc.received?(' · '+esc(mc.received)):'')+(wl?(' · '+wl):'')+'</div>'
+      +'<iframe class="calc-mailframe" sandbox="" referrerpolicy="no-referrer"></iframe>'
+      +'</div>';
+    const fr=lijst.querySelector('.calc-mailframe');
+    if(fr) fr.srcdoc = mc.body_html || ('<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:12px;padding:8px;margin:0">'+esc(mc.preview||'(geen voorbeeld beschikbaar)')+'</pre>');
   }
   window.sluitOfferte=function(){
+    if(window._calcMailPaneelActief){ window._calcMailPaneelActief=false; if(typeof renderProjectLijst==='function') renderProjectLijst(); }
     if(typeof huidigProject!=='undefined' && huidigProject && typeof renderProjectDetail==='function') renderProjectDetail(huidigProject);
     else { const h=document.getElementById('project-detail'); if(h) h.innerHTML=''; }
   };
@@ -11310,7 +11469,8 @@ function activiteitOpen(force){
         <tbody>${matBody}</tbody>
         <tfoot><tr class="calc-tot"><td colspan="3">Totaal materialen</td><td class="calc-num" id="mft-ink-${c}">${eur(t.mInk)}</td><td></td><td class="calc-num" id="mft-verk-${c}">${eur(t.mVerk)}</td><td></td></tr></tfoot>
       </table></div>
-      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddMat('${key}')">+ materiaal</button>`;
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddMat('${key}')">+ materiaal</button>
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem;margin-left:6px" onclick="calcImportVW('${key}')" title="Plak een Vectorworks/interiorcad materiaallijst — ik vul de regels + echte inkoopprijzen voor je in">📋 VW-lijst importeren</button>`;
 
     const uurBody=o.uren.map(u=>uurRij(key,u)).join('');
     const uurTabel=`<div class="calc-sec" style="margin-top:1.2rem">Uren — arbeid</div>
@@ -11342,13 +11502,13 @@ function activiteitOpen(force){
           <button class="btn btn-sm btn-secondary" onclick="calcKoppelMail('${key}')" title="Koppel een mail zodat de offertetekst context uit die mail meekrijgt">📧 Mail koppelen</button>
           <span style="flex:1"></span>
           <button class="btn btn-sm btn-secondary" onclick="calcMaakProjectVoorOfferte('${key}')">${proj?'💾 Opslaan in projectmap':'+ Project aanmaken'}</button>
-          <button class="btn btn-sm btn-primary" onclick="calcMaakOfferteMB('${key}')">📄 Offerte aanmaken in Moneybird</button>
+          <button class="btn btn-sm btn-primary" onclick="calcMaakOfferteMB('${key}')" title="Bouw eerst een preview van de offerteregels + tekst die je kunt bijschaven vóór het naar Moneybird gaat">👁 Preview voor Moneybird</button>
         </div>
       </div>
       <div id="calc-mbprev-${c}">${_mbPreviewHtml(key)}</div>
       <div id="calc-status-${c}" style="font-size:11px;min-height:16px;margin-top:0.3rem"></div>
       ${defaultsPaneel(key)}
-      <p style="font-size:10px;color:var(--text-faint);margin:0.5rem 0 0">Inkoopprijzen/marges staan privé op SharePoint — nooit in de publieke repo. "🔍 prijs" vult omschrijving + artikelnummer uit de interiorcad-materialen-DB. <b>Let op:</b> de DB-prijs is <span style="color:var(--gold)">indicatief uit Vectorworks</span> (geen echte inkoop) en wordt enkel als ⚠-hint getoond — vul de werkelijke inkoop uit de factuur. Fase 2 koppelt dit live aan inkoop.db/voorraad.</p>
+      <p style="font-size:10px;color:var(--text-faint);margin:0.5rem 0 0">Inkoopprijzen/marges staan privé op SharePoint — nooit in de publieke repo. "🔍 prijs" zoekt eerst je <b>echte inkoop</b> in voorraad/facturen (Drimensa, Ostermann, …) en zet die als inkoopprijs. Lukt dat niet, dan toont het hooguit een <span style="color:var(--gold)">indicatieve VW-richtprijs</span> (⚠ géén echte inkoop) of meldt het dat je handmatig moet zoeken. Leveranciers hebben geen open prijs-API (onderzoek 28-6) — de factuur-historie is de bron.</p>
     </div>`;
   };
 })();
@@ -11386,9 +11546,17 @@ function activiteitOpen(force){
   .calc-mbprev-tekst{font-style:italic;color:var(--text);background:var(--surface-sunken,#f6f7f6);border-radius:6px;padding:7px 10px;margin-bottom:.6rem;font-size:12px;white-space:pre-wrap}
   .calc-mbprev-tbl{width:100%;border-collapse:collapse;font-size:12px}
   .calc-mbprev-tbl td{padding:4px 6px;border-bottom:1px solid var(--surface-sunken)}
+  .calc-mbprev-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint);text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);font-weight:600}
+  .calc-mbprev-tbl th.calc-num{text-align:right}
   .calc-mbprev-tbl .calc-num{text-align:right;font-family:var(--mono)}
   .calc-mbprev-tbl tfoot td{border-top:2px solid var(--border);border-bottom:none;padding:6px}
+  .calc-mbprev-tbl .calc-prev-desc{width:100%;min-width:180px}
+  .calc-mbprev-tbl .calc-prev-pr{width:92px;text-align:right}
+  .calc-prev-lbl{font-size:11px;color:var(--text-dim);display:block;margin:2px 0 2px}
+  .calc-prev-toolrow{display:flex;gap:10px;align-items:center;margin:6px 0 2px}
   .calc-mbprev-chat{display:flex;gap:6px;margin-top:.6rem}
+  .calc-mailpaneel{display:flex;flex-direction:column}
+  .calc-mailframe{width:100%;height:520px;border:1px solid var(--border);border-radius:6px;background:#fff}
 </style>
 <script src="track.js"></script>
 

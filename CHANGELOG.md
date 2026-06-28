@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — Inbox: knop "Maak offerte" naast "Maak project"
+- Commit: `9d4229c` | Auteur: Bart Witte
+
 ## 2026-06-28 — Offerte-calc: artikelnr-kolom weg, uitlijning, randafwerking-voorstel + MB-offerte met preview/chat
 - Commit: `c3db091` | Auteur: Bart Witte
 
