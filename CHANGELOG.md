@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — Voorraad: parser voor rommelige materiaalregels + per-regel factuur/chat
+- Commit: `77a1aaf` | Auteur: Bart Witte
+
 ## 2026-06-28 — Voorraad: importeer materialen uit inkoopfacturen (aantal 0)
 - Commit: `aad952d` | Auteur: Bart Witte
 

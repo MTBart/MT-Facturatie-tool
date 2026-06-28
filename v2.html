@@ -10781,13 +10781,27 @@ function activiteitOpen(force){
     el.textContent=msg; el.style.color=ok?'var(--green)':'var(--text-dim)'; clearTimeout(el._t); el._t=setTimeout(()=>{el.textContent='';},4000);}
 
   // ---- mutaties -------------------------------------------------------------
-  window.calcSetMeta=function(key,field,val){const o=getOfferte(key);o.meta[field]=val;saveCalc('off');
-    // alleen totalen/summary verversen bij factuurbedrag; rest niet her-renderen (datum/select behoudt focus niet nodig)
-    renderOfferteCalc(key);};
+  window.calcSetMeta=function(key,field,val){const o=getOfferte(key);o.meta[field]=val;saveCalc('off');};
+  // herbereken alleen de afgeleide getalcellen (totalen/KPI's/footers) zonder de
+  // inputs of knoppen opnieuw te tekenen — anders sloopt een onchange-render de
+  // +knop mid-klik (klik wordt "opgegeten") en raakt focus tijdens typen kwijt.
+  function recalcView(key){
+    const o=getOfferte(key), t=totalen(o), c=cid(key);
+    const set=(id,v)=>{const e=document.getElementById(id); if(e)e.textContent=v;};
+    o.materiaal.forEach(m=>{const r=mRow(m); set('mi-'+m.id,eur(r.inkoop)); set('mv-'+m.id,eur(r.verkoop));});
+    o.uren.forEach(u=>{const r=uRow(u); set('uk-'+u.id,eur(r.kost)); set('uv-'+u.id,eur(r.verkoop));});
+    set('mft-ink-'+c,eur(t.mInk)); set('mft-verk-'+c,eur(t.mVerk));
+    set('uft-kost-'+c,eur(t.uKost)); set('uft-verk-'+c,eur(t.uVerk));
+    set('kpi-off-'+c,eur(t.offertebedrag)); set('kpi-mink-'+c,eur(t.mInk));
+    set('kpi-uverk-'+c,eur(t.uVerk)); set('kpi-kost-'+c,eur(t.kostprijs));
+    set('kpi-bw-'+c,eur(t.brutowinst)); set('calc-bigtot-'+c,eur(t.offertebedrag));
+    const mk=document.getElementById('kpi-marge-'+c);
+    if(mk){mk.textContent=pct(t.marge); mk.style.color=t.marge==null?'var(--text-faint)':(t.marge<0.15?'#c0392b':(t.marge<0.30?'var(--gold)':'var(--green)'));}
+  }
   window.calcKoppelProject=function(key,code){const o=getOfferte(key);o.project_code=code||null;saveCalc('off');renderOfferteCalc(key);};
   window.calcSetTitel=function(key,val){const o=getOfferte(key);o.titel=val;saveCalc('off');};
 
-  window.calcSetMat=function(key,rid,field,val){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m)return;m[field]=val;saveCalc('off');renderOfferteCalc(key);};
+  window.calcSetMat=function(key,rid,field,val){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m)return;m[field]=val;saveCalc('off');recalcView(key);};
   window.calcAddMat=function(key){const o=getOfferte(key);o.materiaal.push({id:uid('m'),omschrijving:'',artikel:'',aantal:'',inkoop_stuk:'',marge:CALC.defaults.materiaal_marge});saveCalc('off');renderOfferteCalc(key);};
   window.calcDelMat=function(key,rid){const o=getOfferte(key);o.materiaal=o.materiaal.filter(m=>m.id!==rid);saveCalc('off');renderOfferteCalc(key);};
   window.calcZoekPrijs=function(key,rid){
@@ -10808,7 +10822,7 @@ function activiteitOpen(force){
     } else { flash(key,'geen match in materialen-DB — vul prijs handmatig uit factuur'); }
   };
 
-  window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u)return;u[field]=val;saveCalc('off');renderOfferteCalc(key);};
+  window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u)return;u[field]=val;saveCalc('off');recalcView(key);};
   window.calcAddUur=function(key){const o=getOfferte(key);o.uren.push({id:uid('u'),omschrijving:'',uren:'',uurtarief:CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:45,marge:2});saveCalc('off');renderOfferteCalc(key);};
   window.calcDelUur=function(key,rid){const o=getOfferte(key);o.uren=o.uren.filter(u=>u.id!==rid);saveCalc('off');renderOfferteCalc(key);};
 
@@ -10861,9 +10875,9 @@ function activiteitOpen(force){
       <td style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${esc(m.artikel||'')}</td>
       <td><input class="calc-inp calc-num" style="width:64px" value="${inval(m.aantal)}" placeholder="0" onchange="calcSetMat('${key}','${m.id}','aantal',this.value)"></td>
       <td><input class="calc-inp calc-num" style="width:84px" value="${inval(m.inkoop_stuk)}" placeholder="0,00" onchange="calcSetMat('${key}','${m.id}','inkoop_stuk',this.value)">${(m.ic_indicatief!=null&&(m.inkoop_stuk===''||m.inkoop_stuk==null))?`<div style="font-size:9px;color:var(--gold)" title="Indicatieve Vectorworks-richtprijs — geen echte inkoop. Vul de werkelijke prijs uit de factuur in.">⚠ VW ${eur(m.ic_indicatief)}</div>`:''}</td>
-      <td class="calc-num">${eur(r.inkoop)}</td>
+      <td class="calc-num" id="mi-${m.id}">${eur(r.inkoop)}</td>
       <td><input class="calc-inp calc-num" style="width:56px" value="${inval(m.marge)}" placeholder="1,5" onchange="calcSetMat('${key}','${m.id}','marge',this.value)"></td>
-      <td class="calc-num" style="font-weight:600">${eur(r.verkoop)}</td>
+      <td class="calc-num" style="font-weight:600" id="mv-${m.id}">${eur(r.verkoop)}</td>
       <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelMat('${key}','${m.id}')">×</button></td>
     </tr>`;
   }
@@ -10873,9 +10887,9 @@ function activiteitOpen(force){
       <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur('${key}','${u.id}','omschrijving',this.value)"></td>
       <td><input class="calc-inp calc-num" style="width:64px" value="${inval(u.uren)}" placeholder="0" onchange="calcSetUur('${key}','${u.id}','uren',this.value)"></td>
       <td><input class="calc-inp calc-num" style="width:72px" value="${inval(u.uurtarief)}" placeholder="45" onchange="calcSetUur('${key}','${u.id}','uurtarief',this.value)"></td>
-      <td class="calc-num">${eur(r.kost)}</td>
+      <td class="calc-num" id="uk-${u.id}">${eur(r.kost)}</td>
       <td><input class="calc-inp calc-num" style="width:56px" value="${inval(u.marge)}" placeholder="2" onchange="calcSetUur('${key}','${u.id}','marge',this.value)"></td>
-      <td class="calc-num" style="font-weight:600">${eur(r.verkoop)}</td>
+      <td class="calc-num" style="font-weight:600" id="uv-${u.id}">${eur(r.verkoop)}</td>
       <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur('${key}','${u.id}')">×</button></td>
     </tr>`;
   }
@@ -10936,12 +10950,12 @@ function activiteitOpen(force){
 
     const margeKleur = t.marge==null?'var(--text-faint)':(t.marge<0.15?'#c0392b':(t.marge<0.30?'var(--gold)':'var(--green)'));
     const kpis = `<div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:0.6rem;gap:0.5rem">
-      <div class="kpi-card green"><div class="kpi-label">Offertebedrag (ex. btw)</div><div class="kpi-waarde" style="font-size:18px">${eur(t.offertebedrag)}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Inkoop materiaal</div><div class="kpi-waarde" style="font-size:15px">${eur(t.mInk)}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Arbeid (verkoop)</div><div class="kpi-waarde" style="font-size:15px">${eur(t.uVerk)}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Kostprijs totaal</div><div class="kpi-waarde" style="font-size:15px">${eur(t.kostprijs)}</div></div>
-      <div class="kpi-card gold"><div class="kpi-label">Brutowinst</div><div class="kpi-waarde" style="font-size:15px">${eur(t.brutowinst)}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Marge</div><div class="kpi-waarde" style="font-size:18px;color:${margeKleur}">${pct(t.marge)}</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Offertebedrag (ex. btw)</div><div class="kpi-waarde" style="font-size:18px" id="kpi-off-${c}">${eur(t.offertebedrag)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Inkoop materiaal</div><div class="kpi-waarde" style="font-size:15px" id="kpi-mink-${c}">${eur(t.mInk)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Arbeid (verkoop)</div><div class="kpi-waarde" style="font-size:15px" id="kpi-uverk-${c}">${eur(t.uVerk)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Kostprijs totaal</div><div class="kpi-waarde" style="font-size:15px" id="kpi-kost-${c}">${eur(t.kostprijs)}</div></div>
+      <div class="kpi-card gold"><div class="kpi-label">Brutowinst</div><div class="kpi-waarde" style="font-size:15px" id="kpi-bw-${c}">${eur(t.brutowinst)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Marge</div><div class="kpi-waarde" style="font-size:18px;color:${margeKleur}" id="kpi-marge-${c}">${pct(t.marge)}</div></div>
     </div>`;
 
     const matBody=o.materiaal.map(m=>matRij(key,m)).join('');
@@ -10950,7 +10964,7 @@ function activiteitOpen(force){
       <table class="calc-tbl">
         <thead><tr><th>Omschrijving</th><th>Artikelnr.</th><th class="calc-num">Aantal</th><th class="calc-num">Inkoop €/stuk</th><th class="calc-num">Inkoop totaal</th><th class="calc-num">Marge ×</th><th class="calc-num">Verkoop ex. btw</th><th></th></tr></thead>
         <tbody>${matBody}</tbody>
-        <tfoot><tr class="calc-tot"><td colspan="4">Totaal materialen</td><td class="calc-num">${eur(t.mInk)}</td><td></td><td class="calc-num">${eur(t.mVerk)}</td><td></td></tr></tfoot>
+        <tfoot><tr class="calc-tot"><td colspan="4">Totaal materialen</td><td class="calc-num" id="mft-ink-${c}">${eur(t.mInk)}</td><td></td><td class="calc-num" id="mft-verk-${c}">${eur(t.mVerk)}</td><td></td></tr></tfoot>
       </table></div>
       <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddMat('${key}')">+ materiaal</button>`;
 
@@ -10960,7 +10974,7 @@ function activiteitOpen(force){
       <table class="calc-tbl">
         <thead><tr><th>Omschrijving</th><th class="calc-num">Uren</th><th class="calc-num">Uurtarief €</th><th class="calc-num">Prijs (kost)</th><th class="calc-num">Marge ×</th><th class="calc-num">Verkoop</th><th></th></tr></thead>
         <tbody>${uurBody}</tbody>
-        <tfoot><tr class="calc-tot"><td colspan="3">Totaal uren</td><td class="calc-num">${eur(t.uKost)}</td><td></td><td class="calc-num">${eur(t.uVerk)}</td><td></td></tr></tfoot>
+        <tfoot><tr class="calc-tot"><td colspan="3">Totaal uren</td><td class="calc-num" id="uft-kost-${c}">${eur(t.uKost)}</td><td></td><td class="calc-num" id="uft-verk-${c}">${eur(t.uVerk)}</td><td></td></tr></tfoot>
       </table></div>
       <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddUur('${key}')">+ uur-regel</button>`;
 
@@ -10972,7 +10986,7 @@ function activiteitOpen(force){
       ${uurTabel}
       <div style="margin-top:0.8rem;display:flex;justify-content:flex-end;gap:1rem;align-items:baseline;border-top:2px solid var(--green);padding-top:0.6rem">
         <span style="font-size:12px;color:var(--text-dim)">Offertebedrag (ex. btw)</span>
-        <span style="font-family:var(--serif);font-size:22px;font-weight:700;color:var(--green)">${eur(t.offertebedrag)}</span>
+        <span style="font-family:var(--serif);font-size:22px;font-weight:700;color:var(--green)" id="calc-bigtot-${c}">${eur(t.offertebedrag)}</span>
       </div>
       <div id="calc-status-${c}" style="font-size:11px;min-height:16px;margin-top:0.3rem"></div>
       ${defaultsPaneel(key)}
