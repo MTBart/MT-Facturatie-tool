@@ -8107,7 +8107,7 @@ const _SP = {
   FOLDER: 'MT-Bedrijfstool',
   // mt_mail_links synct mee zodat mail↔project-koppelingen op élke PC zichtbaar zijn.
   // Opslag = privé SharePoint-tenant (alleen @mortiseandtenon.nl), NOOIT de publieke git-repo.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map']),
   _q: {},
   ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
   lastSync: null,           // {ts, ok, key, error} — voedt de zichtbare sync-status
@@ -10877,11 +10877,90 @@ function activiteitOpen(force){
       m.ic_indicatief = (hit.cost!=null&&hit.cost!=='') ? Number(hit.cost) : null;
       saveCalc('off'); renderOfferteCalc(key);
       const hintPrijs = m.ic_indicatief!=null ? (' (VW-richtprijs '+eur(m.ic_indicatief)+' indicatief — vul echte inkoop uit factuur)') : '';
-      flash(key,'⚠ Geen echte inkoopprijs gevonden — wel catalogus-match: '+(hit.description||hit.id)+hintPrijs+'. Zoek de inkoop handmatig.',false);
+      flash(key,'⚠ Geen echte inkoopprijs gevonden — wel catalogus-match: '+(hit.description||hit.id)+hintPrijs+'. Kies hieronder de leverancier voor de actuele prijs.',false);
+      _toonLevKiezer(key,rid);
       return;
     }
-    // 3) niets gevonden
-    flash(key,'❌ Geen prijs gevonden voor "'+esc(q)+'". Zoek de inkoopprijs handmatig (factuur/leverancier-shop Drimensa/Ostermann) en vul \'m in.',false);
+    // 3) niets gevonden — geen lokale prijs. Toon de zelflerende leverancier-kiezer:
+    //    Bart wijst de leverancier aan, we ONTHOUDEN item↔leverancier, en openen
+    //    de shop voor de actuele prijs. Volgende keer weet de calc de leverancier al.
+    flash(key,'❌ Geen lokale prijs voor "'+esc(q)+'". Kies hieronder de leverancier — ik onthoud \'m en open de shop voor de actuele inkoop.',false);
+    _toonLevKiezer(key,rid);
+  };
+
+  // ---- zelflerende leverancier-prijslaag (Fase 1) ---------------------------
+  // Als de 🔍-lookup geen lokale inkoopprijs vindt, kiest Bart de leverancier.
+  // De item↔leverancier-koppeling wordt onthouden (mt_supplier_map, SP-synced),
+  // zodat het de 2e keer meteen klopt. De actuele prijs komt voorlopig via de
+  // ingelogde shop (Bart pakt 'm over) — Fase 4 haalt 'm live op bij Ostermann.
+  const LEVERANCIERS_CALC=[
+    {id:'ostermann', naam:'Ostermann', zoek:q=>'https://www.ostermann.eu/nl_NL/search?search='+encodeURIComponent(q), home:'https://www.ostermann.eu/nl_NL/'},
+    {id:'drimensa',  naam:'Drimensa',  home:'https://www.drimensa.nl/'},
+    {id:'hafele',    naam:'Häfele',    home:'https://www.hafele.nl/'},
+    {id:'blum',      naam:'Blum',      home:'https://www.blum.com/nl/nl/'},
+  ];
+  function supplierMapAll(){try{return JSON.parse(localStorage.getItem('mt_supplier_map')||'{}');}catch(e){return {};}}
+  function supplierMapSaveAll(o){localStorage.setItem('mt_supplier_map',JSON.stringify(o));}
+  function supplierMapKey(m){
+    const art=String(m.artikel||'').trim().toLowerCase();
+    if(art) return 'art:'+art;
+    const d=String(m.omschrijving||'').trim().toLowerCase().replace(/\s+/g,' ');
+    return d?'desc:'+d:'';
+  }
+  function supplierMapGet(m){const k=supplierMapKey(m); if(!k)return null; return supplierMapAll()[k]||null;}
+  function supplierMapSet(m,levId){
+    const k=supplierMapKey(m); if(!k)return;
+    const lev=LEVERANCIERS_CALC.find(l=>l.id===levId);
+    const all=supplierMapAll();
+    all[k]={lev:levId, lev_naam:lev?lev.naam:levId, artikelnr:String(m.artikel||'').trim()||null, omschrijving:String(m.omschrijving||'').trim(), ts:Date.now()};
+    supplierMapSaveAll(all);
+  }
+  function supplierMapDel(m){const k=supplierMapKey(m); if(!k)return; const all=supplierMapAll(); delete all[k]; supplierMapSaveAll(all);}
+
+  function _levKiezerHtml(key,m){
+    const wrap=s=>'<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px">'+s+'</div>';
+    const map=supplierMapGet(m);
+    if(map){
+      const naam=map.lev_naam||map.lev;
+      return wrap(
+        '<span style="font-size:10px;border:1px solid var(--border);border-radius:8px;padding:1px 6px;color:var(--text-dim)" title="Onthouden leverancier voor dit materiaal">📦 '+esc(naam)+(map.artikelnr?(' · '+esc(map.artikelnr)):'')+'</span>'+
+        '<button class="btn btn-xs btn-secondary" title="Open de shop met de actuele inkoopprijs" onclick="calcOpenLevShop(\''+key+'\',\''+m.id+'\')">🛒 actuele prijs</button>'+
+        '<button class="btn btn-xs" style="opacity:.6" title="Andere leverancier kiezen" onclick="calcWijzigLeverancier(\''+key+'\',\''+m.id+'\')">✎</button>');
+    }
+    const chips=LEVERANCIERS_CALC.map(l=>'<button class="btn btn-xs btn-secondary" onclick="calcKiesLeverancier(\''+key+'\',\''+m.id+'\',\''+l.id+'\')">'+esc(l.naam)+'</button>').join('');
+    return wrap('<span style="font-size:10px;color:var(--text-dim)">Welke leverancier levert dit?</span> '+chips);
+  }
+  // Persistente chip bij render: alleen tonen als er al een onthouden leverancier is.
+  function levChipHtml(key,m){ return supplierMapGet(m) ? _levKiezerHtml(key,m) : ''; }
+  function _toonLevKiezer(key,rid){
+    const o=getOfferte(key); const m=o.materiaal.find(x=>x.id===rid); if(!m)return;
+    const el=document.getElementById('lev-'+rid); if(el) el.innerHTML=_levKiezerHtml(key,m);
+  }
+  window.calcKiesLeverancier=function(key,rid,levId){
+    const o=getOfferte(key); const m=o.materiaal.find(x=>x.id===rid); if(!m)return;
+    const inp=document.getElementById('calc-mo-'+rid); if(inp) m.omschrijving=inp.value;
+    supplierMapSet(m,levId); saveCalc('off');
+    _toonLevKiezer(key,rid);
+    calcOpenLevShop(key,rid);
+    const lev=LEVERANCIERS_CALC.find(l=>l.id===levId);
+    flash(key,'✓ Onthouden: dit materiaal koop je bij '+(lev?lev.naam:levId)+'. Shop geopend — vul de actuele prijs als inkoop in.',true);
+  };
+  window.calcWijzigLeverancier=function(key,rid){
+    const el=document.getElementById('lev-'+rid); if(!el)return;
+    const chips=LEVERANCIERS_CALC.map(l=>'<button class="btn btn-xs btn-secondary" onclick="calcKiesLeverancier(\''+key+'\',\''+rid+'\',\''+l.id+'\')">'+esc(l.naam)+'</button>').join('');
+    el.innerHTML='<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px"><span style="font-size:10px;color:var(--text-dim)">Wijzig leverancier:</span> '+chips+' <button class="btn btn-xs" style="opacity:.6" onclick="calcWisLeverancier(\''+key+'\',\''+rid+'\')">✕ wis</button></div>';
+  };
+  window.calcWisLeverancier=function(key,rid){
+    const o=getOfferte(key); const m=o.materiaal.find(x=>x.id===rid); if(!m)return;
+    supplierMapDel(m); saveCalc('off'); _toonLevKiezer(key,rid);
+  };
+  window.calcOpenLevShop=function(key,rid){
+    const o=getOfferte(key); const m=o.materiaal.find(x=>x.id===rid); if(!m)return;
+    const map=supplierMapGet(m); if(!map){ _toonLevKiezer(key,rid); return; }
+    const lev=LEVERANCIERS_CALC.find(l=>l.id===map.lev); if(!lev){ flash(key,'leverancier onbekend'); return; }
+    const q=(m.artikel||m.omschrijving||'').trim();
+    const url=(lev.zoek && q) ? lev.zoek(q) : lev.home;
+    window.open(url,'_blank','noopener');
   };
 
   // ---- materiaal-autocomplete (eigen dropdown) ------------------------------
@@ -11375,7 +11454,7 @@ function activiteitOpen(force){
       <td><div style="display:flex;gap:4px;align-items:center">
         <input id="calc-mo-${m.id}" class="calc-inp" autocomplete="off" style="flex:1;min-width:150px" value="${esc(m.omschrijving)}" placeholder="materiaal (typ voor suggesties)…" oninput="calcMatSuggest(this,'${key}','${m.id}')" onfocus="calcMatSuggest(this,'${key}','${m.id}')" onblur="calcMatBlur()" onkeydown="calcMatKey(event)" onchange="calcSetMat('${key}','${m.id}','omschrijving',this.value)">
         <button class="btn btn-xs btn-secondary" title="Zoek inkoopprijs in materialen-DB" onclick="calcZoekPrijs('${key}','${m.id}')">🔍 prijs</button>
-      </div><div id="rand-${m.id}">${randChipHtml(key,m)}</div></td>
+      </div><div id="rand-${m.id}">${randChipHtml(key,m)}</div><div id="lev-${m.id}">${levChipHtml(key,m)}</div></td>
       <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(m.aantal)}" placeholder="0" onchange="calcSetMat('${key}','${m.id}','aantal',this.value)"></td>
       <td class="calc-num"><input class="calc-inp calc-num" style="width:84px" value="${inval(m.inkoop_stuk)}" placeholder="0,00" onchange="calcSetMat('${key}','${m.id}','inkoop_stuk',this.value)">${(m.ic_indicatief!=null&&(m.inkoop_stuk===''||m.inkoop_stuk==null))?`<div style="font-size:9px;color:var(--gold)" title="Indicatieve Vectorworks-richtprijs — geen echte inkoop. Vul de werkelijke prijs uit de factuur in.">⚠ VW ${eur(m.ic_indicatief)}</div>`:''}</td>
       <td class="calc-num" id="mi-${m.id}">${eur(r.inkoop)}</td>
