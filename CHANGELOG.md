@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — Offerte-calc Fase 1: zelflerende leverancier-prijslaag
+- Commit: `8af5a0e` | Auteur: Bart Witte
+
 ## 2026-06-28 — Offerte-calc: echte prijslookup, VW-import, mail-paneel, bewerkbare MB-preview + factuur-stap
 - Commit: `309c2c4` | Auteur: Bart Witte
 
