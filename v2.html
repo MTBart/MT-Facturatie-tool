@@ -6977,6 +6977,11 @@ async function maakProjectAan(){
       }
     }catch(e){ console.warn('Toggl-koppeling faalde:',e); }
   }
+  // Offerte-calc haakt hier in: een standalone offerte die "+ Project aanmaken" koos,
+  // koppelt zich aan dit verse project en bewaart zichzelf in de projectmap.
+  if(typeof window._calcAfterProject==='function'){
+    try{ await window._calcAfterProject(nieuwProj); }catch(e){ console.warn('calcAfterProject faalde:',e); }
+  }
   setTimeout(sluitModal,1600);
 }
 
@@ -10788,7 +10793,7 @@ function activiteitOpen(force){
   function recalcView(key){
     const o=getOfferte(key), t=totalen(o), c=cid(key);
     const set=(id,v)=>{const e=document.getElementById(id); if(e)e.textContent=v;};
-    o.materiaal.forEach(m=>{const r=mRow(m); set('mi-'+m.id,eur(r.inkoop)); set('mv-'+m.id,eur(r.verkoop));});
+    o.materiaal.forEach(m=>{const r=mRow(m); set('mi-'+m.id,eur(r.inkoop)); set('mv-'+m.id,eur(r.verkoop)); const rc=document.getElementById('rand-'+m.id); if(rc) rc.innerHTML=randChipHtml(key,m);});
     o.uren.forEach(u=>{const r=uRow(u); set('uk-'+u.id,eur(r.kost)); set('uv-'+u.id,eur(r.verkoop));});
     set('mft-ink-'+c,eur(t.mInk)); set('mft-verk-'+c,eur(t.mVerk));
     set('uft-kost-'+c,eur(t.uKost)); set('uft-verk-'+c,eur(t.uVerk));
@@ -10852,7 +10857,7 @@ function activiteitOpen(force){
     const q=(inp.value||'').toLowerCase().trim();
     if(!MATERIALEN_IC.boards.length && typeof laadMaterialen==='function'){ try{laadMaterialen();}catch(e){} }
     const toks=q.split(/\s+/).filter(Boolean);
-    const all=_matIndex();
+    const all=_matIndex().filter(o=>!_isRandMat(o.desc));   // kantenband/olie horen via de randafwerking-regel, niet als basismateriaal
     const hits=(toks.length? all.filter(o=>{const d=o.desc.toLowerCase(); return toks.every(t=>d.includes(t));}) : all).slice(0,60);
     if(!hits.length){ box.style.display='none'; box.innerHTML=''; box._hits=null; return; }
     box._hits=hits; box._sel=-1;
@@ -10891,6 +10896,256 @@ function activiteitOpen(force){
     } else if(ev.key==='Enter'){
       if(box._sel>=0){ ev.preventDefault(); calcMatPick(null,box._sel); }
     } else if(ev.key==='Escape'){ box.style.display='none'; }
+  };
+
+  // ── Randafwerking-voorstel ────────────────────────────────────────────────
+  // Bij een plaat (bv. EGGER U899) een optionele tweede regel voorstellen:
+  // kantenband bij een decor-code, of olie bij een berken-multiplex-basis.
+  function _isRandMat(naam){return /(kantenband|randband|kantband|edgeband|abs[- ]?kant|\bolie\b|hardwax|osmo)/i.test(naam||'');}
+  function randSuggest(m){
+    const naam=(m.omschrijving||'').trim(); if(!naam) return null;
+    const low=naam.toLowerCase();
+    // zelf al randafwerking / hardware / beslag? dan geen voorstel
+    if(_isRandMat(naam)||/lijm|schroef|deuvel|scharnier|beslag|greep|hardware/.test(low)) return null;
+    const dm=naam.toUpperCase().match(/\b([A-Z]{1,2}\d{3,4})\b/);   // decor-code als U899, W980, H1145
+    const decor=dm?dm[1]:null;
+    if(decor){
+      const hit=_matIndex().find(o=>{const d=o.desc.toLowerCase(); return d.includes(decor.toLowerCase()) && /(kant|randband|abs|rand)/.test(d);});
+      return {type:'kantenband', label: hit?hit.desc:('Kantenband '+decor), hit:hit||null};
+    }
+    if(/multiplex|berken|triplex|\bmpx\b|vuren|grenen|eiken|fineer|massief/.test(low)){
+      const hit=_matIndex().find(o=>/olie|hardwax|osmo/.test(o.desc.toLowerCase()));
+      return {type:'olie', label: hit?hit.desc:'Olie (afwerking)', hit:hit||null};
+    }
+    return null;
+  }
+  function randChipHtml(key,m){
+    if(m._randDone) return '';
+    const sug=randSuggest(m); if(!sug) return '';
+    const tag=sug.type==='olie'?'olie':'kantenband';
+    return '<div class="calc-rand">↳ randafwerking: <b>'+esc(sug.label)+'</b> <span class="calc-rand-t">'+tag+'</span>'
+      +'<button class="btn btn-xs btn-gold" onmousedown="event.preventDefault()" onclick="calcAddRand(\''+key+'\',\''+m.id+'\')">+ toevoegen</button>'
+      +'<button class="btn btn-xs btn-secondary" title="voorstel negeren" onmousedown="event.preventDefault()" onclick="calcRandDismiss(\''+key+'\',\''+m.id+'\')">×</button></div>';
+  }
+  window.calcAddRand=function(key,rid){
+    const o=getOfferte(key); const idx=o.materiaal.findIndex(x=>x.id===rid); if(idx<0)return;
+    const m=o.materiaal[idx]; const sug=randSuggest(m); m._randDone=true;
+    if(sug){
+      const row={id:uid('m'),omschrijving:sug.hit?sug.hit.desc:sug.label,artikel:sug.hit?(sug.hit.id||''):'',aantal:'',inkoop_stuk:'',marge:CALC.defaults.materiaal_marge,_randDone:true};
+      if(sug.hit&&sug.hit.bron==='voorraad'&&sug.hit.prijs!=null) row.inkoop_stuk=sug.hit.prijs;       // echte factuurprijs
+      else if(sug.hit&&sug.hit.ic&&sug.hit.prijs!=null) row.ic_indicatief=sug.hit.prijs;               // catalogus = indicatief
+      o.materiaal.splice(idx+1,0,row);
+    }
+    saveCalc('off'); renderOfferteCalc(key);
+  };
+  window.calcRandDismiss=function(key,rid){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(m)m._randDone=true;saveCalc('off');renderOfferteCalc(key);};
+
+  // ── Offerte → Moneybird ───────────────────────────────────────────────────
+  // Nette, klant-zichtbare offerteregels die EXACT op het offertebedrag uitkomen.
+  function _offRegels(o){
+    const tekst=((o.meta&&o.meta.offerte_tekst)||'').trim();
+    const pre='';   // begeleidende tekst komt als losse tekst-regel in MB, niet als prefix
+    const cap=s=>s.replace(/^(.)/,c=>c.toUpperCase());
+    const mSub=o.materiaal.reduce((s,m)=>s+mRow(m).verkoop,0);
+    const buckets=[{re:/ontwerp|calculat|werkvoorber|tekening/i,naam:'ontwerp & werkvoorbereiding',v:0},
+                   {re:/productie|afwerk|fabric|maak|spuit|lak/i,naam:'productie & afwerking',v:0},
+                   {re:/transport|montage|leveren|plaats|bezorg/i,naam:'levering & montage',v:0}];
+    let restU=0;
+    o.uren.forEach(u=>{const v=uRow(u).verkoop; const b=buckets.find(b=>b.re.test(u.omschrijving||'')); if(b)b.v+=v; else restU+=v;});
+    if(restU>0) buckets[1].v+=restU;
+    const lijnen=[];
+    if(mSub>0.005) lijnen.push({description:cap(pre+'materiaal & onderdelen'), value:mSub});
+    buckets.forEach(b=>{ if(b.v>0.005) lijnen.push({description:cap(pre+b.naam), value:b.v}); });
+    if(!lijnen.length) lijnen.push({description: tekst||'Maatwerk conform offerte', value:mSub+buckets.reduce((s,b)=>s+b.v,0)});
+    // exact-totaal: laatste regel absorbeert het centen-restant
+    const total=Math.round((mSub+buckets.reduce((s,b)=>s+b.v,0))*100)/100;
+    let acc=0; lijnen.forEach((l,i)=>{ if(i<lijnen.length-1){ l.price=Math.round(l.value*100)/100; acc+=l.price; } });
+    lijnen[lijnen.length-1].price=Math.round((total-acc)*100)/100;
+    return {lijnen,total};
+  }
+  function _mbCtx(key){
+    const o=getOfferte(key);
+    if(typeof mbPost!=='function'||typeof getAdmin!=='function') return {o,err:'⚠ Moneybird-koppeling niet beschikbaar in deze weergave.'};
+    const proj=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===key||p.code===o.project_code):null;
+    const ref=proj?proj.code:(o.project_code||o.titel||key);
+    const mbId=proj?((typeof resolveMbContact==='function'?resolveMbContact(proj):null)||proj.mb_contact_id||null):null;
+    const klant=proj?(proj.klant_naam||proj.klant||''):'';
+    return {o,proj,ref,mbId,klant};
+  }
+  // schaal prijzen zodat ze EXACT op het offertebedrag uitkomen; laatste regel slikt het restant
+  function _normRegels(regels,total){
+    regels=(regels||[]).filter(r=>r&&r.description&&isFinite(+r.price)).map(r=>({description:String(r.description).trim(),price:Math.max(0,+r.price)}));
+    if(!regels.length) return [{description:'Maatwerk conform offerte',price:Math.round(total*100)/100}];
+    const sum=regels.reduce((s,r)=>s+r.price,0);
+    if(sum>0 && Math.abs(sum-total)>0.005){ const f=total/sum; regels.forEach(r=>r.price=Math.round(r.price*f*100)/100); }
+    let acc=0; regels.forEach((r,i)=>{ if(i<regels.length-1) acc+=r.price; });
+    regels[regels.length-1].price=Math.round((total-acc)*100)/100;
+    return regels;
+  }
+  // Bouwt/herziet de preview-offerteregels + begeleidende tekst (via Larry; valt terug op deterministisch).
+  async function _calcGenPreview(key,instructie){
+    const ctx=_mbCtx(key); const o=ctx.o;
+    const {lijnen,total}=_offRegels(o);
+    let tekst=(o._mbPreview&&o._mbPreview.tekst)||'';
+    let regels=_normRegels(lijnen.map(l=>({description:l.description,price:l.price})),total);
+    if(typeof claudeCall==='function'){
+      const wat=((o.meta&&o.meta.offerte_tekst)||'').trim();
+      const matLijst=o.materiaal.filter(m=>(m.omschrijving||'').trim()).map(m=>'- '+m.omschrijving+(m.aantal?(' ×'+m.aantal):'')).join('\n');
+      const urenLijst=o.uren.filter(u=>n(u.uren)>0).map(u=>'- '+u.omschrijving+': '+u.uren+' u').join('\n');
+      const mailCtx=(o.mail_context&&(o.mail_context.subject||o.mail_context.preview))
+        ? ('\nContext uit gekoppelde mail — onderwerp: '+(o.mail_context.subject||'')+'\n'+(o.mail_context.preview||'').slice(0,1200)) : '';
+      const sys='Je bent Larry, offerte-assistent van Mortise & Tenon (maatwerk meubelmaker). Schrijf een nette, klantgerichte concept-offerte. Geef UITSLUITEND geldige JSON terug, geen extra tekst: {"tekst":"<korte begeleidende introtekst, 1-3 zinnen, Nederlands, professioneel-warm>","regels":[{"description":"<nette klant-zichtbare regelomschrijving>","price":<getal ex btw>}]}. Vat de calculatie samen in 2-5 mooie regels die de klant begrijpt; toon NOOIT interne marges of inkoopprijzen. De som van de prijzen moet zo dicht mogelijk bij het offertebedrag liggen (ik herschaal daarna exact). Voeg geen btw toe.';
+      const usr='Project/ref: '+ctx.ref+(ctx.klant?(' — klant: '+ctx.klant):'')
+        +'\nWat het wordt (beschrijving van Bart): '+(wat||'(leeg)')+mailCtx
+        +'\nOffertebedrag ex btw: € '+total.toFixed(2)
+        +'\nMaterialen:\n'+(matLijst||'(geen)')
+        +'\nArbeid:\n'+(urenLijst||'(geen)')
+        +'\nHuidige conceptregels:\n'+regels.map(r=>'- '+r.description+': € '+r.price.toFixed(2)).join('\n')
+        +(instructie?('\n\nAanpassing gevraagd door Bart: '+instructie):'')
+        +'\n\nGeef de verbeterde JSON.';
+      try{
+        const r=await claudeCall([{role:'user',content:sys+'\n\n'+usr}],1500);
+        const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||'';
+        const m=txt.match(/\{[\s\S]*\}/);
+        if(m){ const j=JSON.parse(m[0]); if(j.tekst) tekst=String(j.tekst).trim(); if(Array.isArray(j.regels)&&j.regels.length) regels=_normRegels(j.regels,total); }
+      }catch(e){ /* val stil terug op de deterministische regels */ }
+    }
+    o._mbPreview={tekst,regels,total};
+    saveCalc('off');
+  }
+  function _mbPreviewHtml(key){
+    const c=cid(key); const o=getOfferte(key); const p=o._mbPreview;
+    if(!p) return '';
+    if(p.loading) return '<div class="calc-mbprev"><div class="calc-mbprev-h">📄 Offerte-preview</div><div style="padding:10px;color:var(--text-dim)">⏳ '+esc(p.loading)+'</div></div>';
+    const regelsH=(p.regels||[]).map(r=>'<tr><td>'+esc(r.description)+'</td><td class="calc-num" style="white-space:nowrap">'+eur(+r.price)+'</td></tr>').join('');
+    const som=(p.regels||[]).reduce((s,r)=>s+(+r.price),0);
+    return '<div class="calc-mbprev">'
+      +'<div class="calc-mbprev-h">📄 Offerte-preview <span style="font-weight:400;color:var(--text-dim)">— controleer & verfijn vóór je doorzet naar Moneybird</span></div>'
+      +'<div class="calc-mbprev-tekst">'+esc(p.tekst||'(geen begeleidende tekst)')+'</div>'
+      +'<table class="calc-mbprev-tbl"><tbody>'+regelsH+'</tbody>'
+      +'<tfoot><tr><td style="text-align:right;font-weight:600">Totaal ex. btw</td><td class="calc-num" style="font-weight:700">'+eur(som)+'</td></tr></tfoot></table>'
+      +'<div class="calc-mbprev-chat">'
+      +'<input id="calc-prevchat-'+c+'" class="calc-inp" style="flex:1" placeholder="bv. \'splits productie en montage\' of \'maak de tekst korter\'" onkeydown="if(event.key===\'Enter\')calcPreviewChat(\''+key+'\')">'
+      +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewChat(\''+key+'\')">↻ Pas aan</button>'
+      +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewRegen(\''+key+'\')">🔄 Opnieuw</button>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">'
+      +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewSluit(\''+key+'\')">✕ Sluiten</button>'
+      +'<button class="btn btn-sm btn-primary" onclick="calcPreviewDoorzetten(\''+key+'\')">✓ Doorzetten naar Moneybird</button>'
+      +'</div></div>';
+  }
+  function _renderMbPrev(key){ const el=document.getElementById('calc-mbprev-'+cid(key)); if(el) el.innerHTML=_mbPreviewHtml(key); }
+  // Knop "Offerte aanmaken in Moneybird" → bouwt EERST een preview die Bart kan bijsturen/hergenereren.
+  window.calcMaakOfferteMB=async function(key){
+    const ctx=_mbCtx(key); const o=ctx.o;
+    const setSt=(h,ok)=>{const st=document.getElementById('calc-status-'+cid(key)); if(st){st.innerHTML=h;st.style.color=(ok===false)?'#c0392b':(ok?'var(--green)':'var(--text-dim)');}};
+    if(ctx.err){ setSt(ctx.err,false); return; }
+    if(!ctx.mbId){ setSt('⚠ Geen Moneybird-klant gekoppeld. Koppel deze offerte aan een project mét klant (of maak eerst het project aan) — dan vul ik de klant automatisch in.',false); return; }
+    const {total}=_offRegels(o);
+    if(total<=0){ setSt('⚠ Niets om te offreren — vul eerst materiaal/uren in.',false); return; }
+    o._mbPreview={loading:'Larry stelt nette offerteregels op…'}; saveCalc('off'); _renderMbPrev(key);
+    await _calcGenPreview(key); _renderMbPrev(key);
+  };
+  window.calcPreviewRegen=async function(key){ const o=getOfferte(key); const prev=o._mbPreview||{}; o._mbPreview={tekst:'',loading:'Opnieuw genereren…'}; saveCalc('off'); _renderMbPrev(key); await _calcGenPreview(key); _renderMbPrev(key); };
+  window.calcPreviewChat=async function(key){
+    const inp=document.getElementById('calc-prevchat-'+cid(key)); const instr=inp?inp.value.trim():''; if(!instr) return;
+    const o=getOfferte(key); o._mbPreview=Object.assign({},o._mbPreview||{},{loading:'Aanpassen: '+instr}); saveCalc('off'); _renderMbPrev(key);
+    await _calcGenPreview(key,instr); _renderMbPrev(key);
+  };
+  window.calcPreviewSluit=function(key){ const o=getOfferte(key); delete o._mbPreview; saveCalc('off'); _renderMbPrev(key); };
+  // De ENIGE outward-actie: pas hier gaat de offerte echt als concept naar Moneybird.
+  window.calcPreviewDoorzetten=async function(key){
+    const ctx=_mbCtx(key); const o=ctx.o; const p=o._mbPreview;
+    const setSt=(h,ok)=>{const st=document.getElementById('calc-status-'+cid(key)); if(st){st.innerHTML=h;st.style.color=(ok===false)?'#c0392b':(ok?'var(--green)':'var(--text-dim)');}};
+    if(!p||!p.regels||!p.regels.length){ setSt('⚠ Geen preview om door te zetten.',false); return; }
+    if(ctx.err||!ctx.mbId){ setSt('⚠ Geen Moneybird-klant gekoppeld.',false); return; }
+    const som=p.regels.reduce((s,r)=>s+(+r.price),0);
+    if(!confirm('Concept-offerte aanmaken in Moneybird?\n\nReferentie: '+ctx.ref+'\nTotaal: € '+som.toFixed(2)+' excl. btw\n\nDe offerte komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.')) return;
+    o._mbPreview.loading='Concept-offerte aanmaken in Moneybird…'; _renderMbPrev(key);
+    const details=[];
+    if(p.tekst) details.push({description:p.tekst});                                  // begeleidende tekst als tekst-regel
+    p.regels.forEach(r=>details.push({description:r.description,amount:'1 x',price:(+r.price).toFixed(2)}));
+    try{
+      const r=await mbPost(getAdmin()+'/estimates',{estimate:{contact_id:ctx.mbId,reference:ctx.ref,details_attributes:details}});
+      if(!r.ok){const tx=await r.text().catch(()=> ''); throw new Error('HTTP '+r.status+' '+tx.slice(0,160));}
+      const est=await r.json();
+      o.mb_estimate_id=est.id; delete o._mbPreview; saveCalc('off'); _renderMbPrev(key);
+      const url='https://moneybird.com/'+getAdmin()+'/estimates/'+est.id;
+      setSt('✓ Concept-offerte aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);
+      window.open(url,'_blank');
+    }catch(e){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt('❌ Offerte aanmaken mislukt: '+(e.message||e),false); }
+  };
+
+  // ── Mail koppelen aan de offerte (context voor de offertetekst) ────────────
+  window.calcKoppelMail=async function(key){
+    const o=getOfferte(key);
+    const setSt=(h,ok)=>{const st=document.getElementById('calc-status-'+cid(key)); if(st){st.innerHTML=h;st.style.color=(ok===false)?'#c0392b':(ok?'var(--green)':'var(--text-dim)');}};
+    if(typeof window.getGraphToken!=='function'){ setSt('⚠ Mail-koppeling vereist Microsoft-login (Inbox-tab).',false); return; }
+    const ctx=_mbCtx(key);
+    const standaard=(ctx.klant||o.titel||'').trim();
+    const term=prompt('Zoek een mail om te koppelen (afzender, onderwerp of trefwoord):',standaard);
+    if(term===null) return;
+    setSt('Mails zoeken…');
+    try{
+      const token=await window.getGraphToken();
+      if(!token){ setSt('⚠ Niet ingelogd bij Microsoft.',false); return; }
+      const base='https://graph.microsoft.com/v1.0/users/'+encodeURIComponent('info@mortiseandtenon.nl');
+      const url=base+'/messages?$search='+encodeURIComponent('"'+(term||'').replace(/"/g,'')+'"')+'&$top=8&$select=id,subject,from,receivedDateTime,bodyPreview';
+      const r=await fetch(url,{headers:{Authorization:'Bearer '+token,'ConsistencyLevel':'eventual'}});
+      if(!r.ok){const t=await r.text().catch(()=>''); throw new Error('HTTP '+r.status+' '+t.slice(0,120));}
+      const j=await r.json(); const msgs=(j.value||[]);
+      if(!msgs.length){ setSt('Geen mails gevonden voor "'+esc(term)+'".',false); return; }
+      window._calcMailKeuze=msgs; o._calcMailKey=key;
+      const lijst=msgs.map((m,i)=>{const f=(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'?'; const d=(m.receivedDateTime||'').slice(0,10);
+        return (i+1)+'. ['+d+'] '+f+' — '+(m.subject||'(geen onderwerp)');}).join('\n');
+      const keuze=prompt('Welke mail koppelen? Typ het nummer:\n\n'+lijst,'1');
+      if(keuze===null) return;
+      const idx=parseInt(keuze,10)-1; const m=msgs[idx];
+      if(!m){ setSt('Ongeldige keuze.',false); return; }
+      o.mail_context={id:m.id, subject:m.subject||'', from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'', received:(m.receivedDateTime||'').slice(0,10), preview:(m.bodyPreview||'')};
+      saveCalc('off'); renderOfferteCalc(key);
+      setSt('✓ Mail gekoppeld — de offertetekst krijgt nu context uit deze mail.',true);
+    }catch(e){ setSt('⚠ Mail zoeken mislukt: '+(e.message||e),false); }
+  };
+  window.calcOntkoppelMail=function(key){ const o=getOfferte(key); delete o.mail_context; saveCalc('off'); renderOfferteCalc(key); };
+
+  // ── Offerte opslaan in de projectmap (07_Administratie, idempotent) ────────
+  async function _bewaarOfferteInMap(proj,o,key){
+    const setSt=(h,ok)=>{const st=document.getElementById('calc-status-'+cid(key)); if(st){st.innerHTML=h; st.style.color=(ok===false)?'#c0392b':(ok?'var(--green)':'var(--text-dim)');}};
+    if(typeof window.spUploadProjectBytes!=='function'){ setSt('⚠ Opslaan in projectmap niet beschikbaar in deze weergave.',false); return; }
+    setSt('Offerte opslaan in de projectmap…');
+    try{
+      const t=totalen(o);
+      const dump={ type:'mt-offerte-calculatie', code:proj.code, titel:o.titel||'', datum:new Date().toISOString().slice(0,10),
+        offerte_tekst:(o.meta&&o.meta.offerte_tekst)||'', moneybird_estimate_id:o.mb_estimate_id||null,
+        offertebedrag_excl_btw:t.offertebedrag, materiaal_inkoop:t.mInk, materiaal_verkoop:t.mVerk,
+        uren_kost:t.uKost, uren_verkoop:t.uVerk, kostprijs:t.kostprijs, brutowinst:t.brutowinst, marge:t.marge,
+        materiaal:o.materiaal, uren:o.uren, meta:o.meta };
+      const naam='Offerte-'+proj.code+'-'+dump.datum+'.json';
+      const bytes=new TextEncoder().encode(JSON.stringify(dump,null,2));
+      const res=await window.spUploadProjectBytes(proj,naam,bytes,'application/json','07_Administratie');
+      setSt('✓ Offerte opgeslagen in de projectmap — <a href="'+(res.webUrl||'#')+'" target="_blank" style="color:var(--gold)">📄 '+esc(res.naam)+'</a>',true);
+    }catch(e){ setSt('⚠ Opslaan in projectmap mislukt: '+(e.message||e),false); }
+  }
+  // Standalone offerte → project maken (modal); na aanmaken koppelt + bewaart hij vanzelf.
+  // Al een project? Dan direct opslaan in de map.
+  window.calcMaakProjectVoorOfferte=function(key){
+    const o=getOfferte(key);
+    const proj=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===key||p.code===o.project_code):null;
+    if(proj){ _bewaarOfferteInMap(proj,o,key); return; }
+    if(typeof openModal!=='function'){ flash(key,'projectmodal niet beschikbaar in deze weergave'); return; }
+    window._calcAfterProject=async function(nieuwProj){
+      window._calcAfterProject=null;
+      try{
+        CALC.offertes[nieuwProj.code]=o; o.project_code=nieuwProj.code;
+        if(key!==nieuwProj.code && /^OFF-/.test(key)) delete CALC.offertes[key];   // standalone-sleutel opruimen
+        saveCalc('off');
+        await _bewaarOfferteInMap(nieuwProj,o,nieuwProj.code);
+      }catch(e){ console.warn('offerte koppelen/opslaan faalde:',e); }
+    };
+    openModal();
+    const np=document.getElementById('modal-naam-product');
+    if(np && o.titel && !np.value){ np.value=o.titel; if(typeof autoCode==='function') autoCode(); }
   };
 
   window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u)return;u[field]=val;saveCalc('off');recalcView(key);};
@@ -10942,12 +11197,11 @@ function activiteitOpen(force){
       <td><div style="display:flex;gap:4px;align-items:center">
         <input id="calc-mo-${m.id}" class="calc-inp" autocomplete="off" style="flex:1;min-width:150px" value="${esc(m.omschrijving)}" placeholder="materiaal (typ voor suggesties)…" oninput="calcMatSuggest(this,'${key}','${m.id}')" onfocus="calcMatSuggest(this,'${key}','${m.id}')" onblur="calcMatBlur()" onkeydown="calcMatKey(event)" onchange="calcSetMat('${key}','${m.id}','omschrijving',this.value)">
         <button class="btn btn-xs btn-secondary" title="Zoek inkoopprijs in materialen-DB" onclick="calcZoekPrijs('${key}','${m.id}')">🔍 prijs</button>
-      </div></td>
-      <td style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${esc(m.artikel||'')}</td>
-      <td><input class="calc-inp calc-num" style="width:64px" value="${inval(m.aantal)}" placeholder="0" onchange="calcSetMat('${key}','${m.id}','aantal',this.value)"></td>
-      <td><input class="calc-inp calc-num" style="width:84px" value="${inval(m.inkoop_stuk)}" placeholder="0,00" onchange="calcSetMat('${key}','${m.id}','inkoop_stuk',this.value)">${(m.ic_indicatief!=null&&(m.inkoop_stuk===''||m.inkoop_stuk==null))?`<div style="font-size:9px;color:var(--gold)" title="Indicatieve Vectorworks-richtprijs — geen echte inkoop. Vul de werkelijke prijs uit de factuur in.">⚠ VW ${eur(m.ic_indicatief)}</div>`:''}</td>
+      </div><div id="rand-${m.id}">${randChipHtml(key,m)}</div></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(m.aantal)}" placeholder="0" onchange="calcSetMat('${key}','${m.id}','aantal',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:84px" value="${inval(m.inkoop_stuk)}" placeholder="0,00" onchange="calcSetMat('${key}','${m.id}','inkoop_stuk',this.value)">${(m.ic_indicatief!=null&&(m.inkoop_stuk===''||m.inkoop_stuk==null))?`<div style="font-size:9px;color:var(--gold)" title="Indicatieve Vectorworks-richtprijs — geen echte inkoop. Vul de werkelijke prijs uit de factuur in.">⚠ VW ${eur(m.ic_indicatief)}</div>`:''}</td>
       <td class="calc-num" id="mi-${m.id}">${eur(r.inkoop)}</td>
-      <td><input class="calc-inp calc-num" style="width:56px" value="${inval(m.marge)}" placeholder="1,5" onchange="calcSetMat('${key}','${m.id}','marge',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${inval(m.marge)}" placeholder="1,5" onchange="calcSetMat('${key}','${m.id}','marge',this.value)"></td>
       <td class="calc-num" style="font-weight:600" id="mv-${m.id}">${eur(r.verkoop)}</td>
       <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelMat('${key}','${m.id}')">×</button></td>
     </tr>`;
@@ -10956,10 +11210,10 @@ function activiteitOpen(force){
     const r=uRow(u);
     return `<tr>
       <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur('${key}','${u.id}','omschrijving',this.value)"></td>
-      <td><input class="calc-inp calc-num" style="width:64px" value="${inval(u.uren)}" placeholder="0" onchange="calcSetUur('${key}','${u.id}','uren',this.value)"></td>
-      <td><input class="calc-inp calc-num" style="width:72px" value="${inval(u.uurtarief)}" placeholder="45" onchange="calcSetUur('${key}','${u.id}','uurtarief',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(u.uren)}" placeholder="0" onchange="calcSetUur('${key}','${u.id}','uren',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${inval(u.uurtarief)}" placeholder="45" onchange="calcSetUur('${key}','${u.id}','uurtarief',this.value)"></td>
       <td class="calc-num" id="uk-${u.id}">${eur(r.kost)}</td>
-      <td><input class="calc-inp calc-num" style="width:56px" value="${inval(u.marge)}" placeholder="2" onchange="calcSetUur('${key}','${u.id}','marge',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${inval(u.marge)}" placeholder="2" onchange="calcSetUur('${key}','${u.id}','marge',this.value)"></td>
       <td class="calc-num" style="font-weight:600" id="uv-${u.id}">${eur(r.verkoop)}</td>
       <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur('${key}','${u.id}')">×</button></td>
     </tr>`;
@@ -11033,9 +11287,9 @@ function activiteitOpen(force){
     const matTabel=`<div class="calc-sec">Calculatie — materialen</div>
       <div style="overflow-x:auto;border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px">
       <table class="calc-tbl">
-        <thead><tr><th>Omschrijving</th><th>Artikelnr.</th><th class="calc-num">Aantal</th><th class="calc-num">Inkoop €/stuk</th><th class="calc-num">Inkoop totaal</th><th class="calc-num">Marge ×</th><th class="calc-num">Verkoop ex. btw</th><th></th></tr></thead>
+        <thead><tr><th>Omschrijving</th><th class="calc-num">Aantal</th><th class="calc-num">Inkoop €/stuk</th><th class="calc-num">Inkoop totaal</th><th class="calc-num">Marge ×</th><th class="calc-num">Verkoop ex. btw</th><th></th></tr></thead>
         <tbody>${matBody}</tbody>
-        <tfoot><tr class="calc-tot"><td colspan="4">Totaal materialen</td><td class="calc-num" id="mft-ink-${c}">${eur(t.mInk)}</td><td></td><td class="calc-num" id="mft-verk-${c}">${eur(t.mVerk)}</td><td></td></tr></tfoot>
+        <tfoot><tr class="calc-tot"><td colspan="3">Totaal materialen</td><td class="calc-num" id="mft-ink-${c}">${eur(t.mInk)}</td><td></td><td class="calc-num" id="mft-verk-${c}">${eur(t.mVerk)}</td><td></td></tr></tfoot>
       </table></div>
       <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddMat('${key}')">+ materiaal</button>`;
 
@@ -11059,6 +11313,20 @@ function activiteitOpen(force){
         <span style="font-size:12px;color:var(--text-dim)">Offertebedrag (ex. btw)</span>
         <span style="font-family:var(--serif);font-size:22px;font-weight:700;color:var(--green)" id="calc-bigtot-${c}">${eur(t.offertebedrag)}</span>
       </div>
+      <div class="calc-actions">
+        <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:3px">
+          Wat wordt het? <span style="color:var(--text-faint)">— beschrijving voor de offerteregels</span>
+          ${o.mail_context?`<span class="calc-mailchip" title="${esc((o.mail_context.from||'')+' — '+(o.mail_context.subject||''))}">📧 ${esc((o.mail_context.subject||'mail').slice(0,42))}<button class="btn btn-xs btn-secondary" style="margin-left:5px" onclick="calcOntkoppelMail('${key}')">×</button></span>`:''}
+        </label>
+        <textarea id="calc-otekst-${c}" class="calc-inp" style="width:100%;min-height:46px;resize:vertical;font-family:inherit" placeholder="bv. 'Maatwerk eikenhouten dressoir met 3 lades en push-to-open, in olie afgewerkt'" onchange="calcSetMeta('${key}','offerte_tekst',this.value)">${esc((o.meta&&o.meta.offerte_tekst)||'')}</textarea>
+        <div class="calc-btnrow">
+          <button class="btn btn-sm btn-secondary" onclick="calcKoppelMail('${key}')" title="Koppel een mail zodat de offertetekst context uit die mail meekrijgt">📧 Mail koppelen</button>
+          <span style="flex:1"></span>
+          <button class="btn btn-sm btn-secondary" onclick="calcMaakProjectVoorOfferte('${key}')">${proj?'💾 Opslaan in projectmap':'+ Project aanmaken'}</button>
+          <button class="btn btn-sm btn-primary" onclick="calcMaakOfferteMB('${key}')">📄 Offerte aanmaken in Moneybird</button>
+        </div>
+      </div>
+      <div id="calc-mbprev-${c}">${_mbPreviewHtml(key)}</div>
       <div id="calc-status-${c}" style="font-size:11px;min-height:16px;margin-top:0.3rem"></div>
       ${defaultsPaneel(key)}
       <p style="font-size:10px;color:var(--text-faint);margin:0.5rem 0 0">Inkoopprijzen/marges staan privé op SharePoint — nooit in de publieke repo. "🔍 prijs" vult omschrijving + artikelnummer uit de interiorcad-materialen-DB. <b>Let op:</b> de DB-prijs is <span style="color:var(--gold)">indicatief uit Vectorworks</span> (geen echte inkoop) en wordt enkel als ⚠-hint getoond — vul de werkelijke inkoop uit de factuur. Fase 2 koppelt dit live aan inkoop.db/voorraad.</p>
@@ -11088,6 +11356,20 @@ function activiteitOpen(force){
   .calc-tbl .calc-num{text-align:right;font-family:var(--mono)}
   .calc-tbl th.calc-num{text-align:right}
   .calc-tbl tfoot .calc-tot td{border-top:2px solid var(--border);border-bottom:none;padding:7px 6px;font-weight:700;background:var(--surface-sunken)}
+  .calc-tbl td.calc-num input{text-align:right}
+  .calc-rand{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;font-size:11px;color:var(--text-dim)}
+  .calc-rand-t{font-size:9px;text-transform:uppercase;letter-spacing:.04em;padding:1px 5px;border-radius:8px;background:rgba(160,130,60,.14);color:var(--gold)}
+  .calc-actions{margin-top:.9rem;padding:.8rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-sunken,#f6f7f6)}
+  .calc-btnrow{display:flex;align-items:center;gap:8px;margin-top:.6rem;flex-wrap:wrap}
+  .calc-mailchip{display:inline-flex;align-items:center;margin-left:8px;padding:1px 6px;border-radius:10px;background:rgba(42,74,56,.10);color:var(--green);font-size:10px;font-weight:600}
+  .calc-mbprev{margin-top:.8rem;padding:.8rem;border:1px solid var(--green);border-radius:8px;background:var(--n-0,#fff)}
+  .calc-mbprev-h{font-weight:700;font-size:12px;color:var(--green);margin-bottom:.5rem}
+  .calc-mbprev-tekst{font-style:italic;color:var(--text);background:var(--surface-sunken,#f6f7f6);border-radius:6px;padding:7px 10px;margin-bottom:.6rem;font-size:12px;white-space:pre-wrap}
+  .calc-mbprev-tbl{width:100%;border-collapse:collapse;font-size:12px}
+  .calc-mbprev-tbl td{padding:4px 6px;border-bottom:1px solid var(--surface-sunken)}
+  .calc-mbprev-tbl .calc-num{text-align:right;font-family:var(--mono)}
+  .calc-mbprev-tbl tfoot td{border-top:2px solid var(--border);border-bottom:none;padding:6px}
+  .calc-mbprev-chat{display:flex;gap:6px;margin-top:.6rem}
 </style>
 <script src="track.js"></script>
 

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — feat(offerte-calc): echte materiaal-dropdown (voorraad + catalogus)
+- Commit: `96e1ab4` | Auteur: Bart Witte
+
 ## 2026-06-28 — fix(offerte-calc): +materiaal/+uur-regel niet opgegeten door re-render
 - Commit: `7765da3` | Auteur: Bart Witte
 
