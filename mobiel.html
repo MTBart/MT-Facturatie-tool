@@ -1435,12 +1435,13 @@ function closeCamera() {
    ===================================================================== */
 let _feTarget = null, _feCb = null, _feCtx = null, _feDraw = false;
 let _feColor = "#e23", _feUndo = [], _feMode = "draw";
-let _feMaatDraw = false, _feMaatStart = null, _feBase = null;  // maatlijn-modus
+// maatlijn = 2 stappen: sleep 1 = span tussen 2 verankerde punten, sleep 2 = lijn loodrecht wegschuiven
+let _feBase = null, _feMaatDrag = false, _feMaatPhase = 0, _feMaatA = null, _feMaatB = null;
 
 function openFotoEdit(photo, cb) {
   if (!photo) return;
   _feTarget = photo; _feCb = cb || null; _feUndo = []; _feColor = "#e23"; _feMode = "draw";
-  _feMaatDraw = false; _feMaatStart = null; _feBase = null;
+  _feBase = null; _feMaatDrag = false; _feMaatPhase = 0; _feMaatA = null; _feMaatB = null;
   // tekst-/maat-tool resetten
   const tb = document.getElementById("feTextBar"); if (tb) tb.style.display = "none";
   const tbtn = document.getElementById("feTextBtn"); if (tbtn) tbtn.style.background = "#333";
@@ -1508,31 +1509,78 @@ function _feRoundRect(x, y, w, h, r) {
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
-function _feDrawDim(x1, y1, x2, y2, label) {
+// Maat-label op een donkere chip (leesbaar op elke foto).
+function _feChip(mx, my, label) {
   const ctx = _feCtx;
+  const fs = Math.max(18, Math.round(ctx.canvas.width / 26));
+  ctx.save();
+  ctx.font = `bold ${fs}px -apple-system, "Segoe UI", Roboto, sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const tw = ctx.measureText(label).width, padX = fs * 0.45, padY = fs * 0.32;
+  ctx.fillStyle = "rgba(0,0,0,.78)";
+  _feRoundRect(mx - tw / 2 - padX, my - fs / 2 - padY, tw + padX * 2, fs + padY * 2, fs * 0.3);
+  ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.fillText(label, mx, my);
+  ctx.restore();
+}
+// Stap 1: lichte hulplijn met eind-tikjes zodat de 2 aangrijppunten zichtbaar zijn.
+function _feDrawSpanGuide(ax, ay, bx, by) {
+  const ctx = _feCtx;
+  const lw = Math.max(2, Math.round(ctx.canvas.width / 320));
+  const t = Math.max(8, Math.round(ctx.canvas.width / 90));
+  const len = Math.hypot(bx - ax, by - ay) || 1;
+  const nx = -(by - ay) / len, ny = (bx - ax) / len;
+  ctx.save();
+  ctx.strokeStyle = _feColor; ctx.lineWidth = lw; ctx.lineCap = "round";
+  ctx.setLineDash([t * 0.6, t * 0.5]);
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(ax - nx * t, ay - ny * t); ctx.lineTo(ax + nx * t, ay + ny * t);
+  ctx.moveTo(bx - nx * t, by - ny * t); ctx.lineTo(bx + nx * t, by + ny * t);
+  ctx.stroke();
+  ctx.restore();
+}
+// Loodrechte afstand (met teken) van punt p tot de A-B lijn — bepaalt de offset.
+function _feMaatOff(p) {
+  const ax = _feMaatA.x, ay = _feMaatA.y;
+  const dx = _feMaatB.x - ax, dy = _feMaatB.y - ay, len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  return (p.x - ax) * nx + (p.y - ay) * ny;
+}
+// Stap 2: maatlijn op `off` loodrecht weg, met hulplijntjes naar de verankerde punten.
+function _feDrawDimOffset(ax, ay, bx, by, off, label) {
+  const ctx = _feCtx;
+  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;                 // normaal (loodrecht)
+  const a2x = ax + nx * off, a2y = ay + ny * off;      // dimensielijn-uiteinden
+  const b2x = bx + nx * off, b2y = by + ny * off;
   const lw = Math.max(3, Math.round(ctx.canvas.width / 220));
   const ah = Math.max(14, Math.round(ctx.canvas.width / 55));
-  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const gap = Math.max(2, Math.round(ctx.canvas.width / 300));
+  const ext = ah * 0.5;
   ctx.save();
   ctx.strokeStyle = _feColor; ctx.fillStyle = _feColor;
-  ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.lineJoin = "round";
-  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-  _feArrow(x1, y1, ang + Math.PI, ah);   // pijl naar buiten bij start
-  _feArrow(x2, y2, ang, ah);             // pijl naar buiten bij eind
-  ctx.restore();
-  if (label) {
-    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-    const fs = Math.max(18, Math.round(ctx.canvas.width / 26));
-    ctx.save();
-    ctx.font = `bold ${fs}px -apple-system, "Segoe UI", Roboto, sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    const tw = ctx.measureText(label).width, padX = fs * 0.45, padY = fs * 0.32;
-    ctx.fillStyle = "rgba(0,0,0,.78)";
-    _feRoundRect(mx - tw / 2 - padX, my - fs / 2 - padY, tw + padX * 2, fs + padY * 2, fs * 0.3);
-    ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.fillText(label, mx, my);
-    ctx.restore();
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  // hulplijnen (witness) — alleen als de lijn echt is weggeschoven
+  if (Math.abs(off) > 1) {
+    const sgn = off >= 0 ? 1 : -1;
+    ctx.lineWidth = Math.max(2, Math.round(lw * 0.8));
+    ctx.beginPath();
+    ctx.moveTo(ax + nx * gap * sgn, ay + ny * gap * sgn);
+    ctx.lineTo(ax + nx * (off + sgn * ext), ay + ny * (off + sgn * ext));
+    ctx.moveTo(bx + nx * gap * sgn, by + ny * gap * sgn);
+    ctx.lineTo(bx + nx * (off + sgn * ext), by + ny * (off + sgn * ext));
+    ctx.stroke();
   }
+  // dimensielijn + pijlpunten naar buiten
+  ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.moveTo(a2x, a2y); ctx.lineTo(b2x, b2y); ctx.stroke();
+  const ang = Math.atan2(b2y - a2y, b2x - a2x);
+  _feArrow(a2x, a2y, ang + Math.PI, ah);
+  _feArrow(b2x, b2y, ang, ah);
+  ctx.restore();
+  if (label) _feChip((a2x + b2x) / 2, (a2y + b2y) / 2, label);
 }
 function _feBind(canvas) {
   canvas.onpointerdown = (e) => {
@@ -1547,12 +1595,20 @@ function _feBind(canvas) {
       return;   // geen vrij tekenen in tekst-modus
     }
     if (_feMode === "maat") {
-      _fePushUndo();
-      _feMaatStart = p;
-      try { _feBase = _feCtx.getImageData(0, 0, canvas.width, canvas.height); } catch (x) { _feBase = null; }
-      _feMaatDraw = true;
+      if (_feMaatPhase === 0) {
+        // stap 1: span tussen de 2 aangrijppunten — basis-snapshot voor rubber-band + undo
+        _fePushUndo();
+        try { _feBase = _feCtx.getImageData(0, 0, canvas.width, canvas.height); } catch (x) { _feBase = null; }
+        _feMaatA = p; _feMaatB = p;
+      } else {
+        // stap 2: offset bepalen — base blijft (geen extra undo); meteen tekenen zodat tikken ook werkt
+        if (_feBase) _feCtx.putImageData(_feBase, 0, 0);
+        const inp = document.getElementById("feTextInput");
+        _feDrawDimOffset(_feMaatA.x, _feMaatA.y, _feMaatB.x, _feMaatB.y, _feMaatOff(p), inp ? inp.value.trim() : "");
+      }
+      _feMaatDrag = true;
       canvas.setPointerCapture(e.pointerId);
-      return;   // sleep = maatlijn, geen vrij tekenen
+      return;
     }
     _fePushUndo();
     _feDraw = true;
@@ -1563,19 +1619,44 @@ function _feBind(canvas) {
   canvas.onpointermove = (e) => {
     if (!_feCtx) return;
     const p = _fePos(canvas, e);
-    if (_feMaatDraw) {
-      if (_feBase) _feCtx.putImageData(_feBase, 0, 0);   // rubber-band: herteken vanaf basis
-      const inp = document.getElementById("feTextInput");
-      _feDrawDim(_feMaatStart.x, _feMaatStart.y, p.x, p.y, inp ? inp.value.trim() : "");
+    if (_feMode === "maat" && _feMaatDrag) {
+      if (_feBase) _feCtx.putImageData(_feBase, 0, 0);   // rubber-band vanaf basis
+      if (_feMaatPhase === 0) {
+        _feMaatB = p;
+        _feDrawSpanGuide(_feMaatA.x, _feMaatA.y, p.x, p.y);
+      } else {
+        const inp = document.getElementById("feTextInput");
+        _feDrawDimOffset(_feMaatA.x, _feMaatA.y, _feMaatB.x, _feMaatB.y, _feMaatOff(p), inp ? inp.value.trim() : "");
+      }
       return;
     }
     if (!_feDraw) return;
     _feCtx.lineTo(p.x, p.y); _feCtx.stroke();
   };
-  canvas.onpointerup = canvas.onpointercancel = () => { _feDraw = false; _feMaatDraw = false; _feBase = null; };
+  canvas.onpointerup = canvas.onpointercancel = () => {
+    _feDraw = false;
+    if (_feMode === "maat" && _feMaatDrag) {
+      _feMaatDrag = false;
+      if (_feMaatPhase === 0) {
+        const span = Math.hypot(_feMaatB.x - _feMaatA.x, _feMaatB.y - _feMaatA.y);
+        if (span > Math.max(8, _feCtx.canvas.width / 120)) {
+          _feMaatPhase = 1;   // span staat → nu omhoog/omlaag wegschuiven
+          if (window.showToast) showToast("Sleep nu omhoog/omlaag om de maatlijn te verplaatsen");
+        } else {
+          if (_feBase) _feCtx.putImageData(_feBase, 0, 0);   // te kort: annuleer
+          _feBase = null;
+        }
+      } else {
+        _feMaatPhase = 0; _feBase = null;   // maatlijn vastgelegd
+      }
+    }
+  };
 }
 // Eén modus-schakelaar voor tekst én maat; opnieuw tikken = terug naar tekenen.
 function _feSetMode(m) {
+  // half-gezette maatlijn opruimen bij van-modus-wisselen
+  if (_feCtx && _feBase) { try { _feCtx.putImageData(_feBase, 0, 0); } catch (x) {} }
+  _feMaatPhase = 0; _feMaatDrag = false; _feBase = null;
   _feMode = (_feMode === m) ? "draw" : m;
   const bar = document.getElementById("feTextBar");
   const inp = document.getElementById("feTextInput");
@@ -1601,6 +1682,7 @@ function fotoEditKleur(kleur, btn) {
   if (btn) btn.classList.add("active");
 }
 function fotoEditUndo() {
+  _feMaatPhase = 0; _feMaatDrag = false; _feBase = null;   // maatlijn-fase resetten
   if (!_feCtx || !_feUndo.length) return;
   _feCtx.putImageData(_feUndo.pop(), 0, 0);
 }
@@ -1608,6 +1690,7 @@ function closeFotoEdit() {
   const modal = document.getElementById("fotoEditModal");
   if (modal) modal.style.display = "none";
   _feTarget = null; _feCb = null; _feCtx = null; _feUndo = [];
+  _feMaatPhase = 0; _feMaatDrag = false; _feBase = null;
 }
 function saveFotoEdit() {
   const canvas = document.getElementById("fotoEditCanvas");
