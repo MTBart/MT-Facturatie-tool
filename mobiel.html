@@ -1348,6 +1348,14 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
    ===================================================================== */
 const WORKER = 'https://mt-claude-proxy.bart-a12.workers.dev';
 
+/* Service worker: network-first, zodat Android altijd de nieuwste versie
+   pakt (geen vastzittende cache meer) + offline-fallback. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
 /* =====================================================================
    ═══ IN-APP CAMERA (getUserMedia) ═══
    Werkt op telefoon én Windows-tablet, waar de <input capture> door de

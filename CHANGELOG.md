@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-30 — App: camera-review krijgt 3 keuzes (akkoord / verlaten / opnieuw)
+- Commit: `c4cdf7d` | Auteur: Bart Witte
+
 ## 2026-06-30 — App: één foto per camerasessie — opslaan keert terug naar verslag
 - Commit: `555b8e7` | Auteur: Bart Witte
 
