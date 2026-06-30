@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-30 — App: WhatsApp-foto-flow + gedeelde foto-bewerker met teken- en tekst-tool
+- Commit: `c66d8d6` | Auteur: Bart Witte
+
 ## 2026-06-28 — offerte-calc: Van Hoecke vervangt Blum in leverancier-keuze
 - Commit: `687c6ca` | Auteur: Bart Witte
 

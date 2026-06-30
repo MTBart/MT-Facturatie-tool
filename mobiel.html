@@ -1321,12 +1321,13 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <canvas id="fotoEditCanvas" style="max-width:100%;max-height:100%;touch-action:none;border-radius:8px"></canvas>
   </div>
   <div style="display:flex;gap:8px;align-items:center;padding:8px 14px;background:#111">
-    <span style="color:#fff;font-size:12px;margin-right:auto">✏️ Teken of plaats tekst</span>
+    <span style="color:#fff;font-size:12px;margin-right:auto">✏️ Teken · tekst · maat</span>
     <button class="fe-kleur active" style="background:#e23" onclick="fotoEditKleur('#e23',this)"></button>
     <button class="fe-kleur" style="background:#f4c000" onclick="fotoEditKleur('#f4c000',this)"></button>
     <button class="fe-kleur" style="background:#19c08a" onclick="fotoEditKleur('#19c08a',this)"></button>
     <button class="fe-kleur" style="background:#ffffff" onclick="fotoEditKleur('#ffffff',this)"></button>
     <button id="feTextBtn" onclick="fotoEditTextMode()" style="background:#333;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:15px;font-weight:700;margin-left:6px">T</button>
+    <button id="feMaatBtn" onclick="fotoEditMaatMode()" style="background:#333;color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:15px;margin-left:4px">📏</button>
     <button onclick="fotoEditUndo()" style="background:#333;color:#fff;border:none;border-radius:8px;padding:7px 11px;font-size:15px">↶</button>
   </div>
   <!-- Tekst-tool: typ tekst, tik dan op de foto om 'm te plaatsen (meerdere mag) -->
@@ -1434,13 +1435,16 @@ function closeCamera() {
    ===================================================================== */
 let _feTarget = null, _feCb = null, _feCtx = null, _feDraw = false;
 let _feColor = "#e23", _feUndo = [], _feMode = "draw";
+let _feMaatDraw = false, _feMaatStart = null, _feBase = null;  // maatlijn-modus
 
 function openFotoEdit(photo, cb) {
   if (!photo) return;
   _feTarget = photo; _feCb = cb || null; _feUndo = []; _feColor = "#e23"; _feMode = "draw";
-  // tekst-tool resetten
+  _feMaatDraw = false; _feMaatStart = null; _feBase = null;
+  // tekst-/maat-tool resetten
   const tb = document.getElementById("feTextBar"); if (tb) tb.style.display = "none";
   const tbtn = document.getElementById("feTextBtn"); if (tbtn) tbtn.style.background = "#333";
+  const mbtn = document.getElementById("feMaatBtn"); if (mbtn) mbtn.style.background = "#333";
   const tin = document.getElementById("feTextInput"); if (tin) tin.value = "";
   const modal = document.getElementById("fotoEditModal");
   const canvas = document.getElementById("fotoEditCanvas");
@@ -1486,6 +1490,50 @@ function _feDrawText(txt, x, y) {
   _feCtx.fillText(txt, x, y);
   _feCtx.lineWidth = Math.max(3, Math.round(_feCtx.canvas.width / 200));  // terug voor tekenen
 }
+// Maatlijn: hoofdlijn + pijlpunten aan beide kanten + maat-label op een donkere chip.
+function _feArrow(x, y, ang, len) {
+  const ctx = _feCtx, a = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y); ctx.lineTo(x - len * Math.cos(ang - a), y - len * Math.sin(ang - a));
+  ctx.moveTo(x, y); ctx.lineTo(x - len * Math.cos(ang + a), y - len * Math.sin(ang + a));
+  ctx.stroke();
+}
+function _feRoundRect(x, y, w, h, r) {
+  const ctx = _feCtx;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function _feDrawDim(x1, y1, x2, y2, label) {
+  const ctx = _feCtx;
+  const lw = Math.max(3, Math.round(ctx.canvas.width / 220));
+  const ah = Math.max(14, Math.round(ctx.canvas.width / 55));
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  ctx.save();
+  ctx.strokeStyle = _feColor; ctx.fillStyle = _feColor;
+  ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  _feArrow(x1, y1, ang + Math.PI, ah);   // pijl naar buiten bij start
+  _feArrow(x2, y2, ang, ah);             // pijl naar buiten bij eind
+  ctx.restore();
+  if (label) {
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const fs = Math.max(18, Math.round(ctx.canvas.width / 26));
+    ctx.save();
+    ctx.font = `bold ${fs}px -apple-system, "Segoe UI", Roboto, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const tw = ctx.measureText(label).width, padX = fs * 0.45, padY = fs * 0.32;
+    ctx.fillStyle = "rgba(0,0,0,.78)";
+    _feRoundRect(mx - tw / 2 - padX, my - fs / 2 - padY, tw + padX * 2, fs + padY * 2, fs * 0.3);
+    ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.fillText(label, mx, my);
+    ctx.restore();
+  }
+}
 function _feBind(canvas) {
   canvas.onpointerdown = (e) => {
     if (!_feCtx) return;
@@ -1498,6 +1546,14 @@ function _feBind(canvas) {
       _feDrawText(txt, p.x, p.y);
       return;   // geen vrij tekenen in tekst-modus
     }
+    if (_feMode === "maat") {
+      _fePushUndo();
+      _feMaatStart = p;
+      try { _feBase = _feCtx.getImageData(0, 0, canvas.width, canvas.height); } catch (x) { _feBase = null; }
+      _feMaatDraw = true;
+      canvas.setPointerCapture(e.pointerId);
+      return;   // sleep = maatlijn, geen vrij tekenen
+    }
     _fePushUndo();
     _feDraw = true;
     _feCtx.strokeStyle = _feColor;
@@ -1505,20 +1561,39 @@ function _feBind(canvas) {
     canvas.setPointerCapture(e.pointerId);
   };
   canvas.onpointermove = (e) => {
-    if (!_feDraw || !_feCtx) return;
+    if (!_feCtx) return;
     const p = _fePos(canvas, e);
+    if (_feMaatDraw) {
+      if (_feBase) _feCtx.putImageData(_feBase, 0, 0);   // rubber-band: herteken vanaf basis
+      const inp = document.getElementById("feTextInput");
+      _feDrawDim(_feMaatStart.x, _feMaatStart.y, p.x, p.y, inp ? inp.value.trim() : "");
+      return;
+    }
+    if (!_feDraw) return;
     _feCtx.lineTo(p.x, p.y); _feCtx.stroke();
   };
-  canvas.onpointerup = canvas.onpointercancel = () => { _feDraw = false; };
+  canvas.onpointerup = canvas.onpointercancel = () => { _feDraw = false; _feMaatDraw = false; _feBase = null; };
 }
-function fotoEditTextMode() {
-  _feMode = _feMode === "text" ? "draw" : "text";
+// Eén modus-schakelaar voor tekst én maat; opnieuw tikken = terug naar tekenen.
+function _feSetMode(m) {
+  _feMode = (_feMode === m) ? "draw" : m;
   const bar = document.getElementById("feTextBar");
-  const btn = document.getElementById("feTextBtn");
-  if (bar) bar.style.display = _feMode === "text" ? "flex" : "none";
-  if (btn) btn.style.background = _feMode === "text" ? "#2ea043" : "#333";
-  if (_feMode === "text") { const inp = document.getElementById("feTextInput"); if (inp) inp.focus(); }
+  const inp = document.getElementById("feTextInput");
+  const tbtn = document.getElementById("feTextBtn");
+  const mbtn = document.getElementById("feMaatBtn");
+  const showBar = (_feMode === "text" || _feMode === "maat");
+  if (bar) bar.style.display = showBar ? "flex" : "none";
+  if (tbtn) tbtn.style.background = _feMode === "text" ? "#2ea043" : "#333";
+  if (mbtn) mbtn.style.background = _feMode === "maat" ? "#2ea043" : "#333";
+  if (inp) {
+    inp.placeholder = _feMode === "maat"
+      ? "Maat, bijv. 1200 mm — sleep dan op de foto…"
+      : "Typ tekst, tik dan op de foto…";
+    if (showBar) inp.focus();
+  }
 }
+function fotoEditTextMode() { _feSetMode("text"); }
+function fotoEditMaatMode() { _feSetMode("maat"); }
 function fotoEditKleur(kleur, btn) {
   _feColor = kleur;
   if (_feCtx) _feCtx.strokeStyle = kleur;
