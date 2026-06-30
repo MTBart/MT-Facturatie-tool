@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-30 — App: crash-bestendige losse opname (IndexedDB) — nooit meer foto's kwijt
+- Commit: `3a33c76` | Auteur: Bart Witte
+
 ## 2026-06-30 — App: camera-wisselknop + auto-achtercamera op tablet
 - Commit: `ec6d782` | Auteur: Bart Witte
 

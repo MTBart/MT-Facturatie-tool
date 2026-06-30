@@ -897,6 +897,12 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <button class="btn btn-secondary btn-full" style="margin-bottom:4px;min-height:44px" onclick="npReturnToOplever=true;openNewProject()">➕ Nieuw project (start meteen een timer)</button>
       <button class="btn btn-secondary btn-full" style="margin-bottom:4px;min-height:44px" onclick="openVoorOpname()">📦 Losse opname (nog geen project)</button>
 
+      <!-- LOPENDE LOSSE OPNAMES: blijven staan tot de cockpit ze verwerkt heeft -->
+      <div id="voLopendWrap" style="display:none;margin-bottom:6px">
+        <div class="section-head" style="margin-top:10px">📋 Lopende losse opnames <span style="font-weight:400;color:var(--text-faint);font-size:12px">— tot ze in de cockpit verwerkt zijn</span></div>
+        <div id="voLopendList"></div>
+      </div>
+
       <!-- VOOR-OPNAME: items vastleggen zonder project; later in de cockpit herverwijzen -->
       <div id="voorOpnameWrap" style="display:none">
         <div class="section-head" style="margin-top:14px">📦 Losse opname — komt in <b>Voor-opname</b> op SharePoint</div>
@@ -1691,17 +1697,10 @@ function _feBind(canvas) {
       return;   // geen vrij tekenen in tekst-modus
     }
     if (_feMode === "maat") {
-      if (_feMaatPhase === 0) {
-        // stap 1: span tussen de 2 aangrijppunten — basis-snapshot voor rubber-band + undo
-        _fePushUndo();
-        try { _feBase = _feCtx.getImageData(0, 0, canvas.width, canvas.height); } catch (x) { _feBase = null; }
-        _feMaatA = p; _feMaatB = p;
-      } else {
-        // stap 2: offset bepalen — base blijft (geen extra undo); meteen tekenen zodat tikken ook werkt
-        if (_feBase) _feCtx.putImageData(_feBase, 0, 0);
-        const inp = document.getElementById("feTextInput");
-        _feDrawDimOffset(_feMaatA.x, _feMaatA.y, _feMaatB.x, _feMaatB.y, _feMaatOff(p), inp ? inp.value.trim() : "");
-      }
+      // één sleep: van punt A naar punt B = de maatlijn. Loslaten = vast.
+      _fePushUndo();
+      try { _feBase = _feCtx.getImageData(0, 0, canvas.width, canvas.height); } catch (x) { _feBase = null; }
+      _feMaatA = p; _feMaatB = p;
       _feMaatDrag = true;
       canvas.setPointerCapture(e.pointerId);
       return;
@@ -1717,13 +1716,9 @@ function _feBind(canvas) {
     const p = _fePos(canvas, e);
     if (_feMode === "maat" && _feMaatDrag) {
       if (_feBase) _feCtx.putImageData(_feBase, 0, 0);   // rubber-band vanaf basis
-      if (_feMaatPhase === 0) {
-        _feMaatB = p;
-        _feDrawSpanGuide(_feMaatA.x, _feMaatA.y, p.x, p.y);
-      } else {
-        const inp = document.getElementById("feTextInput");
-        _feDrawDimOffset(_feMaatA.x, _feMaatA.y, _feMaatB.x, _feMaatB.y, _feMaatOff(p), inp ? inp.value.trim() : "");
-      }
+      _feMaatB = p;
+      const inp = document.getElementById("feTextInput");
+      _feDrawDimOffset(_feMaatA.x, _feMaatA.y, p.x, p.y, 0, inp ? inp.value.trim() : "");
       return;
     }
     if (!_feDraw) return;
@@ -1733,18 +1728,12 @@ function _feBind(canvas) {
     _feDraw = false;
     if (_feMode === "maat" && _feMaatDrag) {
       _feMaatDrag = false;
-      if (_feMaatPhase === 0) {
-        const span = Math.hypot(_feMaatB.x - _feMaatA.x, _feMaatB.y - _feMaatA.y);
-        if (span > Math.max(8, _feCtx.canvas.width / 120)) {
-          _feMaatPhase = 1;   // span staat → nu omhoog/omlaag wegschuiven
-          if (window.showToast) showToast("Sleep nu omhoog/omlaag om de maatlijn te verplaatsen");
-        } else {
-          if (_feBase) _feCtx.putImageData(_feBase, 0, 0);   // te kort: annuleer
-          _feBase = null;
-        }
-      } else {
-        _feMaatPhase = 0; _feBase = null;   // maatlijn vastgelegd
+      const span = Math.hypot(_feMaatB.x - _feMaatA.x, _feMaatB.y - _feMaatA.y);
+      if (span <= Math.max(8, _feCtx.canvas.width / 120)) {
+        if (_feBase) _feCtx.putImageData(_feBase, 0, 0);   // te kort: annuleer
       }
+      // anders staat de maatlijn er al → vastgelegd
+      _feBase = null;
     }
   };
 }
@@ -1764,7 +1753,7 @@ function _feSetMode(m) {
   if (mbtn) mbtn.style.background = _feMode === "maat" ? "#2ea043" : "#333";
   if (inp) {
     inp.placeholder = _feMode === "maat"
-      ? "Maat, bijv. 1200 mm — sleep dan op de foto…"
+      ? "Maat (bijv. 1200 mm) — sleep dan over de maat, loslaten = klaar"
       : "Typ tekst, tik dan op de foto…";
     if (showBar) inp.focus();
   }
@@ -2450,6 +2439,7 @@ async function loadRealProjects() {
     renderPickerList(allProjects());
     renderProjectCards();
     populateOpleverSelect();
+    renderVoorOpnameLijst(true);   // lopende losse opnames ophalen nu we ingelogd zijn
     showToast(`✓ ${REAL_PROJECTS.length} projecten geladen van Toggl 2.0`);
   } catch(e) {
     console.warn('loadRealProjects fout:', e.message);
@@ -2704,6 +2694,7 @@ function switchTab(name, btn) {
   if (name === "capture") renderCaptureProject();
   if (name === "feedback") renderFbList();
   if (name === "voorraad") initVoorraadApp();
+  if (name === "oplevering") renderVoorOpnameLijst();
 }
 
 /* =====================================================================
@@ -4044,6 +4035,41 @@ function closeVoorOpname() {
   const wrap = document.getElementById('voorOpnameWrap'); if (wrap) wrap.style.display = 'none';
 }
 
+/* Lopende losse opnames: lezen mt_vooropname.json en tonen wat de cockpit nog
+   niet verwerkt heeft. Blijft staan in de Rapportage-tab tot status='verwerkt'.
+   Na verwerking koppelt de cockpit de foto's aan het project (inzage via project). */
+let _voLopendCache = null;
+async function renderVoorOpnameLijst(forceFetch) {
+  const wrap = document.getElementById('voLopendWrap');
+  const list = document.getElementById('voLopendList');
+  if (!wrap || !list) return;
+  let idx = _voLopendCache;
+  if (forceFetch || !idx) {
+    try { idx = (await _SP.read('mt_vooropname.json')) || []; _voLopendCache = idx; }
+    catch (e) { idx = idx || []; }
+  }
+  const open = (idx || []).filter(b => (b.status || 'nieuw') !== 'verwerkt');
+  if (!open.length) { wrap.style.display = 'none'; list.innerHTML = ''; return; }
+  wrap.style.display = 'block';
+  list.innerHTML = open.map(b => {
+    let dt = '';
+    if (b.datum) { try { dt = new Date(b.datum).toLocaleDateString('nl-NL', {day:'2-digit',month:'2-digit'}); } catch(e){} }
+    const n = b.aantal || 0;
+    const klant = escHtml(b.klant || b.klantCode || 'onbekend');
+    const not = b.notitie ? escHtml(b.notitie) : '';
+    const badge = (b.status === 'bezig')
+      ? '<span style="color:#d6a93a">● bezig in cockpit</span>'
+      : '<span style="color:var(--text-faint)">● wacht op verwerking</span>';
+    return `<div class="foto-row" style="align-items:flex-start;cursor:default">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">${klant}</div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:1px">${dt ? dt+' · ' : ''}${n} foto${n===1?'':"'s"} · ${badge}</div>
+        ${not ? `<div style="font-size:12px;color:var(--text-faint);margin-top:3px">${not}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function voKlantChange() {
   const ks = document.getElementById('voKlantSelect');
   const vw = document.getElementById('voKlantVrijWrap');
@@ -4174,6 +4200,7 @@ async function uploadVoorOpname() {
     await _voIdbDel(); _voDraft = null;   // concept is veilig geüpload → lokaal wissen
     const rb = document.getElementById('voRestoreBanner'); if (rb) rb.style.display = 'none';
     renderVoorOpname();
+    _voLopendCache = null; renderVoorOpnameLijst(true);   // nieuwe opname meteen in de lopend-lijst
     const nn = document.getElementById('voNotitie'); if (nn) nn.value = '';
     const res = document.getElementById('voResult');
     if (res) {
