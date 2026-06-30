@@ -851,8 +851,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>addPhoto(f))">📷 Nieuwe foto</button>
       <div class="photo-input-wrap" style="display:block;margin-top:8px">
         <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
-          <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Bestand kiezen</button>
-          <input type="file" accept="image/*" capture="environment" onchange="addPhoto(this)" multiple>
+          <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Uit album of bestand</button>
+          <input type="file" accept="image/*" onchange="addPhoto(this)" multiple>
         </label>
       </div>
     </div>
@@ -923,8 +923,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>voFoto(f))">📷 Nieuwe foto</button>
         <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
-            <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Bestand kiezen</button>
-            <input type="file" accept="image/*" capture="environment" onchange="voFoto(this)" multiple>
+            <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Uit album of bestand</button>
+            <input type="file" accept="image/*" onchange="voFoto(this)" multiple>
           </label>
         </div>
         <div id="voFotoList" style="margin-top:10px"></div>
@@ -948,8 +948,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>inmFoto(f))">📷 Nieuwe foto</button>
         <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
-            <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Bestand kiezen</button>
-            <input type="file" accept="image/*" capture="environment" onchange="inmFoto(this)" multiple>
+            <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Uit album of bestand</button>
+            <input type="file" accept="image/*" onchange="inmFoto(this)" multiple>
           </label>
         </div>
         <div id="inmFotoList" style="margin-top:10px"></div>
@@ -969,8 +969,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <button class="btn btn-primary btn-full" onclick="openCamera(f=>oplFoto('voor',f))">📷 Camera — hoe troffen we het aan</button>
         <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
-            <button class="btn btn-secondary btn-full" style="pointer-events:none">📁 Bestand kiezen</button>
-            <input type="file" accept="image/*" capture="environment" onchange="oplFoto('voor',this)" multiple>
+            <button class="btn btn-secondary btn-full" style="pointer-events:none">📁 Uit album of bestand</button>
+            <input type="file" accept="image/*" onchange="oplFoto('voor',this)" multiple>
           </label>
         </div>
         <div class="section-head" style="margin-top:14px">📷 Opgeleverd resultaat</div>
@@ -978,8 +978,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <button class="btn btn-primary btn-full" onclick="openCamera(f=>oplFoto('na',f))">📷 Camera — zoals opgeleverd</button>
         <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
-            <button class="btn btn-secondary btn-full" style="pointer-events:none">📁 Bestand kiezen</button>
-            <input type="file" accept="image/*" capture="environment" onchange="oplFoto('na',this)" multiple>
+            <button class="btn btn-secondary btn-full" style="pointer-events:none">📁 Uit album of bestand</button>
+            <input type="file" accept="image/*" onchange="oplFoto('na',this)" multiple>
           </label>
         </div>
         <div style="margin-top:12px">
@@ -1379,7 +1379,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   </div>
   <!-- Tekst-tool: typ tekst, tik dan op de foto om 'm te plaatsen (meerdere mag) -->
   <div id="feTextBar" style="display:none;gap:8px;align-items:center;padding:8px 14px;background:#1a1a1a">
-    <input id="feTextInput" type="text" placeholder="Typ tekst, tik dan op de foto…" autocomplete="off"
+    <input id="feTextInput" type="text" placeholder="Typ tekst, tik dan op de foto…" autocomplete="off" oninput="_feMaatInput()"
       style="flex:1;min-width:0;font-size:15px;padding:9px 10px;border-radius:8px;border:1px solid #444;background:#000;color:#fff">
   </div>
   <div style="display:flex;gap:10px;padding:12px 14px;background:#000;padding-bottom:max(12px,env(safe-area-inset-bottom))">
@@ -1459,7 +1459,7 @@ async function openCamera(cb) {
       (e && e.name === "NotAllowedError"
         ? "Geef de pagina toestemming voor de camera (slotje-icoon in de adresbalk) en probeer opnieuw."
         : "Controleer of er een camera is en geen andere app hem gebruikt.") +
-      "<br><br>Je kunt ook 'Sluiten' kiezen en de knop \"📁 Bestand kiezen\" gebruiken.";
+      "<br><br>Je kunt ook 'Sluiten' kiezen en de knop \"📁 Uit album of bestand\" gebruiken.";
   }
 }
 
@@ -1537,13 +1537,18 @@ function closeCamera() {
    ===================================================================== */
 let _feTarget = null, _feCb = null, _feCtx = null, _feDraw = false;
 let _feColor = "#e23", _feUndo = [], _feMode = "draw";
-// maatlijn = 2 stappen: sleep 1 = span tussen 2 verankerde punten, sleep 2 = lijn loodrecht wegschuiven
-let _feBase = null, _feMaatDrag = false, _feMaatPhase = 0, _feMaatA = null, _feMaatB = null;
+// Maat = bewerkbaar overlay: tik punt 1, tik punt 2, sleep daarna de punten of
+// het label (label slepen = lijn haaks wegschuiven met hulplijnen). Blijft
+// bewerkbaar tot je elders tikt, van tool wisselt, undo't of opslaat.
+let _feBase = null;          // bevroren canvas zónder de actieve maat (voor re-render)
+let _feDim = null;           // actieve maat {a:{x,y}, b:{x,y}, off, label}
+let _feDimPhase = "";        // "" | "await-b" | "edit"
+let _feDimDrag = null;       // "a" | "b" | "label" | null
 
 function openFotoEdit(photo, cb) {
   if (!photo) return;
   _feTarget = photo; _feCb = cb || null; _feUndo = []; _feColor = "#e23"; _feMode = "draw";
-  _feBase = null; _feMaatDrag = false; _feMaatPhase = 0; _feMaatA = null; _feMaatB = null;
+  _feBase = null; _feDim = null; _feDimPhase = ""; _feDimDrag = null;
   // tekst-/maat-tool resetten
   const tb = document.getElementById("feTextBar"); if (tb) tb.style.display = "none";
   const tbtn = document.getElementById("feTextBtn"); if (tbtn) tbtn.style.background = "#333";
@@ -1625,30 +1630,66 @@ function _feChip(mx, my, label) {
   ctx.fillStyle = "#fff"; ctx.fillText(label, mx, my);
   ctx.restore();
 }
-// Stap 1: lichte hulplijn met eind-tikjes zodat de 2 aangrijppunten zichtbaar zijn.
-function _feDrawSpanGuide(ax, ay, bx, by) {
-  const ctx = _feCtx;
-  const lw = Math.max(2, Math.round(ctx.canvas.width / 320));
-  const t = Math.max(8, Math.round(ctx.canvas.width / 90));
-  const len = Math.hypot(bx - ax, by - ay) || 1;
-  const nx = -(by - ay) / len, ny = (bx - ax) / len;
+// Loodrechte afstand (met teken) van punt p tot de A-B-lijn — bepaalt de offset.
+function _feMaatOff(p) {
+  const a = _feDim.a, b = _feDim.b;
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  return (p.x - a.x) * nx + (p.y - a.y) * ny;
+}
+// Aangrijppunt-stip (wit omrand) zodat je ziet wat je kunt verslepen.
+function _feDot(x, y) {
+  const ctx = _feCtx, r = Math.max(8, Math.round(ctx.canvas.width / 80));
   ctx.save();
-  ctx.strokeStyle = _feColor; ctx.lineWidth = lw; ctx.lineCap = "round";
-  ctx.setLineDash([t * 0.6, t * 0.5]);
-  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.beginPath();
-  ctx.moveTo(ax - nx * t, ay - ny * t); ctx.lineTo(ax + nx * t, ay + ny * t);
-  ctx.moveTo(bx - nx * t, by - ny * t); ctx.lineTo(bx + nx * t, by + ny * t);
-  ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = _feColor; ctx.fill();
+  ctx.lineWidth = Math.max(2, Math.round(r / 2.5)); ctx.strokeStyle = "#fff"; ctx.stroke();
   ctx.restore();
 }
-// Loodrechte afstand (met teken) van punt p tot de A-B lijn — bepaalt de offset.
-function _feMaatOff(p) {
-  const ax = _feMaatA.x, ay = _feMaatA.y;
-  const dx = _feMaatB.x - ax, dy = _feMaatB.y - ay, len = Math.hypot(dx, dy) || 1;
+// Het label-aangrijppunt = midden van de (eventueel weggeschoven) maatlijn.
+function _feDimLabelPt() {
+  const a = _feDim.a, b = _feDim.b, off = _feDim.off || 0;
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
   const nx = -dy / len, ny = dx / len;
-  return (p.x - ax) * nx + (p.y - ay) * ny;
+  return { x: (a.x + b.x) / 2 + nx * off, y: (a.y + b.y) / 2 + ny * off };
+}
+// Welk handvat ligt onder punt p? Eindpunten hebben voorrang op het label.
+function _feHandleAt(p) {
+  if (!_feDim) return null;
+  const HR = Math.max(22, _feCtx.canvas.width / 14);
+  const d = (q) => Math.hypot(p.x - q.x, p.y - q.y);
+  if (d(_feDim.a) <= HR) return "a";
+  if (d(_feDim.b) <= HR) return "b";
+  if (d(_feDimLabelPt()) <= HR) return "label";
+  return null;
+}
+// Eén momentopname (canvas zónder de actieve maat) om elke frame op te re-renderen.
+function _feCaptureBase() {
+  try { _feBase = _feCtx.getImageData(0, 0, _feCtx.canvas.width, _feCtx.canvas.height); }
+  catch (x) { _feBase = null; }
+}
+// De actieve maat (her)tekenen boven de bevroren basis.
+function _feRenderDim(withHandles) {
+  if (_feBase) { try { _feCtx.putImageData(_feBase, 0, 0); } catch (x) {} }
+  if (!_feDim) return;
+  if (_feDimPhase === "await-b") { _feDot(_feDim.a.x, _feDim.a.y); return; }
+  _feDrawDimOffset(_feDim.a.x, _feDim.a.y, _feDim.b.x, _feDim.b.y, _feDim.off || 0, _feDim.label || "");
+  if (withHandles) {
+    _feDot(_feDim.a.x, _feDim.a.y); _feDot(_feDim.b.x, _feDim.b.y);
+    const lp = _feDimLabelPt(); _feDot(lp.x, lp.y);
+  }
+}
+// Maat vastleggen (in de foto bakken) — de handvatten niet meebakken.
+function _feCommitDim() {
+  if (!_feDim) { _feBase = null; return; }
+  if (_feDimPhase === "edit") { _feRenderDim(false); }                              // definitief tekenen
+  else if (_feBase) { try { _feCtx.putImageData(_feBase, 0, 0); } catch (x) {} }    // half (alleen A) → weg
+  _feDim = null; _feDimPhase = ""; _feDimDrag = null; _feBase = null;
+}
+// Actieve (nog niet vastgelegde) maat weggooien en terug naar de basis.
+function _feDiscardDim() {
+  if (_feBase) { try { _feCtx.putImageData(_feBase, 0, 0); } catch (x) {} }
+  _feDim = null; _feDimPhase = ""; _feDimDrag = null; _feBase = null;
 }
 // Stap 2: maatlijn op `off` loodrecht weg, met hulplijntjes naar de verankerde punten.
 function _feDrawDimOffset(ax, ay, bx, by, off, label) {
@@ -1697,12 +1738,26 @@ function _feBind(canvas) {
       return;   // geen vrij tekenen in tekst-modus
     }
     if (_feMode === "maat") {
-      // één sleep: van punt A naar punt B = de maatlijn. Loslaten = vast.
+      const inp = document.getElementById("feTextInput");
+      const label = inp ? inp.value.trim() : "";
+      // 2e tik = punt B zetten → maat staat, daarna bewerkbaar
+      if (_feDim && _feDimPhase === "await-b") {
+        _feDim.b = p; _feDim.label = label; _feDimPhase = "edit";
+        _feRenderDim(true);
+        return;
+      }
+      // bestaande maat: handvat pakken (punt A/B of label), of elders → vastleggen
+      if (_feDim && _feDimPhase === "edit") {
+        const h = _feHandleAt(p);
+        if (h) { _feDimDrag = h; canvas.setPointerCapture(e.pointerId); return; }
+        _feCommitDim();   // elders getikt = klaar met deze maat
+      }
+      // nieuwe maat: punt A (tik 1)
       _fePushUndo();
-      try { _feBase = _feCtx.getImageData(0, 0, canvas.width, canvas.height); } catch (x) { _feBase = null; }
-      _feMaatA = p; _feMaatB = p;
-      _feMaatDrag = true;
-      canvas.setPointerCapture(e.pointerId);
+      _feCaptureBase();
+      _feDim = { a: p, b: p, off: 0, label: label };
+      _feDimPhase = "await-b";
+      _feRenderDim(true);
       return;
     }
     _fePushUndo();
@@ -1714,11 +1769,12 @@ function _feBind(canvas) {
   canvas.onpointermove = (e) => {
     if (!_feCtx) return;
     const p = _fePos(canvas, e);
-    if (_feMode === "maat" && _feMaatDrag) {
-      if (_feBase) _feCtx.putImageData(_feBase, 0, 0);   // rubber-band vanaf basis
-      _feMaatB = p;
-      const inp = document.getElementById("feTextInput");
-      _feDrawDimOffset(_feMaatA.x, _feMaatA.y, p.x, p.y, 0, inp ? inp.value.trim() : "");
+    if (_feMode === "maat") {
+      if (!_feDimDrag) return;                        // alleen tijdens handvat-slepen
+      if (_feDimDrag === "a") _feDim.a = p;
+      else if (_feDimDrag === "b") _feDim.b = p;
+      else if (_feDimDrag === "label") _feDim.off = _feMaatOff(p);   // haaks wegschuiven
+      _feRenderDim(true);
       return;
     }
     if (!_feDraw) return;
@@ -1726,22 +1782,16 @@ function _feBind(canvas) {
   };
   canvas.onpointerup = canvas.onpointercancel = () => {
     _feDraw = false;
-    if (_feMode === "maat" && _feMaatDrag) {
-      _feMaatDrag = false;
-      const span = Math.hypot(_feMaatB.x - _feMaatA.x, _feMaatB.y - _feMaatA.y);
-      if (span <= Math.max(8, _feCtx.canvas.width / 120)) {
-        if (_feBase) _feCtx.putImageData(_feBase, 0, 0);   // te kort: annuleer
-      }
-      // anders staat de maatlijn er al → vastgelegd
-      _feBase = null;
+    if (_feMode === "maat" && _feDimDrag) {
+      _feDimDrag = null;
+      _feRenderDim(true);   // handvatten blijven staan → nog bij te stellen
     }
   };
 }
 // Eén modus-schakelaar voor tekst én maat; opnieuw tikken = terug naar tekenen.
 function _feSetMode(m) {
-  // half-gezette maatlijn opruimen bij van-modus-wisselen
-  if (_feCtx && _feBase) { try { _feCtx.putImageData(_feBase, 0, 0); } catch (x) {} }
-  _feMaatPhase = 0; _feMaatDrag = false; _feBase = null;
+  // lopende maat eerst vastleggen vóór we van tool wisselen
+  if (_feCtx) _feCommitDim();
   _feMode = (_feMode === m) ? "draw" : m;
   const bar = document.getElementById("feTextBar");
   const inp = document.getElementById("feTextInput");
@@ -1753,34 +1803,45 @@ function _feSetMode(m) {
   if (mbtn) mbtn.style.background = _feMode === "maat" ? "#2ea043" : "#333";
   if (inp) {
     inp.placeholder = _feMode === "maat"
-      ? "Maat (bijv. 1200 mm) — sleep dan over de maat, loslaten = klaar"
+      ? "Maat (bijv. 1200 mm) — tik punt 1, tik punt 2, sleep punten of label bij"
       : "Typ tekst, tik dan op de foto…";
     if (showBar) inp.focus();
   }
 }
 function fotoEditTextMode() { _feSetMode("text"); }
 function fotoEditMaatMode() { _feSetMode("maat"); }
+// Maat-label live bijwerken terwijl je typt (de maat staat dan al op de foto).
+function _feMaatInput() {
+  if (_feMode === "maat" && _feDim) {
+    const inp = document.getElementById("feTextInput");
+    _feDim.label = inp ? inp.value.trim() : "";
+    _feRenderDim(_feDimPhase === "edit");
+  }
+}
 function fotoEditKleur(kleur, btn) {
   _feColor = kleur;
   if (_feCtx) _feCtx.strokeStyle = kleur;
   document.querySelectorAll("#fotoEditModal .fe-kleur").forEach(b => b.classList.remove("active"));
   if (btn) btn.classList.add("active");
+  if (_feMode === "maat" && _feDim) _feRenderDim(_feDimPhase === "edit");   // actieve maat meekleuren
 }
 function fotoEditUndo() {
-  _feMaatPhase = 0; _feMaatDrag = false; _feBase = null;   // maatlijn-fase resetten
-  if (!_feCtx || !_feUndo.length) return;
+  if (!_feCtx) return;
+  if (_feDim) { _feDiscardDim(); return; }   // eerst de lopende maat weg
+  if (!_feUndo.length) return;
   _feCtx.putImageData(_feUndo.pop(), 0, 0);
 }
 function closeFotoEdit() {
   const modal = document.getElementById("fotoEditModal");
   if (modal) modal.style.display = "none";
   _feTarget = null; _feCb = null; _feCtx = null; _feUndo = [];
-  _feMaatPhase = 0; _feMaatDrag = false; _feBase = null;
+  _feDim = null; _feDimPhase = ""; _feDimDrag = null; _feBase = null;
 }
 function saveFotoEdit() {
   const canvas = document.getElementById("fotoEditCanvas");
   const target = _feTarget, cb = _feCb;
   if (!canvas || !target) { closeFotoEdit(); return; }
+  if (_feCtx) _feCommitDim();   // lopende maat eerst vastleggen
   canvas.toBlob(blob => {
     if (blob) {
       const base = (target.name || "foto.jpg").replace(/\.[^.]+$/, "");
@@ -4958,7 +5019,7 @@ function renderChecklist() {
           <div class="photo-input-wrap" style="display:inline-block">
             <label style="margin:0;font-weight:400;text-transform:none">
               <div class="herstel-foto-btn" style="pointer-events:none">📷 Foto toevoegen</div>
-              <input type="file" accept="image/*" capture="environment" onchange="herstelFoto(${i},this)" style="position:absolute;inset:0;opacity:0;width:100%;cursor:pointer">
+              <input type="file" accept="image/*" onchange="herstelFoto(${i},this)" style="position:absolute;inset:0;opacity:0;width:100%;cursor:pointer">
             </label>
           </div>
           <button class="herstel-foto-btn" style="margin-top:8px" onclick="herstelNaarTaak(${i})">＋ Maak taak aan in project</button>
