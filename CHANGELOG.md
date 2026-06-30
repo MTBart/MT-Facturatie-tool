@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-30 — App: maatlijn met verankerde punten + verschuifbare offset (CAD-stijl)
+- Commit: `7467d19` | Auteur: Bart Witte
+
 ## 2026-06-30 — App: maatlijn-tool in de foto-bewerker
 - Commit: `8abd83f` | Auteur: Bart Witte
 

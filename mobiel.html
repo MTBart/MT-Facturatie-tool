@@ -848,7 +848,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <div class="card-label">Foto's opnemen</div>
         <span class="badge badge-info" id="photoCount">0 foto's</span>
       </div>
-      <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>addPhoto(f))">📷 Camera openen</button>
+      <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>addPhoto(f))">📷 Nieuwe foto</button>
       <div class="photo-input-wrap" style="display:block;margin-top:8px">
         <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
           <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Bestand kiezen</button>
@@ -900,7 +900,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <!-- OPNAME / INMETEN -->
       <div id="opnameRapWrap" style="display:none">
         <div class="section-head" id="opnameRapLabel" style="margin-top:14px"></div>
-        <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>inmFoto(f))">📷 Camera openen</button>
+        <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>inmFoto(f))">📷 Nieuwe foto</button>
         <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
             <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Bestand kiezen</button>
@@ -1303,14 +1303,14 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#000;padding-bottom:max(14px,env(safe-area-inset-bottom))">
     <button onclick="closeCamera()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:12px 16px;font-size:15px">Sluiten</button>
     <button id="camShotBtn" onclick="camSnap()" style="width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid #bbb;flex-shrink:0"></button>
-    <div id="camCount" style="color:#fff;font-size:13px;min-width:64px;text-align:right">0 foto's</div>
+    <div id="camCount" style="color:#fff;font-size:13px;min-width:64px;text-align:right"></div>
   </div>
   <!-- WhatsApp-achtige review na een opname: behouden of opnieuw (fase 2) -->
   <div id="camReview" style="display:none;position:absolute;inset:0;z-index:2;background:#000;flex-direction:column">
     <img id="camReviewImg" alt="net gemaakte foto" style="flex:1;width:100%;object-fit:contain;background:#000">
     <div style="display:flex;gap:8px;padding:12px 14px;background:#000;padding-bottom:max(12px,env(safe-area-inset-bottom))">
       <button onclick="camReviewRetry()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px">🗑 Opnieuw</button>
-      <button onclick="camReviewKeep()" style="flex:1;background:#2ea043;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px;font-weight:600">✓ Opslaan &amp; door</button>
+      <button onclick="camReviewKeep()" style="flex:1;background:#2ea043;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px;font-weight:600">✓ Opslaan &amp; terug naar verslag</button>
     </div>
   </div>
 </div>
@@ -1361,7 +1361,7 @@ async function openCamera(cb) {
   const modal = document.getElementById("camModal");
   const err = document.getElementById("camErr");
   const video = document.getElementById("camVideo");
-  document.getElementById("camCount").textContent = "0 foto's";
+  document.getElementById("camCount").textContent = "";
   err.style.display = "none"; video.style.display = "block";
   modal.style.display = "flex";
   try {
@@ -1405,10 +1405,10 @@ function camSnap() {
 function camReviewKeep() {
   if (!_camPending || !_camCb) { _camCloseReview(); return; }
   _camCb({ files: [_camPending.file], value: "" });   // zelfde vorm als <input type=file>
-  _camN++;
-  document.getElementById("camCount").textContent = `${_camN} foto${_camN === 1 ? "" : "'s"}`;
-  if (window.showToast) showToast(`✓ Foto ${_camN} opgeslagen`);
-  _camCloseReview();
+  if (window.showToast) showToast("✓ Foto opgeslagen");
+  // Eén foto per sessie: meteen terug naar het verslag (niet in de camera blijven).
+  // Volgende foto = de "📷 Nieuwe foto"-knop in het verslag opnieuw tikken.
+  closeCamera();
 }
 function camReviewRetry() { _camCloseReview(); }
 function _camCloseReview() {
