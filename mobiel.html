@@ -887,6 +887,37 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         </select>
       </div>
       <button class="btn btn-secondary btn-full" style="margin-bottom:4px;min-height:44px" onclick="npReturnToOplever=true;openNewProject()">➕ Nieuw project (start meteen een timer)</button>
+      <button class="btn btn-secondary btn-full" style="margin-bottom:4px;min-height:44px" onclick="openVoorOpname()">📦 Losse opname (nog geen project)</button>
+
+      <!-- VOOR-OPNAME: items vastleggen zonder project; later in de cockpit herverwijzen -->
+      <div id="voorOpnameWrap" style="display:none">
+        <div class="section-head" style="margin-top:14px">📦 Losse opname — komt in <b>Voor-opname</b> op SharePoint</div>
+        <div class="field">
+          <label>Klant (code mag later)</label>
+          <select id="voKlantSelect" onchange="voKlantChange()">
+            <option value="">— kies klant —</option>
+            <option value="__vrij">— andere / nog onbekend —</option>
+          </select>
+        </div>
+        <div class="field" id="voKlantVrijWrap" style="display:none">
+          <input id="voKlantVrij" type="text" placeholder="Klantnaam (vrije tekst)…" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Algemene notitie bij deze opname</label>
+          <textarea id="voNotitie" rows="2" placeholder="Waar, wat opgemeten, voor welke offerte/aanvraag…"></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>voFoto(f))">📷 Nieuwe foto</button>
+        <div class="photo-input-wrap" style="display:block;margin-top:8px">
+          <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
+            <button class="btn btn-secondary btn-full" style="pointer-events:none;min-height:48px">📁 Bestand kiezen</button>
+            <input type="file" accept="image/*" capture="environment" onchange="voFoto(this)" multiple>
+          </label>
+        </div>
+        <div id="voFotoList" style="margin-top:10px"></div>
+        <button class="btn btn-gold btn-full" style="margin-top:10px" onclick="uploadVoorOpname()">✅ Opslaan naar Voor-opname</button>
+        <button class="btn btn-secondary btn-full" style="margin-top:6px" onclick="closeVoorOpname()">← Terug</button>
+        <div id="voResult" style="display:none"></div>
+      </div>
 
       <!-- Rapporttype: opname (inmeten) of oplevering -->
       <div id="rapTypeWrap" style="display:none">
@@ -3782,6 +3813,185 @@ function updateSpMockPath() {
   const code = proj ? proj.code : "–";
   const el = document.getElementById("spMockPath");
   if (el) el.textContent = `→ NAS: ${code} › 06_Fotos/`;
+}
+
+/* =====================================================================
+   VOOR-OPNAME — losse opname zonder project (snel onderweg opmeten).
+   Alles in ÉÉN bucket op SharePoint:
+     Nieuwe mappenstructuur/Voor-opname/<klant>_<datum-tijd>/
+   met item-foto's (+ _bewerkt + .txt kladblok) en een _meta.json.
+   De cockpit (v2.html) leest mt_vooropname.json en herverwijst de items
+   later thuis naar het juiste project. Klant mag bekend zijn, code nog niet.
+   ===================================================================== */
+let voorOpnamePhotos = [];
+
+async function openVoorOpname() {
+  ['rapTypeWrap','opnameRapWrap','checklistWrap'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  const sel = document.getElementById('opleverProjectSelect'); if (sel) sel.value = '';
+  const wrap = document.getElementById('voorOpnameWrap'); if (wrap) wrap.style.display = 'block';
+  const res = document.getElementById('voResult'); if (res) res.style.display = 'none';
+  // klant-dropdown één keer vullen (na de 2 vaste opties)
+  const ks = document.getElementById('voKlantSelect');
+  if (ks && ks.options.length <= 2) {
+    try {
+      const reg = await loadKlantRegistry();
+      reg.slice().sort((a,b)=>(a.naam||'').localeCompare(b.naam||''))
+        .forEach(k => {
+          const o = document.createElement('option');
+          o.value = k.code || ''; o.textContent = k.naam || k.code || '';
+          ks.appendChild(o);
+        });
+    } catch(e) { console.warn('klantlijst laden faalde:', e.message); }
+  }
+}
+
+function closeVoorOpname() {
+  const wrap = document.getElementById('voorOpnameWrap'); if (wrap) wrap.style.display = 'none';
+}
+
+function voKlantChange() {
+  const ks = document.getElementById('voKlantSelect');
+  const vw = document.getElementById('voKlantVrijWrap');
+  if (vw) vw.style.display = (ks && ks.value === '__vrij') ? 'block' : 'none';
+}
+
+function voFoto(input) {
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  files.forEach(file => {
+    const url = URL.createObjectURL(file);
+    voorOpnamePhotos.push({url, name:file.name, file, kladblok:"", bewerktFile:null, bewerktUrl:null});
+  });
+  renderVoorOpname();
+  input.value = "";
+}
+
+function renderVoorOpname() {
+  const grid = document.getElementById('voFotoList');
+  if (!grid) return;
+  grid.innerHTML = voorOpnamePhotos.map((p, i) => `
+    <div class="foto-row">
+      <div class="foto-row-thumb" onclick="openFotoEdit(voorOpnamePhotos[${i}], renderVoorOpname)" title="Tik om aantekeningen te zetten">
+        <img src="${p.bewerktUrl || p.url}" alt="foto">
+        ${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : ''}
+        <span class="foto-edit-hint">✏️</span>
+      </div>
+      <textarea class="foto-klad" rows="2" placeholder="Welk item / wat is dit…" onchange="setVoKlad(${i}, this.value)">${escHtml(p.kladblok || "")}</textarea>
+      <button class="note-del" onclick="delVoFoto(${i})">×</button>
+    </div>`).join("");
+}
+function setVoKlad(i, v) { if (voorOpnamePhotos[i]) voorOpnamePhotos[i].kladblok = v; }
+function delVoFoto(i) {
+  const p = voorOpnamePhotos[i];
+  if (p && p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl);
+  voorOpnamePhotos.splice(i, 1);
+  renderVoorOpname();
+}
+
+// Lokale tijdstempel YYYY-MM-DD_HHMM voor de bucket-naam.
+function _voStamp() {
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+async function uploadVoorOpname() {
+  const ks = document.getElementById('voKlantSelect');
+  const klantCode = ks ? ks.value : '';
+  let klantNaam = '';
+  if (klantCode === '__vrij' || klantCode === '') {
+    const vv = document.getElementById('voKlantVrij'); klantNaam = vv ? vv.value.trim() : '';
+  } else {
+    const sel = ks.options[ks.selectedIndex]; klantNaam = sel ? sel.textContent.trim() : klantCode;
+  }
+  const echteCode = (klantCode === '__vrij') ? '' : (klantCode || '');
+  if (!klantNaam) { showToast('Kies of typ eerst een klant'); return; }
+  const fotos = voorOpnamePhotos.filter(p => p.file);
+  if (!fotos.length) { showToast('Maak eerst minstens één foto'); return; }
+  const token = await window.getGraphToken();
+  if (!token) { showToast('Niet ingelogd op Microsoft 365'); return; }
+
+  const notitie = ((document.getElementById('voNotitie')||{}).value || '').trim();
+  const ROOT = 'Nieuwe mappenstructuur';
+  const drive = _SPProj.DRIVE;
+  const stamp = _voStamp();
+  showToast('⬆ Voor-opname uploaden…');
+  try {
+    const vo = await _SPProj.ensureFolder(ROOT, 'Voor-opname', drive);
+    const bucketNaam = `${(klantNaam||'onbekend').replace(/[\\\/:*?"<>|]/g,'_').trim()}_${stamp}`;
+    const bucket = await _SPProj.ensureFolder(`${ROOT}/${vo}`, bucketNaam, drive);
+    const bucketPath = `${ROOT}/${vo}/${bucket}`;
+    const fotoMeta = [];
+    let ok = 0, fail = 0;
+    for (let i = 0; i < fotos.length; i++) {
+      const p = fotos[i];
+      const base = `item_${String(i+1).padStart(2,'0')}`;
+      const veilig = `${base}.jpg`;
+      try {
+        const r = await _spPut(token, drive, `${bucketPath}/${veilig}`,
+          await p.file.arrayBuffer(), p.file.type || 'image/jpeg');
+        if (r.ok) {
+          ok++;
+          const entry = { bestand: veilig, kladblok: (p.kladblok||'').trim() };
+          if (p.bewerktFile) {
+            try {
+              const br = await _spPut(token, drive, `${bucketPath}/${base}_bewerkt.jpg`,
+                await p.bewerktFile.arrayBuffer(), 'image/jpeg');
+              if (br.ok) entry.bewerkt = `${base}_bewerkt.jpg`;
+            } catch(e) {}
+          }
+          const klad = (p.kladblok||'').trim();
+          if (klad) {
+            try {
+              await _spPut(token, drive, `${bucketPath}/${base}.txt`,
+                new Blob([klad], {type:'text/plain'}), 'text/plain; charset=utf-8');
+            } catch(e) {}
+          }
+          fotoMeta.push(entry);
+        } else { fail++; console.warn(`voor-opname upload ${veilig} HTTP ${r.status}`); }
+      } catch(e) { fail++; console.warn('voor-opname upload fout:', e.message); }
+    }
+    const meta = {
+      klant: klantNaam, klantCode: echteCode,
+      datum: new Date().toISOString(),
+      door: (typeof _msAccount !== 'undefined' && _msAccount && _msAccount.username) || '',
+      notitie, status: 'nieuw', bron: 'mobiel-vooropname', fotos: fotoMeta
+    };
+    try {
+      await _spPut(token, drive, `${bucketPath}/_meta.json`,
+        new Blob([JSON.stringify(meta, null, 2)], {type:'application/json'}), 'application/json');
+    } catch(e) { console.warn('_meta.json schrijven faalde:', e.message); }
+    // index voor de cockpit (mt_vooropname.json in MT-Bedrijfstool)
+    try {
+      const idx = (await _SP.read('mt_vooropname.json')) || [];
+      idx.unshift({
+        bucket, pad: bucketPath, klant: klantNaam, klantCode: echteCode,
+        datum: meta.datum, door: meta.door, notitie, aantal: fotoMeta.length, status: 'nieuw'
+      });
+      await _SP.write('mt_vooropname.json', idx.slice(0, 300));
+    } catch(e) { console.warn('mt_vooropname.json faalde:', e.message); }
+
+    // reset + blijvende bevestiging
+    voorOpnamePhotos.forEach(p => { if (p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl); if (p.url) URL.revokeObjectURL(p.url); });
+    voorOpnamePhotos = [];
+    renderVoorOpname();
+    const nn = document.getElementById('voNotitie'); if (nn) nn.value = '';
+    const res = document.getElementById('voResult');
+    if (res) {
+      res.style.display = 'block';
+      res.innerHTML = `<div style="background:#0f2a18;border:1px solid #2ea043;border-radius:10px;padding:12px;margin-top:10px;font-size:14px">
+        ✅ <b>${ok} foto${ok===1?'':'\'s'}</b> opgeslagen in Voor-opname<br>
+        <span style="color:var(--text-faint);font-size:12px">${escHtml(klantNaam)} · ${escHtml(bucket)}${fail?` · ${fail} mislukt`:''}</span><br>
+        <span style="color:var(--text-faint);font-size:12px">Thuis op kantoor in de cockpit aan het juiste project koppelen.</span>
+      </div>`;
+    }
+    showToast(`✅ Voor-opname opgeslagen (${ok})`);
+  } catch(e) {
+    console.warn('voor-opname faalde:', e.message);
+    showToast('❌ Voor-opname mislukt: ' + (e.message||e));
+  }
 }
 
 /* =====================================================================
