@@ -886,6 +886,14 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           <option value="">— selecteer project —</option>
         </select>
       </div>
+      <!-- HERSTEL-BALK: onvoltooide losse opname na een app/PWA-herstart -->
+      <div id="voRestoreBanner" style="display:none;background:#2a1f0f;border:1px solid #d6a93a;border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="font-size:14px;margin-bottom:8px">📦 <span id="voRbTxt">Onvoltooide losse opname</span></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-gold" style="flex:1;min-height:42px" onclick="voRestoreDraft()">↩️ Verdergaan</button>
+          <button class="btn btn-secondary" style="flex:0 0 auto;min-height:42px" onclick="voDiscardDraft()">🗑 Weggooien</button>
+        </div>
+      </div>
       <button class="btn btn-secondary btn-full" style="margin-bottom:4px;min-height:44px" onclick="npReturnToOplever=true;openNewProject()">➕ Nieuw project (start meteen een timer)</button>
       <button class="btn btn-secondary btn-full" style="margin-bottom:4px;min-height:44px" onclick="openVoorOpname()">📦 Losse opname (nog geen project)</button>
 
@@ -900,11 +908,11 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           </select>
         </div>
         <div class="field" id="voKlantVrijWrap" style="display:none">
-          <input id="voKlantVrij" type="text" placeholder="Klantnaam (vrije tekst)…" autocomplete="off">
+          <input id="voKlantVrij" type="text" placeholder="Klantnaam (vrije tekst)…" autocomplete="off" oninput="_voPersist()">
         </div>
         <div class="field">
           <label>Algemene notitie bij deze opname</label>
-          <textarea id="voNotitie" rows="2" placeholder="Waar, wat opgemeten, voor welke offerte/aanvraag…"></textarea>
+          <textarea id="voNotitie" rows="2" placeholder="Waar, wat opgemeten, voor welke offerte/aanvraag…" oninput="_voPersist()"></textarea>
         </div>
         <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>voFoto(f))">📷 Nieuwe foto</button>
         <div class="photo-input-wrap" style="display:block;margin-top:8px">
@@ -2676,6 +2684,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderNotes();
   renderNotifBadge();
   if (DEV_MODE) { const _db = document.getElementById("demoNotifBtn"); if (_db) _db.style.display = ""; }
+  _voCheckDraft();   // onvoltooide losse opname na herstart? → herstel-balk tonen
   // MSAL: probeer stil in te loggen; login-screen blijft zichtbaar totdat login slaagt of demo gekozen wordt
   initMsal();
   // Terug uit de achtergrond: timer-herstel nogmaals proberen + klok bijwerken
@@ -3873,6 +3882,142 @@ function updateSpMockPath() {
    ===================================================================== */
 let voorOpnamePhotos = [];
 
+/* ---------------------------------------------------------------------
+   CRASH-BESTENDIGE OPSLAG (IndexedDB) voor de losse opname.
+   Elke foto/kladblok/klant/notitie wordt meteen lokaal weggeschreven, zodat
+   een herstart van de app/PWA onderweg niets verliest. Bij heropenen toont
+   een "verdergaan?"-balk het concept; na een geslaagde upload wordt het gewist.
+   Blobs (foto's) kunnen niet in localStorage → daarom IndexedDB.
+   --------------------------------------------------------------------- */
+const _VODB = { name:'mt-app', store:'drafts', key:'vooropname', _db:null };
+let _voDraft = null;        // op load gevonden concept (nog niet hersteld)
+let _voPersistT = null;     // debounce-timer
+
+function _voIdb() {
+  if (_VODB._db) return Promise.resolve(_VODB._db);
+  return new Promise((res, rej) => {
+    let r;
+    try { r = indexedDB.open(_VODB.name, 1); }
+    catch (e) { rej(e); return; }
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      if (!db.objectStoreNames.contains(_VODB.store)) db.createObjectStore(_VODB.store);
+    };
+    r.onsuccess = () => { _VODB._db = r.result; res(r.result); };
+    r.onerror = () => rej(r.error);
+  });
+}
+async function _voIdbPut(val) {
+  try {
+    const db = await _voIdb();
+    return await new Promise((res, rej) => {
+      const tx = db.transaction(_VODB.store, 'readwrite');
+      tx.objectStore(_VODB.store).put(val, _VODB.key);
+      tx.oncomplete = () => res(true);
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch (e) { console.warn('idb put:', e.message); return false; }
+}
+async function _voIdbGet() {
+  try {
+    const db = await _voIdb();
+    return await new Promise((res, rej) => {
+      const tx = db.transaction(_VODB.store, 'readonly');
+      const rq = tx.objectStore(_VODB.store).get(_VODB.key);
+      rq.onsuccess = () => res(rq.result || null);
+      rq.onerror = () => rej(rq.error);
+    });
+  } catch (e) { console.warn('idb get:', e.message); return null; }
+}
+async function _voIdbDel() {
+  try {
+    const db = await _voIdb();
+    return await new Promise((res) => {
+      const tx = db.transaction(_VODB.store, 'readwrite');
+      tx.objectStore(_VODB.store).delete(_VODB.key);
+      tx.oncomplete = () => res(true);
+      tx.onerror = () => res(false);
+    });
+  } catch (e) { return false; }
+}
+
+// Snapshot van de huidige losse-opname → IndexedDB (gedebounced).
+function _voPersist() {
+  clearTimeout(_voPersistT);
+  _voPersistT = setTimeout(async () => {
+    try {
+      if (!voorOpnamePhotos.length) { await _voIdbDel(); return; }
+      const ks = document.getElementById('voKlantSelect');
+      const vv = document.getElementById('voKlantVrij');
+      const nn = document.getElementById('voNotitie');
+      const fotos = voorOpnamePhotos.map(p => ({
+        name: p.name || 'foto.jpg',
+        kladblok: p.kladblok || '',
+        blob: p.file || null,            // File is een Blob → structured-cloneable
+        bewerktBlob: p.bewerktFile || null
+      }));
+      await _voIdbPut({
+        klantCode: ks ? ks.value : '',
+        klantVrij: vv ? vv.value : '',
+        notitie: nn ? nn.value : '',
+        fotos,
+        ts: new Date().toISOString()
+      });
+    } catch (e) { console.warn('voPersist:', e.message); }
+  }, 400);
+}
+
+// Op load: is er een onvoltooid concept? → toon de herstel-balk.
+async function _voCheckDraft() {
+  try {
+    const d = await _voIdbGet();
+    if (!d || !d.fotos || !d.fotos.length) return;
+    _voDraft = d;
+    const b = document.getElementById('voRestoreBanner');
+    if (!b) return;
+    let tijd = '';
+    if (d.ts) { try { tijd = new Date(d.ts).toLocaleString('nl-NL', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(e){} }
+    const n = d.fotos.length;
+    const wie = d.klantVrij || '';
+    const txt = b.querySelector('#voRbTxt');
+    if (txt) txt.innerHTML = `Onvoltooide losse opname — <b>${n} foto${n===1?'':"'s"}</b>${wie?` · ${escHtml(wie)}`:''}${tijd?` · ${tijd}`:''}`;
+    b.style.display = 'block';
+  } catch (e) { console.warn('voCheckDraft:', e.message); }
+}
+
+// "Verdergaan" → concept terug in het geheugen + sub-view openen.
+async function voRestoreDraft() {
+  const d = _voDraft;
+  if (!d) return;
+  voorOpnamePhotos.forEach(p => { if (p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl); if (p.url) URL.revokeObjectURL(p.url); });
+  voorOpnamePhotos = (d.fotos || []).map(f => {
+    const blob = f.blob || null;
+    const file = blob ? (blob instanceof File ? blob : new File([blob], f.name || 'foto.jpg', {type: blob.type || 'image/jpeg'})) : null;
+    const url = file ? URL.createObjectURL(file) : '';
+    const bb = f.bewerktBlob || null;
+    const bewerktFile = bb ? (bb instanceof File ? bb : new File([bb], 'bewerkt.jpg', {type: bb.type || 'image/jpeg'})) : null;
+    const bewerktUrl = bewerktFile ? URL.createObjectURL(bewerktFile) : null;
+    return { url, name: f.name || 'foto.jpg', file, kladblok: f.kladblok || '', bewerktFile, bewerktUrl };
+  }).filter(p => p.file);
+  await openVoorOpname();   // vult de klantlijst + toont de sub-view
+  const ks = document.getElementById('voKlantSelect');
+  if (ks && d.klantCode) ks.value = d.klantCode;
+  voKlantChange();
+  const vv = document.getElementById('voKlantVrij'); if (vv) vv.value = d.klantVrij || '';
+  const nn = document.getElementById('voNotitie'); if (nn) nn.value = d.notitie || '';
+  renderVoorOpname();
+  const b = document.getElementById('voRestoreBanner'); if (b) b.style.display = 'none';
+  if (window.showToast) showToast('📦 Losse opname hersteld');
+}
+
+// "Weggooien" → concept verwijderen.
+async function voDiscardDraft() {
+  await _voIdbDel();
+  _voDraft = null;
+  const b = document.getElementById('voRestoreBanner'); if (b) b.style.display = 'none';
+  if (window.showToast) showToast('Concept weggegooid');
+}
+
 async function openVoorOpname() {
   ['rapTypeWrap','opnameRapWrap','checklistWrap'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
@@ -3903,6 +4048,7 @@ function voKlantChange() {
   const ks = document.getElementById('voKlantSelect');
   const vw = document.getElementById('voKlantVrijWrap');
   if (vw) vw.style.display = (ks && ks.value === '__vrij') ? 'block' : 'none';
+  _voPersist();
 }
 
 function voFoto(input) {
@@ -3929,8 +4075,9 @@ function renderVoorOpname() {
       <textarea class="foto-klad" rows="2" placeholder="Welk item / wat is dit…" onchange="setVoKlad(${i}, this.value)">${escHtml(p.kladblok || "")}</textarea>
       <button class="note-del" onclick="delVoFoto(${i})">×</button>
     </div>`).join("");
+  _voPersist();   // elke wijziging (toevoegen/wissen/bewerken) meteen lokaal bewaren
 }
-function setVoKlad(i, v) { if (voorOpnamePhotos[i]) voorOpnamePhotos[i].kladblok = v; }
+function setVoKlad(i, v) { if (voorOpnamePhotos[i]) { voorOpnamePhotos[i].kladblok = v; _voPersist(); } }
 function delVoFoto(i) {
   const p = voorOpnamePhotos[i];
   if (p && p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl);
@@ -4024,6 +4171,8 @@ async function uploadVoorOpname() {
     // reset + blijvende bevestiging
     voorOpnamePhotos.forEach(p => { if (p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl); if (p.url) URL.revokeObjectURL(p.url); });
     voorOpnamePhotos = [];
+    await _voIdbDel(); _voDraft = null;   // concept is veilig geüpload → lokaal wissen
+    const rb = document.getElementById('voRestoreBanner'); if (rb) rb.style.display = 'none';
     renderVoorOpname();
     const nn = document.getElementById('voNotitie'); if (nn) nn.value = '';
     const res = document.getElementById('voResult');

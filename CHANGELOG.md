@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-30 — App: camera-wisselknop + auto-achtercamera op tablet
+- Commit: `ec6d782` | Auteur: Bart Witte
+
 ## 2026-06-30 — App: Voor-opname — losse opname onderweg, later in cockpit splitsen
 - Commit: `d6d9c83` | Auteur: Bart Witte
 
