@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-28 — offerte-calc: Van Hoecke vervangt Blum in leverancier-keuze
+- Commit: `687c6ca` | Auteur: Bart Witte
+
 ## 2026-06-28 — Offerte-calc Fase 1: zelflerende leverancier-prijslaag
 - Commit: `8af5a0e` | Auteur: Bart Witte
 

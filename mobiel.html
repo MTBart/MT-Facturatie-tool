@@ -487,6 +487,22 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 }
 .sig-canvas.has-sig{border-color:var(--green);border-style:solid}
 
+/* Foto-verslag: foto's onder elkaar met kladblok per foto (fase 2) */
+.foto-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;
+  background:var(--n-100,#f6f7f5);border:1px solid var(--n-200,#e3e6e1);
+  border-radius:var(--radius);padding:8px}
+.foto-row-thumb{position:relative;width:88px;height:88px;flex-shrink:0;
+  border-radius:8px;overflow:hidden;cursor:pointer;background:#000}
+.foto-row-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.foto-edit-hint{position:absolute;right:3px;bottom:3px;font-size:11px;
+  background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:1px 5px;line-height:1.4}
+.foto-bewerkt-badge{position:absolute;left:3px;top:3px;font-size:11px;
+  background:var(--gold,#c9a24b);color:#fff;border-radius:6px;padding:1px 5px;line-height:1.4}
+.foto-klad{flex:1;min-width:0;resize:vertical;font:inherit;font-size:13px;
+  border:1px solid var(--n-200,#e3e6e1);border-radius:8px;padding:7px 8px;background:#fff}
+.fe-kleur{width:26px;height:26px;border-radius:50%;border:2px solid #fff;flex-shrink:0;cursor:pointer}
+.fe-kleur.active{outline:2px solid #fff;outline-offset:2px;transform:scale(1.12)}
+
 /* Rapport preview */
 .rapport-preview{
   background:#fff;border:1px solid var(--n-200);border-radius:var(--radius-lg);
@@ -870,6 +886,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           <option value="">— selecteer project —</option>
         </select>
       </div>
+      <button class="btn btn-secondary btn-full" style="margin-bottom:4px;min-height:44px" onclick="npReturnToOplever=true;openNewProject()">➕ Nieuw project (start meteen een timer)</button>
 
       <!-- Rapporttype: opname (inmeten) of oplevering -->
       <div id="rapTypeWrap" style="display:none">
@@ -1147,6 +1164,13 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <label>Product-slug</label>
         <input id="npProd" placeholder="bv. GARDEROBE" maxlength="12" autocapitalize="characters" oninput="updateNpPreview()">
       </div>
+      <div class="field" id="npKlusHint" style="font-size:12px;color:var(--text-faint);margin-top:-4px"></div>
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-weight:400;font-size:14px">
+          <input type="checkbox" id="npMaatwerk" style="width:auto;min-height:0;margin:0">
+          Maatwerk / los item onder dit project
+        </label>
+      </div>
       <button class="btn btn-primary btn-full" onclick="saveNewProject()">💾 Project aanmaken</button>
     </div>
   </div>
@@ -1281,6 +1305,39 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <button id="camShotBtn" onclick="camSnap()" style="width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid #bbb;flex-shrink:0"></button>
     <div id="camCount" style="color:#fff;font-size:13px;min-width:64px;text-align:right">0 foto's</div>
   </div>
+  <!-- WhatsApp-achtige review na een opname: behouden of opnieuw (fase 2) -->
+  <div id="camReview" style="display:none;position:absolute;inset:0;z-index:2;background:#000;flex-direction:column">
+    <img id="camReviewImg" alt="net gemaakte foto" style="flex:1;width:100%;object-fit:contain;background:#000">
+    <div style="display:flex;gap:8px;padding:12px 14px;background:#000;padding-bottom:max(12px,env(safe-area-inset-bottom))">
+      <button onclick="camReviewRetry()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px">🗑 Opnieuw</button>
+      <button onclick="camReviewKeep()" style="flex:1;background:#2ea043;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px;font-weight:600">✓ Opslaan &amp; door</button>
+    </div>
+  </div>
+</div>
+
+<!-- FOTO-BEWERKER: aantekeningen tekenen op een foto, opslaan als _bewerkt-kopie (fase 2) -->
+<div id="fotoEditModal" style="display:none;position:fixed;inset:0;z-index:10000;background:#000;flex-direction:column">
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px">
+    <canvas id="fotoEditCanvas" style="max-width:100%;max-height:100%;touch-action:none;border-radius:8px"></canvas>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;padding:8px 14px;background:#111">
+    <span style="color:#fff;font-size:12px;margin-right:auto">✏️ Teken of plaats tekst</span>
+    <button class="fe-kleur active" style="background:#e23" onclick="fotoEditKleur('#e23',this)"></button>
+    <button class="fe-kleur" style="background:#f4c000" onclick="fotoEditKleur('#f4c000',this)"></button>
+    <button class="fe-kleur" style="background:#19c08a" onclick="fotoEditKleur('#19c08a',this)"></button>
+    <button class="fe-kleur" style="background:#ffffff" onclick="fotoEditKleur('#ffffff',this)"></button>
+    <button id="feTextBtn" onclick="fotoEditTextMode()" style="background:#333;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:15px;font-weight:700;margin-left:6px">T</button>
+    <button onclick="fotoEditUndo()" style="background:#333;color:#fff;border:none;border-radius:8px;padding:7px 11px;font-size:15px">↶</button>
+  </div>
+  <!-- Tekst-tool: typ tekst, tik dan op de foto om 'm te plaatsen (meerdere mag) -->
+  <div id="feTextBar" style="display:none;gap:8px;align-items:center;padding:8px 14px;background:#1a1a1a">
+    <input id="feTextInput" type="text" placeholder="Typ tekst, tik dan op de foto…" autocomplete="off"
+      style="flex:1;min-width:0;font-size:15px;padding:9px 10px;border-radius:8px;border:1px solid #444;background:#000;color:#fff">
+  </div>
+  <div style="display:flex;gap:10px;padding:12px 14px;background:#000;padding-bottom:max(12px,env(safe-area-inset-bottom))">
+    <button onclick="closeFotoEdit()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px">Annuleren</button>
+    <button onclick="saveFotoEdit()" style="flex:1;background:#2ea043;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px;font-weight:600">✅ Opslaan als kopie</button>
+  </div>
 </div>
 
 <script>
@@ -1323,6 +1380,11 @@ async function openCamera(cb) {
   }
 }
 
+// WhatsApp-flow: een opname gaat eerst naar een review (behouden of opnieuw)
+// vóór hij in de lijst belandt. Bewerken (aantekeningen) gebeurt daarna door
+// op de foto in het verslag te tikken — zo blijft origineel én bewerkt bewaard.
+let _camPending = null;   // {file, url} in review, nog niet vastgelegd
+
 function camSnap() {
   const video = document.getElementById("camVideo");
   if (!video.videoWidth) return;
@@ -1330,25 +1392,167 @@ function camSnap() {
   canvas.width = video.videoWidth; canvas.height = video.videoHeight;
   canvas.getContext("2d").drawImage(video, 0, 0);
   canvas.toBlob(blob => {
-    if (!blob || !_camCb) return;
+    if (!blob) return;
     const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const file = new File([blob], `foto-${ts}.jpg`, { type: "image/jpeg" });
-    _camCb({ files: [file], value: "" });   // zelfde vorm als een <input type=file>
-    _camN++;
-    document.getElementById("camCount").textContent = `${_camN} foto${_camN === 1 ? "" : "'s"}`;
-    const btn = document.getElementById("camShotBtn");
-    btn.style.borderColor = "#c9a24b";
-    setTimeout(() => { btn.style.borderColor = "#bbb"; }, 150);
-    if (window.showToast) showToast(`Foto ${_camN} toegevoegd`);
+    _camPending = { file, url: URL.createObjectURL(blob) };
+    document.getElementById("camReviewImg").src = _camPending.url;
+    document.getElementById("camReview").style.display = "flex";
   }, "image/jpeg", 0.92);
 }
 
+function camReviewKeep() {
+  if (!_camPending || !_camCb) { _camCloseReview(); return; }
+  _camCb({ files: [_camPending.file], value: "" });   // zelfde vorm als <input type=file>
+  _camN++;
+  document.getElementById("camCount").textContent = `${_camN} foto${_camN === 1 ? "" : "'s"}`;
+  if (window.showToast) showToast(`✓ Foto ${_camN} opgeslagen`);
+  _camCloseReview();
+}
+function camReviewRetry() { _camCloseReview(); }
+function _camCloseReview() {
+  if (_camPending && _camPending.url) URL.revokeObjectURL(_camPending.url);
+  _camPending = null;
+  const rv = document.getElementById("camReview");
+  if (rv) rv.style.display = "none";
+}
+
 function closeCamera() {
+  _camCloseReview();
   if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
   const video = document.getElementById("camVideo");
   if (video) video.srcObject = null;
   document.getElementById("camModal").style.display = "none";
   _camCb = null;
+}
+
+/* =====================================================================
+   ═══ FOTO-BEWERKER (annotaties) ═══
+   Tekent op een kopie van de foto (bewezen pointer-techniek uit de
+   handtekening-canvas) en bewaart die als `<naam>_bewerkt.jpg` op het
+   foto-object — náást het origineel. Gedeeld door opname/inmeet/oplever.
+   ===================================================================== */
+let _feTarget = null, _feCb = null, _feCtx = null, _feDraw = false;
+let _feColor = "#e23", _feUndo = [], _feMode = "draw";
+
+function openFotoEdit(photo, cb) {
+  if (!photo) return;
+  _feTarget = photo; _feCb = cb || null; _feUndo = []; _feColor = "#e23"; _feMode = "draw";
+  // tekst-tool resetten
+  const tb = document.getElementById("feTextBar"); if (tb) tb.style.display = "none";
+  const tbtn = document.getElementById("feTextBtn"); if (tbtn) tbtn.style.background = "#333";
+  const tin = document.getElementById("feTextInput"); if (tin) tin.value = "";
+  const modal = document.getElementById("fotoEditModal");
+  const canvas = document.getElementById("fotoEditCanvas");
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.naturalWidth || 1280;
+    canvas.height = img.naturalHeight || 960;
+    _feCtx = canvas.getContext("2d");
+    _feCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    _feCtx.lineCap = "round"; _feCtx.lineJoin = "round";
+    _feCtx.lineWidth = Math.max(3, Math.round(canvas.width / 200));
+    _feCtx.strokeStyle = _feColor;
+    // markeer eerste kleur actief
+    document.querySelectorAll("#fotoEditModal .fe-kleur").forEach((b, i) =>
+      b.classList.toggle("active", i === 0));
+    modal.style.display = "flex";
+  };
+  img.src = photo.bewerktUrl || photo.url;   // doorbewerken op bestaande bewerking mag
+  _feBind(canvas);
+}
+
+function _fePos(canvas, e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (canvas.width / r.width),
+           y: (e.clientY - r.top) * (canvas.height / r.height) };
+}
+function _fePushUndo() {
+  if (!_feCtx) return;
+  const canvas = document.getElementById("fotoEditCanvas");
+  try { _feUndo.push(_feCtx.getImageData(0, 0, canvas.width, canvas.height)); } catch (x) {}
+  if (_feUndo.length > 12) _feUndo.shift();
+}
+// Tekst plaatsen: gekleurde vulling + donkere outline = leesbaar op elke foto.
+function _feDrawText(txt, x, y) {
+  const fs = Math.max(20, Math.round(_feCtx.canvas.width / 22));
+  _feCtx.font = `bold ${fs}px -apple-system, "Segoe UI", Roboto, sans-serif`;
+  _feCtx.textBaseline = "top";
+  _feCtx.lineJoin = "round";
+  _feCtx.lineWidth = Math.max(3, Math.round(fs / 5));
+  _feCtx.strokeStyle = "rgba(0,0,0,.85)";
+  _feCtx.fillStyle = _feColor;
+  _feCtx.strokeText(txt, x, y);
+  _feCtx.fillText(txt, x, y);
+  _feCtx.lineWidth = Math.max(3, Math.round(_feCtx.canvas.width / 200));  // terug voor tekenen
+}
+function _feBind(canvas) {
+  canvas.onpointerdown = (e) => {
+    if (!_feCtx) return;
+    const p = _fePos(canvas, e);
+    if (_feMode === "text") {
+      const inp = document.getElementById("feTextInput");
+      const txt = inp ? inp.value.trim() : "";
+      if (!txt) { if (window.showToast) showToast("Typ eerst tekst in het balkje"); return; }
+      _fePushUndo();
+      _feDrawText(txt, p.x, p.y);
+      return;   // geen vrij tekenen in tekst-modus
+    }
+    _fePushUndo();
+    _feDraw = true;
+    _feCtx.strokeStyle = _feColor;
+    _feCtx.beginPath(); _feCtx.moveTo(p.x, p.y);
+    canvas.setPointerCapture(e.pointerId);
+  };
+  canvas.onpointermove = (e) => {
+    if (!_feDraw || !_feCtx) return;
+    const p = _fePos(canvas, e);
+    _feCtx.lineTo(p.x, p.y); _feCtx.stroke();
+  };
+  canvas.onpointerup = canvas.onpointercancel = () => { _feDraw = false; };
+}
+function fotoEditTextMode() {
+  _feMode = _feMode === "text" ? "draw" : "text";
+  const bar = document.getElementById("feTextBar");
+  const btn = document.getElementById("feTextBtn");
+  if (bar) bar.style.display = _feMode === "text" ? "flex" : "none";
+  if (btn) btn.style.background = _feMode === "text" ? "#2ea043" : "#333";
+  if (_feMode === "text") { const inp = document.getElementById("feTextInput"); if (inp) inp.focus(); }
+}
+function fotoEditKleur(kleur, btn) {
+  _feColor = kleur;
+  if (_feCtx) _feCtx.strokeStyle = kleur;
+  document.querySelectorAll("#fotoEditModal .fe-kleur").forEach(b => b.classList.remove("active"));
+  if (btn) btn.classList.add("active");
+}
+function fotoEditUndo() {
+  if (!_feCtx || !_feUndo.length) return;
+  _feCtx.putImageData(_feUndo.pop(), 0, 0);
+}
+function closeFotoEdit() {
+  const modal = document.getElementById("fotoEditModal");
+  if (modal) modal.style.display = "none";
+  _feTarget = null; _feCb = null; _feCtx = null; _feUndo = [];
+}
+function saveFotoEdit() {
+  const canvas = document.getElementById("fotoEditCanvas");
+  const target = _feTarget, cb = _feCb;
+  if (!canvas || !target) { closeFotoEdit(); return; }
+  canvas.toBlob(blob => {
+    if (blob) {
+      const base = (target.name || "foto.jpg").replace(/\.[^.]+$/, "");
+      target.bewerktFile = new File([blob], base + "_bewerkt.jpg", { type: "image/jpeg" });
+      if (target.bewerktUrl) URL.revokeObjectURL(target.bewerktUrl);
+      target.bewerktUrl = URL.createObjectURL(blob);
+    }
+    closeFotoEdit();
+    if (window.showToast) showToast("✏️ Bewerkte kopie bewaard — komt náást het origineel");
+    if (cb) { try { cb(); } catch (e) {} }
+    // alle zichtbare fotolijsten verversen
+    ["renderOpname", "renderInmFotos", "renderOplFotos"].forEach(fn => {
+      if (typeof window[fn] === "function") { try { window[fn](); } catch (e) {} }
+    });
+  }, "image/jpeg", 0.92);
 }
 const TG_WS  = 21258443;
 const TG_ORG = 21259253;
@@ -3371,25 +3575,39 @@ function addPhoto(input) {
   block.style.display = "block";
   files.forEach(file => {
     const url = URL.createObjectURL(file);
-    opnamePhotos.push({url, name:file.name, file});  // File-ref nodig voor NAS-upload
+    // kladblok = losse tekst (→ .txt náást de foto); bewerktFile = annotatie-kopie
+    opnamePhotos.push({url, name:file.name, file, kladblok:"", bewerktFile:null, bewerktUrl:null});
   });
   renderOpname();
   input.value = "";
 }
 
+// Foto's onder elkaar (verslagje): per foto een kladblok + tik-om-te-bewerken.
 function renderOpname() {
   const grid = document.getElementById("thumbsGrid");
   const count = document.getElementById("opnameCount");
   const photoCount = document.getElementById("photoCount");
-  count.textContent = `${opnamePhotos.length} foto's`;
-  photoCount.textContent = `${opnamePhotos.length} foto's`;
-  grid.innerHTML = opnamePhotos.slice(0,6).map(p =>
-    `<div class="thumb-cell"><img src="${p.url}" alt="foto"></div>`
-  ).join("");
-  if (opnamePhotos.length > 6) {
-    grid.innerHTML += `<div class="thumb-cell"><div class="thumb-placeholder">+${opnamePhotos.length-6}</div></div>`;
-  }
+  if (count) count.textContent = `${opnamePhotos.length} foto's`;
+  if (photoCount) photoCount.textContent = `${opnamePhotos.length} foto's`;
+  if (grid) grid.style.display = "block";   // stacked verslag i.p.v. 3-koloms grid
+  if (grid) grid.innerHTML = opnamePhotos.map((p, i) => `
+    <div class="foto-row">
+      <div class="foto-row-thumb" onclick="openFotoEdit(opnamePhotos[${i}], renderOpname)" title="Tik om aantekeningen te zetten">
+        <img src="${p.bewerktUrl || p.url}" alt="foto">
+        ${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : ''}
+        <span class="foto-edit-hint">✏️</span>
+      </div>
+      <textarea class="foto-klad" rows="2" placeholder="Kladblok bij deze foto…" onchange="setOpnameKlad(${i}, this.value)">${escHtml(p.kladblok || "")}</textarea>
+      <button class="note-del" onclick="delOpnamePhoto(${i})">×</button>
+    </div>`).join("");
   updateSpMockPath();
+}
+function setOpnameKlad(i, v) { if (opnamePhotos[i]) opnamePhotos[i].kladblok = v; }
+function delOpnamePhoto(i) {
+  const p = opnamePhotos[i];
+  if (p && p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl);
+  opnamePhotos.splice(i, 1);
+  renderOpname();
 }
 
 function updateSpMockPath() {
@@ -3593,6 +3811,13 @@ async function findProjectFolder(code) {
   return parentPath ? `${parentPath}/${best.name}` : best.name;
 }
 
+// Eén bestand naar 06_Fotos PUT'en (origineel, _bewerkt-kopie of .txt-kladblok).
+async function _spPut(token, drive, dest, body, type) {
+  const url = `https://graph.microsoft.com/v1.0/drives/${drive}/root:/${_encPath(dest)}:/content?@microsoft.graph.conflictBehavior=rename`;
+  return fetch(url, { method: 'PUT',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': type }, body });
+}
+
 // Foto's uploaden naar <projPath>/06_Fotos/.
 // Dedupe-vangnet: bestaat er al een bestand met dezelfde naam ÉN grootte,
 // dan slaan we 'm over (dubbel "Opname afronden" maakt dan geen " 1"-kopie meer).
@@ -3616,14 +3841,30 @@ async function uploadOpnamePhotos(proj, projPath) {
       if (bestaand[veilig] !== undefined && bestaand[veilig] === p.file.size) {
         skip++; uploaded.push(veilig); continue;  // al op de NAS — niet nogmaals
       }
-      const dest = `${projPath}/06_Fotos/${veilig}`;
-      const url = `https://graph.microsoft.com/v1.0/drives/${_projDrive(proj.code)}/root:/${_encPath(dest)}:/content?@microsoft.graph.conflictBehavior=rename`;
-      const r = await fetch(url, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': p.file.type || 'image/jpeg' },
-        body: await p.file.arrayBuffer()
-      });
-      if (r.ok) { ok++; uploaded.push(veilig); } else { fail++; console.warn(`upload ${veilig} HTTP ${r.status}`); }
+      const drive = _projDrive(proj.code);
+      const r = await _spPut(token, drive, `${projPath}/06_Fotos/${veilig}`,
+        await p.file.arrayBuffer(), p.file.type || 'image/jpeg');
+      if (r.ok) {
+        ok++; uploaded.push(veilig);
+        const base = veilig.replace(/\.[^.]+$/, "");
+        // bewerkte kopie náást het origineel
+        if (p.bewerktFile) {
+          try {
+            const br = await _spPut(token, drive, `${projPath}/06_Fotos/${base}_bewerkt.jpg`,
+              await p.bewerktFile.arrayBuffer(), 'image/jpeg');
+            if (br.ok) uploaded.push(`${base}_bewerkt.jpg`);
+            else console.warn(`bewerkt ${base} HTTP ${br.status}`);
+          } catch(e) { console.warn('bewerkt upload fout:', e.message); }
+        }
+        // losse tekst als kladblok-.txt met dezelfde basisnaam
+        const klad = (p.kladblok || "").trim();
+        if (klad) {
+          try {
+            await _spPut(token, drive, `${projPath}/06_Fotos/${base}.txt`,
+              new Blob([klad], {type:'text/plain'}), 'text/plain; charset=utf-8');
+          } catch(e) { console.warn('kladblok upload fout:', e.message); }
+        }
+      } else { fail++; console.warn(`upload ${veilig} HTTP ${r.status}`); }
     } catch(e) { fail++; console.warn('upload fout:', e.message); }
   }
   // Bijschrift → notitie gekoppeld aan deze foto's (met datumstempel)
@@ -3834,7 +4075,7 @@ function kiesRapType(t) {
 function inmFoto(input) {
   const files = Array.from(input.files);
   if (!files.length) return;
-  files.forEach(f => inmFotos.push({url: URL.createObjectURL(f), name: f.name, file: f, bijschrift: ""}));
+  files.forEach(f => inmFotos.push({url: URL.createObjectURL(f), name: f.name, file: f, bijschrift: "", bewerktFile: null, bewerktUrl: null}));
   input.value = "";
   renderInmFotos();
 }
@@ -3846,7 +4087,10 @@ function renderInmFotos() {
   const el = document.getElementById("inmFotoList");
   el.innerHTML = inmFotos.map((p, i) => `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <img src="${p.url}" alt="foto" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex-shrink:0">
+      <div class="foto-row-thumb" style="width:64px;height:64px" onclick="openFotoEdit(inmFotos[${i}], renderInmFotos)" title="Tik om aantekeningen te zetten">
+        <img src="${p.bewerktUrl || p.url}" alt="foto">
+        ${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}
+      </div>
       <input type="text" value="${escHtml(p.bijschrift)}" placeholder="Bijschrift bij deze foto…"
         onchange="setInmBijschrift(${i},this.value)" style="flex:1;min-width:0">
       <button class="note-del" onclick="delInmFoto(${i})">×</button>
@@ -3859,7 +4103,7 @@ let _oplUploaded = {voor: [], na: []};  // al op SP staande foto's (uit tussenti
 function oplFoto(soort, input) {
   const files = Array.from(input.files);
   if (!files.length) return;
-  files.forEach(f => oplFotos[soort].push({url: URL.createObjectURL(f), name: f.name, file: f}));
+  files.forEach(f => oplFotos[soort].push({url: URL.createObjectURL(f), name: f.name, file: f, bewerktFile: null, bewerktUrl: null}));
   input.value = "";
   renderOplFotos();
 }
@@ -3873,7 +4117,7 @@ function renderOplFotos() {
     let html = _oplUploaded[soort].map(naam =>
       `<div class="thumb-cell" title="${escHtml(naam)}"><div class="thumb-placeholder">📷<div style="font-size:8px;line-height:1.2">opgeslagen</div></div></div>`).join("");
     html += oplFotos[soort].map((p, i) =>
-      `<div class="thumb-cell" style="position:relative"><img src="${p.url}" alt="foto"><button class="note-del" style="position:absolute;top:2px;right:2px" onclick="delOplFoto('${soort}',${i})">×</button></div>`).join("");
+      `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos['${soort}'][${i}], renderOplFotos)" title="Tik om aantekeningen te zetten"><img src="${p.bewerktUrl || p.url}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto('${soort}',${i})">×</button></div>`).join("");
     grid.innerHTML = html;
   });
 }
@@ -3895,15 +4139,28 @@ async function _rapFotosUpload(proj, fotos, prefix) {
     try {
       const veilig = (p.name || "foto.jpg").replace(/[\\\/:*?"<>|]/g, "_").trim().replace(/[. ]+$/, "") || "foto.jpg";
       const naam = `${prefix}_${datum}_${String(nr).padStart(2, "0")}_${veilig}`;
-      const dest = `${projPath}/06_Fotos/${naam}`;
-      const url = `https://graph.microsoft.com/v1.0/drives/${_projDrive(proj.code)}/root:/${_encPath(dest)}:/content?@microsoft.graph.conflictBehavior=rename`;
-      const r = await fetch(url, {
-        method: "PUT",
-        headers: {"Authorization": `Bearer ${token}`, "Content-Type": p.file.type || "image/jpeg"},
-        body: await p.file.arrayBuffer()
-      });
-      if (r.ok) out.namen.push(naam);
-      else { out.fail++; console.warn(`rapFoto ${naam} HTTP ${r.status}`); }
+      const drive = _projDrive(proj.code);
+      const r = await _spPut(token, drive, `${projPath}/06_Fotos/${naam}`,
+        await p.file.arrayBuffer(), p.file.type || "image/jpeg");
+      if (r.ok) {
+        out.namen.push(naam);
+        const base = naam.replace(/\.[^.]+$/, "");
+        if (p.bewerktFile) {
+          try {
+            const br = await _spPut(token, drive, `${projPath}/06_Fotos/${base}_bewerkt.jpg`,
+              await p.bewerktFile.arrayBuffer(), "image/jpeg");
+            if (br.ok) out.namen.push(`${base}_bewerkt.jpg`);
+            else console.warn(`rapFoto bewerkt ${base} HTTP ${br.status}`);
+          } catch(e) { console.warn("rapFoto bewerkt fout:", e.message); }
+        }
+        const klad = ((p.kladblok || p.bijschrift) || "").trim();
+        if (klad) {
+          try {
+            await _spPut(token, drive, `${projPath}/06_Fotos/${base}.txt`,
+              new Blob([klad], {type:"text/plain"}), "text/plain; charset=utf-8");
+          } catch(e) { console.warn("rapFoto kladblok fout:", e.message); }
+        }
+      } else { out.fail++; console.warn(`rapFoto ${naam} HTTP ${r.status}`); }
     } catch(e) { out.fail++; console.warn("rapFoto upload fout:", e.message); }
   }
   return out;
@@ -4561,8 +4818,25 @@ function buildNpCode() {
   return [k||"KLANT", l||"LOC", p||"PROD"].join("-");
 }
 
+// Project (groep) = eerste twee segmenten van de projectcode (KLANT-LOC). De
+// projectcode dráágt de hiërarchie al; geen apart veld nodig. (Interne naam blijft
+// klusVanCode; gebruiker ziet "Project". Items eronder = losse items / maatwerk.)
+function klusVanCode(code) {
+  const seg = String(code || "").split("-");
+  return seg.length >= 2 ? `${seg[0]}-${seg[1]}` : (seg[0] || "");
+}
+
 function updateNpPreview() {
-  document.getElementById("npCodePreview").textContent = buildNpCode();
+  const code = buildNpCode();
+  document.getElementById("npCodePreview").textContent = code;
+  const hint = document.getElementById("npKlusHint");
+  if (hint) {
+    const groep = klusVanCode(code);
+    const items = allProjects().filter(p => klusVanCode(p.code) === groep);
+    hint.textContent = groep && !/KLANT|LOC/.test(groep)
+      ? `Project: ${groep}${items.length ? ` · ${items.length} los(se) item(s) al onder dit project` : " · eerste item"}`
+      : "";
+  }
 }
 
 function openNewProject() {
@@ -4570,6 +4844,7 @@ function openNewProject() {
   const codes = [...new Set(allProjects().map(p => p.code.split("-")[0]))].sort();
   document.getElementById("klantCodes").innerHTML = codes.map(c => `<option value="${c}">`).join("");
   ["npName","npKlant","npLoc","npProd"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("npMaatwerk").checked = false;
   updateNpPreview();
   document.getElementById("newProjectSheet").classList.add("visible");
 }
@@ -4598,9 +4873,12 @@ async function saveNewProject() {
   if (!k || !l || !pr) { alert("Vul klantcode, locatie én product in voor de projectcode."); return; }
   const code = `${k}-${l}-${pr}`;
   if (allProjects().some(p => p.code === code)) { alert(`Projectcode ${code} bestaat al.`); return; }
+  const maatwerk = document.getElementById("npMaatwerk").checked;
 
   const proj = {
     id: "u"+Date.now(), code, name,
+    klus: klusVanCode(code),
+    maatwerk,
     addr: "–",
     status: "concept",
     assigned: true,
@@ -4635,7 +4913,8 @@ async function saveNewProject() {
       const remote = await _SP.read('mt_user_projects.json') || [];
       remote.push({
         id: proj.id, code: proj.code, naam: proj.name,
-        klantcode: k, togglProjectId: proj.togglProjectId || null,
+        klantcode: k, klus: proj.klus, maatwerk: proj.maatwerk,
+        togglProjectId: proj.togglProjectId || null,
         ts: new Date().toISOString(), door: email,
         pending: proj.pending
       });
@@ -4653,12 +4932,18 @@ async function saveNewProject() {
 
   document.getElementById("newProjectSheet").classList.remove("visible");
 
+  // Punt 1 (Bart 30-6): een nieuw project start meteen een lopende timer op dát item.
+  if (timerRunning) stopTimer();   // eventueel lopende timer netjes stoppen voor we wisselen
+  selectProject(proj.id);
+  startTimer();
+
+  const mw = proj.maatwerk ? " (maatwerk)" : "";
   if (proj.pending) {
-    showToast(`✓ Project ${code} lokaal bewaard — sync naar Toggl 2.0 volgt later`);
+    showToast(`✓ Project ${code}${mw} lokaal bewaard — timer loopt · Toggl-sync volgt`);
   } else if (proj.togglProjectId) {
-    showToast(`✓ Project ${code} live aangemaakt (Toggl 2.0 + gedeeld)`);
+    showToast(`✓ Project ${code}${mw} aangemaakt — timer loopt (Toggl 2.0 + gedeeld)`);
   } else {
-    showToast(`✓ Project ${code} aangemaakt`);
+    showToast(`✓ Project ${code}${mw} aangemaakt — timer loopt`);
   }
 
   if (npReturnToBlok) {
