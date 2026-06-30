@@ -1309,8 +1309,9 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div id="camReview" style="display:none;position:absolute;inset:0;z-index:2;background:#000;flex-direction:column">
     <img id="camReviewImg" alt="net gemaakte foto" style="flex:1;width:100%;object-fit:contain;background:#000">
     <div style="display:flex;gap:8px;padding:12px 14px;background:#000;padding-bottom:max(12px,env(safe-area-inset-bottom))">
-      <button onclick="camReviewRetry()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px">🗑 Opnieuw</button>
-      <button onclick="camReviewKeep()" style="flex:1;background:#2ea043;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px;font-weight:600">✓ Opslaan &amp; terug naar verslag</button>
+      <button onclick="camReviewRetry()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:13px 12px;font-size:14px">↻ Opnieuw</button>
+      <button onclick="closeCamera()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:13px 12px;font-size:14px">✕ Verlaten</button>
+      <button onclick="camReviewKeep()" style="flex:1;background:#2ea043;color:#fff;border:none;border-radius:10px;padding:13px 14px;font-size:15px;font-weight:600">✓ Akkoord</button>
     </div>
   </div>
 </div>
