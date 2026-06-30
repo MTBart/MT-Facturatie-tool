@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-30 — App: maatlijn op punten + album-foto's + foto-editor overal
+- Commit: `6006d89` | Auteur: Bart Witte
+
 ## 2026-06-30 — App: maatlijn = 1 sleep + lopende losse opnames blijven in de tab
 - Commit: `7a807cb` | Auteur: Bart Witte
 

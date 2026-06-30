@@ -1342,10 +1342,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 
 <!-- ── IN-APP CAMERA (getUserMedia — werkt op telefoon én Windows-tablet) ── -->
 <div id="camModal" style="display:none;position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column">
-  <video id="camVideo" autoplay playsinline muted style="flex:1;width:100%;object-fit:cover;background:#000"></video>
+  <video id="camVideo" autoplay playsinline muted style="flex:1;min-height:0;width:100%;object-fit:cover;background:#000"></video>
   <canvas id="camCanvas" style="display:none"></canvas>
   <div id="camErr" style="display:none;color:#fff;padding:20px;text-align:center;font-size:14px"></div>
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#000;padding-bottom:max(14px,env(safe-area-inset-bottom))">
+  <div style="display:flex;flex-shrink:0;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#000;padding-bottom:max(14px,env(safe-area-inset-bottom))">
     <button onclick="closeCamera()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:12px 16px;font-size:15px">Sluiten</button>
     <button id="camShotBtn" onclick="camSnap()" style="width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid #bbb;flex-shrink:0"></button>
     <button id="camSwitchBtn" onclick="camSwitch()" title="Wissel camera" style="display:none;background:#333;color:#fff;border:none;border-radius:10px;padding:12px 14px;font-size:20px;min-width:64px">🔄</button>
@@ -1353,7 +1353,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   </div>
   <!-- WhatsApp-achtige review na een opname: behouden of opnieuw (fase 2) -->
   <div id="camReview" style="display:none;position:absolute;inset:0;z-index:2;background:#000;flex-direction:column">
-    <img id="camReviewImg" alt="net gemaakte foto" style="flex:1;width:100%;object-fit:contain;background:#000">
+    <img id="camReviewImg" alt="net gemaakte foto" style="flex:1;min-height:0;width:100%;object-fit:contain;background:#000">
     <div style="display:flex;gap:8px;padding:12px 14px;background:#000;padding-bottom:max(12px,env(safe-area-inset-bottom))">
       <button onclick="camReviewRetry()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:13px 12px;font-size:14px">↻ Opnieuw</button>
       <button onclick="closeCamera()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:13px 12px;font-size:14px">✕ Verlaten</button>
