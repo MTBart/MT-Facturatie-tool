@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-30 — App: Voor-opname — losse opname onderweg, later in cockpit splitsen
+- Commit: `d6d9c83` | Auteur: Bart Witte
+
 ## 2026-06-30 — App: service worker (network-first) — einde cache-gedoe op Android
 - Commit: `42c01a4` | Auteur: Bart Witte
 

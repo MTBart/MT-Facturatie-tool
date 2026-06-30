@@ -1334,7 +1334,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#000;padding-bottom:max(14px,env(safe-area-inset-bottom))">
     <button onclick="closeCamera()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:12px 16px;font-size:15px">Sluiten</button>
     <button id="camShotBtn" onclick="camSnap()" style="width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid #bbb;flex-shrink:0"></button>
-    <div id="camCount" style="color:#fff;font-size:13px;min-width:64px;text-align:right"></div>
+    <button id="camSwitchBtn" onclick="camSwitch()" title="Wissel camera" style="display:none;background:#333;color:#fff;border:none;border-radius:10px;padding:12px 14px;font-size:20px;min-width:64px">🔄</button>
+    <span id="camCount" style="display:none"></span>
   </div>
   <!-- WhatsApp-achtige review na een opname: behouden of opnieuw (fase 2) -->
   <div id="camReview" style="display:none;position:absolute;inset:0;z-index:2;background:#000;flex-direction:column">
@@ -1395,21 +1396,48 @@ if ('serviceWorker' in navigator) {
    bestandskiezer, zodat de upload-pijplijn ongewijzigd blijft.
    ===================================================================== */
 let _camStream = null, _camCb = null, _camN = 0;
+let _camDevices = [], _camIdx = -1;   // camera-lijst + actieve index (voor wisselen)
+
+// Eén stream (her)starten; stopt eerst de oude. Returnt de track-settings.
+async function _camGetStream(constraints) {
+  if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
+  _camStream = await navigator.mediaDevices.getUserMedia(constraints);
+  const video = document.getElementById("camVideo");
+  if (video) video.srcObject = _camStream;
+  return _camStream;
+}
 
 async function openCamera(cb) {
   _camCb = cb; _camN = 0;
   const modal = document.getElementById("camModal");
   const err = document.getElementById("camErr");
   const video = document.getElementById("camVideo");
-  document.getElementById("camCount").textContent = "";
+  const cc = document.getElementById("camCount"); if (cc) cc.textContent = "";
   err.style.display = "none"; video.style.display = "block";
   modal.style.display = "flex";
   try {
-    _camStream = await navigator.mediaDevices.getUserMedia({
+    await _camGetStream({
       video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false
     });
-    video.srcObject = _camStream;
+    // Camera's inventariseren (labels zijn nu beschikbaar na toestemming) →
+    // wissel-knop tonen bij >1 camera, en op een tablet die facingMode negeert
+    // automatisch naar de achtercamera springen.
+    try {
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      _camDevices = devs.filter(d => d.kind === "videoinput");
+      const active = _camStream.getVideoTracks()[0];
+      const aId = (active && active.getSettings) ? active.getSettings().deviceId : null;
+      _camIdx = Math.max(0, _camDevices.findIndex(d => d.deviceId === aId));
+      const sw = document.getElementById("camSwitchBtn");
+      if (sw) sw.style.display = _camDevices.length > 1 ? "block" : "none";
+      const lbl = ((active && active.label) || "").toLowerCase();
+      const isFront = /front|user|face|voor|selfie/.test(lbl);
+      if (isFront && _camDevices.length > 1) {
+        const back = _camDevices.findIndex(d => /back|rear|environment|achter|world/i.test(d.label));
+        if (back >= 0 && back !== _camIdx) { _camIdx = back; await _camUseDevice(_camIdx); }
+      }
+    } catch (e) { /* enumerate optioneel — wissel-knop blijft dan verborgen */ }
   } catch (e) {
     video.style.display = "none";
     err.style.display = "block";
@@ -1419,6 +1447,26 @@ async function openCamera(cb) {
         : "Controleer of er een camera is en geen andere app hem gebruikt.") +
       "<br><br>Je kunt ook 'Sluiten' kiezen en de knop \"📁 Bestand kiezen\" gebruiken.";
   }
+}
+
+// Naar een specifieke camera uit de lijst schakelen (op deviceId — werkt ook
+// op tablets/Windows waar facingMode genegeerd wordt).
+async function _camUseDevice(idx) {
+  const d = _camDevices[idx];
+  if (!d) return;
+  try {
+    await _camGetStream({
+      video: { deviceId: { exact: d.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+  } catch (e) { console.warn("camera wisselen faalde:", e.message); if (window.showToast) showToast("Kon niet wisselen van camera"); }
+}
+
+// Wissel-knop: door alle beschikbare camera's heen rouleren.
+async function camSwitch() {
+  if (_camDevices.length < 2) { if (window.showToast) showToast("Maar één camera gevonden"); return; }
+  _camIdx = (_camIdx + 1) % _camDevices.length;
+  await _camUseDevice(_camIdx);
 }
 
 // WhatsApp-flow: een opname gaat eerst naar een review (behouden of opnieuw)
