@@ -2003,15 +2003,20 @@ const _SP = {
     return {base:`https://graph.microsoft.com/v1.0/sites/${this.SITE_ID}/drive`, token};
   },
 
+  // Faalveilig lezen: ALLEEN 404 (bestand bestaat nog niet) geeft null terug.
+  // Elke andere fout gooit — een leesfout mag nooit als "leeg bestand" gelden,
+  // anders overschrijft een read-merge-write met een halve lijst de echte data.
+  // Alle callers zitten in try/catch en vallen terug op de _RQ-retry-queue.
   async read(filename) {
-    try {
-      const {base, token} = await this._driveBase();
-      const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
-        {headers:{'Authorization':`Bearer ${token}`}});
-      if (r.status === 404) return null;
-      if (!r.ok) { console.warn('SP read faalde:', filename, 'HTTP', r.status); return null; }
-      return await r.json();
-    } catch(e) { console.warn('SP read fout:', filename, e.message); return null; }
+    const {base, token} = await this._driveBase();
+    const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
+      {headers:{'Authorization':`Bearer ${token}`}});
+    if (r.status === 404) return null;
+    if (!r.ok) {
+      console.warn('SP read faalde:', filename, 'HTTP', r.status);
+      throw new Error(`SP read ${filename}: HTTP ${r.status}`);
+    }
+    return await r.json();
   },
 
   async write(filename, data) {

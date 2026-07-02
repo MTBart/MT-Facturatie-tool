@@ -8187,6 +8187,7 @@ const _SP = {
   _q: {},
   ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
   lastSync: null,           // {ts, ok, key, error} — voedt de zichtbare sync-status
+  blockedKeys: new Set(),   // keys waarvan de hydrate FAALDE (≠ 404) → auto-sync uit tot herladen (anti-clobber)
 
   // Graph weigert twee colon-paths in één URL (sites/host:/... én drive/root:/...:/content).
   // Daarom de site éérst naar zijn id resolven en dáármee /sites/{id}/drive/... bouwen.
@@ -8202,15 +8203,20 @@ const _SP = {
     return { base: `https://graph.microsoft.com/v1.0/sites/${this.SITE_ID}/drive`, token };
   },
 
+  // Faalveilig lezen: ALLEEN 404 (bestand bestaat nog niet) geeft null terug.
+  // Elke andere fout (token weg, netwerk, 5xx) gooit een Error — een leesfout
+  // mag NOOIT als "SharePoint is leeg" gelezen worden, anders migreert een
+  // stale localStorage over de echte SP-data heen (het twee-PC-clobber-patroon).
   async read(filename) {
-    try {
-      const { base, token } = await this._driveBase();
-      const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
-        { headers: { 'Authorization': `Bearer ${token}` } });
-      if (r.status === 404) return null;        // bestaat nog niet → geen fout
-      if (!r.ok) { console.warn('SP read faalde:', filename, 'HTTP', r.status); return null; }
-      return await r.json();
-    } catch(e) { console.warn('SP read fout:', filename, e.message); return null; }
+    const { base, token } = await this._driveBase();
+    const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
+      { headers: { 'Authorization': `Bearer ${token}` } });
+    if (r.status === 404) return null;        // bestaat nog niet → geen fout
+    if (!r.ok) {
+      console.warn('SP read faalde:', filename, 'HTTP', r.status);
+      throw new Error(`SP read ${filename}: HTTP ${r.status}`);
+    }
+    return await r.json();
   },
 
   async write(filename, data) {
@@ -8234,6 +8240,7 @@ const _SP = {
 
   schedule(key, rawValue) {
     if (!this.ready) return;   // hydrate nog niet klaar → niet schrijven (anti-clobber)
+    if (this.blockedKeys.has(key)) { console.warn('SP auto-sync geblokkeerd voor', key, '(hydrate faalde — herlaad de pagina)'); return; }
     clearTimeout(this._q[key]);
     this._q[key] = setTimeout(async () => {
       if (rawValue === null) { await this.write(key + '.json', '[]'); return; }
@@ -9123,12 +9130,21 @@ window.toonPdfInViewer = function(containerId, blobUrl) {
 
 window.initStorage = async function() {
   const taken = [..._SP.KEYS].map(async key => {
-    const spData = await _SP.read(key + '.json');
+    let spData;
+    try { spData = await _SP.read(key + '.json'); }
+    catch(e) {
+      // Leesfout ≠ "SharePoint is leeg": NIET migreren én deze key niet meer
+      // auto-syncen deze sessie. Anders schuift een stale localStorage over de
+      // echte SP-data heen (twee-PC-clobber). Lokale cache blijft bruikbaar.
+      _SP.blockedKeys.add(key);
+      console.warn('SP hydrate faalde voor', key, '— migratie en auto-sync geblokkeerd:', e.message);
+      return;
+    }
     if (spData !== null) {
       // SharePoint heeft data → in localStorage laden (SharePoint wint altijd)
       _lsSet(key, typeof spData === 'string' ? spData : JSON.stringify(spData));
     } else {
-      // SharePoint leeg → migreer bestaande localStorage naar SharePoint.
+      // SharePoint leeg (echte 404) → migreer bestaande localStorage naar SharePoint.
       // Een lege/triviale waarde NIET migreren: anders schrijft een lege PC '[]'
       // naar SP en dat "wint" later van de PC die de echte data heeft.
       const lokaal = localStorage.getItem(key);
@@ -9139,7 +9155,11 @@ window.initStorage = async function() {
     }
   });
   await Promise.all(taken);
-  _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan
+  _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan (behalve blockedKeys)
+  if (_SP.blockedKeys.size) {
+    _SP.lastSync = { ts: Date.now(), ok: false, key: [..._SP.blockedKeys].join(', '),
+      error: 'hydrate faalde — auto-sync uit voor deze key(s), herlaad de pagina' };
+  }
   // Verrijkte klant/leverancier-registry uit SharePoint laden (privé, niet publiek).
   // Voedt modal-suggesties + auto-koppeling. Faalt stil → publieke KLANTEN blijft.
   try {
@@ -10051,7 +10071,8 @@ function admId(){return Date.now().toString(36)+Math.random().toString(36).slice
 
 // ── SP read-merge-write helpers ──
 async function admLoadConfig(){
-  const d=await _SP.read('mt_adminconfig.json');
+  let d; try{ d=await _SP.read('mt_adminconfig.json'); }
+  catch(e){ _admConfig=admCfg(); return; }   // leesfout → lokale cache houden, niet overschrijven
   _admConfig=d||(JSON.parse(JSON.stringify(ADM_CFG_DEF)));
   _admConfig.lockDagen=_admConfig.lockDagen??14;
   _admConfig.werkuren=_admConfig.werkuren||{};
@@ -10065,47 +10086,56 @@ async function admSaveConfig(){
 function admCfg(){if(_admConfig)return _admConfig;try{return JSON.parse(localStorage.getItem('mt_adminconfig')||'null')||JSON.parse(JSON.stringify(ADM_CFG_DEF));}catch(e){return JSON.parse(JSON.stringify(ADM_CFG_DEF));}}
 
 async function admLoadVerlof(){
-  const d=await _SP.read('mt_verlof.json');
+  let d; try{ d=await _SP.read('mt_verlof.json'); }
+  catch(e){ _admVerlof=admVerlof(); return; }   // leesfout → lokale cache houden
   _admVerlof=Array.isArray(d)?d:[];
   try{localStorage.setItem('mt_verlof',JSON.stringify(_admVerlof));}catch(e){}
 }
 function admVerlof(){if(_admVerlof)return _admVerlof;try{return JSON.parse(localStorage.getItem('mt_verlof')||'[]');}catch(e){return [];}}
 async function admSaveVerlof(){
   try{localStorage.setItem('mt_verlof',JSON.stringify(_admVerlof));}catch(e){}
-  // read-merge-write op id
-  const remote=await _SP.read('mt_verlof.json')||[];
+  // read-merge-write op id; leesfout → NIET schrijven (anti-clobber), wijziging blijft lokaal
+  let remote; try{ remote=(await _SP.read('mt_verlof.json'))||[]; }
+  catch(e){ if(typeof planToast==='function')planToast('⚠ SharePoint niet bereikbaar — wijziging alleen lokaal bewaard'); return false; }
   const ids=new Set(_admVerlof.map(v=>v.id));
   const merged=[..._admVerlof,...remote.filter(v=>!ids.has(v.id))];
   _admVerlof=merged;
   try{localStorage.setItem('mt_verlof',JSON.stringify(_admVerlof));}catch(e){}
   await _SP.write('mt_verlof.json',_admVerlof);
+  return true;
 }
 
 async function admLoadVrijdagen(){
-  const d=await _SP.read('mt_vrijedagen.json');
+  let d; try{ d=await _SP.read('mt_vrijedagen.json'); }
+  catch(e){ _admVrijdagen=admVrijdagen(); return; }   // leesfout → lokale cache houden
   _admVrijdagen=Array.isArray(d)?d:[];
   try{localStorage.setItem('mt_vrijedagen',JSON.stringify(_admVrijdagen));}catch(e){}
 }
 function admVrijdagen(){if(_admVrijdagen)return _admVrijdagen;try{return JSON.parse(localStorage.getItem('mt_vrijedagen')||'[]');}catch(e){return [];}}
 async function admSaveVrijdagen(){
   try{localStorage.setItem('mt_vrijedagen',JSON.stringify(_admVrijdagen));}catch(e){}
-  const remote=await _SP.read('mt_vrijedagen.json')||[];
+  // read-merge-write op id; leesfout → NIET schrijven (anti-clobber)
+  let remote; try{ remote=(await _SP.read('mt_vrijedagen.json'))||[]; }
+  catch(e){ if(typeof planToast==='function')planToast('⚠ SharePoint niet bereikbaar — wijziging alleen lokaal bewaard'); return false; }
   const ids=new Set(_admVrijdagen.map(v=>v.id));
   const merged=[..._admVrijdagen,...remote.filter(v=>!ids.has(v.id))];
   _admVrijdagen=merged.sort((a,b)=>a.datum.localeCompare(b.datum));
   try{localStorage.setItem('mt_vrijedagen',JSON.stringify(_admVrijdagen));}catch(e){}
   await _SP.write('mt_vrijedagen.json',_admVrijdagen);
+  return true;
 }
 
 async function admLoadAudit(){
-  const d=await _SP.read('mt_auditlog.json');
+  let d; try{ d=await _SP.read('mt_auditlog.json'); }
+  catch(e){ _admAudit=admAudit(); return; }   // leesfout → lokale cache houden
   _admAudit=Array.isArray(d)?d:[];
   try{localStorage.setItem('mt_auditlog',JSON.stringify(_admAudit));}catch(e){}
 }
 function admAudit(){if(_admAudit)return _admAudit;try{return JSON.parse(localStorage.getItem('mt_auditlog')||'[]');}catch(e){return [];}}
 
 async function admLoadNotifs(){
-  const d=await _SP.read('mt_notificaties.json');
+  let d; try{ d=await _SP.read('mt_notificaties.json'); }
+  catch(e){ _admNotifs=admNotifs(); return; }   // leesfout → lokale cache houden
   _admNotifs=Array.isArray(d)?d:[];
   try{localStorage.setItem('mt_notificaties',JSON.stringify(_admNotifs));}catch(e){}
 }
@@ -10224,11 +10254,11 @@ async function admBoekVerlof(){
   const opm=document.getElementById('adm-verl-opm')?.value||'';
   const entry={id:admId(),persoon:pers,van,tm,dagen,opm,ts:new Date().toISOString(),door:mtMijEmail()};
   const arr=admVerlof(); arr.push(entry); _admVerlof=arr;
-  await admSaveVerlof();
+  const ok=await admSaveVerlof();
   auditLog('verlof-boeken',pers,null,`${van}→${tm} (${dagen}d)`,opm);
   if(dagenEl)dagenEl.value='';
   admRenderVerlofLijst();admRenderSaldo();
-  planToast('✓ Verlof geboekt');
+  if(ok!==false)planToast('✓ Verlof geboekt');
 }
 function admRenderVerlofLijst(){
   const el=document.getElementById('adm-verlof-lijst'); if(!el) return;
@@ -10245,10 +10275,10 @@ async function admVerwijderVerlof(id){
   if(!confirm('Verlof-boeking verwijderen?')) return;
   const arr=admVerlof(); const v=arr.find(x=>x.id===id);
   _admVerlof=arr.filter(x=>x.id!==id);
-  await admSaveVerlof();
+  const ok=await admSaveVerlof();
   auditLog('verlof-verwijder',v?.persoon,`${v?.van}→${v?.tm}`,null,'');
   admRenderVerlofLijst();admRenderSaldo();
-  planToast('✓ Verlof verwijderd');
+  if(ok!==false)planToast('✓ Verlof verwijderd');
 }
 function admRenderSaldo(){
   // jaar-select vullen
@@ -10283,12 +10313,12 @@ async function admVoegVrijeDagToe(){
   if(arr.find(v=>v.datum===datum)){planToast('Die datum staat al in de lijst');return;}
   const entry={id:admId(),datum,naam,type,ts:new Date().toISOString(),door:mtMijEmail()};
   arr.push(entry);arr.sort((a,b)=>a.datum.localeCompare(b.datum));_admVrijdagen=arr;
-  await admSaveVrijdagen();
+  const ok=await admSaveVrijdagen();
   auditLog('vrijdag-toevoegen',naam,null,`${datum} (${type})`,'');
   document.getElementById('adm-vd-datum').value='';
   document.getElementById('adm-vd-naam').value='';
   admRenderVrijdagenLijst();
-  planToast('✓ Vrije dag toegevoegd');
+  if(ok!==false)planToast('✓ Vrije dag toegevoegd');
 }
 function admRenderVrijdagenLijst(){
   const el=document.getElementById('adm-vd-lijst'); if(!el) return;
@@ -10305,10 +10335,10 @@ async function admVerwijderVrijeDag(id){
   if(!confirm('Vrije dag verwijderen?')) return;
   const arr=admVrijdagen(); const v=arr.find(x=>x.id===id);
   _admVrijdagen=arr.filter(x=>x.id!==id);
-  await admSaveVrijdagen();
+  const ok=await admSaveVrijdagen();
   auditLog('vrijdag-verwijder',v?.naam,`${v?.datum} (${v?.type})`,null,'');
   admRenderVrijdagenLijst();
-  planToast('✓ Vrije dag verwijderd');
+  if(ok!==false)planToast('✓ Vrije dag verwijderd');
 }
 
 // ── A5: Notificaties ──
@@ -10319,7 +10349,9 @@ async function admVerstuurNotificatie(){
   const tabDeep=document.getElementById('adm-notif-tab')?.value||'';
   const itemDeep=document.getElementById('adm-notif-item')?.value?.trim()||'';
   if(!titel||!tekst){planToast('Vul titel en tekst in');return;}
-  const remote=await _SP.read('mt_notificaties.json')||[];
+  // leesfout → NIET versturen (anti-clobber: anders wist een halve lijst de rest)
+  let remote; try{ remote=(await _SP.read('mt_notificaties.json'))||[]; }
+  catch(e){ planToast('⚠ SharePoint niet bereikbaar — notificatie NIET verstuurd'); return; }
   const entry={id:admId(),ts:new Date().toISOString(),van:mtMijEmail(),aan,titel,tekst,
     deeplink:{tab:tabDeep,item:itemDeep},gelezen:[]};
   remote.unshift(entry);_admNotifs=remote;
@@ -10366,19 +10398,23 @@ let _planblokken=null;
 function agPlanBlokken(){if(_planblokken)return _planblokken;try{return JSON.parse(localStorage.getItem('mt_planblokken')||'[]');}catch(e){return [];}}
 
 async function agPlanLoad(){
-  const d=await _SP.read('mt_planblokken.json');
+  let d; try{ d=await _SP.read('mt_planblokken.json'); }
+  catch(e){ _planblokken=agPlanBlokken(); return; }   // leesfout → lokale cache houden
   _planblokken=Array.isArray(d)?d:[];
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
 }
 
 async function agPlanSave(){
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
-  const remote=await _SP.read('mt_planblokken.json')||[];
+  // read-merge-write op id; leesfout → NIET schrijven (anti-clobber)
+  let remote; try{ remote=(await _SP.read('mt_planblokken.json'))||[]; }
+  catch(e){ if(typeof planToast==='function')planToast('⚠ SharePoint niet bereikbaar — wijziging alleen lokaal bewaard'); return false; }
   const ids=new Set((_planblokken||[]).map(b=>b.id));
   const merged=[...(_planblokken||[]),...remote.filter(b=>!ids.has(b.id))];
   _planblokken=merged;
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
   await _SP.write('mt_planblokken.json',_planblokken);
+  return true;
 }
 
 // ── Render Planning-view ──
@@ -10586,7 +10622,7 @@ function agPlanNieuwFormulier(datum,start){
     persoon:persLid.slug,project_code:proj||'',taak:taak||'',
     datum,start:startI,duurMin,notitie:'',ts:new Date().toISOString(),door:mtMijEmail()};
   const arr=agPlanBlokken(); arr.push(blok); _planblokken=arr;
-  agPlanSave().then(()=>{agPlanRender();planToast('✓ Planblok aangemaakt');});
+  agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok aangemaakt');});
 }
 
 // ── Blok-menu (bewerken / verwijderen) ──
@@ -10597,7 +10633,7 @@ function agPlanBlokMenu(evt,id){
     const arr=agPlanBlokken();
     const b=arr.find(x=>x.id===id);
     _planblokken=arr.filter(x=>x.id!==id);
-    agPlanSave().then(()=>{agPlanRender();planToast('✓ Planblok verwijderd');});
+    agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok verwijderd');});
   }
 }
 
@@ -10631,7 +10667,7 @@ function agPlanDrop(evt,datum){
     return {...b,datum,start:startStr,ts:new Date().toISOString(),door:mtMijEmail()};
   });
   _planblokken=arr;
-  agPlanSave().then(()=>{agPlanRender();planToast('✓ Planblok verplaatst');});
+  agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok verplaatst');});
 }
 </script>
 
