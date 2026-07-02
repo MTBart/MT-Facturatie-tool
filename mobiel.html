@@ -16,6 +16,10 @@
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
      Lokaal = geen supply-chain-risico via CDN + login werkt offline-cached (sw.js). -->
 <script src="vendor/msal-browser.min.js?v=2.39.0"></script>
+<!-- Gedeelde kernlaag (esc, _encPath, authHeader, MSAL-tokenhelpers, _SP-synclaag) —
+     één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
+     gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
+<script src="mt-core.js?v=2026-07-02"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1916,44 +1920,19 @@ const _STATUS_FROM_ID = {300785:'todo', 300788:'bezig', 300786:'klaar'};
 // productie. Stuurt demo-seeds (taken/notificaties) die echte gebruikers niet horen te zien.
 const DEV_MODE = false;
 
-let _msal = null;
+// _msal op window zodat mt-core.js dezelfde instance ziet (token-helpers wonen daar).
+window._msal = null;
 let _msAccount = null;   // ingelogd account
 let _demoMode = false;   // true = niet ingelogd, alles lokaal
 
-/* Auth-token helpers — identiek aan v2.html patroon */
-window.getAuthToken = async function() {
-  if (!_msal) return null;
-  const accounts = _msal.getAllAccounts();
-  if (!accounts.length) return null;
-  try {
-    const result = await _msal.acquireTokenSilent({ scopes: ['openid','profile'], account: accounts[0] });
-    return result.idToken;
-  } catch(e) { return null; }
-};
-
+// getAuthToken / getGraphToken / authHeader komen uit mt-core.js. Mobiel gebruikt
+// alleen Files/Sites-scopes (geen Mail/Calendars/Tasks) en heeft GEEN sessie-banner:
+// bij dubbele token-fail geeft de helper stil null en leunt de app op de _RQ-queue.
 const GRAPH_SCOPES = [
   'https://graph.microsoft.com/Files.ReadWrite',
   'https://graph.microsoft.com/Sites.ReadWrite.All'
 ];
-window.getGraphToken = async function() {
-  if (!_msal) return null;
-  const accounts = _msal.getAllAccounts();
-  if (!accounts.length) return null;
-  try {
-    const result = await _msal.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
-    return result.accessToken;
-  } catch(e) {
-    try {
-      const result = await _msal.acquireTokenPopup({ scopes: GRAPH_SCOPES });
-      return result.accessToken;
-    } catch(e2) { return null; }
-  }
-};
-
-async function authHeader() {
-  const t = typeof getAuthToken === 'function' ? await getAuthToken() : null;
-  return t ? {'X-Auth-Token': t} : {};
-}
+window.MTCore.installAuth({ graphScopes: GRAPH_SCOPES });
 
 /* ── Track v9 via Worker ── */
 async function tgTrack(path, method='GET', body=null) {
@@ -1993,115 +1972,16 @@ async function focusFetch(path, method='GET', body=null) {
   try { return JSON.parse(txt); } catch(e) { return txt; }
 }
 
-/* ── SharePoint mini-laag (MT-Bedrijfstool/) ── */
-const _SP = {
-  SITE: 'mortisetenon.sharepoint.com:/sites/MortiseTenon',
-  SITE_ID: null,
-  FOLDER: 'MT-Bedrijfstool',
-
-  // S1 — ETag-concurrency (proef op mt_planning; gespiegeld met v2.html). Alleen
-  // keys in etagKeys krijgen If-Match + 412-conflictafhandeling; andere keys
-  // houden het oude last-write-wins-gedrag. Uitrol naar meer keys komt later.
+/* ── SharePoint mini-laag (MT-Bedrijfstool/) ──
+   De sync-kern (site-resolve, faalveilig read, write + S1 ETag/412-merge) komt uit
+   mt-core.js, gedeeld met v2.html. Mobiel houdt GEEN lastSync/updateSyncStatus (die
+   zijn cockpit-only) → mt-core-defaults volstaan; alleen de toast wijst naar showToast.
+   Een 412 gaat bewust NIET terug in _RQ (oneindige retry-loop) — mt-core handelt 'm
+   éénmalig af. Callers zitten in try/catch en vallen terug op de _RQ-retry-queue. */
+const _SP = window.MTCore.makeSP({
+  toast: (m) => { if (typeof showToast === 'function') showToast(m); },
   etagKeys: new Set(['mt_planning']),
-  _etags: {},               // filename -> laatst gelezen ETag (voor If-Match bij write)
-
-  async _driveBase() {
-    const token = await window.getGraphToken();
-    if (!token) throw new Error('Geen Graph-token');
-    if (!this.SITE_ID) {
-      const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${this.SITE}`,
-        {headers:{'Authorization':`Bearer ${token}`}});
-      if (!sr.ok) throw new Error(`site-resolve HTTP ${sr.status}`);
-      this.SITE_ID = (await sr.json()).id;
-    }
-    return {base:`https://graph.microsoft.com/v1.0/sites/${this.SITE_ID}/drive`, token};
-  },
-
-  // Faalveilig lezen: ALLEEN 404 (bestand bestaat nog niet) geeft null terug.
-  // Elke andere fout gooit — een leesfout mag nooit als "leeg bestand" gelden,
-  // anders overschrijft een read-merge-write met een halve lijst de echte data.
-  // Alle callers zitten in try/catch en vallen terug op de _RQ-retry-queue.
-  async read(filename) {
-    const {base, token} = await this._driveBase();
-    const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
-      {headers:{'Authorization':`Bearer ${token}`}});
-    if (r.status === 404) { delete this._etags[filename]; return null; }
-    if (!r.ok) {
-      console.warn('SP read faalde:', filename, 'HTTP', r.status);
-      throw new Error(`SP read ${filename}: HTTP ${r.status}`);
-    }
-    // S1: bewaar de ETag zodat write() 'm als If-Match kan meesturen (opt-in keys).
-    const et = r.headers.get('ETag');
-    if (et) this._etags[filename] = et; else delete this._etags[filename];
-    return await r.json();
-  },
-
-  async write(filename, data) {
-    try {
-      const {base, token} = await this._driveBase();
-      const key = filename.replace(/\.json$/, '');
-      const useEtag = this.etagKeys.has(key) && this._etags[filename];
-      const headers = {'Authorization':`Bearer ${token}`, 'Content-Type':'application/json'};
-      if (useEtag) headers['If-Match'] = this._etags[filename];
-      const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`, {
-        method: 'PUT',
-        headers,
-        body: typeof data === 'string' ? data : JSON.stringify(data)
-      });
-      // S1: 412 = SP-versie nieuwer dan onze ETag → re-read, mergen, herschrijven.
-      if (r.status === 412 && useEtag) return await this._resolveConflict(filename, data);
-      if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; }
-      if (!r.ok) console.warn('SP write faalde:', filename, 'HTTP', r.status);
-      return r.ok;
-    } catch(e) { console.warn('SP write fout:', filename, e.message); return false; }
-  },
-
-  // S1 — conflictafhandeling na HTTP 412 (opt-in keys). Re-read (ververst _etags),
-  // merge lokale wijzigingen erin (bij zelfde id/sleutel wint LOKAAL), herschrijf
-  // met verse ETag. Mergebaar: array-van-{id} of plain object/map (mt_planning is
-  // mt_planning[code]={...}). Niet-mergebare vorm (scalar/array-zonder-id) → NIET
-  // blind overschrijven: toast + write laten vallen; volgende flush herprobeert.
-  // Belangrijk voor mobiel: 412 gaat NIET terug in _RQ (dat zou dezelfde bytes in
-  // een oneindige retry-loop zetten) — conflict wordt hier één keer afgehandeld.
-  async _resolveConflict(filename, localData) {
-    let remote;
-    try { remote = await this.read(filename); }   // ververst _etags[filename]
-    catch(e) { console.warn('SP 412 re-read faalde:', filename, e.message); return false; }
-    const local = (typeof localData === 'string') ? (()=>{ try{return JSON.parse(localData);}catch(e){return localData;} })() : localData;
-    const merged = this._mergeById(remote, local);
-    if (merged === null) {
-      const key = filename.replace(/\.json$/, '');
-      console.warn('SP 412 op', key, '— niet-mergebare vorm, write overgeslagen (herlaad → verse write)');
-      if (typeof showToast === 'function') showToast('⚠ sync-conflict op ' + key + ', herladen');
-      return false;
-    }
-    const {base, token} = await this._driveBase();
-    const headers = {'Authorization':`Bearer ${token}`, 'Content-Type':'application/json'};
-    if (this._etags[filename]) headers['If-Match'] = this._etags[filename];
-    const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
-      { method:'PUT', headers, body: JSON.stringify(merged) });
-    if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; }
-    else console.warn('SP 412-merge herschrijf faalde:', filename, 'HTTP', r.status);
-    return r.ok;
-  },
-
-  // Merge remote+local; lokaal wint bij gelijke sleutel. null = niet-mergebare vorm.
-  _mergeById(remote, local) {
-    if (Array.isArray(local) && Array.isArray(remote)
-        && local.every(x => x && typeof x === 'object' && 'id' in x)
-        && remote.every(x => x && typeof x === 'object' && 'id' in x)) {
-      const byId = new Map();
-      for (const rec of remote) byId.set(rec.id, rec);
-      for (const rec of local) byId.set(rec.id, rec);   // lokaal wint
-      return [...byId.values()];
-    }
-    const isPlainObj = v => v && typeof v === 'object' && !Array.isArray(v);
-    if (isPlainObj(local) && (isPlainObj(remote) || remote === null)) {
-      return Object.assign({}, remote || {}, local);    // lokale sleutels winnen
-    }
-    return null;
-  }
-};
+});
 
 /* ── MSAL init ── */
 async function initMsal() {
@@ -2110,7 +1990,7 @@ async function initMsal() {
   if (typeof window.name === 'string' && window.name.indexOf('msal.') === 0) window.name = '';
   Object.keys(sessionStorage).filter(k => k.includes('interaction')).forEach(k => sessionStorage.removeItem(k));
   try {
-    _msal = new msal.PublicClientApplication({
+    window._msal = new msal.PublicClientApplication({
       auth: {
         clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
         authority: 'https://login.microsoftonline.com/15b652c3-ff53-433f-a29d-e9626cbafb41',
@@ -4549,8 +4429,7 @@ async function genereerProjectMappenMobiel(proj) {
 // pad-call op de verkeerde drive (bug 12-6: "NAS niet bereikbaar: HTTP 404").
 const _projDriveMap = {};   // CODE → driveId waar de projectmap echt leeft
 function _projDrive(code) { return _projDriveMap[(code || '').toUpperCase()] || _SPProj.DRIVE; }
-// encodeURI laat # en ? staan — die breken Graph-pad-adressering
-function _encPath(p) { return encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F'); }
+// _encPath (encodeURI + #/? escapen) komt uit mt-core.js — window._encPath.
 
 async function findProjectFolder(code) {
   const token = await window.getGraphToken();

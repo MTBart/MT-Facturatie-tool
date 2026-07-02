@@ -13,6 +13,10 @@
      nooit tijdens parse → defer haalt ~1,3 MB uit het render-blocking pad. -->
 <script src="vendor/xlsx.full.min.js" defer></script>
 <script src="vendor/jspdf.umd.min.js" defer></script>
+<!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
+     voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
+     ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
+<script src="mt-core.js?v=2026-07-02"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -2156,9 +2160,9 @@ button{transition:transform .07s ease,filter .07s ease}
 <script>
 // ═══ CONFIG ═══
 // Canonieke HTML-escaper — één implementatie voor de hele tool (dedup, was 8+ kopieën).
-// Zelfde tekenmap als het oude tgEsc. Bewust NIET voor: attribute-only escapes
-// (bewerkVoorraadRegel) en CSV-quoting (nacalcExportCsv) — die doen iets anders.
-function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// esc() woont nu in mt-core.js (window.esc), gedeeld met mobiel.html (audit-actie S2).
+// Bewust NIET voor: attribute-only escapes (bewerkVoorraadRegel) en CSV-quoting
+// (nacalcExportCsv) — die functies houden hun eigen lokale helper.
 const WORKER = 'https://mt-claude-proxy.bart-a12.workers.dev';
 window.WORKER = WORKER; // track.js leest window.WORKER
 // Versie-stempel voor usage-tracking. Handmatig bumpen bij grotere wijzigingen
@@ -2294,7 +2298,7 @@ function slaProjectenOp(){localStorage.setItem('mt_projecten',JSON.stringify(PRO
 function fmt(n){return`€ ${n.toFixed(2).replace('.',',')}`;}
 function fmtDatum(d){return d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'—';}
 
-async function authHeader(){const t=typeof getAuthToken==='function'?await getAuthToken():null;return t?{'X-Auth-Token':t}:{};}
+// authHeader() woont nu in mt-core.js (window.authHeader), gedeeld met mobiel.html.
 // Wikkelt een MB-fetch en logt latency + faal-status (alleen pad/methode, geen
 // body/inhoud). Gefaalde API-calls = usability-frictie → zichtbaar in Activiteit.
 async function _mbTrack(method,path,doFetch){
@@ -8183,149 +8187,25 @@ async function openFactuurInControle(factuurId){
 
 <!-- ═══ SHAREPOINT OPSLAG ═══ -->
 <script>
-// Bugfix: encodeURI laat '#' en '?' staan → Graph-URL breekt bij projectnamen zoals "#519617 CN Bajeskwartier"
-function _encPath(p){ return encodeURI(p).replace(/#/g,'%23').replace(/\?/g,'%3F'); }
+// _encPath woont nu in mt-core.js (window._encPath), gedeeld met mobiel.html.
 
-const _SP = {
-  SITE: 'mortisetenon.sharepoint.com:/sites/MortiseTenon',
-  SITE_ID: null,            // resolved site-id (cache) — colon-path chaining geeft HTTP 400
-  FOLDER: 'MT-Bedrijfstool',
+// _SP = de gedeelde SharePoint-synckern (mt-core.js) mét de v2-specifieke laag
+// eroverheen: KEYS/ready/blockedKeys (anti-clobber), schedule (debounced auto-sync),
+// en de project-drive-helpers (PROJ_DRIVE/listChildren/rename/ensureFolder).
+// De kern levert SITE/FOLDER/_driveBase/read/write/_resolveConflict/_mergeById +
+// S1 ETag/412-merge. lastSync + updateSyncStatus zijn v2-only → via config aan.
+const _SP = Object.assign(window.MTCore.makeSP({
+  toast: (m) => { if (typeof planToast === 'function') planToast(m); },
+  onSyncStatus: () => { if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus(); },
+  trackLastSync: true,
+  etagKeys: new Set(['mt_planning']),
+}), {
   // mt_mail_links synct mee zodat mail↔project-koppelingen op élke PC zichtbaar zijn.
   // Opslag = privé SharePoint-tenant (alleen @mortiseandtenon.nl), NOOIT de publieke git-repo.
   KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map']),
   _q: {},
   ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
-  lastSync: null,           // {ts, ok, key, error} — voedt de zichtbare sync-status
   blockedKeys: new Set(),   // keys waarvan de hydrate FAALDE (≠ 404) → auto-sync uit tot herladen (anti-clobber)
-
-  // S1 — ETag-concurrency (proef op mt_planning). Alleen keys in deze opt-in
-  // lijst krijgen If-Match + 412-conflictafhandeling; alle andere keys behouden
-  // exact het oude last-write-wins-gedrag. Uitrol naar meer keys komt later.
-  etagKeys: new Set(['mt_planning']),
-  _etags: {},               // filename -> laatst gelezen ETag (voor If-Match bij write)
-
-  // Graph weigert twee colon-paths in één URL (sites/host:/... én drive/root:/...:/content).
-  // Daarom de site éérst naar zijn id resolven en dáármee /sites/{id}/drive/... bouwen.
-  async _driveBase() {
-    const token = await window.getGraphToken();
-    if (!token) throw new Error('geen Graph-token (Microsoft-login/toestemming vereist)');
-    if (!this.SITE_ID) {
-      const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${this.SITE}`,
-        { headers: { 'Authorization': `Bearer ${token}` } });
-      if (!sr.ok) throw new Error(`site-resolve HTTP ${sr.status}`);
-      this.SITE_ID = (await sr.json()).id;
-    }
-    return { base: `https://graph.microsoft.com/v1.0/sites/${this.SITE_ID}/drive`, token };
-  },
-
-  // Faalveilig lezen: ALLEEN 404 (bestand bestaat nog niet) geeft null terug.
-  // Elke andere fout (token weg, netwerk, 5xx) gooit een Error — een leesfout
-  // mag NOOIT als "SharePoint is leeg" gelezen worden, anders migreert een
-  // stale localStorage over de echte SP-data heen (het twee-PC-clobber-patroon).
-  async read(filename) {
-    const { base, token } = await this._driveBase();
-    const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
-      { headers: { 'Authorization': `Bearer ${token}` } });
-    if (r.status === 404) { delete this._etags[filename]; return null; }  // bestaat nog niet → geen fout
-    if (!r.ok) {
-      console.warn('SP read faalde:', filename, 'HTTP', r.status);
-      throw new Error(`SP read ${filename}: HTTP ${r.status}`);
-    }
-    // S1: bewaar de ETag zodat write() 'm als If-Match kan meesturen (opt-in keys).
-    const et = r.headers.get('ETag');
-    if (et) this._etags[filename] = et; else delete this._etags[filename];
-    return await r.json();
-  },
-
-  async write(filename, data) {
-    try {
-      const { base, token } = await this._driveBase();
-      const key = filename.replace(/\.json$/, '');
-      const useEtag = this.etagKeys.has(key) && this._etags[filename];
-      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-      if (useEtag) headers['If-Match'] = this._etags[filename];
-      const body = typeof data === 'string' ? data : JSON.stringify(data);
-      const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
-        { method: 'PUT', headers, body });
-      // S1: 412 = SP-versie is nieuwer dan onze ETag (andere PC schreef ertussenin).
-      // Niet last-write-wins doorduwen: re-read, mergen, met verse ETag herschrijven.
-      if (r.status === 412 && useEtag) return await this._resolveConflict(filename, data);
-      if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; }
-      this.lastSync = { ts: Date.now(), ok: r.ok, key: filename, error: r.ok ? null : `HTTP ${r.status}` };
-      if (!r.ok) console.warn('SP write faalde:', filename, 'HTTP', r.status);
-      if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
-      return r.ok;
-    } catch(e) {
-      this.lastSync = { ts: Date.now(), ok: false, key: filename, error: e.message };
-      console.warn('SP write fout:', filename, e.message);
-      if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
-      return false;
-    }
-  },
-
-  // S1 — conflictafhandeling na HTTP 412 (opt-in keys). Re-read de verse SP-versie
-  // (dit ververst tevens this._etags[filename]), merge onze lokale wijzigingen erin
-  // en herschrijf met de nieuwe ETag. Bij zelfde id/sleutel wint LOKAAL.
-  // Mergebaar: array-van-{id} (per id) of plain object/map (per sleutel — mt_planning
-  // is mt_planning[code]={...}). Andere vormen (scalar, array zonder id) kunnen we
-  // niet veilig mergen → NIET blind overschrijven: toast + laat de write vallen; de
-  // volgende schedule na re-hydrate probeert het met verse data opnieuw.
-  async _resolveConflict(filename, localData) {
-    let remote;
-    try { remote = await this.read(filename); }   // ververst _etags[filename]
-    catch(e) {
-      console.warn('SP 412 re-read faalde:', filename, e.message);
-      this.lastSync = { ts: Date.now(), ok: false, key: filename, error: '412 re-read faalde' };
-      if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
-      return false;
-    }
-    const local = (typeof localData === 'string') ? (()=>{ try{return JSON.parse(localData);}catch(e){return localData;} })() : localData;
-    const merged = this._mergeById(remote, local);
-    if (merged === null) {
-      // Niet-mergebare vorm → veilige kant kiezen: niet overschrijven.
-      const key = filename.replace(/\.json$/, '');
-      console.warn('SP 412 op', key, '— niet-mergebare vorm, write overgeslagen (herlaad → verse write)');
-      if (typeof planToast === 'function') planToast('⚠ sync-conflict op ' + key + ', herladen');
-      this.lastSync = { ts: Date.now(), ok: false, key: filename, error: 'sync-conflict (herladen)' };
-      if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
-      return false;
-    }
-    // Herschrijf met de verse ETag (read() zette 'm zojuist). Eén retry; belandt
-    // die óók op 412 dan valt hij netjes door zonder blind te overschrijven.
-    const { base, token } = await this._driveBase();
-    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-    if (this._etags[filename]) headers['If-Match'] = this._etags[filename];
-    const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
-      { method: 'PUT', headers, body: JSON.stringify(merged) });
-    if (r.ok) {
-      const et = r.headers.get('ETag'); if (et) this._etags[filename] = et;
-      this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null };
-    } else {
-      console.warn('SP 412-merge herschrijf faalde:', filename, 'HTTP', r.status);
-      this.lastSync = { ts: Date.now(), ok: false, key: filename, error: `HTTP ${r.status} (na merge)` };
-    }
-    if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
-    return r.ok;
-  },
-
-  // Merge remote+local; lokaal wint bij gelijke sleutel. null = niet-mergebare vorm.
-  _mergeById(remote, local) {
-    // Array-van-objecten-met-id → merge per id.
-    if (Array.isArray(local) && Array.isArray(remote)
-        && local.every(x => x && typeof x === 'object' && 'id' in x)
-        && remote.every(x => x && typeof x === 'object' && 'id' in x)) {
-      const byId = new Map();
-      for (const rec of remote) byId.set(rec.id, rec);
-      for (const rec of local) byId.set(rec.id, rec);   // lokaal wint
-      return [...byId.values()];
-    }
-    // Plain object/map (bv. mt_planning[code]={...}) → merge per sleutel.
-    const isPlainObj = v => v && typeof v === 'object' && !Array.isArray(v);
-    if (isPlainObj(local) && (isPlainObj(remote) || remote === null)) {
-      return Object.assign({}, remote || {}, local);    // lokale sleutels winnen
-    }
-    return null;   // niet veilig mergebaar
-  },
 
   schedule(key, rawValue) {
     if (!this.ready) return;   // hydrate nog niet klaar → niet schrijven (anti-clobber)
@@ -8414,7 +8294,7 @@ const _SP = {
     }
     return safe;
   }
-};
+});
 
 // Mappenstructuur op SharePoint voor nieuw project (mkdir-p, idempotent)
 window.genereerProjectMappen = async function(proj) {
@@ -10896,18 +10776,10 @@ HARDE GRENS: je kunt hier NIETS uitvoeren of wijzigen — geen acties, geen data
 
 <script>
 // ═══ MICROSOFT LOGIN (MSAL) ═══
-let _msal = null;
+// _msal op window zodat mt-core.js dezelfde instance ziet (token-helpers wonen daar).
+window._msal = null;
 
-window.getAuthToken = async function() {
-  if (!_msal) return null;
-  const accounts = _msal.getAllAccounts();
-  if (!accounts.length) return null;
-  try {
-    const result = await _msal.acquireTokenSilent({ scopes: ['openid','profile'], account: accounts[0] });
-    return result.idToken;
-  } catch(e) { return null; }
-};
-
+// v2-scopes: naast Files/Sites ook Mail/Calendars/Tasks (mobiel heeft alleen de eerste twee).
 const GRAPH_SCOPES = [
   'https://graph.microsoft.com/Files.ReadWrite',
   'https://graph.microsoft.com/Sites.ReadWrite.All',
@@ -10930,7 +10802,7 @@ function toonSessieVerlopen() {
   b.textContent = '⚠ Sessie verlopen — klik hier om opnieuw in te loggen';
   b.onclick = async () => {
     try {
-      const result = await _msal.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+      const result = await window._msal.acquireTokenPopup({ scopes: GRAPH_SCOPES });
       if (result && result.accessToken) _wisSessieBanner();
     } catch(e) { /* popup weer mislukt of geannuleerd — banner blijft staan */ }
   };
@@ -10942,26 +10814,14 @@ function _wisSessieBanner() {
   _sesBannerActief = false;
 }
 
-window.getGraphToken = async function() {
-  if (!_msal) return null;
-  const accounts = _msal.getAllAccounts();
-  if (!accounts.length) return null;
-  try {
-    const result = await _msal.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
-    if (_sesBannerActief) _wisSessieBanner();   // sessie is weer goed
-    return result.accessToken;
-  } catch(e) {
-    // Eerste keer: popup voor toestemming nieuwe scopes
-    try {
-      const result = await _msal.acquireTokenPopup({ scopes: GRAPH_SCOPES });
-      if (_sesBannerActief) _wisSessieBanner();
-      return result.accessToken;
-    } catch(e2) {
-      toonSessieVerlopen();                     // zichtbaar i.p.v. stil null
-      return null;
-    }
-  }
-};
+// getAuthToken / getGraphToken / authHeader komen uit mt-core.js. De v2-specifieke
+// scopes en het Q7-banner-gedrag (bij dubbele fail zichtbaar i.p.v. stil null)
+// gaan mee als config; onTokenOk wist de banner zodra de sessie weer geldig is.
+window.MTCore.installAuth({
+  graphScopes: GRAPH_SCOPES,
+  onTokenOk: () => { if (_sesBannerActief) _wisSessieBanner(); },
+  onTokenFail: () => { toonSessieVerlopen(); },
+});
 
 async function toonApp(account) {
   document.getElementById('login-screen').style.display = 'none';
@@ -11009,7 +10869,7 @@ async function initMsal() {
   // Wis stale interactievlaggen van vorige sessies
   Object.keys(sessionStorage).filter(k => k.includes('interaction')).forEach(k => sessionStorage.removeItem(k));
   try {
-    _msal = new msal.PublicClientApplication({
+    window._msal = new msal.PublicClientApplication({
       auth: {
         clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
         authority: 'https://login.microsoftonline.com/15b652c3-ff53-433f-a29d-e9626cbafb41',
@@ -11020,8 +10880,8 @@ async function initMsal() {
       },
       cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
     });
-    await _msal.initialize();
-    const accounts = _msal.getAllAccounts();
+    await window._msal.initialize();
+    const accounts = window._msal.getAllAccounts();
     if (accounts.length > 0) {
       toonApp(accounts[0]);
     }

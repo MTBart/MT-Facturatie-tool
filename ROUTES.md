@@ -32,6 +32,35 @@ mee-gecachet voor offline):
 
 Nieuwe versie = bestand vervangen + `?v=`-cachebuster in de script-tag bumpen.
 
+### Gedeelde kernlaag (`mt-core.js`, sinds 2-7)
+
+Eén bestand met de laag die cockpit én app allebei nodig hebben — voorheen
+tweemaal inline gedupliceerd. Geladen als gewone (niet-`defer`) script-tag ná
+`vendor/msal-browser` en vóór de inline-app-code, in beide front-ends:
+`<script src="mt-core.js?v=<datum>"></script>`. Zet alles expliciet op `window`,
+zodat de losse script-blokken elkaar zien.
+
+| Export | Wat |
+|---|---|
+| `window.esc(s)` | canonieke HTML-escaper (`& < > "`) |
+| `window._encPath(p)` | Graph-padencodering (`encodeURI` + `#`/`?` escapen) |
+| `window.authHeader()` | `{X-Auth-Token}`-header uit het huidige ID-token |
+| `window.getAuthToken()` | silent ID-token (null bij fail) |
+| `window.getGraphToken()` | Graph-access-token: silent → popup → `onTokenFail`-hook |
+| `MTCore.installAuth(cfg)` | zet de token-helpers op `window`; `cfg` = `{graphScopes, onTokenOk, onTokenFail}` |
+| `MTCore.makeSP(cfg)` | bouwt de `_SP`-synckern (site-resolve, faalveilig `read`, `write` + S1 ETag/412-merge); `cfg` = `{toast, onSyncStatus, trackLastSync, etagKeys}` |
+
+Page-specifieke verschillen zitten in de config, niet in geforkte code:
+- **cockpit:** 7 Graph-scopes (Files/Sites/Mail/Calendars/Tasks), Q7-sessiebanner
+  via `onTokenFail`, `trackLastSync:true` + `onSyncStatus` (statusbalk), `_SP`
+  uitgebreid met `KEYS`/`schedule`/`PROJ_DRIVE` via `Object.assign`.
+- **app:** 2 scopes (Files/Sites), géén banner (leunt op `_RQ`-queue),
+  géén `lastSync`/statusbalk; `_SP` = kale synckern met `showToast` als toast.
+
+`window._msal` (i.p.v. een lokale `let`) zodat `mt-core.js` dezelfde MSAL-instance
+gebruikt als de inline init. `sw.js` is network-first zonder precache-manifest →
+`mt-core.js` wordt vanzelf same-origin mee-gecachet, geen aparte vermelding nodig.
+
 ## Repo & paden
 
 | Wat | Pad / waarde |
@@ -106,7 +135,8 @@ Per-user mapping (`userKey()`): e-mailprefix uit het MSAL-token →
 
 ### Weg 2 — Microsoft Graph (direct vanuit de browser)
 
-- **Gedeelde tool-data:** `_SP`-laag → site `mortisetenon.sharepoint.com/sites/MortiseTenon`,
+- **Gedeelde tool-data:** `_SP`-laag (synckern uit `mt-core.js`, zie boven) → site
+  `mortisetenon.sharepoint.com/sites/MortiseTenon`,
   default drive (Documenten), map **`MT-Bedrijfstool/`**. Patroon: read-merge-write
   JSON-bestanden (zie tabel hieronder), dedup op `id`. Sinds 2-7 faalveilig:
   alleen HTTP 404 telt als "bestaat nog niet"; elke andere leesfout blokkeert
