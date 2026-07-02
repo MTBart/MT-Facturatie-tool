@@ -9225,6 +9225,23 @@ window.initStorage = async function() {
   } catch(e) { console.warn('rehydrate na initStorage faalde:', e); }
   if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus();
 };
+
+// Na lange afwezigheid (tab >10 min verborgen) opnieuw uit SharePoint hydrateren.
+// Een tab die 's ochtends nog open stond toont anders stale data van gisteren —
+// en zou die bij de eerstvolgende bewerking over de actuele SP-data heen syncen.
+let _spHiddenSinds = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { _spHiddenSinds = Date.now(); return; }
+  if (!_spHiddenSinds) return;
+  const wegMs = Date.now() - _spHiddenSinds;
+  _spHiddenSinds = null;
+  if (wegMs < 10 * 60 * 1000) return;   // korter weg → niets doen
+  if (!_SP.ready) return;               // nooit gehydrateerd (niet ingelogd) → niets doen
+  console.log('Tab was', Math.round(wegMs / 60000), 'min verborgen — opnieuw hydrateren uit SharePoint');
+  _SP.ready = false;                    // auto-sync uit tijdens re-hydrate (anti-clobber)
+  _SP.blockedKeys.clear();              // eerder geblokkeerde keys krijgen een nieuwe kans
+  window.initStorage().catch(e => { console.warn('re-hydrate na tab-focus faalde:', e); _SP.ready = true; });
+});
 </script>
 
 <script>
