@@ -2155,6 +2155,10 @@ button{transition:transform .07s ease,filter .07s ease}
 
 <script>
 // ═══ CONFIG ═══
+// Canonieke HTML-escaper — één implementatie voor de hele tool (dedup, was 8+ kopieën).
+// Zelfde tekenmap als het oude tgEsc. Bewust NIET voor: attribute-only escapes
+// (bewerkVoorraadRegel) en CSV-quoting (nacalcExportCsv) — die doen iets anders.
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 const WORKER = 'https://mt-claude-proxy.bart-a12.workers.dev';
 window.WORKER = WORKER; // track.js leest window.WORKER
 // Versie-stempel voor usage-tracking. Handmatig bumpen bij grotere wijzigingen
@@ -3119,7 +3123,7 @@ const tgLokaal={
 
 // — helpers —
 function tgStatus(msg,kleur){const el=document.getElementById('tg-status');if(el){el.textContent=msg||'';el.style.color=kleur||'var(--text-faint)';}}
-function tgEsc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
+function tgEsc(s){return esc(s);}   // alias van de canonieke esc() bovenin — zelfde map, veel bestaande callers
 function tgSec2hms(sec){sec=Math.max(0,Math.round(sec));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
 function tgSec2u(sec){return (sec/3600).toFixed(1).replace('.',',')+'u';}
 function tgStatusById(id){return TG_STATUS.find(s=>s.id===id)||{label:'?',kleur:'#9a9a9a'};}
@@ -4608,7 +4612,6 @@ function toonVoorraadDetail(mat){
   const panel=document.getElementById('voorraad-detail-panel');
   const inhoud=document.getElementById('voorraad-detail-inhoud');
   panel.classList.remove('hidden');
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const matJs=mat.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   const art=regels.map(r=>r.artikelnummer).find(Boolean);
   const fid=_vindFactuurVoor(regels[0]);
@@ -4687,7 +4690,6 @@ function slaVoorraadRegelOp(id){
 async function voorraadChatSend(mat){
   const inp=document.getElementById('vrd-chatq');const log=document.getElementById('vrd-chatlog');
   const q=(inp?.value||'').trim();if(!q||!log) return;
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   log.innerHTML+=`<div style="align-self:flex-end;background:var(--green-light);padding:5px 9px;border-radius:9px;max-width:85%">${esc(q)}</div>`;
   inp.value='';log.scrollTop=log.scrollHeight;
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>v.omschrijving===mat);
@@ -5252,7 +5254,6 @@ function renderProjectDetail(proj){
 function gekoppeldeMailsHtml(proj){
   const arr=(typeof mailLinksVoor==='function')?mailLinksVoor(proj.code):[];
   if(!arr.length) return '<p style="color:var(--text-faint);font-size:13px;margin:0 0 0.5rem">Nog geen mails gekoppeld aan dit project.</p>';
-  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   return `<table class="materiaal-lijst" style="margin-bottom:0.5rem"><tbody>${arr.slice().reverse().map(x=>{
     const i=arr.indexOf(x);
     return `<tr>
@@ -5285,7 +5286,6 @@ const _PT_STAT_TG={todo:300785,bezig:300788,klaar:300786};
 function projectTakenHtml(proj){
   const arr=projTaken(proj.code), sid=proj.code.replace(/-/g,'');
   const naamById={}; arr.forEach(t=>naamById[t.id]=t.naam);
-  const esc=s=>(typeof tgEsc==='function')?tgEsc(s):String(s==null?'':s);
   // Welke taken staan al in de uit-taken-planning (Gantt)? → kruisverwijzing.
   const _pl=(typeof planVoor==='function')?planVoor(proj.code):null;
   const inPlan=new Set((_pl&&_pl.vanTaken&&_pl.fases?_pl.fases:[]).map(fa=>fa.bronTaakId).filter(Boolean));
@@ -5465,7 +5465,6 @@ function projTaakTemplateKies(code){
   const ov=document.createElement('div');ov.id='tpl-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(28,26,22,.45);z-index:10000;display:flex;align-items:center;justify-content:center';
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
-  const esc=s=>(typeof tgEsc==='function')?tgEsc(s):String(s==null?'':s);
   const rows=Object.keys(_PT_TEMPLATES).map(k=>{const t=_PT_TEMPLATES[k];const u=t.taken.reduce((s,x)=>s+(x.uur||0),0);
     return `<div class="kp-row" onclick="projTaakTemplateInvoeg('${code}','${k}')" style="padding:9px 11px;border-radius:var(--radius-sm);cursor:pointer">
       <div style="font-weight:600;font-size:13px">${esc(t.label)}</div>
@@ -8364,7 +8363,7 @@ window.genereerProjectMappen = async function(proj) {
 };
 
 // Kleine HTML-escape helper (ook gebruikt door latere modules — geen conflict met _esc op r.10259)
-function _escH(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function _escH(s){return esc(s);}   // alias van de canonieke esc() bovenin (was identieke kopie)
 
 /* ════════════════════════════════════════════════════════════════════
    OPLEVERINGEN-VIEWER (Fase 1, gat A) — desktop leest wat de app wegschrijft.
@@ -9264,7 +9263,7 @@ document.addEventListener('visibilitychange', () => {
 const INBOX_DEFAULT='info@mortiseandtenon.nl';
 let _inbox={mbx:INBOX_DEFAULT,folderId:null,folderName:'',folders:[],msgs:[],cur:null,undo:null,loaded:false,q:'',nextLink:null,loadingMore:false,threadMode:false,curThread:null};
 
-function ibEsc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function ibEsc(s){return esc(s);}   // alias van de canonieke esc() bovenin (was identieke kopie)
 function ibBase(){return _inbox.mbx==='me'?'https://graph.microsoft.com/v1.0/me':`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(_inbox.mbx)}`;}
 async function ibFetch(path,opts){
   const token=await window.getGraphToken();
@@ -11296,8 +11295,7 @@ function activiteitOpen(force){
   };
   const _saveTimers = {};
 
-  // ---- util -----------------------------------------------------------------
-  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  // ---- util (esc = de canonieke globale bovenin het eerste scriptblok) -------
   function uid(p){return (p||'r')+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36);}
   function n(v){if(v===''||v==null)return null;const x=typeof v==='string'?Number(v.replace(/\s/g,'').replace(',','.')):Number(v);return isNaN(x)?null:x;}
   function eur(v){return (v==null||isNaN(v))?'—':('€ '+Number(v).toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2}));}

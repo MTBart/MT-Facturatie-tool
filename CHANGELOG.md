@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-02 — Q4: msal-browser 2.39.0 lokaal gevendord (was jsdelivr @2-tag)
+- Commit: `c7e96ee` | Auteur: Bart Witte
+
 ## 2026-07-02 — Q3: xlsx/jspdf defer + Google Fonts via <link> met preconnect
 - Commit: `a2fa9d2` | Auteur: Bart Witte
 
