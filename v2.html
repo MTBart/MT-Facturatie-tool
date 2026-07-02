@@ -2472,9 +2472,10 @@ function matVerkoop(m){
   return cost*(1+waste/100)*(1+markup/100);
 }
 
-async function laadMaterialen(force){
+async function laadMaterialen(force, voorafData){
   try{
-    const d = await _SP.read('interiorcad-materialen.json');
+    // voorafData: al opgehaald door de S5-prefetch in initStorage (undefined = zelf lezen).
+    const d = (voorafData !== undefined) ? voorafData : await _SP.read('interiorcad-materialen.json');
     if(d && (Array.isArray(d.boards)||Array.isArray(d.edgebandings))){
       MATERIALEN_IC = {boards:d.boards||[], edgebandings:d.edgebandings||[], suppliers:d.suppliers||[], meta:d.meta||{}};
       console.log('interiorcad-materialen geladen:', MATERIALEN_IC.boards.length, 'platen /', MATERIALEN_IC.edgebandings.length, 'kantenband');
@@ -9098,15 +9099,38 @@ window.toonPdfInViewer = function(containerId, blobUrl) {
 };
 
 window.initStorage = async function() {
+  // S5 — één children-listing haalt in één keer de metadata (eTag + downloadUrl)
+  // van álle MT-Bedrijfstool-bestanden op; de inhoud volgt parallel via de
+  // preauth-downloadUrls. Faalt de listing zélf (≠ leeg), dan blokkeren we ALLE
+  // keys en vallen terug op de losse read-per-key hieronder — precies het oude,
+  // faalveilige gedrag (leesfout ≠ "SharePoint leeg", anti-clobber).
+  // Naast de KEYS ook de drie losse hydrate-bestanden meenemen in dezelfde listing:
+  // scheelt nog drie site-resolve→content round-trips bij login.
+  const EXTRA_FILES = ['klanten-registry-vol.json', 'mt_user_projects.json', 'interiorcad-materialen.json'];
+  const KEY_FILES = [..._SP.KEYS].map(k => k + '.json');
+  let pref = null;
+  try { pref = await _SP.prefetch([...KEY_FILES, ...EXTRA_FILES]); }
+  catch(e) { console.warn('SP prefetch-listing faalde — terugval op losse reads:', e.message); }
+
   const taken = [..._SP.KEYS].map(async key => {
-    let spData;
-    try { spData = await _SP.read(key + '.json'); }
-    catch(e) {
+    const file = key + '.json';
+    let spData, gefaald = false;
+    const pf = pref && pref.get(file);
+    if (pf && pf.ok) {
+      spData = pf.data;                    // 404 → data === null (migreren), anders SP-data
+    } else if (pf && !pf.ok) {
+      gefaald = true;                      // downloadUrl-fetch faalde voor déze key
+    } else {
+      // Geen (geslaagde) prefetch → losse read als vangnet (zelfde faalveilige regels).
+      try { spData = await _SP.read(file); }
+      catch(e) { gefaald = true; console.warn('SP hydrate faalde voor', key, ':', e.message); }
+    }
+    if (gefaald) {
       // Leesfout ≠ "SharePoint is leeg": NIET migreren én deze key niet meer
       // auto-syncen deze sessie. Anders schuift een stale localStorage over de
       // echte SP-data heen (twee-PC-clobber). Lokale cache blijft bruikbaar.
       _SP.blockedKeys.add(key);
-      console.warn('SP hydrate faalde voor', key, '— migratie en auto-sync geblokkeerd:', e.message);
+      console.warn('SP hydrate faalde voor', key, '— migratie en auto-sync geblokkeerd');
       return;
     }
     if (spData !== null) {
@@ -9129,10 +9153,18 @@ window.initStorage = async function() {
     _SP.lastSync = { ts: Date.now(), ok: false, key: [..._SP.blockedKeys].join(', '),
       error: 'hydrate faalde — auto-sync uit voor deze key(s), herlaad de pagina' };
   }
+  // S5-helper: gebruik het prefetch-resultaat als dat er (geslaagd) is, anders
+  // een losse read. Deze drie bestanden falen sowieso stil (geen anti-clobber-
+  // migratie) — bij een prefetch-mis gewoon opnieuw lezen.
+  const _prefRead = async (file) => {
+    const pf = pref && pref.get(file);
+    if (pf && pf.ok) return pf.data;
+    return await _SP.read(file);
+  };
   // Verrijkte klant/leverancier-registry uit SharePoint laden (privé, niet publiek).
   // Voedt modal-suggesties + auto-koppeling. Faalt stil → publieke KLANTEN blijft.
   try {
-    const vol = await _SP.read('klanten-registry-vol.json');
+    const vol = await _prefRead('klanten-registry-vol.json');
     if (vol && Array.isArray(vol.klanten) && vol.klanten.length) {
       KLANTEN_VOL = vol.klanten;
       // Zelfgekozen klant-codes (mt_klant_codes) overheen de registry leggen, zodat
@@ -9153,7 +9185,11 @@ window.initStorage = async function() {
     }
   } catch(e) { console.warn('registry-vol laden faalde:', e); }
   // interiorcad materialen-catalogus (privé, bevat inkoop+marge). Faalt stil.
-  try { await laadMaterialen(false); } catch(e) { console.warn('interiorcad-materialen laden faalde:', e); }
+  // Uit de prefetch als die geslaagd is, anders laat laadMaterialen zelf lezen.
+  try {
+    const pfMat = pref && pref.get('interiorcad-materialen.json');
+    await laadMaterialen(false, (pfMat && pfMat.ok) ? pfMat.data : undefined);
+  } catch(e) { console.warn('interiorcad-materialen laden faalde:', e); }
   // Na hydrate uit SharePoint: in-memory state + UI verversen. Anders toont de
   // pagina de stale versie van vóór de sync (PROJECT_CODES is op regel ~767
   // synchroon uit localStorage geladen, vóór deze async hydrate).
@@ -9165,7 +9201,7 @@ window.initStorage = async function() {
     // die de cockpit nog niet kent (dedup op code), zonder ooit terug te schrijven.
     // Zo verschijnen veld-projecten in de cockpit-Projecten-tab + Uren-koppeling.
     try {
-      const userProj = await _SP.read('mt_user_projects.json');
+      const userProj = await _prefRead('mt_user_projects.json');
       if (Array.isArray(userProj) && userProj.length) {
         const bekend = new Set(PROJECT_CODES.map(p => (p.code||'').toUpperCase()));
         let toegevoegd = 0;

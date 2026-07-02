@@ -238,6 +238,61 @@
         return r.ok;
       },
 
+      // S5 — snelle hydrate: haal de metadata van ALLE bestanden in de map met één
+      // children-listing (naam + eTag + preauth downloadUrl), dan de gevraagde
+      // bestanden parallel via hun downloadUrl. Scheelt bij login een reeks losse
+      // site-resolve→content round-trips (initStorage deed er ~15 na elkaar-ish).
+      //
+      // Waarom listing i.p.v. Graph $batch van ':/content': dat pad geeft HTTP 302
+      // naar een download-URL; in een $batch wordt die redirect NIET gevolgd, dus
+      // je krijgt geen inhoud terug. De children-listing levert eTag én downloadUrl
+      // rechtstreeks in de body — S1-ETags blijven zo intact — en is bovendien één
+      // request i.p.v. een batch van twintig.
+      //
+      // Retour: Map(filename -> { ok, status, data }).
+      //   - bestand niet in de map  -> { ok:true,  status:404, data:null }  (→ migreren)
+      //   - downloadUrl-fetch faalt  -> { ok:false, status, data:null }     (→ key blokkeren)
+      // De listing zelf faalt (≠ leeg) -> throw: de caller blokkeert dan ALLE keys,
+      // net als wanneer een losse read een niet-404-fout gaf (anti-clobber).
+      async prefetch(filenames) {
+        const { base, token } = await this._driveBase();
+        const listUrl = `${base}/root:/${this.FOLDER}:/children`
+          + `?$select=name,eTag,@microsoft.graph.downloadUrl&$top=999`;
+        const lr = await fetch(listUrl, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!lr.ok) throw new Error(`SP prefetch listing: HTTP ${lr.status}`);
+        const kinderen = (await lr.json()).value || [];
+        const byName = new Map();
+        for (const c of kinderen) byName.set(c.name, c);
+
+        const out = new Map();
+        await Promise.all(filenames.map(async (filename) => {
+          const meta = byName.get(filename);
+          if (!meta) {                       // bestaat niet → zelfde als een echte 404
+            delete this._etags[filename];
+            out.set(filename, { ok: true, status: 404, data: null });
+            return;
+          }
+          // S1: eTag uit de listing bewaren zodat write() 'm als If-Match meestuurt.
+          if (meta.eTag) this._etags[filename] = meta.eTag; else delete this._etags[filename];
+          const dl = meta['@microsoft.graph.downloadUrl'];
+          if (!dl) {                         // geen downloadUrl (bv. lege map-item) → val terug op losse read
+            try { out.set(filename, { ok: true, status: 200, data: await this.read(filename) }); }
+            catch (e) { out.set(filename, { ok: false, status: 0, data: null, error: e.message }); }
+            return;
+          }
+          try {
+            // Preauth-URL: geen Authorization-header, geen CORS-preflight, korte TTL.
+            const dr = await fetch(dl);
+            if (dr.status === 404) { out.set(filename, { ok: true, status: 404, data: null }); return; }
+            if (!dr.ok) { out.set(filename, { ok: false, status: dr.status, data: null }); return; }
+            out.set(filename, { ok: true, status: 200, data: await dr.json() });
+          } catch (e) {
+            out.set(filename, { ok: false, status: 0, data: null, error: e.message });
+          }
+        }));
+        return out;
+      },
+
       // Merge remote+local; lokaal wint bij gelijke sleutel. null = niet-mergebare vorm.
       _mergeById(remote, local) {
         if (Array.isArray(local) && Array.isArray(remote)

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-02 — S2: gedeelde kernlaag mt-core.js — esc/_encPath/auth/_SP ontdubbeld uit v2 + mobiel
+- Commit: `892ae5d` | Auteur: Bart Witte
+
 ## 2026-07-02 — S1: ETag-concurrency (If-Match) — proef op mt_planning
 - Commit: `597611e` | Auteur: Bart Witte
 
