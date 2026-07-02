@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-02 — Q6: ROUTES.md bijgewerkt — root-redirect, vendor/-tabel, faalveilige SP-laag
+- Commit: `3ed39b7` | Auteur: Bart Witte
+
 ## 2026-07-02 — Q5: één canonieke esc() — 8 verspreide HTML-escapers gededupliceerd
 - Commit: `a70a4c5` | Auteur: Bart Witte
 

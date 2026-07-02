@@ -10838,19 +10838,48 @@ const GRAPH_SCOPES = [
   'https://graph.microsoft.com/Tasks.ReadWrite'
 ];
 
+// Sessie-verlopen-banner: als silent én popup falen gaf getGraphToken stil null
+// terug en leek de tool "leeg". Nu wordt dat zichtbaar, met klik-om-opnieuw-in-te-loggen.
+let _sesBannerActief = false;
+function toonSessieVerlopen() {
+  if (_sesBannerActief || !document.body) return;
+  _sesBannerActief = true;
+  const b = document.createElement('div');
+  b.id = 'sessie-verlopen-banner';
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)';
+  b.textContent = '⚠ Sessie verlopen — klik hier om opnieuw in te loggen';
+  b.onclick = async () => {
+    try {
+      const result = await _msal.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+      if (result && result.accessToken) _wisSessieBanner();
+    } catch(e) { /* popup weer mislukt of geannuleerd — banner blijft staan */ }
+  };
+  document.body.appendChild(b);
+}
+function _wisSessieBanner() {
+  const b = document.getElementById('sessie-verlopen-banner');
+  if (b) b.remove();
+  _sesBannerActief = false;
+}
+
 window.getGraphToken = async function() {
   if (!_msal) return null;
   const accounts = _msal.getAllAccounts();
   if (!accounts.length) return null;
   try {
     const result = await _msal.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+    if (_sesBannerActief) _wisSessieBanner();   // sessie is weer goed
     return result.accessToken;
   } catch(e) {
     // Eerste keer: popup voor toestemming nieuwe scopes
     try {
       const result = await _msal.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+      if (_sesBannerActief) _wisSessieBanner();
       return result.accessToken;
-    } catch(e2) { return null; }
+    } catch(e2) {
+      toonSessieVerlopen();                     // zichtbaar i.p.v. stil null
+      return null;
+    }
   }
 };
 
