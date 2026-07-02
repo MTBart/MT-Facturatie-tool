@@ -4,7 +4,7 @@
 > Worker-routes, SharePoint-databestanden, auth en deploy. Vindbaar op beide PC's
 > (SharePoint-sync) én voor Claude-sessies. Geen secrets hier — repo is **PUBLIC**.
 >
-> Laatst geverifieerd: 2026-06-12.
+> Laatst geverifieerd: 2026-07-02.
 
 ## De front-ends (wat is wat)
 
@@ -12,12 +12,25 @@
 |---|---|---|
 | `v2.html` | **de cockpit** | PC-tool waar Bart non-stop mee werkt: projecten, facturen/MB, inbox, agenda/planning, admin, nacalculatie. Actieve ontwikkeling gebeurt hier. |
 | `mobiel.html` | **de app** | Telefoon-PWA (manifest `manifest-mobiel.json`) voor het veld: timer, capture/foto's, taken, agenda, Rapportage (opname- + opleverrapport), feedback. |
-| `index.html` | v4 (legacy, live op root) | Oudere bedrijfstool, staat nog op de root-URL. Niet meer doorontwikkelen; alles nieuw → v2.html. |
+| `index.html` | redirect naar de cockpit | Sinds 15-6 alleen nog een doorstuurpagina naar `v2.html` (query/hash blijven behouden). De oude v4-bedrijfstool is gearchiveerd in `_archive/index-v4.html`. |
 | `toggl2.html` | Toggl 2.0-weergave | Aparte agenda/uren-view op de Focus-API. |
 | `uren.html` | M&T Uren | Urenregistratie (ouder). |
 
 Nóg oudere front-ends staan gearchiveerd in `_archief/oude-tool-2026-06-04/`
 (gitignored, niet live).
+
+### Gevendorde libraries (`vendor/`, sinds 2-7)
+
+Geen runtime-CDN-afhankelijkheden meer; alles same-origin (en dus door `sw.js`
+mee-gecachet voor offline):
+
+| Bestand | Versie | Gebruikt door |
+|---|---|---|
+| `vendor/msal-browser.min.js` | 2.39.0 (sha256 in comment bij de script-tag) | cockpit + app (login) |
+| `vendor/xlsx.full.min.js` | SheetJS (bestond al) | cockpit (import, `defer`) |
+| `vendor/jspdf.umd.min.js` | 4.2.1 (Vex-akkoord 1-7) | cockpit (PDF-export, `defer`) |
+
+Nieuwe versie = bestand vervangen + `?v=`-cachebuster in de script-tag bumpen.
 
 ## Repo & paden
 
@@ -95,7 +108,10 @@ Per-user mapping (`userKey()`): e-mailprefix uit het MSAL-token →
 
 - **Gedeelde tool-data:** `_SP`-laag → site `mortisetenon.sharepoint.com/sites/MortiseTenon`,
   default drive (Documenten), map **`MT-Bedrijfstool/`**. Patroon: read-merge-write
-  JSON-bestanden (zie tabel hieronder), dedup op `id`.
+  JSON-bestanden (zie tabel hieronder), dedup op `id`. Sinds 2-7 faalveilig:
+  alleen HTTP 404 telt als "bestaat nog niet"; elke andere leesfout blokkeert
+  migratie én auto-sync voor die key (anti-clobber) en de cockpit re-hydrateert
+  na >10 min verborgen tab.
 - **Projectmappen:** drive **On-Prem-Data** (`_SPProj.DRIVE = b!lTex…yoejLeBe`,
   "Nieuwe mappenstructuur"). `findProjectFolder(code)` zoekt drive-bewust:
   eerst On-Prem-drive, fallback site-default drive; gevonden `driveId` wordt
