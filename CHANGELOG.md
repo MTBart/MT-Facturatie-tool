@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-02 — Q2: re-hydrate uit SharePoint wanneer de tab >10 min verborgen was
+- Commit: `3d55917` | Auteur: Bart Witte
+
 ## 2026-07-02 — Q1: SP-read faalveilig — alleen 404 = leeg, fouten blokkeren migratie en auto-sync
 - Commit: `15c3962` | Auteur: Bart Witte
 
