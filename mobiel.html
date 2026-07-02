@@ -11,7 +11,11 @@
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2/lib/msal-browser.min.js"></script>
+<!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
+     Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
+     sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
+     Lokaal = geen supply-chain-risico via CDN + login werkt offline-cached (sw.js). -->
+<script src="vendor/msal-browser.min.js?v=2.39.0"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">

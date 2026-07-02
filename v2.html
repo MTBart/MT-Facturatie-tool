@@ -4,7 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>M&T Bedrijfstool v2 bèta</title>
-<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2/lib/msal-browser.min.js"></script>
+<!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
+     Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
+     sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
+     Lokaal = geen supply-chain-risico via CDN + login werkt offline-cached (sw.js). -->
+<script src="vendor/msal-browser.min.js?v=2.39.0"></script>
 <!-- xlsx + jspdf zijn alleen nodig bij runtime-acties (bestand-import, PDF-export),
      nooit tijdens parse → defer haalt ~1,3 MB uit het render-blocking pad. -->
 <script src="vendor/xlsx.full.min.js" defer></script>

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-02 — Q3: xlsx/jspdf defer + Google Fonts via <link> met preconnect
+- Commit: `a2fa9d2` | Auteur: Bart Witte
+
 ## 2026-07-02 — Q2: re-hydrate uit SharePoint wanneer de tab >10 min verborgen was
 - Commit: `3d55917` | Auteur: Bart Witte
 
