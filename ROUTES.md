@@ -112,6 +112,16 @@ Per-user mapping (`userKey()`): e-mailprefix uit het MSAL-token →
   alleen HTTP 404 telt als "bestaat nog niet"; elke andere leesfout blokkeert
   migratie én auto-sync voor die key (anti-clobber) en de cockpit re-hydrateert
   na >10 min verborgen tab.
+- **ETag-concurrency (S1, proef op `mt_planning`):** `_SP.read` bewaart per
+  bestand de `ETag` (`_SP._etags`), `_SP.write` stuurt `If-Match` mee voor keys in
+  `_SP.etagKeys` (nu alleen `mt_planning`). Bij **HTTP 412** (andere PC schreef
+  ertussenin): re-read → merge → herschrijf met verse ETag; bij gelijke sleutel
+  wint **lokaal**. Merge is vorm-bewust: array-van-`{id}` per id, plain object/map
+  per sleutel (`mt_planning[code]`). Niet-mergebare vorm → géén blinde overwrite:
+  toast "sync-conflict, herladen" + write vervalt tot de volgende schedule na
+  re-hydrate. Gespiegeld in v2.html én mobiel.html; 412 gaat op mobiel **niet**
+  terug in `_RQ` (geen retry-loop). Alle overige keys: ongewijzigd last-write-wins.
+  Uitrol naar meer keys volgt.
 - **Projectmappen:** drive **On-Prem-Data** (`_SPProj.DRIVE = b!lTex…yoejLeBe`,
   "Nieuwe mappenstructuur"). `findProjectFolder(code)` zoekt drive-bewust:
   eerst On-Prem-drive, fallback site-default drive; gevonden `driveId` wordt

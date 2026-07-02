@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-02 — Q7: sessie-verlopen-banner i.p.v. stil null bij mislukte token-verversing
+- Commit: `f6c4372` | Auteur: Bart Witte
+
 ## 2026-07-02 — Q6: ROUTES.md bijgewerkt — root-redirect, vendor/-tabel, faalveilige SP-laag
 - Commit: `3ed39b7` | Auteur: Bart Witte
 

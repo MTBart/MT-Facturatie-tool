@@ -1999,6 +1999,12 @@ const _SP = {
   SITE_ID: null,
   FOLDER: 'MT-Bedrijfstool',
 
+  // S1 — ETag-concurrency (proef op mt_planning; gespiegeld met v2.html). Alleen
+  // keys in etagKeys krijgen If-Match + 412-conflictafhandeling; andere keys
+  // houden het oude last-write-wins-gedrag. Uitrol naar meer keys komt later.
+  etagKeys: new Set(['mt_planning']),
+  _etags: {},               // filename -> laatst gelezen ETag (voor If-Match bij write)
+
   async _driveBase() {
     const token = await window.getGraphToken();
     if (!token) throw new Error('Geen Graph-token');
@@ -2019,25 +2025,81 @@ const _SP = {
     const {base, token} = await this._driveBase();
     const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
       {headers:{'Authorization':`Bearer ${token}`}});
-    if (r.status === 404) return null;
+    if (r.status === 404) { delete this._etags[filename]; return null; }
     if (!r.ok) {
       console.warn('SP read faalde:', filename, 'HTTP', r.status);
       throw new Error(`SP read ${filename}: HTTP ${r.status}`);
     }
+    // S1: bewaar de ETag zodat write() 'm als If-Match kan meesturen (opt-in keys).
+    const et = r.headers.get('ETag');
+    if (et) this._etags[filename] = et; else delete this._etags[filename];
     return await r.json();
   },
 
   async write(filename, data) {
     try {
       const {base, token} = await this._driveBase();
+      const key = filename.replace(/\.json$/, '');
+      const useEtag = this.etagKeys.has(key) && this._etags[filename];
+      const headers = {'Authorization':`Bearer ${token}`, 'Content-Type':'application/json'};
+      if (useEtag) headers['If-Match'] = this._etags[filename];
       const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`, {
         method: 'PUT',
-        headers: {'Authorization':`Bearer ${token}`, 'Content-Type':'application/json'},
+        headers,
         body: typeof data === 'string' ? data : JSON.stringify(data)
       });
+      // S1: 412 = SP-versie nieuwer dan onze ETag → re-read, mergen, herschrijven.
+      if (r.status === 412 && useEtag) return await this._resolveConflict(filename, data);
+      if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; }
       if (!r.ok) console.warn('SP write faalde:', filename, 'HTTP', r.status);
       return r.ok;
     } catch(e) { console.warn('SP write fout:', filename, e.message); return false; }
+  },
+
+  // S1 — conflictafhandeling na HTTP 412 (opt-in keys). Re-read (ververst _etags),
+  // merge lokale wijzigingen erin (bij zelfde id/sleutel wint LOKAAL), herschrijf
+  // met verse ETag. Mergebaar: array-van-{id} of plain object/map (mt_planning is
+  // mt_planning[code]={...}). Niet-mergebare vorm (scalar/array-zonder-id) → NIET
+  // blind overschrijven: toast + write laten vallen; volgende flush herprobeert.
+  // Belangrijk voor mobiel: 412 gaat NIET terug in _RQ (dat zou dezelfde bytes in
+  // een oneindige retry-loop zetten) — conflict wordt hier één keer afgehandeld.
+  async _resolveConflict(filename, localData) {
+    let remote;
+    try { remote = await this.read(filename); }   // ververst _etags[filename]
+    catch(e) { console.warn('SP 412 re-read faalde:', filename, e.message); return false; }
+    const local = (typeof localData === 'string') ? (()=>{ try{return JSON.parse(localData);}catch(e){return localData;} })() : localData;
+    const merged = this._mergeById(remote, local);
+    if (merged === null) {
+      const key = filename.replace(/\.json$/, '');
+      console.warn('SP 412 op', key, '— niet-mergebare vorm, write overgeslagen (herlaad → verse write)');
+      if (typeof showToast === 'function') showToast('⚠ sync-conflict op ' + key + ', herladen');
+      return false;
+    }
+    const {base, token} = await this._driveBase();
+    const headers = {'Authorization':`Bearer ${token}`, 'Content-Type':'application/json'};
+    if (this._etags[filename]) headers['If-Match'] = this._etags[filename];
+    const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
+      { method:'PUT', headers, body: JSON.stringify(merged) });
+    if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; }
+    else console.warn('SP 412-merge herschrijf faalde:', filename, 'HTTP', r.status);
+    return r.ok;
+  },
+
+  // Merge remote+local; lokaal wint bij gelijke sleutel. null = niet-mergebare vorm.
+  _mergeById(remote, local) {
+    if (Array.isArray(local) && Array.isArray(remote)
+        && local.every(x => x && typeof x === 'object' && 'id' in x)
+        && remote.every(x => x && typeof x === 'object' && 'id' in x)) {
+      const byId = new Map();
+      for (const rec of remote) byId.set(rec.id, rec);
+      for (const rec of local) byId.set(rec.id, rec);   // lokaal wint
+      return [...byId.values()];
+    }
+    const isPlainObj = v => v && typeof v === 'object' && !Array.isArray(v);
+    if (isPlainObj(local) && (isPlainObj(remote) || remote === null)) {
+      return Object.assign({}, remote || {}, local);    // lokale sleutels winnen
+    }
+    return null;
   }
 };
 
