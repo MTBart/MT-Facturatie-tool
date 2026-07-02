@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-06-30 — App-camera: sluiterknop altijd in beeld (flexbox min-height fix)
+- Commit: `ec54d14` | Auteur: Bart Witte
+
 ## 2026-06-30 — App: maatlijn op punten + album-foto's + foto-editor overal
 - Commit: `6006d89` | Auteur: Bart Witte
 

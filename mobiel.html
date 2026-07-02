@@ -982,6 +982,9 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
             <input type="file" accept="image/*" onchange="oplFoto('na',this)" multiple>
           </label>
         </div>
+        <div class="section-head" style="margin-top:14px">📍 Pinlocaties (plattegrond / detailfoto)</div>
+        <div id="oplVlakGrid" class="thumbs-grid"></div>
+        <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="pinManagerOpen()">📍 Pinlocaties beheren</button>
         <div style="margin-top:12px">
           <button class="btn btn-secondary btn-full" id="rapDraftBtn" onclick="rapDraftSave()">💾 Tussentijds opslaan</button>
           <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="showRapport()">📋 Definitief opleverrapport maken</button>
@@ -1385,6 +1388,42 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div style="display:flex;gap:10px;padding:12px 14px;background:#000;padding-bottom:max(12px,env(safe-area-inset-bottom))">
     <button onclick="closeFotoEdit()" style="background:#333;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px">Annuleren</button>
     <button onclick="saveFotoEdit()" style="flex:1;background:#2ea043;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:15px;font-weight:600">✅ Opslaan als kopie</button>
+  </div>
+</div>
+
+<!-- ═══ PIN-MANAGER: lijst van pinbare vlakken (plattegrond/detailfoto) ═══ -->
+<div id="pinManagerModal" style="display:none;position:fixed;inset:0;z-index:10001;background:var(--bg,#f4f1ea);flex-direction:column">
+  <div style="display:flex;align-items:center;gap:8px;padding:14px;background:var(--surface,#fff);border-bottom:1px solid var(--border,#e2ddd2)">
+    <strong style="margin-right:auto;font-size:16px">📍 Pinlocaties</strong>
+    <button onclick="pinManagerClose()" style="background:#333;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:14px">Klaar</button>
+  </div>
+  <div style="flex:1;overflow:auto;padding:14px" id="pinManagerList"></div>
+  <div style="padding:12px 14px;background:var(--surface,#fff);border-top:1px solid var(--border,#e2ddd2);padding-bottom:max(12px,env(safe-area-inset-bottom))">
+    <label style="display:block">
+      <button class="btn btn-primary btn-full" style="pointer-events:none">➕ Nieuw vlak (foto / plattegrond)</button>
+      <input type="file" accept="image/*" style="display:none" onchange="pinVlakNieuw(this)">
+    </label>
+  </div>
+</div>
+
+<!-- ═══ VLAK-EDITOR: tik op de ondergrond om een pin te plaatsen ═══ -->
+<div id="pinVlakModal" style="display:none;position:fixed;inset:0;z-index:10002;background:#000;flex-direction:column">
+  <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#111">
+    <button onclick="pinVlakClose()" style="background:#333;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:14px">← Terug</button>
+    <span id="pinVlakTitel" style="color:#fff;font-size:13px;font-weight:600;margin:0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%"></span>
+    <button onclick="pinTypeToggle(this)" id="pinTypeBtn" style="background:var(--gold,#B8962E);color:#111;border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700">● opleverpunt</button>
+  </div>
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:6px">
+    <div id="pinVlakStage" style="position:relative;display:inline-block;line-height:0" onclick="pinStageTap(event)">
+      <img id="pinVlakImg" style="max-width:100%;max-height:78vh;border-radius:6px;pointer-events:none" alt="ondergrond">
+    </div>
+  </div>
+  <div style="padding:8px 14px;background:#111;color:#bbb;font-size:11px;text-align:center">Tik op de tekening om een pin te plaatsen. Tik een bestaande pin om te bewerken.</div>
+  <div style="display:flex;gap:8px;padding:10px 14px;background:#000;padding-bottom:max(10px,env(safe-area-inset-bottom))">
+    <label style="flex:1">
+      <button class="btn btn-secondary btn-full" style="pointer-events:none;font-size:13px">🔄 Nieuwe versie</button>
+      <input type="file" accept="image/*" style="display:none" onchange="pinVlakNieuweVersie(this)">
+    </label>
   </div>
 </div>
 
@@ -2711,6 +2750,12 @@ let currentOpleverProject = null;
 let rapType = null;              // 'opname' | 'oplevering' — gekozen rapporttype
 let inmFotos = [];               // opname/inmeten: [{url,name,file,bijschrift}]
 let oplFotos = {voor: [], na: []}; // oplevering: aangetroffen / opgeleverd [{url,name,file}]
+// Pinbare vlakken (opleverpunt-/documentatie-pins op schets/foto/plattegrond).
+// Model per spec: { id, type:'plattegrond'|'foto', naam,
+//   ondergronden:[{versie,soort:'schets'|'pdf'|'foto',pad,pagina,datum}]  (APPEND-ONLY),
+//   pins:[{nr,x,y,type:'opleverpunt'|'documentatie',doel_vlak,opleverpunt_id,label}] }.
+// Coördinaten relatief (0-1) zodat ze over elke ondergrond/schermmaat schalen.
+let _pinVlakken = [];
 let agendaView = "dag";          // 'dag' | '3d' | 'week'
 let currentWeek = CURRENT_WEEK_NR;
 let editingTaskId = null;        // taak in bewerk-modus in project-sheet
@@ -4696,6 +4741,9 @@ function loadChecklist() {
   inmFotos = [];
   oplFotos = {voor: [], na: []};
   _oplUploaded = {voor: [], na: []};
+  _sigDataUrl = null;
+  _pinVlakken = [];
+  renderOplVlakGrid();
   document.getElementById("inmNotitie").value = "";
   _setDraftInfo(null);
   setRapTypeButtons();
@@ -4782,6 +4830,292 @@ function renderOplFotos() {
       `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos['${soort}'][${i}], renderOplFotos)" title="Tik om aantekeningen te zetten"><img src="${p.bewerktUrl || p.url}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto('${soort}',${i})">×</button></div>`).join("");
     grid.innerHTML = html;
   });
+}
+
+/* =====================================================================
+   ═══ PIN-LAAG: pinbare vlakken (opleverpunt / documentatie) ═══
+   Ondergrond = schets/foto/plattegrond (append-only versies). Pins met
+   relatieve coördinaten (0-1) zodat ze op elke schermmaat kloppen. Vlakken
+   staan plat in _pinVlakken; nesting loopt via pin.doel_vlak (id-verwijzing).
+   Ondergrond-bitmaps gaan bij rapport-afronding naar 06_Fotos (prefix pin_);
+   de _file/_url-velden zijn tijdelijk en worden nooit in de JSON bewaard.
+   ===================================================================== */
+let _pinCurrentVlak = null;   // id van vlak dat nu open staat in de editor
+let _pinDropType = "opleverpunt";  // type dat de volgende tik plaatst
+
+function _pinFindVlak(id) { return _pinVlakken.find(v => v && v.id === id) || null; }
+
+// Mini-overzicht in de checklist-view.
+function renderOplVlakGrid() {
+  const grid = document.getElementById("oplVlakGrid");
+  if (!grid) return;
+  if (!_pinVlakken.length) { grid.innerHTML = ""; return; }
+  grid.innerHTML = _pinVlakken.map(v => {
+    const og = (v.ondergronden || [])[ (v.ondergronden||[]).length - 1 ];
+    const src = og && og._url ? og._url : "";
+    const n = (v.pins || []).length;
+    return `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="pinVlakOpen('${v.id}')" title="${escHtml(v.naam||'')}">`
+      + (src ? `<img src="${src}" alt="vlak">` : `<div class="thumb-placeholder">📍</div>`)
+      + `<span class="foto-bewerkt-badge">${n}📍</span></div>`;
+  }).join("");
+}
+
+function pinManagerOpen() {
+  _pinRenderManager();
+  const m = document.getElementById("pinManagerModal");
+  m.style.display = "flex";
+}
+function pinManagerClose() {
+  document.getElementById("pinManagerModal").style.display = "none";
+  renderOplVlakGrid();
+}
+function _pinRenderManager() {
+  const box = document.getElementById("pinManagerList");
+  if (!box) return;
+  if (!_pinVlakken.length) {
+    box.innerHTML = `<div style="color:var(--text-faint,#888);font-size:14px;text-align:center;padding:30px 10px">Nog geen vlakken.<br>Voeg een plattegrond of detailfoto toe om opleverpunten aan te wijzen.</div>`;
+    return;
+  }
+  box.innerHTML = _pinVlakken.map(v => {
+    const og = (v.ondergronden || [])[ (v.ondergronden||[]).length - 1 ];
+    const src = og && og._url ? og._url : "";
+    const n = (v.pins || []).length;
+    const versies = (v.ondergronden || []).length;
+    return `<div class="card" style="display:flex;gap:12px;align-items:center;margin-bottom:10px;cursor:pointer" onclick="pinVlakOpen('${v.id}')">`
+      + (src ? `<img src="${src}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex:0 0 auto">` : `<div style="width:64px;height:64px;border-radius:8px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:24px;flex:0 0 auto">📍</div>`)
+      + `<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.naam || '(zonder naam)')}</div>`
+      + `<div style="font-size:12px;color:var(--text-faint,#888)">${n} pin${n===1?'':'s'} · ${versies} versie${versies===1?'':'s'} · ${v.type}</div></div>`
+      + `<button onclick="event.stopPropagation();pinVlakVerwijder('${v.id}')" style="background:none;border:none;color:#c00;font-size:20px;padding:4px 8px">×</button></div>`;
+  }).join("");
+}
+
+// Nieuw top-level vlak uit een geüploade afbeelding.
+function pinVlakNieuw(input) {
+  const f = (input.files || [])[0];
+  input.value = "";
+  if (!f) return;
+  const naam = prompt("Naam van dit vlak (bv. 'Plattegrond begane grond' of 'Detail keukenblok'):", f.name.replace(/\.[^.]+$/, "")) ;
+  if (naam === null) return;
+  const soort = /pdf/i.test(f.type) ? "pdf" : "foto";
+  const v = {
+    id: "vlak-" + Date.now() + "-" + Math.random().toString(36).slice(2, 5),
+    type: soort === "pdf" ? "plattegrond" : "foto",
+    naam: (naam || "").trim() || "Vlak",
+    ondergronden: [{ versie: 1, soort, pad: "", pagina: null, datum: new Date().toISOString(),
+                     _file: f, _name: f.name, _url: URL.createObjectURL(f) }],
+    pins: []
+  };
+  _pinVlakken.push(v);
+  _pinRenderManager();
+  pinVlakOpen(v.id);
+}
+
+function pinVlakVerwijder(id) {
+  if (!confirm("Dit vlak met alle pins verwijderen?")) return;
+  const i = _pinVlakken.findIndex(v => v.id === id);
+  if (i >= 0) _pinVlakken.splice(i, 1);
+  // pins die naar dit vlak wezen ontkoppelen
+  _pinVlakken.forEach(v => (v.pins || []).forEach(p => { if (p.doel_vlak === id) p.doel_vlak = null; }));
+  _pinRenderManager();
+  renderOplVlakGrid();
+}
+
+function pinVlakOpen(id) {
+  const v = _pinFindVlak(id);
+  if (!v) return;
+  _pinCurrentVlak = id;
+  const og = (v.ondergronden || [])[ (v.ondergronden||[]).length - 1 ];
+  const img = document.getElementById("pinVlakImg");
+  img.src = og && og._url ? og._url : "";
+  document.getElementById("pinVlakTitel").textContent = v.naam || "Vlak";
+  document.getElementById("pinManagerModal").style.display = "none";
+  document.getElementById("pinVlakModal").style.display = "flex";
+  _pinSetType(_pinDropType);
+  img.onload = () => _pinRenderStage();
+  _pinRenderStage();
+}
+function pinVlakClose() {
+  document.getElementById("pinVlakModal").style.display = "none";
+  _pinCurrentVlak = null;
+  renderOplVlakGrid();
+  pinManagerOpen();
+}
+
+function pinTypeToggle() {
+  _pinSetType(_pinDropType === "opleverpunt" ? "documentatie" : "opleverpunt");
+}
+function _pinSetType(t) {
+  _pinDropType = t;
+  const b = document.getElementById("pinTypeBtn");
+  if (!b) return;
+  if (t === "opleverpunt") { b.textContent = "● opleverpunt"; b.style.background = "var(--gold,#B8962E)"; b.style.color = "#111"; }
+  else { b.textContent = "◆ documentatie"; b.style.background = "#2c6fb3"; b.style.color = "#fff"; }
+}
+
+// Tik op de ondergrond → pin plaatsen op relatieve coördinaten.
+function pinStageTap(ev) {
+  if (ev.target && ev.target.classList && ev.target.classList.contains("pin-marker")) return; // pin-tik = bewerken
+  const v = _pinFindVlak(_pinCurrentVlak);
+  if (!v) return;
+  const img = document.getElementById("pinVlakImg");
+  const r = img.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const x = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+  const y = Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height));
+  const label = prompt(_pinDropType === "opleverpunt" ? "Omschrijving opleverpunt:" : "Omschrijving / documentatie:", "");
+  if (label === null) return;
+  const nr = ((v.pins || []).reduce((m, p) => Math.max(m, p.nr || 0), 0)) + 1;
+  const pin = { nr, x, y, type: _pinDropType, doel_vlak: null, opleverpunt_id: null, label: (label || "").trim() };
+  // Opleverpunt koppelen aan een herstelpunt van de checklist (optioneel).
+  if (_pinDropType === "opleverpunt") _pinKoppelOpleverpunt(pin);
+  v.pins = v.pins || [];
+  v.pins.push(pin);
+  _pinRenderStage();
+}
+
+// Toont de herstelpunten van de huidige checklist en laat er één kiezen.
+function _pinKoppelOpleverpunt(pin) {
+  const p = currentOpleverProject;
+  if (!p || !Array.isArray(p.checklist)) return;
+  const herstel = [];
+  p.checklist.forEach((item, i) => { if (checklistState[i] === "herstel") herstel.push({ i, item }); });
+  if (!herstel.length) return;
+  const lijst = herstel.map((h, k) => `${k + 1}. ${h.item}`).join("\n");
+  const keuze = prompt("Koppel aan checklist-herstelpunt (geef nummer, of leeg laten):\n\n" + lijst, "");
+  if (keuze === null || !keuze.trim()) return;
+  const k = parseInt(keuze.trim(), 10) - 1;
+  if (k >= 0 && k < herstel.length) {
+    pin.opleverpunt_id = herstel[k].i;
+    if (!pin.label) pin.label = herstel[k].item;
+  }
+}
+
+function _pinRenderStage() {
+  const stage = document.getElementById("pinVlakStage");
+  const img = document.getElementById("pinVlakImg");
+  if (!stage || !img) return;
+  stage.querySelectorAll(".pin-marker").forEach(el => el.remove());
+  const v = _pinFindVlak(_pinCurrentVlak);
+  if (!v) return;
+  (v.pins || []).forEach(p => {
+    const el = document.createElement("div");
+    el.className = "pin-marker";
+    const doc = p.type === "documentatie";
+    el.style.cssText = `position:absolute;left:${(p.x*100).toFixed(2)}%;top:${(p.y*100).toFixed(2)}%;transform:translate(-50%,-100%);`
+      + `min-width:24px;height:24px;border-radius:50% 50% 50% 0;transform-origin:bottom;`
+      + `background:${doc ? '#2c6fb3' : 'var(--gold,#B8962E)'};color:#fff;font-size:12px;font-weight:700;`
+      + `display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.5);cursor:pointer;`
+      + `transform:translate(-50%,-100%) rotate(-45deg)`;
+    const span = document.createElement("span");
+    span.textContent = p.nr;
+    span.style.cssText = "transform:rotate(45deg);pointer-events:none";
+    el.appendChild(span);
+    el.onclick = (e) => { e.stopPropagation(); pinBewerk(p.nr); };
+    stage.appendChild(el);
+  });
+}
+
+// Bestaande pin bewerken/verwijderen/koppelen aan detailvlak.
+function pinBewerk(nr) {
+  const v = _pinFindVlak(_pinCurrentVlak);
+  if (!v) return;
+  const p = (v.pins || []).find(x => x.nr === nr);
+  if (!p) return;
+  const acties = p.type === "documentatie"
+    ? "1 = label wijzigen\n2 = detailvlak koppelen/openen\n3 = verwijderen"
+    : "1 = label wijzigen\n2 = herstelpunt (her)koppelen\n3 = verwijderen";
+  const keuze = prompt(`Pin ${nr} (${p.type})\n${p.label || '(geen label)'}\n\n${acties}\n\nGeef nummer:`, "1");
+  if (keuze === null) return;
+  if (keuze.trim() === "1") {
+    const nl = prompt("Label:", p.label || "");
+    if (nl !== null) p.label = nl.trim();
+  } else if (keuze.trim() === "2") {
+    if (p.type === "documentatie") _pinDetailvlak(p);
+    else _pinKoppelOpleverpunt(p);
+  } else if (keuze.trim() === "3") {
+    const i = v.pins.findIndex(x => x.nr === nr);
+    if (i >= 0) v.pins.splice(i, 1);
+  }
+  _pinRenderStage();
+}
+
+// Documentatie-pin → detailvlak (genest). Opent bestaand of maakt nieuw.
+function _pinDetailvlak(pin) {
+  if (pin.doel_vlak && _pinFindVlak(pin.doel_vlak)) {
+    pinVlakOpen(pin.doel_vlak);
+    return;
+  }
+  // trigger een verborgen file-input om een detailfoto te kiezen
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = () => {
+    const f = (inp.files || [])[0];
+    if (!f) return;
+    const soort = /pdf/i.test(f.type) ? "pdf" : "foto";
+    const v = {
+      id: "vlak-" + Date.now() + "-" + Math.random().toString(36).slice(2, 5),
+      type: "foto",
+      naam: (pin.label || "Detail") + " (detail)",
+      ondergronden: [{ versie: 1, soort, pad: "", pagina: null, datum: new Date().toISOString(),
+                       _file: f, _name: f.name, _url: URL.createObjectURL(f) }],
+      pins: []
+    };
+    _pinVlakken.push(v);
+    pin.doel_vlak = v.id;
+    pinVlakOpen(v.id);
+  };
+  inp.click();
+}
+
+// Nieuwe ondergrond-versie toevoegen (APPEND-ONLY; oude versies blijven staan).
+function pinVlakNieuweVersie(input) {
+  const f = (input.files || [])[0];
+  input.value = "";
+  if (!f) return;
+  const v = _pinFindVlak(_pinCurrentVlak);
+  if (!v) return;
+  const soort = /pdf/i.test(f.type) ? "pdf" : "foto";
+  const versie = (v.ondergronden || []).reduce((m, o) => Math.max(m, o.versie || 0), 0) + 1;
+  v.ondergronden.push({ versie, soort, pad: "", pagina: null, datum: new Date().toISOString(),
+                        _file: f, _name: f.name, _url: URL.createObjectURL(f) });
+  const img = document.getElementById("pinVlakImg");
+  img.src = v.ondergronden[v.ondergronden.length - 1]._url;
+  img.onload = () => _pinRenderStage();
+}
+
+/* Ondergrond-bitmaps uploaden naar 06_Fotos en een schone (serialiseerbare)
+   kopie van de vlakkenboom teruggeven — zónder de tijdelijke _file/_url. */
+async function _pinVlakkenFinalize(p) {
+  const online = !_demoMode && _msAccount;
+  if (online && p) {
+    const pend = [];
+    _pinVlakken.forEach(v => (v.ondergronden || []).forEach(o => {
+      if (o._file && !o.pad) pend.push({ o, w: { name: o._name || "pin.jpg", file: o._file } });
+    }));
+    if (pend.length) {
+      try {
+        const r = await _rapFotosUpload(p, pend.map(x => x.w), "pin");
+        (r.namen || []).forEach((naam, i) => { if (pend[i]) pend[i].o.pad = naam; });
+      } catch (e) { console.warn("pin-ondergrond upload fout:", e.message); }
+    }
+  }
+  // Vlakken die als detail (doel_vlak) aan een pin hangen, markeren als genest
+  // zodat de desktop-viewer ze niet dubbel (root + genest) rendert.
+  const genest = new Set();
+  _pinVlakken.forEach(v => (v.pins || []).forEach(pn => { if (pn.doel_vlak) genest.add(pn.doel_vlak); }));
+  return _pinVlakken.map(v => ({
+    id: v.id, type: v.type, naam: v.naam,
+    _genest: genest.has(v.id) || undefined,
+    ondergronden: (v.ondergronden || []).map(o => ({
+      versie: o.versie, soort: o.soort, pad: o.pad || "", pagina: o.pagina || null, datum: o.datum
+    })),
+    pins: (v.pins || []).map(pn => ({
+      nr: pn.nr, x: pn.x, y: pn.y, type: pn.type,
+      doel_vlak: pn.doel_vlak || null,
+      opleverpunt_id: (pn.opleverpunt_id === undefined ? null : pn.opleverpunt_id),
+      label: pn.label || ""
+    }))
+  }));
 }
 
 /* ── Generieke rapportfoto-upload: <projectmap>/06_Fotos/ met prefix ── */
@@ -5170,6 +5504,10 @@ async function logOplevering(wijze) {
     if (oplFotos.voor.length) { const r = await _rapFotosUpload(p, oplFotos.voor, "aangetroffen"); fotosVoor.push(...r.namen); }
     if (oplFotos.na.length) { const r = await _rapFotosUpload(p, oplFotos.na, "opgeleverd"); fotosNa.push(...r.namen); }
   }
+  // Pin-ondergronden uploaden + boom opschonen (tijdelijke _file/_url eruit).
+  let vlakkenClean = [];
+  try { vlakkenClean = await _pinVlakkenFinalize(p); }
+  catch (e) { console.warn("pin finalize fout:", e.message); vlakkenClean = []; }
   const entry = {
     id: "opl-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
     ts: new Date().toISOString(),
@@ -5183,7 +5521,12 @@ async function logOplevering(wijze) {
     herstel,
     nietBeoordeeld: p.checklist.filter((_, i) => !checklistState[i]),
     fotosAangetroffen: fotosVoor,
-    fotosOpgeleverd: fotosNa
+    fotosOpgeleverd: fotosNa,
+    // Handtekening-bitmap (PNG dataURL) + moment; alleen bij ter-plekke aftekenen gezet.
+    handtekening: (wijze === "afgetekend") ? (_sigDataUrl || null) : null,
+    handtekeningTs: (wijze === "afgetekend" && _sigDataUrl) ? new Date().toISOString() : null,
+    // Pinbare vlakken (opleverpunten/documentatie op schets/foto) — append-only boom.
+    vlakken: vlakkenClean
   };
   let ok = false;
   if (!_demoMode && _msAccount) ok = await oplUpload(entry);
@@ -5213,6 +5556,9 @@ function resetOplevering() {
   inmFotos = [];
   oplFotos = {voor: [], na: []};
   _oplUploaded = {voor: [], na: []};
+  _sigDataUrl = null;
+  _pinVlakken = [];
+  renderOplVlakGrid();
   document.getElementById("inmNotitie").value = "";
   document.getElementById("opleverProjectSelect").value = "";
   document.getElementById("rapTypeWrap").style.display = "none";
@@ -5235,6 +5581,7 @@ function resetOplevering() {
 let sigCtx = null;
 let sigDrawing = false;
 let sigHasMark = false;
+let _sigDataUrl = null;   // laatste bevestigde handtekening-bitmap (PNG dataURL), gaat mee het oplever-record in
 
 function initCanvas() {
   const canvas = document.getElementById("sigCanvas");
@@ -5282,6 +5629,9 @@ function clearCanvas() {
 
 function bevestigHandtekening() {
   if (!sigHasMark) { alert("Teken eerst de handtekening."); return; }
+  // Handtekening-bitmap vastleggen vóór we het rapport loggen — anders is 'ie weg.
+  try { _sigDataUrl = document.getElementById("sigCanvas").toDataURL("image/png"); }
+  catch (e) { _sigDataUrl = null; console.warn("handtekening capture fout:", e.message); }
   document.getElementById("opleverDoneTitle").textContent = "Rapport klaar";
   document.getElementById("opleverDoneSub").innerHTML = "Het opleverrapport met handtekening wordt gemaild naar de opdrachtgever.<br><br><em>(mock — in productie via Graph /sendMail)</em>";
   document.getElementById("handtekeningView").classList.add("view-hidden");

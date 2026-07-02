@@ -6,6 +6,7 @@
 <title>M&T Bedrijfstool v2 bèta</title>
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2/lib/msal-browser.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
 <script src="calc-engine.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Manrope:wght@300;400;500;600;700&display=swap');
@@ -278,6 +279,21 @@ button{transition:transform .07s ease,filter .07s ease}
 .data-table .muted{color:var(--text-dim)}
 .data-table--compact{--cell-py:5px;--cell-px:8px;--row-min-h:30px;font-size:12px}
 .data-table--zebra tbody tr:nth-child(even) td{background:var(--surface2)}
+
+/* ── OPLEVERINGEN-VIEWER ── */
+.opl-pill{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;line-height:1.5}
+.opl-rap-paper{background:var(--n-0);border:1px solid var(--n-200);border-radius:10px;padding:1.4rem 1.6rem;box-shadow:var(--shadow-card)}
+.opl-rap-title{font-family:var(--serif);font-size:22px;color:var(--green);font-weight:600}
+.opl-rap-sub{font-size:12px;color:var(--n-600);margin:2px 0 14px;border-bottom:2px solid var(--gold);padding-bottom:8px}
+.opl-rap-sect{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--green);margin:16px 0 6px}
+.opl-rap-item{font-size:13px;padding:4px 0;border-bottom:1px solid var(--n-200);color:var(--n-900)}
+.opl-rap-note{font-size:12px;color:var(--n-600);margin-top:2px;padding-left:20px}
+.opl-rap-foot{margin-top:20px;padding-top:10px;border-top:1px solid var(--n-200);font-size:11px;color:var(--n-500);font-family:var(--mono)}
+.opl-foto-grid{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}
+.opl-foto-cell{width:140px}
+.opl-foto-img{width:140px;height:105px;object-fit:cover;border-radius:6px;border:1px solid var(--n-300)}
+.opl-foto-ph{width:140px;height:105px;display:flex;align-items:center;justify-content:center;background:var(--n-100);border-radius:6px;font-size:24px}
+.opl-foto-cap{font-size:10px;color:var(--n-600);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* toolbar: filter/zoek/actie-balk boven lijst (Outlook/Toggl/Jortt-pariteit) */
 .toolbar{display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:center;padding:var(--space-3) var(--space-4);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:var(--space-4)}
@@ -564,6 +580,7 @@ button{transition:transform .07s ease,filter .07s ease}
   <button class="tab-btn" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
   <button class="tab-btn" onclick="showTab('projecten',this)">Projecten</button>
+  <button class="tab-btn" onclick="showTab('oplevering',this)">Opleveringen</button>
   <button class="tab-btn" onclick="showTab('agenda',this)">Agenda</button>
   <button class="tab-btn" onclick="showTab('toggl',this)">Uren</button>
   <button class="tab-btn" onclick="showTab('voorraad',this)">Voorraad</button>
@@ -894,6 +911,35 @@ button{transition:transform .07s ease,filter .07s ease}
           <div style="font-size:40px;margin-bottom:1rem">📁</div>
           <div style="font-family:var(--serif);font-size:18px;font-style:italic;font-weight:300">Selecteer een project</div>
           <div style="font-size:12px;margin-top:0.5rem">of maak een nieuw project aan</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: OPLEVERINGEN ═══ -->
+  <!-- Desktop-viewer op mt_opleveringen.json + mt_opnames.json (door de app geschreven).
+       De cockpit las deze JSON's nog niet — dit ontsluit ze per projectcode. -->
+  <div id="tab-oplevering" class="tab-content">
+    <div style="display:grid;grid-template-columns:300px 1fr;gap:1.5rem;min-height:600px">
+      <!-- Lijst per project -->
+      <div>
+        <div class="card" style="padding:1rem">
+          <div class="card-title">Opleveringen &amp; opnames</div>
+          <div class="flex" style="margin-bottom:0.6rem;gap:6px">
+            <button class="btn btn-secondary btn-sm" onclick="oplViewerOpen()" style="flex:1" title="Opnieuw laden vanaf SharePoint">↻ Vernieuwen</button>
+          </div>
+          <input class="zoek-input" type="text" id="oplZoek" placeholder="🔍 Zoek project / klant..." oninput="oplViewerFilter(this.value)" style="margin-bottom:8px">
+          <div id="opl-project-lijst" style="font-size:13px">
+            <div style="color:var(--text-faint);padding:1rem 0">Laden…</div>
+          </div>
+        </div>
+      </div>
+      <!-- Detail: rapporten van het gekozen project + rapport-preview -->
+      <div id="opl-detail">
+        <div class="card" style="text-align:center;padding:3rem;color:var(--text-faint)">
+          <div style="font-size:40px;margin-bottom:1rem">📋</div>
+          <div style="font-family:var(--serif);font-size:18px;font-style:italic;font-weight:300">Selecteer een project</div>
+          <div style="font-size:12px;margin-top:0.5rem">om de opnames en opleverrapporten te bekijken</div>
         </div>
       </div>
     </div>
@@ -1942,6 +1988,35 @@ button{transition:transform .07s ease,filter .07s ease}
   </div>
 </div>
 
+<!-- Opleverrapport → PDF (één scherm: filter + inhoud-toggle + preview + export) -->
+<div id="oplPdfModal" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:820px;max-width:96vw;max-height:92vh;display:flex;flex-direction:column">
+    <h2>⬇ Opleverrapport → PDF</h2>
+    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;margin:0.5rem 0 0.75rem">
+      <div>
+        <div class="card-title" style="margin:0 0 0.3rem">Inhoud</div>
+        <label style="display:block;font-size:13px"><input type="radio" name="oplPdfInhoud" value="detailed" checked onchange="_oplPdfRender()"> Detailed — alles</label>
+        <label style="display:block;font-size:13px"><input type="radio" name="oplPdfInhoud" value="summary" onchange="_oplPdfRender()"> Summary — alleen lijst</label>
+      </div>
+      <div>
+        <div class="card-title" style="margin:0 0 0.3rem">Filter op status</div>
+        <label style="display:block;font-size:13px"><input type="radio" name="oplPdfFilter" value="alle" checked onchange="_oplPdfRender()"> Alle punten</label>
+        <label style="display:block;font-size:13px"><input type="radio" name="oplPdfFilter" value="herstel" onchange="_oplPdfRender()"> Alleen herstelpunten <span style="color:var(--text-faint)">(onderaannemer)</span></label>
+        <label style="display:block;font-size:13px"><input type="radio" name="oplPdfFilter" value="ok" onchange="_oplPdfRender()"> Alleen goedgekeurd <span style="color:var(--text-faint)">(architect/klant)</span></label>
+        <label style="display:block;font-size:13px"><input type="radio" name="oplPdfFilter" value="open" onchange="_oplPdfRender()"> Alleen niet-beoordeeld</label>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:0.6rem">
+      PDF met doorzoekbare/selecteerbare tekst (jsPDF). Foto's en pinlocaties worden ingesloten; pins staan op hun exacte plek in de tekening.
+    </div>
+    <div id="oplPdfPreview" style="flex:1;overflow:auto;background:var(--n-100);border:1px solid var(--n-200);border-radius:8px;padding:1rem"></div>
+    <div class="flex" style="justify-content:flex-end;gap:8px;margin-top:0.75rem">
+      <button class="btn btn-secondary" onclick="oplPdfClose()">Sluiten</button>
+      <button class="btn btn-gold" id="oplPdfExportBtn" onclick="oplPdfExport()">⬇ Exporteer PDF</button>
+    </div>
+  </div>
+</div>
+
 <!-- Project aanmaken modal -->
 <div id="project-modal" class="modal-overlay hidden">
   <div class="modal" style="width:520px">
@@ -2304,6 +2379,7 @@ function showTab(name,btn){
   if(name==='historie') renderHistory();
   if(name==='bestelling') renderBestellijst();
   if(name==='projecten') renderProjectLijst();
+  if(name==='oplevering') oplViewerOpen();
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
   if(name==='agenda') renderAgenda();
@@ -8273,6 +8349,478 @@ window.genereerProjectMappen = async function(proj) {
 // Kleine HTML-escape helper (ook gebruikt door latere modules — geen conflict met _esc op r.10259)
 function _escH(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
+/* ════════════════════════════════════════════════════════════════════
+   OPLEVERINGEN-VIEWER (Fase 1, gat A) — desktop leest wat de app wegschrijft.
+   Bron: mt_opleveringen.json (type 'oplevering') + mt_opnames.json (type 'opname'),
+   beide door mobiel.html in SP geschreven, bewust buiten _SP.KEYS. Read-only viewer:
+   we tonen, muteren niets. Foto's uit <projPath>/06_Fotos lazy per klik geladen.
+   ════════════════════════════════════════════════════════════════════ */
+let _oplData = { opleveringen: [], opnames: [] };   // rauwe SP-lijsten
+let _oplGroups = [];                                 // [{code, naam, items:[...]}] gesorteerd
+let _oplZoekTerm = '';
+let _oplGekozenCode = null;
+const _oplProjPathCache = {};                        // code -> projPath (Graph-resolve cachen)
+const _oplFotoUrlCache = {};                         // "code/naam" -> blob-URL
+
+async function oplViewerOpen(){
+  const lijst = document.getElementById('opl-project-lijst');
+  if(lijst) lijst.innerHTML = '<div style="color:var(--text-faint);padding:1rem 0">Laden…</div>';
+  try{
+    const [opl, opn] = await Promise.all([
+      _SP.read('mt_opleveringen.json'),
+      _SP.read('mt_opnames.json')
+    ]);
+    _oplData.opleveringen = Array.isArray(opl) ? opl : ((opl && opl.items) || []);
+    _oplData.opnames      = Array.isArray(opn) ? opn : ((opn && opn.items) || []);
+  }catch(e){
+    console.warn('opleveringen laden faalde:', e.message);
+    _oplData = { opleveringen: [], opnames: [] };
+  }
+  _oplGroepeer();
+  _oplRenderLijst();
+}
+
+function oplViewerFilter(q){ _oplZoekTerm = (q||'').toLowerCase().trim(); _oplRenderLijst(); }
+
+function _oplGroepeer(){
+  const byCode = {};
+  const push = (e) => {
+    const code = e.projectCode || '—';
+    (byCode[code] = byCode[code] || { code, naam: e.projectNaam || '', items: [] }).items.push(e);
+    if(!byCode[code].naam && e.projectNaam) byCode[code].naam = e.projectNaam;
+  };
+  _oplData.opleveringen.forEach(push);
+  _oplData.opnames.forEach(push);
+  _oplGroups = Object.values(byCode);
+  // Nieuwste rapport bovenaan binnen elk project; projecten op meest-recente activiteit.
+  _oplGroups.forEach(g => g.items.sort((a,b) => (b.ts||'').localeCompare(a.ts||'')));
+  _oplGroups.sort((a,b) => {
+    const la = (a.items[0]||{}).ts || '', lb = (b.items[0]||{}).ts || '';
+    return lb.localeCompare(la);
+  });
+}
+
+function _oplRenderLijst(){
+  const el = document.getElementById('opl-project-lijst');
+  if(!el) return;
+  const groups = _oplGroups.filter(g => {
+    if(!_oplZoekTerm) return true;
+    return (g.code+' '+g.naam).toLowerCase().includes(_oplZoekTerm);
+  });
+  if(!groups.length){
+    el.innerHTML = `<div style="color:var(--text-faint);padding:1rem 0">${_oplData.opleveringen.length||_oplData.opnames.length ? 'Geen project komt overeen.' : 'Nog geen opnames of opleveringen. Deze worden via de app (Oplevering-tab) aangemaakt.'}</div>`;
+    return;
+  }
+  el.innerHTML = groups.map(g => {
+    const nOpl = g.items.filter(i => i.type==='oplevering').length;
+    const nOpn = g.items.filter(i => i.type==='opname').length;
+    const actief = g.code === _oplGekozenCode ? 'background:var(--gold-50);border-color:var(--gold-mid)' : '';
+    const badges = [
+      nOpl ? `<span class="opl-pill" style="background:var(--green-50);color:var(--green)">${nOpl} oplevering${nOpl>1?'en':''}</span>` : '',
+      nOpn ? `<span class="opl-pill" style="background:var(--info-50);color:var(--info)">${nOpn} opname${nOpn>1?'s':''}</span>` : ''
+    ].join(' ');
+    return `<div onclick="oplSelectProject('${_escH(g.code)}')" style="cursor:pointer;padding:8px 10px;border:1px solid var(--n-200);border-radius:8px;margin-bottom:6px;${actief}">
+      <div style="font-weight:600;color:var(--n-900)">${_escH(g.code)}</div>
+      <div style="font-size:12px;color:var(--text-dim);margin:1px 0 4px">${_escH(g.naam||'')}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${badges}</div>
+    </div>`;
+  }).join('');
+}
+
+function oplSelectProject(code){
+  _oplGekozenCode = code;
+  _oplRenderLijst();
+  const g = _oplGroups.find(x => x.code === code);
+  const el = document.getElementById('opl-detail');
+  if(!g || !el) return;
+  const rows = g.items.map((e,i) => {
+    const d = e.ts ? new Date(e.ts).toLocaleString('nl-NL',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    const typ = e.type==='opname'
+      ? '<span class="opl-pill" style="background:var(--info-50);color:var(--info)">Opname</span>'
+      : '<span class="opl-pill" style="background:var(--green-50);color:var(--green)">Oplevering</span>';
+    let samenvatting = '';
+    if(e.type==='oplevering'){
+      const h = (e.herstel||[]).length, o = (e.ok||[]).length, n = (e.nietBeoordeeld||[]).length;
+      samenvatting = `${o} OK · ${h} herstelpunt${h===1?'':'en'}${n?` · ${n} open`:''}${e.handtekening?' · ✍ afgetekend':''}`;
+    } else {
+      samenvatting = `${(e.fotos||[]).length} foto('s)${e.notitie?' · notitie':''}`;
+    }
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--n-200);border-radius:8px;margin-bottom:6px">
+      <div style="flex:1">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:2px">${typ}<span style="font-size:12px;color:var(--text-dim)">${d}</span></div>
+        <div style="font-size:13px;color:var(--n-800)">${_escH(samenvatting)}</div>
+        <div style="font-size:11px;color:var(--text-faint)">${_escH(e.doorNaam||e.door||'')}</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="oplShowRapport('${_escH(e.id)}')">Bekijk</button>
+      ${e.type==='oplevering' ? `<button class="btn btn-gold btn-sm" onclick="oplPdfOpen('${_escH(e.id)}')" title="Rapport als PDF">⬇ PDF</button>` : ''}
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="card">
+    <div class="card-title">${_escH(g.code)} — ${_escH(g.naam||'')}</div>
+    <div style="margin-top:0.5rem">${rows}</div>
+    <div id="opl-rapport-preview" style="margin-top:1rem"></div>
+  </div>`;
+}
+
+// Eén entry (opl of opn) opzoeken over beide lijsten heen.
+function _oplFindEntry(id){
+  return _oplData.opleveringen.find(e => e.id===id) || _oplData.opnames.find(e => e.id===id) || null;
+}
+
+// Rapport-HTML opbouwen — gedeeld door de preview én de PDF-generator.
+// opts.filter = 'alle'|'ok'|'herstel'|'open'  ; opts.detail = true/false (Detailed vs Summary).
+function _oplRapportHtml(e, opts){
+  opts = opts || {};
+  const detail = opts.detail !== false;
+  const filter = opts.filter || 'alle';
+  const d = e.ts ? new Date(e.ts).toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'}) : '';
+  const door = _escH(e.doorNaam || e.door || '');
+  if(e.type==='opname'){
+    let h = `<div class="opl-rap-title">Opnamerapport</div>
+      <div class="opl-rap-sub">${_escH(e.projectCode)} · ${_escH(e.projectNaam||'')} · ${d} · ingemeten door ${door}</div>`;
+    if(e.notitie) h += `<div class="opl-rap-sect">📝 Omschrijving / maten / afspraken</div><div class="opl-rap-item" style="white-space:pre-wrap">${_escH(e.notitie)}</div>`;
+    if((e.fotos||[]).length){
+      h += `<div class="opl-rap-sect">📷 Foto's (${e.fotos.length})</div>`;
+      h += `<div class="opl-foto-grid" data-fotos='${_oplFotoData(e.projectCode, e.fotos.map(f=>({naam:f.bestand,bijschrift:f.bijschrift})))}'></div>`;
+    }
+    return h + _oplRapFooter(d, door);
+  }
+  // oplevering
+  const ok = e.ok||[], herstel = e.herstel||[], open = e.nietBeoordeeld||[];
+  let h = `<div class="opl-rap-title">Opleveringsrapport</div>
+    <div class="opl-rap-sub">${_escH(e.projectCode)} · ${_escH(e.projectNaam||'')} · ${d} · ${e.wijze==='gemaild'?'akkoord op afstand':'ter plekke afgetekend'} · door ${door}</div>`;
+  const wil = (k) => filter==='alle' || filter===k;
+  if(wil('ok') && ok.length){
+    h += `<div class="opl-rap-sect">✅ Goedgekeurd (${ok.length})</div>`;
+    if(detail) h += ok.map(it => `<div class="opl-rap-item">✅ ${_escH(it)}</div>`).join('');
+  }
+  if(wil('herstel') && herstel.length){
+    h += `<div class="opl-rap-sect">⚠️ Herstelpunten (${herstel.length})</div>`;
+    h += herstel.map(x => `<div class="opl-rap-item">⚠️ ${_escH(x.item||x)}${detail && x.notitie ? `<div class="opl-rap-note">${_escH(x.notitie)}</div>`:''}</div>`).join('');
+  }
+  if(wil('open') && open.length){
+    h += `<div class="opl-rap-sect">⬜ Niet beoordeeld (${open.length})</div>`;
+    if(detail) h += open.map(it => `<div class="opl-rap-item">⬜ ${_escH(it)}</div>`).join('');
+  }
+  if(detail){
+    if((e.fotosAangetroffen||[]).length){
+      h += `<div class="opl-rap-sect">📷 Aangetroffen situatie (${e.fotosAangetroffen.length})</div>`;
+      h += `<div class="opl-foto-grid" data-fotos='${_oplFotoData(e.projectCode, e.fotosAangetroffen.map(n=>({naam:n})))}'></div>`;
+    }
+    if((e.fotosOpgeleverd||[]).length){
+      h += `<div class="opl-rap-sect">📷 Opgeleverd resultaat (${e.fotosOpgeleverd.length})</div>`;
+      h += `<div class="opl-foto-grid" data-fotos='${_oplFotoData(e.projectCode, e.fotosOpgeleverd.map(n=>({naam:n})))}'></div>`;
+    }
+    h += _oplVlakkenHtml(e);
+  }
+  if(e.handtekening){
+    const ht = e.handtekeningTs ? new Date(e.handtekeningTs).toLocaleString('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    h += `<div class="opl-rap-sect">✍ Handtekening opdrachtgever</div>
+      <div style="padding:8px 0"><img src="${_escH(e.handtekening)}" alt="handtekening" style="max-width:280px;border:1px solid var(--n-300);border-radius:6px;background:#fff"><div style="font-size:11px;color:var(--text-faint);margin-top:3px">Afgetekend${ht?' · '+ht:''}</div></div>`;
+  }
+  return h + _oplRapFooter(d, door);
+}
+
+function _oplRapFooter(d, door){
+  return `<div class="opl-rap-foot">Rapport gegenereerd · ${d} · ${door} · M&amp;T</div>`;
+}
+
+// Pinbare vlakken samenvatten in het rapport — boom platgeslagen met hiërarchische
+// nummering (③, ③.1). Coördinaten zijn relatief (0-1); hier tonen we de structuur.
+function _oplVlakkenHtml(e){
+  const vlakken = e.vlakken || [];
+  if(!vlakken.length) return '';
+  let h = `<div class="opl-rap-sect">📍 Pinlocaties</div>`;
+  const wandel = (vlak, prefix) => {
+    const grond = (vlak.ondergronden||[]).slice(-1)[0] || {};
+    h += `<div class="opl-rap-item"><b>${prefix ? prefix+' ' : ''}${_escH(vlak.naam||vlak.type||'vlak')}</b> <span style="color:var(--text-faint);font-size:11px">${_escH(grond.soort||'')}${(vlak.ondergronden||[]).length>1?` · ${vlak.ondergronden.length} ondergronden`:''}</span></div>`;
+    (vlak.pins||[]).forEach(pin => {
+      const nr = prefix ? `${prefix}.${pin.nr}` : `${pin.nr}`;
+      const kind = pin.type==='documentatie' ? '📄' : '⚑';
+      h += `<div class="opl-rap-item" style="margin-left:14px">${kind} <b>${nr}</b> ${_escH(pin.label||'')} <span style="color:var(--text-faint);font-size:11px">${pin.type==='documentatie'?'documentatie':'opleverpunt'}</span></div>`;
+      if(pin.doel_vlak){
+        const kind2 = vlakken.find(v => v.id === pin.doel_vlak);
+        if(kind2) wandel(kind2, nr);
+      }
+    });
+  };
+  vlakken.filter(v => !v._genest).forEach((v,i) => wandel(v, `${i+1}`));
+  return h;
+}
+
+// Foto-verwijzingen als data-attribuut serialiseren; pas op klik (lazy) omgezet in blob-URL's.
+// Ook ' escapen — het attribuut staat tussen enkele quotes en bijschriften kunnen ze bevatten.
+function _oplFotoData(code, fotos){
+  return _escH(JSON.stringify({ code, fotos })).replace(/'/g,'&#39;');
+}
+
+// Rapport tonen in de preview onder de lijst.
+async function oplShowRapport(id){
+  const e = _oplFindEntry(id);
+  const box = document.getElementById('opl-rapport-preview');
+  if(!e || !box) return;
+  box.innerHTML = `<div class="opl-rap-paper">${_oplRapportHtml(e, {detail:true, filter:'alle'})}</div>`;
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+  _oplHydrateFotos(box);
+}
+
+// Alle .opl-foto-grid in een container hun thumbnails lazy laten laden.
+async function _oplHydrateFotos(root){
+  const grids = root.querySelectorAll('.opl-foto-grid[data-fotos]');
+  for(const grid of grids){
+    let spec; try{ spec = JSON.parse(grid.getAttribute('data-fotos')); }catch(e){ continue; }
+    grid.removeAttribute('data-fotos');
+    grid.innerHTML = spec.fotos.map(f =>
+      `<div class="opl-foto-cell"><div class="opl-foto-ph">📷</div><div class="opl-foto-cap">${_escH(f.bijschrift||f.naam||'')}</div></div>`).join('');
+    // Op de achtergrond de echte bytes ophalen (mislukt stil → placeholder blijft).
+    const cells = grid.querySelectorAll('.opl-foto-cell');
+    spec.fotos.forEach(async (f,i) => {
+      try{
+        const url = await _oplFotoUrl(spec.code, f.naam);
+        if(url && cells[i]){ const ph = cells[i].querySelector('.opl-foto-ph'); if(ph) ph.outerHTML = `<img class="opl-foto-img" src="${url}" alt="">`; }
+      }catch(e){}
+    });
+  }
+}
+
+// Projectmap-pad voor een code resolven (idempotent via bestaande helper), gecached.
+async function _oplProjPath(code){
+  if(_oplProjPathCache[code]) return _oplProjPathCache[code];
+  const proj = (typeof PROJECT_CODES!=='undefined' && PROJECT_CODES.find) ? PROJECT_CODES.find(p=>p.code===code) : null;
+  if(!proj) throw new Error('project onbekend: '+code);
+  const path = await window.genereerProjectMappen(proj);
+  _oplProjPathCache[code] = path;
+  return path;
+}
+
+// Eén foto uit 06_Fotos als blob-URL (gecached). Faalt stil bij niet-ingelogd/niet-gevonden.
+async function _oplFotoUrl(code, naam){
+  const key = code+'/'+naam;
+  if(_oplFotoUrlCache[key]) return _oplFotoUrlCache[key];
+  const token = await window.getGraphToken();
+  if(!token) return null;
+  const projPath = await _oplProjPath(code);
+  const url = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(projPath+'/06_Fotos/'+naam)}:/content`;
+  const r = await fetch(url, { headers:{'Authorization':`Bearer ${token}`} });
+  if(!r.ok) return null;
+  const blob = await r.blob();
+  const objUrl = URL.createObjectURL(blob);
+  _oplFotoUrlCache[key] = objUrl;
+  return objUrl;
+}
+
+/* ── PDF-generator (gat B+G) — één scherm: filter + inhoud-toggle + preview + export.
+   BELANGRIJK: de echte PDF-library is nog niet goedgekeurd (Vex reviewt html2pdf.js/
+   jsPDF). Daarom staat de daadwerkelijke PDF-call achter de dunne adapter generatePdf();
+   die is nu gestubd (print-dialoog als tussenoplossing). Larry wired de library op Vex-GO. */
+let _oplPdfEntry = null;
+
+function oplPdfOpen(id){
+  _oplPdfEntry = _oplFindEntry(id);
+  if(!_oplPdfEntry) return;
+  document.getElementById('oplPdfModal').style.display = 'flex';
+  _oplPdfRender();
+}
+function oplPdfClose(){ document.getElementById('oplPdfModal').style.display = 'none'; }
+
+function _oplPdfOpts(){
+  return {
+    filter: (document.querySelector('input[name="oplPdfFilter"]:checked')||{}).value || 'alle',
+    detail: ((document.querySelector('input[name="oplPdfInhoud"]:checked')||{}).value || 'detailed') === 'detailed'
+  };
+}
+
+function _oplPdfRender(){
+  const e = _oplPdfEntry; if(!e) return;
+  const box = document.getElementById('oplPdfPreview');
+  box.innerHTML = `<div class="opl-rap-paper" id="oplPdfPaper">${_oplRapportHtml(e, _oplPdfOpts())}</div>`;
+  _oplHydrateFotos(box);
+}
+
+// Afbeelding laden als <img> (blob-URL / dataURL) — null bij fout, gooit nooit.
+function _pdfLoadImg(src){
+  return new Promise(res => { if(!src){res(null);return;} const im=new Image(); im.onload=()=>res(im); im.onerror=()=>res(null); im.src=src; });
+}
+// <img> → dataURL via canvas (blob-URL's zijn same-origin, dus niet tainted).
+function _pdfImgData(img, mime){
+  try{ const c=document.createElement('canvas'); c.width=img.naturalWidth||img.width; c.height=img.naturalHeight||img.height;
+       c.getContext('2d').drawImage(img,0,0); return c.toDataURL(mime||'image/jpeg', 0.82); }catch(e){ return null; }
+}
+
+/* Dunne adapter — DE goedgekeurde library: jsPDF 4.2.1 (latest, MIT, self-hosted UMD; Vex GREEN 1-7-2026).
+   Bewust de tekst-API (text()/splitTextToSize/addImage), NIET .html()/loadFile: de PDF
+   krijgt zo doorzoekbare/selecteerbare tekst i.p.v. een platte afbeelding. Foto's en
+   pin-ondergronden via addImage; pins vector-getekend op relatieve coördinaten.
+   Valt veilig terug op de browser-print als de lib onverhoopt niet geladen is. */
+async function generatePdf(o){
+  const e = o && o.entry, opts = (o && o.opts) || {};
+  if(!e){ alert('Geen rapport om te exporteren.'); return; }
+  const JS = window.jspdf && window.jspdf.jsPDF;
+  if(!JS){ console.warn('jsPDF niet geladen — print-fallback'); return _oplPdfPrintFallback(e, o && o.filename); }
+
+  const detail = opts.detail !== false;
+  const filter = opts.filter || 'alle';
+  const doc = new JS({ unit:'pt', format:'a4' });
+  const M=40, PW=doc.internal.pageSize.getWidth(), PH=doc.internal.pageSize.getHeight(), CW=PW-M*2;
+  const GREEN=[42,74,56], GOLD=[184,150,46], GREY=[90,104,98], INK=[23,37,33], LINE=[227,233,231], BLUE=[44,111,179];
+  let y = M;
+
+  const ensure = (h) => { if(y+h > PH-M){ doc.addPage(); y=M; } };
+  const writeLines = (txt, {size=11, color=INK, x=M, bold=false, gap=0}={}) => {
+    doc.setFont('helvetica', bold?'bold':'normal'); doc.setFontSize(size); doc.setTextColor(color[0],color[1],color[2]);
+    const lines = doc.splitTextToSize(String(txt==null?'':txt), CW-(x-M)); const lh = size*1.34;
+    for(const ln of lines){ ensure(lh); y += lh; doc.text(ln, x, y); }
+    y += gap;
+  };
+  const sect = (t) => { ensure(30); y+=12; doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...GREEN);
+    doc.text(String(t).toUpperCase(), M, y+9); y+=12; doc.setDrawColor(...GOLD); doc.setLineWidth(1.2); doc.line(M,y,M+46,y); y+=6; };
+  const rule = () => { ensure(8); doc.setDrawColor(...LINE); doc.setLineWidth(.6); doc.line(M,y+3,PW-M,y+3); y+=6; };
+  const d = e.ts ? new Date(e.ts).toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'}) : '';
+  const door = e.doorNaam || e.door || '';
+
+  // ── Kop ──
+  doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.setTextColor(...GREEN);
+  const titel = e.type==='opname' ? 'Opnamerapport' : 'Opleveringsrapport';
+  y += 22; doc.text(titel, M, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...GREY);
+  const wijze = e.type==='opname' ? `ingemeten door ${door}` : `${e.wijze==='gemaild'?'akkoord op afstand':'ter plekke afgetekend'} · door ${door}`;
+  y += 15; doc.text(`${e.projectCode||''} · ${e.projectNaam||''} · ${d} · ${wijze}`, M, y);
+  y += 6; doc.setDrawColor(...GOLD); doc.setLineWidth(1.6); doc.line(M,y,PW-M,y); y += 4;
+
+  // Foto-grid helper (2 per rij). specs = [{img|null, cap}]
+  const fotoGrid = async (specs) => {
+    const gap=10, cols=2, cw=(CW-gap*(cols-1))/cols, ch=cw*0.72;
+    for(let i=0;i<specs.length;i+=cols){
+      ensure(ch+18);
+      for(let c=0;c<cols && i+c<specs.length;c++){
+        const s=specs[i+c], x=M+c*(cw+gap), yy=y+2;
+        if(s.img){ const data=_pdfImgData(s.img,'image/jpeg');
+          if(data){ const iw=s.img.naturalWidth||1, ih=s.img.naturalHeight||1, sc=Math.min(cw/iw,ch/ih), w=iw*sc, h=ih*sc;
+            try{ doc.addImage(data,'JPEG',x+(cw-w)/2,yy,w,h); }catch(e2){} }
+        } else { doc.setDrawColor(...LINE); doc.setFillColor(244,247,246); doc.rect(x,yy,cw,ch,'FD');
+          doc.setTextColor(...GREY); doc.setFontSize(8); doc.text('(foto niet geladen)', x+cw/2, yy+ch/2, {align:'center'}); }
+        if(s.cap){ doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...GREY);
+          doc.text(doc.splitTextToSize(s.cap,cw)[0]||'', x, yy+ch+9); }
+      }
+      y += ch+18;
+    }
+  };
+  const laadFotos = async (namen) => {
+    const out=[]; for(const f of namen){ const naam=f.naam||f, cap=f.bijschrift||'';
+      let img=null; try{ img=await _pdfLoadImg(await _oplFotoUrl(e.projectCode, naam)); }catch(e2){}
+      out.push({img, cap}); } return out;
+  };
+
+  if(e.type==='opname'){
+    if(e.notitie){ sect('Omschrijving / maten / afspraken'); writeLines(e.notitie,{size:11}); }
+    if((e.fotos||[]).length){ sect(`Foto's (${e.fotos.length})`);
+      await fotoGrid(await laadFotos(e.fotos.map(f=>({naam:f.bestand,bijschrift:f.bijschrift})))); }
+  } else {
+    const ok=e.ok||[], herstel=e.herstel||[], open=e.nietBeoordeeld||[], wil=(k)=>filter==='alle'||filter===k;
+    if(wil('ok') && ok.length){ sect(`Goedgekeurd (${ok.length})`);
+      if(detail) ok.forEach(it=>{ writeLines('OK   '+it,{size:11}); }); }
+    if(wil('herstel') && herstel.length){ sect(`Herstelpunten (${herstel.length})`);
+      herstel.forEach(x=>{ writeLines('!   '+(x.item||x),{size:11,bold:true});
+        if(detail && x.notitie) writeLines(x.notitie,{size:10,color:GREY,x:M+16}); }); }
+    if(wil('open') && open.length){ sect(`Niet beoordeeld (${open.length})`);
+      if(detail) open.forEach(it=>{ writeLines('–   '+it,{size:11,color:GREY}); }); }
+
+    if(detail){
+      if((e.fotosAangetroffen||[]).length){ sect(`Aangetroffen situatie (${e.fotosAangetroffen.length})`);
+        await fotoGrid(await laadFotos(e.fotosAangetroffen.map(n=>({naam:n})))); }
+      if((e.fotosOpgeleverd||[]).length){ sect(`Opgeleverd resultaat (${e.fotosOpgeleverd.length})`);
+        await fotoGrid(await laadFotos(e.fotosOpgeleverd.map(n=>({naam:n})))); }
+
+      // ── Pinlocaties: ondergrond-afbeelding met vector-pins op relatieve coörden ──
+      const vlakken = e.vlakken||[];
+      if(vlakken.length){
+        sect('Pinlocaties');
+        const renderVlak = async (vlak, prefix) => {
+          writeLines(`${prefix}  ${vlak.naam||vlak.type||'vlak'}`, {size:11, bold:true});
+          const grond=(vlak.ondergronden||[]).slice(-1)[0]||{};
+          let img=null; if(grond.pad){ try{ img=await _pdfLoadImg(await _oplFotoUrl(e.projectCode, grond.pad)); }catch(e2){} }
+          if(img){ const data=_pdfImgData(img,'image/jpeg');
+            if(data){ const maxW=CW, maxH=300, iw=img.naturalWidth||1, ih=img.naturalHeight||1, sc=Math.min(maxW/iw,maxH/ih), w=iw*sc, h=ih*sc;
+              ensure(h+8); const ix=M, iy=y+4; try{ doc.addImage(data,'JPEG',ix,iy,w,h); }catch(e2){}
+              (vlak.pins||[]).forEach(p=>{ const px=ix+(p.x||0)*w, py=iy+(p.y||0)*h;
+                doc.setFillColor(...(p.type==='documentatie'?BLUE:GOLD)); doc.circle(px,py,8,'F');
+                doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+                doc.text(String(p.nr), px, py+3, {align:'center'}); });
+              y = iy+h+6; } }
+          // pin-tekstlijst (doorzoekbaar) + geneste detailvlakken
+          (vlak.pins||[]).forEach(p=>{
+            const nr=`${prefix}.${p.nr}`, k=p.type==='documentatie'?'documentatie':'opleverpunt';
+            writeLines(`${nr}  ${p.label||''}  (${k})`, {size:10, x:M+14});
+          });
+          for(const p of (vlak.pins||[])){ if(p.doel_vlak){ const kind=vlakken.find(v=>v.id===p.doel_vlak);
+            if(kind) await renderVlak(kind, `${prefix}.${p.nr}`); } }
+        };
+        let n=0; for(const v of vlakken.filter(v=>!v._genest)){ n++; await renderVlak(v, String(n)); }
+      }
+    }
+
+    if(e.handtekening){
+      sect('Handtekening opdrachtgever');
+      const ht = e.handtekeningTs ? new Date(e.handtekeningTs).toLocaleString('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+      const sig = await _pdfLoadImg(e.handtekening);
+      if(sig){ const iw=sig.naturalWidth||280, ih=sig.naturalHeight||120, w=Math.min(240,iw), h=ih*(w/iw);
+        ensure(h+16); doc.setDrawColor(...LINE); doc.setLineWidth(.8); doc.rect(M,y+4,w,h,'S');
+        try{ doc.addImage(e.handtekening,'PNG',M,y+4,w,h); }catch(e2){} y += h+10; }
+      writeLines(`Afgetekend${ht?' · '+ht:''}`, {size:9, color:GREY});
+    }
+  }
+
+  // ── Voettekst op elke pagina ──
+  const pages = doc.getNumberOfPages();
+  for(let p=1;p<=pages;p++){ doc.setPage(p);
+    doc.setDrawColor(...LINE); doc.setLineWidth(.6); doc.line(M,PH-30,PW-M,PH-30);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...GREY);
+    doc.text(`Rapport gegenereerd · ${d} · ${door} · Mortise & Tenon`, M, PH-18);
+    doc.text(`${p} / ${pages}`, PW-M, PH-18, {align:'right'}); }
+
+  const fname = (o && o.filename) || `Rapport_${(e.projectCode||'MT').replace(/[^\w-]/g,'_')}_${(e.ts||'').slice(0,10)}.pdf`;
+  doc.save(fname);
+}
+
+// Veilige terugval als de vendored jsPDF onverhoopt niet is geladen (beeld-PDF via print).
+function _oplPdfPrintFallback(e, filename){
+  const paper = document.getElementById('oplPdfPaper');
+  if(!paper){ alert('Geen rapport om te exporteren.'); return; }
+  const w = window.open('', '_blank');
+  if(!w){ alert('Sta pop-ups toe om het PDF-venster te openen.'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8"><title>${_escH(filename||'Rapport')}</title>
+    <style>${_OPL_PDF_CSS}</style></head><body>${paper.outerHTML}</body></html>`);
+  w.document.close();
+  setTimeout(() => { try{ w.focus(); w.print(); }catch(e2){} }, 600);
+}
+
+async function oplPdfExport(){
+  const e = _oplPdfEntry; if(!e) return;
+  const btn = document.getElementById('oplPdfExportBtn');
+  const fname = `${e.type==='opname'?'Opnamerapport':'Opleverrapport'}_${(e.projectCode||'MT').replace(/[^\w-]/g,'_')}_${(e.ts||'').slice(0,10)}.pdf`;
+  if(btn){ btn.disabled=true; btn.dataset._t=btn.textContent; btn.textContent='PDF maken…'; }
+  try{ await generatePdf({ entry: e, filename: fname, opts: _oplPdfOpts() }); }
+  catch(err){ console.warn('PDF-export fout:', err); alert('PDF maken mislukte: '+(err&&err.message||err)); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent=btn.dataset._t||'Exporteer PDF'; } }
+}
+
+// Losse print-CSS voor het PDF-venster (walnut/M&T-stijl, standalone — geen app-tokens).
+const _OPL_PDF_CSS = `
+  body{font-family:'Segoe UI',Roboto,-apple-system,sans-serif;color:#172521;margin:28px;max-width:720px}
+  .opl-rap-title{font-family:Georgia,serif;font-size:22px;color:#2A4A38;font-weight:600}
+  .opl-rap-sub{font-size:12px;color:#5A6862;margin:2px 0 14px;border-bottom:2px solid #B8962E;padding-bottom:8px}
+  .opl-rap-sect{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#2A4A38;margin:16px 0 6px}
+  .opl-rap-item{font-size:13px;padding:4px 0;border-bottom:1px solid #E3E9E7}
+  .opl-rap-note{font-size:12px;color:#5A6862;margin-top:2px;padding-left:20px}
+  .opl-rap-foot{margin-top:20px;padding-top:10px;border-top:1px solid #E3E9E7;font-size:11px;color:#8B9893;font-family:'DM Mono',monospace}
+  .opl-foto-grid{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}
+  .opl-foto-cell{width:140px}
+  .opl-foto-img{width:140px;height:105px;object-fit:cover;border-radius:6px;border:1px solid #D6DEDB}
+  .opl-foto-ph{width:140px;height:105px;display:flex;align-items:center;justify-content:center;background:#F4F7F6;border-radius:6px;font-size:24px}
+  .opl-foto-cap{font-size:10px;color:#5A6862;margin-top:2px}
+  img{max-width:100%}
+`;
+
 // ═══ MOBIELE PROJECTMELDINGEN ═══
 // Leest mt_mobiel_projecten.json van SharePoint en toont entries met status==='nieuw'.
 // Poll elke 3 minuten; instapknop in header-bel + rijen boven de projectlijst.
@@ -10664,6 +11212,7 @@ function activiteitOpen(force){
   const SP = { def:'mt_calc_defaults.json', off:'mt_calc_offertes.json' };
   const DEFAULT_DEFAULTS = {
     materiaal_marge: 1.5,
+    marge_ondergrens: 0.15,              // waarschuwings-drempel voor "marge te laag" (fractie)
     uren: [
       { omschrijving:'Calculatie',        uurtarief:45,  marge:2 },
       { omschrijving:'Ontwerpen',         uurtarief:45,  marge:2 },
@@ -10725,6 +11274,7 @@ function activiteitOpen(force){
   function mergeDefaults(d){
     const out=JSON.parse(JSON.stringify(DEFAULT_DEFAULTS));
     if(d&&d.materiaal_marge!=null&&d.materiaal_marge!=='') out.materiaal_marge=d.materiaal_marge;
+    if(d&&d.marge_ondergrens!=null&&d.marge_ondergrens!=='') out.marge_ondergrens=d.marge_ondergrens;
     if(d&&Array.isArray(d.uren)&&d.uren.length) out.uren=d.uren.map(u=>({omschrijving:u.omschrijving||'',uurtarief:u.uurtarief,marge:u.marge}));
     return out;
   }
@@ -10803,6 +11353,7 @@ function activiteitOpen(force){
     set('kpi-bw-'+c,eur(t.brutowinst)); set('calc-bigtot-'+c,eur(t.offertebedrag));
     const mk=document.getElementById('kpi-marge-'+c);
     if(mk){mk.textContent=pct(t.marge); mk.style.color=t.marge==null?'var(--text-faint)':(t.marge<0.15?'#c0392b':(t.marge<0.30?'var(--gold)':'var(--green)'));}
+    const ve=document.getElementById('calc-vergeten-'+c); if(ve) ve.innerHTML=vergetenPaneelHtml(key);   // live vergeten-kosten-strook
   }
   window.calcKoppelProject=function(key,code){const o=getOfferte(key);o.project_code=code||null;saveCalc('off');renderOfferteCalc(key);};
   window.calcSetTitel=function(key,val){const o=getOfferte(key);o.titel=val;saveCalc('off');};
@@ -11075,6 +11626,83 @@ function activiteitOpen(force){
     saveCalc('off'); renderOfferteCalc(key);
   };
   window.calcRandDismiss=function(key,rid){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(m)m._randDone=true;saveCalc('off');renderOfferteCalc(key);};
+
+  // ── "Vergeten-kosten"-waarschuwing (marge-bewaker bij het offreren) ─────────
+  // Proactieve strook onder de marge-KPI die live veelvergeten kostenposten
+  // aanstipt. Bewust DATA-/CONFIG-GEDREVEN: alle drempels/woordenlijsten staan
+  // in VERGETEN_CFG (+ marge-ondergrens uit CALC.defaults), zodat een nieuwe
+  // heuristiek erbij zetten = één regel config, geen nieuwe rendercode.
+  const VERGETEN_CFG = {
+    montage_woorden:   /montage|monter|plaats(en|ing)?|installat|inmeten|afhang|stell?en/i,
+    transport_woorden: /transport|bezorg|leveren|levering|aflever|vracht|rijden|km[- ]?vergoed/i,
+    afval_woorden:     /afval|snijverlies|verlies|uitval|restmateriaal/i,
+    plaat_woorden:     /plaat|paneel|\bmdf\b|multiplex|spaanplaat|\bhpl\b|melamine|meubelpaneel|\bmpx\b|18\s*mm|topcoat|fineerpaneel/i,
+    marge_ondergrens_default: 0.15,
+  };
+  const _heeftText=v=>String(v==null?'':v).trim()!=='';
+  const _uurGerekend=(o,re)=>o.uren.some(u=>re.test(u.omschrijving||'') && (n(u.uren)||0)>0);
+  const _matGerekend=(o,re)=>o.materiaal.some(m=>re.test(m.omschrijving||'') && ((n(m.aantal)||0)>0 || (n(m.inkoop_stuk)||0)>0));
+  function _heeftPlaat(o){ return o.materiaal.some(m=>_heeftText(m.omschrijving) && VERGETEN_CFG.plaat_woorden.test(m.omschrijving)); }
+  function _kantRijAanwezig(o){ return o.materiaal.some(m=>/(kantenband|randband|kantband|abs[- ]?kant)/i.test(m.omschrijving||'')); }
+  // eerste plaatregel die om kantenband vraagt (hergebruikt de bestaande randSuggest-detectie)
+  function _plaatZonderKant(o){
+    if(_kantRijAanwezig(o)) return null;
+    for(const m of o.materiaal){ if(m._randDone) continue; const s=randSuggest(m); if(s&&s.type==='kantenband') return m; }
+    return null;
+  }
+  function _margeOndergrens(){
+    const d=CALC.defaults||{}; const v=(d.marge_ondergrens!=null&&d.marge_ondergrens!=='')?Number(d.marge_ondergrens):VERGETEN_CFG.marge_ondergrens_default;
+    return (isFinite(v)&&v>0)?(v>1?v/100:v):VERGETEN_CFG.marge_ondergrens_default;   // tolerant: 15 of 0,15
+  }
+  // Levert de lijst actieve waarschuwingen (na dismiss-filter). Elk item:
+  // {id, icon, tekst, actie?:{label,onclick}}. Alleen tonen wat relevant is.
+  function vergetenChecks(key){
+    const o=getOfferte(key), t=totalen(o), dis=o._vergeten_dismissed||{};
+    const heeftMat = o.materiaal.some(m=>_heeftText(m.omschrijving));
+    const out=[];
+    const push=(id,icon,tekst,actie)=>{ if(!dis[id]) out.push({id,icon,tekst,actie}); };
+    // 1) plaatmateriaal zonder kantenband — leunt op dezelfde detectie als de rand-nudge
+    const plaat=_plaatZonderKant(o);
+    if(plaat) push('kantenband','🪵','Plaatmateriaal zonder kantenband — de zichtzijden krijgen waarschijnlijk kantenband.',
+      {label:'+ kantenband', onclick:"calcVergetenAddKant('"+key+"')"});
+    // 2) geen montage-uren gerekend terwijl er wél materiaal staat
+    if(heeftMat && !_uurGerekend(o,VERGETEN_CFG.montage_woorden))
+      push('montage','🔧','Geen montage-/plaatsingsuren gerekend terwijl er materiaal in de calculatie staat.',
+        {label:'+ montage-uren', onclick:"calcVergetenAddMontage('"+key+"')"});
+    // 3) geen transport/bezorging gerekend
+    if(heeftMat && !_uurGerekend(o,VERGETEN_CFG.transport_woorden) && !_matGerekend(o,VERGETEN_CFG.transport_woorden))
+      push('transport','🚚','Geen transport/bezorging gerekend — levering naar de klant kost tijd én kilometers.',
+        {label:'+ transport-uren', onclick:"calcVergetenAddTransport('"+key+"')"});
+    // 4) geen afval/snijverlies — alleen vlaggen als er plaatmateriaal is (afval is geen apart calc-concept: niet forceren)
+    if(_heeftPlaat(o) && !o.materiaal.some(m=>VERGETEN_CFG.afval_woorden.test(m.omschrijving||'')) && !o.uren.some(u=>VERGETEN_CFG.afval_woorden.test(u.omschrijving||'')))
+      push('afval','♻️','Geen snijverlies/afval verrekend op het plaatmateriaal — reken je een afvalmarge?');
+    // 5) marge onder de ingestelde ondergrens (naast de bestaande kleur-KPI, als expliciete waarschuwing)
+    if(t.offertebedrag>0 && t.marge!=null && t.marge < _margeOndergrens())
+      push('marge','📉','Marge ('+pct(t.marge)+') ligt onder je ondergrens van '+pct(_margeOndergrens())+' — controleer de marges of het uurtarief.');
+    return out;
+  }
+  function vergetenPaneelHtml(key){
+    const ws=vergetenChecks(key); if(!ws.length) return '';
+    const items=ws.map(w=>{
+      const act = w.actie ? '<button class="btn btn-xs btn-gold" onmousedown="event.preventDefault()" onclick="'+w.actie.onclick+'">'+esc(w.actie.label)+'</button>' : '';
+      return '<div class="calc-vg-item"><span class="calc-vg-ic">'+w.icon+'</span><span class="calc-vg-tx">'+esc(w.tekst)+'</span>'+act
+        +'<button class="btn btn-xs btn-secondary" title="waarschuwing negeren" onmousedown="event.preventDefault()" onclick="calcVergetenDismiss(\''+key+'\',\''+w.id+'\')">×</button></div>';
+    }).join('');
+    return '<div class="calc-vergeten"><div class="calc-vg-h">⚠ Mogelijk vergeten kostenposten <span class="calc-vg-sub">— check vóór je de offerte verstuurt</span></div>'+items+'</div>';
+  }
+  function _renderVergeten(key){ const el=document.getElementById('calc-vergeten-'+cid(key)); if(el) el.innerHTML=vergetenPaneelHtml(key); }
+  window.calcVergetenDismiss=function(key,id){ const o=getOfferte(key); o._vergeten_dismissed=o._vergeten_dismissed||{}; o._vergeten_dismissed[id]=true; saveCalc('off'); _renderVergeten(key); };
+  window.calcVergetenAddKant=function(key){ const o=getOfferte(key); const m=_plaatZonderKant(o); if(m){ if(o._vergeten_dismissed)delete o._vergeten_dismissed.kantenband; calcAddRand(key,m.id); } else { _renderVergeten(key); } };
+  window.calcVergetenAddMontage=function(key){
+    const o=getOfferte(key); const def=(CALC.defaults.uren||[]).find(u=>VERGETEN_CFG.montage_woorden.test(u.omschrijving||''));
+    o.uren.push({id:uid('u'),omschrijving:'Montage',uren:'',uurtarief:def?def.uurtarief:(CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:45),marge:def?def.marge:2});
+    if(o._vergeten_dismissed)delete o._vergeten_dismissed.montage; saveCalc('off'); renderOfferteCalc(key);
+  };
+  window.calcVergetenAddTransport=function(key){
+    const o=getOfferte(key); const def=(CALC.defaults.uren||[]).find(u=>VERGETEN_CFG.transport_woorden.test(u.omschrijving||''));
+    o.uren.push({id:uid('u'),omschrijving:'Transport',uren:'',uurtarief:def?def.uurtarief:110,marge:def?def.marge:1});
+    if(o._vergeten_dismissed)delete o._vergeten_dismissed.transport; saveCalc('off'); renderOfferteCalc(key);
+  };
 
   // ── Offerte → Moneybird ───────────────────────────────────────────────────
   // Nette, klant-zichtbare offerteregels die EXACT op het offertebedrag uitkomen.
@@ -11369,6 +11997,7 @@ function activiteitOpen(force){
 
   // standaardwaarden (leeg rekenblad)
   window.calcSetDefMarge=function(val){CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));};
+  window.calcSetDefMargeOndergrens=function(val){const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));};
   window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));};
   window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:45,marge:2});renderOfferteCalc(key);};
   window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);renderOfferteCalc(key);};
@@ -11487,6 +12116,7 @@ function activiteitOpen(force){
     return `<details style="margin-top:1rem"><summary style="cursor:pointer;color:var(--text-dim);font-size:12px">⚙ Standaardwaarden (vaste uren-regels &amp; materiaal-marge voor een nieuwe offerte)</summary>
       <div style="margin:0.6rem 0;display:flex;gap:0.8rem;align-items:flex-end;flex-wrap:wrap">
         <label style="font-size:11px;color:var(--text-dim)">Standaard materiaal-marge (×)<br><input class="calc-inp calc-num" style="width:70px" value="${inval(d.materiaal_marge)}" onchange="calcSetDefMarge(this.value)"></label>
+        <label style="font-size:11px;color:var(--text-dim)" title="Onder deze marge geeft de calculator een 'vergeten-kosten'-waarschuwing">Marge-ondergrens (waarschuwing) %<br><input class="calc-inp calc-num" style="width:70px" value="${inval((((d.marge_ondergrens!=null?d.marge_ondergrens:0.15))*100).toFixed(0))}" onchange="calcSetDefMargeOndergrens(this.value)"></label>
       </div>
       <table class="calc-tbl" style="max-width:480px"><thead><tr><th>Vaste uren-regel</th><th class="calc-num">Uurtarief €</th><th class="calc-num">Marge ×</th><th></th></tr></thead><tbody>${rows}</tbody></table>
       <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center">
@@ -11565,6 +12195,7 @@ function activiteitOpen(force){
       ${kopHtml}
       ${summary}
       ${kpis}
+      <div id="calc-vergeten-${c}">${vergetenPaneelHtml(key)}</div>
       ${matTabel}
       ${uurTabel}
       <div style="margin-top:0.8rem;display:flex;justify-content:flex-end;gap:1rem;align-items:baseline;border-top:2px solid var(--green);padding-top:0.6rem">
@@ -11617,6 +12248,13 @@ function activiteitOpen(force){
   .calc-tbl td.calc-num input{text-align:right}
   .calc-rand{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;font-size:11px;color:var(--text-dim)}
   .calc-rand-t{font-size:9px;text-transform:uppercase;letter-spacing:.04em;padding:1px 5px;border-radius:8px;background:rgba(160,130,60,.14);color:var(--gold)}
+  .calc-vergeten{margin-bottom:.6rem;border:1px solid var(--gold);border-radius:8px;background:rgba(160,130,60,.07);padding:.5rem .7rem}
+  .calc-vg-h{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.35rem}
+  .calc-vg-sub{font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)}
+  .calc-vg-item{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:3px 0;font-size:12px;color:var(--text)}
+  .calc-vg-item+.calc-vg-item{border-top:1px dashed var(--border)}
+  .calc-vg-ic{flex-shrink:0}
+  .calc-vg-tx{flex:1;min-width:180px}
   .calc-actions{margin-top:.9rem;padding:.8rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-sunken,#f6f7f6)}
   .calc-btnrow{display:flex;align-items:center;gap:8px;margin-top:.6rem;flex-wrap:wrap}
   .calc-mailchip{display:inline-flex;align-items:center;margin-left:8px;padding:1px 6px;border-radius:10px;background:rgba(42,74,56,.10);color:var(--green);font-size:10px;font-weight:600}
