@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-03 — S6: herbruikbare <dialog>-helper (mtDialog) i.p.v. prompt/confirm
+- Commit: `7690fde` | Auteur: Bart Witte
+
 ## 2026-07-03 — S3: Smart-inbox-tab afgesplitst naar mt-inbox.js
 - Commit: `c1d7b1c` | Auteur: Bart Witte
 

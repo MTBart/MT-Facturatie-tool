@@ -4371,9 +4371,9 @@ function gekoppeldeMailsHtml(proj){
     <td style="white-space:nowrap;text-align:right">${x.webLink?`<a href="${esc(x.webLink)}" target="_blank" class="btn btn-xs btn-secondary" style="text-decoration:none" title="Open in Outlook">↗</a> `:''}<button class="btn btn-xs btn-danger" title="Ontkoppelen (mail blijft in Outlook)" onclick="ontkoppelMail('${proj.code}',${i})">×</button></td>
   </tr>`;}).join('')}</tbody></table>`;
 }
-function ontkoppelMail(code,idx){
+async function ontkoppelMail(code,idx){
   const all=mailLinksAll();const arr=all[code]||[];if(!arr[idx])return;
-  if(!confirm('Mail "'+(arr[idx].subject||'')+'" ontkoppelen van '+code+'?\nDe mail zelf blijft in Outlook staan.'))return;
+  if(!await mtDialog.confirm({title:'Mail ontkoppelen',message:'Mail "'+(arr[idx].subject||'')+'" ontkoppelen van '+code+'?\nDe mail zelf blijft in Outlook staan.',okLabel:'Ontkoppelen',danger:true}))return;
   arr.splice(idx,1);all[code]=arr;mailLinksSave(all);
   if(huidigProject&&huidigProject.code===code)renderProjectDetail(huidigProject);
 }
@@ -4496,7 +4496,7 @@ async function _tgVerwijderTaak(tg_task_id){
 }
 async function projTaakVerwijder(code,id){
   const t=projTaken(code).find(x=>x.id===id);
-  if(!confirm('Taak verwijderen?'+(t&&t.tg_task_id?'\nWordt óók in Toggl verwijderd.':''))) return;
+  if(!await mtDialog.confirm({title:'Taak verwijderen',message:'Taak verwijderen?'+(t&&t.tg_task_id?'\nWordt óók in Toggl verwijderd.':''),okLabel:'Verwijderen',danger:true})) return;
   try{ if(window.track) track('taken','verwijder',{detail:code}); }catch(e){}
   if(t&&t.tg_task_id){ _ptStatus(code,'Toggl: taak verwijderen…'); await _tgVerwijderTaak(t.tg_task_id); }
   projTakenZet(code,projTaken(code).filter(x=>x.id!==id));
@@ -4509,7 +4509,7 @@ async function projTakenVerwijderSelectie(code){
   if(!ids.length){ _ptStatus(code,'Geen taken aangevinkt.','#c0392b'); return; }
   const teVerw=projTaken(code).filter(t=>ids.includes(t.id));
   const inToggl=teVerw.filter(t=>t.tg_task_id).length;
-  if(!confirm(`${ids.length} ta(a)k(en) verwijderen?`+(inToggl?`\n${inToggl} óók in Toggl.`:''))) return;
+  if(!await mtDialog.confirm({title:'Taken verwijderen',message:`${ids.length} ta(a)k(en) verwijderen?`+(inToggl?`\n${inToggl} óók in Toggl.`:''),okLabel:'Verwijderen',danger:true})) return;
   try{ if(window.track) track('taken','verwijder_selectie',{detail:code+' · '+ids.length}); }catch(e){}
   let i=0;
   for(const t of teVerw){ i++;
@@ -4991,10 +4991,10 @@ async function uploadProjectBijlagen(files, code){
   const st2=document.getElementById('bijlage-status-'+code.replace(/-/g,''));
   if(st2){st2.style.color='var(--green)';st2.textContent=`✓ ${ok} bijlage${ok===1?'':'n'} op SharePoint`;}
 }
-function ontkoppelBijlage(code,idx){
+async function ontkoppelBijlage(code,idx){
   const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj||!Array.isArray(proj.bijlagen)) return;
   const x=proj.bijlagen[idx]; if(!x) return;
-  if(!confirm(`"${x.naam}" ontkoppelen?\nHet bestand blijft op SharePoint staan; alleen de link in de tool verdwijnt.`)) return;
+  if(!await mtDialog.confirm({title:'Bijlage ontkoppelen',message:`"${x.naam}" ontkoppelen?\nHet bestand blijft op SharePoint staan; alleen de link in de tool verdwijnt.`,okLabel:'Ontkoppelen',danger:true})) return;
   proj.bijlagen.splice(idx,1);
   slaProjectenOp();
   renderProjectDetail(huidigProject);
@@ -6084,8 +6084,8 @@ function updateModalPreview(){
   const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim();
   document.getElementById('modal-naam-preview').textContent=naam?`Volledige naam: ${naam}`:'';
 }
-function verwijderProject(code){
-  if(!confirm(`Project ${code} verwijderen?`)) return;
+async function verwijderProject(code){
+  if(!await mtDialog.confirm({title:'Project verwijderen',message:`Project ${code} verwijderen?`,okLabel:'Verwijderen',danger:true})) return;
   PROJECT_CODES=PROJECT_CODES.filter(p=>p.code!==code);
   slaProjectenOp();huidigProject=null;
   document.getElementById('project-detail').innerHTML='';renderProjectLijst();
@@ -10338,7 +10338,7 @@ function activiteitOpen(force){
     if(typeof window.getGraphToken!=='function'){ setSt('⚠ Mail-koppeling vereist Microsoft-login (Inbox-tab).',false); return; }
     const ctx=_mbCtx(key);
     const standaard=(ctx.klant||o.titel||'').trim();
-    const term=prompt('Zoek een mail om te koppelen (afzender, onderwerp of trefwoord):',standaard);
+    const term=await mtDialog.prompt({title:'Mail koppelen',message:'Zoek een mail om te koppelen (afzender, onderwerp of trefwoord):',defaultValue:standaard,okLabel:'Zoeken'});
     if(term===null) return;
     setSt('Mails zoeken…');
     try{
@@ -10351,11 +10351,11 @@ function activiteitOpen(force){
       const j=await r.json(); const msgs=(j.value||[]);
       if(!msgs.length){ setSt('Geen mails gevonden voor "'+esc(term)+'".',false); return; }
       window._calcMailKeuze=msgs; o._calcMailKey=key;
-      const lijst=msgs.map((m,i)=>{const f=(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'?'; const d=(m.receivedDateTime||'').slice(0,10);
-        return (i+1)+'. ['+d+'] '+f+' — '+(m.subject||'(geen onderwerp)');}).join('\n');
-      const keuze=prompt('Welke mail koppelen? Typ het nummer:\n\n'+lijst,'1');
-      if(keuze===null) return;
-      const idx=parseInt(keuze,10)-1; const m=msgs[idx];
+      const keuzes=msgs.map((m)=>{const f=(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'?'; const d=(m.receivedDateTime||'').slice(0,10);
+        return {label:(m.subject||'(geen onderwerp)'), sublabel:'['+d+'] '+f};});
+      const idx=await mtDialog.choose({title:'Welke mail koppelen?',choices:keuzes});
+      if(idx===null) return;
+      const m=msgs[idx];
       if(!m){ setSt('Ongeldige keuze.',false); return; }
       let bodyHtml='';
       try{
