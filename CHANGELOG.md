@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-03 — S6: mail-koppelen-flow + 5 verwijder-confirms via mtDialog
+- Commit: `d742d79` | Auteur: Bart Witte
+
 ## 2026-07-03 — S6: herbruikbare <dialog>-helper (mtDialog) i.p.v. prompt/confirm
 - Commit: `7690fde` | Auteur: Bart Witte
 

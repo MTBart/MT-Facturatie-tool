@@ -4,7 +4,7 @@
 > Worker-routes, SharePoint-databestanden, auth en deploy. Vindbaar op beide PC's
 > (SharePoint-sync) én voor Claude-sessies. Geen secrets hier — repo is **PUBLIC**.
 >
-> Laatst geverifieerd: 2026-07-02.
+> Laatst geverifieerd: 2026-07-03.
 
 ## De front-ends (wat is wat)
 
@@ -60,6 +60,57 @@ Page-specifieke verschillen zitten in de config, niet in geforkte code:
 `window._msal` (i.p.v. een lokale `let`) zodat `mt-core.js` dezelfde MSAL-instance
 gebruikt als de inline init. `sw.js` is network-first zonder precache-manifest →
 `mt-core.js` wordt vanzelf same-origin mee-gecachet, geen aparte vermelding nodig.
+
+### Dialog-laag (`mt-dialog.js`, sinds 3-7)
+
+Herbruikbare, Promise-gebaseerde `<dialog>`-flows als vervanger voor de
+blokkerende `prompt()`/`confirm()` (audit-actie S6). Eigen bestand (mt-core is de
+data/auth-laag), zelfde `<script src="mt-dialog.js?v=<datum>">`-patroon ná mt-core.
+Cockpit-tokens (`--green`/`--gold`, Segoe UI) — **interne** tool, niet de
+website-huisstijl. Alles op `window.mtDialog`:
+
+| Aanroep | Retour | Voor |
+|---|---|---|
+| `mtDialog.confirm(opts)` | `Promise<boolean>` (`false` = annuleren) | ja/nee-bevestiging, `danger:true` = rode knop |
+| `mtDialog.prompt(opts)` | `Promise<string\|null>` (`null` = annuleren) | tekst-invoer (`multiline:true` = textarea) |
+| `mtDialog.choose(opts)` | `Promise<number\|null>` (gekozen index) | kies-uit-lijst (`choices:[{label,sublabel}]`) |
+| `mtDialog.alert(opts)` | `Promise<void>` | melding met alleen OK |
+
+`opts` mag een string zijn (= `{message}`). Velden: `title`, `message` (platte
+tekst, wordt ge-escaped + `\n`→`<br>`), `html` (vertrouwde HTML-body, bv.
+mail-preview), `okLabel`, `cancelLabel`, `danger`, `defaultValue`, `placeholder`,
+`multiline`, `choices`. **Escape / backdrop-klik / systeem-cancel = afwijzen** (net
+als een geannuleerde `prompt`). Gedrag identiek aan de vervangen dialoog; alleen de
+UI-laag verschilt. Omgezet tot nu toe: mail-koppelen in de offerte-calc + de
+verwijder-/ontkoppel-confirms van projecten/taken/bijlagen. De rest blijft
+voorlopig `prompt`/`confirm` (S6 is doorlopend, per flow).
+
+### Event-delegatie voor NIEUWE code (S7-conventie, sinds 3-7)
+
+Nieuwe interactieve elementen krijgen **geen inline `onclick`** meer, maar een
+`data-action`-attribuut dat één gedelegeerde listener afhandelt. Reden: het
+CSP-pad (inline handlers verbieden) blijft zo open, en handlers zijn testbaar/
+buiten de HTML-string te houden. Bestaande inline-`onclick`'s worden **niet**
+massaal omgezet — alleen meegenomen in code die je voor een andere reden (bv. S6)
+toch aanraakt. Patroon:
+
+```html
+<button data-action="verwijder-project" data-code="INT-KANTOOR-KEUKEN">×</button>
+```
+```js
+// één keer, per tab-container of document:
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  switch (el.dataset.action) {
+    case 'verwijder-project': verwijderProject(el.dataset.code); break;
+    // …
+  }
+});
+```
+
+Waarden reizen via `data-*` (geen string-interpolatie in `onclick`, dus geen
+`.replace(/'/g,"\\'")`-ontsnapping meer nodig — vgl. audit-bevinding Q5).
 
 ## Repo & paden
 
