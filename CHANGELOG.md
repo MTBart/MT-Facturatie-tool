@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-03 — S3: Toggl-/uren-tab afgesplitst naar mt-toggl.js
+- Commit: `1f6a834` | Auteur: Bart Witte
+
 ## 2026-07-02 — S5: snellere login/initStorage — één SP-listing i.p.v. ~17 losse Graph-GETs
 - Commit: `397f312` | Auteur: Bart Witte
 
