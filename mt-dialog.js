@@ -50,6 +50,9 @@
     const css = `
     dialog.mt-dialog{
       border:none;border-radius:12px;padding:0;max-width:480px;width:calc(100vw - 40px);
+      /* Native <dialog> centreert via de UA-margin:auto; expliciet zetten omdat de
+         cockpit-reset (*{margin:0}) die UA-regel platslaat → anders linksboven. */
+      margin:auto;position:fixed;inset:0;
       background:var(--surface-overlay,#fff);color:var(--text,#1a1a1a);
       box-shadow:0 12px 40px rgba(0,0,0,.28);font-family:var(--sans,Segoe UI,system-ui,sans-serif);
     }

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-03 — S7: event-delegatie-conventie + mtDialog-laag in ROUTES.md
+- Commit: `f690590` | Auteur: Bart Witte
+
 ## 2026-07-03 — S6: mail-koppelen-flow + 5 verwijder-confirms via mtDialog
 - Commit: `d742d79` | Auteur: Bart Witte
 
