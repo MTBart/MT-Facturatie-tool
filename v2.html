@@ -17,6 +17,10 @@
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-07-02"></script>
+<!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
+     blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
+     want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
+<script src="mt-dialog.js?v=2026-07-03"></script>
 <script src="mt-toggl.js?v=2026-07-03"></script>
 <script src="mt-inbox.js?v=2026-07-03"></script>
 <script src="calc-engine.js"></script>

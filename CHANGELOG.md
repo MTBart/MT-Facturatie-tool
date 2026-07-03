@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-03 — S3: Smart-inbox-tab afgesplitst naar mt-inbox.js
+- Commit: `c1d7b1c` | Auteur: Bart Witte
+
 ## 2026-07-03 — S3: Toggl-/uren-tab afgesplitst naar mt-toggl.js
 - Commit: `1f6a834` | Auteur: Bart Witte
 
