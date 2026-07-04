@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta name="robots" content="noindex, nofollow">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mortise &amp; Tenon — website-preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#14100f; --ink:#ece5e0; --muted:#93887f; --eik:#A0764A; --eik-licht:#C9A87C; --merk:#3d2b2e; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--ink); font-family:"Jost","Century Gothic",Futura,sans-serif;
+           min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+           padding:32px; text-align:center; font-weight:300; }
+    .brand { font-size:clamp(28px,6vw,44px); letter-spacing:.14em; font-weight:400; text-transform:lowercase; }
+    .brand em { font-style:normal; color:var(--eik-licht); }
+    .tag { color:var(--muted); letter-spacing:.28em; text-transform:uppercase; font-size:12px; margin-top:10px; }
+    .intro { color:var(--muted); max-width:38ch; margin:26px auto 8px; line-height:1.6; font-size:15px; }
+    .cards { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; margin-top:34px; }
+    a.card { display:block; width:230px; padding:26px 24px; text-decoration:none; color:var(--ink);
+             border:1px solid rgba(160,118,74,.35); border-radius:14px; background:rgba(61,43,46,.28);
+             transition:transform .18s ease, border-color .18s ease, background .18s ease; }
+    a.card:hover { transform:translateY(-4px); border-color:var(--eik); background:rgba(61,43,46,.5); }
+    a.card .v { font-size:26px; color:var(--eik-licht); letter-spacing:.05em; }
+    a.card .k { font-size:14px; color:var(--muted); margin-top:10px; line-height:1.5; }
+    .note { color:var(--muted); font-size:12px; margin-top:40px; max-width:44ch; line-height:1.6; }
+  </style>
+</head>
+<body>
+  <div class="brand">mortise <em>&amp;</em> tenon</div>
+  <div class="tag">website-preview</div>
+  <p class="intro">Twee richtingen van de landing-intro, naast elkaar om te vergelijken. Klik een versie — de cinematische opening speelt automatisch (±12&nbsp;s).</p>
+  <div class="cards">
+    <a class="card" href="v4/index.html">
+      <div class="v">v4</div>
+      <div class="k">Schetsstijl — exploded view als opening (nieuwste richting)</div>
+    </a>
+    <a class="card" href="v3/index.html">
+      <div class="v">v3</div>
+      <div class="k">Fotorealistische richting — shakerdeur, rotate naar doorsnede</div>
+    </a>
+  </div>
+  <p class="note">Interne preview. Beste beleving op een desktop of recente telefoon; geluid is niet nodig. Nog werk in uitvoering — feedback op losse elementen welkom.</p>
+</body>
+</html>

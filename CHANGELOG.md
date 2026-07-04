@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-03 — S6: cachebuster-bump mt-dialog na centreer-fix
+- Commit: `ff7f66a` | Auteur: Bart Witte
+
 ## 2026-07-03 — S6: dialog centreren — cockpit-reset platste UA margin:auto
 - Commit: `4c0dd14` | Auteur: Bart Witte
 

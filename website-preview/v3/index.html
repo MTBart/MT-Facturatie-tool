@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta name="robots" content="noindex, nofollow">
+  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mortise &amp; Tenon — Maatwerk interieurbouw</title>
+  <meta name="description" content="Mortise & Tenon ontwerpt, bouwt en monteert maatwerk interieurs. Traditioneel handwerk voorop, ondersteund door de precisie van moderne CNC-productie.">
+  <meta name="theme-color" content="#14100f">
+  <!-- favicon: het lijn-logo (pen-en-gat-doorsnede) als inline SVG -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233d2b2e'/%3E%3Crect x='14' y='14' width='72' height='72' fill='none' stroke='%23ece5e0' stroke-width='5'/%3E%3Cpath d='M54 14 V36 H38 V63 H54 V86' fill='none' stroke='%23ece5e0' stroke-width='5'/%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="no-scroll">
+
+<!-- =====================================================================
+     INTRO — cinematische opening (auto-play, ±12,5 s, JS-API: playIntro / skipIntro)
+
+     Sequence (v3 — gespiegelde face-on regie, NIETS draait):
+       a. staander (stijl, ±65×21 mm-verhouding) staat LINKS in beeld; de
+          regel met haunched pen glijdt van RECHTS naar zijn hover-positie
+          (Three.js-scène in #intro-stage, warme lichtbundel, zwevend stof,
+          ronde uitsnede via #intro-vignette)
+       b. de camera schuift alleen recht-van-voren-toe (translatie + fov,
+          geen rotatie); een clipping plane opent de dwarsdoorsnede op de
+          halve dikte — vlakke kopse vlakken, donkere gat/groef-diepte
+       c. de pen schuift ÍN het doorsnedebeeld het gat in ("valt over elkaar
+          heen"); een getekende lijn trekt het vierkant + de deellijn over,
+          morpht naar de logo-geometrie en valt pixel-exact over het
+          M&T-merk (#intro-logo, crossfade)
+       d. de iris opent zich (CSS-variabele - -reveal op #intro) en de site staat er
+
+     DEBUG: ?t=<seconden> (bv. ?t=6.5) rendert één bevroren frame op dat
+     intro-tijdstip — voor fase-checks en headless screenshots.
+
+     LATER VERVANGEN DOOR ECHT BEELD:
+       De 3D-scène is 1-op-1 inwisselbaar voor een echte videoclip van een
+       houtbewerker. Zet in #intro-stage een
+         <video autoplay muted playsinline src="intro.mp4"></video>
+       in plaats van het canvas (main.js: functie buildScene overslaan of
+       liteIntro-pad gebruiken). De vignette, de logo-crossfade en de
+       iris-reveal blijven dan exact hetzelfde werken.
+     ===================================================================== -->
+<section id="intro" aria-hidden="false" aria-label="Introanimatie">
+  <div id="intro-stage"><!-- three.js-canvas óf later: <video> --></div>
+  <div id="intro-vignette"></div>
+
+  <div id="intro-logo">
+    <div class="brandmark" role="img" aria-label="mortise &amp; tenon">
+      <span class="bm-word">mortise</span>
+      <!-- het officiële beeldmerk: lijn-doorsnede van de pen-en-gat-verbinding
+           (links het gat, rechts de pen; de deellijn verspringt halverwege) -->
+      <svg class="bm-mark" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <rect class="lijn kader" x="1.1" y="1.1" width="97.8" height="97.8" pathLength="1"/>
+        <path class="lijn deellijn" d="M55.5 1.1 V30.9 H33.9 V67.6 H55.5 V98.9" pathLength="1"/>
+      </svg>
+      <span class="bm-word">&amp; tenon</span>
+    </div>
+    <div class="brand-tag">maatwerk interieurbouw</div>
+  </div>
+
+  <button id="intro-skip" type="button">Overslaan&nbsp;&#8618;</button>
+</section>
+
+<!-- ===================================================================== -->
+
+<header id="site-header">
+  <div class="wrap">
+    <a class="logo-mini" href="#top" aria-label="mortise &amp; tenon — naar boven">
+      <svg class="logo-mark" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <rect class="lijn" x="2" y="2" width="96" height="96"/>
+        <path class="lijn" d="M55.4 2 V31.3 H34.2 V67.3 H55.4 V98"/>
+      </svg>
+      <span class="logo-word">mortise <em>&amp;</em> tenon</span>
+    </a>
+    <button id="nav-toggle" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="site-nav" aria-label="Hoofdnavigatie">
+      <ul>
+        <li><a href="#over">Over ons</a></li>
+        <li><a href="#werkwijze">Werkwijze</a></li>
+        <li><a href="#projecten">Projecten</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- HERO -->
+  <section id="hero">
+    <div class="hero-grid">
+      <div>
+        <p class="kicker reveal">Interieurbouwers — met de hand ontworpen, met precisie gemaakt</p>
+        <h1 class="reveal" data-d="1">Gemaakt met passie.<br>Gebouwd met de precisie van een pen-<span class="h-amp">&amp;</span>-gat-verbinding.</h1>
+        <p class="lede reveal" data-d="2">Mortise &amp; Tenon is bovenal handwerk: we houden van hout en van
+          verbindingen die kloppen. Van keuken tot compleet winkelinterieur ontwerpen en
+          bouwen we alles op maat — het vakmanschap voorop, ondersteund door de nauwkeurigheid
+          van onze eigen CNC-machines.</p>
+        <div class="cta-row reveal" data-d="3">
+          <a class="btn-accent" href="#projecten">Bekijk ons werk</a>
+          <a class="link-pijl" href="#contact">Plan een gesprek &#8594;</a>
+        </div>
+      </div>
+
+      <figure class="hero-art reveal" data-d="2" aria-hidden="true">
+        <!-- technische lijntekening van de naamgever: de pen-en-gat-verbinding -->
+        <svg viewBox="0 0 420 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- stijl (balk met gat) -->
+          <rect x="52" y="34" width="86" height="252" stroke="#A0764A" stroke-opacity=".75" fill="#3d2b2e" fill-opacity=".30"/>
+          <rect x="79" y="128" width="32" height="64" stroke="#C9A87C" stroke-opacity=".8" fill="#0a0706" fill-opacity=".85"/>
+          <!-- regel (balk met pen) -->
+          <rect x="196" y="132" width="188" height="56" stroke="#A0764A" stroke-opacity=".75" fill="#3d2b2e" fill-opacity=".30"/>
+          <rect x="160" y="145" width="36" height="30" stroke="#C9A87C" stroke-opacity=".85" fill="#A0764A" fill-opacity=".15"/>
+          <!-- hulplijnen -->
+          <line x1="111" y1="128" x2="196" y2="145" stroke="#C9A87C" stroke-opacity=".3" stroke-dasharray="4 5"/>
+          <line x1="111" y1="192" x2="196" y2="175" stroke="#C9A87C" stroke-opacity=".3" stroke-dasharray="4 5"/>
+          <!-- maatvoering -->
+          <line x1="160" y1="205" x2="196" y2="205" stroke="#A0764A" stroke-opacity=".6"/>
+          <line x1="160" y1="199" x2="160" y2="211" stroke="#A0764A" stroke-opacity=".6"/>
+          <line x1="196" y1="199" x2="196" y2="211" stroke="#A0764A" stroke-opacity=".6"/>
+          <text x="178" y="226" text-anchor="middle" fill="#93887f" font-size="11" font-family="Jost, Segoe UI, sans-serif" letter-spacing="1">pen</text>
+          <line x1="79" y1="110" x2="111" y2="110" stroke="#A0764A" stroke-opacity=".6"/>
+          <line x1="79" y1="104" x2="79" y2="116" stroke="#A0764A" stroke-opacity=".6"/>
+          <line x1="111" y1="104" x2="111" y2="116" stroke="#A0764A" stroke-opacity=".6"/>
+          <text x="95" y="98" text-anchor="middle" fill="#93887f" font-size="11" font-family="Jost, Segoe UI, sans-serif" letter-spacing="1">gat</text>
+        </svg>
+        <figcaption>fig. 1 — de verbinding waar wij naar vernoemd zijn</figcaption>
+      </figure>
+    </div>
+    <div class="scroll-hint" aria-hidden="true">scroll</div>
+  </section>
+
+  <!-- OVER ONS -->
+  <section id="over">
+    <div class="wrap">
+      <div class="over-grid">
+        <div class="tekst">
+          <p class="kicker reveal">Over ons</p>
+          <h2 class="reveal" data-d="1">Vakmanschap voorop, precisie als fundament.</h2>
+          <p class="reveal" data-d="2">Een pen-en-gat-verbinding houdt eeuwen — niet door lijm of
+            schroeven, maar doordat twee delen met zorg exact op elkaar zijn gemaakt. Dat is hoe
+            wij naar interieurs kijken: <strong>het begint bij liefde voor het vak</strong>, bij
+            de hand die voelt of iets klopt.</p>
+          <p class="reveal" data-d="3">Dat handwerk ondersteunen we met moderne precisie. Elk
+            project tekenen we volledig in 3D uit in <strong>Vectorworks met interiorcad</strong>,
+            en vanuit dat model sturen we onze eigen <strong>CNC-frees en opdeelzaag</strong> aan —
+            zodat de maat tot op de tiende millimeter klopt. Het oog, het schuren, passen en
+            stellen: dat blijft mensenwerk in onze werkplaats.</p>
+          <p class="reveal" data-d="4">Zo krijgt traditioneel meubelmaken de zekerheid van
+            moderne productie — zonder dat de machine het overneemt. Voor particulieren,
+            architecten en bedrijven die iets willen dat nergens anders past.</p>
+        </div>
+        <div class="feiten reveal" data-d="2">
+          <div class="feit">
+            <div class="cijfer">0,1&nbsp;mm</div>
+            <div class="label">de precisie waarmee de machine ons handwerk ondersteunt</div>
+          </div>
+          <div class="feit">
+            <div class="cijfer">100%</div>
+            <div class="label">eigen ontwerp, productie en montage — geen schakels ertussen</div>
+          </div>
+          <div class="feit">
+            <div class="cijfer">3D</div>
+            <div class="label">elk project vooraf volledig uitgewerkt in Vectorworks / interiorcad</div>
+          </div>
+          <div class="feit">
+            <div class="cijfer">1 team</div>
+            <div class="label">van eerste schets tot laatste plint: dezelfde mensen</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WERKWIJZE -->
+  <section id="werkwijze">
+    <div class="wrap">
+      <p class="kicker reveal">Werkwijze</p>
+      <h2 class="reveal" data-d="1">Vier stappen. Eén doorlopende maatvoering.</h2>
+      <ol class="stappen">
+        <li class="reveal" data-d="1">
+          <div class="stap-nr">01</div>
+          <h3>Ontwerp</h3>
+          <p>We beginnen bij uw ruimte en uw wensen. Schetsen worden een volledig
+            3D-model, zodat u vooraf ziet wat er komt — geen verrassingen achteraf.</p>
+        </li>
+        <li class="reveal" data-d="2">
+          <div class="stap-nr">02</div>
+          <h3>Engineering</h3>
+          <p>Het ontwerp wordt technisch uitgewerkt: verbindingen, beslag, materiaal
+            en werktekeningen. Hier wordt elk paneel al voorbereid voor de machine.</p>
+        </li>
+        <li class="reveal" data-d="3">
+          <div class="stap-nr">03</div>
+          <h3>Productie</h3>
+          <p>De machine freest en deelt op tot op de tiende millimeter; daarna nemen
+            onze handen het over — schuren, passen, afwerken en controleren vóórdat
+            iets de deur uit gaat.</p>
+        </li>
+        <li class="reveal" data-d="4">
+          <div class="stap-nr">04</div>
+          <h3>Montage</h3>
+          <p>Ons eigen team plaatst het interieur strak en schoon. We leveren pas op
+            als het klopt — tot op de naad.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- PROJECTEN -->
+  <section id="projecten">
+    <div class="wrap">
+      <p class="kicker reveal">Projecten</p>
+      <h2 class="reveal" data-d="1">Gemaakt om gebruikt te worden.</h2>
+      <div class="project-grid">
+        <a class="project-card reveal" data-d="1" href="#contact">
+          <div class="thumb"><div class="vlak t-eiken"></div></div>
+          <div class="bijschrift"><h3>Keukens</h3><p>Kookeilanden, fronten en kastwanden op maat</p></div>
+        </a>
+        <a class="project-card reveal" data-d="2" href="#contact">
+          <div class="thumb"><div class="vlak t-noten"></div></div>
+          <div class="bijschrift"><h3>Kasten op maat</h3><p>Inbouwkasten, boekenwanden en dressoirs</p></div>
+        </a>
+        <a class="project-card reveal" data-d="3" href="#contact">
+          <div class="thumb"><div class="vlak t-merk"></div></div>
+          <div class="bijschrift"><h3>Winkelinterieurs</h3><p>Presentatiemeubels, balies en wandsystemen</p></div>
+        </a>
+        <a class="project-card reveal" data-d="1" href="#contact">
+          <div class="thumb"><div class="vlak t-warm"></div></div>
+          <div class="bijschrift"><h3>Horeca</h3><p>Bars, banken en betimmeringen die tegen een stootje kunnen</p></div>
+        </a>
+        <a class="project-card reveal" data-d="2" href="#contact">
+          <div class="thumb"><div class="vlak t-blank"></div></div>
+          <div class="bijschrift"><h3>Badkamermeubels</h3><p>Vochtbestendig maatwerk met strakke detaillering</p></div>
+        </a>
+        <a class="project-card reveal" data-d="3" href="#contact">
+          <div class="thumb"><div class="vlak t-diep"></div></div>
+          <div class="bijschrift"><h3>Kantoren &amp; werkplekken</h3><p>Receptiebalies, pantry&#39;s en akoestische wanden</p></div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact">
+    <div class="wrap">
+      <div class="contact-grid">
+        <div class="tekst">
+          <p class="kicker reveal">Contact</p>
+          <h2 class="reveal" data-d="1">Vertel ons wat er moet passen.</h2>
+          <p class="reveal" data-d="2">Een idee, een schets van de architect of alleen nog een
+            leeg hoekje in huis: we denken graag vroeg mee. Mail ons en we plannen een
+            vrijblijvend gesprek — bij u op locatie of in onze werkplaats.</p>
+          <a class="mail-groot reveal" data-d="3" href="mailto:bart@mortiseandtenon.nl">bart@mortiseandtenon.nl</a>
+        </div>
+        <div class="adres-kaart reveal" data-d="2">
+          <h3>Mortise <em>&amp;</em> Tenon</h3>
+          <address>
+            Werkplaats &amp; showroom<br>
+            Ambachtsweg 12<br>
+            Nederland
+          </address>
+          <div class="noot">
+            Bezoek op afspraak — ma t/m vr 08.00–17.00<br>
+            <a href="mailto:bart@mortiseandtenon.nl">bart@mortiseandtenon.nl</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>&copy; <span id="jaar">2026</span> Mortise <em>&amp;</em> Tenon — Maatwerk interieurbouw</p>
+    <a href="#top">Naar boven &#8593;</a>
+  </div>
+</footer>
+
+<!-- Three.js (UMD-build, werkt betrouwbaar vanaf file:// zonder server) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="main.js"></script>
+
+</body>
+</html>
