@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-04 — Add website-preview (v3+v4) voor interne review door Mathijs
+- Commit: `1c032ec` | Auteur: Bart Witte
+
 ## 2026-07-03 — S6: cachebuster-bump mt-dialog na centreer-fix
 - Commit: `ff7f66a` | Auteur: Bart Witte
 

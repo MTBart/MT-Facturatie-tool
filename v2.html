@@ -607,6 +607,7 @@ button{transition:transform .07s ease,filter .07s ease}
   <button class="tab-btn" onclick="showTab('bestelling',this)">Bestellijst</button>
   <button class="tab-btn" onclick="showTab('klanten',this)">Klanten</button>
   <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
+  <button class="tab-btn" onclick="showTab('verbeterpunten',this)">&#128161; Verbeterpunten</button>
   <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" id="tab-btn-admin" style="display:none" onclick="showTab('admin',this)">⚙ Admin</button>
   <button class="tab-btn" id="tab-btn-activiteit" style="display:none" onclick="showTab('activiteit',this)">📊 Activiteit</button>
@@ -1126,6 +1127,62 @@ button{transition:transform .07s ease,filter .07s ease}
   </div>
 
   <!-- ═══ TAB: INSTELLINGEN ═══ -->
+  <!-- ═══ TAB: VERBETERPUNTEN ═══ -->
+  <div id="tab-verbeterpunten" class="tab-content">
+    <div style="max-width:800px">
+      <div class="card">
+        <div class="card-title">&#128161; Verbeterpunt indienen</div>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Draag een verbetering aan voor de cockpit of app, spar er eventueel met Larry over, en stuur het als belangrijk punt naar Bart zodat jullie het samen kunnen oppakken.</p>
+        <div class="field">
+          <label>Titel <span style="color:var(--gold)">*</span></label>
+          <input type="text" id="vb-titel" placeholder="Kort en concreet — bv. 'Bestellijst exporteren naar Excel'" maxlength="120">
+        </div>
+        <div class="field">
+          <label>Betreft</label>
+          <select id="vb-betreft">
+            <option value="Dashboard">Dashboard</option>
+            <option value="Inbox">Inbox</option>
+            <option value="Projecten">Projecten</option>
+            <option value="Opleveringen">Opleveringen</option>
+            <option value="Agenda">Agenda</option>
+            <option value="Uren">Uren</option>
+            <option value="Voorraad">Voorraad</option>
+            <option value="Bestellijst">Bestellijst</option>
+            <option value="Klanten">Klanten</option>
+            <option value="Geschiedenis">Geschiedenis</option>
+            <option value="App/mobiel">App/mobiel</option>
+            <option value="Anders">Anders</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Omschrijving</label>
+          <textarea id="vb-omschrijving" rows="4" placeholder="Wat is nu het probleem of de belemmering, en wat zou er beter kunnen?"></textarea>
+        </div>
+        <div class="flex mt2" style="gap:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary" data-action="vb-spar">Spar met Larry</button>
+          <button class="btn btn-primary" data-action="vb-verstuur">Verstuur naar Bart als belangrijk punt</button>
+        </div>
+      </div>
+
+      <!-- Spar-paneel — verborgen tot "Spar met Larry" wordt geklikt -->
+      <div id="vb-chat-wrap" class="card" style="display:none">
+        <div class="card-title" style="margin-bottom:.75rem">Gesprek met Larry</div>
+        <div id="vb-chat-berichten" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:1rem"></div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <textarea id="vb-chat-invoer" rows="2" placeholder="Reageer op Larry of stel een vraag…" style="flex:1"></textarea>
+          <button class="btn btn-primary" style="min-width:80px" data-action="vb-chat-stuur">Stuur</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:8px;display:none" id="vb-neem-over-btn" data-action="vb-neem-over">Neem Larry&#8217;s samenvatting over in omschrijving</button>
+      </div>
+
+      <!-- Lijst van ingediende verbeterpunten -->
+      <div class="card">
+        <div class="card-title">Ingediende verbeterpunten</div>
+        <div id="vb-lijst"><div style="padding:.75rem;text-align:center;color:var(--text-faint);font-size:13px">Laden&#8230;</div></div>
+      </div>
+    </div>
+  </div>
+
   <div id="tab-instellingen" class="tab-content">
     <div class="grid2">
       <div>
@@ -2413,6 +2470,7 @@ function showTab(name,btn){
   if(name==='materialen') renderMaterialen();
   if(name==='admin') adminOpen();
   if(name==='activiteit') activiteitOpen();
+  if(name==='verbeterpunten') verbLaadTab();
   // Houd de URL-hash gelijk aan de actieve tab → deep-link + "apart venster".
   try{ history.replaceState(null,'','#tab='+name); }catch(e){}
 }
@@ -10693,6 +10751,270 @@ function activiteitOpen(force){
   .calc-mailframe{width:100%;height:520px;border:1px solid var(--border);border-radius:6px;background:#fff}
 </style>
 <script src="track.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// VERBETERPUNTEN-TAB
+// Formulier → spar met Larry (claudeCall) → mail naar bart@ via Graph sendMail
+// → persisteer in mt_verbeterpunten.json via _SP-laag.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const VB_STATUS_LABEL = {nieuw:'Nieuw', opgepakt:'Opgepakt', afgerond:'Afgerond'};
+const VB_STATUS_KLEUR = {nieuw:'var(--gold)', opgepakt:'var(--green)', afgerond:'var(--text-faint)'};
+let _vbLijst = [];           // lokale cache van mt_verbeterpunten.json
+let _vbChatGesprek = [];     // [{rol:'gebruiker'|'larry', tekst}]
+let _vbLarrySamenvatting = ''; // laatste tekst van Larry — kan worden overgenomen
+
+// ── hulp ──
+function _vbIndiener() {
+  try {
+    const a = _msal && _msal.getAllAccounts();
+    const acc = a && a[0];
+    return {email: (acc && acc.username || '').toLowerCase(), naam: acc && acc.name || acc && acc.username || '?'};
+  } catch(e) { return {email: '?', naam: '?'}; }
+}
+
+// ── tab openen ──
+async function verbLaadTab() {
+  try {
+    const arr = await _SP.read('mt_verbeterpunten.json');
+    _vbLijst = Array.isArray(arr) ? arr : [];
+  } catch(e) { _vbLijst = []; }
+  _vbRenderLijst();
+}
+
+// ── spar-chat starten ──
+async function _vbSparMetLarry() {
+  const titel = (document.getElementById('vb-titel') || {}).value?.trim() || '';
+  const betreft = (document.getElementById('vb-betreft') || {}).value || '';
+  const omschrijving = (document.getElementById('vb-omschrijving') || {}).value?.trim() || '';
+  if (!titel) { planToast('Vul eerst een titel in'); return; }
+
+  const wrap = document.getElementById('vb-chat-wrap');
+  if (wrap) wrap.style.display = '';
+
+  // Alleen een eerste Larry-opening insturen als het gesprek nog leeg is.
+  if (_vbChatGesprek.length === 0) {
+    const sys = 'Je bent Larry, de bedrijfsassistent van Mortise & Tenon. Een teamlid wil een verbeterpunt indienen voor de interne cockpit-tool. Help het punt scherp en concreet te maken: stel maximaal 3 gerichte vragen (wat is de impact, hoe vaak speelt het, wat zou de ideale situatie zijn). Vat het daarna samen als "**Samenvatting:** probleem → voorgestelde verbetering → verwachte winst". Wees nuchter en meedenkend. Antwoord altijd in het Nederlands.';
+    const start = 'Titel: ' + titel + '\nBetreft: ' + betreft + '\nOmschrijving: ' + (omschrijving || '(nog niet ingevuld)');
+    _vbChatToon('gebruiker', titel + (omschrijving ? '\n' + omschrijving : ''));
+    _vbChatToon('larry', '…', true);
+    try {
+      const r = await claudeCall([{role: 'user', content: sys + '\n\n' + start}], 700);
+      const tekst = r && r.content && r.content[0] && r.content[0].text || '(geen antwoord)';
+      _vbChatGesprek = [{rol: 'gebruiker', tekst: start}, {rol: 'larry', tekst}];
+      _vbVervangLaatsteLarry(tekst);
+      _vbExtractSamenvatting(tekst);
+    } catch(e) {
+      _vbVervangLaatsteLarry('Fout bij verbinden met Larry — probeer opnieuw.');
+    }
+  }
+}
+
+// ── antwoord sturen in de chat ──
+async function _vbChatStuur() {
+  const invoer = document.getElementById('vb-chat-invoer');
+  const tekst = (invoer && invoer.value || '').trim();
+  if (!tekst) return;
+  if (invoer) invoer.value = '';
+  _vbChatToon('gebruiker', tekst);
+  _vbChatGesprek.push({rol: 'gebruiker', tekst});
+  _vbChatToon('larry', '…', true);
+  try {
+    // Bouw het hele gesprek op als doorlopende tekst zodat het model context heeft.
+    const conv = _vbChatGesprek.map(m => (m.rol === 'gebruiker' ? 'Teamlid' : 'Larry') + ': ' + m.tekst).join('\n\n');
+    const r = await claudeCall([{role: 'user', content: conv + '\n\nLarry:'}], 700);
+    const ant = r && r.content && r.content[0] && r.content[0].text || '(geen antwoord)';
+    _vbChatGesprek.push({rol: 'larry', tekst: ant});
+    _vbVervangLaatsteLarry(ant);
+    _vbExtractSamenvatting(ant);
+  } catch(e) {
+    _vbVervangLaatsteLarry('Fout — probeer opnieuw.');
+  }
+}
+
+// ── chat-render helpers ──
+function _vbChatToon(rol, tekst, isLaden) {
+  const el = document.getElementById('vb-chat-berichten');
+  if (!el) return;
+  const div = document.createElement('div');
+  div.style.cssText = 'padding:8px 12px;border-radius:8px;font-size:13px;line-height:1.5;' +
+    (rol === 'larry' ? 'background:var(--green-50);border:1px solid var(--green-100)' : 'background:var(--n-100,#f1f4f2);border:1px solid var(--border)');
+  if (isLaden) div.dataset.laden = '1';
+  div.innerHTML = '<strong style="color:' + (rol === 'larry' ? 'var(--green)' : 'var(--text)') + '">' +
+    (rol === 'larry' ? 'Larry' : 'Jij') + ':</strong> ' +
+    esc(tekst).replace(/\n/g, '<br>');
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+function _vbVervangLaatsteLarry(tekst) {
+  const el = document.getElementById('vb-chat-berichten');
+  if (!el) return;
+  const laden = el.querySelector('[data-laden]');
+  if (laden) {
+    laden.innerHTML = '<strong style="color:var(--green)">Larry:</strong> ' + esc(tekst).replace(/\n/g, '<br>');
+    delete laden.dataset.laden;
+  } else {
+    _vbChatToon('larry', tekst);
+  }
+  el.scrollTop = el.scrollHeight;
+}
+function _vbExtractSamenvatting(tekst) {
+  // Elke Larry-reactie bewaren als potentiële samenvatting; knop zichtbaar maken.
+  _vbLarrySamenvatting = tekst;
+  const btn = document.getElementById('vb-neem-over-btn');
+  if (btn) btn.style.display = '';
+}
+
+// ── samenvatting overnemen in het omschrijvingsveld ──
+function _vbNeemOver() {
+  if (!_vbLarrySamenvatting) return;
+  const ta = document.getElementById('vb-omschrijving');
+  if (ta) ta.value = _vbLarrySamenvatting;
+  planToast('✓ Samenvatting overgenomen');
+}
+
+// ── versturen naar Bart ──
+async function _vbVerstuur() {
+  const titel = (document.getElementById('vb-titel') || {}).value?.trim() || '';
+  const betreft = (document.getElementById('vb-betreft') || {}).value || '';
+  const omschrijving = (document.getElementById('vb-omschrijving') || {}).value?.trim() || '';
+  if (!titel) { planToast('Vul een titel in'); return; }
+  const indiener = _vbIndiener();
+  const heeftSam = _vbLarrySamenvatting && _vbLarrySamenvatting !== omschrijving;
+
+  // Bevestigingsdialoog met preview (mtDialog.confirm, S6-patroon).
+  const previewHtml = '<table style="border-collapse:collapse;font-family:Segoe UI,sans-serif;font-size:13px;width:100%">' +
+    '<tr><td style="padding:4px 8px 4px 0;color:#666;white-space:nowrap">Titel</td><td style="padding:4px 0"><strong>' + esc(titel) + '</strong></td></tr>' +
+    '<tr><td style="padding:4px 8px 4px 0;color:#666">Betreft</td><td style="padding:4px 0">' + esc(betreft) + '</td></tr>' +
+    '<tr><td style="padding:4px 8px 4px 0;color:#666">Indiener</td><td style="padding:4px 0">' + esc(indiener.naam) + ' (' + esc(indiener.email) + ')</td></tr>' +
+    '<tr><td style="padding:4px 8px 4px 0;color:#666;vertical-align:top">Omschrijving</td><td style="padding:4px 0">' + esc(omschrijving || '(leeg)').replace(/\n/g, '<br>') + '</td></tr>' +
+    (heeftSam ? '<tr><td style="padding:4px 8px 4px 0;color:#666;vertical-align:top">Larry&#8217;s samenvatting</td><td style="padding:4px 0;font-style:italic">' + esc(_vbLarrySamenvatting).replace(/\n/g, '<br>') + '</td></tr>' : '') +
+    '</table>';
+  const ok = await mtDialog.confirm({title: 'Verstuur naar Bart?', html: previewHtml, okLabel: 'Verstuur', cancelLabel: 'Annuleren'});
+  if (!ok) return;
+
+  // Graph sendMail — rechtstreeks vanuit de browser (Mail.Send-scope is aangevraagd in GRAPH_SCOPES).
+  const token = await getGraphToken();
+  if (!token) { planToast('⚠ Niet ingelogd — kan mail niet versturen'); return; }
+  const mailBody = '<div style="font-family:Segoe UI,sans-serif;font-size:14px;color:#222">' +
+    '<h2 style="color:#2A4A38;margin-bottom:16px">&#128161; Verbeterpunt: ' + esc(titel) + '</h2>' +
+    '<table style="border-collapse:collapse;width:100%;max-width:560px">' +
+    '<tr><td style="padding:6px 12px 6px 0;color:#666;white-space:nowrap"><strong>Betreft</strong></td><td>' + esc(betreft) + '</td></tr>' +
+    '<tr><td style="padding:6px 12px 6px 0;color:#666;white-space:nowrap"><strong>Indiener</strong></td><td>' + esc(indiener.naam) + ' (' + esc(indiener.email) + ')</td></tr>' +
+    '</table>' +
+    '<h3 style="margin-top:20px;margin-bottom:6px">Omschrijving</h3>' +
+    '<p style="margin:0;line-height:1.6">' + esc(omschrijving || '(geen omschrijving)').replace(/\n/g, '<br>') + '</p>' +
+    (heeftSam ? '<h3 style="margin-top:20px;margin-bottom:6px">Larry&#8217;s samenvatting</h3><p style="margin:0;line-height:1.6;font-style:italic">' + esc(_vbLarrySamenvatting).replace(/\n/g, '<br>') + '</p>' : '') +
+    '<hr style="margin-top:24px;border:none;border-top:1px solid #ddd">' +
+    '<p style="margin-top:12px;font-size:12px;color:#888">Ingediend via de Verbeterpunten-tab in de M&amp;T-cockpit. Kan samen opgepakt worden.</p>' +
+    '</div>';
+  try {
+    const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        message: {
+          subject: '💡 Verbeterpunt: ' + titel,
+          importance: 'high',
+          body: {contentType: 'HTML', content: mailBody},
+          toRecipients: [{emailAddress: {address: 'bart@mortiseandtenon.nl'}}]
+        },
+        saveToSentItems: true
+      })
+    });
+    if (!r.ok) {
+      const err = await r.text().catch(() => '');
+      planToast('⚠ Mail kon niet worden verstuurd (' + r.status + ')');
+      console.error('sendMail fout:', r.status, err);
+      return;
+    }
+  } catch(e) {
+    planToast('⚠ Verbindingsfout bij versturen');
+    console.error('sendMail exception:', e);
+    return;
+  }
+
+  // SP persisteren — dedup op id, nieuwste bovenaan.
+  const aangemaakt_op = new Date().toISOString();
+  const id = admId();
+  let arr = [];
+  try { arr = await _SP.read('mt_verbeterpunten.json') || []; } catch(e) { arr = []; }
+  const record = {id, titel, betreft, omschrijving, larry_samenvatting: _vbLarrySamenvatting || '', indiener: indiener.email, indiener_naam: indiener.naam, status: 'nieuw', aangemaakt_op};
+  arr = arr.filter(x => x.id !== id);
+  arr.unshift(record);
+  _vbLijst = arr;
+  await _SP.write('mt_verbeterpunten.json', arr);
+
+  try { if (window.track) track('feature', 'verbeterpunt_aangemaakt', {detail: betreft, ok: true}); } catch(e) {}
+  try { if (window.track) track('feature', 'verbeterpunt_gemaild', {detail: betreft, ok: true}); } catch(e) {}
+
+  planToast('✓ Verbeterpunt verstuurd naar Bart');
+
+  // Formulier leegmaken en spar-paneel verbergen.
+  document.getElementById('vb-titel').value = '';
+  document.getElementById('vb-omschrijving').value = '';
+  const chatWrap = document.getElementById('vb-chat-wrap');
+  if (chatWrap) chatWrap.style.display = 'none';
+  const berichten = document.getElementById('vb-chat-berichten');
+  if (berichten) berichten.innerHTML = '';
+  _vbChatGesprek = [];
+  _vbLarrySamenvatting = '';
+  const neemBtn = document.getElementById('vb-neem-over-btn');
+  if (neemBtn) neemBtn.style.display = 'none';
+
+  _vbRenderLijst();
+}
+
+// ── status doorschakelen (nieuw → opgepakt → afgerond → nieuw) ──
+async function _vbStatusWijzig(id, huidig) {
+  const volgorde = ['nieuw', 'opgepakt', 'afgerond'];
+  const volgende = volgorde[(volgorde.indexOf(huidig) + 1) % volgorde.length];
+  let arr;
+  try { arr = await _SP.read('mt_verbeterpunten.json') || []; }
+  catch(e) { planToast('SharePoint niet bereikbaar'); return; }
+  arr = arr.map(x => x.id === id ? {...x, status: volgende} : x);
+  _vbLijst = arr;
+  await _SP.write('mt_verbeterpunten.json', arr);
+  _vbRenderLijst();
+}
+
+// ── lijst renderen ──
+function _vbRenderLijst() {
+  const el = document.getElementById('vb-lijst');
+  if (!el) return;
+  if (!_vbLijst.length) {
+    el.innerHTML = '<div style="padding:.75rem;text-align:center;color:var(--text-faint);font-size:13px">Nog geen verbeterpunten ingediend.</div>';
+    return;
+  }
+  el.innerHTML = _vbLijst.map(p => {
+    const kleur = VB_STATUS_KLEUR[p.status] || 'var(--text-faint)';
+    const label = VB_STATUS_LABEL[p.status] || p.status;
+    const datum = p.aangemaakt_op ? p.aangemaakt_op.replace('T', ' ').slice(0, 16) : '';
+    return '<div style="padding:.75rem 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px">' +
+      '<div style="flex:1;min-width:0">' +
+      '<div style="font-weight:600;font-size:13px">' + esc(p.titel) + '</div>' +
+      '<div style="font-size:12px;color:var(--text-dim);margin-top:2px">' + esc(p.betreft) + ' &middot; ' + esc(p.indiener_naam || p.indiener) + ' &middot; ' + esc(datum) + '</div>' +
+      (p.omschrijving ? '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">' + esc(p.omschrijving).replace(/\n/g, '<br>') + '</div>' : '') +
+      '</div>' +
+      '<button class="btn btn-secondary btn-sm" style="white-space:nowrap;color:' + kleur + ';border-color:' + kleur + '" data-action="vb-status" data-id="' + esc(p.id) + '" data-huidig="' + esc(p.status) + '">' + label + '</button>' +
+      '</div>';
+  }).join('');
+}
+
+// ── event-delegatie (S7-conventie — geen inline-onclick op nieuwe interactieve elementen) ──
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  switch (el.dataset.action) {
+    case 'vb-spar':       _vbSparMetLarry(); break;
+    case 'vb-chat-stuur': _vbChatStuur(); break;
+    case 'vb-verstuur':   _vbVerstuur(); break;
+    case 'vb-neem-over':  _vbNeemOver(); break;
+    case 'vb-status':     _vbStatusWijzig(el.dataset.id, el.dataset.huidig); break;
+  }
+});
+</script>
 
 </body>
 </html>
