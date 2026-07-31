@@ -919,6 +919,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <!-- VOOR-OPNAME: items vastleggen zonder project; later in de cockpit herverwijzen -->
       <div id="voorOpnameWrap" style="display:none">
         <div class="section-head" style="margin-top:14px">📦 Losse opname — komt in <b>Voor-opname</b> op SharePoint</div>
+        <div id="voHervatInfo" style="display:none;background:#0f2030;border:1px solid #3b78b0;border-radius:10px;padding:10px;margin-bottom:8px;font-size:13px"></div>
         <div class="field">
           <label>Klant (code mag later)</label>
           <select id="voKlantSelect" onchange="voKlantChange()">
@@ -933,6 +934,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           <label>Algemene notitie bij deze opname</label>
           <textarea id="voNotitie" rows="2" placeholder="Waar, wat opgemeten, voor welke offerte/aanvraag…" oninput="_voPersist()"></textarea>
         </div>
+        <div id="voRuimteTabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0"></div>
         <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>voFoto(f))">📷 Nieuwe foto</button>
         <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
@@ -941,6 +943,15 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           </label>
         </div>
         <div id="voFotoList" style="margin-top:10px"></div>
+        <div id="voRuimteNav" style="display:none;margin-top:10px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-secondary" style="min-height:44px;flex:0 0 auto" onclick="voRuimtePrev()">◀</button>
+            <select id="voRuimteSelect" onchange="voRuimteKies(this.value)" style="flex:1;min-height:44px"></select>
+            <button class="btn btn-secondary" style="min-height:44px;flex:0 0 auto" onclick="voRuimteNext()">▶</button>
+          </div>
+          <div id="voRuimteNavInfo" style="text-align:center;font-size:11px;color:var(--text-faint);margin-top:4px"></div>
+          <button class="btn btn-gold btn-full" style="margin-top:8px;min-height:48px" onclick="voRuimteVolgende()">➡️ Klaar hier — volgende ruimte</button>
+        </div>
         <button class="btn btn-gold btn-full" style="margin-top:10px" onclick="uploadVoorOpname()">✅ Opslaan naar Voor-opname</button>
         <button class="btn btn-secondary btn-full" style="margin-top:6px" onclick="closeVoorOpname()">← Terug</button>
         <div id="voResult" style="display:none"></div>
@@ -3947,6 +3958,9 @@ function updateSpMockPath() {
    later thuis naar het juiste project. Klant mag bekend zijn, code nog niet.
    ===================================================================== */
 let voorOpnamePhotos = [];
+let _voRuimtes = [];        // ruimte-tabbladen binnen de losse opname
+let _voRuimteActief = '';
+let _voHervat = null;       // {bucket, pad} bij verder werken aan een al geüploade opname
 
 /* ---------------------------------------------------------------------
    CRASH-BESTENDIGE OPSLAG (IndexedDB) voor de losse opname.
@@ -4019,6 +4033,9 @@ function _voPersist() {
       const fotos = voorOpnamePhotos.map(p => ({
         name: p.name || 'foto.jpg',
         kladblok: p.kladblok || '',
+        ruimte: p.ruimte || '',
+        bestaand: !!p.bestaand,
+        bestand: p.bestand || '',
         blob: p.file || null,            // File is een Blob → structured-cloneable
         bewerktBlob: p.bewerktFile || null
       }));
@@ -4026,6 +4043,9 @@ function _voPersist() {
         klantCode: ks ? ks.value : '',
         klantVrij: vv ? vv.value : '',
         notitie: nn ? nn.value : '',
+        ruimtes: _voRuimtes.slice(),
+        ruimteActief: _voRuimteActief,
+        hervat: _voHervat ? { bucket: _voHervat.bucket, pad: _voHervat.pad } : null,
         fotos,
         ts: new Date().toISOString()
       });
@@ -4063,8 +4083,13 @@ async function voRestoreDraft() {
     const bb = f.bewerktBlob || null;
     const bewerktFile = bb ? (bb instanceof File ? bb : new File([bb], 'bewerkt.jpg', {type: bb.type || 'image/jpeg'})) : null;
     const bewerktUrl = bewerktFile ? URL.createObjectURL(bewerktFile) : null;
-    return { url, name: f.name || 'foto.jpg', file, kladblok: f.kladblok || '', bewerktFile, bewerktUrl };
+    return { url, name: f.name || 'foto.jpg', file, kladblok: f.kladblok || '', ruimte: f.ruimte || '', bestaand: !!f.bestaand, bestand: f.bestand || '', bewerktFile, bewerktUrl };
   }).filter(p => p.file);
+  _voRuimtes = Array.isArray(d.ruimtes) ? d.ruimtes.slice() : [];
+  voorOpnamePhotos.forEach(p => { if (p.ruimte && !_voRuimtes.includes(p.ruimte)) _voRuimtes.push(p.ruimte); });
+  _voRuimteActief = (d.ruimteActief && _voRuimtes.includes(d.ruimteActief)) ? d.ruimteActief : '';
+  _voHervat = (d.hervat && d.hervat.bucket) ? { bucket: d.hervat.bucket, pad: d.hervat.pad } : null;
+  _voHervatInfoToon();
   await openVoorOpname();   // vult de klantlijst + toont de sub-view
   const ks = document.getElementById('voKlantSelect');
   if (ks && d.klantCode) ks.value = d.klantCode;
@@ -4124,9 +4149,10 @@ async function renderVoorOpnameLijst(forceFetch) {
     catch (e) { idx = idx || []; }
   }
   const open = (idx || []).filter(b => (b.status || 'nieuw') !== 'verwerkt');
+  _voOpenLijst = open;
   if (!open.length) { wrap.style.display = 'none'; list.innerHTML = ''; return; }
   wrap.style.display = 'block';
-  list.innerHTML = open.map(b => {
+  list.innerHTML = open.map((b, oi) => {
     let dt = '';
     if (b.datum) { try { dt = new Date(b.datum).toLocaleDateString('nl-NL', {day:'2-digit',month:'2-digit'}); } catch(e){} }
     const n = b.aantal || 0;
@@ -4135,14 +4161,77 @@ async function renderVoorOpnameLijst(forceFetch) {
     const badge = (b.status === 'bezig')
       ? '<span style="color:#d6a93a">● bezig in cockpit</span>'
       : '<span style="color:var(--text-faint)">● wacht op verwerking</span>';
-    return `<div class="foto-row" style="align-items:flex-start;cursor:default">
+    return `<div class="foto-row" style="align-items:flex-start;cursor:pointer" onclick="voHervatOpname(${oi})">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600">${klant}</div>
         <div style="font-size:12px;color:var(--text-faint);margin-top:1px">${dt ? dt+' · ' : ''}${n} foto${n===1?'':"'s"} · ${badge}</div>
         ${not ? `<div style="font-size:12px;color:var(--text-faint);margin-top:3px">${not}</div>` : ''}
+        <div style="font-size:12px;color:#d6a93a;margin-top:3px">✏️ Tik om verder te werken</div>
       </div>
     </div>`;
   }).join('');
+}
+let _voOpenLijst = [];
+
+// Hervat-balkje bovenin de losse-opname-view tonen/verbergen.
+function _voHervatInfoToon() {
+  const el = document.getElementById('voHervatInfo');
+  if (!el) return;
+  if (!_voHervat) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = `✏️ <b>Verder werken</b> aan een al opgeslagen opname (${escHtml(_voHervat.bucket || '')}).<br>
+    <span style="color:var(--text-faint)">Foto's met ☁️ staan al online. Nieuwe foto's worden bij het opslaan toegevoegd aan dezelfde map.</span>`;
+}
+
+// Tik op een lopende losse opname → foto's + meta terughalen en verder werken.
+async function voHervatOpname(oi) {
+  const b = (_voOpenLijst || [])[oi];
+  if (!b || !b.pad) { showToast('Deze opname kan niet geopend worden'); return; }
+  if (voorOpnamePhotos.length && !(_voHervat && _voHervat.bucket === b.bucket)) {
+    if (!confirm('Je hebt nog een niet-opgeslagen losse opname open. Die gaat verloren als je verdergaat met deze. Doorgaan?')) return;
+  }
+  const token = await window.getGraphToken();
+  if (!token) { showToast('Niet ingelogd op Microsoft 365'); return; }
+  showToast('⬇ Opname ophalen…');
+  const drive = _SPProj.DRIVE;
+  const haal = async (naam) => {
+    try {
+      const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${drive}/root:/${_encPath(b.pad + '/' + naam)}:/content`,
+        { headers: { 'Authorization': `Bearer ${token}` } });
+      return r.ok ? r : null;
+    } catch (e) { return null; }
+  };
+  let meta = null;
+  try { const r = await haal('_meta.json'); if (r) meta = await r.json(); } catch (e) {}
+  if (!meta || !Array.isArray(meta.fotos)) { showToast('❌ _meta.json niet gevonden — opname kan niet geopend worden'); return; }
+  voorOpnamePhotos.forEach(p => { if (p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl); if (p.url) URL.revokeObjectURL(p.url); });
+  voorOpnamePhotos = [];
+  _voRuimtes = []; _voRuimteActief = '';
+  for (const f of meta.fotos) {
+    const naam = f.bewerkt || f.bestand;
+    if (!naam) continue;
+    const r = await haal(naam);
+    if (!r) continue;
+    const blob = await r.blob();
+    const file = new File([blob], f.bestand || naam, { type: blob.type || 'image/jpeg' });
+    const p = { url: URL.createObjectURL(file), name: f.bestand || naam, file, kladblok: f.kladblok || '',
+      ruimte: f.ruimte || '', bestaand: true, bestand: f.bestand || naam, bewerktFile: null, bewerktUrl: null };
+    voorOpnamePhotos.push(p);
+    if (p.ruimte && !_voRuimtes.includes(p.ruimte)) _voRuimtes.push(p.ruimte);
+  }
+  _voHervat = { bucket: b.bucket, pad: b.pad };
+  _voHervatInfoToon();
+  await openVoorOpname();
+  const ks = document.getElementById('voKlantSelect');
+  if (ks) {
+    const code = b.klantCode || '';
+    if (code && Array.from(ks.options).some(o => o.value === code)) ks.value = code;
+    else { ks.value = '__vrij'; const vv = document.getElementById('voKlantVrij'); if (vv) vv.value = b.klant || ''; }
+  }
+  voKlantChange();
+  const nn = document.getElementById('voNotitie'); if (nn) nn.value = b.notitie || '';
+  renderVoorOpname();
+  showToast(`✏️ Verder werken aan ${b.klant || 'opname'} (${voorOpnamePhotos.length} foto's opgehaald)`);
 }
 
 function voKlantChange() {
@@ -4155,27 +4244,85 @@ function voKlantChange() {
 function voFoto(input) {
   const files = Array.from(input.files || []);
   if (!files.length) return;
+  _voRuimteInit();
   files.forEach(file => {
     const url = URL.createObjectURL(file);
-    voorOpnamePhotos.push({url, name:file.name, file, kladblok:"", bewerktFile:null, bewerktUrl:null});
+    voorOpnamePhotos.push({url, name:file.name, file, kladblok:"", ruimte:_voRuimteActief, bestaand:false, bestand:"", bewerktFile:null, bewerktUrl:null});
   });
   renderVoorOpname();
   input.value = "";
 }
 
+/* --- ruimte-tabbladen binnen de losse opname (zelfde idee als projectrapport) --- */
+function _voRuimteInit() {
+  if (!_voRuimtes.length) { _voRuimtes = ['Ruimte 1']; _voRuimteActief = 'Ruimte 1'; }
+  if (_voRuimteActief !== '' && !_voRuimtes.includes(_voRuimteActief)) _voRuimteActief = _voRuimtes[0];
+  if (_voRuimteActief === '' && !voorOpnamePhotos.some(p => !(p.ruimte || ''))) _voRuimteActief = _voRuimtes[0];
+}
+function _voRuimteCount(naam) { return voorOpnamePhotos.filter(p => (p.ruimte || '') === naam).length; }
+function _voRuimteRender() {
+  const tabs = document.getElementById('voRuimteTabs');
+  const nav = document.getElementById('voRuimteNav');
+  const sel = document.getElementById('voRuimteSelect');
+  const info = document.getElementById('voRuimteNavInfo');
+  if (!tabs) return;
+  const zonder = voorOpnamePhotos.filter(p => !(p.ruimte || '')).length;
+  let h = _voRuimtes.map(r => {
+    const act = (r === _voRuimteActief);
+    return `<button class="btn ${act ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px"
+      onclick="${act ? 'voRuimteRename()' : `voRuimteKies(${JSON.stringify(r).replace(/"/g,'&quot;')})`}">${escHtml(r)} (${_voRuimteCount(r)})</button>`;
+  }).join('');
+  if (zonder) h += `<button class="btn ${_voRuimteActief === '' ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px" onclick="voRuimteKies('')">Zonder ruimte (${zonder})</button>`;
+  tabs.innerHTML = h;
+  if (sel) {
+    sel.innerHTML = _voRuimtes.map(r => `<option value="${escHtml(r)}"${r === _voRuimteActief ? ' selected' : ''}>${escHtml(r)} (${_voRuimteCount(r)} foto's)</option>`).join('')
+      + (zonder ? `<option value=""${_voRuimteActief === '' ? ' selected' : ''}>Zonder ruimte (${zonder})</option>` : '');
+  }
+  if (info) {
+    const idx = _voRuimtes.indexOf(_voRuimteActief);
+    info.textContent = idx >= 0 ? `Ruimte ${idx + 1} van ${_voRuimtes.length} — tik op het actieve tabblad om te hernoemen` : '';
+  }
+  if (nav) nav.style.display = 'block';
+}
+function voRuimteKies(naam) { _voRuimteActief = naam; renderVoorOpname(); }
+function voRuimtePrev() { const i = _voRuimtes.indexOf(_voRuimteActief); if (i > 0) voRuimteKies(_voRuimtes[i - 1]); else if (i < 0 && _voRuimtes.length) voRuimteKies(_voRuimtes[_voRuimtes.length - 1]); }
+function voRuimteNext() { const i = _voRuimtes.indexOf(_voRuimteActief); if (i >= 0 && i < _voRuimtes.length - 1) voRuimteKies(_voRuimtes[i + 1]); }
+function voRuimteVolgende() {
+  const i = _voRuimtes.indexOf(_voRuimteActief);
+  if (i >= 0 && i < _voRuimtes.length - 1) { voRuimteKies(_voRuimtes[i + 1]); return; }
+  const naam = (prompt('Naam van de volgende ruimte:', `Ruimte ${_voRuimtes.length + 1}`) || '').trim();
+  if (!naam) return;
+  if (!_voRuimtes.includes(naam)) _voRuimtes.push(naam);
+  voRuimteKies(naam);
+  if (window.showToast) showToast(`➡️ Verder in "${naam}"`);
+}
+function voRuimteRename() {
+  if (_voRuimteActief === '') return;
+  const oud = _voRuimteActief;
+  const naam = (prompt('Nieuwe naam voor deze ruimte:', oud) || '').trim();
+  if (!naam || naam === oud) return;
+  _voRuimtes = _voRuimtes.map(r => r === oud ? naam : r);
+  voorOpnamePhotos.forEach(p => { if (p.ruimte === oud) p.ruimte = naam; });
+  voRuimteKies(naam);
+}
+
 function renderVoorOpname() {
   const grid = document.getElementById('voFotoList');
   if (!grid) return;
-  grid.innerHTML = voorOpnamePhotos.map((p, i) => `
+  _voRuimteInit();
+  _voRuimteRender();
+  const rows = voorOpnamePhotos.map((p, i) => ({p, i})).filter(x => (x.p.ruimte || '') === _voRuimteActief);
+  grid.innerHTML = rows.map(({p, i}) => `
     <div class="foto-row">
-      <div class="foto-row-thumb" onclick="openFotoEdit(voorOpnamePhotos[${i}], renderVoorOpname)" title="Tik om aantekeningen te zetten">
+      <div class="foto-row-thumb" ${p.bestaand ? '' : `onclick="openFotoEdit(voorOpnamePhotos[${i}], renderVoorOpname)" title="Tik om aantekeningen te zetten"`}>
         <img src="${p.bewerktUrl || p.url}" alt="foto">
         ${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : ''}
-        <span class="foto-edit-hint">✏️</span>
+        ${p.bestaand ? '<span class="foto-bewerkt-badge" title="Staat al online">☁️</span>' : '<span class="foto-edit-hint">✏️</span>'}
       </div>
-      <textarea class="foto-klad" rows="2" placeholder="Welk item / wat is dit…" onchange="setVoKlad(${i}, this.value)">${escHtml(p.kladblok || "")}</textarea>
-      <button class="note-del" onclick="delVoFoto(${i})">×</button>
-    </div>`).join("");
+      <textarea class="foto-klad" rows="2" placeholder="Welk item / wat is dit…" ${p.bestaand ? 'readonly style="opacity:.7"' : ''} onchange="setVoKlad(${i}, this.value)">${escHtml(p.kladblok || "")}</textarea>
+      ${p.bestaand ? '' : `<button class="note-del" onclick="delVoFoto(${i})">×</button>`}
+    </div>`).join("")
+    + (rows.length === 0 ? `<div style="text-align:center;color:var(--text-faint);font-size:13px;padding:10px 0">Nog geen foto's in deze ruimte</div>` : '');
   _voPersist();   // elke wijziging (toevoegen/wissen/bewerken) meteen lokaal bewaren
 }
 function setVoKlad(i, v) { if (voorOpnamePhotos[i]) { voorOpnamePhotos[i].kladblok = v; _voPersist(); } }
@@ -4204,8 +4351,8 @@ async function uploadVoorOpname() {
   }
   const echteCode = (klantCode === '__vrij') ? '' : (klantCode || '');
   if (!klantNaam) { showToast('Kies of typ eerst een klant'); return; }
-  const fotos = voorOpnamePhotos.filter(p => p.file);
-  if (!fotos.length) { showToast('Maak eerst minstens één foto'); return; }
+  const fotos = voorOpnamePhotos.filter(p => p.file && !p.bestaand);
+  if (!fotos.length) { showToast(_voHervat ? 'Geen nieuwe foto\'s toegevoegd — er valt niets op te slaan' : 'Maak eerst minstens één foto'); return; }
   const token = await window.getGraphToken();
   if (!token) { showToast('Niet ingelogd op Microsoft 365'); return; }
 
@@ -4215,22 +4362,36 @@ async function uploadVoorOpname() {
   const stamp = _voStamp();
   showToast('⬆ Voor-opname uploaden…');
   try {
-    const vo = await _SPProj.ensureFolder(ROOT, 'Voor-opname', drive);
-    const bucketNaam = `${(klantNaam||'onbekend').replace(/[\\\/:*?"<>|]/g,'_').trim()}_${stamp}`;
-    const bucket = await _SPProj.ensureFolder(`${ROOT}/${vo}`, bucketNaam, drive);
-    const bucketPath = `${ROOT}/${vo}/${bucket}`;
+    let bucket, bucketPath, startNr = 0, oudeMeta = null;
+    if (_voHervat && _voHervat.pad) {
+      // verder werken: zelfde map, nummering doorlopen vanaf bestaande items
+      bucket = _voHervat.bucket; bucketPath = _voHervat.pad;
+      try {
+        const mr = await fetch(`https://graph.microsoft.com/v1.0/drives/${drive}/root:/${_encPath(bucketPath + '/_meta.json')}:/content`,
+          { headers: { 'Authorization': `Bearer ${token}` } });
+        if (mr.ok) oudeMeta = await mr.json();
+      } catch(e) {}
+      const nrs = ((oudeMeta && oudeMeta.fotos) || []).concat(voorOpnamePhotos.filter(p => p.bestaand))
+        .map(f => { const m = /item_(\d+)/.exec(f.bestand || ''); return m ? parseInt(m[1], 10) : 0; });
+      startNr = nrs.length ? Math.max(...nrs) : 0;
+    } else {
+      const vo = await _SPProj.ensureFolder(ROOT, 'Voor-opname', drive);
+      const bucketNaam = `${(klantNaam||'onbekend').replace(/[\\\/:*?"<>|]/g,'_').trim()}_${stamp}`;
+      bucket = await _SPProj.ensureFolder(`${ROOT}/${vo}`, bucketNaam, drive);
+      bucketPath = `${ROOT}/${vo}/${bucket}`;
+    }
     const fotoMeta = [];
     let ok = 0, fail = 0;
     for (let i = 0; i < fotos.length; i++) {
       const p = fotos[i];
-      const base = `item_${String(i+1).padStart(2,'0')}`;
+      const base = `item_${String(startNr + i + 1).padStart(2,'0')}`;
       const veilig = `${base}.jpg`;
       try {
         const r = await _spPut(token, drive, `${bucketPath}/${veilig}`,
           await p.file.arrayBuffer(), p.file.type || 'image/jpeg');
         if (r.ok) {
           ok++;
-          const entry = { bestand: veilig, kladblok: (p.kladblok||'').trim() };
+          const entry = { bestand: veilig, kladblok: (p.kladblok||'').trim(), ruimte: p.ruimte || '' };
           if (p.bewerktFile) {
             try {
               const br = await _spPut(token, drive, `${bucketPath}/${base}_bewerkt.jpg`,
@@ -4249,29 +4410,42 @@ async function uploadVoorOpname() {
         } else { fail++; console.warn(`voor-opname upload ${veilig} HTTP ${r.status}`); }
       } catch(e) { fail++; console.warn('voor-opname upload fout:', e.message); }
     }
+    const alleFotos = ((oudeMeta && oudeMeta.fotos) || []).concat(fotoMeta);
     const meta = {
       klant: klantNaam, klantCode: echteCode,
-      datum: new Date().toISOString(),
-      door: (typeof _msAccount !== 'undefined' && _msAccount && _msAccount.username) || '',
-      notitie, status: 'nieuw', bron: 'mobiel-vooropname', fotos: fotoMeta
+      datum: (oudeMeta && oudeMeta.datum) || new Date().toISOString(),
+      bijgewerkt: new Date().toISOString(),
+      door: (oudeMeta && oudeMeta.door) || (typeof _msAccount !== 'undefined' && _msAccount && _msAccount.username) || '',
+      notitie, status: (oudeMeta && oudeMeta.status) || 'nieuw', bron: 'mobiel-vooropname', fotos: alleFotos
     };
     try {
       await _spPut(token, drive, `${bucketPath}/_meta.json`,
-        new Blob([JSON.stringify(meta, null, 2)], {type:'application/json'}), 'application/json');
+        new Blob([JSON.stringify(meta, null, 2)], {type:'application/json'}), 'application/json', !!_voHervat);
     } catch(e) { console.warn('_meta.json schrijven faalde:', e.message); }
     // index voor de cockpit (mt_vooropname.json in MT-Bedrijfstool)
     try {
       const idx = (await _SP.read('mt_vooropname.json')) || [];
-      idx.unshift({
-        bucket, pad: bucketPath, klant: klantNaam, klantCode: echteCode,
-        datum: meta.datum, door: meta.door, notitie, aantal: fotoMeta.length, status: 'nieuw'
-      });
+      const bestaandIdx = _voHervat ? idx.findIndex(x => x.bucket === bucket) : -1;
+      if (bestaandIdx >= 0) {
+        const e0 = idx[bestaandIdx];
+        e0.aantal = alleFotos.length; e0.notitie = notitie; e0.bijgewerkt = meta.bijgewerkt;
+        e0.klant = klantNaam; e0.klantCode = echteCode;
+      } else {
+        idx.unshift({
+          bucket, pad: bucketPath, klant: klantNaam, klantCode: echteCode,
+          datum: meta.datum, door: meta.door, notitie, aantal: alleFotos.length, status: 'nieuw'
+        });
+      }
       await _SP.write('mt_vooropname.json', idx.slice(0, 300));
     } catch(e) { console.warn('mt_vooropname.json faalde:', e.message); }
 
     // reset + blijvende bevestiging
     voorOpnamePhotos.forEach(p => { if (p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl); if (p.url) URL.revokeObjectURL(p.url); });
     voorOpnamePhotos = [];
+    _voRuimtes = []; _voRuimteActief = '';
+    _voHervat = null; _voHervatInfoToon();
+    const rn = document.getElementById('voRuimteNav'); if (rn) rn.style.display = 'none';
+    const rt = document.getElementById('voRuimteTabs'); if (rt) rt.innerHTML = '';
     await _voIdbDel(); _voDraft = null;   // concept is veilig geüpload → lokaal wissen
     const rb = document.getElementById('voRestoreBanner'); if (rb) rb.style.display = 'none';
     renderVoorOpname();
@@ -4487,8 +4661,8 @@ async function findProjectFolder(code) {
 }
 
 // Eén bestand naar 06_Fotos PUT'en (origineel, _bewerkt-kopie of .txt-kladblok).
-async function _spPut(token, drive, dest, body, type) {
-  const url = `https://graph.microsoft.com/v1.0/drives/${drive}/root:/${_encPath(dest)}:/content?@microsoft.graph.conflictBehavior=rename`;
+async function _spPut(token, drive, dest, body, type, replace) {
+  const url = `https://graph.microsoft.com/v1.0/drives/${drive}/root:/${_encPath(dest)}:/content?@microsoft.graph.conflictBehavior=${replace ? 'replace' : 'rename'}`;
   return fetch(url, { method: 'PUT',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': type }, body });
 }

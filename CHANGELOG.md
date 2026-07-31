@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-31 — Ruimte-tabbladen, tussentijds opslaan + verder werken, autosave bij app-sluiten (opname)
+- Commit: `c49aef0` | Auteur: Bart Witte
+
 ## 2026-07-31 — Merge fotoherstel-20260731: IndexedDB-fotoherstel mobiel + concepten-overzicht cockpit
 - Commit: `37a17eb` | Auteur: Bart Witte
 
