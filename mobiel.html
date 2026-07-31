@@ -20,6 +20,7 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-07-02"></script>
+<script src="mt-fotostore.js?v=2026-07-31"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -5072,28 +5073,40 @@ async function _pinVlakkenFinalize(p) {
   }));
 }
 
-/* ── Generieke rapportfoto-upload: <projectmap>/06_Fotos/ met prefix ── */
+/* ── Generieke rapportfoto-upload: <projectmap>/06_Fotos/ met prefix ──
+   Idempotent: foto's met een lokale herstelkopie (_fsId uit mt-fotostore)
+   krijgen een stabiele bestandsnaam op basis van die id — een retry PUT
+   overschrijft dan hetzelfde pad en maakt nooit duplicaten. Statussen
+   (wacht/sync/fout) worden per foto in IndexedDB bijgewerkt; de lokale
+   blob wordt hier nooit verwijderd. out.geslaagd telt bron-foto's
+   (out.namen bevat ook _bewerkt-bestanden en is dus geen bron-teller). */
 async function _rapFotosUpload(proj, fotos, prefix) {
-  const out = {namen: [], fail: 0};
+  const out = {namen: [], fail: 0, geslaagd: 0};
   if (!fotos.length) return out;
+  const _fs = window.MTFotoStore;
+  const _setSt = (p, st) => { if (p._fsId) { p._fsStatus = st; if (_fs) _fs.setFotoStatus(p._fsId, st).catch(()=>{}); } };
+  fotos.forEach(p => _setSt(p, "wacht"));
   let token = null;
   try { token = await window.getGraphToken(); } catch(e) {}
-  if (!token) { out.fail = fotos.length; showToast("Niet ingelogd — foto's niet geüpload"); return out; }
+  if (!token) { out.fail = fotos.length; fotos.forEach(p => _setSt(p, "fout")); showToast("Niet ingelogd — foto's niet geüpload"); return out; }
   let projPath = null;
   try { projPath = await findProjectFolder(proj.code); } catch(e) { console.warn('rapFotos zoeken fout:', e.message); }
-  if (!projPath) { out.fail = fotos.length; showToast(`⚠ Projectmap ${proj.code} niet gevonden — foto's niet geüpload`); return out; }
+  if (!projPath) { out.fail = fotos.length; fotos.forEach(p => _setSt(p, "fout")); showToast(`⚠ Projectmap ${proj.code} niet gevonden — foto's niet geüpload`); return out; }
   const datum = new Date().toISOString().slice(0, 10);
   let nr = 0;
   for (const p of fotos) {
     nr++;
     try {
       const veilig = (p.name || "foto.jpg").replace(/[\\\/:*?"<>|]/g, "_").trim().replace(/[. ]+$/, "") || "foto.jpg";
-      const naam = `${prefix}_${datum}_${String(nr).padStart(2, "0")}_${veilig}`;
+      const naam = p._fsId ? `${prefix}_${p._fsId}_${veilig}`
+                           : `${prefix}_${datum}_${String(nr).padStart(2, "0")}_${veilig}`;
       const drive = _projDrive(proj.code);
       const r = await _spPut(token, drive, `${projPath}/06_Fotos/${naam}`,
         await p.file.arrayBuffer(), p.file.type || "image/jpeg");
       if (r.ok) {
         out.namen.push(naam);
+        out.geslaagd++;
+        _setSt(p, "sync");
         const base = naam.replace(/\.[^.]+$/, "");
         if (p.bewerktFile) {
           try {
@@ -5110,8 +5123,8 @@ async function _rapFotosUpload(proj, fotos, prefix) {
               new Blob([klad], {type:"text/plain"}), "text/plain; charset=utf-8");
           } catch(e) { console.warn("rapFoto kladblok fout:", e.message); }
         }
-      } else { out.fail++; console.warn(`rapFoto ${naam} HTTP ${r.status}`); }
-    } catch(e) { out.fail++; console.warn("rapFoto upload fout:", e.message); }
+      } else { out.fail++; _setSt(p, "fout"); console.warn(`rapFoto ${naam} HTTP ${r.status}`); }
+    } catch(e) { out.fail++; _setSt(p, "fout"); console.warn("rapFoto upload fout:", e.message); }
   }
   return out;
 }
@@ -5136,7 +5149,9 @@ async function rapDraftSave() {
         const res = await _rapFotosUpload(p, oplFotos[soort], prefix);
         _oplUploaded[soort].push(...res.namen);
         // gelukte foto's uit de lokale lijst; mislukte blijven staan voor retry
-        oplFotos[soort] = res.fail ? oplFotos[soort].slice(res.namen.length) : [];
+        // (op per-foto status gefilterd — namen.length telt ook _bewerkt-bestanden mee).
+        // De lokale IndexedDB-herstelkopie blijft bestaan tot definitieve afronding.
+        oplFotos[soort] = res.fail ? oplFotos[soort].filter(f => f._fsStatus && f._fsStatus !== "sync") : [];
       }
       renderOplFotos();
     }
@@ -6474,6 +6489,343 @@ function showToast(msg) {
 function escHtml(s) {
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
+
+/* =====================================================================
+   RAPPORT-FOTOHERSTEL (capture first → persist first → sync later)
+   =====================================================================
+   Elke rapportfoto krijgt bij bevestiging DIRECT een harde herstelkopie
+   in IndexedDB (mt-fotostore.js, db 'mt-rapporten') vóórdat hij in het
+   rapport verschijnt. Herstel werkt na app-sluiten, reload, offline en
+   uploadfouten. Blobs worden pas opgeruimd na bewezen upload ÉN
+   definitieve afronding. Bestaande functies worden hier via window-
+   toewijzing uitgebreid zodat de oorspronkelijke flow leesbaar blijft.
+
+   Galerij-eerlijkheid: een webapp kan NIET garanderen dat een foto in de
+   telefoongalerij belandt (daar is een native wrapper voor nodig). De
+   IndexedDB-kopie is de garantie; "Bewaar ook op telefoon" biedt een
+   expliciete download als extra kopie.
+   ===================================================================== */
+(function () {
+  if (!window.MTFotoStore || !window.indexedDB) return; // oude browser → gedrag als voorheen
+  const FS = window.MTFotoStore;
+  let _rapId = null;             // uniek id van het actieve conceptrapport
+  let _rapHoofdstukLaatst = "";  // laatst gebruikte groep/hoofdstuk in de kaart
+  let _persistTimer = null;
+  let _entryUploadOk = false;    // laatste JSON-entry-upload gelukt?
+
+  const CHIP = {
+    lokaal: ["✅ lokaal veilig", "#2e7d32"],
+    wacht:  ["⏳ wacht op upload", "#b26a00"],
+    sync:   ["☁️ gesynchroniseerd", "#1565c0"],
+    fout:   ["⚠️ upload mislukt – opnieuw proberen", "#c62828"]
+  };
+  function _chipHtml(f, retryJs) {
+    const st = f._fsStatus || "lokaal";
+    const c = CHIP[st] || CHIP.lokaal;
+    const click = (st === "fout" && retryJs) ? ` onclick="event.stopPropagation();${retryJs}" style="cursor:pointer;` : ` style="`;
+    return `<span class="fs-chip"${click}display:inline-block;font-size:10px;line-height:1.4;padding:1px 6px;border-radius:8px;background:${c[1]}22;color:${c[1]};white-space:nowrap">${c[0]}</span>`;
+  }
+
+  /* ── rapport-id ── */
+  async function _rapEnsureId() {
+    if (_rapId) return _rapId;
+    const p = currentOpleverProject;
+    let drafts = [];
+    try { drafts = await FS.listDrafts(); } catch (e) {}
+    // projectCode is exact — twee gelijknamige projecten (bv. de twee
+    // Bajeskwartier-records) hebben verschillende codes en blijven apart.
+    const d = p && drafts.find(x => x.projectCode === p.code && x.type === rapType);
+    _rapId = d ? d.rapportId : FS.newId("rap");
+    return _rapId;
+  }
+
+  /* ── autosave (debounce + directe flush bij weggaan) ── */
+  function _rapPersistSoon() { clearTimeout(_persistTimer); _persistTimer = setTimeout(_rapPersistNow, 600); }
+  async function _rapPersistNow() {
+    clearTimeout(_persistTimer);
+    const p = currentOpleverProject;
+    if (!p || !rapType || !_rapId) return;
+    const fotos = [];
+    inmFotos.forEach(f => { if (f._fsId) fotos.push({id: f._fsId, soort: "inm", opmerking: f.bijschrift || "", hoofdstuk: f._fsHoofdstuk || "", status: f._fsStatus || "lokaal"}); });
+    ["voor", "na"].forEach(s => oplFotos[s].forEach(f => { if (f._fsId) fotos.push({id: f._fsId, soort: s, opmerking: f.opmerking || "", hoofdstuk: f._fsHoofdstuk || "", status: f._fsStatus || "lokaal"}); }));
+    const draft = {
+      rapportId: _rapId, projectId: p.id, projectCode: p.code, projectNaam: p.name,
+      type: rapType, status: "concept", ts: Date.now(),
+      checklistState, checklistNotes,
+      notitie: (document.getElementById("inmNotitie") || {}).value || "",
+      hoofdstukken: [...new Set(fotos.map(f => f.hoofdstuk).filter(Boolean))].map(t => ({titel: t})),
+      fotos
+    };
+    try { await FS.putDraft(draft); } catch (e) { console.warn("rapdraft persist fout:", e); }
+  }
+  document.addEventListener("visibilitychange", () => { if (document.hidden) _rapPersistNow(); });
+  window.addEventListener("pagehide", () => _rapPersistNow());
+  // elke relevante wijziging in de oplevertab (checklist, notities, bijschriften)
+  const _tabOpl = document.getElementById("tab-oplevering");
+  if (_tabOpl) { _tabOpl.addEventListener("change", _rapPersistSoon, true); _tabOpl.addEventListener("input", _rapPersistSoon, true); }
+
+  /* ── bevestigingskaart per foto ── */
+  const _fcModal = document.createElement("div");
+  _fcModal.id = "fotoConfirmModal";
+  _fcModal.style.cssText = "display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:16px";
+  _fcModal.innerHTML = `
+    <div style="background:var(--card-bg,#fff);border-radius:14px;max-width:420px;width:100%;max-height:92vh;overflow-y:auto;padding:16px">
+      <div style="font-weight:700;margin-bottom:8px">Foto toevoegen aan rapport <span id="fcTeller" style="font-weight:400;color:#888;font-size:12px"></span></div>
+      <img id="fcThumb" alt="foto" style="width:100%;max-height:40vh;object-fit:contain;border-radius:10px;background:#eee">
+      <input id="fcHoofdstuk" type="text" placeholder="Groep / hoofdstuk (bv. Groep 3 – keukens)" style="width:100%;margin-top:10px">
+      <textarea id="fcOpmerking" rows="2" placeholder="Korte opmerking bij deze foto…" style="width:100%;margin-top:8px"></textarea>
+      <div id="fcStatus" style="font-size:12px;color:#888;margin:8px 0">Nog niet opgeslagen</div>
+      <button class="btn btn-gold" id="fcBewaarBtn" style="width:100%" onclick="_fcBewaar()">💾 Bewaar in rapport</button>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-secondary" style="flex:1" onclick="_fcDownload()">📱 Bewaar ook op telefoon</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="_fcVerwijder()">🗑️ Verwijder</button>
+      </div>
+      <div style="font-size:11px;color:#999;margin-top:8px">De foto wordt direct veilig op dit toestel bewaard (ook offline). Automatisch in de galerij zetten kan een webapp niet garanderen — "Bewaar ook op telefoon" geeft een extra kopie via Downloads.</div>
+    </div>`;
+  document.body.appendChild(_fcModal);
+
+  let _fcQueue = [];  // [{file, ctx:{soort:'inm'|'voor'|'na'}}]
+  function _fcNext() {
+    const item = _fcQueue[0];
+    if (!item) { _fcModal.style.display = "none"; return; }
+    document.getElementById("fcThumb").src = URL.createObjectURL(item.file);
+    document.getElementById("fcHoofdstuk").value = _rapHoofdstukLaatst;
+    document.getElementById("fcOpmerking").value = "";
+    document.getElementById("fcStatus").textContent = "Nog niet opgeslagen";
+    document.getElementById("fcTeller").textContent = _fcQueue.length > 1 ? `(nog ${_fcQueue.length})` : "";
+    const btn = document.getElementById("fcBewaarBtn");
+    btn.disabled = false; btn.textContent = "💾 Bewaar in rapport";
+    _fcModal.style.display = "flex";
+  }
+  window._fcBewaar = async function () {
+    const item = _fcQueue[0];
+    if (!item) return;
+    const btn = document.getElementById("fcBewaarBtn");
+    const stEl = document.getElementById("fcStatus");
+    btn.disabled = true; btn.textContent = "Opslaan op toestel…";
+    const hoofdstuk = document.getElementById("fcHoofdstuk").value.trim();
+    const opmerking = document.getElementById("fcOpmerking").value.trim();
+    try {
+      await _rapEnsureId();
+      const id = FS.newId("foto");
+      await FS.putFoto({
+        id, rapportId: _rapId, hoofdstuk, naam: item.file.name || (id + ".jpg"),
+        mime: item.file.type || "image/jpeg", opmerking, soort: item.ctx.soort,
+        ts: Date.now(), status: "lokaal", blob: item.file, bewerktBlob: null
+      });
+      // pas NA de gelukte lokale write telt de foto als opgeslagen
+      const entry = {url: URL.createObjectURL(item.file), name: item.file.name || (id + ".jpg"), file: item.file,
+                     bewerktFile: null, bewerktUrl: null, _fsId: id, _fsStatus: "lokaal", _fsHoofdstuk: hoofdstuk};
+      if (item.ctx.soort === "inm") { entry.bijschrift = opmerking; inmFotos.push(entry); renderInmFotos(); }
+      else { entry.opmerking = opmerking; oplFotos[item.ctx.soort].push(entry); renderOplFotos(); }
+      _rapHoofdstukLaatst = hoofdstuk;
+      showToast("📥 Foto lokaal opgeslagen — veilig, ook offline");
+      _fcQueue.shift();
+      _rapPersistNow();
+      _fcNext();
+    } catch (e) {
+      // foutveilig: foto komt NIET in het rapport zolang de lokale write faalt
+      stEl.textContent = "⚠️ Lokaal opslaan mislukt (" + (e && e.message || e) + ") — probeer opnieuw of controleer opslagruimte.";
+      btn.disabled = false; btn.textContent = "💾 Bewaar in rapport";
+      const q = await FS.estimateQuota();
+      if (q && q.quota) stEl.textContent += ` Opslag: ${Math.round((q.usage||0)/1048576)} / ${Math.round(q.quota/1048576)} MB.`;
+    }
+  };
+  window._fcVerwijder = function () { _fcQueue.shift(); _fcNext(); };
+  window._fcDownload = function () {
+    const item = _fcQueue[0];
+    if (!item) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(item.file);
+    a.download = item.file.name || "foto.jpg";
+    document.body.appendChild(a); a.click(); a.remove();
+    showToast("Foto als download bewaard — check je Downloads-map");
+  };
+
+  /* ── foto-invoer via de bevestigingskaart ── */
+  window.inmFoto = function (input) {
+    const files = Array.from(input.files || []);
+    input.value = "";
+    if (!files.length) return;
+    files.forEach(f => _fcQueue.push({file: f, ctx: {soort: "inm"}}));
+    _fcNext();
+  };
+  window.oplFoto = function (soort, input) {
+    const files = Array.from(input.files || []);
+    input.value = "";
+    if (!files.length) return;
+    files.forEach(f => _fcQueue.push({file: f, ctx: {soort}}));
+    _fcNext();
+  };
+
+  /* ── verwijderen (expliciete gebruikersactie: dan mag de kopie ook weg) ── */
+  window.delInmFoto = function (i) {
+    const f = inmFotos[i];
+    if (f && f._fsId) FS.deleteFoto(f._fsId).catch(()=>{});
+    inmFotos.splice(i, 1); renderInmFotos(); _rapPersistSoon();
+  };
+  window.delOplFoto = function (soort, i) {
+    const f = oplFotos[soort][i];
+    if (f && f._fsId) FS.deleteFoto(f._fsId).catch(()=>{});
+    oplFotos[soort].splice(i, 1); renderOplFotos(); _rapPersistSoon();
+  };
+  window.setInmBijschrift = function (i, v) {
+    const f = inmFotos[i];
+    if (!f) return;
+    f.bijschrift = v;
+    if (f._fsId) FS.updateFoto(f._fsId, {opmerking: v}).catch(()=>{});
+    _rapPersistSoon();
+  };
+
+  /* ── renderers met statuslabel per foto ── */
+  window.renderInmFotos = function () {
+    const el = document.getElementById("inmFotoList");
+    el.innerHTML = inmFotos.map((p, i) => `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <div class="foto-row-thumb" style="width:64px;height:64px" onclick="openFotoEdit(inmFotos[${i}], renderInmFotos)" title="Tik om aantekeningen te zetten">
+          <img src="${p.bewerktUrl || p.url}" alt="foto">
+          ${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}
+        </div>
+        <div style="flex:1;min-width:0">
+          <input type="text" value="${escHtml(p.bijschrift || "")}" placeholder="Bijschrift bij deze foto…"
+            onchange="setInmBijschrift(${i},this.value)" style="width:100%;min-width:0">
+          <div style="margin-top:2px">${_chipHtml(p)}${p._fsHoofdstuk ? ` <span style="font-size:10px;color:#888">${escHtml(p._fsHoofdstuk)}</span>` : ""}</div>
+        </div>
+        <button class="note-del" onclick="delInmFoto(${i})">×</button>
+      </div>`).join("");
+  };
+  window.renderOplFotos = function () {
+    ["voor", "na"].forEach(soort => {
+      const grid = document.getElementById(soort === "voor" ? "oplVoorGrid" : "oplNaGrid");
+      if (!grid) return;
+      let html = _oplUploaded[soort].map(naam =>
+        `<div class="thumb-cell" title="${escHtml(naam)}"><div class="thumb-placeholder">📷<div style="font-size:8px;line-height:1.2">☁️ gesynchroniseerd</div></div></div>`).join("");
+      html += oplFotos[soort].map((p, i) =>
+        `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos['${soort}'][${i}], renderOplFotos)" title="${escHtml(p.opmerking || "")}"><img src="${p.bewerktUrl || p.url}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto('${soort}',${i})">×</button><div style="position:absolute;left:2px;bottom:2px;right:2px;z-index:2;overflow:hidden">${_chipHtml(p, "rapDraftSave()")}</div></div>`).join("");
+      grid.innerHTML = html;
+    });
+  };
+
+  /* ── herstel uit IndexedDB na reload/app-sluiten/offline ── */
+  async function _rapIdbRestore() {
+    const p = currentOpleverProject;
+    if (!p || !rapType) return;
+    let drafts = [];
+    try { drafts = await FS.listDrafts(); } catch (e) { return; }
+    const d = drafts.find(x => x.projectCode === p.code && x.type === rapType);
+    if (!d) { await _rapEnsureId(); return; }
+    _rapId = d.rapportId;
+    if (d.checklistState && !Object.keys(checklistState).length) checklistState = d.checklistState;
+    if (d.checklistNotes && !Object.keys(checklistNotes).length) checklistNotes = d.checklistNotes;
+    const not = document.getElementById("inmNotitie");
+    if (not && !not.value && d.notitie) not.value = d.notitie;
+    let recs = [];
+    try { recs = await FS.listFotos(d.rapportId); } catch (e) {}
+    let hersteld = 0;
+    for (const rec of recs) {
+      if (rec.status === "sync") continue; // staat bewezen op SharePoint (naam via concept)
+      const file = FS.fotoToFile(rec);
+      if (!file) continue;
+      const entry = {url: URL.createObjectURL(file), name: rec.naam, file, bewerktFile: null, bewerktUrl: null,
+                     _fsId: rec.id, _fsStatus: rec.status === "wacht" ? "lokaal" : rec.status, _fsHoofdstuk: rec.hoofdstuk || ""};
+      if (rec.bewerktBlob) {
+        const bf = FS.fotoToFile(rec, true);
+        if (bf) { entry.bewerktFile = bf; entry.bewerktUrl = URL.createObjectURL(bf); }
+      }
+      if (rec.soort === "inm") {
+        entry.bijschrift = rec.opmerking || "";
+        if (!inmFotos.some(f => f._fsId === rec.id)) { inmFotos.push(entry); hersteld++; }
+      } else if (oplFotos[rec.soort]) {
+        entry.opmerking = rec.opmerking || "";
+        if (!oplFotos[rec.soort].some(f => f._fsId === rec.id)) { oplFotos[rec.soort].push(entry); hersteld++; }
+      }
+    }
+    try { renderInmFotos(); renderOplFotos(); renderChecklist(); } catch (e) {}
+    if (hersteld) showToast(`📥 ${hersteld} foto('s) hersteld van dit toestel`);
+  }
+
+  const _origKiesRapType = window.kiesRapType;
+  window.kiesRapType = function (t) {
+    _origKiesRapType(t);
+    _rapIdbRestore();
+  };
+  const _origLoadChecklist = window.loadChecklist;
+  window.loadChecklist = function () {
+    _rapPersistNow();          // huidige stand eerst veiligstellen
+    _origLoadChecklist();
+    _rapId = null;             // nieuw project ⇒ nieuw/eigen rapport-id
+  };
+
+  /* ── entry-upload volgen + opruimen alléén na bewezen upload + afronding ── */
+  ["oplUpload", "opnUpload"].forEach(fn => {
+    const orig = window[fn];
+    if (!orig) return;
+    window[fn] = async function (entry) {
+      const ok = await orig(entry);
+      _entryUploadOk = !!ok;
+      return ok;
+    };
+  });
+  ["logOplevering", "opnameRapportAfronden"].forEach(fn => {
+    const orig = window[fn];
+    if (!orig) return;
+    window[fn] = async function () {
+      const rid = _rapId;
+      _entryUploadOk = false;
+      const r = await orig.apply(this, arguments);
+      if (rid && _entryUploadOk) {
+        try {
+          const res = await FS.cleanupSynced(rid);
+          if (res.rest) showToast(`${res.rest} foto('s) nog niet geüpload — lokaal bewaard voor herstel`);
+        } catch (e) { console.warn("fotostore cleanup fout:", e); }
+        if (_rapId === rid) _rapId = null;
+      } else if (rid) {
+        _rapPersistNow(); // afronding (nog) niet bewezen ⇒ alles lokaal houden
+      }
+      return r;
+    };
+  });
+  const _origReset = window.resetOplevering;
+  window.resetOplevering = function () {
+    _origReset();
+    _rapId = null; // IndexedDB-kopieën blijven staan — alleen cleanupSynced ruimt op
+  };
+
+  const _origRapDraftSave = window.rapDraftSave;
+  window.rapDraftSave = async function () {
+    await _rapEnsureId();
+    const r = await _origRapDraftSave.apply(this, arguments);
+    _rapPersistNow();
+    // rapportId meegeven aan de localStorage-cache zodat de cockpit
+    // concepten aan een uniek rapport kan koppelen (niet alleen projectcode)
+    try {
+      const p = currentOpleverProject;
+      if (p) {
+        const k = _draftLocalKey(p.code);
+        const d = JSON.parse(localStorage.getItem(k) || "null");
+        if (d) { d.rapportId = _rapId; localStorage.setItem(k, JSON.stringify(d)); }
+      }
+    } catch (e) {}
+    return r;
+  };
+
+  /* ── melding bij opstarten: onafgeronde rapporten met lokale foto's ── */
+  async function _rapBootCheck() {
+    let drafts = [];
+    try { drafts = await FS.listDrafts(); } catch (e) { return; }
+    const met = [];
+    for (const d of drafts) {
+      let fotos = [];
+      try { fotos = await FS.listFotos(d.rapportId); } catch (e) {}
+      const lokaal = fotos.filter(f => f.status !== "sync").length;
+      if (lokaal) met.push({d, lokaal});
+    }
+    if (!met.length) return;
+    const m = met[0];
+    showToast(`📥 Onafgerond rapport ${m.d.projectCode} met ${m.lokaal} lokaal bewaarde foto('s) — open het project in de Rapport-tab om te herstellen`);
+  }
+  setTimeout(_rapBootCheck, 2500);
+})();
 </script>
 </body>
 </html>
