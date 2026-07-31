@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Fotoherstel-test — mt-fotostore.js</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem}
+  .ok{color:#2e7d32}.fail{color:#c62828}
+  li{margin:4px 0}
+  #samenvatting{font-weight:700;margin-top:1rem}
+</style>
+</head>
+<body>
+<h1>Fotoherstel-test (mt-fotostore.js)</h1>
+<p>Automatische test van de IndexedDB-herstellaag die mobiel.html gebruikt.
+   Testdata only — geen SharePoint, geen login, geen echte foto's.</p>
+<ol id="log"></ol>
+<div id="samenvatting">Bezig…</div>
+<script src="../mt-fotostore.js"></script>
+<script>
+const log = document.getElementById('log');
+let nOk = 0, nFail = 0;
+function check(naam, cond, extra) {
+  const li = document.createElement('li');
+  li.className = cond ? 'ok' : 'fail';
+  li.textContent = (cond ? '✅ ' : '❌ ') + naam + (extra ? ' — ' + extra : '');
+  log.appendChild(li);
+  cond ? nOk++ : nFail++;
+  console.log((cond ? 'PASS: ' : 'FAIL: ') + naam + (extra ? ' — ' + extra : ''));
+}
+function blobVan(tekst) { return new Blob([tekst], {type: 'image/jpeg'}); }
+async function blobTekst(b) { return await new Response(b).text(); }
+
+(async () => {
+  const FS = window.MTFotoStore;
+  check('MTFotoStore geladen', !!FS);
+
+  // Schone lei per run (testdatabase-inhoud, geen productiedata)
+  for (const f of await FS.listFotos()) await FS.deleteFoto(f.id);
+  for (const d of await FS.listDrafts()) await FS.deleteDraft(d.rapportId);
+
+  /* ── Scenario 1: offline foto bevestigen → 'reload' → herstellen ── */
+  const rapId = FS.newId('rap');
+  const fotoId = FS.newId('foto');
+  await FS.putFoto({id: fotoId, rapportId: rapId, hoofdstuk: 'Groep 3 – keukens',
+    naam: 'test1.jpg', mime: 'image/jpeg', opmerking: 'kastdeur links', soort: 'na',
+    ts: 1, status: 'lokaal', blob: blobVan('FOTO-DATA-1'), bewerktBlob: null});
+  await FS.putDraft({rapportId: rapId, projectCode: 'TG-219730795', projectNaam: '#509152 CN Bajeskwartier',
+    type: 'oplevering', status: 'concept', ts: 1, fotos: [{id: fotoId}]});
+  // 'reload': nieuwe lees-ronde puur uit IndexedDB
+  const terug = await FS.getFoto(fotoId);
+  check('S1: foto-record hersteld uit IndexedDB', !!terug && terug.status === 'lokaal');
+  check('S1: blob-inhoud intact na herstel', terug && await blobTekst(terug.blob) === 'FOTO-DATA-1');
+  const file = FS.fotoToFile(terug);
+  check('S1: blob → File herbouwd (naam+type)', file && file.name === 'test1.jpg' && file.type === 'image/jpeg');
+  check('S1: metadata compleet (hoofdstuk/opmerking/soort)',
+    terug.hoofdstuk === 'Groep 3 – keukens' && terug.opmerking === 'kastdeur links' && terug.soort === 'na');
+
+  /* ── Scenario 2: uploadfout → retry zonder duplicaat ── */
+  await FS.setFotoStatus(fotoId, 'fout');
+  check('S2: status → fout na mislukte upload', (await FS.getFoto(fotoId)).status === 'fout');
+  // idempotente naam: retry gebruikt zelfde _fsId → zelfde SharePoint-bestandsnaam
+  const naam1 = `oplevering_${fotoId}_test1.jpg`;
+  const naam2 = `oplevering_${fotoId}_test1.jpg`;
+  check('S2: retry-bestandsnaam identiek (idempotent, PUT overschrijft)', naam1 === naam2);
+  check('S2: blob blijft bewaard na uploadfout', await blobTekst((await FS.getFoto(fotoId)).blob) === 'FOTO-DATA-1');
+  await FS.setFotoStatus(fotoId, 'sync');
+  check('S2: status → sync na geslaagde retry', (await FS.getFoto(fotoId)).status === 'sync');
+  check('S2: geen duplicaat-records ontstaan', (await FS.listFotos(rapId)).length === 1);
+
+  /* ── Scenario 3: opruimen alléén sync-foto's, ná afronding ── */
+  const foto2 = FS.newId('foto');
+  await FS.putFoto({id: foto2, rapportId: rapId, hoofdstuk: 'Groep 5 – commodes',
+    naam: 'test2.jpg', mime: 'image/jpeg', opmerking: '', soort: 'voor',
+    ts: 2, status: 'fout', blob: blobVan('FOTO-DATA-2'), bewerktBlob: null});
+  const res = await FS.cleanupSynced(rapId);
+  check('S3: cleanup verwijdert alleen sync-foto', res.removed.length === 1 && res.removed[0] === fotoId);
+  check('S3: fout-foto blijft bewaard (foutveilig)', res.rest === 1 && !!(await FS.getFoto(foto2)));
+  check('S3: draft blijft zolang er lokale foto’s zijn', !!(await FS.getDraft(rapId)));
+  await FS.setFotoStatus(foto2, 'sync');
+  const res2 = await FS.cleanupSynced(rapId);
+  check('S3: na laatste sync-foto ook draft weg', res2.rest === 0 && !(await FS.getDraft(rapId)));
+
+  /* ── Scenario 4: Bajeskwartier-duplicaten blijven apart ── */
+  const rapA = FS.newId('rap'), rapB = FS.newId('rap');
+  await FS.putDraft({rapportId: rapA, projectCode: 'TG-219730795', projectNaam: '#509152 CN Bajeskwartier', type: 'oplevering', ts: 3, fotos: []});
+  await FS.putDraft({rapportId: rapB, projectCode: 'TG-219870094', projectNaam: 'CN Bajeskwartier', type: 'oplevering', ts: 4, fotos: []});
+  const drafts = await FS.listDrafts();
+  const dA = drafts.find(d => d.projectCode === 'TG-219730795');
+  const dB = drafts.find(d => d.projectCode === 'TG-219870094');
+  check('S4: twee gelijknamige projecten = twee losse drafts', drafts.length === 2 && dA && dB && dA.rapportId !== dB.rapportId);
+  // herstel-matching gaat op exacte projectCode + type (zoals in mobiel.html)
+  const match = drafts.find(x => x.projectCode === 'TG-219870094' && x.type === 'oplevering');
+  check('S4: herstel matcht op exacte code, niet op naam', match && match.rapportId === rapB);
+
+  /* ── Scenario 5: foutveilig — putFoto zonder blob weigert ── */
+  let geweigerd = false;
+  try { await FS.putFoto({id: FS.newId('foto'), rapportId: rapA}); } catch (e) { geweigerd = true; }
+  check('S5: putFoto zonder blob wordt geweigerd (foto telt niet als opgeslagen)', geweigerd);
+
+  // opruimen testdata
+  for (const f of await FS.listFotos()) await FS.deleteFoto(f.id);
+  for (const d of await FS.listDrafts()) await FS.deleteDraft(d.rapportId);
+
+  const s = document.getElementById('samenvatting');
+  s.textContent = `Klaar: ${nOk} geslaagd, ${nFail} mislukt.`;
+  s.className = nFail ? 'fail' : 'ok';
+  console.log(`RESULTAAT: ${nOk} geslaagd, ${nFail} mislukt`);
+  document.title = (nFail ? 'FAIL' : 'PASS') + ' — Fotoherstel-test';
+})().catch(e => {
+  check('Onverwachte fout', false, e && e.message || String(e));
+  document.getElementById('samenvatting').textContent = 'Afgebroken: ' + (e && e.message || e);
+});
+</script>
+</body>
+</html>

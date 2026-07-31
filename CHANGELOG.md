@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-06 — Verbeterpunten-tab in cockpit: spar met Larry + mail belangrijk punt naar Bart
+- Commit: `ef7686d` | Auteur: Bart Witte
+
 ## 2026-07-04 — Add website-preview (v3+v4) voor interne review door Mathijs
 - Commit: `1c032ec` | Auteur: Bart Witte
 

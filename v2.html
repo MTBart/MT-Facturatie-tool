@@ -954,6 +954,14 @@ button{transition:transform .07s ease,filter .07s ease}
             <div style="color:var(--text-faint);padding:1rem 0">Laden…</div>
           </div>
         </div>
+        <!-- Concepten uit mt_rapport_concepten.json (mobiel schrijft, cockpit kan
+             het project corrigeren; gelijknamige projecten blijven op code apart) -->
+        <div class="card" style="padding:1rem;margin-top:1rem">
+          <div class="card-title">Concepten (nog niet afgerond)</div>
+          <div id="opl-concept-lijst" style="font-size:13px">
+            <div style="color:var(--text-faint);padding:0.5rem 0">Laden…</div>
+          </div>
+        </div>
       </div>
       <!-- Detail: rapporten van het gekozen project + rapport-preview -->
       <div id="opl-detail">
@@ -7516,6 +7524,85 @@ async function oplViewerOpen(){
   }
   _oplGroepeer();
   _oplRenderLijst();
+  oplConceptenOpen();
+}
+
+/* ── Concepten uit mt_rapport_concepten.json ─────────────────────────
+   Map: projectCode → draft (mobiel schrijft). De cockpit toont ze en kan
+   het gekoppelde project corrigeren. Koppeling gaat ALTIJD op exacte
+   projectcode — twee gelijknamige projecten (bv. TG-219730795 en
+   TG-219870094, beide "CN Bajeskwartier") blijven gescheiden records
+   en worden nooit samengevoegd. */
+let _oplConcepten = {};
+async function oplConceptenOpen(){
+  const el = document.getElementById('opl-concept-lijst');
+  if(!el) return;
+  try{
+    const cur = await _SP.read('mt_rapport_concepten.json');
+    _oplConcepten = (cur && !Array.isArray(cur)) ? cur : {};
+  }catch(e){
+    el.innerHTML = `<div style="color:var(--text-faint);padding:0.5rem 0">Concepten laden faalde: ${_escH(e.message||'')}</div>`;
+    return;
+  }
+  _oplConceptenRender();
+}
+function _oplConceptenRender(){
+  const el = document.getElementById('opl-concept-lijst');
+  if(!el) return;
+  const codes = Object.keys(_oplConcepten);
+  if(!codes.length){ el.innerHTML = '<div style="color:var(--text-faint);padding:0.5rem 0">Geen open concepten.</div>'; return; }
+  el.innerHTML = codes.map(code => {
+    const d = _oplConcepten[code] || {};
+    const dt = d.ts ? new Date(d.ts).toLocaleString('nl-NL',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+    const nFoto = (d.fotosVoor||[]).length + (d.fotosNa||[]).length;
+    const esc = _escH(code).replace(/'/g,'&#39;');
+    return `<div style="padding:8px 10px;border:1px solid var(--n-200);border-radius:8px;margin-bottom:6px">
+      <div style="font-weight:600;color:var(--n-900)">${_escH(code)}</div>
+      <div style="font-size:12px;color:var(--text-dim)">${dt} · ${nFoto} foto('s) op SP · ${_escH(d.door||'')}</div>
+      <div id="opl-concept-edit-${_escH(code)}" style="margin-top:5px">
+        <button class="btn btn-secondary btn-sm" onclick="oplConceptRelinkForm('${esc}')">✎ Project corrigeren</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function oplConceptRelinkForm(code){
+  const box = document.getElementById('opl-concept-edit-'+code);
+  if(!box) return;
+  // suggesties: bekende cockpit-projectcodes + codes uit de rapporten-lijst
+  const opts = [...new Set([...PROJECT_CODES.map(p=>p.code), ..._oplGroups.map(g=>g.code)])]
+    .filter(c => c && c !== code).sort();
+  box.innerHTML = `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+    <input class="zoek-input" list="opl-concept-codes" id="opl-concept-target-${_escH(code)}"
+      placeholder="Nieuwe projectcode…" style="flex:1;min-width:120px;margin:0">
+    <datalist id="opl-concept-codes">${opts.map(c=>`<option value="${_escH(c)}">`).join('')}</datalist>
+    <button class="btn btn-gold btn-sm" onclick="oplConceptRelink('${_escH(code).replace(/'/g,'&#39;')}')">Opslaan</button>
+    <button class="btn btn-secondary btn-sm" onclick="_oplConceptenRender()">Annuleer</button>
+  </div>
+  <div style="font-size:11px;color:var(--text-faint);margin-top:3px">Exacte code — gelijknamige projecten blijven apart.</div>`;
+}
+async function oplConceptRelink(code){
+  const inp = document.getElementById('opl-concept-target-'+code);
+  const target = inp && inp.value.trim();
+  if(!target || target === code) { _oplConceptenRender(); return; }
+  if(_oplConcepten[target]){
+    alert(`Er bestaat al een concept voor ${target} — eerst dat concept afronden of verwijderen.`);
+    return;
+  }
+  const d = _oplConcepten[code];
+  if(!d) return;
+  d.projectCode = target;
+  d.hergekoppeld = { van: code, ts: new Date().toISOString() };
+  _oplConcepten[target] = d;
+  delete _oplConcepten[code];
+  try{
+    await _SP.write('mt_rapport_concepten.json', _oplConcepten);
+    if(typeof planToast==='function') planToast(`✓ Concept ${code} → ${target} hergekoppeld`);
+  }catch(e){
+    // terugdraaien zodat scherm en SP niet uiteenlopen
+    _oplConcepten[code] = d; delete _oplConcepten[target];
+    alert('Opslaan naar SharePoint mislukte: '+(e.message||e));
+  }
+  _oplConceptenRender();
 }
 
 function oplViewerFilter(q){ _oplZoekTerm = (q||'').toLowerCase().trim(); _oplRenderLijst(); }
