@@ -5,6 +5,12 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-07-31 — Merge fotoherstel-20260731: IndexedDB-fotoherstel mobiel + concepten-overzicht cockpit
+- Commit: `37a17eb` | Auteur: Bart Witte
+
+## 2026-07-31 — Fotoherstel: IndexedDB-herstellaag mobiel + concepten-overzicht cockpit (job 20260731-064845)
+- Commit: `ee3967d` | Auteur: Bart Witte
+
 ## 2026-07-06 — Verbeterpunten-tab in cockpit: spar met Larry + mail belangrijk punt naar Bart
 - Commit: `ef7686d` | Auteur: Bart Witte
 

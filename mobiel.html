@@ -958,6 +958,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <!-- OPNAME / INMETEN -->
       <div id="opnameRapWrap" style="display:none">
         <div class="section-head" id="opnameRapLabel" style="margin-top:14px"></div>
+        <div id="ruimteTabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0"></div>
         <button class="btn btn-primary btn-full" style="min-height:48px" onclick="openCamera(f=>inmFoto(f))">📷 Nieuwe foto</button>
         <div class="photo-input-wrap" style="display:block;margin-top:8px">
           <label style="text-transform:none;font-size:14px;font-weight:400;margin-bottom:0">
@@ -966,10 +967,21 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           </label>
         </div>
         <div id="inmFotoList" style="margin-top:10px"></div>
+        <div id="ruimteNav" style="display:none;margin-top:10px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-secondary" style="min-height:44px;flex:0 0 auto" onclick="ruimtePrev()">◀</button>
+            <select id="ruimteSelect" onchange="ruimteKies(this.value)" style="flex:1;min-height:44px"></select>
+            <button class="btn btn-secondary" style="min-height:44px;flex:0 0 auto" onclick="ruimteNext()">▶</button>
+          </div>
+          <div id="ruimteNavInfo" style="text-align:center;font-size:11px;color:var(--text-faint);margin-top:4px"></div>
+          <button class="btn btn-gold btn-full" style="margin-top:8px;min-height:48px" onclick="ruimteVolgende()">➡️ Klaar hier — volgende ruimte</button>
+        </div>
         <div class="field" style="margin-top:8px">
           <label>Omschrijving / maten / afspraken</label>
           <textarea id="inmNotitie" rows="3" placeholder="Wat is ingemeten, bijzonderheden van de situatie, afspraken met de klant…"></textarea>
         </div>
+        <button class="btn btn-secondary btn-full" id="opnDraftBtn" onclick="opnameDraftSave()">💾 Tussentijds opslaan</button>
+        <div id="opnDraftInfo" style="font-size:11px;color:var(--text-faint);margin:6px 0"></div>
         <button class="btn btn-primary btn-full" onclick="showOpnameRapport()">📋 Opnamerapport maken</button>
       </div>
 
@@ -1041,7 +1053,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <div class="done-icon">✅</div>
         <div class="done-title" id="opleverDoneTitle">Rapport klaar</div>
         <div class="done-sub" id="opleverDoneSub">Het opleverrapport met handtekening wordt gemaild naar de opdrachtgever.<br><br><em>(mock — in productie via Graph /sendMail)</em></div>
-        <button class="btn btn-primary" onclick="resetOplevering()">← Nieuw rapport</button>
+        <button class="btn btn-gold" onclick="rapVerderWerken()">✏️ Verder met dit rapport</button>
+        <button class="btn btn-primary" style="margin-top:8px" onclick="resetOplevering()">← Nieuw rapport</button>
       </div>
     </div>
 
@@ -5235,9 +5248,20 @@ function showOpnameRapport() {
       <div class="rapport-item"><div class="rapport-item-content"><div class="rapport-item-name" style="white-space:pre-wrap">${escHtml(notitie)}</div></div></div>`;
   }
   if (inmFotos.length) {
-    html += `<div class="rapport-section">📷 Foto's (${inmFotos.length})</div>`;
+    // groepeer per ruimte (hoofdstuk); foto's zonder ruimte komen als laatste blok
+    const groepen = [];
     inmFotos.forEach(f => {
-      html += `<div style="margin-bottom:10px"><img src="${f.url}" alt="foto" style="width:100%;border-radius:8px">${f.bijschrift ? `<div class="rapport-item-note" style="margin-top:4px">${escHtml(f.bijschrift)}</div>` : ""}</div>`;
+      const r = f._fsHoofdstuk || "";
+      let g = groepen.find(x => x.naam === r);
+      if (!g) { g = {naam: r, fotos: []}; groepen.push(g); }
+      g.fotos.push(f);
+    });
+    groepen.sort((a, b) => (a.naam === "") - (b.naam === ""));
+    groepen.forEach(g => {
+      html += `<div class="rapport-section">📷 ${g.naam ? escHtml(g.naam) : "Foto's"} (${g.fotos.length})</div>`;
+      g.fotos.forEach(f => {
+        html += `<div style="margin-bottom:10px"><img src="${f.url}" alt="foto" style="width:100%;border-radius:8px">${f.bijschrift ? `<div class="rapport-item-note" style="margin-top:4px">${escHtml(f.bijschrift)}</div>` : ""}</div>`;
+      });
     });
   }
   html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${now} · ${escHtml(door)} · M&T</div>`;
@@ -5266,7 +5290,9 @@ async function opnameRapportAfronden() {
       }
     }
     const entry = {
-      id: "opn-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      // stabiel id per rapport (via fotoherstel-laag) ⇒ opnieuw afronden na
+      // "verder werken" werkt dezelfde opname bij i.p.v. een duplicaat te maken
+      id: (window._mtRapEntryId && window._mtRapEntryId()) || ("opn-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6)),
       ts: new Date().toISOString(),
       door: _msAccount ? (_msAccount.username || "").toLowerCase() : "demo",
       doorNaam: _msAccount ? (_msAccount.name || "") : "Demo",
@@ -5295,7 +5321,8 @@ async function opnUpload(entry) {
   try {
     const cur = await _SP.read("mt_opnames.json");
     const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
-    if (!list.some(e => e && e.id === entry.id)) list.push(entry);
+    const i = list.findIndex(e => e && e.id === entry.id);
+    if (i >= 0) list[i] = entry; else list.push(entry);
     return await _SP.write("mt_opnames.json", list);
   } catch(e) { return false; }
 }
@@ -6510,6 +6537,8 @@ function escHtml(s) {
   const FS = window.MTFotoStore;
   let _rapId = null;             // uniek id van het actieve conceptrapport
   let _rapHoofdstukLaatst = "";  // laatst gebruikte groep/hoofdstuk in de kaart
+  let _ruimtes = [];             // ruimte-tabbladen (opname): namen in volgorde
+  let _ruimteActief = "";        // actieve ruimte (= hoofdstuk van nieuwe foto's)
   let _persistTimer = null;
   let _entryUploadOk = false;    // laatste JSON-entry-upload gelukt?
 
@@ -6553,13 +6582,18 @@ function escHtml(s) {
       type: rapType, status: "concept", ts: Date.now(),
       checklistState, checklistNotes,
       notitie: (document.getElementById("inmNotitie") || {}).value || "",
-      hoofdstukken: [...new Set(fotos.map(f => f.hoofdstuk).filter(Boolean))].map(t => ({titel: t})),
+      hoofdstukken: [...new Set([..._ruimtes, ...fotos.map(f => f.hoofdstuk).filter(Boolean)])].map(t => ({titel: t})),
+      ruimteActief: _ruimteActief,
       fotos
     };
     try { await FS.putDraft(draft); } catch (e) { console.warn("rapdraft persist fout:", e); }
   }
+  // autosave: bij scherm/app dicht, telefoon uit (freeze) én als vangnet elke 20s
   document.addEventListener("visibilitychange", () => { if (document.hidden) _rapPersistNow(); });
   window.addEventListener("pagehide", () => _rapPersistNow());
+  document.addEventListener("freeze", () => _rapPersistNow());
+  window.addEventListener("beforeunload", () => { _rapPersistNow(); });
+  setInterval(() => { if (_rapId) _rapPersistNow(); }, 20000);
   // elke relevante wijziging in de oplevertab (checklist, notities, bijschriften)
   const _tabOpl = document.getElementById("tab-oplevering");
   if (_tabOpl) { _tabOpl.addEventListener("change", _rapPersistSoon, true); _tabOpl.addEventListener("input", _rapPersistSoon, true); }
@@ -6619,6 +6653,12 @@ function escHtml(s) {
       if (item.ctx.soort === "inm") { entry.bijschrift = opmerking; inmFotos.push(entry); renderInmFotos(); }
       else { entry.opmerking = opmerking; oplFotos[item.ctx.soort].push(entry); renderOplFotos(); }
       _rapHoofdstukLaatst = hoofdstuk;
+      // afwijkende naam in de kaart = (nieuwe) ruimte — tabblad volgt mee
+      if (item.ctx.soort === "inm" && hoofdstuk) {
+        if (!_ruimtes.includes(hoofdstuk)) _ruimtes.push(hoofdstuk);
+        _ruimteActief = hoofdstuk;
+        _ruimteRender();
+      }
       showToast("📥 Foto lokaal opgeslagen — veilig, ook offline");
       _fcQueue.shift();
       _rapPersistNow();
@@ -6647,6 +6687,8 @@ function escHtml(s) {
     const files = Array.from(input.files || []);
     input.value = "";
     if (!files.length) return;
+    _ruimteInit();
+    _rapHoofdstukLaatst = _ruimteActief; // nieuwe foto's vallen in de actieve ruimte
     files.forEach(f => _fcQueue.push({file: f, ctx: {soort: "inm"}}));
     _fcNext();
   };
@@ -6677,10 +6719,68 @@ function escHtml(s) {
     _rapPersistSoon();
   };
 
+  /* ── ruimte-tabbladen (opname): foto's per ruimte, snel wisselen ── */
+  function _ruimteInit() {
+    if (!_ruimtes.length) { _ruimtes = ["Ruimte 1"]; _ruimteActief = "Ruimte 1"; }
+    if (!_ruimteActief || !_ruimtes.includes(_ruimteActief)) _ruimteActief = _ruimtes[0];
+  }
+  function _ruimteCount(naam) { return inmFotos.filter(f => (f._fsHoofdstuk || "") === naam).length; }
+  function _ruimteRender() {
+    const tabs = document.getElementById("ruimteTabs");
+    const nav = document.getElementById("ruimteNav");
+    if (!tabs || !nav) return;
+    _ruimteInit();
+    const zonder = inmFotos.filter(f => !f._fsHoofdstuk).length;
+    tabs.innerHTML = _ruimtes.map(r => {
+      const actief = r === _ruimteActief;
+      return `<button type="button" onclick="${actief ? "ruimteRename()" : `ruimteKies(${JSON.stringify(r).replace(/"/g, "&quot;")})`}"
+        style="border:1px solid ${actief ? "var(--gold,#b8860b)" : "#ccc"};background:${actief ? "var(--gold,#b8860b)" : "transparent"};color:${actief ? "#fff" : "inherit"};border-radius:16px;padding:6px 12px;font-size:13px;min-height:36px">${escHtml(r)} <span style="opacity:.75;font-size:11px">${_ruimteCount(r)}</span>${actief ? " ✏️" : ""}</button>`;
+    }).join("") + (zonder ? `<button type="button" onclick="ruimteKies('')" style="border:1px dashed #999;background:${_ruimteActief === "" ? "#8882" : "transparent"};border-radius:16px;padding:6px 12px;font-size:13px;min-height:36px">Zonder ruimte <span style="opacity:.75;font-size:11px">${zonder}</span></button>` : "");
+    // onderaan: dropdown + vorige/volgende voor snel navigeren
+    const sel = document.getElementById("ruimteSelect");
+    sel.innerHTML = _ruimtes.map(r => `<option value="${escHtml(r)}"${r === _ruimteActief ? " selected" : ""}>${escHtml(r)} (${_ruimteCount(r)} foto's)</option>`).join("");
+    const idx = _ruimtes.indexOf(_ruimteActief);
+    document.getElementById("ruimteNavInfo").textContent = idx >= 0 ? `Ruimte ${idx + 1} van ${_ruimtes.length} — tik op het actieve tabblad om te hernoemen` : "";
+    nav.style.display = "block";
+  }
+  window.ruimteKies = function (naam) { _ruimteActief = naam; _ruimteRender(); renderInmFotos(); _rapPersistSoon(); };
+  window.ruimtePrev = function () { _ruimteInit(); const i = _ruimtes.indexOf(_ruimteActief); window.ruimteKies(_ruimtes[Math.max(0, i - 1)]); };
+  window.ruimteNext = function () { _ruimteInit(); const i = _ruimtes.indexOf(_ruimteActief); window.ruimteKies(_ruimtes[Math.min(_ruimtes.length - 1, i + 1)]); };
+  window.ruimteVolgende = function () {
+    _ruimteInit();
+    const i = _ruimtes.indexOf(_ruimteActief);
+    if (i >= 0 && i < _ruimtes.length - 1) { window.ruimteKies(_ruimtes[i + 1]); showToast(`➡️ ${_ruimtes[i + 1]}`); return; }
+    const def = "Ruimte " + (_ruimtes.length + 1);
+    const naam = (prompt("Naam van de volgende ruimte:", def) || "").trim();
+    if (!naam) return;
+    if (!_ruimtes.includes(naam)) _ruimtes.push(naam);
+    window.ruimteKies(naam);
+    showToast(`➡️ ${naam} — maak hier je foto's`);
+  };
+  window.ruimteRename = function () {
+    const oud = _ruimteActief;
+    if (!oud) return;
+    const naam = (prompt("Nieuwe naam voor deze ruimte:", oud) || "").trim();
+    if (!naam || naam === oud) return;
+    _ruimtes = _ruimtes.map(r => r === oud ? naam : r);
+    inmFotos.forEach(f => {
+      if (f._fsHoofdstuk === oud) {
+        f._fsHoofdstuk = naam;
+        if (f._fsId) FS.updateFoto(f._fsId, {hoofdstuk: naam}).catch(() => {});
+      }
+    });
+    if (_rapHoofdstukLaatst === oud) _rapHoofdstukLaatst = naam;
+    window.ruimteKies(naam);
+  };
+
   /* ── renderers met statuslabel per foto ── */
   window.renderInmFotos = function () {
     const el = document.getElementById("inmFotoList");
-    el.innerHTML = inmFotos.map((p, i) => `
+    _ruimteInit();
+    // alleen de foto's van de actieve ruimte tonen ('' = zonder ruimte),
+    // met behoud van de echte index in inmFotos voor edit/verwijder
+    const rows = inmFotos.map((p, i) => ({p, i})).filter(x => (x.p._fsHoofdstuk || "") === _ruimteActief);
+    el.innerHTML = rows.map(({p, i}) => `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
         <div class="foto-row-thumb" style="width:64px;height:64px" onclick="openFotoEdit(inmFotos[${i}], renderInmFotos)" title="Tik om aantekeningen te zetten">
           <img src="${p.bewerktUrl || p.url}" alt="foto">
@@ -6715,6 +6815,10 @@ function escHtml(s) {
     const d = drafts.find(x => x.projectCode === p.code && x.type === rapType);
     if (!d) { await _rapEnsureId(); return; }
     _rapId = d.rapportId;
+    if (Array.isArray(d.hoofdstukken)) d.hoofdstukken.forEach(h => {
+      const t = h && h.titel; if (t && !_ruimtes.includes(t)) _ruimtes.push(t);
+    });
+    if (d.ruimteActief && _ruimtes.includes(d.ruimteActief)) _ruimteActief = d.ruimteActief;
     if (d.checklistState && !Object.keys(checklistState).length) checklistState = d.checklistState;
     if (d.checklistNotes && !Object.keys(checklistNotes).length) checklistNotes = d.checklistNotes;
     const not = document.getElementById("inmNotitie");
@@ -6740,13 +6844,15 @@ function escHtml(s) {
         if (!oplFotos[rec.soort].some(f => f._fsId === rec.id)) { oplFotos[rec.soort].push(entry); hersteld++; }
       }
     }
-    try { renderInmFotos(); renderOplFotos(); renderChecklist(); } catch (e) {}
+    inmFotos.forEach(f => { if (f._fsHoofdstuk && !_ruimtes.includes(f._fsHoofdstuk)) _ruimtes.push(f._fsHoofdstuk); });
+    try { if (rapType === "opname") _ruimteRender(); renderInmFotos(); renderOplFotos(); renderChecklist(); } catch (e) {}
     if (hersteld) showToast(`📥 ${hersteld} foto('s) hersteld van dit toestel`);
   }
 
   const _origKiesRapType = window.kiesRapType;
   window.kiesRapType = function (t) {
     _origKiesRapType(t);
+    if (t === "opname") { _ruimteInit(); _ruimteRender(); }
     _rapIdbRestore();
   };
   const _origLoadChecklist = window.loadChecklist;
@@ -6754,6 +6860,7 @@ function escHtml(s) {
     _rapPersistNow();          // huidige stand eerst veiligstellen
     _origLoadChecklist();
     _rapId = null;             // nieuw project ⇒ nieuw/eigen rapport-id
+    _ruimtes = []; _ruimteActief = "";
   };
 
   /* ── entry-upload volgen + opruimen alléén na bewezen upload + afronding ── */
@@ -6807,6 +6914,26 @@ function escHtml(s) {
       }
     } catch (e) {}
     return r;
+  };
+
+  /* ── stabiel entry-id voor mt_opnames.json (upsert i.p.v. duplicaat) ── */
+  window._mtRapEntryId = () => _rapId;
+
+  /* ── tussentijds opslaan (opname) + verder werken na afronden ── */
+  window.opnameDraftSave = async function () {
+    await _rapEnsureId();
+    _rapPersistNow();
+    const el = document.getElementById("opnDraftInfo");
+    if (el) el.textContent = "💾 Opgeslagen op dit toestel om " + new Date().toLocaleTimeString("nl-NL", {hour: "2-digit", minute: "2-digit"}) + " — je kunt de app veilig sluiten";
+    showToast("💾 Tussenstand opgeslagen — later verder werken kan gewoon");
+  };
+  window.rapVerderWerken = function () {
+    document.getElementById("opleverDoneView").classList.add("view-hidden");
+    document.getElementById("rapportView").classList.add("view-hidden");
+    document.getElementById("opleverView").classList.remove("view-hidden");
+    if (rapType === "opname") { _ruimteInit(); _ruimteRender(); }
+    try { renderInmFotos(); renderOplFotos(); renderChecklist(); } catch (e) {}
+    _rapPersistSoon();
   };
 
   /* ── melding bij opstarten: onafgeronde rapporten met lokale foto's ── */
