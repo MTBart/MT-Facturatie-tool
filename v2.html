@@ -3268,15 +3268,15 @@ async function getMailFolderId(naam) {
 }
 
 async function verplaatsMailNaarVerwerkt(mailId) {
-  try {
-    const folderId = await getMailFolderId('Facturen verwerkt');
-    if (!folderId) return;
-    const token = await window.getGraphToken();
-    await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mailId}/move`, {
-      method:'POST', headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
-      body: JSON.stringify({destinationId: folderId})
-    });
-  } catch(e) {}
+  const folderId = await getMailFolderId('Facturen verwerkt');
+  if (!folderId) throw new Error('Map "Facturen verwerkt" niet gevonden');
+  const token = await window.getGraphToken();
+  if (!token) throw new Error('Geen toegang tot e-mail');
+  const r=await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mailId}/move`, {
+    method:'POST', headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+    body: JSON.stringify({destinationId: folderId})
+  });
+  if(!r.ok) throw new Error(`E-mail verplaatsen mislukt (HTTP ${r.status})`);
 }
 
 async function scanEmailFacturen(forceer=false) {
@@ -3423,7 +3423,36 @@ function handleDrop(e){
 }
 
 // ═══ BOEKEN IN MONEYBIRD ═══
-async function boekInMoneybird(){
+// De voortgang blijft bewust in het geheugen staan. Als Moneybird al is gelukt
+// maar een PDF-stap faalt, kan de gebruiker veilig opnieuw proberen zonder een
+// tweede inkoopfactuur aan te maken.
+let _factuurBoekVoortgang=null;
+function normaliseerFactuurVergelijking(tekst){return String(tekst||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
+function zelfdeFactuurReferentie(referentie,factuurnummer){
+  const gezocht=normaliseerFactuurVergelijking(factuurnummer);
+  const delen=String(referentie||'').split(' - ');
+  return !!gezocht&&(normaliseerFactuurVergelijking(referentie)===gezocht||normaliseerFactuurVergelijking(delen[delen.length-1])===gezocht);
+}
+async function zoekBestaandeFactuur(contact,factuurnummer){
+  let page=1;
+  while(true){
+    const r=await mbGet(`${getAdmin()}/documents/purchase_invoices?page=${page}`);
+    if(!r.ok) throw new Error(`Duplicaatcontrole in Moneybird mislukt (HTTP ${r.status})`);
+    const batch=await r.json();
+    const match=(batch||[]).find(f=>normaliseerFactuurVergelijking(f.contact?.company_name)===normaliseerFactuurVergelijking(contact)&&zelfdeFactuurReferentie(f.reference,factuurnummer));
+    if(match) return match;
+    if(!batch?.length||batch.length<50) return null;
+    page++;
+  }
+}
+function toonBoekDeelfout(status,voortgang,stap,fout){
+  const gelukt=[];
+  if(voortgang.moneybird) gelukt.push(`Moneybird-boeking (id ${voortgang.invoiceId})`);
+  if(voortgang.moneybirdPdf) gelukt.push('PDF-bijlage in Moneybird');
+  if(voortgang.sharepointPdf) gelukt.push('PDF-opslag');
+  status.innerHTML=`<span style="color:var(--red)">✕ ${stap} mislukt: ${fout}</span><br><span style="font-size:11px;color:var(--text-dim)">Wel gelukt: ${gelukt.join(', ')||'nog niets'}. De e-mail blijft in de map Facturen. Klik opnieuw op Boeken om alleen de ontbrekende stap(pen) te herhalen.</span>`;
+}
+async function boekInMoneybirdOud(){
   const status=document.getElementById('boek-status');
   const contact=document.getElementById('f-contact').value.trim();
   const ref=document.getElementById('f-ref').value.trim();
@@ -3491,6 +3520,57 @@ async function boekInMoneybird(){
 // leverancier-hint. Zo belandt Ostermann-lijm/deuvels/scharnieren NIET in platen
 // (Bart 28-6: "alles wordt bij platen gezet, Ostermann is vaak kantenband of
 // verbruik — lijm, deuvels, scharnieren etc.").
+async function boekInMoneybird(){
+  const status=document.getElementById('boek-status');
+  const contact=document.getElementById('f-contact').value.trim(),ref=document.getElementById('f-ref').value.trim();
+  const date=document.getElementById('f-date').value,due=document.getElementById('f-due').value,hoofdProject=document.getElementById('f-project').value;
+  if(!contact||!ref||!date){status.textContent='✕ Leverancier, factuurnummer en datum zijn verplicht';return;}
+  if(!currentFile){status.textContent='✕ Kies eerst de PDF; zonder PDF wordt de factuur niet geboekt';return;}
+  const details=[],voorraadRegels=[];
+  document.querySelectorAll('#regels-container .regel-row').forEach(row=>{
+    const inputs=row.querySelectorAll('input'),selects=row.querySelectorAll('select');const oms=inputs[0]?.value?.trim(),ledger_id=selects[0]?.value;
+    const aantal=parseFloat(inputs[1]?.value)||1,stukprijs=parseFloat(inputs[2]?.value)||0,btw=selects[1]?.value||'21',project=selects[2]?.value||hoofdProject,cat=selects[3]?.value||'overig';
+    const isVoorraad=row.querySelector('.voorraad-btn')?.classList.contains('actief');
+    if(oms||stukprijs){details.push({description:oms||'—',amount:aantal.toString(),price:stukprijs.toString(),tax_rate_id:BTW_IDS[btw]||BTW_IDS['21'],ledger_account_id:ledger_id||ledgers.find(l=>l.name.toLowerCase().includes('inkoop materiaal'))?.id||''});if(isVoorraad&&oms)voorraadRegels.push({omschrijving:oms,aantal,stukprijs,btw,project,leverancier:contact,datum:date,categorie:cat});}
+  });
+  const zelfdePoging=_factuurBoekVoortgang&&_factuurBoekVoortgang.contact===contact&&_factuurBoekVoortgang.ref===ref;
+  let voortgang=zelfdePoging?_factuurBoekVoortgang:null;
+  try{
+    if(!voortgang){
+      status.innerHTML='<span class="spinner"></span> Duplicaatcontrole in Moneybird...';
+      const bestaand=await zoekBestaandeFactuur(contact,ref);
+      if(bestaand){status.innerHTML=`<span style="color:var(--red)">✕ Niet geboekt: deze factuur bestaat al in Moneybird (leverancier: ${contact}, factuurnummer: ${ref}, id: ${bestaand.id}).</span>`;return;}
+      status.innerHTML='<span class="spinner"></span> Contact zoeken...';
+      const cR=await mbGet(`${getAdmin()}/contacts?query=${encodeURIComponent(contact)}`);if(!cR.ok)throw new Error(`Contact zoeken mislukt (HTTP ${cR.status})`);
+      const contacts=await cR.json();let contactId=contacts?.[0]?.id;
+      if(!contactId){const nc=await mbPost(`${getAdmin()}/contacts`,{contact:{company_name:contact}});if(!nc.ok)throw new Error(`Contact aanmaken mislukt (HTTP ${nc.status})`);contactId=(await nc.json()).id;}
+      status.innerHTML='<span class="spinner"></span> Boeken in Moneybird...';
+      const r=await mbPost(`${getAdmin()}/documents/purchase_invoices`,{purchase_invoice:{contact_id:contactId,reference:hoofdProject?`${hoofdProject} - ${ref}`:ref,date,due_date:due||undefined,details_attributes:details}});
+      if(!r.ok)throw new Error(`Boeken in Moneybird mislukt (HTTP ${r.status})`);
+      const result=await r.json();voortgang={invoiceId:result.id,contact,ref,moneybird:true,moneybirdPdf:false,sharepointPdf:false};_factuurBoekVoortgang=voortgang;
+    }
+    if(!voortgang.moneybirdPdf){
+      status.innerHTML='<span class="spinner"></span> PDF als bijlage in Moneybird opslaan...';
+      try{const fd=new FormData();fd.append('file',currentFile,currentFile.name);const upload=await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+voortgang.invoiceId+'/attachments')}`,{method:'POST',headers:await authHeader(),body:fd});if(!upload.ok)throw new Error(`HTTP ${upload.status}`);voortgang.moneybirdPdf=true;}catch(e){toonBoekDeelfout(status,voortgang,'PDF-bijlage in Moneybird',e.message);return;}
+    }
+    if(!voortgang.sharepointPdf){
+      status.innerHTML='<span class="spinner"></span> PDF opslaan...';
+      try{if(!window.spUploadPDF)throw new Error('PDF-opslag is niet beschikbaar');await spUploadPDF(voortgang.invoiceId+'.pdf',await currentFile.arrayBuffer());voortgang.sharepointPdf=true;}catch(e){toonBoekDeelfout(status,voortgang,'PDF-opslag',e.message);return;}
+    }
+    if(_huidigMailId){
+      status.innerHTML='<span class="spinner"></span> E-mail verplaatsen naar Facturen verwerkt...';
+      try{await verplaatsMailNaarVerwerkt(_huidigMailId);}catch(e){toonBoekDeelfout(status,voortgang,'E-mail verplaatsen',e.message);return;}
+      _huidigMailId=null;scanEmailFacturen(true);
+    }
+    if(due){try{const dD=new Date(due),pD=new Date(dD);pD.setDate(pD.getDate()-1);const note=await mbPost(`${getAdmin()}/documents/purchase_invoices/${voortgang.invoiceId}/notes`,{note:{note:`Betalen voor: ${pD.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}`}});if(!note.ok)throw new Error(`HTTP ${note.status}`);}catch(e){status.innerHTML=`<span style="color:var(--orange)">⚠ Factuur is geboekt en de PDF is opgeslagen, maar betaalnotitie opslaan mislukte: ${e.message}</span>`;return;}}
+    voorraadRegels.forEach(r=>slaVoorraadOp(r));let payDateStr='';if(due){const d=new Date(due);d.setDate(d.getDate()-1);payDateStr=d.toISOString().split('T')[0];}
+    status.innerHTML=`✓ Geboekt — <strong>betaal voor ${fmtDatum(payDateStr)}</strong>${voorraadRegels.length?` · 📦 ${voorraadRegels.length} voorraad`:''}`;
+    const hist=JSON.parse(localStorage.getItem('mt_history')||'[]');hist.unshift({id:voortgang.invoiceId,contact,ref,date,due,payDate:payDateStr,project:hoofdProject,totaal:document.getElementById('totaal-incl').textContent,ts:Date.now()});localStorage.setItem('mt_history',JSON.stringify(hist.slice(0,500)));
+    _factuurBoekVoortgang=null;try{if(window.track)track('action','factuur_boeken',{detail:hoofdProject?('proj:'+hoofdProject):'geen_project',ok:true});}catch(e){}
+    setTimeout(()=>{resetFormulier();status.innerHTML=`✓ Klaar — <a href="https://moneybird.com/${getAdmin()}/documents/${voortgang.invoiceId}/payment_initiations/new" target="_blank" style="color:var(--green)">💳 Betaling inplannen →</a>`;},1500);
+  }catch(e){status.textContent=`✕ ${e.message}`;try{if(window.track)track('action','factuur_boeken',{detail:'exception',ok:false});}catch(_){}}
+}
+
 function categoriseerMateriaal(naam,leverancier){
   const l=(naam||'').toLowerCase();
   const lev=(leverancier||'').toLowerCase();
@@ -6976,11 +7056,12 @@ async function laadFacturen(){
     renderControleLijst(alleFacturen);filterFacturenActief();return;
   }
   spinner.classList.remove('hidden');status.textContent='Laden...';alleFacturen=[];
+  document.getElementById('controle-inhoud').classList.add('hidden');
   try{
     let page=1;
     while(true){
       const r=await mbGet(`${getAdmin()}/documents/purchase_invoices?filter=${encodeURIComponent(filterStr)}&page=${page}`);
-      if(!r.ok) break;const batch=await r.json();if(!batch?.length) break;
+      if(!r.ok) throw new Error(`Facturen ophalen mislukt op pagina ${page} (HTTP ${r.status})`);const batch=await r.json();if(!batch?.length) break;
       alleFacturen.push(...batch.filter(f=>f?.id));status.textContent=`${alleFacturen.length} facturen...`;
       if(batch.length<50) break;page++;
     }
@@ -6989,7 +7070,13 @@ async function laadFacturen(){
     status.textContent=`${alleFacturen.length} facturen geladen`;
     document.getElementById('controle-inhoud').classList.remove('hidden');
     renderControleLijst(alleFacturen);filterFacturenActief();
-  }catch(e){status.textContent=`Fout: ${e.message}`;}
+  }catch(e){
+    // Een onvolledige reeks mag nooit als geldige cache terugkomen.
+    alleFacturen=[];
+    factuurCache={filterStr:'',facturen:[]};
+    localStorage.removeItem('mt_cache_facturen');
+    status.innerHTML=`<span style="color:var(--red)">✕ ${e.message}</span> <button class="btn btn-secondary btn-xs" onclick="laadFacturen()">Opnieuw proberen</button>`;
+  }
   finally{spinner.classList.add('hidden');}
 }
 function detecteerDuplicaten(facturen){
@@ -7001,8 +7088,7 @@ function isVolledigVerwerkt(f,dup){
   const heeftProj=f.reference&&PROJECT_CODES.some(p=>f.reference.startsWith(p.code));
   return heeftProj&&(!dup.has(f.id)||geenDuplicaat.has(f.id));
 }
-async function verwijderControleFactuur(id) {
-  if (!confirm('Factuur verwijderen uit Moneybird? Dit kan niet ongedaan worden.')) return;
+async function verwijderControleFactuurUitgevoerd(id) {
   const r = await mbDelete(getAdmin()+'/documents/purchase_invoices/'+id);
   if (r.ok) {
     alleFacturen = alleFacturen.filter(f=>f.id!==id);
@@ -7094,7 +7180,10 @@ async function laadControlePDF(f) {
     const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
     toonPdfInViewer('pdf-viewer-controle', url);
     // Sla ook op op SharePoint voor volgende keer
-    if (window.spUploadPDF) spUploadPDF(f.id+'.pdf', bytes.buffer);
+    if (window.spUploadPDF) {
+      try { await spUploadPDF(f.id+'.pdf', bytes.buffer); }
+      catch(e) { document.getElementById('ctrl-status').textContent=`⚠ PDF staat in Moneybird, maar PDF-opslag mislukt: ${e.message}`; }
+    }
   } catch(e) { viewer.innerHTML = `<div class="pdf-placeholder">PDF laden mislukt: ${e.message}</div>`; }
 }
 function renderControleDetail(f){
@@ -7285,7 +7374,7 @@ async function slaControleOp(gaNaarVolgende=false){
     }else{const err=await r.json();status.textContent=`✗ ${JSON.stringify(err)}`;}
   }catch(e){status.textContent=`✗ ${e.message}`;}
 }
-async function verwijderControleFactuur(){
+/* Oude duplicaatverwijderfunctie: vervangen door de bevestigde flow hieronder.
   const f=huidigeFactuur;if(!f) return;
   if(!confirm(`Verwijder factuur van ${f.contact?.company_name}?`)) return;
   const status=document.getElementById('ctrl-status');status.innerHTML='<span class="spinner"></span>';
@@ -7297,6 +7386,22 @@ async function verwijderControleFactuur(){
       renderControleLijst(window._controleLijst);
     }else status.textContent='✗ Kan niet verwijderen';
   }catch(e){status.textContent=`✗ ${e.message}`;}
+*/
+function verwijderControleFactuur(id){
+  const f=id?(alleFacturen.find(x=>x.id===id)||window._controleLijst?.find(x=>x.id===id)):huidigeFactuur;
+  if(!f){alert('Geen factuur geselecteerd om te verwijderen.');return;}
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.58);display:flex;align-items:center;justify-content:center;padding:1rem';
+  const paneel=document.createElement('div');
+  paneel.style.cssText='max-width:480px;width:100%;background:var(--card,#fff);color:var(--text,#1f2937);border-radius:12px;padding:1.5rem;box-shadow:0 16px 40px rgba(0,0,0,.35)';
+  const titel=document.createElement('div');titel.textContent='Factuur definitief verwijderen?';titel.style.cssText='font-size:18px;font-weight:700;color:var(--red);margin-bottom:.75rem';paneel.appendChild(titel);
+  const uitleg=document.createElement('p');uitleg.textContent='Deze factuur wordt definitief uit Moneybird verwijderd en kan niet worden hersteld. Controleer de gegevens hieronder.';uitleg.style.margin='0 0 1rem';paneel.appendChild(uitleg);
+  const gegevens=document.createElement('div');gegevens.style.cssText='background:var(--red-light,#fff1f2);border:1px solid var(--red,#dc2626);border-radius:8px;padding:.75rem;margin-bottom:1rem;font-size:13px';
+  [['Factuurnummer',f.reference||'Geen referentie'],['Leverancier',f.contact?.company_name||'Onbekend'],['Bedrag',fmt(parseFloat(f.total_price_incl_tax||0))]].forEach(([label,waarde])=>{const regel=document.createElement('div');const vet=document.createElement('strong');vet.textContent=label+': ';regel.append(vet,document.createTextNode(waarde));gegevens.appendChild(regel);});paneel.appendChild(gegevens);
+  const akkoord=document.createElement('label');akkoord.style.cssText='display:flex;gap:.5rem;align-items:flex-start;font-size:13px;margin-bottom:1rem';const vink=document.createElement('input');vink.type='checkbox';akkoord.append(vink,document.createTextNode(' Ik begrijp dat deze verwijdering definitief is.'));paneel.appendChild(akkoord);
+  const acties=document.createElement('div');acties.style.cssText='display:flex;justify-content:flex-end;gap:.5rem';const annuleren=document.createElement('button');annuleren.className='btn btn-secondary';annuleren.textContent='Annuleren';const bevestigen=document.createElement('button');bevestigen.className='btn btn-danger';bevestigen.textContent='Definitief verwijderen';bevestigen.disabled=true;acties.append(annuleren,bevestigen);paneel.appendChild(acties);modal.appendChild(paneel);document.body.appendChild(modal);
+  vink.addEventListener('change',()=>{bevestigen.disabled=!vink.checked;});annuleren.onclick=()=>modal.remove();modal.onclick=e=>{if(e.target===modal)modal.remove();};
+  bevestigen.onclick=async()=>{bevestigen.disabled=true;bevestigen.textContent='Verwijderen...';await verwijderControleFactuurUitgevoerd(f.id);modal.remove();};
 }
 function markeerGeenDuplicaat(id){geenDuplicaat.add(id);renderControleLijst(window._controleLijst);filterFacturenActief();if(huidigeFactuur?.id===id)renderControleDetail(huidigeFactuur);}
 function neemSuggestieOver(){
@@ -8270,13 +8375,13 @@ window.updateSyncStatus = function() {
 
 // PDF opslaan op SharePoint
 window.spUploadPDF = async function(filename, arrayBuffer) {
-  try {
-    const { base, token } = await _SP._driveBase();
-    await fetch(
-      `${base}/root:/${_SP.FOLDER}/facturen/${filename}:/content`,
-      { method:'PUT', headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/pdf'}, body: arrayBuffer }
-    );
-  } catch(e) { console.warn('PDF upload mislukt:', e.message); }
+  const { base, token } = await _SP._driveBase();
+  const r=await fetch(
+    `${base}/root:/${_SP.FOLDER}/facturen/${filename}:/content`,
+    { method:'PUT', headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/pdf'}, body: arrayBuffer }
+  );
+  if(!r.ok) throw new Error(`PDF opslaan mislukt (HTTP ${r.status})`);
+  return await r.json();
 };
 
 // Bijlage uploaden NAAR de projectmap op de On-Prem-Data-drive (07_Administratie).
