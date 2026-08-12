@@ -133,6 +133,8 @@ const TG_PRIO=[
 ];
 function tgPrioById(v){return TG_PRIO.find(p=>p.v===(v||''))||{label:String(v),kort:String(v),kleur:'#6b7280'};}
 let _tgTimer={entry:null,tick:null};      // lopende Track-timer
+let _tgTimerBusy=false;                    // voorkomt dubbele start/stop-POSTs
+let _tgMutatieBusy=false;                  // blokkeert parallelle Toggl-mutaties
 let _tgCache={projecten:null,taken:null}; // licht sessie-cachen
 let _tgRecent=[];                          // laatst geladen eigen entries (voor "hervat")
 let _tgDrag=null;                          // board drag-state
@@ -188,6 +190,36 @@ const tgLokaal={
 
 // — helpers —
 function tgStatus(msg,kleur){const el=document.getElementById('tg-status');if(el){el.textContent=msg||'';el.style.color=kleur||'var(--text-faint)';}}
+// Herbruikbare retry+blokkade-wrapper voor Toggl-mutaties (POST/PUT/PATCH/DELETE).
+// Blokkeert parallelle mutaties, probeert bij fout automatisch opnieuw, en toont
+// pas een definitieve ❌-melding (status + alert) als alle pogingen mislukt zijn —
+// zodat lokale state NOOIT wordt bijgewerkt alsof een mislukte actie gelukt is.
+async function tgMetRetry(fn,{actie='Wijziging',pogingen=2,vertragingMs=600}={}){
+  if(_tgMutatieBusy){
+    tgStatus(`⚠ ${actie} is geblokkeerd: een eerdere Toggl-wijziging loopt nog.`, '#b8962e');
+    throw new Error('Toggl-wijziging loopt al');
+  }
+  _tgMutatieBusy=true;
+  let laatsteFout;
+  try{
+    for(let poging=1;poging<=pogingen;poging++){
+      try{return await fn();}
+      catch(e){
+        laatsteFout=e;
+        if(poging<pogingen){
+          tgStatus(`⚠ ${actie} mislukt; opnieuw proberen (${poging+1}/${pogingen})…`, '#b8962e');
+          await new Promise(resolve=>setTimeout(resolve,vertragingMs*poging));
+        }
+      }
+    }
+    const melding=`${actie} is niet uitgevoerd in Toggl. Er is lokaal niets gewijzigd. ${laatsteFout.message}`;
+    tgStatus('❌ '+melding,'#c0392b');
+    alert('❌ '+melding+'\n\nControleer de verbinding en probeer deze actie opnieuw.');
+    throw laatsteFout;
+  }finally{
+    _tgMutatieBusy=false;
+  }
+}
 function tgEsc(s){return esc(s);}   // alias van de canonieke esc() bovenin — zelfde map, veel bestaande callers
 function tgSec2hms(sec){sec=Math.max(0,Math.round(sec));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
 function tgSec2u(sec){return (sec/3600).toFixed(1).replace('.',',')+'u';}
@@ -283,6 +315,8 @@ async function tgTimerSync(){
 function tgTimerPaint(){
   const btn=document.getElementById('tg-startstop'), clk=document.getElementById('tg-clock');
   if(!btn||!clk) return;
+  btn.disabled=_tgTimerBusy;
+  btn.title=_tgTimerBusy?'Timerwijziging wordt verwerkt…':'Start of stop timer';
   if(_tgTimer.tick){clearInterval(_tgTimer.tick);_tgTimer.tick=null;}
   if(_tgTimer.entry){
     const desc=document.getElementById('tg-desc'); if(desc&&document.activeElement!==desc) desc.value=_tgTimer.entry.description||'';
@@ -296,23 +330,43 @@ function tgTimerPaint(){
   }
 }
 async function tgTimerToggle(){
+  if(_tgTimerBusy){
+    tgStatus('⚠ Timerwijziging wordt nog verwerkt; wacht even.', '#b8962e');
+    return;
+  }
   if(_tgTimer.entry){
     if(!confirm('Lopende timer stoppen?')) return;
-    tgStatus('Timer stoppen…');
-    try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${_tgTimer.entry.id}/stop`,'PATCH');
-      _tgTimer.entry=null; tgTimerPaint(); tgStatus('✓ Timer gestopt.','#2A4A38'); tgLaadRecent();
-    }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+    _tgTimerBusy=true; tgTimerPaint(); tgStatus('Timer stoppen…');
+    try{
+      await tgMetRetry(
+        ()=>tgTrack(`workspaces/${TG_WS}/time_entries/${_tgTimer.entry.id}/stop`,'PATCH'),
+        {actie:'Timer stoppen'}
+      );
+      _tgTimer.entry=null; tgStatus('✓ Timer gestopt.','#2A4A38'); tgLaadRecent();
+    }catch(e){
+      // tgMetRetry heeft de definitieve Nederlandse foutmelding al getoond.
+    }finally{
+      _tgTimerBusy=false; tgTimerPaint();
+    }
   }else{
     const desc=document.getElementById('tg-desc').value.trim();
     const pid=document.getElementById('tg-proj-select').value;
     if(!confirm(`Nieuwe timer starten${desc?(' voor "'+desc+'"'):''}?`)) return;
-    tgStatus('Timer starten…');
     const body={created_with:'MT-cockpit',description:desc,workspace_id:TG_WS,
       start:new Date().toISOString().replace(/\.\d{3}Z$/,'Z'),duration:-1};
     if(pid) body.project_id=parseInt(pid);
-    try{ const made=await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body);
-      _tgTimer.entry=(made&&made.id)?made:null; tgTimerPaint(); tgStatus('✓ Timer loopt.','#2A4A38');
-    }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+    _tgTimerBusy=true; tgTimerPaint(); tgStatus('Timer starten…');
+    try{
+      const made=await tgMetRetry(
+        ()=>tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body),
+        {actie:'Timer starten'}
+      );
+      _tgTimer.entry=(made&&made.id)?made:null; tgStatus('✓ Timer loopt.','#2A4A38');
+    }catch(e){
+      // tgMetRetry heeft de definitieve Nederlandse foutmelding al getoond.
+    }finally{
+      _tgTimerBusy=false; tgTimerPaint();
+    }
   }
 }
 async function tgLaadRecent(){
@@ -414,10 +468,15 @@ async function tgEditEntry(i){
     if(!confirm('Entry opslaan in Toggl Track?')) return;
     tgStatus('Entry opslaan…');
     try{
-      await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'PUT',{description:desc,project_id:project_id,workspace_id:TG_WS});
+      await tgMetRetry(
+        ()=>tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'PUT',{description:desc,project_id:project_id,workspace_id:TG_WS}),
+        {actie:'Vergrendelde entry opslaan'}
+      );
       auditLog('unlock-edit',e.description||e.id,e.description,desc,reden);
       tgStatus('✓ Entry bijgewerkt.','#2A4A38'); tgLaadRecent();
-    }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
+    }catch(err){
+      // tgMetRetry heeft de definitieve Nederlandse foutmelding al getoond.
+    }
     return;
   }
   // Niet vergrendeld — normaal flow
@@ -431,10 +490,16 @@ async function tgEditEntry(i){
   else if(keuze&&act[parseInt(keuze)-1]) project_id=act[parseInt(keuze)-1].id;
   if(!confirm('Entry opslaan in Toggl Track?')) return;
   tgStatus('Entry opslaan…');
-  try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'PUT',{description:desc,project_id:project_id,workspace_id:TG_WS});
+  try{
+    await tgMetRetry(
+      ()=>tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'PUT',{description:desc,project_id:project_id,workspace_id:TG_WS}),
+      {actie:'Entry opslaan'}
+    );
     auditLog('uren-edit',e.description||e.id,e.description,desc,'');
     tgStatus('✓ Entry bijgewerkt.','#2A4A38'); tgLaadRecent();
-  }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
+  }catch(err){
+    // tgMetRetry heeft de definitieve Nederlandse foutmelding al getoond.
+  }
 }
 async function tgDelEntry(i){
   const e=_tgRecent[i]; if(!e) return;
@@ -449,18 +514,30 @@ async function tgDelEntry(i){
     if(reden===null||reden.trim()==='') return;
     if(!confirm(`Entry verwijderen?\n"${e.description||'(geen omschrijving)'}"`)) return;
     tgStatus('Entry verwijderen…');
-    try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'DELETE');
+    try{
+      await tgMetRetry(
+        ()=>tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'DELETE'),
+        {actie:'Vergrendelde entry verwijderen'}
+      );
       auditLog('unlock-delete',e.description||e.id,e.description,null,reden);
       tgStatus('✓ Entry verwijderd.','#2A4A38'); tgLaadRecent();
-    }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
+    }catch(err){
+      // tgMetRetry heeft de definitieve Nederlandse foutmelding al getoond.
+    }
     return;
   }
   if(!confirm(`Entry verwijderen?\n"${e.description||'(geen omschrijving)'}"`)) return;
   tgStatus('Entry verwijderen…');
-  try{ await tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'DELETE');
+  try{
+    await tgMetRetry(
+      ()=>tgTrack(`workspaces/${TG_WS}/time_entries/${e.id}`,'DELETE'),
+      {actie:'Entry verwijderen'}
+    );
     auditLog('uren-delete',e.description||e.id,e.description,null,'');
     tgStatus('✓ Entry verwijderd.','#2A4A38'); tgLaadRecent();
-  }catch(err){ tgStatus('❌ '+err.message,'#c0392b'); }
+  }catch(err){
+    // tgMetRetry heeft de definitieve Nederlandse foutmelding al getoond.
+  }
 }
 // Handmatige entry: datum + start + duur (minuten) + omschrijving + project.
 async function tgHandmatig(){
@@ -737,9 +814,9 @@ async function tgZetPriority(taskId){
   const p=TG_PRIO[parseInt(keuze)]; if(!p){ tgStatus('Ongeldige keuze.','#c0392b'); return; }
   if(!confirm(`Prioriteit → ${p.label} (Focus)?`)) return;
   tgStatus('Prioriteit zetten…');
-  try{ await focusFetch(`tasks/${taskId}`,'PATCH',{priority:p.v||null});
+  try{ await tgMetRetry(()=>focusFetch(`tasks/${taskId}`,'PATCH',{priority:p.v||null}),{actie:'Prioriteit zetten'});
     _tgCache.taken=null; tgStatus('✓ Prioriteit → '+p.label,'#2A4A38'); tgLaadTaken();
-  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgZetAssignee(taskId){
   await agNamen(); const {un}=agNames(); const ids=Object.keys(un);
@@ -752,43 +829,43 @@ async function tgZetAssignee(taskId){
   const namen=sel.map(id=>un[String(id)]).join(', ')||'niemand';
   if(!confirm(`Taak toewijzen aan ${namen} (Focus)?`)) return;
   tgStatus('Toewijzen…');
-  try{ await focusFetch(`tasks/${taskId}`,'PATCH',{assignee_user_ids:sel});
+  try{ await tgMetRetry(()=>focusFetch(`tasks/${taskId}`,'PATCH',{assignee_user_ids:sel}),{actie:'Toewijzen'});
     _tgCache.taken=null; tgStatus('✓ Toegewezen aan '+namen,'#2A4A38'); tgLaadTaken();
-  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgNieuweSubtaak(parentId){
   const naam=prompt('Naam van de subtaak (Focus):'); if(!naam) return;
   if(!confirm(`Subtaak "${naam}" toevoegen onder deze taak (Focus)?`)) return;
   tgStatus('Subtaak aanmaken…');
-  try{ await focusFetch('tasks','POST',{name:naam,status_id:300785,parent_task_id:parentId});
+  try{ await tgMetRetry(()=>focusFetch('tasks','POST',{name:naam,status_id:300785,parent_task_id:parentId}),{actie:'Subtaak aanmaken'});
     _tgCache.taken=null; tgStatus('✓ Subtaak aangemaakt.','#2A4A38'); tgLaadTaken();
-  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgHernoemTaak(taskId){
   const t=(_tgCache.taken||[]).find(x=>x.id===taskId);
   const naam=prompt('Nieuwe naam:',t?t.name:''); if(!naam||naam===(t&&t.name)) return;
   if(!confirm(`Taak hernoemen naar "${naam}" (Focus)?`)) return;
   tgStatus('Hernoemen…');
-  try{ await focusFetch(`tasks/${taskId}`,'PATCH',{name:naam});
+  try{ await tgMetRetry(()=>focusFetch(`tasks/${taskId}`,'PATCH',{name:naam}),{actie:'Taak hernoemen'});
     _tgCache.taken=null; tgStatus('✓ Hernoemd.','#2A4A38'); tgLaadTaken();
-  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgVerwijderTaak(taskId){
   const t=(_tgCache.taken||[]).find(x=>x.id===taskId);
   if(!confirm(`Taak "${t?t.name:taskId}" definitief verwijderen uit Toggl Focus?\nDit kan niet ongedaan worden.`)) return;
   tgStatus('Verwijderen…');
-  try{ await focusFetch(`tasks/${taskId}`,'DELETE');
+  try{ await tgMetRetry(()=>focusFetch(`tasks/${taskId}`,'DELETE'),{actie:'Taak verwijderen'});
     _tgCache.taken=null; tgStatus('✓ Taak verwijderd.','#2A4A38'); tgLaadTaken();
-  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgZetTaakStatus(taskId,statusId){
   if(!statusId) return;
   const lbl=tgStatusById(parseInt(statusId)).label;
   if(!confirm(`Taak-status → ${lbl} in Toggl Focus?`)){ tgLaadTaken(); return; }
   tgStatus('Status zetten…');
-  try{ await focusFetch(`tasks/${taskId}`,'PATCH',{status_id:parseInt(statusId)});
+  try{ await tgMetRetry(()=>focusFetch(`tasks/${taskId}`,'PATCH',{status_id:parseInt(statusId)}),{actie:'Status zetten'});
     _tgCache.taken=null; tgStatus(`✓ Status → ${lbl}`,'#2A4A38'); tgLaadTaken();
-  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgNieuweTaak(){
   const naam=prompt('Naam van de nieuwe taak (Focus):'); if(!naam) return;
@@ -800,9 +877,9 @@ async function tgNieuweTaak(){
   if(!confirm(`Taak "${naam}" aanmaken${project_id?' in gekozen project':''} (Focus)?`)) return;
   tgStatus('Taak aanmaken…');
   try{ const body=project_id?{name:naam,project_id}:{name:naam,status_id:300785};
-    await focusFetch('tasks','POST',body);
+    await tgMetRetry(()=>focusFetch('tasks','POST',body),{actie:'Taak aanmaken'});
     _tgCache.taken=null; tgStatus('✓ Taak aangemaakt.','#2A4A38'); tgLaadTaken();
-  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 
 // ── BOARD (Focus kanban) ──
@@ -842,9 +919,9 @@ async function tgDrop(ev){
   const d=_tgDrag; _tgDrag=null;
   if(!confirm(`Taak "${d.naam}" → ${lbl}?`)) return;
   tgStatus('Status zetten…');
-  try{ await focusFetch(`tasks/${d.id}`,'PATCH',{status_id:statusId});
+  try{ await tgMetRetry(()=>focusFetch(`tasks/${d.id}`,'PATCH',{status_id:statusId}),{actie:'Status zetten'});
     _tgCache.taken=null; tgStatus(`✓ "${d.naam}" → ${lbl}`,'#2A4A38'); tgLaadBoard();
-  }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  }catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 
 // ── REPORTS (Reports v3, alle medewerkers) ──
@@ -902,40 +979,40 @@ async function tgLaadBeheer(){
 async function tgVerwijderClient(id,naam){
   if(!confirm(`Client "${naam}" verwijderen uit Toggl Track?\nProjecten verliezen hun client-koppeling.`)) return;
   tgStatus('Client verwijderen…');
-  try{ await tgTrack(`workspaces/${TG_WS}/clients/${id}`,'DELETE'); tgStatus('✓ Client verwijderd.','#2A4A38'); tgLaadBeheer(); }
-  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  try{ await tgMetRetry(()=>tgTrack(`workspaces/${TG_WS}/clients/${id}`,'DELETE'),{actie:'Client verwijderen'}); tgStatus('✓ Client verwijderd.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgVerwijderTag(id,naam){
   if(!confirm(`Tag "${naam}" verwijderen uit Toggl Track?\nDe tag verdwijnt van alle entries.`)) return;
   tgStatus('Tag verwijderen…');
-  try{ await tgTrack(`workspaces/${TG_WS}/tags/${id}`,'DELETE'); tgStatus('✓ Tag verwijderd.','#2A4A38'); tgLaadBeheer(); }
-  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  try{ await tgMetRetry(()=>tgTrack(`workspaces/${TG_WS}/tags/${id}`,'DELETE'),{actie:'Tag verwijderen'}); tgStatus('✓ Tag verwijderd.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgRenameClient(id,huidig){
   const naam=prompt('Nieuwe clientnaam:',huidig||''); if(naam===null||!naam.trim()) return;
   if(!confirm(`Client hernoemen naar "${naam}"?`)) return;
   tgStatus('Client hernoemen…');
-  try{ await tgTrack(`workspaces/${TG_WS}/clients/${id}`,'PUT',{name:naam.trim(),wid:TG_WS}); tgStatus('✓ Client hernoemd.','#2A4A38'); tgLaadBeheer(); }
-  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  try{ await tgMetRetry(()=>tgTrack(`workspaces/${TG_WS}/clients/${id}`,'PUT',{name:naam.trim(),wid:TG_WS}),{actie:'Client hernoemen'}); tgStatus('✓ Client hernoemd.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgRenameTag(id,huidig){
   const naam=prompt('Nieuwe tagnaam:',huidig||''); if(naam===null||!naam.trim()) return;
   if(!confirm(`Tag hernoemen naar "${naam}"?`)) return;
   tgStatus('Tag hernoemen…');
-  try{ await tgTrack(`workspaces/${TG_WS}/tags/${id}`,'PUT',{name:naam.trim(),workspace_id:TG_WS}); tgStatus('✓ Tag hernoemd.','#2A4A38'); tgLaadBeheer(); }
-  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  try{ await tgMetRetry(()=>tgTrack(`workspaces/${TG_WS}/tags/${id}`,'PUT',{name:naam.trim(),workspace_id:TG_WS}),{actie:'Tag hernoemen'}); tgStatus('✓ Tag hernoemd.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgNieuweClient(){
   const naam=prompt('Naam van de nieuwe client (Track):'); if(!naam) return;
   if(!confirm(`Client "${naam}" aanmaken in Toggl Track?`)) return;
   tgStatus('Client aanmaken…');
-  try{ await tgTrack(`workspaces/${TG_WS}/clients`,'POST',{name:naam,wid:TG_WS}); tgStatus('✓ Client aangemaakt.','#2A4A38'); tgLaadBeheer(); }
-  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  try{ await tgMetRetry(()=>tgTrack(`workspaces/${TG_WS}/clients`,'POST',{name:naam,wid:TG_WS}),{actie:'Client aanmaken'}); tgStatus('✓ Client aangemaakt.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgNieuweTag(){
   const naam=prompt('Naam van de nieuwe tag (Track):'); if(!naam) return;
   if(!confirm(`Tag "${naam}" aanmaken in Toggl Track?`)) return;
   tgStatus('Tag aanmaken…');
-  try{ await tgTrack(`workspaces/${TG_WS}/tags`,'POST',{name:naam,workspace_id:TG_WS}); tgStatus('✓ Tag aangemaakt.','#2A4A38'); tgLaadBeheer(); }
-  catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
+  try{ await tgMetRetry(()=>tgTrack(`workspaces/${TG_WS}/tags`,'POST',{name:naam,workspace_id:TG_WS}),{actie:'Tag aanmaken'}); tgStatus('✓ Tag aangemaakt.','#2A4A38'); tgLaadBeheer(); }
+  catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }

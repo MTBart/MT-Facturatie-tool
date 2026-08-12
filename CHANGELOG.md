@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-08-12 — Sync-betrouwbaarheid: ETag-bescherming uitbreiden, geen lege writes, geschiedenis-archief
+- Commit: `11071e6` | Auteur: Bart Witte
+
 ## 2026-08-12 — Fix factuurketen: stille fouten, duplicaatcheck en dubbele verwijderfunctie
 - Commit: `847a6c6` | Auteur: Bart Witte
 

@@ -2983,6 +2983,7 @@ async function agSyncAlleMedewerkers(since,tot){
     firstRow+=PAGE;
   }
   const entries=agEntries(); let nieuw=0,n=0,fallback=0;
+  const remoteIds=new Set();
   for(const row of rows){
     // Nooit droppen: handmatige MT-koppeling > auto Toggl-naam > id-stub.
     const pc=pmap[row.project_id]||pn[row.project_id]||(row.project_id?('Toggl '+row.project_id):'(geen project)');
@@ -2991,14 +2992,25 @@ async function agSyncAlleMedewerkers(since,tot){
     const tes=Array.isArray(row.time_entries)?row.time_entries:[row];
     for(const te of tes){
       if(!te.stop) continue; n++;
+      remoteIds.add(String(te.id));
       nieuw+=agMergeEntry(entries,{id:'ag'+te.id,toggl_id:te.id,teamlid:tl,project_code:pc,
         taak_naam:row.description||null,omschrijving:row.description||'',start:te.start,stop:te.stop,
         duur:te.seconds!=null?te.seconds:(te.duration||0),datum:(te.start||'').slice(0,10)});
     }
   }
-  localStorage.setItem('mt_uren_entries',JSON.stringify(entries));
+  // Extern verwijderde entries ook lokaal opruimen: alleen binnen het gesyncte
+  // since/tot-venster, en alleen entries die al een toggl_id hadden (echte sync-hits).
+  const vanaf=new Date(since+'T00:00:00').getTime();
+  const totEnMet=new Date(tot+'T00:00:00').getTime()+864e5;
+  const bewaard=entries.filter(e=>{
+    const datum=e.datum||(e.start||'').slice(0,10);
+    const tijd=new Date(datum+'T00:00:00').getTime();
+    return !(e.toggl_id!=null&&tijd>=vanaf&&tijd<totEnMet&&!remoteIds.has(String(e.toggl_id)));
+  });
+  const verwijderd=entries.length-bewaard.length;
+  localStorage.setItem('mt_uren_entries',JSON.stringify(bewaard));
   localStorage.setItem('mt_toggl_last_sync',new Date().toISOString());
-  return {nieuw,verwerkt:n,fallback,bron:'alle-medewerkers'};
+  return {nieuw,verwerkt:n,fallback,verwijderd,bron:'alle-medewerkers'};
 }
 
 // Fallback — alleen Barts eigen entries, rechtstreeks Track v9 (werkt zonder Worker/MS-login).
@@ -3010,17 +3022,28 @@ async function agSyncEigen(since,tot){
     {headers:{'Authorization':'Basic '+btoa(token+':api_token'),'Content-Type':'application/json'}});
   if(!res.ok) throw new Error('Track HTTP '+res.status);
   const data=await res.json(); const entries=agEntries(); let nieuw=0,n=0;
+  const remoteIds=new Set();
   for(const te of (data||[])){
     if(!te.stop||te.duration<0) continue; n++;
+    remoteIds.add(String(te.id));
     const pc=pmap[te.project_id]||null, tl=umap[te.user_id]||null;
     if(!pc||!tl) continue;
     nieuw+=agMergeEntry(entries,{id:'ag'+te.id,toggl_id:te.id,teamlid:tl,project_code:pc,
       taak_naam:te.description||null,omschrijving:te.description||'',start:te.start,stop:te.stop,
       duur:te.duration,datum:te.start.slice(0,10)});
   }
-  localStorage.setItem('mt_uren_entries',JSON.stringify(entries));
+  // Extern verwijderde entries ook lokaal opruimen binnen het gesyncte venster.
+  const vanaf=new Date(since+'T00:00:00').getTime();
+  const totEnMet=new Date(tot+'T00:00:00').getTime()+864e5;
+  const bewaard=entries.filter(e=>{
+    const datum=e.datum||(e.start||'').slice(0,10);
+    const tijd=new Date(datum+'T00:00:00').getTime();
+    return !(e.toggl_id!=null&&tijd>=vanaf&&tijd<totEnMet&&!remoteIds.has(String(e.toggl_id)));
+  });
+  const verwijderd=entries.length-bewaard.length;
+  localStorage.setItem('mt_uren_entries',JSON.stringify(bewaard));
   localStorage.setItem('mt_toggl_last_sync',new Date().toISOString());
-  return {nieuw,verwerkt:n,bron:'eigen'};
+  return {nieuw,verwerkt:n,verwijderd,bron:'eigen'};
 }
 
 async function agendaSyncNu(){
@@ -3039,7 +3062,7 @@ async function agendaSyncNu(){
       r=await agSyncEigen(since,tot);
     }
     const extra=r.bron==='alle-medewerkers'?`alle medewerkers${r.fallback?`, ${r.fallback} via Toggl-naam (nog niet MT-gekoppeld)`:''}`:'alleen eigen uren';
-    if(st)st.textContent=`✓ ${r.nieuw} nieuw/bijgewerkt van ${r.verwerkt} (${extra})`;
+    if(st)st.textContent=`✓ ${r.nieuw} nieuw/bijgewerkt, ${r.verwijderd||0} lokaal opgeruimd, van ${r.verwerkt} (${extra})`;
     renderAgenda();
   }catch(err){
     if(st)st.textContent=`❌ Sync mislukt (${err.message}). Tip: log eerst in via Microsoft (knop rechtsboven).`;
