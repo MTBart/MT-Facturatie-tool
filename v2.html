@@ -1249,8 +1249,6 @@ button{transition:transform .07s ease,filter .07s ease}
           <div class="flex">
             <button class="btn btn-secondary btn-sm" onclick="showTab('verwerk',this)">Nieuwe factuur</button>
             <button class="btn btn-secondary btn-sm" onclick="showTab('controle',this)">Factuur controle</button>
-            <button class="btn btn-secondary btn-sm" onclick="showTab('cn',this)">CompaNanny-analyse</button>
-            <button class="btn btn-secondary btn-sm" id="btn-migratie" onclick="showTab('migratie',this)">Data-migratie</button>
           </div>
         </div>
       </div>
@@ -1258,9 +1256,12 @@ button{transition:transform .07s ease,filter .07s ease}
   </div>
 
   <!-- ── CN ANALYSE TAB ── -->
+  <!-- ═══ TAB: CN (GEARCHIVEERD) ═══ -->
+  <!-- CompaNanny-analyse: geen menu-ingang meer (verwijderd uit "Gearchiveerde schermen" in
+       Instellingen). Code blijft intact — niet verwijderen, alleen niet meer bereikbaar via UI. -->
   <div id="tab-cn" class="tab-content">
     <div class="card" style="max-width:900px">
-      <div class="card-title">Klantanalyse — keukens & commodes per vestiging</div>
+      <div class="card-title">Klantanalyse — keukens & commodes per vestiging <span style="font-size:11px;font-weight:400;color:var(--text-dim)">(gearchiveerd)</span></div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Zoek op (deel van) een bedrijfsnaam. Alle overeenkomende contacten worden samengevoegd.</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
         <input type="text" id="cn-zoekterm" value="compan" placeholder="bijv. compan" style="width:220px">
@@ -1955,10 +1956,10 @@ button{transition:transform .07s ease,filter .07s ease}
         <button class="btn btn-sm btn-secondary" onclick="inboxAgendaWeek(-1)">‹ vorige</button>
         <button class="btn btn-sm btn-secondary" onclick="_ibAg.weekOffset=0;inboxLoadAgenda()">vandaag</button>
         <button class="btn btn-sm btn-secondary" onclick="inboxAgendaWeek(1)">volgende ›</button>
-        <strong id="agenda-weeklabel" style="font-size:13px;margin-left:6px"></strong>
+        <strong id="ib-agenda-weeklabel" style="font-size:13px;margin-left:6px"></strong>
         <button class="btn btn-sm btn-secondary" style="margin-left:auto" onclick="inboxLoadAgenda()" title="Vernieuwen">⟳</button>
       </div>
-      <div id="agenda-grid" class="agenda-week"></div>
+      <div id="ib-agenda-grid" class="agenda-week"></div>
     </div>
 
     <div id="inbox-pane-taken" class="inbox-pane">
@@ -4248,7 +4249,7 @@ async function renderAttentie(){
   const toonVerwerkt=document.getElementById('attentie-toon-verwerkt')?.checked;
   let items=lijst.filter(c=>toonVerwerkt?true:c.status==='open');
   // sorteer op prioriteit (1=hoog eerst), daarna nieuwste eerst
-  items.sort((a,b)=>((Number(a.prioriteit)||3)-(Number(b.prioriteit)||3))||((b.ts||0)-(a.ts||0)));
+  items.sort((a,b)=>((Number(a.prioriteit)||3)-(Number(b.prioriteit)||3))||(new Date(b.ts||0)-new Date(a.ts||0)));
   const open=lijst.filter(c=>c.status==='open').length;
   const sub=document.getElementById('attentie-subtitel');
   if(sub) sub.textContent=open?`${open} ${open===1?'item vereist':'items vereisen'} je aandacht — gesorteerd op prioriteit.`:'Niets openstaand — alles afgehandeld. ✓';
@@ -7028,7 +7029,7 @@ async function openKlantDetail(contactId){
   if(!k) return;
   // Laad facturen van deze klant
   try{
-    const r=await mbGet(`${getAdmin()}/documents/purchase_invoices?filter=contact_id:${contactId}&per_page=25`);
+    const r=await mbGet(`${getAdmin()}/documents/sales_invoices?filter=contact_id:${contactId}&per_page=25`);
     const facturen=r.ok?await r.json():[];
     const naam=k.company_name||`${k.firstname||''} ${k.lastname||''}`.trim();
     // Toon in modal
@@ -9369,11 +9370,11 @@ const TAB_HELP={
   bestelling:{naam:'Bestellijst',uitleg:'Wat besteld moet worden, per leverancier. Vanaf hier groeit de inkoopketen: bestelling → factuur → voorraad → nacalculatie.'},
   klanten:{naam:'Klanten',uitleg:'De volledige klantregistry uit Moneybird (650+), met zoekfunctie en de klant-codes die in projectcodes terugkomen. Eigen code-keuzes worden onthouden en gesynct.'},
   historie:{naam:'Geschiedenis',uitleg:'Alles wat verwerkt is: ingelezen facturen, aangemaakte projecten en eerdere acties, terug te zoeken op datum en naam.'},
-  instellingen:{naam:'Instellingen',uitleg:'Sync-status (SharePoint), en de ingangen naar Nieuwe factuur, Factuurcontrole, CompaNanny-analyse en Data-migratie.'},
+  instellingen:{naam:'Instellingen',uitleg:'Sync-status (SharePoint), en de ingangen naar Nieuwe factuur en Factuurcontrole.'},
   verwerk:{naam:'Nieuwe factuur',uitleg:'Upload of kies een factuur-PDF; Claude leest leverancier, regels en bedragen uit en zet alles klaar voor Moneybird. Jij controleert en bevestigt — er wordt nooit zonder jou geboekt.'},
   controle:{naam:'Factuurcontrole',uitleg:'Vergelijkt onze uitgelezen factuurregels met wat er in Moneybird staat en markeert verschillen, zodat foute autoherkenning eruit gevist wordt.'},
-  cn:{naam:'CompaNanny-analyse',uitleg:'Aparte analyse voor CompaNanny: omzet en facturen per locatie (53 locatie-contacten in Moneybird).'},
-  migratie:{naam:'Data-migratie',uitleg:'Eenmalige hulpmiddelen om oude data naar de nieuwe structuur te verhuizen. Alleen gebruiken als je weet wat je doet.'}
+  cn:{naam:'CompaNanny-analyse (gearchiveerd)',uitleg:'Aparte analyse voor CompaNanny: omzet en facturen per locatie (53 locatie-contacten in Moneybird). Geen menu-ingang meer, code blijft staan.'},
+  migratie:{naam:'Data-migratie (gearchiveerd)',uitleg:'Eenmalige hulpmiddelen om oude data naar de nieuwe structuur te verhuizen. Buiten gebruik, geen menu-ingang meer.'}
 };
 function helpActieveTab(){const el=document.querySelector('.tab-content.active');return el?el.id.replace('tab-',''):'?';}
 

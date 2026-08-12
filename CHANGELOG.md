@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-08-12 — fix(uren): Toggl-fouten blokkeren, timer-race-guard, cache-cleanup bij sync
+- Commit: `c8c4c43` | Auteur: Bart Witte
+
 ## 2026-08-12 — Sync-betrouwbaarheid: ETag-bescherming uitbreiden, geen lege writes, geschiedenis-archief
 - Commit: `11071e6` | Auteur: Bart Witte
 
