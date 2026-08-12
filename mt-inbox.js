@@ -579,7 +579,7 @@ function inboxMaakProject(){
       : `Afzender niet in klant-registry — vul de klantnaam zelf in.`;
   }
 }
-// ── Mail ↔ project-koppeling (localStorage, device-lokaal; géén PII in repo) ──
+// ── Mail ↔ project-koppeling (localStorage + privé SharePoint-sync; géén PII in repo) ──
 function mailLinksAll(){try{return JSON.parse(localStorage.getItem('mt_mail_links')||'{}');}catch(e){return {};}}
 function mailLinksSave(o){localStorage.setItem('mt_mail_links',JSON.stringify(o));}
 function mailLinksVoor(code){return mailLinksAll()[code]||[];}

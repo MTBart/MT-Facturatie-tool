@@ -170,7 +170,7 @@
         return await r.json();
       },
 
-      async write(filename, data) {
+      async write(filename, data, conflictMerge) {
         try {
           const { base, token } = await this._driveBase();
           const key = filename.replace(/\.json$/, '');
@@ -181,7 +181,7 @@
           const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
             { method: 'PUT', headers, body });
           // S1: 412 = SP-versie nieuwer dan onze ETag → re-read, mergen, herschrijven.
-          if (r.status === 412 && useEtag) return await this._resolveConflict(filename, data);
+          if (r.status === 412 && useEtag) return await this._resolveConflict(filename, data, conflictMerge);
           if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; }
           if (trackLastSync) this.lastSync = { ts: Date.now(), ok: r.ok, key: filename, error: r.ok ? null : `HTTP ${r.status}` };
           if (!r.ok) console.warn('SP write faalde:', filename, 'HTTP', r.status);
@@ -201,7 +201,7 @@
       // toast + write laten vallen; volgende schedule/flush herprobeert.
       // NB (mobiel): een 412 gaat bewust NIET terug in _RQ — dat zou dezelfde bytes
       // in een oneindige retry-loop zetten. De caller regelt dat; hier één keer.
-      async _resolveConflict(filename, localData) {
+      async _resolveConflict(filename, localData, conflictMerge) {
         let remote;
         try { remote = await this.read(filename); }   // ververst _etags[filename]
         catch (e) {
@@ -213,7 +213,12 @@
         const local = (typeof localData === 'string')
           ? (() => { try { return JSON.parse(localData); } catch (e) { return localData; } })()
           : localData;
-        const merged = this._mergeById(remote, local);
+        // Een caller kan bij een read-merge-write slechts één gewijzigd record
+        // kennen. Gebruik dan die gerichte merge, zodat oude lokale kopieën van
+        // andere records nooit een gelijktijdige serverwijziging terugdraaien.
+        const merged = typeof conflictMerge === 'function'
+          ? conflictMerge(remote, local)
+          : this._mergeById(remote, local);
         if (merged === null) {
           const key = filename.replace(/\.json$/, '');
           console.warn('SP 412 op', key, '— niet-mergebare vorm, write overgeslagen (herlaad → verse write)');

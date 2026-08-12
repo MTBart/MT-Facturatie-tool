@@ -1111,7 +1111,6 @@ button{transition:transform .07s ease,filter .07s ease}
       <div class="card-title">Verwerkte facturen</div>
       <div class="flex" style="margin-bottom:1rem">
         <input type="text" placeholder="🔍 Zoek op leverancier, project of datum..." oninput="zoekGeschiedenis(this.value)" style="max-width:340px">
-        <button class="btn btn-danger btn-sm" onclick="if(confirm('Geschiedenis wissen?')){localStorage.removeItem('mt_history');renderHistory()}">Wissen</button>
       </div>
       <div id="history-list" style="font-size:13px;color:var(--text-dim)">Nog geen facturen verwerkt.</div>
     </div>
@@ -3504,7 +3503,12 @@ async function boekInMoneybirdOud(){
     status.innerHTML=`✓ Geboekt — <strong>betaal voor ${fmtDatum(payDateStr)}</strong>${voorraadRegels.length?` · 📦 ${voorraadRegels.length} voorraad`:''}`;
     const histItem={id:invoiceId,contact,ref,date,due,payDate:payDateStr,project:hoofdProject,totaal:document.getElementById('totaal-incl').textContent,ts:Date.now()};
     const hist=JSON.parse(localStorage.getItem('mt_history')||'[]');hist.unshift(histItem);
-    localStorage.setItem('mt_history',JSON.stringify(hist.slice(0,500)));
+    if(hist.length>500){
+      const archief=JSON.parse(localStorage.getItem('mt_history_archive')||'[]');
+      archief.push(...hist.splice(500));
+      localStorage.setItem('mt_history_archive',JSON.stringify(archief));
+    }
+    localStorage.setItem('mt_history',JSON.stringify(hist));
     // Mail verplaatsen naar "Facturen verwerkt" als hij uit mail geladen was
     if (_huidigMailId) { verplaatsMailNaarVerwerkt(_huidigMailId); _huidigMailId = null; scanEmailFacturen(true); }
     try{ if(window.track) track('action','factuur_boeken',{detail:hoofdProject?('proj:'+hoofdProject):'geen_project',ok:true}); }catch(e){}
@@ -3565,7 +3569,13 @@ async function boekInMoneybird(){
     if(due){try{const dD=new Date(due),pD=new Date(dD);pD.setDate(pD.getDate()-1);const note=await mbPost(`${getAdmin()}/documents/purchase_invoices/${voortgang.invoiceId}/notes`,{note:{note:`Betalen voor: ${pD.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}`}});if(!note.ok)throw new Error(`HTTP ${note.status}`);}catch(e){status.innerHTML=`<span style="color:var(--orange)">⚠ Factuur is geboekt en de PDF is opgeslagen, maar betaalnotitie opslaan mislukte: ${e.message}</span>`;return;}}
     voorraadRegels.forEach(r=>slaVoorraadOp(r));let payDateStr='';if(due){const d=new Date(due);d.setDate(d.getDate()-1);payDateStr=d.toISOString().split('T')[0];}
     status.innerHTML=`✓ Geboekt — <strong>betaal voor ${fmtDatum(payDateStr)}</strong>${voorraadRegels.length?` · 📦 ${voorraadRegels.length} voorraad`:''}`;
-    const hist=JSON.parse(localStorage.getItem('mt_history')||'[]');hist.unshift({id:voortgang.invoiceId,contact,ref,date,due,payDate:payDateStr,project:hoofdProject,totaal:document.getElementById('totaal-incl').textContent,ts:Date.now()});localStorage.setItem('mt_history',JSON.stringify(hist.slice(0,500)));
+    const hist=JSON.parse(localStorage.getItem('mt_history')||'[]');hist.unshift({id:voortgang.invoiceId,contact,ref,date,due,payDate:payDateStr,project:hoofdProject,totaal:document.getElementById('totaal-incl').textContent,ts:Date.now()});
+    if(hist.length>500){
+      const archief=JSON.parse(localStorage.getItem('mt_history_archive')||'[]');
+      archief.push(...hist.splice(500));
+      localStorage.setItem('mt_history_archive',JSON.stringify(archief));
+    }
+    localStorage.setItem('mt_history',JSON.stringify(hist));
     _factuurBoekVoortgang=null;try{if(window.track)track('action','factuur_boeken',{detail:hoofdProject?('proj:'+hoofdProject):'geen_project',ok:true});}catch(e){}
     setTimeout(()=>{resetFormulier();status.innerHTML=`✓ Klaar — <a href="https://moneybird.com/${getAdmin()}/documents/${voortgang.invoiceId}/payment_initiations/new" target="_blank" style="color:var(--green)">💳 Betaling inplannen →</a>`;},1500);
   }catch(e){status.textContent=`✕ ${e.message}`;try{if(window.track)track('action','factuur_boeken',{detail:'exception',ok:false});}catch(_){}}
@@ -4281,11 +4291,17 @@ async function _verwerkAttentie(id,nieuweStatus){
   // pijplijn-consumer NIET blind auto-uitvoert maar het aan Larry overlaat.
   const ta=document.querySelector('textarea[data-att-id="'+((window.CSS&&CSS.escape)?CSS.escape(id):id)+'"]');
   const reactie=ta?(ta.value||'').trim():'';
-  if(reactie){ c.reactie=reactie; c.gereageerd_op=new Date().toISOString(); c.larry_afhandeling=true; }
-  c.status=nieuweStatus;
-  c.verwerkt_op=new Date().toISOString();
-  c.verwerkt_door=nieuweStatus==='verwerkt'?'bart-handmatig':'cockpit';
-  const ok=await _SP.write('mt_attentie.json',lijst);
+  const attentiePatch={status:nieuweStatus,verwerkt_op:new Date().toISOString(),verwerkt_door:nieuweStatus==='verwerkt'?'bart-handmatig':'cockpit'};
+  if(reactie){ attentiePatch.reactie=reactie; attentiePatch.gereageerd_op=new Date().toISOString(); attentiePatch.larry_afhandeling=true; }
+  Object.assign(c,attentiePatch);
+  // Bij een 412 alleen dit ene aandachtspunt opnieuw toepassen op de verse
+  // serverlijst. Zo kan een reactie op item A nooit een wijziging aan item B wissen.
+  const ok=await _SP.write('mt_attentie.json',lijst,(serverLijst)=>{
+    if(!Array.isArray(serverLijst)) return null;
+    const serverItem=serverLijst.find(x=>String(x.id)===String(id));
+    if(!serverItem||serverItem.status!=='open') return null;
+    return serverLijst.map(x=>String(x.id)===String(id)?Object.assign({},x,attentiePatch):x);
+  });
   if(!ok){ planToast('Opslaan mislukt — probeer opnieuw'); return; }
   const toasts={akkoord:reactie?'✓ Reactie genoteerd — Larry pakt het zo aan':'✓ Akkoord — op de stapel; Larry verwerkt het',verwerkt:'✓ Genoteerd als zelf gecorrigeerd',afgewezen:'Afgewezen'};
   planToast(toasts[nieuweStatus]||'Bijgewerkt');
@@ -7473,11 +7489,13 @@ const _SP = Object.assign(window.MTCore.makeSP({
   toast: (m) => { if (typeof planToast === 'function') planToast(m); },
   onSyncStatus: () => { if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus(); },
   trackLastSync: true,
-  etagKeys: new Set(['mt_planning']),
+  // Alle auto-gesynchroniseerde gegevens gebruiken ETags: bij een gelijktijdige
+  // wijziging wordt veilig gemerged, of de gebruiker krijgt een zichtbare melding.
+  etagKeys: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_attentie']),
 }), {
   // mt_mail_links synct mee zodat mail↔project-koppelingen op élke PC zichtbaar zijn.
   // Opslag = privé SharePoint-tenant (alleen @mortiseandtenon.nl), NOOIT de publieke git-repo.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map']),
   _q: {},
   ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
   blockedKeys: new Set(),   // keys waarvan de hydrate FAALDE (≠ 404) → auto-sync uit tot herladen (anti-clobber)
@@ -7487,8 +7505,19 @@ const _SP = Object.assign(window.MTCore.makeSP({
     if (this.blockedKeys.has(key)) { console.warn('SP auto-sync geblokkeerd voor', key, '(hydrate faalde — herlaad de pagina)'); return; }
     clearTimeout(this._q[key]);
     this._q[key] = setTimeout(async () => {
-      if (rawValue === null) { await this.write(key + '.json', '[]'); return; }
-      try { await this.write(key + '.json', JSON.parse(rawValue)); }
+      const tekst=rawValue===null?'':String(rawValue).trim();
+      let data;
+      try{ data=JSON.parse(tekst); }catch(e){ data=undefined; }
+      const leeg=rawValue===null||tekst===''||data===null||(Array.isArray(data)&&!data.length)||(data&&typeof data==='object'&&!Array.isArray(data)&&!Object.keys(data).length);
+      if(leeg){
+        const melding='Lege sync voor '+key+' geblokkeerd — gedeelde gegevens zijn niet gewist';
+        console.warn(melding);
+        this.lastSync={ts:Date.now(),ok:false,key,error:melding};
+        if(typeof window.updateSyncStatus==='function') window.updateSyncStatus();
+        if(typeof planToast==='function') planToast('⚠ '+melding);
+        return;
+      }
+      try { await this.write(key + '.json', data===undefined?rawValue:data); }
       catch(e) { await this.write(key + '.json', rawValue); }
     }, 2000);
   },
