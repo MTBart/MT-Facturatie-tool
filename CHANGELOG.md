@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-09-08 — Offertes: sync werkte niet omdat _SP niet op window staat
+- Commit: `d18b6e0` | Auteur: Bart Witte
+
 ## 2026-09-08 — Offertes: einde aan stil gegevensverlies in de calculatiemodule
 - Commit: `ea8a389` | Auteur: Bart Witte
 

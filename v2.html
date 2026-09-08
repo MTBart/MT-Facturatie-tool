@@ -8523,6 +8523,43 @@ window.spUploadProjectBytes = async function(proj, naam, bytes, contentType, sub
   return { id: item.id, webUrl: item.webUrl, naam: veilig, grootte: item.size || 0 };
 };
 
+// Zelfde als hierboven, maar naar een vrij pad op de On-Prem-Data-drive. Nodig voor
+// offertes die (nog) géén project hebben: die horen niet in een projectmap thuis.
+window.spUploadPadBytes = async function(mapPad, naam, bytes, contentType) {
+  const token = await window.getGraphToken();
+  if (!token) throw new Error('Niet ingelogd op Microsoft 365');
+  const veilig = String(naam||'bestand').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'bestand';
+  const url = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(mapPad+'/'+veilig)}:/content?@microsoft.graph.conflictBehavior=replace`;
+  const r = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': contentType || 'application/octet-stream' },
+    body: bytes
+  });
+  if (!r.ok) { const txt = await r.text().catch(()=> ''); throw new Error(`upload HTTP ${r.status}: ${txt.slice(0,160)}`); }
+  const item = await r.json();
+  return { id: item.id, webUrl: item.webUrl, naam: veilig, grootte: item.size || 0 };
+};
+
+// Bestand van de On-Prem-Data-drive lezen als tekst; null als het er niet is.
+window.spLeesPadTekst = async function(pad) {
+  const token = await window.getGraphToken();
+  if (!token) throw new Error('Niet ingelogd op Microsoft 365');
+  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(pad)}:/content`,
+    { headers: { 'Authorization': `Bearer ${token}` } });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`lezen HTTP ${r.status}`);
+  return await r.text();
+};
+
+// Verwijderen gaat naar de SharePoint-prullenbak (93 dagen terug te halen), niet definitief.
+window.spVerwijderPad = async function(pad) {
+  const token = await window.getGraphToken();
+  if (!token) throw new Error('Niet ingelogd op Microsoft 365');
+  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(pad)}`,
+    { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+  return r.ok || r.status === 404;
+};
+
 // PDF ophalen van SharePoint → blob URL (of null als niet gevonden)
 window.spGetPDF = async function(filename) {
   try {
@@ -10137,9 +10174,16 @@ function activiteitOpen(force){
         else calcStatus('⚠ Lokaal bewaard, maar niet op SharePoint: '+r.reden+'. Sla op in de projectmap.','fout',opts.key);
       });
     }
+    // Ook de leesbare bestanden in de map bijwerken — met pauze en rusttijd, zie planMapOpslag.
+    if(which==='off') planMapOpslag();
     return true;
   }
-  window.saveCalcNu=function(key){ saveCalc('off',{key:key,direct:true}); };
+  window.saveCalcNu=function(key){
+    if(!saveCalc('off',{key:key,direct:true})) return;
+    // De knop wacht niet op de pauze: het leesbare bestandenpaar gaat er meteen heen.
+    _schrijfOfferteNaarMap(key,{melden:true})
+      .catch(e=>calcStatus('⚠ Lokaal bewaard, maar wegschrijven naar de map mislukt: '+(e.message||e),'fout',key));
+  };
 
   async function hydrateCalc(){
     if(CALC.loaded) return;
@@ -10850,26 +10894,208 @@ function activiteitOpen(force){
   };
   window.calcOntkoppelMail=function(key){ const o=getOfferte(key); delete o.mail_context; saveCalc('off'); renderOfferteCalc(key); _toonMailNaast(key); };
 
-  // ── Offerte opslaan in de projectmap (07_Administratie, idempotent) ────────
+  // ══ Automatisch wegschrijven naar de map, leesbaar zónder deze tool ═══════════
+  // mt_calc_offertes.json is één technisch syncbestand met álle offertes door elkaar;
+  // daar kun je buiten de tool niets mee. Per offerte gaan er daarom twee bestanden
+  // onder een vaste naam de map in:
+  //   Offerte-<CODE>.xlsx  — in Excel te openen, mét formules zodat je erin kunt rekenen
+  //   Offerte-<CODE>.json  — dezelfde gegevens exact, om terug te kunnen lezen
+  // Vaste naam + conflictBehavior=replace: SharePoint houdt zelf de versiegeschiedenis
+  // bij en de map loopt niet vol met tientallen tijdstempels.
+  const LOSSE_ROOT='Nieuwe mappenstructuur';
+  const LOSSE_MAP='Nog te rubriceren offertes';    // offertes zonder project
+  const VERSIE_MAP='_offerte-versies';             // vangnet bij een instorting
+  const MAP_STATE='mt_calc_map_state';             // per pc, hoort niet in de sync
+  const MAP_PAUZE=10000;                           // pas schrijven na 10 s stilte
+  const MAP_RUST=180000;                           // hoogstens 1× per 3 min per offerte
+  const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  let _mapTimer=null,_mapBezig=false,_mapLosPad=null;
+
+  const _mapState=()=>lsLoad(MAP_STATE,{})||{};
+  function _mapStateSet(key,val){ const s=_mapState(); s[key]=Object.assign({},s[key],val); lsSave(MAP_STATE,s); }
+  function _hash(s){ let h=5381; for(let i=0;i<s.length;i++) h=((h*33)^s.charCodeAt(i))>>>0; return h.toString(36); }
+  // Maat voor "hoeveel werk zit hierin" — dezelfde die de samenvoeger gebruikt.
+  function _gevuldeRegels(o){
+    return ['materiaal','uren'].reduce((tot,veld)=>tot+((o&&o[veld])||[])
+      .filter(r=>String((r&&r.omschrijving)||'').trim()).length,0);
+  }
+
+  function _offerteDump(o,code){
+    const t=totalen(o);
+    return { type:'mt-offerte-calculatie', code:code, titel:o.titel||'', datum:new Date().toISOString().slice(0,10),
+      offerte_tekst:(o.meta&&o.meta.offerte_tekst)||'', moneybird_estimate_id:o.mb_estimate_id||null,
+      offertebedrag_excl_btw:t.offertebedrag, materiaal_inkoop:t.mInk, materiaal_verkoop:t.mVerk,
+      uren_kost:t.uKost, uren_verkoop:t.uVerk, kostprijs:t.kostprijs, brutowinst:t.brutowinst, marge:t.marge,
+      materiaal:o.materiaal, uren:o.uren, meta:o.meta };
+  }
+
+  // Excel-werkboek van één calculatie. SheetJS zit al in de tool (vendor/xlsx.full.min.js)
+  // voor het lézen van Vectorworks-exports; hier schrijven we ermee — geen nieuw pakket.
+  // De bedragen zijn échte formules, dus in Excel kun je een aantal aanpassen en zien
+  // wat het doet zonder de tool erbij te halen.
+  function _offerteWerkboek(o,code){
+    if(typeof XLSX==='undefined') throw new Error('Excel-bibliotheek nog niet geladen — probeer het over een paar seconden opnieuw');
+    const R=[], zet=r=>R.push(r)-1, EUR='#,##0.00', PCT='0.0%', t=totalen(o);
+    zet(['Calculatie',code]);
+    zet(['Titel',o.titel||'']);
+    zet(['Project',o.project_code||'(nog geen project)']);
+    zet(['Status',(o.meta&&o.meta.status)||'']);
+    zet(['Weggeschreven',new Date().toLocaleString('nl-NL')]);
+    zet(['Let op','Dit bestand wordt door de offertetool overschreven. Wil je er zelf in rekenen, maak dan eerst een kopie.']);
+    zet([]);
+    zet(['MATERIAAL']);
+    const mKop=zet(['Omschrijving','Artikel','Aantal','Inkoop p/st','Marge','Inkoop totaal','Verkoop']);
+    (o.materiaal||[]).forEach(m=>{const r=mRow(m);
+      zet([m.omschrijving||'',m.artikel||'',n(m.aantal)||0,n(m.inkoop_stuk)||0,(n(m.marge)==null?1:n(m.marge)),r.inkoop,r.verkoop]);});
+    const mEind=R.length-1, mTot=zet(['Totaal materiaal','','','','',t.mInk,t.mVerk]);
+    zet([]);
+    zet(['UREN']);
+    const uKop=zet(['Omschrijving','Uren','Uurtarief','Marge','Kostprijs','Verkoop']);
+    (o.uren||[]).forEach(u=>{const r=uRow(u);
+      zet([u.omschrijving||'',n(u.uren)||0,n(u.uurtarief)||0,(n(u.marge)==null?1:n(u.marge)),r.kost,r.verkoop]);});
+    const uEind=R.length-1, uTot=zet(['Totaal uren','','','',t.uKost,t.uVerk]);
+    zet([]);
+    zet(['TOTALEN']);
+    const rKost=zet(['Kostprijs',t.kostprijs]), rBedr=zet(['Offertebedrag excl. btw',t.offertebedrag]),
+          rWinst=zet(['Brutowinst',t.brutowinst]), rMarge=zet(['Marge',t.marge||0]);
+
+    const ws=XLSX.utils.aoa_to_sheet(R);
+    const rij=i=>i+1;                                        // 0-based rij → Excel-rijnummer
+    // De uitgerekende waarde staat er al in; hier komt de formule ernaast. Zonder
+    // waarde schrijft SheetJS de cel niet weg, en dan zou een viewer niets tonen.
+    const form=(k,i,f,z)=>{ const c=ws[k+rij(i)]; if(!c) return; c.f=f; if(z) c.z=z; };
+    const fmt =(k,i,z)=>{ const c=ws[k+rij(i)]; if(c) c.z=z; };
+    for(let i=mKop+1;i<=mEind;i++){
+      form('F',i,`C${rij(i)}*D${rij(i)}`,EUR);
+      form('G',i,`F${rij(i)}*E${rij(i)}`,EUR);
+      fmt('D',i,EUR);
+    }
+    form('F',mTot,(mEind>mKop)?`SUM(F${rij(mKop+1)}:F${rij(mEind)})`:'0',EUR);
+    form('G',mTot,(mEind>mKop)?`SUM(G${rij(mKop+1)}:G${rij(mEind)})`:'0',EUR);
+    for(let i=uKop+1;i<=uEind;i++){
+      form('E',i,`B${rij(i)}*C${rij(i)}`,EUR);
+      form('F',i,`E${rij(i)}*D${rij(i)}`,EUR);
+      fmt('C',i,EUR);
+    }
+    form('E',uTot,(uEind>uKop)?`SUM(E${rij(uKop+1)}:E${rij(uEind)})`:'0',EUR);
+    form('F',uTot,(uEind>uKop)?`SUM(F${rij(uKop+1)}:F${rij(uEind)})`:'0',EUR);
+    form('B',rKost ,`F${rij(mTot)}+E${rij(uTot)}`,EUR);
+    form('B',rBedr ,`G${rij(mTot)}+F${rij(uTot)}`,EUR);
+    form('B',rWinst,`B${rij(rBedr)}-B${rij(rKost)}`,EUR);
+    form('B',rMarge,`IF(B${rij(rBedr)}=0,0,B${rij(rWinst)}/B${rij(rBedr)})`,PCT);
+    ws['!cols']=[{wch:52},{wch:18},{wch:11},{wch:13},{wch:8},{wch:14},{wch:14}];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Calculatie');
+    const wt=XLSX.utils.aoa_to_sheet([['Offertetekst']].concat(
+      String((o.meta&&o.meta.offerte_tekst)||'').split(/\r?\n/).map(r=>[r])));
+    wt['!cols']=[{wch:110}];
+    XLSX.utils.book_append_sheet(wb,wt,'Offertetekst');
+    // De ruwe gegevens erbij, in stukken van 30.000 tekens (een cel houdt er 32.767).
+    // Hiermee is de calculatie ook uit het werkboek alleen weer terug te lezen.
+    const ruw=JSON.stringify(_offerteDump(o,code)), brok=[['Ruwe gegevens (JSON) — niet met de hand aanpassen']];
+    for(let i=0;i<ruw.length;i+=30000) brok.push([ruw.slice(i,i+30000)]);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(brok),'Gegevens');
+    return XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  }
+
+  // Offertes zonder project horen niet in een projectmap; die krijgen een eigen map
+  // naast de klantmappen, zodat ze zichtbaar zijn en later gerubriceerd kunnen worden.
+  async function _losseMap(){
+    if(_mapLosPad) return _mapLosPad;
+    _mapLosPad=LOSSE_ROOT+'/'+(await _SP.ensureFolder(LOSSE_ROOT,LOSSE_MAP,false));
+    return _mapLosPad;
+  }
+
+  // Vangnet: de bestaande versie apart wegzetten vóór hij overschreven wordt.
+  async function _parkeerVorige(mapPad,code){
+    const tekst=await window.spLeesPadTekst(mapPad+'/Offerte-'+code+'.json');
+    if(!tekst) return false;
+    const nu=new Date(), tt=v=>String(v).padStart(2,'0');
+    const stempel=nu.toISOString().slice(0,10)+'-'+tt(nu.getHours())+tt(nu.getMinutes());
+    const vPad=mapPad+'/'+(await _SP.ensureFolder(mapPad,VERSIE_MAP,false));
+    await window.spUploadPadBytes(vPad,'Offerte-'+code+'-'+stempel+'.json',new TextEncoder().encode(tekst),'application/json');
+    try{ await window.spUploadPadBytes(vPad,'Offerte-'+code+'-'+stempel+'.xlsx',_offerteWerkboek(JSON.parse(tekst),code),XLSX_MIME); }catch(e){}
+    return true;
+  }
+
+  function _mapMelding(key,tekst,res){
+    calcStatus(tekst,'ok',key);
+    const st=key&&document.getElementById('calc-status-'+cid(key));
+    if(st&&res&&res.webUrl) st.innerHTML=esc(tekst)+' <a href="'+esc(res.webUrl)+'" target="_blank" style="color:var(--gold)">📄 '+esc(res.naam)+'</a>';
+  }
+
+  // Het hart: één offerte als .xlsx + .json naar zijn map.
+  async function _schrijfOfferteNaarMap(key,opts){
+    opts=opts||{};
+    const o=CALC.offertes[key];
+    if(!o) throw new Error('offerte '+key+' bestaat niet');
+    if(typeof window.spUploadPadBytes!=='function') throw new Error('niet beschikbaar in deze weergave');
+    const proj=opts.proj||((typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===key||p.code===o.project_code):null);
+    const code=(proj&&proj.code)||o.project_code||key;
+    if(opts.melden) calcStatus(proj?'Naar de projectmap schrijven…':'Naar de map "'+LOSSE_MAP+'" schrijven…','bezig',key);
+    const mapPad=proj ? (await window.genereerProjectMappen(proj))+'/07_Administratie' : await _losseMap();
+    const gevuld=_gevuldeRegels(o), vorig=_mapState()[key]||{};
+    // Instortingsbewaking: valt de inhoud in één keer meer dan de helft terug, dan gaat
+    // de vorige versie eerst apart weg. Zo is een lege hersave nooit het einde van een
+    // offerte — ook niet als de versiegeschiedenis van SharePoint uit zou staan.
+    let geparkeerd=false;
+    if(vorig.gevuld>0 && gevuld*2<vorig.gevuld && vorig.pad===mapPad){
+      try{ geparkeerd=await _parkeerVorige(mapPad,code); }
+      catch(e){ console.warn('vorige versie parkeren mislukt:',e); }
+    }
+    const dump=_offerteDump(o,code), basis='Offerte-'+code;
+    const res=await window.spUploadPadBytes(mapPad,basis+'.xlsx',_offerteWerkboek(o,code),XLSX_MIME);
+    await window.spUploadPadBytes(mapPad,basis+'.json',new TextEncoder().encode(JSON.stringify(dump,null,2)),'application/json');
+    _mapStateSet(key,{hash:_hash(JSON.stringify(dump)),tijd:Date.now(),gevuld:gevuld,pad:mapPad,code:code,fout:null});
+    // Kreeg deze offerte zojuist een project? Dan mag de losse kopie weg — pas nu, ná
+    // een geslaagde schrijfactie in de projectmap. Verwijderen = SharePoint-prullenbak.
+    if(proj && vorig.pad && vorig.pad!==mapPad && /\/[^/]*$/.test(vorig.pad) && vorig.pad.slice(vorig.pad.lastIndexOf('/')+1)===LOSSE_MAP){
+      try{
+        await window.spVerwijderPad(vorig.pad+'/Offerte-'+(vorig.code||code)+'.xlsx');
+        await window.spVerwijderPad(vorig.pad+'/Offerte-'+(vorig.code||code)+'.json');
+      }catch(e){ console.warn('losse kopie opruimen mislukt:',e); }
+    }
+    if(geparkeerd) calcStatus('⚠ De calculatie is sterk gekrompen. De vorige versie staat nu in '+VERSIE_MAP+'.','fout',key);
+    else if(opts.melden) _mapMelding(key,'✓ Ook weggeschreven als '+basis+'.xlsx',res);
+    return res;
+  }
+  window.calcNaarMapNu=key=>_schrijfOfferteNaarMap(key,{melden:true});
+
+  // Planner: schrijven ná 10 s stilte, hoogstens eens per 3 minuten per offerte, en
+  // één offerte per beurt — anders vertrekken er bij het openen elf uploads tegelijk.
+  function planMapOpslag(){ clearTimeout(_mapTimer); _mapTimer=setTimeout(_mapTick,MAP_PAUZE); }
+  async function _mapTick(){
+    if(_mapBezig) return;
+    if(typeof window.spUploadPadBytes!=='function'||typeof window.getGraphToken!=='function') return;
+    if(!CALC.loaded){ _mapTimer=setTimeout(_mapTick,15000); return; }
+    const st=_mapState(), nu=Date.now();
+    let volgende=null;
+    for(const key of Object.keys(CALC.offertes||{})){
+      const o=CALC.offertes[key];
+      if(!o||!_gevuldeRegels(o)) continue;                       // lege offerte, geen bestand
+      const s=st[key]||{};
+      if(s.tijd&&nu-s.tijd<MAP_RUST) continue;                   // deze had net zijn beurt
+      if(s.hash===_hash(JSON.stringify(_offerteDump(o,o.project_code||key)))) continue;
+      volgende=key; break;
+    }
+    if(!volgende) return;
+    _mapBezig=true;
+    try{ await _schrijfOfferteNaarMap(volgende); }
+    catch(e){
+      console.warn('offerte naar de map schrijven mislukt:',e);
+      _mapStateSet(volgende,{tijd:Date.now(),fout:String(e.message||e)});
+    }
+    finally{ _mapBezig=false; }
+    _mapTimer=setTimeout(_mapTick,5000);                          // volgende offerte
+  }
+  // Bij het openen van de tool één keer inhalen wat nog nergens als bestand staat.
+  setTimeout(_mapTick,30000);
+
+  // ── Offerte opslaan in de projectmap (knop) ────────────────────────────────
   async function _bewaarOfferteInMap(proj,o,key){
-    const setSt=(h,ok)=>{const st=document.getElementById('calc-status-'+cid(key)); if(st){st.innerHTML=h; st.style.color=(ok===false)?'#c0392b':(ok?'var(--green)':'var(--text-dim)');}};
-    if(typeof window.spUploadProjectBytes!=='function'){ setSt('⚠ Opslaan in projectmap niet beschikbaar in deze weergave.',false); return; }
-    setSt('Offerte opslaan in de projectmap…');
-    try{
-      const t=totalen(o);
-      const dump={ type:'mt-offerte-calculatie', code:proj.code, titel:o.titel||'', datum:new Date().toISOString().slice(0,10),
-        offerte_tekst:(o.meta&&o.meta.offerte_tekst)||'', moneybird_estimate_id:o.mb_estimate_id||null,
-        offertebedrag_excl_btw:t.offertebedrag, materiaal_inkoop:t.mInk, materiaal_verkoop:t.mVerk,
-        uren_kost:t.uKost, uren_verkoop:t.uVerk, kostprijs:t.kostprijs, brutowinst:t.brutowinst, marge:t.marge,
-        materiaal:o.materiaal, uren:o.uren, meta:o.meta };
-      // Tijd erbij. Met alleen de datum overschreef de tweede opslag van dezelfde dag
-      // de eerste — een lege hersave wiste dan de volledige offerte van 's ochtends.
-      const nu=new Date(), tt=v=>String(v).padStart(2,'0');
-      const naam='Offerte-'+proj.code+'-'+dump.datum+'-'+tt(nu.getHours())+tt(nu.getMinutes())+'.json';
-      const bytes=new TextEncoder().encode(JSON.stringify(dump,null,2));
-      const res=await window.spUploadProjectBytes(proj,naam,bytes,'application/json','07_Administratie');
-      setSt('✓ Offerte opgeslagen in de projectmap — <a href="'+(res.webUrl||'#')+'" target="_blank" style="color:var(--gold)">📄 '+esc(res.naam)+'</a>',true);
-    }catch(e){ setSt('⚠ Opslaan in projectmap mislukt: '+(e.message||e),false); }
+    try{ await _schrijfOfferteNaarMap(key,{proj:proj,melden:true}); }
+    catch(e){ calcStatus('⚠ Opslaan in de projectmap mislukt: '+(e.message||e),'fout',key); }
   }
   // Standalone offerte → project maken (modal); na aanmaken koppelt + bewaart hij vanzelf.
   // Al een project? Dan direct opslaan in de map.
@@ -10883,6 +11109,8 @@ function activiteitOpen(force){
       try{
         CALC.offertes[nieuwProj.code]=o; o.project_code=nieuwProj.code;
         if(key!==nieuwProj.code && /^OFF-/.test(key)) delete CALC.offertes[key];   // standalone-sleutel opruimen
+        // De mapadministratie mee verhuizen, anders blijft de losse kopie staan.
+        if(key!==nieuwProj.code){ const s=_mapState(); if(s[key]){ s[nieuwProj.code]=s[key]; delete s[key]; lsSave(MAP_STATE,s); } }
         saveCalc('off');
         await _bewaarOfferteInMap(nieuwProj,o,nieuwProj.code);
       }catch(e){ console.warn('offerte koppelen/opslaan faalde:',e); }
