@@ -119,7 +119,7 @@
   //   toast?: fn(msg)           // niet-mergebaar 412 → gebruiker waarschuwen
   //   onSyncStatus?: fn()       // na elke write de zichtbare sync-status bijwerken
   //   trackLastSync?: bool      // this.lastSync = {ts,ok,key,error} bijhouden (v2)
-  //   etagKeys?: Set<string>    // opt-in keys met If-Match/412-merge (default mt_planning)
+  //   etagKeys?: Set<string>    // keys met If-Match/412-merge; weggelaten = ALLE keys beschermd
   // }
   function makeSP(config) {
     config = config || {};
@@ -132,9 +132,10 @@
       SITE_ID: null,               // resolved site-id (cache) — colon-path chaining geeft HTTP 400
       FOLDER: 'MT-Bedrijfstool',
 
-      // S1 — ETag-concurrency. Alleen keys in etagKeys krijgen If-Match +
-      // 412-conflictafhandeling; andere keys houden last-write-wins.
-      etagKeys: config.etagKeys instanceof Set ? config.etagKeys : new Set(['mt_planning']),
+      // S1 — ETag-concurrency. Keys in etagKeys krijgen If-Match + 412-conflict-
+      // afhandeling; etagKeys = null (default) = ALLE keys beschermd. Een caller
+      // die bewust last-write-wins wil, geeft een expliciete (kleinere) Set mee.
+      etagKeys: config.etagKeys instanceof Set ? config.etagKeys : null,
       _etags: {},                  // filename -> laatst gelezen ETag
 
       lastSync: null,              // {ts, ok, key, error} — alleen gevuld als trackLastSync
@@ -174,7 +175,7 @@
         try {
           const { base, token } = await this._driveBase();
           const key = filename.replace(/\.json$/, '');
-          const useEtag = this.etagKeys.has(key) && this._etags[filename];
+          const useEtag = (!this.etagKeys || this.etagKeys.has(key)) && this._etags[filename];
           const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
           if (useEtag) headers['If-Match'] = this._etags[filename];
           const body = typeof data === 'string' ? data : JSON.stringify(data);

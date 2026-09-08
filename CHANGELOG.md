@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-08-12 — Fix: dubbele agenda-DOM-ids, sortbug attentie-lijst, verkoopfacturen bij klanten, dode migratie-knop, CompaNanny gearchiveerd
+- Commit: `f0fbaa0` | Auteur: Bart Witte
+
 ## 2026-08-12 — fix(uren): Toggl-fouten blokkeren, timer-race-guard, cache-cleanup bij sync
 - Commit: `c8c4c43` | Auteur: Bart Witte
 

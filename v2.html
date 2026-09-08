@@ -7513,13 +7513,54 @@ const _SP = Object.assign(window.MTCore.makeSP({
   toast: (m) => { if (typeof planToast === 'function') planToast(m); },
   onSyncStatus: () => { if (typeof window.updateSyncStatus === 'function') window.updateSyncStatus(); },
   trackLastSync: true,
-  // Alle auto-gesynchroniseerde gegevens gebruiken ETags: bij een gelijktijdige
-  // wijziging wordt veilig gemerged, of de gebruiker krijgt een zichtbare melding.
-  etagKeys: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_attentie']),
+  // Geen etagKeys = mt-core-default: ALLE keys If-Match + 412-merge — bij een
+  // gelijktijdige wijziging wordt veilig gemerged, of de gebruiker krijgt een melding.
 }), {
   // mt_mail_links synct mee zodat mail↔project-koppelingen op élke PC zichtbaar zijn.
   // Opslag = privé SharePoint-tenant (alleen @mortiseandtenon.nl), NOOIT de publieke git-repo.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map']),
+  // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
+  // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
+  // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults']),
+
+  // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
+  // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
+  // Een samenvoeger krijgt (lokale tekst, SP-data) en geeft het samengevoegde object terug.
+  mergers: {
+    mt_calc_offertes(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const L = (lees(lokaal) || {}).offertes || {};
+      const R = (lees(spData) || {}).offertes || {};
+      // "Inhoud" = regels met een echte omschrijving; een lege hersave mag nooit
+      // een volle offerte verdringen.
+      const gevuld = o => ['materiaal','uren'].reduce((n, v) =>
+        n + ((o && o[v]) || []).filter(r => String((r && r.omschrijving) || '').trim()).length, 0);
+      // Een instorting is geen bewerking maar verlies: eerder bleef van
+      // vijftien gevulde regels er één over. Een regel wissen is normaal; meer dan
+      // de helft kwijtraken niet. In dat geval blijft de volle versie staan en wordt
+      // de magere eronder bewaard, zodat een bedoelde opschoning niet écht weg is.
+      const instorting = (nieuw, oud) => gevuld(oud) >= 3 && gevuld(nieuw) * 2 < gevuld(oud);
+      const uit = {};
+      for (const k of new Set([...Object.keys(L), ...Object.keys(R)])) {
+        const a = L[k], b = R[k];
+        if (!a) { uit[k] = b; continue; }          // alleen op SharePoint
+        if (!b) { uit[k] = a; continue; }          // alleen lokaal
+        const ta = a._gewijzigd || '', tb = b._gewijzigd || '';
+        let win, verlies;
+        if (ta && tb) { win = tb > ta ? b : a; verlies = tb > ta ? a : b; }   // nieuwste
+        else { win = gevuld(b) > gevuld(a) ? b : a; verlies = gevuld(b) > gevuld(a) ? a : b; }
+        if (instorting(win, verlies)) {
+          console.warn('offerte ' + k + ': nieuwere versie heeft ' + gevuld(win) + ' van '
+            + gevuld(verlies) + ' regels over — de volle versie blijft staan (_verdrongen)');
+          const kaal = Object.assign({}, win); delete kaal._verdrongen;   // niet stapelen
+          uit[k] = Object.assign({}, verlies, { _verdrongen: { tijd: win._gewijzigd || '', offerte: kaal } });
+        } else {
+          uit[k] = win;
+        }
+      }
+      return { versie: 2, offertes: uit };
+    }
+  },
   _q: {},
   ready: false,             // pas ná geslaagde hydrate auto-syncen — anders kan een lege PC '[]' naar SP duwen en de echte data wissen
   blockedKeys: new Set(),   // keys waarvan de hydrate FAALDE (≠ 404) → auto-sync uit tot herladen (anti-clobber)
@@ -8540,8 +8581,21 @@ window.initStorage = async function() {
       return;
     }
     if (spData !== null) {
-      // SharePoint heeft data → in localStorage laden (SharePoint wint altijd)
-      _lsSet(key, typeof spData === 'string' ? spData : JSON.stringify(spData));
+      const merger = _SP.mergers && _SP.mergers[key];
+      if (merger) {
+        // Heeft deze key een samenvoeger, dan wint SharePoint NIET zomaar: dan zou de
+        // ene PC het werk van de andere wissen. Samenvoegen en het resultaat meteen
+        // terugschrijven, zodat beide kanten naar dezelfde stand toe groeien.
+        let samen;
+        try { samen = merger(localStorage.getItem(key), spData); }
+        catch(e) { console.error('samenvoegen faalde voor', key, e); _SP.blockedKeys.add(key); return; }
+        _lsSet(key, JSON.stringify(samen));
+        try { await _SP.write(key + '.json', samen); }
+        catch(e) { console.warn('terugschrijven na samenvoegen faalde voor', key, ':', e.message); }
+      } else {
+        // SharePoint heeft data → in localStorage laden (SharePoint wint altijd)
+        _lsSet(key, typeof spData === 'string' ? spData : JSON.stringify(spData));
+      }
     } else {
       // SharePoint leeg (echte 404) → migreer bestaande localStorage naar SharePoint.
       // Een lege/triviale waarde NIET migreren: anders schrijft een lege PC '[]'
@@ -9952,7 +10006,6 @@ function activiteitOpen(force){
     defaults: JSON.parse(JSON.stringify(DEFAULT_DEFAULTS)),
     offertes:{},                         // { [key]: offerte }
   };
-  const _saveTimers = {};
 
   // ---- util (esc = de canonieke globale bovenin het eerste scriptblok) -------
   function uid(p){return (p||'r')+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36);}
@@ -9963,16 +10016,129 @@ function activiteitOpen(force){
   function cid(code){return String(code).replace(/[^A-Za-z0-9]/g,'');}
 
   // ---- persistentie ---------------------------------------------------------
-  function lsLoad(key,fb){try{const v=localStorage.getItem(key);return v?JSON.parse(v):fb;}catch(e){return fb;}}
-  function lsSave(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
-  function payloadFor(which){ return which==='def' ? CALC.defaults : {versie:2, offertes:CALC.offertes}; }
-  function saveCalc(which){
-    lsSave(LS[which], payloadFor(which));
-    clearTimeout(_saveTimers[which]);
-    _saveTimers[which]=setTimeout(async()=>{
-      if(window._SP&&typeof _SP.write==='function'){ try{ await _SP.write(SP[which], payloadFor(which)); }catch(e){} }
-    },1500);
+  // Opnieuw opgezet nadat een volledige offerte verloren ging. De oude versie slikte
+  // élke opslagfout op met catch(e){} en schreef met een eigen _SP.write langs de
+  // synclaag heen — langs de ready-gate, de blokkeerlijst en de lege-sync-blokkade.
+  // Falen was daardoor onzichtbaar. Hier geldt: elke fout wordt getoond.
+
+  // Zichtbare terugkoppeling. Zonder dit merkt niemand dat opslaan niet lukt.
+  // key => ook in de statusregel van die offerte; anders alleen de hoekmelding.
+  function calcStatus(tekst,staat,key){
+    const kleur = staat==='fout' ? '#c0392b' : staat==='bezig' ? 'var(--text-dim)' : 'var(--green)';
+    if(key){ const st=document.getElementById('calc-status-'+cid(key)); if(st){ st.textContent=tekst; st.style.color=kleur; } }
+    let t=document.getElementById('calc-toast');
+    if(!t){
+      t=document.createElement('div'); t.id='calc-toast';
+      t.style.cssText='position:fixed;right:14px;bottom:14px;z-index:9999;max-width:420px;padding:.5rem .75rem;'
+        +'border-radius:6px;font-size:12px;background:var(--card,#fff);border:1px solid rgba(0,0,0,.15);'
+        +'box-shadow:0 2px 10px rgba(0,0,0,.18);white-space:pre-wrap';
+      document.body.appendChild(t);
+    }
+    t.textContent=tekst; t.style.color=kleur;
+    t.style.borderColor = staat==='fout' ? '#c0392b' : 'rgba(0,0,0,.15)';
+    clearTimeout(t._weg);
+    // Een fout blijft staan tot de volgende melding; goed nieuws verdwijnt vanzelf.
+    if(staat!=='fout') t._weg=setTimeout(()=>t.remove(),4000);
   }
+  window.calcStatus=calcStatus;
+
+  function lsLoad(key,fb){try{const v=localStorage.getItem(key);return v?JSON.parse(v):fb;}catch(e){console.error('lezen van',key,'mislukt:',e);return fb;}}
+  // Geeft true/false terug in plaats van te zwijgen; de aanroeper meldt het.
+  function lsSave(key,val){
+    try{ localStorage.setItem(key,JSON.stringify(val)); return true; }
+    catch(e){ console.error('opslaan van',key,'mislukt:',e); return false; }
+  }
+
+  // Ringbuffer met herstelpunten: tien momentopnamen van vóór elke schrijfactie.
+  // Hiermee is een lege of half ingevulde hersave altijd terug te draaien — precies
+  // het geval dat eerder een volledige offerte wiste.
+  const HERSTEL_KEY='mt_calc_offertes_backup', HERSTEL_MAX=10, HERSTEL_RUST=60000;
+  let _herstelLaatst=0;
+  function pushHerstelpunt(force){
+    // saveCalc hangt aan de invoervelden, dus dit zou anders bij elke toetsaanslag
+    // draaien. Hoogstens één momentopname per minuut, tenzij expliciet gevraagd.
+    const nutijd=Date.now();
+    if(!force&&nutijd-_herstelLaatst<HERSTEL_RUST) return;
+    _herstelLaatst=nutijd;
+    try{
+      const nu=localStorage.getItem(LS.off);
+      if(!nu) return;
+      const ring=lsLoad(HERSTEL_KEY,[])||[];
+      if(ring.length&&ring[ring.length-1].data===nu) return;   // er is niets veranderd
+      ring.push({tijd:new Date().toISOString(),data:nu});
+      while(ring.length>HERSTEL_MAX) ring.shift();
+      // Bij een volle browseropslag liever minder herstelpunten dan geen enkel.
+      while(ring.length){
+        try{ localStorage.setItem(HERSTEL_KEY,JSON.stringify(ring)); return; }
+        catch(e){ ring.shift(); }
+      }
+    }catch(e){ console.warn('herstelpunt maken mislukt:',e); }
+  }
+  // Console-hulpjes: calcHerstelpunten() toont de lijst, calcHerstel(i) zet er één terug.
+  window.calcHerstelpunten=function(){
+    const ring=lsLoad(HERSTEL_KEY,[])||[];
+    if(!ring.length){ console.log('Nog geen herstelpunten.'); return 0; }
+    ring.forEach((p,i)=>{
+      let aantal='?';
+      try{ aantal=Object.keys((JSON.parse(p.data)||{}).offertes||{}).length; }catch(e){}
+      console.log(i,new Date(p.tijd).toLocaleString('nl-NL'),aantal+' offertes',p.data.length+' tekens');
+    });
+    console.log('Terugzetten met calcHerstel(nummer).');
+    return ring.length;
+  };
+  window.calcHerstel=function(i){
+    const ring=lsLoad(HERSTEL_KEY,[])||[], p=ring[i];
+    if(!p){ console.error('Geen herstelpunt',i,'— gebruik calcHerstelpunten() voor de lijst.'); return false; }
+    let d; try{ d=JSON.parse(p.data); }catch(e){ console.error('herstelpunt onleesbaar:',e); return false; }
+    pushHerstelpunt(true);                 // huidige stand eerst zelf veiligstellen
+    CALC.offertes=(d&&d.offertes)||{};
+    saveCalc('off',{direct:true});
+    console.log('Teruggezet naar',new Date(p.tijd).toLocaleString('nl-NL'),'— herlaad de pagina.');
+    return true;
+  };
+
+  function payloadFor(which){ return which==='def' ? CALC.defaults : {versie:2, offertes:CALC.offertes}; }
+
+  // Nu synchroniseren in plaats van de debounce afwachten, mét dezelfde beveiligingen
+  // als _SP.schedule. Alleen voor de Opslaan-knop: die moet antwoord geven.
+  async function syncNu(which){
+    const key=LS[which];
+    if(!(window._SP&&typeof _SP.write==='function')) return {ok:false,reden:'niet ingelogd op SharePoint'};
+    if(!_SP.ready) return {ok:false,reden:'synchronisatie nog niet klaar'};
+    if(_SP.blockedKeys.has(key)) return {ok:false,reden:'sync geblokkeerd — herlaad de pagina'};
+    clearTimeout(_SP._q[key]);             // de ingeplande schrijfactie is nu overbodig
+    try{ await _SP.write(SP[which],payloadFor(which)); return {ok:true}; }
+    catch(e){ return {ok:false,reden:e.message||String(e)}; }
+  }
+
+  // opts.key    → meldingen ook in de statusregel van die offerte, en die offerte
+  //               krijgt een _gewijzigd-stempel zodat samenvoegen weet wat nieuwer is
+  // opts.direct → meteen naar SharePoint schrijven en het resultaat melden
+  function saveCalc(which,opts){
+    opts=opts||{};
+    if(which==='off'){
+      pushHerstelpunt(opts.direct);
+      const o=opts.key&&CALC.offertes[opts.key];
+      if(o) o._gewijzigd=new Date().toISOString();
+    }
+    // localStorage.setItem is verderop omgeleid: staat de sleutel in _SP.KEYS — en dat
+    // doet hij nu — dan plant deze ene regel de SharePoint-sync in. Vandaar geen eigen
+    // _SP.write meer in het normale pad.
+    if(!lsSave(LS[which],payloadFor(which))){
+      calcStatus('⚠ Opslaan mislukt — browseropslag vol of geblokkeerd. Sla op in de projectmap.','fout',opts.key);
+      return false;
+    }
+    if(opts.direct){
+      calcStatus('Opslaan…','bezig',opts.key);
+      syncNu(which).then(r=>{
+        if(r.ok) calcStatus('✓ Opgeslagen en gesynchroniseerd '+new Date().toLocaleTimeString('nl-NL'),'ok',opts.key);
+        else calcStatus('⚠ Lokaal bewaard, maar niet op SharePoint: '+r.reden+'. Sla op in de projectmap.','fout',opts.key);
+      });
+    }
+    return true;
+  }
+  window.saveCalcNu=function(key){ saveCalc('off',{key:key,direct:true}); };
+
   async function hydrateCalc(){
     if(CALC.loaded) return;
     if(CALC.hydrating) return CALC.hydrating;
@@ -9984,8 +10150,18 @@ function activiteitOpen(force){
         try{
           const [sd,so]=await Promise.all([_SP.read(SP.def),_SP.read(SP.off)]);
           if(sd){CALC.defaults=mergeDefaults(sd); lsSave(LS.def,CALC.defaults);}
-          if(so&&so.offertes){CALC.offertes=so.offertes; lsSave(LS.off,so);}
-        }catch(e){}
+          if(so&&so.offertes){
+            // Samenvoegen, niet overschrijven. Hiervóór won de SharePoint-versie
+            // altijd — waardoor de ene PC het werk van de andere kon wissen.
+            const samen=_SP.mergers.mt_calc_offertes(JSON.stringify({versie:2,offertes:CALC.offertes}),so);
+            CALC.offertes=samen.offertes||{};
+            lsSave(LS.off,samen);
+          }
+        }catch(e){
+          console.error('offertes ophalen van SharePoint mislukt:',e);
+          calcStatus('⚠ Offertes konden niet van SharePoint gehaald worden: '+(e.message||e)
+            +'\nJe ziet nu alleen wat op deze pc staat. Sla nieuw werk óók op in de projectmap.','fout');
+        }
       }
       CALC.loaded=true;
     })();
@@ -10684,7 +10860,10 @@ function activiteitOpen(force){
         offertebedrag_excl_btw:t.offertebedrag, materiaal_inkoop:t.mInk, materiaal_verkoop:t.mVerk,
         uren_kost:t.uKost, uren_verkoop:t.uVerk, kostprijs:t.kostprijs, brutowinst:t.brutowinst, marge:t.marge,
         materiaal:o.materiaal, uren:o.uren, meta:o.meta };
-      const naam='Offerte-'+proj.code+'-'+dump.datum+'.json';
+      // Tijd erbij. Met alleen de datum overschreef de tweede opslag van dezelfde dag
+      // de eerste — een lege hersave wiste dan de volledige offerte van 's ochtends.
+      const nu=new Date(), tt=v=>String(v).padStart(2,'0');
+      const naam='Offerte-'+proj.code+'-'+dump.datum+'-'+tt(nu.getHours())+tt(nu.getMinutes())+'.json';
       const bytes=new TextEncoder().encode(JSON.stringify(dump,null,2));
       const res=await window.spUploadProjectBytes(proj,naam,bytes,'application/json','07_Administratie');
       setSt('✓ Offerte opgeslagen in de projectmap — <a href="'+(res.webUrl||'#')+'" target="_blank" style="color:var(--gold)">📄 '+esc(res.naam)+'</a>',true);
@@ -10930,6 +11109,7 @@ function activiteitOpen(force){
         <textarea id="calc-otekst-${c}" class="calc-inp" style="width:100%;min-height:46px;resize:vertical;font-family:inherit" placeholder="bv. 'Maatwerk eikenhouten dressoir met 3 lades en push-to-open, in olie afgewerkt'" onchange="calcSetMeta('${key}','offerte_tekst',this.value)">${esc((o.meta&&o.meta.offerte_tekst)||'')}</textarea>
         <div class="calc-btnrow">
           <button class="btn btn-sm btn-secondary" onclick="calcKoppelMail('${key}')" title="Koppel een mail zodat de offertetekst context uit die mail meekrijgt">📧 Mail koppelen</button>
+          <button class="btn btn-sm btn-secondary" onclick="saveCalcNu('${key}')" title="Nu opslaan en meteen naar SharePoint synchroniseren. Je krijgt hieronder te zien of dat gelukt is.">💾 Opslaan</button>
           <span style="flex:1"></span>
           <button class="btn btn-sm btn-secondary" onclick="calcMaakProjectVoorOfferte('${key}')">${proj?'💾 Opslaan in projectmap':'+ Project aanmaken'}</button>
           <button class="btn btn-sm btn-primary" onclick="calcMaakOfferteMB('${key}')" title="Bouw eerst een preview van de offerteregels + tekst die je kunt bijschaven vóór het naar Moneybird gaat">👁 Preview voor Moneybird</button>
