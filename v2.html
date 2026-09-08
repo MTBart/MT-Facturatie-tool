@@ -10103,7 +10103,9 @@ function activiteitOpen(force){
   // als _SP.schedule. Alleen voor de Opslaan-knop: die moet antwoord geven.
   async function syncNu(which){
     const key=LS[which];
-    if(!(window._SP&&typeof _SP.write==='function')) return {ok:false,reden:'niet ingelogd op SharePoint'};
+    // Let op: _SP is een const op scriptniveau en staat NIET op window. Een test op
+    // window._SP is altijd onwaar — precies de fout die hydrateCalc stil hield.
+    if(typeof _SP==='undefined'||typeof _SP.write!=='function') return {ok:false,reden:'niet ingelogd op SharePoint'};
     if(!_SP.ready) return {ok:false,reden:'synchronisatie nog niet klaar'};
     if(_SP.blockedKeys.has(key)) return {ok:false,reden:'sync geblokkeerd — herlaad de pagina'};
     clearTimeout(_SP._q[key]);             // de ingeplande schrijfactie is nu overbodig
@@ -10146,7 +10148,7 @@ function activiteitOpen(force){
       const ld=lsLoad(LS.def,null), lo=lsLoad(LS.off,null);
       if(ld) CALC.defaults=mergeDefaults(ld);
       if(lo&&lo.offertes) CALC.offertes=lo.offertes;
-      if(window._SP&&typeof _SP.read==='function'){
+      if(typeof _SP!=='undefined'&&typeof _SP.read==='function'){
         try{
           const [sd,so]=await Promise.all([_SP.read(SP.def),_SP.read(SP.off)]);
           if(sd){CALC.defaults=mergeDefaults(sd); lsSave(LS.def,CALC.defaults);}

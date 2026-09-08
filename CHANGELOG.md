@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-09-08 — Offertes: einde aan stil gegevensverlies in de calculatiemodule
+- Commit: `ea8a389` | Auteur: Bart Witte
+
 ## 2026-08-12 — Fix: dubbele agenda-DOM-ids, sortbug attentie-lijst, verkoopfacturen bij klanten, dode migratie-knop, CompaNanny gearchiveerd
 - Commit: `f0fbaa0` | Auteur: Bart Witte
 
