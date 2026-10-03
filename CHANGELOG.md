@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Offertes: niet meer dagelijks alles opnieuw naar de map schrijven
+- Commit: `2b7d6ec` | Auteur: Bart Witte
+
 ## 2026-10-03 — Offertes: nacalculatie + elke bewerking krijgt een tijdstempel
 - Commit: `3e0965b` | Auteur: Bart Witte
 
