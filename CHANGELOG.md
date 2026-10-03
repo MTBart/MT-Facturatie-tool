@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Bestellijst: nooit meer hard wissen, journaal, eigen samenvoeger, geen stille overschrijving
+- Commit: `f83609e` | Auteur: Bart Witte
+
 ## 2026-10-03 — To Do-proef: Toggl-taken op jouw naam naar MS To Do (één richting, droogloop eerst)
 - Commit: `ab44ba4` | Auteur: Bart Witte
 

@@ -4360,10 +4360,29 @@ function _blIdsToekennen(l){
   });
   return l;
 }
+// Onleesbare opslag (geen JSON-array) wordt NOOIT overschreven: schrijven weigert en de
+// ruwe inhoud gaat eenmalig naar een eigen herstelsleutel (Codex-review L2 #1).
+let _blKapot=false;
 function _blAlle(){
-  let l=[]; try{ l=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]'); }catch(e){ console.error('bestellijst lezen mislukt:',e); l=[]; }
-  if(!Array.isArray(l)) return [];
-  return _blIdsToekennen(l);                  // ook onleesbare items blijven staan (nooit weggooien)
+  const raw=localStorage.getItem('mt_bestellijst');
+  let l=[];
+  try{ l=JSON.parse(raw||'[]'); }catch(e){ l=null; }
+  if(!Array.isArray(l)){
+    if(!_blKapot){
+      _blKapot=true;
+      console.error('bestellijst: opslag is onleesbaar — schrijven geblokkeerd, ruwe inhoud bewaard');
+      try{ localStorage.setItem('mt_bestellijst_onleesbaar_'+Date.now(), String(raw)); }catch(e){}
+      if(typeof planToast==='function') planToast('⚠ Bestellijst-opslag is onleesbaar — er wordt niets overschreven. Meld dit even.');
+    }
+    return [];
+  }
+  _blKapot=false;
+  const voor=l.filter(x=>x&&typeof x==='object'&&(x.id===undefined||x.id===null||x.id==='')).length;
+  _blIdsToekennen(l);
+  // Nieuw toegekende id's meteen vastleggen, zodat de nummering van dubbele oude regels
+  // (_1, _2) niet meer van de volgorde afhangt (Codex-review L2 #2). Voegt alleen id's toe.
+  if(voor){ try{ localStorage.setItem('mt_bestellijst',JSON.stringify(l)); }catch(e){ console.warn('bestellijst-id\'s vastleggen mislukt:',e); } }
+  return l;                                   // ook onleesbare items in de lijst blijven staan
 }
 function _blActief(){ return _blAlle().filter(b=>b&&typeof b==='object'&&!b._vervallen); }
 function _blVervallenLijst(){ return _blAlle().filter(b=>b&&typeof b==='object'&&b._vervallen); }
@@ -4373,25 +4392,46 @@ function _blJournaal(actie,voor,na){
     if(!Array.isArray(j)) j=[];
     j.push({id:'j'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),tijd:new Date().toISOString(),
       actie,door:_blWie(),voor:voor?JSON.parse(JSON.stringify(voor)):null,na:na?JSON.parse(JSON.stringify(na)):null});
+    // Laatste 1000 in de browser; ouder herstel via de SharePoint-versiegeschiedenis van
+    // mt_bestellijst.json / mt_bestellijst_journaal.json.
     if(j.length>1000) j=j.slice(-1000);
     localStorage.setItem('mt_bestellijst_journaal',JSON.stringify(j));
-  }catch(e){ console.warn('bestellijst-journaal schrijven mislukt:',e); }
+    return true;
+  }catch(e){
+    console.error('bestellijst-journaal schrijven mislukt:',e);
+    if(typeof planToast==='function') planToast('⚠ Wijziging niet opgeslagen: het bestellijst-journaal kon niet worden geschreven ('+(e.message||e)+')');
+    return false;
+  }
 }
 function _blBewaar(l){
+  if(_blKapot){ if(typeof planToast==='function') planToast('⚠ Bestellijst niet opgeslagen: de bestaande opslag is onleesbaar'); return false; }
   try{ localStorage.setItem('mt_bestellijst',JSON.stringify(l)); return true; }
   catch(e){ console.error('bestellijst opslaan mislukt:',e); if(typeof planToast==='function') planToast('⚠ Bestellijst opslaan mislukt: '+(e.message||e)); return false; }
 }
-function _blStempel(b){ b._gewijzigd=new Date().toISOString(); const w=_blWie(); if(w) b._door=w; return b; }
+// Stempel = nu, maar altijd later dan de stand waarop deze wijziging voortbouwt
+// (beperkt het effect van een achterlopende klok; Codex-review L2 #3).
+function _blStempel(b,vorig){
+  let t=Date.now(); const v=Date.parse(vorig||'');
+  if(!isNaN(v)&&v>=t) t=v+1;
+  b._gewijzigd=new Date(t).toISOString(); const w=_blWie(); if(w) b._door=w; return b;
+}
 function _blZoek(l,id){ return l.find(x=>x&&typeof x==='object'&&String(x.id)===String(id)); }
 function _blWijzig(id,actie,fn){
   const l=_blAlle(), b=_blZoek(l,id); if(!b) return null;
-  const voor=JSON.parse(JSON.stringify(b)); fn(b); _blStempel(b);
-  _blJournaal(actie,voor,b); return _blBewaar(l)?b:null;
+  if(_blKapot){ _blBewaar(l); return null; }        // meldt en weigert
+  const voor=JSON.parse(JSON.stringify(b));
+  const na=JSON.parse(JSON.stringify(b)); fn(na); _blStempel(na,voor._gewijzigd);
+  if(!_blJournaal(actie,voor,na)) return null;          // geen herstelkopie = geen wijziging
+  Object.keys(b).forEach(k=>delete b[k]); Object.assign(b,na);
+  return _blBewaar(l)?b:null;
 }
 function _blNieuw(item,actie){
   const l=_blAlle();
   if(item.id===undefined||item.id===null||item.id==='') item.id='bl_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-  _blStempel(item); l.push(item); _blJournaal(actie||'nieuw',null,item);
+  if(_blKapot){ _blBewaar(l); return null; }        // meldt en weigert
+  _blStempel(item);
+  if(!_blJournaal(actie||'nieuw',null,item)) return null;
+  l.push(item);
   return _blBewaar(l)?item:null;
 }
 function _blVervallen(id,reden){ return _blWijzig(id,'vervallen',b=>{ b._vervallen={tijd:new Date().toISOString(),door:_blWie(),reden:reden||''}; }); }
@@ -4402,8 +4442,12 @@ function bestellijstTerugzetten(id){
   if(b&&typeof planToast==='function') planToast('↩ "'+(b.materiaal||'regel')+'" staat weer op de bestellijst');
   renderBestellijst();
 }
-// id veilig in een onclick-string tussen enkele quotes
-function _blQ(v){ return String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+// Waarde veilig in een inline onclick tussen enkele quotes: eerst als JS-string ontsnappen,
+// daarna als HTML-attribuut (anders decodeert de browser &#39; terug tot een quote; Codex L2 #5).
+function _blQ(v){
+  const js=String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,'\\n').replace(/</g,'\\x3c');
+  return js.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/>/g,'&gt;');
+}
 
 function toggleBestellijst(mat,cat,lev,prijs,btn){
   const open=_blActief().find(b=>b.materiaal===mat&&!b.besteld);
@@ -6168,7 +6212,14 @@ function updateNcrTotaal(id, basis){
   if(totaalEl) totaalEl.textContent=basis+breuk;
 }
 
+const _ncrBezig=new Set();
 async function ncrNaarBestellijst(resultaten, projectCode){
+  if(_ncrBezig.has(projectCode)){ if(typeof planToast==='function') planToast('Bezig met de bestellijst voor '+projectCode+' — even geduld'); return; }
+  _ncrBezig.add(projectCode);
+  try{ await _ncrNaarBestellijst(resultaten, projectCode); }
+  finally{ _ncrBezig.delete(projectCode); }
+}
+async function _ncrNaarBestellijst(resultaten, projectCode){
   // Brok L2: een open regel voor hetzelfde materiaal in dit project werd stil vervangen
   // (handmatige wijzigingen weg). Nu: nieuwe materialen komen erbij; bij bestaande open
   // regels kies je zelf (bijwerken naar het nieuwe aantal / extra regel / overslaan).
@@ -6210,7 +6261,13 @@ async function ncrNaarBestellijst(resultaten, projectCode){
     if(keuze==null) keuze=2;        // venster gesloten = niets aan bestaande regels doen
   }
   let toegevoegd=0, bijgewerkt=0, overgeslagen=0;
-  nieuw.forEach(item=>{ if(_blNieuw(item,'nieuw (NCR '+projectCode+')')) toegevoegd++; });
+  // Opnieuw kijken ná de dialoog: intussen kan een andere pc/klik hetzelfde materiaal
+  // hebben toegevoegd. Dan niet dubbel toevoegen maar als "overgeslagen" melden.
+  const nuActief=_blActief();
+  nieuw.forEach(item=>{
+    if(nuActief.some(b=>b.materiaal===item.materiaal&&b.project===projectCode&&!b.besteld)){ overgeslagen++; return; }
+    if(_blNieuw(item,'nieuw (NCR '+projectCode+')')) toegevoegd++;
+  });
   conflict.forEach(c=>{
     if(keuze===0){ if(_blWijzig(c.bestaand.id,'aantal (NCR '+projectCode+')',b=>{ b.aantal=c.item.aantal; if(!b.platenmaat) b.platenmaat=c.item.platenmaat; })) bijgewerkt++; }
     else if(keuze===1){ if(_blNieuw(c.item,'extra regel (NCR '+projectCode+')')) toegevoegd++; }
