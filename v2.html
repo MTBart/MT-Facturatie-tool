@@ -7547,7 +7547,9 @@ const _SP = Object.assign(window.MTCore.makeSP({
         if (!b) { uit[k] = a; continue; }          // alleen lokaal
         const ta = a._gewijzigd || '', tb = b._gewijzigd || '';
         let win, verlies;
-        if (ta && tb) { win = tb > ta ? b : a; verlies = tb > ta ? a : b; }   // nieuwste
+        // Nieuwste stempel wint. Heeft maar één kant een stempel, dan is die na de
+        // reparatie bewerkt en dus nieuwer dan een ongestempelde oude kopie.
+        if (ta || tb) { win = tb > ta ? b : a; verlies = tb > ta ? a : b; }
         else { win = gevuld(b) > gevuld(a) ? b : a; verlies = gevuld(b) > gevuld(a) ? a : b; }
         if (instorting(win, verlies)) {
           console.warn('offerte ' + k + ': nieuwere versie heeft ' + gevuld(win) + ' van '
@@ -10157,7 +10159,10 @@ function activiteitOpen(force){
     opts=opts||{};
     if(which==='off'){
       pushHerstelpunt(opts.direct);
-      const o=opts.key&&CALC.offertes[opts.key];
+      // Elke bewerking stempelt, niet alleen de Opslaan-knop: zonder stempel valt de
+      // samenvoeger terug op "meeste regels wint", en dan draait een oude kopie op een
+      // andere pc een prijswijziging (zelfde aantal regels) stil terug.
+      const o=opts.key&&CALC.offertes[basisKey(opts.key)];
       if(o) o._gewijzigd=new Date().toISOString();
     }
     // localStorage.setItem is verderop omgeleid: staat de sleutel in _SP.KEYS — en dat
@@ -10233,7 +10238,31 @@ function activiteitOpen(force){
     return { titel:'', project_code:null, meta:{status:'To do',bron:'',leverdatum:'',offertedatum:'',factuurbedrag:''},
       materiaal:defMateriaalRows(), uren:defUrenRows() };
   }
+  // Nacalculatie: een sleutel 'NC~<code>' wijst naar o.nacalc van offerte <code>.
+  // Daardoor werken alle bestaande regel-handlers (prijs zoeken, autocomplete,
+  // leverancier, VW-import) ongewijzigd op de nacalculatie, en synct die mee in
+  // dezelfde offerte (en krijgt dezelfde _gewijzigd-stempel).
+  const NC='NC~';
+  function isNc(k){ return String(k).startsWith(NC); }
+  function basisKey(k){ return isNc(k) ? String(k).slice(NC.length) : k; }
+  function nieuweNacalc(o){
+    const kopie=r=>Object.assign({},r,{id:uid(r.id&&r.id[0]==='u'?'u':'m')});
+    return { gestart:new Date().toISOString(), meta:{},
+      materiaal:(o.materiaal||[]).filter(m=>String(m.omschrijving||'').trim()).map(kopie),
+      // werkelijke uren leeg; de begrote uren blijven ernaast zichtbaar
+      uren:(o.uren||[]).map(u=>Object.assign(kopie(u),{begroot:u.uren,uren:''})),
+      toggl:null };
+  }
   function getOfferte(key){
+    if(isNc(key)){
+      const p=getOfferte(basisKey(key));
+      if(!p.nacalc) p.nacalc=nieuweNacalc(p);
+      const nc=p.nacalc;
+      if(!nc.meta) nc.meta={};
+      if(!Array.isArray(nc.materiaal)) nc.materiaal=[];
+      if(!Array.isArray(nc.uren)) nc.uren=[];
+      return nc;
+    }
     let o=CALC.offertes[key];
     if(!o){ o=CALC.offertes[key]=nieuweOfferteObj(key); }
     // migratie/robuustheid voor oudere/partial shapes
@@ -10279,7 +10308,7 @@ function activiteitOpen(force){
     el.textContent=msg; el.style.color=ok?'var(--green)':'var(--text-dim)'; clearTimeout(el._t); el._t=setTimeout(()=>{el.textContent='';},4000);}
 
   // ---- mutaties -------------------------------------------------------------
-  window.calcSetMeta=function(key,field,val){const o=getOfferte(key);o.meta[field]=val;saveCalc('off');};
+  window.calcSetMeta=function(key,field,val){const o=getOfferte(key);o.meta[field]=val;saveCalc('off',{key:key});};
   // herbereken alleen de afgeleide getalcellen (totalen/KPI's/footers) zonder de
   // inputs of knoppen opnieuw te tekenen — anders sloopt een onchange-render de
   // +knop mid-klik (klik wordt "opgegeten") en raakt focus tijdens typen kwijt.
@@ -10296,13 +10325,14 @@ function activiteitOpen(force){
     const mk=document.getElementById('kpi-marge-'+c);
     if(mk){mk.textContent=pct(t.marge); mk.style.color=t.marge==null?'var(--text-faint)':(t.marge<0.15?'#c0392b':(t.marge<0.30?'var(--gold)':'var(--green)'));}
     const ve=document.getElementById('calc-vergeten-'+c); if(ve) ve.innerHTML=vergetenPaneelHtml(key);   // live vergeten-kosten-strook
+    if(isNc(key)){ const vg=document.getElementById('nc-verg-'+c); if(vg) vg.innerHTML=ncVergelijkHtml(basisKey(key)); }
   }
-  window.calcKoppelProject=function(key,code){const o=getOfferte(key);o.project_code=code||null;saveCalc('off');renderOfferteCalc(key);};
-  window.calcSetTitel=function(key,val){const o=getOfferte(key);o.titel=val;saveCalc('off');};
+  window.calcKoppelProject=function(key,code){const o=getOfferte(key);o.project_code=code||null;saveCalc('off',{key:key});renderOfferteCalc(key);};
+  window.calcSetTitel=function(key,val){const o=getOfferte(key);o.titel=val;saveCalc('off',{key:key});};
 
-  window.calcSetMat=function(key,rid,field,val){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m)return;m[field]=val;saveCalc('off');recalcView(key);};
-  window.calcAddMat=function(key){const o=getOfferte(key);o.materiaal.push({id:uid('m'),omschrijving:'',artikel:'',aantal:'',inkoop_stuk:'',marge:CALC.defaults.materiaal_marge});saveCalc('off');renderOfferteCalc(key);};
-  window.calcDelMat=function(key,rid){const o=getOfferte(key);o.materiaal=o.materiaal.filter(m=>m.id!==rid);saveCalc('off');renderOfferteCalc(key);};
+  window.calcSetMat=function(key,rid,field,val){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m)return;m[field]=val;saveCalc('off',{key:key});recalcView(key);};
+  window.calcAddMat=function(key){const o=getOfferte(key);o.materiaal.push({id:uid('m'),omschrijving:'',artikel:'',aantal:'',inkoop_stuk:'',marge:CALC.defaults.materiaal_marge});saveCalc('off',{key:key});renderOfferteCalc(key);};
+  window.calcDelMat=function(key,rid){const o=getOfferte(key);o.materiaal=o.materiaal.filter(m=>m.id!==rid);saveCalc('off',{key:key});renderOfferteCalc(key);};
   // Vectorworks/interiorcad materiaallijst → tabelregels voor-invullen + echte inkoop opzoeken.
   // Plak-import (geen vaste bestandslocatie): één regel per materiaal, "omschrijving" of
   // "omschrijving <tab/;/,> aantal". Per regel proberen we de echte voorraadprijs te vinden.
@@ -10324,7 +10354,7 @@ function activiteitOpen(force){
       if(vh){ if(vh.desc) row.omschrijving=vh.desc; if(vh.id) row.artikel=vh.id; row.inkoop_stuk=vh.prijs; prijsHits++; }
       o.materiaal.push(row); added++;
     });
-    saveCalc('off'); renderOfferteCalc(key);
+    saveCalc('off',{key:key}); renderOfferteCalc(key);
     flash(key,'✓ '+added+' materiaalregel(s) uit VW-lijst toegevoegd — '+prijsHits+' met echte inkoopprijs uit voorraad/facturen; rest handmatig invullen.',true);
   };
   // Zoekt de ECHTE inkoopprijs voor een omschrijving in je eigen voorraad/factuur-historie
@@ -10357,7 +10387,7 @@ function activiteitOpen(force){
       if(vh.desc) m.omschrijving=vh.desc;
       if(vh.id) m.artikel=vh.id;
       m.inkoop_stuk=vh.prijs; m.ic_indicatief=null;
-      saveCalc('off'); renderOfferteCalc(key);
+      saveCalc('off',{key:key}); renderOfferteCalc(key);
       flash(key,'✓ Echte inkoopprijs gevonden in voorraad/facturen: '+eur(vh.prijs)+(vh.id?(' · art '+vh.id):'')+' — gezet als inkoop.',true);
       return;
     }
@@ -10368,7 +10398,7 @@ function activiteitOpen(force){
       m.artikel=hit.id||'';
       if(hit.description) m.omschrijving=hit.description;
       m.ic_indicatief = (hit.cost!=null&&hit.cost!=='') ? Number(hit.cost) : null;
-      saveCalc('off'); renderOfferteCalc(key);
+      saveCalc('off',{key:key}); renderOfferteCalc(key);
       const hintPrijs = m.ic_indicatief!=null ? (' (VW-richtprijs '+eur(m.ic_indicatief)+' indicatief — vul echte inkoop uit factuur)') : '';
       flash(key,'⚠ Geen echte inkoopprijs gevonden — wel catalogus-match: '+(hit.description||hit.id)+hintPrijs+'. Kies hieronder de leverancier voor de actuele prijs.',false);
       _toonLevKiezer(key,rid);
@@ -10432,7 +10462,7 @@ function activiteitOpen(force){
   window.calcKiesLeverancier=function(key,rid,levId){
     const o=getOfferte(key); const m=o.materiaal.find(x=>x.id===rid); if(!m)return;
     const inp=document.getElementById('calc-mo-'+rid); if(inp) m.omschrijving=inp.value;
-    supplierMapSet(m,levId); saveCalc('off');
+    supplierMapSet(m,levId); saveCalc('off',{key:key});
     _toonLevKiezer(key,rid);
     calcOpenLevShop(key,rid);
     const lev=LEVERANCIERS_CALC.find(l=>l.id===levId);
@@ -10445,7 +10475,7 @@ function activiteitOpen(force){
   };
   window.calcWisLeverancier=function(key,rid){
     const o=getOfferte(key); const m=o.materiaal.find(x=>x.id===rid); if(!m)return;
-    supplierMapDel(m); saveCalc('off'); _toonLevKiezer(key,rid);
+    supplierMapDel(m); saveCalc('off',{key:key}); _toonLevKiezer(key,rid);
   };
   window.calcOpenLevShop=function(key,rid){
     const o=getOfferte(key); const m=o.materiaal.find(x=>x.id===rid); if(!m)return;
@@ -10509,7 +10539,7 @@ function activiteitOpen(force){
     m.omschrijving=h.desc; m.artikel=h.id||'';
     if(h.bron==='voorraad' && h.prijs!=null){ m.inkoop_stuk=h.prijs; m.ic_indicatief=null; }   // echte factuurprijs → inkoop
     else if(h.ic && h.prijs!=null){ m.ic_indicatief=h.prijs; }                                  // catalogus = enkel indicatieve hint
-    saveCalc('off'); box.style.display='none'; box.innerHTML=''; box._hits=null;
+    saveCalc('off',{key:key}); box.style.display='none'; box.innerHTML=''; box._hits=null;
     renderOfferteCalc(key);
   };
   window.calcMatBlur=function(){ setTimeout(()=>{const b=document.getElementById('calc-matdd'); if(b){b.style.display='none';}},160); };
@@ -10565,9 +10595,9 @@ function activiteitOpen(force){
       else if(sug.hit&&sug.hit.ic&&sug.hit.prijs!=null) row.ic_indicatief=sug.hit.prijs;               // catalogus = indicatief
       o.materiaal.splice(idx+1,0,row);
     }
-    saveCalc('off'); renderOfferteCalc(key);
+    saveCalc('off',{key:key}); renderOfferteCalc(key);
   };
-  window.calcRandDismiss=function(key,rid){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(m)m._randDone=true;saveCalc('off');renderOfferteCalc(key);};
+  window.calcRandDismiss=function(key,rid){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(m)m._randDone=true;saveCalc('off',{key:key});renderOfferteCalc(key);};
 
   // ── "Vergeten-kosten"-waarschuwing (marge-bewaker bij het offreren) ─────────
   // Proactieve strook onder de marge-KPI die live veelvergeten kostenposten
@@ -10633,17 +10663,17 @@ function activiteitOpen(force){
     return '<div class="calc-vergeten"><div class="calc-vg-h">⚠ Mogelijk vergeten kostenposten <span class="calc-vg-sub">— check vóór je de offerte verstuurt</span></div>'+items+'</div>';
   }
   function _renderVergeten(key){ const el=document.getElementById('calc-vergeten-'+cid(key)); if(el) el.innerHTML=vergetenPaneelHtml(key); }
-  window.calcVergetenDismiss=function(key,id){ const o=getOfferte(key); o._vergeten_dismissed=o._vergeten_dismissed||{}; o._vergeten_dismissed[id]=true; saveCalc('off'); _renderVergeten(key); };
+  window.calcVergetenDismiss=function(key,id){ const o=getOfferte(key); o._vergeten_dismissed=o._vergeten_dismissed||{}; o._vergeten_dismissed[id]=true; saveCalc('off',{key:key}); _renderVergeten(key); };
   window.calcVergetenAddKant=function(key){ const o=getOfferte(key); const m=_plaatZonderKant(o); if(m){ if(o._vergeten_dismissed)delete o._vergeten_dismissed.kantenband; calcAddRand(key,m.id); } else { _renderVergeten(key); } };
   window.calcVergetenAddMontage=function(key){
     const o=getOfferte(key); const def=(CALC.defaults.uren||[]).find(u=>VERGETEN_CFG.montage_woorden.test(u.omschrijving||''));
     o.uren.push({id:uid('u'),omschrijving:'Montage',uren:'',uurtarief:def?def.uurtarief:(CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:45),marge:def?def.marge:2});
-    if(o._vergeten_dismissed)delete o._vergeten_dismissed.montage; saveCalc('off'); renderOfferteCalc(key);
+    if(o._vergeten_dismissed)delete o._vergeten_dismissed.montage; saveCalc('off',{key:key}); renderOfferteCalc(key);
   };
   window.calcVergetenAddTransport=function(key){
     const o=getOfferte(key); const def=(CALC.defaults.uren||[]).find(u=>VERGETEN_CFG.transport_woorden.test(u.omschrijving||''));
     o.uren.push({id:uid('u'),omschrijving:'Transport',uren:'',uurtarief:def?def.uurtarief:110,marge:def?def.marge:1});
-    if(o._vergeten_dismissed)delete o._vergeten_dismissed.transport; saveCalc('off'); renderOfferteCalc(key);
+    if(o._vergeten_dismissed)delete o._vergeten_dismissed.transport; saveCalc('off',{key:key}); renderOfferteCalc(key);
   };
 
   // ── Offerte → Moneybird ───────────────────────────────────────────────────
@@ -10721,7 +10751,7 @@ function activiteitOpen(force){
       }catch(e){ /* val stil terug op de deterministische regels */ }
     }
     o._mbPreview={tekst,regels,total};
-    saveCalc('off');
+    saveCalc('off',{key:key});
   }
   // delta/som-regel onderaan de preview (los renderbaar zodat typen niet de focus steelt)
   function _prevDeltaHtml(key){
@@ -10773,25 +10803,25 @@ function activiteitOpen(force){
   }
   function _renderMbPrev(key){ const el=document.getElementById('calc-mbprev-'+cid(key)); if(el) el.innerHTML=_mbPreviewHtml(key); }
   // ── preview tweaken (regels/tekst handmatig bijschaven vóór Moneybird) ──────
-  window.calcPrevSetTekst=function(key,val){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.tekst=val; saveCalc('off'); } };
+  window.calcPrevSetTekst=function(key,val){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.tekst=val; saveCalc('off',{key:key}); } };
   window.calcPrevSetRegel=function(key,idx,field,val){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels||!p.regels[idx]) return;
     if(field==='price'){ const x=n(val); p.regels[idx].price=(x==null?0:Math.max(0,x)); } else { p.regels[idx].description=val; }
-    saveCalc('off'); _prevSumUpdate(key);
+    saveCalc('off',{key:key}); _prevSumUpdate(key);
   };
   window.calcPrevDelRegel=function(key,idx){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels) return;
     p.regels.splice(idx,1);
     if(!p.regels.length) p.regels.push({description:'Maatwerk conform offerte',price:Math.round((p.total||0)*100)/100});
-    saveCalc('off'); _renderMbPrev(key);
+    saveCalc('off',{key:key}); _renderMbPrev(key);
   };
   window.calcPrevAddRegel=function(key){
     const o=getOfferte(key); const p=o._mbPreview; if(!p) return; p.regels=p.regels||[];
-    p.regels.push({description:'',price:0}); saveCalc('off'); _renderMbPrev(key);
+    p.regels.push({description:'',price:0}); saveCalc('off',{key:key}); _renderMbPrev(key);
   };
   window.calcPrevHerschaal=function(key){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels||!p.regels.length) return;
-    p.regels=_normRegels(p.regels,p.total||0); saveCalc('off'); _renderMbPrev(key);
+    p.regels=_normRegels(p.regels,p.total||0); saveCalc('off',{key:key}); _renderMbPrev(key);
   };
   // Knop "Offerte aanmaken in Moneybird" → bouwt EERST een preview die Bart kan bijsturen/hergenereren.
   window.calcMaakOfferteMB=async function(key){
@@ -10801,16 +10831,16 @@ function activiteitOpen(force){
     if(!ctx.mbId){ setSt('⚠ Geen Moneybird-klant gekoppeld. Koppel deze offerte aan een project mét klant (of maak eerst het project aan) — dan vul ik de klant automatisch in.',false); return; }
     const {total}=_offRegels(o);
     if(total<=0){ setSt('⚠ Niets om te offreren — vul eerst materiaal/uren in.',false); return; }
-    o._mbPreview={loading:'Larry stelt nette offerteregels op…'}; saveCalc('off'); _renderMbPrev(key);
+    o._mbPreview={loading:'Larry stelt nette offerteregels op…'}; saveCalc('off',{key:key}); _renderMbPrev(key);
     await _calcGenPreview(key); _renderMbPrev(key);
   };
-  window.calcPreviewRegen=async function(key){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.loading='Hergenereren op basis van je aanpassingen…'; } else { o._mbPreview={loading:'Genereren…'}; } saveCalc('off'); _renderMbPrev(key); await _calcGenPreview(key); _renderMbPrev(key); };
+  window.calcPreviewRegen=async function(key){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.loading='Hergenereren op basis van je aanpassingen…'; } else { o._mbPreview={loading:'Genereren…'}; } saveCalc('off',{key:key}); _renderMbPrev(key); await _calcGenPreview(key); _renderMbPrev(key); };
   window.calcPreviewChat=async function(key){
     const inp=document.getElementById('calc-prevchat-'+cid(key)); const instr=inp?inp.value.trim():''; if(!instr) return;
-    const o=getOfferte(key); o._mbPreview=Object.assign({},o._mbPreview||{},{loading:'Aanpassen: '+instr}); saveCalc('off'); _renderMbPrev(key);
+    const o=getOfferte(key); o._mbPreview=Object.assign({},o._mbPreview||{},{loading:'Aanpassen: '+instr}); saveCalc('off',{key:key}); _renderMbPrev(key);
     await _calcGenPreview(key,instr); _renderMbPrev(key);
   };
-  window.calcPreviewSluit=function(key){ const o=getOfferte(key); delete o._mbPreview; saveCalc('off'); _renderMbPrev(key); };
+  window.calcPreviewSluit=function(key){ const o=getOfferte(key); delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key); };
   // De ENIGE outward-actie: pas hier gaat de offerte echt als concept naar Moneybird.
   window.calcPreviewDoorzetten=async function(key){
     const ctx=_mbCtx(key); const o=ctx.o; const p=o._mbPreview;
@@ -10827,7 +10857,7 @@ function activiteitOpen(force){
       const r=await mbPost(getAdmin()+'/estimates',{estimate:{contact_id:ctx.mbId,reference:ctx.ref,details_attributes:details}});
       if(!r.ok){const tx=await r.text().catch(()=> ''); throw new Error('HTTP '+r.status+' '+tx.slice(0,160));}
       const est=await r.json();
-      o.mb_estimate_id=est.id; delete o._mbPreview; saveCalc('off'); _renderMbPrev(key);
+      o.mb_estimate_id=est.id; delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
       const url='https://moneybird.com/'+getAdmin()+'/estimates/'+est.id;
       setSt('✓ Concept-offerte aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);
       window.open(url,'_blank');
@@ -10849,7 +10879,7 @@ function activiteitOpen(force){
       const r=await mbPost(getAdmin()+'/sales_invoices',{sales_invoice:{contact_id:ctx.mbId,reference:ctx.ref,details_attributes:details}});
       if(!r.ok){const tx=await r.text().catch(()=> ''); throw new Error('HTTP '+r.status+' '+tx.slice(0,160));}
       const inv=await r.json();
-      o.mb_invoice_id=inv.id; delete o._mbPreview; saveCalc('off'); _renderMbPrev(key);
+      o.mb_invoice_id=inv.id; delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
       const url='https://moneybird.com/'+getAdmin()+'/sales_invoices/'+inv.id;
       setSt('✓ Concept-factuur aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);
       window.open(url,'_blank');
@@ -10888,11 +10918,11 @@ function activiteitOpen(force){
         if(bm.ok){ const bj=await bm.json(); const bc=(bj.body&&bj.body.content)||''; const isH=bj.body&&/html/i.test(bj.body.contentType||''); if(bc) bodyHtml=isH?String(bc):('<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:12px;padding:8px;margin:0">'+esc(bc)+'</pre>'); }
       }catch(e){}
       o.mail_context={id:m.id, subject:m.subject||'', from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'', received:(m.receivedDateTime||'').slice(0,16).replace('T',' '), preview:(m.bodyPreview||''), body_html:bodyHtml};
-      saveCalc('off'); renderOfferteCalc(key); _toonMailNaast(key);
+      saveCalc('off',{key:key}); renderOfferteCalc(key); _toonMailNaast(key);
       setSt('✓ Mail gekoppeld — de offertetekst krijgt nu context uit deze mail.',true);
     }catch(e){ setSt('⚠ Mail zoeken mislukt: '+(e.message||e),false); }
   };
-  window.calcOntkoppelMail=function(key){ const o=getOfferte(key); delete o.mail_context; saveCalc('off'); renderOfferteCalc(key); _toonMailNaast(key); };
+  window.calcOntkoppelMail=function(key){ const o=getOfferte(key); delete o.mail_context; saveCalc('off',{key:key}); renderOfferteCalc(key); _toonMailNaast(key); };
 
   // ══ Automatisch wegschrijven naar de map, leesbaar zónder deze tool ═══════════
   // mt_calc_offertes.json is één technisch syncbestand met álle offertes door elkaar;
@@ -10926,7 +10956,7 @@ function activiteitOpen(force){
       offerte_tekst:(o.meta&&o.meta.offerte_tekst)||'', moneybird_estimate_id:o.mb_estimate_id||null,
       offertebedrag_excl_btw:t.offertebedrag, materiaal_inkoop:t.mInk, materiaal_verkoop:t.mVerk,
       uren_kost:t.uKost, uren_verkoop:t.uVerk, kostprijs:t.kostprijs, brutowinst:t.brutowinst, marge:t.marge,
-      materiaal:o.materiaal, uren:o.uren, meta:o.meta };
+      materiaal:o.materiaal, uren:o.uren, meta:o.meta, nacalculatie:o.nacalc||null };
   }
 
   // Excel-werkboek van één calculatie. SheetJS zit al in de tool (vendor/xlsx.full.min.js)
@@ -11111,7 +11141,7 @@ function activiteitOpen(force){
         if(key!==nieuwProj.code && /^OFF-/.test(key)) delete CALC.offertes[key];   // standalone-sleutel opruimen
         // De mapadministratie mee verhuizen, anders blijft de losse kopie staan.
         if(key!==nieuwProj.code){ const s=_mapState(); if(s[key]){ s[nieuwProj.code]=s[key]; delete s[key]; lsSave(MAP_STATE,s); } }
-        saveCalc('off');
+        saveCalc('off',{key:nieuwProj.code});
         await _bewaarOfferteInMap(nieuwProj,o,nieuwProj.code);
       }catch(e){ console.warn('offerte koppelen/opslaan faalde:',e); }
     };
@@ -11120,9 +11150,9 @@ function activiteitOpen(force){
     if(np && o.titel && !np.value){ np.value=o.titel; if(typeof autoCode==='function') autoCode(); }
   };
 
-  window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u)return;u[field]=val;saveCalc('off');recalcView(key);};
-  window.calcAddUur=function(key){const o=getOfferte(key);o.uren.push({id:uid('u'),omschrijving:'',uren:'',uurtarief:CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:45,marge:2});saveCalc('off');renderOfferteCalc(key);};
-  window.calcDelUur=function(key,rid){const o=getOfferte(key);o.uren=o.uren.filter(u=>u.id!==rid);saveCalc('off');renderOfferteCalc(key);};
+  window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u)return;u[field]=val;saveCalc('off',{key:key});recalcView(key);};
+  window.calcAddUur=function(key){const o=getOfferte(key);o.uren.push({id:uid('u'),omschrijving:'',uren:'',uurtarief:CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:45,marge:2});saveCalc('off',{key:key});renderOfferteCalc(key);};
+  window.calcDelUur=function(key,rid){const o=getOfferte(key);o.uren=o.uren.filter(u=>u.id!==rid);saveCalc('off',{key:key});renderOfferteCalc(key);};
 
   // standaardwaarden (leeg rekenblad)
   window.calcSetDefMarge=function(val){CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));};
@@ -11137,7 +11167,7 @@ function activiteitOpen(force){
     await hydrateCalc();
     if(projectCode===undefined && typeof huidigProject!=='undefined' && huidigProject) projectCode=huidigProject.code;
     if(projectCode){
-      getOfferte(projectCode); saveCalc('off');
+      getOfferte(projectCode); saveCalc('off',{key:projectCode});
       if(typeof renderProjectDetail==='function' && typeof huidigProject!=='undefined' && huidigProject && huidigProject.code===projectCode){
         renderProjectDetail(huidigProject);
         setTimeout(()=>{const el=document.getElementById('offerte-calc-'+cid(projectCode)); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});},200);
@@ -11145,7 +11175,7 @@ function activiteitOpen(force){
       return;
     }
     const key='OFF-'+Date.now().toString(36).toUpperCase();
-    const o=getOfferte(key); o.titel='Nieuwe offerte'; saveCalc('off');
+    const o=getOfferte(key); o.titel='Nieuwe offerte'; saveCalc('off',{key:key});
     openStandalone(key);
   };
   // Vanuit een geopende mail (inbox) → nieuwe offerte-calculatie met die mail als context.
@@ -11163,7 +11193,7 @@ function activiteitOpen(force){
     o.mail_context={id:m.id, subject:m.subject||'', from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'', received:(m.receivedDateTime||'').slice(0,16).replace('T',' '), preview:(m.bodyPreview||''), body_html:bodyHtml, weblink:(m.webLink||'')};
     // Al aan een project gekoppeld? Koppel de offerte aan datzelfde project (klant prefill via _mbCtx).
     try{ const info=(typeof mailLinkInfo==='function')?mailLinkInfo(m):null; if(info&&info.code) o.project_code=info.code; }catch(e){}
-    saveCalc('off');
+    saveCalc('off',{key:key});
     if(typeof track==='function'){ try{ track('inbox','maak_offerte',{detail:key}); }catch(e){} }
     if(typeof tbDoTab==='function') tbDoTab('projecten');
     setTimeout(()=>{ openStandalone(key); },140);
@@ -11261,7 +11291,325 @@ function activiteitOpen(force){
     return '<option value="">— niet gekoppeld —</option>'+lijst.map(p=>'<option value="'+esc(p.code)+'"'+(p.code===sel?' selected':'')+'>'+esc(p.code)+(p.naam?(' · '+esc(p.naam)):'')+'</option>').join('');
   }
 
+  /* ==========================================================================
+   * NACALCULATIE — dezelfde rekenbladen als de offerte, maar met de werkelijke
+   * materialen en uren, naast de begroting. Uren kunnen uit Toggl 2.0 komen:
+   *  - projecttotaal van ALLE medewerkers (projects → total_tracked_secs);
+   *  - een verdelingsvoorstel uit taaknamen (tasks/stream → total_tracked_time,
+   *    ook alle medewerkers). Tags staan in Toggl op taken, niet op uren, en het
+   *    meeste werk is taakloos geschreven — dus de rest blijft "niet toegewezen"
+   *    en de mens verdeelt. Auto-match = voorstel, nooit stil overnemen.
+   *  - CSV-export uit Toggl Reports als vangnet (bevat alle medewerkers).
+   * ========================================================================== */
+  const _modus={};            // per offerte: 'voor' | 'na' (alleen deze sessie)
+  window.calcModus=function(basis,m){ _modus[basis]=m; renderOfferteCalc(basis); };
+  function modusBalk(basis){
+    const na=_modus[basis]==='na', o=CALC.offertes[basis], heeftNc=!!(o&&o.nacalc);
+    const knop=(m,label,actief)=>`<button class="btn btn-xs ${actief?'btn-primary':'btn-secondary'}" onclick="calcModus('${basis}','${m}')">${label}</button>`;
+    return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:0.6rem">${knop('voor','Voorcalculatie',!na)}${knop('na','Nacalculatie'+(heeftNc?' ●':''),na)}</div>`;
+  }
+
+  // Uren-categorieën herkennen in een taaknaam/omschrijving. Regels die hier niet
+  // staan, matchen op hun eigen naam.
+  const NC_TREFWOORDEN={
+    calculatie:['calculatie','offerte','begroting'],
+    ontwerpen:['ontwerp','schets','design','3d','render'],
+    werkvoorbereiding:['werkvoorbereiding','voorbereiding','werktekening','tekening','tekenen','inmeten','opname','bestel','werkplaats map','cnc-programma'],
+    productie:['productie','cnc','zagen','frezen','maken','bouwen','assemblage','werkplaats'],
+    afwerking:['afwerking','lak','spuit','olie','schuren','beits','was'],
+    transport:['transport','levering','leveren','vervoer','rijden','ophalen','bezorg'],
+    montage:['montage','monteren','plaatsen','installatie','oplevering','opleveren'],
+  };
+  function ncCategorie(tekst,regels){
+    const t=String(tekst||'').toLowerCase(); if(!t.trim()) return null;
+    for(const r of regels){
+      const naam=String(r||'').toLowerCase().trim(); if(!naam) continue;
+      const woorden=NC_TREFWOORDEN[naam]||[naam];
+      if(woorden.some(w=>t.includes(w))) return r;
+    }
+    return null;
+  }
+  function ncRegelNamen(nc){ return [...new Set(nc.uren.map(u=>String(u.omschrijving||'').trim()).filter(Boolean))]; }
+  function uurFmt(u){ return (u==null||isNaN(u))?'—':(Math.round(u*100)/100).toLocaleString('nl-NL',{maximumFractionDigits:2})+' u'; }
+
+  // Toggl 2.0-gegevens: één keer per 10 min ophalen (rate limit 30–600 req/uur).
+  let _ncTgl=null;
+  const _ncTmp={};          // per nacalc-sleutel: kandidaten/zoekstatus — bewust NIET in de offerte (synct niet)
+  function ncTmp(nk){ return _ncTmp[nk]||(_ncTmp[nk]={}); }
+  async function ncToggl(vers){
+    if(!vers && _ncTgl && Date.now()-_ncTgl.ts<600000) return _ncTgl;
+    if(typeof focusFetch!=='function') throw new Error('Toggl-koppeling niet geladen');
+    const projecten=[]; for(let page=1;page<=10;page++){
+      const r=await focusFetch(`projects?per_page=100&page=${page}`);
+      const d=(r&&r.data)||[]; projecten.push(...d);
+      if(d.length<100 || projecten.length>=((r&&r.total)||0)) break;
+    }
+    const taken=await focusFetch('tasks/stream');
+    _ncTgl={ts:Date.now(), projecten, taken:Array.isArray(taken)?taken:((taken&&taken.data)||[])};
+    return _ncTgl;
+  }
+  function _tglSecs(v){ return (v&&typeof v==='object')?(v.total||v.tracked||0):(Number(v)||0); }
+
+  // Welk Toggl-project hoort bij deze offerte? Score op projectcode ([CODE] of los),
+  // offertenummer vooraan (2026-054 …) en overlappende woorden uit code/titel.
+  function ncMatchProjecten(basis,projecten){
+    const o=CALC.offertes[basis]||{};
+    const pc=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===basis||p.code===o.project_code):null;
+    const code=String((pc&&pc.code)||o.project_code||basis).toLowerCase();
+    const woorden=new Set([code,...code.split(/[-_\s]+/),...String(o.titel||'').toLowerCase().split(/\W+/),
+      ...String((pc&&pc.naam)||'').toLowerCase().split(/\W+/)].filter(w=>w&&w.length>=3&&!/^(off|de|het|een|en|voor)$/.test(w)));
+    return projecten.map(p=>{
+      const naam=String(p.name||'').toLowerCase(); let s=0;
+      if(naam.includes(code)) s+=10;
+      woorden.forEach(w=>{ if(naam.includes(w)) s+=w.length>=5?2:1; });
+      return {p,s};
+    }).filter(x=>x.s>0).sort((a,b)=>b.s-a.s);
+  }
+
+  window.calcStartNacalc=function(basis){
+    const o=getOfferte(basis);
+    if(!o.nacalc) o.nacalc=nieuweNacalc(o);
+    saveCalc('off',{key:basis}); renderOfferteCalc(basis);
+  };
+  window.calcNcKiesToggl=function(nk,pid){
+    const nc=getOfferte(nk);
+    if(!pid){ nc.toggl=null; saveCalc('off',{key:nk}); renderOfferteCalc(nk); return; }
+    const p=_ncTgl&&_ncTgl.projecten.find(x=>String(x.id)===String(pid));
+    nc.toggl={project_id:Number(pid), project_naam:p?p.name:String(pid), bevestigd:true};
+    saveCalc('off',{key:nk}); renderOfferteCalc(nk);
+    calcNcHaalUren(nk);
+  };
+  window.calcNcZoekToggl=async function(nk){
+    const st=document.getElementById('nc-tgl-st-'+cid(nk));
+    try{
+      if(st) st.textContent='Toggl-projecten ophalen…';
+      const T=await ncToggl(true);
+      const nc=getOfferte(nk);
+      const m=ncMatchProjecten(basisKey(nk),T.projecten);
+      ncTmp(nk).kand=m.slice(0,6).map(x=>({id:x.p.id,naam:x.p.name,score:x.s}));
+      renderOfferteCalc(nk);
+    }catch(e){ if(st) st.textContent='⚠ '+(e.message||e); }
+  };
+  // Uren ophalen: totaal (alle medewerkers) + voorstel uit taaknamen.
+  window.calcNcHaalUren=async function(nk){
+    const nc=getOfferte(nk), st=document.getElementById('nc-tgl-st-'+cid(nk));
+    if(!nc.toggl||!nc.toggl.project_id){ if(st) st.textContent='Kies eerst het Toggl-project.'; return; }
+    try{
+      if(st) st.textContent='Uren ophalen uit Toggl…';
+      const T=await ncToggl(true), pid=nc.toggl.project_id;
+      const proj=T.projecten.find(p=>p.id===pid);
+      if(!proj) throw new Error('Toggl-project '+pid+' niet (meer) gevonden');
+      const totaal=(proj.total_tracked_secs||0)/3600;
+      const regels=ncRegelNamen(nc), per={}, herkomst={};
+      let opTaak=0;
+      T.taken.filter(t=>t.project_id===pid).forEach(t=>{
+        const u=_tglSecs(t.total_tracked_time)/3600; if(!u) return;
+        opTaak+=u;
+        const cat=ncCategorie(t.name,regels); if(!cat) return;
+        per[cat]=(per[cat]||0)+u; (herkomst[cat]=herkomst[cat]||[]).push(t.name);
+      });
+      const toegewezen=Object.values(per).reduce((a,b)=>a+b,0);
+      nc.toggl=Object.assign({},nc.toggl,{project_naam:proj.name, opgehaald:new Date().toISOString(), bron:'toggl',
+        totaal_u:totaal, op_taak_u:opTaak,
+        voorstel:regels.map(r=>({regel:r, uren:Math.round((per[r]||0)*100)/100, taken:(herkomst[r]||[]).slice(0,5)})),
+        rest_u:Math.max(0,Math.round((totaal-toegewezen)*100)/100), rest_naar:regels.find(r=>/productie/i.test(r))||regels[0]||''});
+      saveCalc('off',{key:nk}); renderOfferteCalc(nk);
+    }catch(e){ if(st) st.textContent='⚠ Toggl: '+(e.message||e); }
+  };
+  // CSV uit Toggl Reports → Time logs → Export CSV (alle medewerkers).
+  function ncCsvParse(tekst){
+    const regels=[]; let rij=[], veld='', q=false;
+    const delim=(tekst.split('\n')[0].split(';').length>tekst.split('\n')[0].split(',').length)?';':',';
+    for(let i=0;i<tekst.length;i++){
+      const ch=tekst[i];
+      if(q){ if(ch==='"'){ if(tekst[i+1]==='"'){veld+='"';i++;} else q=false; } else veld+=ch; }
+      else if(ch==='"') q=true;
+      else if(ch===delim){ rij.push(veld); veld=''; }
+      else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&tekst[i+1]==='\n') i++; rij.push(veld); veld=''; if(rij.some(v=>v!=='')) regels.push(rij); rij=[]; }
+      else veld+=ch;
+    }
+    rij.push(veld); if(rij.some(v=>v!=='')) regels.push(rij);
+    return regels;
+  }
+  function ncDuurUren(v){
+    const s=String(v||'').trim(); if(!s) return 0;
+    const m=s.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
+    if(m) return (+m[1])+(+m[2])/60+((+m[3]||0)/3600);
+    const x=Number(s.replace(',','.')); return isNaN(x)?0:x;
+  }
+  window.calcNcCsv=function(nk){
+    const inp=document.createElement('input'); inp.type='file'; inp.accept='.csv,text/csv';
+    inp.onchange=async()=>{
+      const f=inp.files&&inp.files[0]; if(!f) return;
+      const st=document.getElementById('nc-tgl-st-'+cid(nk));
+      try{
+        const rows=ncCsvParse(await f.text()); if(rows.length<2) throw new Error('leeg bestand');
+        const kop=rows[0].map(h=>h.toLowerCase().trim()), kol=re=>kop.findIndex(h=>re.test(h));
+        const cP=kol(/^project/), cD=kol(/^(description|omschrijving|beschrijving)/), cT=kol(/^(task|taak)/),
+              cG=kol(/^tags?$/), cU=kol(/^(member|user|gebruiker|medewerker|name|naam)$/),
+              cDur=kol(/^(duration|duur|time|tijd|hours|uren|tracked)/);
+        if(cDur<0) throw new Error('geen kolom met duur gevonden (kolommen: '+kop.join(', ')+')');
+        const nc=getOfferte(nk), regels=ncRegelNamen(nc);
+        const doel=nc.toggl&&nc.toggl.project_naam ? String(nc.toggl.project_naam).toLowerCase() : null;
+        let totaal=0; const per={}, herkomst={}, mensen={};
+        rows.slice(1).forEach(r=>{
+          if(doel && cP>=0 && String(r[cP]||'').toLowerCase().trim()!==doel) return;
+          const u=ncDuurUren(r[cDur]); if(!u) return;
+          totaal+=u; if(cU>=0){ const w=r[cU]||'?'; mensen[w]=(mensen[w]||0)+u; }
+          const tekst=[cT>=0?r[cT]:'',cG>=0?r[cG]:'',cD>=0?r[cD]:''].join(' ');
+          const cat=ncCategorie(tekst,regels); if(!cat) return;
+          per[cat]=(per[cat]||0)+u; (herkomst[cat]=herkomst[cat]||[]).push((cT>=0&&r[cT])||(cD>=0&&r[cD])||'');
+        });
+        if(!totaal) throw new Error(doel?('geen uren voor project "'+nc.toggl.project_naam+'" in dit bestand'):'geen uren gevonden');
+        const toegewezen=Object.values(per).reduce((a,b)=>a+b,0);
+        nc.toggl=Object.assign({},nc.toggl||{},{opgehaald:new Date().toISOString(), bron:'csv:'+f.name, totaal_u:totaal,
+          voorstel:regels.map(r=>({regel:r, uren:Math.round((per[r]||0)*100)/100, taken:[...new Set(herkomst[r]||[])].slice(0,5)})),
+          rest_u:Math.max(0,Math.round((totaal-toegewezen)*100)/100), rest_naar:regels.find(r=>/productie/i.test(r))||regels[0]||'',
+          mensen:Object.entries(mensen).map(([naam,u])=>({naam,uren:Math.round(u*100)/100}))});
+        saveCalc('off',{key:nk}); renderOfferteCalc(nk);
+      }catch(e){ if(st) st.textContent='⚠ CSV: '+(e.message||e); }
+    };
+    inp.click();
+  };
+  window.calcNcVoorstel=function(nk,i,val){ const nc=getOfferte(nk); const v=nc.toggl&&nc.toggl.voorstel&&nc.toggl.voorstel[i]; if(!v)return; v.uren=n(val)||0; saveCalc('off',{key:nk}); renderOfferteCalc(nk); };
+  window.calcNcRest=function(nk,veld,val){ const nc=getOfferte(nk); if(!nc.toggl)return; nc.toggl[veld]=veld==='rest_u'?(n(val)||0):val; saveCalc('off',{key:nk}); renderOfferteCalc(nk); };
+  window.calcNcOvernemen=function(nk){
+    const nc=getOfferte(nk), tg=nc.toggl; if(!tg||!tg.voorstel) return;
+    const som={}; tg.voorstel.forEach(v=>{ if(v.uren) som[v.regel]=(som[v.regel]||0)+v.uren; });
+    if(tg.rest_u && tg.rest_naar) som[tg.rest_naar]=(som[tg.rest_naar]||0)+tg.rest_u;
+    Object.entries(som).forEach(([regel,u])=>{
+      const r=nc.uren.find(x=>String(x.omschrijving||'').trim().toLowerCase()===regel.toLowerCase());
+      if(r) r.uren=Math.round(u*100)/100;
+    });
+    tg.overgenomen=new Date().toISOString();
+    saveCalc('off',{key:nk}); renderOfferteCalc(nk);
+    flash(nk,'✓ Toggl-uren overgenomen in de uren-regels — controleer en pas aan waar nodig',true);
+  };
+
+  function ncVergelijkHtml(basis){
+    const o=getOfferte(basis), nc=o.nacalc; if(!nc) return '';
+    const v=totalen(o), w=totalen(nc);
+    const fb=n(o.meta&&o.meta.factuurbedrag), omzet=(fb!=null)?fb:v.offertebedrag;
+    const resV=v.offertebedrag-v.kostprijs, resW=omzet-w.kostprijs;
+    const urenV=o.uren.reduce((a,u)=>a+(n(u.uren)||0),0), urenW=nc.uren.reduce((a,u)=>a+(n(u.uren)||0),0);
+    const kl=(d,meerSlecht)=>d==null||Math.abs(d)<0.005?'var(--text-faint)':((d>0)===meerSlecht?'#c0392b':'var(--green)');
+    const rij=(label,a,b,fmt,meerSlecht,vet)=>{ const d=(a==null||b==null)?null:b-a;
+      return `<tr${vet?' style="font-weight:700"':''}><td>${label}</td><td class="calc-num">${fmt(a)}</td><td class="calc-num">${fmt(b)}</td><td class="calc-num" style="color:${kl(d,meerSlecht)}">${d==null?'—':((d>0?'+':'')+fmt(d))}</td></tr>`; };
+    return `<table class="calc-tbl" style="max-width:640px">
+      <thead><tr><th></th><th class="calc-num">Begroot (offerte)</th><th class="calc-num">Werkelijk</th><th class="calc-num">Verschil</th></tr></thead>
+      <tbody>
+        ${rij('Materiaal inkoop',v.mInk,w.mInk,eur,true)}
+        ${rij('Uren',urenV,urenW,uurFmt,true)}
+        ${rij('Arbeid (kostprijs)',v.uKost,w.uKost,eur,true)}
+        ${rij('Kostprijs totaal',v.kostprijs,w.kostprijs,eur,true,true)}
+        ${rij('Omzet'+(fb!=null?' (factuurbedrag)':' (offertebedrag — vul factuurbedrag in)'),v.offertebedrag,omzet,eur,false)}
+        ${rij('Resultaat',resV,resW,eur,false,true)}
+        ${rij('Marge',v.offertebedrag>0?resV/v.offertebedrag:null,omzet>0?resW/omzet:null,pct,false)}
+      </tbody></table>`;
+  }
+
+  function ncUurRij(nk,u,begroot){
+    const r=uRow(u);
+    return `<tr>
+      <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur('${nk}','${u.id}','omschrijving',this.value)"></td>
+      <td class="calc-num" style="color:var(--text-dim)">${begroot==null||begroot===''?'—':inval(begroot)}</td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(u.uren)}" placeholder="0" onchange="calcSetUur('${nk}','${u.id}','uren',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${inval(u.uurtarief)}" placeholder="45" onchange="calcSetUur('${nk}','${u.id}','uurtarief',this.value)"></td>
+      <td class="calc-num" id="uk-${u.id}">${eur(r.kost)}</td>
+      <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur('${nk}','${u.id}')">×</button></td>
+    </tr>`;
+  }
+
+  function ncTogglHtml(nk){
+    const nc=getOfferte(nk), tg=nc.toggl, c=cid(nk);
+    const kand=ncTmp(nk).kand||[];
+    const keuze = tg&&tg.project_id
+      ? `<b>${esc(tg.project_naam||tg.project_id)}</b> <button class="btn btn-xs btn-secondary" onclick="calcNcKiesToggl('${nk}','')">wijzig</button>
+         <button class="btn btn-xs btn-gold" onclick="calcNcHaalUren('${nk}')">↻ Uren ophalen</button>`
+      : (kand.length
+          ? `<select class="calc-inp" onchange="calcNcKiesToggl('${nk}',this.value)"><option value="">— kies het Toggl-project —</option>${kand.map((k,i)=>`<option value="${k.id}">${esc(k.naam)}${i===0?' (beste match)':''}</option>`).join('')}${(_ncTgl?_ncTgl.projecten:[]).filter(p=>!kand.some(k=>k.id===p.id)).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>`
+          : `<button class="btn btn-xs btn-secondary" onclick="calcNcZoekToggl('${nk}')">🔎 Zoek Toggl-project</button>`);
+    let voorstel='';
+    if(tg&&tg.voorstel){
+      const regels=ncRegelNamen(nc);
+      const rows=tg.voorstel.map((v,i)=>`<tr><td>${esc(v.regel)}</td><td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(v.uren)}" onchange="calcNcVoorstel('${nk}',${i},this.value)"></td><td style="font-size:10px;color:var(--text-faint)">${esc((v.taken||[]).join(' · ').slice(0,90))}</td></tr>`).join('');
+      voorstel=`<div style="margin-top:0.5rem;font-size:12px">
+        Totaal in ${tg.bron&&tg.bron.startsWith('csv')?'CSV':'Toggl'}: <b>${uurFmt(tg.totaal_u)}</b>${tg.op_taak_u!=null?` <span style="color:var(--text-faint)">— waarvan ${uurFmt(tg.op_taak_u)} op een taak</span>`:''}
+        <span style="color:var(--text-faint)">· opgehaald ${esc(String(tg.opgehaald||'').slice(0,16).replace('T',' '))}</span></div>
+        ${tg.mensen&&tg.mensen.length?`<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${tg.mensen.map(m=>esc(m.naam)+' '+uurFmt(m.uren)).join(' · ')}</div>`:''}
+        <table class="calc-tbl" style="max-width:640px;margin-top:0.4rem"><thead><tr><th>Uren-regel</th><th class="calc-num">Voorstel</th><th>herkend uit</th></tr></thead><tbody>${rows}
+          <tr style="background:rgba(160,130,60,.07)"><td>Niet toegewezen → <select class="calc-inp" onchange="calcNcRest('${nk}','rest_naar',this.value)">${regels.map(r=>`<option${r===tg.rest_naar?' selected':''}>${esc(r)}</option>`).join('')}</select></td>
+            <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(tg.rest_u)}" onchange="calcNcRest('${nk}','rest_u',this.value)"></td>
+            <td style="font-size:10px;color:var(--text-faint)">uren zonder herkenbare taak — verdeel zelf, of laat bij de gekozen regel</td></tr>
+        </tbody></table>
+        <button class="btn btn-xs btn-primary" style="margin-top:0.4rem" onclick="calcNcOvernemen('${nk}')">Overnemen in de uren-regels</button>
+        ${tg.overgenomen?`<span style="font-size:10px;color:var(--text-faint);margin-left:6px">laatst overgenomen ${esc(String(tg.overgenomen).slice(0,16).replace('T',' '))}</span>`:''}`;
+    }
+    return `<div class="calc-actions" style="margin-top:1rem">
+      <div style="font-weight:700;font-size:12px;margin-bottom:0.4rem">⏱ Uren uit Toggl</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${keuze}
+        <span style="flex:1"></span>
+        <button class="btn btn-xs btn-secondary" onclick="calcNcCsv('${nk}')" title="Toggl → Reports → Time logs → Export CSV. Bevat de uren van alle medewerkers.">📄 CSV uit Toggl Reports</button></div>
+      <div id="nc-tgl-st-${c}" style="font-size:11px;color:var(--text-dim);min-height:14px;margin-top:3px"></div>
+      ${voorstel}
+      <p style="font-size:10px;color:var(--text-faint);margin:0.4rem 0 0">Het totaal telt alle medewerkers. De verdeling is een voorstel uit taaknamen: in Toggl hangen tags aan taken, niet aan uren, en veel uren staan zonder taak — die komen bij "niet toegewezen". Niets wordt overgenomen zonder jouw klik.</p>
+    </div>`;
+  }
+
+  async function renderNacalc(basis){
+    const host=document.getElementById('offerte-calc-'+cid(basis)); if(!host) return;
+    const o=getOfferte(basis);
+    if(!o.nacalc){
+      host.innerHTML=`<div class="calc-wrap">${modusBalk(basis)}
+        <div class="calc-actions"><div style="font-weight:700;margin-bottom:0.3rem">Nacalculatie</div>
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 0.6rem">Begin met een kopie van de offerte: dezelfde materialen (met de prijs-zoeker en leveranciers) en dezelfde uren-regels, met de werkelijke uren nog leeg. Daarna vul je in wat het écht kostte en haal je de uren uit Toggl. De offerte zelf blijft ongewijzigd.</p>
+        <button class="btn btn-sm btn-primary" onclick="calcStartNacalc('${basis}')">Start nacalculatie</button></div></div>`;
+      return;
+    }
+    const nk=NC+basis, nc=o.nacalc, t=totalen(nc), c=cid(nk);
+    // auto-match één keer voorstellen als er nog niets gekozen is
+    if(!nc.toggl && !ncTmp(nk).gezocht){ ncTmp(nk).gezocht=true; setTimeout(()=>calcNcZoekToggl(nk),50); }
+    const begrootVan=u=>{ if(u.begroot!==undefined) return u.begroot;
+      const b=o.uren.find(x=>String(x.omschrijving||'').trim().toLowerCase()===String(u.omschrijving||'').trim().toLowerCase()); return b?b.uren:null; };
+    const matBody=nc.materiaal.map(m=>matRij(nk,m)).join('');
+    host.innerHTML=`<div class="calc-wrap">${modusBalk(basis)}
+      <div class="card-title" style="margin:0 0 0.5rem">Nacalculatie <span style="font-size:11px;color:var(--text-faint);font-weight:400">— werkelijk vs begroot · ${esc(basis)} · gestart ${esc(String(nc.gestart||'').slice(0,10))}</span></div>
+      <div id="nc-verg-${c}" style="margin-bottom:0.8rem">${ncVergelijkHtml(basis)}</div>
+      <div class="calc-sec">Werkelijke materialen</div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px">
+      <table class="calc-tbl">
+        <thead><tr><th>Omschrijving</th><th class="calc-num">Aantal</th><th class="calc-num">Inkoop €/stuk</th><th class="calc-num">Inkoop totaal</th><th class="calc-num">Marge ×</th><th class="calc-num">Verkoop ex. btw</th><th></th></tr></thead>
+        <tbody>${matBody}</tbody>
+        <tfoot><tr class="calc-tot"><td colspan="3">Totaal materialen</td><td class="calc-num" id="mft-ink-${c}">${eur(t.mInk)}</td><td></td><td class="calc-num" id="mft-verk-${c}">${eur(t.mVerk)}</td><td></td></tr></tfoot>
+      </table></div>
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddMat('${nk}')">+ materiaal</button>
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem;margin-left:6px" onclick="calcImportVW('${nk}')">📋 VW-lijst importeren</button>
+      <div class="calc-sec" style="margin-top:1.2rem">Werkelijke uren</div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px">
+      <table class="calc-tbl">
+        <thead><tr><th>Omschrijving</th><th class="calc-num">Begroot</th><th class="calc-num">Werkelijk</th><th class="calc-num">Uurtarief €</th><th class="calc-num">Kostprijs</th><th></th></tr></thead>
+        <tbody>${nc.uren.map(u=>ncUurRij(nk,u,begrootVan(u))).join('')}</tbody>
+        <tfoot><tr class="calc-tot"><td colspan="4">Totaal uren (kostprijs)</td><td class="calc-num" id="uft-kost-${c}">${eur(t.uKost)}</td><td></td></tr></tfoot>
+      </table></div>
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddUur('${nk}')">+ uur-regel</button>
+      ${ncTogglHtml(nk)}
+      <div class="calc-btnrow" style="margin-top:0.8rem">
+        <label style="font-size:11px;color:var(--text-dim)">Factuurbedrag (def.)
+          <input class="calc-inp calc-num" style="width:110px" value="${inval(o.meta.factuurbedrag)}" placeholder="0,00" onchange="calcSetMeta('${basis}','factuurbedrag',this.value);renderOfferteCalc('${nk}')"></label>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm btn-secondary" onclick="saveCalcNu('${basis}')">💾 Opslaan</button>
+      </div>
+      <div id="calc-status-${c}" style="font-size:11px;min-height:16px;margin-top:0.3rem"></div>
+      <div id="calc-status-${cid(basis)}" style="font-size:11px;min-height:16px"></div>
+    </div>`;
+  }
+
   window.renderOfferteCalc=async function(key){
+    const basis=basisKey(key);
+    if(!CALC.loaded) await hydrateCalc();
+    if(isNc(key)) _modus[basis]='na';
+    if(_modus[basis]==='na') return renderNacalc(basis);
+    key=basis;
     let host=document.getElementById('offerte-calc-'+cid(key));
     if(!host) return;
     if(!CALC.loaded){ await hydrateCalc(); host=document.getElementById('offerte-calc-'+cid(key)); if(!host) return; }
@@ -11321,6 +11669,7 @@ function activiteitOpen(force){
       <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddUur('${key}')">+ uur-regel</button>`;
 
     host.innerHTML = `<div class="calc-wrap">
+      ${modusBalk(key)}
       ${kopHtml}
       ${summary}
       ${kpis}
