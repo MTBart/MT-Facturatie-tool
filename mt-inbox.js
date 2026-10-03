@@ -685,8 +685,9 @@ function inboxKoppelProjectDo(code){
     inboxToast('✓ Mail gekoppeld aan '+code+' ('+arr.length+' mail'+(arr.length>1?'s':'')+')');
     inboxRefreshKoppelKnop();
     if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
-    // Bijlagen automatisch naar de klantmap (05_Aangeleverd) — stil, best-effort.
-    if(m.hasAttachments) inboxBijlagenNaarProject(m.id,code,true);
+    // Bijlagen: NIET meer stil. Eerst vragen; opslaan overschrijft nooit iets
+    // (zelfde inhoud = overslaan, zelfde naam/andere inhoud = nieuwe naam).
+    if(m.hasAttachments) inboxBijlagenVraag(m.id,code);
   }
   const ov=document.getElementById('koppel-overlay');if(ov)ov.remove();
 }
@@ -715,6 +716,20 @@ function inboxBijlagenNaarMap(){
   inboxBijlagenNaarProject(m.id,info.code,false);
 }
 
+// Na koppelen: vragen of de bijlagen mee moeten (vroeger gebeurde dat stil en
+// overschreef het bestanden met dezelfde naam).
+async function inboxBijlagenVraag(mailId,code){
+  const vraag='Deze mail heeft bijlagen. Een kopie opslaan in '+code+'/05_Aangeleverd?\n\n'
+    +'Er wordt niets overschreven: een bestand dat er al precies zo staat wordt overgeslagen, '
+    +'een ander bestand met dezelfde naam krijgt een nieuwe naam. De mail blijft in Outlook.';
+  let ja=false;
+  try{ ja=(window.mtDialog&&mtDialog.confirm)
+    ? await mtDialog.confirm({title:'Bijlagen opslaan?',message:vraag,okLabel:'Kopie opslaan'})
+    : confirm(vraag); }catch(e){ ja=false; }
+  if(ja) inboxBijlagenNaarProject(mailId,code,false);
+  else inboxToast('Bijlagen niet opgeslagen — kan later via 📎 bij de mail.');
+}
+
 // Kern: haal file-bijlagen op en upload ze naar 05_Aangeleverd van het project.
 // stil=true → geen toasts behalve fouten (gebruikt bij auto-koppel).
 async function inboxBijlagenNaarProject(mailId,code,stil){
@@ -736,7 +751,7 @@ async function inboxBijlagenNaarProject(mailId,code,stil){
       return true; // contentBytes halen we zo nodig per stuk op
     });
     if(!items.length){if(!stil)inboxToast(all.length?'Alleen inline/embedded bijlagen — niets op te slaan.':'Deze mail heeft geen bijlagen.');else ibStatus&&ibStatus('');return;}
-    let ok=0,fout=0,laatsteFout='';
+    let ok=0,fout=0,laatsteFout='';const al=[],hernoemd=[];
     for(const x of items){
       try{
         let b64=x.contentBytes;
@@ -746,17 +761,18 @@ async function inboxBijlagenNaarProject(mailId,code,stil){
         }
         if(!b64){ fout++; laatsteFout='geen bytes ('+(x.name||'?')+')'; continue; }
         const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-        await window.spUploadProjectBytes(proj,x.name,arr,x.contentType,'05_Aangeleverd');
-        ok++;
+        const res=await window.spUploadProjectBytes(proj,x.name,arr,x.contentType,'05_Aangeleverd');
+        if(res&&res.status==='al-aanwezig') al.push(res.naam);
+        else { ok++; if(res&&res.status==='hernoemd') hernoemd.push((x.name||'?')+' → '+res.naam); }
       }catch(e){fout++;laatsteFout=e.message;console.warn('bijlage-upload mislukt:',x.name,e.message);}
     }
     try{ if(window.track) track('inbox','bijlagen_naar_map',{detail:code+' · '+ok+'/'+items.length,ok:fout===0}); }catch(e){}
-    if(ok){
-      const msg=`📎 ${ok} bijlage${ok===1?'':'s'} → ${code}/05_Aangeleverd`+(fout?` (${fout} mislukt)`:'');
-      inboxToast(msg);
-    } else if(fout){
-      inboxToast('⚠ Bijlagen niet opgeslagen: '+(laatsteFout||'onbekende fout'));
-    }
+    const delen=[];
+    if(ok) delen.push(`${ok} opgeslagen`);
+    if(al.length) delen.push(`${al.length} stond${al.length===1?'':'en'} er al (overgeslagen)`);
+    if(hernoemd.length) delen.push(`${hernoemd.length} met nieuwe naam omdat er al een ander bestand zo heette: ${hernoemd.join(', ')}`);
+    if(fout) delen.push(`${fout} mislukt${laatsteFout?' ('+laatsteFout+')':''}`);
+    if(delen.length) inboxToast((fout?'⚠ ':'📎 ')+'Bijlagen '+code+'/05_Aangeleverd: '+delen.join(' · '));
     if(!stil)ibStatus('');
   }catch(e){ ibStatus&&ibStatus(''); inboxToast('⚠ Bijlagen-fout: '+e.message); console.warn('auto-bijlagen mislukt:',e.message); }
 }

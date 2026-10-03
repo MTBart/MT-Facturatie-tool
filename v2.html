@@ -16,13 +16,13 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-07-02"></script>
+<script src="mt-core.js?v=2026-10-03"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-toggl.js?v=2026-07-03"></script>
-<script src="mt-inbox.js?v=2026-07-03"></script>
+<script src="mt-inbox.js?v=2026-10-03"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -8505,8 +8505,18 @@ window.spUploadProjectBijlage = async function(proj, file) {
 };
 
 // Ruwe bytes uploaden naar een submap van de projectmap (On-Prem-Data-drive).
-// Gebruikt door de inbox om mailbijlagen in 05_Aangeleverd te zetten.
-// conflictBehavior=replace → idempotent (zelfde bijlage overschrijft, geen "(1)").
+// Gebruikt door de inbox om mailbijlagen in de projectmap te zetten.
+// NOOIT overschrijven: hiervoor stond hier conflictBehavior=replace, waardoor een
+// ándere "tekening.pdf" een bestaande stil verving. Nu:
+//   - zelfde naam + exact dezelfde inhoud → overslaan ('al-aanwezig');
+//   - zelfde naam + andere inhoud → conflictBehavior=rename ('hernoemd', SharePoint
+//     maakt "tekening 1.pdf");
+//   - kan het bestaande bestand niet gecontroleerd worden → toch rename (nooit replace).
+function _bytesGelijk(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
 window.spUploadProjectBytes = async function(proj, naam, bytes, contentType, subfolder) {
   const token = await window.getGraphToken();
   if (!token) throw new Error('Niet ingelogd op Microsoft 365');
@@ -8514,19 +8524,39 @@ window.spUploadProjectBytes = async function(proj, naam, bytes, contentType, sub
   const sub = subfolder || '05_Aangeleverd';
   const veilig = String(naam||'bijlage').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'bijlage';
   const dest = `${projPath}/${sub}/${veilig}`;
-  const url = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(dest)}:/content?@microsoft.graph.conflictBehavior=replace`;
-  const r = await fetch(url, {
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const pad = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(dest)}`;
+  const auth = { 'Authorization': `Bearer ${token}` };
+  const er = await fetch(`${pad}?$select=id,name,size,webUrl`, { headers: auth });
+  if (er.ok) {
+    const bestaand = await er.json();
+    if (bestaand.size === data.length) {
+      try {
+        const cr = await fetch(`${pad}:/content`, { headers: auth });
+        if (cr.ok && _bytesGelijk(new Uint8Array(await cr.arrayBuffer()), data))
+          return { id: bestaand.id, webUrl: bestaand.webUrl, naam: bestaand.name, grootte: bestaand.size, status: 'al-aanwezig' };
+      } catch (e) { console.warn('vergelijken met bestaand bestand mislukt — upload als nieuwe naam:', e.message); }
+    }
+  } else if (er.status !== 404) {
+    const txt = await er.text().catch(()=> '');
+    throw new Error(`controle bestaand bestand HTTP ${er.status}: ${txt.slice(0,120)}`);
+  }
+  const r = await fetch(`${pad}:/content?@microsoft.graph.conflictBehavior=rename`, {
     method: 'PUT',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': contentType || 'application/octet-stream' },
-    body: bytes
+    headers: { ...auth, 'Content-Type': contentType || 'application/octet-stream' },
+    body: data
   });
   if (!r.ok) { const txt = await r.text().catch(()=> ''); throw new Error(`upload HTTP ${r.status}: ${txt.slice(0,160)}`); }
   const item = await r.json();
-  return { id: item.id, webUrl: item.webUrl, naam: veilig, grootte: item.size || 0 };
+  return { id: item.id, webUrl: item.webUrl, naam: item.name || veilig, grootte: item.size || 0,
+           status: (item.name && item.name !== veilig) ? 'hernoemd' : 'opgeslagen' };
 };
 
 // Zelfde als hierboven, maar naar een vrij pad op de On-Prem-Data-drive. Nodig voor
 // offertes die (nog) géén project hebben: die horen niet in een projectmap thuis.
+// BEWUSTE UITZONDERING op "nooit replace": alleen voor de versiebeheerde offertebestanden
+// (Offerte-<CODE>.xlsx/.json en _offerte-versies). Die hebben een vaste naam zodat
+// SharePoint de versiegeschiedenis bijhoudt; de vorige versie blijft daar terug te halen.
 window.spUploadPadBytes = async function(mapPad, naam, bytes, contentType) {
   const token = await window.getGraphToken();
   if (!token) throw new Error('Niet ingelogd op Microsoft 365');

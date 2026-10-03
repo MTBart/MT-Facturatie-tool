@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Docs: bewezen Toggl 2.0 API-contract (spikes 3 okt)
+- Commit: `0a13c52` | Auteur: Bart Witte
+
 ## 2026-10-03 — Offertes: niet meer dagelijks alles opnieuw naar de map schrijven
 - Commit: `2b7d6ec` | Auteur: Bart Witte
 
