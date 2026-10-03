@@ -50,6 +50,76 @@ async function focusFetch(path,method='GET',body=null){
   if(!res.ok) throw new Error('Focus HTTP '+res.status+(txt?(' — '+txt.slice(0,120)):''));
   try{return JSON.parse(txt);}catch(e){return txt;}
 }
+// ═══ T2 — gedeelde Toggl 2.0-laag (contract: Claude-context/toggl2-api-bewezen.md) ═══
+// Paden zonder org-prefix (clients, statuses, tags) gaan via focusFetchW.
+async function focusFetchW(path,method='GET',body=null){
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('Microsoft-login vereist (log in via de tool)');
+  const opts={method,headers:{...h,'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const res=await fetch(`${WORKER}?target=toggl_focus&path=${encodeURIComponent(`workspaces/${FOCUS_WS}/`+path)}`,opts);
+  if(res.status===204) return true;
+  const txt=await res.text();
+  if(!res.ok) throw new Error('Toggl HTTP '+res.status+(txt?(' — '+txt.slice(0,120)):''));
+  try{return JSON.parse(txt);}catch(e){return txt;}
+}
+// Statussen dynamisch (M&T heeft er 8: Todo, In progress, Productie, Blocked, Klaar voor
+// levering, Factureren, Backlog, Done). De vaste id's blijven alleen als terugval.
+const T2_STATUS_VAST={todo:300785,bezig:300788,klaar:300786};
+const _t2={statussen:null,ts:0};
+async function t2Statussen(){
+  if(_t2.statussen&&Date.now()-_t2.ts<600000) return _t2.statussen;
+  const r=await focusFetchW('statuses?per_page=100');
+  _t2.statussen=(r&&r.data)||[]; _t2.ts=Date.now(); return _t2.statussen;
+}
+async function t2StatusId(soort){
+  try{
+    const s=await t2Statussen();
+    const pick= soort==='klaar' ? s.find(x=>x.type==='done')
+      : soort==='bezig' ? (s.find(x=>x.type==='in_progress'&&/progress|bezig/i.test(x.name||''))||s.find(x=>x.type==='in_progress'))
+      : s.find(x=>x.type==='todo');
+    if(pick) return pick.id;
+  }catch(e){ console.warn('statussen ophalen mislukt, vaste id gebruikt:',e.message); }
+  return T2_STATUS_VAST[soort]||T2_STATUS_VAST.todo;
+}
+// Projectnaam in Toggl: "<offertenummer> <naam>" zodra het nummer bekend is, anders de naam.
+function t2ProjectNaam(mt){
+  const naam=String((mt&&(mt.naam||mt.product_naam))||(mt&&mt.code)||'').trim();
+  return (mt&&mt.offertenr)?`${mt.offertenr} ${naam}`:naam;
+}
+async function t2Projecten(vers){
+  if(vers||!_tgCache.projecten) _tgCache.projecten=await tgStore.projecten();
+  return _tgCache.projecten||[];
+}
+async function t2MaakProject(naam,clientId){
+  const body={name:naam}; if(clientId) body.client_id=clientId;
+  const r=await focusFetch('projects','POST',body);
+  const id=r&&(r.id||(r.data&&r.data.id));
+  _tgCache.projecten=null;
+  if(!id) throw new Error('Toggl gaf geen project-id terug');
+  return id;
+}
+async function t2HernoemProject(id,naam){
+  await focusFetch(`projects/${id}`,'PATCH',{name:naam});
+  _tgCache.projecten=null;
+}
+// Idempotent een taak maken: eerst zoeken op een marker in de notitie
+// ("mt:<sleutel>"), pas daarna aanmaken. Zo maakt een herhaalde klik of een
+// verloren antwoord nooit een tweede taak.
+let _t2TakenStream=null;
+async function t2VindOfMaakTaak(marker,body,vers){
+  if(vers||!_t2TakenStream) _t2TakenStream=await focusFetch('tasks/stream');
+  const lijst=Array.isArray(_t2TakenStream)?_t2TakenStream:((_t2TakenStream&&_t2TakenStream.data)||[]);
+  const tag='mt:'+marker;
+  const hit=lijst.find(t=>String(t.notes||'').includes(tag));
+  if(hit) return {id:hit.id,bestond:true};
+  const r=await focusFetch('tasks','POST',Object.assign({},body,{notes:((body&&body.notes)?body.notes+'\n':'')+tag}));
+  const id=r&&(r.id||(r.data&&r.data.id));
+  if(!id) throw new Error('Toggl gaf geen taak-id terug');
+  lijst.push({id,notes:tag}); if(typeof _tgCache!=='undefined') _tgCache.taken=null;
+  return {id,bestond:false};
+}
+
 function focusStatus(msg,kleur){const el=document.getElementById('focus-status');if(el){el.textContent=msg;el.style.color=kleur||'var(--text-faint)';}}
 function focusOpen(){
   const dt=document.getElementById('focus-datum'); if(dt&&!dt.value) dt.value=new Date().toISOString().slice(0,10);
@@ -605,57 +675,47 @@ function tgNieuwProject(){
 // Geeft het client-id terug of null. Best-effort.
 async function tgVindOfMaakClient(naam){
   naam=String(naam||'').trim(); if(!naam||naam==='—') return null;
-  if(typeof tgTrack!=='function'||typeof TG_WS==='undefined'||!TG_WS) return null;
   try{
-    const lijst=(await tgTrack(`workspaces/${TG_WS}/clients`))||[];
-    const best=(Array.isArray(lijst)?lijst:[]).find(c=>(c.name||'').trim().toLowerCase()===naam.toLowerCase());
+    const r=await focusFetchW('clients?per_page=100');
+    const best=((r&&r.data)||[]).find(c=>(c.name||'').trim().toLowerCase()===naam.toLowerCase());
     if(best) return best.id;
-    const r=await tgTrack(`workspaces/${TG_WS}/clients`,'POST',{name:naam,wid:TG_WS});
-    return (r&&(r.id||(r.data&&r.data.id)))||null;
-  }catch(e){ console.warn('Toggl-client',naam,'aanmaken faalde:',e); return null; }
+    const made=await focusFetchW('clients','POST',{name:naam});
+    return (made&&(made.id||(made.data&&made.data.id)))||null;
+  }catch(e){ console.warn('Toggl-klant',naam,'opzoeken/aanmaken faalde:',e); return null; }
 }
 // Maakt het Toggl-project bij een M&T-projectcode (best-effort, niet-blokkerend).
 // Projectnaam = leesbare naam + code; klant wordt als Toggl-CLIENT gekoppeld
 // (apart veld in Toggl). Geeft het Toggl-project-id terug of null.
 async function tgMaakProjectVoorCode(code, billable){
-  if(typeof tgTrack!=='function'||typeof TG_WS==='undefined'||!TG_WS) return null;
-  let pid=null;
+  // Toggl 2.0 (Track is uit). Naam = "<offertenummer> <naam>" of zolang er geen nummer is
+  // de naam; later bijwerken via "Offertenummer toekennen". Bestaat er al precies één
+  // project met die naam, dan wordt dat gebruikt (geen dubbel). Geeft id of null.
   try{
-    const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase());
-    // Projectnaam = de PROJECTCODE zelf (Bart 2026-06-15). De code is de sleutel
-    // door sticker/Toggl/mail/MB/mappen heen. De klant ("Kobalt 5013") hoort als
-    // Toggl-CLIENT, niet in de projectnaam.
-    const projNaam=code;
-    // 1) Project éérst aanmaken — gegarandeerd, zonder dat klant-gedoe dit blokkeert.
-    const r=await tgTrack(`workspaces/${TG_WS}/projects`,'POST',
-      {name:projNaam,active:true,billable:billable!==false,workspace_id:TG_WS});
-    pid=(r&&(r.id||(r.data&&r.data.id)))||null;
-    _tgCache.projecten=null;
+    const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase())||{code};
+    const naam=t2ProjectNaam(mt);
+    const zelfde=(await t2Projecten(true)).filter(p=>(p.name||'').trim().toLowerCase()===naam.toLowerCase());
+    if(zelfde.length===1) return zelfde[0].id;
+    if(zelfde.length>1){ window._t2LaatsteFout=`Er bestaan al ${zelfde.length} Toggl-projecten met de naam "${naam}" — kies er één via "Toggl-project kiezen"`; return null; }
+    const klantNaam=(mt.klant_naam||(typeof resolveKlantNaam==='function'&&mt.klant?resolveKlantNaam(mt):mt.klant))||'';
+    const clientId=await tgVindOfMaakClient(klantNaam);
+    const id=await t2MaakProject(naam,clientId);
     if(typeof tgVulProjectSelect==='function') tgVulProjectSelect();
-    // 2) Klant als Toggl-CLIENT koppelen (best-effort, mag niet falen → niet-fataal).
-    if(pid){
-      // Client = de klant zoals ingevuld (bv. "Kobalt 5013"); klant_naam vóór de
-      // registry-resolve zodat exact staat wat Bart typte.
-      const klantNaam=(mt&&(mt.klant_naam||(typeof resolveKlantNaam==='function'?resolveKlantNaam(mt):mt.klant)))||'';
-      const clientId=await tgVindOfMaakClient(klantNaam);
-      if(clientId){
-        try{ await tgTrack(`workspaces/${TG_WS}/projects/${pid}`,'PUT',{client_id:clientId,workspace_id:TG_WS}); _tgCache.projecten=null; }
-        catch(e){ console.warn('Toggl-client koppelen aan',code,'faalde:',e); }
-      }
-    }
-    return pid||true;
-  }catch(e){ console.warn('Toggl-project voor',code,'aanmaken faalde:',e); return pid; }
+    return id;
+  }catch(e){ window._t2LaatsteFout=e.message; console.warn('Toggl-project voor',code,'aanmaken faalde:',e); return null; }
 }
 // Zorgt dat er één Toggl-project bestaat voor deze code — STIL (geen dialogen).
 // Geeft het project-id terug (of null). Schrijft tg_project_id op het M&T-record.
 async function _tgZorgProjectVoorCode(code){
   const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase());
   if(!mt) return null;
-  let pid=await _tgProjectIdVoorMt(mt);
+  window._t2LaatsteFout='';
+  let pid=null;
+  try{ pid=await _tgProjectIdVoorMt(mt); }
+  catch(e){ window._t2LaatsteFout=e.message; return null; }   // bv. meerdere kandidaten → mens kiest
   if(pid) return pid;
   const made=await tgMaakProjectVoorCode(code,true);
-  if(made&&made!==true){ mt.tg_project_id=made; if(typeof slaProjectenOp==='function') slaProjectenOp(); return made; }
-  return await _tgProjectIdVoorMt(mt);
+  if(made){ mt.tg_project_id=made; if(typeof slaProjectenOp==='function') slaProjectenOp(); return made; }
+  return null;
 }
 function _tgProjById(id){return (_tgCache.projecten||[]).find(p=>p.id===id);}
 async function tgEditProject(id){
@@ -664,9 +724,9 @@ async function tgEditProject(id){
   const kleur=prompt('Kleur (hex, bv. #e36a00):',p.color||'#888888'); if(kleur===null) return;
   if(!/^#?[0-9a-fA-F]{6}$/.test(kleur.trim())){ tgStatus('Ongeldige hex-kleur.','#c0392b'); return; }
   const hex=kleur.trim().startsWith('#')?kleur.trim():'#'+kleur.trim();
-  if(!confirm(`Project "${naam}" opslaan in Toggl Track?`)) return;
+  if(!confirm(`Project "${naam}" opslaan in Toggl?`)) return;
   tgStatus('Project opslaan…');
-  try{ await tgTrack(`workspaces/${TG_WS}/projects/${id}`,'PUT',{name:naam,color:hex,workspace_id:TG_WS});
+  try{ await focusFetch(`projects/${id}`,'PATCH',{name:naam,color:hex});   // Toggl 2.0 (Track is uit)
     _tgCache.projecten=null; tgStatus('✓ Project bijgewerkt.','#2A4A38'); tgLaadProjecten(); tgVulProjectSelect();
   }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
 }
@@ -674,7 +734,7 @@ async function tgArchiveProject(id){
   const p=_tgProjById(id); if(!p) return;
   if(!confirm(`Project "${p.name}" archiveren?\n(Het verdwijnt uit de actieve lijst; in Toggl terug te halen.)`)) return;
   tgStatus('Project archiveren…');
-  try{ await tgTrack(`workspaces/${TG_WS}/projects/${id}`,'PUT',{active:false,workspace_id:TG_WS});
+  try{ await focusFetch(`projects/${id}/archive`,'PATCH');   // Toggl 2.0: archiveren (terug te zetten via /restore)
     _tgCache.projecten=null; tgStatus('✓ Project gearchiveerd.','#2A4A38'); tgLaadProjecten(); tgVulProjectSelect();
   }catch(e){ tgStatus('❌ '+e.message,'#c0392b'); }
 }

@@ -21,7 +21,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
-<script src="mt-toggl.js?v=2026-07-03"></script>
+<script src="mt-toggl.js?v=2026-10-03"></script>
 <script src="mt-inbox.js?v=2026-10-03b"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
@@ -4478,6 +4478,7 @@ function renderProjectDetail(proj){
       <div style="display:flex;align-items:center;gap:0.5rem;font-size:12px;color:var(--text-dim);margin-bottom:1rem">
         <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${mbNrBlok}
       </div>
+      ${t2ProjectRijHtml(proj)}
       ${projectPlanning(proj)}
       ${projectTakenHtml(proj)}
       ${projectTijdlijn(proj)}
@@ -4596,7 +4597,7 @@ async function projTakenHerkans(code){
     if(!t.tg_pending||!t.tg_task_id) continue;
     if(t.tg_pending.verwijderen){ if(await _tgVerwijderTaak(t.tg_task_id)){ weg.add(t.id); ok++; } else fout++; continue; }
     if(t.tg_pending.status){
-      try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:_PT_STAT_TG[t.status]}); delete t.tg_pending; ok++; }
+      try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await t2StatusId(t.status)}); delete t.tg_pending; ok++; }
       catch(e){ fout++; }
     }
   }
@@ -4671,7 +4672,7 @@ async function projTaakStatus(code,id){
   const order=['todo','bezig','klaar']; t.status=order[(order.indexOf(t.status||'todo')+1)%3];
   // Niet meer "fire and forget": lukt Toggl niet, dan blijft dat zichtbaar (⏳) met herkansing.
   if(t.tg_task_id){
-    try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:_PT_STAT_TG[t.status]}); delete t.tg_pending; }
+    try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await t2StatusId(t.status)}); delete t.tg_pending; }
     catch(e){ t.tg_pending={status:true}; _ptStatus(code,'⚠ Status lokaal gewijzigd, maar nog niet in Toggl: '+(e.message||e)+' — klik ⏳ om opnieuw te proberen','#c0392b'); }
   }
   projTakenZet(code,arr);
@@ -4830,29 +4831,109 @@ function projTaakTemplateInvoeg(code,key){
   _ptStatus(code,`✓ ${nieuwe.length} taken uit "${tpl.label}" toegevoegd · "→ Alles naar Toggl" om te spiegelen`,'var(--green)');
   try{ if(window.track) track('taken','template',{detail:key+' · '+nieuwe.length,ok:true}); }catch(e){}
 }
-// Toggl-projectid voor een M&T-project (opgeslagen, anders match op naam=code).
+// Toggl-projectid voor een M&T-project: opgeslagen id (gecontroleerd tegen Toggl 2.0),
+// anders één eenduidige match op naam/code/offertenummer. Een oud (Track-)id dat in
+// Toggl 2.0 niet bestaat wordt bewaard als legacy_track_id en niet meer gebruikt.
+// Meerdere kandidaten → fout, zodat de mens kiest (nooit gokken, nooit dubbel maken).
 async function _tgProjectIdVoorMt(mt){
-  if(mt.tg_project_id) return mt.tg_project_id;
-  try{ const ps=(_tgCache&&_tgCache.projecten)||await tgStore.projecten(); if(_tgCache)_tgCache.projecten=ps;
-    const hit=ps.find(p=>(p.name||'').toUpperCase()===(mt.code||'').toUpperCase());
-    if(hit){ mt.tg_project_id=hit.id; slaProjectenOp(); return hit.id; }
-  }catch(e){}
+  const ps=await t2Projecten();
+  if(mt.tg_project_id){
+    if(ps.some(p=>p.id===mt.tg_project_id)) return mt.tg_project_id;
+    mt.legacy_track_id=mt.tg_project_id; delete mt.tg_project_id; slaProjectenOp();
+  }
+  const kand=_t2Kandidaten(mt,ps).filter(k=>k.score>=10);
+  if(kand.length===1){ mt.tg_project_id=kand[0].p.id; slaProjectenOp(); return kand[0].p.id; }
+  if(kand.length>1) throw new Error(`Meerdere Toggl-projecten passen bij ${mt.code} — kies er één via "Toggl-project kiezen"`);
   return null;
+}
+// Score per Toggl-project: exacte naam/code/[CODE]/offertenummer = zeker (≥10), woorden = voorstel.
+function _t2Kandidaten(mt,ps){
+  const naam=t2ProjectNaam(mt).toLowerCase(), code=String(mt.code||'').toLowerCase(), nr=String(mt.offertenr||'').toLowerCase();
+  const woorden=[...new Set([...code.split(/[-_\s]+/),...String(mt.naam||'').toLowerCase().split(/\W+/)])].filter(w=>w.length>=4);
+  return ps.map(p=>{ const n=String(p.name||'').trim().toLowerCase(); let score=0;
+    if(n===naam||n===code||n.includes('['+code+']')) score+=20;
+    if(nr&&(n===nr||n.startsWith(nr+' '))) score+=15;
+    woorden.forEach(w=>{ if(n.includes(w)) score+=2; });
+    return {p,score}; }).filter(k=>k.score>0).sort((a,b)=>b.score-a.score);
+}
+// Projectscherm: Toggl-project kiezen (mens bevestigt) en offertenummer toekennen.
+function t2ProjectRijHtml(proj){
+  const p=(typeof _tgCache!=='undefined'&&_tgCache.projecten||[]).find(x=>x.id===proj.tg_project_id);
+  const naam=proj.tg_project_id?(p?esc(p.name):'#'+proj.tg_project_id):'<span style="color:var(--text-faint)">nog niet gekoppeld</span>';
+  return `<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;font-size:12px;color:var(--text-dim);margin-bottom:1rem">
+    <span class="kpi-label" style="margin:0">Toggl-project:</span> ${naam}
+    ${proj.offertenr?`<span class="badge" style="font-family:var(--mono)">${esc(proj.offertenr)}</span>`:'<span style="color:var(--text-faint)">· offertenummer volgt</span>'}
+    <button class="btn btn-xs btn-secondary" onclick="t2KiesProject('${proj.code}')">🔗 Toggl-project kiezen</button>
+    <button class="btn btn-xs btn-secondary" onclick="t2OffertenummerToekennen('${proj.code}')" title="Kies de Moneybird-offerte; de projectnaam in Toggl wordt '&lt;nummer&gt; &lt;naam&gt;'">🔢 Offertenummer toekennen</button>
+    <span id="t2-st-${proj.code.replace(/[^A-Za-z0-9]/g,'')}"></span></div>`;
+}
+function _t2St(code,msg,kleur){ const el=document.getElementById('t2-st-'+code.replace(/[^A-Za-z0-9]/g,'')); if(el){ el.textContent=msg; el.style.color=kleur||'var(--text-dim)'; } }
+async function t2KiesProject(code){
+  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
+  try{
+    _t2St(code,'Toggl-projecten laden…');
+    const ps=await t2Projecten(true), kand=_t2Kandidaten(mt,ps);
+    const rest=ps.filter(p=>!kand.some(k=>k.p.id===p.id)).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+    const lijst=[...kand.map(k=>k.p),...rest];
+    const keuzes=[{label:'+ Nieuw Toggl-project aanmaken',sublabel:'naam: '+t2ProjectNaam(mt)},...lijst.map((p,i)=>({label:p.name,sublabel:(i<kand.length?'voorstel':'')+(p.client&&p.client.name?(' · '+p.client.name):'')}))];
+    _t2St(code,'');
+    const i=await mtDialog.choose({title:'Toggl-project voor '+code,message:'Kies het bestaande Toggl-project (voorstellen bovenaan) of maak een nieuw aan.',choices:keuzes});
+    if(i==null) return;
+    if(i===0){
+      if(!await mtDialog.confirm({title:'Nieuw Toggl-project',message:'Toggl-project "'+t2ProjectNaam(mt)+'" aanmaken?',okLabel:'Aanmaken'})) return;
+      const id=await tgMaakProjectVoorCode(code,true);
+      if(!id){ _t2St(code,'⚠ '+(window._t2LaatsteFout||'aanmaken mislukt'),'#c0392b'); return; }
+      mt.tg_project_id=id;
+    } else {
+      if(mt.tg_project_id&&mt.tg_project_id!==lijst[i-1].id) mt.vorig_tg_project_id=mt.tg_project_id;
+      mt.tg_project_id=lijst[i-1].id;
+    }
+    slaProjectenOp(); renderProjectDetail(huidigProject);
+  }catch(e){ _t2St(code,'⚠ '+e.message,'#c0392b'); }
+}
+async function t2OffertenummerToekennen(code){
+  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
+  const mbId=mt.mb_nr||(typeof resolveMbContact==='function'?resolveMbContact(mt):null);
+  if(!mbId){ _t2St(code,'Geen Moneybird-contact gekoppeld — koppel eerst een contact.','#c0392b'); return; }
+  try{
+    _t2St(code,'Offertes ophalen uit Moneybird…');
+    const r=await mbGet(`${getAdmin()}/estimates?filter=contact_id:${mbId},state:all`);
+    if(!r.ok) throw new Error('Moneybird HTTP '+r.status);
+    // Afgewezen/gearchiveerde offertes tellen nooit; concepten hebben nog geen nummer.
+    const est=((await r.json())||[]).filter(e=>String(e.contact_id)===String(mbId)&&e.estimate_id&&!['archived','rejected'].includes(e.state))
+      .sort((a,b)=>String(b.estimate_date||'').localeCompare(String(a.estimate_date||'')));
+    _t2St(code,'');
+    if(!est.length){ _t2St(code,'Geen verstuurde offerte met nummer bij dit contact (concepten krijgen pas bij versturen een nummer).'); return; }
+    const i=await mtDialog.choose({title:'Offertenummer voor '+code,message:'Kies de offerte die bij dit project hoort (afgewezen offertes staan er niet tussen).',
+      choices:est.map(e=>({label:e.estimate_id+' — '+(e.reference||'(geen referentie)'),sublabel:(e.state||'')+(e.estimate_date?' · '+e.estimate_date:'')+(e.total_price_excl_tax?' · € '+e.total_price_excl_tax:'')}))});
+    if(i==null) return;
+    const nr=est[i].estimate_id, oudNr=mt.offertenr||'', oudNaam=t2ProjectNaam(mt);
+    const nieuwNaam=t2ProjectNaam(Object.assign({},mt,{offertenr:nr}));
+    let pid=null; try{ pid=await _tgProjectIdVoorMt(mt); }catch(e){ pid=null; }
+    const msg='Offertenummer: '+(oudNr||'(geen)')+' → '+nr+'\n'+(pid?('Toggl-projectnaam: "'+((_tgCache.projecten||[]).find(p=>p.id===pid)||{}).name+'" → "'+nieuwNaam+'"'):'Er is nog geen Toggl-project gekoppeld; alleen het nummer wordt opgeslagen.')+'\n\nDe projectmap wordt niet hernoemd.';
+    if(!await mtDialog.confirm({title:'Offertenummer toekennen',message:msg,okLabel:'Toekennen'})) return;
+    if(typeof _ptJournaal==='function') _ptJournaal('offertenummer',code,{offertenr_oud:oudNr,offertenr_nieuw:nr,toggl_naam_oud:oudNaam,toggl_naam_nieuw:nieuwNaam,tg_project_id:pid,mb_estimate:est[i].id});
+    if(pid){ _t2St(code,'Toggl-projectnaam bijwerken…'); await t2HernoemProject(pid,nieuwNaam); }
+    mt.offertenr=nr; mt.offertenr_mb_id=est[i].id; slaProjectenOp();
+    renderProjectDetail(huidigProject);
+  }catch(e){ _t2St(code,'⚠ '+e.message+' — er is niets gewijzigd in Toggl','#c0392b'); }
 }
 async function projTaakNaarToggl(code,id){
   const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return false;
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||t.tg_task_id) return false;
   _ptStatus(code,'Naar Toggl…');
   const pid=await _tgZorgProjectVoorCode(code);
-  if(!pid){ _ptStatus(code,'❌ Geen Toggl-project — taak niet aangemaakt','#c0392b');
+  if(!pid){ _ptStatus(code,'❌ Geen Toggl-project — taak niet aangemaakt'+(window._t2LaatsteFout?(': '+window._t2LaatsteFout):''),'#c0392b');
     try{ if(window.track) track('taken','naar_toggl',{detail:'geen project_id',ok:false}); }catch(e){}
     return false; }
   try{
     // Minimale body: project heeft eigen bord-status-id's; generieke id's geven
     // validatie-fout. Focus default'et de status. (status/prioriteit-sync = follow-up.)
     const body={name:t.naam,project_id:pid};
-    const r=await focusFetch('tasks','POST',body);
-    const tid=r&&(r.id||(r.data&&r.data.id));
+    // Idempotent: marker "mt:<taak-id>" in de notitie — een herhaalde klik of verloren
+    // antwoord koppelt de bestaande Toggl-taak in plaats van een tweede te maken.
+    const r=await t2VindOfMaakTaak(code+'/'+t.id,body);
+    const tid=r&&r.id;
     if(tid){ t.tg_task_id=tid; projTakenZet(code,arr); }
     if(typeof _tgCache!=='undefined') _tgCache.taken=null;
     _ptStatus(code,'✓ In Toggl-project','var(--green)');
@@ -5478,41 +5559,31 @@ function planCheckBesteldatum(code){
 // per fase; id's worden teruggeschreven in mt_planning zodat we later kunnen syncen.
 const _PLAN_TG_STATUS={todo:300785,bezig:300788,klaar:300786};
 async function planNaarToggl(code){
+  // Toggl 2.0 (Track is uit). Project = het gekoppelde Toggl-project van dit M&T-project
+  // (zelfde koppeling als overal, op id). Fasen worden idempotent taken: een fase die al
+  // een bestaande Toggl-taak heeft wordt overgeslagen, en de marker "mt:<code>/fase/<id>"
+  // voorkomt dubbelen na een verloren antwoord. Opnieuw klikken = 0 nieuwe taken.
   const plan=planVoor(code); if(!plan){return;}
-  const proj=(typeof PROJECT_CODES!=='undefined'&&PROJECT_CODES.find)?PROJECT_CODES.find(p=>p.code===code):null;
-  const projNaam=(proj&&(proj.naam||proj.klant_naam))?`${proj.naam||proj.klant_naam} [${code}]`:code;
-  if(plan.togglProjectId){
-    if(!confirm(`Dit project is al gekoppeld aan Toggl-project ${plan.togglProjectId}.\nOpnieuw de fasen als Focus-taken aanmaken? (kan dubbelen geven — bestaande blijven staan)`)) return;
-  } else {
-    if(!confirm(`Toggl-project "${projNaam}" aanmaken met een Focus-taak per fase?`)) return;
-  }
-  planToast('Toggl: project aanmaken…');
-  try{
-    if(!plan.togglProjectId){
-      const made=await tgTrack(`workspaces/${TG_WS}/projects`,'POST',{name:projNaam,active:true,workspace_id:TG_WS});
-      const pid=made&&(made.id||(made.data&&made.data.id));
-      if(!pid) throw new Error('geen project-id terug van Toggl');
-      plan.togglProjectId=pid; planSave(code,plan);
-      if(typeof _tgCache!=='undefined') _tgCache.projecten=null;
-    }
-  }catch(e){ planToast('❌ Toggl-project mislukt: '+e.message); return; }
-  // Focus-taken per fase (sequentieel, best-effort)
-  let ok=0, fout=0, eersteFout='';
+  const mt=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===code):null;
+  if(!mt){ planToast('❌ Project '+code+' niet gevonden'); return; }
+  const open=plan.fases.filter(fa=>!fa.togglTaskId);
+  if(!await mtDialog.confirm({title:'Planning naar Toggl',message:`${open.length} fase(n) als taak in het Toggl-project van ${code} zetten?`+(plan.fases.length-open.length?`\n${plan.fases.length-open.length} fase(n) staan er al in en worden overgeslagen.`:''),okLabel:'Naar Toggl'})) return;
+  planToast('Toggl: project zoeken…');
+  const pid=await _tgZorgProjectVoorCode(code);
+  if(!pid){ planToast('❌ Geen Toggl-project: '+(window._t2LaatsteFout||'onbekende fout')+' — er is niets aangemaakt'); return; }
+  if(plan.togglProjectId&&plan.togglProjectId!==pid) plan.legacy_toggl_project_id=plan.togglProjectId;
+  plan.togglProjectId=pid;
+  let ok=0, al=0, fout=0, eersteFout='';
   for(const fa of plan.fases){
+    if(fa.togglTaskId){ al++; continue; }
     try{
-      // Een net aangemaakt project heeft een eigen Focus-bord met eigen status-id's;
-      // de generieke status_id's (300785…) horen bij een ánder bord → validatie-fout.
-      // Geverifieerd werkend (2026-05-26, HTTP 201): minimale body {name, project_id};
-      // Focus zet de taak dan op de standaard-status van het project.
-      const body={name:fa.naam, project_id:plan.togglProjectId};
-      const made=await focusFetch('tasks','POST',body);
-      const tid=made&&(made.id||(made.data&&made.data.id));
-      if(tid){ fa.togglTaskId=tid; ok++; } else { fout++; if(!eersteFout) eersteFout='geen task-id terug'; }
-    }catch(e){ fout++; if(!eersteFout) eersteFout=e.message; console.warn('Focus-taak faalde:',fa.naam,e); }
+      const r=await t2VindOfMaakTaak(code+'/fase/'+fa.id,{name:fa.naam,project_id:pid});
+      fa.togglTaskId=r.id; if(r.bestond) al++; else ok++;
+    }catch(e){ fout++; if(!eersteFout) eersteFout=e.message; console.warn('Toggl-taak faalde:',fa.naam,e); }
   }
   planSave(code,plan);
   if(typeof _tgCache!=='undefined') _tgCache.taken=null;
-  planToast(`Toggl klaar: ${ok} taken aangemaakt${fout?`, ${fout} mislukt — ${eersteFout}`:''}.`);
+  planToast(`Toggl klaar: ${ok} nieuw, ${al} stonden er al${fout?`, ${fout} mislukt — ${eersteFout}`:''}.`);
   renderProjectDetail(huidigProject);
 }
 
@@ -5685,7 +5756,7 @@ function planOpenEditor(code,faseId){
     </div>
   </div>`;
 }
-function planEditorOpslaan(code,faseId){
+async function planEditorOpslaan(code,faseId){
   const plan=planVoor(code); if(!plan) return;
   const fa=plan.fases.find(x=>x.id===faseId); if(!fa) return;
   fa.naam=document.getElementById('pe-naam').value||fa.naam;
@@ -5699,7 +5770,12 @@ function planEditorOpslaan(code,faseId){
   if(fa.bronTaakId){
     const tarr=projTaken(code), bt=tarr.find(x=>x.id===fa.bronTaakId);
     if(bt){ bt.naam=fa.naam; bt.status=fa.status; bt.duur_uur=fa.effort; projTakenZet(code,tarr);
-      if(bt.tg_task_id){ try{ focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:_PT_STAT_TG[fa.status]||300785}).catch(()=>{}); }catch(e){} }
+      // Niet meer stil: lukt Toggl niet, dan staat de taak op ⏳ (herkansing in Taken).
+      if(bt.tg_task_id){
+        try{ await focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:await t2StatusId(fa.status)}); delete bt.tg_pending; }
+        catch(e){ bt.tg_pending={status:true}; planToast('⚠ Fase opgeslagen, maar Toggl-taak nog niet bijgewerkt: '+(e.message||e)); }
+        projTakenZet(code,tarr);
+      }
     }
   }
   planSave(code,plan);
@@ -6472,7 +6548,7 @@ async function maakProjectAan(){
     try{
       const tgId=await tgMaakProjectVoorCode(code, true);
       if(tgId){
-        nieuwProj.tg_project_id=(tgId===true?null:tgId);
+        nieuwProj.tg_project_id=tgId;
         slaProjectenOp();
         status.textContent=status.textContent.replace(/^✓/,'✓')+ ' + Toggl';
       }

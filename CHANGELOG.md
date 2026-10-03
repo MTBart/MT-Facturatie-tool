@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Bijlagen naar de projectmap: per bijlage een submap-voorstel, bevestigen, index
+- Commit: `1ba1c86` | Auteur: Bart Witte
+
 ## 2026-10-03 — Projectdossier (alleen lezen): mails, offerte, bijlagen en projectmap in één tijdlijn
 - Commit: `febb791` | Auteur: Bart Witte
 
