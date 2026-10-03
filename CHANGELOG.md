@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Offerte-bestanden: JSON eerst, pas "huidig" na beide, losse kopie blijft
+- Commit: `70b58e7` | Auteur: Bart Witte
+
 ## 2026-10-03 — Projecttaken: Toggl-fouten niet meer negeren + journaal vóór wijzigen
 - Commit: `ef531c7` | Auteur: Bart Witte
 

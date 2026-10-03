@@ -7671,7 +7671,11 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const conflictMerge = mg ? ((remote, local) => {
         const samen = mg(typeof local === 'string' ? local : JSON.stringify(local), remote);
         try { if (typeof _lsSet === 'function') _lsSet(key, JSON.stringify(samen)); } catch(e) {}
-        try { if (key === 'mt_calc_offertes' && window.CALC && samen && samen.offertes) window.CALC.offertes = samen.offertes; } catch(e) {}
+        // Live calculatie bijwerken zonder typwerk van ná de start van deze resolve
+        // kwijt te raken: de actuele stand nog één keer met het resultaat samenvoegen
+        // (per offerte wint de nieuwste _gewijzigd-stempel).
+        try { if (key === 'mt_calc_offertes' && window.CALC && samen && samen.offertes)
+          window.CALC.offertes = mg(JSON.stringify({ versie: 2, offertes: window.CALC.offertes }), samen).offertes; } catch(e) {}
         return samen;
       }) : undefined;
       try { await this.write(key + '.json', data===undefined?rawValue:data, conflictMerge); }
@@ -8582,24 +8586,11 @@ window.spUploadPDF = async function(filename, arrayBuffer) {
 // Bestand blijft op SharePoint staan; de tool bewaart enkel een verwijzing.
 // Returnt {id, webUrl, naam, grootte} of gooit een fout.
 window.spUploadProjectBijlage = async function(proj, file) {
-  const token = await window.getGraphToken();
-  if (!token) throw new Error('Niet ingelogd op Microsoft 365');
-  // Idempotent: zorgt dat klant/locatie/project + submappen bestaan, geeft projPath terug.
-  const projPath = await window.genereerProjectMappen(proj);
-  const veilig = file.name.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'bijlage';
-  const dest = `${projPath}/07_Administratie/${veilig}`;
-  const url = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(dest)}:/content`;
-  const r = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': file.type || 'application/octet-stream' },
-    body: await file.arrayBuffer()
-  });
-  if (!r.ok) {
-    const txt = await r.text().catch(()=> '');
-    throw new Error(`upload HTTP ${r.status}: ${txt.slice(0,160)}`);
-  }
-  const item = await r.json();
-  return { id: item.id, webUrl: item.webUrl, naam: veilig, grootte: item.size || file.size || 0 };
+  // Zelfde veilige route als mailbijlagen: hiervoor was dit een PUT zonder
+  // conflictBehavior (= Graph-standaard "replace"), dus een ander bestand met
+  // dezelfde naam werd stil overschreven. Nu: zelfde inhoud overslaan, anders rename.
+  return await window.spUploadProjectBytes(proj, file.name, new Uint8Array(await file.arrayBuffer()),
+    file.type || 'application/octet-stream', '07_Administratie');
 };
 
 // Ruwe bytes uploaden naar een submap van de projectmap (On-Prem-Data-drive).
@@ -10276,7 +10267,15 @@ function activiteitOpen(force){
     if(!_SP.ready) return {ok:false,reden:'synchronisatie nog niet klaar'};
     if(_SP.blockedKeys.has(key)) return {ok:false,reden:'sync geblokkeerd — herlaad de pagina'};
     clearTimeout(_SP._q[key]);             // de ingeplande schrijfactie is nu overbodig
-    try{ await _SP.write(SP[which],payloadFor(which)); return {ok:true}; }
+    // Bij een 412 de samenvoeger van deze key gebruiken (anders verving de lokale
+    // offertes-map die van een andere pc), en write() === false is óók mislukt.
+    const mg=_SP.mergers&&_SP.mergers[key];
+    const cm=mg?((remote,local)=>{ const samen=mg(typeof local==='string'?local:JSON.stringify(local),remote);
+      lsSave(key,samen); if(which==='off'&&samen&&samen.offertes) CALC.offertes=mg(JSON.stringify({versie:2,offertes:CALC.offertes}),samen).offertes;
+      return samen; }):undefined;
+    try{ const ok=await _SP.write(SP[which],payloadFor(which),cm);
+      if(ok===false){ const ls=_SP.lastSync; return {ok:false,reden:(ls&&ls.error)||'SharePoint weigerde de schrijfactie'}; }
+      return {ok:true}; }
     catch(e){ return {ok:false,reden:e.message||String(e)}; }
   }
 
