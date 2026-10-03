@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Offertes: nacalculatie + elke bewerking krijgt een tijdstempel
+- Commit: `3e0965b` | Auteur: Bart Witte
+
 ## 2026-10-03 — Opdrachtverwerker: volledige mailbody i.p.v. afgekapte preview
 - Commit: `643c6e5` | Auteur: Bart Witte
 

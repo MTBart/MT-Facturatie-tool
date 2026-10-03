@@ -10944,6 +10944,9 @@ function activiteitOpen(force){
   const _mapState=()=>lsLoad(MAP_STATE,{})||{};
   function _mapStateSet(key,val){ const s=_mapState(); s[key]=Object.assign({},s[key],val); lsSave(MAP_STATE,s); }
   function _hash(s){ let h=5381; for(let i=0;i<s.length;i++) h=((h*33)^s.charCodeAt(i))>>>0; return h.toString(36); }
+  // Zonder 'datum' (= vandaag): anders wijzigt de hash elke dag en schrijft de tool
+  // dagelijks élke offerte opnieuw naar de map, ook als er niets veranderd is.
+  function _dumpHash(d){ const {datum,...rest}=d; return _hash(JSON.stringify(rest)); }
   // Maat voor "hoeveel werk zit hierin" — dezelfde die de samenvoeger gebruikt.
   function _gevuldeRegels(o){
     return ['materiaal','uren'].reduce((tot,veld)=>tot+((o&&o[veld])||[])
@@ -11077,7 +11080,7 @@ function activiteitOpen(force){
     const dump=_offerteDump(o,code), basis='Offerte-'+code;
     const res=await window.spUploadPadBytes(mapPad,basis+'.xlsx',_offerteWerkboek(o,code),XLSX_MIME);
     await window.spUploadPadBytes(mapPad,basis+'.json',new TextEncoder().encode(JSON.stringify(dump,null,2)),'application/json');
-    _mapStateSet(key,{hash:_hash(JSON.stringify(dump)),tijd:Date.now(),gevuld:gevuld,pad:mapPad,code:code,fout:null});
+    _mapStateSet(key,{hash:_dumpHash(dump),tijd:Date.now(),gevuld:gevuld,pad:mapPad,code:code,fout:null});
     // Kreeg deze offerte zojuist een project? Dan mag de losse kopie weg — pas nu, ná
     // een geslaagde schrijfactie in de projectmap. Verwijderen = SharePoint-prullenbak.
     if(proj && vorig.pad && vorig.pad!==mapPad && /\/[^/]*$/.test(vorig.pad) && vorig.pad.slice(vorig.pad.lastIndexOf('/')+1)===LOSSE_MAP){
@@ -11106,7 +11109,7 @@ function activiteitOpen(force){
       if(!o||!_gevuldeRegels(o)) continue;                       // lege offerte, geen bestand
       const s=st[key]||{};
       if(s.tijd&&nu-s.tijd<MAP_RUST) continue;                   // deze had net zijn beurt
-      if(s.hash===_hash(JSON.stringify(_offerteDump(o,o.project_code||key)))) continue;
+      if(s.hash===_dumpHash(_offerteDump(o,o.project_code||key))) continue;
       volgende=key; break;
     }
     if(!volgende) return;
