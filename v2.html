@@ -3754,7 +3754,7 @@ function renderVoorraadKPI(voorraad){
   const totaalWaarde=voorraad.reduce((s,v)=>s+(v.aantal||1)*(v.stukprijs||0),0);
   const materialen=new Set(voorraad.map(v=>v.omschrijving)).size;
   const leveranciers=new Set(voorraad.map(v=>v.leverancier)).size;
-  const bestellen=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]').filter(b=>!b.besteld).length;
+  const bestellen=_blActief().filter(b=>!b.besteld).length;
   kpiEl.innerHTML=`
     <div class="kpi-card green"><div class="kpi-label">Totale inkoopwaarde</div><div class="kpi-waarde">${fmt(totaalWaarde)}</div><div class="kpi-sub">excl. BTW</div></div>
     <div class="kpi-card"><div class="kpi-label">Materiaalsoorten</div><div class="kpi-waarde">${materialen}</div><div class="kpi-sub">unieke producten</div></div>
@@ -3793,7 +3793,7 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
     return sortA?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va));
   });
   if(!gefilterd.length){el.innerHTML=`<p style="color:var(--text-faint);font-size:13px;padding:1rem 0">Geen ${cat} in voorraad.</p>`;return;}
-  const bestellijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]');
+  const bestellijst=_blActief();
   const thS='cursor:pointer;user-select:none;white-space:nowrap';
   const th=(k,label,align='left')=>`<th style="text-align:${align};${thS}" onclick="renderVoorraadTabel('${cat}',JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>(v.categorie||categoriseerMateriaal(v.omschrijving))==='${cat}'),(document.getElementById('voorraad-zoek')?.value||'').toLowerCase(),'${k}',${sortK==='${k}'?!sortA:true})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
   el.innerHTML=`<table class="v-table">
@@ -4336,18 +4336,89 @@ function handmatigKlaarAttentie(id){ _verwerkAttentie(id,'verwerkt'); }
 function wijsAttentieAf(id){ _verwerkAttentie(id,'afgewezen'); }
 
 // ═══ BESTELLIJST ═══
+// Opslag (brok L2): nooit hard wissen. Van de lijst halen = `_vervallen` (tombstone met
+// tijd + wie, terug te zetten). Elke regel heeft een stabiel id en een `_gewijzigd`-stempel,
+// zodat de samenvoeger (_SP.mergers.mt_bestellijst) per regel de nieuwste stand kiest.
+// Vóór elke wijziging gaat een kopie naar mt_bestellijst_journaal (gesynct).
+// Function-declaraties (gehoist): ze worden al vóór deze regel aangeroepen (KPI's).
+function _blWie(){ try{ const a=window._msal&&_msal.getAllAccounts(); return (a&&a[0]&&a[0].username)||''; }catch(e){ return ''; } }
+// Oude regels zonder id krijgen een id uit hun inhoud: op elke pc hetzelfde, dus de
+// samenvoeger herkent dezelfde regel aan beide kanten (geen dubbel, geen verlies).
+function _blLegacyId(b){
+  const s=[b.materiaal,b.artikel,b.project,b.datum,b.categorie,b.leverancier].map(v=>v==null?'':String(v)).join('|');
+  let h=5381; for(let i=0;i<s.length;i++) h=((h*33)^s.charCodeAt(i))>>>0;
+  return 'bl_'+h.toString(36);
+}
+// Geeft regels zonder id een id (in volgorde; een echte dubbele oude regel krijgt _1, _2 …).
+// Dezelfde functie gebruikt de samenvoeger per kant, zodat beide kanten gelijk nummeren.
+function _blIdsToekennen(l){
+  const gezien=new Set();
+  l.forEach(x=>{ if(x&&typeof x==='object'&&!(x.id===undefined||x.id===null||x.id==='')) gezien.add(String(x.id)); });
+  l.forEach(x=>{
+    if(!x||typeof x!=='object') return;
+    if(x.id===undefined||x.id===null||x.id===''){ const basis=_blLegacyId(x); let id=basis,n=1; while(gezien.has(id)) id=basis+'_'+(n++); x.id=id; gezien.add(id); }
+  });
+  return l;
+}
+function _blAlle(){
+  let l=[]; try{ l=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]'); }catch(e){ console.error('bestellijst lezen mislukt:',e); l=[]; }
+  if(!Array.isArray(l)) return [];
+  return _blIdsToekennen(l);                  // ook onleesbare items blijven staan (nooit weggooien)
+}
+function _blActief(){ return _blAlle().filter(b=>b&&typeof b==='object'&&!b._vervallen); }
+function _blVervallenLijst(){ return _blAlle().filter(b=>b&&typeof b==='object'&&b._vervallen); }
+function _blJournaal(actie,voor,na){
+  try{
+    let j=[]; try{ j=JSON.parse(localStorage.getItem('mt_bestellijst_journaal')||'[]'); }catch(e){ j=[]; }
+    if(!Array.isArray(j)) j=[];
+    j.push({id:'j'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),tijd:new Date().toISOString(),
+      actie,door:_blWie(),voor:voor?JSON.parse(JSON.stringify(voor)):null,na:na?JSON.parse(JSON.stringify(na)):null});
+    if(j.length>1000) j=j.slice(-1000);
+    localStorage.setItem('mt_bestellijst_journaal',JSON.stringify(j));
+  }catch(e){ console.warn('bestellijst-journaal schrijven mislukt:',e); }
+}
+function _blBewaar(l){
+  try{ localStorage.setItem('mt_bestellijst',JSON.stringify(l)); return true; }
+  catch(e){ console.error('bestellijst opslaan mislukt:',e); if(typeof planToast==='function') planToast('⚠ Bestellijst opslaan mislukt: '+(e.message||e)); return false; }
+}
+function _blStempel(b){ b._gewijzigd=new Date().toISOString(); const w=_blWie(); if(w) b._door=w; return b; }
+function _blZoek(l,id){ return l.find(x=>x&&typeof x==='object'&&String(x.id)===String(id)); }
+function _blWijzig(id,actie,fn){
+  const l=_blAlle(), b=_blZoek(l,id); if(!b) return null;
+  const voor=JSON.parse(JSON.stringify(b)); fn(b); _blStempel(b);
+  _blJournaal(actie,voor,b); return _blBewaar(l)?b:null;
+}
+function _blNieuw(item,actie){
+  const l=_blAlle();
+  if(item.id===undefined||item.id===null||item.id==='') item.id='bl_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  _blStempel(item); l.push(item); _blJournaal(actie||'nieuw',null,item);
+  return _blBewaar(l)?item:null;
+}
+function _blVervallen(id,reden){ return _blWijzig(id,'vervallen',b=>{ b._vervallen={tijd:new Date().toISOString(),door:_blWie(),reden:reden||''}; }); }
+let _blToonVervallen=false;
+function bestellijstToonVervallen(aan){ _blToonVervallen=!!aan; renderBestellijst(); }
+function bestellijstTerugzetten(id){
+  const b=_blWijzig(id,'terugzetten',x=>{ delete x._vervallen; });
+  if(b&&typeof planToast==='function') planToast('↩ "'+(b.materiaal||'regel')+'" staat weer op de bestellijst');
+  renderBestellijst();
+}
+// id veilig in een onclick-string tussen enkele quotes
+function _blQ(v){ return String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
 function toggleBestellijst(mat,cat,lev,prijs,btn){
-  const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]');
-  const idx=lijst.findIndex(b=>b.materiaal===mat&&!b.besteld);
-  if(idx>=0){lijst.splice(idx,1);btn.textContent='+ Bestellen';btn.classList.remove('besteld');}
-  else{lijst.push({materiaal:mat,categorie:cat,leverancier:lev,prijsLaatst:prijs,datum:new Date().toISOString().split('T')[0],besteld:false,id:Date.now()});btn.textContent='✓ Op lijst';btn.classList.add('besteld');}
-  localStorage.setItem('mt_bestellijst',JSON.stringify(lijst));
+  const open=_blActief().find(b=>b.materiaal===mat&&!b.besteld);
+  if(open){ _blVervallen(open.id,'van de lijst gehaald via Voorraad'); btn.textContent='+ Bestellen'; btn.classList.remove('besteld'); }
+  else{ _blNieuw({materiaal:mat,categorie:cat,leverancier:lev,prijsLaatst:prijs,datum:new Date().toISOString().split('T')[0],besteld:false},'nieuw (voorraad)'); btn.textContent='✓ Op lijst'; btn.classList.add('besteld'); }
   renderVoorraadKPI(JSON.parse(localStorage.getItem('mt_voorraad')||'[]'));
 }
 function renderBestellijst(sortK='materiaal',sortA=true){
-  const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]');
+  const actief=_blActief(), vervallen=_blVervallenLijst();
+  const lijst=_blToonVervallen?actief.concat(vervallen):actief;
   const el=document.getElementById('bestellijst-inhoud');if(!el) return;
-  if(!lijst.length){el.innerHTML='<p style="color:var(--text-faint);font-size:13px">Geen items op de bestellijst. Klik op "+ Bestellen" in het Voorraad tabblad.</p>';return;}
+  const vervallenBalk=vervallen.length
+    ? `<div style="font-size:11px;color:var(--text-faint);margin-bottom:0.6rem"><label style="cursor:pointer"><input type="checkbox" style="width:auto" ${_blToonVervallen?'checked':''} onchange="bestellijstToonVervallen(this.checked)"> Toon van de lijst gehaalde regels (${vervallen.length}) — terug te zetten</label></div>`
+    : '';
+  if(!lijst.length){el.innerHTML=vervallenBalk+'<p style="color:var(--text-faint);font-size:13px">Geen items op de bestellijst. Klik op "+ Bestellen" in het Voorraad tabblad.</p>';return;}
   const perCat={};lijst.forEach(b=>{if(!perCat[b.categorie]) perCat[b.categorie]=[];perCat[b.categorie].push(b);});
   const thS='cursor:pointer;user-select:none;white-space:nowrap';
   const th=(k,label,align='left')=>`<th style="text-align:${align};${thS}" onclick="renderBestellijst('${k}',${sortK==='${k}'?!sortA:true})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
@@ -4355,7 +4426,7 @@ function renderBestellijst(sortK='materiaal',sortA=true){
   const gesorteerdeEntries=catVolgorde.filter(c=>perCat[c]).map(c=>[c,perCat[c]]);
   // Voeg andere categorieën toe die niet in volgorde staan
   Object.entries(perCat).forEach(([c,items])=>{if(!catVolgorde.includes(c)) gesorteerdeEntries.push([c,items]);});
-  el.innerHTML=gesorteerdeEntries.map(([cat,items])=>{
+  el.innerHTML=vervallenBalk+gesorteerdeEntries.map(([cat,items])=>{
     const gesorteerd=[...items].sort((a,b)=>{
       let va=a[sortK]||'',vb=b[sortK]||'';
       if(typeof va==='number') return sortA?va-vb:vb-va;
@@ -4365,14 +4436,22 @@ function renderBestellijst(sortK='materiaal',sortA=true){
       <div class="card-title" style="margin-bottom:0.5rem">${VOORRAAD_CAT_LABEL[cat]||('🔩 '+cat)}</div>
       <table class="v-table">
         <thead><tr><th>✓</th>${th('materiaal','Materiaal')}${th('leverancier','Leverancier')}<th style="text-align:right">Aantal</th>${th('prijsLaatst','Laatste prijs','right')}${th('datum','Datum','left')}<th></th></tr></thead>
-        <tbody>${gesorteerd.map(b=>`<tr style="${b.besteld?'opacity:0.5;text-decoration:line-through':''}">
-          <td><input type="checkbox" ${b.besteld?'checked':''} onchange="markeerBesteld(${b.id},this.checked)" style="width:auto;cursor:pointer"></td>
-          <td><strong style="font-size:12px">${b.materiaal}</strong>${b.platenmaat?`<div style="font-size:10px;color:var(--text-faint)">${b.platenmaat}</div>`:''}</td>
-          <td style="font-size:12px">${b.leverancier?`<a href="#" onclick="toonLeverancierInfo('${b.leverancier}');return false" style="color:var(--green);text-decoration:none">${b.leverancier}</a>`:'—'}</td>
-          <td style="text-align:right"><input type="number" min="1" value="${b.aantal||1}" style="width:60px;font-family:var(--mono);text-align:right;padding:3px 6px;font-size:12px" onchange="updateBestellijstAantal(${b.id},this.value)"></td>
-          <td style="text-align:right;font-family:var(--mono)">€ ${(b.prijsLaatst||0).toFixed(2)}</td>
+        <tbody>${gesorteerd.map(b=>b._vervallen?`<tr style="opacity:0.45">
+          <td></td>
+          <td><strong style="font-size:12px">${esc(b.materiaal)}</strong><div style="font-size:10px;color:var(--text-faint)">van de lijst gehaald ${fmtDatum(String(b._vervallen.tijd||'').slice(0,10))}${b._vervallen.door?' door '+esc(b._vervallen.door):''}${b._vervallen.reden?' — '+esc(b._vervallen.reden):''}</div></td>
+          <td style="font-size:12px">${esc(b.leverancier||'—')}</td>
+          <td style="text-align:right;font-family:var(--mono)">${b.aantal||1}</td>
+          <td style="text-align:right;font-family:var(--mono)">€ ${(Number(b.prijsLaatst)||0).toFixed(2)}</td>
           <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(b.datum)}</td>
-          <td><button class="btn btn-xs btn-danger" onclick="if(confirm('Verwijderen?'))verwijderUitBestellijst(${b.id})">×</button></td>
+          <td><button class="btn btn-xs btn-secondary" title="Terugzetten op de bestellijst" onclick="bestellijstTerugzetten('${_blQ(b.id)}')">↩</button></td>
+        </tr>`:`<tr style="${b.besteld?'opacity:0.5;text-decoration:line-through':''}">
+          <td><input type="checkbox" ${b.besteld?'checked':''} onchange="markeerBesteld('${_blQ(b.id)}',this.checked)" style="width:auto;cursor:pointer"></td>
+          <td><strong style="font-size:12px">${esc(b.materiaal)}</strong>${b.platenmaat?`<div style="font-size:10px;color:var(--text-faint)">${esc(b.platenmaat)}</div>`:''}</td>
+          <td style="font-size:12px">${b.leverancier?`<a href="#" onclick="toonLeverancierInfo('${_blQ(b.leverancier)}');return false" style="color:var(--green);text-decoration:none">${esc(b.leverancier)}</a>`:'—'}</td>
+          <td style="text-align:right"><input type="number" min="1" value="${b.aantal||1}" style="width:60px;font-family:var(--mono);text-align:right;padding:3px 6px;font-size:12px" onchange="updateBestellijstAantal('${_blQ(b.id)}',this.value)"></td>
+          <td style="text-align:right;font-family:var(--mono)">€ ${(Number(b.prijsLaatst)||0).toFixed(2)}</td>
+          <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(b.datum)}</td>
+          <td><button class="btn btn-xs btn-danger" title="Van de lijst halen (blijft bewaard en is terug te zetten)" onclick="verwijderUitBestellijst('${_blQ(b.id)}')">×</button></td>
         </tr>`).join('')}</tbody>
       </table>
     </div>`;
@@ -4389,9 +4468,7 @@ function voegHandmatigToe(){
   const cat=document.getElementById('hm-cat').value;
   const aantal=parseInt(document.getElementById('hm-aantal').value)||1;
   const lev=document.getElementById('hm-leverancier').value.trim();
-  const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]');
-  lijst.push({materiaal:naam,categorie:cat,leverancier:lev,prijsLaatst:0,datum:new Date().toISOString().split('T')[0],besteld:false,id:Date.now()+Math.random(),aantal});
-  localStorage.setItem('mt_bestellijst',JSON.stringify(lijst));
+  if(!_blNieuw({materiaal:naam,categorie:cat,leverancier:lev,prijsLaatst:0,datum:new Date().toISOString().split('T')[0],besteld:false,aantal},'nieuw (handmatig)')) return;
   // Reset form
   document.getElementById('hm-naam').value='';
   document.getElementById('hm-aantal').value='1';
@@ -4399,24 +4476,26 @@ function voegHandmatigToe(){
   renderBestellijst();
 }
 function updateBestellijstAantal(id,aantal){
-  const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]');
-  const item=lijst.find(b=>b.id===id);if(item) item.aantal=parseInt(aantal)||1;
-  localStorage.setItem('mt_bestellijst',JSON.stringify(lijst));
+  _blWijzig(id,'aantal',b=>{ b.aantal=parseInt(aantal)||1; });
 }
 function markeerBesteld(id,besteld){
-  const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]');
-  const item=lijst.find(b=>b.id===id);if(item) item.besteld=besteld;
-  localStorage.setItem('mt_bestellijst',JSON.stringify(lijst));renderBestellijst();
+  _blWijzig(id,besteld?'besteld':'niet besteld',b=>{ b.besteld=!!besteld; });
+  renderBestellijst();
 }
-function verwijderUitBestellijst(id){
-  const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]').filter(b=>b.id!==id);
-  localStorage.setItem('mt_bestellijst',JSON.stringify(lijst));renderBestellijst();
+async function verwijderUitBestellijst(id){
+  const b=_blZoek(_blAlle(),id); if(!b) return;
+  const ok=(typeof mtDialog!=='undefined')
+    ? await mtDialog.confirm({title:'Van de bestellijst halen',message:'"'+(b.materiaal||'regel')+'" van de bestellijst halen?\nDe regel blijft bewaard en is terug te zetten via "Toon van de lijst gehaalde regels".',okLabel:'Van de lijst halen'})
+    : confirm('"'+(b.materiaal||'regel')+'" van de bestellijst halen? (terug te zetten)');
+  if(!ok) return;
+  _blVervallen(id,'handmatig van de lijst gehaald');
+  renderBestellijst();
 }
 function exportBestellijst(){
-  const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]').filter(b=>!b.besteld);
+  const lijst=_blActief().filter(b=>!b.besteld);
   if(!lijst.length){alert('Geen openstaande items.');return;}
   const tekst=`BESTELLIJST M&T — ${new Date().toLocaleDateString('nl-NL')}\n\n`+
-    lijst.map(b=>`□ ${b.materiaal}\n  Leverancier: ${b.leverancier||'—'}\n  Laatste prijs: € ${(b.prijsLaatst||0).toFixed(2)}\n`).join('\n');
+    lijst.map(b=>`□ ${b.materiaal}\n  Leverancier: ${b.leverancier||'—'}\n  Laatste prijs: € ${(Number(b.prijsLaatst)||0).toFixed(2)}\n`).join('\n');
   const a=document.createElement('a');a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(tekst);
   a.download=`bestellijst-${new Date().toISOString().split('T')[0]}.txt`;a.click();
 }
@@ -5824,7 +5903,7 @@ function projectTijdlijn(proj){
       detail:`${rows.length} regel${rows.length>1?'s':''}${tot?` · ${fmt(tot)}`:''}${levs.length?` · ${levs.join(', ')}`:''}`});
   });
   // Bestellingen op de bestellijst — gegroepeerd per datum
-  const bestel=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]').filter(b=>b.project===proj.code);
+  const bestel=_blActief().filter(b=>b.project===proj.code);
   const perBdatum={};
   bestel.forEach(b=>{const d=b.datum||'?';(perBdatum[d]=perBdatum[d]||[]).push(b);});
   Object.entries(perBdatum).forEach(([d,rows])=>{
@@ -6089,15 +6168,19 @@ function updateNcrTotaal(id, basis){
   if(totaalEl) totaalEl.textContent=basis+breuk;
 }
 
-function ncrNaarBestellijst(resultaten, projectCode){
-  const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]');
+async function ncrNaarBestellijst(resultaten, projectCode){
+  // Brok L2: een open regel voor hetzelfde materiaal in dit project werd stil vervangen
+  // (handmatige wijzigingen weg). Nu: nieuwe materialen komen erbij; bij bestaande open
+  // regels kies je zelf (bijwerken naar het nieuwe aantal / extra regel / overslaan).
+  // Elke wijziging gaat via het journaal; niets wordt gewist.
+  const actief=_blActief();
+  const nieuw=[], conflict=[];
   resultaten.forEach(r=>{
     const safeMatId='ncr_'+r.materiaal.replace(/[^a-zA-Z0-9]/g,'_')+'_'+projectCode.replace(/-/g,'');
     const breuk=parseInt(document.getElementById(`${safeMatId}_breuk`)?.value)||0;
     const totaal=r.aantalPlaten+breuk;
     const vInfo=getVoorraadStatusVoorNcr(r.materiaal);
     const lev=getLeverancierVoorNcr(r.materiaal)||'';
-    const bestaand=lijst.findIndex(b=>b.materiaal===r.materiaal&&b.project===projectCode&&!b.besteld);
     const item={
       materiaal:r.materiaal,
       categorie:'platen',
@@ -6105,16 +6188,40 @@ function ncrNaarBestellijst(resultaten, projectCode){
       prijsLaatst:vInfo.prijs||0,
       datum:new Date().toISOString().split('T')[0],
       besteld:false,
-      id:Date.now()+Math.random(),
       aantal:totaal,
       project:projectCode,
       platenmaat:`${r.breedte}×${r.hoogte}mm`
     };
-    if(bestaand>=0) lijst[bestaand]=item;
-    else lijst.push(item);
+    const bestaand=actief.find(b=>b.materiaal===r.materiaal&&b.project===projectCode&&!b.besteld);
+    if(bestaand) conflict.push({bestaand,item}); else nieuw.push(item);
   });
-  localStorage.setItem('mt_bestellijst',JSON.stringify(lijst));
+  let keuze=null;   // 0 = bijwerken, 1 = extra regel, 2 = overslaan
+  if(conflict.length){
+    const lijstTekst=conflict.map(c=>'• '+c.item.materiaal+': nu '+(c.bestaand.aantal||1)+' → nieuw '+c.item.aantal).join('\n');
+    if(typeof mtDialog!=='undefined'){
+      keuze=await mtDialog.choose({title:'Al op de bestellijst',
+        message:conflict.length+' materia'+(conflict.length===1?'al staat':'len staan')+' voor '+projectCode+' al open op de bestellijst:\n'+lijstTekst,
+        choices:[{label:'Aantallen bijwerken',sublabel:'leverancier, prijs en eigen aanpassingen blijven staan; oude stand in het journaal'},
+                 {label:'Als extra regel toevoegen',sublabel:'de bestaande regel blijft ongewijzigd'},
+                 {label:'Overslaan',sublabel:'alleen de nieuwe materialen toevoegen'}]});
+    } else {
+      keuze=confirm(conflict.length+' materialen staan al open:\n'+lijstTekst+'\n\nOK = aantallen bijwerken, Annuleren = overslaan')?0:2;
+    }
+    if(keuze==null) keuze=2;        // venster gesloten = niets aan bestaande regels doen
+  }
+  let toegevoegd=0, bijgewerkt=0, overgeslagen=0;
+  nieuw.forEach(item=>{ if(_blNieuw(item,'nieuw (NCR '+projectCode+')')) toegevoegd++; });
+  conflict.forEach(c=>{
+    if(keuze===0){ if(_blWijzig(c.bestaand.id,'aantal (NCR '+projectCode+')',b=>{ b.aantal=c.item.aantal; if(!b.platenmaat) b.platenmaat=c.item.platenmaat; })) bijgewerkt++; }
+    else if(keuze===1){ if(_blNieuw(c.item,'extra regel (NCR '+projectCode+')')) toegevoegd++; }
+    else overgeslagen++;
+  });
   renderBestellijst();
+  const delen=[];
+  if(toegevoegd) delen.push(toegevoegd+' toegevoegd');
+  if(bijgewerkt) delen.push(bijgewerkt+' bijgewerkt');
+  if(overgeslagen) delen.push(overgeslagen+' overgeslagen (stonden al open)');
+  if(typeof planToast==='function') planToast('🛒 Bestellijst: '+(delen.join(', ')||'niets gewijzigd'));
   const btn=document.querySelector('[onclick*="bestelling"]');
   if(btn) btn.click();
 }
@@ -6333,10 +6440,9 @@ function slaWerkelijkePrijsOp(projectCode,artikel,prijs){
 }
 
 function csvRegelNaarBestellijst(checkbox,artikel,omschrijving,categorie,hoeveelheid,eenheid,projectCode){
-  const lijst=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]');
   const catMap={'platen':'platen','kanten':'kantenband','beslag':'overig'};
   if(checkbox.checked){
-    lijst.push({
+    _blNieuw({
       materiaal:omschrijving,
       artikel,
       categorie:catMap[categorie]||'overig',
@@ -6344,16 +6450,15 @@ function csvRegelNaarBestellijst(checkbox,artikel,omschrijving,categorie,hoeveel
       prijsLaatst:0,
       datum:new Date().toISOString().split('T')[0],
       besteld:false,
-      id:Date.now()+Math.random(),
       aantal:parseFloat(hoeveelheid)||1,
       eenheid,
       project:projectCode
-    });
+    },'nieuw (VW-CSV '+projectCode+')');
   } else {
-    const idx=lijst.findIndex(b=>b.artikel===artikel&&b.project===projectCode&&!b.besteld);
-    if(idx>=0) lijst.splice(idx,1);
+    // Brok L2: niet meer wissen, maar van de lijst halen (blijft bewaard, terug te zetten)
+    const open=_blActief().find(b=>b.artikel===artikel&&b.project===projectCode&&!b.besteld);
+    if(open) _blVervallen(open.id,'uitgevinkt in VW-CSV '+projectCode);
   }
-  localStorage.setItem('mt_bestellijst',JSON.stringify(lijst));
 }
 
 function exporteerPrijsvergelijking(projectCode){
@@ -6677,7 +6782,7 @@ function renderLeveranciersBar(items){
 }
 function renderTodo(){
   const el=document.getElementById('dash-todo');if(!el) return;
-  const bestellen=JSON.parse(localStorage.getItem('mt_bestellijst')||'[]').filter(b=>!b.besteld).length;
+  const bestellen=_blActief().filter(b=>!b.besteld).length;
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').length;
   const items=[
     {label:'Facturen te controleren',count:'→',kleur:'var(--blue)',link:()=>document.querySelector('[onclick*="controle"]').click()},
@@ -7737,12 +7842,36 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
   // Een samenvoeger krijgt (lokale tekst, SP-data) en geeft het samengevoegde object terug.
   mergers: {
+    // Bestellijst (brok L2): per regel (id; oude regels zonder id → inhoud-id) wint de
+    // stand met de nieuwste `_gewijzigd`. Van de lijst halen is een tombstone
+    // (`_vervallen` + nieuwe stempel), dus een oude kopie zet niets terug en wist niets.
+    // Een regel die maar aan één kant bestaat, blijft staan. Gelijk → lokaal.
+    mt_bestellijst(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const kopie = v => Array.isArray(v) ? JSON.parse(JSON.stringify(v)) : [];
+      const L = _blIdsToekennen(kopie(lees(lokaal))), R = _blIdsToekennen(kopie(lees(spData)));
+      const per = new Map(), los = new Map();
+      for (const x of [...R, ...L]) {
+        if (!x || typeof x !== 'object') { los.set(JSON.stringify(x), x); continue; }
+        const k = String(x.id);
+        const oud = per.get(k);
+        if (!oud || String(x._gewijzigd || '') >= String(oud._gewijzigd || '')) per.set(k, x);
+      }
+      return [...per.values(), ...los.values()];
+    },
+    // Bestellijst-journaal: alleen toevoegen; vereniging op id, op tijd, laatste 1000.
+    mt_bestellijst_journaal(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
+      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
+      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-1000);
+    },
     // To Do-koppeltabel: per (e-mail|Toggl-taak) wint de nieuwste stand; niets valt weg.
     mt_todo_sync(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
