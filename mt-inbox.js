@@ -770,7 +770,8 @@ async function inboxBijlagenDialoog(mailId,code){
   if(typeof window.spUploadProjectBytes!=='function'){ inboxToast('SharePoint-upload niet beschikbaar (ingelogd op M365?).'); return; }
   try{
     ibStatus('Bijlagen ophalen…');
-    const a=await ibFetch(`/messages/${mailId}/attachments?$select=id,name,size,contentType,isInline`);
+    // Bewust zonder $select: dan komt @odata.type gegarandeerd mee (file vs. doorgestuurde mail/link).
+    const a=await ibFetch(`/messages/${mailId}/attachments`);
     ibStatus('');
     const alle=(a&&a.value)||[];
     const items=alle.filter(x=>{ const t=String(x['@odata.type']||''); return !x.isInline && !t.includes('itemAttachment') && !t.includes('referenceAttachment'); });

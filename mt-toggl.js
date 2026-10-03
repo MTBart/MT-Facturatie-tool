@@ -104,19 +104,27 @@ async function t2HernoemProject(id,naam){
   _tgCache.projecten=null;
 }
 // Idempotent een taak maken: eerst zoeken op een marker in de notitie
-// ("mt:<sleutel>"), pas daarna aanmaken. Zo maakt een herhaalde klik of een
-// verloren antwoord nooit een tweede taak.
+// ("mt:<sleutel>", een eigen regel), pas daarna aanmaken. Zo maakt een herhaalde klik
+// of een verloren antwoord geen tweede taak. `vers` = de takenlijst opnieuw ophalen
+// (doe dat bij het begin van elke klik/batch). Exacte regel-match op de marker en
+// hetzelfde project; meer dan één treffer = blokkeren (de mens kiest).
+// Rest-risico (gedocumenteerd): twee pc's die op exact hetzelfde moment dezelfde taak
+// maken; echte atomaire find-or-create kan pas in de worker.
 let _t2TakenStream=null;
 async function t2VindOfMaakTaak(marker,body,vers){
   if(vers||!_t2TakenStream) _t2TakenStream=await focusFetch('tasks/stream');
   const lijst=Array.isArray(_t2TakenStream)?_t2TakenStream:((_t2TakenStream&&_t2TakenStream.data)||[]);
+  if(!Array.isArray(_t2TakenStream)) _t2TakenStream=lijst;
   const tag='mt:'+marker;
-  const hit=lijst.find(t=>String(t.notes||'').includes(tag));
-  if(hit) return {id:hit.id,bestond:true};
+  const hits=lijst.filter(t=>String(t.notes||'').split(/\r?\n/).some(r=>r.trim()===tag));
+  const zelfdeProj=hits.filter(t=>!body||!body.project_id||String(t.project_id)===String(body.project_id));
+  if(zelfdeProj.length>1) throw new Error(`Er staan al ${zelfdeProj.length} Toggl-taken met kenmerk ${tag} — los dat eerst op in Toggl`);
+  if(zelfdeProj.length===1) return {id:zelfdeProj[0].id,bestond:true};
+  if(hits.length) throw new Error(`Taak met kenmerk ${tag} staat in een ánder Toggl-project — controleer de koppeling`);
   const r=await focusFetch('tasks','POST',Object.assign({},body,{notes:((body&&body.notes)?body.notes+'\n':'')+tag}));
   const id=r&&(r.id||(r.data&&r.data.id));
   if(!id) throw new Error('Toggl gaf geen taak-id terug');
-  lijst.push({id,notes:tag}); if(typeof _tgCache!=='undefined') _tgCache.taken=null;
+  lijst.push({id,notes:tag,project_id:body&&body.project_id}); if(typeof _tgCache!=='undefined') _tgCache.taken=null;
   return {id,bestond:false};
 }
 
@@ -674,14 +682,20 @@ function tgNieuwProject(){
 // Zoekt een bestaande Toggl-client op naam (case-insensitief) of maakt 'm aan.
 // Geeft het client-id terug of null. Best-effort.
 async function tgVindOfMaakClient(naam){
+  // Geeft het klant-id, null als er geen klantnaam is, en GOOIT bij een fout: dan wordt
+  // er ook geen project zonder klant gemaakt (de mens beslist).
   naam=String(naam||'').trim(); if(!naam||naam==='—') return null;
-  try{
-    const r=await focusFetchW('clients?per_page=100');
-    const best=((r&&r.data)||[]).find(c=>(c.name||'').trim().toLowerCase()===naam.toLowerCase());
-    if(best) return best.id;
-    const made=await focusFetchW('clients','POST',{name:naam});
-    return (made&&(made.id||(made.data&&made.data.id)))||null;
-  }catch(e){ console.warn('Toggl-klant',naam,'opzoeken/aanmaken faalde:',e); return null; }
+  const alle=[]; for(let page=1;page<=20;page++){
+    const r=await focusFetchW(`clients?per_page=100&page=${page}`);
+    const d=(r&&r.data)||[]; alle.push(...d); if(d.length<100) break;
+  }
+  const best=alle.filter(c=>(c.name||'').trim().toLowerCase()===naam.toLowerCase());
+  if(best.length>1) throw new Error(`Er bestaan ${best.length} Toggl-klanten "${naam}" — voeg ze eerst samen in Toggl`);
+  if(best.length===1) return best[0].id;
+  const made=await focusFetchW('clients','POST',{name:naam});
+  const id=made&&(made.id||(made.data&&made.data.id));
+  if(!id) throw new Error('Toggl gaf geen klant-id terug');
+  return id;
 }
 // Maakt het Toggl-project bij een M&T-projectcode (best-effort, niet-blokkerend).
 // Projectnaam = leesbare naam + code; klant wordt als Toggl-CLIENT gekoppeld
