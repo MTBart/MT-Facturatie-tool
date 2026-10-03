@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Mail-koppelingen: ontkoppelen is een tombstone + eigen samenvoeger
+- Commit: `7f0bf7e` | Auteur: Bart Witte
+
 ## 2026-10-03 — Mappen: niet meer automatisch hernoemen, leesfout is geen lege map
 - Commit: `e6885f2` | Auteur: Bart Witte
 

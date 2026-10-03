@@ -4577,6 +4577,33 @@ function _ptId(){return 't'+Date.now().toString(36)+Math.random().toString(36).s
 const _PT_PRIO={low:{l:'P3',c:'#6b7280'},medium:{l:'P2',c:'#B8962E'},high:{l:'P1',c:'#c0392b'}};
 const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},klaar:{l:'Klaar',c:'#2A4A38'}};
 const _PT_STAT_TG={todo:300785,bezig:300788,klaar:300786};
+// Journaal: vóór elke verwijdering/statuswijziging een volledige kopie van de taak.
+// Gesynct (mt_taken_journaal, eigen samenvoeger) zodat herstel vanaf elke pc kan.
+function _ptJournaal(actie,code,taak,extra){
+  try{
+    let j=[]; try{ j=JSON.parse(localStorage.getItem('mt_taken_journaal')||'[]'); }catch(e){ j=[]; }
+    if(!Array.isArray(j)) j=[];
+    j.push(Object.assign({id:'j'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+      tijd:new Date().toISOString(),actie,code,taak:JSON.parse(JSON.stringify(taak||null))},extra||{}));
+    if(j.length>1000) j=j.slice(-1000);
+    localStorage.setItem('mt_taken_journaal',JSON.stringify(j));
+  }catch(e){ console.warn('taken-journaal schrijven mislukt:',e); }
+}
+// Taken waarvan de Toggl-wijziging nog niet gelukt is, opnieuw proberen.
+async function projTakenHerkans(code){
+  const arr=projTaken(code), weg=new Set(); let ok=0,fout=0;
+  for(const t of arr){
+    if(!t.tg_pending||!t.tg_task_id) continue;
+    if(t.tg_pending.verwijderen){ if(await _tgVerwijderTaak(t.tg_task_id)){ weg.add(t.id); ok++; } else fout++; continue; }
+    if(t.tg_pending.status){
+      try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:_PT_STAT_TG[t.status]}); delete t.tg_pending; ok++; }
+      catch(e){ fout++; }
+    }
+  }
+  projTakenZet(code,arr.filter(t=>!weg.has(t.id)));
+  _ptStatus(code,fout?`⚠ ${fout} taak/taken nog niet bijgewerkt in Toggl — probeer later opnieuw`:`✓ ${ok} bijgewerkt in Toggl`,fout?'#c0392b':'var(--green)');
+  renderProjectDetail(huidigProject);
+}
 
 function projectTakenHtml(proj){
   const arr=projTaken(proj.code), sid=proj.code.replace(/-/g,'');
@@ -4599,6 +4626,7 @@ function projectTakenHtml(proj){
         <button class="btn btn-xs btn-secondary" title="+1 uur" onclick="projTaakUur('${proj.code}','${t.id}',1)">+</button>
       </td>
       <td style="white-space:nowrap;text-align:right">
+        ${t.tg_pending?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="De wijziging is nog niet in Toggl gelukt — klik om opnieuw te proberen" onclick="projTakenHerkans('${proj.code}')">⏳ ${t.tg_pending.verwijderen?'verwijderen':'status'} wacht op Toggl</button>`:''}
         ${t.tg_task_id?'<span class="badge badge-ok" title="Zichtbaar in Toggl-project">Toggl ✓</span>':`<button class="btn btn-xs btn-secondary" title="Naar Toggl-project sturen" onclick="projTaakNaarToggl('${proj.code}','${t.id}').then(()=>renderProjectDetail(huidigProject))">→ Toggl</button>`}
         <button class="btn btn-xs btn-secondary" title="Status wisselen" onclick="projTaakStatus('${proj.code}','${t.id}')">⟳</button>
         <button class="btn btn-xs btn-danger" title="Verwijderen" onclick="projTaakVerwijder('${proj.code}','${t.id}')">×</button>
@@ -4637,12 +4665,17 @@ function nieuweProjectTaak(code){
   arr.push(t); projTakenZet(code,arr); renderProjectDetail(huidigProject);
   try{ if(window.track) track('taken','taak_handmatig',{detail:code,ok:true}); }catch(e){}
 }
-function projTaakStatus(code,id){
+async function projTaakStatus(code,id){
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
+  _ptJournaal('status',code,t);
   const order=['todo','bezig','klaar']; t.status=order[(order.indexOf(t.status||'todo')+1)%3];
+  // Niet meer "fire and forget": lukt Toggl niet, dan blijft dat zichtbaar (⏳) met herkansing.
+  if(t.tg_task_id){
+    try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:_PT_STAT_TG[t.status]}); delete t.tg_pending; }
+    catch(e){ t.tg_pending={status:true}; _ptStatus(code,'⚠ Status lokaal gewijzigd, maar nog niet in Toggl: '+(e.message||e)+' — klik ⏳ om opnieuw te proberen','#c0392b'); }
+  }
   projTakenZet(code,arr);
   try{ if(window.track) track('taken','status',{detail:t.status}); }catch(e){}
-  if(t.tg_task_id){ try{ focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:_PT_STAT_TG[t.status]}).catch(()=>{}); }catch(e){} }
   // Twee-weg-sync: spiegel de status naar de bijbehorende planning-fase.
   try{ const plan=planVoor(code); if(plan&&plan.vanTaken&&plan.fases){ const fa=plan.fases.find(f=>f.bronTaakId===id); if(fa){ fa.status=t.status; planSave(code,plan); } } }catch(e){}
   renderProjectDetail(huidigProject);
@@ -4685,7 +4718,17 @@ async function projTaakVerwijder(code,id){
   const t=projTaken(code).find(x=>x.id===id);
   if(!await mtDialog.confirm({title:'Taak verwijderen',message:'Taak verwijderen?'+(t&&t.tg_task_id?'\nWordt óók in Toggl verwijderd.':''),okLabel:'Verwijderen',danger:true})) return;
   try{ if(window.track) track('taken','verwijder',{detail:code}); }catch(e){}
-  if(t&&t.tg_task_id){ _ptStatus(code,'Toggl: taak verwijderen…'); await _tgVerwijderTaak(t.tg_task_id); }
+  if(!t) return;
+  _ptJournaal('verwijderen',code,t);
+  // Pas lokaal weg als Toggl het bevestigt; anders blijft de taak staan met ⏳.
+  if(t.tg_task_id){
+    _ptStatus(code,'Toggl: taak verwijderen…');
+    if(!await _tgVerwijderTaak(t.tg_task_id)){
+      const arr=projTaken(code), x=arr.find(y=>y.id===id); if(x){ x.tg_pending={verwijderen:true}; projTakenZet(code,arr); }
+      _ptStatus(code,'⚠ Verwijderen in Toggl mislukt — de taak blijft staan tot het lukt (klik ⏳ om opnieuw te proberen)','#c0392b');
+      renderProjectDetail(huidigProject); return;
+    }
+  }
   projTakenZet(code,projTaken(code).filter(x=>x.id!==id));
   renderProjectDetail(huidigProject);
 }
@@ -4698,12 +4741,16 @@ async function projTakenVerwijderSelectie(code){
   const inToggl=teVerw.filter(t=>t.tg_task_id).length;
   if(!await mtDialog.confirm({title:'Taken verwijderen',message:`${ids.length} ta(a)k(en) verwijderen?`+(inToggl?`\n${inToggl} óók in Toggl.`:''),okLabel:'Verwijderen',danger:true})) return;
   try{ if(window.track) track('taken','verwijder_selectie',{detail:code+' · '+ids.length}); }catch(e){}
-  let i=0;
+  let i=0; const mislukt=new Set();
   for(const t of teVerw){ i++;
-    if(t.tg_task_id){ _ptStatus(code,`Toggl: verwijderen ${i}/${teVerw.length}…`,'var(--gold-text)'); await _tgVerwijderTaak(t.tg_task_id); }
+    _ptJournaal('verwijderen',code,t);
+    if(t.tg_task_id){ _ptStatus(code,`Toggl: verwijderen ${i}/${teVerw.length}…`,'var(--gold-text)');
+      if(!await _tgVerwijderTaak(t.tg_task_id)) mislukt.add(t.id); }
   }
-  projTakenZet(code,projTaken(code).filter(t=>!ids.includes(t.id)));
-  _ptStatus(code,`✓ ${ids.length} taken verwijderd`,'var(--green)');
+  const rest=projTaken(code).filter(t=>!ids.includes(t.id)||mislukt.has(t.id));
+  rest.forEach(t=>{ if(mislukt.has(t.id)) t.tg_pending={verwijderen:true}; });
+  projTakenZet(code,rest);
+  _ptStatus(code,mislukt.size?`⚠ ${ids.length-mislukt.size} verwijderd; ${mislukt.size} blijven staan omdat Toggl niet lukte (⏳ = opnieuw)`:`✓ ${ids.length} taken verwijderd`,mislukt.size?'#c0392b':'var(--green)');
   renderProjectDetail(huidigProject);
 }
 function projTakenSelectAll(code,on){
@@ -7522,12 +7569,19 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
   // Een samenvoeger krijgt (lokale tekst, SP-data) en geeft het samengevoegde object terug.
   mergers: {
+    // Taken-journaal: alleen toevoegen. Vereniging op id, gesorteerd op tijd, laatste 1000.
+    mt_taken_journaal(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
+      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
+      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-1000);
+    },
     // Mail↔project-koppelingen: { code: [koppeling…] }. Per code en per mail
     // (internetMessageId, anders id) wint de NIEUWSTE stand (gewijzigd/ontkoppeld/ts).
     // Ontkoppelen is een tombstone (`ontkoppeld`), dus een oude kopie kan een
