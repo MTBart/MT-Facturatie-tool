@@ -838,6 +838,15 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <!-- actief project -->
     <div id="captureProjectBanner"></div>
 
+    <!-- HERSTEL-BALK: onvoltooide opname-foto's na een app/PWA-herstart -->
+    <div id="capRestoreBanner" style="display:none;background:#2a1f0f;border:1px solid #d6a93a;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:14px;margin-bottom:8px">📸 <span id="capRbTxt">Onvoltooide opname</span></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-gold" style="flex:1;min-height:42px" onclick="capRestoreDraft()">↩️ Verdergaan</button>
+        <button class="btn btn-secondary" style="flex:0 0 auto;min-height:42px" onclick="capDiscardDraft()">🗑 Weggooien</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-head">
         <div class="card-label">Snelle notitie</div>
@@ -2005,8 +2014,35 @@ async function focusFetch(path, method='GET', body=null) {
    éénmalig af. Callers zitten in try/catch en vallen terug op de _RQ-retry-queue. */
 const _SP = window.MTCore.makeSP({
   toast: (m) => { if (typeof showToast === 'function') showToast(m); },
-  etagKeys: new Set(['mt_planning']),
+  // Geen etagKeys = mt-core-default: ALLE keys If-Match + 412-merge (taken,
+  // concepten, opnames, opleveringen, voorraadcorrecties — alles beschermd).
 });
+
+/* Gerichte 412-merges. Een caller kent bij read-modify-write maar één gewijzigd
+   record; merge bij een conflict alléén dat record in de VERSE serverversie,
+   zodat een stale lokale kopie nooit andermans gelijktijdige wijziging terugdraait. */
+function _mergeUpsert(entry) {
+  return (remote) => {
+    const list = Array.isArray(remote) ? remote : (remote && remote.items) || [];
+    const i = list.findIndex(e => e && e.id === entry.id);
+    if (i >= 0) list[i] = entry; else list.push(entry);
+    return list;
+  };
+}
+function _mergeMapSet(key, value) {
+  return (remote) => {
+    const map = (remote && !Array.isArray(remote)) ? remote : {};
+    map[key] = value;
+    return map;
+  };
+}
+function _mergeMapDelete(key) {
+  return (remote) => {
+    const map = (remote && !Array.isArray(remote)) ? remote : {};
+    delete map[key];
+    return map;
+  };
+}
 
 /* ── MSAL init ── */
 async function initMsal() {
@@ -2373,8 +2409,9 @@ async function spSyncTaken() {
   } catch(e) { console.warn('SP sync taken fout:', e.message); }
 }
 
-async function spWriteTaken(code, task) {
-  if (_demoMode || !_msAccount) return;
+async function spWriteTaken(code, task, fromQueue) {
+  if (_demoMode || !_msAccount) return false;
+  let ok = false;
   try {
     const remote = await _SP.read('mt_app_taken.json') || [];
     const email = _msAccount ? _msAccount.username : 'bart@mortiseandtenon.nl';
@@ -2391,8 +2428,28 @@ async function spWriteTaken(code, task) {
     };
     const idx = remote.findIndex(r => r.id === task.id);
     if (idx >= 0) remote[idx] = entry; else remote.push(entry);
-    await _SP.write('mt_app_taken.json', remote);
-  } catch(e) { console.warn('SP write taken fout:', e.message); }
+    ok = await _SP.write('mt_app_taken.json', remote, _mergeUpsert(entry));
+  } catch(e) { console.warn('SP write taken fout:', e.message); ok = false; }
+  // Zichtbare pending-status + automatische herkansing via de retry-queue
+  if (ok) {
+    if (task._pending) { delete task._pending; saveTasks(); if (typeof renderSheetTasks === 'function') try { renderSheetTasks(); } catch(e){} }
+  } else if (!fromQueue) {
+    task._pending = true;
+    saveTasks();
+    if (typeof renderSheetTasks === 'function') try { renderSheetTasks(); } catch(e){}
+    // dedupe: één queue-item per taak is genoeg (flush pakt altijd de actuele versie)
+    if (!_RQ.items().some(q => q.type === 'taak' && q.entry && q.entry.taskId === task.id)) {
+      _RQ.push({type: 'taak', entry: {code, taskId: task.id, snapshot: {...task}}});
+    }
+  }
+  return ok;
+}
+// Retry-hulp voor de queue: pak de actuele taakversie (nieuwste kladwijzigingen mee),
+// val terug op de snapshot als de taak lokaal niet meer bestaat.
+async function _taakRetry(entry) {
+  const t = tasksFor(entry.code).find(x => x.id === entry.taskId) || entry.snapshot;
+  if (!t) return true; // niets meer te versturen
+  return await spWriteTaken(entry.code, t, true);
 }
 
 // — Punt 3: eigen agenda-blokken —
@@ -2587,6 +2644,16 @@ async function loadAndMergeTasksForProject(proj) {
    ===================================================================== */
 let _togglTimerEntryId = null;  // lopende Track time-entry id
 
+// Serialisatie van Toggl start/stop: een snelle start→stop-tik mag de stop
+// nooit vóór de (nog lopende) start-POST laten uitvoeren — dat liet een
+// wees-entry doorklokken op Toggl.
+let _tglQ = Promise.resolve();
+function _tglEnqueue(fn) {
+  const next = _tglQ.then(fn, fn);
+  _tglQ = next.catch(() => {});
+  return next;
+}
+
 async function startTimerOnToggl(proj, description) {
   if (_demoMode || !_msAccount || !proj || !proj.togglProjectId) return false;
   try {
@@ -2608,16 +2675,23 @@ async function startTimerOnToggl(proj, description) {
 
 async function stopTimerOnToggl() {
   try {
-    let id = _togglTimerEntryId;
+    let id = _togglTimerEntryId || Number(localStorage.getItem('mt_timer_stop_pending')) || null;
     if (!id) {
       // app herstart: id kwijt → lopende entry server-side opvragen
       const cur = await tgTrack(`me/time_entries/current`);
       if (cur && cur.id && cur.duration < 0) id = cur.id;
     }
-    if (!id) return;
+    if (!id) { localStorage.removeItem('mt_timer_stop_pending'); return true; }
     await tgTrack(`workspaces/${TG_WS}/time_entries/${id}/stop`, 'PATCH');
     _togglTimerEntryId = null;
-  } catch(e) { console.warn('stopTimerOnToggl fout:', e.message); }
+    localStorage.removeItem('mt_timer_stop_pending');
+    return true;
+  } catch(e) {
+    // Stop niet bevestigd → id bewaren zodat een volgende sync/stop hem alsnog stopt
+    if (_togglTimerEntryId) localStorage.setItem('mt_timer_stop_pending', String(_togglTimerEntryId));
+    console.warn('stopTimerOnToggl fout:', e.message);
+    return false;
+  }
 }
 
 /* ── Starttijd van de lopende timer aanpassen ── */
@@ -2761,6 +2835,9 @@ document.addEventListener("DOMContentLoaded", () => {
   renderNotifBadge();
   if (DEV_MODE) { const _db = document.getElementById("demoNotifBtn"); if (_db) _db.style.display = ""; }
   _voCheckDraft();   // onvoltooide losse opname na herstart? → herstel-balk tonen
+  _capCheckDraft();  // onvoltooide capture-opname na herstart? → herstel-balk tonen
+  const _capBs = document.getElementById('opnameBijschrift');
+  if (_capBs) _capBs.addEventListener('input', () => _capPersist());
   // MSAL: probeer stil in te loggen; login-screen blijft zichtbaar totdat login slaagt of demo gekozen wordt
   initMsal();
   // Terug uit de achtergrond: timer-herstel nogmaals proberen + klok bijwerken
@@ -2825,6 +2902,11 @@ function restoreTimer() {
 // (mt_timer kwijt of ander toestel), herstel dan uit de lopende entry.
 async function syncTimerWithToggl() {
   if (_demoMode || !_msAccount) return;
+  // Eerst een eerder mislukte stop afmaken — anders "herstellen" we hieronder
+  // juist de entry die de gebruiker al gestopt had.
+  if (localStorage.getItem('mt_timer_stop_pending') && !timerRunning) {
+    await _tglEnqueue(() => stopTimerOnToggl()).catch(() => {});
+  }
   try {
     const cur = await tgTrack('me/time_entries/current');
     const entry = (cur && cur.id) ? cur : (cur && cur.data);
@@ -2880,8 +2962,9 @@ function startTimer() {
   updateTimerUI();
   renderCaptureProject();
   updateSpMockPath();
-  // Best-effort: start echt klokkende entry op Track (alleen bij ingelogd + echt project)
-  startTimerOnToggl(activeProject, activeProject.name).catch(() => {});
+  // Geserialiseerd: start echt klokkende entry op Track (alleen bij ingelogd + echt project)
+  const proj = activeProject;
+  _tglEnqueue(() => startTimerOnToggl(proj, proj.name)).catch(() => {});
 }
 
 function stopTimer() {
@@ -2892,8 +2975,11 @@ function stopTimer() {
   saveTimerState();
   updateTimerUI();
   renderCaptureProject();
-  // Best-effort: stop Track time entry
-  stopTimerOnToggl().catch(() => {});
+  // Geserialiseerd (na een evt. lopende start-POST); niet bevestigd → melden,
+  // het pending-id wordt bij de volgende sync/stop alsnog gestopt.
+  _tglEnqueue(() => stopTimerOnToggl()).then(ok => {
+    if (ok === false) showToast('⚠ Toggl-stop niet bevestigd — wordt automatisch opnieuw geprobeerd');
+  }).catch(() => {});
 }
 
 function startTickInterval() {
@@ -3082,6 +3168,7 @@ function renderProjectCards() {
         <div class="project-card-name">${p.name}</div>
         <span class="badge ${cls}">${label}</span>
       </div>
+      ${(p.pending || p.spPending) ? `<div style="font-size:11px;color:var(--gold,#d6a93a);margin-top:2px" title="Wordt automatisch opnieuw geprobeerd">⏳ ${p.spPending ? 'nog niet gedeeld met het team' : 'Toggl-koppeling volgt'} — sync loopt automatisch</div>` : ''}
       <div class="project-card-addr">📍 ${addrFor(p) || "– adres ontbreekt"}</div>
       <div class="project-card-footer">
         <div class="project-last">🕐 ${p.lastActivity}</div>
@@ -3800,7 +3887,7 @@ async function noteUpload(entry) {
     const cur = await _SP.read("mt_notities.json");
     const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
     if (!list.some(e => e && e.id === entry.id)) list.push(entry);
-    return await _SP.write("mt_notities.json", list);
+    return await _SP.write("mt_notities.json", list, _mergeUpsert(entry));
   } catch(e) { return false; }
 }
 
@@ -3933,13 +4020,100 @@ function renderOpname() {
       <button class="note-del" onclick="delOpnamePhoto(${i})">×</button>
     </div>`).join("");
   updateSpMockPath();
+  _capPersist();  // elke wijziging (toevoegen/verwijderen/bewerken) direct lokaal veilig
 }
-function setOpnameKlad(i, v) { if (opnamePhotos[i]) opnamePhotos[i].kladblok = v; }
+function setOpnameKlad(i, v) { if (opnamePhotos[i]) { opnamePhotos[i].kladblok = v; _capPersist(); } }
 function delOpnamePhoto(i) {
   const p = opnamePhotos[i];
   if (p && p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl);
   opnamePhotos.splice(i, 1);
   renderOpname();
+}
+
+/* ---------------------------------------------------------------------
+   CRASH-BESTENDIGE OPSLAG voor de capture-opname (zelfde patroon als de
+   losse opname): elke foto + kladblok + bijschrift meteen naar IndexedDB,
+   herstel-balk bij heropenen, wissen pas na volledig geslaagde upload.
+   --------------------------------------------------------------------- */
+const _CAP_KEY = 'capture';
+let _capDraft = null;      // op load gevonden concept (nog niet hersteld)
+let _capPersistT = null;
+
+function _capPersist() {
+  clearTimeout(_capPersistT);
+  _capPersistT = setTimeout(async () => {
+    try {
+      if (!opnamePhotos.length) { await _voIdbDel(_CAP_KEY); return; }
+      const proj = captureProject || activeProject;
+      const bs = document.getElementById('opnameBijschrift');
+      await _voIdbPut({
+        projCode: proj ? proj.code : '',
+        projNaam: proj ? proj.name : '',
+        bijschrift: bs ? bs.value : '',
+        fotos: opnamePhotos.map(p => ({
+          name: p.name || 'foto.jpg',
+          kladblok: p.kladblok || '',
+          blob: p.file || null,
+          bewerktBlob: p.bewerktFile || null
+        })),
+        ts: new Date().toISOString()
+      }, _CAP_KEY);
+    } catch (e) { console.warn('capPersist:', e.message); }
+  }, 400);
+}
+
+async function _capCheckDraft() {
+  try {
+    const d = await _voIdbGet(_CAP_KEY);
+    if (!d || !d.fotos || !d.fotos.length) return;
+    _capDraft = d;
+    const b = document.getElementById('capRestoreBanner');
+    if (!b) return;
+    let tijd = '';
+    if (d.ts) { try { tijd = new Date(d.ts).toLocaleString('nl-NL', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(e){} }
+    const n = d.fotos.length;
+    const txt = b.querySelector('#capRbTxt');
+    if (txt) txt.innerHTML = `Onvoltooide opname — <b>${n} foto${n===1?'':"'s"}</b>${d.projCode?` · ${escHtml(d.projCode)}`:''}${tijd?` · ${tijd}`:''}`;
+    b.style.display = 'block';
+  } catch (e) { console.warn('capCheckDraft:', e.message); }
+}
+
+function capRestoreDraft() {
+  const d = _capDraft;
+  if (!d) return;
+  opnamePhotos.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); if (p.bewerktUrl) URL.revokeObjectURL(p.bewerktUrl); });
+  opnamePhotos = (d.fotos || []).map(f => {
+    const blob = f.blob || null;
+    const file = blob ? (blob instanceof File ? blob : new File([blob], f.name || 'foto.jpg', {type: blob.type || 'image/jpeg'})) : null;
+    const bb = f.bewerktBlob || null;
+    const bewerktFile = bb ? (bb instanceof File ? bb : new File([bb], 'bewerkt.jpg', {type: bb.type || 'image/jpeg'})) : null;
+    return {
+      url: file ? URL.createObjectURL(file) : '',
+      name: f.name || 'foto.jpg', file, kladblok: f.kladblok || '',
+      bewerktFile, bewerktUrl: bewerktFile ? URL.createObjectURL(bewerktFile) : null
+    };
+  }).filter(p => p.file);
+  const bs = document.getElementById('opnameBijschrift');
+  if (bs && d.bijschrift) bs.value = d.bijschrift;
+  // project van het concept terugzetten als het nog bestaat
+  if (d.projCode) {
+    const found = allProjects().find(p => p.code === d.projCode);
+    if (found) { captureProject = found; if (typeof renderCaptureProject === 'function') renderCaptureProject(); }
+  }
+  const block = document.getElementById('opnameBlock');
+  if (block) block.style.display = 'block';
+  renderOpname();
+  const b = document.getElementById('capRestoreBanner'); if (b) b.style.display = 'none';
+  showToast('📸 Opname hersteld');
+}
+
+async function capDiscardDraft() {
+  const n = _capDraft && _capDraft.fotos ? _capDraft.fotos.length : 0;
+  if (n && !confirm(`Weet je het zeker? ${n} foto${n===1?'':"'s"} gaan definitief verloren.`)) return;
+  await _voIdbDel(_CAP_KEY);
+  _capDraft = null;
+  const b = document.getElementById('capRestoreBanner'); if (b) b.style.display = 'none';
+  showToast('Concept weggegooid');
 }
 
 function updateSpMockPath() {
@@ -3987,34 +4161,34 @@ function _voIdb() {
     r.onerror = () => rej(r.error);
   });
 }
-async function _voIdbPut(val) {
+async function _voIdbPut(val, key) {
   try {
     const db = await _voIdb();
     return await new Promise((res, rej) => {
       const tx = db.transaction(_VODB.store, 'readwrite');
-      tx.objectStore(_VODB.store).put(val, _VODB.key);
+      tx.objectStore(_VODB.store).put(val, key || _VODB.key);
       tx.oncomplete = () => res(true);
       tx.onerror = () => rej(tx.error);
     });
   } catch (e) { console.warn('idb put:', e.message); return false; }
 }
-async function _voIdbGet() {
+async function _voIdbGet(key) {
   try {
     const db = await _voIdb();
     return await new Promise((res, rej) => {
       const tx = db.transaction(_VODB.store, 'readonly');
-      const rq = tx.objectStore(_VODB.store).get(_VODB.key);
+      const rq = tx.objectStore(_VODB.store).get(key || _VODB.key);
       rq.onsuccess = () => res(rq.result || null);
       rq.onerror = () => rej(rq.error);
     });
   } catch (e) { console.warn('idb get:', e.message); return null; }
 }
-async function _voIdbDel() {
+async function _voIdbDel(key) {
   try {
     const db = await _voIdb();
     return await new Promise((res) => {
       const tx = db.transaction(_VODB.store, 'readwrite');
-      tx.objectStore(_VODB.store).delete(_VODB.key);
+      tx.objectStore(_VODB.store).delete(key || _VODB.key);
       tx.oncomplete = () => res(true);
       tx.onerror = () => res(false);
     });
@@ -4101,8 +4275,10 @@ async function voRestoreDraft() {
   if (window.showToast) showToast('📦 Losse opname hersteld');
 }
 
-// "Weggooien" → concept verwijderen.
+// "Weggooien" → concept verwijderen (met expliciete bevestiging: foto's zijn dan echt weg).
 async function voDiscardDraft() {
+  const n = _voDraft && _voDraft.fotos ? _voDraft.fotos.length : 0;
+  if (n && !confirm(`Weet je het zeker? ${n} foto${n===1?'':"'s"} gaan definitief verloren.`)) return;
   await _voIdbDel();
   _voDraft = null;
   const b = document.getElementById('voRestoreBanner'); if (b) b.style.display = 'none';
@@ -4132,6 +4308,9 @@ async function openVoorOpname() {
 }
 
 function closeVoorOpname() {
+  // Waarschuw bij teruggaan met nog niet geüploade foto's (concept blijft wél lokaal bewaard)
+  const n = voorOpnamePhotos.filter(p => p.file && !p.bestaand).length;
+  if (n && !confirm(`Je hebt ${n} foto${n===1?'':"'s"} nog niet opgeslagen naar Voor-opname.\nTeruggaan kan — het concept blijft op dit toestel bewaard — maar het staat dan nog niet op SharePoint.\n\nToch teruggaan?`)) return;
   const wrap = document.getElementById('voorOpnameWrap'); if (wrap) wrap.style.display = 'none';
 }
 
@@ -4758,6 +4937,8 @@ function _captureResult(succes, msg) {
 
 function _resetOpname() {
   opnamePhotos = [];
+  clearTimeout(_capPersistT);
+  _voIdbDel(_CAP_KEY);  // upload volledig gelukt → lokale herstelkopie mag weg
   document.getElementById("opnameBlock").style.display = "none";
   document.getElementById("photoCount").textContent = "0 foto's";
   const bs = document.getElementById("opnameBijschrift");
@@ -5354,7 +5535,7 @@ async function rapDraftSave() {
         const cur = await _SP.read("mt_rapport_concepten.json");
         const map = (cur && !Array.isArray(cur)) ? cur : {};
         map[p.code] = draft;
-        await _SP.write("mt_rapport_concepten.json", map);
+        await _SP.write("mt_rapport_concepten.json", map, _mergeMapSet(p.code, draft));
       } catch(e) { console.warn("concept naar SP fout:", e.message); }
     }
     _setDraftInfo(draft);
@@ -5401,7 +5582,9 @@ async function rapDraftClear(code) {
       const map = await _SP.read("mt_rapport_concepten.json");
       if (map && !Array.isArray(map) && map[code]) {
         delete map[code];
-        await _SP.write("mt_rapport_concepten.json", map);
+        // Gerichte delete-merge: de default lokaal-wint-merge zou de verwijderde
+        // key uit onze stale kopie juist weer terugzetten.
+        await _SP.write("mt_rapport_concepten.json", map, _mergeMapDelete(code));
       }
     } catch(e) {}
   }
@@ -5475,10 +5658,15 @@ async function opnameRapportAfronden() {
       notitie: document.getElementById("inmNotitie").value.trim(),
       fotos: inmFotos.map((f, i) => ({bestand: namen[i] || f.name, bijschrift: f.bijschrift || ""}))
     };
-    let ok = false;
     if (!_demoMode && _msAccount) {
-      ok = await opnUpload(entry);
-      if (!ok) _RQ.push({type: "opname", entry});
+      const ok = await opnUpload(entry);
+      if (!ok) {
+        // Niet doen alsof het gelukt is: in de retry-wachtrij + gebruiker op het
+        // rapportscherm laten, zodat nogmaals opslaan mogelijk blijft (zelfde id ⇒ geen duplicaat).
+        _RQ.push({type: "opname", entry});
+        showToast("⚠ Opslaan naar SharePoint lukte niet — rapport staat in de wachtrij, probeer zo nogmaals");
+        return;
+      }
     }
     document.getElementById("rapportView").classList.add("view-hidden");
     document.getElementById("opleverDoneTitle").textContent = "Opnamerapport klaar";
@@ -5497,7 +5685,7 @@ async function opnUpload(entry) {
     const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
     const i = list.findIndex(e => e && e.id === entry.id);
     if (i >= 0) list[i] = entry; else list.push(entry);
-    return await _SP.write("mt_opnames.json", list);
+    return await _SP.write("mt_opnames.json", list, _mergeUpsert(entry));
   } catch(e) { return false; }
 }
 
@@ -5670,9 +5858,10 @@ async function logOplevering(wijze) {
   });
   // Foto's: eerder via tussentijds-opslaan geüploade + nu resterende lokale
   let fotosVoor = _oplUploaded.voor.slice(), fotosNa = _oplUploaded.na.slice();
+  let fotoFail = 0;
   if (!_demoMode && _msAccount) {
-    if (oplFotos.voor.length) { const r = await _rapFotosUpload(p, oplFotos.voor, "aangetroffen"); fotosVoor.push(...r.namen); }
-    if (oplFotos.na.length) { const r = await _rapFotosUpload(p, oplFotos.na, "opgeleverd"); fotosNa.push(...r.namen); }
+    if (oplFotos.voor.length) { const r = await _rapFotosUpload(p, oplFotos.voor, "aangetroffen"); fotosVoor.push(...r.namen); fotoFail += r.fail || 0; }
+    if (oplFotos.na.length) { const r = await _rapFotosUpload(p, oplFotos.na, "opgeleverd"); fotosNa.push(...r.namen); fotoFail += r.fail || 0; }
   }
   // Pin-ondergronden uploaden + boom opschonen (tijdelijke _file/_url eruit).
   let vlakkenClean = [];
@@ -5698,9 +5887,19 @@ async function logOplevering(wijze) {
     // Pinbare vlakken (opleverpunten/documentatie op schets/foto) — append-only boom.
     vlakken: vlakkenClean
   };
-  let ok = false;
-  if (!_demoMode && _msAccount) ok = await oplUpload(entry);
-  if (!ok) _RQ.push({type: "oplevering", entry});
+  let ok = true;
+  if (!_demoMode && _msAccount) {
+    ok = await oplUpload(entry);
+    if (!ok) _RQ.push({type: "oplevering", entry});
+  }
+  if (!ok || fotoFail) {
+    // Concept NOOIT wissen zolang iets faalde — dan blijft "verder werken" mogelijk
+    // en gaat er geen invulwerk/foto verloren. De _RQ-retry stuurt de log alsnog door.
+    showToast(fotoFail
+      ? `⚠ ${fotoFail} foto('s) niet geüpload — concept blijft bewaard, probeer later opnieuw`
+      : "⚠ Opleverlog nog niet opgeslagen — staat in de wachtrij, concept blijft bewaard");
+    return;
+  }
   rapDraftClear(p.code).catch(() => {});
 }
 
@@ -5709,7 +5908,7 @@ async function oplUpload(entry) {
     const cur = await _SP.read("mt_opleveringen.json");
     const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
     if (!list.some(e => e && e.id === entry.id)) list.push(entry);
-    return await _SP.write("mt_opleveringen.json", list);
+    return await _SP.write("mt_opleveringen.json", list, _mergeUpsert(entry));
   } catch(e) { return false; }
 }
 
@@ -5856,7 +6055,7 @@ function renderSheetTasks() {
     html += `<div class="task-row">
       <button class="task-toggle ${t.status}" onclick="toggleTaskStatus('${t.id}')" aria-label="Status wisselen">${TASK_ICON[t.status]||"○"}</button>
       <div class="task-main" onclick="editTask('${t.id}')">
-        <div class="task-name ${t.status==='klaar'?'klaar':''}">${escHtml(t.name)} ${t.tag?`<span class="task-tag">${escHtml(t.tag)}</span>`:""} ${syncDot}</div>
+        <div class="task-name ${t.status==='klaar'?'klaar':''}">${escHtml(t.name)} ${t.tag?`<span class="task-tag">${escHtml(t.tag)}</span>`:""} ${syncDot}${t._pending?` <span style="font-size:10px;color:var(--gold,#d6a93a)" title="Nog niet gedeeld — wordt automatisch opnieuw geprobeerd">⏳ wacht op sync</span>`:""}</div>
         ${meta ? `<div class="task-meta">${escHtml(meta)}</div>` : ""}
         ${t.note ? `<div class="task-meta">📝 ${escHtml(t.note)}</div>` : ""}
         ${t.link ? `<div class="task-meta"><a href="${t.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-mid);text-decoration:none">📂 Bronmap op SharePoint</a></div>` : ""}
@@ -6046,6 +6245,60 @@ function openNewProjectPrefill() {
   if (naam) { document.getElementById("npName").value = naam; updateNpPreview(); }
 }
 
+// Herkansing van een mislukte Toggl-projectaanmaak (via de retry-queue).
+// Eerst kijken of het project inmiddels tóch bestaat (POST kan gelukt zijn
+// terwijl het antwoord wegviel) — anders zou een retry een duplicaat maken.
+async function _togglProjRetry(entry) {
+  const proj = USER_PROJECTS.find(p => p.id === entry.projId);
+  if (!proj || proj.togglProjectId) return true;  // weg of al gekoppeld → klaar
+  const trackName = `${entry.name} [${entry.code}]`;
+  let togglProjectId = null;
+  try {
+    const bestaand = await tgTrack(`workspaces/${TG_WS}/projects?per_page=200`, 'GET');
+    const lijst = Array.isArray(bestaand) ? bestaand : (bestaand && bestaand.data) || [];
+    const hit = lijst.find(pr => pr && pr.name === trackName);
+    if (hit) togglProjectId = hit.id;
+  } catch(e) { /* dedupe-check best-effort */ }
+  if (!togglProjectId) {
+    try {
+      const made = await tgTrack(`workspaces/${TG_WS}/projects`, 'POST', {
+        name: trackName, active: true, workspace_id: TG_WS
+      });
+      togglProjectId = made && (made.id || (made.data && made.data.id));
+    } catch(e) { return false; }
+  }
+  if (!togglProjectId) return false;
+  proj.togglProjectId = togglProjectId;
+  proj.pending = false;
+  saveUserProjects();
+  REAL_PROJECTS.push({...proj, source: 'track'});
+  try { renderProjectCards(); } catch(e){}
+  // gedeelde projectlijst bijwerken met het toggl-id (best-effort; eigen queue-vangnet)
+  _projUpload({
+    id: proj.id, code: proj.code, naam: proj.name,
+    klantcode: (proj.code || '').split('-')[0], klus: proj.klus, maatwerk: proj.maatwerk,
+    togglProjectId, ts: new Date().toISOString(),
+    door: _msAccount ? _msAccount.username : '', pending: false
+  }).catch(() => {});
+  return true;
+}
+
+// Upsert van één user-project in mt_user_projects.json (ook gebruikt door de retry-queue)
+async function _projUpload(entry) {
+  if (_demoMode || !_msAccount) return false;
+  try {
+    const remote = await _SP.read('mt_user_projects.json') || [];
+    const idx = remote.findIndex(r => r && r.id === entry.id);
+    if (idx >= 0) remote[idx] = entry; else remote.push(entry);
+    const ok = await _SP.write('mt_user_projects.json', remote, _mergeUpsert(entry));
+    if (ok) {
+      const lokaal = USER_PROJECTS.find(p => p.id === entry.id);
+      if (lokaal && lokaal.spPending) { delete lokaal.spPending; saveUserProjects(); try { renderProjectCards(); } catch(e){} }
+    }
+    return ok;
+  } catch(e) { console.warn('SP write project fout:', e.message); return false; }
+}
+
 async function saveNewProject() {
   const name = document.getElementById("npName").value.trim();
   const k = sanCode(document.getElementById("npKlant").value);
@@ -6087,21 +6340,25 @@ async function saveNewProject() {
     } catch(e) {
       console.warn('Track project aanmaak fout:', e.message);
       proj.pending = true;
+      _RQ.push({type: 'togglproject', entry: {projId: proj.id, code, name}});
     }
 
-    // SP read-merge-write mt_user_projects.json
-    try {
-      const email = _msAccount ? _msAccount.username : 'bart@mortiseandtenon.nl';
-      const remote = await _SP.read('mt_user_projects.json') || [];
-      remote.push({
-        id: proj.id, code: proj.code, naam: proj.name,
-        klantcode: k, klus: proj.klus, maatwerk: proj.maatwerk,
-        togglProjectId: proj.togglProjectId || null,
-        ts: new Date().toISOString(), door: email,
-        pending: proj.pending
-      });
-      await _SP.write('mt_user_projects.json', remote);
-    } catch(e) { console.warn('SP write project fout:', e.message); }
+    // SP read-merge-write mt_user_projects.json — bij falen zichtbaar in de
+    // wachtrij (⏳ op de projectkaart) en automatische herkansing via _RQ
+    const email = _msAccount ? _msAccount.username : 'bart@mortiseandtenon.nl';
+    const spEntry = {
+      id: proj.id, code: proj.code, naam: proj.name,
+      klantcode: k, klus: proj.klus, maatwerk: proj.maatwerk,
+      togglProjectId: proj.togglProjectId || null,
+      ts: new Date().toISOString(), door: email,
+      pending: proj.pending
+    };
+    const spOk = await _projUpload(spEntry);
+    if (!spOk) {
+      proj.spPending = true;
+      _RQ.push({type: 'project', entry: spEntry});
+      showToast('⚠ Project lokaal bewaard — delen met het team volgt automatisch');
+    }
   }
 
   USER_PROJECTS.push(proj);
@@ -6387,7 +6644,7 @@ async function fbUpload(entry) {
     const cur = await _SP.read(FB_FILE);
     const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
     if (!list.some(e => e && e.id === entry.id)) list.push(entry);
-    const ok = await _SP.write(FB_FILE, list);
+    const ok = await _SP.write(FB_FILE, list, _mergeUpsert(entry));
     if (ok && !_fbSent.some(e => e.id === entry.id)) { _fbSent.push(entry); saveFbSent(); }
     return ok;
   } catch(e) { return false; }
@@ -6447,6 +6704,9 @@ const _RQ = {
           else if (task.type === "notitie") ok = await noteUpload(task.entry);
           else if (task.type === "opname") ok = await opnUpload(task.entry);
           else if (task.type === "voorraadcorrectie") ok = await vcUpload(task.entry);
+          else if (task.type === "taak") ok = await _taakRetry(task.entry);
+          else if (task.type === "project") ok = await _projUpload(task.entry);
+          else if (task.type === "togglproject") ok = await _togglProjRetry(task.entry);
         } catch(e) { ok = false; }
         if (!ok) rest.push(task);
       }
@@ -6668,7 +6928,7 @@ async function vcUpload(entry) {
     const cur = await _SP.read(VC_FILE);
     const list = Array.isArray(cur) ? cur : (cur && cur.items) || [];
     if (!list.some(e => e && e.id === entry.id)) list.push(entry);
-    return await _SP.write(VC_FILE, list);
+    return await _SP.write(VC_FILE, list, _mergeUpsert(entry));
   } catch(e) { return false; }
 }
 
