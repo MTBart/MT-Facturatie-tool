@@ -5738,7 +5738,28 @@ function projectTijdlijn(proj){
     events.push({datum:d,icon:'🛒',kleur:'var(--blue)',label:'Op bestellijst gezet',
       detail:`${rows.length} materia${rows.length>1?'len':'al'}${besteld?` · ${besteld} besteld`:''}`});
   });
-  if(!events.length) return '';
+  // ── Projectdossier (brok K2/K3, ALLEEN LEZEN): mails, offerte, bijlagen en
+  // bestanden uit de projectmap in dezelfde tijdlijn. Er wordt hier niets geschreven.
+  const dos=dossierKoppelingen(proj.code);
+  dos.actief.forEach(k=>events.push({datum:(k.datum||'').slice(0,10),icon:'✉',kleur:'var(--green)',label:'Mail gekoppeld',
+    detail:`${esc(k.titel||'(geen onderwerp)')}${k.van?` · ${esc(k.van)}`:''}`}));
+  const off=(window.CALC&&CALC.offertes)?Object.entries(CALC.offertes).filter(([k,o])=>k===proj.code||(o&&o.project_code===proj.code)):[];
+  off.forEach(([k,o])=>{
+    if(o.meta&&o.meta.offertedatum) events.push({datum:o.meta.offertedatum,icon:'📄',kleur:'var(--gold)',label:'Offertedatum',detail:esc(o.titel||k)});
+    if(o._gewijzigd) events.push({datum:o._gewijzigd.slice(0,10),icon:'🧮',kleur:'var(--gold)',label:'Calculatie bijgewerkt',detail:esc(o.titel||k)+(o.meta&&o.meta.status?` · ${esc(o.meta.status)}`:'')});
+    if(o.nacalc&&o.nacalc.gestart) events.push({datum:o.nacalc.gestart.slice(0,10),icon:'📊',kleur:'var(--gold)',label:'Nacalculatie gestart',detail:esc(o.titel||k)});
+  });
+  (proj.bijlagen||[]).forEach(bj=>events.push({datum:bj.datum||'',icon:'📎',kleur:'var(--text-dim)',label:'Bijlage toegevoegd',detail:esc(bj.naam||'')}));
+  const mapInfo=(window._dossierMap||{})[proj.code];
+  if(mapInfo&&mapInfo.bestanden) mapInfo.bestanden.forEach(f=>events.push({datum:(f.datum||'').slice(0,10),icon:'🗂',kleur:'var(--text-dim)',label:'Bestand in '+esc(f.sub),
+    detail:f.url?`<a href="${esc(f.url)}" target="_blank" style="color:var(--green);text-decoration:none">${esc(f.naam)}</a>`:esc(f.naam)}));
+  const sidD=proj.code.replace(/[^A-Za-z0-9]/g,'');
+  const dossierKop=`<div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--text-dim);margin-bottom:0.4rem">
+      <span title="Telling van de koppelingen in het nieuwe model tegen de bestaande mail-koppelingen (moet gelijk zijn)">✉ ${dos.actief.length} mail${dos.actief.length===1?'':'s'}${dos.ontkoppeld?` · ${dos.ontkoppeld} ontkoppeld (bewaard)`:''}${dos.klopt?'':' · <b style="color:#c0392b">⚠ telling klopt niet — meld dit</b>'}</span>
+      <button class="btn btn-xs btn-secondary" onclick="dossierLaadMap('${proj.code}')" title="Alleen lezen: toont de bestanden uit de projectmap in de tijdlijn">🗂 Projectmap ${mapInfo?'verversen':'tonen'}</button>
+      <span id="dossier-map-st-${sidD}">${mapInfo?(mapInfo.fout?`<span style="color:#c0392b">${esc(mapInfo.fout)}</span>`:(mapInfo.pad?`${mapInfo.bestanden.length} bestanden · ${esc(mapInfo.pad)}`:'')):''}</span>
+    </div>`;
+  if(!events.length) return `<hr class="divider"><div class="card-title" style="margin-bottom:0.5rem">Projectdossier</div>${dossierKop}<p style="color:var(--text-faint);font-size:13px">Nog niets in het dossier.</p>`;
   events.sort((a,b)=>(a.datum||'').localeCompare(b.datum||''));
   const rij=e=>`<div style="display:flex;gap:0.6rem;align-items:flex-start;padding:0.35rem 0">
       <div style="font-size:13px;line-height:1.4">${e.icon}</div>
@@ -5749,10 +5770,63 @@ function projectTijdlijn(proj){
       </div>
     </div>`;
   return `<hr class="divider">
-    <div class="card-title" style="margin-bottom:0.5rem">Tijdlijn</div>
-    <div style="border-left:2px solid var(--border);padding-left:0.75rem;margin-bottom:0.5rem">
+    <div class="card-title" style="margin-bottom:0.5rem">Projectdossier</div>
+    ${dossierKop}
+    <div style="border-left:2px solid var(--border);padding-left:0.75rem;margin-bottom:0.5rem;max-height:420px;overflow:auto">
       ${events.map(rij).join('')}
     </div>`;
+}
+// Koppelingen van een project in het nieuwe, algemene model (brok K2) — gespiegeld
+// uit mt_mail_links, alleen in het geheugen. Niets wordt weggeschreven; de telling
+// vóór (mt_mail_links) = na (model) staat in het dossier.
+function dossierKoppelingen(code){
+  const ruw=(typeof mailLinksAll==='function')?(mailLinksAll()[code]||[]):[];
+  const model=ruw.map(x=>({soort:'mail',code,ref:{internetMessageId:x.internetMessageId||'',id:x.id||'',mbx:x.mbx||'',weblink:x.webLink||''},
+    titel:x.subject||'',van:x.from||'',datum:x.date||'',bron:'hand',status:x.ontkoppeld?'ontkoppeld':'actief',tijd:x.gewijzigd||x.ts||null}));
+  const actief=model.filter(k=>k.status==='actief');
+  const voor=ruw.filter(x=>!x.ontkoppeld).length;
+  return {model,actief,ontkoppeld:model.length-actief.length,klopt:voor===actief.length&&ruw.length===model.length};
+}
+// Projectmap zoeken ZONDER iets aan te maken (genereerProjectMappen maakt mappen aan;
+// dat mag hier niet). Volgt Nieuwe mappenstructuur/<klant>/[<locatie>/]<CODE> - … .
+async function _vindProjectMapAlleenLezen(proj){
+  const ROOT='Nieuwe mappenstructuur';
+  const zoek=async(pad,pred)=>{ const l=await _SP.listChildren(pad); return l.find(c=>c.folder&&pred(c.name)); };
+  const k=(typeof klantByCode==='function')?klantByCode(proj.klant):null;
+  const klantNaam=String((k&&k.naam)||proj.klant_naam||proj.klant||'').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'');
+  const kl=await zoek(ROOT,n=>_SP._norm(n)===_SP._norm(klantNaam));
+  if(!kl) return null;
+  const pad=`${ROOT}/${kl.name}`;
+  const isProj=n=>n.startsWith(proj.code+' - ')||n===proj.code;
+  const direct=await zoek(pad,isProj);
+  if(direct) return `${pad}/${direct.name}`;
+  for(const loc of (await _SP.listChildren(pad)).filter(c=>c.folder)){
+    const hit=await zoek(`${pad}/${loc.name}`,isProj);
+    if(hit) return `${pad}/${loc.name}/${hit.name}`;
+  }
+  return null;
+}
+async function dossierLaadMap(code){
+  const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj) return;
+  const st=document.getElementById('dossier-map-st-'+code.replace(/[^A-Za-z0-9]/g,''));
+  if(st) st.textContent='projectmap lezen…';
+  window._dossierMap=window._dossierMap||{};
+  try{
+    const token=await window.getGraphToken(); if(!token) throw new Error('niet ingelogd bij Microsoft 365');
+    const pad=await _vindProjectMapAlleenLezen(proj);
+    if(!pad){ window._dossierMap[code]={pad:null,bestanden:[],fout:'Geen projectmap gevonden (die wordt pas gemaakt bij de eerste opslag)'}; }
+    else{
+      const bestanden=[];
+      for(const sub of (await _SP.listChildren(pad)).filter(c=>c.folder)){
+        const url=`https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(pad+'/'+sub.name)}:/children?$select=name,lastModifiedDateTime,size,webUrl,file&$top=200`;
+        const r=await fetch(url,{headers:{'Authorization':`Bearer ${token}`}});
+        if(!r.ok) throw new Error(`lezen ${sub.name} HTTP ${r.status}`);
+        ((await r.json()).value||[]).filter(x=>x.file).forEach(x=>bestanden.push({sub:sub.name,naam:x.name,datum:x.lastModifiedDateTime||'',url:x.webUrl||'',grootte:x.size||0}));
+      }
+      window._dossierMap[code]={pad,bestanden,fout:null};
+    }
+  }catch(e){ window._dossierMap[code]={pad:null,bestanden:[],fout:'⚠ '+(e.message||e)}; }
+  if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code) _rerenderDetailKeepScroll();
 }
 
 // ═══ NCR IMPORT ═══
