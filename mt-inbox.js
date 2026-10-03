@@ -459,7 +459,7 @@ async function inboxOpenMail(id){
           <button class="btn btn-sm btn-gold" onclick="inboxMaakProject()">📁 Maak project</button>
           <button class="btn btn-sm btn-primary" onclick="inboxMaakOfferte()" title="Maak een offerte-calculatie met deze mail als context (klant voor-ingevuld als herkend)">📄 Maak offerte</button>
           <span id="inbox-koppelwrap">${inboxKoppelKnopHtml(m)}</span>
-          <button class="btn btn-sm btn-secondary" onclick="inboxBijlagenNaarMap()" title="Bijlagen van deze mail naar de map van het gekoppelde project (05_Aangeleverd)">⬇ Bijlagen → projectmap</button>
+          <button class="btn btn-sm btn-secondary" onclick="inboxBijlagenNaarMap()" title="Bijlagen van deze mail als kopie naar de projectmap — per bijlage kies je de submap; er wordt niets overschreven">⬇ Bijlagen → projectmap</button>
         </div>
         <div class="inbox-ract" style="margin-top:6px">
           <label style="font-size:11px;color:var(--text-dim)">Verplaats in Outlook:</label>
@@ -726,68 +726,117 @@ function inboxBijlagenNaarMap(){
   const info=mailLinkInfo(m);
   if(!info){alert('Koppel deze mail eerst aan een project (🔗) — dan weet ik in welke klantmap de bijlagen horen.');return;}
   if(!m.hasAttachments){inboxToast('Deze mail heeft geen bijlagen.');return;}
-  inboxBijlagenNaarProject(m.id,info.code,false);
+  inboxBijlagenDialoog(m.id,info.code);
 }
 
-// Na koppelen: vragen of de bijlagen mee moeten (vroeger gebeurde dat stil en
-// overschreef het bestanden met dezelfde naam).
-async function inboxBijlagenVraag(mailId,code){
-  const vraag='Deze mail heeft bijlagen. Een kopie opslaan in '+code+'/05_Aangeleverd?\n\n'
-    +'Er wordt niets overschreven: een bestand dat er al precies zo staat wordt overgeslagen, '
-    +'een ander bestand met dezelfde naam krijgt een nieuwe naam. De mail blijft in Outlook.';
-  let ja=false;
-  try{ ja=(window.mtDialog&&mtDialog.confirm)
-    ? await mtDialog.confirm({title:'Bijlagen opslaan?',message:vraag,okLabel:'Kopie opslaan'})
-    : confirm(vraag); }catch(e){ ja=false; }
-  if(ja) inboxBijlagenNaarProject(mailId,code,false);
-  else inboxToast('Bijlagen niet opgeslagen — kan later via 📎 bij de mail.');
+// ── Bijlagen → projectmap (brok 4): per bijlage een voorgestelde submap, de mens
+// bevestigt per bijlage. Opslaan = KOPIE (mail blijft in Outlook), nooit
+// overschrijven (spUploadProjectBytes: zelfde inhoud overslaan, anders rename).
+// Bijlage-index (mt_bijlage_index, gesynct, eigen samenvoeger) onthoudt wat al is
+// opgeslagen: identiteit = mailbox + mail + bijlage-id (+ sha256 van de inhoud).
+const IB_SUBMAPPEN=['01_Offerte','02_Ontwerp','03_Vectorworks','04_Holzher','05_Aangeleverd',
+  '06_Fotos','07_Administratie','08_Archief','09_Werktekeningen','10_CNC'];
+// Voorstel op bestandstype en naam. Bij twijfel: 05_Aangeleverd (zoals vroeger).
+function ibSubmapVoorstel(naam,type){
+  const n=String(naam||'').toLowerCase(), ext=(n.match(/\.([a-z0-9]+)$/)||[])[1]||'', t=String(type||'').toLowerCase();
+  if(/^(vwx|vwxp|vwxw|mcd)$/.test(ext)) return '03_Vectorworks';
+  if(/^(hop|hops|hhos)$/.test(ext)) return '04_Holzher';
+  if(/^(ncr|mpr|mprx|pgmx|nc|cnc|xcs|bpp)$/.test(ext)) return '10_CNC';
+  if(/offerte|prijsopgave|quotation|\bquote\b|aanbieding/.test(n)) return '01_Offerte';
+  if(/factuur|invoice|pakbon|orderbevestiging|order confirmation|bestelbevestiging/.test(n)) return '07_Administratie';
+  if(/werktekening|productietekening|shop ?drawing/.test(n)) return '09_Werktekeningen';
+  if(/schets|ontwerp|render|impressie|moodboard|sketch/.test(n)||/^(skp|3dm)$/.test(ext)) return '02_Ontwerp';
+  if(/^image\//.test(t)||/^(jpe?g|png|heic|heif|webp|gif|tiff?)$/.test(ext)) return '06_Fotos';
+  return '05_Aangeleverd';
 }
+function ibBijlageIndexAll(){ try{ const v=JSON.parse(localStorage.getItem('mt_bijlage_index')||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } }
+function ibBijlageIndexZet(rec){
+  const all=ibBijlageIndexAll(), i=all.findIndex(x=>x.id===rec.id);
+  if(i>=0) all[i]=Object.assign({},all[i],rec); else all.push(rec);
+  localStorage.setItem('mt_bijlage_index',JSON.stringify(all));
+}
+async function ibSha256(bytes){
+  try{ const h=await crypto.subtle.digest('SHA-256',bytes); return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+  catch(e){ return ''; }
+}
+// Na koppelen (en via de knop 📎): het bijlagen-venster openen. Niets gebeurt zonder klik.
+async function inboxBijlagenVraag(mailId,code){ return inboxBijlagenDialoog(mailId,code); }
+async function inboxBijlagenNaarProject(mailId,code){ return inboxBijlagenDialoog(mailId,code); }   // oude naam, zelfde veilige route
 
-// Kern: haal file-bijlagen op en upload ze naar 05_Aangeleverd van het project.
-// stil=true → geen toasts behalve fouten (gebruikt bij auto-koppel).
-async function inboxBijlagenNaarProject(mailId,code,stil){
+let _ibBijl=null;   // {mailId, code, mbx, imid, items:[…]}
+async function inboxBijlagenDialoog(mailId,code){
   const proj=PROJECT_CODES.find(p=>p.code===code);
-  if(!proj){if(!stil)inboxToast('Project '+code+' niet gevonden.');return;}
-  if(typeof window.spUploadProjectBytes!=='function'){inboxToast('SharePoint-upload niet beschikbaar (ingelogd op M365?).');return;}
+  if(!proj){ inboxToast('Project '+code+' niet gevonden.'); return; }
+  if(typeof window.spUploadProjectBytes!=='function'){ inboxToast('SharePoint-upload niet beschikbaar (ingelogd op M365?).'); return; }
   try{
-    if(!stil)ibStatus('Bijlagen ophalen…');
-    // Lijst zonder $select → @odata.type + contentBytes komen standaard mee.
-    const a=await ibFetch(`/messages/${mailId}/attachments`);
-    const all=(a&&a.value)||[];
-    // file-bijlagen = niet inline, en geen item-/reference-attachment. We leunen
-    // op de aanwezigheid van contentBytes i.p.v. alleen op @odata.type (dat soms
-    // ontbreekt). reference-attachments (OneDrive-links) hebben geen bytes → skip.
-    const items=all.filter(x=>{
-      const t=String(x['@odata.type']||'');
-      if(x.isInline) return false;
-      if(t.includes('itemAttachment')||t.includes('referenceAttachment')) return false;
-      return true; // contentBytes halen we zo nodig per stuk op
-    });
-    if(!items.length){if(!stil)inboxToast(all.length?'Alleen inline/embedded bijlagen — niets op te slaan.':'Deze mail heeft geen bijlagen.');else ibStatus&&ibStatus('');return;}
-    let ok=0,fout=0,laatsteFout='';const al=[],hernoemd=[];
-    for(const x of items){
-      try{
-        let b64=x.contentBytes;
-        if(!b64){ // grote bijlage of $select-projectie: per stuk ophalen
-          const one=await ibFetch(`/messages/${mailId}/attachments/${x.id}`);
-          b64=one&&one.contentBytes;
-        }
-        if(!b64){ fout++; laatsteFout='geen bytes ('+(x.name||'?')+')'; continue; }
-        const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-        const res=await window.spUploadProjectBytes(proj,x.name,arr,x.contentType,'05_Aangeleverd');
-        if(res&&res.status==='al-aanwezig') al.push(res.naam);
-        else { ok++; if(res&&res.status==='hernoemd') hernoemd.push((x.name||'?')+' → '+res.naam); }
-      }catch(e){fout++;laatsteFout=e.message;console.warn('bijlage-upload mislukt:',x.name,e.message);}
-    }
-    try{ if(window.track) track('inbox','bijlagen_naar_map',{detail:code+' · '+ok+'/'+items.length,ok:fout===0}); }catch(e){}
-    const delen=[];
-    if(ok) delen.push(`${ok} opgeslagen`);
-    if(al.length) delen.push(`${al.length} stond${al.length===1?'':'en'} er al (overgeslagen)`);
-    if(hernoemd.length) delen.push(`${hernoemd.length} met nieuwe naam omdat er al een ander bestand zo heette: ${hernoemd.join(', ')}`);
-    if(fout) delen.push(`${fout} mislukt${laatsteFout?' ('+laatsteFout+')':''}`);
-    if(delen.length) inboxToast((fout?'⚠ ':'📎 ')+'Bijlagen '+code+'/05_Aangeleverd: '+delen.join(' · '));
-    if(!stil)ibStatus('');
-  }catch(e){ ibStatus&&ibStatus(''); inboxToast('⚠ Bijlagen-fout: '+e.message); console.warn('auto-bijlagen mislukt:',e.message); }
+    ibStatus('Bijlagen ophalen…');
+    const a=await ibFetch(`/messages/${mailId}/attachments?$select=id,name,size,contentType,isInline`);
+    ibStatus('');
+    const alle=(a&&a.value)||[];
+    const items=alle.filter(x=>{ const t=String(x['@odata.type']||''); return !x.isInline && !t.includes('itemAttachment') && !t.includes('referenceAttachment'); });
+    const overig=alle.length-items.length-alle.filter(x=>x.isInline).length;   // bv. doorgestuurde mail / OneDrive-link
+    if(!items.length){ inboxToast(alle.length?'Alleen ingesloten bijlagen (bv. handtekeninglogo\'s) — niets op te slaan.':'Deze mail heeft geen bijlagen.'); return; }
+    const m=_inbox.cur&&_inbox.cur.id===mailId?_inbox.cur:null;
+    const imid=(m&&m.internetMessageId)||mailId, idx=ibBijlageIndexAll();
+    _ibBijl={mailId,code,mbx:_inbox.mbx,imid,items:items.map(x=>{
+      const id=_inbox.mbx+'|'+imid+'|'+x.id, al=idx.find(r=>r.id===id&&r.status==='opgeslagen'&&r.code===code);
+      return {attId:x.id,naam:x.name||'bijlage',type:x.contentType||'',grootte:x.size||0,id,sub:al?al.sub:ibSubmapVoorstel(x.name,x.contentType),aan:!al,al};
+    })};
+    const rij=(it,i)=>`<tr>
+      <td style="padding:4px 6px"><input type="checkbox" ${it.aan?'checked':''} onchange="_ibBijl.items[${i}].aan=this.checked"></td>
+      <td style="padding:4px 6px;font-size:12px;word-break:break-all">${ibEsc(it.naam)} <span style="color:var(--text-faint)">(${Math.max(1,Math.round(it.grootte/1024))} kB)</span>
+        ${it.al?`<div style="font-size:10px;color:var(--green)">✓ al opgeslagen in ${ibEsc(it.al.sub)}${it.al.webUrl?` · <a href="${ibEsc(it.al.webUrl)}" target="_blank">openen</a>`:''}</div>`:''}</td>
+      <td style="padding:4px 6px"><select onchange="_ibBijl.items[${i}].sub=this.value" style="font-size:12px">${IB_SUBMAPPEN.map(s=>`<option${s===it.sub?' selected':''}>${s}</option>`).join('')}</select></td>
+    </tr>`;
+    const oud=document.getElementById('bijl-overlay'); if(oud) oud.remove();
+    const ov=document.createElement('div'); ov.id='bijl-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(28,26,22,.45);z-index:10000;display:flex;align-items:center;justify-content:center';
+    ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+    ov.innerHTML=`<div style="background:var(--surface-overlay,#fff);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);width:620px;max-width:calc(100vw - 32px);max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+        <div style="font-weight:700;font-size:15px">📎 Bijlagen opslaan in ${ibEsc(code)}</div>
+        <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">Kopie in de projectmap — de mail blijft in Outlook. Er wordt niets overschreven: staat een bestand er al precies zo, dan wordt het overgeslagen; heet er al een ánder bestand zo, dan krijgt het nieuwe een eigen naam.</div>
+      </div>
+      <div style="overflow:auto;padding:6px 10px"><table style="width:100%;border-collapse:collapse"><thead><tr style="font-size:10px;text-transform:uppercase;color:var(--text-faint)"><th></th><th style="text-align:left">Bijlage</th><th style="text-align:left">Submap (voorstel)</th></tr></thead><tbody>${_ibBijl.items.map(rij).join('')}</tbody></table>
+      ${overig>0?`<p style="font-size:11px;color:var(--gold-text,#8a6d1f);margin:6px 2px">⚠ ${overig} bijlage(n) zijn een doorgestuurde mail of een link en kunnen niet als bestand worden opgeslagen — open ze in Outlook.</p>`:''}</div>
+      <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('bijl-overlay').remove()">Annuleren</button>
+        <button class="btn btn-sm btn-primary" onclick="inboxBijlagenOpslaan()">Aangevinkte opslaan</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+  }catch(e){ ibStatus(''); inboxToast('⚠ Bijlagen ophalen mislukt: '+e.message); }
+}
+async function inboxBijlagenOpslaan(){
+  const st=_ibBijl; if(!st) return;
+  const proj=PROJECT_CODES.find(p=>p.code===st.code); if(!proj) return;
+  const ov=document.getElementById('bijl-overlay'); if(ov) ov.remove();
+  const gekozen=st.items.filter(it=>it.aan);
+  if(!gekozen.length){ inboxToast('Niets aangevinkt — niets opgeslagen.'); return; }
+  let ok=0,fout=0,laatsteFout=''; const al=[],hernoemd=[];
+  for(const it of gekozen){
+    try{
+      ibStatus(`Opslaan ${ok+fout+al.length+1}/${gekozen.length}: ${it.naam}…`);
+      const one=await ibFetch(`/messages/${st.mailId}/attachments/${it.attId}`);
+      const b64=one&&one.contentBytes; if(!b64) throw new Error('geen inhoud ontvangen');
+      const bin=atob(b64), arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+      const hash=await ibSha256(arr);
+      // outbox-stap 1: voorbereid (bij een crash hierna dedupliceert de upload op inhoud)
+      ibBijlageIndexZet({id:it.id,mbx:st.mbx,imid:st.imid,mailId:st.mailId,attId:it.attId,naam:it.naam,hash,code:st.code,sub:it.sub,status:'voorbereid',tijd:new Date().toISOString()});
+      const res=await window.spUploadProjectBytes(proj,it.naam,arr,it.type,it.sub);
+      ibBijlageIndexZet({id:it.id,status:'opgeslagen',itemId:res.id,webUrl:res.webUrl,opgeslagenAls:res.naam,uitkomst:res.status,tijd:new Date().toISOString()});
+      if(res.status==='al-aanwezig') al.push(it.naam);
+      else { ok++; if(res.status==='hernoemd') hernoemd.push(it.naam+' → '+res.naam); }
+    }catch(e){ fout++; laatsteFout=e.message; ibBijlageIndexZet({id:it.id,status:'mislukt',fout:String(e.message||e).slice(0,160),tijd:new Date().toISOString()}); console.warn('bijlage opslaan mislukt:',it.naam,e.message); }
+  }
+  ibStatus('');
+  try{ if(window.track) track('inbox','bijlagen_naar_map',{detail:st.code+' · '+ok+'/'+gekozen.length,ok:fout===0}); }catch(e){}
+  const delen=[];
+  if(ok) delen.push(`${ok} opgeslagen`);
+  if(al.length) delen.push(`${al.length} stond${al.length===1?'':'en'} er al (overgeslagen)`);
+  if(hernoemd.length) delen.push(`nieuwe naam omdat er al een ander bestand zo heette: ${hernoemd.join(', ')}`);
+  if(fout) delen.push(`${fout} mislukt${laatsteFout?' ('+laatsteFout+')':''} — probeer opnieuw via 📎`);
+  inboxToast((fout?'⚠ ':'📎 ')+'Bijlagen '+st.code+': '+delen.join(' · '));
+  if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===st.code&&window._dossierMap) delete window._dossierMap[st.code];
 }
 
 // ── Larry-chat per mail (via Worker target=claude). Mailcontext alleen runtime.
