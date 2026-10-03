@@ -4578,6 +4578,8 @@ function _ptId(){return 't'+Date.now().toString(36)+Math.random().toString(36).s
 const _PT_PRIO={low:{l:'P3',c:'#6b7280'},medium:{l:'P2',c:'#B8962E'},high:{l:'P1',c:'#c0392b'}};
 const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},klaar:{l:'Klaar',c:'#2A4A38'}};
 const _PT_STAT_TG={todo:300785,bezig:300788,klaar:300786};
+// Status-id dynamisch uit Toggl 2.0 (mt-toggl.js); vaste id's alleen als terugval.
+async function _ptStatusId(st){ return (typeof t2StatusId==='function')?await t2StatusId(st):(_PT_STAT_TG[st]||_PT_STAT_TG.todo); }
 // Journaal: vóór elke verwijdering/statuswijziging een volledige kopie van de taak.
 // Gesynct (mt_taken_journaal, eigen samenvoeger) zodat herstel vanaf elke pc kan.
 function _ptJournaal(actie,code,taak,extra){
@@ -4597,7 +4599,7 @@ async function projTakenHerkans(code){
     if(!t.tg_pending||!t.tg_task_id) continue;
     if(t.tg_pending.verwijderen){ if(await _tgVerwijderTaak(t.tg_task_id)){ weg.add(t.id); ok++; } else fout++; continue; }
     if(t.tg_pending.status){
-      try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await t2StatusId(t.status)}); delete t.tg_pending; ok++; }
+      try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await _ptStatusId(t.status)}); delete t.tg_pending; ok++; }
       catch(e){ fout++; }
     }
   }
@@ -4672,7 +4674,7 @@ async function projTaakStatus(code,id){
   const order=['todo','bezig','klaar']; t.status=order[(order.indexOf(t.status||'todo')+1)%3];
   // Niet meer "fire and forget": lukt Toggl niet, dan blijft dat zichtbaar (⏳) met herkansing.
   if(t.tg_task_id){
-    try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await t2StatusId(t.status)}); delete t.tg_pending; }
+    try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await _ptStatusId(t.status)}); delete t.tg_pending; }
     catch(e){ t.tg_pending={status:true}; _ptStatus(code,'⚠ Status lokaal gewijzigd, maar nog niet in Toggl: '+(e.message||e)+' — klik ⏳ om opnieuw te proberen','#c0392b'); }
   }
   projTakenZet(code,arr);
@@ -5772,7 +5774,7 @@ async function planEditorOpslaan(code,faseId){
     if(bt){ bt.naam=fa.naam; bt.status=fa.status; bt.duur_uur=fa.effort; projTakenZet(code,tarr);
       // Niet meer stil: lukt Toggl niet, dan staat de taak op ⏳ (herkansing in Taken).
       if(bt.tg_task_id){
-        try{ await focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:await t2StatusId(fa.status)}); delete bt.tg_pending; }
+        try{ await focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:await _ptStatusId(fa.status)}); delete bt.tg_pending; }
         catch(e){ bt.tg_pending={status:true}; planToast('⚠ Fase opgeslagen, maar Toggl-taak nog niet bijgewerkt: '+(e.message||e)); }
         projTakenZet(code,tarr);
       }

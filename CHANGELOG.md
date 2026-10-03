@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Toggl 2.0: projecten en taken via één laag, koppelen op id, offertenummer toekennen
+- Commit: `c3ad291` | Auteur: Bart Witte
+
 ## 2026-10-03 — Bijlagen naar de projectmap: per bijlage een submap-voorstel, bevestigen, index
 - Commit: `1ba1c86` | Auteur: Bart Witte
 
