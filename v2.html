@@ -11206,18 +11206,20 @@ function activiteitOpen(force){
       catch(e){ console.warn('vorige versie parkeren mislukt:',e); }
     }
     const dump=_offerteDump(o,code), basis='Offerte-'+code;
-    const res=await window.spUploadPadBytes(mapPad,basis+'.xlsx',_offerteWerkboek(o,code),XLSX_MIME);
+    // Eerst de JSON (daaruit bouwt de tool de offerte exact terug), dan de Excel.
+    // Pas als béide gelukt zijn, telt deze versie als "huidig" in _mapState; faalt
+    // er één, dan probeert de planner het paar later opnieuw.
     await window.spUploadPadBytes(mapPad,basis+'.json',new TextEncoder().encode(JSON.stringify(dump,null,2)),'application/json');
-    _mapStateSet(key,{hash:_dumpHash(dump),tijd:Date.now(),gevuld:gevuld,pad:mapPad,code:code,fout:null});
-    // Kreeg deze offerte zojuist een project? Dan mag de losse kopie weg — pas nu, ná
-    // een geslaagde schrijfactie in de projectmap. Verwijderen = SharePoint-prullenbak.
-    if(proj && vorig.pad && vorig.pad!==mapPad && /\/[^/]*$/.test(vorig.pad) && vorig.pad.slice(vorig.pad.lastIndexOf('/')+1)===LOSSE_MAP){
-      try{
-        await window.spVerwijderPad(vorig.pad+'/Offerte-'+(vorig.code||code)+'.xlsx');
-        await window.spVerwijderPad(vorig.pad+'/Offerte-'+(vorig.code||code)+'.json');
-      }catch(e){ console.warn('losse kopie opruimen mislukt:',e); }
-    }
+    const res=await window.spUploadPadBytes(mapPad,basis+'.xlsx',_offerteWerkboek(o,code),XLSX_MIME);
+    // Kreeg deze offerte zojuist een project? De losse kopie in "Nog te rubriceren"
+    // wordt NIET meer automatisch verwijderd: hij blijft staan als extra kopie en de
+    // gebruiker krijgt een melding. Opruimen is een bewuste handeling.
+    let losseKopie=vorig.losseKopie||null;
+    if(proj && vorig.pad && vorig.pad!==mapPad && vorig.pad.slice(vorig.pad.lastIndexOf('/')+1)===LOSSE_MAP)
+      losseKopie=vorig.pad+'/Offerte-'+(vorig.code||code)+'.xlsx';
+    _mapStateSet(key,{hash:_dumpHash(dump),tijd:Date.now(),gevuld:gevuld,pad:mapPad,code:code,fout:null,losseKopie:losseKopie});
     if(geparkeerd) calcStatus('⚠ De calculatie is sterk gekrompen. De vorige versie staat nu in '+VERSIE_MAP+'.','fout',key);
+    else if(losseKopie && losseKopie!==vorig.losseKopie) calcStatus('✓ Weggeschreven in de projectmap. De oude losse kopie in "'+LOSSE_MAP+'" blijft staan — die mag je zelf weggooien als je wilt.','ok',key);
     else if(opts.melden) _mapMelding(key,'✓ Ook weggeschreven als '+basis+'.xlsx',res);
     return res;
   }
