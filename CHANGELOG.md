@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Bijlagen: nooit meer stil overschrijven bij mail koppelen
+- Commit: `c80c1fe` | Auteur: Bart Witte
+
 ## 2026-10-03 — Docs: bewezen Toggl 2.0 API-contract (spikes 3 okt)
 - Commit: `0a13c52` | Auteur: Bart Witte
 

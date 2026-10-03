@@ -7628,27 +7628,35 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mkdir-p met canonieke naam. wantedName = de ECHTE naam (registry), bv.
   // "Styles Concepts B.V.". Gedrag:
   //   1. exacte match  -> hergebruiken
-  //   2. genorm. match maar andere schrijfwijze -> HERNOEMEN naar wantedName
-  //      (zo convergeren oude afwijkende mappen "Styles Concepts" /
-  //       "Herman Wesselink College" naar de echte naam) — tenzij rename=false
+  //   2. genorm. match maar andere schrijfwijze -> de BESTAANDE map hergebruiken.
+  //      Vroeger werd die automatisch hernoemd naar wantedName; dat brak zonder
+  //      melding links in mails, snelkoppelingen en Moneybird-bijlagen. Nu wordt het
+  //      een voorstel in window._mapNaamVoorstellen (hernoemen = bewuste actie).
   //   3. niets -> aanmaken met wantedName
-  // Returnt de werkelijk gebruikte (echte) mapnaam.
+  // Een fout bij het lezen van de map is FATAAL: vroeger gold die als "lege map",
+  // waarna er een dubbele map naast de bestaande kon ontstaan. (404 = map bestaat
+  // nog niet = echt leeg; dat handelt listChildren zelf af.)
+  // De parameter `rename` doet niets meer (blijft voor compatibiliteit).
+  // Returnt de werkelijk gebruikte mapnaam.
   async ensureFolder(parentPath, wantedName, rename = true) {
     // SharePoint verbiedt deze tekens + een naam mag niet eindigen op '.' of spatie
     // ("Styles Concepts B.V." -> "Styles Concepts B.V").
     const safe = wantedName.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'');
-    let existing = [];
-    try { existing = await this.listChildren(parentPath); } catch(e) { existing = []; }
+    const existing = await this.listChildren(parentPath);
     // 1. exacte match (case-sensitive op werkelijke naam)
     const exact = existing.find(c => c.folder && c.name === safe);
     if (exact) return exact.name;
-    // 2. genormaliseerde match met afwijkende schrijfwijze -> hernoemen naar echte naam
+    // 2. genormaliseerde match met afwijkende schrijfwijze -> bestaande hergebruiken
     const want = this._norm(safe);
     const near = existing.find(c => c.folder && this._norm(c.name) === want);
     if (near) {
-      if (!rename) return near.name;
-      try { return await this.rename(near.id, safe); }
-      catch(e) { console.warn('rename faalde, hergebruik oude naam:', e); return near.name; }
+      if (near.name !== safe) {
+        const v = (window._mapNaamVoorstellen = window._mapNaamVoorstellen || []);
+        if (!v.some(x => x.pad === parentPath && x.huidig === near.name))
+          v.push({ pad: parentPath, huidig: near.name, voorstel: safe, id: near.id, tijd: new Date().toISOString() });
+        console.info('map "' + near.name + '" hergebruikt (registry-naam "' + safe + '") — hernoemen is een voorstel, niet automatisch');
+      }
+      return near.name;
     }
     // 3. aanmaken
     const token = await window.getGraphToken();

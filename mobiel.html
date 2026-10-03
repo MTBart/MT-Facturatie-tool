@@ -4676,8 +4676,9 @@ const _SPProj = {
   // (mobiel hernoemt NOOIT — dat doet alleen de pc-tool); anders aanmaken.
   async ensureFolder(parentPath, wantedName, drive) {
     const safe = wantedName.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'map';
-    let existing = [];
-    try { existing = await this.listChildren(parentPath, drive); } catch(e) { existing = []; }
+    // Leesfout = fataal (vroeger "lege map" → kans op een dubbele map naast de
+    // bestaande). 404 = bestaat nog niet; dat geeft listChildren zelf als [].
+    const existing = await this.listChildren(parentPath, drive);
     const exact = existing.find(c => c.folder && c.name === safe);
     if (exact) return exact.name;
     const want = this._norm(safe);
@@ -4721,8 +4722,7 @@ const PROJECT_SUBS = ['01_Offerte','02_Ontwerp','03_Vectorworks','04_Holzher',
 // het licht (geen 10 mkdir-pogingen per opname). Returnt het aantal nieuw
 // aangemaakte mappen (0 = structuur was al compleet).
 async function ensureFullStructure(projPath, drive) {
-  let existing = [];
-  try { existing = await _SPProj.listChildren(projPath, drive); } catch(e) { existing = []; }
+  const existing = await _SPProj.listChildren(projPath, drive);   // leesfout = fataal (caller vangt), zie ensureFolder
   const have = new Set(existing.filter(c => c.folder).map(c => c.name));
   let gemaakt = 0;
   for (const sub of PROJECT_SUBS) {
