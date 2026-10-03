@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Mobiel: geen stil verlies meer bij opname, taken, projecten en opleveringen
+- Commit: `bc5e226` | Auteur: Bart Witte
+
 ## 2026-09-08 — Offertes automatisch als Excel + JSON naar de map
 - Commit: `dbee567` | Auteur: Bart Witte
 

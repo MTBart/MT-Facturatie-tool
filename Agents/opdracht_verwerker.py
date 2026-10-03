@@ -124,10 +124,12 @@ def _graph_token() -> str | None:
 
 
 def _graph(method: str, pad: str, token: str, **kw):
+    headers = {"Authorization": f"Bearer {token}",
+               "Content-Type": "application/json"}
+    headers.update(kw.pop("headers", {}))
     return requests.request(
         method, f"{_GRAPH}{pad}",
-        headers={"Authorization": f"Bearer {token}",
-                 "Content-Type": "application/json"},
+        headers=headers,
         timeout=30, **kw,
     )
 
@@ -156,19 +158,22 @@ def lees_email_opdrachten() -> list:
         return []
 
     r = _graph("GET",
-               f"/me/mailFolders/{map_id}/messages?$top=25&$select=id,subject,bodyPreview,from,receivedDateTime",
-               token)
+               f"/me/mailFolders/{map_id}/messages?$top=25&$select=id,subject,body,bodyPreview,from,receivedDateTime",
+               token, headers={"Prefer": 'outlook.body-content-type="text"'})
     if r.status_code != 200:
         print(f"  [E-mail] ophalen mislukt: {r.status_code}")
         return []
 
     opdrachten = []
     for m in r.json().get("value", []):
+        # Volledige body (Prefer: text); bodyPreview alleen als vangnet — die
+        # kapt op ~255 tekens af en verminkte langere opdrachten.
+        body = ((m.get("body") or {}).get("content") or m.get("bodyPreview") or "").strip()
         opdrachten.append({
             "bron": "email",
             "mail_id": m["id"],
             "ontvangen": m.get("receivedDateTime", ""),
-            "tekst": f"{m.get('subject','')}\n\n{m.get('bodyPreview','')}".strip(),
+            "tekst": f"{m.get('subject','')}\n\n{body}".strip()[:20000],
         })
     print(f"  [E-mail] {len(opdrachten)} opdracht(en) in Outlook-map '{_OPDRACHT_MAP}'")
     return opdrachten
