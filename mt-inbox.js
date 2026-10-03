@@ -145,7 +145,15 @@ function inboxRenderTakenShell(){
       <label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="todo-toggl" checked> ook in Toggl</label>
       <button class="btn btn-sm btn-gold" onclick="todoAdd()">+ Taak</button>
     </div>
-    <div id="todo-list-body"></div>`;
+    <div id="todo-list-body"></div>
+    <div style="margin-top:16px;padding-top:10px;border-top:1px solid var(--border,#eee)">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+        <b style="font-size:13px">Toggl → To Do</b> <span class="badge" style="font-size:10px">proef</span>
+        <span style="font-size:11px;color:var(--text-faint)">jouw open Toggl-taken in de lijst "${TDS_LIJST}" · één richting · er wordt nooit iets verwijderd</span>
+        <button class="btn btn-sm btn-secondary" onclick="tdsDroogloop()">🔍 Droogloop</button>
+      </div>
+      <div id="tds-uit"></div>
+    </div>`;
 }
 function todoSwitchList(id){_todo.listId=id;inboxLoadTodoTasks();}
 async function inboxLoadTodoTasks(){
@@ -198,6 +206,136 @@ async function todoAdd(){
     inboxLoadTodoTasks();
   }catch(e){alert('Taak aanmaken mislukt: '+e.message);}
   finally{inp.disabled=false;}
+}
+
+// ── To Do-pilot (brok 6): Toggl 2.0 → Microsoft To Do, ÉÉN richting ─────────────
+// Alleen voor de ingelogde gebruiker (gedelegeerd Graph, eigen Toggl-sleutel via de
+// worker), in een eigen lijst "MT test taken". Regels:
+//  - open Toggl-taken die aan jou zijn toegewezen → To Do-taak "[project] taak";
+//  - correlatie: linkedResource (applicationName "MT tool", externalId = Toggl-taak-id)
+//    + koppeltabel mt_todo_sync (gesynct, eigen samenvoeger). Eerst zoeken, dan maken;
+//  - Toggl op Done → To Do voltooid; titel/deadline gewijzigd in Toggl → bijgewerkt,
+//    MAAR niet als je die in To Do zelf al had aangepast (dat wordt gemeld);
+//  - NOOIT verwijderen: weg of niet meer toegewezen in Toggl = alleen melden;
+//  - altijd eerst een droogloop met de lijst van wat er zou gebeuren.
+const TDS_LIJST='MT test taken';
+function tdsMijnEmail(){ try{ const a=window._msal&&_msal.getAllAccounts(); return (a&&a[0]&&a[0].username||'').toLowerCase(); }catch(e){ return ''; } }
+function tdsMapAll(){ try{ const v=JSON.parse(localStorage.getItem('mt_todo_sync')||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } }
+function tdsMapZet(rec){
+  const all=tdsMapAll(), i=all.findIndex(x=>x.id===rec.id);
+  const r=Object.assign({},i>=0?all[i]:{},rec,{tijd:new Date().toISOString()});
+  if(i>=0) all[i]=r; else all.push(r);
+  localStorage.setItem('mt_todo_sync',JSON.stringify(all));
+  return r;
+}
+async function tdsGraphAlle(url){
+  const uit=[]; let next=url, n=0;
+  while(next&&n<50){ const d=await ibFetch(next); uit.push(...((d&&d.value)||[])); next=d&&d['@odata.nextLink']; n++; }
+  return uit;
+}
+function tdsTitel(t){ const p=(t.project&&t.project.name)?'['+t.project.name+'] ':''; return (p+(t.name||'(zonder naam)')).slice(0,255); }
+function tdsDue(t){ return t.end_date?String(t.end_date).slice(0,10):''; }
+function tdsTodoDue(td){ return (td&&td.dueDateTime&&td.dueDateTime.dateTime)?String(td.dueDateTime.dateTime).slice(0,10):''; }
+
+// Bepaalt wat er zou gebeuren. Schrijft niets.
+async function tdsPlan(){
+  const email=tdsMijnEmail(); if(!email) throw new Error('niet ingelogd bij Microsoft 365');
+  const users=await focusFetchOrg('users');
+  const ik=(Array.isArray(users)?users:[]).find(u=>String(u.email||'').toLowerCase()===email);
+  if(!ik) throw new Error('je e-mailadres ('+email+') staat niet als gebruiker in Toggl');
+  const mijnId=ik.user_account_id;
+  const stream=await focusFetch('tasks/stream');
+  const taken=(Array.isArray(stream)?stream:((stream&&stream.data)||[])).filter(t=>!t.is_template&&!t.archived_at);
+  const mijn=taken.filter(t=>(t.assignee_user_ids||[]).map(String).includes(String(mijnId)));
+  const lijsten=await tdsGraphAlle(TODO_BASE+'/lists?$top=100');
+  const lijst=lijsten.find(l=>l.displayName===TDS_LIJST)||null;
+  const todo=lijst?await tdsGraphAlle(`${TODO_BASE}/lists/${lijst.id}/tasks?$top=100&$expand=linkedResources`):[];
+  const perExt=new Map();
+  todo.forEach(td=>(td.linkedResources||[]).forEach(lr=>{ if(lr.applicationName==='MT tool'&&lr.externalId) perExt.set(String(lr.externalId),td); }));
+  const map=tdsMapAll();
+  const acties=[];
+  for(const t of mijn){
+    const klaar=(t.status&&t.status.type)==='done', id=email+'|'+t.id, rec=map.find(x=>x.id===id);
+    const td=perExt.get(String(t.id))||(rec&&rec.todo_task_id&&todo.find(x=>x.id===rec.todo_task_id))||null;
+    const titel=tdsTitel(t), due=tdsDue(t);
+    if(!td){ if(!klaar) acties.push({soort:'maken',t,id,titel,due}); continue; }
+    const tdKlaar=td.status==='completed';
+    if(klaar&&!tdKlaar){ acties.push({soort:'voltooien',t,td,id,titel}); continue; }
+    const vorig=(rec&&rec.laatst)||{};
+    const wijzig={};
+    if(titel!==td.title){ if(vorig.titel&&td.title!==vorig.titel) acties.push({soort:'conflict',t,td,id,titel,reden:'titel in To Do zelf aangepast — niet overschreven'}); else wijzig.title=titel; }
+    if(due!==tdsTodoDue(td)){ if(vorig.due!==undefined&&tdsTodoDue(td)!==vorig.due) acties.push({soort:'conflict',t,td,id,titel,reden:'deadline in To Do zelf aangepast — niet overschreven'}); else wijzig.due=due; }
+    if(Object.keys(wijzig).length) acties.push({soort:'bijwerken',t,td,id,titel,wijzig});
+    else if(!rec||!rec.todo_task_id) acties.push({soort:'koppelen',t,td,id,titel});   // bestond al (bv. na crash) → alleen vastleggen
+    if(tdKlaar&&!klaar) acties.push({soort:'melding',t,td,id,titel,reden:'in To Do afgevinkt, maar in Toggl nog open (tweerichting komt later)'});
+  }
+  // Niet meer van jou of verdwenen in Toggl: alleen melden, nooit verwijderen.
+  const mijnIds=new Set(mijn.map(t=>String(t.id)));
+  perExt.forEach((td,ext)=>{ if(!mijnIds.has(ext)&&td.status!=='completed') acties.push({soort:'melding',td,id:email+'|'+ext,titel:td.title,reden:'staat niet (meer) op jouw naam in Toggl — To Do-taak blijft staan'}); });
+  return {email,lijst,acties,aantalMijn:mijn.length};
+}
+
+// Voert het plan uit. Outbox: koppeltabel vóór de create ('voorbereid'), daarna 'gekoppeld'.
+async function tdsUitvoeren(plan){
+  let lijst=plan.lijst;
+  if(!lijst){
+    lijst=await ibFetch(TODO_BASE+'/lists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({displayName:TDS_LIJST})});
+  }
+  const res={ok:0,fout:0,fouten:[]};
+  for(const a of plan.acties){
+    try{
+      if(a.soort==='maken'){
+        tdsMapZet({id:a.id,email:plan.email,tg_task_id:a.t.id,todo_list_id:lijst.id,status:'voorbereid'});
+        const body={title:a.titel,
+          body:{contentType:'text',content:'Toggl-taak '+a.t.id+(a.t.project&&a.t.project.name?(' · project '+a.t.project.name):'')+'\nAangemaakt door de MT tool (proef Toggl → To Do).'},
+          linkedResources:[{applicationName:'MT tool',displayName:'Toggl-taak '+a.t.id,externalId:String(a.t.id),webUrl:'https://focus.toggl.com/'}]};
+        if(a.due) body.dueDateTime={dateTime:a.due+'T12:00:00',timeZone:'Europe/Amsterdam'};
+        const td=await ibFetch(`${TODO_BASE}/lists/${lijst.id}/tasks`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        tdsMapZet({id:a.id,todo_task_id:td.id,status:'gekoppeld',laatst:{titel:a.titel,due:a.due}});
+      } else if(a.soort==='voltooien'){
+        await ibFetch(`${TODO_BASE}/lists/${lijst.id}/tasks/${a.td.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'completed'})});
+        tdsMapZet({id:a.id,email:plan.email,tg_task_id:a.t.id,todo_task_id:a.td.id,todo_list_id:lijst.id,status:'gekoppeld'});
+      } else if(a.soort==='bijwerken'){
+        const b={}; if(a.wijzig.title!==undefined) b.title=a.wijzig.title;
+        if(a.wijzig.due!==undefined) b.dueDateTime=a.wijzig.due?{dateTime:a.wijzig.due+'T12:00:00',timeZone:'Europe/Amsterdam'}:null;
+        await ibFetch(`${TODO_BASE}/lists/${lijst.id}/tasks/${a.td.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+        tdsMapZet({id:a.id,email:plan.email,tg_task_id:a.t.id,todo_task_id:a.td.id,todo_list_id:lijst.id,status:'gekoppeld',laatst:{titel:a.titel,due:tdsDue(a.t)}});
+      } else if(a.soort==='koppelen'){
+        tdsMapZet({id:a.id,email:plan.email,tg_task_id:a.t.id,todo_task_id:a.td.id,todo_list_id:lijst.id,status:'gekoppeld',laatst:{titel:a.td.title,due:tdsTodoDue(a.td)}});
+      } else continue;   // conflict/melding: niets doen
+      res.ok++;
+    }catch(e){ res.fout++; res.fouten.push((a.titel||'?')+': '+(e.message||e)); }
+  }
+  return res;
+}
+
+let _tdsPlan=null;
+function tdsActieHtml(a){
+  const ic={maken:'➕',voltooien:'✅',bijwerken:'✏️',koppelen:'🔗',conflict:'⚠️',melding:'ℹ️'}[a.soort]||'·';
+  const txt={maken:'nieuw in To Do',voltooien:'afvinken in To Do',bijwerken:'bijwerken in To Do',koppelen:'bestaande To Do-taak koppelen',conflict:a.reden,melding:a.reden}[a.soort]||'';
+  return `<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #f2f2f2">${ic} ${ibEsc(a.titel||'')} <span style="color:var(--text-faint)">— ${ibEsc(txt)}</span></div>`;
+}
+async function tdsDroogloop(){
+  const el=document.getElementById('tds-uit'); if(!el) return;
+  el.innerHTML='<div class="inbox-empty" style="font-size:12px">Toggl en To Do lezen… (er wordt niets gewijzigd)</div>';
+  try{
+    _tdsPlan=await tdsPlan();
+    const n=s=>_tdsPlan.acties.filter(a=>a.soort===s).length, doen=['maken','voltooien','bijwerken','koppelen'].reduce((x,s)=>x+n(s),0);
+    el.innerHTML=`<div style="font-size:12px;margin-bottom:6px">${_tdsPlan.aantalMijn} Toggl-taken op jouw naam · lijst "${TDS_LIJST}" ${_tdsPlan.lijst?'bestaat':'<b>wordt aangemaakt</b>'}<br>
+      ➕ ${n('maken')} nieuw · ✅ ${n('voltooien')} afvinken · ✏️ ${n('bijwerken')} bijwerken · 🔗 ${n('koppelen')} koppelen · ⚠️ ${n('conflict')} niet overschreven · ℹ️ ${n('melding')} meldingen</div>
+      <div style="max-height:260px;overflow:auto;border:1px solid var(--border,#eee);border-radius:6px;padding:4px 8px">${_tdsPlan.acties.map(tdsActieHtml).join('')||'<div style="font-size:12px;color:var(--text-faint)">Alles is al bij.</div>'}</div>
+      ${doen?`<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="tdsUitvoerenKnop()">Uitvoeren (${doen} wijziging${doen===1?'':'en'} in jouw To Do)</button>`:''}`;
+  }catch(e){ el.innerHTML=`<div class="inbox-empty" style="font-size:12px">Droogloop mislukt: ${ibEsc(e.message)}${e.status===403?' — log opnieuw in en sta To Do-toegang toe':''}</div>`; }
+}
+async function tdsUitvoerenKnop(){
+  if(!_tdsPlan) return;
+  const el=document.getElementById('tds-uit');
+  if(!await mtDialog.confirm({title:'Toggl → To Do',message:'De wijzigingen uit de droogloop uitvoeren in jouw To Do-lijst "'+TDS_LIJST+'"?\nEr wordt niets verwijderd, en in Toggl verandert niets.',okLabel:'Uitvoeren'})) return;
+  try{
+    const r=await tdsUitvoeren(_tdsPlan); _tdsPlan=null;
+    if(el) el.innerHTML=`<div style="font-size:12px">${r.fout?'⚠':'✓'} ${r.ok} uitgevoerd${r.fout?`, ${r.fout} mislukt:<br>${r.fouten.map(ibEsc).join('<br>')}`:''}. Klik opnieuw op Droogloop om te controleren.</div>`;
+    if(typeof inboxLoadTaken==='function'){ _todo.loaded=false; }
+  }catch(e){ if(el) el.innerHTML=`<div class="inbox-empty" style="font-size:12px">Uitvoeren mislukt: ${ibEsc(e.message)}</div>`; }
 }
 
 function inboxSwitchMbx(v){

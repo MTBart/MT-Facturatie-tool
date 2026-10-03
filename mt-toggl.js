@@ -63,6 +63,18 @@ async function focusFetchW(path,method='GET',body=null){
   if(!res.ok) throw new Error('Toggl HTTP '+res.status+(txt?(' — '+txt.slice(0,120)):''));
   try{return JSON.parse(txt);}catch(e){return txt;}
 }
+// Organisatie-niveau (bv. users): pad relatief aan /organizations/{org}/.
+async function focusFetchOrg(path,method='GET',body=null){
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('Microsoft-login vereist (log in via de tool)');
+  const opts={method,headers:{...h,'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const res=await fetch(`${WORKER}?target=toggl_focus&path=${encodeURIComponent(`organizations/${FOCUS_ORG}/`+path)}`,opts);
+  if(res.status===204) return true;
+  const txt=await res.text();
+  if(!res.ok) throw new Error('Toggl HTTP '+res.status+(txt?(' — '+txt.slice(0,120)):''));
+  try{return JSON.parse(txt);}catch(e){return txt;}
+}
 // Statussen dynamisch (M&T heeft er 8: Todo, In progress, Productie, Blocked, Klaar voor
 // levering, Factureren, Backlog, Done). De vaste id's blijven alleen als terugval.
 const T2_STATUS_VAST={todo:300785,bezig:300788,klaar:300786};
