@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Mappen: niet meer automatisch hernoemen, leesfout is geen lege map
+- Commit: `e6885f2` | Auteur: Bart Witte
+
 ## 2026-10-03 — Bijlagen: nooit meer stil overschrijven bij mail koppelen
 - Commit: `c80c1fe` | Auteur: Bart Witte
 

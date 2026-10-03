@@ -4558,9 +4558,10 @@ function gekoppeldeMailsHtml(proj){
   </tr>`;}).join('')}</tbody></table>`;
 }
 async function ontkoppelMail(code,idx){
-  const all=mailLinksAll();const arr=all[code]||[];if(!arr[idx])return;
-  if(!await mtDialog.confirm({title:'Mail ontkoppelen',message:'Mail "'+(arr[idx].subject||'')+'" ontkoppelen van '+code+'?\nDe mail zelf blijft in Outlook staan.',okLabel:'Ontkoppelen',danger:true}))return;
-  arr.splice(idx,1);all[code]=arr;mailLinksSave(all);
+  // idx telt over de ACTIEVE koppelingen (zoals getoond); ontkoppelen = tombstone, niet wissen.
+  const x=mailLinksVoor(code)[idx];if(!x)return;
+  if(!await mtDialog.confirm({title:'Mail ontkoppelen',message:'Mail "'+(x.subject||'')+'" ontkoppelen van '+code+'?\nDe mail zelf blijft in Outlook staan.',okLabel:'Ontkoppelen',danger:true}))return;
+  const all=mailLinksAll();mailLinkOntkoppel(all,code,mailLinkIdent(x),x.id);mailLinksSave(all);
   if(huidigProject&&huidigProject.code===code)renderProjectDetail(huidigProject);
 }
 
@@ -6319,7 +6320,7 @@ async function maakProjectAan(){
       const ml=mailLinksAll(); (ml[code]=ml[code]||[]).push({
         id:_ibProjBron.id,internetMessageId:_ibProjBron.internetMessageId,
         subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,
-        webLink:_ibProjBron.webLink,mbx:_ibProjBron.mbx,ts:Date.now()});
+        webLink:_ibProjBron.webLink,mbx:_ibProjBron.mbx,ts:Date.now(),gewijzigd:Date.now()});
       mailLinksSave(ml);
     }catch(e){console.warn('bron-mail koppelen faalde:',e);}
     _ibProjBron=null;
@@ -7527,6 +7528,30 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
   // Een samenvoeger krijgt (lokale tekst, SP-data) en geeft het samengevoegde object terug.
   mergers: {
+    // Mail↔project-koppelingen: { code: [koppeling…] }. Per code en per mail
+    // (internetMessageId, anders id) wint de NIEUWSTE stand (gewijzigd/ontkoppeld/ts).
+    // Ontkoppelen is een tombstone (`ontkoppeld`), dus een oude kopie kan een
+    // ontkoppelde mail niet terugzetten en een nieuwe koppeling niet wegdrukken.
+    // Niets valt weg: een koppeling die alleen aan één kant bestaat, blijft staan.
+    mt_mail_links(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+      const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {};
+      const ident = x => x && (x.internetMessageId || x.id);
+      const tijd = x => Math.max(Number(x && x.gewijzigd) || 0, Number(x && x.ontkoppeld) || 0, Number(x && x.ts) || 0);
+      const uit = {};
+      for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
+        const per = new Map(), los = [];
+        for (const x of [...(Array.isArray(R[code]) ? R[code] : []), ...(Array.isArray(L[code]) ? L[code] : [])]) {
+          const k = ident(x);
+          if (!k) { los.push(x); continue; }                    // zonder identiteit: bewaren, nooit weggooien
+          const oud = per.get(k);
+          if (!oud || tijd(x) >= tijd(oud)) per.set(k, x);      // gelijk → lokaal (komt als tweede)
+        }
+        uit[code] = [...per.values(), ...los];
+      }
+      return uit;
+    },
     mt_calc_offertes(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
       const L = (lees(lokaal) || {}).offertes || {};
@@ -7584,8 +7609,19 @@ const _SP = Object.assign(window.MTCore.makeSP({
         if(typeof planToast==='function') planToast('⚠ '+melding);
         return;
       }
-      try { await this.write(key + '.json', data===undefined?rawValue:data); }
-      catch(e) { await this.write(key + '.json', rawValue); }
+      // Bij een 412 (iemand anders schreef intussen) de samenvoeger van déze key
+      // gebruiken in plaats van de generieke "lokaal wint". En het samengevoegde
+      // resultaat ook lokaal zetten: anders schrijft de volgende wijziging de oude
+      // lokale stand alsnog over andermans werk heen (de ETag klopt dan weer).
+      const mg = this.mergers && this.mergers[key];
+      const conflictMerge = mg ? ((remote, local) => {
+        const samen = mg(typeof local === 'string' ? local : JSON.stringify(local), remote);
+        try { if (typeof _lsSet === 'function') _lsSet(key, JSON.stringify(samen)); } catch(e) {}
+        try { if (key === 'mt_calc_offertes' && window.CALC && samen && samen.offertes) window.CALC.offertes = samen.offertes; } catch(e) {}
+        return samen;
+      }) : undefined;
+      try { await this.write(key + '.json', data===undefined?rawValue:data, conflictMerge); }
+      catch(e) { await this.write(key + '.json', rawValue, conflictMerge); }
     }, 2000);
   },
 

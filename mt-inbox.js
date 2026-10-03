@@ -582,7 +582,18 @@ function inboxMaakProject(){
 // ── Mail ↔ project-koppeling (localStorage + privé SharePoint-sync; géén PII in repo) ──
 function mailLinksAll(){try{return JSON.parse(localStorage.getItem('mt_mail_links')||'{}');}catch(e){return {};}}
 function mailLinksSave(o){localStorage.setItem('mt_mail_links',JSON.stringify(o));}
-function mailLinksVoor(code){return mailLinksAll()[code]||[];}
+// Ontkoppelen wist een koppeling niet meer, maar zet `ontkoppeld:<ms>` (tombstone).
+// Zo kan een andere pc met een oude kopie hem niet stil terugzetten of wegdrukken:
+// de samenvoeger (_SP.mergers.mt_mail_links) kiest per mail de nieuwste stand.
+function mailLinkActief(x){return x&&!x.ontkoppeld;}
+function mailLinkIdent(x){return x&&(x.internetMessageId||x.id);}
+function mailLinksVoor(code){return (mailLinksAll()[code]||[]).filter(mailLinkActief);}
+// Zet een tombstone op alle (actieve) koppelingen van deze mail onder `code`.
+function mailLinkOntkoppel(all,code,imid,mid){
+  const nu=Date.now();let n=0;
+  (all[code]||[]).forEach(x=>{ if(mailLinkActief(x)&&(mailLinkIdent(x)===imid||(mid&&x.id===mid))){x.ontkoppeld=nu;x.gewijzigd=nu;n++;} });
+  return n;
+}
 
 // Is deze mail al aan een project gekoppeld? → {code, entry} of null.
 function mailLinkInfo(m){
@@ -590,7 +601,7 @@ function mailLinkInfo(m){
   const imid=m.internetMessageId||m.id;
   const all=mailLinksAll();
   for(const code in all){
-    const hit=(all[code]||[]).find(x=>(x.internetMessageId||x.id)===imid || x.id===m.id);
+    const hit=(all[code]||[]).find(x=>mailLinkActief(x)&&((x.internetMessageId||x.id)===imid || x.id===m.id));
     if(hit) return {code, entry:hit};
   }
   return null;
@@ -637,9 +648,7 @@ function inboxOntkoppelHuidige(){
     +'(De mail zelf blijft gewoon in Outlook staan.)');
   if(!keuze) return;
   const all=mailLinksAll();
-  const imid=m.internetMessageId||m.id;
-  all[info.code]=(all[info.code]||[]).filter(x=>!((x.internetMessageId||x.id)===imid || x.id===m.id));
-  if(!all[info.code].length) delete all[info.code];
+  mailLinkOntkoppel(all,info.code,m.internetMessageId||m.id,m.id);
   mailLinksSave(all);
   inboxToast('Koppeling met '+info.code+' verbroken');
   inboxRefreshKoppelKnop();
@@ -676,13 +685,17 @@ function inboxKoppelProjectDo(code){
   const m=_inbox.cur;if(!m)return;
   const all=mailLinksAll();const arr=all[code]||[];
   const imid=m.internetMessageId||m.id;
-  if(arr.some(x=>(x.internetMessageId||x.id)===imid)){inboxToast('Deze mail was al gekoppeld aan '+code);}
+  if(arr.some(x=>mailLinkActief(x)&&(x.internetMessageId||x.id)===imid)){inboxToast('Deze mail was al gekoppeld aan '+code);}
   else{
-    arr.push({id:m.id,internetMessageId:m.internetMessageId||'',subject:m.subject||'',
+    const nu=Date.now();
+    const oud=arr.find(x=>(x.internetMessageId||x.id)===imid);   // eerder ontkoppeld → weer actief maken
+    if(oud){ delete oud.ontkoppeld; oud.gewijzigd=nu; }
+    else arr.push({id:m.id,internetMessageId:m.internetMessageId||'',subject:m.subject||'',
       from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'',
-      date:m.receivedDateTime||'',webLink:m.webLink||'',mbx:_inbox.mbx,ts:Date.now()});
+      date:m.receivedDateTime||'',webLink:m.webLink||'',mbx:_inbox.mbx,ts:nu,gewijzigd:nu});
     all[code]=arr;mailLinksSave(all);
-    inboxToast('✓ Mail gekoppeld aan '+code+' ('+arr.length+' mail'+(arr.length>1?'s':'')+')');
+    const nAct=arr.filter(mailLinkActief).length;
+    inboxToast('✓ Mail gekoppeld aan '+code+' ('+nAct+' mail'+(nAct>1?'s':'')+')');
     inboxRefreshKoppelKnop();
     if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
     // Bijlagen: NIET meer stil. Eerst vragen; opslaan overschrijft nooit iets
