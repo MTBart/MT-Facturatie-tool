@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-06 — Mail koppelen via mt-koppel.js: meerdere projecten per mail, journaal, nette dialogen
+- Commit: `f0e5077` | Auteur: Bart Witte
+
 ## 2026-10-06 — Router: links naar project en klant, terug/vooruit, kopieer link en projectwisselaar
 - Commit: `ac65d8a` | Auteur: Bart Witte
 

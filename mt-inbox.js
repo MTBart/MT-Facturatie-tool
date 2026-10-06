@@ -44,12 +44,33 @@ let _inbox={mbx:INBOX_DEFAULT,folderId:null,folderName:'',folders:[],msgs:[],cur
 
 function ibEsc(s){return esc(s);}   // alias van de canonieke esc() bovenin (was identieke kopie)
 function ibBase(){return _inbox.mbx==='me'?'https://graph.microsoft.com/v1.0/me':`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(_inbox.mbx)}`;}
+// Mail-calls (berichten/mappen) vragen immutable ids: die blijven gelijk als een mail
+// verplaatst wordt, zodat koppelingen en chips blijven kloppen (brok B5). Een eigen Prefer
+// van de aanroeper (bv. outlook.timezone of body-content-type) wordt samengevoegd tot één
+// komma-lijst — getest 2026-10-06: Graph past dan beide toe (Preference-Applied toont beide).
+const IB_PREFER_IMMUTABLE='IdType="ImmutableId"';
+function ibPreferSamen(...waarden){
+  const uit=[];
+  waarden.forEach(w=>String(w||'').split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(x=>x.trim()).filter(Boolean)
+    .forEach(x=>{ if(!uit.some(u=>u.toLowerCase()===x.toLowerCase())) uit.push(x); }));
+  return uit.join(', ');
+}
+function ibIsMailUrl(url){ return /\/(messages|mailFolders)(\/|\?|$)/i.test(String(url||'').split('#')[0]); }
+function ibHeaders(url,eigen){
+  const h={...(eigen||{})};
+  if(!ibIsMailUrl(url)) return h;
+  const k=Object.keys(h).find(x=>x.toLowerCase()==='prefer');
+  const samen=ibPreferSamen(k?h[k]:'',IB_PREFER_IMMUTABLE);
+  if(k) delete h[k];
+  h.Prefer=samen;
+  return h;
+}
 async function ibFetch(path,opts){
   const token=await window.getGraphToken();
   if(!token) throw new Error('niet ingelogd bij Microsoft');
   const o=opts||{};
   const url=/^https?:\/\//.test(path)?path:ibBase()+path;
-  const r=await fetch(url,{...o,headers:{'Authorization':`Bearer ${token}`,...(o.headers||{})}});
+  const r=await fetch(url,{...o,headers:{'Authorization':`Bearer ${token}`,...ibHeaders(url,o.headers)}});
   if(!r.ok){const t=await r.text().catch(()=>'');const e=new Error('HTTP '+r.status+(t?' '+t.slice(0,160):''));e.status=r.status;throw e;}
   return r.status===204?null:r.json();
 }
@@ -390,7 +411,8 @@ function inboxOpenFolder(id,name){
   inboxLoadMessages();
 }
 function inboxMsgUrl(){
-  const sel='id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview,parentFolderId,conversationId';
+  // internetMessageId mee: koppel-chips matchen daarop, ook als het Graph-id ooit wijzigt.
+  const sel='id,internetMessageId,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview,parentFolderId,conversationId';
   // Zoeken = HELE postbus (alle mappen, ook body) net als Outlook-zoeken.
   // Geen zoekterm = alleen de geopende map, op datum gesorteerd.
   if(_inbox.q){
@@ -523,7 +545,7 @@ async function inboxOpenThread(cid,fallbackId){
   try{
     let items=[];
     if(cid&&cid.indexOf('solo:')!==0){
-      const sel='id,subject,from,toRecipients,receivedDateTime,bodyPreview,hasAttachments,isRead,webLink';
+      const sel='id,internetMessageId,subject,from,toRecipients,receivedDateTime,bodyPreview,hasAttachments,isRead,webLink';
       const d=await ibFetch(`/messages?$filter=`+encodeURIComponent("conversationId eq '"+cid.replace(/'/g,"''")+"'")+`&$select=${sel}&$top=50`);
       items=(d&&d.value)||[];
     }
@@ -575,6 +597,8 @@ async function inboxThreadExpand(id,slot){
   }catch(e){host.innerHTML=`<div style="padding:0 11px 8px;font-size:12px;color:#c0392b">openen mislukt: ${ibEsc(e.message)}</div>`;}
 }
 
+// Geeft het geopende bericht terug, of null bij een fout (fout staat dan ook in het
+// leesvenster en in _inbox.laatsteFout) — zodat openGekoppeldeMail kan terugvallen.
 async function inboxOpenMail(id){
   const rb=document.getElementById('inbox-readbody');
   rb.classList.add('inbox-empty');rb.textContent='laden…';
@@ -613,8 +637,12 @@ async function inboxOpenMail(id){
     const content=(m.body&&m.body.content)||m.bodyPreview||'';
     frame.srcdoc=isHtml?content:`<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:13px;padding:10px">${ibEsc(content)}</pre>`;
     inboxChatReset();
+    _inbox.laatsteFout=null;
+    return m;
   }catch(e){
     rb.classList.add('inbox-empty');rb.textContent='Mail laden mislukt: '+e.message;
+    _inbox.laatsteFout=e;
+    return null;
   }
 }
 function inboxRenderMsgListActief(){
@@ -706,7 +734,7 @@ function inboxMaakProject(){
   // Onthoud de bron-mail zodat het project er straks aan gekoppeld wordt.
   _ibProjBron={id:m.id,internetMessageId:m.internetMessageId||'',subject:m.subject||'',
     from:(m.from&&m.from.emailAddress)?(m.from.emailAddress.name||m.from.emailAddress.address):'',
-    date:m.receivedDateTime||'',webLink:m.webLink||'',mbx:_inbox.mbx,hasAttachments:!!m.hasAttachments};
+    date:m.receivedDateTime||'',webLink:m.webLink||'',mbx:_inbox.mbx,hasAttachments:!!m.hasAttachments,idType:'immutable'};
   const nk=document.getElementById('modal-naam-klant'); if(nk) nk.value=kv?kv.naam:'';
   const np=document.getElementById('modal-naam-product'); if(np) np.value=onderw.slice(0,60);
   autoCode(true);   // leidt code-segmenten af (registry-klant → vaste code)
@@ -808,7 +836,7 @@ function inboxKoppelFilter(){
 }
 function inboxKoppelProjectDo(code){
   const m=_inbox.cur;if(!m)return;
-  const r=MTKoppel.koppelMail(code,m,{bron:'hand',mbx:_inbox.mbx});   // eerder ontkoppeld → zelfde record weer actief
+  const r=MTKoppel.koppelMail(code,m,{bron:'hand',mbx:_inbox.mbx,idType:'immutable'});   // eerder ontkoppeld → zelfde record weer actief
   if(r.status==='al'){inboxToast('Deze mail was al gekoppeld aan '+code);}
   else if(r.status==='fout'){inboxToast('Koppelen mislukt: deze mail heeft geen id');}
   else{
@@ -826,17 +854,28 @@ function inboxKoppelProjectDo(code){
 async function openGekoppeldeMail(code,idx){
   const x=mailLinksVoor(code)[idx];if(!x)return;
   tbDoTab('inbox');
-  if(_inbox.mbx!==x.mbx){const sel=document.getElementById('inbox-mailbox');if(sel)sel.value=x.mbx;_inbox.mbx=x.mbx;_inbox.loaded=false;}
+  const mbx=x.mbx||INBOX_DEFAULT;   // oude koppeling zonder mailbox = info@ (zelfde regel als MTKoppel)
+  if(_inbox.mbx!==mbx){const sel=document.getElementById('inbox-mailbox');if(sel)sel.value=mbx;_inbox.mbx=mbx;_inbox.loaded=false;}
   if(!_inbox.loaded){await inboxReload();}
-  try{await inboxOpenMail(x.id);}
-  catch(e){
-    if(x.internetMessageId){try{
-      const d=await ibFetch('/messages?$filter='+encodeURIComponent("internetMessageId eq '"+x.internetMessageId+"'")+'&$select=id&$top=1');
-      const hit=d&&d.value&&d.value[0];
-      if(hit){await inboxOpenMail(hit.id);return;}
-    }catch(e2){}}
-    inboxToast('Mail niet te openen (verplaatst/verwijderd?) — gebruik ↗ Outlook.');
+  // 1) immutable id (blijft gelijk na verplaatsen), 2) het oorspronkelijke id,
+  // 3) terugval: zoeken op internetMessageId. Gevonden via 3 → iid bijschrijven (oud id blijft).
+  let m=null;
+  if(x.iid) m=await inboxOpenMail(x.iid);
+  if(!m&&x.id&&x.id!==x.iid) m=await inboxOpenMail(x.id);
+  if(!m&&x.internetMessageId){
+    try{
+      const d=await ibFetch('/messages?$filter='+encodeURIComponent("internetMessageId eq '"+String(x.internetMessageId).replace(/'/g,"''")+"'")+'&$select=id&$top=2');
+      const hits=(d&&d.value)||[];
+      if(hits.length){
+        // Meerdere treffers = kopieën van dezelfde mail (zelfde Message-ID) in meerdere mappen:
+        // wel tonen, maar dan geen iid vastleggen (niet eenduidig).
+        m=await inboxOpenMail(hits[0].id);
+        if(m&&hits.length===1&&window.MTKoppel) MTKoppel.idBijwerken(mailLinkIdent(x),hits[0].id,{code,mbx});
+        else if(m&&hits.length>1) inboxToast('Let op: deze mail staat meerdere keren in de mailbox — de eerste kopie is geopend.');
+      }
+    }catch(e2){}
   }
+  if(!m) inboxToast('Mail niet te openen (verplaatst/verwijderd?) — gebruik ↗ Outlook.');
 }
 // Bijlagen van de geopende mail naar de map van het gekoppelde project.
 async function inboxBijlagenNaarMap(){
@@ -903,7 +942,12 @@ async function inboxBijlagenDialoog(mailId,code){
     const m=_inbox.cur&&_inbox.cur.id===mailId?_inbox.cur:null;
     const imid=(m&&m.internetMessageId)||mailId, idx=ibBijlageIndexAll();
     _ibBijl={mailId,code,mbx:_inbox.mbx,imid,items:items.map(x=>{
-      const id=_inbox.mbx+'|'+imid+'|'+x.id, al=idx.find(r=>r.id===id&&r.status==='opgeslagen'&&r.code===code);
+      const id=_inbox.mbx+'|'+imid+'|'+x.id, naam=x.name||'bijlage';
+      // Terugval op naam (bijlage-id's wisselen met de id-vorm van de mail): alleen als die naam
+      // uniek is in deze mail, en de grootte klopt wanneer die bekend is.
+      const uniek=items.filter(y=>(y.name||'bijlage')===naam).length===1;
+      const al=idx.find(r=>r.id===id&&r.status==='opgeslagen'&&r.code===code)
+        ||(uniek?idx.find(r=>r.status==='opgeslagen'&&r.code===code&&r.mbx===_inbox.mbx&&r.imid===imid&&r.naam===naam&&(r.grootte==null||r.grootte===x.size)):null);
       return {attId:x.id,naam:x.name||'bijlage',type:x.contentType||'',grootte:x.size||0,id,sub:al?al.sub:ibSubmapVoorstel(x.name,x.contentType),aan:!al,al};
     })};
     const rij=(it,i)=>`<tr>
@@ -945,7 +989,7 @@ async function inboxBijlagenOpslaan(){
       const bin=atob(b64), arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
       const hash=await ibSha256(arr);
       // outbox-stap 1: voorbereid (bij een crash hierna dedupliceert de upload op inhoud)
-      ibBijlageIndexZet({id:it.id,mbx:st.mbx,imid:st.imid,mailId:st.mailId,attId:it.attId,naam:it.naam,hash,code:st.code,sub:it.sub,status:'voorbereid',tijd:new Date().toISOString()});
+      ibBijlageIndexZet({id:it.id,mbx:st.mbx,imid:st.imid,mailId:st.mailId,attId:it.attId,naam:it.naam,grootte:it.grootte,hash,code:st.code,sub:it.sub,status:'voorbereid',tijd:new Date().toISOString()});
       const res=await window.spUploadProjectBytes(proj,it.naam,arr,it.type,it.sub);
       ibBijlageIndexZet({id:it.id,status:'opgeslagen',itemId:res.id,webUrl:res.webUrl,opgeslagenAls:res.naam,uitkomst:res.status,tijd:new Date().toISOString()});
       if(res.status==='al-aanwezig') al.push(it.naam);

@@ -22,8 +22,8 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-toggl.js?v=2026-10-06a"></script>
-<script src="mt-koppel.js?v=2026-10-06a"></script>
-<script src="mt-inbox.js?v=2026-10-06b"></script>
+<script src="mt-koppel.js?v=2026-10-06c"></script>
+<script src="mt-inbox.js?v=2026-10-06d"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -5467,12 +5467,16 @@ async function aiMailContext(code){
   const stuks=[];
   for(const x of mails.slice(-5)){
     let m=null;
-    try{ m=await ibFetch(`/messages/${x.id}?${sel}`,pref); }
+    // Altijd in de mailbox van de koppeling zoeken (niet de mailbox die toevallig in de inbox open staat).
+    const mbx=x.mbx||'info@mortiseandtenon.nl';
+    const base=mbx==='me'?'https://graph.microsoft.com/v1.0/me':'https://graph.microsoft.com/v1.0/users/'+encodeURIComponent(mbx);
+    try{ m=await ibFetch(`${base}/messages/${x.iid||x.id}?${sel}`,pref); }
     catch(e){
       if(x.internetMessageId){ try{
-        const d=await ibFetch('/messages?$filter='+encodeURIComponent("internetMessageId eq '"+x.internetMessageId+"'")+'&$select=id&$top=1');
-        const hit=d&&d.value&&d.value[0];
-        if(hit) m=await ibFetch(`/messages/${hit.id}?${sel}`,pref);
+        const d=await ibFetch(base+'/messages?$filter='+encodeURIComponent("internetMessageId eq '"+String(x.internetMessageId).replace(/'/g,"''")+"'")+'&$select=id&$top=2');
+        const hits=(d&&d.value)||[];
+        if(hits[0]) m=await ibFetch(`${base}/messages/${hits[0].id}?${sel}`,pref);
+        if(m&&hits.length===1&&window.MTKoppel) MTKoppel.idBijwerken(mailLinkIdent(x),hits[0].id,{code,mbx});   // B5: iid bijschrijven
       }catch(e2){} }
     }
     if(!m) continue;
@@ -8391,7 +8395,12 @@ const _SP = Object.assign(window.MTCore.makeSP({
           const k = ident(x);
           if (!k) { los.push(x); continue; }                    // zonder identiteit: bewaren, nooit weggooien
           const oud = per.get(k);
-          if (!oud || tijd(x) >= tijd(oud)) per.set(k, x);      // gelijk → lokaal (komt als tweede)
+          // gelijk → lokaal (komt als tweede). Een immutable id (`iid`, B5) hoort bij de mail,
+          // niet bij de koppelstand: altijd meenemen als de winnaar hem nog niet heeft.
+          // Alleen bij dezelfde mailbox (dezelfde mail heeft per mailbox een ander id).
+          const win = (!oud || tijd(x) >= tijd(oud)) ? x : oud, ander = win === x ? oud : x;
+          const mb = r => String((r && r.mbx) || 'info@mortiseandtenon.nl').toLowerCase();
+          per.set(k, (ander && ander.iid && !win.iid && mb(ander) === mb(win)) ? Object.assign({}, win, { iid: ander.iid, id_bijgewerkt: ander.id_bijgewerkt }) : win);
         }
         uit[code] = [...per.values(), ...los];
       }
@@ -11851,7 +11860,7 @@ function activiteitOpen(force){
       if(!token){ setSt('⚠ Niet ingelogd bij Microsoft.',false); return; }
       const base='https://graph.microsoft.com/v1.0/users/'+encodeURIComponent('info@mortiseandtenon.nl');
       const url=base+'/messages?$search='+encodeURIComponent('"'+(term||'').replace(/"/g,'')+'"')+'&$top=8&$select=id,subject,from,receivedDateTime,bodyPreview';
-      const r=await fetch(url,{headers:{Authorization:'Bearer '+token,'ConsistencyLevel':'eventual'}});
+      const r=await fetch(url,{headers:{Authorization:'Bearer '+token,'ConsistencyLevel':'eventual','Prefer':'IdType="ImmutableId"'}});
       if(!r.ok){const t=await r.text().catch(()=>''); throw new Error('HTTP '+r.status+' '+t.slice(0,120));}
       const j=await r.json(); const msgs=(j.value||[]);
       if(!msgs.length){ setSt('Geen mails gevonden voor "'+esc(term)+'".',false); return; }

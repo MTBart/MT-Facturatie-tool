@@ -8,7 +8,9 @@
  *
  * Opslag (ongewijzigde vorm): mt_mail_links = { CODE: [koppeling…] }.
  *   koppeling = {id, internetMessageId, subject, from, date, webLink, mbx, ts,
- *                gewijzigd, ontkoppeld?, door?, bron?, herkoppeld?}
+ *                gewijzigd, ontkoppeld?, door?, bron?, herkoppeld?, idType?, iid?, id_bijgewerkt?}
+ *   - idType:'immutable' = `id` is een immutable Graph-id (B5, blijft gelijk na verplaatsen)
+ *   - iid = later gevonden immutable id bij een oud record; `id` blijft dan ongewijzigd
  *   - sleutel van een mail = internetMessageId || id (zoals altijd)
  *   - ontkoppelen = tombstone `ontkoppeld:<ms>` (niet wissen); herkoppelen maakt
  *     hetzelfde record weer actief met een nieuwere `gewijzigd`, zodat de bestaande
@@ -22,6 +24,8 @@
   if (!root) return;
 
   const LINKS = 'mt_mail_links', JOURNAAL = 'mt_koppel_journaal', JOURNAAL_MAX = 2000;
+  // Oude koppelingen zonder mailbox komen uit de gedeelde info@-inbox (vaste regel, ook in de migratie).
+  const STANDAARD_MBX = 'info@mortiseandtenon.nl';
 
   const K = {
     // ── adapters (vervangbaar, bv. in een add-in) ──
@@ -34,12 +38,13 @@
 
     // ── basis ──
     sleutel(x) { return x && (x.internetMessageId || x.id) || ''; },
+    mbx(x) { return String((x && x.mbx) || STANDAARD_MBX).toLowerCase(); },
     actief(x) { return !!x && !x.ontkoppeld; },
-    // Zelfde mail? Op sleutel, of op Graph-id (een mail zonder internetMessageId in de lijst).
+    // Zelfde mail? Op sleutel, of op Graph-id (ook het bijgeschreven immutable id `iid`).
     zelfde(x, msg) {
       if (!x || !msg) return false;
       const s = K.sleutel(msg);
-      return (!!s && K.sleutel(x) === s) || (!!msg.id && x.id === msg.id);
+      return (!!s && K.sleutel(x) === s) || (!!msg.id && (x.id === msg.id || x.iid === msg.id));
     },
     alle() {
       try { const v = JSON.parse(K.opslag.lees(LINKS) || '{}'); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; }
@@ -97,9 +102,12 @@
         delete oud.ontkoppeld; oud.gewijzigd = Math.max(nu, (Number(oud.gewijzigd) || 0) + 1);
         oud.herkoppeld = oud.gewijzigd; oud.door = door; oud.bron = bron;
         if (msg.id && !oud.id) oud.id = msg.id;
+        // Oud record + nu een immutable id bekend: bijschrijven als iid (id blijft staan).
+        if (opts.idType === 'immutable' && msg.id && oud.id !== msg.id && !oud.iid) { oud.iid = msg.id; oud.id_bijgewerkt = nu; }
         rec = oud; status = 'herkoppeld';
       } else {
-        rec = K.record(Object.assign({}, msg, opts.mbx ? { mbx: opts.mbx } : {}), { door, bron });
+        rec = K.record(Object.assign({}, msg, opts.mbx ? { mbx: opts.mbx } : {}),
+          Object.assign({ door, bron }, (opts.idType || msg.idType) ? { idType: opts.idType || msg.idType } : {}));
         arr.push(rec); status = 'nieuw';
       }
       all[code] = arr; K.bewaar(all);
@@ -113,12 +121,30 @@
       const door = opts.door || K.wie(), nu = K.nu();
       let n = 0, laatste = null;
       arr.forEach(x => {
-        if (K.actief(x) && (K.sleutel(x) === sleutel || (opts.id && x.id === opts.id))) {
+        if (K.actief(x) && (K.sleutel(x) === sleutel || (opts.id && (x.id === opts.id || x.iid === opts.id)))) {
           const t = Math.max(nu, (Number(x.gewijzigd) || 0) + 1);
           x.ontkoppeld = t; x.gewijzigd = t; x.ontkoppeld_door = door; n++; laatste = x;
         }
       });
       if (n) { K.bewaar(all); K.journaal('ontkoppel', code, laatste, { door, bron: opts.bron || 'hand' }); }
+      return n;
+    },
+    // Immutable id bijschrijven bij de records van deze mail in déze mailbox (opts.mbx;
+    // dezelfde mail heeft per mailbox een ander id) en optioneel alleen onder opts.code.
+    // Alleen records die nog geen iid hebben. `id` blijft staan; `gewijzigd` wordt NIET
+    // opgehoogd, zodat dit nooit een nieuwere (ont)koppeling van een andere pc verdringt.
+    idBijwerken(sleutel, iid, opts) {
+      opts = opts || {};
+      if (!sleutel || !iid) return 0;
+      const doelMbx = String(opts.mbx || STANDAARD_MBX).toLowerCase();
+      const all = K.alle(), nu = K.nu(); let n = 0, laatste = null, codes = [];
+      for (const code in all) {
+        if (opts.code && code !== opts.code) continue;
+        (Array.isArray(all[code]) ? all[code] : []).forEach(x => {
+          if (K.sleutel(x) === sleutel && K.mbx(x) === doelMbx && !x.iid && x.id !== iid) { x.iid = iid; x.id_bijgewerkt = nu; n++; laatste = x; codes.push(code); }
+        });
+      }
+      if (n) { K.bewaar(all); K.journaal('id-bijgewerkt', codes.join(','), laatste, { door: opts.door, bron: opts.bron || 'terugval' }); }
       return n;
     },
     // Een eerder ontkoppelde koppeling weer actief maken (zonder het bericht zelf).
@@ -158,7 +184,7 @@
   // Alleen bij het ruwe object (zonder opslaan/journaal) — voor oude aanroepers.
   root.mailLinkOntkoppel = (all, code, imid, mid) => {
     const nu = K.nu(); let n = 0;
-    (all[code] || []).forEach(x => { if (K.actief(x) && (K.sleutel(x) === imid || (mid && x.id === mid))) { x.ontkoppeld = nu; x.gewijzigd = nu; n++; } });
+    (all[code] || []).forEach(x => { if (K.actief(x) && (K.sleutel(x) === imid || (mid && (x.id === mid || x.iid === mid)))) { x.ontkoppeld = nu; x.gewijzigd = nu; n++; } });
     return n;
   };
   // Eerste project (oude API). Nieuwe code: MTKoppel.mailProjecten(msg).
