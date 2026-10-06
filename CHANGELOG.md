@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-06 — Samenvoegers projecten, planning en planblokken: niets meer kwijt bij gelijktijdig werken
+- Commit: `588d30d` | Auteur: Bart Witte
+
 ## 2026-10-06 — Projecten: nieuw project direct open, dubbelklik-slot, contextbalk, nieuwste eerst
 - Commit: `9d0761d` | Auteur: Bart Witte
 

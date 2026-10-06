@@ -462,6 +462,23 @@ button{transition:transform .07s ease,filter .07s ease}
 .proj-ctx-naam{min-width:0;font-family:var(--serif);font-style:italic;font-size:15px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .proj-ctx-status{margin-left:auto;font-size:11px;color:var(--gold-text);background:var(--gold-light);border-radius:9px;padding:2px 8px;white-space:nowrap}
 .proj-ctx-status[hidden]{display:none}
+a.proj-ctx-klant,a.proj-ctx-loc{text-decoration:none;border-bottom:1px dashed var(--gold-mid)}
+a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.proj-ctx-loc:focus-visible{color:var(--green);border-bottom-color:var(--green);outline:none}
+.proj-ctx-acties{display:inline-flex;align-items:center;gap:6px;margin-left:auto;min-width:0;flex:0 1 auto;max-width:100%}
+.proj-ctx-status:not([hidden])+.proj-ctx-acties{margin-left:0}
+.proj-ctx-wissel{position:relative;min-width:0;flex:1 1 170px;max-width:240px}
+.proj-ctx-zoek{width:100%;min-width:0;height:var(--control-h-sm);font-size:12px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-family:var(--sans)}
+.proj-ctx-zoek:focus{outline:none;border-color:var(--green-mid);box-shadow:var(--focus-ring)}
+.proj-ctx-opties{position:absolute;right:0;top:calc(100% + 4px);z-index:60;width:300px;max-width:calc(100vw - 32px);max-height:280px;overflow-y:auto;background:var(--surface-overlay);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-pop);padding:4px}
+.proj-ctx-opties[hidden]{display:none}
+.proj-ctx-optie{padding:6px 8px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj-ctx-optie .code{font-family:var(--mono);font-size:11px;color:var(--green)}
+.proj-ctx-optie.sel,.proj-ctx-optie:hover{background:var(--gold-light)}
+.proj-ctx-optie.leeg{color:var(--text-faint);font-style:italic;cursor:default}
+@media(max-width:640px){.proj-ctx-acties{flex:1 1 100%;margin-left:0}.proj-ctx-wissel{max-width:none}.proj-ctx-opties{left:0;right:auto;width:100%}}
+.proj-filterchip{display:inline-flex;align-items:center;gap:6px;max-width:100%;margin-bottom:8px;padding:3px 4px 3px 10px;font-size:12px;font-weight:600;color:var(--gold-text);background:var(--gold-light);border:1px solid var(--gold-mid);border-radius:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj-filterchip button{border:none;background:none;cursor:pointer;color:var(--gold-text);font-size:12px;line-height:1;padding:2px 6px;border-radius:8px}
+.proj-filterchip button:hover,.proj-filterchip button:focus-visible{background:var(--gold-mid);outline:none}
 .materiaal-lijst{width:100%;border-collapse:collapse;font-size:12px;margin-top:0.75rem}
 .materiaal-lijst th{text-align:left;padding:var(--cell-py) var(--cell-px);font-family:var(--mono);font-size:10px;color:var(--text-faint);text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--surface-sunken)}
 .materiaal-lijst td{padding:var(--cell-py) var(--cell-px);border-bottom:1px solid var(--border-hair)}
@@ -935,6 +952,7 @@ button{transition:transform .07s ease,filter .07s ease}
           </div>
           <input class="zoek-input" id="project-zoek" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
           <div id="mobiel-meldingen-container"></div>
+          <div id="project-filterchip"></div>
           <div id="project-lijst"></div>
         </div>
       </div>
@@ -2565,7 +2583,7 @@ function showTab(name,btn){
   if(name==='projecten'){
     // Detail bijwerken als het niet (meer) het huidige project toont; een open losse offerte laten staan.
     const pd=document.getElementById('project-detail');
-    const vers=huidigProject && pd && !pd.dataset.offerte && pd.dataset.code!==huidigProject.code && openProject(huidigProject.code,{scroll:false});
+    const vers=huidigProject && pd && !pd.dataset.offerte && pd.dataset.code!==huidigProject.code && openProject(huidigProject.code,{scroll:false,geschiedenis:'replace'});
     if(!vers) renderProjectLijst();
   }
   if(name==='oplevering') oplViewerOpen();
@@ -2579,22 +2597,114 @@ function showTab(name,btn){
   if(name==='admin') adminOpen();
   if(name==='activiteit') activiteitOpen();
   if(name==='verbeterpunten') verbLaadTab();
-  // Houd de URL-hash gelijk aan de actieve tab → deep-link + "apart venster".
-  try{ history.replaceState(null,'','#tab='+name); }catch(e){}
+  // Houd de URL-hash gelijk aan de actieve tab (tabwissel = replaceState) → deep-link + "apart venster".
+  // Toont Projecten een project, dan is dát de route (#projecten/<CODE>).
+  if(!mtRoute._stil){
+    const pd=document.getElementById('project-detail');
+    const code=(name==='projecten'&&huidigProject&&pd&&pd.dataset.code===huidigProject.code)?huidigProject.code:null;
+    mtRoute.zet(code?{tab:'projecten',code}:{tab:name},false);
+  }
 }
-// Multi-monitor: open de (huidige) tab in een nieuw browservenster met #tab-deeplink.
+// Multi-monitor: open de (huidige) tab in een nieuw browservenster met dezelfde deeplink.
 function tbOpenInNieuwVenster(naam){
-  const t=naam||_tbHashTab()||_tabHuidig||'dashboard';
-  const url=location.origin+location.pathname+location.search+'#tab='+t;
-  window.open(url,'_blank');
+  const r=mtRoute.parse(location.hash);
+  const t=naam||r.tab||_tabHuidig||'dashboard';
+  const hash=(r.tab===t)?mtRoute.format(r):mtRoute.format({tab:t});
+  window.open(location.origin+location.pathname+location.search+hash,'_blank');
 }
-function _tbHashTab(){ const m=(location.hash||'').match(/[#&]tab=([a-z]+)/i); return m?m[1]:''; }
-// Past een #tab=<naam>-deeplink toe zodra de app klaar is (na login).
+function _tbHashTab(){ return mtRoute.parse(location.hash).tab||''; }
+// Past de deeplink uit de URL toe zodra de app klaar is (na login + hydrate, dus projecten geladen).
 function tbApplyHashTab(){
-  const t=_tbHashTab(); if(!t) return false;
-  const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+t+"'"));
-  if(btn){ btn.click(); return true; }
-  return false;
+  const hash=mtRoute.klaar?location.hash:(mtRoute._start||location.hash);
+  mtRoute.klaar=true;
+  const r=mtRoute.parse(hash); if(!r.tab) return false;
+  mtRoute.toepassen(r);
+  mtRoute.zet(r,false);   // URL terugzetten als iets hem tussendoor overschreef
+  _mtRouteLaatst=mtRoute.format(r);
+  return true;
+}
+
+// ═══ ROUTER (brok B3) ═══
+// Vormen: #projecten/<CODE>[/<sectie>] · #klant/<KL>[/<LOC>] · #tab=<naam> · #<naam> (oud, blijft werken).
+// Project openen = pushState, tab/sectie wisselen = replaceState, terug/vooruit (popstate) past de
+// route toe zonder nieuwe history-entry. Alleen project- en klantcodes in de URL, geen persoonsgegevens.
+const mtRoute={
+  klaar:false, _stil:false, _start:(typeof location!=='undefined'?location.hash:''),
+  parse(hash){
+    const h=String(hash||'').replace(/^#/,'');
+    const dec=x=>{ try{ return decodeURIComponent(x); }catch(e){ return x; } };
+    const m=h.match(/(?:^|&)tab=([a-z]+)/i);
+    if(m) return {tab:m[1].toLowerCase()};
+    const delen=h.split('/').filter(x=>x!=='').map(dec);
+    if(!delen.length) return {tab:null};
+    const eerste=delen[0].toLowerCase();
+    if(eerste==='projecten'&&delen[1]) return Object.assign({tab:'projecten',code:delen[1]},delen[2]?{sectie:delen[2]}:{});
+    if(eerste==='klant'&&delen[1]) return Object.assign({tab:'projecten',klant:delen[1].toUpperCase()},delen[2]?{loc:delen[2].toUpperCase()}:{});
+    if(/^[a-z]+$/.test(eerste)&&delen.length===1) return {tab:eerste};
+    return {tab:null};
+  },
+  format(r){
+    const enc=encodeURIComponent;
+    if(!r) return '';
+    if(r.code) return '#projecten/'+enc(r.code)+(r.sectie?'/'+enc(r.sectie):'');
+    if(r.klant) return '#klant/'+enc(r.klant)+(r.loc?'/'+enc(r.loc):'');
+    return r.tab?'#tab='+r.tab:'';
+  },
+  // Alleen de URL bijwerken (push = nieuwe history-entry). Geen dubbele entry voor dezelfde route.
+  zet(r,push){
+    if(this._stil) return;
+    const h=this.format(r); if(!h) return;
+    try{
+      if(this.format(this.parse(location.hash))===h) return;
+      history[push?'pushState':'replaceState'](null,'',h);
+      _mtRouteLaatst=h;
+    }catch(e){}
+  },
+  go(r,{push=true}={}){ this.zet(r,push); this.toepassen(r); },
+  // Route tonen zonder zelf history te schrijven (popstate, deeplink bij opstarten).
+  toepassen(r){
+    if(!r||!r.tab) return;
+    this._stil=true;
+    try{
+      if(!document.getElementById('tab-'+r.tab)) return;
+      const tabEl=document.getElementById('tab-'+r.tab);
+      if(!tabEl.classList.contains('active')){
+        const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+r.tab+"'"));
+        if(btn) btn.click(); else showTab(r.tab);
+      }
+      if(r.tab!=='projecten') return;
+      if(r.klant){ projKlantFilterZet(r.klant,r.loc); return; }
+      if(r.code){
+        const p=PROJECT_CODES.find(x=>x.code===r.code)||PROJECT_CODES.find(x=>String(x.code).toUpperCase()===String(r.code).toUpperCase());
+        if(!p){ projNietGevonden(r.code); return; }
+        openProject(p.code);
+        if(r.sectie){ const el=[...document.querySelectorAll('#project-detail [data-sectie]')].find(e=>e.dataset.sectie===r.sectie); if(el&&el.scrollIntoView) el.scrollIntoView({block:'start'}); }
+      } else if(_projKlantFilter){ projKlantFilterZet(null); }
+    } finally { this._stil=false; }
+  }
+};
+// Terug/vooruit en met de hand aangepaste URL. Pas na login (klaar) — anders doet tbApplyHashTab het.
+let _mtRouteLaatst='';
+function _mtRouteVolg(){
+  if(!mtRoute.klaar) return;
+  const r=mtRoute.parse(location.hash), h=mtRoute.format(r);
+  if(!h||h===_mtRouteLaatst) return;       // popstate + hashchange voor dezelfde navigatie: één keer
+  _mtRouteLaatst=h;
+  mtRoute.toepassen(r);
+}
+if(typeof window!=='undefined'&&window.addEventListener){
+  window.addEventListener('popstate',_mtRouteVolg);
+  window.addEventListener('hashchange',_mtRouteVolg);
+}
+function projNietGevonden(code){
+  huidigProject=null;
+  renderProjectLijst();
+  const h=document.getElementById('project-detail'); if(!h) return;
+  delete h.dataset.code; delete h.dataset.offerte;
+  h.innerHTML=`<div class="card" style="text-align:center;padding:2.5rem;color:var(--text-faint)">
+    <div style="font-size:32px;margin-bottom:.75rem">🔍</div>
+    <div style="font-family:var(--serif);font-size:17px;font-style:italic;color:var(--text)">Project <span style="font-family:var(--mono);font-style:normal">${esc(code)}</span> niet gevonden</div>
+    <div style="font-size:12px;margin-top:.5rem">Misschien is de code gewijzigd of het project verwijderd. Kies een project uit de lijst.</div></div>`;
 }
 function showVtab(name,btn){
   document.querySelectorAll('#tab-voorraad .vtab-content').forEach(t=>t.classList.remove('active'));
@@ -4394,9 +4504,9 @@ async function renderAttentie(){
 function attentieGa(url){
   if(!url) return;
   if(url.charAt(0)==='#'){
-    // interne deep-link, bv. #tab=voorraad
-    const m=url.match(/tab=([a-z]+)/i);
-    if(m){ const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+m[1]+"'")); if(btn){ btn.click(); return; } }
+    // interne deep-link, bv. #tab=voorraad of #projecten/<CODE> — via de router
+    const r=mtRoute.parse(url);
+    if(r.tab&&document.getElementById('tab-'+r.tab)){ mtRoute.go(r,{push:true}); return; }
     location.hash=url; return;
   }
   window.open(url,'_blank','noopener');
@@ -4645,9 +4755,38 @@ function exportBestellijst(){
 }
 
 // ═══ PROJECTEN ═══
+// Klantfilter vanuit #klant/<KL>[/<LOC>] (tot de klantpagina er is, brok B8).
+let _projKlantFilter=null;   // {klant, loc} of null
+function _projInKlantFilter(p){
+  const f=_projKlantFilter; if(!f) return true;
+  if(String(p.klant||'').toUpperCase()!==f.klant) return false;
+  return !f.loc||String(p.loc||'').toUpperCase()===f.loc;
+}
+function projKlantFilterZet(klant,loc){
+  _projKlantFilter=klant?{klant:String(klant).toUpperCase(),loc:loc?String(loc).toUpperCase():''}:null;
+  renderProjectLijst((document.getElementById('project-zoek')||{}).value||'');
+}
+function projKlantFilterWis(){
+  projKlantFilterZet(null);
+  const pd=document.getElementById('project-detail');
+  mtRoute.zet(huidigProject&&pd&&pd.dataset.code===huidigProject.code?{tab:'projecten',code:huidigProject.code}:{tab:'projecten'},false);
+}
+function _projKlantFilterChip(){
+  const f=_projKlantFilter; if(!f) return '';
+  const k=klantByCode(f.klant), voorb=PROJECT_CODES.find(p=>String(p.klant||'').toUpperCase()===f.klant);
+  const kn=(k&&k.naam)||(voorb&&voorb.klant_naam)||f.klant;
+  let ln='';
+  if(f.loc){ const lr=k&&Array.isArray(k.locaties)?k.locaties.find(l=>l.code===f.loc):null;
+    const vl=PROJECT_CODES.find(p=>String(p.klant||'').toUpperCase()===f.klant&&String(p.loc||'').toUpperCase()===f.loc);
+    ln=(lr&&lr.naam)||(vl&&vl.loc_naam)||f.loc; }
+  return `<span class="proj-filterchip">Klant: ${esc(kn)}${ln?' › '+esc(ln):''}<button type="button" onclick="projKlantFilterWis()" aria-label="Klantfilter wissen" title="Filter wissen">✕</button></span>`;
+}
 function renderProjectLijst(filter=''){
   const el=document.getElementById('project-lijst');if(!el) return;
-  const gefilterd=filter?PROJECT_CODES.filter(p=>p.code.toLowerCase().includes(filter.toLowerCase())||p.naam?.toLowerCase().includes(filter.toLowerCase())):PROJECT_CODES;
+  const chip=document.getElementById('project-filterchip'); if(chip) chip.innerHTML=_projKlantFilterChip();
+  let gefilterd=filter?PROJECT_CODES.filter(p=>p.code.toLowerCase().includes(filter.toLowerCase())||p.naam?.toLowerCase().includes(filter.toLowerCase())):PROJECT_CODES;
+  if(_projKlantFilter) gefilterd=gefilterd.filter(_projInKlantFilter);
+  if(_projKlantFilter&&!gefilterd.length){ el.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-faint);font-style:italic">Geen projecten voor deze klant.</div>'; return; }
   el.innerHTML=projSorteerNieuwst(gefilterd).map(p=>`
     <div class="factuur-item ${huidigProject?.code===p.code?'actief':''}" data-code="${esc(p.code)}" onclick="selecteerProject('${p.code}',this)">
       <div class="factuur-item-naam">${p.naam||p.code}</div>
@@ -4667,10 +4806,12 @@ function zoekProjecten(v){renderProjectLijst(v);}
 // Eén ingang om een project te tonen: op code opzoeken (huidigProject kan na een rehydrate
 // naar een oud object wijzen), lijst met actief item (zoekterm blijft staan zolang het
 // project erin valt), dan het detail.
-function openProject(code,{scroll=true}={}){
+// geschiedenis: 'push' (project openen, default) · 'replace' (tabwissel) · 'geen'.
+function openProject(code,{scroll=true,geschiedenis='push'}={}){
   const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj) return null;
   huidigProject=proj;
   window._calcMailPaneelActief=false;
+  if(typeof _projKlantFilter!=='undefined'&&_projKlantFilter&&!_projInKlantFilter(proj)) _projKlantFilter=null;
   const zk=document.getElementById('project-zoek');
   let f=(zk&&zk.value)||'';
   if(f && !(proj.code.toLowerCase().includes(f.toLowerCase())||proj.naam?.toLowerCase().includes(f.toLowerCase()))){ f=''; zk.value=''; }
@@ -4678,6 +4819,7 @@ function openProject(code,{scroll=true}={}){
   const it=[...document.querySelectorAll('#project-lijst .factuur-item')].find(d=>d.dataset.code===code);
   if(scroll && it && it.scrollIntoView) it.scrollIntoView({block:'nearest'});
   renderProjectDetail(proj);
+  if(geschiedenis!=='geen'&&typeof mtRoute!=='undefined') mtRoute.zet({tab:'projecten',code:proj.code},geschiedenis==='push');
   return proj;
 }
 function selecteerProject(code,el){ openProject(code,{scroll:!el}); }
@@ -4692,12 +4834,73 @@ function projContextBalk(proj){
   const top=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
   const sep='<span class="proj-ctx-sep">›</span>';
   const st=_projStatus[proj.code]||'';
+  // Klant/locatie klikbaar naar #klant/<KL>[/<LOC>] (alleen met een code; anders platte tekst).
+  const kl=String(proj.klant||'').toUpperCase(), lc=String(proj.loc||'').toUpperCase();
+  const deel=(cls,naam,route,extra)=>route
+    ? `<a class="${cls}" href="${mtRoute.format(route)}" onclick="event.preventDefault();mtRoute.go(${esc(JSON.stringify(route))})" ${extra} title="Alle projecten van ${esc(naam)}">${esc(naam)}</a>`
+    : `<span class="${cls}" ${extra} title="${esc(naam)}">${esc(naam)}</span>`;
   return `<div class="proj-ctx" style="top:${top}px" data-code="${esc(proj.code)}">`
-    +(klantNaam?`<span class="proj-ctx-klant" data-klant="${esc(proj.klant||'')}" title="${esc(klantNaam)}">${esc(klantNaam)}</span>${sep}`:'')
-    +(locNaam?`<span class="proj-ctx-loc" data-klant="${esc(proj.klant||'')}" data-loc="${esc(proj.loc||'')}" title="${esc(locNaam)}">${esc(locNaam)}</span>${sep}`:'')
+    +(klantNaam?deel('proj-ctx-klant',klantNaam,kl?{tab:'projecten',klant:kl}:null,`data-klant="${esc(proj.klant||'')}"`)+sep:'')
+    +(locNaam?deel('proj-ctx-loc',locNaam,(kl&&lc)?{tab:'projecten',klant:kl,loc:lc}:null,`data-klant="${esc(proj.klant||'')}" data-loc="${esc(proj.loc||'')}"`)+sep:'')
     +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(proj.code)}</span><span class="proj-ctx-naam" title="${esc(proj.naam||proj.code)}">${esc(proj.naam||proj.code)}</span></span>`
-    +`<span class="proj-ctx-status"${st?'':' hidden'}>${esc(st)}</span></div>`;
+    +`<span class="proj-ctx-status"${st?'':' hidden'}>${esc(st)}</span>`
+    +`<span class="proj-ctx-acties">`
+      +`<span class="proj-ctx-wissel"><input type="text" class="proj-ctx-zoek" placeholder="⇄ Ander project…" autocomplete="off" spellcheck="false"`
+        +` role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="proj-wissel-lijst" aria-label="Wissel van project (zoek op code, naam, klant of locatie)"`
+        +` oninput="projWisselZoek(this)" onkeydown="projWisselToets(event,this)" onfocus="projWisselZoek(this)" onblur="setTimeout(()=>projWisselSluit(this),150)">`
+        +`<div class="proj-ctx-opties" id="proj-wissel-lijst" role="listbox" hidden></div></span>`
+      +`<button type="button" class="btn btn-xs btn-secondary" onclick="projKopieerLink('${esc(proj.code)}')" title="Kopieer de link naar dit project">🔗 Kopieer link</button>`
+    +`</span></div>`;
 }
+// ── Link kopiëren ──
+function projLinkUrl(code){ return location.origin+location.pathname+location.search+mtRoute.format({code}); }
+async function projKopieerLink(code){
+  const url=projLinkUrl(code);
+  let ok=false;
+  try{ if(navigator.clipboard&&window.isSecureContext){ await navigator.clipboard.writeText(url); ok=true; } }catch(e){}
+  if(!ok){
+    try{ const ta=document.createElement('textarea'); ta.value=url; ta.setAttribute('readonly',''); ta.style.cssText='position:fixed;top:-1000px;opacity:0';
+      document.body.appendChild(ta); ta.select(); ok=document.execCommand('copy'); ta.remove(); }catch(e){}
+  }
+  if(typeof planToast==='function') planToast(ok?'🔗 Link gekopieerd':'Kopiëren lukte niet — link: '+url);
+}
+// ── Projectwisselaar (type-ahead in de contextbalk) ──
+let _projWisselSel=-1;
+function _projWisselTreffers(q){
+  q=String(q||'').trim().toLowerCase();
+  const velden=p=>[p.code,p.naam,p.klant_naam,p.loc_naam].map(v=>String(v||'').toLowerCase());
+  const lijst=projSorteerNieuwst(PROJECT_CODES.filter(p=>!huidigProject||p.code!==huidigProject.code));
+  return (q?lijst.filter(p=>velden(p).some(v=>v.includes(q))):lijst).slice(0,8);
+}
+function projWisselZoek(inp){
+  const box=inp.parentNode.querySelector('.proj-ctx-opties'); if(!box) return;
+  const tr=_projWisselTreffers(inp.value);
+  _projWisselSel=tr.length?0:-1;
+  box.innerHTML=tr.length?tr.map((p,i)=>`<div role="option" id="proj-wissel-opt-${i}" class="proj-ctx-optie${i===0?' sel':''}" aria-selected="${i===0}" data-code="${esc(p.code)}"
+      onmousedown="event.preventDefault();projWisselOpen(this.dataset.code)"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</div>`).join('')
+    :'<div class="proj-ctx-optie leeg">Geen project gevonden</div>';
+  box.hidden=false; inp.setAttribute('aria-expanded','true');
+  if(_projWisselSel>=0) inp.setAttribute('aria-activedescendant','proj-wissel-opt-0'); else inp.removeAttribute('aria-activedescendant');
+}
+function projWisselToets(e,inp){
+  const box=inp.parentNode.querySelector('.proj-ctx-opties'); if(!box) return;
+  const opts=[...box.querySelectorAll('[role=option]')];
+  if(e.key==='Escape'){ e.preventDefault(); inp.value=''; projWisselSluit(inp); inp.blur(); return; }
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault(); if(box.hidden) projWisselZoek(inp);
+    const o=[...box.querySelectorAll('[role=option]')]; if(!o.length) return;
+    _projWisselSel=(_projWisselSel+(e.key==='ArrowDown'?1:-1)+o.length)%o.length;
+    o.forEach((x,i)=>{ x.classList.toggle('sel',i===_projWisselSel); x.setAttribute('aria-selected',String(i===_projWisselSel)); });
+    inp.setAttribute('aria-activedescendant',o[_projWisselSel].id); o[_projWisselSel].scrollIntoView&&o[_projWisselSel].scrollIntoView({block:'nearest'});
+    return;
+  }
+  if(e.key==='Enter'){ e.preventDefault(); const o=opts[_projWisselSel>=0?_projWisselSel:0]; if(o) projWisselOpen(o.dataset.code); }
+}
+function projWisselSluit(inp){
+  const box=inp&&inp.parentNode&&inp.parentNode.querySelector('.proj-ctx-opties'); if(box) box.hidden=true;
+  if(inp){ inp.setAttribute('aria-expanded','false'); inp.removeAttribute('aria-activedescendant'); }
+}
+function projWisselOpen(code){ _projWisselSel=-1; openProject(code); }
 // Status in de balk bijwerken zonder het hele detail te hertekenen ('' = weg).
 function projCtxStatus(code,tekst){
   if(tekst) _projStatus[code]=tekst; else delete _projStatus[code];
