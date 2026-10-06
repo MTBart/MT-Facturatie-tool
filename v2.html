@@ -22,7 +22,7 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-toggl.js?v=2026-10-06a"></script>
-<script src="mt-koppel.js?v=2026-10-06c"></script>
+<script src="mt-koppel.js?v=2026-10-06d"></script>
 <script src="mt-inbox.js?v=2026-10-06d"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
@@ -477,6 +477,61 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .proj-ctx-optie.sel,.proj-ctx-optie:hover{background:var(--gold-light)}
 .proj-ctx-optie.leeg{color:var(--text-faint);font-style:italic;cursor:default}
 @media(max-width:640px){.proj-ctx-acties{flex:1 1 100%;margin-left:0}.proj-ctx-wissel{max-width:none}.proj-ctx-opties{left:0;right:auto;width:100%}}
+/* Sectie-navigatie projectscherm (B7) — sticky onder de contextbalk, op smal scherm scrollbare pills */
+.proj-secnav{position:sticky;top:160px;z-index:49;display:flex;gap:4px;margin:0 0 var(--space-3);padding:4px;background:var(--surface-overlay);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow-x:auto;scrollbar-width:none;max-width:100%}
+.proj-secnav::-webkit-scrollbar{display:none}
+.proj-secknop{flex:0 0 auto;border:none;background:none;padding:6px 14px;border-radius:var(--radius-sm);font:600 13px var(--sans);color:var(--text-dim);cursor:pointer;white-space:nowrap}
+.proj-secknop:hover{background:var(--surface-sunken);color:var(--text)}
+.proj-secknop:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+.proj-secknop.actief{background:var(--green);color:var(--n-0)}
+.proj-secn{font:600 10px var(--mono);opacity:.75;margin-left:2px}
+.proj-sectie{min-width:0;overflow-wrap:anywhere}
+.tabel-scroll{overflow-x:auto;max-width:100%}
+.kpi-grid.ov-kpi{grid-template-columns:repeat(3,minmax(0,1fr))}
+.ov-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);margin-bottom:var(--space-3)}
+.ov-blok{border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;background:var(--surface);min-width:0}
+.ov-blok .card-title{margin-bottom:6px}
+.ov-stap,.ov-act,.ov-letrij{font-size:13px;padding:4px 0;border-bottom:1px solid var(--border-hair)}
+.ov-stap:last-child,.ov-act:last-of-type,.ov-letrij:last-child{border-bottom:none}
+.ov-meer{display:inline-block;margin-top:6px;font-size:12px;color:var(--green)}
+.ov-let{border-left:3px solid var(--warning);margin-bottom:var(--space-3)}
+.ov-letrij .btn{margin-left:6px}
+/* Dossier (B7) */
+.dos-kop{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem}
+.dos-chips{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.dos-chip{border:1px solid var(--border);background:var(--surface);border-radius:14px;padding:3px 10px;font:600 12px var(--sans);color:var(--text-dim);cursor:pointer}
+.dos-chip.actief{background:var(--green);border-color:var(--green);color:var(--n-0)}
+.dos-chip:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+.dos-n{font:600 10px var(--mono);opacity:.8}
+.dos-filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px}
+.dos-zoek{flex:1 1 180px;min-width:0;height:var(--control-h-sm);font-size:12px}
+.dos-sel{height:var(--control-h-sm);font-size:12px;max-width:100%}
+.dos-check{display:inline-flex;align-items:center;gap:4px;color:var(--text-dim)}
+.dos-aangepast[hidden]{display:none}
+.dos-extra{display:contents}
+.dos-meerknop{display:none}
+.dos-chip-bijl{border-style:dashed}
+.ov-dossier{font-size:12px;margin-bottom:4px}
+.ov-dossier a{color:var(--green);text-decoration:none}
+.dos-aangepast input{height:var(--control-h-sm);font-size:12px}
+.dos-groep{font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);margin:12px 0 4px;padding-bottom:3px;border-bottom:1px solid var(--border)}
+.dos-rij{display:flex;gap:8px;align-items:flex-start;padding:6px 2px;border-bottom:1px solid var(--border-hair)}
+.dos-rij.uit{opacity:.55}
+.dos-ic{flex:0 0 20px;text-align:center;font-size:14px;line-height:1.4}
+.dos-hoofd{flex:1;min-width:0}
+.dos-titel{font-size:13px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+.dos-titel a{color:var(--green);text-decoration:none}
+.dos-titel a:hover{text-decoration:underline}
+.dos-meta{font-size:11px;color:var(--text-dim)}
+.dos-meta .code{font-family:var(--mono)}
+.dos-st{font:600 10px var(--mono);background:var(--surface-sunken);border-radius:8px;padding:0 6px}
+.dos-tag{display:inline-block;margin-left:6px;font:600 10px var(--sans);color:var(--green);background:var(--green-light);border-radius:8px;padding:1px 6px}
+.dos-tag.let{color:var(--gold-text);background:var(--gold-light)}
+.dos-acties{flex:0 0 auto;display:flex;gap:4px}
+.dos-leeg{color:var(--text-faint);font-size:13px;padding:.5rem 0}
+@media(max-width:820px){#proj-grid{grid-template-columns:minmax(0,1fr)!important}.ov-grid{grid-template-columns:minmax(0,1fr)}
+  .dos-meerknop{display:inline-flex}.dos-extra{display:none}.dos-filters.open .dos-extra{display:contents}}
+@media(max-width:560px){.kpi-grid.ov-kpi{grid-template-columns:minmax(0,1fr)}.dos-rij{flex-wrap:wrap}.dos-acties{margin-left:28px}}
 .proj-filterchip{display:inline-flex;align-items:center;gap:6px;max-width:100%;margin-bottom:8px;padding:3px 4px 3px 10px;font-size:12px;font-weight:600;color:var(--gold-text);background:var(--gold-light);border:1px solid var(--gold-mid);border-radius:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .proj-filterchip button{border:none;background:none;cursor:pointer;color:var(--gold-text);font-size:12px;line-height:1;padding:2px 6px;border-radius:8px}
 .proj-filterchip button:hover,.proj-filterchip button:focus-visible{background:var(--gold-mid);outline:none}
@@ -942,7 +997,7 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 
   <!-- ═══ TAB: PROJECTEN ═══ -->
   <div id="tab-projecten" class="tab-content">
-    <div style="display:grid;grid-template-columns:280px 1fr;gap:1.5rem;min-height:600px">
+    <div id="proj-grid" style="display:grid;grid-template-columns:280px minmax(0,1fr);gap:1.5rem;min-height:600px">
       <!-- Projectenlijst -->
       <div>
         <div class="card" style="padding:1rem">
@@ -2608,7 +2663,8 @@ function showTab(name,btn){
   if(!mtRoute._stil){
     const pd=document.getElementById('project-detail');
     const code=(name==='projecten'&&huidigProject&&pd&&pd.dataset.code===huidigProject.code)?huidigProject.code:null;
-    mtRoute.zet(code?{tab:'projecten',code}:{tab:name},false);
+    const sec=(code&&typeof projSectieHuidig==='function')?projSectieHuidig():'overzicht';
+    mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined}:{tab:name},false);
   }
 }
 // Multi-monitor: open de (huidige) tab in een nieuw browservenster met dezelfde deeplink.
@@ -2637,14 +2693,19 @@ function tbApplyHashTab(){
 const mtRoute={
   klaar:false, _stil:false, _start:(typeof location!=='undefined'?location.hash:''),
   parse(hash){
-    const h=String(hash||'').replace(/^#/,'');
+    const heel=String(hash||'').replace(/^#/,'');
+    const qi=heel.indexOf('?'), h=qi>=0?heel.slice(0,qi):heel, query=qi>=0?heel.slice(qi+1):'';
     const dec=x=>{ try{ return decodeURIComponent(x); }catch(e){ return x; } };
     const m=h.match(/(?:^|&)tab=([a-z]+)/i);
     if(m) return {tab:m[1].toLowerCase()};
     const delen=h.split('/').filter(x=>x!=='').map(dec);
     if(!delen.length) return {tab:null};
     const eerste=delen[0].toLowerCase();
-    if(eerste==='projecten'&&delen[1]) return Object.assign({tab:'projecten',code:delen[1]},delen[2]?{sectie:delen[2]}:{});
+    if(eerste==='projecten'&&delen[1]){
+      const r=Object.assign({tab:'projecten',code:delen[1]},delen[2]?{sectie:delen[2]}:{});
+      if(delen[2]&&query){ const f={}; new URLSearchParams(query).forEach((v,k)=>{ f[k]=v; }); if(Object.keys(f).length) r.filter=f; }
+      return r;
+    }
     if(eerste==='klant'&&delen[1]) return Object.assign({tab:'projecten',klant:delen[1].toUpperCase()},delen[2]?{loc:delen[2].toUpperCase()}:{});
     if(/^[a-z]+$/.test(eerste)&&delen.length===1) return {tab:eerste};
     return {tab:null};
@@ -2652,7 +2713,11 @@ const mtRoute={
   format(r){
     const enc=encodeURIComponent;
     if(!r) return '';
-    if(r.code) return '#projecten/'+enc(r.code)+(r.sectie?'/'+enc(r.sectie):'');
+    if(r.code){
+      const f=r.filter||{}, ks=Object.keys(f).filter(k=>f[k]!==''&&f[k]!==undefined&&f[k]!==null).sort();
+      const q=(r.sectie&&ks.length)?'?'+ks.map(k=>enc(k)+'='+enc(f[k])).join('&'):'';
+      return '#projecten/'+enc(r.code)+(r.sectie?'/'+enc(r.sectie)+q:'');
+    }
     if(r.klant) return '#klant/'+enc(r.klant)+(r.loc?'/'+enc(r.loc):'');
     return r.tab?'#tab='+r.tab:'';
   },
@@ -2683,8 +2748,8 @@ const mtRoute={
       if(r.code){
         const p=PROJECT_CODES.find(x=>x.code===r.code)||PROJECT_CODES.find(x=>String(x.code).toUpperCase()===String(r.code).toUpperCase());
         if(!p){ projNietGevonden(r.code); return; }
-        openProject(p.code);
-        if(r.sectie){ const el=[...document.querySelectorAll('#project-detail [data-sectie]')].find(e=>e.dataset.sectie===r.sectie); if(el&&el.scrollIntoView) el.scrollIntoView({block:'start'}); }
+        // Zonder sectie in de URL = Overzicht (een gedeelde link toont dus altijd hetzelfde).
+        openProject(p.code,{sectie:r.sectie||'overzicht',filter:r.filter||null,onthoud:false});
       } else if(_projKlantFilter){ projKlantFilterZet(null); }
     } finally { this._stil=false; }
   }
@@ -4813,7 +4878,7 @@ function zoekProjecten(v){renderProjectLijst(v);}
 // naar een oud object wijzen), lijst met actief item (zoekterm blijft staan zolang het
 // project erin valt), dan het detail.
 // geschiedenis: 'push' (project openen, default) · 'replace' (tabwissel) · 'geen'.
-function openProject(code,{scroll=true,geschiedenis='push'}={}){
+function openProject(code,{scroll=true,geschiedenis='push',sectie=null,filter=null,onthoud=true}={}){
   const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj) return null;
   huidigProject=proj;
   window._calcMailPaneelActief=false;
@@ -4824,8 +4889,15 @@ function openProject(code,{scroll=true,geschiedenis='push'}={}){
   renderProjectLijst(f);
   const it=[...document.querySelectorAll('#project-lijst .factuur-item')].find(d=>d.dataset.code===code);
   if(scroll && it && it.scrollIntoView) it.scrollIntoView({block:'nearest'});
+  if(sectie&&typeof _projSectieZet==='function') _projSectieZet(sectie,{onthoud,code:proj.code});
+  else if(!sectie&&typeof _projSectieVoor==='function') _projSectieZet(_projSectieVoor(proj.code),{onthoud:false});
+  if(filter&&typeof _dosFilter!=='undefined') _dosFilter['proj:'+proj.code]=Object.assign({},_DOS_STD,filter);
   renderProjectDetail(proj);
-  if(geschiedenis!=='geen'&&typeof mtRoute!=='undefined') mtRoute.zet({tab:'projecten',code:proj.code},geschiedenis==='push');
+  if(geschiedenis!=='geen'&&typeof mtRoute!=='undefined'){
+    const sec=(typeof projSectieHuidig==='function')?projSectieHuidig():'overzicht', fl={};
+    if(sec==='dossier'&&typeof _dosStand==='function'){ const f=_dosStand('proj:'+proj.code); Object.keys(f).forEach(k=>{ if(f[k]) fl[k]=f[k]; }); }
+    mtRoute.zet({tab:'projecten',code:proj.code,sectie:sec!=='overzicht'?sec:undefined,filter:fl},geschiedenis==='push');
+  }
   return proj;
 }
 function selecteerProject(code,el){ openProject(code,{scroll:!el}); }
@@ -4914,12 +4986,39 @@ function projCtxStatus(code,tekst){
   const s=el&&el.querySelector('.proj-ctx-status'); if(!s) return;
   s.textContent=tekst||''; s.hidden=!tekst;
 }
-function renderProjectDetail(proj){
-  if(!proj){const h=document.getElementById('project-detail');h.innerHTML='';delete h.dataset.code;return;}
-  const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
+// ═══ PROJECTSCHERM IN SECTIES (brok B7) ═══
+// Per werkvraag: Overzicht (hoe staat het ervoor) · Dossier (wat is er gebeurd/binnengekomen) ·
+// Planning (wat moet er gebeuren en wanneer) · Calculatie (wat kost/levert het op) · Productie
+// (wat gaat de werkplaats in). De blokken zijn dezelfde als vroeger, alleen verdeeld; een
+// sectie wordt pas opgebouwd als hij open gaat. Laatst gekozen sectie wordt onthouden.
+const PROJ_SECTIES=[
+  {k:'overzicht',l:'Overzicht'},{k:'dossier',l:'Dossier'},{k:'planning',l:'Planning'},
+  {k:'calculatie',l:'Calculatie'},{k:'productie',l:'Productie'}];
+PROJ_SECTIES[2].l='Planning & taken';
+let _projSectie=(()=>{ try{ const s=localStorage.getItem('mt_proj_sectie'); return PROJ_SECTIES.some(x=>x.k===s)?s:'overzicht'; }catch(e){ return 'overzicht'; } })();
+function projSectieHuidig(){ return _projSectie; }
+// Per project onthouden (wie A in Calculatie verliet, opent B niet vanzelf daar); terugval = laatst gekozen.
+function _projSectieVoor(code){
+  try{ const m=JSON.parse(localStorage.getItem('mt_proj_sectie_per')||'{}'); if(m&&PROJ_SECTIES.some(x=>x.k===m[code])) return m[code]; }catch(e){}
+  try{ const g=localStorage.getItem('mt_proj_sectie'); if(PROJ_SECTIES.some(x=>x.k===g)) return g; }catch(e){}
+  return 'overzicht';
+}
+function _projSectieZet(s,{onthoud=true,code=null}={}){
+  if(!PROJ_SECTIES.some(x=>x.k===s)) s='overzicht';
+  _projSectie=s;
+  if(!onthoud) return;
+  try{
+    localStorage.setItem('mt_proj_sectie',s);
+    if(code){ let m={}; try{ m=JSON.parse(localStorage.getItem('mt_proj_sectie_per')||'{}')||{}; }catch(e){ m={}; }
+      delete m[code]; m[code]=s; const ks=Object.keys(m); ks.slice(0,Math.max(0,ks.length-200)).forEach(k=>delete m[k]);
+      localStorage.setItem('mt_proj_sectie_per',JSON.stringify(m)); }
+  }catch(e){}
+}
+// Gegevens die meerdere secties nodig hebben (één keer per render).
+function _projCtx(proj){
+  const voorraad=(()=>{ try{ return JSON.parse(localStorage.getItem('mt_voorraad')||'[]'); }catch(e){ return []; } })();
   const projItems=voorraad.filter(v=>v.project===proj.code);
   const totaalInkoop=projItems.reduce((s,v)=>s+(v.aantal||1)*(v.stukprijs||0),0);
-  // ── Klant resolven via registry (Fase B bidirectionele link) ──
   // resolveMbContact: locatie-niveau eerst (CN-vestiging), dan klant-niveau.
   // proj.mb_nr = handmatige override (heeft voorrang). Anders auto via registry.
   const autoMb=resolveMbContact(proj);
@@ -4930,76 +5029,167 @@ function renderProjectDetail(proj){
         ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${effectiveMb}" target="_blank" style="color:var(--gold);text-decoration:none" title="Open in Moneybird">${klantNaam} ↗</a>`
         : `<a href="#" onclick="event.preventDefault();document.querySelector('.tab-btn[onclick*=\\'klanten\\']')?.click()" style="color:var(--gold);text-decoration:none" title="Naar Klanten">${klantNaam} →</a>`)
     : '—';
-  // ── Moneybird-contact: auto via registry of handmatig overschreven ──
   const mbBron=proj.mb_nr?'handmatig':(autoMb?'auto via klantregistry':null);
   const mbNrBlok=effectiveMb
-    ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${effectiveMb}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${effectiveMb} ↗</a> <span style="font-size:10px;color:var(--text-faint)">(${mbBron})</span> <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')" title="Handmatig overschrijven">✏</button>`
-    : `<span style="color:var(--text-faint)">geen — </span><button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')">+ handmatig koppelen</button>`;
+    ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${effectiveMb}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${effectiveMb} ↗</a> <span style="font-size:10px;color:var(--text-faint)">(${mbBron})</span> <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${_jsCode(proj.code)}')" title="Handmatig overschrijven">✏</button>`
+    : `<span style="color:var(--text-faint)">geen — </span><button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${_jsCode(proj.code)}')">+ handmatig koppelen</button>`;
+  return {projItems,totaalInkoop,effectiveMb,klantChip,mbNrBlok,sid:proj.code.replace(/-/g,''),cid:proj.code.replace(/[^A-Za-z0-9]/g,'')};
+}
+function renderProjectDetail(proj){
+  if(!proj){const h=document.getElementById('project-detail');h.innerHTML='';delete h.dataset.code;return;}
   const host=document.getElementById('project-detail');
   host.dataset.code=proj.code; delete host.dataset.offerte;
-  host.innerHTML=projContextBalk(proj)+`
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1.25rem">
+  const nav=PROJ_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_projSectie?' actief':''}" data-sectie="${s.k}" aria-selected="${s.k===_projSectie}" aria-controls="proj-sectie-inhoud" onclick="projSectieKies('${s.k}')">${s.l}${_projSecTeller(proj,s.k)}</button>`).join('');
+  host.innerHTML=projContextBalk(proj)
+    +`<nav class="proj-secnav" role="tablist" aria-label="Projectonderdelen">${nav}</nav>`
+    +`<div class="card proj-sectie" id="proj-sectie-inhoud" role="tabpanel" data-sectie="${_projSectie}"></div>`;
+  _projSecNavTop();
+  try{ if(window.ResizeObserver){ if(window._projRO) window._projRO.disconnect(); window._projRO=new ResizeObserver(()=>_projSecNavTop()); const cb=host.querySelector('.proj-ctx'); if(cb) window._projRO.observe(cb); } }catch(e){}
+  _projSectieRender(proj);
+}
+// Kleine telling achter een sectienaam (alleen waar het iets zegt).
+function _projSecTeller(proj,k){
+  try{
+    if(k==='dossier'){ const n=(typeof mailLinksVoor==='function'?mailLinksVoor(proj.code).length:0); return n?` <span class="proj-secn">${n}✉</span>`:''; }
+    if(k==='planning'){ const n=(typeof projTaken==='function'?projTaken(proj.code).filter(t=>t.status!=='klaar').length:0); return n?` <span class="proj-secn">${n}</span>`:''; }
+  }catch(e){}
+  return '';
+}
+function _projSecNavTop(){
+  const host=document.getElementById('project-detail'); if(!host||!host.querySelector) return;
+  const ctx=host.querySelector('.proj-ctx'), nav=host.querySelector('.proj-secnav');
+  if(!ctx||!nav) return;
+  const top=(parseFloat(ctx.style.top)||0)+(ctx.offsetHeight||0);
+  if(top>0) nav.style.top=top+'px';
+}
+if(typeof window!=='undefined'&&window.addEventListener) window.addEventListener('resize',()=>{ try{ _projSecNavTop(); }catch(e){} });
+// Alleen de sectie-inhoud (her)tekenen; contextbalk en navigatie blijven staan.
+const _PROJ_BLIJVEND=new Set(['calculatie','productie']);
+function _projSectieRender(proj){
+  const el=document.getElementById('proj-sectie-inhoud'); if(!el) return;
+  el.dataset.sectie=_projSectie;
+  let pan=[...el.querySelectorAll('.proj-paneel')].find(x=>x.dataset.sectie===_projSectie);
+  if(!pan){ pan=document.createElement('div'); pan.className='proj-paneel'; pan.dataset.sectie=_projSectie; el.appendChild(pan); }
+  [...el.querySelectorAll('.proj-paneel')].forEach(x=>{ if(x===pan) x.hidden=false; else if(_PROJ_BLIJVEND.has(x.dataset.sectie)) x.hidden=true; else x.remove(); });
+  if(_PROJ_BLIJVEND.has(_projSectie)&&pan.dataset.klaar) return;   // al opgebouwd: alleen tonen
+  const c=_projCtx(proj);
+  const bouw={overzicht:projSecOverzicht,dossier:projSecDossier,planning:projSecPlanning,calculatie:projSecCalculatie,productie:projSecProductie}[_projSectie]||projSecOverzicht;
+  pan.innerHTML=bouw(proj,c); pan.dataset.klaar='1';
+  if(_projSectie==='dossier') renderDossier(document.getElementById('proj-dossier-'+c.cid),{codes:[proj.code],key:'proj:'+proj.code});
+  if(_projSectie==='calculatie'){
+    nacalcLaadOfferte(proj.code,c.effectiveMb);
+    if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
+  }
+}
+// Sectie kiezen (klik of route). Tab/sectie wisselen = replaceState.
+function projSectieKies(s,{filter=null,geschiedenis='replace'}={}){
+  _projSectieZet(s,{code:huidigProject?huidigProject.code:null});
+  if(filter&&huidigProject) _dosFilter['proj:'+huidigProject.code]=Object.assign({},_DOS_STD,filter);
+  const host=document.getElementById('project-detail');
+  if(!huidigProject||!host||host.dataset.code!==huidigProject.code){ if(huidigProject) renderProjectDetail(huidigProject); return; }
+  host.querySelectorAll('.proj-secknop').forEach(b=>{ const aan=b.dataset.sectie===_projSectie; b.classList.toggle('actief',aan); b.setAttribute('aria-selected',String(aan)); });
+  _projSectieRender(huidigProject);
+  if(geschiedenis!=='geen'&&typeof mtRoute!=='undefined'){
+    const f=(_projSectie==='dossier')?_dosStand('proj:'+huidigProject.code):null, fl={};
+    if(f) Object.keys(f).forEach(x=>{ if(f[x]) fl[x]=f[x]; });
+    mtRoute.zet({tab:'projecten',code:huidigProject.code,sectie:_projSectie==='overzicht'?undefined:_projSectie,filter:fl},geschiedenis==='push');
+  }
+  // Ver naar beneden gescrold? Dan naar het begin van de sectie, net onder de sticky balken.
+  try{ const nav=host.querySelector('.proj-secnav'), pan=document.getElementById('proj-sectie-inhoud');
+    if(nav&&pan&&pan.getBoundingClientRect().top<nav.getBoundingClientRect().bottom){
+      window.scrollTo({top:window.scrollY+pan.getBoundingClientRect().top-nav.getBoundingClientRect().bottom-8}); } }catch(e){}
+}
+
+// ── Overzicht: kerngegevens + volgende stap + laatste activiteit + aandachtspunten ──
+function projSecOverzicht(proj,c){
+  const rijen=dossierItems({codes:[proj.code]});
+  const vandaag=new Date().toISOString().slice(0,10);
+  const laatste=rijen.filter(r=>r.datum&&r.datum.slice(0,10)<=vandaag&&r.status!=='ontkoppeld'&&r.soort!=='project')
+    .sort((a,b)=>b.datum.localeCompare(a.datum)).slice(0,5);
+  const icoon=s=>(DOS_SOORTEN.find(x=>x.k===s)||{}).i||'•';
+  // Volgende stap: eerste open taak → lopende planningsfase → offerte-status.
+  const taken=(typeof projTaken==='function')?projTaken(proj.code):[];
+  const open=taken.find(t=>t.status==='bezig')||taken.find(t=>t.status!=='klaar');
+  const plan=(typeof planVoor==='function')?planVoor(proj.code):null;
+  const fase=plan&&plan.fases&&(plan.fases.find(f=>f.start&&f.eind&&f.start<=vandaag&&vandaag<=f.eind&&f.status!=='klaar')||plan.fases.find(f=>f.status!=='klaar'&&f.start&&f.start>=vandaag));
+  const off=(window.CALC&&CALC.offertes)?(CALC.offertes[proj.code]||Object.values(CALC.offertes).find(o=>o&&o.project_code===proj.code)):null;
+  const stappen=[];
+  const nOpen=taken.filter(t=>t.status!=='klaar').length;
+  if(nOpen>1) stappen.push(`<div class="ov-stap">☑ <a href="#" onclick="event.preventDefault();projSectieKies('planning')">${nOpen} open taken</a></div>`);
+  if(open) stappen.push(`<div class="ov-stap">☑ <b>${esc(open.naam)}</b> <span class="dos-st">${esc(open.status||'todo')}</span> <a href="#" onclick="event.preventDefault();projSectieKies('planning')">→ taken</a></div>`);
+  if(fase) stappen.push(`<div class="ov-stap">📅 Fase <b>${esc(fase.naam||fase.key)}</b> ${fase.start?fmtDatum(fase.start):''}${fase.eind?' – '+fmtDatum(fase.eind):''} <a href="#" onclick="event.preventDefault();projSectieKies('planning')">→ planning</a></div>`);
+  if(off) stappen.push(`<div class="ov-stap">📄 Offerte: <b>${esc((off.meta&&off.meta.status)||'in bewerking')}</b> <a href="#" onclick="event.preventDefault();projSectieKies('calculatie')">→ calculatie</a></div>`);
+  if(!stappen.length) stappen.push(`<div class="ov-stap" style="color:var(--text-faint)">Nog geen taken, planning of offerte. <a href="#" onclick="event.preventDefault();projSectieKies('planning')">Taken toevoegen</a> · <a href="#" onclick="event.preventDefault();nieuweOfferte('${_jsCode(proj.code)}')">Offerte starten</a></div>`);
+  // Aandachtspunten: alleen wat ontbreekt of nog moet; elk punt met de knop om het op te lossen.
+  const let_=[];
+  const nietOpgeslagen=rijen.filter(r=>r.soort==='mail'&&r.ref.nogNietOpgeslagen).length;
+  if(nietOpgeslagen) let_.push(`📎 ${nietOpgeslagen} gekoppelde mail${nietOpgeslagen>1?'s':''} met bijlagen die nog niet in de projectmap staan <button class="btn btn-xs btn-secondary" onclick="projSectieKies('dossier',{filter:{soort:'mail',bijlage:'1'}})">Bekijken</button>`);
+  if(!proj.map||!proj.map.itemId) let_.push(`🗂 Projectmap nog niet gecontroleerd <button class="btn btn-xs btn-secondary" onclick="projMappenHerstel('${_jsCode(proj.code)}')">Controleren</button>`);
+  if(!proj.tg_project_id) let_.push(`⏱ Nog geen Toggl-project gekoppeld <button class="btn btn-xs btn-secondary" onclick="t2KiesProject('${_jsCode(proj.code)}')">Koppelen</button>`);
+  if(!proj.offertenr) let_.push(`🔢 Nog geen offertenummer <button class="btn btn-xs btn-secondary" onclick="t2OffertenummerToekennen('${_jsCode(proj.code)}')">Toekennen</button>`);
+  if(!c.effectiveMb&&proj.klant) let_.push(`👤 Geen Moneybird-contact <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${_jsCode(proj.code)}')">Koppelen</button>`);
+  return `
+      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1.25rem;gap:.5rem;flex-wrap:wrap">
         <div>
           <div class="project-code-badge">${proj.code}</div>
           <div class="project-naam">${proj.naam||proj.code}</div>
         </div>
         <div class="flex">
-          <button class="btn btn-secondary btn-sm" onclick="verwijderProject('${proj.code}')">Verwijderen</button>
+          <button class="btn btn-secondary btn-sm" onclick="verwijderProject('${_jsCode(proj.code)}')">Verwijderen</button>
         </div>
       </div>
-      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:1rem">
-        <div class="kpi-card green"><div class="kpi-label">Materiaalinkoop</div><div class="kpi-waarde" style="font-size:20px">${fmt(totaalInkoop)}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Materiaalregels</div><div class="kpi-waarde" style="font-size:20px">${projItems.length}</div></div>
-        <div class="kpi-card gold"><div class="kpi-label">Klant</div><div class="kpi-waarde" style="font-size:15px;line-height:1.3">${klantChip}</div></div>
+      <div class="kpi-grid ov-kpi" style="margin-bottom:1rem">
+        <div class="kpi-card green"><div class="kpi-label">Materiaalinkoop</div><div class="kpi-waarde" style="font-size:20px">${fmt(c.totaalInkoop)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Materiaalregels</div><div class="kpi-waarde" style="font-size:20px">${c.projItems.length}</div></div>
+        <div class="kpi-card gold"><div class="kpi-label">Klant</div><div class="kpi-waarde" style="font-size:15px;line-height:1.3">${c.klantChip}</div></div>
       </div>
-      <div style="display:flex;align-items:center;gap:0.5rem;font-size:12px;color:var(--text-dim);margin-bottom:1rem">
-        <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${mbNrBlok}
+      <div style="display:flex;align-items:center;gap:0.5rem;font-size:12px;color:var(--text-dim);margin-bottom:1rem;flex-wrap:wrap">
+        <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${c.mbNrBlok}
       </div>
       ${t2ProjectRijHtml(proj)}
-      ${projectPlanning(proj)}
+      <div class="ov-grid">
+        <section class="ov-blok"><div class="card-title">Volgende stap</div>${stappen.join('')}</section>
+        <section class="ov-blok"><div class="card-title">Laatste activiteit</div>
+          <div class="ov-dossier"><a href="#" onclick="event.preventDefault();projSectieKies('dossier',{filter:{soort:'mail'}})">✉ ${rijen.filter(r=>r.soort==='mail'&&r.status!=='ontkoppeld').length} mails</a> · <a href="#" onclick="event.preventDefault();projSectieKies('dossier',{filter:{soort:'bestand'}})">🗂 ${rijen.filter(r=>r.soort==='bestand').length} bestanden</a></div>
+          ${laatste.length?laatste.map(r=>`<div class="ov-act">${icoon(r.soort)} ${esc(r.titel)} <span class="dos-meta">${fmtDatum(r.datum.slice(0,10))}</span></div>`).join(''):'<div class="ov-act" style="color:var(--text-faint)">Nog niets gebeurd.</div>'}
+          <a href="#" class="ov-meer" onclick="event.preventDefault();projSectieKies('dossier')">Alles in het dossier →</a></section>
+      </div>
+      ${let_.length?`<section class="ov-blok ov-let"><div class="card-title">Aandachtspunten</div>${let_.map(x=>`<div class="ov-letrij">${x}</div>`).join('')}</section>`:''}`;
+}
+// ── Dossier: bijlagen toevoegen, projectmap, en de tijdlijn met filters ──
+function projSecDossier(proj,c){
+  const mapInfo=(window._dossierMap||{})[proj.code];
+  const dos=dossierKoppelingen(proj.code);
+  return `
+      <div class="dos-kop">
+        <div class="card-title" style="margin:0">Dossier</div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bijlage-input-${c.sid}').click()">📎 Bijlage toevoegen</button>
+        <input type="file" id="bijlage-input-${c.sid}" class="hidden" multiple onchange="uploadProjectBijlagen(this.files,'${_jsCode(proj.code)}')">
+        <button class="btn btn-secondary btn-sm" onclick="tbDoTab('inbox')" title="Koppelen doe je in de Inbox met 🔗 “Koppel aan project”">📥 Naar inbox</button>
+        <button class="btn btn-secondary btn-sm" onclick="dossierLaadMap('${_jsCode(proj.code)}')" title="Alleen lezen: toont de bestanden uit de projectmap in het dossier">🗂 Projectmap ${mapInfo?'verversen':'tonen'}</button>
+        <button class="btn btn-secondary btn-sm" onclick="projMappenHerstel('${_jsCode(proj.code)}')" title="Controleert eerst wat ontbreekt (en of er dubbele projectmappen zijn); maakt pas na bevestiging ontbrekende mappen aan. Hernoemt of verplaatst nooit iets.">🗂 Mappen herstellen</button>
+        <span id="bijlage-status-${c.sid}" style="font-size:12px;color:var(--text-dim)"></span>
+        <span id="dossier-map-st-${c.cid}" style="font-size:11px;color:var(--text-dim)">${mapInfo?(mapInfo.fout?`<span style="color:#c0392b">${esc(mapInfo.fout)}</span>`:(mapInfo.pad?`${mapInfo.bestanden.length} bestanden · ${esc(mapInfo.pad)}`:'')):''}</span>
+        ${dos.klopt?'':'<span style="font-size:11px;color:#c0392b">⚠ mail-telling klopt niet — meld dit</span>'}
+      </div>
+      <div id="proj-dossier-${c.cid}"></div>`;
+}
+// ── Planning: Gantt + taken (taken voeden de planning; "📅 → Planning" zet ze om) ──
+function projSecPlanning(proj,c){
+  return `${projectPlanning(proj)}
       ${projectTakenHtml(proj)}
-      ${projectTijdlijn(proj)}
-      <hr class="divider">
-      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
-        <div class="card-title" style="margin:0">Kostenberekening — Vectorworks CSV / Excel</div>
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('csv-input-${proj.code.replace(/-/g,'')}').click()">📊 CSV / Excel uploaden</button>
-        <input type="file" id="csv-input-${proj.code.replace(/-/g,'')}" class="hidden" accept=".csv,.xlsx,.xls" onchange="verwerKostenCSV(this.files[0],'${proj.code}')">
-        <span id="csv-status-${proj.code.replace(/-/g,'')}" style="font-size:12px;color:var(--text-dim)"></span>
-      </div>
-      <div id="csv-resultaat-${proj.code.replace(/-/g,'')}" class="hidden"></div>
-      <hr class="divider">
-      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
-        <div class="card-title" style="margin:0">NCR Import — Zaagoptimalisatie</div>
-        <button class="btn btn-gold btn-sm" onclick="document.getElementById('ncr-input-${proj.code.replace(/-/g,'')}').click()">📂 NCR bestanden uploaden</button>
-        <input type="file" id="ncr-input-${proj.code.replace(/-/g,'')}" class="hidden" accept=".ncr,.NCR" multiple onchange="verwerNCR(this.files,'${proj.code}')">
-        <span style="font-size:11px;color:var(--text-faint)">Meerdere NCR's tegelijk selecteren</span>
-        <span id="ncr-status-${proj.code.replace(/-/g,'')}" style="font-size:12px;color:var(--text-dim)"></span>
-      </div>
-      <div id="ncr-resultaat-${proj.code.replace(/-/g,'')}" class="hidden"></div>
-      <hr class="divider">
-      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
-        <div class="card-title" style="margin:0">Bijlagen</div>
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bijlage-input-${proj.code.replace(/-/g,'')}').click()">📎 Bijlage toevoegen</button>
-        <input type="file" id="bijlage-input-${proj.code.replace(/-/g,'')}" class="hidden" multiple onchange="uploadProjectBijlagen(this.files,'${proj.code}')">
-        <span style="font-size:11px;color:var(--text-faint)">Blijft op SharePoint in 07_Administratie — de tool linkt alleen</span>
-        <span id="bijlage-status-${proj.code.replace(/-/g,'')}" style="font-size:12px;color:var(--text-dim)"></span>
-      </div>
-      ${bijlagenHtml(proj)}
-      <hr class="divider">
-      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
-        <div class="card-title" style="margin:0">Gekoppelde mails</div>
-        <button class="btn btn-secondary btn-sm" onclick="tbDoTab('inbox')">📥 Naar inbox</button>
-        <span style="font-size:11px;color:var(--text-faint)">Koppelen doe je in de Inbox met 🔗 “Koppel aan project”</span>
-      </div>
-      ${gekoppeldeMailsHtml(proj)}
-      <hr class="divider">
-      <div id="offerte-calc-${proj.code.replace(/[^A-Za-z0-9]/g,'')}"><p style="color:var(--text-faint);font-size:13px">Offerte-calculator laden…</p></div>
-      ${nacalcHtml(proj,totaalInkoop,effectiveMb)}
+      <div id="proj-tijdlijn-${c.cid}" class="proj-b10-plek"></div>`;
+}
+// ── Calculatie: offerte-calculator, nacalculatie, materiaalinkoop uit facturen ──
+function projSecCalculatie(proj,c){
+  const projItems=c.projItems;
+  return `
+      <div id="offerte-calc-${c.cid}"><p style="color:var(--text-faint);font-size:13px">Offerte-calculator laden…</p></div>
+      ${nacalcHtml(proj,c.totaalInkoop,c.effectiveMb)}
       ${projItems.length?`
       <hr class="divider">
       <div class="card-title">Materiaalinkoop uit facturen</div>
-      <table class="materiaal-lijst">
+      <div class="tabel-scroll"><table class="materiaal-lijst">
         <thead><tr>
           <th style="cursor:pointer" onclick="renderProjectDetail(huidigProject)">Materiaal</th>
           <th>Leverancier</th>
@@ -5018,11 +5208,264 @@ function renderProjectDetail(proj){
           <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(v.datum)}</td>
           <td><button class="btn btn-xs btn-danger" onclick="if(confirm('Inkoopregel verwijderen?')){const vrd=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(x=>!(x.project==='${proj.code}'&&x.omschrijving==='${v.omschrijving.replace(/'/g,"\\'")}' &&x.ts===${v.ts}));localStorage.setItem('mt_voorraad',JSON.stringify(vrd));renderProjectDetail(huidigProject);}">×</button></td>
         </tr>`).join('')}</tbody>
-      </table>`:'<p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}
-    </div>`;
-  nacalcLaadOfferte(proj.code,effectiveMb);
-  if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
+      </table></div>`:'<hr class="divider"><p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}`;
 }
+// ── Productie: Vectorworks-CSV, NCR-import, bestellijst van dit project ──
+function projSecProductie(proj,c){
+  const bestel=(typeof _blActief==='function')?_blActief().filter(b=>b.project===proj.code):[];
+  return `
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
+        <div class="card-title" style="margin:0">Kostenberekening — Vectorworks CSV / Excel</div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('csv-input-${c.sid}').click()">📊 CSV / Excel uploaden</button>
+        <input type="file" id="csv-input-${c.sid}" class="hidden" accept=".csv,.xlsx,.xls" onchange="verwerKostenCSV(this.files[0],'${_jsCode(proj.code)}')">
+        <span id="csv-status-${c.sid}" style="font-size:12px;color:var(--text-dim)"></span>
+      </div>
+      <div id="csv-resultaat-${c.sid}" class="hidden"></div>
+      <hr class="divider">
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
+        <div class="card-title" style="margin:0">NCR Import — Zaagoptimalisatie</div>
+        <button class="btn btn-gold btn-sm" onclick="document.getElementById('ncr-input-${c.sid}').click()">📂 NCR bestanden uploaden</button>
+        <input type="file" id="ncr-input-${c.sid}" class="hidden" accept=".ncr,.NCR" multiple onchange="verwerNCR(this.files,'${_jsCode(proj.code)}')">
+        <span style="font-size:11px;color:var(--text-faint)">Meerdere NCR's tegelijk selecteren</span>
+        <span id="ncr-status-${c.sid}" style="font-size:12px;color:var(--text-dim)"></span>
+      </div>
+      <div id="ncr-resultaat-${c.sid}" class="hidden"></div>
+      <hr class="divider">
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;flex-wrap:wrap">
+        <div class="card-title" style="margin:0">Bestellijst van dit project</div>
+        <button class="btn btn-secondary btn-sm" onclick="tbDoTab('bestelling')">🛒 Naar bestellijst</button>
+      </div>
+      ${bestel.length?`<div class="tabel-scroll"><table class="materiaal-lijst"><tbody>${bestel.map(b=>`<tr>
+        <td style="font-size:12px">${esc(b.materiaal||b.artikel||'')}</td>
+        <td style="font-size:11px;color:var(--text-dim)">${esc(b.leverancier||'')}</td>
+        <td style="font-size:11px;text-align:right;font-family:var(--mono)">${b.aantal?esc(b.aantal):''}</td>
+        <td>${b.besteld?'<span class="badge badge-ok">besteld</span>':'<span class="badge">open</span>'}</td>
+        <td style="font-size:11px;color:var(--text-faint)">${b.datum?fmtDatum(b.datum):''}</td></tr>`).join('')}</tbody></table></div>`
+        :'<p style="color:var(--text-faint);font-size:13px">Nog niets op de bestellijst voor dit project (NCR-import en de voorraad zetten hier regels op).</p>'}`;
+}
+
+// ═══ DOSSIER (brok B7) — één component voor alles wat bij een project (later: klant) hoort ═══
+// dossierItems({codes}) → rijen {soort, code, klant, loc, ref, titel, van, datum, status, door,
+// bron, heeftBijlage, open(), acties[]}. Alleen lezen: acties roepen de bestaande functies aan.
+// Ontworpen voor meerdere codes, zodat de klantpagina (B8) hetzelfde kan tonen.
+const DOS_SOORTEN=[
+  {k:'mail',l:'Mail',i:'✉'},{k:'bestand',l:'Bestanden',i:'🗂'},{k:'offerte',l:'Offerte',i:'📄'},
+  {k:'taak',l:'Taken',i:'☑'},{k:'planning',l:'Planning',i:'📅'},{k:'inkoop',l:'Inkoop',i:'📦'},{k:'uren',l:'Uren',i:'⏱'},{k:'project',l:'Project',i:'🏷️'}];
+const _DOS_ALTIJD=new Set(['mail','bestand','offerte','taak','planning']);   // chips die er altijd staan
+function _dosDatum(v){
+  if(v===null||v===undefined||v==='') return '';
+  if(typeof v==='number') return new Date(v).toISOString();
+  const s=String(v); return /^\d{4}-\d{2}-\d{2}/.test(s)?s:(isNaN(Date.parse(s))?'':new Date(s).toISOString());
+}
+function dossierItems({codes}={}){
+  const uit=[], lijst=Array.isArray(codes)?codes:[codes];
+  const projen=lijst.map(c=>PROJECT_CODES.find(p=>p.code===c)||{code:c});
+  const idx=(typeof ibBijlageIndexAll==='function')?ibBijlageIndexAll():[];
+  const voorraad=(()=>{ try{ return JSON.parse(localStorage.getItem('mt_voorraad')||'[]'); }catch(e){ return []; } })();
+  const journaal=(()=>{ try{ const j=JSON.parse(localStorage.getItem('mt_taken_journaal')||'[]'); return Array.isArray(j)?j:[]; }catch(e){ return []; } })();
+  const blokken=(typeof agPlanActief==='function')?agPlanActief():[];
+  const uren=(typeof agEntries==='function')?agEntries():[];
+  const alleLinks=(typeof mailLinksAll==='function')?mailLinksAll():{};
+  for(const proj of projen){
+    const code=proj.code, basis={code,klant:proj.klant||'',loc:proj.loc||''};
+    const rij=o=>uit.push(Object.assign({ref:{},van:'',status:'',door:'',bron:'',heeftBijlage:false,acties:[]},basis,o,{datum:_dosDatum(o.datum)}));
+    if(proj.created) rij({soort:'project',titel:'Project aangemaakt',datum:proj.created,status:'',open:()=>projSectieKies('overzicht')});
+    // ── mail (actief + ontkoppeld; ontkoppeld standaard verborgen) ──
+    // Actieve lijst uit dezelfde lezing (zelfde volgorde als mailLinksVoor → index klopt voor
+    // openGekoppeldeMail/ontkoppelMail, die op die index werken).
+    const links=Array.isArray(alleLinks[code])?alleLinks[code]:[], actief=links.filter(y=>y&&!y.ontkoppeld);
+    links.forEach(x=>{
+      const i=actief.indexOf(x), imid=x.internetMessageId||x.id;
+      const opgeslagen=idx.filter(r=>r.code===code&&r.status==='opgeslagen'&&r.imid===imid);
+      const acties=[];
+      if(x.webLink) acties.push({l:'↗',t:'Open in Outlook',f:()=>window.open(x.webLink,'_blank','noopener')});
+      if(i>=0&&x.hasAttachments!==false) acties.push({l:'📎',t:'Bijlagen van deze mail naar de projectmap',f:()=>dossierBijlagenNaarMap(code,i)});
+      if(i>=0) acties.push({l:'×',t:'Ontkoppelen (mail blijft in Outlook)',gevaar:true,f:()=>ontkoppelMail(code,i)});
+      rij({soort:'mail',titel:x.subject||'(geen onderwerp)',van:x.from||'',datum:x.date||x.ts,status:x.ontkoppeld?'ontkoppeld':'gekoppeld',
+        door:x.door||'',bron:x.bron||'hand',heeftBijlage:x.hasAttachments===true||opgeslagen.length>0,
+        ref:{internetMessageId:x.internetMessageId||'',id:x.id||'',iid:x.iid||'',mbx:x.mbx||'',webLink:x.webLink||'',opgeslagen:opgeslagen.length,
+          nogNietOpgeslagen:x.hasAttachments===true&&!opgeslagen.length},
+        open:i>=0?()=>openGekoppeldeMail(code,i):null,acties});
+    });
+    // ── bestanden: opgeslagen mailbijlagen, toegevoegde bijlagen, projectmap (lui) ──
+    const gezien=new Set();
+    idx.filter(r=>r.code===code&&r.status==='opgeslagen').forEach(r=>{
+      const mail=(alleLinks[code]||[]).find(x=>(x.internetMessageId||x.id)===r.imid);
+      gezien.add(r.webUrl||(r.sub+'/'+(r.opgeslagenAls||r.naam)));
+      rij({soort:'bestand',titel:r.opgeslagenAls||r.naam,van:mail?'uit mail: '+(mail.subject||''):'uit mail',datum:r.tijd,status:r.sub||'',bron:'mail',
+        ref:{webUrl:r.webUrl||'',sub:r.sub||'',imid:r.imid||''},open:r.webUrl?()=>window.open(r.webUrl,'_blank','noopener'):null});
+    });
+    (Array.isArray(proj.bijlagen)?proj.bijlagen:[]).forEach((b,i)=>{
+      gezien.add(b.web_url||('07_Administratie/'+b.naam));
+      rij({soort:'bestand',titel:b.naam,datum:b.datum,status:'07_Administratie',bron:'upload',ref:{webUrl:b.web_url||''},
+        open:b.web_url?()=>window.open(b.web_url,'_blank','noopener'):null,
+        acties:[{l:'×',t:'Ontkoppelen (bestand blijft op SharePoint staan)',gevaar:true,f:()=>ontkoppelBijlage(code,i)}]});
+    });
+    const mapInfo=(window._dossierMap||{})[code];
+    if(mapInfo&&mapInfo.bestanden) mapInfo.bestanden.forEach(f=>{
+      if(gezien.has(f.url)||gezien.has(f.sub+'/'+f.naam)) return;
+      rij({soort:'bestand',titel:f.naam,datum:f.datum,status:f.sub,bron:'projectmap',ref:{webUrl:f.url||'',sub:f.sub},open:f.url?()=>window.open(f.url,'_blank','noopener'):null});
+    });
+    // ── offerte / calculatie / nacalculatie ──
+    const off=(window.CALC&&CALC.offertes)?Object.entries(CALC.offertes).filter(([k,o])=>k===code||(o&&o.project_code===code)):[];
+    off.forEach(([k,o])=>{
+      const st=(o.meta&&o.meta.status)||'', naar=()=>projSectieKies('calculatie');
+      if(o._gewijzigd) rij({soort:'offerte',titel:'Calculatie bijgewerkt — '+(o.titel||k),datum:o._gewijzigd,status:st,ref:{key:k},open:naar});
+      if(o.meta&&o.meta.offertedatum) rij({soort:'offerte',titel:'Offertedatum — '+(o.titel||k),datum:o.meta.offertedatum,status:st,ref:{key:k},open:naar});
+      if(o.nacalc&&o.nacalc.gestart) rij({soort:'offerte',titel:'Nacalculatie gestart — '+(o.titel||k),datum:o.nacalc.gestart,status:'nacalculatie',ref:{key:'NC~'+k},open:naar});
+      if(!o._gewijzigd&&!(o.meta&&o.meta.offertedatum)) rij({soort:'offerte',titel:'Calculatie — '+(o.titel||k),datum:'',status:st,ref:{key:k},open:naar});
+    });
+    // ── taken (+ journaal) ──
+    const taken=(typeof projTaken==='function')?projTaken(code):[];
+    taken.forEach(t=>rij({soort:'taak',titel:t.naam||'(taak)',datum:t.aangemaakt||t.ts||'',status:t.status||'todo',bron:t.bron||'',ref:{id:t.id},open:()=>projSectieKies('planning')}));
+    journaal.filter(j=>j.code===code).forEach(j=>rij({soort:'taak',titel:(j.actie||'wijziging')+' — '+((j.taak&&j.taak.naam)||''),datum:j.tijd,status:'journaal',door:j.door||'',ref:{journaal:j.id},open:()=>projSectieKies('planning')}));
+    // ── planning: fasen + planblokken ──
+    const plan=(typeof planVoor==='function')?planVoor(code):null;
+    ((plan&&plan.fases)||[]).forEach(fa=>rij({soort:'planning',titel:'Fase: '+(fa.naam||fa.key||''),datum:fa.start,status:fa.status||'todo',ref:{fase:fa.id,eind:fa.eind||''},open:()=>projSectieKies('planning')}));
+    blokken.filter(b=>b.project_code===code).forEach(b=>rij({soort:'planning',titel:'Planblok: '+(b.taak||'')+(b.start?' · '+b.start:''),datum:b.datum,van:b.persoon||'',door:b.door||'',status:'gepland',ref:{blok:b.id},
+      open:()=>{ if(typeof tbDoTab==='function') tbDoTab('agenda'); }}));
+    // ── inkoop: materiaal uit facturen + bestellijst (per datum) ──
+    const perD={}; voorraad.filter(v=>v.project===code).forEach(v=>{ (perD[v.datum||'']=perD[v.datum||'']||[]).push(v); });
+    Object.entries(perD).forEach(([d,rs])=>{
+      const tot=rs.reduce((s,v)=>s+(v.aantal||1)*(v.stukprijs||0),0), levs=[...new Set(rs.map(v=>v.leverancier).filter(Boolean))];
+      rij({soort:'inkoop',titel:(rs.some(v=>v.correctie)?'Voorraadcorrectie':'Materiaal geboekt')+` — ${rs.length} regel${rs.length>1?'s':''}${tot?' · '+fmt(tot):''}`,van:levs.join(', '),zoek:rs.map(v=>v.omschrijving).join(' '),datum:d,status:'geboekt',open:()=>projSectieKies('calculatie')});
+    });
+    const bestel=(typeof _blActief==='function')?_blActief().filter(b=>b.project===code):[];
+    const perB={}; bestel.forEach(b=>{ (perB[b.datum||'']=perB[b.datum||'']||[]).push(b); });
+    Object.entries(perB).forEach(([d,rs])=>{ const bst=rs.filter(b=>b.besteld).length;
+      rij({soort:'inkoop',titel:`Op bestellijst — ${rs.length} materia${rs.length>1?'len':'al'}${bst?' · '+bst+' besteld':''}`,datum:d,status:bst===rs.length?'besteld':'open',zoek:rs.map(b=>[b.materiaal,b.artikel,b.leverancier].filter(Boolean).join(' ')).join(' '),open:()=>projSectieKies('productie')}); });
+    // ── uren (alleen wat lokaal al gesynct is; Toggl-rapporten komen in B10) ──
+    const perU={}; uren.filter(e=>e.project_code===code).forEach(e=>{ const k=(e.datum||String(e.start||'').slice(0,10))+'|'+(e.teamlid||'?'); perU[k]=(perU[k]||0)+(Number(e.duur)||0); });
+    Object.entries(perU).forEach(([k,sec])=>{ const [d,wie]=k.split('|'); const u=Math.round(sec/360)/10;
+      rij({soort:'uren',titel:`${String(u).replace('.',',')} uur`,van:wie,door:wie,datum:d,status:'geboekt'}); });
+  }
+  return uit;
+}
+// Mailbijlagen naar de map vanuit het dossier: eerst de juiste mailbox zetten (zoals openen).
+async function dossierBijlagenNaarMap(code,i){
+  const x=(typeof mailLinksVoor==='function')?mailLinksVoor(code)[i]:null; if(!x) return;
+  const mbx=x.mbx||'info@mortiseandtenon.nl';
+  if(typeof _inbox!=='undefined'&&_inbox.mbx!==mbx){ _inbox.mbx=mbx; _inbox.loaded=false; const sel=document.getElementById('inbox-mailbox'); if(sel) sel.value=mbx; }
+  if(typeof inboxBijlagenDialoog==='function') inboxBijlagenDialoog(x.iid||x.id,code);
+}
+
+// ── Filters ──
+const _dosFilter={}, _dosReg={};
+const _DOS_STD={soort:'',periode:'',persoon:'',bijlage:'',status:'',q:'',van:'',tot:''};
+function _dosStand(key){ return Object.assign({},_DOS_STD,_dosFilter[key]||{}); }
+function _dosPeriode(f){
+  const nu=new Date(), d=x=>x.toISOString().slice(0,10);
+  if(f.periode==='week'){ const ma=new Date(nu); ma.setDate(nu.getDate()-((nu.getDay()+6)%7)); const zo=new Date(ma); zo.setDate(ma.getDate()+6); return [d(ma),d(zo)]; }
+  if(f.periode==='maand'){ return [d(new Date(nu.getFullYear(),nu.getMonth(),1,12)),d(new Date(nu.getFullYear(),nu.getMonth()+1,0,12))]; }
+  if(f.periode==='aangepast') return [f.van||'0000-00-00',f.tot||'9999-99-99'];
+  return null;
+}
+function dossierFilteren(rijen,f,{zonderSoort=false}={}){
+  const per=_dosPeriode(f), q=String(f.q||'').trim().toLowerCase();
+  return rijen.filter(r=>{
+    if(!zonderSoort&&f.soort&&r.soort!==f.soort) return false;
+    if(f.status==='') { if(r.status==='ontkoppeld') return false; }
+    else if(f.status!=='*'&&r.status!==f.status) return false;
+    if(f.persoon&&r.door!==f.persoon&&r.van!==f.persoon) return false;
+    if(f.bijlage&&!r.heeftBijlage) return false;
+    if(per){ const d=(r.datum||'').slice(0,10); if(!d||d<per[0]||d>per[1]) return false; }
+    if(q&&![r.titel,r.van,r.door,r.status,r.code,r.zoek].some(v=>String(v||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+
+// ── UI ──
+// scope = {codes:[…], key}; facetten = optionele begin-filterstand (bv. uit de URL).
+function renderDossier(el,scope,facetten){
+  if(!el) return;
+  const key=scope.key||('codes:'+scope.codes.join(','));
+  if(facetten) _dosFilter[key]=Object.assign({},_DOS_STD,facetten);
+  const f=_dosStand(key);
+  const rijen=dossierItems({codes:scope.codes});
+  _dosReg[key]={rijen,scope};
+  const personen=[...new Set(rijen.flatMap(r=>[r.door,r.van]).filter(v=>v&&!/^uit mail/.test(v)))].sort();
+  const statussen=[...new Set(rijen.map(r=>r.status).filter(Boolean))].sort();
+  const k=esc(key);
+  const sel=(veld,opts,huidig,label)=>`<select class="dos-sel" aria-label="${label}" onchange="dossierZetFilter('${k}','${veld}',this.value)">${opts.map(([v,t])=>`<option value="${esc(v)}"${String(v)===String(huidig)?' selected':''}>${esc(t)}</option>`).join('')}</select>`;
+  el.innerHTML=`<div class="dossier" data-key="${k}">
+    <div class="dos-chips" role="toolbar" aria-label="Soort"></div>
+    <div class="dos-filters">
+      <input type="search" class="dos-zoek" placeholder="🔍 Zoek in dossier…" aria-label="Zoek in dossier" value="${esc(f.q)}" oninput="dossierZetFilter('${k}','q',this.value)">
+      <button type="button" class="btn btn-xs btn-secondary dos-meerknop" aria-expanded="false" onclick="const o=this.parentNode.classList.toggle('open');this.setAttribute('aria-expanded',String(o))">Filters ▾</button>
+      <span class="dos-extra">
+      ${sel('periode',[['','Alle data'],['week','Deze week'],['maand','Deze maand'],['aangepast','Aangepast…']],f.periode,'Periode')}
+      <span class="dos-aangepast"${f.periode==='aangepast'?'':' hidden'}><input type="date" value="${esc(f.van)}" aria-label="Vanaf" onchange="dossierZetFilter('${k}','van',this.value)"> – <input type="date" value="${esc(f.tot)}" aria-label="Tot en met" onchange="dossierZetFilter('${k}','tot',this.value)"></span>
+      ${sel('persoon',[['','Iedereen'],...personen.map(p=>[p,p])],f.persoon,'Persoon')}
+      ${sel('status',[['','Status: standaard'],['*','Status: alles (ook ontkoppeld)'],...statussen.map(s=>[s,'Status: '+s])],f.status,'Status')}
+      <label class="dos-check"><input type="checkbox"${f.bijlage?' checked':''} onchange="dossierZetFilter('${k}','bijlage',this.checked?'1':'')"> met bijlage</label>
+      <button type="button" class="btn btn-xs btn-secondary" onclick="dossierWisFilters('${k}')" title="Alle filters terug naar standaard">Wis filters</button>
+      </span>
+    </div>
+    <div class="dos-lijst"></div></div>`;
+  _dosTekenLijst(key);
+}
+function _dosTekenLijst(key){
+  const reg=_dosReg[key]; if(!reg) return;
+  const root=[...document.querySelectorAll('.dossier')].find(d=>d.dataset.key===key); if(!root) return;
+  const f=_dosStand(key), k=esc(key);
+  const basis=dossierFilteren(reg.rijen,f,{zonderSoort:true});
+  const tel={}; basis.forEach(r=>{ tel[r.soort]=(tel[r.soort]||0)+1; });
+  const chip=(v,l,n)=>`<button type="button" class="dos-chip${f.soort===v?' actief':''}" aria-pressed="${f.soort===v}" onclick="dossierZetFilter('${k}','soort','${v}')">${l} <span class="dos-n">${n}</span></button>`;
+  const nBijl=dossierFilteren(reg.rijen,Object.assign({},f,{bijlage:'1'}),{zonderSoort:true}).length;
+  root.querySelector('.dos-chips').innerHTML=chip('','Alles',basis.length)
+    +DOS_SOORTEN.filter(s=>_DOS_ALTIJD.has(s.k)||tel[s.k]).map(s=>chip(s.k,s.i+' '+s.l,tel[s.k]||0)).join('')
+    +`<button type="button" class="dos-chip dos-chip-bijl${f.bijlage?' actief':''}" aria-pressed="${!!f.bijlage}" onclick="dossierZetFilter('${k}','bijlage','${f.bijlage?'':'1'}')" title="Alleen rijen met een bijlage">📎 met bijlage <span class="dos-n">${nBijl}</span></button>`;
+  const cb=root.querySelector('.dos-check input'); if(cb) cb.checked=!!f.bijlage;
+  const ac=root.querySelector('.dos-aangepast'); if(ac) ac.hidden=f.periode!=='aangepast';
+  const rijen=(f.soort?basis.filter(r=>r.soort===f.soort):basis).slice();
+  rijen.sort((a,b)=>(b.datum||'').localeCompare(a.datum||''));
+  const lijst=root.querySelector('.dos-lijst');
+  if(!rijen.length){ lijst.innerHTML=`<p class="dos-leeg">${reg.rijen.length?'Niets gevonden met deze filters.':'Nog niets in het dossier.'}</p>`; return; }
+  const perDag=f.periode==='week';
+  const groep=r=>{ const d=(r.datum||'').slice(0,10); if(!d) return 'Zonder datum';
+    const dt=new Date(d+'T12:00:00');
+    if(perDag) return dt.toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'});
+    const ma=new Date(dt); ma.setDate(dt.getDate()-((dt.getDay()+6)%7)); const zo=new Date(ma); zo.setDate(ma.getDate()+6);
+    const wk=_dosWeek(dt); return `Week ${wk} · ${ma.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} – ${zo.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})}`; };
+  const icoon=s=>(DOS_SOORTEN.find(x=>x.k===s)||{}).i||'•';
+  let html='', vorige=null;
+  rijen.forEach(r=>{
+    const i=reg.rijen.indexOf(r), g=groep(r);
+    if(g!==vorige){ html+=`<div class="dos-groep">${esc(g)}</div>`; vorige=g; }
+    const wie=[r.van,r.door&&r.door!==r.van?r.door:''].filter(Boolean).map(esc).join(' · ');
+    const titel=r.open?`<a href="#" onclick="event.preventDefault();dossierOpen('${k}',${i})">${esc(r.titel)}</a>`:esc(r.titel);
+    const bijl=r.soort==='mail'&&r.ref.opgeslagen?`<span class="dos-tag" title="Opgeslagen bijlagen van deze mail">📎 ${r.ref.opgeslagen} opgeslagen</span>`
+      :(r.soort==='mail'&&r.ref.nogNietOpgeslagen?'<span class="dos-tag let" title="Deze mail heeft bijlagen die nog niet in de projectmap staan">📎 nog niet opgeslagen</span>':'');
+    html+=`<div class="dos-rij${r.status==='ontkoppeld'?' uit':''}">
+      <span class="dos-ic" aria-hidden="true">${icoon(r.soort)}</span>
+      <div class="dos-hoofd"><div class="dos-titel">${titel}${bijl}</div>
+        <div class="dos-meta">${(reg.scope.codes.length>1)?`<span class="code">${esc(r.code)}</span> · `:''}${wie?wie+' · ':''}${r.datum?fmtDatum(r.datum.slice(0,10)):'—'}${r.status?` · <span class="dos-st">${esc(r.status)}</span>`:''}</div></div>
+      <div class="dos-acties">${r.acties.map((a,j)=>`<button type="button" class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie('${k}',${i},${j})">${a.l}</button>`).join('')}</div>
+    </div>`;
+  });
+  lijst.innerHTML=html;
+}
+function _dosWeek(d){ const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); const dag=t.getUTCDay()||7; t.setUTCDate(t.getUTCDate()+4-dag); const j=new Date(Date.UTC(t.getUTCFullYear(),0,1)); return Math.ceil(((t-j)/864e5+1)/7); }
+function dossierZetFilter(key,veld,waarde){
+  _dosFilter[key]=Object.assign(_dosStand(key),{[veld]:waarde});
+  _dosTekenLijst(key);
+  _dosUrl(key);
+}
+function dossierWisFilters(key){
+  _dosFilter[key]=Object.assign({},_DOS_STD);
+  const reg=_dosReg[key], el=[...document.querySelectorAll('.dossier')].find(d=>d.dataset.key===key);
+  if(reg&&el) renderDossier(el.parentNode,reg.scope);
+  _dosUrl(key);
+}
+function dossierOpen(key,i){ const r=_dosReg[key]&&_dosReg[key].rijen[i]; if(r&&r.open) r.open(); }
+function dossierActie(key,i,j){ const r=_dosReg[key]&&_dosReg[key].rijen[i]; const a=r&&r.acties[j]; if(a&&a.f) a.f(); }
+// Filterstand in de URL (#projecten/CODE/dossier?soort=mail) — replaceState, geen extra history.
+function _dosUrl(key){
+  const m=String(key).match(/^proj:(.+)$/); if(!m||typeof mtRoute==='undefined') return;
+  const f=_dosStand(key), filter={}; Object.keys(f).forEach(x=>{ if(f[x]) filter[x]=f[x]; });
+  mtRoute.zet({tab:'projecten',code:m[1],sectie:'dossier',filter},false);
+}
+
 // ── Gekoppelde mails van een project (mt_mail_links — synct via privé SharePoint, zichtbaar op alle PC's) ──
 function gekoppeldeMailsHtml(proj){
   const arr=(typeof mailLinksVoor==='function')?mailLinksVoor(proj.code):[];
@@ -5802,7 +6245,7 @@ async function uploadProjectBijlagen(files, code){
     }
   }
   slaProjectenOp();
-  renderProjectDetail(huidigProject);
+  if(huidigProject&&huidigProject.code===code) renderProjectDetail(huidigProject);   // niet een ander project hertekenen
   const st2=document.getElementById('bijlage-status-'+code.replace(/-/g,''));
   if(st2){st2.style.color='var(--green)';st2.textContent=`✓ ${ok} bijlage${ok===1?'':'n'} op SharePoint`;}
 }
@@ -7080,7 +7523,7 @@ async function maakProjectAan(){
   status.style.color='var(--green)';status.textContent=`✓ ${code} aangemaakt`;
   // Meteen het nieuwe project tonen (lijst + detail); mappen/Toggl lopen daarna door
   // met hun status in de contextbalk.
-  openProject(code);
+  openProject(code,{sectie:'overzicht',onthoud:false});
   let mapFout='';
   // Mappenstructuur op SharePoint aanmaken (mkdir-p, idempotent)
   try{
@@ -12301,7 +12744,7 @@ function activiteitOpen(force){
     if(projectCode){
       getOfferte(projectCode); saveCalc('off',{key:projectCode});
       if(typeof renderProjectDetail==='function' && typeof huidigProject!=='undefined' && huidigProject && huidigProject.code===projectCode){
-        renderProjectDetail(huidigProject);
+        if(typeof projSectieKies==='function') projSectieKies('calculatie'); else renderProjectDetail(huidigProject);
         setTimeout(()=>{const el=document.getElementById('offerte-calc-'+cid(projectCode)); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});},200);
       } else { openStandalone(projectCode); }
       return;

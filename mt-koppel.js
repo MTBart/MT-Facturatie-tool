@@ -62,7 +62,7 @@
         id: msg.id || '', internetMessageId: msg.internetMessageId || '', subject: msg.subject || '',
         from: van, date: msg.receivedDateTime || msg.date || '', webLink: msg.webLink || '',
         mbx: msg.mbx || '', ts: nu, gewijzigd: nu
-      }, extra || {});
+      }, typeof msg.hasAttachments === 'boolean' ? { hasAttachments: msg.hasAttachments } : {}, extra || {});
     },
 
     // ── journaal ──

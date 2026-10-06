@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-06 — Projectmap: een mapzoeker (projMap) voor lezen en schrijven, Mappen herstellen met droogloop
+- Commit: `44f93b3` | Auteur: Bart Witte
+
 ## 2026-10-06 — Immutable mail-id's: koppelingen en chips blijven na verplaatsen, terugval die echt werkt
 - Commit: `a90feed` | Auteur: Bart Witte
 
