@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-06 — Router: links naar project en klant, terug/vooruit, kopieer link en projectwisselaar
+- Commit: `ac65d8a` | Auteur: Bart Witte
+
 ## 2026-10-06 — Samenvoegers projecten, planning en planblokken: niets meer kwijt bij gelijktijdig werken
 - Commit: `588d30d` | Auteur: Bart Witte
 

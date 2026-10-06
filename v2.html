@@ -22,7 +22,8 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-toggl.js?v=2026-10-06a"></script>
-<script src="mt-inbox.js?v=2026-10-06a"></script>
+<script src="mt-koppel.js?v=2026-10-06a"></script>
+<script src="mt-inbox.js?v=2026-10-06b"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -1864,6 +1865,11 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
       #tab-inbox .inbox-msg.gekoppeld{background:rgba(46,125,50,.07)}
       #tab-inbox .inbox-msg.gekoppeld:hover{background:rgba(46,125,50,.13)}
       #tab-inbox .inbox-msg.gekoppeld.actief{background:#EAF3EA}
+      #tab-inbox .inbox-msg a.kpchip{text-decoration:none}
+      #tab-inbox .inbox-msg a.kpchip:hover,#tab-inbox .inbox-msg a.kpchip:focus-visible{background:rgba(46,125,50,.28);outline:none}
+      #tab-inbox .ib-kpgroep{display:inline-flex;gap:0;white-space:nowrap}
+      #tab-inbox .ib-kpgroep .btn:first-child{border-top-right-radius:0;border-bottom-right-radius:0}
+      #tab-inbox .ib-kpgroep .btn:last-child{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px}
       #tab-inbox .inbox-msg .kpchip{display:inline-flex;align-items:center;gap:2px;font-size:9.5px;font-family:var(--mono,monospace);color:#1b5e20;background:rgba(46,125,50,.14);border-radius:3px;padding:0 4px;margin-left:6px;white-space:nowrap;vertical-align:middle}
       #tab-inbox .inbox-msg .van{font-weight:600;display:flex;justify-content:space-between;gap:6px}
       #tab-inbox .inbox-msg .van .dt{font-weight:400;color:var(--text-faint,#999);font-size:10.5px;white-space:nowrap}
@@ -5034,7 +5040,7 @@ async function ontkoppelMail(code,idx){
   // idx telt over de ACTIEVE koppelingen (zoals getoond); ontkoppelen = tombstone, niet wissen.
   const x=mailLinksVoor(code)[idx];if(!x)return;
   if(!await mtDialog.confirm({title:'Mail ontkoppelen',message:'Mail "'+(x.subject||'')+'" ontkoppelen van '+code+'?\nDe mail zelf blijft in Outlook staan.',okLabel:'Ontkoppelen',danger:true}))return;
-  const all=mailLinksAll();mailLinkOntkoppel(all,code,mailLinkIdent(x),x.id);mailLinksSave(all);
+  MTKoppel.ontkoppelMail(code,mailLinkIdent(x),{id:x.id});
   if(huidigProject&&huidigProject.code===code)renderProjectDetail(huidigProject);
 }
 
@@ -7061,13 +7067,12 @@ async function maakProjectAan(){
   aangemaakt=true;
   slaProjectenOp();
   // Bron-mail automatisch aan het verse project koppelen (zoals de inbox-knop "koppel project").
+  // Had de mail bijlagen, dan na het sluiten van de modal het bijlagen-venster aanbieden.
+  let bijlagenNa=null;
   if(_ibProjBron){
     try{
-      const ml=mailLinksAll(); (ml[code]=ml[code]||[]).push({
-        id:_ibProjBron.id,internetMessageId:_ibProjBron.internetMessageId,
-        subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,
-        webLink:_ibProjBron.webLink,mbx:_ibProjBron.mbx,ts:Date.now(),gewijzigd:Date.now()});
-      mailLinksSave(ml);
+      const r=MTKoppel.koppelMail(code,_ibProjBron,{bron:'nieuw-project',mbx:_ibProjBron.mbx});
+      if(r.status!=='fout'&&_ibProjBron.hasAttachments) bijlagenNa={id:_ibProjBron.id,mbx:_ibProjBron.mbx};
     }catch(e){console.warn('bron-mail koppelen faalde:',e);}
     _ibProjBron=null;
   }
@@ -7119,7 +7124,13 @@ async function maakProjectAan(){
   }
   if(mapFout) projCtxStatus(code,'⚠ mappen niet aangemaakt');
   else { projCtxStatus(code,'✓ klaar'); setTimeout(()=>{ if(_projStatus[code]==='✓ klaar') projCtxStatus(code,''); },4000); }
-  setTimeout(()=>{ sluitModal(); _projAanmaakVrij(); },1600);
+  setTimeout(()=>{ sluitModal(); _projAanmaakVrij();
+    if(bijlagenNa&&typeof inboxBijlagenVraag==='function'){
+      if(typeof _inbox!=='undefined'&&_inbox.mbx&&bijlagenNa.mbx&&_inbox.mbx!==bijlagenNa.mbx){
+        if(typeof planToast==='function') planToast('📎 Bijlagen: open de mail in de inbox en kies "Bijlagen → projectmap"');
+      } else inboxBijlagenVraag(bijlagenNa.id,code);
+    }
+  },1600);
   }finally{ if(!aangemaakt) _projAanmaakVrij(); }
 }
 
@@ -8280,7 +8291,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -8346,6 +8357,14 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const per = new Map();
       [...R, ...L].forEach(x => { if (!x || !x.id) return; const o = per.get(x.id); if (!o || String(x.tijd || '') >= String(o.tijd || '')) per.set(x.id, x); });
       return [...per.values()];
+    },
+    // Koppel-journaal (B4, mt-koppel.js): alleen toevoegen, vereniging op id, laatste 2000.
+    // Zelfstandig (niet via window.MTKoppel), zodat hydrate niet blokkeert als mt-koppel.js ontbreekt.
+    mt_koppel_journaal(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
+      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
+      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-2000);
     },
     // Taken-journaal: alleen toevoegen. Vereniging op id, gesorteerd op tijd, laatste 1000.
     mt_taken_journaal(lokaal, spData) {
@@ -12128,7 +12147,15 @@ function activiteitOpen(force){
     try{ const bc=(m.body&&m.body.content)||''; const isH=m.body&&/html/i.test(m.body.contentType||''); if(bc) bodyHtml=isH?String(bc):('<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:12px;padding:8px;margin:0">'+esc(bc)+'</pre>'); }catch(e){}
     o.mail_context={id:m.id, subject:m.subject||'', from:(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'', received:(m.receivedDateTime||'').slice(0,16).replace('T',' '), preview:(m.bodyPreview||''), body_html:bodyHtml, weblink:(m.webLink||'')};
     // Al aan een project gekoppeld? Koppel de offerte aan datzelfde project (klant prefill via _mbCtx).
-    try{ const info=(typeof mailLinkInfo==='function')?mailLinkInfo(m):null; if(info&&info.code) o.project_code=info.code; }catch(e){}
+    // Hangt de mail aan meerdere projecten, dan eerst kiezen (anders zou het eerste willekeurig winnen).
+    try{
+      const codes=(window.MTKoppel)?MTKoppel.mailProjecten(m):[];
+      if(codes.length===1) o.project_code=codes[0];
+      else if(codes.length>1&&typeof mtDialog!=='undefined'){
+        const i=await mtDialog.choose({title:'Offerte voor welk project?',message:'Deze mail hangt aan '+codes.length+' projecten. Annuleren = losse offerte.',choices:codes.map(c=>({label:c}))});
+        if(i!==null&&i!==undefined&&codes[i]) o.project_code=codes[i];
+      }
+    }catch(e){}
     saveCalc('off',{key:key});
     if(typeof track==='function'){ try{ track('inbox','maak_offerte',{detail:key}); }catch(e){} }
     if(typeof tbDoTab==='function') tbDoTab('projecten');
