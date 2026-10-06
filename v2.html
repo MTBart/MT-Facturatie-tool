@@ -6336,6 +6336,7 @@ function projectTijdlijn(proj){
   const dossierKop=`<div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--text-dim);margin-bottom:0.4rem">
       <span title="Telling van de koppelingen in het nieuwe model tegen de bestaande mail-koppelingen (moet gelijk zijn)">✉ ${dos.actief.length} mail${dos.actief.length===1?'':'s'}${dos.ontkoppeld?` · ${dos.ontkoppeld} ontkoppeld (bewaard)`:''}${dos.klopt?'':' · <b style="color:#c0392b">⚠ telling klopt niet — meld dit</b>'}</span>
       <button class="btn btn-xs btn-secondary" onclick="dossierLaadMap('${_jsCode(proj.code)}')" title="Alleen lezen: toont de bestanden uit de projectmap in de tijdlijn">🗂 Projectmap ${mapInfo?'verversen':'tonen'}</button>
+      <button class="btn btn-xs btn-secondary" onclick="projMappenHerstel('${_jsCode(proj.code)}')" title="Controleert eerst wat ontbreekt (en of er dubbele projectmappen zijn); maakt pas na bevestiging ontbrekende mappen aan. Hernoemt of verplaatst nooit iets.">🗂 Mappen herstellen</button>
       <span id="dossier-map-st-${sidD}">${mapInfo?(mapInfo.fout?`<span style="color:#c0392b">${esc(mapInfo.fout)}</span>`:(mapInfo.pad?`${mapInfo.bestanden.length} bestanden · ${esc(mapInfo.pad)}`:'')):''}</span>
     </div>`;
   if(!events.length) return `<hr class="divider"><div class="card-title" style="margin-bottom:0.5rem">Projectdossier</div>${dossierKop}<p style="color:var(--text-faint);font-size:13px">Nog niets in het dossier.</p>`;
@@ -6366,24 +6367,10 @@ function dossierKoppelingen(code){
   const voor=ruw.filter(x=>!x.ontkoppeld).length;
   return {model,actief,ontkoppeld:model.length-actief.length,klopt:voor===actief.length&&ruw.length===model.length};
 }
-// Projectmap zoeken ZONDER iets aan te maken (genereerProjectMappen maakt mappen aan;
-// dat mag hier niet). Volgt Nieuwe mappenstructuur/<klant>/[<locatie>/]<CODE> - … .
+// Projectmap zoeken ZONDER iets aan te maken — via projMap (zelfde regels als de schrijver).
 async function _vindProjectMapAlleenLezen(proj){
-  const ROOT='Nieuwe mappenstructuur';
-  const zoek=async(pad,pred)=>{ const l=await _SP.listChildren(pad); return l.find(c=>c.folder&&pred(c.name)); };
-  const k=(typeof klantByCode==='function')?klantByCode(proj.klant):null;
-  const klantNaam=String((k&&k.naam)||proj.klant_naam||proj.klant||'').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'');
-  const kl=await zoek(ROOT,n=>_SP._norm(n)===_SP._norm(klantNaam));
-  if(!kl) return null;
-  const pad=`${ROOT}/${kl.name}`;
-  const isProj=n=>n.startsWith(proj.code+' - ')||n===proj.code;
-  const direct=await zoek(pad,isProj);
-  if(direct) return `${pad}/${direct.name}`;
-  for(const loc of (await _SP.listChildren(pad)).filter(c=>c.folder)){
-    const hit=await zoek(`${pad}/${loc.name}`,isProj);
-    if(hit) return `${pad}/${loc.name}/${hit.name}`;
-  }
-  return null;
+  const m=await window.projMap(proj,{maak:false});
+  return m.pad||null;
 }
 async function dossierLaadMap(code){
   const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj) return;
@@ -6392,8 +6379,11 @@ async function dossierLaadMap(code){
   window._dossierMap=window._dossierMap||{};
   try{
     const token=await window.getGraphToken(); if(!token) throw new Error('niet ingelogd bij Microsoft 365');
-    const pad=await _vindProjectMapAlleenLezen(proj);
-    if(!pad){ window._dossierMap[code]={pad:null,bestanden:[],fout:'Geen projectmap gevonden (die wordt pas gemaakt bij de eerste opslag)'}; }
+    const pm=await window.projMap(proj,{maak:false});
+    const pad=pm.pad;
+    if(!pad){ window._dossierMap[code]={pad:null,bestanden:[],fout:pm.dubbel
+      ?'Meerdere projectmappen gevonden ('+pm.kandidaten.length+') — zie 🗂 Mappen herstellen'
+      :'Geen projectmap gevonden (die wordt pas gemaakt bij de eerste opslag)'}; }
     else{
       const bestanden=[];
       for(const sub of (await _SP.listChildren(pad)).filter(c=>c.folder)){
@@ -8500,7 +8490,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   async listChildren(path) {
     const token = await window.getGraphToken();
     if (!token) throw new Error('Niet ingelogd op Microsoft 365');
-    const url = `https://graph.microsoft.com/v1.0/drives/${this.PROJ_DRIVE}/root:/${_encPath(path)}:/children?$select=id,name,folder&$top=999`;
+    const url = `https://graph.microsoft.com/v1.0/drives/${this.PROJ_DRIVE}/root:/${_encPath(path)}:/children?$select=id,name,folder,webUrl&$top=999`;
     const r = await fetch(url, { headers: {'Authorization':`Bearer ${token}`} });
     if (r.status === 404) return [];
     if (!r.ok) throw new Error(`list "${path}" HTTP ${r.status}`);
@@ -8572,12 +8562,125 @@ const _SP = Object.assign(window.MTCore.makeSP({
   }
 });
 
-// Mappenstructuur op SharePoint voor nieuw project (mkdir-p, idempotent)
+// ═══ PROJECTMAP (brok B6): één mapzoeker voor lezen én schrijven ═══
+// Structuur: Nieuwe mappenstructuur/<klant>/[<locatie>/]<CODE> - <naam>/<submappen>.
+// Zoekregels (lezer = schrijver): onder de klantmap (exacte naam, anders genormaliseerd) en
+// diens locatiemappen eerst exact "<CODE> - <naam>", anders "<CODE> - …" of "<CODE>".
+// Meerdere kandidaten → geen gok: melden. Nooit hernoemen, verplaatsen of samenvoegen.
+const PROJ_ROOT = 'Nieuwe mappenstructuur';
+const PROJ_SUBS = ['01_Offerte','02_Ontwerp','03_Vectorworks','04_Holzher',
+                   '05_Aangeleverd','06_Fotos','07_Administratie','08_Archief',
+                   '09_Werktekeningen','10_CNC'];
+const _projMapCache = {};     // code -> {itemId, pad, webUrl} (deze sessie)
+const _projSubOk = {};        // "<pad>/<sub>" -> true (submap deze sessie al gecontroleerd)
+const _projVeilig = s => String(s||'').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'');
+function _projKlantNaam(proj){ const k=(typeof klantByCode==='function')?klantByCode(proj.klant):null; return (k&&k.naam)||proj.klant_naam||proj.klant||''; }
+function _projLocNaam(proj){
+  if(!proj.loc) return '';
+  const k=(typeof klantByCode==='function')?klantByCode(proj.klant):null;
+  const lc=k&&Array.isArray(k.locaties)?k.locaties.find(x=>x.code===(proj.loc||'').toUpperCase()):null;
+  return (lc&&lc.naam)||proj.loc_naam||proj.loc;
+}
+function _projMapNaam(proj){ return _projVeilig(`${proj.code} - ${proj.product_naam||proj.naam||proj.code}`); }
+// Read-only zoeken. `lijst` = optionele memo voor listChildren (rapport over alle projecten).
+async function _projMapZoek(proj, lijst){
+  const lees = lijst || (p => _SP.listChildren(p));
+  const kids = await lees(PROJ_ROOT);
+  const kn = _projVeilig(_projKlantNaam(proj));
+  const kl = kids.find(c=>c.folder&&c.name===kn) || kids.find(c=>c.folder&&_SP._norm(c.name)===_SP._norm(kn));
+  if(!kl) return { pad:null, kandidaten:[], reden:'geen klantmap "'+kn+'"' };
+  const klPad = `${PROJ_ROOT}/${kl.name}`;
+  const exactNaam = _projMapNaam(proj), code = proj.code;
+  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code;
+  const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n);   // ziet eruit als een (andere) projectmap → niet induiken
+  const kandidaten = [];
+  const klKids = await lees(klPad);
+  for(const c of klKids.filter(c=>c.folder)){
+    if(isProj(c.name)) kandidaten.push({ itemId:c.id, pad:`${klPad}/${c.name}`, webUrl:c.webUrl||'', naam:c.name });
+    else if(!lijkt(c.name)){
+      for(const d of (await lees(`${klPad}/${c.name}`)).filter(d=>d.folder&&isProj(d.name)))
+        kandidaten.push({ itemId:d.id, pad:`${klPad}/${c.name}/${d.name}`, webUrl:d.webUrl||'', naam:d.name });
+    }
+  }
+  const exact = kandidaten.filter(x=>x.naam===exactNaam);
+  const keuze = exact.length===1 ? exact[0] : (exact.length===0 && kandidaten.length===1 ? kandidaten[0] : null);
+  return { pad:keuze?keuze.pad:null, itemId:keuze?keuze.itemId:null, webUrl:keuze?keuze.webUrl:'',
+    kandidaten, dubbel:kandidaten.length>1, klPad, reden:keuze?'':(kandidaten.length>1?'meerdere projectmappen':'geen projectmap') };
+}
+// Gevonden map op het project bewaren (alleen als er iets veranderd is → geen sync-ruis).
+function _projMapBewaar(proj, m){
+  const rec = (typeof PROJECT_CODES!=='undefined') ? PROJECT_CODES.find(p=>p.code===proj.code) : null;
+  _projMapCache[proj.code] = { itemId:m.itemId, pad:m.pad, webUrl:m.webUrl||'' };
+  if(!rec) return;
+  const oud = rec.map||{};
+  if(oud.itemId===m.itemId && oud.pad===m.pad && (oud.webUrl||'')===(m.webUrl||'')) return;
+  rec.map = { itemId:m.itemId, pad:m.pad, webUrl:m.webUrl||'', gecheckt:new Date().toISOString() };
+  if(proj!==rec) proj.map = rec.map;
+  if(typeof slaProjectenOp==='function') slaProjectenOp();
+}
+// Pad van een drive-item uit parentReference ("/drives/<id>/root:/a/b") + naam.
+function _projItemPad(it){
+  let p = String((it.parentReference&&it.parentReference.path)||'').replace(/^\/drives\/[^/]+\/root:?/,'').replace(/^\//,'');
+  try{ p = decodeURIComponent(p); }catch(e){}
+  return (p?p+'/':'')+it.name;
+}
+// projMap(proj,{maak}) → {itemId, pad, webUrl} of {pad:null, dubbel, kandidaten, reden}.
+//  1. opgeslagen itemId → 1 call (bestaat nog? pad bijwerken als de map handmatig hernoemd/
+//     verplaatst is — alleen het opgeslagen pad, nooit de map zelf)
+//  2. anders read-only zoeken (_projMapZoek); gevonden → opslaan op het project
+//  3. alleen met maak:true (projectaanmaak, "Mappen herstellen", eerste upload) aanmaken
+window.projMap = async function(proj, { maak=false } = {}){
+  if(!proj||!proj.code) throw new Error('geen project');
+  if(_projMapCache[proj.code]) return _projMapCache[proj.code];
+  const rec = (typeof PROJECT_CODES!=='undefined' && PROJECT_CODES.find(p=>p.code===proj.code)) || proj;
+  if(rec.map && rec.map.itemId){
+    const token = await window.getGraphToken();
+    if(!token) throw new Error('Niet ingelogd op Microsoft 365');
+    const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/items/${encodeURIComponent(rec.map.itemId)}?$select=id,name,webUrl,parentReference,folder`,
+      { headers:{'Authorization':`Bearer ${token}`} });
+    if(r.ok){
+      const it = await r.json();
+      if(it.folder){ const m={ itemId:it.id, pad:_projItemPad(it), webUrl:it.webUrl||'' }; _projMapBewaar(proj,m); return _projMapCache[proj.code]; }
+    } else if(r.status!==404) throw new Error(`projectmap controleren HTTP ${r.status}`);
+    // 404 of geen map meer → opnieuw zoeken
+  }
+  const z = await _projMapZoek(proj);
+  if(z.pad){ _projMapBewaar(proj,z); return _projMapCache[proj.code]; }
+  if(z.dubbel) return { pad:null, dubbel:true, kandidaten:z.kandidaten, reden:z.reden };
+  if(!maak) return { pad:null, dubbel:false, kandidaten:[], reden:z.reden };
+  await window.genereerProjectMappen(proj);
+  return _projMapCache[proj.code] || { pad:null, reden:'aanmaken mislukt' };
+};
+// Map of een duidelijke fout (voor schrijvers die een map nodig hebben).
+async function projMapZeker(proj, opts){
+  const m = await window.projMap(proj, opts);
+  if(m.pad) return m;
+  if(m.dubbel) throw new Error(`Meerdere projectmappen voor ${proj.code} (${m.kandidaten.map(k=>k.pad).join(' | ')}) — kies er zelf één (Mappen herstellen toont ze)`);
+  throw new Error(`Geen projectmap voor ${proj.code}`);
+}
+async function projMapPad(proj, opts){ return (await projMapZeker(proj, opts)).pad; }
+// Submap binnen de projectmap verzekeren (1 call, daarna deze sessie gecachet).
+async function projSubmap(pad, sub){
+  const k = pad+'/'+sub;
+  if(_projSubOk[k]) return k;
+  const naam = await _SP.ensureFolder(pad, sub, false);
+  _projSubOk[pad+'/'+naam] = true; _projSubOk[k] = true;
+  return pad+'/'+naam;
+}
+
+// Mappenstructuur op SharePoint voor een project (mkdir-p, idempotent). Bestaat de projectmap
+// al (zelfde zoekregels als projMap), dan worden alleen ontbrekende submappen aangemaakt.
+// Meerdere kandidaatmappen → fout, niets aanmaken (geen gok, geen dubbele map erbij).
 window.genereerProjectMappen = async function(proj) {
-  const ROOT = 'Nieuwe mappenstructuur';
-  const SUBS = ['01_Offerte','02_Ontwerp','03_Vectorworks','04_Holzher',
-                '05_Aangeleverd','06_Fotos','07_Administratie','08_Archief',
-                '09_Werktekeningen','10_CNC'];
+  const ROOT = PROJ_ROOT;
+  const SUBS = PROJ_SUBS;
+  const z = await _projMapZoek(proj);
+  if (z.dubbel && !z.pad) throw new Error(`Meerdere projectmappen voor ${proj.code}: ${z.kandidaten.map(k=>k.pad).join(' | ')} — niets aangemaakt`);
+  if (z.pad) {
+    for (const sub of SUBS) await _SP.ensureFolder(z.pad, sub, false);
+    _projMapBewaar(proj, z);
+    return z.pad;
+  }
   const k = (typeof klantByCode === 'function') ? klantByCode(proj.klant) : null;
   const klantNaam = (k && k.naam) || proj.klant_naam || proj.klant;
   const klantFolder = await _SP.ensureFolder(ROOT, klantNaam);
@@ -8595,8 +8698,65 @@ window.genereerProjectMappen = async function(proj) {
   const projFolder = await _SP.ensureFolder(parent, `${proj.code} - ${projNaam}`, false);
   const projPath = `${parent}/${projFolder}`;
   for (const sub of SUBS) await _SP.ensureFolder(projPath, sub, false);
+  // itemId vastleggen (1 call), zodat volgende keren projMap met één controle-call klaar is.
+  try {
+    const token = await window.getGraphToken();
+    const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(projPath)}?$select=id,webUrl`, { headers:{'Authorization':`Bearer ${token}`} });
+    if (r.ok) { const it = await r.json(); _projMapBewaar(proj, { itemId:it.id, pad:projPath, webUrl:it.webUrl||'' }); }
+  } catch(e) { console.warn('projectmap-id vastleggen mislukt:', e.message); }
   return projPath;
 };
+// "Mappen herstellen": eerst een droogloop (wat ontbreekt, zijn er dubbele mappen), dan pas
+// na bevestiging ontbrekende mappen aanmaken. Nooit hernoemen/verplaatsen/samenvoegen.
+async function projMappenDroog(proj){
+  const z = await _projMapZoek(proj);
+  if(z.dubbel && !z.pad) return { soort:'dubbel', kandidaten:z.kandidaten };
+  if(!z.pad){
+    const loc=_projLocNaam(proj);
+    return { soort:'nieuw', pad:`${PROJ_ROOT}/${_projVeilig(_projKlantNaam(proj))}${loc?'/'+_projVeilig(loc):''}/${_projMapNaam(proj)}`, ontbreekt:PROJ_SUBS.slice(), reden:z.reden };
+  }
+  const bestaand = new Set((await _SP.listChildren(z.pad)).filter(c=>c.folder).map(c=>c.name));
+  return { soort:'bestaat', pad:z.pad, ontbreekt:PROJ_SUBS.filter(s=>!bestaand.has(s)), kandidaten:z.kandidaten, dubbel:z.dubbel };
+}
+async function projMappenHerstel(code){
+  const proj = PROJECT_CODES.find(p=>p.code===code); if(!proj) return;
+  const ask = (typeof mtDialog!=='undefined') ? mtDialog : null;
+  let d;
+  try{ d = await projMappenDroog(proj); }
+  catch(e){ if(ask) await ask.alert({title:'Mappen herstellen',message:'Controleren mislukt: '+(e.message||e)}); return; }
+  if(d.soort==='dubbel'){
+    if(ask) await ask.alert({title:'Mappen herstellen — meerdere projectmappen',message:'Er zijn '+d.kandidaten.length+' mappen die bij '+code+' kunnen horen:\n\n'
+      +d.kandidaten.map(k=>'• '+k.pad).join('\n')+'\n\nEr wordt niets aangemaakt of verplaatst. Voeg ze zelf samen in SharePoint (of hernoem er één), en probeer het daarna opnieuw.'});
+    return;
+  }
+  if(d.soort==='bestaat' && !d.ontbreekt.length){
+    if(ask) await ask.alert({title:'Mappen herstellen',message:'Alles is in orde: '+d.pad+' heeft alle '+PROJ_SUBS.length+' submappen.'});
+    return;
+  }
+  const tekst = d.soort==='nieuw'
+    ? 'Er is nog geen projectmap ('+d.reden+'). Aanmaken:\n'+d.pad+'\nmet '+PROJ_SUBS.length+' submappen.'
+    : 'Projectmap: '+d.pad+'\nOntbrekende submappen ('+d.ontbreekt.length+'):\n'+d.ontbreekt.map(s=>'• '+s).join('\n');
+  const ok = ask ? await ask.confirm({title:'Mappen herstellen',message:tekst+'\n\nEr wordt niets hernoemd, verplaatst of verwijderd.',okLabel:'Aanmaken'}) : false;
+  if(!ok) return;
+  delete _projMapCache[code];
+  try{
+    const pad = await window.genereerProjectMappen(proj);
+    if(typeof planToast==='function') planToast('🗂 Mappen hersteld: '+pad);
+  }catch(e){ if(ask) await ask.alert({title:'Mappen herstellen',message:'Aanmaken mislukt: '+(e.message||e)}); }
+  if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof _rerenderDetailKeepScroll==='function') _rerenderDetailKeepScroll();
+}
+// Rapport: projecten met meer dan één kandidaat-projectmap. Alleen melden (console-tabel).
+async function projMappenDubbelRapport(){
+  const memo = {};
+  const lees = p => memo[p] || (memo[p] = _SP.listChildren(p));
+  const uit = [];
+  for(const proj of PROJECT_CODES){
+    try{ const z = await _projMapZoek(proj, lees); if(z.kandidaten.length>1) uit.push({ code:proj.code, aantal:z.kandidaten.length, gekozen:z.pad||'(geen — niet eenduidig)', mappen:z.kandidaten.map(k=>k.pad).join(' | ') }); }
+    catch(e){ uit.push({ code:proj.code, aantal:'?', gekozen:'', mappen:'fout: '+(e.message||e) }); }
+  }
+  if(typeof console.table==='function') console.table(uit);
+  return uit;
+}
 
 // Kleine HTML-escape helper (ook gebruikt door latere modules — geen conflict met _esc op r.10259)
 function _escH(s){return esc(s);}   // alias van de canonieke esc() bovenin (was identieke kopie)
@@ -8914,12 +9074,12 @@ async function _oplHydrateFotos(root){
   }
 }
 
-// Projectmap-pad voor een code resolven (idempotent via bestaande helper), gecached.
+// Projectmap-pad voor een code resolven — ALLEEN LEZEN (projMap), gecached. Maakt geen mappen aan.
 async function _oplProjPath(code){
   if(_oplProjPathCache[code]) return _oplProjPathCache[code];
   const proj = (typeof PROJECT_CODES!=='undefined' && PROJECT_CODES.find) ? PROJECT_CODES.find(p=>p.code===code) : null;
   if(!proj) throw new Error('project onbekend: '+code);
-  const path = await window.genereerProjectMappen(proj);
+  const path = await projMapPad(proj, { maak:false });
   _oplProjPathCache[code] = path;
   return path;
 }
@@ -9421,12 +9581,20 @@ function _bytesGelijk(a, b) {
 window.spUploadProjectBytes = async function(proj, naam, bytes, contentType, subfolder) {
   const token = await window.getGraphToken();
   if (!token) throw new Error('Niet ingelogd op Microsoft 365');
-  const projPath = await window.genereerProjectMappen(proj);
-  const sub = subfolder || '05_Aangeleverd';
+  // Projectmap via projMap (gecachet; 1 controle-call per sessie) + alleen de submap verzekeren.
+  // Nog geen projectmap? Dan maakt de eerste opslag hem aan (zoals altijd); bij twijfel (meerdere
+  // kandidaten) stopt de upload met een duidelijke melding.
+  const pm = await projMapZeker(proj, { maak:true });
+  const subPad = await projSubmap(pm.pad, subfolder || '05_Aangeleverd');
   const veilig = String(naam||'bijlage').replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'') || 'bijlage';
-  const dest = `${projPath}/${sub}/${veilig}`;
+  const dest = `${subPad}/${veilig}`;
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  const pad = `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(dest)}`;
+  // Adresseren vanaf het map-item (items/<id>:/sub/bestand): wordt de projectmap intussen
+  // hernoemd of verplaatst, dan komt het bestand tóch in de goede map en ontstaat er geen
+  // nieuwe map op het oude pad (een PUT op een pad maakt ontbrekende mappen stil aan).
+  const pad = pm.itemId
+    ? `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/items/${encodeURIComponent(pm.itemId)}:/${_encPath(subPad.slice(pm.pad.length+1)+'/'+veilig)}`
+    : `https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(dest)}`;
   const auth = { 'Authorization': `Bearer ${token}` };
   const er = await fetch(`${pad}?$select=id,name,size,webUrl`, { headers: auth });
   if (er.ok) {
@@ -12026,7 +12194,7 @@ function activiteitOpen(force){
     const proj=opts.proj||((typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===key||p.code===o.project_code):null);
     const code=(proj&&proj.code)||o.project_code||key;
     if(opts.melden) calcStatus(proj?'Naar de projectmap schrijven…':'Naar de map "'+LOSSE_MAP+'" schrijven…','bezig',key);
-    const mapPad=proj ? (await window.genereerProjectMappen(proj))+'/07_Administratie' : await _losseMap();
+    const mapPad=proj ? await projSubmap(await projMapPad(proj,{maak:true}),'07_Administratie') : await _losseMap();
     const gevuld=_gevuldeRegels(o), vorig=_mapState()[key]||{};
     // Instortingsbewaking: valt de inhoud in één keer meer dan de helft terug, dan gaat
     // de vorige versie eerst apart weg. Zo is een lege hersave nooit het einde van een
