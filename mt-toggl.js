@@ -27,7 +27,7 @@
  *   - projecten-laag : PROJECT_CODES, huidigProject, resolveKlantNaam,
  *                      resolveMbContact, gekoppeldeMailsHtml, slaProjectenOp,
  *                      _tgProjectIdVoorMt, openModal, tbDoTab,
- *                      renderProjectLijst, selecteerProject, renderProjectDetail
+ *                      renderProjectLijst, selecteerProject, openProject, renderProjectDetail
  *   - tracking       : window.track (optioneel, altijd achter een guard)
  *
  * OMGEKEERD gebruikt v2.html deze symbolen uit dit bestand: focusOpen,
@@ -848,9 +848,19 @@ function tgNaarVolledigProject(code){
   if(typeof PROJECT_CODES==='undefined') return;
   const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
   try{ if(window.track) track('toggl','naar_volledig_project',{detail:code}); }catch(e){}
+  // Via openProject (zet huidigProject, lijst actief, detail). huidigProject vooraf zetten
+  // zodat de tabwissel meteen dít project tekent i.p.v. eerst het vorige.
+  if(typeof openProject==='function'){
+    huidigProject=mt;
+    if(typeof tbDoTab==='function') tbDoTab('projecten');
+    const pd=document.getElementById('project-detail');
+    if(!pd||pd.dataset.code!==code) openProject(code);
+    const el=[...document.querySelectorAll('#project-lijst .factuur-item')].find(d=>d.dataset.code===code);
+    if(el) el.scrollIntoView({block:'nearest'});
+    return;
+  }
+  // Terugval voor een oudere v2 zonder openProject.
   if(typeof tbDoTab==='function') tbDoTab('projecten');
-  // Even wachten tot de Projecten-tab gerenderd is, dan het project selecteren
-  // via de bestaande lijst-flow (zet huidigProject + renderProjectDetail).
   setTimeout(()=>{
     if(typeof renderProjectLijst==='function') renderProjectLijst();
     const el=document.querySelector(`#project-lijst .factuur-item[onclick*="selecteerProject('${code}'"]`);

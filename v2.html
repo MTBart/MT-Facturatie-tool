@@ -21,8 +21,8 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
-<script src="mt-toggl.js?v=2026-10-03c"></script>
-<script src="mt-inbox.js?v=2026-10-03d"></script>
+<script src="mt-toggl.js?v=2026-10-06a"></script>
+<script src="mt-inbox.js?v=2026-10-06a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -450,6 +450,18 @@ button{transition:transform .07s ease,filter .07s ease}
 .project-kaart.actief{border-color:var(--green);border-left:4px solid var(--gold)}
 .project-naam{font-family:var(--serif);font-size:16px;font-weight:400;font-style:italic;color:var(--text)}
 .project-code-badge{font-family:var(--mono);font-size:10px;background:var(--green-light);color:var(--green);padding:2px 8px;border-radius:10px;display:inline-block;margin-bottom:6px}
+/* Contextbalk projectdetail — sticky onder de tabbalk (top wordt in JS gezet) */
+.proj-ctx{position:sticky;top:112px;z-index:50;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0;max-width:100%;
+  margin-bottom:var(--space-3);padding:8px 12px;background:var(--surface-overlay);border:1px solid var(--border);border-left:4px solid var(--gold);
+  border-radius:var(--radius);box-shadow:var(--shadow-sm);font-size:var(--text-sm)}
+.proj-ctx>span{min-width:0}
+.proj-ctx-klant,.proj-ctx-loc{color:var(--text-dim);font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj-ctx-sep{color:var(--gold);font-weight:700}
+.proj-ctx-proj{display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:100%}
+.proj-ctx-code{flex:0 0 auto;font-family:var(--mono);font-size:12px;font-weight:600;background:var(--green);color:var(--n-0);padding:2px 9px;border-radius:10px;letter-spacing:.03em}
+.proj-ctx-naam{min-width:0;font-family:var(--serif);font-style:italic;font-size:15px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj-ctx-status{margin-left:auto;font-size:11px;color:var(--gold-text);background:var(--gold-light);border-radius:9px;padding:2px 8px;white-space:nowrap}
+.proj-ctx-status[hidden]{display:none}
 .materiaal-lijst{width:100%;border-collapse:collapse;font-size:12px;margin-top:0.75rem}
 .materiaal-lijst th{text-align:left;padding:var(--cell-py) var(--cell-px);font-family:var(--mono);font-size:10px;color:var(--text-faint);text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--surface-sunken)}
 .materiaal-lijst td{padding:var(--cell-py) var(--cell-px);border-bottom:1px solid var(--border-hair)}
@@ -921,7 +933,7 @@ button{transition:transform .07s ease,filter .07s ease}
             <button class="btn btn-gold btn-sm" onclick="openModal()" style="flex:1">+ Nieuw project</button>
             <button class="btn btn-secondary btn-sm" onclick="nieuweOfferte()" style="flex:1" title="Losse offerte-calculatie (voorcalculatie)">+ Nieuwe offerte</button>
           </div>
-          <input class="zoek-input" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
+          <input class="zoek-input" id="project-zoek" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
           <div id="mobiel-meldingen-container"></div>
           <div id="project-lijst"></div>
         </div>
@@ -2153,7 +2165,7 @@ button{transition:transform .07s ease,filter .07s ease}
 
     <div class="flex">
       <button class="btn btn-gold btn-sm" onclick="autoCode(true)">✨ Genereer code</button>
-      <button class="btn btn-primary" onclick="maakProjectAan()">Aanmaken</button>
+      <button class="btn btn-primary" id="modal-aanmaken-knop" onclick="maakProjectAan()">Aanmaken</button>
       <button class="btn btn-secondary" onclick="sluitModal()">Annuleren</button>
       <span id="modal-status" style="font-size:12px;color:var(--text-dim)"></span>
     </div>
@@ -2467,7 +2479,12 @@ function showTab(name,btn){
   if(name==='voorraad') renderVoorraadActief();
   if(name==='historie') renderHistory();
   if(name==='bestelling') renderBestellijst();
-  if(name==='projecten') renderProjectLijst();
+  if(name==='projecten'){
+    // Detail bijwerken als het niet (meer) het huidige project toont; een open losse offerte laten staan.
+    const pd=document.getElementById('project-detail');
+    const vers=huidigProject && pd && !pd.dataset.offerte && pd.dataset.code!==huidigProject.code && openProject(huidigProject.code,{scroll:false});
+    if(!vers) renderProjectLijst();
+  }
   if(name==='oplevering') oplViewerOpen();
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
@@ -4548,21 +4565,65 @@ function exportBestellijst(){
 function renderProjectLijst(filter=''){
   const el=document.getElementById('project-lijst');if(!el) return;
   const gefilterd=filter?PROJECT_CODES.filter(p=>p.code.toLowerCase().includes(filter.toLowerCase())||p.naam?.toLowerCase().includes(filter.toLowerCase())):PROJECT_CODES;
-  el.innerHTML=gefilterd.map(p=>`
-    <div class="factuur-item ${huidigProject?.code===p.code?'actief':''}" onclick="selecteerProject('${p.code}',this)">
+  el.innerHTML=projSorteerNieuwst(gefilterd).map(p=>`
+    <div class="factuur-item ${huidigProject?.code===p.code?'actief':''}" data-code="${esc(p.code)}" onclick="selecteerProject('${p.code}',this)">
       <div class="factuur-item-naam">${p.naam||p.code}</div>
       <div class="factuur-item-sub"><span class="code">${p.code}</span><span class="badge badge-ok">${p.klant||''}</span></div>
     </div>`).join('');
 }
+// Alleen weergave: nieuwste eerst op `created` (YYYY-MM-DD); zelfde dag → later toegevoegd
+// eerst; zonder created achteraan in de bestaande volgorde. PROJECT_CODES blijft onaangeroerd.
+function projSorteerNieuwst(lijst){
+  return lijst.map((p,i)=>({p,i})).sort((a,b)=>{
+    const ca=a.p.created||'', cb=b.p.created||'';
+    if(!ca||!cb) return ca?-1:cb?1:a.i-b.i;
+    return ca<cb?1:ca>cb?-1:b.i-a.i;
+  }).map(x=>x.p);
+}
 function zoekProjecten(v){renderProjectLijst(v);}
-function selecteerProject(code,el){
-  document.querySelectorAll('#project-lijst .factuur-item').forEach(d=>d.classList.remove('actief'));
-  el.classList.add('actief');
-  huidigProject=PROJECT_CODES.find(p=>p.code===code);
-  renderProjectDetail(huidigProject);
+// Eén ingang om een project te tonen: op code opzoeken (huidigProject kan na een rehydrate
+// naar een oud object wijzen), lijst met actief item (zoekterm blijft staan zolang het
+// project erin valt), dan het detail.
+function openProject(code,{scroll=true}={}){
+  const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj) return null;
+  huidigProject=proj;
+  window._calcMailPaneelActief=false;
+  const zk=document.getElementById('project-zoek');
+  let f=(zk&&zk.value)||'';
+  if(f && !(proj.code.toLowerCase().includes(f.toLowerCase())||proj.naam?.toLowerCase().includes(f.toLowerCase()))){ f=''; zk.value=''; }
+  renderProjectLijst(f);
+  const it=[...document.querySelectorAll('#project-lijst .factuur-item')].find(d=>d.dataset.code===code);
+  if(scroll && it && it.scrollIntoView) it.scrollIntoView({block:'nearest'});
+  renderProjectDetail(proj);
+  return proj;
+}
+function selecteerProject(code,el){ openProject(code,{scroll:!el}); }
+// ── Contextbalk: "waar ben ik?" — Klant › Locatie › CODE — naam, sticky onder de tabbalk ──
+// Klant/locatie zijn nog spans met data-attributen; de router (B3) maakt ze klikbaar.
+const _projStatus={};   // code → lopende aanmaakstatus (mappen/Toggl), getoond in de balk
+function projContextBalk(proj){
+  const k=klantByCode(proj.klant);
+  const klantNaam=(k&&k.naam)||proj.klant_naam||proj.klant||'';
+  const locReg=(k&&proj.loc&&Array.isArray(k.locaties))?k.locaties.find(l=>l.code===(proj.loc||'').toUpperCase()):null;
+  const locNaam=(locReg&&locReg.naam)||proj.loc_naam||proj.loc||'';
+  const top=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
+  const sep='<span class="proj-ctx-sep">›</span>';
+  const st=_projStatus[proj.code]||'';
+  return `<div class="proj-ctx" style="top:${top}px" data-code="${esc(proj.code)}">`
+    +(klantNaam?`<span class="proj-ctx-klant" data-klant="${esc(proj.klant||'')}" title="${esc(klantNaam)}">${esc(klantNaam)}</span>${sep}`:'')
+    +(locNaam?`<span class="proj-ctx-loc" data-klant="${esc(proj.klant||'')}" data-loc="${esc(proj.loc||'')}" title="${esc(locNaam)}">${esc(locNaam)}</span>${sep}`:'')
+    +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(proj.code)}</span><span class="proj-ctx-naam" title="${esc(proj.naam||proj.code)}">${esc(proj.naam||proj.code)}</span></span>`
+    +`<span class="proj-ctx-status"${st?'':' hidden'}>${esc(st)}</span></div>`;
+}
+// Status in de balk bijwerken zonder het hele detail te hertekenen ('' = weg).
+function projCtxStatus(code,tekst){
+  if(tekst) _projStatus[code]=tekst; else delete _projStatus[code];
+  const el=[...document.querySelectorAll('#project-detail .proj-ctx')].find(d=>d.dataset.code===code);
+  const s=el&&el.querySelector('.proj-ctx-status'); if(!s) return;
+  s.textContent=tekst||''; s.hidden=!tekst;
 }
 function renderProjectDetail(proj){
-  if(!proj){document.getElementById('project-detail').innerHTML='';return;}
+  if(!proj){const h=document.getElementById('project-detail');h.innerHTML='';delete h.dataset.code;return;}
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]');
   const projItems=voorraad.filter(v=>v.project===proj.code);
   const totaalInkoop=projItems.reduce((s,v)=>s+(v.aantal||1)*(v.stukprijs||0),0);
@@ -4582,7 +4643,9 @@ function renderProjectDetail(proj){
   const mbNrBlok=effectiveMb
     ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${effectiveMb}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${effectiveMb} ↗</a> <span style="font-size:10px;color:var(--text-faint)">(${mbBron})</span> <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')" title="Handmatig overschrijven">✏</button>`
     : `<span style="color:var(--text-faint)">geen — </span><button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${proj.code}')">+ handmatig koppelen</button>`;
-  document.getElementById('project-detail').innerHTML=`
+  const host=document.getElementById('project-detail');
+  host.dataset.code=proj.code; delete host.dataset.offerte;
+  host.innerHTML=projContextBalk(proj)+`
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1.25rem">
         <div>
@@ -6590,6 +6653,7 @@ function afkortProduct(naam,max=40){
   return _clean(naam).replace(/\s+/g,'-').replace(/[^A-Z0-9-]/g,'').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,max);
 }
 function openModal(){
+  _projAanmaakVrij();
   _ibProjBron=null;   // schone start; inboxMaakProject() zet 'm daarna evt. opnieuw
   ['modal-naam-klant','modal-naam-locatie','modal-naam-product','modal-klant','modal-locatie','modal-product'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
@@ -6654,7 +6718,22 @@ async function verwijderProject(code){
   slaProjectenOp();huidigProject=null;
   document.getElementById('project-detail').innerHTML='';renderProjectLijst();
 }
+// Dubbelklik-slot: zolang een aanmaak loopt (en tot de modal dicht is) geen tweede project.
+let _projAanmaakBezig=false;
+function _projAanmaakVrij(){ _projAanmaakBezig=false; const b=document.getElementById('modal-aanmaken-knop'); if(b) b.disabled=false; }
+// Detail opnieuw tekenen als het nog dit project toont (niet als er intussen iets anders open is).
+function _projHerteken(code){
+  const h=document.getElementById('project-detail');
+  if(!huidigProject||huidigProject.code!==code||!h||h.dataset.code!==code) return;
+  huidigProject=PROJECT_CODES.find(p=>p.code===code)||huidigProject;
+  _rerenderDetailKeepScroll();
+}
 async function maakProjectAan(){
+  if(_projAanmaakBezig) return;
+  _projAanmaakBezig=true;
+  const knop=document.getElementById('modal-aanmaken-knop'); if(knop) knop.disabled=true;
+  let aangemaakt=false;
+  try{
   const k=_clean(document.getElementById('modal-klant').value).replace(/[^A-Z0-9]/g,'');
   const l=_clean(document.getElementById('modal-locatie').value).replace(/[^A-Z0-9]/g,'');
   const p=afkortProduct(document.getElementById('modal-product').value);
@@ -6690,6 +6769,7 @@ async function maakProjectAan(){
   if(_ibProjBron) nieuwProj.bron_mail={internetMessageId:_ibProjBron.internetMessageId,
     subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,mbx:_ibProjBron.mbx};
   PROJECT_CODES.push(nieuwProj);
+  aangemaakt=true;
   slaProjectenOp();
   // Bron-mail automatisch aan het verse project koppelen (zoals de inbox-knop "koppel project").
   if(_ibProjBron){
@@ -6710,36 +6790,48 @@ async function maakProjectAan(){
     sel.value=code;
   });
   status.style.color='var(--green)';status.textContent=`✓ ${code} aangemaakt`;
-  renderProjectLijst();
+  // Meteen het nieuwe project tonen (lijst + detail); mappen/Toggl lopen daarna door
+  // met hun status in de contextbalk.
+  openProject(code);
+  let mapFout='';
   // Mappenstructuur op SharePoint aanmaken (mkdir-p, idempotent)
   try{
     status.textContent=`✓ ${code} aangemaakt — mappen aanmaken…`;
+    projCtxStatus(code,'mappen aanmaken…');
     await genereerProjectMappen(nieuwProj);
     status.textContent=`✓ ${code} aangemaakt + mappen op SharePoint`;
   }catch(e){
     console.warn('mappen aanmaken faalde:',e);
+    mapFout=String(e.message||e);
     status.style.color='var(--amber,#d97706)';
-    status.textContent=`✓ ${code} aangemaakt — ⚠ mappen niet aangemaakt: ${e.message||e}`;
+    status.textContent=`✓ ${code} aangemaakt — ⚠ mappen niet aangemaakt: ${mapFout}`;
   }
   // M&T-verweving: meteen het Toggl-project aanmaken met de code als naam, zodat de
   // projectcode één-op-één in Toggl terugkomt. Best-effort — faalt het, dan blijft
   // het M&T-project gewoon bestaan en kan Toggl later handmatig.
   if(typeof tgMaakProjectVoorCode==='function'){
     try{
+      projCtxStatus(code,'Toggl-project aanmaken…');
       const tgId=await tgMaakProjectVoorCode(code, true);
       if(tgId){
-        nieuwProj.tg_project_id=tgId;
+        // Op code opzoeken: een rehydrate tijdens het wachten kan PROJECT_CODES vervangen hebben.
+        const pr=PROJECT_CODES.find(x=>x.code===code)||nieuwProj;
+        pr.tg_project_id=tgId; nieuwProj.tg_project_id=tgId;
         slaProjectenOp();
         status.textContent=status.textContent.replace(/^✓/,'✓')+ ' + Toggl';
+        _projHerteken(code);
       }
     }catch(e){ console.warn('Toggl-koppeling faalde:',e); }
   }
   // Offerte-calc haakt hier in: een standalone offerte die "+ Project aanmaken" koos,
   // koppelt zich aan dit verse project en bewaart zichzelf in de projectmap.
   if(typeof window._calcAfterProject==='function'){
-    try{ await window._calcAfterProject(nieuwProj); }catch(e){ console.warn('calcAfterProject faalde:',e); }
+    try{ await window._calcAfterProject(nieuwProj); _projHerteken(code); }catch(e){ console.warn('calcAfterProject faalde:',e); }
   }
-  setTimeout(sluitModal,1600);
+  if(mapFout) projCtxStatus(code,'⚠ mappen niet aangemaakt');
+  else { projCtxStatus(code,'✓ klaar'); setTimeout(()=>{ if(_projStatus[code]==='✓ klaar') projCtxStatus(code,''); },4000); }
+  setTimeout(()=>{ sluitModal(); _projAanmaakVrij(); },1600);
+  }finally{ if(!aangemaakt) _projAanmaakVrij(); }
 }
 
 // ═══ DASHBOARD ═══
@@ -8869,7 +8961,8 @@ async function mobielAanvulOpslaan() {
   // State + UI verversen
   _mobielMeldingen = _mobielAlleItems.filter(m => m.status === 'nieuw');
   mobielMeldingenRender();
-  renderProjectLijst();
+  // Het zojuist aangevulde project openen (ook na een code-wijziging klopt het detail dan).
+  if (!openProject(proj.code, { scroll: false })) renderProjectLijst();
 
   document.getElementById('mobiel-aanvul-modal').classList.add('hidden');
   _mobielHuidigeMelding = null;
@@ -9210,6 +9303,8 @@ window.initStorage = async function() {
         if (toegevoegd) console.log('app-projecten (mt_user_projects.json) read-only gemerged:', toegevoegd);
       }
     } catch(e) { console.warn('mt_user_projects.json read-only merge faalde:', e); }
+    // huidigProject naar het verse object laten wijzen (anders gaan latere wijzigingen verloren).
+    if (huidigProject) huidigProject = PROJECT_CODES.find(p => p.code === huidigProject.code) || huidigProject;
     if (typeof renderProjectLijst === 'function') renderProjectLijst();
     if (typeof renderVoorraadActief === 'function') renderVoorraadActief();
     if (typeof renderBestellijst === 'function') renderBestellijst();
@@ -11702,6 +11797,7 @@ function activiteitOpen(force){
   };
   function openStandalone(key){
     const host=document.getElementById('project-detail'); if(!host) return;
+    host.dataset.offerte=key; delete host.dataset.code;
     host.innerHTML='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">'
       +'<div class="card-title" style="margin:0">Offerte-calculator</div>'
       +'<button class="btn btn-secondary btn-sm" onclick="sluitOfferte()">← terug</button></div>'
@@ -11731,8 +11827,16 @@ function activiteitOpen(force){
   }
   window.sluitOfferte=function(){
     if(window._calcMailPaneelActief){ window._calcMailPaneelActief=false; if(typeof renderProjectLijst==='function') renderProjectLijst(); }
+    // Terug naar het project van déze offerte (als dat bestaat), anders het huidige project.
+    const h=document.getElementById('project-detail');
+    const key=h&&h.dataset.offerte; if(h) delete h.dataset.offerte;
+    const o=key&&CALC.offertes?CALC.offertes[key]:null;
+    const pcs=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES:[];
+    const pc=(o&&o.project_code&&pcs.find(p=>p.code===o.project_code))||(key&&pcs.find(p=>p.code===key));
+    const terug=pc?pc.code:((typeof huidigProject!=='undefined'&&huidigProject)?huidigProject.code:null);
+    if(terug && typeof openProject==='function' && openProject(terug,{scroll:true})) return;
     if(typeof huidigProject!=='undefined' && huidigProject && typeof renderProjectDetail==='function') renderProjectDetail(huidigProject);
-    else { const h=document.getElementById('project-detail'); if(h) h.innerHTML=''; }
+    else if(h){ h.innerHTML=''; delete h.dataset.code; }
   };
 
   // ---- render ---------------------------------------------------------------

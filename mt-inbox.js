@@ -764,6 +764,7 @@ function inboxNaarProject(code){
   try{ if(window.track) track('inbox','naar_project',{detail:code}); }catch(e){}
   if(typeof tgNaarVolledigProject==='function'){ tgNaarVolledigProject(code); return; }
   if(typeof tbDoTab==='function') tbDoTab('projecten');
+  if(typeof openProject==='function') openProject(code);
 }
 
 // Ververst alleen de koppel-knop in de geopende mail (na (ont)koppelen).

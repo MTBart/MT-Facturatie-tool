@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-03 — Codex-review bestellijst verwerkt: kapotte opslag, journaal verplicht, escaping, NCR-race
+- Commit: `f7a30cc` | Auteur: Bart Witte
+
 ## 2026-10-03 — Bestellijst: nooit meer hard wissen, journaal, eigen samenvoeger, geen stille overschrijving
 - Commit: `f83609e` | Auteur: Bart Witte
 
