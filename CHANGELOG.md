@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-06 — Projecten: nieuw project direct open, dubbelklik-slot, contextbalk, nieuwste eerst
+- Commit: `9d0761d` | Auteur: Bart Witte
+
 ## 2026-10-03 — Codex-review bestellijst verwerkt: kapotte opslag, journaal verplicht, escaping, NCR-race
 - Commit: `f7a30cc` | Auteur: Bart Witte
 

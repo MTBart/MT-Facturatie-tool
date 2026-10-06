@@ -975,8 +975,9 @@ function setTogglUserMap(m){localStorage.setItem('mt_toggl_user_map',JSON.string
 function getLopende(){return JSON.parse(localStorage.getItem('mt_uren_lopend')||'null')}
 function setLopende(e){e?localStorage.setItem('mt_uren_lopend',JSON.stringify(e)):localStorage.removeItem('mt_uren_lopend')}
 function getProjecten(){
+  // Vervallen projecten (tombstones uit de cockpit, `_vervallen`) niet tonen.
   const raw=JSON.parse(localStorage.getItem('mt_projecten')||'null');
-  if(raw&&raw.length) return raw;
+  if(raw&&raw.length) return raw.filter(p=>!(p&&p._vervallen));
   return JSON.parse(localStorage.getItem('mt_uren_projecten')||'[]');
 }
 
@@ -2204,7 +2205,22 @@ function startTbKlok(){
 // PROJECTEN BEHEER
 // ════════════════════════════════════════════
 function setProjecten(lijst){
-  localStorage.setItem('mt_projecten',JSON.stringify(lijst));
+  // Tombstones van de cockpit (`_vervallen`) bewaren: een verouderde kopie met dezelfde code
+  // mag een verwijderd project niet terugzetten. Alleen een echt nieuw/gewijzigd record (andere
+  // inhoud dan de tombstone) wint, en krijgt dan een stempel die later is dan de tombstone.
+  const tijd=x=>{const v=x&&x._gewijzigd;if(typeof v==='number')return v;const t=Date.parse(v||'');return isNaN(t)?0:t;};
+  const inhoud=x=>{const {_gewijzigd,_door,_vervallen,_hernoemd_naar,...r}=x||{};return JSON.stringify(r);};
+  let ruw=[]; try{ ruw=JSON.parse(localStorage.getItem('mt_projecten')||'[]'); if(!Array.isArray(ruw)) ruw=[]; }catch(e){ ruw=[]; }
+  const graf=new Map(ruw.filter(p=>p&&p._vervallen&&p.code).map(p=>[p.code,p]));
+  const uit=[];
+  lijst.forEach(x=>{
+    const t=x&&graf.get(x.code);
+    if(!t){ uit.push(x); return; }
+    if(tijd(x)>tijd(t)){ graf.delete(x.code); uit.push(x); return; }
+    if(inhoud(x)===inhoud(t)) return;                                  // verouderde kopie → tombstone blijft
+    x._gewijzigd=Math.max(Date.now(),tijd(t)+1); graf.delete(x.code); uit.push(x);  // echt opnieuw/anders
+  });
+  localStorage.setItem('mt_projecten',JSON.stringify([...uit,...graf.values()]));
 }
 
 function renderProjectenTab(){

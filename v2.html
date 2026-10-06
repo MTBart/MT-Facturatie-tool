@@ -16,7 +16,7 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-10-03"></script>
+<script src="mt-core.js?v=2026-10-06a"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
@@ -2270,7 +2270,11 @@ const VOORRAAD_CAT_LABEL = Object.fromEntries(VOORRAAD_CATS.map(c=>[c.key,(c.ico
 const VOORRAAD_HANDMATIG_LEVERANCIERS = ['Glas Klooster','Veldman Slijptechniek','Ostermann','Dozon','PD Hout','KGHN','Drimensa'];
 
 // Projecten zonder jaarsuffix
-let PROJECT_CODES = JSON.parse(localStorage.getItem('mt_projecten') || '[]');
+// Opslag mt_projecten = actieve projecten + tombstones (`_vervallen`). PROJECT_CODES bevat
+// alleen de actieve; _projBasis onthoudt per code hoe het record eruitzag bij laden/opslaan,
+// zodat slaProjectenOp ziet wat déze pc wijzigde en wat een andere pc intussen bijwerkte.
+let _projBasis = new Map();
+let PROJECT_CODES = projLaad();
 
 // ═══ STATE ═══
 let ledgers=[], regelCount=0, currentFile=null;
@@ -2377,7 +2381,86 @@ function isVoorraadLeverancier(naam){const l=naam.toLowerCase();return VOORRAAD_
 // Persisteert ALLEEN de cockpit-eigen projecten. Read-only meegelezen app-projecten
 // (bron:'app', uit mt_user_projects.json) worden NOOIT teruggeschreven — de app blijft
 // de enige schrijver van die records (ROUTES.md). Zo lekt de cockpit-write niet in de app.
-function slaProjectenOp(){localStorage.setItem('mt_projecten',JSON.stringify(PROJECT_CODES.filter(p=>p&&p.bron!=='app')));}
+//
+// Samenvoegen i.p.v. vervangen (brok B2): records die alleen in de opslag staan (bv. net van
+// een andere pc binnengekomen) blijven staan en komen in PROJECT_CODES; door deze pc
+// ongewijzigde records nemen de opgeslagen (mogelijk nieuwere) stand over; alleen wat hier
+// echt gewijzigd is krijgt een stempel `_gewijzigd` (ms) + `_door`. Verwijderen = projTombstone.
+function _spTijd(x){ const v=x&&x._gewijzigd; if(typeof v==='number') return v; const t=Date.parse(v||''); return isNaN(t)?0:t; }
+function _spWie(){ try{ return (typeof mtMijEmail==='function'&&mtMijEmail())||''; }catch(e){ return ''; } }
+// Stempel = nu, maar altijd later dan de stand waarop de wijziging voortbouwt (achterlopende klok).
+function _spStempel(x,vorig){ let t=Date.now(); const v=_spTijd(vorig); if(v>=t) t=v+1; x._gewijzigd=t; const w=_spWie(); if(w) x._door=w; return x; }
+function _projJson(p){ if(!p||typeof p!=='object') return JSON.stringify(p); const {_gewijzigd,_door,...r}=p; return JSON.stringify(r); }
+function _projLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_projecten')||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function projLaad(){
+  const alle=_projLees();
+  _projBasis=new Map(alle.filter(p=>p&&p.code).map(p=>[p.code,_projJson(p)]));
+  return alle.filter(p=>p&&typeof p==='object'&&!p._vervallen);
+}
+function slaProjectenOp(){
+  const opslag=_projLees(), perCode=new Map(), losOpslag=[];
+  opslag.forEach(p=>{ if(p&&p.code) perCode.set(p.code,p); else losOpslag.push(p); });
+  const uit=[], gezien=new Set(), weg=new Set();
+  for(const p of PROJECT_CODES){
+    if(!p||p.bron==='app') continue;
+    if(!p.code){ uit.push(p); continue; }
+    if(gezien.has(p.code)){ console.warn('dubbele projectcode in PROJECT_CODES — tweede record niet opgeslagen:',p.code,p); continue; }
+    gezien.add(p.code);
+    const s=perCode.get(p.code), j=_projJson(p);
+    if(s && j===_projBasis.get(p.code)){
+      // Hier niets gewijzigd → de opgeslagen stand overnemen (in place, zodat huidigProject klopt).
+      if(s._vervallen){ weg.add(p); uit.push(s); continue; }
+      if(_projJson(s)!==j||s._gewijzigd!==p._gewijzigd){ Object.keys(p).forEach(k=>delete p[k]); Object.assign(p,JSON.parse(JSON.stringify(s))); }
+      uit.push(p); continue;
+    }
+    if(!s||_projJson(s)!==j) _spStempel(p,s);
+    uit.push(p);
+  }
+  // Alleen in de opslag (andere pc, tombstones): bewaren; actieve ook tonen.
+  for(const [code,s] of perCode){
+    if(gezien.has(code)) continue;
+    uit.push(s);
+    if(!s._vervallen && s.bron!=='app') PROJECT_CODES.push(JSON.parse(JSON.stringify(s)));
+  }
+  uit.push(...losOpslag.filter(x=>!uit.includes(x)));
+  if(weg.size) PROJECT_CODES=PROJECT_CODES.filter(p=>!weg.has(p));
+  const tekst=JSON.stringify(uit);
+  if(tekst!==localStorage.getItem('mt_projecten')) localStorage.setItem('mt_projecten',tekst);
+  _projBasis=new Map(uit.filter(p=>p&&p.code).map(p=>[p.code,_projJson(p)]));
+}
+// Project verwijderen/hernoemen zonder te wissen: de opgeslagen stand wordt een tombstone
+// (`_vervallen` met tijd+door, evt. `_hernoemd_naar`), zodat een oude kopie elders hem
+// niet terugzet. De volledige gegevens blijven in de tombstone staan (herstelbaar).
+function projTombstone(code,extra){
+  const opslag=_projLees(), i=opslag.findIndex(p=>p&&p.code===code);
+  const mem=PROJECT_CODES.find(p=>p&&p.code===code);
+  const bron=mem||(i>=0?opslag[i]:{code});
+  const t=Object.assign(JSON.parse(JSON.stringify(bron)),extra||{},{_vervallen:{tijd:new Date().toISOString(),door:_spWie()}});
+  _spStempel(t,i>=0&&_spTijd(opslag[i])>_spTijd(bron)?opslag[i]:bron);
+  if(i>=0) opslag[i]=t; else opslag.push(t);
+  localStorage.setItem('mt_projecten',JSON.stringify(opslag));
+  _projBasis.set(code,_projJson(t));
+  PROJECT_CODES=PROJECT_CODES.filter(p=>!(p&&p.code===code));
+  return t;
+}
+// Samenvoeger voor lijsten met een vaste sleutel per record (projecten: code, planblokken: id).
+// Per sleutel wint de nieuwste stempel; gelijk → lokaal. Beide zonder stempel (0, data van vóór
+// B2) → SharePoint, zoals vroeger: anders duwt een pc met een verouderde kopie die bij zijn
+// eerste keer laden over nieuwere wijzigingen heen. Een record aan één kant blijft staan.
+// Records zonder sleutel blijven altijd staan (ontdubbeld op inhoud).
+function _spLokaalWint(tl,tr){ return tl>tr||(tl===tr&&tl>0); }
+function _spSamenPerSleutel(lokaal,spData,sleutel,tijd){
+  const lees=v=>{ try{ return typeof v==='string'?JSON.parse(v):v; }catch(e){ return null; } };
+  const L=Array.isArray(lees(lokaal))?lees(lokaal):[], R=Array.isArray(lees(spData))?lees(spData):[];
+  const per=new Map(), los=new Map();
+  for(const x of [...R,...L]){
+    const k=(x&&typeof x==='object')?sleutel(x):null;
+    if(k===null||k===undefined||k===''){ los.set(JSON.stringify(x),x); continue; }
+    const o=per.get(String(k));
+    if(!o||_spLokaalWint(tijd(x),tijd(o))) per.set(String(k),x);
+  }
+  return [...per.values(),...los.values()];
+}
 function fmt(n){return`€ ${n.toFixed(2).replace('.',',')}`;}
 function fmtDatum(d){return d?new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'—';}
 
@@ -5590,10 +5673,13 @@ function planToast(msg){
 }
 
 // ── Storage ──
-function planAll(){try{return JSON.parse(localStorage.getItem('mt_planning')||'{}');}catch(e){return {};}}
+// Opslag bevat ook tombstones (`_vervallen`); planAll/planVoor tonen alleen de actieve.
+// Elke echte wijziging krijgt `_gewijzigd` (ms) + `_door` voor de samenvoeger (brok B2).
+function _planRuw(){try{const a=JSON.parse(localStorage.getItem('mt_planning')||'{}');return (a&&typeof a==='object'&&!Array.isArray(a))?a:{};}catch(e){return {};}}
+function planAll(){const a=_planRuw(),uit={};Object.keys(a).forEach(k=>{if(!(a[k]&&a[k]._vervallen))uit[k]=a[k];});return uit;}
 function planVoor(code){return planAll()[code]||null;}
-function planSave(code,plan){const a=planAll();a[code]=plan;localStorage.setItem('mt_planning',JSON.stringify(a));}
-function planVerwijder(code){const a=planAll();delete a[code];localStorage.setItem('mt_planning',JSON.stringify(a));}
+function planSave(code,plan){const a=_planRuw(),v=a[code];if(!v||v._vervallen||_projJson(v)!==_projJson(plan))_spStempel(plan,v);a[code]=plan;localStorage.setItem('mt_planning',JSON.stringify(a));}
+function planVerwijder(code){const a=_planRuw(),v=a[code];if(!v||v._vervallen)return;a[code]=_spStempel(Object.assign({},v,{_vervallen:{tijd:new Date().toISOString(),door:_spWie()}}),v);localStorage.setItem('mt_planning',JSON.stringify(a));}
 
 // ── Engine ──
 // Bereken start/eind voor elke fase. gepinde fasen behouden hun start; downstream
@@ -6714,7 +6800,7 @@ function updateModalPreview(){
 }
 async function verwijderProject(code){
   if(!await mtDialog.confirm({title:'Project verwijderen',message:`Project ${code} verwijderen?`,okLabel:'Verwijderen',danger:true})) return;
-  PROJECT_CODES=PROJECT_CODES.filter(p=>p.code!==code);
+  projTombstone(code);   // niet wissen: tombstone, zodat een oude kopie elders hem niet terugzet
   slaProjectenOp();huidigProject=null;
   document.getElementById('project-detail').innerHTML='';renderProjectLijst();
 }
@@ -7997,6 +8083,27 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
   // Een samenvoeger krijgt (lokale tekst, SP-data) en geeft het samengevoegde object terug.
   mergers: {
+    // Projecten (brok B2): per code wint de nieuwste `_gewijzigd`; verwijderen/hernoemen is
+    // een tombstone (`_vervallen`, evt. `_hernoemd_naar`). Eén-zijdig blijft; zie _spSamenPerSleutel.
+    mt_projecten(lokaal, spData) { return _spSamenPerSleutel(lokaal, spData, x => x.code, _spTijd); },
+    // Planning { code: plan }: zelfde regels per code (ook: beide ongestempeld → SharePoint);
+    // planVerwijder zet een tombstone.
+    mt_planning(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+      const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {};
+      const uit = {};
+      for (const k of new Set([...Object.keys(R), ...Object.keys(L)])) {
+        if (!(k in L)) { uit[k] = R[k]; continue; }
+        if (!(k in R)) { uit[k] = L[k]; continue; }
+        uit[k] = _spLokaalWint(_spTijd(L[k]), _spTijd(R[k])) ? L[k] : R[k];
+      }
+      return uit;
+    },
+    // Planblokken (Agenda → Planning): per id; oude blokken zonder stempel tellen met hun `ts`.
+    mt_planblokken(lokaal, spData) {
+      return _spSamenPerSleutel(lokaal, spData, x => x.id, x => _spTijd(x) || (Date.parse(x && x.ts || '') || 0));
+    },
     // Bestellijst (brok L2): per regel (id; oude regels zonder id → inhoud-id) wint de
     // stand met de nieuwste `_gewijzigd`. Van de lijst halen is een tombstone
     // (`_vervallen` + nieuwe stempel), dus een oude kopie zet niets terug en wist niets.
@@ -8138,6 +8245,9 @@ const _SP = Object.assign(window.MTCore.makeSP({
         // (per offerte wint de nieuwste _gewijzigd-stempel).
         try { if (key === 'mt_calc_offertes' && window.CALC && samen && samen.offertes)
           window.CALC.offertes = mg(JSON.stringify({ versie: 2, offertes: window.CALC.offertes }), samen).offertes; } catch(e) {}
+        // Projecten: binnengekomen/bijgewerkte records meteen in PROJECT_CODES (en de lijst) zetten.
+        if (key === 'mt_projecten') setTimeout(() => { try { slaProjectenOp();
+          if (typeof renderProjectLijst === 'function' && !window._calcMailPaneelActief) renderProjectLijst(); } catch(e) {} }, 0);
         return samen;
       }) : undefined;
       try { await this.write(key + '.json', data===undefined?rawValue:data, conflictMerge); }
@@ -8913,11 +9023,19 @@ async function mobielAanvulOpslaan() {
   const locNaam = document.getElementById('aanvul-locatie').value.trim();
   const omschrijving = document.getElementById('aanvul-omschrijving').value.trim();
 
+  // Naar een code die al bestaat hernoemen zou twee projecten op één code zetten (en er één
+  // laten verdwijnen) — weigeren.
+  if (nieuweCode !== oudeCode && PROJECT_CODES.some(p => p.code === nieuweCode)) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `Code ${nieuweCode} bestaat al — kies een andere code`;
+    return;
+  }
+
   // Bestaand record bijwerken of nieuw aanmaken
   let proj = PROJECT_CODES.find(p => p.code === oudeCode);
   if (proj) {
     // Code vervangen (rename)
-    if (nieuweCode && nieuweCode !== oudeCode) proj.code = nieuweCode;
+    if (nieuweCode && nieuweCode !== oudeCode) { proj.code = nieuweCode; projTombstone(oudeCode, { _hernoemd_naar: nieuweCode }); }
     if (naam) proj.naam = naam;
     if (klant) proj.klant = klant;
     if (locNaam) proj.loc_naam = locNaam;
@@ -9211,7 +9329,10 @@ window.initStorage = async function() {
         try { samen = merger(localStorage.getItem(key), spData); }
         catch(e) { console.error('samenvoegen faalde voor', key, e); _SP.blockedKeys.add(key); return; }
         _lsSet(key, JSON.stringify(samen));
-        try { await _SP.write(key + '.json', samen); }
+        // Ook hier bij een 412 de samenvoeger gebruiken (de generieke merge kan geen
+        // projecten/planning aan en zou de write overslaan).
+        const opnieuw = (remote, local) => { const s2 = merger(JSON.stringify(local), remote); _lsSet(key, JSON.stringify(s2)); return s2; };
+        try { await _SP.write(key + '.json', samen, opnieuw); }
         catch(e) { console.warn('terugschrijven na samenvoegen faalde voor', key, ':', e.message); }
       } else {
         // SharePoint heeft data → in localStorage laden (SharePoint wint altijd)
@@ -9275,7 +9396,7 @@ window.initStorage = async function() {
   // pagina de stale versie van vóór de sync (PROJECT_CODES is op regel ~767
   // synchroon uit localStorage geladen, vóór deze async hydrate).
   try {
-    PROJECT_CODES = JSON.parse(localStorage.getItem('mt_projecten') || '[]');
+    PROJECT_CODES = projLaad();
     leveranciers  = JSON.parse(localStorage.getItem('mt_leveranciers') || '[]');
     // App-projecten (in het veld aangemaakt) READ-ONLY meelezen. De app is en blijft de
     // schrijver van mt_user_projects.json (ROUTES.md) — wij voegen hier alleen records toe
@@ -9285,6 +9406,8 @@ window.initStorage = async function() {
       const userProj = await _prefRead('mt_user_projects.json');
       if (Array.isArray(userProj) && userProj.length) {
         const bekend = new Set(PROJECT_CODES.map(p => (p.code||'').toUpperCase()));
+        // In de cockpit verwijderde (tombstone) app-projecten niet opnieuw tonen.
+        _projLees().forEach(p => { if (p && p._vervallen && p.code) bekend.add(String(p.code).toUpperCase()); });
         let toegevoegd = 0;
         userProj.forEach(u => {
           const code = (u && u.code || '').toUpperCase();
@@ -9748,25 +9871,37 @@ function admInitKnop(){
 
 // ── State & storage ──
 let _planblokken=null;
+// Opslag bevat ook tombstones (`_vervallen`); agPlanActief() is wat getoond wordt.
 function agPlanBlokken(){if(_planblokken)return _planblokken;try{return JSON.parse(localStorage.getItem('mt_planblokken')||'[]');}catch(e){return [];}}
+function agPlanActief(){return agPlanBlokken().filter(b=>b&&!b._vervallen);}
+function _agPlanSamen(lokaal,remote){return _SP.mergers.mt_planblokken(lokaal,remote);}
 
 async function agPlanLoad(){
   let d; try{ d=await _SP.read('mt_planblokken.json'); }
   catch(e){ _planblokken=agPlanBlokken(); return; }   // leesfout → lokale cache houden
-  _planblokken=Array.isArray(d)?d:[];
+  // Samenvoegen i.p.v. "SharePoint wint": een eerder alleen lokaal bewaarde wijziging blijft.
+  const remote=Array.isArray(d)?d:[];
+  _planblokken=_agPlanSamen(localStorage.getItem('mt_planblokken'),remote);
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
+  if(JSON.stringify(_planblokken)!==JSON.stringify(remote)) agPlanSchrijf();
+}
+// Schrijven met de samenvoeger als conflictoplossing (412 → per id samenvoegen).
+async function agPlanSchrijf(){
+  return _SP.write('mt_planblokken.json',_planblokken,(remote,local)=>{
+    const s2=_agPlanSamen(local,remote); _planblokken=s2;
+    try{localStorage.setItem('mt_planblokken',JSON.stringify(s2));}catch(e){}
+    return s2;
+  });
 }
 
 async function agPlanSave(){
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
-  // read-merge-write op id; leesfout → NIET schrijven (anti-clobber)
+  // read-merge-write per id (nieuwste stempel wint, verwijderen = tombstone); leesfout → NIET schrijven (anti-clobber)
   let remote; try{ remote=(await _SP.read('mt_planblokken.json'))||[]; }
   catch(e){ if(typeof planToast==='function')planToast('⚠ SharePoint niet bereikbaar — wijziging alleen lokaal bewaard'); return false; }
-  const ids=new Set((_planblokken||[]).map(b=>b.id));
-  const merged=[...(_planblokken||[]),...remote.filter(b=>!ids.has(b.id))];
-  _planblokken=merged;
+  _planblokken=_agPlanSamen(_planblokken||[],remote);
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
-  await _SP.write('mt_planblokken.json',_planblokken);
+  await agPlanSchrijf();
   return true;
 }
 
@@ -9791,7 +9926,7 @@ async function agPlanRender(){
   const totalH=(agEind-agStart)*agUurPx;
 
   // filter planblokken op persoon/project
-  let blokken=agPlanBlokken().filter(b=>{
+  let blokken=agPlanActief().filter(b=>{
     const datum=b.datum;
     return dagen.some(d=>_planYmd(d)===datum);
   });
@@ -9960,7 +10095,7 @@ function agPlanNieuwFormulier(datum,start){
   const heeftVerlof=verlof.find(v=>v.persoon===persLid.slug&&datum>=v.van&&datum<=v.tm);
   if(heeftVerlof){planToast(`${persLid.naam} heeft verlof op ${datum}`);return;}
 
-  const projs=[...new Set(agPlanBlokken().map(b=>b.project_code).filter(Boolean)),...(PROJECT_CODES||[]).map(p=>p.code)];
+  const projs=[...new Set(agPlanActief().map(b=>b.project_code).filter(Boolean)),...(PROJECT_CODES||[]).map(p=>p.code)];
   const projStr=projs.slice(0,20).join(', ');
   const proj=prompt(`Project-code${projStr?'\n(bijv. '+projStr.slice(0,60)+')':''}:`,'');
   const taak=prompt('Taak / omschrijving:','');
@@ -9974,6 +10109,7 @@ function agPlanNieuwFormulier(datum,start){
   const blok={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
     persoon:persLid.slug,project_code:proj||'',taak:taak||'',
     datum,start:startI,duurMin,notitie:'',ts:new Date().toISOString(),door:mtMijEmail()};
+  _spStempel(blok);
   const arr=agPlanBlokken(); arr.push(blok); _planblokken=arr;
   agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok aangemaakt');});
 }
@@ -9984,8 +10120,8 @@ function agPlanBlokMenu(evt,id){
   if(!actie||actie.trim()==='2') return;
   if(actie.trim()==='1'){
     const arr=agPlanBlokken();
-    const b=arr.find(x=>x.id===id);
-    _planblokken=arr.filter(x=>x.id!==id);
+    // Tombstone i.p.v. weghalen: anders zet de volgende samenvoeging hem terug.
+    _planblokken=arr.map(x=>x.id!==id?x:_spStempel({...x,_vervallen:{tijd:new Date().toISOString(),door:mtMijEmail()}},x));
     agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok verwijderd');});
   }
 }
@@ -10000,7 +10136,7 @@ function agPlanDrop(evt,datum){
   const el=document.getElementById('agplan-drop-'+datum); if(el) el.style.background='';
   // Verlof check
   const verlof=admVerlof();
-  const blok=agPlanBlokken().find(b=>b.id===id);
+  const blok=agPlanActief().find(b=>b.id===id);
   if(!blok) return;
   const heeftVerlof=verlof.find(v=>v.persoon===blok.persoon&&datum>=v.van&&datum<=v.tm);
   if(heeftVerlof){planToast(`${blok.persoon} heeft verlof op ${datum}`);return;}
@@ -10017,7 +10153,7 @@ function agPlanDrop(evt,datum){
 
   const arr=agPlanBlokken().map(b=>{
     if(b.id!==id) return b;
-    return {...b,datum,start:startStr,ts:new Date().toISOString(),door:mtMijEmail()};
+    return _spStempel({...b,datum,start:startStr,ts:new Date().toISOString(),door:mtMijEmail()},b);
   });
   _planblokken=arr;
   agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok verplaatst');});
