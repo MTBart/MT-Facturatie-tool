@@ -21,7 +21,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
-<script src="mt-toggl.js?v=2026-10-06a"></script>
+<script src="mt-toggl.js?v=2026-10-06c"></script>
 <script src="mt-koppel.js?v=2026-10-06f"></script>
 <script src="mt-inbox.js?v=2026-10-06f"></script>
 <script src="calc-engine.js"></script>
@@ -509,6 +509,47 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .dos-sel{height:var(--control-h-sm);font-size:12px;max-width:100%}
 .dos-check{display:inline-flex;align-items:center;gap:4px;color:var(--text-dim)}
 .dos-aangepast[hidden]{display:none}
+/* Projecttijdlijn (B10) */
+.tl-som{font-size:12.5px;color:var(--text-dim);margin-bottom:6px}
+.tl-som b{color:var(--text);font-family:var(--mono)}
+.tl-nav{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}
+.tl-scroll{overflow-x:auto;max-width:100%;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.tl-grid{position:relative}
+.tl-rij{display:grid;border-bottom:1px solid var(--border-hair);min-height:34px}
+.tl-rij:last-of-type{border-bottom:none}
+.tl-naam{position:sticky;left:0;z-index:3;background:var(--surface);padding:6px 8px;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-right:1px solid var(--border);display:flex;align-items:center;gap:4px}
+.tl-kop .tl-naam{background:var(--surface-sunken)}
+.tl-week{border:none;border-right:1px solid var(--border-hair);background:var(--surface-sunken);font:600 10px var(--mono);color:var(--text-dim);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:3px 0}
+.tl-week span{font-weight:400;font-size:9.5px}
+.tl-week.nu{background:var(--gold-light);color:var(--gold-text)}
+.tl-cel{position:relative;border:none;border-right:1px solid var(--border-hair);background:transparent;cursor:pointer;padding:4px 3px 14px;display:flex;flex-direction:column;gap:2px;justify-content:flex-start;min-width:0}
+.tl-cel:focus-visible,.tl-week:focus-visible,.tl-fase:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+.tl-cel.cap-ruim{background:rgba(47,107,69,.07)}
+.tl-cel.cap-krap{background:rgba(184,118,46,.14)}
+.tl-cel.cap-vol{background:rgba(139,26,26,.13)}
+.tl-cel.cap-geen{background:repeating-linear-gradient(45deg,transparent 0 5px,rgba(0,0,0,.04) 5px 10px)}
+.tl-cel.nu{box-shadow:inset 0 0 0 1px var(--gold-mid)}
+.tl-balk{display:block;height:6px;border-radius:3px;max-width:100%}
+.tl-balk.p{border:1.5px solid var(--pk,var(--info));background:transparent;height:7px}
+.tl-balk.w{background:var(--pk,var(--green))}
+.tl-getal{position:absolute;left:3px;right:3px;bottom:1px;font:600 9.5px var(--mono);color:var(--text-dim);white-space:nowrap;overflow:hidden;text-align:left}
+.tl-getal i{font-style:normal;color:var(--green);margin-left:4px}
+.tl-fasen{position:relative}
+.tl-fase{position:absolute;height:17px;border:none;border-radius:4px;color:#fff;font:600 10px var(--sans);padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-align:left;opacity:.9}
+.tl-fase.st-klaar{opacity:.45}
+.tl-leeg{position:absolute;left:8px;top:8px;font-size:11px;color:var(--text-faint);font-style:italic}
+.tl-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.tl-vandaag{position:absolute;top:0;bottom:0;width:2px;background:var(--error);opacity:.6;z-index:2;pointer-events:none}
+.tl-legenda{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--text-dim);margin-top:6px;align-items:center}
+.tl-lg{display:inline-block;width:12px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle;border:1px solid var(--border)}
+.tl-lg.cap-ruim{background:rgba(47,107,69,.18)}.tl-lg.cap-krap{background:rgba(184,118,46,.3)}.tl-lg.cap-vol{background:rgba(139,26,26,.28)}
+.tl-lg.p{background:transparent;border:1.5px solid var(--info)}.tl-lg.w{background:var(--green)}
+.tl-detail{margin-top:8px;font-size:12px;padding:6px 8px;border-left:3px solid var(--gold);background:var(--surface-sunken);border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.tl-detail .btn{margin-left:6px}
+.tl-dr{display:block;padding:2px 0}
+.tl-let{color:var(--warning);font-weight:600;font-family:var(--sans)}
+.tl-veeg{display:none;font-size:11px;color:var(--text-faint);margin-bottom:3px}
+@media(max-width:820px){.tl-veeg{display:block}.tl-rij{min-height:42px}.tl-fase{height:20px}.tl-cel{padding-bottom:16px}}
 /* Nog te koppelen (B9) */
 details.ntk{border:1px dashed var(--border-strong);border-radius:var(--radius);padding:6px 10px;margin-bottom:10px;background:var(--surface)}
 details.ntk>summary{cursor:pointer;font-size:13px;font-weight:600;list-style:revert}
@@ -5133,6 +5174,12 @@ function _projSectieRender(proj){
   const bouw={overzicht:projSecOverzicht,dossier:projSecDossier,planning:projSecPlanning,calculatie:projSecCalculatie,productie:projSecProductie}[_projSectie]||projSecOverzicht;
   pan.innerHTML=bouw(proj,c); pan.dataset.klaar='1';
   if(_projSectie==='dossier') renderDossier(document.getElementById('proj-dossier-'+c.cid),{codes:[proj.code],key:'proj:'+proj.code});
+  if(_projSectie==='planning'){
+    // Een fout in de tijdlijn mag de rest van de sectie (Gantt, taken) nooit blokkeren.
+    const tl=document.getElementById('proj-tijdlijn-'+c.cid);
+    try{ projPlanTijdlijn(tl,[proj.code],{key:'proj:'+proj.code}); }
+    catch(e){ console.warn('tijdlijn:',e); if(tl) tl.innerHTML='<p class="dos-leeg">Tijdlijn kon niet laden: '+esc(e.message||String(e))+'</p>'; }
+  }
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -5230,9 +5277,10 @@ function projSecDossier(proj,c){
 }
 // ── Planning: Gantt + taken (taken voeden de planning; "📅 → Planning" zet ze om) ──
 function projSecPlanning(proj,c){
-  return `${projectPlanning(proj)}
-      ${projectTakenHtml(proj)}
-      <div id="proj-tijdlijn-${c.cid}" class="proj-b10-plek"></div>`;
+  return `<div class="card-title" style="margin:0 0 .4rem">📊 Tijdlijn — wie, wanneer, past het?</div>
+      <div id="proj-tijdlijn-${c.cid}" class="proj-b10-plek"></div>
+      ${projectPlanning(proj)}
+      ${projectTakenHtml(proj)}`;
 }
 // ── Calculatie: offerte-calculator, nacalculatie, materiaalinkoop uit facturen ──
 function projSecCalculatie(proj,c){
@@ -5296,6 +5344,166 @@ function projSecProductie(proj,c){
         <td>${b.besteld?'<span class="badge badge-ok">besteld</span>':'<span class="badge">open</span>'}</td>
         <td style="font-size:11px;color:var(--text-faint)">${b.datum?fmtDatum(b.datum):''}</td></tr>`).join('')}</tbody></table></div>`
         :'<p style="color:var(--text-faint);font-size:13px">Nog niets op de bestellijst voor dit project (NCR-import en de voorraad zetten hier regels op).</p>'}`;
+}
+
+// ═══ PROJECTTIJDLIJN + KLANT-ROLL-UP (brok B10) ═══
+// Weken horizontaal, één rij per persoon (+ fasen): fasebalken (mt_planning), geplande blokken
+// (mt_planblokken via planBlokkenFilter), werkelijke uren (Toggl-rapporten, lui) en vrije
+// capaciteit als achtergrond (Toggl-capaciteit als die werkt, anders werkuren − verlof −
+// vrije dagen uit Beheer, min alle geplande blokken). Alles klikbaar: detailregel + "Open in Agenda".
+const TL_KOL=74, TL_NAAM=112, TL_WEKEN=11, TL_TERUG=2;
+const _tlState={};
+function _tlYmd(d){ return _planYmd(d); }
+function _tlWeken(st){
+  const ma=agMaandag(new Date()); ma.setDate(ma.getDate()+7*(st.offset-TL_TERUG));
+  const uit=[]; const vandaag=_tlYmd(new Date());
+  for(let i=0;i<TL_WEKEN;i++){ const s=new Date(ma); s.setDate(ma.getDate()+7*i); const e=new Date(s); e.setDate(s.getDate()+6);
+    const ws=_tlYmd(s), we=_tlYmd(e); uit.push({ws,we,label:'wk '+_dosWeek(s),datum:s.toLocaleDateString('nl-NL',{day:'numeric',month:'short'}),huidig:vandaag>=ws&&vandaag<=we}); }
+  return uit;
+}
+function _tlPersonen(){ return MT_TEAM.map(m=>({slug:m.slug,naam:m.naam,email:m.email})); }
+function _tlDagen(a,b){ return Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/864e5); }
+// Alle cijfers voor de huidige weken (zonder DOM; ook voor de test bruikbaar).
+function tijdlijnData(codes,st){
+  const weken=_tlWeken(st), van=weken[0].ws, tot=weken[weken.length-1].we;
+  const pers=_tlPersonen();
+  const blokCodes=planBlokkenFilter({codes,van,tot});
+  const blokAlle=planBlokkenFilter({van,tot});
+  const tgUsers=(st.toggl&&st.toggl.users)||[];
+  const slugVanUser=uid=>{ const u=tgUsers.find(x=>String(x.id)===String(uid)); const m=u&&MT_TEAM.find(t=>t.email.toLowerCase()===u.email); return m?m.slug:('tg:'+uid); };
+  const werk=(st.toggl&&st.toggl.status==='ok')?st.toggl.per:[];
+  // Toggl-gebruikers die niet in het team staan krijgen een eigen rij.
+  werk.forEach(r=>{ const s=slugVanUser(r.user); if(!pers.some(p=>p.slug===s)){ const u=tgUsers.find(x=>String(x.id)===String(r.user)); pers.push({slug:s,naam:(u&&u.naam)||('Toggl '+r.user),email:(u&&u.email)||''}); } });
+  const cel={}, norm=x=>String(x||'').trim().toLowerCase();
+  const vanPersoon=(b,p)=>{ const x=norm(b.persoon); return x===p.slug||(p.email&&x===norm(p.email)); };
+  pers.forEach(p=>{ cel[p.slug]={};
+    weken.forEach(w=>{
+      const bk=blokCodes.filter(b=>vanPersoon(b,p)&&b.datum>=w.ws&&b.datum<=w.we);
+      const ba=blokAlle.filter(b=>vanPersoon(b,p)&&b.datum>=w.ws&&b.datum<=w.we);
+      const gepland=bk.reduce((s,b)=>s+(Number(b.duurMin)||0)/60,0), geplandAlle=ba.reduce((s,b)=>s+(Number(b.duurMin)||0)/60,0);
+      const wr=werk.filter(r=>r.week===w.ws&&slugVanUser(r.user)===p.slug), gewerkt=wr.reduce((s,r)=>s+r.uren,0);
+      let cap=null, vrij=null, capBron='eigen';
+      if(MT_TEAM.some(m=>m.slug===p.slug)){
+        const tgc=st.tgcap&&st.tgcapUser&&st.tgcapUser[p.slug]&&st.tgcap[st.tgcapUser[p.slug]];
+        // Toggl-capaciteit alleen als alle werkdagen (ma–vr) van die week erin staan; anders Beheer.
+        if(tgc){ const dagen=Object.keys(tgc).filter(d=>d>=w.ws&&d<=w.we); const wd=dagen.filter(d=>{ const g=new Date(d+'T12:00:00').getDay(); return g>0&&g<6; });
+          if(wd.length>=5){ cap=dagen.reduce((s,d)=>s+tgc[d].werk,0); vrij=dagen.reduce((s,d)=>s+tgc[d].vrij,0); capBron='toggl'; } }
+        if(cap===null){ cap=capaciteitPerDag({pers:[p.slug],van:w.ws,tot:w.we})[p.slug].totaal; vrij=cap-geplandAlle; }
+      }
+      const perProj={}; bk.forEach(b=>{ (perProj[b.project_code]=perProj[b.project_code]||{p:0,w:0}).p+=(Number(b.duurMin)||0)/60; });
+      wr.forEach(r=>{ const pc=((typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]).find(x=>Number(x.tg_project_id)===Number(r.project))||{}).code||'?'; (perProj[pc]=perProj[pc]||{p:0,w:0}).w+=r.uren; });
+      const niveau=cap===null?'':(cap<=0?'geen':(vrij/cap>=0.3?'ruim':(vrij>0?'krap':'vol')));
+      cel[p.slug][w.ws]={gepland,geplandAlle,gewerkt,cap,vrij,capBron,niveau,blokken:bk,uren:wr,perProj};
+    }); });
+  // Fasen per project (met berekende datums als ze ontbreken)
+  const fasen=[];
+  codes.forEach(code=>{ let plan=(typeof planVoor==='function')?planVoor(code):null; if(!plan||!plan.fases) return;
+    if(plan.fases.some(f=>!f.start||!f.eind)&&typeof planBerekenDatums==='function'){ try{ plan=JSON.parse(JSON.stringify(plan)); planBerekenDatums(plan); }catch(e){} }
+    plan.fases.forEach(f=>{ if(f.start&&f.eind&&f.eind>=van&&f.start<=tot) fasen.push({code,id:f.id,naam:f.naam||f.key||'',start:f.start,eind:f.eind,status:f.status||'todo',mijlpaal:!!f.mijlpaal}); }); });
+  // Samenvatting
+  const gepland=blokCodes.reduce((s,b)=>s+(Number(b.duurMin)||0)/60,0);
+  const gewerkt=werk.reduce((s,r)=>s+r.uren,0);
+  let begroot=0; codes.forEach(c=>{ const o=window.CALC&&CALC.offertes&&(CALC.offertes[c]||Object.values(CALC.offertes).find(x=>x&&x.project_code===c));
+    if(o&&Array.isArray(o.uren)) begroot+=o.uren.reduce((s,u)=>s+(parseFloat(String(u.uren||'').replace(',','.'))||0),0); });
+  const komend=weken.filter(w=>w.ws>=_tlYmd(agMaandag(new Date()))).slice(0,4);
+  const vrijTeam=MT_TEAM.reduce((s,m)=>s+komend.reduce((t,w)=>t+Math.max(0,(cel[m.slug]&&cel[m.slug][w.ws]&&cel[m.slug][w.ws].vrij)||0),0),0);
+  return {weken,van,tot,pers,cel,fasen,som:{gepland,gewerkt,begroot,vrijTeam}};
+}
+function projPlanTijdlijn(el,codes,opts={}){
+  if(!el) return;
+  const key=opts.key||('tl:'+codes.join(','));
+  const st=_tlState[key]=Object.assign(_tlState[key]||{offset:0},{codes:codes.slice()});
+  el.dataset.tlKey=key; el.classList.add('tl-host');
+  _tlTeken(key);
+  _tlLaadToggl(key);
+}
+function _tlHost(key){ return [...document.querySelectorAll('.tl-host')].find(e=>e.dataset.tlKey===key); }
+const _tlU=n=>(Math.round(n*10)/10).toString().replace('.',',');
+function _tlTeken(key){
+  const el=_tlHost(key), st=_tlState[key]; if(!el||!st) return;
+  if(!st.codes.length){ el.innerHTML='<p class="dos-leeg">Geen (actieve) projecten om te tonen.</p>'; return; }
+  const D=tijdlijnData(st.codes,st), k=esc(key), meer=st.codes.length>1;
+  const vandaag=_tlYmd(new Date()), totDagen=_tlDagen(D.van,D.tot)+1;
+  const tg=st.toggl||{status:'laden'};
+  const zk=(tg.status==='ok'&&!tg.geenKoppeling&&tg.zonderKoppeling&&tg.zonderKoppeling.length)?` <span class="tl-let" title="${esc(tg.zonderKoppeling.join(', '))}">⚠ ${tg.zonderKoppeling.length} project${tg.zonderKoppeling.length>1?'en':''} zonder Toggl-koppeling niet meegeteld</span>`:'';
+  const uf=(tg.status==='ok'&&tg.usersFout)?' <span class="tl-let">⚠ Toggl-gebruikers onbekend: uren staan per Toggl-id</span>':'';
+  const tgTekst=tg.status==='ok'?(tg.geenKoppeling?'geen Toggl-project gekoppeld':_tlU(D.som.gewerkt)+' u (Toggl)'+zk+uf)
+    :tg.status==='fout'?'<span title="'+esc(tg.fout||'')+'">werkelijke uren niet beschikbaar: '+esc(tg.fout||'')+'</span>':'<span class="spinner"></span> laden…';
+  const kop=`<div class="tl-som">Gepland <b>${_tlU(D.som.gepland)} u</b> · Gewerkt <b>${tgTekst}</b>${D.som.begroot?` · Begroot <b>${_tlU(D.som.begroot)} u</b> (offerte)`:''} · Vrije capaciteit team komende 4 weken <b>${_tlU(D.som.vrijTeam)} u</b></div>
+    <div class="tl-nav"><button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',-4)" aria-label="4 weken terug">‹‹</button><button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',-1)" aria-label="Week terug">‹</button>
+      <button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',0)">vandaag</button>
+      <button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',1)" aria-label="Week vooruit">›</button><button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',4)" aria-label="4 weken vooruit">››</button>
+      <button type="button" class="btn btn-xs btn-secondary" onclick="tlNaarAgenda('${k}','${D.weken.find(w=>w.huidig)?.ws||D.weken[TL_TERUG].ws}')">📅 Open in Agenda</button></div>`;
+  const kol=`grid-template-columns:${TL_NAAM}px repeat(${D.weken.length},${TL_KOL}px)`;
+  let html=`<div class="tl-rij tl-kop" style="${kol}"><div class="tl-naam">&nbsp;</div>${D.weken.map(w=>`<button type="button" class="tl-week${w.huidig?' nu':''}" onclick="tlDetail('${k}','week','','${w.ws}')" title="Week van ${esc(w.datum)}"><b>${esc(w.label)}</b><span>${esc(w.datum)}</span></button>`).join('')}</div>`;
+  // fasen-rij(en): per project een eigen rij bij meerdere projecten
+  const fasenPer=meer?st.codes.map(c=>({c,f:D.fasen.filter(x=>x.code===c)})):[{c:'',f:D.fasen}];
+  fasenPer.forEach(({c,f})=>{
+    const lanes=[]; f.sort((a,b)=>a.start.localeCompare(b.start)).forEach(x=>{ let l=lanes.findIndex(e=>e<x.start); if(l<0){ l=lanes.length; lanes.push(''); } lanes[l]=x.eind; x.lane=l; });
+    html+=`<div class="tl-rij" style="${kol}"><div class="tl-naam" title="${esc(c||'Fasen')}">${meer?`<span class="tl-dot" style="background:${agProjKleur(c)}"></span>${esc(c)}`:'Fasen'}</div>
+      <div class="tl-fasen" style="grid-column:2 / span ${D.weken.length};height:${Math.max(1,lanes.length)*20+6}px">${f.map(x=>{
+        const a=Math.max(0,_tlDagen(D.van,x.start)), b=Math.min(totDagen,_tlDagen(D.van,x.eind)+1);
+        return `<button type="button" class="tl-fase st-${esc(x.status)}" style="left:${a/totDagen*100}%;width:${Math.max(1.2,(b-a)/totDagen*100)}%;top:${3+x.lane*20}px;background:${agProjKleur(x.code)}" title="${esc(x.naam)} · ${esc(x.start)} – ${esc(x.eind)} · ${esc(x.status)}" onclick="tlDetail('${k}','fase','${esc(x.code)}','${esc(x.id)}')">${esc(x.naam)}</button>`; }).join('')}
+      ${!f.length?'<span class="tl-leeg">nog geen fasen</span>':''}</div></div>`;
+  });
+
+  D.pers.forEach(p=>{
+    html+=`<div class="tl-rij" style="${kol}"><div class="tl-naam" title="${esc(p.naam)}">${esc(p.naam)}</div>`+D.weken.map(w=>{
+      const c=D.cel[p.slug][w.ws], schaal=Math.max(c.cap||0,c.geplandAlle,c.gewerkt,8);
+      const balk=(cls,u,kleur)=>u>0?`<span class="tl-balk ${cls}" style="width:${Math.min(100,u/schaal*100)}%${kleur?';--pk:'+kleur:''}"></span>`:'';
+      const segs=meer?Object.entries(c.perProj).map(([pc,v])=>balk('p',v.p,agProjKleur(pc))+balk('w',v.w,agProjKleur(pc))).join(''):(balk('p',c.gepland)+balk('w',c.gewerkt));
+      const tip=[c.gepland?_tlU(c.gepland)+' u gepland':'',c.gewerkt?_tlU(c.gewerkt)+' u gewerkt':'',c.cap!==null?_tlU(Math.max(0,c.vrij))+' u vrij van '+_tlU(c.cap):''].filter(Boolean).join(' · ');
+      return `<button type="button" class="tl-cel cap-${c.niveau||'x'}${w.huidig?' nu':''}" title="${esc(tip||'niets gepland')}" aria-label="${esc(p.naam)}, ${esc(w.label)}: ${esc(tip||'niets gepland')}" onclick="tlDetail('${k}','cel','${esc(p.slug)}','${w.ws}')">${segs}${c.gepland||c.gewerkt?`<span class="tl-getal">${c.gepland?'📅'+_tlU(c.gepland):''}${c.gewerkt?`<i>⏱${_tlU(c.gewerkt)}</i>`:''}</span>`:''}</button>`; }).join('')+'</div>';
+  });
+  const nu=D.weken.findIndex(w=>w.huidig);
+  const lijn=(vandaag>=D.van&&vandaag<=D.tot)?`<div class="tl-vandaag" style="left:${TL_NAAM+(_tlDagen(D.van,vandaag)+0.5)/7*TL_KOL}px" aria-hidden="true"></div>`:'';
+  const legenda=`<div class="tl-legenda"><span><i class="tl-lg cap-ruim"></i>ruim</span><span><i class="tl-lg cap-krap"></i>krap</span><span><i class="tl-lg cap-vol"></i>vol</span>
+    <span><i class="tl-lg p"></i>📅 gepland</span><span><i class="tl-lg w"></i>⏱ gewerkt (Toggl)</span>
+    <span class="dos-meta">capaciteit: ${st.tgcap?'Toggl':'werkuren − verlof − vrije dagen (Beheer)'}</span>
+    ${meer?st.codes.map(c=>`<span><i class="tl-lg" style="background:${agProjKleur(c)}"></i>${esc(c)}</span>`).join(''):''}</div>`;
+  el.innerHTML=kop+`<div class="tl-veeg" aria-hidden="true">↔ veeg voor meer weken</div><div class="tl-scroll"><div class="tl-grid" style="width:${TL_NAAM+D.weken.length*TL_KOL}px">${html}${lijn}</div></div>`+legenda+`<div class="tl-detail" aria-live="polite">${st.detail?_tlDetailHtml(key,D,st.detail):'<span class="dos-meta">Klik op een week, fase of cel voor details.</span>'}</div>`;
+}
+async function _tlLaadToggl(key){
+  const st=_tlState[key]; if(!st) return;
+  const weken=_tlWeken(st), van=weken[0].ws, tot=weken[weken.length-1].we, sig=st.codes.join(',')+'|'+van;
+  if(st.tgSig===sig&&st.toggl&&st.toggl.status!=='laden') return;
+  st.tgSig=sig; st.toggl={status:'laden'};
+  if(typeof tgReportsUren!=='function'){ st.toggl={status:'fout',fout:'Toggl-laag niet geladen'}; _tlTeken(key); return; }
+  try{
+    let usersFout=false;
+    const users=await tgUsers().catch(()=>{ usersFout=true; return []; });
+    const r=await tgReportsUren(st.codes,van,tot);
+    if(st.tgSig!==sig) return;
+    st.toggl={status:'ok',per:r.per,geenKoppeling:r.geenKoppeling,zonderKoppeling:r.zonderKoppeling||[],users,usersFout:usersFout&&r.per.length>0};
+    // Toggl-capaciteit (optioneel): faalt stil → eigen capaciteit uit Beheer
+    try{
+      const map={}; MT_TEAM.forEach(m=>{ const u=users.find(x=>x.email===m.email.toLowerCase()); if(u) map[m.slug]=u.id; });
+      const ids=Object.values(map); if(ids.length&&typeof tgCapaciteit==='function'){ const cap=await tgCapaciteit(ids,van,tot); if(cap&&Object.keys(cap).length){ st.tgcap=cap; st.tgcapUser=map; } }
+    }catch(e){ st.tgcap=null; }
+  }catch(e){ if(st.tgSig!==sig) return; st.toggl={status:'fout',fout:(typeof _tgFoutTekst==='function')?_tgFoutTekst(e):(e.message||String(e))}; }
+  _tlTeken(key);
+}
+function tlSchuif(key,n){ const st=_tlState[key]; if(!st) return; st.offset=n===0?0:st.offset+n; st.detail=null; _tlTeken(key); _tlLaadToggl(key); }
+function tlDetail(key,soort,a,b){ const st=_tlState[key]; if(!st) return; st.detail={soort,a,b}; const el=_tlHost(key); const D=tijdlijnData(st.codes,st);
+  const d=el&&el.querySelector('.tl-detail'); if(d) d.innerHTML=_tlDetailHtml(key,D,st.detail); }
+function _tlDetailHtml(key,D,det){
+  const k=esc(key), agenda=ws=>`<button type="button" class="btn btn-xs btn-secondary" onclick="tlNaarAgenda('${k}','${esc(ws)}')">📅 Open in Agenda</button>`;
+  if(det.soort==='fase'){ const f=D.fasen.find(x=>x.code===det.a&&x.id===det.b); if(!f) return '';
+    return `<b>${esc(f.naam)}</b> · <span class="code">${esc(f.code)}</span> · ${esc(f.start)} – ${esc(f.eind)} · <span class="dos-st">${esc(f.status)}</span>
+      <button type="button" class="btn btn-xs btn-secondary" onclick="openProject('${_jsCode(f.code)}',{sectie:'planning'})">Planning openen</button> ${agenda(_tlYmd(agMaandag(new Date(f.start+'T12:00:00'))))}`; }
+  if(det.soort==='week'){ const w=D.weken.find(x=>x.ws===det.b); if(!w) return '';
+    const rij=D.pers.map(p=>{ const c=D.cel[p.slug][w.ws]; return c.gepland||c.gewerkt||c.cap?`<span class="tl-dr">${esc(p.naam)}: ${_tlU(c.gepland)} u gepland${c.gewerkt?' · '+_tlU(c.gewerkt)+' u gewerkt':''}${c.cap!==null?' · '+_tlU(Math.max(0,c.vrij))+' u vrij':''}</span>`:''; }).join('');
+    return `<b>${esc(w.label)}</b> (${esc(w.ws)} – ${esc(w.we)}) ${agenda(w.ws)}<div>${rij||'<span class="dos-meta">Niets gepland of gewerkt.</span>'}</div>`; }
+  const p=D.pers.find(x=>x.slug===det.a), c=p&&D.cel[p.slug][det.b]; if(!c) return '';
+  const bl=c.blokken.map(x=>`<span class="tl-dr">📅 ${esc(x.datum)} ${esc(x.start||'')} · ${_tlU((Number(x.duurMin)||0)/60)} u · ${esc(x.taak||x.project_code||'')}${D.weken.length&&_tlState[key].codes.length>1?' · <span class="code">'+esc(x.project_code)+'</span>':''}</span>`).join('');
+  const ur=c.uren.length?`<span class="tl-dr">⏱ ${_tlU(c.gewerkt)} u gewerkt (Toggl)</span>`:'';
+  return `<b>${esc(p.naam)}</b> · week van ${esc(det.b)} · ${c.cap!==null?`capaciteit ${_tlU(c.cap)} u, nog ${_tlU(Math.max(0,c.vrij))} u vrij (${esc(c.capBron==='toggl'?'Toggl':'Beheer')})`:'geen capaciteit bekend'} ${agenda(det.b)}<div>${bl||ur?bl+ur:'<span class="dos-meta">Niets gepland of gewerkt voor dit project.</span>'}</div>`;
+}
+// Naar de Agenda (planningweergave), gefilterd op deze project(en) en de gekozen week.
+function tlNaarAgenda(key,ws){
+  const st=_tlState[key]; if(!st) return;
+  _agenda.fProj=new Set(st.codes); _agenda.weekStart=agMaandag(new Date(ws+'T12:00:00')); _agenda.view='plan';
+  if(typeof tbDoTab==='function') tbDoTab('agenda'); else if(typeof renderAgenda==='function') renderAgenda();
 }
 
 // ═══ DOSSIER (brok B7) — één component voor alles wat bij een project (later: klant) hoort ═══
@@ -5549,7 +5757,7 @@ function _dosUrl(key){
 // project wisselt zonder van tab te springen (zelfde contextbalk, pills en dossier als B7).
 // Klantidentiteit = klantcode + Moneybird-contact; "geen locatie" is een gewone staat.
 const PROJ_STATUSSEN=['offerte','lopend','opgeleverd','archief'];
-const KLANT_SECTIES=[{k:'overzicht',l:'Overzicht'},{k:'dossier',l:'Dossier'},{k:'bestanden',l:'Bestanden'},{k:'geld',l:'Geld'}];
+const KLANT_SECTIES=[{k:'overzicht',l:'Overzicht'},{k:'dossier',l:'Dossier'},{k:'planning',l:'Planning'},{k:'bestanden',l:'Bestanden'},{k:'geld',l:'Geld'}];
 let _klantHuidig=null;                       // {kl, loc}
 let _klantSectie=(()=>{ try{ const s=localStorage.getItem('mt_klant_sectie'); return KLANT_SECTIES.some(x=>x.k===s)?s:'overzicht'; }catch(e){ return 'overzicht'; } })();
 const _klantToonArchief={};                  // kl -> true als archief zichtbaar moet zijn
@@ -5705,6 +5913,14 @@ function _klantSectieRender(){
       ${typeof ntkPlek==='function'?ntkPlek(_klantDosKey(),projen.filter(p=>projStatus(p).status!=='archief').map(p=>p.code),klantDomeinen(projen.map(p=>p.code))):''}
       <div id="klant-dossier"></div>`;
     renderDossier(document.getElementById('klant-dossier'),{codes:projen.map(p=>p.code),key:_klantDosKey(),locaties:info.locaties});
+    return;
+  }
+  if(_klantSectie==='planning'){
+    const actief=projen.filter(p=>projStatus(p).status!=='archief');
+    el.innerHTML=`<div class="dos-kop"><div class="card-title" style="margin:0">Planning — ${esc(info.naam)}${loc?' › '+esc(loc):''}</div>
+      <span style="font-size:11px;color:var(--text-dim)">${actief.length} actie${actief.length===1?'f project':'ve projecten'} (zonder archief), kleur per project</span></div><div id="klant-tijdlijn"></div>`;
+    try{ projPlanTijdlijn(document.getElementById('klant-tijdlijn'),actief.map(p=>p.code),{key:_klantDosKey()+'|tl'}); }
+    catch(e){ console.warn('tijdlijn:',e); const tl=document.getElementById('klant-tijdlijn'); if(tl) tl.innerHTML='<p class="dos-leeg">Tijdlijn kon niet laden: '+esc(e.message||String(e))+'</p>'; }
     return;
   }
   if(_klantSectie==='bestanden'){ el.innerHTML=klantSecBestanden(info,projen); return; }
@@ -11127,13 +11343,8 @@ async function agPlanRender(){
   const agStart=AG_START, agEind=AG_EIND;
   const totalH=(agEind-agStart)*agUurPx;
 
-  // filter planblokken op persoon/project
-  let blokken=agPlanActief().filter(b=>{
-    const datum=b.datum;
-    return dagen.some(d=>_planYmd(d)===datum);
-  });
-  if(_agenda.fPers.size&&!_agenda.fPers.has(AG_NONE)) blokken=blokken.filter(b=>_agenda.fPers.has(b.persoon));
-  if(_agenda.fProj.size&&!_agenda.fProj.has(AG_NONE)) blokken=blokken.filter(b=>_agenda.fProj.has(b.project_code));
+  // filter planblokken op persoon/project (pure functie, ook gebruikt door de projecttijdlijn)
+  let blokken=planBlokkenFilter({codes:_agenda.fProj,pers:_agenda.fPers,van:_planYmd(dagen[0]),tot:_planYmd(dagen[6])});
 
   // Capaciteits-balk
   agPlanCapBalk(dagen,blokken,verlof,vrijdagen);
@@ -11220,6 +11431,45 @@ async function agPlanRender(){
   grid.querySelectorAll('[ondragover]').forEach(el=>el.style.pointerEvents='auto');
 }
 
+// ── Pure planningsfuncties (B10) — gedeeld door Agenda en projecttijdlijn ──
+// Planblokken filteren op project(en), persoon/personen en datumbereik (ymd, inclusief).
+// Lege set/lijst = alles; met AG_NONE erin wordt (net als in de Agenda) niet gefilterd.
+function planBlokkenFilter({codes=null,pers=null,van=null,tot=null}={}){
+  const set=x=>x instanceof Set?x:(Array.isArray(x)?new Set(x):null);
+  const c=set(codes), p=set(pers);
+  let bl=agPlanActief();
+  if(van) bl=bl.filter(b=>b.datum>=van);
+  if(tot) bl=bl.filter(b=>b.datum<=tot);
+  if(p&&p.size&&!p.has(AG_NONE)) bl=bl.filter(b=>p.has(b.persoon));
+  if(c&&c.size&&!c.has(AG_NONE)) bl=bl.filter(b=>c.has(b.project_code));
+  return bl;
+}
+// Capaciteit per persoon over [van, tot]: werkuren (admCfg, per week; ma–vr) − 8u per verplichte
+// vrije dag − 8u per verlofdag (op werkdagen). Zelfde regels als de Agenda-capaciteitsbalk.
+// → { slug: { totaal, perDag:{ymd:uren} } }
+function capaciteitPerDag({pers=null,van,tot,verlof=null,vrijdagen=null,cfg=null}={}){
+  cfg=cfg||admCfg(); verlof=verlof||admVerlof(); vrijdagen=vrijdagen||admVrijdagen();
+  const dagen=[]; { const [y,m,d]=String(van).split('-').map(Number); const e=String(tot); for(let dt=new Date(y,m-1,d);_planYmd(dt)<=e;dt.setDate(dt.getDate()+1)) dagen.push(new Date(dt)); }
+  const wie=(pers&&(pers instanceof Set?[...pers]:pers).length)?(pers instanceof Set?[...pers]:pers):MT_TEAM.map(m=>m.slug);
+  const uit={};
+  wie.forEach(slug=>{
+    const werk=(cfg.werkuren&&cfg.werkuren[slug])||40;
+    const werkdagen=dagen.filter(d=>{ const g=d.getDay(); return g>0&&g<6; });
+    const verplicht=dagen.filter(d=>vrijdagen.find(v=>v.datum===_planYmd(d)&&v.type==='verplicht'));
+    const verlofDagen=dagen.filter(d=>{ const g=d.getDay(); if(!(g>0&&g<6)) return false; const ymd=_planYmd(d); return verlof.some(v=>v.persoon===slug&&ymd>=v.van&&ymd<=v.tm); });
+    // per verlofperiode telt elke werkdag 8u (zoals de Agenda: overlappende perioden tellen dubbel in
+    // `totaal`). perDag telt een dag maar één keer — gebruik voor weektotalen altijd `totaal`.
+    const verlofUren=verlof.filter(v=>v.persoon===slug).reduce((s,v)=>s+werkdagen.filter(d=>{ const ymd=_planYmd(d); return ymd>=v.van&&ymd<=v.tm; }).length*8,0);
+    const totaal=Math.max(0,werk*werkdagen.length/5-verplicht.length*8-verlofUren);
+    const perDag={};
+    dagen.forEach(d=>{ const ymd=_planYmd(d), g=d.getDay();
+      const basis=(g>0&&g<6)?werk/5:0, vp=verplicht.includes(d)?8:0, vl=verlofDagen.includes(d)?8:0;
+      perDag[ymd]=Math.max(0,basis-vp-vl); });
+    uit[slug]={totaal,perDag};
+  });
+  return uit;
+}
+
 // ── Capaciteits-balk ──
 function agPlanCapBalk(dagen,blokken,verlof,vrijdagen){
   const el=document.getElementById('agenda-cap-balk'); if(!el) return;
@@ -11230,19 +11480,8 @@ function agPlanCapBalk(dagen,blokken,verlof,vrijdagen){
   MT_TEAM.forEach(m=>{
     // filter op persoon-filter
     if(_agenda.fPers.size&&!_agenda.fPers.has(AG_NONE)&&!_agenda.fPers.has(m.slug)&&!_agenda.fPers.has(m.email)) return;
-    const werkurenWk=cfg.werkuren[m.slug]||40;
-    // Verplichte vrije dagen in week → −8u per dag (1 dag = 8u)
-    const verplichtUit=dagen.filter(d=>{
-      const ymd=_planYmd(d);
-      return vrijdagen.find(v=>v.datum===ymd&&v.type==='verplicht');
-    }).length*8;
-    // Verlofuren in week
-    const verlofUren=verlof.filter(v=>v.persoon===m.slug).reduce((s,v)=>{
-      let uren=0;
-      for(let i=0;i<7;i++){const ymd=_planYmd(dagen[i]);if(ymd>=v.van&&ymd<=v.tm){const g=dagen[i].getDay();if(g>0&&g<6)uren+=8;}}
-      return s+uren;
-    },0);
-    const capaciteit=Math.max(0,werkurenWk-verplichtUit-verlofUren);
+    // Capaciteit = werkuren − verplichte vrije dagen − verlof (pure functie, ook voor de projecttijdlijn)
+    const capaciteit=capaciteitPerDag({pers:[m.slug],van:weekStart,tot:weekEind,verlof,vrijdagen,cfg})[m.slug].totaal;
     const gepland=blokken.filter(b=>b.persoon===m.slug||b.persoon===m.email).reduce((s,b)=>s+(b.duurMin/60),0);
     const pct=capaciteit>0?gepland/capaciteit:gepland>0?2:0;
     const kleur=pct<0.9?'#2A4A38':pct<=1?'#B8962E':'#c0392b';

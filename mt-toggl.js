@@ -75,6 +75,91 @@ async function focusFetchOrg(path,method='GET',body=null){
   if(!res.ok) throw new Error('Toggl HTTP '+res.status+(txt?(' — '+txt.slice(0,120)):''));
   try{return JSON.parse(txt);}catch(e){return txt;}
 }
+// Vrij pad onder https://focus.toggl.com/api/ (bv. reports/workspaces/{ws}/query).
+async function focusFetchPad(pad,method='GET',body=null){
+  const h=await authHeader();
+  if(!h['X-Auth-Token']) throw new Error('Microsoft-login vereist (log in via de tool)');
+  const opts={method,headers:{...h,'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const res=await fetch(`${WORKER}?target=toggl_focus&path=${encodeURIComponent(pad)}`,opts);
+  if(res.status===204) return true;
+  const txt=await res.text();
+  if(!res.ok){ const e=new Error('Toggl HTTP '+res.status+(txt?(' — '+txt.slice(0,120)):'')); e.status=res.status; throw e; }
+  try{return JSON.parse(txt);}catch(e){return txt;}
+}
+// ═══ B10 — werkelijke uren en capaciteit voor de projecttijdlijn (alleen lezen) ═══
+// Cache per dag in sessionStorage (faalt stil in privé-vensters e.d.).
+function _tgCacheLees(k){ try{ const v=sessionStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
+function _tgCacheZet(k,v){ try{ sessionStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function _tgVandaag(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _tgFoutTekst(e){
+  const st=e&&e.status||((String(e&&e.message||'').match(/HTTP (\d{3})/)||[])[1]|0);
+  if(st===403) return 'geen toegang (alleen een Toggl-beheerder ziet teamuren)';
+  if(st===401) return 'niet ingelogd bij Toggl';
+  if(st===429) return 'Toggl vraagt om even te wachten';
+  return (e&&e.message)||'onbekende fout';
+}
+// Gebruikers van de organisatie: user_account_id ↔ naam/e-mail (sessie-cache).
+let _tgUsersCache=null;
+const _tgLopend={};          // lopende verzoeken delen (project- en klanttijdlijn tegelijk open)
+function _tgEenmalig(k,fn){ if(!_tgLopend[k]) _tgLopend[k]=Promise.resolve().then(fn).finally(()=>{ delete _tgLopend[k]; }); return _tgLopend[k]; }
+async function tgUsers(){
+  if(_tgUsersCache) return _tgUsersCache;
+  const k='mt_tg_users|'+_tgVandaag(), c=_tgCacheLees(k); if(c) return (_tgUsersCache=c);
+  const d=await _tgEenmalig(k,()=>focusFetchOrg('users'));
+  const lijst=(Array.isArray(d)?d:(d&&(d.data||d.users))||[]).map(u=>({id:u.user_account_id||u.id,naam:u.name||u.fullname||u.email||'',email:String(u.email||'').toLowerCase()}));
+  _tgCacheZet(k,lijst); return (_tgUsersCache=lijst);
+}
+// Werkelijke uren per gebruiker per week (en per taak) voor de projecten van `codes`.
+// Datums ALTIJD via filters (velden op het hoogste niveau negeert Toggl). Per week één query,
+// alleen voor weken die al begonnen zijn, max 12. → {per:[{week,user,task,project,uren}], geenKoppeling}
+async function tgReportsUren(codes,van,tot){
+  const PC=(typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]);
+  const zonderKoppeling=(codes||[]).filter(c=>!((PC.find(p=>p.code===c)||{}).tg_project_id));
+  const ids=[...new Set((codes||[]).map(c=>(PC.find(p=>p.code===c)||{}).tg_project_id).filter(Boolean).map(Number))].sort((a,b)=>a-b);
+  if(!ids.length) return {per:[],geenKoppeling:true,zonderKoppeling};
+  const vandaag=_tgVandaag(), weken=[];
+  const [y,m,d]=String(van).split('-').map(Number); const w=new Date(y,m-1,d); w.setDate(w.getDate()-((w.getDay()+6)%7));
+  for(;weken.length<12;w.setDate(w.getDate()+7)){
+    const ws=w.getFullYear()+'-'+String(w.getMonth()+1).padStart(2,'0')+'-'+String(w.getDate()).padStart(2,'0');
+    if(ws>tot||ws>vandaag) break; weken.push(ws);
+  }
+  const per=[];
+  for(const ws of weken){
+    const k='mt_tgrep|'+ids.join(',')+'|'+ws+'|'+vandaag;
+    let rijen=_tgCacheLees(k);
+    if(!rijen){
+      // Weekgrens in LOKALE tijd (zoals de Agenda), als UTC-tijdstip meegegeven: maandag 00:00 NL.
+      const [wy,wm,wd]=ws.split('-').map(Number), a=new Date(wy,wm-1,wd), e=new Date(wy,wm-1,wd+7);
+      const body={groupings:[{property:'project_id'},{property:'task_id'},{property:'user'}],
+        aggregations:[{property:'duration',function:'sum'}],
+        filters:[{property:'start',operator:'between',value:[a.toISOString(),e.toISOString()]},
+          {property:'project_id',operator:'in',value:ids}]};
+      const r=await _tgEenmalig(k,()=>focusFetchPad(`reports/workspaces/${FOCUS_WS}/query`,'POST',body));
+      rijen=((r&&r.data_json_row)||[]).map(x=>({user:x.user_account_id,task:x.task_id||null,project:x.project_id,uren:Math.round((Number(x.sum_duration)||0)/36)/100}));
+      _tgCacheZet(k,rijen);
+    }
+    rijen.forEach(x=>per.push(Object.assign({week:ws},x)));
+  }
+  return {per,geenKoppeling:false,zonderKoppeling};
+}
+// Capaciteit uit Toggl (vrij = working − estimated, per gebruiker per dag). Let op: deze call staat
+// (nog) niet in toggl2-api-bewezen.md; faalt hij, dan valt de tijdlijn terug op de eigen capaciteit
+// (werkuren − verlof − vrije dagen, uit Beheer).
+async function tgCapaciteit(userIds,van,tot){
+  const ids=[...new Set((userIds||[]).filter(Boolean))]; if(!ids.length) return {};
+  const k='mt_tgcap|'+ids.join(',')+'|'+van+'|'+tot+'|'+_tgVandaag(), c=_tgCacheLees(k); if(c) return c;
+  const d=await _tgEenmalig(k,()=>focusFetch(`capacities/users?user_id=${ids.join(',')}&unit=day&start_date=${van}&end_date=${tot}`));
+  const rijen=Array.isArray(d)?d:((d&&(d.data||d.capacities||d.users))||[]);
+  const uit={};
+  rijen.forEach(r=>{ const uid=r.user_id||r.user_account_id; const dagen=Array.isArray(r.days)?r.days:[r];
+    dagen.forEach(x=>{ const dag=String(x.date||x.day||'').slice(0,10); if(!uid||!dag) return;
+      // Alleen dagen met echte getallen; ontbrekende velden worden niet als 0 gelezen.
+      if(!isFinite(parseFloat(x.working_minutes))||!isFinite(parseFloat(x.estimated_minutes))) return;
+      const werk=Number(x.working_minutes), gepland=Number(x.estimated_minutes);
+      (uit[uid]=uit[uid]||{})[dag]={werk:werk/60,gepland:gepland/60,vrij:(werk-gepland)/60}; }); });
+  _tgCacheZet(k,uit); return uit;
+}
 // Statussen dynamisch (M&T heeft er 8: Todo, In progress, Productie, Blocked, Klaar voor
 // levering, Factureren, Backlog, Done). De vaste id's blijven alleen als terugval.
 const T2_STATUS_VAST={todo:300785,bezig:300788,klaar:300786};
