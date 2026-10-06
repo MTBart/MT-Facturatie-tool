@@ -466,6 +466,7 @@ button{transition:transform .07s ease,filter .07s ease}
 a.proj-ctx-klant,a.proj-ctx-loc{text-decoration:none;border-bottom:1px dashed var(--gold-mid)}
 a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.proj-ctx-loc:focus-visible{color:var(--green);border-bottom-color:var(--green);outline:none}
 .proj-ctx-acties{display:inline-flex;align-items:center;gap:6px;margin-left:auto;min-width:0;flex:0 1 auto;max-width:100%}
+.proj-ctx-acties .btn,.proj-ctx-acties a.btn{white-space:nowrap;flex:0 0 auto}
 .proj-ctx-status:not([hidden])+.proj-ctx-acties{margin-left:0}
 .proj-ctx-wissel{position:relative;min-width:0;flex:1 1 170px;max-width:240px}
 .proj-ctx-zoek{width:100%;min-width:0;height:var(--control-h-sm);font-size:12px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-family:var(--sans)}
@@ -5169,11 +5170,7 @@ function projSecOverzicht(proj,c){
   if(!proj.offertenr) let_.push(`🔢 Nog geen offertenummer <button class="btn btn-xs btn-secondary" onclick="t2OffertenummerToekennen('${_jsCode(proj.code)}')">Toekennen</button>`);
   if(!c.effectiveMb&&proj.klant) let_.push(`👤 Geen Moneybird-contact <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${_jsCode(proj.code)}')">Koppelen</button>`);
   return `
-      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1.25rem;gap:.5rem;flex-wrap:wrap">
-        <div>
-          <div class="project-code-badge">${proj.code}</div>
-          <div class="project-naam">${proj.naam||proj.code}</div>
-        </div>
+      <div style="display:flex;justify-content:flex-end;align-items:start;margin-bottom:.75rem;gap:.5rem;flex-wrap:wrap">
         <div class="flex">
           <button class="btn btn-secondary btn-sm" onclick="verwijderProject('${_jsCode(proj.code)}')">Verwijderen</button>
         </div>
