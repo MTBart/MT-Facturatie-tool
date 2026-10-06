@@ -508,6 +508,28 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .dos-sel{height:var(--control-h-sm);font-size:12px;max-width:100%}
 .dos-check{display:inline-flex;align-items:center;gap:4px;color:var(--text-dim)}
 .dos-aangepast[hidden]{display:none}
+/* Klantpagina (B8) */
+.klant-locsel{height:var(--control-h-sm);font-size:12px;max-width:180px}
+.klant-kop{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-dim);margin-bottom:var(--space-3)}
+.klant-gegevens a{color:var(--green);text-decoration:none}
+.klant-kpi b{font-family:var(--mono);color:var(--text)}
+.klant-proj{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-hair);flex-wrap:wrap}
+.klant-proj:last-child{border-bottom:none}
+.klant-proj-hoofd{min-width:0;flex:1 1 220px}
+.klant-proj-hoofd a{color:var(--text);text-decoration:none;font-weight:600;font-size:13px;overflow-wrap:anywhere}
+.klant-proj-hoofd a:hover{color:var(--green)}
+.klant-proj .code,.ov-act .code,.klant-bestanden .code{font-family:var(--mono);font-size:11px;color:var(--green)}
+.klant-status select{height:var(--control-h-sm);font-size:12px;max-width:170px}
+.st-pill{display:inline-block;font:600 10px var(--mono);text-transform:uppercase;letter-spacing:.04em;border-radius:8px;padding:1px 7px;vertical-align:middle}
+.st-pill.afgeleid{opacity:.7;border:1px dashed currentColor}
+.st-offerte{background:var(--gold-light);color:var(--gold-text)}
+.st-lopend{background:var(--info-50);color:var(--info)}
+.st-opgeleverd{background:var(--success-50);color:var(--success)}
+.st-archief{background:var(--surface-sunken);color:var(--text-faint)}
+.klant-status .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.klant-bestanden{border-top:1px solid var(--border);padding:8px 0}
+.klant-bestanden-kop{font-size:13px;font-weight:600;margin-bottom:4px}
+.klant-bestanden-kop a{color:var(--text);text-decoration:none}
 .dos-extra{display:contents}
 .dos-meerknop{display:none}
 .dos-chip-bijl{border-style:dashed}
@@ -2644,7 +2666,7 @@ function showTab(name,btn){
   if(name==='projecten'){
     // Detail bijwerken als het niet (meer) het huidige project toont; een open losse offerte laten staan.
     const pd=document.getElementById('project-detail');
-    const vers=huidigProject && pd && !pd.dataset.offerte && pd.dataset.code!==huidigProject.code && openProject(huidigProject.code,{scroll:false,geschiedenis:'replace'});
+    const vers=huidigProject && pd && !pd.dataset.offerte && !pd.dataset.klant && pd.dataset.code!==huidigProject.code && openProject(huidigProject.code,{scroll:false,geschiedenis:'replace'});
     if(!vers) renderProjectLijst();
   }
   if(name==='oplevering') oplViewerOpen();
@@ -2664,7 +2686,8 @@ function showTab(name,btn){
     const pd=document.getElementById('project-detail');
     const code=(name==='projecten'&&huidigProject&&pd&&pd.dataset.code===huidigProject.code)?huidigProject.code:null;
     const sec=(code&&typeof projSectieHuidig==='function')?projSectieHuidig():'overzicht';
-    mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined}:{tab:name},false);
+    if(name==='projecten'&&pd&&pd.dataset.klant&&typeof _klantRoute==='function'&&_klantHuidig) mtRoute.zet(_klantRoute(),false);
+    else mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined}:{tab:name},false);
   }
 }
 // Multi-monitor: open de (huidige) tab in een nieuw browservenster met dezelfde deeplink.
@@ -2706,7 +2729,12 @@ const mtRoute={
       if(delen[2]&&query){ const f={}; new URLSearchParams(query).forEach((v,k)=>{ f[k]=v; }); if(Object.keys(f).length) r.filter=f; }
       return r;
     }
-    if(eerste==='klant'&&delen[1]) return Object.assign({tab:'projecten',klant:delen[1].toUpperCase()},delen[2]?{loc:delen[2].toUpperCase()}:{});
+    if(eerste==='klant'&&delen[1]){
+      const r=Object.assign({tab:'projecten',klant:delen[1].toUpperCase()},delen[2]?{loc:delen[2].toUpperCase()}:{});
+      if(query){ const f={}; new URLSearchParams(query).forEach((v,k)=>{ f[k]=v; });
+        if(f.sectie){ r.sectie=f.sectie; delete f.sectie; } if(Object.keys(f).length) r.filter=f; }
+      return r;
+    }
     if(/^[a-z]+$/.test(eerste)&&delen.length===1) return {tab:eerste};
     return {tab:null};
   },
@@ -2718,7 +2746,11 @@ const mtRoute={
       const q=(r.sectie&&ks.length)?'?'+ks.map(k=>enc(k)+'='+enc(f[k])).join('&'):'';
       return '#projecten/'+enc(r.code)+(r.sectie?'/'+enc(r.sectie)+q:'');
     }
-    if(r.klant) return '#klant/'+enc(r.klant)+(r.loc?'/'+enc(r.loc):'');
+    if(r.klant){
+      const f=Object.assign({},r.filter||{}), ks=Object.keys(f).filter(k=>f[k]!==''&&f[k]!==undefined&&f[k]!==null).sort();
+      const delen=(r.sectie?['sectie='+enc(r.sectie)]:[]).concat(r.sectie?ks.map(k=>enc(k)+'='+enc(f[k])):[]);
+      return '#klant/'+enc(r.klant)+(r.loc?'/'+enc(r.loc):'')+(delen.length?'?'+delen.join('&'):'');
+    }
     return r.tab?'#tab='+r.tab:'';
   },
   // Alleen de URL bijwerken (push = nieuwe history-entry). Geen dubbele entry voor dezelfde route.
@@ -2744,7 +2776,12 @@ const mtRoute={
         if(btn) btn.click(); else showTab(r.tab);
       }
       if(r.tab!=='projecten') return;
-      if(r.klant){ projKlantFilterZet(r.klant,r.loc); return; }
+      if(r.klant){
+        projKlantFilterZet(r.klant,r.loc);
+        // Klantpagina in het detailpaneel; zonder sectie in de URL = Overzicht.
+        if(typeof openKlant==='function') openKlant(r.klant,r.loc,{sectie:r.sectie||'overzicht',filter:r.filter||null});
+        return;
+      }
       if(r.code){
         const p=PROJECT_CODES.find(x=>x.code===r.code)||PROJECT_CODES.find(x=>String(x.code).toUpperCase()===String(r.code).toUpperCase());
         if(!p){ projNietGevonden(r.code); return; }
@@ -2771,7 +2808,7 @@ function projNietGevonden(code){
   huidigProject=null;
   renderProjectLijst();
   const h=document.getElementById('project-detail'); if(!h) return;
-  delete h.dataset.code; delete h.dataset.offerte;
+  delete h.dataset.code; delete h.dataset.offerte; delete h.dataset.klant;
   h.innerHTML=`<div class="card" style="text-align:center;padding:2.5rem;color:var(--text-faint)">
     <div style="font-size:32px;margin-bottom:.75rem">🔍</div>
     <div style="font-family:var(--serif);font-size:17px;font-style:italic;color:var(--text)">Project <span style="font-family:var(--mono);font-style:normal">${esc(code)}</span> niet gevonden</div>
@@ -4830,16 +4867,19 @@ function exportBestellijst(){
 let _projKlantFilter=null;   // {klant, loc} of null
 function _projInKlantFilter(p){
   const f=_projKlantFilter; if(!f) return true;
+  if(f.codes) return f.codes.has(p.code);          // zelfde selectie als de klantpagina (incl. Moneybird-vangnet)
   if(String(p.klant||'').toUpperCase()!==f.klant) return false;
   return !f.loc||String(p.loc||'').toUpperCase()===f.loc;
 }
 function projKlantFilterZet(klant,loc){
   _projKlantFilter=klant?{klant:String(klant).toUpperCase(),loc:loc?String(loc).toUpperCase():''}:null;
+  if(_projKlantFilter&&typeof klantProjecten==='function') _projKlantFilter.codes=new Set(klantProjecten(_projKlantFilter.klant,_projKlantFilter.loc).map(p=>p.code));
   renderProjectLijst((document.getElementById('project-zoek')||{}).value||'');
 }
 function projKlantFilterWis(){
   projKlantFilterZet(null);
   const pd=document.getElementById('project-detail');
+  if(pd&&pd.dataset.klant) return;                 // klantpagina staat open: die (en zijn route) blijft
   mtRoute.zet(huidigProject&&pd&&pd.dataset.code===huidigProject.code?{tab:'projecten',code:huidigProject.code}:{tab:'projecten'},false);
 }
 function _projKlantFilterChip(){
@@ -5038,7 +5078,7 @@ function _projCtx(proj){
 function renderProjectDetail(proj){
   if(!proj){const h=document.getElementById('project-detail');h.innerHTML='';delete h.dataset.code;return;}
   const host=document.getElementById('project-detail');
-  host.dataset.code=proj.code; delete host.dataset.offerte;
+  host.dataset.code=proj.code; delete host.dataset.offerte; delete host.dataset.klant;
   const nav=PROJ_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_projSectie?' actief':''}" data-sectie="${s.k}" aria-selected="${s.k===_projSectie}" aria-controls="proj-sectie-inhoud" onclick="projSectieKies('${s.k}')">${s.l}${_projSecTeller(proj,s.k)}</button>`).join('');
   host.innerHTML=projContextBalk(proj)
     +`<nav class="proj-secnav" role="tablist" aria-label="Projectonderdelen">${nav}</nav>`
@@ -5351,7 +5391,7 @@ async function dossierBijlagenNaarMap(code,i){
 
 // ── Filters ──
 const _dosFilter={}, _dosReg={};
-const _DOS_STD={soort:'',periode:'',persoon:'',bijlage:'',status:'',q:'',van:'',tot:''};
+const _DOS_STD={soort:'',periode:'',persoon:'',bijlage:'',status:'',q:'',van:'',tot:'',project:'',locatie:''};
 function _dosStand(key){ return Object.assign({},_DOS_STD,_dosFilter[key]||{}); }
 function _dosPeriode(f){
   const nu=new Date(), d=x=>x.toISOString().slice(0,10);
@@ -5367,6 +5407,8 @@ function dossierFilteren(rijen,f,{zonderSoort=false}={}){
     if(f.status==='') { if(r.status==='ontkoppeld') return false; }
     else if(f.status!=='*'&&r.status!==f.status) return false;
     if(f.persoon&&r.door!==f.persoon&&r.van!==f.persoon) return false;
+    if(f.project&&r.code!==f.project) return false;
+    if(f.locatie&&String(r.loc||'').toUpperCase()!==(f.locatie==='-'?'':f.locatie)) return false;
     if(f.bijlage&&!r.heeftBijlage) return false;
     if(per){ const d=(r.datum||'').slice(0,10); if(!d||d<per[0]||d>per[1]) return false; }
     if(q&&![r.titel,r.van,r.door,r.status,r.code,r.zoek].some(v=>String(v||'').toLowerCase().includes(q))) return false;
@@ -5396,6 +5438,8 @@ function renderDossier(el,scope,facetten){
       ${sel('periode',[['','Alle data'],['week','Deze week'],['maand','Deze maand'],['aangepast','Aangepast…']],f.periode,'Periode')}
       <span class="dos-aangepast"${f.periode==='aangepast'?'':' hidden'}><input type="date" value="${esc(f.van)}" aria-label="Vanaf" onchange="dossierZetFilter('${k}','van',this.value)"> – <input type="date" value="${esc(f.tot)}" aria-label="Tot en met" onchange="dossierZetFilter('${k}','tot',this.value)"></span>
       ${sel('persoon',[['','Iedereen'],...personen.map(p=>[p,p])],f.persoon,'Persoon')}
+      ${scope.codes.length>1?sel('project',[['','Alle projecten'],...scope.codes.map(c=>[c,c+' — '+(((PROJECT_CODES.find(p=>p.code===c)||{}).naam)||'')])],f.project,'Project'):''}
+      ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.map(l=>[l.code,l.naam||l.code])],f.locatie,'Locatie'):''}
       ${sel('status',[['','Status: standaard'],['*','Status: alles (ook ontkoppeld)'],...statussen.map(s=>[s,'Status: '+s])],f.status,'Status')}
       <label class="dos-check"><input type="checkbox"${f.bijlage?' checked':''} onchange="dossierZetFilter('${k}','bijlage',this.checked?'1':'')"> met bijlage</label>
       <button type="button" class="btn btn-xs btn-secondary" onclick="dossierWisFilters('${k}')" title="Alle filters terug naar standaard">Wis filters</button>
@@ -5461,9 +5505,288 @@ function dossierOpen(key,i){ const r=_dosReg[key]&&_dosReg[key].rijen[i]; if(r&&
 function dossierActie(key,i,j){ const r=_dosReg[key]&&_dosReg[key].rijen[i]; const a=r&&r.acties[j]; if(a&&a.f) a.f(); }
 // Filterstand in de URL (#projecten/CODE/dossier?soort=mail) — replaceState, geen extra history.
 function _dosUrl(key){
-  const m=String(key).match(/^proj:(.+)$/); if(!m||typeof mtRoute==='undefined') return;
+  if(typeof mtRoute==='undefined') return;
   const f=_dosStand(key), filter={}; Object.keys(f).forEach(x=>{ if(f[x]) filter[x]=f[x]; });
-  mtRoute.zet({tab:'projecten',code:m[1],sectie:'dossier',filter},false);
+  const m=String(key).match(/^proj:(.+)$/);
+  if(m){ mtRoute.zet({tab:'projecten',code:m[1],sectie:'dossier',filter},false); return; }
+  const k=String(key).match(/^klant:([^/]+)(?:\/(.+))?$/);
+  if(k) mtRoute.zet(Object.assign({tab:'projecten',klant:k[1],sectie:'dossier',filter},k[2]?{loc:k[2]}:{}),false);
+}
+
+// ═══ KLANT- & LOCATIEPAGINA (brok B8) ═══
+// Staat in het detailpaneel van de Projecten-tab: de projectenlijst blijft links, en klant ↔
+// project wisselt zonder van tab te springen (zelfde contextbalk, pills en dossier als B7).
+// Klantidentiteit = klantcode + Moneybird-contact; "geen locatie" is een gewone staat.
+const PROJ_STATUSSEN=['offerte','lopend','opgeleverd','archief'];
+const KLANT_SECTIES=[{k:'overzicht',l:'Overzicht'},{k:'dossier',l:'Dossier'},{k:'bestanden',l:'Bestanden'},{k:'geld',l:'Geld'}];
+let _klantHuidig=null;                       // {kl, loc}
+let _klantSectie=(()=>{ try{ const s=localStorage.getItem('mt_klant_sectie'); return KLANT_SECTIES.some(x=>x.k===s)?s:'overzicht'; }catch(e){ return 'overzicht'; } })();
+const _klantToonArchief={};                  // kl -> true als archief zichtbaar moet zijn
+const _klantGeld={};                         // mbId -> {facturen, offertes} (deze sessie)
+const _klantMapLos={};                       // kl|loc -> [{naam, webUrl}] losse bestanden op klantmap-niveau
+// Klantgegevens: publieke registry → verrijkte registry → de projecten zelf (vangnet).
+function klantInfo(kl,{projecten=null,loc=''}={}){
+  kl=String(kl||'').toUpperCase(); loc=String(loc||'').toUpperCase();
+  const k=(typeof klantByCode==='function')?klantByCode(kl):null;
+  const ov=(typeof klantCodesAll==='function')?klantCodesAll():{};
+  const vol=(typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]).find(x=>String(x.code||'').toUpperCase()===kl
+    ||(x.mb_contact_id&&String(ov['mb:'+x.mb_contact_id]||'').toUpperCase()===kl))||null;
+  const eigen=(projecten||PROJECT_CODES).filter(p=>String(p.klant||'').toUpperCase()===kl);
+  const mbId=(k&&k.mb_contact_id)||(vol&&vol.mb_contact_id)||(eigen.find(p=>p.mb_contact_id)||{}).mb_contact_id||null;
+  const naam=(k&&k.naam)||(vol&&vol.naam)||(eigen.find(p=>p.klant_naam)||{}).klant_naam||kl;
+  let locaties=(k&&Array.isArray(k.locaties))?k.locaties.map(l=>({code:String(l.code).toUpperCase(),naam:l.naam,mb_contact_id:l.mb_contact_id||null})):[];
+  eigen.forEach(p=>{ const lc=String(p.loc||'').toUpperCase(); if(lc&&!locaties.some(l=>l.code===lc)) locaties.push({code:lc,naam:p.loc_naam||lc,mb_contact_id:null}); });
+  const mbIds=new Set([mbId,...locaties.map(l=>l.mb_contact_id)].filter(Boolean).map(String));
+  // Op een locatiepagina telt het Moneybird-contact van die locatie (als dat er is).
+  const locMb=loc?((locaties.find(l=>l.code===loc)||{}).mb_contact_id||null):null;
+  const actiefMb=locMb||mbId;
+  const cache=(()=>{ try{ const c=JSON.parse(localStorage.getItem('mt_cache_klanten')||'null'); return (c&&Array.isArray(c.data))?c.data:[]; }catch(e){ return []; } })();
+  const mb=actiefMb?cache.find(c=>String(c.id)===String(actiefMb)):null;
+  return {kl,naam,mbId:actiefMb,mbHoofd:mbId,mbIds,locaties,
+    email:(mb&&mb.email)||(vol&&vol.email)||'', telefoon:(mb&&mb.phone)||(vol&&vol.telefoon)||'',
+    plaats:(mb&&mb.city)||(vol&&vol.plaats)||'', adres:(mb&&mb.address1)||''};
+}
+// Projecten van een klant: zelfde klantcode, OF hetzelfde Moneybird-contact (vangt codefouten);
+// optioneel alleen één locatie.
+// Een project onder een ándere, geregistreerde klantcode hoort daar (gedeeld contact, geen codefout).
+function _isGeregistreerdeKlant(code){
+  code=String(code||'').toUpperCase(); if(!code) return false;
+  if(typeof klantByCode==='function'&&klantByCode(code)) return true;
+  if((typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]).some(v=>String(v.code||'').toUpperCase()===code)) return true;
+  const ov=(typeof klantCodesAll==='function')?klantCodesAll():{};
+  return Object.values(ov).some(v=>String(v||'').toUpperCase()===code);
+}
+function klantProjecten(kl,loc){
+  const info=klantInfo(kl);
+  return PROJECT_CODES.filter(p=>{
+    const eigen=String(p.klant||'').toUpperCase()===info.kl;
+    const viaMb=!eigen&&info.mbIds.size&&!_isGeregistreerdeKlant(p.klant)
+      &&[p.mb_contact_id,typeof resolveMbContact==='function'?resolveMbContact(p):null].some(x=>x&&info.mbIds.has(String(x)));
+    if(!eigen&&!viaMb) return false;
+    return !loc||String(p.loc||'').toUpperCase()===String(loc).toUpperCase();
+  });
+}
+// Klantcode bij een Moneybird-contact (Klanten-tab → klantpagina).
+function klantCodeVoorMb(mbId){
+  if(!mbId) return null; const id=String(mbId);
+  const ov=(typeof klantCodesAll==='function')?klantCodesAll():{};
+  if(ov['mb:'+id]) return String(ov['mb:'+id]).toUpperCase();
+  const k=(typeof KLANTEN!=='undefined'?KLANTEN:[]).find(x=>String(x.mb_contact_id||'')===id||(Array.isArray(x.locaties)&&x.locaties.some(l=>String(l.mb_contact_id||'')===id)));
+  if(k) return String(k.code).toUpperCase();
+  const v=(typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]).find(x=>String(x.mb_contact_id||'')===id&&x.code);
+  if(v) return String(v.code).toUpperCase();
+  const p=PROJECT_CODES.find(x=>String(x.mb_contact_id||'')===id&&x.klant);
+  return p?String(p.klant).toUpperCase():null;
+}
+// ── Projectstatus: eigen keuze, anders afgeleid (en zo getoond) ──
+function projStatus(p){
+  if(p.status&&PROJ_STATUSSEN.includes(p.status)) return {status:p.status,afgeleid:false};
+  const plan=(typeof planVoor==='function')?planVoor(p.code):null, fases=(plan&&plan.fases)||[];
+  const vandaag=new Date().toISOString().slice(0,10);
+  const taken=(typeof projTaken==='function')?projTaken(p.code):[];
+  if(fases.length&&fases.every(f=>f.status==='klaar')) return {status:'opgeleverd',afgeleid:true};
+  if(fases.some(f=>f.status==='klaar'||f.status==='bezig'||(f.start&&f.start<=vandaag))||taken.some(t=>t.status==='bezig'||t.status==='klaar')) return {status:'lopend',afgeleid:true};
+  return {status:'offerte',afgeleid:true};
+}
+function projStatusZet(code,waarde){
+  const p=PROJECT_CODES.find(x=>x.code===code); if(!p) return;
+  if(waarde&&PROJ_STATUSSEN.includes(waarde)) p.status=waarde; else delete p.status;
+  slaProjectenOp();                                   // B2: stempel _gewijzigd + _door
+  if(_klantHuidig) _klantSectieRender();
+}
+// ── Pagina ──
+function openKlant(kl,loc,{sectie=null,filter=null}={}){
+  kl=String(kl||'').toUpperCase(); loc=loc?String(loc).toUpperCase():'';
+  _klantHuidig={kl,loc};
+  if(sectie&&KLANT_SECTIES.some(x=>x.k===sectie)) _klantSectie=sectie;
+  if(filter&&typeof _dosFilter!=='undefined') _dosFilter[_klantDosKey()]=Object.assign({},_DOS_STD,filter);
+  const host=document.getElementById('project-detail'); if(!host) return;
+  host.dataset.klant=kl+(loc?'/'+loc:''); delete host.dataset.code; delete host.dataset.offerte;
+  const info=klantInfo(kl,{loc}), top=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
+  const locSel=info.locaties.length?`<select class="klant-locsel" aria-label="Locatie" onchange="klantKiesLoc(this.value)"><option value="">Alle locaties</option>${info.locaties.map(l=>`<option value="${esc(l.code)}"${l.code===loc?' selected':''}>${esc(l.naam||l.code)}</option>`).join('')}</select>`:'';
+  const locNaam=loc?((info.locaties.find(l=>l.code===loc)||{}).naam||loc):'';
+  host.innerHTML=`<div class="proj-ctx klant-ctx" style="top:${top}px" data-klant="${esc(kl)}">`
+    +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(kl)}</span><span class="proj-ctx-naam">${esc(info.naam)}</span></span>`
+    +(locNaam?`<span class="proj-ctx-sep">›</span><span class="proj-ctx-loc">${esc(locNaam)}</span>`:'')
+    +`<span class="proj-ctx-acties">${locSel}`
+    +(info.telefoon?`<a class="btn btn-xs btn-secondary" href="tel:${esc(info.telefoon)}" title="Bellen: ${esc(info.telefoon)}" aria-label="Bellen">📞</a>`:'')
+    +(info.email?`<a class="btn btn-xs btn-secondary" href="mailto:${esc(info.email)}" title="Mailen: ${esc(info.email)}" aria-label="Mailen">📧</a>`:'')
+    +`<button type="button" class="btn btn-xs btn-gold" onclick="klantNieuwProject()" title="Nieuw project voor deze klant${loc?' (deze locatie)':''}">+ Nieuw project</button>`
+    +(info.mbId?`<a class="btn btn-xs btn-secondary" href="https://moneybird.com/${getAdmin()}/contacts/${esc(info.mbId)}" target="_blank" rel="noopener" title="Open het contact in Moneybird">Moneybird ↗</a>`:'')
+    +`<button type="button" class="btn btn-xs btn-secondary" onclick="klantKopieerLink()" title="Kopieer de link naar deze klant">🔗 Kopieer link</button></span></div>`
+    +`<nav class="proj-secnav" role="tablist" aria-label="Klantonderdelen">${KLANT_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_klantSectie?' actief':''}" data-sectie="${s.k}" aria-selected="${s.k===_klantSectie}" onclick="klantSectieKies('${s.k}')">${s.l}</button>`).join('')}</nav>`
+    +`<div class="card proj-sectie" id="klant-sectie-inhoud" role="tabpanel" data-sectie="${_klantSectie}"></div>`;
+  if(typeof _projSecNavTop==='function') _projSecNavTop();
+  _klantSectieRender();
+}
+function _klantDosKey(){ return _klantHuidig?('klant:'+_klantHuidig.kl+(_klantHuidig.loc?'/'+_klantHuidig.loc:'')):'klant:'; }
+function _klantRoute(extra){
+  const r={tab:'projecten',klant:_klantHuidig.kl}; if(_klantHuidig.loc) r.loc=_klantHuidig.loc;
+  if(_klantSectie!=='overzicht') r.sectie=_klantSectie;
+  return Object.assign(r,extra||{});
+}
+function klantKiesLoc(loc){
+  if(!_klantHuidig) return;
+  if(typeof projKlantFilterZet==='function') projKlantFilterZet(_klantHuidig.kl,loc||'');
+  openKlant(_klantHuidig.kl,loc||'');
+  if(typeof mtRoute!=='undefined') mtRoute.zet(_klantRoute(),false);
+}
+function klantSectieKies(s){
+  if(!KLANT_SECTIES.some(x=>x.k===s)||!_klantHuidig) return;
+  _klantSectie=s; try{ localStorage.setItem('mt_klant_sectie',s); }catch(e){}
+  document.querySelectorAll('#project-detail .proj-secknop').forEach(b=>{ const aan=b.dataset.sectie===s; b.classList.toggle('actief',aan); b.setAttribute('aria-selected',String(aan)); });
+  _klantSectieRender();
+  if(typeof mtRoute!=='undefined'){
+    let filter={};
+    if(s==='dossier'){ const f=_dosStand(_klantDosKey()); Object.keys(f).forEach(k=>{ if(f[k]) filter[k]=f[k]; }); }
+    mtRoute.zet(_klantRoute({filter}),false);
+  }
+}
+async function klantKopieerLink(){
+  if(!_klantHuidig) return;
+  let filter={};
+  if(_klantSectie==='dossier'&&typeof _dosStand==='function'){ const f=_dosStand(_klantDosKey()); Object.keys(f).forEach(k=>{ if(f[k]) filter[k]=f[k]; }); }
+  const url=location.origin+location.pathname+location.search+mtRoute.format(_klantRoute({filter}));
+  let ok=false;
+  try{ if(navigator.clipboard&&window.isSecureContext){ await navigator.clipboard.writeText(url); ok=true; } }catch(e){}
+  if(!ok){ try{ const ta=document.createElement('textarea'); ta.value=url; ta.style.cssText='position:fixed;top:-1000px;opacity:0'; document.body.appendChild(ta); ta.select(); ok=document.execCommand('copy'); ta.remove(); }catch(e){} }
+  if(typeof planToast==='function') planToast(ok?'🔗 Link gekopieerd':'Kopiëren lukte niet — link: '+url);
+}
+// Nieuw project voor deze klant: projectvenster met klant (en locatie) al ingevuld.
+function klantNieuwProject(){
+  if(!_klantHuidig||typeof openModal!=='function') return;
+  const info=klantInfo(_klantHuidig.kl,{loc:_klantHuidig.loc});
+  openModal();
+  const zet=(id,v)=>{ const e=document.getElementById(id); if(e&&v) e.value=v; };
+  zet('modal-naam-klant',info.naam); zet('modal-klant',info.kl);
+  if(_klantHuidig.loc){ zet('modal-locatie',_klantHuidig.loc); zet('modal-naam-locatie',(info.locaties.find(l=>l.code===_klantHuidig.loc)||{}).naam||''); }
+  if(typeof updateModalPreview==='function') updateModalPreview();
+  const np=document.getElementById('modal-naam-product'); if(np) np.focus();
+}
+function klantArchief(kl,aan){ _klantToonArchief[kl]=!!aan; _klantSectieRender(); }
+function _klantSectieRender(){
+  const el=document.getElementById('klant-sectie-inhoud'); if(!el||!_klantHuidig) return;
+  el.dataset.sectie=_klantSectie;
+  const {kl,loc}=_klantHuidig, info=klantInfo(kl,{loc}), projen=klantProjecten(kl,loc);
+  if(_klantSectie==='dossier'){
+    el.innerHTML=`<div class="dos-kop"><div class="card-title" style="margin:0">Dossier — ${esc(info.naam)}${loc?' › '+esc(loc):''}</div>
+      <span style="font-size:11px;color:var(--text-dim)">${projen.length} project${projen.length===1?'':'en'} (ook gearchiveerde)</span></div><div id="klant-dossier"></div>`;
+    renderDossier(document.getElementById('klant-dossier'),{codes:projen.map(p=>p.code),key:_klantDosKey(),locaties:info.locaties});
+    return;
+  }
+  if(_klantSectie==='bestanden'){ el.innerHTML=klantSecBestanden(info,projen); return; }
+  if(_klantSectie==='geld'){ el.innerHTML=klantSecGeld(info,projen); klantGeldLaad(info); return; }
+  el.innerHTML=klantSecOverzicht(info,projen);
+}
+function klantSecOverzicht(info,projen){
+  const toonArch=!!_klantToonArchief[info.kl];
+  const zicht=projen.filter(p=>toonArch||projStatus(p).status!=='archief');
+  const verborgen=projen.length-zicht.length;
+  const rijen=dossierItems({codes:projen.map(p=>p.code)});
+  const vandaag=new Date().toISOString().slice(0,10);
+  const laatste=rijen.filter(r=>r.datum&&r.datum.slice(0,10)<=vandaag&&r.status!=='ontkoppeld'&&r.soort!=='project').sort((a,b)=>b.datum.localeCompare(a.datum)).slice(0,8);
+  const openTaken=projen.reduce((n,p)=>n+((typeof projTaken==='function')?projTaken(p.code).filter(t=>t.status!=='klaar').length:0),0);
+  const icoon=s=>(DOS_SOORTEN.find(x=>x.k===s)||{}).i||'•';
+  const kaart=p=>{
+    const st=projStatus(p), lt=rijen.filter(r=>r.code===p.code&&r.datum&&r.datum.slice(0,10)<=vandaag).sort((a,b)=>b.datum.localeCompare(a.datum))[0];
+    const nt=(typeof projTaken==='function')?projTaken(p.code).filter(t=>t.status!=='klaar').length:0;
+    const viaMb=String(p.klant||'').toUpperCase()!==info.kl;
+    return `<div class="klant-proj">
+      <div class="klant-proj-hoofd"><span class="st-pill st-${st.status}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid uit planning/taken':'Zelf gekozen'}">${esc(st.status)}</span> <a href="${mtRoute.format({code:p.code})}" onclick="event.preventDefault();openProject('${_jsCode(p.code)}')"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
+        <div class="dos-meta">${p.loc?esc(p.loc_naam||p.loc)+' · ':''}${lt?'laatst: '+fmtDatum(lt.datum.slice(0,10)):'nog geen activiteit'}${nt?` · ${nt} open ta${nt===1?'ak':'ken'}`:''}</div></div>
+      <label class="klant-status"><span class="sr">Status</span><select aria-label="Status van ${esc(p.code)}" onchange="projStatusZet('${_jsCode(p.code)}',this.value)">
+        <option value=""${st.afgeleid?' selected':''}>${st.afgeleid?esc(st.status)+' (afgeleid)':'automatisch'}</option>
+        ${PROJ_STATUSSEN.map(s=>`<option value="${s}"${!st.afgeleid&&st.status===s?' selected':''}>${s}</option>`).join('')}</select></label></div>`;
+  };
+  const let_=[];
+  const zonderMap=zicht.filter(p=>!p.map||!p.map.itemId).length; if(zonderMap) let_.push(`🗂 ${zonderMap} project${zonderMap>1?'en':''} zonder gecontroleerde map`);
+  const zonderTg=zicht.filter(p=>!p.tg_project_id).length; if(zonderTg) let_.push(`⏱ ${zonderTg} project${zonderTg>1?'en':''} zonder Toggl-project`);
+  const nietOpg=rijen.filter(r=>r.soort==='mail'&&r.ref.nogNietOpgeslagen).length;
+  if(nietOpg) let_.push(`📎 ${nietOpg} mail${nietOpg>1?'s':''} met bijlagen nog niet in de projectmap <button class="btn btn-xs btn-secondary" onclick="_dosFilter[_klantDosKey()]=Object.assign({},_DOS_STD,{soort:'mail',bijlage:'1'});klantSectieKies('dossier')">Bekijken</button>`);
+  if(!info.mbId) let_.push('👤 Geen Moneybird-contact bekend voor deze klant');
+  return `<div class="klant-kop">
+      <div class="klant-gegevens">${info.email?`📧 <a href="mailto:${esc(info.email)}">${esc(info.email)}</a>`:''}${info.telefoon?` · 📞 <a href="tel:${esc(info.telefoon)}">${esc(info.telefoon)}</a>`:''}${info.adres||info.plaats?` · 📍 ${esc([info.adres,info.plaats].filter(Boolean).join(', '))}`:''}${!info.email&&!info.telefoon&&!info.plaats?'<span style="color:var(--text-faint)">Geen contactgegevens in de registry of Moneybird-cache</span>':''}</div>
+      <div class="klant-kpi"><b>${zicht.length}</b> project${zicht.length===1?'':'en'} · <b>${openTaken}</b> open ta${openTaken===1?'ak':'ken'}${info.locaties.length?` · <b>${info.locaties.length}</b> locatie${info.locaties.length===1?'':'s'}`:''}</div></div>
+    <div class="ov-grid">
+      <section class="ov-blok"><div class="card-title" style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">Projecten
+        <label class="dos-check"><input type="checkbox"${toonArch?'':' checked'} onchange="klantArchief('${_jsCode(info.kl)}',!this.checked)"> verberg archief${verborgen?` (${verborgen})`:''}</label></div>
+        ${zicht.length?projSorteerNieuwst(zicht).map(kaart).join(''):'<div class="ov-act" style="color:var(--text-faint)">Geen projecten'+(verborgen?' (alleen gearchiveerde)':'')+'.</div>'}</section>
+      <section class="ov-blok"><div class="card-title">Laatste activiteit</div>
+        ${laatste.length?laatste.map(r=>`<div class="ov-act">${icoon(r.soort)} <span class="code">${esc(r.code)}</span> ${esc(r.titel)} <span class="dos-meta">${fmtDatum(r.datum.slice(0,10))}</span></div>`).join(''):'<div class="ov-act" style="color:var(--text-faint)">Nog niets gebeurd.</div>'}
+        <a href="#" class="ov-meer" onclick="event.preventDefault();klantSectieKies('dossier')">Alles in het klantdossier →</a></section>
+    </div>
+    ${let_.length?`<section class="ov-blok ov-let"><div class="card-title">Aandachtspunten</div>${let_.map(x=>`<div class="ov-letrij">${x}</div>`).join('')}</section>`:''}`;
+}
+// ── Bestanden: per project (lui, op verzoek) + losse bestanden op klantmap-niveau ──
+function klantSecBestanden(info,projen){
+  const los=_klantMapLos[info.kl+'|'+(_klantHuidig.loc||'')];
+  const blok=p=>{ const m=(window._dossierMap||{})[p.code];
+    const inhoud=!m?`<button class="btn btn-xs btn-secondary" onclick="klantBestandenLaad('${_jsCode(p.code)}')">🗂 Bestanden tonen</button>`
+      :(m.fout?`<span style="color:#c0392b;font-size:12px">${esc(m.fout)}</span>`
+      :(m.bestanden.length?`<div class="tabel-scroll"><table class="materiaal-lijst"><tbody>${m.bestanden.map(f=>`<tr><td style="font-size:12px">${f.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none">${esc(f.naam)}</a>`:esc(f.naam)}</td><td style="font-size:11px;color:var(--text-dim)">${esc(f.sub)}</td><td style="font-size:11px;color:var(--text-faint)">${f.datum?fmtDatum(f.datum.slice(0,10)):''}</td></tr>`).join('')}</tbody></table></div>`
+      :'<span style="font-size:12px;color:var(--text-faint)">Projectmap is leeg.</span>'));
+    return `<section class="klant-bestanden"><div class="klant-bestanden-kop"><a href="#" onclick="event.preventDefault();openProject('${_jsCode(p.code)}',{sectie:'dossier'})"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</a>${m&&m.pad?` <span class="dos-meta">${esc(m.pad)}</span>`:''}</div>${inhoud}</section>`; };
+  return `<div class="dos-kop"><div class="card-title" style="margin:0">Bestanden</div>
+      <button class="btn btn-secondary btn-sm" onclick="klantBestandenAlles()">🗂 Alles laden</button>
+      <span style="font-size:11px;color:var(--text-faint)">Alleen lezen; per project pas geladen als je erom vraagt.</span></div>
+    <section class="klant-bestanden"><div class="klant-bestanden-kop">📁 Klantmap${_klantHuidig.loc?' › '+esc(_klantHuidig.loc):''} — losse bestanden</div>
+      ${los?(los.fout?`<span style="color:#c0392b;font-size:12px">${esc(los.fout)}</span>`:(los.length?los.map(f=>`<div style="font-size:12px">📄 ${f.webUrl?`<a href="${esc(f.webUrl)}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none">${esc(f.naam)}</a>`:esc(f.naam)}</div>`).join(''):'<span style="font-size:12px;color:var(--text-faint)">Geen losse bestanden.</span>'))
+        :`<button class="btn btn-xs btn-secondary" onclick="klantMapLosLaad()">Tonen</button>`}</section>
+    ${projen.length?projSorteerNieuwst(projen).map(blok).join(''):'<p class="dos-leeg">Geen projecten.</p>'}`;
+}
+async function klantBestandenLaad(code){
+  if(typeof dossierLaadMap==='function') await dossierLaadMap(code);
+  if(_klantHuidig&&_klantSectie==='bestanden') _klantSectieRender();
+}
+async function klantBestandenAlles(){
+  if(!_klantHuidig) return;
+  for(const p of klantProjecten(_klantHuidig.kl,_klantHuidig.loc)){ if(!(window._dossierMap||{})[p.code]) await klantBestandenLaad(p.code); }
+}
+async function klantMapLosLaad(){
+  if(!_klantHuidig) return;
+  const {kl,loc}=_klantHuidig, sleutel=kl+'|'+(loc||''), info=klantInfo(kl);
+  try{
+    const kids=await _SP.listChildren(PROJ_ROOT);
+    const kn=_projVeilig(info.naam);
+    const map=kids.find(c=>c.folder&&c.name===kn)||kids.find(c=>c.folder&&_SP._norm(c.name)===_SP._norm(kn));
+    if(!map){ _klantMapLos[sleutel]=Object.assign([],{fout:'Geen klantmap "'+kn+'" gevonden'}); }
+    else{
+      let pad=`${PROJ_ROOT}/${map.name}`;
+      if(loc){ const ln=_projVeilig((info.locaties.find(l=>l.code===loc)||{}).naam||loc); const lk=(await _SP.listChildren(pad)).find(c=>c.folder&&(_SP._norm(c.name)===_SP._norm(ln))); if(lk) pad+='/'+lk.name; }
+      _klantMapLos[sleutel]=(await _SP.listChildren(pad)).filter(c=>!c.folder).map(c=>({naam:c.name,webUrl:c.webUrl||''}));
+    }
+  }catch(e){ _klantMapLos[sleutel]=Object.assign([],{fout:'⚠ '+(e.message||e)}); }
+  if(_klantHuidig&&_klantSectie==='bestanden') _klantSectieRender();
+}
+// ── Geld: Moneybird-facturen en -offertes van dit contact (lui) + calculaties per project ──
+function klantSecGeld(info,projen){
+  const g=info.mbId?_klantGeld[info.mbId]:null;
+  const state=f=>f.state==='paid'?'<span class="badge badge-ok">Betaald</span>':f.state==='pending_payment'?'<span class="badge badge-info">In betaling</span>':f.state==='draft'?'<span class="badge">Concept</span>':'<span class="badge badge-warn">Open</span>';
+  const tabel=(lijst,leeg)=>lijst.length?`<div class="tabel-scroll"><table class="v-table"><thead><tr><th>Datum</th><th>Referentie</th><th style="text-align:right">Bedrag</th><th>Status</th></tr></thead><tbody>${lijst.slice(0,25).map(f=>`<tr><td style="font-size:12px">${fmtDatum(f.date||f.estimate_date||f.invoice_date)}</td><td style="font-size:12px">${esc(f.reference||f.estimate_id||f.invoice_id||'—')}</td><td style="text-align:right;font-family:var(--mono);font-size:12px">${fmt(parseFloat(f.total_price_incl_tax||0))}</td><td>${state(f)}</td></tr>`).join('')}</tbody></table></div>`:`<p class="dos-leeg">${leeg}</p>`;
+  const calc=projen.map(p=>{ const o=(window.CALC&&CALC.offertes)?(CALC.offertes[p.code]||Object.values(CALC.offertes).find(x=>x&&x.project_code===p.code)):null; return o?{p,o}:null; }).filter(Boolean);
+  return `<div class="card-title">Calculaties per project</div>
+    ${calc.length?calc.map(({p,o})=>`<div class="ov-act"><a href="#" onclick="event.preventDefault();openProject('${_jsCode(p.code)}',{sectie:'calculatie'})"><span class="code">${esc(p.code)}</span> ${esc(o.titel||p.naam||'')}</a> <span class="dos-st">${esc((o.meta&&o.meta.status)||'in bewerking')}</span>${o._gewijzigd?` <span class="dos-meta">${fmtDatum(String(o._gewijzigd).slice(0,10))}</span>`:''}</div>`).join(''):'<p class="dos-leeg">Nog geen calculaties.</p>'}
+    <hr class="divider">
+    ${!info.mbId?'<p class="dos-leeg">Geen Moneybird-contact bekend — facturen en offertes zijn niet op te halen.</p>'
+      :!g?'<p class="dos-leeg"><span class="spinner"></span> Moneybird laden…</p>'
+      :g.fout?`<p style="color:#c0392b;font-size:13px">${esc(g.fout)}</p>`
+      :`<div class="card-title">Facturen (Moneybird)</div>${tabel(g.facturen,'Geen facturen gevonden.')}<div class="card-title" style="margin-top:1rem">Offertes (Moneybird)</div>${tabel(g.offertes,'Geen offertes gevonden.')}`}`;
+}
+async function klantGeldLaad(info){
+  if(!info.mbId||_klantGeld[info.mbId]) return;
+  try{
+    const [rf,ro]=await Promise.all([
+      mbGet(`${getAdmin()}/documents/sales_invoices?filter=contact_id:${info.mbId}&per_page=25`),
+      mbGet(`${getAdmin()}/estimates?filter=contact_id:${info.mbId},state:all`)]);
+    _klantGeld[info.mbId]={facturen:rf.ok?(await rf.json()||[]):[],offertes:ro.ok?((await ro.json()||[]).filter(e=>String(e.contact_id)===String(info.mbId))):[]};
+  }catch(e){ _klantGeld[info.mbId]={fout:'Moneybird ophalen mislukt: '+(e.message||e),facturen:[],offertes:[]}; }
+  if(_klantHuidig&&_klantSectie==='geld'&&klantInfo(_klantHuidig.kl,{loc:_klantHuidig.loc}).mbId===info.mbId) _klantSectieRender();
+}
+// Klanten-tab: klik op een klant → klantpagina als er een klantcode bij hoort, anders de modal.
+function klantKlik(mbId){
+  const code=klantCodeVoorMb(mbId);
+  if(code&&typeof mtRoute!=='undefined'){ mtRoute.go({tab:'projecten',klant:code},{push:true}); return; }
+  openKlantDetail(mbId);
 }
 
 // ── Gekoppelde mails van een project (mt_mail_links — synct via privé SharePoint, zichtbaar op alle PC's) ──
@@ -6838,7 +7161,8 @@ async function dossierLaadMap(code){
       window._dossierMap[code]={pad,bestanden,fout:null};
     }
   }catch(e){ window._dossierMap[code]={pad:null,bestanden:[],fout:'⚠ '+(e.message||e)}; }
-  if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code) _rerenderDetailKeepScroll();
+  const pdH=document.getElementById('project-detail');
+  if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&pdH&&pdH.dataset.code===code) _rerenderDetailKeepScroll();
 }
 
 // ═══ NCR IMPORT ═══
@@ -8180,7 +8504,7 @@ function renderKlantenGrid(klanten){
         const naam=k.company_name||`${k.firstname||''} ${k.lastname||''}`.trim();
         const kleur=kleuren[naam.charCodeAt(0)%5];
         const initialen=naam.split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
-        return`<tr style="cursor:pointer" onclick="openKlantDetail('${k.id}')">
+        return`<tr style="cursor:pointer" onclick="klantKlik('${k.id}')">
           <td><div style="display:flex;align-items:center;gap:10px">
             <div style="width:32px;height:32px;border-radius:50%;background:${kleur}22;border:2px solid ${kleur}55;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${kleur};flex-shrink:0">${initialen}</div>
             <div><strong style="font-size:13px">${naam}</strong>${k.customer_id?`<div style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">nr. ${k.customer_id}</div>`:''}</div>
@@ -8201,8 +8525,10 @@ function renderKlantenGrid(klanten){
       const naam=k.company_name||`${k.firstname||''} ${k.lastname||''}`.trim();
       const initialen=naam.split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
       const kleur=kleuren[naam.charCodeAt(0)%5];
-      const projVanKlant=PROJECT_CODES.filter(p=>p.naam?.toLowerCase().includes(naam.toLowerCase().split(' ')[0])||false);
-      return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);cursor:pointer;transition:all 0.15s" onclick="openKlantDetail('${k.id}')" onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-lg)'" onmouseleave="this.style.transform='';this.style.boxShadow='var(--shadow)'">
+      // Exacte selectie (klantcode of zelfde Moneybird-contact) i.p.v. eerste-woord-in-de-naam.
+      const kCode=klantCodeVoorMb(k.id);
+      const projVanKlant=kCode?klantProjecten(kCode):PROJECT_CODES.filter(p=>String(p.mb_contact_id||'')===String(k.id));
+      return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);cursor:pointer;transition:all 0.15s" onclick="klantKlik('${k.id}')" onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-lg)'" onmouseleave="this.style.transform='';this.style.boxShadow='var(--shadow)'">
         <div style="height:6px;background:${kleur}"></div>
         <div style="padding:1.25rem">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
@@ -8222,8 +8548,9 @@ function renderKlantenGrid(klanten){
             <span style="font-size:11px;color:var(--orange)">${k.total_outstanding_invoices_count} openstaande factuur/facturen</span>
             <span style="font-family:var(--mono);font-weight:700;font-size:13px;color:var(--orange)">${fmt(parseFloat(k.total_outstanding_invoices_amount||0))}</span>
           </div>`:''}
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <a href="https://moneybird.com/${getAdmin()}/contacts/${k.id}" target="_blank" style="font-size:11px;color:var(--green);text-decoration:none;padding:4px 10px;border:1px solid var(--green);border-radius:4px" onclick="event.stopPropagation()">Moneybird →</a>
+            ${kCode?`<span style="font-size:11px;color:var(--text-dim)"><span class="code">${esc(kCode)}</span> · ${projVanKlant.length} project${projVanKlant.length===1?'':'en'} →</span>`:''}
           </div>
         </div>
       </div>`;

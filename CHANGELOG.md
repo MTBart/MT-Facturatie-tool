@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-06 — Projectscherm in secties + dossier: alles van een project op een vaste plek, met filters
+- Commit: `adfc3fd` | Auteur: Bart Witte
+
 ## 2026-10-06 — Projectmap: een mapzoeker (projMap) voor lezen en schrijven, Mappen herstellen met droogloop
 - Commit: `44f93b3` | Auteur: Bart Witte
 
