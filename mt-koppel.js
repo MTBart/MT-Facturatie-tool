@@ -58,11 +58,13 @@
         ? (msg.from.emailAddress.name || msg.from.emailAddress.address || '')
         : (typeof (msg && msg.from) === 'string' ? msg.from : '');
       const nu = K.nu();
+      const adres = String((msg && msg.from && msg.from.emailAddress && msg.from.emailAddress.address) || msg.fromAddr || '').toLowerCase();
       return Object.assign({
         id: msg.id || '', internetMessageId: msg.internetMessageId || '', subject: msg.subject || '',
         from: van, date: msg.receivedDateTime || msg.date || '', webLink: msg.webLink || '',
         mbx: msg.mbx || '', ts: nu, gewijzigd: nu
-      }, typeof msg.hasAttachments === 'boolean' ? { hasAttachments: msg.hasAttachments } : {}, extra || {});
+      }, typeof msg.hasAttachments === 'boolean' ? { hasAttachments: msg.hasAttachments } : {},
+        msg.conversationId ? { conversationId: msg.conversationId } : {}, adres ? { fromAddr: adres } : {}, extra || {});
     },
 
     // ── journaal ──
@@ -163,6 +165,79 @@
       });
       return uit;
     },
+    // ── Koppelvoorstellen (brok B9) — alleen voorstellen, NOOIT automatisch koppelen ──
+    // Signalen (eenvoudig en uitlegbaar, score max 100):
+    //   projectcode of offertenummer in onderwerp (60) / in de tekst-preview (45)
+    //   ander bericht in hetzelfde gesprek al gekoppeld (70)
+    //   eerder gekoppeld van dezelfde afzender (30)
+    //   afzender = e-mail van het project (35) / afzenderdomein = klantdomein (25, recentste eerst)
+    // Freemail-domeinen en het eigen domein tellen nooit als klantdomein.
+    FREEMAIL: new Set(['gmail.com','googlemail.com','hotmail.com','hotmail.nl','outlook.com','outlook.nl','live.com','live.nl','msn.com',
+      'ziggo.nl','kpnmail.nl','kpnplanet.nl','planet.nl','home.nl','icloud.com','me.com','mac.com','yahoo.com','yahoo.nl','hetnet.nl',
+      'chello.nl','casema.nl','upcmail.nl','telfort.nl','quicknet.nl','tele2.nl','xs4all.nl','protonmail.com','proton.me','gmx.com',
+      'gmx.net','gmx.de','aol.com','zonnet.nl','online.nl','caiway.nl','solcon.nl','mortiseandtenon.nl']),
+    domein(adres) { const d = String(adres || '').toLowerCase().split('@')[1] || ''; return d && !K.FREEMAIL.has(d) ? d : ''; },
+    // Index één keer bouwen (per lijst-render), daarna per mail goedkoop scoren.
+    voorstelIndex(opts) {
+      opts = opts || {};
+      const projecten = (opts.projecten || root.PROJECT_CODES || []).filter(p => p && p.code && p.status !== 'archief');
+      const all = K.alle();
+      const perCode = new Map(projecten.map(p => [p.code, p]));
+      const codes = projecten.map(p => ({ code: p.code, re: new RegExp('(^|[^A-Za-z0-9-])' + p.code.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&') + '($|[^A-Za-z0-9-])', 'i') }));
+      const offertes = projecten.filter(p => p.offertenr).map(p => ({ code: p.code, nr: String(p.offertenr),
+        re: new RegExp('(^|[^0-9])' + String(p.offertenr).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^0-9])') }));
+      const gesprek = new Map(), afzender = new Map();
+      for (const code in all) for (const x of (Array.isArray(all[code]) ? all[code] : [])) {
+        if (!K.actief(x) || !perCode.has(code)) continue;
+        if (x.conversationId) { if (!gesprek.has(x.conversationId)) gesprek.set(x.conversationId, new Set()); gesprek.get(x.conversationId).add(code); }
+        const a = String(x.fromAddr || '').toLowerCase();
+        if (a) { if (!afzender.has(a)) afzender.set(a, new Set()); afzender.get(a).add(code); }
+      }
+      // Klantdomeinen → klantcode (registry + e-mail op projecten); klant → projecten.
+      const domKlant = new Map(), adresProj = new Map();
+      const zetDom = (adres, kl) => { const d = K.domein(adres); if (d && kl) { if (!domKlant.has(d)) domKlant.set(d, new Set()); domKlant.get(d).add(String(kl).toUpperCase()); } };
+      (opts.klantenVol || root.KLANTEN_VOL || []).forEach(k => { if (k && k.soort !== 'leverancier' && k.email && k.code) zetDom(k.email, k.code); });
+      (opts.klanten || root.KLANTEN || []).forEach(k => { if (k && k.email && k.code) zetDom(k.email, k.code); });
+      projecten.forEach(p => { if (p.klant_email) { zetDom(p.klant_email, p.klant); const a = String(p.klant_email).toLowerCase(); if (!adresProj.has(a)) adresProj.set(a, new Set()); adresProj.get(a).add(p.code); } });
+      // Afzenders van eerdere koppelingen: hun domein telt pas als klantdomein bij ≥2 gekoppelde
+      // mails voor die klant, en nooit als het een leveranciersdomein is (factuurmails aan een project).
+      const lev = new Set((opts.klantenVol || root.KLANTEN_VOL || []).filter(k => k && k.soort === 'leverancier' && k.email).map(k => K.domein(k.email)).filter(Boolean));
+      const telDom = new Map();
+      for (const code in all) for (const x of (Array.isArray(all[code]) ? all[code] : [])) {
+        const p = perCode.get(code), d = K.actief(x) && p && p.klant ? K.domein(x.fromAddr) : '';
+        if (d && !lev.has(d)) { const k = d + '|' + String(p.klant).toUpperCase(); telDom.set(k, (telDom.get(k) || 0) + 1); }
+      }
+      telDom.forEach((n, k) => { if (n >= 2) { const [d, kl] = k.split('|'); zetDom('x@' + d, kl); } });
+      const klantProj = new Map(); projecten.forEach(p => { const kl = String(p.klant || '').toUpperCase(); if (!kl) return; if (!klantProj.has(kl)) klantProj.set(kl, []); klantProj.get(kl).push(p); });
+      klantProj.forEach(lijst => lijst.sort((a, b) => String(b.created || '').localeCompare(String(a.created || ''))));
+      return { perCode, codes, offertes, gesprek, afzender, domKlant, adresProj, klantProj };
+    },
+    // → [{code, score, redenen:[…]}], max 3, hoogste eerst; zonder projecten waar de mail al aan hangt.
+    koppelVoorstel(msg, opts) {
+      opts = opts || {};
+      if (!msg) return [];
+      const ix = opts.index || K.voorstelIndex(opts);
+      const al = new Set(K.mailProjecten(msg));
+      const sc = new Map();
+      const plus = (code, n, reden) => { if (!ix.perCode.has(code) || al.has(code)) return; const o = sc.get(code) || { code, score: 0, redenen: [] }; if (!o.redenen.includes(reden)) { o.score += n; o.redenen.push(reden); } sc.set(code, o); };
+      const onderw = String(msg.subject || ''), tekst = String(msg.bodyPreview || '');
+      ix.codes.forEach(c => { if (c.re.test(onderw)) plus(c.code, 60, 'projectcode in onderwerp'); else if (c.re.test(tekst)) plus(c.code, 45, 'projectcode in tekst'); });
+      ix.offertes.forEach(o => { if (o.re.test(onderw)) plus(o.code, 60, 'offertenummer ' + o.nr + ' in onderwerp'); else if (o.re.test(tekst)) plus(o.code, 45, 'offertenummer ' + o.nr + ' in tekst'); });
+      const cid = msg.conversationId;
+      const gesprekCodes = new Set(cid && ix.gesprek.get(cid) || []);
+      // Alleen bij een echt gesprek-id (anders zouden alle mails zonder id "één gesprek" zijn).
+      if (cid) (opts.gesprek || []).forEach(m => { if (m && m !== msg && m.conversationId === cid) K.mailProjecten(m).forEach(c => gesprekCodes.add(c)); });
+      gesprekCodes.forEach(c => plus(c, 70, 'ander bericht in dit gesprek is gekoppeld'));
+      const adres = String((msg.from && msg.from.emailAddress && msg.from.emailAddress.address) || '').toLowerCase();
+      (ix.afzender.get(adres) || []).forEach(c => plus(c, 30, 'eerder gekoppeld van deze afzender'));
+      (ix.adresProj.get(adres) || []).forEach(c => plus(c, 35, 'afzender is het e-mailadres van het project'));
+      const dom = K.domein(adres);
+      if (dom) (ix.domKlant.get(dom) || []).forEach(kl => (ix.klantProj.get(kl) || []).forEach((p, i) => plus(p.code, Math.max(10, 25 - i * 3), 'afzenderdomein ' + dom + ' hoort bij klant ' + kl)));
+      return [...sc.values()].map(o => Object.assign(o, { score: Math.min(100, o.score) }))
+        .sort((a, b) => b.score - a.score || String((ix.perCode.get(b.code) || {}).created || '').localeCompare(String((ix.perCode.get(a.code) || {}).created || '')))
+        .slice(0, 3);
+    },
+    VOORSTEL_STERK: 60,
     // ALLE projecten waar deze mail (actief) aan hangt, in opslagvolgorde.
     mailProjecten(msg) {
       if (!msg) return [];

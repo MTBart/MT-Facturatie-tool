@@ -22,8 +22,8 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-toggl.js?v=2026-10-06a"></script>
-<script src="mt-koppel.js?v=2026-10-06d"></script>
-<script src="mt-inbox.js?v=2026-10-06d"></script>
+<script src="mt-koppel.js?v=2026-10-06f"></script>
+<script src="mt-inbox.js?v=2026-10-06f"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -509,6 +509,11 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .dos-sel{height:var(--control-h-sm);font-size:12px;max-width:100%}
 .dos-check{display:inline-flex;align-items:center;gap:4px;color:var(--text-dim)}
 .dos-aangepast[hidden]{display:none}
+/* Nog te koppelen (B9) */
+details.ntk{border:1px dashed var(--border-strong);border-radius:var(--radius);padding:6px 10px;margin-bottom:10px;background:var(--surface)}
+details.ntk>summary{cursor:pointer;font-size:13px;font-weight:600;list-style:revert}
+details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-left:6px}
+.ntk-rij{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border-hair);flex-wrap:wrap}
 /* Klantpagina (B8) */
 .klant-locsel{height:var(--control-h-sm);font-size:12px;max-width:180px}
 .klant-kop{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-dim);margin-bottom:var(--space-3)}
@@ -1967,6 +1972,16 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
       #tab-inbox .inbox-rhdr h3{margin:0 0 4px;font-size:15px}
       #tab-inbox .inbox-rmeta{font-size:11.5px;color:var(--text-dim,#666);display:flex;flex-wrap:wrap;gap:4px 12px}
       #tab-inbox .inbox-ract{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
+      #tab-inbox .ib-filters{display:flex;gap:4px;flex-wrap:wrap}
+      #tab-inbox .ib-fchip{border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:2px 9px;font:600 11px var(--sans);color:var(--text-dim);cursor:pointer}
+      #tab-inbox .ib-fchip.actief{background:var(--green);border-color:var(--green);color:#fff}
+      #tab-inbox .inbox-msg a.kpchip.voorstel{background:var(--gold-light);color:var(--gold-text);border:1px dashed var(--gold-mid)}
+      .ib-voorstel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:6px 8px;border:1px dashed var(--gold-mid);background:var(--gold-light);border-radius:8px;font-size:12px}
+      .ib-voorstel .ib-waarom,.ib-voorstel .ib-anders{color:var(--text-dim);font-size:11px}
+      .ib-voorstel .ib-anders a{color:var(--green)}
+      .ib-voorstel.zwak{border-style:dotted;background:transparent;padding:4px 8px}
+      .ib-voorstel.zwak>a{color:var(--green);font-weight:600}
+      @media(max-width:820px){.ib-voorstel .btn,#tab-inbox .ib-fchip{min-height:34px;padding-left:12px;padding-right:12px}}
       #tab-inbox .inbox-ract select{font-size:12px;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:6px;background:#fff}
       #tab-inbox .inbox-att{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:var(--surface-sunken);border:1px solid var(--border);border-radius:6px;padding:3px 8px;margin:3px 4px 0 0;cursor:pointer}
       #tab-inbox .inbox-body{flex:1 1 auto;min-height:340px;border:0;width:100%;background:#fff}
@@ -2047,7 +2062,8 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
             <div id="inbox-listtitle">—</div>
             <label class="inbox-threadtoggle" title="Mailwisselingen als één gesprek tonen (zoals Outlook)"><input type="checkbox" id="inbox-threadtoggle" onchange="inboxToggleThread(this.checked)"> 💬 Gesprekken</label>
           </div>
-          <input id="inbox-search" type="search" placeholder="🔍 Zoek in deze map…" oninput="inboxSearchInput()" onsearch="inboxSearchInput()">
+          <input id="inbox-search" type="search" placeholder="🔍 Zoek in hele mailbox…" oninput="inboxSearchInput()" onsearch="inboxSearchInput()">
+          <div id="inbox-filters" class="ib-filters" role="group" aria-label="Filters"></div>
         </div>
         <div id="inbox-messages"></div>
       </div>
@@ -5209,6 +5225,7 @@ function projSecDossier(proj,c){
         <span id="dossier-map-st-${c.cid}" style="font-size:11px;color:var(--text-dim)">${mapInfo?(mapInfo.fout?`<span style="color:#c0392b">${esc(mapInfo.fout)}</span>`:(mapInfo.pad?`${mapInfo.bestanden.length} bestanden · ${esc(mapInfo.pad)}`:'')):''}</span>
         ${dos.klopt?'':'<span style="font-size:11px;color:#c0392b">⚠ mail-telling klopt niet — meld dit</span>'}
       </div>
+      ${typeof ntkPlek==='function'?ntkPlek('proj:'+proj.code,[proj.code],klantDomeinen([proj.code])):''}
       <div id="proj-dossier-${c.cid}"></div>`;
 }
 // ── Planning: Gantt + taken (taken voeden de planning; "📅 → Planning" zet ze om) ──
@@ -5377,6 +5394,23 @@ function dossierItems({codes}={}){
       rij({soort:'uren',titel:`${String(u).replace('.',',')} uur`,van:wie,door:wie,datum:d,status:'geboekt'}); });
   }
   return uit;
+}
+// Klantdomeinen voor "Nog te koppelen": e-mail op de projecten, de registry en eerdere
+// koppelingen — zonder freemail (gmail/hotmail/…) en zonder het eigen domein.
+function klantDomeinen(codes){
+  const dom=a=>(window.MTKoppel&&MTKoppel.domein)?MTKoppel.domein(a):'';
+  const uit=new Set(), kls=new Set(), tel={};
+  const all=(typeof mailLinksAll==='function')?mailLinksAll():{};
+  const vol=(typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]);
+  const lev=new Set(vol.filter(k=>k&&k.soort==='leverancier'&&k.email).map(k=>dom(k.email)).filter(Boolean));
+  (codes||[]).forEach(c=>{ const p=PROJECT_CODES.find(x=>x.code===c); if(!p) return;
+    if(p.klant) kls.add(String(p.klant).toUpperCase()); const d=dom(p.klant_email); if(d) uit.add(d);
+    (all[c]||[]).forEach(x=>{ if(x&&!x.ontkoppeld){ const d2=dom(x.fromAddr); if(d2&&!lev.has(d2)) tel[d2]=(tel[d2]||0)+1; } }); });
+  // Afzenderdomein van eerdere koppelingen pas bij ≥2 mails (één toevallige afzender, bv. een
+  // leverancier die een factuur aan het project stuurde, maakt nog geen klantdomein).
+  Object.keys(tel).forEach(d=>{ if(tel[d]>=2) uit.add(d); });
+  vol.forEach(k=>{ if(k&&k.soort!=='leverancier'&&kls.has(String(k.code||'').toUpperCase())){ const d=dom(k.email); if(d) uit.add(d); } });
+  return [...uit];
 }
 // Mailbijlagen naar de map vanuit het dossier: eerst de juiste mailbox zetten (zoals openen).
 async function dossierBijlagenNaarMap(code,i){
@@ -5667,7 +5701,9 @@ function _klantSectieRender(){
   const {kl,loc}=_klantHuidig, info=klantInfo(kl,{loc}), projen=klantProjecten(kl,loc);
   if(_klantSectie==='dossier'){
     el.innerHTML=`<div class="dos-kop"><div class="card-title" style="margin:0">Dossier — ${esc(info.naam)}${loc?' › '+esc(loc):''}</div>
-      <span style="font-size:11px;color:var(--text-dim)">${projen.length} project${projen.length===1?'':'en'} (ook gearchiveerde)</span></div><div id="klant-dossier"></div>`;
+      <span style="font-size:11px;color:var(--text-dim)">${projen.length} project${projen.length===1?'':'en'} (ook gearchiveerde)</span></div>
+      ${typeof ntkPlek==='function'?ntkPlek(_klantDosKey(),projen.filter(p=>projStatus(p).status!=='archief').map(p=>p.code),klantDomeinen(projen.map(p=>p.code))):''}
+      <div id="klant-dossier"></div>`;
     renderDossier(document.getElementById('klant-dossier'),{codes:projen.map(p=>p.code),key:_klantDosKey(),locaties:info.locaties});
     return;
   }

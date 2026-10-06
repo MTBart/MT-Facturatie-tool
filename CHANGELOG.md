@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-06 — Rooktest-punten: contextbalk-knoppen breken niet meer af, geen dubbele projectkop op Overzicht
+- Commit: `abd8d69` | Auteur: Bart Witte
+
 ## 2026-10-06 — Klant- en locatiepagina: alle projecten, het klantdossier, bestanden en geld op een plek
 - Commit: `ffb032c` | Auteur: Bart Witte
 
