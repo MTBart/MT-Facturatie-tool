@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.5 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.6 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -24,7 +24,8 @@
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-toggl.js?v=2026-10-07a"></script>
 <script src="mt-koppel.js?v=2026-10-07a"></script>
-<script src="mt-inbox.js?v=2026-10-07a"></script>
+<script src="mt-contacten.js?v=2026-10-07a"></script>
+<script src="mt-inbox.js?v=2026-10-07b"></script>
 <script src="mt-rollen.js?v=2026-10-07a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -644,6 +645,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .dos-tag.let{color:var(--gold-text);background:var(--gold-light)}
 .dos-acties{flex:0 0 auto;display:flex;gap:4px}
 .dos-leeg{color:var(--text-faint);font-size:13px;padding:.5rem 0}
+/* Projectenlijst blijft in beeld op brede schermen (eigen scroll); smal = gewoon stapelen. */
+@media(min-width:1100px){.proj-lijst-kaart{position:sticky;top:var(--mt-kop,112px);max-height:calc(100vh - var(--mt-kop,112px) - 16px);display:flex;flex-direction:column;box-sizing:border-box}
+  .proj-lijst-kaart #project-lijst{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}}
 @media(max-width:820px){#proj-grid{grid-template-columns:minmax(0,1fr)!important}.ov-grid{grid-template-columns:minmax(0,1fr)}
   .dos-meerknop{display:inline-flex}.dos-extra{display:none}.dos-filters.open .dos-extra{display:contents}}
 @media(max-width:560px){.kpi-grid.ov-kpi{grid-template-columns:minmax(0,1fr)}.dos-rij{flex-wrap:wrap}.dos-acties{margin-left:28px}}
@@ -753,7 +757,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.5, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.6, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -774,7 +778,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.5</span>
+    <span class="header-version">v2.6</span>
     <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
@@ -788,6 +792,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <div class="header-right">
     <span id="api-dot" class="api-dot warn"></span>
     <span id="api-label" class="api-label">verbinden...</span>
+    <button class="mtc-hdrknop" data-mtc="zoek" title="Contact zoeken" aria-label="Contact zoeken">📇</button>
     <button class="mobiel-bell-btn" id="mobiel-bell-btn" onclick="showTab('projecten',document.querySelector('.tab-btn[onclick*=\\'projecten\\']'));scrollMobielMeldingen()" title="Nieuwe projecten vanaf mobiel">📱<span class="mobiel-bell-badge" id="mobiel-bell-badge"></span></button>
     <div class="user-chip" onclick="msLogout()" title="Uitloggen">
       <div class="user-avatar" id="user-avatar">?</div>
@@ -1121,7 +1126,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="proj-grid" style="display:grid;grid-template-columns:280px minmax(0,1fr);gap:1.5rem;min-height:600px">
       <!-- Projectenlijst -->
       <div>
-        <div class="card" style="padding:1rem">
+        <div class="card proj-lijst-kaart" style="padding:1rem">
           <div class="card-title">Projecten</div>
           <div class="flex" style="margin-bottom:0.75rem;gap:6px">
             <button class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1">+ Nieuw project</button>
@@ -1406,6 +1411,11 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <div class="card-title">Koppel je Toggl</div>
       <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Je timer en uren lopen via je eigen Toggl-account. Eén keer koppelen; je sleutel wordt versleuteld bewaard en is voor niemand zichtbaar — ook niet voor beheerders.</p>
       <span data-tgk-badge></span>
+    </div>
+    <div class="card" data-recht="projecten:wijzigen" id="mtc-instel-kaart">
+      <div class="card-title">Contacten</div>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Eén contactenregister voor klanten, leveranciers en collega's. “Bijwerken” leest Moneybird, projecten en gekoppelde mails; je ziet eerst wat er zou veranderen en niets wordt overschreven.</p>
+      <div class="flex"><button class="btn btn-secondary btn-sm" data-mtc="bijwerken">↻ Contacten bijwerken</button><button class="btn btn-secondary btn-sm" data-mtc="zoek">🔎 Contact zoeken</button><span id="mtc-instel-status" style="font-size:12px;color:var(--text-dim)"></span></div>
     </div>
     <div class="grid2">
       <div>
@@ -2700,10 +2710,82 @@ async function _mbTrack(method,path,doFetch){
     throw err;
   }
 }
-async function mbGet(path){const h=await authHeader();return _mbTrack('get',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{headers:h}));}
-async function mbPost(path,body){const h=await authHeader();return _mbTrack('post',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)}));}
-async function mbPatch(path,body){const h=await authHeader();return _mbTrack('patch',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'PATCH',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)}));}
-async function mbDelete(path){const h=await authHeader();return _mbTrack('delete',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(path)}`,{method:'DELETE',headers:h}));}
+// Paden zonder leidende '/' (de worker weigert '//'); opts = {bevestiging, actie} → X-MT-Bevestiging / X-MT-Actie (F3/F4).
+const _mbPad=p=>String(p||'').replace(/^\/+/,'');
+function _mbHdr(h,opts){ const x={...h}; if(opts&&opts.bevestiging) x['X-MT-Bevestiging']=opts.bevestiging; if(opts&&opts.actie) x['X-MT-Actie']=opts.actie; return x; }
+async function mbGet(path){const h=await authHeader();return _mbTrack('get',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(_mbPad(path))}`,{headers:h}));}
+async function mbPost(path,body,opts){const h=await authHeader();return _mbTrack('post',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(_mbPad(path))}`,{method:'POST',headers:{..._mbHdr(h,opts),'Content-Type':'application/json'},body:JSON.stringify(body)}));}
+async function mbPatch(path,body,opts){const h=await authHeader();return _mbTrack('patch',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(_mbPad(path))}`,{method:'PATCH',headers:{..._mbHdr(h,opts),'Content-Type':'application/json'},body:JSON.stringify(body)}));}
+async function mbDelete(path,opts){const h=await authHeader();return _mbTrack('delete',path,()=>fetch(`${WORKER}?target=moneybird&path=${encodeURIComponent(_mbPad(path))}`,{method:'DELETE',headers:_mbHdr(h,opts)}));}
+
+// ── F3: elke Moneybird-schrijfactie eerst bevestigen (wie / wat / contact / bedrag) ──
+// Geeft een bevestigings-id terug (of null bij annuleren); de worker verwacht dat id als
+// X-MT-Bevestiging (in PROXY_MODUS 'log' wordt alleen het ontbreken gelogd).
+function mbActieId(){ return 'mt-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10); }
+async function mbBevestig({wat,contact,bedrag,ref,extra,gevaar}={}){
+  const wie=(window.MTRol&&MTRol.me&&MTRol.me.naam)||(typeof mtMijEmail==='function'&&mtMijEmail())||'jij';
+  const regels=['Wie: '+wie,'Wat: '+wat];
+  if(contact) regels.push('Contact: '+contact);
+  if(ref) regels.push('Referentie: '+ref);
+  if(bedrag!=null&&bedrag!==''&&isFinite(+bedrag)) regels.push('Bedrag: € '+(+bedrag).toFixed(2).replace('.',',')+' excl. btw');
+  if(extra) regels.push('',extra);
+  const vraag=regels.join('\n')+'\n\nDoorgaan?';
+  const ok=(typeof mtDialog!=='undefined')?await mtDialog.confirm({title:'Moneybird — bevestigen',message:vraag,okLabel:'Ja, doorgaan',danger:!!gevaar}):confirm(vraag);
+  return ok?mbActieId():null;
+}
+// ── F4: een concept hooguit één keer aanmaken, ook als het antwoord onderweg zoekraakt ──
+// Vóór de POST krijgt de actie een id dat lokaal (+ SharePoint) bij het record staat als
+// 'in-behandeling'. De worker voert dezelfde actie maar één keer uit. Is het onzeker
+// (time-out, 5xx, "bezig/onzeker"), dan zoeken we het concept op i.p.v. opnieuw te posten.
+// rec[veld] = {id, status:'in-behandeling'|'klaar'|'controleren'|'mislukt', pad, ts, mb_id}
+async function mbMaakEenmalig({rec,veld,pad,body,bev,stap,opslaan,zoek,methode='POST',opnieuw=false}){
+  const vorig=rec[veld];
+  const hergebruik=!opnieuw&&vorig&&['in-behandeling','controleren'].includes(vorig.status)&&vorig.pad===pad&&vorig.id;
+  const actie=hergebruik||(bev+':'+stap+'-'+Date.now().toString(36));   // nieuwe poging = nieuw id
+  rec[veld]={id:actie,status:'in-behandeling',pad,ts:Date.now()};
+  // Eerst vastleggen; lukt dat (lokaal) niet, dan niets naar Moneybird — anders is de actie-id na een crash kwijt.
+  let vast=true; try{ vast=(await opslaan())!==false; }catch(e){ vast=false; }
+  if(!vast){ rec[veld]=vorig; return {ok:false,fout:'Kon de actie niet vastleggen in de browser — er is niets naar Moneybird gestuurd.'}; }
+  const fn=methode==='PATCH'?mbPatch:mbPost;
+  const poging=async()=>{ try{ return await fn(pad,body,{bevestiging:bev,actie}); }catch(e){ return null; } };
+  let r=await poging();
+  if(!r){ await new Promise(z=>setTimeout(z,mbMaakEenmalig.wacht)); r=await poging(); }   // netwerk weg: zelfde actie nog eens (worker geeft het bewaarde antwoord)
+  if(r&&r.ok){
+    const data=await r.json().catch(()=>({}));
+    rec[veld]={...rec[veld],status:'klaar',mb_id:data&&data.id!=null?String(data.id):null};
+    try{ await opslaan(); }catch(e){}
+    return {ok:true,data,herhaald:!!(r.headers&&r.headers.get&&r.headers.get('X-MT-Herhaald')==='1')};
+  }
+  let j={}; if(r){ try{ j=await r.clone().json(); }catch(e){} }
+  if(!r||r.status>=500||(r.status===409&&/^actie-(onzeker|bezig)$/.test(j.error||''))){
+    let kandidaten=[]; try{ kandidaten=(await zoek())||[]; }catch(e){}
+    rec[veld]={...rec[veld],status:'controleren'};
+    try{ await opslaan(); }catch(e){}
+    return {ok:false,controleren:true,kandidaten,bezig:j.error==='actie-bezig'};
+  }
+  const tx=await r.text().catch(()=>'');
+  rec[veld]={...rec[veld],status:'mislukt'};
+  try{ await opslaan(); }catch(e){}
+  return {ok:false,fout:'HTTP '+r.status+' '+tx.slice(0,160)};
+}
+mbMaakEenmalig.wacht=1500;
+const _mbOpnieuwTekst='⚠ Eerder was onzeker of dit concept al bestond. Ga alleen door als je in Moneybird hebt gezien dat er GEEN concept is — anders krijg je er twee.\n\n';
+// Concepten die bij een onzekere actie kunnen horen: zelfde contact + referentie, laatste 24 u.
+async function mbZoekConcepten(soort,contactId,ref){
+  const pad=`${getAdmin()}/${soort}?filter=${encodeURIComponent('contact_id:'+contactId+',state:draft')}&per_page=100`;
+  const r=await mbGet(pad); if(!r||!r.ok) return [];
+  const lijst=await r.json().catch(()=>[]); const grens=Date.now()-864e5;
+  return (Array.isArray(lijst)?lijst:[]).filter(x=>x&&String(x.reference||'')===String(ref||'')&&(Date.parse(x.created_at||'')||0)>=grens)
+    .map(x=>({id:String(x.id),url:`https://moneybird.com/${getAdmin()}/${soort}/${x.id}`,bedrag:x.total_price_excl_tax!=null?+x.total_price_excl_tax:null,tijd:x.created_at}));
+}
+function mbControleerHtml(res,soortNaam,opnieuwOnclick){
+  const k=res.kandidaten||[];
+  return '⚠ Onzeker of de '+esc(soortNaam)+' is aangemaakt'+(res.bezig?' (Moneybird is er nog mee bezig)':'')+'. <b>Niet opnieuw aanmaken</b> — controleer eerst in Moneybird'
+    +(k.length?': '+k.map(x=>'<a href="'+esc(x.url)+'" target="_blank" rel="noopener" style="color:var(--gold)">concept '+esc(x.id)+(x.bedrag!=null&&isFinite(x.bedrag)?' (€ '+x.bedrag.toFixed(2).replace('.',',')+')':'')
+      +(x.tijd?' van '+esc(new Date(x.tijd).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})):'')+' ↗</a>').join(', ')+'.'
+      :'. Nog geen concept gevonden; probeer het over een minuut opnieuw (dezelfde knop maakt hem niet dubbel aan).')
+    +(opnieuwOnclick&&!k.length?' <button class="btn btn-xs btn-secondary" onclick="'+opnieuwOnclick+'">Echt niets in Moneybird? Toch aanmaken</button>':'');
+}
 async function claudeCall(messages,maxTokens=1800){
   const h=await authHeader();
   const resp=await fetch(`${WORKER}?target=claude`,{method:'POST',headers:{...h,'Content-Type':'application/json'},
@@ -4002,6 +4084,14 @@ async function boekInMoneybird(){
   });
   const zelfdePoging=_factuurBoekVoortgang&&_factuurBoekVoortgang.contact===contact&&_factuurBoekVoortgang.ref===ref;
   let voortgang=zelfdePoging?_factuurBoekVoortgang:null;
+  // F3: één bevestiging voor de hele reeks (contact, factuur, bijlage, notitie); een herstart van dezelfde
+  // poging gebruikt dezelfde bevestiging en dezelfde actie-id's (geen dubbele factuur).
+  let bev=voortgang&&voortgang.bev;
+  if(!bev){
+    const totaal=details.reduce((s,d)=>s+(parseFloat(d.amount)||1)*(parseFloat(d.price)||0),0);
+    bev=await mbBevestig({wat:'Inkoopfactuur boeken in Moneybird (met PDF als bijlage)',contact,ref:hoofdProject?`${hoofdProject} - ${ref}`:ref,bedrag:totaal,extra:'Bestaat de leverancier nog niet in Moneybird, dan wordt die als contact aangemaakt.'});
+    if(!bev){status.textContent='Niet geboekt (geannuleerd).';return;}
+  }
   try{
     if(!voortgang){
       status.innerHTML='<span class="spinner"></span> Duplicaatcontrole in Moneybird...';
@@ -4010,15 +4100,15 @@ async function boekInMoneybird(){
       status.innerHTML='<span class="spinner"></span> Contact zoeken...';
       const cR=await mbGet(`${getAdmin()}/contacts?query=${encodeURIComponent(contact)}`);if(!cR.ok)throw new Error(`Contact zoeken mislukt (HTTP ${cR.status})`);
       const contacts=await cR.json();let contactId=contacts?.[0]?.id;
-      if(!contactId){const nc=await mbPost(`${getAdmin()}/contacts`,{contact:{company_name:contact}});if(!nc.ok)throw new Error(`Contact aanmaken mislukt (HTTP ${nc.status})`);contactId=(await nc.json()).id;}
+      if(!contactId){const nc=await mbPost(`${getAdmin()}/contacts`,{contact:{company_name:contact}},{bevestiging:bev,actie:bev+':contact'});if(!nc.ok)throw new Error(`Contact aanmaken mislukt (HTTP ${nc.status})`);contactId=(await nc.json()).id;}
       status.innerHTML='<span class="spinner"></span> Boeken in Moneybird...';
-      const r=await mbPost(`${getAdmin()}/documents/purchase_invoices`,{purchase_invoice:{contact_id:contactId,reference:hoofdProject?`${hoofdProject} - ${ref}`:ref,date,due_date:due||undefined,details_attributes:details}});
+      const r=await mbPost(`${getAdmin()}/documents/purchase_invoices`,{purchase_invoice:{contact_id:contactId,reference:hoofdProject?`${hoofdProject} - ${ref}`:ref,date,due_date:due||undefined,details_attributes:details}},{bevestiging:bev,actie:bev+':inkoop'});
       if(!r.ok)throw new Error(`Boeken in Moneybird mislukt (HTTP ${r.status})`);
-      const result=await r.json();voortgang={invoiceId:result.id,contact,ref,moneybird:true,moneybirdPdf:false,sharepointPdf:false};_factuurBoekVoortgang=voortgang;
+      const result=await r.json();voortgang={invoiceId:result.id,contact,ref,bev,moneybird:true,moneybirdPdf:false,sharepointPdf:false};_factuurBoekVoortgang=voortgang;
     }
     if(!voortgang.moneybirdPdf){
       status.innerHTML='<span class="spinner"></span> PDF als bijlage in Moneybird opslaan...';
-      try{const fd=new FormData();fd.append('file',currentFile,currentFile.name);const upload=await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+voortgang.invoiceId+'/attachments')}`,{method:'POST',headers:await authHeader(),body:fd});if(!upload.ok)throw new Error(`HTTP ${upload.status}`);voortgang.moneybirdPdf=true;}catch(e){toonBoekDeelfout(status,voortgang,'PDF-bijlage in Moneybird',e.message);return;}
+      try{const fd=new FormData();fd.append('file',currentFile,currentFile.name);const upload=await fetch(`${WORKER}?target=moneybird_upload&path=${encodeURIComponent(getAdmin()+'/documents/purchase_invoices/'+voortgang.invoiceId+'/attachments')}`,{method:'POST',headers:_mbHdr(await authHeader(),{bevestiging:bev}),body:fd});if(!upload.ok)throw new Error(`HTTP ${upload.status}`);voortgang.moneybirdPdf=true;}catch(e){toonBoekDeelfout(status,voortgang,'PDF-bijlage in Moneybird',e.message);return;}
     }
     if(!voortgang.sharepointPdf){
       status.innerHTML='<span class="spinner"></span> PDF opslaan...';
@@ -4029,7 +4119,7 @@ async function boekInMoneybird(){
       try{await verplaatsMailNaarVerwerkt(_huidigMailId);}catch(e){toonBoekDeelfout(status,voortgang,'E-mail verplaatsen',e.message);return;}
       _huidigMailId=null;scanEmailFacturen(true);
     }
-    if(due){try{const dD=new Date(due),pD=new Date(dD);pD.setDate(pD.getDate()-1);const note=await mbPost(`${getAdmin()}/documents/purchase_invoices/${voortgang.invoiceId}/notes`,{note:{note:`Betalen voor: ${pD.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}`}});if(!note.ok)throw new Error(`HTTP ${note.status}`);}catch(e){status.innerHTML=`<span style="color:var(--orange)">⚠ Factuur is geboekt en de PDF is opgeslagen, maar betaalnotitie opslaan mislukte: ${e.message}</span>`;return;}}
+    if(due){try{const dD=new Date(due),pD=new Date(dD);pD.setDate(pD.getDate()-1);const note=await mbPost(`${getAdmin()}/documents/purchase_invoices/${voortgang.invoiceId}/notes`,{note:{note:`Betalen voor: ${pD.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}`}},{bevestiging:bev,actie:bev+':notitie'});if(!note.ok)throw new Error(`HTTP ${note.status}`);}catch(e){status.innerHTML=`<span style="color:var(--orange)">⚠ Factuur is geboekt en de PDF is opgeslagen, maar betaalnotitie opslaan mislukte: ${e.message}</span>`;return;}}
     voorraadRegels.forEach(r=>slaVoorraadOp(r));let payDateStr='';if(due){const d=new Date(due);d.setDate(d.getDate()-1);payDateStr=d.toISOString().split('T')[0];}
     status.innerHTML=`✓ Geboekt — <strong>betaal voor ${fmtDatum(payDateStr)}</strong>${voorraadRegels.length?` · 📦 ${voorraadRegels.length} voorraad`:''}`;
     const hist=JSON.parse(localStorage.getItem('mt_history')||'[]');hist.unshift({id:voortgang.invoiceId,contact,ref,date,due,payDate:payDateStr,project:hoofdProject,totaal:document.getElementById('totaal-incl').textContent,ts:Date.now()});
@@ -5021,7 +5111,7 @@ function renderProjectLijst(filter=''){
   if(_projKlantFilter&&!gefilterd.length){ el.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-faint);font-style:italic">Geen projecten voor deze klant.</div>'; return; }
   el.innerHTML=projSorteerNieuwst(gefilterd).map(p=>`
     <div class="factuur-item ${huidigProject?.code===p.code?'actief':''}" data-code="${esc(p.code)}" onclick="selecteerProject('${p.code}',this)">
-      <div class="factuur-item-naam">${p.naam||p.code}</div>
+      <div class="factuur-item-naam" title="${esc(p.naam||p.code)}">${esc(p.naam||p.code)}</div>
       <div class="factuur-item-sub"><span class="code">${p.code}</span><span class="badge badge-ok">${p.klant||''}</span></div>
     </div>`).join('');
 }
@@ -5065,11 +5155,71 @@ function selecteerProject(code,el){ openProject(code,{scroll:!el}); }
 // ── Contextbalk: "waar ben ik?" — Klant › Locatie › CODE — naam, sticky onder de tabbalk ──
 // Klant/locatie zijn nog spans met data-attributen; de router (B3) maakt ze klikbaar.
 const _projStatus={};   // code → lopende aanmaakstatus (mappen/Toggl), getoond in de balk
+// Namen (besluit Bart 7-10): zo compleet mogelijk, maar alleen ECHTE namen — onbekend blijft leeg (geen
+// gok, geen kale code, geen "Locatie K"); de gebruiker kan aanvullen via "+ locatienaam" / "+ klantnaam".
+const _echteNaam=(naam,code)=>{ const n=String(naam||'').trim(); return n&&n.toUpperCase()!==String(code||'').trim().toUpperCase()?n:''; };
+let _locContactenCache=null;
+function _locNaamUitContacten(kl,code){
+  if(!window.MTContacten||!kl||!code) return '';
+  if(!_locContactenCache||Date.now()-_locContactenCache.t>5000){
+    let lijst=[]; try{ lijst=MTContacten.actieven(); }catch(e){}
+    _locContactenCache={t:Date.now(),lijst};
+  }
+  const c=_locContactenCache.lijst.find(x=>x&&x.organisatie&&String(x.organisatie.klantCode||'').toUpperCase()===kl&&x.locatie
+    &&String(x.locatie.code||'').toUpperCase()===code&&_echteNaam(x.locatie.naam,code));
+  return c?_echteNaam(c.locatie.naam,code):'';
+}
+// Locatie van een project: eigen loc_naam → klantregistry → contactenregister → leeg.
+function projLocLabel(proj){
+  if(!proj) return '';
+  const code=String(proj.loc||'').trim().toUpperCase(), eigen=_echteNaam(proj.loc_naam,code);
+  if(eigen) return eigen;                              // ook zonder code (aangevulde projecten)
+  if(!code) return '';
+  const kl=String(proj.klant||'').toUpperCase();
+  const k=(typeof klantByCode==='function')?klantByCode(kl):null;
+  const lc=k&&Array.isArray(k.locaties)?k.locaties.find(l=>String(l.code||'').toUpperCase()===code):null;
+  return _echteNaam(lc&&lc.naam,code)||_locNaamUitContacten(kl,code);
+}
+// Klantnaam van een project: registry → verrijkte registry → eigen klant_naam → leeg (nooit de code).
+function projKlantNaam(proj){
+  if(!proj) return '';
+  const kl=String(proj.klant||'').toUpperCase(), k=(typeof klantByCode==='function')?klantByCode(kl):null;
+  const vol=(typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]).find(x=>String(x.code||'').toUpperCase()===kl)||null;
+  return _echteNaam(k&&k.naam,kl)||_echteNaam(vol&&vol.naam,kl)||_echteNaam(proj.klant_naam,kl);
+}
+// "+ invullen"-knopje in open-gele koppelbadge-stijl (alleen voor wie projecten mag wijzigen).
+function _naamInvulBadge(label,onclick,titel){
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return '';
+  return window.MTKoppelUI?MTKoppelUI.badge({status:'open',klein:true,tekst:'+ '+label,titel:titel||(label+' onbekend — klik om in te vullen'),onclick}):'';
+}
+// Locatienaam invullen: op dit project én de andere projecten van dezelfde klant met dezelfde
+// locatiecode die nog geen naam hebben (zelfde locatie). B2-stempel via slaProjectenOp.
+async function projLocNaamInvullen(code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!proj.loc) return;
+  const kl=String(proj.klant||'').toUpperCase(), lc=String(proj.loc).toUpperCase();
+  const naam=await mtDialog.prompt({title:'Locatienaam invullen',message:'Naam van locatie '+lc+' bij '+(projKlantNaam(proj)||kl)+':',placeholder:'bv. Kantoor Zuidas',okLabel:'Opslaan'});
+  if(naam==null||!_echteNaam(naam,lc)) return;
+  PROJECT_CODES.filter(x=>String(x.klant||'').toUpperCase()===kl&&String(x.loc||'').toUpperCase()===lc&&!_echteNaam(x.loc_naam,lc)).forEach(x=>{ x.loc_naam=String(naam).trim(); });
+  slaProjectenOp(); _namenVernieuwd();
+}
+// Klantnaam invullen: op alle projecten met deze klantcode die nog geen klantnaam hebben.
+async function projKlantNaamInvullen(kl){
+  kl=String(kl||'').toUpperCase(); if(!kl) return;
+  const naam=await mtDialog.prompt({title:'Klantnaam invullen',message:'Volledige naam van klant '+kl+':',placeholder:'bv. CompaNanny B.V.',okLabel:'Opslaan'});
+  if(naam==null||!_echteNaam(naam,kl)) return;
+  PROJECT_CODES.filter(x=>String(x.klant||'').toUpperCase()===kl&&!_echteNaam(x.klant_naam,kl)).forEach(x=>{ x.klant_naam=String(naam).trim(); });
+  slaProjectenOp(); _namenVernieuwd();
+}
+function _namenVernieuwd(){
+  try{ renderProjectLijst((document.getElementById('project-zoek')||{}).value||''); }catch(e){}
+  try{ if(typeof _klantHuidig!=='undefined'&&_klantHuidig&&document.getElementById('project-detail')?.dataset.klant) openKlant(_klantHuidig.kl,_klantHuidig.loc);
+       else if(typeof huidigProject!=='undefined'&&huidigProject&&typeof _rerenderDetailKeepScroll==='function') _rerenderDetailKeepScroll(); }catch(e){}
+}
+// Locatienaam voor keuzelijsten en kopjes: alleen een echte naam (anders '' → niet tonen).
+function _locKeuzeLabel(l){ return _echteNaam(l&&l.naam,l&&l.code); }
 function projContextBalk(proj){
-  const k=klantByCode(proj.klant);
-  const klantNaam=(k&&k.naam)||proj.klant_naam||proj.klant||'';
-  const locReg=(k&&proj.loc&&Array.isArray(k.locaties))?k.locaties.find(l=>l.code===(proj.loc||'').toUpperCase()):null;
-  const locNaam=(locReg&&locReg.naam)||proj.loc_naam||proj.loc||'';
+  const klantNaam=projKlantNaam(proj);
+  const locNaam=projLocLabel(proj);
   const top=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
   const sep='<span class="proj-ctx-sep">›</span>';
   const st=_projStatus[proj.code]||'';
@@ -5079,8 +5229,10 @@ function projContextBalk(proj){
     ? `<a class="${cls}" href="${mtRoute.format(route)}" onclick="event.preventDefault();mtRoute.go(${esc(JSON.stringify(route))})" ${extra} title="Alle projecten van ${esc(naam)}">${esc(naam)}</a>`
     : `<span class="${cls}" ${extra} title="${esc(naam)}">${esc(naam)}</span>`;
   return `<div class="proj-ctx" style="top:${top}px" data-code="${esc(proj.code)}">`
-    +(klantNaam?deel('proj-ctx-klant',klantNaam,kl?{tab:'projecten',klant:kl}:null,`data-klant="${esc(proj.klant||'')}"`)+sep:'')
-    +(locNaam?deel('proj-ctx-loc',locNaam,(kl&&lc)?{tab:'projecten',klant:kl,loc:lc}:null,`data-klant="${esc(proj.klant||'')}" data-loc="${esc(proj.loc||'')}"`)+sep:'')
+    +(klantNaam?deel('proj-ctx-klant',klantNaam,kl?{tab:'projecten',klant:kl}:null,`data-klant="${esc(proj.klant||'')}"`)+sep
+      :(kl?_naamInvulBadge('klantnaam',`projKlantNaamInvullen('${_jsCode(kl)}')`,'Klantnaam onbekend — klik om de volledige naam in te vullen')+sep:''))
+    +(locNaam?deel('proj-ctx-loc',locNaam,(kl&&lc)?{tab:'projecten',klant:kl,loc:lc}:null,`data-klant="${esc(proj.klant||'')}" data-loc="${esc(proj.loc||'')}"`)+sep
+      :(lc?_naamInvulBadge('locatienaam',`projLocNaamInvullen('${_jsCode(proj.code)}')`,'Locatienaam onbekend — klik om in te vullen')+sep:''))
     +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(proj.code)}</span><span class="proj-ctx-naam" title="${esc(proj.naam||proj.code)}">${esc(proj.naam||proj.code)}</span></span>`
     +`<span class="proj-ctx-status"${st?'':' hidden'}>${esc(st)}</span>`
     +`<span class="proj-ctx-acties">`
@@ -5320,6 +5472,7 @@ function projSecOverzicht(proj,c){
           ${laatste.length?laatste.map(r=>`<div class="ov-act">${icoon(r.soort)} ${esc(r.titel)} <span class="dos-meta">${fmtDatum(r.datum.slice(0,10))}</span></div>`).join(''):'<div class="ov-act" style="color:var(--text-faint)">Nog niets gebeurd.</div>'}
           <a href="#" class="ov-meer" onclick="event.preventDefault();projSectieKies('dossier')">Alles in het dossier →</a></section>
       </div>
+      ${window.MTContactenUI?MTContactenUI.projectKaart(proj):''}
       ${let_.length?`<section class="ov-blok ov-let"><div class="card-title">Aandachtspunten</div>${let_.map(x=>`<div class="ov-letrij">${x}</div>`).join('')}</section>`:''}`;
 }
 // ── Dossier: bijlagen toevoegen, projectmap, en de tijdlijn met filters ──
@@ -5745,7 +5898,7 @@ function renderDossier(el,scope,facetten){
       <span class="dos-aangepast"${f.periode==='aangepast'?'':' hidden'}><input type="date" value="${esc(f.van)}" aria-label="Vanaf" onchange="dossierZetFilter('${k}','van',this.value)"> – <input type="date" value="${esc(f.tot)}" aria-label="Tot en met" onchange="dossierZetFilter('${k}','tot',this.value)"></span>
       ${sel('persoon',[['','Iedereen'],...personen.map(p=>[p,p])],f.persoon,'Persoon')}
       ${scope.codes.length>1?sel('project',[['','Alle projecten'],...scope.codes.map(c=>[c,c+' — '+(((PROJECT_CODES.find(p=>p.code===c)||{}).naam)||'')])],f.project,'Project'):''}
-      ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.map(l=>[l.code,l.naam||l.code])],f.locatie,'Locatie'):''}
+      ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.filter(l=>_locKeuzeLabel(l)).map(l=>[l.code,_locKeuzeLabel(l)])],f.locatie,'Locatie'):''}
       ${sel('status',[['','Status: standaard'],['*','Status: alles (ook ontkoppeld)'],...statussen.map(s=>[s,'Status: '+s])],f.status,'Status')}
       <label class="dos-check"><input type="checkbox"${f.bijlage?' checked':''} onchange="dossierZetFilter('${k}','bijlage',this.checked?'1':'')"> met bijlage</label>
       <button type="button" class="btn btn-xs btn-secondary" onclick="dossierWisFilters('${k}')" title="Alle filters terug naar standaard">Wis filters</button>
@@ -5839,7 +5992,7 @@ function _dosUrl(key){
 // project wisselt zonder van tab te springen (zelfde contextbalk, pills en dossier als B7).
 // Klantidentiteit = klantcode + Moneybird-contact; "geen locatie" is een gewone staat.
 const PROJ_STATUSSEN=['offerte','lopend','opgeleverd','archief'];
-const KLANT_SECTIES=[{k:'overzicht',l:'Overzicht'},{k:'dossier',l:'Dossier'},{k:'planning',l:'Planning'},{k:'bestanden',l:'Bestanden'},{k:'geld',l:'Geld'}];
+const KLANT_SECTIES=[{k:'overzicht',l:'Overzicht'},{k:'dossier',l:'Dossier'},{k:'planning',l:'Planning'},{k:'bestanden',l:'Bestanden'},{k:'geld',l:'Geld'},{k:'contacten',l:'Contacten'}];
 let _klantHuidig=null;                       // {kl, loc}
 let _klantSectie=(()=>{ try{ const s=localStorage.getItem('mt_klant_sectie'); return KLANT_SECTIES.some(x=>x.k===s)?s:'overzicht'; }catch(e){ return 'overzicht'; } })();
 const _klantToonArchief={};                  // kl -> true als archief zichtbaar moet zijn
@@ -5856,7 +6009,12 @@ function klantInfo(kl,{projecten=null,loc=''}={}){
   const mbId=(k&&k.mb_contact_id)||(vol&&vol.mb_contact_id)||(eigen.find(p=>p.mb_contact_id)||{}).mb_contact_id||null;
   const naam=(k&&k.naam)||(vol&&vol.naam)||(eigen.find(p=>p.klant_naam)||{}).klant_naam||kl;
   let locaties=(k&&Array.isArray(k.locaties))?k.locaties.map(l=>({code:String(l.code).toUpperCase(),naam:l.naam,mb_contact_id:l.mb_contact_id||null})):[];
-  eigen.forEach(p=>{ const lc=String(p.loc||'').toUpperCase(); if(lc&&!locaties.some(l=>l.code===lc)) locaties.push({code:lc,naam:p.loc_naam||lc,mb_contact_id:null}); });
+  // Locaties uit de projecten zelf: naam volgens projLocLabel (nooit de kale code); het eerste project met
+  // een naam wint, ook als een eerder project met dezelfde code er geen had.
+  eigen.forEach(p=>{ const lc=String(p.loc||'').toUpperCase(); if(!lc) return;
+    const naam=(typeof projLocLabel==='function')?projLocLabel(p):(p.loc_naam||''), l=locaties.find(x=>x.code===lc);
+    if(!l) locaties.push({code:lc,naam,mb_contact_id:null});
+    else if((!l.naam||String(l.naam).toUpperCase()===lc)&&naam) l.naam=naam; });
   const mbIds=new Set([mbId,...locaties.map(l=>l.mb_contact_id)].filter(Boolean).map(String));
   // Op een locatiepagina telt het Moneybird-contact van die locatie (als dat er is).
   const locMb=loc?((locaties.find(l=>l.code===loc)||{}).mb_contact_id||null):null;
@@ -5900,14 +6058,64 @@ function klantCodeVoorMb(mbId){
   return p?String(p.klant).toUpperCase():null;
 }
 // ── Projectstatus: eigen keuze, anders afgeleid (en zo getoond) ──
+// Afleidregels (de eerste die past wint; de reden staat in de tooltip):
+//  opgeleverd — de laatste planfase (normaal "Oplevering") is klaar, of alle fases zijn klaar,
+//               of er is een opleveringsrapport voor het project (mt_opleveringen.json);
+//  lopend     — een fase vóórbij de offerte (Tekening, Offerte-akkoord, Werkvoorbereiding, Inkoop,
+//               Productie, Levering, Oplevering) is bezig of klaar; of Tekening of later is volgens de
+//               planning al begonnen (de akkoord-mijlpaal telt niet op datum); of een projecttaak is bezig/klaar; of een Toggl-taak van
+//               het project staat op In Progress / Productie / Klaar voor levering / Factureren / Done;
+//               of de offerte is akkoord (gekozen in de nacalculatie, of in Moneybird geaccepteerd/gefactureerd);
+//  offerte    — anders. Budgetbepaling en de offerte-fase zelf tellen nog als offerte.
+const _ST_VOORBIJ_OFFERTE=new Set(['tekening','akkoord','wvb','inkoop','productie','levering','oplever']);
+const _ST_GESTART_PLAN=new Set(['tekening','wvb','inkoop','productie','levering','oplever']);   // niet 'akkoord': een datum is geen akkoord
+const _ST_TOGGL_LOPEND=new Set([300788,604241,309790,604212,300786]);   // In Progress, Productie, Klaar voor levering, Factureren, Done
+let _oplCodesCache=null;
+function _oplCodes(){
+  if(_oplCodesCache&&Date.now()-_oplCodesCache.t<10000) return _oplCodesCache.s;
+  let s; try{ s=new Set(JSON.parse(localStorage.getItem('mt_opl_codes')||'[]')); }catch(e){ s=new Set(); }
+  _oplCodesCache={s,t:Date.now()}; return s;
+}
+function _oplCodesBewaar(lijst){
+  const codes=[...new Set((lijst||[]).map(e=>e&&e.projectCode).filter(c=>c&&c!=='—'))];
+  try{ localStorage.setItem('mt_opl_codes',JSON.stringify(codes)); }catch(e){}
+  _oplCodesCache=null; return codes;
+}
+// Opleveringen op de achtergrond ophalen (anders pas bij het openen van het Opleveringen-tabblad).
+async function oplCodesVerversen(){
+  try{ const d=await _SP.read('mt_opleveringen.json'); const voor=localStorage.getItem('mt_opl_codes');
+    _oplCodesBewaar(Array.isArray(d)?d:((d&&d.items)||[]));
+    if(localStorage.getItem('mt_opl_codes')!==voor){ if(typeof renderProjectLijst==='function') renderProjectLijst((document.getElementById('project-zoek')||{}).value||''); if(_klantHuidig) _klantSectieRender(); }
+  }catch(e){}
+}
 function projStatus(p){
-  if(p.status&&PROJ_STATUSSEN.includes(p.status)) return {status:p.status,afgeleid:false};
+  if(p.status&&PROJ_STATUSSEN.includes(p.status)) return {status:p.status,afgeleid:false,reden:'zelf gekozen'};
   const plan=(typeof planVoor==='function')?planVoor(p.code):null, fases=(plan&&plan.fases)||[];
   const vandaag=new Date().toISOString().slice(0,10);
+  const uit=(status,reden)=>({status,afgeleid:true,reden});
+  if(fases.length){
+    const laatste=fases.slice().sort((a,b)=>(a.volgorde??0)-(b.volgorde??0))[fases.length-1];
+    if(fases.every(f=>f.status==='klaar')) return uit('opgeleverd','alle planfases klaar');
+    if(laatste&&laatste.status==='klaar') return uit('opgeleverd','fase '+(laatste.naam||laatste.key)+' klaar');
+  }
+  if(_oplCodes().has(p.code)) return uit('opgeleverd','opleveringsrapport aanwezig');
+  const fBezig=fases.find(f=>_ST_VOORBIJ_OFFERTE.has(f.key)&&(f.status==='bezig'||f.status==='klaar'));
+  if(fBezig) return uit('lopend','fase '+(fBezig.naam||fBezig.key)+' '+fBezig.status);
+  const fGestart=fases.find(f=>_ST_GESTART_PLAN.has(f.key)&&f.start&&f.start<=vandaag);
+  if(fGestart) return uit('lopend','fase '+(fGestart.naam||fGestart.key)+' gestart volgens planning');
+  const fAnder=fases.find(f=>!f.key&&(f.status==='bezig'||f.status==='klaar'));   // oude/eigen fases zonder sleutel
+  if(fAnder) return uit('lopend','fase '+(fAnder.naam||'')+' '+fAnder.status);
   const taken=(typeof projTaken==='function')?projTaken(p.code):[];
-  if(fases.length&&fases.every(f=>f.status==='klaar')) return {status:'opgeleverd',afgeleid:true};
-  if(fases.some(f=>f.status==='klaar'||f.status==='bezig'||(f.start&&f.start<=vandaag))||taken.some(t=>t.status==='bezig'||t.status==='klaar')) return {status:'lopend',afgeleid:true};
-  return {status:'offerte',afgeleid:true};
+  const t=taken.find(x=>x.status==='bezig'||x.status==='klaar');
+  if(t) return uit('lopend','taak '+(t.naam||'')+' '+t.status);
+  const tg=(typeof _tgCache!=='undefined'&&_tgCache&&Array.isArray(_tgCache.taken)&&p.tg_project_id)
+    ?_tgCache.taken.find(x=>String(x.project_id)===String(p.tg_project_id)&&_ST_TOGGL_LOPEND.has(Number(x.status_id))):null;
+  if(tg) return uit('lopend','Toggl-taak '+(tg.name||'')+' in uitvoering');
+  const keuze=(typeof offerteKeuze==='function')?(offerteKeuze()[p.code]||{}):{};
+  if(keuze.gekozen) return uit('lopend','offerte akkoord (nacalculatie)');
+  const off=(typeof _nacalcOfferte!=='undefined'&&_nacalcOfferte)?_nacalcOfferte[p.code]:null;
+  if(off&&['accepted','billed'].includes(off.state)) return uit('lopend','offerte '+(off.state==='billed'?'gefactureerd':'geaccepteerd')+' in Moneybird');
+  return uit('offerte','nog geen gestarte fase, taak of akkoord');
 }
 function projStatusZet(code,waarde){
   const p=PROJECT_CODES.find(x=>x.code===code); if(!p) return;
@@ -5924,11 +6132,16 @@ function openKlant(kl,loc,{sectie=null,filter=null}={}){
   const host=document.getElementById('project-detail'); if(!host) return;
   host.dataset.klant=kl+(loc?'/'+loc:''); delete host.dataset.code; delete host.dataset.offerte;
   const info=klantInfo(kl,{loc}), top=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
-  const locSel=info.locaties.length?`<select class="klant-locsel" aria-label="Locatie" onchange="klantKiesLoc(this.value)"><option value="">Alle locaties</option>${info.locaties.map(l=>`<option value="${esc(l.code)}"${l.code===loc?' selected':''}>${esc(l.naam||l.code)}</option>`).join('')}</select>`:'';
-  const locNaam=loc?((info.locaties.find(l=>l.code===loc)||{}).naam||loc):'';
+  const lokNamen=info.locaties.filter(l=>_locKeuzeLabel(l)||l.code===loc);   // locaties zonder naam niet in de keuzelijst
+  const locSel=lokNamen.length?`<select class="klant-locsel" aria-label="Locatie" onchange="klantKiesLoc(this.value)"><option value="">Alle locaties</option>${lokNamen.map(l=>`<option value="${esc(l.code)}"${l.code===loc?' selected':''}>${esc(_locKeuzeLabel(l)||'Zonder locatienaam')}</option>`).join('')}</select>`:'';
+  const locNaam=loc?_locKeuzeLabel(info.locaties.find(l=>l.code===loc)||{code:loc}):'';
+  const klantNaamBekend=_echteNaam(info.naam,kl);
+  const locVoorbeeld=loc&&!locNaam?PROJECT_CODES.find(p=>String(p.klant||'').toUpperCase()===kl&&String(p.loc||'').toUpperCase()===loc):null;
   host.innerHTML=`<div class="proj-ctx klant-ctx" style="top:${top}px" data-klant="${esc(kl)}">`
-    +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(kl)}</span><span class="proj-ctx-naam">${esc(info.naam)}</span></span>`
-    +(locNaam?`<span class="proj-ctx-sep">›</span><span class="proj-ctx-loc">${esc(locNaam)}</span>`:'')
+    +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(kl)}</span>`
+    +(klantNaamBekend?`<span class="proj-ctx-naam" title="${esc(info.naam)}">${esc(info.naam)}</span>`:_naamInvulBadge('klantnaam',`projKlantNaamInvullen('${_jsCode(kl)}')`,'Klantnaam onbekend — klik om de volledige naam in te vullen'))+`</span>`
+    +(locNaam?`<span class="proj-ctx-sep">›</span><span class="proj-ctx-loc" title="${esc(locNaam)}">${esc(locNaam)}</span>`
+      :(locVoorbeeld?`<span class="proj-ctx-sep">›</span>`+_naamInvulBadge('locatienaam',`projLocNaamInvullen('${_jsCode(locVoorbeeld.code)}')`,'Locatienaam onbekend — klik om in te vullen'):''))
     +`<span class="proj-ctx-acties">${locSel}`
     +(info.telefoon?`<a class="btn btn-xs btn-secondary" href="tel:${esc(info.telefoon)}" title="Bellen: ${esc(info.telefoon)}" aria-label="Bellen">📞</a>`:'')
     +(info.email?`<a class="btn btn-xs btn-secondary" href="mailto:${esc(info.email)}" title="Mailen: ${esc(info.email)}" aria-label="Mailen">📧</a>`:'')
@@ -6005,6 +6218,7 @@ function _klantSectieRender(){
     catch(e){ console.warn('tijdlijn:',e); const tl=document.getElementById('klant-tijdlijn'); if(tl) tl.innerHTML='<p class="dos-leeg">Tijdlijn kon niet laden: '+esc(e.message||String(e))+'</p>'; }
     return;
   }
+  if(_klantSectie==='contacten'){ el.innerHTML=window.MTContactenUI?MTContactenUI.klantSectie(info,projen,{loc}):'<p class="dos-leeg">Contacten niet beschikbaar.</p>'; return; }
   if(_klantSectie==='bestanden'){ el.innerHTML=klantSecBestanden(info,projen); return; }
   if(_klantSectie==='geld'){ el.innerHTML=klantSecGeld(info,projen); klantGeldLaad(info); return; }
   el.innerHTML=klantSecOverzicht(info,projen);
@@ -6023,8 +6237,8 @@ function klantSecOverzicht(info,projen){
     const nt=(typeof projTaken==='function')?projTaken(p.code).filter(t=>t.status!=='klaar').length:0;
     const viaMb=String(p.klant||'').toUpperCase()!==info.kl;
     return `<div class="klant-proj">
-      <div class="klant-proj-hoofd"><span class="st-pill st-${st.status}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid uit planning/taken':'Zelf gekozen'}">${esc(st.status)}</span> <a href="${mtRoute.format({code:p.code})}" onclick="event.preventDefault();openProject('${_jsCode(p.code)}')"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
-        <div class="dos-meta">${p.loc?esc(p.loc_naam||p.loc)+' · ':''}${lt?'laatst: '+fmtDatum(lt.datum.slice(0,10)):'nog geen activiteit'}${nt?` · ${nt} open ta${nt===1?'ak':'ken'}`:''}</div></div>
+      <div class="klant-proj-hoofd"><span class="st-pill st-${st.status}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid: '+esc(st.reden||'planning/taken'):'Zelf gekozen'}">${esc(st.status)}</span> <a href="${mtRoute.format({code:p.code})}" onclick="event.preventDefault();openProject('${_jsCode(p.code)}')"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
+        <div class="dos-meta">${projLocLabel(p)?esc(projLocLabel(p))+' · ':''}${lt?'laatst: '+fmtDatum(lt.datum.slice(0,10)):'nog geen activiteit'}${nt?` · ${nt} open ta${nt===1?'ak':'ken'}`:''}</div></div>
       <label class="klant-status"><span class="sr">Status</span><select aria-label="Status van ${esc(p.code)}" onchange="projStatusZet('${_jsCode(p.code)}',this.value)">
         <option value=""${st.afgeleid?' selected':''}>${st.afgeleid?esc(st.status)+' (afgeleid)':'automatisch'}</option>
         ${PROJ_STATUSSEN.map(s=>`<option value="${s}"${!st.afgeleid&&st.status===s?' selected':''}>${s}</option>`).join('')}</select></label></div>`;
@@ -6921,19 +7135,24 @@ function nacalcOfferteHerstel(code){
   try{ if(window.track) track('nacalc','offerte_herstel',{detail:code}); }catch(e){}
   _nacalcHerlaadOfferte(code);
 }
-async function nacalcMaakFactuur(code){
+async function nacalcMaakFactuur(code,opts){
   const proj=PROJECT_CODES.find(p=>p.code===code);if(!proj)return;
+  const opnieuw=!!(opts&&opts.opnieuw), opnieuwKnop=`nacalcMaakFactuur('${_jsCode(code)}',{opnieuw:true})`;
   const st=document.getElementById('nacalc-status-'+code.replace(/-/g,''));
   const mbId=proj.mb_nr||resolveMbContact(proj);
   if(!mbId){alert('Geen Moneybird-contact gekoppeld aan dit project.\nKoppel eerst een contact via ✏ bij "Moneybird-contact".');return;}
   const off=_nacalcOfferte[code];
   if(off){
-    if(!confirm(`Offerte ${off.estimate_id||off.id} (${off.state}) omzetten naar een CONCEPT-factuur in Moneybird?\n\nDe offerteregels worden overgenomen. Nacalculatie-meerwerk voeg je daarna toe in Moneybird.`))return;
+    const bev=await mbBevestig({wat:`Offerte ${off.estimate_id||off.id} (${off.state}) omzetten naar een CONCEPT-factuur`,contact:resolveKlantNaam(proj)||('Moneybird-contact '+mbId),ref:off.reference||code,
+      bedrag:off.total_price_excl_tax!=null?off.total_price_excl_tax:null,gevaar:opnieuw,extra:(opnieuw?_mbOpnieuwTekst:'')+'De offerteregels worden overgenomen. Nacalculatie-meerwerk voeg je daarna toe in Moneybird.'});
+    if(!bev)return;
     if(st)st.textContent='Offerte omzetten…';
     try{
-      const r=await mbPatch(`${getAdmin()}/estimates/${off.id}/bill_estimate`,{});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const inv=await r.json();
+      const res=await mbMaakEenmalig({rec:proj,veld:'mb_actie_bill',pad:`${getAdmin()}/estimates/${off.id}/bill_estimate`,body:{},methode:'PATCH',bev,stap:'bill',opslaan:()=>slaProjectenOp(),
+        zoek:()=>mbZoekConcepten('sales_invoices',mbId,off.reference||code),opnieuw});
+      if(res.controleren){ if(st)st.innerHTML=mbControleerHtml(res,'factuur',opnieuwKnop); return; }
+      if(!res.ok)throw new Error(res.fout);
+      const inv=res.data;
       if(st)st.innerHTML=`✓ Concept-factuur aangemaakt — <a href="https://moneybird.com/${getAdmin()}/sales_invoices/${inv.id}" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>`;
     }catch(e){if(st)st.textContent='❌ Omzetten mislukt: '+e.message;}
     return;
@@ -6945,12 +7164,15 @@ async function nacalcMaakFactuur(code){
   const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
   const details=nc.rijen.filter(r=>r.uren>0.01).map(r=>({description:`Arbeid ${cap(r.naam)} — nacalculatie ${code}`,amount:`${r.uren.toFixed(2)} x`,price:r.tarief.toFixed(2)}));
   if(mat>0)details.push({description:`Materiaal — nacalculatie ${code}`,amount:'1 x',price:mat.toFixed(2)});
-  if(!confirm(`Geen offerte gevonden.\nCONCEPT-factuur maken met ${details.length} nacalculatieregel(s)?\nTotaal € ${(nc.arbeid+mat).toFixed(2)} excl. btw.`))return;
+  const bev=await mbBevestig({wat:`CONCEPT-factuur maken met ${details.length} nacalculatieregel(s) (geen offerte gevonden)`,contact:resolveKlantNaam(proj)||('Moneybird-contact '+mbId),ref:code,bedrag:nc.arbeid+mat,gevaar:opnieuw,extra:opnieuw?_mbOpnieuwTekst:''});
+  if(!bev)return;
   if(st)st.textContent='Concept-factuur maken…';
   try{
-    const r=await mbPost(`${getAdmin()}/sales_invoices`,{sales_invoice:{contact_id:mbId,reference:code,details_attributes:details}});
-    if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+' '+t.slice(0,120));}
-    const inv=await r.json();
+    const res=await mbMaakEenmalig({rec:proj,veld:'mb_actie_nacalc',pad:`${getAdmin()}/sales_invoices`,body:{sales_invoice:{contact_id:mbId,reference:code,details_attributes:details}},bev,stap:'nacalc',
+      opslaan:()=>slaProjectenOp(),zoek:()=>mbZoekConcepten('sales_invoices',mbId,code),opnieuw});
+    if(res.controleren){ if(st)st.innerHTML=mbControleerHtml(res,'factuur',opnieuwKnop); return; }
+    if(!res.ok)throw new Error(res.fout);
+    const inv=res.data;
     if(st)st.innerHTML=`✓ Concept-factuur aangemaakt — <a href="https://moneybird.com/${getAdmin()}/sales_invoices/${inv.id}" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>`;
   }catch(e){if(st)st.textContent='❌ Factuur maken mislukt: '+e.message;}
 }
@@ -9081,7 +9303,9 @@ function isVolledigVerwerkt(f,dup){
   return heeftProj&&(!dup.has(f.id)||geenDuplicaat.has(f.id));
 }
 async function verwijderControleFactuurUitgevoerd(id) {
-  const r = await mbDelete(getAdmin()+'/documents/purchase_invoices/'+id);
+  // F3: de verwijder-modal (met vinkje "ik weet het zeker") is de bevestiging.
+  const bev=mbActieId();
+  const r = await mbDelete(getAdmin()+'/documents/purchase_invoices/'+id, {bevestiging:bev,actie:bev+':verwijder'});
   if (r.ok) {
     alleFacturen = alleFacturen.filter(f=>f.id!==id);
     factuurCache = {filterStr:factuurCache.filterStr, facturen:alleFacturen, ts:Date.now()};
@@ -9348,7 +9572,9 @@ async function slaControleOp(gaNaarVolgende=false){
   });
   status.innerHTML='<span class="spinner"></span> Opslaan...';
   try{
-    const r=await mbPatch(`${getAdmin()}/documents/purchase_invoices/${f.id}`,{purchase_invoice:{reference:nieuweRef,details_attributes:details}});
+    const bev=await mbBevestig({wat:'Inkoopfactuur bijwerken (referentie en regels)',contact:f.contact?.company_name||'',ref:nieuweRef,bedrag:details.reduce((s,d)=>s+(parseFloat(d.amount)||1)*(parseFloat(d.price)||0),0)});
+    if(!bev){status.textContent='Niet opgeslagen (geannuleerd).';return;}
+    const r=await mbPatch(`${getAdmin()}/documents/purchase_invoices/${f.id}`,{purchase_invoice:{reference:nieuweRef,details_attributes:details}},{bevestiging:bev,actie:bev+':controle'});
     if(r.ok){
       const updated=await r.json();
       const idx=alleFacturen.findIndex(x=>x.id===f.id);
@@ -9473,7 +9699,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -9546,6 +9772,19 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // Koppel-journaal (B4, mt-koppel.js): alleen toevoegen, vereniging op id, laatste 2000.
     // Zelfstandig (niet via window.MTKoppel), zodat hydrate niet blokkeert als mt-koppel.js ontbreekt.
     mt_koppel_journaal(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
+      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
+      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-2000);
+    },
+    // Contactenregister (mt-contacten.js): per contact nieuwste stempel; velden met herkomst 'hand'
+    // worden nooit door automatische bronnen overschreven; tombstones (verwijderd/samengevoegd) winnen als ze nieuwer zijn.
+    // Valt terug op "nieuwste per id" als mt-contacten.js ontbreekt, zodat hydrate nooit blokkeert.
+    mt_contacten(lokaal, spData) {
+      if (window.MTContacten) return window.MTContacten.samen(lokaal, spData);
+      return _spSamenPerSleutel(lokaal, spData, x => x && x.id, _spTijd);
+    },
+    mt_contacten_journaal(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
       const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
       const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
@@ -9974,6 +10213,7 @@ async function oplViewerOpen(){
       _SP.read('mt_opnames.json')
     ]);
     _oplData.opleveringen = Array.isArray(opl) ? opl : ((opl && opl.items) || []);
+    _oplCodesBewaar(_oplData.opleveringen);
     _oplData.opnames      = Array.isArray(opn) ? opn : ((opn && opn.items) || []);
   }catch(e){
     console.warn('opleveringen laden faalde:', e.message);
@@ -11982,6 +12222,7 @@ async function toonApp(account) {
   laadDashboard();
   if(typeof admInitKnop==='function') admInitKnop();
   rolLaad();
+  mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
   // Deep-link uit de URL-hash honoreren (bv. een "apart venster" met #tab=inbox).
   try{ tbApplyHashTab(); }catch(e){}
 }
@@ -12132,6 +12373,13 @@ async function beheerAanvraag(oid,weigeren){
   try{ await beheerApi('/beheer/aanvraag',weigeren?{oid,weigeren:true}:{oid,rol:sel?sel.value:'werkplaats'}); }catch(e){ await mtDialog.alert({title:'Beheer',message:e.message}); }
   beheerLaad();
 }
+
+// Hoogte van header + tabbalk als CSS-variabele (--mt-kop) voor sticky elementen.
+function mtKopHoogte(){
+  const h=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
+  document.documentElement.style.setProperty('--mt-kop',h+'px');
+}
+window.addEventListener('resize',()=>{ clearTimeout(mtKopHoogte._t); mtKopHoogte._t=setTimeout(mtKopHoogte,150); });
 
 async function msLogin() {
   const errEl = document.getElementById('login-error');
@@ -13373,21 +13621,27 @@ function activiteitOpen(force){
   };
   window.calcPreviewSluit=function(key){ const o=getOfferte(key); delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key); };
   // De ENIGE outward-actie: pas hier gaat de offerte echt als concept naar Moneybird.
-  window.calcPreviewDoorzetten=async function(key){
+  // Record vóór een Moneybird-actie direct lokaal + op SharePoint ('in-behandeling'), max 5 s wachten.
+  const _calcOpslaanNu=key=>()=>{ if(saveCalc('off',{key:key})===false) return false; return Promise.race([syncNu('off').catch(()=>null),new Promise(r=>setTimeout(r,5000))]).then(()=>true); };
+  window.calcPreviewDoorzetten=async function(key,opts){
     const ctx=_mbCtx(key); const o=ctx.o; const p=o._mbPreview;
     const setSt=(h,ok)=>{const st=document.getElementById('calc-status-'+cid(key)); if(st){st.innerHTML=h;st.style.color=(ok===false)?'#c0392b':(ok?'var(--green)':'var(--text-dim)');}};
     if(!p||!p.regels||!p.regels.length){ setSt('⚠ Geen preview om door te zetten.',false); return; }
     if(ctx.err||!ctx.mbId){ setSt('⚠ Geen Moneybird-klant gekoppeld.',false); return; }
     const som=p.regels.reduce((s,r)=>s+(+r.price),0);
-    if(!confirm('Concept-offerte aanmaken in Moneybird?\n\nReferentie: '+ctx.ref+'\nTotaal: € '+som.toFixed(2)+' excl. btw\n\nDe offerte komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.')) return;
+    const bev=await mbBevestig({wat:'CONCEPT-offerte aanmaken',contact:ctx.klant||('Moneybird-contact '+ctx.mbId),ref:ctx.ref,bedrag:som,gevaar:!!(opts&&opts.opnieuw),
+      extra:(opts&&opts.opnieuw?_mbOpnieuwTekst:'')+'De offerte komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.'});
+    if(!bev) return;
     o._mbPreview.loading='Concept-offerte aanmaken in Moneybird…'; _renderMbPrev(key);
     const details=[];
     if(p.tekst) details.push({description:p.tekst});                                  // begeleidende tekst als tekst-regel
     p.regels.forEach(r=>details.push({description:r.description,amount:'1 x',price:(+r.price).toFixed(2)}));
     try{
-      const r=await mbPost(getAdmin()+'/estimates',{estimate:{contact_id:ctx.mbId,reference:ctx.ref,details_attributes:details}});
-      if(!r.ok){const tx=await r.text().catch(()=> ''); throw new Error('HTTP '+r.status+' '+tx.slice(0,160));}
-      const est=await r.json();
+      const res=await mbMaakEenmalig({rec:o,veld:'mb_actie_offerte',pad:getAdmin()+'/estimates',body:{estimate:{contact_id:ctx.mbId,reference:ctx.ref,details_attributes:details}},
+        bev,stap:'offerte',opslaan:_calcOpslaanNu(key),zoek:()=>mbZoekConcepten('estimates',ctx.mbId,ctx.ref),opnieuw:!!(opts&&opts.opnieuw)});
+      if(res.controleren){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt(mbControleerHtml(res,'offerte',"calcPreviewDoorzetten('"+key+"',{opnieuw:true})"),false); return; }
+      if(!res.ok) throw new Error(res.fout);
+      const est=res.data;
       o.mb_estimate_id=est.id; delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
       const url='https://moneybird.com/'+getAdmin()+'/estimates/'+est.id;
       setSt('✓ Concept-offerte aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);
@@ -13395,21 +13649,25 @@ function activiteitOpen(force){
     }catch(e){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt('❌ Offerte aanmaken mislukt: '+(e.message||e),false); }
   };
   // Volgende stap: dezelfde (getweakte) regels als CONCEPT-VERKOOPFACTUUR in Moneybird.
-  window.calcPreviewNaarFactuur=async function(key){
+  window.calcPreviewNaarFactuur=async function(key,opts){
     const ctx=_mbCtx(key); const o=ctx.o; const p=o._mbPreview;
     const setSt=(h,ok)=>{const st=document.getElementById('calc-status-'+cid(key)); if(st){st.innerHTML=h;st.style.color=(ok===false)?'#c0392b':(ok?'var(--green)':'var(--text-dim)');}};
     if(!p||!p.regels||!p.regels.length){ setSt('⚠ Geen preview om door te zetten.',false); return; }
     if(ctx.err||!ctx.mbId){ setSt('⚠ Geen Moneybird-klant gekoppeld — koppel de offerte aan een project mét klant.',false); return; }
     const som=p.regels.reduce((s,r)=>s+(+r.price),0);
-    if(!confirm('CONCEPT-FACTUUR aanmaken in Moneybird?\n\nDit slaat de offerte-stap over en maakt direct een verkoopfactuur (concept) van deze regels.\n\nReferentie: '+ctx.ref+'\nTotaal: € '+som.toFixed(2)+' excl. btw\n\nDe factuur komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.')) return;
+    const bev=await mbBevestig({wat:'CONCEPT-verkoopfactuur aanmaken (slaat de offerte-stap over)',contact:ctx.klant||('Moneybird-contact '+ctx.mbId),ref:ctx.ref,bedrag:som,gevaar:!!(opts&&opts.opnieuw),
+      extra:(opts&&opts.opnieuw?_mbOpnieuwTekst:'')+'De factuur komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.'});
+    if(!bev) return;
     o._mbPreview.loading='Concept-factuur aanmaken in Moneybird…'; _renderMbPrev(key);
     const details=[];
     if(p.tekst) details.push({description:p.tekst});
     p.regels.forEach(r=>details.push({description:r.description,amount:'1 x',price:(+r.price).toFixed(2)}));
     try{
-      const r=await mbPost(getAdmin()+'/sales_invoices',{sales_invoice:{contact_id:ctx.mbId,reference:ctx.ref,details_attributes:details}});
-      if(!r.ok){const tx=await r.text().catch(()=> ''); throw new Error('HTTP '+r.status+' '+tx.slice(0,160));}
-      const inv=await r.json();
+      const res=await mbMaakEenmalig({rec:o,veld:'mb_actie_factuur',pad:getAdmin()+'/sales_invoices',body:{sales_invoice:{contact_id:ctx.mbId,reference:ctx.ref,details_attributes:details}},
+        bev,stap:'factuur',opslaan:_calcOpslaanNu(key),zoek:()=>mbZoekConcepten('sales_invoices',ctx.mbId,ctx.ref),opnieuw:!!(opts&&opts.opnieuw)});
+      if(res.controleren){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt(mbControleerHtml(res,'factuur',"calcPreviewNaarFactuur('"+key+"',{opnieuw:true})"),false); return; }
+      if(!res.ok) throw new Error(res.fout);
+      const inv=res.data;
       o.mb_invoice_id=inv.id; delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
       const url='https://moneybird.com/'+getAdmin()+'/sales_invoices/'+inv.id;
       setSt('✓ Concept-factuur aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);

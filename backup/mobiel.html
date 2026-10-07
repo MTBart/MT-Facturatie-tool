@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.5 — M&T Mobiel</title>
+<title>BACKUP v2.6 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -24,6 +24,7 @@
 <script src="mt-rollen.js?v=2026-10-07a"></script>
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-koppel.js?v=2026-10-07a"></script>
+<script src="mt-contacten.js?v=2026-10-07a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
@@ -760,7 +761,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.5, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.6, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -1235,6 +1236,8 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
       <div id="sheetStatus" style="margin-bottom:10px"></div>
       <div class="section-head">Adres</div>
       <div id="sheetAddr" style="font-size:14px;color:var(--text-dim);margin-bottom:4px"></div>
+      <div class="section-head" style="margin-top:10px">Contactpersonen</div>
+      <div id="sheetContacten" style="margin-bottom:4px"></div>
       <div class="section-head" style="margin-top:10px">Laatste activiteit</div>
       <div id="sheetActivity" style="font-size:13px;color:var(--text-faint);margin-bottom:4px"></div>
       <div class="section-head" style="margin-top:12px">Notities</div>
@@ -2164,6 +2167,7 @@ async function msLogout() {
   if (!confirm('Uitloggen?')) return;
   try { await _msal.logoutPopup(); } catch(e) { /* beste poging */ }
   _msAccount = null;
+  try { if (window.MTContactenUI) MTContactenUI.mobielWis(); } catch(e) {}
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('userAvatarBtn').style.display = 'none';
   document.getElementById('demoBadge').style.display = 'none';
@@ -3335,6 +3339,7 @@ function openProjectSheet(id) {
   document.getElementById("sheetSub").textContent = p.code;
   document.getElementById("sheetStatus").innerHTML = `<span class="badge ${cls}">${label}</span>`;
   renderSheetAddr(p);
+  try { if (window.MTContactenUI) MTContactenUI.mobielSheet(p, document.getElementById("sheetContacten"), addrFor(p)); } catch(e) { console.warn("contacten:", e); }
   renderSheetNotes(p);
   renderSheetNas(p);
   document.getElementById("sheetActivity").textContent = p.lastActivity;

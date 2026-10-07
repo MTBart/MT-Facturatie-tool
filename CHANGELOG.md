@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Projectnummering: werkcode via worker-teller + instelling "Projectcode tonen als"
+- Commit: `c39a32f` | Auteur: Bart Witte
+
 ## 2026-10-07 — Merge v2.6.1-weergave (geen generator-code zichtbaar) in main met P2
 - Commit: `c5da69b` | Auteur: Bart Witte
 
