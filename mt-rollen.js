@@ -57,7 +57,12 @@
   R.isBeheer = () => !!(R.me && R.me.rechten && R.me.rechten.beheer);
   // Geld (geldtijdlijn, financieel dashboard): in élke modus, want de worker dwingt het altijd af.
   // niveau 'wijzigen' = ijkpunten/instellingen aanpassen; anders volstaat lezen.
-  R.magGeld = niveau => { const v = R.recht('geld'); return niveau === 'wijzigen' ? v === 'wijzigen' : !!v; };
+  // Een worker van vóór het recht `geld` (geen kolom geld in /me) → het oude gedrag: dashboard met moneybird, instellingen met beheer.
+  R.magGeld = niveau => {
+    const r = R.me && R.me.rechten;
+    if (r && !('geld' in r)) return niveau === 'wijzigen' ? !!r.beheer : !!r.moneybird;
+    const v = R.recht('geld'); return niveau === 'wijzigen' ? v === 'wijzigen' : !!v;
+  };
   const toets = el => el.classList.toggle('mt-rol-verborgen', !R.mag(el.dataset.recht));
   R.pasToe = function (scope) {
     (scope || doc).querySelectorAll('[data-recht]').forEach(toets);

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — G1-aanvulling: spaarpotjes-model, kredietlimiet, BTW-config; recht geld + rol administratie
+- Commit: `7ac3d92` | Auteur: Bart Witte
+
 ## 2026-10-07 — G1 geldtijdlijn: fundament /geld/* in de worker (eigenaar-only, niets stil weg)
 - Commit: `d12ba88` | Auteur: Bart Witte
 
