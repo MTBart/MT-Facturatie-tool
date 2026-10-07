@@ -62,7 +62,8 @@ id = "f1405a729e4e4f1985c98ad12b194fa2"
 # 3) Versleuteling van zelf gekoppelde Toggl-sleutels (F1e): 32 willekeurige bytes, base64:
 #      node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" | wrangler secret put SLEUTEL_KEK
 #    Zonder SLEUTEL_KEK kan niemand z'n Toggl koppelen (nooit onversleuteld opgeslagen).
-#    Kwijt of gewijzigd = gekoppelde sleutels onbruikbaar → iedereen koppelt opnieuw.
+#    Roteren: nieuwe waarde als SLEUTEL_KEK en de oude als SLEUTEL_KEK_VORIG (records worden bij
+#    gebruik herversleuteld; na een paar weken VORIG weghalen). Kwijt = iedereen koppelt opnieuw.
 #
 # 4) Modus: 'uit' | 'log' (eerst ±1 week) | 'afdwingen'. Wijzigen = hier aanpassen + deploy.
 [vars]

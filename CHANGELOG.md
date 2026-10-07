@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — App F1e: Koppel je Toggl, planvoorstellen en Vandaag aanwezig (v2 + mobiel)
+- Commit: `12eb26f` | Auteur: Bart Witte
+
 ## 2026-10-07 — Worker F1e: KEK-rotatie, server-sleutels nooit koppelen, aanwezig altijd met rol (Codex-ronde)
 - Commit: `da511a0` | Auteur: Bart Witte
 
