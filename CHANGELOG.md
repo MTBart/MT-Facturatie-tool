@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — v2.6.1 weergave: geen generator-code meer zichtbaar (besluit Bart)
+- Commit: `15c9366` | Auteur: Bart Witte
+
 ## 2026-10-07 — Release v2.6: Moneybird-bevestiging + geen dubbele acties, contactenregister, namen zonder gokken; backup = v2.5
 - Commit: `0363cb4` | Auteur: Bart Witte
 

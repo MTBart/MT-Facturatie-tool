@@ -670,6 +670,7 @@ async function inboxOpenMail(id){
         <div class="inbox-rmeta"><span><b>Van:</b> ${ibEsc(van)}</span><span>${dt}</span></div>
         ${attHtml}
         <div id="inbox-voorstel"></div>
+        <div id="inbox-contactwrap"></div>
         <div class="inbox-ract">
           <button class="btn btn-sm btn-gold" onclick="inboxMaakProject()">📁 Maak project</button>
           <button class="btn btn-sm btn-primary" onclick="inboxMaakOfferte()" title="Maak een offerte-calculatie met deze mail als context (klant voor-ingevuld als herkend)">📄 Maak offerte</button>
@@ -689,6 +690,8 @@ async function inboxOpenMail(id){
     const content=(m.body&&m.body.content)||m.bodyPreview||'';
     frame.srcdoc=isHtml?content:`<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:13px;padding:10px">${ibEsc(content)}</pre>`;
     inboxChatReset();
+    // Contactenregister: handtekening van een gekoppelde mail → alleen voorstellen (mt-contacten.js)
+    try{ if(window.MTContactenUI) MTContactenUI.inboxHandtekening(m,document.getElementById('inbox-contactwrap')); }catch(e){ console.warn('contacten (handtekening):',e); }
     _inbox.laatsteFout=null;
     return m;
   }catch(e){
