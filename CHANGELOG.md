@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Release v2.7: project_id onder elk project, werkcode via worker-teller, instelling projectcode; backup = v2.6.1
+- Commit: `f08cb5a` | Auteur: Bart Witte
+
 ## 2026-10-07 — Projectenlijst: klantnaam als gewone tekst, chipje alleen voor een echt nummer
 - Commit: `482cb74` | Auteur: Bart Witte
 
