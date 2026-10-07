@@ -23,6 +23,7 @@
 <script src="mt-rollen.js?v=2026-10-07a"></script>
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-koppel.js?v=2026-10-07a"></script>
+<script src="mt-contacten.js?v=2026-10-07a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
@@ -1233,6 +1234,8 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
       <div id="sheetStatus" style="margin-bottom:10px"></div>
       <div class="section-head">Adres</div>
       <div id="sheetAddr" style="font-size:14px;color:var(--text-dim);margin-bottom:4px"></div>
+      <div class="section-head" style="margin-top:10px">Contactpersonen</div>
+      <div id="sheetContacten" style="margin-bottom:4px"></div>
       <div class="section-head" style="margin-top:10px">Laatste activiteit</div>
       <div id="sheetActivity" style="font-size:13px;color:var(--text-faint);margin-bottom:4px"></div>
       <div class="section-head" style="margin-top:12px">Notities</div>
@@ -2162,6 +2165,7 @@ async function msLogout() {
   if (!confirm('Uitloggen?')) return;
   try { await _msal.logoutPopup(); } catch(e) { /* beste poging */ }
   _msAccount = null;
+  try { if (window.MTContactenUI) MTContactenUI.mobielWis(); } catch(e) {}
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('userAvatarBtn').style.display = 'none';
   document.getElementById('demoBadge').style.display = 'none';
@@ -3333,6 +3337,7 @@ function openProjectSheet(id) {
   document.getElementById("sheetSub").textContent = p.code;
   document.getElementById("sheetStatus").innerHTML = `<span class="badge ${cls}">${label}</span>`;
   renderSheetAddr(p);
+  try { if (window.MTContactenUI) MTContactenUI.mobielSheet(p, document.getElementById("sheetContacten"), addrFor(p)); } catch(e) { console.warn("contacten:", e); }
   renderSheetNotes(p);
   renderSheetNas(p);
   document.getElementById("sheetActivity").textContent = p.lastActivity;
