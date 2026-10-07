@@ -719,7 +719,7 @@
         const kl = String(p.klant || '').toUpperCase();
         uit.push({ bron: 'project', reden: 'Andere waarde in project ' + p.code, naam: klantNaam, algemeen: true, emails: [p.klant_email], telefoons: [p.klant_telefoon],
           organisatie: { type: kl === 'INT' ? 'intern' : 'klant', klantCode: kl || undefined, mbContactId: p.mb_contact_id || undefined, naam: klantNaam },
-          locatie: p.loc ? { code: p.loc, naam: p.loc_naam || '' } : undefined, projecten: [{ code: p.code }] });
+          locatie: p.loc ? { code: p.loc, naam: (typeof root.projLocLabel === 'function' ? root.projLocLabel(p) : p.loc_naam) || '' } : undefined, projecten: [{ code: p.code }] });
       });
       return uit;
     },
@@ -966,9 +966,20 @@
     const a = adresVan(c, opts), h = C.routeHref(a); if (!h) return '';
     return '<a class="' + (groot ? 'mtc-mbtn' : 'mtc-btn') + '" href="' + esc(h) + '" target="_blank" rel="noopener noreferrer" aria-label="Route naar ' + esc(a) + ' (opent kaarten in een nieuw tabblad)">📍 <span>Route</span></a>';
   }
+  // Locatie zonder naam: zoek de naam bij de klant (v2: klantInfo); anders weglaten — nooit een kale code.
+  function locatieNaam(c) {
+    const l = c.locatie; if (!l) return '';
+    const code = String(l.code || '').toUpperCase(), naam = String(l.naam || '').trim();
+    if (naam && naam.toUpperCase() !== code) return naam;
+    const kl = c.organisatie && c.organisatie.klantCode;
+    if (code && kl && typeof root.klantInfo === 'function') {
+      try { const x = (root.klantInfo(kl).locaties || []).find(y => y.code === code); const n = x && String(x.naam || '').trim(); if (n && n.toUpperCase() !== code) return n; } catch (e) {}
+    }
+    return '';
+  }
   function orgRegel(c) {
     const o = c.organisatie || {};
-    return [o.naam, c.locatie && (c.locatie.naam || c.locatie.code)].filter(Boolean).map(esc).join(' · ');
+    return [o.naam, locatieNaam(c)].filter(Boolean).map(esc).join(' · ');
   }
   // opts: {adres, projectChips, extra (html achter de acties)}
   function contactRij(c, opts) {

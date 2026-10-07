@@ -5164,6 +5164,8 @@ function projLocLabel(proj){
   const reg=lc&&String(lc.naam||'').trim();
   return reg&&reg.toUpperCase()!==code?reg:'';
 }
+// In keuzelijsten en kopjes moet een locatie zonder naam toch iets heten: "Locatie K" i.p.v. kaal "K".
+function _locKeuzeLabel(l){ const n=String((l&&l.naam)||'').trim(), c=String((l&&l.code)||'').trim(); return n&&n.toUpperCase()!==c.toUpperCase()?n:(c?'Locatie '+c:''); }
 function projContextBalk(proj){
   const k=klantByCode(proj.klant);
   const klantNaam=(k&&k.naam)||proj.klant_naam||proj.klant||'';
@@ -5844,7 +5846,7 @@ function renderDossier(el,scope,facetten){
       <span class="dos-aangepast"${f.periode==='aangepast'?'':' hidden'}><input type="date" value="${esc(f.van)}" aria-label="Vanaf" onchange="dossierZetFilter('${k}','van',this.value)"> – <input type="date" value="${esc(f.tot)}" aria-label="Tot en met" onchange="dossierZetFilter('${k}','tot',this.value)"></span>
       ${sel('persoon',[['','Iedereen'],...personen.map(p=>[p,p])],f.persoon,'Persoon')}
       ${scope.codes.length>1?sel('project',[['','Alle projecten'],...scope.codes.map(c=>[c,c+' — '+(((PROJECT_CODES.find(p=>p.code===c)||{}).naam)||'')])],f.project,'Project'):''}
-      ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.map(l=>[l.code,l.naam||l.code])],f.locatie,'Locatie'):''}
+      ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.map(l=>[l.code,_locKeuzeLabel(l)])],f.locatie,'Locatie'):''}
       ${sel('status',[['','Status: standaard'],['*','Status: alles (ook ontkoppeld)'],...statussen.map(s=>[s,'Status: '+s])],f.status,'Status')}
       <label class="dos-check"><input type="checkbox"${f.bijlage?' checked':''} onchange="dossierZetFilter('${k}','bijlage',this.checked?'1':'')"> met bijlage</label>
       <button type="button" class="btn btn-xs btn-secondary" onclick="dossierWisFilters('${k}')" title="Alle filters terug naar standaard">Wis filters</button>
@@ -5955,7 +5957,12 @@ function klantInfo(kl,{projecten=null,loc=''}={}){
   const mbId=(k&&k.mb_contact_id)||(vol&&vol.mb_contact_id)||(eigen.find(p=>p.mb_contact_id)||{}).mb_contact_id||null;
   const naam=(k&&k.naam)||(vol&&vol.naam)||(eigen.find(p=>p.klant_naam)||{}).klant_naam||kl;
   let locaties=(k&&Array.isArray(k.locaties))?k.locaties.map(l=>({code:String(l.code).toUpperCase(),naam:l.naam,mb_contact_id:l.mb_contact_id||null})):[];
-  eigen.forEach(p=>{ const lc=String(p.loc||'').toUpperCase(); if(lc&&!locaties.some(l=>l.code===lc)) locaties.push({code:lc,naam:p.loc_naam||lc,mb_contact_id:null}); });
+  // Locaties uit de projecten zelf: naam volgens projLocLabel (nooit de kale code); het eerste project met
+  // een naam wint, ook als een eerder project met dezelfde code er geen had.
+  eigen.forEach(p=>{ const lc=String(p.loc||'').toUpperCase(); if(!lc) return;
+    const naam=(typeof projLocLabel==='function')?projLocLabel(p):(p.loc_naam||''), l=locaties.find(x=>x.code===lc);
+    if(!l) locaties.push({code:lc,naam,mb_contact_id:null});
+    else if((!l.naam||String(l.naam).toUpperCase()===lc)&&naam) l.naam=naam; });
   const mbIds=new Set([mbId,...locaties.map(l=>l.mb_contact_id)].filter(Boolean).map(String));
   // Op een locatiepagina telt het Moneybird-contact van die locatie (als dat er is).
   const locMb=loc?((locaties.find(l=>l.code===loc)||{}).mb_contact_id||null):null;
@@ -6073,8 +6080,8 @@ function openKlant(kl,loc,{sectie=null,filter=null}={}){
   const host=document.getElementById('project-detail'); if(!host) return;
   host.dataset.klant=kl+(loc?'/'+loc:''); delete host.dataset.code; delete host.dataset.offerte;
   const info=klantInfo(kl,{loc}), top=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
-  const locSel=info.locaties.length?`<select class="klant-locsel" aria-label="Locatie" onchange="klantKiesLoc(this.value)"><option value="">Alle locaties</option>${info.locaties.map(l=>`<option value="${esc(l.code)}"${l.code===loc?' selected':''}>${esc(l.naam||l.code)}</option>`).join('')}</select>`:'';
-  const locNaam=loc?((info.locaties.find(l=>l.code===loc)||{}).naam||loc):'';
+  const locSel=info.locaties.length?`<select class="klant-locsel" aria-label="Locatie" onchange="klantKiesLoc(this.value)"><option value="">Alle locaties</option>${info.locaties.map(l=>`<option value="${esc(l.code)}"${l.code===loc?' selected':''}>${esc(_locKeuzeLabel(l))}</option>`).join('')}</select>`:'';
+  const locNaam=loc?_locKeuzeLabel(info.locaties.find(l=>l.code===loc)||{code:loc}):'';
   host.innerHTML=`<div class="proj-ctx klant-ctx" style="top:${top}px" data-klant="${esc(kl)}">`
     +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(kl)}</span><span class="proj-ctx-naam">${esc(info.naam)}</span></span>`
     +(locNaam?`<span class="proj-ctx-sep">›</span><span class="proj-ctx-loc">${esc(locNaam)}</span>`:'')

@@ -5,11 +5,23 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Samenvoegen: contactenregister (branch contacten)
+- Commit: `8eb25ea` | Auteur: Bart Witte
+
 ## 2026-10-07 — UX: locatie nooit als kale code, betere afgeleide projectstatus, projectenlijst blijft in beeld
 - Commit: `655844b` | Auteur: Bart Witte
 
+## 2026-10-07 — Contactenregister: Codex-ronde verwerkt (geen stille overschrijvingen, merger-lijsten, modale overlays, handtekening na klik)
+- Commit: `47a4969` | Auteur: Bart Witte
+
 ## 2026-10-07 — F2–F4: bevestiging bij elke Moneybird-schrijfactie, concepten hooguit één keer (UI + Codex-ronde)
 - Commit: `a77504e` | Auteur: Bart Witte
+
+## 2026-10-07 — Contactenregister: UI (klantpagina, projectkaart, zoeker, droogloop), haakjes in v2/mobiel/inbox
+- Commit: `b0f7471` | Auteur: Bart Witte
+
+## 2026-10-07 — Contactenregister: kern (model, ontdubbeling, aanvullen met voorstellen, merger, bronnen, handtekening)
+- Commit: `b10a30a` | Auteur: Bart Witte
 
 ## 2026-10-07 — Worker F2–F4: proxy-contract (allowlist), bevestiging bij Moneybird-writes, idempotente acties
 - Commit: `b224406` | Auteur: Bart Witte
