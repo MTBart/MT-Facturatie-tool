@@ -643,6 +643,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .dos-tag.let{color:var(--gold-text);background:var(--gold-light)}
 .dos-acties{flex:0 0 auto;display:flex;gap:4px}
 .dos-leeg{color:var(--text-faint);font-size:13px;padding:.5rem 0}
+/* Projectenlijst blijft in beeld op brede schermen (eigen scroll); smal = gewoon stapelen. */
+@media(min-width:1100px){.proj-lijst-kaart{position:sticky;top:var(--mt-kop,112px);max-height:calc(100vh - var(--mt-kop,112px) - 16px);display:flex;flex-direction:column;box-sizing:border-box}
+  .proj-lijst-kaart #project-lijst{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}}
 @media(max-width:820px){#proj-grid{grid-template-columns:minmax(0,1fr)!important}.ov-grid{grid-template-columns:minmax(0,1fr)}
   .dos-meerknop{display:inline-flex}.dos-extra{display:none}.dos-filters.open .dos-extra{display:contents}}
 @media(max-width:560px){.kpi-grid.ov-kpi{grid-template-columns:minmax(0,1fr)}.dos-rij{flex-wrap:wrap}.dos-acties{margin-left:28px}}
@@ -1119,7 +1122,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="proj-grid" style="display:grid;grid-template-columns:280px minmax(0,1fr);gap:1.5rem;min-height:600px">
       <!-- Projectenlijst -->
       <div>
-        <div class="card" style="padding:1rem">
+        <div class="card proj-lijst-kaart" style="padding:1rem">
           <div class="card-title">Projecten</div>
           <div class="flex" style="margin-bottom:0.75rem;gap:6px">
             <button class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1">+ Nieuw project</button>
@@ -5143,11 +5146,21 @@ function selecteerProject(code,el){ openProject(code,{scroll:!el}); }
 // ── Contextbalk: "waar ben ik?" — Klant › Locatie › CODE — naam, sticky onder de tabbalk ──
 // Klant/locatie zijn nog spans met data-attributen; de router (B3) maakt ze klikbaar.
 const _projStatus={};   // code → lopende aanmaakstatus (mappen/Toggl), getoond in de balk
+// Locatie om te tonen: eigen locatienaam → naam uit de klantregistry → niets (nooit een kale code als "K").
+function projLocLabel(proj){
+  if(!proj) return '';
+  const code=String(proj.loc||'').trim().toUpperCase(), eigen=String(proj.loc_naam||'').trim();
+  if(eigen&&eigen.toUpperCase()!==code) return eigen;   // ook zonder code (aangevulde projecten)
+  if(!code) return '';
+  const k=(typeof klantByCode==='function')?klantByCode(proj.klant):null;
+  const lc=k&&Array.isArray(k.locaties)?k.locaties.find(l=>String(l.code||'').toUpperCase()===code):null;
+  const reg=lc&&String(lc.naam||'').trim();
+  return reg&&reg.toUpperCase()!==code?reg:'';
+}
 function projContextBalk(proj){
   const k=klantByCode(proj.klant);
   const klantNaam=(k&&k.naam)||proj.klant_naam||proj.klant||'';
-  const locReg=(k&&proj.loc&&Array.isArray(k.locaties))?k.locaties.find(l=>l.code===(proj.loc||'').toUpperCase()):null;
-  const locNaam=(locReg&&locReg.naam)||proj.loc_naam||proj.loc||'';
+  const locNaam=projLocLabel(proj);
   const top=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
   const sep='<span class="proj-ctx-sep">›</span>';
   const st=_projStatus[proj.code]||'';
@@ -5978,14 +5991,64 @@ function klantCodeVoorMb(mbId){
   return p?String(p.klant).toUpperCase():null;
 }
 // ── Projectstatus: eigen keuze, anders afgeleid (en zo getoond) ──
+// Afleidregels (de eerste die past wint; de reden staat in de tooltip):
+//  opgeleverd — de laatste planfase (normaal "Oplevering") is klaar, of alle fases zijn klaar,
+//               of er is een opleveringsrapport voor het project (mt_opleveringen.json);
+//  lopend     — een fase vóórbij de offerte (Tekening, Offerte-akkoord, Werkvoorbereiding, Inkoop,
+//               Productie, Levering, Oplevering) is bezig of klaar; of Tekening of later is volgens de
+//               planning al begonnen (de akkoord-mijlpaal telt niet op datum); of een projecttaak is bezig/klaar; of een Toggl-taak van
+//               het project staat op In Progress / Productie / Klaar voor levering / Factureren / Done;
+//               of de offerte is akkoord (gekozen in de nacalculatie, of in Moneybird geaccepteerd/gefactureerd);
+//  offerte    — anders. Budgetbepaling en de offerte-fase zelf tellen nog als offerte.
+const _ST_VOORBIJ_OFFERTE=new Set(['tekening','akkoord','wvb','inkoop','productie','levering','oplever']);
+const _ST_GESTART_PLAN=new Set(['tekening','wvb','inkoop','productie','levering','oplever']);   // niet 'akkoord': een datum is geen akkoord
+const _ST_TOGGL_LOPEND=new Set([300788,604241,309790,604212,300786]);   // In Progress, Productie, Klaar voor levering, Factureren, Done
+let _oplCodesCache=null;
+function _oplCodes(){
+  if(_oplCodesCache&&Date.now()-_oplCodesCache.t<10000) return _oplCodesCache.s;
+  let s; try{ s=new Set(JSON.parse(localStorage.getItem('mt_opl_codes')||'[]')); }catch(e){ s=new Set(); }
+  _oplCodesCache={s,t:Date.now()}; return s;
+}
+function _oplCodesBewaar(lijst){
+  const codes=[...new Set((lijst||[]).map(e=>e&&e.projectCode).filter(c=>c&&c!=='—'))];
+  try{ localStorage.setItem('mt_opl_codes',JSON.stringify(codes)); }catch(e){}
+  _oplCodesCache=null; return codes;
+}
+// Opleveringen op de achtergrond ophalen (anders pas bij het openen van het Opleveringen-tabblad).
+async function oplCodesVerversen(){
+  try{ const d=await _SP.read('mt_opleveringen.json'); const voor=localStorage.getItem('mt_opl_codes');
+    _oplCodesBewaar(Array.isArray(d)?d:((d&&d.items)||[]));
+    if(localStorage.getItem('mt_opl_codes')!==voor){ if(typeof renderProjectLijst==='function') renderProjectLijst((document.getElementById('project-zoek')||{}).value||''); if(_klantHuidig) _klantSectieRender(); }
+  }catch(e){}
+}
 function projStatus(p){
-  if(p.status&&PROJ_STATUSSEN.includes(p.status)) return {status:p.status,afgeleid:false};
+  if(p.status&&PROJ_STATUSSEN.includes(p.status)) return {status:p.status,afgeleid:false,reden:'zelf gekozen'};
   const plan=(typeof planVoor==='function')?planVoor(p.code):null, fases=(plan&&plan.fases)||[];
   const vandaag=new Date().toISOString().slice(0,10);
+  const uit=(status,reden)=>({status,afgeleid:true,reden});
+  if(fases.length){
+    const laatste=fases.slice().sort((a,b)=>(a.volgorde??0)-(b.volgorde??0))[fases.length-1];
+    if(fases.every(f=>f.status==='klaar')) return uit('opgeleverd','alle planfases klaar');
+    if(laatste&&laatste.status==='klaar') return uit('opgeleverd','fase '+(laatste.naam||laatste.key)+' klaar');
+  }
+  if(_oplCodes().has(p.code)) return uit('opgeleverd','opleveringsrapport aanwezig');
+  const fBezig=fases.find(f=>_ST_VOORBIJ_OFFERTE.has(f.key)&&(f.status==='bezig'||f.status==='klaar'));
+  if(fBezig) return uit('lopend','fase '+(fBezig.naam||fBezig.key)+' '+fBezig.status);
+  const fGestart=fases.find(f=>_ST_GESTART_PLAN.has(f.key)&&f.start&&f.start<=vandaag);
+  if(fGestart) return uit('lopend','fase '+(fGestart.naam||fGestart.key)+' gestart volgens planning');
+  const fAnder=fases.find(f=>!f.key&&(f.status==='bezig'||f.status==='klaar'));   // oude/eigen fases zonder sleutel
+  if(fAnder) return uit('lopend','fase '+(fAnder.naam||'')+' '+fAnder.status);
   const taken=(typeof projTaken==='function')?projTaken(p.code):[];
-  if(fases.length&&fases.every(f=>f.status==='klaar')) return {status:'opgeleverd',afgeleid:true};
-  if(fases.some(f=>f.status==='klaar'||f.status==='bezig'||(f.start&&f.start<=vandaag))||taken.some(t=>t.status==='bezig'||t.status==='klaar')) return {status:'lopend',afgeleid:true};
-  return {status:'offerte',afgeleid:true};
+  const t=taken.find(x=>x.status==='bezig'||x.status==='klaar');
+  if(t) return uit('lopend','taak '+(t.naam||'')+' '+t.status);
+  const tg=(typeof _tgCache!=='undefined'&&_tgCache&&Array.isArray(_tgCache.taken)&&p.tg_project_id)
+    ?_tgCache.taken.find(x=>String(x.project_id)===String(p.tg_project_id)&&_ST_TOGGL_LOPEND.has(Number(x.status_id))):null;
+  if(tg) return uit('lopend','Toggl-taak '+(tg.name||'')+' in uitvoering');
+  const keuze=(typeof offerteKeuze==='function')?(offerteKeuze()[p.code]||{}):{};
+  if(keuze.gekozen) return uit('lopend','offerte akkoord (nacalculatie)');
+  const off=(typeof _nacalcOfferte!=='undefined'&&_nacalcOfferte)?_nacalcOfferte[p.code]:null;
+  if(off&&['accepted','billed'].includes(off.state)) return uit('lopend','offerte '+(off.state==='billed'?'gefactureerd':'geaccepteerd')+' in Moneybird');
+  return uit('offerte','nog geen gestarte fase, taak of akkoord');
 }
 function projStatusZet(code,waarde){
   const p=PROJECT_CODES.find(x=>x.code===code); if(!p) return;
@@ -6101,8 +6164,8 @@ function klantSecOverzicht(info,projen){
     const nt=(typeof projTaken==='function')?projTaken(p.code).filter(t=>t.status!=='klaar').length:0;
     const viaMb=String(p.klant||'').toUpperCase()!==info.kl;
     return `<div class="klant-proj">
-      <div class="klant-proj-hoofd"><span class="st-pill st-${st.status}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid uit planning/taken':'Zelf gekozen'}">${esc(st.status)}</span> <a href="${mtRoute.format({code:p.code})}" onclick="event.preventDefault();openProject('${_jsCode(p.code)}')"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
-        <div class="dos-meta">${p.loc?esc(p.loc_naam||p.loc)+' · ':''}${lt?'laatst: '+fmtDatum(lt.datum.slice(0,10)):'nog geen activiteit'}${nt?` · ${nt} open ta${nt===1?'ak':'ken'}`:''}</div></div>
+      <div class="klant-proj-hoofd"><span class="st-pill st-${st.status}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid: '+esc(st.reden||'planning/taken'):'Zelf gekozen'}">${esc(st.status)}</span> <a href="${mtRoute.format({code:p.code})}" onclick="event.preventDefault();openProject('${_jsCode(p.code)}')"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
+        <div class="dos-meta">${projLocLabel(p)?esc(projLocLabel(p))+' · ':''}${lt?'laatst: '+fmtDatum(lt.datum.slice(0,10)):'nog geen activiteit'}${nt?` · ${nt} open ta${nt===1?'ak':'ken'}`:''}</div></div>
       <label class="klant-status"><span class="sr">Status</span><select aria-label="Status van ${esc(p.code)}" onchange="projStatusZet('${_jsCode(p.code)}',this.value)">
         <option value=""${st.afgeleid?' selected':''}>${st.afgeleid?esc(st.status)+' (afgeleid)':'automatisch'}</option>
         ${PROJ_STATUSSEN.map(s=>`<option value="${s}"${!st.afgeleid&&st.status===s?' selected':''}>${s}</option>`).join('')}</select></label></div>`;
@@ -10064,6 +10127,7 @@ async function oplViewerOpen(){
       _SP.read('mt_opnames.json')
     ]);
     _oplData.opleveringen = Array.isArray(opl) ? opl : ((opl && opl.items) || []);
+    _oplCodesBewaar(_oplData.opleveringen);
     _oplData.opnames      = Array.isArray(opn) ? opn : ((opn && opn.items) || []);
   }catch(e){
     console.warn('opleveringen laden faalde:', e.message);
@@ -12072,6 +12136,7 @@ async function toonApp(account) {
   laadDashboard();
   if(typeof admInitKnop==='function') admInitKnop();
   rolLaad();
+  mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
   // Deep-link uit de URL-hash honoreren (bv. een "apart venster" met #tab=inbox).
   try{ tbApplyHashTab(); }catch(e){}
 }
@@ -12222,6 +12287,13 @@ async function beheerAanvraag(oid,weigeren){
   try{ await beheerApi('/beheer/aanvraag',weigeren?{oid,weigeren:true}:{oid,rol:sel?sel.value:'werkplaats'}); }catch(e){ await mtDialog.alert({title:'Beheer',message:e.message}); }
   beheerLaad();
 }
+
+// Hoogte van header + tabbalk als CSS-variabele (--mt-kop) voor sticky elementen.
+function mtKopHoogte(){
+  const h=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
+  document.documentElement.style.setProperty('--mt-kop',h+'px');
+}
+window.addEventListener('resize',()=>{ clearTimeout(mtKopHoogte._t); mtKopHoogte._t=setTimeout(mtKopHoogte,150); });
 
 async function msLogin() {
   const errEl = document.getElementById('login-error');

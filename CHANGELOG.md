@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — F2–F4: bevestiging bij elke Moneybird-schrijfactie, concepten hooguit één keer (UI + Codex-ronde)
+- Commit: `a77504e` | Auteur: Bart Witte
+
 ## 2026-10-07 — Worker F2–F4: proxy-contract (allowlist), bevestiging bij Moneybird-writes, idempotente acties
 - Commit: `b224406` | Auteur: Bart Witte
 
