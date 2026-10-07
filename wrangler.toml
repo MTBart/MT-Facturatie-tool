@@ -59,6 +59,11 @@ id = "f1405a729e4e4f1985c98ad12b194fa2"
 #    bij de eerste login de oid vastgelegd (Beheer toont hem) → later naar OWNER_OIDS.
 #    (OWNER_OID / OWNER_EMAIL enkelvoud werken ook nog.)
 #
-# 3) Modus: 'uit' | 'log' (eerst ±1 week) | 'afdwingen'. Wijzigen = hier aanpassen + deploy.
+# 3) Versleuteling van zelf gekoppelde Toggl-sleutels (F1e): 32 willekeurige bytes, base64:
+#      node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" | wrangler secret put SLEUTEL_KEK
+#    Zonder SLEUTEL_KEK kan niemand z'n Toggl koppelen (nooit onversleuteld opgeslagen).
+#    Kwijt of gewijzigd = gekoppelde sleutels onbruikbaar → iedereen koppelt opnieuw.
+#
+# 4) Modus: 'uit' | 'log' (eerst ±1 week) | 'afdwingen'. Wijzigen = hier aanpassen + deploy.
 [vars]
 ROLLEN_MODUS = "log"

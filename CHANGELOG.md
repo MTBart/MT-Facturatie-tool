@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Release v2.4.1: Beheer/Activiteit laden ook bij directe link; backup = v2.4
+- Commit: `6677f46` | Auteur: Bart Witte
+
 ## 2026-10-07 — Beheer-auditlog: koppeling van een uitrol-uitnodiging toont "uitrol" als door
 - Commit: `4ecd2fb` | Auteur: Bart Witte
 

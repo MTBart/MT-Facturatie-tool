@@ -841,6 +841,8 @@ function requirePermission(rol, target, methode, pad, velden) {
       if (pad === '/dashboard/anker' && !lees) return R.beheer ? ja() : nee('dashboard-anker');
       return R.moneybird ? ja() : nee('dashboard');
     case 'track':
+    case 'mijn':        // eigen instellingen (Toggl koppelen)
+    case 'aanwezig':    // aanwezigheidsbord: lezen voor alle rollen
       return ja();
     case 'track_admin':
     case 'beheer':
@@ -867,12 +869,219 @@ function actieNaam(target, methode, pad) {
   const m = /^[A-Z]{3,7}$/.test(String(methode || '').toUpperCase()) ? String(methode).toUpperCase() : '?';
   return `${m} ${target}${res ? ':' + res : ''}`;
 }
-// 'Eigen uren' (werkplaats/lezen) is alleen echt "eigen" met een persoonlijke Toggl-sleutel;
-// met de gedeelde (admin-)sleutel zou je ieders uren zien/wijzigen → dan weigeren.
-function heeftEigenTogglSleutel(env, target, payload) {
-  const prefix = target === 'toggl_focus' ? 'TOGGL_FOCUS_KEY' : 'TOGGL_KEY';
-  return userKey(env, prefix, null, payload) != null;
+// 'Eigen uren' (werkplaats/lezen) is alleen echt "eigen" met een persoonlijke Toggl-sleutel
+// (zelf gekoppeld of worker-secret); met de gedeelde (admin-)sleutel zou je ieders uren zien.
+
+// ══ EIGEN TOGGL-SLEUTEL (F1e-A) ══════════════════════════════════════════════
+// Iedereen koppelt zelf z'n Toggl: POST /mijn/toggl valideert live bij Toggl en bewaart de
+// sleutel VERSLEUTELD (AES-GCM, worker-secret SLEUTEL_KEK = 32 bytes base64) in KV
+// `sleutel:{oid}`. De sleutel gaat nooit terug naar de browser en nooit in een log.
+// Additional data = "mt-sleutel:{oid}:{soort}": een versleutelde sleutel is niet naar een
+// andere gebruiker of ander soort te verplaatsen.
+//   sleutel:{oid} = { focus?: {iv, ct, v, naam, tgUserId, sinds, bevestigd}, track?: {iv, ct, v, naam, sinds} }
+// Volgorde in togglSleutel(): 1) eigen sleutel (KV)  2) worker-secret TOGGL_*_<NAAM>  3) gedeelde sleutel.
+const FOCUS_ORG = 21259253, FOCUS_WS = 21258443;
+const FOCUS_API = 'https://focus.toggl.com/api/';
+const TOGGL_TIMEOUT_MS = 8000;
+const b64 = u8 => btoa(String.fromCharCode(...u8));
+const unb64 = s => Uint8Array.from(atob(String(s || '')), c => c.charCodeAt(0));
+let _kek = null, _kekBron = null;
+async function sleutelKek(env) {
+  if (!env.SLEUTEL_KEK) return null;
+  if (_kek && _kekBron === env.SLEUTEL_KEK) return _kek;
+  let raw; try { raw = unb64(String(env.SLEUTEL_KEK).trim()); } catch { return null; }
+  if (raw.length !== 32) return null;
+  _kek = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']); _kekBron = env.SLEUTEL_KEK;
+  return _kek;
 }
+const sleutelAad = (oid, soort) => new TextEncoder().encode(`mt-sleutel:${String(oid).toLowerCase()}:${soort}`);
+async function versleutel(env, oid, soort, tekst) {
+  const k = await sleutelKek(env); if (!k) throw new Error('geen-kek');
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: sleutelAad(oid, soort) }, k, new TextEncoder().encode(tekst));
+  return { iv: b64(iv), ct: b64(new Uint8Array(ct)), v: 1 };
+}
+async function ontsleutel(env, oid, soort, blob) {
+  if (!blob || !blob.iv || !blob.ct) return null;
+  const k = await sleutelKek(env); if (!k) return null;
+  try {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv), additionalData: sleutelAad(oid, soort) }, k, unb64(blob.ct));
+    return new TextDecoder().decode(pt);
+  } catch { return null; }
+}
+const _sleutelCache = new Map();   // oid -> {rec, t} (versleuteld record, 60 s)
+async function leesSleutelRec(env, oid) {
+  if (!oid || !env.MT_ROLLEN) return null;
+  const c = _sleutelCache.get(oid);
+  if (c && Date.now() - c.t < CACHE_MS) return c.rec;
+  const rec = await kvJson(env, 'sleutel:' + oid);
+  _sleutelCache.set(oid, { rec, t: Date.now() });
+  return rec;
+}
+// → {sleutel, bron: 'eigen'|'secret'|'gedeeld'|'geen'}
+async function togglSleutel(env, soort, payload) {
+  const prefix = soort === 'focus' ? 'TOGGL_FOCUS_KEY' : 'TOGGL_KEY', gedeeld = soort === 'focus' ? env.TOGGL_FOCUS_KEY : env.TOGGL_KEY;
+  try {
+    const rec = await leesSleutelRec(env, payload && payload.oid);
+    const eigen = rec && rec[soort] ? await ontsleutel(env, payload.oid, soort, rec[soort]) : null;
+    if (eigen) return { sleutel: eigen, bron: 'eigen' };
+  } catch {}
+  const sec = userKey(env, prefix, null, payload);
+  if (sec) return { sleutel: sec, bron: 'secret' };
+  return gedeeld ? { sleutel: gedeeld, bron: 'gedeeld' } : { sleutel: null, bron: 'geen' };
+}
+async function togglFetch(url, init) {
+  const ac = new AbortController(), tm = setTimeout(() => ac.abort(), TOGGL_TIMEOUT_MS);
+  try { return await fetch(url, { ...init, signal: ac.signal }); } finally { clearTimeout(tm); }
+}
+const SLEUTEL_RE = /^[\x21-\x7e]{16,512}$/;
+const _pogingen = new Map();   // oid -> [ts…] (koppelpogingen, in geheugen)
+function teVaakGeprobeerd(oid) {
+  const nu = Date.now(), l = (_pogingen.get(oid) || []).filter(t => nu - t < 3600e3);
+  l.push(nu); _pogingen.set(oid, l);
+  return l.length > 10;
+}
+// Focus-sleutel: geldig in onze werkruimte + van deze gebruiker (e-mail ↔ Toggl-gebruiker ↔ eigen uren).
+async function valideerFocus(env, sleutel, email) {
+  const auth = { Authorization: `Bearer ${sleutel}` };
+  const O = `${FOCUS_API}organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/`;
+  const r = await togglFetch(O + 'tracking/current', { headers: auth });
+  if (r.status === 401 || r.status === 403) return { fout: 'sleutel-ongeldig' };
+  if (r.status !== 200 && r.status !== 204) return { fout: 'toggl-onbereikbaar' };
+  const ru = await togglFetch(`${FOCUS_API}organizations/${FOCUS_ORG}/users`, { headers: { Authorization: `Bearer ${env.TOGGL_FOCUS_KEY || sleutel}` } });
+  if (!ru.ok) return { fout: 'toggl-onbereikbaar' };
+  const lijst = await ru.json().catch(() => []);
+  const users = Array.isArray(lijst) ? lijst : (lijst && Array.isArray(lijst.data) ? lijst.data : []);
+  const ik = users.find(u => String(u.email || '').toLowerCase() === email);
+  if (!ik) return { fout: 'email-niet-in-toggl' };
+  const tgUserId = ik.user_account_id != null ? ik.user_account_id : (ik.id != null ? ik.id : null);
+  const naam = clip(ik.name || ik.fullname || ik.full_name || ik.email, 80);
+  // Eigenaarschap: de eigen uren van de sleutel moeten van deze Toggl-gebruiker zijn.
+  const tot = new Date(), van = new Date(Date.now() - 60 * DAG_S * 1000);
+  const rt = await togglFetch(`${O}time-entries/stream?date_from=${encodeURIComponent(van.toISOString())}&date_to=${encodeURIComponent(tot.toISOString())}&include_taskless=true`, { headers: auth });
+  let bevestigd = false;
+  if (rt.ok) {
+    const e = await rt.json().catch(() => []);
+    const rijen = Array.isArray(e) ? e : (e && Array.isArray(e.data) ? e.data : []);
+    const ids = new Set(rijen.map(x => x.toggl_user_id != null ? x.toggl_user_id : x.user_id).filter(x => x != null).map(String));
+    if (ids.size && (ids.size > 1 || !ids.has(String(tgUserId)))) return { fout: 'sleutel-van-ander' };
+    bevestigd = ids.size === 1;
+  }
+  return { naam, tgUserId, bevestigd };
+}
+// Track-sleutel (v9, gaat er op termijn uit): /me moet ons e-mailadres zijn.
+async function valideerTrack(sleutel, email) {
+  const r = await togglFetch('https://api.track.toggl.com/api/v9/me', { headers: { Authorization: `Basic ${btoa(sleutel + ':api_token')}` } });
+  if (r.status === 401 || r.status === 403) return { fout: 'sleutel-ongeldig' };
+  if (!r.ok) return { fout: 'toggl-onbereikbaar' };
+  const me = await r.json().catch(() => ({}));
+  if (String(me.email || '').toLowerCase() !== email) return { fout: 'sleutel-van-ander' };
+  return { naam: clip(me.fullname || me.email, 80), bevestigd: true };
+}
+async function mijnTogglStatus(env, payload) {
+  const rec = await leesSleutelRec(env, payload.oid);
+  const st = soort => {
+    const r = rec && rec[soort];
+    if (r) return { gekoppeld: true, bron: 'eigen', naam: r.naam || '', sinds: r.sinds || null, bevestigd: !!r.bevestigd };
+    const sec = userKey(env, soort === 'focus' ? 'TOGGL_FOCUS_KEY' : 'TOGGL_KEY', null, payload);
+    return { gekoppeld: !!sec, bron: sec ? 'secret' : 'geen' };
+  };
+  return { focus: st('focus'), track: st('track'), versleuteling: !!(await sleutelKek(env)) };
+}
+async function handleMijnToggl(request, env, ik, payload, json) {
+  const m = request.method, email = tokenEmail(payload);
+  if (m === 'GET') return json(await mijnTogglStatus(env, payload));
+  if (!env.MT_ROLLEN) return json({ error: 'geen-rollen-opslag' }, 503);
+  const door = { door: payload.oid, doorNaam: (ik.rec && ik.rec.naam) || email };
+  if (m === 'DELETE') {
+    const soort = new URL(request.url).searchParams.get('soort');   // leeg = beide
+    const rec = await kvJson(env, 'sleutel:' + payload.oid);
+    if (rec) {
+      const nieuw = { ...rec }; if (!soort || soort === 'focus') delete nieuw.focus; if (!soort || soort === 'track') delete nieuw.track;
+      if (nieuw.focus || nieuw.track) await kvZet(env, 'sleutel:' + payload.oid, nieuw); else await env.MT_ROLLEN.delete('sleutel:' + payload.oid);
+      _sleutelCache.delete(payload.oid);
+      await audit(env, { ...door, actie: 'toggl-ontkoppeld', doel: payload.oid, doelNaam: door.doorNaam, soort: soort || 'alles' });
+    }
+    return json({ ok: true, ...(await mijnTogglStatus(env, payload)) });
+  }
+  if (m !== 'POST') return json({ error: 'methode' }, 405);
+  if (!(await sleutelKek(env))) return json({ error: 'geen-versleuteling', uitleg: 'Worker-secret SLEUTEL_KEK ontbreekt of is ongeldig.' }, 503);
+  if (teVaakGeprobeerd(payload.oid)) return json({ error: 'te-vaak' }, 429);
+  let b = {}; try { b = await request.json(); } catch {}
+  const focus = typeof b.focus === 'string' ? b.focus.trim() : '', track = typeof b.track === 'string' ? b.track.trim() : '';
+  if (!focus && !track) return json({ error: 'geen-sleutel' }, 400);
+  if ((focus && !SLEUTEL_RE.test(focus)) || (track && !SLEUTEL_RE.test(track))) return json({ error: 'sleutel-vorm' }, 400);
+  const uit = {};
+  try {
+    if (focus) { const v = await valideerFocus(env, focus, email); if (v.fout) return json({ error: v.fout, soort: 'focus' }, v.fout === 'toggl-onbereikbaar' ? 502 : 400); uit.focus = v; }
+    if (track) { const v = await valideerTrack(track, email); if (v.fout) return json({ error: v.fout, soort: 'track' }, v.fout === 'toggl-onbereikbaar' ? 502 : 400); uit.track = v; }
+  } catch (e) { return json({ error: 'toggl-onbereikbaar' }, 502); }
+  const rec = (await kvJson(env, 'sleutel:' + payload.oid)) || {};
+  for (const soort of Object.keys(uit)) {
+    rec[soort] = { ...(await versleutel(env, payload.oid, soort, soort === 'focus' ? focus : track)), naam: uit[soort].naam || '', sinds: Date.now(), bevestigd: !!uit[soort].bevestigd, ...(uit[soort].tgUserId != null ? { tgUserId: uit[soort].tgUserId } : {}) };
+  }
+  await kvZet(env, 'sleutel:' + payload.oid, rec);
+  _sleutelCache.delete(payload.oid);
+  await audit(env, { ...door, actie: 'toggl-gekoppeld', doel: payload.oid, doelNaam: door.doorNaam, soort: Object.keys(uit).join('+') });
+  return json({ ok: true, ...(await mijnTogglStatus(env, payload)) });
+}
+
+// ══ AANWEZIGHEIDSBORD (F1e-C) ═══════════════════════════════════════════════
+// GET /aanwezig: per teamlid (rol, actief) of er nu een timer loopt, op welk project/welke
+// taak, en sinds wanneer. GEEN duur- of urentotalen en geen omschrijving. Alleen met de
+// eigen sleutel van die persoon (KV of worker-secret) — nooit met de gedeelde sleutel
+// (die zou de timer van de beheerder tonen). Gepland/verlof vult de app lokaal aan.
+const AANWEZIG_MS = 60 * 1000;
+let _aanwezig = null;            // {t, data}
+const _namenCache = { projecten: null, t: 0, taken: new Map() };
+async function focusNamen(env) {
+  if (_namenCache.projecten && Date.now() - _namenCache.t < 10 * 60 * 1000) return _namenCache.projecten;
+  const m = new Map();
+  if (env.TOGGL_FOCUS_KEY) {
+    for (let page = 1; page <= 10; page++) {
+      const r = await togglFetch(`${FOCUS_API}organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/projects?page=${page}&per_page=100`, { headers: { Authorization: `Bearer ${env.TOGGL_FOCUS_KEY}` } }).catch(() => null);
+      if (!r || !r.ok) break;
+      const j = await r.json().catch(() => ({})); const d = Array.isArray(j) ? j : (j.data || []);
+      d.forEach(p => m.set(String(p.id), clip(p.name, 120)));
+      if (d.length < 100) break;
+    }
+  }
+  _namenCache.projecten = m; _namenCache.t = Date.now();
+  return m;
+}
+async function focusTaakNaam(env, id) {
+  if (id == null || !env.TOGGL_FOCUS_KEY) return null;
+  const c = _namenCache.taken.get(String(id)); if (c && Date.now() - c.t < 10 * 60 * 1000) return c.naam;
+  const r = await togglFetch(`${FOCUS_API}organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/tasks/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${env.TOGGL_FOCUS_KEY}` } }).catch(() => null);
+  const naam = r && r.ok ? clip((await r.json().catch(() => ({}))).name, 120) : null;
+  _namenCache.taken.set(String(id), { naam, t: Date.now() });
+  return naam;
+}
+async function handleAanwezig(env, json) {
+  if (_aanwezig && Date.now() - _aanwezig.t < AANWEZIG_MS) return json({ ..._aanwezig.data, cache: true });
+  const team = (await lijstKV(env, 'user:')).filter(g => g.active !== false && ROLLEN.includes(g.role));
+  const projecten = await focusNamen(env).catch(() => new Map());
+  const personen = await Promise.all(team.map(async g => {
+    const basis = { oid: g.oid, naam: g.naam || g.email || '', rol: g.role };
+    const s = await togglSleutel(env, 'focus', { oid: g.oid, preferred_username: g.email }).catch(() => ({ bron: 'geen' }));
+    if (s.bron !== 'eigen' && s.bron !== 'secret') return { ...basis, status: 'onbekend' };
+    try {
+      const r = await togglFetch(`${FOCUS_API}organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}/tracking/current`, { headers: { Authorization: `Bearer ${s.sleutel}` } });
+      if (r.status === 204) return { ...basis, status: 'geen-timer' };
+      if (!r.ok) return { ...basis, status: 'onbekend' };
+      const e = await r.json().catch(() => null);
+      if (!e || !e.start) return { ...basis, status: 'geen-timer' };
+      const pid = e.project_id != null ? String(e.project_id) : null;
+      return { ...basis, status: 'aan-het-werk', sinds: e.start, project_id: e.project_id ?? null, project: pid ? (projecten.get(pid) || null) : null,
+        task_id: e.task_id ?? null, taak: await focusTaakNaam(env, e.task_id).catch(() => null) };
+    } catch { return { ...basis, status: 'onbekend' }; }
+  }));
+  personen.sort((a, b) => (a.status === 'aan-het-werk' ? 0 : 1) - (b.status === 'aan-het-werk' ? 0 : 1) || String(a.naam).localeCompare(String(b.naam)));
+  const data = { ts: Date.now(), personen };
+  _aanwezig = { t: Date.now(), data };
+  return json(data);
+}
+
 
 // Log-teller: in geheugen optellen, hooguit eens per LOG_FLUSH_MS samenvoegen in KV.
 const _teller = { dag: '', totaal: 0, geweigerd: 0, redenen: {}, laatsteFlush: Date.now() };
@@ -1077,10 +1286,14 @@ export default {
 
       const isTrack = url.pathname === '/track' || url.pathname.startsWith('/track/');
       const isDash = url.pathname.startsWith('/dashboard/');
+      const isMijn = url.pathname === '/mijn/toggl', isAanwezig = url.pathname === '/aanwezig';
+      const eigenRoute = isTrack || isDash || isMijn || isAanwezig;
       const target = isTrack ? (['/track/online', '/track/usage'].includes(url.pathname) ? 'track_admin' : 'track')
-        : isDash ? 'dashboard' : url.searchParams.get('target');
-      const pad = isTrack || isDash ? url.pathname : (url.searchParams.get('path') || '');
-      if (!isTrack && !isDash && !veiligPad(pad)) return json({ error: 'ongeldig pad' }, 400);
+        : isDash ? 'dashboard' : isMijn ? 'mijn' : isAanwezig ? 'aanwezig' : url.searchParams.get('target');
+      const pad = eigenRoute ? url.pathname : (url.searchParams.get('path') || '');
+      if (!eigenRoute && !veiligPad(pad)) return json({ error: 'ongeldig pad' }, 400);
+      // Toggl-sleutel van deze gebruiker (eigen → secret → gedeeld), één keer per verzoek.
+      const tgS = target === 'toggl' || target === 'toggl_focus' ? await togglSleutel(env, target === 'toggl_focus' ? 'focus' : 'track', msPayload) : null;
 
       // Matrix: 'log' = alles door + loggen wat geweigerd zóu worden; 'afdwingen' = weigeren.
       let beperkt = false;
@@ -1092,11 +1305,14 @@ export default {
         }
         let besluit = ik.rol ? requirePermission(ik.rol, target, request.method, pad, velden) : { ok: false, reden: ik.reden || 'geen-rol' };
         if (besluit.ok && (target === 'toggl' || target === 'toggl_focus') && ['eigen', 'eigen-lezen'].includes(RECHTEN[ik.rol].uren)
-            && togglKlasse(target, pad) === 'uren' && !heeftEigenTogglSleutel(env, target, msPayload)) besluit = { ok: false, reden: 'uren-zonder-eigen-sleutel' };
+            && togglKlasse(target, pad) === 'uren' && !(tgS && (tgS.bron === 'eigen' || tgS.bron === 'secret'))) besluit = { ok: false, reden: 'uren-zonder-eigen-sleutel' };
         try { await noteerBesluit(env, ctx, { ...besluit, modus, rol: ik.rol, oid: ik.oid, target, actie: actieNaam(target, request.method, pad) }); } catch {}
         if (!besluit.ok && modus === 'afdwingen') return json({ error: 'geen-toegang', reden: besluit.reden, rol: ik.rol }, 403);
         beperkt = besluit.ok && !!besluit.beperkt && modus === 'afdwingen';
       }
+
+      if (isMijn) return await handleMijnToggl(request, env, ik, msPayload, json);
+      if (isAanwezig) return await handleAanwezig(env, json);
 
       // Pad-gebaseerde tracking-routes (los van de ?target=-proxy hieronder).
       if (isTrack) {
@@ -1184,7 +1400,7 @@ export default {
         const togglPath = url.searchParams.get('path');
         const method = request.method;
         const body = ['POST','PATCH','PUT'].includes(method) ? await request.text() : undefined;
-        const token = btoa(`${userKey(env, 'TOGGL_KEY', env.TOGGL_KEY, msPayload)}:api_token`);
+        const token = btoa(`${tgS.sleutel}:api_token`);
         const response = await fetch(`https://api.track.toggl.com/api/v9/${togglPath}`, {
           method,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${token}` },
@@ -1202,7 +1418,7 @@ export default {
           method,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${userKey(env, 'TOGGL_FOCUS_KEY', env.TOGGL_FOCUS_KEY, msPayload)}`
+            'Authorization': `Bearer ${tgS.sleutel}`
           },
           body
         });
