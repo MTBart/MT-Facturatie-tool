@@ -633,13 +633,16 @@ async function handleDashboard(pathname, request, env, msPayload, cors) {
 // (niets opgeslagen, dus geen race); /me toont dan de oid om als OWNER_OID te zetten.
 const ROLLEN = ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen'];
 const ROL_NAAM = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', kantoor: 'Kantoor', werkplaats: 'Werkplaats', lezen: 'Alleen lezen' };
-// De matrix (ontwerp F1). Ook naar de front-end via /me (alleen UI-gemak; de worker beslist).
+// De matrix (ontwerp F1 + besluiten Bart 7-10). Ook naar de front-end via /me (alleen UI-gemak; de worker beslist).
+//   taken: 'status-nieuw' = taakstatus wijzigen + nieuwe taak/opdracht aanmaken (niet hernoemen/verwijderen/toewijzen)
+//   bestellijst/opmerkingen: lopen via SharePoint → alleen UI (niet afdwingbaar in de worker)
+//   mb_verwijderen: Moneybird-inkoopfacturen (en hun bijlagen/notities) verwijderen
 const RECHTEN = {
-  eigenaar:   { projecten: 'wijzigen', inbox: 'alles',     offertes: 'wijzigen', moneybird: 'concepten', uren: 'alles',       verbeterpunten: 'alles',   ai: 'ja',      beheer: 'alles' },
-  beheerder:  { projecten: 'wijzigen', inbox: 'alles',     offertes: 'wijzigen', moneybird: 'concepten', uren: 'alles',       verbeterpunten: 'alles',   ai: 'ja',      beheer: 'beheren' },
-  kantoor:    { projecten: 'wijzigen', inbox: 'verwerken', offertes: 'wijzigen', moneybird: 'concepten', uren: 'team',        verbeterpunten: 'beheren', ai: 'ja',      beheer: null },
-  werkplaats: { projecten: 'lezen',    inbox: null,        offertes: null,       moneybird: null,        uren: 'eigen',       verbeterpunten: 'maken',   ai: 'beperkt', beheer: null },
-  lezen:      { projecten: 'lezen',    inbox: null,        offertes: 'lezen',    moneybird: 'lezen',     uren: 'eigen-lezen', verbeterpunten: 'lezen',   ai: null,      beheer: null },
+  eigenaar:   { projecten: 'wijzigen', taken: 'alles',        bestellijst: 'alles',     opmerkingen: 'alles',     inbox: 'alles',     offertes: 'wijzigen', moneybird: 'concepten', mb_verwijderen: 'ja', uren: 'alles',       verbeterpunten: 'alles',   ai: 'ja',      beheer: 'alles' },
+  beheerder:  { projecten: 'wijzigen', taken: 'alles',        bestellijst: 'alles',     opmerkingen: 'alles',     inbox: 'alles',     offertes: 'wijzigen', moneybird: 'concepten', mb_verwijderen: null, uren: 'alles',       verbeterpunten: 'alles',   ai: 'ja',      beheer: 'beheren' },
+  kantoor:    { projecten: 'wijzigen', taken: 'alles',        bestellijst: 'alles',     opmerkingen: 'alles',     inbox: 'verwerken', offertes: 'wijzigen', moneybird: 'concepten', mb_verwijderen: null, uren: 'team',        verbeterpunten: 'beheren', ai: 'ja',      beheer: null },
+  werkplaats: { projecten: 'lezen',    taken: 'status-nieuw', bestellijst: 'toevoegen', opmerkingen: 'toevoegen', inbox: null,        offertes: null,       moneybird: null,        mb_verwijderen: null, uren: 'eigen',       verbeterpunten: 'maken',   ai: 'beperkt', beheer: null },
+  lezen:      { projecten: 'lezen',    taken: null,           bestellijst: null,        opmerkingen: null,        inbox: null,        offertes: 'lezen',    moneybird: 'lezen',     mb_verwijderen: null, uren: 'eigen-lezen', verbeterpunten: 'lezen',   ai: null,      beheer: null },
 };
 const ROLLEN_MODI = ['uit', 'log', 'afdwingen'];
 const AI_BEPERKT_MAX_TOKENS = 1024;      // werkplaats: AI "beperkt"
@@ -732,12 +735,14 @@ async function bepaalRol(env, payload, ctx) {
 // ── Matrix toegepast op worker-targets ────────────────────────────────────────
 // Moneybird-"concepten": alleen wat de app echt aanmaakt (concepten/nieuwe documenten);
 // versturen, betalingen, boeken, contacten wijzigen e.d. vallen erbuiten.
+// Derde veld 'verwijderen' = alleen met mb_verwijderen (Eigenaar).
 const MB_CONCEPT = [
   ['POST',   /^contacts$/],
   ['POST',   /^documents\/purchase_invoices$/],
   ['PATCH',  /^documents\/purchase_invoices\/\d+$/],
-  ['DELETE', /^documents\/purchase_invoices\/\d+$/],
+  ['DELETE', /^documents\/purchase_invoices\/\d+$/, 'verwijderen'],
   ['POST',   /^documents\/purchase_invoices\/\d+\/(attachments|notes)$/],
+  ['DELETE', /^documents\/purchase_invoices\/\d+\/(attachments|notes)\/\d+$/, 'verwijderen'],
   ['POST',   /^sales_invoices$/],
   ['POST',   /^estimates$/],
   ['PATCH',  /^estimates\/\d+\/bill_estimate$/],
@@ -746,9 +751,15 @@ function mbRest(pad) {
   const m = /^(\d+)\/([^?#]*)$/.exec(String(pad || '').split(/[?#]/)[0]);
   return m && m[1] === MB_ADMIN ? m[2].replace(/\.json$/, '').replace(/\/$/, '') : null;
 }
+// → null (geen concept-actie) | 'concept' | 'verwijderen'
 function mbConcept(methode, pad) {
   const p = mbRest(pad);
-  return p != null && MB_CONCEPT.some(([m, re]) => m === methode && re.test(p));
+  const hit = p != null ? MB_CONCEPT.find(([m, re]) => m === methode && re.test(p)) : null;
+  return hit ? (hit[2] || 'concept') : null;
+}
+// Toggl Focus-pad zonder organisatie/werkruimte-voorvoegsel ("tasks/9").
+function focusRest(pad) {
+  return String(pad || '').split(/[?#]/)[0].replace(/^\/+/, '').replace(/^organizations\/\d+\/?/, '').replace(/^workspaces\/\d+\/?/, '').replace(/\/$/, '');
 }
 // Toggl-pad → klasse: 'uren' (eigen tijdregistratie), 'uren-team' (rapporten over iedereen),
 // 'planning' (projecten/taken/klanten/statussen/blokken), 'meta' (gebruikers, werkruimtes).
@@ -772,7 +783,8 @@ function togglKlasse(target, pad) {
   return 'planning';
 }
 // Centrale toets: mag `rol` deze actie? → {ok, reden?, beperkt?}
-function requirePermission(rol, target, methode, pad) {
+// `velden` = top-level sleutels van de JSON-body (alleen nodig voor Toggl-taak-PATCH van Werkplaats).
+function requirePermission(rol, target, methode, pad, velden) {
   const R = RECHTEN[rol];
   const ja = extra => ({ ok: true, ...(extra || {}) }), nee = reden => ({ ok: false, reden });
   if (!R) return nee('geen-rol');
@@ -787,7 +799,9 @@ function requirePermission(rol, target, methode, pad) {
       if (!R.moneybird) return nee('moneybird');
       if (target === 'moneybird' && lees) return ja();
       if (R.moneybird !== 'concepten') return nee('moneybird-schrijven');
-      return mbConcept(target === 'moneybird_upload' ? 'POST' : m, pad) ? ja() : nee('moneybird-geen-concept');
+      const soort = mbConcept(target === 'moneybird_upload' ? 'POST' : m, pad);
+      if (!soort) return nee('moneybird-geen-concept');
+      return soort === 'verwijderen' && R.mb_verwijderen !== 'ja' ? nee('moneybird-verwijderen-alleen-eigenaar') : ja();
     }
     case 'toggl':
     case 'toggl_focus':
@@ -799,7 +813,15 @@ function requirePermission(rol, target, methode, pad) {
       // meta (gebruikers, werkruimtes, organisatie, profiel): lezen mag, schrijven alleen met beheerrecht
       if (k === 'meta') return lees ? ja() : (R.beheer ? ja() : nee('meta-schrijven'));
       if (lees) return R.projecten ? ja() : nee('projecten');
-      return R.projecten === 'wijzigen' ? ja() : nee('projecten-schrijven');
+      if (R.projecten === 'wijzigen') return ja();
+      // Werkplaats: nieuwe taak/opdracht aanmaken en alléén de status van een taak wijzigen.
+      if (R.taken === 'status-nieuw' && target === 'toggl_focus') {
+        const p = focusRest(pad);
+        if (m === 'POST' && p === 'tasks') return ja();
+        if (m === 'PATCH' && /^tasks\/\d+$/.test(p) && Array.isArray(velden) && velden.length && velden.every(v => v === 'status_id')) return ja();
+        return nee('taken-alleen-status-en-nieuw');
+      }
+      return nee('projecten-schrijven');
     }
     case 'dashboard':
       if (pad === '/dashboard/anker' && !lees) return R.beheer ? ja() : nee('dashboard-anker');
@@ -1034,7 +1056,12 @@ export default {
       // Matrix: 'log' = alles door + loggen wat geweigerd zóu worden; 'afdwingen' = weigeren.
       let beperkt = false;
       if (modus !== 'uit' && target !== 'track_admin') {
-        let besluit = ik.rol ? requirePermission(ik.rol, target, request.method, pad) : { ok: false, reden: ik.reden || 'geen-rol' };
+        // Body-sleutels alleen waar de matrix ernaar kijkt (Toggl Focus PATCH); dezelfde body gaat door.
+        let velden = null;
+        if (target === 'toggl_focus' && request.method === 'PATCH') {
+          try { const j = await request.clone().json(); velden = j && typeof j === 'object' && !Array.isArray(j) ? Object.keys(j) : []; } catch { velden = []; }
+        }
+        let besluit = ik.rol ? requirePermission(ik.rol, target, request.method, pad, velden) : { ok: false, reden: ik.reden || 'geen-rol' };
         if (besluit.ok && (target === 'toggl' || target === 'toggl_focus') && ['eigen', 'eigen-lezen'].includes(RECHTEN[ik.rol].uren)
             && togglKlasse(target, pad) === 'uren' && !heeftEigenTogglSleutel(env, target, msPayload)) besluit = { ok: false, reden: 'uren-zonder-eigen-sleutel' };
         try { await noteerBesluit(env, ctx, { ...besluit, modus, rol: ik.rol, oid: ik.oid, target, actie: actieNaam(target, request.method, pad) }); } catch {}

@@ -6053,8 +6053,8 @@ function renderSheetTasks() {
           <input id="tfEst" value="${t.est||""}" placeholder="Schatting (bv. 2u)" style="flex:1">
         </div>
         <div style="display:flex;gap:8px;margin-top:4px">
-          <button class="btn btn-primary btn-sm" style="flex:2" onclick="saveTaskEdit('${t.id}')">💾 Opslaan</button>
-          <button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteTask('${t.id}')">🗑</button>
+          <button class="btn btn-primary btn-sm" style="flex:2" data-recht="taken:alles" onclick="saveTaskEdit('${t.id}')">💾 Opslaan</button>
+          <button class="btn btn-danger btn-sm" style="flex:1" data-recht="taken:alles" onclick="deleteTask('${t.id}')">🗑</button>
           <button class="btn btn-ghost btn-sm" style="flex:1" onclick="cancelTaskEdit()">×</button>
         </div>
       </div>`;

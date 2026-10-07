@@ -7,8 +7,8 @@
  *
  * Markeren in HTML: data-recht="kolom" (elk niveau behalve geen) of
  * data-recht="kolom:niveau1|niveau2", bv. data-recht="moneybird" of
- * data-recht="projecten:wijzigen". Kolommen: projecten, inbox, offertes,
- * moneybird, uren, verbeterpunten, ai, beheer.
+ * data-recht="projecten:wijzigen". Kolommen: projecten, taken, bestellijst,
+ * opmerkingen, inbox, offertes, moneybird, mb_verwijderen, uren, verbeterpunten, ai, beheer.
  * Werkt met de oude worker (zonder /me): laad() geeft dan null en er verandert niets.
  * ========================================================================== */
 (function (root) {
@@ -55,8 +55,18 @@
   };
   // Beheer tonen kan in élke modus (de beheer-API is altijd afgedwongen).
   R.isBeheer = () => !!(R.me && R.me.rechten && R.me.rechten.beheer);
+  const toets = el => el.classList.toggle('mt-rol-verborgen', !R.mag(el.dataset.recht));
   R.pasToe = function (scope) {
-    (scope || doc).querySelectorAll('[data-recht]').forEach(el => el.classList.toggle('mt-rol-verborgen', !R.mag(el.dataset.recht)));
+    (scope || doc).querySelectorAll('[data-recht]').forEach(toets);
+    // Knoppen die later getekend worden (lijsten, popovers) ook meenemen — alleen in 'afdwingen'.
+    if (R.afdwingen() && !R._waker && root.MutationObserver && doc.body) {
+      R._waker = new root.MutationObserver(lijst => lijst.forEach(mu => mu.addedNodes.forEach(n => {
+        if (n.nodeType !== 1) return;
+        if (n.dataset && n.dataset.recht) toets(n);
+        n.querySelectorAll && n.querySelectorAll('[data-recht]').forEach(toets);
+      })));
+      R._waker.observe(doc.body, { childList: true, subtree: true });
+    }
   };
   // Alleen in 'afdwingen': onbekende/gedeactiveerde gebruiker krijgt een nette pagina.
   R.geenToegangNodig = () => R.afdwingen() && !R.me.actief;

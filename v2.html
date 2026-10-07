@@ -21,7 +21,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
-<script src="mt-toggl.js?v=2026-10-06c"></script>
+<script src="mt-toggl.js?v=2026-10-07a"></script>
 <script src="mt-koppel.js?v=2026-10-07a"></script>
 <script src="mt-inbox.js?v=2026-10-07a"></script>
 <script src="mt-rollen.js?v=2026-10-07a"></script>
@@ -4913,7 +4913,7 @@ function renderBestellijst(sortK='materiaal',sortA=true){
           <td style="text-align:right"><input type="number" min="1" value="${b.aantal||1}" style="width:60px;font-family:var(--mono);text-align:right;padding:3px 6px;font-size:12px" onchange="updateBestellijstAantal('${_blQ(b.id)}',this.value)"></td>
           <td style="text-align:right;font-family:var(--mono)">€ ${(Number(b.prijsLaatst)||0).toFixed(2)}</td>
           <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(b.datum)}</td>
-          <td><button class="btn btn-xs btn-danger" title="Van de lijst halen (blijft bewaard en is terug te zetten)" onclick="verwijderUitBestellijst('${_blQ(b.id)}')">×</button></td>
+          <td><button class="btn btn-xs btn-danger" data-recht="bestellijst:alles" title="Van de lijst halen (blijft bewaard en is terug te zetten)" onclick="verwijderUitBestellijst('${_blQ(b.id)}')">×</button></td>
         </tr>`).join('')}</tbody>
       </table>
     </div>`;
@@ -6192,7 +6192,7 @@ function projectTakenHtml(proj){
         ${t.tg_pending?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="De wijziging is nog niet in Toggl gelukt — klik om opnieuw te proberen" onclick="projTakenHerkans('${proj.code}')">⏳ ${t.tg_pending.verwijderen?'verwijderen':'status'} wacht op Toggl</button>`:''}
         ${t.tg_task_id?'<span class="badge badge-ok" title="Zichtbaar in Toggl-project">Toggl ✓</span>':`<button class="btn btn-xs btn-secondary" title="Naar Toggl-project sturen" onclick="projTaakNaarToggl('${proj.code}','${t.id}').then(()=>renderProjectDetail(huidigProject))">→ Toggl</button>`}
         <button class="btn btn-xs btn-secondary" title="Status wisselen" onclick="projTaakStatus('${proj.code}','${t.id}')">⟳</button>
-        <button class="btn btn-xs btn-danger" title="Verwijderen" onclick="projTaakVerwijder('${proj.code}','${t.id}')">×</button>
+        <button class="btn btn-xs btn-danger" data-recht="taken:alles" title="Verwijderen" onclick="projTaakVerwijder('${proj.code}','${t.id}')">×</button>
       </td></tr>`;
   }).join(''):'<tr><td colspan="6" style="color:var(--text-faint);font-size:13px;padding:.5rem">Nog geen taken — gebruik ✨ AI-voorstel of + Taak.</td></tr>';
   const onbesp=arr.filter(t=>!t.tg_task_id).length;
@@ -7416,8 +7416,8 @@ function planOpenEditor(code,faseId){
       <div><label>Startdatum</label><input id="pe-start" type="date" value="${fa.start}"></div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" onclick="planEditorOpslaan('${code}','${faseId}')">Opslaan</button>
-      ${fa.gepind?`<button class="btn btn-sm" onclick="planFaseUnpin('${code}','${faseId}')">📌 losmaken</button>`:''}
+      <button class="btn btn-primary btn-sm" data-recht="projecten:wijzigen" onclick="planEditorOpslaan('${code}','${faseId}')">Opslaan</button>
+      ${fa.gepind?`<button class="btn btn-sm" data-recht="projecten:wijzigen" onclick="planFaseUnpin('${code}','${faseId}')">📌 losmaken</button>`:''}
       <button class="btn btn-sm" onclick="document.getElementById('plan-editor-${cid}').innerHTML=''">Sluiten</button>
     </div>
   </div>`;
@@ -9181,7 +9181,7 @@ function renderControleDetail(f){
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <a href="https://moneybird.com/${getAdmin()}/documents/${f.id}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none">📎 Openen in Moneybird →</a>
-      ${f.state!=='paid'?`<button class="btn btn-danger btn-xs" onclick="verwijderControleFactuur('${f.id}')">🗑 Verwijderen</button>`:''}
+      ${f.state!=='paid'?`<button class="btn btn-danger btn-xs" data-recht="mb_verwijderen" onclick="verwijderControleFactuur('${f.id}')">🗑 Verwijderen</button>`:''}
     </div>
     <hr class="divider">
     <div class="grid2" style="margin-bottom:0.75rem">
@@ -9207,7 +9207,7 @@ function renderControleDetail(f){
       <button class="btn btn-primary" onclick="slaControleOp(false)">Opslaan</button>
       <button class="btn btn-primary" onclick="slaControleOp(true)" style="background:var(--green-700)">Opslaan &amp; volgende →</button>
       ${f.state!=='paid'?`<a href="https://moneybird.com/${getAdmin()}/documents/${f.id}/payment_initiations/new" target="_blank" class="btn btn-info btn-sm">💳 Betalen</a>`:''}
-      <button class="btn btn-danger btn-sm" onclick="verwijderControleFactuur()">Verwijderen</button>
+      <button class="btn btn-danger btn-sm" data-recht="mb_verwijderen" onclick="verwijderControleFactuur()">Verwijderen</button>
       <span id="ctrl-status" style="font-size:12px;color:var(--text-dim)"></span>
     </div>`;
   let ctrlCount=0;const ctrlContainer=document.getElementById('ctrl-regels-container');

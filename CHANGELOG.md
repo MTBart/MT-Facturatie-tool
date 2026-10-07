@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Rollen in de app (F1c): Instellingen → Beheer, /me en verbergen volgens de rol
+- Commit: `4d370ce` | Auteur: Bart Witte
+
 ## 2026-10-07 — Rollen in de worker (F1a/F1b): strengere tokencontrole, rol per gebruiker, eerst alleen loggen
 - Commit: `02caa93` | Auteur: Bart Witte
 
