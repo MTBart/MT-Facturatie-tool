@@ -79,6 +79,18 @@ class_name = "MtActies"
 tag = "v1-mt-acties"
 new_sqlite_classes = ["MtActies"]
 
+# ─── Werkcode-teller (projectnummering): Durable Object MT_TELLER ──────────────
+# Eén object geeft de werkcodes W<jj>-<nnn> uit: atomair, idempotent per project_id, nooit
+# hergebruikt. Zonder deze binding geven /teller/* een 503 (bewust geen KV-terugval) en blijven
+# nieuwe projecten zonder werkcode tot de binding er is (de cockpit probeert het later opnieuw).
+[[durable_objects.bindings]]
+name = "MT_TELLER"
+class_name = "MtTeller"
+
+[[migrations]]
+tag = "v2-mt-teller"
+new_sqlite_classes = ["MtTeller"]
+
 [vars]
 ROLLEN_MODUS = "log"
 # F2–F4: proxy-contract + bevestiging bij Moneybird-writes. Eerst "log", later "afdwingen".

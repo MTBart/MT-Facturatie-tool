@@ -2639,9 +2639,19 @@ function _projHash(str){   // cyrb53: snelle, stabiele 53-bit hash (geen crypto 
 }
 function projIdVoor(p){ return 'p_'+_projHash(String((p&&p.code)||'').trim().toUpperCase()+'|'+String((p&&p.created)||'').trim()); }
 function projNieuwId(){ return 'p_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+// Werkcode (W<jj>-<nnn>): eigen werkplaatscode, centraal uitgegeven door de worker-teller (idempotent per
+// project_id, per jaar doorlopend, nooit hergebruikt). De worker is de bron; mt_werkcodes is een lokale
+// kopie die bij het lezen wordt aangevuld — zonder stempel, net als de andere afgeleide velden.
+let _wcMem=null;
+function _werkcodeKaart(){
+  if(_wcMem) return _wcMem;
+  try{ const m=JSON.parse(localStorage.getItem('mt_werkcodes')||'{}'); _wcMem=m&&typeof m==='object'&&!Array.isArray(m)?m:{}; }catch(e){ _wcMem={}; }
+  return _wcMem;
+}
 function projAanvullen(p){
   if(!p||typeof p!=='object'||(!p.code&&!p.project_id)) return p;
   if(!p.project_id) p.project_id=projIdVoor(p);
+  if(!p.werkcode){ const w=_werkcodeKaart()[p.project_id]; if(w) p.werkcode=w; }
   if(!Array.isArray(p.legacy_codes)) p.legacy_codes=p.code?[p.code]:[];
   if(!p.soort) p.soort='klant';
   if(!Array.isArray(p.offertes)||(!p.offertes.length&&p.offertenr))
@@ -2669,6 +2679,7 @@ function _projP2Behoud(uit, lokaal, spData){
       if(o===u) continue;
       if(o.project_id&&!u.project_id&&!(k&&k.project_id)) z().project_id=o.project_id;
       if(o.soort&&!(k||u).soort) z().soort=o.soort;
+      if(o.werkcode&&!(k||u).werkcode) z().werkcode=o.werkcode;
       if(Array.isArray(o.legacy_codes)){ const mis=o.legacy_codes.filter(c=>!((k||u).legacy_codes||[]).includes(c)); if(mis.length){ const w=z(); w.legacy_codes=(Array.isArray(w.legacy_codes)?w.legacy_codes:[]).concat(mis); } }
       if(Array.isArray(o.offertes)&&o.offertes.length&&!(Array.isArray((k||u).offertes)&&(k||u).offertes.length)) z().offertes=JSON.parse(JSON.stringify(o.offertes));
     }
@@ -2713,8 +2724,9 @@ function projConflicten(lijst){
   huidig.forEach(p=>(Array.isArray(p.legacy_codes)?p.legacy_codes:[]).forEach(c=>{ if(c===p.code) return;
     if(huidig.has(c)) uit.push({code:c,soort:'oude code is huidige code van ander project',projecten:[p.code,c]});
     if(oud.has(c)&&oud.get(c)!==p) uit.push({code:c,soort:'oude code bij twee projecten',projecten:[oud.get(c).code,p.code]}); else oud.set(c,p); }));
-  const ids=new Map();
+  const ids=new Map(), wcs=new Map();
   huidig.forEach(p=>{ if(!p.project_id) return; if(ids.has(p.project_id)) uit.push({code:p.project_id,soort:'dubbel project_id',projecten:[ids.get(p.project_id),p.code]}); else ids.set(p.project_id,p.code); });
+  huidig.forEach(p=>{ if(!p.werkcode) return; if(wcs.has(p.werkcode)) uit.push({code:p.werkcode,soort:'dubbele werkcode',projecten:[wcs.get(p.werkcode),p.code]}); else wcs.set(p.werkcode,p.code); });
   return uit;
 }
 function _projLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_projecten')||'[]'); return Array.isArray(a)?_projHernoemKetens(a).map(projAanvullen):[]; }catch(e){ return []; } }
@@ -8603,6 +8615,7 @@ async function maakProjectAan(){
   PROJECT_CODES.push(nieuwProj);
   aangemaakt=true;
   slaProjectenOp();
+  projWerkcodeVraag(nieuwProj);   // eigen werkcode (W<jj>-<nnn>) van de worker-teller; lukt het niet → later
   // Bron-mail automatisch aan het verse project koppelen (zoals de inbox-knop "koppel project").
   // Had de mail bijlagen, dan na het sluiten van de modal het bijlagen-venster aanbieden.
   let bijlagenNa=null;
@@ -11028,6 +11041,7 @@ async function mobielAanvulOpslaan() {
       project_id: projNieuwId(), legacy_codes: [nieuweCode], soort: 'klant', offertes: []
     };
     PROJECT_CODES.push(proj);
+    setTimeout(()=>projWerkcodeVraag(proj),0);   // na het opslaan hieronder
   }
   slaProjectenOp();
 
@@ -12362,7 +12376,7 @@ async function toonApp(account) {
   loadLedgers();
   laadDashboard();
   if(typeof admInitKnop==='function') admInitKnop();
-  rolLaad();
+  rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); });
   mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
   // Deep-link uit de URL-hash honoreren (bv. een "apart venster" met #tab=inbox).
   try{ tbApplyHashTab(); }catch(e){}
@@ -12388,6 +12402,64 @@ async function rolLaad(){
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   return me;
+}
+// ── Werkcodes en centrale instellingen (projectnummering) ──
+// /instellingen: "Projectcode tonen als" (offerte | werkcode | beide), centraal door de eigenaar gezet.
+// /teller/werkcodes: alle werkcodes (project_id → W<jj>-<nnn>). Een nieuw project vraagt zijn werkcode
+// meteen aan; lukt dat niet (offline, teller nog niet uitgerold), dan staat het in mt_werkcode_wacht
+// en volgt het bij het volgende laden. Bestaande projecten: eenmalig via Beheer → Projectcode.
+async function _tellerApi(pad,body){
+  const h=await authHeader(); if(!h['X-Auth-Token']) return null;
+  const r=await fetch(WORKER+pad,body===undefined?{headers:h}:{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>null);
+  if(!r.ok){ const e=new Error((j&&(j.uitleg||j.error))||('HTTP '+r.status)); e.status=r.status; throw e; }
+  return j;
+}
+async function instellingenLaad(){
+  try{ const c=JSON.parse(localStorage.getItem('mt_instellingen')||'null'); if(c&&!window.MT_INSTELLINGEN) window.MT_INSTELLINGEN=c; }catch(e){}
+  try{
+    const j=await _tellerApi('/instellingen'); if(!j||typeof j!=='object') return;
+    const oud=JSON.stringify(window.MT_INSTELLINGEN||{}); window.MT_INSTELLINGEN=j;
+    try{ localStorage.setItem('mt_instellingen',JSON.stringify(j)); }catch(e){}
+    if(JSON.stringify(j)!==oud) _namenVernieuwd();
+  }catch(e){}
+}
+// Werkcodes in de lokale kopie zetten en op de projecten aanvullen, zonder stempel: een record dat
+// verder ongewijzigd was, blijft "ongewijzigd" (basis mee bijgewerkt), dus geen schijnwijziging.
+function _werkcodesZet(kaart){
+  const k=_werkcodeKaart(); let n=0;
+  for(const [pid,code] of Object.entries(kaart||{})) if(/^W\d{2}-\d{3,}$/.test(String(code))&&k[pid]!==code){ k[pid]=code; n++; }
+  if(!n&&!PROJECT_CODES.some(p=>p&&p.project_id&&k[p.project_id]&&p.werkcode&&p.werkcode!==k[p.project_id])) return 0;
+  try{ localStorage.setItem('mt_werkcodes',JSON.stringify(k)); }catch(e){}
+  for(const p of PROJECT_CODES){
+    if(!p||!p.project_id||!k[p.project_id]||p.werkcode===k[p.project_id]) continue;
+    if(p.werkcode){ console.warn('werkcode gecorrigeerd volgens de teller:',p.code,p.werkcode,'→',k[p.project_id]); p.werkcode=k[p.project_id]; continue; }
+    const was=p.code&&_projBasis.get(p.code)===_projJson(p);
+    p.werkcode=k[p.project_id];
+    if(was) _projBasis.set(p.code,_projJson(p));
+  }
+  slaProjectenOp(); _namenVernieuwd();
+  return n;
+}
+function _werkcodeWacht(pid,erbij){
+  let l=[]; try{ l=JSON.parse(localStorage.getItem('mt_werkcode_wacht')||'[]'); if(!Array.isArray(l)) l=[]; }catch(e){}
+  l=l.filter(x=>x!==pid); if(erbij) l.push(pid);
+  if(l.length>200) l=l.slice(-200);   // begrensd; wat eruit valt, staat in Beheer bij "zonder werkcode"
+  try{ localStorage.setItem('mt_werkcode_wacht',JSON.stringify(l)); }catch(e){}
+  return l;
+}
+async function projWerkcodeVraag(p){
+  if(!p||!p.project_id||p.werkcode) return p&&p.werkcode||null;
+  try{
+    const j=await _tellerApi('/teller/werkcode',{project_id:p.project_id});
+    if(j&&j.werkcode){ _werkcodeWacht(p.project_id,false); _werkcodesZet({[p.project_id]:j.werkcode}); return j.werkcode; }
+  }catch(e){ console.warn('werkcode nog niet toegekend (volgt later):',e.message); }
+  _werkcodeWacht(p.project_id,true);
+  return null;
+}
+async function werkcodesLaad(){
+  try{ const j=await _tellerApi('/teller/werkcodes'); if(j&&j.werkcodes) _werkcodesZet(j.werkcodes); }catch(e){ return; }
+  for(const pid of _werkcodeWacht(null,false)){ const p=projVind(pid); if(p&&!p.werkcode) await projWerkcodeVraag(p); else _werkcodeWacht(pid,false); }
 }
 // ── Vandaag aanwezig (F1e-C): worker (/aanwezig) + lokaal: planblokken van vandaag en verlof ──
 function _awSlug(persoon){ const p=String(persoon||'').toLowerCase(); return p.includes('@')?p.split('@')[0]:p; }
@@ -12428,7 +12500,7 @@ function pvTeken(){
       <button class="btn btn-xs btn-secondary" onclick="MTPlanVoorstel.markeerGezien('${esc(m.sleutel)}');pvTeken()">OK</button></div>`).join('')
     +(open.length?`<div class="pv-melding open">${open.length} planvoorstel${open.length>1?'len':''} wacht${open.length>1?'en':''} op goedkeuring — klik op een gestippeld blok in de planning.</div>`:'');
 }
-const _BH_FOUT={'alleen-eigenaar-mag-eigenaar':'Alleen de eigenaar kan iemand eigenaar maken of een eigenaar wijzigen.','niet-jezelf':'Je eigen account wijzig je hier niet.',
+const _BH_FOUT={'alleen-eigenaar':'Alleen de eigenaar kan dit wijzigen.','alleen-eigenaar-mag-eigenaar':'Alleen de eigenaar kan iemand eigenaar maken of een eigenaar wijzigen.','niet-jezelf':'Je eigen account wijzig je hier niet.',
   'eigenaar-beschermd':'De vaste eigenaar is hier niet te wijzigen.','bestaat-al':'Er is al een gebruiker met dit e-mailadres.','ongeldig-email':'Dat is geen geldig e-mailadres.',
   'onbekende-rol':'Onbekende rol.','laatste-eigenaar':'Dit is de laatste Eigenaar — maak eerst iemand anders Eigenaar.','geen-rollen-opslag':'De rollen-opslag (KV MT_ROLLEN) is nog niet ingesteld in Cloudflare.','geen-toegang':'Je hebt geen beheerrecht.','niet-gevonden':'Niet (meer) gevonden.'};
 async function beheerApi(pad,body){
@@ -12445,8 +12517,9 @@ async function beheerLaad(){
   if(!kaart||!el||!window.MTRol||!MTRol.isBeheer()){ if(kaart) kaart.style.display='none'; return; }
   kaart.style.display='';
   try{
-    const [g,log,au]=await Promise.all([beheerApi('/beheer/gebruikers'),beheerApi('/beheer/log?dagen=7').catch(()=>null),beheerApi('/beheer/audit?limit=50').catch(()=>({audit:[]}))]);
-    _bh={g,log,au}; beheerTeken();
+    const [g,log,au,inst]=await Promise.all([beheerApi('/beheer/gebruikers'),beheerApi('/beheer/log?dagen=7').catch(()=>null),beheerApi('/beheer/audit?limit=50').catch(()=>({audit:[]})),beheerApi('/instellingen').catch(()=>null)]);
+    if(inst){ window.MT_INSTELLINGEN=inst; try{ localStorage.setItem('mt_instellingen',JSON.stringify(inst)); }catch(e){} }
+    _bh={g,log,au,inst}; beheerTeken();
   }catch(e){ el.innerHTML=`<div class="bh-modus">${esc(e.message)}</div>`; }
 }
 function beheerTeken(){
@@ -12470,7 +12543,8 @@ function beheerTeken(){
     <td><select id="bh-aanv-${esc(a.oid)}" aria-label="Rol voor ${esc(a.naam||'')}">${rolOpt('werkplaats')}</select> <button class="btn btn-xs btn-primary" onclick="beheerAanvraag('${esc(a.oid)}',false)">Toekennen</button> <button class="btn btn-xs btn-secondary" onclick="beheerAanvraag('${esc(a.oid)}',true)">Weigeren</button></td></tr>`).join('');
   const AUDIT={'uitgenodigd':'uitgenodigd','uitnodiging-gekoppeld':'uitnodiging gebruikt (eerste login)','uitnodiging-ingetrokken':'uitnodiging ingetrokken','rol-gewijzigd':'rol gewijzigd',
     'gedeactiveerd':'gedeactiveerd','gereactiveerd':'gereactiveerd','toegang-aangevraagd':'toegang aangevraagd','aanvraag-toegekend':'aanvraag toegekend','aanvraag-geweigerd':'aanvraag geweigerd',
-    'eigenaar-gekoppeld':'eigenaar gekoppeld','eigenaar-vastgelegd':'eigenaar vastgelegd'};
+    'eigenaar-gekoppeld':'eigenaar gekoppeld','eigenaar-vastgelegd':'eigenaar vastgelegd',
+    'instelling-gewijzigd':'instelling gewijzigd','werkcode-toegekend':'werkcode toegekend','werkcodes-migratie':'werkcodes toegekend (bestaande projecten)'};
   const rn=id=>(g.rollen.find(r=>r.id===id)||{}).naam||id||'';
   const auditR=(au.audit||[]).map(a=>`<tr><td class="bh-opt">${_bhDatum(a.ts)}</td><td>${esc(a.doorNaam||(a.door==='systeem'?'systeem':a.door==='deploy'?'uitrol':''))}</td><td>${esc(AUDIT[a.actie]||a.actie)}</td><td>${esc(a.doelNaam||a.doel||'')}</td><td>${a.oud?esc(rn(a.oud))+' → ':''}${esc(rn(a.nieuw))}</td></tr>`).join('');
   el.innerHTML=`<div class="bh-modus ${g.modus==='afdwingen'?'afdwingen':''}">${modusTekst}</div>
@@ -12484,8 +12558,65 @@ function beheerTeken(){
     ${inv?`<div class="bh-blok"><h4>Openstaande uitnodigingen</h4><table class="bh-tabel"><tbody>${inv}</tbody></table></div>`:''}
     ${aanv?`<div class="bh-blok"><h4>Toegangsaanvragen</h4><table class="bh-tabel"><tbody>${aanv}</tbody></table></div>`:''}
     ${top}
+    ${_bhProjectcode(ikEig)}
     <details class="bh-blok"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Auditlog (laatste ${(au.audit||[]).length})</summary>
       <table class="bh-tabel"><thead><tr><th class="bh-opt">Wanneer</th><th>Door</th><th>Actie</th><th>Wie</th><th>Rol</th></tr></thead><tbody>${auditR||'<tr><td colspan="5">Nog niets.</td></tr>'}</tbody></table></details>`;
+}
+// Beheer → Projectcode: wat staat zichtbaar bij een project (alleen de eigenaar wijzigt), en werkcodes
+// voor bestaande projecten (eenmalig, in volgorde van aanmaakdatum; eerst een proef).
+const _PC_KEUZES=[['offerte','Offertenummer','2026-071'],['werkcode','Werkcode','W26-014'],['beide','Beide','W26-014 · 2026-071']];
+function _bhZonderWerkcode(){ return PROJECT_CODES.filter(p=>p&&p.project_id&&!p.werkcode&&!p._vervallen); }
+function _bhProjectcode(ikEig){
+  const huidig=projCodeModus(), zonder=_bhZonderWerkcode().length;
+  const vb=PROJECT_CODES.find(p=>p&&projOfferteNr(p)&&p.werkcode)||null;
+  const voorbeeld=k=>vb?[k[0]==='offerte'?'':vb.werkcode,k[0]==='werkcode'?'':projOfferteNr(vb)].filter(Boolean).join(' · '):k[2];
+  return `<div class="bh-blok"><h4>Projectcode</h4>
+    <div class="dos-meta" style="margin-bottom:6px">Welke code bij een project staat (lijst, contextbalk, koppelingen, mobiel). Geen nummer bekend → alleen de naam. De technische sleutel en links veranderen niet.</div>
+    <div class="bh-form" role="radiogroup" aria-label="Projectcode tonen als">${_PC_KEUZES.map(k=>`<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="bh-projectcode" value="${k[0]}"${k[0]===huidig?' checked':''}${ikEig?'':' disabled'} onchange="beheerProjectcode(this.value)"> ${k[1]} <span class="code">${esc(voorbeeld(k))}</span></label>`).join('')}</div>
+    ${ikEig?'':'<div class="dos-meta">Alleen de eigenaar kan dit wijzigen.</div>'}
+    <div class="dos-meta" style="margin-top:8px">Werkcodes: ${zonder?`<b>${zonder}</b> project${zonder===1?'':'en'} nog zonder werkcode. <button class="btn btn-xs btn-secondary" onclick="beheerWerkcodes()">Werkcodes toekennen…</button>`:'alle projecten hebben een werkcode.'}</div></div>`;
+}
+async function beheerProjectcode(waarde){
+  const k=_PC_KEUZES.find(x=>x[0]===waarde); if(!k) return;
+  if(!await mtDialog.confirm({title:'Projectcode tonen als',message:`Voor iedereen bij elk project tonen: ${k[1]} (bv. ${k[2]})?`,okLabel:'Wijzigen'})){ beheerTeken(); return; }
+  try{ const j=await beheerApi('/beheer/instelling',{sleutel:'projectcode',waarde}); window.MT_INSTELLINGEN=j.instellingen; try{ localStorage.setItem('mt_instellingen',JSON.stringify(j.instellingen)); }catch(e){} _namenVernieuwd(); }
+  catch(e){ await mtDialog.alert({title:'Projectcode',message:e.message}); }
+  beheerLaad();
+}
+// Volgorde zoals de teller: jaar (uit created), created, project_id. Zonder geldige aanmaakdatum geen
+// werkcode via de migratie (niets gokken): die projecten worden genoemd, eerst de datum invullen.
+const _WC_STUK=40;
+function _bhWerkcodeItems(){
+  const jaarNu=new Date().getFullYear(), goed=[], zonder=[];
+  for(const p of _bhZonderWerkcode()){
+    const c=String(p.created||''), j=Number(c.slice(0,4));
+    if(/^\d{4}-\d{2}-\d{2}$/.test(c)&&j>=2000&&j<=jaarNu) goed.push({project_id:p.project_id,jaar:j,created:c}); else zonder.push(p);
+  }
+  goed.sort((a,b)=>(a.jaar-b.jaar)||a.created.localeCompare(b.created)||a.project_id.localeCompare(b.project_id));
+  return {goed,zonder};
+}
+async function _bhWerkcodeStukken(items,proef){
+  const uit=[];
+  for(let i=0;i<items.length;i+=_WC_STUK){ const j=await beheerApi('/teller/werkcode/batch',{items:items.slice(i,i+_WC_STUK),proef:proef||undefined}); uit.push(...j.uit); if(proef) break; }
+  return uit;
+}
+async function beheerWerkcodes(){
+  slaProjectenOp();   // project_id's eerst vastleggen in de opslag (de werkcode hangt eraan)
+  const {goed,zonder}=_bhWerkcodeItems();
+  const zonderTxt=zonder.length?`\n\n${zonder.length} project${zonder.length===1?'':'en'} zonder aanmaakdatum (eerst invullen, nu overgeslagen): ${zonder.slice(0,5).map(p=>projNaamVol(p)).join(', ')}${zonder.length>5?', …':''}`:'';
+  if(!goed.length) return mtDialog.alert({title:'Werkcodes',message:'Geen projecten om een werkcode te geven.'+zonderTxt});
+  let proef; try{ proef=await _bhWerkcodeStukken(goed,true); }catch(e){ return mtDialog.alert({title:'Werkcodes',message:e.message}); }
+  const nieuw=proef.filter(u=>u.nieuw), voorbeeld=nieuw.slice(0,6).map(u=>`${u.werkcode}  ${projNaamVol(projVind(u.project_id))}`).join('\n');
+  if(!await mtDialog.confirm({title:'Werkcodes toekennen',message:`${goed.length} project${goed.length===1?'':'en'} krijg${goed.length===1?'t':'en'} een werkcode, in volgorde van aanmaakdatum. Voorlopig (kan schuiven als er intussen een project bijkomt):\n${voorbeeld}${goed.length>6?'\n…':''}\n\nEen werkcode wordt nooit hergebruikt.${zonderTxt}`,okLabel:'Toekennen'})) return;
+  let echt=[];
+  try{ echt=await _bhWerkcodeStukken(goed,false); }
+  catch(e){ await mtDialog.alert({title:'Werkcodes',message:e.message+'\n\nWat al is toegekend blijft staan; opnieuw proberen is veilig.'}); }
+  if(echt.length){
+    _werkcodesZet(Object.fromEntries(echt.map(u=>[u.project_id,u.werkcode])));
+    const n=echt.filter(u=>u.nieuw).length;
+    await mtDialog.alert({title:'Werkcodes toegekend',message:`${n} werkcode${n===1?'':'s'} toegekend:\n`+echt.filter(u=>u.nieuw).slice(0,8).map(u=>`${u.werkcode}  ${projNaamVol(projVind(u.project_id))}`).join('\n')+(n>8?'\n…':'')});
+  }
+  beheerLaad();
 }
 async function beheerRol(oid,rol,sel){
   const u=_bh&&_bh.g.gebruikers.find(x=>x.oid===oid);

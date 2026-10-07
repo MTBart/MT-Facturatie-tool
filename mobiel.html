@@ -2474,6 +2474,10 @@ function mProjNaam(p) {
   return echt(i && i.naam) || echt(p.name) || 'Project zonder naam';
 }
 function mProjKort(p) { return mProjNr(p) || mProjNaam(p); }
+async function mInstellingenLaad() {
+  if (_demoMode || !_msAccount) return;
+  try { const r = await fetch(WORKER + '/instellingen', { headers: await authHeader() }); if (r.ok) window.MT_INSTELLINGEN = await r.json(); } catch (e) {}
+}
 function allProjects() {
   if (REAL_PROJECTS.length) {
     // Echte Track-projecten + user-projecten; mock-projecten verbergen
@@ -2740,7 +2744,7 @@ async function loadRealProjects() {
     REAL_PROJECTS.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nl'));
     // Sync user-projecten + adres-overlay van SP (merge)
     await spSyncUserProjects();
-    await spSyncProjInfo();
+    await Promise.all([spSyncProjInfo(), mInstellingenLaad()]);
     spSyncAddr().then(() => renderProjectCards());
     // Herrender
     renderPickerList(allProjects());

@@ -5,6 +5,12 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Merge v2.6.1-weergave (geen generator-code zichtbaar) in main met P2
+- Commit: `c5da69b` | Auteur: Bart Witte
+
+## 2026-10-07 — v2.6.1 weergave: geen generator-code meer zichtbaar (besluit Bart)
+- Commit: `15c9366` | Auteur: Bart Witte
+
 ## 2026-10-07 — Projectnummering P2: project_id + dual-read via projVind
 - Commit: `3065fa8` | Auteur: Bart Witte
 

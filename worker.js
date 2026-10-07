@@ -1385,6 +1385,106 @@ export class MtActies {
   async alarm() { await this.state.storage.deleteAll(); }
 }
 
+// ── Werkcode-teller (projectnummering) ────────────────────────────────────────
+// Elk project krijgt een eigen werkcode W<jj>-<nnn> (bv. W26-014): per jaar doorlopend, nooit
+// hergebruikt, en idempotent per project_id (zelfde project = zelfde code, ook bij herhalen of
+// vanaf twee pc's tegelijk). Eén Durable Object houdt de teller; opslag daarin is geserialiseerd
+// (blockConcurrencyWhile), dus lezen + ophogen + vastleggen is atomair. Bewust GEEN KV-terugval:
+// KV is eventually consistent en zou dubbele nummers kunnen geven → zonder binding 503.
+// Bestaande projecten: in volgorde van (jaar, created, project_id), in stukken van hooguit 40; elk stuk
+// wordt in één schrijfactie vastgelegd (alles of niets). De cockpit stuurt de stukken gesorteerd en na
+// elkaar; een afgebroken migratie is veilig te herhalen (idempotent per project_id). `proef` laat zien
+// wat er nu zou gebeuren zonder iets vast te leggen (indicatief: andere uitgifte tussendoor kan schuiven).
+const WERKCODE_PID_RE = /^p_[0-9a-z]{4,40}$/;
+const WERKCODE_BATCH_MAX = 40;          // × 3 sleutels + tellers ≤ 128 sleutels per put (DO-limiet)
+function jaarNu() { return Number(new Intl.DateTimeFormat('en', { timeZone: 'Europe/Amsterdam', year: 'numeric' }).format(new Date())); }
+export class MtTeller {
+  constructor(state) { this.state = state; }
+  async fetch(request) {
+    const op = new URL(request.url).pathname.slice(1);
+    let b = {}; try { b = await request.json(); } catch {}
+    const st = this.state.storage, antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    if (op === 'alle') {
+      const m = await st.list({ prefix: 'pid:' }), werkcodes = {};
+      for (const [k, w] of m) werkcodes[k.slice(4)] = w.code;
+      return antw({ werkcodes });
+    }
+    if (op !== 'ken' && op !== 'proef') return antw({ error: 'onbekend' }, 404);
+    const items = (Array.isArray(b.items) ? b.items : []).slice();
+    if (b.sorteer) items.sort((x, y) => (x.jaar - y.jaar) || String(x.created || '').localeCompare(String(y.created || '')) || String(x.project_id).localeCompare(String(y.project_id)));
+    const uit = await this.state.blockConcurrencyWhile(async () => {
+      const res = [], teller = {}, gezien = new Map(), nieuweCodes = new Set(), schrijf = {}, ts = Date.now();
+      for (const it of items) {
+        const pid = String(it.project_id);
+        const bestaand = gezien.get(pid) || ((await st.get('pid:' + pid)) || {}).code;
+        if (bestaand) { res.push({ project_id: pid, werkcode: bestaand, nieuw: false }); gezien.set(pid, bestaand); continue; }
+        const jaar = String(it.jaar), jj = jaar.slice(-2);   // teller per volledig jaar; code toont twee cijfers
+        if (!(jaar in teller)) teller[jaar] = (await st.get('n:' + jaar)) || 0;
+        let code;
+        do { teller[jaar]++; code = `W${jj}-${String(teller[jaar]).padStart(3, '0')}`; } while (nieuweCodes.has(code) || await st.get('code:' + code));   // nooit een bestaande code
+        nieuweCodes.add(code); gezien.set(pid, code);
+        Object.assign(schrijf, { ['n:' + jaar]: teller[jaar], ['pid:' + pid]: { code, ts }, ['code:' + code]: pid });
+        res.push({ project_id: pid, werkcode: code, nieuw: true });
+      }
+      if (op === 'ken' && Object.keys(schrijf).length) {
+        if (Object.keys(schrijf).length > 128) throw new Error('te-veel-sleutels');
+        await st.put(schrijf);   // alles in één keer: een afgebroken verzoek legt niets half vast
+      }
+      return res;
+    }).catch(e => ({ fout: String(e.message || e) }));
+    if (uit && uit.fout) return antw({ error: uit.fout }, 400);
+    return antw({ uit, proef: op === 'proef' || undefined });
+  }
+}
+// Centrale instellingen (KV MT_ROLLEN `instelling:<sleutel>`); alleen bekende sleutels/waarden.
+const INSTELLINGEN = { projectcode: { naam: 'Projectcode tonen als', waarden: ['offerte', 'werkcode', 'beide'], standaard: 'offerte' } };
+async function leesInstellingen(env) {
+  const uit = {};
+  for (const [k, d] of Object.entries(INSTELLINGEN)) { const r = await kvJson(env, 'instelling:' + k); uit[k] = r && d.waarden.includes(r.waarde) ? r.waarde : d.standaard; }
+  return uit;
+}
+async function handleTeller(p, request, env, ik, json) {
+  if (!ik.rol) return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+  const m = request.method, R = RECHTEN[ik.rol];
+  if (p === '/instellingen' && m === 'GET') return json(await leesInstellingen(env));
+  const ns = env.MT_TELLER;
+  if (!ns || !ns.idFromName) return json({ error: 'geen-teller', uitleg: 'Durable Object-binding MT_TELLER ontbreekt (zie wrangler.toml)' }, 503);
+  const stub = ns.get(ns.idFromName('werkcode'));
+  const doe = async (op, b) => { const r = await stub.fetch('https://mt-teller/' + op, { method: 'POST', body: JSON.stringify(b || {}) }); return { status: r.status, j: await r.json() }; };
+  if (p === '/teller/werkcodes' && m === 'GET') { const r = await doe('alle'); return json(r.j, r.status); }
+  if (m !== 'POST' || (p !== '/teller/werkcode' && p !== '/teller/werkcode/batch')) return json({ error: 'onbekende-route' }, 404);
+  // Nummers uitgeven: in élke modus afgedwongen (een verbruikt nummer komt nooit terug).
+  if (R.projecten !== 'wijzigen') return json({ error: 'geen-toegang', reden: 'projecten-wijzigen' }, 403);
+  let body = {}; try { body = await request.json(); } catch {}
+  const door = { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email };
+  if (p === '/teller/werkcode') {
+    const pid = String((body && body.project_id) || '');
+    if (!WERKCODE_PID_RE.test(pid)) return json({ error: 'ongeldig-project_id' }, 400);
+    const r = await doe('ken', { items: [{ project_id: pid, jaar: jaarNu() }] });   // nieuw project: jaar van nu (server)
+    if (r.status !== 200) return json(r.j, r.status);
+    const u = r.j.uit[0];
+    if (u.nieuw) await audit(env, { ...door, actie: 'werkcode-toegekend', doel: pid, doelNaam: u.werkcode, nieuw: u.werkcode });
+    return json(u);
+  }
+  // Bestaande projecten (eenmalige migratie, of nagekomen projecten): alleen beheer.
+  if (!R.beheer) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
+  const items = body && Array.isArray(body.items) ? body.items : null;
+  if (!items || !items.length || items.length > WERKCODE_BATCH_MAX) return json({ error: 'ongeldige-items' }, 400);
+  const nu = jaarNu(), schoon = [];
+  for (const x of items) {
+    const pid = String((x && x.project_id) || ''), created = String((x && x.created) || ''), jaar = Number(created.slice(0, 4));
+    // Bestaand project: het jaar komt uit de aanmaakdatum (verplicht) — zonder geldige datum geen gok.
+    if (!WERKCODE_PID_RE.test(pid) || !/^\d{4}-\d{2}-\d{2}$/.test(created) || jaar < 2000 || jaar > nu || (x.jaar != null && Number(x.jaar) !== jaar)) return json({ error: 'ongeldig-item', project_id: pid }, 400);
+    schoon.push({ project_id: pid, jaar, created });
+  }
+  const r = await doe(body.proef ? 'proef' : 'ken', { items: schoon, sorteer: true });
+  if (r.status === 200 && !body.proef) {
+    const n = r.j.uit.filter(u => u.nieuw).length;
+    if (n) await audit(env, { ...door, actie: 'werkcodes-migratie', doel: 'werkcodes', doelNaam: n + ' project' + (n === 1 ? '' : 'en'), nieuw: r.j.uit.filter(u => u.nieuw).map(u => u.werkcode).join(', ').slice(0, 300) });
+  }
+  return json(r.j, r.status);
+}
+
 // ── /me, /toegang en /beheer/* ────────────────────────────────────────────────
 function meAntwoord(env, ik, payload) {
   return {
@@ -1500,6 +1600,19 @@ async function handleBeheer(pathname, request, env, ik, json) {
     await audit(env, { ...door, actie: 'aanvraag-toegekend', doel: oid, doelNaam: a.naam, nieuw: rol });
     return json({ ok: true, gebruiker: rec });
   }
+  // Centrale instelling wijzigen (alle pc's lezen hem bij het laden via /instellingen): alleen de eigenaar.
+  if (p === '/beheer/instelling' && m === 'POST') {
+    if (ik.rol !== 'eigenaar') return json({ error: 'alleen-eigenaar' }, 403);
+    const b = await body(), d = b && INSTELLINGEN[b.sleutel];
+    if (!d || !d.waarden.includes(b.waarde)) return json({ error: 'ongeldige-instelling' }, 400);
+    const alle = await leesInstellingen(env), oud = alle[b.sleutel];
+    if (oud !== b.waarde) {
+      await kvZet(env, 'instelling:' + b.sleutel, { waarde: b.waarde, ts: Date.now(), door: ik.oid });
+      await audit(env, { ...door, actie: 'instelling-gewijzigd', doel: b.sleutel, doelNaam: d.naam, oud, nieuw: b.waarde });
+    }
+    // De zojuist geschreven waarde teruggeven (KV is eventually consistent; andere pc's volgen binnen ±1 min).
+    return json({ ok: true, instellingen: { ...alle, [b.sleutel]: b.waarde } });
+  }
   if (p === '/beheer/audit' && m === 'GET') {
     const n = Math.max(1, Math.min(500, parseInt(new URL(request.url).searchParams.get('limit') || '100', 10) || 100));
     return json({ audit: await lijstKV(env, 'audit:', n) });
@@ -1560,6 +1673,8 @@ export default {
       if (url.pathname === '/toegang') return await handleToegang(request, env, ik, msPayload, json);
       // Gebruikersbeheer: in élke modus afgedwongen.
       if (url.pathname.startsWith('/beheer/')) return await handleBeheer(url.pathname, request, env, ik, json);
+      // Werkcode-teller en centrale instellingen: eigen routes (zie handleTeller).
+      if (url.pathname === '/instellingen' || url.pathname.startsWith('/teller/')) return await handleTeller(url.pathname, request, env, ik, json);
 
       const isTrack = url.pathname === '/track' || url.pathname.startsWith('/track/');
       const isDash = url.pathname.startsWith('/dashboard/');
