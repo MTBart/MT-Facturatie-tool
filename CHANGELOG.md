@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Release v2.3: koppel-badges; vorige versie v2.2 als vaste backup
+- Commit: `7626571` | Auteur: Bart Witte
+
 ## 2026-10-07 — Koppel-badge: altijd lichte pillen, namen in plaats van ids, projectmap eerst popover
 - Commit: `91cc7ee` | Auteur: Bart Witte
 

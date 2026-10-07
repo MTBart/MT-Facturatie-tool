@@ -146,10 +146,17 @@ cockpit / app (browser, MSAL-login @mortiseandtenon.nl)
 
 ### Weg 1 — de Worker (`worker.js`)
 
-Auth per request: **`X-Auth-Token`** (MSAL-JWT; Worker valideert handtekening
-tegen tenant `15b652c3…` + client `a091db96…`) óf **`X-Claude-Key`**
-(server-side scripts, secret `CLAUDE_SECRET`). CORS alleen voor
-`https://mtbart.github.io`.
+Auth per request: **`X-Auth-Token`** (MSAL-ID-token; Worker controleert
+handtekening RS256/kid, exp, nbf, tid, iss (v2, tenant `15b652c3…`), aud
+(client `a091db96…`) en oid). De `X-Claude-Key`-bypass is weg (F1b, geen
+gebruiker gevonden). CORS alleen voor `https://mtbart.github.io`.
+
+**Rollen (F1):** rol per oid in KV `MT_ROLLEN` (Eigenaar / Beheerder / Kantoor /
+Werkplaats / Alleen lezen), `requirePermission` per target. Modus `ROLLEN_MODUS`:
+`uit` | `log` (alles door, "zou geweigerd" loggen + dagteller) | `afdwingen` (403).
+Extra routes: `GET /me` (rol + rechten), `POST /toegang` (toegang aanvragen),
+`/beheer/*` (gebruikers, uitnodigen, rol, (de)activeren, audit, log) — beheer en
+`/track/online|usage` zijn in elke modus alleen voor Eigenaar/Beheerder.
 
 | `?target=` | Doet | Token |
 |---|---|---|

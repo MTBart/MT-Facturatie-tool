@@ -1,21 +1,30 @@
 const TENANT_ID = '15b652c3-ff53-433f-a29d-e9626cbafb41';
 const CLIENT_ID = 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb';
 const JWKS_URL = `https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys`;
+const ISSUER = `https://login.microsoftonline.com/${TENANT_ID}/v2.0`;   // v2-ID-token van onze tenant
+const KLOK_MARGE_S = 300;                                                // speling voor nbf (klokverschil)
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Usage-/presence-tracking: alleen deze e-mail mag de admin-leesroutes
-// (/track/online, /track/usage). Schrijfroutes (/track, /track/heartbeat)
-// mogen alle ingelogde @mortiseandtenon.nl-gebruikers.
-const TRACK_ADMIN = 'bart@mortiseandtenon.nl';
+// Usage-/presence-tracking: de admin-leesroutes (/track/online, /track/usage) zijn
+// voor rollen met beheerrecht (F1: Eigenaar/Beheerder). Schrijfroutes: iedereen
+// die is ingelogd (in modus 'afdwingen': iedereen met een rol).
 
 let jwksCache = null;
 let jwksCacheTime = 0;
+let jwksVerversTijd = 0;
 
-async function getJwks() {
-  if (jwksCache && (Date.now() - jwksCacheTime) < 3600000) return jwksCache;
-  const resp = await fetch(JWKS_URL);
-  jwksCache = (await resp.json()).keys;
-  jwksCacheTime = Date.now();
-  return jwksCache;
+// JWKS 1 uur cachen; onbekende kid → hooguit eens per 5 min opnieuw ophalen (sleutelrotatie).
+async function getJwks(verversen) {
+  if (jwksCache && !verversen && (Date.now() - jwksCacheTime) < 3600000) return jwksCache;
+  if (verversen && jwksCache && Date.now() - jwksVerversTijd < 300000) return jwksCache;
+  if (verversen) jwksVerversTijd = Date.now();
+  // Mislukte/rare respons → oude cache houden (niet een uur lang een lege sleutellijst).
+  try {
+    const resp = await fetch(JWKS_URL);
+    const keys = resp.ok ? (await resp.json()).keys : null;
+    if (Array.isArray(keys) && keys.length) { jwksCache = keys; jwksCacheTime = Date.now(); }
+  } catch {}
+  return jwksCache || [];
 }
 
 function b64urlDecode(str) {
@@ -24,37 +33,47 @@ function b64urlDecode(str) {
   return Uint8Array.from(atob(pad), c => c.charCodeAt(0));
 }
 
-// Valideert het MSAL-token en geeft de JWT-payload terug (of null).
-// De payload is nodig voor per-user token-mapping (F1): e-mailclaim → secret.
-async function validateToken(token) {
+// Valideert het MSAL-ID-token streng (F1a) → {payload} of {fout: reden}.
+// Handtekening (RS256, kid uit JWKS), exp, nbf (met klokmarge), tid, iss (v2 van
+// onze tenant), aud (onze app) en een oid (vaste gebruikers-id voor de rol).
+async function checkToken(token, nu = Date.now()) {
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3) return { fout: 'vorm' };
     const header  = JSON.parse(new TextDecoder().decode(b64urlDecode(parts[0])));
     const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(parts[1])));
-    if (payload.exp * 1000 < Date.now()) return null;
-    if (payload.tid !== TENANT_ID) return null;
-    if (payload.aud !== CLIENT_ID) return null;
-    const keys = await getJwks();
-    const jwk = keys.find(k => k.kid === header.kid);
-    if (!jwk) return null;
+    if (header.alg !== 'RS256' || !header.kid) return { fout: 'alg' };
+    const sec = Math.floor(nu / 1000);
+    if (typeof payload.exp !== 'number' || payload.exp <= sec) return { fout: 'verlopen' };
+    if (typeof payload.nbf === 'number' && payload.nbf > sec + KLOK_MARGE_S) return { fout: 'nbf' };
+    if (payload.tid !== TENANT_ID) return { fout: 'tid' };
+    if (payload.iss !== ISSUER) return { fout: 'iss' };
+    if (payload.aud !== CLIENT_ID) return { fout: 'aud' };
+    if (!GUID_RE.test(String(payload.oid || ''))) return { fout: 'oid' };
+    let jwk = (await getJwks()).find(k => k.kid === header.kid);
+    if (!jwk) jwk = (await getJwks(true)).find(k => k.kid === header.kid);
+    if (!jwk || jwk.kty !== 'RSA' || (jwk.use && jwk.use !== 'sig')) return { fout: 'kid' };
     const cryptoKey = await crypto.subtle.importKey(
-      'jwk', jwk,
+      'jwk', { kty: 'RSA', n: jwk.n, e: jwk.e, alg: 'RS256', ext: true },
       { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
       false, ['verify']
     );
     const data = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
     const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, b64urlDecode(parts[2]), data);
-    return ok ? payload : null;
+    return ok ? { payload } : { fout: 'handtekening' };
   } catch(e) {
-    return null;
+    return { fout: 'ongeldig' };
   }
+}
+// Compat: payload of null. De payload is ook nodig voor per-user token-mapping (e-mailclaim → secret).
+async function validateToken(token) {
+  const r = await checkToken(token);
+  return r.payload || null;
 }
 
 // F1: per-user Toggl-token. E-mail uit het MSAL-token → Worker-secret
 // `<prefix>_<NAAM>` (bv. TOGGL_KEY_ARJAN voor arjan@mortiseandtenon.nl).
-// Geen persoonlijk secret gezet (of geen MS-login, bv. X-Claude-Key) →
-// fallback naar het gedeelde secret. toggl_reports blijft bewust op het
+// Geen persoonlijk secret gezet → fallback naar het gedeelde secret. toggl_reports blijft bewust op het
 // admin-token (aggregeert over alle workspace-gebruikers).
 function userKey(env, prefix, fallback, payload) {
   const email = (payload && (payload.preferred_username || payload.upn || payload.email)) || '';
@@ -76,15 +95,14 @@ function clip(v, n) {
 
 // ── Tracking-routes ───────────────────────────────────────────────────────────
 // Pad-gebaseerd (/track, /track/heartbeat, /track/online, /track/usage) i.t.t. de
-// ?target=-routes hierboven. Zelfde auth (MSAL of server-key) is al gevalideerd
-// vóór dit punt. Schrijfroutes: alle ingelogde gebruikers. Leesroutes: admin-only.
+// ?target=-routes hierboven. Het MSAL-token is al gevalideerd vóór dit punt.
+// Schrijfroutes: alle ingelogde gebruikers. Leesroutes: rollen met beheerrecht (isAdmin).
 // Faalt nooit hard op ontbrekende bindings — tracking mag de tool niet ophouden.
-async function handleTrack(pathname, request, env, msPayload, cors) {
+async function handleTrack(pathname, request, env, msPayload, cors, isAdmin) {
   const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
     status, headers: { 'Content-Type': 'application/json', ...cors }
   });
   const email = tokenEmail(msPayload);
-  const isAdmin = email === TRACK_ADMIN;
 
   // POST /track — batch events wegschrijven naar D1.
   if (pathname === '/track' && request.method === 'POST') {
@@ -599,8 +617,379 @@ async function handleDashboard(pathname, request, env, msPayload, cors) {
   return json({ error: 'unknown-dashboard-route' }, 404);
 }
 
+// ══ ROLLEN (F1a/F1b) ═════════════════════════════════════════════════════════
+// Rol per Entra-gebruiker (oid) in KV `MT_ROLLEN`; de worker dwingt af per target.
+// Modus (worker-var ROLLEN_MODUS): 'uit' | 'log' (standaard: alles door, wel loggen
+// wat geweigerd zóu worden) | 'afdwingen'. /beheer/* en de admin-leesroutes van
+// /track zijn in élke modus beperkt (die waren al beperkt of zijn nieuw).
+// KV-schema:
+//   user:{oid}     {oid, role, active, email, naam, createdBy, createdAt, updatedAt, lastSeen}
+//   invite:{email} {email, role, naam, createdBy, createdAt, verloopt}   (TTL 30 dagen)
+//   aanvraag:{oid} {oid, email, naam, bericht, ts}                       (TTL 30 dagen)
+//   audit:{omgekeerde ts}:{rand}  één wijziging, nieuwste eerst          (TTL 400 dagen)
+//   stat:{yyyy-mm-dd}  teller "zou geweigerd zijn" (log-modus)           (TTL 35 dagen)
+// Eigenaar: OWNER_OID (worker-var/secret) is altijd eigenaar en is via de API niet
+// te wijzigen. Zolang OWNER_OID ontbreekt geeft OWNER_EMAIL tijdelijk de eigenaarsrol
+// (niets opgeslagen, dus geen race); /me toont dan de oid om als OWNER_OID te zetten.
+const ROLLEN = ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen'];
+const ROL_NAAM = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', kantoor: 'Kantoor', werkplaats: 'Werkplaats', lezen: 'Alleen lezen' };
+// De matrix (ontwerp F1). Ook naar de front-end via /me (alleen UI-gemak; de worker beslist).
+const RECHTEN = {
+  eigenaar:   { projecten: 'wijzigen', inbox: 'alles',     offertes: 'wijzigen', moneybird: 'concepten', uren: 'alles',       verbeterpunten: 'alles',   ai: 'ja',      beheer: 'alles' },
+  beheerder:  { projecten: 'wijzigen', inbox: 'alles',     offertes: 'wijzigen', moneybird: 'concepten', uren: 'alles',       verbeterpunten: 'alles',   ai: 'ja',      beheer: 'beheren' },
+  kantoor:    { projecten: 'wijzigen', inbox: 'verwerken', offertes: 'wijzigen', moneybird: 'concepten', uren: 'team',        verbeterpunten: 'beheren', ai: 'ja',      beheer: null },
+  werkplaats: { projecten: 'lezen',    inbox: null,        offertes: null,       moneybird: null,        uren: 'eigen',       verbeterpunten: 'maken',   ai: 'beperkt', beheer: null },
+  lezen:      { projecten: 'lezen',    inbox: null,        offertes: 'lezen',    moneybird: 'lezen',     uren: 'eigen-lezen', verbeterpunten: 'lezen',   ai: null,      beheer: null },
+};
+const ROLLEN_MODI = ['uit', 'log', 'afdwingen'];
+const AI_BEPERKT_MAX_TOKENS = 1024;      // werkplaats: AI "beperkt"
+const LOG_FLUSH_MS = 5 * 60 * 1000;      // teller hooguit eens per 5 min naar KV (KV-schrijflimiet)
+const LASTSEEN_MS = 60 * 60 * 1000;      // "laatst gezien" hooguit eens per uur
+const CACHE_MS = 60 * 1000;              // gebruikersrecord per isolate 60 s in geheugen
+const DAG_S = 86400;
+
+function rollenModus(env) {
+  const m = String((env && env.ROLLEN_MODUS) || 'log').trim().toLowerCase();
+  return ROLLEN_MODI.includes(m) ? m : 'log';
+}
+async function kvJson(env, key) {
+  if (!env.MT_ROLLEN) return null;
+  try { const v = await env.MT_ROLLEN.get(key); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+async function kvZet(env, key, val, opts) {
+  if (!env.MT_ROLLEN) return;
+  await env.MT_ROLLEN.put(key, JSON.stringify(val), opts || {});
+}
+// Korte, niet-omkeerbare oid-hash voor logregels (geen PII in de logs).
+async function oidHash(oid) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('mt-rol:' + String(oid || '')));
+  return [...new Uint8Array(d)].slice(0, 5).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function randHex(n) { return [...crypto.getRandomValues(new Uint8Array(n))].map(b => b.toString(16).padStart(2, '0')).join(''); }
+// Append-only audit: elke wijziging een eigen sleutel (nooit overschrijven), nieuwste eerst bij list().
+async function audit(env, e) {
+  if (!env.MT_ROLLEN) return;
+  const ts = Date.now();
+  const key = `audit:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`;
+  try { await kvZet(env, key, { ts, ...e }, { expirationTtl: 400 * DAG_S }); } catch {}
+}
+
+const _gebruikerCache = new Map();   // oid -> {rec, t}
+async function leesGebruiker(env, oid) {
+  const c = _gebruikerCache.get(oid);
+  if (c && Date.now() - c.t < CACHE_MS) return c.rec;
+  const rec = await kvJson(env, 'user:' + oid);
+  _gebruikerCache.set(oid, { rec, t: Date.now() });
+  return rec;
+}
+async function schrijfGebruiker(env, rec) {
+  await kvZet(env, 'user:' + rec.oid, rec);
+  _gebruikerCache.set(rec.oid, { rec, t: Date.now() });
+}
+function nieuweGebruiker(oid, role, email, naam, door) {
+  const nu = Date.now();
+  return { oid, role, active: true, email: email || '', naam: clip(naam, 80) || email || '', createdBy: door || '', createdAt: nu, updatedAt: nu, lastSeen: nu };
+}
+const waitUntil = (ctx, p) => { try { if (ctx && ctx.waitUntil) ctx.waitUntil(p); else p.catch(() => {}); } catch {} };
+
+// Rol van de ingelogde gebruiker → {rol, rec, reden}. Koppelt bij eerste login een
+// uitnodiging (invite:{email}) aan de oid. OWNER_EMAIL: tijdelijk, zonder opslag.
+async function bepaalRol(env, payload, ctx) {
+  const oid = payload.oid, email = tokenEmail(payload), naam = payload.name || '';
+  let rec = await leesGebruiker(env, oid);
+  if (rec && Date.now() - (rec.lastSeen || 0) > LASTSEEN_MS) {
+    rec = { ...rec, lastSeen: Date.now() };
+    waitUntil(ctx, schrijfGebruiker(env, rec).catch(() => {}));
+  }
+  if (env.OWNER_OID && oid === env.OWNER_OID) {
+    if (!rec && env.MT_ROLLEN) {
+      rec = nieuweGebruiker(oid, 'eigenaar', email, naam, 'OWNER_OID');
+      await schrijfGebruiker(env, rec);
+      await audit(env, { actie: 'eigenaar-vastgelegd', door: 'systeem', doel: oid, doelNaam: rec.naam, nieuw: 'eigenaar' });
+    }
+    return { rol: 'eigenaar', rec, eigenaarVast: true };
+  }
+  if (rec) {
+    if (rec.active === false) return { rol: null, rec, reden: 'gedeactiveerd' };
+    return ROLLEN.includes(rec.role) ? { rol: rec.role, rec } : { rol: null, rec, reden: 'onbekende-rol' };
+  }
+  if (!env.OWNER_OID && env.OWNER_EMAIL && email && email === String(env.OWNER_EMAIL).trim().toLowerCase()) {
+    return { rol: 'eigenaar', rec: null, tijdelijk: true };
+  }
+  if (!env.MT_ROLLEN) return { rol: null, rec: null, reden: 'geen-rollen-opslag' };
+  const inv = email ? await kvJson(env, 'invite:' + email) : null;
+  if (inv && ROLLEN.includes(inv.role) && (!inv.verloopt || inv.verloopt > Date.now())) {
+    rec = nieuweGebruiker(oid, inv.role, email, inv.naam || naam, inv.createdBy);
+    await schrijfGebruiker(env, rec);
+    try { await env.MT_ROLLEN.delete('invite:' + email); } catch {}
+    try { await env.MT_ROLLEN.delete('aanvraag:' + oid); } catch {}
+    await audit(env, { actie: 'uitnodiging-gekoppeld', door: inv.createdBy || 'systeem', doel: oid, doelNaam: rec.naam, nieuw: inv.role });
+    return { rol: inv.role, rec };
+  }
+  return { rol: null, rec: null, reden: 'onbekend' };
+}
+
+// ── Matrix toegepast op worker-targets ────────────────────────────────────────
+// Moneybird-"concepten": alleen wat de app echt aanmaakt (concepten/nieuwe documenten);
+// versturen, betalingen, boeken, contacten wijzigen e.d. vallen erbuiten.
+const MB_CONCEPT = [
+  ['POST',   /^contacts$/],
+  ['POST',   /^documents\/purchase_invoices$/],
+  ['PATCH',  /^documents\/purchase_invoices\/\d+$/],
+  ['DELETE', /^documents\/purchase_invoices\/\d+$/],
+  ['POST',   /^documents\/purchase_invoices\/\d+\/(attachments|notes)$/],
+  ['POST',   /^sales_invoices$/],
+  ['POST',   /^estimates$/],
+  ['PATCH',  /^estimates\/\d+\/bill_estimate$/],
+];
+function mbRest(pad) {
+  const m = /^(\d+)\/([^?#]*)$/.exec(String(pad || '').split(/[?#]/)[0]);
+  return m && m[1] === MB_ADMIN ? m[2].replace(/\.json$/, '').replace(/\/$/, '') : null;
+}
+function mbConcept(methode, pad) {
+  const p = mbRest(pad);
+  return p != null && MB_CONCEPT.some(([m, re]) => m === methode && re.test(p));
+}
+// Toggl-pad → klasse: 'uren' (eigen tijdregistratie), 'uren-team' (rapporten over iedereen),
+// 'planning' (projecten/taken/klanten/statussen/blokken), 'meta' (gebruikers, werkruimtes).
+function togglKlasse(target, pad) {
+  if (target === 'toggl_reports') return 'uren-team';
+  if (target === 'toggl_admin_projects') return 'planning';
+  let p = String(pad || '').split(/[?#]/)[0].replace(/^\/+/, '');
+  if (target === 'toggl_focus') {
+    if (/^reports\//.test(p)) return 'uren-team';
+    p = p.replace(/^organizations\/\d+\/?/, '').replace(/^workspaces\/\d+\/?/, '');
+    if (/^reports\//.test(p)) return 'uren-team';
+    const s = p.split('/')[0];
+    if (['time-entries', 'tracking', 'timer'].includes(s)) return 'uren';
+    if (['users', 'me', 'workspaces', 'organizations', ''].includes(s)) return 'meta';
+    return 'planning';
+  }
+  p = p.replace(/^workspaces\/\d+\/?/, '');
+  if (/^me\/time_entries/.test(p) || /^time_entries/.test(p)) return 'uren';
+  const s = p.split('/')[0];
+  if (['me', 'workspaces', 'organizations', 'users', ''].includes(s)) return 'meta';
+  return 'planning';
+}
+// Centrale toets: mag `rol` deze actie? → {ok, reden?, beperkt?}
+function requirePermission(rol, target, methode, pad) {
+  const R = RECHTEN[rol];
+  const ja = extra => ({ ok: true, ...(extra || {}) }), nee = reden => ({ ok: false, reden });
+  if (!R) return nee('geen-rol');
+  const m = String(methode || 'GET').toUpperCase(), lees = m === 'GET' || m === 'HEAD';
+  switch (target) {
+    case 'claude':
+      return R.ai === 'ja' ? ja() : R.ai === 'beperkt' ? ja({ beperkt: true }) : nee('ai');
+    case 'moneybird_download':
+      return R.moneybird ? ja() : nee('moneybird');
+    case 'moneybird':
+    case 'moneybird_upload': {
+      if (!R.moneybird) return nee('moneybird');
+      if (target === 'moneybird' && lees) return ja();
+      if (R.moneybird !== 'concepten') return nee('moneybird-schrijven');
+      return mbConcept(target === 'moneybird_upload' ? 'POST' : m, pad) ? ja() : nee('moneybird-geen-concept');
+    }
+    case 'toggl':
+    case 'toggl_focus':
+    case 'toggl_reports':
+    case 'toggl_admin_projects': {
+      const k = togglKlasse(target, pad);
+      if (k === 'uren-team') return ['alles', 'team'].includes(R.uren) ? ja() : nee('uren-team');
+      if (k === 'uren') return lees ? (R.uren ? ja() : nee('uren')) : (['alles', 'team', 'eigen'].includes(R.uren) ? ja() : nee('uren-schrijven'));
+      // meta (gebruikers, werkruimtes, organisatie, profiel): lezen mag, schrijven alleen met beheerrecht
+      if (k === 'meta') return lees ? ja() : (R.beheer ? ja() : nee('meta-schrijven'));
+      if (lees) return R.projecten ? ja() : nee('projecten');
+      return R.projecten === 'wijzigen' ? ja() : nee('projecten-schrijven');
+    }
+    case 'dashboard':
+      if (pad === '/dashboard/anker' && !lees) return R.beheer ? ja() : nee('dashboard-anker');
+      return R.moneybird ? ja() : nee('dashboard');
+    case 'track':
+      return ja();
+    case 'track_admin':
+    case 'beheer':
+      return R.beheer ? ja() : nee('beheer');
+  }
+  return nee('onbekend-doel');
+}
+// Pad-hygiëne voor de proxy-targets (in élke modus): geen ../, backslash, // of stuurtekens.
+function veiligPad(pad) {
+  if (pad == null || pad === '') return true;
+  const p = String(pad).split(/[?#]/)[0];
+  let d; try { d = decodeURIComponent(p); } catch { return false; }
+  const slecht = s => /(^|[\/\\])\.{1,2}([\/\\]|$)|\\|\/\/|^\/|[\x00-\x1f]/.test(s);
+  return !slecht(p) && !slecht(d);
+}
+// Actienaam voor log/teller zonder ids, zoektermen of vrije padsegmenten (geen PII):
+// alleen het resourcetype ("POST moneybird:sales_invoices"); onbekende vorm → "?".
+const ACTIE_GROEP = ['documents', 'me', 'reports', 'tracking', 'workspace'];
+function actieNaam(target, methode, pad) {
+  const seg = String(pad || '').split(/[?#]/)[0].split('/')
+    .filter(s => s && !/^\d+$/.test(s) && !['organizations', 'workspaces', 'api', 'v2', 'v9'].includes(s));
+  const ok = x => /^[a-z][a-z_-]{1,39}$/.test(x || '');
+  const res = !seg.length ? '' : !ok(seg[0]) ? '?' : (ACTIE_GROEP.includes(seg[0]) && ok(seg[1]) ? seg[0] + '/' + seg[1] : seg[0]);
+  const m = /^[A-Z]{3,7}$/.test(String(methode || '').toUpperCase()) ? String(methode).toUpperCase() : '?';
+  return `${m} ${target}${res ? ':' + res : ''}`;
+}
+// 'Eigen uren' (werkplaats/lezen) is alleen echt "eigen" met een persoonlijke Toggl-sleutel;
+// met de gedeelde (admin-)sleutel zou je ieders uren zien/wijzigen → dan weigeren.
+function heeftEigenTogglSleutel(env, target, payload) {
+  const prefix = target === 'toggl_focus' ? 'TOGGL_FOCUS_KEY' : 'TOGGL_KEY';
+  return userKey(env, prefix, null, payload) != null;
+}
+
+// Log-teller: in geheugen optellen, hooguit eens per LOG_FLUSH_MS samenvoegen in KV.
+const _teller = { dag: '', totaal: 0, geweigerd: 0, redenen: {}, laatsteFlush: Date.now() };
+async function flushTeller(env) {
+  if (!env.MT_ROLLEN || (!_teller.totaal && !_teller.geweigerd)) return;
+  const dag = _teller.dag, delta = { totaal: _teller.totaal, geweigerd: _teller.geweigerd, redenen: _teller.redenen };
+  _teller.totaal = 0; _teller.geweigerd = 0; _teller.redenen = {}; _teller.laatsteFlush = Date.now();
+  const oud = (await kvJson(env, 'stat:' + dag)) || { totaal: 0, geweigerd: 0, redenen: {} };
+  oud.totaal += delta.totaal; oud.geweigerd += delta.geweigerd;
+  for (const [k, n] of Object.entries(delta.redenen)) {
+    if (oud.redenen[k] != null || Object.keys(oud.redenen).length < 300) oud.redenen[k] = (oud.redenen[k] || 0) + n;
+  }
+  try { await kvZet(env, 'stat:' + dag, oud, { expirationTtl: 35 * DAG_S }); } catch {}
+}
+async function noteerBesluit(env, ctx, b) {
+  const dag = new Date().toISOString().slice(0, 10);
+  if (_teller.dag && _teller.dag !== dag) await flushTeller(env).catch(() => {});
+  _teller.dag = dag;
+  _teller.totaal++;
+  if (!b.ok) {
+    _teller.geweigerd++;
+    const k = `${b.rol || '-'}|${b.actie}|${b.reden}`;
+    if (_teller.redenen[k] != null || Object.keys(_teller.redenen).length < 300) _teller.redenen[k] = (_teller.redenen[k] || 0) + 1;
+    // Alleen oid-hash, rol, target, actie, besluit — geen tokens, e-mail of inhoud.
+    console.log(JSON.stringify({ rollen: b.modus, oid: await oidHash(b.oid), rol: b.rol || '-', target: b.target, actie: b.actie,
+      besluit: b.modus === 'afdwingen' ? 'geweigerd' : 'zou-weigeren', reden: b.reden }));
+  }
+  if (Date.now() - _teller.laatsteFlush > LOG_FLUSH_MS) waitUntil(ctx, flushTeller(env).catch(() => {}));
+}
+
+// ── /me, /toegang en /beheer/* ────────────────────────────────────────────────
+function meAntwoord(env, ik, payload) {
+  return {
+    oid: payload.oid, email: ik.email, naam: (ik.rec && ik.rec.naam) || payload.name || ik.email,
+    rol: ik.rol, rolNaam: ik.rol ? ROL_NAAM[ik.rol] : null, actief: !!ik.rol, reden: ik.rol ? null : (ik.reden || 'onbekend'),
+    modus: rollenModus(env), rechten: ik.rol ? RECHTEN[ik.rol] : null,
+    // Eenmalig handig: eigenaar zonder OWNER_OID ziet zijn oid (bovenaan) om in Cloudflare te zetten.
+    ownerOidNogZetten: ik.rol === 'eigenaar' && !env.OWNER_OID ? true : undefined,
+    tijdelijkeEigenaar: ik.tijdelijk ? true : undefined,
+  };
+}
+async function handleToegang(request, env, ik, payload, json) {
+  if (request.method !== 'POST') return json({ error: 'POST verwacht' }, 405);
+  if (ik.rol) return json({ ok: true, alToegang: true });
+  if (!env.MT_ROLLEN) return json({ ok: false, error: 'geen-rollen-opslag' }, 503);
+  let body = {}; try { body = await request.json(); } catch {}
+  const bestaand = await kvJson(env, 'aanvraag:' + payload.oid);
+  if (bestaand && Date.now() - bestaand.ts < 3600 * 1000) return json({ ok: true, alAangevraagd: true });
+  const a = { oid: payload.oid, email: ik.email, naam: clip(payload.name, 80) || ik.email, bericht: clip(body && body.bericht, 300) || '', ts: Date.now() };
+  await kvZet(env, 'aanvraag:' + payload.oid, a, { expirationTtl: 30 * DAG_S });
+  await audit(env, { actie: 'toegang-aangevraagd', door: payload.oid, doorNaam: a.naam, doel: payload.oid, doelNaam: a.naam });
+  return json({ ok: true });
+}
+async function lijstKV(env, prefix, max = 1000) {
+  if (!env.MT_ROLLEN) return [];
+  const uit = []; let cursor;
+  do {
+    const r = await env.MT_ROLLEN.list({ prefix, cursor, limit: Math.min(1000, max - uit.length) });
+    for (const k of r.keys) { const v = await kvJson(env, k.name); if (v) uit.push(v); if (uit.length >= max) break; }
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor && uit.length < max);
+  return uit;
+}
+const EMAIL_RE = /^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$/;
+// Wie mag wat aan een gebruiker veranderen (beheer-regels bovenop de matrix).
+function magBeheren(env, ik, doel, nieuweRol) {
+  if (nieuweRol != null && !ROLLEN.includes(nieuweRol)) return 'onbekende-rol';
+  if (doel && env.OWNER_OID && doel.oid === env.OWNER_OID) return 'eigenaar-beschermd';
+  if (doel && doel.oid === ik.oid) return 'niet-jezelf';
+  if (ik.rol !== 'eigenaar' && ((doel && doel.role === 'eigenaar') || nieuweRol === 'eigenaar')) return 'alleen-eigenaar-mag-eigenaar';
+  return null;
+}
+async function handleBeheer(pathname, request, env, ik, json) {
+  if (!(RECHTEN[ik.rol] && RECHTEN[ik.rol].beheer)) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
+  if (!env.MT_ROLLEN) return json({ error: 'geen-rollen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt (zie wrangler.toml)' }, 503);
+  const door = { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email };
+  const body = async () => { try { return await request.json(); } catch { return {}; } };
+  const p = pathname, m = request.method;
+
+  if (p === '/beheer/gebruikers' && m === 'GET') {
+    const gebruikers = (await lijstKV(env, 'user:')).map(g => ({ ...g, rolNaam: ROL_NAAM[g.role] || g.role, beschermd: !!(env.OWNER_OID && g.oid === env.OWNER_OID) }));
+    if (env.OWNER_OID && !gebruikers.some(g => g.oid === env.OWNER_OID)) gebruikers.push({ oid: env.OWNER_OID, role: 'eigenaar', rolNaam: 'Eigenaar', active: true, naam: '(eigenaar, nog niet ingelogd)', beschermd: true });
+    return json({ gebruikers, uitnodigingen: await lijstKV(env, 'invite:'), aanvragen: await lijstKV(env, 'aanvraag:'),
+      rollen: ROLLEN.map(r => ({ id: r, naam: ROL_NAAM[r] })), matrix: RECHTEN, modus: rollenModus(env), ik: ik.oid, ikRol: ik.rol });
+  }
+  if (p === '/beheer/uitnodigen' && m === 'POST') {
+    const b = await body(), email = String(b.email || '').trim().toLowerCase(), rol = String(b.rol || '');
+    if (!EMAIL_RE.test(email)) return json({ error: 'ongeldig-email' }, 400);
+    const fout = magBeheren(env, ik, null, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
+    if ((await lijstKV(env, 'user:')).some(g => (g.email || '').toLowerCase() === email)) return json({ error: 'bestaat-al' }, 409);
+    const inv = { email, role: rol, naam: clip(b.naam, 80) || '', createdBy: ik.oid, createdAt: Date.now(), verloopt: Date.now() + 30 * DAG_S * 1000 };
+    await kvZet(env, 'invite:' + email, inv, { expirationTtl: 30 * DAG_S });
+    await audit(env, { ...door, actie: 'uitgenodigd', doel: email, doelNaam: inv.naam || email, nieuw: rol });
+    return json({ ok: true, uitnodiging: inv });
+  }
+  if (p === '/beheer/uitnodiging-intrekken' && m === 'POST') {
+    const email = String((await body()).email || '').trim().toLowerCase();
+    const inv = await kvJson(env, 'invite:' + email); if (!inv) return json({ error: 'niet-gevonden' }, 404);
+    const fout = magBeheren(env, ik, null, inv.role); if (fout) return json({ error: fout }, 403);
+    await env.MT_ROLLEN.delete('invite:' + email);
+    await audit(env, { ...door, actie: 'uitnodiging-ingetrokken', doel: email, oud: inv.role });
+    return json({ ok: true });
+  }
+  if (p === '/beheer/gebruiker' && m === 'POST') {
+    const b = await body(), oid = String(b.oid || '');
+    const doel = await kvJson(env, 'user:' + oid); if (!doel) return json({ error: 'niet-gevonden' }, 404);
+    const nieuweRol = b.rol != null ? String(b.rol) : null, actief = b.actief != null ? !!b.actief : null;
+    const fout = magBeheren(env, ik, doel, nieuweRol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
+    const nieuw = { ...doel, updatedAt: Date.now() };
+    if (nieuweRol != null && nieuweRol !== doel.role) { nieuw.role = nieuweRol; await audit(env, { ...door, actie: 'rol-gewijzigd', doel: oid, doelNaam: doel.naam, oud: doel.role, nieuw: nieuweRol }); }
+    if (actief != null && actief !== (doel.active !== false)) { nieuw.active = actief; await audit(env, { ...door, actie: actief ? 'gereactiveerd' : 'gedeactiveerd', doel: oid, doelNaam: doel.naam }); }
+    await schrijfGebruiker(env, nieuw);
+    return json({ ok: true, gebruiker: nieuw });
+  }
+  if (p === '/beheer/aanvraag' && m === 'POST') {
+    const b = await body(), oid = String(b.oid || '');
+    const a = await kvJson(env, 'aanvraag:' + oid); if (!a) return json({ error: 'niet-gevonden' }, 404);
+    if (b.weigeren) {
+      await env.MT_ROLLEN.delete('aanvraag:' + oid);
+      await audit(env, { ...door, actie: 'aanvraag-geweigerd', doel: oid, doelNaam: a.naam });
+      return json({ ok: true });
+    }
+    const rol = String(b.rol || ''), fout = magBeheren(env, ik, { oid }, rol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
+    if (await kvJson(env, 'user:' + oid)) return json({ error: 'bestaat-al' }, 409);
+    const rec = nieuweGebruiker(oid, rol, a.email, a.naam, ik.oid); rec.lastSeen = a.ts;
+    await schrijfGebruiker(env, rec);
+    await env.MT_ROLLEN.delete('aanvraag:' + oid);
+    await audit(env, { ...door, actie: 'aanvraag-toegekend', doel: oid, doelNaam: a.naam, nieuw: rol });
+    return json({ ok: true, gebruiker: rec });
+  }
+  if (p === '/beheer/audit' && m === 'GET') {
+    const n = Math.max(1, Math.min(500, parseInt(new URL(request.url).searchParams.get('limit') || '100', 10) || 100));
+    return json({ audit: await lijstKV(env, 'audit:', n) });
+  }
+  if (p === '/beheer/log' && m === 'GET') {
+    const dagen = Math.max(1, Math.min(31, parseInt(new URL(request.url).searchParams.get('dagen') || '7', 10) || 7));
+    const tot = { totaal: 0, geweigerd: 0, redenen: {} }, perDag = [];
+    for (let i = 0; i < dagen; i++) {
+      const dag = new Date(Date.now() - i * DAG_S * 1000).toISOString().slice(0, 10);
+      const s = await kvJson(env, 'stat:' + dag); if (!s) continue;
+      perDag.push({ dag, totaal: s.totaal, geweigerd: s.geweigerd });
+      tot.totaal += s.totaal; tot.geweigerd += s.geweigerd;
+      for (const [k, n] of Object.entries(s.redenen || {})) tot.redenen[k] = (tot.redenen[k] || 0) + n;
+    }
+    const top = Object.entries(tot.redenen).sort((a, b) => b[1] - a[1]).slice(0, 25)
+      .map(([k, n]) => { const [rol, actie, reden] = k.split('|'); return { rol, actie, reden, n }; });
+    return json({ modus: rollenModus(env), dagen, totaal: tot.totaal, geweigerd: tot.geweigerd, perDag, top });
+  }
+  return json({ error: 'unknown-beheer-route' }, 404);
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const corsHeaders = {
       'Access-Control-Allow-Origin': 'https://mtbart.github.io',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PATCH, DELETE',
@@ -611,38 +1000,65 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // Valideer: Microsoft-token OF Claude-server-key
+    const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
+      status, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+    // Alleen het Microsoft-token (F1b: de X-Claude-Key-bypass is weg — er was geen gebruiker van).
     const authToken = request.headers.get('X-Auth-Token');
-    const claudeKey = request.headers.get('X-Claude-Key');
-    const validClaude = claudeKey && env.CLAUDE_SECRET && claudeKey === env.CLAUDE_SECRET;
     const msPayload = authToken ? await validateToken(authToken) : null;
-    const validMs = !!msPayload;
-    if (!validClaude && !validMs) {
-      return new Response(JSON.stringify({ error: 'Niet geautoriseerd' }), {
-        status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
+    if (!msPayload) return json({ error: 'Niet geautoriseerd' }, 401);
 
     try {
       const url = new URL(request.url);
+      const modus = rollenModus(env);
+      // Rollen mogen de tool niet platleggen: KV-storing → geen rol (eigenaar via OWNER_OID blijft).
+      let ik;
+      try { ik = await bepaalRol(env, msPayload, ctx); }
+      catch (e) { ik = { rol: env.OWNER_OID && msPayload.oid === env.OWNER_OID ? 'eigenaar' : null, rec: null, reden: 'rollen-fout' }; }
+      ik.oid = msPayload.oid; ik.email = tokenEmail(msPayload);
+
+      // Eigen rol + rechten (front-end: tabs/knoppen verbergen — UI-gemak, geen beveiliging).
+      if (url.pathname === '/me') return json(meAntwoord(env, ik, msPayload));
+      // Toegang aanvragen (onbekende/gedeactiveerde gebruiker) → lijst in Beheer.
+      if (url.pathname === '/toegang') return await handleToegang(request, env, ik, msPayload, json);
+      // Gebruikersbeheer: in élke modus afgedwongen.
+      if (url.pathname.startsWith('/beheer/')) return await handleBeheer(url.pathname, request, env, ik, json);
+
+      const isTrack = url.pathname === '/track' || url.pathname.startsWith('/track/');
+      const isDash = url.pathname.startsWith('/dashboard/');
+      const target = isTrack ? (['/track/online', '/track/usage'].includes(url.pathname) ? 'track_admin' : 'track')
+        : isDash ? 'dashboard' : url.searchParams.get('target');
+      const pad = isTrack || isDash ? url.pathname : (url.searchParams.get('path') || '');
+      if (!isTrack && !isDash && !veiligPad(pad)) return json({ error: 'ongeldig pad' }, 400);
+
+      // Matrix: 'log' = alles door + loggen wat geweigerd zóu worden; 'afdwingen' = weigeren.
+      let beperkt = false;
+      if (modus !== 'uit' && target !== 'track_admin') {
+        let besluit = ik.rol ? requirePermission(ik.rol, target, request.method, pad) : { ok: false, reden: ik.reden || 'geen-rol' };
+        if (besluit.ok && (target === 'toggl' || target === 'toggl_focus') && ['eigen', 'eigen-lezen'].includes(RECHTEN[ik.rol].uren)
+            && togglKlasse(target, pad) === 'uren' && !heeftEigenTogglSleutel(env, target, msPayload)) besluit = { ok: false, reden: 'uren-zonder-eigen-sleutel' };
+        try { await noteerBesluit(env, ctx, { ...besluit, modus, rol: ik.rol, oid: ik.oid, target, actie: actieNaam(target, request.method, pad) }); } catch {}
+        if (!besluit.ok && modus === 'afdwingen') return json({ error: 'geen-toegang', reden: besluit.reden, rol: ik.rol }, 403);
+        beperkt = besluit.ok && !!besluit.beperkt && modus === 'afdwingen';
+      }
 
       // Pad-gebaseerde tracking-routes (los van de ?target=-proxy hieronder).
-      if (url.pathname === '/track' || url.pathname.startsWith('/track/')) {
-        return await handleTrack(url.pathname, request, env, msPayload, corsHeaders);
+      if (isTrack) {
+        return await handleTrack(url.pathname, request, env, msPayload, corsHeaders, !!(RECHTEN[ik.rol] && RECHTEN[ik.rol].beheer));
       }
 
       // Dashboard-routes
-      if (url.pathname.startsWith('/dashboard/')) {
+      if (isDash) {
         return await handleDashboard(url.pathname, request, env, msPayload, corsHeaders);
       }
-
-      const target = url.searchParams.get('target');
 
      if (target === 'claude') {
   const body = await request.text();
   const parsed = JSON.parse(body);
   delete parsed.api_key;
   parsed.stream = true;
+  // Werkplaats: AI "beperkt" → kortere antwoorden.
+  if (beperkt) parsed.max_tokens = Math.min(Number(parsed.max_tokens) || AI_BEPERKT_MAX_TOKENS, AI_BEPERKT_MAX_TOKENS);
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -664,6 +1080,7 @@ export default {
       } else if (target === 'moneybird_download') {
         const factuurId = url.searchParams.get('factuur_id');
         const bijlageId = url.searchParams.get('bijlage_id');
+        if (!/^\d+$/.test(factuurId || '') || !/^\d+$/.test(bijlageId || '')) return json({ error: 'ongeldige id' }, 400);
         const response = await fetch(
           `https://moneybird.com/api/v2/342968480452052559/documents/purchase_invoices/${factuurId}/attachments/${bijlageId}/download`,
           { headers: { 'Authorization': `Bearer ${env.MONEYBIRD_KEY}` } }

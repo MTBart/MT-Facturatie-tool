@@ -38,3 +38,26 @@ database_id = "ad68c685-d15b-403e-882f-232ed594691c"
 [[kv_namespaces]]
 binding = "TRACK_KV"
 id = "c2ccdda50c59470d99ca885acecaff20"
+
+# ─── Rollen (F1a): KV MT_ROLLEN + modus + eigenaar ────────────────────────────
+# Zonder deze binding werkt de Worker door (iedereen "onbekend", eigenaar via
+# OWNER_OID blijft eigenaar, /beheer geeft 503). Stappen (Bart, eenmalig):
+#
+# 1) KV-namespace aanmaken:
+#      wrangler kv namespace create MT_ROLLEN
+#    → zet de geprinte id hieronder i.p.v. VUL_IN en haal de # weg.
+#      (een namespace-id is geen geheim; tokens/secrets horen hier NIET)
+#
+# [[kv_namespaces]]
+# binding = "MT_ROLLEN"
+# id = "VUL_IN"
+#
+# 2) Eigenaar (niet in de repo — als secret):
+#      wrangler secret put OWNER_OID      ← je Entra Object ID (oid)
+#    Weet je je oid nog niet? Tijdelijk (daarna weer weghalen):
+#      wrangler secret put OWNER_EMAIL    ← dit adres is eigenaar zolang OWNER_OID ontbreekt
+#    (niets opgeslagen); open dan <worker>/me ingelogd → "oid" → zet die als OWNER_OID.
+#
+# 3) Modus: 'uit' | 'log' (eerst ±1 week) | 'afdwingen'. Wijzigen = hier aanpassen + deploy.
+[vars]
+ROLLEN_MODUS = "log"
