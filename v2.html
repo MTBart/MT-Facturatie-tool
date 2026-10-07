@@ -25,6 +25,9 @@
 <script src="mt-koppel.js?v=2026-10-07a"></script>
 <script src="mt-inbox.js?v=2026-10-07a"></script>
 <script src="mt-rollen.js?v=2026-10-07a"></script>
+<script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
+<script src="mt-planvoorstel.js?v=2026-10-07a"></script>
+<script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -512,6 +515,11 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .dos-aangepast[hidden]{display:none}
 /* Koppel-badge (B11, Moneybird-stijl): geel/open = niet gekoppeld, groen/dicht = gekoppeld */
 :root{--kb-open-bg:#FFF4D6;--kb-open-fg:#7A5300;--kb-open-rand:#E9C46A;--kb-ok-bg:#E3F1E7;--kb-ok-fg:#1F5C36;--kb-ok-rand:#9CCBAA}
+/* Planvoorstel (F1e) */
+.ag-blok.pv-voorstel{background:repeating-linear-gradient(135deg,rgba(255,255,255,.55) 0 6px,rgba(255,255,255,.2) 6px 12px)!important;color:#3b2f00!important;border:2px dashed #B8962E!important;opacity:.95}
+.pv-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:#FFF4D6;color:#7A5300;border-radius:3px;padding:0 3px}
+.pv-melding{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:6px;margin-bottom:4px;font-size:12.5px}
+.pv-melding.goed{background:#E3F1E7;color:#1F5C36}.pv-melding.af{background:#FDE8E8;color:#8B1A1A}.pv-melding.open{background:#FFF4D6;color:#7A5300}
 /* Beheer (F1c) */
 .bh-tabel{width:100%;border-collapse:collapse;font-size:12.5px}.bh-tabel th,.bh-tabel td{padding:6px 8px;border-bottom:1px solid var(--border,#e3e8e6);text-align:left;vertical-align:middle}
 .bh-tabel th{font-size:11px;color:var(--text-dim);font-weight:600}.bh-tabel select{min-height:32px}.bh-uit{opacity:.55}
@@ -792,7 +800,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('projecten',this)">Projecten</button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('oplevering',this)">Opleveringen</button>
-  <button class="tab-btn" data-recht="projecten" onclick="showTab('agenda',this)">Agenda</button>
+  <button class="tab-btn" data-recht="projecten" onclick="showTab('agenda',this)">Agenda<span id="pv-badge" class="tab-badge" style="display:none" title="Open planvoorstellen"></span></button>
   <button class="tab-btn" data-recht="uren" onclick="showTab('toggl',this)">Uren</button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('voorraad',this)">Voorraad</button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('bestelling',this)">Bestellijst</button>
@@ -814,6 +822,11 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
   <!-- ═══ TAB: DASHBOARD ═══ -->
   <div id="tab-dashboard" class="tab-content active">
+    <div class="card" id="aw-kaart" style="display:none;margin-bottom:1rem">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">Vandaag aanwezig
+        <button class="btn btn-xs btn-secondary" onclick="aanwezigLaad(true)" title="Verversen" aria-label="Aanwezigheid verversen">↻</button></div>
+      <div id="aw-inhoud" style="font-size:13px"></div>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem" id="dash-kpi-row">
       <div class="kpi-card green" style="cursor:default">
         <div class="kpi-label">Omzet dit jaar</div>
@@ -1387,6 +1400,11 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <div class="card-title">Beheer — gebruikers &amp; rollen</div>
       <div id="beheer-inhoud" style="font-size:13px">Laden…</div>
     </div>
+    <div class="card" id="tgk-kaart" data-tgk-kaart style="display:none">
+      <div class="card-title">Koppel je Toggl</div>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Je timer en uren lopen via je eigen Toggl-account. Eén keer koppelen; je sleutel wordt versleuteld bewaard en is voor niemand zichtbaar — ook niet voor beheerders.</p>
+      <span data-tgk-badge></span>
+    </div>
     <div class="grid2">
       <div>
         <div class="card" data-recht="moneybird">
@@ -1616,6 +1634,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="agenda-plan-toolbar" style="display:none;margin-bottom:8px;display:none">
       <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="agenda-plan-actuals" onchange="agPlanRender()"> ✓ toon geklokt (semi-transparant)</label>
     </div>
+    <div id="pv-meldingen" style="margin-bottom:8px"></div>
     <div id="agenda-cap-balk" style="display:none;margin-bottom:8px"></div>
     <div id="agenda-totalen" style="margin-bottom:1rem"></div>
     <div class="card" style="padding:0;overflow:auto;max-height:74vh">
@@ -2758,7 +2777,7 @@ function showTab(name,btn){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   if(btn && btn.classList.contains('tab-btn')) btn.classList.add('active');
-  if(name==='dashboard') laadDashboard();
+  if(name==='dashboard'){ laadDashboard(); if(typeof aanwezigLaad==='function') aanwezigLaad(); }
   if(name==='voorraad') renderVoorraadActief();
   if(name==='historie') renderHistory();
   if(name==='bestelling') renderBestellijst();
@@ -9476,8 +9495,11 @@ const _SP = Object.assign(window.MTCore.makeSP({
       return uit;
     },
     // Planblokken (Agenda → Planning): per id; oude blokken zonder stempel tellen met hun `ts`.
+    // Planvoorstel (F1e): een besloten voorstel (goedgekeurd/afgewezen) wint altijd van een nog
+    // open versie — een late intrekking of oude kopie zet een besluit niet terug.
     mt_planblokken(lokaal, spData) {
-      return _spSamenPerSleutel(lokaal, spData, x => x.id, x => _spTijd(x) || (Date.parse(x && x.ts || '') || 0));
+      const besloten = x => !!(x && x.voorstel && (x.voorstel.goedgekeurd || x.voorstel.afgewezen));
+      return _spSamenPerSleutel(lokaal, spData, x => x.id, x => (_spTijd(x) || (Date.parse(x && x.ts || '') || 0)) + (besloten(x) ? 1e15 : 0));
     },
     // Bestellijst (brok L2): per regel (id; oude regels zonder id → inhoud-id) wint de
     // stand met de nieuwste `_gewijzigd`. Van de lijst halen is een tombstone
@@ -11492,10 +11514,11 @@ async function agPlanRender(){
   const totalH=(agEind-agStart)*agUurPx;
 
   // filter planblokken op persoon/project (pure functie, ook gebruikt door de projecttijdlijn)
-  let blokken=planBlokkenFilter({codes:_agenda.fProj,pers:_agenda.fPers,van:_planYmd(dagen[0]),tot:_planYmd(dagen[6])});
+  let blokken=planBlokkenFilter({codes:_agenda.fProj,pers:_agenda.fPers,van:_planYmd(dagen[0]),tot:_planYmd(dagen[6]),metVoorstel:true});
 
-  // Capaciteits-balk
-  agPlanCapBalk(dagen,blokken,verlof,vrijdagen);
+  // Capaciteits-balk (open voorstellen tellen niet mee)
+  agPlanCapBalk(dagen,blokken.filter(b=>b.status!=='voorstel'),verlof,vrijdagen);
+  if(typeof pvTeken==='function') pvTeken();
 
   // Bouw grid HTML
   let html='<div class="ag-grid" style="--aguur:'+agUurPx+'px">';
@@ -11541,13 +11564,15 @@ async function agPlanRender(){
       const startMin=blok.start?parseInt(blok.start.split(':')[0])*60+parseInt(blok.start.split(':')[1]):agStart*60;
       const topPx=((startMin/60)-agStart)*agUurPx;
       const hPx=(blok.duurMin/60)*agUurPx;
-      html+=`<div class="ag-blok" data-planid="${blok.id}"
+      const isVs=blok.status==='voorstel';
+      html+=`<div class="ag-blok${isVs?' pv-voorstel':''}" data-planid="${esc(blok.id)}"
         style="top:${topPx}px;height:${Math.max(hPx,18)}px;left:4px;right:4px;background:${kleur};z-index:6;cursor:pointer"
-        onclick="event.stopPropagation();agPlanBlokMenu(event,'${blok.id}')"
-        draggable="true" ondragstart="agPlanDragStart(event,'${blok.id}')"
+        onclick="event.stopPropagation();agPlanBlokMenu(event,'${esc(blok.id)}')"
+        ${isVs?`title="Voorstel van ${esc((blok.voorstel&&blok.voorstel.doorNaam)||'')} — nog niet goedgekeurd"`:''}
+        draggable="${isVs?'false':'true'}" ondragstart="agPlanDragStart(event,'${esc(blok.id)}')"
         ondragend="agPlanDragEnd(event)">
-        <b>${blok.taak||blok.project_code||'?'}</b><br>
-        <span style="font-size:9px;opacity:.85">${lid?lid.naam:blok.persoon} · ${blok.start||''} ${blok.duurMin?'('+Math.round(blok.duurMin/60*10)/10+'u)':''}</span>
+        ${isVs?'<span class="pv-label">Voorstel</span> ':''}<b>${esc(blok.taak||blok.project_code||'?')}</b><br>
+        <span style="font-size:9px;opacity:.85">${esc(lid?lid.naam:blok.persoon)} · ${esc(blok.start||'')} ${blok.duurMin?'('+Math.round(blok.duurMin/60*10)/10+'u)':''}</span>
       </div>`;
     });
 
@@ -11582,10 +11607,11 @@ async function agPlanRender(){
 // ── Pure planningsfuncties (B10) — gedeeld door Agenda en projecttijdlijn ──
 // Planblokken filteren op project(en), persoon/personen en datumbereik (ymd, inclusief).
 // Lege set/lijst = alles; met AG_NONE erin wordt (net als in de Agenda) niet gefilterd.
-function planBlokkenFilter({codes=null,pers=null,van=null,tot=null}={}){
+function planBlokkenFilter({codes=null,pers=null,van=null,tot=null,metVoorstel=false}={}){
   const set=x=>x instanceof Set?x:(Array.isArray(x)?new Set(x):null);
   const c=set(codes), p=set(pers);
   let bl=agPlanActief();
+  if(!metVoorstel) bl=bl.filter(b=>b.status!=='voorstel');   // open voorstel = nog niet gepland
   if(van) bl=bl.filter(b=>b.datum>=van);
   if(tot) bl=bl.filter(b=>b.datum<=tot);
   if(p&&p.size&&!p.has(AG_NONE)) bl=bl.filter(b=>p.has(b.persoon));
@@ -11695,16 +11721,40 @@ function agPlanNieuwFormulier(datum,start){
   const duurMin=parseInt(duurStr);
   if(!(duurMin>0)){planToast('Ongeldige duur');return;}
 
-  const blok={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
-    persoon:persLid.slug,project_code:proj||'',taak:taak||'',
-    datum,start:startI,duurMin,notitie:'',ts:new Date().toISOString(),door:mtMijEmail()};
-  _spStempel(blok);
+  const velden={persoon:persLid.slug,project_code:proj||'',taak:taak||'',datum,start:startI,duurMin,notitie:''};
+  const voorstel=pvMoetVoorstel()&&window.MTPlanVoorstel;
+  const blok=voorstel?MTPlanVoorstel.nieuw(velden,mtMijEmail(),pvNaam())
+    :_spStempel({id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),...velden,ts:new Date().toISOString(),door:mtMijEmail()});
   const arr=agPlanBlokken(); arr.push(blok); _planblokken=arr;
-  agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok aangemaakt');});
+  agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast(voorstel?'✓ Voorstel ingediend — wacht op goedkeuring':'✓ Planblok aangemaakt');});
 }
 
 // ── Blok-menu (bewerken / verwijderen) ──
 function agPlanBlokMenu(evt,id){
+  const blok=agPlanActief().find(b=>b.id===id), PV=window.MTPlanVoorstel;
+  if(blok&&blok.status==='voorstel'&&PV){
+    const eigen=String((blok.voorstel&&blok.voorstel.door)||'').toLowerCase()===mtMijEmail();
+    const kop=`Voorstel van ${(blok.voorstel&&blok.voorstel.doorNaam)||'?'}: ${blok.taak||blok.project_code||''} · ${blok.datum} ${blok.start||''}`;
+    if(pvMagBeslissen()){
+      return mtDialog.choose({title:'Planvoorstel',message:kop,choices:[{label:'✓ Goedkeuren',sublabel:'Wordt een gewoon planblok'},{label:'✗ Afwijzen',sublabel:'Met reden; de indiener krijgt een melding'}]}).then(async keuze=>{
+        if(keuze===null||keuze===undefined) return;
+        let nieuw;
+        if(keuze===0) nieuw=PV.keurGoed(blok,mtMijEmail(),pvNaam());
+        else{ const reden=await mtDialog.prompt({title:'Voorstel afwijzen',message:'Reden van afwijzen (de indiener ziet deze):',placeholder:'bv. die dag staat de CNC stil',okLabel:'Afwijzen',danger:true}); if(reden===null) return; nieuw=PV.wijsAf(blok,mtMijEmail(),pvNaam(),reden); }
+        _planblokken=agPlanBlokken().map(x=>x.id===id?nieuw:x);
+        const ok=await agPlanSave(); agPlanRender(); if(ok!==false) planToast(keuze===0?'✓ Voorstel goedgekeurd':'✓ Voorstel afgewezen');
+      });
+    }
+    if(eigen){
+      return mtDialog.confirm({title:'Voorstel intrekken',message:kop+'\n\nJe voorstel intrekken?',okLabel:'Intrekken',danger:true}).then(async ja=>{
+        if(!ja) return;
+        _planblokken=agPlanBlokken().map(x=>x.id===id?PV.trekIn(x,mtMijEmail()):x);
+        const ok=await agPlanSave(); agPlanRender(); if(ok!==false) planToast('✓ Voorstel ingetrokken');
+      });
+    }
+    planToast('Voorstel — wacht op goedkeuring door kantoor'); return;
+  }
+  if(pvMoetVoorstel()){ planToast('Planning wijzigen doet kantoor; jij kunt een voorstel indienen (klik op een lege plek)'); return; }
   const actie=prompt('Planblok:\n1. Verwijderen\n2. Annuleren (niets doen)','2');
   if(!actie||actie.trim()==='2') return;
   if(actie.trim()==='1'){
@@ -11717,7 +11767,10 @@ function agPlanBlokMenu(evt,id){
 
 // ── Drag & drop (verplaatsen naar andere dag) ──
 let _planDragId=null;
-function agPlanDragStart(evt,id){_planDragId=id;evt.dataTransfer.effectAllowed='move';}
+function agPlanDragStart(evt,id){
+  const b=agPlanActief().find(x=>x.id===id);
+  if(pvMoetVoorstel()||(b&&b.status==='voorstel')){ evt.preventDefault(); return; }   // Werkplaats en open voorstellen niet verslepen
+  _planDragId=id;evt.dataTransfer.effectAllowed='move';}
 function agPlanDragEnd(evt){_planDragId=null;document.querySelectorAll('[id^=agplan-drop-]').forEach(el=>{el.style.background='';});}
 function agPlanDrop(evt,datum){
   evt.preventDefault();
@@ -11948,7 +12001,47 @@ async function rolLaad(){
   const open=n=>{ const t=document.getElementById('tab-'+n); return !!(t&&t.classList.contains('active')); };
   if(MTRol.isBeheer()&&open('instellingen')) beheerLaad();
   if(MTRol.isBeheer()&&open('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
+  if(window.MTToggl) MTToggl.laad(WORKER);
+  if(typeof aanwezigLaad==='function') aanwezigLaad();
   return me;
+}
+// ── Vandaag aanwezig (F1e-C): worker (/aanwezig) + lokaal: planblokken van vandaag en verlof ──
+function _awSlug(persoon){ const p=String(persoon||'').toLowerCase(); return p.includes('@')?p.split('@')[0]:p; }
+async function aanwezigLaad(){
+  const kaart=document.getElementById('aw-kaart'), el=document.getElementById('aw-inhoud');
+  if(!kaart||!el||!window.MTAanwezig) return;
+  const data=await MTAanwezig.laad(WORKER);
+  if(!data){ kaart.style.display='none'; return; }
+  if(!_planblokken&&typeof agPlanLoad==='function'){ try{ await agPlanLoad(); }catch(e){} }
+  const vandaag=_planYmd(new Date()), plan={};
+  (typeof agPlanBlokken==='function'?agPlanBlokken():[]).filter(b=>b&&!b._vervallen&&b.datum===vandaag).forEach(b=>{
+    const s=_awSlug(b.persoon); (plan[s]=plan[s]||[]).push({start:b.start,tekst:b.taak||b.project_code||'',voorstel:window.MTPlanVoorstel&&MTPlanVoorstel.isOpen(b)}); });
+  const verlof=new Set((typeof admVerlof==='function'?admVerlof():[]).filter(v=>vandaag>=v.van&&vandaag<=v.tm).map(v=>_awSlug(v.persoon)));
+  (typeof admVrijdagen==='function'?admVrijdagen():[]).filter(v=>v.datum===vandaag&&v.type==='verplicht').forEach(()=>data.personen.forEach(p=>verlof.add(p.slug)));
+  el.innerHTML=MTAanwezig.html(data,{plan,verlof,opener:'aanwezigOpen'});
+  kaart.style.display='';
+}
+function aanwezigOpen(tgId){
+  const p=(PROJECT_CODES||[]).find(x=>String(x.tg_project_id)===String(tgId));
+  if(!p){ if(typeof planToast==='function') planToast('Dit Toggl-project hangt (nog) niet aan een project in de tool'); return; }
+  const btn=document.querySelector(".tabs-wrap .tab-btn[onclick*=\"'projecten'\"]");
+  showTab('projecten',btn); openProject(p.code);
+}
+// ── Planvoorstellen (F1e-B): Werkplaats plant als voorstel; Kantoor en hoger beslissen ──
+// UI-afdwinging (planblokken staan op SharePoint); echte afdwinging komt met F1d.
+function pvMoetVoorstel(){ return !!(window.MTRol&&MTRol.afdwingen()&&!MTRol.mag('projecten:wijzigen')); }
+function pvMagBeslissen(){ return !window.MTRol||MTRol.mag('projecten:wijzigen'); }
+function pvNaam(){ return (window.MTRol&&MTRol.me&&MTRol.me.naam)||mtMijEmail(); }
+function pvTeken(){
+  const PV=window.MTPlanVoorstel; if(!PV) return;
+  const alle=agPlanBlokken(), el=document.getElementById('pv-meldingen'), badge=document.getElementById('pv-badge');
+  const open=pvMagBeslissen()?PV.open(alle):[];
+  const mijn=PV.meldingen(alle,mtMijEmail(),PV.gezien());
+  if(badge){ badge.textContent=open.length||''; badge.style.display=open.length?'':'none'; }
+  if(!el) return;
+  el.innerHTML=mijn.map(m=>`<div class="pv-melding ${m.soort==='goedgekeurd'?'goed':'af'}" role="status">${m.soort==='goedgekeurd'?'✓ Je voorstel is goedgekeurd':'✗ Je voorstel is afgewezen'}: <b>${esc(m.blok.taak||m.blok.project_code||'planblok')}</b> op ${esc(m.blok.datum)} ${esc(m.blok.start||'')}${m.door?' door '+esc(m.door):''}${m.reden?' — “'+esc(m.reden)+'”':''}
+      <button class="btn btn-xs btn-secondary" onclick="MTPlanVoorstel.markeerGezien('${esc(m.sleutel)}');pvTeken()">OK</button></div>`).join('')
+    +(open.length?`<div class="pv-melding open">${open.length} planvoorstel${open.length>1?'len':''} wacht${open.length>1?'en':''} op goedkeuring — klik op een gestippeld blok in de planning.</div>`:'');
 }
 const _BH_FOUT={'alleen-eigenaar-mag-eigenaar':'Alleen de eigenaar kan iemand eigenaar maken of een eigenaar wijzigen.','niet-jezelf':'Je eigen account wijzig je hier niet.',
   'eigenaar-beschermd':'De vaste eigenaar is hier niet te wijzigen.','bestaat-al':'Er is al een gebruiker met dit e-mailadres.','ongeldig-email':'Dat is geen geldig e-mailadres.',

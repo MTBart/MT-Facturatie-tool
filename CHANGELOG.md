@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Worker F1e: KEK-rotatie, server-sleutels nooit koppelen, aanwezig altijd met rol (Codex-ronde)
+- Commit: `da511a0` | Auteur: Bart Witte
+
 ## 2026-10-07 — Worker F1e: eigen Toggl-sleutel (versleuteld per gebruiker) en aanwezigheidsbord
 - Commit: `4822006` | Auteur: Bart Witte
 
