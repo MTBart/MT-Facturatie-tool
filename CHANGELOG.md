@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — G2 geldtijdlijn: betaaldag-logica, betaalprofiel, klantgroepen en per-factuur overrides (worker)
+- Commit: `61a056c` | Auteur: Bart Witte
+
 ## 2026-10-07 — U1 "Wat is er verbeterd": data/updates.json + kaart in Beheer + eenmalig "nieuw"-stipje
 - Commit: `98bdf59` | Auteur: Bart Witte
 
