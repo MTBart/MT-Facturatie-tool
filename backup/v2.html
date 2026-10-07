@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.3 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.4 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -22,9 +22,10 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
-<script src="mt-toggl.js?v=2026-10-06c"></script>
+<script src="mt-toggl.js?v=2026-10-07a"></script>
 <script src="mt-koppel.js?v=2026-10-07a"></script>
 <script src="mt-inbox.js?v=2026-10-07a"></script>
+<script src="mt-rollen.js?v=2026-10-07a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -512,6 +513,13 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .dos-aangepast[hidden]{display:none}
 /* Koppel-badge (B11, Moneybird-stijl): geel/open = niet gekoppeld, groen/dicht = gekoppeld */
 :root{--kb-open-bg:#FFF4D6;--kb-open-fg:#7A5300;--kb-open-rand:#E9C46A;--kb-ok-bg:#E3F1E7;--kb-ok-fg:#1F5C36;--kb-ok-rand:#9CCBAA}
+/* Beheer (F1c) */
+.bh-tabel{width:100%;border-collapse:collapse;font-size:12.5px}.bh-tabel th,.bh-tabel td{padding:6px 8px;border-bottom:1px solid var(--border,#e3e8e6);text-align:left;vertical-align:middle}
+.bh-tabel th{font-size:11px;color:var(--text-dim);font-weight:600}.bh-tabel select{min-height:32px}.bh-uit{opacity:.55}
+.bh-modus{padding:8px 12px;border-radius:6px;margin-bottom:12px;background:var(--orange-light,#FFF4D6);border-left:3px solid var(--orange,#E9A23B)}
+.bh-modus.afdwingen{background:#E3F1E7;border-left-color:#1F5C36}.bh-blok{margin-top:16px}.bh-blok h4{font-size:12px;margin:0 0 6px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em}
+.bh-form{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.bh-form input,.bh-form select{min-height:32px}
+@media(max-width:600px){.bh-tabel .bh-opt{display:none}}
 /* de app is licht; de badge volgt het thema van de app, niet het OS (alleen bij een expliciet donker app-thema) */
 :root[data-theme="dark"]{--kb-open-bg:#3A2E10;--kb-open-fg:#F6D27A;--kb-open-rand:#8A6A1F;--kb-ok-bg:#16301F;--kb-ok-fg:#9FE0B4;--kb-ok-rand:#2F6B45}
 .kb{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:2px 9px;border-radius:14px;border:1px solid;font:600 12px var(--sans);line-height:1.2;white-space:nowrap;vertical-align:middle;max-width:100%;cursor:default;text-decoration:none}
@@ -737,7 +745,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.3, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.4, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -758,7 +766,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.3</span>
+    <span class="header-version">v2.4</span>
     <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
@@ -781,18 +789,18 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </header>
 
 <div class="tabs-wrap">
-  <button class="tab-btn active" onclick="showTab('dashboard',this)">Dashboard</button>
-  <button class="tab-btn" onclick="showTab('inbox',this)">Inbox</button>
+  <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
+  <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
-  <button class="tab-btn" onclick="showTab('projecten',this)">Projecten</button>
-  <button class="tab-btn" onclick="showTab('oplevering',this)">Opleveringen</button>
-  <button class="tab-btn" onclick="showTab('agenda',this)">Agenda</button>
-  <button class="tab-btn" onclick="showTab('toggl',this)">Uren</button>
-  <button class="tab-btn" onclick="showTab('voorraad',this)">Voorraad</button>
-  <button class="tab-btn" onclick="showTab('bestelling',this)">Bestellijst</button>
-  <button class="tab-btn" onclick="showTab('klanten',this)">Klanten</button>
-  <button class="tab-btn" onclick="showTab('historie',this)">Geschiedenis</button>
-  <button class="tab-btn" onclick="showTab('verbeterpunten',this)">&#128161; Verbeterpunten</button>
+  <button class="tab-btn" data-recht="projecten" onclick="showTab('projecten',this)">Projecten</button>
+  <button class="tab-btn" data-recht="projecten" onclick="showTab('oplevering',this)">Opleveringen</button>
+  <button class="tab-btn" data-recht="projecten" onclick="showTab('agenda',this)">Agenda</button>
+  <button class="tab-btn" data-recht="uren" onclick="showTab('toggl',this)">Uren</button>
+  <button class="tab-btn" data-recht="projecten" onclick="showTab('voorraad',this)">Voorraad</button>
+  <button class="tab-btn" data-recht="projecten" onclick="showTab('bestelling',this)">Bestellijst</button>
+  <button class="tab-btn" data-recht="moneybird" onclick="showTab('klanten',this)">Klanten</button>
+  <button class="tab-btn" data-recht="moneybird" onclick="showTab('historie',this)">Geschiedenis</button>
+  <button class="tab-btn" data-recht="verbeterpunten" onclick="showTab('verbeterpunten',this)">&#128161; Verbeterpunten</button>
   <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" id="tab-btn-admin" style="display:none" onclick="showTab('admin',this)">⚙ Admin</button>
   <button class="tab-btn" id="tab-btn-activiteit" style="display:none" onclick="showTab('activiteit',this)">📊 Activiteit</button>
@@ -1103,8 +1111,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="card" style="padding:1rem">
           <div class="card-title">Projecten</div>
           <div class="flex" style="margin-bottom:0.75rem;gap:6px">
-            <button class="btn btn-gold btn-sm" onclick="openModal()" style="flex:1">+ Nieuw project</button>
-            <button class="btn btn-secondary btn-sm" onclick="nieuweOfferte()" style="flex:1" title="Losse offerte-calculatie (voorcalculatie)">+ Nieuwe offerte</button>
+            <button class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1">+ Nieuw project</button>
+            <button class="btn btn-secondary btn-sm" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" style="flex:1" title="Losse offerte-calculatie (voorcalculatie)">+ Nieuwe offerte</button>
           </div>
           <input class="zoek-input" id="project-zoek" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
           <div id="mobiel-meldingen-container"></div>
@@ -1377,9 +1385,13 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   </div>
 
   <div id="tab-instellingen" class="tab-content">
+    <div class="card" id="beheer-kaart" style="display:none">
+      <div class="card-title">Beheer — gebruikers &amp; rollen</div>
+      <div id="beheer-inhoud" style="font-size:13px">Laden…</div>
+    </div>
     <div class="grid2">
       <div>
-        <div class="card">
+        <div class="card" data-recht="moneybird">
           <div class="card-title">API Tokens</div>
           <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem;background:var(--orange-light);padding:10px 12px;border-radius:6px;border-left:3px solid var(--orange)">
             ⚠ Tokens opgeslagen in localStorage van je browser.
@@ -1400,7 +1412,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         </div>
       </div>
       <div>
-        <div class="card">
+        <div class="card" data-recht="moneybird">
           <div class="card-title">Grootboekrekeningen</div>
           <div id="ledger-list" style="font-size:12px;color:var(--text-dim)">Laden...</div>
           <button class="btn btn-secondary btn-sm mt1" onclick="loadLedgers()">Herladen</button>
@@ -1943,7 +1955,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="tg-sub-projecten" class="tg-subcontent">
       <div class="tg-toolbar">
         <button class="btn btn-sm btn-secondary" onclick="tgLaadProjecten()">↻ Ververs</button>
-        <button class="btn btn-sm btn-gold" onclick="tgNieuwProject()">+ Project</button>
+        <button class="btn btn-sm btn-gold" data-recht="projecten:wijzigen" onclick="tgNieuwProject()">+ Project</button>
         <span class="tg-sub" id="tg-proj-tel"></span>
       </div>
       <div id="tg-proj-lijst"><div class="tg-leeg">Laden…</div></div>
@@ -2759,6 +2771,7 @@ function showTab(name,btn){
     if(!vers) renderProjectLijst();
   }
   if(name==='oplevering') oplViewerOpen();
+  if(name==='instellingen') beheerLaad();
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
   if(name==='agenda') renderAgenda();
@@ -4902,7 +4915,7 @@ function renderBestellijst(sortK='materiaal',sortA=true){
           <td style="text-align:right"><input type="number" min="1" value="${b.aantal||1}" style="width:60px;font-family:var(--mono);text-align:right;padding:3px 6px;font-size:12px" onchange="updateBestellijstAantal('${_blQ(b.id)}',this.value)"></td>
           <td style="text-align:right;font-family:var(--mono)">€ ${(Number(b.prijsLaatst)||0).toFixed(2)}</td>
           <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(b.datum)}</td>
-          <td><button class="btn btn-xs btn-danger" title="Van de lijst halen (blijft bewaard en is terug te zetten)" onclick="verwijderUitBestellijst('${_blQ(b.id)}')">×</button></td>
+          <td><button class="btn btn-xs btn-danger" data-recht="bestellijst:alles" title="Van de lijst halen (blijft bewaard en is terug te zetten)" onclick="verwijderUitBestellijst('${_blQ(b.id)}')">×</button></td>
         </tr>`).join('')}</tbody>
       </table>
     </div>`;
@@ -6181,7 +6194,7 @@ function projectTakenHtml(proj){
         ${t.tg_pending?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="De wijziging is nog niet in Toggl gelukt — klik om opnieuw te proberen" onclick="projTakenHerkans('${proj.code}')">⏳ ${t.tg_pending.verwijderen?'verwijderen':'status'} wacht op Toggl</button>`:''}
         ${t.tg_task_id?'<span class="badge badge-ok" title="Zichtbaar in Toggl-project">Toggl ✓</span>':`<button class="btn btn-xs btn-secondary" title="Naar Toggl-project sturen" onclick="projTaakNaarToggl('${proj.code}','${t.id}').then(()=>renderProjectDetail(huidigProject))">→ Toggl</button>`}
         <button class="btn btn-xs btn-secondary" title="Status wisselen" onclick="projTaakStatus('${proj.code}','${t.id}')">⟳</button>
-        <button class="btn btn-xs btn-danger" title="Verwijderen" onclick="projTaakVerwijder('${proj.code}','${t.id}')">×</button>
+        <button class="btn btn-xs btn-danger" data-recht="taken:alles" title="Verwijderen" onclick="projTaakVerwijder('${proj.code}','${t.id}')">×</button>
       </td></tr>`;
   }).join(''):'<tr><td colspan="6" style="color:var(--text-faint);font-size:13px;padding:.5rem">Nog geen taken — gebruik ✨ AI-voorstel of + Taak.</td></tr>';
   const onbesp=arr.filter(t=>!t.tg_task_id).length;
@@ -7405,8 +7418,8 @@ function planOpenEditor(code,faseId){
       <div><label>Startdatum</label><input id="pe-start" type="date" value="${fa.start}"></div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" onclick="planEditorOpslaan('${code}','${faseId}')">Opslaan</button>
-      ${fa.gepind?`<button class="btn btn-sm" onclick="planFaseUnpin('${code}','${faseId}')">📌 losmaken</button>`:''}
+      <button class="btn btn-primary btn-sm" data-recht="projecten:wijzigen" onclick="planEditorOpslaan('${code}','${faseId}')">Opslaan</button>
+      ${fa.gepind?`<button class="btn btn-sm" data-recht="projecten:wijzigen" onclick="planFaseUnpin('${code}','${faseId}')">📌 losmaken</button>`:''}
       <button class="btn btn-sm" onclick="document.getElementById('plan-editor-${cid}').innerHTML=''">Sluiten</button>
     </div>
   </div>`;
@@ -9170,7 +9183,7 @@ function renderControleDetail(f){
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <a href="https://moneybird.com/${getAdmin()}/documents/${f.id}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none">📎 Openen in Moneybird →</a>
-      ${f.state!=='paid'?`<button class="btn btn-danger btn-xs" onclick="verwijderControleFactuur('${f.id}')">🗑 Verwijderen</button>`:''}
+      ${f.state!=='paid'?`<button class="btn btn-danger btn-xs" data-recht="mb_verwijderen" onclick="verwijderControleFactuur('${f.id}')">🗑 Verwijderen</button>`:''}
     </div>
     <hr class="divider">
     <div class="grid2" style="margin-bottom:0.75rem">
@@ -9196,7 +9209,7 @@ function renderControleDetail(f){
       <button class="btn btn-primary" onclick="slaControleOp(false)">Opslaan</button>
       <button class="btn btn-primary" onclick="slaControleOp(true)" style="background:var(--green-700)">Opslaan &amp; volgende →</button>
       ${f.state!=='paid'?`<a href="https://moneybird.com/${getAdmin()}/documents/${f.id}/payment_initiations/new" target="_blank" class="btn btn-info btn-sm">💳 Betalen</a>`:''}
-      <button class="btn btn-danger btn-sm" onclick="verwijderControleFactuur()">Verwijderen</button>
+      <button class="btn btn-danger btn-sm" data-recht="mb_verwijderen" onclick="verwijderControleFactuur()">Verwijderen</button>
       <span id="ctrl-status" style="font-size:12px;color:var(--text-dim)"></span>
     </div>`;
   let ctrlCount=0;const ctrlContainer=document.getElementById('ctrl-regels-container');
@@ -11412,7 +11425,7 @@ function admInitKnop(){
   if(btn) btn.style.display=mtIsAdmin()?'':'none';
   // Activiteit-tab: alléén voor Bart (worker dwingt dit ook af op de leesroutes).
   const actBtn=document.getElementById('tab-btn-activiteit');
-  if(actBtn) actBtn.style.display=(mtMijEmail()==='bart@mortiseandtenon.nl')?'':'none';
+  if(actBtn) actBtn.style.display=(mtMijEmail()==='bart@mortiseandtenon.nl'||(window.MTRol&&MTRol.isBeheer()))?'':'none';
   // Laad ook budgetten-form zodra tab wordt geopend
   const verlofSub=document.getElementById('adm-sub-verlof');
   if(verlofSub) admRenderBudgetten();
@@ -11915,8 +11928,110 @@ async function toonApp(account) {
   loadLedgers();
   laadDashboard();
   if(typeof admInitKnop==='function') admInitKnop();
+  rolLaad();
   // Deep-link uit de URL-hash honoreren (bv. een "apart venster" met #tab=inbox).
   try{ tbApplyHashTab(); }catch(e){}
+}
+
+// ═══ ROLLEN (F1c): /me + verbergen (alleen modus 'afdwingen') + Beheer ═══
+// De worker beslist; verbergen is UI-gemak. Oude worker zonder /me → er verandert niets.
+async function rolLaad(){
+  if(!window.MTRol) return null;
+  const me=await MTRol.laad(WORKER); if(!me) return null;
+  if(MTRol.geenToegangNodig()){ MTRol.toonGeenToegang(WORKER); return me; }
+  MTRol.pasToe();
+  // Actieve tab verborgen (bv. Dashboard voor Werkplaats) → eerste zichtbare tab.
+  const act=document.querySelector('.tabs-wrap .tab-btn.active');
+  if(act&&act.classList.contains('mt-rol-verborgen')){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
+  if(typeof admInitKnop==='function') admInitKnop();
+  const k=document.getElementById('beheer-kaart'); if(k) k.style.display=MTRol.isBeheer()?'':'none';
+  return me;
+}
+const _BH_FOUT={'alleen-eigenaar-mag-eigenaar':'Alleen de eigenaar kan iemand eigenaar maken of een eigenaar wijzigen.','niet-jezelf':'Je eigen account wijzig je hier niet.',
+  'eigenaar-beschermd':'De vaste eigenaar is hier niet te wijzigen.','bestaat-al':'Er is al een gebruiker met dit e-mailadres.','ongeldig-email':'Dat is geen geldig e-mailadres.',
+  'onbekende-rol':'Onbekende rol.','laatste-eigenaar':'Dit is de laatste Eigenaar — maak eerst iemand anders Eigenaar.','geen-rollen-opslag':'De rollen-opslag (KV MT_ROLLEN) is nog niet ingesteld in Cloudflare.','geen-toegang':'Je hebt geen beheerrecht.','niet-gevonden':'Niet (meer) gevonden.'};
+async function beheerApi(pad,body){
+  const h=await authHeader(); if(!h['X-Auth-Token']) throw new Error('Niet ingelogd bij Microsoft');
+  const r=await fetch(WORKER+pad,body===undefined?{headers:h}:{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(_BH_FOUT[j.error]||j.uitleg||('Fout '+r.status));
+  return j;
+}
+const _bhDatum=ms=>ms?new Date(ms).toLocaleString('nl-NL',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+let _bh=null;
+async function beheerLaad(){
+  const kaart=document.getElementById('beheer-kaart'), el=document.getElementById('beheer-inhoud');
+  if(!kaart||!el||!window.MTRol||!MTRol.isBeheer()){ if(kaart) kaart.style.display='none'; return; }
+  kaart.style.display='';
+  try{
+    const [g,log,au]=await Promise.all([beheerApi('/beheer/gebruikers'),beheerApi('/beheer/log?dagen=7').catch(()=>null),beheerApi('/beheer/audit?limit=50').catch(()=>({audit:[]}))]);
+    _bh={g,log,au}; beheerTeken();
+  }catch(e){ el.innerHTML=`<div class="bh-modus">${esc(e.message)}</div>`; }
+}
+function beheerTeken(){
+  const el=document.getElementById('beheer-inhoud'); if(!el||!_bh) return;
+  const {g,log,au}=_bh, ikEig=g.ikRol==='eigenaar';
+  const rolOpt=(huidig,uit)=>g.rollen.filter(r=>ikEig||r.id!=='eigenaar'||r.id===huidig).map(r=>`<option value="${r.id}"${r.id===huidig?' selected':''}${uit&&r.id!==huidig?' disabled':''}>${esc(r.naam)}</option>`).join('');
+  const modusTekst=g.modus==='afdwingen'?'<b>Modus: afdwingen</b> — de worker weigert wat een rol niet mag.'
+    :g.modus==='uit'?'<b>Modus: uit</b> — rollen worden niet gecontroleerd.'
+    :`<b>Modus: log</b> — alles werkt zoals altijd; de worker telt wat geweigerd zóu worden.${log?` Afgelopen ${log.dagen} dagen: <b>${log.geweigerd}</b> van ${log.totaal} verzoeken zouden geweigerd zijn.`:''}`;
+  const top=log&&log.top&&log.top.length?`<div class="bh-blok"><h4>Zou geweigerd zijn — top-redenen</h4><table class="bh-tabel"><thead><tr><th>Rol</th><th>Actie</th><th>Reden</th><th>Aantal</th></tr></thead><tbody>${log.top.slice(0,10).map(x=>`<tr><td>${esc(x.rol)}</td><td>${esc(x.actie)}</td><td>${esc(x.reden)}</td><td>${x.n}</td></tr>`).join('')}</tbody></table></div>`:'';
+  const rijen=g.gebruikers.slice().sort((a,b)=>String(a.naam||'').localeCompare(String(b.naam||''))).map(u=>{
+    const vast=u.beschermd||!u.oid||u.oid===g.ik||(!ikEig&&u.role==='eigenaar'), uit=u.active===false;
+    const vastTxt=u.vast==='oid'?' <span class="dos-meta">· vast</span>':u.vast==='email'?` <span class="dos-meta">· vaste eigenaar (via e-mail)${u.oid?' — oid: '+esc(u.oid):''}</span>`:'';
+    return `<tr class="${uit?'bh-uit':''}"><td>${esc(u.naam||'—')}${u.oid===g.ik?' <span class="dos-meta">(jij)</span>':''}</td><td class="bh-opt">${esc(u.email||'')}</td>
+      <td>${vast?esc(u.rolNaam||u.role)+vastTxt:`<select aria-label="Rol van ${esc(u.naam||u.email||'')}" onchange="beheerRol('${esc(u.oid)}',this.value,this)">${rolOpt(u.role)}</select>`}</td>
+      <td>${uit?'gedeactiveerd':'actief'}</td><td class="bh-opt">${_bhDatum(u.lastSeen)}</td>
+      <td>${vast?'':`<button class="btn btn-xs ${uit?'btn-secondary':'btn-danger'}" onclick="beheerActief('${esc(u.oid)}',${uit})">${uit?'Reactiveren':'Deactiveren'}</button>`}</td></tr>`;
+  }).join('');
+  const inv=(g.uitnodigingen||[]).map(i=>`<tr><td>${esc(i.naam||'—')}</td><td>${esc(i.email)}</td><td>${esc((g.rollen.find(r=>r.id===i.role)||{}).naam||i.role)}</td><td class="bh-opt">verloopt ${_bhDatum(i.verloopt)}</td><td>${!ikEig&&i.role==='eigenaar'?'':`<button class="btn btn-xs btn-secondary" onclick="beheerIntrekken('${esc(i.email)}')">Intrekken</button>`}</td></tr>`).join('');
+  const aanv=(g.aanvragen||[]).map(a=>`<tr><td>${esc(a.naam||'—')}</td><td>${esc(a.email||'')}</td><td class="bh-opt">${esc(a.bericht||'')}</td><td class="bh-opt">${_bhDatum(a.ts)}</td>
+    <td><select id="bh-aanv-${esc(a.oid)}" aria-label="Rol voor ${esc(a.naam||'')}">${rolOpt('werkplaats')}</select> <button class="btn btn-xs btn-primary" onclick="beheerAanvraag('${esc(a.oid)}',false)">Toekennen</button> <button class="btn btn-xs btn-secondary" onclick="beheerAanvraag('${esc(a.oid)}',true)">Weigeren</button></td></tr>`).join('');
+  const AUDIT={'uitgenodigd':'uitgenodigd','uitnodiging-gekoppeld':'uitnodiging gebruikt (eerste login)','uitnodiging-ingetrokken':'uitnodiging ingetrokken','rol-gewijzigd':'rol gewijzigd',
+    'gedeactiveerd':'gedeactiveerd','gereactiveerd':'gereactiveerd','toegang-aangevraagd':'toegang aangevraagd','aanvraag-toegekend':'aanvraag toegekend','aanvraag-geweigerd':'aanvraag geweigerd',
+    'eigenaar-gekoppeld':'eigenaar gekoppeld','eigenaar-vastgelegd':'eigenaar vastgelegd'};
+  const rn=id=>(g.rollen.find(r=>r.id===id)||{}).naam||id||'';
+  const auditR=(au.audit||[]).map(a=>`<tr><td class="bh-opt">${_bhDatum(a.ts)}</td><td>${esc(a.doorNaam||(a.door==='systeem'?'systeem':''))}</td><td>${esc(AUDIT[a.actie]||a.actie)}</td><td>${esc(a.doelNaam||a.doel||'')}</td><td>${a.oud?esc(rn(a.oud))+' → ':''}${esc(rn(a.nieuw))}</td></tr>`).join('');
+  el.innerHTML=`<div class="bh-modus ${g.modus==='afdwingen'?'afdwingen':''}">${modusTekst}</div>
+    <table class="bh-tabel"><thead><tr><th>Naam</th><th class="bh-opt">E-mail</th><th>Rol</th><th>Status</th><th class="bh-opt">Laatst gezien</th><th></th></tr></thead><tbody>${rijen||'<tr><td colspan="6">Nog geen gebruikers.</td></tr>'}</tbody></table>
+    <div class="bh-blok"><h4>Uitnodigen</h4><div class="bh-form">
+      <input id="bh-inv-email" type="email" placeholder="e-mailadres" aria-label="E-mailadres" style="flex:1;min-width:200px">
+      <input id="bh-inv-naam" type="text" placeholder="naam (optioneel)" aria-label="Naam" style="width:150px">
+      <select id="bh-inv-rol" aria-label="Rol">${rolOpt('werkplaats')}</select>
+      <button class="btn btn-sm btn-primary" onclick="beheerUitnodigen()">Uitnodigen</button></div>
+      <div class="dos-meta" style="margin-top:4px">Bij de eerste login met dit adres krijgt die persoon de rol (uitnodiging 30 dagen geldig).</div></div>
+    ${inv?`<div class="bh-blok"><h4>Openstaande uitnodigingen</h4><table class="bh-tabel"><tbody>${inv}</tbody></table></div>`:''}
+    ${aanv?`<div class="bh-blok"><h4>Toegangsaanvragen</h4><table class="bh-tabel"><tbody>${aanv}</tbody></table></div>`:''}
+    ${top}
+    <details class="bh-blok"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Auditlog (laatste ${(au.audit||[]).length})</summary>
+      <table class="bh-tabel"><thead><tr><th class="bh-opt">Wanneer</th><th>Door</th><th>Actie</th><th>Wie</th><th>Rol</th></tr></thead><tbody>${auditR||'<tr><td colspan="5">Nog niets.</td></tr>'}</tbody></table></details>`;
+}
+async function beheerRol(oid,rol,sel){
+  const u=_bh&&_bh.g.gebruikers.find(x=>x.oid===oid);
+  if(!await mtDialog.confirm({title:'Rol wijzigen',message:`Rol van ${(u&&(u.naam||u.email))||'deze gebruiker'} wijzigen naar ${(_bh.g.rollen.find(r=>r.id===rol)||{}).naam||rol}?`,okLabel:'Wijzigen'})){ if(sel&&u) sel.value=u.role; return; }
+  try{ await beheerApi('/beheer/gebruiker',{oid,rol}); }catch(e){ await mtDialog.alert({title:'Rol wijzigen',message:e.message}); }
+  beheerLaad();
+}
+async function beheerActief(oid,aan){
+  const u=_bh&&_bh.g.gebruikers.find(x=>x.oid===oid), naam=(u&&(u.naam||u.email))||'deze gebruiker';
+  if(!aan&&!await mtDialog.confirm({title:'Deactiveren',message:`${naam} deactiveren?\nIn modus "afdwingen" kan die persoon de tool dan niet meer gebruiken. Terugdraaien kan altijd (Reactiveren).`,okLabel:'Deactiveren'})) return;
+  try{ await beheerApi('/beheer/gebruiker',{oid,actief:!!aan}); }catch(e){ await mtDialog.alert({title:'Beheer',message:e.message}); }
+  beheerLaad();
+}
+async function beheerUitnodigen(){
+  const email=(document.getElementById('bh-inv-email').value||'').trim(), naam=(document.getElementById('bh-inv-naam').value||'').trim(), rol=document.getElementById('bh-inv-rol').value;
+  try{ await beheerApi('/beheer/uitnodigen',{email,naam,rol}); }catch(e){ return mtDialog.alert({title:'Uitnodigen',message:e.message}); }
+  beheerLaad();
+}
+async function beheerIntrekken(email){
+  if(!await mtDialog.confirm({title:'Uitnodiging intrekken',message:`Uitnodiging voor ${email} intrekken?`,okLabel:'Intrekken'})) return;
+  try{ await beheerApi('/beheer/uitnodiging-intrekken',{email}); }catch(e){ await mtDialog.alert({title:'Beheer',message:e.message}); }
+  beheerLaad();
+}
+async function beheerAanvraag(oid,weigeren){
+  const sel=document.getElementById('bh-aanv-'+oid);
+  try{ await beheerApi('/beheer/aanvraag',weigeren?{oid,weigeren:true}:{oid,rol:sel?sel.value:'werkplaats'}); }catch(e){ await mtDialog.alert({title:'Beheer',message:e.message}); }
+  beheerLaad();
 }
 
 async function msLogin() {
@@ -12275,7 +12390,7 @@ async function actLoadUsage(){
 
 function activiteitOpen(force){
   // Vangnet: tab is alleen voor Bart; worker dwingt het ook af.
-  if(typeof mtMijEmail==='function' && mtMijEmail()!=='bart@mortiseandtenon.nl'){
+  if(typeof mtMijEmail==='function' && mtMijEmail()!=='bart@mortiseandtenon.nl' && !(window.MTRol&&MTRol.isBeheer())){
     document.getElementById('act-stats').innerHTML='<div class="act-empty">Deze weergave is alleen voor de beheerder.</div>';
     return;
   }

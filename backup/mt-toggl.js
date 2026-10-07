@@ -758,8 +758,8 @@ async function tgLaadProjecten(){
         ${(p.tags||[]).slice(0,6).map(t=>`<span class="tg-pill">${tgEsc(t.name||t)}</span>`).join('')}
         <div class="tg-cardacts">
           <button class="btn btn-sm btn-gold" title="Openen" onclick="tgOpenProject(${p.id})">📂 Openen</button>
-          <button class="btn btn-sm btn-secondary" title="Bewerken" onclick="tgEditProject(${p.id})">✎</button>
-          <button class="btn btn-sm btn-secondary" title="Archiveren" onclick="tgArchiveProject(${p.id})">📦</button>
+          <button class="btn btn-sm btn-secondary" data-recht="projecten:wijzigen" title="Bewerken" onclick="tgEditProject(${p.id})">✎</button>
+          <button class="btn btn-sm btn-secondary" data-recht="projecten:wijzigen" title="Archiveren" onclick="tgArchiveProject(${p.id})">📦</button>
         </div>
       </div>`;
     }).join('')+'</div>';
@@ -981,13 +981,19 @@ async function tgLaadTaken(){
         </select>
         <span class="tg-rowacts">
           <button class="tg-ib" title="Subtaak toevoegen" onclick="tgNieuweSubtaak(${t.id})">＋</button>
-          <button class="tg-ib" title="Hernoemen" onclick="tgHernoemTaak(${t.id})">✎</button>
-          <button class="tg-ib" title="Verwijderen" onclick="tgVerwijderTaak(${t.id})">🗑</button>
+          <button class="tg-ib" data-recht="taken:alles" title="Hernoemen" onclick="tgHernoemTaak(${t.id})">✎</button>
+          <button class="tg-ib" data-recht="taken:alles" title="Verwijderen" onclick="tgVerwijderTaak(${t.id})">🗑</button>
         </span></div>`;
     }).join('');
   }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
 }
+// Werkplaats (rol 'taken: status-nieuw') mag prioriteit/toewijzing niet wijzigen — alleen in modus 'afdwingen'.
+function tgMagTaakWijzigen(){
+  if(!window.MTRol||MTRol.mag('taken:alles')) return true;
+  tgStatus('Prioriteit en toewijzing wijzigt kantoor of de werkvoorbereider.','#c0392b'); return false;
+}
 async function tgZetPriority(taskId){
+  if(!tgMagTaakWijzigen()) return;
   const t=(_tgCache.taken||[]).find(x=>x.id===taskId);
   const huidig=t?tgPrioById(t.priority).label:'?';
   const keuze=prompt(`Prioriteit (nu: ${huidig})\n`+TG_PRIO.map((p,i)=>`${i}. ${p.label}`).join('\n'));
@@ -1000,6 +1006,7 @@ async function tgZetPriority(taskId){
   }catch(e){ /* tgMetRetry toonde al de definitieve melding. */ }
 }
 async function tgZetAssignee(taskId){
+  if(!tgMagTaakWijzigen()) return;
   await agNamen(); const {un}=agNames(); const ids=Object.keys(un);
   if(!ids.length){ tgStatus('Geen medewerkerslijst — open eerst de Agenda (laadt namen).','#c0392b'); return; }
   const t=(_tgCache.taken||[]).find(x=>x.id===taskId);
