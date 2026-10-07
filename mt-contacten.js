@@ -838,5 +838,557 @@
       return kaart;
     }
   };
-  //__UI__
+  // ══════════════════════════════════════════════════════════════════════════
+  // UI (MTContactenUI): klantpagina-sectie, projectkaart, zoeker, detail, droogloop, inbox-balk, mobiel.
+  // Alle klikken lopen via één gedelegeerde handler (data-mtc="actie" data-id/data-code): geen
+  // quoting-problemen in onclick-attributen, en alles wat uit data komt gaat door esc().
+  // ══════════════════════════════════════════════════════════════════════════
+  const doc = root.document;
+  if (!doc) return;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const HERK = { hand: ['✋', 'Handmatig'], moneybird: ['🧾', 'Moneybird'], project: ['📁', 'Project'], mail: ['✉', 'Gekoppelde mail'], handtekening: ['✍', 'Handtekening'], ai: ['✨', 'AI'] };
+  const NL_DATUM = t => { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }); };
+  const jsCode = c => String(c || '').replace(/[^A-Za-z0-9_.\-]/g, '');
+
+  const CSS = `
+.mtc-kop{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.mtc-acties-kop{display:flex;gap:6px;flex-wrap:wrap}
+.mtc-rij{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;padding:8px 2px;border-bottom:1px solid var(--border-hair,#e3e8e5)}
+.mtc-rij:last-child{border-bottom:none}
+.mtc-main{min-width:0;flex:1 1 220px}
+.mtc-naam{font-size:14px;font-weight:600;color:var(--text,#1a1a1a)}
+.mtc-link{background:none;border:none;padding:0;font:inherit;color:var(--green,#2A4A38);cursor:pointer;text-align:left;text-decoration:underline;text-decoration-color:transparent;min-height:24px}
+.mtc-link:hover,.mtc-link:focus-visible{text-decoration-color:currentColor}
+.mtc-functie{font-weight:400;font-size:12px;color:var(--text-dim,#666)}
+.mtc-sub{font-size:12px;color:var(--text-dim,#666);margin-top:2px;display:flex;gap:4px 8px;flex-wrap:wrap;align-items:center}
+.mtc-chip{font-family:var(--mono,monospace);font-size:11px;color:var(--green,#2A4A38);background:var(--green-light,#E6EFE9);border-radius:10px;padding:0 7px;text-decoration:none}
+.mtc-acties{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.mtc-btn{display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:0 10px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--surface,#fafafa);color:var(--text,#1a1a1a);font-size:13px;text-decoration:none;cursor:pointer;font-family:inherit;max-width:100%}
+.mtc-btn:hover,.mtc-btn:focus-visible{border-color:var(--green,#2A4A38);background:var(--green-light,#E6EFE9)}
+.mtc-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.mtc-herk{display:inline-flex;gap:2px;font-size:12px;opacity:.85}
+.mtc-voorstel{display:inline-block;font-size:11px;font-weight:600;color:#7A6010;background:#FBF5E0;border:1px solid #E5CF85;border-radius:10px;padding:0 7px;margin-left:6px;cursor:pointer}
+.mtc-leeg{font-size:13px;color:var(--text-faint,#888);padding:6px 0}
+.mtc-algemeen{font-size:11px;color:var(--text-faint,#888);margin-left:6px;font-weight:400}
+.mtc-dubbel{font-size:12px;background:#FBF5E0;border:1px solid #E5CF85;border-radius:8px;padding:6px 10px;margin:8px 0}
+.mtc-ov{position:fixed;inset:0;z-index:10040;background:rgba(20,30,24,.42);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
+.mtc-paneel{background:var(--surface-overlay,#fff);color:var(--text,#1a1a1a);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.28);width:100%;max-width:560px;padding:14px 16px 16px;font-size:13px}
+.mtc-paneel h3{margin:0;font-size:16px;color:var(--green,#2A4A38)}
+.mtc-kopregel{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.mtc-x{min-width:36px;min-height:36px;border:none;background:none;font-size:16px;cursor:pointer;color:var(--text-dim,#666)}
+.mtc-veld{margin:8px 0}
+.mtc-veld label{display:block;font-size:12px;font-weight:600;margin-bottom:2px}
+.mtc-veld input,.mtc-veld textarea,.mtc-veld select{width:100%;box-sizing:border-box;padding:7px 9px;font:inherit;font-size:13px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--surface,#fafafa);color:inherit}
+.mtc-veld textarea{min-height:54px;resize:vertical}
+.mtc-rij2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mtc-hint{font-size:11px;color:var(--text-faint,#888);margin-top:2px}
+.mtc-fout{color:var(--red,#b3261e);font-size:12px;min-height:16px;margin-top:6px}
+.mtc-voet{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:12px}
+.mtc-sectie{border-top:1px solid var(--border-hair,#e3e8e5);margin-top:12px;padding-top:8px}
+.mtc-sectie h4{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#666)}
+.mtc-vs{display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border-hair,#e3e8e5)}
+.mtc-toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:10060;background:#1a1a1a;color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;max-width:90vw}
+.ov-blok[data-mtc-project]{margin-bottom:var(--space-3,12px)}
+.mtc-hdrknop{background:none;border:1px solid transparent;border-radius:8px;min-width:36px;min-height:36px;font-size:16px;cursor:pointer;color:inherit}
+.mtc-hdrknop:hover,.mtc-hdrknop:focus-visible{border-color:currentColor}
+.mtc-inbox{font-size:12px;background:#F4F7F6;border:1px solid var(--border,#ccc);border-radius:8px;padding:6px 10px;margin:6px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mtc-mrij{padding:10px 0;border-bottom:1px solid var(--border,#e3e8e5)}
+.mtc-mrij:last-child{border-bottom:none}
+.mtc-mbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--border,#ccc);background:var(--surface,#fff);color:inherit;text-decoration:none;font-size:14px}
+@media(max-width:600px){.mtc-rij2{grid-template-columns:1fr}.mtc-ov{padding:0}.mtc-paneel{border-radius:0;max-width:none;min-height:100vh}.mtc-btn{min-height:40px}}
+`;
+  function stijl() {
+    if (doc.getElementById('mtc-stijl')) return;
+    const s = doc.createElement('style'); s.id = 'mtc-stijl'; s.textContent = CSS;
+    (doc.head || doc.documentElement).appendChild(s);
+  }
+  stijl();
+
+  function toast(msg) {
+    try {
+      if (typeof root.planToast === 'function') return root.planToast(msg);
+      if (typeof root.showToast === 'function') return root.showToast(msg);
+    } catch (e) {}
+    const t = doc.createElement('div'); t.className = 'mtc-toast'; t.setAttribute('role', 'status'); t.textContent = msg;
+    doc.body.appendChild(t); setTimeout(() => t.remove(), 3500);
+  }
+
+  // ── herkomst ──
+  function herkIcoon(bron) {
+    const h = HERK[bron] || ['•', bron];
+    return '<span class="mtc-herk-i" role="img" aria-label="Bron: ' + esc(h[1]) + '" title="Bron: ' + esc(h[1]) + '">' + h[0] + '</span>';
+  }
+  function herkRij(c) {
+    const b = C.alleBronnen(c); if (!b.length) return '';
+    return '<span class="mtc-herk">' + b.map(herkIcoon).join('') + '</span>';
+  }
+  function herkTekst(c, veld) {
+    const h = C.herk(c, veld); if (!h) return '';
+    const hb = HERK[h.bron] || ['•', h.bron];
+    const via = h.via ? ' — bevestigd, voorgesteld door ' + ((HERK[h.via] || ['', h.via])[1]).toLowerCase() : '';
+    const ook = (h.ook && h.ook.length) ? ' + ' + h.ook.map(x => (HERK[x] || ['', x])[1]).join(', ') : '';
+    const door = h.door ? ' · ' + String(h.door).split('@')[0] : '';
+    return '<div class="mtc-hint">' + hb[0] + ' ' + esc(hb[1] + ook + via) + (h.tijd ? ' · ' + esc(NL_DATUM(h.tijd)) : '') + esc(door) + '</div>';
+  }
+
+  // ── rijen ──
+  const adresVan = (c, opts) => (c.locatie && c.locatie.adres) || (opts && opts.adres) || '';
+  function bel(c, groot) {
+    return lijstVan(c.telefoons).slice(0, 2).map(t => {
+      const h = C.telHref(t.nr); if (!h) return '';
+      return '<a class="' + (groot ? 'mtc-mbtn' : 'mtc-btn') + '" href="' + esc(h) + '" aria-label="Bel ' + esc(C.weergave(c)) + ' (' + esc(t.soort || 'telefoon') + '): ' + esc(t.nr) + '">📞 <span>' + esc(t.nr) + '</span></a>';
+    }).join('');
+  }
+  function mail(c, groot) {
+    const e = c.emails && c.emails[0]; if (!e) return '';
+    return '<a class="' + (groot ? 'mtc-mbtn' : 'mtc-btn') + '" href="' + esc(C.mailHref(e)) + '" aria-label="Mail ' + esc(C.weergave(c)) + ': ' + esc(e) + '">✉ <span>' + esc(e) + '</span></a>';
+  }
+  function route(c, opts, groot) {
+    const a = adresVan(c, opts), h = C.routeHref(a); if (!h) return '';
+    return '<a class="' + (groot ? 'mtc-mbtn' : 'mtc-btn') + '" href="' + esc(h) + '" target="_blank" rel="noopener" aria-label="Route naar ' + esc(a) + '">📍 <span>Route</span></a>';
+  }
+  function orgRegel(c) {
+    const o = c.organisatie || {};
+    return [o.naam, c.locatie && (c.locatie.naam || c.locatie.code)].filter(Boolean).map(esc).join(' · ');
+  }
+  // opts: {adres, projectChips, extra (html achter de acties)}
+  function contactRij(c, opts) {
+    opts = opts || {};
+    const nv = lijstVan(c.voorstellen).length;
+    const chips = opts.projectChips === false ? '' : lijstVan(c.projecten).slice(0, 4).map(p => {
+      const href = (root.mtRoute && typeof root.mtRoute.format === 'function') ? root.mtRoute.format({ code: p.code }) : '#';
+      return '<a class="mtc-chip" href="' + esc(href) + '" title="Project ' + esc(p.code) + (p.rol ? ' — ' + esc(p.rol) : '') + '">' + esc(p.code) + '</a>';
+    }).join('') + (c.projecten && c.projecten.length > 4 ? '<span class="mtc-hint">+' + (c.projecten.length - 4) + '</span>' : '');
+    return '<div class="mtc-rij" data-id="' + esc(c.id) + '"><div class="mtc-main">'
+      + '<div class="mtc-naam"><button type="button" class="mtc-link" data-mtc="detail" data-id="' + esc(c.id) + '">' + esc(C.weergave(c)) + '</button>'
+      + (c.functie ? ' <span class="mtc-functie">' + esc(c.functie) + '</span>' : '') + (c.algemeen ? '<span class="mtc-algemeen">algemeen adres</span>' : '')
+      + (nv ? '<button type="button" class="mtc-voorstel" data-mtc="detail" data-id="' + esc(c.id) + '" title="Voorstellen bekijken">' + nv + ' voorstel' + (nv === 1 ? '' : 'len') + '</button>' : '') + '</div>'
+      + '<div class="mtc-sub">' + orgRegel(c) + chips + ' ' + herkRij(c) + '</div></div>'
+      + '<div class="mtc-acties">' + bel(c) + mail(c) + route(c, opts) + (opts.extra || '') + '</div></div>';
+  }
+
+  const UI = {};
+
+  // ── klantpagina: pill "Contacten" ──  info = klantInfo(), projen = klantProjecten(), opts = {loc}
+  UI.klantSectie = function (info, projen, opts) {
+    opts = opts || {};
+    const loc = opts.loc || '';
+    const lijst = C.voorKlant(info.kl, { loc, mbIds: info.mbIds, projectCodes: (projen || []).map(p => p.code) });
+    const adres = [info.adres, info.plaats].filter(Boolean).join(', ');
+    const ids = new Set(lijst.map(c => c.id));
+    const dub = C.dubbelen(lijst).filter(d => ids.has(d.a.id) && ids.has(d.b.id));
+    const dubHtml = dub.length ? '<div class="mtc-dubbel" role="note">Mogelijk dubbel: ' + dub.slice(0, 3).map(d => '<button type="button" class="mtc-link" data-mtc="detail" data-id="' + esc(d.a.id) + '">' + esc(C.weergave(d.a)) + '</button> en ' + esc(C.weergave(d.b)) + ' (' + esc(d.reden) + ')').join('; ')
+      + ' — open een van beide en kies “Samenvoegen met…”.</div>' : '';
+    return '<div class="mtc-kop"><div class="card-title" style="margin:0">Contacten — ' + esc(info.naam) + (loc ? ' › ' + esc(loc) : '') + '</div>'
+      + '<div class="mtc-acties-kop">'
+      + '<button type="button" class="btn btn-secondary btn-sm" data-mtc="zoek">🔎 Zoeken</button>'
+      + '<button type="button" class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" data-mtc="nieuw" data-klant="' + esc(info.kl) + '" data-loc="' + esc(loc) + '">+ Contact</button>'
+      + '<button type="button" class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" data-mtc="bijwerken" title="Vult contacten aan uit Moneybird, projecten en gekoppelde mails — eerst een overzicht, pas na je akkoord opslaan">↻ Contacten bijwerken</button></div></div>'
+      + dubHtml
+      + (lijst.length ? lijst.map(c => contactRij(c, { adres })).join('')
+        : '<div class="mtc-leeg">Nog geen contacten bij deze klant. Kies “Contacten bijwerken” om ze uit Moneybird, de projecten en gekoppelde mails te halen, of voeg er met “+ Contact” een toe.</div>');
+  };
+
+  // ── projectkaart (Overzicht) ──
+  const projKlantCode = proj => String(proj.klant || String(proj.code || '').split('-')[0] || '').toUpperCase();
+  function projectInner(proj) {
+    const vp = C.voorProject(proj), code = proj.code, kb = root.MTKoppelUI ? root.MTKoppelUI.badge : () => '';
+    const rij = (c, direct) => contactRij(c, { projectChips: false,
+      extra: kb({ status: direct ? 'gekoppeld' : 'open', klein: true, label: code, titel: direct ? 'Gekoppeld aan dit project — klik om te ontkoppelen' : 'Hoort bij de klant, nog niet aan dit project gekoppeld — klik om te koppelen',
+        onclick: "MTContactenUI.projectPop(this,'" + jsCode(c.id) + "','" + jsCode(code) + "'," + (direct ? 'true' : 'false') + ')' }) });
+    let html = '<div class="card-title mtc-kop" style="margin-bottom:6px"><span>Contactpersonen</span><span class="mtc-acties-kop">'
+      + '<button type="button" class="btn btn-xs btn-secondary" data-recht="projecten:wijzigen" data-mtc="koppel-kies" data-code="' + esc(code) + '" title="Een bestaand contact aan dit project koppelen">+ Koppel</button>'
+      + '<button type="button" class="btn btn-xs btn-secondary" data-recht="projecten:wijzigen" data-mtc="nieuw" data-code="' + esc(code) + '" data-klant="' + esc(projKlantCode(proj)) + '" data-loc="' + esc(proj.loc || '') + '">+ Nieuw</button></span></div>';
+    if (vp.direct.length) html += vp.direct.map(c => rij(c, true)).join('');
+    else if (vp.afgeleid.length) html += '<div class="mtc-hint" style="margin-bottom:4px">Nog niemand aan dit project gekoppeld — dit zijn de contacten van de klant' + (proj.loc ? '/locatie' : '') + ':</div>' + vp.afgeleid.slice(0, 5).map(c => rij(c, false)).join('');
+    if (vp.direct.length && vp.afgeleid.length) html += '<div class="mtc-hint" style="margin-top:6px">Ook bij de klant: ' + vp.afgeleid.slice(0, 4).map(c => '<button type="button" class="mtc-link" data-mtc="koppel-vraag" data-id="' + esc(c.id) + '" data-code="' + esc(code) + '">' + esc(C.weergave(c)) + '</button>').join(', ') + (vp.afgeleid.length > 4 ? ' …' : '') + '</div>';
+    if (!vp.direct.length && !vp.afgeleid.length) html += '<div class="mtc-leeg">Nog geen contactpersonen. Voeg er een toe of werk de contacten bij vanuit de klantpagina.</div>';
+    return html;
+  }
+  UI.projectKaart = function (proj) {
+    if (!proj || !proj.code) return '';
+    let inner = ''; try { inner = projectInner(proj); } catch (e) { console.warn('contactenkaart:', e); inner = '<div class="mtc-leeg">Contacten konden niet laden.</div>'; }
+    return '<section class="ov-blok" data-mtc-project="' + esc(proj.code) + '" data-mtc-klant="' + esc(proj.klant || '') + '" data-mtc-loc="' + esc(proj.loc || '') + '">' + inner + '</section>';
+  };
+  UI.projectPop = function (anker, id, code, isDirect) {
+    const c = C.perId(id); if (!c || !root.MTKoppelUI) return;
+    const naam = esc(C.weergave(c));
+    const html = isDirect
+      ? '<p style="margin:0 0 8px">' + naam + ' is gekoppeld aan <b>' + esc(code) + '</b>.</p><button type="button" class="btn btn-sm btn-secondary" data-recht="projecten:wijzigen" data-mtc="ontkoppel" data-id="' + esc(id) + '" data-code="' + esc(code) + '">Ontkoppelen</button> <button type="button" class="btn btn-sm btn-secondary" data-mtc="detail" data-id="' + esc(id) + '">Details</button>'
+      : '<p style="margin:0 0 8px">' + naam + ' hoort bij de klant maar is nog niet aan <b>' + esc(code) + '</b> gekoppeld.</p><button type="button" class="btn btn-sm btn-gold" data-recht="projecten:wijzigen" data-mtc="koppel" data-id="' + esc(id) + '" data-code="' + esc(code) + '">Koppel aan ' + esc(code) + '</button> <button type="button" class="btn btn-sm btn-secondary" data-mtc="detail" data-id="' + esc(id) + '">Details</button>';
+    root.MTKoppelUI.popover(anker, html, { titel: 'Contact ' + (isDirect ? 'ontkoppelen' : 'koppelen') });
+  };
+
+  // ── overlays (zoeker, detail) ──
+  function overlay(html, label) {
+    const opener = doc.activeElement;
+    const ov = doc.createElement('div'); ov.className = 'mtc-ov'; ov.setAttribute('data-mtc-ov', '1');
+    ov.innerHTML = '<div class="mtc-paneel" role="dialog" aria-modal="true" aria-label="' + esc(label) + '" tabindex="-1">' + html + '</div>';
+    doc.body.appendChild(ov);
+    ov._opener = opener;
+    ov.addEventListener('mousedown', e => { if (e.target === ov) sluitOv(ov); });
+    ov.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.stopPropagation(); sluitOv(ov); return; }
+      if (e.key !== 'Tab') return;
+      const f = [...ov.querySelectorAll('a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])')].filter(x => !x.hidden);
+      if (!f.length) return;
+      const eerste = f[0], laatste = f[f.length - 1];
+      if (e.shiftKey && doc.activeElement === eerste) { e.preventDefault(); laatste.focus(); }
+      else if (!e.shiftKey && doc.activeElement === laatste) { e.preventDefault(); eerste.focus(); }
+    });
+    const fok = ov.querySelector('input:not([type=hidden]),textarea,select') || ov.querySelector('button') || ov.firstElementChild;
+    if (fok && fok.focus) fok.focus();
+    return ov;
+  }
+  function sluitOv(ov) {
+    if (!ov) return;
+    const op = ov._opener; ov.remove();
+    if (op && op.isConnected && op.focus) { try { op.focus(); } catch (e) {} }
+  }
+  const ovVan = el => el && el.closest ? el.closest('.mtc-ov') : null;
+  async function vraag(o) {
+    try { if (root.mtDialog && typeof root.mtDialog.confirm === 'function') return await root.mtDialog.confirm(o); } catch (e) {}
+    return typeof root.confirm === 'function' ? root.confirm((o.title ? o.title + '\n\n' : '') + (o.message || '')) : false;
+  }
+
+  // ── zoeker ──  opts: {titel, kies(id), start()→[contact], prefill, klantContext}
+  UI.zoek = function (opts) {
+    opts = opts || {};
+    const html = '<div class="mtc-kopregel"><h3>' + esc(opts.titel || 'Contact zoeken') + '</h3><button type="button" class="mtc-x" data-mtc="sluit" aria-label="Sluiten">✕</button></div>'
+      + '<div class="mtc-veld"><label for="mtc-zoek-q">Naam, e-mail, telefoon of organisatie</label><input id="mtc-zoek-q" type="search" autocomplete="off"></div>'
+      + '<div id="mtc-zoek-res" aria-live="polite"></div>'
+      + '<div class="mtc-voet"><span></span><button type="button" class="btn btn-sm btn-secondary" data-recht="projecten:wijzigen" data-mtc="zoek-nieuw">+ Nieuw contact</button></div>';
+    const ov = overlay(html, opts.titel || 'Contact zoeken');
+    ov._kies = opts.kies || null; ov._prefill = opts.prefill || null;
+    const inp = ov.querySelector('#mtc-zoek-q'), res = ov.querySelector('#mtc-zoek-res');
+    const kiesKnop = c => ov._kies ? '<button type="button" class="mtc-btn" data-mtc="kies" data-id="' + esc(c.id) + '">Kies</button>' : '';
+    const teken = () => {
+      const q = inp.value.trim();
+      const r = q ? C.zoek(q, { max: 30 }) : (opts.start ? opts.start().slice(0, 30) : []);
+      res.innerHTML = r.length ? r.map(c => contactRij(c, { projectChips: !ov._kies, extra: kiesKnop(c) })).join('')
+        : '<div class="mtc-leeg">' + (q ? 'Geen contact gevonden.' : 'Typ een naam, e-mailadres of telefoonnummer.') + '</div>';
+    };
+    inp.addEventListener('input', teken); teken();
+    return ov;
+  };
+  UI.koppelKies = function (code) {
+    const proj = (typeof PROJECT_CODES !== 'undefined' ? PROJECT_CODES : []).find(p => p && p.code === code) || { code };
+    UI.zoek({ titel: 'Contact koppelen aan ' + code,
+      start: () => { const vp = C.voorProject(proj); return vp.afgeleid; },
+      kies: id => { const r = C.koppelProject(id, code); toast(r.ok ? 'Contact gekoppeld aan ' + code : (r.fout || 'Koppelen mislukt')); UI.ververs(); },
+      prefill: prefillVoor({ code, klant: projKlantCode(proj), loc: proj.loc || '' }) });
+  };
+
+  // ── detail / bewerken ──
+  function prefillVoor(ds) {
+    const kl = String(ds.klant || '').toUpperCase(), loc = String(ds.loc || '').toUpperCase(), uit = { organisatie: { type: 'klant', klantCode: kl, naam: '' }, projecten: ds.code ? [{ code: ds.code }] : [] };
+    try {
+      if (kl && typeof klantInfo === 'function') {
+        const info = klantInfo(kl, { loc });
+        uit.organisatie.naam = info.naam || ''; if (info.mbHoofd) uit.organisatie.mbContactId = String(info.mbHoofd);
+        const l = loc && (info.locaties || []).find(x => x.code === loc); if (l) uit.locatie = { code: l.code, naam: l.naam || '' };
+      }
+    } catch (e) {}
+    return uit;
+  }
+  const FELDEN = [['naam', 'Naam'], ['voornaam', 'Voornaam'], ['functie', 'Functie'], ['emails', 'E-mailadressen'], ['telefoons', 'Telefoonnummers'], ['organisatie', 'Organisatie'], ['locatie', 'Locatie'], ['notities', 'Notities'], ['projecten', 'Projecten']];
+  const VELDLABEL = { naam: 'Naam', voornaam: 'Voornaam', functie: 'Functie', notities: 'Notities', organisatie: 'Organisatie', locatie: 'Locatie', telefoon: 'Telefoon', email: 'E-mail' };
+  function fmtWaarde(v) {
+    const w = v.waarde;
+    if (v.veld === 'telefoon') return (w && w.nr) || String(w);
+    if (v.veld === 'organisatie') return [w.naam, w.klantCode && '(' + w.klantCode + ')'].filter(Boolean).join(' ');
+    if (v.veld === 'locatie') return [w.naam, w.code && '(' + w.code + ')', w.adres].filter(Boolean).join(' ');
+    return String(w == null ? '' : w);
+  }
+  function detailHtml(c, opts) {
+    opts = opts || {};
+    const nieuw = !c, d = c || C.nieuw(Object.assign({ naam: '' }, opts.prefill || {}), 'hand', '', '');
+    const o = d.organisatie || {}, l = d.locatie || {};
+    const H = v => nieuw ? '' : herkTekst(d, v);
+    const rij = (lbl, id, val, extra) => '<div class="mtc-veld"><label for="mtc-f-' + id + '">' + lbl + '</label><input id="mtc-f-' + id + '" type="text" value="' + esc(val || '') + '"' + (extra || '') + '>' + '</div>';
+    const projCodes = (typeof PROJECT_CODES !== 'undefined' ? PROJECT_CODES : []).filter(p => p && p.code && !p._vervallen).map(p => '<option value="' + esc(p.code) + '">').join('');
+    let h = '<div class="mtc-kopregel"><h3>' + (nieuw ? 'Nieuw contact' : esc(C.weergave(d))) + '</h3><button type="button" class="mtc-x" data-mtc="sluit" aria-label="Sluiten">✕</button></div>';
+    if (!nieuw && d.algemeen) h += '<div class="mtc-hint">Algemeen adres van de organisatie (geen persoon).</div>';
+    if (!nieuw && lijstVan(d.voorstellen).length) {
+      h += '<div class="mtc-sectie" style="margin-top:6px;border-top:none"><h4>Voorstellen (' + d.voorstellen.length + ')</h4>' + d.voorstellen.map(v => {
+        const hb = HERK[v.bron] || ['•', v.bron], sl = C.voorstelSleutel(v);
+        return '<div class="mtc-vs"><div>' + esc(VELDLABEL[v.veld] || v.veld) + ': <b>' + esc(fmtWaarde(v)) + '</b><div class="mtc-hint">' + hb[0] + ' ' + esc(hb[1]) + (v.reden ? ' — ' + esc(v.reden) : '') + '</div></div>'
+          + '<div class="mtc-acties"><button type="button" class="btn btn-xs btn-gold" data-recht="projecten:wijzigen" data-mtc="vs-ja" data-id="' + esc(d.id) + '" data-sleutel="' + esc(sl) + '">Accepteren</button>'
+          + '<button type="button" class="btn btn-xs btn-secondary" data-recht="projecten:wijzigen" data-mtc="vs-nee" data-id="' + esc(d.id) + '" data-sleutel="' + esc(sl) + '">Weigeren</button></div></div>';
+      }).join('') + '</div>';
+    }
+    h += '<div class="mtc-rij2">' + rij('Naam', 'naam', d.naam) + rij('Voornaam', 'voornaam', d.voornaam) + '</div>' + H('naam') + H('voornaam')
+      + rij('Functie', 'functie', d.functie) + H('functie')
+      + '<div class="mtc-veld"><label for="mtc-f-emails">E-mailadressen (één per regel)</label><textarea id="mtc-f-emails">' + esc((d.emails || []).join('\n')) + '</textarea></div>' + H('emails')
+      + '<div class="mtc-veld"><label for="mtc-f-telefoons">Telefoonnummers (één per regel)</label><textarea id="mtc-f-telefoons">' + esc((d.telefoons || []).map(t => t.nr).join('\n')) + '</textarea></div>' + H('telefoons')
+      + '<div class="mtc-sectie"><h4>Organisatie</h4><div class="mtc-rij2"><div class="mtc-veld"><label for="mtc-f-orgtype">Soort</label><select id="mtc-f-orgtype">'
+      + C.ORG_TYPES.map(t => '<option value="' + t + '"' + (o.type === t ? ' selected' : '') + '>' + { klant: 'Klant', leverancier: 'Leverancier', intern: 'Intern', overig: 'Overig' }[t] + '</option>').join('') + '</select></div>'
+      + rij('Klantcode', 'orgcode', o.klantCode, ' maxlength="12"') + '</div>' + rij('Naam organisatie', 'orgnaam', o.naam) + H('organisatie')
+      + '<h4 style="margin-top:8px">Locatie</h4><div class="mtc-rij2">' + rij('Code', 'loccode', l.code, ' maxlength="12"') + rij('Naam', 'locnaam', l.naam) + '</div>' + rij('Adres (voor “Route”)', 'locadres', l.adres) + H('locatie') + '</div>'
+      + '<div class="mtc-veld"><label for="mtc-f-notities">Notities</label><textarea id="mtc-f-notities">' + esc(d.notities || '') + '</textarea></div>' + H('notities')
+      + '<div class="mtc-sectie"><h4>Projecten</h4><div id="mtc-f-projecten">' + (lijstVan(d.projecten).length ? d.projecten.map(p =>
+        '<span class="mtc-chip" style="display:inline-flex;gap:4px;align-items:center;margin:0 4px 4px 0">' + esc(p.code) + (p.rol ? ' · ' + esc(p.rol) : '')
+        + (nieuw ? '' : ' <button type="button" class="mtc-x" style="min-width:22px;min-height:22px;font-size:12px" data-mtc="ontkoppel-p" data-id="' + esc(d.id) + '" data-code="' + esc(p.code) + '" aria-label="Ontkoppel ' + esc(p.code) + '">✕</button>') + '</span>').join('')
+        : '<span class="mtc-hint">Niet aan een project gekoppeld.</span>') + '</div>' + H('projecten')
+      + '<div class="mtc-rij2" style="margin-top:6px"><div class="mtc-veld" style="margin:0"><label for="mtc-f-projnieuw">Koppel project (code)</label><input id="mtc-f-projnieuw" list="mtc-projlijst" autocomplete="off"><datalist id="mtc-projlijst">' + projCodes + '</datalist></div>'
+      + '<div class="mtc-veld" style="margin:0"><label for="mtc-f-projrol">Rol (optioneel)</label><input id="mtc-f-projrol" type="text"></div></div></div>'
+      + '<div class="mtc-fout" id="mtc-fout" role="alert"></div>'
+      + '<div class="mtc-voet"><div class="mtc-acties"><button type="button" class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" data-mtc="opslaan" data-id="' + esc(nieuw ? '' : d.id) + '">' + (nieuw ? 'Aanmaken' : 'Opslaan') + '</button><button type="button" class="btn btn-secondary btn-sm" data-mtc="sluit">Annuleren</button></div>'
+      + (nieuw ? '' : '<div class="mtc-acties"><button type="button" class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" data-mtc="samenvoegen" data-id="' + esc(d.id) + '" title="Een ander (dubbel) contact gaat op in dit contact">Samenvoegen met…</button>'
+        + '<button type="button" class="btn btn-danger btn-sm" data-recht="projecten:wijzigen" data-mtc="verwijder" data-id="' + esc(d.id) + '">Verwijderen</button></div>') + '</div>';
+    return h;
+  }
+  UI.detail = function (id, opts) {
+    opts = opts || {};
+    const c = id ? C.perId(id) : null;
+    if (id && (!c || c._vervallen)) { toast('Dit contact bestaat niet meer'); return null; }
+    const bestaand = doc.querySelector('.mtc-ov[data-mtc-detail="' + (id || 'nieuw') + '"]');
+    if (bestaand) { bestaand.querySelector('.mtc-paneel').innerHTML = detailHtml(c, opts); return bestaand; }
+    const ov = overlay(detailHtml(c, opts), c ? C.weergave(c) : 'Nieuw contact');
+    ov.setAttribute('data-mtc-detail', id || 'nieuw'); ov._prefill = opts.prefill || null; ov._naNieuw = opts.naNieuw || null;
+    return ov;
+  };
+  function leesFormulier(ov, c) {
+    const v = id => { const e = ov.querySelector('#mtc-f-' + id); return e ? e.value : ''; };
+    const emails = v('emails').split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
+    const slecht = emails.find(x => !C.normEmail(x));
+    if (slecht) return { fout: 'Geen geldig e-mailadres: ' + slecht };
+    const bekend = new Map((c ? c.telefoons : []).map(t => [C.normTel(t.nr), t]));
+    const tels = v('telefoons').split(/\n+/).map(x => x.trim()).filter(Boolean);
+    const slechtTel = tels.find(x => !C.normTel(x));
+    if (slechtTel) return { fout: 'Geen geldig telefoonnummer: ' + slechtTel };
+    const patch = { naam: v('naam'), voornaam: v('voornaam'), functie: v('functie'), notities: v('notities'), emails,
+      telefoons: tels.map(x => bekend.get(C.normTel(x)) || { nr: x }),
+      organisatie: Object.assign({}, c ? c.organisatie : {}, { type: v('orgtype'), klantCode: v('orgcode').trim(), naam: v('orgnaam').trim() }),
+      locatie: { code: v('loccode').trim(), naam: v('locnaam').trim(), adres: v('locadres').trim() } };
+    if (!patch.organisatie.klantCode) delete patch.organisatie.klantCode;
+    return { patch, projNieuw: v('projnieuw').trim(), projRol: v('projrol').trim() };
+  }
+  function opslaanDetail(ov, id) {
+    const c = id ? C.perId(id) : null, fout = ov.querySelector('#mtc-fout');
+    const f = leesFormulier(ov, c); if (f.fout) { fout.textContent = f.fout; return; }
+    let r;
+    if (!c) {
+      const pre = ov._prefill || {}, p = f.patch;
+      r = C.maak(Object.assign({}, p, { projecten: [...(pre.projecten || []), ...(f.projNieuw ? [{ code: f.projNieuw, rol: f.projRol }] : [])],
+        organisatie: Object.assign({}, pre.organisatie || {}, p.organisatie), locatie: p.locatie.code || p.locatie.naam || p.locatie.adres ? p.locatie : (pre.locatie || null) }));
+    } else {
+      r = C.bewerk(id, f.patch);
+      if (!r.ok && r.fout === 'Niets gewijzigd') r = { ok: true, contact: c, ongewijzigd: true };
+      if (r.ok && f.projNieuw) { const k = C.koppelProject(id, f.projNieuw, f.projRol); if (!k.ok && k.fout !== 'Al gekoppeld') r = k; }
+    }
+    if (!r.ok) { fout.textContent = r.fout || 'Opslaan mislukt'; return; }
+    sluitOv(ov); toast(r.ongewijzigd ? 'Geen wijzigingen' : (c ? 'Contact opgeslagen' : 'Contact aangemaakt')); UI.ververs();
+    if (!c && ov._naNieuw) ov._naNieuw(r.contact);
+  }
+
+  // ── ververs alles wat contacten toont ──
+  UI.ververs = function () {
+    try {
+      if (typeof _klantHuidig !== 'undefined' && _klantHuidig && typeof _klantSectieRender === 'function') {
+        const el = doc.getElementById('klant-sectie-inhoud'); if (el && el.dataset.sectie === 'contacten') _klantSectieRender();
+      }
+    } catch (e) { console.warn('contacten verversen (klant):', e); }
+    doc.querySelectorAll('[data-mtc-project]').forEach(el => {
+      try { el.innerHTML = projectInner({ code: el.dataset.mtcProject, klant: el.dataset.mtcKlant, loc: el.dataset.mtcLoc }); } catch (e) {}
+    });
+    const z = doc.querySelector('#mtc-zoek-q'); if (z) z.dispatchEvent(new root.Event('input'));
+    doc.querySelectorAll('.mtc-ov[data-mtc-detail]').forEach(ov => {
+      const id = ov.getAttribute('data-mtc-detail'); if (id === 'nieuw') return;
+      const c = C.perId(id);
+      if (!c || c._vervallen) { sluitOv(ov); return; }
+      ov.querySelector('.mtc-paneel').innerHTML = detailHtml(c, {});
+    });
+    try { const nn = doc.getElementById('mtc-instel-status'); if (nn) nn.textContent = C.actieven().length + ' contacten'; } catch (e) {}
+  };
+
+  // ── Contacten bijwerken (droogloop eerst, dan pas opslaan) ──
+  let bezig = false;
+  function mbCtx() {
+    const vol = typeof KLANTEN_VOL !== 'undefined' ? KLANTEN_VOL : [], klanten = typeof KLANTEN !== 'undefined' ? KLANTEN : [];
+    return {
+      type: id => { const v = vol.find(x => String(x.mb_contact_id || '') === id); return v && v.soort === 'leverancier' ? 'leverancier' : 'klant'; },
+      klantCode: id => (typeof klantCodeVoorMb === 'function' ? klantCodeVoorMb(id) : null) || null,
+      locatie: id => { for (const k of klanten) { const l = Array.isArray(k.locaties) && k.locaties.find(x => String(x.mb_contact_id || '') === id); if (l) return { code: l.code, naam: l.naam || '' }; } return null; }
+    };
+  }
+  async function mbContactenLaden(info) {
+    let cache = null;
+    try { const c = JSON.parse(root.localStorage.getItem('mt_cache_klanten') || 'null'); if (c && Array.isArray(c.data)) cache = c; } catch (e) {}
+    if (cache && Date.now() - cache.ts < 7 * 864e5) { info.mb = { bron: 'cache van ' + NL_DATUM(cache.ts), n: cache.data.length }; return cache.data; }
+    if (typeof mbGet === 'function' && typeof getAdmin === 'function') {
+      try {
+        let pagina = 1; const alle = [];
+        for (;;) {
+          const r = await mbGet(getAdmin() + '/contacts?page=' + pagina + '&per_page=100');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const b = await r.json(); if (!Array.isArray(b) || !b.length) break;
+          alle.push(...b); if (b.length < 100 || pagina >= 30) break; pagina++;
+        }
+        info.mb = { bron: 'zojuist opgehaald', n: alle.length }; return alle;
+      } catch (e) { console.warn('Moneybird-contacten ophalen mislukt:', e.message); }
+    }
+    if (cache) { info.mb = { bron: 'oude cache van ' + NL_DATUM(cache.ts), n: cache.data.length }; return cache.data; }
+    info.mb = { bron: 'niet beschikbaar', n: 0 }; return [];
+  }
+  async function verzamel() {
+    const info = {}, ctx = mbCtx(), items = [];
+    const mb = await mbContactenLaden(info);
+    const inMb = new Set(mb.map(m => String(m.id)));
+    const a = B.uitMoneybird(mb, ctx); items.push(...a);
+    const reg = B.uitRegistry(typeof KLANTEN_VOL !== 'undefined' ? KLANTEN_VOL : [], ctx, inMb); items.push(...reg); info.registry = reg.length;
+    const pr = B.uitProjecten(typeof PROJECT_CODES !== 'undefined' ? PROJECT_CODES : [], { klantNaam: code => typeof klantByCode === 'function' && (klantByCode(code) || {}).naam || '' }); items.push(...pr); info.projecten = pr.length;
+    const ml = B.uitMails(root.MTKoppel ? root.MTKoppel.alle() : {}, { domeinen: B.domeinKaart() }); items.push(...ml); info.mails = ml.length;
+    return { items, info };
+  }
+  function planHtml(plan, info) {
+    const s = plan.samenvatting, L = [];
+    L.push('<p style="margin:0 0 8px"><b>' + esc(plan.tekst) + '</b>' + (s.overgeslagen ? ' <span style="color:var(--text-dim)">(' + s.overgeslagen + ' eerder verwijderd, overgeslagen)</span>' : '') + '</p>');
+    L.push('<ul style="margin:0 0 8px 18px;padding:0;font-size:12px;color:var(--text-dim)"><li>Moneybird: ' + info.mb.n + ' contacten (' + esc(info.mb.bron) + ')</li><li>Klantregistry: ' + (info.registry || 0)
+      + '</li><li>Projecten: ' + (info.projecten || 0) + ' met klantgegevens</li><li>Gekoppelde mails: ' + (info.mails || 0) + ' afzenders</li></ul>');
+    const vb = [];
+    plan.nieuw.slice(0, 5).forEach(c => vb.push('Nieuw: ' + C.weergave(c) + (c.organisatie && c.organisatie.naam ? ' (' + c.organisatie.naam + ')' : '')));
+    plan.aangevuld.slice(0, 4).forEach(g => vb.push('Aangevuld: ' + g.naam + ' — ' + g.velden.join(', ')));
+    plan.voorstellen.slice(0, 4).forEach(v => vb.push('Voorstel: ' + v.naam + ' — ' + (VELDLABEL[v.veld] || v.veld).toLowerCase()));
+    if (vb.length) L.push('<div style="font-size:12px">' + vb.map(x => '<div>' + esc(x) + '</div>').join('') + (s.nieuw + s.aangevuld + s.voorstellen > vb.length ? '<div style="color:var(--text-dim)">…</div>' : '') + '</div>');
+    L.push('<p style="margin:8px 0 0;font-size:12px;color:var(--text-dim)">Er wordt niets overschreven: een afwijkende waarde komt als voorstel in het contact te staan. Pas na “Opslaan” wordt er iets bewaard.</p>');
+    return L.join('');
+  }
+  UI.bijwerken = async function () {
+    if (bezig) return; bezig = true;
+    const knoppen = [...doc.querySelectorAll('[data-mtc="bijwerken"]')]; knoppen.forEach(k => { k.disabled = true; });
+    const status = doc.getElementById('mtc-instel-status'); if (status) status.textContent = 'Gegevens verzamelen…';
+    try {
+      const { items, info } = await verzamel();
+      const plan = C.bereken(C.lees(), items);
+      const s = plan.samenvatting;
+      if (!s.nieuw && !s.aangevuld && !s.voorstellen) {
+        if (root.mtDialog && root.mtDialog.alert) await root.mtDialog.alert({ title: 'Contacten bijwerken', html: '<p>Alles is al bijgewerkt — er valt niets aan te vullen.</p><p style="font-size:12px;color:var(--text-dim)">Gelezen: Moneybird ' + info.mb.n + ' (' + esc(info.mb.bron) + '), ' + (info.projecten || 0) + ' projecten, ' + (info.mails || 0) + ' mail-afzenders.</p>' });
+        else toast('Contacten zijn al bijgewerkt');
+        return;
+      }
+      const ja = await vraag({ title: 'Contacten bijwerken — controleer eerst', html: planHtml(plan, info), message: plan.tekst, okLabel: 'Opslaan', cancelLabel: 'Annuleren' });
+      if (!ja) { toast('Niets opgeslagen'); return; }
+      // het register kan tijdens het wachten zijn gewijzigd: opnieuw rekenen op de verse lijst
+      const vers = C.bereken(C.lees(), items);
+      C.pasPlanToe(vers, 'bijwerken');
+      toast('Contacten bijgewerkt: ' + vers.tekst); UI.ververs();
+    } catch (e) {
+      console.warn('contacten bijwerken mislukt:', e); toast('Contacten bijwerken mislukte: ' + (e && e.message || e));
+    } finally {
+      bezig = false; knoppen.forEach(k => { k.disabled = false; }); if (status) status.textContent = C.actieven().length + ' contacten';
+    }
+  };
+
+  // ── inbox: handtekening-voorstellen bij een gekoppelde mail (leesvenster) ──
+  let laatsteMail = null;
+  UI.inboxHandtekening = function (m, host) {
+    host = host || doc.getElementById('inbox-contactwrap'); if (!host) return;
+    host.innerHTML = ''; laatsteMail = null;
+    if (!m || !root.MTKoppel || !root.MTKoppel.mailProjecten(m).length) return;
+    let r; try { r = B.handtekeningVoorstellen(m); } catch (e) { console.warn('handtekening-herkenning:', e); return; }
+    if (!r.adres) return;
+    if (r.bestaat) {
+      if (!r.nieuwVoorstellen.length) return;
+      const velden = Array.from(new Set(r.nieuwVoorstellen.map(v => (VELDLABEL[v.veld] || v.veld).toLowerCase())));
+      host.innerHTML = '<div class="mtc-inbox" role="status">📇 <span><b>' + esc(C.weergave(r.contact)) + '</b>: ' + r.nieuwVoorstellen.length + ' nieuw voorstel uit de handtekening (' + esc(velden.join(', ')) + ')</span>'
+        + '<button type="button" class="btn btn-xs btn-secondary" data-mtc="detail" data-id="' + esc(r.contact.id) + '">Bekijken</button></div>';
+      UI.ververs(); return;
+    }
+    laatsteMail = m;
+    const g = r.gevonden, delen = [r.naam || r.adres].concat(g.telefoons.map(t => t.nr), g.functie ? [g.functie] : []);
+    host.innerHTML = '<div class="mtc-inbox" role="status">📇 <span>Nieuw contact? <b>' + esc(delen[0]) + '</b>' + (delen.length > 1 ? ' — ' + esc(delen.slice(1).join(' · ')) : '') + '</span>'
+      + '<button type="button" class="btn btn-xs btn-secondary" data-recht="projecten:wijzigen" data-mtc="mail-contact" title="Maakt het contact aan bij de projecten van deze mail; telefoon en functie uit de handtekening komen als voorstel">Contact aanmaken</button></div>';
+  };
+  function maakUitMail(m) {
+    const K = root.MTKoppel, adres = C.normEmail(m.from && m.from.emailAddress && m.from.emailAddress.address || m.fromAddr);
+    if (!K || !adres) return false;
+    const rec = { fromAddr: adres, from: m.from && m.from.emailAddress && m.from.emailAddress.name || '' };
+    const links = {}; K.mailProjecten(m).forEach(code => { links[code] = [rec]; });
+    const plan = C.bereken(C.lees(), B.uitMails(links, { domeinen: B.domeinKaart() }));
+    C.pasPlanToe(plan, 'mail');
+    B.handtekeningVoorstellen(m);
+    return true;
+  }
+
+  // ── mobiel (alleen lezen: bellen/mailen bij het project) ──
+  async function mobielLijst() {
+    let lijst = [];
+    try { const c = JSON.parse(root.localStorage.getItem('mt_contacten_mobiel') || 'null'); if (c && Array.isArray(c.data)) lijst = c.data; } catch (e) {}
+    try {
+      const ingelogd = typeof _SP !== 'undefined' && typeof _msAccount !== 'undefined' && _msAccount && !(typeof _demoMode !== 'undefined' && _demoMode);
+      if (ingelogd) {
+        const d = await _SP.read('mt_contacten.json');
+        if (Array.isArray(d)) { lijst = d; try { root.localStorage.setItem('mt_contacten_mobiel', JSON.stringify({ ts: Date.now(), data: d })); } catch (e) {} }
+      }
+    } catch (e) { console.warn('contacten laden (mobiel):', e && e.message); }
+    return lijst;
+  }
+  function mobielRij(c, adres) {
+    const sub = [c.functie, c.organisatie && c.organisatie.naam].filter(Boolean).map(esc).join(' · ');
+    return '<div class="mtc-mrij"><div style="font-size:15px;font-weight:600">' + esc(C.weergave(c)) + '</div>' + (sub ? '<div style="font-size:12px;color:var(--text-dim)">' + sub + '</div>' : '')
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">' + bel(c, true) + mail(c, true) + route(c, { adres }, true) + '</div></div>';
+  }
+  UI.mobielSheet = async function (p, host, adres) {
+    if (!host || !p || !p.code) return;
+    host.dataset.mtcProj = p.code; host.innerHTML = '<div class="mtc-leeg">Contactpersonen laden…</div>';
+    const lijst = await mobielLijst();
+    if (host.dataset.mtcProj !== p.code) return;                         // intussen een ander project geopend
+    const vp = C.voorProject({ code: p.code }, { lijst });
+    const toon = vp.direct.length ? vp.direct : vp.afgeleid.slice(0, 4);
+    host.innerHTML = toon.length
+      ? (vp.direct.length ? '' : '<div class="mtc-hint" style="margin-bottom:4px">Contacten van de klant:</div>') + toon.map(c => mobielRij(c, adres)).join('')
+      : '<div class="mtc-leeg">Nog geen contactpersonen bekend.</div>';
+  };
+
+  // ── gedelegeerde klikken ──
+  UI.sluitAlles = function () { doc.querySelectorAll('.mtc-ov').forEach(o => o.remove()); };
+  function klik(e) {
+    const el = e.target && e.target.closest ? e.target.closest('[data-mtc]') : null; if (!el) return;
+    const a = el.dataset.mtc, id = el.dataset.id, code = el.dataset.code, ov = ovVan(el);
+    const klaarPop = () => { if (root.MTKoppelUI && root.MTKoppelUI.sluit) root.MTKoppelUI.sluit(); };
+    switch (a) {
+      case 'detail': klaarPop(); UI.detail(id); break;
+      case 'zoek': UI.zoek(); break;
+      case 'sluit': sluitOv(ov); break;
+      case 'nieuw': UI.detail(null, { prefill: prefillVoor({ klant: el.dataset.klant, loc: el.dataset.loc, code }) }); break;
+      case 'zoek-nieuw': { const pre = ov && ov._prefill; sluitOv(ov); UI.detail(null, { prefill: pre || null }); break; }
+      case 'bijwerken': UI.bijwerken(); break;
+      case 'koppel-kies': UI.koppelKies(code); break;
+      case 'koppel-vraag': UI.projectPop(el, id, code, false); break;
+      case 'kies': { const f = ov && ov._kies; if (f) { sluitOv(ov); f(id); } break; }
+      case 'koppel': { klaarPop(); const r = C.koppelProject(id, code); toast(r.ok ? 'Gekoppeld aan ' + code : (r.fout || 'Koppelen mislukt')); UI.ververs(); break; }
+      case 'ontkoppel': { klaarPop(); const r = C.ontkoppelProject(id, code); toast(r.ok ? 'Ontkoppeld van ' + code : (r.fout || 'Ontkoppelen mislukt')); UI.ververs(); break; }
+      case 'ontkoppel-p': { const r = C.ontkoppelProject(id, code); toast(r.ok ? 'Ontkoppeld van ' + code : (r.fout || 'Ontkoppelen mislukt')); UI.ververs(); break; }
+      case 'opslaan': opslaanDetail(ov, id || null); break;
+      case 'vs-ja': case 'vs-nee': { const r = C.beslis(id, el.dataset.sleutel, a === 'vs-ja'); toast(r.ok ? (a === 'vs-ja' ? 'Voorstel overgenomen' : 'Voorstel geweigerd — komt niet terug') : (r.fout || 'Mislukt')); UI.ververs(); break; }
+      case 'samenvoegen': {
+        const doel = C.perId(id); if (!doel) break;
+        const kand = new Map(); C.dubbelen().forEach(d => { if (d.a.id === id) kand.set(d.b.id, d.b); if (d.b.id === id) kand.set(d.a.id, d.a); });
+        UI.zoek({ titel: 'Samenvoegen in ' + C.weergave(doel), start: () => [...kand.values()],
+          kies: async oid => {
+            const bron = C.perId(oid); if (!bron || oid === id) return;
+            const ja = await vraag({ title: 'Samenvoegen', message: C.weergave(bron) + ' gaat op in ' + C.weergave(doel) + '.\nE-mailadressen, telefoonnummers en projecten worden verenigd; een afwijkende naam of functie komt als voorstel in ' + C.weergave(doel) + '. Het samengevoegde contact blijft als verwijderd bewaard.', okLabel: 'Samenvoegen' });
+            if (!ja) return;
+            const r = C.voegSamen(id, oid); toast(r.ok ? 'Contacten samengevoegd' : (r.fout || 'Samenvoegen mislukt')); UI.ververs();
+          } });
+        break;
+      }
+      case 'verwijder': (async () => {
+        const c = C.perId(id); if (!c) return;
+        const ja = await vraag({ title: 'Contact verwijderen', message: C.weergave(c) + ' verwijderen? Het contact blijft als verwijderd bewaard en wordt niet automatisch opnieuw aangemaakt.', okLabel: 'Verwijderen', danger: true });
+        if (!ja) return;
+        const r = C.verwijder(id); if (r.ok) { sluitOv(ovVan(el)); toast('Contact verwijderd'); UI.ververs(); } else toast(r.fout || 'Verwijderen mislukt');
+      })(); break;
+      case 'mail-contact': if (laatsteMail && maakUitMail(laatsteMail)) { toast('Contact aangemaakt'); UI.inboxHandtekening(laatsteMail); UI.ververs(); } break;
+      default: return;
+    }
+    e.preventDefault();
+  }
+  if (!root.__mtcKlik) { root.__mtcKlik = true; doc.addEventListener('click', klik); }
+
+  UI.zoekOpen = () => UI.zoek();
+  UI._intern = { contactRij, detailHtml, planHtml, mobielRij, projectInner, maakUitMail, leesFormulier };
+  root.MTContactenUI = UI;
+
 })(typeof window !== 'undefined' ? window : null);

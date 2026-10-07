@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Contactenregister: kern (model, ontdubbeling, aanvullen met voorstellen, merger, bronnen, handtekening)
+- Commit: `b10a30a` | Auteur: Bart Witte
+
 ## 2026-10-07 — Release v2.5: Toggl zelf koppelen + planvoorstellen; backup = v2.4.1
 - Commit: `cb14727` | Auteur: Bart Witte
 

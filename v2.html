@@ -23,7 +23,8 @@
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-toggl.js?v=2026-10-07a"></script>
 <script src="mt-koppel.js?v=2026-10-07a"></script>
-<script src="mt-inbox.js?v=2026-10-07a"></script>
+<script src="mt-contacten.js?v=2026-10-07a"></script>
+<script src="mt-inbox.js?v=2026-10-07b"></script>
 <script src="mt-rollen.js?v=2026-10-07a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -786,6 +787,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <div class="header-right">
     <span id="api-dot" class="api-dot warn"></span>
     <span id="api-label" class="api-label">verbinden...</span>
+    <button class="mtc-hdrknop" data-mtc="zoek" title="Contact zoeken" aria-label="Contact zoeken">📇</button>
     <button class="mobiel-bell-btn" id="mobiel-bell-btn" onclick="showTab('projecten',document.querySelector('.tab-btn[onclick*=\\'projecten\\']'));scrollMobielMeldingen()" title="Nieuwe projecten vanaf mobiel">📱<span class="mobiel-bell-badge" id="mobiel-bell-badge"></span></button>
     <div class="user-chip" onclick="msLogout()" title="Uitloggen">
       <div class="user-avatar" id="user-avatar">?</div>
@@ -1404,6 +1406,11 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <div class="card-title">Koppel je Toggl</div>
       <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Je timer en uren lopen via je eigen Toggl-account. Eén keer koppelen; je sleutel wordt versleuteld bewaard en is voor niemand zichtbaar — ook niet voor beheerders.</p>
       <span data-tgk-badge></span>
+    </div>
+    <div class="card" data-recht="projecten:wijzigen" id="mtc-instel-kaart">
+      <div class="card-title">Contacten</div>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Eén contactenregister voor klanten, leveranciers en collega's. “Bijwerken” leest Moneybird, projecten en gekoppelde mails; je ziet eerst wat er zou veranderen en niets wordt overschreven.</p>
+      <div class="flex"><button class="btn btn-secondary btn-sm" data-mtc="bijwerken">↻ Contacten bijwerken</button><button class="btn btn-secondary btn-sm" data-mtc="zoek">🔎 Contact zoeken</button><span id="mtc-instel-status" style="font-size:12px;color:var(--text-dim)"></span></div>
     </div>
     <div class="grid2">
       <div>
@@ -5318,6 +5325,7 @@ function projSecOverzicht(proj,c){
           ${laatste.length?laatste.map(r=>`<div class="ov-act">${icoon(r.soort)} ${esc(r.titel)} <span class="dos-meta">${fmtDatum(r.datum.slice(0,10))}</span></div>`).join(''):'<div class="ov-act" style="color:var(--text-faint)">Nog niets gebeurd.</div>'}
           <a href="#" class="ov-meer" onclick="event.preventDefault();projSectieKies('dossier')">Alles in het dossier →</a></section>
       </div>
+      ${window.MTContactenUI?MTContactenUI.projectKaart(proj):''}
       ${let_.length?`<section class="ov-blok ov-let"><div class="card-title">Aandachtspunten</div>${let_.map(x=>`<div class="ov-letrij">${x}</div>`).join('')}</section>`:''}`;
 }
 // ── Dossier: bijlagen toevoegen, projectmap, en de tijdlijn met filters ──
@@ -5837,7 +5845,7 @@ function _dosUrl(key){
 // project wisselt zonder van tab te springen (zelfde contextbalk, pills en dossier als B7).
 // Klantidentiteit = klantcode + Moneybird-contact; "geen locatie" is een gewone staat.
 const PROJ_STATUSSEN=['offerte','lopend','opgeleverd','archief'];
-const KLANT_SECTIES=[{k:'overzicht',l:'Overzicht'},{k:'dossier',l:'Dossier'},{k:'planning',l:'Planning'},{k:'bestanden',l:'Bestanden'},{k:'geld',l:'Geld'}];
+const KLANT_SECTIES=[{k:'overzicht',l:'Overzicht'},{k:'dossier',l:'Dossier'},{k:'planning',l:'Planning'},{k:'bestanden',l:'Bestanden'},{k:'geld',l:'Geld'},{k:'contacten',l:'Contacten'}];
 let _klantHuidig=null;                       // {kl, loc}
 let _klantSectie=(()=>{ try{ const s=localStorage.getItem('mt_klant_sectie'); return KLANT_SECTIES.some(x=>x.k===s)?s:'overzicht'; }catch(e){ return 'overzicht'; } })();
 const _klantToonArchief={};                  // kl -> true als archief zichtbaar moet zijn
@@ -6003,6 +6011,7 @@ function _klantSectieRender(){
     catch(e){ console.warn('tijdlijn:',e); const tl=document.getElementById('klant-tijdlijn'); if(tl) tl.innerHTML='<p class="dos-leeg">Tijdlijn kon niet laden: '+esc(e.message||String(e))+'</p>'; }
     return;
   }
+  if(_klantSectie==='contacten'){ el.innerHTML=window.MTContactenUI?MTContactenUI.klantSectie(info,projen,{loc}):'<p class="dos-leeg">Contacten niet beschikbaar.</p>'; return; }
   if(_klantSectie==='bestanden'){ el.innerHTML=klantSecBestanden(info,projen); return; }
   if(_klantSectie==='geld'){ el.innerHTML=klantSecGeld(info,projen); klantGeldLaad(info); return; }
   el.innerHTML=klantSecOverzicht(info,projen);
@@ -9471,7 +9480,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -9544,6 +9553,19 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // Koppel-journaal (B4, mt-koppel.js): alleen toevoegen, vereniging op id, laatste 2000.
     // Zelfstandig (niet via window.MTKoppel), zodat hydrate niet blokkeert als mt-koppel.js ontbreekt.
     mt_koppel_journaal(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
+      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
+      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-2000);
+    },
+    // Contactenregister (mt-contacten.js): per contact nieuwste stempel; velden met herkomst 'hand'
+    // worden nooit door automatische bronnen overschreven; tombstones (verwijderd/samengevoegd) winnen als ze nieuwer zijn.
+    // Valt terug op "nieuwste per id" als mt-contacten.js ontbreekt, zodat hydrate nooit blokkeert.
+    mt_contacten(lokaal, spData) {
+      if (window.MTContacten) return window.MTContacten.samen(lokaal, spData);
+      return _spSamenPerSleutel(lokaal, spData, x => x && x.id, _spTijd);
+    },
+    mt_contacten_journaal(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
       const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
       const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
