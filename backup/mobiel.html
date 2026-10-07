@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.6 — M&T Mobiel</title>
+<title>BACKUP v2.6.1 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -761,7 +761,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.6, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.6.1, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -2451,6 +2451,31 @@ let REAL_PROJECTS = [];  // Track-projecten (na login)
 try { USER_PROJECTS = JSON.parse(localStorage.getItem("mt_user_projects") || "[]"); } catch(e) { USER_PROJECTS = []; }
 
 // allProjects(): echte projecten bovenaan, dan mock (alleen tonen als geen echte), dan USER_PROJECTS
+// Zichtbare projectcode (besluit Bart 7-10, zoals de cockpit): de generator-code is alleen een sleutel
+// en wordt niet getoond. Nummer = offertenummer (of werkcode, volgens de centrale instelling) uit de
+// cockpit (mt_projecten.json, alleen lezen); naam = cockpit-naam of Toggl-naam, nooit de kale code.
+let MT_PROJ_INFO = {};
+async function spSyncProjInfo() {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const lijst = await _SP.read('mt_projecten.json');
+    if (Array.isArray(lijst)) { const m = {}; lijst.forEach(p => { if (p && p.code && !p._vervallen) m[p.code] = p; }); MT_PROJ_INFO = m; }
+  } catch (e) {}
+}
+function mProjNr(p) {
+  const i = p && MT_PROJ_INFO[p.code]; if (!i) return '';
+  const h = Array.isArray(i.offertes) ? i.offertes.find(o => o && o.rol === 'hoofd' && o.nummer) : null;
+  const o = String(i.offertenr || (h && h.nummer) || '').trim(), w = String(i.werkcode || '').trim();
+  const m = window.MT_INSTELLINGEN && MT_INSTELLINGEN.projectcode;
+  return m === 'werkcode' ? w : m === 'beide' ? [w, o].filter(Boolean).join(' · ') : o;
+}
+function mProjNaam(p) {
+  if (!p) return '';
+  const c = String(p.code || '').trim().toUpperCase(), i = MT_PROJ_INFO[p.code];
+  const echt = n => { n = String(n || '').trim(); if (c && n.toUpperCase().startsWith(c)) n = n.slice(c.length).replace(/^[\s\-–—·:|]+/, '').trim(); return n && n.toUpperCase() !== c ? n : ''; };
+  return echt(i && i.naam) || echt(p.name) || 'Project zonder naam';
+}
+function mProjKort(p) { return mProjNr(p) || mProjNaam(p); }
 function allProjects() {
   if (REAL_PROJECTS.length) {
     // Echte Track-projecten + user-projecten; mock-projecten verbergen
@@ -2717,6 +2742,7 @@ async function loadRealProjects() {
     REAL_PROJECTS.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nl'));
     // Sync user-projecten + adres-overlay van SP (merge)
     await spSyncUserProjects();
+    await spSyncProjInfo();
     spSyncAddr().then(() => renderProjectCards());
     // Herrender
     renderPickerList(allProjects());
@@ -2878,7 +2904,7 @@ async function saveTimerEdit() {
 function openManualEntry() {
   const sel = document.getElementById("manProject");
   sel.innerHTML = `<option value="">— kies project —</option>` +
-    allProjects().map(p => `<option value="${p.code}" ${activeProject && p.code===activeProject.code ? "selected" : ""}>${p.code} — ${escHtml(p.name)}</option>`).join("");
+    allProjects().map(p => `<option value="${p.code}" ${activeProject && p.code===activeProject.code ? "selected" : ""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("");
   document.getElementById("manDesc").value = "";
   document.getElementById("manDate").value = _isoDate(new Date());
   // standaard: het afgelopen uur, op kwartieren afgerond
@@ -3218,9 +3244,9 @@ function renderPickerList(list) {
 function pickerItemHtml(p) {
   return `<div class="picker-item" data-id="${p.id}" onclick="selectProject('${p.id}')">
     <div>
-      <div class="picker-item-name">${p.name}</div>
+      <div class="picker-item-name">${escHtml(mProjNaam(p))}</div>
     </div>
-    <div class="picker-item-code">${p.code}</div>
+    <div class="picker-item-code">${escHtml(mProjNr(p))}</div>
     <div class="picker-item-check" style="display:none">✓</div>
   </div>`;
 }
@@ -3258,8 +3284,8 @@ function renderRecentList() {
     <div class="recent-entry" onclick="selectProject('${p.id}')">
       <div class="recent-dot"></div>
       <div class="recent-info">
-        <div class="recent-name">${p.name}</div>
-        <div class="recent-meta">${p.code} · ${p.lastActivity}</div>
+        <div class="recent-name">${escHtml(mProjNaam(p))}</div>
+        <div class="recent-meta">${mProjNr(p) ? escHtml(mProjNr(p)) + ' · ' : ''}${p.lastActivity}</div>
       </div>
       <div style="font-size:13px;color:var(--text-faint)">▶</div>
     </div>
@@ -3309,9 +3335,9 @@ function renderProjectCards() {
   el.innerHTML = lijst.map(p => {
     const [cls,label] = STATUS_MAP[p.status] || ["badge-gray","–"];
     return `<div class="project-card" onclick="openProjectSheet('${p.id}')">
-      <div class="project-card-code">${p.code}</div>
+      ${mProjNr(p) ? `<div class="project-card-code">${escHtml(mProjNr(p))}</div>` : ''}
       <div class="project-card-top">
-        <div class="project-card-name">${p.name}</div>
+        <div class="project-card-name">${escHtml(mProjNaam(p))}</div>
         <span class="badge ${cls}">${label}</span>
       </div>
       ${(p.pending || p.spPending) ? `<div style="font-size:11px;color:var(--gold,#d6a93a);margin-top:2px" title="Wordt automatisch opnieuw geprobeerd">⏳ ${p.spPending ? 'nog niet gedeeld met het team' : 'Toggl-koppeling volgt'} — sync loopt automatisch</div>` : ''}
@@ -3348,7 +3374,7 @@ function openProjectSheet(id) {
       <div class="sheet-action-icon">⏱</div>
       <div class="sheet-action-label">
         <div class="sheet-action-title">Start timer</div>
-        <div class="sheet-action-sub">Klokt op ${p.code}</div>
+        <div class="sheet-action-sub">Klokt op ${escHtml(mProjKort(p))}</div>
       </div>
       <div class="sheet-action-arrow">›</div>
     </div>
@@ -3896,7 +3922,7 @@ function closeBlokSheet() {
 function fillBlokProjectSelect(selectedCode) {
   const sel = document.getElementById("blokProject");
   sel.innerHTML = `<option value="">— kies project —</option>` +
-    allProjects().map(p => `<option value="${p.code}" ${p.code===selectedCode?"selected":""}>${p.code} — ${escHtml(p.name)}</option>`).join("") +
+    allProjects().map(p => `<option value="${p.code}" ${p.code===selectedCode?"selected":""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("") +
     `<option value="__new">＋ Nieuw project…</option>`;
 }
 
@@ -3981,8 +4007,8 @@ function renderCaptureProject() {
   if (proj) {
     el.innerHTML = `<div class="capture-active-project">
       <div>
-        <div class="cap-proj-name">${proj.name}</div>
-        <div class="cap-proj-code">${proj.code}</div>
+        <div class="cap-proj-name">${escHtml(mProjNaam(proj))}</div>
+        <div class="cap-proj-code">${escHtml(mProjNr(proj))}</div>
       </div>
       <button class="cap-change-btn" onclick="changeCaptureProject()">Wijzigen</button>
     </div>`;
@@ -5097,7 +5123,7 @@ let _nasProj = null;
 function openNasSheet(proj) {
   _nasProj = proj;
   const n = opnamePhotos.filter(p => p.file).length;
-  document.getElementById("nasSheetSub").textContent = `${proj.code} — ${proj.name || ''}`;
+  document.getElementById("nasSheetSub").textContent = [mProjNaam(proj), mProjNr(proj)].filter(Boolean).join(' · ');
   document.getElementById("nasSheetText").textContent =
     `Dit project heeft nog geen map op de NAS. Maak de mappenstructuur aan, dan komen de ${n} foto('s) meteen in 06_Fotos terecht.`;
   const btn = document.getElementById("nasCreateBtn");
@@ -5176,7 +5202,7 @@ function populateOpleverSelect() {
     .forEach(p => {
     const opt = document.createElement("option");
     opt.value = p.id;
-    opt.textContent = `${p.code} — ${p.name}`;
+    opt.textContent = [mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · ');
     sel.appendChild(opt);
   });
   // project staat soms al wel in Toggl maar nog niet in de tool →
@@ -5746,7 +5772,7 @@ function showOpnameRapport() {
   const now = new Date().toLocaleDateString("nl-NL", {day:"2-digit", month:"long", year:"numeric"});
   const door = _msAccount ? (_msAccount.name || _msAccount.username) : "Demo";
   let html = `<div class="rapport-title">Opnamerapport</div>
-    <div class="rapport-sub">${p.code} · ${p.name} · ${now} · ingemeten door ${escHtml(door)}</div>`;
+    <div class="rapport-sub">${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))} · ${now} · ingemeten door ${escHtml(door)}</div>`;
   if (notitie) {
     html += `<div class="rapport-section">📝 Omschrijving / maten / afspraken</div>
       <div class="rapport-item"><div class="rapport-item-content"><div class="rapport-item-name" style="white-space:pre-wrap">${escHtml(notitie)}</div></div></div>`;
@@ -5928,7 +5954,7 @@ function showRapport() {
   const now = new Date().toLocaleDateString("nl-NL",{day:"2-digit",month:"long",year:"numeric"});
   const door = _msAccount ? (_msAccount.name || _msAccount.username) : "Demo";
   let html = `<div class="rapport-title">Opleveringsrapport</div>
-    <div class="rapport-sub">${p.code} · ${p.name} · ${now} · ingevuld door ${escHtml(door)}</div>`;
+    <div class="rapport-sub">${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))} · ${now} · ingevuld door ${escHtml(door)}</div>`;
   if (oks.length) {
     html += `<div class="rapport-section">✅ Goedgekeurd (${oks.length})</div>`;
     html += oks.map(item => `<div class="rapport-item">

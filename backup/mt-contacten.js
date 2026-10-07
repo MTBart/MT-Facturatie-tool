@@ -1024,7 +1024,7 @@
   function projectInner(proj) {
     const vp = C.voorProject(proj), code = proj.code, kb = root.MTKoppelUI ? root.MTKoppelUI.badge : () => '';
     const rij = (c, direct) => contactRij(c, { projectChips: false,
-      extra: kb({ status: direct ? 'gekoppeld' : 'open', klein: true, label: code, titel: direct ? 'Gekoppeld aan dit project — klik om te ontkoppelen' : 'Hoort bij de klant, nog niet aan dit project gekoppeld — klik om te koppelen',
+      extra: kb({ status: direct ? 'gekoppeld' : 'open', klein: true, label: (typeof projKort === 'function' ? projKort(code) : code), titel: direct ? 'Gekoppeld aan dit project — klik om te ontkoppelen' : 'Hoort bij de klant, nog niet aan dit project gekoppeld — klik om te koppelen',
         onclick: "MTContactenUI.projectPop(this,'" + jsCode(c.id) + "','" + jsCode(code) + "'," + (direct ? 'true' : 'false') + ')' }) });
     let html = '<div class="card-title mtc-kop" style="margin-bottom:6px"><span>Contactpersonen</span><span class="mtc-acties-kop">'
       + '<button type="button" class="btn btn-xs btn-secondary" data-recht="projecten:wijzigen" data-mtc="koppel-kies" data-code="' + esc(code) + '" title="Een bestaand contact aan dit project koppelen">+ Koppel</button>'

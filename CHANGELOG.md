@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Projectenlijst: klantnaam als gewone tekst, chipje alleen voor een echt nummer
+- Commit: `482cb74` | Auteur: Bart Witte
+
 ## 2026-10-07 — Merge release v2.6.1 (origin/main) in main
 - Commit: `166e677` | Auteur: Bart Witte
 
