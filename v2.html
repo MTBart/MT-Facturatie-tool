@@ -5109,7 +5109,7 @@ function renderProjectLijst(filter=''){
   if(_projKlantFilter&&!gefilterd.length){ el.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-faint);font-style:italic">Geen projecten voor deze klant.</div>'; return; }
   el.innerHTML=projSorteerNieuwst(gefilterd).map(p=>`
     <div class="factuur-item ${huidigProject?.code===p.code?'actief':''}" data-code="${esc(p.code)}" onclick="selecteerProject('${p.code}',this)">
-      <div class="factuur-item-naam">${p.naam||p.code}</div>
+      <div class="factuur-item-naam" title="${esc(p.naam||p.code)}">${esc(p.naam||p.code)}</div>
       <div class="factuur-item-sub"><span class="code">${p.code}</span><span class="badge badge-ok">${p.klant||''}</span></div>
     </div>`).join('');
 }
@@ -5153,22 +5153,70 @@ function selecteerProject(code,el){ openProject(code,{scroll:!el}); }
 // ── Contextbalk: "waar ben ik?" — Klant › Locatie › CODE — naam, sticky onder de tabbalk ──
 // Klant/locatie zijn nog spans met data-attributen; de router (B3) maakt ze klikbaar.
 const _projStatus={};   // code → lopende aanmaakstatus (mappen/Toggl), getoond in de balk
-// Locatie om te tonen: eigen locatienaam → naam uit de klantregistry → niets (nooit een kale code als "K").
+// Namen (besluit Bart 7-10): zo compleet mogelijk, maar alleen ECHTE namen — onbekend blijft leeg (geen
+// gok, geen kale code, geen "Locatie K"); de gebruiker kan aanvullen via "+ locatienaam" / "+ klantnaam".
+const _echteNaam=(naam,code)=>{ const n=String(naam||'').trim(); return n&&n.toUpperCase()!==String(code||'').trim().toUpperCase()?n:''; };
+let _locContactenCache=null;
+function _locNaamUitContacten(kl,code){
+  if(!window.MTContacten||!kl||!code) return '';
+  if(!_locContactenCache||Date.now()-_locContactenCache.t>5000){
+    let lijst=[]; try{ lijst=MTContacten.actieven(); }catch(e){}
+    _locContactenCache={t:Date.now(),lijst};
+  }
+  const c=_locContactenCache.lijst.find(x=>x&&x.organisatie&&String(x.organisatie.klantCode||'').toUpperCase()===kl&&x.locatie
+    &&String(x.locatie.code||'').toUpperCase()===code&&_echteNaam(x.locatie.naam,code));
+  return c?_echteNaam(c.locatie.naam,code):'';
+}
+// Locatie van een project: eigen loc_naam → klantregistry → contactenregister → leeg.
 function projLocLabel(proj){
   if(!proj) return '';
-  const code=String(proj.loc||'').trim().toUpperCase(), eigen=String(proj.loc_naam||'').trim();
-  if(eigen&&eigen.toUpperCase()!==code) return eigen;   // ook zonder code (aangevulde projecten)
+  const code=String(proj.loc||'').trim().toUpperCase(), eigen=_echteNaam(proj.loc_naam,code);
+  if(eigen) return eigen;                              // ook zonder code (aangevulde projecten)
   if(!code) return '';
-  const k=(typeof klantByCode==='function')?klantByCode(proj.klant):null;
+  const kl=String(proj.klant||'').toUpperCase();
+  const k=(typeof klantByCode==='function')?klantByCode(kl):null;
   const lc=k&&Array.isArray(k.locaties)?k.locaties.find(l=>String(l.code||'').toUpperCase()===code):null;
-  const reg=lc&&String(lc.naam||'').trim();
-  return reg&&reg.toUpperCase()!==code?reg:'';
+  return _echteNaam(lc&&lc.naam,code)||_locNaamUitContacten(kl,code);
 }
-// In keuzelijsten en kopjes moet een locatie zonder naam toch iets heten: "Locatie K" i.p.v. kaal "K".
-function _locKeuzeLabel(l){ const n=String((l&&l.naam)||'').trim(), c=String((l&&l.code)||'').trim(); return n&&n.toUpperCase()!==c.toUpperCase()?n:(c?'Locatie '+c:''); }
+// Klantnaam van een project: registry → verrijkte registry → eigen klant_naam → leeg (nooit de code).
+function projKlantNaam(proj){
+  if(!proj) return '';
+  const kl=String(proj.klant||'').toUpperCase(), k=(typeof klantByCode==='function')?klantByCode(kl):null;
+  const vol=(typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]).find(x=>String(x.code||'').toUpperCase()===kl)||null;
+  return _echteNaam(k&&k.naam,kl)||_echteNaam(vol&&vol.naam,kl)||_echteNaam(proj.klant_naam,kl);
+}
+// "+ invullen"-knopje in open-gele koppelbadge-stijl (alleen voor wie projecten mag wijzigen).
+function _naamInvulBadge(label,onclick,titel){
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return '';
+  return window.MTKoppelUI?MTKoppelUI.badge({status:'open',klein:true,tekst:'+ '+label,titel:titel||(label+' onbekend — klik om in te vullen'),onclick}):'';
+}
+// Locatienaam invullen: op dit project én de andere projecten van dezelfde klant met dezelfde
+// locatiecode die nog geen naam hebben (zelfde locatie). B2-stempel via slaProjectenOp.
+async function projLocNaamInvullen(code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!proj.loc) return;
+  const kl=String(proj.klant||'').toUpperCase(), lc=String(proj.loc).toUpperCase();
+  const naam=await mtDialog.prompt({title:'Locatienaam invullen',message:'Naam van locatie '+lc+' bij '+(projKlantNaam(proj)||kl)+':',placeholder:'bv. Kantoor Zuidas',okLabel:'Opslaan'});
+  if(naam==null||!_echteNaam(naam,lc)) return;
+  PROJECT_CODES.filter(x=>String(x.klant||'').toUpperCase()===kl&&String(x.loc||'').toUpperCase()===lc&&!_echteNaam(x.loc_naam,lc)).forEach(x=>{ x.loc_naam=String(naam).trim(); });
+  slaProjectenOp(); _namenVernieuwd();
+}
+// Klantnaam invullen: op alle projecten met deze klantcode die nog geen klantnaam hebben.
+async function projKlantNaamInvullen(kl){
+  kl=String(kl||'').toUpperCase(); if(!kl) return;
+  const naam=await mtDialog.prompt({title:'Klantnaam invullen',message:'Volledige naam van klant '+kl+':',placeholder:'bv. CompaNanny B.V.',okLabel:'Opslaan'});
+  if(naam==null||!_echteNaam(naam,kl)) return;
+  PROJECT_CODES.filter(x=>String(x.klant||'').toUpperCase()===kl&&!_echteNaam(x.klant_naam,kl)).forEach(x=>{ x.klant_naam=String(naam).trim(); });
+  slaProjectenOp(); _namenVernieuwd();
+}
+function _namenVernieuwd(){
+  try{ renderProjectLijst((document.getElementById('project-zoek')||{}).value||''); }catch(e){}
+  try{ if(typeof _klantHuidig!=='undefined'&&_klantHuidig&&document.getElementById('project-detail')?.dataset.klant) openKlant(_klantHuidig.kl,_klantHuidig.loc);
+       else if(typeof huidigProject!=='undefined'&&huidigProject&&typeof _rerenderDetailKeepScroll==='function') _rerenderDetailKeepScroll(); }catch(e){}
+}
+// Locatienaam voor keuzelijsten en kopjes: alleen een echte naam (anders '' → niet tonen).
+function _locKeuzeLabel(l){ return _echteNaam(l&&l.naam,l&&l.code); }
 function projContextBalk(proj){
-  const k=klantByCode(proj.klant);
-  const klantNaam=(k&&k.naam)||proj.klant_naam||proj.klant||'';
+  const klantNaam=projKlantNaam(proj);
   const locNaam=projLocLabel(proj);
   const top=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
   const sep='<span class="proj-ctx-sep">›</span>';
@@ -5179,8 +5227,10 @@ function projContextBalk(proj){
     ? `<a class="${cls}" href="${mtRoute.format(route)}" onclick="event.preventDefault();mtRoute.go(${esc(JSON.stringify(route))})" ${extra} title="Alle projecten van ${esc(naam)}">${esc(naam)}</a>`
     : `<span class="${cls}" ${extra} title="${esc(naam)}">${esc(naam)}</span>`;
   return `<div class="proj-ctx" style="top:${top}px" data-code="${esc(proj.code)}">`
-    +(klantNaam?deel('proj-ctx-klant',klantNaam,kl?{tab:'projecten',klant:kl}:null,`data-klant="${esc(proj.klant||'')}"`)+sep:'')
-    +(locNaam?deel('proj-ctx-loc',locNaam,(kl&&lc)?{tab:'projecten',klant:kl,loc:lc}:null,`data-klant="${esc(proj.klant||'')}" data-loc="${esc(proj.loc||'')}"`)+sep:'')
+    +(klantNaam?deel('proj-ctx-klant',klantNaam,kl?{tab:'projecten',klant:kl}:null,`data-klant="${esc(proj.klant||'')}"`)+sep
+      :(kl?_naamInvulBadge('klantnaam',`projKlantNaamInvullen('${_jsCode(kl)}')`,'Klantnaam onbekend — klik om de volledige naam in te vullen')+sep:''))
+    +(locNaam?deel('proj-ctx-loc',locNaam,(kl&&lc)?{tab:'projecten',klant:kl,loc:lc}:null,`data-klant="${esc(proj.klant||'')}" data-loc="${esc(proj.loc||'')}"`)+sep
+      :(lc?_naamInvulBadge('locatienaam',`projLocNaamInvullen('${_jsCode(proj.code)}')`,'Locatienaam onbekend — klik om in te vullen')+sep:''))
     +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(proj.code)}</span><span class="proj-ctx-naam" title="${esc(proj.naam||proj.code)}">${esc(proj.naam||proj.code)}</span></span>`
     +`<span class="proj-ctx-status"${st?'':' hidden'}>${esc(st)}</span>`
     +`<span class="proj-ctx-acties">`
@@ -5846,7 +5896,7 @@ function renderDossier(el,scope,facetten){
       <span class="dos-aangepast"${f.periode==='aangepast'?'':' hidden'}><input type="date" value="${esc(f.van)}" aria-label="Vanaf" onchange="dossierZetFilter('${k}','van',this.value)"> – <input type="date" value="${esc(f.tot)}" aria-label="Tot en met" onchange="dossierZetFilter('${k}','tot',this.value)"></span>
       ${sel('persoon',[['','Iedereen'],...personen.map(p=>[p,p])],f.persoon,'Persoon')}
       ${scope.codes.length>1?sel('project',[['','Alle projecten'],...scope.codes.map(c=>[c,c+' — '+(((PROJECT_CODES.find(p=>p.code===c)||{}).naam)||'')])],f.project,'Project'):''}
-      ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.map(l=>[l.code,_locKeuzeLabel(l)])],f.locatie,'Locatie'):''}
+      ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.filter(l=>_locKeuzeLabel(l)).map(l=>[l.code,_locKeuzeLabel(l)])],f.locatie,'Locatie'):''}
       ${sel('status',[['','Status: standaard'],['*','Status: alles (ook ontkoppeld)'],...statussen.map(s=>[s,'Status: '+s])],f.status,'Status')}
       <label class="dos-check"><input type="checkbox"${f.bijlage?' checked':''} onchange="dossierZetFilter('${k}','bijlage',this.checked?'1':'')"> met bijlage</label>
       <button type="button" class="btn btn-xs btn-secondary" onclick="dossierWisFilters('${k}')" title="Alle filters terug naar standaard">Wis filters</button>
@@ -6080,11 +6130,16 @@ function openKlant(kl,loc,{sectie=null,filter=null}={}){
   const host=document.getElementById('project-detail'); if(!host) return;
   host.dataset.klant=kl+(loc?'/'+loc:''); delete host.dataset.code; delete host.dataset.offerte;
   const info=klantInfo(kl,{loc}), top=(document.querySelector('header')?.offsetHeight||60)+(document.querySelector('.tabs-wrap')?.offsetHeight||0);
-  const locSel=info.locaties.length?`<select class="klant-locsel" aria-label="Locatie" onchange="klantKiesLoc(this.value)"><option value="">Alle locaties</option>${info.locaties.map(l=>`<option value="${esc(l.code)}"${l.code===loc?' selected':''}>${esc(_locKeuzeLabel(l))}</option>`).join('')}</select>`:'';
+  const lokNamen=info.locaties.filter(l=>_locKeuzeLabel(l)||l.code===loc);   // locaties zonder naam niet in de keuzelijst
+  const locSel=lokNamen.length?`<select class="klant-locsel" aria-label="Locatie" onchange="klantKiesLoc(this.value)"><option value="">Alle locaties</option>${lokNamen.map(l=>`<option value="${esc(l.code)}"${l.code===loc?' selected':''}>${esc(_locKeuzeLabel(l)||'Zonder locatienaam')}</option>`).join('')}</select>`:'';
   const locNaam=loc?_locKeuzeLabel(info.locaties.find(l=>l.code===loc)||{code:loc}):'';
+  const klantNaamBekend=_echteNaam(info.naam,kl);
+  const locVoorbeeld=loc&&!locNaam?PROJECT_CODES.find(p=>String(p.klant||'').toUpperCase()===kl&&String(p.loc||'').toUpperCase()===loc):null;
   host.innerHTML=`<div class="proj-ctx klant-ctx" style="top:${top}px" data-klant="${esc(kl)}">`
-    +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(kl)}</span><span class="proj-ctx-naam">${esc(info.naam)}</span></span>`
-    +(locNaam?`<span class="proj-ctx-sep">›</span><span class="proj-ctx-loc">${esc(locNaam)}</span>`:'')
+    +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(kl)}</span>`
+    +(klantNaamBekend?`<span class="proj-ctx-naam" title="${esc(info.naam)}">${esc(info.naam)}</span>`:_naamInvulBadge('klantnaam',`projKlantNaamInvullen('${_jsCode(kl)}')`,'Klantnaam onbekend — klik om de volledige naam in te vullen'))+`</span>`
+    +(locNaam?`<span class="proj-ctx-sep">›</span><span class="proj-ctx-loc" title="${esc(locNaam)}">${esc(locNaam)}</span>`
+      :(locVoorbeeld?`<span class="proj-ctx-sep">›</span>`+_naamInvulBadge('locatienaam',`projLocNaamInvullen('${_jsCode(locVoorbeeld.code)}')`,'Locatienaam onbekend — klik om in te vullen'):''))
     +`<span class="proj-ctx-acties">${locSel}`
     +(info.telefoon?`<a class="btn btn-xs btn-secondary" href="tel:${esc(info.telefoon)}" title="Bellen: ${esc(info.telefoon)}" aria-label="Bellen">📞</a>`:'')
     +(info.email?`<a class="btn btn-xs btn-secondary" href="mailto:${esc(info.email)}" title="Mailen: ${esc(info.email)}" aria-label="Mailen">📧</a>`:'')
