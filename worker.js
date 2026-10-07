@@ -1572,18 +1572,31 @@ const geldRond = n => Math.round(n * 100) / 100;
 const geldUrl = (soort, id) => `https://moneybird.com/${MB_ADMIN}/${soort}/${id}`;
 
 // Moneybird-verzoeken met een vast budget (subrequest-limiet van de worker); elke fout wordt teruggegeven.
+// Hooguit GELD_MB_TEGELIJK tegelijk (anders "429 Retry later" bij de eerste keer laden); bij 429 hooguit twee
+// nieuwe pogingen, na Retry-After (max 8 s) of 1,5 s / 3 s — elke poging telt mee in het budget.
+const GELD_MB_TEGELIJK = 3;
 function geldMb(env, budget) {
   const hdr = { Authorization: `Bearer ${env.MONEYBIRD_KEY}`, Accept: 'application/json' };
+  let bezig = 0; const rij = [];
+  const slot = () => bezig < GELD_MB_TEGELIJK ? (bezig++, Promise.resolve()) : new Promise(res => rij.push(res));
+  const vrij = () => { const n = rij.shift(); if (n) n(); else bezig--; };
+  const haal = async pad => { try { return await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/${pad}`, { headers: hdr }); } catch (e) { return { netwerk: String(e.message || e).slice(0, 80) }; } };
   return async function get(pad) {
     if (budget.rest <= 0) return { ok: false, status: 0, fout: 'budget-op' };
     budget.rest--;
+    await slot();
     let r;
-    try { r = await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/${pad}`, { headers: hdr }); }
-    catch (e) { return { ok: false, status: 0, fout: 'netwerk: ' + String(e.message || e).slice(0, 80) }; }
-    if (r.status === 429 && budget.rest > 0) {                       // één keer opnieuw na korte pauze
-      await new Promise(res => setTimeout(res, 1000)); budget.rest--;
-      try { r = await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/${pad}`, { headers: hdr }); } catch (e) { return { ok: false, status: 0, fout: 'netwerk' }; }
-    }
+    try {
+      r = await haal(pad);
+      for (let poging = 1; r.status === 429 && poging <= 2 && budget.rest > 0; poging++) {
+        budget.rest--;                                               // eerst reserveren, dan wachten (anders kan een ander verzoek het restant opmaken)
+        const ra = Number(r.headers && r.headers.get && r.headers.get('Retry-After'));
+        await new Promise(res => setTimeout(res, ra > 0 ? Math.min(ra, 8) * 1000 : 1500 * poging));
+        r = await haal(pad);
+      }
+    } finally { vrij(); }
+    if (r.netwerk) return { ok: false, status: 0, fout: 'netwerk: ' + r.netwerk };
+    if (r.status === 429) return { ok: false, status: 429, fout: 'Moneybird is even druk (429) — over een minuut opnieuw' };
     let data = null, tekst = '';
     try { tekst = await r.text(); data = JSON.parse(tekst); } catch {}
     if (!r.ok) return { ok: false, status: r.status, fout: (data && (data.error || data.message)) || tekst.slice(0, 120) || ('HTTP ' + r.status) };
@@ -1692,7 +1705,8 @@ async function geldFacturen(get, vandaag, w) {
   for (let j = jaar - GELD.jarenTerug; j <= jaar; j++) jaren.push(j);
   // Elk jaar apart (Moneybird geeft standaard alleen het huidige jaar) plus één vraag voor alles daarvóór,
   // zodat een oude open factuur nooit stil wegvalt.
-  const perioden = [[`20000101..${jaren[0] - 1}1231`, 'vóór ' + jaren[0]], ...jaren.map(j => [`${j}0101..${j}1231`, String(j)])];
+  // Moneybird staat hooguit 10 jaar per vraag toe; deze administratie begint in 2022, dus 10 jaar vóór het venster volstaat.
+  const perioden = [[`${jaren[0] - 10}0101..${jaren[0] - 1}1231`, `${jaren[0] - 10}-${jaren[0] - 1}`], ...jaren.map(j => [`${j}0101..${j}1231`, String(j)])];
   const [ink, ver] = await Promise.all([
     Promise.all(perioden.map(([p, l]) => geldLijst(get, `documents/purchase_invoices?filter=period:${p},state:open|late|pending_payment|new`, w, 'inkoopfacturen ' + l))),
     Promise.all(perioden.map(([p, l]) => geldLijst(get, `sales_invoices?filter=period:${p},state:open|late|reminded|pending_payment`, w, 'verkoopfacturen ' + l))),
