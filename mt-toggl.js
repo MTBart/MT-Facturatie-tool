@@ -749,7 +749,7 @@ async function tgLaadProjecten(){
       const est=p.estimated_mins?(' / '+tgSec2u(p.estimated_mins*60)+' geraamd'):'';
       const pct=Math.round(sec/maxSec*100);
       const mt=_mtProjVoorToggl(p);
-      const mtbadge=mt?` <span class="tg-mtbadge" title="Gekoppeld M&T-project ${tgEsc(mt.code)}">M&amp;T</span>`:'';
+      const mtbadge=mt?` <span class="tg-mtbadge" title="Gekoppeld M&T-project ${tgEsc(typeof projKeuzeLabel==='function'?projKeuzeLabel(mt):mt.code)}">M&amp;T</span>`:'';
       return `<div class="tg-card">
         <h4 style="cursor:pointer" title="Project openen" onclick="tgOpenProject(${p.id})"><span class="tg-dot" style="background:${kl}"></span>${tgEsc(p.name||('project '+p.id))}${mtbadge}</h4>
         <div class="tg-sub">${p.total_tasks||0} taken · ${p.billable?'billable':'niet-billable'}</div>
@@ -897,7 +897,7 @@ function tgOpenProject(id){
     const mails=(typeof gekoppeldeMailsHtml==='function')?gekoppeldeMailsHtml(mt):'';
     mtBlok=`
       <div class="tg-daysum" style="margin-bottom:12px">
-        <div class="tg-stat"><div class="lbl">Projectcode</div><div class="val"><span class="tg-code">${tgEsc(mt.code)}</span></div></div>
+        <div class="tg-stat"><div class="lbl">Projectcode</div><div class="val"><span class="tg-code">${tgEsc((typeof projLabelCode==='function'?projLabelCode(mt):mt.code)||'—')}</span></div></div>
         <div class="tg-stat"><div class="lbl">Klant</div><div class="val" style="font-size:14px">${tgEsc(klantNaam)||'—'}</div></div>
         <div class="tg-stat"><div class="lbl">Moneybird</div><div class="val" style="font-size:14px">${mbChip}</div></div>
       </div>

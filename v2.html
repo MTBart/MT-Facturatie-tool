@@ -3758,7 +3758,7 @@ function getLedgerIdByName(naam){
 // ═══ PROJECT OPTIONS ═══
 function projectOptiesHTML(geselecteerd=''){
   return`<option value="">— Kies project —</option>`+
-    PROJECT_CODES.map(p=>`<option value="${p.code}" ${p.code===geselecteerd?'selected':''}>${p.code}</option>`).join('')+
+    PROJECT_CODES.map(p=>`<option value="${p.code}" ${p.code===geselecteerd?'selected':''}>${esc(projKeuzeLabel(p))}</option>`).join('')+
     `<option value="__nieuw__">+ Nieuw project aanmaken</option>`;
 }
 
@@ -4545,7 +4545,7 @@ function toonVoorraadDetail(mat){
           <td style="text-align:right;font-family:var(--mono)">${v.aantal||1}</td>
           <td style="text-align:right;font-family:var(--mono)">€ ${(v.stukprijs||0).toFixed(2)}${diff?`<span style="color:${omhoog?'var(--red)':'var(--green)'};font-size:10px"> ${omhoog?'▲':'▼'}</span>`:''}${i===0?' <small style="opacity:0.5">(laatste)</small>':''}</td>
           <td style="text-align:right;font-family:var(--mono);font-weight:600">€ ${((v.aantal||1)*(v.stukprijs||0)).toFixed(2)}</td>
-          <td><span class="code">${esc(v.project)||'—'}</span></td>
+          <td>${v.project?projKortHtml(v.project):'—'}</td>
           <td style="white-space:nowrap;text-align:right">
             <button class="btn btn-xs btn-secondary" title="Deze regel aanpassen" onclick="bewerkVoorraadRegel('${v.id}')">✏</button>
             <button class="btn btn-xs btn-secondary" title="Open de bijbehorende factuur in Moneybird" onclick="gaNaarVoorraadFactuur('${v.id}')">→ Factuur</button>
@@ -5204,13 +5204,13 @@ function _projKlantFilterChip(){
 function renderProjectLijst(filter=''){
   const el=document.getElementById('project-lijst');if(!el) return;
   const chip=document.getElementById('project-filterchip'); if(chip) chip.innerHTML=_projKlantFilterChip();
-  let gefilterd=filter?PROJECT_CODES.filter(p=>p.code.toLowerCase().includes(filter.toLowerCase())||p.naam?.toLowerCase().includes(filter.toLowerCase())):PROJECT_CODES;
+  let gefilterd=filter?PROJECT_CODES.filter(p=>projZoekTekst(p).includes(filter.toLowerCase())):PROJECT_CODES;
   if(_projKlantFilter) gefilterd=gefilterd.filter(_projInKlantFilter);
   if(_projKlantFilter&&!gefilterd.length){ el.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-faint);font-style:italic">Geen projecten voor deze klant.</div>'; return; }
   el.innerHTML=projSorteerNieuwst(gefilterd).map(p=>`
     <div class="factuur-item ${huidigProject?.code===p.code?'actief':''}" data-code="${esc(p.code)}" onclick="selecteerProject('${p.code}',this)">
-      <div class="factuur-item-naam" title="${esc(p.naam||p.code)}">${esc(p.naam||p.code)}</div>
-      <div class="factuur-item-sub"><span class="code">${p.code}</span><span class="badge badge-ok">${p.klant||''}</span></div>
+      <div class="factuur-item-naam" title="${esc(projNaamVol(p))}">${esc(projNaamVol(p))}</div>
+      <div class="factuur-item-sub">${projKlantNaam(p)?`<span class="badge badge-ok">${esc(projKlantNaam(p))}</span>`:''}${projTag(p)}</div>
     </div>`).join('');
 }
 // Alleen weergave: nieuwste eerst op `created` (YYYY-MM-DD); zelfde dag → later toegevoegd
@@ -5286,6 +5286,42 @@ function projKlantNaam(proj){
   const vol=(typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]).find(x=>String(x.code||'').toUpperCase()===kl)||null;
   return _echteNaam(k&&k.naam,kl)||_echteNaam(vol&&vol.naam,kl)||_echteNaam(proj.klant_naam,kl);
 }
+// ── Zichtbare projectcode (besluit Bart 7-10, v2.6.1): de generator-code (KLANT-LOC-PRODUCT) is alleen
+// nog een technische sleutel (URL, opslag, koppelingen) en wordt nergens meer getoond. Zichtbaar is het
+// offertenummer — of, volgens de centrale instelling "Projectcode tonen als", de werkcode of beide.
+// Onbekend → leeg: dan is de volledige projectnaam de identificatie (niets verzinnen).
+function projCodeModus(){ const m=window.MT_INSTELLINGEN&&MT_INSTELLINGEN.projectcode; return m==='werkcode'||m==='beide'?m:'offerte'; }
+function projOfferteNr(p){
+  if(!p) return '';
+  const h=Array.isArray(p.offertes)?p.offertes.find(o=>o&&o.rol==='hoofd'&&o.nummer):null;
+  return String(p.offertenr||(h&&h.nummer)||'').trim();
+}
+function projLabelCode(p){
+  if(!p) return '';
+  const o=projOfferteNr(p), w=String(p.werkcode||'').trim(), m=projCodeModus();
+  return m==='werkcode'?w:m==='beide'?[w,o].filter(Boolean).join(' · '):o;
+}
+// Volledige projectnaam, zonder de generator-code (ook niet als voorvoegsel); geen naam → klant/locatie/product.
+function projNaamVol(p){
+  if(!p) return '';
+  const c=String(p.code||'').trim();
+  let n=String(p.naam||'').trim();
+  if(c&&n.toUpperCase().startsWith(c.toUpperCase())) n=n.slice(c.length).replace(/^[\s\-–—·:|]+/,'').trim();
+  return _echteNaam(n,c)||[projKlantNaam(p),projLocLabel(p),_echteNaam(p.product_naam,p.product)].filter(Boolean).join(' — ')||'Project zonder naam';
+}
+function _projVoorCode(c){ return (c&&typeof c==='object')?c:((typeof PROJECT_CODES!=='undefined'&&c)?projVind(c):null); }
+// Voor een code uit een koppeling/dossier/planning: het zichtbare nummer, anders de naam.
+function projKort(c){ const p=_projVoorCode(c); return p?(projLabelCode(p)||projNaamVol(p)):(c?'onbekend project':''); }
+function projTag(c,cls){ const l=projLabelCode(_projVoorCode(c)); return l?`<span class="${cls||'code'}">${esc(l)}</span>`:''; }
+function projKortHtml(c){ return projTag(c)||esc(projKort(c)); }
+// Keuzelijsten: "Volledige naam · nummer".
+function projKeuzeLabel(c,reserve){ const p=_projVoorCode(c); return p?[projNaamVol(p),projLabelCode(p)].filter(Boolean).join(' · '):(reserve||'onbekend project'); }
+// Zoeken vindt ook op wat niet getoond wordt (generator-/oude code, werkcode, offertenummers).
+function projZoekTekst(p){
+  if(!p) return '';
+  return [p.code,p.naam,projNaamVol(p),p.offertenr,p.werkcode,...(Array.isArray(p.legacy_codes)?p.legacy_codes:[]),
+    ...(Array.isArray(p.offertes)?p.offertes.map(o=>o&&o.nummer):[]),p.klant_naam,projKlantNaam(p),p.loc_naam,projLocLabel(p)].filter(Boolean).join(' ').toLowerCase();
+}
 // "+ invullen"-knopje in open-gele koppelbadge-stijl (alleen voor wie projecten mag wijzigen).
 function _naamInvulBadge(label,onclick,titel){
   if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return '';
@@ -5332,7 +5368,7 @@ function projContextBalk(proj){
       :(kl?_naamInvulBadge('klantnaam',`projKlantNaamInvullen('${_jsCode(kl)}')`,'Klantnaam onbekend — klik om de volledige naam in te vullen')+sep:''))
     +(locNaam?deel('proj-ctx-loc',locNaam,(kl&&lc)?{tab:'projecten',klant:kl,loc:lc}:null,`data-klant="${esc(proj.klant||'')}" data-loc="${esc(proj.loc||'')}"`)+sep
       :(lc?_naamInvulBadge('locatienaam',`projLocNaamInvullen('${_jsCode(proj.code)}')`,'Locatienaam onbekend — klik om in te vullen')+sep:''))
-    +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(proj.code)}</span><span class="proj-ctx-naam" title="${esc(proj.naam||proj.code)}">${esc(proj.naam||proj.code)}</span></span>`
+    +`<span class="proj-ctx-proj"><span class="proj-ctx-naam" title="${esc(projNaamVol(proj))}">${esc(projNaamVol(proj))}</span>${projTag(proj,'proj-ctx-code')}</span>`
     +`<span class="proj-ctx-status"${st?'':' hidden'}>${esc(st)}</span>`
     +`<span class="proj-ctx-acties">`
       +`<span class="proj-ctx-wissel"><input type="text" class="proj-ctx-zoek" placeholder="⇄ Ander project…" autocomplete="off" spellcheck="false"`
@@ -5358,7 +5394,7 @@ async function projKopieerLink(code){
 let _projWisselSel=-1;
 function _projWisselTreffers(q){
   q=String(q||'').trim().toLowerCase();
-  const velden=p=>[p.code,p.naam,p.klant_naam,p.loc_naam].map(v=>String(v||'').toLowerCase());
+  const velden=p=>[projZoekTekst(p)];
   const lijst=projSorteerNieuwst(PROJECT_CODES.filter(p=>!huidigProject||p.code!==huidigProject.code));
   return (q?lijst.filter(p=>velden(p).some(v=>v.includes(q))):lijst).slice(0,8);
 }
@@ -5367,7 +5403,7 @@ function projWisselZoek(inp){
   const tr=_projWisselTreffers(inp.value);
   _projWisselSel=tr.length?0:-1;
   box.innerHTML=tr.length?tr.map((p,i)=>`<div role="option" id="proj-wissel-opt-${i}" class="proj-ctx-optie${i===0?' sel':''}" aria-selected="${i===0}" data-code="${esc(p.code)}"
-      onmousedown="event.preventDefault();projWisselOpen(this.dataset.code)"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</div>`).join('')
+      onmousedown="event.preventDefault();projWisselOpen(this.dataset.code)">${esc(projNaamVol(p))} ${projTag(p)}</div>`).join('')
     :'<div class="proj-ctx-optie leeg">Geen project gevonden</div>';
   box.hidden=false; inp.setAttribute('aria-expanded','true');
   if(_projWisselSel>=0) inp.setAttribute('aria-activedescendant','proj-wissel-opt-0'); else inp.removeAttribute('aria-activedescendant');
@@ -5778,7 +5814,7 @@ function _tlTeken(key){
   const legenda=`<div class="tl-legenda"><span><i class="tl-lg cap-ruim"></i>ruim</span><span><i class="tl-lg cap-krap"></i>krap</span><span><i class="tl-lg cap-vol"></i>vol</span>
     <span><i class="tl-lg p"></i>📅 gepland</span><span><i class="tl-lg w"></i>⏱ gewerkt (Toggl)</span>
     <span class="dos-meta">capaciteit: ${st.tgcap?'Toggl':'werkuren − verlof − vrije dagen (Beheer)'}</span>
-    ${meer?st.codes.map(c=>`<span><i class="tl-lg" style="background:${agProjKleur(c)}"></i>${esc(c)}</span>`).join(''):''}</div>`;
+    ${meer?st.codes.map(c=>`<span><i class="tl-lg" style="background:${agProjKleur(c)}"></i>${esc(projKort(c))}</span>`).join(''):''}</div>`;
   el.innerHTML=kop+`<div class="tl-veeg" aria-hidden="true">↔ veeg voor meer weken</div><div class="tl-scroll"><div class="tl-grid" style="width:${TL_NAAM+D.weken.length*TL_KOL}px">${html}${lijn}</div></div>`+legenda+`<div class="tl-detail" aria-live="polite">${st.detail?_tlDetailHtml(key,D,st.detail):'<span class="dos-meta">Klik op een week, fase of cel voor details.</span>'}</div>`;
 }
 async function _tlLaadToggl(key){
@@ -5807,13 +5843,13 @@ function tlDetail(key,soort,a,b){ const st=_tlState[key]; if(!st) return; st.det
 function _tlDetailHtml(key,D,det){
   const k=esc(key), agenda=ws=>`<button type="button" class="btn btn-xs btn-secondary" onclick="tlNaarAgenda('${k}','${esc(ws)}')">📅 Open in Agenda</button>`;
   if(det.soort==='fase'){ const f=D.fasen.find(x=>x.code===det.a&&x.id===det.b); if(!f) return '';
-    return `<b>${esc(f.naam)}</b> · <span class="code">${esc(f.code)}</span> · ${esc(f.start)} – ${esc(f.eind)} · <span class="dos-st">${esc(f.status)}</span>
+    return `<b>${esc(f.naam)}</b> · ${projKortHtml(f.code)} · ${esc(f.start)} – ${esc(f.eind)} · <span class="dos-st">${esc(f.status)}</span>
       <button type="button" class="btn btn-xs btn-secondary" onclick="openProject('${_jsCode(f.code)}',{sectie:'planning'})">Planning openen</button> ${agenda(_tlYmd(agMaandag(new Date(f.start+'T12:00:00'))))}`; }
   if(det.soort==='week'){ const w=D.weken.find(x=>x.ws===det.b); if(!w) return '';
     const rij=D.pers.map(p=>{ const c=D.cel[p.slug][w.ws]; return c.gepland||c.gewerkt||c.cap?`<span class="tl-dr">${esc(p.naam)}: ${_tlU(c.gepland)} u gepland${c.gewerkt?' · '+_tlU(c.gewerkt)+' u gewerkt':''}${c.cap!==null?' · '+_tlU(Math.max(0,c.vrij))+' u vrij':''}</span>`:''; }).join('');
     return `<b>${esc(w.label)}</b> (${esc(w.ws)} – ${esc(w.we)}) ${agenda(w.ws)}<div>${rij||'<span class="dos-meta">Niets gepland of gewerkt.</span>'}</div>`; }
   const p=D.pers.find(x=>x.slug===det.a), c=p&&D.cel[p.slug][det.b]; if(!c) return '';
-  const bl=c.blokken.map(x=>`<span class="tl-dr">📅 ${esc(x.datum)} ${esc(x.start||'')} · ${_tlU((Number(x.duurMin)||0)/60)} u · ${esc(x.taak||x.project_code||'')}${D.weken.length&&_tlState[key].codes.length>1?' · <span class="code">'+esc(x.project_code)+'</span>':''}</span>`).join('');
+  const bl=c.blokken.map(x=>`<span class="tl-dr">📅 ${esc(x.datum)} ${esc(x.start||'')} · ${_tlU((Number(x.duurMin)||0)/60)} u · ${esc(x.taak||(x.project_code?projKort(x.project_code):''))}${D.weken.length&&_tlState[key].codes.length>1?' · '+projKortHtml(x.project_code):''}</span>`).join('');
   const ur=c.uren.length?`<span class="tl-dr">⏱ ${_tlU(c.gewerkt)} u gewerkt (Toggl)</span>`:'';
   return `<b>${esc(p.naam)}</b> · week van ${esc(det.b)} · ${c.cap!==null?`capaciteit ${_tlU(c.cap)} u, nog ${_tlU(Math.max(0,c.vrij))} u vrij (${esc(c.capBron==='toggl'?'Toggl':'Beheer')})`:'geen capaciteit bekend'} ${agenda(det.b)}<div>${bl||ur?bl+ur:'<span class="dos-meta">Niets gepland of gewerkt voor dit project.</span>'}</div>`;
 }
@@ -5996,7 +6032,7 @@ function renderDossier(el,scope,facetten){
       ${sel('periode',[['','Alle data'],['week','Deze week'],['maand','Deze maand'],['aangepast','Aangepast…']],f.periode,'Periode')}
       <span class="dos-aangepast"${f.periode==='aangepast'?'':' hidden'}><input type="date" value="${esc(f.van)}" aria-label="Vanaf" onchange="dossierZetFilter('${k}','van',this.value)"> – <input type="date" value="${esc(f.tot)}" aria-label="Tot en met" onchange="dossierZetFilter('${k}','tot',this.value)"></span>
       ${sel('persoon',[['','Iedereen'],...personen.map(p=>[p,p])],f.persoon,'Persoon')}
-      ${scope.codes.length>1?sel('project',[['','Alle projecten'],...scope.codes.map(c=>[c,c+' — '+(((projVind(c)||{}).naam)||'')])],f.project,'Project'):''}
+      ${scope.codes.length>1?sel('project',[['','Alle projecten'],...scope.codes.map(c=>[c,projKeuzeLabel(c)])],f.project,'Project'):''}
       ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.filter(l=>_locKeuzeLabel(l)).map(l=>[l.code,_locKeuzeLabel(l)])],f.locatie,'Locatie'):''}
       ${sel('status',[['','Status: standaard'],['*','Status: alles (ook ontkoppeld)'],...statussen.map(s=>[s,'Status: '+s])],f.status,'Status')}
       <label class="dos-check"><input type="checkbox"${f.bijlage?' checked':''} onchange="dossierZetFilter('${k}','bijlage',this.checked?'1':'')"> met bijlage</label>
@@ -6041,12 +6077,12 @@ function _dosTekenLijst(key){
     const bijl=r.soort==='mail'&&r.ref.opgeslagen?' '+kb({status:'gekoppeld',klein:true,label:r.ref.opgeslagen+' bijlage'+(r.ref.opgeslagen>1?'n':'')+' in map',titel:'Opgeslagen bijlagen van deze mail staan in de projectmap'})
       :(r.soort==='mail'&&r.ref.nogNietOpgeslagen?' '+kb({status:'open',klein:true,label:'bijlagen in map',titel:'Deze mail heeft bijlagen die nog niet in de projectmap staan — klik om ze op te slaan',onclick:jBijl>=0?`dossierActie('${k}',${i},${jBijl})`:''}):'');
     // Mail en bestand: één koppel-badge (B11); de overige acties zitten in de popover.
-    const koppel=r.soort==='mail'?kb(r.status==='ontkoppeld'?{status:'open',klein:true,tekst:'Ontkoppeld',titel:'Deze mail is ontkoppeld — klik om opnieuw te koppelen',onclick:`dossierKoppelPop(this,'${k}',${i})`}:{status:'gekoppeld',klein:true,label:reg.scope.codes.length>1?r.code:'',titel:'Gekoppeld aan '+r.code+' — klik voor openen of ontkoppelen',onclick:`dossierKoppelPop(this,'${k}',${i})`})
+    const koppel=r.soort==='mail'?kb(r.status==='ontkoppeld'?{status:'open',klein:true,tekst:'Ontkoppeld',titel:'Deze mail is ontkoppeld — klik om opnieuw te koppelen',onclick:`dossierKoppelPop(this,'${k}',${i})`}:{status:'gekoppeld',klein:true,label:reg.scope.codes.length>1?projKort(r.code):'',titel:'Gekoppeld aan '+projKort(r.code)+' — klik voor openen of ontkoppelen',onclick:`dossierKoppelPop(this,'${k}',${i})`})
       :(r.soort==='bestand'?kb({status:'gekoppeld',klein:true,label:r.bron==='projectmap'||r.bron==='mail'?'in map':'bijlage',titel:'Staat in '+(r.status||'de projectmap')+' — klik voor details',onclick:`dossierKoppelPop(this,'${k}',${i})`}):'');
     html+=`<div class="dos-rij${r.status==='ontkoppeld'?' uit':''}">
       <span class="dos-ic" aria-hidden="true">${icoon(r.soort)}</span>
       <div class="dos-hoofd"><div class="dos-titel">${titel}${bijl}</div>
-        <div class="dos-meta">${(reg.scope.codes.length>1)?`<span class="code">${esc(r.code)}</span> · `:''}${wie?wie+' · ':''}${r.datum?fmtDatum(r.datum.slice(0,10)):'—'}${r.status?` · <span class="dos-st">${esc(r.status)}</span>`:''}</div></div>
+        <div class="dos-meta">${(reg.scope.codes.length>1)?`${projKortHtml(r.code)} · `:''}${wie?wie+' · ':''}${r.datum?fmtDatum(r.datum.slice(0,10)):'—'}${r.status?` · <span class="dos-st">${esc(r.status)}</span>`:''}</div></div>
       <div class="dos-acties">${koppel?r.acties.map((a,j)=>a.snel?`<button type="button" class="btn btn-xs btn-secondary" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie('${k}',${i},${j})">${a.l}</button>`:'').join('')+koppel
         :r.acties.map((a,j)=>`<button type="button" class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie('${k}',${i},${j})">${a.l}</button>`).join('')}</div>
     </div>`;
@@ -6070,7 +6106,7 @@ function dossierKoppelPop(el,key,i){
   const r=_dosReg[key]&&_dosReg[key].rijen[i]; if(!r||!window.MTKoppelUI) return;
   const k=esc(key);
   const acties=r.acties.map((a,j)=>a.snel?'':`<button class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" onclick="MTKoppelUI.sluit();dossierActie('${k}',${i},${j})">${esc(a.l==='×'?'Ontkoppelen':a.l==='📎'?'📎 Bijlagen → projectmap':a.l)}</button>`).join(' ');
-  MTKoppelUI.popover(el,`<div class="kb-pop-rij"><div class="kb-pop-n"><b>${esc(r.titel)}</b><div class="dos-meta">${esc([r.van,r.code,r.status].filter(Boolean).join(' · '))}</div></div></div>
+  MTKoppelUI.popover(el,`<div class="kb-pop-rij"><div class="kb-pop-n"><b>${esc(r.titel)}</b><div class="dos-meta">${esc([r.van,r.code?projKort(r.code):'',r.status].filter(Boolean).join(' · '))}</div></div></div>
     <div class="kb-pop-acties">${r.open?`<button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();dossierOpen('${k}',${i})">Open</button>`:''} ${acties}</div>`,{titel:r.soort==='mail'?(r.status==='ontkoppeld'?'Ontkoppelde mail':'Gekoppelde mail'):'Bestand in projectmap'});
 }
 function dossierVernieuw(){ document.querySelectorAll('.dossier').forEach(d=>{ const reg=_dosReg[d.dataset.key]; if(reg) renderDossier(d.parentNode,reg.scope); }); }
@@ -6237,7 +6273,7 @@ function openKlant(kl,loc,{sectie=null,filter=null}={}){
   const klantNaamBekend=_echteNaam(info.naam,kl);
   const locVoorbeeld=loc&&!locNaam?PROJECT_CODES.find(p=>String(p.klant||'').toUpperCase()===kl&&String(p.loc||'').toUpperCase()===loc):null;
   host.innerHTML=`<div class="proj-ctx klant-ctx" style="top:${top}px" data-klant="${esc(kl)}">`
-    +`<span class="proj-ctx-proj"><span class="proj-ctx-code">${esc(kl)}</span>`
+    +`<span class="proj-ctx-proj">${klantNaamBekend?'':`<span class="proj-ctx-code">${esc(kl)}</span>`}`
     +(klantNaamBekend?`<span class="proj-ctx-naam" title="${esc(info.naam)}">${esc(info.naam)}</span>`:_naamInvulBadge('klantnaam',`projKlantNaamInvullen('${_jsCode(kl)}')`,'Klantnaam onbekend — klik om de volledige naam in te vullen'))+`</span>`
     +(locNaam?`<span class="proj-ctx-sep">›</span><span class="proj-ctx-loc" title="${esc(locNaam)}">${esc(locNaam)}</span>`
       :(locVoorbeeld?`<span class="proj-ctx-sep">›</span>`+_naamInvulBadge('locatienaam',`projLocNaamInvullen('${_jsCode(locVoorbeeld.code)}')`,'Locatienaam onbekend — klik om in te vullen'):''))
@@ -6336,9 +6372,9 @@ function klantSecOverzicht(info,projen){
     const nt=(typeof projTaken==='function')?projTaken(p.code).filter(t=>t.status!=='klaar').length:0;
     const viaMb=String(p.klant||'').toUpperCase()!==info.kl;
     return `<div class="klant-proj">
-      <div class="klant-proj-hoofd"><span class="st-pill st-${st.status}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid: '+esc(st.reden||'planning/taken'):'Zelf gekozen'}">${esc(st.status)}</span> <a href="${mtRoute.format({code:p.code})}" onclick="event.preventDefault();openProject('${_jsCode(p.code)}')"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
+      <div class="klant-proj-hoofd"><span class="st-pill st-${st.status}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid: '+esc(st.reden||'planning/taken'):'Zelf gekozen'}">${esc(st.status)}</span> <a href="${mtRoute.format({code:p.code})}" onclick="event.preventDefault();openProject('${_jsCode(p.code)}')">${esc(projNaamVol(p))} ${projTag(p)}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
         <div class="dos-meta">${projLocLabel(p)?esc(projLocLabel(p))+' · ':''}${lt?'laatst: '+fmtDatum(lt.datum.slice(0,10)):'nog geen activiteit'}${nt?` · ${nt} open ta${nt===1?'ak':'ken'}`:''}</div></div>
-      <label class="klant-status"><span class="sr">Status</span><select aria-label="Status van ${esc(p.code)}" onchange="projStatusZet('${_jsCode(p.code)}',this.value)">
+      <label class="klant-status"><span class="sr">Status</span><select aria-label="Status van ${esc(projNaamVol(p))}" onchange="projStatusZet('${_jsCode(p.code)}',this.value)">
         <option value=""${st.afgeleid?' selected':''}>${st.afgeleid?esc(st.status)+' (afgeleid)':'automatisch'}</option>
         ${PROJ_STATUSSEN.map(s=>`<option value="${s}"${!st.afgeleid&&st.status===s?' selected':''}>${s}</option>`).join('')}</select></label></div>`;
   };
@@ -6357,7 +6393,7 @@ function klantSecOverzicht(info,projen){
         <label class="dos-check"><input type="checkbox"${toonArch?'':' checked'} onchange="klantArchief('${_jsCode(info.kl)}',!this.checked)"> verberg archief${verborgen?` (${verborgen})`:''}</label></div>
         ${zicht.length?projSorteerNieuwst(zicht).map(kaart).join(''):'<div class="ov-act" style="color:var(--text-faint)">Geen projecten'+(verborgen?' (alleen gearchiveerde)':'')+'.</div>'}</section>
       <section class="ov-blok"><div class="card-title">Laatste activiteit</div>
-        ${laatste.length?laatste.map(r=>`<div class="ov-act">${icoon(r.soort)} <span class="code">${esc(r.code)}</span> ${esc(r.titel)} <span class="dos-meta">${fmtDatum(r.datum.slice(0,10))}</span></div>`).join(''):'<div class="ov-act" style="color:var(--text-faint)">Nog niets gebeurd.</div>'}
+        ${laatste.length?laatste.map(r=>`<div class="ov-act">${icoon(r.soort)} ${projKortHtml(r.code)} ${esc(r.titel)} <span class="dos-meta">${fmtDatum(r.datum.slice(0,10))}</span></div>`).join(''):'<div class="ov-act" style="color:var(--text-faint)">Nog niets gebeurd.</div>'}
         <a href="#" class="ov-meer" onclick="event.preventDefault();klantSectieKies('dossier')">Alles in het klantdossier →</a></section>
     </div>
     ${let_.length?`<section class="ov-blok ov-let"><div class="card-title">Aandachtspunten</div>${let_.map(x=>`<div class="ov-letrij">${x}</div>`).join('')}</section>`:''}`;
@@ -6370,7 +6406,7 @@ function klantSecBestanden(info,projen){
       :(m.fout?`<span style="color:#c0392b;font-size:12px">${esc(m.fout)}</span>`
       :(m.bestanden.length?`<div class="tabel-scroll"><table class="materiaal-lijst"><tbody>${m.bestanden.map(f=>`<tr><td style="font-size:12px">${f.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none">${esc(f.naam)}</a>`:esc(f.naam)}</td><td style="font-size:11px;color:var(--text-dim)">${esc(f.sub)}</td><td style="font-size:11px;color:var(--text-faint)">${f.datum?fmtDatum(f.datum.slice(0,10)):''}</td></tr>`).join('')}</tbody></table></div>`
       :'<span style="font-size:12px;color:var(--text-faint)">Projectmap is leeg.</span>'));
-    return `<section class="klant-bestanden"><div class="klant-bestanden-kop"><a href="#" onclick="event.preventDefault();openProject('${_jsCode(p.code)}',{sectie:'dossier'})"><span class="code">${esc(p.code)}</span> ${esc(p.naam||'')}</a>${m&&m.pad?` <span class="dos-meta">${esc(m.pad)}</span>`:''}</div>${inhoud}</section>`; };
+    return `<section class="klant-bestanden"><div class="klant-bestanden-kop"><a href="#" onclick="event.preventDefault();openProject('${_jsCode(p.code)}',{sectie:'dossier'})">${esc(projNaamVol(p))} ${projTag(p)}</a>${m&&m.pad?` <span class="dos-meta">${esc(m.pad)}</span>`:''}</div>${inhoud}</section>`; };
   return `<div class="dos-kop"><div class="card-title" style="margin:0">Bestanden</div>
       <button class="btn btn-secondary btn-sm" onclick="klantBestandenAlles()">🗂 Alles laden</button>
       <span style="font-size:11px;color:var(--text-faint)">Alleen lezen; per project pas geladen als je erom vraagt.</span></div>
@@ -6410,7 +6446,7 @@ function klantSecGeld(info,projen){
   const tabel=(lijst,leeg)=>lijst.length?`<div class="tabel-scroll"><table class="v-table"><thead><tr><th>Datum</th><th>Referentie</th><th style="text-align:right">Bedrag</th><th>Status</th></tr></thead><tbody>${lijst.slice(0,25).map(f=>`<tr><td style="font-size:12px">${fmtDatum(f.date||f.estimate_date||f.invoice_date)}</td><td style="font-size:12px">${esc(f.reference||f.estimate_id||f.invoice_id||'—')}</td><td style="text-align:right;font-family:var(--mono);font-size:12px">${fmt(parseFloat(f.total_price_incl_tax||0))}</td><td>${state(f)}</td></tr>`).join('')}</tbody></table></div>`:`<p class="dos-leeg">${leeg}</p>`;
   const calc=projen.map(p=>{ const o=(window.CALC&&CALC.offertes)?(CALC.offertes[p.code]||Object.values(CALC.offertes).find(x=>x&&x.project_code===p.code)):null; return o?{p,o}:null; }).filter(Boolean);
   return `<div class="card-title">Calculaties per project</div>
-    ${calc.length?calc.map(({p,o})=>`<div class="ov-act"><a href="#" onclick="event.preventDefault();openProject('${_jsCode(p.code)}',{sectie:'calculatie'})"><span class="code">${esc(p.code)}</span> ${esc(o.titel||p.naam||'')}</a> <span class="dos-st">${esc((o.meta&&o.meta.status)||'in bewerking')}</span>${o._gewijzigd?` <span class="dos-meta">${fmtDatum(String(o._gewijzigd).slice(0,10))}</span>`:''}</div>`).join(''):'<p class="dos-leeg">Nog geen calculaties.</p>'}
+    ${calc.length?calc.map(({p,o})=>`<div class="ov-act"><a href="#" onclick="event.preventDefault();openProject('${_jsCode(p.code)}',{sectie:'calculatie'})">${esc(projNaamVol(p))}${o.titel&&o.titel!==p.naam?' — '+esc(o.titel):''} ${projTag(p)}</a> <span class="dos-st">${esc((o.meta&&o.meta.status)||'in bewerking')}</span>${o._gewijzigd?` <span class="dos-meta">${fmtDatum(String(o._gewijzigd).slice(0,10))}</span>`:''}</div>`).join(''):'<p class="dos-leeg">Nog geen calculaties.</p>'}
     <hr class="divider">
     ${!info.mbId?'<p class="dos-leeg">Geen Moneybird-contact bekend — facturen en offertes zijn niet op te halen.</p>'
       :!g?'<p class="dos-leeg"><span class="spinner"></span> Moneybird laden…</p>'
@@ -7079,7 +7115,7 @@ function nacalcHtml(proj,totaalInkoop,effectiveMb){
           <td style="text-align:right;font-family:var(--mono)">${r.uren.toFixed(1)} u</td>
           <td style="text-align:right;font-family:var(--mono)">€ ${r.tarief.toFixed(2)}/u</td>
           <td style="text-align:right;font-family:var(--mono);font-weight:600">${fmt(r.kosten)}</td>
-        </tr>`).join(''):`<tr><td colspan="4" style="font-size:12px;color:var(--text-faint)">Geen uren gevonden voor ${proj.code} — sync de Uren-tab of check de Toggl-projectnaam.</td></tr>`;
+        </tr>`).join(''):`<tr><td colspan="4" style="font-size:12px;color:var(--text-faint)">Geen uren gevonden voor ${esc(projNaamVol(proj))} — sync de Uren-tab of check de Toggl-projectnaam.</td></tr>`;
   return `
       <hr class="divider">
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
@@ -7150,7 +7186,7 @@ function nacalcExportPdf(code){
   const w=window.open('','_blank');
   if(!w){planToast('Pop-up geblokkeerd — sta pop-ups toe voor PDF-export');return;}
   w.document.write(`<!doctype html><html lang="nl"><head><meta charset="utf-8">
-    <title>Nacalculatie ${code}</title><style>
+    <title>Nacalculatie ${esc(projKort(code))}</title><style>
     body{font-family:Georgia,'Times New Roman',serif;color:#2a1d14;margin:40px;}
     h1{font-size:20px;border-bottom:3px solid #5b3a29;padding-bottom:8px;}
     .meta{color:#6b5544;font-size:12px;margin:4px 0 24px;}
@@ -7160,7 +7196,7 @@ function nacalcExportPdf(code){
     .foot{margin-top:24px;font-size:11px;color:#8a7560;}
     </style></head><body>
     <h1>Mortise &amp; Tenon — Nacalculatie</h1>
-    <div class="meta">Project: <strong>${(proj.naam||proj.code)}</strong> · code ${code} · ${new Date().toLocaleDateString('nl-NL')}</div>
+    <div class="meta">Project: <strong>${esc(projNaamVol(proj))}</strong>${projLabelCode(proj)?' · '+esc(projLabelCode(proj)):''} · ${new Date().toLocaleDateString('nl-NL')}</div>
     <table><thead><tr><th>Post</th><th style="text-align:right">Hoeveelheid</th>
       <th style="text-align:right">Tarief</th><th style="text-align:right">Kosten excl. btw</th></tr></thead>
       <tbody>${tr}</tbody></table>
@@ -7261,8 +7297,8 @@ async function nacalcMaakFactuur(code,opts){
   const mat=nacalcMatTotaal(code);
   if(!nc.rijen.length&&!(mat>0)){alert('Geen uren en geen materiaal gevonden — niets om te factureren.');return;}
   const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
-  const details=nc.rijen.filter(r=>r.uren>0.01).map(r=>({description:`Arbeid ${cap(r.naam)} — nacalculatie ${code}`,amount:`${r.uren.toFixed(2)} x`,price:r.tarief.toFixed(2)}));
-  if(mat>0)details.push({description:`Materiaal — nacalculatie ${code}`,amount:'1 x',price:mat.toFixed(2)});
+  const details=nc.rijen.filter(r=>r.uren>0.01).map(r=>({description:`Arbeid ${cap(r.naam)} — nacalculatie ${projKort(code)}`,amount:`${r.uren.toFixed(2)} x`,price:r.tarief.toFixed(2)}));
+  if(mat>0)details.push({description:`Materiaal — nacalculatie ${projKort(code)}`,amount:'1 x',price:mat.toFixed(2)});
   const bev=await mbBevestig({wat:`CONCEPT-factuur maken met ${details.length} nacalculatieregel(s) (geen offerte gevonden)`,contact:resolveKlantNaam(proj)||('Moneybird-contact '+mbId),ref:code,bedrag:nc.arbeid+mat,gevaar:opnieuw,extra:opnieuw?_mbOpnieuwTekst:''});
   if(!bev)return;
   if(st)st.textContent='Concept-factuur maken…';
@@ -7575,7 +7611,7 @@ async function planNaarToggl(code){
   const mt=(typeof PROJECT_CODES!=='undefined')?projVind(code):null;
   if(!mt){ planToast('❌ Project '+code+' niet gevonden'); return; }
   const open=plan.fases.filter(fa=>!fa.togglTaskId);
-  if(!await mtDialog.confirm({title:'Planning naar Toggl',message:`${open.length} fase(n) als taak in het Toggl-project van ${code} zetten?`+(plan.fases.length-open.length?`\n${plan.fases.length-open.length} fase(n) staan er al in en worden overgeslagen.`:''),okLabel:'Naar Toggl'})) return;
+  if(!await mtDialog.confirm({title:'Planning naar Toggl',message:`${open.length} fase(n) als taak in het Toggl-project van ${projNaamVol(_projVoorCode(code))||'dit project'} zetten?`+(plan.fases.length-open.length?`\n${plan.fases.length-open.length} fase(n) staan er al in en worden overgeslagen.`:''),okLabel:'Naar Toggl'})) return;
   planToast('Toggl: project zoeken…');
   const pid=await _tgZorgProjectVoorCode(code);
   if(!pid){ planToast('❌ Geen Toggl-project: '+(window._t2LaatsteFout||'onbekende fout')+' — er is niets aangemaakt'); return; }
@@ -7800,7 +7836,7 @@ function planFaseUnpin(code,faseId){
 // ── Projecttijdlijn: alleen echte events (aanmaak, inkoop, bestellingen) ──
 function projectTijdlijn(proj){
   const events=[];
-  if(proj.created) events.push({datum:proj.created,icon:'🏷️',kleur:'var(--gold)',label:'Project aangemaakt',detail:`${proj.code}`});
+  if(proj.created) events.push({datum:proj.created,icon:'🏷️',kleur:'var(--gold)',label:'Project aangemaakt',detail:projLabelCode(proj)});
   // Materiaalinkoop uit facturen — gegroepeerd per factuurdatum
   const voorraad=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>v.project===proj.code);
   const perDatum={};
@@ -8508,7 +8544,7 @@ function updateModalPreview(){
   document.getElementById('modal-naam-preview').textContent=naam?`Volledige naam: ${naam}`:'';
 }
 async function verwijderProject(code){
-  if(!await mtDialog.confirm({title:'Project verwijderen',message:`Project ${code} verwijderen?`,okLabel:'Verwijderen',danger:true})) return;
+  if(!await mtDialog.confirm({title:'Project verwijderen',message:`Project „${projNaamVol(_projVoorCode(code))||'zonder naam'}” verwijderen?`,okLabel:'Verwijderen',danger:true})) return;
   projTombstone(code);   // niet wissen: tombstone, zodat een oude kopie elders hem niet terugzet
   slaProjectenOp();huidigProject=null;
   document.getElementById('project-detail').innerHTML='';renderProjectLijst();
@@ -8584,22 +8620,22 @@ async function maakProjectAan(){
     }
     sel.value=code;
   });
-  status.style.color='var(--green)';status.textContent=`✓ ${code} aangemaakt`;
+  status.style.color='var(--green)';status.textContent=`✓ ${naam} aangemaakt`;
   // Meteen het nieuwe project tonen (lijst + detail); mappen/Toggl lopen daarna door
   // met hun status in de contextbalk.
   openProject(code,{sectie:'overzicht',onthoud:false});
   let mapFout='';
   // Mappenstructuur op SharePoint aanmaken (mkdir-p, idempotent)
   try{
-    status.textContent=`✓ ${code} aangemaakt — mappen aanmaken…`;
+    status.textContent=`✓ ${naam} aangemaakt — mappen aanmaken…`;
     projCtxStatus(code,'mappen aanmaken…');
     await genereerProjectMappen(nieuwProj);
-    status.textContent=`✓ ${code} aangemaakt + mappen op SharePoint`;
+    status.textContent=`✓ ${naam} aangemaakt + mappen op SharePoint`;
   }catch(e){
     console.warn('mappen aanmaken faalde:',e);
     mapFout=String(e.message||e);
     status.style.color='var(--amber,#d97706)';
-    status.textContent=`✓ ${code} aangemaakt — ⚠ mappen niet aangemaakt: ${mapFout}`;
+    status.textContent=`✓ ${naam} aangemaakt — ⚠ mappen niet aangemaakt: ${mapFout}`;
   }
   // M&T-verweving: meteen het Toggl-project aanmaken met de code als naam, zodat de
   // projectcode één-op-één in Toggl terugkomt. Best-effort — faalt het, dan blijft
@@ -9744,7 +9780,7 @@ function renderHistory(filter=''){
     <div class="geschiedenis-item" onclick="openFactuurInControle('${h.id}')" style="cursor:pointer;border-radius:8px;padding:0.875rem 0.75rem;margin:0 -0.75rem;transition:background 0.12s" onmouseenter="this.style.background='var(--gold-light)'" onmouseleave="this.style.background=''">
       <span class="badge badge-ok">✓</span>
       <strong>${h.contact}</strong>
-      <span class="code">${h.project||'—'}</span>
+      ${h.project?projKortHtml(h.project):'<span class="code">—</span>'}
       <span style="color:var(--text-faint);font-size:11px">${fmtDatum(h.date)}</span>
       <span style="margin-left:auto;font-family:var(--mono);font-weight:600;color:var(--green)">${h.totaal||''}</span>
       <span style="color:var(--text-faint);font-size:11px">verval: ${fmtDatum(h.due)}</span>
@@ -10442,8 +10478,8 @@ function _oplRenderLijst(){
       nOpn ? `<span class="opl-pill" style="background:var(--info-50);color:var(--info)">${nOpn} opname${nOpn>1?'s':''}</span>` : ''
     ].join(' ');
     return `<div onclick="oplSelectProject('${_escH(g.code)}')" style="cursor:pointer;padding:8px 10px;border:1px solid var(--n-200);border-radius:8px;margin-bottom:6px;${actief}">
-      <div style="font-weight:600;color:var(--n-900)">${_escH(g.code)}</div>
-      <div style="font-size:12px;color:var(--text-dim);margin:1px 0 4px">${_escH(g.naam||'')}</div>
+      <div style="font-weight:600;color:var(--n-900)">${_escH(_projVoorCode(g.code)?projNaamVol(_projVoorCode(g.code)):(g.naam||'Project'))}</div>
+      <div style="font-size:12px;color:var(--text-dim);margin:1px 0 4px">${_escH(projLabelCode(_projVoorCode(g.code)))}</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap">${badges}</div>
     </div>`;
   }).join('');
@@ -10478,7 +10514,7 @@ function oplSelectProject(code){
     </div>`;
   }).join('');
   el.innerHTML = `<div class="card">
-    <div class="card-title">${_escH(g.code)} — ${_escH(g.naam||'')}</div>
+    <div class="card-title">${_escH(projKeuzeLabel(g.code,g.naam||'Project'))}</div>
     <div style="margin-top:0.5rem">${rows}</div>
     <div id="opl-rapport-preview" style="margin-top:1rem"></div>
   </div>`;
@@ -10880,8 +10916,7 @@ function mobielMeldingenRender() {
     return `<div class="mobiel-melding-rij" onclick="mobielAanvulOpen(${JSON.stringify(m.code)})" title="Klik om gegevens aan te vullen">
       <span class="mm-icon">🆕</span>
       <span class="mm-tekst">
-        <span class="mm-code">${_escH(m.code)}</span>
-        ${m.naam ? ` — ${_escH(m.naam)}` : ''}
+        <span class="mm-code">${_escH(m.naam || 'Nieuw project')}</span>
         <span style="color:var(--text-faint);font-size:11px"> · ${_escH(door)}${dt?' · '+dt:''}</span>
         ${m.aangevuld ? `<span style="color:var(--text-dim);font-size:11px"> · ${m.aangevuld} mappen aangemaakt</span>` : ''}
       </span>
@@ -12365,7 +12400,7 @@ async function aanwezigLaad(){
   if(!_planblokken&&typeof agPlanLoad==='function'){ try{ await agPlanLoad(); }catch(e){} }
   const vandaag=_planYmd(new Date()), plan={};
   (typeof agPlanBlokken==='function'?agPlanBlokken():[]).filter(b=>b&&!b._vervallen&&b.datum===vandaag).forEach(b=>{
-    const s=_awSlug(b.persoon); (plan[s]=plan[s]||[]).push({start:b.start,tekst:b.taak||b.project_code||'',voorstel:window.MTPlanVoorstel&&MTPlanVoorstel.isOpen(b)}); });
+    const s=_awSlug(b.persoon); (plan[s]=plan[s]||[]).push({start:b.start,tekst:b.taak||(b.project_code?projKort(b.project_code):''),voorstel:window.MTPlanVoorstel&&MTPlanVoorstel.isOpen(b)}); });
   const verlof=new Set((typeof admVerlof==='function'?admVerlof():[]).filter(v=>vandaag>=v.van&&vandaag<=v.tm).map(v=>_awSlug(v.persoon)));
   (typeof admVrijdagen==='function'?admVrijdagen():[]).filter(v=>v.datum===vandaag&&v.type==='verplicht').forEach(()=>data.personen.forEach(p=>verlof.add(p.slug)));
   el.innerHTML=MTAanwezig.html(data,{plan,verlof,opener:'aanwezigOpen'});
@@ -13205,7 +13240,7 @@ function activiteitOpen(force){
     const o=getOfferte(key); if(!window.MTKoppelUI) return;
     const kies=`MTKoppelUI.sluit();var s=document.getElementById('calc-projsel-${key}');if(s)s.focus()`;
     MTKoppelUI.popover(el,o.project_code
-      ?`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:o.project_code})}</div>
+      ?`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:projKort(o.project_code)})}</div>
         <div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();openProject('${o.project_code}')">Open project</button>
         <button class="btn btn-xs btn-secondary" onclick="${kies}">Ander project kiezen</button>
         <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();calcKoppelProject('${key}','')">Ontkoppelen</button></div>`
@@ -14541,7 +14576,7 @@ function activiteitOpen(force){
            <input class="calc-inp" style="font-weight:700;font-size:15px;min-width:220px;flex:1" value="${esc(o.titel||'')}" placeholder="Offertetitel…" onchange="calcSetTitel('${key}',this.value)">
            <label style="font-size:11px;color:var(--text-dim)">Koppel aan project
              <select class="calc-inp" id="calc-projsel-${key}" onchange="calcKoppelProject('${key}',this.value)">${projectKoppelOpties(o.project_code)}</select></label>
-           ${window.MTKoppelUI?MTKoppelUI.badge(o.project_code?{status:'gekoppeld',label:o.project_code,titel:'Offerte gekoppeld aan project '+o.project_code+' — klik voor details',onclick:`calcProjPop(this,'${key}')`}:{status:'open',label:'project',titel:'Nog niet aan een project gekoppeld — klik om er een te kiezen',onclick:`calcProjPop(this,'${key}')`}):''}
+           ${window.MTKoppelUI?MTKoppelUI.badge(o.project_code?{status:'gekoppeld',label:projKort(o.project_code),titel:'Offerte gekoppeld aan project '+projKeuzeLabel(o.project_code)+' — klik voor details',onclick:`calcProjPop(this,'${key}')`}:{status:'open',label:'project',titel:'Nog niet aan een project gekoppeld — klik om er een te kiezen',onclick:`calcProjPop(this,'${key}')`}):''}
          </div>`
       : `<div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.5rem">
            <div class="card-title" style="margin:0">Offerte-calculator <span style="font-size:11px;color:var(--text-faint);font-weight:400">— voorcalculatie · ${esc(key)}</span></div>

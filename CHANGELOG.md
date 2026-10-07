@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Projectnummering P2: project_id + dual-read via projVind
+- Commit: `3065fa8` | Auteur: Bart Witte
+
 ## 2026-10-07 — Release v2.6: Moneybird-bevestiging + geen dubbele acties, contactenregister, namen zonder gokken; backup = v2.5
 - Commit: `0363cb4` | Auteur: Bart Witte
 
