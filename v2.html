@@ -11943,6 +11943,11 @@ async function rolLaad(){
   if(act&&act.classList.contains('mt-rol-verborgen')){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
   if(typeof admInitKnop==='function') admInitKnop();
   const k=document.getElementById('beheer-kaart'); if(k) k.style.display=MTRol.isBeheer()?'':'none';
+  // Deeplink-race: een tab die al open stond vóór /me terug was (bv. #tab=instellingen of
+  // #tab=activiteit) laadde zonder rol → nu alsnog vullen.
+  const open=n=>{ const t=document.getElementById('tab-'+n); return !!(t&&t.classList.contains('active')); };
+  if(MTRol.isBeheer()&&open('instellingen')) beheerLaad();
+  if(MTRol.isBeheer()&&open('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
   return me;
 }
 const _BH_FOUT={'alleen-eigenaar-mag-eigenaar':'Alleen de eigenaar kan iemand eigenaar maken of een eigenaar wijzigen.','niet-jezelf':'Je eigen account wijzig je hier niet.',

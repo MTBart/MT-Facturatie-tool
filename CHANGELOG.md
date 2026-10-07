@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Release v2.4: rollen (Beheer-scherm, meekijkstand); backup = v2.3
+- Commit: `46fcd56` | Auteur: Bart Witte
+
 ## 2026-10-07 — Rollen: meerdere vaste eigenaren (OWNER_OIDS + OWNER_EMAILS), eigenaar kan eigenaar maken
 - Commit: `924207f` | Auteur: Bart Witte
 
