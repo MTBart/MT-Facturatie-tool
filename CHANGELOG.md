@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Release v2.6: Moneybird-bevestiging + geen dubbele acties, contactenregister, namen zonder gokken; backup = v2.5
+- Commit: `0363cb4` | Auteur: Bart Witte
+
 ## 2026-10-07 — Namen zo compleet mogelijk, onbekend = leeg + "+ invullen" (besluit Bart)
 - Commit: `3efbdc0` | Auteur: Bart Witte
 

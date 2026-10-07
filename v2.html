@@ -2620,11 +2620,110 @@ function _spWie(){ try{ return (typeof mtMijEmail==='function'&&mtMijEmail())||'
 // Stempel = nu, maar altijd later dan de stand waarop de wijziging voortbouwt (achterlopende klok).
 function _spStempel(x,vorig){ let t=Date.now(); const v=_spTijd(vorig); if(v>=t) t=v+1; x._gewijzigd=t; const w=_spWie(); if(w) x._door=w; return x; }
 function _projJson(p){ if(!p||typeof p!=='object') return JSON.stringify(p); const {_gewijzigd,_door,...r}=p; return JSON.stringify(r); }
-function _projLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_projecten')||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+// ── Projectnummering P2: onveranderlijke technische sleutel `project_id` + dual-read ──
+// De zichtbare `code` gaat later (P3) het offertenummer worden; alles wat een project zoekt, gaat via
+// projVind(id | code | oude code). Velden die P2 toevoegt (afgeleid, idempotent):
+//   project_id   — bestaande projecten: deterministisch uit (code + created), zodat elke pc hetzelfde
+//                  id berekent; nieuwe projecten: 'p_' + tijd + willekeur bij het aanmaken.
+//   legacy_codes — [de code van vóór de nummering]; soort — 'klant' (later ook 'intern');
+//   offertes     — [{nummer, mb_id, rol:'hoofd', status}] uit het bestaande offertenr (zolang leeg).
+// Aanvullen gebeurt bij het LEZEN (_projLees) en zonder stempel: het is geen bewerking, dus het kan
+// nooit een nieuwere wijziging van een andere pc overschrijven (bij het samenvoegen wint die gewoon,
+// en de volgende lezing vult het weer — met hetzelfde id).
+function _projHash(str){   // cyrb53: snelle, stabiele 53-bit hash (geen crypto nodig, overal gelijk)
+  let h1=0xdeadbeef, h2=0x41c6ce57;
+  for(let i=0;i<str.length;i++){ const c=str.charCodeAt(i); h1=Math.imul(h1^c,2654435761); h2=Math.imul(h2^c,1597334677); }
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);
+  h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+  return (4294967296*(2097151&h2)+(h1>>>0)).toString(36);
+}
+function projIdVoor(p){ return 'p_'+_projHash(String((p&&p.code)||'').trim().toUpperCase()+'|'+String((p&&p.created)||'').trim()); }
+function projNieuwId(){ return 'p_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+function projAanvullen(p){
+  if(!p||typeof p!=='object'||(!p.code&&!p.project_id)) return p;
+  if(!p.project_id) p.project_id=projIdVoor(p);
+  if(!Array.isArray(p.legacy_codes)) p.legacy_codes=p.code?[p.code]:[];
+  if(!p.soort) p.soort='klant';
+  if(!Array.isArray(p.offertes)||(!p.offertes.length&&p.offertenr))
+    p.offertes=p.offertenr?[{nummer:String(p.offertenr),mb_id:p.offertenr_mb_id!=null?String(p.offertenr_mb_id):null,rol:'hoofd',status:''}]:[];
+  return p;
+}
+// Eén ingang om een (actief) project te vinden: project_id, huidige code of een oude code.
+function projVind(x){
+  if(x==null||x==='') return null;
+  const s=String(x), l=s.toLowerCase();
+  return PROJECT_CODES.find(p=>p&&p.project_id&&String(p.project_id).toLowerCase()===l)
+    ||PROJECT_CODES.find(p=>p&&p.code===s)
+    ||PROJECT_CODES.find(p=>p&&Array.isArray(p.legacy_codes)&&p.legacy_codes.includes(s))||null;
+}
+// P2-velden behouden als de winnende kant ze mist (geschreven door een app-versie van vóór P2):
+// project_id/soort van de andere kant, legacy_codes samengevoegd, offertes als de winnaar er geen heeft.
+function _projP2Behoud(uit, lokaal, spData){
+  if(!Array.isArray(uit)) return uit;
+  const per=new Map();
+  [lokaal,spData].forEach(l=>{ if(typeof l==='string'){ try{ l=JSON.parse(l); }catch(e){ l=null; } } (Array.isArray(l)?l:[]).forEach(x=>{ if(x&&x.code){ if(!per.has(x.code)) per.set(x.code,[]); per.get(x.code).push(x); } }); });
+  return uit.map(u=>{
+    if(!u||!u.code) return u;
+    let k=null; const z=()=>k||(k=JSON.parse(JSON.stringify(u)));
+    for(const o of per.get(u.code)||[]){
+      if(o===u) continue;
+      if(o.project_id&&!u.project_id&&!(k&&k.project_id)) z().project_id=o.project_id;
+      if(o.soort&&!(k||u).soort) z().soort=o.soort;
+      if(Array.isArray(o.legacy_codes)){ const mis=o.legacy_codes.filter(c=>!((k||u).legacy_codes||[]).includes(c)); if(mis.length){ const w=z(); w.legacy_codes=(Array.isArray(w.legacy_codes)?w.legacy_codes:[]).concat(mis); } }
+      if(Array.isArray(o.offertes)&&o.offertes.length&&!(Array.isArray((k||u).offertes)&&(k||u).offertes.length)) z().offertes=JSON.parse(JSON.stringify(o.offertes));
+    }
+    return k||u;
+  });
+}
+// Hernoemd vóór P2: tombstone OUD (`_hernoemd_naar` NIEUW, zelfde `created`) + actief record NIEUW.
+// Beide krijgen het id van het oudste record in de keten en NIEUW krijgt de oude codes als legacy,
+// zodat oude links blijven werken. Deterministisch: tombstone en nieuw record staan samen in de store.
+function _projHernoemKetens(a){
+  const naar=new Map();
+  a.forEach(p=>{ if(p&&p._vervallen&&p._hernoemd_naar&&p.code){ const n=String(p._hernoemd_naar); if(!naar.has(n)) naar.set(n,[]); naar.get(n).push(p); } });
+  if(!naar.size) return a;
+  for(const p of a){
+    if(!p||!p.code) continue;
+    // Alleen een eenduidige keten volgen: per stap precies één voorganger met dezelfde (ingevulde)
+    // created, geen kring. Twijfel → niets erven (niets gokken), alleen melden.
+    const voor=[], gezien=new Set([p.code]); let q=p, twijfel='';
+    for(;;){
+      const vg=(naar.get(q.code)||[]).filter(t=>t.created&&q.created&&String(t.created)===String(q.created));
+      if(!vg.length) break;
+      if(vg.length>1){ twijfel='meerdere voorgangers'; break; }
+      if(gezien.has(vg[0].code)){ twijfel='kring'; break; }
+      gezien.add(vg[0].code); voor.push(vg[0]); q=vg[0];
+    }
+    if(twijfel){ console.warn('hernoemketen niet gekoppeld ('+twijfel+'):',p.code); continue; }
+    if(!voor.length) continue;
+    const wortel=voor[voor.length-1], id=wortel.project_id||projIdVoor(wortel);
+    if(!p.project_id) p.project_id=id;
+    else if(p.project_id!==id) console.warn('hernoemketen: afwijkend project_id blijft staan:',p.code,p.project_id,id);
+    const leg=Array.isArray(p.legacy_codes)?p.legacy_codes:(p.legacy_codes=[p.code]);
+    voor.forEach(t=>{ if(!leg.includes(t.code)) leg.push(t.code); });
+  }
+  return a;
+}
+// Conflicten die projVind niet eenduidig kan oplossen (bv. een achterlopende pc gaf een oude code
+// opnieuw uit): een oude code die ook de huidige code van een ander project is, of bij twee projecten
+// als oude code staat. projVind kiest dan de huidige code; dit wordt gemeld, niet automatisch hersteld.
+function projConflicten(lijst){
+  const uit=[], huidig=new Map(), oud=new Map();
+  (lijst||[]).forEach(p=>{ if(p&&p.code&&!p._vervallen) huidig.set(p.code,p); });
+  huidig.forEach(p=>(Array.isArray(p.legacy_codes)?p.legacy_codes:[]).forEach(c=>{ if(c===p.code) return;
+    if(huidig.has(c)) uit.push({code:c,soort:'oude code is huidige code van ander project',projecten:[p.code,c]});
+    if(oud.has(c)&&oud.get(c)!==p) uit.push({code:c,soort:'oude code bij twee projecten',projecten:[oud.get(c).code,p.code]}); else oud.set(c,p); }));
+  const ids=new Map();
+  huidig.forEach(p=>{ if(!p.project_id) return; if(ids.has(p.project_id)) uit.push({code:p.project_id,soort:'dubbel project_id',projecten:[ids.get(p.project_id),p.code]}); else ids.set(p.project_id,p.code); });
+  return uit;
+}
+function _projLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_projecten')||'[]'); return Array.isArray(a)?_projHernoemKetens(a).map(projAanvullen):[]; }catch(e){ return []; } }
 function projLaad(){
   const alle=_projLees();
   _projBasis=new Map(alle.filter(p=>p&&p.code).map(p=>[p.code,_projJson(p)]));
-  return alle.filter(p=>p&&typeof p==='object'&&!p._vervallen);
+  const actief=alle.filter(p=>p&&typeof p==='object'&&!p._vervallen);
+  projConflicten(actief).forEach(c=>console.warn('projectsleutel-conflict ('+c.soort+'):',c.code,c.projecten.join(' / ')));
+  return actief;
 }
 function slaProjectenOp(){
   const opslag=_projLees(), perCode=new Map(), losOpslag=[];
@@ -2632,6 +2731,7 @@ function slaProjectenOp(){
   const uit=[], gezien=new Set(), weg=new Set();
   for(const p of PROJECT_CODES){
     if(!p||p.bron==='app') continue;
+    projAanvullen(p);                                   // zelfde afgeleide velden als bij het lezen → geen schijnwijziging
     if(!p.code){ uit.push(p); continue; }
     if(gezien.has(p.code)){ console.warn('dubbele projectcode in PROJECT_CODES — tweede record niet opgeslagen:',p.code,p); continue; }
     gezien.add(p.code);
@@ -2662,7 +2762,7 @@ function slaProjectenOp(){
 // niet terugzet. De volledige gegevens blijven in de tombstone staan (herstelbaar).
 function projTombstone(code,extra){
   const opslag=_projLees(), i=opslag.findIndex(p=>p&&p.code===code);
-  const mem=PROJECT_CODES.find(p=>p&&p.code===code);
+  const mem=PROJECT_CODES.find(p=>p&&p.code===code);   // bewust op code: de tombstone hoort bij precies dit record
   const bron=mem||(i>=0?opslag[i]:{code});
   const t=Object.assign(JSON.parse(JSON.stringify(bron)),extra||{},{_vervallen:{tijd:new Date().toISOString(),door:_spWie()}});
   _spStempel(t,i>=0&&_spTijd(opslag[i])>_spTijd(bron)?opslag[i]:bron);
@@ -2984,7 +3084,7 @@ const mtRoute={
         return;
       }
       if(r.code){
-        const p=PROJECT_CODES.find(x=>x.code===r.code)||PROJECT_CODES.find(x=>String(x.code).toUpperCase()===String(r.code).toUpperCase());
+        const p=projVind(r.code)||PROJECT_CODES.find(x=>String(x.code).toUpperCase()===String(r.code).toUpperCase());
         if(!p){ projNietGevonden(r.code); return; }
         // Zonder sectie in de URL = Overzicht (een gedeelde link toont dus altijd hetzelfde).
         openProject(p.code,{sectie:r.sectie||'overzicht',filter:r.filter||null,onthoud:false});
@@ -5128,7 +5228,8 @@ function zoekProjecten(v){renderProjectLijst(v);}
 // project erin valt), dan het detail.
 // geschiedenis: 'push' (project openen, default) · 'replace' (tabwissel) · 'geen'.
 function openProject(code,{scroll=true,geschiedenis='push',sectie=null,filter=null,onthoud=true}={}){
-  const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj) return null;
+  const proj=projVind(code); if(!proj) return null;
+  code=proj.code;                                     // id of oude code → huidige code (URL wordt bijgewerkt)
   huidigProject=proj;
   window._calcMailPaneelActief=false;
   if(typeof _projKlantFilter!=='undefined'&&_projKlantFilter&&!_projInKlantFilter(proj)) _projKlantFilter=null;
@@ -5193,7 +5294,7 @@ function _naamInvulBadge(label,onclick,titel){
 // Locatienaam invullen: op dit project én de andere projecten van dezelfde klant met dezelfde
 // locatiecode die nog geen naam hebben (zelfde locatie). B2-stempel via slaProjectenOp.
 async function projLocNaamInvullen(code){
-  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!proj.loc) return;
+  const proj=projVind(code); if(!proj||!proj.loc) return;
   const kl=String(proj.klant||'').toUpperCase(), lc=String(proj.loc).toUpperCase();
   const naam=await mtDialog.prompt({title:'Locatienaam invullen',message:'Naam van locatie '+lc+' bij '+(projKlantNaam(proj)||kl)+':',placeholder:'bv. Kantoor Zuidas',okLabel:'Opslaan'});
   if(naam==null||!_echteNaam(naam,lc)) return;
@@ -5738,7 +5839,7 @@ function _dosDatum(v){
 }
 function dossierItems({codes}={}){
   const uit=[], lijst=Array.isArray(codes)?codes:[codes];
-  const projen=lijst.map(c=>PROJECT_CODES.find(p=>p.code===c)||{code:c});
+  const projen=lijst.map(c=>projVind(c)||{code:c});
   const idx=(typeof ibBijlageIndexAll==='function')?ibBijlageIndexAll():[];
   const voorraad=(()=>{ try{ return JSON.parse(localStorage.getItem('mt_voorraad')||'[]'); }catch(e){ return []; } })();
   const journaal=(()=>{ try{ const j=JSON.parse(localStorage.getItem('mt_taken_journaal')||'[]'); return Array.isArray(j)?j:[]; }catch(e){ return []; } })();
@@ -5829,7 +5930,7 @@ function klantDomeinen(codes){
   const all=(typeof mailLinksAll==='function')?mailLinksAll():{};
   const vol=(typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]);
   const lev=new Set(vol.filter(k=>k&&k.soort==='leverancier'&&k.email).map(k=>dom(k.email)).filter(Boolean));
-  (codes||[]).forEach(c=>{ const p=PROJECT_CODES.find(x=>x.code===c); if(!p) return;
+  (codes||[]).forEach(c=>{ const p=projVind(c); if(!p) return;
     if(p.klant) kls.add(String(p.klant).toUpperCase()); const d=dom(p.klant_email); if(d) uit.add(d);
     (all[c]||[]).forEach(x=>{ if(x&&!x.ontkoppeld){ const d2=dom(x.fromAddr); if(d2&&!lev.has(d2)) tel[d2]=(tel[d2]||0)+1; } }); });
   // Afzenderdomein van eerdere koppelingen pas bij ≥2 mails (één toevallige afzender, bv. een
@@ -5895,7 +5996,7 @@ function renderDossier(el,scope,facetten){
       ${sel('periode',[['','Alle data'],['week','Deze week'],['maand','Deze maand'],['aangepast','Aangepast…']],f.periode,'Periode')}
       <span class="dos-aangepast"${f.periode==='aangepast'?'':' hidden'}><input type="date" value="${esc(f.van)}" aria-label="Vanaf" onchange="dossierZetFilter('${k}','van',this.value)"> – <input type="date" value="${esc(f.tot)}" aria-label="Tot en met" onchange="dossierZetFilter('${k}','tot',this.value)"></span>
       ${sel('persoon',[['','Iedereen'],...personen.map(p=>[p,p])],f.persoon,'Persoon')}
-      ${scope.codes.length>1?sel('project',[['','Alle projecten'],...scope.codes.map(c=>[c,c+' — '+(((PROJECT_CODES.find(p=>p.code===c)||{}).naam)||'')])],f.project,'Project'):''}
+      ${scope.codes.length>1?sel('project',[['','Alle projecten'],...scope.codes.map(c=>[c,c+' — '+(((projVind(c)||{}).naam)||'')])],f.project,'Project'):''}
       ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.filter(l=>_locKeuzeLabel(l)).map(l=>[l.code,_locKeuzeLabel(l)])],f.locatie,'Locatie'):''}
       ${sel('status',[['','Status: standaard'],['*','Status: alles (ook ontkoppeld)'],...statussen.map(s=>[s,'Status: '+s])],f.status,'Status')}
       <label class="dos-check"><input type="checkbox"${f.bijlage?' checked':''} onchange="dossierZetFilter('${k}','bijlage',this.checked?'1':'')"> met bijlage</label>
@@ -6116,7 +6217,7 @@ function projStatus(p){
   return uit('offerte','nog geen gestarte fase, taak of akkoord');
 }
 function projStatusZet(code,waarde){
-  const p=PROJECT_CODES.find(x=>x.code===code); if(!p) return;
+  const p=projVind(code); if(!p) return;
   if(waarde&&PROJ_STATUSSEN.includes(waarde)) p.status=waarde; else delete p.status;
   slaProjectenOp();                                   // B2: stempel _gewijzigd + _door
   if(_klantHuidig) _klantSectieRender();
@@ -6677,7 +6778,7 @@ function mbContactNaam(id){
   const k=reg.find(x=>x&&String(x.mb_contact_id||'')===s); return (k&&k.naam)||'';
 }
 function mbPop(el,code){
-  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!window.MTKoppelUI) return;
+  const proj=projVind(code); if(!proj||!window.MTKoppelUI) return;
   const auto=resolveMbContact(proj), eff=proj.mb_nr||auto, bron=proj.mb_nr?'handmatig gekoppeld':'automatisch via de klantregistry';
   MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:mbContactNaam(eff)||'Moneybird'})}<span class="kb-pop-n dos-meta">${esc(bron)} · contact-id ${esc(eff)}</span></div>
     <div class="kb-pop-acties"><a class="btn btn-xs btn-secondary" href="https://moneybird.com/${getAdmin()}/contacts/${esc(eff)}" target="_blank" rel="noopener">Open in Moneybird ↗</a>
@@ -6686,7 +6787,7 @@ function mbPop(el,code){
     ${!proj.mb_nr?'<div class="dos-meta" style="margin-top:4px">Automatische koppeling: pas de klantregistry aan om dit te wijzigen, of koppel handmatig.</div>':''}`,{titel:'Moneybird-contact'});
 }
 async function mbOntkoppel(code){
-  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!proj.mb_nr) return;
+  const proj=projVind(code); if(!proj||!proj.mb_nr) return;
   if(!await mtDialog.confirm({title:'Moneybird-koppeling weghalen',message:'De handmatige koppeling met contact '+proj.mb_nr+' weghalen?\n'+(resolveMbContact(proj)?'Daarna geldt weer de automatische koppeling uit de registry.':'Daarna is er geen Moneybird-contact meer.'),okLabel:'Weghalen',danger:true})) return;
   proj.mb_nr=null; slaProjectenOp();
   if(typeof _rerenderDetailKeepScroll==='function') _rerenderDetailKeepScroll();
@@ -6700,7 +6801,7 @@ function projMapBadge(proj,{klein=false}={}){
   return MTKoppelUI.badge({status:'open',klein,label:'projectmap',titel:'Projectmap nog niet gecontroleerd — klik voor details',onclick:`mapPop(this,'${c}')`});
 }
 function mapPop(el,code){
-  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!window.MTKoppelUI) return;
+  const proj=projVind(code); if(!proj||!window.MTKoppelUI) return;
   const m=proj.map||{}, jc=_jsCode(code);
   if(!m.itemId){
     const dub=(window._dossierMap||{})[code], dubbel=!!(dub&&dub.fout&&/Meerdere projectmappen/.test(dub.fout));
@@ -6717,7 +6818,7 @@ function mapPop(el,code){
 }
 // Alleen lezen: projectmap zoeken; precies één → onthouden op het project (projMap), anders melden.
 async function mapControleer(code){
-  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj) return;
+  const proj=projVind(code); if(!proj) return;
   let pm; try{ pm=await window.projMap(proj,{maak:false}); }catch(e){ return mtDialog.alert({title:'Projectmap controleren',message:'Controleren lukte niet: '+(e.message||e)}); }
   window._dossierMap=window._dossierMap||{};
   if(!pm.pad&&pm.dubbel) window._dossierMap[code]=Object.assign({},window._dossierMap[code],{fout:'Meerdere projectmappen gevonden ('+pm.kandidaten.length+') — zie 🗂 Mappen herstellen'});
@@ -6726,7 +6827,7 @@ async function mapControleer(code){
 }
 // Klantmap openen (venster meteen openen, anders blokkeert de browser het na het wachten).
 async function mapOpenKlantmap(code){
-  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj) return;
+  const proj=projVind(code); if(!proj) return;
   const w=window.open('','_blank');
   try{
     const kids=await _SP.listChildren(PROJ_ROOT), kn=_projVeilig(_projKlantNaam(proj));
@@ -6737,14 +6838,14 @@ async function mapOpenKlantmap(code){
 }
 // Popover Toggl-koppeling: details, ander project kiezen, ontkoppelen (alleen de koppeling in de tool).
 function t2Pop(el,code){
-  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!window.MTKoppelUI) return;
+  const proj=projVind(code); if(!proj||!window.MTKoppelUI) return;
   const p=(typeof _tgCache!=='undefined'&&_tgCache.projecten||[]).find(x=>x.id===proj.tg_project_id);
   MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:(p&&p.name)||'Toggl'})}<span class="kb-pop-n dos-meta">Toggl-id ${esc(proj.tg_project_id)}</span></div>
     <div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();t2KiesProject('${_jsCode(code)}')">Ander Toggl-project kiezen</button>
     <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();t2Ontkoppel('${_jsCode(code)}')">Ontkoppelen</button></div>`,{titel:'Toggl-project'});
 }
 async function t2Ontkoppel(code){
-  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!proj.tg_project_id) return;
+  const proj=projVind(code); if(!proj||!proj.tg_project_id) return;
   if(!await mtDialog.confirm({title:'Toggl-project ontkoppelen',message:'De koppeling tussen '+code+' en het Toggl-project verbreken?\nIn Toggl verandert niets; je kunt later opnieuw koppelen.',okLabel:'Ontkoppelen',danger:true})) return;
   delete proj.tg_project_id; slaProjectenOp();
   if(typeof _rerenderDetailKeepScroll==='function') _rerenderDetailKeepScroll();
@@ -6752,7 +6853,7 @@ async function t2Ontkoppel(code){
 function _jsCode(c){ return String(c||'').replace(/[^A-Za-z0-9_.\-]/g,''); }   // veilig in onclick='…'
 function _t2St(code,msg,kleur){ const el=document.getElementById('t2-st-'+code.replace(/[^A-Za-z0-9]/g,'')); if(el){ el.textContent=msg; el.style.color=kleur||'var(--text-dim)'; } }
 async function t2KiesProject(code){
-  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
+  const mt=projVind(code); if(!mt) return;
   try{
     _t2St(code,'Toggl-projecten laden…');
     const ps=await t2Projecten(true), kand=_t2Kandidaten(mt,ps);
@@ -6775,7 +6876,7 @@ async function t2KiesProject(code){
   }catch(e){ _t2St(code,'⚠ '+e.message,'#c0392b'); }
 }
 async function t2OffertenummerToekennen(code){
-  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
+  const mt=projVind(code); if(!mt) return;
   const mbId=mt.mb_nr||(typeof resolveMbContact==='function'?resolveMbContact(mt):null);
   if(!mbId){ _t2St(code,'Geen Moneybird-contact gekoppeld — koppel eerst een contact.','#c0392b'); return; }
   try{
@@ -6811,7 +6912,7 @@ async function t2OffertenummerToekennen(code){
   }catch(e){ _t2St(code,'⚠ '+e.message+' — er is niets gewijzigd in Toggl','#c0392b'); }
 }
 async function projTaakNaarToggl(code,id,vers=true){
-  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return false;
+  const mt=projVind(code); if(!mt) return false;
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||t.tg_task_id) return false;
   _ptStatus(code,'Naar Toggl…');
   const pid=await _tgZorgProjectVoorCode(code);
@@ -6887,7 +6988,7 @@ async function aiMailContext(code){
 // afhankelijkheden voor; baseert zich op de gekoppelde mails als die er zijn;
 // wordt lokaal toegevoegd en optioneel naar Toggl gespiegeld.
 async function aiTakenVoorstel(code){
-  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
+  const mt=projVind(code); if(!mt) return;
   const _t0=(typeof performance!=='undefined'?performance.now():Date.now());
   const klant=(typeof resolveKlantNaam==='function')?resolveKlantNaam(mt):'';
   // Eerst de gekoppelde mails inlezen zodat de taken op de echte aanvraag steunen.
@@ -7095,7 +7196,7 @@ async function nacalcLaadOfferte(code,mbId){
     _nacalcOfferte[code]=o;
     const goedgekeurd=String(keuze.gekozen)===String(o.id);
     const beg=Number(o.total_price_excl_tax||0);
-    const proj=PROJECT_CODES.find(p=>p.code===code);
+    const proj=projVind(code);
     const werk=(proj?nacalcData(proj).arbeid:0)+nacalcMatTotaal(code);
     const diff=beg-werk;
     el.innerHTML=`📄 Offerte <a href="https://moneybird.com/${getAdmin()}/estimates/${o.id}" target="_blank" style="color:var(--gold)">${o.estimate_id||o.id} ↗</a>
@@ -7111,7 +7212,7 @@ async function nacalcLaadOfferte(code,mbId){
   }catch(e){el.textContent='Offerte-check mislukt: '+e.message;}
 }
 function _nacalcHerlaadOfferte(code){
-  const proj=PROJECT_CODES.find(p=>p.code===code);if(!proj)return;
+  const proj=projVind(code);if(!proj)return;
   const mbId=proj.mb_nr||(typeof resolveMbContact==='function'?resolveMbContact(proj):null);
   if(mbId) nacalcLaadOfferte(code,mbId);
 }
@@ -7134,7 +7235,7 @@ function nacalcOfferteHerstel(code){
   _nacalcHerlaadOfferte(code);
 }
 async function nacalcMaakFactuur(code,opts){
-  const proj=PROJECT_CODES.find(p=>p.code===code);if(!proj)return;
+  const proj=projVind(code);if(!proj)return;
   const opnieuw=!!(opts&&opts.opnieuw), opnieuwKnop=`nacalcMaakFactuur('${_jsCode(code)}',{opnieuw:true})`;
   const st=document.getElementById('nacalc-status-'+code.replace(/-/g,''));
   const mbId=proj.mb_nr||resolveMbContact(proj);
@@ -7187,7 +7288,7 @@ function bijlagenHtml(proj){
   </tr>`).join('')}</tbody></table>`;
 }
 async function uploadProjectBijlagen(files, code){
-  const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj||!files||!files.length) return;
+  const proj=projVind(code); if(!proj||!files||!files.length) return;
   const st=document.getElementById('bijlage-status-'+code.replace(/-/g,''));
   if(!proj.bijlagen) proj.bijlagen=[];
   let ok=0;
@@ -7211,7 +7312,7 @@ async function uploadProjectBijlagen(files, code){
   if(st2){st2.style.color='var(--green)';st2.textContent=`✓ ${ok} bijlage${ok===1?'':'n'} op SharePoint`;}
 }
 async function ontkoppelBijlage(code,idx){
-  const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj||!Array.isArray(proj.bijlagen)) return;
+  const proj=projVind(code); if(!proj||!Array.isArray(proj.bijlagen)) return;
   const x=proj.bijlagen[idx]; if(!x) return;
   if(!await mtDialog.confirm({title:'Bijlage ontkoppelen',message:`"${x.naam}" ontkoppelen?\nHet bestand blijft op SharePoint staan; alleen de link in de tool verdwijnt.`,okLabel:'Ontkoppelen',danger:true})) return;
   proj.bijlagen.splice(idx,1);
@@ -7233,7 +7334,7 @@ function gaNaarLeverancier(naam){
 }
 // ── Moneybird-contact koppelen aan project (inline, geen write naar MB) ──
 function bewerkProjectMbNr(code){
-  const p=PROJECT_CODES.find(x=>x.code===code);if(!p) return;
+  const p=projVind(code);if(!p) return;
   const huidig=p.mb_nr||'';
   const v=prompt('Moneybird-contact-ID voor dit project\n(leeg = ontkoppelen):',huidig);
   if(v===null) return;
@@ -7471,7 +7572,7 @@ async function planNaarToggl(code){
   // een bestaande Toggl-taak heeft wordt overgeslagen, en de marker "mt:<code>/fase/<id>"
   // voorkomt dubbelen na een verloren antwoord. Opnieuw klikken = 0 nieuwe taken.
   const plan=planVoor(code); if(!plan){return;}
-  const mt=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===code):null;
+  const mt=(typeof PROJECT_CODES!=='undefined')?projVind(code):null;
   if(!mt){ planToast('❌ Project '+code+' niet gevonden'); return; }
   const open=plan.fases.filter(fa=>!fa.togglTaskId);
   if(!await mtDialog.confirm({title:'Planning naar Toggl',message:`${open.length} fase(n) als taak in het Toggl-project van ${code} zetten?`+(plan.fases.length-open.length?`\n${plan.fases.length-open.length} fase(n) staan er al in en worden overgeslagen.`:''),okLabel:'Naar Toggl'})) return;
@@ -7777,7 +7878,7 @@ async function _vindProjectMapAlleenLezen(proj){
   return m.pad||null;
 }
 async function dossierLaadMap(code){
-  const proj=PROJECT_CODES.find(p=>p.code===code); if(!proj) return;
+  const proj=projVind(code); if(!proj) return;
   const st=document.getElementById('dossier-map-st-'+code.replace(/[^A-Za-z0-9]/g,''));
   if(st) st.textContent='projectmap lezen…';
   window._dossierMap=window._dossierMap||{};
@@ -8419,7 +8520,7 @@ function _projAanmaakVrij(){ _projAanmaakBezig=false; const b=document.getElemen
 function _projHerteken(code){
   const h=document.getElementById('project-detail');
   if(!huidigProject||huidigProject.code!==code||!h||h.dataset.code!==code) return;
-  huidigProject=PROJECT_CODES.find(p=>p.code===code)||huidigProject;
+  huidigProject=projVind(code)||huidigProject;
   _rerenderDetailKeepScroll();
 }
 async function maakProjectAan(){
@@ -8439,9 +8540,9 @@ async function maakProjectAan(){
   let code=[k,l,p].filter(Boolean).join('-');
   if(code.length>STICKER_HARD){status.style.color='var(--red)';status.textContent='Code te lang voor sticker — kort product of locatie in';return;}
   // collision → volgnummer -02, -03 … (alleen bij botsing, schone codes blijven schoon)
-  if(PROJECT_CODES.find(x=>x.code===code)){
+  if(projVind(code)){
     let n=2; const base=code;
-    while(PROJECT_CODES.find(x=>x.code===`${base}-${String(n).padStart(2,'0')}`)) n++;
+    while(projVind(`${base}-${String(n).padStart(2,'0')}`)) n++;   // ook oude codes (legacy) zijn bezet
     code=`${base}-${String(n).padStart(2,'0')}`;
   }
   const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim()||code;
@@ -8458,7 +8559,8 @@ async function maakProjectAan(){
     klant_plaats:(kv&&kv.plaats)||'',klant_email:(kv&&kv.email)||'',
     klant_telefoon:(kv&&kv.telefoon)||'',klant_kvk:(kv&&kv.kvk)||'',
     klant_btw:(kv&&kv.btw)||'',klant_customer_id:(kv&&kv.customer_id)||null,
-    created:new Date().toISOString().slice(0,10)};
+    created:new Date().toISOString().slice(0,10),
+    project_id:projNieuwId(),legacy_codes:[code],soort:'klant',offertes:[]};
   // Kwam dit project uit een mail (inbox → "Maak project")? Leg de bron vast.
   if(_ibProjBron) nieuwProj.bron_mail={internetMessageId:_ibProjBron.internetMessageId,
     subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,mbx:_ibProjBron.mbx};
@@ -8508,7 +8610,7 @@ async function maakProjectAan(){
       const tgId=await tgMaakProjectVoorCode(code, true);
       if(tgId){
         // Op code opzoeken: een rehydrate tijdens het wachten kan PROJECT_CODES vervangen hebben.
-        const pr=PROJECT_CODES.find(x=>x.code===code)||nieuwProj;
+        const pr=projVind(code)||nieuwProj;
         pr.tg_project_id=tgId; nieuwProj.tg_project_id=tgId;
         slaProjectenOp();
         status.textContent=status.textContent.replace(/^✓/,'✓')+ ' + Toggl';
@@ -9705,7 +9807,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   mergers: {
     // Projecten (brok B2): per code wint de nieuwste `_gewijzigd`; verwijderen/hernoemen is
     // een tombstone (`_vervallen`, evt. `_hernoemd_naar`). Eén-zijdig blijft; zie _spSamenPerSleutel.
-    mt_projecten(lokaal, spData) { return _spSamenPerSleutel(lokaal, spData, x => x.code, _spTijd); },
+    mt_projecten(lokaal, spData) { return _projP2Behoud(_spSamenPerSleutel(lokaal, spData, x => x.code, _spTijd), lokaal, spData); },
     // Planning { code: plan }: zelfde regels per code (ook: beide ongestempeld → SharePoint);
     // planVerwijder zet een tombstone.
     mt_planning(lokaal, spData) {
@@ -10037,7 +10139,7 @@ async function _projMapZoek(proj, lijst){
 }
 // Gevonden map op het project bewaren (alleen als er iets veranderd is → geen sync-ruis).
 function _projMapBewaar(proj, m){
-  const rec = (typeof PROJECT_CODES!=='undefined') ? PROJECT_CODES.find(p=>p.code===proj.code) : null;
+  const rec = (typeof PROJECT_CODES!=='undefined') ? projVind(proj.code) : null;
   _projMapCache[proj.code] = { itemId:m.itemId, pad:m.pad, webUrl:m.webUrl||'' };
   if(!rec) return;
   const oud = rec.map||{};
@@ -10060,7 +10162,7 @@ function _projItemPad(it){
 window.projMap = async function(proj, { maak=false } = {}){
   if(!proj||!proj.code) throw new Error('geen project');
   if(_projMapCache[proj.code]) return _projMapCache[proj.code];
-  const rec = (typeof PROJECT_CODES!=='undefined' && PROJECT_CODES.find(p=>p.code===proj.code)) || proj;
+  const rec = (typeof PROJECT_CODES!=='undefined' && projVind(proj.code)) || proj;
   if(rec.map && rec.map.itemId){
     const token = await window.getGraphToken();
     if(!token) throw new Error('Niet ingelogd op Microsoft 365');
@@ -10147,7 +10249,7 @@ async function projMappenDroog(proj){
   return { soort:'bestaat', pad:z.pad, ontbreekt:PROJ_SUBS.filter(s=>!bestaand.has(s)), kandidaten:z.kandidaten, dubbel:z.dubbel };
 }
 async function projMappenHerstel(code){
-  const proj = PROJECT_CODES.find(p=>p.code===code); if(!proj) return;
+  const proj = projVind(code); if(!proj) return;
   const ask = (typeof mtDialog!=='undefined') ? mtDialog : null;
   let d;
   try{ d = await projMappenDroog(proj); }
@@ -10506,7 +10608,7 @@ async function _oplHydrateFotos(root){
 // Projectmap-pad voor een code resolven — ALLEEN LEZEN (projMap), gecached. Maakt geen mappen aan.
 async function _oplProjPath(code){
   if(_oplProjPathCache[code]) return _oplProjPathCache[code];
-  const proj = (typeof PROJECT_CODES!=='undefined' && PROJECT_CODES.find) ? PROJECT_CODES.find(p=>p.code===code) : null;
+  const proj = (typeof PROJECT_CODES!=='undefined' && PROJECT_CODES.find) ? projVind(code) : null;
   if(!proj) throw new Error('project onbekend: '+code);
   const path = await projMapPad(proj, { maak:false });
   _oplProjPathCache[code] = path;
@@ -10802,7 +10904,7 @@ function mobielAanvulOpen(code) {
   _mobielHuidigeMelding = melding;
 
   // Zoek bestaand project in PROJECT_CODES op (de tijdelijke code)
-  let proj = PROJECT_CODES.find(p => p.code === code);
+  let proj = projVind(code);
 
   // Datalist vullen vanuit klant-codes (hergebruik bestaande datalist als die er is)
   const dl = document.getElementById('klant-codes-aanvul');
@@ -10845,17 +10947,22 @@ async function mobielAanvulOpslaan() {
 
   // Naar een code die al bestaat hernoemen zou twee projecten op één code zetten (en er één
   // laten verdwijnen) — weigeren.
-  if (nieuweCode !== oudeCode && PROJECT_CODES.some(p => p.code === nieuweCode)) {
+  if (nieuweCode !== oudeCode && (PROJECT_CODES.some(p => p.code === nieuweCode) || (projVind(nieuweCode) && projVind(nieuweCode) !== projVind(oudeCode)))) {
     statusEl.style.color = 'var(--red)';
     statusEl.textContent = `Code ${nieuweCode} bestaat al — kies een andere code`;
     return;
   }
 
   // Bestaand record bijwerken of nieuw aanmaken
-  let proj = PROJECT_CODES.find(p => p.code === oudeCode);
+  let proj = projVind(oudeCode);
   if (proj) {
     // Code vervangen (rename)
-    if (nieuweCode && nieuweCode !== oudeCode) { proj.code = nieuweCode; projTombstone(oudeCode, { _hernoemd_naar: nieuweCode }); }
+    // Vergelijk met de huidige code van het gevonden record: projVind kan via een oude code (legacy_codes) matchen.
+    if (nieuweCode && nieuweCode !== oudeCode && nieuweCode !== proj.code) {
+      const vorige = proj.code; proj.code = nieuweCode;
+      if (Array.isArray(proj.legacy_codes) && !proj.legacy_codes.includes(vorige)) proj.legacy_codes.push(vorige);
+      projTombstone(vorige, { _hernoemd_naar: nieuweCode });
+    }
     if (naam) proj.naam = naam;
     if (klant) proj.klant = klant;
     if (locNaam) proj.loc_naam = locNaam;
@@ -10882,7 +10989,8 @@ async function mobielAanvulOpslaan() {
       klant_customer_id: null,
       omschrijving: omschrijving || '',
       bron: 'mobiel',
-      created: new Date().toISOString().slice(0,10)
+      created: new Date().toISOString().slice(0,10),
+      project_id: projNieuwId(), legacy_codes: [nieuweCode], soort: 'klant', offertes: []
     };
     PROJECT_CODES.push(proj);
   }
@@ -10922,7 +11030,7 @@ async function mobielMapprenCompleet() {
   const locNaam = document.getElementById('aanvul-locatie').value.trim();
 
   // Probeer bestaand proj-record te vinden; anders tijdelijk object bouwen
-  let proj = PROJECT_CODES.find(p => p.code === oudeCode || p.code === nieuweCode);
+  let proj = PROJECT_CODES.find(p => p.code === oudeCode || p.code === nieuweCode) || projVind(oudeCode) || projVind(nieuweCode);
   if (!proj) {
     proj = { code: nieuweCode, naam, klant, klant_naam: klant, loc: '', loc_naam: locNaam, product: '', product_naam: naam };
   }
@@ -11241,21 +11349,21 @@ window.initStorage = async function() {
           const code = (u && u.code || '').toUpperCase();
           if (!code || bekend.has(code)) return;   // leeg of al bekend → niet aanraken
           bekend.add(code);
-          PROJECT_CODES.push({
+          PROJECT_CODES.push(projAanvullen({
             code: u.code,
             naam: u.naam || u.code,
             klant: u.klantcode || '',
             tg_project_id: u.togglProjectId || null,
             bron: 'app',                            // herkomst-vlag (cockpit schrijft dit niet terug)
             created: (u.ts ? String(u.ts).slice(0,10) : '')
-          });
+          }));
           toegevoegd++;
         });
         if (toegevoegd) console.log('app-projecten (mt_user_projects.json) read-only gemerged:', toegevoegd);
       }
     } catch(e) { console.warn('mt_user_projects.json read-only merge faalde:', e); }
     // huidigProject naar het verse object laten wijzen (anders gaan latere wijzigingen verloren).
-    if (huidigProject) huidigProject = PROJECT_CODES.find(p => p.code === huidigProject.code) || huidigProject;
+    if (huidigProject) huidigProject = projVind(huidigProject.project_id) || projVind(huidigProject.code) || huidigProject;
     if (typeof renderProjectLijst === 'function') renderProjectLijst();
     if (typeof renderVoorraadActief === 'function') renderVoorraadActief();
     if (typeof renderBestellijst === 'function') renderBestellijst();
@@ -13479,7 +13587,7 @@ function activiteitOpen(force){
   function _mbCtx(key){
     const o=getOfferte(key);
     if(typeof mbPost!=='function'||typeof getAdmin!=='function') return {o,err:'⚠ Moneybird-koppeling niet beschikbaar in deze weergave.'};
-    const proj=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===key||p.code===o.project_code):null;
+    const proj=(typeof PROJECT_CODES!=='undefined')?(projVind(key)||projVind(o.project_code)):null;
     const ref=proj?proj.code:(o.project_code||o.titel||key);
     const mbId=proj?((typeof resolveMbContact==='function'?resolveMbContact(proj):null)||proj.mb_contact_id||null):null;
     const klant=proj?(proj.klant_naam||proj.klant||''):'';
@@ -13851,7 +13959,7 @@ function activiteitOpen(force){
     const o=CALC.offertes[key];
     if(!o) throw new Error('offerte '+key+' bestaat niet');
     if(typeof window.spUploadPadBytes!=='function') throw new Error('niet beschikbaar in deze weergave');
-    const proj=opts.proj||((typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===key||p.code===o.project_code):null);
+    const proj=opts.proj||((typeof PROJECT_CODES!=='undefined')?(projVind(key)||projVind(o.project_code)):null);
     const code=(proj&&proj.code)||o.project_code||key;
     if(opts.melden) calcStatus(proj?'Naar de projectmap schrijven…':'Naar de map "'+LOSSE_MAP+'" schrijven…','bezig',key);
     const mapPad=proj ? await projSubmap(await projMapPad(proj,{maak:true}),'07_Administratie') : await _losseMap();
@@ -13923,7 +14031,7 @@ function activiteitOpen(force){
   // Al een project? Dan direct opslaan in de map.
   window.calcMaakProjectVoorOfferte=function(key){
     const o=getOfferte(key);
-    const proj=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===key||p.code===o.project_code):null;
+    const proj=(typeof PROJECT_CODES!=='undefined')?(projVind(key)||projVind(o.project_code)):null;
     if(proj){ _bewaarOfferteInMap(proj,o,key); return; }
     if(typeof openModal!=='function'){ flash(key,'projectmodal niet beschikbaar in deze weergave'); return; }
     window._calcAfterProject=async function(nieuwProj){
@@ -14163,7 +14271,7 @@ function activiteitOpen(force){
   // offertenummer vooraan (2026-054 …) en overlappende woorden uit code/titel.
   function ncMatchProjecten(basis,projecten){
     const o=CALC.offertes[basis]||{};
-    const pc=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===basis||p.code===o.project_code):null;
+    const pc=(typeof PROJECT_CODES!=='undefined')?(projVind(basis)||projVind(o.project_code)):null;
     const code=String((pc&&pc.code)||o.project_code||basis).toLowerCase();
     const woorden=new Set([code,...code.split(/[-_\s]+/),...String(o.titel||'').toLowerCase().split(/\W+/),
       ...String((pc&&pc.naam)||'').toLowerCase().split(/\W+/)].filter(w=>w&&w.length>=3&&!/^(off|de|het|een|en|voor)$/.test(w)));
@@ -14424,7 +14532,7 @@ function activiteitOpen(force){
     if(!CALC.loaded){ await hydrateCalc(); host=document.getElementById('offerte-calc-'+cid(key)); if(!host) return; }
     const o=getOfferte(key);
     const t=totalen(o);
-    const proj=(typeof PROJECT_CODES!=='undefined')?PROJECT_CODES.find(p=>p.code===key):null;
+    const proj=(typeof PROJECT_CODES!=='undefined')?projVind(key):null;
     const standalone=!proj;
     const c=cid(key);
 

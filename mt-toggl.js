@@ -802,7 +802,7 @@ async function tgMaakProjectVoorCode(code, billable){
   // de naam; later bijwerken via "Offertenummer toekennen". Bestaat er al precies één
   // project met die naam, dan wordt dat gebruikt (geen dubbel). Geeft id of null.
   try{
-    const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase())||{code};
+    const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase())||(typeof projVind==='function'&&projVind(code))||{code};
     const naam=t2ProjectNaam(mt);
     const zelfde=(await t2Projecten(true)).filter(p=>(p.name||'').trim().toLowerCase()===naam.toLowerCase());
     if(zelfde.length===1) return zelfde[0].id;
@@ -817,7 +817,7 @@ async function tgMaakProjectVoorCode(code, billable){
 // Zorgt dat er één Toggl-project bestaat voor deze code — STIL (geen dialogen).
 // Geeft het project-id terug (of null). Schrijft tg_project_id op het M&T-record.
 async function _tgZorgProjectVoorCode(code){
-  const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase());
+  const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase())||(typeof projVind==='function'&&projVind(code));
   if(!mt) return null;
   window._t2LaatsteFout='';
   let pid=null;
@@ -872,7 +872,7 @@ function _mtProjVoorToggl(p){
   if(byId) return byId;
   const code=codeUitTogglNaam(p.name);
   if(code){
-    const byCode=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===code);
+    const byCode=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===code)||(typeof projVind==='function'&&projVind(code));   // ook een oude code in de Toggl-naam
     if(byCode) return byCode;
   }
   const nm=(p.name||'').trim().toUpperCase();
@@ -931,7 +931,7 @@ function tgOpenProject(id){
 }
 function tgNaarVolledigProject(code){
   if(typeof PROJECT_CODES==='undefined') return;
-  const mt=PROJECT_CODES.find(x=>x.code===code); if(!mt) return;
+  const mt=(typeof projVind==='function'?projVind(code):PROJECT_CODES.find(x=>x.code===code)); if(!mt) return;
   try{ if(window.track) track('toggl','naar_volledig_project',{detail:code}); }catch(e){}
   // Via openProject (zet huidigProject, lijst actief, detail). huidigProject vooraf zetten
   // zodat de tabwissel meteen dít project tekent i.p.v. eerst het vorige.

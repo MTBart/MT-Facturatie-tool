@@ -837,7 +837,7 @@ function _ibMailVia(id){ return (_inbox.cur&&_inbox.cur.id===id&&_inbox.cur)||(_
 function inboxKoppelPop(el,id){
   const m=_ibMailVia(id); if(!m||!window.MTKoppelUI) return;
   const codes=ibProjecten(m), mid=ibEsc(id).replace(/'/g,'');
-  const naam=c=>{ const p=(typeof PROJECT_CODES!=='undefined'&&PROJECT_CODES.find(x=>x.code===c))||{}; return p.naam?' '+ibEsc(p.naam):''; };
+  const naam=c=>{ const p=(typeof PROJECT_CODES!=='undefined'&&(typeof projVind==='function'?projVind(c):PROJECT_CODES.find(x=>x.code===c)))||{}; return p.naam?' '+ibEsc(p.naam):''; };
   let html='';
   if(codes.length){
     html+=codes.map(c=>{ const cc=ibEsc(c).replace(/'/g,''); return `<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:c})}<span class="kb-pop-n">${naam(c)}</span>
@@ -1161,7 +1161,7 @@ async function inboxBijlagenNaarProject(mailId,code){ return inboxBijlagenDialoo
 
 let _ibBijl=null;   // {mailId, code, mbx, imid, items:[…]}
 async function inboxBijlagenDialoog(mailId,code){
-  const proj=PROJECT_CODES.find(p=>p.code===code);
+  const proj=(typeof projVind==='function'?projVind(code):PROJECT_CODES.find(p=>p.code===code));
   if(!proj){ inboxToast('Project '+code+' niet gevonden.'); return; }
   if(typeof window.spUploadProjectBytes!=='function'){ inboxToast('SharePoint-upload niet beschikbaar (ingelogd op M365?).'); return; }
   try{
@@ -1210,7 +1210,7 @@ async function inboxBijlagenDialoog(mailId,code){
 }
 async function inboxBijlagenOpslaan(){
   const st=_ibBijl; if(!st) return;
-  const proj=PROJECT_CODES.find(p=>p.code===st.code); if(!proj) return;
+  const proj=(typeof projVind==='function'?projVind(st.code):PROJECT_CODES.find(p=>p.code===st.code)); if(!proj) return;
   const ov=document.getElementById('bijl-overlay'); if(ov) ov.remove();
   const gekozen=st.items.filter(it=>it.aan);
   if(!gekozen.length){ inboxToast('Niets aangevinkt — niets opgeslagen.'); return; }
