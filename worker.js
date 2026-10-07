@@ -885,30 +885,42 @@ const FOCUS_API = 'https://focus.toggl.com/api/';
 const TOGGL_TIMEOUT_MS = 8000;
 const b64 = u8 => btoa(String.fromCharCode(...u8));
 const unb64 = s => Uint8Array.from(atob(String(s || '')), c => c.charCodeAt(0));
-let _kek = null, _kekBron = null;
-async function sleutelKek(env) {
-  if (!env.SLEUTEL_KEK) return null;
-  if (_kek && _kekBron === env.SLEUTEL_KEK) return _kek;
-  let raw; try { raw = unb64(String(env.SLEUTEL_KEK).trim()); } catch { return null; }
+// KEK-rotatie: nieuwe SLEUTEL_KEK zetten en de oude als SLEUTEL_KEK_VORIG; records met de oude
+// sleutel worden bij het eerstvolgende gebruik herversleuteld. `kid` = korte hash van de KEK.
+const _keks = new Map();   // secret-tekst -> {key, kid}
+async function kekUit(tekst) {
+  if (!tekst) return null;
+  if (_keks.has(tekst)) return _keks.get(tekst);
+  let raw; try { raw = unb64(String(tekst).trim()); } catch { return null; }
   if (raw.length !== 32) return null;
-  _kek = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']); _kekBron = env.SLEUTEL_KEK;
-  return _kek;
+  const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', raw));
+  const k = { key, kid: [...d.slice(0, 4)].map(b => b.toString(16).padStart(2, '0')).join('') };
+  _keks.set(tekst, k);
+  return k;
 }
+async function sleutelKek(env) { const k = await kekUit(env.SLEUTEL_KEK); return k ? k.key : null; }
 const sleutelAad = (oid, soort) => new TextEncoder().encode(`mt-sleutel:${String(oid).toLowerCase()}:${soort}`);
 async function versleutel(env, oid, soort, tekst) {
-  const k = await sleutelKek(env); if (!k) throw new Error('geen-kek');
+  const k = await kekUit(env.SLEUTEL_KEK); if (!k) throw new Error('geen-kek');
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: sleutelAad(oid, soort) }, k, new TextEncoder().encode(tekst));
-  return { iv: b64(iv), ct: b64(new Uint8Array(ct)), v: 1 };
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: sleutelAad(oid, soort) }, k.key, new TextEncoder().encode(tekst));
+  return { iv: b64(iv), ct: b64(new Uint8Array(ct)), v: 1, kid: k.kid };
 }
-async function ontsleutel(env, oid, soort, blob) {
+// → {tekst, oud} (oud = met SLEUTEL_KEK_VORIG ontsleuteld) of null (onleesbaar)
+async function ontsleutelMet(env, oid, soort, blob) {
   if (!blob || !blob.iv || !blob.ct) return null;
-  const k = await sleutelKek(env); if (!k) return null;
-  try {
-    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv), additionalData: sleutelAad(oid, soort) }, k, unb64(blob.ct));
-    return new TextDecoder().decode(pt);
-  } catch { return null; }
+  for (const [tekst, oud] of [[env.SLEUTEL_KEK, false], [env.SLEUTEL_KEK_VORIG, true]]) {
+    const k = await kekUit(tekst); if (!k) continue;
+    if (blob.kid && blob.kid !== k.kid) continue;
+    try {
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv), additionalData: sleutelAad(oid, soort) }, k.key, unb64(blob.ct));
+      return { tekst: new TextDecoder().decode(pt), oud };
+    } catch {}
+  }
+  return null;
 }
+async function ontsleutel(env, oid, soort, blob) { const r = await ontsleutelMet(env, oid, soort, blob); return r ? r.tekst : null; }
 const _sleutelCache = new Map();   // oid -> {rec, t} (versleuteld record, 60 s)
 async function leesSleutelRec(env, oid) {
   if (!oid || !env.MT_ROLLEN) return null;
@@ -923,8 +935,13 @@ async function togglSleutel(env, soort, payload) {
   const prefix = soort === 'focus' ? 'TOGGL_FOCUS_KEY' : 'TOGGL_KEY', gedeeld = soort === 'focus' ? env.TOGGL_FOCUS_KEY : env.TOGGL_KEY;
   try {
     const rec = await leesSleutelRec(env, payload && payload.oid);
-    const eigen = rec && rec[soort] ? await ontsleutel(env, payload.oid, soort, rec[soort]) : null;
-    if (eigen) return { sleutel: eigen, bron: 'eigen' };
+    const r = rec && rec[soort] ? await ontsleutelMet(env, payload.oid, soort, rec[soort]) : null;
+    if (r) {
+      if (r.oud) {   // met de vorige KEK → meteen herversleutelen met de huidige
+        try { const nieuw = { ...rec, [soort]: { ...rec[soort], ...(await versleutel(env, payload.oid, soort, r.tekst)) } }; await kvZet(env, 'sleutel:' + payload.oid, nieuw); _sleutelCache.set(payload.oid, { rec: nieuw, t: Date.now() }); } catch {}
+      }
+      return { sleutel: r.tekst, bron: 'eigen' };
+    }
   } catch {}
   const sec = userKey(env, prefix, null, payload);
   if (sec) return { sleutel: sec, bron: 'secret' };
@@ -936,10 +953,20 @@ async function togglFetch(url, init) {
 }
 const SLEUTEL_RE = /^[\x21-\x7e]{16,512}$/;
 const _pogingen = new Map();   // oid -> [ts…] (koppelpogingen, in geheugen)
-function teVaakGeprobeerd(oid) {
+// Max 10 koppelpogingen per uur per gebruiker: in geheugen én in KV (geldt dan over isolates heen).
+async function teVaakGeprobeerd(env, oid) {
   const nu = Date.now(), l = (_pogingen.get(oid) || []).filter(t => nu - t < 3600e3);
   l.push(nu); _pogingen.set(oid, l);
-  return l.length > 10;
+  if (l.length > 10) return true;
+  if (!env.MT_ROLLEN) return false;
+  const key = `poging:${oid}:${Math.floor(nu / 3600e3)}`;
+  const n = ((await kvJson(env, key)) || 0) + 1;
+  try { await kvZet(env, key, n, { expirationTtl: 2 * 3600 }); } catch {}
+  return n > 10;
+}
+// Is dit een sleutel die de worker zelf als secret heeft (gedeeld of van iemand anders)?
+function isServerSleutel(env, sleutel) {
+  return Object.keys(env).some(k => /^TOGGL_(FOCUS_)?KEY(_|$)/.test(k) && env[k] === sleutel);
 }
 // Focus-sleutel: geldig in onze werkruimte + van deze gebruiker (e-mail ↔ Toggl-gebruiker ↔ eigen uren).
 async function valideerFocus(env, sleutel, email) {
@@ -956,8 +983,8 @@ async function valideerFocus(env, sleutel, email) {
   if (!ik) return { fout: 'email-niet-in-toggl' };
   const tgUserId = ik.user_account_id != null ? ik.user_account_id : (ik.id != null ? ik.id : null);
   const naam = clip(ik.name || ik.fullname || ik.full_name || ik.email, 80);
-  // Eigenaarschap: de eigen uren van de sleutel moeten van deze Toggl-gebruiker zijn.
-  const tot = new Date(), van = new Date(Date.now() - 60 * DAG_S * 1000);
+  // Eigenaarschap: de eigen uren van de sleutel moeten van deze Toggl-gebruiker zijn (laatste jaar).
+  const tot = new Date(), van = new Date(Date.now() - 365 * DAG_S * 1000);
   const rt = await togglFetch(`${O}time-entries/stream?date_from=${encodeURIComponent(van.toISOString())}&date_to=${encodeURIComponent(tot.toISOString())}&include_taskless=true`, { headers: auth });
   let bevestigd = false;
   if (rt.ok) {
@@ -967,6 +994,9 @@ async function valideerFocus(env, sleutel, email) {
     if (ids.size && (ids.size > 1 || !ids.has(String(tgUserId)))) return { fout: 'sleutel-van-ander' };
     bevestigd = ids.size === 1;
   }
+  // Onbevestigd (nog geen eigen uren) én gelijk aan een sleutel die de worker al als secret heeft
+  // (de gedeelde of die van een collega) → weigeren: dat is nooit "je eigen" sleutel.
+  if (!bevestigd && isServerSleutel(env, sleutel)) return { fout: 'sleutel-van-ander' };
   return { naam, tgUserId, bevestigd };
 }
 // Track-sleutel (v9, gaat er op termijn uit): /me moet ons e-mailadres zijn.
@@ -980,13 +1010,15 @@ async function valideerTrack(sleutel, email) {
 }
 async function mijnTogglStatus(env, payload) {
   const rec = await leesSleutelRec(env, payload.oid);
-  const st = soort => {
+  const st = async soort => {
     const r = rec && rec[soort];
-    if (r) return { gekoppeld: true, bron: 'eigen', naam: r.naam || '', sinds: r.sinds || null, bevestigd: !!r.bevestigd };
+    // Opgeslagen maar niet (meer) te ontsleutelen (KEK gewijzigd zonder SLEUTEL_KEK_VORIG) → opnieuw koppelen.
+    if (r && await ontsleutel(env, payload.oid, soort, r)) return { gekoppeld: true, bron: 'eigen', naam: r.naam || '', sinds: r.sinds || null, bevestigd: !!r.bevestigd };
     const sec = userKey(env, soort === 'focus' ? 'TOGGL_FOCUS_KEY' : 'TOGGL_KEY', null, payload);
+    if (r) return { gekoppeld: false, bron: 'onleesbaar', opnieuwKoppelen: true, naam: r.naam || '', viaBeheer: !!sec };
     return { gekoppeld: !!sec, bron: sec ? 'secret' : 'geen' };
   };
-  return { focus: st('focus'), track: st('track'), versleuteling: !!(await sleutelKek(env)) };
+  return { focus: await st('focus'), track: await st('track'), versleuteling: !!(await sleutelKek(env)) };
 }
 async function handleMijnToggl(request, env, ik, payload, json) {
   const m = request.method, email = tokenEmail(payload);
@@ -1006,7 +1038,7 @@ async function handleMijnToggl(request, env, ik, payload, json) {
   }
   if (m !== 'POST') return json({ error: 'methode' }, 405);
   if (!(await sleutelKek(env))) return json({ error: 'geen-versleuteling', uitleg: 'Worker-secret SLEUTEL_KEK ontbreekt of is ongeldig.' }, 503);
-  if (teVaakGeprobeerd(payload.oid)) return json({ error: 'te-vaak' }, 429);
+  if (await teVaakGeprobeerd(env, payload.oid)) return json({ error: 'te-vaak' }, 429);
   let b = {}; try { b = await request.json(); } catch {}
   const focus = typeof b.focus === 'string' ? b.focus.trim() : '', track = typeof b.track === 'string' ? b.track.trim() : '';
   if (!focus && !track) return json({ error: 'geen-sleutel' }, 400);
@@ -1062,7 +1094,8 @@ async function handleAanwezig(env, json) {
   const team = (await lijstKV(env, 'user:')).filter(g => g.active !== false && ROLLEN.includes(g.role));
   const projecten = await focusNamen(env).catch(() => new Map());
   const personen = await Promise.all(team.map(async g => {
-    const basis = { oid: g.oid, naam: g.naam || g.email || '', rol: g.role };
+    // slug = deel vóór de @ (koppelt aan planblokken/verlof in de app); geen volledig e-mailadres naar buiten.
+    const basis = { naam: g.naam || String(g.email || '').split('@')[0], slug: String(g.email || '').split('@')[0].toLowerCase(), rol: g.role };
     const s = await togglSleutel(env, 'focus', { oid: g.oid, preferred_username: g.email }).catch(() => ({ bron: 'geen' }));
     if (s.bron !== 'eigen' && s.bron !== 'secret') return { ...basis, status: 'onbekend' };
     try {
@@ -1261,7 +1294,7 @@ export default {
     }
 
     const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
-      status, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', ...corsHeaders }
     });
     // Alleen het Microsoft-token (F1b: de X-Claude-Key-bypass is weg — er was geen gebruiker van).
     const authToken = request.headers.get('X-Auth-Token');
@@ -1312,7 +1345,10 @@ export default {
       }
 
       if (isMijn) return await handleMijnToggl(request, env, ik, msPayload, json);
-      if (isAanwezig) return await handleAanwezig(env, json);
+      if (isAanwezig) {
+        if (!ik.rol) return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+        return await handleAanwezig(env, json);
+      }
 
       // Pad-gebaseerde tracking-routes (los van de ?target=-proxy hieronder).
       if (isTrack) {

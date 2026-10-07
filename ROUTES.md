@@ -157,6 +157,10 @@ Werkplaats / Alleen lezen), `requirePermission` per target. Modus `ROLLEN_MODUS`
 Extra routes: `GET /me` (rol + rechten), `POST /toegang` (toegang aanvragen),
 `/beheer/*` (gebruikers, uitnodigen, rol, (de)activeren, audit, log) — beheer en
 `/track/online|usage` zijn in elke modus alleen voor Eigenaar/Beheerder.
+**F1e:** `GET|POST|DELETE /mijn/toggl` — eigen Toggl-sleutel koppelen (live gevalideerd, AES-GCM
+versleuteld per oid met `SLEUTEL_KEK`, nooit terug naar de browser); Toggl-sleutel per verzoek:
+eigen → `TOGGL_*_<NAAM>` → gedeeld. `GET /aanwezig` (alle rollen, altijd met rol) — lopende timer
+per teamlid (projectnaam, taak, sinds; geen duur of omschrijving), 60 s cache.
 
 | `?target=` | Doet | Token |
 |---|---|---|
