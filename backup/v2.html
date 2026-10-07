@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.8 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.9 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -30,6 +30,7 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
+<script src="mt-geld.js?v=2026-10-08a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -148,6 +149,12 @@ header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px
 header h1{font-family:var(--serif);font-size:20px;font-weight:400;letter-spacing:0.02em;color:var(--green)}
 header h1 span{color:var(--gold);font-style:italic}
 .header-version{font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-left:4px}
+.upd-stip{border:0;background:none;cursor:pointer;font:600 10px/1 var(--mono);color:var(--gold,#B8962E);padding:2px 4px;margin-left:2px;display:inline-flex;align-items:center;gap:3px}
+.upd-stip::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--gold,#B8962E)}
+.upd-stip[hidden]{display:none}
+.upd-versie summary{cursor:pointer;padding:4px 0}
+.upd-versie ul{margin:2px 0 8px 18px;padding:0}
+.upd-versie li{margin:3px 0;font-size:13px}
 .header-badge{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:0.04em;
   background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid);
   border-radius:20px;padding:2px 9px;text-transform:uppercase}
@@ -758,7 +765,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.8, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.9, 8 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -779,7 +786,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.8</span>
+    <span class="header-version">v2.9</span>
+    <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
@@ -804,6 +812,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
 <div class="tabs-wrap">
   <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
+  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Geld</button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('projecten',this)">Projecten</button>
@@ -1015,6 +1024,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <!-- ═══ EINDE CASHFLOW SECTIE ═══ -->
 
   </div>
+
+  <!-- ═══ TAB: GELD (geldtijdlijn, mt-geld.js) ═══ -->
+  <div id="tab-geld" class="tab-content"><div id="geld-root"></div></div>
 
   <!-- ═══ TAB: KLANTEN ═══ -->
   <div id="tab-klanten" class="tab-content">
@@ -1407,6 +1419,10 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div class="card" id="beheer-kaart" style="display:none">
       <div class="card-title">Beheer — gebruikers &amp; rollen</div>
       <div id="beheer-inhoud" style="font-size:13px">Laden…</div>
+    </div>
+    <div class="card" id="upd-kaart" style="display:none">
+      <div class="card-title">Wat is er verbeterd</div>
+      <div id="upd-inhoud" style="font-size:13px">Laden…</div>
     </div>
     <div class="card" id="tgk-kaart" data-tgk-kaart style="display:none">
       <div class="card-title">Koppel je Toggl</div>
@@ -2996,6 +3012,7 @@ function showTab(name,btn){
   if(name==='admin') adminOpen();
   if(name==='activiteit') activiteitOpen();
   if(name==='verbeterpunten') verbLaadTab();
+  if(name==='geld') geldOpen();
   // Houd de URL-hash gelijk aan de actieve tab (tabwissel = replaceState) → deep-link + "apart venster".
   // Toont Projecten een project, dan is dát de route (#projecten/<CODE>).
   if(!mtRoute._stil){
@@ -5615,6 +5632,7 @@ function projSecOverzicht(proj,c){
         <span class="kpi-label" style="margin:0 0 0 .5rem">Projectmap:</span> ${projMapBadge(proj)}
       </div>
       ${t2ProjectRijHtml(proj)}
+      ${typeof geldProjectRijHtml==='function'?geldProjectRijHtml(proj):''}
       <div class="ov-grid">
         <section class="ov-blok"><div class="card-title">Volgende stap</div>${stappen.join('')}</section>
         <section class="ov-blok"><div class="card-title">Laatste activiteit</div>
@@ -8832,6 +8850,15 @@ async function laadCashflowDashboard(){
     return;
   }
   if(!MTRol.magGeld()){ if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none'; return; }
+  // Nieuwe geldtijdlijn beschikbaar → de oude cashflow verbergen (data blijft staan) en verwijzen naar het tabblad Geld.
+  if(typeof geldNieuw==='function'&&geldNieuw()){
+    if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none';
+    const dash=document.getElementById('tab-dashboard');
+    if(dash&&!document.getElementById('cf-naar-geld')){ const d=document.createElement('div'); d.id='cf-naar-geld'; d.className='card'; d.style.cssText='margin-bottom:1rem;font-size:13px';
+      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Geld</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Geld →</button>';
+      dash.insertBefore(d,dash.firstElementChild); }
+    return;
+  }
   // Instellingen (anker, doelen) alleen voor wie mag wijzigen.
   const inst=document.querySelector('#cf-root .cf-settings-toggle'); if(inst&&inst.closest('.card')) inst.closest('.card').style.display=MTRol.magGeld('wijzigen')?'':'none';
   try{
@@ -12396,7 +12423,7 @@ async function toonApp(account) {
   loadLedgers();
   laadDashboard();
   if(typeof admInitKnop==='function') admInitKnop();
-  rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); });
+  rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); updStipZet(); });
   mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
   // Deep-link uit de URL-hash honoreren (bv. een "apart venster" met #tab=inbox).
   try{ tbApplyHashTab(); }catch(e){}
@@ -12414,6 +12441,7 @@ async function rolLaad(){
   if(act&&act.classList.contains('mt-rol-verborgen')){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
   if(typeof admInitKnop==='function') admInitKnop();
   const k=document.getElementById('beheer-kaart'); if(k) k.style.display=MTRol.isBeheer()?'':'none';
+  if(MTRol.isBeheer()) updKaartTeken(); else { const u=document.getElementById('upd-kaart'); if(u) u.style.display='none'; }
   // Deeplink-race: een tab die al open stond vóór /me terug was (bv. #tab=instellingen of
   // #tab=activiteit) laadde zonder rol → nu alsnog vullen.
   const open=n=>{ const t=document.getElementById('tab-'+n); return !!(t&&t.classList.contains('active')); };
@@ -12421,7 +12449,109 @@ async function rolLaad(){
   if(MTRol.isBeheer()&&open('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
+  if(typeof geldTabZet==='function') geldTabZet();
   return me;
+}
+// ── Geld (geldtijdlijn) ──
+// Alleen als de worker de geldtijdlijn kent (kolom `geld` in /me) én je dat recht hebt; dan vervangt het
+// tabblad Geld de oude cashflow op het dashboard (die wordt alleen verborgen). Oude worker → alles als vroeger.
+const geldNieuw=()=>!!(window.MTRol&&MTRol.me&&MTRol.me.rechten&&('geld' in MTRol.me.rechten));
+function geldTabZet(){
+  const b=document.getElementById('tab-btn-geld'); if(!b) return;
+  const ja=geldNieuw()&&MTRol.magGeld();
+  b.style.display=ja?'':'none';
+  const t=document.getElementById('tab-geld'); if(t&&t.classList.contains('active')&&ja) geldOpen();
+}
+async function geldHaal(pad,opt){
+  opt=opt||{};
+  const h=await authHeader();
+  const r=await fetch(`${WORKER}${pad}`,{method:opt.method||'GET',headers:{...h,'Content-Type':'application/json'},body:opt.body!==undefined?JSON.stringify(opt.body):undefined});
+  let j=null; try{ j=await r.json(); }catch(e){}
+  if(!r.ok) return Object.assign({error:(j&&j.error)||('HTTP '+r.status)},j||{});
+  return j;
+}
+function geldOpen(){
+  const el=document.getElementById('geld-root'); if(!el||!window.MTGeld) return;
+  if(!window.MTRol||!MTRol.me){ if(!geldOpen._wacht){ geldOpen._wacht=true; window.addEventListener('mt-rol',()=>{ geldOpen._wacht=false; geldTabZet(); },{once:true}); } el.innerHTML='<div class="dos-meta">Laden…</div>'; return; }
+  if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Het geldscherm is alleen voor eigenaren en de administratie.</div>'; return; }
+  if(el.dataset.gestart){ MTGeld.laad(); return; }
+  el.dataset.gestart='1';
+  Promise.resolve(MTGeld.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',
+    projecten:geldProjecten,offerteBedrag:geldOfferteBedrag})).then(()=>{ if(geldOpen._na){ const f=geldOpen._na; geldOpen._na=null; f(); } });
+}
+// Projecten voor de prognose (geen interne): naam, klant (Moneybird-contact), offerte en planning (start/oplevering).
+function geldProjecten(){
+  return (typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]).filter(p=>p&&p.project_id&&!p._vervallen&&p.soort!=='intern'&&String(p.klant||'').toUpperCase()!=='INT'&&!p.gearchiveerd).map(p=>{
+    let start=null,oplevering=null;
+    try{ const pl=typeof planVoor==='function'?planVoor(p.code):null; if(pl&&Array.isArray(pl.fases)&&pl.fases.length){ planBerekenDatums(pl); start=pl.fases[0].start||null; oplevering=pl.fases[pl.fases.length-1].eind||null; } }catch(e){}
+    return {project_id:p.project_id,code:p.code,label:(typeof projNaamVol==='function'?projNaamVol(p):p.naam)||p.code,klant:typeof projKlantNaam==='function'?projKlantNaam(p):'',
+      mb_contact_id:typeof resolveMbContact==='function'?resolveMbContact(p):null,offertenr:typeof projOfferteNr==='function'?projOfferteNr(p):(p.offertenr||''),offerte_mb_id:p.offertenr_mb_id||null,start,oplevering};
+  }).sort((a,b)=>a.label.localeCompare(b.label));
+}
+// Voorstel voor het totaal: het offertebedrag incl. btw uit Moneybird (alleen lezen).
+async function geldOfferteBedrag(pr){
+  if(!pr||!pr.offerte_mb_id) return null;
+  const r=await mbGet(`${getAdmin()}/estimates/${pr.offerte_mb_id}`); if(!r.ok) return null;
+  const e=await r.json(); const v=parseFloat(e&&(e.total_price_incl_tax_base!=null?e.total_price_incl_tax_base:e.total_price_incl_tax));
+  return isFinite(v)&&v>0?Math.round(v*100)/100:null;
+}
+// Vanuit het projectscherm: naar Geld en de prognose van dit project openen.
+function geldPrognoseOpen(code){
+  const p=projVind(code); if(!p) return;
+  const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
+  const open=()=>{ const x=geldProjecten().find(q=>q.project_id===p.project_id); MTGeld.prognoseBewerk('p:'+p.project_id,x||null); };
+  const el=document.getElementById('geld-root');
+  if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ b.click(); setTimeout(open,50); } else { geldOpen._na=open; b.click(); }
+}
+// Rij in het projectoverzicht (alleen met recht geld): "Prognose: gaat zeker door".
+let _geldProgCache=null;
+function geldProjectRijHtml(proj){
+  if(typeof geldNieuw!=='function'||!geldNieuw()||!MTRol.magGeld()||!proj||!proj.project_id||proj.soort==='intern') return '';
+  if(!_geldProgCache){ _geldProgCache={items:null}; geldHaal('/geld/prognose').then(r=>{ _geldProgCache.items=(r&&r.items)||{}; const el=document.getElementById('geld-proj-rij'); if(el&&huidigProject) el.outerHTML=geldProjectRijHtml(huidigProject); }).catch(()=>{}); }
+  const it=_geldProgCache.items&&_geldProgCache.items['p:'+proj.project_id];
+  const tekst=!_geldProgCache.items?'…':it?(it.aan?`✓ gaat zeker door — ${it.termijnen.length} termijn(en)`:'staat uit'):'nog niet aangevinkt';
+  return `<div class="koppel-rij" id="geld-proj-rij"><span class="kpi-label" style="margin:0">Prognose (geld):</span> <span>${esc(tekst)}</span>
+    ${MTRol.magGeld('wijzigen')?`<button class="btn btn-xs btn-secondary" onclick="geldPrognoseOpen('${_jsCode(proj.code)}')">${it?'Bekijken':'Gaat zeker door…'}</button>`:''}</div>`;
+}
+// ── Wat is er verbeterd (data/updates.json, gewone taal, nieuwste eerst) ──
+// Beheer ziet alle versies in de kaart; iedereen krijgt eenmalig een "nieuw"-stipje bij het versielabel
+// voor de punten "voor iedereen" die hij nog niet zag (per gebruiker onthouden in deze browser).
+let _updates=null;
+async function updLaad(){
+  if(_updates) return _updates;
+  try{ const r=await fetch('data/updates.json',{cache:'no-cache'}); const d=r.ok?await r.json():[]; _updates=Array.isArray(d)?d.filter(u=>u&&u.versie&&Array.isArray(u.punten)):[]; }
+  catch(e){ _updates=[]; }
+  return _updates;
+}
+function _updCmp(a,b){ const x=String(a).split('.').map(Number), y=String(b).split('.').map(Number);
+  for(let i=0;i<Math.max(x.length,y.length);i++){ const d=(x[i]||0)-(y[i]||0); if(d) return d; } return 0; }
+const _updSleutel=()=>'mt_updates_gezien:'+((typeof mtMijEmail==='function'&&mtMijEmail())||'');
+function _updGezien(){ try{ return localStorage.getItem(_updSleutel())||''; }catch(e){ return ''; } }
+// Wat deze gebruiker te zien krijgt: alles "voor iedereen", en "voor beheer" alleen voor eigenaar/beheerder.
+const _updVoorMij=u=>u.voor==='iedereen'||(u.voor==='beheer'&&!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()));
+function _updNieuw(lijst){ const g=_updGezien(); return lijst.filter(u=>_updVoorMij(u)&&(!g||_updCmp(u.versie,g)>0)).sort((a,b)=>_updCmp(b.versie,a.versie)); }
+async function updStipZet(){
+  const b=document.getElementById('upd-stip'); if(!b) return;
+  const n=_updNieuw(await updLaad());
+  b.hidden=!n.length; if(n.length) b.title='Nieuw in v'+n[0].versie;
+}
+async function updNieuwToon(){
+  const l=await updLaad(), iedereen=l.filter(_updVoorMij).sort((a,b)=>_updCmp(b.versie,a.versie));
+  const n=_updNieuw(l), toon=(n.length?n:iedereen).slice(0,3);
+  const tekst=toon.map(u=>`v${u.versie} — ${u.titel}\n`+u.punten.map(p=>'• '+p).join('\n')).join('\n\n');
+  await mtDialog.alert({title:'Nieuw in de tool',message:tekst||'Nog geen nieuws.'});
+  try{ if(iedereen[0]) localStorage.setItem(_updSleutel(),iedereen[0].versie); }catch(e){}
+  updStipZet();
+}
+const _updDatum=d=>{ const t=Date.parse(String(d||'')+'T12:00:00'); return isNaN(t)?String(d||''):new Date(t).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'}); };
+async function updKaartTeken(){
+  const kaart=document.getElementById('upd-kaart'), el=document.getElementById('upd-inhoud'); if(!kaart||!el) return;
+  const l=(await updLaad()).slice().sort((a,b)=>_updCmp(b.versie,a.versie));
+  kaart.style.display='';
+  if(!l.length){ el.innerHTML='<div class="dos-meta">Nog geen overzicht beschikbaar.</div>'; return; }
+  el.innerHTML=l.map((u,i)=>`<details class="upd-versie"${i===0?' open':''}><summary><b>v${esc(u.versie)}</b> — ${esc(u.titel)}
+      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${u.voor==='beheer'?' · voor beheer':''}</span></summary>
+    <ul>${u.punten.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></details>`).join('');
 }
 // ── Werkcodes en centrale instellingen (projectnummering) ──
 // /instellingen: "Projectcode tonen als" (offerte | werkcode | beide), centraal door de eigenaar gezet.

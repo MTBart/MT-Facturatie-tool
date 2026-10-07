@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.9.1",
+    "datum": "2026-10-08",
+    "titel": "Geld: duidelijkere meldingen",
+    "voor": "beheer",
+    "punten": [
+      "Is Moneybird even druk, dan zegt het geldscherm dat in gewone taal, met een knop om het over een minuut opnieuw te proberen.",
+      "Wat nog ingesteld moet worden (spaarpotjes, kredietlimiet, BTW) staat bij elkaar in één kaart \"Nog in te stellen\", met knoppen naar de instellingen.",
+      "Het eerste keer laden is rustiger voor Moneybird, zodat het saldo meteen bekend is."
+    ]
+  },
+  {
     "versie": "2.9",
     "datum": "2026-10-08",
     "titel": "Nieuw tabblad Geld: de geldtijdlijn",

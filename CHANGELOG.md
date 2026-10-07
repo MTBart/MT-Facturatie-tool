@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — Hotfix geld (worker): Moneybird 429 en de 10-jaarsgrens
+- Commit: `6465d7a` | Auteur: Bart Witte
+
 ## 2026-10-08 — Release v2.9: geldtijdlijn (tabblad Geld) + "Wat is er verbeterd"; backup = v2.8
 - Commit: `4b02568` | Auteur: Bart Witte
 
