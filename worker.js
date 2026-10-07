@@ -1485,6 +1485,278 @@ async function handleTeller(p, request, env, ik, json) {
   return json(r.j, r.status);
 }
 
+// ── Geldtijdlijn (cashflow v2), brok G1: /geld/* ──────────────────────────────
+// Eén cash-eventlijst (verleden = echte bankmutaties, toekomst = open facturen op hun vervaldag) plus
+// saldo-informatie. ALTIJD alleen de eigenaar (server-side, los van ROLLEN_MODUS). Uitgangspunt: geld
+// mag nooit stil verdwijnen of dubbel tellen — elke onvolledige of mislukte bron komt in waarschuwingen[].
+// - Mutaties: Moneybird geeft boven ~100 resultaten een 400 ("too many") en pagineert dan niet → de periode
+//   wordt gehalveerd tot het past; één dag die nog te vol is → waarschuwing (mogelijk onvolledig).
+// - Facturen: Moneybird geeft standaard alleen het huidige jaar → per jaar opvragen (period-filter).
+// - Saldo: MB-stand = balans (reports/balance_sheet) op het laatste maandeinde + mutaties sindsdien.
+//   IJkpunt (Bart): eindsaldo van die dag; mutaties tellen vanaf de dag ÉRNA. verschil = MB-stand − ijkpunt-stand.
+// - Interne overboekingen (geboekt op een spaar-grootboek) zijn intern:true: in "totaal" tellen ze niet.
+// Rekening-id's zijn Moneybird-sleutels (geen geheimen; geen namen/IBAN's in de repo).
+const GELD = {
+  bank: { account: '343544076091524743', ledger: '343544076108301960' },
+  spaar: { F: '433635600448357550', H: '433636513530512854', T: '469153299281478977', Z: '433635755717297353' },
+  maxDagen: 400, cacheTtl: 300, jarenTerug: 3,
+  // Subrequest-limiet (gratis plan 50 per verzoek): Moneybird-verzoeken + KV-bewerkingen samen, met reserve.
+  budget: 34, kvReserve: 14,
+};
+const GELD_REKENINGEN = ['betaal', ...Object.keys(GELD.spaar).map(k => 'spaar:' + k)];
+function geldVandaag() { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+function geldDag(s, n) { const d = new Date(s + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+// Echte kalenderdatum (2026-02-31 wordt niet stil 3 maart).
+const geldIsDatum = s => { s = String(s || ''); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false; const t = Date.parse(s + 'T00:00:00Z'); return !isNaN(t) && new Date(t).toISOString().slice(0, 10) === s; };
+const geldGetal = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+const geldRond = n => Math.round(n * 100) / 100;
+// Moneybird-webadressen: documenten en verkoopfacturen zoals de app ze al gebruikt; voor een bankmutatie is
+// het formaat niet geverifieerd (bron_url_zeker:false).
+const geldUrl = (soort, id) => `https://moneybird.com/${MB_ADMIN}/${soort}/${id}`;
+
+// Moneybird-verzoeken met een vast budget (subrequest-limiet van de worker); elke fout wordt teruggegeven.
+function geldMb(env, budget) {
+  const hdr = { Authorization: `Bearer ${env.MONEYBIRD_KEY}`, Accept: 'application/json' };
+  return async function get(pad) {
+    if (budget.rest <= 0) return { ok: false, status: 0, fout: 'budget-op' };
+    budget.rest--;
+    let r;
+    try { r = await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/${pad}`, { headers: hdr }); }
+    catch (e) { return { ok: false, status: 0, fout: 'netwerk: ' + String(e.message || e).slice(0, 80) }; }
+    if (r.status === 429 && budget.rest > 0) {                       // één keer opnieuw na korte pauze
+      await new Promise(res => setTimeout(res, 1000)); budget.rest--;
+      try { r = await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/${pad}`, { headers: hdr }); } catch (e) { return { ok: false, status: 0, fout: 'netwerk' }; }
+    }
+    let data = null, tekst = '';
+    try { tekst = await r.text(); data = JSON.parse(tekst); } catch {}
+    if (!r.ok) return { ok: false, status: r.status, fout: (data && (data.error || data.message)) || tekst.slice(0, 120) || ('HTTP ' + r.status) };
+    return { ok: true, status: r.status, data };
+  };
+}
+// Lijst met paginering (per_page=100); dubbele id's eruit; fouten → waarschuwing + onvolledig.
+async function geldLijst(get, pad, w, label) {
+  const uit = [], gezien = new Set(); let page = 1, onvolledig = false;
+  for (;;) {
+    const r = await get(`${pad}${pad.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
+    if (!r.ok) { w.push({ bron: label, fout: r.fout, status: r.status, pad: pad.split('?')[0] }); onvolledig = true; break; }
+    if (!Array.isArray(r.data)) { w.push({ bron: label, fout: 'onverwacht antwoord (geen lijst)', pad: pad.split('?')[0] }); onvolledig = true; break; }
+    const d = r.data;
+    const nieuw = d.filter(x => x && x.id && !gezien.has(x.id));
+    nieuw.forEach(x => gezien.add(x.id)); uit.push(...nieuw);
+    if (d.length < 100 || !nieuw.length) break;
+    if (++page > 20) { w.push({ bron: label, fout: 'meer dan 20 pagina\'s — afgebroken', pad: pad.split('?')[0] }); onvolledig = true; break; }
+  }
+  return { lijst: uit, onvolledig };
+}
+// Bankmutaties [van, tot] (inclusief): adaptief halveren bij "too many" of een volle pagina.
+async function geldMutaties(get, van, tot, w) {
+  const uit = new Map(); let onvolledig = false;
+  // Ook bij een serverfout halveren (hooguit 3 niveaus, i.v.m. het budget): wat wél lukt komt binnen,
+  // elk mislukt deel krijgt een eigen waarschuwing met zijn periode.
+  const stuk = async (a, b, foutDiepte = 0) => {
+    const r = await get(`financial_mutations?filter=period:${a.replace(/-/g, '')}..${b.replace(/-/g, '')},financial_account_id:${GELD.bank.account}&per_page=100&page=1`);
+    if (r.ok && !Array.isArray(r.data)) { w.push({ bron: 'bankmutaties', fout: 'onverwacht antwoord (geen lijst)', periode: `${a}..${b}` }); onvolledig = true; return; }
+    const vol = r.ok && r.data.length >= 100;
+    const teVeel = !r.ok && r.status === 400 && /too many|sync api/i.test(String(r.fout || ''));
+    const serverFout = !r.ok && (r.status >= 500 || r.status === 0 || r.status === 429) && r.fout !== 'budget-op' && foutDiepte < 3;   // geen 4xx-fouten herhalen
+    if ((vol || teVeel || serverFout) && a < b) {
+      const dagen = Math.round((Date.parse(b) - Date.parse(a)) / 864e5), mid = geldDag(a, Math.floor(dagen / 2)), d = serverFout ? foutDiepte + 1 : foutDiepte;
+      await stuk(a, mid, d); await stuk(geldDag(mid, 1), b, d); return;
+    }
+    if (!r.ok) { w.push({ bron: 'bankmutaties', fout: teVeel ? 'te veel mutaties op één dag — mogelijk onvolledig' : r.fout, status: r.status, periode: `${a}..${b}` }); onvolledig = true; return; }
+    if (vol) { w.push({ bron: 'bankmutaties', fout: '100 of meer mutaties op één dag — mogelijk onvolledig', periode: a }); onvolledig = true; }
+    for (const m of r.data) if (m && m.id) uit.set(m.id, m);
+  };
+  if (van <= tot) await stuk(van, tot);
+  return { lijst: [...uit.values()], onvolledig };
+}
+const geldSpaarVan = m => {                                  // spaar-letter als de mutatie (alleen) op een spaar-grootboek is geboekt
+  const ids = (m.ledger_account_bookings || []).map(b => String(b.ledger_account_id));
+  const letters = [...new Set(ids.map(id => Object.keys(GELD.spaar).find(k => GELD.spaar[k] === id)).filter(Boolean))];
+  return { letter: letters.length === 1 && ids.every(id => GELD.spaar[letters[0]] === id) ? letters[0] : null, gemengd: letters.length > 0 && !(letters.length === 1 && ids.every(id => GELD.spaar[letters[0]] === id)) };
+};
+function geldBankEvent(m) {
+  const bedrag = geldRond(geldGetal(m.amount)), sp = geldSpaarVan(m), betaling = (m.payments || [])[0] || null;
+  const ev = {
+    id: 'bank:' + m.id, bron: 'bank', richting: bedrag >= 0 ? 'in' : 'uit', bedrag, datum: m.date, datumtype: 'werkelijk', zekerheid: 'werkelijk',
+    rekening: 'betaal', tegenpartij: m.contra_account_name || '', document_id: betaling ? betaling.invoice_id : null,
+    bron_url: geldUrl('financial_mutations', m.id), bron_url_zeker: false,
+    uitleg: 'Bankmutatie (werkelijk afgeschreven/bijgeschreven op deze dag).',
+  };
+  if (betaling && betaling.invoice_id) ev.document_url = geldUrl(betaling.invoice_type === 'SalesInvoice' ? 'sales_invoices' : 'documents', betaling.invoice_id);
+  if (sp.letter) { ev.intern = true; ev.naar_rekening = 'spaar:' + sp.letter; ev.uitleg = 'Interne overboeking tussen betaal- en spaarrekening (telt niet mee in "totaal").'; }
+  else if (sp.gemengd) { ev.intern_onzeker = true; ev.uitleg += ' Deels op een spaar-grootboek geboekt — controleer.'; }
+  else if (!(m.ledger_account_bookings || []).length && !(m.payments || []).length && /spaar/i.test(m.contra_account_name || '')) { ev.intern_vermoed = true; ev.uitleg += ' Lijkt een overboeking naar spaar, maar is nog niet geboekt.'; }
+  return ev;
+}
+// Open factuur → event op de vervaldag (betaaldag-logica volgt in G2). Achterstallig blijft staan; zonder
+// vervaldag geen gok: zekerheid "invullen".
+function geldFactuurEvent(soort, d, vandaag, w) {
+  const verkoop = soort === 'verkoop';
+  if (d.total_price_incl_tax_base == null && d.currency && d.currency !== 'EUR') w.push({ bron: soort + 'facturen', fout: 'factuur in ' + d.currency + ' zonder bedrag in euro — bedrag onzeker', document_id: d.id });
+  const totaal = geldGetal(d.total_price_incl_tax_base != null ? d.total_price_incl_tax_base : d.total_price_incl_tax);
+  const betaald = (d.payments || []).reduce((s, p) => s + geldGetal(p.price_base != null ? p.price_base : p.price), 0);
+  const open = geldRond(verkoop ? (d.total_unpaid_base != null ? geldGetal(d.total_unpaid_base) : totaal - betaald) : totaal - betaald);
+  const due = geldIsDatum(d.due_date) ? d.due_date : null;
+  const c = d.contact || {};
+  const ev = {
+    id: (verkoop ? 'verkoop:' : 'inkoop:') + d.id, bron: soort, bedrag: open,
+    richting: (verkoop ? open >= 0 : open < 0) ? 'in' : 'uit',
+    datum: due, datumtype: due ? 'vervaldag' : 'onbekend', zekerheid: due ? 'vastgelegd' : 'invullen',
+    rekening: 'betaal', tegenpartij: c.company_name || [c.firstname, c.lastname].filter(Boolean).join(' ') || '',
+    document_id: d.id, bron_url: geldUrl(verkoop ? 'sales_invoices' : 'documents', d.id), bron_url_zeker: true,
+    factuurdatum: (verkoop ? d.invoice_date : d.date) || null, referentie: d.reference || d.invoice_id || '', status: d.state,
+    uitleg: due ? (verkoop ? 'Open verkoopfactuur op de vervaldag.' : 'Open inkoopfactuur op de vervaldag.') : 'Geen vervaldag in Moneybird — datum invullen.',
+  };
+  if (open < 0) ev.creditnota = true;
+  // Al (deels) betaald via een andere rekening dan de betaalrekening (kas, privé): die betaling staat niet bij de bankmutaties.
+  if ((d.payments || []).some(p => p.financial_account_id && String(p.financial_account_id) !== GELD.bank.account)) ev.betaald_buiten_bank = true;
+  if (due && due < vandaag) { ev.achterstallig = true; ev.uitleg = (verkoop ? 'Vervallen verkoopfactuur' : 'Vervallen inkoopfactuur') + ' — nog niet betaald (blijft staan tot het betaald is).'; }
+  if (!verkoop && d.state === 'new') { ev.ongeboekt = true; ev.zekerheid = 'invullen'; ev.uitleg = 'Nog niet geboekt in Moneybird — controleer bedrag en datum.'; }
+  return ev;
+}
+async function geldFacturen(get, vandaag, w) {
+  const jaar = Number(vandaag.slice(0, 4)), jaren = [];
+  for (let j = jaar - GELD.jarenTerug; j <= jaar; j++) jaren.push(j);
+  // Elk jaar apart (Moneybird geeft standaard alleen het huidige jaar) plus één vraag voor alles daarvóór,
+  // zodat een oude open factuur nooit stil wegvalt.
+  const perioden = [[`20000101..${jaren[0] - 1}1231`, 'vóór ' + jaren[0]], ...jaren.map(j => [`${j}0101..${j}1231`, String(j)])];
+  const [ink, ver] = await Promise.all([
+    Promise.all(perioden.map(([p, l]) => geldLijst(get, `documents/purchase_invoices?filter=period:${p},state:open|late|pending_payment|new`, w, 'inkoopfacturen ' + l))),
+    Promise.all(perioden.map(([p, l]) => geldLijst(get, `sales_invoices?filter=period:${p},state:open|late|reminded|pending_payment`, w, 'verkoopfacturen ' + l))),
+  ]);
+  const uniek = lijsten => { const m = new Map(); lijsten.forEach(l => l.lijst.forEach(x => m.set(x.id, x))); return [...m.values()]; };
+  return { inkoop: uniek(ink), verkoop: uniek(ver), onvolledig: ink.some(l => l.onvolledig) || ver.some(l => l.onvolledig), jaren };
+}
+// Balans op het laatste maandeinde: bank-ledger en spaar-ledgers (veld `value`, cumulatief t/m periode-einde).
+async function geldBalans(get, vandaag, w) {
+  const eersteDezeMaand = vandaag.slice(0, 8) + '01', maandeinde = geldDag(eersteDezeMaand, -1), begin = maandeinde.slice(0, 8) + '01';
+  const r = await get(`reports/balance_sheet?period=${begin.replace(/-/g, '')}..${maandeinde.replace(/-/g, '')}`);
+  if (!r.ok) { w.push({ bron: 'balans', fout: r.fout, status: r.status }); return { maandeinde, waarden: null }; }
+  const treffers = {};
+  const zoek = o => { if (Array.isArray(o)) o.forEach(zoek); else if (o && typeof o === 'object') {
+    if (o.ledger_account_id && 'value' in o) (treffers[String(o.ledger_account_id)] = treffers[String(o.ledger_account_id)] || []).push(geldGetal(o.value));
+    Object.values(o).forEach(v => { if (v && typeof v === 'object') zoek(v); }); } };
+  zoek(r.data);
+  // Alleen een eenduidige waarde gebruiken (dezelfde ledger als ouder én kind met andere bedragen → niet gokken).
+  const waarden = {};
+  for (const [id, vs] of Object.entries(treffers)) { if (vs.every(x => x === vs[0])) waarden[id] = vs[0]; else w.push({ bron: 'balans', fout: 'grootboek komt met verschillende bedragen in de balans voor — niet gebruikt', ledger: id }); }
+  if (!(GELD.bank.ledger in waarden)) w.push({ bron: 'balans', fout: 'bankrekening niet (eenduidig) gevonden in de balans' });
+  for (const [k, l] of Object.entries(GELD.spaar)) if (!(l in waarden)) w.push({ bron: 'balans', rekening: 'spaar:' + k, fout: 'spaarrekening niet (eenduidig) gevonden in de balans' });
+  return { maandeinde, waarden };
+}
+// IJkpunten: alleen toevoegen; nieuwste per rekening telt.
+const GELD_IJK = 'geld:ijkpunt:';
+// Sleutels zijn op omgekeerde tijd gesorteerd → de eerste per rekening is de nieuwste.
+async function geldIjkpunten(env, perRekening) {
+  if (!env.MT_ROLLEN) return [];
+  const uit = [];
+  for (const rek of GELD_REKENINGEN) {
+    const r = await env.MT_ROLLEN.list({ prefix: `${GELD_IJK}${rek}:`, limit: perRekening });
+    for (const k of r.keys) { const v = await kvJson(env, k.name); if (v) uit.push(v); }
+  }
+  return uit.sort((a, b) => (b.ts - a.ts) || String(b.id).localeCompare(String(a.id)));
+}
+async function geldCacheVersie(env) { return (await kvJson(env, 'geld:cachever')) || '0'; }
+
+async function geldTijdlijn(env, url) {
+  const vandaag = geldVandaag(), w = [], budget = { rest: GELD.budget };   // + GELD.kvReserve voor KV (cache, ijkpunten)
+  let van = url.searchParams.get('van') || geldDag(vandaag, -30), tot = url.searchParams.get('tot') || geldDag(vandaag, 90);
+  if (!geldIsDatum(van) || !geldIsDatum(tot) || van > tot) return { status: 400, body: { error: 'ongeldige periode (van/tot = JJJJ-MM-DD, van ≤ tot)' } };
+  if ((Date.parse(tot) - Date.parse(van)) / 864e5 > GELD.maxDagen) return { status: 400, body: { error: `periode te lang (max ${GELD.maxDagen} dagen)` } };
+  const get = geldMb(env, budget);
+  let ijk = [];
+  try { ijk = await geldIjkpunten(env, 1); }
+  catch (e) { w.push({ bron: 'ijkpunt', fout: 'ijkpunten niet te lezen (opslag) — Moneybird-stand gebruikt' }); }
+  const laatsteIjk = {};
+  for (const i of ijk) if (!laatsteIjk[i.rekening]) laatsteIjk[i.rekening] = i;
+  const balans = await geldBalans(get, vandaag, w);
+  // Mutaties nodig vanaf: de dag na het maandeinde (MB-stand), de dag na het oudste ijkpunt, en het begin van de tijdlijn.
+  const vanaf = [geldDag(balans.maandeinde, 1), van, ...Object.values(laatsteIjk).map(i => geldDag(i.datum, 1))].filter(d => geldIsDatum(d) && d <= vandaag).sort()[0] || vandaag;
+  const ondergrens = geldDag(vandaag, -GELD.maxDagen);
+  if (vanaf < ondergrens) w.push({ bron: 'ijkpunt', fout: `ijkpunt ouder dan ${GELD.maxDagen} dagen — niet meegenomen, opnieuw ijken` });
+  const mutVan = vanaf < ondergrens ? ondergrens : vanaf;
+  const [muts, fact] = await Promise.all([geldMutaties(get, mutVan, vandaag, w), geldFacturen(get, vandaag, w)]);
+  if (budget.rest <= 0) w.push({ bron: 'algemeen', fout: 'te veel Moneybird-verzoeken nodig — gegevens mogelijk onvolledig' });
+  const bankEv = muts.lijst.map(geldBankEvent).sort((a, b) => a.datum.localeCompare(b.datum) || a.id.localeCompare(b.id));
+  const gemengd = bankEv.filter(e => e.intern_onzeker);
+  if (gemengd.length) w.push({ bron: 'bankmutaties', fout: `${gemengd.length} mutatie(s) deels op een spaar-grootboek geboekt — spaar- en totaalsaldo onzeker`, ids: gemengd.slice(0, 10).map(e => e.id) });
+  const som = (lijst, filt) => geldRond(lijst.filter(filt).reduce((s, e) => s + e.bedrag, 0));
+  // ── saldo per rekening
+  const saldo = {}, mbStand = {};
+  const metBalans = balans.waarden && (GELD.bank.ledger in balans.waarden);
+  mbStand.betaal = metBalans ? geldRond(balans.waarden[GELD.bank.ledger] + som(bankEv, e => e.datum > balans.maandeinde)) : null;
+  for (const k of Object.keys(GELD.spaar)) {
+    const l = GELD.spaar[k];
+    mbStand['spaar:' + k] = balans.waarden && (l in balans.waarden) ? geldRond(balans.waarden[l] - som(bankEv, e => e.naar_rekening === 'spaar:' + k && e.datum > balans.maandeinde)) : null;
+  }
+  for (const rek of GELD_REKENINGEN) {
+    const i = laatsteIjk[rek], s = { mb_stand: mbStand[rek], ijkpunt: i ? { bedrag: i.bedrag, datum: i.datum, door: i.doorNaam || i.door || '', ts: i.ts } : null };
+    if (i && i.datum >= ondergrens) {
+      // Eindsaldo van de ijkdag; mutaties vanaf de dag erna.
+      const delta = rek === 'betaal' ? som(bankEv, e => e.datum > i.datum) : -som(bankEv, e => e.naar_rekening === rek && e.datum > i.datum);
+      s.berekend = geldRond(i.bedrag + delta); s.gerapporteerd = s.berekend; s.bron = 'ijkpunt';
+      s.verschil = s.mb_stand == null ? null : geldRond(s.mb_stand - s.berekend);
+    } else {
+      s.berekend = null; s.gerapporteerd = s.mb_stand; s.bron = 'moneybird'; s.verschil = null;
+      if (rek === 'betaal' || s.mb_stand != null) w.push({ bron: 'saldo', rekening: rek, fout: 'nog niet geijkt — Moneybird-stand gebruikt' });
+    }
+    if (muts.onvolledig) { s.onzeker = true; s.onzeker_reden = 'bankmutaties onvolledig opgehaald — saldo kan afwijken'; }
+    else if (gemengd.length && rek !== 'betaal') { s.onzeker = true; s.onzeker_reden = 'gemengde spaarboeking(en) — spaarsaldo kan afwijken'; }
+    saldo[rek] = s;
+  }
+  const spaarSom = Object.keys(GELD.spaar).map(k => saldo['spaar:' + k].gerapporteerd);
+  saldo.totaal = { gerapporteerd: saldo.betaal.gerapporteerd == null || spaarSom.some(v => v == null) ? null : geldRond(saldo.betaal.gerapporteerd + spaarSom.reduce((a, b) => a + b, 0)),
+    uitleg: 'Betaal + spaar; interne overboekingen heffen elkaar op.', onzeker: (muts.onvolledig || gemengd.length > 0) || undefined };
+  // ── events: verleden (bank, binnen de tijdlijn) + toekomst/open (facturen) + ijkpunten
+  const events = bankEv.filter(e => e.datum >= van && e.datum <= tot);
+  const factEv = [...fact.inkoop.map(d => geldFactuurEvent('inkoop', d, vandaag, w)), ...fact.verkoop.map(d => geldFactuurEvent('verkoop', d, vandaag, w))]
+    .filter(e => e.bedrag !== 0);
+  // Achterstallig en zonder datum altijd mee (nooit weg); verder alleen binnen de periode.
+  events.push(...factEv.filter(e => e.achterstallig || !e.datum || (e.datum >= van && e.datum <= tot)));
+  for (const rek of Object.keys(laatsteIjk)) { const i = laatsteIjk[rek];
+    if (i.datum >= van && i.datum <= tot) events.push({ id: 'ijkpunt:' + i.id, bron: 'ijkpunt', richting: 'in', bedrag: i.bedrag, datum: i.datum, datumtype: 'werkelijk', zekerheid: 'werkelijk', rekening: rek === 'betaal' ? 'betaal' : 'spaar', tegenpartij: '', document_id: null, bron_url: null, uitleg: 'IJkpunt: eindsaldo van deze dag (ingevuld door ' + (i.doorNaam || i.door || '?') + ').', saldo_ijkpunt: true }); }
+  const buiten = factEv.filter(e => e.datum && !e.achterstallig && (e.datum < van || e.datum > tot)).length;
+  return { status: 200, body: {
+    vandaag, van, tot, as_of: new Date().toISOString(),
+    bronnen: { bankmutaties: { as_of: new Date().toISOString(), van: mutVan, tot: vandaag, aantal: muts.lijst.length, onvolledig: muts.onvolledig },
+      facturen: { as_of: new Date().toISOString(), jaren: fact.jaren, inkoop: fact.inkoop.length, verkoop: fact.verkoop.length, buiten_periode: buiten, onvolledig: fact.onvolledig },
+      balans: { as_of: new Date().toISOString(), maandeinde: balans.maandeinde, gevonden: !!metBalans } },
+    saldo, events, waarschuwingen: w, verzoeken: GELD.budget - budget.rest,
+  } };
+}
+async function handleGeld(p, request, env, ik, json) {
+  // Altijd alleen de eigenaar, in élke ROLLEN_MODUS; onbekende rol → nee.
+  if (ik.rol !== 'eigenaar') return json({ error: 'geen-toegang', reden: 'alleen-eigenaar' }, 403);
+  const m = request.method, url = new URL(request.url);
+  if (p === '/geld/tijdlijn' && m === 'GET') {
+    const ver = await geldCacheVersie(env), key = `geld:cache:v${ver}:${url.searchParams.get('van') || ''}:${url.searchParams.get('tot') || ''}:${geldVandaag()}`;
+    if (url.searchParams.get('vers') !== '1') { const c = await kvJson(env, key); if (c) return json(Object.assign(c, { cache: true })); }
+    const r = await geldTijdlijn(env, url);
+    if (r.status === 200 && env.MT_ROLLEN) { try { await kvZet(env, key, r.body, { expirationTtl: GELD.cacheTtl }); } catch {} }
+    // (de cachesleutel bevat de versie van ná de laatste wijziging; een wijziging maakt een nieuwe, unieke versie)
+    return json(r.body, r.status);
+  }
+  if (p === '/geld/ijkpunten' && m === 'GET') {
+    try { return json({ ijkpunten: await geldIjkpunten(env, 50) }); } catch (e) { return json({ error: 'ijkpunten niet te lezen' }, 503); }
+  }
+  if (p === '/geld/ijkpunt' && m === 'POST') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let b = {}; try { b = await request.json(); } catch {}
+    const rek = String(b.rekening || ''), bedrag = Number(b.bedrag), datum = String(b.datum || '');
+    if (!GELD_REKENINGEN.includes(rek)) return json({ error: 'onbekende rekening', rekeningen: GELD_REKENINGEN }, 400);
+    if (typeof b.bedrag !== 'number' || !isFinite(bedrag) || Math.abs(bedrag) > 1e8) return json({ error: 'bedrag moet een getal zijn' }, 400);
+    if (!geldIsDatum(datum) || datum > geldVandaag()) return json({ error: 'datum (JJJJ-MM-DD) mag niet in de toekomst liggen' }, 400);
+    const ts = Date.now(), id = randHex(6);
+    const rec = { id, rekening: rek, bedrag: geldRond(bedrag), datum, door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', ts };
+    await kvZet(env, `${GELD_IJK}${rek}:${String(9e15 - ts).padStart(16, '0')}:${id}`, rec);
+    await kvZet(env, 'geld:cachever', `${ts}-${id}`);                                          // unieke versie: cache meteen ongeldig (geen teller-race)
+    await audit(env, { door: ik.oid, doorNaam: rec.doorNaam, actie: 'geld-ijkpunt', doel: rek, doelNaam: 'ijkpunt ' + datum });   // geen bedragen in het (voor beheerders leesbare) auditlog
+    return json({ ok: true, ijkpunt: rec });
+  }
+  return json({ error: 'onbekende-route' }, 404);
+}
+
 // ── /me, /toegang en /beheer/* ────────────────────────────────────────────────
 function meAntwoord(env, ik, payload) {
   return {
@@ -1675,6 +1947,8 @@ export default {
       if (url.pathname.startsWith('/beheer/')) return await handleBeheer(url.pathname, request, env, ik, json);
       // Werkcode-teller en centrale instellingen: eigen routes (zie handleTeller).
       if (url.pathname === '/instellingen' || url.pathname.startsWith('/teller/')) return await handleTeller(url.pathname, request, env, ik, json);
+      // Geldtijdlijn: altijd alleen de eigenaar (los van ROLLEN_MODUS; zie handleGeld).
+      if (url.pathname.startsWith('/geld/')) return await handleGeld(url.pathname, request, env, ik, json);
 
       const isTrack = url.pathname === '/track' || url.pathname.startsWith('/track/');
       const isDash = url.pathname.startsWith('/dashboard/');

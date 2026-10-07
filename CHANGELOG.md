@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — P3a polijst (rooktest): voorstel-soort zichtbaar, intern zonder offertezoeken, klant invullen
+- Commit: `5e5548b` | Auteur: Bart Witte
+
 ## 2026-10-07 — P3a: Controlelijst projecten in Beheer (voorstellen + data zonder project)
 - Commit: `021f412` | Auteur: Bart Witte
 
