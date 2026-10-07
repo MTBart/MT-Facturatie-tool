@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Koppel-badge: altijd lichte pillen, namen in plaats van ids, projectmap eerst popover
+- Commit: `91cc7ee` | Auteur: Bart Witte
+
 ## 2026-10-07 — Koppel-badge in Moneybird-stijl: overal hetzelfde open/gekoppeld-icoon met voorstellen en details
 - Commit: `e88ac5b` | Auteur: Bart Witte
 

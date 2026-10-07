@@ -202,7 +202,7 @@
       // toast + write laten vallen; volgende schedule/flush herprobeert.
       // NB (mobiel): een 412 gaat bewust NIET terug in _RQ — dat zou dezelfde bytes
       // in een oneindige retry-loop zetten. De caller regelt dat; hier één keer.
-      async _resolveConflict(filename, localData, conflictMerge) {
+      async _resolveConflict(filename, localData, conflictMerge, poging = 1) {
         let remote;
         try { remote = await this.read(filename); }   // ververst _etags[filename]
         catch (e) {
@@ -233,6 +233,10 @@
         if (this._etags[filename]) headers['If-Match'] = this._etags[filename];
         const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
           { method: 'PUT', headers, body: JSON.stringify(merged) });
+        // Schreef iemand precies tussen onze re-read en PUT? Dan nog (beperkt) een keer
+        // lezen-samenvoegen-schrijven, anders bereikt de samengevoegde stand SharePoint niet.
+        if (r.status === 412 && this._etags[filename] && poging < 3)
+          return await this._resolveConflict(filename, localData, conflictMerge, poging + 1);
         if (r.ok) {
           const et = r.headers.get('ETag'); if (et) this._etags[filename] = et;
           if (trackLastSync) this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null };

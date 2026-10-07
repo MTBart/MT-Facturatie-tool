@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#2A4A38">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>BACKUP 6 okt — M&T Uren</title>
+<title>BACKUP v2.2 — M&T Uren</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Figtree:wght@300;400;500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -481,7 +481,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP-versie van 6 okt 2026 — alleen gebruiken als de nieuwe versie niet werkt. Gebruik niet tegelijk met de nieuwe versie. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.2, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <header>
   <div class="header-left">
@@ -977,8 +977,9 @@ function setTogglUserMap(m){localStorage.setItem('mt_toggl_user_map',JSON.string
 function getLopende(){return JSON.parse(localStorage.getItem('mt_uren_lopend')||'null')}
 function setLopende(e){e?localStorage.setItem('mt_uren_lopend',JSON.stringify(e)):localStorage.removeItem('mt_uren_lopend')}
 function getProjecten(){
+  // Vervallen projecten (tombstones uit de cockpit, `_vervallen`) niet tonen.
   const raw=JSON.parse(localStorage.getItem('mt_projecten')||'null');
-  if(raw&&raw.length) return raw;
+  if(raw&&raw.length) return raw.filter(p=>!(p&&p._vervallen));
   return JSON.parse(localStorage.getItem('mt_uren_projecten')||'[]');
 }
 
@@ -2206,7 +2207,22 @@ function startTbKlok(){
 // PROJECTEN BEHEER
 // ════════════════════════════════════════════
 function setProjecten(lijst){
-  localStorage.setItem('mt_projecten',JSON.stringify(lijst));
+  // Tombstones van de cockpit (`_vervallen`) bewaren: een verouderde kopie met dezelfde code
+  // mag een verwijderd project niet terugzetten. Alleen een echt nieuw/gewijzigd record (andere
+  // inhoud dan de tombstone) wint, en krijgt dan een stempel die later is dan de tombstone.
+  const tijd=x=>{const v=x&&x._gewijzigd;if(typeof v==='number')return v;const t=Date.parse(v||'');return isNaN(t)?0:t;};
+  const inhoud=x=>{const {_gewijzigd,_door,_vervallen,_hernoemd_naar,...r}=x||{};return JSON.stringify(r);};
+  let ruw=[]; try{ ruw=JSON.parse(localStorage.getItem('mt_projecten')||'[]'); if(!Array.isArray(ruw)) ruw=[]; }catch(e){ ruw=[]; }
+  const graf=new Map(ruw.filter(p=>p&&p._vervallen&&p.code).map(p=>[p.code,p]));
+  const uit=[];
+  lijst.forEach(x=>{
+    const t=x&&graf.get(x.code);
+    if(!t){ uit.push(x); return; }
+    if(tijd(x)>tijd(t)){ graf.delete(x.code); uit.push(x); return; }
+    if(inhoud(x)===inhoud(t)) return;                                  // verouderde kopie → tombstone blijft
+    x._gewijzigd=Math.max(Date.now(),tijd(t)+1); graf.delete(x.code); uit.push(x);  // echt opnieuw/anders
+  });
+  localStorage.setItem('mt_projecten',JSON.stringify([...uit,...graf.values()]));
 }
 
 function renderProjectenTab(){
