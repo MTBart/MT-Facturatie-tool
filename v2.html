@@ -5630,6 +5630,7 @@ function projSecOverzicht(proj,c){
         <span class="kpi-label" style="margin:0 0 0 .5rem">Projectmap:</span> ${projMapBadge(proj)}
       </div>
       ${t2ProjectRijHtml(proj)}
+      ${typeof geldProjectRijHtml==='function'?geldProjectRijHtml(proj):''}
       <div class="ov-grid">
         <section class="ov-blok"><div class="card-title">Volgende stap</div>${stappen.join('')}</section>
         <section class="ov-blok"><div class="card-title">Laatste activiteit</div>
@@ -12473,7 +12474,42 @@ function geldOpen(){
   if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Het geldscherm is alleen voor eigenaren en de administratie.</div>'; return; }
   if(el.dataset.gestart){ MTGeld.laad(); return; }
   el.dataset.gestart='1';
-  MTGeld.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||''});
+  Promise.resolve(MTGeld.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',
+    projecten:geldProjecten,offerteBedrag:geldOfferteBedrag})).then(()=>{ if(geldOpen._na){ const f=geldOpen._na; geldOpen._na=null; f(); } });
+}
+// Projecten voor de prognose (geen interne): naam, klant (Moneybird-contact), offerte en planning (start/oplevering).
+function geldProjecten(){
+  return (typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]).filter(p=>p&&p.project_id&&!p._vervallen&&p.soort!=='intern'&&String(p.klant||'').toUpperCase()!=='INT'&&!p.gearchiveerd).map(p=>{
+    let start=null,oplevering=null;
+    try{ const pl=typeof planVoor==='function'?planVoor(p.code):null; if(pl&&Array.isArray(pl.fases)&&pl.fases.length){ planBerekenDatums(pl); start=pl.fases[0].start||null; oplevering=pl.fases[pl.fases.length-1].eind||null; } }catch(e){}
+    return {project_id:p.project_id,code:p.code,label:(typeof projNaamVol==='function'?projNaamVol(p):p.naam)||p.code,klant:typeof projKlantNaam==='function'?projKlantNaam(p):'',
+      mb_contact_id:typeof resolveMbContact==='function'?resolveMbContact(p):null,offertenr:typeof projOfferteNr==='function'?projOfferteNr(p):(p.offertenr||''),offerte_mb_id:p.offertenr_mb_id||null,start,oplevering};
+  }).sort((a,b)=>a.label.localeCompare(b.label));
+}
+// Voorstel voor het totaal: het offertebedrag incl. btw uit Moneybird (alleen lezen).
+async function geldOfferteBedrag(pr){
+  if(!pr||!pr.offerte_mb_id) return null;
+  const r=await mbGet(`${getAdmin()}/estimates/${pr.offerte_mb_id}`); if(!r.ok) return null;
+  const e=await r.json(); const v=parseFloat(e&&(e.total_price_incl_tax_base!=null?e.total_price_incl_tax_base:e.total_price_incl_tax));
+  return isFinite(v)&&v>0?Math.round(v*100)/100:null;
+}
+// Vanuit het projectscherm: naar Geld en de prognose van dit project openen.
+function geldPrognoseOpen(code){
+  const p=projVind(code); if(!p) return;
+  const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
+  const open=()=>{ const x=geldProjecten().find(q=>q.project_id===p.project_id); MTGeld.prognoseBewerk('p:'+p.project_id,x||null); };
+  const el=document.getElementById('geld-root');
+  if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ b.click(); setTimeout(open,50); } else { geldOpen._na=open; b.click(); }
+}
+// Rij in het projectoverzicht (alleen met recht geld): "Prognose: gaat zeker door".
+let _geldProgCache=null;
+function geldProjectRijHtml(proj){
+  if(typeof geldNieuw!=='function'||!geldNieuw()||!MTRol.magGeld()||!proj||!proj.project_id||proj.soort==='intern') return '';
+  if(!_geldProgCache){ _geldProgCache={items:null}; geldHaal('/geld/prognose').then(r=>{ _geldProgCache.items=(r&&r.items)||{}; const el=document.getElementById('geld-proj-rij'); if(el&&huidigProject) el.outerHTML=geldProjectRijHtml(huidigProject); }).catch(()=>{}); }
+  const it=_geldProgCache.items&&_geldProgCache.items['p:'+proj.project_id];
+  const tekst=!_geldProgCache.items?'…':it?(it.aan?`✓ gaat zeker door — ${it.termijnen.length} termijn(en)`:'staat uit'):'nog niet aangevinkt';
+  return `<div class="koppel-rij" id="geld-proj-rij"><span class="kpi-label" style="margin:0">Prognose (geld):</span> <span>${esc(tekst)}</span>
+    ${MTRol.magGeld('wijzigen')?`<button class="btn btn-xs btn-secondary" onclick="geldPrognoseOpen('${_jsCode(proj.code)}')">${it?'Bekijken':'Gaat zeker door…'}</button>`:''}</div>`;
 }
 // ── Wat is er verbeterd (data/updates.json, gewone taal, nieuwste eerst) ──
 // Beheer ziet alle versies in de kaart; iedereen krijgt eenmalig een "nieuw"-stipje bij het versielabel

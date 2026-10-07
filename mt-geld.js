@@ -115,6 +115,16 @@
     }
     return r;
   };
+  // BTW-pot zonder eigen doel: het doel is de eerstvolgende BTW-aangifte. Dekt de verwachte stand van de pot
+  // (vlak vóór de aangifte, incl. BTW-sparen) het bedrag? Prognose telt niet mee (alleen wat zeker is).
+  G.btwDekking = function (data, pot) {
+    const a = (data.events || []).filter(e => e.bron === 'btw' && e.kwartaal && !String(e.id).endsWith(':terug') && e.delta < 0 && e.datum).sort((p, q) => p.datum.localeCompare(q.datum))[0];
+    if (!a) return null;
+    const bedrag = Math.abs(a.delta), stand = G.potOp(data, pot, dagPlus(a.datum, -1));
+    const r = { kwartaal: a.kwartaal, bedrag, datum: a.datum, pot: stand };
+    if (stand == null) return Object.assign(r, { gedekt: null, pct: 0 });
+    return Object.assign(r, { gedekt: stand >= bedrag, tekort: rond(Math.max(0, bedrag - stand)), pct: Math.max(0, Math.min(100, Math.round(stand / bedrag * 100))) });
+  };
   // Mijlpalen: expliciet ingesteld, anders 0 voor de lopende rekening en 25/50/75/100% van het doel voor potjes.
   G.mijlpalen = function (streef, rek) {
     if (!streef) return rek === 'lopend' ? [0] : [];
@@ -141,7 +151,12 @@
   const esc = x => String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const eur = (n, dec) => n == null ? '—' : (n < 0 ? '−' : '') + '€ ' + Math.abs(n).toLocaleString('nl-NL', { minimumFractionDigits: dec ? 2 : 0, maximumFractionDigits: dec ? 2 : 0 });
   const kort = n => { if (n == null) return '—'; const a = Math.abs(n); return (n < 0 ? '−' : '') + '€ ' + (a >= 1e6 ? (a / 1e6).toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + 'M' : a >= 1e4 ? Math.round(a / 1e3) + 'k' : a >= 1e3 ? (a / 1e3).toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + 'k' : Math.round(a)); };
-  const datumTekst = (d, lang) => { if (!d) return 'nog geen datum'; const t = new Date(d + 'T12:00:00Z'); return t.toLocaleDateString('nl-NL', lang ? { weekday: 'long', day: 'numeric', month: 'long' } : { day: 'numeric', month: 'short' }); };
+  // Datum in gewone taal; buiten het huidige jaar met jaartal (anders is "20 feb" dubbelzinnig).
+  const datumTekst = (d, lang) => {
+    if (!d) return 'nog geen datum';
+    const t = new Date(d + 'T12:00:00Z'), ander = d.slice(0, 4) !== ((st.data && st.data.vandaag) || new Date().toISOString()).slice(0, 4);
+    return t.toLocaleDateString('nl-NL', Object.assign(lang ? { weekday: 'long', day: 'numeric', month: 'long' } : { day: 'numeric', month: 'short' }, ander ? { year: 'numeric' } : {}));
+  };
   G._eur = eur; G._esc = esc;
   const BRON = { bank: 'Bank (werkelijk)', inkoop: 'Inkoopfactuur', verkoop: 'Verkoopfactuur', patroon: 'Vast patroon', inleg: 'Weekinleg potje', btw: 'BTW-aangifte', 'btw-sparen': 'BTW-sparen', prognose: 'Prognose', ijkpunt: 'IJkpunt' };
   const ZEKER = { werkelijk: 'werkelijk', vastgelegd: 'vastgelegd in Moneybird', gepland: 'gepland', aanname: 'aanname (betaalgedrag)', invullen: 'nog in te vullen', patroon: 'vast patroon', schatting: 'schatting', prognose: 'prognose' };
@@ -149,7 +164,7 @@
     intro: 'De lijn is de lopende rekening: links wat er gebeurd is (bank), rechts wat er verwacht wordt. ▲ is geld dat binnenkomt, ▼ geld dat eruit gaat. Een stippellijn is prognose (nog geen factuur). De rode lijn is de kredietlimiet: daaronder kan het niet. Potjes zijn de spaarrekeningen; overboekingen daarheen tellen niet mee in "totaal".',
     nu: 'Het saldo van vandaag. Als er een ijkpunt is (zelf ingevuld bankaldo), rekent de tool vanaf dat ijkpunt met de bankmutaties; anders de stand uit Moneybird.',
     laagste: 'Het laagste verwachte saldo in de gekozen periode, met alles wat gepland staat (facturen, vaste lasten, BTW). Hiermee zie je of het krap wordt.',
-    ruimte: 'Hoeveel ruimte er op het laagste punt nog is tot de kredietlimiet van de lopende rekening.',
+    ruimte: 'Hoeveel ruimte er op het laagste punt van de gekozen periode nog is tot de kredietlimiet van de lopende rekening. Daaronder staat de ruimte van vandaag.',
     lijn: 'Sleep of veeg om terug of vooruit te kijken, knijp of gebruik de knoppen om in of uit te zoomen. Tik op een dag voor wat er die dag gebeurt.',
     lijst: 'Alles wat de komende 14 dagen verwacht wordt. Tik op een regel voor de bron, de uitleg waarom het op die datum staat, en de link naar Moneybird.',
     potjes: 'De lopende rekening en de spaarpotjes, met het doel dat je ze geeft. Het tempo is het gemiddelde van de laatste 8 weken op de bank; de verwachting rekent daarmee door.',
@@ -264,7 +279,8 @@
 
   // ── Tekenen ──────────────────────────────────────────────────────────────────
   function teken() {
-    const d = st.data; if (!d) return;
+    if (!st.data) return;
+    const d = st.dataS = G.metScenario(st.data, st.scenario);      // scenario: verschoven termijnen (nog niet opgeslagen)
     const lijn = G.lijn(d, { modus: st.modus, prognose: st.prognose });
     st.lijn = lijn;
     const zoomTot = dagPlus(d.vandaag, ZOOM[st.zoom]);
@@ -286,7 +302,7 @@
   <div class="mtg-kaarten">
     ${kaart('nu', 'Nu', eur(nu), nu != null && nu < 0, (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''))}
     ${kaart('laagste', 'Laagste punt', low ? eur(low.saldo) : '—', low && (limiet != null ? low.saldo < -limiet * 0.9 : low.saldo < 0), low ? `${datumTekst(low.datum, true)} · komende ${st.zoom === 'week' ? '2 weken' : st.zoom}` : '')}
-    ${st.modus === 'lopend' ? kaart('ruimte', 'Ruimte tot kredietlimiet', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, limiet == null ? 'kredietlimiet nog niet ingesteld' : `limiet ${eur(-limiet)}`) : kaart('nu', 'Lopende rekening', eur(L.gerapporteerd), L.gerapporteerd < 0, 'zonder potjes')}
+    ${st.modus === 'lopend' ? kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, limiet == null ? 'kredietlimiet nog niet ingesteld' : `tot de kredietlimiet (${eur(-limiet)}) · nu: ${eur(nu != null ? nu + limiet : null)}`) : kaart('nu', 'Lopende rekening', eur(L.gerapporteerd), L.gerapporteerd < 0, 'zonder potjes')}
   </div>
   <div class="mtg-kaart">
     <div class="mtg-kop" style="margin:0 0 6px"><b style="flex:1">Verloop ${st.modus === 'totaal' ? 'totaal' : 'lopende rekening'}</b>
@@ -295,9 +311,10 @@
       ${heeftProg ? `<button class="mtg-knop klein ${st.prognose ? 'aan' : ''}" data-prognose="1" title="Prognose meenemen">prognose</button>` : ''}
       <button class="mtg-vraag" data-uitleg="lijn">?</button></div></div>
     <div class="mtg-grafiek" id="mtg-grafiek"></div>
-    <div class="mtg-legenda"><span><i></i>saldo</span><span><i style="border-top-style:dashed"></i>verwacht</span>${heeftProg ? '<span><i style="border-top:2px dotted #3a5a8a"></i>met prognose</span>' : ''}<span><i style="border-color:var(--mtg-uit)"></i>kredietlimiet</span>${st.modus === 'lopend' && st.cfg && st.cfg.lopend_streef && st.cfg.lopend_streef.datum ? '<span><i style="border-top:2px dashed var(--gold,#B8962E)"></i>doelpad</span>' : ''}<span class="mtg-in">▲ erbij</span><span class="mtg-uit">▼ eraf</span><span>⚑ mijlpaal</span></div>
+    <div class="mtg-legenda"><span><i></i>saldo</span><span><i style="border-top-style:dashed"></i>verwacht</span>${heeftProg && st.prognose ? '<span><i style="border-top:2px dotted #3a5a8a"></i>met prognose (waar het afwijkt)</span>' : ''}<span><i style="border-color:var(--mtg-uit)"></i>kredietlimiet</span>${st.modus === 'lopend' && st.cfg && st.cfg.lopend_streef && st.cfg.lopend_streef.datum ? '<span><i style="border-top:2px dashed var(--gold,#B8962E)"></i>doelpad</span>' : ''}<span class="mtg-in">▲ erbij</span><span class="mtg-uit">▼ eraf</span><span>⚑ mijlpaal</span></div>
   </div>
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Komende 14 dagen</b><button class="mtg-vraag" data-uitleg="lijst">?</button></div>${lijstHtml()}</div>
+  ${prognoseHtml()}
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Potjes en doelen</b><button class="mtg-vraag" data-uitleg="potjes">?</button></div>${potjesHtml()}</div>
   ${letOpHtml()}
   ${patronenHtml()}
@@ -305,6 +322,13 @@
 </div>`;
     grafiek();
     st.el.querySelector('.mtg').addEventListener('click', klik);
+    st.el.querySelector('.mtg').addEventListener('change', e => {        // termijndatum verschuiven = scenario, lijn rekent mee
+      const i = e.target.closest('.mtg-fd'); if (!i || !i.value) return;
+      const sc = st.scenario = st.scenario || {}, x = (st.data.prognose && st.data.prognose.posten || []).find(p => p.sleutel === i.dataset.sl), t = x && x.termijnen.find(q => q.id === i.dataset.tm);
+      (sc[i.dataset.sl] = sc[i.dataset.sl] || {})[i.dataset.tm] = i.value;
+      if (t && t.factuurdatum === i.value) { delete sc[i.dataset.sl][i.dataset.tm]; if (!Object.keys(sc[i.dataset.sl]).length) delete sc[i.dataset.sl]; }
+      teken();
+    });
     felicitatie();
   }
   // Mijlpaal gehaald (werkelijk saldo, niet de verwachting): eenmalig een korte felicitatie. Bij de eerste keer
@@ -328,7 +352,7 @@
   }
   // Lijst: vandaag t/m +14, inclusief achterstallig (staat op vandaag); zonder datum apart.
   function lijstHtml() {
-    const d = st.data, eind = dagPlus(d.vandaag, 14);
+    const d = st.dataS || st.data, eind = dagPlus(d.vandaag, 14);
     const ev = (d.events || []).filter(e => isGepland(e) && G.telt(e, { prognose: st.prognose }) && e.datum <= eind && !(e.intern && e.bron === 'btw-sparen'))
       .sort((a, b) => a.datum.localeCompare(b.datum) || Math.abs(b.delta) - Math.abs(a.delta));
     const zonder = (d.events || []).filter(e => e.bron !== 'bank' && !e.saldo_ijkpunt && !e.datum);
@@ -348,7 +372,7 @@
   }
   function rijHtml(e) {
     const inn = e.delta > 0, chip = e.achterstallig ? '<span class="mtg-chip achter">achterstallig</span>' : e.zekerheid === 'prognose' ? '<span class="mtg-chip prog">prognose</span>' : e.intern ? '<span class="mtg-chip">intern</span>' : `<span class="mtg-chip">${esc(ZEKER[e.zekerheid] || e.zekerheid || '')}</span>`;
-    return `<div class="mtg-rij" data-ev="${esc(e.id)}"><span class="p ${inn ? 'mtg-in' : 'mtg-uit'}">${inn ? '▲' : '▼'}</span><span class="n">${esc(e.tegenpartij || BRON[e.bron] || e.bron)}${e.termijn ? ` · termijn ${esc(e.termijn)}` : ''}</span>${chip}<span class="b ${inn ? 'mtg-in' : 'mtg-uit'}">${eur(e.delta != null ? e.delta : e.bedrag)}</span></div>`;
+    return `<div class="mtg-rij" data-ev="${esc(e.id)}"${e.scenario ? ' style="background:#eef3fb"' : ''}><span class="p ${inn ? 'mtg-in' : 'mtg-uit'}">${inn ? '▲' : '▼'}</span><span class="n">${esc(e.tegenpartij || BRON[e.bron] || e.bron)}${e.termijn ? ` · termijn ${esc(e.termijn)}` : ''}</span>${chip}<span class="b ${inn ? 'mtg-in' : 'mtg-uit'}">${eur(e.delta != null ? e.delta : e.bedrag)}</span></div>`;
   }
   // Potjes: lopende rekening + elk potje (ook virtueel), met doel, balk en tempo.
   function potjesHtml() {
@@ -358,7 +382,7 @@
     for (const p of (cfg.potten || [])) {
       const s = (d.saldo.potten || {})[p.id];
       const nu = p.virtueel ? virtueelSaldo(p, d.vandaag) : s ? s.gerapporteerd : null;
-      rijen.push(potRij(p.id, p.naam + (p.actief === false ? ' (gearchiveerd)' : ''), nu, p.streef, p.virtueel ? (p.weekinleg ? rond(p.weekinleg * 52 / 12) : null) : G.tempo(d, p.id), p));
+      rijen.push(potRij(p.id, p.naam + (p.actief === false ? ' (gearchiveerd)' : ''), nu, p.streef, p.virtueel ? (p.weekinleg ? rond(p.weekinleg * 52 / 12) : null) : G.tempo(d, p.id), p, !p.streef && p.doel === 'btw' ? G.btwDekking(d, p.id) : null));
     }
     return rijen.join('') + (st.mag ? '<div style="margin-top:10px"><button class="mtg-knop" data-pot="nieuw">+ potje of doel toevoegen</button></div>' : '');
   }
@@ -366,8 +390,11 @@
     const s = p.streef && p.streef.start; if (!s || s.bedrag == null) return null;
     return rond(s.bedrag + (p.weekinleg || 0) * Math.max(0, Math.floor(dagenTussen(s.datum, vandaag) / 7)));
   }
-  function potRij(id, naam, nu, streef, tempo, pot) {
+  function potRij(id, naam, nu, streef, tempo, pot, btw) {
     const v = G.voortgang(streef, nu, tempo, st.data.vandaag);
+    if (btw) return `<div class="mtg-pot" ${st.mag ? `data-pot="${esc(id)}" style="cursor:pointer"` : ''}><div class="r1"><b>${esc(naam)}</b><span style="font-weight:600">${nu == null ? 'saldo onbekend' : eur(nu)}</span>
+      <span class="mtg-chip">doel: BTW-aangifte ${esc(btw.kwartaal)} (≈${kort(btw.bedrag)})</span></div>
+      <div class="mtg-balk"><div style="width:${btw.pct}%"></div></div><div class="r3">${btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(btw.kwartaal)} (≈${eur(btw.bedrag)}) ✓ — verwacht ${eur(btw.pot)} op ${esc(datumTekst(btw.datum))}` : `tekort ${eur(btw.tekort)} vóór ${esc(datumTekst(btw.datum))} (aangifte ${esc(btw.kwartaal)} ≈${eur(btw.bedrag)})`}${pot && pot.weekinleg ? ' · inleg ' + eur(pot.weekinleg) + '/week' : ''} · automatisch doel; een eigen doel overschrijft het</div></div>`;
     const doelTekst = !streef ? (st.mag ? 'nog geen doel — tik om er een te geven' : 'geen doel') : streef.van != null && streef.tot != null ? `doel ${kort(streef.van)}–${kort(streef.tot)}` : `doel ${kort(streef.bedrag)}`;
     let r3 = '';
     if (v) {
@@ -409,19 +436,20 @@
       <dl class="mtg-dl"><dt>Kredietlimiet</dt><dd>${c.kredietlimiet == null ? 'niet ingesteld' : eur(c.kredietlimiet)}</dd>
       <dt>BTW-sparen</dt><dd>${b.spaarpercentage ? Math.round(b.spaarpercentage * 10000) / 100 + '% naar ' + esc(b.spaarpot || '?') : 'uit'}</dd>
       <dt>BTW-aangifte</dt><dd>van ${esc(b.aangifte_van || 'lopend (aangenomen)')}${b.terugboeking_van ? ', terug uit ' + esc(b.terugboeking_van) : ''}</dd>
-      <dt>Klantgroepen</dt><dd>${(c.klantgroepen || []).map(g => esc(g.naam) + (g.prefix ? ` (begint met "${esc(g.prefix)}")` : ` (${g.contact_ids.length} klanten)`)).join(', ') || 'geen'}</dd></dl>
-      <div class="mtg-knoppen"><button class="mtg-knop" data-inst="algemeen">Kredietlimiet en BTW…</button><button class="mtg-knop" data-inst="groepen">Klantgroepen…</button></div></details></div>`;
+      <dt>Klantgroepen</dt><dd>${(c.klantgroepen || []).map(g => esc(g.naam) + (g.prefix ? ` (begint met "${esc(g.prefix)}")` : ` (${g.contact_ids.length} klanten)`)).join(', ') || 'geen'}</dd>
+      <dt>Prognose</dt><dd>${c.prognose_schema ? `schema: klein onder ${eur(c.prognose_schema.grens_klein)}, groot vanaf ${eur(c.prognose_schema.grens_groot)}` : 'standaardschema nog niet ingesteld'}${c.buffer_lopend != null ? ` · buffer ${eur(c.buffer_lopend)}` : ''}</dd></dl>
+      <div class="mtg-knoppen"><button class="mtg-knop" data-inst="algemeen">Kredietlimiet en BTW…</button><button class="mtg-knop" data-inst="groepen">Klantgroepen…</button><button class="mtg-knop" data-inst="schema">Prognose-schema en buffer…</button></div></details></div>`;
   }
 
   // ── Grafiek (SVG) ────────────────────────────────────────────────────────────
   function grafiek() {
     const box = st.el.querySelector('#mtg-grafiek'); if (!box) return;
-    const d = st.data, lijn = st.lijn, n = ZOOM[st.zoom];
+    const d = st.dataS || st.data, lijn = st.lijn, n = ZOOM[st.zoom];
     if (lijn.onbekend) { box.innerHTML = '<div class="mtg-melding">Saldo onbekend — ijk eerst de rekening (Potjes → tik op de rekening → saldo ijken).</div>'; return; }
     const vanD = dagPlus(d.vandaag, Math.round(-n * 0.25) + st.offset), totD = dagPlus(vanD, n);
     const pts = lijn.punten.filter(p => p.datum >= vanD && p.datum <= totD);
     if (pts.length < 2) { box.innerHTML = '<div class="mtg-melding">Geen gegevens voor deze periode.</div>'; return; }
-    const W = Math.max(300, box.clientWidth || 600), H = box.clientWidth < 700 ? 200 : 240, pl = 46, pr = 8, pt = 10, pb = 22;
+    const W = Math.max(300, box.clientWidth || 600), H = box.clientWidth < 700 ? 220 : 260, pl = 46, pr = 8, pt = 10, pb = 44;   // onderin: datums + strook voor ▲▼
     const limiet = st.modus === 'lopend' && d.saldo.lopend.kredietlimiet != null ? -d.saldo.lopend.kredietlimiet : null;
     // de lijn zonder prognose als stippel-referentie wanneer prognose aan staat
     const zonder = st.prognose && (d.events || []).some(e => e.zekerheid === 'prognose') ? G.lijn(d, { modus: st.modus, prognose: false }).punten.filter(p => p.datum >= vanD && p.datum <= totD) : null;
@@ -429,25 +457,34 @@
     let lo = Math.min(...waarden), hi = Math.max(...waarden); if (hi - lo < 100) { hi += 50; lo -= 50; }
     const marge = (hi - lo) * 0.08; lo -= marge; hi += marge;
     const x = dd => pl + dagenTussen(vanD, dd) / n * (W - pl - pr), y = v => pt + (hi - v) / (hi - lo) * (H - pt - pb);
-    const pad = l => l.map((p, i) => `${i ? 'L' : 'M'}${x(p.datum).toFixed(1)},${y(p.saldo).toFixed(1)}`).join('');
+    // Traplijn: het saldo verandert óp de dag van de beweging (geen schuine lijnen tussen dagen).
+    const pad = l => l.map((p, i) => i ? `H${x(p.datum).toFixed(1)}V${y(p.saldo).toFixed(1)}` : `M${x(p.datum).toFixed(1)},${y(p.saldo).toFixed(1)}`).join('');
+    // Met prognose: alleen tekenen waar het afwijkt van de gewone verwachting (losse stukken).
+    const afwijk = (met, zon) => { const z = new Map(zon.map(p => [p.datum, p.saldo])); let h = '', vorig = null;
+      met.forEach((p, i) => { const anders = Math.abs(p.saldo - (z.has(p.datum) ? z.get(p.datum) : p.saldo)) > 0.5;
+        if (anders) h += vorig ? `H${x(p.datum).toFixed(1)}V${y(p.saldo).toFixed(1)}` : `M${x(p.datum).toFixed(1)},${y(z.get(p.datum)).toFixed(1)}V${y(p.saldo).toFixed(1)}`;
+        else if (vorig) h += `H${x(p.datum).toFixed(1)}V${y(p.saldo).toFixed(1)}`;
+        vorig = anders ? p : null; }); return h; };
     const ver = pts.filter(p => p.datum <= d.vandaag), toek = pts.filter(p => p.datum >= d.vandaag);
     const ticks = [], stap = niceStap((hi - lo) / 4); for (let t = Math.ceil(lo / stap) * stap; t <= hi; t += stap) ticks.push(t);
     const maandStreep = []; for (let dd = vanD; dd <= totD; dd = dagPlus(dd, 1)) if (dd.endsWith('-01') || (n <= 31 && new Date(dd + 'T00:00:00Z').getUTCDay() === 1)) maandStreep.push(dd);
     // ▲▼: grootste bewegingen per dag (gepland én verleden)
     const perDag = {};
     for (const e of d.events || []) { if (!e.datum || e.datum < vanD || e.datum > totD || e.saldo_ijkpunt || !G.telt(e, { prognose: st.prognose })) continue; const ef = effect(e, st.modus); if (!ef) continue; const dd = e.bron !== 'bank' && e.datum < d.vandaag ? d.vandaag : e.datum; perDag[dd] = perDag[dd] || { in: 0, uit: 0 }; if (ef > 0) perDag[dd].in += ef; else perDag[dd].uit += ef; }
-    const drempel = (hi - lo) * 0.04;
-    const pijlen = Object.entries(perDag).flatMap(([dd, s]) => [s.in > drempel ? `<text x="${x(dd)}" y="${H - pb - 2}" text-anchor="middle" font-size="10" fill="var(--mtg-in)">▲</text>` : '', s.uit < -drempel ? `<text x="${x(dd)}" y="${pt + 9}" text-anchor="middle" font-size="10" fill="var(--mtg-uit)">▼</text>` : '']).join('');
+    // ▲▼ op een eigen strook onder de datums, grootte naar het bedrag (kleine posten weg: < 4% van het bereik).
+    const drempel = (hi - lo) * 0.04, groot = Math.max(1, ...Object.values(perDag).map(s => Math.max(s.in, -s.uit)));
+    const maat = b => (9 + 9 * Math.sqrt(Math.min(1, Math.abs(b) / groot))).toFixed(1);
+    const pijlen = Object.entries(perDag).flatMap(([dd, s]) => [s.in > drempel ? `<text x="${x(dd)}" y="${H - 18}" text-anchor="middle" font-size="${maat(s.in)}" fill="var(--mtg-in)">▲</text>` : '', s.uit < -drempel ? `<text x="${x(dd)}" y="${H - 3}" text-anchor="middle" font-size="${maat(s.uit)}" fill="var(--mtg-uit)">▼</text>` : '']).join('');
     const vlaggen = mijlpaalVlaggen(vanD, totD, x, y);
     box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Verloop saldo">
       ${ticks.map(t => `<line x1="${pl}" x2="${W - pr}" y1="${y(t)}" y2="${y(t)}" stroke="#e8e6de" stroke-width="1"/><text x="${pl - 4}" y="${y(t) + 3}" text-anchor="end" font-size="10" fill="#8a8a80">${kort(t)}</text>`).join('')}
-      ${maandStreep.map(dd => `<line x1="${x(dd)}" x2="${x(dd)}" y1="${pt}" y2="${H - pb}" stroke="#f0eee6"/><text x="${x(dd) + 2}" y="${H - 6}" font-size="10" fill="#8a8a80">${datumTekst(dd)}</text>`).join('')}
+      ${maandStreep.map(dd => `<line x1="${x(dd)}" x2="${x(dd)}" y1="${pt}" y2="${H - pb}" stroke="#f0eee6"/><text x="${x(dd) + 2}" y="${H - pb + 12}" font-size="10" fill="#8a8a80">${datumTekst(dd)}</text>`).join('')}
       ${lo < 0 && hi > 0 ? `<line x1="${pl}" x2="${W - pr}" y1="${y(0)}" y2="${y(0)}" stroke="#bbb" stroke-width="1"/>` : ''}
       ${limiet != null && limiet >= lo ? `<line x1="${pl}" x2="${W - pr}" y1="${y(limiet)}" y2="${y(limiet)}" stroke="var(--mtg-uit)" stroke-width="1.5"/><text x="${W - pr - 2}" y="${y(limiet) - 3}" text-anchor="end" font-size="10" fill="var(--mtg-uit)">kredietlimiet</text>` : ''}
       ${d.vandaag >= vanD && d.vandaag <= totD ? `<line x1="${x(d.vandaag)}" x2="${x(d.vandaag)}" y1="${pt}" y2="${H - pb}" stroke="var(--gold,#B8962E)" stroke-dasharray="3 3"/>` : ''}
-      ${zonder ? `<path d="${pad(zonder.filter(p => p.datum >= d.vandaag))}" fill="none" stroke="#9aa7b8" stroke-width="1.5" stroke-dasharray="2 3"/>` : ''}
       ${ver.length > 1 ? `<path d="${pad(ver)}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2"/>` : ''}
-      ${toek.length > 1 ? `<path d="${pad(toek)}" fill="none" stroke="${zonder ? '#3a5a8a' : 'var(--mtg-lijn)'}" stroke-width="2" stroke-dasharray="${zonder ? '1 3' : '6 4'}"/>` : ''}
+      ${(zonder || toek).filter(p => p.datum >= d.vandaag).length > 1 ? `<path d="${pad((zonder || toek).filter(p => p.datum >= d.vandaag))}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2" stroke-dasharray="6 4"/>` : ''}
+      ${zonder && toek.length > 1 ? `<path d="${afwijk(toek, zonder.filter(p => p.datum >= d.vandaag))}" fill="none" stroke="#3a5a8a" stroke-width="2" stroke-dasharray="1 3"/>` : ''}
       ${pijlen}${vlaggen}
       <rect x="${pl}" y="0" width="${W - pl - pr}" height="${H}" fill="transparent" class="mtg-vang"/></svg><div class="mtg-tip" style="display:none"></div>`;
     st.geo = { vanD, n, W, pl, pr };
@@ -508,15 +545,217 @@
   }
   function zoomStap(r) { const z = Object.keys(ZOOM), i = Math.max(0, Math.min(z.length - 1, z.indexOf(st.zoom) + r)); if (z[i] !== st.zoom) { st.zoom = z[i]; ls.set('mtg:zoom:' + st.wie, st.zoom); begrens(); grafiek(); } }
   function dagInfo(dd) {
-    const ev = (st.data.events || []).filter(e => (e.datum === dd || (dd === st.data.vandaag && isGepland(e) && e.datum < dd)) && !e.saldo_ijkpunt && G.telt(e, { prognose: st.prognose }));
+    const ev = ((st.dataS || st.data).events || []).filter(e => (e.datum === dd || (dd === st.data.vandaag && isGepland(e) && e.datum < dd)) && !e.saldo_ijkpunt && G.telt(e, { prognose: st.prognose }));
     const p = st.lijn.punten.find(q => q.datum === dd);
     blad(`<h3>${esc(datumTekst(dd, true))}</h3><div class="mtg-melding">Saldo ${dd < st.data.vandaag ? 'aan het eind van de dag' : 'verwacht'}: <b>${eur(p ? (p.saldo_gepland != null ? p.saldo_gepland : p.saldo) : null)}</b></div>
       ${ev.length ? ev.map(rijHtml).join('') : '<div class="mtg-melding">Geen bewegingen op deze dag.</div>'}`);
   }
 
+
+  // ── G5: prognose, factuurmoment-hulp ─────────────────────────────────────────
+  // Scenario: termijndatums lokaal verschuiven (lijn rekent mee) tot je opslaat. st.scenario[sleutel][termijn] = nieuwe factuurdatum.
+  // Een verschoven termijn verschuift zijn verwachte ontvangst en het BTW-sparen dat erbij hoort evenveel.
+  G.metScenario = function (data, scenario) {
+    if (!scenario || !Object.keys(scenario).length) return data;
+    const schuif = {};
+    const events = (data.events || []).map(e => {
+      const nieuw = e.prognose && e.termijn_id && scenario[e.prognose] && scenario[e.prognose][e.termijn_id];
+      if (!nieuw || !e.factuurdatum) return e;
+      let fd = nieuw < data.vandaag ? data.vandaag : nieuw, d = dagPlus(fd, e.ontvangst_na || 0); if (d < data.vandaag) d = data.vandaag;
+      schuif[e.id] = d;
+      return Object.assign({}, e, { factuurdatum: fd, datum: d, scenario: true });
+    }).map(e => e.van_event && schuif[e.van_event] ? Object.assign({}, e, { datum: schuif[e.van_event], scenario: true }) : e);
+    return Object.assign({}, data, { events });
+  };
+  // Drempel voor het signaal: de buffer (zelf ingesteld) of anders de kredietlimiet.
+  G.drempel = (data, cfg) => (cfg && cfg.buffer_lopend != null) ? cfg.buffer_lopend : (data.saldo.lopend.kredietlimiet != null ? -data.saldo.lopend.kredietlimiet : null);
+  // Factuurmoment-hulp: welke prognosetermijn eerder factureren tilt het laagste punt het meest op? Alleen een voorstel.
+  G.factuurAdvies = function (data, cfg, scenario, tot) {
+    const drempel = G.drempel(data, cfg); if (drempel == null) return null;
+    const basis = G.metScenario(data, scenario), lijn0 = G.lijn(basis, { modus: 'lopend', prognose: true }), low0 = G.laagste(lijn0, tot);
+    if (!low0 || low0.saldo >= drempel) return { ok: true, low: low0, drempel };
+    const kand = (basis.events || []).filter(e => e.bron === 'prognose' && e.termijn_id && e.factuurdatum && e.datum > low0.datum);
+    let best = null;
+    for (const e of kand) {
+      const doelFd = dagPlus(low0.datum, -(e.ontvangst_na || 0) - 1), fd = doelFd < data.vandaag ? data.vandaag : doelFd;
+      if (fd >= e.factuurdatum) continue;
+      const sc = JSON.parse(JSON.stringify(scenario || {})); (sc[e.prognose] = sc[e.prognose] || {})[e.termijn_id] = fd;
+      const low = G.laagste(G.lijn(G.metScenario(data, sc), { modus: 'lopend', prognose: true }), tot);
+      if (low && (!best || low.saldo > best.low.saldo)) best = { event: e, van: e.factuurdatum, naar: fd, low, winst: rond(low.saldo - low0.saldo), scenario: sc };
+    }
+    if (best && cfg && cfg.lopend_streef && cfg.lopend_streef.datum) {
+      const s = cfg.lopend_streef, doel = s.bedrag != null ? s.bedrag : s.van, p = G.lijn(G.metScenario(data, best.scenario), { modus: 'lopend', prognose: true }).punten.find(q => q.datum === s.datum);
+      if (p && doel != null && p.saldo >= doel) best.doelpad = true;
+    }
+    return { ok: false, low: low0, drempel, voorstel: best && best.winst > 0 ? best : null };
+  };
+  // Termijnen uit het standaardschema (instellingen): grootte → percentages; datum = de start- of opleverdatum als die
+  // bekend is (anker), anders akkoord + het aantal dagen (zoals afgesproken: +7/+50/+100 bij onbekende planning).
+  G.schemaTermijnen = function (schema, totaal, datums) {
+    if (!schema || !(totaal > 0)) return [];
+    const klasse = schema.grens_klein != null && totaal < schema.grens_klein ? 'klein' : schema.grens_groot != null && totaal < schema.grens_groot ? 'middel' : 'groot';
+    const rijen = schema[klasse] || []; if (!rijen.length) return [];
+    let rest = rond(totaal);
+    return rijen.map((r, i) => {
+      const b = i === rijen.length - 1 ? rest : rond(totaal * r.pct / 100); rest = rond(rest - b);
+      const anker = r.anker === 'start' && datums.start ? datums.start : r.anker === 'oplevering' && datums.oplevering ? datums.oplevering : null;
+      return { id: 't' + (i + 1), label: r.label || 'termijn ' + (i + 1), bedrag: b, factuurdatum: anker || dagPlus(datums.akkoord, r.dagen), aan: true, pct: r.pct };
+    });
+  };
+  // Voorstel voor het standaardschema (uit de analyse van de facturen van de afgelopen jaren); de eigenaar slaat het zelf op.
+  G.SCHEMA_VOORSTEL = { grens_klein: 10000, grens_groot: 50000, betaaltermijn: 14,
+    klein: [{ pct: 100, dagen: 14, label: 'factuur', anker: 'akkoord' }],
+    middel: [{ pct: 50, dagen: 7, label: 'aanbetaling', anker: 'akkoord' }, { pct: 50, dagen: 60, label: 'oplevering', anker: 'oplevering' }],
+    groot: [{ pct: 50, dagen: 7, label: 'bevestiging opdracht', anker: 'akkoord' }, { pct: 40, dagen: 50, label: 'voor oplevering', anker: 'start' }, { pct: 10, dagen: 100, label: 'oplevering', anker: 'oplevering' }] };
+  UITLEG.prognose = 'Projecten die zeker doorgaan maar nog geen factuur hebben. Vink een project aan; het bedrag (incl. btw) wordt volgens het standaardschema in termijnen verdeeld, elk met een factuurdatum. Voorbeeld: een project van € 30.000 geeft 50% aanbetaling een week na akkoord en 50% bij oplevering; de tool rekent er de betaaltermijn en het gewone betaalgedrag van de klant bij. In de lijn is dat de stippellijn, en alleen als "prognose" aan staat. Komt de echte factuur in Moneybird (zelfde offerte, of het offertenummer in de referentie), dan vervangt die de termijn vanzelf; twijfelt de tool, dan vraagt hij het hier. Schuif een factuurdatum om te zien wat eerder factureren doet — pas bij "Opslaan" wordt het bewaard. Er gaat nooit iets naar Moneybird.';
+  UITLEG.advies = 'Zakt het laagste punt onder je buffer (of de kredietlimiet), dan zoekt de tool welke prognosetermijn je eerder kunt factureren om daarboven te blijven. Het is alleen een voorstel: je beslist zelf, en er gaat niets naar Moneybird.';
+
+  function prognoseHtml() {
+    const p = st.data.prognose || { posten: [] }, sc = st.scenario || {}, heeft = Object.keys(sc).length;
+    const advies = st.prognose ? G.factuurAdvies(st.data, st.cfg, sc, dagPlus(st.data.vandaag, 180)) : null;   // alleen met prognose aan
+    let h = `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Prognose</b>
+      <button class="mtg-knop klein ${st.prognose ? 'aan' : ''}" data-prognose="1">${st.prognose ? 'meegenomen' : 'niet meegenomen'}</button><button class="mtg-vraag" data-uitleg="prognose">?</button></div>`;
+    if (heeft) h += `<div class="mtg-uitleg">Scenario (nog niet opgeslagen): ${Object.values(sc).reduce((a, x) => a + Object.keys(x).length, 0)} termijn(en) verschoven. ${st.mag ? '<button class="mtg-knop klein aan" data-sc="opslaan">Opslaan</button> ' : ''}<button class="mtg-knop klein" data-sc="terug">Terug</button></div>`;
+    if (advies && !advies.ok) h += `<div class="mtg-uitleg" style="background:#fbe3dd;border-color:#f0b8aa"><b>Krap:</b> laagste punt ${eur(advies.low.saldo)} op ${esc(datumTekst(advies.low.datum))}, onder ${st.cfg && st.cfg.buffer_lopend != null ? 'je buffer' : 'de kredietlimiet'} (${eur(advies.drempel)}). <button class="mtg-vraag" data-uitleg="advies">?</button><br>`
+      + (advies.voorstel ? `Factureer <b>${esc(advies.voorstel.event.tegenpartij)}</b> op ${esc(datumTekst(advies.voorstel.naar))} i.p.v. ${esc(datumTekst(advies.voorstel.van))} → laagste punt ${advies.voorstel.winst > 0 ? '+' : ''}${eur(advies.voorstel.winst)}${advies.voorstel.low.saldo >= advies.drempel ? ' (weer erboven)' : ''}${advies.voorstel.doelpad ? ' → doelpad gehaald' : ''}. <button class="mtg-knop klein" data-advies="1">Probeer</button>` : 'Geen prognosetermijn die eerder gefactureerd kan worden om dit op te lossen.') + '</div>';
+    const posten = p.posten || [];
+    if (!posten.length) h += `<div class="mtg-melding">Nog geen prognose. ${st.mag ? 'Vink in een project "gaat zeker door" aan, of voeg hier een project of post toe.' : ''}</div>`;
+    for (const x of posten) {
+      if (x.soort === 'post') { const e = (st.data.events || []).find(q => q.prognose === x.sleutel); h += `<div class="mtg-rij" ${st.mag ? `data-prog="${esc(x.sleutel)}"` : ''}><span class="p ${e && e.delta > 0 ? 'mtg-in' : 'mtg-uit'}">${e && e.delta > 0 ? '▲' : '▼'}</span><span class="n">${esc(x.omschrijving)} <span class="mtg-chip">handmatig</span>${x.aan ? '' : ' <span class="mtg-chip">uit</span>'}</span><span class="b">${e ? esc(datumTekst(e.datum)) + ' ' + eur(e.delta) : ''}</span></div>`; continue; }
+      h += `<div class="mtg-pot" ${st.mag ? `data-prog="${esc(x.sleutel)}" style="cursor:pointer"` : ''}><div class="r1"><b>${esc(x.naam || x.code)}</b>${x.aan ? '' : '<span class="mtg-chip">uit</span>'}<span>${eur(x.totaal)}</span><span class="mtg-chip">${x.gefactureerd > 0 ? 'gefactureerd ' + kort(x.gefactureerd) : 'nog niets gefactureerd'}</span></div>
+        <div class="r3">${(x.termijnen || []).map(t => {
+          const nieuw = sc[x.sleutel] && sc[x.sleutel][t.id], ev = (st.data.events || []).find(q => q.prognose === x.sleutel && q.termijn_id === t.id);
+          return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:3px 0">${esc(t.label)}: ${eur(t.bedrag)}${t.gefactureerd > 0 ? ` (${t.open > 0 ? 'deels ' : ''}gefactureerd ${kort(t.gefactureerd)})` : ''}${t.open > 0 && t.aan && x.aan ? ` · factuur <input type="date" class="mtg-fd" data-sl="${esc(x.sleutel)}" data-tm="${esc(t.id)}" value="${esc(nieuw || t.factuurdatum)}" style="font-size:12px;padding:2px 4px;border:1px solid var(--border,#ccc);border-radius:4px">${ev ? ` → binnen rond ${esc(datumTekst(ev.datum))}` : ''}${nieuw ? ' <span class="mtg-chip prog">scenario</span>' : ''}` : t.aan ? '' : ' · uit'}</div>`;
+        }).join('')}</div>
+        ${(x.vragen || []).slice(0, 3).map(f => `<div class="mtg-uitleg">Hoort factuur ${esc(f.nummer || f.id)} (${eur(f.bedrag)}, ${esc(datumTekst(f.datum))}${f.ref ? ', "' + esc(f.ref) + '"' : ''}) bij dit project?${f.meerdere ? ' <b>Hij past bij meer dan één project.</b>' : ''} ${st.mag ? `<button class="mtg-knop klein aan" data-vraag="ja" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Ja</button> <button class="mtg-knop klein" data-vraag="nee" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Nee</button>` : ''}</div>`).join('')}</div>`;
+    }
+    if (st.mag) h += `<div class="mtg-knoppen" style="margin-top:8px"><button class="mtg-knop" data-prog="nieuw-project">+ project</button><button class="mtg-knop" data-prog="nieuw-post">+ handmatige post</button></div>`;
+    return h + '</div>';
+  }
+  G._prognoseHtml = prognoseHtml;
+  async function prognoseItems() { const r = await st.bron.haal('/geld/prognose'); return (r && r.items) || {}; }
+  async function prognoseBewaar(sleutel, item, ok) {
+    return opslaan(async () => { const huidig = (await prognoseItems())[sleutel]; return stuur('/geld/prognose', { sleutel, item, vorige_ts: huidig ? huidig.ts : null }); }, ok || 'Prognose opgeslagen');
+  }
+  async function scenarioOpslaan() {
+    const sc = st.scenario || {}; const items = await prognoseItems();
+    try {
+      for (const [sl, tm] of Object.entries(sc)) {
+        const it = items[sl]; if (!it) continue;
+        const n = Object.assign({}, it, { termijnen: it.termijnen.map(t => tm[t.id] ? Object.assign({}, t, { factuurdatum: tm[t.id] }) : t) });
+        delete n.ts; delete n.door;
+        await stuur('/geld/prognose', { sleutel: sl, item: n, vorige_ts: it.ts });
+      }
+      st.scenario = {}; toast('Factuurdatums opgeslagen'); await G.laad(true);
+    } catch (e) { toast('Niet opgeslagen: ' + e.message); await G.laad(true); }
+  }
+  async function vraagAntwoord(sl, fid, ja) {
+    const items = await prognoseItems(), it = items[sl]; if (!it) return;
+    const n = Object.assign({}, it, ja ? { k: [...new Set((it.k || []).concat(fid))] } : { x: [...new Set((it.x || []).concat(fid))] });
+    delete n.ts; delete n.door;
+    return opslaan(() => stuur('/geld/prognose', { sleutel: sl, item: n, vorige_ts: it.ts }), ja ? 'Factuur gekoppeld — de termijn is vervangen' : 'Genoteerd: hoort er niet bij');
+  }
+  // Editor: project (vinkje "gaat zeker door", totaal, termijnen) of handmatige post.
+  G.prognoseBewerk = async function (sleutel, project) {
+    if (!st.data) return;
+    const items = await prognoseItems(), oud = items[sleutel] || null;
+    if (sleutel && sleutel.startsWith('h:') || sleutel === 'nieuw-post') return postBlad(sleutel === 'nieuw-post' ? null : sleutel, oud);
+    let pr = project || null;
+    if (!pr && sleutel === 'nieuw-project') {
+      const lijst = st.projecten ? st.projecten() : [];
+      const o = blad(`<h3>Project als prognose</h3><label class="mtg-veld"><span>Project</span><select name="pr"><option value="">— kies —</option>${lijst.map((x, i) => `<option value="${i}">${esc(x.label)}</option>`).join('')}</select></label><button class="mtg-knop aan" data-ok="1">Verder</button>`);
+      o.querySelector('[data-ok]').addEventListener('click', () => { const i = o.querySelector('[name="pr"]').value; if (i === '') return; o.remove(); const x = lijst[Number(i)]; G.prognoseBewerk('p:' + x.project_id, x); });
+      return;
+    }
+    if (!pr && st.projecten) pr = st.projecten().find(x => 'p:' + x.project_id === sleutel) || null;
+    projectBlad(sleutel, oud, pr);
+  };
+  async function projectBlad(sleutel, oud, pr) {
+    const schema = (st.cfg || {}).prognose_schema;
+    const akkoord = st.data.vandaag, datums = { akkoord, start: pr && pr.start || null, oplevering: pr && pr.oplevering || null };
+    let totaal = oud ? oud.totaal : null, voorstel = null;
+    if (!oud && pr && st.offerteBedrag) { try { voorstel = await st.offerteBedrag(pr); } catch (e) { } }
+    let termijnen = oud ? oud.termijnen.map(t => Object.assign({}, t)) : [];
+    const o = blad(`<h3>Prognose: ${esc(pr ? pr.label : (oud && oud.naam) || '')}</h3>
+      <label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="aan" style="width:auto" ${!oud || oud.aan ? 'checked' : ''}> <span style="margin:0"><b>Gaat zeker door</b> — meenemen in de prognose</span></label>
+      <label class="mtg-veld"><span>Totaal incl. btw (€)${voorstel ? ` — offerte: <a href="#" data-voorstel="1">${eur(voorstel, true)} overnemen</a>` : ''}</span><input type="number" step="0.01" name="totaal" value="${totaal != null ? totaal : ''}"></label>
+      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Akkoord</span><input type="date" name="akkoord" value="${esc(akkoord)}"></label><label class="mtg-veld" style="flex:1"><span>Betaaltermijn (dagen)</span><input type="number" name="bt" value="${oud ? oud.betaaltermijn : (schema && schema.betaaltermijn != null ? schema.betaaltermijn : 14)}"></label></div>
+      <div class="mtg-melding">${datums.start || datums.oplevering ? `Planning: start ${esc(datumTekst(datums.start))}, oplevering ${esc(datumTekst(datums.oplevering))}.` : 'Geen planning bekend: datums volgens het schema vanaf akkoord.'}${schema ? '' : ' <b>Standaardschema nog niet ingesteld</b> (Instellingen) — vul de termijnen zelf in.'}</div>
+      <button class="mtg-knop klein" data-schema="1">Termijnen volgens het standaardschema</button>
+      <div class="tms" style="margin-top:8px"></div><button class="mtg-knop klein" data-tm-bij="1">+ termijn</button>
+      <div class="mtg-melding som"></div>
+      <div style="margin-top:10px"><button class="mtg-knop aan" data-ok="1">Opslaan</button>${oud ? ' <button class="mtg-knop" data-wis="1">Prognose verwijderen</button>' : ''}</div>`);
+    const tms = o.querySelector('.tms'), somEl = o.querySelector('.som');
+    const tekenTm = () => {
+      tms.innerHTML = termijnen.map((t, i) => `<div style="display:flex;gap:4px;align-items:center;margin:4px 0;flex-wrap:wrap" data-i="${i}">
+        <input name="l" value="${esc(t.label)}" maxlength="24" style="flex:2;min-width:90px;padding:6px;border:1px solid #ccc;border-radius:5px">
+        <input name="b" type="number" step="0.01" value="${t.bedrag}" style="flex:1;min-width:80px;padding:6px;border:1px solid #ccc;border-radius:5px">
+        <input name="d" type="date" value="${esc(t.factuurdatum)}" style="flex:1;min-width:120px;padding:6px;border:1px solid #ccc;border-radius:5px">
+        <label style="font-size:12px"><input name="a" type="checkbox" ${t.aan !== false ? 'checked' : ''}> aan</label><button class="mtg-knop klein" data-tm-weg="${i}">×</button></div>`).join('');
+      const som = rond(termijnen.reduce((a, t) => a + (Number(t.bedrag) || 0), 0)), tt = Number(o.querySelector('[name="totaal"]').value) || 0;
+      somEl.textContent = termijnen.length ? `Termijnen samen ${eur(som, true)}${Math.abs(som - tt) > 0.01 ? ` — moet ${eur(tt, true)} zijn` : ' ✓'}` : '';
+    };
+    const lees = () => { tms.querySelectorAll('[data-i]').forEach(r => { const t = termijnen[Number(r.dataset.i)]; t.label = r.querySelector('[name="l"]').value; t.bedrag = Number(r.querySelector('[name="b"]').value); t.factuurdatum = r.querySelector('[name="d"]').value; t.aan = r.querySelector('[name="a"]').checked; }); };
+    tekenTm();
+    o.addEventListener('input', () => { lees(); const som = rond(termijnen.reduce((a, t) => a + (Number(t.bedrag) || 0), 0)), tt = Number(o.querySelector('[name="totaal"]').value) || 0; somEl.textContent = termijnen.length ? `Termijnen samen ${eur(som, true)}${Math.abs(som - tt) > 0.01 ? ` — moet ${eur(tt, true)} zijn` : ' ✓'}` : ''; });
+    o.addEventListener('click', ev => {
+      const k = ev.target.closest('[data-voorstel],[data-schema],[data-tm-bij],[data-tm-weg],[data-ok],[data-wis]'); if (!k) return;
+      ev.preventDefault();
+      if (k.dataset.voorstel) { o.querySelector('[name="totaal"]').value = voorstel; lees(); tekenTm(); }
+      else if (k.dataset.schema) { const tt = Number(o.querySelector('[name="totaal"]').value); termijnen = G.schemaTermijnen(schema || G.SCHEMA_VOORSTEL, tt, Object.assign({}, datums, { akkoord: o.querySelector('[name="akkoord"]').value || akkoord })); if (!schema) toast('Schema nog niet ingesteld — het voorstel uit de analyse gebruikt'); tekenTm(); }
+      else if (k.dataset.tmBij !== undefined && k.dataset.tmBij) { lees(); termijnen.push({ id: 't' + (Math.max(0, ...termijnen.map(t => Number(String(t.id).slice(1)) || 0)) + 1), label: 'termijn', bedrag: 0, factuurdatum: st.data.vandaag, aan: true }); tekenTm(); }
+      else if (k.dataset.tmWeg !== undefined && k.dataset.tmWeg !== '') { lees(); termijnen.splice(Number(k.dataset.tmWeg), 1); tekenTm(); }
+      else if (k.dataset.wis) { if (!confirm('Prognose voor dit project verwijderen? (de historie blijft bewaard)')) return; o.remove(); prognoseBewaar(sleutel, null, 'Prognose verwijderd'); }
+      else if (k.dataset.ok) {
+        lees();
+        const item = { naam: pr ? pr.label : oud && oud.naam, code: pr ? pr.code : oud && oud.code, contact_id: pr ? pr.mb_contact_id : oud && oud.contact_id, estimate_id: pr ? pr.offerte_mb_id : oud && oud.estimate_id,
+          offertenr: pr ? pr.offertenr : oud && oud.offertenr, totaal: Number(o.querySelector('[name="totaal"]').value), betaaltermijn: Number(o.querySelector('[name="bt"]').value) || 0,
+          aan: o.querySelector('[name="aan"]').checked, termijnen: termijnen.map(t => ({ id: t.id, label: t.label, bedrag: Number(t.bedrag), factuurdatum: t.factuurdatum, aan: t.aan !== false })), k: oud ? oud.k : [], x: oud ? oud.x : [] };
+        if (!(item.totaal > 0)) return toast('Vul het totaal in');
+        if (!item.termijnen.length) return toast('Voeg termijnen toe (of gebruik het schema)');
+        if (Math.abs(item.termijnen.reduce((a, t) => a + t.bedrag, 0) - item.totaal) > 0.01) return toast('De termijnen tellen niet op tot het totaal');
+        o.remove(); prognoseBewaar(sleutel, item);
+      }
+    });
+  }
+  function postBlad(sleutel, oud) {
+    const o = blad(`<h3>${oud ? 'Handmatige post' : 'Nieuwe handmatige post'}</h3><div class="mtg-melding">Bijvoorbeeld een machine, subsidie of andere verwachte post zonder factuur. Telt mee als prognose.</div>
+      <label class="mtg-veld"><span>Omschrijving</span><input name="om" maxlength="60" value="${esc(oud ? oud.omschrijving : '')}"></label>
+      <label class="mtg-veld"><span>Richting</span><select name="ri"><option value="uit" ${oud && oud.richting === 'in' ? '' : 'selected'}>uitgave</option><option value="in" ${oud && oud.richting === 'in' ? 'selected' : ''}>inkomst</option></select></label>
+      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Bedrag (€)</span><input type="number" step="0.01" name="b" value="${oud ? oud.bedrag : ''}"></label><label class="mtg-veld" style="flex:1"><span>Datum</span><input type="date" name="d" value="${esc(oud ? oud.datum : st.data.vandaag)}"></label></div>
+      <label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="aan" style="width:auto" ${!oud || oud.aan ? 'checked' : ''}> <span style="margin:0">Meenemen</span></label>
+      <button class="mtg-knop aan" data-ok="1">Opslaan</button>${oud ? ' <button class="mtg-knop" data-wis="1">Verwijderen</button>' : ''}`);
+    o.addEventListener('click', ev => {
+      const k = ev.target.closest('[data-ok],[data-wis]'); if (!k) return;
+      const sl = sleutel || 'h:' + Math.random().toString(36).slice(2, 10).replace(/[^a-z0-9]/g, 'x').padEnd(8, 'x');
+      if (k.dataset.wis) { o.remove(); return prognoseBewaar(sl, null, 'Post verwijderd'); }
+      const f = n => o.querySelector(`[name="${n}"]`);
+      const item = { omschrijving: f('om').value, richting: f('ri').value, bedrag: Number(f('b').value), datum: f('d').value, aan: f('aan').checked };
+      if (!(item.bedrag > 0)) return toast('Vul een bedrag in');
+      o.remove(); prognoseBewaar(sl, item);
+    });
+  }
+  function schemaBlad() {
+    const c = st.cfg || {}, s = c.prognose_schema || null, v = s || G.SCHEMA_VOORSTEL;
+    const rijen = k => (v[k] || []).map(r => `${r.pct}% ${r.label} (${r.anker === 'akkoord' ? 'akkoord + ' + r.dagen + ' d' : r.anker + ', anders akkoord + ' + r.dagen + ' d'})`).join(' · ');
+    const o = blad(`<h3>Standaardschema prognose</h3>${s ? '' : '<div class="mtg-uitleg">Nog niet ingesteld. Hieronder het voorstel uit de analyse van de facturen van de afgelopen jaren; pas aan en sla op.</div>'}
+      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Klein onder (€)</span><input type="number" name="gk" value="${v.grens_klein != null ? v.grens_klein : ''}"></label><label class="mtg-veld" style="flex:1"><span>Groot vanaf (€)</span><input type="number" name="gg" value="${v.grens_groot != null ? v.grens_groot : ''}"></label><label class="mtg-veld" style="flex:1"><span>Betaaltermijn</span><input type="number" name="bt" value="${v.betaaltermijn != null ? v.betaaltermijn : 14}"></label></div>
+      ${['klein', 'middel', 'groot'].map(k => `<label class="mtg-veld"><span>${k} — per regel: % ; omschrijving ; anker (akkoord/start/oplevering) ; dagen na akkoord</span><textarea name="${k}" rows="3" style="width:100%;font-size:13px;padding:6px;border:1px solid #ccc;border-radius:6px">${esc((v[k] || []).map(r => `${r.pct};${r.label};${r.anker};${r.dagen}`).join('\n'))}</textarea><span>${esc(rijen(k))}</span></label>`).join('')}
+      <label class="mtg-veld"><span>Buffer lopende rekening (€) — signaal bij een laagste punt hieronder (leeg = kredietlimiet)</span><input type="number" name="buf" value="${c.buffer_lopend != null ? c.buffer_lopend : ''}"></label>
+      <button class="mtg-knop aan" data-ok="1">Opslaan</button>`);
+    o.querySelector('[data-ok]').addEventListener('click', () => {
+      const f = n => o.querySelector(`[name="${n}"]`).value;
+      const lijst = k => f(k).split('\n').map(l => l.split(';').map(x => x.trim())).filter(x => x[0]).map(x => ({ pct: Number(x[0].replace(',', '.')), label: x[1] || '', anker: x[2] || 'akkoord', dagen: Number(x[3] || 0) }));
+      const schema = { grens_klein: f('gk') === '' ? null : Number(f('gk')), grens_groot: f('gg') === '' ? null : Number(f('gg')), betaaltermijn: Number(f('bt')) || 14, klein: lijst('klein'), middel: lijst('middel'), groot: lijst('groot') };
+      for (const k of ['klein', 'middel', 'groot']) if (schema[k].length && Math.abs(schema[k].reduce((a, r) => a + r.pct, 0) - 100) > 0.01) return toast(`${k}: de percentages moeten samen 100 zijn`);
+      o.remove(); opslaan(() => stuur('/geld/config', { revisie: c.revisie, prognose_schema: schema, buffer_lopend: f('buf') === '' ? null : Number(f('buf')) }), 'Standaardschema opgeslagen');
+    });
+  }
+
   // ── Interactie ───────────────────────────────────────────────────────────────
   function klik(e) {
-    const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst]');
+    if (e.target.closest('.mtg-fd')) return;
+    const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst],[data-prog],[data-sc],[data-advies],[data-vraag]');
     if (!t) return;
     if (t.dataset.modus) { st.modus = t.dataset.modus; st.offset = 0; teken(); }
     else if (t.dataset.zoom) { st.zoom = t.dataset.zoom; ls.set('mtg:zoom:' + st.wie, st.zoom); begrens(); teken(); }
@@ -530,6 +769,12 @@
     else if (t.dataset.patroon) patroonZet(t.dataset.patroon, t.dataset.aan === '1');
     else if (t.dataset.inst === 'algemeen') instBlad();
     else if (t.dataset.inst === 'groepen') groepenBlad();
+    else if (t.dataset.inst === 'schema') schemaBlad();
+    else if (t.dataset.prog) G.prognoseBewerk(t.dataset.prog);
+    else if (t.dataset.sc === 'opslaan') scenarioOpslaan();
+    else if (t.dataset.sc === 'terug') { st.scenario = {}; teken(); }
+    else if (t.dataset.advies) { const a = G.factuurAdvies(st.data, st.cfg, st.scenario, dagPlus(st.data.vandaag, 180)); if (a && a.voorstel) { st.scenario = a.voorstel.scenario; st.prognose = true; teken(); toast('Scenario: termijn eerder gefactureerd — sla op als je het zo wilt'); } }
+    else if (t.dataset.vraag) vraagAntwoord(t.dataset.sl, t.dataset.f, t.dataset.vraag === 'ja');
   }
   function blad(html, bij) {
     const o = document.createElement('div'); o.className = 'mtg-blad';

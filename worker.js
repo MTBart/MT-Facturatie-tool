@@ -1525,6 +1525,16 @@ function geldStreefNorm(x) {
   if (r.van == null || r.tot == null) { if (r.bedrag == null) r.bedrag = r.van != null ? r.van : r.tot; r.van = r.tot = null; }
   return r.bedrag == null && r.van == null && r.datum == null ? null : r;
 }
+// Standaardschema prognose (grenzen en termijnen per grootte; de eigenaar stelt het in, niets vast in de code).
+function geldSchemaNorm(x) {
+  if (!x || typeof x !== 'object') return null;
+  const g = (v, min, max) => typeof v === 'number' && isFinite(v) && v >= min && v <= max ? v : null;
+  const rij = l => (Array.isArray(l) ? l : []).slice(0, 6).map(r => ({ pct: g(r && r.pct, 0, 100), dagen: g(r && r.dagen, 0, 730), label: String((r && r.label) || '').slice(0, 24),
+    anker: ['akkoord', 'start', 'oplevering'].includes(r && r.anker) ? r.anker : 'akkoord' })).filter(r => r.pct != null && r.dagen != null);
+  const r = { grens_klein: g(x.grens_klein, 0, 1e9), grens_groot: g(x.grens_groot, 0, 1e9), betaaltermijn: Number.isInteger(x.betaaltermijn) && x.betaaltermijn >= 0 && x.betaaltermijn <= 120 ? x.betaaltermijn : null };
+  for (const k of ['klein', 'middel', 'groot']) { const l = rij(x[k]); r[k] = l.length && Math.abs(l.reduce((a, q) => a + q.pct, 0) - 100) < 0.01 ? l : []; }
+  return r;
+}
 function geldConfigNorm(c) {
   c = c && typeof c === 'object' ? c : {};
   const getal = (x, min, max) => (typeof x === 'number' && isFinite(x) && x >= min && x <= max) ? x : null;
@@ -1543,7 +1553,8 @@ function geldConfigNorm(c) {
     id: String(g.id), naam: String(g.naam || g.id).slice(0, 60), prefix: String(g.prefix || '').trim().slice(0, 60),
     contact_ids: (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String).filter(x => /^\d{6,25}$/.test(x)).slice(0, 200) }))
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
-  return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef),
+  return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
+    buffer_lopend: typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? c.buffer_lopend : null,
     btw: { spaarpercentage: getal(btw.spaarpercentage, 0, 1), spaarpot: uniek.some(p => p.id === btw.spaarpot && !p.virtueel) ? btw.spaarpot : null,
       aangifte_van: rek(btw.aangifte_van), terugboeking_van: rek(btw.terugboeking_van) },
     gewijzigd: c.gewijzigd || null, door: c.door || null, revisie: Number.isInteger(c.revisie) ? c.revisie : 0 };
@@ -1853,7 +1864,8 @@ async function geldProfielBereken(env) {
       const cid = String(doc.contact_id); (incasso[cid] = incasso[cid] || { naam: geldContactNaam(doc.contact), m: new Set() }).m.add(String(m.id)); }
   }
   for (const cid of Object.keys(incasso)) { const n = incasso[cid].m.size; if (n < 2) delete incasso[cid]; else incasso[cid] = { naam: incasso[cid].naam, n }; }   // pas vanaf 2 incasso's een patroon
-  return { as_of: new Date().toISOString(), vandaag, klanten, algemeen: alle.length ? geldStat(alle) : null, incasso,
+  const facturen = [...v1.lijst, ...v2.lijst].filter(x => String(x.invoice_date || '') >= geldDag(vandaag, -400)).map(geldFactuurKort);
+  return { as_of: new Date().toISOString(), vandaag, klanten, algemeen: alle.length ? geldStat(alle) : null, incasso, facturen,
     onvolledig: v1.onvolledig || v2.onvolledig || ink.onvolledig || muts.onvolledig || budget.rest <= 0, waarschuwingen: w, verzoeken: GELD_PROFIEL_BUDGET - budget.rest };
 }
 // Huidige overrides: één list (met metadata) i.p.v. een get per factuur.
@@ -2066,6 +2078,101 @@ async function geldBtwAangifte(get, vandaag, cfg, betalingen, w) {
   return uit;
 }
 
+// ── G5: prognose (projecten die zeker doorgaan + handmatige posten) ───────────────
+// Per post één KV-sleutel geld:prognose:<p:project_id | h:id> (waarde ook als metadata). Een project heeft een
+// totaal (incl. btw) in termijnen met elk een factuurdatum; de verwachte ontvangst = factuurdatum + betaaltermijn
+// + gebruikelijke vertraging van de klant (betaalprofiel). Echte verkoopfacturen vervangen termijnen: zeker bij
+// dezelfde offerte (original_estimate_id), bij hetzelfde contact met het offertenummer in de referentie, of door de
+// eigenaar bevestigd; wat al gefactureerd is gaat van de termijnen af (oudste eerst) — nooit dubbel. Andere facturen
+// van hetzelfde contact komen als vraag op de lijst (niet afgetrokken tot de eigenaar kiest).
+const GELD_PROG = 'geld:prognose:';
+function geldPrognoseNorm(sleutel, x, vandaag) {
+  const fout = t => ({ fout: t });
+  if (!x || typeof x !== 'object') return fout('item ontbreekt');
+  const bedrag = v => typeof v === 'number' && isFinite(v) && v >= 0.01 && v < 1e8 ? geldRond(v) : null;
+  const binnen = d => geldIsDatum(d) && d >= geldDag(vandaag, -730) && d <= geldDag(vandaag, 3 * 366);
+  const tekst = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const ids = (v, n) => [...new Set((Array.isArray(v) ? v : []).map(String).filter(s => /^[a-z0-9]{1,30}$/i.test(s)))].slice(0, n);
+  if (sleutel.startsWith('h:')) {
+    if (!['in', 'uit'].includes(x.richting)) return fout("richting: 'in' of 'uit'");
+    if (bedrag(x.bedrag) == null) return fout('bedrag: getal ≥ 0,01');
+    if (!binnen(x.datum)) return fout('datum ontbreekt of ligt te ver weg');
+    return { item: { soort: 'post', omschrijving: tekst(x.omschrijving, 60) || 'Handmatige post', richting: x.richting, bedrag: bedrag(x.bedrag), datum: x.datum, aan: x.aan !== false } };
+  }
+  const totaal = bedrag(x.totaal);
+  if (totaal == null) return fout('totaal (incl. btw): getal ≥ 0,01');
+  const tm = Array.isArray(x.termijnen) ? x.termijnen : [];
+  if (!tm.length || tm.length > 6) return fout('1 tot 6 termijnen');
+  const termijnen = [];
+  for (const [i, t] of tm.entries()) {
+    if (!t || bedrag(t.bedrag) == null || !binnen(t.factuurdatum)) return fout(`termijn ${i + 1}: bedrag en factuurdatum nodig`);
+    termijnen.push({ id: /^t\d{1,2}$/.test(t.id) ? t.id : 't' + (i + 1), label: tekst(t.label, 24) || 'termijn ' + (i + 1), bedrag: bedrag(t.bedrag), factuurdatum: t.factuurdatum, aan: t.aan !== false });
+  }
+  if (new Set(termijnen.map(t => t.id)).size !== termijnen.length) return fout('termijn-id dubbel');
+  if (Math.abs(termijnen.reduce((a, t) => a + t.bedrag, 0) - totaal) > 0.01) return fout('de termijnen tellen niet op tot het totaal');
+  const bt = Number.isInteger(x.betaaltermijn) && x.betaaltermijn >= 0 && x.betaaltermijn <= 120 ? x.betaaltermijn : 14;
+  return { item: { soort: 'project', naam: tekst(x.naam, 60), contact_id: /^\d{6,25}$/.test(String(x.contact_id || '')) ? String(x.contact_id) : null,
+    estimate_id: /^\d{6,25}$/.test(String(x.estimate_id || '')) ? String(x.estimate_id) : null, offertenr: tekst(x.offertenr, 24), code: tekst(x.code, 30),
+    totaal, termijnen, betaaltermijn: bt, aan: x.aan !== false, k: ids(x.k, 10), x: ids(x.x, 20) } };
+}
+// Facturen voor de koppeling: open (tijdlijn) + recent betaald (profiel + laatste 60 dagen).
+function geldFactuurKort(x) {
+  return { id: String(x.id), contact_id: String(x.contact_id || ''), datum: x.invoice_date || null, bedrag: geldRond(geldGetal(x.total_price_incl_tax_base != null ? x.total_price_incl_tax_base : x.total_price_incl_tax)),
+    ref: String(x.reference || '').slice(0, 80), estimate_id: x.original_estimate_id ? String(x.original_estimate_id) : null, nummer: x.invoice_id || '',
+    orig: x.original_sales_invoice_id ? String(x.original_sales_invoice_id) : null };   // creditnota → oorspronkelijke factuur
+}
+function geldPrognoseEvents(items, facturen, ctx, w) {
+  const { vandaag, profiel, cfg } = ctx, uit = [], overzicht = [];
+  const zeker = (it, f) => !it.x.includes(f.id) && (it.k.includes(f.id) || (it.estimate_id && f.estimate_id === it.estimate_id)
+    || (it.contact_id && f.contact_id === it.contact_id && it.offertenr.length >= 4 && f.ref.toLowerCase().includes(it.offertenr.toLowerCase())));
+  const lijst = Object.entries(items).sort(([a], [b]) => a.localeCompare(b));
+  // Toewijzing per factuur: door de eigenaar bevestigd bij precies één project, of zeker bij precies één project.
+  // Past hij bij meerdere projecten → niet automatisch afboeken, maar vragen (nooit dubbel, nooit stil).
+  // Een creditnota volgt de oorspronkelijke factuur.
+  const projecten = lijst.filter(([, it]) => it.soort === 'project'), toe = new Map(), meer = new Map();
+  for (const f of facturen.slice().sort((a, b) => (a.orig ? 1 : 0) - (b.orig ? 1 : 0))) {
+    if (f.orig && toe.has(f.orig)) { toe.set(f.id, toe.get(f.orig)); continue; }
+    const bev = projecten.filter(([, it]) => it.k.includes(f.id)).map(([sl]) => sl), kand = projecten.filter(([, it]) => zeker(it, f)).map(([sl]) => sl);
+    if (bev.length === 1) toe.set(f.id, bev[0]);
+    else if (!bev.length && kand.length === 1) toe.set(f.id, kand[0]);
+    else if (bev.length > 1 || kand.length > 1) { meer.set(f.id, [...new Set(bev.concat(kand))]); w.push({ bron: 'prognose', fout: `factuur ${f.nummer || f.id} past bij meerdere prognoseprojecten — bevestig bij welk project hij hoort (nu bij geen enkel afgetrokken)` }); }
+  }
+  for (const [sleutel, it] of lijst) {
+    if (it.soort === 'post') {
+      const ov = { sleutel, soort: 'post', omschrijving: it.omschrijving, aan: it.aan };
+      overzicht.push(ov);
+      if (!it.aan) continue;
+      if (it.datum < vandaag) w.push({ bron: 'prognose', fout: `handmatige post "${it.omschrijving}": datum ${it.datum} is voorbij — klopt hij nog? (vandaag ingepland)` });
+      uit.push({ id: `prognose:${sleutel}`, bron: 'prognose', richting: it.richting, bedrag: it.bedrag, datum: it.datum < vandaag ? vandaag : it.datum, datumtype: 'prognose', zekerheid: 'prognose', rekening: 'lopend',
+        tegenpartij: it.omschrijving, document_id: null, bron_url: null, prognose: sleutel, uitleg: 'Handmatige post (prognose): zelf ingevuld, telt alleen mee als de prognose aan staat.' });
+      continue;
+    }
+    const mijn = facturen.filter(f => toe.get(f.id) === sleutel);
+    const gefactureerd = geldRond(mijn.reduce((a, f) => a + f.bedrag, 0));   // creditnota's (negatief) tellen terug
+    const vragen = facturen.filter(f => !it.x.includes(f.id) && f.bedrag > 0 && !toe.has(f.id) && ((meer.get(f.id) || []).includes(sleutel) || (!meer.has(f.id) && it.contact_id && f.contact_id === it.contact_id)))
+      .map(f => ({ id: f.id, nummer: f.nummer, datum: f.datum, bedrag: f.bedrag, ref: f.ref, meerdere: meer.has(f.id) || undefined }));
+    const ov = { sleutel, soort: 'project', naam: it.naam, code: it.code, aan: it.aan, totaal: it.totaal, gefactureerd, facturen: mijn.map(f => f.id), vragen, termijnen: [] };
+    overzicht.push(ov);
+    if (!it.aan) continue;
+    const v = geldVerwachtVerkoop({ contact_id: it.contact_id, contact: { company_name: it.naam } }, profiel, cfg), vertraging = v.basis !== 'vervaldag' ? v.mediaan : 0;
+    let rest = gefactureerd;
+    for (const t of it.termijnen.slice().sort((a, b) => a.factuurdatum.localeCompare(b.factuurdatum) || a.id.localeCompare(b.id))) {
+      const dekking = Math.min(t.bedrag, Math.max(0, rest)); rest = geldRond(rest - dekking);
+      const over = geldRond(t.bedrag - dekking);
+      ov.termijnen.push({ id: t.id, label: t.label, bedrag: t.bedrag, gefactureerd: geldRond(dekking), open: over, factuurdatum: t.factuurdatum, aan: t.aan });
+      if (!t.aan || over <= 0.004) continue;
+      const fd = t.factuurdatum < vandaag ? vandaag : t.factuurdatum;
+      if (t.factuurdatum < vandaag) w.push({ bron: 'prognose', fout: `${it.naam || it.code}: ${t.label} had op ${t.factuurdatum} gefactureerd moeten worden en er is nog geen factuur gezien` });
+      let ontvangst = geldDag(fd, it.betaaltermijn + vertraging); if (ontvangst < vandaag) ontvangst = vandaag;
+      uit.push({ id: `prognose:${sleutel}:${t.id}`, bron: 'prognose', richting: 'in', bedrag: over, datum: ontvangst, factuurdatum: fd, ontvangst_na: geldDagenTussen(fd, ontvangst),
+        datumtype: 'prognose', zekerheid: 'prognose', rekening: 'lopend', tegenpartij: `${it.naam || it.code} — ${t.label}`, document_id: null, bron_url: null, prognose: sleutel, termijn_id: t.id,
+        uitleg: `Prognose (gaat zeker door, nog geen factuur): factureren op ${fd}, betaaltermijn ${it.betaaltermijn} dagen${vertraging ? ` + ${vertraging} dag(en) zoals ${v.basis === 'klant' ? 'deze klant' : v.basis === 'groep' ? 'de groep' : 'klanten'} meestal later betalen` : ''}.${dekking > 0 ? ` Al gefactureerd van deze termijn: ${dekking}.` : ''} Komt de echte factuur, dan vervangt die deze regel.` });
+    }
+    if (rest > 0.004) w.push({ bron: 'prognose', fout: `${it.naam || it.code}: er is meer gefactureerd dan het prognosetotaal — controleer het totaal` });
+  }
+  return { events: uit, overzicht };
+}
+
 async function geldTijdlijn(env, url) {
   const vandaag = geldVandaag(), w = [], budget = { rest: GELD.budget };   // + GELD.kvReserve voor KV (cache, ijkpunten)
   let van = url.searchParams.get('van') || geldDag(vandaag, -30), tot = url.searchParams.get('tot') || geldDag(vandaag, 90);
@@ -2081,8 +2188,8 @@ async function geldTijdlijn(env, url) {
   catch (e) { w.push({ bron: 'ijkpunt', fout: 'ijkpunten niet te lezen (opslag) — Moneybird-stand gebruikt' }); }
   const laatsteIjk = {};
   for (const i of ijk) if (!laatsteIjk[i.rekening]) laatsteIjk[i.rekening] = i;
-  let profiel = null, overrides = { items: {}, compleet: false };
-  try { profiel = await kvJson(env, 'geld:profiel'); overrides = await geldOverrides(env); }
+  let profiel = null, overrides = { items: {}, compleet: false }, prognose = { items: {}, compleet: false }, profielRuw = null;
+  try { profiel = profielRuw = await kvJson(env, 'geld:profiel'); overrides = await geldOverrides(env); prognose = await geldKvLijst(env, GELD_PROG); }
   catch (e) { w.push({ bron: 'overrides', fout: 'eigen betaaldata/afbetalingen niet te lezen (opslag) — facturen volgens het beleid ingepland' }); }
   if (!overrides.compleet && !w.some(x => x.bron === 'overrides')) w.push({ bron: 'overrides', fout: 'niet alle eigen betaaldata/afbetalingen gelezen' });
   const profielDagen = profiel ? geldDagenTussen(String(profiel.vandaag || '2000-01-01'), vandaag) : null;
@@ -2175,7 +2282,24 @@ async function geldTijdlijn(env, url) {
   const btwBet = new Map();
   for (const b of (patronen && patronen.btw_betalingen) || []) btwBet.set(b.datum + '|' + b.bedrag, b);
   for (const m of muts.lijst) if ((m.payments || []).some(x => x.invoice_type === 'VatDocument')) btwBet.set(m.date + '|' + geldRond(geldGetal(m.amount)), { datum: m.date, bedrag: geldRond(geldGetal(m.amount)) });
-  const gepland = [...factEv, ...patEv, ...inlegEv];
+  // ── G5: prognose (projecten die zeker doorgaan, handmatige posten); echte facturen gaan voor
+  let progEv = [], progOverzicht = [];
+  const progItems = prognose.items || {};
+  if (Object.keys(progItems).length) {
+    if (!prognose.compleet) w.push({ bron: 'prognose', fout: 'niet alle prognose-posten gelezen' });
+    const fk = new Map();
+    for (const f of (profielRuw && profielRuw.facturen) || []) fk.set(f.id, f);
+    if (Object.values(progItems).some(it => it.soort === 'project')) {
+      if (!profielRuw) w.push({ bron: 'prognose', fout: 'betaalprofiel ontbreekt: facturen ouder dan 60 dagen niet te zien — een al gefactureerde termijn kan dubbel staan' });
+      const rec = await geldLijst(get, `sales_invoices?filter=period:${geldDag(vandaag, -60).replace(/-/g, '')}..${vandaag.replace(/-/g, '')},state:paid`, w, 'recent betaalde verkoopfacturen');
+      for (const x of rec.lijst) fk.set(String(x.id), geldFactuurKort(x));
+      if (rec.onvolledig) w.push({ bron: 'prognose', fout: 'recent betaalde facturen onvolledig — een al gefactureerde termijn kan dubbel staan' });
+    }
+    for (const x of fact.verkoop) fk.set(String(x.id), geldFactuurKort(x));
+    const r = geldPrognoseEvents(progItems, [...fk.values()], { vandaag, profiel, cfg }, w);
+    progEv = r.events.map(metDelta); progOverzicht = r.overzicht;
+  }
+  const gepland = [...factEv, ...patEv, ...inlegEv, ...progEv];
   gepland.push(...geldBtwSparen(gepland, cfg).map(metDelta));
   const btwEv = (await geldBtwAangifte(get, vandaag, cfg, [...btwBet.values()], w)).map(metDelta);
   // Terugboeking uit de BTW-pot: hooguit wat er (verwacht) in de pot zit op die dag; onbekend potsaldo → niet terugboeken.
@@ -2216,6 +2340,7 @@ async function geldTijdlijn(env, url) {
     overrides: { aantal: Object.keys(plan.overrides).length, niet_meer_open: vervallenOv, compleet: overrides.compleet },
     patronen: patronen ? { as_of: patronen.as_of, aantal: patLijst.length, aan: patLijst.filter(x => x.aan && !x.potje).length, vervangen_door_factuur: pctx.vervangen, lijst: patLijst } : null,
     historie_dagsom: url.searchParams.get('historie') === '1' && patronen ? patronen.dagsom : undefined,
+    prognose: { posten: progOverzicht, compleet: prognose.compleet },
     instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, lopend_streef: cfg.lopend_streef },
   } };
 }
@@ -2255,6 +2380,28 @@ async function handleGeld(p, request, env, ik, json) {
     pat.opgeslagen = !!env.MT_ROLLEN && !pat.onvolledig;
     if (pat.opgeslagen) { await kvZet(env, 'geld:patronen', pat); await kvZet(env, 'geld:cachever', `${Date.now()}-q${randHex(3)}`); }
     return json(Object.assign(pat, { keuzes: keuzes.items }));
+  }
+  if (p === '/geld/prognose' && m === 'GET') return json(await geldKvLijst(env, GELD_PROG, 3));
+  if (p === '/geld/prognose' && m === 'POST') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let b = {}; try { b = await request.json(); } catch {}
+    const sleutel = String(b.sleutel || '');
+    if (!/^p:[A-Za-z0-9_-]{1,40}$/.test(sleutel) && !/^h:[a-z0-9]{4,20}$/.test(sleutel)) return json({ error: 'sleutel: p:<project_id> of h:<id>' }, 400);
+    const kv = GELD_PROG + sleutel, vorige = await kvJson(env, kv);
+    if ((b.vorige_ts == null ? null : b.vorige_ts) !== (vorige ? vorige.ts : null)) return json({ error: 'deze prognose is intussen aangepast — herlaad en probeer opnieuw', huidig: vorige }, 409);
+    let item = null;
+    if (b.item !== null) {
+      const n = geldPrognoseNorm(sleutel, b.item, geldVandaag());
+      if (n.fout) return json({ error: n.fout }, 400);
+      item = Object.assign(n.item, { door: String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 20), ts: Date.now() });
+      if (new TextEncoder().encode(JSON.stringify(item)).byteLength > 1000) return json({ error: 'te groot — minder termijnen of kortere teksten' }, 400);   // KV-metadata ≤ 1024 bytes
+    } else if (!vorige) return json({ error: 'er is geen prognose om te wissen' }, 400);
+    const ts = item ? item.ts : Date.now();
+    await kvZet(env, `geld:prognose-historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, { sleutel, vorige, nieuw: item });
+    if (item) await kvZet(env, kv, item, { metadata: item }); else await env.MT_ROLLEN.delete(kv);
+    await kvZet(env, 'geld:cachever', `${ts}-g${randHex(3)}`);
+    await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-prognose', doel: sleutel, doelNaam: item ? (item.aan ? 'prognose aan' : 'prognose uit') : 'prognose gewist' });   // geen bedragen
+    return json({ ok: true, item });
   }
   if (p === '/geld/patroon' && m === 'POST') {
     if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
@@ -2350,6 +2497,12 @@ async function handleGeld(p, request, env, ik, json) {
       for (const n of b.potten) { const o = oud.potten.find(x => x.id === n.id); if (o && !!o.virtueel !== (n.virtueel === true)) return json({ error: `potje "${o.naam}": virtueel/echt kan na het aanmaken niet meer wisselen (maak een nieuw potje)`, pot: o.id }, 400); }
       nieuw.potten = b.potten; gewijzigd.push('potten');
     }
+    if ('prognose_schema' in b) {
+      const n = geldSchemaNorm(b.prognose_schema);
+      if (b.prognose_schema !== null && (!n || ['klein', 'middel', 'groot'].some(k => Array.isArray(b.prognose_schema[k]) && b.prognose_schema[k].length && !n[k].length))) return json({ error: 'standaardschema: per grootte percentages die samen 100 zijn' }, 400);
+      nieuw.prognose_schema = b.prognose_schema; gewijzigd.push('prognose_schema');
+    }
+    if ('buffer_lopend' in b) { if (b.buffer_lopend !== null && !(typeof b.buffer_lopend === 'number' && isFinite(b.buffer_lopend))) return json({ error: 'buffer_lopend: getal of null' }, 400); nieuw.buffer_lopend = b.buffer_lopend; gewijzigd.push('buffer_lopend'); }
     if ('lopend_streef' in b) { if (b.lopend_streef !== null && (typeof b.lopend_streef !== 'object' || Array.isArray(b.lopend_streef))) return json({ error: 'lopend_streef: object of null' }, 400); nieuw.lopend_streef = b.lopend_streef; gewijzigd.push('lopend_streef'); }
     if ('klantgroepen' in b) {
       if (!Array.isArray(b.klantgroepen) || b.klantgroepen.length > 50) return json({ error: 'klantgroepen: lijst (max 50)' }, 400);

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — G4 geldscherm: tabblad Geld (mt-geld.js) met kaarten, lijn, 14 dagen, potjes en doelen
+- Commit: `c1155ec` | Auteur: Bart Witte
+
 ## 2026-10-08 — G3 geldtijdlijn: vaste patronen, potjes-weekinleg, BTW-sparen en BTW-aangifte (worker)
 - Commit: `52b1266` | Auteur: Bart Witte
 

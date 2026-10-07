@@ -781,6 +781,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 <header class="app-header">
   <div class="app-title" style="display:flex;align-items:center">M<span>&amp;</span>T<span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></div>
   <div class="header-btns">
+    <button class="header-info-btn" id="geldKnop" style="display:none" onclick="location.href='v2.html#tab=geld'" aria-label="Geld (geldtijdlijn)" title="Geld">€</button>
     <button class="header-info-btn notif-btn" onclick="openNotifs()" aria-label="Notificaties">🔔<span class="notif-badge" id="notifBadge" style="display:none">0</span></button>
     <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
     <button class="user-avatar-btn" id="userAvatarBtn" style="display:none" onclick="msLogout()" title="Uitloggen"></button>
@@ -2176,6 +2177,8 @@ async function rolLaadMobiel() {
   const me = await MTRol.laad(WORKER); if (!me) return;
   if (MTRol.geenToegangNodig()) { MTRol.toonGeenToegang(WORKER); return; }
   MTRol.pasToe();
+  // Geld (geldtijdlijn) staat in de cockpit (responsive): alleen een knop voor wie het recht heeft, op een worker die het kent.
+  const gk = document.getElementById('geldKnop'); if (gk) gk.style.display = me.rechten && ('geld' in me.rechten) && MTRol.magGeld() ? '' : 'none';
   const act = document.querySelector('.bottom-nav .nav-btn.active');
   if (act && act.classList.contains('mt-rol-verborgen')) { const vrij = [...document.querySelectorAll('.bottom-nav .nav-btn')].find(b => !b.classList.contains('mt-rol-verborgen')); if (vrij) vrij.click(); }
 }
