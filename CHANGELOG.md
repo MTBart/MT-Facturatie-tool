@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Backupmap van de vorige live-versie (6 okt) + versie v2.2
+- Commit: `f09b055` | Auteur: Bart Witte
+
 ## 2026-10-06 — Projecttijdlijn en klant-roll-up: gepland, gewerkt en vrije capaciteit per persoon per week
 - Commit: `e4b28c5` | Auteur: Bart Witte
 

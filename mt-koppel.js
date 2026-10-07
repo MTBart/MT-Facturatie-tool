@@ -180,7 +180,8 @@
     // Index één keer bouwen (per lijst-render), daarna per mail goedkoop scoren.
     voorstelIndex(opts) {
       opts = opts || {};
-      const projecten = (opts.projecten || root.PROJECT_CODES || []).filter(p => p && p.code && p.status !== 'archief');
+      // PROJECT_CODES is een `let` in v2.html (geen window-eigenschap) → ook via de gedeelde globale scope zoeken.
+      const projecten = (opts.projecten || root.PROJECT_CODES || (typeof PROJECT_CODES !== 'undefined' ? PROJECT_CODES : [])).filter(p => p && p.code && p.status !== 'archief');
       const all = K.alle();
       const perCode = new Map(projecten.map(p => [p.code, p]));
       const codes = projecten.map(p => ({ code: p.code, re: new RegExp('(^|[^A-Za-z0-9-])' + p.code.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&') + '($|[^A-Za-z0-9-])', 'i') }));
@@ -249,6 +250,89 @@
     }
   };
   root.MTKoppel = K;
+
+
+  // ══ UI-helper (B11): één koppel-badge voor de hele tool, naar Moneybird-werkwijze ══
+  //   open (geel/amber, schakel OPEN)      = niet gekoppeld → klik = voorstellen / koppelen
+  //   voorstel (geel, schakel open, tekst) = er is een sterk voorstel → klik = voorstellen
+  //   gekoppeld (groen, schakel DICHT)     = gekoppeld (+ doel) → klik = details / ontkoppelen
+  // De betekenis zit in icoon (open/dicht) + tekst, niet alleen in kleur (kleurenblind-proof).
+  // badge() geeft HTML terug (geen DOM nodig); popover() is de enige DOM-functie.
+  const UI_ESC = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const SVG_DICHT = '<svg class="kb-i" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+  const SVG_OPEN = '<svg class="kb-i" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/></svg>';
+  const UI = {
+    SVG_DICHT, SVG_OPEN,
+    // o = {status:'open'|'voorstel'|'gekoppeld', label (het doel), tekst (hele tekst, alleen voor uitzonderingen),
+    //      titel, onclick (JS-tekst), klein, icoon (alleen icoon), waarschuwing}
+    // Vast copy-patroon: "Niet gekoppeld · doel" / "Koppel? CODE" / "Gekoppeld · doel".
+    badge(o) {
+      o = o || {};
+      const st = ['open', 'voorstel', 'gekoppeld'].includes(o.status) ? o.status : 'open';
+      const tekst = o.tekst ? String(o.tekst)
+        : st === 'gekoppeld' ? 'Gekoppeld' + (o.label ? ' · ' + o.label : '')
+        : st === 'voorstel' ? 'Koppel? ' + (o.label || '')
+        : 'Niet gekoppeld' + (o.label ? ' · ' + o.label : '');
+      const svg = st === 'gekoppeld' ? SVG_DICHT : SVG_OPEN;
+      const basis = st === 'voorstel' ? 'Niet gekoppeld, voorstel: ' + (o.tekst || o.label || '')
+        : o.tekst ? (st === 'gekoppeld' ? 'Gekoppeld: ' : 'Niet gekoppeld: ') + o.tekst : tekst;
+      const let_ = o.waarschuwing ? ' (let op: ' + o.waarschuwing + ')' : '';
+      // titel die al met de status begint vervangt de basis (anders leest een schermlezer "Niet gekoppeld — Niet gekoppeld …")
+      const aria = o.titel && String(o.titel).toLowerCase().startsWith(basis.toLowerCase()) ? o.titel + let_ : basis + let_ + (o.titel ? ' — ' + o.titel : '');
+      const cls = 'kb kb-' + st + (o.klein ? ' kb-klein' : '') + (o.icoon ? ' kb-icoon' : '') + (o.waarschuwing ? ' kb-let' : '');
+      const inhoud = svg + (o.waarschuwing ? '<span class="kb-w" aria-hidden="true">⚠</span>' : '') + '<span class="kb-t">' + UI_ESC(tekst) + '</span>';
+      const attr = ' class="' + cls + '" data-koppel="' + st + '" aria-label="' + UI_ESC(aria) + '" title="' + UI_ESC(o.titel || aria) + '"';
+      return o.onclick ? '<button type="button"' + attr + ' onclick="' + UI_ESC(o.onclick) + '">' + inhoud + '</button>'
+        : '<span role="img"' + attr + '>' + inhoud + '</span>';
+    },
+    // Popover naast de badge (op smal scherm als paneel onderin). Sluit met Esc, klik buiten, of ✕.
+    popover(anker, html, opts) {
+      opts = opts || {};
+      const doc = root.document; if (!doc) return null;
+      UI.sluit();
+      const p = doc.createElement('div');
+      p.className = 'kb-pop'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', opts.titel || 'Koppeling');
+      p.innerHTML = '<div class="kb-pop-kop"><b>' + UI_ESC(opts.titel || 'Koppeling') + '</b><button type="button" class="kb-pop-x" aria-label="Sluiten" onclick="MTKoppelUI.sluit()">✕</button></div><div class="kb-pop-in">' + html + '</div>';
+      p.id = 'kb-pop'; doc.body.appendChild(p);
+      const smal = (root.innerWidth || 1024) < 600;
+      if (anker && anker.getBoundingClientRect && !smal) {
+        const r = anker.getBoundingClientRect(), b = Math.min(340, (root.innerWidth || 1024) - 16);
+        p.style.width = b + 'px';
+        p.style.left = Math.max(8, Math.min(r.left + (root.scrollX || 0), (root.scrollX || 0) + (root.innerWidth || 1024) - b - 8)) + 'px';
+        // onder de badge; past het daar niet en boven wel → erboven
+        const h = p.offsetHeight || 0, vh = root.innerHeight || 800;
+        const boven = h && r.bottom + 6 + h > vh && r.top - 6 - h >= 0;
+        p.style.top = ((boven ? r.top - 6 - h : r.bottom + 6) + (root.scrollY || 0)) + 'px';
+      } else p.classList.add('kb-pop-onder');
+      UI._anker = anker || null;
+      if (anker && anker.setAttribute) { anker.setAttribute('aria-expanded', 'true'); anker.setAttribute('aria-controls', 'kb-pop'); }
+      const eerste = p.querySelector('.kb-pop-in button, .kb-pop-in a, .kb-pop-in select, .kb-pop-in input'); if (eerste && eerste.focus) eerste.focus();
+      setTimeout(() => {
+        UI._buiten = e => { if (!p.contains(e.target) && e.target !== anker && !(anker && anker.contains && anker.contains(e.target))) UI.sluit(); };
+        UI._esc = e => { if (e.key === 'Escape') UI.sluit(); };
+        UI._resize = () => UI.sluit();
+        doc.addEventListener('mousedown', UI._buiten); doc.addEventListener('keydown', UI._esc);
+        if (root.addEventListener) root.addEventListener('resize', UI._resize);
+      }, 0);
+      return p;
+    },
+    // Sluit; stond de focus in de popover, dan terug naar de badge (als die er nog is).
+    sluit() {
+      const doc = root.document; if (!doc) return;
+      const a = UI._anker, act = doc.activeElement;
+      const focusTerug = !!(act && act.closest && act.closest('.kb-pop'));
+      doc.querySelectorAll('.kb-pop').forEach(x => x.remove());
+      if (UI._buiten) doc.removeEventListener('mousedown', UI._buiten);
+      if (UI._esc) doc.removeEventListener('keydown', UI._esc);
+      if (UI._resize && root.removeEventListener) root.removeEventListener('resize', UI._resize);
+      UI._buiten = UI._esc = UI._resize = UI._anker = null;
+      if (a && a.setAttribute) { a.setAttribute('aria-expanded', 'false'); a.removeAttribute('aria-controls'); }
+      if (focusTerug && a && a.isConnected && a.focus) a.focus();
+    },
+    esc: UI_ESC
+  };
+  root.MTKoppelUI = UI;
+  root.koppelBadge = UI.badge;
 
   // ── Compat-laag: de oude globale namen (v2.html + mt-inbox.js) leunen nu op MTKoppel ──
   root.mailLinksAll = () => K.alle();
