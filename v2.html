@@ -11947,7 +11947,7 @@ async function rolLaad(){
 }
 const _BH_FOUT={'alleen-eigenaar-mag-eigenaar':'Alleen de eigenaar kan iemand eigenaar maken of een eigenaar wijzigen.','niet-jezelf':'Je eigen account wijzig je hier niet.',
   'eigenaar-beschermd':'De vaste eigenaar is hier niet te wijzigen.','bestaat-al':'Er is al een gebruiker met dit e-mailadres.','ongeldig-email':'Dat is geen geldig e-mailadres.',
-  'onbekende-rol':'Onbekende rol.','geen-rollen-opslag':'De rollen-opslag (KV MT_ROLLEN) is nog niet ingesteld in Cloudflare.','geen-toegang':'Je hebt geen beheerrecht.','niet-gevonden':'Niet (meer) gevonden.'};
+  'onbekende-rol':'Onbekende rol.','laatste-eigenaar':'Dit is de laatste Eigenaar — maak eerst iemand anders Eigenaar.','geen-rollen-opslag':'De rollen-opslag (KV MT_ROLLEN) is nog niet ingesteld in Cloudflare.','geen-toegang':'Je hebt geen beheerrecht.','niet-gevonden':'Niet (meer) gevonden.'};
 async function beheerApi(pad,body){
   const h=await authHeader(); if(!h['X-Auth-Token']) throw new Error('Niet ingelogd bij Microsoft');
   const r=await fetch(WORKER+pad,body===undefined?{headers:h}:{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -11975,9 +11975,10 @@ function beheerTeken(){
     :`<b>Modus: log</b> — alles werkt zoals altijd; de worker telt wat geweigerd zóu worden.${log?` Afgelopen ${log.dagen} dagen: <b>${log.geweigerd}</b> van ${log.totaal} verzoeken zouden geweigerd zijn.`:''}`;
   const top=log&&log.top&&log.top.length?`<div class="bh-blok"><h4>Zou geweigerd zijn — top-redenen</h4><table class="bh-tabel"><thead><tr><th>Rol</th><th>Actie</th><th>Reden</th><th>Aantal</th></tr></thead><tbody>${log.top.slice(0,10).map(x=>`<tr><td>${esc(x.rol)}</td><td>${esc(x.actie)}</td><td>${esc(x.reden)}</td><td>${x.n}</td></tr>`).join('')}</tbody></table></div>`:'';
   const rijen=g.gebruikers.slice().sort((a,b)=>String(a.naam||'').localeCompare(String(b.naam||''))).map(u=>{
-    const vast=u.beschermd||u.oid===g.ik||(!ikEig&&u.role==='eigenaar'), uit=u.active===false;
+    const vast=u.beschermd||!u.oid||u.oid===g.ik||(!ikEig&&u.role==='eigenaar'), uit=u.active===false;
+    const vastTxt=u.vast==='oid'?' <span class="dos-meta">· vast</span>':u.vast==='email'?` <span class="dos-meta">· vaste eigenaar (via e-mail)${u.oid?' — oid: '+esc(u.oid):''}</span>`:'';
     return `<tr class="${uit?'bh-uit':''}"><td>${esc(u.naam||'—')}${u.oid===g.ik?' <span class="dos-meta">(jij)</span>':''}</td><td class="bh-opt">${esc(u.email||'')}</td>
-      <td>${vast?esc(u.rolNaam||u.role):`<select aria-label="Rol van ${esc(u.naam||u.email||'')}" onchange="beheerRol('${esc(u.oid)}',this.value,this)">${rolOpt(u.role)}</select>`}</td>
+      <td>${vast?esc(u.rolNaam||u.role)+vastTxt:`<select aria-label="Rol van ${esc(u.naam||u.email||'')}" onchange="beheerRol('${esc(u.oid)}',this.value,this)">${rolOpt(u.role)}</select>`}</td>
       <td>${uit?'gedeactiveerd':'actief'}</td><td class="bh-opt">${_bhDatum(u.lastSeen)}</td>
       <td>${vast?'':`<button class="btn btn-xs ${uit?'btn-secondary':'btn-danger'}" onclick="beheerActief('${esc(u.oid)}',${uit})">${uit?'Reactiveren':'Deactiveren'}</button>`}</td></tr>`;
   }).join('');

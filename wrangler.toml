@@ -52,11 +52,12 @@ id = "c2ccdda50c59470d99ca885acecaff20"
 # binding = "MT_ROLLEN"
 # id = "VUL_IN"
 #
-# 2) Eigenaar (niet in de repo — als secret):
-#      wrangler secret put OWNER_OID      ← je Entra Object ID (oid)
-#    Weet je je oid nog niet? Tijdelijk (daarna weer weghalen):
-#      wrangler secret put OWNER_EMAIL    ← dit adres is eigenaar zolang OWNER_OID ontbreekt
-#    (niets opgeslagen); open dan <worker>/me ingelogd → "oid" → zet die als OWNER_OID.
+# 2) Vaste eigenaren (niet in de repo — als secret; komma-gescheiden lijsten):
+#      wrangler secret put OWNER_OIDS     ← Entra Object ID's (oid), bv. "<oid1>,<oid2>"
+#      wrangler secret put OWNER_EMAILS   ← voor wie z'n oid nog niet bekend is (e-mail)
+#    Een vaste eigenaar is altijd Eigenaar en via Beheer niet te wijzigen. Via e-mail wordt
+#    bij de eerste login de oid vastgelegd (Beheer toont hem) → later naar OWNER_OIDS.
+#    (OWNER_OID / OWNER_EMAIL enkelvoud werken ook nog.)
 #
 # 3) Modus: 'uit' | 'log' (eerst ±1 week) | 'afdwingen'. Wijzigen = hier aanpassen + deploy.
 [vars]

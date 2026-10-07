@@ -628,9 +628,12 @@ async function handleDashboard(pathname, request, env, msPayload, cors) {
 //   aanvraag:{oid} {oid, email, naam, bericht, ts}                       (TTL 30 dagen)
 //   audit:{omgekeerde ts}:{rand}  één wijziging, nieuwste eerst          (TTL 400 dagen)
 //   stat:{yyyy-mm-dd}  teller "zou geweigerd zijn" (log-modus)           (TTL 35 dagen)
-// Eigenaar: OWNER_OID (worker-var/secret) is altijd eigenaar en is via de API niet
-// te wijzigen. Zolang OWNER_OID ontbreekt geeft OWNER_EMAIL tijdelijk de eigenaarsrol
-// (niets opgeslagen, dus geen race); /me toont dan de oid om als OWNER_OID te zetten.
+// Vaste eigenaren (worker-secrets, komma-lijsten; enkelvoud blijft werken):
+//   OWNER_OIDS (+ OWNER_OID)     → altijd Eigenaar, via de API niet te wijzigen/deactiveren.
+//   OWNER_EMAILS (+ OWNER_EMAIL) → idem voor wie z'n oid nog niet bekend is: geverifieerde
+//     token-e-mail (zelfde tenant) → Eigenaar; bij eerste login user:{oid} met bron 'owner_email'
+//     (alleen lezen + idempotente put, geen race). Beheer toont de oid om naar OWNER_OIDS te verplaatsen.
+// Gewone eigenaren (via Beheer) zijn wél te wijzigen, maar nooit de laatste Eigenaar.
 const ROLLEN = ['eigenaar', 'beheerder', 'kantoor', 'werkplaats', 'lezen'];
 const ROL_NAAM = { eigenaar: 'Eigenaar', beheerder: 'Beheerder', kantoor: 'Kantoor', werkplaats: 'Werkplaats', lezen: 'Alleen lezen' };
 // De matrix (ontwerp F1 + besluiten Bart 7-10). Ook naar de front-end via /me (alleen UI-gemak; de worker beslist).
@@ -677,6 +680,16 @@ async function audit(env, e) {
   try { await kvZet(env, key, { ts, ...e }, { expirationTtl: 400 * DAG_S }); } catch {}
 }
 
+const lijstVar = v => String(v || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+function ownerOids(env) { return new Set([...lijstVar(env.OWNER_OIDS), ...lijstVar(env.OWNER_OID)]); }
+function ownerEmails(env) { return new Set([...lijstVar(env.OWNER_EMAILS), ...lijstVar(env.OWNER_EMAIL)]); }
+// 'oid' | 'email' | null — is deze gebruiker een vaste eigenaar (uit de worker-secrets)?
+function vasteEigenaar(env, oid, email) {
+  if (oid && ownerOids(env).has(String(oid).toLowerCase())) return 'oid';
+  if (email && ownerEmails(env).has(String(email).toLowerCase())) return 'email';
+  return null;
+}
+
 const _gebruikerCache = new Map();   // oid -> {rec, t}
 async function leesGebruiker(env, oid) {
   const c = _gebruikerCache.get(oid);
@@ -696,7 +709,7 @@ function nieuweGebruiker(oid, role, email, naam, door) {
 const waitUntil = (ctx, p) => { try { if (ctx && ctx.waitUntil) ctx.waitUntil(p); else p.catch(() => {}); } catch {} };
 
 // Rol van de ingelogde gebruiker → {rol, rec, reden}. Koppelt bij eerste login een
-// uitnodiging (invite:{email}) aan de oid. OWNER_EMAIL: tijdelijk, zonder opslag.
+// uitnodiging (invite:{email}) of een vaste eigenaar via e-mail (OWNER_EMAILS) aan de oid.
 async function bepaalRol(env, payload, ctx) {
   const oid = payload.oid, email = tokenEmail(payload), naam = payload.name || '';
   let rec = await leesGebruiker(env, oid);
@@ -704,20 +717,21 @@ async function bepaalRol(env, payload, ctx) {
     rec = { ...rec, lastSeen: Date.now() };
     waitUntil(ctx, schrijfGebruiker(env, rec).catch(() => {}));
   }
-  if (env.OWNER_OID && oid === env.OWNER_OID) {
-    if (!rec && env.MT_ROLLEN) {
-      rec = nieuweGebruiker(oid, 'eigenaar', email, naam, 'OWNER_OID');
+  const vast = vasteEigenaar(env, oid, email);
+  if (vast) {
+    // Record vastleggen/bijwerken (idempotent); bij 'email' is dit hoe we de oid leren.
+    const bron = vast === 'oid' ? 'owner_oid' : 'owner_email';
+    if (env.MT_ROLLEN && (!rec || rec.role !== 'eigenaar' || rec.active === false || rec.bron !== bron)) {
+      const nieuw = !rec;
+      rec = { ...(rec || nieuweGebruiker(oid, 'eigenaar', email, naam, bron)), role: 'eigenaar', active: true, bron, email: email || (rec && rec.email) || '', updatedAt: Date.now() };
       await schrijfGebruiker(env, rec);
-      await audit(env, { actie: 'eigenaar-vastgelegd', door: 'systeem', doel: oid, doelNaam: rec.naam, nieuw: 'eigenaar' });
+      await audit(env, { actie: nieuw ? 'eigenaar-vastgelegd' : 'eigenaar-bijgewerkt', door: 'systeem', doel: oid, doelNaam: rec.naam, nieuw: 'eigenaar', bron });
     }
-    return { rol: 'eigenaar', rec, eigenaarVast: true };
+    return { rol: 'eigenaar', rec, vast };
   }
   if (rec) {
     if (rec.active === false) return { rol: null, rec, reden: 'gedeactiveerd' };
     return ROLLEN.includes(rec.role) ? { rol: rec.role, rec } : { rol: null, rec, reden: 'onbekende-rol' };
-  }
-  if (!env.OWNER_OID && env.OWNER_EMAIL && email && email === String(env.OWNER_EMAIL).trim().toLowerCase()) {
-    return { rol: 'eigenaar', rec: null, tijdelijk: true };
   }
   if (!env.MT_ROLLEN) return { rol: null, rec: null, reden: 'geen-rollen-opslag' };
   const inv = email ? await kvJson(env, 'invite:' + email) : null;
@@ -895,9 +909,9 @@ function meAntwoord(env, ik, payload) {
     oid: payload.oid, email: ik.email, naam: (ik.rec && ik.rec.naam) || payload.name || ik.email,
     rol: ik.rol, rolNaam: ik.rol ? ROL_NAAM[ik.rol] : null, actief: !!ik.rol, reden: ik.rol ? null : (ik.reden || 'onbekend'),
     modus: rollenModus(env), rechten: ik.rol ? RECHTEN[ik.rol] : null,
-    // Eenmalig handig: eigenaar zonder OWNER_OID ziet zijn oid (bovenaan) om in Cloudflare te zetten.
-    ownerOidNogZetten: ik.rol === 'eigenaar' && !env.OWNER_OID ? true : undefined,
-    tijdelijkeEigenaar: ik.tijdelijk ? true : undefined,
+    // Vaste eigenaar via e-mail: zet deze oid (bovenaan) later in OWNER_OIDS.
+    vasteEigenaar: ik.vast || undefined,
+    ownerOidNogZetten: ik.vast === 'email' ? true : undefined,
   };
 }
 async function handleToegang(request, env, ik, payload, json) {
@@ -924,12 +938,23 @@ async function lijstKV(env, prefix, max = 1000) {
 }
 const EMAIL_RE = /^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$/;
 // Wie mag wat aan een gebruiker veranderen (beheer-regels bovenop de matrix).
-function magBeheren(env, ik, doel, nieuweRol) {
+// `alle` = alle user-records (voor de laatste-eigenaar-toets); `deactiveren` = actief → uit.
+function magBeheren(env, ik, doel, nieuweRol, alle, deactiveren) {
   if (nieuweRol != null && !ROLLEN.includes(nieuweRol)) return 'onbekende-rol';
-  if (doel && env.OWNER_OID && doel.oid === env.OWNER_OID) return 'eigenaar-beschermd';
+  if (doel && (vasteEigenaar(env, doel.oid) || (doel.bron === 'owner_email' && vasteEigenaar(env, null, doel.email)))) return 'eigenaar-beschermd';
   if (doel && doel.oid === ik.oid) return 'niet-jezelf';
   if (ik.rol !== 'eigenaar' && ((doel && doel.role === 'eigenaar') || nieuweRol === 'eigenaar')) return 'alleen-eigenaar-mag-eigenaar';
+  const wegAlsEigenaar = doel && doel.role === 'eigenaar' && doel.active !== false && ((nieuweRol != null && nieuweRol !== 'eigenaar') || deactiveren);
+  if (wegAlsEigenaar && alle) {
+    const eig = new Set([...ownerOids(env)]);
+    for (const g of alle) if (g.role === 'eigenaar' && g.active !== false) eig.add(String(g.oid).toLowerCase());
+    eig.delete(String(doel.oid).toLowerCase());
+    if (!eig.size) return 'laatste-eigenaar';
+  }
   return null;
+}
+function beheerVast(env, g) {
+  return vasteEigenaar(env, g.oid) || (g.bron === 'owner_email' && vasteEigenaar(env, null, g.email)) || null;
 }
 async function handleBeheer(pathname, request, env, ik, json) {
   if (!(RECHTEN[ik.rol] && RECHTEN[ik.rol].beheer)) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
@@ -939,8 +964,11 @@ async function handleBeheer(pathname, request, env, ik, json) {
   const p = pathname, m = request.method;
 
   if (p === '/beheer/gebruikers' && m === 'GET') {
-    const gebruikers = (await lijstKV(env, 'user:')).map(g => ({ ...g, rolNaam: ROL_NAAM[g.role] || g.role, beschermd: !!(env.OWNER_OID && g.oid === env.OWNER_OID) }));
-    if (env.OWNER_OID && !gebruikers.some(g => g.oid === env.OWNER_OID)) gebruikers.push({ oid: env.OWNER_OID, role: 'eigenaar', rolNaam: 'Eigenaar', active: true, naam: '(eigenaar, nog niet ingelogd)', beschermd: true });
+    const gebruikers = (await lijstKV(env, 'user:')).map(g => { const vast = beheerVast(env, g); return { ...g, rolNaam: ROL_NAAM[g.role] || g.role, beschermd: !!vast, vast }; });
+    for (const o of ownerOids(env)) if (!gebruikers.some(g => String(g.oid).toLowerCase() === o))
+      gebruikers.push({ oid: o, role: 'eigenaar', rolNaam: 'Eigenaar', active: true, naam: '(vaste eigenaar, nog niet ingelogd)', beschermd: true, vast: 'oid' });
+    for (const e of ownerEmails(env)) if (!gebruikers.some(g => (g.email || '').toLowerCase() === e))
+      gebruikers.push({ oid: '', email: e, role: 'eigenaar', rolNaam: 'Eigenaar', active: true, naam: '(vaste eigenaar via e-mail, nog niet ingelogd)', beschermd: true, vast: 'email' });
     return json({ gebruikers, uitnodigingen: await lijstKV(env, 'invite:'), aanvragen: await lijstKV(env, 'aanvraag:'),
       rollen: ROLLEN.map(r => ({ id: r, naam: ROL_NAAM[r] })), matrix: RECHTEN, modus: rollenModus(env), ik: ik.oid, ikRol: ik.rol });
   }
@@ -966,7 +994,8 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const b = await body(), oid = String(b.oid || '');
     const doel = await kvJson(env, 'user:' + oid); if (!doel) return json({ error: 'niet-gevonden' }, 404);
     const nieuweRol = b.rol != null ? String(b.rol) : null, actief = b.actief != null ? !!b.actief : null;
-    const fout = magBeheren(env, ik, doel, nieuweRol); if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : 403);
+    const fout = magBeheren(env, ik, doel, nieuweRol, await lijstKV(env, 'user:'), actief === false);
+    if (fout) return json({ error: fout }, fout === 'onbekende-rol' ? 400 : fout === 'laatste-eigenaar' ? 409 : 403);
     const nieuw = { ...doel, updatedAt: Date.now() };
     if (nieuweRol != null && nieuweRol !== doel.role) { nieuw.role = nieuweRol; await audit(env, { ...door, actie: 'rol-gewijzigd', doel: oid, doelNaam: doel.naam, oud: doel.role, nieuw: nieuweRol }); }
     if (actief != null && actief !== (doel.active !== false)) { nieuw.active = actief; await audit(env, { ...door, actie: actief ? 'gereactiveerd' : 'gedeactiveerd', doel: oid, doelNaam: doel.naam }); }
@@ -1033,10 +1062,10 @@ export default {
     try {
       const url = new URL(request.url);
       const modus = rollenModus(env);
-      // Rollen mogen de tool niet platleggen: KV-storing → geen rol (eigenaar via OWNER_OID blijft).
+      // Rollen mogen de tool niet platleggen: KV-storing → geen rol (vaste eigenaren blijven eigenaar).
       let ik;
       try { ik = await bepaalRol(env, msPayload, ctx); }
-      catch (e) { ik = { rol: env.OWNER_OID && msPayload.oid === env.OWNER_OID ? 'eigenaar' : null, rec: null, reden: 'rollen-fout' }; }
+      catch (e) { const vast = vasteEigenaar(env, msPayload.oid, tokenEmail(msPayload)); ik = { rol: vast ? 'eigenaar' : null, rec: null, vast, reden: 'rollen-fout' }; }
       ik.oid = msPayload.oid; ik.email = tokenEmail(msPayload);
 
       // Eigen rol + rechten (front-end: tabs/knoppen verbergen — UI-gemak, geen beveiliging).
