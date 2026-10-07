@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — G1 geldtijdlijn: fundament /geld/* in de worker (eigenaar-only, niets stil weg)
+- Commit: `d12ba88` | Auteur: Bart Witte
+
 ## 2026-10-07 — P3a polijst (rooktest): voorstel-soort zichtbaar, intern zonder offertezoeken, klant invullen
 - Commit: `5e5548b` | Auteur: Bart Witte
 

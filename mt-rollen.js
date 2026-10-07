@@ -55,6 +55,9 @@
   };
   // Beheer tonen kan in élke modus (de beheer-API is altijd afgedwongen).
   R.isBeheer = () => !!(R.me && R.me.rechten && R.me.rechten.beheer);
+  // Geld (geldtijdlijn, financieel dashboard): in élke modus, want de worker dwingt het altijd af.
+  // niveau 'wijzigen' = ijkpunten/instellingen aanpassen; anders volstaat lezen.
+  R.magGeld = niveau => { const v = R.recht('geld'); return niveau === 'wijzigen' ? v === 'wijzigen' : !!v; };
   const toets = el => el.classList.toggle('mt-rol-verborgen', !R.mag(el.dataset.recht));
   R.pasToe = function (scope) {
     (scope || doc).querySelectorAll('[data-recht]').forEach(toets);

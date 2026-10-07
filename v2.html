@@ -8822,6 +8822,16 @@ async function cfFetch(pad,opties){
 }
 
 async function laadCashflowDashboard(){
+  // Alleen met recht `geld` (eigenaar, administratie); de worker weigert anderen sowieso. Wachten op /me.
+  const cfRoot=document.getElementById('cf-root');
+  if(!window.MTRol||!MTRol.me){
+    if(cfRoot) cfRoot.style.display='none';
+    if(window.MTRol&&!laadCashflowDashboard._wacht){ laadCashflowDashboard._wacht=true; window.addEventListener('mt-rol',()=>{ laadCashflowDashboard._wacht=false; laadCashflowDashboard(); },{once:true}); }
+    return;
+  }
+  if(!MTRol.magGeld()){ if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none'; return; }
+  // Instellingen (anker, doelen) alleen voor wie mag wijzigen.
+  const inst=document.querySelector('#cf-root .cf-settings-toggle'); if(inst&&inst.closest('.card')) inst.closest('.card').style.display=MTRol.magGeld('wijzigen')?'':'none';
   try{
     // Config ophalen (vasten, anker, doelen)
     _cfConfig = await cfFetch('/dashboard/config');
@@ -12552,7 +12562,8 @@ function beheerTeken(){
   const AUDIT={'uitgenodigd':'uitgenodigd','uitnodiging-gekoppeld':'uitnodiging gebruikt (eerste login)','uitnodiging-ingetrokken':'uitnodiging ingetrokken','rol-gewijzigd':'rol gewijzigd',
     'gedeactiveerd':'gedeactiveerd','gereactiveerd':'gereactiveerd','toegang-aangevraagd':'toegang aangevraagd','aanvraag-toegekend':'aanvraag toegekend','aanvraag-geweigerd':'aanvraag geweigerd',
     'eigenaar-gekoppeld':'eigenaar gekoppeld','eigenaar-vastgelegd':'eigenaar vastgelegd',
-    'instelling-gewijzigd':'instelling gewijzigd','werkcode-toegekend':'werkcode toegekend','werkcodes-migratie':'werkcodes toegekend (bestaande projecten)'};
+    'instelling-gewijzigd':'instelling gewijzigd','werkcode-toegekend':'werkcode toegekend','werkcodes-migratie':'werkcodes toegekend (bestaande projecten)',
+    'geld-ijkpunt':'saldo geijkt','geld-config':'geld-instellingen gewijzigd'};
   const rn=id=>(g.rollen.find(r=>r.id===id)||{}).naam||id||'';
   const auditR=(au.audit||[]).map(a=>`<tr><td class="bh-opt">${_bhDatum(a.ts)}</td><td>${esc(a.doorNaam||(a.door==='systeem'?'systeem':a.door==='deploy'?'uitrol':''))}</td><td>${esc(AUDIT[a.actie]||a.actie)}</td><td>${esc(a.doelNaam||a.doel||'')}</td><td>${a.oud?esc(rn(a.oud))+' → ':''}${esc(rn(a.nieuw))}</td></tr>`).join('');
   el.innerHTML=`<div class="bh-modus ${g.modus==='afdwingen'?'afdwingen':''}">${modusTekst}</div>
@@ -12566,10 +12577,20 @@ function beheerTeken(){
     ${inv?`<div class="bh-blok"><h4>Openstaande uitnodigingen</h4><table class="bh-tabel"><tbody>${inv}</tbody></table></div>`:''}
     ${aanv?`<div class="bh-blok"><h4>Toegangsaanvragen</h4><table class="bh-tabel"><tbody>${aanv}</tbody></table></div>`:''}
     ${top}
+    ${_bhRolUitleg(g)}
     ${_bhProjectcode(ikEig)}
     ${_bhControlelijst()}
     <details class="bh-blok"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Auditlog (laatste ${(au.audit||[]).length})</summary>
       <table class="bh-tabel"><thead><tr><th class="bh-opt">Wanneer</th><th>Door</th><th>Actie</th><th>Wie</th><th>Rol</th></tr></thead><tbody>${auditR||'<tr><td colspan="5">Nog niets.</td></tr>'}</tbody></table></details>`;
+}
+// Beheer: korte uitleg per rol (de worker beslist; dit is alleen de samenvatting).
+const _ROL_UITLEG={eigenaar:'alles, ook geld (geldtijdlijn) wijzigen en Moneybird-facturen verwijderen',
+  beheerder:'alles behalve geld; gebruikers en rollen beheren',kantoor:'projecten, inbox, offertes, Moneybird-concepten en team-uren; geen geld',
+  werkplaats:'projecten bekijken, taken en bestellijst, eigen uren',lezen:'projecten en offertes bekijken',administratie:'alleen geld en Moneybird bekijken'};
+function _bhRolUitleg(g){
+  const rollen=(g&&g.rollen)||[];
+  return `<details class="bh-blok"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Wat mag elke rol?</summary>
+    <table class="bh-tabel"><tbody>${rollen.map(r=>`<tr><td><b>${esc(r.naam)}</b></td><td>${esc(_ROL_UITLEG[r.id]||'')}</td></tr>`).join('')}</tbody></table></details>`;
 }
 // Beheer → Projectcode: wat staat zichtbaar bij een project (alleen de eigenaar wijzigt), en werkcodes
 // voor bestaande projecten (eenmalig, in volgorde van aanmaakdatum; eerst een proef).
