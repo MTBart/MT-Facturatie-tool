@@ -1119,13 +1119,18 @@ async function handleAanwezig(env, json) {
 // Log-teller: in geheugen optellen, hooguit eens per LOG_FLUSH_MS samenvoegen in KV.
 const _teller = { dag: '', totaal: 0, geweigerd: 0, redenen: {}, laatsteFlush: Date.now() };
 async function flushTeller(env) {
-  if (!env.MT_ROLLEN || (!_teller.totaal && !_teller.geweigerd)) return;
-  const dag = _teller.dag, delta = { totaal: _teller.totaal, geweigerd: _teller.geweigerd, redenen: _teller.redenen };
-  _teller.totaal = 0; _teller.geweigerd = 0; _teller.redenen = {}; _teller.laatsteFlush = Date.now();
+  if (!env.MT_ROLLEN || (!_teller.totaal && !_teller.geweigerd && !_teller.proxyTotaal)) return;
+  const dag = _teller.dag, delta = { totaal: _teller.totaal, geweigerd: _teller.geweigerd, redenen: _teller.redenen, proxy: _teller.proxy || {}, proxyTotaal: _teller.proxyTotaal || 0 };
+  _teller.totaal = 0; _teller.geweigerd = 0; _teller.redenen = {}; _teller.proxy = {}; _teller.proxyTotaal = 0; _teller.laatsteFlush = Date.now();
   const oud = (await kvJson(env, 'stat:' + dag)) || { totaal: 0, geweigerd: 0, redenen: {} };
   oud.totaal += delta.totaal; oud.geweigerd += delta.geweigerd;
   for (const [k, n] of Object.entries(delta.redenen)) {
     if (oud.redenen[k] != null || Object.keys(oud.redenen).length < 300) oud.redenen[k] = (oud.redenen[k] || 0) + n;
+  }
+  // F2: afwijkingen van het proxy-contract apart
+  oud.proxy = oud.proxy || {}; oud.proxyTotaal = (oud.proxyTotaal || 0) + delta.proxyTotaal;
+  for (const [k, n] of Object.entries(delta.proxy)) {
+    if (oud.proxy[k] != null || Object.keys(oud.proxy).length < 300) oud.proxy[k] = (oud.proxy[k] || 0) + n;
   }
   try { await kvZet(env, 'stat:' + dag, oud, { expirationTtl: 35 * DAG_S }); } catch {}
 }
@@ -1143,6 +1148,188 @@ async function noteerBesluit(env, ctx, b) {
       besluit: b.modus === 'afdwingen' ? 'geweigerd' : 'zou-weigeren', reden: b.reden }));
   }
   if (Date.now() - _teller.laatsteFlush > LOG_FLUSH_MS) waitUntil(ctx, flushTeller(env).catch(() => {}));
+}
+
+
+// ══ PROXY-CONTRACT (F2) ══════════════════════════════════════════════════════
+// Allowlist van wat de UI echt doet (v2, mobiel, toggl2, mt-*.js — inventaris 2026-10-07):
+// per target methode + padpatroon + toegestane query-sleutels + maximale body. Alles daarbuiten
+// is een "afwijking": PROXY_MODUS 'log' (standaard) logt en telt, 'afdwingen' weigert (403).
+// Los daarvan blijven veiligPad (../, //, backslash) en de rolmatrix gelden.
+// Regel: [methodes, pad-regex (zonder query), toegestane query-sleutels, maxBody (bytes)]
+const KB = 1024, MB_ = 1024 * 1024;
+const Q = (...s) => new Set(s);
+const PROXY_CONTRACT = {
+  // pad = na "<admin>/" (MB_ADMIN verplicht), zonder .json
+  moneybird: [
+    [['GET'], /^contacts$/, Q('page', 'per_page', 'query'), 0],
+    [['GET'], /^documents\/purchase_invoices$/, Q('filter', 'page', 'per_page'), 0],
+    [['GET'], /^documents\/purchase_invoices\/\d+$/, Q(), 0],
+    [['GET'], /^documents\/sales_invoices$/, Q('filter', 'page', 'per_page'), 0],
+    [['GET'], /^sales_invoices$/, Q('filter', 'page', 'per_page'), 0],
+    [['GET'], /^sales_invoices\/\d+$/, Q(), 0],
+    [['GET'], /^estimates$/, Q('filter', 'page', 'per_page'), 0],
+    [['GET'], /^estimates\/\d+$/, Q(), 0],
+    [['GET'], /^ledger_accounts$/, Q(), 0],
+    [['GET'], /^reports\/(creditors|debtors|creditors_aging|debtors_aging|expenses_by_contact|profit_loss)$/, Q('period', 'per_page'), 0],
+    [['POST'], /^contacts$/, Q(), 16 * KB],
+    [['POST'], /^documents\/purchase_invoices$/, Q(), 256 * KB],
+    [['PATCH'], /^documents\/purchase_invoices\/\d+$/, Q(), 256 * KB],
+    [['DELETE'], /^documents\/purchase_invoices\/\d+$/, Q(), 0],
+    [['POST'], /^documents\/purchase_invoices\/\d+\/notes$/, Q(), 16 * KB],
+    [['POST'], /^estimates$/, Q(), 256 * KB],
+    [['POST'], /^sales_invoices$/, Q(), 256 * KB],
+    [['PATCH'], /^estimates\/\d+\/bill_estimate$/, Q(), 4 * KB],
+  ],
+  moneybird_upload: [[['POST'], /^documents\/purchase_invoices\/\d+\/attachments$/, Q(), 15 * MB_]],
+  moneybird_download: [[['GET'], /^$/, Q(), 0]],   // ids worden apart als numeriek gecontroleerd
+  toggl: [   // Track v9 (pad zonder workspaces/{WS}/ waar dat ervoor staat)
+    [['GET'], /^me\/time_entries\/current$/, Q(), 0],
+    [['GET'], /^me\/time_entries$/, Q('start_date', 'end_date'), 0],
+    [['GET'], /^me\/projects$/, Q(), 0],
+    [['GET', 'POST'], /^W\/projects$/, Q('active', 'per_page'), 16 * KB],
+    [['GET'], /^W\/(workspace_users|users)$/, Q(), 0],
+    [['GET', 'POST'], /^W\/(clients|tags)$/, Q(), 8 * KB],
+    [['PUT', 'DELETE'], /^W\/(clients|tags)\/\d+$/, Q(), 8 * KB],
+    [['POST'], /^W\/time_entries$/, Q(), 16 * KB],
+    [['PUT', 'DELETE'], /^W\/time_entries\/\d+$/, Q(), 16 * KB],
+    [['PATCH'], /^W\/time_entries\/\d+\/stop$/, Q(), 4 * KB],
+  ],
+  toggl_focus: [   // O = organizations/{ORG}/workspaces/{WS}, W = workspaces/{WS}, G = organizations/{ORG}
+    [['GET', 'POST'], /^O\/projects$/, Q('page', 'per_page', 'order_by', 'include_drafts'), 16 * KB],
+    [['GET', 'PATCH'], /^O\/projects\/\d+$/, Q(), 16 * KB],
+    [['PATCH'], /^O\/projects\/\d+\/archive$/, Q(), 1 * KB],
+    [['GET', 'POST'], /^O\/tasks$/, Q('page', 'per_page', 'parent_task_id'), 32 * KB],
+    [['GET'], /^O\/tasks\/stream$/, Q(), 0],
+    [['PATCH', 'DELETE'], /^O\/tasks\/\d+$/, Q(), 32 * KB],
+    [['GET'], /^O\/tracking\/current$/, Q(), 0],
+    [['POST'], /^O\/time-entries$/, Q(), 16 * KB],
+    [['PATCH', 'DELETE'], /^O\/time-entries\/\d+$/, Q(), 16 * KB],
+    [['GET'], /^O\/time-entries\/stream$/, Q('date_from', 'date_to', 'order_by', 'include_taskless', 'project_id'), 0],
+    [['GET'], /^O\/time-blocks\/stream$/, Q('date_from', 'date_to', 'order_by'), 0],
+    [['GET'], /^O\/capacities\/users$/, Q('user_id', 'unit', 'start_date', 'end_date'), 0],
+    [['GET'], /^W\/statuses$/, Q('per_page', 'page', 'order_by'), 0],
+    [['GET', 'POST'], /^W\/clients$/, Q('per_page', 'page'), 8 * KB],
+    [['GET'], /^G\/users$/, Q(), 0],
+    [['POST'], /^reports\/W\/query$/, Q(), 32 * KB],
+  ],
+  toggl_reports: [[['POST'], /^workspace\/WS\/search\/time_entries$/, Q(), 32 * KB]],
+  toggl_admin_projects: [[['GET'], /^W\/projects$/, Q('active', 'per_page'), 0]],
+  claude: [[['POST'], /^$/, Q(), 25 * MB_]],
+};
+const CLAUDE_MODEL_RE = /^claude-(haiku|sonnet)-[a-z0-9.-]{1,40}$/;
+const CLAUDE_MAX_TOKENS = 4096;
+function proxyModus(env) {
+  const m = String((env && env.PROXY_MODUS) || 'log').trim().toLowerCase();
+  return ['uit', 'log', 'afdwingen'].includes(m) ? m : 'log';
+}
+// Pad → genormaliseerde vorm voor het contract (ids en werkruimte vast, MB-admin eraf).
+function contractPad(target, pad) {
+  let p = String(pad || '').split(/[?#]/)[0].replace(/\.json$/, '').replace(/\/$/, '');
+  if (target === 'moneybird' || target === 'moneybird_upload') {
+    const m = /^(\d+)\/(.*)$/.exec(p);
+    return m && m[1] === MB_ADMIN ? m[2] : null;
+  }
+  if (target === 'toggl' || target === 'toggl_admin_projects') return p.replace(new RegExp(`^workspaces/${FOCUS_WS}(?=/|$)`), 'W');
+  if (target === 'toggl_focus') {
+    return p.replace(new RegExp(`^organizations/${FOCUS_ORG}/workspaces/${FOCUS_WS}(?=/|$)`), 'O')
+      .replace(new RegExp(`^organizations/${FOCUS_ORG}(?=/|$)`), 'G')
+      .replace(new RegExp(`^reports/workspaces/${FOCUS_WS}(?=/|$)`), 'reports/W')
+      .replace(new RegExp(`^workspaces/${FOCUS_WS}(?=/|$)`), 'W');
+  }
+  if (target === 'toggl_reports') return p.replace(new RegExp(`^workspace/${FOCUS_WS}(?=/|$)`), 'workspace/WS');
+  return p;
+}
+// → null (binnen contract) of reden. `lengte` = Content-Length (of null), `body` = JSON (alleen claude).
+function toetsContract(target, methode, pad, lengte, body) {
+  const regels = PROXY_CONTRACT[target];
+  if (!regels) return 'onbekend-target';
+  const ruw = String(pad || '');
+  if (/^[a-z][a-z0-9+.-]*:/i.test(ruw) || ruw.includes('://')) return 'volledige-url';
+  const p = contractPad(target, ruw);
+  if (p == null) return 'andere-administratie';
+  const m = String(methode || 'GET').toUpperCase();
+  const regel = regels.find(([ms, re]) => ms.includes(m) && re.test(p));
+  if (!regel) return regels.some(([, re]) => re.test(p)) ? 'methode-niet-in-contract' : 'pad-niet-in-contract';
+  const qs = ruw.includes('?') ? ruw.slice(ruw.indexOf('?') + 1) : '';
+  if (qs) {
+    for (const [k, v] of new URLSearchParams(qs)) {
+      if (!regel[2].has(k)) return 'onverwachte-query';
+      if (v.length > 500 || /[\x00-\x1f]/.test(v)) return 'query-waarde';
+    }
+  }
+  if (lengte != null && lengte > regel[3]) return 'body-te-groot';
+  if (target === 'claude' && body) {
+    if (!CLAUDE_MODEL_RE.test(String(body.model || ''))) return 'claude-model';
+    if (!(Number(body.max_tokens) > 0 && Number(body.max_tokens) <= CLAUDE_MAX_TOKENS)) return 'claude-max-tokens';
+    if (body.tools || (body.system && String(body.system).length > 20000)) return 'claude-opties';
+  }
+  return null;
+}
+// F3: elke Moneybird-schrijfactie draagt X-MT-Bevestiging (de UI vroeg de gebruiker vooraf om bevestiging).
+const BEVESTIG_RE = /^mt-[a-z0-9-]{6,60}$/;
+const ACTIE_RE = /^mt-[a-z0-9-]{6,60}(:[a-z0-9_-]{1,30})?$/;
+const isMbSchrijf = (target, methode) => (target === 'moneybird' && String(methode).toUpperCase() !== 'GET') || target === 'moneybird_upload';
+async function noteerProxy(env, ctx, b) {
+  const k = `${b.target}|${b.actie}|${b.reden}`;
+  _teller.proxy = _teller.proxy || {};
+  if (_teller.proxy[k] != null || Object.keys(_teller.proxy).length < 200) _teller.proxy[k] = (_teller.proxy[k] || 0) + 1;
+  _teller.proxyTotaal = (_teller.proxyTotaal || 0) + 1;
+  console.log(JSON.stringify({ proxy: b.modus, oid: await oidHash(b.oid), target: b.target, actie: b.actie, reden: b.reden,
+    besluit: b.modus === 'afdwingen' ? 'geweigerd' : 'zou-weigeren' }));
+  if (!_teller.dag) _teller.dag = new Date().toISOString().slice(0, 10);
+  if (Date.now() - _teller.laatsteFlush > LOG_FLUSH_MS) waitUntil(ctx, flushTeller(env).catch(() => {}));
+}
+
+// ══ IDEMPOTENTIE (F4) ════════════════════════════════════════════════════════
+// MB-schrijfactie met X-MT-Actie: per (oid, actie) in KV `actie:{oid}:{actie}` (24 u):
+//   bezig → klaar {http, body, mbId} | onzeker (5xx/time-out: MB kán het gedaan hebben)
+// Zelfde actie nog eens: klaar → hetzelfde antwoord zonder nieuwe call (X-MT-Herhaald: 1);
+// bezig (< 2 min) → 409 actie-bezig; anders → 409 actie-onzeker (UI zoekt het concept op).
+// 4xx van MB = niets aangemaakt → sleutel weg, opnieuw proberen mag.
+// Beperking: KV is eventually consistent; gelijktijdige dubbele verzoeken via verschillende
+// datacenters kunnen beide door (de in-memory kaart vangt het binnen één isolate af).
+const ACTIE_TTL_S = 24 * 3600, ACTIE_BEZIG_MS = 2 * 60 * 1000, ACTIE_BODY_MAX = 512 * KB;
+const _acties = new Map();   // key -> rec (deze isolate)
+async function mbIdempotent(env, ik, actie, methode, pad, doFetch, cors) {
+  const hdr = extra => ({ 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', ...cors, ...(extra || {}) });
+  const fout = (obj, status) => new Response(JSON.stringify(obj), { status, headers: hdr() });
+  if (!ACTIE_RE.test(actie)) return fout({ error: 'ongeldige-actie' }, 400);
+  const key = `actie:${String(ik.oid).toLowerCase()}:${actie}`;
+  const bestaand = _acties.get(key) || await kvJson(env, key);
+  if (bestaand) {
+    if (bestaand.methode !== methode || bestaand.pad !== pad) return fout({ error: 'actie-andere-inhoud' }, 409);
+    if (bestaand.status === 'klaar') {
+      const body = bestaand.body != null ? bestaand.body : JSON.stringify({ id: bestaand.mbId });
+      return new Response(body, { status: bestaand.http || 200, headers: hdr({ 'X-MT-Herhaald': '1' }) });
+    }
+    const bezig = bestaand.status === 'bezig' && Date.now() - bestaand.ts < ACTIE_BEZIG_MS;
+    return fout({ error: bezig ? 'actie-bezig' : 'actie-onzeker', sinds: bestaand.ts }, 409);
+  }
+  const start = { status: 'bezig', ts: Date.now(), methode, pad };
+  _acties.set(key, start);
+  try { await kvZet(env, key, start, { expirationTtl: ACTIE_TTL_S }); } catch {}
+  let resp;
+  try { resp = await doFetch(); }
+  catch (e) {
+    const onz = { ...start, status: 'onzeker' }; _acties.set(key, onz);
+    try { await kvZet(env, key, onz, { expirationTtl: ACTIE_TTL_S }); } catch {}
+    return fout({ error: 'moneybird-onbereikbaar', actie: 'onzeker' }, 504);
+  }
+  const text = await resp.text();
+  if (resp.ok) {
+    let mbId = null; try { const j = JSON.parse(text); mbId = j && j.id != null ? String(j.id) : null; } catch {}
+    const klaar = { ...start, status: 'klaar', http: resp.status, mbId, body: text.length <= ACTIE_BODY_MAX ? text : null };
+    _acties.set(key, klaar);
+    try { await kvZet(env, key, klaar, { expirationTtl: ACTIE_TTL_S }); } catch {}
+  } else if (resp.status >= 400 && resp.status < 500) {
+    _acties.delete(key);
+    try { await env.MT_ROLLEN.delete(key); } catch {}
+  } else {
+    const onz = { ...start, status: 'onzeker', http: resp.status }; _acties.set(key, onz);
+    try { await kvZet(env, key, onz, { expirationTtl: ACTIE_TTL_S }); } catch {}
+  }
+  return new Response(text, { status: resp.status, headers: hdr() });
 }
 
 // ── /me, /toegang en /beheer/* ────────────────────────────────────────────────
@@ -1266,17 +1453,20 @@ async function handleBeheer(pathname, request, env, ik, json) {
   }
   if (p === '/beheer/log' && m === 'GET') {
     const dagen = Math.max(1, Math.min(31, parseInt(new URL(request.url).searchParams.get('dagen') || '7', 10) || 7));
-    const tot = { totaal: 0, geweigerd: 0, redenen: {} }, perDag = [];
+    const tot = { totaal: 0, geweigerd: 0, redenen: {}, proxy: {}, proxyTotaal: 0 }, perDag = [];
     for (let i = 0; i < dagen; i++) {
       const dag = new Date(Date.now() - i * DAG_S * 1000).toISOString().slice(0, 10);
       const s = await kvJson(env, 'stat:' + dag); if (!s) continue;
-      perDag.push({ dag, totaal: s.totaal, geweigerd: s.geweigerd });
-      tot.totaal += s.totaal; tot.geweigerd += s.geweigerd;
+      perDag.push({ dag, totaal: s.totaal, geweigerd: s.geweigerd, proxy: s.proxyTotaal || 0 });
+      tot.totaal += s.totaal; tot.geweigerd += s.geweigerd; tot.proxyTotaal += s.proxyTotaal || 0;
       for (const [k, n] of Object.entries(s.redenen || {})) tot.redenen[k] = (tot.redenen[k] || 0) + n;
+      for (const [k, n] of Object.entries(s.proxy || {})) tot.proxy[k] = (tot.proxy[k] || 0) + n;
     }
+    const proxyTop = Object.entries(tot.proxy).sort((a, b) => b[1] - a[1]).slice(0, 25)
+      .map(([k, n]) => { const [target, actie, reden] = k.split('|'); return { target, actie, reden, n }; });
     const top = Object.entries(tot.redenen).sort((a, b) => b[1] - a[1]).slice(0, 25)
       .map(([k, n]) => { const [rol, actie, reden] = k.split('|'); return { rol, actie, reden, n }; });
-    return json({ modus: rollenModus(env), dagen, totaal: tot.totaal, geweigerd: tot.geweigerd, perDag, top });
+    return json({ modus: rollenModus(env), proxyModus: proxyModus(env), dagen, totaal: tot.totaal, geweigerd: tot.geweigerd, perDag, top, proxyAfwijkingen: tot.proxyTotaal, proxyTop });
   }
   return json({ error: 'unknown-beheer-route' }, 404);
 }
@@ -1286,7 +1476,8 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': 'https://mtbart.github.io',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PATCH, DELETE',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-MT-Bevestiging, X-MT-Actie',
+      'Access-Control-Expose-Headers': 'X-MT-Herhaald',
     };
 
     if (request.method === 'OPTIONS') {
@@ -1342,6 +1533,20 @@ export default {
         try { await noteerBesluit(env, ctx, { ...besluit, modus, rol: ik.rol, oid: ik.oid, target, actie: actieNaam(target, request.method, pad) }); } catch {}
         if (!besluit.ok && modus === 'afdwingen') return json({ error: 'geen-toegang', reden: besluit.reden, rol: ik.rol }, 403);
         beperkt = besluit.ok && !!besluit.beperkt && modus === 'afdwingen';
+      }
+
+      // F2/F3: proxy-contract + bevestiging bij Moneybird-schrijfacties ('log' = alleen loggen).
+      const pm = proxyModus(env);
+      if (pm !== 'uit' && !eigenRoute && PROXY_CONTRACT[target]) {
+        let cBody = null;
+        if (target === 'claude') { try { cBody = await request.clone().json(); } catch {} }
+        const cl = request.headers.get('content-length'), lengte = cl != null && cl !== '' ? Number(cl) : null;
+        let reden = toetsContract(target, request.method, target === 'moneybird_download' ? '' : pad, lengte, cBody);
+        if (!reden && isMbSchrijf(target, request.method) && !BEVESTIG_RE.test(request.headers.get('X-MT-Bevestiging') || '')) reden = 'geen-bevestiging';
+        if (reden) {
+          try { await noteerProxy(env, ctx, { modus: pm, oid: ik.oid, target, actie: actieNaam(target, request.method, pad), reden }); } catch {}
+          if (pm === 'afdwingen') return json({ error: 'buiten-contract', reden }, 403);
+        }
       }
 
       if (isMijn) return await handleMijnToggl(request, env, ik, msPayload, json);
@@ -1413,11 +1618,15 @@ export default {
         const mbPath = url.searchParams.get('path');
         const method = request.method;
         const body = ['POST','PATCH'].includes(method) ? await request.text() : undefined;
-        const response = await fetch(`https://moneybird.com/api/v2/${mbPath}`, {
+        const mbFetch = () => fetch(`https://moneybird.com/api/v2/${mbPath}`, {
           method,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.MONEYBIRD_KEY}` },
           body
         });
+        // F4: schrijfactie met X-MT-Actie → hooguit één keer uitvoeren (zie mbIdempotent).
+        const actie = method !== 'GET' ? request.headers.get('X-MT-Actie') : null;
+        if (actie && env.MT_ROLLEN) return await mbIdempotent(env, ik, actie, method, mbPath, mbFetch, corsHeaders);
+        const response = await mbFetch();
         const text = await response.text();
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 
