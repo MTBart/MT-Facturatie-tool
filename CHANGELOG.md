@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Koppel-badge in Moneybird-stijl: overal hetzelfde open/gekoppeld-icoon met voorstellen en details
+- Commit: `e88ac5b` | Auteur: Bart Witte
+
 ## 2026-10-07 — Backupmap van de vorige live-versie (6 okt) + versie v2.2
 - Commit: `f09b055` | Auteur: Bart Witte
 

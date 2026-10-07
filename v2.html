@@ -511,7 +511,7 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .dos-aangepast[hidden]{display:none}
 /* Koppel-badge (B11, Moneybird-stijl): geel/open = niet gekoppeld, groen/dicht = gekoppeld */
 :root{--kb-open-bg:#FFF4D6;--kb-open-fg:#7A5300;--kb-open-rand:#E9C46A;--kb-ok-bg:#E3F1E7;--kb-ok-fg:#1F5C36;--kb-ok-rand:#9CCBAA}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--kb-open-bg:#3A2E10;--kb-open-fg:#F6D27A;--kb-open-rand:#8A6A1F;--kb-ok-bg:#16301F;--kb-ok-fg:#9FE0B4;--kb-ok-rand:#2F6B45}}
+/* de app is licht; de badge volgt het thema van de app, niet het OS (alleen bij een expliciet donker app-thema) */
 :root[data-theme="dark"]{--kb-open-bg:#3A2E10;--kb-open-fg:#F6D27A;--kb-open-rand:#8A6A1F;--kb-ok-bg:#16301F;--kb-ok-fg:#9FE0B4;--kb-ok-rand:#2F6B45}
 .kb{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:2px 9px;border-radius:14px;border:1px solid;font:600 12px var(--sans);line-height:1.2;white-space:nowrap;vertical-align:middle;max-width:100%;cursor:default;text-decoration:none}
 button.kb{cursor:pointer}
@@ -5159,7 +5159,7 @@ function _projCtx(proj){
   const mbBron=proj.mb_nr?'handmatig':(autoMb?'auto via klantregistry':null);
   const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' );
   const mbNrBlok=effectiveMb
-    ? kb({status:'gekoppeld',label:String(effectiveMb),titel:'Moneybird-contact '+effectiveMb+' ('+mbBron+') — klik voor details',onclick:`mbPop(this,'${_jsCode(proj.code)}')`})
+    ? kb({status:'gekoppeld',label:mbContactNaam(effectiveMb)||'Moneybird',titel:'Moneybird-contact '+(mbContactNaam(effectiveMb)||'')+' ('+mbBron+') — klik voor details',onclick:`mbPop(this,'${_jsCode(proj.code)}')`})
     : kb({status:'open',label:'Moneybird',titel:'Nog geen Moneybird-contact — klik om te koppelen',onclick:`bewerkProjectMbNr('${_jsCode(proj.code)}')`});
   return {projItems,totaalInkoop,effectiveMb,klantChip,mbNrBlok,sid:proj.code.replace(/-/g,''),cid:proj.code.replace(/[^A-Za-z0-9]/g,'')};
 }
@@ -6414,18 +6414,26 @@ function _t2Kandidaten(mt,ps){
 // Projectscherm: Toggl-project kiezen (mens bevestigt) en offertenummer toekennen.
 function t2ProjectRijHtml(proj){
   const p=(typeof _tgCache!=='undefined'&&_tgCache.projecten||[]).find(x=>x.id===proj.tg_project_id);
-  const naam=proj.tg_project_id?(p?p.name:'#'+proj.tg_project_id):'';
+  const naam=proj.tg_project_id?((p&&p.name)||'Toggl'):'';     // nooit het ruwe id (dat staat in de popover)
   const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' ), c=_jsCode(proj.code);
   return `<div class="koppel-rij">
-    <span class="kpi-label" style="margin:0">Toggl-project:</span> ${kb(proj.tg_project_id?{status:'gekoppeld',label:naam,titel:'Gekoppeld aan Toggl-project '+naam+' — klik voor details',onclick:`t2Pop(this,'${c}')`}:{status:'open',label:'Toggl',titel:'Nog geen Toggl-project — klik om er een te kiezen',onclick:`t2KiesProject('${c}')`})}
+    <span class="kpi-label" style="margin:0">Toggl-project:</span> ${kb(proj.tg_project_id?{status:'gekoppeld',label:naam,titel:'Gekoppeld aan Toggl-project'+(p&&p.name?' '+p.name:'')+' — klik voor details',onclick:`t2Pop(this,'${c}')`}:{status:'open',label:'Toggl',titel:'Nog geen Toggl-project — klik om er een te kiezen',onclick:`t2KiesProject('${c}')`})}
     <span class="kpi-label" style="margin:0 0 0 .5rem">Offertenummer:</span> ${kb(proj.offertenr?{status:'gekoppeld',label:proj.offertenr,titel:'Offertenummer '+proj.offertenr+' — klik om te wijzigen',onclick:`t2OffertenummerToekennen('${c}')`}:{status:'open',label:'offertenummer',titel:'Kies de Moneybird-offerte; de projectnaam in Toggl wordt "<nummer> <naam>"',onclick:`t2OffertenummerToekennen('${c}')`})}
     <span id="t2-st-${proj.code.replace(/[^A-Za-z0-9]/g,'')}"></span></div>`;
 }
 // Popover Moneybird-contact: openen, bron, wijzigen, handmatige koppeling weghalen.
+// Naam van een Moneybird-contact (contactencache, anders klantregistry); '' als onbekend → nooit het ruwe id tonen.
+function mbContactNaam(id){
+  if(!id) return ''; const s=String(id);
+  try{ const c=JSON.parse(localStorage.getItem('mt_cache_klanten')||'null'), m=(c&&Array.isArray(c.data)?c.data:[]).find(x=>String(x.id)===s);
+    const n=m&&(m.company_name||[m.firstname,m.lastname].filter(Boolean).join(' ')); if(n) return n; }catch(e){}
+  const reg=[...(typeof KLANTEN!=='undefined'&&Array.isArray(KLANTEN)?KLANTEN:[]),...(typeof KLANTEN_VOL!=='undefined'&&Array.isArray(KLANTEN_VOL)?KLANTEN_VOL:[])];
+  const k=reg.find(x=>x&&String(x.mb_contact_id||'')===s); return (k&&k.naam)||'';
+}
 function mbPop(el,code){
   const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!window.MTKoppelUI) return;
   const auto=resolveMbContact(proj), eff=proj.mb_nr||auto, bron=proj.mb_nr?'handmatig gekoppeld':'automatisch via de klantregistry';
-  MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:String(eff)})}<span class="kb-pop-n dos-meta">${esc(bron)}</span></div>
+  MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:mbContactNaam(eff)||'Moneybird'})}<span class="kb-pop-n dos-meta">${esc(bron)} · contact-id ${esc(eff)}</span></div>
     <div class="kb-pop-acties"><a class="btn btn-xs btn-secondary" href="https://moneybird.com/${getAdmin()}/contacts/${esc(eff)}" target="_blank" rel="noopener">Open in Moneybird ↗</a>
     <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();bewerkProjectMbNr('${_jsCode(code)}')">Wijzigen</button>
     ${proj.mb_nr?`<button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();mbOntkoppel('${_jsCode(code)}')">Handmatige koppeling weghalen</button>`:''}</div>
@@ -6442,22 +6450,50 @@ function projMapBadge(proj,{klein=false}={}){
   if(!window.MTKoppelUI) return '';
   const m=(window._dossierMap||{})[proj.code], c=_jsCode(proj.code);
   if(proj.map&&proj.map.itemId) return MTKoppelUI.badge({status:'gekoppeld',klein,label:'projectmap',titel:'Projectmap: '+(proj.map.pad||'')+' — klik voor details',onclick:`mapPop(this,'${c}')`});
-  if(m&&m.fout&&/Meerdere projectmappen/.test(m.fout)) return MTKoppelUI.badge({status:'open',klein,tekst:'Meerdere mappen',waarschuwing:'meerdere kandidaat-mappen',titel:'Er zijn meerdere mappen die bij dit project kunnen horen — klik om te bekijken',onclick:`projMappenHerstel('${c}')`});
-  return MTKoppelUI.badge({status:'open',klein,label:'projectmap',titel:'Projectmap nog niet gecontroleerd — klik om te zoeken (eerst een droogloop)',onclick:`projMappenHerstel('${c}')`});
+  if(m&&m.fout&&/Meerdere projectmappen/.test(m.fout)) return MTKoppelUI.badge({status:'open',klein,tekst:'Meerdere mappen',waarschuwing:'meerdere kandidaat-mappen',titel:'Er zijn meerdere mappen die bij dit project kunnen horen — klik voor details',onclick:`mapPop(this,'${c}')`});
+  return MTKoppelUI.badge({status:'open',klein,label:'projectmap',titel:'Projectmap nog niet gecontroleerd — klik voor details',onclick:`mapPop(this,'${c}')`});
 }
 function mapPop(el,code){
   const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!window.MTKoppelUI) return;
-  const m=proj.map||{};
+  const m=proj.map||{}, jc=_jsCode(code);
+  if(!m.itemId){
+    const dub=(window._dossierMap||{})[code], dubbel=!!(dub&&dub.fout&&/Meerdere projectmappen/.test(dub.fout));
+    MTKoppelUI.popover(el,`<div class="dos-meta">${dubbel?'⚠ Er zijn meerdere mappen die bij dit project kunnen horen. Kies de juiste via "Mappen herstellen…" — er wordt niets samengevoegd of hernoemd.':'De projectmap is nog niet gecontroleerd. "Controleren" zoekt alleen (leest), en onthoudt de map als er precies één is.'}</div>
+      <div class="kb-pop-acties"><button class="btn btn-xs ${dubbel?'btn-secondary':'btn-primary'}" onclick="MTKoppelUI.sluit();mapControleer('${jc}')">Controleren</button>
+      <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();mapOpenKlantmap('${jc}')">Open klantmap ↗</button>
+      <button class="btn btn-xs ${dubbel?'btn-primary':'btn-secondary'}" onclick="MTKoppelUI.sluit();projMappenHerstel('${jc}')">Mappen herstellen…</button></div>`,{titel:dubbel?'Niet gekoppeld · meerdere mappen':'Niet gekoppeld · projectmap'});
+    return;
+  }
   MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:'projectmap'})}<span class="kb-pop-n dos-meta" style="overflow-wrap:anywhere">${esc(m.pad||'')}</span></div>
     <div class="kb-pop-acties">${m.webUrl?`<a class="btn btn-xs btn-secondary" href="${esc(m.webUrl)}" target="_blank" rel="noopener">Open map ↗</a>`:''}
     <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();projSectieKies('dossier');dossierLaadMap('${_jsCode(code)}')">Bestanden tonen</button>
     <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();projMappenHerstel('${_jsCode(code)}')">Mappen herstellen</button></div>`,{titel:'Projectmap'});
 }
+// Alleen lezen: projectmap zoeken; precies één → onthouden op het project (projMap), anders melden.
+async function mapControleer(code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj) return;
+  let pm; try{ pm=await window.projMap(proj,{maak:false}); }catch(e){ return mtDialog.alert({title:'Projectmap controleren',message:'Controleren lukte niet: '+(e.message||e)}); }
+  window._dossierMap=window._dossierMap||{};
+  if(!pm.pad&&pm.dubbel) window._dossierMap[code]=Object.assign({},window._dossierMap[code],{fout:'Meerdere projectmappen gevonden ('+pm.kandidaten.length+') — zie 🗂 Mappen herstellen'});
+  _rerenderDetailKeepScroll();
+  if(!pm.pad) mtDialog.alert({title:'Projectmap controleren',message:pm.dubbel?'Er zijn meerdere mappen die bij dit project kunnen horen. Kies de juiste via "Mappen herstellen…".':'Geen projectmap gevonden ('+(pm.reden||'onbekend')+'). Die wordt gemaakt bij de eerste opslag, of via "Mappen herstellen…".'});
+}
+// Klantmap openen (venster meteen openen, anders blokkeert de browser het na het wachten).
+async function mapOpenKlantmap(code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj) return;
+  const w=window.open('','_blank');
+  try{
+    const kids=await _SP.listChildren(PROJ_ROOT), kn=_projVeilig(_projKlantNaam(proj));
+    const kl=kids.find(c=>c.folder&&c.name===kn)||kids.find(c=>c.folder&&_SP._norm(c.name)===_SP._norm(kn));
+    if(!kl||!kl.webUrl) throw new Error('geen klantmap "'+kn+'" gevonden');
+    if(w){ w.opener=null; w.location.href=kl.webUrl; } else window.open(kl.webUrl,'_blank','noopener');
+  }catch(e){ if(w) w.close(); mtDialog.alert({title:'Klantmap',message:'Klantmap openen lukte niet: '+(e.message||e)}); }
+}
 // Popover Toggl-koppeling: details, ander project kiezen, ontkoppelen (alleen de koppeling in de tool).
 function t2Pop(el,code){
   const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!window.MTKoppelUI) return;
   const p=(typeof _tgCache!=='undefined'&&_tgCache.projecten||[]).find(x=>x.id===proj.tg_project_id);
-  MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:p?p.name:'#'+proj.tg_project_id})}<span class="kb-pop-n dos-meta">id ${esc(proj.tg_project_id)}</span></div>
+  MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:(p&&p.name)||'Toggl'})}<span class="kb-pop-n dos-meta">Toggl-id ${esc(proj.tg_project_id)}</span></div>
     <div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();t2KiesProject('${_jsCode(code)}')">Ander Toggl-project kiezen</button>
     <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();t2Ontkoppel('${_jsCode(code)}')">Ontkoppelen</button></div>`,{titel:'Toggl-project'});
 }
