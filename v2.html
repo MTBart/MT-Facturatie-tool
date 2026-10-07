@@ -147,6 +147,12 @@ header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px
 header h1{font-family:var(--serif);font-size:20px;font-weight:400;letter-spacing:0.02em;color:var(--green)}
 header h1 span{color:var(--gold);font-style:italic}
 .header-version{font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-left:4px}
+.upd-stip{border:0;background:none;cursor:pointer;font:600 10px/1 var(--mono);color:var(--gold,#B8962E);padding:2px 4px;margin-left:2px;display:inline-flex;align-items:center;gap:3px}
+.upd-stip::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--gold,#B8962E)}
+.upd-stip[hidden]{display:none}
+.upd-versie summary{cursor:pointer;padding:4px 0}
+.upd-versie ul{margin:2px 0 8px 18px;padding:0}
+.upd-versie li{margin:3px 0;font-size:13px}
 .header-badge{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:0.04em;
   background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid);
   border-radius:20px;padding:2px 9px;text-transform:uppercase}
@@ -778,6 +784,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
     <span class="header-version">v2.8</span>
+    <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
@@ -1405,6 +1412,10 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div class="card" id="beheer-kaart" style="display:none">
       <div class="card-title">Beheer — gebruikers &amp; rollen</div>
       <div id="beheer-inhoud" style="font-size:13px">Laden…</div>
+    </div>
+    <div class="card" id="upd-kaart" style="display:none">
+      <div class="card-title">Wat is er verbeterd</div>
+      <div id="upd-inhoud" style="font-size:13px">Laden…</div>
     </div>
     <div class="card" id="tgk-kaart" data-tgk-kaart style="display:none">
       <div class="card-title">Koppel je Toggl</div>
@@ -12394,7 +12405,7 @@ async function toonApp(account) {
   loadLedgers();
   laadDashboard();
   if(typeof admInitKnop==='function') admInitKnop();
-  rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); });
+  rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); updStipZet(); });
   mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
   // Deep-link uit de URL-hash honoreren (bv. een "apart venster" met #tab=inbox).
   try{ tbApplyHashTab(); }catch(e){}
@@ -12412,6 +12423,7 @@ async function rolLaad(){
   if(act&&act.classList.contains('mt-rol-verborgen')){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
   if(typeof admInitKnop==='function') admInitKnop();
   const k=document.getElementById('beheer-kaart'); if(k) k.style.display=MTRol.isBeheer()?'':'none';
+  if(MTRol.isBeheer()) updKaartTeken(); else { const u=document.getElementById('upd-kaart'); if(u) u.style.display='none'; }
   // Deeplink-race: een tab die al open stond vóór /me terug was (bv. #tab=instellingen of
   // #tab=activiteit) laadde zonder rol → nu alsnog vullen.
   const open=n=>{ const t=document.getElementById('tab-'+n); return !!(t&&t.classList.contains('active')); };
@@ -12420,6 +12432,44 @@ async function rolLaad(){
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   return me;
+}
+// ── Wat is er verbeterd (data/updates.json, gewone taal, nieuwste eerst) ──
+// Beheer ziet alle versies in de kaart; iedereen krijgt eenmalig een "nieuw"-stipje bij het versielabel
+// voor de punten "voor iedereen" die hij nog niet zag (per gebruiker onthouden in deze browser).
+let _updates=null;
+async function updLaad(){
+  if(_updates) return _updates;
+  try{ const r=await fetch('data/updates.json',{cache:'no-cache'}); const d=r.ok?await r.json():[]; _updates=Array.isArray(d)?d.filter(u=>u&&u.versie&&Array.isArray(u.punten)):[]; }
+  catch(e){ _updates=[]; }
+  return _updates;
+}
+function _updCmp(a,b){ const x=String(a).split('.').map(Number), y=String(b).split('.').map(Number);
+  for(let i=0;i<Math.max(x.length,y.length);i++){ const d=(x[i]||0)-(y[i]||0); if(d) return d; } return 0; }
+const _updSleutel=()=>'mt_updates_gezien:'+((typeof mtMijEmail==='function'&&mtMijEmail())||'');
+function _updGezien(){ try{ return localStorage.getItem(_updSleutel())||''; }catch(e){ return ''; } }
+function _updNieuw(lijst){ const g=_updGezien(); return lijst.filter(u=>u.voor==='iedereen'&&(!g||_updCmp(u.versie,g)>0)).sort((a,b)=>_updCmp(b.versie,a.versie)); }
+async function updStipZet(){
+  const b=document.getElementById('upd-stip'); if(!b) return;
+  const n=_updNieuw(await updLaad());
+  b.hidden=!n.length; if(n.length) b.title='Nieuw in v'+n[0].versie;
+}
+async function updNieuwToon(){
+  const l=await updLaad(), iedereen=l.filter(u=>u.voor==='iedereen').sort((a,b)=>_updCmp(b.versie,a.versie));
+  const n=_updNieuw(l), toon=(n.length?n:iedereen).slice(0,3);
+  const tekst=toon.map(u=>`v${u.versie} — ${u.titel}\n`+u.punten.map(p=>'• '+p).join('\n')).join('\n\n');
+  await mtDialog.alert({title:'Nieuw in de tool',message:tekst||'Nog geen nieuws.'});
+  try{ if(iedereen[0]) localStorage.setItem(_updSleutel(),iedereen[0].versie); }catch(e){}
+  updStipZet();
+}
+const _updDatum=d=>{ const t=Date.parse(String(d||'')+'T12:00:00'); return isNaN(t)?String(d||''):new Date(t).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'}); };
+async function updKaartTeken(){
+  const kaart=document.getElementById('upd-kaart'), el=document.getElementById('upd-inhoud'); if(!kaart||!el) return;
+  const l=(await updLaad()).slice().sort((a,b)=>_updCmp(b.versie,a.versie));
+  kaart.style.display='';
+  if(!l.length){ el.innerHTML='<div class="dos-meta">Nog geen overzicht beschikbaar.</div>'; return; }
+  el.innerHTML=l.map((u,i)=>`<details class="upd-versie"${i===0?' open':''}><summary><b>v${esc(u.versie)}</b> — ${esc(u.titel)}
+      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${u.voor==='beheer'?' · voor beheer':''}</span></summary>
+    <ul>${u.punten.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></details>`).join('');
 }
 // ── Werkcodes en centrale instellingen (projectnummering) ──
 // /instellingen: "Projectcode tonen als" (offerte | werkcode | beide), centraal door de eigenaar gezet.

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Release v2.8: Controlelijst projecten in Beheer; backup = v2.7
+- Commit: `66b3004` | Auteur: Bart Witte
+
 ## 2026-10-07 — magGeld: terugval voor een worker zonder recht geld (veilig vóór de worker-deploy)
 - Commit: `d6a5b6c` | Auteur: Bart Witte
 

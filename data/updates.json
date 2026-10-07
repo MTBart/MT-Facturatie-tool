@@ -1,0 +1,88 @@
+[
+  {
+    "versie": "2.8",
+    "datum": "2026-10-07",
+    "titel": "Controlelijst projecten",
+    "voor": "beheer",
+    "punten": [
+      "Nieuw in Beheer: de Controlelijst projecten. Per project een voorstel voor een schone naam (zonder klantnaam erin), de soort (klant of intern) en het bijbehorende offertenummer uit Moneybird.",
+      "Losse gegevens zonder project (oude codes met mails, calculaties of voorraadregels) kun je koppelen aan een bestaand project, opnieuw als project aanmaken of als historie laten staan.",
+      "Eerst zie je altijd wat er verplaatst wordt; daarna pas gebeurt het, en het is terug te draaien. Er wordt niets gewist en niets gegokt."
+    ]
+  },
+  {
+    "versie": "2.7",
+    "datum": "2026-10-07",
+    "titel": "Vaste projectnummers",
+    "voor": "iedereen",
+    "punten": [
+      "Elk project heeft nu een vast, onzichtbaar nummer onder de motorkap, zodat koppelingen nooit meer breken als de naam of code verandert.",
+      "Nieuwe projecten kunnen een werkcode krijgen (bijv. W26-004) zolang er nog geen offertenummer is.",
+      "In Instellingen kies je wat je als projectcode ziet: het offertenummer, de werkcode of allebei."
+    ]
+  },
+  {
+    "versie": "2.6.1",
+    "datum": "2026-10-07",
+    "titel": "Nettere projectnamen",
+    "voor": "iedereen",
+    "punten": [
+      "De oude, automatisch gemaakte projectcodes zie je nergens meer; je ziet de volledige naam met het offertenummer als label."
+    ]
+  },
+  {
+    "versie": "2.6",
+    "datum": "2026-10-07",
+    "titel": "Moneybird veilig + contacten",
+    "voor": "iedereen",
+    "punten": [
+      "Acties naar Moneybird vragen eerst om bevestiging en kunnen niet per ongeluk dubbel gebeuren (ook niet bij twee keer klikken of een haperende verbinding).",
+      "Nieuw contactenregister: contactpersonen per klant en locatie op één plek.",
+      "Onbekende namen en locaties worden niet meer geraden: ze blijven leeg met '+ invullen'."
+    ]
+  },
+  {
+    "versie": "2.5",
+    "datum": "2026-10-07",
+    "titel": "Toggl zelf koppelen",
+    "voor": "iedereen",
+    "punten": [
+      "Iedereen koppelt zelf zijn eigen Toggl-account (één keer de sleutel plakken); je uren en timer lopen dan via je eigen account.",
+      "Planvoorstellen: de tool stelt voor wanneer werk ingepland kan worden; jij beslist."
+    ]
+  },
+  {
+    "versie": "2.4",
+    "datum": "2026-10-07",
+    "titel": "Rollen en Beheer",
+    "voor": "beheer",
+    "punten": [
+      "Nieuw Beheer-scherm: per persoon een rol (eigenaar, beheerder, kantoor, werkplaats, alleen lezen) die bepaalt wat je kunt zien en doen.",
+      "Nieuwe mensen kun je uitnodigen; elke wijziging wordt gelogd. De rollen draaien nu eerst in meekijkstand (er wordt nog niets geblokkeerd)."
+    ]
+  },
+  {
+    "versie": "2.3",
+    "datum": "2026-10-07",
+    "titel": "Koppelingen in één oogopslag",
+    "voor": "iedereen",
+    "punten": [
+      "Overal kleine labels die laten zien of iets gekoppeld is (Moneybird, projectmap, Toggl), met namen in plaats van nummers.",
+      "Koppelvoorstellen voor mails werken weer betrouwbaar."
+    ]
+  },
+  {
+    "versie": "2.2",
+    "datum": "2026-10-07",
+    "titel": "Dossier per project en klant",
+    "voor": "iedereen",
+    "punten": [
+      "Na het aanmaken van een project open je direct dat nieuwe project (niet meer het vorige); dubbelklikken maakt geen dubbel project meer.",
+      "Bovenin zie je altijd waar je bent: klant › locatie › project, met snelknoppen.",
+      "Links naar een project of klant kun je delen, en de terugknop van de browser werkt.",
+      "Per project én per klant zie je alle mails, bestanden, taken en planning bij elkaar, met filters.",
+      "Een mail kan bij meerdere projecten horen; verplaatste mails blijven vindbaar.",
+      "Wijzigingen van twee mensen tegelijk overschrijven elkaar niet meer."
+    ]
+  }
+]
