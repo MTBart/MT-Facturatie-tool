@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — P3a: Controlelijst projecten in Beheer (voorstellen + data zonder project)
+- Commit: `021f412` | Auteur: Bart Witte
+
 ## 2026-10-07 — Release v2.7: project_id onder elk project, werkcode via worker-teller, instelling projectcode; backup = v2.6.1
 - Commit: `f08cb5a` | Auteur: Bart Witte
 

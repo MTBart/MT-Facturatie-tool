@@ -12727,6 +12727,8 @@ function ctlWeesData(){
     losse:losse.filter(l=>_CTL_OPEN(besl.get(l.key))),losseAfgehandeld:losse.filter(l=>!_CTL_OPEN(besl.get(l.key))).map(l=>Object.assign(l,{besluit:besl.get(l.key)})),onherkend};
 }
 const _CTL_VERPLAATSBAAR=['mail','calculatie','offertekeuze','voorraad','facturen'];
+const _CTL_LABEL={mail:'mails',calculatie:'calculaties',offertekeuze:'gekozen offerte',voorraad:'voorraadregels',facturen:'inkoopfacturen',planning:'planning',taken:'taken',planblokken:'planblokken'};
+const _ctlTel=o=>Object.entries(o||{}).filter(([k,n])=>k!=='nieuw'&&n).map(([k,n])=>`${_CTL_LABEL[k]||k}: ${n}`);
 function ctlGelijkend(code){
   const tok=x=>String(x||'').toUpperCase().split(/[^A-Z0-9]+/).filter(t=>t.length>1&&!/^\d+$/.test(t));
   const a=new Set(tok(code));
@@ -12916,9 +12918,13 @@ function ctlWeesAanmakenUitvoeren(code,opts){
     if(opts.naam) p.naam=opts.naam;
   } else {
     const v=ctlProjectVoorstel(Object.assign({titels:[],datums:[]},opts.r||{code}));
-    p={code,naam:opts.naam||v.naam||'',klant:v.klant,loc:v.loc,created:v.created,bron:'controlelijst',
+    const kl=opts.klant&&opts.klant.klant?opts.klant:null;
+    p={code,naam:opts.naam||v.naam||'',klant:kl?kl.klant:v.klant,loc:kl?'':v.loc,created:v.created,bron:'controlelijst',
       project_id:projNieuwId(),legacy_codes:[code],soort:opts.soort||ctlSoortVoorstel({code,naam:opts.naam||v.naam,klant:v.klant}).soort,offertes:[]};
+    if(kl&&kl.klant_naam) p.klant_naam=kl.klant_naam;
+    if(kl&&kl.mb_contact_id) p.mb_contact_id=kl.mb_contact_id;
   }
+  if(opts.soort&&t) p.soort=opts.soort;
   if(opts.archief) p.status='archief'; else delete p.status;   // keuze altijd expliciet (ook bij herstellen)
   PROJECT_CODES.push(p); slaProjectenOp();
   if(typeof projWerkcodeVraag==='function') projWerkcodeVraag(projVind(code)||p);
@@ -12960,21 +12966,25 @@ function _bhControlelijst(){
   const open=projen.filter(p=>!p.controle).length, W=ctlWeesData();
   const rij=(p,i)=>{
     const app=p.bron==='app', sv=ctlSoortVoorstel(p), nv=ctlNaamVoorstel(p), huidig=p.soort||'klant';
-    return `<tr${p.controle?' class="bh-uit"':''}><td>${esc(projNaamVol(p))}${projKlantNaam(p)?`<div class="dos-meta">${esc(projKlantNaam(p))}</div>`:''}</td>
+    // soort 'klant' is de P2-standaard, geen besluit: tot Akkoord telt het voorstel ook mee
+    const intern=p.soort==='intern'||(!p.controle&&sv.soort==='intern');
+    const klant=projKlantNaam(p)?`<div class="dos-meta">${esc(projKlantNaam(p))}</div>`
+      :(!app&&!intern&&!p.klant?`<div><button class="btn btn-xs btn-secondary" onclick="ctlProjectKlant(${_ctlArg(p.code)})">+ klant invullen</button></div>`:'');
+    return `<tr${p.controle?' class="bh-uit"':''}><td>${esc(projNaamVol(p))}${klant}</td>
       <td>${app?'<span class="dos-meta">app-project (alleen lezen)</span>':`<input type="text" id="ctl-naam-${i}" value="${esc(nv)}" aria-label="Schone naam voor ${esc(projNaamVol(p))}" style="width:100%;min-width:140px">${nv!==projNaamVol(p)?'<div class="dos-meta">voorstel</div>':''}`}</td>
-      <td>${app?'':`<select id="ctl-soort-${i}" aria-label="Soort">${['klant','intern'].map(x=>`<option value="${x}"${x===huidig?' selected':''}>${x}${x===sv.soort&&x!==huidig?' (voorstel)':''}</option>`).join('')}</select>`}</td>
-      <td>${projOfferteNr(p)?`<span class="code">${esc(projOfferteNr(p))}</span>`:(app?'':`<button class="btn btn-xs btn-secondary" onclick="ctlOfferteZoek(${_ctlArg(p.code)})">Zoeken…</button>`)}</td>
+      <td>${app?'':`<select id="ctl-soort-${i}" aria-label="Soort">${['klant','intern'].map(x=>`<option value="${x}"${x===huidig?' selected':''}>${x}${x===sv.soort&&x!==huidig?' (voorstel)':''}</option>`).join('')}</select>${sv.soort!==huidig?`<div class="dos-meta" title="${esc(sv.reden)}">voorstel: ${esc(sv.soort)}</div>`:''}`}</td>
+      <td>${projOfferteNr(p)?`<span class="code">${esc(projOfferteNr(p))}</span>`:(app?'':intern?'<span class="dos-meta">intern, geen offerte</span>':`<button class="btn btn-xs btn-secondary" onclick="ctlOfferteZoek(${_ctlArg(p.code)})">Zoeken…</button>`)}</td>
       <td>${app?'':`<button class="btn btn-xs ${p.controle?'btn-secondary':'btn-primary'}" onclick="ctlProjectAkkoord(${_ctlArg(p.code)})">${p.controle?'Opnieuw':'Akkoord'}</button>`}</td></tr>`;
   };
   const VS={aanmaken:'project aanmaken',koppelen:'koppelen',historie:'laten als historie',hervatten:'hervatten'};
-  const wrij=r=>{ const a=_ctlArg(r.code), wat=Object.entries(r.stores).map(([k,n])=>`${k} ${n}`).join(' · ');
+  const wrij=r=>{ const a=_ctlArg(r.code), wat=Object.entries(r.stores).map(([k,n])=>`${_CTL_LABEL[k]||k} ${n}`).join(' · ');
     const handm=Object.keys(r.stores).filter(k=>!_CTL_VERPLAATSBAAR.includes(k)), doel=r.doel?projVind(r.doel):null;
     const knoppen=r.voorstel==='hervatten'
       ?`<button class="btn btn-xs btn-primary" onclick="ctlWeesHervatten(${a})">Hervatten</button> <button class="btn btn-xs btn-secondary" onclick="ctlWeesTerug(${a})">Terugdraaien</button>`
       :`<button class="btn btn-xs ${r.voorstel==='aanmaken'?'btn-primary':'btn-secondary'}" onclick="ctlWeesAanmaken(${a})">${r.tombstone?'Herstellen':'Project aanmaken'}</button>
         <button class="btn btn-xs ${r.voorstel==='koppelen'?'btn-primary':'btn-secondary'}" onclick="ctlWeesKoppelen(${a})">Koppelen…</button>
         <button class="btn btn-xs ${r.voorstel==='historie'?'btn-primary':'btn-secondary'}" onclick="ctlWeesHistorie(${a})">Historie</button>`;
-    return `<tr><td><span class="dos-meta">${esc(r.code)}</span>${r.titels[0]?`<div>${esc(r.titels[0])}</div>`:''}</td><td class="dos-meta">${esc(wat)}${handm.length?`<div>${esc(handm.join(', '))}: handmatig</div>`:''}</td>
+    return `<tr><td>${r.titels[0]?`<div>${esc(r.titels[0])}</div><div class="dos-meta" style="font-size:10px">${esc(r.code)}</div>`:`<span class="dos-meta">${esc(r.code)}</span>`}</td><td class="dos-meta">${esc(wat)}${handm.length?`<div>${esc(handm.map(k=>_CTL_LABEL[k]||k).join(', '))}: handmatig</div>`:''}</td>
       <td><span class="dos-tag">${esc(VS[r.voorstel]||r.voorstel)}</span><div class="dos-meta">${esc(r.reden||'')}${doel&&r.voorstel==='hervatten'?' → „'+esc(projNaamVol(doel))+'”':''}</div></td>
       <td style="white-space:nowrap">${knoppen}</td></tr>`; };
   const lrij=l=>{ const a=_ctlArg(l.key);
@@ -12986,7 +12996,7 @@ function _bhControlelijst(){
     const conflict=ctlKoppelConflict(b.code);
     const knop=b.besluit==='gekoppeld'&&b.verhuis?`<button class="btn btn-xs btn-secondary" onclick="ctlWeesTerug(${a})">Terugdraaien</button>`
       :b.besluit==='historie'?`<button class="btn btn-xs btn-secondary" onclick="ctlWeesHeropenen(${a})">Heropenen</button>`:'';
-    return `<tr><td class="dos-meta">${esc(r.code||r.titel||r.key)}</td><td>${esc(BL[b.besluit]||b.besluit)}${doel?' „'+esc(projNaamVol(doel))+'”':''}${conflict?`<div class="dos-meta" style="color:var(--red)">⚠ ook verplaatst naar ${esc(conflict.filter(c=>c!==b.naar).map(c=>projVind(c)?projNaamVol(projVind(c)):c).join(', '))} — zelf nakijken</div>`:''}</td><td class="dos-meta">${esc(String(b.tijd||'').slice(0,10))} · ${esc(b.door||'')}</td><td>${knop}</td></tr>`; }).join('');
+    return `<tr><td class="dos-meta">${esc(r.code||r.titel||r.key)}</td><td>${esc(BL[b.besluit]||b.besluit)}${doel?' „'+esc(projNaamVol(doel))+'”':''}${conflict?`<div class="dos-meta" style="color:var(--red)">⚠ ook verplaatst naar ${esc(conflict.filter(c=>c!==b.naar).map(c=>projVind(c)?projNaamVol(projVind(c)):c).join(', '))} — zelf nakijken</div>`:''}</td><td class="dos-meta">${esc([String(b.tijd||'').slice(0,10),String(b.door||'').split('@')[0]].filter(Boolean).join(' · '))}</td><td>${knop}</td></tr>`; }).join('');
   const oh=Object.entries(W.onherkend).map(([k,n])=>`${k} ${n}`).join(' · ');
   return `<details class="bh-blok" id="bh-controlelijst"${(_bhControleOpen?' open':'')} ontoggle="_bhControleOpen=this.open"><summary style="cursor:pointer"><b>Controlelijst projecten</b> <span class="dos-meta">${open} project${open===1?'':'en'} nog te controleren · ${W.open.length+W.losse.length} stuk${W.open.length+W.losse.length===1?'':'s'} data zonder project</span></summary>
     <div class="dos-meta" style="margin:6px 0">Alleen voorstellen — niets gebeurt vanzelf. Naam: zonder klantnaam (die staat al in de balk). Niets wordt gewist; verplaatsen is terug te draaien en alles staat in het journaal.</div>
@@ -13041,12 +13051,63 @@ async function ctlWeesAanmaken(code){
   const v=ctlProjectVoorstel(r);
   const naam=r.tombstone?(r.tombstone.naam||v.naam):await mtDialog.prompt({title:'Project aanmaken',message:'Naam van het project (zonder klantnaam). De data blijft gewoon aan dit project hangen.',defaultValue:v.naam,placeholder:'bv. Keuken',okLabel:'Verder'});
   if(naam==null) return;
-  const k=await mtDialog.choose({title:r.tombstone?'Project herstellen':'Project aanmaken',message:`„${naam||'(zonder naam)'}”`+(v.klant?` · klant ${projKlantNaam({klant:v.klant})||v.klant}`:'')+`\nAls lopend project, of als afgerond (archief)?`,
-    choices:[{label:'Lopend project'},{label:'Afgerond (archief)',sublabel:'ooit gestart of elders afgemaakt'}]});
+  let klant=null;
+  if(!r.tombstone&&!v.klant){ klant=await ctlKlantKies('Klant voor „'+(String(naam).trim()||'nieuw project')+'”',true); if(!klant) return; if(klant.later) klant=null; }
+  const sv=ctlSoortVoorstel({code,naam,klant:(klant&&klant.klant)||v.klant}).soort;
+  const klantTxt=(klant&&klant.klant_naam)||(v.klant?projKlantNaam({klant:v.klant})||'':'')||(r.tombstone?projKlantNaam(r.tombstone):'');
+  const KEUZES=[{label:'Klantproject — lopend',soort:'klant',archief:false},{label:'Klantproject — afgerond (archief)',sublabel:'ooit gestart of elders afgemaakt',soort:'klant',archief:true},
+    {label:'Intern project — lopend',soort:'intern',archief:false},{label:'Intern project — afgerond (archief)',soort:'intern',archief:true}];
+  const volg=sv==='intern'?[2,3,0,1]:[0,1,2,3];
+  const k=await mtDialog.choose({title:r.tombstone?'Project herstellen':'Project aanmaken',message:`„${naam||'(zonder naam)'}”`+(klantTxt?` · klant ${klantTxt}`:' · klant nog onbekend (later in te vullen)')+`\nWat voor project, en lopend of afgerond?`,
+    choices:volg.map(i=>Object.assign({},KEUZES[i],i===volg[0]?{sublabel:((KEUZES[i].sublabel?KEUZES[i].sublabel+' · ':'')+'voorstel')}:{}))});
   if(k==null) return;
-  try{ ctlWeesAanmakenUitvoeren(code,{naam:String(naam).trim(),archief:k===1,r}); }catch(e){ return mtDialog.alert({title:'Project aanmaken',message:e.message}); }
+  const gekozen=KEUZES[volg[k]];
+  try{ ctlWeesAanmakenUitvoeren(code,{naam:String(naam).trim(),archief:gekozen.archief,soort:gekozen.soort,klant,r}); }catch(e){ return mtDialog.alert({title:'Project aanmaken',message:e.message}); }
   if(typeof renderProjectLijst==='function') renderProjectLijst((document.getElementById('project-zoek')||{}).value||'');
   _ctlHerteken();
+}
+// Klant kiezen: de klanten uit de registry en de projecten, of zelf een naam typen. Nooit een gok.
+async function ctlKlantKies(titel,metLater){
+  const per=new Map();
+  (typeof KLANTEN!=='undefined'?KLANTEN:[]).forEach(k=>{ if(k&&k.code&&k.code!=='INT') per.set(k.code,k.naam||''); });
+  PROJECT_CODES.forEach(p=>{ const c=String(p&&p.klant||'').toUpperCase(); if(c&&c!=='INT'&&!per.has(c)) per.set(c,projKlantNaam(p)); });
+  const lijst=[...per.entries()].filter(([,n])=>n).sort((a,b)=>a[1].localeCompare(b[1]));
+  const keuzes=lijst.map(([,n])=>({label:n})).concat([{label:'Andere klant…',sublabel:'naam typen'}],metLater?[{label:'Nog onbekend — later invullen'}]:[]);
+  const i=await mtDialog.choose({title:titel||'Klant',message:'Bij welke klant hoort dit project?',choices:keuzes});
+  if(i==null) return null;
+  if(i<lijst.length) return {klant:lijst[i][0],klant_naam:lijst[i][1]};
+  if(i===lijst.length){
+    const naam=await mtDialog.prompt({title:'Andere klant',message:'Volledige naam van de klant:',placeholder:'bv. Bakkerij Jansen B.V.',okLabel:'Verder'});
+    if(naam==null||!String(naam).trim()) return null;
+    const kv=typeof klantVolByNaam==='function'?klantVolByNaam(naam):null;
+    const code=(kv&&kv.code)?String(kv.code).toUpperCase():_ctlVrijeKlantCode(typeof afkortKlant==='function'?afkortKlant(naam):'',naam);
+    return {klant:code,klant_naam:String(naam).trim(),mb_contact_id:kv&&kv.mb_contact_id||undefined};
+  }
+  return {later:true};
+}
+// Een afgeleide klantcode mag niet al bij een ándere klant horen (registry of projecten): dan zou die
+// klant (en zijn Moneybird-contact) gekozen worden. Bij botsing een volgnummer erachter.
+function _ctlVrijeKlantCode(code,naam){
+  code=String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(!code) return '';
+  const norm=x=>typeof _normNaam==='function'?_normNaam(x):String(x||'').toLowerCase().trim(), n=norm(naam);
+  const bezet=c=>(typeof KLANTEN!=='undefined'?KLANTEN:[]).some(k=>k&&String(k.code).toUpperCase()===c&&norm(k.naam)!==n)
+    ||(typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]).some(k=>k&&String(k.code||'').toUpperCase()===c&&norm(k.naam)!==n)
+    ||PROJECT_CODES.some(p=>p&&String(p.klant||'').toUpperCase()===c&&projKlantNaam(p)&&norm(projKlantNaam(p))!==n);
+  if(!bezet(code)) return code;
+  for(let i=2;i<100;i++) if(!bezet(code+i)) return code+i;
+  return '';
+}
+async function ctlProjectKlant(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  const p=projVind(code); if(!p||p.bron==='app') return;
+  const k=await ctlKlantKies('Klant invullen voor „'+projNaamVol(p)+'”',false); if(!k||k.later) return;
+  const oud={klant:p.klant||'',klant_naam:p.klant_naam||'',mb_contact_id:p.mb_contact_id||null,mb_nr:p.mb_nr||null};
+  p.klant=k.klant; p.klant_naam=k.klant_naam;
+  // Andere klant → het oude Moneybird-contact hoort er niet meer bij (oude waarde staat in het journaal).
+  if(k.mb_contact_id) p.mb_contact_id=k.mb_contact_id; else delete p.mb_contact_id;
+  if(oud.mb_nr&&String(oud.klant).toUpperCase()!==String(k.klant).toUpperCase()) delete p.mb_nr;
+  slaProjectenOp(); _ctlJournaal('klant',p.code,{oud,nieuw:{klant:p.klant,klant_naam:p.klant_naam,mb_contact_id:p.mb_contact_id||null}});
+  _namenVernieuwd(); _ctlHerteken();
 }
 async function _ctlKiesProject(code,titel){
   const g=ctlGelijkend(code), rest=PROJECT_CODES.filter(p=>p&&p.code&&!p._vervallen&&!g.some(x=>x.p===p)).sort((a,b)=>projNaamVol(a).localeCompare(projNaamVol(b)));
@@ -13059,23 +13120,24 @@ async function ctlWeesKoppelen(code){
   if(!_ctlMag()) return _CTL_GEEN_RECHT();
   const doel=await _ctlKiesProject(code,'Koppelen aan bestaand project'); if(!doel) return;
   if(window.calcZorgGeladen) await calcZorgGeladen();
-  const plan=ctlKoppelPlan(code), regels=Object.entries(plan.tel).filter(([,n])=>n).map(([k,n])=>`• ${k}: ${n}`);
+  const plan=ctlKoppelPlan(code), regels=_ctlTel(plan.tel).map(x=>'• '+x);
   const r=ctlWeesData().open.find(x=>x.code===code), handm=r?Object.keys(r.stores).filter(k=>!_CTL_VERPLAATSBAAR.includes(k)):[];
   if(!await mtDialog.confirm({title:'Droogloop — verplaatsen naar „'+projNaamVol(doel)+'”',message:(regels.length?'Dit wordt verplaatst:\n'+regels.join('\n'):'Er is niets automatisch te verplaatsen.')
-    +(handm.length?`\n\nNiet automatisch (zelf in het project zetten): ${handm.join(', ')}`:'')+'\n\nDe oude verwijzingen blijven als spoor staan (niets gewist); terugdraaien kan onder "Afgehandeld".',okLabel:'Verplaatsen'})) return;
+    +(handm.length?`\n\nNiet automatisch (zelf in het project zetten): ${handm.map(k=>_CTL_LABEL[k]||k).join(', ')}`:'')+'\n\nDe oude verwijzingen blijven als spoor staan (niets gewist); terugdraaien kan onder "Afgehandeld".',okLabel:'Verplaatsen'})) return;
   let g; try{ g=await ctlKoppelUitvoeren(code,doel.code,plan.tel); }catch(e){ await mtDialog.alert({title:'Koppelen',message:e.message}); return _ctlHerteken(); }
-  await mtDialog.alert({title:'Verplaatst',message:_ctlUitkomst(g)||'Niets verplaatst.'});
+  await mtDialog.alert({title:'Verplaatst',message:_ctlUitkomst(g,doel)});
   if(typeof dossierVernieuw==='function') dossierVernieuw();
   _ctlHerteken();
 }
-function _ctlUitkomst(g){
-  const r=Object.entries(g).filter(([k,n])=>k!=='nieuw'&&n).map(([k,n])=>`${k}: ${n}`).join('\n');
-  return r+(g.nieuw?`\n\nSinds de droogloop bijgekomen (niet verplaatst — doe zo nodig een nieuwe droogloop): ${Object.entries(g.nieuw).map(([k,n])=>k+' '+n).join(', ')}`:'');
+function _ctlUitkomst(g,doel){
+  const r=_ctlTel(g).join('\n');
+  return (doel?`Naar „${projKeuzeLabel(doel)}”:\n`:'')+(r||'Niets verplaatst.')
+    +(g.nieuw?`\n\nSinds de droogloop bijgekomen (niet verplaatst — doe zo nodig een nieuwe droogloop): ${_ctlTel(g.nieuw).join(', ')}`:'');
 }
 async function ctlWeesHervatten(code){
   if(!_ctlMag()) return _CTL_GEEN_RECHT();
   const b=ctlBesluitActueel().get(code); if(!b||b.besluit!=='koppelen-bezig') return;
-  try{ const g=await ctlKoppelUitvoeren(code,b.naar,null,{hervatten:true}); await mtDialog.alert({title:'Verplaatsen afgerond',message:_ctlUitkomst(g)||'Er was niets meer te verplaatsen.'}); }
+  try{ const g=await ctlKoppelUitvoeren(code,b.naar,null,{hervatten:true}); await mtDialog.alert({title:'Verplaatsen afgerond',message:_ctlUitkomst(g,projVind(b.naar))}); }
   catch(e){ await mtDialog.alert({title:'Hervatten',message:e.message}); }
   _ctlHerteken();
 }
@@ -13084,7 +13146,7 @@ async function ctlWeesTerug(code){
   const b=ctlBesluitActueel().get(code), doel=b&&b.naar?projVind(b.naar):null;
   if(!b||!['gekoppeld','koppelen-bezig'].includes(b.besluit)) return;
   if(!await mtDialog.confirm({title:'Verplaatsen terugdraaien',message:`Wat naar „${doel?projNaamVol(doel):b.naar}” verplaatst is, terugzetten op de oude code? Alleen wat sindsdien niet gewijzigd is, gaat terug.`,okLabel:'Terugdraaien'})) return;
-  try{ const r=await ctlKoppelTerug(code); await mtDialog.alert({title:'Teruggedraaid',message:(Object.entries(r.terug).filter(([,n])=>n).map(([k,n])=>`${k}: ${n}`).join('\n')||'Niets teruggezet.')+(r.overgeslagen.length?'\n\nNiet teruggezet: '+r.overgeslagen.join('; '):'')}); }
+  try{ const r=await ctlKoppelTerug(code); await mtDialog.alert({title:'Teruggedraaid',message:(_ctlTel(r.terug).join('\n')||'Niets teruggezet.')+(r.overgeslagen.length?'\n\nNiet teruggezet: '+r.overgeslagen.join('; '):'')}); }
   catch(e){ await mtDialog.alert({title:'Terugdraaien',message:e.message}); }
   if(typeof dossierVernieuw==='function') dossierVernieuw();
   _ctlHerteken();
