@@ -1,5 +1,19 @@
 [
   {
+    "versie": "2.9",
+    "datum": "2026-10-08",
+    "titel": "Nieuw tabblad Geld: de geldtijdlijn",
+    "voor": "beheer",
+    "punten": [
+      "Nieuw tabblad Geld (alleen voor de eigenaren en de administratie): het saldo van de lopende rekening, het laagste punt dat eraan komt en de ruimte tot de kredietlimiet, in één lijn van terug in de tijd tot een jaar vooruit.",
+      "Alles wat er verwacht wordt staat erin: openstaande facturen (met het gewone betaalgedrag van de klant), vaste lasten zoals lonen en hypotheek, de weekinleg in de potjes en de BTW-aangifte. Tik op een regel om te zien waarom hij op die datum staat, met de link naar Moneybird.",
+      "Potjes en doelen: geef de lopende rekening en elk potje een doel en een streefdatum; de tool laat zien hoe ver je bent, welk tempo nodig is en wanneer je het bij het huidige tempo haalt.",
+      "Prognose: vink bij een project 'gaat zeker door' aan; de termijnen komen als stippellijn in beeld en worden vanzelf vervangen zodra de echte factuur in Moneybird staat.",
+      "Factuurmoment: schuif een termijndatum om te zien wat eerder factureren doet. Wordt het krap, dan stelt de tool voor welke termijn je eerder kunt factureren. Er gaat nooit iets naar Moneybird.",
+      "Op het dashboard is de oude cashflow vervangen door een verwijzing naar het tabblad Geld."
+    ]
+  },
+  {
     "versie": "2.8",
     "datum": "2026-10-07",
     "titel": "Controlelijst projecten",

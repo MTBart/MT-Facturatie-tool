@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — Geldtijdlijn: bankdagen, rooktest G5 en Codex-eindreview verwerkt
+- Commit: `f164e2e` | Auteur: Bart Witte
+
 ## 2026-10-08 — G5 geldtijdlijn: prognose, factuurmoment-hulp en G4-rooktestpunten
 - Commit: `63364b9` | Auteur: Bart Witte
 

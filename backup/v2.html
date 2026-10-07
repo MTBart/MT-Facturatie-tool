@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.7 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.8 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -758,7 +758,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.7, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.8, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -779,7 +779,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.7</span>
+    <span class="header-version">v2.8</span>
     <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
@@ -8824,6 +8824,16 @@ async function cfFetch(pad,opties){
 }
 
 async function laadCashflowDashboard(){
+  // Alleen met recht `geld` (eigenaar, administratie); de worker weigert anderen sowieso. Wachten op /me.
+  const cfRoot=document.getElementById('cf-root');
+  if(!window.MTRol||!MTRol.me){
+    if(cfRoot) cfRoot.style.display='none';
+    if(window.MTRol&&!laadCashflowDashboard._wacht){ laadCashflowDashboard._wacht=true; window.addEventListener('mt-rol',()=>{ laadCashflowDashboard._wacht=false; laadCashflowDashboard(); },{once:true}); }
+    return;
+  }
+  if(!MTRol.magGeld()){ if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none'; return; }
+  // Instellingen (anker, doelen) alleen voor wie mag wijzigen.
+  const inst=document.querySelector('#cf-root .cf-settings-toggle'); if(inst&&inst.closest('.card')) inst.closest('.card').style.display=MTRol.magGeld('wijzigen')?'':'none';
   try{
     // Config ophalen (vasten, anker, doelen)
     _cfConfig = await cfFetch('/dashboard/config');
@@ -9851,7 +9861,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -9935,6 +9945,13 @@ const _SP = Object.assign(window.MTCore.makeSP({
     mt_contacten(lokaal, spData) {
       if (window.MTContacten) return window.MTContacten.samen(lokaal, spData);
       return _spSamenPerSleutel(lokaal, spData, x => x && x.id, _spTijd);
+    },
+    // Controlelijst (P3a): besluiten over data zonder project — alleen toevoegen; vereniging op id, op tijd.
+    mt_project_controle(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
+      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
+      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd)) || String(a.id).localeCompare(String(b.id)));
     },
     mt_contacten_journaal(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
@@ -12547,7 +12564,8 @@ function beheerTeken(){
   const AUDIT={'uitgenodigd':'uitgenodigd','uitnodiging-gekoppeld':'uitnodiging gebruikt (eerste login)','uitnodiging-ingetrokken':'uitnodiging ingetrokken','rol-gewijzigd':'rol gewijzigd',
     'gedeactiveerd':'gedeactiveerd','gereactiveerd':'gereactiveerd','toegang-aangevraagd':'toegang aangevraagd','aanvraag-toegekend':'aanvraag toegekend','aanvraag-geweigerd':'aanvraag geweigerd',
     'eigenaar-gekoppeld':'eigenaar gekoppeld','eigenaar-vastgelegd':'eigenaar vastgelegd',
-    'instelling-gewijzigd':'instelling gewijzigd','werkcode-toegekend':'werkcode toegekend','werkcodes-migratie':'werkcodes toegekend (bestaande projecten)'};
+    'instelling-gewijzigd':'instelling gewijzigd','werkcode-toegekend':'werkcode toegekend','werkcodes-migratie':'werkcodes toegekend (bestaande projecten)',
+    'geld-ijkpunt':'saldo geijkt','geld-config':'geld-instellingen gewijzigd'};
   const rn=id=>(g.rollen.find(r=>r.id===id)||{}).naam||id||'';
   const auditR=(au.audit||[]).map(a=>`<tr><td class="bh-opt">${_bhDatum(a.ts)}</td><td>${esc(a.doorNaam||(a.door==='systeem'?'systeem':a.door==='deploy'?'uitrol':''))}</td><td>${esc(AUDIT[a.actie]||a.actie)}</td><td>${esc(a.doelNaam||a.doel||'')}</td><td>${a.oud?esc(rn(a.oud))+' → ':''}${esc(rn(a.nieuw))}</td></tr>`).join('');
   el.innerHTML=`<div class="bh-modus ${g.modus==='afdwingen'?'afdwingen':''}">${modusTekst}</div>
@@ -12561,9 +12579,20 @@ function beheerTeken(){
     ${inv?`<div class="bh-blok"><h4>Openstaande uitnodigingen</h4><table class="bh-tabel"><tbody>${inv}</tbody></table></div>`:''}
     ${aanv?`<div class="bh-blok"><h4>Toegangsaanvragen</h4><table class="bh-tabel"><tbody>${aanv}</tbody></table></div>`:''}
     ${top}
+    ${_bhRolUitleg(g)}
     ${_bhProjectcode(ikEig)}
+    ${_bhControlelijst()}
     <details class="bh-blok"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Auditlog (laatste ${(au.audit||[]).length})</summary>
       <table class="bh-tabel"><thead><tr><th class="bh-opt">Wanneer</th><th>Door</th><th>Actie</th><th>Wie</th><th>Rol</th></tr></thead><tbody>${auditR||'<tr><td colspan="5">Nog niets.</td></tr>'}</tbody></table></details>`;
+}
+// Beheer: korte uitleg per rol (de worker beslist; dit is alleen de samenvatting).
+const _ROL_UITLEG={eigenaar:'alles, ook geld (geldtijdlijn) wijzigen en Moneybird-facturen verwijderen',
+  beheerder:'alles behalve geld; gebruikers en rollen beheren',kantoor:'projecten, inbox, offertes, Moneybird-concepten en team-uren; geen geld',
+  werkplaats:'projecten bekijken, taken en bestellijst, eigen uren',lezen:'projecten en offertes bekijken',administratie:'alleen geld en Moneybird bekijken'};
+function _bhRolUitleg(g){
+  const rollen=(g&&g.rollen)||[];
+  return `<details class="bh-blok"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Wat mag elke rol?</summary>
+    <table class="bh-tabel"><tbody>${rollen.map(r=>`<tr><td><b>${esc(r.naam)}</b></td><td>${esc(_ROL_UITLEG[r.id]||'')}</td></tr>`).join('')}</tbody></table></details>`;
 }
 // Beheer → Projectcode: wat staat zichtbaar bij een project (alleen de eigenaar wijzigt), en werkcodes
 // voor bestaande projecten (eenmalig, in volgorde van aanmaakdatum; eerst een proef).
@@ -12620,6 +12649,552 @@ async function beheerWerkcodes(){
     await mtDialog.alert({title:'Werkcodes toegekend',message:`${n} werkcode${n===1?'':'s'} toegekend:\n`+echt.filter(u=>u.nieuw).slice(0,8).map(u=>`${u.werkcode}  ${projNaamVol(projVind(u.project_id))}`).join('\n')+(n>8?'\n…':'')});
   }
   beheerLaad();
+}
+// ── Controlelijst projecten (P3a, alleen Beheer) ──
+// Per project een VOORSTEL (nooit automatisch): soort klant/intern, een schone naam zonder klantnaam
+// (die staat al in de balk) en een offertenummer uit Moneybird (kandidaten van het eigen contact, zelf
+// kiezen). Daarnaast "data zonder project": codes met mails/calculaties/voorraad/facturen maar zonder
+// project, en losse offertes. Per stuk: project (her)aanmaken / koppelen aan een bestaand project
+// (verplaatsen, eerst een droogloop) / laten als historie. Niets wordt gewist: verplaatsen laat een
+// spoor achter (ontkoppeld, *_was), het verhuisplan wordt vóóraf vastgelegd (hervatten bij een
+// onderbreking, precies terugdraaien) en elk besluit is een eigen record in mt_project_controle (synct
+// mee, alleen toevoegen). Journaal: mt_taken_journaal + het koppel-journaal.
+// Projectcode-vorm: HOOFDLETTERS (ook één woord, bv. "TG123"), of in kleine letters alleen mét streepje
+// (anders zou een los woord als "Hal" of "Beamerkast" als code tellen).
+const _ctlLijktCode=c=>/^[A-Z][A-Z0-9]{1,9}(-[A-Z0-9][A-Z0-9-]{0,60})?$/.test(c)||/^[a-z][a-z0-9]{1,9}(-[a-z0-9][a-z0-9-]{0,60})$/.test(c);
+function _ctlJson(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)||'null'); return v==null?d:v; }catch(e){ return d; } }
+// Alleen eigenaar/beheerder (de sectie staat in Beheer; dit vangt ook een directe aanroep af). Zonder
+// bekende rol: nee.
+function _ctlMag(){ return !!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()); }
+function _ctlJournaal(wat,code,extra){ if(typeof _ptJournaal==='function') _ptJournaal('controle-'+wat,code,null,Object.assign({door:_spWie()},extra||{})); }
+function ctlSoortVoorstel(p){
+  const t=[p&&p.code,p&&p.naam,p&&p.klant].join(' ');
+  if(/^(INT|MT)-/i.test(String(p&&p.code||''))||/^(INT|MT)$/i.test(String(p&&p.klant||''))||/\b(intern|werkplaats|test|algeme(en|ne)|inkoop|voorraad|uren[-\s]?totaal)\b/i.test(t))
+    return {soort:'intern',reden:'naam/code wijst op intern werk'};
+  return {soort:'klant',reden:'klantproject'};
+}
+// Schone naam: klantnaam/-code en locatie(naam) aan begin of eind eraf, scheidingstekens weg, hoofdletter.
+function ctlNaamVoorstel(p){
+  if(!p) return '';
+  let n=projNaamVol(p);
+  const reEsc=x=>String(x).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), SEP='[\\s\\-–—·:|,/]';
+  const weg=[projKlantNaam(p),p.klant_naam,projLocLabel(p),p.loc_naam,p.klant,p.loc].map(x=>String(x||'').trim()).filter(x=>x.length>1)
+    .sort((a,b)=>b.length-a.length);
+  for(let ronde=0;ronde<4;ronde++){
+    const voor=n;
+    for(const w of weg){
+      n=n.replace(new RegExp('^'+reEsc(w)+'(?='+SEP+'|$)'+SEP+'*','i'),'').replace(new RegExp(SEP+'+'+reEsc(w)+'$','i'),'').trim();
+    }
+    if(n===voor) break;
+  }
+  n=n.replace(new RegExp('^'+SEP+'+|'+SEP+'+$','g'),'').trim();
+  if(!n||n==='Project zonder naam') return projNaamVol(p);
+  return n.charAt(0).toUpperCase()+n.slice(1);
+}
+// Besluiten: alleen toevoegen (eigen id), het laatste per code telt. Zo gaat bij gelijktijdig beslissen
+// op twee pc's niets verloren en blijft de hele geschiedenis staan.
+function ctlBesluiten(){ const a=_ctlJson('mt_project_controle',[]); return Array.isArray(a)?a.filter(x=>x&&x.code):[]; }
+function ctlBesluitActueel(){
+  const m=new Map();
+  ctlBesluiten().slice().sort((a,b)=>String(a.tijd).localeCompare(String(b.tijd))||String(a.id).localeCompare(String(b.id))).forEach(b=>m.set(b.code,b));
+  return m;
+}
+function _ctlBesluitZet(code,besluit,extra){
+  const alle=ctlBesluiten(), max=alle.reduce((m,b)=>Math.max(m,Date.parse(b.tijd)||0),0);
+  const rec=Object.assign({id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),code,besluit,door:_spWie(),tijd:new Date(Math.max(Date.now(),max+1)).toISOString()},extra||{});
+  localStorage.setItem('mt_project_controle',JSON.stringify(alle.concat([rec])));
+  return rec;
+}
+const _CTL_OPEN=b=>!b||b.besluit==='teruggedraaid'||b.besluit==='heropend';
+function _ctlProjOpslag(code){ return (_projLees()||[]).find(p=>p&&p.code===code)||null; }
+function _ctlOffertes(){ return (window.CALC&&CALC.loaded)?CALC.offertes:((_ctlJson('mt_calc_offertes',{})||{}).offertes||{}); }
+// Data zonder project: alles wat naar een code verwijst die geen (actief) project is (ook geen oude code).
+function ctlWeesData(){
+  const per=new Map(), losse=[], onherkend={};
+  const tel=(c,store,info)=>{
+    c=String(c==null?'':c).trim();
+    if(!c||/^[-—–.\s]*$/.test(c)) return;
+    if(!_ctlLijktCode(c)){ onherkend[store]=(onherkend[store]||0)+1; return; }
+    if(projVind(c)) return;
+    const r=per.get(c)||{code:c,stores:{},titels:[],datums:[]};
+    r.stores[store]=(r.stores[store]||0)+1;
+    if(info&&info.titel) r.titels[store==='calculatie'?'unshift':'push'](String(info.titel));   // calculatietitel eerst (schoonste naam)
+    if(info&&info.datum){ const d=String(info.datum).slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(d)) r.datums.push(d); }
+    per.set(c,r);
+  };
+  const links=_ctlJson('mt_mail_links',{});
+  Object.entries(links&&typeof links==='object'&&!Array.isArray(links)?links:{}).forEach(([c,l])=>(Array.isArray(l)?l:[]).forEach(x=>{
+    if(x&&!x.ontkoppeld) tel(c,'mail',{titel:x.subject,datum:x.date||(x.ts?new Date(Number(x.ts)).toISOString():'')}); }));
+  Object.entries(_ctlOffertes()).forEach(([k,o])=>{
+    if(!o||typeof o!=='object') return;
+    const c=o.project_code||((/^OFF-/i.test(k)&&!projVind(k))?'':k);
+    if(!c){ losse.push({key:k,titel:o.titel||'',datum:String(o._gewijzigd||'').slice(0,10),status:(o.meta&&o.meta.status)||''}); return; }
+    tel(c,'calculatie',{titel:o.titel,datum:o._gewijzigd});
+  });
+  Object.entries(_ctlJson('mt_offerte_keuze',{})||{}).forEach(([c,k])=>{ if(k&&!k._verplaatst_naar) tel(c,'offertekeuze'); });
+  (_ctlJson('mt_voorraad',[])||[]).forEach(x=>x&&tel(x.project,'voorraad',{titel:x.omschrijving,datum:x.datum}));
+  (_ctlJson('mt_history',[])||[]).forEach(x=>x&&tel(x.project,'facturen',{titel:x.contact,datum:x.date}));
+  // alleen tellen (niet automatisch te verplaatsen; handmatig in het project)
+  const plan=_ctlJson('mt_planning',{}); Object.entries(plan&&typeof plan==='object'?plan:{}).forEach(([c,x])=>{ if(x&&!x._vervallen) tel(c,'planning'); });
+  const taken=_ctlJson('mt_project_taken',{}); Object.entries(taken&&typeof taken==='object'?taken:{}).forEach(([c,l])=>(Array.isArray(l)?l:[]).forEach(()=>tel(c,'taken')));
+  (_ctlJson('mt_planblokken',[])||[]).forEach(b=>b&&!b._vervallen&&tel(b.project_code,'planblokken'));
+  const besl=ctlBesluitActueel(), opslag=_projLees()||[];
+  const wees=[...per.values()].map(r=>{
+    r.tombstone=opslag.find(p=>p&&p.code===r.code&&p._vervallen)||null;
+    r.besluit=besl.get(r.code)||null;
+    return Object.assign(r,ctlWeesVoorstel(r));
+  }).sort((a,b)=>a.code.localeCompare(b.code));
+  // Gekoppeld/historie zonder resterende data verdwijnt uit "open"; een onderbroken verhuizing blijft open.
+  const afgehandeldZonderData=[...besl.values()].filter(b=>!_CTL_OPEN(b)&&b.besluit!=='koppelen-bezig'&&!per.has(b.code)&&!/^OFF-/i.test(b.code)).map(b=>({code:b.code,stores:{},titels:[],besluit:b}));
+  return {open:wees.filter(r=>_CTL_OPEN(r.besluit)||r.besluit.besluit==='koppelen-bezig'),afgehandeld:wees.filter(r=>!_CTL_OPEN(r.besluit)&&r.besluit.besluit!=='koppelen-bezig').concat(afgehandeldZonderData),
+    losse:losse.filter(l=>_CTL_OPEN(besl.get(l.key))),losseAfgehandeld:losse.filter(l=>!_CTL_OPEN(besl.get(l.key))).map(l=>Object.assign(l,{besluit:besl.get(l.key)})),onherkend};
+}
+const _CTL_VERPLAATSBAAR=['mail','calculatie','offertekeuze','voorraad','facturen'];
+const _CTL_LABEL={mail:'mails',calculatie:'calculaties',offertekeuze:'gekozen offerte',voorraad:'voorraadregels',facturen:'inkoopfacturen',planning:'planning',taken:'taken',planblokken:'planblokken'};
+const _ctlTel=o=>Object.entries(o||{}).filter(([k,n])=>k!=='nieuw'&&n).map(([k,n])=>`${_CTL_LABEL[k]||k}: ${n}`);
+function ctlGelijkend(code){
+  const tok=x=>String(x||'').toUpperCase().split(/[^A-Z0-9]+/).filter(t=>t.length>1&&!/^\d+$/.test(t));
+  const a=new Set(tok(code));
+  return PROJECT_CODES.filter(p=>p&&p.code&&!p._vervallen).map(p=>({p,score:[...new Set(tok(p.code).concat(tok(p.naam)))].filter(t=>a.has(t)).length}))
+    .filter(x=>x.score>0).sort((x,y)=>y.score-x.score||String(x.p.code).localeCompare(String(y.p.code)));
+}
+function ctlWeesVoorstel(r){
+  if(r.besluit&&r.besluit.besluit==='koppelen-bezig') return {voorstel:'hervatten',doel:r.besluit.naar,reden:'verplaatsen is onderbroken — hervatten'};
+  if(r.tombstone) return {voorstel:'aanmaken',reden:'verwijderd project — herstellen'};
+  const g=ctlGelijkend(r.code)[0];
+  if(g&&g.score>=2) return {voorstel:'koppelen',doel:g.p.code,reden:'lijkt op „'+projNaamVol(g.p)+'”'};
+  const s=r.stores;
+  if(!s.mail&&!s.calculatie&&!s.offertekeuze&&(s.voorraad||s.facturen)) return {voorstel:'historie',reden:'alleen boekhouding (voorraad/facturen)'};
+  return {voorstel:'aanmaken',reden:'mails of calculaties zonder project'};
+}
+// Droogloop: precies welke records van `van` verplaatst zouden worden, en de aantallen.
+function ctlKoppelPlan(van){
+  const links=_ctlJson('mt_mail_links',{})||{}, keuze=_ctlJson('mt_offerte_keuze',{})||{}, off=_ctlOffertes();
+  const mail=(Array.isArray(links[van])?links[van]:[]).filter(x=>x&&!x.ontkoppeld).map(x=>JSON.parse(JSON.stringify(x)));
+  const calc=Object.keys(off).filter(k=>{ const o=off[k]; return o&&(o.project_code===van||(k===van&&!o.project_code)); });
+  const rij=key=>(_ctlJson(key,[])||[]).filter(x=>x&&x.project===van).map(x=>x.id);
+  const ok=!!(keuze[van]&&!keuze[van]._verplaatst_naar);
+  const voorraad=rij('mt_voorraad'), facturen=rij('mt_history');
+  return {mail,calc,voorraad,facturen,keuze:ok,tel:{mail:mail.length,calculatie:calc.length,offertekeuze:ok?1:0,voorraad:voorraad.length,facturen:facturen.length}};
+}
+// Verhuizing = één id. Elk verplaatst record krijgt die id als marker mét zijn oude waarden (calculatie
+// `_verhuis`, voorraad/facturen `verhuis`, offertekeuze `_verhuis` op de bron); zo weten hervatten en
+// terugdraaien uit de data zelf wat er gebeurd is — ook als de pagina halverwege wegviel. Mails: voor en
+// na elke mail een voortgangsrecord. Het plan (precies de records uit de droogloop) staat in het eerste
+// besluit "koppelen-bezig"; hervatten doet alleen die records, nieuw bijgekomen data wordt gemeld.
+function _ctlVerhuisRecords(code,vid){ return ctlBesluiten().filter(b=>b.code===code&&b.verhuis===vid).sort((a,b)=>String(a.tijd).localeCompare(String(b.tijd))); }
+async function ctlKoppelUitvoeren(van,naar,verwacht,opts){
+  opts=opts||{};
+  if(!_ctlMag()) throw new Error('alleen eigenaar of beheerder');
+  if(projVind(van)) throw new Error('er is intussen een project met deze code — niets verplaatst');
+  const vorige=ctlBesluitActueel().get(van);
+  if(opts.hervatten){ if(!vorige||vorige.besluit!=='koppelen-bezig') throw new Error('er is geen onderbroken verhuizing om te hervatten'); naar=vorige.naar; }
+  else {
+    if(vorige&&vorige.besluit==='koppelen-bezig') throw new Error('er loopt al een verhuizing van deze code (door '+(vorige.door||'?')+') — hervat die of draai hem eerst terug');
+    if(ctlKoppelConflict(van)) throw new Error('deze code is al naar meer dan één project verplaatst — eerst nakijken en terugdraaien');
+  }
+  const doel=projVind(naar); if(!doel||doel._vervallen) throw new Error('doelproject niet gevonden');
+  naar=doel.code;
+  if(van===naar) throw new Error('bron en doel zijn hetzelfde');
+  if(window.calcZorgGeladen) await calcZorgGeladen();
+  const huidig=ctlKoppelPlan(van);
+  if(!opts.hervatten&&verwacht&&JSON.stringify(huidig.tel)!==JSON.stringify(verwacht)) throw new Error('de gegevens zijn sinds de droogloop gewijzigd — niets verplaatst, doe de droogloop opnieuw');
+  let vid, plan, voortgang;
+  if(opts.hervatten){
+    vid=vorige.verhuis; const recs=_ctlVerhuisRecords(van,vid);
+    plan=(recs.find(b=>b.plan)||{}).plan; voortgang=Object.assign({mail:[]},(recs.filter(b=>b.voortgang).pop()||{}).voortgang||{});
+    if(!plan) throw new Error('het verhuisplan is niet gevonden');
+  } else {
+    vid='v'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+    plan={mail:huidig.mail.map(x=>Object.assign({},x,{_alBijDoel:!!window.MTKoppel&&(MTKoppel.alle()[naar]||[]).some(y=>MTKoppel.actief(y)&&MTKoppel.zelfde(y,x))})),
+      calc:huidig.calc,voorraad:huidig.voorraad,facturen:huidig.facturen,keuze:huidig.keuze};
+    voortgang={mail:[]};
+  }
+  // Alles of niets per soort: ontbreekt een module, dan niet beginnen.
+  if((plan.calc||[]).length&&!(window.calcProjectVerplaats&&window.CALC&&CALC.loaded)) throw new Error('de calculaties zijn nog niet geladen — open eerst het tabblad Calculatie en probeer opnieuw');
+  if((plan.mail||[]).length&&!window.MTKoppel) throw new Error('de koppelmodule (mt-koppel.js) is niet geladen');
+  const bewaar=extra=>_ctlBesluitZet(van,'koppelen-bezig',Object.assign({naar,verhuis:vid,voortgang},extra||{}));
+  if(!opts.hervatten) bewaar({plan});
+  const wie=_spWie();
+  try{
+    for(const m of plan.mail||[]){
+      const {_alBijDoel,...rec}=m, sl=MTKoppel.sleutel(rec);
+      if(voortgang.mail.some(x=>x.sleutel===sl)) continue;
+      if(!(MTKoppel.alle()[van]||[]).some(y=>MTKoppel.actief(y)&&MTKoppel.zelfde(y,rec))) continue;   // niet meer actief op de bron
+      voortgang.mailBezig=sl; bewaar();                                   // checkpoint vóór de mail
+      const r=MTKoppel.koppelMail(naar,rec,{door:wie,bron:'controlelijst'});
+      if(!r||r.status==='fout') throw new Error('mail koppelen mislukt — verplaatsen onderbroken (hervatten of terugdraaien kan)');
+      MTKoppel.ontkoppelMail(van,sl,{id:rec.id,door:wie,bron:'controlelijst'});
+      const bronRec=(MTKoppel.alle()[van]||[]).find(y=>MTKoppel.zelfde(y,rec)), doelRec=(MTKoppel.alle()[naar]||[]).find(y=>MTKoppel.actief(y)&&MTKoppel.zelfde(y,rec));
+      voortgang.mail.push({sleutel:sl,rec,alBijDoel:!!_alBijDoel||r.status==='al',bronOntkoppeld:bronRec&&bronRec.ontkoppeld||null,doelGewijzigd:doelRec&&doelRec.gewijzigd||null});
+      delete voortgang.mailBezig; bewaar();                               // en erna
+    }
+    const ck=(plan.calc||[]).filter(k=>CALC.offertes[k]&&(CALC.offertes[k].project_code===van||(k===van&&!CALC.offertes[k].project_code)));
+    if(ck.length) calcProjectVerplaats(van,naar,{keys:ck,marker:vid});
+    if(plan.keuze){
+      const all=_ctlJson('mt_offerte_keuze',{})||{}, k=all[van]||{}, d=all[naar]||{};
+      if(!k._verplaatst_naar){
+        const geschreven={gekozen:d.gekozen!=null?d.gekozen:(k.gekozen==null?null:k.gekozen),afgewezen:[...new Set([...(d.afgewezen||[]),...(k.afgewezen||[])].map(String))]};
+        all[van]=Object.assign({},k,{_verplaatst_naar:naar,_verhuis:{id:vid,voor:{van:JSON.parse(JSON.stringify(k)),naar:all[naar]?JSON.parse(JSON.stringify(all[naar])):null},geschreven}});
+        all[naar]=geschreven;
+        if(typeof offerteKeuzeSave==='function') offerteKeuzeSave(all); else localStorage.setItem('mt_offerte_keuze',JSON.stringify(all));
+      }
+    }
+    for(const [key,naam] of [['mt_voorraad','voorraad'],['mt_history','facturen']]){
+      const ids=new Set(plan[naam]||[]); if(!ids.size) continue;
+      const lijst=_ctlJson(key,[]); let n=0;
+      (Array.isArray(lijst)?lijst:[]).forEach(x=>{ if(x&&ids.has(x.id)&&x.project===van){ x.verhuis={id:vid,was:x.project_was}; x.project_was=van; x.project=naar; n++; } });
+      if(n) localStorage.setItem(key,JSON.stringify(lijst));
+    }
+  }catch(e){ try{ bewaar(); }catch(e2){} throw e; }
+  const gedaan=ctlVerhuisTelling(van,naar,vid,voortgang);
+  const na=ctlKoppelPlan(van), nieuw=Object.fromEntries(Object.entries(na.tel).filter(([,n])=>n>0));
+  _ctlBesluitZet(van,'gekoppeld',{naar,verhuis:vid,voortgang,verplaatst:gedaan,nieuw:Object.keys(nieuw).length?nieuw:undefined});
+  _ctlJournaal('wees-koppelen',van,{naar,verhuis:vid,verplaatst:gedaan});
+  return Object.assign(gedaan,Object.keys(nieuw).length?{nieuw}:{});
+}
+// Wat er volgens de markers in de data echt verplaatst is (bron van waarheid voor hervatten/terugdraaien).
+function ctlVerhuisTelling(van,naar,vid,voortgang){
+  const off=_ctlOffertes(), keuze=(_ctlJson('mt_offerte_keuze',{})||{})[van];
+  const telRij=key=>(_ctlJson(key,[])||[]).filter(x=>x&&x.verhuis&&x.verhuis.id===vid&&x.project===naar).length;
+  return {mail:(voortgang&&voortgang.mail||[]).length,calculatie:Object.values(off).filter(o=>o&&o._verhuis&&o._verhuis.id===vid&&o.project_code===naar).length,
+    offertekeuze:keuze&&keuze._verhuis&&keuze._verhuis.id===vid?1:0,voorraad:telRij('mt_voorraad'),facturen:telRij('mt_history')};
+}
+// Terugdraaien (ook van een onderbroken verhuizing): alleen records met de marker van déze verhuizing die
+// nog zo staan; mails met hun markers. Vorige sporen (_project_code_was, project_was) komen terug.
+async function ctlKoppelTerug(van){
+  if(!_ctlMag()) throw new Error('alleen eigenaar of beheerder');
+  const b=ctlBesluitActueel().get(van);
+  if(!b||!['gekoppeld','koppelen-bezig'].includes(b.besluit)||!b.verhuis) throw new Error('geen verhuizing om terug te draaien');
+  const naar=b.naar, vid=b.verhuis, recs=_ctlVerhuisRecords(van,vid);
+  const plan=(recs.find(x=>x.plan)||{}).plan||{}, voortgang=Object.assign({mail:[]},(recs.filter(x=>x.voortgang).pop()||{}).voortgang||{});
+  const terug={mail:0,calculatie:0,offertekeuze:0,voorraad:0,facturen:0}, overgeslagen=[];
+  if(window.calcZorgGeladen) await calcZorgGeladen();
+  const off=_ctlOffertes();
+  if(Object.values(off).some(o=>o&&o._verhuis&&o._verhuis.id===vid)&&!(window.calcProjectTerug&&window.CALC&&CALC.loaded)) throw new Error('de calculaties zijn nog niet geladen — open eerst het tabblad Calculatie');
+  const wie=_spWie(), mails=voortgang.mail.slice();
+  // Mail die midden in het verplaatsen zat (checkpoint zonder resultaat): alleen als de stand het bevestigt.
+  if(voortgang.mailBezig&&!mails.some(m=>m.sleutel===voortgang.mailBezig)){
+    const rec=(plan.mail||[]).find(x=>window.MTKoppel&&MTKoppel.sleutel(x)===voortgang.mailBezig);
+    if(rec){ const {_alBijDoel,...r}=rec, d=(MTKoppel.alle()[naar]||[]).find(y=>MTKoppel.zelfde(y,r)), s=(MTKoppel.alle()[van]||[]).find(y=>MTKoppel.zelfde(y,r));
+      if(d&&MTKoppel.actief(d)&&d.bron==='controlelijst') mails.push({sleutel:voortgang.mailBezig,rec:r,alBijDoel:!!_alBijDoel,bronOntkoppeld:s&&s.ontkoppeld||null,doelGewijzigd:d.gewijzigd}); }
+  }
+  if(mails.length&&!window.MTKoppel) throw new Error('de koppelmodule (mt-koppel.js) is niet geladen');
+  for(const m of mails){
+    const bron=(MTKoppel.alle()[van]||[]).find(y=>MTKoppel.zelfde(y,m.rec)), doelRec=(MTKoppel.alle()[naar]||[]).find(y=>MTKoppel.zelfde(y,m.rec));
+    if(bron&&bron.ontkoppeld&&(!m.bronOntkoppeld||bron.ontkoppeld===m.bronOntkoppeld)) MTKoppel.koppelMail(van,m.rec,{door:wie,bron:'controlelijst-terug'});
+    else if(bron&&MTKoppel.actief(bron)){ /* al terug op de bron */ }
+    else { overgeslagen.push('mail „'+(m.rec.subject||m.sleutel)+'” is sindsdien op de oude code gewijzigd'); continue; }
+    if(m.alBijDoel) overgeslagen.push('mail „'+(m.rec.subject||m.sleutel)+'” stond al bij het doel — daar blijft hij ook');
+    else if(doelRec&&MTKoppel.actief(doelRec)&&doelRec.gewijzigd===m.doelGewijzigd) MTKoppel.ontkoppelMail(naar,m.sleutel,{id:m.rec.id,door:wie,bron:'controlelijst-terug'});
+    else if(doelRec&&MTKoppel.actief(doelRec)) overgeslagen.push('mail „'+(m.rec.subject||m.sleutel)+'” is sindsdien bij het doel gewijzigd — daar blijft hij');
+    terug.mail++;
+  }
+  if(window.calcProjectTerug&&window.CALC&&CALC.loaded) terug.calculatie=calcProjectTerug(vid,naar).length;
+  const all=_ctlJson('mt_offerte_keuze',{})||{}, k=all[van];
+  if(k&&k._verhuis&&k._verhuis.id===vid){
+    if(JSON.stringify(all[naar]||null)===JSON.stringify(k._verhuis.geschreven)){
+      if(k._verhuis.voor.naar) all[naar]=k._verhuis.voor.naar; else delete all[naar];   // door de verhuizing aangemaakt → weer zoals ervoor
+      all[van]=k._verhuis.voor.van; terug.offertekeuze=1;
+      if(typeof offerteKeuzeSave==='function') offerteKeuzeSave(all); else localStorage.setItem('mt_offerte_keuze',JSON.stringify(all));
+    } else overgeslagen.push('offertekeuze is sindsdien bij het doel gewijzigd');
+  }
+  for(const [key,naam] of [['mt_voorraad','voorraad'],['mt_history','facturen']]){
+    const lijst=_ctlJson(key,[]); let n=0, rest=0;
+    (Array.isArray(lijst)?lijst:[]).forEach(x=>{ if(!x||!x.verhuis||x.verhuis.id!==vid) return;
+      if(x.project===naar&&x.project_was===van){ const was=x.verhuis.was; x.project=van; if(was===undefined) delete x.project_was; else x.project_was=was; delete x.verhuis; n++; } else rest++; });
+    if(n){ localStorage.setItem(key,JSON.stringify(lijst)); terug[naam]=n; }
+    if(rest) overgeslagen.push(rest+' '+naam+'regel(s) sindsdien gewijzigd');
+  }
+  _ctlBesluitZet(van,'teruggedraaid',{naar,verhuis:vid,terug,overgeslagen});
+  _ctlJournaal('wees-terug',van,{naar,verhuis:vid,terug,overgeslagen});
+  return {terug,overgeslagen};
+}
+// Naar meer dan één project verplaatst (bv. tegelijk op twee pc's)? Niet stil "laatste wint": melden.
+// Een terugdraaiing haalt alleen dié verhuizing uit de telling.
+function ctlKoppelConflict(code){
+  const per=new Map();
+  ctlBesluiten().filter(b=>b.code===code).sort((a,b)=>String(a.tijd).localeCompare(String(b.tijd))).forEach(b=>{
+    const id=b.verhuis||b.id;
+    if(b.besluit==='teruggedraaid') per.delete(id); else if(b.naar&&(b.besluit==='gekoppeld'||b.besluit==='koppelen-bezig')) per.set(id,b.naar); });
+  const doelen=[...new Set(per.values())];
+  return doelen.length>1?doelen:null;
+}
+// Project (her)aanmaken voor een code: data blijft gewoon op die code staan.
+function ctlProjectVoorstel(r){
+  const delen=r.code.split('-'), kl=typeof klantByCode==='function'?klantByCode(delen[0]):null;
+  const loc=kl&&delen[1]&&Array.isArray(kl.locaties)&&kl.locaties.some(l=>String(l.code||'').toUpperCase()===delen[1].toUpperCase())?delen[1].toUpperCase():'';
+  const titel=r.titels.find(t=>t&&!/^[A-Z][A-Z0-9]{1,9}(-[A-Z0-9][A-Z0-9-]{0,60})?$/.test(t))||'';
+  const staart=delen.slice(loc?2:1).filter(x=>!/^\d+$/.test(x)).pop()||'';
+  const naam=titel||(staart?staart.charAt(0)+staart.slice(1).toLowerCase():'');
+  const created=r.datums.slice().sort()[0]||new Date().toISOString().slice(0,10);
+  return {code:r.code,naam,klant:kl?delen[0].toUpperCase():'',loc,created};
+}
+function ctlWeesAanmakenUitvoeren(code,opts){
+  opts=opts||{};
+  if(!_ctlMag()) throw new Error('alleen eigenaar of beheerder');
+  if(projVind(code)) throw new Error('er is al een project met deze code');
+  const t=_ctlProjOpslag(code);
+  let p;
+  if(t&&t._vervallen){                                         // herstellen: gegevens uit de tombstone
+    const {_vervallen,_hernoemd_naar,...rest}=JSON.parse(JSON.stringify(t)); p=rest;
+    if(opts.naam) p.naam=opts.naam;
+  } else {
+    const v=ctlProjectVoorstel(Object.assign({titels:[],datums:[]},opts.r||{code}));
+    const kl=opts.klant&&opts.klant.klant?opts.klant:null;
+    p={code,naam:opts.naam||v.naam||'',klant:kl?kl.klant:v.klant,loc:kl?'':v.loc,created:v.created,bron:'controlelijst',
+      project_id:projNieuwId(),legacy_codes:[code],soort:opts.soort||ctlSoortVoorstel({code,naam:opts.naam||v.naam,klant:v.klant}).soort,offertes:[]};
+    if(kl&&kl.klant_naam) p.klant_naam=kl.klant_naam;
+    if(kl&&kl.mb_contact_id) p.mb_contact_id=kl.mb_contact_id;
+  }
+  if(opts.soort&&t) p.soort=opts.soort;
+  if(opts.archief) p.status='archief'; else delete p.status;   // keuze altijd expliciet (ook bij herstellen)
+  PROJECT_CODES.push(p); slaProjectenOp();
+  if(typeof projWerkcodeVraag==='function') projWerkcodeVraag(projVind(code)||p);
+  _ctlBesluitZet(code,t?'hersteld':'aangemaakt',{archief:!!opts.archief});
+  _ctlJournaal(t?'wees-herstellen':'wees-aanmaken',code,{naam:p.naam,archief:!!opts.archief});
+  return projVind(code)||p;
+}
+// Moneybird-offertes van het EIGEN contact van het project, gerangschikt op overeenkomst met naam/product.
+// Zonder bevestigd contact geen kandidaten (geen gok over alle klanten heen).
+async function ctlOfferteKandidaten(p){
+  const mbId=p.mb_nr||(typeof resolveMbContact==='function'?resolveMbContact(p):null);
+  if(!mbId) return {geenContact:true,lijst:[]};
+  const r=await mbGet(`${getAdmin()}/estimates?filter=contact_id:${mbId},state:all`);
+  if(!r.ok) throw new Error('Moneybird HTTP '+r.status);
+  const tok=x=>String(x||'').toLowerCase().split(/[^a-z0-9à-ü]+/).filter(t=>t.length>2);
+  const zoek=new Set(tok([ctlNaamVoorstel(p),p.naam,p.product_naam].join(' ')));
+  const bezet=new Map(PROJECT_CODES.filter(x=>x&&x!==p&&!x._vervallen).flatMap(x=>[x.offertenr,...(Array.isArray(x.offertes)?x.offertes.map(o=>o&&o.nummer):[])].filter(Boolean).map(n=>[String(n),x])));
+  const contactNaam=e=>{ const c=e&&e.contact; return c?(c.company_name||[c.firstname,c.lastname].filter(Boolean).join(' ')||''):''; };
+  const lijst=((await r.json())||[]).filter(e=>e&&e.estimate_id&&String(e.contact_id)===String(mbId)&&!['archived','rejected'].includes(e.state))
+    .map(e=>({e,contact:contactNaam(e),score:tok([e.reference,e.title].join(' ')).filter(t=>zoek.has(t)).length,bezet:bezet.get(String(e.estimate_id))||null}))
+    .sort((a,b)=>b.score-a.score||String(b.e.estimate_date||'').localeCompare(String(a.e.estimate_date||'')));
+  return {geenContact:false,lijst};
+}
+function ctlOfferteZet(p,e){
+  const oud={offertenr:p.offertenr||'',offertenr_mb_id:p.offertenr_mb_id||null,offertes:JSON.parse(JSON.stringify(p.offertes||[]))};
+  const nu=new Date().toISOString();
+  p.offertenr=String(e.estimate_id); p.offertenr_mb_id=e.id!=null?String(e.id):null;
+  // Vorige hoofd-offerte blijft staan (rol 'vorige'), niets valt uit offertes[].
+  const rest=(Array.isArray(p.offertes)?p.offertes:[]).filter(o=>o&&String(o.nummer)!==p.offertenr).map(o=>o.rol==='hoofd'?Object.assign({},o,{rol:'vorige',vervangen:nu}):o);
+  p.offertes=[{nummer:p.offertenr,mb_id:p.offertenr_mb_id,rol:'hoofd',status:e.state||''}].concat(rest);
+  slaProjectenOp();
+  _ctlJournaal('offerte',p.code,{oud,nieuw:p.offertenr,mb_estimate:e.id});
+}
+let _ctlRijen=[];   // rij-index → code (geen afgeleide id's uit de code: die kunnen botsen)
+const _ctlArg=c=>esc(JSON.stringify(String(c)));
+function _bhControlelijst(){
+  const projen=PROJECT_CODES.filter(p=>p&&p.code&&!p._vervallen).slice().sort((a,b)=>projNaamVol(a).localeCompare(projNaamVol(b)));
+  _ctlRijen=projen.map(p=>p.code);
+  const open=projen.filter(p=>!p.controle).length, W=ctlWeesData();
+  const rij=(p,i)=>{
+    const app=p.bron==='app', sv=ctlSoortVoorstel(p), nv=ctlNaamVoorstel(p), huidig=p.soort||'klant';
+    // soort 'klant' is de P2-standaard, geen besluit: tot Akkoord telt het voorstel ook mee
+    const intern=p.soort==='intern'||(!p.controle&&sv.soort==='intern');
+    const klant=projKlantNaam(p)?`<div class="dos-meta">${esc(projKlantNaam(p))}</div>`
+      :(!app&&!intern&&!p.klant?`<div><button class="btn btn-xs btn-secondary" onclick="ctlProjectKlant(${_ctlArg(p.code)})">+ klant invullen</button></div>`:'');
+    return `<tr${p.controle?' class="bh-uit"':''}><td>${esc(projNaamVol(p))}${klant}</td>
+      <td>${app?'<span class="dos-meta">app-project (alleen lezen)</span>':`<input type="text" id="ctl-naam-${i}" value="${esc(nv)}" aria-label="Schone naam voor ${esc(projNaamVol(p))}" style="width:100%;min-width:140px">${nv!==projNaamVol(p)?'<div class="dos-meta">voorstel</div>':''}`}</td>
+      <td>${app?'':`<select id="ctl-soort-${i}" aria-label="Soort">${['klant','intern'].map(x=>`<option value="${x}"${x===huidig?' selected':''}>${x}${x===sv.soort&&x!==huidig?' (voorstel)':''}</option>`).join('')}</select>${sv.soort!==huidig?`<div class="dos-meta" title="${esc(sv.reden)}">voorstel: ${esc(sv.soort)}</div>`:''}`}</td>
+      <td>${projOfferteNr(p)?`<span class="code">${esc(projOfferteNr(p))}</span>`:(app?'':intern?'<span class="dos-meta">intern, geen offerte</span>':`<button class="btn btn-xs btn-secondary" onclick="ctlOfferteZoek(${_ctlArg(p.code)})">Zoeken…</button>`)}</td>
+      <td>${app?'':`<button class="btn btn-xs ${p.controle?'btn-secondary':'btn-primary'}" onclick="ctlProjectAkkoord(${_ctlArg(p.code)})">${p.controle?'Opnieuw':'Akkoord'}</button>`}</td></tr>`;
+  };
+  const VS={aanmaken:'project aanmaken',koppelen:'koppelen',historie:'laten als historie',hervatten:'hervatten'};
+  const wrij=r=>{ const a=_ctlArg(r.code), wat=Object.entries(r.stores).map(([k,n])=>`${_CTL_LABEL[k]||k} ${n}`).join(' · ');
+    const handm=Object.keys(r.stores).filter(k=>!_CTL_VERPLAATSBAAR.includes(k)), doel=r.doel?projVind(r.doel):null;
+    const knoppen=r.voorstel==='hervatten'
+      ?`<button class="btn btn-xs btn-primary" onclick="ctlWeesHervatten(${a})">Hervatten</button> <button class="btn btn-xs btn-secondary" onclick="ctlWeesTerug(${a})">Terugdraaien</button>`
+      :`<button class="btn btn-xs ${r.voorstel==='aanmaken'?'btn-primary':'btn-secondary'}" onclick="ctlWeesAanmaken(${a})">${r.tombstone?'Herstellen':'Project aanmaken'}</button>
+        <button class="btn btn-xs ${r.voorstel==='koppelen'?'btn-primary':'btn-secondary'}" onclick="ctlWeesKoppelen(${a})">Koppelen…</button>
+        <button class="btn btn-xs ${r.voorstel==='historie'?'btn-primary':'btn-secondary'}" onclick="ctlWeesHistorie(${a})">Historie</button>`;
+    return `<tr><td>${r.titels[0]?`<div>${esc(r.titels[0])}</div><div class="dos-meta" style="font-size:10px">${esc(r.code)}</div>`:`<span class="dos-meta">${esc(r.code)}</span>`}</td><td class="dos-meta">${esc(wat)}${handm.length?`<div>${esc(handm.map(k=>_CTL_LABEL[k]||k).join(', '))}: handmatig</div>`:''}</td>
+      <td><span class="dos-tag">${esc(VS[r.voorstel]||r.voorstel)}</span><div class="dos-meta">${esc(r.reden||'')}${doel&&r.voorstel==='hervatten'?' → „'+esc(projNaamVol(doel))+'”':''}</div></td>
+      <td style="white-space:nowrap">${knoppen}</td></tr>`; };
+  const lrij=l=>{ const a=_ctlArg(l.key);
+    return `<tr><td>${esc(l.titel||'(zonder titel)')}<div class="dos-meta">${esc([l.status,l.datum].filter(Boolean).join(' · '))}</div></td>
+      <td style="white-space:nowrap"><button class="btn btn-xs btn-secondary" onclick="ctlLosseKoppelen(${a})">Aan project koppelen…</button>
+        <button class="btn btn-xs btn-secondary" onclick="ctlWeesHistorie(${a})">Historie</button></td></tr>`; };
+  const BL={gekoppeld:'gekoppeld aan',historie:'historie',aangemaakt:'project aangemaakt',hersteld:'project hersteld'};
+  const af=[...W.afgehandeld,...W.losseAfgehandeld].map(r=>{ const b=r.besluit, doel=b.naar?projVind(b.naar):null, a=_ctlArg(b.code);
+    const conflict=ctlKoppelConflict(b.code);
+    const knop=b.besluit==='gekoppeld'&&b.verhuis?`<button class="btn btn-xs btn-secondary" onclick="ctlWeesTerug(${a})">Terugdraaien</button>`
+      :b.besluit==='historie'?`<button class="btn btn-xs btn-secondary" onclick="ctlWeesHeropenen(${a})">Heropenen</button>`:'';
+    return `<tr><td class="dos-meta">${esc(r.code||r.titel||r.key)}</td><td>${esc(BL[b.besluit]||b.besluit)}${doel?' „'+esc(projNaamVol(doel))+'”':''}${conflict?`<div class="dos-meta" style="color:var(--red)">⚠ ook verplaatst naar ${esc(conflict.filter(c=>c!==b.naar).map(c=>projVind(c)?projNaamVol(projVind(c)):c).join(', '))} — zelf nakijken</div>`:''}</td><td class="dos-meta">${esc([String(b.tijd||'').slice(0,10),String(b.door||'').split('@')[0]].filter(Boolean).join(' · '))}</td><td>${knop}</td></tr>`; }).join('');
+  const oh=Object.entries(W.onherkend).map(([k,n])=>`${k} ${n}`).join(' · ');
+  return `<details class="bh-blok" id="bh-controlelijst"${(_bhControleOpen?' open':'')} ontoggle="_bhControleOpen=this.open"><summary style="cursor:pointer"><b>Controlelijst projecten</b> <span class="dos-meta">${open} project${open===1?'':'en'} nog te controleren · ${W.open.length+W.losse.length} stuk${W.open.length+W.losse.length===1?'':'s'} data zonder project</span></summary>
+    <div class="dos-meta" style="margin:6px 0">Alleen voorstellen — niets gebeurt vanzelf. Naam: zonder klantnaam (die staat al in de balk). Niets wordt gewist; verplaatsen is terug te draaien en alles staat in het journaal.</div>
+    <table class="bh-tabel"><thead><tr><th>Project</th><th>Schone naam</th><th>Soort</th><th>Offertenummer</th><th></th></tr></thead><tbody>${projen.map(rij).join('')||'<tr><td colspan="5">Geen projecten.</td></tr>'}</tbody></table>
+    <h4 style="margin-top:12px">Data zonder project</h4>
+    ${W.open.length?`<table class="bh-tabel"><thead><tr><th>Code / omschrijving</th><th>Wat</th><th>Voorstel</th><th></th></tr></thead><tbody>${W.open.map(wrij).join('')}</tbody></table>`:'<div class="dos-meta">Niets meer open.</div>'}
+    ${oh?`<div class="dos-meta" style="margin-top:4px">Niet als projectcode herkend (zelf nakijken): ${esc(oh)}</div>`:''}
+    ${W.losse.length?`<h4 style="margin-top:12px">Losse offertes (zonder project)</h4><table class="bh-tabel"><tbody>${W.losse.map(lrij).join('')}</tbody></table>`:''}
+    ${af?`<details style="margin-top:8px"><summary class="dos-meta" style="cursor:pointer">Afgehandeld</summary><table class="bh-tabel"><tbody>${af}</tbody></table></details>`:''}
+  </details>`;
+}
+let _bhControleOpen=false;
+function _ctlHerteken(){ _bhControleOpen=true; if(typeof beheerTeken==='function') beheerTeken(); }
+const _CTL_GEEN_RECHT=()=>mtDialog.alert({title:'Controlelijst',message:'Alleen de eigenaar of een beheerder kan dit doen.'});
+async function ctlProjectAkkoord(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  const p=projVind(code); if(!p||p.bron==='app') return;
+  const i=_ctlRijen.indexOf(p.code), naamEl=document.getElementById('ctl-naam-'+i), soortEl=document.getElementById('ctl-soort-'+i);
+  const naam=String(naamEl?naamEl.value:'').trim(), soort=soortEl?soortEl.value:(p.soort||'klant');
+  const wijz=[];
+  if(naam&&naam!==projNaamVol(p)&&naam!==p.naam) wijz.push(`naam: „${projNaamVol(p)}” → „${naam}”`);
+  if(soort!==(p.soort||'klant')) wijz.push(`soort: ${p.soort||'klant'} → ${soort}`);
+  if(wijz.length&&!await mtDialog.confirm({title:'Project bijwerken',message:wijz.join('\n'),okLabel:'Opslaan'})) return;
+  const oud={naam:p.naam,soort:p.soort};
+  if(naam&&naam!==projNaamVol(p)&&naam!==p.naam) p.naam=naam;
+  if(soort==='klant'||soort==='intern') p.soort=soort;
+  p.controle={tijd:new Date().toISOString(),door:_spWie()};
+  slaProjectenOp();
+  _ctlJournaal('project',p.code,{oud,nieuw:{naam:p.naam,soort:p.soort}});
+  _namenVernieuwd(); _ctlHerteken();
+}
+async function ctlOfferteZoek(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  const p=projVind(code); if(!p) return;
+  if(p.tg_project_id) return mtDialog.alert({title:'Offertenummer',message:'Dit project hangt aan Toggl: ken het nummer toe via het project zelf (Overzicht → Offertenummer), dan wordt ook de Toggl-naam bijgewerkt.'});
+  let k; try{ k=await ctlOfferteKandidaten(p); }catch(e){ return mtDialog.alert({title:'Offertenummer',message:e.message}); }
+  if(k.geenContact) return mtDialog.alert({title:'Offertenummer',message:'Dit project heeft nog geen Moneybird-contact. Koppel eerst het contact (Overzicht → Moneybird); zonder contact worden geen offertes voorgesteld.'});
+  if(!k.lijst.length) return mtDialog.alert({title:'Offertenummer',message:'Geen verstuurde offerte met nummer bij dit contact (concepten krijgen pas bij versturen een nummer).'});
+  const lijst=k.lijst.slice(0,12);
+  const i=await mtDialog.choose({title:'Offertenummer voor „'+projNaamVol(p)+'”',message:'Kies de offerte die bij dit project hoort — bovenaan de beste overeenkomst. Niets wordt automatisch gekoppeld.',
+    choices:lijst.map(x=>({label:x.e.estimate_id+' — '+(x.e.reference||x.e.title||'(geen referentie)'),
+      sublabel:[x.contact,(x.e.state||''),x.e.estimate_date||'',x.score?'overeenkomst '+x.score:'',x.bezet?'⚠ al bij „'+projNaamVol(x.bezet)+'”':''].filter(Boolean).join(' · ')}))});
+  if(i==null) return;
+  const x=lijst[i];
+  if(x.bezet) return mtDialog.alert({title:'Offertenummer',message:`Offertenummer ${x.e.estimate_id} hoort al bij „${projNaamVol(x.bezet)}”. Haal het daar eerst weg als het echt bij dit project hoort.`});
+  if(!await mtDialog.confirm({title:'Offertenummer koppelen',message:`„${projNaamVol(p)}” krijgt offertenummer ${x.e.estimate_id}${x.contact?' ('+x.contact+')':''}.${p.offertenr?`\nHet huidige nummer ${p.offertenr} blijft als vorige offerte bewaard.`:''}`,okLabel:'Koppelen'})) return;
+  ctlOfferteZet(p,x.e); _namenVernieuwd(); _ctlHerteken();
+}
+async function ctlWeesAanmaken(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  const r=ctlWeesData().open.find(x=>x.code===code); if(!r) return;
+  const v=ctlProjectVoorstel(r);
+  const naam=r.tombstone?(r.tombstone.naam||v.naam):await mtDialog.prompt({title:'Project aanmaken',message:'Naam van het project (zonder klantnaam). De data blijft gewoon aan dit project hangen.',defaultValue:v.naam,placeholder:'bv. Keuken',okLabel:'Verder'});
+  if(naam==null) return;
+  let klant=null;
+  if(!r.tombstone&&!v.klant){ klant=await ctlKlantKies('Klant voor „'+(String(naam).trim()||'nieuw project')+'”',true); if(!klant) return; if(klant.later) klant=null; }
+  const sv=ctlSoortVoorstel({code,naam,klant:(klant&&klant.klant)||v.klant}).soort;
+  const klantTxt=(klant&&klant.klant_naam)||(v.klant?projKlantNaam({klant:v.klant})||'':'')||(r.tombstone?projKlantNaam(r.tombstone):'');
+  const KEUZES=[{label:'Klantproject — lopend',soort:'klant',archief:false},{label:'Klantproject — afgerond (archief)',sublabel:'ooit gestart of elders afgemaakt',soort:'klant',archief:true},
+    {label:'Intern project — lopend',soort:'intern',archief:false},{label:'Intern project — afgerond (archief)',soort:'intern',archief:true}];
+  const volg=sv==='intern'?[2,3,0,1]:[0,1,2,3];
+  const k=await mtDialog.choose({title:r.tombstone?'Project herstellen':'Project aanmaken',message:`„${naam||'(zonder naam)'}”`+(klantTxt?` · klant ${klantTxt}`:' · klant nog onbekend (later in te vullen)')+`\nWat voor project, en lopend of afgerond?`,
+    choices:volg.map(i=>Object.assign({},KEUZES[i],i===volg[0]?{sublabel:((KEUZES[i].sublabel?KEUZES[i].sublabel+' · ':'')+'voorstel')}:{}))});
+  if(k==null) return;
+  const gekozen=KEUZES[volg[k]];
+  try{ ctlWeesAanmakenUitvoeren(code,{naam:String(naam).trim(),archief:gekozen.archief,soort:gekozen.soort,klant,r}); }catch(e){ return mtDialog.alert({title:'Project aanmaken',message:e.message}); }
+  if(typeof renderProjectLijst==='function') renderProjectLijst((document.getElementById('project-zoek')||{}).value||'');
+  _ctlHerteken();
+}
+// Klant kiezen: de klanten uit de registry en de projecten, of zelf een naam typen. Nooit een gok.
+async function ctlKlantKies(titel,metLater){
+  const per=new Map();
+  (typeof KLANTEN!=='undefined'?KLANTEN:[]).forEach(k=>{ if(k&&k.code&&k.code!=='INT') per.set(k.code,k.naam||''); });
+  PROJECT_CODES.forEach(p=>{ const c=String(p&&p.klant||'').toUpperCase(); if(c&&c!=='INT'&&!per.has(c)) per.set(c,projKlantNaam(p)); });
+  const lijst=[...per.entries()].filter(([,n])=>n).sort((a,b)=>a[1].localeCompare(b[1]));
+  const keuzes=lijst.map(([,n])=>({label:n})).concat([{label:'Andere klant…',sublabel:'naam typen'}],metLater?[{label:'Nog onbekend — later invullen'}]:[]);
+  const i=await mtDialog.choose({title:titel||'Klant',message:'Bij welke klant hoort dit project?',choices:keuzes});
+  if(i==null) return null;
+  if(i<lijst.length) return {klant:lijst[i][0],klant_naam:lijst[i][1]};
+  if(i===lijst.length){
+    const naam=await mtDialog.prompt({title:'Andere klant',message:'Volledige naam van de klant:',placeholder:'bv. Bakkerij Jansen B.V.',okLabel:'Verder'});
+    if(naam==null||!String(naam).trim()) return null;
+    const kv=typeof klantVolByNaam==='function'?klantVolByNaam(naam):null;
+    const code=(kv&&kv.code)?String(kv.code).toUpperCase():_ctlVrijeKlantCode(typeof afkortKlant==='function'?afkortKlant(naam):'',naam);
+    return {klant:code,klant_naam:String(naam).trim(),mb_contact_id:kv&&kv.mb_contact_id||undefined};
+  }
+  return {later:true};
+}
+// Een afgeleide klantcode mag niet al bij een ándere klant horen (registry of projecten): dan zou die
+// klant (en zijn Moneybird-contact) gekozen worden. Bij botsing een volgnummer erachter.
+function _ctlVrijeKlantCode(code,naam){
+  code=String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(!code) return '';
+  const norm=x=>typeof _normNaam==='function'?_normNaam(x):String(x||'').toLowerCase().trim(), n=norm(naam);
+  const bezet=c=>(typeof KLANTEN!=='undefined'?KLANTEN:[]).some(k=>k&&String(k.code).toUpperCase()===c&&norm(k.naam)!==n)
+    ||(typeof KLANTEN_VOL!=='undefined'?KLANTEN_VOL:[]).some(k=>k&&String(k.code||'').toUpperCase()===c&&norm(k.naam)!==n)
+    ||PROJECT_CODES.some(p=>p&&String(p.klant||'').toUpperCase()===c&&projKlantNaam(p)&&norm(projKlantNaam(p))!==n);
+  if(!bezet(code)) return code;
+  for(let i=2;i<100;i++) if(!bezet(code+i)) return code+i;
+  return '';
+}
+async function ctlProjectKlant(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  const p=projVind(code); if(!p||p.bron==='app') return;
+  const k=await ctlKlantKies('Klant invullen voor „'+projNaamVol(p)+'”',false); if(!k||k.later) return;
+  const oud={klant:p.klant||'',klant_naam:p.klant_naam||'',mb_contact_id:p.mb_contact_id||null,mb_nr:p.mb_nr||null};
+  p.klant=k.klant; p.klant_naam=k.klant_naam;
+  // Andere klant → het oude Moneybird-contact hoort er niet meer bij (oude waarde staat in het journaal).
+  if(k.mb_contact_id) p.mb_contact_id=k.mb_contact_id; else delete p.mb_contact_id;
+  if(oud.mb_nr&&String(oud.klant).toUpperCase()!==String(k.klant).toUpperCase()) delete p.mb_nr;
+  slaProjectenOp(); _ctlJournaal('klant',p.code,{oud,nieuw:{klant:p.klant,klant_naam:p.klant_naam,mb_contact_id:p.mb_contact_id||null}});
+  _namenVernieuwd(); _ctlHerteken();
+}
+async function _ctlKiesProject(code,titel){
+  const g=ctlGelijkend(code), rest=PROJECT_CODES.filter(p=>p&&p.code&&!p._vervallen&&!g.some(x=>x.p===p)).sort((a,b)=>projNaamVol(a).localeCompare(projNaamVol(b)));
+  const lijst=g.map(x=>x.p).concat(rest).slice(0,15);
+  if(!lijst.length) return null;
+  const i=await mtDialog.choose({title:titel,message:'Kies het project — bovenaan wat er het meest op lijkt.',choices:lijst.map(p=>({label:projKeuzeLabel(p),sublabel:projKlantNaam(p)||''}))});
+  return i==null?null:lijst[i];
+}
+async function ctlWeesKoppelen(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  const doel=await _ctlKiesProject(code,'Koppelen aan bestaand project'); if(!doel) return;
+  if(window.calcZorgGeladen) await calcZorgGeladen();
+  const plan=ctlKoppelPlan(code), regels=_ctlTel(plan.tel).map(x=>'• '+x);
+  const r=ctlWeesData().open.find(x=>x.code===code), handm=r?Object.keys(r.stores).filter(k=>!_CTL_VERPLAATSBAAR.includes(k)):[];
+  if(!await mtDialog.confirm({title:'Droogloop — verplaatsen naar „'+projNaamVol(doel)+'”',message:(regels.length?'Dit wordt verplaatst:\n'+regels.join('\n'):'Er is niets automatisch te verplaatsen.')
+    +(handm.length?`\n\nNiet automatisch (zelf in het project zetten): ${handm.map(k=>_CTL_LABEL[k]||k).join(', ')}`:'')+'\n\nDe oude verwijzingen blijven als spoor staan (niets gewist); terugdraaien kan onder "Afgehandeld".',okLabel:'Verplaatsen'})) return;
+  let g; try{ g=await ctlKoppelUitvoeren(code,doel.code,plan.tel); }catch(e){ await mtDialog.alert({title:'Koppelen',message:e.message}); return _ctlHerteken(); }
+  await mtDialog.alert({title:'Verplaatst',message:_ctlUitkomst(g,doel)});
+  if(typeof dossierVernieuw==='function') dossierVernieuw();
+  _ctlHerteken();
+}
+function _ctlUitkomst(g,doel){
+  const r=_ctlTel(g).join('\n');
+  return (doel?`Naar „${projKeuzeLabel(doel)}”:\n`:'')+(r||'Niets verplaatst.')
+    +(g.nieuw?`\n\nSinds de droogloop bijgekomen (niet verplaatst — doe zo nodig een nieuwe droogloop): ${_ctlTel(g.nieuw).join(', ')}`:'');
+}
+async function ctlWeesHervatten(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  const b=ctlBesluitActueel().get(code); if(!b||b.besluit!=='koppelen-bezig') return;
+  try{ const g=await ctlKoppelUitvoeren(code,b.naar,null,{hervatten:true}); await mtDialog.alert({title:'Verplaatsen afgerond',message:_ctlUitkomst(g,projVind(b.naar))}); }
+  catch(e){ await mtDialog.alert({title:'Hervatten',message:e.message}); }
+  _ctlHerteken();
+}
+async function ctlWeesTerug(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  const b=ctlBesluitActueel().get(code), doel=b&&b.naar?projVind(b.naar):null;
+  if(!b||!['gekoppeld','koppelen-bezig'].includes(b.besluit)) return;
+  if(!await mtDialog.confirm({title:'Verplaatsen terugdraaien',message:`Wat naar „${doel?projNaamVol(doel):b.naar}” verplaatst is, terugzetten op de oude code? Alleen wat sindsdien niet gewijzigd is, gaat terug.`,okLabel:'Terugdraaien'})) return;
+  try{ const r=await ctlKoppelTerug(code); await mtDialog.alert({title:'Teruggedraaid',message:(_ctlTel(r.terug).join('\n')||'Niets teruggezet.')+(r.overgeslagen.length?'\n\nNiet teruggezet: '+r.overgeslagen.join('; '):'')}); }
+  catch(e){ await mtDialog.alert({title:'Terugdraaien',message:e.message}); }
+  if(typeof dossierVernieuw==='function') dossierVernieuw();
+  _ctlHerteken();
+}
+async function ctlWeesHistorie(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  if(!await mtDialog.confirm({title:'Laten als historie',message:'Laten staan zoals het is (gemarkeerd als historie)? Er wordt niets verplaatst of gewist; heropenen kan onder "Afgehandeld".',okLabel:'Markeren'})) return;
+  _ctlBesluitZet(code,'historie'); _ctlJournaal('historie',code,{});
+  _ctlHerteken();
+}
+async function ctlWeesHeropenen(code){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  _ctlBesluitZet(code,'heropend'); _ctlJournaal('heropend',code,{});
+  _ctlHerteken();
+}
+async function ctlLosseKoppelen(key){
+  if(!_ctlMag()) return _CTL_GEEN_RECHT();
+  const doel=await _ctlKiesProject(key,'Losse offerte aan project koppelen'); if(!doel) return;
+  if(window.calcZorgGeladen) await calcZorgGeladen();
+  if(!window.calcProjectVerplaats||!(window.CALC&&CALC.loaded)) return mtDialog.alert({title:'Offerte koppelen',message:'De calculaties zijn nog niet geladen — open eerst het tabblad Calculatie.'});
+  if(!await mtDialog.confirm({title:'Offerte koppelen',message:`Deze offerte aan „${projNaamVol(doel)}” koppelen?`,okLabel:'Koppelen'})) return;
+  const vid='v'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  let n=0; try{ n=calcProjectVerplaats(key,doel.code,{marker:vid}).length; }catch(e){ return mtDialog.alert({title:'Offerte koppelen',message:e.message}); }
+  if(n){ _ctlBesluitZet(key,'gekoppeld',{naar:doel.code,verhuis:vid,voortgang:{mail:[]}}); _ctlJournaal('offerte-koppelen',key,{naar:doel.code,verhuis:vid}); }
+  _ctlHerteken();
 }
 async function beheerRol(oid,rol,sel){
   const u=_bh&&_bh.g.gebruikers.find(x=>x.oid===oid);
@@ -13382,6 +13957,33 @@ function activiteitOpen(force){
       {titel:o.project_code?'Gekoppeld · '+o.project_code:'Niet gekoppeld · project'});
   };
   window.calcKoppelProject=function(key,code){const o=getOfferte(key);o.project_code=code||null;saveCalc('off',{key:key});renderOfferteCalc(key);};
+  // Controlelijst (P3a): alle calculaties van `van` (project_code, of de sleutel zelf zonder project_code)
+  // aan project `naar` hangen. De sleutel blijft; de oude waarde staat in _project_code_was. {droog} = alleen tellen.
+  // Alleen op de geladen calculaties werken (vóór het laden is CALC.offertes nog leeg). Lukt opslaan niet,
+  // dan gaat de wijziging in het geheugen ook terug.
+  window.calcZorgGeladen=async function(){ if(!CALC.loaded) await hydrateCalc(); return !!CALC.loaded; };
+  window.calcProjectVerplaats=function(van,naar,opts){
+    if(!CALC.loaded) throw new Error('de calculaties zijn nog niet geladen');
+    const keys=Object.keys(CALC.offertes).filter(k=>{ const o=CALC.offertes[k]; return o&&(o.project_code===van||(k===van&&!o.project_code))&&(!opts||!opts.keys||opts.keys.includes(k)); });
+    if((opts&&opts.droog)||!naar) return keys;
+    const t=new Date().toISOString(), oud={};
+    keys.forEach(k=>{ const o=CALC.offertes[k]; oud[k]={project_code:o.project_code,_project_code_was:o._project_code_was,_gewijzigd:o._gewijzigd,_verhuis:o._verhuis};
+      if(opts&&opts.marker) o._verhuis={id:opts.marker,project_code:o.project_code==null?null:o.project_code,was:o._project_code_was};   // marker + oude waarden op het record zelf
+      o._project_code_was=o.project_code||k; o.project_code=naar; o._gewijzigd=t; });
+    if(keys.length&&saveCalc('off')===false){ keys.forEach(k=>Object.assign(CALC.offertes[k],oud[k])); throw new Error('calculaties opslaan mislukt — niets verplaatst'); }
+    return keys;
+  };
+  // Terugdraaien: alleen offertes met de marker van déze verhuizing die nog op `naar` staan; oude waarden
+  // (project_code en het vorige spoor) komen uit die marker.
+  window.calcProjectTerug=function(marker,naar){
+    if(!CALC.loaded) throw new Error('de calculaties zijn nog niet geladen');
+    const t=new Date().toISOString(), oud={};
+    const keys=Object.keys(CALC.offertes).filter(k=>{ const o=CALC.offertes[k]; return o&&o._verhuis&&o._verhuis.id===marker&&o.project_code===naar; });
+    keys.forEach(k=>{ const o=CALC.offertes[k], m=o._verhuis; oud[k]={project_code:o.project_code,_project_code_was:o._project_code_was,_gewijzigd:o._gewijzigd,_verhuis:m};
+      o.project_code=m.project_code; if(m.was===undefined) delete o._project_code_was; else o._project_code_was=m.was; delete o._verhuis; o._teruggezet=t; o._gewijzigd=t; });
+    if(keys.length&&saveCalc('off')===false){ keys.forEach(k=>Object.assign(CALC.offertes[k],oud[k])); throw new Error('calculaties opslaan mislukt — niets teruggezet'); }
+    return keys;
+  };
   window.calcSetTitel=function(key,val){const o=getOfferte(key);o.titel=val;saveCalc('off',{key:key});};
 
   window.calcSetMat=function(key,rid,field,val){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m)return;m[field]=val;saveCalc('off',{key:key});recalcView(key);};

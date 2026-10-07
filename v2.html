@@ -784,7 +784,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.8</span>
+    <span class="header-version">v2.9</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -12525,14 +12525,16 @@ function _updCmp(a,b){ const x=String(a).split('.').map(Number), y=String(b).spl
   for(let i=0;i<Math.max(x.length,y.length);i++){ const d=(x[i]||0)-(y[i]||0); if(d) return d; } return 0; }
 const _updSleutel=()=>'mt_updates_gezien:'+((typeof mtMijEmail==='function'&&mtMijEmail())||'');
 function _updGezien(){ try{ return localStorage.getItem(_updSleutel())||''; }catch(e){ return ''; } }
-function _updNieuw(lijst){ const g=_updGezien(); return lijst.filter(u=>u.voor==='iedereen'&&(!g||_updCmp(u.versie,g)>0)).sort((a,b)=>_updCmp(b.versie,a.versie)); }
+// Wat deze gebruiker te zien krijgt: alles "voor iedereen", en "voor beheer" alleen voor eigenaar/beheerder.
+const _updVoorMij=u=>u.voor==='iedereen'||(u.voor==='beheer'&&!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()));
+function _updNieuw(lijst){ const g=_updGezien(); return lijst.filter(u=>_updVoorMij(u)&&(!g||_updCmp(u.versie,g)>0)).sort((a,b)=>_updCmp(b.versie,a.versie)); }
 async function updStipZet(){
   const b=document.getElementById('upd-stip'); if(!b) return;
   const n=_updNieuw(await updLaad());
   b.hidden=!n.length; if(n.length) b.title='Nieuw in v'+n[0].versie;
 }
 async function updNieuwToon(){
-  const l=await updLaad(), iedereen=l.filter(u=>u.voor==='iedereen').sort((a,b)=>_updCmp(b.versie,a.versie));
+  const l=await updLaad(), iedereen=l.filter(_updVoorMij).sort((a,b)=>_updCmp(b.versie,a.versie));
   const n=_updNieuw(l), toon=(n.length?n:iedereen).slice(0,3);
   const tekst=toon.map(u=>`v${u.versie} — ${u.titel}\n`+u.punten.map(p=>'• '+p).join('\n')).join('\n\n');
   await mtDialog.alert({title:'Nieuw in de tool',message:tekst||'Nog geen nieuws.'});
