@@ -416,6 +416,7 @@ button{transition:transform .07s ease,filter .07s ease}
 .factuur-item.actief{background:var(--gold-light);border-left:3px solid var(--gold)}
 .factuur-item-naam{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .factuur-item-sub{display:flex;justify-content:space-between;margin-top:3px;font-size:11px;color:var(--text-faint)}
+.factuur-item-klant{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dim)}   /* klantnaam: gewone tekst; het chipje is alleen voor een echt nummer */
 .filter-bar{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
 .filter-btn{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-dim);font-weight:500}
 .filter-btn.active{background:var(--green);color:var(--n-0);border-color:var(--green)}
@@ -5222,7 +5223,7 @@ function renderProjectLijst(filter=''){
   el.innerHTML=projSorteerNieuwst(gefilterd).map(p=>`
     <div class="factuur-item ${huidigProject?.code===p.code?'actief':''}" data-code="${esc(p.code)}" onclick="selecteerProject('${p.code}',this)">
       <div class="factuur-item-naam" title="${esc(projNaamVol(p))}">${esc(projNaamVol(p))}</div>
-      <div class="factuur-item-sub">${projKlantNaam(p)?`<span class="badge badge-ok">${esc(projKlantNaam(p))}</span>`:''}${projTag(p)}</div>
+      <div class="factuur-item-sub"><span class="factuur-item-klant">${esc(projKlantNaam(p))}</span>${projTag(p)}</div>
     </div>`).join('');
 }
 // Alleen weergave: nieuwste eerst op `created` (YYYY-MM-DD); zelfde dag → later toegevoegd

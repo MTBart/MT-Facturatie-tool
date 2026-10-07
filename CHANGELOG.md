@@ -5,8 +5,14 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Merge release v2.6.1 (origin/main) in main
+- Commit: `166e677` | Auteur: Bart Witte
+
 ## 2026-10-07 — Projectnummering: werkcode via worker-teller + instelling "Projectcode tonen als"
 - Commit: `c39a32f` | Auteur: Bart Witte
+
+## 2026-10-07 — Release v2.6.1: geen generator-code meer zichtbaar; backup = v2.6
+- Commit: `7e23163` | Auteur: Bart Witte
 
 ## 2026-10-07 — Merge v2.6.1-weergave (geen generator-code zichtbaar) in main met P2
 - Commit: `c5da69b` | Auteur: Bart Witte
