@@ -11,6 +11,18 @@
   const dagenTussen = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / DAG);
   const rond = n => Math.round(n * 100) / 100;
   G._dagPlus = dagPlus; G._dagenTussen = dagenTussen;
+  // Bankdagen (zoals de worker): geen weekend, geen NL-bankfeestdag (Nieuwjaar, Goede Vrijdag, Paasmaandag, Koningsdag,
+  // Hemelvaart, Pinkstermaandag, Kerst). Nodig als het scenario een ontvangst verschuift.
+  const feest = {};
+  function feestdagen(j) {
+    if (feest[j]) return feest[j];
+    const a = j % 19, b = Math.floor(j / 100), c = j % 100, h = (19 * a + b - Math.floor(b / 4) - Math.floor((b - Math.floor((b + 8) / 25) + 1) / 3) + 15) % 30,
+      l = (32 + 2 * (b % 4) + 2 * Math.floor(c / 4) - h - (c % 4)) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mnd = Math.floor((h + l - 7 * m + 114) / 31), dg = ((h + l - 7 * m + 114) % 31) + 1;
+    const pasen = `${j}-${String(mnd).padStart(2, '0')}-${String(dg).padStart(2, '0')}`, koning = new Date(Date.UTC(j, 3, 27)).getUTCDay() === 0 ? `${j}-04-26` : `${j}-04-27`;
+    return (feest[j] = new Set([`${j}-01-01`, dagPlus(pasen, -2), dagPlus(pasen, 1), koning, dagPlus(pasen, 39), dagPlus(pasen, 50), `${j}-12-25`, `${j}-12-26`]));
+  }
+  const bankdag = d => { const x = new Date(d + 'T00:00:00Z').getUTCDay(); return x !== 0 && x !== 6 && !feestdagen(Number(d.slice(0, 4))).has(d); };
+  G.bankdagNa = d => { let x = d; while (!bankdag(x)) x = dagPlus(x, 1); return x; };
 
   // ── Rekenen (los testbaar) ───────────────────────────────────────────────────
   const isGepland = e => e.bron !== 'bank' && !e.saldo_ijkpunt && !!e.datum && typeof e.delta === 'number';
@@ -284,12 +296,12 @@
     const lijn = G.lijn(d, { modus: st.modus, prognose: st.prognose });
     st.lijn = lijn;
     const zoomTot = dagPlus(d.vandaag, ZOOM[st.zoom]);
-    const low = G.laagste(lijn, zoomTot);
+    const low = G.laagste(lijn, zoomTot), heeftProg = (d.events || []).some(e => e.zekerheid === 'prognose');
+    const lowZonder = heeftProg && st.prognose ? G.laagste(G.lijn(d, { modus: st.modus, prognose: false }), zoomTot) : null;
     const L = d.saldo.lopend || {}, limiet = L.kredietlimiet;
     const nu = st.modus === 'totaal' ? d.saldo.totaal.gerapporteerd : L.gerapporteerd;
     const ruimte = limiet != null && low && st.modus === 'lopend' ? low.saldo + limiet : null;
     const introWeg = ls.get('mtg:intro:' + st.wie) === 'weg';
-    const heeftProg = (d.events || []).some(e => e.zekerheid === 'prognose');
     st.el.innerHTML = `<div class="mtg">
   <div class="mtg-kop"><h2>Geld</h2>
     <div class="mtg-knoppen">
@@ -301,7 +313,8 @@
   ${st.bezig ? '<div class="mtg-uitleg">Betaalgedrag en vaste patronen worden bijgewerkt… (de lijn ververst vanzelf)</div>' : ''}
   <div class="mtg-kaarten">
     ${kaart('nu', 'Nu', eur(nu), nu != null && nu < 0, (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''))}
-    ${kaart('laagste', 'Laagste punt', low ? eur(low.saldo) : '—', low && (limiet != null ? low.saldo < -limiet * 0.9 : low.saldo < 0), low ? `${datumTekst(low.datum, true)} · komende ${st.zoom === 'week' ? '2 weken' : st.zoom}` : '')}
+    ${kaart('laagste', heeftProg && st.prognose ? 'Laagste punt (incl. prognose)' : 'Laagste punt', low ? eur(low.saldo) : '—', low && (limiet != null ? low.saldo < -limiet * 0.9 : low.saldo < 0),
+      low ? `${datumTekst(low.datum, true)} · komende ${st.zoom === 'week' ? '2 weken' : st.zoom}${lowZonder ? ` · zonder prognose: ${eur(lowZonder.saldo)} op ${datumTekst(lowZonder.datum)}` : ''}` : '')}
     ${st.modus === 'lopend' ? kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, limiet == null ? 'kredietlimiet nog niet ingesteld' : `tot de kredietlimiet (${eur(-limiet)}) · nu: ${eur(nu != null ? nu + limiet : null)}`) : kaart('nu', 'Lopende rekening', eur(L.gerapporteerd), L.gerapporteerd < 0, 'zonder potjes')}
   </div>
   <div class="mtg-kaart">
@@ -561,7 +574,7 @@
     const events = (data.events || []).map(e => {
       const nieuw = e.prognose && e.termijn_id && scenario[e.prognose] && scenario[e.prognose][e.termijn_id];
       if (!nieuw || !e.factuurdatum) return e;
-      let fd = nieuw < data.vandaag ? data.vandaag : nieuw, d = dagPlus(fd, e.ontvangst_na || 0); if (d < data.vandaag) d = data.vandaag;
+      let fd = nieuw < data.vandaag ? data.vandaag : nieuw, d = G.bankdagNa(dagPlus(fd, e.ontvangst_na || 0)); if (d < data.vandaag) d = G.bankdagNa(data.vandaag);
       schuif[e.id] = d;
       return Object.assign({}, e, { factuurdatum: fd, datum: d, scenario: true });
     }).map(e => e.van_event && schuif[e.van_event] ? Object.assign({}, e, { datum: schuif[e.van_event], scenario: true }) : e);
@@ -577,11 +590,15 @@
     const kand = (basis.events || []).filter(e => e.bron === 'prognose' && e.termijn_id && e.factuurdatum && e.datum > low0.datum);
     let best = null;
     for (const e of kand) {
-      const doelFd = dagPlus(low0.datum, -(e.ontvangst_na || 0) - 1), fd = doelFd < data.vandaag ? data.vandaag : doelFd;
-      if (fd >= e.factuurdatum) continue;
-      const sc = JSON.parse(JSON.stringify(scenario || {})); (sc[e.prognose] = sc[e.prognose] || {})[e.termijn_id] = fd;
-      const low = G.laagste(G.lijn(G.metScenario(data, sc), { modus: 'lopend', prognose: true }), tot);
-      if (low && (!best || low.saldo > best.low.saldo)) best = { event: e, van: e.factuurdatum, naar: fd, low, winst: rond(low.saldo - low0.saldo), scenario: sc };
+      let fd = dagPlus(low0.datum, -(e.ontvangst_na || 0)); if (fd < data.vandaag) fd = data.vandaag;
+      while (fd > data.vandaag && G.bankdagNa(dagPlus(fd, e.ontvangst_na || 0)) > low0.datum) fd = dagPlus(fd, -1);   // ontvangst vóór (of op) het dieptepunt
+      while (fd > data.vandaag && !bankdag(fd)) fd = dagPlus(fd, -1);                                                  // factureren op een werkdag
+      for (const kies of [...new Set([fd, data.vandaag])]) {
+        if (kies >= e.factuurdatum) continue;
+        const sc = JSON.parse(JSON.stringify(scenario || {})); (sc[e.prognose] = sc[e.prognose] || {})[e.termijn_id] = kies;
+        const low = G.laagste(G.lijn(G.metScenario(data, sc), { modus: 'lopend', prognose: true }), tot);
+        if (low && (!best || low.saldo > best.low.saldo + 0.004)) best = { event: e, van: e.factuurdatum, naar: kies, low, winst: rond(low.saldo - low0.saldo), scenario: sc, opTijd: G.bankdagNa(dagPlus(kies, e.ontvangst_na || 0)) <= low0.datum };
+      }
     }
     if (best && cfg && cfg.lopend_streef && cfg.lopend_streef.datum) {
       const s = cfg.lopend_streef, doel = s.bedrag != null ? s.bedrag : s.van, p = G.lijn(G.metScenario(data, best.scenario), { modus: 'lopend', prognose: true }).punten.find(q => q.datum === s.datum);
@@ -592,7 +609,7 @@
   // Termijnen uit het standaardschema (instellingen): grootte → percentages; datum = de start- of opleverdatum als die
   // bekend is (anker), anders akkoord + het aantal dagen (zoals afgesproken: +7/+50/+100 bij onbekende planning).
   G.schemaTermijnen = function (schema, totaal, datums) {
-    if (!schema || !(totaal > 0)) return [];
+    if (!schema || !(totaal > 0) || schema.grens_klein == null || schema.grens_groot == null) return [];
     const klasse = schema.grens_klein != null && totaal < schema.grens_klein ? 'klein' : schema.grens_groot != null && totaal < schema.grens_groot ? 'middel' : 'groot';
     const rijen = schema[klasse] || []; if (!rijen.length) return [];
     let rest = rond(totaal);
@@ -602,12 +619,12 @@
       return { id: 't' + (i + 1), label: r.label || 'termijn ' + (i + 1), bedrag: b, factuurdatum: anker || dagPlus(datums.akkoord, r.dagen), aan: true, pct: r.pct };
     });
   };
-  // Voorstel voor het standaardschema (uit de analyse van de facturen van de afgelopen jaren); de eigenaar slaat het zelf op.
-  G.SCHEMA_VOORSTEL = { grens_klein: 10000, grens_groot: 50000, betaaltermijn: 14,
+  // Voorstel voor de verdeling per grootte (percentages); de grensbedragen vult de eigenaar zelf in (geen bedragen in de code).
+  G.SCHEMA_VOORSTEL = { grens_klein: null, grens_groot: null, betaaltermijn: 14,
     klein: [{ pct: 100, dagen: 14, label: 'factuur', anker: 'akkoord' }],
     middel: [{ pct: 50, dagen: 7, label: 'aanbetaling', anker: 'akkoord' }, { pct: 50, dagen: 60, label: 'oplevering', anker: 'oplevering' }],
     groot: [{ pct: 50, dagen: 7, label: 'bevestiging opdracht', anker: 'akkoord' }, { pct: 40, dagen: 50, label: 'voor oplevering', anker: 'start' }, { pct: 10, dagen: 100, label: 'oplevering', anker: 'oplevering' }] };
-  UITLEG.prognose = 'Projecten die zeker doorgaan maar nog geen factuur hebben. Vink een project aan; het bedrag (incl. btw) wordt volgens het standaardschema in termijnen verdeeld, elk met een factuurdatum. Voorbeeld: een project van € 30.000 geeft 50% aanbetaling een week na akkoord en 50% bij oplevering; de tool rekent er de betaaltermijn en het gewone betaalgedrag van de klant bij. In de lijn is dat de stippellijn, en alleen als "prognose" aan staat. Komt de echte factuur in Moneybird (zelfde offerte, of het offertenummer in de referentie), dan vervangt die de termijn vanzelf; twijfelt de tool, dan vraagt hij het hier. Schuif een factuurdatum om te zien wat eerder factureren doet — pas bij "Opslaan" wordt het bewaard. Er gaat nooit iets naar Moneybird.';
+  UITLEG.prognose = 'Projecten die zeker doorgaan maar nog geen factuur hebben. Vink een project aan; het bedrag (incl. btw) wordt volgens het standaardschema in termijnen verdeeld, elk met een factuurdatum. Voorbeeld: een middelgroot project geeft 50% aanbetaling een week na akkoord en 50% bij oplevering; de tool rekent er de betaaltermijn en het gewone betaalgedrag van de klant bij. In de lijn is dat de stippellijn, en alleen als "prognose" aan staat. Komt de echte factuur in Moneybird (zelfde offerte, of het offertenummer in de referentie), dan vervangt die de termijn vanzelf; twijfelt de tool, dan vraagt hij het hier. Schuif een factuurdatum om te zien wat eerder factureren doet — pas bij "Opslaan" wordt het bewaard. Er gaat nooit iets naar Moneybird.';
   UITLEG.advies = 'Zakt het laagste punt onder je buffer (of de kredietlimiet), dan zoekt de tool welke prognosetermijn je eerder kunt factureren om daarboven te blijven. Het is alleen een voorstel: je beslist zelf, en er gaat niets naar Moneybird.';
 
   function prognoseHtml() {
@@ -616,8 +633,10 @@
     let h = `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Prognose</b>
       <button class="mtg-knop klein ${st.prognose ? 'aan' : ''}" data-prognose="1">${st.prognose ? 'meegenomen' : 'niet meegenomen'}</button><button class="mtg-vraag" data-uitleg="prognose">?</button></div>`;
     if (heeft) h += `<div class="mtg-uitleg">Scenario (nog niet opgeslagen): ${Object.values(sc).reduce((a, x) => a + Object.keys(x).length, 0)} termijn(en) verschoven. ${st.mag ? '<button class="mtg-knop klein aan" data-sc="opslaan">Opslaan</button> ' : ''}<button class="mtg-knop klein" data-sc="terug">Terug</button></div>`;
-    if (advies && !advies.ok) h += `<div class="mtg-uitleg" style="background:#fbe3dd;border-color:#f0b8aa"><b>Krap:</b> laagste punt ${eur(advies.low.saldo)} op ${esc(datumTekst(advies.low.datum))}, onder ${st.cfg && st.cfg.buffer_lopend != null ? 'je buffer' : 'de kredietlimiet'} (${eur(advies.drempel)}). <button class="mtg-vraag" data-uitleg="advies">?</button><br>`
-      + (advies.voorstel ? `Factureer <b>${esc(advies.voorstel.event.tegenpartij)}</b> op ${esc(datumTekst(advies.voorstel.naar))} i.p.v. ${esc(datumTekst(advies.voorstel.van))} → laagste punt ${advies.voorstel.winst > 0 ? '+' : ''}${eur(advies.voorstel.winst)}${advies.voorstel.low.saldo >= advies.drempel ? ' (weer erboven)' : ''}${advies.voorstel.doelpad ? ' → doelpad gehaald' : ''}. <button class="mtg-knop klein" data-advies="1">Probeer</button>` : 'Geen prognosetermijn die eerder gefactureerd kan worden om dit op te lossen.') + '</div>';
+    const grens = st.cfg && st.cfg.buffer_lopend != null ? 'je eigen ondergrens' : 'de kredietlimiet';
+    if (advies && !advies.ok) h += `<div class="mtg-uitleg" style="background:#fbe3dd;border-color:#f0b8aa"><b>Krap:</b> laagste punt ${eur(advies.low.saldo)} op ${esc(datumTekst(advies.low.datum))}, onder ${grens} (${eur(advies.drempel)}). <button class="mtg-vraag" data-uitleg="advies">?</button><br>`
+      + (advies.voorstel ? `Factureer <b>${esc(advies.voorstel.event.tegenpartij)}</b> op ${esc(datumTekst(advies.voorstel.naar))} i.p.v. ${esc(datumTekst(advies.voorstel.van))} → laagste punt +${eur(advies.voorstel.winst)}${advies.voorstel.low.saldo >= advies.drempel ? ' (weer boven ' + grens + ')' : `, maar nog steeds onder ${grens}`}${advies.voorstel.opTijd ? '' : ' — de betaling komt pas na het dieptepunt binnen, eerder factureren kan niet meer'}${advies.voorstel.doelpad ? ' → doelpad gehaald' : ''}. <button class="mtg-knop klein" data-advies="1">Probeer</button>`
+        : 'Geen prognosetermijn die op tijd gefactureerd kan worden om dit op te lossen.') + '</div>';
     const posten = p.posten || [];
     if (!posten.length) h += `<div class="mtg-melding">Nog geen prognose. ${st.mag ? 'Vink in een project "gaat zeker door" aan, of voeg hier een project of post toe.' : ''}</div>`;
     for (const x of posten) {
@@ -702,7 +721,8 @@
       const k = ev.target.closest('[data-voorstel],[data-schema],[data-tm-bij],[data-tm-weg],[data-ok],[data-wis]'); if (!k) return;
       ev.preventDefault();
       if (k.dataset.voorstel) { o.querySelector('[name="totaal"]').value = voorstel; lees(); tekenTm(); }
-      else if (k.dataset.schema) { const tt = Number(o.querySelector('[name="totaal"]').value); termijnen = G.schemaTermijnen(schema || G.SCHEMA_VOORSTEL, tt, Object.assign({}, datums, { akkoord: o.querySelector('[name="akkoord"]').value || akkoord })); if (!schema) toast('Schema nog niet ingesteld — het voorstel uit de analyse gebruikt'); tekenTm(); }
+      else if (k.dataset.schema) { if (!schema || schema.grens_klein == null || schema.grens_groot == null) return toast('Stel eerst het standaardschema in (Instellingen → Prognose-schema) of vul de termijnen zelf in');
+        const tt = Number(o.querySelector('[name="totaal"]').value); termijnen = G.schemaTermijnen(schema, tt, Object.assign({}, datums, { akkoord: o.querySelector('[name="akkoord"]').value || akkoord })); tekenTm(); }
       else if (k.dataset.tmBij !== undefined && k.dataset.tmBij) { lees(); termijnen.push({ id: 't' + (Math.max(0, ...termijnen.map(t => Number(String(t.id).slice(1)) || 0)) + 1), label: 'termijn', bedrag: 0, factuurdatum: st.data.vandaag, aan: true }); tekenTm(); }
       else if (k.dataset.tmWeg !== undefined && k.dataset.tmWeg !== '') { lees(); termijnen.splice(Number(k.dataset.tmWeg), 1); tekenTm(); }
       else if (k.dataset.wis) { if (!confirm('Prognose voor dit project verwijderen? (de historie blijft bewaard)')) return; o.remove(); prognoseBewaar(sleutel, null, 'Prognose verwijderd'); }
@@ -738,15 +758,16 @@
   function schemaBlad() {
     const c = st.cfg || {}, s = c.prognose_schema || null, v = s || G.SCHEMA_VOORSTEL;
     const rijen = k => (v[k] || []).map(r => `${r.pct}% ${r.label} (${r.anker === 'akkoord' ? 'akkoord + ' + r.dagen + ' d' : r.anker + ', anders akkoord + ' + r.dagen + ' d'})`).join(' · ');
-    const o = blad(`<h3>Standaardschema prognose</h3>${s ? '' : '<div class="mtg-uitleg">Nog niet ingesteld. Hieronder het voorstel uit de analyse van de facturen van de afgelopen jaren; pas aan en sla op.</div>'}
+    const o = blad(`<h3>Standaardschema prognose</h3>${s ? '' : '<div class="mtg-uitleg">Nog niet ingesteld. De verdeling hieronder is een voorstel (uit de analyse van eerdere facturen); vul zelf de grensbedragen in en sla op.</div>'}
       <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Klein onder (€)</span><input type="number" name="gk" value="${v.grens_klein != null ? v.grens_klein : ''}"></label><label class="mtg-veld" style="flex:1"><span>Groot vanaf (€)</span><input type="number" name="gg" value="${v.grens_groot != null ? v.grens_groot : ''}"></label><label class="mtg-veld" style="flex:1"><span>Betaaltermijn</span><input type="number" name="bt" value="${v.betaaltermijn != null ? v.betaaltermijn : 14}"></label></div>
       ${['klein', 'middel', 'groot'].map(k => `<label class="mtg-veld"><span>${k} — per regel: % ; omschrijving ; anker (akkoord/start/oplevering) ; dagen na akkoord</span><textarea name="${k}" rows="3" style="width:100%;font-size:13px;padding:6px;border:1px solid #ccc;border-radius:6px">${esc((v[k] || []).map(r => `${r.pct};${r.label};${r.anker};${r.dagen}`).join('\n'))}</textarea><span>${esc(rijen(k))}</span></label>`).join('')}
-      <label class="mtg-veld"><span>Buffer lopende rekening (€) — signaal bij een laagste punt hieronder (leeg = kredietlimiet)</span><input type="number" name="buf" value="${c.buffer_lopend != null ? c.buffer_lopend : ''}"></label>
+      <label class="mtg-veld"><span>Eigen ondergrens lopende rekening (€) — signaal als het laagste punt hieronder komt (leeg = de kredietlimiet)</span><input type="number" name="buf" value="${c.buffer_lopend != null ? c.buffer_lopend : ''}"></label>
       <button class="mtg-knop aan" data-ok="1">Opslaan</button>`);
     o.querySelector('[data-ok]').addEventListener('click', () => {
       const f = n => o.querySelector(`[name="${n}"]`).value;
       const lijst = k => f(k).split('\n').map(l => l.split(';').map(x => x.trim())).filter(x => x[0]).map(x => ({ pct: Number(x[0].replace(',', '.')), label: x[1] || '', anker: x[2] || 'akkoord', dagen: Number(x[3] || 0) }));
       const schema = { grens_klein: f('gk') === '' ? null : Number(f('gk')), grens_groot: f('gg') === '' ? null : Number(f('gg')), betaaltermijn: Number(f('bt')) || 14, klein: lijst('klein'), middel: lijst('middel'), groot: lijst('groot') };
+      if (schema.grens_klein == null || schema.grens_groot == null || schema.grens_klein > schema.grens_groot) return toast('Vul beide grensbedragen in (klein ≤ groot)');
       for (const k of ['klein', 'middel', 'groot']) if (schema[k].length && Math.abs(schema[k].reduce((a, r) => a + r.pct, 0) - 100) > 0.01) return toast(`${k}: de percentages moeten samen 100 zijn`);
       o.remove(); opslaan(() => stuur('/geld/config', { revisie: c.revisie, prognose_schema: schema, buffer_lopend: f('buf') === '' ? null : Number(f('buf')) }), 'Standaardschema opgeslagen');
     });

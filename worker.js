@@ -483,7 +483,7 @@ async function handleDashboard(pathname, request, env, msPayload, cors) {
   // ── GET /dashboard/cashflow?horizon=90d|kwartaal|jaar ─────────────────────────
   if (pathname === '/dashboard/cashflow' && request.method === 'GET') {
     const url2 = new URL(request.url);
-    const horizon = url2.searchParams.get('horizon') || '90d';
+    const horizon = ['90d', 'kwartaal', 'jaar'].includes(url2.searchParams.get('horizon')) ? url2.searchParams.get('horizon') : '90d';   // vaste waarden: geen eindeloze cachesleutels
     const cacheKey = `dash:cf:${email}:${horizon}`;
     const cached = await kvGet(cacheKey);
     if (cached) return json({ ...cached, cached: true });
@@ -1722,12 +1722,13 @@ const GELD_IJK = 'geld:ijkpunt:';
 // Sleutels zijn op omgekeerde tijd gesorteerd → de eerste per rekening is de nieuwste.
 async function geldIjkpunten(env, perRekening, rekeningen, paginas = 1) {
   if (!env.MT_ROLLEN) return [];
-  const uit = [], per = {}; let cursor, n = 0;
+  const uit = [], per = {}; let cursor, n = 0, losse = 0;
   do {                                                               // één list (met metadata) i.p.v. een get per ijkpunt
     const r = await env.MT_ROLLEN.list({ prefix: GELD_IJK, cursor });
     for (const k of r.keys) {
       const rek = k.name.slice(GELD_IJK.length).split(':')[0];
       if (!rekeningen.includes(rek) || (per[rek] = (per[rek] || 0) + 1) > perRekening) continue;
+      if (!k.metadata && ++losse > 6) { uit.onvolledig = true; continue; }   // terugval zonder metadata begrensd (subrequests)
       const v = k.metadata || await kvJson(env, k.name); if (v) uit.push(v);
     }
     cursor = r.list_complete ? null : r.cursor;
@@ -1750,7 +1751,21 @@ async function geldCacheVersie(env) { return (await kvJson(env, 'geld:cachever')
 // Betaalprofiel (KV geld:profiel): apart berekend via GET /geld/profiel (te veel verzoeken voor de tijdlijn);
 //   alleen een volledige berekening wordt bewaard.
 const GELD_PROFIEL_DAGEN = 7, GELD_PROFIEL_MAX = 31, GELD_PROFIEL_BUDGET = 40, GELD_OV = 'geld:ov:';
-const geldWerkdag = d => { const x = new Date(d + 'T00:00:00Z').getUTCDay(); return x !== 0 && x !== 6; };
+// Bankdag: geen weekend en geen NL-bankfeestdag (Nieuwjaar, Goede Vrijdag, Paasmaandag, Koningsdag, Hemelvaart,
+// Pinkstermaandag, 1e en 2e Kerstdag). Banken boeken dan niet.
+const _geldFeest = {};
+function geldFeestdagen(j) {
+  if (_geldFeest[j]) return _geldFeest[j];
+  const a = j % 19, b = Math.floor(j / 100), c = j % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3),
+    h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451),
+    mnd = Math.floor((h + l - 7 * m + 114) / 31), dag = ((h + l - 7 * m + 114) % 31) + 1;
+  const pasen = `${j}-${String(mnd).padStart(2, '0')}-${String(dag).padStart(2, '0')}`;
+  const koning = new Date(Date.UTC(j, 3, 27)).getUTCDay() === 0 ? `${j}-04-26` : `${j}-04-27`;
+  return (_geldFeest[j] = new Set([`${j}-01-01`, geldDag(pasen, -2), geldDag(pasen, 1), koning, geldDag(pasen, 39), geldDag(pasen, 50), `${j}-12-25`, `${j}-12-26`]));
+}
+const geldWerkdag = d => { const x = new Date(d + 'T00:00:00Z').getUTCDay(); return x !== 0 && x !== 6 && !geldFeestdagen(Number(d.slice(0, 4))).has(d); };
+const geldBankdagNa = d => { let x = d; while (!geldWerkdag(x)) x = geldDag(x, 1); return x; };
+const geldBankdagVoor = d => { let x = d; while (!geldWerkdag(x)) x = geldDag(x, -1); return x; };
 function geldWerkdagenTerug(d, n) { let x = d, k = 0; while (k < n) { x = geldDag(x, -1); if (geldWerkdag(x)) k++; } return x; }
 function geldPlusMaand(d, n) {                                // zelfde dag, of de laatste dag van een kortere maand
   const [j, m, dg] = d.split('-').map(Number), t = new Date(Date.UTC(j, m - 1 + n, 1)), laatste = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
@@ -2299,9 +2314,24 @@ async function geldTijdlijn(env, url) {
     const r = geldPrognoseEvents(progItems, [...fk.values()], { vandaag, profiel, cfg }, w);
     progEv = r.events.map(metDelta); progOverzicht = r.overzicht;
   }
-  const gepland = [...factEv, ...patEv, ...inlegEv, ...progEv];
+  // Bankdagen: wat wij zelf betalen (inkoop volgens beleid, eigen afspraken, aangifte, handmatige uitgaven) → vorige
+  // bankdag, maar niet vóór vandaag; ontvangsten, incasso's, patronen en inleg → volgende bankdag. Eerst verschuiven,
+  // dan pas BTW-sparen en de dekking van de aangifte rekenen; afgeleide events (BTW-sparen, terugboeking) volgen hun bron.
+  const bankdagen = lijst => {
+    for (const e of lijst) {
+      if (!e.datum || e.van_event || String(e.id).endsWith(':terug')) continue;
+      const zelf = e.delta < 0 && e.datumtype !== 'incasso' && e.datumtype !== 'patroon' && e.bron !== 'inleg';
+      let d = zelf ? geldBankdagVoor(e.datum) : geldBankdagNa(e.datum);
+      if (d < vandaag) d = geldBankdagNa(vandaag);
+      if (d !== e.datum) { e.datum_oorspronkelijk = e.datum; e.datum = d; }
+    }
+    const bron = new Map(lijst.map(e => [e.id, e]));
+    for (const e of lijst) { const b = String(e.id).endsWith(':terug') ? bron.get(String(e.id).replace(/:terug$/, '')) : null; if (b && b.datum !== e.datum) e.datum = b.datum; }
+    return lijst;
+  };
+  const gepland = bankdagen([...factEv, ...patEv, ...inlegEv, ...progEv]);
   gepland.push(...geldBtwSparen(gepland, cfg).map(metDelta));
-  const btwEv = (await geldBtwAangifte(get, vandaag, cfg, [...btwBet.values()], w)).map(metDelta);
+  const btwEv = bankdagen((await geldBtwAangifte(get, vandaag, cfg, [...btwBet.values()], w)).map(metDelta));
   // Terugboeking uit de BTW-pot: hooguit wat er (verwacht) in de pot zit op die dag; onbekend potsaldo → niet terugboeken.
   for (const t of btwEv.filter(e => e.id.endsWith(':terug')).sort((a, b) => a.datum.localeCompare(b.datum))) {
     const aangifte = btwEv.find(e => e.id === t.id.replace(/:terug$/, '')), ps = saldo.potten[t.pot];
@@ -2324,11 +2354,12 @@ async function geldTijdlijn(env, url) {
   }
   gepland.push(...btwEv);
   // Achterstallig en zonder datum altijd mee (nooit weg); verder alleen binnen de periode.
-  const inBeeld = e => !e.datum || (e.datum >= van && e.datum <= tot) || e.achterstallig;   // achterstallig staat altijd op vandaag
+  const binnen = d => d && d >= van && d <= tot;
+  const inBeeld = e => !e.datum || binnen(e.datum) || binnen(e.datum_oorspronkelijk) || e.achterstallig;   // achterstallig staat altijd op vandaag; verschoven naar een bankdag blijft zichtbaar
   events.push(...gepland.filter(inBeeld));
   for (const rek of Object.keys(laatsteIjk)) { const i = laatsteIjk[rek];
     if (i.datum >= van && i.datum <= tot) events.push({ id: 'ijkpunt:' + i.id, bron: 'ijkpunt', richting: 'in', bedrag: i.bedrag, datum: i.datum, datumtype: 'werkelijk', zekerheid: 'werkelijk', rekening: rek, tegenpartij: '', document_id: null, bron_url: null, uitleg: 'IJkpunt: eindsaldo van deze dag (ingevuld door ' + (i.doorNaam || i.door || '?') + ').', saldo_ijkpunt: true }); }
-  const buitenEv = factEv.filter(e => !inBeeld(e)), buiten = buitenEv.length;
+  const buitenEv = gepland.filter(e => !inBeeld(e) && !e.intern), buiten = buitenEv.length;   // alle geplande posten buiten de periode (intern heft zich op)
   const buitenBedrag = { in: geldRond(buitenEv.filter(e => e.richting === 'in').reduce((a, e) => a + Math.abs(e.bedrag), 0)), uit: geldRond(buitenEv.filter(e => e.richting === 'uit').reduce((a, e) => a + Math.abs(e.bedrag), 0)) };
   return { status: 200, body: {
     vandaag, van, tot, as_of: new Date().toISOString(),
@@ -2351,7 +2382,8 @@ async function handleGeld(p, request, env, ik, json) {
   if (!['GET', 'HEAD'].includes(m.toUpperCase()) && R.geld !== 'wijzigen') return json({ error: 'geen-toegang', reden: 'geld-wijzigen' }, 403);
   if (p === '/geld/tijdlijn' && m === 'GET') {
     const ver = await geldCacheVersie(env), key = `geld:cache:v${ver}:${url.searchParams.get('van') || ''}:${url.searchParams.get('tot') || ''}:${url.searchParams.get('historie') === '1' ? 'h' : ''}:${geldVandaag()}`;
-    if (url.searchParams.get('vers') !== '1') { const c = await kvJson(env, key); if (c) return json(Object.assign(c, { cache: true })); }
+    // Vers (cache overslaan) alleen voor wie mag wijzigen; lezers krijgen de gedeelde cache.
+    if (url.searchParams.get('vers') !== '1' || R.geld !== 'wijzigen') { const c = await kvJson(env, key); if (c) return json(Object.assign(c, { cache: true })); }
     const r = await geldTijdlijn(env, url);
     if (r.status === 200 && env.MT_ROLLEN) { try { await kvZet(env, key, r.body, { expirationTtl: GELD.cacheTtl }); } catch {} }
     // (de cachesleutel bevat de versie van ná de laatste wijziging; een wijziging maakt een nieuwe, unieke versie)
@@ -2452,7 +2484,7 @@ async function handleGeld(p, request, env, ik, json) {
     const cfg = await geldConfig(env);
     // Voorstel voor potten: de grootboeken naast de bankrekening onder "financiële rekeningen" (namen live uit Moneybird).
     let voorstel = null;
-    if (url.searchParams.get('voorstel') === '1') {
+    if (url.searchParams.get('voorstel') === '1' && R.geld === 'wijzigen') {
       const get = geldMb(env, { rest: 3 }), w = [];
       const [bal, la] = await Promise.all([get(`reports/balance_sheet`), get('ledger_accounts')]);
       if (bal.ok && la.ok && Array.isArray(la.data)) {
@@ -2748,7 +2780,8 @@ export default {
       if (url.pathname.startsWith('/geld/')) return await handleGeld(url.pathname, request, env, ik, json);
       if (url.pathname.startsWith('/dashboard/')) {
         const RG = RECHTEN[ik.rol], lees = ['GET', 'HEAD'].includes(request.method.toUpperCase());
-        if (!RG || !RG.geld || (!lees && RG.geld !== 'wijzigen')) return json({ error: 'geen-toegang', reden: RG && RG.geld ? 'geld-wijzigen' : 'geld' }, 403);
+        // Alleen de eigenaar: het oude dashboard rekent bij een cache-miss alles opnieuw uit (de administratie heeft het tabblad Geld).
+        if (!RG || RG.geld !== 'wijzigen') return json({ error: 'geen-toegang', reden: RG && RG.geld ? 'geld-wijzigen' : 'geld' }, 403);
       }
 
       const isTrack = url.pathname === '/track' || url.pathname.startsWith('/track/');
