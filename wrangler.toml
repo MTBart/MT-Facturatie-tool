@@ -66,5 +66,20 @@ id = "f1405a729e4e4f1985c98ad12b194fa2"
 #    gebruik herversleuteld; na een paar weken VORIG weghalen). Kwijt = iedereen koppelt opnieuw.
 #
 # 4) Modus: 'uit' | 'log' (eerst ±1 week) | 'afdwingen'. Wijzigen = hier aanpassen + deploy.
+# ─── Idempotente Moneybird-acties (F4): Durable Object MT_ACTIES ───────────────
+# Maakt "dezelfde actie maar één keer" atomair, ook over datacenters heen (KV alleen is
+# eventually consistent). Werkt op het gratis plan (SQLite-DO). Zonder deze binding valt de
+# worker terug op KV + geheugen. Geeft de deploy een fout over Durable Objects: dit blok tijdelijk
+# uitzetten (#) — de rest werkt dan gewoon door.
+[[durable_objects.bindings]]
+name = "MT_ACTIES"
+class_name = "MtActies"
+
+[[migrations]]
+tag = "v1-mt-acties"
+new_sqlite_classes = ["MtActies"]
+
 [vars]
 ROLLEN_MODUS = "log"
+# F2–F4: proxy-contract + bevestiging bij Moneybird-writes. Eerst "log", later "afdwingen".
+PROXY_MODUS = "log"

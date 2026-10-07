@@ -162,6 +162,26 @@ versleuteld per oid met `SLEUTEL_KEK`, nooit terug naar de browser); Toggl-sleut
 eigen → `TOGGL_*_<NAAM>` → gedeeld. `GET /aanwezig` (alle rollen, altijd met rol) — lopende timer
 per teamlid (projectnaam, taak, sinds; geen duur of omschrijving), 60 s cache.
 
+**F2 — proxy-contract.** `PROXY_CONTRACT` in worker.js is de allowlist van wat de UI echt doet
+(inventaris van alle 130 aanroepen in v2, mobiel, toggl2 en mt-*.js): per target methode +
+padpatroon + toegestane query-sleutels + max body. Moneybird alleen eigen administratie; Toggl
+alleen eigen werkruimte/organisatie; geen volledige URL's; DELETE alleen waar de UI hem gebruikt
+(MB inkoopfactuur, Toggl clients/tags/time_entries, Focus tasks/time-entries); claude alleen
+haiku/sonnet, max_tokens ≤ 4096, geen tools. `PROXY_MODUS`: `log` (standaard: afwijking loggen +
+tellen, zichtbaar in `/beheer/log`) | `afdwingen` (403 `buiten-contract`) | `uit`.
+Nieuwe UI-aanroep = eerst een regel in `PROXY_CONTRACT` (anders in `afdwingen` geweigerd).
+
+**F3 — bevestiging.** Elke Moneybird-schrijfactie vraagt in de UI eerst bevestiging (wie / wat /
+contact / bedrag) en draagt dan `X-MT-Bevestiging: <id>`; zonder header → afwijking `geen-bevestiging`.
+Let op: dit is een UI-/auditmarkering, géén beveiligingsgrens (een aanroeper kan zo'n id verzinnen);
+de grenzen zijn de rolmatrix, het contract en de concept-only-regels.
+
+**F4 — idempotentie.** `X-MT-Actie: <id>` op een Moneybird-schrijfactie: de worker voert hem per
+gebruiker maar één keer uit (Durable Object `MT_ACTIES`, atomair; zonder binding KV `actie:{oid}:{id}`, 24 u;
+zelfde id met andere inhoud = 409 `actie-andere-inhoud`). Herhaling = hetzelfde antwoord
+(`X-MT-Herhaald: 1`); time-out/5xx = `actie-onzeker` (409) → de UI zoekt het concept op (contact +
+referentie, laatste 24 u) en toont "controleer concept" i.p.v. opnieuw te posten.
+
 | `?target=` | Doet | Token |
 |---|---|---|
 | `claude` | Anthropic `/v1/messages` (SSE-stream) voor in-app chat | `CLAUDE_KEY` |

@@ -1253,8 +1253,12 @@ function toetsContract(target, methode, pad, lengte, body) {
   if (!regel) return regels.some(([, re]) => re.test(p)) ? 'methode-niet-in-contract' : 'pad-niet-in-contract';
   const qs = ruw.includes('?') ? ruw.slice(ruw.indexOf('?') + 1) : '';
   if (qs) {
+    if (qs.length > 2000) return 'query-te-lang';
+    const gezien = new Set();
     for (const [k, v] of new URLSearchParams(qs)) {
       if (!regel[2].has(k)) return 'onverwachte-query';
+      if (gezien.has(k)) return 'dubbele-query';
+      gezien.add(k);
       if (v.length > 500 || /[\x00-\x1f]/.test(v)) return 'query-waarde';
     }
   }
@@ -1267,6 +1271,8 @@ function toetsContract(target, methode, pad, lengte, body) {
   return null;
 }
 // F3: elke Moneybird-schrijfactie draagt X-MT-Bevestiging (de UI vroeg de gebruiker vooraf om bevestiging).
+// Let op: dit is een UI-/auditmarkering, GEEN beveiligingsgrens — elke ingelogde aanroeper kan zo'n
+// id verzinnen. De echte grenzen zijn de rolmatrix, het contract en de concept-only-regels.
 const BEVESTIG_RE = /^mt-[a-z0-9-]{6,60}$/;
 const ACTIE_RE = /^mt-[a-z0-9-]{6,60}(:[a-z0-9_-]{1,30})?$/;
 const isMbSchrijf = (target, methode) => (target === 'moneybird' && String(methode).toUpperCase() !== 'GET') || target === 'moneybird_upload';
@@ -1290,15 +1296,46 @@ async function noteerProxy(env, ctx, b) {
 // Beperking: KV is eventually consistent; gelijktijdige dubbele verzoeken via verschillende
 // datacenters kunnen beide door (de in-memory kaart vangt het binnen één isolate af).
 const ACTIE_TTL_S = 24 * 3600, ACTIE_BEZIG_MS = 2 * 60 * 1000, ACTIE_BODY_MAX = 512 * KB;
-const _acties = new Map();   // key -> rec (deze isolate)
-async function mbIdempotent(env, ik, actie, methode, pad, doFetch, cors) {
+const _acties = new Map();   // key -> rec (deze isolate; KV-terugval)
+// Opslag van één actie. Met de Durable Object-binding MT_ACTIES is "begin" atomair (één object per
+// gebruiker+actie, opslag geserialiseerd) — ook over datacenters heen. Zonder binding: KV + geheugen
+// (KV is eventually consistent: gelijktijdige dubbele verzoeken via verschillende datacenters kunnen
+// dan beide door; binnen één isolate vangt het geheugen het af).
+function actieOpslag(env, key) {
+  if (env.MT_ACTIES && env.MT_ACTIES.idFromName) {
+    const stub = env.MT_ACTIES.get(env.MT_ACTIES.idFromName(key));
+    const doe = async (op, rec) => (await stub.fetch('https://mt-acties/' + op, { method: 'POST', body: JSON.stringify(rec || {}) })).json();
+    return { soort: 'do', begin: async start => doe('begin', start), zet: rec => doe('zet', rec), wis: () => doe('wis') };
+  }
+  return {
+    soort: 'kv',
+    begin: async start => {
+      const bestaand = _acties.get(key) || await kvJson(env, key);
+      if (bestaand) return { bestaand };
+      _acties.set(key, start);
+      try { await kvZet(env, key, start, { expirationTtl: ACTIE_TTL_S }); } catch {}
+      return { nieuw: true };
+    },
+    zet: async rec => { _acties.set(key, rec); try { await kvZet(env, key, rec, { expirationTtl: ACTIE_TTL_S }); } catch {} },
+    wis: async () => { _acties.delete(key); try { await env.MT_ROLLEN.delete(key); } catch {} },
+  };
+}
+async function sha256Hex(tekst) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(tekst == null ? '' : tekst)));
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function mbIdempotent(env, ik, actie, methode, pad, doFetch, cors, body) {
   const hdr = extra => ({ 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', ...cors, ...(extra || {}) });
   const fout = (obj, status) => new Response(JSON.stringify(obj), { status, headers: hdr() });
   if (!ACTIE_RE.test(actie)) return fout({ error: 'ongeldige-actie' }, 400);
   const key = `actie:${String(ik.oid).toLowerCase()}:${actie}`;
-  const bestaand = _acties.get(key) || await kvJson(env, key);
+  const opslag = actieOpslag(env, key);
+  const start = { status: 'bezig', ts: Date.now(), methode, pad, hash: await sha256Hex(body) };
+  const b = await opslag.begin(start);
+  const bestaand = b && b.bestaand;
   if (bestaand) {
-    if (bestaand.methode !== methode || bestaand.pad !== pad) return fout({ error: 'actie-andere-inhoud' }, 409);
+    // Zelfde actie-id hoort bij precies dezelfde vraag (methode, pad én inhoud).
+    if (bestaand.methode !== methode || bestaand.pad !== pad || (bestaand.hash && bestaand.hash !== start.hash)) return fout({ error: 'actie-andere-inhoud' }, 409);
     if (bestaand.status === 'klaar') {
       const body = bestaand.body != null ? bestaand.body : JSON.stringify({ id: bestaand.mbId });
       return new Response(body, { status: bestaand.http || 200, headers: hdr({ 'X-MT-Herhaald': '1' }) });
@@ -1306,30 +1343,46 @@ async function mbIdempotent(env, ik, actie, methode, pad, doFetch, cors) {
     const bezig = bestaand.status === 'bezig' && Date.now() - bestaand.ts < ACTIE_BEZIG_MS;
     return fout({ error: bezig ? 'actie-bezig' : 'actie-onzeker', sinds: bestaand.ts }, 409);
   }
-  const start = { status: 'bezig', ts: Date.now(), methode, pad };
-  _acties.set(key, start);
-  try { await kvZet(env, key, start, { expirationTtl: ACTIE_TTL_S }); } catch {}
   let resp;
   try { resp = await doFetch(); }
   catch (e) {
-    const onz = { ...start, status: 'onzeker' }; _acties.set(key, onz);
-    try { await kvZet(env, key, onz, { expirationTtl: ACTIE_TTL_S }); } catch {}
+    try { await opslag.zet({ ...start, status: 'onzeker' }); } catch {}
     return fout({ error: 'moneybird-onbereikbaar', actie: 'onzeker' }, 504);
   }
   const text = await resp.text();
-  if (resp.ok) {
-    let mbId = null; try { const j = JSON.parse(text); mbId = j && j.id != null ? String(j.id) : null; } catch {}
-    const klaar = { ...start, status: 'klaar', http: resp.status, mbId, body: text.length <= ACTIE_BODY_MAX ? text : null };
-    _acties.set(key, klaar);
-    try { await kvZet(env, key, klaar, { expirationTtl: ACTIE_TTL_S }); } catch {}
-  } else if (resp.status >= 400 && resp.status < 500) {
-    _acties.delete(key);
-    try { await env.MT_ROLLEN.delete(key); } catch {}
-  } else {
-    const onz = { ...start, status: 'onzeker', http: resp.status }; _acties.set(key, onz);
-    try { await kvZet(env, key, onz, { expirationTtl: ACTIE_TTL_S }); } catch {}
-  }
+  try {
+    if (resp.ok) {
+      let mbId = null; try { const j = JSON.parse(text); mbId = j && j.id != null ? String(j.id) : null; } catch {}
+      await opslag.zet({ ...start, status: 'klaar', http: resp.status, mbId, body: text.length <= ACTIE_BODY_MAX ? text : null });
+    } else if (resp.status >= 400 && resp.status < 500) {
+      await opslag.wis();   // MB weigerde: er is niets aangemaakt → opnieuw proberen mag
+    } else {
+      await opslag.zet({ ...start, status: 'onzeker', http: resp.status });
+    }
+  } catch {}
   return new Response(text, { status: resp.status, headers: hdr() });
+}
+
+// Durable Object: één per (gebruiker, actie). Opslag binnen een object is geserialiseerd, dus
+// "begin" (lezen + bezig zetten) is atomair. Na 24 u ruimt een alarm het object op.
+export class MtActies {
+  constructor(state) { this.state = state; }
+  async fetch(request) {
+    const op = new URL(request.url).pathname.slice(1);
+    let rec = {}; try { rec = await request.json(); } catch {}
+    const st = this.state.storage, antw = o => new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json' } });
+    if (op === 'begin') {
+      const bestaand = await st.get('rec');
+      if (bestaand) return antw({ bestaand });
+      await st.put('rec', rec);
+      try { await st.setAlarm(Date.now() + ACTIE_TTL_S * 1000); } catch {}
+      return antw({ nieuw: true });
+    }
+    if (op === 'zet') { await st.put('rec', rec); return antw({ ok: true }); }
+    if (op === 'wis') { await st.deleteAll(); return antw({ ok: true }); }
+    return new Response('onbekend', { status: 404 });
+  }
+  async alarm() { await this.state.storage.deleteAll(); }
 }
 
 // ── /me, /toegang en /beheer/* ────────────────────────────────────────────────
@@ -1540,7 +1593,13 @@ export default {
       if (pm !== 'uit' && !eigenRoute && PROXY_CONTRACT[target]) {
         let cBody = null;
         if (target === 'claude') { try { cBody = await request.clone().json(); } catch {} }
-        const cl = request.headers.get('content-length'), lengte = cl != null && cl !== '' ? Number(cl) : null;
+        // Bodygrootte: Content-Length, en zonder (of ongeldige) header gewoon nagemeten — zo geldt de
+        // limiet ook bij chunked verzoeken.
+        const cl = request.headers.get('content-length');
+        let lengte = cl != null && cl !== '' && isFinite(Number(cl)) ? Number(cl) : null;
+        if (lengte == null && !['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase())) {
+          try { lengte = (await request.clone().arrayBuffer()).byteLength; } catch { lengte = Infinity; }
+        }
         let reden = toetsContract(target, request.method, target === 'moneybird_download' ? '' : pad, lengte, cBody);
         if (!reden && isMbSchrijf(target, request.method) && !BEVESTIG_RE.test(request.headers.get('X-MT-Bevestiging') || '')) reden = 'geen-bevestiging';
         if (reden) {
@@ -1625,7 +1684,7 @@ export default {
         });
         // F4: schrijfactie met X-MT-Actie → hooguit één keer uitvoeren (zie mbIdempotent).
         const actie = method !== 'GET' ? request.headers.get('X-MT-Actie') : null;
-        if (actie && env.MT_ROLLEN) return await mbIdempotent(env, ik, actie, method, mbPath, mbFetch, corsHeaders);
+        if (actie && (env.MT_ACTIES || env.MT_ROLLEN)) return await mbIdempotent(env, ik, actie, method, mbPath, mbFetch, corsHeaders, body);
         const response = await mbFetch();
         const text = await response.text();
         return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
