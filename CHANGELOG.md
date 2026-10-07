@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-06 — Projecttijdlijn en klant-roll-up: gepland, gewerkt en vrije capaciteit per persoon per week
+- Commit: `e4b28c5` | Auteur: Bart Witte
+
 ## 2026-10-06 — Koppelvoorstellen en inboxfilters: snel de juiste mail bij het juiste project, nooit automatisch
 - Commit: `bf9619b` | Auteur: Bart Witte
 
