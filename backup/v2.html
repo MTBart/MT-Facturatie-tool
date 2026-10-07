@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.4 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.4.1 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -745,7 +745,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.4, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.4.1, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -766,7 +766,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.4</span>
+    <span class="header-version">v2.4.1</span>
     <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
@@ -11945,6 +11945,11 @@ async function rolLaad(){
   if(act&&act.classList.contains('mt-rol-verborgen')){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
   if(typeof admInitKnop==='function') admInitKnop();
   const k=document.getElementById('beheer-kaart'); if(k) k.style.display=MTRol.isBeheer()?'':'none';
+  // Deeplink-race: een tab die al open stond vóór /me terug was (bv. #tab=instellingen of
+  // #tab=activiteit) laadde zonder rol → nu alsnog vullen.
+  const open=n=>{ const t=document.getElementById('tab-'+n); return !!(t&&t.classList.contains('active')); };
+  if(MTRol.isBeheer()&&open('instellingen')) beheerLaad();
+  if(MTRol.isBeheer()&&open('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
   return me;
 }
 const _BH_FOUT={'alleen-eigenaar-mag-eigenaar':'Alleen de eigenaar kan iemand eigenaar maken of een eigenaar wijzigen.','niet-jezelf':'Je eigen account wijzig je hier niet.',
@@ -11991,7 +11996,7 @@ function beheerTeken(){
     'gedeactiveerd':'gedeactiveerd','gereactiveerd':'gereactiveerd','toegang-aangevraagd':'toegang aangevraagd','aanvraag-toegekend':'aanvraag toegekend','aanvraag-geweigerd':'aanvraag geweigerd',
     'eigenaar-gekoppeld':'eigenaar gekoppeld','eigenaar-vastgelegd':'eigenaar vastgelegd'};
   const rn=id=>(g.rollen.find(r=>r.id===id)||{}).naam||id||'';
-  const auditR=(au.audit||[]).map(a=>`<tr><td class="bh-opt">${_bhDatum(a.ts)}</td><td>${esc(a.doorNaam||(a.door==='systeem'?'systeem':''))}</td><td>${esc(AUDIT[a.actie]||a.actie)}</td><td>${esc(a.doelNaam||a.doel||'')}</td><td>${a.oud?esc(rn(a.oud))+' → ':''}${esc(rn(a.nieuw))}</td></tr>`).join('');
+  const auditR=(au.audit||[]).map(a=>`<tr><td class="bh-opt">${_bhDatum(a.ts)}</td><td>${esc(a.doorNaam||(a.door==='systeem'?'systeem':a.door==='deploy'?'uitrol':''))}</td><td>${esc(AUDIT[a.actie]||a.actie)}</td><td>${esc(a.doelNaam||a.doel||'')}</td><td>${a.oud?esc(rn(a.oud))+' → ':''}${esc(rn(a.nieuw))}</td></tr>`).join('');
   el.innerHTML=`<div class="bh-modus ${g.modus==='afdwingen'?'afdwingen':''}">${modusTekst}</div>
     <table class="bh-tabel"><thead><tr><th>Naam</th><th class="bh-opt">E-mail</th><th>Rol</th><th>Status</th><th class="bh-opt">Laatst gezien</th><th></th></tr></thead><tbody>${rijen||'<tr><td colspan="6">Nog geen gebruikers.</td></tr>'}</tbody></table>
     <div class="bh-blok"><h4>Uitnodigen</h4><div class="bh-form">
