@@ -20,6 +20,7 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-06a"></script>
+<script src="mt-rollen.js?v=2026-10-07a"></script>
 <script src="mt-fotostore.js?v=2026-07-31"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -1142,15 +1143,15 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 
 <!-- ── BOTTOM NAV ── -->
 <nav class="bottom-nav">
-  <button class="nav-btn active" onclick="switchTab('timer',this)" id="nav-timer">
+  <button class="nav-btn active" onclick="switchTab('timer',this)" id="nav-timer" data-recht="uren">
     <div class="nav-icon">⏱</div>
     <span>Timer</span>
   </button>
-  <button class="nav-btn" onclick="switchTab('projecten',this)" id="nav-projecten">
+  <button class="nav-btn" onclick="switchTab('projecten',this)" id="nav-projecten" data-recht="projecten">
     <div class="nav-icon">📁</div>
     <span>Projecten</span>
   </button>
-  <button class="nav-btn" onclick="switchTab('agenda',this)" id="nav-agenda">
+  <button class="nav-btn" onclick="switchTab('agenda',this)" id="nav-agenda" data-recht="projecten">
     <div class="nav-icon">📅</div>
     <span>Agenda</span>
   </button>
@@ -1158,15 +1159,15 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <div class="nav-icon">📷</div>
     <span>Capture</span>
   </button>
-  <button class="nav-btn" onclick="switchTab('oplevering',this)" id="nav-oplevering">
+  <button class="nav-btn" onclick="switchTab('oplevering',this)" id="nav-oplevering" data-recht="projecten">
     <div class="nav-icon">📋</div>
     <span>Rapportage</span>
   </button>
-  <button class="nav-btn" onclick="switchTab('voorraad',this)" id="nav-voorraad">
+  <button class="nav-btn" onclick="switchTab('voorraad',this)" id="nav-voorraad" data-recht="projecten">
     <div class="nav-icon">📦</div>
     <span>Voorraad</span>
   </button>
-  <button class="nav-btn" onclick="switchTab('feedback',this)" id="nav-feedback">
+  <button class="nav-btn" onclick="switchTab('feedback',this)" id="nav-feedback" data-recht="verbeterpunten">
     <div class="nav-icon">💬</div>
     <span>Feedback</span>
   </button>
@@ -2120,6 +2121,15 @@ async function msLogout() {
   document.getElementById('demoBadge').style.display = 'none';
 }
 
+async function rolLaadMobiel() {
+  if (!window.MTRol) return;
+  const me = await MTRol.laad(WORKER); if (!me) return;
+  if (MTRol.geenToegangNodig()) { MTRol.toonGeenToegang(WORKER); return; }
+  MTRol.pasToe();
+  const act = document.querySelector('.bottom-nav .nav-btn.active');
+  if (act && act.classList.contains('mt-rol-verborgen')) { const vrij = [...document.querySelectorAll('.bottom-nav .nav-btn')].find(b => !b.classList.contains('mt-rol-verborgen')); if (vrij) vrij.click(); }
+}
+
 async function toonApp(account) {
   // Valideer domein — alleen @mortiseandtenon.nl
   const email = account.username || '';
@@ -2138,6 +2148,8 @@ async function toonApp(account) {
   avatar.textContent = naam.charAt(0).toUpperCase();
   avatar.style.display = 'flex';
   document.getElementById('demoBadge').style.display = 'none';
+  // F1c: rol ophalen (verbergen alleen in modus 'afdwingen'; de worker beslist)
+  rolLaadMobiel();
   // Laad echte data na login
   await loadRealProjects();
   // Timer herstellen nu de echte projecten er zijn (PWA-herstart-fix)

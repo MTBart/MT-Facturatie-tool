@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Rollen in de worker (F1a/F1b): strengere tokencontrole, rol per gebruiker, eerst alleen loggen
+- Commit: `02caa93` | Auteur: Bart Witte
+
 ## 2026-10-07 — Release v2.3: koppel-badges; vorige versie v2.2 als vaste backup
 - Commit: `7626571` | Auteur: Bart Witte
 
