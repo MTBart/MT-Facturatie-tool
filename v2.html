@@ -29,6 +29,7 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
+<script src="mt-geld.js?v=2026-10-08a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -809,6 +810,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
 <div class="tabs-wrap">
   <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
+  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Geld</button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('projecten',this)">Projecten</button>
@@ -1020,6 +1022,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <!-- ═══ EINDE CASHFLOW SECTIE ═══ -->
 
   </div>
+
+  <!-- ═══ TAB: GELD (geldtijdlijn, mt-geld.js) ═══ -->
+  <div id="tab-geld" class="tab-content"><div id="geld-root"></div></div>
 
   <!-- ═══ TAB: KLANTEN ═══ -->
   <div id="tab-klanten" class="tab-content">
@@ -3005,6 +3010,7 @@ function showTab(name,btn){
   if(name==='admin') adminOpen();
   if(name==='activiteit') activiteitOpen();
   if(name==='verbeterpunten') verbLaadTab();
+  if(name==='geld') geldOpen();
   // Houd de URL-hash gelijk aan de actieve tab (tabwissel = replaceState) → deep-link + "apart venster".
   // Toont Projecten een project, dan is dát de route (#projecten/<CODE>).
   if(!mtRoute._stil){
@@ -8841,6 +8847,15 @@ async function laadCashflowDashboard(){
     return;
   }
   if(!MTRol.magGeld()){ if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none'; return; }
+  // Nieuwe geldtijdlijn beschikbaar → de oude cashflow verbergen (data blijft staan) en verwijzen naar het tabblad Geld.
+  if(typeof geldNieuw==='function'&&geldNieuw()){
+    if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none';
+    const dash=document.getElementById('tab-dashboard');
+    if(dash&&!document.getElementById('cf-naar-geld')){ const d=document.createElement('div'); d.id='cf-naar-geld'; d.className='card'; d.style.cssText='margin-bottom:1rem;font-size:13px';
+      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Geld</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Geld →</button>';
+      dash.insertBefore(d,dash.firstElementChild); }
+    return;
+  }
   // Instellingen (anker, doelen) alleen voor wie mag wijzigen.
   const inst=document.querySelector('#cf-root .cf-settings-toggle'); if(inst&&inst.closest('.card')) inst.closest('.card').style.display=MTRol.magGeld('wijzigen')?'':'none';
   try{
@@ -12431,7 +12446,34 @@ async function rolLaad(){
   if(MTRol.isBeheer()&&open('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
+  if(typeof geldTabZet==='function') geldTabZet();
   return me;
+}
+// ── Geld (geldtijdlijn) ──
+// Alleen als de worker de geldtijdlijn kent (kolom `geld` in /me) én je dat recht hebt; dan vervangt het
+// tabblad Geld de oude cashflow op het dashboard (die wordt alleen verborgen). Oude worker → alles als vroeger.
+const geldNieuw=()=>!!(window.MTRol&&MTRol.me&&MTRol.me.rechten&&('geld' in MTRol.me.rechten));
+function geldTabZet(){
+  const b=document.getElementById('tab-btn-geld'); if(!b) return;
+  const ja=geldNieuw()&&MTRol.magGeld();
+  b.style.display=ja?'':'none';
+  const t=document.getElementById('tab-geld'); if(t&&t.classList.contains('active')&&ja) geldOpen();
+}
+async function geldHaal(pad,opt){
+  opt=opt||{};
+  const h=await authHeader();
+  const r=await fetch(`${WORKER}${pad}`,{method:opt.method||'GET',headers:{...h,'Content-Type':'application/json'},body:opt.body!==undefined?JSON.stringify(opt.body):undefined});
+  let j=null; try{ j=await r.json(); }catch(e){}
+  if(!r.ok) return Object.assign({error:(j&&j.error)||('HTTP '+r.status)},j||{});
+  return j;
+}
+function geldOpen(){
+  const el=document.getElementById('geld-root'); if(!el||!window.MTGeld) return;
+  if(!window.MTRol||!MTRol.me){ if(!geldOpen._wacht){ geldOpen._wacht=true; window.addEventListener('mt-rol',()=>{ geldOpen._wacht=false; geldTabZet(); },{once:true}); } el.innerHTML='<div class="dos-meta">Laden…</div>'; return; }
+  if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Het geldscherm is alleen voor eigenaren en de administratie.</div>'; return; }
+  if(el.dataset.gestart){ MTGeld.laad(); return; }
+  el.dataset.gestart='1';
+  MTGeld.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||''});
 }
 // ── Wat is er verbeterd (data/updates.json, gewone taal, nieuwste eerst) ──
 // Beheer ziet alle versies in de kaart; iedereen krijgt eenmalig een "nieuw"-stipje bij het versielabel

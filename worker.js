@@ -1514,6 +1514,17 @@ const GELD = {
 const GELD_POT_DOELEN = ['buffer', 'winst', 'vakantie', 'btw', 'overig'];
 const GELD_POT_ID = /^[a-z][a-z0-9-]{1,30}$/;
 // Configuratie normaliseren: alleen geldige velden; ontbrekend = leeg/null (niets verzinnen).
+// Doel van een rekening/potje: bedrag óf bandbreedte (van–tot), streefdatum, mijlpalen, startpunt (voor het % van de weg).
+function geldStreefNorm(x) {
+  if (!x || typeof x !== 'object') return null;
+  const g = v => typeof v === 'number' && isFinite(v) && Math.abs(v) <= 1e9 ? geldRond(v) : null;
+  const r = { bedrag: g(x.bedrag), van: g(x.van), tot: g(x.tot), datum: geldIsDatum(x.datum) ? x.datum : null,
+    mijlpalen: [...new Set((Array.isArray(x.mijlpalen) ? x.mijlpalen : []).map(g).filter(v => v != null))].sort((a, b) => a - b).slice(0, 10),
+    start: x.start && geldIsDatum(x.start.datum) && g(x.start.bedrag) != null ? { datum: x.start.datum, bedrag: g(x.start.bedrag) } : null };
+  if (r.van != null && r.tot != null && r.van > r.tot) [r.van, r.tot] = [r.tot, r.van];
+  if (r.van == null || r.tot == null) { if (r.bedrag == null) r.bedrag = r.van != null ? r.van : r.tot; r.van = r.tot = null; }
+  return r.bedrag == null && r.van == null && r.datum == null ? null : r;
+}
 function geldConfigNorm(c) {
   c = c && typeof c === 'object' ? c : {};
   const getal = (x, min, max) => (typeof x === 'number' && isFinite(x) && x >= min && x <= max) ? x : null;
@@ -1522,21 +1533,23 @@ function geldConfigNorm(c) {
     ledger: /^\d{6,25}$/.test(String(p.ledger || '')) ? String(p.ledger) : null,
     herkenning: { tegenrekening: String((p.herkenning && p.herkenning.tegenrekening) || '').replace(/\s+/g, '').toUpperCase().slice(0, 40),
       omschrijving: String((p.herkenning && p.herkenning.omschrijving) || '').trim().slice(0, 60) },
-    weekinleg: getal(p.weekinleg, 0, 1e7), weekdag: Number.isInteger(p.weekdag) && p.weekdag >= 1 && p.weekdag <= 7 ? p.weekdag : null, actief: p.actief !== false }));
+    weekinleg: getal(p.weekinleg, 0, 1e7), weekdag: Number.isInteger(p.weekdag) && p.weekdag >= 1 && p.weekdag <= 7 ? p.weekdag : null, actief: p.actief !== false,
+    streef: geldStreefNorm(p.streef), virtueel: p.virtueel === true }))
+    .map(p => p.virtueel ? Object.assign(p, { ledger: null, herkenning: { tegenrekening: '', omschrijving: '' } }) : p);   // virtueel: geen eigen rekening
   const ids = new Set(), uniek = potten.filter(p => !ids.has(p.id) && ids.add(p.id));
   const btw = c.btw && typeof c.btw === 'object' ? c.btw : {};
-  const rek = x => (x === 'lopend' || uniek.some(p => p.id === x)) ? x : null;
+  const rek = x => (x === 'lopend' || uniek.some(p => p.id === x && !p.virtueel)) ? x : null;   // virtueel heeft geen eigen saldo
   const groepen = (Array.isArray(c.klantgroepen) ? c.klantgroepen : []).filter(g => g && GELD_POT_ID.test(String(g.id))).map(g => ({
     id: String(g.id), naam: String(g.naam || g.id).slice(0, 60), prefix: String(g.prefix || '').trim().slice(0, 60),
     contact_ids: (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String).filter(x => /^\d{6,25}$/.test(x)).slice(0, 200) }))
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
-  return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen,
-    btw: { spaarpercentage: getal(btw.spaarpercentage, 0, 1), spaarpot: uniek.some(p => p.id === btw.spaarpot) ? btw.spaarpot : null,
+  return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef),
+    btw: { spaarpercentage: getal(btw.spaarpercentage, 0, 1), spaarpot: uniek.some(p => p.id === btw.spaarpot && !p.virtueel) ? btw.spaarpot : null,
       aangifte_van: rek(btw.aangifte_van), terugboeking_van: rek(btw.terugboeking_van) },
     gewijzigd: c.gewijzigd || null, door: c.door || null, revisie: Number.isInteger(c.revisie) ? c.revisie : 0 };
 }
 async function geldConfig(env) { return geldConfigNorm(await kvJson(env, 'geld:config')); }
-const geldRekeningen = cfg => ['lopend', ...cfg.potten.map(p => p.id)];
+const geldRekeningen = cfg => ['lopend', ...cfg.potten.filter(p => !p.virtueel).map(p => p.id)];   // met eigen saldo (ijkbaar)
 function geldVandaag() { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function geldDag(s, n) { const d = new Date(s + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 // Echte kalenderdatum (2026-02-31 wordt niet stil 3 maart).
@@ -1609,16 +1622,17 @@ async function geldMutaties(get, van, tot, w) {
 function geldPotVan(m, potten) {
   const ids = (m.ledger_account_bookings || []).map(b => String(b.ledger_account_id));
   const potLedgers = new Set(potten.filter(p => p.ledger).map(p => p.ledger));
-  const vrij = !(m.payments || []).length && ids.every(id => potLedgers.has(id));
+  const metFactuur = (m.payments || []).length > 0;      // hangt aan een factuur → nooit stil intern
+  const vrij = !metFactuur && ids.every(id => potLedgers.has(id));
   const tekst = (String(m.message || '') + ' ' + String(m.contra_account_name || '')).toLowerCase();
   const tegen = String(m.contra_account_number || '').replace(/\s+/g, '').toUpperCase();
   // Zeker: grootboek of exacte tegenrekening. Alleen een omschrijving → "te bevestigen" (onzeker), want een
   // leveranciertekst kan toevallig overeenkomen en dan zou een echte uitgave als inleg verdwijnen.
-  const zeker = potten.filter(p => p.actief && ((p.ledger && ids.length && ids.every(id => id === p.ledger)) ||
+  const zeker = potten.filter(p => p.actief && ((!metFactuur && p.ledger && ids.length && ids.every(id => id === p.ledger)) ||
     (vrij && p.herkenning.tegenrekening && tegen && tegen === p.herkenning.tegenrekening)));
   const viaTekst = potten.filter(p => p.actief && vrij && !zeker.includes(p) && p.herkenning.omschrijving && tekst.includes(p.herkenning.omschrijving.toLowerCase()));
   const deels = ids.some(id => potLedgers.has(id)) && !ids.every(id => potLedgers.has(id));
-  const kandidaten = [...new Set([...zeker, ...viaTekst, ...(deels ? potten.filter(p => p.ledger && ids.includes(p.ledger)) : [])].map(p => p.id))];
+  const kandidaten = [...new Set([...zeker, ...viaTekst, ...(deels || metFactuur ? potten.filter(p => p.ledger && ids.includes(p.ledger)) : [])].map(p => p.id))];
   if (zeker.length === 1 && !deels && !viaTekst.length) return { pot: zeker[0].id, onzeker: false, kandidaten };
   return { pot: null, onzeker: kandidaten.length > 0, kandidaten, alleenTekst: !zeker.length && !deels && viaTekst.length > 0 };
 }
@@ -1997,7 +2011,7 @@ function geldPatroonEvents(p, ctx) {
 function geldInlegEvents(cfg, patronen, ctx, w) {
   const { vandaag, tot, bank } = ctx, uit = [], dagen = ['', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'];
   for (const p of cfg.potten) {
-    if (!p.actief || !(p.weekinleg > 0)) continue;
+    if (!p.actief || p.virtueel || !(p.weekinleg > 0)) continue;
     const wd = p.weekdag || (patronen && patronen.pot_weekdag && patronen.pot_weekdag[p.id]) || null;
     if (!wd) { w.push({ bron: 'config', rekening: p.id, fout: `weekdag van de inleg in "${p.naam}" onbekend — stel hem in (nu niet ingepland)` }); continue; }
     let d = vandaag; while ((new Date(d + 'T00:00:00Z').getUTCDay() || 7) !== wd) d = geldDag(d, 1);
@@ -2060,7 +2074,7 @@ async function geldTijdlijn(env, url) {
   const get = geldMb(env, budget);
   let cfg;
   try { cfg = await geldConfig(env); } catch (e) { cfg = geldConfigNorm(null); w.push({ bron: 'config', fout: 'instellingen niet te lezen (opslag)' }); }
-  const potten = cfg.potten;                         // inactief = alleen niet meer herkennen; het saldo telt wel mee
+  const potten = cfg.potten.filter(p => !p.virtueel);   // inactief = alleen niet meer herkennen; het saldo telt wel mee. Virtueel = geen eigen rekening.
   if (!potten.length) w.push({ bron: 'config', fout: 'nog geen spaarpotten ingesteld — overboekingen naar spaar worden niet herkend' });
   let ijk = [];
   try { ijk = await geldIjkpunten(env, 1, geldRekeningen(cfg)); if (ijk.onvolledig) w.push({ bron: 'ijkpunt', fout: 'niet alle ijkpunten gelezen (te veel) — oudere stand mogelijk' }); }
@@ -2202,7 +2216,7 @@ async function geldTijdlijn(env, url) {
     overrides: { aantal: Object.keys(plan.overrides).length, niet_meer_open: vervallenOv, compleet: overrides.compleet },
     patronen: patronen ? { as_of: patronen.as_of, aantal: patLijst.length, aan: patLijst.filter(x => x.aan && !x.potje).length, vervangen_door_factuur: pctx.vervangen, lijst: patLijst } : null,
     historie_dagsom: url.searchParams.get('historie') === '1' && patronen ? patronen.dagsom : undefined,
-    instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag })), btw: cfg.btw },
+    instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, lopend_streef: cfg.lopend_streef },
   } };
 }
 async function handleGeld(p, request, env, ik, json) {
@@ -2333,8 +2347,10 @@ async function handleGeld(p, request, env, ik, json) {
         if (heeftIjk && !n) return json({ error: `pot "${o.naam}" heeft ijkpunten — zet hem op inactief in plaats van verwijderen`, pot: o.id }, 400);
         if (heeftIjk) return json({ error: `pot "${o.naam}" heeft ijkpunten — grootboek niet wijzigen (maak een nieuwe pot)`, pot: o.id }, 400);
       }
+      for (const n of b.potten) { const o = oud.potten.find(x => x.id === n.id); if (o && !!o.virtueel !== (n.virtueel === true)) return json({ error: `potje "${o.naam}": virtueel/echt kan na het aanmaken niet meer wisselen (maak een nieuw potje)`, pot: o.id }, 400); }
       nieuw.potten = b.potten; gewijzigd.push('potten');
     }
+    if ('lopend_streef' in b) { if (b.lopend_streef !== null && (typeof b.lopend_streef !== 'object' || Array.isArray(b.lopend_streef))) return json({ error: 'lopend_streef: object of null' }, 400); nieuw.lopend_streef = b.lopend_streef; gewijzigd.push('lopend_streef'); }
     if ('klantgroepen' in b) {
       if (!Array.isArray(b.klantgroepen) || b.klantgroepen.length > 50) return json({ error: 'klantgroepen: lijst (max 50)' }, 400);
       const ids = new Set();
