@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Contactenregister: UI (klantpagina, projectkaart, zoeker, droogloop), haakjes in v2/mobiel/inbox
+- Commit: `b0f7471` | Auteur: Bart Witte
+
 ## 2026-10-07 — Contactenregister: kern (model, ontdubbeling, aanvullen met voorstellen, merger, bronnen, handtekening)
 - Commit: `b10a30a` | Auteur: Bart Witte
 

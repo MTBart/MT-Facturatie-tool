@@ -2165,6 +2165,7 @@ async function msLogout() {
   if (!confirm('Uitloggen?')) return;
   try { await _msal.logoutPopup(); } catch(e) { /* beste poging */ }
   _msAccount = null;
+  try { if (window.MTContactenUI) MTContactenUI.mobielWis(); } catch(e) {}
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('userAvatarBtn').style.display = 'none';
   document.getElementById('demoBadge').style.display = 'none';
