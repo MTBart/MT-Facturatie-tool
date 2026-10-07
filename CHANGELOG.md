@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — magGeld: terugval voor een worker zonder recht geld (veilig vóór de worker-deploy)
+- Commit: `d6a5b6c` | Auteur: Bart Witte
+
 ## 2026-10-07 — G1-aanvulling: spaarpotjes-model, kredietlimiet, BTW-config; recht geld + rol administratie
 - Commit: `7ac3d92` | Auteur: Bart Witte
 
