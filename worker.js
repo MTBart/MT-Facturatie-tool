@@ -1526,7 +1526,11 @@ function geldConfigNorm(c) {
   const ids = new Set(), uniek = potten.filter(p => !ids.has(p.id) && ids.add(p.id));
   const btw = c.btw && typeof c.btw === 'object' ? c.btw : {};
   const rek = x => (x === 'lopend' || uniek.some(p => p.id === x)) ? x : null;
-  return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek,
+  const groepen = (Array.isArray(c.klantgroepen) ? c.klantgroepen : []).filter(g => g && GELD_POT_ID.test(String(g.id))).map(g => ({
+    id: String(g.id), naam: String(g.naam || g.id).slice(0, 60), prefix: String(g.prefix || '').trim().slice(0, 60),
+    contact_ids: (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String).filter(x => /^\d{6,25}$/.test(x)).slice(0, 200) }))
+    .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
+  return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen,
     btw: { spaarpercentage: getal(btw.spaarpercentage, 0, 1), spaarpot: uniek.some(p => p.id === btw.spaarpot) ? btw.spaarpot : null,
       aangifte_van: rek(btw.aangifte_van), terugboeking_van: rek(btw.terugboeking_van) },
     gewijzigd: c.gewijzigd || null, door: c.door || null, revisie: Number.isInteger(c.revisie) ? c.revisie : 0 };
@@ -1702,6 +1706,149 @@ async function geldIjkpunten(env, perRekening, rekeningen) {
 }
 async function geldCacheVersie(env) { return (await kvJson(env, 'geld:cachever')) || '0'; }
 
+// ── G2: betaaldag-logica, betaalprofiel en per-factuur overrides ──────────────
+// Inkoop: override → incasso (leverancier die ons incasseert: op de vervaldag) → beleid "2 werkdagen vóór
+//   de vervaldag" → zonder vervaldag "bij ontvangst" (factuurdatum, aanname). Vervallen → vandaag ingepland,
+//   achterstallig:true. Nooit een betaaldag in het verleden voor iets dat nog open staat.
+// Verkoop: override → vervaldag + gebruikelijke vertraging van die klant (≥3 betaalde facturen) → van zijn
+//   groep (alleen een expliciete groep in de instellingen: prefix of contactlijst) → algemeen → vervaldag.
+//   Marge p25–p75 als datum_vroeg/datum_laat. Creditnota's: op de vervaldag, zonder vertraging.
+// Overrides: per factuur één KV-sleutel geld:ov:<soort>:<id> (waarde ook als metadata, zodat één list volstaat),
+//   elke wijziging ook in geld:ov-historie:*. {type:'datum', datum} of {type:'afbetaling', bedrag, eerste,
+//   interval:'maand'|'week', termijnen?} — afbetalingstermijnen tellen samen precies op tot het open bedrag.
+// Betaalprofiel (KV geld:profiel): apart berekend via GET /geld/profiel (te veel verzoeken voor de tijdlijn);
+//   alleen een volledige berekening wordt bewaard.
+const GELD_PROFIEL_DAGEN = 7, GELD_PROFIEL_MAX = 31, GELD_PROFIEL_BUDGET = 40, GELD_OV = 'geld:ov:';
+const geldWerkdag = d => { const x = new Date(d + 'T00:00:00Z').getUTCDay(); return x !== 0 && x !== 6; };
+function geldWerkdagenTerug(d, n) { let x = d, k = 0; while (k < n) { x = geldDag(x, -1); if (geldWerkdag(x)) k++; } return x; }
+function geldPlusMaand(d, n) {                                // zelfde dag, of de laatste dag van een kortere maand
+  const [j, m, dg] = d.split('-').map(Number), t = new Date(Date.UTC(j, m - 1 + n, 1)), laatste = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), Math.min(dg, laatste))).toISOString().slice(0, 10);
+}
+const geldDagenTussen = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5);
+function geldPct(a, q) { const s = a.slice().sort((x, y) => x - y); if (!s.length) return null; const k = (s.length - 1) * q, f = Math.floor(k), c = Math.min(f + 1, s.length - 1); return s[f] + (s[c] - s[f]) * (k - f); }
+const geldStat = d => ({ n: d.length, mediaan: Math.round(geldPct(d, 0.5)), p25: Math.round(geldPct(d, 0.25)), p75: Math.round(geldPct(d, 0.75)) });
+const geldContactNaam = c => (c && (c.company_name || [c.firstname, c.lastname].filter(Boolean).join(' '))) || '';
+const geldIsIncasso = m => { const s = m && m.sepa_fields && typeof m.sepa_fields === 'object' ? m.sepa_fields : {};
+  return 'marf' in s || String(s.sref || '').startsWith('DOMREC') || String(m && m.code || '') === '01018'; };
+const geldInGroep = (g, cid, naam) => g.contact_ids.includes(String(cid)) || (!!g.prefix && String(naam || '').toLowerCase().startsWith(g.prefix.toLowerCase()));
+function geldVerwachtVerkoop(d, profiel, cfg) {
+  if (!profiel) return { basis: 'vervaldag', reden: 'geen bruikbaar betaalprofiel' };
+  const k = profiel.klanten[String(d.contact_id)];
+  if (k && k.d.length >= 3) return Object.assign({ basis: 'klant' }, geldStat(k.d));
+  const gs = (cfg.klantgroepen || []).filter(g => geldInGroep(g, d.contact_id, geldContactNaam(d.contact)));
+  let noot = '';
+  if (gs.length > 1) noot = 'valt in meerdere klantgroepen (' + gs.map(g => g.naam).join(', ') + ') — groep niet gebruikt';   // niet kiezen
+  else if (gs.length === 1) {
+    const g = gs[0], ds = Object.entries(profiel.klanten).filter(([cid, x]) => geldInGroep(g, cid, x.naam)).flatMap(([, x]) => x.d);
+    if (ds.length >= 3) return Object.assign({ basis: 'groep', groep: g.naam }, geldStat(ds));
+  }
+  if (profiel.algemeen && profiel.algemeen.n >= 3) return Object.assign({ basis: 'algemeen' }, profiel.algemeen, noot ? { noot } : {});
+  return { basis: 'vervaldag', reden: noot || 'te weinig betaalhistorie' };
+}
+// Afbetaling: termijnen volgens het schema vanaf de eerste termijn op of na vandaag; samen precies het open bedrag.
+// Bij een vast aantal termijnen: wat de resterende termijnen niet dragen (hooguit de gemiste termijnen) komt
+// vandaag, als achterstallig; de rest van een te krap plan op de laatste termijn.
+function geldTermijnen(basis, ov, vandaag) {
+  const teken = basis.bedrag < 0 ? -1 : 1, per = Math.abs(ov.bedrag), wk = ov.interval === 'week';
+  const stap = k => wk ? geldDag(ov.eerste, 7 * k) : geldPlusMaand(ov.eerste, k);
+  const ev = (id, b, datum, extra) => { const e = Object.assign({}, basis, { id: `${basis.id}:${id}`, bedrag: geldRond(teken * b), datum, datumtype: 'override', zekerheid: 'gepland' }, extra);
+    if (!extra.achterstallig) delete e.achterstallig; return e; };
+  let k = Math.max(0, wk ? Math.floor(geldDagenTussen(ov.eerste, vandaag) / 7) - 1                      // k = verstreken termijnen (direct
+    : (Number(vandaag.slice(0, 4)) - Number(ov.eerste.slice(0, 4))) * 12 + Number(vandaag.slice(5, 7)) - Number(ov.eerste.slice(5, 7)) - 1);   //  benaderd, dan exact)
+  while (stap(k) < vandaag) k++;
+  const nog = ov.termijnen ? ov.termijnen - k : Infinity;               // nog te komen termijnen
+  const uit = []; let rest = Math.abs(basis.bedrag);
+  if (k > 0 && nog !== Infinity) {
+    const achter = nog <= 0 ? rest : Math.min(Math.max(0, rest - nog * per), k * per);
+    if (achter > 0.004) { uit.push(ev('achter', achter, vandaag, { achterstallig: true, uitleg: `Afbetaling: ${nog <= 0 ? 'alle termijnen verstreken' : 'gemiste termijn(en)'} — nog open, vandaag ingepland.` })); rest = geldRond(rest - achter); }
+  }
+  for (let j = 0; rest > 0.004 && j < Math.min(nog, 240); j++) {
+    const laatste = j === nog - 1, b = laatste ? rest : Math.min(per, rest), n = k + j + 1;
+    uit.push(ev('t' + n, b, stap(k + j), { termijn: n, uitleg: `Afbetaling: termijn ${n}${ov.termijnen ? ' van ' + ov.termijnen : ''} (${wk ? 'wekelijks' : 'maandelijks'})${laatste && b > per + 0.004 ? ' — met restant' : ''}.` }));
+    rest = geldRond(rest - b);
+  }
+  if (rest > 0.004) uit.push(ev('rest', rest, stap(k + Math.min(nog, 240)), { uitleg: 'Afbetaling: resterend bedrag (na 240 termijnen).' }));
+  return uit;
+}
+// Eén open factuur → één of meer geplande events (G1-basis + betaaldag-logica).
+function geldPlan(soort, d, basis, ctx) {
+  const { vandaag, profiel, overrides, cfg } = ctx, sleutel = `${soort}:${d.id}`, ov = overrides[sleutel];
+  const due = basis.datum, ev = Object.assign({}, basis, { vervaldag: due });
+  const nooitVerleden = e => { if (e.datum && e.datum < vandaag) { e.datum = vandaag; e.uitleg += ' (nog open: vandaag ingepland)'; } return e; };
+  if (ov) {
+    ctx.gebruikt.add(sleutel);
+    if (ov.type === 'afbetaling') return geldTermijnen(Object.assign(ev, { override: ov }), ov, vandaag);
+    const e = Object.assign(ev, { datum: ov.datum, datumtype: 'override', zekerheid: 'gepland', override: ov, uitleg: 'Datum zelf ingesteld' + (ov.reden ? ': ' + ov.reden : '') + '.' });
+    if (ov.datum < vandaag) e.achterstallig = true; else delete e.achterstallig;   // achterstallig t.o.v. de eigen afspraak
+    return [nooitVerleden(e)];
+  }
+  if (soort === 'inkoop') {
+    const inc = profiel && profiel.incasso && profiel.incasso[String(d.contact_id)];
+    if (basis.bedrag < 0) return [nooitVerleden(Object.assign(ev, due ? {} : { datum: basis.factuurdatum || vandaag, datumtype: 'factuurdatum', zekerheid: ev.ongeboekt ? 'invullen' : 'aanname', uitleg: 'Creditnota zonder vervaldag: verrekenen bij ontvangst (aanname).' }))];
+    if (inc) return [nooitVerleden(Object.assign(ev, { datum: due || basis.factuurdatum || vandaag, datumtype: 'incasso', zekerheid: ev.ongeboekt ? 'invullen' : 'gepland',
+      uitleg: `Wordt geïncasseerd op de vervaldag (deze leverancier incasseerde ${inc.n}× in het afgelopen halfjaar).` }))];
+    if (due && due < vandaag) return [Object.assign(ev, { datum: vandaag, datumtype: 'beleid', zekerheid: ev.ongeboekt ? 'invullen' : 'gepland', uitleg: `Vervallen op ${due} — nog te betalen (vandaag ingepland).` })];
+    if (due) return [nooitVerleden(Object.assign(ev, { datum: geldWerkdagenTerug(due, 2), datumtype: 'beleid', zekerheid: ev.ongeboekt ? 'invullen' : 'gepland', uitleg: 'Betalen 2 werkdagen vóór de vervaldag (beleid).' }))];
+    return [nooitVerleden(Object.assign(ev, { datum: basis.factuurdatum || vandaag, datumtype: 'beleid', zekerheid: ev.ongeboekt ? 'invullen' : 'aanname', uitleg: 'Geen vervaldag: betalen bij ontvangst (beleid).' }))];
+  }
+  // verkoop
+  if (!due) return [ev];                                   // geen vervaldag: blijft "invullen" (geen gok)
+  if (basis.bedrag < 0) return [nooitVerleden(Object.assign(ev, { uitleg: 'Creditnota: op de vervaldag.' }))];
+  const v = geldVerwachtVerkoop(d, profiel, cfg);
+  if (v.basis === 'vervaldag') return [nooitVerleden(Object.assign(ev, { verwacht: v, uitleg: ev.uitleg + (v.reden ? ` (${v.reden})` : '') }))];
+  const tekst = { klant: 'deze klant', groep: `groep ${v.groep}`, algemeen: 'alle klanten' }[v.basis];
+  const e = Object.assign(ev, { datum: geldDag(due, v.mediaan), datumtype: 'beleid', zekerheid: 'aanname', verwacht: v,
+    datum_vroeg: geldDag(due, v.p25), datum_laat: geldDag(due, v.p75),
+    uitleg: `Vervaldag ${v.mediaan >= 0 ? '+' : '−'} ${Math.abs(v.mediaan)} dag(en): zo betaalt ${tekst} meestal (n=${v.n}, marge ${v.p25} tot ${v.p75})${v.noot ? '; ' + v.noot : ''}.` });
+  if (e.datum_vroeg < vandaag) e.datum_vroeg = vandaag;
+  if (e.datum_laat < vandaag) e.datum_laat = vandaag;
+  return [nooitVerleden(e)];
+}
+// Betaalprofiel berekenen: betaalde verkoopfacturen (2 jaar) → vertraging t.o.v. de vervaldag per klant;
+// incasso-leveranciers uit de bankmutaties van het afgelopen halfjaar (gekoppeld aan inkoopfacturen).
+async function geldProfielBereken(env) {
+  const vandaag = geldVandaag(), w = [], budget = { rest: GELD_PROFIEL_BUDGET }, get = geldMb(env, budget), jaar = Number(vandaag.slice(0, 4));
+  const vanaf = geldDag(vandaag, -730), halfjaar = geldDag(vandaag, -182);
+  const [v1, v2, ink, muts] = await Promise.all([
+    geldLijst(get, `sales_invoices?filter=period:${jaar - 1}0101..${jaar - 1}1231,state:paid`, w, 'betaalde verkoop ' + (jaar - 1)),
+    geldLijst(get, `sales_invoices?filter=period:${jaar}0101..${jaar}1231,state:paid`, w, 'betaalde verkoop ' + jaar),
+    geldLijst(get, `documents/purchase_invoices?filter=period:${geldDag(vandaag, -300).replace(/-/g, '')}..${vandaag.replace(/-/g, '')},state:paid`, w, 'betaalde inkoop'),
+    geldMutaties(get, halfjaar, vandaag, w),
+  ]);
+  const klanten = {}, alle = [];
+  for (const x of [...v1.lijst, ...v2.lijst]) {
+    if (!geldIsDatum(x.due_date) || !(x.payments || []).length || geldGetal(x.total_price_incl_tax_base) <= 0) continue;
+    const betaald = (x.payments || []).map(p => String(p.payment_date || '').slice(0, 10)).filter(geldIsDatum).sort().pop();
+    if (!betaald || betaald < vanaf) continue;
+    const delta = geldDagenTussen(x.due_date, betaald), cid = String(x.contact_id);
+    (klanten[cid] = klanten[cid] || { naam: geldContactNaam(x.contact), d: [] }).d.push(delta); alle.push(delta);
+  }
+  for (const k of Object.values(klanten)) Object.assign(k, geldStat(k.d));
+  const contactVan = new Map(ink.lijst.map(x => [String(x.id), x]));
+  const incasso = {};
+  for (const m of muts.lijst) {
+    if (geldGetal(m.amount) >= 0 || !geldIsIncasso(m)) continue;
+    for (const p of m.payments || []) { const doc = contactVan.get(String(p.invoice_id)); if (!doc) continue;
+      const cid = String(doc.contact_id); (incasso[cid] = incasso[cid] || { naam: geldContactNaam(doc.contact), m: new Set() }).m.add(String(m.id)); }
+  }
+  for (const cid of Object.keys(incasso)) { const n = incasso[cid].m.size; if (n < 2) delete incasso[cid]; else incasso[cid] = { naam: incasso[cid].naam, n }; }   // pas vanaf 2 incasso's een patroon
+  return { as_of: new Date().toISOString(), vandaag, klanten, algemeen: alle.length ? geldStat(alle) : null, incasso,
+    onvolledig: v1.onvolledig || v2.onvolledig || ink.onvolledig || muts.onvolledig || budget.rest <= 0, waarschuwingen: w, verzoeken: GELD_PROFIEL_BUDGET - budget.rest };
+}
+// Huidige overrides: één list (met metadata) i.p.v. een get per factuur.
+async function geldOverrides(env) {
+  const items = {}; let cursor, n = 0;
+  if (!env.MT_ROLLEN) return { items, compleet: true };
+  do {
+    const r = await env.MT_ROLLEN.list({ prefix: GELD_OV, cursor });
+    for (const k of r.keys) items[k.name.slice(GELD_OV.length)] = k.metadata || await kvJson(env, k.name);
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor && ++n < 3);
+  for (const s of Object.keys(items)) if (!items[s] || !items[s].type) delete items[s];
+  return { items, compleet: !cursor };
+}
+
 async function geldTijdlijn(env, url) {
   const vandaag = geldVandaag(), w = [], budget = { rest: GELD.budget };   // + GELD.kvReserve voor KV (cache, ijkpunten)
   let van = url.searchParams.get('van') || geldDag(vandaag, -30), tot = url.searchParams.get('tot') || geldDag(vandaag, 90);
@@ -1717,6 +1864,16 @@ async function geldTijdlijn(env, url) {
   catch (e) { w.push({ bron: 'ijkpunt', fout: 'ijkpunten niet te lezen (opslag) — Moneybird-stand gebruikt' }); }
   const laatsteIjk = {};
   for (const i of ijk) if (!laatsteIjk[i.rekening]) laatsteIjk[i.rekening] = i;
+  let profiel = null, overrides = { items: {}, compleet: false };
+  try { profiel = await kvJson(env, 'geld:profiel'); overrides = await geldOverrides(env); }
+  catch (e) { w.push({ bron: 'overrides', fout: 'eigen betaaldata/afbetalingen niet te lezen (opslag) — facturen volgens het beleid ingepland' }); }
+  if (!overrides.compleet && !w.some(x => x.bron === 'overrides')) w.push({ bron: 'overrides', fout: 'niet alle eigen betaaldata/afbetalingen gelezen' });
+  const profielDagen = profiel ? geldDagenTussen(String(profiel.vandaag || '2000-01-01'), vandaag) : null;
+  if (!profiel) w.push({ bron: 'profiel', fout: 'betaalprofiel nog niet berekend — klantbetalingen op de vervaldag, incasso\'s niet herkend (GET /geld/profiel?vers=1)' });
+  else if (profiel.onvolledig || !(profielDagen <= GELD_PROFIEL_MAX)) {
+    w.push({ bron: 'profiel', fout: (profiel.onvolledig ? 'betaalprofiel onvolledig' : `betaalprofiel ouder dan ${GELD_PROFIEL_MAX} dagen`) + ' — niet gebruikt: klantbetalingen op de vervaldag, incasso\'s niet herkend; vernieuwen' });
+    profiel = null;
+  } else if (profielDagen > GELD_PROFIEL_DAGEN) w.push({ bron: 'profiel', fout: `betaalprofiel ouder dan ${GELD_PROFIEL_DAGEN} dagen — vernieuwen` });
   const balans = await geldBalans(get, vandaag, w, potten);
   // Mutaties nodig vanaf: de dag na het maandeinde (MB-stand), de dag na het oudste ijkpunt, en het begin van de tijdlijn.
   const vanaf = [geldDag(balans.maandeinde, 1), van, ...Object.values(laatsteIjk).map(i => geldDag(i.datum, 1))].filter(d => geldIsDatum(d) && d <= vandaag).sort()[0] || vandaag;
@@ -1766,19 +1923,26 @@ async function geldTijdlijn(env, url) {
     uitleg: 'Lopend + spaarpotten; inleg en opname tussen lopend en potten heffen elkaar op.', onzeker: (muts.onvolledig || gemengd.length > 0) || undefined };
   // ── events: verleden (bank, binnen de tijdlijn) + toekomst/open (facturen) + ijkpunten
   const events = bankEv.filter(e => e.datum >= van && e.datum <= tot);
-  const factEv = [...fact.inkoop.map(d => geldFactuurEvent('inkoop', d, vandaag, w)), ...fact.verkoop.map(d => geldFactuurEvent('verkoop', d, vandaag, w))]
-    .filter(e => e.bedrag !== 0);
+  const plan = { vandaag, profiel, overrides: overrides.items || {}, cfg, gebruikt: new Set() };
+  const factEv = [...fact.inkoop.map(d => [d, geldFactuurEvent('inkoop', d, vandaag, w)]), ...fact.verkoop.map(d => [d, geldFactuurEvent('verkoop', d, vandaag, w)])]
+    .filter(([, e]) => e.bedrag !== 0).flatMap(([d, e]) => geldPlan(e.bron, d, e, plan));
+  // Overrides voor facturen die niet (meer) open zijn: melden zodat ze opgeruimd kunnen worden (niet stil laten liggen).
+  const vervallenOv = Object.keys(plan.overrides).filter(id => !plan.gebruikt.has(id));
   // Achterstallig en zonder datum altijd mee (nooit weg); verder alleen binnen de periode.
-  events.push(...factEv.filter(e => e.achterstallig || !e.datum || (e.datum >= van && e.datum <= tot)));
+  const inBeeld = e => !e.datum || (e.datum >= van && e.datum <= tot) || e.achterstallig;   // achterstallig staat altijd op vandaag
+  events.push(...factEv.filter(inBeeld));
   for (const rek of Object.keys(laatsteIjk)) { const i = laatsteIjk[rek];
     if (i.datum >= van && i.datum <= tot) events.push({ id: 'ijkpunt:' + i.id, bron: 'ijkpunt', richting: 'in', bedrag: i.bedrag, datum: i.datum, datumtype: 'werkelijk', zekerheid: 'werkelijk', rekening: rek, tegenpartij: '', document_id: null, bron_url: null, uitleg: 'IJkpunt: eindsaldo van deze dag (ingevuld door ' + (i.doorNaam || i.door || '?') + ').', saldo_ijkpunt: true }); }
-  const buiten = factEv.filter(e => e.datum && !e.achterstallig && (e.datum < van || e.datum > tot)).length;
+  const buitenEv = factEv.filter(e => !inBeeld(e)), buiten = buitenEv.length;
+  const buitenBedrag = { in: geldRond(buitenEv.filter(e => e.richting === 'in').reduce((a, e) => a + Math.abs(e.bedrag), 0)), uit: geldRond(buitenEv.filter(e => e.richting === 'uit').reduce((a, e) => a + Math.abs(e.bedrag), 0)) };
   return { status: 200, body: {
     vandaag, van, tot, as_of: new Date().toISOString(),
     bronnen: { bankmutaties: { as_of: new Date().toISOString(), van: mutVan, tot: vandaag, aantal: muts.lijst.length, onvolledig: muts.onvolledig },
-      facturen: { as_of: new Date().toISOString(), jaren: fact.jaren, inkoop: fact.inkoop.length, verkoop: fact.verkoop.length, buiten_periode: buiten, onvolledig: fact.onvolledig },
+      facturen: { as_of: new Date().toISOString(), jaren: fact.jaren, inkoop: fact.inkoop.length, verkoop: fact.verkoop.length, buiten_periode: buiten, buiten_periode_bedrag: buitenBedrag, onvolledig: fact.onvolledig },
       balans: { as_of: new Date().toISOString(), maandeinde: balans.maandeinde, gevonden: !!metBalans } },
     saldo, events, waarschuwingen: w, verzoeken: GELD.budget - budget.rest,
+    profiel: profiel ? { as_of: profiel.as_of, klanten: Object.keys(profiel.klanten || {}).length, incasso_leveranciers: Object.keys(profiel.incasso || {}).length, onvolledig: !!profiel.onvolledig } : null,
+    overrides: { aantal: Object.keys(plan.overrides).length, niet_meer_open: vervallenOv, compleet: overrides.compleet },
     instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg })), btw: cfg.btw },
   } };
 }
@@ -1797,6 +1961,47 @@ async function handleGeld(p, request, env, ik, json) {
   }
   if (p === '/geld/ijkpunten' && m === 'GET') {
     try { return json({ ijkpunten: await geldIjkpunten(env, 50, geldRekeningen(await geldConfig(env))) }); } catch (e) { return json({ error: 'ijkpunten niet te lezen' }, 503); }
+  }
+  if (p === '/geld/profiel' && m === 'GET') {
+    // Lezen: eigenaar en administratie. (Her)berekenen alleen wie mag wijzigen; alleen een volledige berekening wordt bewaard.
+    const oud = await kvJson(env, 'geld:profiel'), vers = url.searchParams.get('vers') === '1';
+    if (oud && !vers) return json(oud);
+    if (R.geld !== 'wijzigen') return vers ? json({ error: 'geen-toegang', reden: 'geld-wijzigen' }, 403) : json({ error: 'nog-niet-berekend', uitleg: 'het betaalprofiel is nog niet berekend (eigenaar)' }, 404);
+    const prof = await geldProfielBereken(env);
+    prof.opgeslagen = !!env.MT_ROLLEN && !prof.onvolledig;
+    if (prof.opgeslagen) { await kvZet(env, 'geld:profiel', prof); await kvZet(env, 'geld:cachever', `${Date.now()}-p${randHex(3)}`); }
+    return json(prof);
+  }
+  if (p === '/geld/overrides' && m === 'GET') return json(await geldOverrides(env));
+  if (p === '/geld/override' && m === 'POST') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+    let b = {}; try { b = await request.json(); } catch {}
+    const id = String(b.document_id || ''), soort = b.soort, type = b.type;
+    if (!/^[a-z0-9]{1,40}$/i.test(id)) return json({ error: 'document_id ontbreekt' }, 400);
+    if (!['inkoop', 'verkoop'].includes(soort)) return json({ error: "soort: 'inkoop' of 'verkoop'" }, 400);
+    const sleutel = `${GELD_OV}${soort}:${id}`, vorige = await kvJson(env, sleutel), vandaag = geldVandaag();
+    const binnen = d => geldIsDatum(d) && d >= '2000-01-01' && d <= geldDag(vandaag, 3 * 366);   // redelijke horizon (termijnen tot ± 2050)
+    // Optimistische vergrendeling per factuur: wie een oude stand stuurt, overschrijft niet ongemerkt een nieuwere.
+    if ((b.vorige_ts == null ? null : b.vorige_ts) !== (vorige ? vorige.ts : null)) return json({ error: 'deze factuur is intussen aangepast — herlaad en probeer opnieuw', huidig: vorige }, 409);
+    let item = null;
+    if (type === 'wissen') { if (!vorige) return json({ error: 'er is geen override voor deze factuur' }, 400); }
+    else if (type === 'datum') {
+      if (!binnen(b.datum)) return json({ error: 'datum (JJJJ-MM-DD, vanaf 2000, hooguit 3 jaar vooruit) ontbreekt' }, 400);
+      item = { soort, type, datum: b.datum };
+    } else if (type === 'afbetaling') {
+      if (!(typeof b.bedrag === 'number' && isFinite(b.bedrag) && b.bedrag >= 0.01 && b.bedrag < 1e8)) return json({ error: 'bedrag per termijn: getal ≥ 0,01' }, 400);
+      if (!binnen(b.eerste)) return json({ error: 'eerste termijn (JJJJ-MM-DD, vanaf 2000, hooguit 3 jaar vooruit) ontbreekt' }, 400);
+      if (!['maand', 'week'].includes(b.interval || 'maand')) return json({ error: "interval: 'maand' of 'week'" }, 400);
+      if (b.termijnen != null && !(Number.isInteger(b.termijnen) && b.termijnen > 0 && b.termijnen <= 240)) return json({ error: 'termijnen: geheel getal 1..240' }, 400);
+      item = { soort, type, bedrag: geldRond(b.bedrag), eerste: b.eerste, interval: b.interval || 'maand', termijnen: b.termijnen || null };
+    } else return json({ error: "type: 'datum', 'afbetaling' of 'wissen'" }, 400);
+    const ts = Date.now(), door = String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60);
+    if (item) Object.assign(item, { reden: String(b.reden || '').slice(0, 120), door, ts });
+    await kvZet(env, `geld:ov-historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, { sleutel: `${soort}:${id}`, vorige, nieuw: item, door, ts });   // elke wijziging bewaard
+    if (item) await kvZet(env, sleutel, item, { metadata: item }); else await env.MT_ROLLEN.delete(sleutel);
+    await kvZet(env, 'geld:cachever', `${ts}-o${randHex(3)}`);
+    await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-override', doel: `${soort}:${id}`, doelNaam: `${soort}factuur: ${type}` });   // geen bedragen
+    return json({ ok: true, override: item });
   }
   if (p === '/geld/config' && m === 'GET') {
     const cfg = await geldConfig(env);
@@ -1845,6 +2050,24 @@ async function handleGeld(p, request, env, ik, json) {
         if (heeftIjk) return json({ error: `pot "${o.naam}" heeft ijkpunten — grootboek niet wijzigen (maak een nieuwe pot)`, pot: o.id }, 400);
       }
       nieuw.potten = b.potten; gewijzigd.push('potten');
+    }
+    if ('klantgroepen' in b) {
+      if (!Array.isArray(b.klantgroepen) || b.klantgroepen.length > 50) return json({ error: 'klantgroepen: lijst (max 50)' }, 400);
+      const ids = new Set();
+      for (const g of b.klantgroepen) {
+        if (!g || !GELD_POT_ID.test(String(g.id)) || ids.has(g.id)) return json({ error: 'groep-id ongeldig of dubbel', groep: g && g.id }, 400);
+        // Alleen een expliciete regel: een herkenbaar voorvoegsel (≥ 3 tekens) of een lijst contacten — niets gokken.
+        if (!(String(g.prefix || '').trim().length >= 3 || (Array.isArray(g.contact_ids) && g.contact_ids.length))) return json({ error: 'groep heeft een voorvoegsel (≥ 3 tekens) of contactlijst nodig', groep: g.id }, 400);
+        ids.add(g.id);
+      }
+      const cids = new Set(), pre = [];
+      for (const g of b.klantgroepen) {
+        for (const c of (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String)) { if (cids.has(c)) return json({ error: 'contact staat in twee klantgroepen', contact_id: c }, 400); cids.add(c); }
+        const x = String(g.prefix || '').trim().toLowerCase();
+        if (x && pre.some(y => y.startsWith(x) || x.startsWith(y))) return json({ error: 'voorvoegsels van klantgroepen overlappen', groep: g.id }, 400);
+        if (x) pre.push(x);
+      }
+      nieuw.klantgroepen = b.klantgroepen; gewijzigd.push('klantgroepen');
     }
     if ('btw' in b) {
       const t = b.btw || {};
