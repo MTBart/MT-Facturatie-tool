@@ -541,11 +541,6 @@ function ibVoorstel(m){
   if(!_ibVoorstelIx) _ibVoorstelIx=MTKoppel.voorstelIndex();
   return MTKoppel.koppelVoorstel(m,{index:_ibVoorstelIx,gesprek:_inbox.msgs});
 }
-function ibVoorstelChip(m,kp){
-  if(kp.codes.length) return '';
-  const v=ibVoorstel(m)[0]; if(!v||v.score<MTKoppel.VOORSTEL_STERK) return '';
-  return `<a class="kpchip voorstel" href="#" aria-label="Voorstel: koppelen aan ${ibEsc(v.code)}" title="Voorstel: ${ibEsc(v.code)} — ${ibEsc(v.redenen.join('; '))}. Klik om te koppelen." onclick="event.stopPropagation();event.preventDefault();inboxVoorstelVanuitLijst('${ibEsc(m.id).replace(/'/g,'')}','${ibEsc(v.code).replace(/'/g,'')}')">? ${ibEsc(v.code)}</a>`;
-}
 function inboxMsgRow(m){
   const van=(m.from&&m.from.emailAddress&&(m.from.emailAddress.name||m.from.emailAddress.address))||'(onbekend)';
   const dt=m.receivedDateTime?new Date(m.receivedDateTime).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
@@ -555,7 +550,7 @@ function inboxMsgRow(m){
   const fchip=fnaam?`<span style="font-size:10px;color:#777;background:rgba(0,0,0,.06);border-radius:3px;padding:0 4px;margin-left:6px;white-space:nowrap">${ibEsc(fnaam)}</span>`:'';
   const kp=ibKoppelChips(m);
   const kpcls=kp.codes.length?' gekoppeld':'';
-  const kpchip=kp.html+ibVoorstelChip(m,kp);
+  const kpchip=kp.html;
   return `<div class="inbox-msg${m.isRead?'':' ongelezen'}${kpcls}${act}" onclick="inboxOpenMail('${m.id}')">
     <div class="van"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(van)}</span><span class="dt">${dt}</span></div>
     <div class="onderw">${ibEsc(m.subject||'(geen onderwerp)')}${clip}${kpchip}${fchip}</div>
@@ -674,7 +669,7 @@ async function inboxOpenMail(id){
         <h3>${ibEsc(m.subject||'(geen onderwerp)')}</h3>
         <div class="inbox-rmeta"><span><b>Van:</b> ${ibEsc(van)}</span><span>${dt}</span></div>
         ${attHtml}
-        <div id="inbox-voorstel">${inboxVoorstelHtml(m)}</div>
+        <div id="inbox-voorstel"></div>
         <div class="inbox-ract">
           <button class="btn btn-sm btn-gold" onclick="inboxMaakProject()">📁 Maak project</button>
           <button class="btn btn-sm btn-primary" onclick="inboxMaakOfferte()" title="Maak een offerte-calculatie met deze mail als context (klant voor-ingevuld als herkend)">📄 Maak offerte</button>
@@ -816,22 +811,67 @@ function ibMelding(msg){ return (typeof mtDialog!=='undefined')?mtDialog.alert({
 function ibBevestig(opts){ return (typeof mtDialog!=='undefined')?mtDialog.confirm(opts):Promise.resolve(confirm((opts.title?opts.title+'\n\n':'')+opts.message)); }
 function ibProjecten(m){ return (window.MTKoppel&&m)?MTKoppel.mailProjecten(m):[]; }
 // Chips voor alle projecten van een mail (lijst-rij). Klik = naar het project, niet de mail openen.
+// Koppel-badge (B11, Moneybird-stijl) voor één mail: groen dicht = gekoppeld, geel open = niet
+// gekoppeld (met "Koppel? CODE" bij een sterk voorstel). Klik = popover met voorstellen of details.
+function ibKoppelBadge(m,{klein=false}={}){
+  const codes=ibProjecten(m), id=ibEsc(m.id).replace(/'/g,''), klik=`event.stopPropagation();event.preventDefault();inboxKoppelPop(this,'${id}')`;
+  if(!window.MTKoppelUI) return '';
+  if(codes.length) return MTKoppelUI.badge({status:'gekoppeld',klein,label:codes[0]+(codes.length>1?' +'+(codes.length-1):''),titel:'Gekoppeld aan '+codes.join(', ')+' — klik voor details of ontkoppelen',onclick:klik});
+  const v=ibVoorstel(m)[0];
+  if(v&&v.score>=MTKoppel.VOORSTEL_STERK) return MTKoppelUI.badge({status:'voorstel',klein,label:v.code,titel:'Voorstel: '+v.code+' — '+v.redenen.join('; ')+'. Klik om te koppelen.',onclick:klik});
+  return MTKoppelUI.badge({status:'open',klein,icoon:klein,titel:'Niet gekoppeld — klik voor koppelvoorstellen',onclick:klik});
+}
 function ibKoppelChips(m){
   const codes=ibProjecten(m);
-  const chip=c=>`<a class="kpchip" href="#projecten/${encodeURIComponent(c)}" onclick="event.stopPropagation();event.preventDefault();inboxNaarProject('${ibEsc(c).replace(/'/g,'')}')" title="Open project ${ibEsc(c)}">🔗 ${ibEsc(c)}</a>`;
-  const html=codes.slice(0,3).map(chip).join('')+(codes.length>3?`<span class="kpchip" title="${ibEsc(codes.slice(3).join(', '))}">+${codes.length-3}</span>`:'');
-  return {codes,html};
+  return {codes,html:ibKoppelBadge(m,{klein:true})};
 }
 // Knoppen in het leesvenster: per gekoppeld project een groene knop (→ project) met ✕
 // (ontkoppelen, met waarschuwing), plus koppelen aan (nog) een project.
-function inboxKoppelKnopHtml(m){
-  const codes=ibProjecten(m);
-  const groep=codes.map(code=>{ const c=ibEsc(code).replace(/'/g,'');
-    return `<span class="ib-kpgroep"><button class="btn btn-sm" onclick="inboxNaarProject('${c}')"`
-      +` style="background:var(--green,#2e7d32);color:#fff;border-color:transparent" title="Open project ${ibEsc(code)}">📁 ${ibEsc(code)} →</button>`
-      +`<button class="btn btn-sm btn-secondary" onclick="inboxOntkoppel('${c}')" title="Ontkoppelen van ${ibEsc(code)} (mail blijft in Outlook)" aria-label="Ontkoppelen van ${ibEsc(code)}">✕</button></span>`; }).join(' ');
-  return groep+(codes.length?' ':'')+`<button class="btn btn-sm btn-secondary" id="inbox-koppelknop" onclick="inboxKoppelProject()">${codes.length?'🔗 + ander project':'🔗 Koppel aan project'}</button>`;
+// Leesvenster: één koppel-badge (B11). Voorstellen, ontkoppelen en "+ nog een" zitten in de popover.
+function inboxKoppelKnopHtml(m){ return `<span id="inbox-koppelknop">${ibKoppelBadge(m)}</span>`; }
+// Popover-inhoud voor één mail (lijst of leesvenster).
+function _ibMailVia(id){ return (_inbox.cur&&_inbox.cur.id===id&&_inbox.cur)||(_inbox.msgs||[]).find(x=>x.id===id)||(_inbox.curThreadItems||[]).find(x=>x.id===id)||null; }
+function inboxKoppelPop(el,id){
+  const m=_ibMailVia(id); if(!m||!window.MTKoppelUI) return;
+  const codes=ibProjecten(m), mid=ibEsc(id).replace(/'/g,'');
+  const naam=c=>{ const p=(typeof PROJECT_CODES!=='undefined'&&PROJECT_CODES.find(x=>x.code===c))||{}; return p.naam?' '+ibEsc(p.naam):''; };
+  let html='';
+  if(codes.length){
+    html+=codes.map(c=>{ const cc=ibEsc(c).replace(/'/g,''); return `<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:c})}<span class="kb-pop-n">${naam(c)}</span>
+      <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxNaarProject('${cc}')">Open</button>
+      <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();ibOntkoppelVia('${mid}','${cc}')">Ontkoppelen</button></div>`; }).join('');
+    html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();ibAnderVia('${mid}')">+ nog een koppeling</button></div>`;
+  } else {
+    const v=ibVoorstel(m);
+    html+=v.length?v.map((o,i)=>{ const cc=ibEsc(o.code).replace(/'/g,''); return `<div class="kb-pop-rij"><div class="kb-pop-n"><b>${ibEsc(o.code)}</b>${naam(o.code)}<div class="dos-meta">${ibEsc(o.redenen.join('; '))}</div></div>
+      <button class="btn btn-xs ${i===0&&o.score>=MTKoppel.VOORSTEL_STERK?'btn-primary':'btn-secondary'}" onclick="MTKoppelUI.sluit();ibKoppelVia('${mid}','${cc}','voorstel')">✓ Koppel</button></div>`; }).join('')
+      :'<div class="dos-meta" style="margin-bottom:6px">Geen voorstel gevonden.</div>';
+    if(v.length&&m.conversationId) html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxKoppelGesprek('${ibEsc(v[0].code).replace(/'/g,'')}','${ibEsc(m.conversationId).replace(/'/g,'')}')">✓ Koppel hele gesprek aan ${ibEsc(v[0].code)}</button></div>`;
+    html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();ibAnderVia('${mid}')">🔍 Ander project…</button>${_inbox.cur&&_inbox.cur.id===id?` <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxMaakProject()">📁 Nieuw project van deze mail</button>`:''}</div>`;
+  }
+  MTKoppelUI.popover(el,html,{titel:codes.length?'Gekoppeld':'Niet gekoppeld — voorstellen'});
 }
+// Koppelen/ontkoppelen van een mail op id (ook vanuit de lijst, zonder de mail te openen).
+function ibKoppelVia(id,code,bron){
+  const m=_ibMailVia(id); if(!m) return;
+  const r=MTKoppel.koppelMail(code,m,{bron:bron||'hand',mbx:_inbox.mbx,idType:'immutable'});
+  if(r.status==='al'){ inboxToast('Deze mail was al gekoppeld aan '+code); return; }
+  if(r.status==='fout'){ inboxToast('Koppelen mislukt: deze mail heeft geen id'); return; }
+  _ibUndoKoppel([{code,sleutel:m.internetMessageId||m.id,id:m.id}],'✓ Gekoppeld aan '+code);
+  inboxRefreshKoppelKnop(); if(Array.isArray(_inbox.msgs)&&_inbox.msgs.length) inboxRenderList();
+  if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
+  if(m.hasAttachments&&_inbox.cur&&_inbox.cur.id===id&&typeof inboxBijlagenVraag==='function') inboxBijlagenVraag(m.id,code);
+}
+async function ibOntkoppelVia(id,code){
+  const m=_ibMailVia(id); if(!m) return;
+  const ok=await ibBevestig({title:'Mail ontkoppelen',message:'⚠️ Let op — deze mail is gekoppeld aan project '+code+'.\nKoppeling verbreken?\n\n(De mail zelf blijft gewoon in Outlook staan.)',okLabel:'Ontkoppelen',danger:true});
+  if(!ok) return;
+  const n=MTKoppel.ontkoppelMail(code,m.internetMessageId||m.id,{id:m.id});
+  inboxToast(n?'Koppeling met '+code+' verbroken':'Deze mail was niet (meer) gekoppeld aan '+code);
+  inboxRefreshKoppelKnop(); if(Array.isArray(_inbox.msgs)&&_inbox.msgs.length) inboxRenderList();
+  if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
+}
+function ibAnderVia(id){ const m=_ibMailVia(id); if(!m) return; _inbox.koppelModus={mail:m}; inboxKoppelProject(); }
 // ── "Nog te koppelen" (B9): recente mails (30 dagen, info@ + eigen postbus) van de klantdomeinen
 // die nog aan geen project hangen. Eén $search per postbus, pas bij openklappen, 10 min gecachet.
 // Alles blijft in de browser (Graph → scherm); er gaat niets naar een externe dienst.
@@ -856,7 +896,7 @@ function ntkLijst(key){
     return `<div class="ntk-rij"><div class="dos-hoofd"><div class="dos-titel">${m.hasAttachments?'📎 ':''}${ibEsc(m.subject||'(geen onderwerp)')}</div>
       <div class="dos-meta">${ibEsc(van)} · ${m.receivedDateTime?ibEsc(m.receivedDateTime.slice(0,10)):''} · ${ibEsc(m.mbxLabel||m.mbx||'')}</div></div>
       <div class="dos-acties">${st.codes.length>1?`<select class="dos-sel" aria-label="Project" id="ntk-sel-${ibEsc(key).replace(/[^A-Za-z0-9]/g,'')}-${i}">${projOpt(m)}</select>`:''}
-        <button class="btn btn-xs btn-primary" onclick="ntkKoppel('${ibEsc(key)}',${i})">✓ koppel${st.codes.length>1?'':' aan '+ibEsc(st.codes[0])}</button></div></div>`; }).join('');
+        ${window.MTKoppelUI?MTKoppelUI.badge(st.codes.length===1?{status:'voorstel',label:st.codes[0],titel:'Voorstel: koppel aan '+st.codes[0]+' — klik om te koppelen',onclick:`ntkKoppel('${ibEsc(key)}',${i})`}:{status:'open',label:'project',titel:'Niet gekoppeld — klik om een project te kiezen',onclick:`ntkKoppel('${ibEsc(key)}',${i})`}):`<button class="btn btn-xs btn-primary" onclick="ntkKoppel('${ibEsc(key)}',${i})">✓ koppel</button>`}</div></div>`; }).join('');
 }
 async function ntkLaad(key,{forceer=false}={}){
   const st=_ntk[key]; if(!st) return;
@@ -900,47 +940,10 @@ function inboxNaarProject(code){
   if(typeof openProject==='function') openProject(code);
 }
 
-// ── Koppelvoorstellen in het leesvenster (B9) — alleen voorstellen; koppelen = jouw klik ──
-function inboxVoorstelHtml(m){
-  const v=ibVoorstel(m); if(!v.length) return '';
-  const p=c=>(typeof PROJECT_CODES!=='undefined'&&PROJECT_CODES.find(x=>x.code===c))||{code:c};
-  const top=v[0], tp=p(top.code), c=ibEsc(top.code).replace(/'/g,'');
-  // Zwak voorstel (bv. alleen het afzenderdomein): bescheiden hint, geen grote knoppen.
-  if(top.score<MTKoppel.VOORSTEL_STERK) return `<div class="ib-voorstel zwak" role="group" aria-label="Mogelijk project">
-    <span>Mogelijk bij <b>${ibEsc(top.code)}</b>${tp.naam?' '+ibEsc(tp.naam):''}</span> <a href="#" onclick="event.preventDefault();inboxVoorstelKoppel('${c}')">koppel</a>
-    <span class="ib-waarom">${ibEsc(top.redenen.join('; '))}</span>${v.length>1?` <span class="ib-anders">of: ${v.slice(1).map(o=>`<a href="#" onclick="event.preventDefault();inboxVoorstelKoppel('${ibEsc(o.code).replace(/'/g,'')}')">${ibEsc(o.code)}</a>`).join(' · ')}</span>`:''}</div>`;
-  const nGesprek=m.conversationId?(_inbox.msgs||[]).filter(x=>x.conversationId===m.conversationId).length:0;
-  return `<div class="ib-voorstel" role="group" aria-label="Koppelvoorstel">
-    <span>Hoort bij <b>${ibEsc(top.code)}</b>${tp.naam?' '+ibEsc(tp.naam):''}?</span>
-    <button class="btn btn-xs btn-primary" onclick="inboxVoorstelKoppel('${c}')">✓ Koppel</button>
-    ${m.conversationId?`<button class="btn btn-xs btn-secondary" onclick="inboxKoppelGesprek('${c}','${ibEsc(m.conversationId).replace(/'/g,'')}')" title="Alle mails van dit gesprek aan ${ibEsc(top.code)} koppelen">✓ Koppel hele gesprek${nGesprek>1?' ('+nGesprek+'+)':''}</button>`:''}
-    <span class="ib-waarom">waarom: ${ibEsc(top.redenen.join('; '))}</span>
-    ${v.length>1?`<span class="ib-anders">of: ${v.slice(1).map(o=>`<a href="#" onclick="event.preventDefault();inboxVoorstelKoppel('${ibEsc(o.code).replace(/'/g,'')}')" title="${ibEsc(o.redenen.join('; '))}">${ibEsc(o.code)}</a>`).join(' · ')}</span>`:''}
-  </div>`;
-}
+// ── Koppelvoorstellen (B9): staan sinds B11 in de popover van de koppel-badge (inboxKoppelPop) ──
 function _ibUndoKoppel(links,tekst){
   _inbox.undo={soort:'koppel',links};
   inboxToast(tekst);
-}
-function inboxVoorstelKoppel(code){
-  const m=_inbox.cur; if(!m) return;
-  const r=MTKoppel.koppelMail(code,m,{bron:'voorstel',mbx:_inbox.mbx,idType:'immutable'});
-  if(r.status==='al'){ inboxToast('Deze mail was al gekoppeld aan '+code); return; }
-  if(r.status==='fout'){ inboxToast('Koppelen mislukt: deze mail heeft geen id'); return; }
-  _ibUndoKoppel([{code,sleutel:m.internetMessageId||m.id,id:m.id}],'✓ Gekoppeld aan '+code);
-  inboxRefreshKoppelKnop();
-  if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
-  if(m.hasAttachments&&typeof inboxBijlagenVraag==='function') inboxBijlagenVraag(m.id,code);
-}
-// Vanuit de lijst ("?"-chip): eerst bevestigen, want je hebt de mail niet geopend.
-async function inboxVoorstelVanuitLijst(id,code){
-  const m=(_inbox.msgs||[]).find(x=>x.id===id); if(!m) return;
-  const v=ibVoorstel(m).find(x=>x.code===code);
-  const ok=await ibBevestig({title:'Mail koppelen',message:'"'+(m.subject||'(geen onderwerp)')+'" koppelen aan '+code+'?\n\nWaarom voorgesteld: '+(v?v.redenen.join('; '):'—'),okLabel:'Koppelen'});
-  if(!ok) return;
-  const r=MTKoppel.koppelMail(code,m,{bron:'voorstel',mbx:_inbox.mbx,idType:'immutable'});
-  if(r.status==='nieuw'||r.status==='herkoppeld') _ibUndoKoppel([{code,sleutel:m.internetMessageId||m.id,id:m.id}],'✓ Gekoppeld aan '+code);
-  inboxRefreshKoppelKnop(); inboxRenderList();
 }
 // Hele gesprek koppelen: alle mails met deze conversationId (uit de hele postbus), na bevestiging.
 async function inboxKoppelGesprek(code,cid){
@@ -970,15 +973,29 @@ function inboxGesprekKoppelTekenen(){
   const nieuwste=items[items.length-1], cid=nieuwste.conversationId||'';
   if(!_ibVoorstelIx&&window.MTKoppel) _ibVoorstelIx=MTKoppel.voorstelIndex();
   const v=(window.MTKoppel&&cid)?MTKoppel.koppelVoorstel(nieuwste,{index:_ibVoorstelIx,gesprek:items}).filter(x=>!codes.includes(x.code)):[];
-  el.innerHTML=codes.map(c=>`<button class="btn btn-sm" style="background:var(--green,#2e7d32);color:#fff;border-color:transparent" onclick="inboxNaarProject('${ibEsc(c).replace(/'/g,'')}')">📁 ${ibEsc(c)} →</button>`).join(' ')
-    +(v[0]?` <span class="ib-voorstel"><span>Hoort bij <b>${ibEsc(v[0].code)}</b>?</span> <button class="btn btn-xs btn-primary" onclick="inboxKoppelGesprek('${ibEsc(v[0].code).replace(/'/g,'')}','${ibEsc(cid).replace(/'/g,'')}')">✓ Koppel hele gesprek (${items.length})</button> <span class="ib-waarom">waarom: ${ibEsc(v[0].redenen.join('; '))}</span></span>`:'')
-    +(cid?` <button class="btn btn-sm btn-secondary" onclick="inboxKoppelGesprekKies('${ibEsc(cid).replace(/'/g,'')}')">🔗 Gesprek koppelen…</button>`:'');
+  const st=codes.length?{status:'gekoppeld',label:codes[0]+(codes.length>1?' +'+(codes.length-1):''),titel:'Gesprek gekoppeld aan '+codes.join(', ')}
+    :(v[0]?{status:'voorstel',label:v[0].code,titel:'Voorstel: '+v[0].redenen.join('; ')}:{status:'open',label:'gesprek'});
+  el.innerHTML=(window.MTKoppelUI?MTKoppelUI.badge(Object.assign(st,{onclick:'inboxGesprekPop(this)'})):'')
+    +(v[0]&&!codes.length?` <span class="ib-waarom">${items.length} mails · waarom: ${ibEsc(v[0].redenen.join('; '))}</span>`:'');
+}
+function inboxGesprekPop(el){
+  const items=_inbox.curThreadItems||[]; if(!items.length||!window.MTKoppelUI) return;
+  const codes=[...new Set(items.flatMap(m=>ibProjecten(m)))], nieuwste=items[items.length-1], cid=ibEsc(nieuwste.conversationId||'').replace(/'/g,'');
+  if(!_ibVoorstelIx) _ibVoorstelIx=MTKoppel.voorstelIndex();
+  const v=nieuwste.conversationId?MTKoppel.koppelVoorstel(nieuwste,{index:_ibVoorstelIx,gesprek:items}).filter(x=>!codes.includes(x.code)):[];
+  let html=codes.map(c=>`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:c})}<span class="kb-pop-n">${items.filter(m=>ibProjecten(m).includes(c)).length} van ${items.length} mails</span>
+    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxNaarProject('${ibEsc(c).replace(/'/g,'')}')">Open</button>
+    ${cid?`<button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxKoppelGesprek('${ibEsc(c).replace(/'/g,'')}','${cid}')">Rest ook koppelen</button>`:''}</div>`).join('');
+  html+=v.map(o=>`<div class="kb-pop-rij"><div class="kb-pop-n"><b>${ibEsc(o.code)}</b><div class="dos-meta">${ibEsc(o.redenen.join('; '))}</div></div>
+    <button class="btn btn-xs btn-primary" onclick="MTKoppelUI.sluit();inboxKoppelGesprek('${ibEsc(o.code).replace(/'/g,'')}','${cid}')">✓ Koppel hele gesprek</button></div>`).join('');
+  if(cid) html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxKoppelGesprekKies('${cid}')">🔍 Gesprek koppelen aan ander project…</button></div>`;
+  MTKoppelUI.popover(el,html||'<div class="dos-meta">Geen gesprek-id; koppel de mails los.</div>',{titel:'Gesprek ('+items.length+' mails)'});
 }
 function inboxKoppelGesprekKies(cid){ _inbox.koppelModus={gesprek:cid}; inboxKoppelProject(); }
 // Ververst alleen de koppel-knop in de geopende mail (na (ont)koppelen).
 function inboxRefreshKoppelKnop(){
   _ibVoorstelIx=null;
-  const vw=document.getElementById('inbox-voorstel'); if(vw&&_inbox.cur) vw.innerHTML=inboxVoorstelHtml(_inbox.cur);
+  if(window.MTKoppelUI) MTKoppelUI.sluit();
   const w=document.getElementById('inbox-koppelwrap');
   if(w&&_inbox.cur){w.innerHTML=inboxKoppelKnopHtml(_inbox.cur);}
   else{const b=document.getElementById('inbox-koppelknop');if(b&&_inbox.cur)b.outerHTML=inboxKoppelKnopHtml(_inbox.cur);}
@@ -990,6 +1007,7 @@ function inboxRefreshKoppelKnop(){
 // Ontkoppelen — altijd eerst waarschuwen. Tombstone + journaal via MTKoppel.
 async function inboxOntkoppel(code){
   const m=_inbox.cur; if(!m||!code) return;
+  return ibOntkoppelVia(m.id,code);
   const ok=await ibBevestig({title:'Mail ontkoppelen',message:'⚠️ Let op — deze mail is gekoppeld aan project '+code+'.\n'
     +'Koppeling verbreken?\n\n(De mail zelf blijft gewoon in Outlook staan.)',okLabel:'Ontkoppelen',danger:true});
   if(!ok) return;
@@ -1008,10 +1026,10 @@ async function inboxOntkoppelHuidige(){
 }
 
 function inboxKoppelProject(){
-  const gesprek=_inbox.koppelModus&&_inbox.koppelModus.gesprek;
-  if(!_inbox.cur&&!gesprek){ibMelding('Open eerst een mail.');return;}
+  const gesprek=_inbox.koppelModus&&_inbox.koppelModus.gesprek, losseMail=_inbox.koppelModus&&_inbox.koppelModus.mail;
+  if(!_inbox.cur&&!gesprek&&!losseMail){ibMelding('Open eerst een mail.');return;}
   if(!PROJECT_CODES.length){_inbox.koppelModus=null;ibMelding('Er zijn nog geen projecten om aan te koppelen.');return;}
-  const items=gesprek?(_inbox.curThreadItems||[]):[_inbox.cur];
+  const items=gesprek?(_inbox.curThreadItems||[]):[losseMail||_inbox.cur];
   const al=new Set(items.flatMap(m=>ibProjecten(m)));
   const oud=document.getElementById('koppel-overlay');if(oud)oud.remove();
   const ov=document.createElement('div');ov.id='koppel-overlay';
@@ -1019,7 +1037,7 @@ function inboxKoppelProject(){
   ov.onclick=e=>{if(e.target===ov){ov.remove();_inbox.koppelModus=null;}};
   const lijst=PROJECT_CODES.map(p=>`<div class="kp-row" data-zoek="${ibEsc((p.code+' '+(p.naam||'')+' '+(p.klant||'')).toLowerCase())}" onclick="inboxKoppelProjectDo('${ibEsc(p.code).replace(/'/g,'')}')" style="padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer">
       <div style="font-weight:600;font-size:13px">${ibEsc(p.naam||p.code)}</div>
-      <div style="font-size:11px;color:var(--text-dim)"><span style="font-family:var(--mono)">${ibEsc(p.code)}</span>${p.klant?' · '+ibEsc(p.klant):''}${al.has(p.code)?' · <b style="color:var(--green)">✓ al gekoppeld</b>':''}</div>
+      <div style="font-size:11px;color:var(--text-dim)"><span style="font-family:var(--mono)">${ibEsc(p.code)}</span>${p.klant?' · '+ibEsc(p.klant):''}${al.has(p.code)&&window.MTKoppelUI?' '+MTKoppelUI.badge({status:'gekoppeld',klein:true}):''}</div>
     </div>`).join('');
   ov.innerHTML=`<div style="background:var(--surface-overlay,#fff);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);width:440px;max-width:calc(100vw - 32px);max-height:80vh;display:flex;flex-direction:column;overflow:hidden">
     <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
@@ -1041,6 +1059,11 @@ function inboxKoppelProjectDo(code){
     const cid=_inbox.koppelModus.gesprek; _inbox.koppelModus=null;
     const ov=document.getElementById('koppel-overlay');if(ov)ov.remove();
     return inboxKoppelGesprek(code,cid);
+  }
+  if(_inbox.koppelModus&&_inbox.koppelModus.mail){
+    const lm=_inbox.koppelModus.mail; _inbox.koppelModus=null;
+    const ov=document.getElementById('koppel-overlay');if(ov)ov.remove();
+    if(!(_inbox.cur&&_inbox.cur.id===lm.id)) return ibKoppelVia(lm.id,code,'hand');
   }
   const m=_inbox.cur;if(!m)return;
   const r=MTKoppel.koppelMail(code,m,{bron:'hand',mbx:_inbox.mbx,idType:'immutable'});   // eerder ontkoppeld → zelfde record weer actief
@@ -1161,7 +1184,7 @@ async function inboxBijlagenDialoog(mailId,code){
     const rij=(it,i)=>`<tr>
       <td style="padding:4px 6px"><input type="checkbox" ${it.aan?'checked':''} onchange="_ibBijl.items[${i}].aan=this.checked"></td>
       <td style="padding:4px 6px;font-size:12px;word-break:break-all">${ibEsc(it.naam)} <span style="color:var(--text-faint)">(${Math.max(1,Math.round(it.grootte/1024))} kB)</span>
-        ${it.al?`<div style="font-size:10px;color:var(--green)">✓ al opgeslagen in ${ibEsc(it.al.sub)}${it.al.webUrl?` · <a href="${ibEsc(it.al.webUrl)}" target="_blank">openen</a>`:''}</div>`:''}</td>
+        ${it.al?`<div style="font-size:10px">${window.MTKoppelUI?MTKoppelUI.badge({status:'gekoppeld',klein:true,label:it.al.sub,titel:'Al opgeslagen in de projectmap ('+it.al.sub+')'}):'✓ al opgeslagen in '+ibEsc(it.al.sub)}${it.al.webUrl?` · <a href="${ibEsc(it.al.webUrl)}" target="_blank">openen</a>`:''}</div>`:''}</td>
       <td style="padding:4px 6px"><select onchange="_ibBijl.items[${i}].sub=this.value" style="font-size:12px">${IB_SUBMAPPEN.map(s=>`<option${s===it.sub?' selected':''}>${s}</option>`).join('')}</select></td>
     </tr>`;
     const oud=document.getElementById('bijl-overlay'); if(oud) oud.remove();

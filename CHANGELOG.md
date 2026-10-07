@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Rollen: meerdere vaste eigenaren (OWNER_OIDS + OWNER_EMAILS), eigenaar kan eigenaar maken
+- Commit: `924207f` | Auteur: Bart Witte
+
 ## 2026-10-07 — Rollen: besluiten Bart — Werkplaats taakstatus en nieuwe taak, MB-verwijderen alleen Eigenaar
 - Commit: `fd5b71e` | Auteur: Bart Witte
 

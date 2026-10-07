@@ -48,9 +48,9 @@ id = "c2ccdda50c59470d99ca885acecaff20"
 #    → zet de geprinte id hieronder i.p.v. VUL_IN en haal de # weg.
 #      (een namespace-id is geen geheim; tokens/secrets horen hier NIET)
 #
-# [[kv_namespaces]]
-# binding = "MT_ROLLEN"
-# id = "VUL_IN"
+[[kv_namespaces]]
+binding = "MT_ROLLEN"
+id = "f1405a729e4e4f1985c98ad12b194fa2"
 #
 # 2) Vaste eigenaren (niet in de repo — als secret; komma-gescheiden lijsten):
 #      wrangler secret put OWNER_OIDS     ← Entra Object ID's (oid), bv. "<oid1>,<oid2>"

@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.2 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.3 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -23,8 +23,8 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-toggl.js?v=2026-10-06c"></script>
-<script src="mt-koppel.js?v=2026-10-06f"></script>
-<script src="mt-inbox.js?v=2026-10-06f"></script>
+<script src="mt-koppel.js?v=2026-10-07a"></script>
+<script src="mt-inbox.js?v=2026-10-07a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -510,6 +510,35 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .dos-sel{height:var(--control-h-sm);font-size:12px;max-width:100%}
 .dos-check{display:inline-flex;align-items:center;gap:4px;color:var(--text-dim)}
 .dos-aangepast[hidden]{display:none}
+/* Koppel-badge (B11, Moneybird-stijl): geel/open = niet gekoppeld, groen/dicht = gekoppeld */
+:root{--kb-open-bg:#FFF4D6;--kb-open-fg:#7A5300;--kb-open-rand:#E9C46A;--kb-ok-bg:#E3F1E7;--kb-ok-fg:#1F5C36;--kb-ok-rand:#9CCBAA}
+/* de app is licht; de badge volgt het thema van de app, niet het OS (alleen bij een expliciet donker app-thema) */
+:root[data-theme="dark"]{--kb-open-bg:#3A2E10;--kb-open-fg:#F6D27A;--kb-open-rand:#8A6A1F;--kb-ok-bg:#16301F;--kb-ok-fg:#9FE0B4;--kb-ok-rand:#2F6B45}
+.kb{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:2px 9px;border-radius:14px;border:1px solid;font:600 12px var(--sans);line-height:1.2;white-space:nowrap;vertical-align:middle;max-width:100%;cursor:default;text-decoration:none}
+button.kb{cursor:pointer}
+.kb-open,.kb-voorstel{background:var(--kb-open-bg);color:var(--kb-open-fg);border-color:var(--kb-open-rand)}
+.kb-voorstel{border-style:dashed}
+.kb-gekoppeld{background:var(--kb-ok-bg);color:var(--kb-ok-fg);border-color:var(--kb-ok-rand)}
+.kb-i{flex:0 0 auto}
+.kb-t{overflow:hidden;text-overflow:ellipsis}
+.kb-w{font-size:11px}
+.kb-klein{min-height:22px;padding:1px 7px;font-size:11px;gap:4px}
+.kb-klein .kb-i{width:13px;height:13px}
+.kb-icoon{padding:1px 5px}.kb-icoon .kb-t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+button.kb:hover{filter:brightness(.96)}
+button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.kb-let{border-color:var(--warning)}
+@media(max-width:600px){button.kb{min-height:32px;min-width:32px;justify-content:center}.kb-klein .kb-t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}}
+.kb-pop{position:absolute;z-index:10050;background:var(--surface-overlay);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-pop);padding:8px 10px;font-size:12.5px;max-width:calc(100vw - 16px)}
+.kb-pop-onder{position:fixed;left:8px;right:8px;bottom:8px;top:auto;max-height:70vh;overflow:auto}
+.kb-pop-kop{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.kb-pop-x{border:none;background:none;cursor:pointer;font-size:14px;min-width:32px;min-height:32px;color:var(--text-dim)}
+.kb-pop-rij{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:5px 0;border-bottom:1px solid var(--border-hair)}
+.kb-pop-n{flex:1 1 140px;min-width:0}
+.kb-pop-acties{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.kb-pop-in a{color:var(--green)}
+.kb-mini{color:var(--kb-ok-fg);display:inline-flex;vertical-align:-2px}
+.koppel-rij{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;font-size:12px;color:var(--text-dim);margin-bottom:.75rem}
 /* Projecttijdlijn (B10) */
 .tl-som{font-size:12.5px;color:var(--text-dim);margin-bottom:6px}
 .tl-som b{color:var(--text);font-family:var(--mono)}
@@ -708,7 +737,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.2, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.3, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -729,7 +758,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.2</span>
+    <span class="header-version">v2.3</span>
     <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
@@ -5130,9 +5159,10 @@ function _projCtx(proj){
         : `<a href="#" onclick="event.preventDefault();document.querySelector('.tab-btn[onclick*=\\'klanten\\']')?.click()" style="color:var(--gold);text-decoration:none" title="Naar Klanten">${klantNaam} →</a>`)
     : '—';
   const mbBron=proj.mb_nr?'handmatig':(autoMb?'auto via klantregistry':null);
+  const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' );
   const mbNrBlok=effectiveMb
-    ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${effectiveMb}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${effectiveMb} ↗</a> <span style="font-size:10px;color:var(--text-faint)">(${mbBron})</span> <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${_jsCode(proj.code)}')" title="Handmatig overschrijven">✏</button>`
-    : `<span style="color:var(--text-faint)">geen — </span><button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${_jsCode(proj.code)}')">+ handmatig koppelen</button>`;
+    ? kb({status:'gekoppeld',label:mbContactNaam(effectiveMb)||'Moneybird',titel:'Moneybird-contact '+(mbContactNaam(effectiveMb)||'')+' ('+mbBron+') — klik voor details',onclick:`mbPop(this,'${_jsCode(proj.code)}')`})
+    : kb({status:'open',label:'Moneybird',titel:'Nog geen Moneybird-contact — klik om te koppelen',onclick:`bewerkProjectMbNr('${_jsCode(proj.code)}')`});
   return {projItems,totaalInkoop,effectiveMb,klantChip,mbNrBlok,sid:proj.code.replace(/-/g,''),cid:proj.code.replace(/[^A-Za-z0-9]/g,'')};
 }
 function renderProjectDetail(proj){
@@ -5229,11 +5259,12 @@ function projSecOverzicht(proj,c){
   // Aandachtspunten: alleen wat ontbreekt of nog moet; elk punt met de knop om het op te lossen.
   const let_=[];
   const nietOpgeslagen=rijen.filter(r=>r.soort==='mail'&&r.ref.nogNietOpgeslagen).length;
-  if(nietOpgeslagen) let_.push(`📎 ${nietOpgeslagen} gekoppelde mail${nietOpgeslagen>1?'s':''} met bijlagen die nog niet in de projectmap staan <button class="btn btn-xs btn-secondary" onclick="projSectieKies('dossier',{filter:{soort:'mail',bijlage:'1'}})">Bekijken</button>`);
-  if(!proj.map||!proj.map.itemId) let_.push(`🗂 Projectmap nog niet gecontroleerd <button class="btn btn-xs btn-secondary" onclick="projMappenHerstel('${_jsCode(proj.code)}')">Controleren</button>`);
-  if(!proj.tg_project_id) let_.push(`⏱ Nog geen Toggl-project gekoppeld <button class="btn btn-xs btn-secondary" onclick="t2KiesProject('${_jsCode(proj.code)}')">Koppelen</button>`);
-  if(!proj.offertenr) let_.push(`🔢 Nog geen offertenummer <button class="btn btn-xs btn-secondary" onclick="t2OffertenummerToekennen('${_jsCode(proj.code)}')">Toekennen</button>`);
-  if(!c.effectiveMb&&proj.klant) let_.push(`👤 Geen Moneybird-contact <button class="btn btn-xs btn-secondary" onclick="bewerkProjectMbNr('${_jsCode(proj.code)}')">Koppelen</button>`);
+  const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' ), pc=_jsCode(proj.code);
+  if(nietOpgeslagen) let_.push(`${kb({status:'open',klein:true,label:'Bijlagen',titel:'Bijlagen nog niet in de projectmap — klik om ze te bekijken',onclick:`projSectieKies('dossier',{filter:{soort:'mail',bijlage:'1'}})`})} ${nietOpgeslagen} gekoppelde mail${nietOpgeslagen>1?'s':''} met bijlagen die nog niet in de projectmap staan`);
+  if(!proj.map||!proj.map.itemId) let_.push(`${projMapBadge(proj,{klein:true})} Projectmap nog niet gecontroleerd`);
+  if(!proj.tg_project_id) let_.push(`${kb({status:'open',klein:true,label:'Toggl',titel:'Nog geen Toggl-project — klik om te koppelen',onclick:`t2KiesProject('${pc}')`})} Nog geen Toggl-project gekoppeld`);
+  if(!proj.offertenr) let_.push(`${kb({status:'open',klein:true,label:'Offertenummer',titel:'Nog geen offertenummer — klik om toe te kennen',onclick:`t2OffertenummerToekennen('${pc}')`})} Nog geen offertenummer`);
+  if(!c.effectiveMb&&proj.klant) let_.push(`${kb({status:'open',klein:true,label:'Moneybird',titel:'Geen Moneybird-contact — klik om te koppelen',onclick:`bewerkProjectMbNr('${pc}')`})} Geen Moneybird-contact`);
   return `
       <div style="display:flex;justify-content:flex-end;align-items:start;margin-bottom:.75rem;gap:.5rem;flex-wrap:wrap">
         <div class="flex">
@@ -5245,8 +5276,9 @@ function projSecOverzicht(proj,c){
         <div class="kpi-card"><div class="kpi-label">Materiaalregels</div><div class="kpi-waarde" style="font-size:20px">${c.projItems.length}</div></div>
         <div class="kpi-card gold"><div class="kpi-label">Klant</div><div class="kpi-waarde" style="font-size:15px;line-height:1.3">${c.klantChip}</div></div>
       </div>
-      <div style="display:flex;align-items:center;gap:0.5rem;font-size:12px;color:var(--text-dim);margin-bottom:1rem;flex-wrap:wrap">
+      <div class="koppel-rij">
         <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${c.mbNrBlok}
+        <span class="kpi-label" style="margin:0 0 0 .5rem">Projectmap:</span> ${projMapBadge(proj)}
       </div>
       ${t2ProjectRijHtml(proj)}
       <div class="ov-grid">
@@ -5542,7 +5574,8 @@ function dossierItems({codes}={}){
       const i=actief.indexOf(x), imid=x.internetMessageId||x.id;
       const opgeslagen=idx.filter(r=>r.code===code&&r.status==='opgeslagen'&&r.imid===imid);
       const acties=[];
-      if(x.webLink) acties.push({l:'↗',t:'Open in Outlook',f:()=>window.open(x.webLink,'_blank','noopener')});
+      if(x.webLink) acties.push({l:'↗',t:'Open in Outlook',snel:true,f:()=>window.open(x.webLink,'_blank','noopener')});
+      if(x.ontkoppeld) acties.push({l:'↺ Opnieuw koppelen',t:'Deze mail weer aan het project koppelen',f:()=>{ MTKoppel.herkoppel(code,x.internetMessageId||x.id); dossierVernieuw(); }});
       if(i>=0&&x.hasAttachments!==false) acties.push({l:'📎',t:'Bijlagen van deze mail naar de projectmap',f:()=>dossierBijlagenNaarMap(code,i)});
       if(i>=0) acties.push({l:'×',t:'Ontkoppelen (mail blijft in Outlook)',gevaar:true,f:()=>ontkoppelMail(code,i)});
       rij({soort:'mail',titel:x.subject||'(geen onderwerp)',van:x.from||'',datum:x.date||x.ts,status:x.ontkoppeld?'ontkoppeld':'gekoppeld',
@@ -5719,13 +5752,19 @@ function _dosTekenLijst(key){
     if(g!==vorige){ html+=`<div class="dos-groep">${esc(g)}</div>`; vorige=g; }
     const wie=[r.van,r.door&&r.door!==r.van?r.door:''].filter(Boolean).map(esc).join(' · ');
     const titel=r.open?`<a href="#" onclick="event.preventDefault();dossierOpen('${k}',${i})">${esc(r.titel)}</a>`:esc(r.titel);
-    const bijl=r.soort==='mail'&&r.ref.opgeslagen?`<span class="dos-tag" title="Opgeslagen bijlagen van deze mail">📎 ${r.ref.opgeslagen} opgeslagen</span>`
-      :(r.soort==='mail'&&r.ref.nogNietOpgeslagen?'<span class="dos-tag let" title="Deze mail heeft bijlagen die nog niet in de projectmap staan">📎 nog niet opgeslagen</span>':'');
+    const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' );
+    const jBijl=r.acties.findIndex(a=>a.l==='📎');
+    const bijl=r.soort==='mail'&&r.ref.opgeslagen?' '+kb({status:'gekoppeld',klein:true,label:r.ref.opgeslagen+' bijlage'+(r.ref.opgeslagen>1?'n':'')+' in map',titel:'Opgeslagen bijlagen van deze mail staan in de projectmap'})
+      :(r.soort==='mail'&&r.ref.nogNietOpgeslagen?' '+kb({status:'open',klein:true,label:'bijlagen in map',titel:'Deze mail heeft bijlagen die nog niet in de projectmap staan — klik om ze op te slaan',onclick:jBijl>=0?`dossierActie('${k}',${i},${jBijl})`:''}):'');
+    // Mail en bestand: één koppel-badge (B11); de overige acties zitten in de popover.
+    const koppel=r.soort==='mail'?kb(r.status==='ontkoppeld'?{status:'open',klein:true,tekst:'Ontkoppeld',titel:'Deze mail is ontkoppeld — klik om opnieuw te koppelen',onclick:`dossierKoppelPop(this,'${k}',${i})`}:{status:'gekoppeld',klein:true,label:reg.scope.codes.length>1?r.code:'',titel:'Gekoppeld aan '+r.code+' — klik voor openen of ontkoppelen',onclick:`dossierKoppelPop(this,'${k}',${i})`})
+      :(r.soort==='bestand'?kb({status:'gekoppeld',klein:true,label:r.bron==='projectmap'||r.bron==='mail'?'in map':'bijlage',titel:'Staat in '+(r.status||'de projectmap')+' — klik voor details',onclick:`dossierKoppelPop(this,'${k}',${i})`}):'');
     html+=`<div class="dos-rij${r.status==='ontkoppeld'?' uit':''}">
       <span class="dos-ic" aria-hidden="true">${icoon(r.soort)}</span>
       <div class="dos-hoofd"><div class="dos-titel">${titel}${bijl}</div>
         <div class="dos-meta">${(reg.scope.codes.length>1)?`<span class="code">${esc(r.code)}</span> · `:''}${wie?wie+' · ':''}${r.datum?fmtDatum(r.datum.slice(0,10)):'—'}${r.status?` · <span class="dos-st">${esc(r.status)}</span>`:''}</div></div>
-      <div class="dos-acties">${r.acties.map((a,j)=>`<button type="button" class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie('${k}',${i},${j})">${a.l}</button>`).join('')}</div>
+      <div class="dos-acties">${koppel?r.acties.map((a,j)=>a.snel?`<button type="button" class="btn btn-xs btn-secondary" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie('${k}',${i},${j})">${a.l}</button>`:'').join('')+koppel
+        :r.acties.map((a,j)=>`<button type="button" class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie('${k}',${i},${j})">${a.l}</button>`).join('')}</div>
     </div>`;
   });
   lijst.innerHTML=html;
@@ -5742,6 +5781,15 @@ function dossierWisFilters(key){
   if(reg&&el) renderDossier(el.parentNode,reg.scope);
   _dosUrl(key);
 }
+// Popover bij de koppel-badge van een dossier-rij: openen + alle acties van die rij.
+function dossierKoppelPop(el,key,i){
+  const r=_dosReg[key]&&_dosReg[key].rijen[i]; if(!r||!window.MTKoppelUI) return;
+  const k=esc(key);
+  const acties=r.acties.map((a,j)=>a.snel?'':`<button class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" onclick="MTKoppelUI.sluit();dossierActie('${k}',${i},${j})">${esc(a.l==='×'?'Ontkoppelen':a.l==='📎'?'📎 Bijlagen → projectmap':a.l)}</button>`).join(' ');
+  MTKoppelUI.popover(el,`<div class="kb-pop-rij"><div class="kb-pop-n"><b>${esc(r.titel)}</b><div class="dos-meta">${esc([r.van,r.code,r.status].filter(Boolean).join(' · '))}</div></div></div>
+    <div class="kb-pop-acties">${r.open?`<button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();dossierOpen('${k}',${i})">Open</button>`:''} ${acties}</div>`,{titel:r.soort==='mail'?(r.status==='ontkoppeld'?'Ontkoppelde mail':'Gekoppelde mail'):'Bestand in projectmap'});
+}
+function dossierVernieuw(){ document.querySelectorAll('.dossier').forEach(d=>{ const reg=_dosReg[d.dataset.key]; if(reg) renderDossier(d.parentNode,reg.scope); }); }
 function dossierOpen(key,i){ const r=_dosReg[key]&&_dosReg[key].rijen[i]; if(r&&r.open) r.open(); }
 function dossierActie(key,i,j){ const r=_dosReg[key]&&_dosReg[key].rijen[i]; const a=r&&r.acties[j]; if(a&&a.f) a.f(); }
 // Filterstand in de URL (#projecten/CODE/dossier?soort=mail) — replaceState, geen extra history.
@@ -5853,7 +5901,7 @@ function openKlant(kl,loc,{sectie=null,filter=null}={}){
     +(info.telefoon?`<a class="btn btn-xs btn-secondary" href="tel:${esc(info.telefoon)}" title="Bellen: ${esc(info.telefoon)}" aria-label="Bellen">📞</a>`:'')
     +(info.email?`<a class="btn btn-xs btn-secondary" href="mailto:${esc(info.email)}" title="Mailen: ${esc(info.email)}" aria-label="Mailen">📧</a>`:'')
     +`<button type="button" class="btn btn-xs btn-gold" onclick="klantNieuwProject()" title="Nieuw project voor deze klant${loc?' (deze locatie)':''}">+ Nieuw project</button>`
-    +(info.mbId?`<a class="btn btn-xs btn-secondary" href="https://moneybird.com/${getAdmin()}/contacts/${esc(info.mbId)}" target="_blank" rel="noopener" title="Open het contact in Moneybird">Moneybird ↗</a>`:'')
+    +(window.MTKoppelUI?MTKoppelUI.badge(info.mbId?{status:'gekoppeld',label:'Moneybird',titel:'Moneybird-contact '+info.mbId+' — klik om te openen',onclick:`window.open('https://moneybird.com/${getAdmin()}/contacts/${esc(info.mbId)}','_blank','noopener')`}:{status:'open',label:'Moneybird',titel:'Geen Moneybird-contact bekend voor deze klant — klik voor uitleg',onclick:'klantMbPop(this)'}):'')
     +`<button type="button" class="btn btn-xs btn-secondary" onclick="klantKopieerLink()" title="Kopieer de link naar deze klant">🔗 Kopieer link</button></span></div>`
     +`<nav class="proj-secnav" role="tablist" aria-label="Klantonderdelen">${KLANT_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_klantSectie?' actief':''}" data-sectie="${s.k}" aria-selected="${s.k===_klantSectie}" onclick="klantSectieKies('${s.k}')">${s.l}</button>`).join('')}</nav>`
     +`<div class="card proj-sectie" id="klant-sectie-inhoud" role="tabpanel" data-sectie="${_klantSectie}"></div>`;
@@ -5950,11 +5998,12 @@ function klantSecOverzicht(info,projen){
         ${PROJ_STATUSSEN.map(s=>`<option value="${s}"${!st.afgeleid&&st.status===s?' selected':''}>${s}</option>`).join('')}</select></label></div>`;
   };
   const let_=[];
-  const zonderMap=zicht.filter(p=>!p.map||!p.map.itemId).length; if(zonderMap) let_.push(`🗂 ${zonderMap} project${zonderMap>1?'en':''} zonder gecontroleerde map`);
-  const zonderTg=zicht.filter(p=>!p.tg_project_id).length; if(zonderTg) let_.push(`⏱ ${zonderTg} project${zonderTg>1?'en':''} zonder Toggl-project`);
+  const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' );
+  const zonderMap=zicht.filter(p=>!p.map||!p.map.itemId).length; if(zonderMap) let_.push(`${kb({status:'open',klein:true,label:'Projectmap',titel:'Klik: projecten van deze klant in de lijst tonen',onclick:`projKlantFilterZet('${_jsCode(info.kl)}','${_jsCode((_klantHuidig&&_klantHuidig.loc)||'')}')`})} ${zonderMap} project${zonderMap>1?'en':''} zonder gecontroleerde map`);
+  const zonderTg=zicht.filter(p=>!p.tg_project_id).length; if(zonderTg) let_.push(`${kb({status:'open',klein:true,label:'Toggl',titel:'Klik: projecten van deze klant in de lijst tonen',onclick:`projKlantFilterZet('${_jsCode(info.kl)}','${_jsCode((_klantHuidig&&_klantHuidig.loc)||'')}')`})} ${zonderTg} project${zonderTg>1?'en':''} zonder Toggl-project`);
   const nietOpg=rijen.filter(r=>r.soort==='mail'&&r.ref.nogNietOpgeslagen).length;
-  if(nietOpg) let_.push(`📎 ${nietOpg} mail${nietOpg>1?'s':''} met bijlagen nog niet in de projectmap <button class="btn btn-xs btn-secondary" onclick="_dosFilter[_klantDosKey()]=Object.assign({},_DOS_STD,{soort:'mail',bijlage:'1'});klantSectieKies('dossier')">Bekijken</button>`);
-  if(!info.mbId) let_.push('👤 Geen Moneybird-contact bekend voor deze klant');
+  if(nietOpg) let_.push(`${kb({status:'open',klein:true,label:'Bijlagen',titel:'Bijlagen nog niet in de projectmap — klik om ze te bekijken',onclick:"_dosFilter[_klantDosKey()]=Object.assign({},_DOS_STD,{soort:'mail',bijlage:'1'});klantSectieKies('dossier')"})} ${nietOpg} mail${nietOpg>1?'s':''} met bijlagen nog niet in de projectmap`);
+  if(!info.mbId) let_.push(`${kb({status:'open',klein:true,label:'Moneybird',titel:'Geen Moneybird-contact bekend — klik voor uitleg',onclick:'klantMbPop(this)'})} Geen Moneybird-contact bekend voor deze klant`);
   return `<div class="klant-kop">
       <div class="klant-gegevens">${info.email?`📧 <a href="mailto:${esc(info.email)}">${esc(info.email)}</a>`:''}${info.telefoon?` · 📞 <a href="tel:${esc(info.telefoon)}">${esc(info.telefoon)}</a>`:''}${info.adres||info.plaats?` · 📍 ${esc([info.adres,info.plaats].filter(Boolean).join(', '))}`:''}${!info.email&&!info.telefoon&&!info.plaats?'<span style="color:var(--text-faint)">Geen contactgegevens in de registry of Moneybird-cache</span>':''}</div>
       <div class="klant-kpi"><b>${zicht.length}</b> project${zicht.length===1?'':'en'} · <b>${openTaken}</b> open ta${openTaken===1?'ak':'ken'}${info.locaties.length?` · <b>${info.locaties.length}</b> locatie${info.locaties.length===1?'':'s'}`:''}</div></div>
@@ -6034,6 +6083,11 @@ async function klantGeldLaad(info){
   if(_klantHuidig&&_klantSectie==='geld'&&klantInfo(_klantHuidig.kl,{loc:_klantHuidig.loc}).mbId===info.mbId) _klantSectieRender();
 }
 // Klanten-tab: klik op een klant → klantpagina als er een klantcode bij hoort, anders de modal.
+function klantMbPop(el){
+  if(!window.MTKoppelUI) return;
+  MTKoppelUI.popover(el,`<div class="dos-meta">Voor deze klant is geen Moneybird-contact bekend. Het contact komt uit de klantregistry, of uit een project (Moneybird-koppeling op het project).</div>
+    <div class="kb-pop-acties"><a class="btn btn-xs btn-secondary" href="https://moneybird.com/${getAdmin()}/contacts" target="_blank" rel="noopener">Moneybird-contacten ↗</a></div>`,{titel:'Niet gekoppeld · Moneybird'});
+}
 function klantKlik(mbId){
   const code=klantCodeVoorMb(mbId);
   if(code&&typeof mtRoute!=='undefined'){ mtRoute.go({tab:'projecten',klant:code},{push:true}); return; }
@@ -6362,13 +6416,94 @@ function _t2Kandidaten(mt,ps){
 // Projectscherm: Toggl-project kiezen (mens bevestigt) en offertenummer toekennen.
 function t2ProjectRijHtml(proj){
   const p=(typeof _tgCache!=='undefined'&&_tgCache.projecten||[]).find(x=>x.id===proj.tg_project_id);
-  const naam=proj.tg_project_id?(p?esc(p.name):'#'+proj.tg_project_id):'<span style="color:var(--text-faint)">nog niet gekoppeld</span>';
-  return `<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;font-size:12px;color:var(--text-dim);margin-bottom:1rem">
-    <span class="kpi-label" style="margin:0">Toggl-project:</span> ${naam}
-    ${proj.offertenr?`<span class="badge" style="font-family:var(--mono)">${esc(proj.offertenr)}</span>`:'<span style="color:var(--text-faint)">· offertenummer volgt</span>'}
-    <button class="btn btn-xs btn-secondary" onclick="t2KiesProject('${_jsCode(proj.code)}')">🔗 Toggl-project kiezen</button>
-    <button class="btn btn-xs btn-secondary" onclick="t2OffertenummerToekennen('${_jsCode(proj.code)}')" title="Kies de Moneybird-offerte; de projectnaam in Toggl wordt '&lt;nummer&gt; &lt;naam&gt;'">🔢 Offertenummer toekennen</button>
+  const naam=proj.tg_project_id?((p&&p.name)||'Toggl'):'';     // nooit het ruwe id (dat staat in de popover)
+  const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' ), c=_jsCode(proj.code);
+  return `<div class="koppel-rij">
+    <span class="kpi-label" style="margin:0">Toggl-project:</span> ${kb(proj.tg_project_id?{status:'gekoppeld',label:naam,titel:'Gekoppeld aan Toggl-project'+(p&&p.name?' '+p.name:'')+' — klik voor details',onclick:`t2Pop(this,'${c}')`}:{status:'open',label:'Toggl',titel:'Nog geen Toggl-project — klik om er een te kiezen',onclick:`t2KiesProject('${c}')`})}
+    <span class="kpi-label" style="margin:0 0 0 .5rem">Offertenummer:</span> ${kb(proj.offertenr?{status:'gekoppeld',label:proj.offertenr,titel:'Offertenummer '+proj.offertenr+' — klik om te wijzigen',onclick:`t2OffertenummerToekennen('${c}')`}:{status:'open',label:'offertenummer',titel:'Kies de Moneybird-offerte; de projectnaam in Toggl wordt "<nummer> <naam>"',onclick:`t2OffertenummerToekennen('${c}')`})}
     <span id="t2-st-${proj.code.replace(/[^A-Za-z0-9]/g,'')}"></span></div>`;
+}
+// Popover Moneybird-contact: openen, bron, wijzigen, handmatige koppeling weghalen.
+// Naam van een Moneybird-contact (contactencache, anders klantregistry); '' als onbekend → nooit het ruwe id tonen.
+function mbContactNaam(id){
+  if(!id) return ''; const s=String(id);
+  try{ const c=JSON.parse(localStorage.getItem('mt_cache_klanten')||'null'), m=(c&&Array.isArray(c.data)?c.data:[]).find(x=>String(x.id)===s);
+    const n=m&&(m.company_name||[m.firstname,m.lastname].filter(Boolean).join(' ')); if(n) return n; }catch(e){}
+  const reg=[...(typeof KLANTEN!=='undefined'&&Array.isArray(KLANTEN)?KLANTEN:[]),...(typeof KLANTEN_VOL!=='undefined'&&Array.isArray(KLANTEN_VOL)?KLANTEN_VOL:[])];
+  const k=reg.find(x=>x&&String(x.mb_contact_id||'')===s); return (k&&k.naam)||'';
+}
+function mbPop(el,code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!window.MTKoppelUI) return;
+  const auto=resolveMbContact(proj), eff=proj.mb_nr||auto, bron=proj.mb_nr?'handmatig gekoppeld':'automatisch via de klantregistry';
+  MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:mbContactNaam(eff)||'Moneybird'})}<span class="kb-pop-n dos-meta">${esc(bron)} · contact-id ${esc(eff)}</span></div>
+    <div class="kb-pop-acties"><a class="btn btn-xs btn-secondary" href="https://moneybird.com/${getAdmin()}/contacts/${esc(eff)}" target="_blank" rel="noopener">Open in Moneybird ↗</a>
+    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();bewerkProjectMbNr('${_jsCode(code)}')">Wijzigen</button>
+    ${proj.mb_nr?`<button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();mbOntkoppel('${_jsCode(code)}')">Handmatige koppeling weghalen</button>`:''}</div>
+    ${!proj.mb_nr?'<div class="dos-meta" style="margin-top:4px">Automatische koppeling: pas de klantregistry aan om dit te wijzigen, of koppel handmatig.</div>':''}`,{titel:'Moneybird-contact'});
+}
+async function mbOntkoppel(code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!proj.mb_nr) return;
+  if(!await mtDialog.confirm({title:'Moneybird-koppeling weghalen',message:'De handmatige koppeling met contact '+proj.mb_nr+' weghalen?\n'+(resolveMbContact(proj)?'Daarna geldt weer de automatische koppeling uit de registry.':'Daarna is er geen Moneybird-contact meer.'),okLabel:'Weghalen',danger:true})) return;
+  proj.mb_nr=null; slaProjectenOp();
+  if(typeof _rerenderDetailKeepScroll==='function') _rerenderDetailKeepScroll();
+}
+// Projectmap als koppeling: gevonden = gekoppeld, niet gecontroleerd = open, dubbel = open met waarschuwing.
+function projMapBadge(proj,{klein=false}={}){
+  if(!window.MTKoppelUI) return '';
+  const m=(window._dossierMap||{})[proj.code], c=_jsCode(proj.code);
+  if(proj.map&&proj.map.itemId) return MTKoppelUI.badge({status:'gekoppeld',klein,label:'projectmap',titel:'Projectmap: '+(proj.map.pad||'')+' — klik voor details',onclick:`mapPop(this,'${c}')`});
+  if(m&&m.fout&&/Meerdere projectmappen/.test(m.fout)) return MTKoppelUI.badge({status:'open',klein,tekst:'Meerdere mappen',waarschuwing:'meerdere kandidaat-mappen',titel:'Er zijn meerdere mappen die bij dit project kunnen horen — klik voor details',onclick:`mapPop(this,'${c}')`});
+  return MTKoppelUI.badge({status:'open',klein,label:'projectmap',titel:'Projectmap nog niet gecontroleerd — klik voor details',onclick:`mapPop(this,'${c}')`});
+}
+function mapPop(el,code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!window.MTKoppelUI) return;
+  const m=proj.map||{}, jc=_jsCode(code);
+  if(!m.itemId){
+    const dub=(window._dossierMap||{})[code], dubbel=!!(dub&&dub.fout&&/Meerdere projectmappen/.test(dub.fout));
+    MTKoppelUI.popover(el,`<div class="dos-meta">${dubbel?'⚠ Er zijn meerdere mappen die bij dit project kunnen horen. Kies de juiste via "Mappen herstellen…" — er wordt niets samengevoegd of hernoemd.':'De projectmap is nog niet gecontroleerd. "Controleren" zoekt alleen (leest), en onthoudt de map als er precies één is.'}</div>
+      <div class="kb-pop-acties"><button class="btn btn-xs ${dubbel?'btn-secondary':'btn-primary'}" onclick="MTKoppelUI.sluit();mapControleer('${jc}')">Controleren</button>
+      <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();mapOpenKlantmap('${jc}')">Open klantmap ↗</button>
+      <button class="btn btn-xs ${dubbel?'btn-primary':'btn-secondary'}" onclick="MTKoppelUI.sluit();projMappenHerstel('${jc}')">Mappen herstellen…</button></div>`,{titel:dubbel?'Niet gekoppeld · meerdere mappen':'Niet gekoppeld · projectmap'});
+    return;
+  }
+  MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:'projectmap'})}<span class="kb-pop-n dos-meta" style="overflow-wrap:anywhere">${esc(m.pad||'')}</span></div>
+    <div class="kb-pop-acties">${m.webUrl?`<a class="btn btn-xs btn-secondary" href="${esc(m.webUrl)}" target="_blank" rel="noopener">Open map ↗</a>`:''}
+    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();projSectieKies('dossier');dossierLaadMap('${_jsCode(code)}')">Bestanden tonen</button>
+    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();projMappenHerstel('${_jsCode(code)}')">Mappen herstellen</button></div>`,{titel:'Projectmap'});
+}
+// Alleen lezen: projectmap zoeken; precies één → onthouden op het project (projMap), anders melden.
+async function mapControleer(code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj) return;
+  let pm; try{ pm=await window.projMap(proj,{maak:false}); }catch(e){ return mtDialog.alert({title:'Projectmap controleren',message:'Controleren lukte niet: '+(e.message||e)}); }
+  window._dossierMap=window._dossierMap||{};
+  if(!pm.pad&&pm.dubbel) window._dossierMap[code]=Object.assign({},window._dossierMap[code],{fout:'Meerdere projectmappen gevonden ('+pm.kandidaten.length+') — zie 🗂 Mappen herstellen'});
+  _rerenderDetailKeepScroll();
+  if(!pm.pad) mtDialog.alert({title:'Projectmap controleren',message:pm.dubbel?'Er zijn meerdere mappen die bij dit project kunnen horen. Kies de juiste via "Mappen herstellen…".':'Geen projectmap gevonden ('+(pm.reden||'onbekend')+'). Die wordt gemaakt bij de eerste opslag, of via "Mappen herstellen…".'});
+}
+// Klantmap openen (venster meteen openen, anders blokkeert de browser het na het wachten).
+async function mapOpenKlantmap(code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj) return;
+  const w=window.open('','_blank');
+  try{
+    const kids=await _SP.listChildren(PROJ_ROOT), kn=_projVeilig(_projKlantNaam(proj));
+    const kl=kids.find(c=>c.folder&&c.name===kn)||kids.find(c=>c.folder&&_SP._norm(c.name)===_SP._norm(kn));
+    if(!kl||!kl.webUrl) throw new Error('geen klantmap "'+kn+'" gevonden');
+    if(w){ w.opener=null; w.location.href=kl.webUrl; } else window.open(kl.webUrl,'_blank','noopener');
+  }catch(e){ if(w) w.close(); mtDialog.alert({title:'Klantmap',message:'Klantmap openen lukte niet: '+(e.message||e)}); }
+}
+// Popover Toggl-koppeling: details, ander project kiezen, ontkoppelen (alleen de koppeling in de tool).
+function t2Pop(el,code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!window.MTKoppelUI) return;
+  const p=(typeof _tgCache!=='undefined'&&_tgCache.projecten||[]).find(x=>x.id===proj.tg_project_id);
+  MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:(p&&p.name)||'Toggl'})}<span class="kb-pop-n dos-meta">Toggl-id ${esc(proj.tg_project_id)}</span></div>
+    <div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();t2KiesProject('${_jsCode(code)}')">Ander Toggl-project kiezen</button>
+    <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();t2Ontkoppel('${_jsCode(code)}')">Ontkoppelen</button></div>`,{titel:'Toggl-project'});
+}
+async function t2Ontkoppel(code){
+  const proj=PROJECT_CODES.find(x=>x.code===code); if(!proj||!proj.tg_project_id) return;
+  if(!await mtDialog.confirm({title:'Toggl-project ontkoppelen',message:'De koppeling tussen '+code+' en het Toggl-project verbreken?\nIn Toggl verandert niets; je kunt later opnieuw koppelen.',okLabel:'Ontkoppelen',danger:true})) return;
+  delete proj.tg_project_id; slaProjectenOp();
+  if(typeof _rerenderDetailKeepScroll==='function') _rerenderDetailKeepScroll();
 }
 function _jsCode(c){ return String(c||'').replace(/[^A-Za-z0-9_.\-]/g,''); }   // veilig in onclick='…'
 function _t2St(code,msg,kleur){ const el=document.getElementById('t2-st-'+code.replace(/[^A-Za-z0-9]/g,'')); if(el){ el.textContent=msg; el.style.color=kleur||'var(--text-dim)'; } }
@@ -7161,7 +7296,7 @@ function projectPlanning(proj){
     const koppel=bron?` koppelbaar`:'';
     const naarTaak=bron?` onclick="planNaarTaak('${proj.code}','${bron}')" title="${fa.naam} — klik: spring naar de taak"`:` title="${fa.naam}"`;
     rows+=`<div class="plan-row"${rowId}>
-      <div class="plan-rowlabel${koppel}"${naarTaak}>${bron?'🔗 ':''}${fa.gepind?'📌 ':''}${fa.naam}<br><span class="u">${fa.effort?fa.effort+'u · ':''}${dt}</span></div>
+      <div class="plan-rowlabel${koppel}"${naarTaak}>${bron?(window.MTKoppelUI?'<span class="kb-mini" title="Gekoppeld aan een taak" aria-label="Gekoppeld aan een taak">'+MTKoppelUI.SVG_DICHT+'</span> ':'🔗 '):''}${fa.gepind?'📌 ':''}${fa.naam}<br><span class="u">${fa.effort?fa.effort+'u · ':''}${dt}</span></div>
       <div class="plan-track" data-code="${proj.code}" data-span="${totDagen}">
         ${fa.mijlpaal
           ? `<span class="plan-bar mijlpaal" style="left:${l}%;background:#d4a017" title="${fa.naam} — ${fa.start}" onpointerdown="planDragStart(event,'${proj.code}','${fa.id}')"></span>`
@@ -12498,6 +12633,17 @@ function activiteitOpen(force){
     const ve=document.getElementById('calc-vergeten-'+c); if(ve) ve.innerHTML=vergetenPaneelHtml(key);   // live vergeten-kosten-strook
     if(isNc(key)){ const vg=document.getElementById('nc-verg-'+c); if(vg) vg.innerHTML=ncVergelijkHtml(basisKey(key)); }
   }
+  window.calcProjPop=function(el,key){
+    const o=getOfferte(key); if(!window.MTKoppelUI) return;
+    const kies=`MTKoppelUI.sluit();var s=document.getElementById('calc-projsel-${key}');if(s)s.focus()`;
+    MTKoppelUI.popover(el,o.project_code
+      ?`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:o.project_code})}</div>
+        <div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();openProject('${o.project_code}')">Open project</button>
+        <button class="btn btn-xs btn-secondary" onclick="${kies}">Ander project kiezen</button>
+        <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();calcKoppelProject('${key}','')">Ontkoppelen</button></div>`
+      :`<div class="dos-meta">Deze offerte hangt nog niet aan een project.</div><div class="kb-pop-acties"><button class="btn btn-xs btn-primary" onclick="${kies}">Kies een project</button></div>`,
+      {titel:o.project_code?'Gekoppeld · '+o.project_code:'Niet gekoppeld · project'});
+  };
   window.calcKoppelProject=function(key,code){const o=getOfferte(key);o.project_code=code||null;saveCalc('off',{key:key});renderOfferteCalc(key);};
   window.calcSetTitel=function(key,val){const o=getOfferte(key);o.titel=val;saveCalc('off',{key:key});};
 
@@ -13816,7 +13962,8 @@ function activiteitOpen(force){
       ? `<div style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">
            <input class="calc-inp" style="font-weight:700;font-size:15px;min-width:220px;flex:1" value="${esc(o.titel||'')}" placeholder="Offertetitel…" onchange="calcSetTitel('${key}',this.value)">
            <label style="font-size:11px;color:var(--text-dim)">Koppel aan project
-             <select class="calc-inp" onchange="calcKoppelProject('${key}',this.value)">${projectKoppelOpties(o.project_code)}</select></label>
+             <select class="calc-inp" id="calc-projsel-${key}" onchange="calcKoppelProject('${key}',this.value)">${projectKoppelOpties(o.project_code)}</select></label>
+           ${window.MTKoppelUI?MTKoppelUI.badge(o.project_code?{status:'gekoppeld',label:o.project_code,titel:'Offerte gekoppeld aan project '+o.project_code+' — klik voor details',onclick:`calcProjPop(this,'${key}')`}:{status:'open',label:'project',titel:'Nog niet aan een project gekoppeld — klik om er een te kiezen',onclick:`calcProjPop(this,'${key}')`}):''}
          </div>`
       : `<div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.5rem">
            <div class="card-title" style="margin:0">Offerte-calculator <span style="font-size:11px;color:var(--text-faint);font-weight:400">— voorcalculatie · ${esc(key)}</span></div>
@@ -13880,7 +14027,7 @@ function activiteitOpen(force){
         </label>
         <textarea id="calc-otekst-${c}" class="calc-inp" style="width:100%;min-height:46px;resize:vertical;font-family:inherit" placeholder="bv. 'Maatwerk eikenhouten dressoir met 3 lades en push-to-open, in olie afgewerkt'" onchange="calcSetMeta('${key}','offerte_tekst',this.value)">${esc((o.meta&&o.meta.offerte_tekst)||'')}</textarea>
         <div class="calc-btnrow">
-          <button class="btn btn-sm btn-secondary" onclick="calcKoppelMail('${key}')" title="Koppel een mail zodat de offertetekst context uit die mail meekrijgt">📧 Mail koppelen</button>
+          ${window.MTKoppelUI?MTKoppelUI.badge(o.mail_context?{status:'gekoppeld',label:'mail',titel:'Mail gekoppeld: '+(o.mail_context.subject||'')+' — klik om een andere te kiezen',onclick:`calcKoppelMail('${key}')`}:{status:'open',label:'mail',titel:'Koppel een mail zodat de offertetekst context uit die mail meekrijgt',onclick:`calcKoppelMail('${key}')`}):`<button class="btn btn-sm btn-secondary" onclick="calcKoppelMail('${key}')">📧 Mail koppelen</button>`}
           <button class="btn btn-sm btn-secondary" onclick="saveCalcNu('${key}')" title="Nu opslaan en meteen naar SharePoint synchroniseren. Je krijgt hieronder te zien of dat gelukt is.">💾 Opslaan</button>
           <span style="flex:1"></span>
           <button class="btn btn-sm btn-secondary" onclick="calcMaakProjectVoorOfferte('${key}')">${proj?'💾 Opslaan in projectmap':'+ Project aanmaken'}</button>
