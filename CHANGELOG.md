@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — Namen zo compleet mogelijk, onbekend = leeg + "+ invullen" (besluit Bart)
+- Commit: `3efbdc0` | Auteur: Bart Witte
+
 ## 2026-10-07 — Na merge contacten: locatie ook in keuzelijst, klantkop en contactkaart nooit als kale code
 - Commit: `bc3e3cc` | Auteur: Bart Witte
 

@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.4.1 — M&T Mobiel</title>
+<title>BACKUP v2.5 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -22,6 +22,11 @@
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-06a"></script>
 <script src="mt-rollen.js?v=2026-10-07a"></script>
+<script src="mt-dialog.js?v=2026-07-03b"></script>
+<script src="mt-koppel.js?v=2026-10-07a"></script>
+<script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
+<script src="mt-planvoorstel.js?v=2026-10-07a"></script>
+<script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-fotostore.js?v=2026-07-31"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -723,10 +728,39 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 /* ── TASK SYNC INDICATOR ── */
 .task-sync-dot{width:6px;height:6px;border-radius:50%;background:var(--n-300);flex:0 0 auto;display:inline-block;margin-right:4px;vertical-align:middle}
 .task-sync-dot.synced{background:#4CAF50}
+/* Koppel-badge (B11) — zelfde stijl als v2 */
+:root{--kb-open-bg:#FFF4D6;--kb-open-fg:#7A5300;--kb-open-rand:#E9C46A;--kb-ok-bg:#E3F1E7;--kb-ok-fg:#1F5C36;--kb-ok-rand:#9CCBAA}
+.kb{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:2px 9px;border-radius:14px;border:1px solid;font:600 12px var(--sans,inherit);line-height:1.2;white-space:nowrap;vertical-align:middle;max-width:100%;cursor:default;text-decoration:none}
+button.kb{cursor:pointer}
+.kb-open,.kb-voorstel{background:var(--kb-open-bg);color:var(--kb-open-fg);border-color:var(--kb-open-rand)}
+.kb-voorstel{border-style:dashed}
+.kb-gekoppeld{background:var(--kb-ok-bg);color:var(--kb-ok-fg);border-color:var(--kb-ok-rand)}
+.kb-i{flex:0 0 auto}
+.kb-t{overflow:hidden;text-overflow:ellipsis}
+.kb-w{font-size:11px}
+.kb-klein{min-height:22px;padding:1px 7px;font-size:11px;gap:4px}
+.kb-klein .kb-i{width:13px;height:13px}
+.kb-icoon{padding:1px 5px}.kb-icoon .kb-t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+button.kb:hover{filter:brightness(.96)}
+button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.kb-let{border-color:var(--warning)}
+@media(max-width:600px){button.kb{min-height:32px;min-width:32px;justify-content:center}.kb-klein .kb-t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}}
+.kb-pop{position:absolute;z-index:10050;background:var(--surface-overlay,#fff);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-pop);padding:8px 10px;font-size:12.5px;max-width:calc(100vw - 16px)}
+.kb-pop-onder{position:fixed;left:8px;right:8px;bottom:8px;top:auto;max-height:70vh;overflow:auto}
+.kb-pop-kop{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.kb-pop-x{border:none;background:none;cursor:pointer;font-size:14px;min-width:32px;min-height:32px;color:var(--text-dim)}
+.kb-pop-rij{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:5px 0;border-bottom:1px solid var(--border-hair)}
+.kb-pop-n{flex:1 1 140px;min-width:0}
+.kb-pop-acties{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.kb-pop-in a{color:var(--green)}
+.kb-mini{color:var(--kb-ok-fg);display:inline-flex;vertical-align:-2px}
+.mt-kaartkop{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pv-melding{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:6px;margin:6px 0;font-size:12.5px}.pv-melding.goed{background:#E3F1E7;color:#1F5C36}.pv-melding.af{background:#FDE8E8;color:#8B1A1A}.pv-melding.open{background:#FFF4D6;color:#7A5300}
+.pv-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.pv-form input{min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:8px;font:inherit}.pv-form .vol{grid-column:1/-1}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.4.1, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.5, 7 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -769,6 +803,18 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 
   <!-- TAB: TIMER -->
   <div class="tab active" id="tab-timer">
+    <div class="card" id="tgk-kaart-m" data-tgk-alleen-open style="display:none;margin-bottom:12px">
+      <div class="mt-kaartkop"><div class="card-label" style="margin:0">Koppel je Toggl</div><span data-tgk-badge></span></div>
+      <div style="font-size:13px;color:var(--text-dim);margin-top:6px">Eén keer instellen, dan lopen je timer en uren via je eigen Toggl-account.</div>
+    </div>
+    <div class="card" id="aw-kaart-m" style="display:none;margin-bottom:12px">
+      <div class="mt-kaartkop"><div class="card-label" style="margin:0" id="aw-titel-m">Vandaag aanwezig</div>
+        <button class="timer-mini-btn" onclick="aanwezigLaadMobiel()" aria-label="Aanwezigheid verversen">↻</button></div>
+      <div id="aw-inhoud-m" style="margin-top:6px"></div>
+      <div id="pv-meldingen-m"></div>
+      <button class="timer-mini-btn" id="pv-nieuw-knop" onclick="pvFormulierMobiel()" style="margin-top:8px">＋ Planblok voorstellen</button>
+      <div id="pv-form-m"></div>
+    </div>
     <div class="timer-main">
       <div class="timer-circle" id="timerCircle" onclick="toggleTimer()">
         <div class="timer-display" id="timerDisplay" style="display:none">00:00:00</div>
@@ -799,7 +845,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 
   <!-- TAB: PROJECTEN -->
   <div class="tab" id="tab-projecten">
-    <button class="btn btn-secondary btn-full" style="margin-bottom:14px" onclick="openNewProject()">＋ Nieuw project</button>
+    <button class="btn btn-secondary btn-full" style="margin-bottom:14px" data-recht="projecten:wijzigen" onclick="openNewProject()">＋ Nieuw project</button>
     <div class="field" style="margin-bottom:12px">
       <input type="search" id="projectSearch" list="projSuggest" placeholder="🔍 Zoek project (naam, code, adres)…" autocomplete="off" oninput="filterProjectCards(this.value)">
       <datalist id="projSuggest"></datalist>
@@ -2132,6 +2178,88 @@ async function rolLaadMobiel() {
   if (act && act.classList.contains('mt-rol-verborgen')) { const vrij = [...document.querySelectorAll('.bottom-nav .nav-btn')].find(b => !b.classList.contains('mt-rol-verborgen')); if (vrij) vrij.click(); }
 }
 
+// ── Vandaag aanwezig + planvoorstellen (F1e) ──
+// Planblokken staan op SharePoint (mt_planblokken.json); samenvoegen met MTPlanVoorstel.samen
+// (zelfde regels als v2). Werkplaats (in modus 'afdwingen') plant alleen als voorstel.
+let _pvBlokken = [];
+const _mijnSlug = () => String((_msAccount && _msAccount.username) || '').toLowerCase().split('@')[0];
+const _mijnEmail = () => String((_msAccount && _msAccount.username) || '').toLowerCase();
+const _pvMoetVoorstel = () => !!(window.MTRol && MTRol.afdwingen() && !MTRol.mag('projecten:wijzigen'));
+const _pvMagBeslissen = () => !window.MTRol || MTRol.mag('projecten:wijzigen');
+async function _pvLees() {
+  try { const r = await _SP.read('mt_planblokken.json'); _pvBlokken = MTPlanVoorstel.samen(_pvBlokken, Array.isArray(r) ? r : []); }
+  catch (e) {}
+  return _pvBlokken;
+}
+async function _pvSchrijf(wijzig) {
+  const remote = await _SP.read('mt_planblokken.json').catch(() => null);
+  if (!Array.isArray(remote)) { showToast('SharePoint niet bereikbaar — probeer het zo opnieuw'); return false; }
+  _pvBlokken = wijzig(MTPlanVoorstel.samen(_pvBlokken, remote));
+  return await _SP.write('mt_planblokken.json', _pvBlokken, (r2, lokaal) => { _pvBlokken = MTPlanVoorstel.samen(lokaal, r2); return _pvBlokken; });
+}
+async function aanwezigLaadMobiel() {
+  const kaart = document.getElementById('aw-kaart-m'), el = document.getElementById('aw-inhoud-m');
+  if (!kaart || !window.MTAanwezig || _demoMode) return;
+  // Feature-flag: zonder aanwezigheidslaag blijft de kaart als "Planning" (voorstellen + meldingen).
+  const aan = MTAanwezig.kaartAan;
+  const [data] = await Promise.all([aan ? MTAanwezig.laad(WORKER) : null, _pvLees()]);
+  const titel = document.getElementById('aw-titel-m'); if (titel) titel.textContent = aan && data ? 'Vandaag aanwezig' : 'Planning';
+  if (aan && data) {
+    const vandaag = new Date().toISOString().slice(0, 10), plan = {};
+    _pvBlokken.filter(b => b && !b._vervallen && b.datum === vandaag).forEach(b => {
+      const s = String(b.persoon || '').toLowerCase().split('@')[0]; (plan[s] = plan[s] || []).push({ start: b.start, tekst: b.taak || b.project_code || '', voorstel: MTPlanVoorstel.isOpen(b) }); });
+    el.innerHTML = MTAanwezig.html(data, { plan, opener: 'aanwezigOpenMobiel' });
+  } else el.innerHTML = '';
+  kaart.style.display = '';
+  pvTekenMobiel();
+}
+function aanwezigOpenMobiel(tgId) {
+  const p = _projByTgId(tgId);
+  if (p) openProjectSheet(p.id); else showToast('Dit Toggl-project staat niet in je projectenlijst');
+}
+function pvTekenMobiel() {
+  const el = document.getElementById('pv-meldingen-m'); if (!el || !window.MTPlanVoorstel) return;
+  const PV = MTPlanVoorstel, mijn = PV.meldingen(_pvBlokken, _mijnEmail(), PV.gezien()), open = _pvMagBeslissen() ? PV.open(_pvBlokken) : [];
+  el.innerHTML = mijn.map(m => `<div class="pv-melding ${m.soort === 'goedgekeurd' ? 'goed' : 'af'}" role="status">${m.soort === 'goedgekeurd' ? '✓ Voorstel goedgekeurd' : '✗ Voorstel afgewezen'}: <b>${escHtml(m.blok.taak || m.blok.project_code || 'planblok')}</b> ${escHtml(m.blok.datum)} ${escHtml(m.blok.start || '')}${m.reden ? ' — “' + escHtml(m.reden) + '”' : ''}
+      <button class="timer-mini-btn" onclick="MTPlanVoorstel.markeerGezien('${escHtml(m.sleutel)}');pvTekenMobiel()">OK</button></div>`).join('')
+    + open.map(b => `<div class="pv-melding open"><span>Voorstel ${escHtml((b.voorstel && b.voorstel.doorNaam) || '')}: <b>${escHtml(b.taak || b.project_code || '')}</b> ${escHtml(b.datum)} ${escHtml(b.start || '')}</span>
+      <button class="timer-mini-btn" onclick="pvBeslisMobiel('${escHtml(b.id)}',true)">✓ Goedkeuren</button><button class="timer-mini-btn" onclick="pvBeslisMobiel('${escHtml(b.id)}',false)">✗ Afwijzen</button></div>`).join('');
+}
+async function pvBeslisMobiel(id, goed) {
+  const PV = MTPlanVoorstel, b = _pvBlokken.find(x => x.id === id); if (!b) return;
+  let reden = '';
+  if (!goed) {
+    const vraag = { title: 'Voorstel afwijzen', message: 'Reden van afwijzen (de indiener ziet deze):', placeholder: 'bv. die dag staat de CNC stil', okLabel: 'Afwijzen', danger: true };
+    reden = window.mtDialog ? await mtDialog.prompt(vraag) : prompt(vraag.message, ''); if (reden === null) return;
+  }
+  const naam = (MTRol.me && MTRol.me.naam) || _mijnEmail();
+  const ok = await _pvSchrijf(lijst => lijst.map(x => x.id !== id ? x : (goed ? PV.keurGoed(x, _mijnEmail(), naam) : PV.wijsAf(x, _mijnEmail(), naam, reden))));
+  if (ok) showToast(goed ? '✓ Voorstel goedgekeurd' : '✓ Voorstel afgewezen');
+  aanwezigLaadMobiel();
+}
+function pvFormulierMobiel() {
+  const el = document.getElementById('pv-form-m'); if (!el) return;
+  if (el.innerHTML) { el.innerHTML = ''; return; }
+  const morgen = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  el.innerHTML = `<div class="pv-form">
+    <label class="vol" style="font-size:12px;color:var(--text-dim)">${_pvMoetVoorstel() ? 'Je planblok wordt een voorstel; kantoor keurt het goed.' : 'Nieuw planblok voor jezelf.'}</label>
+    <input id="pv-datum" type="date" value="${morgen}" aria-label="Datum"><input id="pv-start" type="time" value="08:00" aria-label="Starttijd">
+    <input id="pv-duur" type="number" min="15" step="15" value="120" aria-label="Duur in minuten"><input id="pv-proj" placeholder="Projectcode" aria-label="Projectcode">
+    <input id="pv-taak" class="vol" placeholder="Wat ga je doen? (bv. meubel fout → opdracht tekenaar)" aria-label="Omschrijving">
+    <button class="btn btn-primary vol" onclick="pvIndienenMobiel()">${_pvMoetVoorstel() ? 'Voorstel indienen' : 'Planblok opslaan'}</button></div>`;
+}
+async function pvIndienenMobiel() {
+  const PV = MTPlanVoorstel, g = id => (document.getElementById(id) || {}).value || '';
+  const duurMin = parseInt(g('pv-duur'), 10);
+  if (!g('pv-datum') || !g('pv-start') || !(duurMin > 0)) { showToast('Vul datum, starttijd en duur in'); return; }
+  const velden = { persoon: _mijnSlug(), project_code: g('pv-proj').trim().toUpperCase(), taak: g('pv-taak').trim(), datum: g('pv-datum'), start: g('pv-start'), duurMin, notitie: '' };
+  const naam = (MTRol.me && MTRol.me.naam) || _mijnEmail();
+  const blok = _pvMoetVoorstel() ? PV.nieuw(velden, _mijnEmail(), naam)
+    : PV.stempel(Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7) }, velden, { ts: new Date().toISOString(), door: _mijnEmail() }), null, _mijnEmail());
+  const ok = await _pvSchrijf(lijst => lijst.concat([blok]));
+  if (ok) { showToast(_pvMoetVoorstel() ? '✓ Voorstel ingediend — wacht op goedkeuring' : '✓ Planblok opgeslagen'); document.getElementById('pv-form-m').innerHTML = ''; aanwezigLaadMobiel(); }
+}
+
 async function toonApp(account) {
   // Valideer domein — alleen @mortiseandtenon.nl
   const email = account.username || '';
@@ -2151,7 +2279,7 @@ async function toonApp(account) {
   avatar.style.display = 'flex';
   document.getElementById('demoBadge').style.display = 'none';
   // F1c: rol ophalen (verbergen alleen in modus 'afdwingen'; de worker beslist)
-  rolLaadMobiel();
+  rolLaadMobiel().then(() => { if (window.MTToggl) MTToggl.laad(WORKER); aanwezigLaadMobiel(); });
   // Laad echte data na login
   await loadRealProjects();
   // Timer herstellen nu de echte projecten er zijn (PWA-herstart-fix)
