@@ -12010,6 +12010,7 @@ function _awSlug(persoon){ const p=String(persoon||'').toLowerCase(); return p.i
 async function aanwezigLaad(){
   const kaart=document.getElementById('aw-kaart'), el=document.getElementById('aw-inhoud');
   if(!kaart||!el||!window.MTAanwezig) return;
+  if(!MTAanwezig.kaartAan){ kaart.style.display='none'; return; }   // feature-flag: kaart staat (nog) uit
   const data=await MTAanwezig.laad(WORKER);
   if(!data){ kaart.style.display='none'; return; }
   if(!_planblokken&&typeof agPlanLoad==='function'){ try{ await agPlanLoad(); }catch(e){} }

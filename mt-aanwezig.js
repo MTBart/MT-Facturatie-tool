@@ -8,6 +8,9 @@
 (function (root) {
   'use strict';
   const A = { data: null, fout: null };
+  // Feature-flag (besluit Bart 7-10): de losse kaart staat uit; hij komt later als laag in het
+  // Planbord. Code en /aanwezig blijven. Vooruitkijken kan per browser: localStorage mt_aanwezig_kaart = '1'.
+  A.kaartAan = (() => { try { return root.localStorage.getItem('mt_aanwezig_kaart') === '1'; } catch (e) { return false; } })();
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const hhmm = iso => { const d = new Date(iso); return isNaN(d) ? '' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   A.laad = async function (worker) {

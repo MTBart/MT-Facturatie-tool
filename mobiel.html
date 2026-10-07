@@ -806,7 +806,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
       <div style="font-size:13px;color:var(--text-dim);margin-top:6px">Eén keer instellen, dan lopen je timer en uren via je eigen Toggl-account.</div>
     </div>
     <div class="card" id="aw-kaart-m" style="display:none;margin-bottom:12px">
-      <div class="mt-kaartkop"><div class="card-label" style="margin:0">Vandaag aanwezig</div>
+      <div class="mt-kaartkop"><div class="card-label" style="margin:0" id="aw-titel-m">Vandaag aanwezig</div>
         <button class="timer-mini-btn" onclick="aanwezigLaadMobiel()" aria-label="Aanwezigheid verversen">↻</button></div>
       <div id="aw-inhoud-m" style="margin-top:6px"></div>
       <div id="pv-meldingen-m"></div>
@@ -2198,12 +2198,16 @@ async function _pvSchrijf(wijzig) {
 async function aanwezigLaadMobiel() {
   const kaart = document.getElementById('aw-kaart-m'), el = document.getElementById('aw-inhoud-m');
   if (!kaart || !window.MTAanwezig || _demoMode) return;
-  const [data] = await Promise.all([MTAanwezig.laad(WORKER), _pvLees()]);
-  if (!data) { kaart.style.display = 'none'; return; }
-  const vandaag = new Date().toISOString().slice(0, 10), plan = {};
-  _pvBlokken.filter(b => b && !b._vervallen && b.datum === vandaag).forEach(b => {
-    const s = String(b.persoon || '').toLowerCase().split('@')[0]; (plan[s] = plan[s] || []).push({ start: b.start, tekst: b.taak || b.project_code || '', voorstel: MTPlanVoorstel.isOpen(b) }); });
-  el.innerHTML = MTAanwezig.html(data, { plan, opener: 'aanwezigOpenMobiel' });
+  // Feature-flag: zonder aanwezigheidslaag blijft de kaart als "Planning" (voorstellen + meldingen).
+  const aan = MTAanwezig.kaartAan;
+  const [data] = await Promise.all([aan ? MTAanwezig.laad(WORKER) : null, _pvLees()]);
+  const titel = document.getElementById('aw-titel-m'); if (titel) titel.textContent = aan && data ? 'Vandaag aanwezig' : 'Planning';
+  if (aan && data) {
+    const vandaag = new Date().toISOString().slice(0, 10), plan = {};
+    _pvBlokken.filter(b => b && !b._vervallen && b.datum === vandaag).forEach(b => {
+      const s = String(b.persoon || '').toLowerCase().split('@')[0]; (plan[s] = plan[s] || []).push({ start: b.start, tekst: b.taak || b.project_code || '', voorstel: MTPlanVoorstel.isOpen(b) }); });
+    el.innerHTML = MTAanwezig.html(data, { plan, opener: 'aanwezigOpenMobiel' });
+  } else el.innerHTML = '';
   kaart.style.display = '';
   pvTekenMobiel();
 }

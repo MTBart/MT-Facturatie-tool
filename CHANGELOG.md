@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-07 — wrangler.toml: SLEUTEL_KEK roteren via SLEUTEL_KEK_VORIG
+- Commit: `f187232` | Auteur: Bart Witte
+
 ## 2026-10-07 — App F1e: Koppel je Toggl, planvoorstellen en Vandaag aanwezig (v2 + mobiel)
 - Commit: `12eb26f` | Auteur: Bart Witte
 
