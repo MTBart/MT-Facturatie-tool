@@ -1524,7 +1524,10 @@ function geldStreefNorm(x) {
     // meegroeien met de bankhistorie (standaard aan); hooguit 1× per maand herberekend; laatste wijziging voor de melding
     meegroeien: x.meegroeien !== false, advies_maand: /^\d{4}-\d{2}$/.test(String(x.advies_maand || '')) ? x.advies_maand : null,
     wijziging: x.wijziging && g(x.wijziging.van) != null && g(x.wijziging.naar) != null && geldIsDatum(x.wijziging.datum)
-      ? { van: g(x.wijziging.van), naar: g(x.wijziging.naar), datum: x.wijziging.datum, reden: String(x.wijziging.reden || '').slice(0, 200) } : null };
+      ? { van: g(x.wijziging.van), naar: g(x.wijziging.naar), datum: x.wijziging.datum, reden: String(x.wijziging.reden || '').slice(0, 200) } : null,
+    // bovengrens voor automatisch meegroeien, en of de eigenaar al eens een advies heeft overgenomen (pas daarna automatisch)
+    meegroei_max: g(x.meegroei_max) != null && g(x.meegroei_max) > 0 ? g(x.meegroei_max) : null,
+    advies_akkoord: x.advies_akkoord && g(x.advies_akkoord.bedrag) != null && geldIsDatum(x.advies_akkoord.datum) ? { bedrag: g(x.advies_akkoord.bedrag), datum: x.advies_akkoord.datum } : null };
   if (r.van != null && r.tot != null && r.van > r.tot) [r.van, r.tot] = [r.tot, r.van];
   if (r.van == null || r.tot == null) { if (r.bedrag == null) r.bedrag = r.van != null ? r.van : r.tot; r.van = r.tot = null; }
   return r.bedrag == null && r.van == null && r.datum == null ? null : r;
