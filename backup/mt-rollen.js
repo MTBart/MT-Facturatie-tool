@@ -33,7 +33,7 @@
     try {
       const h = root.authHeader ? await root.authHeader() : {};
       if (!h || !h['X-Auth-Token']) return null;
-      const r = await root.fetch(basis(worker) + '/me', { headers: h });
+      const r = root.fetchMetAuth ? await root.fetchMetAuth(basis(worker) + '/me') : await root.fetch(basis(worker) + '/me', { headers: h });   // 401 → één keer met vers token
       if (!r.ok) return null;
       const me = await r.json();
       if (!me || !('rol' in me) || !('modus' in me)) return null;   // oude worker

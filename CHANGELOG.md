@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — Geld: eigen reserve (fictieve nullijn), meegroeiende doelen
+- Commit: `b3e91dc` | Auteur: Bart Witte
+
 ## 2026-10-08 — Release v2.9.6: inlog op tijd vernieuwd (geen stille 401s na een uur); backup = v2.9.5
 - Commit: `fa87180` | Auteur: Bart Witte
 

@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.9.5 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.9.6 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -17,7 +17,7 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-10-06a"></script>
+<script src="mt-core.js?v=2026-10-08a"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
@@ -26,11 +26,11 @@
 <script src="mt-koppel.js?v=2026-10-07a"></script>
 <script src="mt-contacten.js?v=2026-10-07a"></script>
 <script src="mt-inbox.js?v=2026-10-07b"></script>
-<script src="mt-rollen.js?v=2026-10-07a"></script>
+<script src="mt-rollen.js?v=2026-10-08a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-geld.js?v=2026-10-08a"></script>
+<script src="mt-geld.js?v=2026-10-08f"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -765,7 +765,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.9.5, 8 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.9.6, 8 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -786,7 +786,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.9.5</span>
+    <span class="header-version">v2.9.6</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -8831,8 +8831,7 @@ function cfFmt2(n){return'€ '+(n||0).toLocaleString('nl-NL',{minimumFractionD
 // Worker-fetch voor /dashboard/* routes
 async function cfFetch(pad,opties){
   try{
-    const h=await authHeader();
-    const r=await fetch(`${WORKER}${pad}`,{...opties,headers:{...h,'Content-Type':'application/json',...(opties?.headers||{})}});
+    const r=await fetchMetAuth(`${WORKER}${pad}`,{...opties,headers:{'Content-Type':'application/json',...(opties?.headers||{})}});   // 401 → één keer met vers token
     if(!r.ok) throw new Error('HTTP '+r.status);
     return r.json();
   }catch(e){
@@ -12464,8 +12463,7 @@ function geldTabZet(){
 }
 async function geldHaal(pad,opt){
   opt=opt||{};
-  const h=await authHeader();
-  const r=await fetch(`${WORKER}${pad}`,{method:opt.method||'GET',headers:{...h,'Content-Type':'application/json'},body:opt.body!==undefined?JSON.stringify(opt.body):undefined});
+  const r=await fetchMetAuth(`${WORKER}${pad}`,{method:opt.method||'GET',headers:{'Content-Type':'application/json'},body:opt.body!==undefined?JSON.stringify(opt.body):undefined});   // 401 → één keer met vers token
   let j=null; try{ j=await r.json(); }catch(e){}
   if(!r.ok) return Object.assign({error:(j&&j.error)||('HTTP '+r.status)},j||{});
   return j;

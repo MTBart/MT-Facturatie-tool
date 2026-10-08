@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.9.7",
+    "datum": "2026-10-08",
+    "titel": "Geld: eigen reserve als nullijn en doelen die meegroeien",
+    "voor": "beheer",
+    "punten": [
+      "Je Buffer is je eigen rekening-courant: in de grafiek is de zone onder nul nu verdeeld in je eigen reserve (amber, gedekt door het Bufferpotje) en daaronder het bankkrediet (lichtrood, kost rente). De reserve is nooit meer dan wat er die dag echt in het potje staat. Stel het bedrag in bij Instellingen.",
+      "Nieuwe kaart met hoeveel van je eigen reserve je gebruikt en hoeveel bankkrediet. Signalen en het factuuradvies gaan standaard over \"niet onder de reserve\". De kosten van de rekening-courant komen uit de echte afrekeningen van de bank.",
+      "Doelen kunnen meegroeien met de praktijk (vinkje per doel): een hoger advies wordt automatisch overgenomen met een melding, een lager advies alleen als voorstel met een Ja-knop. Hooguit één keer per maand, met de uitleg erbij."
+    ]
+  },
+  {
     "versie": "2.9.6",
     "datum": "2026-10-08",
     "titel": "Langer achter elkaar werken zonder opnieuw te laden",
