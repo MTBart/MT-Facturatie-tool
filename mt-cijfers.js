@@ -67,10 +67,10 @@
   // ── Rekenen (los te testen) ──────────────────────────────────────────────
   // Maanden optellen tot één periode; met "eerlijk beeld" telt de correctie (lonen via de bank) als personeelskosten.
   C.som = function (ms, cats, eerlijk) {
-    const P = { maanden: 0, ontbrekend: 0, omzet: 0, kosten: {}, correctie: 0, correctie_soort: { netto: 0, loonheffing: 0, pensioen: 0 }, prive: {}, prive_totaal: 0, aflossing: 0, kas: null, kasStart: null, prognose: 0, prognoseKosten: 0 };
+    const P = { maanden: 0, ontbrekend: 0, omzet: 0, prognoseRef: 0, kosten: {}, correctie: 0, correctie_soort: { netto: 0, loonheffing: 0, pensioen: 0 }, prive: {}, prive_totaal: 0, aflossing: 0, kas: null, kasStart: null, prognose: 0, prognoseKosten: 0 };
     for (const c of cats) P.kosten[c] = 0;
     for (const m of ms) {
-      if (m.prognose) { P.prognose += m.omzet || 0; P.prognoseKosten += m.kosten_totaal || 0; continue; }
+      if (m.prognose) { P.prognose += m.omzet || 0; P.prognoseKosten += m.kosten_totaal || 0; P.prognoseRef += m.kosten_ref || 0; continue; }
       if (!m.maanden) { P.ontbrekend++; continue; }
       P.maanden++; P.omzet += m.omzet || 0;
       for (const c of cats) P.kosten[c] += (m.kosten || {})[c] || 0;
@@ -100,22 +100,27 @@
     }
     return [...per.values()];
   };
-  // Omzetprognose voor de rest van het boekjaar: de termijnen uit de prognose (incl. btw → ≈ excl. ÷ 1,21);
-  // kosten = het gemiddelde van de afgesloten maanden van dit jaar (anders de laatste 3).
+  // Omzetprognose voor de rest van het boekjaar: de termijnen uit de prognose (incl. btw → ≈ excl. ÷ 1,21).
+  // Kosten bij die omzet = omzet × (1 − gemiddelde brutomarge) + gemiddelde vaste kosten (afgesloten maanden van dit
+  // jaar, anders de laatste 3). Zonder prognose-omzet geen kosten- of resultaatprognose: alleen een referentie (kosten_ref).
   C.prognose = function (maanden, progItems, vandaag, eerlijk, cats) {
     const jaar = vandaag.slice(0, 4), huidig = vandaag.slice(0, 7), uit = [];
     const dicht = maanden.filter(m => m.maanden && m.id < huidig), ditJaar = dicht.filter(m => m.id.startsWith(jaar + '-'));
     const basis = ditJaar.length >= 3 ? ditJaar : dicht.slice(-3);
-    const kostGem = basis.length ? basis.reduce((a, m) => a + C.som([m], cats, eerlijk).kosten_totaal, 0) / basis.length : null;
+    const S = basis.map(m => C.som([m], cats, eerlijk)), som = f => S.reduce((a, P) => a + f(P), 0);
+    const kostGem = S.length ? som(P => P.kosten_totaal) / S.length : null;
+    const marge = som(P => P.omzet) > 0 ? som(P => P.brutomarge) / som(P => P.omzet) : null;              // gemiddelde brutomarge (fractie)
+    const vast = S.length ? som(P => P.kosten_totaal - (P.kosten.materiaal || 0) - (P.kosten.uitbesteed || 0)) / S.length : null;   // gemiddelde vaste kosten per maand
     for (let i = Number(huidig.slice(5)) + 1; i <= 12; i++) {
       const ym = `${jaar}-${String(i).padStart(2, '0')}`; let omzet = 0, n = 0;
       for (const it of Object.values(progItems || {})) {
         if (!it || it.soort !== 'project' || it.aan === false) continue;
         for (const t of it.termijnen || []) if (t.aan !== false && String(t.factuurdatum || '').slice(0, 7) === ym) { omzet += (t.bedrag || 0) / BTW; n++; }
       }
-      uit.push({ id: ym, prognose: true, omzet: Math.round(omzet * 100) / 100, kosten_totaal: kostGem == null ? 0 : Math.round(kostGem * 100) / 100, termijnen: n });
+      const r2 = x => Math.round(x * 100) / 100, kosten = omzet > 0 && marge != null && vast != null ? omzet * (1 - marge) + vast : 0;
+      uit.push({ id: ym, prognose: true, omzet: r2(omzet), kosten_totaal: r2(kosten), kosten_ref: omzet > 0 || kostGem == null ? 0 : r2(kostGem), termijnen: n });
     }
-    return { maanden: uit, kostenBasis: basis.length };
+    return { maanden: uit, kostenBasis: basis.length, marge, vast };
   };
   // Waterval: omzet → brutomarge → resultaat → na opnames → na aflossing → werkelijke kasmutatie (rest = btw, debiteuren e.d.).
   // De kasmutatie loopt van de stand vóór de periode (eind van de maand ervoor) tot het eind van de periode; zonder
@@ -268,28 +273,35 @@
     const progStart = per.findIndex(p => p.ms.length && p.ms.every(m => m.prognose));
     let svg = '', leg = [], noot = [];
     if (g === 'omzet_kosten') {
-      const hoog = Math.max(1, ...per.map(p => Math.max(p.P.omzet + p.P.prognose, p.P.kosten_totaal + p.P.prognoseKosten))), laag = Math.min(0, ...per.map(p => p.P.resultaat), ...per.map(p => p.P.prognose || p.P.prognoseKosten ? p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten : 0));   // ook de prognoselijn past op de as
+      const hoog = Math.max(1, ...per.map(p => Math.max(p.P.omzet + p.P.prognose, p.P.kosten_totaal + p.P.prognoseKosten, p.P.prognoseRef))), laag = Math.min(0, ...per.map(p => p.P.resultaat), ...per.map(p => p.P.prognose > 0 ? p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten : 0));   // ook de prognoselijn past op de as
       const sc = schaal(laag, hoog), y = v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a));
       svg += assen(sc, y, kort);
       per.forEach((p, i) => {
         let top = 0; const P = p.P, w = Math.max(4, bw * 0.62), x0 = x(i) - w / 2, gekozen = st.sel && st.sel.id === p.id;
+        const lopend = p.ms.some(m => !m.prognose && m.id === st.vandaag.slice(0, 7));   // lopende maand (t/m vandaag): lichter + gestreept kader
         if (gekozen) svg += `<rect x="${ML + i * bw}" y="${MT}" width="${bw}" height="${HO - MT - MB}" fill="#eef1f6"/>`;
         const segs = st.geo.segs[i] = [];
         st.cats.forEach((c, k) => { const v = c === 'personeel' && st.eerlijk ? P.kosten[c] - P.correctie : P.kosten[c]; if (!(v > 0)) return; const y1 = y(top + v), y0 = y(top); top += v; segs.push({ tik: 'kosten', cat: c, y1, y2: y0 });
-          const dim = st.focusCat && st.focusCat !== c ? ' opacity="0.25"' : '';
+          const dim = st.focusCat && st.focusCat !== c ? ' opacity="0.25"' : lopend ? ' opacity="0.5"' : '';
           svg += `<rect data-tik="kosten" data-p="${esc(p.id)}" data-cat="${c}" x="${x0}" y="${y1}" width="${w}" height="${Math.max(0.5, y0 - y1)}" fill="${TINT[k % TINT.length]}"${dim}><title>${esc((st.catNaam[c] || c) + ' ' + (p.label || p.id) + ': ' + eur(v))}</title></rect>`; });
         if (st.eerlijk && P.correctie > 0) { const y1 = y(top + P.correctie), y0 = y(top); top += P.correctie; segs.push({ tik: 'correctie', y1, y2: y0 });
           svg += `<rect data-tik="correctie" data-p="${esc(p.id)}" x="${x0}" y="${y1}" width="${w}" height="${Math.max(0.5, y0 - y1)}" fill="url(#mtc-corr)"><title>${esc('lonen buiten de W&V (eerlijk beeld) ' + (p.label || p.id) + ': ' + eur(P.correctie) + ' — ' + LOONSOORT.map(([k, t]) => t + ' ' + eur(P.correctie_soort[k])).join(', '))}</title></rect>`; }
         if (P.maanden) segs.push({ tik: 'omzet', y1: y(P.omzet) - 2, y2: y(P.omzet) + 2 });
+        if (lopend && top > 0) svg += `<rect x="${x0 - 1}" y="${y(top)}" width="${w + 2}" height="${Math.max(1, y(0) - y(top))}" fill="none" stroke="#56616d" stroke-dasharray="3 2"><title>lopende maand (t/m vandaag)</title></rect>`;
+        if (P.prognoseRef && !P.prognose) svg += `<line x1="${x0}" x2="${x0 + w}" y1="${y(P.prognoseRef)}" y2="${y(P.prognoseRef)}" stroke="#9fb3d6" stroke-width="1.5" stroke-dasharray="2 3"><title>${esc('gemiddelde kosten ≈ ' + eur(P.prognoseRef) + ' — omzet nog niet bekend')}</title></line>`;
         if (P.prognoseKosten) svg += `<rect data-tik="periode" data-p="${esc(p.id)}" x="${x0}" y="${y(top + P.prognoseKosten)}" width="${w}" height="${Math.max(0.5, y(top) - y(top + P.prognoseKosten))}" fill="url(#mtc-arcering)" stroke="#9fb3d6" stroke-dasharray="3 2"><title>prognose kosten ${esc(eur(P.prognoseKosten))}</title></rect>`;
         if (P.maanden) svg += `<line data-tik="omzet" data-p="${esc(p.id)}" x1="${x0 - 3}" x2="${x0 + w + 3}" y1="${y(P.omzet)}" y2="${y(P.omzet)}" stroke="#1d3557" stroke-width="3"><title>omzet ${esc(eur(P.omzet))}</title></line>`;
         if (P.prognose) svg += `<line x1="${x0 - 3}" x2="${x0 + w + 3}" y1="${y(P.omzet + P.prognose)}" y2="${y(P.omzet + P.prognose)}" stroke="#1d3557" stroke-width="2" stroke-dasharray="4 3"><title>prognose omzet ≈ ${esc(eur(P.prognose))} (excl. btw)</title></line>`;
-        svg += `<rect data-tik="periode" data-p="${esc(p.id)}" x="${ML + i * bw}" y="${HO - MB}" width="${bw}" height="${MB}" fill="transparent"/><text x="${x(i)}" y="${HO - MB + 14}" text-anchor="middle" font-size="11" fill="#666">${esc(p.label || p.id)}</text>`;
+        svg += `<rect data-tik="periode" data-p="${esc(p.id)}" x="${ML + i * bw}" y="${HO - MB}" width="${bw}" height="${MB}" fill="transparent"/><text x="${x(i)}" y="${HO - MB + 14}" text-anchor="middle" font-size="11" fill="#666">${esc((p.label || p.id) + (lopend ? '*' : ''))}</text>`;
       });
+      if (per.some(p => p.ms.some(m => !m.prognose && m.id === st.vandaag.slice(0, 7)))) noot.push('* lopende maand (t/m vandaag): lichter en gestreept, nog niet compleet.');
+      const zonderOmzet = per.filter(p => p.P.prognoseRef && !p.P.prognose);
+      if (zonderOmzet.length) noot.push(`${zonderOmzet.map(p => p.label || p.id).join(', ')}: omzet nog niet bekend — zet projecten in de prognose. De dunne stippellijn is alleen de gemiddelde kosten ter referentie, geen verlies.`);
       const res = per.map((p, i) => p.P.maanden ? [x(i), y(p.P.resultaat)] : null);
       svg += pad(res, '#2A4A38', 2.5) + res.map((q, i) => q ? `<circle data-tik="periode" data-p="${esc(per[i].id)}" cx="${q[0]}" cy="${q[1]}" r="${st.sel && st.sel.id === per[i].id ? 6 : 4}" fill="#2A4A38"><title>resultaat ${esc(eur(per[i].P.resultaat))}</title></circle>` : '').join('');
-      const resProg = per.map((p, i) => p.P.prognose || p.P.prognoseKosten ? [x(i), y(p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten)] : null);
+      const resProg = per.map((p, i) => p.P.prognose > 0 ? [x(i), y(p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten)] : null);   // alleen waar prognose-omzet is
       svg += pad(resProg, '#2A4A38', 2, '4 4');
+      svg += resProg.map((q, i) => q ? `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#fff" stroke="#2A4A38" stroke-width="1.5" stroke-dasharray="2 1.5"><title>${esc('prognose resultaat ≈ ' + eur(per[i].P.omzet + per[i].P.prognose - per[i].P.kosten_totaal - per[i].P.prognoseKosten))}</title></circle>` : '').join('');   // ook één losse prognosemaand zichtbaar
       if (!st.eerlijk) { const ref = per.map((p, i) => p.P.maanden && p.P.correctie ? [x(i), y(p.P.resultaat - p.P.correctie)] : null); if (ref.some(Boolean)) { svg += pad(ref, '#2A4A38', 1.2, '2 3'); noot.push('Dunne stippellijn: resultaat mét de lonen die niet in de W&V staan (eerlijk beeld).'); } }
       vergelijkReeks(per, P => P.omzet).forEach((r, k) => { svg += pad(r.w.map((v, i) => v == null ? null : [x(i), y(v)]), '#9aa3ad', 1.5, k ? '2 4' : '6 3'); leg.push([`border-top:2px ${k ? 'dotted' : 'dashed'} #9aa3ad;height:0`, `omzet ${r.jaar}`]); });
       leg.unshift(['background:#3f4a56', 'kosten (tik voor de categorie)'], ['border-top:3px solid #1d3557;height:0', 'omzet'], ['border-top:3px solid #2A4A38;height:0', 'resultaat']);
@@ -331,7 +343,7 @@
       noot.push('Stand op het maandeinde (balans in Moneybird). Een €-as die niet bij 0 begint, staat er niet: de as loopt altijd door 0.');
     }
     if (progStart >= 0 && g !== 'opnames') { svg += `<line x1="${ML + progStart * bw}" x2="${ML + progStart * bw}" y1="${MT - 18}" y2="${HO - MB}" stroke="#9fb3d6" stroke-dasharray="3 3"/><text x="${ML + progStart * bw + (ML + progStart * bw > BR - 130 ? -4 : 4)}" y="${MT - 8}" text-anchor="${ML + progStart * bw > BR - 130 ? 'end' : 'start'}" font-size="11" fill="#3a5a8a">vanaf hier prognose</text>`;
-      const pr = C.prognose(st.maanden, st.prognoseRuw, st.vandaag, st.eerlijk, st.cats); noot.push(`Prognose: omzet uit de termijnen in de prognose (≈ excl. 21% btw), kosten = gemiddelde van ${pr.kostenBasis} afgesloten maand${pr.kostenBasis === 1 ? '' : 'en'}. Telt nooit mee in de kerncijfers.`); }
+      const pr = C.prognose(st.maanden, st.prognoseRuw, st.vandaag, st.eerlijk, st.cats); noot.push(`Prognose: omzet uit de termijnen in de prognose (≈ excl. 21% btw); kosten = omzet × (1 − gemiddelde brutomarge${pr.marge != null ? ' ' + pct(pr.marge * 100) : ''}) + gemiddelde vaste kosten${pr.vast != null ? ' ' + kort(pr.vast) : ''}/mnd, uit ${pr.kostenBasis} afgesloten maand${pr.kostenBasis === 1 ? '' : 'en'}. Telt nooit mee in de kerncijfers.`); }
     if (per.some(p => p.P.ontbrekend && !p.ms.every(m => m.prognose))) noot.push('Niet alle maanden zijn al opgehaald (zie boven).');
     leg = leg.slice(0, 6);
     return `<div class="mtc-grafiek" data-grafiek="${esc(g)}"><svg viewBox="0 0 ${BR} ${HO}" role="img" aria-label="${esc(WEERGAVEN.find(w => w[0] === g)[1])}">${defs}${svg}</svg></div>
@@ -487,9 +499,10 @@
     const k = x => esc(eur(x)), som = b => (b.netto || 0) + (b.loonheffing || 0) + (b.pensioen || 0);
     box.innerHTML = `<h3 style="margin-top:0">Controle eerlijk beeld ${esc(jaar)}</h3>
       <div class="mtc-noot">Woorden: ${esc(d.loonpatronen.join(', '))} · via balansgrootboek: ${esc((d.loon_balans || []).map(x => x.naam + ' (' + ((LOONSOORT.find(q => q[0] === x.soort) || [0, x.soort])[1]) + ')').join(', ') || 'geen')}${d.loon_balans_bron === 'voorstel' ? ' (voorstel)' : ''} · loon in de W&V: ${esc(d.loon_wv.join(', ') || 'geen')} (${d.loon_wv_bron === 'voorstel' ? 'voorstel op naam' : 'ingesteld'}) · telt vanaf ${esc(maandNaam(d.correctie_van))}.</div>
-      <table><tr><td><b>Maand</b></td><td class="b"><b>netto</b></td><td class="b"><b>loonheffing</b></td><td class="b"><b>pensioen</b></td><td class="b"><b>via balans</b></td><td class="b"><b>al in W&V</b></td><td class="b"><b>telt</b></td><td class="b"><b>eigenaar (uit)</b></td></tr>
-      ${d.maanden.map(m => `<tr><td>${esc(maandNaam(m.maand))}${m.in_correctie ? '' : ' <span class="mtc-noot">(vóór start)</span>'}</td><td class="b">${k(m.betaald.netto)}</td><td class="b">${k(m.betaald.loonheffing)}</td><td class="b">${k(m.betaald.pensioen)}</td><td class="b">${k(m.via_balans || 0)}</td><td class="b" title="${esc(m.wv_grootboeken.map(g => g.naam + ' ' + eur(g.bedrag)).join(', '))}">${k(m.al_in_wv)}</td><td class="b"><b>${k(m.telt)}</b></td><td class="b">${k(m.eigenaar_uitgesloten)}</td></tr>`).join('')}
-      <tr><td><b>Totaal</b></td><td class="b"><b>${k(d.totaal.betaald.netto)}</b></td><td class="b"><b>${k(d.totaal.betaald.loonheffing)}</b></td><td class="b"><b>${k(d.totaal.betaald.pensioen)}</b></td><td class="b"><b>${k(d.maanden.reduce((a, m) => a + (m.via_balans || 0), 0))}</b></td><td class="b"><b>${k(d.totaal.al_in_wv)}</b></td><td class="b"><b>${k(d.totaal.telt)}</b></td><td class="b">${k(d.totaal.eigenaar_uitgesloten)}</td></tr></table>
+      <table><tr><td><b>Maand</b></td><td class="b"><b>netto</b></td><td class="b"><b>loonheffing</b></td><td class="b"><b>pensioen</b></td><td class="b"><b>via balans</b></td><td class="b"><b>via factuur</b></td><td class="b"><b>al in W&V</b></td><td class="b"><b>telt</b></td><td class="b"><b>eigenaar (uit)</b></td></tr>
+      ${d.maanden.map(m => `<tr><td>${esc(maandNaam(m.maand))}${m.in_correctie ? '' : ' <span class="mtc-noot">(vóór start)</span>'}</td><td class="b">${k(m.betaald.netto)}</td><td class="b">${k(m.betaald.loonheffing)}</td><td class="b">${k(m.betaald.pensioen)}</td><td class="b">${k(m.via_balans || 0)}</td><td class="b">${k(m.via_factuur || 0)}${m.in_correctie && m.facturen_gehaald === false ? '*' : ''}</td><td class="b" title="${esc(m.wv_grootboeken.map(g => g.naam + ' ' + eur(g.bedrag)).join(', '))}">${k(m.al_in_wv)}</td><td class="b"><b>${k(m.telt)}</b></td><td class="b">${k(m.eigenaar_uitgesloten)}</td></tr>`).join('')}
+      <tr><td><b>Totaal</b></td><td class="b"><b>${k(d.totaal.betaald.netto)}</b></td><td class="b"><b>${k(d.totaal.betaald.loonheffing)}</b></td><td class="b"><b>${k(d.totaal.betaald.pensioen)}</b></td><td class="b"><b>${k(d.maanden.reduce((a, m) => a + (m.via_balans || 0), 0))}</b></td><td class="b"><b>${k(d.maanden.reduce((a, m) => a + (m.via_factuur || 0), 0))}</b></td><td class="b"><b>${k(d.totaal.al_in_wv)}</b></td><td class="b"><b>${k(d.totaal.telt)}</b></td><td class="b">${k(d.totaal.eigenaar_uitgesloten)}</td></tr></table>
+      <div class="mtc-noot">"via factuur" = regels van inkoopfacturen en bonnen op een loon-balansgrootboek (bv. pensioenpremies), op factuurdatum.${d.maanden.some(m => m.in_correctie && m.facturen_gehaald === false) ? ' * = facturen voor die maand nog niet opgehaald (ververs de cijfers).' : ''}</div>
       <div class="mtc-noot">Betaald via de bank samen ${k(som(d.totaal.betaald))}; telt in het eerlijke beeld ${k(d.totaal.telt)}.${d.ontbrekend.length ? ' Nog niet opgehaald: ' + esc(d.ontbrekend.map(maandNaam).join(', ')) + '.' : ''}</div>
       <h4>Niet herkend</h4><div class="mtc-noot">Uitgaande betalingen die niet in de W&V geboekt zijn, geen trefwoord hebben, niet op een loon-balansgrootboek staan en niet naar een eigenaar, spaarpot of lening gaan. Hoort er een bij de lonen (werknemer, Belastingdienst, pensioenfonds)? Maak er een vaste loonrekening van.</div>
       <table>${d.niet_herkend.map((x, i) => `<tr><td>${esc(x.tegenpartij || '—')}<div class="mtc-noot">${esc(x.iban || 'geen IBAN')} · ${esc(x.n)}× · ${esc(x.voorbeeld)}</div></td><td class="b">${k(x.bedrag)}</td>

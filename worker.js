@@ -2460,7 +2460,7 @@ async function geldTijdlijn(env, url, hint) {
 //   geld:cijfers:maand:JJJJ-MM                      de lopende maand, dagelijks opnieuw (lazy, bij het eerste openen)
 //   geld:cijfers:ledgers                            grootboekrekeningen (naam, soort), een dag geldig
 // Per verzoek hooguit GELD_CIJ_PER_VERZOEK maanden (subrequest-budget); het antwoord zegt welke nog ontbreken.
-const GELD_CIJ = 'geld:cijfers:', GELD_CIJ_START = '2022-01', GELD_CIJ_PER_VERZOEK = 6, GELD_CIJ_MB_PER_MAAND = 4;
+const GELD_CIJ = 'geld:cijfers:', GELD_CIJ_START = '2022-01', GELD_CIJ_PER_VERZOEK = 6, GELD_CIJ_MB_PER_MAAND = 6, GELD_CIJ_MAX_FACT = 500;   // per maand: W&V, balans, bank, inkoopfacturen, bonnen (+ reserve)
 const GELD_CATS = [['materiaal', 'Materiaal'], ['uitbesteed', 'Uitbesteed werk'], ['personeel', 'Personeel en inhuur'], ['huisvesting', 'Huisvesting en energie'],
   ['vervoer', 'Vervoer'], ['machines', 'Machines en gereedschap'], ['kantoor', 'Kantoor en ICT'], ['verzekeringen', 'Verzekeringen'], ['advies', 'Advies en administratie'],
   ['financiering', 'Financiering'], ['overig', 'Overig']];
@@ -2494,6 +2494,25 @@ const geldHeeftTrefwoord = (x, pat) => pat.some(t => `${x.omschrijving} ${x.tege
 function geldLoonKand(r, pat, eig, lc) {
   return ((r && r.kand) || []).filter(x => !geldIsEigenaar(x, eig) && ((lc && lc.li.has(x.iban || '-')) || (lc && geldLoonBalansSoort(x, lc)) || geldHeeftTrefwoord(x, pat)));
 }
+// Alle loonposten van een maand: bankbetalingen (trefwoord, vaste loonrekening of loon-balansgrootboek) en de regels van
+// inkoopfacturen/bonnen die op een loon-balansgrootboek staan (per document en soort).
+function geldLoonPosten(r, pat, eig, lc) {
+  // Geen dubbeltelling: heeft een loon-balansgrootboek deze maand factuurregels, dan telt een bankmutatie op dát
+  // grootboek niet als die op bedrag overeenkomt met een (nog niet gebruikte) factuurregel — de factuur telt dan.
+  const pool = new Map();
+  for (const d of (r && r.fact) || []) for (const g of d.regels || []) if (lc.lb.has(g.led)) { if (!pool.has(g.led)) pool.set(g.led, []); pool.get(g.led).push(geldRond(g.bedrag)); }
+  const uit = [];
+  for (const x of geldLoonKand(r, pat, eig, lc)) {
+    const led = x.led || (x.grootboek && lc.lbNaamId.get(x.grootboek)) || null, arr = led ? pool.get(led) : null;
+    if (arr) { const i = arr.findIndex(b => Math.abs(b - x.bedrag) < 0.01); if (i >= 0) { arr.splice(i, 1); continue; } }
+    uit.push({ bron: 'bank', x, id: x.id, datum: x.datum, tegenpartij: x.tegenpartij, omschrijving: x.omschrijving, bedrag: x.bedrag, soort: geldLoonSoort(x, lc), balans: !!geldLoonBalansSoort(x, lc) });
+  }
+  for (const d of (r && r.fact) || []) {
+    const per = {}; for (const g of d.regels || []) { const s2 = lc.lb.get(g.led); if (s2) per[s2] = (per[s2] || 0) + g.bedrag; }
+    for (const [s2, b] of Object.entries(per)) if (b) uit.push({ bron: 'factuur', doc: d.soort, id: d.id, datum: d.datum, tegenpartij: d.tegenpartij, omschrijving: d.nummer || '', bedrag: geldRond(b), soort: s2 });
+  }
+  return uit;
+}
 // Lonen via balansgrootboeken: elke uitgaande betaling die daarop geboekt is, telt als die soort. Voorstel op naam
 // (alleen schulden-grootboeken, dus geen spaarpotten); de eigenaar bevestigt of past aan (cijfers.loon_balans).
 const GELD_CIJ_LOON_BALANS = [['netto', /netto ?lonen|nettoloon|vakantiegeld|te betalen lonen/i], ['loonheffing', /loonheffing/i], ['pensioen', /pensioen/i]];
@@ -2511,8 +2530,9 @@ function geldLoonCtx(ledgers, cc, potLed) {
   // Oudere records kennen alleen de grootboeknaam. Namen zijn niet uniek: alleen gebruiken als álle grootboeken met die
   // naam loon-balansgrootboek zijn van dezelfde soort.
   for (const [id, l] of Object.entries(ledgers || {})) if (l && l.naam) { if (!naamIds.has(l.naam)) naamIds.set(l.naam, []); naamIds.get(l.naam).push(id); }
-  for (const [n, ids] of naamIds) { const sr = new Set(ids.map(id => lb.get(id) || null)); if (sr.size === 1 && !sr.has(null)) lbNaam.set(n, [...sr][0]); }
-  return { li: geldLoonIban(cc), lb, lbNaam };
+  const lbNaamId = new Map();                                          // naam → grootboek-id, alleen als de naam uniek is
+  for (const [n, ids] of naamIds) { const sr = new Set(ids.map(id => lb.get(id) || null)); if (sr.size === 1 && !sr.has(null)) lbNaam.set(n, [...sr][0]); if (ids.length === 1 && lb.has(ids[0])) lbNaamId.set(n, ids[0]); }
+  return { li: geldLoonIban(cc), lb, lbNaam, lbNaamId };
 }
 const geldLoonBalansSoort = (x, lc) => (x.led && lc.lb.get(x.led)) || (x.grootboek && lc.lbNaam.get(x.grootboek)) || null;
 // Welke W&V-grootboeken de lonen zijn: de instelling, anders alleen de echte loonrekeningen op naam (niet de hele
@@ -2600,16 +2620,35 @@ function geldBalansLedgers(data) {
   const uit = {}; for (const [id, vs] of Object.entries(t)) if (vs.every(x => x === vs[0])) uit[id] = vs[0];   // alleen eenduidige waarden
   return uit;
 }
+// Factuur- en bonregels op balansgrootboeken (niet W&V, niet eigen vermogen): per document de bedragen per grootboek.
+function geldFactRegels(ink, bon, ledgers) {
+  const uit = [];
+  for (const [l, soort] of [[ink, 'inkoopfactuur'], [bon, 'bonnetje']]) for (const d of (l && l.lijst) || []) {
+    const per = {};
+    for (const x of d.details || []) { const id = String(x.ledger_account_id || ''), lg = ledgers[id]; if (!lg || GELD_PL_SOORT.has(lg.soort) || lg.soort === 'equity') continue;
+      per[id] = geldRond((per[id] || 0) + geldGetal(x.total_price_excl_tax_with_discount_base != null ? x.total_price_excl_tax_with_discount_base : x.total_price_excl_tax_with_discount != null ? x.total_price_excl_tax_with_discount : geldGetal(x.price) * geldGetal(x.amount || 1))); }
+    const regels = Object.entries(per).filter(([, b]) => b).map(([led, bedrag]) => ({ led, bedrag }));
+    if (regels.length) uit.push({ id: String(d.id), soort, datum: d.date || null, nummer: String(d.reference || '').slice(0, 40), tegenpartij: geldContactNaam(d.contact).slice(0, 60), regels });
+  }
+  return uit;
+}
 // Eén maand ophalen (W&V, balans, bankmutaties). null = mislukt (niet opslaan, later opnieuw).
 async function geldCijferMaand(get, ym, ledgers, cfg, w) {
   const van = ym + '-01', tot = geldMaandEinde(ym), per = `${van.replace(/-/g, '')}..${tot.replace(/-/g, '')}`, w2 = [];
-  const [pl, bal, muts] = await Promise.all([get(`reports/profit_loss?period=${per}`), get(`reports/balance_sheet?period=${per}`), geldMutaties(get, van, tot, w2)]);
-  if (!pl.ok || !pl.data || !bal.ok || muts.onvolledig) { w.push({ bron: 'cijfers ' + ym, fout: (!pl.ok && pl.fout) || (!bal.ok && bal.fout) || (w2[0] && w2[0].fout) || 'onvolledig', status: pl.status || bal.status }); return null; }
+  // In de correctieperiode ook de inkoopfacturen en bonnen (op factuurdatum): lonen die via een factuur lopen
+  // (bv. pensioenpremies) staan met hun grootboek in de factuurregels, niet in de bankboeking.
+  const metFact = ym >= ((cfg.cijfers && cfg.cijfers.correctie_van) || `${geldVandaag().slice(0, 4)}-01`);
+  const [pl, bal, muts, ink, bon] = await Promise.all([get(`reports/profit_loss?period=${per}`), get(`reports/balance_sheet?period=${per}`), geldMutaties(get, van, tot, w2),
+    metFact ? geldLijst(get, `documents/purchase_invoices?filter=period:${per},state:open|late|pending_payment|paid`, w2, 'inkoopfacturen') : null,
+    metFact ? geldLijst(get, `documents/receipts?filter=period:${per}`, w2, 'bonnetjes') : null]);
+  if (!pl.ok || !pl.data || !bal.ok || muts.onvolledig || (ink && ink.onvolledig) || (bon && bon.onvolledig)) { w.push({ bron: 'cijfers ' + ym, fout: (!pl.ok && pl.fout) || (!bal.ok && bal.fout) || (w2[0] && w2[0].fout) || 'onvolledig', status: pl.status || bal.status }); return null; }
   const omzet = {}, kosten = {};
   const tel = (o, k, x) => { const id = geldId(k); if (id) o[id] = geldRond((o[id] || 0) + x); };
   for (const a of ((pl.data.revenue_by_ledger_account || {}).ledger_accounts || [])) tel(omzet, a.ledger_account_id, geldGetal(a.value));
   for (const s of ['direct_costs_by_ledger_account', 'expenses_by_ledger_account']) for (const a of ((pl.data[s] || {}).ledger_accounts || [])) tel(kosten, a.ledger_account_id, geldGetal(a.value));
   for (const a of ((pl.data.other_income_expenses_by_ledger_account || {}).ledger_accounts || [])) tel(kosten, a.ledger_account_id, -geldGetal(a.value));   // bate = negatieve kosten
+  const fact = metFact ? geldFactRegels(ink, bon, ledgers) : undefined;
+  if (fact && fact.length > GELD_CIJ_MAX_FACT) { w.push({ bron: 'cijfers ' + ym, fout: `meer dan ${GELD_CIJ_MAX_FACT} facturen/bonnen met balansregels — maand niet opgeslagen` }); return null; }   // niet stil afkappen
   const balans = geldBalansLedgers(bal.data), btwPot = (cfg.potten.find(p => p.id === geldBtwPot(cfg)) || {}).ledger;
   const bank = {}, kand = [], eq = [], eqGezien = new Set();
   for (const m of muts.lijst) {
@@ -2627,7 +2666,8 @@ async function geldCijferMaand(get, ym, ledgers, cfg, w) {
         eq: !!eqB });                                               // een van de boekingen op eigen vermogen → nooit loon
   }
   return { maand: ym, as_of: geldVandaag(), omzet, kosten, mb: { omzet: geldRond(geldGetal(pl.data.total_revenue)), resultaat: geldRond(geldGetal(pl.data.net_profit)), bruto: geldRond(geldGetal(pl.data.gross_profit)) },
-    kas: { lopend: GELD.bank.ledger in balans ? balans[GELD.bank.ledger] : null, btw_pot: btwPot && btwPot in balans ? balans[btwPot] : null }, bank, kand, eq, v: GELD_CIJ_V };
+    kas: { lopend: GELD.bank.ledger in balans ? balans[GELD.bank.ledger] : null, btw_pot: btwPot && btwPot in balans ? balans[btwPot] : null }, bank, kand, eq, v: GELD_CIJ_V,
+    fact };
 }
 // Maanden laden en (binnen het budget) aanvullen. Afgesloten maanden in een jaarbundel, de lopende maand apart.
 async function geldCijferData(env, get, budget, maanden, cfg, ledgers, w, herbouwJaar) {
@@ -2640,8 +2680,8 @@ async function geldCijferData(env, get, budget, maanden, cfg, ledgers, w, herbou
   const lopend = maanden.includes(huidig) ? await kvJson(env, `${GELD_CIJ}maand:${huidig}`) : null;
   const nodig = [];
   for (const m of maanden) {
-    if (m === huidig) { if (lopend && lopend.as_of === vandaag && lopend.v === GELD_CIJ_V) recs[m] = lopend; else nodig.push(m); continue; }
-    const r = bundels[m.slice(0, 4)].maanden[m.slice(5)]; if (r && (r.v === GELD_CIJ_V || m < corrVan)) recs[m] = r; else nodig.push(m);   // oud record in de correctieperiode → opnieuw
+    if (m === huidig) { if (lopend && lopend.as_of === vandaag && lopend.v === GELD_CIJ_V && (m < corrVan || Array.isArray(lopend.fact))) recs[m] = lopend; else nodig.push(m); continue; }
+    const r = bundels[m.slice(0, 4)].maanden[m.slice(5)]; if (r && (m < corrVan || (r.v === GELD_CIJ_V && Array.isArray(r.fact)))) recs[m] = r; else nodig.push(m);   // oud record in de correctieperiode → opnieuw
   }
   // Nieuwste eerst aanvullen (het lopende jaar is meteen bruikbaar), één maand tegelijk: elke maand neemt wat hij nodig
   // heeft van het budget; begint er een maand zonder genoeg budget, dan stoppen (die komt de volgende ronde). Een maand
@@ -2675,9 +2715,9 @@ function geldCijferReeksen(recs, maanden, per, idl, ledgers, cc, cfg) {
       if (!idl.cat[id]) nietIngedeeld[id] = geldRond((nietIngedeeld[id] || 0) + x);
     }
     if (m >= corrVan) {                                          // alleen het deel dat nog niet in de W&V staat
-      const k2 = geldLoonKand(r, pat, eig, lc);
-      const som = k2.reduce((a, x) => a + x.bedrag, 0), corr = Math.max(0, som - Math.max(0, loonPl));
-      if (corr > 0) { P.correctie += corr; P.correctie_n += k2.length; for (const x of k2) P.correctie_soort[geldLoonSoort(x, lc)] += x.bedrag * corr / som; }
+      const ps = geldLoonPosten(r, pat, eig, lc);
+      const som = ps.reduce((a, x) => a + x.bedrag, 0), corr = Math.max(0, som - Math.max(0, loonPl));
+      if (corr > 0) { P.correctie += corr; P.correctie_n += ps.length; for (const x of ps) P.correctie_soort[x.soort] += x.bedrag * corr / som; }
     }
     for (const p of idl.prive) { const x = -((r.bank || {})[p.ledger] || 0); if (x) P.prive[p.naam] = (P.prive[p.naam] || 0) + x; }
     for (const id of idl.aflossing) P.aflossing += -((r.bank || {})[id] || 0);
@@ -2704,11 +2744,12 @@ async function geldCijferDetail(env, get, w, ym, reeks, cat, cfg, ledgers, idl, 
     return { items, totaal_wv: rec ? geldRond(Object.values(rec.omzet || {}).reduce((a, x) => a + x, 0)) : null, onvolledig: l.onvolledig };
   }
   if (reeks === 'correctie') {
-    const lc = geldLoonCtx(ledgers, cfg.cijfers, geldPotLedgers(cfg)), eig = geldEigenaren(recsJaar || [rec], idl, ledgers), k2 = geldLoonKand(rec, cfg.cijfers.loonpatronen || GELD_CIJ_LOONPATRONEN, eig, lc);
+    const lc = geldLoonCtx(ledgers, cfg.cijfers, geldPotLedgers(cfg)), eig = geldEigenaren(recsJaar || [rec], idl, ledgers), k2 = geldLoonPosten(rec, cfg.cijfers.loonpatronen || GELD_CIJ_LOONPATRONEN, eig, lc);
     // Zelfde regel als in de reeksen: alleen het deel boven de lonen die al in de W&V staan telt, naar rato per post.
     const som = k2.reduce((a, x) => a + x.bedrag, 0), inWv = Math.max(0, geldLoonPl(rec, geldLoonWv(ledgers, cfg.cijfers).set)), corr = Math.max(0, som - inWv), f = som ? corr / som : 0;
     const per = { netto: 0, loonheffing: 0, pensioen: 0 };
-    const items = k2.map(x => { const ls = geldLoonSoort(x, lc); per[ls] += x.bedrag * f; return { soort: 'bankmutatie', loonsoort: ls, id: x.id, datum: x.datum, betaald: x.bedrag, bedrag: geldRond(x.bedrag * f), tegenpartij: x.tegenpartij, omschrijving: x.omschrijving, url: geldUrl('financial_mutations', x.id) }; });
+    const items = k2.map(x => { per[x.soort] += x.bedrag * f; return { soort: x.bron === 'factuur' ? x.doc : 'bankmutatie', loonsoort: x.soort, id: x.id, datum: x.datum, betaald: x.bedrag, bedrag: geldRond(x.bedrag * f), tegenpartij: x.tegenpartij, omschrijving: x.omschrijving,
+      url: x.bron === 'factuur' ? geldUrl('documents', x.id) : geldUrl('financial_mutations', x.id) }; });
     return { items, totaal_wv: null, correctie: { betaald: geldRond(som), al_in_wv: geldRond(Math.min(som, inWv)), telt: geldRond(corr), per_soort: geldRondSoorten(per, corr) } };
   }
   const doel = new Set(reeks === 'kosten' ? Object.keys(idl.cat).filter(id => idl.cat[id] === cat) : reeks === 'prive' ? idl.prive.map(p => p.ledger) : reeks === 'aflossing' ? idl.aflossing : []);
@@ -2745,9 +2786,9 @@ async function geldCijferDiagnose(env, jaar, cfg, ledgers) {
   const corrVan = cc.correctie_van || `${huidig.slice(0, 4)}-01`, nul = () => ({ netto: 0, loonheffing: 0, pensioen: 0 });
   const tot = { betaald: nul(), al_in_wv: 0, telt: 0, eigenaar_uitgesloten: 0 }, niet = new Map(), maanden = [];
   for (const m of Object.keys(recs).sort()) {
-    const r = recs[m], k2 = geldLoonKand(r, pat, eig, lc), b = nul();
-    for (const x of k2) b[geldLoonSoort(x, lc)] += x.bedrag;
-    const viaBalans = k2.filter(x => geldLoonBalansSoort(x, lc)).reduce((a, x) => a + x.bedrag, 0);
+    const r = recs[m], ps = geldLoonPosten(r, pat, eig, lc), k2 = ps.filter(x => x.bron === 'bank').map(x => x.x), b = nul();
+    for (const x of ps) b[x.soort] += x.bedrag;
+    const viaBalans = ps.filter(x => x.bron === 'bank' && x.balans).reduce((a, x) => a + x.bedrag, 0), viaFactuur = ps.filter(x => x.bron === 'factuur').reduce((a, x) => a + x.bedrag, 0);
     const som = Object.values(b).reduce((a, x) => a + x, 0), inWv = Math.max(0, geldLoonPl(r, wv.set)), telt = m >= corrVan ? Math.max(0, som - inWv) : 0;
     const eigSom = (r.kand || []).filter(x => geldIsEigenaar(x, eig) && geldHeeftTrefwoord(x, pat)).reduce((a, x) => a + x.bedrag, 0);
     for (const x of r.kand || []) if (!k2.includes(x) && !geldIsEigenaar(x, eig) && !ruis(x)) {
@@ -2756,7 +2797,7 @@ async function geldCijferDiagnose(env, jaar, cfg, ledgers) {
     }
     for (const k of Object.keys(b)) tot.betaald[k] += b[k];
     tot.al_in_wv += Math.min(som, inWv); tot.telt += telt; tot.eigenaar_uitgesloten += eigSom;
-    maanden.push({ maand: m, via_balans: geldRond(viaBalans), betaald: Object.fromEntries(Object.entries(b).map(([k, x]) => [k, geldRond(x)])), al_in_wv: geldRond(Math.min(som, inWv)), telt: geldRond(telt), eigenaar_uitgesloten: geldRond(eigSom),
+    maanden.push({ maand: m, via_balans: geldRond(viaBalans), via_factuur: geldRond(viaFactuur), facturen_gehaald: Array.isArray(r.fact), betaald: Object.fromEntries(Object.entries(b).map(([k, x]) => [k, geldRond(x)])), al_in_wv: geldRond(Math.min(som, inWv)), telt: geldRond(telt), eigenaar_uitgesloten: geldRond(eigSom),
       wv_grootboeken: [...wv.set].filter(id => (r.kosten || {})[id]).map(id => ({ naam: (ledgers[id] || {}).naam || id, bedrag: geldRond(r.kosten[id]) })), versie: r.v || 1, in_correctie: m >= corrVan });
   }
   const alle = geldMaanden(`${jaar}-01`, jaar === huidig.slice(0, 4) ? huidig : `${jaar}-12`);
