@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.11.4",
+    "datum": "2026-10-09",
+    "titel": "Rapporten: lonen ook via een tussenrekening",
+    "voor": "beheer",
+    "punten": [
+      "Lonen die via een tussenrekening onder de activa lopen (zoals \"netto lonen en vakantiegeld\"), tellen nu ook mee in het eerlijke beeld. Je kunt elk balansgrootboek kiezen, behalve de bank en de spaarpotjes.",
+      "In de controle per maand blijven betalingen op andere balansrekeningen zichtbaar bij \"niet herkend\", zodat je ze kunt indelen; alleen de spaarpotjes en de aflossingen staan er niet tussen."
+    ]
+  },
+  {
     "versie": "2.11.3",
     "datum": "2026-10-09",
     "titel": "Rapporten: lonen via balansgrootboeken in het eerlijke beeld",
