@@ -1,5 +1,17 @@
 [
   {
+    "versie": "2.10",
+    "datum": "2026-10-08",
+    "titel": "Nieuw tabblad Rapporten voor de CEO-avond",
+    "voor": "beheer",
+    "punten": [
+      "Een nieuw tabblad Rapporten met de rapporten voor de tweewekelijkse CEO-avond. Elk onderwerp heeft een gekleurd oordeel (goed, let op, actie nodig); tik erop voor de uitleg, de cijfers met de vergelijking met de branche, en de acties.",
+      "Bij elk onderwerp kun je een vraag of opmerking zetten; het antwoord komt erbij als gesprek. Het aantal open vragen staat in de tabkop.",
+      "Acties vink je af als ze gedaan zijn (met wie en wanneer); dat blijft staan als er een nieuwe versie van het rapport komt. Met de rapportkiezer kijk je terug, en je ziet wat er veranderd is ten opzichte van het vorige rapport.",
+      "De administratie kan de rapporten lezen en vragen stellen; afvinken doet de eigenaar."
+    ]
+  },
+  {
     "versie": "2.9.9",
     "datum": "2026-10-08",
     "titel": "Geld: wat roodstaan kost en wat zelf bufferen oplevert",

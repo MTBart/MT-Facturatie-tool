@@ -164,6 +164,45 @@
     }
     return r;
   };
+  // ── Roodstaan: kosten en wat zelf bufferen oplevert (alleen weergave) ──
+  const MOEITE = 25;   // €/mnd: minder besparing dan dit is het terugboeken niet de moeite (omslagpunt)
+  // Spaarrente op de potjes: zelf ingevuld, anders uit de rentebijschrijvingen van de laatste 12 maanden ÷ de huidige
+  // stand van die potjes. Niets gevonden → null ("onbekend — vul in"), nooit een aangenomen percentage.
+  G.spaarRente = function (data, cfg) {
+    const ing = cfg && cfg.spaarrente != null ? cfg.spaarrente : (data.instellingen || {}).spaarrente;
+    if (ing != null) return { tarief: ing, bron: 'ingesteld' };
+    const grens = dagPlus(data.vandaag, -365), bij = (data.historie_spaarrente || []).filter(x => x.datum > grens && x.bedrag > 0);
+    if (!bij.length) return null;
+    const pots = [...new Set(bij.map(x => x.pot))], stand = pots.reduce((a, p) => a + Math.max(0, ((data.saldo.potten || {})[p] || {}).gerapporteerd || 0), 0);
+    return stand > 0 ? { tarief: bij.reduce((a, x) => a + x.bedrag, 0) / stand, bron: 'afgeleid', n: bij.length } : null;
+  };
+  G.roodKosten = function (data, cfg) {
+    const k = G.rcKosten(data), L = data.saldo.lopend && data.saldo.lopend.gerapporteerd;
+    if (!k && !(L < 0)) return null;
+    const per = {};
+    for (const x of data.historie_rc || []) if (x.soort === 'rente' || x.soort === 'provisie') { const m = per[x.maand] = per[x.maand] || { maand: x.maand, rente: 0, provisie: 0 }; m[x.soort] = rond(m[x.soort] + x.bedrag); }
+    const maanden = Object.values(per).sort((a, b) => a.maand.localeCompare(b.maand)).slice(-12);
+    const som = f => rond(maanden.reduce((a, m) => a + f(m), 0));
+    const rood = rond(Math.max(0, -(L || 0))), rp = G.reservePot(data, cfg), potIds = [...new Set([(data.instellingen || {}).btw_pot, rp].filter(Boolean))];
+    const X = rond(potIds.reduce((a, p) => a + Math.max(0, ((data.saldo.potten || {})[p] || {}).gerapporteerd || 0), 0)), terug = rond(Math.min(X, rood));
+    const sp = G.spaarRente(data, cfg), tj = k ? k.tariefJaar : null;
+    const r = { maanden, totaal: som(m => m.rente + m.provisie), totRente: som(m => m.rente), totProvisie: som(m => m.provisie), rood, nu: k ? k.schatting : null, renteNu: k ? k.rente : null,
+      provisie: k ? k.provisie : null, potIds, X, terug, sp, tariefJaar: tj };
+    if (tj == null) return r;
+    r.renteWeg = rond(tj / 12 * terug);                                   // debetrente die verdwijnt als je terugboekt
+    if (sp) { r.spaarMis = rond(sp.tarief / 12 * terug); r.winstMnd = rond(r.renteWeg - r.spaarMis); r.winstJr = rond(r.winstMnd * 12); r.omslag = tj > sp.tarief ? rond(MOEITE * 12 / (tj - sp.tarief)) : null; }
+    // Doelpad: had je een volle eigen reserve R op de lopende rekening gehad (i.p.v. op een spaarpotje), hoeveel debetrente
+    // was er dan weggevallen — op de werkelijke rode dagsaldi van de lopende rekening van de laatste 12 maanden.
+    const P = G.lijn(data, { modus: 'lopend', groep: ['lopend'] }).punten.filter(p => p.verleden && p.datum > dagPlus(data.vandaag, -365));
+    const pot = ((cfg && cfg.potten) || []).find(p => p.id === rp), s = pot && pot.streef, res = G.reserveCfg(data, cfg);
+    const Rs = s && s.van != null && s.tot != null ? [s.van, s.tot] : res && res.bedrag > 0 ? [res.bedrag] : s && s.bedrag ? [s.bedrag] : [];
+    if (P.length >= 60 && Rs.length) {
+      r.histDagen = P.length;
+      r.historisch = Rs.map(R => { const bruto = P.reduce((a, p) => a + Math.min(R, Math.max(0, -p.saldo)), 0) * tj / P.length;   // gemiddeld per dag × 365 / 365
+        return { R, bruto: rond(bruto), netto: sp ? rond(bruto - R * sp.tarief) : null }; });
+    }
+    return r;
+  };
   // ── Doelen die meegroeien met de bankhistorie (alleen echte data, geen prognose) ──
   G.historieMaanden = function (data) {
     const P = G.lijn(data, { modus: 'lopend' }).punten.filter(p => p.verleden), per = {};
@@ -175,8 +214,9 @@
     const M = G.historieMaanden(data); if (M.length < 6) return null;
     const p90 = pctL(M.map(m => Math.max(0, -m.min)), 0.9); let b = ceil5k(p90);
     const band = streef && streef.van != null && streef.tot != null ? [streef.van, streef.tot] : null;
+    const onbegrensd = b;
     if (band) b = Math.min(band[1], Math.max(band[0], b));
-    return { bedrag: b, reden: `de dips onder 0 van lopend + BTW-pot in de laatste ${M.length} maanden (p90 van de maandminima ${eur(p90)}), naar boven afgerond op € 5.000${band ? `, binnen je band ${kort(band[0])}–${kort(band[1])}` : ''}` };
+    return { bedrag: b, p90: rond(p90), onbegrensd, band, maanden: M.length, reden: `de dips onder 0 van lopend + BTW-pot in de laatste ${M.length} maanden (p90 van de maandminima ${eur(p90)}), naar boven afgerond op € 5.000${band ? `, binnen je band ${kort(band[0])}–${kort(band[1])}` : ''}` };
   };
   // Vaste lasten per maand: de ingeplande patronen (loon, huur, abonnementen …) en de inleg in de potjes van de komende
   // 13 weken, gemiddeld per maand. Geen inkoopfacturen (die worden vaak doorbelast) en geen BTW.
@@ -190,7 +230,9 @@
   G.lopendAdvies = function (data) {
     const M = G.historieMaanden(data); if (M.length < 6) return null;
     const p75 = pctL(M.map(m => m.max), 0.75), vast = G.vasteLastenMaand(data);
-    return { bedrag: ceil5k(Math.max(p75, vast || 0)), reden: `het hoogste van: p75 van de maandpieken van lopend + BTW-pot in de laatste ${M.length} maanden (${eur(p75)}) en 1× de vaste lasten per maand (patronen + inleg in de potjes, zonder inkoopfacturen: ${vast == null ? 'onbekend' : eur(vast)}), naar boven afgerond op € 5.000` };
+    const uit = data.historie_maand_uit || {}, mu = M.map(m => uit[m.maand]).filter(x => typeof x === 'number');   // bruto: alleen ter referentie
+    const bruto = mu.length ? rond(mu.reduce((a, x) => a + x, 0) / mu.length) : null;
+    return { bedrag: ceil5k(Math.max(p75, vast || 0)), p75: rond(p75), vast, bruto, brutoAdvies: bruto == null ? null : ceil5k(2 * bruto), wint: vast != null && vast > p75 ? 'vast' : 'pieken', maanden: M.length, reden: `het hoogste van: p75 van de maandpieken van lopend + BTW-pot in de laatste ${M.length} maanden (${eur(p75)}) en 1× de vaste lasten per maand (patronen + inleg in de potjes, zonder inkoopfacturen: ${vast == null ? 'onbekend' : eur(vast)}), naar boven afgerond op € 5.000` };
   };
   // Per doel met meegroeien aan (reserve-/Bufferpotje en lopende rekening). Automatisch alleen een kleine stap omhoog:
   // hooguit 1× per maand, max +10%, nooit boven de bovengrens (meegroei_max, anders de "tot" van de band; geen grens =
@@ -379,6 +421,12 @@
 .mtg-chip{font-size:11px;border-radius:10px;padding:1px 7px;background:var(--bg,#f1f0ea);color:var(--mtg-zacht);white-space:nowrap}
 .mtg-chip.achter{background:#fbe3dd;color:var(--mtg-uit)}
 .mtg-chip.prog{background:#e8eef9;color:#3a5a8a}
+.mtg-advlink{border:0;background:none;padding:0;margin-left:3px;font:inherit;color:#3a5a8a;text-decoration:underline dotted;cursor:pointer}
+.mtg-staafjes{display:flex;align-items:flex-end;gap:3px;height:62px;margin:6px 0 2px}
+.mtg-staafjes>div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;height:100%;min-width:0}
+.mtg-staafjes i{display:block}.mtg-staafjes i.re{background:var(--mtg-uit,#c0392b)}.mtg-staafjes i.pr{background:#b9b6aa}
+.mtg-staafjes span{font-size:9px;text-align:center;color:var(--mtg-zacht)}
+details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{margin:8px 0}
 .mtg-pot{padding:10px 2px;border-bottom:1px solid var(--border,#eee)}
 .mtg-pot .r1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .mtg-pot .r1 b{flex:1;min-width:120px}
@@ -505,12 +553,14 @@
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Komende 14 dagen</b><button class="mtg-vraag" data-uitleg="lijst">?</button></div>${lijstHtml()}</div>
   ${prognoseHtml()}
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Potjes en doelen</b><button class="mtg-vraag" data-uitleg="potjes">?</button></div>${potjesHtml()}</div>
+  ${roodHtml()}
   ${instellenHtml()}
   ${letOpHtml()}
   ${patronenHtml()}
   ${st.mag ? instellingenHtml() : ''}
 </div>`;
     grafiek();
+    const rk = st.el.querySelector('#mtg-rood'); if (rk) rk.addEventListener('toggle', () => { st.roodOpen = rk.open; });
     st.el.querySelector('.mtg').addEventListener('click', klik);
     st.el.querySelector('.mtg').addEventListener('change', e => {        // termijndatum verschuiven = scenario, lijn rekent mee
       const i = e.target.closest('.mtg-fd'); if (!i || !i.value) return;
@@ -530,6 +580,53 @@
     const rp = G.reservePot(d, st.cfg), rn = (((st.cfg || {}).potten || []).find(p => p.id === rp) || {}).naam || 'Buffer';
     const k = kosten ? (kosten.schatting != null ? `kost ≈${esc(eur(kosten.schatting))}/mnd: rente ±${esc((kosten.tariefJaar * 100).toFixed(1).replace('.', ','))}%/jr, afgeleid uit je ING-afrekeningen, + provisie; <a href="#" data-rc="1">hoe berekend?</a>` : `kostte historisch ${esc(eur(kosten.min))}–${esc(eur(kosten.max))}/mnd, <a href="#" data-rc="1">hoe berekend?</a>`) : 'kosten nog onbekend';
     return `werkelijk op de bank: lopende rekening ${esc(eur(lop))} rood (${k}); zolang je het ${esc((metBtw ? 'BTW- en ' : '') + rn)}geld niet terugboekt, betaal je die rente`;
+  }
+  function roodHtml() {
+    const d = st.data, r = G.roodKosten(d, st.cfg); if (!r) return '';
+    const pct = x => (x * 100).toFixed(1).replace('.', ',') + '%', namen = r.potIds.map(id => (((st.cfg || {}).potten || []).find(p => p.id === id) || {}).naam || id).join(' + ');
+    const max = Math.max(1, ...r.maanden.map(m => m.rente + m.provisie)), h = x => Math.round(x / max * 46);
+    const staaf = r.maanden.length ? `<div class="mtg-staafjes">${r.maanden.map(m => `<div title="${esc(m.maand)}: debetrente ${esc(eur(m.rente))} · provisie ${esc(eur(m.provisie))}"><i class="re" style="height:${h(m.rente)}px"></i><i class="pr" style="height:${h(m.provisie)}px"></i><span>${esc(m.maand.slice(5))}</span></div>`).join('')}</div>
+      <div class="mtg-legenda"><span><i style="border-top:8px solid var(--mtg-uit,#c0392b);vertical-align:-2px"></i>debetrente</span><span><i style="border-top:8px solid #b9b6aa;vertical-align:-2px"></i>provisie</span></div>` : '';
+    const delen = [];
+    delen.push(r.maanden.length ? `<p><b>Afgelopen ${r.maanden.length} maand${r.maanden.length === 1 ? '' : 'en'}</b>: ${esc(eur(r.totaal))} aan ING-kosten (debetrente ${esc(eur(r.totRente))}, provisie ${esc(eur(r.totProvisie))}).</p>${staaf}`
+      : '<p><b>Afgelopen 12 maanden</b>: nog geen afrekeningen van de rekening-courant gezien.</p>');
+    delen.push(`<p><b>Nu</b>: ${r.rood > 0 ? `lopende rekening ${esc(eur(-r.rood))} rood${r.nu != null ? ` → ≈${esc(eur(r.nu))}/mnd (debetrente ≈${esc(eur(r.renteNu))} + provisie ${esc(eur(r.provisie))})` : ''}` : 'de lopende rekening staat niet rood'}.</p>`);
+    let z;
+    if (r.rood <= 0) z = 'Je staat nu niet rood: terugboeken levert nu niets op.';
+    else if (r.tariefJaar == null) z = 'Nog geen debetrente in de afrekeningen gezien: geen tarief, dus geen berekening.';
+    else if (!(r.X > 0)) z = `Er staat nu niets in ${esc(namen || 'de potjes')} om terug te boeken.`;
+    else {
+      z = `Rekenvoorbeeld: boek je ${esc(eur(r.terug))} terug uit ${esc(namen)} (er staat nu ${esc(eur(r.X))}) naar de lopende rekening, dan verdwijnt ≈${esc(eur(r.renteWeg))}/mnd debetrente.${r.X > r.rood ? ' Meer terugboeken dan je rood staat levert niets extra op.' : ''} `;
+      z += r.sp ? `Je mist dan ≈${esc(eur(r.spaarMis))}/mnd spaarrente (${esc(pct(r.sp.tarief))}/jr, ${r.sp.bron === 'ingesteld' ? 'zelf ingevuld' : 'afgeleid uit de rentebijschrijvingen op je potjes'}): netto scheelt het ≈${esc(eur(r.winstMnd))}/mnd, ${esc(eur(r.winstJr))}/jr.`
+        : `Spaarrente onbekend — vul in${st.mag ? ' (<a href="#" data-inst="algemeen">instellingen</a>)' : ''} voor het netto verschil.`;
+      z += ` <br>Formule: (debetrente ±${esc(pct(r.tariefJaar))}/jr, afgeleid uit je ING-afrekeningen − spaarrente ${r.sp ? esc(pct(r.sp.tarief)) : '?'}/jr) ÷ 12 × het teruggeboekte bedrag.`;
+    }
+    if (r.tariefJaar != null) z += ' ' + (!r.sp ? 'Omslagpunt: onbekend zolang de spaarrente onbekend is.' : r.omslag != null ? `Pas als je meer dan ${esc(eur(r.omslag))} rood staat, loont terugboeken echt de moeite (dan scheelt het ≥ ${esc(eur(MOEITE))}/mnd).` : 'Je spaarrente is hoger dan de debetrente: terugboeken levert niets op.');
+    delen.push(`<p><b>Wat zelf bufferen oplevert</b>: ${z}</p>`);
+    if (r.provisie != null) delen.push(`<p>De bereidstellingsprovisie (≈${esc(eur(r.provisie))}/mnd, ≈${esc(eur(r.provisie * 12))}/jr) blijft zolang de kredietfaciliteit er is, ook als je niet rood staat. Die verdwijnt alleen als je de limiet laat verlagen. Ter informatie, geen advies om op te zeggen.</p>`);
+    if (r.historisch) {
+      const hs = r.historisch, bed = x => hs.length > 1 ? `${esc(eur(x(hs[0])))}–${esc(eur(x(hs[1])))}` : esc(eur(x(hs[0])));
+      delen.push(`<p><b>Doelpad</b>: met een volle eigen reserve van ${hs.length > 1 ? `${esc(kort(hs[0].R))}–${esc(kort(hs[1].R))}` : esc(kort(hs[0].R))} op de lopende rekening (in plaats van op een spaarpotje) bespaar je historisch ±${r.sp ? bed(x => x.netto) : bed(x => x.bruto)}/jr${r.sp ? ' netto (na gemiste spaarrente)' : ' aan debetrente (vóór gemiste spaarrente; spaarrente onbekend)'}, berekend op de werkelijke rode dagsaldi van de lopende rekening (${r.histDagen} dagen).</p>`);
+    }
+    return `<details class="mtg-kaart" id="mtg-rood" ${st.roodOpen ? 'open' : ''}><summary>Roodstaan: kosten en besparing${r.nu != null ? ` <span class="mtg-chip">≈${esc(eur(r.nu))}/mnd</span>` : ''}</summary>${delen.join('')}</details>`;
+  }
+  // Uitleg bij het advies naast een doel: bronnen, getallen en welke regel wint.
+  function adviesUitleg(id) {
+    const d = st.data, b = x => `<b>${x == null ? 'onbekend' : esc(eur(x))}</b>`;
+    if (id === 'lopend') {
+      const a = G.lopendAdvies(d); if (!a) return;
+      return blad(`<h3>Advies lopende rekening: ${esc(eur(a.bedrag))}</h3><div class="mtg-uitleg">
+        <p>Maandpieken: p75 van het hoogste saldo per maand (lopend + BTW-pot, laatste ${a.maanden} maanden): ${b(a.p75)}${a.wint === 'pieken' ? ' ← wint' : ''}</p>
+        <p>Vaste lasten per maand: patronen + inleg in de potjes (komende 13 weken), zonder inkoopfacturen en BTW-sparen: ${b(a.vast)}${a.wint === 'vast' ? ' ← wint' : ''}</p>
+        <p>Gemiddelde bruto uitgaven per maand (alles, incl. inkoop en potinleg, zonder BTW-sparen): ${b(a.bruto)}</p>
+        <p>Regel: het hoogste van maandpieken en vaste lasten, naar boven afgerond op € 5.000 → ${b(a.bedrag)}.</p>
+        ${a.brutoAdvies != null ? `<p>Ter referentie (telt niet mee): 2× gemiddelde maanduitgaven incl. inkoop en potinleg = ${b(a.brutoAdvies)}${a.brutoAdvies > a.bedrag ? ' (hoger dan het advies)' : ''}.</p>` : ''}</div>`);
+    }
+    const pot = ((st.cfg || {}).potten || []).find(p => p.id === id), a = pot && G.reserveAdvies(d, pot.streef); if (!a) return;
+    blad(`<h3>Advies ${esc(pot.naam)}: ${esc(eur(a.bedrag))}</h3><div class="mtg-uitleg">
+      <p>Dips onder 0: de laagste stand per maand van lopend + BTW-pot, laatste ${a.maanden} maanden; p90 daarvan: ${b(a.p90)}</p>
+      <p>Naar boven afgerond op € 5.000: ${b(a.onbegrensd)}${a.band ? `; binnen je band ${esc(kort(a.band[0]))}–${esc(kort(a.band[1]))} → ${b(a.bedrag)}` : ''}.</p>
+      <p>Regel: de reserve dekt 9 van de 10 maanddips.</p></div>`);
   }
   function rcUitleg() {
     const k = G.rcKosten(st.data), lop = st.data.saldo.lopend && st.data.saldo.lopend.gerapporteerd; if (!k) return;
@@ -618,6 +715,9 @@
       <span class="mtg-chip">doel: BTW-aangifte ${esc(btw.kwartaal)} (≈${kort(btw.bedrag)})</span></div>
       <div class="mtg-balk"><div style="width:${btw.pct}%"></div></div><div class="r3">${btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(btw.kwartaal)} (≈${eur(btw.bedrag)}) ✓ — verwacht ${eur(btw.pot)} op ${esc(datumTekst(btw.datum))}` : `tekort ${eur(btw.tekort)} vóór ${esc(datumTekst(btw.datum))} (aangifte ${esc(btw.kwartaal)} ≈${eur(btw.bedrag)})${G.btwInLopend(st.data) && (st.data.instellingen || {}).btw_pot === id ? ' — als reserve; de aangifte zelf gaat van de lopende rekening (+ BTW-pot)' : ''}`}${pot && pot.weekinleg ? ' · inleg ' + eur(pot.weekinleg) + '/week' : ''} · automatisch doel; een eigen doel overschrijft het${G.btwInLopend(st.data) && (st.data.instellingen || {}).btw_pot === id ? ' · telt mee in je lopende rekening' : ''}</div></div>`;
     const doelTekst = !streef ? (st.mag ? 'nog geen doel — tik om er een te geven' : 'geen doel') : streef.van != null && streef.tot != null ? `doel ${kort(streef.van)}–${kort(streef.tot)}` : `doel ${kort(streef.bedrag)}`;
+    const adv = !streef ? null : id === 'lopend' ? G.lopendAdvies(st.data) : id === G.reservePot(st.data, st.cfg) ? G.reserveAdvies(st.data, streef) : null;   // ook met meegroeien uit
+    const advTitel = !adv ? '' : id === 'lopend' ? `hoogste van maandpieken ${kort(adv.p75)} en vaste lasten ${kort(adv.vast)}${adv.brutoAdvies != null ? ` (referentie 2× bruto uitgaven ${kort(adv.brutoAdvies)})` : ''} — klik voor de uitleg` : `p90 van de maanddips ${kort(adv.p90)}${adv.band ? `, binnen je band ${kort(adv.band[0])}–${kort(adv.band[1])}` : ''} — klik voor de uitleg`;
+    const advHtml = adv ? `<button class="mtg-advlink" data-adviesuitleg="${esc(id)}" title="${esc(advTitel)}">(advies ${esc(kort(adv.bedrag))})</button>` : '';
     let r3 = '';
     if (v) {
       if (v.gehaald) r3 = v.boven ? 'boven de bandbreedte' : 'doel gehaald ✓';
@@ -640,7 +740,7 @@
         : `Voorstel: doel verlagen naar ${esc(eur(vs.naar))} — ${esc(vs.reden)}. ${st.mag ? `<button class="mtg-knop klein aan" data-doeladvies="${esc(id)}">Ja, verlagen</button>` : ''}`}</div>` : '')
       + (streef && streef.meegroeien !== false && (id === 'lopend' || id === G.reservePot(st.data, st.cfg)) ? `<div class="r3">doel groeit mee met de bankhistorie: automatisch alleen kleine stappen (max +10%, hooguit 1× per maand${streef.meegroei_max != null || streef.tot != null ? `, tot ${esc(eur(streef.meegroei_max != null ? streef.meegroei_max : streef.tot))}` : ', stel een bovengrens in'})${streef.advies_akkoord ? '' : ', na het eerste overgenomen advies'}</div>` : '');
     return `<div class="mtg-pot" ${st.mag ? `data-pot="${esc(id)}" style="cursor:pointer"` : ''}>
-  <div class="r1"><b>${esc(naam)}</b><span class="${nu != null && nu < 0 ? 'mtg-uit' : ''}" style="font-weight:600">${nu == null ? 'saldo onbekend' : eur(nu)}</span><span class="mtg-chip">${esc(doelTekst)}${streef && streef.datum ? ' · ' + esc(datumTekst(streef.datum)) : ''}</span></div>
+  <div class="r1"><b>${esc(naam)}</b><span class="${nu != null && nu < 0 ? 'mtg-uit' : ''}" style="font-weight:600">${nu == null ? 'saldo onbekend' : eur(nu)}</span><span class="mtg-chip">${esc(doelTekst)}${advHtml}${streef && streef.datum ? ' · ' + esc(datumTekst(streef.datum)) : ''}</span></div>
   ${v ? `<div class="mtg-balk" title="${v.pct}% van de weg vanaf het startpunt"><div style="width:${v.pct}%"></div></div>` : ''}
   <div class="r3">${esc([r3, extra].filter(Boolean).join(' · '))}</div>${meeTekst}</div>`;
   }
@@ -1070,6 +1170,8 @@
     const vl = e.target.closest('[data-doeladvies]');
     if (vl) { e.stopPropagation(); return doelAdvies(vl.dataset.doeladvies); }
     if (e.target.closest('[data-rc]')) { e.preventDefault(); e.stopPropagation(); return rcUitleg(); }
+    const au = e.target.closest('[data-adviesuitleg]');
+    if (au) { e.stopPropagation(); return adviesUitleg(au.dataset.adviesuitleg); }
     if (e.target.closest('[data-alleen]')) { st.alleenLopend = !st.alleenLopend; ls.set('mtg:alleen:' + st.wie, st.alleenLopend ? '1' : '0'); return teken(); }
     const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst],[data-prog],[data-sc],[data-advies],[data-vraag],[data-herlaad]');
     if (!t) return;
@@ -1231,6 +1333,7 @@
       <label class="mtg-veld"><span>Kredietlimiet lopende rekening (€)</span><input type="number" name="kl" value="${c.kredietlimiet != null ? c.kredietlimiet : ''}"></label>
       <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Eigen reserve (€) — leeg = geen${(() => { const rp = G.reservePot(st.data, c), pt = (c.potten || []).find(p => p.id === rp), a = G.reserveAdvies(st.data, pt && pt.streef); return a ? `; voorstel uit de historie: ${eur(a.bedrag)}` : ''; })()}</span><input type="number" name="res" value="${c.reserve && c.reserve.bedrag != null ? c.reserve.bedrag : ''}"></label>
       <label class="mtg-veld" style="flex:1"><span>Uit potje</span><select name="respot">${pot.filter(p => p.doel !== 'btw' && p.id !== (st.data.instellingen || {}).btw_pot).map(p => `<option value="${esc(p.id)}" ${(c.reserve && c.reserve.pot ? c.reserve.pot === p.id : G.reservePot(st.data, c) === p.id) ? 'selected' : ''}>${esc(p.naam)}</option>`).join('')}</select></label></div>
+      <label class="mtg-veld"><span>Spaarrente op de potjes (% per jaar) — leeg = afleiden uit de rentebijschrijvingen${(() => { const sp = G.spaarRente(Object.assign({}, st.data, { instellingen: Object.assign({}, st.data.instellingen, { spaarrente: null }) }), Object.assign({}, c, { spaarrente: null })); return sp ? ` (afgeleid: ${(sp.tarief * 100).toFixed(2).replace('.', ',')}%)` : ' (niet gevonden)'; })()}</span><input type="number" step="0.01" name="spr" value="${c.spaarrente != null ? Math.round(c.spaarrente * 10000) / 100 : ''}"></label>
       <label class="mtg-veld"><span>BTW-sparen: percentage van elke ontvangst (bv. 17,36 = 21/121)</span><input type="number" step="0.01" name="pct" value="${b.spaarpercentage != null ? Math.round(b.spaarpercentage * 10000) / 100 : ''}"></label>
       <label class="mtg-veld"><span>BTW-sparen naar potje</span><select name="spaarpot"><option value="">—</option>${pot.map(p => `<option value="${esc(p.id)}" ${b.spaarpot === p.id ? 'selected' : ''}>${esc(p.naam)}</option>`).join('')}</select></label>
       <div class="btw-apart"><label class="mtg-veld"><span>Alleen als de BTW-rekening apart staat — BTW-aangifte betaald van</span><select name="van"><option value="lopend" ${b.aangifte_van !== 'lopend' && b.aangifte_van ? '' : 'selected'}>lopende rekening</option>${pot.map(p => `<option value="${esc(p.id)}" ${b.aangifte_van === p.id ? 'selected' : ''}>${esc(p.naam)}</option>`).join('')}</select></label>
@@ -1242,6 +1345,7 @@
       const f = n => o.querySelector(`[name="${n}"]`).value;
       const body = { revisie: c.revisie, kredietlimiet: f('kl') === '' ? null : Number(f('kl')), btw: { spaarpercentage: f('pct') === '' ? null : Math.round(Number(String(f('pct')).replace(',', '.')) * 100) / 10000, spaarpot: f('spaarpot') || null, aangifte_van: f('van') || null, terugboeking_van: f('terug') || null, modus: o.querySelector('[name="inl"]').checked ? 'in_lopend' : 'apart' } };
       body.reserve = f('res') === '' ? null : { bedrag: Number(f('res')), pot: f('respot') || null };
+      body.spaarrente = f('spr') === '' ? null : Math.round(Number(String(f('spr')).replace(',', '.')) * 100) / 10000;
       o.remove(); opslaan(() => stuur('/geld/config', body), 'Opgeslagen');
     });
   }

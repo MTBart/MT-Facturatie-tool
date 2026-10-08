@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — Rapporten (G8): tabblad voor de CEO-avond, vragen en acties, schrijfroute met sleutel
+- Commit: `a64cbfb` | Auteur: Bart Witte
+
 ## 2026-10-08 — Release v2.9.9: wat roodstaan kost en wat zelf bufferen oplevert, advies naast het doel (geld); backup = v2.9.8
 - Commit: `56ab460` | Auteur: Bart Witte
 
