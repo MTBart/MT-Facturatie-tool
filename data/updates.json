@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.11.1",
+    "datum": "2026-10-09",
+    "titel": "Rapporten: eerlijk beeld zonder de opnames van de eigenaren",
+    "voor": "beheer",
+    "punten": [
+      "Het eerlijke beeld telde ook de maandelijkse opnames van de eigenaren mee als lonen, omdat daar \"loon\" bij staat. Die tellen nu niet meer mee: alles wat op privé/opnames is geboekt of naar dezelfde rekening gaat, valt erbuiten.",
+      "Bij de lonen buiten de W&V zie je nu wat er meetelt: werknemers (netto), Belastingdienst (loonheffing) en pensioenfonds."
+    ]
+  },
+  {
     "versie": "2.11",
     "datum": "2026-10-09",
     "titel": "Rapporten: interactieve cijfers en grafieken",
