@@ -1863,8 +1863,21 @@ function geldPlan(soort, d, basis, ctx) {
   if (!due) return [ev];                                   // geen vervaldag: blijft "invullen" (geen gok)
   if (basis.bedrag < 0) return [nooitVerleden(Object.assign(ev, { uitleg: 'Creditnota: op de vervaldag.' }))];
   const v = geldVerwachtVerkoop(d, profiel, cfg);
+  if (v.basis === 'vervaldag' && due < vandaag) {                 // achterstallig zonder betaalhistorie: over 2 bankdagen
+    const d = geldBankdagNa(geldDag(geldBankdagNa(geldDag(vandaag, 1)), 1));
+    return [Object.assign(ev, { datum: d, datumtype: 'beleid', zekerheid: 'aanname', verwacht: v, uitleg: `Achterstallig sinds ${due}; nog geen betaalhistorie (${v.reden || 'te weinig gegevens'}) → verwacht rond ${d}.` })];
+  }
   if (v.basis === 'vervaldag') return [nooitVerleden(Object.assign(ev, { verwacht: v, uitleg: ev.uitleg + (v.reden ? ` (${v.reden})` : '') }))];
   const tekst = { klant: 'deze klant', groep: `groep ${v.groep}`, algemeen: 'alle klanten' }[v.basis];
+  // Achterstallig en de gebruikelijke betaaldag is ook al voorbij: vandaag + (p75 − mediaan) dagen, minstens 2 bankdagen,
+  // hooguit 30 dagen (geen "vandaag" meer: dat wordt het nooit). Het label achterstallig blijft.
+  if (due < vandaag && geldDag(due, v.mediaan) < vandaag) {
+    const min = geldBankdagNa(geldDag(geldBankdagNa(geldDag(vandaag, 1)), 1)), extra = Math.min(30, Math.max(0, v.p75 - v.mediaan));
+    let d = geldBankdagNa(geldDag(vandaag, extra)); if (d < min) d = min;
+    if (d > geldDag(vandaag, 30)) d = geldBankdagVoor(geldDag(vandaag, 30));   // 30 dagen is een harde grens (bankdag ervoor)
+    return [Object.assign(ev, { datum: d, datumtype: 'beleid', zekerheid: 'aanname', verwacht: v, datum_vroeg: min, datum_laat: geldDag(vandaag, 30) < geldDag(d, Math.max(0, v.p75 - v.p25)) ? geldDag(vandaag, 30) : geldDag(d, Math.max(0, v.p75 - v.p25)),
+      uitleg: `Achterstallig sinds ${due}; ${tekst} betaalt meestal ${v.mediaan} dag(en) na verval (n=${v.n}) → verwacht rond ${d}.${v.noot ? ' ' + v.noot + '.' : ''}` })];
+  }
   const e = Object.assign(ev, { datum: geldDag(due, v.mediaan), datumtype: 'beleid', zekerheid: 'aanname', verwacht: v,
     datum_vroeg: geldDag(due, v.p25), datum_laat: geldDag(due, v.p75),
     uitleg: `Vervaldag ${v.mediaan >= 0 ? '+' : '−'} ${Math.abs(v.mediaan)} dag(en): zo betaalt ${tekst} meestal (n=${v.n}, marge ${v.p25} tot ${v.p75})${v.noot ? '; ' + v.noot : ''}.` });
@@ -2211,8 +2224,15 @@ function geldPrognoseEvents(items, facturen, ctx, w) {
   return { events: uit, overzicht };
 }
 
-async function geldTijdlijn(env, url) {
+async function geldTijdlijn(env, url, hint) {
+  const ks = (hint && hint.ks) || [], ksWaarde = {};
+  const ksFout = [];
+  for (const k of ks) {                                         // direct gelezen (list loopt achter); leesfout ≠ verwijderd
+    if (!env.MT_ROLLEN) break;
+    try { const raw = await env.MT_ROLLEN.get('geld:' + k); ksWaarde[k] = raw ? JSON.parse(raw) : null; } catch (e) { ksFout.push(k); }
+  }
   const vandaag = geldVandaag(), w = [], budget = { rest: GELD.budget };   // + GELD.kvReserve voor KV (cache, ijkpunten)
+  if (ksFout.length) w.push({ bron: 'opslag', fout: 'een net opgeslagen wijziging kon niet direct gelezen worden — over een minuut opnieuw laden' });
   let van = url.searchParams.get('van') || geldDag(vandaag, -30), tot = url.searchParams.get('tot') || geldDag(vandaag, 90);
   if (!geldIsDatum(van) || !geldIsDatum(tot) || van > tot) return { status: 400, body: { error: 'ongeldige periode (van/tot = JJJJ-MM-DD, van ≤ tot)' } };
   if ((Date.parse(tot) - Date.parse(van)) / 864e5 > GELD.maxDagen) return { status: 400, body: { error: `periode te lang (max ${GELD.maxDagen} dagen)` } };
@@ -2224,11 +2244,17 @@ async function geldTijdlijn(env, url) {
   let ijk = [];
   try { ijk = await geldIjkpunten(env, 1, geldRekeningen(cfg)); if (ijk.onvolledig) w.push({ bron: 'ijkpunt', fout: 'niet alle ijkpunten gelezen (te veel) — oudere stand mogelijk' }); }
   catch (e) { w.push({ bron: 'ijkpunt', fout: 'ijkpunten niet te lezen (opslag) — Moneybird-stand gebruikt' }); }
+  for (const [k, x] of Object.entries(ksWaarde)) if (k.startsWith('ijkpunt:') && x && x.id && !ijk.some(i => i.id === x.id)) ijk.push(x);   // net ingevuld
+  ijk.sort((a, b) => (b.ts - a.ts) || String(b.id).localeCompare(String(a.id)));
   const laatsteIjk = {};
   for (const i of ijk) if (!laatsteIjk[i.rekening]) laatsteIjk[i.rekening] = i;
   let profiel = null, overrides = { items: {}, compleet: false }, prognose = { items: {}, compleet: false }, profielRuw = null;
   try { profiel = profielRuw = await kvJson(env, 'geld:profiel'); overrides = await geldOverrides(env); prognose = await geldKvLijst(env, GELD_PROG); }
   catch (e) { w.push({ bron: 'overrides', fout: 'eigen betaaldata/afbetalingen niet te lezen (opslag) — facturen volgens het beleid ingepland' }); }
+  for (const [k, x] of Object.entries(ksWaarde)) {
+    if (k.startsWith('ov:')) { if (x && x.type) overrides.items[k.slice(3)] = x; else delete overrides.items[k.slice(3)]; }
+    else if (k.startsWith('prognose:')) { if (x) prognose.items[k.slice(9)] = x; else delete prognose.items[k.slice(9)]; }
+  }
   if (!overrides.compleet && !w.some(x => x.bron === 'overrides')) w.push({ bron: 'overrides', fout: 'niet alle eigen betaaldata/afbetalingen gelezen' });
   const profielDagen = profiel ? geldDagenTussen(String(profiel.vandaag || '2000-01-01'), vandaag) : null;
   if (!profiel) w.push({ bron: 'profiel', fout: 'betaalprofiel nog niet berekend — klantbetalingen op de vervaldag, incasso\'s niet herkend (GET /geld/profiel?vers=1)' });
@@ -2243,6 +2269,7 @@ async function geldTijdlijn(env, url) {
   if (!patronen) w.push({ bron: 'patronen', fout: 'vaste patronen (loon, hypotheek, privé, abonnementen) nog niet berekend — niet ingepland (GET /geld/patronen?vers=1)' });
   else if (patronen.onvolledig || !(patDagen <= GELD_PROFIEL_MAX)) { w.push({ bron: 'patronen', fout: (patronen.onvolledig ? 'vaste patronen onvolledig' : `vaste patronen ouder dan ${GELD_PROFIEL_MAX} dagen`) + ' — niet gebruikt; vernieuwen' }); patronen = null; }
   else if (patDagen > GELD_PROFIEL_DAGEN) w.push({ bron: 'patronen', fout: `vaste patronen ouder dan ${GELD_PROFIEL_DAGEN} dagen — vernieuwen` });
+  for (const [k, x] of Object.entries(ksWaarde)) if (k.startsWith('pk:')) { if (x) keuzes.items[k.slice(3)] = x; else delete keuzes.items[k.slice(3)]; }
   if (!keuzes.compleet && patronen) w.push({ bron: 'patronen', fout: 'niet alle aan/uit-keuzes van patronen gelezen' });
   const balans = await geldBalans(get, vandaag, w, potten);
   // Mutaties nodig vanaf: de dag na het maandeinde (MB-stand), de dag na het oudste ijkpunt, en het begin van de tijdlijn.
@@ -2401,7 +2428,7 @@ async function geldTijdlijn(env, url) {
 }
 async function handleGeld(p, request, env, ik, json0) {
   const ctx = {};
-  const json = (b, st) => json0(ctx.versie && b && typeof b === 'object' && !Array.isArray(b) ? Object.assign(b, { cachever: ctx.versie }) : b, st);
+  const json = (b, st) => json0(ctx.versie && b && typeof b === 'object' && !Array.isArray(b) ? Object.assign(b, { cachever: ctx.versie }, ctx.ks ? { ks: ctx.ks } : {}) : b, st);
   // Recht `geld`, in élke ROLLEN_MODUS: lezen (eigenaar, administratie), wijzigen alleen de eigenaar.
   const R = RECHTEN[ik.rol], m = request.method, url = new URL(request.url);
   if (!R || !R.geld) return json({ error: 'geen-toegang', reden: 'geld' }, 403);
@@ -2412,8 +2439,11 @@ async function handleGeld(p, request, env, ik, json0) {
     if (R.geld === 'wijzigen' && /^\d{13}-[a-z0-9]{1,12}$/.test(cv || '') && cv.slice(0, 13) > String(ver).slice(0, 13)) { ver = cv; vooruit = true; }
     const key = `geld:cache:v${ver}:${url.searchParams.get('van') || ''}:${url.searchParams.get('tot') || ''}:${url.searchParams.get('historie') === '1' ? 'h' : ''}:${geldVandaag()}`;
     // Vers (cache overslaan) alleen voor wie mag wijzigen; lezers krijgen de gedeelde cache.
-    if (url.searchParams.get('vers') !== '1' || R.geld !== 'wijzigen') { const c = await kvJson(env, key); if (c) return json(Object.assign(c, { cache: true })); }
-    const r = await geldTijdlijn(env, url);
+    // ks: net opgeslagen sleutels (alleen wie mag wijzigen) — die direct lezen; dan geen cache (vers, en niet terugschrijven).
+    const ks = R.geld === 'wijzigen' ? String(url.searchParams.get('ks') || '').split(',').filter(k => /^(ov|pk|prognose|ijkpunt):[A-Za-z0-9_:.-]{1,90}$/.test(k)).slice(0, 10) : [];
+    if (ks.length) vooruit = true;
+    if (!ks.length && (url.searchParams.get('vers') !== '1' || R.geld !== 'wijzigen')) { const c = await kvJson(env, key); if (c) return json(Object.assign(c, { cache: true })); }
+    const r = await geldTijdlijn(env, url, { ks });
     // Loopt deze edge achter (cv nieuwer dan KV hier ziet), dan niet cachen: de onderliggende gegevens kunnen hier ook nog oud zijn.
     if (r.status === 200 && env.MT_ROLLEN && !vooruit) { try { await kvZet(env, key, r.body, { expirationTtl: GELD.cacheTtl }); } catch {} }
     // (de cachesleutel bevat de versie van ná de laatste wijziging; een wijziging maakt een nieuwe, unieke versie)
@@ -2461,6 +2491,7 @@ async function handleGeld(p, request, env, ik, json0) {
     const ts = item ? item.ts : Date.now();
     await kvZet(env, `geld:prognose-historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, { sleutel, vorige, nieuw: item });
     if (item) await kvZet(env, kv, item, { metadata: item }); else await env.MT_ROLLEN.delete(kv);
+    ctx.ks = kv.slice(5);                                     // zonder 'geld:' — de app stuurt hem mee (KV-list loopt achter)
     await geldZetVersie(env, `${ts}-g${randHex(3)}`, ctx);
     await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-prognose', doel: sleutel, doelNaam: item ? (item.aan ? 'prognose aan' : 'prognose uit') : 'prognose gewist' });   // geen bedragen
     return json({ ok: true, item });
@@ -2475,7 +2506,7 @@ async function handleGeld(p, request, env, ik, json0) {
     if ((b.vorige_ts == null ? null : b.vorige_ts) !== (vorige ? vorige.ts : null)) return json({ error: 'dit patroon is intussen aangepast — herlaad en probeer opnieuw', huidig: vorige }, 409);
     const ts = Date.now(), door = String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60), item = { aan: b.aan, reden: String(b.reden || '').slice(0, 120), door, ts };
     await kvZet(env, `geld:pk-historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, { sleutel: id, vorige, nieuw: item });
-    await kvZet(env, sleutel, item, { metadata: item });
+    await kvZet(env, sleutel, item, { metadata: item }); ctx.ks = sleutel.slice(5);
     await geldZetVersie(env, `${ts}-k${randHex(3)}`, ctx);
     await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-patroon', doel: id, doelNaam: b.aan ? 'patroon aan' : 'patroon uit' });
     return json({ ok: true, keuze: item });
@@ -2506,6 +2537,7 @@ async function handleGeld(p, request, env, ik, json0) {
     if (item) Object.assign(item, { reden: String(b.reden || '').slice(0, 120), door, ts });
     await kvZet(env, `geld:ov-historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, { sleutel: `${soort}:${id}`, vorige, nieuw: item, door, ts });   // elke wijziging bewaard
     if (item) await kvZet(env, sleutel, item, { metadata: item }); else await env.MT_ROLLEN.delete(sleutel);
+    ctx.ks = sleutel.slice(5);
     await geldZetVersie(env, `${ts}-o${randHex(3)}`, ctx);
     await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-override', doel: `${soort}:${id}`, doelNaam: `${soort}factuur: ${type}` });   // geen bedragen
     return json({ ok: true, override: item });
@@ -2609,7 +2641,7 @@ async function handleGeld(p, request, env, ik, json0) {
     if (!geldIsDatum(datum) || datum > geldVandaag()) return json({ error: 'datum (JJJJ-MM-DD) mag niet in de toekomst liggen' }, 400);
     const ts = Date.now(), id = randHex(6);
     const rec = { id, rekening: rek, bedrag: geldRond(bedrag), datum, door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', ts };
-    await kvZet(env, `${GELD_IJK}${rek}:${String(9e15 - ts).padStart(16, '0')}:${id}`, rec, { metadata: rec });
+    await kvZet(env, `${GELD_IJK}${rek}:${String(9e15 - ts).padStart(16, '0')}:${id}`, rec, { metadata: rec }); ctx.ks = `${GELD_IJK}${rek}:${String(9e15 - ts).padStart(16, '0')}:${id}`.slice(5);
     await geldZetVersie(env, `${ts}-${id}`, ctx);                                          // unieke versie: cache meteen ongeldig (geen teller-race)
     await audit(env, { door: ik.oid, doorNaam: rec.doorNaam, actie: 'geld-ijkpunt', doel: rek, doelNaam: 'ijkpunt ' + datum });   // geen bedragen in het (voor beheerders leesbare) auditlog
     return json({ ok: true, ijkpunt: rec });

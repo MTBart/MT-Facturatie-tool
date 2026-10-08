@@ -87,6 +87,25 @@
     }
     return { punten, start: s0 };
   };
+  // Alleen de lopende rekening (zonder BTW-pot): BTW-sparen haalt daar geld af en de aangifte gaat ervan af; aangenomen
+  // wordt dat er op de aangiftedag wordt teruggeboekt van de BTW-pot (begrensd op de verwachte potstand).
+  G.alleenLopend = function (data, opt) {
+    const pot = (data.instellingen || {}).btw_pot;
+    let al = 0;                                                    // eerdere aangenomen terugboekingen gaan van de pot af (op volgorde)
+    const terug = (data.events || []).filter(e => e.bron === 'btw' && e.kwartaal && e.datum && e.delta < 0 && (e.rekening || 'lopend') === 'lopend' && G.telt(e, opt))
+      .sort((a, b) => a.datum.localeCompare(b.datum) || String(a.id).localeCompare(String(b.id))).map(e => {
+        const stand = pot ? G.potOp(data, pot, e.datum, opt) : null, b = stand == null ? 0 : Math.max(0, Math.min(-e.delta, stand - al));
+        al += b;
+        return { id: e.id + ':aangenomen-terug', bron: 'btw', datum: e.datum, delta: rond(b), rekening: 'lopend', zekerheid: e.zekerheid, aangenomen: true };
+      }).filter(e => e.delta > 0);
+    return G.lijn(Object.assign({}, data, { events: (data.events || []).concat(terug) }), Object.assign({}, opt, { modus: 'lopend', groep: ['lopend'] }));
+  };
+  // Waarschuwing als alleen de lopende rekening onder de kredietlimiet zakt (terwijl lopend + BTW-pot erboven blijft).
+  G.limietWaarschuwing = function (data, opt, tot) {
+    const lim = data.saldo.lopend && data.saldo.lopend.kredietlimiet; if (lim == null || !G.btwInLopend(data)) return null;
+    const low = G.laagste(G.alleenLopend(data, opt), tot);
+    return low && low.saldo < -lim ? { datum: low.datum, saldo: low.saldo, nodig: rond(-lim - low.saldo) } : null;
+  };
   // Laagste punt in de toekomst (vanaf vandaag, inclusief wat vandaag nog gepland staat).
   G.laagste = function (lijn, tot) {
     let min = null;
@@ -276,14 +295,16 @@
     st.projecten = opties.projecten || null; st.offerteBedrag = opties.offerteBedrag || null;
     if (ls.get('mtg:zoom:' + st.wie)) st.zoom = ls.get('mtg:zoom:' + st.wie);
     if (ls.get('mtg:prognose:' + st.wie) === '0') st.prognose = false;
+    st.alleenLopend = ls.get('mtg:alleen:' + st.wie) === '1';
     css();
     el.innerHTML = '<div class="mtg"><div class="mtg-melding">Geld laden…</div></div>';
     await G.laad();
   };
+  const verseKs = () => (st.ks || []).filter(x => Date.now() - x.t < 180000).map(x => x.k);   // 3 minuten meesturen
   G.laad = async function (vers) {
     const v = st.data ? st.data.vandaag : null;
     const vandaag = v || new Date().toISOString().slice(0, 10);
-    const pad = `/geld/tijdlijn?van=${dagPlus(vandaag, -35)}&tot=${dagPlus(vandaag, 364)}&historie=1${vers ? '&vers=1' : ''}${st.cv ? '&cv=' + encodeURIComponent(st.cv) : ''}`;
+    const pad = `/geld/tijdlijn?van=${dagPlus(vandaag, -35)}&tot=${dagPlus(vandaag, 364)}&historie=1${vers ? '&vers=1' : ''}${st.cv ? '&cv=' + encodeURIComponent(st.cv) : ''}${verseKs().length ? '&ks=' + encodeURIComponent(verseKs().join(',')) : ''}`;
     try {
       const [d, c] = await Promise.all([st.bron.haal(pad), st.cfg && !vers ? Promise.resolve({ config: st.cfg }) : st.bron.haal('/geld/config')]);
       if (!d || d.error) throw new Error(d && d.error || 'geen antwoord');
@@ -336,6 +357,7 @@
     </div></div>
   ${introWeg ? '' : `<div class="mtg-uitleg"><b>Wat zie je hier?</b> ${esc(UITLEG.intro)} <button class="mtg-knop klein" data-intro="weg">Begrepen</button></div>`}
   ${drukHtml()}
+  ${verseKs().length ? '<div class="mtg-melding">✓ Net opgeslagen — wordt verwerkt (op andere apparaten kan het een minuut duren).</div>' : ''}
   ${st.bezig ? '<div class="mtg-uitleg">Betaalgedrag en vaste patronen worden bijgewerkt… (de lijn ververst vanzelf)</div>' : ''}
   <div class="mtg-kaarten">
     ${kaart('nu', metBtw ? 'Nu (lopend + BTW-pot)' : 'Nu', eur(nu), nu != null && nu < 0, (metBtw ? `lopend ${eur(L.gerapporteerd)} · BTW-pot ${eur(d.saldo.potten[btwPot].gerapporteerd)} · ` : '') + (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''))}
@@ -348,9 +370,10 @@
       <div class="mtg-knoppen">${Object.keys(ZOOM).map(z => `<button class="mtg-knop klein ${st.zoom === z ? 'aan' : ''}" data-zoom="${z}">${z}</button>`).join('')}
       ${st.offset ? '<button class="mtg-knop klein" data-terug="1">vandaag</button>' : ''}
       ${heeftProg ? `<button class="mtg-knop klein ${st.prognose ? 'aan' : ''}" data-prognose="1" title="Prognose meenemen">prognose</button>` : ''}
+      ${metBtw && st.modus === 'lopend' ? `<button class="mtg-knop klein ${st.alleenLopend ? 'aan' : ''}" data-alleen="1" title="Stand van alleen de lopende rekening (zonder BTW-pot)">alleen lopend</button>` : ''}
       <button class="mtg-vraag" data-uitleg="lijn">?</button></div></div>
     <div class="mtg-grafiek" id="mtg-grafiek"></div>
-    <div class="mtg-legenda"><span><i></i>saldo</span><span><i style="border-top-style:dashed"></i>verwacht</span>${heeftProg && st.prognose ? '<span><i style="border-top:2px dotted #3a5a8a"></i>met prognose (waar het afwijkt)</span>' : ''}<span><i style="border-color:var(--mtg-uit)"></i>kredietlimiet</span>${st.modus === 'lopend' && st.cfg && st.cfg.lopend_streef && st.cfg.lopend_streef.datum ? '<span><i style="border-top:2px dashed var(--gold,#B8962E)"></i>doelpad</span>' : ''}<span class="mtg-in">▲ erbij</span><span class="mtg-uit">▼ eraf</span><span>⚑ mijlpaal</span></div>
+    <div class="mtg-legenda"><span><i></i>saldo</span><span><i style="border-top-style:dashed"></i>verwacht</span>${heeftProg && st.prognose ? '<span><i style="border-top:2px dotted #3a5a8a"></i>met prognose (waar het afwijkt)</span>' : ''}<span><i style="border-color:var(--mtg-uit)"></i>kredietlimiet</span>${st.alleenLopend && metBtw && st.modus === 'lopend' ? '<span><i style="border-top:1px solid #9a9a92"></i>alleen lopend (zonder BTW-pot)</span>' : ''}${st.modus === 'lopend' && st.cfg && st.cfg.lopend_streef && st.cfg.lopend_streef.datum ? '<span><i style="border-top:2px dashed var(--gold,#B8962E)"></i>doelpad</span>' : ''}<span class="mtg-in">▲ erbij</span><span class="mtg-uit">▼ eraf</span><span>⚑ mijlpaal</span></div>
   </div>
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Komende 14 dagen</b><button class="mtg-vraag" data-uitleg="lijst">?</button></div>${lijstHtml()}</div>
   ${prognoseHtml()}
@@ -477,6 +500,8 @@
   }
   function letOpHtml() {
     const w = (st.data.waarschuwingen || []).filter(x => !isDruk(x) && !isInstellen(x));
+    const lw = G.limietWaarschuwing(st.dataS || st.data, { prognose: st.prognose }, dagPlus(st.data.vandaag, 120));
+    if (lw) w.unshift({ bron: 'limiet', fout: `Je lopende rekening zelf komt op ${datumTekst(lw.datum)} op ${eur(lw.saldo)}, onder de kredietlimiet. Boek eerder geld terug van de BTW-rekening (≈${eur(lw.nodig)} nodig).` });
     if (!w.length) return '';
     return `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Let op (${w.length})</b><button class="mtg-vraag" data-uitleg="letop">?</button></div>
       <details><summary class="mtg-melding" style="cursor:pointer">tonen</summary><ul class="mtg-letop">${w.map(x => `<li>${esc(x.fout)}${x.rekening ? ` <span class="mtg-chip">${esc(x.rekening)}</span>` : ''}</li>`).join('')}</ul></details></div>`;
@@ -512,7 +537,8 @@
     const limiet = st.modus === 'lopend' && d.saldo.lopend.kredietlimiet != null ? -d.saldo.lopend.kredietlimiet : null;
     // de lijn zonder prognose als stippel-referentie wanneer prognose aan staat
     const zonder = st.prognose && (d.events || []).some(e => e.zekerheid === 'prognose') ? G.lijn(d, { modus: st.modus, prognose: false }).punten.filter(p => p.datum >= vanD && p.datum <= totD) : null;
-    const waarden = pts.map(p => p.saldo).concat(zonder ? zonder.map(p => p.saldo) : [], limiet != null ? [limiet] : [], [0]);
+    const alleen = st.alleenLopend && st.modus === 'lopend' && G.btwInLopend(d) ? G.alleenLopend(d, { prognose: st.prognose }).punten.filter(p => p.datum >= vanD && p.datum <= totD) : null;
+    const waarden = pts.map(p => p.saldo).concat(zonder ? zonder.map(p => p.saldo) : [], alleen ? alleen.map(p => p.saldo) : [], limiet != null ? [limiet] : [], [0]);   // de dip van "alleen lopend" moet in beeld
     let lo = Math.min(...waarden), hi = Math.max(...waarden); if (hi - lo < 100) { hi += 50; lo -= 50; }
     const marge = (hi - lo) * 0.08; lo -= marge; hi += marge;
     const x = dd => pl + dagenTussen(vanD, dd) / n * (W - pl - pr), y = v => pt + (hi - v) / (hi - lo) * (H - pt - pb);
@@ -545,6 +571,7 @@
       ${ver.length > 1 ? `<path d="${pad(ver)}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2"/>` : ''}
       ${(zonder || toek).filter(p => p.datum >= d.vandaag).length > 1 ? `<path d="${pad((zonder || toek).filter(p => p.datum >= d.vandaag))}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2" stroke-dasharray="6 4"/>` : ''}
       ${zonder && toek.length > 1 ? `<path d="${afwijk(toek, zonder.filter(p => p.datum >= d.vandaag))}" fill="none" stroke="#3a5a8a" stroke-width="2" stroke-dasharray="1 3"/>` : ''}
+      ${alleen && alleen.length > 1 ? `<path d="${pad(alleen)}" fill="none" stroke="#9a9a92" stroke-width="1.2"/>` : ''}
       ${pijlen}${vlaggen}
       <rect x="${pl}" y="0" width="${W - pl - pr}" height="${H}" fill="transparent" class="mtg-vang"/></svg><div class="mtg-tip" style="display:none"></div>`;
     st.geo = { vanD, n, W, pl, pr };
@@ -837,6 +864,7 @@
   function klik(e) {
     if (e.target.closest('.mtg-fd')) return;
     if (e.target.closest('[data-laag]')) { e.preventDefault(); return laagsteUitleg(); }
+    if (e.target.closest('[data-alleen]')) { st.alleenLopend = !st.alleenLopend; ls.set('mtg:alleen:' + st.wie, st.alleenLopend ? '1' : '0'); return teken(); }
     const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst],[data-prog],[data-sc],[data-advies],[data-vraag],[data-herlaad]');
     if (!t) return;
     if (t.dataset.modus) { st.modus = t.dataset.modus; st.offset = 0; teken(); }
@@ -873,6 +901,7 @@
     const r = await st.bron.haal(pad, { method: 'POST', body });
     if (!r || r.error) throw new Error(r && r.error || 'opslaan mislukt');
     if (r.cachever) st.cv = r.cachever;                      // volgende load met deze versie (geen oude cache van een andere edge)
+    if (r.ks) { st.ks = (st.ks || []).filter(x => x.k !== r.ks && Date.now() - x.t < 180000).concat({ k: r.ks, t: Date.now() }).slice(-10); }   // KV-list loopt tot ~1 min achter
     return r;
   }
   function eventDetail(id) {
