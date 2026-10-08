@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Release v2.11.2: eerlijk beeld te controleren en bij te stellen; backup = v2.11.1
+- Commit: `4c0c1ae` | Auteur: Bart Witte
+
 ## 2026-10-09 — Rapporten: eerlijk beeld te controleren en bij te stellen
 - Commit: `ff432a7` | Auteur: Bart Witte
 
