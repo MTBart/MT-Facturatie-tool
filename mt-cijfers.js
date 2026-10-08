@@ -70,7 +70,7 @@
     const P = { maanden: 0, ontbrekend: 0, omzet: 0, prognoseRef: 0, kosten: {}, correctie: 0, correctie_soort: { netto: 0, loonheffing: 0, pensioen: 0 }, prive: {}, prive_totaal: 0, aflossing: 0, kas: null, kasStart: null, prognose: 0, prognoseKosten: 0 };
     for (const c of cats) P.kosten[c] = 0;
     for (const m of ms) {
-      if (m.prognose) { P.prognose += m.omzet || 0; P.prognoseKosten += m.kosten_totaal || 0; P.prognoseRef += m.kosten_ref || 0; continue; }
+      if (m.prognose) { P.prognose += m.omzet || 0; P.prognoseKosten += m.kosten_totaal || 0; P.prognoseRef += m.kosten_ref || 0; if (m.geen_historie) P.geenHistorie = true; continue; }
       if (!m.maanden) { P.ontbrekend++; continue; }
       P.maanden++; P.omzet += m.omzet || 0;
       for (const c of cats) P.kosten[c] += (m.kosten || {})[c] || 0;
@@ -110,15 +110,16 @@
     const S = basis.map(m => C.som([m], cats, eerlijk)), som = f => S.reduce((a, P) => a + f(P), 0);
     const kostGem = S.length ? som(P => P.kosten_totaal) / S.length : null;
     const marge = som(P => P.omzet) > 0 ? som(P => P.brutomarge) / som(P => P.omzet) : null;              // gemiddelde brutomarge (fractie)
-    const vast = S.length ? som(P => P.kosten_totaal - (P.kosten.materiaal || 0) - (P.kosten.uitbesteed || 0)) / S.length : null;   // gemiddelde vaste kosten per maand
+    const vast = S.length ? Math.max(0, som(P => P.kosten_totaal - (P.kosten.materiaal || 0) - (P.kosten.uitbesteed || 0)) / S.length) : null;   // gemiddelde vaste kosten per maand
     for (let i = Number(huidig.slice(5)) + 1; i <= 12; i++) {
       const ym = `${jaar}-${String(i).padStart(2, '0')}`; let omzet = 0, n = 0;
       for (const it of Object.values(progItems || {})) {
         if (!it || it.soort !== 'project' || it.aan === false) continue;
         for (const t of it.termijnen || []) if (t.aan !== false && String(t.factuurdatum || '').slice(0, 7) === ym) { omzet += (t.bedrag || 0) / BTW; n++; }
       }
-      const r2 = x => Math.round(x * 100) / 100, kosten = omzet > 0 && marge != null && vast != null ? omzet * (1 - marge) + vast : 0;
-      uit.push({ id: ym, prognose: true, omzet: r2(omzet), kosten_totaal: r2(kosten), kosten_ref: omzet > 0 || kostGem == null ? 0 : r2(kostGem), termijnen: n });
+      const r2 = x => Math.round(x * 100) / 100, kanRekenen = marge != null && vast != null, kosten = omzet > 0 && kanRekenen ? Math.max(0, omzet * (1 - marge) + vast) : 0;
+      // zonder historie geen kosten- of resultaatprognose (anders een misleidend positief resultaat)
+      uit.push({ id: ym, prognose: true, omzet: r2(omzet), kosten_totaal: r2(kosten), kosten_ref: omzet > 0 || kostGem == null ? 0 : r2(kostGem), termijnen: n, geen_historie: omzet > 0 && !kanRekenen });
     }
     return { maanden: uit, kostenBasis: basis.length, marge, vast };
   };
@@ -273,7 +274,7 @@
     const progStart = per.findIndex(p => p.ms.length && p.ms.every(m => m.prognose));
     let svg = '', leg = [], noot = [];
     if (g === 'omzet_kosten') {
-      const hoog = Math.max(1, ...per.map(p => Math.max(p.P.omzet + p.P.prognose, p.P.kosten_totaal + p.P.prognoseKosten, p.P.prognoseRef))), laag = Math.min(0, ...per.map(p => p.P.resultaat), ...per.map(p => p.P.prognose > 0 ? p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten : 0));   // ook de prognoselijn past op de as
+      const hoog = Math.max(1, ...per.map(p => Math.max(p.P.omzet + p.P.prognose, p.P.kosten_totaal + p.P.prognoseKosten, p.P.prognoseRef))), laag = Math.min(0, ...per.map(p => p.P.resultaat), ...per.map(p => p.P.prognose > 0 && !p.P.geenHistorie ? p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten : 0));   // ook de prognoselijn past op de as
       const sc = schaal(laag, hoog), y = v => MT + (HO - MT - MB) * (1 - (v - sc.a) / (sc.b - sc.a));
       svg += assen(sc, y, kort);
       per.forEach((p, i) => {
@@ -296,10 +297,11 @@
       });
       if (per.some(p => p.ms.some(m => !m.prognose && m.id === st.vandaag.slice(0, 7)))) noot.push('* lopende maand (t/m vandaag): lichter en gestreept, nog niet compleet.');
       const zonderOmzet = per.filter(p => p.P.prognoseRef && !p.P.prognose);
+      if (per.some(p => p.P.geenHistorie)) noot.push('Onvoldoende historie voor een prognose van kosten en resultaat (alleen de verwachte omzet staat erin).');
       if (zonderOmzet.length) noot.push(`${zonderOmzet.map(p => p.label || p.id).join(', ')}: omzet nog niet bekend — zet projecten in de prognose. De dunne stippellijn is alleen de gemiddelde kosten ter referentie, geen verlies.`);
       const res = per.map((p, i) => p.P.maanden ? [x(i), y(p.P.resultaat)] : null);
       svg += pad(res, '#2A4A38', 2.5) + res.map((q, i) => q ? `<circle data-tik="periode" data-p="${esc(per[i].id)}" cx="${q[0]}" cy="${q[1]}" r="${st.sel && st.sel.id === per[i].id ? 6 : 4}" fill="#2A4A38"><title>resultaat ${esc(eur(per[i].P.resultaat))}</title></circle>` : '').join('');
-      const resProg = per.map((p, i) => p.P.prognose > 0 ? [x(i), y(p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten)] : null);   // alleen waar prognose-omzet is
+      const resProg = per.map((p, i) => p.P.prognose > 0 && !p.P.geenHistorie ? [x(i), y(p.P.omzet + p.P.prognose - p.P.kosten_totaal - p.P.prognoseKosten)] : null);   // alleen waar prognose-omzet is
       svg += pad(resProg, '#2A4A38', 2, '4 4');
       svg += resProg.map((q, i) => q ? `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#fff" stroke="#2A4A38" stroke-width="1.5" stroke-dasharray="2 1.5"><title>${esc('prognose resultaat ≈ ' + eur(per[i].P.omzet + per[i].P.prognose - per[i].P.kosten_totaal - per[i].P.prognoseKosten))}</title></circle>` : '').join('');   // ook één losse prognosemaand zichtbaar
       if (!st.eerlijk) { const ref = per.map((p, i) => p.P.maanden && p.P.correctie ? [x(i), y(p.P.resultaat - p.P.correctie)] : null); if (ref.some(Boolean)) { svg += pad(ref, '#2A4A38', 1.2, '2 3'); noot.push('Dunne stippellijn: resultaat mét de lonen die niet in de W&V staan (eerlijk beeld).'); } }

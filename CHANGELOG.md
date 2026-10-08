@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Release v2.11.5: lonen via inkoopfacturen, eerlijkere prognose; backup = v2.11.4
+- Commit: `73f8986` | Auteur: Bart Witte
+
 ## 2026-10-09 — Rapporten: lonen via inkoopfacturen; eerlijkere prognose in de grafiek
 - Commit: `a4d0fe1` | Auteur: Bart Witte
 
