@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.9.3",
+    "datum": "2026-10-08",
+    "titel": "Geld: meteen de nieuwe stand na een wijziging",
+    "voor": "beheer",
+    "punten": [
+      "Na het opslaan van een eigen datum, afbetaling, potje of instelling laat het geldscherm direct de nieuwe stand zien, ook als een andere server nog even de oude had."
+    ]
+  },
+  {
     "versie": "2.9.2",
     "datum": "2026-10-08",
     "titel": "Geld: BTW-rekening hoort bij de lopende rekening",

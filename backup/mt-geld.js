@@ -28,31 +28,49 @@
   const isGepland = e => e.bron !== 'bank' && !e.saldo_ijkpunt && !!e.datum && typeof e.delta === 'number';
   G.isGepland = isGepland;
   // Effect van een event op de gekozen lijn: 'lopend' = de lopende rekening; 'totaal' = lopend + potjes (intern telt niet).
-  function effect(e, modus) {
+  // Groep die als "lopende rekening" telt: lopend, en bij btw.modus 'in_lopend' (standaard) ook de BTW-pot (als die een
+  // bekend saldo heeft). Overboekingen binnen de groep (BTW-sparen) zijn dan neutraal; de andere potjes zijn echt weg.
+  G.groep = function (data) {
+    const i = data.instellingen || {}, pot = i.btw_pot, s = pot && data.saldo && data.saldo.potten && data.saldo.potten[pot];
+    return (!i.btw || i.btw.modus !== 'apart') && pot && s && s.gerapporteerd != null ? ['lopend', pot] : ['lopend'];
+  };
+  G.btwInLopend = data => G.groep(data).length > 1;
+  function effect(e, modus, groep) {
     if (typeof e.delta !== 'number' || e.saldo_ijkpunt) return 0;
     if (modus === 'totaal') return e.intern ? 0 : e.delta;
-    return (e.rekening || 'lopend') === 'lopend' ? e.delta : 0;
+    const g = groep || ['lopend'];
+    let x = g.includes(e.rekening || 'lopend') ? e.delta : 0;
+    if (e.intern && e.pot && g.includes(e.pot)) x -= e.delta;      // de pot krijgt −delta: binnen de groep heft het elkaar op
+    return x;
   }
   G.effect = effect;
+  // Saldo van de groep vandaag (lopend + BTW-pot), of null als het onbekend is.
+  G.groepSaldo = function (data, groep) {
+    let s = data.saldo.lopend && data.saldo.lopend.gerapporteerd; if (s == null) return null;
+    for (const r of (groep || G.groep(data)).filter(x => x !== 'lopend')) s += data.saldo.potten[r].gerapporteerd;
+    return rond(s);
+  };
   // Telt dit geplande event mee? Prognose alleen met de schakelaar aan (en de post zelf aan).
   G.telt = (e, opt) => !(e.zekerheid === 'prognose' && !(opt && opt.prognose));
   // Dagelijkse lijn van van..tot: verleden terug vanaf het saldo van vandaag (bank), toekomst vooruit (gepland).
   G.lijn = function (data, opt) {
     opt = opt || {};
-    const modus = opt.modus || 'lopend', v = data.vandaag;
-    const s0 = modus === 'totaal' ? data.saldo.totaal && data.saldo.totaal.gerapporteerd : data.saldo.lopend && data.saldo.lopend.gerapporteerd;
+    const modus = opt.modus || 'lopend', v = data.vandaag, groep = opt.groep || G.groep(data);
+    const s0 = modus === 'totaal' ? data.saldo.totaal && data.saldo.totaal.gerapporteerd : G.groepSaldo(data, groep);
     if (s0 == null) return { punten: [], onbekend: true };
     const dagsomVan = modus === 'lopend' && data.historie_dagsom ? Object.keys(data.historie_dagsom).sort()[0] : null;   // verder terug dan de bank van de tijdlijn
     const van = opt.van || (dagsomVan && dagsomVan < data.van ? dagsomVan : data.van), tot = opt.tot || data.tot, perDag = {}, verleden = {};
     for (const e of data.events || []) {
-      if (e.bron === 'bank') { if (e.datum <= v) verleden[e.datum] = (verleden[e.datum] || 0) + effect(e, modus); continue; }
+      if (e.bron === 'bank') { if (e.datum <= v) verleden[e.datum] = (verleden[e.datum] || 0) + effect(e, modus, groep); continue; }
       if (!isGepland(e) || !G.telt(e, opt)) continue;
       const d = e.datum < v ? v : e.datum;
-      perDag[d] = (perDag[d] || 0) + effect(e, modus);
+      perDag[d] = (perDag[d] || 0) + effect(e, modus, groep);
     }
     // Verder terug dan de bankmutaties van de tijdlijn: dagsommen (alleen de lopende rekening).
     const bankVan = data.bronnen && data.bronnen.bankmutaties ? data.bronnen.bankmutaties.van : v;
-    if (modus === 'lopend' && data.historie_dagsom) for (const [d, som] of Object.entries(data.historie_dagsom)) if (d < bankVan && !(d in verleden)) verleden[d] = som;
+    // (lopend + BTW-pot: de overboekingen naar de BTW-pot eruit, die zijn binnen de groep neutraal)
+    const intern = (data.historie_intern || {}), binnen = groep.filter(x => x !== 'lopend');
+    if (modus === 'lopend' && data.historie_dagsom) for (const [d, som] of Object.entries(data.historie_dagsom)) if (d < bankVan && !(d in verleden)) verleden[d] = rond(som - binnen.reduce((a, p) => a + ((intern[p] || {})[d] || 0), 0));
     const eerste = modus === 'lopend' && data.historie_dagsom ? Object.keys(data.historie_dagsom).sort()[0] || bankVan : bankVan;
     const punten = [];
     // verleden: saldo(d) = saldo(d+1) − mutaties(d+1)
@@ -98,11 +116,12 @@
     const dagen = rek === 'lopend' && data.historie_dagsom ? 56 : Math.min(56, dagenTussen(bankVan, v) + 1), van = dagPlus(v, -dagen);
     if (dagen < 28) return null;                                                            // te weinig historie
     let som = 0;
+    const groep = G.groep(data), binnen = groep.filter(x => x !== 'lopend'), intern = data.historie_intern || {};
     for (const e of data.events || []) {
       if (e.bron !== 'bank' || e.datum <= van || e.datum > v) continue;
-      if (rek === 'lopend') som += e.delta; else if (e.intern && e.pot === rek) som -= e.delta;
+      if (rek === 'lopend') som += effect(e, 'lopend', groep); else if (e.intern && e.pot === rek) som -= e.delta;
     }
-    if (rek === 'lopend' && data.historie_dagsom && bankVan > dagPlus(van, 1)) for (const [d, x] of Object.entries(data.historie_dagsom)) if (d > van && d < bankVan) som += x;
+    if (rek === 'lopend' && data.historie_dagsom && bankVan > dagPlus(van, 1)) for (const [d, x] of Object.entries(data.historie_dagsom)) if (d > van && d < bankVan) som += x - binnen.reduce((a, p) => a + ((intern[p] || {})[d] || 0), 0);
     return rond(som / (dagen / 30.44));
   };
   // Voortgang naar een doel: % vanaf het startpunt, nodig vs werkelijk tempo, verwachte datum. Eerlijk: geen tempo → geen belofte.
@@ -173,7 +192,7 @@
   const BRON = { bank: 'Bank (werkelijk)', inkoop: 'Inkoopfactuur', verkoop: 'Verkoopfactuur', patroon: 'Vast patroon', inleg: 'Weekinleg potje', btw: 'BTW-aangifte', 'btw-sparen': 'BTW-sparen', prognose: 'Prognose', ijkpunt: 'IJkpunt' };
   const ZEKER = { werkelijk: 'werkelijk', vastgelegd: 'vastgelegd in Moneybird', gepland: 'gepland', aanname: 'aanname (betaalgedrag)', invullen: 'nog in te vullen', patroon: 'vast patroon', schatting: 'schatting', prognose: 'prognose' };
   const UITLEG = {
-    intro: 'De lijn is de lopende rekening: links wat er gebeurd is (bank), rechts wat er verwacht wordt. ▲ is geld dat binnenkomt, ▼ geld dat eruit gaat. Een stippellijn is prognose (nog geen factuur). De rode lijn is de kredietlimiet: daaronder kan het niet. Potjes zijn de spaarrekeningen; overboekingen daarheen tellen niet mee in "totaal".',
+    intro: 'De lijn is de stand van de lopende rekening op elk moment (de BTW-pot telt daarin mee): links wat er gebeurd is (bank), rechts wat er verwacht wordt. ▲ is geld dat binnenkomt, ▼ geld dat eruit gaat. Een stippellijn is prognose (nog geen factuur). De rode lijn is de kredietlimiet: daaronder kan het niet. De andere spaarpotjes zijn echt weg van de lopende rekening (dat geld wordt later privé uitbetaald): een weekinleg is gewoon een uitgave, en ze tellen niet mee als buffer.',
     nu: 'Het saldo van vandaag. Als er een ijkpunt is (zelf ingevuld bankaldo), rekent de tool vanaf dat ijkpunt met de bankmutaties; anders de stand uit Moneybird.',
     laagste: 'Het laagste verwachte saldo in de gekozen periode, met alles wat gepland staat (facturen, vaste lasten, BTW). Hiermee zie je of het krap wordt.',
     ruimte: 'Hoeveel ruimte er op het laagste punt van de gekozen periode nog is tot de kredietlimiet van de lopende rekening. Daaronder staat de ruimte van vandaag.',
@@ -300,27 +319,29 @@
     const lijn = G.lijn(d, { modus: st.modus, prognose: st.prognose });
     st.lijn = lijn;
     const zoomTot = dagPlus(d.vandaag, ZOOM[st.zoom]);
-    const low = G.laagste(lijn, zoomTot), heeftProg = (d.events || []).some(e => e.zekerheid === 'prognose');
-    const lowZonder = heeftProg && st.prognose ? G.laagste(G.lijn(d, { modus: st.modus, prognose: false }), zoomTot) : null;
-    const L = d.saldo.lopend || {}, limiet = L.kredietlimiet;
-    const nu = st.modus === 'totaal' ? d.saldo.totaal.gerapporteerd : L.gerapporteerd;
-    const ruimte = limiet != null && low && st.modus === 'lopend' ? low.saldo + limiet : null;
+    // Kaarten (nu, laagste punt, ruimte) rekenen altijd op de lopende rekening (+ BTW-pot), nooit op het totaal met potjes.
+    const lijnL = st.modus === 'lopend' ? lijn : G.lijn(d, { modus: 'lopend', prognose: st.prognose });
+    const low = st.low = G.laagste(lijnL, zoomTot), heeftProg = (d.events || []).some(e => e.zekerheid === 'prognose');
+    const lowZonder = heeftProg && st.prognose ? G.laagste(G.lijn(d, { modus: 'lopend', prognose: false }), zoomTot) : null;
+    const L = d.saldo.lopend || {}, limiet = L.kredietlimiet, metBtw = G.btwInLopend(d), btwPot = (d.instellingen || {}).btw_pot;
+    const nu = G.groepSaldo(d);
+    const ruimte = limiet != null && low ? low.saldo + limiet : null;
     const introWeg = ls.get('mtg:intro:' + st.wie) === 'weg';
     st.el.innerHTML = `<div class="mtg">
   <div class="mtg-kop"><h2>Geld</h2>
     <div class="mtg-knoppen">
-      <button class="mtg-knop ${st.modus === 'lopend' ? 'aan' : ''}" data-modus="lopend">Lopende rekening</button>
-      <button class="mtg-knop ${st.modus === 'totaal' ? 'aan' : ''}" data-modus="totaal">Totaal met potjes</button>
+      <button class="mtg-knop ${st.modus === 'lopend' ? 'aan' : ''}" data-modus="lopend">Lopende rekening${metBtw ? ' (+ BTW-pot)' : ''}</button>
+      <button class="mtg-knop ${st.modus === 'totaal' ? 'aan' : ''}" data-modus="totaal" title="De spaarpotjes zijn geen buffer: dat geld blijft eraf">Inclusief spaarpotjes (niet bedoeld als buffer)</button>
       ${introWeg ? '<button class="mtg-vraag" data-intro="1" title="Wat zie je hier?">?</button>' : ''}
     </div></div>
   ${introWeg ? '' : `<div class="mtg-uitleg"><b>Wat zie je hier?</b> ${esc(UITLEG.intro)} <button class="mtg-knop klein" data-intro="weg">Begrepen</button></div>`}
   ${drukHtml()}
   ${st.bezig ? '<div class="mtg-uitleg">Betaalgedrag en vaste patronen worden bijgewerkt… (de lijn ververst vanzelf)</div>' : ''}
   <div class="mtg-kaarten">
-    ${kaart('nu', 'Nu', eur(nu), nu != null && nu < 0, (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''))}
-    ${kaart('laagste', heeftProg && st.prognose ? 'Laagste punt (incl. prognose)' : 'Laagste punt', low ? eur(low.saldo) : '—', low && (limiet != null ? low.saldo < -limiet * 0.9 : low.saldo < 0),
-      low ? `${datumTekst(low.datum, true)} · komende ${st.zoom === 'week' ? '2 weken' : st.zoom}${lowZonder ? ` · zonder prognose: ${eur(lowZonder.saldo)} op ${datumTekst(lowZonder.datum)}` : ''}` : '')}
-    ${st.modus === 'lopend' ? kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, limiet == null ? 'kredietlimiet nog niet ingesteld' : `tot de kredietlimiet (${eur(-limiet)}) · nu: ${eur(nu != null ? nu + limiet : null)}`) : kaart('nu', 'Lopende rekening', eur(L.gerapporteerd), L.gerapporteerd < 0, 'zonder potjes')}
+    ${kaart('nu', metBtw ? 'Nu (lopend + BTW-pot)' : 'Nu', eur(nu), nu != null && nu < 0, (metBtw ? `lopend ${eur(L.gerapporteerd)} · BTW-pot ${eur(d.saldo.potten[btwPot].gerapporteerd)} · ` : '') + (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''))}
+    <div class="mtg-k ${low && (limiet != null ? low.saldo < -limiet * 0.9 : low.saldo < 0) ? 'rood' : ''}"><div class="l"><span>${heeftProg && st.prognose ? 'Laagste punt (incl. prognose)' : 'Laagste punt'}</span><button class="mtg-vraag" data-uitleg="laagste">?</button></div>
+      <div class="w">${low ? eur(low.saldo) : '—'}</div><div class="s">${low ? `<a href="#" data-laag="1" title="Naar die dag in de grafiek, met de grootste oorzaken">${esc(datumTekst(low.datum, true))} · waardoor?</a> · komende ${st.zoom === 'week' ? '2 weken' : esc(st.zoom)}${lowZonder ? ` · zonder prognose: ${esc(eur(lowZonder.saldo))} op ${esc(datumTekst(lowZonder.datum))}` : ''}` : ''}</div></div>
+    ${true ? kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, limiet == null ? 'kredietlimiet nog niet ingesteld' : `tot de kredietlimiet (${eur(-limiet)}) · nu: ${eur(nu != null ? nu + limiet : null)}`) : kaart('nu', 'Lopende rekening', eur(L.gerapporteerd), L.gerapporteerd < 0, 'zonder potjes')}
   </div>
   <div class="mtg-kaart">
     <div class="mtg-kop" style="margin:0 0 6px"><b style="flex:1">Verloop ${st.modus === 'totaal' ? 'totaal' : 'lopende rekening'}</b>
@@ -353,7 +374,7 @@
   // Mijlpaal gehaald (werkelijk saldo, niet de verwachting): eenmalig een korte felicitatie. Bij de eerste keer
   // openen tellen al gehaalde mijlpalen als gezien (geen stortvloed van felicitaties).
   function felicitatie() {
-    const d = st.data, cfg = st.cfg || {}, rek = [['lopend', 'De lopende rekening', d.saldo.lopend.gerapporteerd, cfg.lopend_streef]]
+    const d = st.data, cfg = st.cfg || {}, rek = [['lopend', 'De lopende rekening', G.groepSaldo(d), cfg.lopend_streef]]
       .concat((cfg.potten || []).filter(p => !p.virtueel && p.streef).map(p => [p.id, p.naam, (d.saldo.potten[p.id] || {}).gerapporteerd, p.streef]));
     const eerst = !ls.get('mtg:mp-init:' + st.wie), nieuw = [];
     for (const [id, naam, nu, streef] of rek) {
@@ -397,7 +418,7 @@
   function potjesHtml() {
     const d = st.data, cfg = st.cfg || {}, rijen = [];
     const lopendStreef = cfg.lopend_streef || null;
-    rijen.push(potRij('lopend', 'Lopende rekening', d.saldo.lopend.gerapporteerd, lopendStreef, G.tempo(d, 'lopend'), null));
+    rijen.push(potRij('lopend', G.btwInLopend(d) ? 'Lopende rekening (+ BTW-pot)' : 'Lopende rekening', G.groepSaldo(d), lopendStreef, G.tempo(d, 'lopend'), null));
     for (const p of (cfg.potten || [])) {
       const s = (d.saldo.potten || {})[p.id];
       const nu = p.virtueel ? virtueelSaldo(p, d.vandaag) : s ? s.gerapporteerd : null;
@@ -413,7 +434,7 @@
     const v = G.voortgang(streef, nu, tempo, st.data.vandaag);
     if (btw) return `<div class="mtg-pot" ${st.mag ? `data-pot="${esc(id)}" style="cursor:pointer"` : ''}><div class="r1"><b>${esc(naam)}</b><span style="font-weight:600">${nu == null ? 'saldo onbekend' : eur(nu)}</span>
       <span class="mtg-chip">doel: BTW-aangifte ${esc(btw.kwartaal)} (≈${kort(btw.bedrag)})</span></div>
-      <div class="mtg-balk"><div style="width:${btw.pct}%"></div></div><div class="r3">${btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(btw.kwartaal)} (≈${eur(btw.bedrag)}) ✓ — verwacht ${eur(btw.pot)} op ${esc(datumTekst(btw.datum))}` : `tekort ${eur(btw.tekort)} vóór ${esc(datumTekst(btw.datum))} (aangifte ${esc(btw.kwartaal)} ≈${eur(btw.bedrag)})`}${pot && pot.weekinleg ? ' · inleg ' + eur(pot.weekinleg) + '/week' : ''} · automatisch doel; een eigen doel overschrijft het</div></div>`;
+      <div class="mtg-balk"><div style="width:${btw.pct}%"></div></div><div class="r3">${btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(btw.kwartaal)} (≈${eur(btw.bedrag)}) ✓ — verwacht ${eur(btw.pot)} op ${esc(datumTekst(btw.datum))}` : `tekort ${eur(btw.tekort)} vóór ${esc(datumTekst(btw.datum))} (aangifte ${esc(btw.kwartaal)} ≈${eur(btw.bedrag)})${G.btwInLopend(st.data) && (st.data.instellingen || {}).btw_pot === id ? ' — als reserve; de aangifte zelf gaat van de lopende rekening (+ BTW-pot)' : ''}`}${pot && pot.weekinleg ? ' · inleg ' + eur(pot.weekinleg) + '/week' : ''} · automatisch doel; een eigen doel overschrijft het${G.btwInLopend(st.data) && (st.data.instellingen || {}).btw_pot === id ? ' · telt mee in je lopende rekening' : ''}</div></div>`;
     const doelTekst = !streef ? (st.mag ? 'nog geen doel — tik om er een te geven' : 'geen doel') : streef.van != null && streef.tot != null ? `doel ${kort(streef.van)}–${kort(streef.tot)}` : `doel ${kort(streef.bedrag)}`;
     let r3 = '';
     if (v) {
@@ -473,7 +494,7 @@
     return `<div class="mtg-kaart"><details><summary style="cursor:pointer"><b>Instellingen</b> <span class="mtg-melding">kredietlimiet, BTW, klantgroepen</span></summary>
       <dl class="mtg-dl"><dt>Kredietlimiet</dt><dd>${c.kredietlimiet == null ? 'niet ingesteld' : eur(c.kredietlimiet)}</dd>
       <dt>BTW-sparen</dt><dd>${b.spaarpercentage ? Math.round(b.spaarpercentage * 10000) / 100 + '% naar ' + esc(b.spaarpot || '?') : 'uit'}</dd>
-      <dt>BTW-aangifte</dt><dd>van ${esc(b.aangifte_van || 'lopend (aangenomen)')}${b.terugboeking_van ? ', terug uit ' + esc(b.terugboeking_van) : ''}</dd>
+      <dt>BTW-aangifte</dt><dd>${b.modus === 'apart' ? `van ${esc(b.aangifte_van || 'lopend (aangenomen)')}${b.terugboeking_van ? ', terug uit ' + esc(b.terugboeking_van) : ''}` : 'van de lopende rekening; de BTW-pot telt daarin mee'}</dd>
       <dt>Klantgroepen</dt><dd>${(c.klantgroepen || []).map(g => esc(g.naam) + (g.prefix ? ` (begint met "${esc(g.prefix)}")` : ` (${g.contact_ids.length} klanten)`)).join(', ') || 'geen'}</dd>
       <dt>Prognose</dt><dd>${c.prognose_schema ? `schema: klein onder ${eur(c.prognose_schema.grens_klein)}, groot vanaf ${eur(c.prognose_schema.grens_groot)}` : 'standaardschema nog niet ingesteld'}${c.buffer_lopend != null ? ` · buffer ${eur(c.buffer_lopend)}` : ''}</dd></dl>
       <div class="mtg-knoppen"><button class="mtg-knop" data-inst="algemeen">Kredietlimiet en BTW…</button><button class="mtg-knop" data-inst="groepen">Klantgroepen…</button><button class="mtg-knop" data-inst="schema">Prognose-schema en buffer…</button></div></details></div>`;
@@ -508,7 +529,7 @@
     const maandStreep = []; for (let dd = vanD; dd <= totD; dd = dagPlus(dd, 1)) if (dd.endsWith('-01') || (n <= 31 && new Date(dd + 'T00:00:00Z').getUTCDay() === 1)) maandStreep.push(dd);
     // ▲▼: grootste bewegingen per dag (gepland én verleden)
     const perDag = {};
-    for (const e of d.events || []) { if (!e.datum || e.datum < vanD || e.datum > totD || e.saldo_ijkpunt || !G.telt(e, { prognose: st.prognose })) continue; const ef = effect(e, st.modus); if (!ef) continue; const dd = e.bron !== 'bank' && e.datum < d.vandaag ? d.vandaag : e.datum; perDag[dd] = perDag[dd] || { in: 0, uit: 0 }; if (ef > 0) perDag[dd].in += ef; else perDag[dd].uit += ef; }
+    for (const e of d.events || []) { if (!e.datum || e.datum < vanD || e.datum > totD || e.saldo_ijkpunt || !G.telt(e, { prognose: st.prognose })) continue; const ef = effect(e, st.modus, G.groep(d)); if (!ef) continue; const dd = e.bron !== 'bank' && e.datum < d.vandaag ? d.vandaag : e.datum; perDag[dd] = perDag[dd] || { in: 0, uit: 0 }; if (ef > 0) perDag[dd].in += ef; else perDag[dd].uit += ef; }
     // ▲▼ op een eigen strook onder de datums, grootte naar het bedrag (kleine posten weg: < 4% van het bereik).
     const drempel = (hi - lo) * 0.04, groot = Math.max(1, ...Object.values(perDag).map(s => Math.max(s.in, -s.uit)));
     const maat = b => (9 + 9 * Math.sqrt(Math.min(1, Math.abs(b) / groot))).toFixed(1);
@@ -520,6 +541,7 @@
       ${lo < 0 && hi > 0 ? `<line x1="${pl}" x2="${W - pr}" y1="${y(0)}" y2="${y(0)}" stroke="#bbb" stroke-width="1"/>` : ''}
       ${limiet != null && limiet >= lo ? `<line x1="${pl}" x2="${W - pr}" y1="${y(limiet)}" y2="${y(limiet)}" stroke="var(--mtg-uit)" stroke-width="1.5"/><text x="${W - pr - 2}" y="${y(limiet) - 3}" text-anchor="end" font-size="10" fill="var(--mtg-uit)">kredietlimiet</text>` : ''}
       ${d.vandaag >= vanD && d.vandaag <= totD ? `<line x1="${x(d.vandaag)}" x2="${x(d.vandaag)}" y1="${pt}" y2="${H - pb}" stroke="var(--gold,#B8962E)" stroke-dasharray="3 3"/>` : ''}
+      ${st.markeer && st.markeer >= vanD && st.markeer <= totD ? `<line x1="${x(st.markeer)}" x2="${x(st.markeer)}" y1="${pt}" y2="${H - pb}" stroke="var(--mtg-uit)" stroke-width="1.5" stroke-dasharray="2 2"/><text x="${x(st.markeer) + 3}" y="${pt + 20}" font-size="10" fill="var(--mtg-uit)">laagste punt</text>` : ''}
       ${ver.length > 1 ? `<path d="${pad(ver)}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2"/>` : ''}
       ${(zonder || toek).filter(p => p.datum >= d.vandaag).length > 1 ? `<path d="${pad((zonder || toek).filter(p => p.datum >= d.vandaag))}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2" stroke-dasharray="6 4"/>` : ''}
       ${zonder && toek.length > 1 ? `<path d="${afwijk(toek, zonder.filter(p => p.datum >= d.vandaag))}" fill="none" stroke="#3a5a8a" stroke-width="2" stroke-dasharray="1 3"/>` : ''}
@@ -535,10 +557,10 @@
     let h = '';
     for (const mp of m) {
       const p = punten.find(q => !q.verleden && q.datum >= st.data.vandaag && q.saldo >= mp && q.datum >= vanD && q.datum <= totD);
-      if (p && st.data.saldo.lopend.gerapporteerd < mp) h += `<text x="${x(p.datum)}" y="${y(mp) - 4}" font-size="12" fill="var(--gold,#B8962E)">⚑</text>`;
+      if (p && G.groepSaldo(st.data) < mp) h += `<text x="${x(p.datum)}" y="${y(mp) - 4}" font-size="12" fill="var(--gold,#B8962E)">⚑</text>`;
     }
     if (streef && streef.datum && (streef.bedrag != null || streef.van != null)) {   // doelpad: stippellijn van nu naar het doel op de streefdatum
-      const doel = streef.bedrag != null ? streef.bedrag : streef.van, nu = st.data.saldo.lopend.gerapporteerd;
+      const doel = streef.bedrag != null ? streef.bedrag : streef.van, nu = G.groepSaldo(st.data);
       if (nu != null && streef.datum > st.data.vandaag) {
         const a = st.data.vandaag < vanD ? vanD : st.data.vandaag, b = streef.datum > totD ? totD : streef.datum, f = dd => nu + (doel - nu) * dagenTussen(st.data.vandaag, dd) / dagenTussen(st.data.vandaag, streef.datum);
         if (a < b) h += `<path d="M${x(a)},${y(f(a))}L${x(b)},${y(f(b))}" stroke="var(--gold,#B8962E)" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/>`;
@@ -582,6 +604,19 @@
     st.offset = Math.max(Math.min(st.offset, Math.max(maxOff, 0)), Math.min(minOff, 0));
   }
   function zoomStap(r) { const z = Object.keys(ZOOM), i = Math.max(0, Math.min(z.length - 1, z.indexOf(st.zoom) + r)); if (z[i] !== st.zoom) { st.zoom = z[i]; ls.set('mtg:zoom:' + st.wie, st.zoom); begrens(); grafiek(); } }
+  // Laagste punt: naar die dag in de grafiek (gemarkeerd) en de drie posten die het meest bijdragen (tot en met die dag).
+  G.laagsteOorzaken = function (data, low, opt) {
+    const groep = G.groep(data);
+    return (data.events || []).filter(e => isGepland(e) && G.telt(e, opt) && e.datum <= low.datum).map(e => ({ e, ef: effect(e, 'lopend', groep) }))
+      .filter(x => x.ef < 0).sort((a, b) => a.ef - b.ef).slice(0, 3).map(x => x.e);
+  };
+  function laagsteUitleg() {
+    const low = st.low; if (!low) return;
+    const n = ZOOM[st.zoom]; st.markeer = low.datum; st.offset = dagenTussen(st.data.vandaag, low.datum) - Math.round(n * 0.5) + Math.round(n * 0.25); begrens(); teken();
+    const oorz = G.laagsteOorzaken(st.dataS || st.data, low, { prognose: st.prognose });
+    blad(`<h3>Laagste punt: ${eur(low.saldo)}</h3><div class="mtg-melding">${esc(datumTekst(low.datum, true))} — in de grafiek gemarkeerd. Vertrekpunt: het saldo van nu, ${eur(G.groepSaldo(st.data))}. De grootste geplande posten die er (tot en met die dag) aan bijdragen:</div>
+      ${oorz.length ? oorz.map(rijHtml).join('') : '<div class="mtg-melding">Geen geplande uitgaven vóór die dag — het laagste punt is het saldo van nu.</div>'}`);
+  }
   function dagInfo(dd) {
     const ev = ((st.dataS || st.data).events || []).filter(e => (e.datum === dd || (dd === st.data.vandaag && isGepland(e) && e.datum < dd)) && !e.saldo_ijkpunt && G.telt(e, { prognose: st.prognose }));
     const p = st.lijn.punten.find(q => q.datum === dd);
@@ -801,6 +836,7 @@
   // ── Interactie ───────────────────────────────────────────────────────────────
   function klik(e) {
     if (e.target.closest('.mtg-fd')) return;
+    if (e.target.closest('[data-laag]')) { e.preventDefault(); return laagsteUitleg(); }
     const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst],[data-prog],[data-sc],[data-advies],[data-vraag],[data-herlaad]');
     if (!t) return;
     if (t.dataset.modus) { st.modus = t.dataset.modus; st.offset = 0; teken(); }
@@ -915,7 +951,7 @@
     o.querySelector('[data-ok]').addEventListener('click', () => {
       const f = n => { const el = o.querySelector(`[name="${n}"]`); return el ? (el.type === 'checkbox' ? el.checked : el.value) : undefined; };
       const getal = n => f(n) === '' || f(n) == null ? null : Number(f(n));
-      const nuSaldo = lopend ? st.data.saldo.lopend.gerapporteerd : saldo ? saldo.gerapporteerd : 0;
+      const nuSaldo = lopend ? G.groepSaldo(st.data) : saldo ? saldo.gerapporteerd : 0;   // lopend: incl. BTW-pot (zoals de lijn)
       const streef = (getal('bedrag') != null || getal('van') != null || f('datum')) ? { bedrag: getal('bedrag'), van: getal('van'), tot: getal('tot'), datum: f('datum') || null,
         mijlpalen: String(f('mijlpalen') || '').split(/[;,]\s*/).map(x => Number(x.replace(/[^\d.-]/g, ''))).filter(x => x === x && String(x) !== ''),
         start: s.start && (s.bedrag === getal('bedrag') && s.van === getal('van')) ? s.start : { datum: st.data.vandaag, bedrag: nuSaldo == null ? 0 : nuSaldo } } : null;
@@ -952,15 +988,18 @@
   function instBlad() {
     const c = st.cfg || {}, b = c.btw || {}, pot = (c.potten || []).filter(p => !p.virtueel);
     const o = blad(`<h3>Kredietlimiet en BTW</h3>
+      <label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="inl" style="width:auto" ${b.modus === 'apart' ? '' : 'checked'}> <span style="margin:0">BTW-rekening telt mee als lopende rekening (aangifte gaat van de gezamenlijke stand, geen terugboeking)</span></label>
       <label class="mtg-veld"><span>Kredietlimiet lopende rekening (€)</span><input type="number" name="kl" value="${c.kredietlimiet != null ? c.kredietlimiet : ''}"></label>
       <label class="mtg-veld"><span>BTW-sparen: percentage van elke ontvangst (bv. 17,36 = 21/121)</span><input type="number" step="0.01" name="pct" value="${b.spaarpercentage != null ? Math.round(b.spaarpercentage * 10000) / 100 : ''}"></label>
       <label class="mtg-veld"><span>BTW-sparen naar potje</span><select name="spaarpot"><option value="">—</option>${pot.map(p => `<option value="${esc(p.id)}" ${b.spaarpot === p.id ? 'selected' : ''}>${esc(p.naam)}</option>`).join('')}</select></label>
-      <label class="mtg-veld"><span>BTW-aangifte betaald van</span><select name="van"><option value="lopend" ${b.aangifte_van !== 'lopend' && b.aangifte_van ? '' : 'selected'}>lopende rekening</option>${pot.map(p => `<option value="${esc(p.id)}" ${b.aangifte_van === p.id ? 'selected' : ''}>${esc(p.naam)}</option>`).join('')}</select></label>
+      <div class="btw-apart"><label class="mtg-veld"><span>Alleen als de BTW-rekening apart staat — BTW-aangifte betaald van</span><select name="van"><option value="lopend" ${b.aangifte_van !== 'lopend' && b.aangifte_van ? '' : 'selected'}>lopende rekening</option>${pot.map(p => `<option value="${esc(p.id)}" ${b.aangifte_van === p.id ? 'selected' : ''}>${esc(p.naam)}</option>`).join('')}</select></label>
       <label class="mtg-veld"><span>Zelfde dag terugboeken van</span><select name="terug"><option value="">niet</option>${pot.map(p => `<option value="${esc(p.id)}" ${b.terugboeking_van === p.id ? 'selected' : ''}>${esc(p.naam)}</option>`).join('')}</select></label>
-      <button class="mtg-knop aan" data-ok="1">Opslaan</button>`);
+      </div><button class="mtg-knop aan" data-ok="1">Opslaan</button>`);
+    const apartZet = () => { o.querySelector('.btw-apart').style.display = o.querySelector('[name="inl"]').checked ? 'none' : ''; };
+    o.querySelector('[name="inl"]').addEventListener('change', apartZet); apartZet();
     o.querySelector('[data-ok]').addEventListener('click', () => {
       const f = n => o.querySelector(`[name="${n}"]`).value;
-      const body = { revisie: c.revisie, kredietlimiet: f('kl') === '' ? null : Number(f('kl')), btw: { spaarpercentage: f('pct') === '' ? null : Math.round(Number(String(f('pct')).replace(',', '.')) * 100) / 10000, spaarpot: f('spaarpot') || null, aangifte_van: f('van') || null, terugboeking_van: f('terug') || null } };
+      const body = { revisie: c.revisie, kredietlimiet: f('kl') === '' ? null : Number(f('kl')), btw: { spaarpercentage: f('pct') === '' ? null : Math.round(Number(String(f('pct')).replace(',', '.')) * 100) / 10000, spaarpot: f('spaarpot') || null, aangifte_van: f('van') || null, terugboeking_van: f('terug') || null, modus: o.querySelector('[name="inl"]').checked ? 'in_lopend' : 'apart' } };
       o.remove(); opslaan(() => stuur('/geld/config', body), 'Opgeslagen');
     });
   }
