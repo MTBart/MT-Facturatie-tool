@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.11.5",
+    "datum": "2026-10-09",
+    "titel": "Rapporten: lonen via inkoopfacturen (pensioen)",
+    "voor": "beheer",
+    "punten": [
+      "Lonen die via een inkoopfactuur of bon lopen (zoals pensioenpremies), tellen nu mee in het eerlijke beeld: staat de factuurregel op een loon-balansgrootboek, dan telt die als die soort. De betaling van zo'n factuur telt niet nog een keer.",
+      "In de controle per maand staat een kolom \"via factuur\"; in de uitsplitsing zie je de factuur zelf, met een link naar Moneybird.",
+      "Grafiek omzet en kosten: een maand zonder prognose-omzet toont geen verlies meer, alleen een dunne referentielijn met \"omzet nog niet bekend\". Met prognose-omzet worden de kosten geschat als omzet × (1 − brutomarge) + vaste kosten. De lopende maand is lichter en gestreept (nog niet compleet)."
+    ]
+  },
+  {
     "versie": "2.11.4",
     "datum": "2026-10-09",
     "titel": "Rapporten: lonen ook via een tussenrekening",
