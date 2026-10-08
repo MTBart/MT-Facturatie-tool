@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Release v2.11.1: eerlijk beeld zonder opnames van de eigenaren; backup = v2.11
+- Commit: `0169cb0` | Auteur: Bart Witte
+
 ## 2026-10-09 — Rapporten: eerlijk beeld zonder opnames van de eigenaren (hotfix)
 - Commit: `d34da53` | Auteur: Bart Witte
 

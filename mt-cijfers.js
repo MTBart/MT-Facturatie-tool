@@ -470,27 +470,65 @@
       <div style="margin-top:12px;text-align:right"><button class="mtc-knop" data-sluit="1">Sluiten</button></div>`;
     box.addEventListener('click', ev => { if (ev.target.closest('[data-corr]')) { ev.preventDefault(); o.remove(); drillMaand('correctie', null, ym, 'Lonen buiten de W&V'); } });
   }
+  // Vaste loonrekeningen aanpassen (meteen opslaan) en de cijfers opnieuw laden.
+  async function loonIbanZet(fn) {
+    const c = await st.bron.haal('/geld/config'); if (!c || !c.config) return false;
+    const cc = c.config.cijfers || {}, lijst = fn((cc.loon_iban || []).slice());
+    const res = await st.bron.haal('/geld/config', { method: 'POST', body: { revisie: c.config.revisie, cijfers: Object.assign({}, cc, { loon_iban: lijst }) } });
+    if (!res || res.error) return false;
+    st.maanden = []; C.laad(); return true;
+  }
+  // Controle van het eerlijke beeld per maand (eigenaar): betaald per soort, al als loon in de W&V, telt; en wat niet herkend wordt.
+  async function diagnoseBlad(jaar) {
+    if (!st.mag) return;
+    const o = sheet(`<h3 style="margin-top:0">Controle eerlijk beeld ${esc(jaar)}</h3><div class="mtc-noot">Laden…</div>`), box = o.firstElementChild;
+    const d = await st.bron.haal(`/geld/cijfers/diagnose?jaar=${encodeURIComponent(jaar)}`);
+    if (!d || d.error) { box.querySelector('.mtc-noot').textContent = 'Kon niet worden geladen: ' + ((d && d.error) || 'geen antwoord'); return; }
+    const k = x => esc(eur(x)), som = b => (b.netto || 0) + (b.loonheffing || 0) + (b.pensioen || 0);
+    box.innerHTML = `<h3 style="margin-top:0">Controle eerlijk beeld ${esc(jaar)}</h3>
+      <div class="mtc-noot">Woorden: ${esc(d.loonpatronen.join(', '))} · loon in de W&V: ${esc(d.loon_wv.join(', ') || 'geen')} (${d.loon_wv_bron === 'voorstel' ? 'voorstel op naam' : 'ingesteld'}) · telt vanaf ${esc(maandNaam(d.correctie_van))}.</div>
+      <table><tr><td><b>Maand</b></td><td class="b"><b>netto</b></td><td class="b"><b>loonheffing</b></td><td class="b"><b>pensioen</b></td><td class="b"><b>al in W&V</b></td><td class="b"><b>telt</b></td><td class="b"><b>eigenaar (uit)</b></td></tr>
+      ${d.maanden.map(m => `<tr><td>${esc(maandNaam(m.maand))}${m.in_correctie ? '' : ' <span class="mtc-noot">(vóór start)</span>'}</td><td class="b">${k(m.betaald.netto)}</td><td class="b">${k(m.betaald.loonheffing)}</td><td class="b">${k(m.betaald.pensioen)}</td><td class="b" title="${esc(m.wv_grootboeken.map(g => g.naam + ' ' + eur(g.bedrag)).join(', '))}">${k(m.al_in_wv)}</td><td class="b"><b>${k(m.telt)}</b></td><td class="b">${k(m.eigenaar_uitgesloten)}</td></tr>`).join('')}
+      <tr><td><b>Totaal</b></td><td class="b"><b>${k(d.totaal.betaald.netto)}</b></td><td class="b"><b>${k(d.totaal.betaald.loonheffing)}</b></td><td class="b"><b>${k(d.totaal.betaald.pensioen)}</b></td><td class="b"><b>${k(d.totaal.al_in_wv)}</b></td><td class="b"><b>${k(d.totaal.telt)}</b></td><td class="b">${k(d.totaal.eigenaar_uitgesloten)}</td></tr></table>
+      <div class="mtc-noot">Betaald via de bank samen ${k(som(d.totaal.betaald))}; telt in het eerlijke beeld ${k(d.totaal.telt)}.${d.ontbrekend.length ? ' Nog niet opgehaald: ' + esc(d.ontbrekend.map(maandNaam).join(', ')) + '.' : ''}</div>
+      <h4>Niet herkend</h4><div class="mtc-noot">Uitgaande betalingen die niet in de W&V geboekt zijn, geen trefwoord hebben en niet naar een eigenaar gaan. Hoort er een bij de lonen (werknemer, Belastingdienst, pensioenfonds)? Maak er een vaste loonrekening van.</div>
+      <table>${d.niet_herkend.map((x, i) => `<tr><td>${esc(x.tegenpartij || '—')}<div class="mtc-noot">${esc(x.iban || 'geen IBAN')} · ${esc(x.n)}× · ${esc(x.voorbeeld)}</div></td><td class="b">${k(x.bedrag)}</td>
+        <td>${x.iban ? `<select data-nhsoort="${i}">${LOONSOORT.map(([kk, t]) => `<option value="${kk}">${esc(t)}</option>`).join('')}</select> <button class="mtc-knop" data-alsloon="${i}">telt als loon</button>` : ''}</td></tr>`).join('') || '<tr><td>Niets.</td></tr>'}</table>
+      <div style="margin-top:12px;text-align:right"><button class="mtc-knop" data-sluit="1">Sluiten</button></div>`;
+    box.querySelectorAll('[data-alsloon]').forEach(b => b.addEventListener('click', async () => {
+      const x = d.niet_herkend[Number(b.dataset.alsloon)], soort = box.querySelector(`[data-nhsoort="${b.dataset.alsloon}"]`).value;
+      b.disabled = true;
+      const ok = await loonIbanZet(l => l.filter(q => q.iban !== x.iban).concat([{ iban: x.iban, naam: x.tegenpartij || '', soort }]));
+      if (ok) { o.remove(); diagnoseBlad(jaar); } else { b.disabled = false; }
+    }));
+  }
   // Indeling (eigenaar): grootboek → categorie, privé- en aflossingsgrootboeken, loonpatronen, correctie vanaf, branche.
   async function indelingBlad() {
     if (!st.mag) return;
     const o = sheet('<h3 style="margin-top:0">Indeling</h3><div class="mtc-noot">Laden…</div>'), box = o.firstElementChild;
     const [r, c] = await Promise.all([st.bron.haal('/geld/cijfers/indeling'), st.bron.haal('/geld/config')]);
     if (!r || r.error || !c || !c.config) { box.querySelector('.mtc-noot').textContent = 'Kon niet worden geladen.'; return; }
-    const priveSet = new Map((r.prive || []).map(p => [p.ledger, p.naam])), afl = new Set(r.aflossing || []);
+    const priveSet = new Map((r.prive || []).map(p => [p.ledger, p.naam])), afl = new Set(r.aflossing || []), loonWv = new Set(r.loon_wv || []);
     const opties = sel => r.categorieen.map(k => `<option value="${esc(k.id)}" ${k.id === sel ? 'selected' : ''}>${esc(k.naam)}</option>`).join('');
     const bmVeld = (id, naam) => { const b = (r.benchmarks || {})[id] || {}; return `<tr><td>${esc(naam)}</td><td><input type="number" step="0.1" min="0" max="100" data-bm="${esc(id)}" value="${b.pct != null ? b.pct : b.van != null ? (b.van + b.tot) / 2 : ''}" style="width:80px"> %</td></tr>`; };
     box.innerHTML = `<h3 style="margin-top:0">Indeling</h3>
       <div class="mtc-noot">Welke grootboekrekening in welke categorie valt. "voorstel" = op naam geraden; kies om vast te leggen. De cijfers rekenen meteen opnieuw (zonder Moneybird opnieuw te vragen).</div>
-      <table>${r.kosten.map(k => `<tr><td>${esc(k.naam)}${k.bron === 'voorstel' ? ' <span class="mtc-badge">voorstel</span>' : ''}</td><td><select data-led="${esc(k.ledger)}">${opties(k.categorie)}</select></td></tr>`).join('')}</table>
+      <table>${r.kosten.map(k => `<tr><td>${esc(k.naam)}${k.bron === 'voorstel' ? ' <span class="mtc-badge">voorstel</span>' : ''}</td><td><select data-led="${esc(k.ledger)}">${opties(k.categorie)}</select></td>
+        <td>${k.categorie === 'personeel' || loonWv.has(k.ledger) ? `<label title="Dit grootboek bevat de lonen zelf (bruto, sociale lasten, pensioen) — tegen dubbel tellen met het eerlijke beeld"><input type="checkbox" data-loonwv="${esc(k.ledger)}" ${loonWv.has(k.ledger) ? 'checked' : ''}> loon</label>` : ''}</td></tr>`).join('')}</table>
+      <div class="mtc-noot">"loon" = het grootboek bevat de lonen zelf${r.loon_wv_bron === 'voorstel' ? ' (nu een voorstel op naam)' : ''}. Alleen dat telt als "al in de W&V" bij het eerlijke beeld; overige personeelskosten, reiskosten en inhuur niet.</div>
       <h4>Privé-opnames (per eigenaar)</h4><table>${r.eigen_vermogen.map(l => `<tr><td><label><input type="checkbox" data-prive="${esc(l.ledger)}" ${priveSet.has(l.ledger) ? 'checked' : ''}> ${esc(l.naam)}</label></td><td><input data-privenaam="${esc(l.ledger)}" value="${esc(priveSet.get(l.ledger) || '')}" placeholder="naam" maxlength="40" style="width:120px"></td></tr>`).join('') || '<tr><td>Geen eigen-vermogensrekeningen.</td></tr>'}</table>
       <h4>Aflossingen (leningen)</h4><table>${r.schulden.map(l => `<tr><td><label><input type="checkbox" data-afl="${esc(l.ledger)}" ${afl.has(l.ledger) ? 'checked' : ''}> ${esc(l.naam)}</label></td></tr>`).join('') || '<tr><td>Geen schulden-rekeningen.</td></tr>'}</table>
-      <h4>Eerlijk beeld</h4><div class="mtc-noot">Uitgaande bankmutaties die niet in de W&V staan en een van deze woorden bevatten, tellen als personeelskosten (alleen het deel dat nog niet in de W&V staat).</div>
+      <h4>Eerlijk beeld</h4><div class="mtc-noot">Uitgaande bankmutaties die niet in de W&V staan en een van deze woorden bevatten, of naar een vaste loonrekening gaan, tellen als personeelskosten (alleen het deel dat nog niet als loon in de W&V staat). Opnames van de eigenaren tellen nooit.</div>
+      <div style="margin:6px 0"><button class="mtc-knop" data-diagnose="1">Controle per maand</button></div>
+      <div class="mtc-noot">Vaste loonrekeningen: ${(r.loon_iban || []).length ? (r.loon_iban || []).map(x => `<span class="mtc-badge">${esc((x.naam || x.iban) + ' · ' + (LOONSOORT.find(q => q[0] === x.soort) || [0, x.soort])[1])} <a href="#" data-weg-iban="${esc(x.iban)}" aria-label="verwijderen">×</a></span>`).join(' ') : 'nog geen (kies ze in de controle per maand)'}</div>
       <label>Woorden <input data-loon value="${esc((r.loonpatronen || []).join(', '))}" style="width:100%"></label><label>Vanaf maand <input type="month" data-corrvan value="${esc(r.correctie_van || '')}"></label>
       <h4>Opnieuw ophalen</h4><div class="mtc-noot">Na late boekingen in Moneybird: haal een afgesloten jaar opnieuw op (in rondes van 6 maanden).</div>
       <select data-herbouwjaar>${Array.from({ length: Number(st.vandaag.slice(0, 4)) - Number(START.slice(0, 4)) + 1 }, (_, i) => Number(START.slice(0, 4)) + i).reverse().map(j => `<option value="${j}">${j}</option>`).join('')}</select> <button class="mtc-knop" data-herbouw="1">Jaar opnieuw ophalen</button>
       <h4>Branche (% van de omzet)</h4><table>${bmVeld('brutomarge', 'Brutomarge')}${r.categorieen.map(k => bmVeld(k.id, k.naam)).join('')}${bmVeld('resultaat', 'Resultaat')}</table>
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"><button class="mtc-knop" data-sluit="1">Annuleren</button><button class="mtc-knop aan" data-bewaar="1">Opslaan</button></div>`;
     box.querySelector('[data-herbouw]').addEventListener('click', () => { const j = box.querySelector('[data-herbouwjaar]').value; o.remove(); C.laad(j); });
+    box.querySelector('[data-diagnose]').addEventListener('click', () => { o.remove(); diagnoseBlad(st.jaar); });
+    box.querySelectorAll('[data-weg-iban]').forEach(a => a.addEventListener('click', async ev => { ev.preventDefault(); await loonIbanZet(l => l.filter(x => x.iban !== a.dataset.wegIban)); o.remove(); indelingBlad(); }));
     box.querySelector('[data-bewaar]').addEventListener('click', async () => {
       const map = {}; box.querySelectorAll('select[data-led]').forEach(s => { const k = r.kosten.find(x => x.ledger === s.dataset.led); if (k && (k.bron === 'instelling' || s.value !== k.categorie)) map[s.dataset.led] = s.value; });
       const prive = [...box.querySelectorAll('input[data-prive]:checked')].map(i => ({ ledger: i.dataset.prive, naam: (box.querySelector(`[data-privenaam="${i.dataset.prive}"]`) || {}).value || 'privé' }));
@@ -499,7 +537,8 @@
       const bm = {}; const oud = r.benchmarks || {};
       box.querySelectorAll('[data-bm]').forEach(i => { const id = i.dataset.bm, v = i.value === '' ? null : Number(i.value), o2 = oud[id] || {};
         if (v == null || !isFinite(v)) return; const gelijk = o2.pct != null ? o2.pct === v : o2.van != null && (o2.van + o2.tot) / 2 === v; bm[id] = gelijk ? o2 : { pct: v, bron: 'eigen' }; });
-      const cijfers = Object.assign({}, c.config.cijfers || {}, { map: Object.assign({}, (c.config.cijfers || {}).map || {}, map), prive, aflossing, loonpatronen, correctie_van: box.querySelector('[data-corrvan]').value || null, benchmarks: bm });
+      const loon_wv = [...box.querySelectorAll('input[data-loonwv]:checked')].map(i => i.dataset.loonwv);
+      const cijfers = Object.assign({}, c.config.cijfers || {}, { map: Object.assign({}, (c.config.cijfers || {}).map || {}, map), prive, aflossing, loonpatronen, correctie_van: box.querySelector('[data-corrvan]').value || null, benchmarks: bm, loon_wv });
       const res = await st.bron.haal('/geld/config', { method: 'POST', body: { revisie: c.config.revisie, cijfers } });
       if (!res || res.error) { const f = document.createElement('div'); f.className = 'mtc-waarsch'; f.textContent = 'Niet opgeslagen: ' + ((res && res.error) || 'geen antwoord'); box.appendChild(f); return; }
       o.remove(); st.maanden = []; await C.laad();
