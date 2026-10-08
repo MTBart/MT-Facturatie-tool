@@ -9,7 +9,14 @@
   const OORDEEL = { groen: { l: 'goed', k: 'g', rang: 3 }, oranje: { l: 'let op', k: 'o', rang: 2 }, rood: { l: 'actie nodig', k: 'r', rang: 1 }, neutraal: { l: 'neutraal', k: 'n', rang: null } };
   const oordeel = o => OORDEEL[o] || OORDEEL.neutraal;
   const MAX_TEKST = 2000;
-  const st = R._st = { el: null, bron: null, mag: false, magVragen: false, index: [], open: {}, id: null, data: null, vorige: null, openSec: Object.create(null), lokaal: [], concept: Object.create(null), bezig: false, ixCompleet: true };
+  const st = R._st = { el: null, bron: null, mag: false, magVragen: false, index: [], open: {}, id: null, data: null, vorige: null, openSec: Object.create(null), lokaal: [], concept: Object.create(null), bezig: false, ixCompleet: true, dash: null, horizon: 'kort' };
+  const HORIZON = { kort: ['Korte termijn', 'nu: kas en de komende 3 maanden'], lang: ['Lange termijn', 'de komende 1 tot 3 jaar'] };
+  const mobiel = () => { try { return root.matchMedia && root.matchMedia('(max-width: 760px)').matches; } catch (e) { return false; } };
+  // Het scherm: rechts (desktop, sticky) of bovenaan (mobiel) de cijfers, links het rapport. Het dashboard blijft hetzelfde element.
+  function scherm(links) {
+    st.el.innerHTML = `<div class="mtr${st.dash ? ' mtr-met' : ''}"><div class="mtr-grid">${st.dash ? '<div class="mtr-rechts" data-dash></div>' : ''}<div class="mtr-links">${links}</div></div></div>`;
+    const plek = st.el.querySelector('[data-dash]'); if (plek && st.dash) plek.appendChild(st.dash);
+  }
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } } };
 
   // ── Beperkte markdown → HTML (eerst escapen, dan alleen **vet**, lijstjes en tabellen) ──
@@ -49,6 +56,11 @@
     const s = document.createElement('style'); s.id = 'mtr-css';
     s.textContent = `
 .mtr{--mtr-g:#2A7A4A;--mtr-o:#B7791F;--mtr-r:#B4412F;--mtr-zacht:var(--text-faint,#8a8a80);font-size:15px;max-width:900px;margin:0 auto;line-height:1.45}
+.mtr.mtr-met{max-width:1400px}
+.mtr-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media(min-width:1000px){.mtr-met .mtr-grid{grid-template-columns:minmax(0,5fr) minmax(0,6fr)}.mtr-met .mtr-rechts{grid-column:2;grid-row:1;position:sticky;top:8px;align-self:start;max-height:calc(100vh - 16px);overflow:auto}.mtr-met .mtr-links{grid-column:1;grid-row:1}}
+.mtr-advies{background:#f4f6f9;border-radius:8px;padding:8px 10px;margin:8px 0}.mtr-advies ul{margin:4px 0 0;padding-left:20px}
+.mtr-horizon{display:inline-flex;border:1px solid var(--border,#ddd);border-radius:22px;overflow:hidden}.mtr-horizon button{border:0;background:none;min-height:44px;padding:0 12px;font:inherit;cursor:pointer}.mtr-horizon button.aan{background:var(--green,#2A4A38);color:#fff}
 .mtr *{box-sizing:border-box}
 .mtr-kop{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0 10px}.mtr-kop h2{margin:0;flex:1}
 .mtr-kop select{padding:7px 9px;border:1px solid var(--border,#ccc);border-radius:8px;font-size:14px;max-width:100%}
@@ -88,16 +100,19 @@
   // ── Laden ──
   R.start = async function (el, opties) {
     st.el = el; st.bron = opties.bron; st.mag = !!opties.magWijzigen; st.magVragen = opties.magVragen !== false; st.wie = opties.wie || ''; st.opBadge = opties.opBadge || null;
+    st.horizon = ls.get('mtr:horizon:' + st.wie) === 'lang' ? 'lang' : 'kort';
     css();
-    el.innerHTML = '<div class="mtr"><div class="mtr-zacht">Rapporten laden…</div></div>';
+    if (root.MTCijfers && opties.cijfers !== false && !st.dash) { st.dash = document.createElement('div'); st.dash.className = 'mtr-dash'; }
+    scherm('<div class="mtr-zacht">Rapporten laden…</div>');
+    if (st.dash) root.MTCijfers.mount(st.dash, { bron: st.bron, magWijzigen: st.mag, wie: st.wie, horizon: st.horizon, vandaag: opties.vandaag, opHorizon: h => zetHorizon(h, true) });   // laadt parallel
     await R.laad();
   };
   R.laad = async function () {
     const ix = await st.bron.haal('/geld/rapporten');
-    if (!ix || ix.error) { st.el.innerHTML = `<div class="mtr"><div class="mtr-kaart">Rapporten konden niet worden geladen${ix && ix.error ? ': ' + esc(ix.error) : ''}.</div></div>`; return; }
+    if (!ix || ix.error) { scherm(`<div class="mtr-kaart">Rapporten konden niet worden geladen${ix && ix.error ? ': ' + esc(ix.error) : ''}.</div>`); return; }
     st.index = ix.rapporten || []; st.open = ix.open || {}; st.ixCompleet = ix.compleet !== false;
     if (st.opBadge) st.opBadge(ix.open_totaal || 0);
-    if (!st.index.length) { st.el.innerHTML = '<div class="mtr"><div class="mtr-kop"><h2>Rapporten</h2></div><div class="mtr-kaart">Nog geen rapporten. Claude zet ze hier klaar voor de CEO-avond.</div></div>'; return; }
+    if (!st.index.length) { scherm('<div class="mtr-kop"><h2>Rapporten</h2></div><div class="mtr-kaart">Nog geen rapporten. Claude zet ze hier klaar voor de CEO-avond.</div>'); return; }
     const bewaard = ls.get('mtr:id:' + st.wie);
     await R.kies(st.id && st.index.some(x => x.id === st.id) ? st.id : bewaard && st.index.some(x => x.id === bewaard) ? bewaard : st.index[0].id);
   };
@@ -105,7 +120,7 @@
     st.id = id; ls.set('mtr:id:' + st.wie, id);
     const i = st.index.findIndex(x => x.id === id), vorigeId = i >= 0 && st.index[i + 1] ? st.index[i + 1].id : null;
     const [d, v] = await Promise.all([st.bron.haal('/geld/rapport?id=' + encodeURIComponent(id)), vorigeId ? st.bron.haal('/geld/rapport?id=' + encodeURIComponent(vorigeId)) : Promise.resolve(null)]);
-    if (!d || d.error || !d.rapport) { st.el.innerHTML = `<div class="mtr"><div class="mtr-kaart">Rapport kon niet worden geladen${d && d.error ? ': ' + esc(d.error) : ''}${d && d.fout ? ' (' + esc(d.fout) + ')' : ''}.</div></div>`; return; }
+    if (!d || d.error || !d.rapport) { scherm(`<div class="mtr-kaart">Rapport kon niet worden geladen${d && d.error ? ': ' + esc(d.error) : ''}${d && d.fout ? ' (' + esc(d.fout) + ')' : ''}.</div>`); return; }
     st.data = d; st.vorige = v && v.rapport ? Object.assign({ _id: vorigeId }, v.rapport) : null;
     teken();
   };
@@ -126,17 +141,21 @@
     const veranderd = !vs ? '' : `<div class="mtr-veranderd" style="margin-top:10px"><b>Wat is er veranderd t.o.v. ${esc((st.index.find(x => x.id === st.vorige._id) || {}).titel || st.vorige._id)}</b>
       ${vs.anders.length || vs.nieuw.length || vs.weg.length ? `<ul>${vs.anders.map(x => `<li>${esc(x.sectie.titel || x.sectie.id)}: <span class="mtr-chip ${oordeel(x.van).k}">${esc(oordeel(x.van).l)}</span> → <span class="mtr-chip ${oordeel(x.naar).k}">${esc(oordeel(x.naar).l)}</span>${x.richting ? ` (${x.richting})` : ''}</li>`).join('')}
         ${vs.nieuw.map(s => `<li>Nieuw: ${esc(s.titel || s.id)}</li>`).join('')}${vs.weg.map(s => `<li>Niet meer in dit rapport: ${esc(s.titel || s.id)}</li>`).join('')}</ul>` : '<div class="mtr-zacht">Geen oordelen veranderd.</div>'}</div>`;
-    st.el.innerHTML = `<div class="mtr">
-  <div class="mtr-kop"><h2>Rapporten</h2>${st.index.length > 1 ? `<select data-kies="1" aria-label="Kies een rapport">${st.index.map(x => `<option value="${esc(x.id)}" ${x.id === st.id ? 'selected' : ''}>${esc(x.titel)}${x.periode ? ' — ' + esc(x.periode) : ''}${st.open[x.id] ? ` (${st.open[x.id]} open)` : ''}</option>`).join('')}</select>` : ''}</div>
+    scherm(`
+  <div class="mtr-kop"><h2>Rapporten</h2>${st.dash ? '' : `<div class="mtr-horizon" role="group" aria-label="Horizon advies">${Object.entries(HORIZON).map(([k, [t]]) => `<button data-horizon="${k}" class="${st.horizon === k ? 'aan' : ''}">${t}</button>`).join('')}</div>`}${st.index.length > 1 ? `<select data-kies="1" aria-label="Kies een rapport">${st.index.map(x => `<option value="${esc(x.id)}" ${x.id === st.id ? 'selected' : ''}>${esc(x.titel)}${x.periode ? ' — ' + esc(x.periode) : ''}${st.open[x.id] ? ` (${st.open[x.id]} open)` : ''}</option>`).join('')}</select>` : ''}</div>
   <div class="mtr-kaart"><h3 style="margin:0">${esc(r.titel || st.id)}</h3><div class="mtr-zacht">${esc([r.periode, r.gemaakt ? 'gemaakt ' + r.gemaakt : ''].filter(Boolean).join(' · '))}</div>
     ${Array.isArray(r.samenvatting) && r.samenvatting.length ? `<ul>${r.samenvatting.map(z => `<li>${R.md(z).replace(/^<p>|<\/p>$/g, '')}</li>`).join('')}</ul>` : ''}
     <div class="mtr-chips">${secties.map(s => `<button class="mtr-chip ${oordeel(s.oordeel).k}" data-naar="${esc(s.id)}" title="${esc(oordeel(s.oordeel).l)}">${esc(s.titel || s.id)}${openPer[s.id] ? ` <span class="mtr-badge">${openPer[s.id]}</span>` : ''}</button>`).join('')}</div>
     ${veranderd}${onvolledig ? '<div class="mtr-zacht" style="margin-top:8px">Let op: niet alle vragen konden worden geladen (te veel); tellingen kunnen hoger zijn.</div>' : ''}</div>
-  ${secties.map(s => sectieHtml(s, vr.filter(q => q.sectie_id === String(s.id)), openPer[s.id] || 0)).join('')}
-</div>`;
-    st.el.querySelectorAll('details.mtr-sec').forEach(d => d.addEventListener('toggle', () => { st.openSec[d.dataset.sec] = d.open; }));
+  ${secties.map(s => sectieHtml(s, vr.filter(q => q.sectie_id === String(s.id)), openPer[s.id] || 0)).join('')}`);
+    st.el.querySelectorAll('details.mtr-sec').forEach(d => d.addEventListener('toggle', () => {
+      st.openSec[d.dataset.sec] = d.open; if (!d.open) return;
+      const sec = secties.find(x => String(x.id) === d.dataset.sec);
+      if (sec && sec.grafiek && root.MTCijfers && st.dash) root.MTCijfers.toon(sec.grafiek);       // de grafiek bij deze sectie, in context
+      if (mobiel()) st.el.querySelectorAll('details.mtr-sec[open]').forEach(x => { if (x !== d) { x.open = false; st.openSec[x.dataset.sec] = false; } });   // mobiel: één sectie open
+    }));
     st.el.querySelectorAll('textarea[data-tekst]').forEach(x => x.addEventListener('input', () => { st.concept[st.id + ':' + x.dataset.tekst] = x.value; }));
-    st.el.querySelector('.mtr').addEventListener('click', klik);
+    st.el.querySelector('.mtr-links').addEventListener('click', klik);
     const kies = st.el.querySelector('[data-kies]'); if (kies) kies.addEventListener('change', () => R.kies(kies.value));
   }
   function sectieHtml(s, draad, nOpen) {
@@ -146,6 +165,8 @@
     return `<details class="mtr-sec" id="mtr-sec-${esc(id)}" data-sec="${esc(id)}" ${st.openSec[id] ? 'open' : ''}>
   <summary><span class="mtr-chip ${o.k}">${esc(o.l)}</span><span class="t">${esc(s.titel || id)}</span>${nOpen ? `<span class="mtr-badge">${nOpen} open vra${nOpen === 1 ? 'ag' : 'gen'}</span>` : ''}${s.kern ? `<div class="mtr-kern">${esc(s.kern)}</div>` : ''}</summary>
   ${cijfers.length ? `<div class="mtr-tabel"><table class="mtr-cijfers"><thead><tr><th>Cijfer</th><th>Waarde</th>${branche ? '<th>Branche</th>' : ''}${toel ? '<th>Toelichting</th>' : ''}</tr></thead><tbody>${cijfers.map(c => `<tr><td><b>${esc(c.label)}</b></td><td data-l="Waarde">${esc(c.waarde)}</td>${branche ? `<td data-l="Branche">${esc(c.branche == null ? '—' : c.branche)}</td>` : ''}${toel ? `<td data-l="Toelichting">${esc(c.toelichting || '')}</td>` : ''}</tr>`).join('')}</tbody></table></div>` : ''}
+  ${adviesHtml(s)}
+  ${s.grafiek && st.dash ? `<div><button class="mtr-knop" data-grafiek="${esc(id)}">Toon de grafiek hierbij</button></div>` : ''}
   ${s.tekst ? `<div class="mtr-tekst">${R.md(s.tekst)}</div>` : ''}
   ${acties.length ? `<b>Acties</b><ul class="mtr-acties">${acties.map(a => { const x = actieStatus(a), klaar = x.status === 'gedaan'; return `<li><label><input type="checkbox" data-actie="${esc(a.id)}" ${klaar ? 'checked' : ''} ${st.mag ? '' : 'disabled'}><span><span class="${klaar ? 'mtr-gedaan' : ''}">${esc(a.tekst)}</span>${a.wie ? ` <span class="mtr-zacht">— ${esc(a.wie)}</span>` : ''}${klaar && x.door ? `<br><span class="mtr-zacht">gedaan door ${esc(x.door)}${x.ts ? ', ' + esc(wanneer(x.ts)) : ''}</span>` : ''}</span></label></li>`; }).join('')}</ul>` : ''}
   ${bronnen.length ? `<div class="mtr-zacht">Bronnen: ${bronnen.map(bron).filter(Boolean).join(' · ')}</div>` : ''}
@@ -156,8 +177,23 @@
 </details>`;
   }
 
+  // Advies per horizon: de schakelaar wisselt alleen het advies, niet de cijfers.
+  function adviesHtml(s) {
+    if (!s.advies) return '';
+    const l = Array.isArray(s.advies[st.horizon]) ? s.advies[st.horizon] : [], [t, uitleg] = HORIZON[st.horizon];
+    return `<div class="mtr-advies"><b>Advies — ${esc(t)}</b> <span class="mtr-zacht">(${esc(uitleg)})</span>${l.length ? `<ul>${l.map(z => `<li>${R.md(z).replace(/^<p>|<\/p>$/g, '')}</li>`).join('')}</ul>` : '<div class="mtr-zacht">Geen advies voor deze termijn.</div>'}</div>`;
+  }
+  function zetHorizon(h, vanDash) {
+    st.horizon = h === 'lang' ? 'lang' : 'kort'; ls.set('mtr:horizon:' + st.wie, st.horizon);
+    if (!vanDash && root.MTCijfers && st.dash) root.MTCijfers.horizon(st.horizon);
+    if (st.data) teken();
+  }
+  R.horizon = h => zetHorizon(h, false);
   // ── Interactie ──
   function klik(e) {
+    const hz = e.target.closest('[data-horizon]'); if (hz) return zetHorizon(hz.dataset.horizon, false);
+    const gr = e.target.closest('[data-grafiek]');
+    if (gr) { const sec = ((st.data && st.data.rapport.secties) || []).find(x => x && String(x.id) === gr.dataset.grafiek); if (sec && sec.grafiek && root.MTCijfers) { root.MTCijfers.toon(sec.grafiek); if (st.dash.scrollIntoView) st.dash.scrollIntoView({ behavior: 'smooth', block: 'start' }); } return; }
     const n = e.target.closest('[data-naar]');
     if (n) { const d = [...st.el.querySelectorAll('details.mtr-sec')].find(x => x.dataset.sec === n.dataset.naar); if (d) { d.open = true; st.openSec[d.dataset.sec] = true; if (d.scrollIntoView) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); } return; }
     const a = e.target.closest('input[data-actie]'); if (a) return actieZet(a);
