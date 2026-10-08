@@ -1562,6 +1562,8 @@ function geldConfigNorm(c) {
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
   return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
     buffer_lopend: typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? c.buffer_lopend : null,
+    // spaarrente op de potjes (fractie per jaar), door de eigenaar ingevuld; leeg = afleiden uit rentebijschrijvingen
+    spaarrente: typeof c.spaarrente === 'number' && isFinite(c.spaarrente) && c.spaarrente >= 0 && c.spaarrente <= 0.2 ? c.spaarrente : null,
     // Eigen reserve (alleen weergave): tot dit bedrag, en nooit meer dan de stand van het reservepotje, telt een stand
     // onder 0 als "eigen reserve" in plaats van bankkrediet.
     reserve: c.reserve && typeof c.reserve === 'object' && getal(c.reserve.bedrag, 0, 1e9) != null ? { bedrag: c.reserve.bedrag, pot: uniek.some(p => p.id === c.reserve.pot && !p.virtueel && p.doel !== 'btw' && p.id !== (btw.spaarpot || null)) ? c.reserve.pot : null } : null,   // nooit de BTW-pot (die telt al in lopend)
@@ -2003,7 +2005,7 @@ async function geldPatronenBereken(env) {
   const vandaag = geldVandaag(), w = [], budget = { rest: GELD_PROFIEL_BUDGET }, get = geldMb(env, budget);
   let cfg; try { cfg = await geldConfig(env); } catch (e) { cfg = geldConfigNorm(null); }
   const muts = await geldMutaties(get, geldDag(vandaag, -365), vandaag, w);
-  const groepen = {}, dagsom = {}, btw = [], potDag = {}, dagsomIntern = {}, maandUit = {}, rc = [], btwPot = geldBtwPot(cfg);
+  const groepen = {}, dagsom = {}, btw = [], potDag = {}, dagsomIntern = {}, maandUit = {}, rc = [], spaarRente = [], btwPot = geldBtwPot(cfg);
   for (const m of muts.lijst) {
     const bedrag = geldGetal(m.amount), pays = m.payments || [];
     dagsom[m.date] = geldRond((dagsom[m.date] || 0) + bedrag);
@@ -2015,6 +2017,8 @@ async function geldPatronenBereken(env) {
     if (pays.some(p => p.invoice_type === 'VatDocument')) { btw.push({ datum: m.date, bedrag: geldRond(bedrag) }); continue; }
     const sp = geldPotVan(m, cfg.potten);
     if (bedrag < 0 && !(sp.pot && sp.pot === btwPot)) maandUit[m.date.slice(0, 7)] = geldRond((maandUit[m.date.slice(0, 7)] || 0) - bedrag);   // uitgaven (BTW-sparen telt niet)
+    // rentebijschrijving vanaf een spaarpotje (herkend potje, binnenkomend, "rente"/"interest" in de omschrijving)
+    if (sp.pot && bedrag > 0 && /\b(rente|interest)\b/i.test(`${m.message || ''} ${m.contra_account_name || ''}`)) spaarRente.push({ datum: m.date, pot: sp.pot, bedrag: geldRond(bedrag) });
     if (sp.pot) { const di = dagsomIntern[sp.pot] = dagsomIntern[sp.pot] || {}; di[m.date] = geldRond((di[m.date] || 0) + bedrag);
       if (m.date > geldDag(vandaag, -56)) (potDag[sp.pot] = potDag[sp.pot] || []).push(new Date(m.date + 'T00:00:00Z').getUTCDay() || 7); continue; }
     if (sp.onzeker || pays.some(p => p.invoice_type === 'SalesInvoice') || Math.abs(bedrag) < 5) continue;
@@ -2036,7 +2040,7 @@ async function geldPatronenBereken(env) {
     richting: x.g.sleutel.includes(':uit') ? 'uit' : 'in', factuur: x.g.factuur, ledgers: [...x.ledgers].slice(0, 10) }, p));
   const pot_weekdag = {};
   for (const [pot, wd] of Object.entries(potDag)) { const t = {}; for (const d of wd) t[d] = (t[d] || 0) + 1; const [dag, n] = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; if (n >= 3) pot_weekdag[pot] = Number(dag); }
-  return { as_of: new Date().toISOString(), vandaag, patronen: patronen.sort((a, b) => b.bedrag - a.bedrag), dagsom, dagsom_intern: dagsomIntern, maand_uit: maandUit, rc_afrek: rc, btw_betalingen: btw, pot_weekdag,
+  return { as_of: new Date().toISOString(), vandaag, patronen: patronen.sort((a, b) => b.bedrag - a.bedrag), dagsom, dagsom_intern: dagsomIntern, maand_uit: maandUit, rc_afrek: rc, spaar_rente: spaarRente, btw_betalingen: btw, pot_weekdag,
     onvolledig: muts.onvolledig || budget.rest <= 0, waarschuwingen: w, verzoeken: GELD_PROFIEL_BUDGET - budget.rest };
 }
 const geldMaandLengte = ym => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
@@ -2440,8 +2444,9 @@ async function geldTijdlijn(env, url, hint) {
     historie_intern: url.searchParams.get('historie') === '1' && patronen ? patronen.dagsom_intern || {} : undefined,
     historie_maand_uit: url.searchParams.get('historie') === '1' && patronen ? patronen.maand_uit || {} : undefined,
     historie_rc: url.searchParams.get('historie') === '1' && patronen ? patronen.rc_afrek || [] : undefined,
+    historie_spaarrente: url.searchParams.get('historie') === '1' && patronen ? patronen.spaar_rente || [] : undefined,
     prognose: { posten: progOverzicht, compleet: prognose.compleet },
-    instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, btw_pot: geldBtwPot(cfg), lopend_streef: cfg.lopend_streef, reserve: cfg.reserve, buffer_lopend: cfg.buffer_lopend },
+    instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, btw_pot: geldBtwPot(cfg), lopend_streef: cfg.lopend_streef, reserve: cfg.reserve, buffer_lopend: cfg.buffer_lopend, spaarrente: cfg.spaarrente },
   } };
 }
 async function handleGeld(p, request, env, ik, json0) {
@@ -2621,6 +2626,7 @@ async function handleGeld(p, request, env, ik, json0) {
       nieuw.reserve = b.reserve; gewijzigd.push('reserve');
     }
     if ('buffer_lopend' in b) { if (b.buffer_lopend !== null && !(typeof b.buffer_lopend === 'number' && isFinite(b.buffer_lopend))) return json({ error: 'buffer_lopend: getal of null' }, 400); nieuw.buffer_lopend = b.buffer_lopend; gewijzigd.push('buffer_lopend'); }
+    if ('spaarrente' in b) { if (b.spaarrente !== null && !(typeof b.spaarrente === 'number' && isFinite(b.spaarrente) && b.spaarrente >= 0 && b.spaarrente <= 0.2)) return json({ error: 'spaarrente: fractie per jaar tussen 0 en 0,2, of null' }, 400); nieuw.spaarrente = b.spaarrente; gewijzigd.push('spaarrente'); }
     if ('lopend_streef' in b) { if (b.lopend_streef !== null && (typeof b.lopend_streef !== 'object' || Array.isArray(b.lopend_streef))) return json({ error: 'lopend_streef: object of null' }, 400); nieuw.lopend_streef = b.lopend_streef; gewijzigd.push('lopend_streef'); }
     if ('klantgroepen' in b) {
       if (!Array.isArray(b.klantgroepen) || b.klantgroepen.length > 50) return json({ error: 'klantgroepen: lijst (max 50)' }, 400);
