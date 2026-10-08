@@ -16,7 +16,7 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-10-06a"></script>
+<script src="mt-core.js?v=2026-10-08a"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
@@ -25,11 +25,11 @@
 <script src="mt-koppel.js?v=2026-10-07a"></script>
 <script src="mt-contacten.js?v=2026-10-07a"></script>
 <script src="mt-inbox.js?v=2026-10-07b"></script>
-<script src="mt-rollen.js?v=2026-10-07a"></script>
+<script src="mt-rollen.js?v=2026-10-08a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-geld.js?v=2026-10-08a"></script>
+<script src="mt-geld.js?v=2026-10-08f"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -8829,8 +8829,7 @@ function cfFmt2(n){return'€ '+(n||0).toLocaleString('nl-NL',{minimumFractionD
 // Worker-fetch voor /dashboard/* routes
 async function cfFetch(pad,opties){
   try{
-    const h=await authHeader();
-    const r=await fetch(`${WORKER}${pad}`,{...opties,headers:{...h,'Content-Type':'application/json',...(opties?.headers||{})}});
+    const r=await fetchMetAuth(`${WORKER}${pad}`,{...opties,headers:{'Content-Type':'application/json',...(opties?.headers||{})}});   // 401 → één keer met vers token
     if(!r.ok) throw new Error('HTTP '+r.status);
     return r.json();
   }catch(e){
@@ -12462,8 +12461,7 @@ function geldTabZet(){
 }
 async function geldHaal(pad,opt){
   opt=opt||{};
-  const h=await authHeader();
-  const r=await fetch(`${WORKER}${pad}`,{method:opt.method||'GET',headers:{...h,'Content-Type':'application/json'},body:opt.body!==undefined?JSON.stringify(opt.body):undefined});
+  const r=await fetchMetAuth(`${WORKER}${pad}`,{method:opt.method||'GET',headers:{'Content-Type':'application/json'},body:opt.body!==undefined?JSON.stringify(opt.body):undefined});   // 401 → één keer met vers token
   let j=null; try{ j=await r.json(); }catch(e){}
   if(!r.ok) return Object.assign({error:(j&&j.error)||('HTTP '+r.status)},j||{});
   return j;

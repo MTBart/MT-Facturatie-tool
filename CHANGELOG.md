@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — Release v2.9.5: eerlijkere limietwaarschuwing en grafiek verder in de tijd; backup = v2.9.4
+- Commit: `87d7c64` | Auteur: Bart Witte
+
 ## 2026-10-08 — Geld: limietwaarschuwing alleen over de BTW-terugboeking; zone "alleen vaste lasten bekend"
 - Commit: `0d244a9` | Auteur: Bart Witte
 

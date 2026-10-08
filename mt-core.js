@@ -54,9 +54,17 @@
   // ── authHeader — X-Auth-Token-header voor Worker-calls. Meteen beschikbaar
   //    (niet achter installAuth) zodat vroege fetch-code er niet op struikelt;
   //    leest root.getAuthToken pas op aanroep-tijd.
-  async function authHeader() {
-    const t = typeof root.getAuthToken === 'function' ? await root.getAuthToken() : null;
+  async function authHeader(opt) {
+    const t = typeof root.getAuthToken === 'function' ? await root.getAuthToken(opt) : null;
     return t ? { 'X-Auth-Token': t } : {};
+  }
+  // fetch naar de Worker met X-Auth-Token; bij een 401 één keer opnieuw met een geforceerd vernieuwd token.
+  async function fetchMetAuth(url, init) {
+    init = init || {};
+    const met = h => Object.assign({}, init, { headers: Object.assign({}, init.headers || {}, h) });
+    let r = await root.fetch(url, met(await authHeader()));
+    if (r.status === 401) { const h = await authHeader({ vers: true }); if (h['X-Auth-Token']) r = await root.fetch(url, met(h)); }
+    return r;
   }
 
   // ── Auth (MSAL-tokenhelpers) ─────────────────────────────────────────────
@@ -65,6 +73,12 @@
   // acquisitie is wél identiek op scopes en de fail-hook na.
   //
   // config: { graphScopes: string[], onTokenFail?: fn(err), onTokenOk?: fn() }
+  // Vervaltijd (ms) van een JWT, zonder verificatie — alleen om op tijd te vernieuwen.
+  function tokenExp(t) {
+    try { const p = String(t).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), e = JSON.parse(root.atob(p + '='.repeat((4 - p.length % 4) % 4))).exp; return Number.isFinite(e) ? e * 1000 : 0; }
+    catch (e) { return 0; }                                       // onleesbaar of zonder exp → als verlopen behandelen
+  }
+  root._tokenExp = tokenExp;
   function installAuth(config) {
     config = config || {};
     const GRAPH_SCOPES = config.graphScopes || [
@@ -74,15 +88,28 @@
     root.MT_GRAPH_SCOPES = GRAPH_SCOPES;
 
     // ID-token (voor de Worker: X-Auth-Token). Silent-only; geen popup.
-    root.getAuthToken = async function () {
+    // msal-browser 2.x geeft bij acquireTokenSilent het gecachte ID-token terug zolang het access-token geldig is —
+    // ook als het ID-token zelf al verlopen is (gevolg: na ~1 uur stille 401's). Daarom: minder dan 5 minuten geldig,
+    // of op verzoek (na een 401) → geforceerd vernieuwen via het refresh-token.
+    let vernieuwen = null;                                        // één gedeelde vernieuwing tegelijk
+    root.getAuthToken = async function (opt) {
       const m = root._msal;
       if (!m) return null;
       const accounts = m.getAllAccounts();
       if (!accounts.length) return null;
+      const req = { scopes: ['openid', 'profile'], account: accounts[0] };
       try {
-        const result = await m.acquireTokenSilent({ scopes: ['openid', 'profile'], account: accounts[0] });
-        return result.idToken;
-      } catch (e) { return null; }
+        const result = opt && opt.vers ? null : await m.acquireTokenSilent(req);
+        if (result && result.idToken && tokenExp(result.idToken) - Date.now() >= 5 * 60 * 1000) return result.idToken;
+      } catch (e) { }
+      if (!vernieuwen) vernieuwen = (async () => {
+        try {
+          const r = await m.acquireTokenSilent(Object.assign({}, req, { forceRefresh: true }));
+          // Ook na een geforceerde vernieuwing controleren: geen verlopen token doorgeven (dan liever opnieuw inloggen).
+          return r && r.idToken && tokenExp(r.idToken) > Date.now() + 60 * 1000 ? r.idToken : null;
+        } catch (e) { return null; } finally { setTimeout(() => { vernieuwen = null; }, 0); }
+      })();
+      return vernieuwen;
     };
 
     // Graph-accesstoken. Silent → popup-fallback → onTokenFail-hook.
@@ -328,6 +355,7 @@
   root.esc = esc;
   root._encPath = _encPath;
   root.authHeader = authHeader;
+  root.fetchMetAuth = fetchMetAuth;
   root.MTCore = { esc, _encPath, authHeader, installAuth, makeSP };
 
 })(typeof window !== 'undefined' ? window : null);
