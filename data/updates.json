@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.9.6",
+    "datum": "2026-10-08",
+    "titel": "Langer achter elkaar werken zonder opnieuw te laden",
+    "voor": "iedereen",
+    "punten": [
+      "Stond de tool langer dan een uur open, dan werkten sommige onderdelen (zoals het geldscherm en Moneybird-acties) soms stilletjes niet meer. De inlog wordt nu op tijd vernieuwd, en lukt een verzoek niet omdat de inlog net verlopen was, dan probeert de tool het meteen nog een keer."
+    ]
+  },
+  {
     "versie": "2.9.5",
     "datum": "2026-10-08",
     "titel": "Geld: eerlijkere waarschuwing en grafiek verder in de tijd",

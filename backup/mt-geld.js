@@ -101,10 +101,28 @@
     return G.lijn(Object.assign({}, data, { events: (data.events || []).concat(terug) }), Object.assign({}, opt, { modus: 'lopend', groep: ['lopend'] }));
   };
   // Waarschuwing als alleen de lopende rekening onder de kredietlimiet zakt (terwijl lopend + BTW-pot erboven blijft).
+  // Doel: alleen de timing van de terugboeking. Dus alleen op dagen waarop lopend + BTW-pot BOVEN de limiet zit en
+  // alleen-lopend eronder (dan is het benodigde bedrag nooit meer dan wat de pot dekt). Zakt ook de gecombineerde stand
+  // onder de limiet, dan is dat al de hoofdboodschap (laagste punt/ruimte): hier alleen een korte zin.
   G.limietWaarschuwing = function (data, opt, tot) {
     const lim = data.saldo.lopend && data.saldo.lopend.kredietlimiet; if (lim == null || !G.btwInLopend(data)) return null;
-    const low = G.laagste(G.alleenLopend(data, opt), tot);
-    return low && low.saldo < -lim ? { datum: low.datum, saldo: low.saldo, nodig: rond(-lim - low.saldo) } : null;
+    const al = G.alleenLopend(data, opt).punten, sam = new Map(G.lijn(data, Object.assign({}, opt, { modus: 'lopend' })).punten.map(p => [p.datum, p]));
+    const st = p => p.saldo_gepland != null ? Math.min(p.saldo, p.saldo_gepland) : p.saldo;
+    let timing = null, potNietGenoeg = null;
+    for (const p of al) {
+      if (p.verleden || p.datum > tot) continue;
+      const c = sam.get(p.datum); if (!c) continue;
+      if (st(c) <= -lim) { if (!potNietGenoeg) potNietGenoeg = { datum: p.datum }; continue; }   // gecombineerd moet echt erboven zitten
+      if (st(p) < -lim && (!timing || st(p) < timing.saldo)) timing = { datum: p.datum, saldo: st(p), nodig: rond(-lim - st(p)) };
+    }
+    if (potNietGenoeg) timing = null;                            // dan is de hoofdboodschap het laagste punt; hier alleen één zin
+    return timing || potNietGenoeg ? { timing, potNietGenoeg } : null;
+  };
+  // Waar de kennis ophoudt: na de laatste verwachte factuurontvangst (en prognose, als die meetelt) staan alleen nog
+  // vaste lasten in de lijn. Geen facturen bekend → vanaf zes weken.
+  G.onzekerVanaf = function (data, opt) {
+    const ds = (data.events || []).filter(e => isGepland(e) && e.delta > 0 && e.datum >= data.vandaag && (e.bron === 'verkoop' || (e.bron === 'prognose' && G.telt(e, opt)))).map(e => e.datum).sort();
+    return ds.length ? ds[ds.length - 1] : dagPlus(data.vandaag, 42);
   };
   // Laagste punt in de toekomst (vanaf vandaag, inclusief wat vandaag nog gepland staat).
   G.laagste = function (lijn, tot) {
@@ -362,7 +380,7 @@
   <div class="mtg-kaarten">
     ${kaart('nu', metBtw ? 'Nu (lopend + BTW-pot)' : 'Nu', eur(nu), nu != null && nu < 0, (metBtw ? `lopend ${eur(L.gerapporteerd)} · BTW-pot ${eur(d.saldo.potten[btwPot].gerapporteerd)} · ` : '') + (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''))}
     <div class="mtg-k ${low && (limiet != null ? low.saldo < -limiet * 0.9 : low.saldo < 0) ? 'rood' : ''}"><div class="l"><span>${heeftProg && st.prognose ? 'Laagste punt (incl. prognose)' : 'Laagste punt'}</span><button class="mtg-vraag" data-uitleg="laagste">?</button></div>
-      <div class="w">${low ? eur(low.saldo) : '—'}</div><div class="s">${low ? `<a href="#" data-laag="1" title="Naar die dag in de grafiek, met de grootste oorzaken">${esc(datumTekst(low.datum, true))} · waardoor?</a> · komende ${st.zoom === 'week' ? '2 weken' : esc(st.zoom)}${lowZonder ? ` · zonder prognose: ${esc(eur(lowZonder.saldo))} op ${esc(datumTekst(lowZonder.datum))}` : ''}` : ''}</div></div>
+      <div class="w">${low ? eur(low.saldo) : '—'}</div><div class="s">${low ? `<a href="#" data-laag="1" title="Naar die dag in de grafiek, met de grootste oorzaken">${esc(datumTekst(low.datum, true))} · waardoor?</a> · komende ${st.zoom === 'week' ? '2 weken' : esc(st.zoom)}${lowZonder ? ` · zonder prognose: ${esc(eur(lowZonder.saldo))} op ${esc(datumTekst(lowZonder.datum))}` : ''}${(st.zoom === 'kwartaal' || st.zoom === 'jaar') && low.datum > G.onzekerVanaf(d, { prognose: st.prognose }) ? ' · let op: valt waar alleen vaste lasten bekend zijn (vul de prognose aan)' : ''}` : ''}</div></div>
     ${true ? kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, limiet == null ? 'kredietlimiet nog niet ingesteld' : `tot de kredietlimiet (${eur(-limiet)}) · nu: ${eur(nu != null ? nu + limiet : null)}`) : kaart('nu', 'Lopende rekening', eur(L.gerapporteerd), L.gerapporteerd < 0, 'zonder potjes')}
   </div>
   <div class="mtg-kaart">
@@ -373,7 +391,7 @@
       ${metBtw && st.modus === 'lopend' ? `<button class="mtg-knop klein ${st.alleenLopend ? 'aan' : ''}" data-alleen="1" title="Stand van alleen de lopende rekening (zonder BTW-pot)">alleen lopend</button>` : ''}
       <button class="mtg-vraag" data-uitleg="lijn">?</button></div></div>
     <div class="mtg-grafiek" id="mtg-grafiek"></div>
-    <div class="mtg-legenda"><span><i></i>saldo</span><span><i style="border-top-style:dashed"></i>verwacht</span>${heeftProg && st.prognose ? '<span><i style="border-top:2px dotted #3a5a8a"></i>met prognose (waar het afwijkt)</span>' : ''}<span><i style="border-color:var(--mtg-uit)"></i>kredietlimiet</span>${st.alleenLopend && metBtw && st.modus === 'lopend' ? '<span><i style="border-top:1px solid #9a9a92"></i>alleen lopend (zonder BTW-pot)</span>' : ''}${st.modus === 'lopend' && st.cfg && st.cfg.lopend_streef && st.cfg.lopend_streef.datum ? '<span><i style="border-top:2px dashed var(--gold,#B8962E)"></i>doelpad</span>' : ''}<span class="mtg-in">▲ erbij</span><span class="mtg-uit">▼ eraf</span><span>⚑ mijlpaal</span></div>
+    <div class="mtg-legenda"><span><i></i>saldo</span><span><i style="border-top-style:dashed"></i>verwacht</span>${heeftProg && st.prognose ? '<span><i style="border-top:2px dotted #3a5a8a"></i>met prognose (waar het afwijkt)</span>' : ''}<span><i style="border-color:var(--mtg-uit)"></i>kredietlimiet</span><span><i style="border-top:8px solid rgba(138,138,128,.15);vertical-align:-2px"></i>alleen vaste lasten bekend</span>${st.alleenLopend && metBtw && st.modus === 'lopend' ? '<span><i style="border-top:1px solid #9a9a92"></i>alleen lopend (zonder BTW-pot)</span>' : ''}${st.modus === 'lopend' && st.cfg && st.cfg.lopend_streef && st.cfg.lopend_streef.datum ? '<span><i style="border-top:2px dashed var(--gold,#B8962E)"></i>doelpad</span>' : ''}<span class="mtg-in">▲ erbij</span><span class="mtg-uit">▼ eraf</span><span>⚑ mijlpaal</span></div>
   </div>
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Komende 14 dagen</b><button class="mtg-vraag" data-uitleg="lijst">?</button></div>${lijstHtml()}</div>
   ${prognoseHtml()}
@@ -500,8 +518,9 @@
   }
   function letOpHtml() {
     const w = (st.data.waarschuwingen || []).filter(x => !isDruk(x) && !isInstellen(x));
-    const lw = G.limietWaarschuwing(st.dataS || st.data, { prognose: st.prognose }, dagPlus(st.data.vandaag, 120));
-    if (lw) w.unshift({ bron: 'limiet', fout: `Je lopende rekening zelf komt op ${datumTekst(lw.datum)} op ${eur(lw.saldo)}, onder de kredietlimiet. Boek eerder geld terug van de BTW-rekening (≈${eur(lw.nodig)} nodig).` });
+    const lw = G.limietWaarschuwing(st.dataS || st.data, { prognose: st.prognose }, dagPlus(st.data.vandaag, 60));
+    if (lw && lw.potNietGenoeg) w.unshift({ bron: 'limiet', fout: `Op ${datumTekst(lw.potNietGenoeg.datum)} is ook de BTW-pot niet genoeg: dan zakt lopend + BTW-pot onder de kredietlimiet (zie het laagste punt).` });
+    if (lw && lw.timing) w.unshift({ bron: 'limiet', fout: `Je lopende rekening zelf komt op ${datumTekst(lw.timing.datum)} op ${eur(lw.timing.saldo)}, onder de kredietlimiet. Boek eerder geld terug van de BTW-rekening (≈${eur(lw.timing.nodig)} nodig).` });
     if (!w.length) return '';
     return `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Let op (${w.length})</b><button class="mtg-vraag" data-uitleg="letop">?</button></div>
       <details><summary class="mtg-melding" style="cursor:pointer">tonen</summary><ul class="mtg-letop">${w.map(x => `<li>${esc(x.fout)}${x.rekening ? ` <span class="mtg-chip">${esc(x.rekening)}</span>` : ''}</li>`).join('')}</ul></details></div>`;
@@ -572,6 +591,8 @@
       ${(zonder || toek).filter(p => p.datum >= d.vandaag).length > 1 ? `<path d="${pad((zonder || toek).filter(p => p.datum >= d.vandaag))}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2" stroke-dasharray="6 4"/>` : ''}
       ${zonder && toek.length > 1 ? `<path d="${afwijk(toek, zonder.filter(p => p.datum >= d.vandaag))}" fill="none" stroke="#3a5a8a" stroke-width="2" stroke-dasharray="1 3"/>` : ''}
       ${alleen && alleen.length > 1 ? `<path d="${pad(alleen)}" fill="none" stroke="#9a9a92" stroke-width="1.2"/>` : ''}
+      ${(() => { const z = G.onzekerVanaf(d, { prognose: st.prognose }); if (z >= totD) return ''; const x0 = Math.max(pl, x(z < vanD ? vanD : z));
+        return `<defs><pattern id="mtg-arc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#8a8a80" stroke-opacity="0.22" stroke-width="2"/></pattern></defs><rect x="${x0}" y="${pt}" width="${Math.max(0, W - pr - x0)}" height="${H - pt - pb}" fill="url(#mtg-arc)" class="mtg-zone"/><text x="${Math.min(x0 + 4, W - pr - 4)}" y="${pt + 32}" font-size="10" fill="#7a7a70">verder weg: alleen vaste lasten bekend — vul de prognose aan</text>`; })()}
       ${pijlen}${vlaggen}
       <rect x="${pl}" y="0" width="${W - pl - pr}" height="${H}" fill="transparent" class="mtg-vang"/></svg><div class="mtg-tip" style="display:none"></div>`;
     st.geo = { vanD, n, W, pl, pr };
