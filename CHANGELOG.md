@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — Geld: meegroeien voorzichtig, lopend-advies op vaste lasten, eerlijke bankweergave
+- Commit: `64d87b0` | Auteur: Bart Witte
+
 ## 2026-10-08 — Release v2.9.7: eigen reserve als nullijn en meegroeiende doelen (geld); backup = v2.9.6
 - Commit: `d732e59` | Auteur: Bart Witte
 

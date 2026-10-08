@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.9.8",
+    "datum": "2026-10-08",
+    "titel": "Geld: doelen groeien voorzichtiger mee, eerlijker beeld van de bank",
+    "voor": "beheer",
+    "punten": [
+      "Een doel wordt nooit meer in één keer flink verhoogd. Het eerste advies is altijd een voorstel (\"overnemen?\"). Daarna groeit een doel vanzelf alleen in kleine stappen mee (hooguit +10% per maand en nooit boven de bovengrens die je zelf instelt). Grotere sprongen en verlagen blijven een voorstel met een Ja-knop.",
+      "Het advies voor de lopende rekening kijkt nu naar de vaste lasten per maand (vaste patronen en inleg in de potjes, zonder inkoopfacturen) in plaats van naar alle uitgaven. De berekening staat erbij.",
+      "De reservekaart laat twee dingen zien: hoeveel je fictief in je eigen reserve zit, en wat er werkelijk op de bank staat (de lopende rekening rood, en wat dat ongeveer kost). Het rentetarief is afgeleid uit je eigen afrekeningen; onder \"hoe berekend?\" staat de uitleg."
+    ]
+  },
+  {
     "versie": "2.9.7",
     "datum": "2026-10-08",
     "titel": "Geld: eigen reserve als nullijn en doelen die meegroeien",
