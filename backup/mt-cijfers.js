@@ -14,6 +14,7 @@
   const MND = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
   const maandNaam = ym => `${MND[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
   const START = '2022-01', BTW = 1.21, MAX_RONDES = 15;
+  const LOONSOORT = [['netto', 'werknemers (netto)'], ['loonheffing', 'Belastingdienst (loonheffing)'], ['pensioen', 'pensioenfonds']];
   // Neutrale tinten per categorie (geen rood/oranje/groen: die kleuren zijn voor oordelen).
   const TINT = ['#3f4a56', '#6b7682', '#94a0ab', '#2b333c', '#7f8a96', '#b3bcc5', '#56616d', '#a2abb4', '#c9d0d6', '#1f262d', '#8c96a0'];
   const ZOOMS = [['M', 'maand'], ['K', 'kwartaal'], ['J', 'jaar t/m nu'], ['5J', '5 jaar']];
@@ -66,7 +67,7 @@
   // ── Rekenen (los te testen) ──────────────────────────────────────────────
   // Maanden optellen tot één periode; met "eerlijk beeld" telt de correctie (lonen via de bank) als personeelskosten.
   C.som = function (ms, cats, eerlijk) {
-    const P = { maanden: 0, ontbrekend: 0, omzet: 0, kosten: {}, correctie: 0, prive: {}, prive_totaal: 0, aflossing: 0, kas: null, kasStart: null, prognose: 0, prognoseKosten: 0 };
+    const P = { maanden: 0, ontbrekend: 0, omzet: 0, kosten: {}, correctie: 0, correctie_soort: { netto: 0, loonheffing: 0, pensioen: 0 }, prive: {}, prive_totaal: 0, aflossing: 0, kas: null, kasStart: null, prognose: 0, prognoseKosten: 0 };
     for (const c of cats) P.kosten[c] = 0;
     for (const m of ms) {
       if (m.prognose) { P.prognose += m.omzet || 0; P.prognoseKosten += m.kosten_totaal || 0; continue; }
@@ -74,6 +75,7 @@
       P.maanden++; P.omzet += m.omzet || 0;
       for (const c of cats) P.kosten[c] += (m.kosten || {})[c] || 0;
       P.correctie += m.correctie || 0; P.aflossing += m.aflossing || 0;
+      for (const [k, x] of Object.entries(m.correctie_soort || {})) if (k in P.correctie_soort) P.correctie_soort[k] += x || 0;
       for (const [n, x] of Object.entries(m.prive || {})) { P.prive[n] = (P.prive[n] || 0) + x; P.prive_totaal += x; }
       if (m.kas) { if (!P.kasStart) P.kasStart = m.kas; P.kas = m.kas; }
     }
@@ -277,7 +279,7 @@
           const dim = st.focusCat && st.focusCat !== c ? ' opacity="0.25"' : '';
           svg += `<rect data-tik="kosten" data-p="${esc(p.id)}" data-cat="${c}" x="${x0}" y="${y1}" width="${w}" height="${Math.max(0.5, y0 - y1)}" fill="${TINT[k % TINT.length]}"${dim}><title>${esc((st.catNaam[c] || c) + ' ' + (p.label || p.id) + ': ' + eur(v))}</title></rect>`; });
         if (st.eerlijk && P.correctie > 0) { const y1 = y(top + P.correctie), y0 = y(top); top += P.correctie; segs.push({ tik: 'correctie', y1, y2: y0 });
-          svg += `<rect data-tik="correctie" data-p="${esc(p.id)}" x="${x0}" y="${y1}" width="${w}" height="${Math.max(0.5, y0 - y1)}" fill="url(#mtc-corr)"><title>${esc('lonen buiten de W&V (eerlijk beeld) ' + (p.label || p.id) + ': ' + eur(P.correctie))}</title></rect>`; }
+          svg += `<rect data-tik="correctie" data-p="${esc(p.id)}" x="${x0}" y="${y1}" width="${w}" height="${Math.max(0.5, y0 - y1)}" fill="url(#mtc-corr)"><title>${esc('lonen buiten de W&V (eerlijk beeld) ' + (p.label || p.id) + ': ' + eur(P.correctie) + ' — ' + LOONSOORT.map(([k, t]) => t + ' ' + eur(P.correctie_soort[k])).join(', '))}</title></rect>`; }
         if (P.maanden) segs.push({ tik: 'omzet', y1: y(P.omzet) - 2, y2: y(P.omzet) + 2 });
         if (P.prognoseKosten) svg += `<rect data-tik="periode" data-p="${esc(p.id)}" x="${x0}" y="${y(top + P.prognoseKosten)}" width="${w}" height="${Math.max(0.5, y(top) - y(top + P.prognoseKosten))}" fill="url(#mtc-arcering)" stroke="#9fb3d6" stroke-dasharray="3 2"><title>prognose kosten ${esc(eur(P.prognoseKosten))}</title></rect>`;
         if (P.maanden) svg += `<line data-tik="omzet" data-p="${esc(p.id)}" x1="${x0 - 3}" x2="${x0 + w + 3}" y1="${y(P.omzet)}" y2="${y(P.omzet)}" stroke="#1d3557" stroke-width="3"><title>omzet ${esc(eur(P.omzet))}</title></line>`;
@@ -456,10 +458,14 @@
     const r = await st.bron.haal(`/geld/cijfers/detail?maand=${encodeURIComponent(ym)}&reeks=${encodeURIComponent(reeks)}${cat ? '&categorie=' + encodeURIComponent(cat) : ''}`);
     if (!r || r.error) { box.querySelector('.mtc-noot').textContent = 'Kon niet worden opgehaald: ' + ((r && r.error) || 'geen antwoord'); return; }
     const extra = reeks === 'kosten' && st.eerlijk && cat === 'personeel' ? (st.maanden.find(m => m.id === ym) || {}).correctie || 0 : 0;
+    const cr = reeks === 'correctie' && r.correctie ? r.correctie : null;   // de worker rekent wat meetelt (boven de lonen in de W&V)
+    const perSoort = reeks === 'correctie' ? LOONSOORT.map(([k, tt]) => [tt, cr && cr.per_soort ? cr.per_soort[k] || 0 : r.items.filter(x => x.loonsoort === k).reduce((a, x) => a + x.bedrag, 0)]) : null;
     box.innerHTML = `<h3 style="margin-top:0">${esc(titel)} — ${esc(maandNaam(ym))}</h3>
+      ${cr ? `<div class="mtc-noot">Via de bank betaald: ${esc(eur(cr.betaald))}${cr.al_in_wv ? `, waarvan ${esc(eur(cr.al_in_wv))} al als loon in de W&V staat` : ''} → telt mee: <b>${esc(eur(cr.telt))}</b>.</div>` : ''}
+      ${perSoort ? `<div class="mtc-noot">Telt mee: ${perSoort.map(([tt, x]) => esc(tt) + ' ' + esc(eur(x))).join(' · ')}. Opnames van de eigenaren tellen niet mee, ook niet als er "loon" bij staat.</div>` : ''}
       ${r.totaal_wv != null ? `<div class="mtc-noot">In de W&V: ${esc(eur(r.totaal_wv))}${r.rest ? ` · waarvan ${esc(eur(r.rest))} niet als losse factuur/bon/mutatie te zien (memoriaal, afschrijving e.d.)` : ''}</div>` : ''}
       ${extra ? `<div class="mtc-noot">Eerlijk beeld: plus ${esc(eur(extra))} lonen die via de bank zijn betaald maar niet in de W&V staan (<a href="#" data-corr="1">bekijk</a>).</div>` : ''}
-      <table>${r.items.map(x => `<tr><td>${esc(x.datum || '')}</td><td>${esc(x.tegenpartij || '')}${x.nummer ? ' · ' + esc(x.nummer) : ''}${x.omschrijving ? `<div class="mtc-noot">${esc(x.omschrijving)}</div>` : ''}<div class="mtc-noot">${esc(x.soort)}</div></td><td class="b">${esc(eur(x.bedrag))}</td><td class="b">${mbLink(x.url)}</td></tr>`).join('') || '<tr><td>Geen losse stukken gevonden.</td></tr>'}</table>
+      <table>${r.items.map(x => `<tr><td>${esc(x.datum || '')}</td><td>${esc(x.tegenpartij || '')}${x.nummer ? ' · ' + esc(x.nummer) : ''}${x.omschrijving ? `<div class="mtc-noot">${esc(x.omschrijving)}</div>` : ''}<div class="mtc-noot">${esc(x.soort)}${x.loonsoort ? ' · ' + esc((LOONSOORT.find(q => q[0] === x.loonsoort) || [0, ''])[1]) : ''}</div></td><td class="b">${esc(eur(x.bedrag))}${x.betaald != null && Math.abs(x.betaald - x.bedrag) > 0.5 ? `<div class="mtc-noot">van ${esc(eur(x.betaald))}</div>` : ''}</td><td class="b">${mbLink(x.url)}</td></tr>`).join('') || '<tr><td>Geen losse stukken gevonden.</td></tr>'}</table>
       ${r.meer ? `<div class="mtc-noot">En nog ${esc(r.meer)} kleinere posten.</div>` : ''}${r.onvolledig ? '<div class="mtc-waarsch">Niet alles kon worden opgehaald; de lijst is mogelijk onvolledig.</div>' : ''}
       <div style="margin-top:12px;text-align:right"><button class="mtc-knop" data-sluit="1">Sluiten</button></div>`;
     box.addEventListener('click', ev => { if (ev.target.closest('[data-corr]')) { ev.preventDefault(); o.remove(); drillMaand('correctie', null, ym, 'Lonen buiten de W&V'); } });

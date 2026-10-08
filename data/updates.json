@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.11.2",
+    "datum": "2026-10-09",
+    "titel": "Rapporten: eerlijk beeld te controleren en bij te stellen",
+    "voor": "beheer",
+    "punten": [
+      "Bij \"al als loon in de W&V\" tellen alleen nog de echte loongrootboeken (brutolonen, sociale lasten, pensioen), niet de overige personeelskosten, reiskosten of inhuur. Welke dat zijn, vink je aan onder ⚙ Indeling.",
+      "Nieuw onder ⚙ Indeling: \"Controle per maand\" met per maand wat er via de bank aan lonen is betaald (netto, loonheffing, pensioen), wat al in de W&V staat en wat meetelt — plus de betalingen die niet herkend worden. Met \"telt als loon\" maak je van een tegenrekening (werknemer, Belastingdienst, pensioenfonds) een vaste loonrekening."
+    ]
+  },
+  {
     "versie": "2.11.1",
     "datum": "2026-10-09",
     "titel": "Rapporten: eerlijk beeld zonder de opnames van de eigenaren",
