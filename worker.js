@@ -1555,11 +1555,15 @@ function geldConfigNorm(c) {
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
   return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
     buffer_lopend: typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? c.buffer_lopend : null,
-    btw: { spaarpercentage: getal(btw.spaarpercentage, 0, 1), spaarpot: uniek.some(p => p.id === btw.spaarpot && !p.virtueel) ? btw.spaarpot : null,
+    // modus 'in_lopend' (standaard): de BTW-pot telt mee als lopende rekening, aangifte van die gecombineerde stand, geen
+    // terugboeking; 'apart': BTW-pot als eigen rekening met aangifte_van/terugboeking_van.
+    btw: { modus: btw.modus === 'apart' ? 'apart' : 'in_lopend', spaarpercentage: getal(btw.spaarpercentage, 0, 1), spaarpot: uniek.some(p => p.id === btw.spaarpot && !p.virtueel) ? btw.spaarpot : null,
       aangifte_van: rek(btw.aangifte_van), terugboeking_van: rek(btw.terugboeking_van) },
     gewijzigd: c.gewijzigd || null, door: c.door || null, revisie: Number.isInteger(c.revisie) ? c.revisie : 0 };
 }
 async function geldConfig(env) { return geldConfigNorm(await kvJson(env, 'geld:config')); }
+// De BTW-pot: de ingestelde spaarpot, anders het (eerste) actieve potje met doel 'btw'.
+const geldBtwPot = cfg => cfg.btw.spaarpot || ((cfg.potten.find(p => p.doel === 'btw' && !p.virtueel && p.actief) || {}).id) || null;
 const geldRekeningen = cfg => ['lopend', ...cfg.potten.filter(p => !p.virtueel).map(p => p.id)];   // met eigen saldo (ijkbaar)
 function geldVandaag() { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function geldDag(s, n) { const d = new Date(s + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
@@ -1973,13 +1977,14 @@ async function geldPatronenBereken(env) {
   const vandaag = geldVandaag(), w = [], budget = { rest: GELD_PROFIEL_BUDGET }, get = geldMb(env, budget);
   let cfg; try { cfg = await geldConfig(env); } catch (e) { cfg = geldConfigNorm(null); }
   const muts = await geldMutaties(get, geldDag(vandaag, -365), vandaag, w);
-  const groepen = {}, dagsom = {}, btw = [], potDag = {};
+  const groepen = {}, dagsom = {}, btw = [], potDag = {}, dagsomIntern = {};
   for (const m of muts.lijst) {
     const bedrag = geldGetal(m.amount), pays = m.payments || [];
     dagsom[m.date] = geldRond((dagsom[m.date] || 0) + bedrag);
     if (pays.some(p => p.invoice_type === 'VatDocument')) { btw.push({ datum: m.date, bedrag: geldRond(bedrag) }); continue; }
     const sp = geldPotVan(m, cfg.potten);
-    if (sp.pot) { if (m.date > geldDag(vandaag, -56)) (potDag[sp.pot] = potDag[sp.pot] || []).push(new Date(m.date + 'T00:00:00Z').getUTCDay() || 7); continue; }
+    if (sp.pot) { const di = dagsomIntern[sp.pot] = dagsomIntern[sp.pot] || {}; di[m.date] = geldRond((di[m.date] || 0) + bedrag);
+      if (m.date > geldDag(vandaag, -56)) (potDag[sp.pot] = potDag[sp.pot] || []).push(new Date(m.date + 'T00:00:00Z').getUTCDay() || 7); continue; }
     if (sp.onzeker || pays.some(p => p.invoice_type === 'SalesInvoice') || Math.abs(bedrag) < 5) continue;
     const g = geldPatroonGroep(m); if (!g) continue;
     const x = groepen[g.sleutel] = groepen[g.sleutel] || { g, xs: [], ledgers: new Set() };
@@ -1999,7 +2004,7 @@ async function geldPatronenBereken(env) {
     richting: x.g.sleutel.includes(':uit') ? 'uit' : 'in', factuur: x.g.factuur, ledgers: [...x.ledgers].slice(0, 10) }, p));
   const pot_weekdag = {};
   for (const [pot, wd] of Object.entries(potDag)) { const t = {}; for (const d of wd) t[d] = (t[d] || 0) + 1; const [dag, n] = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; if (n >= 3) pot_weekdag[pot] = Number(dag); }
-  return { as_of: new Date().toISOString(), vandaag, patronen: patronen.sort((a, b) => b.bedrag - a.bedrag), dagsom, btw_betalingen: btw, pot_weekdag,
+  return { as_of: new Date().toISOString(), vandaag, patronen: patronen.sort((a, b) => b.bedrag - a.bedrag), dagsom, dagsom_intern: dagsomIntern, btw_betalingen: btw, pot_weekdag,
     onvolledig: muts.onvolledig || budget.rest <= 0, waarschuwingen: w, verzoeken: GELD_PROFIEL_BUDGET - budget.rest };
 }
 const geldMaandLengte = ym => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
@@ -2092,15 +2097,16 @@ async function geldBtwAangifte(get, vandaag, cfg, betalingen, w) {
         bedrag = (bedrag > 0 ? 1 : -1) * rest; deel = true;
       }
     }
-    const datum = vervalt < vandaag ? vandaag : vervalt, rek = cfg.btw.aangifte_van || 'lopend', id = `btw:${k.j}-K${k.q}`;
+    const apart = cfg.btw.modus === 'apart', datum = vervalt < vandaag ? vandaag : vervalt, rek = apart ? (cfg.btw.aangifte_van || 'lopend') : 'lopend', id = `btw:${k.j}-K${k.q}`;
     const marge = { min: geldRond(bedrag * 0.9), max: geldRond(bedrag * 1.1) };
     const ev = { id, bron: 'btw', richting: bedrag > 0 ? 'uit' : 'in', bedrag: Math.abs(bedrag), datum, datumtype: 'aangifte', zekerheid: 'schatting', rekening: rek, tegenpartij: 'Belastingdienst',
       document_id: null, bron_url: null, kwartaal: `${k.j}-K${k.q}`, marge,
       uitleg: `BTW-aangifte ${k.j} kwartaal ${k.q}: verkoop-btw min inkoop-btw uit Moneybird, schatting ±10%${deel ? ' — restant na een eerdere (deel)betaling' : ''}${loopt ? ' — het kwartaal loopt nog, dit is de stand tot nu toe en loopt nog op' : ''}${vervalt < vandaag ? ` — uiterste betaaldatum ${vervalt} is voorbij en er is geen betaling gezien` : ''}.` };
     if (vervalt < vandaag) ev.achterstallig = true;
-    if (!cfg.btw.aangifte_van) w.push({ bron: 'config', fout: 'BTW-instellingen: van welke rekening de aangifte betaald wordt is niet ingesteld — lopende rekening aangenomen' });
+    if (apart && !cfg.btw.aangifte_van) w.push({ bron: 'config', fout: 'BTW-instellingen: van welke rekening de aangifte betaald wordt is niet ingesteld — lopende rekening aangenomen' });
+    if (!apart) ev.uitleg += ' Betaald van de lopende rekening; de BTW-pot telt daar al in mee.';
     uit.push(ev);
-    const terug = cfg.btw.terugboeking_van;
+    const terug = apart ? cfg.btw.terugboeking_van : null;   // in_lopend: geen terugboeking (de BTW-pot hoort al bij lopend)
     if (bedrag > 0 && rek === 'lopend' && terug && terug !== 'lopend') uit.push(Object.assign({}, ev, { id: id + ':terug', richting: 'in', rekening: 'lopend', intern: true, pot: terug, tegenpartij: '',
       uitleg: `Terugboeking van de BTW-pot op dezelfde dag als de aangifte (lopende rekening netto 0, de BTW-pot daalt).` }));
   }
@@ -2385,8 +2391,9 @@ async function geldTijdlijn(env, url) {
     overrides: { aantal: Object.keys(plan.overrides).length, niet_meer_open: vervallenOv, compleet: overrides.compleet },
     patronen: patronen ? { as_of: patronen.as_of, aantal: patLijst.length, aan: patLijst.filter(x => x.aan && !x.potje).length, vervangen_door_factuur: pctx.vervangen, lijst: patLijst } : null,
     historie_dagsom: url.searchParams.get('historie') === '1' && patronen ? patronen.dagsom : undefined,
+    historie_intern: url.searchParams.get('historie') === '1' && patronen ? patronen.dagsom_intern || {} : undefined,
     prognose: { posten: progOverzicht, compleet: prognose.compleet },
-    instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, lopend_streef: cfg.lopend_streef },
+    instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, btw_pot: geldBtwPot(cfg), lopend_streef: cfg.lopend_streef },
   } };
 }
 async function handleGeld(p, request, env, ik, json) {
@@ -2571,6 +2578,7 @@ async function handleGeld(p, request, env, ik, json) {
     if ('btw' in b) {
       const t = b.btw || {};
       if (t.spaarpercentage != null && !(typeof t.spaarpercentage === 'number' && t.spaarpercentage >= 0 && t.spaarpercentage <= 1)) return json({ error: 'btw.spaarpercentage: fractie tussen 0 en 1' }, 400);
+      if (t.modus != null && !['in_lopend', 'apart'].includes(t.modus)) return json({ error: "btw.modus: 'in_lopend' of 'apart'" }, 400);
       nieuw.btw = Object.assign({}, oud.btw, t); gewijzigd.push('btw');
     }
     if (!gewijzigd.length) return json({ error: 'niets te wijzigen' }, 400);
