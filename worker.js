@@ -1520,7 +1520,11 @@ function geldStreefNorm(x) {
   const g = v => typeof v === 'number' && isFinite(v) && Math.abs(v) <= 1e9 ? geldRond(v) : null;
   const r = { bedrag: g(x.bedrag), van: g(x.van), tot: g(x.tot), datum: geldIsDatum(x.datum) ? x.datum : null,
     mijlpalen: [...new Set((Array.isArray(x.mijlpalen) ? x.mijlpalen : []).map(g).filter(v => v != null))].sort((a, b) => a - b).slice(0, 10),
-    start: x.start && geldIsDatum(x.start.datum) && g(x.start.bedrag) != null ? { datum: x.start.datum, bedrag: g(x.start.bedrag) } : null };
+    start: x.start && geldIsDatum(x.start.datum) && g(x.start.bedrag) != null ? { datum: x.start.datum, bedrag: g(x.start.bedrag) } : null,
+    // meegroeien met de bankhistorie (standaard aan); hooguit 1× per maand herberekend; laatste wijziging voor de melding
+    meegroeien: x.meegroeien !== false, advies_maand: /^\d{4}-\d{2}$/.test(String(x.advies_maand || '')) ? x.advies_maand : null,
+    wijziging: x.wijziging && g(x.wijziging.van) != null && g(x.wijziging.naar) != null && geldIsDatum(x.wijziging.datum)
+      ? { van: g(x.wijziging.van), naar: g(x.wijziging.naar), datum: x.wijziging.datum, reden: String(x.wijziging.reden || '').slice(0, 200) } : null };
   if (r.van != null && r.tot != null && r.van > r.tot) [r.van, r.tot] = [r.tot, r.van];
   if (r.van == null || r.tot == null) { if (r.bedrag == null) r.bedrag = r.van != null ? r.van : r.tot; r.van = r.tot = null; }
   return r.bedrag == null && r.van == null && r.datum == null ? null : r;
@@ -1555,6 +1559,9 @@ function geldConfigNorm(c) {
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
   return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
     buffer_lopend: typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? c.buffer_lopend : null,
+    // Eigen reserve (alleen weergave): tot dit bedrag, en nooit meer dan de stand van het reservepotje, telt een stand
+    // onder 0 als "eigen reserve" in plaats van bankkrediet.
+    reserve: c.reserve && typeof c.reserve === 'object' && getal(c.reserve.bedrag, 0, 1e9) != null ? { bedrag: c.reserve.bedrag, pot: uniek.some(p => p.id === c.reserve.pot && !p.virtueel && p.doel !== 'btw' && p.id !== (btw.spaarpot || null)) ? c.reserve.pot : null } : null,   // nooit de BTW-pot (die telt al in lopend)
     // modus 'in_lopend' (standaard): de BTW-pot telt mee als lopende rekening, aangifte van die gecombineerde stand, geen
     // terugboeking; 'apart': BTW-pot als eigen rekening met aangifte_van/terugboeking_van.
     btw: { modus: btw.modus === 'apart' ? 'apart' : 'in_lopend', spaarpercentage: getal(btw.spaarpercentage, 0, 1), spaarpot: uniek.some(p => p.id === btw.spaarpot && !p.virtueel) ? btw.spaarpot : null,
@@ -1993,12 +2000,18 @@ async function geldPatronenBereken(env) {
   const vandaag = geldVandaag(), w = [], budget = { rest: GELD_PROFIEL_BUDGET }, get = geldMb(env, budget);
   let cfg; try { cfg = await geldConfig(env); } catch (e) { cfg = geldConfigNorm(null); }
   const muts = await geldMutaties(get, geldDag(vandaag, -365), vandaag, w);
-  const groepen = {}, dagsom = {}, btw = [], potDag = {}, dagsomIntern = {};
+  const groepen = {}, dagsom = {}, btw = [], potDag = {}, dagsomIntern = {}, maandUit = {}, rc = [], btwPot = geldBtwPot(cfg);
   for (const m of muts.lijst) {
     const bedrag = geldGetal(m.amount), pays = m.payments || [];
     dagsom[m.date] = geldRond((dagsom[m.date] || 0) + bedrag);
+    const tekstRc = String(m.message || '');
+    if (/RC AFREK/i.test(tekstRc)) {                              // rekening-courant: bereidstellingsprovisie en debetrente per maand
+      const pm = tekstRc.match(/T\/M\s+\d{2}\.(\d{2})\.(\d{4})/i);
+      rc.push({ datum: m.date, maand: pm ? `${pm[2]}-${pm[1]}` : m.date.slice(0, 7), soort: /DEBETRENTE/i.test(tekstRc) ? 'rente' : /PROVISIE/i.test(tekstRc) ? 'provisie' : 'overig', bedrag: geldRond(-bedrag) });
+    }
     if (pays.some(p => p.invoice_type === 'VatDocument')) { btw.push({ datum: m.date, bedrag: geldRond(bedrag) }); continue; }
     const sp = geldPotVan(m, cfg.potten);
+    if (bedrag < 0 && !(sp.pot && sp.pot === btwPot)) maandUit[m.date.slice(0, 7)] = geldRond((maandUit[m.date.slice(0, 7)] || 0) - bedrag);   // uitgaven (BTW-sparen telt niet)
     if (sp.pot) { const di = dagsomIntern[sp.pot] = dagsomIntern[sp.pot] || {}; di[m.date] = geldRond((di[m.date] || 0) + bedrag);
       if (m.date > geldDag(vandaag, -56)) (potDag[sp.pot] = potDag[sp.pot] || []).push(new Date(m.date + 'T00:00:00Z').getUTCDay() || 7); continue; }
     if (sp.onzeker || pays.some(p => p.invoice_type === 'SalesInvoice') || Math.abs(bedrag) < 5) continue;
@@ -2020,7 +2033,7 @@ async function geldPatronenBereken(env) {
     richting: x.g.sleutel.includes(':uit') ? 'uit' : 'in', factuur: x.g.factuur, ledgers: [...x.ledgers].slice(0, 10) }, p));
   const pot_weekdag = {};
   for (const [pot, wd] of Object.entries(potDag)) { const t = {}; for (const d of wd) t[d] = (t[d] || 0) + 1; const [dag, n] = Object.entries(t).sort((a, b) => b[1] - a[1])[0]; if (n >= 3) pot_weekdag[pot] = Number(dag); }
-  return { as_of: new Date().toISOString(), vandaag, patronen: patronen.sort((a, b) => b.bedrag - a.bedrag), dagsom, dagsom_intern: dagsomIntern, btw_betalingen: btw, pot_weekdag,
+  return { as_of: new Date().toISOString(), vandaag, patronen: patronen.sort((a, b) => b.bedrag - a.bedrag), dagsom, dagsom_intern: dagsomIntern, maand_uit: maandUit, rc_afrek: rc, btw_betalingen: btw, pot_weekdag,
     onvolledig: muts.onvolledig || budget.rest <= 0, waarschuwingen: w, verzoeken: GELD_PROFIEL_BUDGET - budget.rest };
 }
 const geldMaandLengte = ym => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
@@ -2422,8 +2435,10 @@ async function geldTijdlijn(env, url, hint) {
     patronen: patronen ? { as_of: patronen.as_of, aantal: patLijst.length, aan: patLijst.filter(x => x.aan && !x.potje).length, vervangen_door_factuur: pctx.vervangen, lijst: patLijst } : null,
     historie_dagsom: url.searchParams.get('historie') === '1' && patronen ? patronen.dagsom : undefined,
     historie_intern: url.searchParams.get('historie') === '1' && patronen ? patronen.dagsom_intern || {} : undefined,
+    historie_maand_uit: url.searchParams.get('historie') === '1' && patronen ? patronen.maand_uit || {} : undefined,
+    historie_rc: url.searchParams.get('historie') === '1' && patronen ? patronen.rc_afrek || [] : undefined,
     prognose: { posten: progOverzicht, compleet: prognose.compleet },
-    instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, btw_pot: geldBtwPot(cfg), lopend_streef: cfg.lopend_streef },
+    instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, btw_pot: geldBtwPot(cfg), lopend_streef: cfg.lopend_streef, reserve: cfg.reserve, buffer_lopend: cfg.buffer_lopend },
   } };
 }
 async function handleGeld(p, request, env, ik, json0) {
@@ -2595,6 +2610,12 @@ async function handleGeld(p, request, env, ik, json0) {
       const n = geldSchemaNorm(b.prognose_schema);
       if (b.prognose_schema !== null && (!n || ['klein', 'middel', 'groot'].some(k => Array.isArray(b.prognose_schema[k]) && b.prognose_schema[k].length && !n[k].length))) return json({ error: 'standaardschema: per grootte percentages die samen 100 zijn' }, 400);
       nieuw.prognose_schema = b.prognose_schema; gewijzigd.push('prognose_schema');
+    }
+    if ('reserve' in b) {
+      if (b.reserve !== null && !(b.reserve && typeof b.reserve === 'object' && typeof b.reserve.bedrag === 'number' && isFinite(b.reserve.bedrag) && b.reserve.bedrag >= 0)) return json({ error: 'reserve: {bedrag ≥ 0, pot} of null' }, 400);
+      if (b.reserve && b.reserve.pot != null && !(nieuw.potten || oud.potten).some(p => p.id === b.reserve.pot && !p.virtueel)) return json({ error: 'reserve.pot: onbekend potje' }, 400);
+      if (b.reserve && b.reserve.pot != null && ((nieuw.potten || oud.potten).some(p => p.id === b.reserve.pot && p.doel === 'btw') || b.reserve.pot === ((nieuw.btw || oud.btw) || {}).spaarpot)) return json({ error: 'reserve.pot: niet de BTW-pot (die telt al mee in de lopende rekening)' }, 400);
+      nieuw.reserve = b.reserve; gewijzigd.push('reserve');
     }
     if ('buffer_lopend' in b) { if (b.buffer_lopend !== null && !(typeof b.buffer_lopend === 'number' && isFinite(b.buffer_lopend))) return json({ error: 'buffer_lopend: getal of null' }, 400); nieuw.buffer_lopend = b.buffer_lopend; gewijzigd.push('buffer_lopend'); }
     if ('lopend_streef' in b) { if (b.lopend_streef !== null && (typeof b.lopend_streef !== 'object' || Array.isArray(b.lopend_streef))) return json({ error: 'lopend_streef: object of null' }, 400); nieuw.lopend_streef = b.lopend_streef; gewijzigd.push('lopend_streef'); }

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — Release v2.9.6: inlog op tijd vernieuwd (geen stille 401s na een uur); backup = v2.9.5
+- Commit: `fa87180` | Auteur: Bart Witte
+
 ## 2026-10-08 — Inlog: verlopen ID-token op tijd vernieuwen, 401 een keer opnieuw
 - Commit: `2615b2d` | Auteur: Bart Witte
 
