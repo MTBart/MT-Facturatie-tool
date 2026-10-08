@@ -270,7 +270,9 @@
       if (!d || d.error) throw new Error(d && d.error || 'geen antwoord');
       st.data = d; st.cfg = c && c.config ? c.config : st.cfg;
     } catch (e) {
-      st.el.innerHTML = `<div class="mtg"><div class="mtg-kaart">Het geldscherm kon niet laden (${esc(e.message)}). Probeer het later opnieuw.</div></div>`;
+      const druk = /429|retry later|druk/i.test(String(e.message));
+      st.el.innerHTML = `<div class="mtg"><div class="mtg-kaart">${druk ? '<b>Moneybird is even druk.</b> Probeer het over een minuut opnieuw.' : `Het geldscherm kon niet laden (${esc(e.message)}). Probeer het later opnieuw.`} <button class="mtg-knop klein" data-herlaad-los="1">Opnieuw laden</button></div></div>`;
+      const k = st.el.querySelector('[data-herlaad-los]'); if (k) k.addEventListener('click', () => G.laad());
       return;
     }
     teken();
@@ -280,10 +282,12 @@
   async function verversOpAchtergrond() {
     if (!st.mag || st.bezig || st.ververst) return;          // hooguit één poging per keer openen
     const w = st.data.waarschuwingen || [];
+    if (w.some(isDruk)) return;                               // Moneybird druk: niet nog meer vragen
     const oud = b => w.some(x => x.bron === b && /nog niet berekend|ouder dan|onvolledig/.test(x.fout));
     const taken = [oud('profiel') && '/geld/profiel?vers=1', oud('patronen') && '/geld/patronen?vers=1'].filter(Boolean);
     if (!taken.length) return;
     st.bezig = true; st.ververst = true; teken();
+    await new Promise(r => setTimeout(r, G._pauze != null ? G._pauze : 4000));   // eerst de tijdlijn laten uitrusten (Moneybird-limiet)
     try { for (const t of taken) await st.bron.haal(t); } catch (e) { }
     st.bezig = false;
     await G.laad(true);
@@ -310,6 +314,7 @@
       ${introWeg ? '<button class="mtg-vraag" data-intro="1" title="Wat zie je hier?">?</button>' : ''}
     </div></div>
   ${introWeg ? '' : `<div class="mtg-uitleg"><b>Wat zie je hier?</b> ${esc(UITLEG.intro)} <button class="mtg-knop klein" data-intro="weg">Begrepen</button></div>`}
+  ${drukHtml()}
   ${st.bezig ? '<div class="mtg-uitleg">Betaalgedrag en vaste patronen worden bijgewerkt… (de lijn ververst vanzelf)</div>' : ''}
   <div class="mtg-kaarten">
     ${kaart('nu', 'Nu', eur(nu), nu != null && nu < 0, (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''))}
@@ -329,6 +334,7 @@
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Komende 14 dagen</b><button class="mtg-vraag" data-uitleg="lijst">?</button></div>${lijstHtml()}</div>
   ${prognoseHtml()}
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Potjes en doelen</b><button class="mtg-vraag" data-uitleg="potjes">?</button></div>${potjesHtml()}</div>
+  ${instellenHtml()}
   ${letOpHtml()}
   ${patronenHtml()}
   ${st.mag ? instellingenHtml() : ''}
@@ -429,8 +435,27 @@
   ${v ? `<div class="mtg-balk" title="${v.pct}% van de weg vanaf het startpunt"><div style="width:${v.pct}%"></div></div>` : ''}
   <div class="r3">${esc([r3, extra].filter(Boolean).join(' · '))}</div></div>`;
   }
+  // Waarschuwingen in drie soorten: Moneybird even druk (429), nog in te stellen (verwacht tot de eigenaar het
+  // instelt) en de rest (Let op).
+  const isDruk = x => x.status === 429 || /\b429\b|retry later|even druk/i.test(x.fout || '');
+  const isInstellen = x => x.bron === 'config' && !isDruk(x);
+  G._soorten = { isDruk, isInstellen };
+  function drukHtml() {
+    const w = (st.data.waarschuwingen || []).filter(isDruk);
+    if (!w.length) return '';
+    return `<div class="mtg-uitleg" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:200px"><b>Moneybird is even druk.</b> Niet alles kon worden opgehaald (${w.length}×); probeer het over een minuut opnieuw.</span><button class="mtg-knop klein aan" data-herlaad="1">Opnieuw laden</button></div>`;
+  }
+  function instellenHtml() {
+    const w = (st.data.waarschuwingen || []).filter(isInstellen);
+    if (!w.length) return '';
+    const tekst = x => /spaarpotten/.test(x.fout) ? 'Spaarpotjes (grootboek of tegenrekening per potje)' : /kredietlimiet/.test(x.fout) ? 'Kredietlimiet van de lopende rekening'
+      : /BTW-instellingen/.test(x.fout) ? 'BTW: van welke rekening de aangifte betaald wordt' : /weekdag/.test(x.fout) ? x.fout.replace(/ — stel hem in.*$/, '') : x.fout;
+    return `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Nog in te stellen (${w.length})</b></div>
+      <ul class="mtg-letop">${[...new Set(w.map(tekst))].map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+      ${st.mag ? '<div class="mtg-knoppen"><button class="mtg-knop" data-inst="algemeen">Kredietlimiet en BTW…</button><button class="mtg-knop" data-pot="nieuw">+ potje</button></div>' : '<div class="mtg-melding">De eigenaar stelt dit in.</div>'}</div>`;
+  }
   function letOpHtml() {
-    const w = st.data.waarschuwingen || [];
+    const w = (st.data.waarschuwingen || []).filter(x => !isDruk(x) && !isInstellen(x));
     if (!w.length) return '';
     return `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Let op (${w.length})</b><button class="mtg-vraag" data-uitleg="letop">?</button></div>
       <details><summary class="mtg-melding" style="cursor:pointer">tonen</summary><ul class="mtg-letop">${w.map(x => `<li>${esc(x.fout)}${x.rekening ? ` <span class="mtg-chip">${esc(x.rekening)}</span>` : ''}</li>`).join('')}</ul></details></div>`;
@@ -776,7 +801,7 @@
   // ── Interactie ───────────────────────────────────────────────────────────────
   function klik(e) {
     if (e.target.closest('.mtg-fd')) return;
-    const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst],[data-prog],[data-sc],[data-advies],[data-vraag]');
+    const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst],[data-prog],[data-sc],[data-advies],[data-vraag],[data-herlaad]');
     if (!t) return;
     if (t.dataset.modus) { st.modus = t.dataset.modus; st.offset = 0; teken(); }
     else if (t.dataset.zoom) { st.zoom = t.dataset.zoom; ls.set('mtg:zoom:' + st.wie, st.zoom); begrens(); teken(); }
@@ -786,6 +811,7 @@
     else if (t.dataset.intro) { ls.set('mtg:intro:' + st.wie, t.dataset.intro === 'weg' ? 'weg' : ''); teken(); }
     else if (t.dataset.ev) eventDetail(t.dataset.ev);
     else if (t.dataset.dag) dagInfo(t.dataset.dag);
+    else if (t.dataset.herlaad) { st.ververst = false; G.laad(st.mag); }
     else if (t.dataset.pot) potBlad(t.dataset.pot);
     else if (t.dataset.patroon) patroonZet(t.dataset.patroon, t.dataset.aan === '1');
     else if (t.dataset.inst === 'algemeen') instBlad();

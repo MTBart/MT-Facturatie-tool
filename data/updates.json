@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.9.2",
+    "datum": "2026-10-08",
+    "titel": "Geld: BTW-rekening hoort bij de lopende rekening",
+    "voor": "beheer",
+    "punten": [
+      "De BTW-rekening telt nu mee als lopende rekening: de lijn, het laagste punt en de ruimte tot de kredietlimiet rekenen met lopend + BTW-pot. BTW-sparen is daarbinnen neutraal en de aangifte gaat van die gezamenlijke stand af.",
+      "De andere spaarpotjes zijn echt weg van de lopende rekening (dat geld wordt later privé uitbetaald): de weekinleg telt als uitgave en de potjes tellen nooit mee als buffer.",
+      "Tik in de kaart Laagste punt op de datum: de grafiek springt naar die dag en je ziet de drie grootste posten die eraan bijdragen."
+    ]
+  },
+  {
     "versie": "2.9.1",
     "datum": "2026-10-08",
     "titel": "Geld: duidelijkere meldingen",
