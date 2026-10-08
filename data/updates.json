@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.9.4",
+    "datum": "2026-10-08",
+    "titel": "Geld: achterstallige facturen realistischer, waarschuwing kredietlimiet",
+    "voor": "beheer",
+    "punten": [
+      "Achterstallige klantfacturen staan niet meer allemaal op vandaag: de tool verwacht ze zoals die klant (of groep) meestal betaalt, uiterlijk binnen 30 dagen. Het label achterstallig blijft staan; een eigen datum gaat altijd voor.",
+      "Zakt de lopende rekening zelf (zonder de BTW-pot) onder de kredietlimiet, dan staat dat onder Let op, met hoeveel je eerder van de BTW-rekening moet terugboeken. In de grafiek kun je die stand als grijze lijn aanzetten (\"alleen lopend\").",
+      "Na het opslaan zie je de wijziging meteen terug in het geldscherm."
+    ]
+  },
+  {
     "versie": "2.9.3",
     "datum": "2026-10-08",
     "titel": "Geld: meteen de nieuwe stand na een wijziging",

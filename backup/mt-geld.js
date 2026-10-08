@@ -283,7 +283,7 @@
   G.laad = async function (vers) {
     const v = st.data ? st.data.vandaag : null;
     const vandaag = v || new Date().toISOString().slice(0, 10);
-    const pad = `/geld/tijdlijn?van=${dagPlus(vandaag, -35)}&tot=${dagPlus(vandaag, 364)}&historie=1${vers ? '&vers=1' : ''}`;
+    const pad = `/geld/tijdlijn?van=${dagPlus(vandaag, -35)}&tot=${dagPlus(vandaag, 364)}&historie=1${vers ? '&vers=1' : ''}${st.cv ? '&cv=' + encodeURIComponent(st.cv) : ''}`;
     try {
       const [d, c] = await Promise.all([st.bron.haal(pad), st.cfg && !vers ? Promise.resolve({ config: st.cfg }) : st.bron.haal('/geld/config')]);
       if (!d || d.error) throw new Error(d && d.error || 'geen antwoord');
@@ -307,7 +307,7 @@
     if (!taken.length) return;
     st.bezig = true; st.ververst = true; teken();
     await new Promise(r => setTimeout(r, G._pauze != null ? G._pauze : 4000));   // eerst de tijdlijn laten uitrusten (Moneybird-limiet)
-    try { for (const t of taken) await st.bron.haal(t); } catch (e) { }
+    try { for (const t of taken) { const r = await st.bron.haal(t); if (r && r.cachever) st.cv = r.cachever; } } catch (e) { }
     st.bezig = false;
     await G.laad(true);
   }
@@ -872,6 +872,7 @@
   async function stuur(pad, body) {
     const r = await st.bron.haal(pad, { method: 'POST', body });
     if (!r || r.error) throw new Error(r && r.error || 'opslaan mislukt');
+    if (r.cachever) st.cv = r.cachever;                      // volgende load met deze versie (geen oude cache van een andere edge)
     return r;
   }
   function eventDetail(id) {
