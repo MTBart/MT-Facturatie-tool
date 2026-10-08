@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.9.5",
+    "datum": "2026-10-08",
+    "titel": "Geld: eerlijkere waarschuwing en grafiek verder in de tijd",
+    "voor": "beheer",
+    "punten": [
+      "De waarschuwing over de kredietlimiet gaat alleen nog over het moment van terugboeken van de BTW-rekening: ze verschijnt als lopend + BTW-pot boven de limiet blijft maar de lopende rekening zelf eronder komt (komende 60 dagen). Is ook de BTW-pot niet genoeg, dan staat dat er in één zin bij.",
+      "Verder in de tijd staan alleen vaste lasten in de lijn (nieuwe facturen zijn nog niet bekend). Dat deel is in de grafiek gearceerd met \"vul de prognose aan\"; valt het laagste punt daar, dan staat dat bij de kaart."
+    ]
+  },
+  {
     "versie": "2.9.4",
     "datum": "2026-10-08",
     "titel": "Geld: achterstallige facturen realistischer, waarschuwing kredietlimiet",
