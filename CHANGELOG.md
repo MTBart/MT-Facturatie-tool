@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — Release v2.9.2: BTW-rekening hoort bij de lopende rekening; backup = v2.9.1
+- Commit: `e4da576` | Auteur: Bart Witte
+
 ## 2026-10-08 — Geld: BTW-rekening telt mee als lopende rekening, potjes zijn echt weg (rekenregels Bart)
 - Commit: `0e4bf0e` | Auteur: Bart Witte
 
