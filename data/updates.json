@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.11.3",
+    "datum": "2026-10-09",
+    "titel": "Rapporten: lonen via balansgrootboeken in het eerlijke beeld",
+    "voor": "beheer",
+    "punten": [
+      "Lonen die in Moneybird op een balansgrootboek staan (zoals \"netto lonen en vakantiegeld\", \"af te dragen loonheffing\" of pensioenpremies) tellen nu mee in het eerlijke beeld, ook als er geen \"loon\" of \"salaris\" bij de betaling staat. Welke grootboeken dat zijn en als welke soort, stel je in onder ⚙ Indeling (er staat een voorstel klaar).",
+      "In de controle per maand zie je hoeveel er via die balansgrootboeken meetelt. Overboekingen naar de spaarpotjes en aflossingen staan niet meer tussen de niet-herkende betalingen."
+    ]
+  },
+  {
     "versie": "2.11.2",
     "datum": "2026-10-09",
     "titel": "Rapporten: eerlijk beeld te controleren en bij te stellen",
