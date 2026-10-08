@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Release v2.11.3: lonen via balansgrootboeken in het eerlijke beeld; backup = v2.11.2
+- Commit: `93a02f6` | Auteur: Bart Witte
+
 ## 2026-10-09 — Rapporten: lonen via balansgrootboeken in het eerlijke beeld
 - Commit: `a0baeb7` | Auteur: Bart Witte
 

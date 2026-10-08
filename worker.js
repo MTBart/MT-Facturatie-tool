@@ -2497,14 +2497,17 @@ function geldLoonKand(r, pat, eig, lc) {
 // Lonen via balansgrootboeken: elke uitgaande betaling die daarop geboekt is, telt als die soort. Voorstel op naam
 // (alleen schulden-grootboeken, dus geen spaarpotten); de eigenaar bevestigt of past aan (cijfers.loon_balans).
 const GELD_CIJ_LOON_BALANS = [['netto', /netto ?lonen|nettoloon|vakantiegeld|te betalen lonen/i], ['loonheffing', /loonheffing/i], ['pensioen', /pensioen/i]];
-function geldLoonBalans(ledgers, cc) {
+// Balansgrootboeken die loon kunnen zijn: activa of passiva, maar nooit de bank of een spaarpot.
+const geldBalansSoort = s2 => /assets|liabilities/.test(s2 || '');
+const geldPotLedgers = cfg => new Set(((cfg && cfg.potten) || []).map(x => String(x.ledger || '')).filter(Boolean).concat([GELD.bank.ledger]));
+function geldLoonBalans(ledgers, cc, potLed) {
   if (Array.isArray(cc.loon_balans)) return { lijst: cc.loon_balans, bron: 'instelling' };
   const lijst = [];
-  for (const [id, l] of Object.entries(ledgers || {})) if (/liabilities/.test(l.soort)) { const r = GELD_CIJ_LOON_BALANS.find(([, re]) => re.test(l.naam)); if (r) lijst.push({ ledger: id, soort: r[0] }); }
+  for (const [id, l] of Object.entries(ledgers || {})) if (geldBalansSoort(l.soort) && !(potLed && potLed.has(id))) { const r = GELD_CIJ_LOON_BALANS.find(([, re]) => re.test(l.naam)); if (r) lijst.push({ ledger: id, soort: r[0] }); }
   return { lijst, bron: 'voorstel' };
 }
-function geldLoonCtx(ledgers, cc) {
-  const lb = new Map(geldLoonBalans(ledgers, cc).lijst.map(x => [x.ledger, x.soort])), lbNaam = new Map(), naamIds = new Map();
+function geldLoonCtx(ledgers, cc, potLed) {
+  const lb = new Map(geldLoonBalans(ledgers, cc, potLed).lijst.map(x => [x.ledger, x.soort])), lbNaam = new Map(), naamIds = new Map();
   // Oudere records kennen alleen de grootboeknaam. Namen zijn niet uniek: alleen gebruiken als álle grootboeken met die
   // naam loon-balansgrootboek zijn van dezelfde soort.
   for (const [id, l] of Object.entries(ledgers || {})) if (l && l.naam) { if (!naamIds.has(l.naam)) naamIds.set(l.naam, []); naamIds.get(l.naam).push(id); }
@@ -2656,10 +2659,10 @@ async function geldCijferData(env, get, budget, maanden, cfg, ledgers, w, herbou
   return { recs, ontbrekend: maanden.filter(m => !recs[m]), mislukt };
 }
 // Maandrecords → reeksen per maand/kwartaal/jaar, met de indeling, de correctie en de branche.
-function geldCijferReeksen(recs, maanden, per, idl, ledgers, cc) {
+function geldCijferReeksen(recs, maanden, per, idl, ledgers, cc, cfg) {
   const pat = cc.loonpatronen || GELD_CIJ_LOONPATRONEN, corrVan = cc.correctie_van || `${geldVandaag().slice(0, 4)}-01`;
   const sleutel = m => per === 'jaar' ? m.slice(0, 4) : per === 'kwartaal' ? `${m.slice(0, 4)}-K${Math.ceil(Number(m.slice(5)) / 3)}` : m;
-  const perioden = new Map(), nietIngedeeld = {}, eig = geldEigenaren(Object.values(recs), idl, ledgers), wv = geldLoonWv(ledgers, cc).set, lc = geldLoonCtx(ledgers, cc);
+  const perioden = new Map(), nietIngedeeld = {}, eig = geldEigenaren(Object.values(recs), idl, ledgers), wv = geldLoonWv(ledgers, cc).set, lc = geldLoonCtx(ledgers, cc, geldPotLedgers(cfg));
   for (const m of maanden) {
     const k = sleutel(m); if (!perioden.has(k)) perioden.set(k, { id: k, van: m, tot: m, maanden: 0, ontbrekend: 0, omzet: 0, kosten: Object.fromEntries(GELD_CATS.map(c => [c[0], 0])), correctie: 0, correctie_n: 0, correctie_soort: { netto: 0, loonheffing: 0, pensioen: 0 }, prive: {}, aflossing: 0, kas: null, mb_resultaat: 0 });
     const P = perioden.get(k); P.tot = m;
@@ -2701,7 +2704,7 @@ async function geldCijferDetail(env, get, w, ym, reeks, cat, cfg, ledgers, idl, 
     return { items, totaal_wv: rec ? geldRond(Object.values(rec.omzet || {}).reduce((a, x) => a + x, 0)) : null, onvolledig: l.onvolledig };
   }
   if (reeks === 'correctie') {
-    const lc = geldLoonCtx(ledgers, cfg.cijfers), eig = geldEigenaren(recsJaar || [rec], idl, ledgers), k2 = geldLoonKand(rec, cfg.cijfers.loonpatronen || GELD_CIJ_LOONPATRONEN, eig, lc);
+    const lc = geldLoonCtx(ledgers, cfg.cijfers, geldPotLedgers(cfg)), eig = geldEigenaren(recsJaar || [rec], idl, ledgers), k2 = geldLoonKand(rec, cfg.cijfers.loonpatronen || GELD_CIJ_LOONPATRONEN, eig, lc);
     // Zelfde regel als in de reeksen: alleen het deel boven de lonen die al in de W&V staan telt, naar rato per post.
     const som = k2.reduce((a, x) => a + x.bedrag, 0), inWv = Math.max(0, geldLoonPl(rec, geldLoonWv(ledgers, cfg.cijfers).set)), corr = Math.max(0, som - inWv), f = som ? corr / som : 0;
     const per = { netto: 0, loonheffing: 0, pensioen: 0 };
@@ -2730,10 +2733,15 @@ async function geldCijferDiagnose(env, jaar, cfg, ledgers) {
   const cc = cfg.cijfers || geldCijferCfgNorm(null), idl = geldCijferIndeling(ledgers, cc), huidig = geldVandaag().slice(0, 7);
   const bundel = (await kvJson(env, `${GELD_CIJ}jaar:${jaar}`)) || { maanden: {} }, lop = jaar === huidig.slice(0, 4) ? await kvJson(env, `${GELD_CIJ}maand:${huidig}`) : null;
   const recs = {}; for (const [mm, r] of Object.entries(bundel.maanden || {})) recs[`${jaar}-${mm}`] = r; if (lop) recs[huidig] = lop;
-  const eig = geldEigenaren(Object.values(recs), idl, ledgers), pat = cc.loonpatronen || GELD_CIJ_LOONPATRONEN, wv = geldLoonWv(ledgers, cc), lc = geldLoonCtx(ledgers, cc), lb = geldLoonBalans(ledgers, cc);
+  const eig = geldEigenaren(Object.values(recs), idl, ledgers), pat = cc.loonpatronen || GELD_CIJ_LOONPATRONEN, wv = geldLoonWv(ledgers, cc), potLed = geldPotLedgers(cfg), lc = geldLoonCtx(ledgers, cc, potLed), lb = geldLoonBalans(ledgers, cc, potLed);
   // ruis uit "niet herkend": overboekingen naar de spaarpotten en aflossingen/leningen
   const potIban = new Set((cfg.potten || []).map(x => String((x.herkenning || {}).tegenrekening || '').replace(/\s+/g, '').toUpperCase()).filter(Boolean));
-  const ruis = x => x.soort === 'current_assets' || x.soort === 'non_current_liabilities' || (x.iban && potIban.has(x.iban));
+  // alleen echte potten en aflossingsgrootboeken; andere balansrekeningen (bv. een lonen-tussenrekening) blijven zichtbaar
+  // oude records kennen alleen de naam: alleen gebruiken als álle grootboeken met die naam pot of aflossing zijn
+  const ruisLed = new Set([...potLed, ...idl.aflossing]), ruisNaam = new Set();
+  { const per = new Map(); for (const [id, l] of Object.entries(ledgers || {})) if (l && l.naam) { if (!per.has(l.naam)) per.set(l.naam, []); per.get(l.naam).push(id); }
+    for (const [n, ids] of per) if (ids.every(id => ruisLed.has(id))) ruisNaam.add(n); }
+  const ruis = x => (x.led ? ruisLed.has(x.led) : !!(x.grootboek && ruisNaam.has(x.grootboek))) || !!(x.iban && potIban.has(x.iban));
   const corrVan = cc.correctie_van || `${huidig.slice(0, 4)}-01`, nul = () => ({ netto: 0, loonheffing: 0, pensioen: 0 });
   const tot = { betaald: nul(), al_in_wv: 0, telt: 0, eigenaar_uitgesloten: 0 }, niet = new Map(), maanden = [];
   for (const m of Object.keys(recs).sort()) {
@@ -2769,8 +2777,8 @@ async function geldCijfersRoute(p, env, url, R, json) {
       prive: idl.prive, prive_bron: idl.prive_bron, aflossing: idl.aflossing, aflossing_bron: idl.aflossing_bron, loonpatronen: cc.loonpatronen || GELD_CIJ_LOONPATRONEN,
       correctie_van: cc.correctie_van || `${huidig.slice(0, 4)}-01`, benchmarks: cc.benchmarks || GELD_CIJ_BRANCHE, benchmarks_bron: cc.benchmarks ? 'instelling' : 'standaard',
       loon_wv: [...geldLoonWv(ledgers, cc).set], loon_wv_bron: geldLoonWv(ledgers, cc).bron,
-      loon_balans: geldLoonBalans(ledgers, cc).lijst, loon_balans_bron: geldLoonBalans(ledgers, cc).bron,
-      balans_schulden: Object.entries(ledgers).filter(([, l]) => /liabilities/.test(l.soort)).map(([id, l]) => ({ ledger: id, naam: l.naam, soort: l.soort })).sort((a, b) => a.naam.localeCompare(b.naam)), loon_iban: R.geld === 'wijzigen' ? cc.loon_iban || [] : undefined, waarschuwingen: w });   // IBAN's alleen voor de eigenaar
+      loon_balans: geldLoonBalans(ledgers, cc, geldPotLedgers(cfg)).lijst, loon_balans_bron: geldLoonBalans(ledgers, cc, geldPotLedgers(cfg)).bron,
+      balans_schulden: Object.entries(ledgers).filter(([id, l]) => geldBalansSoort(l.soort) && !geldPotLedgers(cfg).has(id)).map(([id, l]) => ({ ledger: id, naam: l.naam, soort: l.soort })).sort((a, b) => a.naam.localeCompare(b.naam)), loon_iban: R.geld === 'wijzigen' ? cc.loon_iban || [] : undefined, waarschuwingen: w });   // IBAN's alleen voor de eigenaar
   }
   if (p === '/geld/cijfers/diagnose') {                          // alleen de eigenaar (bevat tegenpartijen en IBAN's)
     if (R.geld !== 'wijzigen') return json({ error: 'geen-toegang', reden: 'geld-wijzigen' }, 403);
@@ -2798,7 +2806,7 @@ async function geldCijfersRoute(p, env, url, R, json) {
   // Een jaar opnieuw opbouwen (bv. na late boekingen) mag alleen de eigenaar.
   const hb = url.searchParams.get('herbouw'), herbouwJaar = R.geld === 'wijzigen' && /^\d{4}$/.test(hb || '') && maanden.some(m => m.startsWith(hb)) ? hb : null;
   const { recs, ontbrekend, mislukt } = await geldCijferData(env, get, budget, maanden, cfg, ledgers, w, herbouwJaar);
-  const r = geldCijferReeksen(recs, maanden, per, idl, ledgers, cc);
+  const r = geldCijferReeksen(recs, maanden, per, idl, ledgers, cc, cfg);
   const ni = Object.entries(r.niet_ingedeeld).map(([id, x]) => ({ ledger: id, naam: (ledgers[id] || {}).naam || id, bedrag: x }));
   return json({ per, van: maanden[0], tot: maanden[maanden.length - 1], perioden: r.perioden, categorieen: GELD_CATS.map(([id, naam]) => ({ id, naam })),
     benchmarks: cc.benchmarks || GELD_CIJ_BRANCHE, benchmarks_bron: cc.benchmarks ? 'instelling' : 'standaard', correctie_van: cc.correctie_van || `${huidig.slice(0, 4)}-01`,
@@ -3219,11 +3227,12 @@ async function handleGeld(p, request, env, ik, json0) {
       if (cb.loon_wv != null && (!Array.isArray(cb.loon_wv) || cb.loon_wv.length > 30 || cb.loon_wv.some(x => !geldId(x)) || new Set(cb.loon_wv.map(String)).size !== cb.loon_wv.length)) return json({ error: 'cijfers.loon_wv: lijst van hooguit 30 unieke grootboek-ids' }, 400);
       if (cb.loon_balans != null && (!Array.isArray(cb.loon_balans) || cb.loon_balans.length > 30 || cb.loon_balans.some(x => !x || !geldId(x.ledger) || !['netto', 'loonheffing', 'pensioen'].includes(x.soort))
         || new Set(cb.loon_balans.map(x => String(x.ledger))).size !== cb.loon_balans.length)) return json({ error: 'cijfers.loon_balans: lijst van hooguit 30 {ledger, soort netto/loonheffing/pensioen}, elk grootboek één keer' }, 400);
-      if (Array.isArray(cb.loon_balans) && cb.loon_balans.length) {                // alleen bestaande schulden-grootboeken
+      if (Array.isArray(cb.loon_balans) && cb.loon_balans.length) {                // alleen bestaande balansgrootboeken, geen pot of bank
         const led = await geldLedgers(env, geldMb(env, { rest: 3 }), []);
         if (!led) return json({ error: 'grootboeken niet op te halen; probeer het zo opnieuw' }, 503);
-        const fout = cb.loon_balans.find(x => !led[String(x.ledger)] || !/liabilities/.test(led[String(x.ledger)].soort));
-        if (fout) return json({ error: 'cijfers.loon_balans: alleen bestaande schulden-grootboeken (te betalen lonen, loonheffing, pensioen)', ledger: String(fout.ledger) }, 400);
+        const pl2 = geldPotLedgers({ potten: nieuw.potten || oud.potten });
+        const fout = cb.loon_balans.find(x => !led[String(x.ledger)] || !geldBalansSoort(led[String(x.ledger)].soort) || pl2.has(String(x.ledger)));
+        if (fout) return json({ error: 'cijfers.loon_balans: alleen bestaande balansgrootboeken (activa of passiva, geen spaarpot of bank)', ledger: String(fout.ledger) }, 400);
       }
       if (cb.loon_iban != null) {
         if (!Array.isArray(cb.loon_iban) || cb.loon_iban.length > 60) return json({ error: 'cijfers.loon_iban: lijst van hooguit 60' }, 400);
