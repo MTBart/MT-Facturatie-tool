@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-08 — Release v2.9.9: wat roodstaan kost en wat zelf bufferen oplevert, advies naast het doel (geld); backup = v2.9.8
+- Commit: `56ab460` | Auteur: Bart Witte
+
 ## 2026-10-08 — Geld: kaart roodstaan (kosten en besparing), advies naast het doel
 - Commit: `424b8a9` | Auteur: Bart Witte
 

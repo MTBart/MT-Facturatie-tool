@@ -2449,12 +2449,220 @@ async function geldTijdlijn(env, url, hint) {
     instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, btw_pot: geldBtwPot(cfg), lopend_streef: cfg.lopend_streef, reserve: cfg.reserve, buffer_lopend: cfg.buffer_lopend, spaarrente: cfg.spaarrente },
   } };
 }
+// ── Rapporten (G8) ──────────────────────────────────────────────────────────────
+// Claude zet de rapporten met de CLI in KV (wrangler kv key put); de app leest ze, stelt vragen en vinkt acties af.
+// geld:rapport:<JJJJ-MM-DD>                  het rapport (JSON)
+// geld:rapport:index                         [{id, titel, periode}], nieuwste eerst
+// geld:rapportvraag:<rapport>:<sectie>:<ts>  een vraag/opmerking {door, tekst, ts, status} (metadata {status})
+//   …:<ts>:antwoord (of :antwoord-2 …)       het antwoord, door Claude erbij gezet {door, tekst, ts}
+// geld:rapportactie:<rapport>:<actie>        afgevinkt {status, door, ts}: los van het rapport, dus een nieuwe versie wist dit niet
+const GELD_RAP = 'geld:rapport:', GELD_RVR = 'geld:rapportvraag:', GELD_RAC = 'geld:rapportactie:';
+const GELD_RAP_TEKST = 2000;   // max. tekens per vraag
+const geldRapId = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? String(s) : null;
+const GELD_RAP_PAGINAS = 50;        // KV-listing: hooguit 50 × 1000 sleutels, daarboven "onvolledig" (compleet: false)
+const GELD_RAP_DRAAD = 300;         // per verzoek hooguit zoveel vragen met tekst lezen (de nieuwste)
+const GELD_RAP_ANTW = 20;           // antwoorden per vraag
+const GELD_RAP_VRAGEN_MAX = 500;    // vragen per rapport — bewust een zachte limiet (2-3 gebruikers; tellen en schrijven is niet atomair)
+const GELD_RAP_TS = /^\d{10,16}(-[0-9a-f]{4,16})?$/;   // <ts> of <ts>-<rand>: elke vraag/elk antwoord een eigen sleutel, nooit overschrijven
+const geldRapTs = () => `${Date.now()}-${randHex(4)}`;
+const GELD_RAP_GERESERVEERD = new Set(['__proto__', 'constructor', 'prototype', 'hasOwnProperty', 'toString', 'valueOf', 'isPrototypeOf']);
+const geldRapSleutel = s => /^[A-Za-z0-9_-]{1,40}$/.test(String(s || '')) && !GELD_RAP_GERESERVEERD.has(String(s)) ? String(s) : null;
+async function geldInBatches(items, n, fn) { const uit = []; for (let i = 0; i < items.length; i += n) uit.push(...await Promise.all(items.slice(i, i + n).map(fn))); return uit; }
+async function geldKvNamen(env, prefix, paginas = GELD_RAP_PAGINAS) {
+  const keys = []; let cursor, n = 0;
+  do { const r = await env.MT_ROLLEN.list({ prefix, cursor }); keys.push(...r.keys); cursor = r.list_complete ? null : r.cursor; } while (cursor && ++n < paginas);
+  return { keys, compleet: !cursor };
+}
+// Vragen (van één rapport, of van alle): een vraag is open zolang er geen antwoord bij staat en de status 'open' is.
+async function geldRapVragen(env, rapport, metTekst) {
+  const { keys, compleet } = await geldKvNamen(env, GELD_RVR + (rapport ? rapport + ':' : ''));
+  const vr = new Map(), antw = [];
+  for (const k of keys) {
+    const d = k.name.slice(GELD_RVR.length).split(':');                       // rapport, sectie, ts[, antwoord]
+    if (d.length === 3 && geldRapId(d[0]) && geldRapSleutel(d[1]) && GELD_RAP_TS.test(d[2])) vr.set(k.name, { key: k.name, rapport_id: d[0], sectie_id: d[1], ts: Number(d[2].split('-')[0]), deel: d[2], meta: k.metadata || null, antwoorden: [] });
+    else if ((d.length === 4 && /^antwoord(-\d{1,3})?$/.test(d[3])) || (d.length === 5 && d[3] === 'antwoord' && GELD_RAP_TS.test(d[4])))
+      antw.push({ vraag: GELD_RVR + d.slice(0, 3).join(':'), key: k.name, volg: d.length === 5 ? Number(d[4].split('-')[0]) : Number((d[3].match(/-(\d+)$/) || [0, 1])[1]) });
+  }
+  for (const a of antw) { const x = vr.get(a.vraag); if (x) x.antwoorden.push(a); }
+  const tekst = x => String(x == null ? '' : x).slice(0, 8000);
+  const alle = [...vr.values()].sort((a, b) => a.ts - b.ts);
+  // Met tekst: alleen de nieuwste GELD_RAP_DRAAD vragen (en per vraag GELD_RAP_ANTW antwoorden), parallel in kleine porties.
+  const lezen = metTekst ? alle.slice(-GELD_RAP_DRAAD) : alle, afgekapt = metTekst && alle.length > lezen.length;
+  const lijst = await geldInBatches(lezen, 25, async x => {
+    const rec = metTekst ? (await kvJson(env, x.key)) || {} : null;
+    const status = (rec && rec.status) || (x.meta && x.meta.status) || 'open';
+    const item = { id: x.key.slice(GELD_RVR.length), rapport_id: x.rapport_id, sectie_id: x.sectie_id, ts: x.ts, vraag_ts: x.deel, status, open: status === 'open' && !x.antwoorden.length };
+    if (metTekst) {
+      Object.assign(item, { door: tekst(rec.door).slice(0, 80), tekst: tekst(rec.tekst) });
+      const ak = x.antwoorden.sort((a, b) => a.volg - b.volg || a.key.localeCompare(b.key)).slice(0, GELD_RAP_ANTW);
+      item.antwoorden = (await Promise.all(ak.map(a => kvJson(env, a.key)))).filter(Boolean).map(r => ({ door: tekst(r.door || 'Claude').slice(0, 80), tekst: tekst(r.tekst), ts: Number(r.ts) || null }));
+      if (x.antwoorden.length > ak.length) item.antwoorden_afgekapt = true;
+    }
+    return item;
+  });
+  return { lijst, compleet, afgekapt };
+}
+// ── Rapporten schrijven, server-naar-server (headless Claude-run zonder wrangler) ──
+// POST /geld/rapport/import {rapport}, POST /geld/rapport/antwoord {rapport_id, sectie_id, vraag_ts, tekst},
+// GET /geld/rapport/vragen?status=open|alle. Alleen met header X-MT-Rapport-Key = secret RAPPORT_KEY (constant-time).
+const GELD_RAP_SERVER = ['/geld/rapport/import', '/geld/rapport/antwoord', '/geld/rapport/vragen'];
+const GELD_RAP_MAX = 200 * 1024;          // max. grootte van een rapport (bytes)
+async function geldGelijk(a, b) {          // constant-time: vergelijk de SHA-256 van beide (lengte lekt niet)
+  const e = new TextEncoder(), [x, y] = await Promise.all([crypto.subtle.digest('SHA-256', e.encode(String(a))), crypto.subtle.digest('SHA-256', e.encode(String(b)))]);
+  const u = new Uint8Array(x), w = new Uint8Array(y); let d = 0; for (let i = 0; i < u.length; i++) d |= u[i] ^ w[i]; return d === 0;
+}
+// Schema van een rapport: onbekende velden vallen weg, alles begrensd. Fout → { fout: 'pad: uitleg' }.
+function geldRapportNorm(r) {
+  const tk = (x, max, pad, nodig) => { if (x == null || x === '') { if (nodig) throw pad + ': verplicht'; return null; } if (typeof x !== 'string' && typeof x !== 'number') throw pad + ': tekst verwacht'; const t = String(x); if (t.length > max) throw `${pad}: hooguit ${max} tekens`; return t; };
+  const lijst = (x, max, pad) => { if (x == null) return []; if (!Array.isArray(x)) throw pad + ': lijst verwacht'; if (x.length > max) throw `${pad}: hooguit ${max}`; return x; };
+  const obj = (x, pad) => { if (!x || typeof x !== 'object' || Array.isArray(x)) throw pad + ': object verwacht'; return x; };
+  try {
+    obj(r, 'rapport');
+    const id = geldRapId(r.id); if (!id) throw 'id: JJJJ-MM-DD';
+    const sids = new Set(), aids = new Set();
+    const secties = lijst(r.secties, 30, 'secties').map((x, i) => {
+      const P = `secties[${i}]`; obj(x, P);
+      const sid = geldRapSleutel(x.id); if (!sid) throw P + '.id: letters, cijfers, - of _ (max 40)'; if (sids.has(sid)) throw P + '.id: dubbel'; sids.add(sid);
+      if (x.oordeel != null && !['groen', 'oranje', 'rood', 'neutraal'].includes(x.oordeel)) throw P + ".oordeel: groen, oranje, rood of neutraal";
+      return { id: sid, titel: tk(x.titel, 200, P + '.titel', true), oordeel: x.oordeel || 'neutraal', kern: tk(x.kern, 1000, P + '.kern'),
+        cijfers: lijst(x.cijfers, 40, P + '.cijfers').map((c, j) => { const Q = `${P}.cijfers[${j}]`; obj(c, Q); return { label: tk(c.label, 200, Q + '.label', true), waarde: tk(c.waarde, 200, Q + '.waarde'), branche: tk(c.branche, 200, Q + '.branche'), toelichting: tk(c.toelichting, 1000, Q + '.toelichting') }; }),
+        tekst: tk(x.tekst, 20000, P + '.tekst'),
+        acties: lijst(x.acties, 30, P + '.acties').map((a, j) => { const Q = `${P}.acties[${j}]`; obj(a, Q); const aid = geldRapSleutel(a.id); if (!aid) throw Q + '.id: letters, cijfers, - of _ (max 40)'; if (aids.has(aid)) throw Q + '.id: dubbel in dit rapport'; aids.add(aid);
+          if (a.status != null && !['open', 'gedaan'].includes(a.status)) throw Q + ".status: open of gedaan"; return { id: aid, tekst: tk(a.tekst, 500, Q + '.tekst', true), wie: tk(a.wie, 80, Q + '.wie'), status: a.status || 'open' }; }),
+        bronnen: lijst(x.bronnen, 20, P + '.bronnen').map((b, j) => { const Q = `${P}.bronnen[${j}]`; if (typeof b === 'string') return tk(b, 300, Q);
+          obj(b, Q); const url = tk(b.url, 500, Q + '.url'); if (url && !/^https:\/\//i.test(url)) throw Q + '.url: alleen https://'; return { titel: tk(b.titel, 200, Q + '.titel'), url }; }) };
+    });
+    if (!secties.length) throw 'secties: minstens één';
+    return { rapport: { id, titel: tk(r.titel, 200, 'titel', true), periode: tk(r.periode, 100, 'periode'), gemaakt: tk(r.gemaakt, 40, 'gemaakt'),
+      samenvatting: lijst(r.samenvatting, 20, 'samenvatting').map((z, i) => tk(z, 1000, `samenvatting[${i}]`, true)), secties } };
+  } catch (e) { return { fout: typeof e === 'string' ? e : 'ongeldig rapport' }; }
+}
+// Body lezen met een harde bytelimiet: eerst Content-Length, dan de stream (stopt zodra het te veel wordt). null = te groot.
+async function geldLeesMax(request, max) {
+  const cl = Number(request.headers.get('Content-Length'));
+  if (isFinite(cl) && cl > max) return null;
+  if (!request.body) return '';
+  const r = request.body.getReader(), delen = []; let n = 0;
+  for (;;) {
+    const { done, value } = await r.read(); if (done) break;
+    n += value.byteLength; if (n > max) { try { await r.cancel(); } catch {} return null; }
+    delen.push(value);
+  }
+  const buf = new Uint8Array(n); let o = 0; for (const d of delen) { buf.set(d, o); o += d.byteLength; }
+  return new TextDecoder().decode(buf);
+}
+async function geldRapportServer(p, request, env, json) {
+  if (!env.RAPPORT_KEY) return json({ error: 'niet-ingesteld', uitleg: 'secret RAPPORT_KEY ontbreekt' }, 503);
+  if (!(await geldGelijk(request.headers.get('X-MT-Rapport-Key') || '', env.RAPPORT_KEY))) return json({ error: 'Niet geautoriseerd' }, 401);
+  if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+  const m = request.method.toUpperCase(), wie = { door: 'rapport-key', doorNaam: 'Claude (rapporten)' };
+  if (p === '/geld/rapport/vragen') {
+    if (m !== 'GET') return json({ error: 'alleen GET' }, 405);
+    const status = new URL(request.url).searchParams.get('status') || 'open';
+    if (!['open', 'alle'].includes(status)) return json({ error: 'status: open of alle' }, 400);
+    const vr = await geldRapVragen(env, null, true);
+    return json({ vragen: vr.lijst.filter(x => status === 'alle' || x.open), compleet: vr.compleet });
+  }
+  if (m !== 'POST') return json({ error: 'alleen POST' }, 405);
+  const ruw = await geldLeesMax(request, GELD_RAP_MAX);
+  if (ruw == null) return json({ error: `te groot (max ${GELD_RAP_MAX / 1024} KB)` }, 413);
+  let b; try { b = JSON.parse(ruw); } catch { return json({ error: 'geen geldige JSON' }, 400); }
+  if (p === '/geld/rapport/import') {
+    const n = geldRapportNorm(b); if (n.fout) return json({ error: 'schema', fout: n.fout }, 400);
+    const r = n.rapport;
+    await kvZet(env, GELD_RAP + r.id, r);
+    // Index bijwerken (lezen-wijzigen-schrijven): er is één schrijver (de geplande Claude-run), de race is verwaarloosbaar.
+    // Mist er toch een regel, dan herstelt GET /geld/rapporten die uit de KV-listing.
+    const oud = await kvJson(env, GELD_RAP + 'index');
+    const index = [{ id: r.id, titel: r.titel, periode: r.periode || '' }].concat((Array.isArray(oud) ? oud : []).filter(x => x && geldRapId(x.id) && x.id !== r.id))
+      .sort((a, c) => c.id.localeCompare(a.id)).slice(0, 200);
+    await kvZet(env, GELD_RAP + 'index', index);
+    await audit(env, Object.assign({ actie: 'geld-rapport-import', doel: r.id, doelNaam: 'rapport geïmporteerd ' + r.id }, wie));   // zonder inhoud
+    return json({ ok: true, id: r.id, secties: r.secties.length, index: index.length });
+  }
+  if (p === '/geld/rapport/antwoord') {
+    const id = geldRapId(b && b.rapport_id), sec = geldRapSleutel(b && b.sectie_id), ts = String(b && b.vraag_ts != null ? b.vraag_ts : ''), tekst = String((b && b.tekst) == null ? '' : b.tekst).trim();
+    if (!id || !sec || !GELD_RAP_TS.test(ts)) return json({ error: 'rapport_id, sectie_id en vraag_ts (uit /geld/rapport/vragen) verplicht' }, 400);
+    if (!tekst || tekst.length > 8000) return json({ error: 'tekst: 1–8000 tekens' }, 400);
+    const vk = `${GELD_RVR}${id}:${sec}:${ts}`, vraag = await kvJson(env, vk);
+    if (!vraag) return json({ error: 'vraag niet gevonden' }, 404);
+    const ak = `${vk}:antwoord:${geldRapTs()}`, nu = Date.now();
+    await kvZet(env, ak, { door: 'Claude', tekst, ts: nu });
+    await kvZet(env, vk, Object.assign({}, vraag, { status: 'beantwoord', beantwoord: nu }), { metadata: { status: 'beantwoord' } });
+    await audit(env, Object.assign({ actie: 'geld-rapport-antwoord', doel: id, doelNaam: 'antwoord bij ' + sec }, wie));            // zonder de tekst
+    return json({ ok: true, antwoord: ak.slice(GELD_RVR.length) });
+  }
+  return json({ error: 'onbekende-route' }, 404);
+}
+async function geldRapportRoute(p, request, env, ik, json, R, url) {
+  const m = request.method.toUpperCase(), naam = String((ik.rec && ik.rec.naam) || ik.email || '').slice(0, 80);
+  if (!env.MT_ROLLEN) return json({ error: 'geen-opslag', uitleg: 'KV-binding MT_ROLLEN ontbreekt' }, 503);
+  if (p === '/geld/rapporten' && m === 'GET') {
+    const index = await kvJson(env, GELD_RAP + 'index');
+    let rapporten = (Array.isArray(index) ? index : []).filter(x => x && geldRapId(x.id)).slice(0, 200)
+      .map(x => ({ id: x.id, titel: String(x.titel || x.id).slice(0, 200), periode: String(x.periode || '').slice(0, 100) }));
+    // Herstelbaar: een rapport dat wel in KV staat maar niet in de index (bv. na een race), komt er alsnog bij.
+    const bekend = new Set(rapporten.map(x => x.id));
+    const mist = (await geldKvNamen(env, GELD_RAP)).keys.map(k => k.name.slice(GELD_RAP.length)).filter(x => geldRapId(x) && !bekend.has(x)).slice(0, 50);
+    if (mist.length) {
+      const extra = (await Promise.all(mist.map(async x => { const r = await kvJson(env, GELD_RAP + x); return r && typeof r === 'object' ? { id: x, titel: String(r.titel || x).slice(0, 200), periode: String(r.periode || '').slice(0, 100) } : null; }))).filter(Boolean);
+      rapporten = rapporten.concat(extra).sort((a, c) => c.id.localeCompare(a.id)).slice(0, 200);
+      if (extra.length) { try { await kvZet(env, GELD_RAP + 'index', rapporten); } catch {} }
+    }
+    const vr = await geldRapVragen(env, null, false), open = {};
+    for (const x of vr.lijst) if (x.open) open[x.rapport_id] = (open[x.rapport_id] || 0) + 1;
+    return json({ rapporten, open, open_totaal: Object.values(open).reduce((a, n) => a + n, 0), compleet: vr.compleet });
+  }
+  if (p === '/geld/rapport' && m === 'GET') {
+    const id = geldRapId(url.searchParams.get('id')); if (!id) return json({ error: 'id: JJJJ-MM-DD' }, 400);
+    const ruw = await kvJson(env, GELD_RAP + id); if (!ruw || typeof ruw !== 'object') return json({ error: 'rapport niet gevonden' }, 404);
+    // Ook wat met de CLI in KV is gezet gaat door het schema (begrensd, onbekende velden weg) vóór het de app in gaat.
+    const n = geldRapportNorm(Object.assign(Object.create(null), ruw, { id })); if (n.fout) return json({ error: 'rapport voldoet niet aan het schema', fout: n.fout }, 422);
+    const rapport = n.rapport, vr = await geldRapVragen(env, id, true), acties = Object.create(null);
+    for (const k of (await geldKvNamen(env, GELD_RAC + id + ':')).keys) {
+      const aid = k.name.slice((GELD_RAC + id + ':').length), r = k.metadata || await kvJson(env, k.name);
+      if (geldRapSleutel(aid) && r && ['open', 'gedaan'].includes(r.status)) acties[aid] = { status: r.status, door: String(r.door || '').slice(0, 80), ts: Number(r.ts) || null };
+    }
+    return json({ rapport, vragen: vr.lijst, acties, compleet: vr.compleet && !vr.afgekapt });
+  }
+  if (m !== 'POST') return json({ error: 'onbekende-route' }, 404);
+  let b = {}; try { b = await request.json(); } catch {}
+  const id = geldRapId(b.rapport_id); if (!id) return json({ error: 'rapport_id: JJJJ-MM-DD' }, 400);
+  const ruw = await kvJson(env, GELD_RAP + id); if (!ruw || typeof ruw !== 'object') return json({ error: 'rapport niet gevonden' }, 404);
+  const n = geldRapportNorm(Object.assign(Object.create(null), ruw, { id })); if (n.fout) return json({ error: 'rapport voldoet niet aan het schema', fout: n.fout }, 422);
+  const rapport = n.rapport;
+  if (p === '/geld/rapport/vraag') {                                          // eigenaar én administratie (sparren)
+    const sec = geldRapSleutel(b.sectie_id), tekst = String(b.tekst == null ? '' : b.tekst).trim();
+    if (!sec || !rapport.secties.some(x => x && String(x.id) === sec)) return json({ error: 'onbekende sectie' }, 400);
+    if (!tekst || tekst.length > GELD_RAP_TEKST) return json({ error: `tekst: 1–${GELD_RAP_TEKST} tekens` }, 400);
+    const al = (await geldKvNamen(env, GELD_RVR + id + ':')).keys.filter(k => k.name.slice(GELD_RVR.length).split(':').length === 3).length;
+    if (al >= GELD_RAP_VRAGEN_MAX) return json({ error: `te veel vragen bij dit rapport (max ${GELD_RAP_VRAGEN_MAX})` }, 429);
+    const deel = geldRapTs(), ts = Number(deel.split('-')[0]);                // eigen sleutel: overschrijft nooit een andere vraag
+    const rec = { door: naam, tekst, ts, status: 'open', rapport_id: id, sectie_id: sec };
+    await kvZet(env, `${GELD_RVR}${id}:${sec}:${deel}`, rec, { metadata: { status: 'open' } });
+    await audit(env, { door: ik.oid, doorNaam: naam, actie: 'geld-rapport-vraag', doel: id, doelNaam: 'vraag bij ' + sec });   // zonder de tekst
+    return json({ ok: true, vraag: { id: `${id}:${sec}:${deel}`, rapport_id: id, sectie_id: sec, ts, vraag_ts: deel, status: 'open', open: true, door: naam, tekst, antwoorden: [] } });
+  }
+  if (p === '/geld/rapport/actie') {                                          // alleen wie mag wijzigen
+    if (R.geld !== 'wijzigen') return json({ error: 'geen-toegang', reden: 'geld-wijzigen' }, 403);
+    const aid = geldRapSleutel(b.actie_id), status = String(b.status || '');
+    if (!aid || !rapport.secties.some(x => x && Array.isArray(x.acties) && x.acties.some(a => a && String(a.id) === aid))) return json({ error: 'onbekende actie' }, 400);
+    if (!['open', 'gedaan'].includes(status)) return json({ error: "status: 'open' of 'gedaan'" }, 400);
+    const rec = { status, door: naam, ts: Date.now() };
+    await kvZet(env, `${GELD_RAC}${id}:${aid}`, rec, { metadata: rec });
+    await audit(env, { door: ik.oid, doorNaam: naam, actie: 'geld-rapport-actie', doel: id, doelNaam: `actie ${aid}: ${status}` });
+    return json({ ok: true, actie: Object.assign({ id: aid }, rec) });
+  }
+  return json({ error: 'onbekende-route' }, 404);
+}
 async function handleGeld(p, request, env, ik, json0) {
   const ctx = {};
   const json = (b, st) => json0(ctx.versie && b && typeof b === 'object' && !Array.isArray(b) ? Object.assign(b, { cachever: ctx.versie }, ctx.ks ? { ks: ctx.ks } : {}) : b, st);
   // Recht `geld`, in élke ROLLEN_MODUS: lezen (eigenaar, administratie), wijzigen alleen de eigenaar.
   const R = RECHTEN[ik.rol], m = request.method, url = new URL(request.url);
   if (!R || !R.geld) return json({ error: 'geen-toegang', reden: 'geld' }, 403);
+  // Rapporten: ook wie alleen mag lezen (administratie) mag er vragen bij stellen; afvinken alleen de eigenaar.
+  if (p === '/geld/rapporten' || p === '/geld/rapport' || p.startsWith('/geld/rapport/')) return await geldRapportRoute(p, request, env, ik, json, R, url);
   if (!['GET', 'HEAD'].includes(m.toUpperCase()) && R.geld !== 'wijzigen') return json({ error: 'geen-toegang', reden: 'geld-wijzigen' }, 403);
   if (p === '/geld/tijdlijn' && m === 'GET') {
     let ver = await geldCacheVersie(env), vooruit = false;
@@ -2847,6 +3055,8 @@ export default {
     const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
       status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', ...corsHeaders }
     });
+    // Rapporten schrijven door de headless Claude-run (server-naar-server): alleen met X-MT-Rapport-Key, nooit met een MSAL-rol.
+    { const pad = new URL(request.url).pathname; if (GELD_RAP_SERVER.includes(pad)) return await geldRapportServer(pad, request, env, json); }
     // Alleen het Microsoft-token (F1b: de X-Claude-Key-bypass is weg — er was geen gebruiker van).
     const authToken = request.headers.get('X-Auth-Token');
     const msPayload = authToken ? await validateToken(authToken) : null;

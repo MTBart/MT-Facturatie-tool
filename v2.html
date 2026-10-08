@@ -30,6 +30,7 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-geld.js?v=2026-10-08i"></script>
+<script src="mt-rapport.js?v=2026-10-08a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -811,6 +812,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <div class="tabs-wrap">
   <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
   <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Geld</button>
+  <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('projecten',this)">Projecten</button>
@@ -1025,6 +1027,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
   <!-- ═══ TAB: GELD (geldtijdlijn, mt-geld.js) ═══ -->
   <div id="tab-geld" class="tab-content"><div id="geld-root"></div></div>
+  <!-- ═══ TAB: RAPPORTEN (CEO-avond, mt-rapport.js) ═══ -->
+  <div id="tab-rapporten" class="tab-content"><div id="rapport-root"></div></div>
 
   <!-- ═══ TAB: KLANTEN ═══ -->
   <div id="tab-klanten" class="tab-content">
@@ -3011,6 +3015,7 @@ function showTab(name,btn){
   if(name==='activiteit') activiteitOpen();
   if(name==='verbeterpunten') verbLaadTab();
   if(name==='geld') geldOpen();
+  if(name==='rapporten') rapportOpen();
   // Houd de URL-hash gelijk aan de actieve tab (tabwissel = replaceState) → deep-link + "apart venster".
   // Toont Projecten een project, dan is dát de route (#projecten/<CODE>).
   if(!mtRoute._stil){
@@ -12458,6 +12463,27 @@ function geldTabZet(){
   const ja=geldNieuw()&&MTRol.magGeld();
   b.style.display=ja?'':'none';
   const t=document.getElementById('tab-geld'); if(t&&t.classList.contains('active')&&ja) geldOpen();
+  rapportTabZet(ja);
+}
+// ── Rapporten (CEO-avond): zelfde recht als Geld; de eigenaar vinkt acties af, de administratie leest en stelt vragen ──
+function rapportBadge(n){
+  const s=document.getElementById('rapport-badge'); if(!s) return;
+  s.hidden=!(n>0); s.textContent=n>0?(n===1?'1 open vraag':n+' open vragen'):'';
+}
+function rapportTabZet(ja){
+  const b=document.getElementById('tab-btn-rapporten'); if(!b) return;
+  b.style.display=ja&&window.MTRapport?'':'none';
+  if(!ja||!window.MTRapport) return;
+  MTRapport.telOpen({haal:geldHaal}).then(n=>{ if(n!=null) rapportBadge(n); });
+  const t=document.getElementById('tab-rapporten'); if(t&&t.classList.contains('active')) rapportOpen();
+}
+function rapportOpen(){
+  const el=document.getElementById('rapport-root'); if(!el||!window.MTRapport) return;
+  if(!window.MTRol||!MTRol.me){ if(!rapportOpen._wacht){ rapportOpen._wacht=true; window.addEventListener('mt-rol',()=>{ rapportOpen._wacht=false; geldTabZet(); },{once:true}); } el.innerHTML='<div class="dos-meta">Laden…</div>'; return; }
+  if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Rapporten zijn alleen voor eigenaren en de administratie.</div>'; return; }
+  if(el.dataset.gestart){ MTRapport.laad(); return; }
+  el.dataset.gestart='1';
+  MTRapport.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),magVragen:true,wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',opBadge:rapportBadge});
 }
 async function geldHaal(pad,opt){
   opt=opt||{};
