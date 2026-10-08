@@ -1,5 +1,17 @@
 [
   {
+    "versie": "2.11",
+    "datum": "2026-10-09",
+    "titel": "Rapporten: interactieve cijfers en grafieken",
+    "voor": "beheer",
+    "punten": [
+      "Bij de rapporten staan nu de cijfers zelf: kerncijfers (omzet, brutomarge, resultaat, opnames, kas) over het boekjaar tot nu, met de vergelijking met vorig jaar. Altijd per boekjaar, nooit rollende 12 maanden.",
+      "Grafieken: omzet en kosten per categorie, brutomarge tegenover de branche, kosten als % van de omzet tegenover de branche, opnames tegenover het resultaat, de kas en een waterval van omzet naar kas. Zoom per maand, kwartaal, jaar of 5 jaar; vegen en knijpen werkt ook. Tik op een staaf voor de facturen en mutaties erachter, met een link naar Moneybird.",
+      "\"Eerlijk beeld\" (standaard aan) telt lonen mee die via de bank zijn betaald maar niet in de W&V staan; dat deel is apart gearceerd. Prognose staat altijd gestippeld en telt nooit mee in de kerncijfers.",
+      "Een sectie in het rapport opent de grafiek die erbij hoort, en met de schakelaar Korte/Lange termijn zie je per sectie het advies voor die horizon. De eigenaar regelt onder ⚙ Indeling welke grootboeken in welke categorie vallen."
+    ]
+  },
+  {
     "versie": "2.10",
     "datum": "2026-10-08",
     "titel": "Nieuw tabblad Rapporten voor de CEO-avond",

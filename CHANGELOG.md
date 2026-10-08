@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Rapporten (G9): interactieve cijfers en grafieken bij de rapporten
+- Commit: `e9e2e8b` | Auteur: Bart Witte
+
 ## 2026-10-08 — Release v2.10: tabblad Rapporten voor de CEO-avond; backup = v2.9.9
 - Commit: `77776e2` | Auteur: Bart Witte
 
