@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.9.9",
+    "datum": "2026-10-08",
+    "titel": "Geld: wat roodstaan kost en wat zelf bufferen oplevert",
+    "voor": "beheer",
+    "punten": [
+      "Nieuwe uitklapbare kaart \"Roodstaan: kosten en besparing\": de werkelijke kosten van de rekening-courant van de afgelopen 12 maanden (debetrente en provisie per maand), wat het nu kost, en een rekenvoorbeeld van wat terugboeken uit de BTW-pot en Buffer scheelt, met de formule en vanaf hoeveel rood het echt de moeite loont.",
+      "De spaarrente die je op de potjes misloopt komt uit de rentebijschrijvingen of vul je zelf in bij Instellingen; is die onbekend, dan zegt de kaart dat eerlijk in plaats van te gokken.",
+      "Achter het doel van de lopende rekening en de Buffer staat nu altijd het advies (ook als meegroeien uit staat). Tik of klik erop voor de uitleg: welke getallen, welke regel wint, en ter referentie de variant met 2× de gemiddelde maanduitgaven."
+    ]
+  },
+  {
     "versie": "2.9.8",
     "datum": "2026-10-08",
     "titel": "Geld: doelen groeien voorzichtiger mee, eerlijker beeld van de bank",

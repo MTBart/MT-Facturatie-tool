@@ -141,7 +141,8 @@
     return { nu, reserve: res, gebruikt: rond(Math.max(0, Math.min(res, -nu))), krediet: rond(Math.max(0, -nu - res)) };
   };
   // Kosten rekening-courant uit de "RC AFREK."-mutaties: historisch per maand, en als er debetrente was een
-  // afgeleid tarief (rente / gemiddeld negatief saldo van de lopende rekening zelf — daarover rekent de bank).
+  // afgeleid jaartarief (rente / gemiddeld negatief dagsaldo van de lopende rekening zelf × 365 / dagen in de maand —
+  // daarover rekent de bank). De bereidstellingsprovisie (over het ongebruikte deel) als mediaan per maand erbij.
   G.rcKosten = function (data) {
     const rc = data.historie_rc || []; if (!rc.length) return null;
     const per = {};
@@ -154,9 +155,13 @@
       if (!(per[k].rente > 0)) continue;
       const dagen = L.filter(p => p.datum.slice(0, 7) === k); if (dagen.length < 20) continue;
       const gem = dagen.reduce((a, p) => a + Math.max(0, -p.saldo), 0) / dagen.length;
-      if (gem > 100) tarieven.push(per[k].rente / gem);          // ondergrens tegen ruis (bijna geen negatief saldo → geen tarief)
+      const mdagen = new Date(Date.UTC(Number(k.slice(0, 4)), Number(k.slice(5, 7)), 0)).getUTCDate();
+      if (gem > 100) tarieven.push(per[k].rente / gem * 365 / mdagen);   // ondergrens tegen ruis (bijna geen negatief saldo → geen tarief)
     }
-    if (tarieven.length) { r.tarief = pctL(tarieven, 0.5); r.tariefMaanden = tarieven.length; r.schatting = rond(r.provisie + r.tarief * Math.max(0, -((data.saldo.lopend && data.saldo.lopend.gerapporteerd) || 0))); }
+    if (tarieven.length) {
+      r.tariefJaar = pctL(tarieven, 0.5); r.tariefMaanden = tarieven.length;
+      r.rente = rond(r.tariefJaar / 12 * Math.max(0, -((data.saldo.lopend && data.saldo.lopend.gerapporteerd) || 0))); r.schatting = rond(r.provisie + r.rente);
+    }
     return r;
   };
   // ── Doelen die meegroeien met de bankhistorie (alleen echte data, geen prognose) ──
@@ -173,28 +178,41 @@
     if (band) b = Math.min(band[1], Math.max(band[0], b));
     return { bedrag: b, reden: `de dips onder 0 van lopend + BTW-pot in de laatste ${M.length} maanden (p90 van de maandminima ${eur(p90)}), naar boven afgerond op € 5.000${band ? `, binnen je band ${kort(band[0])}–${kort(band[1])}` : ''}` };
   };
+  // Vaste lasten per maand: de ingeplande patronen (loon, huur, abonnementen …) en de inleg in de potjes van de komende
+  // 13 weken, gemiddeld per maand. Geen inkoopfacturen (die worden vaak doorbelast) en geen BTW.
+  G.vasteLastenMaand = function (data) {
+    const tot = [dagPlus(data.vandaag, 91), data.tot].filter(Boolean).sort()[0], dagen = dagenTussen(data.vandaag, tot); if (!(dagen >= 28)) return null;
+    const groep = G.groep(data), btwPot = (data.instellingen || {}).btw_pot;
+    const som = (data.events || []).filter(e => (e.bron === 'patroon' || (e.bron === 'inleg' && !(btwPot && e.pot === btwPot))) && isGepland(e) && e.datum > data.vandaag && e.datum <= tot)   // BTW-sparen is geen vaste last, ook niet in modus 'apart'
+      .reduce((a, e) => a + Math.max(0, -effect(e, 'lopend', groep)), 0);
+    return rond(som / (dagen / (365.25 / 12)));
+  };
   G.lopendAdvies = function (data) {
     const M = G.historieMaanden(data); if (M.length < 6) return null;
-    const p75 = pctL(M.map(m => m.max), 0.75), uit = data.historie_maand_uit || {}, mu = M.map(m => uit[m.maand]).filter(x => typeof x === 'number');
-    const gem = mu.length ? mu.reduce((a, x) => a + x, 0) / mu.length : 0;
-    return { bedrag: ceil5k(Math.max(p75, 2 * gem)), reden: `het hoogste van: p75 van de maandpieken (${eur(p75)}) en 2× de gemiddelde maanduitgaven incl. inleg in de potjes (${eur(2 * gem)}), naar boven afgerond op € 5.000` };
+    const p75 = pctL(M.map(m => m.max), 0.75), vast = G.vasteLastenMaand(data);
+    return { bedrag: ceil5k(Math.max(p75, vast || 0)), reden: `het hoogste van: p75 van de maandpieken van lopend + BTW-pot in de laatste ${M.length} maanden (${eur(p75)}) en 1× de vaste lasten per maand (patronen + inleg in de potjes, zonder inkoopfacturen: ${vast == null ? 'onbekend' : eur(vast)}), naar boven afgerond op € 5.000` };
   };
-  // Per doel met meegroeien aan (reserve-/Bufferpotje en lopende rekening), hooguit 1× per maand: stijgt het advies →
-  // automatisch verhogen (met melding); daalt het → alleen een voorstel met een Ja-knop. Nooit stil verlagen.
+  // Per doel met meegroeien aan (reserve-/Bufferpotje en lopende rekening). Automatisch alleen een kleine stap omhoog:
+  // hooguit 1× per maand, max +10%, nooit boven de bovengrens (meegroei_max, anders de "tot" van de band; geen grens =
+  // niets automatisch), en pas nadat de eigenaar een advies één keer zelf heeft overgenomen. Al het andere (het eerste
+  // advies, een grotere sprong, boven de grens, lager) is een voorstel met een Ja-knop. Nooit stil verlagen.
+  const STAP_MAX = 0.10;
   G.meegroeiPlan = function (data, cfg) {
     const maand = data.vandaag.slice(0, 7), uit = { wijzig: [], voorstel: [] }, doelen = [];
     if (cfg && cfg.lopend_streef) doelen.push({ id: 'lopend', naam: 'de lopende rekening', streef: cfg.lopend_streef, advies: G.lopendAdvies(data) });
     const rp = G.reservePot(data, cfg), pot = ((cfg && cfg.potten) || []).find(p => p.id === rp);
     if (pot && pot.streef) doelen.push({ id: pot.id, naam: pot.naam, streef: pot.streef, advies: G.reserveAdvies(data, pot.streef) });
     for (const x of doelen) {
-      const doel = x.streef.bedrag != null ? x.streef.bedrag : x.streef.van;
-      if (x.streef.meegroeien === false || !x.advies || doel == null) continue;
-      if (x.advies.bedrag < doel) uit.voorstel.push({ id: x.id, naam: x.naam, van: doel, naar: x.advies.bedrag, reden: x.advies.reden });
-      if (x.streef.advies_maand === maand) continue;               // deze maand al herberekend
-      const nieuw = Object.assign({}, x.streef, { advies_maand: maand });
-      const hoger = x.advies.bedrag > doel;
-      if (hoger) Object.assign(nieuw, { bedrag: x.advies.bedrag, wijziging: { van: doel, naar: x.advies.bedrag, datum: data.vandaag, reden: x.advies.reden } });
-      uit.wijzig.push({ id: x.id, naam: x.naam, streef: nieuw, verhoogd: hoger ? { van: doel, naar: x.advies.bedrag } : null });
+      const doel = x.streef.bedrag != null ? x.streef.bedrag : x.streef.van, a = x.advies && x.advies.bedrag;
+      if (x.streef.meegroeien === false || !x.advies || doel == null || a === doel) continue;
+      const grens = x.streef.meegroei_max != null ? x.streef.meegroei_max : x.streef.tot != null ? x.streef.tot : null;
+      const waarom = a < doel ? null : !x.streef.advies_akkoord ? 'eerste advies: eerst zelf overnemen' : grens == null ? 'geen bovengrens ingesteld'
+        : a > grens ? `boven je bovengrens ${eur(grens)}` : a > doel * (1 + STAP_MAX) ? 'meer dan +10% in één keer' : '';
+      if (waarom === '') {                                          // kleine stap omhoog: automatisch, hooguit 1× per maand
+        if (x.streef.advies_maand === maand) continue;
+        const nieuw = Object.assign({}, x.streef, { advies_maand: maand, bedrag: a, wijziging: { van: doel, naar: a, datum: data.vandaag, reden: x.advies.reden } });
+        uit.wijzig.push({ id: x.id, naam: x.naam, streef: nieuw, verhoogd: { van: doel, naar: a } });
+      } else uit.voorstel.push({ id: x.id, naam: x.naam, van: doel, naar: a, reden: x.advies.reden, hoger: a > doel, waarom });
     }
     return uit;
   };
@@ -470,7 +488,8 @@
       : kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, limiet == null ? 'kredietlimiet nog niet ingesteld' : `tot de kredietlimiet (${eur(-limiet)}) · nu: ${eur(nu != null ? nu + limiet : null)}`)}
     ${metRes ? `<div class="mtg-k ${resInfo && resInfo.krediet > 0 ? 'rood' : resInfo && resInfo.gebruikt > 0 ? 'amber' : ''}"><div class="l"><span>Eigen reserve (Buffer)</span><button class="mtg-vraag" data-uitleg="reserve">?</button></div>
       <div class="w">${resInfo ? eur(resInfo.gebruikt) : '—'} <span style="font-size:13px;font-weight:400">gebruikt van ${resInfo ? eur(resInfo.reserve) : '—'}</span></div>
-      <div class="s">Bankkrediet in gebruik: ${resInfo ? esc(eur(resInfo.krediet)) : '—'}${kosten ? ` · kosten rekening-courant ${kosten.schatting != null ? `≈${esc(eur(kosten.schatting))}/mnd bij het huidige gebruik` : `historisch ${esc(eur(kosten.min))}–${esc(eur(kosten.max))}/mnd`}` : ''}</div></div>`
+      <div class="s">${resInfo ? `fictief: je zit ${esc(eur(resInfo.gebruikt))} in je eigen reserve · bankkrediet ${esc(eur(resInfo.krediet))}` : '—'}</div>
+      <div class="s">${bankTekst(d, kosten, metBtw)}</div></div>`
       : st.mag ? `<div class="mtg-k"><div class="l"><span>Eigen reserve (Buffer)</span><button class="mtg-vraag" data-uitleg="reserve">?</button></div><div class="w" style="font-size:15px">nog niet ingesteld</div><div class="s"><a href="#" data-inst="algemeen">instellen${(() => { const rp = G.reservePot(d, st.cfg), pt = ((st.cfg || {}).potten || []).find(p => p.id === rp), a = G.reserveAdvies(d, pt && pt.streef); return a ? ` (voorstel ${esc(eur(a.bedrag))})` : ''; })()}</a></div></div>` : ''}
   </div>
   <div class="mtg-kaart">
@@ -503,7 +522,23 @@
     felicitatie();
     meegroeiUitvoeren();
   }
-  // Eigenaar opent het scherm: wat deze maand nog niet herberekend is, verwerken (stijgend advies → verhogen, met melding).
+  // Werkelijk op de bank: de lopende rekening zelf (zonder potjes) en wat dat kost. De bank rekent over dat saldo,
+  // ook als er in de potjes genoeg staat.
+  function bankTekst(d, kosten, metBtw) {
+    const lop = d.saldo.lopend && d.saldo.lopend.gerapporteerd; if (lop == null) return '';
+    if (lop >= 0) return `werkelijk op de bank: lopende rekening ${esc(eur(lop))} (niet rood)`;
+    const rp = G.reservePot(d, st.cfg), rn = (((st.cfg || {}).potten || []).find(p => p.id === rp) || {}).naam || 'Buffer';
+    const k = kosten ? (kosten.schatting != null ? `kost ≈${esc(eur(kosten.schatting))}/mnd: rente ±${esc((kosten.tariefJaar * 100).toFixed(1).replace('.', ','))}%/jr, afgeleid uit je ING-afrekeningen, + provisie; <a href="#" data-rc="1">hoe berekend?</a>` : `kostte historisch ${esc(eur(kosten.min))}–${esc(eur(kosten.max))}/mnd, <a href="#" data-rc="1">hoe berekend?</a>`) : 'kosten nog onbekend';
+    return `werkelijk op de bank: lopende rekening ${esc(eur(lop))} rood (${k}); zolang je het ${esc((metBtw ? 'BTW- en ' : '') + rn)}geld niet terugboekt, betaal je die rente`;
+  }
+  function rcUitleg() {
+    const k = G.rcKosten(st.data), lop = st.data.saldo.lopend && st.data.saldo.lopend.gerapporteerd; if (!k) return;
+    const pct = x => (x * 100).toFixed(1).replace('.', ',') + '%';
+    blad(`<h3>Kosten rekening-courant</h3><div class="mtg-uitleg">${k.schatting != null
+      ? `≈ ${esc(eur(k.schatting))} per maand = debetrente ≈${esc(eur(k.rente))} (±${esc(pct(k.tariefJaar))}/jr ÷ 12 × het huidige rode saldo van de lopende rekening ${esc(eur(Math.max(0, -(lop || 0))))}) + bereidstellingsprovisie ${esc(eur(k.provisie))} (mediaan per maand; die rekent de bank over het ongebruikte deel van het krediet). Het tarief is afgeleid uit je ING-afrekeningen: debetrente ÷ het gemiddelde rode dagsaldo in die maand, omgerekend naar een jaar (mediaan over ${k.tariefMaanden} maand${k.tariefMaanden === 1 ? '' : 'en'}).`
+      : `Er is (nog) geen debetrente in de afrekeningen gezien, dus geen tarief; alleen wat het historisch kostte.`} Historisch: ${esc(eur(k.min))}–${esc(eur(k.max))} per maand over ${k.maanden} maand${k.maanden === 1 ? '' : 'en'}. Een indicatie: de bank rekent per dag over de lopende rekening zelf, los van wat er in de potjes staat.</div>`);
+  }
+  // Eigenaar opent het scherm: wat deze maand nog niet herberekend is, verwerken (kleine stap omhoog, met melding).
   async function meegroeiUitvoeren() {
     const plan = st.meegroei; if (!st.mag || st.meegroeiBezig || !plan || !plan.wijzig.length || !st.cfg) return;
     st.meegroeiBezig = true;
@@ -598,11 +633,12 @@
       }
     }
     const extra = pot ? [pot.virtueel ? 'virtueel (geen eigen rekening, telt niet mee in totaal)' : '', pot.weekinleg ? `inleg ${eur(pot.weekinleg)}/week` : ''].filter(Boolean).join(' · ') : '';
-    const wz = streef && streef.wijziging && dagenTussen(streef.wijziging.datum, st.data.vandaag) <= 30 ? streef.wijziging : null;
+    const wz = streef && streef.wijziging && dagenTussen(streef.wijziging.datum, st.data.vandaag) <= 30 && streef.wijziging.naar === (streef.bedrag != null ? streef.bedrag : streef.van) ? streef.wijziging : null;   // alleen als het doel nog zo staat (niet na handmatig terugzetten)
     const vs = ((st.meegroei && st.meegroei.voorstel) || []).find(x => x.id === id);
-    const meeTekst = (wz ? `<div class="r3" style="color:#7a6010">Doel verhoogd van ${esc(eur(wz.van))} naar ${esc(eur(wz.naar))} op ${esc(datumTekst(wz.datum))}, omdat ${esc(wz.reden)}.</div>` : '')
-      + (vs ? `<div class="r3" style="color:#7a6010">Voorstel: doel verlagen naar ${esc(eur(vs.naar))} — ${esc(vs.reden)}. ${st.mag ? `<button class="mtg-knop klein aan" data-verlaag="${esc(id)}">Ja, verlagen</button>` : ''}</div>` : '')
-      + (streef && streef.meegroeien !== false && (id === 'lopend' || id === G.reservePot(st.data, st.cfg)) ? '<div class="r3">doel groeit mee met de bankhistorie (hooguit 1× per maand)</div>' : '');
+    const meeTekst = (wz ? `<div class="r3" style="color:#7a6010">Doel ${wz.naar < wz.van ? 'verlaagd' : 'verhoogd'} van ${esc(eur(wz.van))} naar ${esc(eur(wz.naar))} op ${esc(datumTekst(wz.datum))}, omdat ${esc(wz.reden)}.</div>` : '')
+      + (vs ? `<div class="r3" style="color:#7a6010">${vs.hoger ? `Advies: ${esc(eur(vs.naar))} (nu ${esc(eur(vs.van))}; ${esc(vs.waarom)}) — ${esc(vs.reden)}. ${st.mag ? `<button class="mtg-knop klein aan" data-doeladvies="${esc(id)}">Ja, overnemen</button>` : ''}`
+        : `Voorstel: doel verlagen naar ${esc(eur(vs.naar))} — ${esc(vs.reden)}. ${st.mag ? `<button class="mtg-knop klein aan" data-doeladvies="${esc(id)}">Ja, verlagen</button>` : ''}`}</div>` : '')
+      + (streef && streef.meegroeien !== false && (id === 'lopend' || id === G.reservePot(st.data, st.cfg)) ? `<div class="r3">doel groeit mee met de bankhistorie: automatisch alleen kleine stappen (max +10%, hooguit 1× per maand${streef.meegroei_max != null || streef.tot != null ? `, tot ${esc(eur(streef.meegroei_max != null ? streef.meegroei_max : streef.tot))}` : ', stel een bovengrens in'})${streef.advies_akkoord ? '' : ', na het eerste overgenomen advies'}</div>` : '');
     return `<div class="mtg-pot" ${st.mag ? `data-pot="${esc(id)}" style="cursor:pointer"` : ''}>
   <div class="r1"><b>${esc(naam)}</b><span class="${nu != null && nu < 0 ? 'mtg-uit' : ''}" style="font-weight:600">${nu == null ? 'saldo onbekend' : eur(nu)}</span><span class="mtg-chip">${esc(doelTekst)}${streef && streef.datum ? ' · ' + esc(datumTekst(streef.datum)) : ''}</span></div>
   ${v ? `<div class="mtg-balk" title="${v.pct}% van de weg vanaf het startpunt"><div style="width:${v.pct}%"></div></div>` : ''}
@@ -786,14 +822,16 @@
     return (data.events || []).filter(e => isGepland(e) && G.telt(e, opt) && e.datum <= low.datum).map(e => ({ e, ef: effect(e, 'lopend', groep) }))
       .filter(x => x.ef < 0).sort((a, b) => a.ef - b.ef).slice(0, 3).map(x => x.e);
   };
-  // Verlagen alleen na "Ja" (voorstel uit de historie); de wijziging komt in de historie van de instellingen.
-  function doelVerlagen(id) {
+  // Een voorstel (hoger of lager) alleen na "Ja"; daarna mag het doel in kleine stappen vanzelf meegroeien (advies_akkoord).
+  // De wijziging komt in de historie van de instellingen.
+  function doelAdvies(id) {
     const vs = ((st.meegroei && st.meegroei.voorstel) || []).find(x => x.id === id), cfg = st.cfg; if (!st.mag || !vs || !cfg) return;
-    const maand = st.data.vandaag.slice(0, 7), wz = { van: vs.van, naar: vs.naar, datum: st.data.vandaag, reden: 'verlaagd op voorstel: ' + vs.reden };
+    const maand = st.data.vandaag.slice(0, 7), wz = { van: vs.van, naar: vs.naar, datum: st.data.vandaag, reden: (vs.hoger ? 'overgenomen op voorstel: ' : 'verlaagd op voorstel: ') + vs.reden };
+    const zet = s => Object.assign({}, s, { bedrag: vs.naar, advies_maand: maand, wijziging: wz, advies_akkoord: { bedrag: vs.naar, datum: st.data.vandaag } });
     const body = { revisie: cfg.revisie };
-    if (id === 'lopend') body.lopend_streef = Object.assign({}, cfg.lopend_streef, { bedrag: vs.naar, advies_maand: maand, wijziging: wz });
-    else body.potten = cfg.potten.map(p => p.id === id ? Object.assign({}, p, { streef: Object.assign({}, p.streef, { bedrag: vs.naar, advies_maand: maand, wijziging: wz }) }) : p);
-    return opslaan(() => stuur('/geld/config', body), 'Doel verlaagd');
+    if (id === 'lopend') body.lopend_streef = zet(cfg.lopend_streef);
+    else body.potten = cfg.potten.map(p => p.id === id ? Object.assign({}, p, { streef: zet(p.streef) }) : p);
+    return opslaan(() => stuur('/geld/config', body), vs.hoger ? 'Advies overgenomen' : 'Doel verlaagd');
   }
   function laagsteUitleg() {
     const low = st.low; if (!low) return;
@@ -1029,8 +1067,9 @@
   function klik(e) {
     if (e.target.closest('.mtg-fd')) return;
     if (e.target.closest('[data-laag]')) { e.preventDefault(); return laagsteUitleg(); }
-    const vl = e.target.closest('[data-verlaag]');
-    if (vl) { e.stopPropagation(); return doelVerlagen(vl.dataset.verlaag); }
+    const vl = e.target.closest('[data-doeladvies]');
+    if (vl) { e.stopPropagation(); return doelAdvies(vl.dataset.doeladvies); }
+    if (e.target.closest('[data-rc]')) { e.preventDefault(); e.stopPropagation(); return rcUitleg(); }
     if (e.target.closest('[data-alleen]')) { st.alleenLopend = !st.alleenLopend; ls.set('mtg:alleen:' + st.wie, st.alleenLopend ? '1' : '0'); return teken(); }
     const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst],[data-prog],[data-sc],[data-advies],[data-vraag],[data-herlaad]');
     if (!t) return;
@@ -1135,7 +1174,8 @@
       <label class="mtg-veld"><span>Doelbedrag (€) — of vul hieronder een bandbreedte in</span><input type="number" name="bedrag" value="${s.bedrag != null ? s.bedrag : ''}"></label>
       <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Van (€)</span><input type="number" name="van" value="${s.van != null ? s.van : ''}"></label><label class="mtg-veld" style="flex:1"><span>Tot (€)</span><input type="number" name="tot" value="${s.tot != null ? s.tot : ''}"></label></div>
       <label class="mtg-veld"><span>Streefdatum</span><input type="date" name="datum" value="${esc(s.datum || '')}"></label>
-      <label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="mee" style="width:auto" ${s.meegroeien === false ? '' : 'checked'}> <span style="margin:0">Doel laten meegroeien met de bankhistorie (verhogen automatisch met melding, verlagen alleen als voorstel)</span></label>
+      <label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="mee" style="width:auto" ${s.meegroeien === false ? '' : 'checked'}> <span style="margin:0">Doel laten meegroeien met de bankhistorie (automatisch alleen kleine stappen tot +10% per maand en onder de bovengrens, met melding; het eerste advies, grotere sprongen en verlagen alleen als voorstel)</span></label>
+      <label class="mtg-veld"><span>Bovengrens voor automatisch meegroeien (€) — leeg = de "tot" van de band, of niets automatisch</span><input type="number" name="meemax" value="${s.meegroei_max != null ? s.meegroei_max : ''}"></label>
       <label class="mtg-veld"><span>Mijlpalen (€, komma-gescheiden; leeg = standaard)</span><input name="mijlpalen" value="${esc((s.mijlpalen || []).join(', '))}"></label>
       ${lopend ? '' : `<div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Weekinleg (€)</span><input type="number" name="weekinleg" value="${p.weekinleg != null ? p.weekinleg : ''}"></label>
       <label class="mtg-veld" style="flex:1"><span>Op</span><select name="weekdag"><option value="">${p.weekdag ? '' : 'afleiden uit de bank'}</option>${[1, 2, 3, 4, 5, 6, 7].map(i => `<option value="${i}" ${p.weekdag === i ? 'selected' : ''}>${dagen[i]}</option>`).join('')}</select></label></div>
@@ -1154,7 +1194,7 @@
         mijlpalen: String(f('mijlpalen') || '').split(/[;,]\s*/).map(x => Number(x.replace(/[^\d.-]/g, ''))).filter(x => x === x && String(x) !== ''),
         start: s.start && (s.bedrag === getal('bedrag') && s.van === getal('van')) ? s.start : { datum: st.data.vandaag, bedrag: nuSaldo == null ? 0 : nuSaldo } } : null;
       if (streef && !(f('mijlpalen') || '').trim()) streef.mijlpalen = [];
-      if (streef) Object.assign(streef, { meegroeien: !!f('mee'), advies_maand: s.advies_maand || null, wijziging: s.wijziging || null });
+      if (streef) Object.assign(streef, { meegroeien: !!f('mee'), meegroei_max: getal('meemax'), advies_maand: s.advies_maand || null, wijziging: s.wijziging || null, advies_akkoord: s.advies_akkoord || null });
       let body;
       if (lopend) body = { revisie: cfg.revisie, lopend_streef: streef };
       else {
