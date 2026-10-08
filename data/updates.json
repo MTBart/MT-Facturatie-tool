@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.11.6",
+    "datum": "2026-10-09",
+    "titel": "Rapporten: prognose alleen met genoeg historie",
+    "voor": "beheer",
+    "punten": [
+      "Is er te weinig historie om kosten te schatten, dan toont de grafiek bij een prognose alleen de verwachte omzet, met de noot \"onvoldoende historie voor een prognose\" — geen (misleidend) resultaat."
+    ]
+  },
+  {
     "versie": "2.11.5",
     "datum": "2026-10-09",
     "titel": "Rapporten: lonen via inkoopfacturen (pensioen)",
