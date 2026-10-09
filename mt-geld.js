@@ -458,6 +458,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
 
   G.start = async function (el, opties) {
     st.el = el; st.bron = opties.bron; st.mag = !!opties.magWijzigen; st.wie = opties.wie || ''; st.ververst = false; st.scenario = {};
+    st.koers = { r: null, laden: false, fout: null, rondes: 0 };
     st.projecten = opties.projecten || null; st.offerteBedrag = opties.offerteBedrag || null;
     if (ls.get('mtg:zoom:' + st.wie)) st.zoom = ls.get('mtg:zoom:' + st.wie);
     if (ls.get('mtg:prognose:' + st.wie) === '0') st.prognose = false;
@@ -482,8 +483,32 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       return;
     }
     teken();
+    koersLaad();
     verversOpAchtergrond();
   };
+  // ── Koersmeter (mt-koers.js): de cijfers van dit en vorig boekjaar, één keer per openen. De worker vult ontbrekende
+  // maanden in stukken aan; daarom een paar rondes (zoals in Rapporten), en alleen de kaart opnieuw tekenen.
+  const KOERS_RONDES = 6;
+  async function koersLaad() {
+    const k = st.koers; if (!root.MTKoers || !k || k.laden || (k.r && !k.fout && (k.r.compleet || k.klaar))) return;
+    k.laden = true; k.fout = null; koersTeken();
+    const v = st.data.vandaag, mislukt = new Set();
+    for (k.rondes = 0; k.rondes < KOERS_RONDES; k.rondes++) {
+      let r = null;
+      try { r = await st.bron.haal(`/geld/cijfers?per=maand&van=${Number(v.slice(0, 4)) - 1}-01&tot=${v.slice(0, 7)}`); } catch (e) { r = { error: e.message || String(e) }; }
+      if (!r || r.error) { k.fout = (r && r.error) || 'geen antwoord'; break; }
+      k.r = r; (r.mislukt || []).forEach(m => mislukt.add(m));
+      if (r.compleet || (r.ontbrekend || []).every(m => mislukt.has(m)) || !st.el || !st.el.isConnected) break;
+      await new Promise(res => setTimeout(res, G._pauze != null ? G._pauze : 1500));
+    }
+    k.laden = false; k.klaar = true; koersTeken();
+  }
+  function koersHtml() {
+    if (!root.MTKoers || !st.data) return '';
+    try { root.MTKoers.css(); st.koersOordeel = root.MTKoers.oordeel(root.MTKoers.invoer(st.data, st.cfg, st.koers, G)); return root.MTKoers.kaartHtml(st.koersOordeel); }
+    catch (e) { return `<div class="mtg-melding">Koersmeter kon niet rekenen (${esc(e.message)}).</div>`; }
+  }
+  function koersTeken() { const p = st.el && st.el.querySelector('#mtk-plek'); if (p) p.innerHTML = koersHtml(); }
   // Betaalgedrag en vaste patronen: zonder cron — de eigenaar ververst ze op de achtergrond bij het openen.
   async function verversOpAchtergrond() {
     if (!st.mag || st.bezig || st.ververst) return;          // hooguit één poging per keer openen
@@ -524,6 +549,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       <button class="mtg-knop ${st.modus === 'totaal' ? 'aan' : ''}" data-modus="totaal" title="De spaarpotjes zijn geen buffer: dat geld blijft eraf">Inclusief spaarpotjes (niet bedoeld als buffer)</button>
       ${introWeg ? '<button class="mtg-vraag" data-intro="1" title="Wat zie je hier?">?</button>' : ''}
     </div></div>
+  <div id="mtk-plek">${koersHtml()}</div>
   ${introWeg ? '' : `<div class="mtg-uitleg"><b>Wat zie je hier?</b> ${esc(UITLEG.intro)} <button class="mtg-knop klein" data-intro="weg">Begrepen</button></div>`}
   ${drukHtml()}
   ${verseKs().length ? '<div class="mtg-melding">✓ Net opgeslagen — wordt verwerkt (op andere apparaten kan het een minuut duren).</div>' : ''}
@@ -1167,6 +1193,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   function klik(e) {
     if (e.target.closest('.mtg-fd')) return;
     if (e.target.closest('[data-laag]')) { e.preventDefault(); return laagsteUitleg(); }
+    const kz = e.target.closest('[data-koers]');
+    if (kz) { e.stopPropagation(); return blad(root.MTKoers.uitlegHtml(st.koersOordeel, kz.dataset.koers)); }
     const vl = e.target.closest('[data-doeladvies]');
     if (vl) { e.stopPropagation(); return doelAdvies(vl.dataset.doeladvies); }
     if (e.target.closest('[data-rc]')) { e.preventDefault(); e.stopPropagation(); return rcUitleg(); }
