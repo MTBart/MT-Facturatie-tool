@@ -37,12 +37,43 @@
   if (!root) return;
 
   // ── esc — canonieke HTML-escaper ─────────────────────────────────────────
-  // Zelfde tekenmap als het oude tgEsc/esc in v2. Bewust NIET voor attribute-only
-  // escapes of CSV-quoting — die functies houden hun eigen lokale helper.
+  // Voor tekst en attributen tussen DUBBELE quotes. Laat ' bewust staan: bestaande
+  // code doet esc(x).replace(/'/g, …) voor inline handlers. Nieuw werk: geen waarden
+  // in onclick-strings (data-attributen + addEventListener). Niet voor CSV-quoting.
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
     }[c]));
+  }
+  // ── escHtml — als esc, maar escapet ook ' (ook veilig tussen enkele quotes) (F7).
+  //    Niet geschikt voor JavaScript-strings: de browser decodeert &#39; vóór het script draait.
+  function escHtml(s) {
+    return esc(s).replace(/'/g, '&#39;');
+  }
+
+  // ── veiligeUrl — alleen verwachte URL's in href/src (F7) ──────────────────
+  // opt.protocollen: toegestane schema's (standaard ['https:']); 'data:' alleen als
+  //   data:image/… ; opt.hosts: hostnaam moet gelijk zijn aan of eindigen op een van
+  //   deze (bv. ['sharepoint.com']); opt.prefix: schema dat vóór een kale domeinnaam
+  //   komt (bv. 'https://' voor "www.leverancier.nl"); opt.anders: wat terugkomt als
+  //   de URL niet mag (standaard ''). Geeft de genormaliseerde URL (u.href) terug —
+  //   in HTML altijd nog door esc() halen.
+  function veiligeUrl(u, opt) {
+    opt = opt || {};
+    const anders = opt.anders != null ? opt.anders : '';
+    let s = String(u == null ? '' : u).trim();
+    if (!s) return anders;
+    if (opt.prefix && !/^[a-z][a-z0-9+.-]*:/i.test(s)) s = opt.prefix + s.replace(/^\/+/, '');
+    let p;
+    try { p = new URL(s); } catch (e) { return anders; }
+    const prot = opt.protocollen || ['https:'];
+    if (!prot.includes(p.protocol)) return anders;
+    if (p.protocol === 'data:' && !/^data:image\/(png|jpe?g|gif|webp);/i.test(s)) return anders;
+    if (opt.hosts && opt.hosts.length && !(p.protocol === 'blob:' || p.protocol === 'data:')) {
+      const h = p.hostname.toLowerCase();
+      if (!opt.hosts.some(x => h === x || h.endsWith('.' + x))) return anders;
+    }
+    return p.href;
   }
 
   // ── _encPath — Graph laat '#' en '?' staan → URL breekt bij namen als
@@ -353,9 +384,11 @@
 
   // ── Export op window (geen build → globals expliciet) ────────────────────
   root.esc = esc;
+  root.veiligeUrl = veiligeUrl;
+  root.escHtml = escHtml;
   root._encPath = _encPath;
   root.authHeader = authHeader;
   root.fetchMetAuth = fetchMetAuth;
-  root.MTCore = { esc, _encPath, authHeader, installAuth, makeSP };
+  root.MTCore = { esc, escHtml, veiligeUrl, _encPath, authHeader, installAuth, makeSP };
 
 })(typeof window !== 'undefined' ? window : null);

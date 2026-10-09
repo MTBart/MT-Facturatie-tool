@@ -409,9 +409,10 @@ function inboxRenderTree(){
   const row=(f,kind)=>{
     const act=f.id===_inbox.folderId?' actief':'';
     const b=f.unreadItemCount?`<span class="badge">${f.unreadItemCount}</span>`:'';
-    return `<div class="inbox-fold${kind?' kind':''}${act}" onclick="inboxOpenFolder('${f.id}','${ibEsc(f.displayName).replace(/'/g,'')}')"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(f.displayName)}</span>${b}</div>`;
+    return `<div class="inbox-fold${kind?' kind':''}${act}" data-fid="${ibEsc(f.id)}" data-fnaam="${ibEsc(f.displayName)}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(f.displayName)}</span>${b}</div>`;
   };
   el.innerHTML=_inbox.folders.map(f=>row(f,false)+(f.children||[]).map(c=>row(c,true)).join('')).join('')||'<div class="inbox-empty" style="font-size:12px">geen mappen</div>';
+  el.onclick=e=>{ const d=e.target.closest('[data-fid]'); if(d) inboxOpenFolder(d.dataset.fid,d.dataset.fnaam); };   // F7: geen waarden in onclick
 }
 
 function inboxOpenFolder(id,name){
@@ -471,6 +472,9 @@ function inboxRenderList(){
   }else{
     cont.innerHTML=msgs.map(inboxMsgRow).join('');
   }
+  // F7: één handler op de lijst (id's via data-attributen, niet in onclick-strings)
+  cont.onclick=e=>{ const r=e.target.closest('.inbox-msg[data-mail]'); if(!r||!cont.contains(r)) return;
+    if(r.dataset.cid!=null) inboxOpenThread(r.dataset.cid,r.dataset.mail); else inboxOpenMail(r.dataset.mail); };
 }
 // Client-side filters (altijd; server-side is alleen een versnelling).
 function ibFilterToepassen(msgs){
@@ -551,7 +555,7 @@ function inboxMsgRow(m){
   const kp=ibKoppelChips(m);
   const kpcls=kp.codes.length?' gekoppeld':'';
   const kpchip=kp.html;
-  return `<div class="inbox-msg${m.isRead?'':' ongelezen'}${kpcls}${act}" onclick="inboxOpenMail('${m.id}')">
+  return `<div class="inbox-msg${m.isRead?'':' ongelezen'}${kpcls}${act}" data-mail="${ibEsc(m.id)}">
     <div class="van"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(van)}</span><span class="dt">${dt}</span></div>
     <div class="onderw">${ibEsc(m.subject||'(geen onderwerp)')}${clip}${kpchip}${fchip}</div>
     <div class="prev">${ibEsc(m.bodyPreview||'')}</div></div>`;
@@ -577,7 +581,7 @@ function inboxThreadRow(g){
   const kpcls=kp.codes.length?' gekoppeld':'';
   const kpchip=kp.html;
   const onderw=_ibOnderwerpSchoon(m.subject||'')||'(geen onderwerp)';
-  return `<div class="inbox-msg${anyUnread?' ongelezen':''}${kpcls}${act}" onclick="inboxOpenThread('${ibEsc(g.cid).replace(/'/g,"\\'")}','${m.id}')">
+  return `<div class="inbox-msg${anyUnread?' ongelezen':''}${kpcls}${act}" data-cid="${ibEsc(g.cid)}" data-mail="${ibEsc(m.id)}">
     <div class="van"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(van)}</span><span class="dt">${dt}</span></div>
     <div class="onderw">${ibEsc(onderw)}${anyClip}${count}${kpchip}</div>
     <div class="prev">${ibEsc(m.bodyPreview||'')}</div></div>`;
@@ -663,7 +667,7 @@ async function inboxOpenMail(id){
     const dt=m.receivedDateTime?new Date(m.receivedDateTime).toLocaleString('nl-NL'):'';
     const folderOpts=ibFlat(_inbox.folders).filter(f=>f.id!==_inbox.folderId)
       .map(f=>`<option value="${f.id}">${ibEsc(f.displayName)}</option>`).join('');
-    const attHtml=att.length?('<div style="margin-top:8px">'+att.map(a=>`<span class="inbox-att" onclick="inboxAtt('${m.id}','${a.id}','${ibEsc(a.name).replace(/'/g,'')}')">📎 ${ibEsc(a.name)} <span style="color:#999">(${Math.round((a.size||0)/1024)} kB)</span></span>`).join('')+'</div>'):'';
+    const attHtml=att.length?('<div style="margin-top:8px">'+att.map(a=>`<span class="inbox-att" data-att="${ibEsc(a.id)}" data-attnaam="${ibEsc(a.name)}">📎 ${ibEsc(a.name)} <span style="color:#999">(${Math.round((a.size||0)/1024)} kB)</span></span>`).join('')+'</div>'):'';
     rb.classList.remove('inbox-empty');
     rb.innerHTML=`<div class="inbox-rhdr">
         <h3>${ibEsc(m.subject||'(geen onderwerp)')}</h3>
@@ -681,10 +685,11 @@ async function inboxOpenMail(id){
           <label style="font-size:11px;color:var(--text-dim)">Verplaats in Outlook:</label>
           <select id="inbox-moveto"><option value="">— kies map —</option>${folderOpts}</select>
           <button class="btn btn-sm btn-secondary" onclick="inboxMove(document.getElementById('inbox-moveto').value)">Verplaats</button>
-          <a href="${ibEsc(m.webLink||'#')}" target="_blank" class="btn btn-sm btn-secondary" style="text-decoration:none">↗ Outlook</a>
+          ${veiligeUrl(m.webLink,{hosts:['office.com','office365.com','outlook.com','microsoft.com']})?`<a href="${ibEsc(veiligeUrl(m.webLink,{hosts:['office.com','office365.com','outlook.com','microsoft.com']}))}" target="_blank" rel="noopener" class="btn btn-sm btn-secondary" style="text-decoration:none">↗ Outlook</a>`:''}
         </div>
       </div>
       <iframe class="inbox-body" id="inbox-bodyframe" sandbox="" referrerpolicy="no-referrer"></iframe>`;
+    rb.querySelectorAll('[data-att]').forEach(x=>x.addEventListener('click',()=>inboxAtt(m.id,x.dataset.att,x.dataset.attnaam)));   // F7
     const frame=document.getElementById('inbox-bodyframe');
     const isHtml=m.body&&m.body.contentType&&/html/i.test(m.body.contentType);
     const content=(m.body&&m.body.content)||m.bodyPreview||'';
