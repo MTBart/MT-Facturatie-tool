@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Release v2.11.6: prognose alleen met genoeg historie; backup = v2.11.5
+- Commit: `4e3ed93` | Auteur: Bart Witte
+
 ## 2026-10-09 — Rapporten: prognose alleen met genoeg historie
 - Commit: `c895cae` | Auteur: Bart Witte
 

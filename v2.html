@@ -16,7 +16,7 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-10-08a"></script>
+<script src="mt-core.js?v=2026-10-09a"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
@@ -24,7 +24,7 @@
 <script src="mt-toggl.js?v=2026-10-07a"></script>
 <script src="mt-koppel.js?v=2026-10-07a"></script>
 <script src="mt-contacten.js?v=2026-10-07a"></script>
-<script src="mt-inbox.js?v=2026-10-07b"></script>
+<script src="mt-inbox.js?v=2026-10-09a"></script>
 <script src="mt-rollen.js?v=2026-10-08a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -4608,17 +4608,20 @@ function bewerkVoorraadRegel(id){
   const tr=document.querySelector(`#voorraad-detail-inhoud tr[data-vrow="${id}"]`);
   const v=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').find(x=>String(x.id)===String(id));
   if(!tr||!v) return;
-  const esc=s=>String(s||'').replace(/"/g,'&quot;');
+  // F7: alle waarden door de canonieke esc(); de knoppen krijgen hun handler via addEventListener (geen waarden in onclick).
+  const eid=esc(id);
   tr.innerHTML=`
-    <td><input type="date" id="ve-datum-${id}" value="${(v.datum||'').slice(0,10)}" style="font-size:11px;width:130px"></td>
-    <td><input type="text" id="ve-lev-${id}" value="${esc(v.leverancier)}" style="font-size:11px;width:120px"></td>
-    <td style="text-align:right"><input type="number" step="any" id="ve-aantal-${id}" value="${v.aantal!=null?v.aantal:1}" style="font-size:11px;width:70px;text-align:right"></td>
-    <td style="text-align:right"><input type="number" step="0.01" id="ve-prijs-${id}" value="${v.stukprijs!=null?v.stukprijs:0}" style="font-size:11px;width:80px;text-align:right"></td>
-    <td colspan="2"><input type="text" id="ve-oms-${id}" value="${esc(v.omschrijving)}" title="Schone naam (zoals je 'm wilt zien)" style="font-size:11px;width:100%"></td>
+    <td><input type="date" id="ve-datum-${eid}" value="${esc((v.datum||'').slice(0,10))}" style="font-size:11px;width:130px"></td>
+    <td><input type="text" id="ve-lev-${eid}" value="${esc(v.leverancier||'')}" style="font-size:11px;width:120px"></td>
+    <td style="text-align:right"><input type="number" step="any" id="ve-aantal-${eid}" value="${esc(v.aantal!=null?v.aantal:1)}" style="font-size:11px;width:70px;text-align:right"></td>
+    <td style="text-align:right"><input type="number" step="0.01" id="ve-prijs-${eid}" value="${esc(v.stukprijs!=null?v.stukprijs:0)}" style="font-size:11px;width:80px;text-align:right"></td>
+    <td colspan="2"><input type="text" id="ve-oms-${eid}" value="${esc(v.omschrijving||'')}" title="Schone naam (zoals je 'm wilt zien)" style="font-size:11px;width:100%"></td>
     <td style="white-space:nowrap;text-align:right">
-      <button class="btn btn-xs btn-primary" onclick="slaVoorraadRegelOp('${id}')">✓ Opslaan</button>
-      <button class="btn btn-xs btn-secondary" onclick="toonVoorraadDetail('${(v.omschrijving||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">✕</button>
+      <button class="btn btn-xs btn-primary" data-ve-ok>✓ Opslaan</button>
+      <button class="btn btn-xs btn-secondary" data-ve-terug>✕</button>
     </td>`;
+  tr.querySelector('[data-ve-ok]').addEventListener('click',()=>slaVoorraadRegelOp(String(id)));
+  tr.querySelector('[data-ve-terug]').addEventListener('click',()=>toonVoorraadDetail(v.omschrijving||''));
 }
 function slaVoorraadRegelOp(id){
   const g=s=>document.getElementById(s);
@@ -4892,7 +4895,7 @@ function wijsCorrectieAf(id){ _verwerkCorrectie(id,false); }
 let _attentieItems=[];
 const ATT_PRIO={1:{label:'HOOG',kleur:'#dc2626',bg:'#fef2f2'},2:{label:'MIDDEL',kleur:'#d97706',bg:'#fffbeb'},3:{label:'LAAG',kleur:'#64748b',bg:'#f8fafc'}};
 function _attPrio(p){ const n=Number(p)||3; return ATT_PRIO[n]||ATT_PRIO[3]; }
-function _escAtt(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _escAtt(s){ return esc(s); }   // F7: volledige escape (ook quotes); waarden niet meer in onclick, zie data-att-*
 async function attentieBadge(){
   // Alleen de open-teller verversen (voor het tab-label) zonder de hele tab te tekenen.
   let lijst=null;
@@ -4922,7 +4925,7 @@ async function renderAttentie(){
     const P=_attPrio(c.prioriteit);
     const verwerkt=c.status&&c.status!=='open';
     const links=(Array.isArray(c.links)?c.links:[]).map(l=>
-      `<button class="btn btn-xs btn-secondary" onclick="attentieGa('${_escAtt(l.url).replace(/'/g,"\\'")}')">${_escAtt(l.label||'open')} ↗</button>`).join(' ');
+      `<button class="btn btn-xs btn-secondary" data-att-url="${_escAtt(l.url)}">${_escAtt(l.label||'open')} ↗</button>`).join(' ');
     const statusBadge=verwerkt?`<span style="font-size:11px;font-weight:700;color:${c.status==='afgewezen'?'#dc2626':'#059669'}">${c.status==='afgewezen'?'✕ afgewezen':(c.status==='verwerkt'?'✓ verwerkt':'✓ akkoord')}</span>`:'';
     return `<div class="card" style="border-left:4px solid ${P.kleur};margin-bottom:0.9rem;${verwerkt?'opacity:.6':''}">
       <div class="flex" style="justify-content:space-between;align-items:flex-start;gap:8px">
@@ -4944,25 +4947,34 @@ async function renderAttentie(){
       <div class="flex" style="justify-content:space-between;align-items:center;gap:8px">
         <small style="color:var(--text-dim);font-size:10.5px">${c.bron?'via '+_escAtt(c.bron):''}${c.ts?' · '+new Date(c.ts).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):''}${c.actie_type==='pijplijn'?' · akkoord = Larry voert uit':''}</small>
         ${verwerkt?'':`<div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-xs btn-primary" onclick="akkordeerAttentie('${_escAtt(c.id)}')">✓ Akkoord — Larry doet het</button>
-          <button class="btn btn-xs btn-secondary" onclick="handmatigKlaarAttentie('${_escAtt(c.id)}')">✎ Zelf gecorrigeerd</button>
-          <button class="btn btn-xs btn-danger" onclick="wijsAttentieAf('${_escAtt(c.id)}')">✕ Afwijzen</button>
+          <button class="btn btn-xs btn-primary" data-att-actie="akkoord" data-att-id="${_escAtt(c.id)}">✓ Akkoord — Larry doet het</button>
+          <button class="btn btn-xs btn-secondary" data-att-actie="verwerkt" data-att-id="${_escAtt(c.id)}">✎ Zelf gecorrigeerd</button>
+          <button class="btn btn-xs btn-danger" data-att-actie="afgewezen" data-att-id="${_escAtt(c.id)}">✕ Afwijzen</button>
         </div>`}
       </div>
       ${verwerkt&&c.reactie?`<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:7px 10px;font-size:12px;margin-top:8px"><strong style="color:#4338ca;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em">Jouw reactie</strong><br>${_escAtt(c.reactie).replace(/\n/g,'<br>')}</div>`:''}
       ${verwerkt&&c.resultaat?`<div style="color:var(--text-dim);font-size:11.5px;margin-top:6px">↳ ${_escAtt(c.resultaat).replace(/\n/g,'<br>')}</div>`:''}
     </div>`;
   }).join('');
+  el.onclick=_attentieKlik;   // F7: knoppen via data-att-*, niet via onclick-strings
 }
 function attentieGa(url){
   if(!url) return;
+  url=String(url);
   if(url.charAt(0)==='#'){
     // interne deep-link, bv. #tab=voorraad of #projecten/<CODE> — via de router
     const r=mtRoute.parse(url);
     if(r.tab&&document.getElementById('tab-'+r.tab)){ mtRoute.go(r,{push:true}); return; }
     location.hash=url; return;
   }
-  window.open(url,'_blank','noopener');
+  const u=veiligeUrl(url,{protocollen:['https:']}); if(!u) return;   // F7: geen javascript:/data: e.d.
+  window.open(u,'_blank','noopener');
+}
+// F7: één click-handler op de attentielijst (waarden via data-attributen, niet in onclick-strings)
+function _attentieKlik(e){
+  const b=e.target.closest('[data-att-url],[data-att-actie]'); if(!b) return;
+  if(b.dataset.attUrl!=null) return attentieGa(b.dataset.attUrl);
+  _verwerkAttentie(b.dataset.attId,b.dataset.attActie);
 }
 async function _verwerkAttentie(id,nieuweStatus){
   // Lees ACTUELE SP-staat (read-merge-write — niet de mogelijk verouderde lokale kopie).
@@ -7354,10 +7366,10 @@ function bijlagenHtml(proj){
   const b=Array.isArray(proj.bijlagen)?proj.bijlagen:[];
   if(!b.length) return '<p style="color:var(--text-faint);font-size:13px;margin:0 0 0.5rem">Nog geen bijlagen. Toegevoegde bestanden komen in <span style="font-family:var(--mono)">07_Administratie</span> op SharePoint te staan.</p>';
   return `<table class="materiaal-lijst" style="margin-bottom:0.5rem"><tbody>${b.map((x,i)=>`<tr>
-    <td style="font-size:12px">📄 ${x.web_url?`<a href="${x.web_url}" target="_blank" style="color:var(--green);text-decoration:none">${x.naam} ↗</a>`:x.naam}</td>
+    <td style="font-size:12px">📄 ${veiligeUrl(x.web_url,{hosts:['sharepoint.com']})?`<a href="${esc(veiligeUrl(x.web_url,{hosts:['sharepoint.com']}))}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none">${esc(x.naam)} ↗</a>`:esc(x.naam)}</td>
     <td style="font-size:11px;color:var(--text-faint);text-align:right">${x.grootte?Math.round(x.grootte/1024)+' kB':''}</td>
     <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(x.datum)}</td>
-    <td><button class="btn btn-xs btn-danger" title="Ontkoppelen (bestand blijft op SharePoint staan)" onclick="ontkoppelBijlage('${proj.code}',${i})">×</button></td>
+    <td><button class="btn btn-xs btn-danger" title="Ontkoppelen (bestand blijft op SharePoint staan)" data-ontkoppel-code="${esc(proj.code)}" data-ontkoppel-i="${i}">×</button></td>
   </tr>`).join('')}</tbody></table>`;
 }
 async function uploadProjectBijlagen(files, code){
@@ -7384,6 +7396,8 @@ async function uploadProjectBijlagen(files, code){
   const st2=document.getElementById('bijlage-status-'+code.replace(/-/g,''));
   if(st2){st2.style.color='var(--green)';st2.textContent=`✓ ${ok} bijlage${ok===1?'':'n'} op SharePoint`;}
 }
+// F7: de ontkoppel-knop draagt code en index als data-attributen (geen waarden in onclick); één listener voor alle lijsten.
+document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('[data-ontkoppel-code]'); if(b) ontkoppelBijlage(b.dataset.ontkoppelCode,Number(b.dataset.ontkoppelI)); });
 async function ontkoppelBijlage(code,idx){
   const proj=projVind(code); if(!proj||!Array.isArray(proj.bijlagen)) return;
   const x=proj.bijlagen[idx]; if(!x) return;
@@ -8471,12 +8485,12 @@ function renderLeveranciersBeheer(){
   el.innerHTML=`<table class="v-table" style="margin-bottom:0.75rem">
     <thead><tr><th>Naam</th><th>Categorie</th><th>Contact</th><th></th></tr></thead>
     <tbody>${leveranciers.map((l,i)=>`<tr>
-      <td><strong style="font-size:12px">${l.naam}</strong></td>
-      <td><span class="badge badge-info">${l.categorie||'—'}</span></td>
+      <td><strong style="font-size:12px">${esc(l.naam)}</strong></td>
+      <td><span class="badge badge-info">${esc(l.categorie||'—')}</span></td>
       <td style="font-size:11px">
-        ${l.website?`<a href="${l.website}" target="_blank" style="color:var(--green);text-decoration:none">🌐 website</a> `:''}
-        ${l.email?`<a href="mailto:${l.email}" style="color:var(--green);text-decoration:none">📧 mail</a> `:''}
-        ${l.telefoon?`<a href="tel:${l.telefoon}" style="color:var(--green);text-decoration:none">📞 bel</a>`:''}
+        ${veiligeUrl(l.website,{protocollen:['https:','http:'],prefix:'https://'})?`<a href="${esc(veiligeUrl(l.website,{protocollen:['https:','http:'],prefix:'https://'}))}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none">🌐 website</a> `:''}
+        ${l.email?`<a href="mailto:${esc(String(l.email).trim())}" style="color:var(--green);text-decoration:none">📧 mail</a> `:''}
+        ${l.telefoon?`<a href="tel:${esc(String(l.telefoon).replace(/[^0-9+]/g,''))}" style="color:var(--green);text-decoration:none">📞 bel</a>`:''}
       </td>
       <td><button class="btn btn-xs btn-secondary" onclick="bewerkLeverancier(${i})">✏</button> <button class="btn btn-xs btn-danger" onclick="verwijderLeverancier(${i})">×</button></td>
     </tr>`).join('')}</tbody>
@@ -13645,7 +13659,7 @@ initMsal();
 
   function cnRenderRegelsTabel(regels) {
     const typekl = {pantry:'var(--green-light)',commode:'var(--gold-light)',kast:'var(--purple-light)'};
-    document.getElementById('cn-body-regels').innerHTML = regels.map(r=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 8px;color:var(--text-dim)">${r.datum}</td><td style="padding:6px 8px;font-family:var(--mono);font-size:11px">${r.factuurnr}</td><td style="padding:6px 8px;font-size:11px;color:var(--text-dim)">${r.referentie||'—'}</td><td style="padding:6px 8px">${r.vestiging}</td><td style="padding:6px 8px">${r.omschrijving}</td><td style="padding:6px 8px"><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${typekl[r.type]||'var(--surface2)'}">${r.type}</span></td></tr>`).join('');
+    document.getElementById('cn-body-regels').innerHTML = regels.map(r=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 8px;color:var(--text-dim)">${esc(r.datum)}</td><td style="padding:6px 8px;font-family:var(--mono);font-size:11px">${esc(r.factuurnr)}</td><td style="padding:6px 8px;font-size:11px;color:var(--text-dim)">${esc(r.referentie||'—')}</td><td style="padding:6px 8px">${esc(r.vestiging)}</td><td style="padding:6px 8px">${esc(r.omschrijving)}</td><td style="padding:6px 8px"><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${Object.prototype.hasOwnProperty.call(typekl,r.type)?typekl[r.type]:'var(--surface2)'}">${esc(r.type)}</span></td></tr>`).join('');
   }
 
   window.cnFilterTabel = function() {

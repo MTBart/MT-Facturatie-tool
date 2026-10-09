@@ -19,7 +19,7 @@
 <!-- Gedeelde kernlaag (esc, _encPath, authHeader, MSAL-tokenhelpers, _SP-synclaag) —
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
-<script src="mt-core.js?v=2026-10-08a"></script>
+<script src="mt-core.js?v=2026-10-09a"></script>
 <script src="mt-rollen.js?v=2026-10-08a"></script>
 <script src="mt-dialog.js?v=2026-07-03b"></script>
 <script src="mt-koppel.js?v=2026-10-07a"></script>
@@ -1706,7 +1706,7 @@ function openFotoEdit(photo, cb) {
       b.classList.toggle("active", i === 0));
     modal.style.display = "flex";
   };
-  img.src = photo.bewerktUrl || photo.url;   // doorbewerken op bestaande bewerking mag
+  img.src = window.veiligeUrl(photo.bewerktUrl || photo.url, { protocollen: ['blob:', 'https:', 'data:'] }) || '';   // doorbewerken op bestaande bewerking mag; F7: alleen eigen foto-URL's
   _feBind(canvas);
 }
 
@@ -3532,7 +3532,7 @@ async function _nasFolders(code) {
   mappen.sort((a, b) => a.name.localeCompare(b.name));
   const icoon = n => /foto/i.test(n) ? "📷" : /ontwerp|werkteken|teken/i.test(n) ? "📐" : /offerte|contract/i.test(n) ? "📄" : /cnc/i.test(n) ? "⚙" : "📁";
   return `<div style="display:flex;flex-wrap:wrap;gap:6px">` + mappen.map(m =>
-    `<a href="${m.webUrl}" target="_blank" rel="noopener" style="text-decoration:none;font-size:12px;padding:6px 10px;border-radius:8px;background:var(--n-800);color:#fff;border:1px solid rgba(255,255,255,.1)">${icoon(m.name)} ${escHtml(m.name)}</a>`
+    `<a href="${escHtml(veiligeSpUrl(m.webUrl) || '#')}" target="_blank" rel="noopener" style="text-decoration:none;font-size:12px;padding:6px 10px;border-radius:8px;background:var(--n-800);color:#fff;border:1px solid rgba(255,255,255,.1)">${icoon(m.name)} ${escHtml(m.name)}</a>`
   ).join("") + `</div>`;
 }
 
@@ -4190,7 +4190,7 @@ function renderOpname() {
   if (grid) grid.innerHTML = opnamePhotos.map((p, i) => `
     <div class="foto-row">
       <div class="foto-row-thumb" onclick="openFotoEdit(opnamePhotos[${i}], renderOpname)" title="Tik om aantekeningen te zetten">
-        <img src="${p.bewerktUrl || p.url}" alt="foto">
+        <img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">
         ${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : ''}
         <span class="foto-edit-hint">✏️</span>
       </div>
@@ -4672,7 +4672,7 @@ function renderVoorOpname() {
   grid.innerHTML = rows.map(({p, i}) => `
     <div class="foto-row">
       <div class="foto-row-thumb" ${p.bestaand ? '' : `onclick="openFotoEdit(voorOpnamePhotos[${i}], renderVoorOpname)" title="Tik om aantekeningen te zetten"`}>
-        <img src="${p.bewerktUrl || p.url}" alt="foto">
+        <img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">
         ${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : ''}
         ${p.bestaand ? '<span class="foto-bewerkt-badge" title="Staat al online">☁️</span>' : '<span class="foto-edit-hint">✏️</span>'}
       </div>
@@ -5299,7 +5299,7 @@ function renderInmFotos() {
   el.innerHTML = inmFotos.map((p, i) => `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <div class="foto-row-thumb" style="width:64px;height:64px" onclick="openFotoEdit(inmFotos[${i}], renderInmFotos)" title="Tik om aantekeningen te zetten">
-        <img src="${p.bewerktUrl || p.url}" alt="foto">
+        <img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">
         ${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}
       </div>
       <input type="text" value="${escHtml(p.bijschrift)}" placeholder="Bijschrift bij deze foto…"
@@ -5328,7 +5328,7 @@ function renderOplFotos() {
     let html = _oplUploaded[soort].map(naam =>
       `<div class="thumb-cell" title="${escHtml(naam)}"><div class="thumb-placeholder">📷<div style="font-size:8px;line-height:1.2">opgeslagen</div></div></div>`).join("");
     html += oplFotos[soort].map((p, i) =>
-      `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos['${soort}'][${i}], renderOplFotos)" title="Tik om aantekeningen te zetten"><img src="${p.bewerktUrl || p.url}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto('${soort}',${i})">×</button></div>`).join("");
+      `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos['${soort}'][${i}], renderOplFotos)" title="Tik om aantekeningen te zetten"><img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto('${soort}',${i})">×</button></div>`).join("");
     grid.innerHTML = html;
   });
 }
@@ -5356,7 +5356,7 @@ function renderOplVlakGrid() {
     const src = og && og._url ? og._url : "";
     const n = (v.pins || []).length;
     return `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="pinVlakOpen('${v.id}')" title="${escHtml(v.naam||'')}">`
-      + (src ? `<img src="${src}" alt="vlak">` : `<div class="thumb-placeholder">📍</div>`)
+      + (src ? `<img src="${veiligeFoto(src)}" alt="vlak">` : `<div class="thumb-placeholder">📍</div>`)
       + `<span class="foto-bewerkt-badge">${n}📍</span></div>`;
   }).join("");
 }
@@ -5383,7 +5383,7 @@ function _pinRenderManager() {
     const n = (v.pins || []).length;
     const versies = (v.ondergronden || []).length;
     return `<div class="card" style="display:flex;gap:12px;align-items:center;margin-bottom:10px;cursor:pointer" onclick="pinVlakOpen('${v.id}')">`
-      + (src ? `<img src="${src}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex:0 0 auto">` : `<div style="width:64px;height:64px;border-radius:8px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:24px;flex:0 0 auto">📍</div>`)
+      + (src ? `<img src="${veiligeFoto(src)}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex:0 0 auto">` : `<div style="width:64px;height:64px;border-radius:8px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:24px;flex:0 0 auto">📍</div>`)
       + `<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.naam || '(zonder naam)')}</div>`
       + `<div style="font-size:12px;color:var(--text-faint,#888)">${n} pin${n===1?'':'s'} · ${versies} versie${versies===1?'':'s'} · ${v.type}</div></div>`
       + `<button onclick="event.stopPropagation();pinVlakVerwijder('${v.id}')" style="background:none;border:none;color:#c00;font-size:20px;padding:4px 8px">×</button></div>`;
@@ -5795,7 +5795,7 @@ function showOpnameRapport() {
     groepen.forEach(g => {
       html += `<div class="rapport-section">📷 ${g.naam ? escHtml(g.naam) : "Foto's"} (${g.fotos.length})</div>`;
       g.fotos.forEach(f => {
-        html += `<div style="margin-bottom:10px"><img src="${f.url}" alt="foto" style="width:100%;border-radius:8px">${f.bijschrift ? `<div class="rapport-item-note" style="margin-top:4px">${escHtml(f.bijschrift)}</div>` : ""}</div>`;
+        html += `<div style="margin-bottom:10px"><img src="${veiligeFoto(f.url)}" alt="foto" style="width:100%;border-radius:8px">${f.bijschrift ? `<div class="rapport-item-note" style="margin-top:4px">${escHtml(f.bijschrift)}</div>` : ""}</div>`;
       });
     });
   }
@@ -5993,12 +5993,12 @@ function showRapport() {
   if (fVoor) {
     html += `<div class="rapport-section">📷 Aangetroffen situatie (${fVoor})</div>`;
     if (_oplUploaded.voor.length) html += `<div class="rapport-item-note">${_oplUploaded.voor.length} foto('s) eerder opgeslagen op SharePoint</div>`;
-    html += oplFotos.voor.map(f => `<img src="${f.url}" style="width:100%;border-radius:8px;margin-top:8px">`).join("");
+    html += oplFotos.voor.map(f => `<img src="${veiligeFoto(f.url)}" style="width:100%;border-radius:8px;margin-top:8px">`).join("");
   }
   if (fNa) {
     html += `<div class="rapport-section">📷 Opgeleverd resultaat (${fNa})</div>`;
     if (_oplUploaded.na.length) html += `<div class="rapport-item-note">${_oplUploaded.na.length} foto('s) eerder opgeslagen op SharePoint</div>`;
-    html += oplFotos.na.map(f => `<img src="${f.url}" style="width:100%;border-radius:8px;margin-top:8px">`).join("");
+    html += oplFotos.na.map(f => `<img src="${veiligeFoto(f.url)}" style="width:100%;border-radius:8px;margin-top:8px">`).join("");
   }
   html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${now} · ${escHtml(door)} · M&T</div>`;
   document.getElementById("rapportContent").innerHTML = html;
@@ -6236,7 +6236,7 @@ function renderSheetTasks() {
         <div class="task-name ${t.status==='klaar'?'klaar':''}">${escHtml(t.name)} ${t.tag?`<span class="task-tag">${escHtml(t.tag)}</span>`:""} ${syncDot}${t._pending?` <span style="font-size:10px;color:var(--gold,#d6a93a)" title="Nog niet gedeeld — wordt automatisch opnieuw geprobeerd">⏳ wacht op sync</span>`:""}</div>
         ${meta ? `<div class="task-meta">${escHtml(meta)}</div>` : ""}
         ${t.note ? `<div class="task-meta">📝 ${escHtml(t.note)}</div>` : ""}
-        ${t.link ? `<div class="task-meta"><a href="${t.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-mid);text-decoration:none">📂 Bronmap op SharePoint</a></div>` : ""}
+        ${veiligeSpUrl(t.link) ? `<div class="task-meta"><a href="${escHtml(veiligeSpUrl(t.link))}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-mid);text-decoration:none">📂 Bronmap op SharePoint</a></div>` : ""}
       </div>
     </div>`;
   });
@@ -7126,8 +7126,12 @@ function showToast(msg) {
    UTIL
    ===================================================================== */
 function escHtml(s) {
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  return window.MTCore.escHtml(s);   // F7: de gedeelde escHtml uit mt-core.js (ook ' en null-veilig; via MTCore, want deze functie overschrijft window.escHtml)
 }
+// F7: alleen eigen foto-URL's in <img src>: blob: (net gemaakt), data:image/… of https.
+function veiligeFoto(u) { return escHtml(window.veiligeUrl(u, { protocollen: ['blob:', 'https:', 'data:'] })); }
+// F7: links naar SharePoint alleen als het echt een https-SharePoint-adres is.
+function veiligeSpUrl(u) { return window.veiligeUrl(u, { hosts: ['sharepoint.com'] }); }
 
 /* =====================================================================
    RAPPORT-FOTOHERSTEL (capture first → persist first → sync later)
@@ -7395,7 +7399,7 @@ function escHtml(s) {
     el.innerHTML = rows.map(({p, i}) => `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
         <div class="foto-row-thumb" style="width:64px;height:64px" onclick="openFotoEdit(inmFotos[${i}], renderInmFotos)" title="Tik om aantekeningen te zetten">
-          <img src="${p.bewerktUrl || p.url}" alt="foto">
+          <img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">
           ${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}
         </div>
         <div style="flex:1;min-width:0">
@@ -7413,7 +7417,7 @@ function escHtml(s) {
       let html = _oplUploaded[soort].map(naam =>
         `<div class="thumb-cell" title="${escHtml(naam)}"><div class="thumb-placeholder">📷<div style="font-size:8px;line-height:1.2">☁️ gesynchroniseerd</div></div></div>`).join("");
       html += oplFotos[soort].map((p, i) =>
-        `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos['${soort}'][${i}], renderOplFotos)" title="${escHtml(p.opmerking || "")}"><img src="${p.bewerktUrl || p.url}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto('${soort}',${i})">×</button><div style="position:absolute;left:2px;bottom:2px;right:2px;z-index:2;overflow:hidden">${_chipHtml(p, "rapDraftSave()")}</div></div>`).join("");
+        `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos['${soort}'][${i}], renderOplFotos)" title="${escHtml(p.opmerking || "")}"><img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto('${soort}',${i})">×</button><div style="position:absolute;left:2px;bottom:2px;right:2px;z-index:2;overflow:hidden">${_chipHtml(p, "rapDraftSave()")}</div></div>`).join("");
       grid.innerHTML = html;
     });
   };
