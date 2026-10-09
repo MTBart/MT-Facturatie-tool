@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Startpagina: #tab=dashboard telt niet als deeplink; Personen-label (Codex)
+- Commit: `f77d469` | Auteur: Bart Witte
+
 ## 2026-10-09 — Startpagina per rol: zonder Geld-recht de eigen planning in Agenda
 - Commit: `7405d04` | Auteur: Bart Witte
 

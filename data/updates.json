@@ -10,6 +10,15 @@
     ]
   },
   {
+    "versie": "2.11.8",
+    "datum": "2026-10-09",
+    "titel": "Je start nu op je eigen planning",
+    "voor": "zonder-geld",
+    "punten": [
+      "Bij het openen zie je meteen je planning van deze week in Agenda. Het oude dashboard staat er nog onder de knop Dashboard."
+    ]
+  },
+  {
     "versie": "2.11.7",
     "datum": "2026-10-09",
     "titel": "Veiligheid: geen code meer via tekst van buiten",

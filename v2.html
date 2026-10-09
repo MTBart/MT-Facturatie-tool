@@ -12635,7 +12635,8 @@ const _updSleutel=()=>'mt_updates_gezien:'+((typeof mtMijEmail==='function'&&mtM
 function _updGezien(){ try{ return localStorage.getItem(_updSleutel())||''; }catch(e){ return ''; } }
 // Wat deze gebruiker te zien krijgt: alles "voor iedereen", en "voor beheer" alleen voor eigenaar/beheerder.
 const _updVoorMij=u=>u.voor==='iedereen'||(u.voor==='beheer'&&!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()))
-  ||(u.voor==='geld'&&typeof geldNieuw==='function'&&geldNieuw()&&!!MTRol.magGeld());
+  ||(u.voor==='geld'&&typeof geldNieuw==='function'&&geldNieuw()&&!!MTRol.magGeld())
+  ||(u.voor==='zonder-geld'&&typeof geldNieuw==='function'&&geldNieuw()&&!!MTRol.me.rol&&!MTRol.magGeld());   // startpagina = eigen planning
 function _updNieuw(lijst){ const g=_updGezien(); return lijst.filter(u=>_updVoorMij(u)&&(!g||_updCmp(u.versie,g)>0)).sort((a,b)=>_updCmp(b.versie,a.versie)); }
 async function updStipZet(){
   const b=document.getElementById('upd-stip'); if(!b) return;
@@ -12657,7 +12658,7 @@ async function updKaartTeken(){
   kaart.style.display='';
   if(!l.length){ el.innerHTML='<div class="dos-meta">Nog geen overzicht beschikbaar.</div>'; return; }
   el.innerHTML=l.map((u,i)=>`<details class="upd-versie"${i===0?' open':''}><summary><b>v${esc(u.versie)}</b> — ${esc(u.titel)}
-      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${u.voor==='beheer'?' · voor beheer':u.voor==='geld'?' · voor Geld':''}</span></summary>
+      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${u.voor==='beheer'?' · voor beheer':u.voor==='geld'?' · voor Geld':u.voor==='zonder-geld'?' · zonder Geld-recht':''}</span></summary>
     <ul>${u.punten.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></details>`).join('');
 }
 // ── Werkcodes en centrale instellingen (projectnummering) ──
