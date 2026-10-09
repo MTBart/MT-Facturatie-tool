@@ -3370,7 +3370,9 @@ function agRenderFilters(){
     const set=agSet(which), opts=agOpts(which);
     const naam=which==='proj'?'Projecten':'Personen';
     const lblEl=document.getElementById('ag-drop-'+which+'-lbl');
-    if(lblEl){const cnt=set.has(AG_NONE)?'0':(set.size?String(set.size):'alle');lblEl.textContent=`${naam} (${cnt})`;}
+    // Personen: een teamlid kan als slug én e-mail in het filter staan (startpagina) → unieke teamleden tellen.
+    const n=which==='pers'?new Set([...set].map(v=>{ const m=typeof MT_TEAM!=='undefined'&&MT_TEAM.find(x=>x.email===v); return m?m.slug:v; })).size:set.size;
+    if(lblEl){const cnt=set.has(AG_NONE)?'0':(n?String(n):'alle');lblEl.textContent=`${naam} (${cnt})`;}
     const panel=document.getElementById('ag-drop-'+which+'-panel');
     if(!panel) return;
     if(!opts.length){panel.innerHTML='<div style="font-size:11px;color:#aaa;padding:10px">geen data</div>';return;}
@@ -12510,7 +12512,10 @@ function _eersteVrijeTab(){ const vrij=[...document.querySelectorAll('.tabs-wrap
 let _startTabGedaan=false;
 function _startTabOpen(){
   if(_startTabGedaan||_tabWissels) return false;
-  let diep=false; try{ diep=!!(mtRoute.parse(mtRoute._start).tab||mtRoute.parse(location.hash).tab); }catch(e){}
+  // #tab=dashboard telt niet: showTab schrijft die hash zelf (replaceState), dus na een reload/bladwijzer
+  // is dat geen bewuste keuze. Alleen een route naar een ánder tabblad houdt de startpagina tegen.
+  const naarAnder=h=>{ const t=mtRoute.parse(h).tab; return !!t&&t!=='dashboard'; };
+  let diep=false; try{ diep=naarAnder(mtRoute._start)||naarAnder(location.hash); }catch(e){}
   const d=document.getElementById('tab-dashboard');
   return !diep&&!!d&&d.classList.contains('active');
 }
