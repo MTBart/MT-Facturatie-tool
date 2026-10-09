@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Hotfix: rollen opnieuw laden als het token bij de eerste laad nog niet klaar is
+- Commit: `5d317de` | Auteur: Bart Witte
+
 ## 2026-10-09 — Release v2.11.7: veiligheid (XSS release 1); backup = v2.11.6
 - Commit: `08fdf89` | Auteur: Bart Witte
 

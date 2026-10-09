@@ -12450,10 +12450,11 @@ async function toonApp(account) {
 // De worker beslist; verbergen is UI-gemak. Oude worker zonder /me → er verandert niets.
 // Bij de eerste paginalaad kan het MSAL-token nog niet klaar zijn: dan opnieuw proberen met oplopende pauze, bij
 // focus/zichtbaar worden en na een geslaagde token-acquire — tot /me binnen is. Nooit twee aanvragen tegelijk;
-// een oude worker (geen /me) wordt niet blijvend opnieuw gevraagd.
-const ROL_PAUZES=[1500,3000,6000,12000,24000];
-let _rolBezig=null,_rolTimer=null,_rolPoging=0;
-const _rolStoppen=()=>!window.MTRol||!!MTRol.me||MTRol.laadReden==='oude-worker';
+// een oude worker (geen /me) wordt niet blijvend opnieuw gevraagd. Een /me die wél faalt (401/5xx/netwerk) telt
+// mee in een budget van ROL_MAX_FOUT per paginalaad; "nog geen token" kost geen aanvraag en telt niet.
+const ROL_PAUZES=[1500,3000,6000,12000,24000],ROL_MAX_FOUT=8;
+let _rolBezig=null,_rolTimer=null,_rolPoging=0,_rolFout=0;
+const _rolStoppen=()=>!window.MTRol||!!MTRol.me||MTRol.laadReden==='oude-worker'||_rolFout>=ROL_MAX_FOUT;
 function rolOpnieuwPlannen(){
   if(_rolStoppen()||_rolTimer||_rolPoging>=ROL_PAUZES.length) return;
   _rolTimer=setTimeout(()=>{ _rolTimer=null; if(!_rolStoppen()) rolLaad(); },ROL_PAUZES[_rolPoging++]);
@@ -12469,7 +12470,7 @@ async function rolLaad(){
   _rolBezig=(async()=>{
     try{
       const me=await MTRol.laad(WORKER);
-      if(!me){ rolOpnieuwPlannen(); return null; }
+      if(!me){ if(MTRol.laadReden!=='geen-token') _rolFout++; rolOpnieuwPlannen(); return null; }
       if(_rolTimer){ clearTimeout(_rolTimer); _rolTimer=null; }
       const r=rolToepassen(me);
       if(!eerder&&_rolPoging&&typeof updStipZet==='function') updStipZet();   // pas later gelukt: ook het "nieuw"-stipje (beheer-items) bijwerken
