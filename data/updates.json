@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.11.7",
+    "datum": "2026-10-09",
+    "titel": "Veiligheid: geen code meer via tekst van buiten",
+    "voor": "iedereen",
+    "punten": [
+      "Veiligheid: tekst uit mails, Moneybird en invoer van collega's kan geen code meer uitvoeren. Namen van bijlagen, leveranciers, factuurregels, voorraad en mailmappen worden altijd als gewone tekst getoond, en links en foto's werken alleen nog met vertrouwde adressen (zoals SharePoint en Outlook). Voor jou verandert er verder niets."
+    ]
+  },
+  {
     "versie": "2.11.6",
     "datum": "2026-10-09",
     "titel": "Rapporten: prognose alleen met genoeg historie",
