@@ -26,9 +26,11 @@
 
   // ── Bronnen: wat maakt een oordeel onbetrouwbaar ──
   // Waarschuwingen van de routes die betekenen dat er gegevens ontbreken (niet: echte signalen zoals een BTW-tekort).
-  const ONVOLLEDIG = /niet te lezen|niet alle|onvolledig|nog niet berekend|niet gebruikt|onbekend|niet meegenomen, opnieuw ijken|niet direct gelezen|kan dubbel staan|te veel moneybird/i;
+  // Ook de afkap van Moneybird-lijsten (geldLijst: "onverwacht antwoord (geen lijst)", "meer dan 20 pagina's — afgebroken")
+  // en elke mislukte Moneybird-aanvraag (die waarschuwing draagt een HTTP-status). Later: een vlag onvolledig:true in de worker.
+  const ONVOLLEDIG = /niet te lezen|niet alle|onvolledig|nog niet berekend|niet gebruikt|onbekend|niet meegenomen, opnieuw ijken|niet direct gelezen|kan dubbel staan|te veel moneybird|onverwacht antwoord|afgebroken/i;
   const druk = x => x.status === 429 || /\b429\b|retry later|even druk/i.test(x.fout || '');
-  K.onvolledig = (w, bron) => (w || []).filter(x => (!bron || x.bron === bron) && (druk(x) || ONVOLLEDIG.test(x.fout || ''))).map(x => String(x.fout || 'onbekende fout'));
+  K.onvolledig = (w, bron) => (w || []).filter(x => x && (!bron || x.bron === bron) && (x.onvolledig === true || druk(x) || typeof x.status === 'number' || ONVOLLEDIG.test(x.fout || ''))).map(x => String(x.fout || 'onbekende fout'));
 
   // ── Invoer bouwen uit de geldtijdlijn (+ config) en /geld/cijfers ──
   // G = MTGeld (lijn, laagste, drempel, vasteLastenMaand, reserveCfg). cijfers = { r: antwoord /geld/cijfers, laden, fout }.
@@ -100,7 +102,7 @@
     const nu = x.dit.pct; m.getal = Math.round(nu * 10) / 10; m.waarde = pct(nu);
     const dv = x.vorig && x.vorig.pct != null ? nu - x.vorig.pct : null, db = bRef != null ? nu - bRef : null;
     m.sub.push(`t/m ${mndKort(t)} · ${jaar - 1} zelfde periode: ${x.vorig ? `${pct(x.vorig.pct)} (${dv >= 0 ? '+' : '−'}${pp(dv)} punt)` : 'geen omzet'}`);
-    if (bTekst) m.sub.push(`branche (CBS): ${bTekst}${b.bron ? ' · ' + b.bron : ''}`);
+    if (bTekst) { const cbs = /\bcbs\b/i.test(b.bron || ''); m.sub.push(`branche${cbs ? ' (CBS)' : ''}: ${bTekst}${b.bron && !/^\s*cbs\s*$/i.test(b.bron) ? ' · ' + b.bron : ''}`); }
     if (dv == null && db == null) { m.waarom.push('geen vergelijking: geen omzet in dezelfde periode vorig jaar en geen branchecijfer'); return m; }
     const beste = Math.max(dv == null ? -Infinity : dv, db == null ? -Infinity : db);
     m.kleur = beste >= 0 ? 'groen' : beste >= -MARGE_PP ? 'oranje' : 'rood';

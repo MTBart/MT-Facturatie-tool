@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Koersmeter (variant A) bovenaan Geld
+- Commit: `71b09fa` | Auteur: Bart Witte
+
 ## 2026-10-09 — Release v2.11.8: startpagina per rol + rollen ook bij traag inloggen; backup = v2.11.7
 - Commit: `ca56195` | Auteur: Bart Witte
 
