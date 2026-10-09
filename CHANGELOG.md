@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Release v2.11.7: veiligheid (XSS release 1); backup = v2.11.6
+- Commit: `08fdf89` | Auteur: Bart Witte
+
 ## 2026-10-09 — F7 XSS release 1: escaping, URL-allowlist en geen waarden meer in inline handlers
 - Commit: `fdbeb4f` | Auteur: Bart Witte
 

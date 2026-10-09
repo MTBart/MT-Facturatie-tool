@@ -25,7 +25,7 @@
 <script src="mt-koppel.js?v=2026-10-07a"></script>
 <script src="mt-contacten.js?v=2026-10-07a"></script>
 <script src="mt-inbox.js?v=2026-10-09a"></script>
-<script src="mt-rollen.js?v=2026-10-08a"></script>
+<script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
@@ -12425,7 +12425,7 @@ function _wisSessieBanner() {
 // gaan mee als config; onTokenOk wist de banner zodra de sessie weer geldig is.
 window.MTCore.installAuth({
   graphScopes: GRAPH_SCOPES,
-  onTokenOk: () => { if (_sesBannerActief) _wisSessieBanner(); },
+  onTokenOk: () => { if (_sesBannerActief) _wisSessieBanner(); if (typeof rolLaadAlsNodig === 'function') rolLaadAlsNodig(); },
   onTokenFail: () => { toonSessieVerlopen(); },
 });
 
@@ -12448,9 +12448,37 @@ async function toonApp(account) {
 
 // ═══ ROLLEN (F1c): /me + verbergen (alleen modus 'afdwingen') + Beheer ═══
 // De worker beslist; verbergen is UI-gemak. Oude worker zonder /me → er verandert niets.
+// Bij de eerste paginalaad kan het MSAL-token nog niet klaar zijn: dan opnieuw proberen met oplopende pauze, bij
+// focus/zichtbaar worden en na een geslaagde token-acquire — tot /me binnen is. Nooit twee aanvragen tegelijk;
+// een oude worker (geen /me) wordt niet blijvend opnieuw gevraagd.
+const ROL_PAUZES=[1500,3000,6000,12000,24000];
+let _rolBezig=null,_rolTimer=null,_rolPoging=0;
+const _rolStoppen=()=>!window.MTRol||!!MTRol.me||MTRol.laadReden==='oude-worker';
+function rolOpnieuwPlannen(){
+  if(_rolStoppen()||_rolTimer||_rolPoging>=ROL_PAUZES.length) return;
+  _rolTimer=setTimeout(()=>{ _rolTimer=null; if(!_rolStoppen()) rolLaad(); },ROL_PAUZES[_rolPoging++]);
+}
+// Extra kans buiten het schema om (focus, tab weer zichtbaar, token net gelukt): alleen als /me nog ontbreekt.
+function rolLaadAlsNodig(){ if(!_rolStoppen()&&!_rolBezig) rolLaad(); }
+window.addEventListener('focus',rolLaadAlsNodig);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') rolLaadAlsNodig(); });
 async function rolLaad(){
   if(!window.MTRol) return null;
-  const me=await MTRol.laad(WORKER); if(!me) return null;
+  if(_rolBezig) return _rolBezig;                               // geen dubbele gelijktijdige /me
+  const eerder=!!MTRol.me;
+  _rolBezig=(async()=>{
+    try{
+      const me=await MTRol.laad(WORKER);
+      if(!me){ rolOpnieuwPlannen(); return null; }
+      if(_rolTimer){ clearTimeout(_rolTimer); _rolTimer=null; }
+      const r=rolToepassen(me);
+      if(!eerder&&_rolPoging&&typeof updStipZet==='function') updStipZet();   // pas later gelukt: ook het "nieuw"-stipje (beheer-items) bijwerken
+      return r;
+    }finally{ _rolBezig=null; }
+  })();
+  return _rolBezig;
+}
+function rolToepassen(me){
   if(MTRol.geenToegangNodig()){ MTRol.toonGeenToegang(WORKER); return me; }
   MTRol.pasToe();
   // Actieve tab verborgen (bv. Dashboard voor Werkplaats) → eerste zichtbare tab.
