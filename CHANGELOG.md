@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Hotfix rollen: begrensd budget bij een blijvende /me-fout (Codex)
+- Commit: `e3ae1d6` | Auteur: Bart Witte
+
 ## 2026-10-09 — Hotfix: rollen opnieuw laden als het token bij de eerste laad nog niet klaar is
 - Commit: `5d317de` | Auteur: Bart Witte
 

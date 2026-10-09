@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.11.8",
+    "datum": "2026-10-09",
+    "titel": "Geld is nu je startpagina",
+    "voor": "geld",
+    "punten": [
+      "Geld is nu je startpagina: na het openen van de tool kom je meteen op Geld, en de knop Geld staat vooraan. Kwam je binnen via een link naar een ander tabblad, of klik je zelf al ergens heen, dan blijf je daar. Dashboard blijft gewoon bereikbaar.",
+      "Geld en Rapporten verschijnen nu altijd, ook als het inloggen even duurt. Je hoeft de pagina niet meer te verversen."
+    ]
+  },
+  {
     "versie": "2.11.7",
     "datum": "2026-10-09",
     "titel": "Veiligheid: geen code meer via tekst van buiten",

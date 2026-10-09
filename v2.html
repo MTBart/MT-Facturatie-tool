@@ -811,8 +811,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </header>
 
 <div class="tabs-wrap">
-  <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
   <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Geld</button>
+  <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
   <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
@@ -2979,7 +2979,9 @@ window.onload=async()=>{
 // ═══ TABS ═══
 // Dwell-tracking: hoe lang bleef een tab open vóór de gebruiker wegklikte.
 let _tabHuidig='dashboard', _tabSinds=Date.now();
+let _tabWissels=0;   // elke tabwissel (klik, deeplink, router) — Geld als startpagina springt alleen als dit nog 0 is
 function showTab(name,btn){
+  _tabWissels++;
   // Vorige tab afsluiten met dwell-tijd, nieuwe tab loggen + presence verversen.
   try{
     if(window.track && name!==_tabHuidig){
@@ -12496,7 +12498,22 @@ function rolToepassen(me){
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   if(typeof geldTabZet==='function') geldTabZet();
+  geldAlsStart();
   return me;
+}
+// ── Geld als startpagina (Bart 9-10): wie Geld mag, begint op Geld in plaats van Dashboard. Eén keer per
+// paginalaad, en alleen als je nog op Dashboard staat, zelf nog geen tab koos en er geen deeplink (#tab=…,
+// #projecten/…) is — ook als de rol pas laat binnenkomt. Dashboard blijft gewoon bereikbaar.
+let _geldStartGedaan=false;
+function geldAlsStart(){
+  if(_geldStartGedaan) return;
+  const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
+  _geldStartGedaan=true;
+  if(_tabWissels) return;
+  let diep=false; try{ diep=!!(mtRoute.parse(mtRoute._start).tab||mtRoute.parse(location.hash).tab); }catch(e){}
+  const d=document.getElementById('tab-dashboard');
+  if(diep||!d||!d.classList.contains('active')) return;
+  showTab('geld',b);
 }
 // ── Geld (geldtijdlijn) ──
 // Alleen als de worker de geldtijdlijn kent (kolom `geld` in /me) én je dat recht hebt; dan vervangt het
@@ -12594,7 +12611,8 @@ function _updCmp(a,b){ const x=String(a).split('.').map(Number), y=String(b).spl
 const _updSleutel=()=>'mt_updates_gezien:'+((typeof mtMijEmail==='function'&&mtMijEmail())||'');
 function _updGezien(){ try{ return localStorage.getItem(_updSleutel())||''; }catch(e){ return ''; } }
 // Wat deze gebruiker te zien krijgt: alles "voor iedereen", en "voor beheer" alleen voor eigenaar/beheerder.
-const _updVoorMij=u=>u.voor==='iedereen'||(u.voor==='beheer'&&!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()));
+const _updVoorMij=u=>u.voor==='iedereen'||(u.voor==='beheer'&&!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()))
+  ||(u.voor==='geld'&&typeof geldNieuw==='function'&&geldNieuw()&&!!MTRol.magGeld());
 function _updNieuw(lijst){ const g=_updGezien(); return lijst.filter(u=>_updVoorMij(u)&&(!g||_updCmp(u.versie,g)>0)).sort((a,b)=>_updCmp(b.versie,a.versie)); }
 async function updStipZet(){
   const b=document.getElementById('upd-stip'); if(!b) return;
@@ -12616,7 +12634,7 @@ async function updKaartTeken(){
   kaart.style.display='';
   if(!l.length){ el.innerHTML='<div class="dos-meta">Nog geen overzicht beschikbaar.</div>'; return; }
   el.innerHTML=l.map((u,i)=>`<details class="upd-versie"${i===0?' open':''}><summary><b>v${esc(u.versie)}</b> — ${esc(u.titel)}
-      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${u.voor==='beheer'?' · voor beheer':''}</span></summary>
+      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${u.voor==='beheer'?' · voor beheer':u.voor==='geld'?' · voor Geld':''}</span></summary>
     <ul>${u.punten.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></details>`).join('');
 }
 // ── Werkcodes en centrale instellingen (projectnummering) ──
