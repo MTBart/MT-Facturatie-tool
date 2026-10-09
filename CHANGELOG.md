@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Koersmeter: Moneybird-afkap als onvolledig; branchelabel (Codex)
+- Commit: `5e5b8e5` | Auteur: Bart Witte
+
 ## 2026-10-09 — Koersmeter (variant A) bovenaan Geld
 - Commit: `71b09fa` | Auteur: Bart Witte
 

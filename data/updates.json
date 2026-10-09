@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.11.9",
+    "datum": "2026-10-09",
+    "titel": "Koersmeter bovenaan Geld",
+    "voor": "geld",
+    "punten": [
+      "Bovenaan Geld staat nu de Koersmeter: één oordeel (Op koers / Opletten / Alle zeilen bijzetten) met kasruimte, brutomarge en omzet tegenover vorig boekjaar. Ontbreekt er een bron, dan staat er eerlijk 'Oordeel onbetrouwbaar'."
+    ]
+  },
+  {
     "versie": "2.11.8",
     "datum": "2026-10-09",
     "titel": "Geld is nu je startpagina",

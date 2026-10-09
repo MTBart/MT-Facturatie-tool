@@ -29,18 +29,22 @@
   }
 
   const basis = w => String(w || '').replace(/\/+$/, '');
+  // R.laadReden na een null: 'geen-token' (MSAL nog niet klaar → later opnieuw), 'http-<status>', 'oude-worker'
+  // (geen /me of geen rol/modus → niet blijven herhalen) of 'fout' (netwerk e.d.).
+  R.laadReden = null;
   R.laad = async function (worker) {
     try {
       const h = root.authHeader ? await root.authHeader() : {};
-      if (!h || !h['X-Auth-Token']) return null;
+      if (!h || !h['X-Auth-Token']) { R.laadReden = 'geen-token'; return null; }
       const r = root.fetchMetAuth ? await root.fetchMetAuth(basis(worker) + '/me') : await root.fetch(basis(worker) + '/me', { headers: h });   // 401 → één keer met vers token
-      if (!r.ok) return null;
+      if (!r.ok) { R.laadReden = r.status === 404 ? 'oude-worker' : 'http-' + r.status; return null; }
       const me = await r.json();
-      if (!me || !('rol' in me) || !('modus' in me)) return null;   // oude worker
+      if (!me || !('rol' in me) || !('modus' in me)) { R.laadReden = 'oude-worker'; return null; }   // oude worker
+      R.laadReden = null;
       R.me = me;
       try { root.dispatchEvent(new root.CustomEvent('mt-rol', { detail: me })); } catch (e) {}
       return me;
-    } catch (e) { return null; }
+    } catch (e) { R.laadReden = 'fout'; return null; }
   };
   R.afdwingen = () => !!(R.me && R.me.modus === 'afdwingen');
   R.recht = kolom => (R.me && R.me.rechten) ? R.me.rechten[kolom] : null;

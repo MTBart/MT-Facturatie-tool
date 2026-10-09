@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.11.7 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.11.8 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -26,7 +26,7 @@
 <script src="mt-koppel.js?v=2026-10-07a"></script>
 <script src="mt-contacten.js?v=2026-10-07a"></script>
 <script src="mt-inbox.js?v=2026-10-09a"></script>
-<script src="mt-rollen.js?v=2026-10-08a"></script>
+<script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
@@ -767,7 +767,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.11.7, 9 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.11.8, 9 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -788,7 +788,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.11.7</span>
+    <span class="header-version">v2.11.8</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -813,8 +813,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </header>
 
 <div class="tabs-wrap">
-  <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
   <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Geld</button>
+  <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
   <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
@@ -2981,7 +2981,9 @@ window.onload=async()=>{
 // ═══ TABS ═══
 // Dwell-tracking: hoe lang bleef een tab open vóór de gebruiker wegklikte.
 let _tabHuidig='dashboard', _tabSinds=Date.now();
+let _tabWissels=0;   // elke tabwissel (klik, deeplink, router) — Geld als startpagina springt alleen als dit nog 0 is
 function showTab(name,btn){
+  _tabWissels++;
   // Vorige tab afsluiten met dwell-tijd, nieuwe tab loggen + presence verversen.
   try{
     if(window.track && name!==_tabHuidig){
@@ -3370,7 +3372,9 @@ function agRenderFilters(){
     const set=agSet(which), opts=agOpts(which);
     const naam=which==='proj'?'Projecten':'Personen';
     const lblEl=document.getElementById('ag-drop-'+which+'-lbl');
-    if(lblEl){const cnt=set.has(AG_NONE)?'0':(set.size?String(set.size):'alle');lblEl.textContent=`${naam} (${cnt})`;}
+    // Personen: een teamlid kan als slug én e-mail in het filter staan (startpagina) → unieke teamleden tellen.
+    const n=which==='pers'?new Set([...set].map(v=>{ const m=typeof MT_TEAM!=='undefined'&&MT_TEAM.find(x=>x.email===v); return m?m.slug:v; })).size:set.size;
+    if(lblEl){const cnt=set.has(AG_NONE)?'0':(n?String(n):'alle');lblEl.textContent=`${naam} (${cnt})`;}
     const panel=document.getElementById('ag-drop-'+which+'-panel');
     if(!panel) return;
     if(!opts.length){panel.innerHTML='<div style="font-size:11px;color:#aaa;padding:10px">geen data</div>';return;}
@@ -12427,7 +12431,7 @@ function _wisSessieBanner() {
 // gaan mee als config; onTokenOk wist de banner zodra de sessie weer geldig is.
 window.MTCore.installAuth({
   graphScopes: GRAPH_SCOPES,
-  onTokenOk: () => { if (_sesBannerActief) _wisSessieBanner(); },
+  onTokenOk: () => { if (_sesBannerActief) _wisSessieBanner(); if (typeof rolLaadAlsNodig === 'function') rolLaadAlsNodig(); },
   onTokenFail: () => { toonSessieVerlopen(); },
 });
 
@@ -12450,14 +12454,44 @@ async function toonApp(account) {
 
 // ═══ ROLLEN (F1c): /me + verbergen (alleen modus 'afdwingen') + Beheer ═══
 // De worker beslist; verbergen is UI-gemak. Oude worker zonder /me → er verandert niets.
+// Bij de eerste paginalaad kan het MSAL-token nog niet klaar zijn: dan opnieuw proberen met oplopende pauze, bij
+// focus/zichtbaar worden en na een geslaagde token-acquire — tot /me binnen is. Nooit twee aanvragen tegelijk;
+// een oude worker (geen /me) wordt niet blijvend opnieuw gevraagd. Een /me die wél faalt (401/5xx/netwerk) telt
+// mee in een budget van ROL_MAX_FOUT per paginalaad; "nog geen token" kost geen aanvraag en telt niet.
+const ROL_PAUZES=[1500,3000,6000,12000,24000],ROL_MAX_FOUT=8;
+let _rolBezig=null,_rolTimer=null,_rolPoging=0,_rolFout=0;
+const _rolStoppen=()=>!window.MTRol||!!MTRol.me||MTRol.laadReden==='oude-worker'||_rolFout>=ROL_MAX_FOUT;
+function rolOpnieuwPlannen(){
+  if(_rolStoppen()||_rolTimer||_rolPoging>=ROL_PAUZES.length) return;
+  _rolTimer=setTimeout(()=>{ _rolTimer=null; if(!_rolStoppen()) rolLaad(); },ROL_PAUZES[_rolPoging++]);
+}
+// Extra kans buiten het schema om (focus, tab weer zichtbaar, token net gelukt): alleen als /me nog ontbreekt.
+function rolLaadAlsNodig(){ if(!_rolStoppen()&&!_rolBezig) rolLaad(); }
+window.addEventListener('focus',rolLaadAlsNodig);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') rolLaadAlsNodig(); });
 async function rolLaad(){
   if(!window.MTRol) return null;
-  const me=await MTRol.laad(WORKER); if(!me) return null;
+  if(_rolBezig) return _rolBezig;                               // geen dubbele gelijktijdige /me
+  const eerder=!!MTRol.me;
+  _rolBezig=(async()=>{
+    try{
+      const me=await MTRol.laad(WORKER);
+      if(!me){ if(MTRol.laadReden!=='geen-token') _rolFout++; rolOpnieuwPlannen(); return null; }
+      if(_rolTimer){ clearTimeout(_rolTimer); _rolTimer=null; }
+      const r=rolToepassen(me);
+      if(!eerder&&_rolPoging&&typeof updStipZet==='function') updStipZet();   // pas later gelukt: ook het "nieuw"-stipje (beheer-items) bijwerken
+      return r;
+    }finally{ _rolBezig=null; }
+  })();
+  return _rolBezig;
+}
+function rolToepassen(me){
   if(MTRol.geenToegangNodig()){ MTRol.toonGeenToegang(WORKER); return me; }
   MTRol.pasToe();
-  // Actieve tab verborgen (bv. Dashboard voor Werkplaats) → eerste zichtbare tab.
+  // Actieve tab verborgen (bv. Dashboard voor Werkplaats) → eerste zichtbare tab; behalve als de startpagina
+  // straks kiest (startTabZet, onderaan): dan niet eerst naar een willekeurige tab springen.
   const act=document.querySelector('.tabs-wrap .tab-btn.active');
-  if(act&&act.classList.contains('mt-rol-verborgen')){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
+  if(act&&act.classList.contains('mt-rol-verborgen')&&!_startTabOpen()) _eersteVrijeTab();
   if(typeof admInitKnop==='function') admInitKnop();
   const k=document.getElementById('beheer-kaart'); if(k) k.style.display=MTRol.isBeheer()?'':'none';
   if(MTRol.isBeheer()) updKaartTeken(); else { const u=document.getElementById('upd-kaart'); if(u) u.style.display='none'; }
@@ -12469,7 +12503,42 @@ async function rolLaad(){
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   if(typeof geldTabZet==='function') geldTabZet();
+  startTabZet();
   return me;
+}
+function _eersteVrijeTab(){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
+// ── Startpagina per rol (Bart 9-10): wie Geld mag, begint op Geld; alle anderen (kantoor, werkplaats, …) op
+// Agenda → Planning, gefilterd op hun eigen planblokken (wie niet in MT_TEAM staat: de hele teamplanning).
+// Eén keer per paginalaad, en alleen als je nog op Dashboard staat, zelf nog geen tab koos en er geen
+// deeplink (#tab=…, #projecten/…) is — ook als de rol pas laat binnenkomt. Dashboard blijft bereikbaar.
+let _startTabGedaan=false;
+function _startTabOpen(){
+  if(_startTabGedaan||_tabWissels) return false;
+  // #tab=dashboard telt niet: showTab schrijft die hash zelf (replaceState), dus na een reload/bladwijzer
+  // is dat geen bewuste keuze. Alleen een route naar een ánder tabblad houdt de startpagina tegen.
+  const naarAnder=h=>{ const t=mtRoute.parse(h).tab; return !!t&&t!=='dashboard'; };
+  let diep=false; try{ diep=naarAnder(mtRoute._start)||naarAnder(location.hash); }catch(e){}
+  const d=document.getElementById('tab-dashboard');
+  return !diep&&!!d&&d.classList.contains('active');
+}
+function startTabZet(){
+  if(_startTabGedaan) return;
+  const open=_startTabOpen(); _startTabGedaan=true;
+  if(!open) return;   // de verborgen-tab-terugval deed rolToepassen dan al
+  // Zonder rol of met een oude worker (geen kolom geld in /me) → geen startpagina, alles als vroeger.
+  const kies=!!(MTRol.me&&MTRol.me.rol)&&geldNieuw();
+  const zichtbaar=b=>!!b&&b.style.display!=='none'&&!b.classList.contains('mt-rol-verborgen');
+  const knop=n=>[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('"+n+"'"));
+  const g=document.getElementById('tab-btn-geld'), a=knop('agenda');
+  if(kies&&MTRol.magGeld()){ if(zichtbaar(g)) showTab('geld',g); }
+  else if(kies&&zichtbaar(a)){
+    const ik=(typeof mtMijEmail==='function'&&mtMijEmail())||'', lid=MT_TEAM.find(m=>m.email.toLowerCase()===ik);
+    _agenda.view='plan'; _agenda.weekStart=agMaandag(new Date());
+    if(lid) _agenda.fPers=new Set([lid.slug,lid.email]);   // planblokken staan op slug of e-mail
+    showTab('agenda',a);
+  }
+  const act=document.querySelector('.tabs-wrap .tab-btn.active');
+  if(act&&act.classList.contains('mt-rol-verborgen')) _eersteVrijeTab();   // niets te kiezen en Dashboard verborgen
 }
 // ── Geld (geldtijdlijn) ──
 // Alleen als de worker de geldtijdlijn kent (kolom `geld` in /me) én je dat recht hebt; dan vervangt het
@@ -12567,7 +12636,9 @@ function _updCmp(a,b){ const x=String(a).split('.').map(Number), y=String(b).spl
 const _updSleutel=()=>'mt_updates_gezien:'+((typeof mtMijEmail==='function'&&mtMijEmail())||'');
 function _updGezien(){ try{ return localStorage.getItem(_updSleutel())||''; }catch(e){ return ''; } }
 // Wat deze gebruiker te zien krijgt: alles "voor iedereen", en "voor beheer" alleen voor eigenaar/beheerder.
-const _updVoorMij=u=>u.voor==='iedereen'||(u.voor==='beheer'&&!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()));
+const _updVoorMij=u=>u.voor==='iedereen'||(u.voor==='beheer'&&!!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()))
+  ||(u.voor==='geld'&&typeof geldNieuw==='function'&&geldNieuw()&&!!MTRol.magGeld())
+  ||(u.voor==='zonder-geld'&&typeof geldNieuw==='function'&&geldNieuw()&&!!MTRol.me.rol&&!MTRol.magGeld());   // startpagina = eigen planning
 function _updNieuw(lijst){ const g=_updGezien(); return lijst.filter(u=>_updVoorMij(u)&&(!g||_updCmp(u.versie,g)>0)).sort((a,b)=>_updCmp(b.versie,a.versie)); }
 async function updStipZet(){
   const b=document.getElementById('upd-stip'); if(!b) return;
@@ -12589,7 +12660,7 @@ async function updKaartTeken(){
   kaart.style.display='';
   if(!l.length){ el.innerHTML='<div class="dos-meta">Nog geen overzicht beschikbaar.</div>'; return; }
   el.innerHTML=l.map((u,i)=>`<details class="upd-versie"${i===0?' open':''}><summary><b>v${esc(u.versie)}</b> — ${esc(u.titel)}
-      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${u.voor==='beheer'?' · voor beheer':''}</span></summary>
+      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${u.voor==='beheer'?' · voor beheer':u.voor==='geld'?' · voor Geld':u.voor==='zonder-geld'?' · zonder Geld-recht':''}</span></summary>
     <ul>${u.punten.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></details>`).join('');
 }
 // ── Werkcodes en centrale instellingen (projectnummering) ──
