@@ -12484,9 +12484,10 @@ async function rolLaad(){
 function rolToepassen(me){
   if(MTRol.geenToegangNodig()){ MTRol.toonGeenToegang(WORKER); return me; }
   MTRol.pasToe();
-  // Actieve tab verborgen (bv. Dashboard voor Werkplaats) → eerste zichtbare tab.
+  // Actieve tab verborgen (bv. Dashboard voor Werkplaats) → eerste zichtbare tab; behalve als de startpagina
+  // straks kiest (startTabZet, onderaan): dan niet eerst naar een willekeurige tab springen.
   const act=document.querySelector('.tabs-wrap .tab-btn.active');
-  if(act&&act.classList.contains('mt-rol-verborgen')){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
+  if(act&&act.classList.contains('mt-rol-verborgen')&&!_startTabOpen()) _eersteVrijeTab();
   if(typeof admInitKnop==='function') admInitKnop();
   const k=document.getElementById('beheer-kaart'); if(k) k.style.display=MTRol.isBeheer()?'':'none';
   if(MTRol.isBeheer()) updKaartTeken(); else { const u=document.getElementById('upd-kaart'); if(u) u.style.display='none'; }
@@ -12498,22 +12499,39 @@ function rolToepassen(me){
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   if(typeof geldTabZet==='function') geldTabZet();
-  geldAlsStart();
+  startTabZet();
   return me;
 }
-// ── Geld als startpagina (Bart 9-10): wie Geld mag, begint op Geld in plaats van Dashboard. Eén keer per
-// paginalaad, en alleen als je nog op Dashboard staat, zelf nog geen tab koos en er geen deeplink (#tab=…,
-// #projecten/…) is — ook als de rol pas laat binnenkomt. Dashboard blijft gewoon bereikbaar.
-let _geldStartGedaan=false;
-function geldAlsStart(){
-  if(_geldStartGedaan) return;
-  const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
-  _geldStartGedaan=true;
-  if(_tabWissels) return;
+function _eersteVrijeTab(){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
+// ── Startpagina per rol (Bart 9-10): wie Geld mag, begint op Geld; alle anderen (kantoor, werkplaats, …) op
+// Agenda → Planning, gefilterd op hun eigen planblokken (wie niet in MT_TEAM staat: de hele teamplanning).
+// Eén keer per paginalaad, en alleen als je nog op Dashboard staat, zelf nog geen tab koos en er geen
+// deeplink (#tab=…, #projecten/…) is — ook als de rol pas laat binnenkomt. Dashboard blijft bereikbaar.
+let _startTabGedaan=false;
+function _startTabOpen(){
+  if(_startTabGedaan||_tabWissels) return false;
   let diep=false; try{ diep=!!(mtRoute.parse(mtRoute._start).tab||mtRoute.parse(location.hash).tab); }catch(e){}
   const d=document.getElementById('tab-dashboard');
-  if(diep||!d||!d.classList.contains('active')) return;
-  showTab('geld',b);
+  return !diep&&!!d&&d.classList.contains('active');
+}
+function startTabZet(){
+  if(_startTabGedaan) return;
+  const open=_startTabOpen(); _startTabGedaan=true;
+  if(!open) return;   // de verborgen-tab-terugval deed rolToepassen dan al
+  // Zonder rol of met een oude worker (geen kolom geld in /me) → geen startpagina, alles als vroeger.
+  const kies=!!(MTRol.me&&MTRol.me.rol)&&geldNieuw();
+  const zichtbaar=b=>!!b&&b.style.display!=='none'&&!b.classList.contains('mt-rol-verborgen');
+  const knop=n=>[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('"+n+"'"));
+  const g=document.getElementById('tab-btn-geld'), a=knop('agenda');
+  if(kies&&MTRol.magGeld()){ if(zichtbaar(g)) showTab('geld',g); }
+  else if(kies&&zichtbaar(a)){
+    const ik=(typeof mtMijEmail==='function'&&mtMijEmail())||'', lid=MT_TEAM.find(m=>m.email.toLowerCase()===ik);
+    _agenda.view='plan'; _agenda.weekStart=agMaandag(new Date());
+    if(lid) _agenda.fPers=new Set([lid.slug,lid.email]);   // planblokken staan op slug of e-mail
+    showTab('agenda',a);
+  }
+  const act=document.querySelector('.tabs-wrap .tab-btn.active');
+  if(act&&act.classList.contains('mt-rol-verborgen')) _eersteVrijeTab();   // niets te kiezen en Dashboard verborgen
 }
 // ── Geld (geldtijdlijn) ──
 // Alleen als de worker de geldtijdlijn kent (kolom `geld` in /me) én je dat recht hebt; dan vervangt het

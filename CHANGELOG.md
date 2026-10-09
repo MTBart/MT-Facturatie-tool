@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Geld als startpagina voor wie Geld mag
+- Commit: `cb61614` | Auteur: Bart Witte
+
 ## 2026-10-09 — Hotfix rollen: begrensd budget bij een blijvende /me-fout (Codex)
 - Commit: `e3ae1d6` | Auteur: Bart Witte
 
