@@ -592,7 +592,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     st.el.querySelector('.mtg').addEventListener('input', e => {
       const h = e.target.closest('[data-hulp]'); if (!h) return;
       st.hulp[h.dataset.hulp] = h.value;
-      if (h.dataset.hulp === 'id') { const p = st.el.querySelector('#mts-plek'); if (p) p.outerHTML = schuldenHtml(); return; }
+      if (h.dataset.hulp === 'id') { const p = st.el.querySelector('#mts-plek'); if (p) p.outerHTML = schuldenHtml(); const s = st.el.querySelector('[data-hulp="id"]'); if (s) s.focus(); return; }
       const u = st.el.querySelector('#mts-uit'); if (u) u.innerHTML = hulpUitkomst();
     });
     st.el.querySelector('.mtg').addEventListener('change', e => {        // termijndatum verschuiven = scenario, lijn rekent mee
@@ -814,27 +814,46 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
         <span class="b">${eur(x.bedrag)}</span>${st.mag && !x.potje ? `<button class="mtg-knop klein ${x.aan ? 'aan' : ''}" data-patroon="${esc(x.id)}" data-aan="${x.aan ? 0 : 1}">${x.aan ? 'aan' : 'uit'}</button>` : ''}</div>`).join('')}</details></div>`;
   }
   // ── Schulden (mt-schulden.js): per lening restschuld, rente, termijn, einde, nog te betalen rente + rekenhulp extra aflossen ──
+  // De rekening-courant (kredietlimiet ingesteld) staat er altijd bij als "rood staan": geen lening om in te vullen.
+  const rcPotten = () => (((st.cfg || {}).potten) || []).filter(p => !p.virtueel && p.actief !== false);
   function schuldenHtml() {
     const S = root.MTSchulden, lijst = ((st.cfg && st.cfg.schulden) || []);
-    if (!S || !st.data || (!lijst.length && !st.mag)) return '';
+    if (!S || !st.data) return '';
+    const rc = S.rcInfo(st.data, st.cfg, G);
+    if (!lijst.length && !rc && !st.mag) return '';
     S.css();
-    if (!lijst.length) return `<div class="mtg-kaart" id="mts-plek"><div class="mtg-kop" style="margin:0"><b style="flex:1">Schulden</b><button class="mtg-vraag" data-uitleg="schulden">?</button></div><div class="mtg-melding">Nog geen leningen ingevuld. <a href="#" data-inst="schulden">Lening toevoegen</a> (bijvoorbeeld de hypotheek op het pand) voor de restschuld, de rente en de rekenhulp extra aflossen.</div></div>`;
-    const h = st.hulp = st.hulp || { id: lijst[0].id, perMaand: '', eenmalig: '', datum: st.data.vandaag };
-    if (!lijst.some(x => x.id === h.id)) h.id = lijst[0].id;
-    const v = st.data.vandaag, an = lijst.map(s => ({ s, a: S.analyse(s, v) }));
-    const tot = an.reduce((x, y) => x + y.a.restNuCent, 0);
-    return `<div class="mtg-kaart" id="mts-plek"><div class="mtg-kop" style="margin:0"><b style="flex:1">Schulden <span class="mtg-melding" style="font-weight:400">${lijst.length} lening${lijst.length === 1 ? '' : 'en'} · samen ${esc(S._eurC(tot))}</span></b><button class="mtg-vraag" data-uitleg="schulden">?</button></div>
-      ${an.map(x => S.leningHtml(x.s, x.a)).join('')}
-      <div class="mts-hulp"><b>Rekenhulp extra aflossen</b>
-        <div class="rij" style="margin-top:6px">${lijst.length > 1 ? `<label>Lening<select data-hulp="id">${lijst.map(s => `<option value="${esc(s.id)}" ${s.id === h.id ? 'selected' : ''}>${esc(s.naam)}</option>`).join('')}</select></label>` : ''}
-          <label>Extra per maand (€)<input inputmode="decimal" data-hulp="perMaand" value="${esc(h.perMaand)}" placeholder="bv. 500"></label>
-          <label>Of eenmalig (€)<input inputmode="decimal" data-hulp="eenmalig" value="${esc(h.eenmalig)}" placeholder="bv. 10.000"></label>
+    const v = st.data.vandaag, keuzes = lijst.map(s => [s.id, s.naam]).concat(rc ? [['rc', 'Rekening-courant (rood staan)']] : []);
+    const nieuw = st.mag && !lijst.length ? `<div class="mtg-melding">Nog geen leningen ingevuld. <a href="#" data-inst="schulden">Lening toevoegen</a> (de hypotheek op het pand) voor de restschuld, de rente en de rekenhulp extra aflossen.</div>` : '';
+    const kop = `<div class="mtg-kop" style="margin:0"><b style="flex:1">Schulden${lijst.length ? ` <span class="mtg-melding" style="font-weight:400">${lijst.length} lening${lijst.length === 1 ? '' : 'en'} · samen ${esc(S._eurC(lijst.reduce((x, s) => x + S.analyse(s, v).restNuCent, 0)))}</span>` : ''}</b><button class="mtg-vraag" data-uitleg="schulden">?</button></div>`;
+    if (!keuzes.length) return `<div class="mtg-kaart" id="mts-plek">${kop}${nieuw}</div>`;
+    const pots = rcPotten(), r = rc && rc.r, standaardPot = (r && r.potIds && r.potIds.find(id => pots.some(p => p.id === id && id !== (st.data.instellingen || {}).btw_pot))) || (pots[0] && pots[0].id) || '';
+    const h = st.hulp = st.hulp || { id: keuzes[0][0], perMaand: '', eenmalig: '', datum: v, bron: standaardPot };
+    if (!keuzes.some(k => k[0] === h.id)) h.id = keuzes[0][0];
+    if (h.bron == null) h.bron = standaardPot;
+    const isRc = h.id === 'rc';
+    const velden = isRc
+      ? `<label>Bedrag (€)<input inputmode="decimal" data-hulp="eenmalig" value="${esc(h.eenmalig)}" placeholder="bv. 10.000"></label>
+          <label>Waarvandaan<select data-hulp="bron">${pots.map(p => `<option value="${esc(p.id)}" ${h.bron === p.id ? 'selected' : ''}>terugboeken uit ${esc(p.naam)}</option>`).join('')}<option value="" ${!h.bron ? 'selected' : ''}>aanvullen (storting van buiten)</option></select></label>`
+      : `<label>Extra per maand (€)<input inputmode="decimal" data-hulp="perMaand" value="${esc(h.perMaand)}" placeholder="bv. 500"></label>
+          <label>Of eenmalig (€)<input inputmode="decimal" data-hulp="eenmalig" value="${esc(h.eenmalig)}" placeholder="bv. 10.000"></label>`;
+    return `<div class="mtg-kaart" id="mts-plek">${kop}
+      ${lijst.map(s => S.leningHtml(s, S.analyse(s, v))).join('')}${rc ? S.rcHtml(rc) : ''}${nieuw}
+      <div class="mts-hulp"><b>${isRc ? 'Rekenhulp terugboeken/aanvullen' : 'Rekenhulp extra aflossen'}</b>
+        <div class="rij" style="margin-top:6px">${keuzes.length > 1 ? `<label>Schuld<select data-hulp="id">${keuzes.map(([id, n]) => `<option value="${esc(id)}" ${id === h.id ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>` : ''}
+          ${velden}
           <label>Op / vanaf datum<input type="date" data-hulp="datum" value="${esc(h.datum)}" min="${esc(v)}"></label></div>
         <div id="mts-uit">${hulpUitkomst()}</div>
         <div class="mtg-melding" style="font-size:12px;margin-top:6px">${esc(S.INFO)}</div></div></div>`;
   }
   function hulpUitkomst() {
-    const S = root.MTSchulden, h = st.hulp, s = ((st.cfg && st.cfg.schulden) || []).find(x => x.id === h.id); if (!S || !s) return '';
+    const S = root.MTSchulden, h = st.hulp; if (!S || !h) return '';
+    if (h.id === 'rc') {
+      const rc = S.rcInfo(st.data, st.cfg, G); if (!rc) return '';
+      const c = S.centUit(h.eenmalig) || 0, pot = rcPotten().find(p => p.id === h.bron);
+      const kas = c > 0 ? S.kasEffect(st.data, st.cfg, { terugCent: c, pot: pot ? pot.id : null, datum: h.datum }, G) : null;
+      return S.rcUitkomstHtml(rc, Object.assign({}, h, { bron: pot ? pot.id : '' }), kas, pot && pot.naam);
+    }
+    const s = ((st.cfg && st.cfg.schulden) || []).find(x => x.id === h.id); if (!s) return '';
     const per = S.centUit(h.perMaand) || 0, een = S.centUit(h.eenmalig) || 0;
     const kas = per > 0 || een > 0 ? S.kasEffect(st.data, st.cfg, { perMaandCent: per, eenmaligCent: een, datum: h.datum }, G) : null;
     return S.uitkomstHtml(s, S.analyse(s, st.data.vandaag), Object.assign({ vandaag: st.data.vandaag }, h), kas);
@@ -1116,7 +1135,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     middel: [{ pct: 50, dagen: 7, label: 'aanbetaling', anker: 'akkoord' }, { pct: 50, dagen: 60, label: 'oplevering', anker: 'oplevering' }],
     groot: [{ pct: 50, dagen: 7, label: 'bevestiging opdracht', anker: 'akkoord' }, { pct: 40, dagen: 50, label: 'voor oplevering', anker: 'start' }, { pct: 10, dagen: 100, label: 'oplevering', anker: 'oplevering' }] };
   UITLEG.prognose = 'Projecten die zeker doorgaan maar nog geen factuur hebben. Vink een project aan; het bedrag (incl. btw) wordt volgens het standaardschema in termijnen verdeeld, elk met een factuurdatum. Voorbeeld: een middelgroot project geeft 50% aanbetaling een week na akkoord en 50% bij oplevering; de tool rekent er de betaaltermijn en het gewone betaalgedrag van de klant bij. In de lijn is dat de stippellijn, en alleen als "prognose" aan staat. Komt de echte factuur in Moneybird (zelfde offerte, of het offertenummer in de referentie), dan vervangt die de termijn vanzelf; twijfelt de tool, dan vraagt hij het hier. Schuif een factuurdatum om te zien wat eerder factureren doet — pas bij "Opslaan" wordt het bewaard. Er gaat nooit iets naar Moneybird.';
-  UITLEG.schulden = 'Per lening: de restschuld nu (een schatting als er sinds de ingevulde stand maanden zijn verstreken), de rente, de termijn, de einddatum en de rente die nog betaald wordt, volgens het aflosschema (annuïtair of lineair; aflossingsvrij lost niet af; zonder bekende rente geen prognose). De rekenhulp vergelijkt het schema met en zonder extra aflossing, met de aanname dat de termijn gelijk blijft en de looptijd korter wordt. Daaronder staat wat de aflossing doet met de kasruimte (laagste punt komende 8 weken, zoals in de Koersmeter): aflossen bekijk je nooit los van de kas. ' + ((root.MTSchulden && root.MTSchulden.INFO) || 'Algemene informatie, geen advies.');
+  UITLEG.schulden = 'Per lening: de restschuld nu (een schatting als er sinds de ingevulde stand maanden zijn verstreken), de rente, de termijn, de einddatum en de rente die nog betaald wordt, volgens het aflosschema (annuïtair of lineair; aflossingsvrij lost niet af; zonder bekende rente geen prognose). De rekenhulp vergelijkt het schema met en zonder extra aflossing, met de aanname dat de termijn gelijk blijft en de looptijd korter wordt. Daaronder staat wat de aflossing doet met de kasruimte (laagste punt komende 8 weken, zoals in de Koersmeter): aflossen bekijk je nooit los van de kas. De rekening-courant is geen aflossende lening: daar zie je hoeveel je nu rood staat, de limiet en de kosten (uit je ING-afrekeningen), en wat terugboeken uit een potje of aanvullen per jaar aan rente scheelt. Terugboeken uit je eigen reserve laat de kasruimte gelijk: het geld was al van jou. ' + ((root.MTSchulden && root.MTSchulden.INFO) || 'Algemene informatie, geen advies.');
   UITLEG.advies = 'Zakt het laagste punt onder je buffer (of de kredietlimiet), dan zoekt de tool welke prognosetermijn je eerder kunt factureren om daarboven te blijven. Het is alleen een voorstel: je beslist zelf, en er gaat niets naar Moneybird.';
 
   function prognoseHtml() {

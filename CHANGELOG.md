@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-10 — Schulden in Geld: aflosschema en rekenhulp extra aflossen, met kas-effect
+- Commit: `aad0b73` | Auteur: Bart Witte
+
 ## 2026-10-09 — Release v2.11.9: Koersmeter bovenaan Geld; backup = v2.11.8
 - Commit: `17907f1` | Auteur: Bart Witte
 
