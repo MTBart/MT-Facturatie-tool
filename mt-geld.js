@@ -815,6 +815,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   }
   // ── Schulden (mt-schulden.js): per lening restschuld, rente, termijn, einde, nog te betalen rente + rekenhulp extra aflossen ──
   // De rekening-courant (kredietlimiet ingesteld) staat er altijd bij als "rood staan": geen lening om in te vullen.
+  const RC_ID = ':rc';   // geen geldige lening-id (a-z, 0-9, -): botst nooit met een lening
   const rcPotten = () => (((st.cfg || {}).potten) || []).filter(p => !p.virtueel && p.actief !== false);
   function schuldenHtml() {
     const S = root.MTSchulden, lijst = ((st.cfg && st.cfg.schulden) || []);
@@ -822,7 +823,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const rc = S.rcInfo(st.data, st.cfg, G);
     if (!lijst.length && !rc && !st.mag) return '';
     S.css();
-    const v = st.data.vandaag, keuzes = lijst.map(s => [s.id, s.naam]).concat(rc ? [['rc', 'Rekening-courant (rood staan)']] : []);
+    const v = st.data.vandaag, keuzes = lijst.map(s => [s.id, s.naam]).concat(rc ? [[RC_ID, 'Rekening-courant (rood staan)']] : []);
     const nieuw = st.mag && !lijst.length ? `<div class="mtg-melding">Nog geen leningen ingevuld. <a href="#" data-inst="schulden">Lening toevoegen</a> (de hypotheek op het pand) voor de restschuld, de rente en de rekenhulp extra aflossen.</div>` : '';
     const kop = `<div class="mtg-kop" style="margin:0"><b style="flex:1">Schulden${lijst.length ? ` <span class="mtg-melding" style="font-weight:400">${lijst.length} lening${lijst.length === 1 ? '' : 'en'} · samen ${esc(S._eurC(lijst.reduce((x, s) => x + S.analyse(s, v).restNuCent, 0)))}</span>` : ''}</b><button class="mtg-vraag" data-uitleg="schulden">?</button></div>`;
     if (!keuzes.length) return `<div class="mtg-kaart" id="mts-plek">${kop}${nieuw}</div>`;
@@ -830,7 +831,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const h = st.hulp = st.hulp || { id: keuzes[0][0], perMaand: '', eenmalig: '', datum: v, bron: standaardPot };
     if (!keuzes.some(k => k[0] === h.id)) h.id = keuzes[0][0];
     if (h.bron == null) h.bron = standaardPot;
-    const isRc = h.id === 'rc';
+    const isRc = h.id === RC_ID;
     const velden = isRc
       ? `<label>Bedrag (€)<input inputmode="decimal" data-hulp="eenmalig" value="${esc(h.eenmalig)}" placeholder="bv. 10.000"></label>
           <label>Waarvandaan<select data-hulp="bron">${pots.map(p => `<option value="${esc(p.id)}" ${h.bron === p.id ? 'selected' : ''}>terugboeken uit ${esc(p.naam)}</option>`).join('')}<option value="" ${!h.bron ? 'selected' : ''}>aanvullen (storting van buiten)</option></select></label>`
@@ -847,7 +848,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   }
   function hulpUitkomst() {
     const S = root.MTSchulden, h = st.hulp; if (!S || !h) return '';
-    if (h.id === 'rc') {
+    if (h.id === RC_ID) {
       const rc = S.rcInfo(st.data, st.cfg, G); if (!rc) return '';
       const c = S.centUit(h.eenmalig) || 0, pot = rcPotten().find(p => p.id === h.bron);
       const kas = c > 0 ? S.kasEffect(st.data, st.cfg, { terugCent: c, pot: pot ? pot.id : null, datum: h.datum }, G) : null;
