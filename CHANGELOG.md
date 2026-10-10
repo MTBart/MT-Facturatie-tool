@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-10 — Schulden: sleutel rekening-courant botst nooit met een lening-id
+- Commit: `e65a541` | Auteur: Bart Witte
+
 ## 2026-10-10 — Schulden: rekening-courant (rood staan) i.p.v. een tweede lening
 - Commit: `4bd7086` | Auteur: Bart Witte
 

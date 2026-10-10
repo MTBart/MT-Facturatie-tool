@@ -104,17 +104,21 @@
       volgende: volgende ? { renteCent: volgende.renteCent, aflossingCent: volgende.aflossingCent } : null, verloop,
       standOud: !sch.heeftSchema && dagenTussen(s.stand_datum, vandaag) > STAND_TE_OUD, invoer: Object.assign({}, inv, { restCent: restNu }) };
   };
-  // Rekenhulp: met en zonder extra (per maand en/of eenmalig, gerekend vanaf de restschuld nu). Zonder schema dat afloopt
-  // (ook bij onbekende rente of aflossingsvrij) is er niets te vergelijken.
+  // Rekenhulp: met en zonder extra (per maand en/of eenmalig), vanaf de restschuld nu. `startMaanden` (opt.start): zoveel
+  // maanden lopen eerst de gewone termijnen door; daarna wordt het eenmalige bedrag afgelost en begint de extra
+  // maandaflossing. Zonder schema dat afloopt (ook bij onbekende rente of aflossingsvrij) is er niets te vergelijken.
   S.extraAflossen = function (inv, opt) {
-    const per = Math.max(0, Math.round((opt && opt.perMaandCent) || 0)), een = Math.max(0, Math.round((opt && opt.eenmaligCent) || 0));
+    const per = Math.max(0, Math.round((opt && opt.perMaandCent) || 0)), een = Math.max(0, Math.round((opt && opt.eenmaligCent) || 0)), k = Math.max(0, Math.floor((opt && opt.start) || 0));
     const leeg = { mogelijk: false, maandenZonder: null, maandenMet: null, maandenEerder: null, renteBespaardCent: null, renteZonderCent: null, renteMetCent: null };
     if (!(per > 0 || een > 0) || inv.restCent <= 0) return leeg;
     const zonder = S.aflosschema(inv, 0); if (!zonder.heeftSchema || !zonder.afgelost) return Object.assign(leeg, { reden: zonder.geenSchemaReden || (zonder.heeftSchema ? 'loopt-niet-af' : null) });
-    const met = S.aflosschema(Object.assign({}, inv, { restCent: Math.max(0, inv.restCent - een) }), per); if (!met.afgelost) return leeg;
-    const som = s => s.regels.reduce((a, r) => a + r.renteCent, 0);
-    return { mogelijk: true, maandenZonder: zonder.regels.length, maandenMet: met.regels.length, maandenEerder: zonder.regels.length - met.regels.length,
-      renteBespaardCent: som(zonder) - som(met), renteZonderCent: som(zonder), renteMetCent: som(met), eenmaligAlles: een >= inv.restCent };
+    const som = l => l.reduce((a, r) => a + r.renteCent, 0);
+    if (k >= zonder.regels.length) return Object.assign(leeg, { reden: 'al-afgelost' });           // dan is hij voor de startdatum al klaar
+    const restK = k ? zonder.regels[k - 1].restCent : inv.restCent, renteVoor = som(zonder.regels.slice(0, k));
+    const met = S.aflosschema(Object.assign({}, inv, { restCent: Math.max(0, restK - een) }), per); if (!met.afgelost) return leeg;
+    const mMet = k + met.regels.length, rMet = renteVoor + som(met.regels);
+    return { mogelijk: true, start: k, maandenZonder: zonder.regels.length, maandenMet: mMet, maandenEerder: zonder.regels.length - mMet,
+      renteBespaardCent: som(zonder.regels) - rMet, renteZonderCent: som(zonder.regels), renteMetCent: rMet, eenmaligAlles: een >= restK };
   };
 
   // ── Zakelijk: effect op de kasruimte (laagste punt lopend + BTW-pot komende 56 dagen, incl. prognose) ──
@@ -213,15 +217,17 @@
   S.uitkomstHtml = function (s, a, h, kas) {
     const per = S.centUit(h.perMaand) || 0, een = S.centUit(h.eenmalig) || 0;
     if (!(per > 0 || een > 0)) return '<div class="mts-uit mtg-melding">Vul een extra bedrag per maand of een eenmalig bedrag in.</div>';
-    const r = S.extraAflossen(a.invoer, { perMaandCent: per, eenmaligCent: een });
+    const start = h.datum && h.datum > h.vandaag ? h.datum : h.vandaag, k = S.heleMaandenTussen(h.vandaag, start);
+    const r = S.extraAflossen(a.invoer, { perMaandCent: per, eenmaligCent: een, start: k });
     const wat = [per > 0 ? `${eurC(per)} per maand` : '', een > 0 ? `eenmalig ${eurC(een)}` : ''].filter(Boolean).join(' en ');
     let t;
     if (r.mogelijk) {
       const eind = r.maandenMet === 0 ? null : S.plusMaanden(h.vandaag, r.maandenMet);
-      t = r.eenmaligAlles ? `Extra aflossen: ${wat} → de lening is in één keer afgelost; ${eurC(r.renteBespaardCent)} rente bespaard.`
-        : `Extra aflossen: ${wat} → <b>${r.maandenEerder ? `${r.maandenEerder} maand${r.maandenEerder === 1 ? '' : 'en'} eerder klaar` : 'nog geen hele maand eerder klaar'}</b>${eind ? ` (rond ${datum(eind)})` : ''}, <b>${eurC(r.renteBespaardCent)} rente bespaard</b>.`;
-      t += ` <span class="mtg-melding" style="font-size:12px">Aanname: de termijn blijft gelijk en de looptijd wordt korter${een > 0 ? '; het eenmalige bedrag gerekend alsof het nu wordt afgelost' : ''}. Verlaagt de bank juist de termijn, dan klopt dit niet.</span>`;
-    } else t = a.renteOnbekend ? 'Rente onbekend: niets uit te rekenen. Vul de rente in (of expliciet 0).' : a.aflossingsvrij ? 'Aflossingsvrij: zonder vast aflosschema is er geen "eerder klaar" te berekenen.' : 'Geen aflosschema dat afloopt: niets te vergelijken.';
+      const vanaf = k ? ` vanaf ${datum(start)}` : '';
+      t = r.eenmaligAlles ? `Extra aflossen: ${wat}${vanaf} → de lening is dan in één keer afgelost; ${eurC(r.renteBespaardCent)} rente bespaard.`
+        : `Extra aflossen: ${wat}${vanaf} → <b>${r.maandenEerder ? `${r.maandenEerder} maand${r.maandenEerder === 1 ? '' : 'en'} eerder klaar` : 'nog geen hele maand eerder klaar'}</b>${eind ? ` (rond ${datum(eind)})` : ''}, <b>${eurC(r.renteBespaardCent)} rente bespaard</b>.`;
+      t += ` <span class="mtg-melding" style="font-size:12px">Aanname: de termijn blijft gelijk en de looptijd wordt korter${k ? `; tot ${datum(start)} lopen de gewone termijnen door` : ''}. Verlaagt de bank juist de termijn, dan klopt dit niet.</span>`;
+    } else t = r.reden === 'al-afgelost' ? 'Volgens het schema is de lening vóór die datum al afgelost.' : a.renteOnbekend ? 'Rente onbekend: niets uit te rekenen. Vul de rente in (of expliciet 0).' : a.aflossingsvrij ? 'Aflossingsvrij: zonder vast aflosschema is er geen "eerder klaar" te berekenen.' : 'Geen aflosschema dat afloopt: niets te vergelijken.';
     return `<div class="mts-uit">${t}</div>${S.kasZin(kas, { eerste: per > 0 })}`;
   };
   // Het kas-effect in één zin: verlaagt, verhoogt of laat de kasruimte (laagste punt komende 8 weken) gelijk.

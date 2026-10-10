@@ -1545,8 +1545,11 @@ function geldSchemaNorm(x) {
 // Schulden (leningen) voor de rekenhulp in Geld: hele centen, rente in basispunten (null = onbekend, 0 alleen expliciet).
 // Geen vrije tekst behalve de naam (≤ 60). Max. 10. Fout → de lening valt weg (normaliseren) of 400 (POST).
 const GELD_SCHULD_MAX = 10, GELD_SCHULD_SOORT = ['hypotheek', 'lening', 'krediet', 'overig'], GELD_SCHULD_VORM = ['annuiteit', 'lineair', 'aflossingsvrij', 'vrij'];
+const GELD_SCHULD_VELDEN = new Set(['id', 'naam', 'soort', 'vorm', 'restschuld_cent', 'stand_datum', 'rente_bp', 'maandtermijn_cent', 'aflossing_cent', 'einde', 'ledger_id']);
 function geldSchuldFout(x) {
   if (!x || typeof x !== 'object' || Array.isArray(x)) return 'lening: object verwacht';
+  // Onbekende velden (ook __proto__ of constructor uit JSON) weigeren, niet stil weglaten.
+  const vreemd = Object.keys(x).find(k => !GELD_SCHULD_VELDEN.has(k)); if (vreemd !== undefined) return `onbekend veld "${String(vreemd).slice(0, 40)}"`;
   const cent = (v, max) => v === null || v === undefined ? null : Number.isInteger(v) && v >= 0 && v <= max ? v : false;
   if (!GELD_POT_ID.test(String(x.id || ''))) return 'id ongeldig (a-z, 0-9, -)';
   const naam = typeof x.naam === 'string' ? x.naam.trim() : '';
