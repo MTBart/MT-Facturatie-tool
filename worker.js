@@ -1552,6 +1552,7 @@ function geldSchuldFout(x) {
   const vreemd = Object.keys(x).find(k => !GELD_SCHULD_VELDEN.has(k)); if (vreemd !== undefined) return `onbekend veld "${String(vreemd).slice(0, 40)}"`;
   const cent = (v, max) => v === null || v === undefined ? null : Number.isInteger(v) && v >= 0 && v <= max ? v : false;
   if (!GELD_POT_ID.test(String(x.id || ''))) return 'id ongeldig (a-z, 0-9, -)';
+  if (x.id === 'rc') return 'id "rc" is gereserveerd voor de rekening-courant';
   const naam = typeof x.naam === 'string' ? x.naam.trim() : '';
   if (!naam || naam.length > 60) return 'naam: 1 tot 60 tekens';
   if (!GELD_SCHULD_SOORT.includes(x.soort)) return 'soort: ' + GELD_SCHULD_SOORT.join(' | ');

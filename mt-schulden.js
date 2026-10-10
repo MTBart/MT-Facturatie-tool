@@ -238,7 +238,8 @@
     const v = kas.verschil, kl = kas.onderGrens ? 'rood' : v < 0 ? 'oranje' : '', van = `van ${eur(kas.voor.ruimte)} naar ${eur(kas.na.ruimte)} op ${datum(kas.na.datum)}`;
     const kop = Math.abs(v) < 0.5 ? `De kasruimte (laagste punt komende 8 weken) blijft gelijk${ctx.uitPot ? `: het geld verschuift alleen van ${esc(ctx.uitPot)} naar de lopende rekening (het was al van jou)` : ''} (${eur(kas.voor.ruimte)}).`
       : `Dit ${v < 0 ? 'verlaagt' : 'verhoogt'} de kasruimte (laagste punt komende 8 weken) met <b>${eur(Math.abs(v))}</b>: ${van}.`;
-    return `<div class="mts-kas ${kl}">${kop}${kas.onderGrens && !kas.wasOnder ? ' <b>Daarmee zakt de kas onder je ondergrens.</b>' : kas.onderGrens ? ' De kas zit dan (nog) onder je ondergrens.' : ''}${kas.onderLimiet ? ' Ook onder de kredietlimiet.' : ''}</div>`;
+    const potNoot = ctx.uitPot && v >= 0.5 ? ` Dat komt doordat er in ${esc(ctx.uitPot)} meer staat dan je eigen reserve-doel; zakt het potje daaronder, dan blijft de kasruimte verder gelijk.` : '';
+    return `<div class="mts-kas ${kl}">${kop}${potNoot}${kas.onderGrens && !kas.wasOnder ? ' <b>Daarmee zakt de kas onder je ondergrens.</b>' : kas.onderGrens ? ' De kas zit dan (nog) onder je ondergrens.' : ''}${kas.onderLimiet ? ' Ook onder de kredietlimiet.' : ''}</div>`;
   };
   const pctJ = x => (x * 100).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
   S.rcHtml = function (i) {
@@ -250,10 +251,14 @@
       <div class="mtg-melding" style="font-size:12px">Geen aflossende lening: de kosten zijn debetrente over het rode saldo${i.tariefJaar != null ? ' (tarief afgeleid uit je ING-afrekeningen)' : ''} plus de bereidstellingsprovisie, die blijft zolang de faciliteit er is. Meer in de kaart "Roodstaan: kosten en besparing".</div></div>`;
   };
   // Rekenhulp RC: h = { eenmalig, bron (pot-id of '' = van buiten), datum }, potNaam = naam van dat potje.
-  S.rcUitkomstHtml = function (info, h, kas, potNaam) {
-    const c = S.centUit(h.eenmalig) || 0;
-    if (!(c > 0)) return '<div class="mts-uit mtg-melding">Vul een bedrag in om terug te boeken of aan te vullen.</div>';
-    const b = S.rcBesparing(info, c / 100, !!h.bron), wat = `${eurC(c)} ${h.bron ? `terugboeken uit ${esc(potNaam || h.bron)}` : 'aanvullen (storting van buiten)'}`;
+  // grens = { datum, stand } bij terugboeken uit een potje: h.cent is dan al begrensd op die (verwachte) stand.
+  S.rcUitkomstHtml = function (info, h, kas, potNaam, grens) {
+    const gevraagd = h.gevraagd != null ? h.gevraagd : S.centUit(h.eenmalig) || 0, c = h.cent != null ? h.cent : gevraagd, pn = esc(potNaam || h.bron);
+    if (!(gevraagd > 0)) return '<div class="mts-uit mtg-melding">Vul een bedrag in om terug te boeken of aan te vullen.</div>';
+    if (grens && grens.stand == null) return `<div class="mts-uit">Het saldo van ${pn} is onbekend: niets te rekenen. Ijk eerst het potje.</div>`;
+    if (grens && !(c > 0)) return `<div class="mts-uit">In ${pn} zit op ${datum(grens.datum)} niets: er valt niets terug te boeken.</div>`;
+    const noot = grens && c < gevraagd ? `<div class="mtg-melding" style="font-size:12px">In ${pn} zit op ${datum(grens.datum)} maar ${eurC(c)}: gerekend met ${eurC(c)} in plaats van ${eurC(gevraagd)}.</div>` : '';
+    const b = S.rcBesparing(info, c / 100, !!h.bron), wat = `${eurC(c)} ${h.bron ? `terugboeken uit ${pn}` : 'aanvullen (storting van buiten)'}`;
     let t;
     if (!b || !b.kan) t = b && b.reden === 'niet-rood' ? `${wat}: je staat nu niet rood, dus het bespaart nu geen rente. De provisie blijft.` : `${wat}: nog geen debetrente in de afrekeningen gezien, dus geen tarief en geen besparing te berekenen.`;
     else {
@@ -263,6 +268,6 @@
       else if (b.spOnbekend) t += ' Spaarrente op het potje onbekend: het netto verschil is niet te berekenen.';
       t += ' <span class="mtg-melding" style="font-size:12px">Gerekend op je huidige rode stand; sta je later minder rood, dan scheelt het minder. De provisie blijft.</span>';
     }
-    return `<div class="mts-uit">${t}</div>${S.kasZin(kas, { uitPot: h.bron ? (potNaam || h.bron) : null })}`;
+    return `${noot}<div class="mts-uit">${t}</div>${S.kasZin(kas, { uitPot: h.bron ? (potNaam || h.bron) : null })}`;
   };
 })(typeof window !== 'undefined' ? window : globalThis);
