@@ -41,6 +41,8 @@
     return Number.isFinite(c) ? c : null;
   };
   S.bpUit = S.centUit;
+  // Potstand (euro's, met floating-point-ruis) → hele centen ≥ 0; niet-eindig = onbekend (null). Afronden, niet afkappen (0,29 × 100 = 28,999…).
+  S.potCent = x => typeof x === 'number' && Number.isFinite(x) ? Math.max(0, Math.round(x * 100)) : null;
 
   // ── Aflosschema ──
   S.maandRenteCent = (rest, bp) => Math.round(rest * bp / 120000);

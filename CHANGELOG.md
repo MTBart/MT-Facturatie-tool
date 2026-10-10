@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-10 — Schulden: terugboeken begrensd op de potstand; reserve-zin voorwaardelijk (Codex)
+- Commit: `4021b77` | Auteur: Bart Witte
+
 ## 2026-10-10 — Schulden: startdatum in de berekening; onbekende velden geweigerd (Codex)
 - Commit: `07422a1` | Auteur: Bart Witte
 

@@ -853,9 +853,9 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       // Terugboeken kan nooit meer dan er (verwacht) in het potje zit op die datum: begrenzen, en dat melden.
       const gevraagd = S.centUit(h.eenmalig) || 0, pot = rcPotten().find(p => p.id === h.bron), start = h.datum && h.datum > st.data.vandaag ? h.datum : st.data.vandaag;
       const stand = pot && gevraagd > 0 ? G.potOp(st.data, pot.id, start, { prognose: true }) : null;
-      const c = pot && gevraagd > 0 ? (stand == null ? 0 : Math.min(gevraagd, Math.max(0, Math.floor(stand * 100)))) : gevraagd;
+      const sc = S.potCent(stand), c = pot && gevraagd > 0 ? (sc == null ? 0 : Math.min(gevraagd, sc)) : gevraagd;
       const kas = c > 0 ? S.kasEffect(st.data, st.cfg, { terugCent: c, pot: pot ? pot.id : null, datum: start }, G) : null;
-      return S.rcUitkomstHtml(rc, Object.assign({}, h, { bron: pot ? pot.id : '', cent: c, gevraagd }), kas, pot && pot.naam, pot && gevraagd > 0 ? { datum: start, stand } : null);
+      return S.rcUitkomstHtml(rc, Object.assign({}, h, { bron: pot ? pot.id : '', cent: c, gevraagd }), kas, pot && pot.naam, pot && gevraagd > 0 ? { datum: start, stand: sc == null ? null : stand } : null);
     }
     const s = ((st.cfg && st.cfg.schulden) || []).find(x => x.id === h.id); if (!s) return '';
     const per = S.centUit(h.perMaand) || 0, een = S.centUit(h.eenmalig) || 0;
