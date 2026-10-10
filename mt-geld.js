@@ -579,6 +579,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Komende 14 dagen</b><button class="mtg-vraag" data-uitleg="lijst">?</button></div>${lijstHtml()}</div>
   ${prognoseHtml()}
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Potjes en doelen</b><button class="mtg-vraag" data-uitleg="potjes">?</button></div>${potjesHtml()}</div>
+  ${schuldenHtml()}
   ${roodHtml()}
   ${instellenHtml()}
   ${letOpHtml()}
@@ -588,6 +589,12 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     grafiek();
     const rk = st.el.querySelector('#mtg-rood'); if (rk) rk.addEventListener('toggle', () => { st.roodOpen = rk.open; });
     st.el.querySelector('.mtg').addEventListener('click', klik);
+    st.el.querySelector('.mtg').addEventListener('input', e => {
+      const h = e.target.closest('[data-hulp]'); if (!h) return;
+      st.hulp[h.dataset.hulp] = h.value;
+      if (h.dataset.hulp === 'id') { const p = st.el.querySelector('#mts-plek'); if (p) p.outerHTML = schuldenHtml(); return; }
+      const u = st.el.querySelector('#mts-uit'); if (u) u.innerHTML = hulpUitkomst();
+    });
     st.el.querySelector('.mtg').addEventListener('change', e => {        // termijndatum verschuiven = scenario, lijn rekent mee
       const i = e.target.closest('.mtg-fd'); if (!i || !i.value) return;
       const sc = st.scenario = st.scenario || {}, x = (st.data.prognose && st.data.prognose.posten || []).find(p => p.sleutel === i.dataset.sl), t = x && x.termijnen.find(q => q.id === i.dataset.tm);
@@ -806,6 +813,74 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
         <span class="n">${esc(x.tegenpartij)} <span class="mtg-chip">${x.frequentie === 'week' ? 'elke ' + dagen[x.weekdag] : 'rond de ' + (((x.dag + (x.verschuiving || 0) - 1) % 31) + 1) + 'e'}</span>${x.potje ? ' <span class="mtg-chip">potje</span>' : ''}</span>
         <span class="b">${eur(x.bedrag)}</span>${st.mag && !x.potje ? `<button class="mtg-knop klein ${x.aan ? 'aan' : ''}" data-patroon="${esc(x.id)}" data-aan="${x.aan ? 0 : 1}">${x.aan ? 'aan' : 'uit'}</button>` : ''}</div>`).join('')}</details></div>`;
   }
+  // ── Schulden (mt-schulden.js): per lening restschuld, rente, termijn, einde, nog te betalen rente + rekenhulp extra aflossen ──
+  function schuldenHtml() {
+    const S = root.MTSchulden, lijst = ((st.cfg && st.cfg.schulden) || []);
+    if (!S || !st.data || (!lijst.length && !st.mag)) return '';
+    S.css();
+    if (!lijst.length) return `<div class="mtg-kaart" id="mts-plek"><div class="mtg-kop" style="margin:0"><b style="flex:1">Schulden</b><button class="mtg-vraag" data-uitleg="schulden">?</button></div><div class="mtg-melding">Nog geen leningen ingevuld. <a href="#" data-inst="schulden">Lening toevoegen</a> (bijvoorbeeld de hypotheek op het pand) voor de restschuld, de rente en de rekenhulp extra aflossen.</div></div>`;
+    const h = st.hulp = st.hulp || { id: lijst[0].id, perMaand: '', eenmalig: '', datum: st.data.vandaag };
+    if (!lijst.some(x => x.id === h.id)) h.id = lijst[0].id;
+    const v = st.data.vandaag, an = lijst.map(s => ({ s, a: S.analyse(s, v) }));
+    const tot = an.reduce((x, y) => x + y.a.restNuCent, 0);
+    return `<div class="mtg-kaart" id="mts-plek"><div class="mtg-kop" style="margin:0"><b style="flex:1">Schulden <span class="mtg-melding" style="font-weight:400">${lijst.length} lening${lijst.length === 1 ? '' : 'en'} · samen ${esc(S._eurC(tot))}</span></b><button class="mtg-vraag" data-uitleg="schulden">?</button></div>
+      ${an.map(x => S.leningHtml(x.s, x.a)).join('')}
+      <div class="mts-hulp"><b>Rekenhulp extra aflossen</b>
+        <div class="rij" style="margin-top:6px">${lijst.length > 1 ? `<label>Lening<select data-hulp="id">${lijst.map(s => `<option value="${esc(s.id)}" ${s.id === h.id ? 'selected' : ''}>${esc(s.naam)}</option>`).join('')}</select></label>` : ''}
+          <label>Extra per maand (€)<input inputmode="decimal" data-hulp="perMaand" value="${esc(h.perMaand)}" placeholder="bv. 500"></label>
+          <label>Of eenmalig (€)<input inputmode="decimal" data-hulp="eenmalig" value="${esc(h.eenmalig)}" placeholder="bv. 10.000"></label>
+          <label>Op / vanaf datum<input type="date" data-hulp="datum" value="${esc(h.datum)}" min="${esc(v)}"></label></div>
+        <div id="mts-uit">${hulpUitkomst()}</div>
+        <div class="mtg-melding" style="font-size:12px;margin-top:6px">${esc(S.INFO)}</div></div></div>`;
+  }
+  function hulpUitkomst() {
+    const S = root.MTSchulden, h = st.hulp, s = ((st.cfg && st.cfg.schulden) || []).find(x => x.id === h.id); if (!S || !s) return '';
+    const per = S.centUit(h.perMaand) || 0, een = S.centUit(h.eenmalig) || 0;
+    const kas = per > 0 || een > 0 ? S.kasEffect(st.data, st.cfg, { perMaandCent: per, eenmaligCent: een, datum: h.datum }, G) : null;
+    return S.uitkomstHtml(s, S.analyse(s, st.data.vandaag), Object.assign({ vandaag: st.data.vandaag }, h), kas);
+  }
+  // Leningen invullen (alleen de eigenaar; de worker controleert alles opnieuw).
+  function schuldenBlad() {
+    const S = root.MTSchulden, c = st.cfg || {}, lijst = (c.schulden || []).map(x => Object.assign({}, x));
+    const cent = x => x == null ? '' : (x / 100).toLocaleString('nl-NL', { minimumFractionDigits: x % 100 ? 2 : 0, maximumFractionDigits: 2 });
+    const veld = (s, i) => `<div class="mtg-kaart" data-i="${i}">
+      <label class="mtg-veld"><span>Naam (max. 60 tekens)</span><input name="naam" maxlength="60" value="${esc(s.naam || '')}"></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Soort</span><select name="soort">${S.SOORTEN.map(([k, t]) => `<option value="${k}" ${s.soort === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label class="mtg-veld" style="flex:1"><span>Vorm</span><select name="vorm">${S.VORMEN.map(([k, t]) => `<option value="${k}" ${s.vorm === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Restschuld (€)</span><input name="rest" inputmode="decimal" value="${cent(s.restschuld_cent)}"></label>
+        <label class="mtg-veld" style="flex:1"><span>Stand op datum</span><input type="date" name="stand" value="${esc(s.stand_datum || st.data.vandaag)}"></label></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Rente (% per jaar) — leeg = onbekend</span><input name="rente" inputmode="decimal" value="${s.rente_bp == null ? '' : (s.rente_bp / 100).toLocaleString('nl-NL', { maximumFractionDigits: 2 })}"></label>
+        <label class="mtg-veld" style="flex:1"><span>Einddatum (optioneel)</span><input type="date" name="einde" value="${esc(s.einde || '')}"></label></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Termijn per maand, rente + aflossing (€)</span><input name="termijn" inputmode="decimal" value="${cent(s.maandtermijn_cent)}"></label>
+        <label class="mtg-veld" style="flex:1"><span>Aflossing per maand (€, lineair)</span><input name="aflossing" inputmode="decimal" value="${cent(s.aflossing_cent)}"></label></div>
+      <label class="mtg-veld"><span>Moneybird-grootboek (id, optioneel)</span><input name="ledger" inputmode="numeric" value="${esc(s.ledger_id || '')}"></label>
+      <button class="mtg-knop klein" data-weg="${i}">Lening verwijderen</button></div>`;
+    const o = blad(`<h3>Leningen</h3><div class="mtg-melding">${esc(S.INFO)} Bedragen in euro's; de rekenhulp rekent in hele centen.</div>
+      <div class="mts-lijst">${lijst.map(veld).join('')}</div>
+      ${lijst.length < 10 ? '<button class="mtg-knop" data-nieuw="1">+ lening</button>' : ''} <button class="mtg-knop aan" data-ok="1">Opslaan</button>`);
+    const lees = () => {
+      const uit = [];
+      for (const k of o.querySelectorAll('.mts-lijst [data-i]')) {
+        const f = n => k.querySelector(`[name="${n}"]`).value.trim(), oud = lijst[Number(k.dataset.i)] || {};
+        const opt = (n, wat) => { const t = f(n); if (t === '') return null; if (/-/.test(t)) throw new Error(`${wat} kan niet negatief zijn`); const c = S.centUit(t); if (c == null) throw new Error(`${wat} is niet te lezen`); return c; };
+        const naam = f('naam'); if (!naam) throw new Error('geef elke lening een naam');
+        const rest = opt('rest', 'De restschuld'); if (rest == null) throw new Error(`vul de restschuld van "${naam}" in`);
+        const stand = f('stand'), einde = f('einde') || null;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(stand)) throw new Error(`kies de datum van de stand voor "${naam}"`);
+        if (einde && einde <= stand) throw new Error(`de einddatum van "${naam}" moet na de stand liggen`);
+        const led = f('ledger'); if (led && !/^\d{6,25}$/.test(led)) throw new Error('het grootboek-id bestaat alleen uit cijfers');
+        uit.push({ id: oud.id || ('lening-' + Math.random().toString(36).slice(2, 8)), naam: naam.slice(0, 60), soort: f('soort'), restschuld_cent: rest, stand_datum: stand,
+          rente_bp: opt('rente', 'De rente'), maandtermijn_cent: opt('termijn', 'De termijn'), aflossing_cent: opt('aflossing', 'De aflossing'), vorm: f('vorm'), einde, ledger_id: led || null });
+      }
+      return uit;
+    };
+    o.addEventListener('click', ev => {
+      const k = ev.target.closest('[data-weg],[data-nieuw],[data-ok]'); if (!k) return;
+      if (k.dataset.weg != null) { if (!confirm('Deze lening verwijderen? (de vorige instellingen blijven in de historie bewaard)')) return; k.closest('[data-i]').remove(); }
+      else if (k.dataset.nieuw) { const n = lijst.length; lijst.push({ soort: 'hypotheek', vorm: 'annuiteit', stand_datum: st.data.vandaag }); o.querySelector('.mts-lijst').insertAdjacentHTML('beforeend', veld(lijst[n], n)); if (o.querySelectorAll('.mts-lijst [data-i]').length >= 10) k.remove(); }
+      else { let uit; try { uit = lees(); } catch (e) { return toast(e.message); } o.remove(); opslaan(() => stuur('/geld/config', { revisie: c.revisie, schulden: uit }), 'Leningen opgeslagen'); }
+    });
+  }
   function instellingenHtml() {
     const c = st.cfg || {}, b = c.btw || {};
     return `<div class="mtg-kaart"><details><summary style="cursor:pointer"><b>Instellingen</b> <span class="mtg-melding">kredietlimiet, BTW, klantgroepen</span></summary>
@@ -814,7 +889,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       <dt>BTW-aangifte</dt><dd>${b.modus === 'apart' ? `van ${esc(b.aangifte_van || 'lopend (aangenomen)')}${b.terugboeking_van ? ', terug uit ' + esc(b.terugboeking_van) : ''}` : 'van de lopende rekening; de BTW-pot telt daarin mee'}</dd>
       <dt>Klantgroepen</dt><dd>${(c.klantgroepen || []).map(g => esc(g.naam) + (g.prefix ? ` (begint met "${esc(g.prefix)}")` : ` (${g.contact_ids.length} klanten)`)).join(', ') || 'geen'}</dd>
       <dt>Prognose</dt><dd>${c.prognose_schema ? `schema: klein onder ${eur(c.prognose_schema.grens_klein)}, groot vanaf ${eur(c.prognose_schema.grens_groot)}` : 'standaardschema nog niet ingesteld'}${c.buffer_lopend != null ? ` · buffer ${eur(c.buffer_lopend)}` : ''}</dd></dl>
-      <div class="mtg-knoppen"><button class="mtg-knop" data-inst="algemeen">Kredietlimiet en BTW…</button><button class="mtg-knop" data-inst="groepen">Klantgroepen…</button><button class="mtg-knop" data-inst="schema">Prognose-schema en buffer…</button></div></details></div>`;
+      <div class="mtg-knoppen"><button class="mtg-knop" data-inst="algemeen">Kredietlimiet en BTW…</button><button class="mtg-knop" data-inst="groepen">Klantgroepen…</button><button class="mtg-knop" data-inst="schema">Prognose-schema en buffer…</button><button class="mtg-knop" data-inst="schulden">Leningen…</button></div></details></div>`;
   }
 
   // ── Grafiek (SVG) ────────────────────────────────────────────────────────────
@@ -1041,6 +1116,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     middel: [{ pct: 50, dagen: 7, label: 'aanbetaling', anker: 'akkoord' }, { pct: 50, dagen: 60, label: 'oplevering', anker: 'oplevering' }],
     groot: [{ pct: 50, dagen: 7, label: 'bevestiging opdracht', anker: 'akkoord' }, { pct: 40, dagen: 50, label: 'voor oplevering', anker: 'start' }, { pct: 10, dagen: 100, label: 'oplevering', anker: 'oplevering' }] };
   UITLEG.prognose = 'Projecten die zeker doorgaan maar nog geen factuur hebben. Vink een project aan; het bedrag (incl. btw) wordt volgens het standaardschema in termijnen verdeeld, elk met een factuurdatum. Voorbeeld: een middelgroot project geeft 50% aanbetaling een week na akkoord en 50% bij oplevering; de tool rekent er de betaaltermijn en het gewone betaalgedrag van de klant bij. In de lijn is dat de stippellijn, en alleen als "prognose" aan staat. Komt de echte factuur in Moneybird (zelfde offerte, of het offertenummer in de referentie), dan vervangt die de termijn vanzelf; twijfelt de tool, dan vraagt hij het hier. Schuif een factuurdatum om te zien wat eerder factureren doet — pas bij "Opslaan" wordt het bewaard. Er gaat nooit iets naar Moneybird.';
+  UITLEG.schulden = 'Per lening: de restschuld nu (een schatting als er sinds de ingevulde stand maanden zijn verstreken), de rente, de termijn, de einddatum en de rente die nog betaald wordt, volgens het aflosschema (annuïtair of lineair; aflossingsvrij lost niet af; zonder bekende rente geen prognose). De rekenhulp vergelijkt het schema met en zonder extra aflossing, met de aanname dat de termijn gelijk blijft en de looptijd korter wordt. Daaronder staat wat de aflossing doet met de kasruimte (laagste punt komende 8 weken, zoals in de Koersmeter): aflossen bekijk je nooit los van de kas. ' + ((root.MTSchulden && root.MTSchulden.INFO) || 'Algemene informatie, geen advies.');
   UITLEG.advies = 'Zakt het laagste punt onder je buffer (of de kredietlimiet), dan zoekt de tool welke prognosetermijn je eerder kunt factureren om daarboven te blijven. Het is alleen een voorstel: je beslist zelf, en er gaat niets naar Moneybird.';
 
   function prognoseHtml() {
@@ -1217,6 +1293,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     else if (t.dataset.inst === 'algemeen') instBlad();
     else if (t.dataset.inst === 'groepen') groepenBlad();
     else if (t.dataset.inst === 'schema') schemaBlad();
+    else if (t.dataset.inst === 'schulden') schuldenBlad();
     else if (t.dataset.prog) G.prognoseBewerk(t.dataset.prog);
     else if (t.dataset.sc === 'opslaan') scenarioOpslaan();
     else if (t.dataset.sc === 'terug') { st.scenario = {}; teken(); }

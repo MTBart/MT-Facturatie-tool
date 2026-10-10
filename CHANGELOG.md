@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-09 — Release v2.11.9: Koersmeter bovenaan Geld; backup = v2.11.8
+- Commit: `17907f1` | Auteur: Bart Witte
+
 ## 2026-10-09 — Koersmeter: Moneybird-afkap als onvolledig; branchelabel (Codex)
 - Commit: `5e5b8e5` | Auteur: Bart Witte
 

@@ -1542,6 +1542,33 @@ function geldSchemaNorm(x) {
   for (const k of ['klein', 'middel', 'groot']) { const l = rij(x[k]); r[k] = l.length && Math.abs(l.reduce((a, q) => a + q.pct, 0) - 100) < 0.01 ? l : []; }
   return r;
 }
+// Schulden (leningen) voor de rekenhulp in Geld: hele centen, rente in basispunten (null = onbekend, 0 alleen expliciet).
+// Geen vrije tekst behalve de naam (≤ 60). Max. 10. Fout → de lening valt weg (normaliseren) of 400 (POST).
+const GELD_SCHULD_MAX = 10, GELD_SCHULD_SOORT = ['hypotheek', 'lening', 'krediet', 'overig'], GELD_SCHULD_VORM = ['annuiteit', 'lineair', 'aflossingsvrij', 'vrij'];
+function geldSchuldFout(x) {
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return 'lening: object verwacht';
+  const cent = (v, max) => v === null || v === undefined ? null : Number.isInteger(v) && v >= 0 && v <= max ? v : false;
+  if (!GELD_POT_ID.test(String(x.id || ''))) return 'id ongeldig (a-z, 0-9, -)';
+  const naam = typeof x.naam === 'string' ? x.naam.trim() : '';
+  if (!naam || naam.length > 60) return 'naam: 1 tot 60 tekens';
+  if (!GELD_SCHULD_SOORT.includes(x.soort)) return 'soort: ' + GELD_SCHULD_SOORT.join(' | ');
+  if (!GELD_SCHULD_VORM.includes(x.vorm)) return 'vorm: ' + GELD_SCHULD_VORM.join(' | ');
+  if (!(Number.isInteger(x.restschuld_cent) && x.restschuld_cent >= 0 && x.restschuld_cent <= 1e11)) return 'restschuld_cent: heel getal ≥ 0';
+  if (!geldIsDatum(x.stand_datum)) return 'stand_datum: JJJJ-MM-DD';
+  if (cent(x.rente_bp, 5000) === false) return 'rente_bp: heel getal 0–5000 of null';
+  if (cent(x.maandtermijn_cent, 1e10) === false) return 'maandtermijn_cent: heel getal ≥ 0 of null';
+  if (cent(x.aflossing_cent, 1e10) === false) return 'aflossing_cent: heel getal ≥ 0 of null';
+  if (x.einde != null && !(geldIsDatum(x.einde) && x.einde > x.stand_datum)) return 'einde: JJJJ-MM-DD na stand_datum, of null';
+  if (x.ledger_id != null && !/^\d{6,25}$/.test(String(x.ledger_id))) return 'ledger_id: alleen cijfers, of null';
+  return null;
+}
+const geldSchuldNorm = x => ({ id: String(x.id), naam: x.naam.trim(), soort: x.soort, vorm: x.vorm, restschuld_cent: x.restschuld_cent, stand_datum: x.stand_datum,
+  rente_bp: x.rente_bp == null ? null : x.rente_bp, maandtermijn_cent: x.maandtermijn_cent == null ? null : x.maandtermijn_cent, aflossing_cent: x.aflossing_cent == null ? null : x.aflossing_cent,
+  einde: x.einde == null ? null : x.einde, ledger_id: x.ledger_id == null ? null : String(x.ledger_id) });
+function geldSchuldenNorm(l) {
+  const ids = new Set();
+  return (Array.isArray(l) ? l : []).filter(x => !geldSchuldFout(x) && !ids.has(x.id) && ids.add(x.id)).slice(0, GELD_SCHULD_MAX).map(geldSchuldNorm);
+}
 function geldConfigNorm(c) {
   c = c && typeof c === 'object' ? c : {};
   const getal = (x, min, max) => (typeof x === 'number' && isFinite(x) && x >= min && x <= max) ? x : null;
@@ -1566,6 +1593,7 @@ function geldConfigNorm(c) {
     cijfers: geldCijferCfgNorm(c.cijfers),
     // spaarrente op de potjes (fractie per jaar), door de eigenaar ingevuld; leeg = afleiden uit rentebijschrijvingen
     spaarrente: typeof c.spaarrente === 'number' && isFinite(c.spaarrente) && c.spaarrente >= 0 && c.spaarrente <= 0.2 ? c.spaarrente : null,
+    schulden: geldSchuldenNorm(c.schulden),
     // Eigen reserve (alleen weergave): tot dit bedrag, en nooit meer dan de stand van het reservepotje, telt een stand
     // onder 0 als "eigen reserve" in plaats van bankkrediet.
     reserve: c.reserve && typeof c.reserve === 'object' && getal(c.reserve.bedrag, 0, 1e9) != null ? { bedrag: c.reserve.bedrag, pot: uniek.some(p => p.id === c.reserve.pot && !p.virtueel && p.doel !== 'btw' && p.id !== (btw.spaarpot || null)) ? c.reserve.pot : null } : null,   // nooit de BTW-pot (die telt al in lopend)
@@ -3302,6 +3330,15 @@ async function handleGeld(p, request, env, ik, json0) {
         if (x) pre.push(x);
       }
       nieuw.klantgroepen = b.klantgroepen; gewijzigd.push('klantgroepen');
+    }
+    if ('schulden' in b) {
+      if (!Array.isArray(b.schulden) || b.schulden.length > GELD_SCHULD_MAX) return json({ error: `schulden: lijst (max ${GELD_SCHULD_MAX})` }, 400);
+      const ids = new Set();
+      for (const x of b.schulden) {
+        const f = geldSchuldFout(x); if (f) return json({ error: 'schulden: ' + f, lening: x && GELD_POT_ID.test(String(x.id || '')) ? x.id : null }, 400);
+        if (ids.has(x.id)) return json({ error: 'schulden: dubbele id', lening: x.id }, 400); ids.add(x.id);
+      }
+      nieuw.schulden = b.schulden.map(geldSchuldNorm); gewijzigd.push('schulden');
     }
     if ('btw' in b) {
       const t = b.btw || {};
