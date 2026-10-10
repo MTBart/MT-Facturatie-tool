@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-10 — Schulden: potstand in centen afronden i.p.v. afkappen (Codex)
+- Commit: `079d74c` | Auteur: Bart Witte
+
 ## 2026-10-10 — Schulden: terugboeken begrensd op de potstand; reserve-zin voorwaardelijk (Codex)
 - Commit: `4021b77` | Auteur: Bart Witte
 

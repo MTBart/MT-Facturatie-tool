@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.11.10",
+    "datum": "2026-10-10",
+    "titel": "Schulden en aflossen",
+    "voor": "geld",
+    "punten": [
+      "Schulden en aflossen: bij Geld zie je nu de NEW10-hypotheek en de rekening-courant, met een rekenhulp voor extra aflossen of terugboeken en het effect op de kas. Algemene informatie, geen advies."
+    ]
+  },
+  {
     "versie": "2.11.9",
     "datum": "2026-10-09",
     "titel": "Koersmeter bovenaan Geld",
