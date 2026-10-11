@@ -468,6 +468,78 @@
     return t.toLocaleDateString('nl-NL', Object.assign(lang ? { weekday: 'long', day: 'numeric', month: 'long' } : { day: 'numeric', month: 'short' }, ander ? { year: 'numeric' } : {}));
   };
   G._eur = eur; G._esc = esc;
+  // ── G6: "Kan ik € X uitgeven op datum Y?" ────────────────────────────────────────────────────────────────────────────
+  // Rekent op dezelfde lijn als de rest van het scherm (G.kasLijn: besteedbaar budget, noodbuffer volgens het vinkje) maar BEHOUDEND: zonder
+  // prognose (alleen wat zeker of vast is). Een uitgave van X op datum Y verlaagt de lijn vanaf Y; het laagste punt daarna bepaalt het antwoord:
+  //   ja (boven de gele lijn / nul) · onder-buffer (onder de fictieve buffer, nog boven nul) · noodbuffer (onder nul, de noodbuffer dekt het)
+  //   · krediet (alleen met bankkrediet) · nee (onder de kredietlimiet, of zonder krediet onder nul).
+  // Geeft ook het maximum dat op Y kan, en vanaf wanneer het wel kan. Puur en los testbaar; verzint niets: geen lijn → fout 'onbekend'.
+  G.kanUitgeven = function (data, cfg, bedrag, datum, opt) {
+    opt = opt || {};
+    const v = data.vandaag, X = Number(bedrag);
+    if (!(X > 0) || !isFinite(X) || X > 1e12) return { fout: 'bedrag' };
+    const XC = Math.round(X * 100);                                        // alles hieronder rekent in gehele centen (geen drijvende-komma-vergelijkingen)
+    if (Math.abs(X * 100 - XC) > 1e-6) return { fout: 'decimalen' };       // hooguit twee decimalen: 100,004 is geen bedrag
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(datum || '')) || isNaN(Date.parse(datum + 'T00:00:00Z'))) return { fout: 'datum' };
+    if (datum < v) return { fout: 'verleden', vandaag: v };
+    const kasOpt = { prognose: false, nood: !!opt.nood }, cent = n => Math.round(n * 100), euro = c => c / 100;
+    const eerst = lijn => {   // alle toekomstpunten met het laagste saldo van die dag (vandaag: inclusief wat vandaag nog gepland staat), in centen
+      const pt = lijn.punten.filter(q => !q.verleden && q.datum >= v).map(q => ({ datum: q.datum, c: cent(q.saldo_gepland != null ? Math.min(q.saldo, q.saldo_gepland) : q.saldo) }));
+      const suf = new Array(pt.length); let m = null;
+      for (let i = pt.length - 1; i >= 0; i--) { if (!m || pt[i].c <= m.c) m = pt[i]; suf[i] = m; }   // bij gelijke stand de EERSTE dag van het laagste punt
+      return { pt, suf };
+    };
+    const lijn = G.kasLijn(data, cfg, kasOpt); if (lijn.onbekend) return { fout: 'onbekend' };
+    const { pt, suf } = eerst(lijn); if (!pt.length) return { fout: 'onbekend' };
+    const eind = pt[pt.length - 1].datum; if (datum > eind) return { fout: 'buiten', tot: eind };
+    const onder = G.drempel(data, cfg), lim = data.saldo && data.saldo.lopend ? data.saldo.lopend.kredietlimiet : null, bes = G.besteedbaar(data, cfg, kasOpt);
+    const noodStand = !opt.nood && bes && bes.nood && bes.nood.stand > 0 ? bes.nood.stand : 0;
+    const oC = cent(onder), limC = typeof lim === 'number' ? cent(lim) : null, noodC = cent(noodStand);
+    const beoordeel = (suffix, idx) => {
+      const min = suffix[idx], naC = min.c - XC;
+      const status = naC >= oC ? 'ja' : naC >= 0 ? 'onder-buffer' : noodC > 0 && naC >= -noodC ? 'noodbuffer' : limC != null && naC >= -limC ? 'krediet' : 'nee';
+      return { status, min: { datum: min.datum, saldo: euro(min.c) }, na: { datum: min.datum, saldo: euro(naC) }, naC };
+    };
+    const idx = pt.findIndex(q => q.datum >= datum), r = beoordeel(suf, idx);
+    let eerstMogelijk = null;                                              // vroegste dag vanaf wanneer het bedrag past (alleen als dat later is dan gevraagd)
+    if (r.status !== 'ja') for (let i = idx + 1; i < pt.length; i++) if (suf[i].c - XC >= oC) { eerstMogelijk = pt[i].datum; break; }
+    const onzekerVanaf = G.onzekerVanaf(data, kasOpt);
+    const metProg = (data.events || []).some(e => e.zekerheid === 'prognose') ? (() => { const l2 = G.kasLijn(data, cfg, { prognose: true, nood: !!opt.nood }), e2 = l2.onbekend ? null : eerst(l2); if (!e2 || !e2.pt.length) return null; const i2 = e2.pt.findIndex(q => q.datum >= datum); return i2 < 0 ? null : beoordeel(e2.suf, i2); })() : null;
+    // Een onvolledige bron (btw, facturen, saldo, bank, ...; alleen de prognose telt hier niet, die gebruiken we niet) maakt een "ja" onbetrouwbaar:
+    // dan is het antwoord "onbekend", met wat het zou zijn als indicatie. Slecht nieuws blijft slecht nieuws.
+    const bronnen = [...new Set((data.waarschuwingen || []).filter(x => x && x.onvolledig === true && x.bron !== 'prognose').map(x => String(x.bron || 'onbekend')))];
+    const indicatie = r.status;
+    const status = r.status === 'ja' && bronnen.length ? 'onbekend' : r.status;
+    return { status, indicatie: status === 'onbekend' ? indicatie : undefined, bedrag: euro(XC), datum, vandaag: v, min: r.min, na: r.na, ruimte: euro(r.naC - oC), onder, grens: onder > 0 ? 'fictieve buffer' : 'nul',
+      maxBedrag: Math.max(0, Math.floor((suf[idx].c - oC) / 100)), eerstMogelijk, onzeker: r.min.datum > onzekerVanaf || datum > onzekerVanaf, onzekerVanaf,
+      onvolledig: bronnen.length, onvolledigBronnen: bronnen, noodStand, kredietlimiet: typeof lim === 'number' ? lim : null,
+      metPrognose: metProg && metProg.status !== r.status ? { status: metProg.status, saldo: metProg.na.saldo, datum: metProg.na.datum } : null };
+  };
+  // De uitkomst in gewone zinnen (Nederlands): { kop, regels[], klasse }. Alleen tekst; de aanroeper escapet.
+  G.kanTekst = function (u) {
+    if (!u) return { kop: '', regels: [], klasse: '' };
+    if (u.fout) return { kop: u.fout === 'bedrag' ? 'Vul een bedrag boven nul in.' : u.fout === 'decimalen' ? 'Gebruik hooguit twee decimalen (hele centen).' : u.fout === 'datum' ? 'Kies een datum.' : u.fout === 'verleden' ? 'Kies vandaag of een dag later: het verleden kan niet meer.' : u.fout === 'buiten' ? 'Die datum ligt buiten het overzicht (tot ' + datumTekst(u.tot, true) + ').' : 'Het besteedbaar budget is nog onbekend: ijk eerst de lopende rekening.', regels: [], klasse: 'let-op' };
+    const E = n => eur(n), dat = d => datumTekst(d, true), regels = [];
+    const laag = 'Het laagste punt wordt dan ' + E(u.na.saldo) + ' op ' + dat(u.na.datum) + ' (nu zonder deze uitgave: ' + E(u.min.saldo) + ').';
+    let kop, klasse;
+    if (u.status === 'onbekend') {
+      kop = 'Kan ik niet zeker zeggen.'; klasse = 'let-op';
+      regels.push('Een of meer bronnen zijn onvolledig (' + u.onvolledigBronnen.join(', ') + '), dus een "ja" zou onbetrouwbaar zijn. Alleen als indicatie: als alles klopt wordt het laagste punt ' + E(u.na.saldo) + ' op ' + dat(u.na.datum) + ' (' + E(Math.abs(u.ruimte)) + (u.ruimte >= 0 ? ' boven ' : ' onder ') + (u.onder > 0 ? 'je fictieve buffer' : 'nul') + ').');
+      regels.push('Indicatie: op ' + dat(u.datum) + ' zou maximaal ' + E(u.maxBedrag) + ' kunnen zonder onder ' + (u.onder > 0 ? 'je fictieve buffer' : 'nul') + ' te komen. Werk de onvolledige bron bij (zie "Let op" hieronder) en probeer het opnieuw.');
+    }
+    else if (u.status === 'ja') { kop = 'Ja, dat kan.'; klasse = 'ja'; regels.push(laag + ' Dat is ' + E(u.ruimte) + ' boven ' + (u.onder > 0 ? 'je fictieve buffer (gele lijn).' : 'nul.')); }
+    else if (u.status === 'onder-buffer') { kop = 'Het kan, maar je komt onder je fictieve buffer.'; klasse = 'let-op'; regels.push(laag + ' Dat is ' + E(-u.ruimte) + ' onder de gele lijn, nog wel boven nul.'); }
+    else if (u.status === 'noodbuffer') { kop = 'Alleen met je noodbuffer.'; klasse = 'let-op'; regels.push(laag + ' Dat is onder nul; je noodbuffer (' + E(u.noodStand) + ') dekt dat, maar dan is die grotendeels op.'); }
+    else if (u.status === 'krediet') { kop = 'Alleen door rood te staan.'; klasse = 'nee'; regels.push(laag + ' Dat kan alleen met bankkrediet' + (u.kredietlimiet != null ? ' (je limiet is ' + E(u.kredietlimiet) + ')' : '') + '; dat kost rente.'); }
+    else { kop = 'Nee, dat kan niet.'; klasse = 'nee'; regels.push(laag + (u.kredietlimiet != null ? ' Dat is onder je kredietlimiet (−' + E(u.kredietlimiet) + ').' : ' Dat is onder nul en er is geen krediet ingesteld.')); }
+    if (u.status !== 'ja' && u.status !== 'onbekend') regels.push(u.maxBedrag > 0 ? 'Op ' + dat(u.datum) + ' kan maximaal ' + E(u.maxBedrag) + ' zonder onder ' + (u.onder > 0 ? 'je fictieve buffer' : 'nul') + ' te komen.' : 'Op ' + dat(u.datum) + ' is er geen ruimte boven ' + (u.onder > 0 ? 'je fictieve buffer' : 'nul') + '.');
+    if (u.status !== 'ja' && u.status !== 'onbekend') regels.push(u.eerstMogelijk ? 'Dit bedrag past wel vanaf ' + dat(u.eerstMogelijk) + ' (zonder onder ' + (u.onder > 0 ? 'je fictieve buffer' : 'nul') + ' te komen).' : 'Binnen het overzicht past dit bedrag op geen enkele dag zonder onder ' + (u.onder > 0 ? 'je fictieve buffer' : 'nul') + ' te komen.');
+    if (u.metPrognose) regels.push('Met de prognose erbij wordt het: ' + ({ ja: 'ja', 'onder-buffer': 'onder je fictieve buffer', noodbuffer: 'alleen met je noodbuffer', krediet: 'alleen met krediet', nee: 'nee' })[u.metPrognose.status] + ' (laagste punt ' + E(u.metPrognose.saldo) + '). Deze uitkomst rekent behoudend zonder prognose.');
+    else regels.push('Rekent behoudend: alleen wat zeker of vast is, zonder prognose.');
+    if (u.onzeker) regels.push('Let op: na ' + dat(u.onzekerVanaf) + ' zijn alleen nog vaste lasten bekend en geen inkomsten; die uitkomst is daar onzeker.');
+    if (u.onvolledig && u.status !== 'onbekend') regels.push('Let op: ' + u.onvolledig + ' bron(nen) zijn onvolledig (zie "Let op" hieronder); de uitkomst kan afwijken.');
+    return { kop, regels, klasse };
+  };
   const BRON = { bank: 'Bank (werkelijk)', inkoop: 'Inkoopfactuur', verkoop: 'Verkoopfactuur', patroon: 'Vast patroon', inleg: 'Weekinleg potje', btw: 'BTW-aangifte', 'btw-sparen': 'BTW-sparen', prognose: 'Prognose', ijkpunt: 'IJkpunt' };
   const ZEKER = { werkelijk: 'werkelijk', vastgelegd: 'vastgelegd in Moneybird', gepland: 'gepland', aanname: 'aanname (betaalgedrag)', invullen: 'nog in te vullen', patroon: 'vast patroon', schatting: 'schatting', prognose: 'prognose' };
   const UITLEG = {
@@ -477,6 +549,7 @@
     laagste: 'Het laagste verwachte besteedbaar budget in de gekozen periode, met alles wat gepland staat (facturen, vaste lasten, BTW). Hiermee zie je of het krap wordt.',
     ruimte: 'Hoeveel ruimte er op het laagste punt van de gekozen periode nog is tot de gele lijn (je fictieve buffer; zonder fictieve buffer tot nul). Daaronder: tot de noodbuffer op is en tot de kredietlimiet.',
     lijn: 'Sleep of veeg om terug of vooruit te kijken, knijp of gebruik de knoppen om in of uit te zoomen. Tik op een dag voor wat er die dag gebeurt.',
+    kan: 'Vul een bedrag en een datum in en je ziet of die uitgave past in je besteedbaar budget. De uitgave gaat vanaf die datum van de lijn af; het laagste punt daarna bepaalt het antwoord (boven de gele lijn is ja). Het rekent behoudend: alleen wat zeker of vast is, zonder prognose. Het noodbuffer-vinkje werkt hier ook. Er wordt niets opgeslagen of ingepland.',
     lijst: 'Alles wat de komende 14 dagen verwacht wordt. Tik op een regel voor de bron, de uitleg waarom het op die datum staat, en de link naar Moneybird.',
     potjes: 'De lopende rekening en de spaarpotjes, met het doel dat je ze geeft. Het tempo is het gemiddelde van de laatste 8 weken op de bank; de verwachting rekent daarmee door.',
     letop: 'Wat de tool niet zeker weet of niet kon ophalen. Niets wordt stil weggelaten: wat hier staat, kan het beeld beïnvloeden.',
@@ -549,6 +622,12 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
 .mtg-toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--green,#2A4A38);color:#fff;padding:9px 14px;border-radius:20px;font-size:13px;z-index:9100;box-shadow:0 4px 14px rgba(0,0,0,.2)}
 @media(max-width:700px){.mtg-kaarten{grid-template-columns:repeat(2,minmax(0,1fr))}.mtg-k .w{font-size:19px}.mtg-grafiek svg{height:200px}}
 @media(max-width:380px){.mtg-kaarten{grid-template-columns:1fr}}
+.mtg-kanrij{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mtg-kan{border-left:6px solid var(--mtg-zacht);border-radius:6px;background:var(--bg,#f6f5f0);padding:8px 10px;font-size:14px;line-height:1.5;margin-top:6px}
+.mtg-kan.ja{border-color:var(--mtg-in)}.mtg-kan.let-op{border-color:#d9a400}.mtg-kan.nee{border-color:var(--mtg-uit)}
+.mtg-kan b{display:block;font-size:15px}
+.mtg-veld input[type=number],.mtg-veld input[type=date]{min-height:40px}
+.mtg-mob .mtg-veld input{min-height:44px;font-size:16px}
 .mtg-mob{max-width:none;margin:0;padding:12px 12px 28px;overflow-x:hidden}
 .mtg-mob .mtg-kaarten{grid-template-columns:1fr}
 .mtg-mob .mtg-k .w{font-size:24px}
@@ -714,6 +793,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     ${kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, ruimteSub(low, d, { limiet, noodStand, nood, grensSoort, fictBron: G.fictiefBron(d, st.cfg) }))}
     ${noodKaart(d, bes, nood, kosten)}
   </div>
+  ${kanHtml()}
   <div class="mtg-kaart">
     <div class="mtg-kop" style="margin:0 0 6px"><b style="flex:1">Verloop ${st.modus === 'totaal' ? 'totaal' : 'besteedbaar budget'}</b>
       <div class="mtg-knoppen">${Object.keys(ZOOM).filter(z => !(c && z === 'jaar')).map(z => `<button class="mtg-knop klein ${st.zoom === z ? 'aan' : ''}" data-zoom="${esc(z)}">${esc(z)}</button>`).join('')}
@@ -737,6 +817,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const rk = st.el.querySelector('#mtg-rood'); if (rk) rk.addEventListener('toggle', () => { st.roodOpen = rk.open; });
     st.el.querySelector('.mtg').addEventListener('click', klik);
     st.el.querySelector('.mtg').addEventListener('input', e => {
+      const kn = e.target.closest('[name="kan-bedrag"],[name="kan-datum"]');
+      if (kn) { st.kan = st.kan || {}; if (kn.name === 'kan-bedrag') st.kan.bedrag = kn.value; else st.kan.datum = kn.value; kanTeken(); return; }
       const h = e.target.closest('[data-hulp]'); if (!h) return;
       st.hulp[h.dataset.hulp] = h.value;
       if (h.dataset.hulp === 'id') { const p = st.el.querySelector('#mts-plek'); if (p) p.outerHTML = schuldenHtml(); const s = st.el.querySelector('[data-hulp="id"]'); if (s) s.focus(); return; }
@@ -950,6 +1032,22 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     if (zonder.length) h += `<div class="mtg-dag">zonder datum (niet in de lijn)</div>` + zonder.map(rijHtml).join('');
     return h;
   }
+  // G6: de kaart "Kan ik dit uitgeven?"; de invoer blijft staan bij elke nieuwe tekening (st.kan), alleen het antwoord wordt ververst.
+  function kanHtml() {
+    const d = st.dataS || st.data, k = st.kan = st.kan || { bedrag: '', datum: d.vandaag };
+    if (!k.datum || k.datum < d.vandaag) k.datum = d.vandaag;
+    return `<div class="mtg-kaart" id="mtg-kan"><div class="mtg-kop" style="margin:0 0 6px"><b style="flex:1">Kan ik dit uitgeven?</b><button class="mtg-vraag" data-uitleg="kan">?</button></div>
+    <div class="mtg-kanrij"><label class="mtg-veld"><span>Bedrag (€)</span><input type="number" inputmode="decimal" min="0" step="0.01" name="kan-bedrag" value="${esc(k.bedrag)}" placeholder="bv. 8000"></label>
+      <label class="mtg-veld"><span>Op datum</span><input type="date" name="kan-datum" min="${esc(d.vandaag)}" value="${esc(k.datum)}"></label></div>
+    <div id="mtg-kan-uit" aria-live="polite">${kanUitHtml()}</div></div>`;
+  }
+  function kanUitHtml() {
+    const d = st.dataS || st.data, k = st.kan;
+    if (!String(k.bedrag).trim()) return '<div class="mtg-melding">Vul een bedrag en een datum in: je ziet meteen of het past in je besteedbaar budget.</div>';
+    const t = G.kanTekst(G.kanUitgeven(d, st.cfg, Number(String(k.bedrag).replace(',', '.')), k.datum, { nood: !!st.noodMee }));
+    return `<div class="mtg-kan ${esc(t.klasse)}"><b>${esc(t.kop)}</b>${t.regels.map(r => `<div>${esc(r)}</div>`).join('')}</div>`;
+  }
+  function kanTeken() { const p = st.el && st.el.querySelector('#mtg-kan-uit'); if (p) p.innerHTML = kanUitHtml(); }
   function rijHtml(e) {
     const nt = e.telt_niet, inn = !nt && e.delta > 0, chip = nt ? `<span class="mtg-chip achter">${esc(nt.soort === 'tegoed' ? 'tegoed — telt niet mee' : nt.soort === 'valuta' ? 'vreemde valuta — telt niet mee' : 'zonder datum/nummer — telt niet mee')}</span>` : e.achterstallig ? '<span class="mtg-chip achter">achterstallig</span>' : e.zekerheid === 'prognose' ? '<span class="mtg-chip prog">prognose</span>' : e.intern ? '<span class="mtg-chip">intern</span>' : `<span class="mtg-chip">${esc(ZEKER[e.zekerheid] || e.zekerheid || '')}</span>`;
     return `<div class="mtg-rij" data-ev="${esc(e.id)}"${e.scenario ? ' style="background:#eef3fb"' : ''}><span class="p ${nt ? '' : inn ? 'mtg-in' : 'mtg-uit'}">${nt ? '○' : inn ? '▲' : '▼'}</span><span class="n">${esc(e.tegenpartij || BRON[e.bron] || e.bron)}${e.termijn ? ` · termijn ${esc(e.termijn)}` : ''}</span>${chip}<span class="b ${nt ? '' : inn ? 'mtg-in' : 'mtg-uit'}">${esc(eur(nt ? Math.abs(e.bedrag) : e.delta != null ? e.delta : e.bedrag))}</span></div>`;

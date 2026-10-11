@@ -1,5 +1,26 @@
 [
   {
+    "versie": "2.13.3",
+    "datum": "2026-10-12",
+    "titel": "Capaciteit uit Toggl op de projecttijdlijn",
+    "voor": "iedereen",
+    "punten": [
+      "De projecttijdlijn haalt de beschikbare uren per persoon nu uit Toggl, voor zover dat lukt. Waar het niet lukt (een week zonder alle werkdagen, iemand zonder Toggl-koppeling of een foutmelding van Toggl) gebruikt hij de capaciteit uit Beheer: werkuren min verlof en vrije dagen.",
+      "Onder de tijdlijn staat welke bron is gebruikt, en bij \"deels Toggl, deels Beheer\" per persoon waarom. Er wordt niets in Toggl aangepast; het is alleen lezen."
+    ]
+  },
+  {
+    "versie": "2.13.3",
+    "datum": "2026-10-12",
+    "titel": "AI-limieten nauwkeuriger en veiliger",
+    "voor": "beheer",
+    "punten": [
+      "De AI telt de invoer voortaan exact voordat hij het verzoek uitvoert (bij documenten, afbeeldingen en lange teksten). Lukt dat tellen niet, dan rekent hij voorzichtig. Documenten boven 400 kB en documenten via een internetadres worden vooraf geweigerd.",
+      "Een lopend AI-verzoek houdt zijn plek vast en wordt niet ten onrechte afgerekend; een verzoek dat toch te laat klaar is, wordt achteraf netjes bijgesteld. Verzoeken die nooit klaar komen, worden na 5 minuten vanzelf opgeruimd.",
+      "Meldingen van de browser over geblokkeerde onderdelen (CSP) worden alleen geteld, zonder pagina-adressen of inhoud, en staan in het overzicht van de eigenaar."
+    ]
+  },
+  {
     "versie": "2.13.2",
     "datum": "2026-10-12",
     "titel": "Kan ik dit uitgeven? en het maandagbericht",

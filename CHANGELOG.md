@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Codex over v2.13.3: geen hartslag in log, tools in de terugval, CSP stopt na een vol budget, Toggl-legenda voor personen buiten het team
+- Commit: `27335b5` | Auteur: Bart Witte
+
 ## 2026-10-12 — F6: invoer exact tellen, hartslag tegen het alarm, late afronding; Toggl-capaciteit "deels Toggl, deels Beheer" (Codex-punten)
 - Commit: `be4e50f` | Auteur: Bart Witte
 
