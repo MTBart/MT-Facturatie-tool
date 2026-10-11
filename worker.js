@@ -2235,12 +2235,14 @@ function geldBtwSparen(events, cfg) {
     tegenpartij: '', document_id: null, bron_url: null, van_event: e.id, uitleg: `BTW-sparen: ${Math.round(pct * 10000) / 100}% van deze ontvangst gaat naar de BTW-pot (interne overboeking).` }));
 }
 const geldKwartaal = d => { const j = Number(d.slice(0, 4)), q = Math.floor((Number(d.slice(5, 7)) - 1) / 3); return { j, q: q + 1, van: `${j}-${String(q * 3 + 1).padStart(2, '0')}-01`, tot: new Date(Date.UTC(j, q * 3 + 3, 0)).toISOString().slice(0, 10) }; };
-// Een btw-betaling aan een kwartaal koppelen, STRIKT (Codex G7): alleen een NEGATIEVE mutatie met de expliciete tekst "Btw aangifte Kwartaal N JJJJ"; het kwartaal komt uit de
+// Een btw-betaling aan een kwartaal koppelen, STRIKT (Codex G7): alleen een NEGATIEVE mutatie aan de Belastingdienst waarvan de hele omschrijving "Btw aangifte Kwartaal N JJJJ" is; het kwartaal komt uit de
 // tekst, niet uit de betaaldatum. Geen betalingskenmerken, geen btw-document-koppeling en geen bedragen of vensters: dat liet een schuld wegvallen door een willekeurige mutatie.
 // Al het andere blijft open + onvolledig tot de eigenaar het kwartaal als betaald markeert (btw.betaald_kwartalen). Een teruggaaf (positief) telt nooit.
 function geldBtwBetaling(m) {
   if (!(geldGetal(m.amount) < 0)) return null;
-  const a = /btw\s+aangifte\s+kwartaal\s+([1-4])\s+(\d{4})/i.exec(`${m.message || ''} ${m.contra_account_name || ''}`);
+  // De tekst telt ALLEEN als de hele omschrijving (message), verankerd; nooit de naam van de tegenpartij. Daarnaast moet de tegenpartij de Belastingdienst zijn.
+  if (!/belastingdienst/i.test(String(m.contra_account_name || ''))) return null;
+  const a = /^\s*btw\s+aangifte\s+kwartaal\s+([1-4])\s+(\d{4})\s*$/i.exec(String(m.message || ''));
   return a ? { soort: 'tekst', kw: `${a[2]}-K${a[1]}` } : null;
 }
 const GELD_BTW_KW = 'geld:btw:kwartalen';   // bedragen van afgesloten kwartalen (12 uur), tegen te veel Moneybird-verzoeken

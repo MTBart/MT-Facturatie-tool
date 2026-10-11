@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Release v2.13.0: zoekbalk bovenin, Besteedbaar budget in Geld (noodbuffer, gele lijn, adviezen als standaard, alle onbetaalde btw-kwartalen); backup = v2.12.4
+- Commit: `3e0ccb9` | Auteur: Bart Witte
+
 ## 2026-10-11 — G7 Codex c76a4bd: alleen de expliciete tekst betaalt een btw-kwartaal; geen marges; één genormaliseerde buffer-waarde; advies-cache met revisie
 - Commit: `94e4ced` | Auteur: Bart Witte
 
