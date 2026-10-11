@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Koersmeter: worker-vlag onvolledig + Koersmeter C (sinds gisteren, één actie, dagfoto's)
+- Commit: `597d114` | Auteur: Bart Witte
+
 ## 2026-10-11 — F7 release 2: uren.html, koppel-popovers, mobiel-handlers, mt-dialog html alleen bewust
 - Commit: `4ba1baa` | Auteur: Bart Witte
 

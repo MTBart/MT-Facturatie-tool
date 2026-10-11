@@ -36,19 +36,39 @@
   'use strict';
   if (!root) return;
 
-  // ── esc — canonieke HTML-escaper ─────────────────────────────────────────
-  // Voor tekst en attributen tussen DUBBELE quotes. Laat ' bewust staan: bestaande
-  // code doet esc(x).replace(/'/g, …) voor inline handlers. Nieuw werk: geen waarden
-  // in onclick-strings (data-attributen + addEventListener). Niet voor CSV-quoting.
+  // ── Veilige renderlaag (F7 release 3) — het beleid in één plek ───────────
+  //  • Tekst en attribuutwaarden in HTML: esc() (= escHtml). Escapet & < > " en ' — dus ook veilig tussen enkele quotes.
+  //  • Een waarde als argument in een inline handler (onclick="…"): jsArg(x) — NOOIT '${esc(x)}': de browser decodeert
+  //    &#39; vóór het script draait. jsArg = een JSON-letterlijke (JS-veilig), daarna HTML-geëscapet (attribuut-veilig).
+  //  • Een JS-letterlijke in handler-tekst die later zelf nog geëscapet wordt (bv. MTKoppelUI.badge({onclick})): jsLit(x).
+  //  • URL's in href/src: veiligeUrl() (alleen verwachte protocollen/hosts), en dan nog esc().
+  //  • HTML die een caller zelf bouwt: html`…${x}…` escapet elke interpolatie; alleen veiligeHtml(s), een html`…`-
+  //    resultaat of een lijst daarvan gaat ruw mee. Ruwe innerHTML met externe data is een uitzondering met reden.
+  //  • Niet voor CSV-quoting of voor JS-strings buiten een HTML-attribuut.
   function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[c]));
   }
-  // ── escHtml — als esc, maar escapet ook ' (ook veilig tussen enkele quotes) (F7).
-  //    Niet geschikt voor JavaScript-strings: de browser decodeert &#39; vóór het script draait.
-  function escHtml(s) {
-    return esc(s).replace(/'/g, '&#39;');
+  // escHtml: zelfde als esc (oude naam, blijft bestaan voor bestaande callers).
+  function escHtml(s) { return esc(s); }
+  // jsArg: argument voor een inline handler binnen een attribuut tussen dubbele quotes.
+  function jsArg(s) { return esc(JSON.stringify(String(s == null ? '' : s))); }
+  // jsLit: JS-letterlijke (string) voor handler-tekst die de ontvanger zelf nog als attribuut escapet.
+  function jsLit(s) { return JSON.stringify(String(s == null ? '' : s)); }
+  // html-tag: interpolaties standaard als tekst; vertrouwde fragmenten alleen via veiligeHtml() of html`…`.
+  const VEILIG = typeof Symbol === 'function' ? Symbol('mtVeiligeHtml') : '__mtVeiligeHtml';
+  function veiligeHtml(s) { const o = { html: String(s == null ? '' : s), toString() { return this.html; } }; o[VEILIG] = true; return o; }
+  function _render(v) {
+    if (v == null || v === false) return '';
+    if (Array.isArray(v)) return v.map(_render).join('');
+    if (typeof v === 'object' && v[VEILIG] === true) return v.html;
+    return esc(v);
+  }
+  function html(delen, ...waarden) {
+    let uit = delen[0];
+    for (let i = 0; i < waarden.length; i++) uit += _render(waarden[i]) + delen[i + 1];
+    return veiligeHtml(uit);
   }
 
   // ── veiligeUrl — alleen verwachte URL's in href/src (F7) ──────────────────
@@ -386,9 +406,11 @@
   root.esc = esc;
   root.veiligeUrl = veiligeUrl;
   root.escHtml = escHtml;
+  root.jsArg = jsArg;
+  root.jsLit = jsLit;
   root._encPath = _encPath;
   root.authHeader = authHeader;
   root.fetchMetAuth = fetchMetAuth;
-  root.MTCore = { esc, escHtml, veiligeUrl, _encPath, authHeader, installAuth, makeSP };
+  root.MTCore = { esc, escHtml, jsArg, jsLit, html, veiligeHtml, veiligeUrl, _encPath, authHeader, installAuth, makeSP };
 
 })(typeof window !== 'undefined' ? window : null);

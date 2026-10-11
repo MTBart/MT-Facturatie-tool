@@ -16,13 +16,13 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-10-09a"></script>
+<script src="mt-core.js?v=2026-10-11a"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11a"></script>
-<script src="mt-toggl.js?v=2026-10-07a"></script>
-<script src="mt-koppel.js?v=2026-10-07a"></script>
+<script src="mt-toggl.js?v=2026-10-11a"></script>
+<script src="mt-koppel.js?v=2026-10-11a"></script>
 <script src="mt-contacten.js?v=2026-10-11a"></script>
 <script src="mt-inbox.js?v=2026-10-11a"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
@@ -3402,12 +3402,12 @@ function agRenderFilters(){
     const panel=document.getElementById('ag-drop-'+which+'-panel');
     if(!panel) return;
     if(!opts.length){panel.innerHTML='<div style="font-size:11px;color:#aaa;padding:10px">geen data</div>';return;}
-    let h=`<div class="ag-optbar"><a onclick="agFilterAll('${which}',true)">alles</a><a onclick="agFilterAll('${which}',false)">niets</a></div>`;
-    h+=`<div class="ag-search"><input type="text" placeholder="🔍 zoeken…" oninput="agSearchOpts('${which}',this.value)" onclick="event.stopPropagation()"></div>`;
+    let h=`<div class="ag-optbar"><a onclick="agFilterAll(${jsArg(which)},true)">alles</a><a onclick="agFilterAll(${jsArg(which)},false)">niets</a></div>`;
+    h+=`<div class="ag-search"><input type="text" placeholder="🔍 zoeken…" oninput="agSearchOpts(${jsArg(which)},this.value)" onclick="event.stopPropagation()"></div>`;
     h+=`<div class="ag-optlist">`+opts.map(v=>{
       const aan=set.size===0||(!set.has(AG_NONE)&&set.has(v));
       const vv=String(v).replace(/"/g,'&quot;');
-      return `<label class="ag-opt"><input type="checkbox" ${aan?'checked':''} data-v="${vv}" onchange="agFilterSet('${which}',this.dataset.v,this.checked)">`
+      return `<label class="ag-opt"><input type="checkbox" ${aan?'checked':''} data-v="${vv}" onchange="agFilterSet(${jsArg(which)},this.dataset.v,this.checked)">`
         +`<span class="dot" style="background:${agOptKleur(which,v)}"></span><span class="lbl">${agOptLabel(which,v)}</span></label>`;
     }).join('')+`</div>`;
     panel.innerHTML=h;
@@ -3519,7 +3519,7 @@ function agRenderLijst(){
       const s=new Date(e.start), eind=new Date(s.getTime()+e.duur*1000);
       const hhmm=d=>d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
       const titel=(e.omschrijving||e.taak_naam||'(geen omschrijving)');
-      return `<div class="ag-lrow" onclick="agBlokDetail('${e.id||e.toggl_id}')">
+      return `<div class="ag-lrow" onclick="agBlokDetail(${jsArg(e.id||e.toggl_id)})">
         <span class="dot" style="background:${agProjKleur(e.project_code)}"></span>
         <span class="ag-ldesc">${titel.replace(/</g,'&lt;')}<span class="ag-lsub"> · ${agProjLabel(e.project_code)}</span></span>
         <span class="ag-lpers">${agPersLabel(e.teamlid)}</span>
@@ -3569,7 +3569,7 @@ function agBlokkenHtml(entries){
     const titel=(e.omschrijving||e.taak_naam||'').replace(/"/g,'&quot;');
     return `<div class="ag-blok" style="top:${top}px;height:${h}px;left:calc(${left}% + 1px);width:calc(${w}% - 2px);background:${agKleur(e)}"
       title="${agPersLabel(e.teamlid)} · ${agProjLabel(e.project_code)} · ${agUur(e.duur)}u&#10;${titel}"
-      onclick="agBlokDetail('${e.id||e.toggl_id}')"><b>${agProjLabel(e.project_code)}</b> ${agUur(e.duur)}u<br>${titel}</div>`;
+      onclick="agBlokDetail(${jsArg(e.id||e.toggl_id)})"><b>${agProjLabel(e.project_code)}</b> ${agUur(e.duur)}u<br>${titel}</div>`;
   }).join('');
 }
 
@@ -3968,7 +3968,7 @@ let _huidigMailId = null;
 async function getMailFolderId(naam) {
   if (_mailFolderIds[naam]) return _mailFolderIds[naam];
   const token = await window.getGraphToken();
-  const r = await fetch(`https://graph.microsoft.com/v1.0/me/mailFolders?$filter=displayName eq '${naam}'&$select=id`, {headers:{'Authorization':`Bearer ${token}`}});
+  const r = await fetch(`https://graph.microsoft.com/v1.0/me/mailFolders?$filter=displayName eq '${encodeURIComponent(String(naam).replace(/'/g,"''"))}'&$select=id`, {headers:{'Authorization':`Bearer ${token}`}});
   const data = await r.json();
   const id = data.value?.[0]?.id || null;
   if (id) _mailFolderIds[naam] = id;
@@ -4040,16 +4040,16 @@ async function scanEmailFacturen(forceer=false) {
 
 function emailRij(i, dimmed=false) {
   const datum = new Date(i.datum).toLocaleDateString('nl-NL', {day:'numeric',month:'short'});
-  const mid = i.mailId.replace(/'/g,"\\'"), aid = i.attId.replace(/'/g,"\\'"), nam = i.naam.replace(/'/g,"\\'");
+  const mid = i.mailId, aid = i.attId, nam = i.naam;   // ruw: jsArg in de handlers escapet goed
   return `<div style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;transition:background 0.1s;${dimmed?'opacity:0.55':''}"
-    onclick="bekijkEmailPDF('${mid}','${aid}','${nam}')"
+    onclick="bekijkEmailPDF(${jsArg(mid)},${jsArg(aid)},${jsArg(nam)})"
     onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
     <div style="flex:1;min-width:0">
-      <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.van}</div>
-      <div style="font-size:11px;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.naam} · ${i.onderwerp}</div>
+      <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.van)}</div>
+      <div style="font-size:11px;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.naam)} · ${esc(i.onderwerp)}</div>
     </div>
     <div style="font-size:11px;color:var(--text-faint);white-space:nowrap">${datum}</div>
-    <button class="btn btn-gold btn-xs" title="Analyseren met Claude" onclick="event.stopPropagation();laadEmailPDF('${mid}','${aid}','${nam}')">✨ Analyseren</button>
+    <button class="btn btn-gold btn-xs" title="Analyseren met Claude" onclick="event.stopPropagation();laadEmailPDF(${jsArg(mid)},${jsArg(aid)},${jsArg(nam)})">✨ Analyseren</button>
   </div>`;
 }
 
@@ -4076,7 +4076,7 @@ async function bekijkEmailPDF(mailId, attId, filename) {
     currentFile = file;
     toonPdfInViewer('pdf-viewer-verwerk', URL.createObjectURL(file));
     rd.innerHTML = `<span style="font-size:12px;color:var(--text-dim)">📄 ${filename}</span>
-      <button class="btn btn-gold btn-sm" style="margin-left:10px" onclick="laadEmailPDF('${mailId}','${attId}','${filename.replace(/'/g,"\\'")}')">✨ Analyseren met Claude</button>`;
+      <button class="btn btn-gold btn-sm" style="margin-left:10px" onclick="laadEmailPDF(${jsArg(mailId)},${jsArg(attId)},${jsArg(filename)})">✨ Analyseren met Claude</button>`;
   } catch(e) { rd.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${e.message}</p>`; }
 }
 
@@ -4488,7 +4488,7 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
   if(!gefilterd.length){el.innerHTML=`<p style="color:var(--text-faint);font-size:13px;padding:1rem 0">Geen ${cat} in voorraad.</p>`;return;}
   const bestellijst=_blActief();
   const thS='cursor:pointer;user-select:none;white-space:nowrap';
-  const th=(k,label,align='left')=>`<th style="text-align:${align};${thS}" onclick="renderVoorraadTabel('${cat}',JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>(v.categorie||categoriseerMateriaal(v.omschrijving))==='${cat}'),(document.getElementById('voorraad-zoek')?.value||'').toLowerCase(),'${k}',${sortK==='${k}'?!sortA:true})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
+  const th=(k,label,align='left')=>`<th style="text-align:${align};${thS}" onclick="renderVoorraadTabel(${jsArg(cat)},JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>(v.categorie||categoriseerMateriaal(v.omschrijving))===${jsArg(cat)}),(document.getElementById('voorraad-zoek')?.value||'').toLowerCase(),${jsArg(k)},${sortK===k?!sortA:true})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
   el.innerHTML=`<table class="v-table">
     <thead><tr>
       ${th('materiaal','Materiaal')}${_voorraadToonArtnr?'<th>Art.nr</th>':''}${th('leverancier','Leverancier')}${th('stuks','Stuks','right')}
@@ -4509,21 +4509,21 @@ function renderVoorraadTabel(cat,items,zoek,sortK='materiaal',sortA=true){
         ${_voorraadToonArtnr?`<td style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${data.artikelnummer||'—'}</td>`:''}
         <td>${levs.map(l=>{
           const info=leveranciers.find(lv=>lv.naam.toLowerCase()===l.toLowerCase());
-          return info?`<span class="lev-chip" onclick="toonLeverancierInfo('${l}')" title="${info.website||''}">${l} 🔗</span>`:`<span style="font-size:11px">${l}</span>`;
+          return info?`<span class="lev-chip" onclick="toonLeverancierInfo(${jsArg(l)})" title="${info.website||''}">${l} 🔗</span>`:`<span style="font-size:11px">${l}</span>`;
         }).join(' ')}</td>
         <td style="text-align:right;font-family:var(--mono);font-weight:600">${data.totaalAantal}</td>
         <td style="text-align:right;font-family:var(--mono)">€ ${lastPrijs.toFixed(2)}</td>
         <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-dim)" title="Tarief per ${data.tarief_eenheid||'m²'} uit factuur">${data.tarief_m2!=null?'€ '+data.tarief_m2.toFixed(2):'—'}</td>
-        <td style="text-align:right"><input class="correctie-input" type="number" placeholder="0" title="Handmatige correctie" onchange="corrigeerVoorraad('${mat}',this.value,'${cat}')"></td>
-        <td><select onchange="verplaatsVoorraadCategorie('${mat.replace(/'/g,"\\'")}','${cat}',this.value)" style="font-size:11px;padding:3px 6px;width:auto">
+        <td style="text-align:right"><input class="correctie-input" type="number" placeholder="0" title="Handmatige correctie" onchange="corrigeerVoorraad(${jsArg(mat)},this.value,${jsArg(cat)})"></td>
+        <td><select onchange="verplaatsVoorraadCategorie(${jsArg(mat)},${jsArg(cat)},this.value)" style="font-size:11px;padding:3px 6px;width:auto">
           <option value="${cat}">${VOORRAAD_CAT_LABEL[cat]||cat}</option>
           ${andereCats.map(c=>`<option value="${c}">${VOORRAAD_CAT_LABEL[c]||c}</option>`).join('')}
         </select></td>
-        <td><button class="bestellen-btn ${opBestelling?'besteld':''}" onclick="toggleBestellijst('${mat}','${cat}','${levs[0]||''}',${lastPrijs},this)">${opBestelling?'✓ Op lijst':'+ Bestellen'}</button></td>
+        <td><button class="bestellen-btn ${opBestelling?'besteld':''}" onclick="toggleBestellijst(${jsArg(mat)},${jsArg(cat)},${jsArg(levs[0]||'')},${lastPrijs},this)">${opBestelling?'✓ Op lijst':'+ Bestellen'}</button></td>
         <td style="display:flex;gap:4px">
-          <button class="btn btn-xs btn-secondary" onclick="toonVoorraadDetail('${mat.replace(/'/g,"\\'")}')">Historie</button>
-          <button class="btn btn-xs btn-secondary" title="Zoek dit materiaal in de interiorcad-catalogus" onclick="gotoInteriorcad('${mat.replace(/'/g,"\\'")}')">→ interiorcad</button>
-          <button class="btn btn-xs btn-danger" onclick="if(confirm('Alle ${mat} mutaties verwijderen uit voorraad?'))verwijderVoorraadMateriaal('${mat.replace(/'/g,"\\'")}')">×</button>
+          <button class="btn btn-xs btn-secondary" onclick="toonVoorraadDetail(${jsArg(mat)})">Historie</button>
+          <button class="btn btn-xs btn-secondary" title="Zoek dit materiaal in de interiorcad-catalogus" onclick="gotoInteriorcad(${jsArg(mat)})">→ interiorcad</button>
+          <button class="btn btn-xs btn-danger" onclick="if(confirm(${jsArg('Alle '+mat+' mutaties verwijderen uit voorraad?')}))verwijderVoorraadMateriaal(${jsArg(mat)})">×</button>
         </td>
       </tr>`;
     }).join('')}</tbody>
@@ -4593,7 +4593,7 @@ function toonVoorraadDetail(mat){
   const panel=document.getElementById('voorraad-detail-panel');
   const inhoud=document.getElementById('voorraad-detail-inhoud');
   panel.classList.remove('hidden');
-  const matJs=mat.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const matJs=mat;   // ruw: jsArg in de handler
   const art=regels.map(r=>r.artikelnummer).find(Boolean);
   const fid=_vindFactuurVoor(regels[0]);
   inhoud.innerHTML=`
@@ -4613,8 +4613,8 @@ function toonVoorraadDetail(mat){
           <td style="text-align:right;font-family:var(--mono);font-weight:600">€ ${((v.aantal||1)*(v.stukprijs||0)).toFixed(2)}</td>
           <td>${v.project?projKortHtml(v.project):'—'}</td>
           <td style="white-space:nowrap;text-align:right">
-            <button class="btn btn-xs btn-secondary" title="Deze regel aanpassen" onclick="bewerkVoorraadRegel('${v.id}')">✏</button>
-            <button class="btn btn-xs btn-secondary" title="Open de bijbehorende factuur in Moneybird" onclick="gaNaarVoorraadFactuur('${v.id}')">→ Factuur</button>
+            <button class="btn btn-xs btn-secondary" title="Deze regel aanpassen" onclick="bewerkVoorraadRegel(${jsArg(v.id)})">✏</button>
+            <button class="btn btn-xs btn-secondary" title="Open de bijbehorende factuur in Moneybird" onclick="gaNaarVoorraadFactuur(${jsArg(v.id)})">→ Factuur</button>
           </td>
         </tr>`;
       }).join('')}</tbody>
@@ -4627,8 +4627,8 @@ function toonVoorraadDetail(mat){
       </div>
       <div id="vrd-chatlog" style="max-height:220px;overflow:auto;font-size:12px;display:flex;flex-direction:column;gap:6px;margin-bottom:0.5rem"></div>
       <div style="display:flex;gap:6px">
-        <input id="vrd-chatq" type="text" placeholder="bv. 'de naam moet korter' of 'stukprijs klopt niet, check de factuur'" style="flex:1" onkeydown="if(event.key==='Enter')voorraadChatSend('${matJs}')">
-        <button class="btn btn-primary btn-sm" onclick="voorraadChatSend('${matJs}')">Vraag</button>
+        <input id="vrd-chatq" type="text" placeholder="bv. 'de naam moet korter' of 'stukprijs klopt niet, check de factuur'" style="flex:1" onkeydown="if(event.key==='Enter')voorraadChatSend(${jsArg(matJs)})">
+        <button class="btn btn-primary btn-sm" onclick="voorraadChatSend(${jsArg(matJs)})">Vraag</button>
       </div>
     </div>`;
   panel.scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -4866,8 +4866,8 @@ async function renderVoorraadCorrecties(){
           <td style="font-size:11px">${c.door||'app'}</td>
           <td style="font-size:11px;color:var(--text-dim)">${c.ts?new Date(c.ts).toLocaleDateString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''}</td>
           <td style="display:flex;gap:4px">
-            <button class="btn btn-xs btn-primary" onclick="akkordeerCorrectie('${c.id}')">✓ Akkoord</button>
-            <button class="btn btn-xs btn-danger" onclick="wijsCorrectieAf('${c.id}')">✕</button>
+            <button class="btn btn-xs btn-primary" onclick="akkordeerCorrectie(${jsArg(c.id)})">✓ Akkoord</button>
+            <button class="btn btn-xs btn-danger" onclick="wijsCorrectieAf(${jsArg(c.id)})">✕</button>
           </td>
         </tr>`;
       }).join('')}</tbody>
@@ -5170,7 +5170,7 @@ function renderBestellijst(sortK='materiaal',sortA=true){
   if(!lijst.length){el.innerHTML=vervallenBalk+'<p style="color:var(--text-faint);font-size:13px">Geen items op de bestellijst. Klik op "+ Bestellen" in het Voorraad tabblad.</p>';return;}
   const perCat={};lijst.forEach(b=>{if(!perCat[b.categorie]) perCat[b.categorie]=[];perCat[b.categorie].push(b);});
   const thS='cursor:pointer;user-select:none;white-space:nowrap';
-  const th=(k,label,align='left')=>`<th style="text-align:${align};${thS}" onclick="renderBestellijst('${k}',${sortK==='${k}'?!sortA:true})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
+  const th=(k,label,align='left')=>`<th style="text-align:${align};${thS}" onclick="renderBestellijst(${jsArg(k)},${sortK===k?!sortA:true})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
   const catVolgorde=VOORRAAD_CAT_KEYS;
   const gesorteerdeEntries=catVolgorde.filter(c=>perCat[c]).map(c=>[c,perCat[c]]);
   // Voeg andere categorieën toe die niet in volgorde staan
@@ -5192,15 +5192,15 @@ function renderBestellijst(sortK='materiaal',sortA=true){
           <td style="text-align:right;font-family:var(--mono)">${b.aantal||1}</td>
           <td style="text-align:right;font-family:var(--mono)">€ ${(Number(b.prijsLaatst)||0).toFixed(2)}</td>
           <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(b.datum)}</td>
-          <td><button class="btn btn-xs btn-secondary" title="Terugzetten op de bestellijst" onclick="bestellijstTerugzetten('${_blQ(b.id)}')">↩</button></td>
+          <td><button class="btn btn-xs btn-secondary" title="Terugzetten op de bestellijst" onclick="bestellijstTerugzetten(${jsArg(b.id)})">↩</button></td>
         </tr>`:`<tr style="${b.besteld?'opacity:0.5;text-decoration:line-through':''}">
-          <td><input type="checkbox" ${b.besteld?'checked':''} onchange="markeerBesteld('${_blQ(b.id)}',this.checked)" style="width:auto;cursor:pointer"></td>
+          <td><input type="checkbox" ${b.besteld?'checked':''} onchange="markeerBesteld(${jsArg(b.id)},this.checked)" style="width:auto;cursor:pointer"></td>
           <td><strong style="font-size:12px">${esc(b.materiaal)}</strong>${b.platenmaat?`<div style="font-size:10px;color:var(--text-faint)">${esc(b.platenmaat)}</div>`:''}</td>
-          <td style="font-size:12px">${b.leverancier?`<a href="#" onclick="toonLeverancierInfo('${_blQ(b.leverancier)}');return false" style="color:var(--green);text-decoration:none">${esc(b.leverancier)}</a>`:'—'}</td>
-          <td style="text-align:right"><input type="number" min="1" value="${b.aantal||1}" style="width:60px;font-family:var(--mono);text-align:right;padding:3px 6px;font-size:12px" onchange="updateBestellijstAantal('${_blQ(b.id)}',this.value)"></td>
+          <td style="font-size:12px">${b.leverancier?`<a href="#" onclick="toonLeverancierInfo(${jsArg(b.leverancier)});return false" style="color:var(--green);text-decoration:none">${esc(b.leverancier)}</a>`:'—'}</td>
+          <td style="text-align:right"><input type="number" min="1" value="${b.aantal||1}" style="width:60px;font-family:var(--mono);text-align:right;padding:3px 6px;font-size:12px" onchange="updateBestellijstAantal(${jsArg(b.id)},this.value)"></td>
           <td style="text-align:right;font-family:var(--mono)">€ ${(Number(b.prijsLaatst)||0).toFixed(2)}</td>
           <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(b.datum)}</td>
-          <td><button class="btn btn-xs btn-danger" data-recht="bestellijst:alles" title="Van de lijst halen (blijft bewaard en is terug te zetten)" onclick="verwijderUitBestellijst('${_blQ(b.id)}')">×</button></td>
+          <td><button class="btn btn-xs btn-danger" data-recht="bestellijst:alles" title="Van de lijst halen (blijft bewaard en is terug te zetten)" onclick="verwijderUitBestellijst(${jsArg(b.id)})">×</button></td>
         </tr>`).join('')}</tbody>
       </table>
     </div>`;
@@ -5286,7 +5286,7 @@ function renderProjectLijst(filter=''){
   if(_projKlantFilter) gefilterd=gefilterd.filter(_projInKlantFilter);
   if(_projKlantFilter&&!gefilterd.length){ el.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-faint);font-style:italic">Geen projecten voor deze klant.</div>'; return; }
   el.innerHTML=projSorteerNieuwst(gefilterd).map(p=>`
-    <div class="factuur-item ${huidigProject?.code===p.code?'actief':''}" data-code="${esc(p.code)}" onclick="selecteerProject('${p.code}',this)">
+    <div class="factuur-item ${huidigProject?.code===p.code?'actief':''}" data-code="${esc(p.code)}" onclick="selecteerProject(${jsArg(p.code)},this)">
       <div class="factuur-item-naam" title="${esc(projNaamVol(p))}">${esc(projNaamVol(p))}</div>
       <div class="factuur-item-sub"><span class="factuur-item-klant">${esc(projKlantNaam(p))}</span>${projTag(p)}</div>
     </div>`).join('');
@@ -5453,7 +5453,7 @@ function projContextBalk(proj){
         +` role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="proj-wissel-lijst" aria-label="Wissel van project (zoek op code, naam, klant of locatie)"`
         +` oninput="projWisselZoek(this)" onkeydown="projWisselToets(event,this)" onfocus="projWisselZoek(this)" onblur="setTimeout(()=>projWisselSluit(this),150)">`
         +`<div class="proj-ctx-opties" id="proj-wissel-lijst" role="listbox" hidden></div></span>`
-      +`<button type="button" class="btn btn-xs btn-secondary" onclick="projKopieerLink('${esc(proj.code)}')" title="Kopieer de link naar dit project">🔗 Kopieer link</button>`
+      +`<button type="button" class="btn btn-xs btn-secondary" onclick="projKopieerLink(${jsArg(proj.code)})" title="Kopieer de link naar dit project">🔗 Kopieer link</button>`
     +`</span></div>`;
 }
 // ── Link kopiëren ──
@@ -5558,15 +5558,15 @@ function _projCtx(proj){
   const mbBron=proj.mb_nr?'handmatig':(autoMb?'auto via klantregistry':null);
   const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' );
   const mbNrBlok=effectiveMb
-    ? kb({status:'gekoppeld',label:mbContactNaam(effectiveMb)||'Moneybird',titel:'Moneybird-contact '+(mbContactNaam(effectiveMb)||'')+' ('+mbBron+') — klik voor details',onclick:`mbPop(this,'${_jsCode(proj.code)}')`})
-    : kb({status:'open',label:'Moneybird',titel:'Nog geen Moneybird-contact — klik om te koppelen',onclick:`bewerkProjectMbNr('${_jsCode(proj.code)}')`});
+    ? kb({status:'gekoppeld',label:mbContactNaam(effectiveMb)||'Moneybird',titel:'Moneybird-contact '+(mbContactNaam(effectiveMb)||'')+' ('+mbBron+') — klik voor details',onclick:`mbPop(this,${jsLit(_jsCode(proj.code))})`})
+    : kb({status:'open',label:'Moneybird',titel:'Nog geen Moneybird-contact — klik om te koppelen',onclick:`bewerkProjectMbNr(${jsLit(_jsCode(proj.code))})`});
   return {projItems,totaalInkoop,effectiveMb,klantChip,mbNrBlok,sid:proj.code.replace(/-/g,''),cid:proj.code.replace(/[^A-Za-z0-9]/g,'')};
 }
 function renderProjectDetail(proj){
   if(!proj){const h=document.getElementById('project-detail');h.innerHTML='';delete h.dataset.code;return;}
   const host=document.getElementById('project-detail');
   host.dataset.code=proj.code; delete host.dataset.offerte; delete host.dataset.klant;
-  const nav=PROJ_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_projSectie?' actief':''}" data-sectie="${s.k}" aria-selected="${s.k===_projSectie}" aria-controls="proj-sectie-inhoud" onclick="projSectieKies('${s.k}')">${s.l}${_projSecTeller(proj,s.k)}</button>`).join('');
+  const nav=PROJ_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_projSectie?' actief':''}" data-sectie="${s.k}" aria-selected="${s.k===_projSectie}" aria-controls="proj-sectie-inhoud" onclick="projSectieKies(${jsArg(s.k)})">${s.l}${_projSecTeller(proj,s.k)}</button>`).join('');
   host.innerHTML=projContextBalk(proj)
     +`<nav class="proj-secnav" role="tablist" aria-label="Projectonderdelen">${nav}</nav>`
     +`<div class="card proj-sectie" id="proj-sectie-inhoud" role="tabpanel" data-sectie="${_projSectie}"></div>`;
@@ -5652,20 +5652,20 @@ function projSecOverzicht(proj,c){
   if(open) stappen.push(`<div class="ov-stap">☑ <b>${esc(open.naam)}</b> <span class="dos-st">${esc(open.status||'todo')}</span> <a href="#" onclick="event.preventDefault();projSectieKies('planning')">→ taken</a></div>`);
   if(fase) stappen.push(`<div class="ov-stap">📅 Fase <b>${esc(fase.naam||fase.key)}</b> ${fase.start?fmtDatum(fase.start):''}${fase.eind?' – '+fmtDatum(fase.eind):''} <a href="#" onclick="event.preventDefault();projSectieKies('planning')">→ planning</a></div>`);
   if(off) stappen.push(`<div class="ov-stap">📄 Offerte: <b>${esc((off.meta&&off.meta.status)||'in bewerking')}</b> <a href="#" onclick="event.preventDefault();projSectieKies('calculatie')">→ calculatie</a></div>`);
-  if(!stappen.length) stappen.push(`<div class="ov-stap" style="color:var(--text-faint)">Nog geen taken, planning of offerte. <a href="#" onclick="event.preventDefault();projSectieKies('planning')">Taken toevoegen</a> · <a href="#" onclick="event.preventDefault();nieuweOfferte('${_jsCode(proj.code)}')">Offerte starten</a></div>`);
+  if(!stappen.length) stappen.push(`<div class="ov-stap" style="color:var(--text-faint)">Nog geen taken, planning of offerte. <a href="#" onclick="event.preventDefault();projSectieKies('planning')">Taken toevoegen</a> · <a href="#" onclick="event.preventDefault();nieuweOfferte(${jsArg(_jsCode(proj.code))})">Offerte starten</a></div>`);
   // Aandachtspunten: alleen wat ontbreekt of nog moet; elk punt met de knop om het op te lossen.
   const let_=[];
   const nietOpgeslagen=rijen.filter(r=>r.soort==='mail'&&r.ref.nogNietOpgeslagen).length;
   const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' ), pc=_jsCode(proj.code);
   if(nietOpgeslagen) let_.push(`${kb({status:'open',klein:true,label:'Bijlagen',titel:'Bijlagen nog niet in de projectmap — klik om ze te bekijken',onclick:`projSectieKies('dossier',{filter:{soort:'mail',bijlage:'1'}})`})} ${nietOpgeslagen} gekoppelde mail${nietOpgeslagen>1?'s':''} met bijlagen die nog niet in de projectmap staan`);
   if(!proj.map||!proj.map.itemId) let_.push(`${projMapBadge(proj,{klein:true})} Projectmap nog niet gecontroleerd`);
-  if(!proj.tg_project_id) let_.push(`${kb({status:'open',klein:true,label:'Toggl',titel:'Nog geen Toggl-project — klik om te koppelen',onclick:`t2KiesProject('${pc}')`})} Nog geen Toggl-project gekoppeld`);
-  if(!proj.offertenr) let_.push(`${kb({status:'open',klein:true,label:'Offertenummer',titel:'Nog geen offertenummer — klik om toe te kennen',onclick:`t2OffertenummerToekennen('${pc}')`})} Nog geen offertenummer`);
-  if(!c.effectiveMb&&proj.klant) let_.push(`${kb({status:'open',klein:true,label:'Moneybird',titel:'Geen Moneybird-contact — klik om te koppelen',onclick:`bewerkProjectMbNr('${pc}')`})} Geen Moneybird-contact`);
+  if(!proj.tg_project_id) let_.push(`${kb({status:'open',klein:true,label:'Toggl',titel:'Nog geen Toggl-project — klik om te koppelen',onclick:`t2KiesProject(${jsLit(pc)})`})} Nog geen Toggl-project gekoppeld`);
+  if(!proj.offertenr) let_.push(`${kb({status:'open',klein:true,label:'Offertenummer',titel:'Nog geen offertenummer — klik om toe te kennen',onclick:`t2OffertenummerToekennen(${jsLit(pc)})`})} Nog geen offertenummer`);
+  if(!c.effectiveMb&&proj.klant) let_.push(`${kb({status:'open',klein:true,label:'Moneybird',titel:'Geen Moneybird-contact — klik om te koppelen',onclick:`bewerkProjectMbNr(${jsLit(pc)})`})} Geen Moneybird-contact`);
   return `
       <div style="display:flex;justify-content:flex-end;align-items:start;margin-bottom:.75rem;gap:.5rem;flex-wrap:wrap">
         <div class="flex">
-          <button class="btn btn-secondary btn-sm" onclick="verwijderProject('${_jsCode(proj.code)}')">Verwijderen</button>
+          <button class="btn btn-secondary btn-sm" onclick="verwijderProject(${jsArg(_jsCode(proj.code))})">Verwijderen</button>
         </div>
       </div>
       <div class="kpi-grid ov-kpi" style="margin-bottom:1rem">
@@ -5697,10 +5697,10 @@ function projSecDossier(proj,c){
       <div class="dos-kop">
         <div class="card-title" style="margin:0">Dossier</div>
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bijlage-input-${c.sid}').click()">📎 Bijlage toevoegen</button>
-        <input type="file" id="bijlage-input-${c.sid}" class="hidden" multiple onchange="uploadProjectBijlagen(this.files,'${_jsCode(proj.code)}')">
+        <input type="file" id="bijlage-input-${c.sid}" class="hidden" multiple onchange="uploadProjectBijlagen(this.files,${jsArg(_jsCode(proj.code))})">
         <button class="btn btn-secondary btn-sm" onclick="tbDoTab('inbox')" title="Koppelen doe je in de Inbox met 🔗 “Koppel aan project”">📥 Naar inbox</button>
-        <button class="btn btn-secondary btn-sm" onclick="dossierLaadMap('${_jsCode(proj.code)}')" title="Alleen lezen: toont de bestanden uit de projectmap in het dossier">🗂 Projectmap ${mapInfo?'verversen':'tonen'}</button>
-        <button class="btn btn-secondary btn-sm" onclick="projMappenHerstel('${_jsCode(proj.code)}')" title="Controleert eerst wat ontbreekt (en of er dubbele projectmappen zijn); maakt pas na bevestiging ontbrekende mappen aan. Hernoemt of verplaatst nooit iets.">🗂 Mappen herstellen</button>
+        <button class="btn btn-secondary btn-sm" onclick="dossierLaadMap(${jsArg(_jsCode(proj.code))})" title="Alleen lezen: toont de bestanden uit de projectmap in het dossier">🗂 Projectmap ${mapInfo?'verversen':'tonen'}</button>
+        <button class="btn btn-secondary btn-sm" onclick="projMappenHerstel(${jsArg(_jsCode(proj.code))})" title="Controleert eerst wat ontbreekt (en of er dubbele projectmappen zijn); maakt pas na bevestiging ontbrekende mappen aan. Hernoemt of verplaatst nooit iets.">🗂 Mappen herstellen</button>
         <span id="bijlage-status-${c.sid}" style="font-size:12px;color:var(--text-dim)"></span>
         <span id="dossier-map-st-${c.cid}" style="font-size:11px;color:var(--text-dim)">${mapInfo?(mapInfo.fout?`<span style="color:#c0392b">${esc(mapInfo.fout)}</span>`:(mapInfo.pad?`${mapInfo.bestanden.length} bestanden · ${esc(mapInfo.pad)}`:'')):''}</span>
         ${dos.klopt?'':'<span style="font-size:11px;color:#c0392b">⚠ mail-telling klopt niet — meld dit</span>'}
@@ -5741,7 +5741,7 @@ function projSecCalculatie(proj,c){
           <td style="text-align:right;font-family:var(--mono)">€ ${(v.stukprijs||0).toFixed(2)}</td>
           <td style="text-align:right;font-family:var(--mono);font-weight:600">€ ${((v.aantal||1)*(v.stukprijs||0)).toFixed(2)}</td>
           <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(v.datum)}</td>
-          <td><button class="btn btn-xs btn-danger" onclick="if(confirm('Inkoopregel verwijderen?')){const vrd=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(x=>!(x.project==='${proj.code}'&&x.omschrijving==='${v.omschrijving.replace(/'/g,"\\'")}' &&x.ts===${v.ts}));localStorage.setItem('mt_voorraad',JSON.stringify(vrd));renderProjectDetail(huidigProject);}">×</button></td>
+          <td><button class="btn btn-xs btn-danger" onclick="if(confirm('Inkoopregel verwijderen?')){const vrd=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(x=>!(x.project===${jsArg(proj.code)}&&x.omschrijving===${jsArg(v.omschrijving)} &&x.ts===${Number(v.ts)||0}));localStorage.setItem('mt_voorraad',JSON.stringify(vrd));renderProjectDetail(huidigProject);}">×</button></td>
         </tr>`).join('')}</tbody>
       </table></div>`:'<hr class="divider"><p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}`;
 }
@@ -5752,7 +5752,7 @@ function projSecProductie(proj,c){
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
         <div class="card-title" style="margin:0">Kostenberekening — Vectorworks CSV / Excel</div>
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('csv-input-${c.sid}').click()">📊 CSV / Excel uploaden</button>
-        <input type="file" id="csv-input-${c.sid}" class="hidden" accept=".csv,.xlsx,.xls" onchange="verwerKostenCSV(this.files[0],'${_jsCode(proj.code)}')">
+        <input type="file" id="csv-input-${c.sid}" class="hidden" accept=".csv,.xlsx,.xls" onchange="verwerKostenCSV(this.files[0],${jsArg(_jsCode(proj.code))})">
         <span id="csv-status-${c.sid}" style="font-size:12px;color:var(--text-dim)"></span>
       </div>
       <div id="csv-resultaat-${c.sid}" class="hidden"></div>
@@ -5760,7 +5760,7 @@ function projSecProductie(proj,c){
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
         <div class="card-title" style="margin:0">NCR Import — Zaagoptimalisatie</div>
         <button class="btn btn-gold btn-sm" onclick="document.getElementById('ncr-input-${c.sid}').click()">📂 NCR bestanden uploaden</button>
-        <input type="file" id="ncr-input-${c.sid}" class="hidden" accept=".ncr,.NCR" multiple onchange="verwerNCR(this.files,'${_jsCode(proj.code)}')">
+        <input type="file" id="ncr-input-${c.sid}" class="hidden" accept=".ncr,.NCR" multiple onchange="verwerNCR(this.files,${jsArg(_jsCode(proj.code))})">
         <span style="font-size:11px;color:var(--text-faint)">Meerdere NCR's tegelijk selecteren</span>
         <span id="ncr-status-${c.sid}" style="font-size:12px;color:var(--text-dim)"></span>
       </div>
@@ -5863,12 +5863,12 @@ function _tlTeken(key){
   const tgTekst=tg.status==='ok'?(tg.geenKoppeling?'geen Toggl-project gekoppeld':_tlU(D.som.gewerkt)+' u (Toggl)'+zk+uf)
     :tg.status==='fout'?'<span title="'+esc(tg.fout||'')+'">werkelijke uren niet beschikbaar: '+esc(tg.fout||'')+'</span>':'<span class="spinner"></span> laden…';
   const kop=`<div class="tl-som">Gepland <b>${_tlU(D.som.gepland)} u</b> · Gewerkt <b>${tgTekst}</b>${D.som.begroot?` · Begroot <b>${_tlU(D.som.begroot)} u</b> (offerte)`:''} · Vrije capaciteit team komende 4 weken <b>${_tlU(D.som.vrijTeam)} u</b></div>
-    <div class="tl-nav"><button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',-4)" aria-label="4 weken terug">‹‹</button><button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',-1)" aria-label="Week terug">‹</button>
-      <button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',0)">vandaag</button>
-      <button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',1)" aria-label="Week vooruit">›</button><button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif('${k}',4)" aria-label="4 weken vooruit">››</button>
-      <button type="button" class="btn btn-xs btn-secondary" onclick="tlNaarAgenda('${k}','${D.weken.find(w=>w.huidig)?.ws||D.weken[TL_TERUG].ws}')">📅 Open in Agenda</button></div>`;
+    <div class="tl-nav"><button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif(${jsArg(k)},-4)" aria-label="4 weken terug">‹‹</button><button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif(${jsArg(k)},-1)" aria-label="Week terug">‹</button>
+      <button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif(${jsArg(k)},0)">vandaag</button>
+      <button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif(${jsArg(k)},1)" aria-label="Week vooruit">›</button><button type="button" class="btn btn-xs btn-secondary" onclick="tlSchuif(${jsArg(k)},4)" aria-label="4 weken vooruit">››</button>
+      <button type="button" class="btn btn-xs btn-secondary" onclick="tlNaarAgenda(${jsArg(k)},${jsArg(D.weken.find(w=>w.huidig)?.ws||D.weken[TL_TERUG].ws)})">📅 Open in Agenda</button></div>`;
   const kol=`grid-template-columns:${TL_NAAM}px repeat(${D.weken.length},${TL_KOL}px)`;
-  let html=`<div class="tl-rij tl-kop" style="${kol}"><div class="tl-naam">&nbsp;</div>${D.weken.map(w=>`<button type="button" class="tl-week${w.huidig?' nu':''}" onclick="tlDetail('${k}','week','','${w.ws}')" title="Week van ${esc(w.datum)}"><b>${esc(w.label)}</b><span>${esc(w.datum)}</span></button>`).join('')}</div>`;
+  let html=`<div class="tl-rij tl-kop" style="${kol}"><div class="tl-naam">&nbsp;</div>${D.weken.map(w=>`<button type="button" class="tl-week${w.huidig?' nu':''}" onclick="tlDetail(${jsArg(k)},'week','',${jsArg(w.ws)})" title="Week van ${esc(w.datum)}"><b>${esc(w.label)}</b><span>${esc(w.datum)}</span></button>`).join('')}</div>`;
   // fasen-rij(en): per project een eigen rij bij meerdere projecten
   const fasenPer=meer?st.codes.map(c=>({c,f:D.fasen.filter(x=>x.code===c)})):[{c:'',f:D.fasen}];
   fasenPer.forEach(({c,f})=>{
@@ -5876,7 +5876,7 @@ function _tlTeken(key){
     html+=`<div class="tl-rij" style="${kol}"><div class="tl-naam" title="${esc(c||'Fasen')}">${meer?`<span class="tl-dot" style="background:${agProjKleur(c)}"></span>${esc(c)}`:'Fasen'}</div>
       <div class="tl-fasen" style="grid-column:2 / span ${D.weken.length};height:${Math.max(1,lanes.length)*20+6}px">${f.map(x=>{
         const a=Math.max(0,_tlDagen(D.van,x.start)), b=Math.min(totDagen,_tlDagen(D.van,x.eind)+1);
-        return `<button type="button" class="tl-fase st-${esc(x.status)}" style="left:${a/totDagen*100}%;width:${Math.max(1.2,(b-a)/totDagen*100)}%;top:${3+x.lane*20}px;background:${agProjKleur(x.code)}" title="${esc(x.naam)} · ${esc(x.start)} – ${esc(x.eind)} · ${esc(x.status)}" onclick="tlDetail('${k}','fase','${esc(x.code)}','${esc(x.id)}')">${esc(x.naam)}</button>`; }).join('')}
+        return `<button type="button" class="tl-fase st-${esc(x.status)}" style="left:${a/totDagen*100}%;width:${Math.max(1.2,(b-a)/totDagen*100)}%;top:${3+x.lane*20}px;background:${agProjKleur(x.code)}" title="${esc(x.naam)} · ${esc(x.start)} – ${esc(x.eind)} · ${esc(x.status)}" onclick="tlDetail(${jsArg(k)},'fase',${jsArg(x.code)},${jsArg(x.id)})">${esc(x.naam)}</button>`; }).join('')}
       ${!f.length?'<span class="tl-leeg">nog geen fasen</span>':''}</div></div>`;
   });
 
@@ -5886,7 +5886,7 @@ function _tlTeken(key){
       const balk=(cls,u,kleur)=>u>0?`<span class="tl-balk ${cls}" style="width:${Math.min(100,u/schaal*100)}%${kleur?';--pk:'+kleur:''}"></span>`:'';
       const segs=meer?Object.entries(c.perProj).map(([pc,v])=>balk('p',v.p,agProjKleur(pc))+balk('w',v.w,agProjKleur(pc))).join(''):(balk('p',c.gepland)+balk('w',c.gewerkt));
       const tip=[c.gepland?_tlU(c.gepland)+' u gepland':'',c.gewerkt?_tlU(c.gewerkt)+' u gewerkt':'',c.cap!==null?_tlU(Math.max(0,c.vrij))+' u vrij van '+_tlU(c.cap):''].filter(Boolean).join(' · ');
-      return `<button type="button" class="tl-cel cap-${c.niveau||'x'}${w.huidig?' nu':''}" title="${esc(tip||'niets gepland')}" aria-label="${esc(p.naam)}, ${esc(w.label)}: ${esc(tip||'niets gepland')}" onclick="tlDetail('${k}','cel','${esc(p.slug)}','${w.ws}')">${segs}${c.gepland||c.gewerkt?`<span class="tl-getal">${c.gepland?'📅'+_tlU(c.gepland):''}${c.gewerkt?`<i>⏱${_tlU(c.gewerkt)}</i>`:''}</span>`:''}</button>`; }).join('')+'</div>';
+      return `<button type="button" class="tl-cel cap-${c.niveau||'x'}${w.huidig?' nu':''}" title="${esc(tip||'niets gepland')}" aria-label="${esc(p.naam)}, ${esc(w.label)}: ${esc(tip||'niets gepland')}" onclick="tlDetail(${jsArg(k)},'cel',${jsArg(p.slug)},${jsArg(w.ws)})">${segs}${c.gepland||c.gewerkt?`<span class="tl-getal">${c.gepland?'📅'+_tlU(c.gepland):''}${c.gewerkt?`<i>⏱${_tlU(c.gewerkt)}</i>`:''}</span>`:''}</button>`; }).join('')+'</div>';
   });
   const nu=D.weken.findIndex(w=>w.huidig);
   const lijn=(vandaag>=D.van&&vandaag<=D.tot)?`<div class="tl-vandaag" style="left:${TL_NAAM+(_tlDagen(D.van,vandaag)+0.5)/7*TL_KOL}px" aria-hidden="true"></div>`:'';
@@ -5920,10 +5920,10 @@ function tlSchuif(key,n){ const st=_tlState[key]; if(!st) return; st.offset=n===
 function tlDetail(key,soort,a,b){ const st=_tlState[key]; if(!st) return; st.detail={soort,a,b}; const el=_tlHost(key); const D=tijdlijnData(st.codes,st);
   const d=el&&el.querySelector('.tl-detail'); if(d) d.innerHTML=_tlDetailHtml(key,D,st.detail); }
 function _tlDetailHtml(key,D,det){
-  const k=esc(key), agenda=ws=>`<button type="button" class="btn btn-xs btn-secondary" onclick="tlNaarAgenda('${k}','${esc(ws)}')">📅 Open in Agenda</button>`;
+  const k=esc(key), agenda=ws=>`<button type="button" class="btn btn-xs btn-secondary" onclick="tlNaarAgenda(${jsArg(k)},${jsArg(ws)})">📅 Open in Agenda</button>`;
   if(det.soort==='fase'){ const f=D.fasen.find(x=>x.code===det.a&&x.id===det.b); if(!f) return '';
     return `<b>${esc(f.naam)}</b> · ${projKortHtml(f.code)} · ${esc(f.start)} – ${esc(f.eind)} · <span class="dos-st">${esc(f.status)}</span>
-      <button type="button" class="btn btn-xs btn-secondary" onclick="openProject('${_jsCode(f.code)}',{sectie:'planning'})">Planning openen</button> ${agenda(_tlYmd(agMaandag(new Date(f.start+'T12:00:00'))))}`; }
+      <button type="button" class="btn btn-xs btn-secondary" onclick="openProject(${jsArg(_jsCode(f.code))},{sectie:'planning'})">Planning openen</button> ${agenda(_tlYmd(agMaandag(new Date(f.start+'T12:00:00'))))}`; }
   if(det.soort==='week'){ const w=D.weken.find(x=>x.ws===det.b); if(!w) return '';
     const rij=D.pers.map(p=>{ const c=D.cel[p.slug][w.ws]; return c.gepland||c.gewerkt||c.cap?`<span class="tl-dr">${esc(p.naam)}: ${_tlU(c.gepland)} u gepland${c.gewerkt?' · '+_tlU(c.gewerkt)+' u gewerkt':''}${c.cap!==null?' · '+_tlU(Math.max(0,c.vrij))+' u vrij':''}</span>`:''; }).join('');
     return `<b>${esc(w.label)}</b> (${esc(w.ws)} – ${esc(w.we)}) ${agenda(w.ws)}<div>${rij||'<span class="dos-meta">Niets gepland of gewerkt.</span>'}</div>`; }
@@ -6101,21 +6101,21 @@ function renderDossier(el,scope,facetten){
   const personen=[...new Set(rijen.flatMap(r=>[r.door,r.van]).filter(v=>v&&!/^uit mail/.test(v)))].sort();
   const statussen=[...new Set(rijen.map(r=>r.status).filter(Boolean))].sort();
   const k=esc(key);
-  const sel=(veld,opts,huidig,label)=>`<select class="dos-sel" aria-label="${label}" onchange="dossierZetFilter('${k}','${veld}',this.value)">${opts.map(([v,t])=>`<option value="${esc(v)}"${String(v)===String(huidig)?' selected':''}>${esc(t)}</option>`).join('')}</select>`;
+  const sel=(veld,opts,huidig,label)=>`<select class="dos-sel" aria-label="${label}" onchange="dossierZetFilter(${jsArg(k)},${jsArg(veld)},this.value)">${opts.map(([v,t])=>`<option value="${esc(v)}"${String(v)===String(huidig)?' selected':''}>${esc(t)}</option>`).join('')}</select>`;
   el.innerHTML=`<div class="dossier" data-key="${k}">
     <div class="dos-chips" role="toolbar" aria-label="Soort"></div>
     <div class="dos-filters">
-      <input type="search" class="dos-zoek" placeholder="🔍 Zoek in dossier…" aria-label="Zoek in dossier" value="${esc(f.q)}" oninput="dossierZetFilter('${k}','q',this.value)">
+      <input type="search" class="dos-zoek" placeholder="🔍 Zoek in dossier…" aria-label="Zoek in dossier" value="${esc(f.q)}" oninput="dossierZetFilter(${jsArg(k)},'q',this.value)">
       <button type="button" class="btn btn-xs btn-secondary dos-meerknop" aria-expanded="false" onclick="const o=this.parentNode.classList.toggle('open');this.setAttribute('aria-expanded',String(o))">Filters ▾</button>
       <span class="dos-extra">
       ${sel('periode',[['','Alle data'],['week','Deze week'],['maand','Deze maand'],['aangepast','Aangepast…']],f.periode,'Periode')}
-      <span class="dos-aangepast"${f.periode==='aangepast'?'':' hidden'}><input type="date" value="${esc(f.van)}" aria-label="Vanaf" onchange="dossierZetFilter('${k}','van',this.value)"> – <input type="date" value="${esc(f.tot)}" aria-label="Tot en met" onchange="dossierZetFilter('${k}','tot',this.value)"></span>
+      <span class="dos-aangepast"${f.periode==='aangepast'?'':' hidden'}><input type="date" value="${esc(f.van)}" aria-label="Vanaf" onchange="dossierZetFilter(${jsArg(k)},'van',this.value)"> – <input type="date" value="${esc(f.tot)}" aria-label="Tot en met" onchange="dossierZetFilter(${jsArg(k)},'tot',this.value)"></span>
       ${sel('persoon',[['','Iedereen'],...personen.map(p=>[p,p])],f.persoon,'Persoon')}
       ${scope.codes.length>1?sel('project',[['','Alle projecten'],...scope.codes.map(c=>[c,projKeuzeLabel(c)])],f.project,'Project'):''}
       ${(scope.locaties&&scope.locaties.length)?sel('locatie',[['','Alle locaties'],['-','Zonder locatie'],...scope.locaties.filter(l=>_locKeuzeLabel(l)).map(l=>[l.code,_locKeuzeLabel(l)])],f.locatie,'Locatie'):''}
       ${sel('status',[['','Status: standaard'],['*','Status: alles (ook ontkoppeld)'],...statussen.map(s=>[s,'Status: '+s])],f.status,'Status')}
-      <label class="dos-check"><input type="checkbox"${f.bijlage?' checked':''} onchange="dossierZetFilter('${k}','bijlage',this.checked?'1':'')"> met bijlage</label>
-      <button type="button" class="btn btn-xs btn-secondary" onclick="dossierWisFilters('${k}')" title="Alle filters terug naar standaard">Wis filters</button>
+      <label class="dos-check"><input type="checkbox"${f.bijlage?' checked':''} onchange="dossierZetFilter(${jsArg(k)},'bijlage',this.checked?'1':'')"> met bijlage</label>
+      <button type="button" class="btn btn-xs btn-secondary" onclick="dossierWisFilters(${jsArg(k)})" title="Alle filters terug naar standaard">Wis filters</button>
       </span>
     </div>
     <div class="dos-lijst"></div></div>`;
@@ -6127,11 +6127,11 @@ function _dosTekenLijst(key){
   const f=_dosStand(key), k=esc(key);
   const basis=dossierFilteren(reg.rijen,f,{zonderSoort:true});
   const tel={}; basis.forEach(r=>{ tel[r.soort]=(tel[r.soort]||0)+1; });
-  const chip=(v,l,n)=>`<button type="button" class="dos-chip${f.soort===v?' actief':''}" aria-pressed="${f.soort===v}" onclick="dossierZetFilter('${k}','soort','${v}')">${l} <span class="dos-n">${n}</span></button>`;
+  const chip=(v,l,n)=>`<button type="button" class="dos-chip${f.soort===v?' actief':''}" aria-pressed="${f.soort===v}" onclick="dossierZetFilter(${jsArg(k)},'soort',${jsArg(v)})">${l} <span class="dos-n">${n}</span></button>`;
   const nBijl=dossierFilteren(reg.rijen,Object.assign({},f,{bijlage:'1'}),{zonderSoort:true}).length;
   root.querySelector('.dos-chips').innerHTML=chip('','Alles',basis.length)
     +DOS_SOORTEN.filter(s=>_DOS_ALTIJD.has(s.k)||tel[s.k]).map(s=>chip(s.k,s.i+' '+s.l,tel[s.k]||0)).join('')
-    +`<button type="button" class="dos-chip dos-chip-bijl${f.bijlage?' actief':''}" aria-pressed="${!!f.bijlage}" onclick="dossierZetFilter('${k}','bijlage','${f.bijlage?'':'1'}')" title="Alleen rijen met een bijlage">📎 met bijlage <span class="dos-n">${nBijl}</span></button>`;
+    +`<button type="button" class="dos-chip dos-chip-bijl${f.bijlage?' actief':''}" aria-pressed="${!!f.bijlage}" onclick="dossierZetFilter(${jsArg(k)},'bijlage',${jsArg(f.bijlage?'':'1')})" title="Alleen rijen met een bijlage">📎 met bijlage <span class="dos-n">${nBijl}</span></button>`;
   const cb=root.querySelector('.dos-check input'); if(cb) cb.checked=!!f.bijlage;
   const ac=root.querySelector('.dos-aangepast'); if(ac) ac.hidden=f.periode!=='aangepast';
   const rijen=(f.soort?basis.filter(r=>r.soort===f.soort):basis).slice();
@@ -6150,20 +6150,20 @@ function _dosTekenLijst(key){
     const i=reg.rijen.indexOf(r), g=groep(r);
     if(g!==vorige){ html+=`<div class="dos-groep">${esc(g)}</div>`; vorige=g; }
     const wie=[r.van,r.door&&r.door!==r.van?r.door:''].filter(Boolean).map(esc).join(' · ');
-    const titel=r.open?`<a href="#" onclick="event.preventDefault();dossierOpen('${k}',${i})">${esc(r.titel)}</a>`:esc(r.titel);
+    const titel=r.open?`<a href="#" onclick="event.preventDefault();dossierOpen(${jsArg(k)},${i})">${esc(r.titel)}</a>`:esc(r.titel);
     const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' );
     const jBijl=r.acties.findIndex(a=>a.l==='📎');
     const bijl=r.soort==='mail'&&r.ref.opgeslagen?' '+kb({status:'gekoppeld',klein:true,label:r.ref.opgeslagen+' bijlage'+(r.ref.opgeslagen>1?'n':'')+' in map',titel:'Opgeslagen bijlagen van deze mail staan in de projectmap'})
-      :(r.soort==='mail'&&r.ref.nogNietOpgeslagen?' '+kb({status:'open',klein:true,label:'bijlagen in map',titel:'Deze mail heeft bijlagen die nog niet in de projectmap staan — klik om ze op te slaan',onclick:jBijl>=0?`dossierActie('${k}',${i},${jBijl})`:''}):'');
+      :(r.soort==='mail'&&r.ref.nogNietOpgeslagen?' '+kb({status:'open',klein:true,label:'bijlagen in map',titel:'Deze mail heeft bijlagen die nog niet in de projectmap staan — klik om ze op te slaan',onclick:jBijl>=0?`dossierActie(${jsLit(k)},${i},${jBijl})`:''}):'');
     // Mail en bestand: één koppel-badge (B11); de overige acties zitten in de popover.
-    const koppel=r.soort==='mail'?kb(r.status==='ontkoppeld'?{status:'open',klein:true,tekst:'Ontkoppeld',titel:'Deze mail is ontkoppeld — klik om opnieuw te koppelen',onclick:`dossierKoppelPop(this,'${k}',${i})`}:{status:'gekoppeld',klein:true,label:reg.scope.codes.length>1?projKort(r.code):'',titel:'Gekoppeld aan '+projKort(r.code)+' — klik voor openen of ontkoppelen',onclick:`dossierKoppelPop(this,'${k}',${i})`})
-      :(r.soort==='bestand'?kb({status:'gekoppeld',klein:true,label:r.bron==='projectmap'||r.bron==='mail'?'in map':'bijlage',titel:'Staat in '+(r.status||'de projectmap')+' — klik voor details',onclick:`dossierKoppelPop(this,'${k}',${i})`}):'');
+    const koppel=r.soort==='mail'?kb(r.status==='ontkoppeld'?{status:'open',klein:true,tekst:'Ontkoppeld',titel:'Deze mail is ontkoppeld — klik om opnieuw te koppelen',onclick:`dossierKoppelPop(this,${jsLit(k)},${i})`}:{status:'gekoppeld',klein:true,label:reg.scope.codes.length>1?projKort(r.code):'',titel:'Gekoppeld aan '+projKort(r.code)+' — klik voor openen of ontkoppelen',onclick:`dossierKoppelPop(this,${jsLit(k)},${i})`})
+      :(r.soort==='bestand'?kb({status:'gekoppeld',klein:true,label:r.bron==='projectmap'||r.bron==='mail'?'in map':'bijlage',titel:'Staat in '+(r.status||'de projectmap')+' — klik voor details',onclick:`dossierKoppelPop(this,${jsLit(k)},${i})`}):'');
     html+=`<div class="dos-rij${r.status==='ontkoppeld'?' uit':''}">
       <span class="dos-ic" aria-hidden="true">${icoon(r.soort)}</span>
       <div class="dos-hoofd"><div class="dos-titel">${titel}${bijl}</div>
         <div class="dos-meta">${(reg.scope.codes.length>1)?`${projKortHtml(r.code)} · `:''}${wie?wie+' · ':''}${r.datum?fmtDatum(r.datum.slice(0,10)):'—'}${r.status?` · <span class="dos-st">${esc(r.status)}</span>`:''}</div></div>
-      <div class="dos-acties">${koppel?r.acties.map((a,j)=>a.snel?`<button type="button" class="btn btn-xs btn-secondary" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie('${k}',${i},${j})">${a.l}</button>`:'').join('')+koppel
-        :r.acties.map((a,j)=>`<button type="button" class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie('${k}',${i},${j})">${a.l}</button>`).join('')}</div>
+      <div class="dos-acties">${koppel?r.acties.map((a,j)=>a.snel?`<button type="button" class="btn btn-xs btn-secondary" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie(${jsArg(k)},${i},${j})">${a.l}</button>`:'').join('')+koppel
+        :r.acties.map((a,j)=>`<button type="button" class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" title="${esc(a.t)}" aria-label="${esc(a.t)}" onclick="dossierActie(${jsArg(k)},${i},${j})">${a.l}</button>`).join('')}</div>
     </div>`;
   });
   lijst.innerHTML=html;
@@ -6184,9 +6184,9 @@ function dossierWisFilters(key){
 function dossierKoppelPop(el,key,i){
   const r=_dosReg[key]&&_dosReg[key].rijen[i]; if(!r||!window.MTKoppelUI) return;
   const k=esc(key);
-  const acties=r.acties.map((a,j)=>a.snel?'':`<button class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" onclick="MTKoppelUI.sluit();dossierActie('${k}',${i},${j})">${esc(a.l==='×'?'Ontkoppelen':a.l==='📎'?'📎 Bijlagen → projectmap':a.l)}</button>`).join(' ');
+  const acties=r.acties.map((a,j)=>a.snel?'':`<button class="btn btn-xs ${a.gevaar?'btn-danger':'btn-secondary'}" onclick="MTKoppelUI.sluit();dossierActie(${jsArg(k)},${i},${j})">${esc(a.l==='×'?'Ontkoppelen':a.l==='📎'?'📎 Bijlagen → projectmap':a.l)}</button>`).join(' ');
   MTKoppelUI.popover(el,`<div class="kb-pop-rij"><div class="kb-pop-n"><b>${esc(r.titel)}</b><div class="dos-meta">${esc([r.van,r.code?projKort(r.code):'',r.status].filter(Boolean).join(' · '))}</div></div></div>
-    <div class="kb-pop-acties">${r.open?`<button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();dossierOpen('${k}',${i})">Open</button>`:''} ${acties}</div>`,{titel:r.soort==='mail'?(r.status==='ontkoppeld'?'Ontkoppelde mail':'Gekoppelde mail'):'Bestand in projectmap'});
+    <div class="kb-pop-acties">${r.open?`<button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();dossierOpen(${jsArg(k)},${i})">Open</button>`:''} ${acties}</div>`,{titel:r.soort==='mail'?(r.status==='ontkoppeld'?'Ontkoppelde mail':'Gekoppelde mail'):'Bestand in projectmap'});
 }
 function dossierVernieuw(){ document.querySelectorAll('.dossier').forEach(d=>{ const reg=_dosReg[d.dataset.key]; if(reg) renderDossier(d.parentNode,reg.scope); }); }
 function dossierOpen(key,i){ const r=_dosReg[key]&&_dosReg[key].rijen[i]; if(r&&r.open) r.open(); }
@@ -6362,7 +6362,7 @@ function openKlant(kl,loc,{sectie=null,filter=null}={}){
     +`<button type="button" class="btn btn-xs btn-gold" onclick="klantNieuwProject()" title="Nieuw project voor deze klant${loc?' (deze locatie)':''}">+ Nieuw project</button>`
     +(window.MTKoppelUI?MTKoppelUI.badge(info.mbId?{status:'gekoppeld',label:'Moneybird',titel:'Moneybird-contact '+info.mbId+' — klik om te openen',onclick:`window.open('https://moneybird.com/${getAdmin()}/contacts/${esc(info.mbId)}','_blank','noopener')`}:{status:'open',label:'Moneybird',titel:'Geen Moneybird-contact bekend voor deze klant — klik voor uitleg',onclick:'klantMbPop(this)'}):'')
     +`<button type="button" class="btn btn-xs btn-secondary" onclick="klantKopieerLink()" title="Kopieer de link naar deze klant">🔗 Kopieer link</button></span></div>`
-    +`<nav class="proj-secnav" role="tablist" aria-label="Klantonderdelen">${KLANT_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_klantSectie?' actief':''}" data-sectie="${s.k}" aria-selected="${s.k===_klantSectie}" onclick="klantSectieKies('${s.k}')">${s.l}</button>`).join('')}</nav>`
+    +`<nav class="proj-secnav" role="tablist" aria-label="Klantonderdelen">${KLANT_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_klantSectie?' actief':''}" data-sectie="${s.k}" aria-selected="${s.k===_klantSectie}" onclick="klantSectieKies(${jsArg(s.k)})">${s.l}</button>`).join('')}</nav>`
     +`<div class="card proj-sectie" id="klant-sectie-inhoud" role="tabpanel" data-sectie="${_klantSectie}"></div>`;
   if(typeof _projSecNavTop==='function') _projSecNavTop();
   _klantSectieRender();
@@ -6451,16 +6451,16 @@ function klantSecOverzicht(info,projen){
     const nt=(typeof projTaken==='function')?projTaken(p.code).filter(t=>t.status!=='klaar').length:0;
     const viaMb=String(p.klant||'').toUpperCase()!==info.kl;
     return `<div class="klant-proj">
-      <div class="klant-proj-hoofd"><span class="st-pill st-${st.status}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid: '+esc(st.reden||'planning/taken'):'Zelf gekozen'}">${esc(st.status)}</span> <a href="${mtRoute.format({code:p.code})}" onclick="event.preventDefault();openProject('${_jsCode(p.code)}')">${esc(projNaamVol(p))} ${projTag(p)}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
+      <div class="klant-proj-hoofd"><span class="st-pill st-${st.status}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid: '+esc(st.reden||'planning/taken'):'Zelf gekozen'}">${esc(st.status)}</span> <a href="${mtRoute.format({code:p.code})}" onclick="event.preventDefault();openProject(${jsArg(_jsCode(p.code))})">${esc(projNaamVol(p))} ${projTag(p)}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
         <div class="dos-meta">${projLocLabel(p)?esc(projLocLabel(p))+' · ':''}${lt?'laatst: '+fmtDatum(lt.datum.slice(0,10)):'nog geen activiteit'}${nt?` · ${nt} open ta${nt===1?'ak':'ken'}`:''}</div></div>
-      <label class="klant-status"><span class="sr">Status</span><select aria-label="Status van ${esc(projNaamVol(p))}" onchange="projStatusZet('${_jsCode(p.code)}',this.value)">
+      <label class="klant-status"><span class="sr">Status</span><select aria-label="Status van ${esc(projNaamVol(p))}" onchange="projStatusZet(${jsArg(_jsCode(p.code))},this.value)">
         <option value=""${st.afgeleid?' selected':''}>${st.afgeleid?esc(st.status)+' (afgeleid)':'automatisch'}</option>
         ${PROJ_STATUSSEN.map(s=>`<option value="${s}"${!st.afgeleid&&st.status===s?' selected':''}>${s}</option>`).join('')}</select></label></div>`;
   };
   const let_=[];
   const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' );
-  const zonderMap=zicht.filter(p=>!p.map||!p.map.itemId).length; if(zonderMap) let_.push(`${kb({status:'open',klein:true,label:'Projectmap',titel:'Klik: projecten van deze klant in de lijst tonen',onclick:`projKlantFilterZet('${_jsCode(info.kl)}','${_jsCode((_klantHuidig&&_klantHuidig.loc)||'')}')`})} ${zonderMap} project${zonderMap>1?'en':''} zonder gecontroleerde map`);
-  const zonderTg=zicht.filter(p=>!p.tg_project_id).length; if(zonderTg) let_.push(`${kb({status:'open',klein:true,label:'Toggl',titel:'Klik: projecten van deze klant in de lijst tonen',onclick:`projKlantFilterZet('${_jsCode(info.kl)}','${_jsCode((_klantHuidig&&_klantHuidig.loc)||'')}')`})} ${zonderTg} project${zonderTg>1?'en':''} zonder Toggl-project`);
+  const zonderMap=zicht.filter(p=>!p.map||!p.map.itemId).length; if(zonderMap) let_.push(`${kb({status:'open',klein:true,label:'Projectmap',titel:'Klik: projecten van deze klant in de lijst tonen',onclick:`projKlantFilterZet(${jsLit(_jsCode(info.kl))},${jsLit(_jsCode((_klantHuidig&&_klantHuidig.loc)||''))})`})} ${zonderMap} project${zonderMap>1?'en':''} zonder gecontroleerde map`);
+  const zonderTg=zicht.filter(p=>!p.tg_project_id).length; if(zonderTg) let_.push(`${kb({status:'open',klein:true,label:'Toggl',titel:'Klik: projecten van deze klant in de lijst tonen',onclick:`projKlantFilterZet(${jsLit(_jsCode(info.kl))},${jsLit(_jsCode((_klantHuidig&&_klantHuidig.loc)||''))})`})} ${zonderTg} project${zonderTg>1?'en':''} zonder Toggl-project`);
   const nietOpg=rijen.filter(r=>r.soort==='mail'&&r.ref.nogNietOpgeslagen).length;
   if(nietOpg) let_.push(`${kb({status:'open',klein:true,label:'Bijlagen',titel:'Bijlagen nog niet in de projectmap — klik om ze te bekijken',onclick:"_dosFilter[_klantDosKey()]=Object.assign({},_DOS_STD,{soort:'mail',bijlage:'1'});klantSectieKies('dossier')"})} ${nietOpg} mail${nietOpg>1?'s':''} met bijlagen nog niet in de projectmap`);
   if(!info.mbId) let_.push(`${kb({status:'open',klein:true,label:'Moneybird',titel:'Geen Moneybird-contact bekend — klik voor uitleg',onclick:'klantMbPop(this)'})} Geen Moneybird-contact bekend voor deze klant`);
@@ -6469,7 +6469,7 @@ function klantSecOverzicht(info,projen){
       <div class="klant-kpi"><b>${zicht.length}</b> project${zicht.length===1?'':'en'} · <b>${openTaken}</b> open ta${openTaken===1?'ak':'ken'}${info.locaties.length?` · <b>${info.locaties.length}</b> locatie${info.locaties.length===1?'':'s'}`:''}</div></div>
     <div class="ov-grid">
       <section class="ov-blok"><div class="card-title" style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">Projecten
-        <label class="dos-check"><input type="checkbox"${toonArch?'':' checked'} onchange="klantArchief('${_jsCode(info.kl)}',!this.checked)"> verberg archief${verborgen?` (${verborgen})`:''}</label></div>
+        <label class="dos-check"><input type="checkbox"${toonArch?'':' checked'} onchange="klantArchief(${jsArg(_jsCode(info.kl))},!this.checked)"> verberg archief${verborgen?` (${verborgen})`:''}</label></div>
         ${zicht.length?projSorteerNieuwst(zicht).map(kaart).join(''):'<div class="ov-act" style="color:var(--text-faint)">Geen projecten'+(verborgen?' (alleen gearchiveerde)':'')+'.</div>'}</section>
       <section class="ov-blok"><div class="card-title">Laatste activiteit</div>
         ${laatste.length?laatste.map(r=>`<div class="ov-act">${icoon(r.soort)} ${projKortHtml(r.code)} ${esc(r.titel)} <span class="dos-meta">${fmtDatum(r.datum.slice(0,10))}</span></div>`).join(''):'<div class="ov-act" style="color:var(--text-faint)">Nog niets gebeurd.</div>'}
@@ -6481,11 +6481,11 @@ function klantSecOverzicht(info,projen){
 function klantSecBestanden(info,projen){
   const los=_klantMapLos[info.kl+'|'+(_klantHuidig.loc||'')];
   const blok=p=>{ const m=(window._dossierMap||{})[p.code];
-    const inhoud=!m?`<button class="btn btn-xs btn-secondary" onclick="klantBestandenLaad('${_jsCode(p.code)}')">🗂 Bestanden tonen</button>`
+    const inhoud=!m?`<button class="btn btn-xs btn-secondary" onclick="klantBestandenLaad(${jsArg(_jsCode(p.code))})">🗂 Bestanden tonen</button>`
       :(m.fout?`<span style="color:#c0392b;font-size:12px">${esc(m.fout)}</span>`
       :(m.bestanden.length?`<div class="tabel-scroll"><table class="materiaal-lijst"><tbody>${m.bestanden.map(f=>`<tr><td style="font-size:12px">${f.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none">${esc(f.naam)}</a>`:esc(f.naam)}</td><td style="font-size:11px;color:var(--text-dim)">${esc(f.sub)}</td><td style="font-size:11px;color:var(--text-faint)">${f.datum?fmtDatum(f.datum.slice(0,10)):''}</td></tr>`).join('')}</tbody></table></div>`
       :'<span style="font-size:12px;color:var(--text-faint)">Projectmap is leeg.</span>'));
-    return `<section class="klant-bestanden"><div class="klant-bestanden-kop"><a href="#" onclick="event.preventDefault();openProject('${_jsCode(p.code)}',{sectie:'dossier'})">${esc(projNaamVol(p))} ${projTag(p)}</a>${m&&m.pad?` <span class="dos-meta">${esc(m.pad)}</span>`:''}</div>${inhoud}</section>`; };
+    return `<section class="klant-bestanden"><div class="klant-bestanden-kop"><a href="#" onclick="event.preventDefault();openProject(${jsArg(_jsCode(p.code))},{sectie:'dossier'})">${esc(projNaamVol(p))} ${projTag(p)}</a>${m&&m.pad?` <span class="dos-meta">${esc(m.pad)}</span>`:''}</div>${inhoud}</section>`; };
   return `<div class="dos-kop"><div class="card-title" style="margin:0">Bestanden</div>
       <button class="btn btn-secondary btn-sm" onclick="klantBestandenAlles()">🗂 Alles laden</button>
       <span style="font-size:11px;color:var(--text-faint)">Alleen lezen; per project pas geladen als je erom vraagt.</span></div>
@@ -6525,7 +6525,7 @@ function klantSecGeld(info,projen){
   const tabel=(lijst,leeg)=>lijst.length?`<div class="tabel-scroll"><table class="v-table"><thead><tr><th>Datum</th><th>Referentie</th><th style="text-align:right">Bedrag</th><th>Status</th></tr></thead><tbody>${lijst.slice(0,25).map(f=>`<tr><td style="font-size:12px">${fmtDatum(f.date||f.estimate_date||f.invoice_date)}</td><td style="font-size:12px">${esc(f.reference||f.estimate_id||f.invoice_id||'—')}</td><td style="text-align:right;font-family:var(--mono);font-size:12px">${fmt(parseFloat(f.total_price_incl_tax||0))}</td><td>${state(f)}</td></tr>`).join('')}</tbody></table></div>`:`<p class="dos-leeg">${leeg}</p>`;
   const calc=projen.map(p=>{ const o=(window.CALC&&CALC.offertes)?(CALC.offertes[p.code]||Object.values(CALC.offertes).find(x=>x&&x.project_code===p.code)):null; return o?{p,o}:null; }).filter(Boolean);
   return `<div class="card-title">Calculaties per project</div>
-    ${calc.length?calc.map(({p,o})=>`<div class="ov-act"><a href="#" onclick="event.preventDefault();openProject('${_jsCode(p.code)}',{sectie:'calculatie'})">${esc(projNaamVol(p))}${o.titel&&o.titel!==p.naam?' — '+esc(o.titel):''} ${projTag(p)}</a> <span class="dos-st">${esc((o.meta&&o.meta.status)||'in bewerking')}</span>${o._gewijzigd?` <span class="dos-meta">${fmtDatum(String(o._gewijzigd).slice(0,10))}</span>`:''}</div>`).join(''):'<p class="dos-leeg">Nog geen calculaties.</p>'}
+    ${calc.length?calc.map(({p,o})=>`<div class="ov-act"><a href="#" onclick="event.preventDefault();openProject(${jsArg(_jsCode(p.code))},{sectie:'calculatie'})">${esc(projNaamVol(p))}${o.titel&&o.titel!==p.naam?' — '+esc(o.titel):''} ${projTag(p)}</a> <span class="dos-st">${esc((o.meta&&o.meta.status)||'in bewerking')}</span>${o._gewijzigd?` <span class="dos-meta">${fmtDatum(String(o._gewijzigd).slice(0,10))}</span>`:''}</div>`).join(''):'<p class="dos-leeg">Nog geen calculaties.</p>'}
     <hr class="divider">
     ${!info.mbId?'<p class="dos-leeg">Geen Moneybird-contact bekend — facturen en offertes zijn niet op te halen.</p>'
       :!g?'<p class="dos-leeg"><span class="spinner"></span> Moneybird laden…</p>'
@@ -6561,10 +6561,10 @@ function gekoppeldeMailsHtml(proj){
   return `<table class="materiaal-lijst" style="margin-bottom:0.5rem"><tbody>${arr.slice().reverse().map(x=>{
     const i=arr.indexOf(x);
     return `<tr>
-    <td style="font-size:12px">✉ <a href="#" onclick="event.preventDefault();openGekoppeldeMail('${proj.code}',${i})" style="color:var(--green);text-decoration:none" title="Open in inbox">${esc(x.subject||'(geen onderwerp)')}</a></td>
+    <td style="font-size:12px">✉ <a href="#" onclick="event.preventDefault();openGekoppeldeMail(${jsArg(proj.code)},${i})" style="color:var(--green);text-decoration:none" title="Open in inbox">${esc(x.subject||'(geen onderwerp)')}</a></td>
     <td style="font-size:11px;color:var(--text-dim)">${esc(x.from||'')}</td>
     <td style="font-size:11px;color:var(--text-faint)">${x.date?fmtDatum(x.date):''}</td>
-    <td style="white-space:nowrap;text-align:right">${x.webLink?`<a href="${esc(x.webLink)}" target="_blank" class="btn btn-xs btn-secondary" style="text-decoration:none" title="Open in Outlook">↗</a> `:''}<button class="btn btn-xs btn-danger" title="Ontkoppelen (mail blijft in Outlook)" onclick="ontkoppelMail('${proj.code}',${i})">×</button></td>
+    <td style="white-space:nowrap;text-align:right">${x.webLink?`<a href="${esc(x.webLink)}" target="_blank" class="btn btn-xs btn-secondary" style="text-decoration:none" title="Open in Outlook">↗</a> `:''}<button class="btn btn-xs btn-danger" title="Ontkoppelen (mail blijft in Outlook)" onclick="ontkoppelMail(${jsArg(proj.code)},${i})">×</button></td>
   </tr>`;}).join('')}</tbody></table>`;
 }
 async function ontkoppelMail(code,idx){
@@ -6626,22 +6626,22 @@ function projectTakenHtml(proj){
   const rows=arr.length?arr.map(t=>{
     const pr=_PT_PRIO[t.prioriteit], stt=_PT_STAT[t.status]||_PT_STAT.todo;
     const deps=(t.afhankelijk_van||[]).map(id=>naamById[id]).filter(Boolean);
-    const planLink=inPlan.has(t.id)?` <a href="#" onclick="event.preventDefault();taakNaarPlan('${proj.code}','${t.id}')" title="Toon in de planning hierboven" style="text-decoration:none">📅</a>`:'';
+    const planLink=inPlan.has(t.id)?` <a href="#" onclick="event.preventDefault();taakNaarPlan(${jsArg(proj.code)},${jsArg(t.id)})" title="Toon in de planning hierboven" style="text-decoration:none">📅</a>`:'';
     return `<tr id="pt-row-${sid}-${t.id}">
       <td style="width:24px;text-align:center"><input type="checkbox" class="pt-check" value="${t.id}" title="Selecteer om in één keer te verwijderen"></td>
       <td><span class="badge" style="background:${stt.c}22;color:${stt.c}">${stt.l}</span></td>
       <td style="font-size:13px">${esc(t.naam)}${planLink}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
       <td>${pr?`<span class="badge" style="background:${pr.c}22;color:${pr.c}">${pr.l}</span>`:''}</td>
       <td style="white-space:nowrap;text-align:right;font-family:var(--mono)">
-        <button class="btn btn-xs btn-secondary" title="−1 uur" onclick="projTaakUur('${proj.code}','${t.id}',-1)">−</button>
-        <input type="text" inputmode="decimal" value="${t.duur_uur||0}" onchange="projTaakUurZet('${proj.code}','${t.id}',this.value)" onfocus="this.select()" title="Vrij typen (uren, decimaal mag)" style="width:42px;text-align:right;font-family:var(--mono);padding:2px 3px;margin:0 2px">u
-        <button class="btn btn-xs btn-secondary" title="+1 uur" onclick="projTaakUur('${proj.code}','${t.id}',1)">+</button>
+        <button class="btn btn-xs btn-secondary" title="−1 uur" onclick="projTaakUur(${jsArg(proj.code)},${jsArg(t.id)},-1)">−</button>
+        <input type="text" inputmode="decimal" value="${t.duur_uur||0}" onchange="projTaakUurZet(${jsArg(proj.code)},${jsArg(t.id)},this.value)" onfocus="this.select()" title="Vrij typen (uren, decimaal mag)" style="width:42px;text-align:right;font-family:var(--mono);padding:2px 3px;margin:0 2px">u
+        <button class="btn btn-xs btn-secondary" title="+1 uur" onclick="projTaakUur(${jsArg(proj.code)},${jsArg(t.id)},1)">+</button>
       </td>
       <td style="white-space:nowrap;text-align:right">
-        ${t.tg_pending?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="De wijziging is nog niet in Toggl gelukt — klik om opnieuw te proberen" onclick="projTakenHerkans('${proj.code}')">⏳ ${t.tg_pending.verwijderen?'verwijderen':'status'} wacht op Toggl</button>`:''}
-        ${t.tg_task_id?'<span class="badge badge-ok" title="Zichtbaar in Toggl-project">Toggl ✓</span>':`<button class="btn btn-xs btn-secondary" title="Naar Toggl-project sturen" onclick="projTaakNaarToggl('${proj.code}','${t.id}').then(()=>renderProjectDetail(huidigProject))">→ Toggl</button>`}
-        <button class="btn btn-xs btn-secondary" title="Status wisselen" onclick="projTaakStatus('${proj.code}','${t.id}')">⟳</button>
-        <button class="btn btn-xs btn-danger" data-recht="taken:alles" title="Verwijderen" onclick="projTaakVerwijder('${proj.code}','${t.id}')">×</button>
+        ${t.tg_pending?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="De wijziging is nog niet in Toggl gelukt — klik om opnieuw te proberen" onclick="projTakenHerkans(${jsArg(proj.code)})">⏳ ${t.tg_pending.verwijderen?'verwijderen':'status'} wacht op Toggl</button>`:''}
+        ${t.tg_task_id?'<span class="badge badge-ok" title="Zichtbaar in Toggl-project">Toggl ✓</span>':`<button class="btn btn-xs btn-secondary" title="Naar Toggl-project sturen" onclick="projTaakNaarToggl(${jsArg(proj.code)},${jsArg(t.id)}).then(()=>renderProjectDetail(huidigProject))">→ Toggl</button>`}
+        <button class="btn btn-xs btn-secondary" title="Status wisselen" onclick="projTaakStatus(${jsArg(proj.code)},${jsArg(t.id)})">⟳</button>
+        <button class="btn btn-xs btn-danger" data-recht="taken:alles" title="Verwijderen" onclick="projTaakVerwijder(${jsArg(proj.code)},${jsArg(t.id)})">×</button>
       </td></tr>`;
   }).join(''):'<tr><td colspan="6" style="color:var(--text-faint);font-size:13px;padding:.5rem">Nog geen taken — gebruik ✨ AI-voorstel of + Taak.</td></tr>';
   const onbesp=arr.filter(t=>!t.tg_task_id).length;
@@ -6649,13 +6649,13 @@ function projectTakenHtml(proj){
     <hr class="divider">
     <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
       <div class="card-title" style="margin:0">Taken <span class="badge" style="background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid)">M&amp;T</span></div>
-      <button class="btn btn-gold btn-sm" onclick="aiTakenVoorstel('${proj.code}')">✨ AI-taken voorstellen</button>
-      <button class="btn btn-secondary btn-sm" onclick="projTaakTemplateKies('${proj.code}')" title="Standaard takenketen invoegen (keuken, kast, wandpaneel, maatwerk)">📋 Template</button>
-      <button class="btn btn-secondary btn-sm" onclick="nieuweProjectTaak('${proj.code}')">+ Taak</button>
-      ${arr.length?`<button class="btn btn-secondary btn-sm" onclick="takenNaarPlanning('${proj.code}')" title="Zet deze taken om in de fasen-planning (Gantt) hierboven">📅 → Planning</button>`:''}
-      ${onbesp&&arr.length?`<button class="btn btn-secondary btn-sm" onclick="projTakenSpiegelAlles('${proj.code}')">→ Alles naar Toggl (${onbesp})</button>`:''}
-      ${arr.length?`<label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" onclick="projTakenSelectAll('${proj.code}',this.checked)" title="Alles aan/uit">alles</label>
-      <button class="btn btn-danger btn-sm" onclick="projTakenVerwijderSelectie('${proj.code}')" title="Aangevinkte taken verwijderen (ook in Toggl)">🗑 Verwijder selectie</button>`:''}
+      <button class="btn btn-gold btn-sm" onclick="aiTakenVoorstel(${jsArg(proj.code)})">✨ AI-taken voorstellen</button>
+      <button class="btn btn-secondary btn-sm" onclick="projTaakTemplateKies(${jsArg(proj.code)})" title="Standaard takenketen invoegen (keuken, kast, wandpaneel, maatwerk)">📋 Template</button>
+      <button class="btn btn-secondary btn-sm" onclick="nieuweProjectTaak(${jsArg(proj.code)})">+ Taak</button>
+      ${arr.length?`<button class="btn btn-secondary btn-sm" onclick="takenNaarPlanning(${jsArg(proj.code)})" title="Zet deze taken om in de fasen-planning (Gantt) hierboven">📅 → Planning</button>`:''}
+      ${onbesp&&arr.length?`<button class="btn btn-secondary btn-sm" onclick="projTakenSpiegelAlles(${jsArg(proj.code)})">→ Alles naar Toggl (${onbesp})</button>`:''}
+      ${arr.length?`<label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" onclick="projTakenSelectAll(${jsArg(proj.code)},this.checked)" title="Alles aan/uit">alles</label>
+      <button class="btn btn-danger btn-sm" onclick="projTakenVerwijderSelectie(${jsArg(proj.code)})" title="Aangevinkte taken verwijderen (ook in Toggl)">🗑 Verwijder selectie</button>`:''}
       <span id="pt-status-${sid}" style="font-size:12px;color:var(--text-dim)"></span>
     </div>
     <table class="materiaal-lijst" id="pt-tbl-${sid}"><tbody>${rows}</tbody></table>`;
@@ -6820,7 +6820,7 @@ function projTaakTemplateKies(code){
   ov.style.cssText='position:fixed;inset:0;background:rgba(28,26,22,.45);z-index:10000;display:flex;align-items:center;justify-content:center';
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   const rows=Object.keys(_PT_TEMPLATES).map(k=>{const t=_PT_TEMPLATES[k];const u=t.taken.reduce((s,x)=>s+(x.uur||0),0);
-    return `<div class="kp-row" onclick="projTaakTemplateInvoeg('${code}','${k}')" style="padding:9px 11px;border-radius:var(--radius-sm);cursor:pointer">
+    return `<div class="kp-row" onclick="projTaakTemplateInvoeg(${jsArg(code)},${jsArg(k)})" style="padding:9px 11px;border-radius:var(--radius-sm);cursor:pointer">
       <div style="font-weight:600;font-size:13px">${esc(t.label)}</div>
       <div style="font-size:11px;color:var(--text-dim)">${t.taken.length} taken · ~${u} u, met afhankelijkheden</div></div>`;}).join('');
   ov.innerHTML=`<div style="background:var(--surface-overlay,#fff);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);width:420px;max-width:calc(100vw - 32px);max-height:80vh;display:flex;flex-direction:column;overflow:hidden">
@@ -6879,8 +6879,8 @@ function t2ProjectRijHtml(proj){
   const naam=proj.tg_project_id?((p&&p.name)||'Toggl'):'';     // nooit het ruwe id (dat staat in de popover)
   const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' ), c=_jsCode(proj.code);
   return `<div class="koppel-rij">
-    <span class="kpi-label" style="margin:0">Toggl-project:</span> ${kb(proj.tg_project_id?{status:'gekoppeld',label:naam,titel:'Gekoppeld aan Toggl-project'+(p&&p.name?' '+p.name:'')+' — klik voor details',onclick:`t2Pop(this,'${c}')`}:{status:'open',label:'Toggl',titel:'Nog geen Toggl-project — klik om er een te kiezen',onclick:`t2KiesProject('${c}')`})}
-    <span class="kpi-label" style="margin:0 0 0 .5rem">Offertenummer:</span> ${kb(proj.offertenr?{status:'gekoppeld',label:proj.offertenr,titel:'Offertenummer '+proj.offertenr+' — klik om te wijzigen',onclick:`t2OffertenummerToekennen('${c}')`}:{status:'open',label:'offertenummer',titel:'Kies de Moneybird-offerte; de projectnaam in Toggl wordt "<nummer> <naam>"',onclick:`t2OffertenummerToekennen('${c}')`})}
+    <span class="kpi-label" style="margin:0">Toggl-project:</span> ${kb(proj.tg_project_id?{status:'gekoppeld',label:naam,titel:'Gekoppeld aan Toggl-project'+(p&&p.name?' '+p.name:'')+' — klik voor details',onclick:`t2Pop(this,${jsLit(c)})`}:{status:'open',label:'Toggl',titel:'Nog geen Toggl-project — klik om er een te kiezen',onclick:`t2KiesProject(${jsLit(c)})`})}
+    <span class="kpi-label" style="margin:0 0 0 .5rem">Offertenummer:</span> ${kb(proj.offertenr?{status:'gekoppeld',label:proj.offertenr,titel:'Offertenummer '+proj.offertenr+' — klik om te wijzigen',onclick:`t2OffertenummerToekennen(${jsLit(c)})`}:{status:'open',label:'offertenummer',titel:'Kies de Moneybird-offerte; de projectnaam in Toggl wordt "<nummer> <naam>"',onclick:`t2OffertenummerToekennen(${jsLit(c)})`})}
     <span id="t2-st-${proj.code.replace(/[^A-Za-z0-9]/g,'')}"></span></div>`;
 }
 // Popover Moneybird-contact: openen, bron, wijzigen, handmatige koppeling weghalen.
@@ -6897,8 +6897,8 @@ function mbPop(el,code){
   const auto=resolveMbContact(proj), eff=proj.mb_nr||auto, bron=proj.mb_nr?'handmatig gekoppeld':'automatisch via de klantregistry';
   MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:mbContactNaam(eff)||'Moneybird'})}<span class="kb-pop-n dos-meta">${esc(bron)} · contact-id ${esc(eff)}</span></div>
     <div class="kb-pop-acties"><a class="btn btn-xs btn-secondary" href="https://moneybird.com/${getAdmin()}/contacts/${esc(eff)}" target="_blank" rel="noopener">Open in Moneybird ↗</a>
-    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();bewerkProjectMbNr('${_jsCode(code)}')">Wijzigen</button>
-    ${proj.mb_nr?`<button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();mbOntkoppel('${_jsCode(code)}')">Handmatige koppeling weghalen</button>`:''}</div>
+    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();bewerkProjectMbNr(${jsArg(_jsCode(code))})">Wijzigen</button>
+    ${proj.mb_nr?`<button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();mbOntkoppel(${jsArg(_jsCode(code))})">Handmatige koppeling weghalen</button>`:''}</div>
     ${!proj.mb_nr?'<div class="dos-meta" style="margin-top:4px">Automatische koppeling: pas de klantregistry aan om dit te wijzigen, of koppel handmatig.</div>':''}`,{titel:'Moneybird-contact'});
 }
 async function mbOntkoppel(code){
@@ -6911,9 +6911,9 @@ async function mbOntkoppel(code){
 function projMapBadge(proj,{klein=false}={}){
   if(!window.MTKoppelUI) return '';
   const m=(window._dossierMap||{})[proj.code], c=_jsCode(proj.code);
-  if(proj.map&&proj.map.itemId) return MTKoppelUI.badge({status:'gekoppeld',klein,label:'projectmap',titel:'Projectmap: '+(proj.map.pad||'')+' — klik voor details',onclick:`mapPop(this,'${c}')`});
-  if(m&&m.fout&&/Meerdere projectmappen/.test(m.fout)) return MTKoppelUI.badge({status:'open',klein,tekst:'Meerdere mappen',waarschuwing:'meerdere kandidaat-mappen',titel:'Er zijn meerdere mappen die bij dit project kunnen horen — klik voor details',onclick:`mapPop(this,'${c}')`});
-  return MTKoppelUI.badge({status:'open',klein,label:'projectmap',titel:'Projectmap nog niet gecontroleerd — klik voor details',onclick:`mapPop(this,'${c}')`});
+  if(proj.map&&proj.map.itemId) return MTKoppelUI.badge({status:'gekoppeld',klein,label:'projectmap',titel:'Projectmap: '+(proj.map.pad||'')+' — klik voor details',onclick:`mapPop(this,${jsLit(c)})`});
+  if(m&&m.fout&&/Meerdere projectmappen/.test(m.fout)) return MTKoppelUI.badge({status:'open',klein,tekst:'Meerdere mappen',waarschuwing:'meerdere kandidaat-mappen',titel:'Er zijn meerdere mappen die bij dit project kunnen horen — klik voor details',onclick:`mapPop(this,${jsLit(c)})`});
+  return MTKoppelUI.badge({status:'open',klein,label:'projectmap',titel:'Projectmap nog niet gecontroleerd — klik voor details',onclick:`mapPop(this,${jsLit(c)})`});
 }
 function mapPop(el,code){
   const proj=projVind(code); if(!proj||!window.MTKoppelUI) return;
@@ -6921,15 +6921,15 @@ function mapPop(el,code){
   if(!m.itemId){
     const dub=(window._dossierMap||{})[code], dubbel=!!(dub&&dub.fout&&/Meerdere projectmappen/.test(dub.fout));
     MTKoppelUI.popover(el,`<div class="dos-meta">${dubbel?'⚠ Er zijn meerdere mappen die bij dit project kunnen horen. Kies de juiste via "Mappen herstellen…" — er wordt niets samengevoegd of hernoemd.':'De projectmap is nog niet gecontroleerd. "Controleren" zoekt alleen (leest), en onthoudt de map als er precies één is.'}</div>
-      <div class="kb-pop-acties"><button class="btn btn-xs ${dubbel?'btn-secondary':'btn-primary'}" onclick="MTKoppelUI.sluit();mapControleer('${jc}')">Controleren</button>
-      <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();mapOpenKlantmap('${jc}')">Open klantmap ↗</button>
-      <button class="btn btn-xs ${dubbel?'btn-primary':'btn-secondary'}" onclick="MTKoppelUI.sluit();projMappenHerstel('${jc}')">Mappen herstellen…</button></div>`,{titel:dubbel?'Niet gekoppeld · meerdere mappen':'Niet gekoppeld · projectmap'});
+      <div class="kb-pop-acties"><button class="btn btn-xs ${dubbel?'btn-secondary':'btn-primary'}" onclick="MTKoppelUI.sluit();mapControleer(${jsArg(jc)})">Controleren</button>
+      <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();mapOpenKlantmap(${jsArg(jc)})">Open klantmap ↗</button>
+      <button class="btn btn-xs ${dubbel?'btn-primary':'btn-secondary'}" onclick="MTKoppelUI.sluit();projMappenHerstel(${jsArg(jc)})">Mappen herstellen…</button></div>`,{titel:dubbel?'Niet gekoppeld · meerdere mappen':'Niet gekoppeld · projectmap'});
     return;
   }
   MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:'projectmap'})}<span class="kb-pop-n dos-meta" style="overflow-wrap:anywhere">${esc(m.pad||'')}</span></div>
     <div class="kb-pop-acties">${m.webUrl?`<a class="btn btn-xs btn-secondary" href="${esc(m.webUrl)}" target="_blank" rel="noopener">Open map ↗</a>`:''}
-    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();projSectieKies('dossier');dossierLaadMap('${_jsCode(code)}')">Bestanden tonen</button>
-    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();projMappenHerstel('${_jsCode(code)}')">Mappen herstellen</button></div>`,{titel:'Projectmap'});
+    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();projSectieKies('dossier');dossierLaadMap(${jsArg(_jsCode(code))})">Bestanden tonen</button>
+    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();projMappenHerstel(${jsArg(_jsCode(code))})">Mappen herstellen</button></div>`,{titel:'Projectmap'});
 }
 // Alleen lezen: projectmap zoeken; precies één → onthouden op het project (projMap), anders melden.
 async function mapControleer(code){
@@ -6956,8 +6956,8 @@ function t2Pop(el,code){
   const proj=projVind(code); if(!proj||!window.MTKoppelUI) return;
   const p=(typeof _tgCache!=='undefined'&&_tgCache.projecten||[]).find(x=>x.id===proj.tg_project_id);
   MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:(p&&p.name)||'Toggl'})}<span class="kb-pop-n dos-meta">Toggl-id ${esc(proj.tg_project_id)}</span></div>
-    <div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();t2KiesProject('${_jsCode(code)}')">Ander Toggl-project kiezen</button>
-    <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();t2Ontkoppel('${_jsCode(code)}')">Ontkoppelen</button></div>`,{titel:'Toggl-project'});
+    <div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();t2KiesProject(${jsArg(_jsCode(code))})">Ander Toggl-project kiezen</button>
+    <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();t2Ontkoppel(${jsArg(_jsCode(code))})">Ontkoppelen</button></div>`,{titel:'Toggl-project'});
 }
 async function t2Ontkoppel(code){
   const proj=projVind(code); if(!proj||!proj.tg_project_id) return;
@@ -7199,9 +7199,9 @@ function nacalcHtml(proj,totaalInkoop,effectiveMb){
       <hr class="divider">
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
         <div class="card-title" style="margin:0">Nacalculatie</div>
-        <button class="btn btn-gold btn-sm" onclick="nacalcMaakFactuur('${proj.code}')">🧾 Maak factuur</button>
-        <button class="btn btn-sm btn-secondary" onclick="nacalcExportCsv('${proj.code}')">⬇ CSV</button>
-        <button class="btn btn-sm btn-secondary" onclick="nacalcExportPdf('${proj.code}')">🖨 PDF</button>
+        <button class="btn btn-gold btn-sm" onclick="nacalcMaakFactuur(${jsArg(proj.code)})">🧾 Maak factuur</button>
+        <button class="btn btn-sm btn-secondary" onclick="nacalcExportCsv(${jsArg(proj.code)})">⬇ CSV</button>
+        <button class="btn btn-sm btn-secondary" onclick="nacalcExportPdf(${jsArg(proj.code)})">🖨 PDF</button>
         <span style="font-size:11px;color:var(--text-faint)">Altijd als concept in Moneybird — versturen doe je zelf</span>
         <span id="nacalc-status-${sid}" style="font-size:12px;color:var(--text-dim)"></span>
       </div>
@@ -7304,7 +7304,7 @@ async function nacalcLaadOfferte(code,mbId){
     if(!over.length){
       _nacalcOfferte[code]=null;
       el.innerHTML=`Alle ${est.length} offerte(s) bij dit contact afgewezen — “Maak factuur” maakt een concept-factuur met de nacalculatieregels.
-        <button class="btn btn-xs btn-secondary" style="margin-left:6px" onclick="nacalcOfferteHerstel('${code}')">↩ herstel</button>`;
+        <button class="btn btn-xs btn-secondary" style="margin-left:6px" onclick="nacalcOfferteHerstel(${jsArg(code)})">↩ herstel</button>`;
       return;
     }
     const o=over.find(e=>String(e.id)===String(keuze.gekozen))||over[0];
@@ -7320,9 +7320,9 @@ async function nacalcLaadOfferte(code,mbId){
       marge <b style="font-family:var(--mono);color:${diff>=0?'var(--green)':'#c0392b'}">${fmt(diff)}</b>
       ${over.length>1?`<span style="color:var(--text-faint)">(${over.length} van ${est.length} offertes)</span>`:''}
       <div style="margin-top:5px;display:flex;gap:5px;align-items:center;flex-wrap:wrap">
-        ${goedgekeurd?'':`<button class="btn btn-xs btn-secondary" title="Deze offerte hoort bij dit project" onclick="nacalcOfferteGoedkeuren('${code}','${o.id}')">✓ Klopt</button>`}
-        <button class="btn btn-xs btn-danger" title="Deze offerte hoort NIET bij dit project — overslaan" onclick="nacalcOfferteAfwijzen('${code}','${o.id}')">✗ Klopt niet${over.length>1?' (toon volgende)':''}</button>
-        ${(afgewezen.size||keuze.gekozen)?`<button class="btn btn-xs btn-secondary" onclick="nacalcOfferteHerstel('${code}')">↩ herstel</button>`:''}
+        ${goedgekeurd?'':`<button class="btn btn-xs btn-secondary" title="Deze offerte hoort bij dit project" onclick="nacalcOfferteGoedkeuren(${jsArg(code)},${jsArg(o.id)})">✓ Klopt</button>`}
+        <button class="btn btn-xs btn-danger" title="Deze offerte hoort NIET bij dit project — overslaan" onclick="nacalcOfferteAfwijzen(${jsArg(code)},${jsArg(o.id)})">✗ Klopt niet${over.length>1?' (toon volgende)':''}</button>
+        ${(afgewezen.size||keuze.gekozen)?`<button class="btn btn-xs btn-secondary" onclick="nacalcOfferteHerstel(${jsArg(code)})">↩ herstel</button>`:''}
       </div>`;
   }catch(e){el.textContent='Offerte-check mislukt: '+e.message;}
 }
@@ -7441,7 +7441,7 @@ function levLink(naam){
   if(!naam) return '—';
   const match=leveranciers.find(l=>l.naam.toLowerCase()===naam.toLowerCase());
   if(!match) return naam;
-  return `<a href="#" onclick="event.preventDefault();gaNaarLeverancier('${naam.replace(/'/g,"\\'")}')" style="color:var(--green);text-decoration:none">${naam} →</a>`;
+  return `<a href="#" onclick="event.preventDefault();gaNaarLeverancier(${jsArg(naam)})" style="color:var(--green);text-decoration:none">${esc(naam)} →</a>`;
 }
 function gaNaarLeverancier(naam){
   const btn=document.querySelector(".tab-btn[onclick*=\"'instellingen'\"]");
@@ -7739,7 +7739,7 @@ function projectPlanning(proj){
           </select>
         </label>
         <input type="date" id="plan-datum-${cid}" value="${vandaag}" style="height:30px;border:1px solid var(--border,#ddd);border-radius:6px;padding:0 7px">
-        <button class="btn btn-primary" onclick="planGenereerUI('${proj.code}')">Genereer standaardplan</button>
+        <button class="btn btn-primary" onclick="planGenereerUI(${jsArg(proj.code)})">Genereer standaardplan</button>
       </div>
     </div>`;
   }
@@ -7764,13 +7764,13 @@ function projectPlanning(proj){
     const bron=fa.bronTaakId||'';
     const rowId=bron?` id="plan-row-${cid}-${bron}"`:'';
     const koppel=bron?` koppelbaar`:'';
-    const naarTaak=bron?` onclick="planNaarTaak('${proj.code}','${bron}')" title="${fa.naam} — klik: spring naar de taak"`:` title="${fa.naam}"`;
+    const naarTaak=bron?` onclick="planNaarTaak(${jsArg(proj.code)},${jsArg(bron)})" title="${fa.naam} — klik: spring naar de taak"`:` title="${fa.naam}"`;
     rows+=`<div class="plan-row"${rowId}>
       <div class="plan-rowlabel${koppel}"${naarTaak}>${bron?(window.MTKoppelUI?'<span class="kb-mini" title="Gekoppeld aan een taak" aria-label="Gekoppeld aan een taak">'+MTKoppelUI.SVG_DICHT+'</span> ':'🔗 '):''}${fa.gepind?'📌 ':''}${fa.naam}<br><span class="u">${fa.effort?fa.effort+'u · ':''}${dt}</span></div>
       <div class="plan-track" data-code="${proj.code}" data-span="${totDagen}">
         ${fa.mijlpaal
-          ? `<span class="plan-bar mijlpaal" style="left:${l}%;background:#d4a017" title="${fa.naam} — ${fa.start}" onpointerdown="planDragStart(event,'${proj.code}','${fa.id}')"></span>`
-          : `<span class="plan-bar" style="left:${l}%;width:${w}%;background:${kleur}" title="${fa.naam}: ${fa.start} → ${fa.eind} (${fa.duur} wd, ${fa.effort}u)" onpointerdown="planDragStart(event,'${proj.code}','${fa.id}')">${fa.naam}</span>`}
+          ? `<span class="plan-bar mijlpaal" style="left:${l}%;background:#d4a017" title="${fa.naam} — ${fa.start}" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})"></span>`
+          : `<span class="plan-bar" style="left:${l}%;width:${w}%;background:${kleur}" title="${fa.naam}: ${fa.start} → ${fa.eind} (${fa.duur} wd, ${fa.effort}u)" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})">${fa.naam}</span>`}
       </div>
     </div>`;
   });
@@ -7779,14 +7779,14 @@ function projectPlanning(proj){
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
     <div class="card-title" style="margin:0">📅 Projectplanning <span style="font-weight:400;font-size:12px;color:var(--text-dim,#888)">· anker: ${ankerLbl} · ${totEffort}u totaal</span></div>
     <div style="display:flex;gap:6px">
-      ${(plan.vanTaken&&projTaken(proj.code).length)?`<button class="btn btn-sm" onclick="takenNaarPlanning('${proj.code}',{herbouw:true})" title="Werk deze tijdlijn opnieuw bij vanuit de taken hieronder (na bewerken/toevoegen/verwijderen)">↻ tijdlijn bijwerken</button>`:''}
-      <button class="btn btn-sm" onclick="planNaarToggl('${proj.code}')" title="${plan.togglProjectId?'Gekoppeld aan Toggl-project '+plan.togglProjectId:'Maak een Toggl-project met een Focus-taak per fase'}">${plan.togglProjectId?'↻ sync naar Toggl':'📤 naar Toggl'}</button>
-      <button class="btn btn-sm" onclick="planAnkerWissel('${proj.code}')">↔ wissel anker</button>
-      <button class="btn btn-sm" onclick="planHerstel('${proj.code}')">↺ herstel template</button>
-      <button class="btn btn-sm" onclick="planWisUI('${proj.code}')">🗑</button>
+      ${(plan.vanTaken&&projTaken(proj.code).length)?`<button class="btn btn-sm" onclick="takenNaarPlanning(${jsArg(proj.code)},{herbouw:true})" title="Werk deze tijdlijn opnieuw bij vanuit de taken hieronder (na bewerken/toevoegen/verwijderen)">↻ tijdlijn bijwerken</button>`:''}
+      <button class="btn btn-sm" onclick="planNaarToggl(${jsArg(proj.code)})" title="${plan.togglProjectId?'Gekoppeld aan Toggl-project '+plan.togglProjectId:'Maak een Toggl-project met een Focus-taak per fase'}">${plan.togglProjectId?'↻ sync naar Toggl':'📤 naar Toggl'}</button>
+      <button class="btn btn-sm" onclick="planAnkerWissel(${jsArg(proj.code)})">↔ wissel anker</button>
+      <button class="btn btn-sm" onclick="planHerstel(${jsArg(proj.code)})">↺ herstel template</button>
+      <button class="btn btn-sm" onclick="planWisUI(${jsArg(proj.code)})">🗑</button>
     </div>
   </div>
-  ${waarsch?`<div class="plan-banner">⚠️ Besteldatum overschreden: <b>Inkoop</b> stond op ${waarsch.besteldatum} (${waarsch.teLaatWerkdagen} werkdagen geleden). <button class="btn btn-sm" onclick="planHerplanVanafVandaag('${proj.code}')">herplan vanaf vandaag</button></div>`:''}
+  ${waarsch?`<div class="plan-banner">⚠️ Besteldatum overschreden: <b>Inkoop</b> stond op ${waarsch.besteldatum} (${waarsch.teLaatWerkdagen} werkdagen geleden). <button class="btn btn-sm" onclick="planHerplanVanafVandaag(${jsArg(proj.code)})">herplan vanaf vandaag</button></div>`:''}
   <div class="plan-gantt">
     <div class="plan-axis">${ticks}</div>
     ${rows}
@@ -7875,8 +7875,8 @@ function planOpenEditor(code,faseId){
       <div><label>Startdatum</label><input id="pe-start" type="date" value="${fa.start}"></div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" data-recht="projecten:wijzigen" onclick="planEditorOpslaan('${code}','${faseId}')">Opslaan</button>
-      ${fa.gepind?`<button class="btn btn-sm" data-recht="projecten:wijzigen" onclick="planFaseUnpin('${code}','${faseId}')">📌 losmaken</button>`:''}
+      <button class="btn btn-primary btn-sm" data-recht="projecten:wijzigen" onclick="planEditorOpslaan(${jsArg(code)},${jsArg(faseId)})">Opslaan</button>
+      ${fa.gepind?`<button class="btn btn-sm" data-recht="projecten:wijzigen" onclick="planFaseUnpin(${jsArg(code)},${jsArg(faseId)})">📌 losmaken</button>`:''}
       <button class="btn btn-sm" onclick="document.getElementById('plan-editor-${cid}').innerHTML=''">Sluiten</button>
     </div>
   </div>`;
@@ -7957,8 +7957,8 @@ function projectTijdlijn(proj){
   const sidD=proj.code.replace(/[^A-Za-z0-9]/g,'');
   const dossierKop=`<div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--text-dim);margin-bottom:0.4rem">
       <span title="Telling van de koppelingen in het nieuwe model tegen de bestaande mail-koppelingen (moet gelijk zijn)">✉ ${dos.actief.length} mail${dos.actief.length===1?'':'s'}${dos.ontkoppeld?` · ${dos.ontkoppeld} ontkoppeld (bewaard)`:''}${dos.klopt?'':' · <b style="color:#c0392b">⚠ telling klopt niet — meld dit</b>'}</span>
-      <button class="btn btn-xs btn-secondary" onclick="dossierLaadMap('${_jsCode(proj.code)}')" title="Alleen lezen: toont de bestanden uit de projectmap in de tijdlijn">🗂 Projectmap ${mapInfo?'verversen':'tonen'}</button>
-      <button class="btn btn-xs btn-secondary" onclick="projMappenHerstel('${_jsCode(proj.code)}')" title="Controleert eerst wat ontbreekt (en of er dubbele projectmappen zijn); maakt pas na bevestiging ontbrekende mappen aan. Hernoemt of verplaatst nooit iets.">🗂 Mappen herstellen</button>
+      <button class="btn btn-xs btn-secondary" onclick="dossierLaadMap(${jsArg(_jsCode(proj.code))})" title="Alleen lezen: toont de bestanden uit de projectmap in de tijdlijn">🗂 Projectmap ${mapInfo?'verversen':'tonen'}</button>
+      <button class="btn btn-xs btn-secondary" onclick="projMappenHerstel(${jsArg(_jsCode(proj.code))})" title="Controleert eerst wat ontbreekt (en of er dubbele projectmappen zijn); maakt pas na bevestiging ontbrekende mappen aan. Hernoemt of verplaatst nooit iets.">🗂 Mappen herstellen</button>
       <span id="dossier-map-st-${sidD}">${mapInfo?(mapInfo.fout?`<span style="color:#c0392b">${esc(mapInfo.fout)}</span>`:(mapInfo.pad?`${mapInfo.bestanden.length} bestanden · ${esc(mapInfo.pad)}`:'')):''}</span>
     </div>`;
   if(!events.length) return `<hr class="divider"><div class="card-title" style="margin-bottom:0.5rem">Projectdossier</div>${dossierKop}<p style="color:var(--text-faint);font-size:13px">Nog niets in het dossier.</p>`;
@@ -8075,7 +8075,7 @@ function verwerNCR(files, projectCode){
             return sortA?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va));
           });
           const thStyle='cursor:pointer;user-select:none;white-space:nowrap';
-          const th=(k,label,align='left')=>`<th style="text-align:${align};${thStyle}" onclick="ncrSorteer('${safeId}','${k}')">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
+          const th=(k,label,align='left')=>`<th style="text-align:${align};${thStyle}" onclick="ncrSorteer(${jsArg(safeId)},${jsArg(k)})">${label} ${sortK===k?(sortA?'↑':'↓'):'↕'}</th>`;
           return`<table class="materiaal-lijst" id="ncr-tbl-${safeId}">
             <thead><tr>
               ${th('materiaal','Materiaal')}
@@ -8110,7 +8110,7 @@ function verwerNCR(files, projectCode){
                 <td style="text-align:right">
                   <input type="number" id="${safeMatId}_breuk" min="0" value="0" placeholder="0"
                     style="width:50px;font-family:var(--mono);text-align:right;padding:3px 5px;font-size:12px"
-                    oninput="updateNcrTotaal('${safeMatId}',${r.aantalPlaten})">
+                    oninput="updateNcrTotaal(${jsArg(safeMatId)},${r.aantalPlaten})">
                 </td>
                 <td style="text-align:right;font-family:var(--mono);font-weight:600" id="${safeMatId}_totaal">${r.aantalPlaten}</td>
                 <td style="font-size:11px">
@@ -8129,10 +8129,10 @@ function verwerNCR(files, projectCode){
                 <td style="font-size:12px">
                   <input type="text" value="${lev}" placeholder="Leverancier"
                     style="width:110px;padding:3px 6px;font-size:11px"
-                    onchange="updateNcrLeverancier('${safeMatId}',this.value)">
+                    onchange="updateNcrLeverancier(${jsArg(safeMatId)},this.value)">
                 </td>
                 <td style="text-align:center">
-                  <button onclick="if(confirm('Regel verwijderen?'))document.getElementById('${safeMatId}_row').remove()" style="width:24px;height:24px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;color:var(--text-faint);font-size:14px;line-height:1;transition:all 0.15s" onmouseenter="this.style.background='var(--red-light)';this.style.color='var(--red)'" onmouseleave="this.style.background='transparent';this.style.color='var(--text-faint)'">×</button>
+                  <button onclick="if(confirm('Regel verwijderen?'))document.getElementById(${jsArg(safeMatId+'_row')}).remove()" style="width:24px;height:24px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;color:var(--text-faint);font-size:14px;line-height:1;transition:all 0.15s" onmouseenter="this.style.background='var(--red-light)';this.style.color='var(--red)'" onmouseleave="this.style.background='transparent';this.style.color='var(--text-faint)'">×</button>
                 </td>
               </tr>`;
             }).join('')}</tbody>
@@ -8150,7 +8150,7 @@ function verwerNCR(files, projectCode){
             </div>
             <div id="ncr-tbl-wrap-${safeId}">${renderNcrTabel(resultaten,'materiaal',true)}</div>
             <div style="margin-top:1rem;display:flex;gap:8px;align-items:center">
-              <button class="btn btn-primary btn-sm" onclick="ncrNaarBestellijst(window._ncrData_${safeId},'${projectCode}')">
+              <button class="btn btn-primary btn-sm" onclick="ncrNaarBestellijst(window._ncrData_${safeId},${jsArg(projectCode)})">
                 📋 Zet op bestellijst
               </button>
               <span style="font-size:11px;color:var(--text-faint)">Klik kolomkop om te sorteren · × om regel te verwijderen</span>
@@ -8414,7 +8414,7 @@ function verwerKostenCSV(file, projectCode){
               <td style="text-align:right">
                 <input type="number" id="${artSafe}_extra" min="0" value="0" placeholder="0"
                   style="width:50px;font-family:var(--mono);text-align:right;padding:3px 5px;font-size:12px"
-                  oninput="updateCsvTotaal('${artSafe}',${item.hoeveelheid})">
+                  oninput="updateCsvTotaal(${jsArg(artSafe)},${item.hoeveelheid})">
               </td>
               <td style="text-align:right;font-family:var(--mono);font-weight:600" id="${artSafe}_totaal">${item.hoeveelheid.toFixed(0)}</td>
               <td>
@@ -8427,11 +8427,11 @@ function verwerKostenCSV(file, projectCode){
               <td style="text-align:right">
                 <input type="number" step="0.01" placeholder="prijs" value="${item.werkelijkePrijs}"
                   style="width:70px;font-family:var(--mono);text-align:right;padding:3px 6px;font-size:12px"
-                  onchange="slaWerkelijkePrijsOp('${projectCode}','${item.artikel}',this.value)">
+                  onchange="slaWerkelijkePrijsOp(${jsArg(projectCode)},${jsArg(item.artikel)},this.value)">
               </td>
               <td style="text-align:center">
                 <input type="checkbox" ${(!heeftVoorraad)?'checked':''} style="width:auto;cursor:pointer"
-                  onchange="csvRegelNaarBestellijst(this,'${item.artikel}','${item.omschrijving}','${naam}','${item.hoeveelheid}','${item.eenheid}','${projectCode}')">
+                  onchange="csvRegelNaarBestellijst(this,${jsArg(item.artikel)},${jsArg(item.omschrijving)},${jsArg(naam)},${jsArg(item.hoeveelheid)},${jsArg(item.eenheid)},${jsArg(projectCode)})">
               </td>
               <td style="text-align:center">
                 <button onclick="if(confirm('Regel verwijderen?'))this.closest('tr').remove()" style="width:24px;height:24px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;color:var(--text-faint);font-size:14px;line-height:1" onmouseenter="this.style.background='var(--red-light)';this.style.color='var(--red)'" onmouseleave="this.style.background='transparent';this.style.color='var(--text-faint)'">×</button>
@@ -8446,7 +8446,7 @@ function verwerKostenCSV(file, projectCode){
     resultaat.innerHTML=`
       <div style="margin-bottom:0.75rem;display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:11px;color:var(--text-faint)">Vink aan wat besteld moet worden → gaat naar de bestellijst. Werkelijke prijzen worden opgeslagen voor terugkoppeling.</div>
-        <button class="btn btn-secondary btn-sm" onclick="exporteerPrijsvergelijking('${projectCode}')">📋 Export prijsvergelijking</button>
+        <button class="btn btn-secondary btn-sm" onclick="exporteerPrijsvergelijking(${jsArg(projectCode)})">📋 Export prijsvergelijking</button>
       </div>
       ${renderSectie(secties.platen,'platen','🪵','m²')}
       <hr class="divider">
@@ -9019,8 +9019,8 @@ function _cfRenderVastenFilter(){
     if(aan) totMnd+=perMnd;
     const cad=v.cadans==='jaarlijks'?'/jaar':'/mnd';
     const naam=(v.leverancier||'?')+(v.omschrijving?' — '+v.omschrijving:'');
-    const safeKey=key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return `<label class="cf-vast-row${aan?'':' uit'}"><input type="checkbox" ${aan?'checked':''} onchange="cfToggleVasteLast(this,'${safeKey}')"><span class="cf-vast-naam">${naam}</span><span class="cf-vast-bedrag">${cfFmt(v.bedrag||0)}${cad}</span></label>`;
+    const safeKey=key;   // ruw: jsArg in de handler
+    return `<label class="cf-vast-row${aan?'':' uit'}"><input type="checkbox" ${aan?'checked':''} onchange="cfToggleVasteLast(this,${jsArg(safeKey)})"><span class="cf-vast-naam">${naam}</span><span class="cf-vast-bedrag">${cfFmt(v.bedrag||0)}${cad}</span></label>`;
   }).join('');
   host.innerHTML=rows+`<div class="cf-vast-totaal"><span>Meegenomen (≈ per maand)</span><span>${cfFmt(Math.round(totMnd))}</span></div>`;
 }
@@ -9380,7 +9380,7 @@ function renderKlantenGrid(klanten){
         const naam=k.company_name||`${k.firstname||''} ${k.lastname||''}`.trim();
         const kleur=kleuren[naam.charCodeAt(0)%5];
         const initialen=naam.split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
-        return`<tr style="cursor:pointer" onclick="klantKlik('${k.id}')">
+        return`<tr style="cursor:pointer" onclick="klantKlik(${jsArg(k.id)})">
           <td><div style="display:flex;align-items:center;gap:10px">
             <div style="width:32px;height:32px;border-radius:50%;background:${kleur}22;border:2px solid ${kleur}55;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${kleur};flex-shrink:0">${initialen}</div>
             <div><strong style="font-size:13px">${naam}</strong>${k.customer_id?`<div style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">nr. ${k.customer_id}</div>`:''}</div>
@@ -9404,7 +9404,7 @@ function renderKlantenGrid(klanten){
       // Exacte selectie (klantcode of zelfde Moneybird-contact) i.p.v. eerste-woord-in-de-naam.
       const kCode=klantCodeVoorMb(k.id);
       const projVanKlant=kCode?klantProjecten(kCode):PROJECT_CODES.filter(p=>String(p.mb_contact_id||'')===String(k.id));
-      return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);cursor:pointer;transition:all 0.15s" onclick="klantKlik('${k.id}')" onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-lg)'" onmouseleave="this.style.transform='';this.style.boxShadow='var(--shadow)'">
+      return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);cursor:pointer;transition:all 0.15s" onclick="klantKlik(${jsArg(k.id)})" onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-lg)'" onmouseleave="this.style.transform='';this.style.boxShadow='var(--shadow)'">
         <div style="height:6px;background:${kleur}"></div>
         <div style="padding:1.25rem">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
@@ -9651,7 +9651,7 @@ function renderControleDetail(f){
       <div>
         <div style="font-size:16px;font-weight:600;margin-bottom:4px">${f.contact?.company_name||'—'}</div>
         <div style="font-size:12px;color:var(--text-dim)">${f.reference||'Geen referentie'} · ${datum}</div>
-        ${isDup?`<span class="badge badge-danger" style="margin-top:4px">Mogelijk duplicaat</span> <button class="btn btn-xs btn-secondary" onclick="markeerGeenDuplicaat('${f.id}')">Geen dup</button>`:''}
+        ${isDup?`<span class="badge badge-danger" style="margin-top:4px">Mogelijk duplicaat</span> <button class="btn btn-xs btn-secondary" onclick="markeerGeenDuplicaat(${jsArg(f.id)})">Geen dup</button>`:''}
         ${isVL?`<span class="badge badge-purple" style="margin-top:4px">📦 Voorraad-lev</span>`:''}
         <span class="badge ${f.state==='paid'?'badge-ok':f.state==='open'?'badge-info':'badge-warn'}" style="margin-top:4px">${f.state==='paid'?'✓ Betaald':f.state==='open'?'Open':'Wacht'}</span>
       </div>
@@ -9662,7 +9662,7 @@ function renderControleDetail(f){
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <a href="https://moneybird.com/${getAdmin()}/documents/${f.id}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none">📎 Openen in Moneybird →</a>
-      ${f.state!=='paid'?`<button class="btn btn-danger btn-xs" data-recht="mb_verwijderen" onclick="verwijderControleFactuur('${f.id}')">🗑 Verwijderen</button>`:''}
+      ${f.state!=='paid'?`<button class="btn btn-danger btn-xs" data-recht="mb_verwijderen" onclick="verwijderControleFactuur(${jsArg(f.id)})">🗑 Verwijderen</button>`:''}
     </div>
     <hr class="divider">
     <div class="grid2" style="margin-bottom:0.75rem">
@@ -9877,7 +9877,7 @@ function renderHistory(filter=''){
   const list=document.getElementById('history-list');
   if(!filtered.length){list.innerHTML='<p style="color:var(--text-faint)">Geen facturen gevonden.</p>';return;}
   list.innerHTML=filtered.map(h=>`
-    <div class="geschiedenis-item" onclick="openFactuurInControle('${h.id}')" style="cursor:pointer;border-radius:8px;padding:0.875rem 0.75rem;margin:0 -0.75rem;transition:background 0.12s" onmouseenter="this.style.background='var(--gold-light)'" onmouseleave="this.style.background=''">
+    <div class="geschiedenis-item" onclick="openFactuurInControle(${jsArg(h.id)})" style="cursor:pointer;border-radius:8px;padding:0.875rem 0.75rem;margin:0 -0.75rem;transition:background 0.12s" onmouseenter="this.style.background='var(--gold-light)'" onmouseleave="this.style.background=''">
       <span class="badge badge-ok">✓</span>
       <strong>${h.contact}</strong>
       ${h.project?projKortHtml(h.project):'<span class="code">—</span>'}
@@ -10495,12 +10495,11 @@ function _oplConceptenRender(){
     const d = _oplConcepten[code] || {};
     const dt = d.ts ? new Date(d.ts).toLocaleString('nl-NL',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
     const nFoto = (d.fotosVoor||[]).length + (d.fotosNa||[]).length;
-    const esc = _escH(code).replace(/'/g,'&#39;');
     return `<div style="padding:8px 10px;border:1px solid var(--n-200);border-radius:8px;margin-bottom:6px">
       <div style="font-weight:600;color:var(--n-900)">${_escH(code)}</div>
       <div style="font-size:12px;color:var(--text-dim)">${dt} · ${nFoto} foto('s) op SP · ${_escH(d.door||'')}</div>
       <div id="opl-concept-edit-${_escH(code)}" style="margin-top:5px">
-        <button class="btn btn-secondary btn-sm" onclick="oplConceptRelinkForm('${esc}')">✎ Project corrigeren</button>
+        <button class="btn btn-secondary btn-sm" onclick="oplConceptRelinkForm(${jsArg(code)})">✎ Project corrigeren</button>
       </div>
     </div>`;
   }).join('');
@@ -10515,7 +10514,7 @@ function oplConceptRelinkForm(code){
     <input class="zoek-input" list="opl-concept-codes" id="opl-concept-target-${_escH(code)}"
       placeholder="Nieuwe projectcode…" style="flex:1;min-width:120px;margin:0">
     <datalist id="opl-concept-codes">${opts.map(c=>`<option value="${_escH(c)}">`).join('')}</datalist>
-    <button class="btn btn-gold btn-sm" onclick="oplConceptRelink('${_escH(code).replace(/'/g,'&#39;')}')">Opslaan</button>
+    <button class="btn btn-gold btn-sm" onclick="oplConceptRelink(${jsArg(code)})">Opslaan</button>
     <button class="btn btn-secondary btn-sm" onclick="_oplConceptenRender()">Annuleer</button>
   </div>
   <div style="font-size:11px;color:var(--text-faint);margin-top:3px">Exacte code — gelijknamige projecten blijven apart.</div>`;
@@ -10584,7 +10583,7 @@ function _oplRenderLijst(){
       nOpl ? `<span class="opl-pill" style="background:var(--green-50);color:var(--green)">${nOpl} oplevering${nOpl>1?'en':''}</span>` : '',
       nOpn ? `<span class="opl-pill" style="background:var(--info-50);color:var(--info)">${nOpn} opname${nOpn>1?'s':''}</span>` : ''
     ].join(' ');
-    return `<div onclick="oplSelectProject('${_escH(g.code)}')" style="cursor:pointer;padding:8px 10px;border:1px solid var(--n-200);border-radius:8px;margin-bottom:6px;${actief}">
+    return `<div onclick="oplSelectProject(${jsArg(g.code)})" style="cursor:pointer;padding:8px 10px;border:1px solid var(--n-200);border-radius:8px;margin-bottom:6px;${actief}">
       <div style="font-weight:600;color:var(--n-900)">${_escH(_projVoorCode(g.code)?projNaamVol(_projVoorCode(g.code)):(g.naam||'Project'))}</div>
       <div style="font-size:12px;color:var(--text-dim);margin:1px 0 4px">${_escH(projLabelCode(_projVoorCode(g.code)))}</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap">${badges}</div>
@@ -10616,8 +10615,8 @@ function oplSelectProject(code){
         <div style="font-size:13px;color:var(--n-800)">${_escH(samenvatting)}</div>
         <div style="font-size:11px;color:var(--text-faint)">${_escH(e.doorNaam||e.door||'')}</div>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="oplShowRapport('${_escH(e.id)}')">Bekijk</button>
-      ${e.type==='oplevering' ? `<button class="btn btn-gold btn-sm" onclick="oplPdfOpen('${_escH(e.id)}')" title="Rapport als PDF">⬇ PDF</button>` : ''}
+      <button class="btn btn-secondary btn-sm" onclick="oplShowRapport(${jsArg(e.id)})">Bekijk</button>
+      ${e.type==='oplevering' ? `<button class="btn btn-gold btn-sm" onclick="oplPdfOpen(${jsArg(e.id)})" title="Rapport als PDF">⬇ PDF</button>` : ''}
     </div>`;
   }).join('');
   el.innerHTML = `<div class="card">
@@ -11823,7 +11822,7 @@ function admRenderVerlofLijst(){
     <span style="min-width:70px;font-size:12px;font-weight:600">${MT_TEAM.find(m=>m.slug===v.persoon)?.naam||v.persoon}</span>
     <span style="flex:1;font-size:12px">${v.van} → ${v.tm} (${v.dagen}d)</span>
     <span style="font-size:11px;color:var(--text-faint)">${v.opm||''}</span>
-    <button class="adm-del-btn" onclick="admVerwijderVerlof('${v.id}')" title="Verwijderen">✕</button>
+    <button class="adm-del-btn" onclick="admVerwijderVerlof(${jsArg(v.id)})" title="Verwijderen">✕</button>
   </div>`).join('');
 }
 async function admVerwijderVerlof(id){
@@ -11883,7 +11882,7 @@ function admRenderVrijdagenLijst(){
     <span style="min-width:100px;font-size:12px;color:var(--text-faint)">${v.datum}</span>
     <span style="flex:1;font-size:13px;font-weight:500">${v.naam}</span>
     <span style="font-size:11px;padding:2px 8px;border-radius:8px;background:${v.type==='verplicht'?'#fde8e8':'#fef3cd'};color:${v.type==='verplicht'?'#c0392b':'#856404'}">${v.type}</span>
-    <button class="adm-del-btn" onclick="admVerwijderVrijeDag('${v.id}')" title="Verwijderen">✕</button>
+    <button class="adm-del-btn" onclick="admVerwijderVrijeDag(${jsArg(v.id)})" title="Verwijderen">✕</button>
   </div>`).join('');
 }
 async function admVerwijderVrijeDag(id){
@@ -12037,7 +12036,7 @@ async function agPlanRender(){
       <div style="font-weight:600;font-size:12px">${weekdagnamen[di]} ${agFmt(dag)}</div>
     </div>`;
     html+=`<div class="ag-daycol" id="agplan-dag-${ymd}" style="height:${totalH}px;position:relative;box-sizing:border-box"
-      onclick="agPlanDagKlik(event,'${ymd}')" data-datum="${ymd}">`;
+      onclick="agPlanDagKlik(event,${jsArg(ymd)})" data-datum="${ymd}">`;
 
     // Verplichte vrije dag overlay
     if(vd&&vd.type==='verplicht'){
@@ -12058,9 +12057,9 @@ async function agPlanRender(){
       const isVs=blok.status==='voorstel';
       html+=`<div class="ag-blok${isVs?' pv-voorstel':''}" data-planid="${esc(blok.id)}"
         style="top:${topPx}px;height:${Math.max(hPx,18)}px;left:4px;right:4px;background:${kleur};z-index:6;cursor:pointer"
-        onclick="event.stopPropagation();agPlanBlokMenu(event,'${esc(blok.id)}')"
+        onclick="event.stopPropagation();agPlanBlokMenu(event,${jsArg(blok.id)})"
         ${isVs?`title="Voorstel van ${esc((blok.voorstel&&blok.voorstel.doorNaam)||'')} — nog niet goedgekeurd"`:''}
-        draggable="${isVs?'false':'true'}" ondragstart="agPlanDragStart(event,'${esc(blok.id)}')"
+        draggable="${isVs?'false':'true'}" ondragstart="agPlanDragStart(event,${jsArg(blok.id)})"
         ondragend="agPlanDragEnd(event)">
         ${isVs?'<span class="pv-label">Voorstel</span> ':''}<b>${esc(blok.taak||blok.project_code||'?')}</b><br>
         <span style="font-size:9px;opacity:.85">${esc(lid?lid.naam:blok.persoon)} · ${esc(blok.start||'')} ${blok.duurMin?'('+Math.round(blok.duurMin/60*10)/10+'u)':''}</span>
@@ -12084,7 +12083,7 @@ async function agPlanRender(){
     html+=`<div style="position:absolute;inset:0;z-index:3;pointer-events:none" id="agplan-drop-${ymd}"
       ondragover="event.preventDefault();document.getElementById('agplan-drop-${ymd}').style.background='rgba(184,150,46,0.08)'"
       ondragleave="document.getElementById('agplan-drop-${ymd}').style.background=''"
-      ondrop="agPlanDrop(event,'${ymd}')" style="pointer-events:auto"></div>`;
+      ondrop="agPlanDrop(event,${jsArg(ymd)})" style="pointer-events:auto"></div>`;
 
     html+='</div></div>';
   }
@@ -12152,7 +12151,7 @@ function agPlanCapBalk(dagen,blokken,verlof,vrijdagen){
     const kleur=pct<0.9?'#2A4A38':pct<=1?'#B8962E':'#c0392b';
     const breedte=Math.min(pct*100,100).toFixed(0);
     html+=`<div style="cursor:pointer;min-width:120px;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;padding:6px 10px"
-      onclick="agTogglPersFilter('${m.slug}','${m.email}')">
+      onclick="agTogglPersFilter(${jsArg(m.slug)},${jsArg(m.email)})">
       <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:600;margin-bottom:4px">
         <span>${m.naam}</span>
         <span style="color:${kleur}">${gepland.toFixed(1)}u/${capaciteit}u${pct>1?' ⚠ +'+((gepland-capaciteit).toFixed(1))+'u':''}</span>
@@ -12644,7 +12643,7 @@ function geldProjectRijHtml(proj){
   const it=_geldProgCache.items&&_geldProgCache.items['p:'+proj.project_id];
   const tekst=!_geldProgCache.items?'…':it?(it.aan?`✓ gaat zeker door — ${it.termijnen.length} termijn(en)`:'staat uit'):'nog niet aangevinkt';
   return `<div class="koppel-rij" id="geld-proj-rij"><span class="kpi-label" style="margin:0">Prognose (geld):</span> <span>${esc(tekst)}</span>
-    ${MTRol.magGeld('wijzigen')?`<button class="btn btn-xs btn-secondary" onclick="geldPrognoseOpen('${_jsCode(proj.code)}')">${it?'Bekijken':'Gaat zeker door…'}</button>`:''}</div>`;
+    ${MTRol.magGeld('wijzigen')?`<button class="btn btn-xs btn-secondary" onclick="geldPrognoseOpen(${jsArg(_jsCode(proj.code))})">${it?'Bekijken':'Gaat zeker door…'}</button>`:''}</div>`;
 }
 // ── Wat is er verbeterd (data/updates.json, gewone taal, nieuwste eerst) ──
 // Beheer ziet alle versies in de kaart; iedereen krijgt eenmalig een "nieuw"-stipje bij het versielabel
@@ -12782,7 +12781,7 @@ function pvTeken(){
   if(badge){ badge.textContent=open.length||''; badge.style.display=open.length?'':'none'; }
   if(!el) return;
   el.innerHTML=mijn.map(m=>`<div class="pv-melding ${m.soort==='goedgekeurd'?'goed':'af'}" role="status">${m.soort==='goedgekeurd'?'✓ Je voorstel is goedgekeurd':'✗ Je voorstel is afgewezen'}: <b>${esc(m.blok.taak||m.blok.project_code||'planblok')}</b> op ${esc(m.blok.datum)} ${esc(m.blok.start||'')}${m.door?' door '+esc(m.door):''}${m.reden?' — “'+esc(m.reden)+'”':''}
-      <button class="btn btn-xs btn-secondary" onclick="MTPlanVoorstel.markeerGezien('${esc(m.sleutel)}');pvTeken()">OK</button></div>`).join('')
+      <button class="btn btn-xs btn-secondary" onclick="MTPlanVoorstel.markeerGezien(${jsArg(m.sleutel)});pvTeken()">OK</button></div>`).join('')
     +(open.length?`<div class="pv-melding open">${open.length} planvoorstel${open.length>1?'len':''} wacht${open.length>1?'en':''} op goedkeuring — klik op een gestippeld blok in de planning.</div>`:'');
 }
 const _BH_FOUT={'alleen-eigenaar':'Alleen de eigenaar kan dit wijzigen.','alleen-eigenaar-mag-eigenaar':'Alleen de eigenaar kan iemand eigenaar maken of een eigenaar wijzigen.','niet-jezelf':'Je eigen account wijzig je hier niet.',
@@ -12819,13 +12818,13 @@ function beheerTeken(){
     const vast=u.beschermd||!u.oid||u.oid===g.ik||(!ikEig&&u.role==='eigenaar'), uit=u.active===false;
     const vastTxt=u.vast==='oid'?' <span class="dos-meta">· vast</span>':u.vast==='email'?` <span class="dos-meta">· vaste eigenaar (via e-mail)${u.oid?' — oid: '+esc(u.oid):''}</span>`:'';
     return `<tr class="${uit?'bh-uit':''}"><td>${esc(u.naam||'—')}${u.oid===g.ik?' <span class="dos-meta">(jij)</span>':''}</td><td class="bh-opt">${esc(u.email||'')}</td>
-      <td>${vast?esc(u.rolNaam||u.role)+vastTxt:`<select aria-label="Rol van ${esc(u.naam||u.email||'')}" onchange="beheerRol('${esc(u.oid)}',this.value,this)">${rolOpt(u.role)}</select>`}</td>
+      <td>${vast?esc(u.rolNaam||u.role)+vastTxt:`<select aria-label="Rol van ${esc(u.naam||u.email||'')}" onchange="beheerRol(${jsArg(u.oid)},this.value,this)">${rolOpt(u.role)}</select>`}</td>
       <td>${uit?'gedeactiveerd':'actief'}</td><td class="bh-opt">${_bhDatum(u.lastSeen)}</td>
-      <td>${vast?'':`<button class="btn btn-xs ${uit?'btn-secondary':'btn-danger'}" onclick="beheerActief('${esc(u.oid)}',${uit})">${uit?'Reactiveren':'Deactiveren'}</button>`}</td></tr>`;
+      <td>${vast?'':`<button class="btn btn-xs ${uit?'btn-secondary':'btn-danger'}" onclick="beheerActief(${jsArg(u.oid)},${uit})">${uit?'Reactiveren':'Deactiveren'}</button>`}</td></tr>`;
   }).join('');
-  const inv=(g.uitnodigingen||[]).map(i=>`<tr><td>${esc(i.naam||'—')}</td><td>${esc(i.email)}</td><td>${esc((g.rollen.find(r=>r.id===i.role)||{}).naam||i.role)}</td><td class="bh-opt">verloopt ${_bhDatum(i.verloopt)}</td><td>${!ikEig&&i.role==='eigenaar'?'':`<button class="btn btn-xs btn-secondary" onclick="beheerIntrekken('${esc(i.email)}')">Intrekken</button>`}</td></tr>`).join('');
+  const inv=(g.uitnodigingen||[]).map(i=>`<tr><td>${esc(i.naam||'—')}</td><td>${esc(i.email)}</td><td>${esc((g.rollen.find(r=>r.id===i.role)||{}).naam||i.role)}</td><td class="bh-opt">verloopt ${_bhDatum(i.verloopt)}</td><td>${!ikEig&&i.role==='eigenaar'?'':`<button class="btn btn-xs btn-secondary" onclick="beheerIntrekken(${jsArg(i.email)})">Intrekken</button>`}</td></tr>`).join('');
   const aanv=(g.aanvragen||[]).map(a=>`<tr><td>${esc(a.naam||'—')}</td><td>${esc(a.email||'')}</td><td class="bh-opt">${esc(a.bericht||'')}</td><td class="bh-opt">${_bhDatum(a.ts)}</td>
-    <td><select id="bh-aanv-${esc(a.oid)}" aria-label="Rol voor ${esc(a.naam||'')}">${rolOpt('werkplaats')}</select> <button class="btn btn-xs btn-primary" onclick="beheerAanvraag('${esc(a.oid)}',false)">Toekennen</button> <button class="btn btn-xs btn-secondary" onclick="beheerAanvraag('${esc(a.oid)}',true)">Weigeren</button></td></tr>`).join('');
+    <td><select id="bh-aanv-${esc(a.oid)}" aria-label="Rol voor ${esc(a.naam||'')}">${rolOpt('werkplaats')}</select> <button class="btn btn-xs btn-primary" onclick="beheerAanvraag(${jsArg(a.oid)},false)">Toekennen</button> <button class="btn btn-xs btn-secondary" onclick="beheerAanvraag(${jsArg(a.oid)},true)">Weigeren</button></td></tr>`).join('');
   const AUDIT={'uitgenodigd':'uitgenodigd','uitnodiging-gekoppeld':'uitnodiging gebruikt (eerste login)','uitnodiging-ingetrokken':'uitnodiging ingetrokken','rol-gewijzigd':'rol gewijzigd',
     'gedeactiveerd':'gedeactiveerd','gereactiveerd':'gereactiveerd','toegang-aangevraagd':'toegang aangevraagd','aanvraag-toegekend':'aanvraag toegekend','aanvraag-geweigerd':'aanvraag geweigerd',
     'eigenaar-gekoppeld':'eigenaar gekoppeld','eigenaar-vastgelegd':'eigenaar vastgelegd',
@@ -14212,13 +14211,13 @@ function activiteitOpen(force){
   }
   window.calcProjPop=function(el,key){
     const o=getOfferte(key); if(!window.MTKoppelUI) return;
-    const kies=`MTKoppelUI.sluit();var s=document.getElementById('calc-projsel-${key}');if(s)s.focus()`;
+    const kies=`MTKoppelUI.sluit();var s=document.getElementById(${jsLit('calc-projsel-'+key)});if(s)s.focus()`;
     MTKoppelUI.popover(el,o.project_code
       ?`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:projKort(o.project_code)})}</div>
-        <div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();openProject('${o.project_code}')">Open project</button>
-        <button class="btn btn-xs btn-secondary" onclick="${kies}">Ander project kiezen</button>
-        <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();calcKoppelProject('${key}','')">Ontkoppelen</button></div>`
-      :`<div class="dos-meta">Deze offerte hangt nog niet aan een project.</div><div class="kb-pop-acties"><button class="btn btn-xs btn-primary" onclick="${kies}">Kies een project</button></div>`,
+        <div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();openProject(${jsArg(o.project_code)})">Open project</button>
+        <button class="btn btn-xs btn-secondary" onclick="${esc(kies)}">Ander project kiezen</button>
+        <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();calcKoppelProject(${jsArg(key)},'')">Ontkoppelen</button></div>`
+      :`<div class="dos-meta">Deze offerte hangt nog niet aan een project.</div><div class="kb-pop-acties"><button class="btn btn-xs btn-primary" onclick="${esc(kies)}">Kies een project</button></div>`,
       {titel:o.project_code?'Gekoppeld · '+o.project_code:'Niet gekoppeld · project'});
   };
   window.calcKoppelProject=function(key,code){const o=getOfferte(key);o.project_code=code||null;saveCalc('off',{key:key});renderOfferteCalc(key);};
@@ -15193,27 +15192,27 @@ function activiteitOpen(force){
     const r=mRow(m);
     return `<tr>
       <td><div style="display:flex;gap:4px;align-items:center">
-        <input id="calc-mo-${m.id}" class="calc-inp" autocomplete="off" style="flex:1;min-width:150px" value="${esc(m.omschrijving)}" placeholder="materiaal (typ voor suggesties)…" oninput="calcMatSuggest(this,'${key}','${m.id}')" onfocus="calcMatSuggest(this,'${key}','${m.id}')" onblur="calcMatBlur()" onkeydown="calcMatKey(event)" onchange="calcSetMat('${key}','${m.id}','omschrijving',this.value)">
-        <button class="btn btn-xs btn-secondary" title="Zoek inkoopprijs in materialen-DB" onclick="calcZoekPrijs('${key}','${m.id}')">🔍 prijs</button>
+        <input id="calc-mo-${m.id}" class="calc-inp" autocomplete="off" style="flex:1;min-width:150px" value="${esc(m.omschrijving)}" placeholder="materiaal (typ voor suggesties)…" oninput="calcMatSuggest(this,${jsArg(key)},${jsArg(m.id)})" onfocus="calcMatSuggest(this,${jsArg(key)},${jsArg(m.id)})" onblur="calcMatBlur()" onkeydown="calcMatKey(event)" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'omschrijving',this.value)">
+        <button class="btn btn-xs btn-secondary" title="Zoek inkoopprijs in materialen-DB" onclick="calcZoekPrijs(${jsArg(key)},${jsArg(m.id)})">🔍 prijs</button>
       </div><div id="rand-${m.id}">${randChipHtml(key,m)}</div><div id="lev-${m.id}">${levChipHtml(key,m)}</div></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(m.aantal)}" placeholder="0" onchange="calcSetMat('${key}','${m.id}','aantal',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:84px" value="${inval(m.inkoop_stuk)}" placeholder="0,00" onchange="calcSetMat('${key}','${m.id}','inkoop_stuk',this.value)">${(m.ic_indicatief!=null&&(m.inkoop_stuk===''||m.inkoop_stuk==null))?`<div style="font-size:9px;color:var(--gold)" title="Indicatieve Vectorworks-richtprijs — geen echte inkoop. Vul de werkelijke prijs uit de factuur in.">⚠ VW ${eur(m.ic_indicatief)}</div>`:''}</td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(m.aantal)}" placeholder="0" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'aantal',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:84px" value="${inval(m.inkoop_stuk)}" placeholder="0,00" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'inkoop_stuk',this.value)">${(m.ic_indicatief!=null&&(m.inkoop_stuk===''||m.inkoop_stuk==null))?`<div style="font-size:9px;color:var(--gold)" title="Indicatieve Vectorworks-richtprijs — geen echte inkoop. Vul de werkelijke prijs uit de factuur in.">⚠ VW ${eur(m.ic_indicatief)}</div>`:''}</td>
       <td class="calc-num" id="mi-${m.id}">${eur(r.inkoop)}</td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${inval(m.marge)}" placeholder="1,5" onchange="calcSetMat('${key}','${m.id}','marge',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${inval(m.marge)}" placeholder="1,5" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'marge',this.value)"></td>
       <td class="calc-num" style="font-weight:600" id="mv-${m.id}">${eur(r.verkoop)}</td>
-      <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelMat('${key}','${m.id}')">×</button></td>
+      <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelMat(${jsArg(key)},${jsArg(m.id)})">×</button></td>
     </tr>`;
   }
   function uurRij(key,u){
     const r=uRow(u);
     return `<tr>
-      <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur('${key}','${u.id}','omschrijving',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(u.uren)}" placeholder="0" onchange="calcSetUur('${key}','${u.id}','uren',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${inval(u.uurtarief)}" placeholder="45" onchange="calcSetUur('${key}','${u.id}','uurtarief',this.value)"></td>
+      <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'omschrijving',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(u.uren)}" placeholder="0" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'uren',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${inval(u.uurtarief)}" placeholder="45" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'uurtarief',this.value)"></td>
       <td class="calc-num" id="uk-${u.id}">${eur(r.kost)}</td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${inval(u.marge)}" placeholder="2" onchange="calcSetUur('${key}','${u.id}','marge',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${inval(u.marge)}" placeholder="2" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'marge',this.value)"></td>
       <td class="calc-num" style="font-weight:600" id="uv-${u.id}">${eur(r.verkoop)}</td>
-      <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur('${key}','${u.id}')">×</button></td>
+      <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur(${jsArg(key)},${jsArg(u.id)})">×</button></td>
     </tr>`;
   }
 
@@ -15223,7 +15222,7 @@ function activiteitOpen(force){
       <td><input class="calc-inp" style="width:100%;min-width:140px" value="${esc(u.omschrijving)}" onchange="calcSetDefUur(${i},'omschrijving',this.value)"></td>
       <td><input class="calc-inp calc-num" style="width:72px" value="${inval(u.uurtarief)}" onchange="calcSetDefUur(${i},'uurtarief',this.value)"></td>
       <td><input class="calc-inp calc-num" style="width:56px" value="${inval(u.marge)}" onchange="calcSetDefUur(${i},'marge',this.value)"></td>
-      <td><button class="btn btn-xs btn-danger" onclick="calcDelDefUur('${key}',${i})">×</button></td>
+      <td><button class="btn btn-xs btn-danger" onclick="calcDelDefUur(${jsArg(key)},${i})">×</button></td>
     </tr>`).join('');
     return `<details style="margin-top:1rem"><summary style="cursor:pointer;color:var(--text-dim);font-size:12px">⚙ Standaardwaarden (vaste uren-regels &amp; materiaal-marge voor een nieuwe offerte)</summary>
       <div style="margin:0.6rem 0;display:flex;gap:0.8rem;align-items:flex-end;flex-wrap:wrap">
@@ -15232,8 +15231,8 @@ function activiteitOpen(force){
       </div>
       <table class="calc-tbl" style="max-width:480px"><thead><tr><th>Vaste uren-regel</th><th class="calc-num">Uurtarief €</th><th class="calc-num">Marge ×</th><th></th></tr></thead><tbody>${rows}</tbody></table>
       <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center">
-        <button class="btn btn-xs btn-secondary" onclick="calcAddDefUur('${key}')">+ vaste regel</button>
-        <button class="btn btn-xs btn-gold" onclick="calcSaveDefaults('${key}')">Opslaan als standaard</button>
+        <button class="btn btn-xs btn-secondary" onclick="calcAddDefUur(${jsArg(key)})">+ vaste regel</button>
+        <button class="btn btn-xs btn-gold" onclick="calcSaveDefaults(${jsArg(key)})">Opslaan als standaard</button>
       </div>
       <p style="font-size:10px;color:var(--text-faint);margin:0.4rem 0 0">Nieuwe offertes starten met deze regels + ${LEGE_MAT_REGELS} lege materiaalregels. Bestaande offertes wijzigen niet.</p>
     </details>`;
@@ -15258,7 +15257,7 @@ function activiteitOpen(force){
   window.calcModus=function(basis,m){ _modus[basis]=m; renderOfferteCalc(basis); };
   function modusBalk(basis){
     const na=_modus[basis]==='na', o=CALC.offertes[basis], heeftNc=!!(o&&o.nacalc);
-    const knop=(m,label,actief)=>`<button class="btn btn-xs ${actief?'btn-primary':'btn-secondary'}" onclick="calcModus('${basis}','${m}')">${label}</button>`;
+    const knop=(m,label,actief)=>`<button class="btn btn-xs ${actief?'btn-primary':'btn-secondary'}" onclick="calcModus(${jsArg(basis)},${jsArg(m)})">${label}</button>`;
     return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:0.6rem">${knop('voor','Voorcalculatie',!na)}${knop('na','Nacalculatie'+(heeftNc?' ●':''),na)}</div>`;
   }
 
@@ -15464,12 +15463,12 @@ function activiteitOpen(force){
   function ncUurRij(nk,u,begroot){
     const r=uRow(u);
     return `<tr>
-      <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur('${nk}','${u.id}','omschrijving',this.value)"></td>
+      <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'omschrijving',this.value)"></td>
       <td class="calc-num" style="color:var(--text-dim)">${begroot==null||begroot===''?'—':inval(begroot)}</td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(u.uren)}" placeholder="0" onchange="calcSetUur('${nk}','${u.id}','uren',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${inval(u.uurtarief)}" placeholder="45" onchange="calcSetUur('${nk}','${u.id}','uurtarief',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(u.uren)}" placeholder="0" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'uren',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${inval(u.uurtarief)}" placeholder="45" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'uurtarief',this.value)"></td>
       <td class="calc-num" id="uk-${u.id}">${eur(r.kost)}</td>
-      <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur('${nk}','${u.id}')">×</button></td>
+      <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur(${jsArg(nk)},${jsArg(u.id)})">×</button></td>
     </tr>`;
   }
 
@@ -15477,32 +15476,32 @@ function activiteitOpen(force){
     const nc=getOfferte(nk), tg=nc.toggl, c=cid(nk);
     const kand=ncTmp(nk).kand||[];
     const keuze = tg&&tg.project_id
-      ? `<b>${esc(tg.project_naam||tg.project_id)}</b> <button class="btn btn-xs btn-secondary" onclick="calcNcKiesToggl('${nk}','')">wijzig</button>
-         <button class="btn btn-xs btn-gold" onclick="calcNcHaalUren('${nk}')">↻ Uren ophalen</button>`
+      ? `<b>${esc(tg.project_naam||tg.project_id)}</b> <button class="btn btn-xs btn-secondary" onclick="calcNcKiesToggl(${jsArg(nk)},'')">wijzig</button>
+         <button class="btn btn-xs btn-gold" onclick="calcNcHaalUren(${jsArg(nk)})">↻ Uren ophalen</button>`
       : (kand.length
-          ? `<select class="calc-inp" onchange="calcNcKiesToggl('${nk}',this.value)"><option value="">— kies het Toggl-project —</option>${kand.map((k,i)=>`<option value="${k.id}">${esc(k.naam)}${i===0?' (beste match)':''}</option>`).join('')}${(_ncTgl?_ncTgl.projecten:[]).filter(p=>!kand.some(k=>k.id===p.id)).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>`
-          : `<button class="btn btn-xs btn-secondary" onclick="calcNcZoekToggl('${nk}')">🔎 Zoek Toggl-project</button>`);
+          ? `<select class="calc-inp" onchange="calcNcKiesToggl(${jsArg(nk)},this.value)"><option value="">— kies het Toggl-project —</option>${kand.map((k,i)=>`<option value="${k.id}">${esc(k.naam)}${i===0?' (beste match)':''}</option>`).join('')}${(_ncTgl?_ncTgl.projecten:[]).filter(p=>!kand.some(k=>k.id===p.id)).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>`
+          : `<button class="btn btn-xs btn-secondary" onclick="calcNcZoekToggl(${jsArg(nk)})">🔎 Zoek Toggl-project</button>`);
     let voorstel='';
     if(tg&&tg.voorstel){
       const regels=ncRegelNamen(nc);
-      const rows=tg.voorstel.map((v,i)=>`<tr><td>${esc(v.regel)}</td><td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(v.uren)}" onchange="calcNcVoorstel('${nk}',${i},this.value)"></td><td style="font-size:10px;color:var(--text-faint)">${esc((v.taken||[]).join(' · ').slice(0,90))}</td></tr>`).join('');
+      const rows=tg.voorstel.map((v,i)=>`<tr><td>${esc(v.regel)}</td><td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(v.uren)}" onchange="calcNcVoorstel(${jsArg(nk)},${i},this.value)"></td><td style="font-size:10px;color:var(--text-faint)">${esc((v.taken||[]).join(' · ').slice(0,90))}</td></tr>`).join('');
       voorstel=`<div style="margin-top:0.5rem;font-size:12px">
         Totaal in ${tg.bron&&tg.bron.startsWith('csv')?'CSV':'Toggl'}: <b>${uurFmt(tg.totaal_u)}</b>${tg.op_taak_u!=null?` <span style="color:var(--text-faint)">— waarvan ${uurFmt(tg.op_taak_u)} op een taak</span>`:''}
         <span style="color:var(--text-faint)">· opgehaald ${esc(String(tg.opgehaald||'').slice(0,16).replace('T',' '))}</span></div>
         ${tg.mensen&&tg.mensen.length?`<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${tg.mensen.map(m=>esc(m.naam)+' '+uurFmt(m.uren)).join(' · ')}</div>`:''}
         <table class="calc-tbl" style="max-width:640px;margin-top:0.4rem"><thead><tr><th>Uren-regel</th><th class="calc-num">Voorstel</th><th>herkend uit</th></tr></thead><tbody>${rows}
-          <tr style="background:rgba(160,130,60,.07)"><td>Niet toegewezen → <select class="calc-inp" onchange="calcNcRest('${nk}','rest_naar',this.value)">${regels.map(r=>`<option${r===tg.rest_naar?' selected':''}>${esc(r)}</option>`).join('')}</select></td>
-            <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(tg.rest_u)}" onchange="calcNcRest('${nk}','rest_u',this.value)"></td>
+          <tr style="background:rgba(160,130,60,.07)"><td>Niet toegewezen → <select class="calc-inp" onchange="calcNcRest(${jsArg(nk)},'rest_naar',this.value)">${regels.map(r=>`<option${r===tg.rest_naar?' selected':''}>${esc(r)}</option>`).join('')}</select></td>
+            <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${inval(tg.rest_u)}" onchange="calcNcRest(${jsArg(nk)},'rest_u',this.value)"></td>
             <td style="font-size:10px;color:var(--text-faint)">uren zonder herkenbare taak — verdeel zelf, of laat bij de gekozen regel</td></tr>
         </tbody></table>
-        <button class="btn btn-xs btn-primary" style="margin-top:0.4rem" onclick="calcNcOvernemen('${nk}')">Overnemen in de uren-regels</button>
+        <button class="btn btn-xs btn-primary" style="margin-top:0.4rem" onclick="calcNcOvernemen(${jsArg(nk)})">Overnemen in de uren-regels</button>
         ${tg.overgenomen?`<span style="font-size:10px;color:var(--text-faint);margin-left:6px">laatst overgenomen ${esc(String(tg.overgenomen).slice(0,16).replace('T',' '))}</span>`:''}`;
     }
     return `<div class="calc-actions" style="margin-top:1rem">
       <div style="font-weight:700;font-size:12px;margin-bottom:0.4rem">⏱ Uren uit Toggl</div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${keuze}
         <span style="flex:1"></span>
-        <button class="btn btn-xs btn-secondary" onclick="calcNcCsv('${nk}')" title="Toggl → Reports → Time logs → Export CSV. Bevat de uren van alle medewerkers.">📄 CSV uit Toggl Reports</button></div>
+        <button class="btn btn-xs btn-secondary" onclick="calcNcCsv(${jsArg(nk)})" title="Toggl → Reports → Time logs → Export CSV. Bevat de uren van alle medewerkers.">📄 CSV uit Toggl Reports</button></div>
       <div id="nc-tgl-st-${c}" style="font-size:11px;color:var(--text-dim);min-height:14px;margin-top:3px"></div>
       ${voorstel}
       <p style="font-size:10px;color:var(--text-faint);margin:0.4rem 0 0">Het totaal telt alle medewerkers. De verdeling is een voorstel uit taaknamen: in Toggl hangen tags aan taken, niet aan uren, en veel uren staan zonder taak — die komen bij "niet toegewezen". Niets wordt overgenomen zonder jouw klik.</p>
@@ -15516,7 +15515,7 @@ function activiteitOpen(force){
       host.innerHTML=`<div class="calc-wrap">${modusBalk(basis)}
         <div class="calc-actions"><div style="font-weight:700;margin-bottom:0.3rem">Nacalculatie</div>
         <p style="font-size:12px;color:var(--text-dim);margin:0 0 0.6rem">Begin met een kopie van de offerte: dezelfde materialen (met de prijs-zoeker en leveranciers) en dezelfde uren-regels, met de werkelijke uren nog leeg. Daarna vul je in wat het écht kostte en haal je de uren uit Toggl. De offerte zelf blijft ongewijzigd.</p>
-        <button class="btn btn-sm btn-primary" onclick="calcStartNacalc('${basis}')">Start nacalculatie</button></div></div>`;
+        <button class="btn btn-sm btn-primary" onclick="calcStartNacalc(${jsArg(basis)})">Start nacalculatie</button></div></div>`;
       return;
     }
     const nk=NC+basis, nc=o.nacalc, t=totalen(nc), c=cid(nk);
@@ -15535,8 +15534,8 @@ function activiteitOpen(force){
         <tbody>${matBody}</tbody>
         <tfoot><tr class="calc-tot"><td colspan="3">Totaal materialen</td><td class="calc-num" id="mft-ink-${c}">${eur(t.mInk)}</td><td></td><td class="calc-num" id="mft-verk-${c}">${eur(t.mVerk)}</td><td></td></tr></tfoot>
       </table></div>
-      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddMat('${nk}')">+ materiaal</button>
-      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem;margin-left:6px" onclick="calcImportVW('${nk}')">📋 VW-lijst importeren</button>
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddMat(${jsArg(nk)})">+ materiaal</button>
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem;margin-left:6px" onclick="calcImportVW(${jsArg(nk)})">📋 VW-lijst importeren</button>
       <div class="calc-sec" style="margin-top:1.2rem">Werkelijke uren</div>
       <div style="overflow-x:auto;border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px">
       <table class="calc-tbl">
@@ -15544,13 +15543,13 @@ function activiteitOpen(force){
         <tbody>${nc.uren.map(u=>ncUurRij(nk,u,begrootVan(u))).join('')}</tbody>
         <tfoot><tr class="calc-tot"><td colspan="4">Totaal uren (kostprijs)</td><td class="calc-num" id="uft-kost-${c}">${eur(t.uKost)}</td><td></td></tr></tfoot>
       </table></div>
-      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddUur('${nk}')">+ uur-regel</button>
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddUur(${jsArg(nk)})">+ uur-regel</button>
       ${ncTogglHtml(nk)}
       <div class="calc-btnrow" style="margin-top:0.8rem">
         <label style="font-size:11px;color:var(--text-dim)">Factuurbedrag (def.)
-          <input class="calc-inp calc-num" style="width:110px" value="${inval(o.meta.factuurbedrag)}" placeholder="0,00" onchange="calcSetMeta('${basis}','factuurbedrag',this.value);renderOfferteCalc('${nk}')"></label>
+          <input class="calc-inp calc-num" style="width:110px" value="${inval(o.meta.factuurbedrag)}" placeholder="0,00" onchange="calcSetMeta(${jsArg(basis)},'factuurbedrag',this.value);renderOfferteCalc(${jsArg(nk)})"></label>
         <span style="flex:1"></span>
-        <button class="btn btn-sm btn-secondary" onclick="saveCalcNu('${basis}')">💾 Opslaan</button>
+        <button class="btn btn-sm btn-secondary" onclick="saveCalcNu(${jsArg(basis)})">💾 Opslaan</button>
       </div>
       <div id="calc-status-${c}" style="font-size:11px;min-height:16px;margin-top:0.3rem"></div>
       <div id="calc-status-${cid(basis)}" style="font-size:11px;min-height:16px"></div>
@@ -15574,21 +15573,21 @@ function activiteitOpen(force){
 
     const kopHtml = standalone
       ? `<div style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">
-           <input class="calc-inp" style="font-weight:700;font-size:15px;min-width:220px;flex:1" value="${esc(o.titel||'')}" placeholder="Offertetitel…" onchange="calcSetTitel('${key}',this.value)">
+           <input class="calc-inp" style="font-weight:700;font-size:15px;min-width:220px;flex:1" value="${esc(o.titel||'')}" placeholder="Offertetitel…" onchange="calcSetTitel(${jsArg(key)},this.value)">
            <label style="font-size:11px;color:var(--text-dim)">Koppel aan project
-             <select class="calc-inp" id="calc-projsel-${key}" onchange="calcKoppelProject('${key}',this.value)">${projectKoppelOpties(o.project_code)}</select></label>
-           ${window.MTKoppelUI?MTKoppelUI.badge(o.project_code?{status:'gekoppeld',label:projKort(o.project_code),titel:'Offerte gekoppeld aan project '+projKeuzeLabel(o.project_code)+' — klik voor details',onclick:`calcProjPop(this,'${key}')`}:{status:'open',label:'project',titel:'Nog niet aan een project gekoppeld — klik om er een te kiezen',onclick:`calcProjPop(this,'${key}')`}):''}
+             <select class="calc-inp" id="calc-projsel-${key}" onchange="calcKoppelProject(${jsArg(key)},this.value)">${projectKoppelOpties(o.project_code)}</select></label>
+           ${window.MTKoppelUI?MTKoppelUI.badge(o.project_code?{status:'gekoppeld',label:projKort(o.project_code),titel:'Offerte gekoppeld aan project '+projKeuzeLabel(o.project_code)+' — klik voor details',onclick:`calcProjPop(this,${jsLit(key)})`}:{status:'open',label:'project',titel:'Nog niet aan een project gekoppeld — klik om er een te kiezen',onclick:`calcProjPop(this,${jsLit(key)})`}):''}
          </div>`
       : `<div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.5rem">
            <div class="card-title" style="margin:0">Offerte-calculator <span style="font-size:11px;color:var(--text-faint);font-weight:400">— voorcalculatie · ${esc(key)}</span></div>
          </div>`;
 
     const summary = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.6rem;background:var(--surface-sunken);border:1px solid var(--border);border-radius:8px;padding:0.8rem;margin-bottom:0.5rem">
-      <label style="font-size:11px;color:var(--text-dim)">Status<br><select class="calc-inp" style="width:100%" onchange="calcSetMeta('${key}','status',this.value)">${selOpts(STATUS_OPTIES,o.meta.status)}</select></label>
-      <label style="font-size:11px;color:var(--text-dim)">Bron<br><input class="calc-inp" style="width:100%" value="${esc(o.meta.bron)}" placeholder="bv. website / referentie" onchange="calcSetMeta('${key}','bron',this.value)"></label>
-      <label style="font-size:11px;color:var(--text-dim)">Offertedatum<br><input type="date" class="calc-inp" style="width:100%" value="${esc(o.meta.offertedatum)}" onchange="calcSetMeta('${key}','offertedatum',this.value)"></label>
-      <label style="font-size:11px;color:var(--text-dim)">Leverdatum<br><input type="date" class="calc-inp" style="width:100%" value="${esc(o.meta.leverdatum)}" onchange="calcSetMeta('${key}','leverdatum',this.value)"></label>
-      <label style="font-size:11px;color:var(--text-dim)">Factuurbedrag (def.)<br><input class="calc-inp calc-num" style="width:100%" value="${inval(o.meta.factuurbedrag)}" placeholder="nacalc." onchange="calcSetMeta('${key}','factuurbedrag',this.value)"></label>
+      <label style="font-size:11px;color:var(--text-dim)">Status<br><select class="calc-inp" style="width:100%" onchange="calcSetMeta(${jsArg(key)},'status',this.value)">${selOpts(STATUS_OPTIES,o.meta.status)}</select></label>
+      <label style="font-size:11px;color:var(--text-dim)">Bron<br><input class="calc-inp" style="width:100%" value="${esc(o.meta.bron)}" placeholder="bv. website / referentie" onchange="calcSetMeta(${jsArg(key)},'bron',this.value)"></label>
+      <label style="font-size:11px;color:var(--text-dim)">Offertedatum<br><input type="date" class="calc-inp" style="width:100%" value="${esc(o.meta.offertedatum)}" onchange="calcSetMeta(${jsArg(key)},'offertedatum',this.value)"></label>
+      <label style="font-size:11px;color:var(--text-dim)">Leverdatum<br><input type="date" class="calc-inp" style="width:100%" value="${esc(o.meta.leverdatum)}" onchange="calcSetMeta(${jsArg(key)},'leverdatum',this.value)"></label>
+      <label style="font-size:11px;color:var(--text-dim)">Factuurbedrag (def.)<br><input class="calc-inp calc-num" style="width:100%" value="${inval(o.meta.factuurbedrag)}" placeholder="nacalc." onchange="calcSetMeta(${jsArg(key)},'factuurbedrag',this.value)"></label>
     </div>`;
 
     const margeKleur = t.marge==null?'var(--text-faint)':(t.marge<0.15?'#c0392b':(t.marge<0.30?'var(--gold)':'var(--green)'));
@@ -15609,8 +15608,8 @@ function activiteitOpen(force){
         <tbody>${matBody}</tbody>
         <tfoot><tr class="calc-tot"><td colspan="3">Totaal materialen</td><td class="calc-num" id="mft-ink-${c}">${eur(t.mInk)}</td><td></td><td class="calc-num" id="mft-verk-${c}">${eur(t.mVerk)}</td><td></td></tr></tfoot>
       </table></div>
-      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddMat('${key}')">+ materiaal</button>
-      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem;margin-left:6px" onclick="calcImportVW('${key}')" title="Plak een Vectorworks/interiorcad materiaallijst — ik vul de regels + echte inkoopprijzen voor je in">📋 VW-lijst importeren</button>`;
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddMat(${jsArg(key)})">+ materiaal</button>
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem;margin-left:6px" onclick="calcImportVW(${jsArg(key)})" title="Plak een Vectorworks/interiorcad materiaallijst — ik vul de regels + echte inkoopprijzen voor je in">📋 VW-lijst importeren</button>`;
 
     const uurBody=o.uren.map(u=>uurRij(key,u)).join('');
     const uurTabel=`<div class="calc-sec" style="margin-top:1.2rem">Uren — arbeid</div>
@@ -15620,7 +15619,7 @@ function activiteitOpen(force){
         <tbody>${uurBody}</tbody>
         <tfoot><tr class="calc-tot"><td colspan="3">Totaal uren</td><td class="calc-num" id="uft-kost-${c}">${eur(t.uKost)}</td><td></td><td class="calc-num" id="uft-verk-${c}">${eur(t.uVerk)}</td><td></td></tr></tfoot>
       </table></div>
-      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddUur('${key}')">+ uur-regel</button>`;
+      <button class="btn btn-xs btn-secondary" style="margin-top:0.4rem" onclick="calcAddUur(${jsArg(key)})">+ uur-regel</button>`;
 
     host.innerHTML = `<div class="calc-wrap">
       ${modusBalk(key)}
@@ -15637,15 +15636,15 @@ function activiteitOpen(force){
       <div class="calc-actions">
         <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:3px">
           Wat wordt het? <span style="color:var(--text-faint)">— beschrijving voor de offerteregels</span>
-          ${o.mail_context?`<span class="calc-mailchip" title="${esc((o.mail_context.from||'')+' — '+(o.mail_context.subject||''))}">📧 ${esc((o.mail_context.subject||'mail').slice(0,42))}<button class="btn btn-xs btn-secondary" style="margin-left:5px" onclick="calcOntkoppelMail('${key}')">×</button></span>`:''}
+          ${o.mail_context?`<span class="calc-mailchip" title="${esc((o.mail_context.from||'')+' — '+(o.mail_context.subject||''))}">📧 ${esc((o.mail_context.subject||'mail').slice(0,42))}<button class="btn btn-xs btn-secondary" style="margin-left:5px" onclick="calcOntkoppelMail(${jsArg(key)})">×</button></span>`:''}
         </label>
-        <textarea id="calc-otekst-${c}" class="calc-inp" style="width:100%;min-height:46px;resize:vertical;font-family:inherit" placeholder="bv. 'Maatwerk eikenhouten dressoir met 3 lades en push-to-open, in olie afgewerkt'" onchange="calcSetMeta('${key}','offerte_tekst',this.value)">${esc((o.meta&&o.meta.offerte_tekst)||'')}</textarea>
+        <textarea id="calc-otekst-${c}" class="calc-inp" style="width:100%;min-height:46px;resize:vertical;font-family:inherit" placeholder="bv. 'Maatwerk eikenhouten dressoir met 3 lades en push-to-open, in olie afgewerkt'" onchange="calcSetMeta(${jsArg(key)},'offerte_tekst',this.value)">${esc((o.meta&&o.meta.offerte_tekst)||'')}</textarea>
         <div class="calc-btnrow">
-          ${window.MTKoppelUI?MTKoppelUI.badge(o.mail_context?{status:'gekoppeld',label:'mail',titel:'Mail gekoppeld: '+(o.mail_context.subject||'')+' — klik om een andere te kiezen',onclick:`calcKoppelMail('${key}')`}:{status:'open',label:'mail',titel:'Koppel een mail zodat de offertetekst context uit die mail meekrijgt',onclick:`calcKoppelMail('${key}')`}):`<button class="btn btn-sm btn-secondary" onclick="calcKoppelMail('${key}')">📧 Mail koppelen</button>`}
-          <button class="btn btn-sm btn-secondary" onclick="saveCalcNu('${key}')" title="Nu opslaan en meteen naar SharePoint synchroniseren. Je krijgt hieronder te zien of dat gelukt is.">💾 Opslaan</button>
+          ${window.MTKoppelUI?MTKoppelUI.badge(o.mail_context?{status:'gekoppeld',label:'mail',titel:'Mail gekoppeld: '+(o.mail_context.subject||'')+' — klik om een andere te kiezen',onclick:`calcKoppelMail(${jsLit(key)})`}:{status:'open',label:'mail',titel:'Koppel een mail zodat de offertetekst context uit die mail meekrijgt',onclick:`calcKoppelMail(${jsLit(key)})`}):`<button class="btn btn-sm btn-secondary" onclick="calcKoppelMail(${jsArg(key)})">📧 Mail koppelen</button>`}
+          <button class="btn btn-sm btn-secondary" onclick="saveCalcNu(${jsArg(key)})" title="Nu opslaan en meteen naar SharePoint synchroniseren. Je krijgt hieronder te zien of dat gelukt is.">💾 Opslaan</button>
           <span style="flex:1"></span>
-          <button class="btn btn-sm btn-secondary" onclick="calcMaakProjectVoorOfferte('${key}')">${proj?'💾 Opslaan in projectmap':'+ Project aanmaken'}</button>
-          <button class="btn btn-sm btn-primary" onclick="calcMaakOfferteMB('${key}')" title="Bouw eerst een preview van de offerteregels + tekst die je kunt bijschaven vóór het naar Moneybird gaat">👁 Preview voor Moneybird</button>
+          <button class="btn btn-sm btn-secondary" onclick="calcMaakProjectVoorOfferte(${jsArg(key)})">${proj?'💾 Opslaan in projectmap':'+ Project aanmaken'}</button>
+          <button class="btn btn-sm btn-primary" onclick="calcMaakOfferteMB(${jsArg(key)})" title="Bouw eerst een preview van de offerteregels + tekst die je kunt bijschaven vóór het naar Moneybird gaat">👁 Preview voor Moneybird</button>
         </div>
       </div>
       <div id="calc-mbprev-${c}">${_mbPreviewHtml(key)}</div>
