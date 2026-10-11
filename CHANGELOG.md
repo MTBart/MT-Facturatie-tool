@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Koersmeter A+A2: ochtendrun via Cron Trigger, melding in KV, getoond bovenaan Geld en als badge op mobiel
+- Commit: `08abc05` | Auteur: Bart Witte
+
 ## 2026-10-11 — Verhuizer: IDB-kandidaten vóór de write (crashvenster dicht) en exclusief slot via navigator.locks
 - Commit: `8ef0deb` | Auteur: Bart Witte
 
