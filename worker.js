@@ -1615,9 +1615,9 @@ function geldConfigNorm(c) {
   const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
     // buffer_lopend (eigen ondergrens) is samengevoegd met de fictieve buffer: een gezet oud veld wordt het eigen bedrag (negatief → 0). Eén release lang schrijven we beide velden
     // (dual-write) zodat een terugdraaiing van de front-end niets verliest: buffer_lopend = de fictieve buffer, of de oude waarde zolang er nog geen fictieve buffer is.
-    buffer_lopend: getal(c.fictieve_buffer, 0, 1e9) != null ? getal(c.fictieve_buffer, 0, 1e9) : (typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? c.buffer_lopend : null),
+    buffer_lopend: null,   // hieronder gelijkgetrokken met fictieve_buffer (dual-write)
     // G7: fictieve buffer op lopend (≥ 0). Alleen een gele lijn in de grafiek en de onderkant van de kasruimte/Koersmeter; nooit als getal in Geld (behalve Instellingen).
-    fictieve_buffer: getal(c.fictieve_buffer, 0, 1e9) != null ? getal(c.fictieve_buffer, 0, 1e9) : (typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? Math.max(0, c.buffer_lopend) : null),
+    fictieve_buffer: getal(c.fictieve_buffer, 0, 1e9) != null ? getal(c.fictieve_buffer, 0, 1e9) : getal(c.buffer_lopend, 0, 1e9),   // een negatief oud veld telt niet (geweigerd bij invoer)
     // cijfers (G9): indeling grootboek → categorie, privé- en aflossingsgrootboeken, loonpatronen, branche; null = voorstel
     cijfers: geldCijferCfgNorm(c.cijfers),
     // spaarrente op de potjes (fractie per jaar), door de eigenaar ingevuld; leeg = afleiden uit rentebijschrijvingen
@@ -1633,6 +1633,7 @@ function geldConfigNorm(c) {
       // kwartalen die de eigenaar als betaald heeft gemarkeerd (de betaling is niet automatisch terug te vinden)
       betaald_kwartalen: [...new Set((Array.isArray(btw.betaald_kwartalen) ? btw.betaald_kwartalen : []).map(String).filter(x => /^\d{4}-K[1-4]$/.test(x)))].sort().slice(0, 12) },
     gewijzigd: c.gewijzigd || null, door: c.door || null, revisie: Number.isInteger(c.revisie) ? c.revisie : 0 };
+  uit.buffer_lopend = uit.fictieve_buffer;   // exact dezelfde waarde (één release lang dual-write voor een terugdraaiing)
   uit.streef_herkomst = geldStreefHerkomst(c.streef_herkomst, uit);
   return uit;
 }
@@ -2133,7 +2134,8 @@ async function geldPatronenBereken(env) {
       const pm = tekstRc.match(/T\/M\s+\d{2}\.(\d{2})\.(\d{4})/i);
       rc.push({ datum: m.date, maand: pm ? `${pm[2]}-${pm[1]}` : m.date.slice(0, 7), soort: /DEBETRENTE/i.test(tekstRc) ? 'rente' : /PROVISIE/i.test(tekstRc) ? 'provisie' : 'overig', bedrag: geldRond(-bedrag) });
     }
-    { const bb = geldBtwBetaling(m); if (bb) { btw.push(Object.assign({ datum: m.date, bedrag: geldRond(bedrag) }, bb)); if (bb.soort === 'document') continue; } }
+    { const bb = geldBtwBetaling(m); if (bb) btw.push(Object.assign({ datum: m.date, bedrag: geldRond(bedrag) }, bb)); }
+    if (pays.some(p => p.invoice_type === 'VatDocument')) continue;                // een btw-document-betaling blijft buiten de patronen (zoals altijd), maar telt niet meer als betaald
     const sp = geldPotVan(m, cfg.potten);
     if (bedrag < 0 && !(sp.pot && sp.pot === btwPot)) maandUit[m.date.slice(0, 7)] = geldRond((maandUit[m.date.slice(0, 7)] || 0) - bedrag);   // uitgaven (BTW-sparen telt niet)
     // rentebijschrijving vanaf een spaarpotje (herkend potje, binnenkomend, "rente"/"interest" in de omschrijving)
@@ -2233,24 +2235,13 @@ function geldBtwSparen(events, cfg) {
     tegenpartij: '', document_id: null, bron_url: null, van_event: e.id, uitleg: `BTW-sparen: ${Math.round(pct * 10000) / 100}% van deze ontvangst gaat naar de BTW-pot (interne overboeking).` }));
 }
 const geldKwartaal = d => { const j = Number(d.slice(0, 4)), q = Math.floor((Number(d.slice(5, 7)) - 1) / 3); return { j, q: q + 1, van: `${j}-${String(q * 3 + 1).padStart(2, '0')}-01`, tot: new Date(Date.UTC(j, q * 3 + 3, 0)).toISOString().slice(0, 10) }; };
-// Een betaling van de omzetbelasting aan een kwartaal koppelen, STRIKT (Codex G7): een willekeurige mutatie mag een schuld nooit laten wegvallen. Alleen:
-//  (a) een negatieve mutatie met de tekst "Btw aangifte Kwartaal N JJJJ" (de omschrijving noemt het kwartaal letterlijk) → dat kwartaal;
-//  (b) een negatieve mutatie met een omzetbelasting-betalingskenmerk: 16 cijfers waarvan het 10e cijfer 1 is (6 = loonheffing) en het 11e het jaar (5 = 2025, 6 = 2026)
-//      → dat belastingjaar; het tijdvak in het kenmerk is uit de bekende voorbeelden niet eenduidig te decoderen, dus het kwartaal volgt uit de betaaldatum (het venster na het kwartaaleinde);
-//  (c) een betaling die in Moneybird aan een btw-document is gekoppeld (VatDocument) → het kwartaal waarvan het venster de datum bevat.
-// Een teruggaaf is positief en telt nooit als betaling van een schuld. Geen enkele andere mutatie.
+// Een btw-betaling aan een kwartaal koppelen, STRIKT (Codex G7): alleen een NEGATIEVE mutatie met de expliciete tekst "Btw aangifte Kwartaal N JJJJ"; het kwartaal komt uit de
+// tekst, niet uit de betaaldatum. Geen betalingskenmerken, geen btw-document-koppeling en geen bedragen of vensters: dat liet een schuld wegvallen door een willekeurige mutatie.
+// Al het andere blijft open + onvolledig tot de eigenaar het kwartaal als betaald markeert (btw.betaald_kwartalen). Een teruggaaf (positief) telt nooit.
 function geldBtwBetaling(m) {
-  const bedrag = geldGetal(m.amount), t = `${m.message || ''} ${m.contra_account_name || ''}`;
-  if ((m.payments || []).some(x => x.invoice_type === 'VatDocument')) return { soort: 'document' };
-  if (!(bedrag < 0)) return null;
-  const a = /btw\s+aangifte\s+kwartaal\s+([1-4])\s+(\d{4})/i.exec(t); if (a) return { soort: 'tekst', kw: `${a[2]}-K${a[1]}` };
-  const Y = Number(String(m.date || '').slice(0, 4));
-  for (const k of t.match(/(?<!\d)\d{16}(?!\d)/g) || []) {
-    if (k[9] !== '1') continue;                                                       // alleen omzetbelasting (loonheffing e.d. niet)
-    const d = Number(k[10]), jaar = [Y, Y - 1].find(y => y % 10 === d);                // belastingjaar: het betaaljaar of het jaar ervoor
-    if (jaar != null) return { soort: 'kenmerk', jaar };
-  }
-  return null;
+  if (!(geldGetal(m.amount) < 0)) return null;
+  const a = /btw\s+aangifte\s+kwartaal\s+([1-4])\s+(\d{4})/i.exec(`${m.message || ''} ${m.contra_account_name || ''}`);
+  return a ? { soort: 'tekst', kw: `${a[2]}-K${a[1]}` } : null;
 }
 const GELD_BTW_KW = 'geld:btw:kwartalen';   // bedragen van afgesloten kwartalen (12 uur), tegen te veel Moneybird-verzoeken
 async function geldBtwAangifte(get, vandaag, cfg, betalingen, w, env) {
@@ -2262,23 +2253,15 @@ async function geldBtwAangifte(get, vandaag, cfg, betalingen, w, env) {
   const cache = (env && await kvJson(env, GELD_BTW_KW)) || {}; let cacheNieuw = false;
   const gebruikt = new Set(), bet = (betalingen || []).slice().sort((x, y) => x.datum.localeCompare(y.datum));
   const verval = k => new Date(Date.UTC(Number(k.tot.slice(0, 4)), Number(k.tot.slice(5, 7)) + 1, 0)).toISOString().slice(0, 10), naam = k => `${k.j}-K${k.q}`;
-  // Kwartalen die meer dan één kwartaal terug liggen en waarvan een btw-betaling in het venster staat: betaald, zonder het overzicht op te halen (spaart Moneybird-verzoeken).
-  // Hoort deze betaling bij dit kwartaal? (uit = wij betalen; een teruggaaf telt nooit als betaling.) Oude cache-regels zonder soort komen van een btw-document.
-  const hoort = (b, k, vervalt, uit) => {
-    if (uit ? !(b.bedrag < 0) : !(b.bedrag > 0)) return false;
-    if (b.datum <= k.tot) return false;
-    const soort = b.soort || 'document', venster = b.datum <= geldDag(vervalt, 60);
-    return soort === 'tekst' ? b.kw === naam(k) : soort === 'kenmerk' ? b.jaar === k.j && venster : soort === 'document' && venster;
-  };
-  const betaaldZonder = new Set();
-  kws.forEach(([k, loopt], i) => { if (loopt || i >= kws.length - 2 || markeerd.has(naam(k))) return; const b = bet.find(x => !gebruikt.has(x) && hoort(x, k, verval(k), true)); if (b) { gebruikt.add(b); betaaldZonder.add(naam(k)); } });
+  // Hoort deze betaling bij dit kwartaal? Alleen de tekst bepaalt het kwartaal (en de betaling moet na het kwartaaleinde liggen). Een teruggaaf (positief) telt nooit.
+  const hoort = (b, k) => b.soort === 'tekst' && b.kw === naam(k) && b.bedrag < 0 && b.datum > k.tot;
   // Het overzicht van het lopende en het vorige kwartaal altijd verversen; van de oudere hooguit twee per aanroep (nieuwste eerst), de rest komt uit de cache of bij een volgende aanroep.
   const magOphalen = new Set(); let nOud = 0;
-  for (let i = kws.length - 1; i >= 0; i--) { const [k, loopt] = kws[i], c = cache[naam(k)]; if (loopt || i >= kws.length - 2) { magOphalen.add(naam(k)); continue; } if (markeerd.has(naam(k)) || betaaldZonder.has(naam(k)) || (c && Date.now() - c.ts < 7 * 24 * 36e5)) continue; if (nOud++ < 2) magOphalen.add(naam(k)); }
+  for (let i = kws.length - 1; i >= 0; i--) { const [k, loopt] = kws[i], c = cache[naam(k)]; if (loopt || i >= kws.length - 2) { magOphalen.add(naam(k)); continue; } if (markeerd.has(naam(k)) || (c && Date.now() - c.ts < 7 * 24 * 36e5)) continue; if (nOud++ < 2) magOphalen.add(naam(k)); }
   const vorigKw = kws.length > 1 ? naam(kws[kws.length - 2][0]) : null;   // het vorige kwartaal wordt nog geboekt: elk uur verversen, oudere 24 uur
   for (const [k, loopt] of kws) {
     const kw = naam(k), vervalt = verval(k), id = `btw:${kw}`;
-    if (!loopt && (markeerd.has(kw) || betaaldZonder.has(kw))) continue;
+    if (!loopt && markeerd.has(kw)) continue;
     let bedrag = null; const c = cache[kw];
     if (!loopt && c && typeof c.bedrag === 'number' && (Date.now() - c.ts < (kw === vorigKw ? 36e5 : 7 * 24 * 36e5) || !magOphalen.has(kw))) bedrag = c.bedrag;   // afgesloten kwartalen veranderen nauwelijks: 7 dagen
     else if (!loopt && !magOphalen.has(kw)) { w.push({ onvolledig: true, bron: 'btw', fout: `BTW-overzicht ${kw} nog niet opgehaald (wordt bij een volgende keer aangevuld) — aangifte niet ingepland` }); continue; }
@@ -2293,16 +2276,15 @@ async function geldBtwAangifte(get, vandaag, cfg, betalingen, w, env) {
     }
     if (bedrag === 0) continue;
     let deel = false, gevonden = true;
-    if (!loopt) {                                                          // al betaald? een BTW-betaling binnen het venster die bij de schatting past
-      const kand = []; let betaald = 0;
-      for (const b of bet) { if (gebruikt.has(b) || !hoort(b, k, vervalt, bedrag > 0)) continue; if (betaald >= Math.abs(bedrag) * 0.9) break; kand.push(b); betaald = geldRond(betaald + Math.abs(b.bedrag)); }
-      kand.forEach(b => gebruikt.add(b));
-      if (betaald > 0) {                                                   // betalingen opgeteld; restant (buiten de ±10%-schatting) blijft staan
-        const rest = geldRond(Math.abs(bedrag) - betaald);
-        if (rest <= Math.max(Math.abs(bedrag) * 0.1, 100)) continue;
-        w.push({ bron: 'btw', fout: `BTW-betaling na ${kw} gezien die lager is dan de schatting — het restant is ingepland, controleer` });
-        bedrag = (bedrag > 0 ? 1 : -1) * rest; deel = true;
-      } else gevonden = false;
+    let reden = null;                                                        // 'betaling niet gevonden' of 'deels betaald'
+    if (!loopt) {                                                          // al betaald? alleen betalingen met de expliciete tekst voor precies dit kwartaal
+      const kand = bet.filter(b => !gebruikt.has(b) && hoort(b, k)); kand.forEach(b => gebruikt.add(b));
+      const betaald = geldRond(kand.reduce((a, b) => a + Math.abs(b.bedrag), 0));
+      if (bedrag > 0) {
+        if (betaald >= bedrag - 1) continue;                                // volledig betaald: de aangifte min € 1 (geen procentuele marge)
+        if (betaald > 0) { w.push({ onvolledig: true, bron: 'btw-schuld', kwartaal: kw, fout: `BTW ${kw}: deels betaald (${geldRond(betaald)} van ${bedrag}) — het exacte restant staat open` }); bedrag = geldRond(bedrag - betaald); deel = true; reden = 'deels betaald'; }
+        else gevonden = false;
+      }
     }
     const apart = cfg.btw.modus === 'apart', datum = vervalt < vandaag ? vandaag : vervalt, rek = apart ? (cfg.btw.aangifte_van || 'lopend') : 'lopend';
     const marge = { min: geldRond(bedrag * 0.9), max: geldRond(bedrag * 1.1) };
@@ -2310,6 +2292,7 @@ async function geldBtwAangifte(get, vandaag, cfg, betalingen, w, env) {
       document_id: null, bron_url: null, kwartaal: kw, marge,
       uitleg: `BTW-aangifte ${k.j} kwartaal ${k.q}: verkoop-btw min inkoop-btw uit Moneybird, schatting ±10%${deel ? ' — restant na een eerdere (deel)betaling' : ''}${loopt ? ' — het kwartaal loopt nog, dit is de stand tot nu toe en loopt nog op' : ''}${vervalt < vandaag ? ` — uiterste betaaldatum ${vervalt} is voorbij en er is geen betaling gezien` : ''}.` };
     if (vervalt < vandaag) ev.achterstallig = true;
+    if (reden) { ev.onvolledig = true; ev.onvolledig_reden = reden; ev.uitleg += ' Deels betaald: het exacte restant staat open (markeer het kwartaal als betaald als dat klopt).'; }
     if (!loopt && !gevonden && vervalt < vandaag) { ev.onvolledig = true; ev.onvolledig_reden = 'betaling niet gevonden'; ev.uitleg += ' Betaling niet gevonden in de bankmutaties: behoudend als open schuld meegenomen.'; w.push({ onvolledig: true, bron: 'btw-schuld', kwartaal: kw, fout: `BTW ${kw}: betaling niet gevonden — als open schuld meegenomen (markeer het kwartaal als betaald in Instellingen als dat klopt)` }); }
     if (apart && !cfg.btw.aangifte_van) w.push({ bron: 'config', fout: 'BTW-instellingen: van welke rekening de aangifte betaald wordt is niet ingesteld — lopende rekening aangenomen' });
     if (!apart) ev.uitleg += ' Betaald van de lopende rekening; zonder terugboeking van de BTW-pot telt de pot niet mee in Besteedbaar.';
@@ -3502,8 +3485,14 @@ async function handleGeld(p, request, env, ik, json0) {
       if (b.reserve && b.reserve.pot != null && ((nieuw.potten || oud.potten).some(p => p.id === b.reserve.pot && p.doel === 'btw') || b.reserve.pot === ((nieuw.btw || oud.btw) || {}).spaarpot)) return json({ error: 'reserve.pot: niet de BTW-pot (die telt al mee in de lopende rekening)' }, 400);
       nieuw.reserve = b.reserve; gewijzigd.push('reserve');
     }
-    if ('fictieve_buffer' in b) { if (b.fictieve_buffer !== null && !(typeof b.fictieve_buffer === 'number' && isFinite(b.fictieve_buffer) && b.fictieve_buffer >= 0 && b.fictieve_buffer <= 1e9)) return json({ error: 'fictieve_buffer: getal ≥ 0 of null' }, 400); nieuw.fictieve_buffer = b.fictieve_buffer; nieuw.buffer_lopend = b.fictieve_buffer; gewijzigd.push('fictieve_buffer'); }   // dual-write
-    if ('buffer_lopend' in b) { if (b.buffer_lopend !== null && !(typeof b.buffer_lopend === 'number' && isFinite(b.buffer_lopend))) return json({ error: 'buffer_lopend: getal of null' }, 400); if (!('fictieve_buffer' in b)) { nieuw.fictieve_buffer = b.buffer_lopend === null ? null : Math.max(0, b.buffer_lopend); nieuw.buffer_lopend = b.buffer_lopend; } gewijzigd.push('fictieve_buffer'); }   // oud veld: nu de fictieve buffer (dual-write)
+    if ('fictieve_buffer' in b || 'buffer_lopend' in b) {   // één waarde, in beide velden (dual-write); buffer_lopend is het oude veld
+      const geldig = x => x === null || (typeof x === 'number' && isFinite(x) && x >= 0 && x <= 1e9);
+      if ('fictieve_buffer' in b && !geldig(b.fictieve_buffer)) return json({ error: 'fictieve_buffer: getal ≥ 0 of null' }, 400);
+      if ('buffer_lopend' in b && !geldig(b.buffer_lopend)) return json({ error: 'buffer_lopend: getal ≥ 0 of null (negatieve waarden worden niet meer geaccepteerd)' }, 400);
+      if ('fictieve_buffer' in b && 'buffer_lopend' in b && b.fictieve_buffer !== b.buffer_lopend) return json({ error: 'fictieve_buffer en buffer_lopend zijn dezelfde instelling en moeten gelijk zijn' }, 400);
+      const v = 'fictieve_buffer' in b ? b.fictieve_buffer : b.buffer_lopend;
+      nieuw.fictieve_buffer = v; nieuw.buffer_lopend = v; gewijzigd.push('fictieve_buffer');
+    }
     if ('cijfers' in b) { if (b.cijfers !== null && (typeof b.cijfers !== 'object' || Array.isArray(b.cijfers))) return json({ error: 'cijfers: object of null' }, 400);
       const cb = b.cijfers || {};
       if (cb.loon_wv != null && (!Array.isArray(cb.loon_wv) || cb.loon_wv.length > 30 || cb.loon_wv.some(x => !geldId(x)) || new Set(cb.loon_wv.map(String)).size !== cb.loon_wv.length)) return json({ error: 'cijfers.loon_wv: lijst van hooguit 30 unieke grootboek-ids' }, 400);

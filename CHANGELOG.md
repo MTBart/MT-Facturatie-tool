@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — G7 Codex 8ae58d5: strikte herkenning van btw-betalingen, cache voor oudere kwartalen, dual-write buffer_lopend
+- Commit: `c76a4bd` | Auteur: Bart Witte
+
 ## 2026-10-11 — Gedeeld: SharePoint-bestand aanmaken met If-None-Match en samenvoeger met mailbox-identiteit (cockpit en Outlook-paneel)
 - Commit: `db2ba39` | Auteur: Bart Witte
 
