@@ -2394,34 +2394,25 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     </div>
     <div style="font-size:11px;color:var(--text-faint);margin-bottom:1rem" id="modal-naam-preview"></div>
 
-    <div class="card-title" style="margin-bottom:0.5rem">2 — Projectcode <span style="font-weight:400;text-transform:none;color:var(--text-faint)">(sticker · Toggl · freesbestand — pas gerust aan)</span></div>
-    <div class="grid3" style="margin-bottom:0.75rem">
-      <div class="field" style="margin-bottom:0">
-        <label>Klant (2-4)</label>
-        <input type="text" id="modal-klant" placeholder="CN" oninput="updateModalPreview()" list="klant-codes" maxlength="4" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
-        <datalist id="klant-codes"><option value="CN"><option value="LGM"><option value="MOS"><option value="STY"><option value="HWC"><option value="PT"><option value="VK"><option value="INT"></datalist>
+    <div class="card-title" style="margin-bottom:0.5rem">2 — Projectcode</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:0.5rem" id="modal-code-uitleg">Wordt automatisch toegekend: een eigen <b>werkcode</b> (W<i>jj</i>-<i>nnn</i>) uit de centrale teller. Het offertenummer komt erbij zodra de offerte in Moneybird is verstuurd. De SharePoint-map van dit nieuwe project heet <b>Volledige naam [werkcode]</b>; bestaande mappen worden nooit hernoemd.</div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:0.75rem" id="modal-map-preview"></div>
+    <details style="margin-bottom:1rem"><summary style="cursor:pointer;font-size:11px;color:var(--text-faint)">Klant- en locatiecode (technisch; meestal niets aan te passen)</summary>
+      <div class="grid3" style="margin-top:6px">
+        <div class="field" style="margin-bottom:0">
+          <label for="modal-klant">Klant (2-4)</label>
+          <input type="text" id="modal-klant" placeholder="CN" oninput="updateModalPreview()" list="klant-codes" maxlength="4" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
+          <datalist id="klant-codes"><option value="CN"><option value="LGM"><option value="MOS"><option value="STY"><option value="HWC"><option value="PT"><option value="VK"><option value="INT"></datalist>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="modal-locatie">Locatie (≤8)</label>
+          <input type="text" id="modal-locatie" placeholder="LOC" oninput="updateModalPreview()" maxlength="8" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
+        </div>
+        <input type="hidden" id="modal-product">
       </div>
-      <div class="field" style="margin-bottom:0">
-        <label>Locatie (≤8)</label>
-        <input type="text" id="modal-locatie" placeholder="LOC" oninput="updateModalPreview()" maxlength="8" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
-      </div>
-      <div class="field" style="margin-bottom:0">
-        <label>Product</label>
-        <input type="text" id="modal-product" placeholder="KEUKEN" oninput="updateModalPreview()" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
-      </div>
-    </div>
-
-    <div style="margin-bottom:1rem">
-      <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);margin-bottom:4px">Sticker-preview</div>
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <div id="sticker-preview" style="font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:0.04em;background:#fff;border:1px dashed var(--border-strong);border-radius:6px;padding:10px 16px;color:var(--text)">—</div>
-        <span id="sticker-count" style="font-family:var(--mono);font-size:12px;color:var(--text-faint)"></span>
-      </div>
-      <div id="sticker-warn" style="font-size:11px;color:var(--orange);margin-top:6px"></div>
-    </div>
+    </details>
 
     <div class="flex">
-      <button class="btn btn-gold btn-sm" onclick="autoCode(true)">✨ Genereer code</button>
       <button class="btn btn-primary" id="modal-aanmaken-knop" onclick="maakProjectAan()">Aanmaken</button>
       <button class="btn btn-secondary" onclick="sluitModal()">Annuleren</button>
       <span id="modal-status" style="font-size:12px;color:var(--text-dim)"></span>
@@ -2735,6 +2726,7 @@ function _projP2Behoud(uit, lokaal, spData){
       if(o.project_id&&!u.project_id&&!(k&&k.project_id)) z().project_id=o.project_id;
       if(o.soort&&!(k||u).soort) z().soort=o.soort;
       if(o.werkcode&&!(k||u).werkcode) z().werkcode=o.werkcode;
+      if(o.map_stijl&&!(k||u).map_stijl) z().map_stijl=o.map_stijl;
       if(Array.isArray(o.legacy_codes)){ const mis=o.legacy_codes.filter(c=>!((k||u).legacy_codes||[]).includes(c)); if(mis.length){ const w=z(); w.legacy_codes=(Array.isArray(w.legacy_codes)?w.legacy_codes:[]).concat(mis); } }
       if(Array.isArray(o.offertes)&&o.offertes.length&&!(Array.isArray((k||u).offertes)&&(k||u).offertes.length)) z().offertes=JSON.parse(JSON.stringify(o.offertes));
     }
@@ -5333,6 +5325,7 @@ function openProject(code,{scroll=true,geschiedenis='push',sectie=null,filter=nu
     if(sec==='dossier'&&typeof _dosStand==='function'){ const f=_dosStand('proj:'+proj.code); Object.keys(f).forEach(k=>{ if(f[k]) fl[k]=f[k]; }); }
     mtRoute.zet({tab:'projecten',code:proj.code,sectie:sec!=='overzicht'?sec:undefined,filter:fl},geschiedenis==='push');
   }
+  setTimeout(()=>{ try{ projOfferteVerstuurdCheck(proj.code); }catch(e){ console.warn('offerte-check faalde:',e); } },400);
   return proj;
 }
 function selecteerProject(code,el){ openProject(code,{scroll:!el}); }
@@ -6881,6 +6874,18 @@ function _t2Kandidaten(mt,ps){
     return {p,score}; }).filter(k=>k.score>0).sort((a,b)=>b.score-a.score);
 }
 // Projectscherm: Toggl-project kiezen (mens bevestigt) en offertenummer toekennen.
+// Meerwerk-/voorstel-offertes en het Toggl-naam-hulpje naast het offertenummer: alles wat er klikbaar uitziet, doet iets.
+function offertesRijHtml(proj,c,togglProj){
+  const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' ), lijst=Array.isArray(proj.offertes)?proj.offertes:[];
+  const uit=lijst.filter(o=>o&&o.nummer&&(o.rol==='meerwerk'||o.rol==='voorstel')).map(o=>o.rol==='voorstel'
+    ?kb({status:'open',klein:true,label:'verstuurd: '+o.nummer,titel:'Offerte '+o.nummer+' is verstuurd — klik om te kiezen: meerwerk, vervangt de hoofdofferte of niet bij dit project',onclick:`projOfferteVoorstelKies(${jsLit(c)},${jsLit(String(o.nummer))})`})
+    :kb({status:'gekoppeld',klein:true,label:o.nummer+' (meerwerk)',titel:'Meerwerk-offerte '+o.nummer+' — klik voor acties',onclick:`projOfferteActies(${jsLit(c)},${jsLit(String(o.nummer))})`}));
+  if(proj.offertenr) uit.push(kb({status:'open',klein:true,label:'+ meerwerk-offerte',titel:'Een tweede offerte (meerwerk) uit Moneybird bij dit project zetten',onclick:`projOfferteMeerwerkToevoegen(${jsLit(c)})`}));
+  // Alleen als in Toggl exact de naam ZONDER het nummer staat, ontbreekt het nummer daar nog: dan een knop (met bevestiging) om het bij te werken.
+  if(proj.offertenr&&proj.tg_project_id&&togglProj&&typeof t2ProjectNaam==='function'&&String(togglProj.name||'').trim()===t2ProjectNaam(Object.assign({},proj,{offertenr:''})))
+    uit.push(kb({status:'open',klein:true,label:'Toggl-naam bijwerken',titel:'In Toggl staat het offertenummer nog niet voor de projectnaam — klik om bij te werken (met bevestiging)',onclick:`t2TogglNaamBijwerken(${jsLit(c)})`}));
+  return uit.join(' ');
+}
 function t2ProjectRijHtml(proj){
   const p=(typeof _tgCache!=='undefined'&&_tgCache.projecten||[]).find(x=>x.id===proj.tg_project_id);
   const naam=proj.tg_project_id?((p&&p.name)||'Toggl'):'';     // nooit het ruwe id (dat staat in de popover)
@@ -6888,6 +6893,7 @@ function t2ProjectRijHtml(proj){
   return `<div class="koppel-rij">
     <span class="kpi-label" style="margin:0">Toggl-project:</span> ${kb(proj.tg_project_id?{status:'gekoppeld',label:naam,titel:'Gekoppeld aan Toggl-project'+(p&&p.name?' '+p.name:'')+' — klik voor details',onclick:`t2Pop(this,${jsLit(c)})`}:{status:'open',label:'Toggl',titel:'Nog geen Toggl-project — klik om er een te kiezen',onclick:`t2KiesProject(${jsLit(c)})`})}
     <span class="kpi-label" style="margin:0 0 0 .5rem">Offertenummer:</span> ${kb(proj.offertenr?{status:'gekoppeld',label:proj.offertenr,titel:'Offertenummer '+proj.offertenr+' — klik om te wijzigen',onclick:`t2OffertenummerToekennen(${jsLit(c)})`}:{status:'open',label:'offertenummer',titel:'Kies de Moneybird-offerte; de projectnaam in Toggl wordt "<nummer> <naam>"',onclick:`t2OffertenummerToekennen(${jsLit(c)})`})}
+    ${offertesRijHtml(proj,c,p)}
     <span id="t2-st-${esc(proj.code.replace(/[^A-Za-z0-9]/g,''))}"></span></div>`;
 }
 // Popover Moneybird-contact: openen, bron, wijzigen, handmatige koppeling weghalen.
@@ -7032,6 +7038,133 @@ async function t2OffertenummerToekennen(code){
       _t2St(code,'⚠ '+(e2.message||e2)+(hernoemd?' — LET OP: de naam in Toggl is wél al gewijzigd naar "'+nieuwNaam+'" (oude naam staat in het journaal)':' — er is niets gewijzigd in Toggl'),'#c0392b');
     }
   }catch(e){ _t2St(code,'⚠ '+e.message+' — er is niets gewijzigd in Toggl','#c0392b'); }
+}
+// ── P3b: offertenummer overnemen zodra de Moneybird-offerte is VERSTUURD, en meerdere offertes per project (meerwerk) ──
+// Bron: de offertes die de calculatie als concept in Moneybird zette (CALC.offertes[..].mb_estimate_id). Moneybird geeft pas
+// bij versturen een nummer, dus we kijken (alleen lezen: GET estimates/<id>) of zo'n concept inmiddels een nummer heeft.
+// Eerste nummer van het project -> automatisch hoofdofferte; een volgende/andere offerte -> voorstel (meerwerk / vervangt / negeren),
+// nooit stil. Concept, afgewezen en gearchiveerd tellen nooit; een nummer dat al bij een ander project staat wordt niet overgenomen.
+function projOfferteBeoordeel(p, est, alle){
+  const nr = String((est && est.estimate_id) || '').trim(), mid = est && est.id != null ? String(est.id) : '';
+  if (!est || !nr || !mid || est.state === 'draft') return { soort: 'wacht' };
+  if (['rejected', 'archived'].includes(est.state)) return { soort: 'overslaan' };
+  const lijst = Array.isArray(p.offertes) ? p.offertes : [];
+  if (String(p.offertenr || '') === nr || lijst.some(o => o && (String(o.nummer || '') === nr || (o.mb_id != null && String(o.mb_id) === mid)))) return { soort: 'bekend' };
+  const bezet = (alle || []).find(x => x && x !== p && !x._vervallen && [x.offertenr].concat(Array.isArray(x.offertes) ? x.offertes.map(o => o && o.nummer) : []).filter(Boolean).map(String).includes(nr));
+  if (bezet) return { soort: 'conflict', met: bezet };
+  const heeftHoofd = !!(p.offertenr || lijst.some(o => o && o.rol === 'hoofd' && o.nummer));
+  return { soort: heeftHoofd ? 'voorstel' : 'hoofd', nummer: nr, mb_id: mid, status: est.state || '' };
+}
+// Moneybird-id's van de concept-offertes die de calculatie voor dit project maakte (en die nog geen regel in offertes[] hebben).
+function projConceptEstimates(p){
+  const ids = new Set();
+  const cal = (window.CALC && CALC.offertes) ? CALC.offertes : {};
+  Object.keys(cal).forEach(k => { const o = cal[k]; if (!o || o.mb_estimate_id == null) return;
+    const hoort = k === p.code || (o.project_code && (o.project_code === p.code || (projVind(o.project_code) || {}).project_id === p.project_id));
+    if (hoort) ids.add(String(o.mb_estimate_id)); });
+  (Array.isArray(p.offertes) ? p.offertes : []).forEach(o => { if (o && o.mb_id != null && o.nummer) ids.delete(String(o.mb_id)); });   // al gekoppeld (hoofd, meerwerk of genegeerd): niet opnieuw ophalen
+  return [...ids];
+}
+const _offNaGezien = {};
+async function projOfferteVerstuurdCheck(code, opts){
+  const p0 = projVind(code); if (!p0 || p0._vervallen || p0.bron === 'app') return;
+  if (typeof mbGet !== 'function' || typeof getAdmin !== 'function') return;
+  const sleutel = p0.project_id || p0.code;
+  if (!(opts && opts.nu) && Date.now() - (_offNaGezien[sleutel] || 0) < 10 * 60 * 1000) return;
+  const ids = projConceptEstimates(p0); if (!ids.length) return;
+  _offNaGezien[sleutel] = Date.now();
+  let verander = false;
+  for (const id of ids) {
+    let est = null;
+    try { const r = await mbGet(`${getAdmin()}/estimates/${encodeURIComponent(id)}`); if (!r.ok) continue; est = await r.json(); } catch (e) { continue; }
+    const p = projVind(code); if (!p) return;                       // kan intussen veranderd zijn
+    const b = projOfferteBeoordeel(p, est, PROJECT_CODES);
+    if (b.soort === 'hoofd') {
+      ctlOfferteZet(p, est);                                        // zet offertenr + offertes[] (hoofd) en schrijft het journaal
+      verander = true;
+      if (typeof planToast === 'function') planToast('Offertenummer ' + b.nummer + ' overgenomen voor ' + projNaamVol(p));
+    } else if (b.soort === 'voorstel') {
+      p.offertes = (Array.isArray(p.offertes) ? p.offertes : []).concat([{ nummer: b.nummer, mb_id: b.mb_id, rol: 'voorstel', status: b.status, gezien: new Date().toISOString() }]);
+      slaProjectenOp(); verander = true;
+      _ctlJournaal('offerte-voorstel', p.code, { nummer: b.nummer, mb_estimate: b.mb_id });
+      if (typeof planToast === 'function') planToast('Offerte ' + b.nummer + ' is verstuurd: kies bij ' + projNaamVol(p) + ' of het meerwerk is');
+    } else if (b.soort === 'conflict') {
+      console.warn('offerte', b.nummer || (est && est.estimate_id), 'staat al bij', b.met && b.met.code, '— niet overgenomen');
+    }
+  }
+  if (verander && huidigProject && huidigProject.code === code && typeof _rerenderDetailKeepScroll === 'function') _rerenderDetailKeepScroll();
+}
+const _offMbUrl = o => `https://moneybird.com/${getAdmin()}/estimates/${o.mb_id}`;
+// Een verstuurde offerte die nog bij niets hoort: meerwerk, vervangt de hoofdofferte, of niet bij dit project.
+async function projOfferteVoorstelKies(code, nummer){
+  const p = projVind(code); if (!p) return;
+  const o = (p.offertes || []).find(x => x && x.rol === 'voorstel' && String(x.nummer) === String(nummer)); if (!o) return;
+  const i = await mtDialog.choose({ title: 'Offerte ' + o.nummer + ' is verstuurd',
+    message: 'Deze offerte komt uit de calculatie van „' + projNaamVol(p) + '”.' + (p.offertenr ? ' De hoofdofferte is ' + p.offertenr + '.' : '') + ' Wat is het? Niets wordt gewist.',
+    choices: [{ label: 'Meerwerk', sublabel: 'komt erbij, naast de hoofdofferte' + (p.offertenr ? ' ' + p.offertenr : '') },
+      { label: 'Vervangt de hoofdofferte', sublabel: (p.offertenr || 'de huidige') + ' blijft bewaard als vorige offerte; de projectnaam in Toggl kan daarna bijgewerkt worden' },
+      { label: 'Niet bij dit project', sublabel: 'negeren; de offerte blijft gewoon in Moneybird staan' }] });
+  if (i == null) return;
+  const oud = JSON.parse(JSON.stringify(p.offertes || []));
+  if (i === 0) { o.rol = 'meerwerk'; delete o.gezien; slaProjectenOp(); }
+  else if (i === 1) {
+    if (!await mtDialog.confirm({ title: 'Hoofdofferte vervangen', message: o.nummer + ' wordt de hoofdofferte' + (p.offertenr ? '; ' + p.offertenr + ' blijft bewaard als vorige offerte' : '') + '.', okLabel: 'Vervangen' })) return;
+    ctlOfferteZet(p, { estimate_id: o.nummer, id: o.mb_id, state: o.status });
+  } else { o.rol = 'genegeerd'; slaProjectenOp(); }
+  _ctlJournaal('offerte-voorstel-besluit', p.code, { nummer: o.nummer, besluit: ['meerwerk', 'vervangt', 'genegeerd'][i], oud });
+  if (typeof _rerenderDetailKeepScroll === 'function') _rerenderDetailKeepScroll();
+}
+// Een meerwerk-offerte uit Moneybird erbij zetten (handmatig; zelfde kandidatenlijst als de controlelijst).
+async function projOfferteMeerwerkToevoegen(code){
+  const p = projVind(code); if (!p) return;
+  if (!p.offertenr) return mtDialog.alert({ title: 'Meerwerk-offerte', message: 'Ken eerst het offertenummer van de hoofdofferte toe (klik op "offertenummer"); meerwerk komt daar naast.' });
+  let k; try { k = await ctlOfferteKandidaten(p); } catch (e) { return mtDialog.alert({ title: 'Meerwerk-offerte', message: e.message }); }
+  if (k.geenContact) return mtDialog.alert({ title: 'Meerwerk-offerte', message: 'Dit project heeft nog geen Moneybird-contact. Koppel eerst het contact (Overzicht → Moneybird).' });
+  const al = new Set((p.offertes || []).map(o => o && String(o.nummer)).concat([String(p.offertenr)]));
+  const lijst = k.lijst.filter(x => !al.has(String(x.e.estimate_id))).slice(0, 12);
+  if (!lijst.length) return mtDialog.alert({ title: 'Meerwerk-offerte', message: 'Geen andere verstuurde offerte met nummer bij dit contact (concepten krijgen pas bij versturen een nummer).' });
+  const i = await mtDialog.choose({ title: 'Meerwerk-offerte voor „' + projNaamVol(p) + '”', message: 'Kies de offerte die als meerwerk bij dit project hoort. Niets wordt automatisch gekoppeld.',
+    choices: lijst.map(x => ({ label: x.e.estimate_id + ' — ' + (x.e.reference || x.e.title || '(geen referentie)'), sublabel: [x.contact, x.e.state || '', x.e.estimate_date || '', x.bezet ? '⚠ al bij „' + projNaamVol(x.bezet) + '”' : ''].filter(Boolean).join(' · ') })) });
+  if (i == null) return;
+  const x = lijst[i];
+  if (x.bezet) return mtDialog.alert({ title: 'Meerwerk-offerte', message: 'Offerte ' + x.e.estimate_id + ' hoort al bij „' + projNaamVol(x.bezet) + '”. Haal hem daar eerst weg als hij echt bij dit project hoort.' });
+  if (!await mtDialog.confirm({ title: 'Meerwerk-offerte koppelen', message: 'Offerte ' + x.e.estimate_id + ' wordt meerwerk bij „' + projNaamVol(p) + '” (hoofdofferte ' + p.offertenr + ').', okLabel: 'Koppelen' })) return;
+  p.offertes = (Array.isArray(p.offertes) ? p.offertes : []).concat([{ nummer: String(x.e.estimate_id), mb_id: x.e.id != null ? String(x.e.id) : null, rol: 'meerwerk', status: x.e.state || '' }]);
+  slaProjectenOp();
+  _ctlJournaal('offerte-meerwerk', p.code, { nummer: String(x.e.estimate_id), mb_estimate: x.e.id });
+  if (typeof _rerenderDetailKeepScroll === 'function') _rerenderDetailKeepScroll();
+}
+// Acties op een meerwerk-offerte: openen in Moneybird, hoofdofferte maken, uit dit project halen (de offerte zelf blijft in Moneybird).
+async function projOfferteActies(code, nummer){
+  const p = projVind(code); if (!p) return;
+  const o = (p.offertes || []).find(x => x && String(x.nummer) === String(nummer) && x.rol !== 'hoofd'); if (!o) return;
+  const i = await mtDialog.choose({ title: 'Offerte ' + o.nummer + ' (' + (o.rol === 'meerwerk' ? 'meerwerk' : o.rol) + ')', message: projNaamVol(p),
+    choices: [{ label: 'Openen in Moneybird', sublabel: o.mb_id ? 'nieuw tabblad' : 'geen Moneybird-id bekend' }, { label: 'Hoofdofferte maken', sublabel: (p.offertenr || 'de huidige') + ' blijft bewaard als vorige offerte' }, { label: 'Uit dit project halen', sublabel: 'de offerte blijft in Moneybird staan' }] });
+  if (i == null) return;
+  if (i === 0) { if (o.mb_id) window.open(_offMbUrl(o), '_blank', 'noopener'); return; }
+  const oud = JSON.parse(JSON.stringify(p.offertes || []));
+  if (i === 1) {
+    if (!await mtDialog.confirm({ title: 'Hoofdofferte vervangen', message: o.nummer + ' wordt de hoofdofferte; ' + (p.offertenr || 'de huidige') + ' blijft bewaard als vorige offerte.', okLabel: 'Vervangen' })) return;
+    ctlOfferteZet(p, { estimate_id: o.nummer, id: o.mb_id, state: o.status });
+  } else {
+    if (!await mtDialog.confirm({ title: 'Offerte uit project halen', message: 'Offerte ' + o.nummer + ' hoort niet meer bij „' + projNaamVol(p) + '”. De offerte zelf blijft in Moneybird staan.', okLabel: 'Uit project halen', danger: true })) return;
+    p.offertes = p.offertes.filter(x => x !== o); slaProjectenOp();
+  }
+  _ctlJournaal('offerte-actie', p.code, { nummer: o.nummer, actie: ['openen', 'hoofd', 'weg'][i], oud });
+  if (typeof _rerenderDetailKeepScroll === 'function') _rerenderDetailKeepScroll();
+}
+// Nadat het offertenummer wisselt blijft de Toggl-projectnaam staan tot de gebruiker bevestigt (Toggl is een buitenwereld-systeem).
+async function t2TogglNaamBijwerken(code){
+  const mt = projVind(code); if (!mt || !mt.offertenr) return;
+  const nieuwNaam = t2ProjectNaam(mt);
+  let pid; try { pid = await _tgProjectIdVoorMt(mt); } catch (e) { _t2St(code, '⚠ ' + e.message, '#c0392b'); return; }
+  if (!pid) { _t2St(code, 'Geen eenduidig Toggl-project gekoppeld — er is niets gewijzigd.', '#c0392b'); return; }
+  const huidig = ((_tgCache.projecten || []).find(x => x.id === pid) || {}).name || '';
+  if (huidig === nieuwNaam) { _t2St(code, 'De naam in Toggl klopt al.'); return; }
+  if (!await mtDialog.confirm({ title: 'Toggl-projectnaam bijwerken', message: '„' + huidig + '” → „' + nieuwNaam + '”\n\nDe projectmap wordt niet hernoemd.', okLabel: 'Bijwerken' })) return;
+  if (typeof _ptJournaal === 'function') _ptJournaal('offertenummer', code, { offertenr_oud: mt.offertenr, offertenr_nieuw: mt.offertenr, toggl_naam_oud: huidig, toggl_naam_nieuw: nieuwNaam, tg_project_id: pid });
+  try { _t2St(code, 'Toggl-projectnaam bijwerken…'); await t2HernoemProject(pid, nieuwNaam); _tgCache.projecten = null; try { await t2Projecten(true); } catch (e) {} if (typeof _rerenderDetailKeepScroll === 'function') _rerenderDetailKeepScroll(); }
+  catch (e) { _t2St(code, '⚠ ' + (e.message || e) + ' — de naam in Toggl is niet gewijzigd', '#c0392b'); }
 }
 async function projTaakNaarToggl(code,id,vers=true){
   const mt=projVind(code); if(!mt) return false;
@@ -8614,25 +8747,16 @@ function autoCode(force){
   updateModalPreview();
 }
 function updateModalPreview(){
-  const ek=document.getElementById('modal-klant'), el=document.getElementById('modal-locatie'), ep=document.getElementById('modal-product');
-  const k=_clean(ek.value).replace(/[^A-Z0-9]/g,''); ek.value=k;
-  const l=_clean(el.value).replace(/[^A-Z0-9]/g,''); el.value=l;
-  const p=afkortProduct(ep.value);
-  const code=[k,l,p].filter(Boolean).join('-');
-  const prev=document.getElementById('sticker-preview'); prev.textContent=code||'—';
-  const cnt=document.getElementById('sticker-count'), warn=document.getElementById('sticker-warn');
-  const len=code.length;
-  cnt.textContent=`${len} / ${STICKER_MAX} tekens`;
-  let col='var(--green)', w='', bc='var(--border-strong)';
-  if(len>STICKER_HARD){col='var(--red)';bc='var(--red)';w='⚠ Te lang voor de sticker — kort het product of de locatie in.';}
-  else if(len>STICKER_MAX){col='var(--orange)';bc='var(--orange)';w='Krap — net binnen de sticker, maar korter is veiliger.';}
-  cnt.style.color=col; prev.style.borderColor=bc; warn.textContent=w;
-  // volledige naam preview
+  const ek=document.getElementById('modal-klant'), el=document.getElementById('modal-locatie');
+  ek.value=_clean(ek.value).replace(/[^A-Z0-9]/g,'');
+  el.value=_clean(el.value).replace(/[^A-Z0-9]/g,'');
+  // volledige naam + de mapnaam die daaruit volgt (de werkcode komt pas bij het aanmaken)
   const nk=document.getElementById('modal-naam-klant').value.trim();
   const nl=document.getElementById('modal-naam-locatie').value.trim();
   const np=document.getElementById('modal-naam-product').value.trim();
   const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim();
   document.getElementById('modal-naam-preview').textContent=naam?`Volledige naam: ${naam}`:'';
+  const mp=document.getElementById('modal-map-preview'); if(mp) mp.textContent=naam?`Projectmap: ${_projVeilig(naam)} [werkcode]`:'';
 }
 async function verwijderProject(code){
   if(!await mtDialog.confirm({title:'Project verwijderen',message:`Project „${projNaamVol(_projVoorCode(code))||'zonder naam'}” verwijderen?`,okLabel:'Verwijderen',danger:true})) return;
@@ -8664,14 +8788,16 @@ async function maakProjectAan(){
   const np=document.getElementById('modal-naam-product').value.trim();
   const status=document.getElementById('modal-status');
   if(!k||!p){status.style.color='var(--red)';status.textContent='Vul minimaal klant en product in';return;}
-  let code=[k,l,p].filter(Boolean).join('-');
-  if(code.length>STICKER_HARD){status.style.color='var(--red)';status.textContent='Code te lang voor sticker — kort product of locatie in';return;}
-  // collision → volgnummer -02, -03 … (alleen bij botsing, schone codes blijven schoon)
-  if(projVind(code)){
-    let n=2; const base=code;
-    while(projVind(`${base}-${String(n).padStart(2,'0')}`)) n++;   // ook oude codes (legacy) zijn bezet
-    code=`${base}-${String(n).padStart(2,'0')}`;
-  }
+  // P3b: de generator-code (KLANT-LOC-PROD) is uit. De technische sleutel `code` is de werkcode (W<jj>-<nnn>) uit de
+  // centrale teller, idempotent per project_id. Lukt dat niet, dan wordt er NIETS aangemaakt (geen gok, geen halve start).
+  const projectId=projNieuwId();
+  status.style.color='var(--text-dim)'; status.textContent='Werkcode ophalen…';
+  let code=null, wcFout='';
+  try{ const j=await _tellerApi('/teller/werkcode',{project_id:projectId}); code=(j&&j.werkcode)?String(j.werkcode):null; if(!code) wcFout=j===null?'niet ingelogd':'geen werkcode ontvangen'; }
+  catch(e){ wcFout=String(e.message||e); }
+  if(!code){status.style.color='var(--red)';status.textContent='Werkcode niet beschikbaar ('+wcFout+') — er is niets aangemaakt. Probeer het zo opnieuw.';return;}
+  if(projVind(code)){status.style.color='var(--red)';status.textContent='Werkcode '+code+' is al in gebruik — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
+  _werkcodesZet({[projectId]:code});
   const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim()||code;
   // Auto-koppeling Moneybird-contact: getypte klantnaam tegen verrijkte registry.
   const kv=klantVolByNaam(nk);
@@ -8687,14 +8813,13 @@ async function maakProjectAan(){
     klant_telefoon:(kv&&kv.telefoon)||'',klant_kvk:(kv&&kv.kvk)||'',
     klant_btw:(kv&&kv.btw)||'',klant_customer_id:(kv&&kv.customer_id)||null,
     created:new Date().toISOString().slice(0,10),
-    project_id:projNieuwId(),legacy_codes:[code],soort:'klant',offertes:[]};
+    project_id:projectId,werkcode:code,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:_MAP_NAAM_CODE};
   // Kwam dit project uit een mail (inbox → "Maak project")? Leg de bron vast.
   if(_ibProjBron) nieuwProj.bron_mail={internetMessageId:_ibProjBron.internetMessageId,
     subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,mbx:_ibProjBron.mbx};
   PROJECT_CODES.push(nieuwProj);
   aangemaakt=true;
   slaProjectenOp();
-  projWerkcodeVraag(nieuwProj);   // eigen werkcode (W<jj>-<nnn>) van de worker-teller; lukt het niet → later
   // Bron-mail automatisch aan het verse project koppelen (zoals de inbox-knop "koppel project").
   // Had de mail bijlagen, dan na het sluiten van de modal het bijlagen-venster aanbieden.
   let bijlagenNa=null;
@@ -10244,7 +10369,14 @@ function _projLocNaam(proj){
   const lc=k&&Array.isArray(k.locaties)?k.locaties.find(x=>x.code===(proj.loc||'').toUpperCase()):null;
   return (lc&&lc.naam)||proj.loc_naam||proj.loc;
 }
-function _projMapNaam(proj){ return _projVeilig(`${proj.code} - ${proj.product_naam||proj.naam||proj.code}`); }
+// Mapnaam (P3b): NIEUWE projecten (map_stijl 'naam-code') heten "Volledige naam [code]"; bestaande projecten houden
+// "code - naam" en worden NOOIT hernoemd. De code in de tag is de technische sleutel (werkcode) en verandert niet,
+// ook niet als het offertenummer later volgt of de projectnaam wijzigt (gevonden wordt de map via itemId of via de tag).
+const _MAP_NAAM_CODE='naam-code';
+function _projMapNaam(proj){
+  if(proj.map_stijl===_MAP_NAAM_CODE) return _projVeilig(`${projNaamVol(proj)} [${proj.code}]`);
+  return _projVeilig(`${proj.code} - ${proj.product_naam||proj.naam||proj.code}`);
+}
 // Read-only zoeken. `lijst` = optionele memo voor listChildren (rapport over alle projecten).
 async function _projMapZoek(proj, lijst){
   const lees = lijst || (p => _SP.listChildren(p));
@@ -10254,8 +10386,8 @@ async function _projMapZoek(proj, lijst){
   if(!kl) return { pad:null, kandidaten:[], reden:'geen klantmap "'+kn+'"' };
   const klPad = `${PROJ_ROOT}/${kl.name}`;
   const exactNaam = _projMapNaam(proj), code = proj.code;
-  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code;
-  const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n);   // ziet eruit als een (andere) projectmap → niet induiken
+  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']');
+  const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n) || / \[[A-Z0-9][A-Z0-9-]*\]$/.test(n);   // ziet eruit als een (andere) projectmap → niet induiken
   const kandidaten = [];
   const klKids = await lees(klPad);
   for(const c of klKids.filter(c=>c.folder)){
@@ -10358,7 +10490,7 @@ window.genereerProjectMappen = async function(proj) {
     parent = `${parent}/${locFolder}`;
   }
   const projNaam = (proj.product_naam || proj.naam || proj.code);
-  const projFolder = await _SP.ensureFolder(parent, `${proj.code} - ${projNaam}`, false);
+  const projFolder = await _SP.ensureFolder(parent, proj.map_stijl===_MAP_NAAM_CODE ? _projMapNaam(proj) : `${proj.code} - ${projNaam}`, false);
   const projPath = `${parent}/${projFolder}`;
   for (const sub of SUBS) await _SP.ensureFolder(projPath, sub, false);
   // itemId vastleggen (1 call), zodat volgende keren projMap met één controle-call klaar is.

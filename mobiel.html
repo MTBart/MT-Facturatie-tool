@@ -5043,7 +5043,7 @@ async function findProjectFolder(code) {
   const token = await window.getGraphToken();
   if (!token) throw new Error('Niet ingelogd op Microsoft 365');
   const filter = arr => arr.filter(it =>
-    it.folder && (it.name === code || it.name.toUpperCase().startsWith(code.toUpperCase() + ' ')));
+    it.folder && (it.name === code || it.name.toUpperCase().startsWith(code.toUpperCase() + ' ') || it.name.toUpperCase().endsWith(' [' + code.toUpperCase() + ']')));
   const zoek = async base => {
     const r = await fetch(`${base}/root/search(q='${encodeURIComponent(code)}')?$select=id,name,folder,parentReference&$top=50`,
       { headers: {'Authorization':`Bearer ${token}`} });

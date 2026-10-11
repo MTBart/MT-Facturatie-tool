@@ -20,7 +20,7 @@ module.exports = {
       'laadKlanten', 'renderKlantenGrid', 'openKlantDetail', 'laadFacturen', 'renderControleLijst', 'laadControlePDF', 'renderControleDetail', 'addCtrlRegel', 'analyseerdControleFactuur', 'neemAlleenProjectOver', 'renderHistory',
       'renderAgingBars', 'renderLeveranciersBar', '_cfRenderTeFact', '_cfRenderOnderhanden', '_cfRenderPijplijn', 'nacalcLaadOfferte', 'nacalcMaakFactuur', 'mbPop', 'klantMbPop', 'bijlagenHtml', 'mapPop', 'klantSecGeld', 'klantGeldLaad', 'arr'],
     veiligeFns: ['fmt', 'fmtDatum', 'fmtL', 'cfFmt2'],   // getal-/datumopmaak: geeft nooit markup terug
-    fragmentFns: ['projKortHtml', 'projTag', 'projectOptiesHTML', 'MTKoppelUI.badge', 'ntkPlek', 'icoon', 'tabel', 'state', 'agenda', 't2ProjectRijHtml', 'projMapBadge', 'MTContactenUI.projectKaart'],   // geven HTML terug; hun eigen templates worden zelf gescand
+    fragmentFns: ['projKortHtml', 'projTag', 'projectOptiesHTML', 'MTKoppelUI.badge', 'ntkPlek', 'icoon', 'tabel', 'state', 'agenda', 't2ProjectRijHtml', 'offertesRijHtml', 'projMapBadge', 'MTContactenUI.projectKaart'],   // geven HTML terug; hun eigen templates worden zelf gescand
     houd: _h2.houd || [],
     overslaan: _h2.overslaan || [],
   },
