@@ -1,0 +1,13 @@
+# Cloudflare Pages (tool.mortiseandtenon.nl): beveiligingskoppen voor alle pagina's. Op GitHub Pages wordt dit bestand genegeerd
+# (daar staat alleen de minimale, afgedwongen meta-CSP in de pagina's zelf: object-src 'none'; base-uri 'self').
+#
+# De Report-Only-CSP hieronder: dezelfde pagina's, maar een brede, realistische policy die NIETS blokkeert: overtredingen gaan naar
+# de worker (POST /csp-rapport; die bewaart alleen de directive en het host van het geblokkeerde, nooit inhoud). Pas na een paar weken
+# zonder meldingen (bekijk /beheer/log, cspTop) wordt dit afgedwongen. 'unsafe-inline' voor scripts blijft voorlopig nodig (inline onclick-handlers en
+# inline scripts); dat gaat weg na F7 3b en Trusted Types.
+#
+# Hosts (uit de code): de worker (alle API-verkeer: Moneybird, Claude, Toggl Focus), Microsoft Graph + login (MSAL; popup/redirect-navigatie valt
+# niet onder deze policy), SharePoint (upload- en downloadadressen van Graph), Toggl Track (alleen api.track.toggl.com; Moneybird en Toggl Focus lopen via de worker), Google Fonts. Foto's en bijlagen komen als blob:/data:.
+/*
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' https://mt-claude-proxy.bart-a12.workers.dev https://graph.microsoft.com https://login.microsoftonline.com https://*.sharepoint.com https://api.track.toggl.com; frame-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri https://mt-claude-proxy.bart-a12.workers.dev/csp-rapport; report-to csp
+  Reporting-Endpoints: csp="https://mt-claude-proxy.bart-a12.workers.dev/csp-rapport"

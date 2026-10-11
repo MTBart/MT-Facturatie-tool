@@ -1122,9 +1122,9 @@ async function handleAanwezig(env, json) {
 // Log-teller: in geheugen optellen, hooguit eens per LOG_FLUSH_MS samenvoegen in KV.
 const _teller = { dag: '', totaal: 0, geweigerd: 0, redenen: {}, laatsteFlush: Date.now() };
 async function flushTeller(env) {
-  if (!env.MT_ROLLEN || (!_teller.totaal && !_teller.geweigerd && !_teller.proxyTotaal)) return;
-  const dag = _teller.dag, delta = { totaal: _teller.totaal, geweigerd: _teller.geweigerd, redenen: _teller.redenen, proxy: _teller.proxy || {}, proxyTotaal: _teller.proxyTotaal || 0 };
-  _teller.totaal = 0; _teller.geweigerd = 0; _teller.redenen = {}; _teller.proxy = {}; _teller.proxyTotaal = 0; _teller.laatsteFlush = Date.now();
+  if (!env.MT_ROLLEN || (!_teller.totaal && !_teller.geweigerd && !_teller.proxyTotaal && !_teller.cspTotaal)) return;
+  const dag = _teller.dag, delta = { totaal: _teller.totaal, geweigerd: _teller.geweigerd, redenen: _teller.redenen, proxy: _teller.proxy || {}, proxyTotaal: _teller.proxyTotaal || 0, csp: _teller.csp || {}, cspTotaal: _teller.cspTotaal || 0 };
+  _teller.totaal = 0; _teller.geweigerd = 0; _teller.redenen = {}; _teller.proxy = {}; _teller.proxyTotaal = 0; _teller.csp = {}; _teller.cspTotaal = 0; _teller.laatsteFlush = Date.now();
   const oud = (await kvJson(env, 'stat:' + dag)) || { totaal: 0, geweigerd: 0, redenen: {} };
   oud.totaal += delta.totaal; oud.geweigerd += delta.geweigerd;
   for (const [k, n] of Object.entries(delta.redenen)) {
@@ -1135,7 +1135,61 @@ async function flushTeller(env) {
   for (const [k, n] of Object.entries(delta.proxy)) {
     if (oud.proxy[k] != null || Object.keys(oud.proxy).length < 300) oud.proxy[k] = (oud.proxy[k] || 0) + n;
   }
+  // CSP-rapporten (alleen directive + host van het geblokkeerde, geen inhoud): zie cspRapport
+  oud.csp = oud.csp || {}; oud.cspTotaal = (oud.cspTotaal || 0) + delta.cspTotaal;
+  for (const [k, n] of Object.entries(delta.csp)) {
+    if (oud.csp[k] != null || Object.keys(oud.csp).length < 300) oud.csp[k] = (oud.csp[k] || 0) + n;
+  }
   try { await kvZet(env, 'stat:' + dag, oud, { expirationTtl: 35 * DAG_S }); } catch {}
+}
+// ── CSP-rapporten (POST /csp-rapport, zonder login: een browser stuurt ze zonder token) ───────────────────────────────────────────────
+// De pagina's draaien met een afgedwongen minimale meta-CSP (object-src 'none'; base-uri 'self') en op Cloudflare Pages met een Report-Only-CSP (_headers).
+// Een overtreding komt hier binnen. We bewaren ALLEEN de directive (bv. script-src-elem) en het host van het geblokkeerde ding (bv. cdn.example.com, of
+// "inline"/"eval"/"data"/"blob"): nooit de pagina-url met pad of query, de broncode (sample), de bronregel, het beleid of de referrer. Alleen tellers per dag
+// (KV stat:<dag>, getoond in /beheer/log als cspTop); grootte, aantal per bericht, aantal per minuut en het aantal verschillende sleutels zijn begrensd.
+const CSP_MAX_BODY = 16384, CSP_PER_MIN = 120, CSP_PER_BERICHT = 10;
+const CSP_KOP = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400', 'Cache-Control': 'no-store' };
+const _cspVenster = { t: 0, n: 0 };
+function cspHost(u) {
+  const s = String(u == null ? '' : u).trim().toLowerCase();
+  if (!s) return 'leeg';
+  if (['inline', 'eval', 'self', 'data', 'blob', 'wasm-eval', 'trusted-types-policy', 'trusted-types-sink'].includes(s)) return s;
+  if (s.startsWith('data:')) return 'data'; if (s.startsWith('blob:')) return 'blob';
+  try {
+    const x = new URL(s), schema = x.protocol.replace(':', '');
+    if (!['http', 'https', 'ws', 'wss'].includes(schema)) return /^[a-z-]{2,30}$/.test(schema) ? 'schema:' + schema : 'onbekend';
+    return /^[a-z0-9.-]{1,80}$/.test(x.hostname) ? x.hostname : 'ongeldig';
+  } catch { return 'onbekend'; }
+}
+function cspVeld(b) {   // b = het rapportlichaam (oud: csp-report; nieuw: Reporting API body)
+  if (!b || typeof b !== 'object') return null;
+  const d = String(b['effective-directive'] || b.effectiveDirective || b['violated-directive'] || b.violatedDirective || '').trim().split(/\s+/)[0].toLowerCase();
+  return { directive: /^[a-z][a-z-]{1,40}$/.test(d) ? d : 'onbekend', host: cspHost(b['blocked-uri'] !== undefined ? b['blocked-uri'] : b.blockedURL !== undefined ? b.blockedURL : b.blockedUri) };
+}
+async function cspRapport(request, env, ctx) {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CSP_KOP });
+  if (request.method !== 'POST') return new Response(null, { status: 405, headers: CSP_KOP });
+  const cl = Number(request.headers.get('content-length'));
+  if (isFinite(cl) && cl > CSP_MAX_BODY) return new Response(null, { status: 413, headers: CSP_KOP });
+  let tekst = ''; try { tekst = await request.text(); } catch { return new Response(null, { status: 400, headers: CSP_KOP }); }
+  if (tekst.length > CSP_MAX_BODY) return new Response(null, { status: 413, headers: CSP_KOP });
+  let j = null; try { j = JSON.parse(tekst); } catch {}
+  const lijst = Array.isArray(j) ? j.filter(r => r && typeof r === 'object' && (r.type === undefined || r.type === 'csp-violation')).map(r => r.body)
+    : j && typeof j === 'object' && j['csp-report'] ? [j['csp-report']] : [];
+  const nu = Date.now(); if (nu - _cspVenster.t > 60000) { _cspVenster.t = nu; _cspVenster.n = 0; }
+  _teller.csp = _teller.csp || {}; _teller.cspTotaal = _teller.cspTotaal || 0;
+  let geteld = 0;
+  for (const b of lijst.slice(0, CSP_PER_BERICHT)) {
+    if (_cspVenster.n >= CSP_PER_MIN) break;
+    const v = cspVeld(b); if (!v) continue;
+    _cspVenster.n++; geteld++;
+    const k = v.directive + '|' + v.host;
+    if (_teller.csp[k] != null || Object.keys(_teller.csp).length < 200) _teller.csp[k] = (_teller.csp[k] || 0) + 1;
+    _teller.cspTotaal++;
+    console.log(JSON.stringify({ csp: v.directive, host: v.host }));
+  }
+  if (geteld) { if (!_teller.dag) _teller.dag = new Date().toISOString().slice(0, 10); if (Date.now() - _teller.laatsteFlush > LOG_FLUSH_MS) waitUntil(ctx, flushTeller(env).catch(() => {})); }
+  return new Response(null, { status: 204, headers: CSP_KOP });
 }
 async function noteerBesluit(env, ctx, b) {
   const dag = new Date().toISOString().slice(0, 10);
@@ -4017,7 +4071,7 @@ async function handleBeheer(pathname, request, env, ik, json) {
   }
   if (p === '/beheer/log' && m === 'GET') {
     const dagen = Math.max(1, Math.min(31, parseInt(new URL(request.url).searchParams.get('dagen') || '7', 10) || 7));
-    const tot = { totaal: 0, geweigerd: 0, redenen: {}, proxy: {}, proxyTotaal: 0 }, perDag = [];
+    const tot = { totaal: 0, geweigerd: 0, redenen: {}, proxy: {}, proxyTotaal: 0, csp: {}, cspTotaal: 0 }, perDag = [];
     for (let i = 0; i < dagen; i++) {
       const dag = new Date(Date.now() - i * DAG_S * 1000).toISOString().slice(0, 10);
       const s = await kvJson(env, 'stat:' + dag); if (!s) continue;
@@ -4025,12 +4079,14 @@ async function handleBeheer(pathname, request, env, ik, json) {
       tot.totaal += s.totaal; tot.geweigerd += s.geweigerd; tot.proxyTotaal += s.proxyTotaal || 0;
       for (const [k, n] of Object.entries(s.redenen || {})) tot.redenen[k] = (tot.redenen[k] || 0) + n;
       for (const [k, n] of Object.entries(s.proxy || {})) tot.proxy[k] = (tot.proxy[k] || 0) + n;
+      tot.cspTotaal += s.cspTotaal || 0; for (const [k, n] of Object.entries(s.csp || {})) tot.csp[k] = (tot.csp[k] || 0) + n;
     }
     const proxyTop = Object.entries(tot.proxy).sort((a, b) => b[1] - a[1]).slice(0, 25)
       .map(([k, n]) => { const [target, actie, reden] = k.split('|'); return { target, actie, reden, n }; });
     const top = Object.entries(tot.redenen).sort((a, b) => b[1] - a[1]).slice(0, 25)
       .map(([k, n]) => { const [rol, actie, reden] = k.split('|'); return { rol, actie, reden, n }; });
-    return json({ modus: rollenModus(env), proxyModus: proxyModus(env), dagen, totaal: tot.totaal, geweigerd: tot.geweigerd, perDag, top, proxyAfwijkingen: tot.proxyTotaal, proxyTop });
+    return json({ modus: rollenModus(env), proxyModus: proxyModus(env), dagen, totaal: tot.totaal, geweigerd: tot.geweigerd, perDag, top, proxyAfwijkingen: tot.proxyTotaal, proxyTop,
+      cspTotaal: tot.cspTotaal, cspTop: Object.entries(tot.csp).sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, n]) => { const [directive, host] = k.split('|'); return { directive, host, n }; }) });
   }
   return json({ error: 'unknown-beheer-route' }, 404);
 }
@@ -4554,6 +4610,7 @@ export default {
     return await taak;
   },
   async fetch(request, env, ctx) {
+    if (new URL(request.url).pathname === '/csp-rapport') return await cspRapport(request, env, ctx);
     const herkomst = request.headers.get('Origin') || '';
     // Onbekende herkomst: géén CORS-headers (dan blokkeert de browser het antwoord); alleen Vary.
     const corsHeaders = CORS_HERKOMST.includes(herkomst) ? {
