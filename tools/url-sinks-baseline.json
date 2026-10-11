@@ -1,0 +1,41 @@
+{
+ "toelichting": "Links uit data buiten veiligeUrl/veiligeLink/veiligeFoto/veiligeSpUrl, per stuk beoordeeld op 2026-10-11.",
+ "regels": [
+  {
+   "bestand": "v2.html",
+   "attr": "href",
+   "expr": "esc(mtRoute.format(route))",
+   "reden": "route-tekst (#/…) die mtRoute.format zelf maakt, geen vrije url"
+  },
+  {
+   "bestand": "v2.html",
+   "attr": "src",
+   "expr": "_escH(e.handtekening)",
+   "reden": "<img src> met een data-url van de handtekening; een img-src voert geen script uit"
+  },
+  {
+   "bestand": "v2.html",
+   "attr": "src",
+   "expr": "esc(url)",
+   "reden": "<img src> met een blob:/SharePoint-download-url uit _oplFotoUrl; geen script"
+  },
+  {
+   "bestand": "v2.html",
+   "attr": "src",
+   "expr": "esc(blobUrl)",
+   "reden": "object-url (blob:) van een eigen blob in een iframe"
+  },
+  {
+   "bestand": "mt-geld.js",
+   "attr": "href",
+   "expr": "esc(link)",
+   "reden": "alleen gevuld na de controle /^https:\\/\\/moneybird\\.com\\// in eventDetail"
+  },
+  {
+   "bestand": "mt-verhuis.js",
+   "attr": "href",
+   "expr": "esc(V.NIEUW_ADRES)",
+   "reden": "vaste constante (het nieuwe adres)"
+  }
+ ]
+}

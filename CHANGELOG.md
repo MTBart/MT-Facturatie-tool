@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F7 3b groep 4: tekstsinks in mobiel.html
+- Commit: `121e465` | Auteur: Bart Witte
+
 ## 2026-10-11 — F7 3b groep 3: tekstsinks in de rest van v2.html (voorraad, planning, projecten, nacalculatie, attentie, agenda, admin)
 - Commit: `a7fcc3f` | Auteur: Bart Witte
 

@@ -168,6 +168,27 @@ function letOpInGroep(tekst, isHtml, groep) {
 // Dekt een houd-/overslaan-regel een gevonden ruwe interpolatie? Op functie + expressie (of het begin ervan, voor lange expressies) en eventueel context.
 const dekt = (e, i) => e.fn === i.fn && (e.expr !== undefined ? e.expr === i.expr : (e.exprBegin !== undefined && i.expr.startsWith(e.exprBegin))) && (!e.ctx || e.ctx === i.ctx);
 module.exports.dekt = dekt;
+// ── Wat de template-scanner niet ziet (Codex a7fcc3f): HTML die met + aan elkaar geplakt wordt, en links uit data ──
+// plakwerk(): regels met een tekenreeks met HTML/handler-tekst waaraan een variabele (niet esc/jsArg/...) met + geplakt wordt.
+// De uitkomst wordt vergeleken met tools/plakwerk-baseline.json (door mij doorgelezen regels); een nieuwe regel moet eerst beoordeeld worden.
+function plakwerk(tekst) {
+  const uit = [];
+  tekst.replace(/\r\n/g, '\n').split('\n').forEach((l, i) => {
+    if (!/(['"])[^'"\n]*(<[a-zA-Z\/]|on[a-z]+=|value=|href=|id=|class=)[^'"\n]*\1\s*\+|\+\s*(['"])[^'"\n]*(<\/?[a-zA-Z]|on[a-z]+=|=\\?['"])/.test(l)) return;
+    if (/^\s*\/\//.test(l)) return;
+    const m = [...l.matchAll(/\+\s*([A-Za-z_$][\w$.]*(?:\([^()]*\))?(?:\[[^\]]*\])?)\s*(?=\+|;|,|\)|$)/g)].map(x => x[1])
+      .filter(x => !/^(esc|jsArg|jsLit|ibEsc|_esc|_escH|_escAtt|tgEsc|UI_ESC|fmt\w*|eur|cfFmt\w*|Math|Number|String)\b/.test(x) && !/^\d/.test(x));
+    if (m.length) uit.push({ regel: i + 1, tekst: l.trim().slice(0, 220) });
+  });
+  return uit;
+}
+// urlSinks(): interpolaties die direct de waarde van een href/src/action-attribuut zijn en niet door veiligeUrl/veiligeFoto/veiligeSpUrl/veiligeLink gaan.
+function urlSinks(tekst) {
+  const uit = [], re = /(href|src|action|formaction|poster|data)=(["'])\$\{([^}]{1,120})\}\2/g;
+  tekst.replace(/\r\n/g, '\n').split('\n').forEach((l, i) => { let m; re.lastIndex = 0; while ((m = re.exec(l))) { const e = m[3]; if (/^(esc\()?\s*veilige/.test(e) || /^(escHtml|esc|_escH)\(\s*veilige/.test(e)) continue; uit.push({ regel: i + 1, attr: m[1], expr: e.slice(0, 100) }); } });
+  return uit;
+}
+module.exports.plakwerk = plakwerk; module.exports.urlSinks = urlSinks;
 module.exports.fnVanRegel = fnVanRegel; module.exports.letOpInGroep = letOpInGroep;
 if (require.main === module) {
   const fs = require('fs'), path = require('path'), f = process.argv[2], G = require('./sinks-groepen.js');

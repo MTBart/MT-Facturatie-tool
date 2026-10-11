@@ -1,0 +1,253 @@
+{
+ "toelichting": "Regels waar HTML met + aan een variabele wordt geplakt (buiten het zicht van de template-scanner), doorgelezen op 2026-10-11: de variabelen zijn ids/constanten, uitkomsten van esc()/jsArg()/UI_ESC()/tgEsc() of HTML-fragmenten uit gescande templates. Een nieuwe regel moet eerst beoordeeld worden.",
+ "regels": [
+  {
+   "bestand": "v2.html",
+   "tekst": "const q=(r.sectie&&ks.length)?'?'+ks.map(k=>enc(k)+'='+enc(f[k])).join('&'):'';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "const delen=(r.sectie?['sectie='+enc(r.sectie)]:[]).concat(r.sectie?ks.map(k=>enc(k)+'='+enc(f[k])):[]);"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "return '<tr>'+common+'</tr>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "<div class=\"plan-rowlabel${esc(koppel)}\"${esc(naarTaak)}>${bron?(window.MTKoppelUI?'<span class=\"kb-mini\" title=\"Gekoppeld aan een taak\" aria-label=\"Gekoppeld aan een taak\">'+MTKoppelUI.SVG_DICHT+'</span> ':'🔗 '):''}${f"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "document.getElementById('help-uitleg').innerHTML='<p>'+info.uitleg+'</p>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "n=n.replace(new RegExp('^'+reEsc(w)+'(?='+SEP+'|$)'+SEP+'*','i'),'').replace(new RegExp(SEP+'+'+reEsc(w)+'$','i'),'').trim();"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "_datalist='<datalist id=\"calc-mat-list\">'+opts.join('')+'</datalist>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "const wrap=s=>'<div style=\"display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px\">'+s+'</div>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "el.innerHTML='<div style=\"display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px\"><span style=\"font-size:10px;color:var(--text-dim)\">Wijzig leverancier:</span> '+chips+' <button class=\"btn btn-xs\" style=\"o"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<span class=\"calc-dd-meta\">'+tag+(h.id?'<span class=\"calc-dd-art\">'+esc(h.id)+'</span>':'')+(pr?'<span class=\"calc-dd-pr\">'+pr+'</span>':'')+'</span></div>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "return '<div class=\"calc-rand\">↳ randafwerking: <b>'+esc(sug.label)+'</b> <span class=\"calc-rand-t\">'+tag+'</span>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "const act = w.actie ? '<button class=\"btn btn-xs btn-gold\" onmousedown=\"event.preventDefault()\" onclick=\"'+w.actie.onclick+'\">'+esc(w.actie.label)+'</button>' : '';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "return '<div class=\"calc-vg-item\"><span class=\"calc-vg-ic\">'+w.icon+'</span><span class=\"calc-vg-tx\">'+esc(w.tekst)+'</span>'+act"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "return '<div class=\"calc-vergeten\"><div class=\"calc-vg-h\">⚠ Mogelijk vergeten kostenposten <span class=\"calc-vg-sub\">— check vóór je de offerte verstuurt</span></div>'+items+'</div>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<td><input class=\"calc-inp calc-prev-desc\" value=\"'+esc(r.description)+'\" onchange=\"calcPrevSetRegel('+jsArg(key)+','+i+',\\'description\\',this.value)\"></td>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<td class=\"calc-num\"><input class=\"calc-inp calc-num calc-prev-pr\" value=\"'+esc(inval((+r.price).toFixed(2)))+'\" onchange=\"calcPrevSetRegel('+jsArg(key)+','+i+',\\'price\\',this.value)\"></td>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<td><button class=\"btn btn-xs btn-secondary\" title=\"regel verwijderen\" onmousedown=\"event.preventDefault()\" onclick=\"calcPrevDelRegel('+jsArg(key)+','+i+')\">×</button></td>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<textarea id=\"calc-prevtekst-'+c+'\" class=\"calc-inp\" style=\"width:100%;min-height:46px;resize:vertical;font-family:inherit\" onchange=\"calcPrevSetTekst('+jsArg(key)+',this.value)\">'+esc(p.tekst||'')+'</textarea>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<table class=\"calc-mbprev-tbl\"><thead><tr><th>Omschrijving (klant ziet dit)</th><th class=\"calc-num\">Prijs ex. btw</th><th></th></tr></thead><tbody>'+regelsH+'</tbody>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<tfoot><tr><td style=\"text-align:right;font-weight:600\">Totaal ex. btw</td><td class=\"calc-num\" style=\"font-weight:700\" id=\"calc-prevsom-'+c+'\">'+eur(som)+'</td><td></td></tr></tfoot></table>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<span id=\"calc-prevdelta-'+c+'\" style=\"font-size:11px\">'+_prevDeltaHtml(key)+'</span></div>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<input id=\"calc-prevchat-'+c+'\" class=\"calc-inp\" style=\"flex:1\" placeholder=\"laat Larry bijschaven, bv. \\'splits productie en montage\\' of \\'maak de tekst korter\\'\" onkeydown=\"if(event.key===\\'Enter\\')calcPreviewChat('"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<div id=\"offerte-calc-'+cid(key)+'\"><p style=\"color:var(--text-faint);font-size:13px\">Laden…</p></div></div>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<div style=\"font-size:11px;color:var(--text-dim);margin-bottom:6px\">'+esc(mc.from||'')+(mc.received?(' · '+esc(mc.received)):'')+(wl?(' · '+wl):'')+'</div>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "'<button class=\"btn btn-secondary btn-sm\" style=\"white-space:nowrap;color:' + kleur + ';border-color:' + kleur + '\" data-action=\"vb-status\" data-id=\"' + esc(p.id) + '\" data-huidig=\"' + esc(p.status) + '\">' + label + '</b"
+  },
+  {
+   "bestand": "mt-inbox.js",
+   "tekst": "const q='('+st.domeinen.map(d=>'from:'+d).join(' OR ')+') AND received>='+sinds;"
+  },
+  {
+   "bestand": "mt-inbox.js",
+   "tekst": "const d=await ibFetch(base+'/messages?$search='+encodeURIComponent('\"'+q.replace(/\"/g,'')+'\"')+'&$top=25&$select='+sel);"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "return '<span class=\"mtc-herk-i\" role=\"img\" aria-label=\"Bron: ' + esc(h[1]) + '\" title=\"Bron: ' + esc(h[1]) + '\">' + h[0] + '</span>';"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "return '<div class=\"mtc-hint\">' + hb[0] + ' ' + esc(hb[1] + ook + via) + (h.tijd ? ' · ' + esc(NL_DATUM(h.tijd)) : '') + esc(door) + '</div>';"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ (nv ? '<button type=\"button\" class=\"mtc-voorstel\" data-mtc=\"detail\" data-id=\"' + esc(c.id) + '\" title=\"Voorstellen bekijken\">' + nv + ' voorstel' + (nv === 1 ? '' : 'len') + '</button>' : '') + '</div>'"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ '<div class=\"mtc-sub\">' + orgRegel(c) + chips + ' ' + herkRij(c) + '</div></div>'"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ '<div class=\"mtc-acties\">' + bel(c) + mail(c) + route(c, opts) + (opts.extra || '') + '</div></div>';"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "return '<section class=\"ov-blok\" data-mtc-project=\"' + esc(proj.code) + '\" data-mtc-klant=\"' + esc(proj.klant || '') + '\" data-mtc-loc=\"' + esc(proj.loc || '') + '\">' + inner + '</section>';"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "? '<p style=\"margin:0 0 8px\">' + naam + ' is gekoppeld aan <b>' + esc(code) + '</b>.</p><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-recht=\"projecten:wijzigen\" data-mtc=\"ontkoppel\" data-id=\"' + esc(id) + '"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": ": '<p style=\"margin:0 0 8px\">' + naam + ' hoort bij de klant maar is nog niet aan <b>' + esc(code) + '</b> gekoppeld.</p><button type=\"button\" class=\"btn btn-sm btn-gold\" data-recht=\"projecten:wijzigen\" data-mtc=\"koppel\""
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "ov.innerHTML = '<div class=\"mtc-paneel\" role=\"dialog\" aria-modal=\"true\" aria-label=\"' + esc(label) + '\" tabindex=\"-1\">' + html + '</div>';"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "const rij = (lbl, id, val, extra) => '<div class=\"mtc-veld\"><label for=\"mtc-f-' + id + '\">' + lbl + '</label><input id=\"mtc-f-' + id + '\" type=\"text\" value=\"' + esc(val || '') + '\"' + (extra || '') + '>' + '</div>';"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "h += '<div class=\"mtc-sectie\" style=\"margin-top:6px;border-top:none\"><h4>Voorstellen (' + d.voorstellen.length + ')</h4>' + d.voorstellen.map(v => {"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "return '<div class=\"mtc-vs\"><div>' + esc(VELDLABEL[v.veld] || v.veld) + ': <b>' + esc(fmtWaarde(v)) + '</b><div class=\"mtc-hint\">' + hb[0] + ' ' + esc(hb[1]) + (v.reden ? ' — ' + esc(v.reden) : '') + '</div></div>'"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "h += '<div class=\"mtc-rij2\">' + rij('Naam', 'naam', d.naam) + rij('Voornaam', 'voornaam', d.voornaam) + '</div>' + H('naam') + H('voornaam')"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ '<div class=\"mtc-veld\"><label for=\"mtc-f-emails\">E-mailadressen (één per regel)</label><textarea id=\"mtc-f-emails\">' + esc((d.emails || []).join('\\n')) + '</textarea></div>' + H('emails')"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ '<div class=\"mtc-veld\"><label for=\"mtc-f-telefoons\">Telefoonnummers (één per regel)</label><textarea id=\"mtc-f-telefoons\">' + esc((d.telefoons || []).map(t => t.nr).join('\\n')) + '</textarea></div>' + H('telefoons')"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ C.ORG_TYPES.map(t => '<option value=\"' + t + '\"' + (o.type === t ? ' selected' : '') + '>' + { klant: 'Klant', leverancier: 'Leverancier', intern: 'Intern', overig: 'Overig' }[t] + '</option>').join('') + '</select></d"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ rij('Klantcode', 'orgcode', o.klantCode, ' maxlength=\"12\"') + '</div>' + rij('Naam organisatie', 'orgnaam', o.naam) + H('organisatie')"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ '<h4 style=\"margin-top:8px\">Locatie</h4><div class=\"mtc-rij2\">' + rij('Code', 'loccode', l.code, ' maxlength=\"12\"') + rij('Naam', 'locnaam', l.naam) + '</div>' + rij('Adres (voor “Route”)', 'locadres', l.adres) + H('lo"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ '<div class=\"mtc-veld\"><label for=\"mtc-f-notities\">Notities</label><textarea id=\"mtc-f-notities\">' + esc(d.notities || '') + '</textarea></div>' + H('notities')"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": ": '<span class=\"mtc-hint\">Niet aan een project gekoppeld.</span>') + '</div>' + H('projecten')"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ '<div class=\"mtc-rij2\" style=\"margin-top:6px\"><div class=\"mtc-veld\" style=\"margin:0\"><label for=\"mtc-f-projnieuw\">Koppel project (code)</label><input id=\"mtc-f-projnieuw\" list=\"mtc-projlijst\" autocomplete=\"off\"><datali"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "const r = await mbGet(getAdmin() + '/contacts?page=' + pagina + '&per_page=100');"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "L.push('<p style=\"margin:0 0 8px\"><b>' + esc(plan.tekst) + '</b>' + (s.overgeslagen ? ' <span style=\"color:var(--text-dim)\">(' + s.overgeslagen + ' eerder verwijderd, overgeslagen)</span>' : '') + '</p>');"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "L.push('<ul style=\"margin:0 0 8px 18px;padding:0;font-size:12px;color:var(--text-dim)\"><li>Moneybird: ' + info.mb.n + ' contacten (' + esc(info.mb.bron) + ')</li><li>Klantregistry: ' + (info.registry || 0)"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "if (vb.length) L.push('<div style=\"font-size:12px\">' + vb.map(x => '<div>' + esc(x) + '</div>').join('') + (s.nieuw + s.aangevuld + s.voorstellen > vb.length ? '<div style=\"color:var(--text-dim)\">…</div>' : '') + '</div>"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "if (root.mtDialog && root.mtDialog.alert) await root.mtDialog.alert({ title: 'Contacten bijwerken', html: vertrouwd('<p>Alles is al bijgewerkt — er valt niets aan te vullen.</p><p style=\"font-size:12px;color:var(--text-d"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "return '<div class=\"mtc-mrij\"><div style=\"font-size:15px;font-weight:600\">' + esc(C.weergave(c)) + '</div>' + (sub ? '<div style=\"font-size:12px;color:var(--text-dim)\">' + sub + '</div>' : '')"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "+ '<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-top:6px\">' + bel(c, true) + mail(c, true) + route(c, { adres }, true) + '</div></div>';"
+  },
+  {
+   "bestand": "mt-contacten.js",
+   "tekst": "if (host) host.innerHTML = r.contact ? '<div class=\"mtc-inbox\" role=\"status\">📇 <span>' + r.nieuwVoorstellen.length + ' voorstel' + (r.nieuwVoorstellen.length === 1 ? '' : 'len') + ' bewaard bij <b>' + esc(C.weergave(r.c"
+  },
+  {
+   "bestand": "mt-koppel.js",
+   "tekst": "return o.onclick ? '<button type=\"button\"' + attr + ' onclick=\"' + UI_ESC(o.onclick) + '\">' + inhoud + '</button>'"
+  },
+  {
+   "bestand": "mt-koppel.js",
+   "tekst": ": '<span role=\"img\"' + attr + '>' + inhoud + '</span>';"
+  },
+  {
+   "bestand": "mt-koppel.js",
+   "tekst": "p.innerHTML = '<div class=\"kb-pop-kop\"><b>' + UI_ESC(opts.titel || 'Koppeling') + '</b><button type=\"button\" class=\"kb-pop-x\" aria-label=\"Sluiten\" onclick=\"MTKoppelUI.sluit()\">✕</button></div><div class=\"kb-pop-in\">' + h"
+  },
+  {
+   "bestand": "mt-toggl.js",
+   "tekst": "for(let i=0;i<7;i++){ html+=`<div class=\"ag-daycol\" style=\"height:${hoogte}px;background:${lijn}\">`+agBlokkenHtml(perDag[i])+'</div>'; }"
+  },
+  {
+   "bestand": "mt-toggl.js",
+   "tekst": "box.innerHTML='<div class=\"tg-board\">'+cols+'</div>';"
+  },
+  {
+   "bestand": "mt-verhuis.js",
+   "tekst": "const r = await fetch(url + ':/content?@microsoft.graph.conflictBehavior=' + conflict, { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': blob.type || 'application/octet-stream' }, body: blob }"
+  }
+ ]
+}
