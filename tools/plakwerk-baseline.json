@@ -1,5 +1,5 @@
 {
- "toelichting": "Regels waar HTML met + aan een variabele wordt geplakt (buiten het zicht van de template-scanner), doorgelezen op 2026-10-11: de variabelen zijn ids/constanten, uitkomsten van esc()/jsArg()/UI_ESC()/tgEsc() of HTML-fragmenten uit gescande templates. Een nieuwe regel moet eerst beoordeeld worden.",
+ "toelichting": "Regels waar HTML met + aan een variabele wordt geplakt (buiten het zicht van de template-scanner), doorgelezen op 2026-10-11: de variabelen zijn ids/constanten, uitkomsten van esc()/jsArg()/UI_ESC()/tgEsc() of HTML-fragmenten uit gescande templates. Een nieuwe regel moet eerst beoordeeld worden. Zoekbalk (11-10): mt-zoek-extern.js plakt twee fetch-URLs (geen HTML): constante basis/drive/map plus de zoekterm via encodeURIComponent.",
  "regels": [
   {
    "bestand": "mt-contacten.js",
@@ -252,6 +252,14 @@
   {
    "bestand": "v2.html",
    "tekst": "'<button class=\"btn btn-secondary btn-sm\" style=\"white-space:nowrap;color:' + kleur + ';border-color:' + kleur + '\" data-action=\"vb-status\" data-id=\"' + esc(p.id) + '\" data-huidig=\"' + esc(p.status) + '\">' + label + '</b"
+  },
+  {
+   "bestand": "mt-zoek-extern.js",
+   "tekst": "const r = await o.fetch(String(o.basis).replace(/\\/+$/, '') + '/zoek/moneybird?q=' + encodeURIComponent(q) + '&max=10', { signal });"
+  },
+  {
+   "bestand": "mt-zoek-extern.js",
+   "tekst": "const url = 'https://graph.microsoft.com/v1.0/drives/' + o.drive + '/root:/' + encodeURI(o.root) + \":/search(q='\" + encodeURIComponent(zoek) + \"')?$select=id,name,webUrl,folder,file,lastModifiedDateTime&$top=25\";"
   }
  ]
 }
