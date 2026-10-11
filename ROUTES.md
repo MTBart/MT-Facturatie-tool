@@ -47,7 +47,7 @@ zodat de losse script-blokken elkaar zien.
 | `window.getAuthToken()` | silent ID-token (null bij fail) |
 | `window.getGraphToken()` | Graph-access-token: silent → popup → `onTokenFail`-hook |
 | `MTCore.installAuth(cfg)` | zet de token-helpers op `window`; `cfg` = `{graphScopes, onTokenOk, onTokenFail}` |
-| `MTCore.makeSP(cfg)` | bouwt de `_SP`-synckern (site-resolve, faalveilig `read`, `write` + S1 ETag/412-merge); `cfg` = `{toast, onSyncStatus, trackLastSync, etagKeys}` |
+| `MTCore.makeSP(cfg)` | bouwt de `_SP`-synckern (site-resolve, faalveilig `read`, `write` + S1 ETag/412-merge; een bestand dat bewezen nog niet bestaat (read/prefetch gaf 404) wordt aangemaakt met `If-None-Match: *`, een 412 daarbij is een gewoon conflict: lezen, samenvoegen, begrensd herschrijven); `cfg` = `{toast, onSyncStatus, trackLastSync, etagKeys}` |
 
 Page-specifieke verschillen zitten in de config, niet in geforkte code:
 - **cockpit:** 7 Graph-scopes (Files/Sites/Mail/Calendars/Tasks), Q7-sessiebanner

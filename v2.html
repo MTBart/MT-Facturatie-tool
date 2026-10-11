@@ -16,13 +16,13 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-10-11b"></script>
+<script src="mt-core.js?v=2026-10-11c"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-toggl.js?v=2026-10-11b"></script>
-<script src="mt-koppel.js?v=2026-10-11a"></script>
+<script src="mt-koppel.js?v=2026-10-11b"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
 <script src="mt-zoek.js?v=2026-10-11d"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
@@ -10056,28 +10056,8 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // ontkoppelde mail niet terugzetten en een nieuwe koppeling niet wegdrukken.
     // Niets valt weg: een koppeling die alleen aan één kant bestaat, blijft staan.
     mt_mail_links(lokaal, spData) {
-      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
-      const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
-      const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {};
-      const ident = x => x && (x.internetMessageId || x.id);
-      const tijd = x => Math.max(Number(x && x.gewijzigd) || 0, Number(x && x.ontkoppeld) || 0, Number(x && x.ts) || 0);
-      const uit = {};
-      for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
-        const per = new Map(), los = [];
-        for (const x of [...(Array.isArray(R[code]) ? R[code] : []), ...(Array.isArray(L[code]) ? L[code] : [])]) {
-          const k = ident(x);
-          if (!k) { los.push(x); continue; }                    // zonder identiteit: bewaren, nooit weggooien
-          const oud = per.get(k);
-          // gelijk → lokaal (komt als tweede). Een immutable id (`iid`, B5) hoort bij de mail,
-          // niet bij de koppelstand: altijd meenemen als de winnaar hem nog niet heeft.
-          // Alleen bij dezelfde mailbox (dezelfde mail heeft per mailbox een ander id).
-          const win = (!oud || tijd(x) >= tijd(oud)) ? x : oud, ander = win === x ? oud : x;
-          const mb = r => String((r && r.mbx) || 'info@mortiseandtenon.nl').toLowerCase();
-          per.set(k, (ander && ander.iid && !win.iid && mb(ander) === mb(win)) ? Object.assign({}, win, { iid: ander.iid, id_bijgewerkt: ander.id_bijgewerkt }) : win);
-        }
-        uit[code] = [...per.values(), ...los];
-      }
-      return uit;
+      // één gedeelde samenvoeger (mt-koppel.js), ook gebruikt door het Outlook-paneel; identiteit = mailbox + mail (dezelfde mail in twee postbussen = twee records)
+      return MTKoppel.linksSamen(lokaal, spData);
     },
     mt_calc_offertes(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };

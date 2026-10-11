@@ -88,6 +88,32 @@
       return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-JOURNAAL_MAX);
     },
 
+    // Samenvoeger voor mt_mail_links ({code:[koppeling…]}): per code en per (mailbox + mail) wint de NIEUWSTE stand (gewijzigd/ontkoppeld/ts); niets
+    // valt weg. De identiteit is mailbox + internetMessageId (anders id): dezelfde mail in je eigen postbus en in info@ zijn twee records (ze hebben ook elk een
+    // ander Graph-id). Een oud record zonder mbx telt als de standaardpostbus (K.mbx: info@, zie STANDAARD_MBX). Eén bron voor de cockpit (_SP.mergers) én het Outlook-paneel.
+    linksSamen(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
+      const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+      const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {};
+      const mail = x => x && (x.internetMessageId || x.id);
+      const ident = x => { const m = mail(x); return m ? K.mbx(x) + '|' + m : ''; };
+      const tijd = x => Math.max(Number(x && x.gewijzigd) || 0, Number(x && x.ontkoppeld) || 0, Number(x && x.ts) || 0);
+      const uit = {};
+      for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
+        const per = new Map(), los = [];
+        for (const x of [...(Array.isArray(R[code]) ? R[code] : []), ...(Array.isArray(L[code]) ? L[code] : [])]) {
+          const k = ident(x);
+          if (!k) { los.push(x); continue; }                    // zonder identiteit: bewaren, nooit weggooien
+          const oud = per.get(k);
+          // gelijk → lokaal (komt als tweede). Een immutable id (`iid`) hoort bij de mail, niet bij de koppelstand: altijd meenemen als de winnaar hem nog niet heeft.
+          const win = (!oud || tijd(x) >= tijd(oud)) ? x : oud, ander = win === x ? oud : x;
+          per.set(k, (ander && ander.iid && !win.iid) ? Object.assign({}, win, { iid: ander.iid, id_bijgewerkt: ander.id_bijgewerkt }) : win);
+        }
+        uit[code] = [...per.values(), ...los];
+      }
+      return uit;
+    },
+
     // ── kern-API ──
     // Koppel `msg` aan `code`. Uitkomst: {status:'nieuw'|'herkoppeld'|'al', record}.
     koppelMail(code, msg, opts) {
