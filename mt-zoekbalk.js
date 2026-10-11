@@ -40,7 +40,7 @@
   if (!doc) return;
 
   const esc = typeof root.esc === 'function' ? root.esc : s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const ICOON = { project: '📁', klant: '🏢', locatie: '📍', taak: '☑', contact: '👤', moneybird: '🧾', sharepoint: '🗂' };
+  const ICOON = { project: '📁', klant: '🏢', locatie: '📍', taak: '☑', contact: '👤', mail: '✉️', moneybird: '🧾', sharepoint: '🗂' };
 
   if (!doc.getElementById('mt-zb-stijl')) {
     const st = doc.createElement('style'); st.id = 'mt-zb-stijl';

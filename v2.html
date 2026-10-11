@@ -24,9 +24,9 @@
 <script src="mt-toggl.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-11a"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
-<script src="mt-zoek.js?v=2026-10-11c"></script>
-<script src="mt-zoek-extern.js?v=2026-10-11a"></script>
-<script src="mt-zoekbalk.js?v=2026-10-11f"></script>
+<script src="mt-zoek.js?v=2026-10-11d"></script>
+<script src="mt-zoek-extern.js?v=2026-10-11b"></script>
+<script src="mt-zoekbalk.js?v=2026-10-11g"></script>
 <script src="mt-inbox.js?v=2026-10-11c"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
@@ -11620,6 +11620,8 @@ function zbIndex(){
 function zbZoek(q){ return MTZoek.zoek(zbIndex(),q,{mag:MTZoek.magUitRollen()}); }
 function zoekbalkOpen(it){
   const d=(it&&it.data)||{};
+  if(it.soort==='mail'){   // gekoppelde mail → het dossier van het project; anders de webLink in Outlook (veilige host, nieuw tabblad)
+    MTZoekExtern.openItem(it,{gekoppeld:m=>(window.MTKoppel&&MTKoppel.mailProjecten)?MTKoppel.mailProjecten(m):[],naarDossier:code=>mtRoute.go({tab:'projecten',code,sectie:'dossier'})}); return; }
   if(it.soort==='moneybird'||it.soort==='sharepoint'){ MTZoekExtern.openUrl(it); return; }   // https + vaste hosts (veiligeUrl), nieuw tabblad
   if(it.soort==='project') mtRoute.go({tab:'projecten',code:d.code});
   else if(it.soort==='klant') mtRoute.go({tab:'projecten',klant:d.klant});
@@ -11641,7 +11643,9 @@ function zoekbalkInit(){
   veld.addEventListener('input',()=>{ if(veld.value.trim()) tbChatClose(); });   // de dropdown neemt de plek van het chatpaneel in
   // Externe bronnen: Moneybird (zoekindex in de worker) en SharePoint (Graph-search binnen de projectbibliotheek); debounce 400 ms, vanaf 3 tekens.
   const ext=window.MTZoekExtern?MTZoekExtern.maak({
-    bronnen:[MTZoekExtern.bronMoneybird({basis:WORKER,fetch:(u,o)=>fetchMetAuth(u,o),nu:()=>Date.now()}),
+    bronnen:[MTZoekExtern.bronMail({token:()=>window.getGraphToken(),fetch:(u,i)=>fetch(u,i),nu:()=>Date.now(),infoAdres:'info@mortiseandtenon.nl',
+        gekoppeld:m=>(window.MTKoppel&&MTKoppel.mailProjecten)?MTKoppel.mailProjecten(m):[]}),
+      MTZoekExtern.bronMoneybird({basis:WORKER,fetch:(u,o)=>fetchMetAuth(u,o),nu:()=>Date.now()}),
       MTZoekExtern.bronSharePoint({token:()=>window.getGraphToken(),drive:_SP.PROJ_DRIVE,root:PROJ_ROOT,fetch:(u,i)=>fetch(u,i),nu:()=>Date.now()})],
     mag:MTZoek.magUitRollen(),
     onWijziging:()=>{ if(veld._zb) veld._zb.ververs({behoud:true}); }}):null;

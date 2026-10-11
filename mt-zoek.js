@@ -43,7 +43,7 @@
     { soort: 'contact', label: 'Contacten', recht: 'projecten' }
   ];
   // Externe bronnen (mt-zoek-extern.js): alleen de rechten staan hier, zodat één functie alle soorten beoordeelt.
-  const EXTERN_RECHT = { moneybird: 'moneybird', sharepoint: 'projecten' };
+  const EXTERN_RECHT = { mail: 'inbox', moneybird: 'moneybird', sharepoint: 'projecten' };
   const DAG = 86400000;
 
   const lijst = v => Array.isArray(v) ? v : [];

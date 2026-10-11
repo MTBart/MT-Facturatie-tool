@@ -1,5 +1,5 @@
 /* ============================================================================
- * mt-zoek-extern.js — externe zoekbronnen voor de zoekbalk: Moneybird (facturen/offertes) en SharePoint (mappen/bestanden)
+ * mt-zoek-extern.js — externe zoekbronnen voor de zoekbalk: e-mail (Graph), Moneybird (facturen/offertes) en SharePoint (mappen/bestanden)
  * ----------------------------------------------------------------------------
  * Zuivere logica, geen DOM: fetch, token en tijd worden meegegeven (dus testbaar met een nep-fetch en nep-klok).
  *
@@ -22,10 +22,11 @@
   if (!root) return;
 
   const EXTERN = [
+    { soort: 'mail', label: 'E-mail', recht: 'inbox' },
     { soort: 'moneybird', label: 'Moneybird', recht: 'moneybird' },
     { soort: 'sharepoint', label: 'SharePoint', recht: 'projecten' }
   ];
-  const HOSTS = { moneybird: ['moneybird.com'], sharepoint: ['sharepoint.com', 'office.com', 'office365.com', 'outlook.com', 'microsoft.com'] };
+  const HOSTS = { mail: ['office.com', 'office365.com', 'outlook.com', 'microsoft.com'], moneybird: ['moneybird.com'], sharepoint: ['sharepoint.com', 'office.com', 'office365.com', 'outlook.com', 'microsoft.com'] };
   const MAX = 5;
 
   const tekst = v => String(v == null ? '' : v);
@@ -43,6 +44,63 @@
     const u = root.veiligeUrl || (root.MTCore && root.MTCore.veiligeUrl);
     if (typeof u !== 'function') return '';
     return u(url, { hosts: HOSTS[soort] || [] });
+  }
+
+  // ── bron: e-mail via Graph $search, in de eigen postbus en (als je daar toegang toe hebt) in een gedeelde postbus (info@) ──
+  //   o.token(), o.fetch(url, init), o.nu(), o.infoAdres (gedeelde postbus, optioneel),
+  //   o.gekoppeld(msg) → projectcodes waaraan de mail al hangt (MTKoppel.mailProjecten); alleen voor de tag.
+  // Toegang tot info@ wordt niet vooraf aangenomen: een 403/404 van die postbus betekent "geen toegang" en wordt stil overgeslagen (en niet
+  // opnieuw geprobeerd in deze sessie); een 403 op de eigen postbus is wél een fout. Graph geeft geen bodytekst terug: alleen onderwerp,
+  // afzender, datum en de webLink; de inhoud staat pas na openen in Outlook.
+  function bronMail(o) {
+    const SEL = 'id,internetMessageId,conversationId,subject,from,receivedDateTime,webLink';
+    const bussen = [{ id: 'me', label: '', base: 'https://graph.microsoft.com/v1.0/me', mbx: 'me' }];
+    if (o.infoAdres) bussen.push({ id: 'info', label: 'info@', base: 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent(o.infoAdres), mbx: String(o.infoAdres).toLowerCase(), optioneel: true });
+    const geenToegang = new Set();
+    return {
+      soort: 'mail', label: 'E-mail', geenToegang,
+      async haal(q, signal) {
+        const token = await o.token();
+        if (!token) throw new Error('E-mail: niet ingelogd');
+        const zoek = String(q).replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim();   // aanhalingstekens/backslash weg: één zoekfrase
+        const een = async b => {
+          const r = await o.fetch(b.base + '/messages?$search=' + encodeURIComponent('"' + zoek + '"') + '&$top=10&$select=' + SEL,
+            { signal, headers: { Authorization: 'Bearer ' + token, Prefer: 'IdType="ImmutableId"' } });
+          if (r.status === 429) throw limietFout(retryAfterVan(r, o.nu && o.nu()));
+          if (r.status === 403 || r.status === 404) { const e = new Error('E-mail: geen toegang tot ' + (b.label || 'je postbus')); e.geenToegang = true; throw e; }
+          if (!r.ok) throw new Error('E-mail: HTTP ' + r.status);
+          const j = await r.json();
+          return (j && Array.isArray(j.value) ? j.value : []).map(m => Object.assign({ _bus: b }, m));
+        };
+        const actief = bussen.filter(b => !geenToegang.has(b.id));
+        const uitkomsten = await Promise.allSettled(actief.map(een));
+        const goed = [], fouten = [];
+        uitkomsten.forEach((u, i) => {
+          if (u.status === 'fulfilled') goed.push(...u.value);
+          else if (u.reason && u.reason.geenToegang && actief[i].optioneel) geenToegang.add(actief[i].id);   // geen recht op info@: stil overslaan
+          else fouten.push(u.reason);
+        });
+        if (!goed.length && fouten.length) {
+          const lim = fouten.filter(e => e && e.limiet).sort((a, b) => b.retryAfter - a.retryAfter)[0];
+          if (lim) throw lim;
+          if (signal && signal.aborted) { const e = new Error('afgebroken'); e.name = 'AbortError'; throw e; }
+          throw fouten[0];
+        }
+        const gezien = new Set(), uit = [];
+        goed.sort((a, b) => tekst(b.receivedDateTime).localeCompare(tekst(a.receivedDateTime))).forEach(m => {
+          const sl = m.internetMessageId || m.id; if (!sl || gezien.has(sl)) return; gezien.add(sl);
+          const van = m.from && m.from.emailAddress ? (m.from.emailAddress.name || m.from.emailAddress.address || '') : '';
+          const msg = { id: tekst(m.id), internetMessageId: tekst(m.internetMessageId), conversationId: tekst(m.conversationId), subject: tekst(m.subject), mbx: m._bus.mbx, idType: 'immutable' };
+          let codes = []; try { codes = o.gekoppeld ? o.gekoppeld(msg) || [] : []; } catch (e) { codes = []; }
+          uit.push({
+            soort: 'mail', id: tekst(m.internetMessageId || m.id) + '|' + m._bus.id, titel: tekst(m.subject) || '(geen onderwerp)',
+            sub: [tekst(van), nlDatum(m.receivedDateTime), m._bus.label].filter(Boolean).join(' · '), tag: codes.length ? 'mail · dossier' : 'mail',
+            data: { url: tekst(m.webLink), msg }
+          });
+        });
+        return { items: uit.slice(0, 10), totaal: uit.length };
+      }
+    };
   }
 
   // ── bron: Moneybird via de worker-route /zoek/moneybird ──
@@ -161,6 +219,16 @@
     return api;
   }
 
+  // Een externe treffer openen. Een mail die al aan een project gekoppeld is opent het dossier van dat project (opt.naarDossier(code));
+  // anders de webLink in Outlook (nieuw tabblad, alleen verwachte hosts). Geeft 'dossier', 'url' of false terug.
+  function openItem(item, opt, venster) {
+    opt = opt || {};
+    if (item && item.soort === 'mail' && typeof opt.gekoppeld === 'function' && typeof opt.naarDossier === 'function') {
+      let codes = []; try { codes = opt.gekoppeld(item.data && item.data.msg) || []; } catch (e) { codes = []; }
+      if (codes.length) { opt.naarDossier(codes[0]); return 'dossier'; }
+    }
+    return openUrl(item, venster) ? 'url' : false;
+  }
   // Een externe treffer openen (nieuw tabblad). Geeft true als er een veilige URL was.
   function openUrl(item, venster) {
     const w = venster || root;
@@ -170,5 +238,5 @@
     return true;
   }
 
-  root.MTZoekExtern = { EXTERN, HOSTS, MAX, maak, bronMoneybird, bronSharePoint, openUrl, retryAfterVan, veiligeLinkVoor };
+  root.MTZoekExtern = { EXTERN, HOSTS, MAX, maak, bronMail, bronMoneybird, bronSharePoint, openUrl, openItem, retryAfterVan, veiligeLinkVoor };
 })(typeof window !== 'undefined' ? window : globalThis);

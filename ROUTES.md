@@ -102,12 +102,18 @@ Treffers op code (project-, werk-, offertecode, oude codes; ook zonder streepjes
 Een treffer opent via `mtRoute.go` (project `#projecten/<CODE>`, klant `#klant/<KL>[/<LOC>]`, taak = project-sectie
 planning) of `MTContactenUI.detail`. De pagina bouwt de index hooguit elke 3 s opnieuw (`zbIndex`/`zbIndexM`).
 De lijst-zoekvelden (`zoekProjecten`, `zoekKlanten`, `zoekInLijst`, `zoekGeschiedenis`) zijn ongewijzigd.
-**Externe bronnen (brok 3, `mt-zoek-extern.js`, DOM-vrij):** na minimaal 3 tekens en 400 ms pauze komen er groepen **Moneybird**
+**Externe bronnen (brok 3, `mt-zoek-extern.js`, DOM-vrij):** na minimaal 3 tekens en 400 ms pauze komen er groepen **E-mail**, **Moneybird**
 (facturen, inkoopfacturen en offertes) en **SharePoint** (mappen en bestanden) bij, na de lokale groepen. Een nieuwe toetsaanslag breekt
 lopende aanvragen af (AbortController); een verouderd antwoord wordt genegeerd. Per bron een status: laden, leeg (groep verdwijnt),
 fout, of 429 met Retry-After (die bron wordt dan niet opnieuw gevraagd tot de tijd om is; de andere bron loopt door).
 Getoond wordt alleen titel, klant, datum en soort; openen gebeurt in Moneybird/SharePoint zelf (nieuw tabblad,
 `MTZoekExtern.openUrl` → `veiligeUrl` met hosts `moneybird.com` resp. de `veiligeLink`-hosts).
+- **E-mail** (alleen cockpit, recht `inbox`): Graph `$search` met het Graph-token van de gebruiker in de eigen postbus (`/me`) en in de gedeelde postbus
+  info@ (`/users/<info@>`); toegang tot info@ wordt niet aangenomen: een 403/404 van die postbus wordt stil overgeslagen en in die sessie niet
+  opnieuw geprobeerd (een 403 op de eigen postbus is wel een fout). Alleen onderwerp, afzender, datum en soort worden getoond (`$select` zonder
+  body); dezelfde mail in beide postbussen telt één keer. Klik: is de mail al aan een project gekoppeld (`MTKoppel.mailProjecten`) dan opent het dossier
+  (`#projecten/<CODE>`, sectie dossier), anders de webLink in Outlook (nieuw tabblad, hosts office.com/office365.com/outlook.com/microsoft.com).
+  429/Retry-After en afbreken zoals bij de andere bronnen. De app (mobiel) heeft geen Mail-scope en dus geen mailgroep.
 - **Moneybird:** worker-route `GET /zoek/moneybird?q=&max=` (alleen lezen). Het recht `moneybird` geldt ALTIJD, ook in ROLLEN_MODUS=log/uit:
   geen rol of geen recht = 403. De route leest uitsluitend een compacte zoekindex in KV (`zoek:mb:index:v1`: nummer, referentie, contactnaam,
   datum; nooit bedragen) van dit en vorig jaar (`period:this_year` en `period:prev_year`; `last_year` bestaat niet). Ontbreekt de index of is hij
@@ -120,7 +126,7 @@ Getoond wordt alleen titel, klant, datum en soort; openen gebeurt in Moneybird/S
   index antwoordt de route 429 met `Retry-After` (andere pauze-redenen: 503 `moneybird-onbereikbaar`).
 - **SharePoint:** Graph drive-search (`/drives/<PROJ_DRIVE>/root:/Nieuwe mappenstructuur:/search(q='…')`) met het Graph-token van de gebruiker;
   alleen treffers waarvan de webUrl in `Nieuwe mappenstructuur` ligt; de klant komt uit de webUrl (de drive-search geeft geen parentReference.path).
-Later (brok 4): e-mail (Graph) als groep tussen de lokale groepen en Moneybird.
+Volgorde in de lijst: lokale groepen, E-mail, Moneybird, SharePoint.
 
 ### Event-delegatie voor NIEUWE code (S7-conventie, sinds 3-7)
 
