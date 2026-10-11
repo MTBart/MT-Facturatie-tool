@@ -1,0 +1,140 @@
+{
+ "omschrijving": "mobiel.html: de mobiele app (notities, agenda, voorraad, opname/oplevering, feedback)",
+ "heleBestand": true,
+ "fragmentFns": [
+  "_chipHtml",
+  "capacityBar"
+ ],
+ "houd": [
+  {
+   "fn": "renderAgenda",
+   "expr": "body",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderAgenda",
+   "expr": "timesHtml",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderAgenda",
+   "expr": "colsHtml",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderAgenda",
+   "expr": "bars",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "renderOpname",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "open",
+   "expr": "not",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "open",
+   "expr": "klant",
+   "reden": "al geëscaped: variabele = esc(...)"
+  },
+  {
+   "fn": "open",
+   "expr": "badge",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderVoorOpname",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "renderInmFotos",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "renderOplFotos",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "renderOplVlakGrid",
+   "expr": "veiligeFoto(src)",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "_pinRenderManager",
+   "expr": "veiligeFoto(src)",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "showOpnameRapport",
+   "expr": "veiligeFoto(f.url)",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "showRapport",
+   "expr": "veiligeFoto(f.url)",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "renderSheetTasks",
+   "expr": "syncDot",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "zoek",
+   "expr": "pendBadge",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "zoek",
+   "expr": "inputBlok",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "_chipHtml",
+   "expr": "click",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "_ruimteRender",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "renderWeekStrip",
+   "expr": "w",
+   "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
+  },
+  {
+   "fn": "renderWeekStrip",
+   "expr": "a.w",
+   "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
+  },
+  {
+   "fn": "renderWeekStrip",
+   "expr": "p.w",
+   "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
+  },
+  {
+   "fn": "renderAgenda",
+   "expr": "c.w",
+   "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
+  },
+  {
+   "fn": "open",
+   "expr": "oi",
+   "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
+  },
+  {
+   "fn": "_chipHtml",
+   "expr": "retryJs",
+   "reden": "vaste JS-tekst die de aanroeper meegeeft (bv. \"rapDraftSave()\"), geen data"
+  }
+ ]
+}

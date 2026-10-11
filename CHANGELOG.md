@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F7 3b groep 3: tekstsinks in de rest van v2.html (voorraad, planning, projecten, nacalculatie, attentie, agenda, admin)
+- Commit: `a7fcc3f` | Auteur: Bart Witte
+
 ## 2026-10-11 — Geld: pot herkennen ook als de naam letter + rekeningnummer heeft ("spaarrekening Z96824563")
 - Commit: `0d52c40` | Auteur: Bart Witte
 
