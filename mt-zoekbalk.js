@@ -11,6 +11,9 @@
  *     open: item => {…},            // klik/Enter op een treffer
  *     vraag: q => {…},              // optioneel: "Vraag dit aan Larry: “<q>”" onderaan; zonder = geen vraagregel
  *     vraagLabel: 'Vraag dit aan Larry',   // optioneel
+ *     extern: {zoek(q), annuleer(), groepen(), bezig()},   // optioneel: asynchrone bronnen (mt-zoek-extern.js MTZoekExtern.maak)
+ *                                   // groepen() geeft {soort,label,status:'laden'|'limiet'|'fout'|'klaar',melding,items,meer}; na elke
+ *                                   // wijziging roept de aanroeper ctl.ververs({behoud:true}) aan
  *     inline: false,                // true = de lijst staat in de pagina (mobiele zoeklaag) i.p.v. als zwevende uitklaplijst
  *     vraagMag: () => bool,         // optioneel: rechtencheck voor de vraagregel
  *     isVraag: q => bool,           // optioneel: lijkt de invoer een vraag? (dan staat de vraagregel vooraf actief)
@@ -30,7 +33,7 @@
   if (!doc) return;
 
   const esc = typeof root.esc === 'function' ? root.esc : s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const ICOON = { project: '📁', klant: '🏢', locatie: '📍', taak: '☑', contact: '👤' };
+  const ICOON = { project: '📁', klant: '🏢', locatie: '📍', taak: '☑', contact: '👤', moneybird: '🧾', sharepoint: '🗂' };
 
   if (!doc.getElementById('mt-zb-stijl')) {
     const st = doc.createElement('style'); st.id = 'mt-zb-stijl';
@@ -55,6 +58,7 @@
       '.zb-vraag{border-top:1px solid var(--border,#D6DEDB);margin-top:4px}',
       '.zb-vraag .zb-titel{font-weight:600}',
       '.zb-lijst.zb-inline{position:static;transform:none;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;padding:0 0 24px;overflow:visible}',
+      '.zb-limiet,.zb-fout{color:var(--warning,#B8762E)}',
       '.zb-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}',
       '@media (max-width:760px){.zb-lijst{position:absolute;left:0;right:0;width:auto;transform:none;max-height:60vh;border-radius:0 0 12px 12px}}',
       '@media (pointer:coarse){.zb-rij{min-height:46px}}'
@@ -78,7 +82,8 @@
       veld.setAttribute('aria-controls', lijstId); veld.setAttribute('aria-expanded', 'false'); veld.setAttribute('autocomplete', 'off');
       if (!veld.getAttribute('aria-label')) veld.setAttribute('aria-label', 'Zoeken');
 
-      let rijen = [], act = -1, open = false;   // rijen: [{item}|{vraag:true}]
+      let rijen = [], act = -1, open = false, bewogen = false;   // rijen: [{item}|{vraag:true}]; bewogen = gebruiker heeft zelf een regel gekozen
+      const sleutel = r => (r ? (r.vraag ? 'vraag' : r.item.soort + ':' + r.item.id) : '');
       const vraagKan = () => typeof opt.vraag === 'function' && (typeof opt.vraagMag !== 'function' || !!opt.vraagMag());
 
       function zet(i) {
@@ -96,16 +101,21 @@
       }
       function sluit() { toon(false); act = -1; }
 
-      function ververs() {
+      function ververs(o) {
+        const behoud = !!(o && o.behoud === true), vorige = behoud && bewogen ? sleutel(rijen[act]) : '';
         const q = veld.value.trim();
         if (!q) { rijen = []; lijst.innerHTML = ''; status.textContent = ''; sluit(); return; }
         let res; try { res = opt.zoek(q) || { groepen: [] }; } catch (e) { res = { groepen: [] }; if (root.console) root.console.warn('zoekbalk:', e); }
+        let ext = []; try { ext = opt.extern ? opt.extern.groepen() || [] : []; } catch (e) { ext = []; }
         rijen = []; let h = '';
-        (res.groepen || []).forEach((g, gi) => {
-          if (!g || !g.items || !g.items.length) return;
+        const nLokaal = (res.groepen || []).reduce((a, g) => a + ((g && g.items && g.items.length) || 0), 0);
+        (res.groepen || []).concat(ext).forEach((g, gi) => {
+          const heeft = g && g.items && g.items.length, melding = g && !heeft && (g.status === 'laden' || g.status === 'limiet' || g.status === 'fout');
+          if (!heeft && !melding) return;
           const kopId = lijstId + '-g' + gi;
           h += '<div role="group" aria-labelledby="' + esc(kopId) + '"><div class="zb-kop" role="presentation" id="' + esc(kopId) + '">' + esc(g.label) + '</div>';
-          g.items.forEach(it => {
+          if (melding) h += '<div class="zb-leeg zb-' + esc(g.status) + '" role="presentation">' + esc(g.status === 'laden' ? (g.melding || 'Zoeken…') : g.melding || 'Niet beschikbaar.') + '</div>';
+          (g.items || []).forEach(it => {
             const i = rijen.length; rijen.push({ item: it });
             h += '<div role="option" id="' + esc(lijstId + '-o' + i) + '" class="zb-rij" data-i="' + i + '" aria-selected="false">'
               + '<span class="zb-ico" aria-hidden="true">' + esc(ICOON[it.soort] || '•') + '</span>'
@@ -115,8 +125,8 @@
           if (g.meer > 0) h += '<div class="zb-meer" role="presentation">+' + esc(g.meer) + ' meer — typ verder om te verfijnen</div>';
           h += '</div>';
         });
-        const n = rijen.length;
-        if (!n) h += '<div class="zb-leeg" role="presentation">Geen treffers. Verfijn je zoekterm.</div>';
+        const n = rijen.length, extBezig = !!(opt.extern && opt.extern.bezig && opt.extern.bezig());
+        if (!n && !ext.some(g => g.status === 'laden' || g.status === 'limiet' || g.status === 'fout')) h += '<div class="zb-leeg" role="presentation">' + (extBezig ? 'Zoeken…' : 'Geen treffers. Verfijn je zoekterm.') + '</div>';
         const kanVragen = vraagKan();
         let vraagIdx = -1;
         if (kanVragen) {
@@ -125,29 +135,33 @@
             + '<span class="zb-ico" aria-hidden="true">✨</span><span class="zb-tekst"><span class="zb-titel">' + esc(vraagLabel) + ': “' + esc(q) + '”</span></span></div></div>';
         }
         lijst.innerHTML = h;
-        status.textContent = n ? n + (n === 1 ? ' treffer' : ' treffers') : 'Geen treffers';
+        status.textContent = (n ? n + (n === 1 ? ' treffer' : ' treffers') : 'Geen treffers') + (extBezig ? ', andere bronnen worden nog doorzocht' : '');
         toon(true);
+        // Beginstand: de eerste lokale treffer (externe bronnen worden nooit zelf voorgeselecteerd), anders de vraagregel.
         const vraagVoorop = kanVragen && typeof opt.isVraag === 'function' && opt.isVraag(q);
-        zet(vraagVoorop ? vraagIdx : n ? 0 : vraagIdx);
+        let begin = vraagVoorop ? vraagIdx : nLokaal ? 0 : kanVragen ? vraagIdx : n ? 0 : -1;
+        const terug = vorige ? rijen.findIndex(r => sleutel(r) === vorige) : -1;
+        if (terug >= 0) begin = terug; else if (vorige) bewogen = false;
+        zet(begin);
       }
 
       function kies(i) {
         const r = rijen[i]; if (!r) return;
         const q = veld.value.trim();
-        veld.value = ''; ververs();
+        veld.value = ''; bewogen = false; if (opt.extern) opt.extern.annuleer(); ververs();
         // Na het afhandelen van deze klik: andere click-away-handlers op de pagina zien dan niet meer de (al vervangen) lijst.
         setTimeout(() => { if (r.vraag) { if (vraagKan()) opt.vraag(q); } else opt.open(r.item); }, 0);
       }
 
-      veld.addEventListener('input', ververs);
+      veld.addEventListener('input', () => { bewogen = false; if (opt.extern) opt.extern.zoek(veld.value); ververs(); });
       veld.addEventListener('focus', () => { if (veld.value.trim() && !open) ververs(); });
       veld.addEventListener('keydown', e => {
         if (e.isComposing) return;
         const n = rijen.length;
-        if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) { ververs(); return; } if (n) zet((act + 1) % n); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); if (open && n) zet(act <= 0 ? n - 1 : act - 1); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) { ververs(); return; } if (n) { bewogen = true; zet((act + 1) % n); } }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); if (open && n) { bewogen = true; zet(act <= 0 ? n - 1 : act - 1); } }
         else if (e.key === 'Enter') { if (open && act >= 0) { e.preventDefault(); kies(act); } }
-        else if (e.key === 'Escape') { if (inline) return; if (open) { e.preventDefault(); sluit(); } else if (veld.value) { e.preventDefault(); veld.value = ''; ververs(); } }
+        else if (e.key === 'Escape') { if (inline) return; if (open) { e.preventDefault(); sluit(); } else if (veld.value) { e.preventDefault(); veld.value = ''; bewogen = false; if (opt.extern) opt.extern.annuleer(); ververs(); } }
         else if (e.key === 'Tab') { if (!inline) sluit(); }
       });
       // Muis/aanraking: de focus blijft in het veld; het openen gebeurt op click.
@@ -158,7 +172,7 @@
       });
       lijst.addEventListener('mousemove', e => {
         const el = e.target.closest ? e.target.closest('[role=option]') : null;
-        if (el && Number(el.dataset.i) !== act) zet(Number(el.dataset.i));
+        if (el && Number(el.dataset.i) !== act) { bewogen = true; zet(Number(el.dataset.i)); }
       });
       if (!inline) doc.addEventListener('mousedown', e => { if (open && e.target !== veld && !lijst.contains(e.target)) sluit(); });
 

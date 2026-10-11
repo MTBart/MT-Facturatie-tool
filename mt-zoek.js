@@ -41,6 +41,8 @@
     { soort: 'taak', label: 'Taken', recht: 'taken' },
     { soort: 'contact', label: 'Contacten', recht: 'projecten' }
   ];
+  // Externe bronnen (mt-zoek-extern.js): alleen de rechten staan hier, zodat één functie alle soorten beoordeelt.
+  const EXTERN_RECHT = { moneybird: 'moneybird', sharepoint: 'projecten' };
   const DAG = 86400000;
 
   const lijst = v => Array.isArray(v) ? v : [];
@@ -143,7 +145,8 @@
     return soort => {
       if (!rol || typeof rol.mag !== 'function') return true;
       const s = SOORTEN.find(x => x.soort === soort);
-      return s ? !!rol.mag(s.recht) : false;
+      if (s) return !!rol.mag(s.recht);
+      return EXTERN_RECHT[soort] ? !!rol.mag(EXTERN_RECHT[soort]) : false;
     };
   }
 
@@ -248,5 +251,5 @@
     return items;
   }
 
-  root.MTZoek = { SOORTEN, norm, tijd, index, zoek, rang, isVraag, magUitRollen, bronVan };
+  root.MTZoek = { SOORTEN, EXTERN_RECHT, norm, tijd, index, zoek, rang, isVraag, magUitRollen, bronVan };
 })(typeof window !== 'undefined' ? window : globalThis);

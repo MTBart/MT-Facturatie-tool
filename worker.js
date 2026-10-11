@@ -4008,6 +4008,88 @@ async function koersCron(env, tijd) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ZOEKBALK — Moneybird-facturen en -offertes (GET /zoek/moneybird?q=…&max=10). Alleen lezen.
+// De zoekbalk typt per toetsaanslag: een Moneybird-download daarbij is uitgesloten. Daarom staat er een compacte
+// zoekindex in KV (verkoopfacturen, inkoopfacturen, offertes van dit en vorig jaar: nummer, referentie, contactnaam,
+// datum, nooit bedragen). Een verzoek leest alleen die index. Is de index er niet of te oud, dan start een
+// achtergrondtaak (waitUntil) de opbouw/verversing en antwoordt het verzoek meteen ("opbouwen" of de oude index).
+// Bij Moneybird-429 komt er een korte pauze-markering (Retry-After) en wordt er niet opnieuw gehaald.
+// ═══════════════════════════════════════════════════════════════════════════
+const ZOEK_MB_INDEX = 'zoek:mb:index:v1', ZOEK_MB_SLOT = 'zoek:mb:slot', ZOEK_MB_PAUZE = 'zoek:mb:pauze';
+const ZOEK_MB_ONVOLLEDIG_MS = 2 * 60 * 1000, ZOEK_MB_VERS_MS = 15 * 60 * 1000, ZOEK_MB_OUD_MS = 24 * 3600 * 1000, ZOEK_MB_SLOT_S = 120, ZOEK_MB_MIN = 3, ZOEK_MB_BUDGET = 45;
+const zoekNorm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const ZOEK_MB_SOORT = { v: 'verkoopfactuur', i: 'inkoopfactuur', o: 'offerte' };
+const ZOEK_MB_PAD = { v: 'sales_invoices', i: 'documents', o: 'estimates' };
+function zoekMbContact(c) { if (!c || typeof c !== 'object') return ''; return String(c.company_name || [c.firstname, c.lastname].filter(Boolean).join(' ') || '').trim(); }
+// Index opbouwen: drie lijsten × twee jaren, binnen een vast subrequest-budget. Geeft {items, onvolledig, pauze?}.
+async function zoekMbOpbouwen(env) {
+  const budget = { rest: ZOEK_MB_BUDGET }, w = [], get = geldMb(env, budget), items = [];
+  const bronnen = [['v', 'sales_invoices', 'invoice_id', 'invoice_date'], ['i', 'documents/purchase_invoices', 'reference', 'date'], ['o', 'estimates', 'estimate_id', 'estimate_date']];
+  let pauze = 0;
+  for (const [s, pad, nrVeld, datumVeld] of bronnen) {
+    for (const periode of ['this_year', 'last_year']) {
+      const l = await geldLijst(get, `${pad}?filter=period:${periode}`, w, s);
+      l.lijst.forEach(x => items.push({ s, id: String(x.id), nr: String((s === 'i' ? '' : x[nrVeld]) || ''), ref: String(x.reference || '').slice(0, 80), c: zoekMbContact(x.contact).slice(0, 80), d: String(x[datumVeld] || '').slice(0, 10) }));
+    }
+  }
+  w.forEach(x => { if (x.status === 429) pauze = Math.max(pauze, 60); });
+  items.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+  return { items: items.slice(0, 6000), onvolledig: w.length > 0, fouten: w.length, pauze };
+}
+// Achtergrondtaak: één opbouw tegelijk (slot met korte TTL), nooit meteen opnieuw na een fout.
+let zoekMbBezig = null;   // in deze isolate: één opbouw tegelijk (KV is niet atomair; het slot hieronder dekt andere isolates bij benadering)
+function zoekMbVerversen(env) {
+  if (zoekMbBezig) return zoekMbBezig;
+  zoekMbBezig = zoekMbVerversen1(env).catch(() => {}).finally(() => { zoekMbBezig = null; });
+  return zoekMbBezig;
+}
+async function zoekMbVerversen1(env) {
+  if (await kvJson(env, ZOEK_MB_SLOT)) return;
+  await kvZet(env, ZOEK_MB_SLOT, { ts: Date.now() }, { expirationTtl: ZOEK_MB_SLOT_S });
+  let res;
+  try { res = await zoekMbOpbouwen(env); } catch (e) { res = { items: [], onvolledig: true, fouten: 1, pauze: 30, mislukt: true }; }
+  const oud = await kvJson(env, ZOEK_MB_INDEX);
+  // Een lege/mislukte opbouw overschrijft nooit een bruikbare oude index.
+  if (res.items.length && !(res.onvolledig && oud && oud.items && oud.items.length > res.items.length)) {
+    await kvZet(env, ZOEK_MB_INDEX, { ts: Date.now(), items: res.items, onvolledig: res.onvolledig }, { expirationTtl: 7 * 86400 });
+  }
+  if (res.pauze || (res.onvolledig && !res.items.length)) await kvZet(env, ZOEK_MB_PAUZE, { tot: Date.now() + (res.pauze || 30) * 1000, ra: res.pauze || 30 }, { expirationTtl: Math.max(60, res.pauze || 30) });
+}
+function zoekMbTreffers(index, q, max) {
+  const termen = zoekNorm(q).split(' ').filter(Boolean), qn = termen.join(' ');
+  const uit = [];
+  for (const x of index.items) {
+    const nr = zoekNorm(x.nr), c = zoekNorm(x.c), hooi = ' ' + [nr, zoekNorm(x.ref), c].join(' ') + ' ';
+    if (!termen.every(t => hooi.includes(t))) continue;
+    const rang = nr && (nr === qn || nr.replace(/ /g, '') === qn.replace(/ /g, '')) ? 0 : (nr && nr.startsWith(qn)) || c.startsWith(qn) ? 1 : 2;
+    uit.push({ x, rang });
+  }
+  uit.sort((a, b) => (a.rang - b.rang) || (a.x.d < b.x.d ? 1 : a.x.d > b.x.d ? -1 : 0));
+  const url = x => `https://moneybird.com/${MB_ADMIN}/${x.s === 'i' ? 'documents' : x.s === 'v' ? 'sales_invoices' : 'estimates'}/${x.id}`;
+  return { totaal: uit.length, items: uit.slice(0, max).map(({ x }) => ({ soort: ZOEK_MB_SOORT[x.s], id: x.id, titel: [x.nr, x.ref].filter(Boolean).join(' · ') || '(zonder nummer)', klant: x.c, datum: x.d, url: url(x) })) };
+}
+async function handleZoekMb(request, env, ik, json, ctx, modus) {
+  if (String(request.method).toUpperCase() !== 'GET') return json({ error: 'alleen GET' }, 405);
+  const R = RECHTEN[ik.rol];
+  if ((modus === 'afdwingen' || R) && !(R && R.moneybird)) return json({ error: 'geen-toegang', reden: 'moneybird' }, 403);
+  if (!env.MT_ROLLEN) return json({ error: 'geen-opslag' }, 503);
+  const url = new URL(request.url), q = (url.searchParams.get('q') || '').trim();
+  if (zoekNorm(q).replace(/ /g, '').length < ZOEK_MB_MIN) return json({ error: `q: minimaal ${ZOEK_MB_MIN} tekens` }, 400);
+  const max = Math.max(1, Math.min(20, Number(url.searchParams.get('max')) || 10));
+  const [index, pauze] = await Promise.all([kvJson(env, ZOEK_MB_INDEX), kvJson(env, ZOEK_MB_PAUZE)]);
+  const nu = Date.now(), leeftijd = index ? nu - index.ts : Infinity;
+  const pauzeNog = pauze && pauze.tot > nu ? Math.ceil((pauze.tot - nu) / 1000) : 0;
+  const versMs = index && index.onvolledig ? ZOEK_MB_ONVOLLEDIG_MS : ZOEK_MB_VERS_MS;   // een onvolledige index (bv. na een 429) wordt snel opnieuw geprobeerd
+  if (leeftijd > versMs && !pauzeNog) waitUntil(ctx, zoekMbVerversen(env).catch(() => {}));   // achtergrond, nooit in dit verzoek
+  if (!index || leeftijd > ZOEK_MB_OUD_MS || !index.items) {
+    if (pauzeNog) { const r = json({ error: 'moneybird-429', retry_after: pauzeNog }, 429); r.headers.set('Retry-After', String(pauzeNog)); return r; }
+    return json({ status: 'opbouwen', retry_after: 5, items: [], totaal: 0 });
+  }
+  const t = zoekMbTreffers(index, q, max);
+  return json({ status: 'klaar', verouderd: leeftijd > versMs, onvolledig: !!index.onvolledig, ts: index.ts, totaal: t.totaal, items: t.items });
+}
+
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
 export default {
@@ -4061,6 +4143,8 @@ export default {
       if (url.pathname === '/klanten') return await handleKlanten(request, env, ik, json, ctx);
       // Werkcode-teller en centrale instellingen: eigen routes (zie handleTeller).
       if (url.pathname === '/instellingen' || url.pathname.startsWith('/teller/')) return await handleTeller(url.pathname, request, env, ik, json);
+      // Zoekbalk: Moneybird-facturen en -offertes uit de zoekindex (alleen lezen; recht `moneybird`).
+      if (url.pathname === '/zoek/moneybird') return await handleZoekMb(request, env, ik, json, ctx, modus);
       // Geldtijdlijn en het financiële dashboard: recht `geld`, in élke ROLLEN_MODUS (zie handleGeld).
       if (url.pathname.startsWith('/geld/')) return await handleGeld(url.pathname, request, env, ik, json);
       if (url.pathname.startsWith('/dashboard/')) {

@@ -24,8 +24,9 @@
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-11a"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
-<script src="mt-zoek.js?v=2026-10-11a"></script>
-<script src="mt-zoekbalk.js?v=2026-10-11b"></script>
+<script src="mt-zoek.js?v=2026-10-11b"></script>
+<script src="mt-zoek-extern.js?v=2026-10-11a"></script>
+<script src="mt-zoekbalk.js?v=2026-10-11d"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
@@ -6272,6 +6273,7 @@ function zbIndexM() {
 function zbZoekM(q) { return MTZoek.zoek(zbIndexM(), q, { mag: MTZoek.magUitRollen(), soorten: ["project", "taak", "contact"] }); }
 function zoekbalkOpenM(it) {
   const d = (it && it.data) || {};
+  if (it.soort === "moneybird" || it.soort === "sharepoint") { MTZoekExtern.openUrl(it); return; }   // https + vaste hosts, nieuw tabblad
   if (it.soort === "contact") { if (window.MTContactenUI) MTContactenUI.detail(d.id); return; }
   const p = allProjects().find(y => y.code === d.code);   // project en taak: het project-blad met de taken
   if (p) openProjectSheet(p.id);
@@ -6291,10 +6293,16 @@ function zoekbalkInitM() {
   }
   function laagSluit() {
     laag.hidden = true; geblokkeerd.forEach(el => { el.inert = false; }); geblokkeerd = [];
-    veld.value = ""; veld._zb.ververs();
+    veld.value = ""; if (ext) ext.annuleer(); veld._zb.ververs();
     if (vorigeFocus && vorigeFocus.focus) { try { vorigeFocus.focus(); } catch (e) {} } else knop.focus();
   }
-  veld._zb = MTZoekbalk.init({ veld, zoek: zbZoekM, open: it => { laagSluit(); zoekbalkOpenM(it); }, host: body, inline: true });
+  // Externe bronnen: Moneybird (zoekindex in de worker) en SharePoint (Graph-search binnen "Nieuwe mappenstructuur").
+  const ext = window.MTZoekExtern ? MTZoekExtern.maak({
+    bronnen: [MTZoekExtern.bronMoneybird({ basis: WORKER, fetch: (u, o) => fetchMetAuth(u, o), nu: () => Date.now() }),
+      MTZoekExtern.bronSharePoint({ token: () => window.getGraphToken(), drive: _SPProj.DRIVE, root: "Nieuwe mappenstructuur", fetch: (u, i) => fetch(u, i), nu: () => Date.now() })],
+    mag: MTZoek.magUitRollen(),
+    onWijziging: () => { if (veld._zb) veld._zb.ververs({ behoud: true }); } }) : null;
+  veld._zb = MTZoekbalk.init({ veld, zoek: zbZoekM, open: it => { laagSluit(); zoekbalkOpenM(it); }, host: body, inline: true, extern: ext });
   veld.addEventListener("input", () => { hint.hidden = !!veld.value.trim(); });
   knop.addEventListener("click", laagOpen);
   document.getElementById("zbTerug").addEventListener("click", laagSluit);

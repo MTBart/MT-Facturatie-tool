@@ -102,7 +102,20 @@ Treffers op code (project-, werk-, offertecode, oude codes; ook zonder streepjes
 Een treffer opent via `mtRoute.go` (project `#projecten/<CODE>`, klant `#klant/<KL>[/<LOC>]`, taak = project-sectie
 planning) of `MTContactenUI.detail`. De pagina bouwt de index hooguit elke 3 s opnieuw (`zbIndex`/`zbIndexM`).
 De lijst-zoekvelden (`zoekProjecten`, `zoekKlanten`, `zoekInLijst`, `zoekGeschiedenis`) zijn ongewijzigd.
-Later (brok 3/4): SharePoint, Moneybird en mail komen als extra groepen na 3 letters + debounce.
+**Externe bronnen (brok 3, `mt-zoek-extern.js`, DOM-vrij):** na minimaal 3 tekens en 400 ms pauze komen er groepen **Moneybird**
+(facturen, inkoopfacturen en offertes) en **SharePoint** (mappen en bestanden) bij, na de lokale groepen. Een nieuwe toetsaanslag breekt
+lopende aanvragen af (AbortController); een verouderd antwoord wordt genegeerd. Per bron een status: laden, leeg (groep verdwijnt),
+fout, of 429 met Retry-After (die bron wordt dan niet opnieuw gevraagd tot de tijd om is; de andere bron loopt door).
+Getoond wordt alleen titel, klant, datum en soort; openen gebeurt in Moneybird/SharePoint zelf (nieuw tabblad,
+`MTZoekExtern.openUrl` → `veiligeUrl` met hosts `moneybird.com` resp. de `veiligeLink`-hosts).
+- **Moneybird:** worker-route `GET /zoek/moneybird?q=&max=` (recht `moneybird`, alleen lezen). De route leest uitsluitend een compacte zoekindex in
+  KV (`zoek:mb:index:v1`: nummer, referentie, contactnaam, datum; nooit bedragen) van dit en vorig jaar. Ontbreekt de index of is hij ouder dan
+  15 min (onvolledig: 2 min), dan start een achtergrondtaak (`waitUntil`, één tegelijk) de opbouw met een vast subrequest-budget; het verzoek
+  zelf antwoordt direct met `opbouwen` of de oude index (`verouderd:true`). Bij een Moneybird-429 komt er een pauze-markering
+  (`zoek:mb:pauze`) en geeft de route 429 + `Retry-After` zolang er geen index is; een bestaande index blijft dan in gebruik.
+- **SharePoint:** Graph drive-search (`/drives/<PROJ_DRIVE>/root:/Nieuwe mappenstructuur:/search(q='…')`) met het Graph-token van de gebruiker;
+  alleen treffers waarvan de webUrl in `Nieuwe mappenstructuur` ligt; de klant komt uit de webUrl (de drive-search geeft geen parentReference.path).
+Later (brok 4): e-mail (Graph) als groep tussen de lokale groepen en Moneybird.
 
 ### Event-delegatie voor NIEUWE code (S7-conventie, sinds 3-7)
 
