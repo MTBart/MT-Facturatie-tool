@@ -1,5 +1,25 @@
 [
   {
+    "versie": "2.13.2",
+    "datum": "2026-10-12",
+    "titel": "Kan ik dit uitgeven? en het maandagbericht",
+    "voor": "geld",
+    "punten": [
+      "In Geld staat een nieuwe kaart \"Kan ik dit uitgeven?\". Vul een bedrag en een datum in en je ziet meteen of het past in je besteedbaar budget: ja, onder je fictieve buffer, alleen met je noodbuffer, alleen met krediet of nee. Je ziet het maximum op die dag en vanaf wanneer het wel past. Dit werkt ook op je telefoon en rekent voorzichtig: zonder prognose, en bij een onvolledige bron zegt hij eerlijk dat hij het niet zeker kan zeggen.",
+      "Elke maandagochtend staat er bovenaan Geld een maandagbericht: het oordeel van de Koersmeter, je besteedbaar budget, het laagste punt van de komende weken, de grootste ontvangsten en betalingen van de komende week en één actie. Je vinkt het af zoals de ochtendmelding. Het blijft in de app; er gaat niets naar anderen."
+    ]
+  },
+  {
+    "versie": "2.13.2",
+    "datum": "2026-10-12",
+    "titel": "AI-gebruik met limieten",
+    "voor": "beheer",
+    "punten": [
+      "Het AI-gebruik loopt nu met een limiet per gebruiker: tokens per dag, verzoeken per minuut en gelijktijdige verzoeken, plus een dagplafond voor de hele tool. De eerste week staat het alleen op meekijken: er wordt niets geweigerd, maar de eigenaar kan het gebruik opvragen en zien wat er geweigerd zou worden. Daarna gaat het aan.",
+      "In het logboek staat nooit wat er gevraagd of geantwoord is, alleen wie (als code), welke rol, welk model en hoeveel. Een afgebroken verzoek wordt direct afgerekend op wat er al was."
+    ]
+  },
+  {
     "versie": "2.13.1",
     "datum": "2026-10-11",
     "titel": "Offertenummer automatisch uit Moneybird",
