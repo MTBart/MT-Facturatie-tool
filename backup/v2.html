@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.11.9 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.11.10 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -30,8 +30,9 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-geld.js?v=2026-10-10a"></script>
+<script src="mt-geld.js?v=2026-10-10b"></script>
 <script src="mt-koers.js?v=2026-10-10a"></script>
+<script src="mt-schulden.js?v=2026-10-10a"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -768,7 +769,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.11.9, 9 okt 2026). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.11.10, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -789,7 +790,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.11.9</span>
+    <span class="header-version">v2.11.10</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -2400,7 +2401,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Locatie (≤8)</label>
-        <input type="text" id="modal-locatie" placeholder="LOC" oninput="updateModalPreview()" maxlength="8" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
+        <input type="text" id="modal-locatie" placeholder="Testlocatie" oninput="updateModalPreview()" maxlength="8" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Product</label>
@@ -2438,7 +2439,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Nieuwe code <span style="color:var(--text-faint)">(vervang tijdelijke code)</span></label>
-        <input type="text" id="aanvul-code-nieuw" placeholder="bijv. CN-LOC-KEUKEN" style="text-transform:uppercase;font-family:var(--mono);width:100%;box-sizing:border-box">
+        <input type="text" id="aanvul-code-nieuw" placeholder="bijv. CN-Testlocatie-KEUKEN" style="text-transform:uppercase;font-family:var(--mono);width:100%;box-sizing:border-box">
       </div>
       <div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Projectnaam</label>
@@ -8534,7 +8535,7 @@ function openModal(){
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
   // datalist met klantnamen: ECHTE registry-namen eerst (single source = klanten.json),
   // aangevuld met namen uit bestaande projecten. Zo stelt het typeveld de echte
-  // bedrijfsnaam voor (bv. "Voorbeeldklant B.V.") en mapt autoCode die naar de code.
+  // bedrijfsnaam voor (bv. "Voorbeeldklant") en mapt autoCode die naar de code.
   const dl=document.getElementById('klant-namen');
   if(dl){
     // Volledige MB-registry (651) eerst — zo verschijnt élke bestaande klant als
@@ -8556,7 +8557,7 @@ function autoCode(force){
   const nl=document.getElementById('modal-naam-locatie').value.trim();
   const np=document.getElementById('modal-naam-product').value.trim();
   const ek=document.getElementById('modal-klant'), el=document.getElementById('modal-locatie'), ep=document.getElementById('modal-product');
-  // Registry-klant herkend? Gebruik diens vaste code (bv. "Voorbeeldklant B.V."→STY),
+  // Registry-klant herkend? Gebruik diens vaste code (bv. "Voorbeeldklant"→STY),
   // anders een afgeleide afkorting.
   if((force||!ek.value)&&nk){ const kv=klantVolByNaam(nk); const ov=klantCodeOverride(kv); ek.value= ov || ((kv&&kv.code)?kv.code:afkortKlant(nk)); }
   if((force||!el.value)&&nl) el.value=afkortLoc(nl);
@@ -10149,7 +10150,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   },
 
   // mkdir-p met canonieke naam. wantedName = de ECHTE naam (registry), bv.
-  // "Voorbeeldklant B.V.". Gedrag:
+  // "Voorbeeldklant". Gedrag:
   //   1. exacte match  -> hergebruiken
   //   2. genorm. match maar andere schrijfwijze -> de BESTAANDE map hergebruiken.
   //      Vroeger werd die automatisch hernoemd naar wantedName; dat brak zonder
@@ -10163,7 +10164,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // Returnt de werkelijk gebruikte mapnaam.
   async ensureFolder(parentPath, wantedName, rename = true) {
     // SharePoint verbiedt deze tekens + een naam mag niet eindigen op '.' of spatie
-    // ("Voorbeeldklant B.V." -> "Voorbeeldklant B.V").
+    // ("Voorbeeldklant" -> "Voorbeeldklant B.V").
     const safe = wantedName.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'');
     const existing = await this.listChildren(parentPath);
     // 1. exacte match (case-sensitive op werkelijke naam)

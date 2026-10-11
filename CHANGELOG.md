@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Tooling-fixes na Codex F: changelog-seed uit de volledige geschiedenis, pre-commit fail closed, atomaire back-up-rotatie
+- Commit: `44fd23b` | Auteur: Bart Witte
+
 ## 2026-10-11 — Codex-verificatie A+B: F1-F5 (klanten-writes via Durable Object, fail-closed back-up en changelog, persistent importjournaal)
 - Commit: `8f12d5b` | Auteur: Bart Witte
 

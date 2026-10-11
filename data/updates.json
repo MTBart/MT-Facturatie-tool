@@ -1,5 +1,34 @@
 [
   {
+    "versie": "2.12.0",
+    "datum": "2026-10-11",
+    "titel": "Veiliger, en de klantenlijst komt van de server",
+    "voor": "beheer",
+    "punten": [
+      "De klantenlijst staat niet meer open voor iedereen op internet, maar wordt na het inloggen van de server gehaald. Wijzigen kan alleen door beheer, en als twee mensen tegelijk opslaan wint er één en gaat er niets verloren (de vorige stand blijft bewaard).",
+      "Extra beveiliging in schermen en berichten: wat uit mail, bijlagen, adressen of gedeelde lijsten komt wordt overal als gewone tekst getoond, nooit meer als werkende code.",
+      "Notities, back-ups en lijsten met klantgegevens zijn uit het openbare deel van de tool gehaald."
+    ]
+  },
+  {
+    "versie": "2.12.0",
+    "datum": "2026-10-11",
+    "titel": "Koersmeter: wat is er sinds gisteren veranderd",
+    "voor": "geld",
+    "punten": [
+      "De Koersmeter vergelijkt nu met gisteren en noemt één duidelijke actie voor vandaag. Is een bron onvolledig of een koppeling nog niet bevestigd (een factuur die bij twee projecten past, of een vast bedrag dat op een afbetaling lijkt), dan zegt hij dat eerlijk en telt hetzelfde bedrag niet dubbel mee."
+    ]
+  },
+  {
+    "versie": "2.12.0",
+    "datum": "2026-10-11",
+    "titel": "Verhuisknop voorbereid",
+    "voor": "beheer",
+    "punten": [
+      "Voorbereid voor de verhuizing naar het nieuwe adres: een verhuisknop die de lokale gegevens van een apparaat (foto's, concepten, wachtrij) veilig meeneemt. Hij staat nog uit en wordt pas ingeschakeld als de verhuizing start; niets wordt gewist of overschreven."
+    ]
+  },
+  {
     "versie": "2.11.10",
     "datum": "2026-10-10",
     "titel": "Schulden en aflossen",
