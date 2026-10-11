@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.12.3",
+    "datum": "2026-10-11",
+    "titel": "Veiliger",
+    "voor": "beheer",
+    "punten": [
+      "Wat uit Moneybird, mail, Toggl, SharePoint en de planning komt (namen, omschrijvingen, projecten, ruimtenamen, bestanden) wordt in bijna alle schermen, ook op de telefoon, overal als gewone tekst getoond en nooit meer als werkende code. Links naar bestanden en mails openen alleen als ze naar SharePoint, Office of Outlook wijzen.",
+      "Een ruimtenaam met vreemde tekens kan op de telefoon geen opdracht meer uitvoeren, en de reactie bij een aandachtspunt blijft precies zoals je hem typte."
+    ]
+  },
+  {
     "versie": "2.12.2",
     "datum": "2026-10-11",
     "titel": "Spaarpotjes volgen de echte overboekingen",

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — HOOG (Codex 121e465): ruimtenaam in een inline onclick van mobiel.html; handler-baseline
+- Commit: `e5bedd9` | Auteur: Bart Witte
+
 ## 2026-10-11 — F7 3b groep 5: tekstsinks in uren.html en mt-toggl.js
 - Commit: `07f152d` | Auteur: Bart Witte
 
