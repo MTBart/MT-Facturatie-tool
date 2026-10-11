@@ -169,7 +169,7 @@ async function inboxLoadTaken(){
 }
 function inboxRenderTakenShell(){
   const wrap=document.getElementById('taken-body');if(!wrap)return;
-  const opts=_todo.lists.map(l=>`<option value="${l.id}"${l.id===_todo.listId?' selected':''}>${ibEsc(l.displayName)}</option>`).join('');
+  const opts=_todo.lists.map(l=>`<option value="${ibEsc(l.id)}"${l.id===_todo.listId?' selected':''}>${ibEsc(l.displayName)}</option>`).join('');
   wrap.innerHTML=`
     <div class="agenda-toolbar">
       <select id="todo-list" onchange="todoSwitchList(this.value)" style="font-size:13px;padding:5px 8px;border:1px solid var(--border,#ddd);border-radius:6px;background:#fff">${opts||'<option>geen lijsten</option>'}</select>
@@ -356,7 +356,7 @@ async function tdsDroogloop(){
   try{
     _tdsPlan=await tdsPlan();
     const n=s=>_tdsPlan.acties.filter(a=>a.soort===s).length, doen=['maken','voltooien','bijwerken','koppelen'].reduce((x,s)=>x+n(s),0);
-    el.innerHTML=`<div style="font-size:12px;margin-bottom:6px">${_tdsPlan.aantalMijn} Toggl-taken op jouw naam · lijst "${TDS_LIJST}" ${_tdsPlan.lijst?'bestaat':'<b>wordt aangemaakt</b>'}<br>
+    el.innerHTML=`<div style="font-size:12px;margin-bottom:6px">${ibEsc(_tdsPlan.aantalMijn)} Toggl-taken op jouw naam · lijst "${TDS_LIJST}" ${_tdsPlan.lijst?'bestaat':'<b>wordt aangemaakt</b>'}<br>
       ➕ ${n('maken')} nieuw · ✅ ${n('voltooien')} afvinken · ✏️ ${n('bijwerken')} bijwerken · 🔗 ${n('koppelen')} koppelen · ⚠️ ${n('conflict')} niet overschreven · ℹ️ ${n('melding')} meldingen</div>
       <div style="max-height:260px;overflow:auto;border:1px solid var(--border,#eee);border-radius:6px;padding:4px 8px">${_tdsPlan.acties.map(tdsActieHtml).join('')||'<div style="font-size:12px;color:var(--text-faint)">Alles is al bij.</div>'}</div>
       ${doen?`<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="tdsUitvoerenKnop()">Uitvoeren (${doen} wijziging${doen===1?'':'en'} in jouw To Do)</button>`:''}`;
@@ -368,7 +368,7 @@ async function tdsUitvoerenKnop(){
   if(!await mtDialog.confirm({title:'Toggl → To Do',message:'De wijzigingen uit de droogloop uitvoeren in jouw To Do-lijst "'+TDS_LIJST+'"?\nEr wordt niets verwijderd, en in Toggl verandert niets.',okLabel:'Uitvoeren'})) return;
   try{
     const r=await tdsUitvoeren(_tdsPlan); _tdsPlan=null;
-    if(el) el.innerHTML=`<div style="font-size:12px">${r.fout?'⚠':'✓'} ${r.ok} uitgevoerd${r.fout?`, ${r.fout} mislukt:<br>${r.fouten.map(ibEsc).join('<br>')}`:''}. Klik opnieuw op Droogloop om te controleren.</div>`;
+    if(el) el.innerHTML=`<div style="font-size:12px">${r.fout?'⚠':'✓'} ${ibEsc(r.ok)} uitgevoerd${r.fout?`, ${ibEsc(r.fout)} mislukt:<br>${r.fouten.map(ibEsc).join('<br>')}`:''}. Klik opnieuw op Droogloop om te controleren.</div>`;
     if(typeof inboxLoadTaken==='function'){ _todo.loaded=false; }
   }catch(e){ if(el) el.innerHTML=`<div class="inbox-empty" style="font-size:12px">Uitvoeren mislukt: ${ibEsc(e.message)}</div>`; }
 }
@@ -410,7 +410,7 @@ function inboxRenderTree(){
   const el=document.getElementById('inbox-foldertree');
   const row=(f,kind)=>{
     const act=f.id===_inbox.folderId?' actief':'';
-    const b=f.unreadItemCount?`<span class="badge">${f.unreadItemCount}</span>`:'';
+    const b=f.unreadItemCount?`<span class="badge">${ibEsc(f.unreadItemCount)}</span>`:'';
     return `<div class="inbox-fold${kind?' kind':''}${act}" data-fid="${ibEsc(f.id)}" data-fnaam="${ibEsc(f.displayName)}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ibEsc(f.displayName)}</span>${b}</div>`;
   };
   el.innerHTML=_inbox.folders.map(f=>row(f,false)+(f.children||[]).map(c=>row(c,true)).join('')).join('')||'<div class="inbox-empty" style="font-size:12px">geen mappen</div>';
@@ -668,7 +668,7 @@ async function inboxOpenMail(id){
     const van=(m.from&&m.from.emailAddress)?`${m.from.emailAddress.name||''} <${m.from.emailAddress.address||''}>`:'(onbekend)';
     const dt=m.receivedDateTime?new Date(m.receivedDateTime).toLocaleString('nl-NL'):'';
     const folderOpts=ibFlat(_inbox.folders).filter(f=>f.id!==_inbox.folderId)
-      .map(f=>`<option value="${f.id}">${ibEsc(f.displayName)}</option>`).join('');
+      .map(f=>`<option value="${ibEsc(f.id)}">${ibEsc(f.displayName)}</option>`).join('');
     const attHtml=att.length?('<div style="margin-top:8px">'+att.map(a=>`<span class="inbox-att" data-att="${ibEsc(a.id)}" data-attnaam="${ibEsc(a.name)}">📎 ${ibEsc(a.name)} <span style="color:#999">(${Math.round((a.size||0)/1024)} kB)</span></span>`).join('')+'</div>'):'';
     rb.classList.remove('inbox-empty');
     rb.innerHTML=`<div class="inbox-rhdr">
@@ -908,7 +908,7 @@ function ntkLijst(key){
     return `<div class="ntk-rij"><div class="dos-hoofd"><div class="dos-titel">${m.hasAttachments?'📎 ':''}${ibEsc(m.subject||'(geen onderwerp)')}</div>
       <div class="dos-meta">${ibEsc(van)} · ${m.receivedDateTime?ibEsc(m.receivedDateTime.slice(0,10)):''} · ${ibEsc(m.mbxLabel||m.mbx||'')}</div></div>
       <div class="dos-acties">${st.codes.length>1?`<select class="dos-sel" aria-label="Project" id="ntk-sel-${ibEsc(key).replace(/[^A-Za-z0-9]/g,'')}-${i}">${projOpt(m)}</select>`:''}
-        ${window.MTKoppelUI?MTKoppelUI.badge(st.codes.length===1?{status:'voorstel',label:(typeof projKort==='function'?projKort(st.codes[0]):st.codes[0]),titel:'Voorstel: koppel aan '+(typeof projKort==='function'?projKort(st.codes[0]):st.codes[0])+' — klik om te koppelen',onclick:`ntkKoppel(${JSON.stringify(String(key))},${i})`}:{status:'open',label:'project',titel:'Niet gekoppeld — klik om een project te kiezen',onclick:`ntkKoppel(${JSON.stringify(String(key))},${i})`}):`<button class="btn btn-xs btn-primary" onclick="ntkKoppel(${JSON.stringify(String(key))},${i})">✓ koppel</button>`}</div></div>`; }).join('');
+        ${window.MTKoppelUI?MTKoppelUI.badge(st.codes.length===1?{status:'voorstel',label:(typeof projKort==='function'?projKort(st.codes[0]):st.codes[0]),titel:'Voorstel: koppel aan '+(typeof projKort==='function'?projKort(st.codes[0]):st.codes[0])+' — klik om te koppelen',onclick:`ntkKoppel(${JSON.stringify(String(key))},${i})`}:{status:'open',label:'project',titel:'Niet gekoppeld — klik om een project te kiezen',onclick:`ntkKoppel(${JSON.stringify(String(key))},${i})`}):`<button class="btn btn-xs btn-primary" onclick="ntkKoppel(${ibJa(key)},${i})">✓ koppel</button>`}</div></div>`; }).join('');
 }
 async function ntkLaad(key,{forceer=false}={}){
   const st=_ntk[key]; if(!st) return;

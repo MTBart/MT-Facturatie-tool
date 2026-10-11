@@ -2,7 +2,7 @@
 // (bevatten '<' of komen in innerHTML/outerHTML/insertAdjacentHTML/srcdoc) en classificeert elke ${…}-interpolatie.
 // Eigen tokenizer (strings, templates met geneste ${}, commentaar, regex-literals); geen parser nodig.
 // Gebruik: const { scan } = require('./sinkscan.js'); scan(tekst, {safeFns}) → { items:[{regel, expr, klasse, ctx}], fouten }
-const VEILIG_FN = new Set(['esc', 'escHtml', '_escH', 'jsArg', 'jsLit', 'ibEsc', 'UI_ESC', 'veiligeHtml', 'html', 'veiligeUrl', 'Number', 'parseInt', 'parseFloat', 'String(Number', 'Math.round', 'Math.max', 'Math.min', 'Math.abs', 'encodeURIComponent', 'encodeURI']);
+const VEILIG_FN = new Set(['esc', 'escHtml', '_escH', 'jsArg', 'jsLit', 'ibEsc', 'ibJa', 'UI_ESC', 'veiligeHtml', 'html', 'veiligeUrl', 'Number', 'parseInt', 'parseFloat', 'String(Number', 'Math.round', 'Math.max', 'Math.min', 'Math.abs', 'encodeURIComponent', 'encodeURI']);
 function tokenize(src) {
   // → lijst templates: { start, end, delen:[tekst], exprs:[{start,end,tekst}] } (ook geneste); fouten
   const templates = [], fouten = []; let i = 0; const n = src.length;
@@ -158,12 +158,15 @@ function fnVanRegel(regels, reg) {
   }
   return '?';
 }
-// Ruwe interpolaties ("let-op") in de functies van één groep. groep = { functies, veiligeFns, fragmentFns }.
+// Ruwe interpolaties ("let-op") in de functies van één groep. groep = { functies | heleBestand, veiligeFns, fragmentFns }.
 function letOpInGroep(tekst, isHtml, groep) {
-  const t = tekst.replace(/\r\n/g, '\n'), regels = t.split('\n'), F = new Set(groep.functies);
+  const t = tekst.replace(/\r\n/g, '\n'), regels = t.split('\n'), F = groep.heleBestand ? null : new Set(groep.functies);   // heleBestand: elke functie in het bestand telt mee
   const r = scanBestand(t, isHtml, { veiligeFns: groep.veiligeFns, fragmentFns: groep.fragmentFns });
-  return r.items.filter(i => i.klasse === 'let-op').map(i => Object.assign({ fn: fnVanRegel(regels, i.regel) }, i)).filter(i => F.has(i.fn));
+  return r.items.filter(i => i.klasse === 'let-op').map(i => Object.assign({ fn: fnVanRegel(regels, i.regel) }, i)).filter(i => !F || F.has(i.fn));
 }
+// Dekt een houd-/overslaan-regel een gevonden ruwe interpolatie? Op functie + expressie (of het begin ervan, voor lange expressies) en eventueel context.
+const dekt = (e, i) => e.fn === i.fn && (e.expr !== undefined ? e.expr === i.expr : (e.exprBegin !== undefined && i.expr.startsWith(e.exprBegin))) && (!e.ctx || e.ctx === i.ctx);
+module.exports.dekt = dekt;
 module.exports.fnVanRegel = fnVanRegel; module.exports.letOpInGroep = letOpInGroep;
 if (require.main === module) {
   const fs = require('fs'), path = require('path'), f = process.argv[2], G = require('./sinks-groepen.js');
