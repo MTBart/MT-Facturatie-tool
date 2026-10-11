@@ -6,15 +6,33 @@
 # De repo is PUBLIC. De live versie kan nog een harde klantenregistry bevatten (namen + Moneybird-contact-id's). Bij het
 # roteren wordt dat uit de KOPIE in backup/ gehaald (de live bestanden blijven zoals ze zijn): zie neutraliseer().
 # De hash-check vergelijkt dus met de live versie NA neutralisatie, plus de drie invoegingen (noindex, titel, rode balk).
-import subprocess, io, os, tarfile, hashlib, re, sys, fnmatch
+import subprocess, io, os, tarfile, hashlib, re, sys, fnmatch, functools
 REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')).replace('\\', '/')
 PATRONEN = ['v2.html', 'mobiel.html', 'uren.html', 'index.html', 'calc-engine.js', 'mt-*.js', 'track.js', 'sw.js', 'manifest-mobiel.json', 'icons/*', 'vendor/*']
 HTML = {'v2.html', 'mobiel.html', 'uren.html', 'index.html'}
 TEKST = HTML | {'sw.js', 'manifest-mobiel.json', 'calc-engine.js', 'track.js'}
 NEUTRAAL_KLANTEN = "let KLANTEN=[{code:'INT',naam:'Intern — Mortise & Tenon',mb_contact_id:null}];"
 NEUTRAAL_ALIAS = "const KLANT_REGISTRY={ 'intern':'INT','mortise':'INT' };"
-# Vaste voorbeeldnamen in placeholders en demodata (geen registry, wel klant-/locatienamen).
-VERVANG = [('CompaNanny', 'Voorbeeldklant'), ('Styles Concepts', 'Voorbeeldklant'), ('Bajeskwartier', 'Testlocatie'), ('BAJES', 'LOC')]
+
+@functools.lru_cache(maxsize=1)
+def voorbeeldnamen():
+    """Namen/aliassen (-> 'Voorbeeldklant') en locaties (-> 'Testlocatie') uit de LOKALE data/klanten.json; de repo zelf
+    bevat dus geen klantnamen. Zonder die lijst: leeg (de structurele blokken worden dan nog wel geneutraliseerd)."""
+    import json
+    pad = os.path.join(REPO, 'data', 'klanten.json')
+    if not os.path.exists(pad): return []
+    d = json.load(io.open(pad, encoding='utf-8-sig'))
+    klant, loc = set(), set()
+    for k in d.get('klanten', []):
+        if k.get('code') == 'INT': continue
+        for v in [k.get('naam')] + list(k.get('aliassen') or []):
+            if isinstance(v, str) and len(v.strip()) >= 6 and v.strip().lower() != 'styles':
+                v = v.strip(); klant.add(v); klant.add(re.sub(r'\s*B\.?V\.?$', '', v, flags=re.I).strip())
+        for l in k.get('locaties') or []:
+            for v in (l.get('naam'), l.get('code')):
+                if isinstance(v, str) and len(v.strip()) >= 4: loc.add(v.strip())
+    paren = [(x, 'Voorbeeldklant') for x in klant if len(x) >= 6] + [(x, 'Testlocatie') for x in loc]
+    return sorted(paren, key=lambda p: -len(p[0]))
 
 def is_tekst(naam):
     return naam in TEKST or naam.startswith('mt-') and naam.endswith('.js')
@@ -35,10 +53,10 @@ def neutraliseer(naam, tekst):
         if m.group(0).replace(' ', '').replace('\n', '') == NEUTRAAL_ALIAS.replace(' ', ''): return m.group(0)
         n += 1; return NEUTRAAL_ALIAS
     tekst = re.sub(r"const KLANT_REGISTRY=\{.*?\};", alias, tekst, count=1, flags=re.S)
-    # 3. voorbeeldnamen
-    for a, b in VERVANG:
-        k = tekst.count(a)
-        if k: tekst = tekst.replace(a, b); n += k
+    # 3. voorbeeldnamen (uit de lokale klantenlijst); namen hoofdletterongevoelig, locatiecodes (bv. BAJES) exact
+    for a, b in voorbeeldnamen():
+        tekst, k = re.subn(re.escape(a), b, tekst, flags=re.I)
+        n += k
     return tekst, n
 
 def wacht_op_resten():

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F5 stap 1: Codex-bevindingen A1-A8 (back-up en Claude-context uit het publieke deel, /klanten met revisie en types)
+- Commit: `e6609f9` | Auteur: Bart Witte
+
 ## 2026-10-11 — F7 release 3a: één veilige renderlaag + alle dynamische handler-argumenten veilig
 - Commit: `399ac97` | Auteur: Bart Witte
 
@@ -431,7 +434,7 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-09-08 — Offertes: einde aan stil gegevensverlies in de calculatiemodule
 - Commit: `ea8a389` | Auteur: Bart Witte
 
-## 2026-08-12 — Fix: dubbele agenda-DOM-ids, sortbug attentie-lijst, verkoopfacturen bij klanten, dode migratie-knop, CompaNanny gearchiveerd
+## 2026-08-12 — Fix: dubbele agenda-DOM-ids, sortbug attentie-lijst, verkoopfacturen bij klanten, dode migratie-knop, [klant] gearchiveerd
 - Commit: `f0fbaa0` | Auteur: Bart Witte
 
 ## 2026-08-12 — fix(uren): Toggl-fouten blokkeren, timer-race-guard, cache-cleanup bij sync
@@ -923,7 +926,7 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-06-01 — Fase B increment 1: project-detail bidirectionele links
 - Commit: `22fbae0` | Auteur: Bart Witte
 
-## 2026-06-01 — Klant-registry: PT Bouw & Meubel + Verkaik toegevoegd
+## 2026-06-01 — Klant-registry: [klant] & Meubel + [klant] toegevoegd
 - Commit: `9e3997b` | Auteur: Bart Witte
 
 ## 2026-06-01 — Fase A fix: klant-registry tegen Moneybird gecorrigeerd
@@ -980,7 +983,7 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-05-08 — structuur: kennisbestanden naar Claude-context/, CLAUDE.md afgeslankt
 - Commit: `413ba4e` | Auteur: MTBart
 
-## 2026-05-06 — docs: sessie 2026-05-06 gedocumenteerd — API fixes, worker.js, Lotte pad
+## 2026-05-06 — docs: sessie 2026-05-06 gedocumenteerd — API fixes, worker.js, [klant] pad
 - Commit: `a3744bd` | Auteur: MTBart
 
 ## 2026-05-06 — docs: STATUS.md bijgewerkt na fix sessie 2026-05-06
@@ -1136,40 +1139,40 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-04-24 — Mapstructuur opgeruimd, CLAUDE.md aangescherpt, STATUS.md aangemaakt
 - Commit: `e7c7d19` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: log eerste factuur raw JSON voor debug
+## 2026-04-23 — [klant]: log eerste factuur raw JSON voor debug
 - Commit: `7fef897` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: vertraging toevoegen om rate limiting te voorkomen
+## 2026-04-23 — [klant]: vertraging toevoegen om rate limiting te voorkomen
 - Commit: `9e5a3d0` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: more explicit console logging START/END
+## 2026-04-23 — [klant]: more explicit console logging START/END
 - Commit: `b522bff` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: verbose debug logging voor invoice structuur
+## 2026-04-23 — [klant]: verbose debug logging voor invoice structuur
 - Commit: `635567f` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: wacht op auth token, auto-laad klanten indien nodig
+## 2026-04-23 — [klant]: wacht op auth token, auto-laad klanten indien nodig
 - Commit: `df55230` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: debug log eerste factuur JSON structuur
+## 2026-04-23 — [klant]: debug log eerste factuur JSON structuur
 - Commit: `c8866df` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: parallel fetchen in batches van 10 voor snelheid
+## 2026-04-23 — [klant]: parallel fetchen in batches van 10 voor snelheid
 - Commit: `691865d` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: individuele factuur details ophalen voor regelinfo
+## 2026-04-23 — [klant]: individuele factuur details ophalen voor regelinfo
 - Commit: `1f937c4` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: scan reference+notes+details ipv alleen details
+## 2026-04-23 — [klant]: scan reference+notes+details ipv alleen details
 - Commit: `f08d2ec` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: pantry detectie, deduplicatie op projectreferentie, referentie kolom
+## 2026-04-23 — [klant]: pantry detectie, deduplicatie op projectreferentie, referentie kolom
 - Commit: `ea4af10` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: contacten client-side filteren ipv server query
+## 2026-04-23 — [klant]: contacten client-side filteren ipv server query
 - Commit: `5ca6709` | Auteur: Bart Witte
 
-## 2026-04-23 — CompaNanny: zoekterm fix naar 'compan', tab hernoemd
+## 2026-04-23 — [klant]: zoekterm fix naar 'compan', tab hernoemd
 - Commit: `7b1c60b` | Auteur: Bart Witte
 
 ## 2026-04-23 — CN Analyse: zoekterm vrij invulbaar ipv hardcoded
