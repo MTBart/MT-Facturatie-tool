@@ -86,7 +86,7 @@ voorlopig `prompt`/`confirm` (S6 is doorlopend, per flow).
 
 ### Zoekbalk (`mt-zoekbalk.js` + `mt-zoek.js`, sinds 11-10)
 
-Het altijd zichtbare zoekveld bovenin cockpit (`#zb-veld` in de topbalk) en app (balk onder de header).
+Het altijd zichtbare zoekveld bovenin cockpit (`#zb-veld` in de topbalk, uitklaplijst) en app (zoekicoon in de kop → zoeklaag over het hele scherm met eigen invoerveld; `inline:true`).
 Twee bestanden, in deze volgorde geladen (na `mt-contacten.js`): `mt-zoek.js` vóór `mt-zoekbalk.js`.
 
 | Bestand | Wat |
@@ -98,7 +98,7 @@ Rangorde (vast, per soort): 0 exacte code/alias · 1 begint met · 2 klant (zoek
 3 recente activiteit (≤ 30 dagen) · 4 overige; binnen een rang eerst woordbegin-treffers, dan meest recent, dan op naam.
 Treffers op code (project-, werk-, offertecode, oude codes; ook zonder streepjes), naam, alias, klantnaam en extra zoektekst
 (locatie, functie, telefoon). Soorten en rechten: Projecten/Klanten/Locaties/Contacten = recht `projecten`, Taken = `taken`
-(`MTZoek.magUitRollen()`); "Vraag Claude" onderaan = recht `ai` en alleen in de cockpit (roept `tbChatSend(q)` aan).
+(`MTZoek.magUitRollen()`); onderaan "Vraag dit aan Larry: “…”" = recht `ai`, alleen in de cockpit; roept `tbChatSend(q)` aan. Het chatpaneel heeft een eigen invoerveld (`#tbchat-in`), zodat zoekveld en chat nooit hetzelfde veld delen; typen in het zoekveld sluit het chatpaneel.
 Een treffer opent via `mtRoute.go` (project `#projecten/<CODE>`, klant `#klant/<KL>[/<LOC>]`, taak = project-sectie
 planning) of `MTContactenUI.detail`. De pagina bouwt de index hooguit elke 3 s opnieuw (`zbIndex`/`zbIndexM`).
 De lijst-zoekvelden (`zoekProjecten`, `zoekKlanten`, `zoekInLijst`, `zoekGeschiedenis`) zijn ongewijzigd.

@@ -25,7 +25,7 @@
 <script src="mt-koppel.js?v=2026-10-11a"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
 <script src="mt-zoek.js?v=2026-10-11a"></script>
-<script src="mt-zoekbalk.js?v=2026-10-11a"></script>
+<script src="mt-zoekbalk.js?v=2026-10-11b"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
@@ -126,9 +126,14 @@ body{
 #geldKnop{position:relative}
 .geld-badge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#B4412F;color:#fff;border:2px solid #fff;font:700 10px/13px system-ui,sans-serif;text-align:center}
 
-/* ── ZOEKBALK (onder de header, op elke tab) ── */
-.zb-balk{flex:0 0 auto;position:relative;z-index:99;padding:6px 12px;background:var(--n-0,#fff);border-bottom:1px solid var(--border)}
-.zb-balk .zb-veld{font-size:16px;padding:9px 16px}   /* 16px: iOS zoomt anders in op het veld */
+/* ── ZOEKLAAG (zoekicoon in de kop → laag over het hele scherm) ── */
+.zb-laag{position:fixed;left:0;top:0;width:100%;height:100%;z-index:1200;background:var(--n-0,#fff);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+.zb-laag[hidden]{display:none}
+.zb-laag-kop{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)}
+.zb-laag-kop .zb-veld{flex:1 1 auto;width:auto;font-size:16px;padding:10px 16px}   /* 16px: iOS zoomt anders in op het veld */
+.zb-terug{flex:0 0 44px;height:44px;border:0;border-radius:50%;background:var(--n-150,#EDF1F0);color:var(--text,#172521);font-size:20px;cursor:pointer}
+.zb-laag-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.zb-hint{padding:18px 16px;font-size:13px;color:var(--text-faint)}
 
 /* ── TIMER BAR (sticky, elke tab) ── */
 .timer-bar{
@@ -790,6 +795,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 <header class="app-header">
   <div class="app-title" style="display:flex;align-items:center">M<span>&amp;</span>T<span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></div>
   <div class="header-btns">
+    <button class="header-info-btn" id="zoekKnop" type="button" aria-label="Zoeken" aria-haspopup="dialog" title="Zoeken">🔍</button>
     <button class="header-info-btn" id="geldKnop" style="display:none" onclick="location.href='v2.html#tab=geld'" aria-label="Geld (geldtijdlijn)" title="Geld">€</button>
     <button class="header-info-btn notif-btn" onclick="openNotifs()" aria-label="Notificaties">🔔<span class="notif-badge" id="notifBadge" style="display:none">0</span></button>
     <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
@@ -798,9 +804,13 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
   </div>
 </header>
 
-<!-- ── ZOEKBALK ── -->
-<div class="zb-balk" id="zbBalk">
-  <input id="zb-veld" class="zb-veld" type="text" placeholder="Zoek een project, taak of contact" aria-label="Zoeken" enterkeyhint="search" spellcheck="false">
+<!-- ── ZOEKLAAG (opent met het zoekicoon in de kop) ── -->
+<div class="zb-laag" id="zbLaag" role="dialog" aria-modal="true" aria-label="Zoeken" hidden>
+  <div class="zb-laag-kop">
+    <button type="button" class="zb-terug" id="zbTerug" aria-label="Zoeken sluiten">←</button>
+    <input id="zb-veld" class="zb-veld" type="text" placeholder="Zoek een project, taak of contact" aria-label="Zoeken" enterkeyhint="search" spellcheck="false">
+  </div>
+  <div class="zb-laag-body" id="zbLaagBody"><p class="zb-hint" id="zbHint">Typ een projectnaam, taak, naam of nummer.</p></div>
 </div>
 
 <!-- ── LOPENDE TIMER BAR ── -->
@@ -6268,7 +6278,28 @@ function zoekbalkOpenM(it) {
 }
 function zoekbalkInitM() {
   const veld = document.getElementById("zb-veld"); if (!veld || !window.MTZoekbalk || veld._zb) return;
-  veld._zb = MTZoekbalk.init({ veld, zoek: zbZoekM, open: zoekbalkOpenM, host: document.getElementById("zbBalk") });
+  const laag = document.getElementById("zbLaag"), body = document.getElementById("zbLaagBody"), hint = document.getElementById("zbHint"), knop = document.getElementById("zoekKnop");
+  let vorigeFocus = null, geblokkeerd = [];
+  const zet = () => {   // laag precies boven het toetsenbord (iOS verkleint alleen de visuele viewport)
+    const vv = window.visualViewport; if (vv) { laag.style.height = vv.height + "px"; laag.style.top = vv.offsetTop + "px"; }
+  };
+  function laagOpen() {
+    vorigeFocus = document.activeElement; laag.hidden = false; zet();
+    geblokkeerd = [...document.body.children].filter(el => el !== laag && el.tagName !== "SCRIPT" && !el.inert);
+    geblokkeerd.forEach(el => { el.inert = true; });
+    veld.value = ""; veld._zb.ververs(); hint.hidden = false; veld.focus();
+  }
+  function laagSluit() {
+    laag.hidden = true; geblokkeerd.forEach(el => { el.inert = false; }); geblokkeerd = [];
+    veld.value = ""; veld._zb.ververs();
+    if (vorigeFocus && vorigeFocus.focus) { try { vorigeFocus.focus(); } catch (e) {} } else knop.focus();
+  }
+  veld._zb = MTZoekbalk.init({ veld, zoek: zbZoekM, open: it => { laagSluit(); zoekbalkOpenM(it); }, host: body, inline: true });
+  veld.addEventListener("input", () => { hint.hidden = !!veld.value.trim(); });
+  knop.addEventListener("click", laagOpen);
+  document.getElementById("zbTerug").addEventListener("click", laagSluit);
+  laag.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); laagSluit(); } });
+  if (window.visualViewport) { window.visualViewport.addEventListener("resize", () => { if (!laag.hidden) zet(); }); window.visualViewport.addEventListener("scroll", () => { if (!laag.hidden) zet(); }); }
 }
 zoekbalkInitM();
 

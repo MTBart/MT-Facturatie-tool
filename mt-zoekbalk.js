@@ -9,14 +9,16 @@
  *     host,                         // element waarin de lijst komt (standaard de ouder van veld)
  *     zoek: q => ({groepen:[{soort, label, items:[{soort,id,titel,sub,tag,data}], meer}]}),
  *     open: item => {…},            // klik/Enter op een treffer
- *     vraag: q => {…},              // optioneel: "Vraag Claude: <q>" onderaan; zonder = geen vraagregel
+ *     vraag: q => {…},              // optioneel: "Vraag dit aan Larry: “<q>”" onderaan; zonder = geen vraagregel
+ *     vraagLabel: 'Vraag dit aan Larry',   // optioneel
+ *     inline: false,                // true = de lijst staat in de pagina (mobiele zoeklaag) i.p.v. als zwevende uitklaplijst
  *     vraagMag: () => bool,         // optioneel: rechtencheck voor de vraagregel
  *     isVraag: q => bool,           // optioneel: lijkt de invoer een vraag? (dan staat de vraagregel vooraf actief)
  *     lijstId: 'zb-lijst'           // optioneel: id van de lijst (nodig als er twee balken op één pagina staan)
  *   });
  *
  * Toetsen: pijltje omlaag/omhoog = door de treffers, Enter = openen, Esc = lijst sluiten (nog eens Esc = veld
- * leegmaken), Tab = sluiten. Muis/aanraking: klik op een treffer; mousedown houdt de focus in het veld.
+ * leegmaken), Tab = sluiten. In inline-modus laat het component Esc en Tab aan de zoeklaag zelf. Muis/aanraking: klik op een treffer; mousedown houdt de focus in het veld.
  * Toegankelijkheid: ARIA 1.2 combobox + listbox (role=group per soort), aria-activedescendant, een
  * aria-live-regel met het aantal treffers.
  * Veiligheid: alle tekst gaat door esc(); er zijn geen inline handlers — één delegatie op de lijst met
@@ -52,6 +54,7 @@
       '.zb-leeg{padding:10px 14px;font-style:italic}',
       '.zb-vraag{border-top:1px solid var(--border,#D6DEDB);margin-top:4px}',
       '.zb-vraag .zb-titel{font-weight:600}',
+      '.zb-lijst.zb-inline{position:static;transform:none;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;padding:0 0 24px;overflow:visible}',
       '.zb-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}',
       '@media (max-width:760px){.zb-lijst{position:absolute;left:0;right:0;width:auto;transform:none;max-height:60vh;border-radius:0 0 12px 12px}}',
       '@media (pointer:coarse){.zb-rij{min-height:46px}}'
@@ -67,7 +70,8 @@
       try { if (root.getComputedStyle(host).position === 'static') host.style.position = 'relative'; } catch (e) {}
       const lijstId = opt.lijstId || 'zb-lijst';
       const lijst = doc.createElement('div');
-      lijst.id = lijstId; lijst.className = 'zb-lijst'; lijst.setAttribute('role', 'listbox'); lijst.setAttribute('aria-label', 'Zoekresultaten'); lijst.hidden = true;
+      const inline = !!opt.inline, vraagLabel = opt.vraagLabel || 'Vraag dit aan Larry';
+      lijst.id = lijstId; lijst.className = 'zb-lijst' + (inline ? ' zb-inline' : ''); lijst.setAttribute('role', 'listbox'); lijst.setAttribute('aria-label', 'Zoekresultaten'); lijst.hidden = true;
       const status = doc.createElement('div'); status.className = 'zb-sr'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
       host.appendChild(lijst); host.appendChild(status);
       veld.setAttribute('role', 'combobox'); veld.setAttribute('aria-autocomplete', 'list'); veld.setAttribute('aria-haspopup', 'listbox');
@@ -112,13 +116,13 @@
           h += '</div>';
         });
         const n = rijen.length;
-        if (!n) h += '<div class="zb-leeg" role="presentation">Geen treffers voor “' + esc(q) + '”</div>';
+        if (!n) h += '<div class="zb-leeg" role="presentation">Geen treffers. Verfijn je zoekterm.</div>';
         const kanVragen = vraagKan();
         let vraagIdx = -1;
         if (kanVragen) {
           vraagIdx = rijen.length; rijen.push({ vraag: true });
           h += '<div role="group" aria-label="Claude"><div role="option" id="' + esc(lijstId + '-o' + vraagIdx) + '" class="zb-rij zb-vraag" data-i="' + vraagIdx + '" data-vraag="1" aria-selected="false">'
-            + '<span class="zb-ico" aria-hidden="true">✨</span><span class="zb-tekst"><span class="zb-titel">Vraag Claude: ' + esc(q) + '</span></span></div></div>';
+            + '<span class="zb-ico" aria-hidden="true">✨</span><span class="zb-tekst"><span class="zb-titel">' + esc(vraagLabel) + ': “' + esc(q) + '”</span></span></div></div>';
         }
         lijst.innerHTML = h;
         status.textContent = n ? n + (n === 1 ? ' treffer' : ' treffers') : 'Geen treffers';
@@ -143,8 +147,8 @@
         if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) { ververs(); return; } if (n) zet((act + 1) % n); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); if (open && n) zet(act <= 0 ? n - 1 : act - 1); }
         else if (e.key === 'Enter') { if (open && act >= 0) { e.preventDefault(); kies(act); } }
-        else if (e.key === 'Escape') { if (open) { e.preventDefault(); sluit(); } else if (veld.value) { e.preventDefault(); veld.value = ''; ververs(); } }
-        else if (e.key === 'Tab') sluit();
+        else if (e.key === 'Escape') { if (inline) return; if (open) { e.preventDefault(); sluit(); } else if (veld.value) { e.preventDefault(); veld.value = ''; ververs(); } }
+        else if (e.key === 'Tab') { if (!inline) sluit(); }
       });
       // Muis/aanraking: de focus blijft in het veld; het openen gebeurt op click.
       lijst.addEventListener('mousedown', e => e.preventDefault());
@@ -156,7 +160,7 @@
         const el = e.target.closest ? e.target.closest('[role=option]') : null;
         if (el && Number(el.dataset.i) !== act) zet(Number(el.dataset.i));
       });
-      doc.addEventListener('mousedown', e => { if (open && e.target !== veld && !lijst.contains(e.target)) sluit(); });
+      if (!inline) doc.addEventListener('mousedown', e => { if (open && e.target !== veld && !lijst.contains(e.target)) sluit(); });
 
       return {
         ververs, sluit, lijst, veld,
