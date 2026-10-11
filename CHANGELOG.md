@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Geld op mobiel: de €-knop opent een Geld-laag binnen mobiel.html (geen v2.html meer), met mt-geld.js in compacte weergave
+- Commit: `c4107e8` | Auteur: Bart Witte
+
 ## 2026-10-11 — Geld: leveranciersposten niet meer als groen pijltje (concept-verkoop telt niet, inkoop-creditnota wordt verrekend of is tegoed)
 - Commit: `b5b069a` | Auteur: Bart Witte
 
