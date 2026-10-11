@@ -1671,6 +1671,15 @@ const geldUrl = (soort, id) => `https://moneybird.com/${MB_ADMIN}/${soort}/${id}
 // Hooguit GELD_MB_TEGELIJK tegelijk (anders "429 Retry later" bij de eerste keer laden); bij 429 hooguit twee
 // nieuwe pogingen, na Retry-After (max 8 s) of 1,5 s / 3 s — elke poging telt mee in het budget.
 const GELD_MB_TEGELIJK = 3;
+// Retry-After: een aantal seconden OF een HTTP-datum → seconden (0 = onbekend). Productplafond ZOEK_RETRY_MAX (24 uur): een langere
+// wachttijd van Moneybird wordt tot een dag teruggebracht, zodat een foutieve of extreme header de zoekbalk niet blijvend lamlegt.
+const ZOEK_RETRY_MAX = 24 * 3600;
+function retryAfterSec(h, nu) {
+  h = String(h == null ? '' : h).trim(); if (!h) return 0;
+  if (/^\d+$/.test(h)) return Math.min(Number(h), ZOEK_RETRY_MAX);
+  const t = Date.parse(h); if (isNaN(t)) return 0;
+  return Math.max(0, Math.min(ZOEK_RETRY_MAX, Math.ceil((t - (nu || Date.now())) / 1000)));
+}
 function geldMb(env, budget, opties) {
   const hdr = { Authorization: `Bearer ${env.MONEYBIRD_KEY}`, Accept: 'application/json' };
   let bezig = 0; const rij = [];
@@ -1692,7 +1701,7 @@ function geldMb(env, budget, opties) {
       }
     } finally { vrij(); }
     if (r.netwerk) return { ok: false, status: 0, fout: 'netwerk: ' + r.netwerk };
-    if (r.status === 429) { const ra = Number(r.headers && r.headers.get && r.headers.get('Retry-After')); return { ok: false, status: 429, retryAfter: ra > 0 ? Math.min(ra, 3600) : 0, fout: 'Moneybird is even druk (429) — over een minuut opnieuw' }; }
+    if (r.status === 429) { const ra = retryAfterSec(r.headers && r.headers.get && r.headers.get('Retry-After')); return { ok: false, status: 429, retryAfter: ra, fout: 'Moneybird is even druk (429) — over een minuut opnieuw' }; }
     let data = null, tekst = '';
     try { tekst = await r.text(); data = JSON.parse(tekst); } catch {}
     if (!r.ok) return { ok: false, status: r.status, fout: (data && (data.error || data.message)) || tekst.slice(0, 120) || ('HTTP ' + r.status) };
@@ -4022,46 +4031,44 @@ const zoekNorm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').
 const ZOEK_MB_SOORT = { v: 'verkoopfactuur', i: 'inkoopfactuur', o: 'offerte' };
 const ZOEK_MB_PAD = { v: 'sales_invoices', i: 'documents', o: 'estimates' };
 function zoekMbContact(c) { if (!c || typeof c !== 'object') return ''; return String(c.company_name || [c.firstname, c.lastname].filter(Boolean).join(' ') || '').trim(); }
-// Index opbouwen: drie lijsten × twee jaren, binnen een vast subrequest-budget. Een Moneybird-429 is TERMINAAL: geen retries, geen verdere
+// De zes lijsten (drie soorten × dit en vorig jaar) en hun compacte vorm; gedeeld door de eenmalige opbouw en de hervatbare opbouw in de DO.
+const ZOEK_MB_LIJSTEN = [['v', 'sales_invoices', 'invoice_id', 'invoice_date'], ['i', 'documents/purchase_invoices', 'reference', 'date'], ['o', 'estimates', 'estimate_id', 'estimate_date']]
+  .flatMap(([s, pad, nrVeld, datumVeld]) => ['this_year', 'prev_year'].map(periode => ({ s, pad, nrVeld, datumVeld, periode })));
+const zoekMbItem = (l, x) => ({ s: l.s, id: String(x.id), nr: String((l.s === 'i' ? '' : x[l.nrVeld]) || ''), ref: String(x.reference || '').slice(0, 80), c: zoekMbContact(x.contact).slice(0, 80), d: String(x[l.datumVeld] || '').slice(0, 10) });
+const zoekMbSorteer = items => items.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+// Eenmalige opbouw (alleen zonder Durable Object, zie zoekMbVerversen1). Een Moneybird-429 is TERMINAAL: geen retries, geen verdere
 // bron/periode-combinaties, niets wordt bewaard; de echte Retry-After komt terug. Alleen een volledige opbouw (geen enkele waarschuwing) is `compleet`.
 async function zoekMbOpbouwen(env) {
   const budget = { rest: ZOEK_MB_BUDGET }, w = [], get = geldMb(env, budget, { geen429Retry: true }), items = [];
-  const bronnen = [['v', 'sales_invoices', 'invoice_id', 'invoice_date'], ['i', 'documents/purchase_invoices', 'reference', 'date'], ['o', 'estimates', 'estimate_id', 'estimate_date']];
-  for (const [s, pad, nrVeld, datumVeld] of bronnen) {
-    for (const periode of ['this_year', 'prev_year']) {
-      const l = await geldLijst(get, `${pad}?filter=period:${periode}`, w, s);
-      const t429 = w.find(x => x.status === 429);
-      if (t429) return { items: [], compleet: false, afgebroken: '429', retryAfter: t429.retryAfter > 0 ? t429.retryAfter : 60, fouten: w.length };
-      l.lijst.forEach(x => items.push({ s, id: String(x.id), nr: String((s === 'i' ? '' : x[nrVeld]) || ''), ref: String(x.reference || '').slice(0, 80), c: zoekMbContact(x.contact).slice(0, 80), d: String(x[datumVeld] || '').slice(0, 10) }));
-    }
+  for (const l of ZOEK_MB_LIJSTEN) {
+    const r = await geldLijst(get, `${l.pad}?filter=period:${l.periode}`, w, l.s);
+    const t429 = w.find(x => x.status === 429);
+    if (t429) return { items: [], compleet: false, afgebroken: '429', retryAfter: t429.retryAfter > 0 ? t429.retryAfter : 60, fouten: w.length };
+    r.lijst.forEach(x => items.push(zoekMbItem(l, x)));
   }
-  items.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+  zoekMbSorteer(items);
   return { items: items.slice(0, 6000), compleet: w.length === 0 && items.length <= 6000, fouten: w.length };
 }
-// Eén opbouw tegelijk, atomair via de Durable Object MT_ZOEKINDEX (claim met korte levensduur). Zonder binding (oude deploy): KV-slot, bij
-// benadering. Is de Durable Object onbereikbaar dan wordt er NIET gebouwd (liever een oude index dan twee gelijktijdige opbouwen).
+// KV-slot: alleen de terugval zonder Durable Object (bij benadering één opbouw tegelijk).
 async function zoekMbClaim(env) {
   const token = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/-/g, '').slice(0, 32);
-  const ns = env.MT_ZOEKINDEX;
-  if (ns && ns.idFromName) {
-    try {
-      const r = await ns.get(ns.idFromName('mb')).fetch('https://mt-zoekindex/claim', { method: 'POST', body: JSON.stringify({ token, ttl: ZOEK_MB_SLOT_S, nu: Date.now() }) });
-      const j = await r.json(); return j && j.ok ? token : null;
-    } catch { return null; }
-  }
   if (await kvJson(env, ZOEK_MB_SLOT)) return null;
   await kvZet(env, ZOEK_MB_SLOT, { ts: Date.now(), token }, { expirationTtl: ZOEK_MB_SLOT_S });
   return token;
 }
-async function zoekMbVrij(env, token) {
-  const ns = env.MT_ZOEKINDEX;
-  try {
-    if (ns && ns.idFromName) await ns.get(ns.idFromName('mb')).fetch('https://mt-zoekindex/vrij', { method: 'POST', body: JSON.stringify({ token }) });
-    else if (env.MT_ROLLEN) await env.MT_ROLLEN.delete(ZOEK_MB_SLOT);
-  } catch {}
+async function zoekMbVrij(env) { try { if (env.MT_ROLLEN) await env.MT_ROLLEN.delete(ZOEK_MB_SLOT); } catch {} }
+const zoekMbPauze = (env, seconden, reden) => { seconden = Math.max(1, Math.min(Number(seconden) || 60, ZOEK_RETRY_MAX)); return kvZet(env, ZOEK_MB_PAUZE, { tot: Date.now() + seconden * 1000, ra: seconden, reden }, { expirationTtl: Math.max(60, seconden) }); };
+// Resultaat van een opbouw wegschrijven. Een complete index wordt alleen vervangen door een aantoonbaar complete nieuwe; een onvolledige
+// opbouw laat de laatste complete versie staan (en geeft 120 s pauze). Een 429 is terminaal: pauze met de echte Retry-After, index onaangetast.
+async function zoekMbAfronden(env, res) {
+  if (res.afgebroken === '429') { await zoekMbPauze(env, res.retryAfter, '429'); return; }
+  const oud = await kvJson(env, ZOEK_MB_INDEX);
+  if (res.items.length && (res.compleet || !oud || !oud.compleet)) {
+    await kvZet(env, ZOEK_MB_INDEX, { ts: Date.now(), items: res.items, compleet: !!res.compleet, onvolledig: !res.compleet }, { expirationTtl: 7 * 86400 });
+  }
+  if (!res.compleet) await zoekMbPauze(env, 120, 'onvolledig');      // niet elk verzoek opnieuw laten proberen
 }
-const zoekMbPauze = (env, seconden, reden) => kvZet(env, ZOEK_MB_PAUZE, { tot: Date.now() + seconden * 1000, ra: seconden, reden }, { expirationTtl: Math.max(60, seconden) });
-let zoekMbBezig = null;   // binnen deze isolate hooguit één opbouw (goedkoop; het echte slot is de Durable Object)
+let zoekMbBezig = null;   // binnen deze isolate hooguit één start/opbouw tegelijk (goedkoop)
 function zoekMbVerversen(env) {
   if (zoekMbBezig) return zoekMbBezig;
   zoekMbBezig = zoekMbVerversen1(env).catch(() => {}).finally(() => { zoekMbBezig = null; });
@@ -4070,17 +4077,17 @@ function zoekMbVerversen(env) {
 async function zoekMbVerversen1(env) {
   const pauze = await kvJson(env, ZOEK_MB_PAUZE);
   if (pauze && pauze.tot > Date.now()) return;                       // tijdens een pauze nooit opnieuw proberen
+  const ns = env.MT_ZOEKINDEX;
+  if (ns && ns.idFromName) {
+    // Hervatbare opbouw in stukken door de Durable Object (alarm): het verzoek start hem alleen. Onbereikbaar = niet bouwen.
+    try { await ns.get(ns.idFromName('mb')).fetch('https://mt-zoekindex/start', { method: 'POST', body: JSON.stringify({ nu: Date.now() }) }); } catch {}
+    return;
+  }
   const token = await zoekMbClaim(env); if (!token) return;
   try {
     let res; try { res = await zoekMbOpbouwen(env); } catch (e) { res = { items: [], compleet: false, mislukt: true, fouten: 1 }; }
-    if (res.afgebroken === '429') { await zoekMbPauze(env, res.retryAfter, '429'); return; }   // terminaal: oude index blijft onaangetast, echte Retry-After
-    const oud = await kvJson(env, ZOEK_MB_INDEX);
-    // Een complete index wordt alleen vervangen door een aantoonbaar complete nieuwe; anders blijft de laatste complete versie staan.
-    if (res.items.length && (res.compleet || !oud || !oud.compleet)) {
-      await kvZet(env, ZOEK_MB_INDEX, { ts: Date.now(), items: res.items, compleet: !!res.compleet, onvolledig: !res.compleet }, { expirationTtl: 7 * 86400 });
-    }
-    if (!res.compleet) await zoekMbPauze(env, 120, 'onvolledig');      // niet elk verzoek opnieuw laten proberen
-  } finally { await zoekMbVrij(env, token); }
+    await zoekMbAfronden(env, res);
+  } finally { await zoekMbVrij(env); }
 }
 function zoekMbTreffers(index, q, max) {
   const termen = zoekNorm(q).split(' ').filter(Boolean), qn = termen.join(' ');
@@ -4120,24 +4127,80 @@ async function handleZoekMb(request, env, ik, json, ctx, modus) {
   return json({ status: 'klaar', verouderd: leeftijd > versMs, onvolledig: !!index.onvolledig, ts: index.ts, totaal: t.totaal, items: t.items });
 }
 
-// Zoekindex-claim (Durable Object MT_ZOEKINDEX): maakt "één opbouw tegelijk" atomair (KV is dat niet). Een claim vervalt vanzelf na `ttl` seconden.
+// Zoekindex-opbouw (Durable Object MT_ZOEKINDEX): één hervatbare opbouw tegelijk, in stukken, gedreven door een alarm.
+// Waarom: een waitUntil-taak heeft maar ~30 s; de opbouw kan dan halverwege stoppen. Hier verwerkt elke alarm-run hooguit ZOEK_MB_PAGINAS_PER_RUN
+// pagina's (en ZOEK_MB_RUN_MS), bewaart de cursor (lijst, pagina) en de ruwe pagina's als `c:<lijst>:<pagina>` in de DO-opslag en plant het
+// volgende alarm. Pas als alle lijsten binnen zijn wordt de index in KV gezet (en alleen `compleet` als er geen enkele waarschuwing was).
+// Een afgebroken of gecrashte run hervat bij de bewaarde cursor (geen dubbele pagina's, nooit een halve index als compleet). Een opbouw
+// zonder voortgang van ZOEK_MB_STIL_MS wordt door een nieuwe start overgenomen. Een Moneybird-429 stopt alles direct (pauze = echte Retry-After).
+const ZOEK_MB_PAGINAS_PER_RUN = 8, ZOEK_MB_RUN_MS = 20000, ZOEK_MB_STIL_MS = 5 * 60 * 1000, ZOEK_MB_TOTAAL = 80, ZOEK_MB_FOUT_MAX = 3;
 export class MtZoekIndex {
-  constructor(state) { this.state = state; }
+  constructor(state, env) { this.state = state; this.env = env || {}; }
   async fetch(request) {
-    const op = new URL(request.url).pathname.slice(1), st = this.state.storage;
+    const op = new URL(request.url).pathname.slice(1);
     const antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
     let b = {}; try { b = await request.json(); } catch {}
-    if (!['claim', 'vrij'].includes(op)) return antw({ error: 'onbekend' }, 404);
-    if (typeof b.token !== 'string' || b.token.length < 6 || b.token.length > 40) return antw({ error: 'ongeldig' }, 400);
+    if (!['start', 'status'].includes(op)) return antw({ error: 'onbekend' }, 404);
     return await this.state.blockConcurrencyWhile(async () => {
       try {
-        const rec = await st.get('claim'), nu = Number(b.nu) || Date.now();
-        if (op === 'vrij') { if (rec && rec.token === b.token) await st.delete('claim'); return antw({ ok: true }); }
-        if (rec && rec.tot > nu) return antw({ ok: false, reden: 'bezig' });
-        await st.put('claim', { token: b.token, tot: nu + Math.max(10, Math.min(600, Number(b.ttl) || 120)) * 1000 });
+        const st = this.state.storage, bouw = await st.get('bouw'), nu = Number(b.nu) || Date.now();
+        if (op === 'status') return antw({ bezig: !!bouw, cursor: bouw ? { lijst: bouw.L, pagina: bouw.pagina, verzoeken: bouw.verzoeken, waarschuwingen: bouw.warn } : null });
+        if (bouw && nu - bouw.ts < ZOEK_MB_STIL_MS) return antw({ ok: false, reden: 'bezig' });
+        const pauze = await kvJson(this.env, ZOEK_MB_PAUZE);
+        if (pauze && pauze.tot > nu) return antw({ ok: false, reden: 'pauze' });
+        if (bouw) await this.opruimen();                                   // vastgelopen opbouw: opnieuw beginnen
+        await st.put('bouw', { gestart: nu, ts: nu, L: 0, pagina: 1, verzoeken: 0, warn: 0, fouten: 0 });
+        await st.setAlarm(nu);
         return antw({ ok: true });
       } catch (e) { return antw({ error: 'opslag' }, 503); }
     });
+  }
+  async opruimen() {
+    const st = this.state.storage, sl = [...(await st.list({ prefix: 'c:' })).keys()];
+    for (let i = 0; i < sl.length; i += 100) await st.delete(sl.slice(i, i + 100));
+    await st.delete('bouw');
+  }
+  async alarm() {
+    const st = this.state.storage, env = this.env;
+    const b = await st.get('bouw'); if (!b) return;
+    const t0 = Date.now(), maxP = Number(env.ZOEK_MB_STAP) > 0 ? Number(env.ZOEK_MB_STAP) : ZOEK_MB_PAGINAS_PER_RUN;
+    const get = geldMb(env, { rest: maxP + 2 }, { geen429Retry: true });
+    const volgende = () => { b.L++; b.pagina = 1; b.fouten = 0; };
+    try {
+      let gedaan = 0;
+      while (b.L < ZOEK_MB_LIJSTEN.length && gedaan < maxP && Date.now() - t0 < ZOEK_MB_RUN_MS) {
+        if (b.verzoeken >= ZOEK_MB_TOTAAL) { b.warn++; b.L = ZOEK_MB_LIJSTEN.length; break; }   // totaalbudget op: onvolledig
+        const l = ZOEK_MB_LIJSTEN[b.L];
+        const r = await get(`${l.pad}?filter=period:${l.periode}&per_page=100&page=${b.pagina}`);
+        gedaan++; b.verzoeken++;
+        if (!r.ok && r.status === 429) { await this.opruimen(); await zoekMbPauze(env, r.retryAfter > 0 ? r.retryAfter : 60, '429'); return; }   // terminaal
+        if (!r.ok || !Array.isArray(r.data)) {
+          b.fouten = (b.fouten || 0) + 1;
+          const blijvend = r.ok || (r.status >= 400 && r.status < 500);   // onverwacht antwoord of 4xx: niet opnieuw proberen
+          if (blijvend || b.fouten >= ZOEK_MB_FOUT_MAX) { b.warn++; volgende(); }
+          else { await st.put('bouw', b); await st.setAlarm(Date.now() + 5000); return; }   // tijdelijk (netwerk/5xx): dezelfde pagina opnieuw
+          b.ts = Date.now(); await st.put('bouw', b); continue;
+        }
+        await st.put('c:' + b.L + ':' + String(b.pagina).padStart(2, '0'), r.data.filter(x => x && x.id).map(x => zoekMbItem(l, x)));
+        b.fouten = 0;
+        if (r.data.length < 100) volgende(); else if (b.pagina >= 20) { b.warn++; volgende(); } else b.pagina++;
+        b.ts = Date.now(); await st.put('bouw', b);
+      }
+      if (b.L >= ZOEK_MB_LIJSTEN.length) {
+        const items = []; for (const [, v] of await st.list({ prefix: 'c:' })) items.push(...v);
+        zoekMbSorteer(items);
+        await zoekMbAfronden(env, { items: items.slice(0, 6000), compleet: b.warn === 0 && items.length <= 6000, fouten: b.warn });
+        await this.opruimen();
+        return;
+      }
+      await st.put('bouw', b); await st.setAlarm(Date.now() + 500);
+    } catch (e) {   // onverwacht (opslag, KV): de cursor staat in 'bouw'; later opnieuw, na drie keer opgeven
+      b.fouten = (b.fouten || 0) + 1;
+      try {
+        if (b.fouten >= ZOEK_MB_FOUT_MAX) { await this.opruimen(); await zoekMbPauze(env, 120, 'onvolledig'); }
+        else { await st.put('bouw', b); await st.setAlarm(Date.now() + 5000); }
+      } catch {}
+    }
   }
 }
 

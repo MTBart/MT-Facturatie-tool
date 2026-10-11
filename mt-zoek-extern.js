@@ -28,6 +28,9 @@
   ];
   const HOSTS = { mail: ['office.com', 'office365.com', 'outlook.com', 'microsoft.com'], moneybird: ['moneybird.com'], sharepoint: ['sharepoint.com', 'office.com', 'office365.com', 'outlook.com', 'microsoft.com'] };
   const MAX = 5;
+  const MAX_WACHT = 24 * 3600;   // productplafond voor Retry-After (zelfde als de worker)
+  // 45 → "45 s", 600 → "10 min", 7200 → "2 uur"
+  const wachtTekst = s => (s < 90 ? s + ' s' : s < 5400 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' uur');
 
   const tekst = v => String(v == null ? '' : v);
   const nlDatum = d => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(tekst(d)); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; };
@@ -36,8 +39,8 @@
   function retryAfterVan(r, nu) {
     let h = null; try { h = r && r.headers && r.headers.get && r.headers.get('Retry-After'); } catch (e) {}
     if (!h) return 0;
-    if (/^\d+$/.test(h)) return Math.min(Number(h), 600);
-    const t = Date.parse(h); return isNaN(t) ? 0 : Math.max(0, Math.min(600, Math.ceil((t - (nu || Date.now())) / 1000)));
+    if (/^\d+$/.test(h)) return Math.min(Number(h), MAX_WACHT);
+    const t = Date.parse(h); return isNaN(t) ? 0 : Math.max(0, Math.min(MAX_WACHT, Math.ceil((t - (nu || Date.now())) / 1000)));
   }
   // Link veilig maken: alleen https naar de verwachte hosts; anders ''.
   function veiligeLinkVoor(soort, url) {
@@ -189,7 +192,7 @@
         if (mijn !== ronde || r.ctl !== ctl) return;
         r.ctl = null;
         if (e && (e.name === 'AbortError' || e.code === 20)) return;
-        if (e && e.limiet) { r.blokTot = nu() + e.retryAfter * 1000; zet(soort, { status: 'limiet', retryAfter: e.retryAfter, melding: b.label + ' is even druk — probeer het over ' + e.retryAfter + ' s opnieuw.' }); }
+        if (e && e.limiet) { r.blokTot = nu() + e.retryAfter * 1000; zet(soort, { status: 'limiet', retryAfter: e.retryAfter, melding: b.label + ' is even druk — probeer het over ' + wachtTekst(e.retryAfter) + ' opnieuw.' }); }
         else zet(soort, { status: 'fout', melding: b.label + ' is even niet bereikbaar.' });
       }
       meld();
@@ -238,5 +241,5 @@
     return true;
   }
 
-  root.MTZoekExtern = { EXTERN, HOSTS, MAX, maak, bronMail, bronMoneybird, bronSharePoint, openUrl, openItem, retryAfterVan, veiligeLinkVoor };
+  root.MTZoekExtern = { EXTERN, HOSTS, MAX, MAX_WACHT, wachtTekst, maak, bronMail, bronMoneybird, bronSharePoint, openUrl, openItem, retryAfterVan, veiligeLinkVoor };
 })(typeof window !== 'undefined' ? window : globalThis);

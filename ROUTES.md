@@ -117,13 +117,17 @@ Getoond wordt alleen titel, klant, datum en soort; openen gebeurt in Moneybird/S
 - **Moneybird:** worker-route `GET /zoek/moneybird?q=&max=` (alleen lezen). Het recht `moneybird` geldt ALTIJD, ook in ROLLEN_MODUS=log/uit:
   geen rol of geen recht = 403. De route leest uitsluitend een compacte zoekindex in KV (`zoek:mb:index:v1`: nummer, referentie, contactnaam,
   datum; nooit bedragen) van dit en vorig jaar (`period:this_year` en `period:prev_year`; `last_year` bestaat niet). Ontbreekt de index of is hij
-  ouder dan 15 min (onvolledig: 2 min), dan start een achtergrondtaak (`waitUntil`) de opbouw met een vast subrequest-budget (45); het verzoek
-  zelf antwoordt direct met `opbouwen` of de oude index (`verouderd:true`). **Eén opbouw tegelijk** wordt afgedwongen door de Durable Object
-  `MT_ZOEKINDEX` (`MtZoekIndex`, migratie v5; claim met levensduur 120 s); onbereikbaar = niet bouwen; zonder binding een KV-slot (bij benadering).
-  Een index is `compleet:true` alleen als de opbouw zonder enige waarschuwing klaar was; een complete index wordt alleen door een complete
-  vervangen (anders blijft hij staan en volgt 120 s pauze). **Een Moneybird-429 is terminaal:** geen retries, geen verdere bron/periode, niets
-  bewaard, de echte Retry-After (default 60 s) wordt de pauze (`zoek:mb:pauze`, reden 429); de bestaande index blijft onaangetast en in gebruik; zonder
-  index antwoordt de route 429 met `Retry-After` (andere pauze-redenen: 503 `moneybird-onbereikbaar`).
+  ouder dan 15 min (onvolledig: 2 min), dan **start** het verzoek de opbouw en antwoordt meteen met `opbouwen` of de oude index (`verouderd:true`).
+  **De opbouw is hervatbaar en atomair:** de Durable Object `MT_ZOEKINDEX` (`MtZoekIndex`, migratie v5) verwerkt per alarm-run hooguit 8 pagina's /
+  20 s, bewaart de cursor (lijst, pagina) en de ruwe pagina's in zijn eigen opslag en plant het volgende alarm; een gestorven isolate of een
+  afgebroken run hervat bij de cursor (geen dubbele pagina's). Tijdelijke fouten (netwerk, 5xx) worden per pagina drie keer geprobeerd, een 4xx
+  niet; elke overgeslagen lijst maakt de index onvolledig. Pas na de laatste pagina gaat de index naar KV: `compleet:true` alleen zonder enige
+  waarschuwing, en een complete index wordt alleen door een complete vervangen (anders blijft hij staan en volgt 120 s pauze). Een nieuwe start
+  neemt een opbouw zonder voortgang van 5 min over. Zonder DO-binding (oude deploy) valt de worker terug op één opbouw per verzoek-taak met een KV-slot.
+  **Een Moneybird-429 is terminaal:** geen retries, geen verdere pagina's, de DO-opslag wordt leeggemaakt, en de **echte Retry-After** (seconden óf
+  HTTP-datum; onleesbaar of verleden = 60 s; productplafond **24 uur**) wordt de pauze (`zoek:mb:pauze`, reden 429). De bestaande index blijft onaangetast
+  en in gebruik; zonder index antwoordt de route 429 met `Retry-After` (andere pauze-redenen: 503 `moneybird-onbereikbaar`). De zoekbalk toont lange
+  wachttijden leesbaar ("over 2 uur").
 - **SharePoint:** Graph drive-search (`/drives/<PROJ_DRIVE>/root:/Nieuwe mappenstructuur:/search(q='…')`) met het Graph-token van de gebruiker;
   alleen treffers waarvan de webUrl in `Nieuwe mappenstructuur` ligt; de klant komt uit de webUrl (de drive-search geeft geen parentReference.path).
 Volgorde in de lijst: lokale groepen, E-mail, Moneybird, SharePoint.
