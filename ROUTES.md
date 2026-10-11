@@ -161,7 +161,10 @@ gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.m
   (ook op het hoogste niveau van de body) → 400; `code`, `naam` en `mb_contact_id` moeten tekst zijn (`mb_contact_id`
   ook `null`) — een getal geeft 400, want een 18-cijferig id rondt in JSON af. Opgeslagen wordt de canonieke vorm
   (getrimde teksten). Elke vorige stand gaat naar `klanten:registry:historie:*`; auditlog zonder namen.
-  Let op: KV heeft geen compare-and-set; de revisiecontrole staat vlak vóór het schrijven.
+  Schrijven loopt via de Durable Object `MT_KLANTEN` (class `MtKlanten`, migratie `v3-mt-klanten` in wrangler.toml): één object
+  serialiseert alle writes en doet het compare-and-set op `rev` (KV heeft geen CAS). Gelijktijdig, zelfde `rev`: precies één wint,
+  de rest krijgt 409. De `rev` van het object is leidend, maar een hogere `rev` die in KV is gezet (release-stap) wordt meegenomen
+  (max van beide). Zonder binding geeft POST 503 `geen-klanten-opslag` (GET blijft werken uit KV); een KV-schrijffout geeft 503 en de rev schuift niet op.
 
 **Rollen (F1):** rol per oid in KV `MT_ROLLEN` (Eigenaar / Beheerder / Kantoor /
 Werkplaats / Alleen lezen), `requirePermission` per target. Modus `ROLLEN_MODUS`:
@@ -287,13 +290,14 @@ Per-user mapping (`userKey()`): e-mailprefix uit het MSAL-token →
 
 Zet de lokale gegevens van één apparaat over van het oude naar het nieuwe adres (browseropslag is per adres). Alleen aan met de
 proefvlag `localStorage.mt_verhuis_proef = '1'`. Het oude adres wordt nooit leeggemaakt.
-- **Pakket:** een expliciete lijst localStorage-sleutels (`V.SLEUTELS`/`V.PREFIXEN`; geen tokens, caches of timers; een sleutel met een
+- **Pakket:** een expliciete lijst localStorage-sleutels (`V.SLEUTELS` = 60 sleutels, `V.PREFIXEN` = 10 prefixen, `V.UITGESLOTEN` = bewust niet; alles daarbuiten is "onbekend" en wordt in het paneel bij naam genoemd; geen tokens, caches of timers; een sleutel met een
   JWT of kale base64-waarde gaat nooit mee) + IndexedDB `mt-rapporten` (fotos, drafts) en `mt-app` (drafts), checksums per onderdeel en per foto.
   Een nieuwe localStorage-sleutel in de code moet in die lijst of bewust in de uitsluitingen van `b-verhuis-harness.js` (de test faalt anders).
 - **SharePoint:** `MT-Bedrijfstool/_verhuizing/<Entra oid>/<apparaat>-<tijd>-<uuid>/` — eerst `blobs/*`, als laatste `pakket.json`
   (`conflictBehavior: fail`; dat bestand = "compleet"). Grote bestanden via een uploadsessie in brokken van 5 MiB, elk brok 3 pogingen met `nextExpectedRanges`.
   De lijst op het nieuwe adres toont alleen pakketten met een manifest waarvan alle foto's bestaan en dat bij de ingelogde oid hoort.
-- **Importeren:** alleen een pakket van dezelfde oid; alles of niets (journaal van wat deze run toevoegde, bij een fout precies dat terug);
+- **Importeren:** alleen een pakket van dezelfde oid; alles of niets (journaal van wat deze run toevoegde, bij een fout precies dat terug;
+  het journaal staat ook in localStorage `mt_verhuis_journaal` (write-ahead) en wordt na een tab-crash vóór de volgende import eerst teruggedraaid; de lock heeft een hartslag, verlaten na 2 min);
   IndexedDB `add()` in één transactie per store (ConstraintError = "al aanwezig"), localStorage met hercontrole en een importlock (`mt_verhuis_lock`, 10 min).
 - **Schema:** `MTFotoStore.SCHEMAS` (mt-fotostore.js) is de ene definitie; de verhuizer verhoogt nooit een databaseversie en stopt met een melding als er een store ontbreekt.
 - **Grootte:** het paneel toont de totale grootte; het download-vangnet is op een telefoon uit boven 150 MB.

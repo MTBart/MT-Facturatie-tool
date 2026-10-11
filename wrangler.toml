@@ -91,6 +91,17 @@ class_name = "MtTeller"
 tag = "v2-mt-teller"
 new_sqlite_classes = ["MtTeller"]
 
+# ─── Klantenlijst (F5): Durable Object MT_KLANTEN ──────────────────────────────
+# Serialiseert de writes op KV `klanten:registry` en doet het compare-and-set op `rev` (KV heeft geen CAS). Zonder deze
+# binding geeft POST /klanten een 503 (GET werkt gewoon uit KV).
+[[durable_objects.bindings]]
+name = "MT_KLANTEN"
+class_name = "MtKlanten"
+
+[[migrations]]
+tag = "v3-mt-klanten"
+new_sqlite_classes = ["MtKlanten"]
+
 [vars]
 ROLLEN_MODUS = "log"
 # F2–F4: proxy-contract + bevestiging bij Moneybird-writes. Eerst "log", later "afdwingen".

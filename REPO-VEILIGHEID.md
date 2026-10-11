@@ -30,6 +30,7 @@ Bewust iets door slot 2 forceren kan alleen expliciet met `git commit --no-verif
 | Klant-registry | worker `/klanten` (KV `klanten:registry`), na login — sinds F5 (11-10-2026) **niet meer** in de repo; `data/klanten.json` staat in `.gitignore` | privé | ✅ |
 | Claude-context | `Claude-context/*` (STATUS.md, projecten.md, … met klant- en persoonsgegevens) — sinds F5 stap 1 niet meer in git; lokaal bewaard; alleen `toggl2-api-bewezen.md` (Toggl-contract) blijft getrackt; pre-commit blokkeert de rest | lokaal, genegeerd + geblokkeerd | ✅ |
 | Klantnamen in scripts | `nieuw-project.ps1` / `create-project-structure.ps1` lezen de koppeling uit lokale `data/klant-zoektermen.json` of `data/klanten.json` (beide genegeerd); zonder die bestanden een neutraal voorbeeld | lokaal | ✅ |
+| CHANGELOG.md | wordt door de pre-commit-hook opgebouwd via `tools/changelog.js` met lokale woordenlijsten (`data/klanten.json`, `data/klanten-historie.txt` = alles wat ooit in de lijst stond, `data/privacy-termen.txt`); fail closed: bij een fout of zonder lijst blijft de oude staan | lokaal, genegeerd | ✅ |
 | Back-up van de live site | `backup/` — `tools/backup-roteer.py` neutraliseert de klantenregistry in de kopie | public, geneutraliseerd | ✅ |
 | Privé-notities | `CLAUDE.local.md`, `.claude/memory/`, `.claude/STATUS.md`, `.claude/SESSIE_SAMENVATTING.md`, `HANDOFF.md` | lokaal, genegeerd + geblokkeerd in pre-commit | ✅ |
 | Klant-PII | `moneybird-contacten.json/.md`, `CRM/`, `Moneybird/` | genegeerd, nooit gecommit | ✅ |

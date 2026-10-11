@@ -11,7 +11,8 @@ worker-code meenemen die nog niet gedeployd is, mits de front-end ook met de oud
    een eventuele harde klantenregistry (namen + Moneybird-contact-id's) en vaste voorbeeldnamen uit de KOPIE in `backup/`
    (de repo is public) en scant daarna `backup/` met de lokale `data/klanten.json` als woordenlijst; "resten" moet `geen` zijn.
    In de html's alleen: `noindex`, titel "BACKUP vX —" en de rode balk. Per bestand een hash-check (gelijk aan live na
-   neutralisatie, op die drie invoegingen na). Alleen de bestaande `backup/` opschonen zonder te roteren: `--saneer`.
+   neutralisatie, op die drie invoegingen na). **Fail closed:** vindt de eindscan een rest (of ontbreekt de lokale `data/klanten.json`),
+   dan exitcode 2/3 en wordt er NIETS geschreven; ga dan niet verder met de release. Alleen de bestaande `backup/` opschonen zonder te roteren: `--saneer`.
 4. **Versielabel** — `<span class="header-version">` in v2.html naar de nieuwe versie.
 5. **"Wat is er verbeterd"** — bovenaan `data/updates.json` een item toevoegen:
    `{versie, datum (JJJJ-MM-DD), titel, voor: 'iedereen' | 'beheer', punten: [...]}`.

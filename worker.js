@@ -3577,8 +3577,9 @@ async function handleBeheer(pathname, request, env, ik, json) {
 // GET: iedereen die is ingelogd (in modus 'afdwingen' alleen met een rol; in 'log' ook zonder rol, maar apart gelogd als
 // `klanten.zonder_rol`). Antwoord bevat `rev`. POST: alleen wie mag beheren, streng gecontroleerd (types, geen onbekende velden,
 // ook niet bovenin de body), met `rev`: is die verouderd dan 409 en blijft alles bewaard. Oude stand wordt altijd bewaard.
-// Let op: KV kent geen compare-and-set; de revisiecontrole staat vlak vóór het schrijven (enkele ms venster) en elke vorige
-// stand gaat naar de historie, dus ook bij een zeldzame gelijktijdige schrijfactie gaat er niets verloren.
+// Schrijven loopt via de Durable Object MT_KLANTEN (class MtKlanten): één object serialiseert alle writes en doet het
+// compare-and-set op `rev` binnen dat object (KV zelf heeft geen CAS). Twee gelijktijdige POST's met dezelfde rev: precies één
+// wint, de ander krijgt 409. Zonder binding geen schrijfroute (503, bewust geen KV-terugval). Elke vorige stand gaat naar de historie.
 // Auditlog zonder namen.
 const KLANTEN_KV = 'klanten:registry', KLANTEN_MAX = 500;
 const KLANT_VELDEN = new Set(['code', 'naam', 'aliassen', 'mb_contact_id', 'opmerking', 'locaties']), KLANT_LOC_VELDEN = new Set(['code', 'naam', 'mb_contact_id']);
@@ -3614,10 +3615,36 @@ function klantSchoon(k, loc) {
   }
   return { klant: uit };
 }
+const klantenRevVan = d => (d && Number.isInteger(d.rev) && d.rev >= 0 ? d.rev : 0);
+// Durable Object: één instantie ('registry'). De waarheid over `rev` staat in de opslag van het object (geserialiseerd);
+// KV bevat de lijst voor lezers. Start (of een KV-stand die vooruit liep, bv. handmatig gezet) telt mee: rev = max(object, KV).
+export class MtKlanten {
+  constructor(state, env) { this.state = state; this.env = env; }
+  async fetch(request) {
+    const op = new URL(request.url).pathname.slice(1), st = this.state.storage;
+    const antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    if (op !== 'schrijf') return antw({ error: 'onbekend' }, 404);
+    let b = {}; try { b = await request.json(); } catch {}
+    if (!Number.isInteger(b.rev) || !Array.isArray(b.klanten)) return antw({ error: 'ongeldig' }, 400);
+    return await this.state.blockConcurrencyWhile(async () => {
+      try {
+        const kvRec = await kvJson(this.env, KLANTEN_KV), doRev = (await st.get('rev')) || 0, kvRev = klantenRevVan(kvRec);
+        const cur = Math.max(doRev, kvRev);
+        if (cur !== b.rev) return antw({ error: 'verouderd', rev: cur }, 409);
+        const doRec = doRev >= kvRev ? await st.get('rec') : null, oud = doRec || kvRec;   // de eigen kopie is nooit ouder dan KV
+        const ts = Date.now(), rev = cur + 1, nieuw = { klanten: b.klanten, bijgewerkt: new Date(ts).toISOString(), door: b.door || null, rev };
+        if (oud) await kvZet(this.env, `${KLANTEN_KV}:historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, oud);   // vorige stand bewaard
+        await kvZet(this.env, KLANTEN_KV, nieuw);
+        await st.put({ rev, rec: nieuw });
+        return antw({ ok: true, aantal: b.klanten.length, rev });
+      } catch (e) { return antw({ error: 'opslag', detail: String((e && e.message) || e).slice(0, 120) }, 503); }
+    });
+  }
+}
 async function handleKlanten(request, env, ik, json, ctx) {
   const m = request.method.toUpperCase();
   const huidig = async () => (env.MT_ROLLEN ? await kvJson(env, KLANTEN_KV) : null);
-  const revVan = d => (d && Number.isInteger(d.rev) && d.rev >= 0 ? d.rev : 0);
+  const revVan = klantenRevVan;
   if (m === 'GET') {
     if (!ik.rol) {
       if (rollenModus(env) === 'afdwingen') return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
@@ -3642,11 +3669,13 @@ async function handleKlanten(request, env, ik, json, ctx) {
     if (codes.has(r.klant.code)) return json({ error: 'dubbele code', code: r.klant.code }, 400);
     codes.add(r.klant.code); schoon.push(r.klant);
   }
-  const ts = Date.now(), oud = await huidig();
-  if (revVan(oud) !== b.rev) return json({ error: 'verouderd', rev: revVan(oud) }, 409);   // niets geschreven; de aanvrager haalt de lijst opnieuw op
-  if (oud) await kvZet(env, `${KLANTEN_KV}:historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, oud);   // vorige stand bewaard
-  const rev = revVan(oud) + 1;
-  await kvZet(env, KLANTEN_KV, { klanten: schoon, bijgewerkt: new Date(ts).toISOString(), door: ik.oid, rev });
+  const ns = env.MT_KLANTEN;
+  if (!ns || !ns.idFromName) return json({ error: 'geen-klanten-opslag', uitleg: 'Durable Object-binding MT_KLANTEN ontbreekt (zie wrangler.toml)' }, 503);
+  let r; try { r = await ns.get(ns.idFromName('registry')).fetch('https://mt-klanten/schrijf', { method: 'POST', body: JSON.stringify({ rev: b.rev, klanten: schoon, door: ik.oid }) }); } catch { return json({ error: 'opslag' }, 503); }
+  const uit = await r.json().catch(() => ({}));
+  if (r.status === 409) return json({ error: 'verouderd', rev: uit.rev }, 409);   // niets geschreven; de aanvrager haalt de lijst opnieuw op
+  if (!r.ok || !uit.ok) return json({ error: 'opslag' }, 503);
+  const rev = uit.rev;
   await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'klantenlijst', doel: 'klanten', doelNaam: `klantenlijst opgeslagen (${schoon.length})` });   // geen namen
   return json({ ok: true, aantal: schoon.length, rev });
 }

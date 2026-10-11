@@ -36,7 +36,13 @@
     'mt_instellingen', 'mt_adminconfig', 'mt_opl_codes', 'mt_mb_admin', 'mt_vrijedagen', 'mt_verlof', 'mt_proj_adressen', 'mt_contacten_mobiel', 'mt_email_verwerkt',
     'mt_cf_vasten_uit', 'mt_fb_sent', 'mt_notif_read', 'mt_pv_gezien', 'mt_klant_sectie', 'mt_proj_sectie', 'mt_proj_sectie_per', 'mt_aanwezig_kaart', 'ncr_lev_overrides',
   ]);
-  V.PREFIXEN = ['mt_rapdraft_', 'mt_bestellijst_onleesbaar_', 'mt_updates_gezien:', 'mtg:zoom:', 'mtg:alleen:', 'mtg:intro:', 'mtg:mp-init:', 'mtg:prognose:'];
+  V.PREFIXEN = ['mt_rapdraft_', 'mt_csv_prijzen_', 'mt_bestellijst_onleesbaar_', 'mt_updates_gezien:', 'mtg:zoom:', 'mtg:alleen:', 'mtg:intro:', 'mtg:mp-init:', 'mtg:mp:', 'mtg:prognose:'];
+  // Bewust NIET mee (token, cache, afgeleid, lopende timer, sessie). Alles wat noch hier noch in SLEUTELS/PREFIXEN staat is "onbekend":
+  // dat gaat niet mee maar wordt in het paneel genoemd, zodat iemand beoordeelt of er een nieuwe sleutel bij moet.
+  V.UITGESLOTEN = new Set(['mt_toggl_token', 'mt_toggl_last_sync', 'mt_toggl_user_names', 'mt_toggl_user_map', 'mt_toggl_project_map', 'mt_toggl_proj_names', 'mt_toggl_names_ver',
+    'mt_toggl_users_raw', 'mt_toggl_projecten_raw', 'mt_cache_facturen', 'mt_cache_klanten', 'mt_klanten_cache', 'mt_notificaties', 'mt_auditlog', 'mt_chatlog_buffer', 'mt_calc_map_state',
+    'mt_timer', 'mt_uren_lopend']);
+  V.UITGESLOTEN_PREFIXEN = ['mt_csv_'];   // mt_csv_<project>: sessionStorage (mt_csv_prijzen_<project> in localStorage staat wél bij PREFIXEN)
   V.sleutelMee = k => typeof k === 'string' && (V.SLEUTELS.has(k) || V.PREFIXEN.some(p => k.startsWith(p) && k.length > p.length));
   // Bijna-zeker-een-geheim in de waarde (ook bij een toegestane sleutel): JWT overal erin, of een kale base64-achtige reeks.
   const JWT = /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/, KALE_B64 = /^[A-Za-z0-9+/_=-]{200,}$/;
@@ -48,7 +54,7 @@
     for (const k of keys.sort()) {
       if (!/^(mt|ncr_)/.test(k)) continue;
       if (/^mt_verhuis/.test(k) || k === 'mt_verhuisd') continue;
-      if (!V.sleutelMee(k)) { overgeslagen.push({ sleutel: k, reden: 'niet op de lijst (token, cache of afgeleid)' }); continue; }
+      if (!V.sleutelMee(k)) { overgeslagen.push({ sleutel: k, reden: V.UITGESLOTEN.has(k) || V.UITGESLOTEN_PREFIXEN.some(p => k.startsWith(p)) ? 'bewust niet meegenomen (token, cache of tijdelijk)' : 'onbekend: nog niet beoordeeld' }); continue; }
       const w = s.getItem(k);
       if (V.waardeVerdacht(w)) { overgeslagen.push({ sleutel: k, reden: 'bevat een token- of sleutelachtige waarde' }); continue; }
       mee[k] = w;
@@ -186,6 +192,7 @@
     const get = k => { try { return JSON.parse(s.getItem(k) || 'null'); } catch (e) { return null; } };
     const sel = V.selecteer();
     const uit = { sleutels: Object.keys(sel.mee).length, nietMee: keys.filter(k => /^(mt|ncr_)/.test(k) && !/^mt_verhuis/.test(k) && k !== 'mt_verhuisd' && !(k in sel.mee)).length, overgeslagen: sel.overgeslagen,
+      onbekend: sel.overgeslagen.filter(o => /^onbekend/.test(o.reden)).map(o => o.sleutel), onderbrokenImport: !!leesJournaal(),
       wachtrij: (get('mt_retry_queue') || []).length || 0, timer: !!s && !!s.getItem('mt_timer'), concepten: keys.filter(k => /^mt_rapdraft_/.test(k) && k in sel.mee).length, agendaBlokken: (get('mt_agenda_blocks') || []).length || 0,
       fotos: { totaal: 0, lokaal: 0, wacht: 0, fout: 0, sync: 0 }, idbConcepten: 0, fouten: [], bytes: { ls: 0, idb: 0, totaal: 0 } };
     for (const v of Object.values(sel.mee)) uit.bytes.ls += String(v).length * 2;
@@ -252,13 +259,30 @@
   // pakket = pakket.json (object); blobVan(id) → Blob (SharePoint of uit het downloadbestand); opt.oid = de ingelogde gebruiker.
   // Nooit overschrijven. Wat DEZE run toevoegt komt in een journaal; gaat er iets mis (bv. QuotaExceeded), dan draait precies
   // dat terug en volgt "onderbroken, niets veranderd, opnieuw proberen".
-  const LOCK = 'mt_verhuis_lock', LOCK_MS = 10 * 60 * 1000;
+  // Het journaal staat ook in localStorage (mt_verhuis_journaal, wordt bijgewerkt vóór elke schrijfactie): sluit de tab midden in
+  // een import, dan blijft er een spoor en draait de volgende import (of V.herstelJournaal) eerst terug wat al was toegevoegd.
+  // Alleen een volledig geslaagde import wist het. De lock heeft een hartslag (elke stap), dus een verlaten lock is na 2 minuten oud.
+  const LOCK = 'mt_verhuis_lock', JOURNAAL = 'mt_verhuis_journaal', LOCK_MS = 2 * 60 * 1000;
+  const fp = v => { v = String(v); let h = 5381; for (let i = 0; i < v.length; i++) h = (((h << 5) + h) + v.charCodeAt(i)) | 0; return v.length + ':' + (h >>> 0).toString(16); };
+  const leesJournaal = () => { try { return JSON.parse(ls().getItem(JOURNAAL) || 'null'); } catch (e) { return null; } };
+  const leesLock = () => { try { return JSON.parse(ls().getItem(LOCK) || 'null'); } catch (e) { return null; } };
+  const BEZET = 'er loopt al een import (in een ander tabblad?): wacht even. Niets veranderd';
+  // Draait terug wat het journaal bevat: een sleutel alleen als hij nog onze waarde heeft, records op key. → lijst mislukte onderdelen.
   async function terugdraaien(journaal) {
     const s = ls(), fouten = [];
-    for (const [k, w] of journaal.ls.slice().reverse()) { try { if (s.getItem(k) === w) s.removeItem(k); } catch (e) { fouten.push(k); } }   // alleen als het nog onze waarde is
-    for (const j of journaal.idb.slice().reverse()) { try { await V.idb.verwijder(j.db, j.store, j.keys); } catch (e) { fouten.push(`${j.db}/${j.store}`); } }
+    for (const [k, f] of (journaal.ls || []).slice().reverse()) { try { const w = s.getItem(k); if (w != null && fp(w) === f) s.removeItem(k); } catch (e) { fouten.push(k); } }
+    for (const j of (journaal.idb || []).slice().reverse()) { try { await V.idb.verwijder(j.db, j.store, j.keys); } catch (e) { fouten.push(`${j.db}/${j.store}`); } }
     return fouten;
   }
+  // Herstelt een onderbroken import (journaal blijft staan na een crash). → null (niets te doen) of { sleutels, records }.
+  V.herstelJournaal = async function () {
+    const s = ls(), j = leesJournaal(); if (!j) return null;
+    const l = leesLock(); if (l && Date.now() - l.t < LOCK_MS) throw new Error(BEZET);
+    const fouten = await terugdraaien(j);
+    if (fouten.length) throw new Error(`een eerder onderbroken import kon niet volledig worden teruggedraaid (${fouten.join(', ')}): start geen nieuwe import maar laat dit nakijken`);
+    try { s.removeItem(JOURNAAL); s.removeItem(LOCK); } catch (e) {}
+    return { sleutels: (j.ls || []).length, records: (j.idb || []).reduce((a, x) => a + x.keys.length, 0) };
+  };
   V.importeer = async function (pakket, blobVan, opt) {
     if (!pakket || pakket.soort !== 'mt-verhuispakket') throw new Error('geen verhuispakket');
     if (pakket.versie !== V.VERSIE) throw new Error('pakket van een oude of nieuwere versie: maak op het oude adres een nieuw pakket');
@@ -281,16 +305,21 @@
       plan.push({ sch, status: c.status, recs });
     }
     const s = ls(), uit = { sleutels: 0, sleutelsAlAanwezig: [], overgeslagen: (pakket.overgeslagen || []).length, fotos: 0, fotosAlAanwezig: 0, concepten: 0, conceptenAlAanwezig: 0 };
-    // Importlock (sleutel met tijdstempel): geen tweede import tegelijk (ander tabblad).
-    const ikId = nieuwId(), lees = () => { try { return JSON.parse(s.getItem(LOCK) || 'null'); } catch (e) { return null; } }, bezet = 'er loopt al een import (in een ander tabblad?): wacht even. Niets veranderd';
-    { const l = lees(); if (l && Date.now() - l.t < LOCK_MS) throw new Error(bezet);
-      s.setItem(LOCK, JSON.stringify({ t: Date.now(), id: ikId })); const na = lees(); if (!na || na.id !== ikId) throw new Error(bezet); }
-    const journaal = { ls: [], idb: [] };
+    // Importlock (sleutel met tijdstempel): geen tweede import tegelijk (ander tabblad). Daarna eerst een onderbroken eerdere import terugdraaien.
+    const ikId = nieuwId();
+    { const l = leesLock(); if (l && Date.now() - l.t < LOCK_MS) throw new Error(BEZET); }
+    const hersteld = await V.herstelJournaal();
+    uit.hersteld = hersteld;
+    { s.setItem(LOCK, JSON.stringify({ t: Date.now(), id: ikId })); const na = leesLock(); if (!na || na.id !== ikId) throw new Error(BEZET); }
+    const journaal = { id: ikId, gemaakt: pakket.gemaakt, t: Date.now(), ls: [], idb: [] };
+    const bewaar = () => { journaal.t = Date.now(); s.setItem(JOURNAAL, JSON.stringify(journaal)); s.setItem(LOCK, JSON.stringify({ t: journaal.t, id: ikId })); };   // journaal + hartslag
     try {
+      bewaar();
       for (const [k, v] of Object.entries(pakket.localStorage || {})) {
         if (!V.sleutelMee(k) || V.waardeVerdacht(v)) continue;
         if (s.getItem(k) != null) { uit.sleutelsAlAanwezig.push(k); continue; }   // al hier (bv. uit SharePoint, of net door een ander tabblad): niet overschrijven
-        s.setItem(k, v); journaal.ls.push([k, v]); uit.sleutels++; if (/^mt_rapdraft_/.test(k)) uit.concepten++;   // controle en schrijven zonder tussenruimte
+        journaal.ls.push([k, fp(v)]); bewaar();   // eerst vastleggen (write-ahead), dan schrijven
+        s.setItem(k, v); uit.sleutels++; if (/^mt_rapdraft_/.test(k)) uit.concepten++;   // controle en schrijven zonder tussenruimte
       }
       for (const p of plan) {
         if (p.status === 'afwezig') { try { await V.idb.maak(p.sch); } catch (e) { const c2 = await V.idb.controle(p.sch.naam, p.sch.stores); if (c2.status !== 'ok') throw e; } }
@@ -298,17 +327,17 @@
           const foto = p.sch.naam === 'mt-rapporten' && st === 'fotos';
           const recs = lijst.map(r => ({ key: r.key, value: zetBlobs(r.value, perId) }));
           const res = await V.idb.voegToe(p.sch.naam, st, recs);
-          if (res.toegevoegd.length) journaal.idb.push({ db: p.sch.naam, store: st, keys: res.toegevoegd });
+          if (res.toegevoegd.length) { journaal.idb.push({ db: p.sch.naam, store: st, keys: res.toegevoegd }); bewaar(); }   // een store is atomair; direct na het slagen vastleggen
           if (foto) { uit.fotos += res.toegevoegd.length; uit.fotosAlAanwezig += res.bestond.length; } else { uit.concepten += res.toegevoegd.length; uit.conceptenAlAanwezig += res.bestond.length; }
         }
       }
     } catch (e) {
       const mis = await terugdraaien(journaal);
-      try { s.removeItem(LOCK); } catch (e2) {}
+      try { if (!mis.length) s.removeItem(JOURNAAL); s.removeItem(LOCK); } catch (e2) {}   // bij een mislukt terugdraaien blijft het journaal voor de volgende keer
       const m = mis.length ? `onderbroken; terugdraaien deels mislukt (${mis.join(', ')}): importeer opnieuw, wat er al staat wordt overgeslagen` : 'onderbroken, niets veranderd, opnieuw proberen';
       const er = new Error(`${m} (${e && e.name === 'QuotaExceededError' ? 'opslag vol' : (e && e.message) || e})`); er.oorzaak = e; er.terugdraaienMislukt = mis; throw er;
     }
-    try { s.removeItem(LOCK); } catch (e) {}
+    try { s.removeItem(JOURNAAL); s.removeItem(LOCK); } catch (e) {}   // pas na volledig succes
     try { s.setItem('mt_verhuis_import:' + pakket.gemaakt, JSON.stringify({ t: Date.now(), bron: pakket.bron, uit: Object.assign({}, uit, { sleutelsAlAanwezig: uit.sleutelsAlAanwezig.length }) })); } catch (e) {}
     return uit;
   };
@@ -351,10 +380,12 @@
     let inv; try { inv = await V.inventaris(); } catch (e) { el.innerHTML = `<div class="mtv-melding">Inventaris mislukt: ${esc(e.message)}</div>`; return; }
     let oid = null; try { oid = await V.oidVan(ctx); } catch (e) { oid = null; }
     const nieuw = root.location && root.location.origin === V.NIEUW_ADRES, al = V.verhuisd(), dlMag = V.downloadMag(inv.bytes.totaal, !!ctx.mobiel);
-    const verdacht = inv.overgeslagen.filter(o => /token|sleutel/.test(o.reden));
+    const verdacht = inv.overgeslagen.filter(o => /^bevat/.test(o.reden));
     const waarsch = [!oid ? 'Je bent niet (meer) ingelogd: log opnieuw in om te verhuizen.' : '',
       inv.timer ? 'Er loopt een timer: stop die eerst (Toggl is de bron; de timer gaat niet mee).' : '',
       inv.nogTeVersturen ? `Nog niet verstuurd: ${inv.wachtrij} in de wachtrij, ${inv.fotos.lokaal + inv.fotos.wacht + inv.fotos.fout} foto's. Ga eerst online zodat het zelf verstuurt; wat overblijft gaat mee in het pakket.` : '',
+      inv.onbekend.length ? 'Onbekende lokale gegevens, niet meegenomen — laat beoordelen of ze mee moeten (geen waarden getoond): ' + inv.onbekend.join(', ') + '.' : '',
+      inv.onderbrokenImport ? 'Een eerdere import is onderbroken (tab dichtgegaan?). Bij de volgende import wordt eerst teruggedraaid wat die al had toegevoegd.' : '',
       verdacht.length ? 'Niet meegenomen omdat de waarde op een token of sleutel lijkt (geen waarden getoond): ' + verdacht.map(o => o.sleutel).join(', ') + '.' : '',
       inv.fouten.length ? 'Niet alles leesbaar: ' + inv.fouten.join('; ') : ''].filter(Boolean);
     el.innerHTML = `<div class="mtv">

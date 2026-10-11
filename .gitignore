@@ -56,6 +56,7 @@ data/klanten.json
 # Lokale koppeling klantcode -> Moneybird-zoekterm voor nieuw-project.ps1 / create-project-structure.ps1 (bevat klantnamen).
 data/klant-zoektermen.json
 data/privacy-termen.txt
+data/klanten-historie.txt
 
 # ---------- 2b. PRIVÉ-NOTITIES (F5, 11-10-2026: lokaal houden, niet in git) ----------
 CLAUDE.local.md
