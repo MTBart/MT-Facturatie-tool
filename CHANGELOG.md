@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-10 — Release v2.11.10: Schulden en aflossen in Geld; backup = v2.11.9
+- Commit: `21a25ec` | Auteur: Bart Witte
+
 ## 2026-10-10 — Schulden: potstand in centen afronden i.p.v. afkappen (Codex)
 - Commit: `079d74c` | Auteur: Bart Witte
 

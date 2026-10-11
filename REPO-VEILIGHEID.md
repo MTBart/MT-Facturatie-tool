@@ -27,7 +27,8 @@ Bewust iets door slot 2 forceren kan alleen expliciet met `git commit --no-verif
 |---|---|---|---|
 | **Echte secrets** (tokens, keys) | `C:\Users\BartWitte\.mt-secret\` (BUITEN de repo, buiten OneDrive) | nooit in git | ✅ |
 | De tool zelf | `index.html` + `uren.html` (oude `index-v3/v4.html` gearchiveerd) | PUBLIC — bewust | ✅ |
-| Klant-registry | `data/klanten.json` (codes + namen, geen PII) | PUBLIC — bewust | ✅ |
+| Klant-registry | worker `/klanten` (KV `klanten:registry`), na login — sinds F5 (11-10-2026) **niet meer** in de repo; `data/klanten.json` staat in `.gitignore` | privé | ✅ |
+| Privé-notities | `CLAUDE.local.md`, `.claude/memory/`, `.claude/STATUS.md`, `.claude/SESSIE_SAMENVATTING.md`, `HANDOFF.md` | lokaal, genegeerd + geblokkeerd in pre-commit | ✅ |
 | Klant-PII | `moneybird-contacten.json/.md`, `CRM/`, `Moneybird/` | genegeerd, nooit gecommit | ✅ |
 | Uren/Toggl-data | `Toggl/` | genegeerd | ✅ |
 | Vergaderdata | `Vergaderingen/` | genegeerd | ✅ |

@@ -15,7 +15,7 @@ STAGED="$(git diff --cached --name-only --diff-filter=ACM)"
 VIOLATIONS=""
 
 # ---- 1a. verboden bestandspaden (naam/extensie) ----
-PATH_RE='(^|/)\.env($|\.)|secret|(^|/)\.mt-secret/|token.*\.json$|token_cache\.json$|google-(token|client)\.json$|(^|/)moneybird\.json$|(^|/)toggl\.json$|\.(key|pem|pfx|p12)$|id_rsa|credentials.*\.json$|client_secret|auth_.*\.txt$|_tmp\.txt$|_result\.txt$|login_instructie|(^|/)config\.json$|moneybird-contacten\.|(^|/)(CRM|Toggl|Vergaderingen|Moneybird)/'
+PATH_RE='(^|/)\.env($|\.)|secret|(^|/)\.mt-secret/|token.*\.json$|token_cache\.json$|google-(token|client)\.json$|(^|/)moneybird\.json$|(^|/)toggl\.json$|\.(key|pem|pfx|p12)$|id_rsa|credentials.*\.json$|client_secret|auth_.*\.txt$|_tmp\.txt$|_result\.txt$|login_instructie|(^|/)config\.json$|moneybird-contacten\.|(^|/)(CRM|Toggl|Vergaderingen|Moneybird)/|(^|/)\.claude/memory/|(^|/)\.claude/(STATUS|SESSIE_SAMENVATTING|HANDOFF)\.md$|(^|/)HANDOFF\.md$|(^|/)CLAUDE\.local\.md$|(^|/)data/klanten\.json$|(^|/)_uit-repo'
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -28,7 +28,7 @@ while IFS= read -r f; do
 done <<< "$STAGED"
 
 # ---- 1b. content-scan: token-achtige literals in staged blobs ----
-CONTENT_RE='ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|toggl_sk_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ0eXAiOiJKV1Q|"refresh_token"[[:space:]]*:[[:space:]]*"[A-Za-z0-9]'
+CONTENT_RE='ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|toggl_sk_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ0eXAiOiJKV1Q|"refresh_token"[[:space:]]*:[[:space:]]*"[A-Za-z0-9]|NL[0-9]{2}[A-Z]{4}[0-9]{10}'
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue

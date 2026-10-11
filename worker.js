@@ -3529,10 +3529,53 @@ async function handleBeheer(pathname, request, env, ik, json) {
   return json({ error: 'unknown-beheer-route' }, 404);
 }
 
+// ── Klantenlijst (F5): niet meer als publiek bestand (data/klanten.json) maar na login via de worker, uit KV.
+// GET: iedereen die is ingelogd (in modus 'afdwingen' alleen met een rol). POST: alleen wie mag beheren, streng
+// gecontroleerd (geen onbekende velden), oude stand bewaard. Auditlog zonder namen.
+const KLANTEN_KV = 'klanten:registry', KLANTEN_MAX = 500;
+const KLANT_VELDEN = new Set(['code', 'naam', 'aliassen', 'mb_contact_id', 'opmerking', 'locaties']), KLANT_LOC_VELDEN = new Set(['code', 'naam', 'mb_contact_id']);
+function klantFout(k, loc) {
+  if (!k || typeof k !== 'object' || Array.isArray(k)) return 'object verwacht';
+  const vreemd = Object.keys(k).find(x => !(loc ? KLANT_LOC_VELDEN : KLANT_VELDEN).has(x)); if (vreemd !== undefined) return `onbekend veld "${String(vreemd).slice(0, 40)}"`;
+  if (!/^[A-Z0-9]{1,10}$/.test(String(k.code || ''))) return 'code: 1–10 hoofdletters/cijfers';
+  if (typeof k.naam !== 'string' || !k.naam.trim() || k.naam.length > 120) return 'naam: 1–120 tekens';
+  if (k.mb_contact_id != null && !/^\d{6,25}$/.test(String(k.mb_contact_id))) return 'mb_contact_id: cijfers of null';
+  if (loc) return null;
+  if (k.aliassen != null && !(Array.isArray(k.aliassen) && k.aliassen.length <= 20 && k.aliassen.every(a => typeof a === 'string' && a.length <= 120))) return 'aliassen: max 20 teksten';
+  if (k.opmerking != null && !(typeof k.opmerking === 'string' && k.opmerking.length <= 300)) return 'opmerking: max 300 tekens';
+  if (k.locaties != null) { if (!Array.isArray(k.locaties) || k.locaties.length > 50) return 'locaties: lijst (max 50)'; for (const l of k.locaties) { const f = klantFout(l, true); if (f) return 'locatie: ' + f; } }
+  return null;
+}
+async function handleKlanten(request, env, ik, json) {
+  const m = request.method.toUpperCase();
+  if (m === 'GET') {
+    if (rollenModus(env) === 'afdwingen' && !ik.rol) return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+    const d = env.MT_ROLLEN ? await kvJson(env, KLANTEN_KV) : null;
+    if (!d || !Array.isArray(d.klanten) || !d.klanten.length) return json({ error: 'geen-klantenlijst' }, 404);
+    return json({ klanten: d.klanten, bijgewerkt: d.bijgewerkt || null });
+  }
+  if (m !== 'POST') return json({ error: 'alleen GET of POST' }, 405);
+  if (!(RECHTEN[ik.rol] && RECHTEN[ik.rol].beheer)) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
+  if (!env.MT_ROLLEN) return json({ error: 'geen-opslag' }, 503);
+  let b = null; try { b = await request.json(); } catch {}
+  if (!b || typeof b !== 'object' || Array.isArray(b) || !Array.isArray(b.klanten) || !b.klanten.length || b.klanten.length > KLANTEN_MAX) return json({ error: `klanten: lijst (1–${KLANTEN_MAX})` }, 400);
+  const codes = new Set();
+  for (const k of b.klanten) { const f = klantFout(k, false); if (f) return json({ error: 'klant: ' + f, code: k && /^[A-Z0-9]{1,10}$/.test(String(k.code || '')) ? k.code : null }, 400); if (codes.has(k.code)) return json({ error: 'dubbele code', code: k.code }, 400); codes.add(k.code); }
+  const ts = Date.now(), oud = await kvJson(env, KLANTEN_KV);
+  if (oud) await kvZet(env, `${KLANTEN_KV}:historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, oud);   // vorige stand bewaard
+  await kvZet(env, KLANTEN_KV, { klanten: b.klanten, bijgewerkt: new Date(ts).toISOString(), door: ik.oid });
+  await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'klantenlijst', doel: 'klanten', doelNaam: `klantenlijst opgeslagen (${b.klanten.length})` });   // geen namen
+  return json({ ok: true, aantal: b.klanten.length });
+}
+
+// CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*'.
+const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
 export default {
   async fetch(request, env, ctx) {
+    const herkomst = request.headers.get('Origin') || '';
     const corsHeaders = {
-      'Access-Control-Allow-Origin': 'https://mtbart.github.io',
+      'Access-Control-Allow-Origin': CORS_HERKOMST.includes(herkomst) ? herkomst : CORS_HERKOMST[0],
+      'Vary': 'Origin',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PATCH, DELETE',
       'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-MT-Bevestiging, X-MT-Actie',
       'Access-Control-Expose-Headers': 'X-MT-Herhaald',
@@ -3567,6 +3610,8 @@ export default {
       if (url.pathname === '/toegang') return await handleToegang(request, env, ik, msPayload, json);
       // Gebruikersbeheer: in élke modus afgedwongen.
       if (url.pathname.startsWith('/beheer/')) return await handleBeheer(url.pathname, request, env, ik, json);
+      // Klantenlijst (F5): na login via de worker, niet meer als publiek bestand.
+      if (url.pathname === '/klanten') return await handleKlanten(request, env, ik, json);
       // Werkcode-teller en centrale instellingen: eigen routes (zie handleTeller).
       if (url.pathname === '/instellingen' || url.pathname.startsWith('/teller/')) return await handleTeller(url.pathname, request, env, ik, json);
       // Geldtijdlijn en het financiële dashboard: recht `geld`, in élke ROLLEN_MODUS (zie handleGeld).

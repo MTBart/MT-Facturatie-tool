@@ -1505,7 +1505,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
   <!-- ── CN ANALYSE TAB ── -->
   <!-- ═══ TAB: CN (GEARCHIVEERD) ═══ -->
-  <!-- CompaNanny-analyse: geen menu-ingang meer (verwijderd uit "Gearchiveerde schermen" in
+  <!-- Klantlocatie-analyse: geen menu-ingang meer (verwijderd uit "Gearchiveerde schermen" in
        Instellingen). Code blijft intact — niet verwijderen, alleen niet meer bereikbaar via UI. -->
   <div id="tab-cn" class="tab-content">
     <div class="card" style="max-width:900px">
@@ -2376,7 +2376,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div class="grid3" style="margin-bottom:0.4rem">
       <div class="field" style="margin-bottom:0">
         <label>Klant</label>
-        <input type="text" id="modal-naam-klant" placeholder="CompaNanny" oninput="autoCode()" list="klant-namen" autocomplete="off">
+        <input type="text" id="modal-naam-klant" placeholder="bv. Klant B.V." oninput="autoCode()" list="klant-namen" autocomplete="off">
         <datalist id="klant-namen"></datalist>
       </div>
       <div class="field" style="margin-bottom:0">
@@ -2441,7 +2441,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Projectnaam</label>
-        <input type="text" id="aanvul-naam" placeholder="bijv. CompaNanny Bajeskwartier Keuken" style="width:100%;box-sizing:border-box">
+        <input type="text" id="aanvul-naam" placeholder="bijv. Klant Locatie Keuken" style="width:100%;box-sizing:border-box">
       </div>
       <div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Klant</label>
@@ -2537,18 +2537,11 @@ let huidigProject=null, voorraadActiefTab='platen';
 let leveranciers=JSON.parse(localStorage.getItem('mt_leveranciers')||'[]');
 let editLevIndex=-1;
 
-// ═══ KLANT-REGISTRY (Fase B) — single source of truth = data/klanten.json ═══
-// Hardcoded fallback zodat het offline / zonder fetch blijft werken.
-let KLANTEN=[
-  {code:'CN',naam:'CompaNanny',mb_contact_id:null},
-  {code:'LGM',naam:'LGM Projecten B.V.',mb_contact_id:'463646635183834931'},
-  {code:'MOS',naam:'MOS Interiors',mb_contact_id:'443177514160883428'},
-  {code:'STY',naam:'Styles Concepts B.V.',mb_contact_id:'480850314306520356'},
-  {code:'HWC',naam:'Hermann Wesselink College',mb_contact_id:null},
-  {code:'PT',naam:'PT Bouw & Meubel B.V.',mb_contact_id:'414898677638760123'},
-  {code:'VK',naam:'Aannemers- en Installatiebedrijf Verkaik',mb_contact_id:'422963124634650333'},
-  {code:'INT',naam:'Intern — Mortise & Tenon',mb_contact_id:null}
-];
+// ═══ KLANT-REGISTRY — bron = de worker (/klanten, na login; F5). Geen klantnamen in de (publieke) code. ═══
+// Volgorde: laatst bekende lijst uit de cache van dit apparaat → (overgang) data/klanten.json → na login de worker.
+let KLANTEN=[{code:'INT',naam:'Intern — Mortise & Tenon',mb_contact_id:null}];
+const _KL_CACHE='mt_klanten_cache';
+let _klantenBestand=null, _klantenUitWorker=false;
 function klantByCode(code){return KLANTEN.find(k=>k.code===(code||'').toUpperCase())||null;}
 // Verrijkte registry (651 MB-contacten) — PRIVE, geladen uit SharePoint ná login
 // (MT-Bedrijfstool/klanten-registry-vol.json). Niet in publieke repo. Voedt
@@ -2600,13 +2593,32 @@ function resolveKlantNaam(proj){
   }
   return k.naam;
 }
+function _klantenZet(lijst){
+  if(!Array.isArray(lijst)||!lijst.length) return false;
+  KLANTEN=lijst; try{ localStorage.setItem(_KL_CACHE,JSON.stringify({klanten:lijst,t:Date.now()})); }catch(e){}
+  return true;
+}
 async function laadKlantRegistry(){
+  try{ const c=JSON.parse(localStorage.getItem(_KL_CACHE)||'null'); if(c&&Array.isArray(c.klanten)&&c.klanten.length) KLANTEN=c.klanten; }catch(e){}
+  // Overgang: zolang data/klanten.json nog op de site staat (verdwijnt in een volgende stap).
   try{
     const r=await fetch('data/klanten.json',{cache:'no-store'});
     if(!r.ok) return;
     const d=JSON.parse((await r.text()).replace(/^﻿/,''));
-    if(Array.isArray(d?.klanten)&&d.klanten.length) KLANTEN=d.klanten;
-  }catch(e){/* fallback blijft staan */}
+    if(Array.isArray(d?.klanten)&&d.klanten.length){ _klantenBestand=d.klanten; if(!_klantenUitWorker) KLANTEN=d.klanten; }
+  }catch(e){/* cache/fallback blijft staan */}
+}
+// Na login: de worker is de bron. Heeft hij nog geen lijst, dan zet wie mag beheren hem één keer over uit het bestand.
+async function klantRegistryNaLogin(){
+  if(typeof fetchMetAuth!=='function') return;
+  try{
+    const r=await fetchMetAuth(`${WORKER}/klanten`); let j=null; try{ j=await r.json(); }catch(e){}
+    if(r.ok&&j&&_klantenZet(j.klanten)){ _klantenUitWorker=true; if(typeof renderProjectLijst==='function') renderProjectLijst(); return; }
+    if(r.status===404&&j&&j.error==='geen-klantenlijst'&&_klantenBestand&&window.MTRol&&MTRol.isBeheer()){
+      const p=await fetchMetAuth(`${WORKER}/klanten`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({klanten:_klantenBestand})});
+      if(p.ok){ _klantenZet(_klantenBestand); _klantenUitWorker=true; }
+    }
+  }catch(e){/* lijst uit cache/bestand blijft staan */}
 }
 // Eenmalige opruiming: oude test-projecten uit de localStorage halen (Bart 2026-06-01).
 // Archiveert eerst naar mt_projecten_archief_<datum> zodat niets onomkeerbaar weg is.
@@ -5394,7 +5406,7 @@ async function projLocNaamInvullen(code){
 // Klantnaam invullen: op alle projecten met deze klantcode die nog geen klantnaam hebben.
 async function projKlantNaamInvullen(kl){
   kl=String(kl||'').toUpperCase(); if(!kl) return;
-  const naam=await mtDialog.prompt({title:'Klantnaam invullen',message:'Volledige naam van klant '+kl+':',placeholder:'bv. CompaNanny B.V.',okLabel:'Opslaan'});
+  const naam=await mtDialog.prompt({title:'Klantnaam invullen',message:'Volledige naam van klant '+kl+':',placeholder:'bv. Klant B.V.',okLabel:'Opslaan'});
   if(naam==null||!_echteNaam(naam,kl)) return;
   PROJECT_CODES.filter(x=>String(x.klant||'').toUpperCase()===kl&&!_echteNaam(x.klant_naam,kl)).forEach(x=>{ x.klant_naam=String(naam).trim(); });
   slaProjectenOp(); _namenVernieuwd();
@@ -8547,7 +8559,7 @@ function openModal(){
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
   // datalist met klantnamen: ECHTE registry-namen eerst (single source = klanten.json),
   // aangevuld met namen uit bestaande projecten. Zo stelt het typeveld de echte
-  // bedrijfsnaam voor (bv. "Styles Concepts B.V.") en mapt autoCode die naar de code.
+  // bedrijfsnaam voor (bv. "Voorbeeld B.V.") en mapt autoCode die naar de code.
   const dl=document.getElementById('klant-namen');
   if(dl){
     // Volledige MB-registry (651) eerst — zo verschijnt élke bestaande klant als
@@ -8569,7 +8581,7 @@ function autoCode(force){
   const nl=document.getElementById('modal-naam-locatie').value.trim();
   const np=document.getElementById('modal-naam-product').value.trim();
   const ek=document.getElementById('modal-klant'), el=document.getElementById('modal-locatie'), ep=document.getElementById('modal-product');
-  // Registry-klant herkend? Gebruik diens vaste code (bv. "Styles Concepts B.V."→STY),
+  // Registry-klant herkend? Gebruik diens vaste code (bv. "Voorbeeld B.V."→STY),
   // anders een afgeleide afkorting.
   if((force||!ek.value)&&nk){ const kv=klantVolByNaam(nk); const ov=klantCodeOverride(kv); ek.value= ov || ((kv&&kv.code)?kv.code:afkortKlant(nk)); }
   if((force||!el.value)&&nl) el.value=afkortLoc(nl);
@@ -10162,7 +10174,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   },
 
   // mkdir-p met canonieke naam. wantedName = de ECHTE naam (registry), bv.
-  // "Styles Concepts B.V.". Gedrag:
+  // "Voorbeeld B.V.". Gedrag:
   //   1. exacte match  -> hergebruiken
   //   2. genorm. match maar andere schrijfwijze -> de BESTAANDE map hergebruiken.
   //      Vroeger werd die automatisch hernoemd naar wantedName; dat brak zonder
@@ -10176,7 +10188,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // Returnt de werkelijk gebruikte mapnaam.
   async ensureFolder(parentPath, wantedName, rename = true) {
     // SharePoint verbiedt deze tekens + een naam mag niet eindigen op '.' of spatie
-    // ("Styles Concepts B.V." -> "Styles Concepts B.V").
+    // ("Voorbeeld B.V." -> "Voorbeeld B.V").
     const safe = wantedName.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'');
     const existing = await this.listChildren(parentPath);
     // 1. exacte match (case-sensitive op werkelijke naam)
@@ -12295,7 +12307,7 @@ const TAB_HELP={
   instellingen:{naam:'Instellingen',uitleg:'Sync-status (SharePoint), en de ingangen naar Nieuwe factuur en Factuurcontrole.'},
   verwerk:{naam:'Nieuwe factuur',uitleg:'Upload of kies een factuur-PDF; Claude leest leverancier, regels en bedragen uit en zet alles klaar voor Moneybird. Jij controleert en bevestigt — er wordt nooit zonder jou geboekt.'},
   controle:{naam:'Factuurcontrole',uitleg:'Vergelijkt onze uitgelezen factuurregels met wat er in Moneybird staat en markeert verschillen, zodat foute autoherkenning eruit gevist wordt.'},
-  cn:{naam:'CompaNanny-analyse (gearchiveerd)',uitleg:'Aparte analyse voor CompaNanny: omzet en facturen per locatie (53 locatie-contacten in Moneybird). Geen menu-ingang meer, code blijft staan.'},
+  cn:{naam:'Klantlocatie-analyse (gearchiveerd)',uitleg:'Aparte analyse voor één grote klant: omzet en facturen per locatie (53 locatie-contacten in Moneybird). Geen menu-ingang meer, code blijft staan.'},
   migratie:{naam:'Data-migratie (gearchiveerd)',uitleg:'Eenmalige hulpmiddelen om oude data naar de nieuwe structuur te verhuizen. Buiten gebruik, geen menu-ingang meer.'}
 };
 function helpActieveTab(){const el=document.querySelector('.tab-content.active');return el?el.id.replace('tab-',''):'?';}
@@ -12446,7 +12458,7 @@ async function toonApp(account) {
   loadLedgers();
   laadDashboard();
   if(typeof admInitKnop==='function') admInitKnop();
-  rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); updStipZet(); });
+  rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); updStipZet(); klantRegistryNaLogin(); });
   mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
   // Deep-link uit de URL-hash honoreren (bv. een "apart venster" met #tab=inbox).
   try{ tbApplyHashTab(); }catch(e){}

@@ -12,8 +12,7 @@
 |---|---|---|
 | `v2.html` | **de cockpit** | PC-tool waar Bart non-stop mee werkt: projecten, facturen/MB, inbox, agenda/planning, admin, nacalculatie. Actieve ontwikkeling gebeurt hier. |
 | `mobiel.html` | **de app** | Telefoon-PWA (manifest `manifest-mobiel.json`) voor het veld: timer, capture/foto's, taken, agenda, Rapportage (opname- + opleverrapport), feedback. |
-| `index.html` | redirect naar de cockpit | Sinds 15-6 alleen nog een doorstuurpagina naar `v2.html` (query/hash blijven behouden). De oude v4-bedrijfstool is gearchiveerd in `_archive/index-v4.html`. |
-| `toggl2.html` | Toggl 2.0-weergave | Aparte agenda/uren-view op de Focus-API. |
+| `index.html` | redirect naar de cockpit | Sinds 15-6 alleen nog een doorstuurpagina naar `v2.html` (query/hash blijven behouden). De oude v4-bedrijfstool staat sinds 11-10-2026 niet meer in de repo (lokaal in `_uit-repo-2026-10-11/`). |
 | `uren.html` | M&T Uren | Urenregistratie (ouder). |
 
 Nóg oudere front-ends staan gearchiveerd in `_archief/oude-tool-2026-06-04/`

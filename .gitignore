@@ -51,9 +51,24 @@ projectinstructies_claude.md
 data/vaste-lasten.json
 vaste-lasten.json
 
+# Klantenlijst: sinds F5 (11-10-2026) alleen via de worker na login, nooit als bestand in de repo.
+data/klanten.json
+
+# ---------- 2b. PRIVÉ-NOTITIES (F5, 11-10-2026: lokaal houden, niet in git) ----------
+CLAUDE.local.md
+.claude/memory/
+.claude/STATUS.md
+.claude/SESSIE_SAMENVATTING.md
+.claude/HANDOFF.md
+HANDOFF.md
+_uit-repo-*/
+
 # ---------- 3. RUNTIME / BACKUPS / TOOLING-ARTEFACTEN ----------
 _backups/
 _archief/
+_archive/
+toggl-preview/
+toggl2.html
 .claude/worktrees/
 .wrangler/
 
