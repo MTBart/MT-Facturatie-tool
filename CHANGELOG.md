@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Toggl-capaciteit voor de projecttijdlijn: echte antwoordvorm lezen, per persoon, met zichtbare reden bij terugval
+- Commit: `c515826` | Auteur: Bart Witte
+
 ## 2026-10-12 — F6-rest: veilige bovengrens voor documenten en een DO-alarm voor verlopen claims
 - Commit: `b9fd47a` | Auteur: Bart Witte
 

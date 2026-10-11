@@ -1122,9 +1122,9 @@ async function handleAanwezig(env, json) {
 // Log-teller: in geheugen optellen, hooguit eens per LOG_FLUSH_MS samenvoegen in KV.
 const _teller = { dag: '', totaal: 0, geweigerd: 0, redenen: {}, laatsteFlush: Date.now() };
 async function flushTeller(env) {
-  if (!env.MT_ROLLEN || (!_teller.totaal && !_teller.geweigerd && !_teller.proxyTotaal && !_teller.cspTotaal)) return;
-  const dag = _teller.dag, delta = { totaal: _teller.totaal, geweigerd: _teller.geweigerd, redenen: _teller.redenen, proxy: _teller.proxy || {}, proxyTotaal: _teller.proxyTotaal || 0, csp: _teller.csp || {}, cspTotaal: _teller.cspTotaal || 0 };
-  _teller.totaal = 0; _teller.geweigerd = 0; _teller.redenen = {}; _teller.proxy = {}; _teller.proxyTotaal = 0; _teller.csp = {}; _teller.cspTotaal = 0; _teller.laatsteFlush = Date.now();
+  if (!env.MT_ROLLEN || (!_teller.totaal && !_teller.geweigerd && !_teller.proxyTotaal)) return;
+  const dag = _teller.dag, delta = { totaal: _teller.totaal, geweigerd: _teller.geweigerd, redenen: _teller.redenen, proxy: _teller.proxy || {}, proxyTotaal: _teller.proxyTotaal || 0 };
+  _teller.totaal = 0; _teller.geweigerd = 0; _teller.redenen = {}; _teller.proxy = {}; _teller.proxyTotaal = 0; _teller.laatsteFlush = Date.now();
   const oud = (await kvJson(env, 'stat:' + dag)) || { totaal: 0, geweigerd: 0, redenen: {} };
   oud.totaal += delta.totaal; oud.geweigerd += delta.geweigerd;
   for (const [k, n] of Object.entries(delta.redenen)) {
@@ -1135,19 +1135,16 @@ async function flushTeller(env) {
   for (const [k, n] of Object.entries(delta.proxy)) {
     if (oud.proxy[k] != null || Object.keys(oud.proxy).length < 300) oud.proxy[k] = (oud.proxy[k] || 0) + n;
   }
-  // CSP-rapporten (alleen directive + host van het geblokkeerde, geen inhoud): zie cspRapport
-  oud.csp = oud.csp || {}; oud.cspTotaal = (oud.cspTotaal || 0) + delta.cspTotaal;
-  for (const [k, n] of Object.entries(delta.csp)) {
-    if (oud.csp[k] != null || Object.keys(oud.csp).length < 300) oud.csp[k] = (oud.csp[k] || 0) + n;
-  }
   try { await kvZet(env, 'stat:' + dag, oud, { expirationTtl: 35 * DAG_S }); } catch {}
 }
 // ── CSP-rapporten (POST /csp-rapport, zonder login: een browser stuurt ze zonder token) ───────────────────────────────────────────────
 // De pagina's draaien met een afgedwongen minimale meta-CSP (object-src 'none'; base-uri 'self') en op Cloudflare Pages met een Report-Only-CSP (_headers).
 // Een overtreding komt hier binnen. We bewaren ALLEEN de directive (bv. script-src-elem) en het host van het geblokkeerde ding (bv. cdn.example.com, of
-// "inline"/"eval"/"data"/"blob"): nooit de pagina-url met pad of query, de broncode (sample), de bronregel, het beleid of de referrer. Alleen tellers per dag
-// (KV stat:<dag>, getoond in /beheer/log als cspTop); grootte, aantal per bericht, aantal per minuut en het aantal verschillende sleutels zijn begrensd.
-const CSP_MAX_BODY = 16384, CSP_PER_MIN = 120, CSP_PER_BERICHT = 10;
+// "inline"/"eval"/"data"/"blob"): nooit de pagina-url met pad of query, de broncode (sample), de bronregel, het beleid of de referrer. Alleen tellers per dag,
+// bijgehouden in de teller-DO (MT_TELLER, instantie csp; NOOIT in KV: dit endpoint is open en KV heeft een dagelijkse schrijflimiet die ook de Koersmeter en de
+// zoekindex nodig hebben), getoond in /beheer/log als cspTop. Begrensd: grootte, aantal per bericht, aantal per minuut per isolate, en in de DO een globaal
+// budget per minuut en per dag (daarna alleen 204 zonder opslag) en een maximum aantal verschillende sleutels.
+const CSP_MAX_BODY = 16384, CSP_PER_MIN = 120, CSP_PER_BERICHT = 10, CSP_DO_PER_MIN = 60, CSP_DO_DAGBUDGET = 500, CSP_MAX_SLEUTELS = 200, CSP_BEWAAR_DAGEN = 35;
 const CSP_KOP = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400', 'Cache-Control': 'no-store' };
 const _cspVenster = { t: 0, n: 0 };
 function cspHost(u) {
@@ -1177,18 +1174,15 @@ async function cspRapport(request, env, ctx) {
   const lijst = Array.isArray(j) ? j.filter(r => r && typeof r === 'object' && (r.type === undefined || r.type === 'csp-violation')).map(r => r.body)
     : j && typeof j === 'object' && j['csp-report'] ? [j['csp-report']] : [];
   const nu = Date.now(); if (nu - _cspVenster.t > 60000) { _cspVenster.t = nu; _cspVenster.n = 0; }
-  _teller.csp = _teller.csp || {}; _teller.cspTotaal = _teller.cspTotaal || 0;
-  let geteld = 0;
+  const items = [];
   for (const b of lijst.slice(0, CSP_PER_BERICHT)) {
     if (_cspVenster.n >= CSP_PER_MIN) break;
     const v = cspVeld(b); if (!v) continue;
-    _cspVenster.n++; geteld++;
-    const k = v.directive + '|' + v.host;
-    if (_teller.csp[k] != null || Object.keys(_teller.csp).length < 200) _teller.csp[k] = (_teller.csp[k] || 0) + 1;
-    _teller.cspTotaal++;
+    _cspVenster.n++; items.push(v.directive + '|' + v.host);
     console.log(JSON.stringify({ csp: v.directive, host: v.host }));
   }
-  if (geteld) { if (!_teller.dag) _teller.dag = new Date().toISOString().slice(0, 10); if (Date.now() - _teller.laatsteFlush > LOG_FLUSH_MS) waitUntil(ctx, flushTeller(env).catch(() => {})); }
+  // Tellen in de DO (nooit KV); zonder binding of bij een fout gaat het rapport verloren, de browser merkt niets.
+  if (items.length && env.MT_TELLER && env.MT_TELLER.idFromName) waitUntil(ctx, (async () => { try { await env.MT_TELLER.get(env.MT_TELLER.idFromName('csp')).fetch('https://mt-teller/csp-tel', { method: 'POST', body: JSON.stringify({ dag: new Date().toISOString().slice(0, 10), nu: Date.now(), items }) }); } catch {} })());
   return new Response(null, { status: 204, headers: CSP_KOP });
 }
 async function noteerBesluit(env, ctx, b) {
@@ -1462,6 +1456,7 @@ export class MtTeller {
     let b = {}; try { b = await request.json(); } catch {}
     const st = this.state.storage, antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
     if (op.startsWith('ai-')) return await this.ai(op, b);
+    if (op.startsWith('csp-')) return await this.csp(op, b);
     if (op === 'alle') {
       const m = await st.list({ prefix: 'pid:' }), werkcodes = {};
       for (const [k, w] of m) werkcodes[k.slice(4)] = w.code;
@@ -1569,6 +1564,41 @@ export class MtTeller {
       } catch (e) { return antw({ error: 'opslag', detail: String((e && e.message) || e).slice(0, 120) }, 503); }
     });
   }
+  // CSP-tellers (instantie 'csp'): per dag { totaal, afgewezen, sleutels:{ 'directive|host': n } }, met een globaal budget per minuut en per dag.
+  async csp(op, b) {
+    const st = this.state.storage, antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    const dag = String(b.dag || ''), nu = Number(b.nu) || Date.now();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dag)) return antw({ error: 'ongeldig' }, 400);
+    return await this.state.blockConcurrencyWhile(async () => {
+      try {
+        if (op === 'csp-tel') {
+          const items = (Array.isArray(b.items) ? b.items : []).slice(0, CSP_PER_BERICHT).filter(k => typeof k === 'string' && /^[a-z][a-z-]{1,40}\|[a-z0-9.:-]{1,80}$/.test(k));
+          if (!items.length) return antw({ ok: true, geteld: 0 });
+          let w = (await st.get('venster')) || { t: 0, n: 0 }; if (nu - w.t > 60000 || nu < w.t) w = { t: nu, n: 0 };
+          const ck = 'c:' + dag, rec = (await st.get(ck)) || { totaal: 0, afgewezen: 0, sleutels: {} };
+          let geteld = 0;
+          for (const k of items) {
+            if (w.n >= CSP_DO_PER_MIN || rec.totaal >= CSP_DO_DAGBUDGET) { rec.afgewezen++; continue; }
+            w.n++; rec.totaal++; geteld++;
+            if (rec.sleutels[k] != null || Object.keys(rec.sleutels).length < CSP_MAX_SLEUTELS) rec.sleutels[k] = (rec.sleutels[k] || 0) + 1;
+          }
+          await st.put({ venster: w, [ck]: rec });
+          if ((await st.get('opruim')) !== dag) {                      // één keer per dag: oude tellers weg
+            const grens = geldDag(dag, -CSP_BEWAAR_DAGEN), oud = [...(await st.list({ prefix: 'c:' }))].map(([k]) => k).filter(k => k.slice(2) < grens);
+            for (let i = 0; i < oud.length; i += 100) await st.delete(oud.slice(i, i + 100));
+            await st.put('opruim', dag);
+          }
+          return antw({ ok: true, geteld });
+        }
+        if (op === 'csp-overzicht') {
+          const n = Math.max(1, Math.min(31, Number(b.dagen) || 7)), vanaf = geldDag(dag, -(n - 1)), uit = { totaal: 0, afgewezen: 0, sleutels: {} };
+          for (const [k, r] of await st.list({ prefix: 'c:' })) { const d = k.slice(2); if (d < vanaf || d > dag) continue; uit.totaal += r.totaal || 0; uit.afgewezen += r.afgewezen || 0; for (const [sl, cn] of Object.entries(r.sleutels || {})) uit.sleutels[sl] = (uit.sleutels[sl] || 0) + cn; }
+          return antw(uit);
+        }
+        return antw({ error: 'onbekend' }, 404);
+      } catch (e) { return antw({ error: 'opslag', detail: String((e && e.message) || e).slice(0, 120) }, 503); }
+    });
+  }
   // Een claim die nooit werd afgerond (afgebroken verbinding, crash): de invoerschatting blijft staan (behoudend), de ONGEBRUIKTE output-reservering gaat terug.
   // Alleen de claims onder `prefix` ('f:' = alle gebruikers, 'f:<oid>:' = één gebruiker). Aanroepen binnen blockConcurrencyWhile. → aantal opgeruimde claims.
   async aiRuimVerlopen(nu, prefix, dagStd) {
@@ -1641,9 +1671,9 @@ const AI_WEIGER = { dag: 'Je AI-limiet voor vandaag is bereikt. Morgen kun je we
   minuut: 'Even rustig aan: er zijn te veel AI-verzoeken in één minuut gedaan. Probeer het zo opnieuw.',
   gelijktijdig: 'Er loopt al een AI-verzoek van jou. Wacht tot dat klaar is en probeer het dan opnieuw.',
   totaal: 'De AI-limiet van de hele tool voor vandaag is bereikt. Probeer het morgen opnieuw of vraag de eigenaar om hulp.' };
-async function aiDO(env, op, body) {
+async function aiDO(env, op, body, instantie = 'ai') {
   const ns = env.MT_TELLER; if (!ns || !ns.idFromName) return null;
-  const r = await ns.get(ns.idFromName('ai')).fetch('https://mt-teller/' + op, { method: 'POST', body: JSON.stringify(body) });
+  const r = await ns.get(ns.idFromName(instantie)).fetch('https://mt-teller/' + op, { method: 'POST', body: JSON.stringify(body) });
   return { status: r.status, j: await r.json().catch(() => null) };
 }
 // Toetsen vóór het verzoek naar Anthropic gaat. → { ok:true, claim?, ... } of { ok:false, status, body, wacht_s }
@@ -4104,7 +4134,7 @@ async function handleBeheer(pathname, request, env, ik, json) {
   }
   if (p === '/beheer/log' && m === 'GET') {
     const dagen = Math.max(1, Math.min(31, parseInt(new URL(request.url).searchParams.get('dagen') || '7', 10) || 7));
-    const tot = { totaal: 0, geweigerd: 0, redenen: {}, proxy: {}, proxyTotaal: 0, csp: {}, cspTotaal: 0 }, perDag = [];
+    const tot = { totaal: 0, geweigerd: 0, redenen: {}, proxy: {}, proxyTotaal: 0 }, perDag = [];
     for (let i = 0; i < dagen; i++) {
       const dag = new Date(Date.now() - i * DAG_S * 1000).toISOString().slice(0, 10);
       const s = await kvJson(env, 'stat:' + dag); if (!s) continue;
@@ -4112,14 +4142,15 @@ async function handleBeheer(pathname, request, env, ik, json) {
       tot.totaal += s.totaal; tot.geweigerd += s.geweigerd; tot.proxyTotaal += s.proxyTotaal || 0;
       for (const [k, n] of Object.entries(s.redenen || {})) tot.redenen[k] = (tot.redenen[k] || 0) + n;
       for (const [k, n] of Object.entries(s.proxy || {})) tot.proxy[k] = (tot.proxy[k] || 0) + n;
-      tot.cspTotaal += s.cspTotaal || 0; for (const [k, n] of Object.entries(s.csp || {})) tot.csp[k] = (tot.csp[k] || 0) + n;
     }
+    let csp = { totaal: 0, afgewezen: 0, sleutels: {} }, cspBeschikbaar = false;   // CSP-tellers staan in de teller-DO, niet in KV
+    try { const x = await aiDO(env, 'csp-overzicht', { dag: new Date().toISOString().slice(0, 10), dagen }, 'csp'); if (x && x.status === 200 && x.j) { csp = x.j; cspBeschikbaar = true; } } catch {}
     const proxyTop = Object.entries(tot.proxy).sort((a, b) => b[1] - a[1]).slice(0, 25)
       .map(([k, n]) => { const [target, actie, reden] = k.split('|'); return { target, actie, reden, n }; });
     const top = Object.entries(tot.redenen).sort((a, b) => b[1] - a[1]).slice(0, 25)
       .map(([k, n]) => { const [rol, actie, reden] = k.split('|'); return { rol, actie, reden, n }; });
     return json({ modus: rollenModus(env), proxyModus: proxyModus(env), dagen, totaal: tot.totaal, geweigerd: tot.geweigerd, perDag, top, proxyAfwijkingen: tot.proxyTotaal, proxyTop,
-      cspTotaal: tot.cspTotaal, cspTop: Object.entries(tot.csp).sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, n]) => { const [directive, host] = k.split('|'); return { directive, host, n }; }) });
+      cspTotaal: csp.totaal, cspAfgewezen: csp.afgewezen, cspBeschikbaar, cspTop: Object.entries(csp.sleutels).sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, n]) => { const [directive, host] = k.split('|'); return { directive, host, n }; }) });
   }
   return json({ error: 'unknown-beheer-route' }, 404);
 }
