@@ -1612,7 +1612,7 @@ function geldConfigNorm(c) {
     id: String(g.id), naam: String(g.naam || g.id).slice(0, 60), prefix: String(g.prefix || '').trim().slice(0, 60),
     contact_ids: (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String).filter(x => /^\d{6,25}$/.test(x)).slice(0, 200) }))
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
-  return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
+  const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
     buffer_lopend: typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? c.buffer_lopend : null,
     // G7: fictieve buffer op lopend (≥ 0). Alleen een gele lijn in de grafiek en de onderkant van de kasruimte/Koersmeter; nooit als getal in Geld (behalve Instellingen).
     fictieve_buffer: getal(c.fictieve_buffer, 0, 1e9),
@@ -1629,6 +1629,26 @@ function geldConfigNorm(c) {
     btw: { modus: btw.modus === 'apart' ? 'apart' : 'in_lopend', spaarpercentage: getal(btw.spaarpercentage, 0, 1), spaarpot: uniek.some(p => p.id === btw.spaarpot && !p.virtueel) ? btw.spaarpot : null,
       aangifte_van: rek(btw.aangifte_van), terugboeking_van: rek(btw.terugboeking_van) },
     gewijzigd: c.gewijzigd || null, door: c.door || null, revisie: Number.isInteger(c.revisie) ? c.revisie : 0 };
+  uit.streef_herkomst = geldStreefHerkomst(c.streef_herkomst, uit);
+  return uit;
+}
+// G7: de streefbedragen (fictieve buffer, streefomvang noodbuffer, streefniveau lopend) volgen standaard het berekende advies; een eigen bedrag wint, leeg = weer het advies.
+// De herkomst wordt uit de bedragen zelf afgeleid ('handmatig' = er is een eigen bedrag, anders 'advies') en met datum en naam van de laatste wijziging vastgelegd.
+const geldEigenStreef = x => !!x && (x.bedrag != null || (x.van != null && x.tot != null));
+function geldNoodPotId(cfg) {
+  if (cfg.reserve && cfg.reserve.pot) return cfg.reserve.pot;
+  const p = cfg.potten.find(x => x.doel === 'buffer' && !x.virtueel && x.actief !== false && x.id !== (cfg.btw || {}).spaarpot);
+  return p ? p.id : null;
+}
+function geldStreefBedragen(cfg) {
+  const np = geldNoodPotId(cfg), pot = cfg.potten.find(x => x.id === np), sj = x => x ? [x.bedrag, x.van, x.tot] : null;
+  return { fictieve_buffer: cfg.fictieve_buffer, noodbuffer: pot && geldEigenStreef(pot.streef) ? sj(pot.streef) : null, lopend: geldEigenStreef(cfg.lopend_streef) ? sj(cfg.lopend_streef) : null };
+}
+function geldStreefHerkomst(oud, cfg) {
+  oud = oud && typeof oud === 'object' ? oud : {};
+  const b = geldStreefBedragen(cfg), eigen = { fictieve_buffer: b.fictieve_buffer != null, noodbuffer: b.noodbuffer != null, lopend: b.lopend != null }, r = {};
+  for (const k of Object.keys(eigen)) { const o = oud[k] && typeof oud[k] === 'object' ? oud[k] : {}; r[k] = { bron: eigen[k] ? 'handmatig' : 'advies', datum: geldIsDatum(o.datum) ? o.datum : null, door: typeof o.door === 'string' ? o.door.slice(0, 60) : null }; }
+  return r;
 }
 async function geldConfig(env) { return geldConfigNorm(await kvJson(env, 'geld:config')); }
 // De BTW-pot: de ingestelde spaarpot, anders het (eerste) actieve potje met doel 'btw'.
@@ -3476,6 +3496,9 @@ async function handleGeld(p, request, env, ik, json0) {
     const ts = Date.now(), norm = geldConfigNorm(Object.assign(nieuw, { gewijzigd: new Date(ts).toISOString(), door: (ik.rec && ik.rec.naam) || ik.email || ik.oid, revisie: oud.revisie + 1 }));
     if ('btw' in b) for (const k of ['spaarpot', 'aangifte_van', 'terugboeking_van']) if (b.btw && b.btw[k] != null && norm.btw[k] !== b.btw[k]) return json({ error: `btw.${k}: onbekende rekening/pot` }, 400);
     await kvZet(env, `geld:config:historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, oud);   // vorige stand bewaard
+    // G7: wijzigt een streefbedrag (of de keuze eigen bedrag ↔ advies), leg datum en naam vast
+    { const vb = geldStreefBedragen(oud), nb = geldStreefBedragen(norm);
+      for (const k of Object.keys(nb)) if (JSON.stringify(vb[k]) !== JSON.stringify(nb[k])) norm.streef_herkomst[k] = { bron: norm.streef_herkomst[k].bron, datum: geldVandaag(), door: norm.door || null }; }
     await kvZet(env, 'geld:config', norm);
     await geldZetVersie(env, `${ts}-c${randHex(3)}`, ctx);
     await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'geld-config', doel: 'geld', doelNaam: 'instellingen: ' + gewijzigd.join(', ') });   // geen bedragen

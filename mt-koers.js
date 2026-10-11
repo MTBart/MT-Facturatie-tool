@@ -47,7 +47,7 @@
     const L = (data.saldo && data.saldo.lopend) || {};
     const soort = G.drempelSoort ? G.drempelSoort(data, cfg) : cfg && cfg.buffer_lopend != null ? 'ondergrens' : 'nul';   // 'fictief' = de gele lijn, 'ondergrens' = eigen ondergrens, 'nul' = de nullijn
     const W = data.waarschuwingen || [];
-    const kas = { laagste: low, zonderPrognose: zonder, ondergrens: low ? G.drempel(data, cfg, low.datum) : null, soort, kredietlimiet: L.kredietlimiet != null ? L.kredietlimiet : null,
+    const kas = { laagste: low, zonderPrognose: zonder, ondergrens: low ? G.drempel(data, cfg, low.datum) : null, soort, bron: G.fictiefBron ? G.fictiefBron(data, cfg) : null, kredietlimiet: L.kredietlimiet != null ? L.kredietlimiet : null,
       vasteLasten: G.vasteLastenMaand(data), onvolledig: K.onvolledig(W).filter((x, i, a) => a.indexOf(x) === i) };
     // b + c: cijfers (per maand, `maanden` > 0 = er is een record)
     const r = cijfers && cijfers.r, per = new Map(((r && r.perioden) || []).map(m => [m.id, m]));
@@ -88,7 +88,7 @@
     m.getal = Math.round(ruimte); m.datum = k.laagste.datum; m.grensNaam = grensNaam;
     m.waarde = (ruimte < 0 ? '' : '+') + kort(ruimte);
     // de fictieve buffer staat als bedrag alleen in Instellingen: hier geen getal van de gele lijn
-    m.sub.push(k.soort === 'fictief' ? `laagste punt ${kort(k.laagste.saldo)} op ${datum(k.laagste.datum)} · tot de gele lijn` : `laagste punt ${kort(k.laagste.saldo)} op ${datum(k.laagste.datum)} · ${grensNaam} ${kort(grens)}`);
+    m.sub.push(k.soort === 'fictief' ? `laagste punt ${kort(k.laagste.saldo)} op ${datum(k.laagste.datum)} · tot de gele lijn (${k.bron === 'advies' ? 'volgt advies' : 'eigen bedrag'})` : `laagste punt ${kort(k.laagste.saldo)} op ${datum(k.laagste.datum)} · ${grensNaam} ${kort(grens)}`);
     if (!k.soort || k.soort === 'nul') m.sub.push('geen fictieve buffer ingesteld: gerekend vanaf € 0');
     if (k.kredietlimiet != null && k.laagste.saldo < -k.kredietlimiet) m.sub.push(`onder de kredietlimiet (${kort(-k.kredietlimiet)})`);
     if (k.zonderPrognose && Math.round(k.zonderPrognose.saldo) !== Math.round(k.laagste.saldo)) m.sub.push(`zonder prognose: ruimte ${kort(k.zonderPrognose.saldo - grens)} op ${datum(k.zonderPrognose.datum)}`);

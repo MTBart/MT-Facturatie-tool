@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — G7 Besteedbaar budget in Geld: hoofdgetal, noodbuffer met vinkje, fictieve buffer als gele lijn, lijnen en adviezen
+- Commit: `5f13848` | Auteur: Bart Witte
+
 ## 2026-10-11 — Release v2.12.4: tekstbeveiliging ook in Geld, Koersmeter, rapporten, cijfers, schulden, verhuisknop, aanwezigheid en dialogen (F7 3b groep 6, 3b af); backup = v2.12.3
 - Commit: `35773f5` | Auteur: Bart Witte
 

@@ -24,7 +24,9 @@
   "eurVetHtml",
   "kaartBesteed",
   "noodKaart",
-  "adv"
+  "adv",
+  "hintHtml",
+  "veldHtml"
  ],
  "houd": [
   {
@@ -155,9 +157,21 @@
   },
   {
    "fn": "instBlad",
-   "exprBegin": "(() => { const np = G.noodPot(st.data, c), npot = (c.potten || []).find(x => x.id === np), ns = npot && npot.streef",
+   "exprBegin": "(() => { const e = G.effCfg(st.data, c), np = G.noodPot(st.data, c), npot = (c.potten || []).find(x ",
    "fp": "b68c8be750",
-   "reden": "IIFE geeft de drie instellingenvelden terug als HTML-fragment: alle bedragen en teksten gaan via esc() (adv(), value=esc(...))"
+   "reden": "IIFE geeft de drie instellingenvelden terug als HTML-fragment: alle bedragen en teksten gaan via esc() (hintHtml(), veldHtml(), value=esc(...))"
+  },
+  {
+   "fn": "instBlad",
+   "expr": "eigen ? 'eigen bedrag' : a ? 'volgt advies' : 'geen bedrag'",
+   "fp": "b4c358bbea",
+   "reden": "vaste tekst (eigen bedrag / volgt advies / geen bedrag), geen data"
+  },
+  {
+   "fn": "instBlad",
+   "expr": "tekst",
+   "fp": "41c3ecc872",
+   "reden": "veldtekst van de aanroeper in veldHtml(): vaste tekst met esc()-delen (potnaam, bedragen via eur())"
   }
  ]
 }
