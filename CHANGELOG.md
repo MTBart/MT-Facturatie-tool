@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Geld: leveranciersposten niet meer als groen pijltje (concept-verkoop telt niet, inkoop-creditnota wordt verrekend of is tegoed)
+- Commit: `b5b069a` | Auteur: Bart Witte
+
 ## 2026-10-11 — P3b: generator uit, offertenummer overnemen bij versturen, meerwerk-offertes, mapnaam "Volledige naam [code]" voor nieuwe projecten
 - Commit: `3bcf037` | Auteur: Bart Witte
 

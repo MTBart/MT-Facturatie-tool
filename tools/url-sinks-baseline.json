@@ -14,6 +14,12 @@
    "reden": "alleen gevuld na de controle /^https:\\/\\/moneybird\\.com\\// in eventDetail"
   },
   {
+   "bestand": "mt-geld.js",
+   "attr": "href",
+   "expr": "esc(st.desktopUrl)",
+   "reden": "alleen gevuld na de controle op https://host/pad(#anker) in G.start (opties.desktopUrl van de app zelf, een vaste constante)"
+  },
+  {
    "bestand": "mt-rapport.js",
    "attr": "href",
    "expr": "esc(b.url)",

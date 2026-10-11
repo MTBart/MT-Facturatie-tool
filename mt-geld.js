@@ -549,6 +549,24 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
 .mtg-toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--green,#2A4A38);color:#fff;padding:9px 14px;border-radius:20px;font-size:13px;z-index:9100;box-shadow:0 4px 14px rgba(0,0,0,.2)}
 @media(max-width:700px){.mtg-kaarten{grid-template-columns:repeat(2,minmax(0,1fr))}.mtg-k .w{font-size:19px}.mtg-grafiek svg{height:200px}}
 @media(max-width:380px){.mtg-kaarten{grid-template-columns:1fr}}
+.mtg-mob{max-width:none;margin:0;padding:12px 12px 28px;overflow-x:hidden}
+.mtg-mob .mtg-kaarten{grid-template-columns:1fr}
+.mtg-mob .mtg-k .w{font-size:24px}
+.mtg-mob .mtg-knop,.mtg-mob .mtg-knop.klein{min-height:44px;padding:8px 14px;font-size:14px}
+.mtg-mob .mtg-vraag{width:44px;height:44px;line-height:40px;font-size:15px;margin:-8px -8px -8px 0}
+.mtg-mob a{color:var(--green-mid,#4A7A5C)}
+.mtg-mob .mtg-rij{min-height:48px}
+.mtg-mob .mtg-rij .n{white-space:normal}
+.mtg-mob .mtg-k label{min-height:44px;display:flex;align-items:center}
+.mtg-mob .mtg-k input[type=checkbox],.mtg-blad input[type=checkbox]{width:24px;height:24px;flex:none}
+.mtg-mob a.mtg-knop{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
+.mtg-mob input,.mtg-mob select,.mtg-blad input,.mtg-blad select{font-size:16px}
+.mtg-mob .mtg-grafiek{max-width:100%}
+.mtg-mob .mtg-grafiek svg{height:230px}
+.mtg-blad .mtg-knop{min-height:44px}
+.mtg-mob .mtk-gelezen{min-height:44px;min-width:96px}
+.mtg-mob .mtk-i{min-width:44px;height:44px;margin:-8px -8px -8px 0}
+.mtg-mob .mtk-och-rij button{align-self:flex-end}
 `;
     document.head.appendChild(s);
   }
@@ -562,7 +580,9 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     st.el = el; st.bron = opties.bron; st.mag = !!opties.magWijzigen; st.wie = opties.wie || ''; st.ververst = false; st.scenario = {};
     st.koers = { r: null, laden: false, fout: null, rondes: 0 };
     st.projecten = opties.projecten || null; st.offerteBedrag = opties.offerteBedrag || null;
+    st.compact = !!opties.compact; st.desktopUrl = /^https:\/\/[A-Za-z0-9.-]+\/[A-Za-z0-9._~\/-]*(#[A-Za-z0-9=&_-]*)?$/.test(String(opties.desktopUrl || '')) ? String(opties.desktopUrl) : '';   // mobiel: alleen het belangrijkste, touch-vriendelijk
     if (ls.get('mtg:zoom:' + st.wie)) st.zoom = ls.get('mtg:zoom:' + st.wie);
+    if (st.compact && st.zoom === 'jaar') st.zoom = 'kwartaal';
     if (ls.get('mtg:prognose:' + st.wie) === '0') st.prognose = false;
     st.noodMee = ls.get('mtg:nood:' + st.wie) === '1';   // G7: noodbuffer meenemen (per gebruiker onthouden)
     css();
@@ -674,16 +694,16 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const noodStand = bes && bes.nood.stand != null ? Math.max(0, bes.nood.stand) : 0, grensSoort = G.drempelSoort(d, st.cfg), onder = G.drempel(d, st.cfg);
     st.meegroei = st.mag && st.cfg ? G.meegroeiPlan(d, st.cfg) : { wijzig: [], voorstel: [] };
     const ruimte = low ? rond(low.saldo - onder) : null;
-    const introWeg = ls.get('mtg:intro:' + st.wie) === 'weg';
-    st.el.innerHTML = `<div class="mtg">
-  <div class="mtg-kop"><h2>Geld</h2>
+    const introWeg = ls.get('mtg:intro:' + st.wie) === 'weg', c = st.compact;
+    st.el.innerHTML = `<div class="mtg${c ? ' mtg-mob' : ''}">
+  ${c ? '' : `<div class="mtg-kop"><h2>Geld</h2>
     <div class="mtg-knoppen">
       <button class="mtg-knop ${st.modus === 'lopend' ? 'aan' : ''}" data-modus="lopend">Besteedbaar budget</button>
       <button class="mtg-knop ${st.modus === 'totaal' ? 'aan' : ''}" data-modus="totaal" title="De spaarpotjes zijn geen buffer: dat geld blijft eraf">Inclusief spaarpotjes (niet bedoeld als buffer)</button>
       ${introWeg ? '<button class="mtg-vraag" data-intro="1" title="Wat zie je hier?">?</button>' : ''}
-    </div></div>
+    </div></div>`}
   <div id="mtk-plek">${koersHtml()}</div>
-  ${introWeg ? '' : `<div class="mtg-uitleg"><b>Wat zie je hier?</b> ${esc(UITLEG.intro)} <button class="mtg-knop klein" data-intro="weg">Begrepen</button></div>`}
+  ${introWeg || c ? '' : `<div class="mtg-uitleg"><b>Wat zie je hier?</b> ${esc(UITLEG.intro)} <button class="mtg-knop klein" data-intro="weg">Begrepen</button></div>`}
   ${drukHtml()}
   ${verseKs().length ? '<div class="mtg-melding">✓ Net opgeslagen — wordt verwerkt (op andere apparaten kan het een minuut duren).</div>' : ''}
   ${st.bezig ? '<div class="mtg-uitleg">Betaalgedrag en vaste patronen worden bijgewerkt… (de lijn ververst vanzelf)</div>' : ''}
@@ -691,12 +711,12 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     ${kaartBesteed(bes, d)}
     <div class="mtg-k ${esc(low && (low.saldo < 0 ? 'rood' : low.saldo < onder ? 'amber' : ''))}"><div class="l"><span>${heeftProg && st.prognose ? 'Laagste punt (incl. prognose)' : 'Laagste punt'}</span><button class="mtg-vraag" data-uitleg="laagste">?</button></div>
       <div class="w">${esc(low ? eur(low.saldo) : '—')}</div><div class="s">${low ? `<a href="#" data-laag="1" title="Naar die dag in de grafiek, met de grootste oorzaken">${esc(datumTekst(low.datum, true))} · waardoor?</a> · komende ${st.zoom === 'week' ? '2 weken' : esc(st.zoom)}${lowZonder ? ` · zonder prognose: ${esc(eur(lowZonder.saldo))} op ${esc(datumTekst(lowZonder.datum))}` : ''}${nood ? ' · incl. noodbuffer' : ''}${(st.zoom === 'kwartaal' || st.zoom === 'jaar') && low.datum > G.onzekerVanaf(d, { prognose: st.prognose }) ? ' · let op: valt waar alleen vaste lasten bekend zijn (vul de prognose aan)' : ''}` : ''}</div></div>
-    ${kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, ruimteSub(low, d, { limiet, noodStand, nood, grensSoort, fictBron: G.fictiefBron(d, st.cfg) }))}
+    ${c ? '' : kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, ruimteSub(low, d, { limiet, noodStand, nood, grensSoort, fictBron: G.fictiefBron(d, st.cfg) }))}
     ${noodKaart(d, bes, nood, kosten)}
   </div>
   <div class="mtg-kaart">
     <div class="mtg-kop" style="margin:0 0 6px"><b style="flex:1">Verloop ${st.modus === 'totaal' ? 'totaal' : 'besteedbaar budget'}</b>
-      <div class="mtg-knoppen">${Object.keys(ZOOM).map(z => `<button class="mtg-knop klein ${st.zoom === z ? 'aan' : ''}" data-zoom="${esc(z)}">${esc(z)}</button>`).join('')}
+      <div class="mtg-knoppen">${Object.keys(ZOOM).filter(z => !(c && z === 'jaar')).map(z => `<button class="mtg-knop klein ${st.zoom === z ? 'aan' : ''}" data-zoom="${esc(z)}">${esc(z)}</button>`).join('')}
       ${st.offset ? '<button class="mtg-knop klein" data-terug="1">vandaag</button>' : ''}
       ${heeftProg ? `<button class="mtg-knop klein ${st.prognose ? 'aan' : ''}" data-prognose="1" title="Prognose meenemen">prognose</button>` : ''}
       <button class="mtg-vraag" data-uitleg="lijn">?</button></div></div>
@@ -704,14 +724,14 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     <div class="mtg-legenda"><span><i></i>saldo</span><span><i style="border-top-style:dashed"></i>verwacht</span>${heeftProg && st.prognose ? '<span><i style="border-top:2px dotted #3a5a8a"></i>met prognose (waar het afwijkt)</span>' : ''}${st.modus === 'lopend' ? `${fict > 0 ? '<span><i style="border-top:2px solid #d9a400"></i>fictieve buffer (geel)</span>' : ''}${noodStand > 0 && !nood ? '<span><i style="border-top:2px solid #e07b1a"></i>noodbuffer is op (oranje)</span>' : ''}${limiet != null ? '<span><i style="border-color:var(--mtg-uit)"></i>kredietlimiet (rood)</span>' : ''}${nood ? '<span>incl. noodbuffer</span>' : ''}` : ''}<span><i style="border-top:8px solid rgba(138,138,128,.15);vertical-align:-2px"></i>alleen vaste lasten bekend</span>${st.modus === 'lopend' && cfgE().lopend_streef && cfgE().lopend_streef.datum ? '<span><i style="border-top:2px dashed var(--gold,#B8962E)"></i>doelpad</span>' : ''}<span class="mtg-in">▲ erbij</span><span class="mtg-uit">▼ eraf</span><span>⚑ mijlpaal</span></div>
   </div>
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Komende 14 dagen</b><button class="mtg-vraag" data-uitleg="lijst">?</button></div>${lijstHtml()}</div>
-  ${prognoseHtml()}
+  ${c ? `${letOpHtml()}${mobielStaart()}` : `${prognoseHtml()}
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Potjes en doelen</b><button class="mtg-vraag" data-uitleg="potjes">?</button></div>${potjesHtml()}</div>
   ${schuldenHtml()}
   ${roodHtml()}
   ${instellenHtml()}
   ${letOpHtml()}
   ${patronenHtml()}
-  ${st.mag ? instellingenHtml() : ''}
+  ${st.mag ? instellingenHtml() : ''}`}
 </div>`;
     grafiek();
     const rk = st.el.querySelector('#mtg-rood'); if (rk) rk.addEventListener('toggle', () => { st.roodOpen = rk.open; });
@@ -907,6 +927,10 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     return `<div class="mtg-k ${rood ? 'rood' : ''}"><div class="l"><span>${esc(titel)}</span><button class="mtg-vraag" data-uitleg="${esc(sleutel)}">?</button></div><div class="w">${esc(waarde)}</div><div class="s">${esc(sub || '')}</div></div>`;
   }
   // Lijst: vandaag t/m +14, inclusief achterstallig (staat op vandaag); zonder datum apart.
+  // Mobiel: wat hier niet staat (potjes, prognose, schulden, instellingen, rapporten) staat op de computer.
+  function mobielStaart() {
+    return `<div class="mtg-kaart"><div class="mtg-melding" style="padding:0 0 8px">Potjes en doelen, prognose, schulden, instellingen en rapporten staan op de computer.</div>${st.desktopUrl ? `<a class="mtg-knop" href="${esc(st.desktopUrl)}" target="_blank" rel="noopener">Meer op de computer ↗</a>` : ''}</div>`;
+  }
   function lijstHtml() {
     const d = st.dataS || st.data, eind = dagPlus(d.vandaag, 14);
     const ev = (d.events || []).filter(e => isGepland(e) && G.telt(e, { prognose: st.prognose }) && e.datum <= eind && !(e.intern && e.bron === 'btw-sparen'))

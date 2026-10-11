@@ -132,6 +132,14 @@ body{
 .zb-laag[hidden]{display:none}
 .zb-laag-kop{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)}
 .zb-laag-kop .zb-veld{flex:1 1 auto;width:auto;font-size:16px;padding:10px 16px}   /* 16px: iOS zoomt anders in op het veld */
+.geld-laag{position:fixed;left:0;top:0;width:100%;height:100%;z-index:1200;background:var(--bg,#f6f5f0);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+.geld-laag[hidden]{display:none}
+.geld-laag-kop{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--n-0,#fff)}
+.geld-terug{min-height:44px;padding:0 18px;border:0;border-radius:22px;background:var(--n-150,#EDF1F0);color:var(--text,#172521);font-size:16px;font-weight:600;cursor:pointer}
+.geld-laag-titel{font-size:18px;font-weight:600}
+.geld-laag-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.geld-laag-leeg{padding:24px 16px;font-size:15px;color:var(--text-faint,#6b7a76)}
+.geld-laag-leeg button{min-height:44px;margin-top:12px;padding:0 18px;font-size:16px}
 .zb-terug{flex:0 0 44px;height:44px;border:0;border-radius:50%;background:var(--n-150,#EDF1F0);color:var(--text,#172521);font-size:20px;cursor:pointer}
 .zb-laag-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .zb-hint{padding:18px 16px;font-size:13px;color:var(--text-faint)}
@@ -797,7 +805,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
   <div class="app-title" style="display:flex;align-items:center">M<span>&amp;</span>T<span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></div>
   <div class="header-btns">
     <button class="header-info-btn" id="zoekKnop" type="button" aria-label="Zoeken" aria-haspopup="dialog" title="Zoeken">🔍</button>
-    <button class="header-info-btn" id="geldKnop" style="display:none" onclick="location.href='v2.html#tab=geld'" aria-label="Geld (geldtijdlijn)" title="Geld">€</button>
+    <button class="header-info-btn" id="geldKnop" style="display:none" onclick="geldLaagOpen()" aria-label="Geld (geldtijdlijn)" title="Geld">€</button>
     <button class="header-info-btn notif-btn" onclick="openNotifs()" aria-label="Notificaties">🔔<span class="notif-badge" id="notifBadge" style="display:none">0</span></button>
     <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
     <button class="user-avatar-btn" id="verhuisBtn" style="display:none" onclick="verhuisOpen()" title="Verhuizen naar het nieuwe adres" aria-label="Verhuizen naar het nieuwe adres">⇄</button>
@@ -812,6 +820,15 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     <input id="zb-veld" class="zb-veld" type="text" placeholder="Zoek een project, taak of contact" aria-label="Zoeken" enterkeyhint="search" spellcheck="false">
   </div>
   <div class="zb-laag-body" id="zbLaagBody"><p class="zb-hint" id="zbHint">Typ een projectnaam, taak, naam of nummer.</p></div>
+</div>
+
+<!-- ── GELD-LAAG (opent met de €-knop in de kop; mt-geld.js in compacte weergave) ── -->
+<div class="geld-laag" id="geldLaag" role="dialog" aria-modal="true" aria-label="Geld" hidden>
+  <div class="geld-laag-kop">
+    <button type="button" class="geld-terug" id="geldTerug" aria-label="Geld sluiten">← Terug</button>
+    <span class="geld-laag-titel">Geld</span>
+  </div>
+  <div class="geld-laag-body" id="geldLaagBody"></div>
 </div>
 
 <!-- ── LOPENDE TIMER BAR ── -->
@@ -6334,6 +6351,85 @@ function zoekbalkInitM() {
   if (window.visualViewport) { window.visualViewport.addEventListener("resize", () => { if (!laag.hidden) zet(); }); window.visualViewport.addEventListener("scroll", () => { if (!laag.hidden) zet(); }); }
 }
 zoekbalkInitM();
+
+/* =====================================================================
+   GELD-LAAG — de €-knop opent een laag over het hele scherm met dezelfde mt-geld.js/mt-koers.js als de cockpit (compacte weergave:
+   ochtendmeldingen, Koersmeter, Besteedbaar, laagste punt, grafiek, komende 14 dagen). Eén bron, geen tweede rekenlogica. Zelfde
+   patroon als de zoeklaag: "← Terug", een history-entry (de Android-terugknop sluit de laag) en de app erachter blijft bewaard.
+   De scripts worden pas geladen als je de laag opent. Instellingen en rapporten blijven op de computer.
+   ===================================================================== */
+const GELD_SCRIPTS = ["mt-koers.js?v=2026-10-12b", "mt-geld.js?v=2026-10-12b"];
+let _geldScripts = null;
+function geldLaadScripts() {
+  if (window.MTGeld && window.MTKoers) return Promise.resolve();
+  if (_geldScripts) return _geldScripts;
+  const een = src => new Promise((ok, fail) => { const sc = document.createElement("script"); sc.src = src; sc.onload = ok; sc.onerror = () => fail(new Error("kon " + src.split("?")[0] + " niet laden")); document.head.appendChild(sc); });
+  _geldScripts = (async () => { for (const src of GELD_SCRIPTS) await een(src); })().catch(e => { _geldScripts = null; throw e; });
+  return _geldScripts;
+}
+async function geldHaalM(pad, opt) {
+  opt = opt || {};
+  const r = await fetchMetAuth(WORKER + pad, { method: opt.method || "GET", headers: { "Content-Type": "application/json" }, body: opt.body !== undefined ? JSON.stringify(opt.body) : undefined });
+  let j = null; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) return Object.assign({ error: (j && j.error) || ("HTTP " + r.status) }, j || {});
+  return j;
+}
+function geldMagM() { try { return !!(window.MTRol && MTRol.me && MTRol.magGeld()); } catch (e) { return false; } }
+function geldLaagInit() {
+  const laag = document.getElementById("geldLaag"), body = document.getElementById("geldLaagBody"), knop = document.getElementById("geldKnop");
+  if (!laag || !body || laag._init) return;
+  laag._init = true;
+  let vorigeFocus = null, geblokkeerd = [], histActief = false, naTerug = null, terugTimer = null, sessie = 0;
+  async function laad() {
+    const mijn = ++sessie;
+    body.innerHTML = '<div class="geld-laag-leeg">Geld laden…</div>';
+    try { await geldLaadScripts(); }
+    catch (e) {
+      if (mijn !== sessie) return;
+      body.innerHTML = '<div class="geld-laag-leeg">Geld kon niet geladen worden (' + esc(e.message || e) + ').<br><button type="button" class="btn btn-primary" id="geldOpnieuw">Opnieuw proberen</button></div>';
+      const o = document.getElementById("geldOpnieuw"); if (o) o.addEventListener("click", laad);
+      return;
+    }
+    if (mijn !== sessie || laag.hidden) return;
+    const wie = ((typeof _msAccount !== "undefined" && _msAccount && _msAccount.username) || "").toLowerCase();
+    let desktopUrl = ""; try { desktopUrl = new URL("v2.html#tab=geld", location.href).href; } catch (e) {}
+    await MTGeld.start(body, { bron: { haal: geldHaalM }, magWijzigen: MTRol.magGeld("wijzigen"), wie, compact: true, desktopUrl });
+  }
+  function open() {
+    if (!laag.hidden) return;
+    if (!geldMagM()) { showToast("Geld is alleen voor eigenaren en de administratie."); return; }
+    vorigeFocus = document.activeElement; laag.hidden = false;
+    geblokkeerd = [...document.body.children].filter(el => el !== laag && el.tagName !== "SCRIPT" && !el.inert);
+    geblokkeerd.forEach(el => { el.inert = true; });
+    try { history.pushState({ geldLaag: 1 }, ""); histActief = true; } catch (e) { histActief = false; }   // de Android-terugknop sluit dan de laag
+    laad();
+    const t = document.getElementById("geldTerug"); if (t) t.focus();
+  }
+  function dicht() {
+    sessie++; laag.hidden = true; geblokkeerd.forEach(el => { el.inert = false; }); geblokkeerd = [];
+    body.innerHTML = "";
+    document.querySelectorAll(".mtg-blad").forEach(b => b.remove());   // een open detailblad hoort bij de laag
+    if (vorigeFocus && vorigeFocus.focus) { try { vorigeFocus.focus(); } catch (e) {} } else if (knop) knop.focus();
+  }
+  function sluit(na) {
+    if (laag.hidden) { if (na) na(); return; }
+    dicht();
+    if (!histActief) { if (na) na(); return; }
+    histActief = false; naTerug = na || null;
+    terugTimer = setTimeout(() => { terugTimer = null; const f = naTerug; naTerug = null; if (f) f(); }, 400);   // vangnet als popstate uitblijft
+    try { history.back(); } catch (e) {}
+  }
+  window.addEventListener("popstate", () => {
+    if (terugTimer) { clearTimeout(terugTimer); terugTimer = null; const f = naTerug; naTerug = null; if (f) f(); return; }   // onze eigen history.back()
+    if (!laag.hidden && histActief) { histActief = false; dicht(); }                                                         // terugknop van het toestel
+  });
+  document.getElementById("geldTerug").addEventListener("click", () => sluit());
+  laag.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); sluit(); } });
+  window.geldLaagOpen = open; window.geldLaagSluit = sluit;
+  window.addEventListener("mtg-koers-gelezen", () => { try { geldBadgeLaad(); } catch (e) {} });   // de badge op de €-knop volgt het afvinken
+}
+geldLaagInit();
+window.geldLaagOpen = window.geldLaagOpen || function () {};
 
 /* =====================================================================
    TAKEN PER PROJECT (punt 2) — in project-detail-sheet
