@@ -148,7 +148,20 @@ cockpit / app (browser, MSAL-login @mortiseandtenon.nl)
 Auth per request: **`X-Auth-Token`** (MSAL-ID-token; Worker controleert
 handtekening RS256/kid, exp, nbf, tid, iss (v2, tenant `15b652c3…`), aud
 (client `a091db96…`) en oid). De `X-Claude-Key`-bypass is weg (F1b, geen
-gebruiker gevonden). CORS alleen voor `https://mtbart.github.io`.
+gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.mortiseandtenon.nl` en
+`https://mt-tool.pages.dev`; een onbekende of ontbrekende `Origin` krijgt **geen** `Access-Control-*`-headers
+(alleen `Vary: Origin`), dus de oude origin wordt niet meer gespiegeld.
+
+**Klantenlijst — `GET|POST /klanten` (F5).** Bron = KV `klanten:registry` (niet meer een bestand in de repo).
+- `GET`: iedereen met een rol (modus `afdwingen`: zonder rol 403 `geen-toegang`). In modus `log` mag een
+  **rolloze** GET nog wel, maar wordt apart geteld/gelogd als `klanten.zonder_rol` (alleen oid-hash, geen naam of
+  token; zichtbaar in `/beheer/log`). Antwoord `{klanten, bijgewerkt, rev}`; nog geen lijst → 404 `geen-klantenlijst` met `rev: 0`.
+- `POST` (alleen beheer): body `{klanten:[…], rev}`. `rev` = het getal uit de laatste GET en is verplicht; is hij
+  verouderd, dan **409** `verouderd` (met de huidige `rev`) en blijft alles bewaard. Streng: onbekende velden
+  (ook op het hoogste niveau van de body) → 400; `code`, `naam` en `mb_contact_id` moeten tekst zijn (`mb_contact_id`
+  ook `null`) — een getal geeft 400, want een 18-cijferig id rondt in JSON af. Opgeslagen wordt de canonieke vorm
+  (getrimde teksten). Elke vorige stand gaat naar `klanten:registry:historie:*`; auditlog zonder namen.
+  Let op: KV heeft geen compare-and-set; de revisiecontrole staat vlak vóór het schrijven.
 
 **Rollen (F1):** rol per oid in KV `MT_ROLLEN` (Eigenaar / Beheerder / Kantoor /
 Werkplaats / Alleen lezen), `requirePermission` per target. Modus `ROLLEN_MODUS`:

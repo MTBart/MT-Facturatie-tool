@@ -1296,7 +1296,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     <div class="sheet-body">
       <div class="field">
         <label>Projectnaam</label>
-        <input id="npName" placeholder="bv. CompaNanny Den Haag – Garderobe">
+        <input id="npName" placeholder="bv. Voorbeeldklant Den Haag – Garderobe">
       </div>
       <div class="field">
         <label>Klantcode</label>
@@ -2317,7 +2317,7 @@ function startDemoMode() {
 const PROJECTS = [
   {
     id:"p1",code:"CN-AMS-KEUKEN",
-    name:"CompaNanny Amsterdam – Keuken",
+    name:"Voorbeeldklant Amsterdam – Keuken",
     addr:"Parnassusweg 819, Amsterdam",
     status:"in-uitvoering",
     assigned:true,
@@ -2381,7 +2381,7 @@ const PROJECTS = [
   },
   {
     id:"p6",code:"CN-EIN-SPEEL",
-    name:"CompaNanny Eindhoven – Speelhoek",
+    name:"Voorbeeldklant Eindhoven – Speelhoek",
     addr:"Dommelseweg 12, Eindhoven",
     status:"concept",
     assigned:false,
@@ -2403,7 +2403,7 @@ const STATUS_MAP = {
 const AGENDA_DATA = {
   // monday = index 0 relative to week start (Mon 9 Jun 2026)
   0:[
-    {proj:"CN-AMS-KEUKEN",name:"CompaNanny Keuken",uren:"8u",who:"bart",start:"07:30",end:"15:30"},
+    {proj:"CN-AMS-KEUKEN",name:"Voorbeeldklant Keuken",uren:"8u",who:"bart",start:"07:30",end:"15:30"},
     {proj:"HWC-HRLM-KAST",name:"Heemstede Kast",uren:"4u",who:"mathijs",start:"08:00",end:"12:00"}
   ],
   1:[
@@ -2411,7 +2411,7 @@ const AGENDA_DATA = {
     {proj:"STY-RTD-WANDKAST",name:"Wandkast Rotterdam",uren:"6u",who:"mathijs",start:"09:00",end:"15:00"}
   ],
   2:[
-    {proj:"CN-AMS-KEUKEN",name:"CompaNanny Keuken",uren:"6u",who:"bart",start:"07:30",end:"13:30"},
+    {proj:"CN-AMS-KEUKEN",name:"Voorbeeldklant Keuken",uren:"6u",who:"bart",start:"07:30",end:"13:30"},
     {proj:"INT-AMS-BUREAU",name:"Directiemeubel",uren:"4u",who:"mathijs",start:"10:00",end:"14:00"}
   ],
   3:[
@@ -6602,7 +6602,7 @@ const NOTIF_FILE = "mt_notificaties.json";
 const NOTIF_SEED = [
   {id:"n1", title:"Herstelpunt toegevoegd", text:"Mathijs zette een herstelpunt op Badkamermeubel Utrecht — bekijk de checklist.", time:"Vandaag 09:12", doel:{type:"oplevering", projId:"p4"}},
   {id:"n2", title:"Planning gewijzigd", text:"Je staat donderdag op Wandkast Rotterdam (07:30–15:30).", time:"Vandaag 08:05", doel:{type:"agenda", week:CURRENT_WEEK_NR, day:3}},
-  {id:"n3", title:"Nieuwe taak voor jou", text:"“Plinten afkitten” staat klaar bij CompaNanny Keuken.", time:"Gisteren 16:40", doel:{type:"taak", projId:"p1"}}
+  {id:"n3", title:"Nieuwe taak voor jou", text:"“Plinten afkitten” staat klaar bij Voorbeeldklant Keuken.", time:"Gisteren 16:40", doel:{type:"taak", projId:"p1"}}
 ];
 let notifs = [];
 let _notifPollTimer = null;
@@ -6743,7 +6743,7 @@ function demoNotif() {
     const n = {
       id:"n"+Date.now(),
       title:"Opdrachtgever reageerde",
-      text:"CompaNanny bevestigt de oplevering: vrijdag 10:00 op locatie.",
+      text:"Voorbeeldklant bevestigt de oplevering: vrijdag 10:00 op locatie.",
       time:"Zojuist",
       doel:{type:"project", projId:"p1"}
     };
@@ -7180,7 +7180,7 @@ function veiligeSpUrl(u) { return window.veiligeUrl(u, { hosts: ['sharepoint.com
     let drafts = [];
     try { drafts = await FS.listDrafts(); } catch (e) {}
     // projectCode is exact — twee gelijknamige projecten (bv. de twee
-    // Bajeskwartier-records) hebben verschillende codes en blijven apart.
+    // Testlocatie-records) hebben verschillende codes en blijven apart.
     const d = p && drafts.find(x => x.projectCode === p.code && x.type === rapType);
     _rapId = d ? d.rapportId : FS.newId("rap");
     return _rapId;

@@ -53,6 +53,8 @@ vaste-lasten.json
 
 # Klantenlijst: sinds F5 (11-10-2026) alleen via de worker na login, nooit als bestand in de repo.
 data/klanten.json
+# Lokale koppeling klantcode -> Moneybird-zoekterm voor nieuw-project.ps1 / create-project-structure.ps1 (bevat klantnamen).
+data/klant-zoektermen.json
 
 # ---------- 2b. PRIVÉ-NOTITIES (F5, 11-10-2026: lokaal houden, niet in git) ----------
 CLAUDE.local.md
@@ -62,6 +64,10 @@ CLAUDE.local.md
 .claude/HANDOFF.md
 HANDOFF.md
 _uit-repo-*/
+# Claude-context/ bevat klant- en persoonsgegevens (STATUS.md, projecten.md, ...) → alleen lokaal. Uitzondering: het Toggl-contract
+# waar mt-toggl.js naar verwijst (geen klant- of persoonsgegevens).
+Claude-context/*
+!Claude-context/toggl2-api-bewezen.md
 
 # ---------- 3. RUNTIME / BACKUPS / TOOLING-ARTEFACTEN ----------
 _backups/

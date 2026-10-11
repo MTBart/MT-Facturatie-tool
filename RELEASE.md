@@ -7,8 +7,11 @@ worker-code meenemen die nog niet gedeployd is, mits de front-end ook met de oud
 2. **Controleren** — alle harnesses groen; de push-diff bevat geen secrets, persoonsgegevens, bedragen of klantnamen.
 3. **Back-up roteren** — `backup/` vullen met de huidige live-versie via `git archive origin/main`
    (v2.html, mobiel.html, uren.html, index.html, calc-engine.js, mt-*.js, track.js, sw.js,
-   manifest-mobiel.json, data/klanten.json, icons, vendor). In de html's alleen: `noindex`, titel
-   "BACKUP vX —" en de rode balk. Per bestand een hash-check (gelijk aan live, op die drie invoegingen na).
+   manifest-mobiel.json, icons, vendor). Doe dit met `python tools/backup-roteer.py vX JJJJ-MM-DD`: het script haalt
+   een eventuele harde klantenregistry (namen + Moneybird-contact-id's) en vaste voorbeeldnamen uit de KOPIE in `backup/`
+   (de repo is public) en scant daarna `backup/` met de lokale `data/klanten.json` als woordenlijst; "resten" moet `geen` zijn.
+   In de html's alleen: `noindex`, titel "BACKUP vX —" en de rode balk. Per bestand een hash-check (gelijk aan live na
+   neutralisatie, op die drie invoegingen na). Alleen de bestaande `backup/` opschonen zonder te roteren: `--saneer`.
 4. **Versielabel** — `<span class="header-version">` in v2.html naar de nieuwe versie.
 5. **"Wat is er verbeterd"** — bovenaan `data/updates.json` een item toevoegen:
    `{versie, datum (JJJJ-MM-DD), titel, voor: 'iedereen' | 'beheer', punten: [...]}`.

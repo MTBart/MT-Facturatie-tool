@@ -2,7 +2,8 @@
 
 Dit is de instructiehub voor Claude (Cowork, Claude Code, Claude Desktop, Claude Mobile).
 Klein gehouden zodat het in elke chat past zonder tokens te vreten.
-Specifieke kennis staat één laag dieper in `Claude-context/` — daar lezen op aanvraag.
+Specifieke kennis staat één laag dieper in `Claude-context/` — daar lezen op aanvraag. Die map staat **alleen lokaal**
+(niet in git: bevat klant- en persoonsgegevens); in een verse clone ontbreekt hij.
 
 **Privé-deel (bedrijf, team, communicatie, werkafspraken, paden):** `CLAUDE.local.md` — alleen lokaal, staat in
 `.gitignore`, hoort nooit in de repo (die is nog publiek).

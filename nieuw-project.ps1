@@ -5,13 +5,13 @@
     Met Moneybird API integratie. Token, admin-ID en basispad uit config.json.
 
 .PARAMETER Klantcode
-    Kortcode van de klant (bijv. CN, LGM). Optioneel — wordt interactief gevraagd.
+    Kortcode van de klant (zie data\klant-zoektermen.json of data\klanten.json). Optioneel — wordt interactief gevraagd.
 
 .PARAMETER Vestiging
     Vestigingsnaam voor de projectmap (bijv. Oosterpark). Optioneel.
 
 .EXAMPLE
-    .\nieuw-project.ps1 -Klantcode CN -Vestiging Oosterpark
+    .\nieuw-project.ps1 -Klantcode KLA -Vestiging Oosterpark
 #>
 
 param(
@@ -37,15 +37,34 @@ $Subfolders = @(
     "09_Werktekeningen"
 )
 
-$KlantMap = @{
-    "CN"  = "CompaNanny"
-    "LGM" = "LGM"
-    "MOS" = "Meubelinterieur"
-    "STY" = "Styles"
-    "HWC" = "Inter Projecten"
-    "DV"  = "David"
-    "JAN" = "Margret Jans"
+#region KlantMap
+# Geen klantnamen in de (publieke) repo. De koppeling klantcode -> zoekterm in Moneybird komt uit lokale, genegeerde bestanden:
+#   1. data\klant-zoektermen.json  { "zoektermen": { "KLA": "zoekterm" }, "straat_in_mapnaam": [ "deel van een klantnaam" ] }
+#   2. anders data\klanten.json    (klantenlijst; code -> naam)
+#   3. anders een neutraal voorbeeld.
+$KlantMap = @{ "KLA" = "Voorbeeldklant" }
+$StraatKlanten = @()
+try {
+    $dataMap = Join-Path $PSScriptRoot "data"
+    $ztPad = Join-Path $dataMap "klant-zoektermen.json"
+    $klPad = Join-Path $dataMap "klanten.json"
+    if (Test-Path $ztPad) {
+        $zj = (Get-Content $ztPad -Raw -Encoding UTF8).TrimStart([char]0xFEFF) | ConvertFrom-Json
+        $kaart = @{}
+        if ($zj.PSObject.Properties['zoektermen']) { foreach ($p in $zj.zoektermen.PSObject.Properties) { $kaart[[string]$p.Name] = [string]$p.Value } }
+        if ($kaart.Count -gt 0) { $KlantMap = $kaart }
+        if ($zj.PSObject.Properties['straat_in_mapnaam']) { $StraatKlanten = @($zj.straat_in_mapnaam | ForEach-Object { [string]$_ }) }
+    } elseif (Test-Path $klPad) {
+        $kj = (Get-Content $klPad -Raw -Encoding UTF8).TrimStart([char]0xFEFF) | ConvertFrom-Json
+        $kaart = @{}
+        foreach ($k in @($kj.klanten)) { if ($k.code -and $k.naam -and $k.code -ne 'INT') { $kaart[[string]$k.code] = [string]$k.naam } }
+        if ($kaart.Count -gt 0) { $KlantMap = $kaart }
+    }
+} catch {
+    Write-Host "Waarschuwing: klantenkoppeling niet geladen ($($_.Exception.Message)); neutraal voorbeeld gebruikt." -ForegroundColor Yellow
 }
+function Test-StraatKlant { param([string]$Naam) foreach ($d in $StraatKlanten) { if ($d -and $Naam -like "*$d*") { return $true } } return $false }
+#endregion
 
 # ---------------------------------------------------------------------------
 # Config laden
@@ -159,7 +178,7 @@ Write-Host "MT Mortise and Tenon - Nieuw Project" -ForegroundColor Cyan
 Write-Host ""
 
 if (-not $Klantcode) {
-    $Klantcode = (Read-Host "Klantcode (CN/LGM/MOS/STY/HWC/DV/JAN, of vrije zoekterm)").Trim()
+    $Klantcode = (Read-Host "Klantcode ($(($KlantMap.Keys | Sort-Object) -join '/'), of vrije zoekterm)").Trim()
 }
 if ([string]::IsNullOrWhiteSpace($Klantcode)) {
     Write-Host "FOUT: Geen klantcode opgegeven." -ForegroundColor Red; exit 1
@@ -182,9 +201,9 @@ if ([string]::IsNullOrWhiteSpace($Vestiging)) {
 # Mapnamen bouwen
 $safeName      = Get-SafePathName -Name $contact.name
 $safeVestiging = Get-SafePathName -Name $Vestiging
-$isCompaNanny  = $contact.name -like "*CompaNanny*"
+$metStraat     = Test-StraatKlant -Naam $contact.name
 
-if ($isCompaNanny) {
+if ($metStraat) {
     $street     = Get-SafePathName -Name (Get-StreetFromAddress -Addr $contact.address)
     $custFolder = "$safeName - $street - $($contact.id)"
 } else {

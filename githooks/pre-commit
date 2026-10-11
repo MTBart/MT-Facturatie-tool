@@ -15,12 +15,13 @@ STAGED="$(git diff --cached --name-only --diff-filter=ACM)"
 VIOLATIONS=""
 
 # ---- 1a. verboden bestandspaden (naam/extensie) ----
-PATH_RE='(^|/)\.env($|\.)|secret|(^|/)\.mt-secret/|token.*\.json$|token_cache\.json$|google-(token|client)\.json$|(^|/)moneybird\.json$|(^|/)toggl\.json$|\.(key|pem|pfx|p12)$|id_rsa|credentials.*\.json$|client_secret|auth_.*\.txt$|_tmp\.txt$|_result\.txt$|login_instructie|(^|/)config\.json$|moneybird-contacten\.|(^|/)(CRM|Toggl|Vergaderingen|Moneybird)/|(^|/)\.claude/memory/|(^|/)\.claude/(STATUS|SESSIE_SAMENVATTING|HANDOFF)\.md$|(^|/)HANDOFF\.md$|(^|/)CLAUDE\.local\.md$|(^|/)data/klanten\.json$|(^|/)_uit-repo'
+PATH_RE='(^|/)\.env($|\.)|secret|(^|/)\.mt-secret/|token.*\.json$|token_cache\.json$|google-(token|client)\.json$|(^|/)moneybird\.json$|(^|/)toggl\.json$|\.(key|pem|pfx|p12)$|id_rsa|credentials.*\.json$|client_secret|auth_.*\.txt$|_tmp\.txt$|_result\.txt$|login_instructie|(^|/)config\.json$|moneybird-contacten\.|(^|/)(CRM|Toggl|Vergaderingen|Moneybird)/|(^|/)\.claude/memory/|(^|/)\.claude/(STATUS|SESSIE_SAMENVATTING|HANDOFF)\.md$|(^|/)HANDOFF\.md$|(^|/)CLAUDE\.local\.md$|(^|/)data/klanten\.json$|(^|/)data/klant-zoektermen\.json$|(^|/)_uit-repo|(^|/)Claude-context/'
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   case "$f" in
     *.env.example|*.example.json|*-template.json|inbox-sorter-config-template.json) continue ;;
+    Claude-context/toggl2-api-bewezen.md) continue ;;   # enige toegestane bestand in Claude-context/ (Toggl-contract, geen klant-/persoonsdata)
   esac
   if echo "$f" | grep -Eiq "$PATH_RE"; then
     VIOLATIONS="${VIOLATIONS}  [bestand] $f\n"

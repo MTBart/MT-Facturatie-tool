@@ -35,5 +35,5 @@ RESULTAAT: 17 geslaagd, 0 mislukt
 | Offline foto bevestigen → reload → herstellen | S1 |
 | Uploadfout → retry zonder duplicaat | S2 |
 | Originelen nooit impliciet weg; alleen sync ná afronding | S3 + S5 |
-| Bajeskwartier-duplicaten (TG-219730795 vs TG-219870094) blijven apart | S4 |
+| Testlocatie-duplicaten (TG-219730795 vs TG-219870094) blijven apart | S4 |
 | App-achtergrond → herstellen | zelfde IndexedDB-pad als S1; autosave op `visibilitychange`/`pagehide` zit in mobiel.html-glue (handmatig na te spelen op toestel) |

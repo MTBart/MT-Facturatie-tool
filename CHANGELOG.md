@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F7 release 3a: één veilige renderlaag + alle dynamische handler-argumenten veilig
+- Commit: `399ac97` | Auteur: Bart Witte
+
 ## 2026-10-11 — Koersmeter: worker-vlag onvolledig + Koersmeter C (sinds gisteren, één actie, dagfoto's)
 - Commit: `597d114` | Auteur: Bart Witte
 

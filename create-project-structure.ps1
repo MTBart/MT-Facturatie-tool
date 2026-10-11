@@ -20,15 +20,34 @@ $MBApiUrl = "https://moneybird.com/api/v2/$MBAdminId"
 $TestDir = "C:\Users\BartWitte\Mortise & Tenon\Mortise & Tenon - On-Prem-Data\Nieuwe mappenstructuur"
 $Subfolders = @("01_Offerte", "02_Ontwerp", "03_Vectorworks", "04_Holzher", "05_Aangeleverd", "06_Fotos", "07_Administratie", "08_Archief", "09_Werktekeningen")
 
-$KlantMap = @{
-    "CN" = "CompaNanny"
-    "LGM" = "LGM"
-    "MOS" = "Meubelinterieur"
-    "STY" = "Styles"
-    "HWC" = "Inter Projecten"
-    "DV" = "David"
-    "JAN" = "Margret Jans"
+#region KlantMap
+# Geen klantnamen in de (publieke) repo. De koppeling klantcode -> zoekterm in Moneybird komt uit lokale, genegeerde bestanden:
+#   1. data\klant-zoektermen.json  { "zoektermen": { "KLA": "zoekterm" }, "straat_in_mapnaam": [ "deel van een klantnaam" ] }
+#   2. anders data\klanten.json    (klantenlijst; code -> naam)
+#   3. anders een neutraal voorbeeld.
+$KlantMap = @{ "KLA" = "Voorbeeldklant" }
+$StraatKlanten = @()
+try {
+    $dataMap = Join-Path $PSScriptRoot "data"
+    $ztPad = Join-Path $dataMap "klant-zoektermen.json"
+    $klPad = Join-Path $dataMap "klanten.json"
+    if (Test-Path $ztPad) {
+        $zj = (Get-Content $ztPad -Raw -Encoding UTF8).TrimStart([char]0xFEFF) | ConvertFrom-Json
+        $kaart = @{}
+        if ($zj.PSObject.Properties['zoektermen']) { foreach ($p in $zj.zoektermen.PSObject.Properties) { $kaart[[string]$p.Name] = [string]$p.Value } }
+        if ($kaart.Count -gt 0) { $KlantMap = $kaart }
+        if ($zj.PSObject.Properties['straat_in_mapnaam']) { $StraatKlanten = @($zj.straat_in_mapnaam | ForEach-Object { [string]$_ }) }
+    } elseif (Test-Path $klPad) {
+        $kj = (Get-Content $klPad -Raw -Encoding UTF8).TrimStart([char]0xFEFF) | ConvertFrom-Json
+        $kaart = @{}
+        foreach ($k in @($kj.klanten)) { if ($k.code -and $k.naam -and $k.code -ne 'INT') { $kaart[[string]$k.code] = [string]$k.naam } }
+        if ($kaart.Count -gt 0) { $KlantMap = $kaart }
+    }
+} catch {
+    Write-Host "Waarschuwing: klantenkoppeling niet geladen ($($_.Exception.Message)); neutraal voorbeeld gebruikt." -ForegroundColor Yellow
 }
+function Test-StraatKlant { param([string]$Naam) foreach ($d in $StraatKlanten) { if ($d -and $Naam -like "*$d*") { return $true } } return $false }
+#endregion
 
 function Get-MoneyBirdContact {
     param([string]$Search, [string]$Token)
@@ -63,7 +82,7 @@ if (-not $Klantcode) {
     Write-Host ""
     Write-Host "MT Mortise and Tenon - Nieuw Project" -ForegroundColor Cyan
     Write-Host ""
-    $Klantcode = Read-Host "Klantcode (CN/LGM/MOS/STY/HWC/DV/JAN)"
+    $Klantcode = Read-Host "Klantcode ($(($KlantMap.Keys | Sort-Object) -join '/'))"
 }
 
 $search = if ($KlantMap[$Klantcode]) {$KlantMap[$Klantcode]} else {$Klantcode}
@@ -86,8 +105,8 @@ $Project = "Projectnaam"
 Write-Host "Projectnaam: $Project (placeholder - later hernoemd)" -ForegroundColor Yellow
 
 # Bepaal mapnaam
-$isCompaNanny = $contact.name -like "*CompaNanny*"
-if ($isCompaNanny) {
+$metStraat = Test-StraatKlant -Naam $contact.name
+if ($metStraat) {
     $street = Get-StreetFromAddress -Addr $contact.address
     $custFolder = "$($contact.name) - $street - $($contact.id)"
 } else {

@@ -1506,7 +1506,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
   <!-- ── CN ANALYSE TAB ── -->
   <!-- ═══ TAB: CN (GEARCHIVEERD) ═══ -->
-  <!-- CompaNanny-analyse: geen menu-ingang meer (verwijderd uit "Gearchiveerde schermen" in
+  <!-- Voorbeeldklant-analyse: geen menu-ingang meer (verwijderd uit "Gearchiveerde schermen" in
        Instellingen). Code blijft intact — niet verwijderen, alleen niet meer bereikbaar via UI. -->
   <div id="tab-cn" class="tab-content">
     <div class="card" style="max-width:900px">
@@ -2377,12 +2377,12 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div class="grid3" style="margin-bottom:0.4rem">
       <div class="field" style="margin-bottom:0">
         <label>Klant</label>
-        <input type="text" id="modal-naam-klant" placeholder="CompaNanny" oninput="autoCode()" list="klant-namen" autocomplete="off">
+        <input type="text" id="modal-naam-klant" placeholder="Voorbeeldklant" oninput="autoCode()" list="klant-namen" autocomplete="off">
         <datalist id="klant-namen"></datalist>
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Locatie</label>
-        <input type="text" id="modal-naam-locatie" placeholder="Bajeskwartier" oninput="autoCode()" autocomplete="off">
+        <input type="text" id="modal-naam-locatie" placeholder="Testlocatie" oninput="autoCode()" autocomplete="off">
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Product</label>
@@ -2400,7 +2400,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Locatie (≤8)</label>
-        <input type="text" id="modal-locatie" placeholder="BAJES" oninput="updateModalPreview()" maxlength="8" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
+        <input type="text" id="modal-locatie" placeholder="LOC" oninput="updateModalPreview()" maxlength="8" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Product</label>
@@ -2438,11 +2438,11 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Nieuwe code <span style="color:var(--text-faint)">(vervang tijdelijke code)</span></label>
-        <input type="text" id="aanvul-code-nieuw" placeholder="bijv. CN-BAJES-KEUKEN" style="text-transform:uppercase;font-family:var(--mono);width:100%;box-sizing:border-box">
+        <input type="text" id="aanvul-code-nieuw" placeholder="bijv. CN-LOC-KEUKEN" style="text-transform:uppercase;font-family:var(--mono);width:100%;box-sizing:border-box">
       </div>
       <div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Projectnaam</label>
-        <input type="text" id="aanvul-naam" placeholder="bijv. CompaNanny Bajeskwartier Keuken" style="width:100%;box-sizing:border-box">
+        <input type="text" id="aanvul-naam" placeholder="bijv. Voorbeeldklant Testlocatie Keuken" style="width:100%;box-sizing:border-box">
       </div>
       <div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Klant</label>
@@ -2451,7 +2451,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div style="grid-column:1/-1">
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Locatie / adres</label>
-        <input type="text" id="aanvul-locatie" placeholder="bijv. Bajeskwartier Amsterdam" style="width:100%;box-sizing:border-box">
+        <input type="text" id="aanvul-locatie" placeholder="bijv. Testlocatie Amsterdam" style="width:100%;box-sizing:border-box">
       </div>
       <div style="grid-column:1/-1">
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Omschrijving</label>
@@ -2540,16 +2540,7 @@ let editLevIndex=-1;
 
 // ═══ KLANT-REGISTRY (Fase B) — single source of truth = data/klanten.json ═══
 // Hardcoded fallback zodat het offline / zonder fetch blijft werken.
-let KLANTEN=[
-  {code:'CN',naam:'CompaNanny',mb_contact_id:null},
-  {code:'LGM',naam:'LGM Projecten B.V.',mb_contact_id:'463646635183834931'},
-  {code:'MOS',naam:'MOS Interiors',mb_contact_id:'443177514160883428'},
-  {code:'STY',naam:'Styles Concepts B.V.',mb_contact_id:'480850314306520356'},
-  {code:'HWC',naam:'Hermann Wesselink College',mb_contact_id:null},
-  {code:'PT',naam:'PT Bouw & Meubel B.V.',mb_contact_id:'414898677638760123'},
-  {code:'VK',naam:'Aannemers- en Installatiebedrijf Verkaik',mb_contact_id:'422963124634650333'},
-  {code:'INT',naam:'Intern — Mortise & Tenon',mb_contact_id:null}
-];
+let KLANTEN=[{code:'INT',naam:'Intern — Mortise & Tenon',mb_contact_id:null}];
 function klantByCode(code){return KLANTEN.find(k=>k.code===(code||'').toUpperCase())||null;}
 // Verrijkte registry (651 MB-contacten) — PRIVE, geladen uit SharePoint ná login
 // (MT-Bedrijfstool/klanten-registry-vol.json). Niet in publieke repo. Voedt
@@ -5395,7 +5386,7 @@ async function projLocNaamInvullen(code){
 // Klantnaam invullen: op alle projecten met deze klantcode die nog geen klantnaam hebben.
 async function projKlantNaamInvullen(kl){
   kl=String(kl||'').toUpperCase(); if(!kl) return;
-  const naam=await mtDialog.prompt({title:'Klantnaam invullen',message:'Volledige naam van klant '+kl+':',placeholder:'bv. CompaNanny B.V.',okLabel:'Opslaan'});
+  const naam=await mtDialog.prompt({title:'Klantnaam invullen',message:'Volledige naam van klant '+kl+':',placeholder:'bv. Voorbeeldklant B.V.',okLabel:'Opslaan'});
   if(naam==null||!_echteNaam(naam,kl)) return;
   PROJECT_CODES.filter(x=>String(x.klant||'').toUpperCase()===kl&&!_echteNaam(x.klant_naam,kl)).forEach(x=>{ x.klant_naam=String(naam).trim(); });
   slaProjectenOp(); _namenVernieuwd();
@@ -8519,12 +8510,7 @@ function sluitLevModal(){document.getElementById('lev-modal').classList.add('hid
 // ── Projectcode-systeem (Fase A) — KLANT-LOC-PROD, ≤32 tekens (sticker-limiet 35)
 const STICKER_MAX=32, STICKER_HARD=35;
 // Bekende klant-namen → code. Aanvulbaar; valt anders terug op acroniem.
-const KLANT_REGISTRY={
-  'compananny':'CN','lgm':'LGM','mos interior':'MOS','mos':'MOS',
-  'styles':'STY','styqx':'STY','wesselink':'HWC','wisselink':'HWC','hwc':'HWC',
-  'pt bouw':'PT','ptbouwenmeubel':'PT','verkaik':'VK',
-  'intern':'INT','mortise':'INT'
-};
+const KLANT_REGISTRY={ 'intern':'INT','mortise':'INT' };
 function _clean(s){return (s||'').toUpperCase().normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]','g'),'');}
 function afkortKlant(naam){
   const key=(naam||'').toLowerCase().trim(); if(!key) return '';
@@ -8548,7 +8534,7 @@ function openModal(){
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
   // datalist met klantnamen: ECHTE registry-namen eerst (single source = klanten.json),
   // aangevuld met namen uit bestaande projecten. Zo stelt het typeveld de echte
-  // bedrijfsnaam voor (bv. "Styles Concepts B.V.") en mapt autoCode die naar de code.
+  // bedrijfsnaam voor (bv. "Voorbeeldklant B.V.") en mapt autoCode die naar de code.
   const dl=document.getElementById('klant-namen');
   if(dl){
     // Volledige MB-registry (651) eerst — zo verschijnt élke bestaande klant als
@@ -8570,7 +8556,7 @@ function autoCode(force){
   const nl=document.getElementById('modal-naam-locatie').value.trim();
   const np=document.getElementById('modal-naam-product').value.trim();
   const ek=document.getElementById('modal-klant'), el=document.getElementById('modal-locatie'), ep=document.getElementById('modal-product');
-  // Registry-klant herkend? Gebruik diens vaste code (bv. "Styles Concepts B.V."→STY),
+  // Registry-klant herkend? Gebruik diens vaste code (bv. "Voorbeeldklant B.V."→STY),
   // anders een afgeleide afkorting.
   if((force||!ek.value)&&nk){ const kv=klantVolByNaam(nk); const ov=klantCodeOverride(kv); ek.value= ov || ((kv&&kv.code)?kv.code:afkortKlant(nk)); }
   if((force||!el.value)&&nl) el.value=afkortLoc(nl);
@@ -10163,7 +10149,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   },
 
   // mkdir-p met canonieke naam. wantedName = de ECHTE naam (registry), bv.
-  // "Styles Concepts B.V.". Gedrag:
+  // "Voorbeeldklant B.V.". Gedrag:
   //   1. exacte match  -> hergebruiken
   //   2. genorm. match maar andere schrijfwijze -> de BESTAANDE map hergebruiken.
   //      Vroeger werd die automatisch hernoemd naar wantedName; dat brak zonder
@@ -10177,7 +10163,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // Returnt de werkelijk gebruikte mapnaam.
   async ensureFolder(parentPath, wantedName, rename = true) {
     // SharePoint verbiedt deze tekens + een naam mag niet eindigen op '.' of spatie
-    // ("Styles Concepts B.V." -> "Styles Concepts B.V").
+    // ("Voorbeeldklant B.V." -> "Voorbeeldklant B.V").
     const safe = wantedName.replace(/[\\\/:*?"<>|]/g,'_').trim().replace(/[. ]+$/,'');
     const existing = await this.listChildren(parentPath);
     // 1. exacte match (case-sensitive op werkelijke naam)
@@ -10448,7 +10434,7 @@ async function oplViewerOpen(){
    Map: projectCode → draft (mobiel schrijft). De cockpit toont ze en kan
    het gekoppelde project corrigeren. Koppeling gaat ALTIJD op exacte
    projectcode — twee gelijknamige projecten (bv. TG-219730795 en
-   TG-219870094, beide "CN Bajeskwartier") blijven gescheiden records
+   TG-219870094, beide "CN Testlocatie") blijven gescheiden records
    en worden nooit samengevoegd. */
 let _oplConcepten = {};
 async function oplConceptenOpen(){
@@ -12296,7 +12282,7 @@ const TAB_HELP={
   instellingen:{naam:'Instellingen',uitleg:'Sync-status (SharePoint), en de ingangen naar Nieuwe factuur en Factuurcontrole.'},
   verwerk:{naam:'Nieuwe factuur',uitleg:'Upload of kies een factuur-PDF; Claude leest leverancier, regels en bedragen uit en zet alles klaar voor Moneybird. Jij controleert en bevestigt — er wordt nooit zonder jou geboekt.'},
   controle:{naam:'Factuurcontrole',uitleg:'Vergelijkt onze uitgelezen factuurregels met wat er in Moneybird staat en markeert verschillen, zodat foute autoherkenning eruit gevist wordt.'},
-  cn:{naam:'CompaNanny-analyse (gearchiveerd)',uitleg:'Aparte analyse voor CompaNanny: omzet en facturen per locatie (53 locatie-contacten in Moneybird). Geen menu-ingang meer, code blijft staan.'},
+  cn:{naam:'Voorbeeldklant-analyse (gearchiveerd)',uitleg:'Aparte analyse voor Voorbeeldklant: omzet en facturen per locatie (53 locatie-contacten in Moneybird). Geen menu-ingang meer, code blijft staan.'},
   migratie:{naam:'Data-migratie (gearchiveerd)',uitleg:'Eenmalige hulpmiddelen om oude data naar de nieuwe structuur te verhuizen. Buiten gebruik, geen menu-ingang meer.'}
 };
 function helpActieveTab(){const el=document.querySelector('.tab-content.active');return el?el.id.replace('tab-',''):'?';}

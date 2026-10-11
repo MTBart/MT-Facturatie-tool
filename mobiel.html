@@ -4894,12 +4894,12 @@ async function loadKlantRegistry() {
       if (r.ok) { const j = await r.json(); if (goed(j.klanten)) _KLANTEN = j.klanten; }
     }
   } catch(e) { console.warn('klantenlijst (worker) laden mislukt:', e.message); }
-  if (!_KLANTEN) {
-    try { const r = await fetch('data/klanten.json'); if (r.ok) { const j = await r.json(); if (goed(j.klanten)) _KLANTEN = j.klanten; } } catch(e) {}
-  }
-  if (_KLANTEN) { try { localStorage.setItem('mt_klanten_cache', JSON.stringify({ klanten: _KLANTEN, t: Date.now() })); } catch(e) {} }
-  else { try { const c = JSON.parse(localStorage.getItem('mt_klanten_cache') || 'null'); if (c && goed(c.klanten)) return c.klanten; } catch(e) {} }
-  return _KLANTEN || [];
+  // Alleen de worker-lijst gaat in de cache. Zonder worker: eerst de cache van dit apparaat; het bestand (overgang) alleen als er
+  // geen bruikbare cache is, en dat wordt niet bewaard, zodat het een recentere lijst nooit overschrijft.
+  if (_KLANTEN) { try { localStorage.setItem('mt_klanten_cache', JSON.stringify({ klanten: _KLANTEN, t: Date.now() })); } catch(e) {} return _KLANTEN; }
+  try { const c = JSON.parse(localStorage.getItem('mt_klanten_cache') || 'null'); if (c && goed(c.klanten)) return c.klanten; } catch(e) {}
+  try { const r = await fetch('data/klanten.json'); if (r.ok) { const j = await r.json(); if (goed(j.klanten)) return j.klanten; } } catch(e) {}
+  return [];
 }
 
 // Vaste projectmappenstructuur (één bron van waarheid; gebruikt door zowel het
@@ -7197,7 +7197,7 @@ function veiligeSpUrl(u) { return window.veiligeUrl(u, { hosts: ['sharepoint.com
     let drafts = [];
     try { drafts = await FS.listDrafts(); } catch (e) {}
     // projectCode is exact — twee gelijknamige projecten (bv. de twee
-    // Bajeskwartier-records) hebben verschillende codes en blijven apart.
+    // Testlocatie-records) hebben verschillende codes en blijven apart.
     const d = p && drafts.find(x => x.projectCode === p.code && x.type === rapType);
     _rapId = d ? d.rapportId : FS.newId("rap");
     return _rapId;

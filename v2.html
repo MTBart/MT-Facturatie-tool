@@ -2384,7 +2384,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Locatie</label>
-        <input type="text" id="modal-naam-locatie" placeholder="Bajeskwartier" oninput="autoCode()" autocomplete="off">
+        <input type="text" id="modal-naam-locatie" placeholder="Locatie" oninput="autoCode()" autocomplete="off">
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Product</label>
@@ -2402,7 +2402,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Locatie (≤8)</label>
-        <input type="text" id="modal-locatie" placeholder="BAJES" oninput="updateModalPreview()" maxlength="8" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
+        <input type="text" id="modal-locatie" placeholder="LOC" oninput="updateModalPreview()" maxlength="8" autocomplete="off" style="text-transform:uppercase;font-family:var(--mono)">
       </div>
       <div class="field" style="margin-bottom:0">
         <label>Product</label>
@@ -2440,7 +2440,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Nieuwe code <span style="color:var(--text-faint)">(vervang tijdelijke code)</span></label>
-        <input type="text" id="aanvul-code-nieuw" placeholder="bijv. CN-BAJES-KEUKEN" style="text-transform:uppercase;font-family:var(--mono);width:100%;box-sizing:border-box">
+        <input type="text" id="aanvul-code-nieuw" placeholder="bijv. KLA-LOC-KEUKEN" style="text-transform:uppercase;font-family:var(--mono);width:100%;box-sizing:border-box">
       </div>
       <div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Projectnaam</label>
@@ -2453,7 +2453,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       </div>
       <div style="grid-column:1/-1">
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Locatie / adres</label>
-        <input type="text" id="aanvul-locatie" placeholder="bijv. Bajeskwartier Amsterdam" style="width:100%;box-sizing:border-box">
+        <input type="text" id="aanvul-locatie" placeholder="bijv. Locatie Amsterdam" style="width:100%;box-sizing:border-box">
       </div>
       <div style="grid-column:1/-1">
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:3px">Omschrijving</label>
@@ -2611,13 +2611,16 @@ function verhuisZet(){
   MTVerhuis.paneel(document.getElementById('verhuis-plek'),{gebruiker:(typeof mtMijEmail==='function'&&mtMijEmail())||'',apparaat:'pc-'+p,toast:planToast});
 }
 async function laadKlantRegistry(){
-  try{ const c=JSON.parse(localStorage.getItem(_KL_CACHE)||'null'); if(c&&Array.isArray(c.klanten)&&c.klanten.length) KLANTEN=c.klanten; }catch(e){}
-  // Overgang: zolang data/klanten.json nog op de site staat (verdwijnt in een volgende stap).
+  let metCache=false;
+  try{ const c=JSON.parse(localStorage.getItem(_KL_CACHE)||'null'); if(c&&Array.isArray(c.klanten)&&c.klanten.length){ KLANTEN=c.klanten; metCache=true; } }catch(e){}
+  // Overgang: zolang data/klanten.json nog op de site staat (verdwijnt in een volgende stap). Het bestand is alleen een
+  // noodlijst: het komt nooit boven een bruikbare cache of de workerlijst (het kan ouder zijn). Wel onthouden we het
+  // voor de eenmalige overzetting naar de worker.
   try{
     const r=await fetch('data/klanten.json',{cache:'no-store'});
     if(!r.ok) return;
     const d=JSON.parse((await r.text()).replace(/^﻿/,''));
-    if(Array.isArray(d?.klanten)&&d.klanten.length){ _klantenBestand=d.klanten; if(!_klantenUitWorker) KLANTEN=d.klanten; }
+    if(Array.isArray(d?.klanten)&&d.klanten.length){ _klantenBestand=d.klanten; if(!_klantenUitWorker&&!metCache) KLANTEN=d.klanten; }
   }catch(e){/* cache/fallback blijft staan */}
 }
 // Na login: de worker is de bron. Heeft hij nog geen lijst, dan zet wie mag beheren hem één keer over uit het bestand.
@@ -2627,7 +2630,8 @@ async function klantRegistryNaLogin(){
     const r=await fetchMetAuth(`${WORKER}/klanten`); let j=null; try{ j=await r.json(); }catch(e){}
     if(r.ok&&j&&_klantenZet(j.klanten)){ _klantenUitWorker=true; if(typeof renderProjectLijst==='function') renderProjectLijst(); return; }
     if(r.status===404&&j&&j.error==='geen-klantenlijst'&&_klantenBestand&&window.MTRol&&MTRol.isBeheer()){
-      const p=await fetchMetAuth(`${WORKER}/klanten`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({klanten:_klantenBestand})});
+      // De worker eist de revisie uit de laatste GET (rev); is die verouderd (409), dan heeft iemand anders al opgeslagen en doen we niets.
+      const p=await fetchMetAuth(`${WORKER}/klanten`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({klanten:_klantenBestand,rev:Number.isInteger(j.rev)?j.rev:0})});
       if(p.ok){ _klantenZet(_klantenBestand); _klantenUitWorker=true; }
     }
   }catch(e){/* lijst uit cache/bestand blijft staan */}
@@ -8541,16 +8545,17 @@ function sluitLevModal(){document.getElementById('lev-modal').classList.add('hid
 // ═══ PROJECTEN MODAL ═══
 // ── Projectcode-systeem (Fase A) — KLANT-LOC-PROD, ≤32 tekens (sticker-limiet 35)
 const STICKER_MAX=32, STICKER_HARD=35;
-// Bekende klant-namen → code. Aanvulbaar; valt anders terug op acroniem.
-const KLANT_REGISTRY={
-  'compananny':'CN','lgm':'LGM','mos interior':'MOS','mos':'MOS',
-  'styles':'STY','styqx':'STY','wesselink':'HWC','wisselink':'HWC','hwc':'HWC',
-  'pt bouw':'PT','ptbouwenmeubel':'PT','verkaik':'VK',
-  'intern':'INT','mortise':'INT'
-};
+// Bekende klant-namen → code: de `aliassen` van de klantenlijst (KLANTEN, uit de worker; geen klantnamen in de publieke code).
+// Alleen het eigen bedrijf staat hier vast. Valt anders terug op acroniem.
+const KLANT_REGISTRY={ 'intern':'INT','mortise':'INT' };
+function klantAliasCode(key){
+  for(const k of KLANTEN) for(const a of (k.aliassen||[])){ const al=String(a||'').toLowerCase().trim(); if(al&&key.includes(al)) return String(k.code||'').toUpperCase()||null; }
+  return null;
+}
 function _clean(s){return (s||'').toUpperCase().normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]','g'),'');}
 function afkortKlant(naam){
   const key=(naam||'').toLowerCase().trim(); if(!key) return '';
+  const uitLijst=klantAliasCode(key); if(uitLijst) return uitLijst;
   for(const [k,v] of Object.entries(KLANT_REGISTRY)) if(key.includes(k)) return v;
   const w=naam.trim().split(/\s+/);
   if(w.length>1) return _clean(w.map(x=>x[0]).join('')).replace(/[^A-Z0-9]/g,'').slice(0,4);
@@ -10471,7 +10476,7 @@ async function oplViewerOpen(){
    Map: projectCode → draft (mobiel schrijft). De cockpit toont ze en kan
    het gekoppelde project corrigeren. Koppeling gaat ALTIJD op exacte
    projectcode — twee gelijknamige projecten (bv. TG-219730795 en
-   TG-219870094, beide "CN Bajeskwartier") blijven gescheiden records
+   TG-219870094, beide "KL Testlocatie") blijven gescheiden records
    en worden nooit samengevoegd. */
 let _oplConcepten = {};
 async function oplConceptenOpen(){

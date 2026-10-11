@@ -3567,56 +3567,96 @@ async function handleBeheer(pathname, request, env, ik, json) {
 }
 
 // ── Klantenlijst (F5): niet meer als publiek bestand (data/klanten.json) maar na login via de worker, uit KV.
-// GET: iedereen die is ingelogd (in modus 'afdwingen' alleen met een rol). POST: alleen wie mag beheren, streng
-// gecontroleerd (geen onbekende velden), oude stand bewaard. Auditlog zonder namen.
+// GET: iedereen die is ingelogd (in modus 'afdwingen' alleen met een rol; in 'log' ook zonder rol, maar apart gelogd als
+// `klanten.zonder_rol`). Antwoord bevat `rev`. POST: alleen wie mag beheren, streng gecontroleerd (types, geen onbekende velden,
+// ook niet bovenin de body), met `rev`: is die verouderd dan 409 en blijft alles bewaard. Oude stand wordt altijd bewaard.
+// Let op: KV kent geen compare-and-set; de revisiecontrole staat vlak vóór het schrijven (enkele ms venster) en elke vorige
+// stand gaat naar de historie, dus ook bij een zeldzame gelijktijdige schrijfactie gaat er niets verloren.
+// Auditlog zonder namen.
 const KLANTEN_KV = 'klanten:registry', KLANTEN_MAX = 500;
 const KLANT_VELDEN = new Set(['code', 'naam', 'aliassen', 'mb_contact_id', 'opmerking', 'locaties']), KLANT_LOC_VELDEN = new Set(['code', 'naam', 'mb_contact_id']);
-function klantFout(k, loc) {
-  if (!k || typeof k !== 'object' || Array.isArray(k)) return 'object verwacht';
-  const vreemd = Object.keys(k).find(x => !(loc ? KLANT_LOC_VELDEN : KLANT_VELDEN).has(x)); if (vreemd !== undefined) return `onbekend veld "${String(vreemd).slice(0, 40)}"`;
-  if (!/^[A-Z0-9]{1,10}$/.test(String(k.code || ''))) return 'code: 1–10 hoofdletters/cijfers';
-  if (typeof k.naam !== 'string' || !k.naam.trim() || k.naam.length > 120) return 'naam: 1–120 tekens';
-  if (k.mb_contact_id != null && !/^\d{6,25}$/.test(String(k.mb_contact_id))) return 'mb_contact_id: cijfers of null';
-  if (loc) return null;
-  if (k.aliassen != null && !(Array.isArray(k.aliassen) && k.aliassen.length <= 20 && k.aliassen.every(a => typeof a === 'string' && a.length <= 120))) return 'aliassen: max 20 teksten';
-  if (k.opmerking != null && !(typeof k.opmerking === 'string' && k.opmerking.length <= 300)) return 'opmerking: max 300 tekens';
-  if (k.locaties != null) { if (!Array.isArray(k.locaties) || k.locaties.length > 50) return 'locaties: lijst (max 50)'; for (const l of k.locaties) { const f = klantFout(l, true); if (f) return 'locatie: ' + f; } }
-  return null;
+const KLANT_BODY_VELDEN = new Set(['klanten', 'rev']);
+// Controleert één klant (of locatie) en geeft { fout } of { klant } terug, met de canonieke vorm (getrimde teksten; mb_contact_id altijd tekst of null:
+// een getal wordt geweigerd, want een 18-cijferig id rondt in JSON af).
+function klantSchoon(k, loc) {
+  if (!k || typeof k !== 'object' || Array.isArray(k)) return { fout: 'object verwacht' };
+  const vreemd = Object.keys(k).find(x => !(loc ? KLANT_LOC_VELDEN : KLANT_VELDEN).has(x)); if (vreemd !== undefined) return { fout: `onbekend veld "${String(vreemd).slice(0, 40)}"` };
+  if (typeof k.code !== 'string' || !/^[A-Z0-9]{1,10}$/.test(k.code)) return { fout: 'code: tekst van 1–10 hoofdletters/cijfers' };
+  if (typeof k.naam !== 'string' || !k.naam.trim() || k.naam.length > 120) return { fout: 'naam: 1–120 tekens' };
+  const uit = { code: k.code, naam: k.naam.trim() };
+  if (k.mb_contact_id != null) {
+    if (typeof k.mb_contact_id !== 'string') return { fout: 'mb_contact_id: tekst of null (geen getal)' };
+    const id = k.mb_contact_id.trim();
+    if (id !== '' && !/^\d{6,25}$/.test(id)) return { fout: 'mb_contact_id: cijfers of null' };
+    uit.mb_contact_id = id === '' ? null : id;
+  } else uit.mb_contact_id = null;
+  if (loc) return { klant: uit };
+  if (k.aliassen != null) {
+    if (!(Array.isArray(k.aliassen) && k.aliassen.length <= 20 && k.aliassen.every(a => typeof a === 'string' && a.length <= 120))) return { fout: 'aliassen: max 20 teksten' };
+    const al = k.aliassen.map(a => a.trim()).filter(Boolean); if (al.length) uit.aliassen = al;
+  }
+  if (k.opmerking != null) {
+    if (!(typeof k.opmerking === 'string' && k.opmerking.length <= 300)) return { fout: 'opmerking: max 300 tekens' };
+    if (k.opmerking.trim()) uit.opmerking = k.opmerking.trim();
+  }
+  if (k.locaties != null) {
+    if (!Array.isArray(k.locaties) || k.locaties.length > 50) return { fout: 'locaties: lijst (max 50)' };
+    const ls = [];
+    for (const l of k.locaties) { const r = klantSchoon(l, true); if (r.fout) return { fout: 'locatie: ' + r.fout }; ls.push(r.klant); }
+    if (ls.length) uit.locaties = ls;
+  }
+  return { klant: uit };
 }
-async function handleKlanten(request, env, ik, json) {
+async function handleKlanten(request, env, ik, json, ctx) {
   const m = request.method.toUpperCase();
+  const huidig = async () => (env.MT_ROLLEN ? await kvJson(env, KLANTEN_KV) : null);
+  const revVan = d => (d && Number.isInteger(d.rev) && d.rev >= 0 ? d.rev : 0);
   if (m === 'GET') {
-    if (rollenModus(env) === 'afdwingen' && !ik.rol) return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
-    const d = env.MT_ROLLEN ? await kvJson(env, KLANTEN_KV) : null;
-    if (!d || !Array.isArray(d.klanten) || !d.klanten.length) return json({ error: 'geen-klantenlijst' }, 404);
-    return json({ klanten: d.klanten, bijgewerkt: d.bijgewerkt || null });
+    if (!ik.rol) {
+      if (rollenModus(env) === 'afdwingen') return json({ error: 'geen-toegang', reden: ik.reden || 'geen-rol' }, 403);
+      if (rollenModus(env) === 'log') { try { await noteerBesluit(env, ctx, { ok: false, modus: 'log', rol: null, oid: ik.oid, target: 'klanten', actie: 'klanten.zonder_rol', reden: ik.reden || 'geen-rol' }); } catch {} }
+    }
+    const d = await huidig();
+    if (!d || !Array.isArray(d.klanten) || !d.klanten.length) return json({ error: 'geen-klantenlijst', rev: 0 }, 404);
+    return json({ klanten: d.klanten, bijgewerkt: d.bijgewerkt || null, rev: revVan(d) });
   }
   if (m !== 'POST') return json({ error: 'alleen GET of POST' }, 405);
   if (!(RECHTEN[ik.rol] && RECHTEN[ik.rol].beheer)) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
   if (!env.MT_ROLLEN) return json({ error: 'geen-opslag' }, 503);
   let b = null; try { b = await request.json(); } catch {}
-  if (!b || typeof b !== 'object' || Array.isArray(b) || !Array.isArray(b.klanten) || !b.klanten.length || b.klanten.length > KLANTEN_MAX) return json({ error: `klanten: lijst (1–${KLANTEN_MAX})` }, 400);
-  const codes = new Set();
-  for (const k of b.klanten) { const f = klantFout(k, false); if (f) return json({ error: 'klant: ' + f, code: k && /^[A-Z0-9]{1,10}$/.test(String(k.code || '')) ? k.code : null }, 400); if (codes.has(k.code)) return json({ error: 'dubbele code', code: k.code }, 400); codes.add(k.code); }
-  const ts = Date.now(), oud = await kvJson(env, KLANTEN_KV);
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return json({ error: `klanten: lijst (1–${KLANTEN_MAX})` }, 400);
+  const vreemdB = Object.keys(b).find(x => !KLANT_BODY_VELDEN.has(x)); if (vreemdB !== undefined) return json({ error: `onbekend veld "${String(vreemdB).slice(0, 40)}"` }, 400);
+  if (!Array.isArray(b.klanten) || !b.klanten.length || b.klanten.length > KLANTEN_MAX) return json({ error: `klanten: lijst (1–${KLANTEN_MAX})` }, 400);
+  if (!Number.isInteger(b.rev) || b.rev < 0) return json({ error: 'rev: verplicht (het getal uit de laatste GET /klanten)' }, 400);
+  const codes = new Set(), schoon = [];
+  for (const k of b.klanten) {
+    const r = klantSchoon(k, false);
+    if (r.fout) return json({ error: 'klant: ' + r.fout, code: k && typeof k.code === 'string' && /^[A-Z0-9]{1,10}$/.test(k.code) ? k.code : null }, 400);
+    if (codes.has(r.klant.code)) return json({ error: 'dubbele code', code: r.klant.code }, 400);
+    codes.add(r.klant.code); schoon.push(r.klant);
+  }
+  const ts = Date.now(), oud = await huidig();
+  if (revVan(oud) !== b.rev) return json({ error: 'verouderd', rev: revVan(oud) }, 409);   // niets geschreven; de aanvrager haalt de lijst opnieuw op
   if (oud) await kvZet(env, `${KLANTEN_KV}:historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, oud);   // vorige stand bewaard
-  await kvZet(env, KLANTEN_KV, { klanten: b.klanten, bijgewerkt: new Date(ts).toISOString(), door: ik.oid });
-  await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'klantenlijst', doel: 'klanten', doelNaam: `klantenlijst opgeslagen (${b.klanten.length})` });   // geen namen
-  return json({ ok: true, aantal: b.klanten.length });
+  const rev = revVan(oud) + 1;
+  await kvZet(env, KLANTEN_KV, { klanten: schoon, bijgewerkt: new Date(ts).toISOString(), door: ik.oid, rev });
+  await audit(env, { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email || '', actie: 'klantenlijst', doel: 'klanten', doelNaam: `klantenlijst opgeslagen (${schoon.length})` });   // geen namen
+  return json({ ok: true, aantal: schoon.length, rev });
 }
 
-// CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*'.
+// CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
 export default {
   async fetch(request, env, ctx) {
     const herkomst = request.headers.get('Origin') || '';
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': CORS_HERKOMST.includes(herkomst) ? herkomst : CORS_HERKOMST[0],
+    // Onbekende herkomst: géén CORS-headers (dan blokkeert de browser het antwoord); alleen Vary.
+    const corsHeaders = CORS_HERKOMST.includes(herkomst) ? {
+      'Access-Control-Allow-Origin': herkomst,
       'Vary': 'Origin',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PATCH, DELETE',
       'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-MT-Bevestiging, X-MT-Actie',
       'Access-Control-Expose-Headers': 'X-MT-Herhaald',
-    };
+    } : { 'Vary': 'Origin' };
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
@@ -3648,7 +3688,7 @@ export default {
       // Gebruikersbeheer: in élke modus afgedwongen.
       if (url.pathname.startsWith('/beheer/')) return await handleBeheer(url.pathname, request, env, ik, json);
       // Klantenlijst (F5): na login via de worker, niet meer als publiek bestand.
-      if (url.pathname === '/klanten') return await handleKlanten(request, env, ik, json);
+      if (url.pathname === '/klanten') return await handleKlanten(request, env, ik, json, ctx);
       // Werkcode-teller en centrale instellingen: eigen routes (zie handleTeller).
       if (url.pathname === '/instellingen' || url.pathname.startsWith('/teller/')) return await handleTeller(url.pathname, request, env, ik, json);
       // Geldtijdlijn en het financiële dashboard: recht `geld`, in élke ROLLEN_MODUS (zie handleGeld).

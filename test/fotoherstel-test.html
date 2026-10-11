@@ -45,7 +45,7 @@ async function blobTekst(b) { return await new Response(b).text(); }
   await FS.putFoto({id: fotoId, rapportId: rapId, hoofdstuk: 'Groep 3 – keukens',
     naam: 'test1.jpg', mime: 'image/jpeg', opmerking: 'kastdeur links', soort: 'na',
     ts: 1, status: 'lokaal', blob: blobVan('FOTO-DATA-1'), bewerktBlob: null});
-  await FS.putDraft({rapportId: rapId, projectCode: 'TG-219730795', projectNaam: '#509152 CN Bajeskwartier',
+  await FS.putDraft({rapportId: rapId, projectCode: 'TG-219730795', projectNaam: '#509152 KL Testlocatie',
     type: 'oplevering', status: 'concept', ts: 1, fotos: [{id: fotoId}]});
   // 'reload': nieuwe lees-ronde puur uit IndexedDB
   const terug = await FS.getFoto(fotoId);
@@ -81,10 +81,10 @@ async function blobTekst(b) { return await new Response(b).text(); }
   const res2 = await FS.cleanupSynced(rapId);
   check('S3: na laatste sync-foto ook draft weg', res2.rest === 0 && !(await FS.getDraft(rapId)));
 
-  /* ── Scenario 4: Bajeskwartier-duplicaten blijven apart ── */
+  /* ── Scenario 4: Testlocatie-duplicaten blijven apart ── */
   const rapA = FS.newId('rap'), rapB = FS.newId('rap');
-  await FS.putDraft({rapportId: rapA, projectCode: 'TG-219730795', projectNaam: '#509152 CN Bajeskwartier', type: 'oplevering', ts: 3, fotos: []});
-  await FS.putDraft({rapportId: rapB, projectCode: 'TG-219870094', projectNaam: 'CN Bajeskwartier', type: 'oplevering', ts: 4, fotos: []});
+  await FS.putDraft({rapportId: rapA, projectCode: 'TG-219730795', projectNaam: '#509152 KL Testlocatie', type: 'oplevering', ts: 3, fotos: []});
+  await FS.putDraft({rapportId: rapB, projectCode: 'TG-219870094', projectNaam: 'KL Testlocatie', type: 'oplevering', ts: 4, fotos: []});
   const drafts = await FS.listDrafts();
   const dA = drafts.find(d => d.projectCode === 'TG-219730795');
   const dB = drafts.find(d => d.projectCode === 'TG-219870094');

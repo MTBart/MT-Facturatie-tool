@@ -77,7 +77,7 @@
   }
 
   // ── _encPath — Graph laat '#' en '?' staan → URL breekt bij namen als
-  //    "#519617 CN Bajeskwartier". Deze twee alsnog percent-encoden.
+  //    "#519617 CN Testlocatie". Deze twee alsnog percent-encoden.
   function _encPath(p) {
     return encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F');
   }
