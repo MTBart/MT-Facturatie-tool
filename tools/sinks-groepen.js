@@ -103,3 +103,27 @@ module.exports['uren'] = { bestand: 'uren.html', omschrijving: _g_uren.omschrijv
 // Groep toggl: mt-toggl.js (houd-lijst met redenen in sinks-groep-toggl.json).
 const _g_toggl = require('./sinks-groep-toggl.json');
 module.exports['toggl'] = { bestand: 'mt-toggl.js', omschrijving: _g_toggl.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_toggl.fragmentFns, houd: _g_toggl.houd, overslaan: [] };
+// Groep geld: mt-geld.js (houd-lijst met redenen in sinks-groep-geld.json).
+const _g_geld = require('./sinks-groep-geld.json');
+module.exports['geld'] = { bestand: 'mt-geld.js', omschrijving: _g_geld.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_geld.fragmentFns, houd: _g_geld.houd, overslaan: [] };
+// Groep cijfers: mt-cijfers.js (houd-lijst met redenen in sinks-groep-cijfers.json).
+const _g_cijfers = require('./sinks-groep-cijfers.json');
+module.exports['cijfers'] = { bestand: 'mt-cijfers.js', omschrijving: _g_cijfers.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_cijfers.fragmentFns, houd: _g_cijfers.houd, overslaan: [] };
+// Groep schulden: mt-schulden.js (houd-lijst met redenen in sinks-groep-schulden.json).
+const _g_schulden = require('./sinks-groep-schulden.json');
+module.exports['schulden'] = { bestand: 'mt-schulden.js', omschrijving: _g_schulden.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_schulden.fragmentFns, houd: _g_schulden.houd, overslaan: [] };
+// Groep verhuis: mt-verhuis.js (houd-lijst met redenen in sinks-groep-verhuis.json).
+const _g_verhuis = require('./sinks-groep-verhuis.json');
+module.exports['verhuis'] = { bestand: 'mt-verhuis.js', omschrijving: _g_verhuis.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_verhuis.fragmentFns, houd: _g_verhuis.houd, overslaan: [] };
+// Groep rapport: mt-rapport.js (houd-lijst met redenen in sinks-groep-rapport.json).
+const _g_rapport = require('./sinks-groep-rapport.json');
+module.exports['rapport'] = { bestand: 'mt-rapport.js', omschrijving: _g_rapport.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_rapport.fragmentFns, houd: _g_rapport.houd, overslaan: [] };
+// Groep aanwezig: mt-aanwezig.js (houd-lijst met redenen in sinks-groep-aanwezig.json).
+const _g_aanwezig = require('./sinks-groep-aanwezig.json');
+module.exports['aanwezig'] = { bestand: 'mt-aanwezig.js', omschrijving: _g_aanwezig.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_aanwezig.fragmentFns, houd: _g_aanwezig.houd, overslaan: [] };
+// Groep dialog: mt-dialog.js (houd-lijst met redenen in sinks-groep-dialog.json).
+const _g_dialog = require('./sinks-groep-dialog.json');
+module.exports['dialog'] = { bestand: 'mt-dialog.js', omschrijving: _g_dialog.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_dialog.fragmentFns, houd: _g_dialog.houd, overslaan: [] };
+// Groep koers: mt-koers.js (houd-lijst met redenen in sinks-groep-koers.json).
+const _g_koers = require('./sinks-groep-koers.json');
+module.exports['koers'] = { bestand: 'mt-koers.js', omschrijving: _g_koers.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_koers.fragmentFns, houd: _g_koers.houd, overslaan: [] };

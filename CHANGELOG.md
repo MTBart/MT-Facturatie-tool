@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — tools/check-sinks.js: alle sink-baselines in de repo, in de pre-commit-hook en verplicht bij elke release
+- Commit: `54ad162` | Auteur: Bart Witte
+
 ## 2026-10-11 — Release v2.12.3: tekstbeveiliging in alle schermen (F7 3b groepen 1-5), ruimtenaam-fix, spaarpot-herkenning met rekeningnummer; backup = v2.12.2
 - Commit: `cde3c78` | Auteur: Bart Witte
 

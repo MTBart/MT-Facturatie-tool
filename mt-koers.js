@@ -265,10 +265,10 @@
       <button class="mtk-gelezen" data-koers-gelezen="${esc(x.datum)}" aria-label="Markeer de melding van ${esc(datum(x.datum))} als gelezen">Gelezen</button></div>`).join('')}</section>`;
   };
   K.kaartHtml = function (o, extra) {
-    return `<section class="mtk ${o.kleur}" aria-label="Koersmeter: ${esc(o.titel)}">
-  <div class="mtk-kop"><span class="mtk-titel">${esc(o.titel)}</span><span class="mtk-jaar">Koersmeter · boekjaar ${o.jaar}</span></div>
+    return `<section class="mtk ${esc(o.kleur)}" aria-label="Koersmeter: ${esc(o.titel)}">
+  <div class="mtk-kop"><span class="mtk-titel">${esc(o.titel)}</span><span class="mtk-jaar">Koersmeter · boekjaar ${esc(o.jaar)}</span></div>
   <div class="mtk-zin">${esc(o.zin)}</div>${o.noten.map(n => `<div class="mtk-noot">${esc(n)}</div>`).join('')}${K.dagHtml(extra)}
-  <div class="mtk-meters">${o.meters.map(m => `<div class="mtk-m ${m.kleur}"><div class="l"><span>${esc(m.titel)}${m.schatting ? ' (schatting)' : ''}</span><button class="mtk-i" data-koers="${m.id}" aria-label="Uitleg en bron: ${esc(m.titel)}" title="Uitleg en bron">i</button></div>
+  <div class="mtk-meters">${o.meters.map(m => `<div class="mtk-m ${esc(m.kleur)}"><div class="l"><span>${esc(m.titel)}${m.schatting ? ' (schatting)' : ''}</span><button class="mtk-i" data-koers="${esc(m.id)}" aria-label="Uitleg en bron: ${esc(m.titel)}" title="Uitleg en bron">i</button></div>
     <div class="w">${esc(m.waarde)}</div><div class="k">${esc(KLEURWOORD[m.kleur])}${m.gedempt ? ' (vroeg in het jaar)' : ''}</div>${m.sub.map(s => `<div class="s">${esc(s)}</div>`).join('')}${m.kleur === 'onbekend' && m.waarom.length ? `<div class="s">${esc(m.waarom[0])}</div>` : ''}</div>`).join('')}</div>
 </section>`;
   };

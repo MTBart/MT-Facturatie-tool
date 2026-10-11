@@ -1,0 +1,14 @@
+{
+ "omschrijving": "mt-koers.js: Koersmeter-kaart en ochtendmeldingen",
+ "heleBestand": true,
+ "fragmentFns": [
+  "K.dagHtml"
+ ],
+ "houd": [
+  {
+   "fn": "cap",
+   "expr": "x.onbetrouwbaar ? ' \\u2014 oordeel onbetrouwbaar' : x.titel ? ' \\u2014 ' + esc(x.titel) : ''",
+   "reden": "tekst met esc(x.titel) en vaste tekst"
+  }
+ ]
+}

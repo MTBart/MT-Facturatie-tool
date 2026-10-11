@@ -1,0 +1,36 @@
+{
+ "omschrijving": "mt-rapport.js: rapporten (beperkte markdown, secties, advies)",
+ "heleBestand": true,
+ "fragmentFns": [
+  "inl",
+  "R.md",
+  "adviesHtml"
+ ],
+ "houd": [
+  {
+   "fn": "scherm",
+   "expr": "links",
+   "reden": "HTML-fragment van de aanroeper; scherm() is een kale omhulling"
+  },
+  {
+   "fn": "scherm",
+   "expr": "inl(x.replace(/^\\s*\\d+[.)]\\s+/, ''))",
+   "reden": "fragment: inl() geeft HTML terug (zijn eigen templates worden gescand)"
+  },
+  {
+   "fn": "teken",
+   "expr": "R.md(z).replace(/^<p>|<\\/p>$/g, '')",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "teken",
+   "expr": "veranderd",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "adviesHtml",
+   "expr": "R.md(z).replace(/^<p>|<\\/p>$/g, '')",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  }
+ ]
+}

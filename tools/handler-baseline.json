@@ -38,8 +38,8 @@
   },
   {
    "bestand": "mt-aanwezig.js",
-   "expr": "o.opener",
-   "reden": "functienaam uit de aanroeper (constante), geen data"
+   "expr": "opener",
+   "reden": "functienaam uit de aanroeper (literal); mt-aanwezig.js valideert hem met een regex als kale functienaam, geen data"
   },
   {
    "bestand": "mt-inbox.js",

@@ -1,0 +1,138 @@
+{
+ "omschrijving": "mt-geld.js: Geld-tab (Koersmeter, potten, prognose, schulden, instellingen)",
+ "heleBestand": true,
+ "fragmentFns": [
+  "koersHtml",
+  "drukHtml",
+  "kaartNu",
+  "kaart",
+  "lijstHtml",
+  "prognoseHtml",
+  "potjesHtml",
+  "schuldenHtml",
+  "roodHtml",
+  "instellenHtml",
+  "letOpHtml",
+  "patronenHtml",
+  "instellingenHtml",
+  "hulpUitkomst",
+  "mijlpaalVlaggen",
+  "S.rcHtml",
+  "rijHtml",
+  "potRij",
+  "bankTekst",
+  "eurVetHtml"
+ ],
+ "houd": [
+  {
+   "fn": "teken",
+   "exprBegin": "(() => { const rp = G.reservePot(d, st.cfg), pt = ((st.cfg || {}).potten || []).find(p => p.id === r",
+   "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
+  },
+  {
+   "fn": "teken",
+   "exprBegin": "metRes ? `<div class=\"mtg-k ${esc(resInfo && resInfo.krediet > 0 ? 'rood' : resInfo && resInfo.gebru",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "roodHtml",
+   "expr": "staaf",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "roodHtml",
+   "expr": "z",
+   "reden": "tekst met esc()-delen, opgebouwd in roodHtml (r670)"
+  },
+  {
+   "fn": "roodHtml",
+   "expr": "delen.join('')",
+   "reden": "lijst van HTML-delen, elk met esc() opgebouwd"
+  },
+  {
+   "fn": "rijHtml",
+   "expr": "chip",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "potRij",
+   "exprBegin": "btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(",
+   "reden": "tekst met esc()-delen (kwartaal en datum geëscaped)"
+  },
+  {
+   "fn": "potRij",
+   "expr": "advHtml",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "potRij",
+   "expr": "meeTekst",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "schuldenHtml",
+   "expr": "kop",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "schuldenHtml",
+   "expr": "nieuw",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "schuldenHtml",
+   "expr": "velden",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "grafiek",
+   "expr": "zones",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "grafiek",
+   "exprBegin": "(() => { const z = G.onzekerVanaf(d, { prognose: st.prognose }); if (z >= totD) return ''; const x0 ",
+   "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
+  },
+  {
+   "fn": "grafiek",
+   "expr": "pijlen",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "grafiek",
+   "expr": "vlaggen",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "prognoseHtml",
+   "expr": "advies.voorstel.low.saldo >= advies.drempel ? ' (weer boven ' + grens + ')' : `, maar nog steeds onder ${grens}`",
+   "reden": "tekst; enige variabele is grens, en die is een van drie vaste teksten (r1212)"
+  },
+  {
+   "fn": "prognoseHtml",
+   "expr": "e ? esc(datumTekst(e.datum)) + ' ' + eur(e.delta) : ''",
+   "reden": "tekst met esc()-delen (datum geëscaped, bedrag = eur())"
+  },
+  {
+   "fn": "prognoseHtml",
+   "exprBegin": "t.open > 0 && t.aan && x.aan ? ` · factuur <input type=\"date\" class=\"mtg-fd\" data-sl=\"${esc(x.sleute",
+   "reden": "HTML-fragment met esc()-delen"
+  },
+  {
+   "fn": "blad",
+   "expr": "html",
+   "reden": "HTML-fragment van de aanroeper; blad() is een kale omhulling"
+  },
+  {
+   "fn": "instBlad",
+   "exprBegin": "(() => { const rp = G.reservePot(st.data, c), pt = (c.potten || []).find(p => p.id === rp), a = G.re",
+   "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
+  },
+  {
+   "fn": "instBlad",
+   "exprBegin": "(() => { const sp = G.spaarRente(Object.assign({}, st.data, { instellingen: Object.assign({}, st.dat",
+   "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
+  }
+ ]
+}

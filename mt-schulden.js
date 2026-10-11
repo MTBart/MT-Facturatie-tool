@@ -200,7 +200,7 @@
   }
   S.leningHtml = function (s, a) {
     const vorm = (S.VORMEN.find(x => x[0] === s.vorm) || [0, s.vorm])[1];
-    const termijn = a.volgende ? `${eurC(a.volgende.renteCent + a.volgende.aflossingCent)} <span style="display:inline;font-size:11px">(rente ${eurC(a.volgende.renteCent)} + aflossing ${eurC(a.volgende.aflossingCent)})</span>`
+    const termijn = a.volgende ? `${esc(eurC(a.volgende.renteCent + a.volgende.aflossingCent))} <span style="display:inline;font-size:11px">(rente ${esc(eurC(a.volgende.renteCent))} + aflossing ${esc(eurC(a.volgende.aflossingCent))})</span>`
       : s.maandtermijn_cent != null ? eurC(s.maandtermijn_cent) : '—';
     const opm = [a.renteOnbekend ? 'Rente onbekend: geen prognose van restschuld, einddatum of rente (0% alleen als je dat invult).' : '',
       a.aflossingsvrij ? 'Aflossingsvrij: de termijn is rente en lost niets af; de restschuld blijft staan.' : '',
@@ -208,11 +208,11 @@
       !a.heeftSchema && a.geenSchemaReden === 'geen-betaling' ? 'Geen termijn of aflossing ingevuld: geen schema.' : '',
       a.standOud ? `De stand is van ${datum(s.stand_datum)}: werk hem bij (zonder schema rekenen we niets af).` : ''].filter(Boolean);
     return `<div class="mts-lening"><div class="mts-kop"><b>${esc(s.naam)}</b><span class="mtg-chip">${esc(s.soort)}</span><span class="mtg-chip">${esc(vorm)}</span></div>
-      <div class="mts-cijfers"><div><span>Restschuld nu${a.isSchatting ? ' (schatting)' : ''}</span>${eurC(a.restNuCent)}</div><div><span>Rente</span>${s.rente_bp == null ? 'onbekend' : pct(s.rente_bp)}</div>
-        <div><span>Termijn per maand</span>${termijn}</div><div><span>Einde${a.eindeBron === 'opgegeven' ? ' (opgegeven)' : ''}</span>${datum(a.einde)}${a.maandenResterend != null ? ` · nog ${looptijd(a.maandenResterend)}` : ''}</div>
-        <div><span>Nog te betalen rente</span>${a.renteResterendCent == null ? '—' : eurC(a.renteResterendCent)}</div></div>
+      <div class="mts-cijfers"><div><span>Restschuld nu${a.isSchatting ? ' (schatting)' : ''}</span>${esc(eurC(a.restNuCent))}</div><div><span>Rente</span>${esc(s.rente_bp == null ? 'onbekend' : pct(s.rente_bp))}</div>
+        <div><span>Termijn per maand</span>${termijn}</div><div><span>Einde${a.eindeBron === 'opgegeven' ? ' (opgegeven)' : ''}</span>${esc(datum(a.einde))}${a.maandenResterend != null ? ` · nog ${looptijd(a.maandenResterend)}` : ''}</div>
+        <div><span>Nog te betalen rente</span>${esc(a.renteResterendCent == null ? '—' : eurC(a.renteResterendCent))}</div></div>
       ${grafiekSvg(a)}
-      <div class="mtg-melding" style="font-size:12px">Stand ${eurC(a.standCent)} op ${datum(s.stand_datum)}${a.isSchatting ? `; daarna ${a.verstreken} maand${a.verstreken === 1 ? '' : 'en'} afgelost volgens het schema` : ''}.</div>
+      <div class="mtg-melding" style="font-size:12px">Stand ${esc(eurC(a.standCent))} op ${esc(datum(s.stand_datum))}${a.isSchatting ? `; daarna ${a.verstreken} maand${a.verstreken === 1 ? '' : 'en'} afgelost volgens het schema` : ''}.</div>
       ${opm.map(o => `<div class="mtg-melding" style="font-size:12px">${esc(o)}</div>`).join('')}</div>`;
   };
   // Uitkomst van de rekenhulp (tekst), met het kas-effect. h = { id, perMaand, eenmalig, datum } (invoer als tekst).
@@ -227,7 +227,7 @@
       const eind = r.maandenMet === 0 ? null : S.plusMaanden(h.vandaag, r.maandenMet);
       const vanaf = k ? ` vanaf ${datum(start)}` : '';
       t = r.eenmaligAlles ? `Extra aflossen: ${wat}${vanaf} → de lening is dan in één keer afgelost; ${eurC(r.renteBespaardCent)} rente bespaard.`
-        : `Extra aflossen: ${wat}${vanaf} → <b>${r.maandenEerder ? `${r.maandenEerder} maand${r.maandenEerder === 1 ? '' : 'en'} eerder klaar` : 'nog geen hele maand eerder klaar'}</b>${eind ? ` (rond ${datum(eind)})` : ''}, <b>${eurC(r.renteBespaardCent)} rente bespaard</b>.`;
+        : `Extra aflossen: ${esc(wat)}${esc(vanaf)} → <b>${r.maandenEerder ? `${r.maandenEerder} maand${r.maandenEerder === 1 ? '' : 'en'} eerder klaar` : 'nog geen hele maand eerder klaar'}</b>${eind ? ` (rond ${datum(eind)})` : ''}, <b>${esc(eurC(r.renteBespaardCent))} rente bespaard</b>.`;
       t += ` <span class="mtg-melding" style="font-size:12px">Aanname: de termijn blijft gelijk en de looptijd wordt korter${k ? `; tot ${datum(start)} lopen de gewone termijnen door` : ''}. Verlaagt de bank juist de termijn, dan klopt dit niet.</span>`;
     } else t = r.reden === 'al-afgelost' ? 'Volgens het schema is de lening vóór die datum al afgelost.' : a.renteOnbekend ? 'Rente onbekend: niets uit te rekenen. Vul de rente in (of expliciet 0).' : a.aflossingsvrij ? 'Aflossingsvrij: zonder vast aflosschema is er geen "eerder klaar" te berekenen.' : 'Geen aflosschema dat afloopt: niets te vergelijken.';
     return `<div class="mts-uit">${t}</div>${S.kasZin(kas, { eerste: per > 0 })}`;
@@ -239,17 +239,17 @@
     if (!kas.binnen) return `<div class="mts-kas">De ${ctx.eerste ? 'eerste ' : ''}betaling valt na de komende 8 weken: geen effect op de kasruimte in die periode. Kijk in de grafiek verder vooruit.</div>`;
     const v = kas.verschil, kl = kas.onderGrens ? 'rood' : v < 0 ? 'oranje' : '', van = `van ${eur(kas.voor.ruimte)} naar ${eur(kas.na.ruimte)} op ${datum(kas.na.datum)}`;
     const kop = Math.abs(v) < 0.5 ? `De kasruimte (laagste punt komende 8 weken) blijft gelijk${ctx.uitPot ? `: het geld verschuift alleen van ${esc(ctx.uitPot)} naar de lopende rekening (het was al van jou)` : ''} (${eur(kas.voor.ruimte)}).`
-      : `Dit ${v < 0 ? 'verlaagt' : 'verhoogt'} de kasruimte (laagste punt komende 8 weken) met <b>${eur(Math.abs(v))}</b>: ${van}.`;
+      : `Dit ${v < 0 ? 'verlaagt' : 'verhoogt'} de kasruimte (laagste punt komende 8 weken) met <b>${esc(eur(Math.abs(v)))}</b>: ${esc(van)}.`;
     const potNoot = ctx.uitPot && v >= 0.5 ? ` Dat komt doordat er in ${esc(ctx.uitPot)} meer staat dan je eigen reserve-doel; zakt het potje daaronder, dan blijft de kasruimte verder gelijk.` : '';
-    return `<div class="mts-kas ${kl}">${kop}${potNoot}${kas.onderGrens && !kas.wasOnder ? ' <b>Daarmee zakt de kas onder je ondergrens.</b>' : kas.onderGrens ? ' De kas zit dan (nog) onder je ondergrens.' : ''}${kas.onderLimiet ? ' Ook onder de kredietlimiet.' : ''}</div>`;
+    return `<div class="mts-kas ${esc(kl)}">${kop}${potNoot}${kas.onderGrens && !kas.wasOnder ? ' <b>Daarmee zakt de kas onder je ondergrens.</b>' : kas.onderGrens ? ' De kas zit dan (nog) onder je ondergrens.' : ''}${kas.onderLimiet ? ' Ook onder de kredietlimiet.' : ''}</div>`;
   };
   const pctJ = x => (x * 100).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
   S.rcHtml = function (i) {
     const r = i.r, kosten = i.nuMnd != null ? `≈ ${eur(i.nuMnd)}/mnd · ≈ ${eur(i.nuMnd * 12)}/jr` : 'nog niet bekend';
     return `<div class="mts-lening"><div class="mts-kop"><b>Rekening-courant (rood staan)</b><span class="mtg-chip">krediet</span><span class="mtg-chip">lost niet af</span></div>
-      <div class="mts-cijfers"><div><span>Nu rood (lopende rekening)</span>${i.rood == null ? 'onbekend' : i.rood > 0 ? eur(i.rood) : 'niet rood'}</div><div><span>Limiet</span>${eur(i.limiet)}${i.gebruikPct != null && i.rood > 0 ? ` · ${Math.round(i.gebruikPct)}% gebruikt` : ''}</div>
-        <div><span>Kosten nu</span>${kosten}</div><div><span>Debetrente</span>${i.tariefJaar != null ? '±' + pctJ(i.tariefJaar) + '/jr' : 'nog niet afgeleid'}</div>
-        <div><span>Provisie</span>${i.provisie != null ? `≈ ${eur(i.provisie)}/mnd` : '—'}</div><div><span>Afgelopen ${i.laatste ? i.laatste.maanden : 12} mnd</span>${i.laatste ? eur(i.laatste.totaal) + ' aan ING-kosten' : 'nog geen afrekeningen gezien'}</div></div>
+      <div class="mts-cijfers"><div><span>Nu rood (lopende rekening)</span>${esc(i.rood == null ? 'onbekend' : i.rood > 0 ? eur(i.rood) : 'niet rood')}</div><div><span>Limiet</span>${esc(eur(i.limiet))}${i.gebruikPct != null && i.rood > 0 ? ` · ${Math.round(i.gebruikPct)}% gebruikt` : ''}</div>
+        <div><span>Kosten nu</span>${esc(kosten)}</div><div><span>Debetrente</span>${esc(i.tariefJaar != null ? '±' + pctJ(i.tariefJaar) + '/jr' : 'nog niet afgeleid')}</div>
+        <div><span>Provisie</span>${i.provisie != null ? `≈ ${eur(i.provisie)}/mnd` : '—'}</div><div><span>Afgelopen ${esc(i.laatste ? i.laatste.maanden : 12)} mnd</span>${esc(i.laatste ? eur(i.laatste.totaal) + ' aan ING-kosten' : 'nog geen afrekeningen gezien')}</div></div>
       <div class="mtg-melding" style="font-size:12px">Geen aflossende lening: de kosten zijn debetrente over het rode saldo${i.tariefJaar != null ? ' (tarief afgeleid uit je ING-afrekeningen)' : ''} plus de bereidstellingsprovisie, die blijft zolang de faciliteit er is. Meer in de kaart "Roodstaan: kosten en besparing".</div></div>`;
   };
   // Rekenhulp RC: h = { eenmalig, bron (pot-id of '' = van buiten), datum }, potNaam = naam van dat potje.
@@ -258,13 +258,13 @@
     const gevraagd = h.gevraagd != null ? h.gevraagd : S.centUit(h.eenmalig) || 0, c = h.cent != null ? h.cent : gevraagd, pn = esc(potNaam || h.bron);
     if (!(gevraagd > 0)) return '<div class="mts-uit mtg-melding">Vul een bedrag in om terug te boeken of aan te vullen.</div>';
     if (grens && grens.stand == null) return `<div class="mts-uit">Het saldo van ${pn} is onbekend: niets te rekenen. Ijk eerst het potje.</div>`;
-    if (grens && !(c > 0)) return `<div class="mts-uit">In ${pn} zit op ${datum(grens.datum)} niets: er valt niets terug te boeken.</div>`;
-    const noot = grens && c < gevraagd ? `<div class="mtg-melding" style="font-size:12px">In ${pn} zit op ${datum(grens.datum)} maar ${eurC(c)}: gerekend met ${eurC(c)} in plaats van ${eurC(gevraagd)}.</div>` : '';
+    if (grens && !(c > 0)) return `<div class="mts-uit">In ${pn} zit op ${esc(datum(grens.datum))} niets: er valt niets terug te boeken.</div>`;
+    const noot = grens && c < gevraagd ? `<div class="mtg-melding" style="font-size:12px">In ${pn} zit op ${esc(datum(grens.datum))} maar ${esc(eurC(c))}: gerekend met ${esc(eurC(c))} in plaats van ${esc(eurC(gevraagd))}.</div>` : '';
     const b = S.rcBesparing(info, c / 100, !!h.bron), wat = `${eurC(c)} ${h.bron ? `terugboeken uit ${pn}` : 'aanvullen (storting van buiten)'}`;
     let t;
     if (!b || !b.kan) t = b && b.reden === 'niet-rood' ? `${wat}: je staat nu niet rood, dus het bespaart nu geen rente. De provisie blijft.` : `${wat}: nog geen debetrente in de afrekeningen gezien, dus geen tarief en geen besparing te berekenen.`;
     else {
-      t = `${wat} → bespaart <b>± ${eur(b.renteJr)} per jaar aan rente</b> (± ${eur(b.renteMnd)}/mnd debetrente, tarief ±${pctJ(b.tariefJaar)}/jr).`;
+      t = `${esc(wat)} → bespaart <b>± ${esc(eur(b.renteJr))} per jaar aan rente</b> (± ${esc(eur(b.renteMnd))}/mnd debetrente, tarief ±${esc(pctJ(b.tariefJaar))}/jr).`;
       if (b.teVeel) t += ` Meer dan je nu rood staat (${eur(b.rood)}) levert niets extra op.`;
       if (b.spaarMisJr != null) t += ` Je mist dan ± ${eur(b.spaarMisJr)}/jr spaarrente (${pctJ(b.sp.tarief)}/jr): netto ± ${eur(b.nettoJr)} per jaar.`;
       else if (b.spOnbekend) t += ' Spaarrente op het potje onbekend: het netto verschil is niet te berekenen.';

@@ -141,7 +141,7 @@
       const dangerCls = opts.danger ? ' mtd-danger' : '';
       inner += `<div class="mtd-foot">`;
       if (kind !== 'alert') inner += `<button type="button" class="mtd-btn" id="mtd-cancel">${cancelLabel}</button>`;
-      if (kind !== 'choose') inner += `<button type="button" class="mtd-btn mtd-ok${dangerCls}" id="mtd-ok">${okLabel}</button>`;
+      if (kind !== 'choose') inner += `<button type="button" class="mtd-btn mtd-ok${esc(dangerCls)}" id="mtd-ok">${okLabel}</button>`;
       inner += `</div>`;
       dlg.innerHTML = inner;
       doc.body.appendChild(dlg);

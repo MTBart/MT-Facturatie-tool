@@ -1,13 +1,4 @@
 {
- "toelichting": "Bestanden met ruwe ${...}-interpolaties die nog in geen sink-groep zitten (F7 3b groep 6). Haal een bestand hier weg zodra het een groep in tools/sinks-groepen.js heeft; check-sinks faalt als dit lijstje veroudert of een nieuw bestand met ruwe interpolaties niet in een groep zit.",
- "bestanden": [
-  { "bestand": "mt-geld.js", "reden": "Geld-tab (Moneybird-tegenpartijen, bedragen): 3b groep 6" },
-  { "bestand": "mt-cijfers.js", "reden": "cijfers (Moneybird-grootboeken): 3b groep 6" },
-  { "bestand": "mt-schulden.js", "reden": "schulden/aflossing: 3b groep 6" },
-  { "bestand": "mt-verhuis.js", "reden": "verhuisknop (achter de vlag): 3b groep 6" },
-  { "bestand": "mt-rapport.js", "reden": "rapporten: 3b groep 6" },
-  { "bestand": "mt-aanwezig.js", "reden": "aanwezigheidsbord: 3b groep 6" },
-  { "bestand": "mt-dialog.js", "reden": "dialogen: 3b groep 6" },
-  { "bestand": "mt-koers.js", "reden": "Koersmeter: 3b groep 6" }
- ]
+ "toelichting": "Bestanden met ruwe ${...}-interpolaties die nog in geen sink-groep zitten. Sinds F7 3b groep 6 is dit lijstje leeg: elk bestand met interpolaties zit in een groep (tools/sinks-groepen.js). Een nieuw bestand met ruwe interpolaties moet een groep krijgen of hier met een reden worden gezet; check-sinks faalt als een genoemd bestand alsnog in een groep zit of niet meer bestaat.",
+ "bestanden": []
 }

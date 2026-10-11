@@ -1,0 +1,67 @@
+{
+ "omschrijving": "mt-cijfers.js: cijfers/grafieken (omzet, kosten, marges, waterval)",
+ "heleBestand": true,
+ "fragmentFns": [
+  "grafiekHtml",
+  "euroHtml",
+  "rij",
+  "mbLink",
+  "kpiHtml",
+  "watervalHtml",
+  "bulletHtml",
+  "opties",
+  "bmVeld"
+ ],
+ "houd": [
+  {
+   "fn": "teken",
+   "expr": "balk",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "teken",
+   "expr": "midden",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "grafiekHtml",
+   "expr": "dim",
+   "reden": "vast attribuutfragment (opacity), geen data"
+  },
+  {
+   "fn": "grafiekHtml",
+   "expr": "defs",
+   "reden": "vaste SVG-defs (geen data)"
+  },
+  {
+   "fn": "grafiekHtml",
+   "expr": "svg",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "pad",
+   "expr": "d",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "bulletHtml",
+   "expr": "bmEl",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "watervalHtml",
+   "expr": "defs",
+   "reden": "vaste SVG-defs (geen data)"
+  },
+  {
+   "fn": "watervalHtml",
+   "expr": "svg",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "sheet",
+   "expr": "html",
+   "reden": "HTML-fragment van de aanroeper; sheet() is een kale omhulling"
+  }
+ ]
+}

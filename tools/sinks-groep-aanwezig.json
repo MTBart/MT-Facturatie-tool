@@ -1,0 +1,32 @@
+{
+ "omschrijving": "mt-aanwezig.js: wie-werkt-waaraan overzicht",
+ "heleBestand": true,
+ "fragmentFns": [],
+ "houd": [
+  {
+   "fn": "hhmm",
+   "expr": "opener",
+   "reden": "functienaam van de aanroeper (literal in v2.html/mobiel.html), gevalideerd met een regex: alleen een kale naam, nooit data"
+  },
+  {
+   "fn": "hhmm",
+   "expr": "klik",
+   "reden": "attribuutfragment: onclick met gevalideerde functienaam, Number() en esc()-delen"
+  },
+  {
+   "fn": "hhmm",
+   "expr": "titelOnb",
+   "reden": "vaste attribuuttekst (geen data)"
+  },
+  {
+   "fn": "hhmm",
+   "expr": "nu",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "hhmm",
+   "expr": "gepland",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  }
+ ]
+}

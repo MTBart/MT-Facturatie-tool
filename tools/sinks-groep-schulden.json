@@ -1,0 +1,50 @@
+{
+ "omschrijving": "mt-schulden.js: schuldenplanner (aflossen, kasruimte, ING-kosten)",
+ "heleBestand": true,
+ "fragmentFns": [
+  "S.kasZin",
+  "grafiekSvg"
+ ],
+ "houd": [
+  {
+   "fn": "grafiekSvg",
+   "expr": "termijn",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "grafiekSvg",
+   "expr": "t",
+   "reden": "HTML-fragment met alleen getallen/vaste tekst (eurC/datum), geen vrije tekst"
+  },
+  {
+   "fn": "grafiekSvg",
+   "expr": "kop",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "grafiekSvg",
+   "expr": "potNoot",
+   "reden": "tekst met esc(ctx.uitPot) en vaste tekst"
+  },
+  {
+   "fn": "grafiekSvg",
+   "exprBegin": "kas.onderGrens && !kas.wasOnder ? ' <b>Daarmee zakt de kas onder je ondergrens.</b>' : kas.onderGren",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "pctJ",
+   "expr": "pn",
+   "reden": "al geëscaped: variabele = esc(...)"
+  },
+  {
+   "fn": "pctJ",
+   "expr": "noot",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "pctJ",
+   "expr": "t",
+   "reden": "HTML-fragment met alleen getallen/vaste tekst (eurC/datum), geen vrije tekst"
+  }
+ ]
+}

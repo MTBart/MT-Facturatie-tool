@@ -1,0 +1,8 @@
+{
+ "omschrijving": "mt-verhuis.js: verhuisknop (pakket maken/importeren)",
+ "heleBestand": true,
+ "fragmentFns": [
+  "dlKnop"
+ ],
+ "houd": []
+}

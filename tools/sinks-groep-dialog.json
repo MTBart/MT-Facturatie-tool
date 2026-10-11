@@ -1,0 +1,32 @@
+{
+ "omschrijving": "mt-dialog.js: modale dialogen (alert/confirm/prompt/choose)",
+ "heleBestand": true,
+ "fragmentFns": [],
+ "houd": [
+  {
+   "fn": "open",
+   "expr": "bodyHtml",
+   "reden": "textToHtml() (escaped) of bewust vertrouwde HTML (private WeakSet)"
+  },
+  {
+   "fn": "open",
+   "expr": "ph",
+   "reden": "attribuutfragment met esc(opts.placeholder)"
+  },
+  {
+   "fn": "open",
+   "expr": "sub",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "open",
+   "expr": "cancelLabel",
+   "reden": "al geëscaped: variabele = esc(...)"
+  },
+  {
+   "fn": "open",
+   "expr": "okLabel",
+   "reden": "al geëscaped: variabele = esc(...)"
+  }
+ ]
+}
