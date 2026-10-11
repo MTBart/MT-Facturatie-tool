@@ -5810,6 +5810,7 @@ function tijdlijnData(codes,st){
   werk.forEach(r=>{ const s=slugVanUser(r.user); if(!pers.some(p=>p.slug===s)){ const u=tgUsers.find(x=>String(x.id)===String(r.user)); pers.push({slug:s,naam:(u&&u.naam)||('Toggl '+r.user),email:(u&&u.email)||''}); } });
   const cel={}, norm=x=>String(x||'').trim().toLowerCase();
   const vanPersoon=(b,p)=>{ const x=norm(b.persoon); return x===p.slug||(p.email&&x===norm(p.email)); };
+  const capStat={toggl:0,eigen:0,redenen:{}};   // per teamlid-week: Toggl of Beheer, en waarom niet Toggl
   pers.forEach(p=>{ cel[p.slug]={};
     weken.forEach(w=>{
       const bk=blokCodes.filter(b=>vanPersoon(b,p)&&b.datum>=w.ws&&b.datum<=w.we);
@@ -5823,6 +5824,9 @@ function tijdlijnData(codes,st){
         if(tgc){ const dagen=Object.keys(tgc).filter(d=>d>=w.ws&&d<=w.we); const wd=dagen.filter(d=>{ const g=new Date(d+'T12:00:00').getDay(); return g>0&&g<6; });
           if(wd.length>=5){ cap=dagen.reduce((s,d)=>s+tgc[d].werk,0); vrij=dagen.reduce((s,d)=>s+tgc[d].vrij,0); capBron='toggl'; } }
         if(cap===null){ cap=capaciteitPerDag({pers:[p.slug],van:w.ws,tot:w.we})[p.slug].totaal; vrij=cap-geplandAlle; }
+        if(capBron==='toggl') capStat.toggl++;
+        else { capStat.eigen++; const red=(st.tgcapPersoon&&st.tgcapPersoon[p.slug])||(tgc?'dagen ontbreken':(st.tgcap?'geen Toggl-gegevens':''));
+          if(red){ const e=capStat.redenen[p.slug]=capStat.redenen[p.slug]||{naam:p.naam,reden:red,weken:[]}; if(red==='dagen ontbreken') e.weken.push(w.label); } }
       }
       const perProj={}; bk.forEach(b=>{ (perProj[b.project_code]=perProj[b.project_code]||{p:0,w:0}).p+=(Number(b.duurMin)||0)/60; });
       wr.forEach(r=>{ const pc=((typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]).find(x=>Number(x.tg_project_id)===Number(r.project))||{}).code||'?'; (perProj[pc]=perProj[pc]||{p:0,w:0}).w+=r.uren; });
@@ -5841,7 +5845,7 @@ function tijdlijnData(codes,st){
     if(o&&Array.isArray(o.uren)) begroot+=o.uren.reduce((s,u)=>s+(parseFloat(String(u.uren||'').replace(',','.'))||0),0); });
   const komend=weken.filter(w=>w.ws>=_tlYmd(agMaandag(new Date()))).slice(0,4);
   const vrijTeam=MT_TEAM.reduce((s,m)=>s+komend.reduce((t,w)=>t+Math.max(0,(cel[m.slug]&&cel[m.slug][w.ws]&&cel[m.slug][w.ws].vrij)||0),0),0);
-  return {weken,van,tot,pers,cel,fasen,som:{gepland,gewerkt,begroot,vrijTeam}};
+  return {weken,van,tot,pers,cel,fasen,capStat,som:{gepland,gewerkt,begroot,vrijTeam}};
 }
 function projPlanTijdlijn(el,codes,opts={}){
   if(!el) return;
@@ -5889,11 +5893,13 @@ function _tlTeken(key){
       const tip=[c.gepland?_tlU(c.gepland)+' u gepland':'',c.gewerkt?_tlU(c.gewerkt)+' u gewerkt':'',c.cap!==null?_tlU(Math.max(0,c.vrij))+' u vrij van '+_tlU(c.cap):''].filter(Boolean).join(' · ');
       return `<button type="button" class="tl-cel cap-${esc(c.niveau||'x')}${w.huidig?' nu':''}" title="${esc(tip||'niets gepland')}" aria-label="${esc(p.naam)}, ${esc(w.label)}: ${esc(tip||'niets gepland')}" onclick="tlDetail(${jsArg(k)},'cel',${jsArg(p.slug)},${jsArg(w.ws)})">${segs}${c.gepland||c.gewerkt?`<span class="tl-getal">${esc(c.gepland?'📅'+_tlU(c.gepland):'')}${c.gewerkt?`<i>⏱${esc(_tlU(c.gewerkt))}</i>`:''}</span>`:''}</button>`; }).join('')+'</div>';
   });
+  const cs=D.capStat, redenTxt=Object.values(cs.redenen).slice(0,6).map(e=>e.naam+': '+e.reden+(e.weken.length?' ('+e.weken.slice(0,4).join(', ')+(e.weken.length>4?' +'+(e.weken.length-4):'')+')':'')).join('; ')+(Object.keys(cs.redenen).length>6?'; …':'');
+  const capTekst=(cs.toggl>0&&cs.eigen===0)?'Toggl':(cs.toggl>0?'deels Toggl, deels Beheer'+(redenTxt?' — '+redenTxt:''):'werkuren − verlof − vrije dagen (Beheer)'+(st.tgcapTekst?' — Toggl: '+st.tgcapTekst:(redenTxt?' — '+redenTxt:'')));
   const nu=D.weken.findIndex(w=>w.huidig);
   const lijn=(vandaag>=D.van&&vandaag<=D.tot)?`<div class="tl-vandaag" style="left:${esc(TL_NAAM+(_tlDagen(D.van,vandaag)+0.5)/7*TL_KOL)}px" aria-hidden="true"></div>`:'';
   const legenda=`<div class="tl-legenda"><span><i class="tl-lg cap-ruim"></i>ruim</span><span><i class="tl-lg cap-krap"></i>krap</span><span><i class="tl-lg cap-vol"></i>vol</span>
     <span><i class="tl-lg p"></i>📅 gepland</span><span><i class="tl-lg w"></i>⏱ gewerkt (Toggl)</span>
-    <span class="dos-meta">capaciteit: ${esc((st.tgcap?'Toggl':'werkuren − verlof − vrije dagen (Beheer)')+(st.tgcapTekst?(st.tgcap?' (':' — Toggl: ')+st.tgcapTekst+(st.tgcap?')':''):''))}</span>
+    <span class="dos-meta">capaciteit: ${esc(capTekst)}</span>
     ${meer?st.codes.map(c=>`<span><i class="tl-lg" style="background:${esc(agProjKleur(c))}"></i>${esc(projKort(c))}</span>`).join(''):''}</div>`;
   el.innerHTML=kop+`<div class="tl-veeg" aria-hidden="true">↔ veeg voor meer weken</div><div class="tl-scroll"><div class="tl-grid" style="width:${esc(TL_NAAM+D.weken.length*TL_KOL)}px">${html}${lijn}</div></div>`+legenda+`<div class="tl-detail" aria-live="polite">${st.detail?_tlDetailHtml(key,D,st.detail):'<span class="dos-meta">Klik op een week, fase of cel voor details.</span>'}</div>`;
 }
@@ -5912,10 +5918,13 @@ async function _tlLaadToggl(key){
     // Toggl-capaciteit (optioneel): faalt stil → eigen capaciteit uit Beheer
     try{
       const map={}; MT_TEAM.forEach(m=>{ const u=users.find(x=>x.email===m.email.toLowerCase()); if(u) map[m.slug]=u.id; });
-      const ids=Object.values(map); st.tgcap=null; st.tgcapTekst='';
-      if(ids.length&&typeof tgCapaciteit==='function'){ const cap=await tgCapaciteit(ids,van,tot); if(cap&&Object.keys(cap).length){ st.tgcap=cap; st.tgcapUser=map; } st.tgcapTekst=(typeof tgCapaciteitStatus==='function')?tgCapaciteitStatus():''; }
+      const ids=Object.values(map); st.tgcap=null; st.tgcapTekst=''; st.tgcapPersoon={};
+      if(ids.length&&typeof tgCapaciteit==='function'){ const cap=await tgCapaciteit(ids,van,tot); if(cap&&Object.keys(cap).length){ st.tgcap=cap; st.tgcapUser=map; } st.tgcapTekst=(typeof tgCapaciteitStatus==='function')?tgCapaciteitStatus():'';
+        // Waarom een teamlid (nog) geen Toggl-capaciteit heeft: geen koppeling, of de aanroep voor die persoon mislukte.
+        const fouten=(tgCapaciteit.laatste&&tgCapaciteit.laatste.fouten)||{};
+        MT_TEAM.forEach(tm=>{ const uid=map[tm.slug]; if(uid==null) st.tgcapPersoon[tm.slug]='geen Toggl-koppeling'; else if(fouten[uid]!=null) st.tgcapPersoon[tm.slug]=(typeof tgCapaciteitReden==='function')?tgCapaciteitReden(fouten[uid]):String(fouten[uid]); }); }
       else if(!ids.length) st.tgcapTekst='geen Toggl-gebruikers gekoppeld';
-    }catch(e){ st.tgcap=null; st.tgcapTekst=String(e&&e.message||'fout').slice(0,60); }
+    }catch(e){ st.tgcap=null; st.tgcapTekst=String(e&&e.message||'fout').slice(0,60); st.tgcapPersoon={}; }
   }catch(e){ if(st.tgSig!==sig) return; st.toggl={status:'fout',fout:(typeof _tgFoutTekst==='function')?_tgFoutTekst(e):(e.message||String(e))}; }
   _tlTeken(key);
 }

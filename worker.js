@@ -1533,21 +1533,28 @@ export class MtTeller {
           }
           return antw({ ok: true, claim, zou_weigeren: reden || undefined });
         }
-        if (op === 'ai-afrond') {
+        if (op === 'ai-verleng') {                                      // hartslag van een lopende stream: de claim blijft vers en het alarm rekent hem niet af
           const fk = 'f:' + h + ':' + String(b.claim || ''), f = await st.get(fk);
-          const u = (await st.get(dk)) || { tokens: 0, calls: 0, in: 0, uit: 0, afgewezen: 0 }, g = (await st.get(gk)) || { tokens: 0, calls: 0, afgewezen: 0 };
+          if (!f) return antw({ ok: true, bestaat: false });
+          f.ts = nu; await st.put(fk, f); return antw({ ok: true, bestaat: true });
+        }
+        if (op === 'ai-afrond') {
+          const cid = String(b.claim || ''), fk = 'f:' + h + ':' + cid, tk = 'x:' + h + ':' + cid, f = await st.get(fk), graf = f ? null : await st.get(tk);
+          // Een claim die al verlopen was (grafsteen): de reservering is bij het verlopen deels teruggeboekt; bij de afronding wordt het verschil alsnog afgerekend (eenmalig per claim-id).
+          const bron = f || (graf ? { reserve: Math.max(0, graf.reserve - graf.terug), dag: graf.dag, uit: 0, zou: graf.zou } : null);
+          if (!bron) { await logZet({ ts: nu, oid: h, model: kort(b.model), status: ['ok', 'fout', 'afgebroken'].includes(b.status) ? b.status : 'fout', niet_gevonden: true }); return antw({ ok: true, niet_gevonden: true }); }   // onbekend of al afgerekend: tellers blijven ongemoeid (idempotent)
+          const cd = /^\d{4}-\d{2}-\d{2}$/.test(String(bron.dag || '')) ? bron.dag : dag, uk = 'u:' + h + ':' + cd, gk3 = 'g:' + cd;
+          const u = (await st.get(uk)) || { tokens: 0, calls: 0, in: 0, uit: 0, afgewezen: 0 }, g = (await st.get(gk3)) || { tokens: 0, calls: 0, afgewezen: 0 };
           const tin = getal(b.in), tuit = getal(b.uit), status = ['ok', 'fout', 'afgebroken'].includes(b.status) ? b.status : 'fout';
           let delta = 0;
-          if (f) {
-            if (status === 'fout' && tin == null && tuit == null) delta = -f.reserve;                       // niets verbruikt: de reservering terug
-            else if (tin != null && tuit != null) delta = (tin + tuit) - f.reserve;                          // werkelijk gebruik i.p.v. de schatting (ook bij een afgebroken stream: wat al binnen was)
-            else if (status === 'afgebroken') delta = -Math.max(0, Math.min(f.reserve, f.uit || 0));        // afgebroken zonder cijfers: minstens de ongebruikte output-reservering terug
-            await st.delete(fk);
-          }
+          if (status === 'fout' && tin == null && tuit == null) delta = -bron.reserve;                       // niets verbruikt: de reservering terug
+          else if (tin != null && tuit != null) delta = (tin + tuit) - bron.reserve;                          // werkelijk gebruik i.p.v. de schatting (ook bij een afgebroken stream: wat al binnen was)
+          else if (status === 'afgebroken') delta = -Math.max(0, Math.min(bron.reserve, bron.uit || 0));      // afgebroken zonder cijfers: minstens de ongebruikte output-reservering terug
+          if (f) await st.delete(fk); else await st.delete(tk);
           u.tokens = Math.max(0, u.tokens + delta); g.tokens = Math.max(0, g.tokens + delta);
           if (tin != null) u.in += tin; if (tuit != null) u.uit += tuit;
-          await st.put({ [dk]: u, [gk]: g });
-          await logZet({ ts: nu, oid: h, rol: u.rol, model: kort(b.model), in: tin == null ? undefined : tin, uit: tuit == null ? undefined : tuit, status, http: getal(b.http) == null ? undefined : getal(b.http), ms: getal(b.ms) == null ? undefined : getal(b.ms), zou: f && f.zou, niet_gevonden: f ? undefined : true });
+          await st.put({ [uk]: u, [gk3]: g });
+          await logZet({ ts: nu, oid: h, rol: u.rol, model: kort(b.model), in: tin == null ? undefined : tin, uit: tuit == null ? undefined : tuit, status, http: getal(b.http) == null ? undefined : getal(b.http), ms: getal(b.ms) == null ? undefined : getal(b.ms), zou: bron.zou, laat: graf ? true : undefined });
           const logs = [...(await st.list({ prefix: 'log:', limit: AI_LOG_MAX + 50 }))].map(([k]) => k);
           if (logs.length > AI_LOG_MAX) await st.delete(logs.slice(AI_LOG_MAX));
           return antw({ ok: true });
@@ -1614,6 +1621,10 @@ export class MtTeller {
       for (const [d, x] of e.dagen) { const uk = 'u:' + o + ':' + d, gk = 'g:' + d, u2 = await st.get(uk), g2 = await st.get(gk); if (u2) u2.tokens = Math.max(0, u2.tokens - x); if (g2) g2.tokens = Math.max(0, g2.tokens - x); await st.put({ ...(u2 ? { [uk]: u2 } : {}), ...(g2 ? { [gk]: g2 } : {}) }); }
       await st.put('log:' + String(9e15 - nu).padStart(16, '0') + ':' + randHex(3), { ts: nu, oid: o, status: 'verlopen', n: e.n, teruggeboekt: e.som });
     }
+    // Grafsteen per verlopen claim (24 uur): komt de stream later toch nog tot een afronding, dan wordt het verschil alsnog afgerekend.
+    for (let i = 0; i < verlopen.length; i += 100) await st.put(Object.fromEntries(verlopen.slice(i, i + 100).map(([k, f]) => { const [, o, cid] = k.split(':'); return ['x:' + o + ':' + cid, { dag: /^\d{4}-\d{2}-\d{2}$/.test(String(f.dag || '')) ? f.dag : dagStd, reserve: f.reserve, terug: Math.max(0, Math.min(f.reserve, f.uit || 0)), ts: nu, zou: f.zou }]; })));
+    const oudeGraven = [...(await st.list({ prefix: 'x:' }))].filter(([, x]) => nu - x.ts > 24 * 3600 * 1000).map(([k]) => k);
+    for (let i = 0; i < oudeGraven.length; i += 100) await st.delete(oudeGraven.slice(i, i + 100));
     for (let i = 0; i < verlopen.length; i += 100) await st.delete(verlopen.slice(i, i + 100).map(([k]) => k));
     return verlopen.length;
   }
@@ -1633,7 +1644,7 @@ export class MtTeller {
 // hele tool. Standaardwaarden hieronder; de eigenaar kan ze aanpassen (POST /beheer/ai-limieten, KV instelling:ai_limieten).
 // Modus (wrangler-var AI_LIMIET_MODUS): 'afdwingen' (standaard) weigert met 429, 'log' telt en logt alleen wat geweigerd zóu worden, 'uit' doet niets.
 // Het logboek bevat nooit de inhoud van vragen of antwoorden.
-const AI_CLAIM_VERLOOP_MS = 5 * 60 * 1000, AI_LOG_MAX = 300, AI_BEWAAR_DAGEN = 45;
+const AI_CLAIM_VERLOOP_MS = 5 * 60 * 1000, AI_LOG_MAX = 300, AI_BEWAAR_DAGEN = 45, AI_HARTSLAG_MS = 60 * 1000, AI_HARTSLAG_MAX = 30;
 const AI_LIMIET_STD = { totaal_dag: 4000000, rollen: { eigenaar: { dag: 1500000, minuut: 30, gelijktijdig: 4 }, beheerder: { dag: 1000000, minuut: 20, gelijktijdig: 3 },
   kantoor: { dag: 600000, minuut: 20, gelijktijdig: 3 }, werkplaats: { dag: 150000, minuut: 10, gelijktijdig: 2 } } };
 const AI_LIMIET_GRENS = { dag: [0, 50e6], minuut: [1, 600], gelijktijdig: [1, 20], totaal_dag: [0, 200e6] };
@@ -1650,22 +1661,40 @@ async function aiLimieten(env) { let r = null; try { r = await kvJson(env, 'inst
 // Geschatte invoertokens (behoudend): tekst ≈ 1 token per 3 tekens, afbeelding vast, document naar grootte met een plafond. Geen inhoud bewaard.
 const AI_DOC_BYTES = 400 * 1024;   // harde grens: documenten boven deze grootte (bytes, na base64-decodering) worden vooraf geweigerd
 const AI_DOC_MAX = 150000;         // geschatte tokens aan documenten waarboven een verzoek vooraf wordt geweigerd (bij 1 token per 3 bytes is de bytegrens de feitelijke stop)
+const AI_TEL_DREMPEL = 8000;       // vanaf zoveel bytes tekst (of bij een document/afbeelding) telt 'afdwingen' de invoer exact met /v1/messages/count_tokens
+const AI_TEL_TIMEOUT_MS = 8000;
+const _enc = new TextEncoder();
+const utf8Len = x => _enc.encode(String(x == null ? '' : x)).length;
+// Schatting: tekst = UTF-8-bytes / 3 (ook niet-Latijnse tekst blijft zo ruim), document = bytes / 3, afbeelding vast. `nCons` is de behoudende bovengrens voor als het exact tellen mislukt:
+// 1 token per byte (tekst én document; documenten zijn al tot 400 kB begrensd). Geen inhoud bewaard.
 function aiSchatTokens(p) {
-  let n = 50, doc = 0, bytes = 0, onbekend = false;
-  const blok = b => { if (!b) return; if (typeof b === 'string') n += Math.ceil(b.length / 3); else if (b.type === 'text') n += Math.ceil(String(b.text || '').length / 3);
-    else if (b.type === 'image') n += 1600;
+  let doc = 0, bytes = 0, onbekend = false, tb = 0, beelden = 0, docs = 0;
+  const blok = b => { if (!b) return; if (typeof b === 'string') tb += utf8Len(b); else if (b.type === 'text') tb += utf8Len(b.text);
+    else if (b.type === 'image') beelden++;
     else if (b.type === 'document') {
-      const s = (b && b.source) || {}; let by;
+      const s = (b && b.source) || {}; let by; docs++;
       if (s.type === 'base64' || (typeof s.data === 'string' && s.type !== 'text')) by = Math.ceil(String(s.data || '').length * 0.75);   // base64: 3 bytes per 4 tekens
-      else if (s.type === 'text') by = String(s.data || '').length;
-      else if (s.type === 'content') by = JSON.stringify(s.content || '').length;
+      else if (s.type === 'text') by = utf8Len(s.data);
+      else if (s.type === 'content') by = utf8Len(JSON.stringify(s.content || ''));
       else { onbekend = true; by = 0; }                    // url-bron of onbekend formaat: de grootte is niet vooraf te begrenzen
-      const x = Math.ceil(by / 3);                          // bovengrens: 1 token per 3 bytes (ook de ongunstigste praktijk blijft eronder)
-      n += x; doc += x; bytes += by;
-    } else n += Math.ceil(JSON.stringify(b).length / 3); };
+      doc += Math.ceil(by / 3); bytes += by;
+    } else tb += utf8Len(JSON.stringify(b)); };
   const lijst = c => { if (typeof c === 'string') blok(c); else if (Array.isArray(c)) c.forEach(blok); };
   lijst(p && p.system); for (const m of (p && Array.isArray(p.messages) ? p.messages : [])) lijst(m && m.content);
-  return { n, doc, bytes, onbekend };
+  const n = 50 + Math.ceil(tb / 3) + doc + 1600 * beelden, nCons = 50 + tb + bytes + 1600 * beelden;
+  return { n, nCons, doc, bytes, onbekend, tekstBytes: tb, teltExact: docs > 0 || beelden > 0 || tb > AI_TEL_DREMPEL };
+}
+// Het gratis endpoint van Anthropic telt de invoertokens exact (zelfde body zonder max_tokens/stream). null bij elke fout (timeout, 4xx/5xx, rare uitkomst).
+async function aiTelTokens(env, parsed) {
+  if (!env.CLAUDE_KEY || !parsed || !parsed.model) return null;
+  const body = {}; for (const k of ['model', 'messages', 'system', 'tools', 'tool_choice', 'thinking', 'mcp_servers']) if (parsed[k] !== undefined) body[k] = parsed[k];
+  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), Math.max(10, Number(env.AI_TEL_TIMEOUT_MS) || AI_TEL_TIMEOUT_MS));
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages/count_tokens', { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/json', 'x-api-key': env.CLAUDE_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body) });
+    if (!r.ok) return null;
+    const j = await r.json(); const n = j && j.input_tokens;
+    return Number.isInteger(n) && n >= 0 && n < 5e6 ? n : null;
+  } catch { return null; } finally { clearTimeout(timer); }
 }
 const AI_WEIGER = { dag: 'Je AI-limiet voor vandaag is bereikt. Morgen kun je weer verder; vraag de eigenaar om meer ruimte als het dringend is.',
   minuut: 'Even rustig aan: er zijn te veel AI-verzoeken in één minuut gedaan. Probeer het zo opnieuw.',
@@ -1682,18 +1711,22 @@ async function aiClaim(env, ik, parsed) {
   const lim = await aiLimieten(env), rolLim = lim.rollen[ik.rol];
   if (!rolLim) return { ok: true };                                        // rol zonder AI wordt al door de rolmatrix geweigerd
   const oid = await oidHash(ik.oid), dag = geldVandaag();
-  const sch = aiSchatTokens(parsed), uitRes = Math.max(1, Number(parsed.max_tokens) || 1), reserve = sch.n + uitRes;
+  const sch = aiSchatTokens(parsed), uitRes = Math.max(1, Number(parsed.max_tokens) || 1);
   if (sch.doc > AI_DOC_MAX || sch.bytes > AI_DOC_BYTES || sch.onbekend) {   // een document waarvan we de kosten niet veilig kunnen begrenzen: vooraf weigeren (in log-modus alleen melden)
     console.log(JSON.stringify({ ai: modus === 'afdwingen' ? 'geweigerd' : 'zou-weigeren', reden: 'te-groot', oid, rol: ik.rol, geschat: sch.doc, bytes: sch.bytes, onbekend: sch.onbekend || undefined }));
     if (modus === 'afdwingen') return { ok: false, status: 413, wacht_s: 1, body: { type: 'error', error: { type: 'mt_ai_te_groot', reden: 'te-groot', message: sch.onbekend ? 'Dit document kan niet vooraf worden gemeten (alleen bijgevoegde bestanden worden doorgegeven). Voeg het bestand zelf toe.' : 'Dit document is te groot voor de AI (meer dan ' + Math.round(AI_DOC_BYTES / 1024) + ' kB). Splits het of kies een kleiner bestand.' } } };
   }
+  // Invoer exact tellen (alleen 'afdwingen'; in 'log' blijft het bij de schatting): bij een document, een afbeelding of veel tekst. Mislukt de telling, dan de behoudende bovengrens.
+  let invoer = sch.n, telBron = 'schatting';
+  if (modus === 'afdwingen' && sch.teltExact) { const x = await aiTelTokens(env, parsed); if (x != null) { invoer = x; telBron = 'geteld'; } else { invoer = sch.nCons; telBron = 'behoudend'; } console.log(JSON.stringify({ ai: 'invoer', bron: telBron, tokens: invoer, schatting: sch.n })); }
+  const reserve = invoer + uitRes;
   let r = null;
   try { r = await aiDO(env, 'ai-claim', { oid, dag, nu: Date.now(), modus, rol: ik.rol, model: parsed.model, reserve, uit_res: uitRes, limiet: { dag: rolLim.dag, minuut: rolLim.minuut, gelijktijdig: rolLim.gelijktijdig, totaal_dag: lim.totaal_dag } }); } catch (e) { r = { status: 503, j: null }; }
   if (!r) {   // geen teller-binding: in 'afdwingen' NIET onbewaakt doorlaten (503), in 'log' wel met een waarschuwing in het log
     console.log(JSON.stringify({ ai: 'geen-binding', modus }));
     return modus === 'afdwingen' ? { ok: false, status: 503, wacht_s: 30, body: { type: 'error', error: { type: 'mt_ai_teller', message: 'De AI-limiet is niet beschikbaar (teller niet ingesteld); de AI staat daarom tijdelijk uit.' } } } : { ok: true };
   }
-  if (r.status === 200 && r.j && r.j.ok) { if (r.j.zou_weigeren) console.log(JSON.stringify({ ai: 'zou-weigeren', reden: r.j.zou_weigeren, oid, rol: ik.rol })); return { ok: true, claim: r.j.claim, oid, dag, schat: sch.n }; }
+  if (r.status === 200 && r.j && r.j.ok) { if (r.j.zou_weigeren) console.log(JSON.stringify({ ai: 'zou-weigeren', reden: r.j.zou_weigeren, oid, rol: ik.rol })); return { ok: true, claim: r.j.claim, oid, dag, schat: invoer }; }
   if (r.status === 200 && r.j && r.j.ok === false) {
     const reden = r.j.reden;
     console.log(JSON.stringify({ ai: 'geweigerd', reden, oid, rol: ik.rol }));
@@ -1714,13 +1747,23 @@ function aiAfrond(env, ctx, claim, gegevens) {
 function aiMeet(response, env, ctx, claim, model, t0) {
   const reader = response.body.getReader(), dec = new TextDecoder();
   let tin = null, tuit = null, fout = false, rest = '', tekens = 0, klaar = false;
+  // Hartslag: een lopende stream verlengt zijn claim elke minuut (ai-verleng), zodat het alarm hem niet als verlopen afrekent. Stopt bij het einde, bij annuleren, bij een weggevallen claim en na AI_HARTSLAG_MAX slagen.
+  let slagen = 0, hartslag = null;
+  const stopSlag = () => { if (hartslag != null) { clearInterval(hartslag); hartslag = null; } };
+  if (claim && claim.claim) {
+    hartslag = setInterval(() => {
+      if (klaar || ++slagen > AI_HARTSLAG_MAX) { stopSlag(); return; }
+      waitUntil(ctx, aiDO(env, 'ai-verleng', { oid: claim.oid, dag: claim.dag, nu: Date.now(), claim: claim.claim }).then(x => { if (x && x.j && x.j.bestaat === false) stopSlag(); }).catch(() => {}));
+    }, Math.max(10, Number(env && env.AI_HARTSLAG_MS) || AI_HARTSLAG_MS));
+    if (hartslag && typeof hartslag === 'object' && hartslag.unref) hartslag.unref();
+  }
   const regel = r => { const x = r.trim(); if (!x.startsWith('data:')) return; let ev; try { ev = JSON.parse(x.slice(5)); } catch { return; }
     if (ev.type === 'message_start' && ev.message && ev.message.usage) { const u = ev.message.usage; tin = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0); if (typeof u.output_tokens === 'number') tuit = u.output_tokens; }
     else if (ev.type === 'message_delta' && ev.usage && typeof ev.usage.output_tokens === 'number') tuit = ev.usage.output_tokens;
     else if (ev.type === 'content_block_delta' && ev.delta && typeof ev.delta.text === 'string') tekens += ev.delta.text.length;
     else if (ev.type === 'error') fout = true; };
   const rond = status => {
-    if (klaar) return; klaar = true;
+    if (klaar) return; klaar = true; stopSlag();
     const gegevens = { http: response.status, ms: Date.now() - t0, model, status };
     if (status === 'afgebroken') Object.assign(gegevens, { in: tin != null ? tin : (claim.schat || 0), uit: Math.max(tuit || 0, Math.ceil(tekens / 3)) });
     else Object.assign(gegevens, { in: tin, uit: tuit });

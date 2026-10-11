@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — CSP-rapporten tellen in de teller-DO in plaats van in KV (Codex-punt)
+- Commit: `8b21363` | Auteur: Bart Witte
+
 ## 2026-10-12 — Toggl-capaciteit voor de projecttijdlijn: echte antwoordvorm lezen, per persoon, met zichtbare reden bij terugval
 - Commit: `c515826` | Auteur: Bart Witte
 

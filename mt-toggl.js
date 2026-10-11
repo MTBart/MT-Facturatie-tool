@@ -183,12 +183,13 @@ async function tgCapaciteit(userIds,van,tot){
   }));
   return uit;
 }
+// Leesbare reden bij een mislukte capaciteitsaanroep (code = HTTP-status of 'antwoord').
+function tgCapaciteitReden(c){ return c==='402'?'402: jullie Toggl-abonnement heeft capaciteit niet':c==='403'?'403: geen rechten':c==='429'?'429: even wachten':c==='antwoord'?'onverwacht antwoord':'HTTP '+c; }
 // Reden voor de legenda van de projecttijdlijn: leeg als Toggl voor iedereen werkte, anders waarom (een deel van) de personen terugvalt op Beheer.
 function tgCapaciteitStatus(){
   const l=tgCapaciteit.laatste; if(!l||l.ok===l.totaal) return '';
   const codes=[...new Set(Object.values(l.fouten))];
-  const uitleg=c=>c==='402'?'402: jullie Toggl-abonnement heeft capaciteit niet':c==='403'?'403: geen rechten':c==='429'?'429: even wachten':c==='antwoord'?'onverwacht antwoord':'HTTP '+c;
-  return (l.ok>0?l.ok+' van '+l.totaal+' personen via Toggl, rest Beheer — ':'')+codes.map(uitleg).join(', ');
+  return (l.ok>0?l.ok+' van '+l.totaal+' personen via Toggl, rest Beheer — ':'')+codes.map(tgCapaciteitReden).join(', ');
 }
 // Statussen dynamisch (M&T heeft er 8: Todo, In progress, Productie, Blocked, Klaar voor
 // levering, Factureren, Backlog, Done). De vaste id's blijven alleen als terugval.
