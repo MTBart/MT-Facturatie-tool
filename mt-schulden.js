@@ -255,14 +255,14 @@
   // Rekenhulp RC: h = { eenmalig, bron (pot-id of '' = van buiten), datum }, potNaam = naam van dat potje.
   // grens = { datum, stand } bij terugboeken uit een potje: h.cent is dan al begrensd op die (verwachte) stand.
   S.rcUitkomstHtml = function (info, h, kas, potNaam, grens) {
-    const gevraagd = h.gevraagd != null ? h.gevraagd : S.centUit(h.eenmalig) || 0, c = h.cent != null ? h.cent : gevraagd, pn = esc(potNaam || h.bron);
+    const gevraagd = h.gevraagd != null ? h.gevraagd : S.centUit(h.eenmalig) || 0, c = h.cent != null ? h.cent : gevraagd, pn = potNaam || h.bron;
     if (!(gevraagd > 0)) return '<div class="mts-uit mtg-melding">Vul een bedrag in om terug te boeken of aan te vullen.</div>';
-    if (grens && grens.stand == null) return `<div class="mts-uit">Het saldo van ${pn} is onbekend: niets te rekenen. Ijk eerst het potje.</div>`;
-    if (grens && !(c > 0)) return `<div class="mts-uit">In ${pn} zit op ${esc(datum(grens.datum))} niets: er valt niets terug te boeken.</div>`;
-    const noot = grens && c < gevraagd ? `<div class="mtg-melding" style="font-size:12px">In ${pn} zit op ${esc(datum(grens.datum))} maar ${esc(eurC(c))}: gerekend met ${esc(eurC(c))} in plaats van ${esc(eurC(gevraagd))}.</div>` : '';
+    if (grens && grens.stand == null) return `<div class="mts-uit">Het saldo van ${esc(pn)} is onbekend: niets te rekenen. Ijk eerst het potje.</div>`;
+    if (grens && !(c > 0)) return `<div class="mts-uit">In ${esc(pn)} zit op ${esc(datum(grens.datum))} niets: er valt niets terug te boeken.</div>`;
+    const noot = grens && c < gevraagd ? `<div class="mtg-melding" style="font-size:12px">In ${esc(pn)} zit op ${esc(datum(grens.datum))} maar ${esc(eurC(c))}: gerekend met ${esc(eurC(c))} in plaats van ${esc(eurC(gevraagd))}.</div>` : '';
     const b = S.rcBesparing(info, c / 100, !!h.bron), wat = `${eurC(c)} ${h.bron ? `terugboeken uit ${pn}` : 'aanvullen (storting van buiten)'}`;
     let t;
-    if (!b || !b.kan) t = b && b.reden === 'niet-rood' ? `${wat}: je staat nu niet rood, dus het bespaart nu geen rente. De provisie blijft.` : `${wat}: nog geen debetrente in de afrekeningen gezien, dus geen tarief en geen besparing te berekenen.`;
+    if (!b || !b.kan) t = b && b.reden === 'niet-rood' ? `${esc(wat)}: je staat nu niet rood, dus het bespaart nu geen rente. De provisie blijft.` : `${esc(wat)}: nog geen debetrente in de afrekeningen gezien, dus geen tarief en geen besparing te berekenen.`;
     else {
       t = `${esc(wat)} → bespaart <b>± ${esc(eur(b.renteJr))} per jaar aan rente</b> (± ${esc(eur(b.renteMnd))}/mnd debetrente, tarief ±${esc(pctJ(b.tariefJaar))}/jr).`;
       if (b.teVeel) t += ` Meer dan je nu rood staat (${eur(b.rood)}) levert niets extra op.`;

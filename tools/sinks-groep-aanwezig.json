@@ -6,26 +6,32 @@
   {
    "fn": "hhmm",
    "expr": "opener",
-   "reden": "functienaam van de aanroeper (literal in v2.html/mobiel.html), gevalideerd met een regex: alleen een kale naam, nooit data"
+   "fp": "1cacf13900",
+   "reden": "functienaam van de aanroeper (literal in v2.html/mobiel.html), gevalideerd met een regex: alleen een kale naam, nooit data",
+   "aantal": 2
   },
   {
    "fn": "hhmm",
    "expr": "klik",
+   "fp": "9d2cdedc8b",
    "reden": "attribuutfragment: onclick met gevalideerde functienaam, Number() en esc()-delen"
   },
   {
    "fn": "hhmm",
    "expr": "titelOnb",
+   "fp": "9d2cdedc8b",
    "reden": "vaste attribuuttekst (geen data)"
   },
   {
    "fn": "hhmm",
    "expr": "nu",
+   "fp": "9d2cdedc8b",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "hhmm",
    "expr": "gepland",
+   "fp": "9d2cdedc8b",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   }
  ]

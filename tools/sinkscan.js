@@ -163,11 +163,25 @@ function letOpInGroep(tekst, isHtml, groep) {
   const t = tekst.replace(/\r\n/g, '\n'), regels = t.split('\n'), F = groep.heleBestand ? null : new Set(groep.functies);   // heleBestand: elke functie in het bestand telt mee
   const r = scanBestand(t, isHtml, { veiligeFns: groep.veiligeFns, fragmentFns: groep.fragmentFns });
   const uitgez = new Set(groep.uitgezonderd || []);   // functies van een eerdere groep in hetzelfde bestand
-  return r.items.filter(i => i.klasse === 'let-op').map(i => Object.assign({ fn: fnVanRegel(regels, i.regel) }, i)).filter(i => (!F || F.has(i.fn)) && !uitgez.has(i.fn));
+  return r.items.filter(i => i.klasse === 'let-op').map(i => Object.assign({ fn: fnVanRegel(regels, i.regel), fp: fingerprint(regels[i.regel - 1]) }, i)).filter(i => (!F || F.has(i.fn)) && !uitgez.has(i.fn));
 }
-// Dekt een houd-/overslaan-regel een gevonden ruwe interpolatie? Op functie + expressie (of het begin ervan, voor lange expressies) en eventueel context.
-const dekt = (e, i) => e.fn === i.fn && (e.expr !== undefined ? e.expr === i.expr : (e.exprBegin !== undefined && i.expr.startsWith(e.exprBegin))) && (!e.ctx || e.ctx === i.ctx);
-module.exports.dekt = dekt;
+// Korte vingerafdruk van de regel waarop een interpolatie begint (witruimte genormaliseerd): een verschoven regelnummer verandert hem niet, een gewijzigde
+// of nieuwe regel wel (Codex groep 6: een tweede, identieke ${z} in dezelfde functie mag niet stilzwijgend meegedekt zijn).
+const fingerprint = regel => require('crypto').createHash('sha1').update(String(regel || '').replace(/\s+/g, ' ').trim()).digest('hex').slice(0, 10);
+// Dekt een houd-/overslaan-regel een gevonden ruwe interpolatie? Op functie + expressie (of het begin ervan, voor lange expressies), eventueel context en,
+// als de regel er een heeft, de vingerafdruk van de omliggende code.
+const dekt = (e, i) => e.fn === i.fn && (e.expr !== undefined ? e.expr === i.expr : (e.exprBegin !== undefined && i.expr.startsWith(e.exprBegin))) && (!e.ctx || e.ctx === i.ctx) && (e.fp === undefined || e.fp === i.fp);
+// Streng, als multiset: elke uitzondering heeft een vingerafdruk (fp) en dekt `aantal` (standaard 1) interpolaties; een extra identieke plek valt erbuiten.
+function dektMulti(lijst, items) {
+  const rest = lijst.map(e => (e.aantal === undefined ? 1 : e.aantal)), nietGedekt = [];
+  for (const i of items) {
+    let k = lijst.findIndex((e, n) => rest[n] > 0 && e.fp && e.expr !== undefined && dekt(e, i));
+    if (k < 0) k = lijst.findIndex((e, n) => rest[n] > 0 && e.fp && dekt(e, i));
+    if (k < 0) nietGedekt.push(i); else rest[k]--;
+  }
+  return { nietGedekt, verouderd: lijst.map((e, n) => ({ e, over: rest[n] })).filter(x => x.over > 0), zonderFp: lijst.filter(e => !e.fp) };
+}
+module.exports.dekt = dekt; module.exports.dektMulti = dektMulti; module.exports.fingerprint = fingerprint;
 // ── Wat de template-scanner niet ziet (Codex a7fcc3f): HTML die met + aan elkaar geplakt wordt, en links uit data ──
 // plakwerk(): regels met een tekenreeks met HTML/handler-tekst waaraan een variabele (niet esc/jsArg/...) met + geplakt wordt.
 // De uitkomst wordt vergeleken met tools/plakwerk-baseline.json (door mij doorgelezen regels); een nieuwe regel moet eerst beoordeeld worden.

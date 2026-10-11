@@ -6,26 +6,37 @@
   {
    "fn": "open",
    "expr": "bodyHtml",
+   "fp": "259fd9be82",
    "reden": "textToHtml() (escaped) of bewust vertrouwde HTML (private WeakSet)"
   },
   {
    "fn": "open",
    "expr": "ph",
+   "fp": "b4965d27d3",
+   "reden": "attribuutfragment met esc(opts.placeholder)"
+  },
+  {
+   "fn": "open",
+   "expr": "ph",
+   "fp": "ec3d48b752",
    "reden": "attribuutfragment met esc(opts.placeholder)"
   },
   {
    "fn": "open",
    "expr": "sub",
+   "fp": "3315ba2cd4",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "open",
    "expr": "cancelLabel",
+   "fp": "05d3a72f9b",
    "reden": "al geëscaped: variabele = esc(...)"
   },
   {
    "fn": "open",
    "expr": "okLabel",
+   "fp": "9d877f1cfc",
    "reden": "al geëscaped: variabele = esc(...)"
   }
  ]

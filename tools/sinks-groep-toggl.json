@@ -6,166 +6,199 @@
   {
    "fn": "tgVulProjectSelect",
    "expr": "tgEsc(p.name||('project '+p.id))",
+   "fp": "e5f4ac83ec",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadRecent",
    "expr": "tgEsc(p.name)",
+   "fp": "d9b53f5101",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadRecent",
    "expr": "tgEsc(e.description||'(geen omschrijving)')",
+   "fp": "43ca2754f3",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadRecent",
    "expr": "code",
+   "fp": "dfff9db799",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgLaadRecent",
    "expr": "bill",
+   "fp": "dfff9db799",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgLaadRecent",
    "expr": "rijen",
+   "fp": "3b4d869839",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgLaadProjecten",
    "expr": "tgEsc(typeof projKeuzeLabel==='function'?projKeuzeLabel(mt):mt.code)",
+   "fp": "c923ff36f8",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadProjecten",
    "expr": "tgEsc(t.name||t)",
+   "fp": "c1d26aefa7",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadProjecten",
    "expr": "tgEsc(p.name||('project '+p.id))",
+   "fp": "83cfa9ba3b",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadProjecten",
    "expr": "mtbadge",
+   "fp": "83cfa9ba3b",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgOpenProject",
    "expr": "tgEsc((typeof projLabelCode==='function'?projLabelCode(mt):mt.code)||'—')",
+   "fp": "4543780d20",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgOpenProject",
    "expr": "tgEsc(klantNaam)||'—'",
+   "fp": "660e466361",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgOpenProject",
    "expr": "mbChip",
+   "fp": "5a439d22ed",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgOpenProject",
    "expr": "mails",
+   "fp": "34cf2a45ca",
    "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
   },
   {
    "fn": "tgOpenProject",
    "expr": "tgEsc(p.name||('project '+p.id))",
+   "fp": "2b8fbd9740",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgOpenProject",
    "expr": "mtBlok",
+   "fp": "2e8c8417e8",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgLaadTaken",
    "expr": "tgEsc(t.name||('taak '+t.id))",
+   "fp": "392a822d21",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadTaken",
    "expr": "t.project?tgEsc(t.project.name):'geen project'",
+   "fp": "992809e796",
    "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
   },
   {
    "fn": "tgLaadTaken",
    "expr": "t.client?(' · '+tgEsc(t.client.name)):''",
+   "fp": "992809e796",
    "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
   },
   {
    "fn": "tgLaadTaken",
    "expr": "sub",
+   "fp": "992809e796",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgLaadTaken",
    "expr": "asg.length?tgEsc(asg.join(', ')):'—'",
+   "fp": "5dcd34d9c0",
    "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
   },
   {
    "fn": "tgLaadBoard",
    "expr": "tgEsc(asg.join(', '))",
+   "fp": "1a23dfb193",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadBoard",
    "expr": "tgEsc(t.project.name)",
+   "fp": "d5f873280f",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadBoard",
    "expr": "subB",
+   "fp": "d5f873280f",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgLaadBoard",
    "expr": "tgEsc(t.name)",
+   "fp": "8c18ff3837",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadBoard",
    "expr": "prB",
+   "fp": "52dcab69e7",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgLaadBoard",
    "expr": "tgEsc(t.name||('taak '+t.id))",
+   "fp": "52dcab69e7",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadBoard",
    "expr": "t.project?`<div class=\"tg-sub\">${tgEsc(t.project.name)}${subB}</div>`:subB",
+   "fp": "d5f873280f",
    "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
   },
   {
    "fn": "tgLaadBoard",
    "expr": "asgB",
+   "fp": "d5f873280f",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgLaadBoard",
    "expr": "tiles",
+   "fp": "2deaf931f3",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "tgLaadReport",
    "expr": "tgEsc(k)",
+   "fp": "7761d0592d",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadBeheer",
    "expr": "tgEsc(c.name)",
+   "fp": "56a27f6c49",
    "reden": "al geëscaped: tgEsc()"
   },
   {
    "fn": "tgLaadBeheer",
    "expr": "tgEsc(t.name)",
+   "fp": "0526baeaa8",
    "reden": "al geëscaped: tgEsc()"
   }
  ]

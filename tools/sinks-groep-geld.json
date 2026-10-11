@@ -26,112 +26,146 @@
  "houd": [
   {
    "fn": "teken",
-   "exprBegin": "(() => { const rp = G.reservePot(d, st.cfg), pt = ((st.cfg || {}).potten || []).find(p => p.id === r",
+   "expr": "(() => { const rp = G.reservePot(d, st.cfg), pt = ((st.cfg || {}).potten || []).find(p => p.id === rp), a = G.reserveAdvies(d, pt && pt.stre",
+   "fp": "24017bfcbc",
    "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
   },
   {
    "fn": "teken",
-   "exprBegin": "metRes ? `<div class=\"mtg-k ${esc(resInfo && resInfo.krediet > 0 ? 'rood' : resInfo && resInfo.gebru",
+   "expr": "metRes ? `<div class=\"mtg-k ${esc(resInfo && resInfo.krediet > 0 ? 'rood' : resInfo && resInfo.gebruikt > 0 ? 'amber' : '')}\"><div class=\"l\"",
+   "fp": "1bdfeb69c2",
    "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
   },
   {
    "fn": "roodHtml",
    "expr": "staaf",
+   "fp": "9fd67cf23e",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "roodHtml",
    "expr": "z",
+   "fp": "746c436397",
    "reden": "tekst met esc()-delen, opgebouwd in roodHtml (r670)"
   },
   {
    "fn": "roodHtml",
    "expr": "delen.join('')",
+   "fp": "8be265fbac",
    "reden": "lijst van HTML-delen, elk met esc() opgebouwd"
   },
   {
    "fn": "rijHtml",
    "expr": "chip",
+   "fp": "5852f9eb40",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "potRij",
-   "exprBegin": "btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(",
+   "expr": "btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(btw.kwartaal)} (≈${eur(btw.bedrag)}) ✓ —",
+   "fp": "fd3c76c19c",
    "reden": "tekst met esc()-delen (kwartaal en datum geëscaped)"
   },
   {
    "fn": "potRij",
    "expr": "advHtml",
+   "fp": "1a7ffa7eb7",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "potRij",
    "expr": "meeTekst",
+   "fp": "a0a17b587d",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "schuldenHtml",
    "expr": "kop",
+   "fp": "bd9a46e505",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "schuldenHtml",
    "expr": "nieuw",
+   "fp": "bd9a46e505",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "schuldenHtml",
+   "expr": "kop",
+   "fp": "59ca3b8b4c",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "schuldenHtml",
+   "expr": "nieuw",
+   "fp": "8d5f217718",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "schuldenHtml",
    "expr": "velden",
+   "fp": "1e059ef727",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "grafiek",
    "expr": "zones",
+   "fp": "b81061b457",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "grafiek",
-   "exprBegin": "(() => { const z = G.onzekerVanaf(d, { prognose: st.prognose }); if (z >= totD) return ''; const x0 ",
+   "expr": "(() => { const z = G.onzekerVanaf(d, { prognose: st.prognose }); if (z >= totD) return ''; const x0 = Math.max(pl, x(z < vanD ? vanD : z)); ",
+   "fp": "1c77eaa151",
    "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
   },
   {
    "fn": "grafiek",
    "expr": "pijlen",
+   "fp": "613c212dca",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "grafiek",
    "expr": "vlaggen",
+   "fp": "613c212dca",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "prognoseHtml",
    "expr": "advies.voorstel.low.saldo >= advies.drempel ? ' (weer boven ' + grens + ')' : `, maar nog steeds onder ${grens}`",
+   "fp": "244b87906a",
    "reden": "tekst; enige variabele is grens, en die is een van drie vaste teksten (r1212)"
   },
   {
    "fn": "prognoseHtml",
    "expr": "e ? esc(datumTekst(e.datum)) + ' ' + eur(e.delta) : ''",
+   "fp": "b78bbc2e42",
    "reden": "tekst met esc()-delen (datum geëscaped, bedrag = eur())"
   },
   {
    "fn": "prognoseHtml",
-   "exprBegin": "t.open > 0 && t.aan && x.aan ? ` · factuur <input type=\"date\" class=\"mtg-fd\" data-sl=\"${esc(x.sleute",
+   "expr": "t.open > 0 && t.aan && x.aan ? ` · factuur <input type=\"date\" class=\"mtg-fd\" data-sl=\"${esc(x.sleutel)}\" data-tm=\"${esc(t.id)}\" value=\"${esc",
+   "fp": "20fc650e72",
    "reden": "HTML-fragment met esc()-delen"
   },
   {
    "fn": "blad",
    "expr": "html",
+   "fp": "aea0225ec1",
    "reden": "HTML-fragment van de aanroeper; blad() is een kale omhulling"
   },
   {
    "fn": "instBlad",
-   "exprBegin": "(() => { const rp = G.reservePot(st.data, c), pt = (c.potten || []).find(p => p.id === rp), a = G.re",
+   "expr": "(() => { const rp = G.reservePot(st.data, c), pt = (c.potten || []).find(p => p.id === rp), a = G.reserveAdvies(st.data, pt && pt.streef); r",
+   "fp": "9e44e7e6d3",
    "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
   },
   {
    "fn": "instBlad",
-   "exprBegin": "(() => { const sp = G.spaarRente(Object.assign({}, st.data, { instellingen: Object.assign({}, st.dat",
+   "expr": "(() => { const sp = G.spaarRente(Object.assign({}, st.data, { instellingen: Object.assign({}, st.data.instellingen, { spaarrente: null }) })",
+   "fp": "2002d8ddbe",
    "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
   }
  ]

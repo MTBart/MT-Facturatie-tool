@@ -10,196 +10,445 @@
   {
    "fn": "showWelkom",
    "expr": "ja(t.naam)",
+   "fp": "2fbff737dc",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderRecentEntries",
    "expr": "ja(e.project_code)",
+   "fp": "3d0b8749c6",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderRecentEntries",
    "expr": "ja(e.taak_id||'')",
+   "fp": "3d0b8749c6",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderRecentEntries",
    "expr": "ja(e.taak_naam||'')",
+   "fp": "3d0b8749c6",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderRecentEntries",
+   "expr": "ja(e.project_code)",
+   "fp": "ec10c2fc58",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderRecentEntries",
+   "expr": "ja(e.taak_id||'')",
+   "fp": "ec10c2fc58",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderRecentEntries",
+   "expr": "ja(e.taak_naam||'')",
+   "fp": "ec10c2fc58",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderMijnTaken",
    "expr": "ja(pc)",
+   "fp": "e6ae77944e",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderMijnTaken",
    "expr": "ja(taak.id)",
+   "fp": "e6ae77944e",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderMijnTaken",
    "expr": "ja(taak.naam||'')",
+   "fp": "e6ae77944e",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderMijnTaken",
+   "expr": "ja(pc)",
+   "fp": "08de9e8934",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderMijnTaken",
+   "expr": "ja(taak.id)",
+   "fp": "08de9e8934",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderMijnTaken",
+   "expr": "ja(taak.naam||'')",
+   "fp": "08de9e8934",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderTimer",
    "expr": "urgentStyle",
+   "fp": "80c361fef5",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "renderTimer",
    "expr": "ja(p.code)",
+   "fp": "80c361fef5",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTimer",
+   "expr": "ja(p.code)",
+   "fp": "0b15cbad55",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderTimer",
    "expr": "dlBadge||''",
+   "fp": "a868e05e32",
    "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
   },
   {
    "fn": "renderStartTaakLijst",
    "expr": "ja(s.id)",
+   "fp": "f47a206af6",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderStartTaakLijst",
    "expr": "ja(t.id)",
+   "fp": "8f61e6b334",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderStartTaakLijst",
    "expr": "t.subtaken?.length?`<div class=\"taak-item-sub\">${t.subtaken.length} subtaken</div>`:''",
+   "fp": "0ad576c30e",
    "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
   },
   {
    "fn": "entryRowHTML",
    "expr": "ja(e.id)",
+   "fp": "ba6e66b672",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "entryRowHTML",
+   "expr": "ja(e.id)",
+   "fp": "2e454a480b",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderTimeline",
    "expr": "ja(pb.id)",
+   "fp": "c98e4f8839",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderTimeline",
    "expr": "ja(dag)",
+   "fp": "be51ff9231",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderTimeline",
    "expr": "ja(row.id)",
+   "fp": "be51ff9231",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderRapport",
    "expr": "bars",
+   "fp": "15010e6540",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "renderRapport",
    "expr": "breakdown",
+   "fp": "3cf31f4745",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "renderBordActief",
    "expr": "ja(t.naam)",
+   "fp": "8146388438",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderBordWeek",
    "expr": "ja(code)",
+   "fp": "9aede79ba4",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderBordWeek",
    "expr": "p?.status?`<div style=\"margin-top:3px\">${statusBadge(p.status)}</div>`:''",
+   "fp": "fbce89767b",
    "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
   },
   {
    "fn": "renderTakenBeheer",
    "expr": "ja(p.code)",
+   "fp": "e9d0c28cfe",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderTakenBeheer",
    "expr": "ja(t.id)",
+   "fp": "e9d0c28cfe",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderTakenBeheer",
    "expr": "ja(s.id)",
+   "fp": "e9d0c28cfe",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(p.code)",
+   "fp": "e810c801c7",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(t.id)",
+   "fp": "e810c801c7",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(p.code)",
+   "fp": "b664264734",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(t.id)",
+   "fp": "b664264734",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(p.code)",
+   "fp": "e791d77379",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(t.id)",
+   "fp": "e791d77379",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(p.code)",
+   "fp": "d4003e25d2",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(t.id)",
+   "fp": "d4003e25d2",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderTakenBeheer",
    "expr": "ja('tb-'+p.code)",
+   "fp": "613ad060f0",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(p.code)",
+   "fp": "215c9f287a",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(p.code)",
+   "fp": "40925f08f8",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderInstCapaciteit",
    "expr": "ja(t.naam)",
+   "fp": "0ca8bf1df4",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderProjectDetail",
    "expr": "ja(code)",
+   "fp": "2502814293",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderProjectDetail",
    "expr": "ja(k)",
+   "fp": "2502814293",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "e8ffcecec6",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
    "expr": "ja(t.id)",
+   "fp": "e8ffcecec6",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderProjectDetail",
    "expr": "ja(s.id)",
+   "fp": "e8ffcecec6",
    "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderProjectDetail",
    "expr": "ja('pdb-'+t.id)",
+   "fp": "7343b905da",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderProjectDetail",
    "expr": "assigneeChips",
+   "fp": "96daf60d1c",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "2103b7348a",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(t.id)",
+   "fp": "2103b7348a",
+   "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderProjectDetail",
    "expr": "subtakenHtml",
+   "fp": "89353255aa",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "f5fd80cdf1",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(t.id)",
+   "fp": "f5fd80cdf1",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "0c0f31409a",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(t.id)",
+   "fp": "0c0f31409a",
+   "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderProjectDetail",
    "expr": "tlOptions",
+   "fp": "0c0f31409a",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "052a2a9b10",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(t.id)",
+   "fp": "052a2a9b10",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "cc26e08848",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(t.id)",
+   "fp": "cc26e08848",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "89917017be",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(k)",
+   "fp": "89917017be",
+   "reden": "al geëscaped: ja()"
   },
   {
    "fn": "renderProjectDetail",
    "expr": "statusHtml",
+   "fp": "875cc9d4e5",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "7fbc8b50bf",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "ec34a5edbe",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
    "expr": "takenHtml||'<div style=\"font-size:13px;color:var(--text-faint);font-style:italic;padding:0.5rem 0\">Geen taken. Voeg hieronder een taak toe.<",
+   "fp": "3aae905347",
    "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "0926eed16b",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "fp": "55a091cabe",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderProjectenTab",
    "expr": "ja(p.code)",
+   "fp": "cc700fe32b",
    "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
   },
   {
    "fn": "renderProjectenTab",
    "expr": "urenHtml",
+   "fp": "5d9045c3c7",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   }
  ]

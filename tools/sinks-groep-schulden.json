@@ -9,41 +9,43 @@
   {
    "fn": "grafiekSvg",
    "expr": "termijn",
+   "fp": "9c9f3ff409",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "grafiekSvg",
    "expr": "t",
+   "fp": "556f751974",
    "reden": "HTML-fragment met alleen getallen/vaste tekst (eurC/datum), geen vrije tekst"
   },
   {
    "fn": "grafiekSvg",
    "expr": "kop",
+   "fp": "aa90717ad5",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "grafiekSvg",
    "expr": "potNoot",
+   "fp": "aa90717ad5",
    "reden": "tekst met esc(ctx.uitPot) en vaste tekst"
   },
   {
    "fn": "grafiekSvg",
-   "exprBegin": "kas.onderGrens && !kas.wasOnder ? ' <b>Daarmee zakt de kas onder je ondergrens.</b>' : kas.onderGren",
+   "expr": "kas.onderGrens && !kas.wasOnder ? ' <b>Daarmee zakt de kas onder je ondergrens.</b>' : kas.onderGrens ? ' De kas zit dan (nog) onder je onde",
+   "fp": "aa90717ad5",
    "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
   },
   {
    "fn": "pctJ",
-   "expr": "pn",
-   "reden": "al geëscaped: variabele = esc(...)"
-  },
-  {
-   "fn": "pctJ",
    "expr": "noot",
+   "fp": "893d8ed707",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "pctJ",
    "expr": "t",
+   "fp": "893d8ed707",
    "reden": "HTML-fragment met alleen getallen/vaste tekst (eurC/datum), geen vrije tekst"
   }
  ]

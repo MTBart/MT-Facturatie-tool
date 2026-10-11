@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 // F7: draait ALLE sink-baselines op de bronbestanden en eindigt met een non-zero exitcode bij een afwijking.
-//   node tools/check-sinks.js [--root <map>] [--stil]
+//   node tools/check-sinks.js [--root <map>] [--stil] [--voorstel]
+//   --voorstel: toon bij een niet-beoordeelde ruwe interpolatie het uitzonderingsregeltje (met vingerafdruk) dat je na lezen, mét reden, kunt toevoegen.
 // Het script wordt aangeroepen door githooks/pre-commit (bij gewijzigde .html/.js/tools/*.json) en is een verplichte stap in RELEASE.md.
+// De hook voert het uit op de GESTAGEDE inhoud: de index wordt naar een tijdelijke map geëxporteerd en dat script draait daar (niet op de werkmap).
 // Wat het controleert (zie ook tools/sinkscan.js en REPO-VEILIGHEID.md):
-//   1. groepen (tools/sinks-groepen.js): elke ruwe ${...}-interpolatie in een gedekt bestand staat met reden in de houd-lijst; geen verouderde regels;
+//   0. bronbestanden (.html/.js) worden recursief verzameld; uitgesloten: vendor/, node_modules/, backup*/, _uit-repo*/, tools/, worker.js, sw.js;
+//   1. groepen (tools/sinks-groepen.js): elke ruwe ${...}-interpolatie in een gedekt bestand staat met reden in de houd-lijst. Een uitzondering is functie +
+//      expressie + vingerafdruk (fp) van de regel en geldt `aantal` keer (multiset): een tweede identieke plek moet apart goedgekeurd worden, een
+//      verschoven regelnummer niet. Geen verouderde regels;
 //   2. bestanden met ruwe interpolaties die in geen groep zitten: alleen die in tools/sinks-nog-open.json (en die lijst mag niet verouderen);
 //   3. plakwerk (HTML met + aan een variabele geplakt)  -> tools/plakwerk-baseline.json;
 //   4. links uit data (href/src direct een interpolatie) -> tools/url-sinks-baseline.json;
@@ -11,12 +16,21 @@
 //   6. verboden patronen: .replace(/"/g,'&quot;') op een waarde die & niet eerst escapet, en ${JSON.stringify(...)} direct in een on*-attribuut.
 const fs = require('fs'), path = require('path');
 const S = require('./sinkscan.js');
-const args = process.argv.slice(2), stil = args.includes('--stil');
+const args = process.argv.slice(2), stil = args.includes('--stil'), voorstel = args.includes('--voorstel');
 const ri = args.indexOf('--root'), ROOT = ri >= 0 ? path.resolve(args[ri + 1]) : path.join(__dirname, '..');
 const lees = f => fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
 const json = f => JSON.parse(lees(f));
-const bestanden = fs.readdirSync(ROOT).filter(f => /\.(html|js)$/.test(f) && !/^(worker|sw)\.js$/.test(f));
-const fouten = [], waarsch = [];
+// Bronbestanden recursief verzamelen (Codex groep 6): in een git-map de gevolgde bestanden (een nieuw bestand telt zodra het gestaged is: de hook), anders een wandeling door de map.
+const UITGESLOTEN = f => /(^|\/)(vendor|node_modules)\//.test(f) || /^(tools|backup[^/]*|_uit-repo[^/]*|\.git)\//.test(f) || /^(worker|sw)\.js$/.test(f);
+function wandel(map, uit) { for (const d of fs.readdirSync(path.join(ROOT, map || '.'), { withFileTypes: true })) { const r = (map ? map + '/' : '') + d.name; if (d.isDirectory()) { if (!UITGESLOTEN(r + '/')) wandel(r, uit); } else uit.push(r); } return uit; }
+function verzamel() {
+  let lijst = null;
+  if (fs.existsSync(path.join(ROOT, '.git'))) { try { lijst = require('child_process').execFileSync('git', ['ls-files', '-c', '-z'], { cwd: ROOT, maxBuffer: 1 << 28 }).toString().split('\0').filter(Boolean); } catch (e) { lijst = null; } }
+  if (!lijst) lijst = wandel('', []);
+  return [...new Set(lijst)].filter(f => /\.(html|js)$/.test(f) && !UITGESLOTEN(f) && fs.existsSync(path.join(ROOT, f))).sort();
+}
+const bestanden = verzamel();
+const fouten = [], waarsch = [], voorstellen = [];
 const fout = (cat, tekst) => fouten.push(`[${cat}] ${tekst}`);
 
 // 1. groepen -----------------------------------------------------------------------------------------------------------------------------
@@ -27,10 +41,12 @@ for (const [naam, g] of Object.entries(GROEPEN)) {
   let tx; try { tx = lees(g.bestand); } catch (e) { fout('groep ' + naam, g.bestand + ' niet te lezen'); continue; }
   const isHtml = /\.html$/.test(g.bestand);
   const items = S.letOpInGroep(tx, isHtml, g), lijst = g.houd.concat(g.overslaan || []);
-  const nietGedekt = items.filter(i => !lijst.some(e => S.dekt(e, i)));
-  for (const i of nietGedekt.slice(0, 8)) fout('groep ' + naam, `ruwe interpolatie zonder reden: ${g.bestand} r${i.regel} ${i.fn} (${i.ctx}) ${i.expr.slice(0, 80)}`);
+  const m = S.dektMulti(lijst, items), nietGedekt = m.nietGedekt;
+  for (const i of nietGedekt.slice(0, 8)) fout('groep ' + naam, `ruwe interpolatie zonder (passende) uitzondering: ${g.bestand} r${i.regel} ${i.fn} (${i.ctx}) ${i.expr.slice(0, 80)} [fp ${i.fp}]`);
   if (nietGedekt.length > 8) fout('groep ' + naam, `… en nog ${nietGedekt.length - 8} meer`);
-  for (const e of lijst.filter(e => !items.some(i => S.dekt(e, i))).slice(0, 8)) fout('groep ' + naam, `verouderde uitzondering: ${e.fn} | ${e.expr || e.exprBegin}`);
+  if (voorstel) for (const i of nietGedekt) voorstellen.push({ groep: naam, regel: { fn: i.fn, expr: i.expr, fp: i.fp, reden: 'TODO: waarom is dit veilig?' } });
+  for (const x of m.verouderd.slice(0, 8)) fout('groep ' + naam, `verouderde uitzondering (${x.over} van ${x.e.aantal || 1} niet meer gevonden): ${x.e.fn} | ${x.e.expr || x.e.exprBegin}`);
+  for (const e of m.zonderFp.slice(0, 5)) fout('groep ' + naam, `uitzondering zonder vingerafdruk (fp): ${e.fn} | ${e.expr || e.exprBegin}`);
   for (const e of lijst.filter(e => !e.reden || String(e.reden).length <= 8).slice(0, 5)) fout('groep ' + naam, `uitzondering zonder reden: ${e.fn} | ${e.expr || e.exprBegin}`);
   const r = S.scanBestand(tx, isHtml, { veiligeFns: g.veiligeFns, fragmentFns: g.fragmentFns });
   if (r.fouten.length) fout('groep ' + naam, `${g.bestand}: ${r.fouten.length} tokenizerfout(en) — de scanner leest het bestand niet goed`);
@@ -80,6 +96,7 @@ for (const f of bestanden) lees(f).split('\n').forEach((l, i) => {
 
 // uitvoer ----------------------------------------------------------------------------------------------------------------------------------
 if (!stil) for (const w of waarsch) console.log('  let op:', w);
+if (voorstel && voorstellen.length) { console.log('\nVoorstel (lees de plek, vul een echte reden in en zet de regel bij "houd" in tools/sinks-groep-<naam>.json; identieke plekken met "aantal": n):'); for (const v of voorstellen) console.log('  ' + v.groep + ': ' + JSON.stringify(v.regel)); }
 if (fouten.length) {
   console.log(`\n🛑 check-sinks: ${fouten.length} afwijking(en)`);
   for (const f of fouten) console.log('  ' + f);

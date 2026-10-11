@@ -1,0 +1,118 @@
+{
+ "omschrijving": "v2: Moneybird (facturen, controle, klanten, dashboard), mail-facturen en SharePoint-bijlagen/-mappen",
+ "heleBestand": true,
+ "fragmentFns": [
+  "projKortHtml",
+  "projTag",
+  "projectOptiesHTML",
+  "MTKoppelUI.badge",
+  "ntkPlek",
+  "icoon",
+  "tabel",
+  "state",
+  "agenda",
+  "t2ProjectRijHtml",
+  "projMapBadge",
+  "MTContactenUI.projectKaart"
+ ],
+ "houd": [
+  {
+   "fn": "handleFile",
+   "expr": "hints.join(' · ')",
+   "fp": "12dabe4d0b",
+   "reden": "eigen HTML-brokjes (<strong>); de variabele data erin (parsed.project_code) gaat via esc()"
+  },
+  {
+   "fn": "renderAgingBars",
+   "expr": "kleur",
+   "fp": "d46780f85d",
+   "reden": "vaste CSS-variabele (rood/oranje/groen)"
+  },
+  {
+   "fn": "renderKlantenGrid",
+   "expr": "kleur",
+   "fp": "e7b64af70e",
+   "reden": "kleur uit een vast palet van CSS-variabelen",
+   "aantal": 3
+  },
+  {
+   "fn": "renderKlantenGrid",
+   "expr": "k.firstname||''",
+   "fp": "d32a7c4c16",
+   "reden": "bouwt een tekst-naam (geen HTML); de naam wordt bij het plaatsen via esc(naam) geëscaped"
+  },
+  {
+   "fn": "renderKlantenGrid",
+   "expr": "k.lastname||''",
+   "fp": "d32a7c4c16",
+   "reden": "zie hierboven: tekst-naam, geëscaped bij plaatsing"
+  },
+  {
+   "fn": "renderKlantenGrid",
+   "expr": "kleur",
+   "fp": "6683829b0e",
+   "reden": "kleur uit een vast palet van CSS-variabelen"
+  },
+  {
+   "fn": "renderKlantenGrid",
+   "expr": "kleur",
+   "fp": "9ca475d2d0",
+   "reden": "kleur uit een vast palet van CSS-variabelen",
+   "aantal": 3
+  },
+  {
+   "fn": "openKlantDetail",
+   "expr": "state",
+   "fp": "07716cb61e",
+   "reden": "vaste HTML-badge zonder data"
+  },
+  {
+   "fn": "renderControleLijst",
+   "expr": "voorraadBadge",
+   "fp": "b7cca7a431",
+   "reden": "vaste HTML-badge zonder data"
+  },
+  {
+   "fn": "renderControleLijst",
+   "expr": "betaalStatus",
+   "fp": "b7cca7a431",
+   "reden": "vaste HTML-badge zonder data"
+  },
+  {
+   "fn": "renderControleLijst",
+   "expr": "badge",
+   "fp": "b7cca7a431",
+   "reden": "vaste HTML-badge zonder data"
+  }
+ ],
+ "overslaan": [
+  {
+   "fn": "addRegel",
+   "ctx": "handler",
+   "expr": "id",
+   "fp": "3407d89cb3",
+   "reden": "volgnummer (regelCount++), geen data"
+  },
+  {
+   "fn": "addRegel",
+   "ctx": "handler",
+   "expr": "id",
+   "fp": "fb043ed682",
+   "reden": "volgnummer (regelCount++), geen data"
+  },
+  {
+   "fn": "renderAgingBars",
+   "ctx": "stijl",
+   "expr": "pct",
+   "fp": "d46780f85d",
+   "reden": "getal uit Math.round"
+  },
+  {
+   "fn": "renderLeveranciersBar",
+   "ctx": "stijl",
+   "expr": "pct",
+   "fp": "8c9386ee98",
+   "reden": "getal uit Math.round"
+  }
+ ]
+}

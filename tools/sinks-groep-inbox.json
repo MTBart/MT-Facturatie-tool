@@ -1,0 +1,359 @@
+{
+ "omschrijving": "mt-inbox.js: mail (Outlook/Graph), To Do, mappen, gesprekken, koppel-popovers en bijlagen",
+ "heleBestand": true,
+ "fragmentFns": [
+  "ibKoppelBadge",
+  "ibKoppelChips",
+  "inboxKoppelKnopHtml",
+  "MTKoppelUI.badge",
+  "ntkLijst",
+  "todoRow",
+  "tdsActieHtml",
+  "inboxMsgRow",
+  "ntkPlek"
+ ],
+ "houd": [
+  {
+   "fn": "inboxRenderAgenda",
+   "expr": "t",
+   "fp": "1f198c9df2",
+   "reden": "tijd uit toLocaleTimeString of de vaste tekst \"hele dag\""
+  },
+  {
+   "fn": "inboxRenderAgenda",
+   "expr": "loc",
+   "fp": "1f198c9df2",
+   "reden": "begint met \" · \" en de locatienaam gaat via ibEsc()"
+  },
+  {
+   "fn": "inboxRenderAgenda",
+   "expr": "dagen[i]",
+   "fp": "cf9fda75e0",
+   "reden": "vaste lijst met dagnamen"
+  },
+  {
+   "fn": "inboxRenderAgenda",
+   "expr": "d.getDate()",
+   "fp": "cf9fda75e0",
+   "reden": "getal uit Date"
+  },
+  {
+   "fn": "inboxRenderAgenda",
+   "expr": "d.getMonth()+1",
+   "fp": "cf9fda75e0",
+   "reden": "getal uit Date"
+  },
+  {
+   "fn": "inboxRenderAgenda",
+   "expr": "lijst",
+   "fp": "cf9fda75e0",
+   "reden": "fragment: de agenda-items, onderwerp en locatie gaan via ibEsc()"
+  },
+  {
+   "fn": "inboxRenderTakenShell",
+   "expr": "opts||'<option>geen lijsten</option>'",
+   "fp": "5127025fdb",
+   "reden": "fragment: de optie-elementen, id en naam gaan via ibEsc()"
+  },
+  {
+   "fn": "inboxRenderTakenShell",
+   "expr": "TDS_LIJST",
+   "fp": "915737c18c",
+   "reden": "vaste tekst-constante"
+  },
+  {
+   "fn": "due",
+   "expr": "due",
+   "fp": "94d816159c",
+   "reden": "datum uit toLocaleDateString (of leeg)"
+  },
+  {
+   "fn": "due",
+   "expr": "imp",
+   "fp": "eecaa072a3",
+   "reden": "vast HTML-fragment (uitroeptekens), geen data"
+  },
+  {
+   "fn": "tdsActieHtml",
+   "expr": "ic",
+   "fp": "35856f00b7",
+   "reden": "emoji uit een vaste tabel op soort"
+  },
+  {
+   "fn": "tdsDroogloop",
+   "expr": "doen",
+   "fp": "56bb69180d",
+   "reden": "getal: som van tellingen"
+  },
+  {
+   "fn": "tdsDroogloop",
+   "expr": "TDS_LIJST",
+   "fp": "e49fe9b254",
+   "reden": "vaste tekst-constante"
+  },
+  {
+   "fn": "tdsDroogloop",
+   "expr": "n('maken')",
+   "fp": "d49852380c",
+   "reden": "getal: lengte van een gefilterde lijst"
+  },
+  {
+   "fn": "tdsDroogloop",
+   "expr": "n('voltooien')",
+   "fp": "d49852380c",
+   "reden": "getal: lengte van een gefilterde lijst"
+  },
+  {
+   "fn": "tdsDroogloop",
+   "expr": "n('bijwerken')",
+   "fp": "d49852380c",
+   "reden": "getal: lengte van een gefilterde lijst"
+  },
+  {
+   "fn": "tdsDroogloop",
+   "expr": "n('koppelen')",
+   "fp": "d49852380c",
+   "reden": "getal: lengte van een gefilterde lijst"
+  },
+  {
+   "fn": "tdsDroogloop",
+   "expr": "n('conflict')",
+   "fp": "d49852380c",
+   "reden": "getal: lengte van een gefilterde lijst"
+  },
+  {
+   "fn": "tdsDroogloop",
+   "expr": "n('melding')",
+   "fp": "d49852380c",
+   "reden": "getal: lengte van een gefilterde lijst"
+  },
+  {
+   "fn": "row",
+   "expr": "act",
+   "fp": "83dec801c2",
+   "reden": "vaste CSS-klasse \" actief\" of leeg"
+  },
+  {
+   "fn": "row",
+   "expr": "b",
+   "fp": "83dec801c2",
+   "reden": "fragment: badge met het aantal ongelezen, het getal gaat via ibEsc()"
+  },
+  {
+   "fn": "inboxRenderList",
+   "expr": "filterAan?'niets met deze filters op de geladen pagina':(_inbox.q?'geen resultaten':'geen berichten')",
+   "fp": "19c15f5b95",
+   "reden": "drie vaste teksten"
+  },
+  {
+   "fn": "inboxFilterChipsTekenen",
+   "expr": "!!f[k]",
+   "fp": "512592b4c8",
+   "reden": "boolean (true/false) in aria-pressed"
+  },
+  {
+   "fn": "inboxFilterChipsTekenen",
+   "expr": "l",
+   "fp": "512592b4c8",
+   "reden": "label uit de vaste lijst IB_FILTERS"
+  },
+  {
+   "fn": "fnaam",
+   "expr": "kpcls",
+   "fp": "7b88930063",
+   "reden": "vaste CSS-klasse \" gekoppeld\" of leeg"
+  },
+  {
+   "fn": "fnaam",
+   "expr": "act",
+   "fp": "7b88930063",
+   "reden": "vaste CSS-klasse \" actief\" of leeg"
+  },
+  {
+   "fn": "fnaam",
+   "expr": "dt",
+   "fp": "4398255385",
+   "reden": "datum/tijd uit toLocaleString"
+  },
+  {
+   "fn": "fnaam",
+   "expr": "clip",
+   "fp": "b8720fbdf7",
+   "reden": "vast tekentje of leeg"
+  },
+  {
+   "fn": "fnaam",
+   "expr": "kpchip",
+   "fp": "b8720fbdf7",
+   "reden": "fragment: MTKoppelUI.badge, die zelf alles escapet"
+  },
+  {
+   "fn": "fnaam",
+   "expr": "fchip",
+   "fp": "b8720fbdf7",
+   "reden": "fragment: de mapnaam erin gaat via ibEsc()"
+  },
+  {
+   "fn": "act",
+   "expr": "kpcls",
+   "fp": "92eaf3c378",
+   "reden": "vaste CSS-klasse \" gekoppeld\" of leeg"
+  },
+  {
+   "fn": "act",
+   "expr": "act",
+   "fp": "92eaf3c378",
+   "reden": "vaste CSS-klasse \" actief\" of leeg"
+  },
+  {
+   "fn": "act",
+   "expr": "dt",
+   "fp": "4398255385",
+   "reden": "datum/tijd uit toLocaleString"
+  },
+  {
+   "fn": "act",
+   "expr": "anyClip",
+   "fp": "5cdb5d33bb",
+   "reden": "vast tekentje of leeg"
+  },
+  {
+   "fn": "act",
+   "expr": "kpchip",
+   "fp": "5cdb5d33bb",
+   "reden": "fragment: MTKoppelUI.badge, die zelf alles escapet"
+  },
+  {
+   "fn": "inboxRenderThread",
+   "expr": "clip",
+   "fp": "80e034c3ca",
+   "reden": "vast tekentje of leeg"
+  },
+  {
+   "fn": "inboxRenderThread",
+   "expr": "dt",
+   "fp": "80e034c3ca",
+   "reden": "datum/tijd uit toLocaleString"
+  },
+  {
+   "fn": "inboxRenderThread",
+   "expr": "fid",
+   "fp": "b6c4551db3",
+   "reden": "zelf gemaakt id \"ibthr-<volgnummer>\", geen data"
+  },
+  {
+   "fn": "inboxRenderThread",
+   "expr": "blocks",
+   "fp": "2ba636ab7b",
+   "reden": "fragment: de berichtblokken, afzender en voorbeeldtekst gaan via ibEsc()"
+  },
+  {
+   "fn": "inboxOpenMail",
+   "expr": "dt",
+   "fp": "e7cf9bbea7",
+   "reden": "datum/tijd uit toLocaleString"
+  },
+  {
+   "fn": "inboxOpenMail",
+   "expr": "attHtml",
+   "fp": "0af159f2df",
+   "reden": "fragment: bijlagenaam en id gaan via ibEsc()"
+  },
+  {
+   "fn": "inboxOpenMail",
+   "expr": "folderOpts",
+   "fp": "ce00bc94a9",
+   "reden": "fragment: optie-elementen, id en naam gaan via ibEsc()"
+  },
+  {
+   "fn": "nr",
+   "expr": "nr(c)?naam(c):''",
+   "fp": "91aad7d763",
+   "reden": "naam() geeft een met ibEsc() geëscapete naam of leeg"
+  },
+  {
+   "fn": "nr",
+   "expr": "cc",
+   "fp": "5386360aaf",
+   "reden": "cc = ibJa(code): JSON-letterlijke, HTML-veilig voor een handler"
+  },
+  {
+   "fn": "nr",
+   "expr": "mid",
+   "fp": "d03c56f543",
+   "reden": "mid = ibJa(id): JSON-letterlijke, HTML-veilig voor een handler"
+  },
+  {
+   "fn": "nr",
+   "expr": "cc",
+   "fp": "d03c56f543",
+   "reden": "cc = ibJa(code): JSON-letterlijke, HTML-veilig voor een handler"
+  },
+  {
+   "fn": "nr",
+   "expr": "mid",
+   "fp": "39563021e6",
+   "reden": "mid = ibJa(id): JSON-letterlijke, HTML-veilig voor een handler"
+  },
+  {
+   "fn": "nr",
+   "expr": "naam(o.code)||ibEsc((typeof projKort==='function'?projKort(o.code):o.code))",
+   "fp": "2aaf07978e",
+   "reden": "beide kanten zijn al geëscaped (naam() en ibEsc())"
+  },
+  {
+   "fn": "nr",
+   "expr": "mid",
+   "fp": "624cf8952d",
+   "reden": "mid = ibJa(id): JSON-letterlijke, HTML-veilig voor een handler"
+  },
+  {
+   "fn": "nr",
+   "expr": "cc",
+   "fp": "624cf8952d",
+   "reden": "cc = ibJa(code): JSON-letterlijke, HTML-veilig voor een handler"
+  },
+  {
+   "fn": "nr",
+   "expr": "mid",
+   "fp": "ec74993294",
+   "reden": "mid = ibJa(id): JSON-letterlijke, HTML-veilig voor een handler"
+  },
+  {
+   "fn": "projOpt",
+   "expr": "ibEsc(key).replace(/[^A-Za-z0-9]/g,'')",
+   "fp": "4f67730008",
+   "reden": "na het escapen blijven alleen letters en cijfers over"
+  },
+  {
+   "fn": "projOpt",
+   "expr": "projOpt(m)",
+   "fp": "4f67730008",
+   "reden": "fragment: optie-elementen, waarde en label gaan via ibEsc()"
+  },
+  {
+   "fn": "inboxKoppelProject",
+   "expr": "typeof projLabelCode==='function'?(projLabelCode(p)?`<span style=\"font-family:var(--mono)\">${ibEsc(projLabelCode(p))}</span> · `:''):`<span ",
+   "fp": "068105d986",
+   "reden": "beide takken bouwen een span met de code via ibEsc()"
+  },
+  {
+   "fn": "inboxKoppelProject",
+   "expr": "lijst",
+   "fp": "acff0a765c",
+   "reden": "fragment: de projectrijen, alle velden gaan via ibEsc()/ibJa()"
+  },
+  {
+   "fn": "proj",
+   "expr": "s",
+   "fp": "8b488b3d92",
+   "reden": "submapnaam uit de vaste lijst IB_SUBMAPPEN"
+  },
+  {
+   "fn": "proj",
+   "expr": "overig",
+   "fp": "dd003eff3d",
+   "reden": "getal: aantal bijlagen dat geen bestand is"
+  }
+ ]
+}

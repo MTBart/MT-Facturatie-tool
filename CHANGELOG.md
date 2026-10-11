@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F7 3b groep 6: tekstsinks in mt-geld, mt-cijfers, mt-schulden, mt-verhuis, mt-rapport, mt-aanwezig, mt-dialog en mt-koers (3b af)
+- Commit: `fa47ed9` | Auteur: Bart Witte
+
 ## 2026-10-11 — tools/check-sinks.js: alle sink-baselines in de repo, in de pre-commit-hook en verplicht bij elke release
 - Commit: `54ad162` | Auteur: Bart Witte
 

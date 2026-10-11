@@ -10,26 +10,31 @@
   {
    "fn": "scherm",
    "expr": "links",
+   "fp": "bd6d05b468",
    "reden": "HTML-fragment van de aanroeper; scherm() is een kale omhulling"
   },
   {
    "fn": "scherm",
    "expr": "inl(x.replace(/^\\s*\\d+[.)]\\s+/, ''))",
+   "fp": "7948889d31",
    "reden": "fragment: inl() geeft HTML terug (zijn eigen templates worden gescand)"
   },
   {
    "fn": "teken",
    "expr": "R.md(z).replace(/^<p>|<\\/p>$/g, '')",
+   "fp": "19d8542661",
    "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
   },
   {
    "fn": "teken",
    "expr": "veranderd",
+   "fp": "45deecc691",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "adviesHtml",
    "expr": "R.md(z).replace(/^<p>|<\\/p>$/g, '')",
+   "fp": "265ff0e727",
    "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
   }
  ]

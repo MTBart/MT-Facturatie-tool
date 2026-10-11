@@ -16,51 +16,61 @@
   {
    "fn": "teken",
    "expr": "balk",
+   "fp": "4d4159ce78",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "teken",
    "expr": "midden",
+   "fp": "4d4159ce78",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "grafiekHtml",
    "expr": "dim",
+   "fp": "4ed1d6943c",
    "reden": "vast attribuutfragment (opacity), geen data"
   },
   {
    "fn": "grafiekHtml",
    "expr": "defs",
+   "fp": "ba1b124ce9",
    "reden": "vaste SVG-defs (geen data)"
   },
   {
    "fn": "grafiekHtml",
    "expr": "svg",
+   "fp": "ba1b124ce9",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "pad",
    "expr": "d",
+   "fp": "8b9ba8e2a3",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "bulletHtml",
    "expr": "bmEl",
+   "fp": "38e7207d66",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "watervalHtml",
    "expr": "defs",
+   "fp": "c7d5c75ac5",
    "reden": "vaste SVG-defs (geen data)"
   },
   {
    "fn": "watervalHtml",
    "expr": "svg",
+   "fp": "c7d5c75ac5",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "sheet",
    "expr": "html",
+   "fp": "82fb3a1251",
    "reden": "HTML-fragment van de aanroeper; sheet() is een kale omhulling"
   }
  ]

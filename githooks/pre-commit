@@ -56,11 +56,12 @@ fi
 echo "✓ Secret-guard: schoon"
 
 # ============================================================
-#  SINK-GUARD (F7) — HTML/JS-injectie: alle sink-baselines (tools/check-sinks.js, <1 s). Controleert de werkmap.
+#  SINK-GUARD (F7) — HTML/JS-injectie: alle sink-baselines (tools/check-sinks.js, <1 s). Controleert de GESTAGEDE inhoud: de index (.html, .js en tools/)
+#  wordt naar een tijdelijke map geëxporteerd en het gestagede check-sinks.js draait daar; wat in de werkmap staat of is hersteld telt niet.
 #  Blokkeert bij elke ruwe ${...}-interpolatie, link uit data, handler-interpolatie of HTML-plakwerk die niet beoordeeld is.
 #  Bewust overslaan (zeer ongebruikelijk, en dan in de release alsnog oplossen):  MT_SINKS_OVERSLAAN=1 git commit ...
 # ============================================================
-if echo "$STAGED" | grep -Eq '(^[^/]+\.(html|js)$)|(^tools/.*\.(js|json)$)'; then
+if echo "$STAGED" | grep -Eq '\.(html|js)$|^tools/'; then
   if [ "$MT_SINKS_OVERSLAAN" = "1" ]; then
     echo "⚠ Sink-guard bewust OVERGESLAGEN (MT_SINKS_OVERSLAAN=1)"
   elif ! command -v node >/dev/null 2>&1; then
@@ -69,8 +70,25 @@ if echo "$STAGED" | grep -Eq '(^[^/]+\.(html|js)$)|(^tools/.*\.(js|json)$)'; the
     echo ""
     exit 1
   else
-    SINK_UIT="$(node "$REPO_DIR/tools/check-sinks.js" --stil 2>&1)"
-    if [ $? -ne 0 ]; then
+    SINK_TMP="$(mktemp -d 2>/dev/null)"
+    if [ -z "$SINK_TMP" ] || [ ! -d "$SINK_TMP" ]; then
+      echo ""
+      echo "🛑 COMMIT GEBLOKKEERD — geen tijdelijke map voor de sink-guard (fail closed)."
+      echo ""
+      exit 1
+    fi
+    SINK_TMP_N="$SINK_TMP"; command -v cygpath >/dev/null 2>&1 && SINK_TMP_N="$(cygpath -m "$SINK_TMP")"
+    if ! (cd "$REPO_DIR" && git ls-files -z -- '*.html' '*.js' 'tools' ':!backup' ':!vendor' | git checkout-index -z --stdin --prefix="$SINK_TMP_N/"); then
+      rm -rf "$SINK_TMP"
+      echo ""
+      echo "🛑 COMMIT GEBLOKKEERD — de index kon niet worden geëxporteerd voor de sink-guard (fail closed)."
+      echo ""
+      exit 1
+    fi
+    SINK_UIT="$(node "$SINK_TMP_N/tools/check-sinks.js" --stil --root "$SINK_TMP_N" 2>&1)"
+    SINK_RC=$?
+    rm -rf "$SINK_TMP"
+    if [ $SINK_RC -ne 0 ]; then
       echo ""
       echo "🛑 COMMIT GEBLOKKEERD — sink-guard (F7): niet-beoordeelde ruwe plek(ken) gevonden."
       echo "$SINK_UIT" | sed 's/^/   /'

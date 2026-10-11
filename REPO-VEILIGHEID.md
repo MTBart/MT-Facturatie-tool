@@ -68,6 +68,7 @@ Gegevens uit Moneybird, mail, SharePoint, Toggl, AI en collega-invoer mogen alle
 in innerHTML. `node tools/check-sinks.js` controleert dat op alle .html/.js-bestanden (groepen met houd-lijsten in `tools/sinks-groepen.js` en `tools/sinks-groep-*.json`,
 `plakwerk-baseline.json`, `url-sinks-baseline.json`, `handler-baseline.json`, `sinks-nog-open.json`) en draait in de pre-commit-hook en als verplichte stap in RELEASE.md.
 Nieuwe afwijking: oplossen, of beoordelen en met reden in de juiste baseline zetten. Overslaan kan alleen bewust met `MT_SINKS_OVERSLAAN=1`.
+De hook controleert de GESTAGEDE inhoud (de index wordt naar een tijdelijke map geëxporteerd), niet de werkmap. Bronbestanden worden recursief verzameld (uitgesloten: `vendor/`, `node_modules/`, `backup*/`, `_uit-repo*/`, `tools/`, `worker.js`, `sw.js`). Een uitzondering in een groep-houd-lijst is functie + expressie + vingerafdruk (fp) van de regel en geldt `aantal` keer: een tweede identieke plek moet apart goedgekeurd worden, een verschoven regelnummer niet. `node tools/check-sinks.js --voorstel` toont het regeltje (met fp) dat je na het lezen van de plek, mét reden, kunt toevoegen.
 
 ---
 

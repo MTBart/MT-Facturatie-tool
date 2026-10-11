@@ -7,134 +7,172 @@
  ],
  "houd": [
   {
-   "fn": "renderAgenda",
-   "expr": "body",
-   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
-  },
-  {
-   "fn": "renderAgenda",
-   "expr": "timesHtml",
-   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
-  },
-  {
-   "fn": "renderAgenda",
-   "expr": "colsHtml",
-   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
-  },
-  {
-   "fn": "renderAgenda",
-   "expr": "bars",
-   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
-  },
-  {
-   "fn": "renderOpname",
-   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
-   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
-  },
-  {
-   "fn": "open",
-   "expr": "not",
-   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
-  },
-  {
-   "fn": "open",
-   "expr": "klant",
-   "reden": "al geëscaped: variabele = esc(...)"
-  },
-  {
-   "fn": "open",
-   "expr": "badge",
-   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
-  },
-  {
-   "fn": "renderVoorOpname",
-   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
-   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
-  },
-  {
-   "fn": "renderInmFotos",
-   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
-   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
-  },
-  {
-   "fn": "renderOplFotos",
-   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
-   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
-  },
-  {
-   "fn": "renderOplVlakGrid",
-   "expr": "veiligeFoto(src)",
-   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
-  },
-  {
-   "fn": "_pinRenderManager",
-   "expr": "veiligeFoto(src)",
-   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
-  },
-  {
-   "fn": "showOpnameRapport",
-   "expr": "veiligeFoto(f.url)",
-   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
-  },
-  {
-   "fn": "showRapport",
-   "expr": "veiligeFoto(f.url)",
-   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
-  },
-  {
-   "fn": "renderSheetTasks",
-   "expr": "syncDot",
-   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
-  },
-  {
-   "fn": "zoek",
-   "expr": "pendBadge",
-   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
-  },
-  {
-   "fn": "zoek",
-   "expr": "inputBlok",
-   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
-  },
-  {
-   "fn": "_chipHtml",
-   "expr": "click",
-   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
-  },
-  {
-   "fn": "_ruimteRender",
-   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
-   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
-  },
-  {
    "fn": "renderWeekStrip",
    "expr": "w",
+   "fp": "3d4e6adc33",
    "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
   },
   {
    "fn": "renderWeekStrip",
    "expr": "a.w",
+   "fp": "f99c4383b4",
    "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
   },
   {
    "fn": "renderWeekStrip",
    "expr": "p.w",
+   "fp": "adce559005",
    "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
   },
   {
    "fn": "renderAgenda",
    "expr": "c.w",
+   "fp": "853c0e3cb6",
    "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
+  },
+  {
+   "fn": "renderAgenda",
+   "expr": "body",
+   "fp": "853c0e3cb6",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderAgenda",
+   "expr": "timesHtml",
+   "fp": "b4597e381d",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderAgenda",
+   "expr": "colsHtml",
+   "fp": "b67ee4dca5",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderAgenda",
+   "expr": "bars",
+   "fp": "d01f2b39b4",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "renderOpname",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "fp": "65e072bda5",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "open",
+   "expr": "not",
+   "fp": "04d398a84b",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
   },
   {
    "fn": "open",
    "expr": "oi",
+   "fp": "0c03e0330b",
    "reden": "getal (weekindex of volgnummer uit rekenwerk), geen tekst uit data"
+  },
+  {
+   "fn": "open",
+   "expr": "klant",
+   "fp": "fa14a2c4f4",
+   "reden": "al geëscaped: variabele = esc(...)"
+  },
+  {
+   "fn": "open",
+   "expr": "badge",
+   "fp": "9e0ca465cc",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderVoorOpname",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "fp": "65e072bda5",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "renderInmFotos",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "fp": "65e072bda5",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "renderOplFotos",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "fp": "c1883ac894",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "renderOplVlakGrid",
+   "expr": "veiligeFoto(src)",
+   "fp": "703ca7ba51",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "_pinRenderManager",
+   "expr": "veiligeFoto(src)",
+   "fp": "dbf6790b92",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "showOpnameRapport",
+   "expr": "veiligeFoto(f.url)",
+   "fp": "1c1da088e5",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "showRapport",
+   "expr": "veiligeFoto(f.url)",
+   "fp": "c75462054b",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "showRapport",
+   "expr": "veiligeFoto(f.url)",
+   "fp": "8afab42b55",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "renderSheetTasks",
+   "expr": "syncDot",
+   "fp": "8fd8f66132",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "zoek",
+   "expr": "pendBadge",
+   "fp": "e531af889c",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "zoek",
+   "expr": "inputBlok",
+   "fp": "e531af889c",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
   },
   {
    "fn": "_chipHtml",
    "expr": "retryJs",
+   "fp": "2c952c2641",
    "reden": "vaste JS-tekst die de aanroeper meegeeft (bv. \"rapDraftSave()\"), geen data"
+  },
+  {
+   "fn": "_chipHtml",
+   "expr": "click",
+   "fp": "ba8b8033d9",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "_ruimteRender",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "fp": "65e072bda5",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
+  },
+  {
+   "fn": "_ruimteRender",
+   "expr": "veiligeFoto(p.bewerktUrl || p.url)",
+   "fp": "3ddcccdcde",
+   "reden": "al geëscaped: veiligeFoto() = escHtml(veiligeUrl(...))"
   }
  ]
 }
