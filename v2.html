@@ -24,6 +24,7 @@
 <script src="mt-toggl.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-11a"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
+<script src="mt-zoekbalk.js?v=2026-10-11a"></script>
 <script src="mt-inbox.js?v=2026-10-11c"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
@@ -172,10 +173,7 @@ header h1 span{color:var(--gold);font-style:italic}
 .api-dot.err{background:var(--error);box-shadow:0 0 0 3px var(--error-50)}
 .api-label{font-size:11px;font-family:var(--mono);color:var(--text-dim)}
 /* ── Topbalk Larry-chat ── */
-.header-center{position:absolute;left:50%;transform:translateX(-50%);z-index:101}
-.tbchat-field{width:340px;max-width:44vw;background:var(--n-0);color:var(--n-900);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-size:13px;font-family:inherit;outline:none;box-shadow:var(--shadow-sm)}
-.tbchat-field::placeholder{color:#9a9a9a}
-.tbchat-field:focus{border-color:var(--gold,#B8962E);box-shadow:0 2px 12px rgba(0,0,0,0.18)}
+.header-center{position:absolute;left:50%;transform:translateX(-50%);z-index:101;width:380px;max-width:44vw}
 .tbchat-panel{position:absolute;top:46px;left:50%;transform:translateX(-50%);width:460px;max-width:92vw;height:480px;max-height:74vh;background:#fff;border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,0.32);display:flex;flex-direction:column;overflow:hidden;color:#222}
 .tbchat-head{background:linear-gradient(135deg,var(--green),var(--green-700));color:var(--n-0);padding:11px 14px;font-size:13px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .tbchat-x{background:none;border:none;color:var(--n-0);cursor:pointer;font-size:14px;line-height:1}
@@ -186,7 +184,7 @@ header h1 span{color:var(--gold);font-style:italic}
 .tbchat-input{display:flex;gap:6px;padding:10px;border-top:1px solid #eee;background:#fff;flex-shrink:0}
 .tbchat-input textarea{flex:1;resize:none;border:1px solid #ddd;border-radius:8px;padding:8px;font-family:inherit;font-size:13px;max-height:90px}
 .tbchat-input button{background:var(--green);color:#fff;border:none;border-radius:8px;width:40px;cursor:pointer;font-size:15px}
-@media(max-width:760px){.header-center{position:static;transform:none}.tbchat-panel{position:fixed;top:60px;left:50%}}
+@media(max-width:760px){.header-center{position:static;transform:none;width:auto;max-width:none;flex:1 1 120px;min-width:0;margin:0 8px}.tbchat-panel{position:fixed;top:60px;left:50%}}
 
 /* ── Per-tab help ("wat is dit?") + feedback-chat ── */
 .tab-help-btn{margin-left:auto;align-self:center;flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:none;border:1px solid var(--border);border-radius:14px;padding:4px 11px;font-family:var(--sans);font-size:12px;color:var(--text-faint);cursor:pointer;white-space:nowrap}
@@ -795,8 +793,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
-    <input id="tbchat-field" class="tbchat-field" placeholder="stel me een vraag?" autocomplete="off"
-      onfocus="tbChatOpen()" onkeydown="if(event.key==='Enter'){event.preventDefault();tbChatSend();}">
+    <input id="zb-veld" class="zb-veld" type="text" placeholder="Zoek een project, klant of taak — of vraag iets" aria-label="Zoeken, of een vraag aan Claude" enterkeyhint="search" spellcheck="false">
     <div id="tbchat-panel" class="tbchat-panel" style="display:none">
       <div class="tbchat-head"><span>✨ Larry — vraag iets of laat iets doen</span><button class="tbchat-x" onclick="tbChatClose()">✕</button></div>
       <div id="tbchat-log" class="tbchat-log"></div>
@@ -11557,7 +11554,7 @@ function tbChatOpen(){
   if(p.style.display!=='none')return;
   p.style.display='flex';
   if(!_tbHist.length) tbBubble('b','Hoi, ik ben Larry 👋 Vraag me iets, of geef een opdracht — bijv. "open de agenda", "ga naar facturen", "ververs de uren".');
-  if(!_tbBound){_tbBound=true;document.addEventListener('click',e=>{const pn=document.getElementById('tbchat-panel');const fld=document.getElementById('tbchat-field');if(pn.style.display!=='none'&&!pn.contains(e.target)&&e.target!==fld)pn.style.display='none';});}
+  if(!_tbBound){_tbBound=true;document.addEventListener('click',e=>{const pn=document.getElementById('tbchat-panel');const fld=document.getElementById('zb-veld');if(pn.style.display!=='none'&&!pn.contains(e.target)&&e.target!==fld)pn.style.display='none';});}
 }
 function tbChatClose(){document.getElementById('tbchat-panel').style.display='none';}
 const TB_TABS=['dashboard','inbox','verwerk','controle','projecten','klanten','voorraad','bestelling','historie','agenda','instellingen','cn','migratie'];
@@ -11572,9 +11569,10 @@ function tbExec(key,val){
     default: return 'onbekende actie: '+key;
   }
 }
-async function tbChatSend(){
-  const inp=document.getElementById('tbchat-field');const q=(inp.value||'').trim();if(!q)return;
-  tbChatOpen();inp.value='';tbBubble('u',q);_tbHist.push({role:'user',content:q});
+async function tbChatSend(vraag){
+  // De zoekbalk (zb-veld) geeft de vraag mee; zonder argument lezen we het veld zelf (oude aanroep).
+  const inp=document.getElementById('zb-veld');const q=(typeof vraag==='string'?vraag:(inp&&inp.value)||'').trim();if(!q)return;
+  tbChatOpen();if(inp&&typeof vraag!=='string')inp.value='';tbBubble('u',q);_tbHist.push({role:'user',content:q});
   const wait=tbBubble('b','…');
   const sys=`Je bent Larry, de orchestrator in de M&T-cockpit (interne tool van Mortise & Tenon). Antwoord kort en concreet in het Nederlands.
 Je kunt ACTIES in de tool uitvoeren door aan het EIND van je antwoord directives op een eigen regel te zetten, exact zo: [[ACTIE:sleutel=waarde]].
@@ -11597,6 +11595,45 @@ HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of map
     if(window._LOG)_LOG.add('tbchat',helpActieveTab(),q,clean);
   }catch(e){wait.textContent='fout: '+e.message;if(window._LOG)_LOG.add('tbchat-fout',helpActieveTab(),q,e.message);}
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZOEKBALK (brok 1: kader) — het altijd zichtbare veld bovenin; component = mt-zoekbalk.js.
+// Treffers openen via de router (mtRoute.go) of de bestaande open-functies; "Vraag Claude" = tbChatSend.
+// De zoekbron hieronder is een eenvoudige tussenstap; brok 2 vervangt hem door mt-zoek.js.
+// ═══════════════════════════════════════════════════════════════════════════
+function zbMag(soort){ return !window.MTRol||MTRol.mag(soort==='taak'?'taken':'projecten'); }
+function zbBronSimpel(q){
+  const t=String(q||'').toLowerCase().trim(); if(!t) return {groepen:[]};
+  const groepen=[];
+  const groep=(soort,label,alle)=>{ if(alle.length&&zbMag(soort)) groepen.push({soort,label,items:alle.slice(0,6),totaal:alle.length,meer:Math.max(0,alle.length-6)}); };
+  groep('project','Projecten',PROJECT_CODES.filter(p=>projZoekTekst(p).includes(t)).map(p=>({soort:'project',id:p.code,titel:projNaamVol(p),sub:projKlantNaam(p),tag:projLabelCode(p),data:{code:p.code}})));
+  groep('klant','Klanten',KLANTEN.filter(k=>[k.naam].concat(k.aliassen||[]).join(' ').toLowerCase().includes(t)).map(k=>({soort:'klant',id:k.code,titel:k.naam,sub:'',tag:'',data:{klant:k.code}})));
+  const loc=new Map();
+  PROJECT_CODES.forEach(p=>{ const lc=String(p.loc||'').toUpperCase(), kl=String(p.klant||'').toUpperCase(), ln=projLocLabel(p);
+    if(kl&&lc&&ln&&ln.toLowerCase().includes(t)&&!loc.has(kl+'/'+lc)) loc.set(kl+'/'+lc,{soort:'locatie',id:kl+'/'+lc,titel:ln,sub:projKlantNaam(p),tag:'',data:{klant:kl,loc:lc}}); });
+  groep('locatie','Locaties',[...loc.values()]);
+  const taken=[]; const pt=projTakenAll();
+  Object.keys(pt).forEach(code=>{ (Array.isArray(pt[code])?pt[code]:[]).forEach(x=>{ if(x&&x.id&&String(x.naam||'').toLowerCase().includes(t)){ const p=projVind(code); taken.push({soort:'taak',id:code+'/'+x.id,titel:x.naam,sub:p?projNaamVol(p):'',tag:'',data:{code,id:x.id}}); } }); });
+  groep('taak','Taken',taken);
+  let cs=[]; try{ cs=window.MTContacten?MTContacten.zoek(q,{max:30}):[]; }catch(e){}
+  groep('contact','Contacten',cs.map(c=>({soort:'contact',id:c.id,titel:MTContacten.weergave(c),sub:((c.organisatie&&c.organisatie.naam)||''),tag:'',data:{id:c.id}})));
+  return {groepen};
+}
+function zoekbalkOpen(it){
+  const d=(it&&it.data)||{};
+  if(it.soort==='project') mtRoute.go({tab:'projecten',code:d.code});
+  else if(it.soort==='klant') mtRoute.go({tab:'projecten',klant:d.klant});
+  else if(it.soort==='locatie') mtRoute.go({tab:'projecten',klant:d.klant,loc:d.loc});
+  else if(it.soort==='taak') mtRoute.go({tab:'projecten',code:d.code,sectie:'planning'});
+  else if(it.soort==='contact'&&window.MTContactenUI) MTContactenUI.detail(d.id);
+}
+function zoekbalkInit(){
+  const veld=document.getElementById('zb-veld'); if(!veld||!window.MTZoekbalk||veld._zb) return;
+  veld._zb=MTZoekbalk.init({veld,zoek:zbBronSimpel,open:zoekbalkOpen,
+    vraag:q=>tbChatSend(q),vraagMag:()=>!window.MTRol||MTRol.mag('ai'),
+    isVraag:q=>/\?/.test(q)||q.trim().split(/\s+/).length>=4});
+}
+zoekbalkInit();
 </script>
 
 <script>

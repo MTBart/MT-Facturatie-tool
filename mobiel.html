@@ -24,6 +24,7 @@
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-11a"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
+<script src="mt-zoekbalk.js?v=2026-10-11a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
@@ -123,6 +124,10 @@ body{
 .header-info-btn:active{background:rgba(255,255,255,.3)}
 #geldKnop{position:relative}
 .geld-badge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#B4412F;color:#fff;border:2px solid #fff;font:700 10px/13px system-ui,sans-serif;text-align:center}
+
+/* ── ZOEKBALK (onder de header, op elke tab) ── */
+.zb-balk{flex:0 0 auto;position:relative;z-index:99;padding:6px 12px;background:var(--n-0,#fff);border-bottom:1px solid var(--border)}
+.zb-balk .zb-veld{font-size:16px;padding:9px 16px}   /* 16px: iOS zoomt anders in op het veld */
 
 /* ── TIMER BAR (sticky, elke tab) ── */
 .timer-bar{
@@ -791,6 +796,11 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     <button class="user-avatar-btn" id="userAvatarBtn" style="display:none" onclick="msLogout()" title="Uitloggen"></button>
   </div>
 </header>
+
+<!-- ── ZOEKBALK ── -->
+<div class="zb-balk" id="zbBalk">
+  <input id="zb-veld" class="zb-veld" type="text" placeholder="Zoek een project, taak of contact" aria-label="Zoeken" enterkeyhint="search" spellcheck="false">
+</div>
 
 <!-- ── LOPENDE TIMER BAR ── -->
 <div class="timer-bar" id="timerBar">
@@ -6233,6 +6243,39 @@ function bevestigHandtekening() {
 function openLarry() { document.getElementById("larrySheet").classList.add("visible"); }
 function closeLarry() { document.getElementById("larrySheet").classList.remove("visible"); }
 function closeLarryOuter(e) { if (e.target === document.getElementById("larrySheet")) closeLarry(); }
+
+/* =====================================================================
+   ZOEKBALK (brok 1: kader) — component = mt-zoekbalk.js. De app heeft geen Claude-chat, dus geen "Vraag Claude".
+   De zoekbron hieronder is een eenvoudige tussenstap; brok 2 vervangt hem door mt-zoek.js.
+   ===================================================================== */
+function zbMagM(soort) { return !window.MTRol || MTRol.mag(soort === "taak" ? "taken" : "projecten"); }
+function zbBronSimpel(q) {
+  const t = String(q || "").toLowerCase().trim(); if (!t) return { groepen: [] };
+  const groepen = [];
+  const groep = (soort, label, alle) => { if (alle.length && zbMagM(soort)) groepen.push({ soort, label, items: alle.slice(0, 6), totaal: alle.length, meer: Math.max(0, alle.length - 6) }); };
+  const proj = allProjects();
+  groep("project", "Projecten", proj.filter(p => (mProjNaam(p) + " " + p.code + " " + mProjNr(p)).toLowerCase().includes(t))
+    .map(p => ({ soort: "project", id: p.code, titel: mProjNaam(p), sub: "", tag: mProjNr(p), data: { code: p.code } })));
+  const taken = [];
+  Object.keys(TASKS || {}).forEach(code => tasksFor(code).forEach(x => {
+    if (x && x.id && String(x.name || "").toLowerCase().includes(t)) { const p = proj.find(y => y.code === code); taken.push({ soort: "taak", id: code + "/" + x.id, titel: x.name, sub: p ? mProjNaam(p) : "", tag: "", data: { code, id: x.id } }); }
+  }));
+  groep("taak", "Taken", taken);
+  let cs = []; try { cs = window.MTContacten ? MTContacten.zoek(q, { max: 30 }) : []; } catch (e) {}
+  groep("contact", "Contacten", cs.map(c => ({ soort: "contact", id: c.id, titel: MTContacten.weergave(c), sub: (c.organisatie && c.organisatie.naam) || "", tag: "", data: { id: c.id } })));
+  return { groepen };
+}
+function zoekbalkOpenM(it) {
+  const d = (it && it.data) || {};
+  if (it.soort === "contact") { if (window.MTContactenUI) MTContactenUI.detail(d.id); return; }
+  const p = allProjects().find(y => y.code === d.code);   // project en taak: het project-blad met de taken
+  if (p) openProjectSheet(p.id);
+}
+function zoekbalkInitM() {
+  const veld = document.getElementById("zb-veld"); if (!veld || !window.MTZoekbalk || veld._zb) return;
+  veld._zb = MTZoekbalk.init({ veld, zoek: zbBronSimpel, open: zoekbalkOpenM, host: document.getElementById("zbBalk") });
+}
+zoekbalkInitM();
 
 /* =====================================================================
    TAKEN PER PROJECT (punt 2) — in project-detail-sheet
