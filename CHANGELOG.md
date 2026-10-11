@@ -5,6 +5,45 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Gedeeld: SharePoint-bestand aanmaken met If-None-Match en samenvoeger met mailbox-identiteit (cockpit en Outlook-paneel)
+- Commit: `db2ba39` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk: Codex-eindreview — voorspelbare KQL-zoekfrase, 429 per postbus, hard begrensde alarm-run
+- Commit: `422e175` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk: hervatbare opbouw van de Moneybird-zoekindex (DO-alarm) en Retry-After als seconden of HTTP-datum
+- Commit: `8bb4b8c` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk brok 4: e-mail als zoekbron (Graph-search in eigen postbus en info@)
+- Commit: `e09491d` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk: Moneybird-zoekroute — recht altijd, atomaire opbouw via Durable Object, complete index, 429 terminaal
+- Commit: `01c89c2` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk: sink-baseline voor de twee fetch-URL's in mt-zoek-extern.js
+- Commit: `6465b43` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk: Codex-fixes (rechten-race, Enter-contract, index, afgeronde taken, Android-terug)
+- Commit: `a8b8f29` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk: Moneybird-index gebruikt period:prev_year (last_year bestaat niet in Moneybird)
+- Commit: `76ad68d` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk brok 3: externe bronnen Moneybird (facturen, offertes) en SharePoint (mappen, bestanden)
+- Commit: `9cbd18d` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk verfijning: Larry-regel, eigen chatveld, mobiele zoeklaag
+- Commit: `19c78a8` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk brok 2: gedeelde zoekbron mt-zoek.js
+- Commit: `6992172` | Auteur: Bart Witte
+
+## 2026-10-11 — Zoekbalk brok 1: het zoekbalk-kader bovenin v2 en mobiel
+- Commit: `5a52171` | Auteur: Bart Witte
+
+## 2026-10-11 — G7 Codex 2× HOOG: alle onbetaalde btw-kwartalen, dekking gelijk aan de worker; advies als basis voor de oude adviezen; buffer_lopend samengevoegd
+- Commit: `8ae58d5` | Auteur: Bart Witte
+
 ## 2026-10-11 — G7 aanvulling: streefbedragen volgen standaard het advies; een eigen bedrag wint, leeg = weer het advies
 - Commit: `b93e786` | Auteur: Bart Witte
 
