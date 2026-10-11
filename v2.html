@@ -24,9 +24,9 @@
 <script src="mt-toggl.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-11a"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
-<script src="mt-zoek.js?v=2026-10-11b"></script>
+<script src="mt-zoek.js?v=2026-10-11c"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11a"></script>
-<script src="mt-zoekbalk.js?v=2026-10-11d"></script>
+<script src="mt-zoekbalk.js?v=2026-10-11f"></script>
 <script src="mt-inbox.js?v=2026-10-11c"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
@@ -11607,9 +11607,11 @@ HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of map
 // stores, met vaste rangorde; alleen de soorten waar de rol recht op heeft.
 // ═══════════════════════════════════════════════════════════════════════════
 let _zbIdx=null, _zbIdxT=0;
-// De index wordt hooguit elke 3 s opnieuw opgebouwd (nieuwe projecten/taken/contacten zijn dus direct vindbaar).
+// De index wordt opnieuw opgebouwd zodra projecten, taken, contacten of klanten zijn opgeslagen (zbVerouderd, zie de hooks in zoekbalkInit);
+// een TTL van 60 s is het vangnet voor wat die hooks missen. Bij het opbouwen worden klant- en locatienamen één keer per code uitgerekend (MTZoek.bronVan).
+function zbVerouderd(){ _zbIdx=null; }
 function zbIndex(){
-  const nu=Date.now(); if(_zbIdx&&nu-_zbIdxT<3000) return _zbIdx;
+  const nu=Date.now(); if(_zbIdx&&nu-_zbIdxT<60000) return _zbIdx;
   let contacten=[]; try{ contacten=window.MTContacten?MTContacten.actieven():[]; }catch(e){}
   _zbIdx=MTZoek.index(MTZoek.bronVan({projecten:PROJECT_CODES,klanten:KLANTEN,taken:projTakenAll(),contacten},
     {projectNaam:projNaamVol,klantNaam:projKlantNaam,locNaam:projLocLabel,projectLabel:projLabelCode,contactNaam:MTContacten.weergave}));
@@ -11626,11 +11628,16 @@ function zoekbalkOpen(it){
   else if(it.soort==='contact'&&window.MTContactenUI) MTContactenUI.detail(d.id);
 }
 function zoekbalkInit(){
+  // Index-invalidatie via de opslagfuncties (en storage-events van andere tabbladen) i.p.v. alleen een TTL.
+  ['slaProjectenOp','projTakenSave','projLaad','_klantenZet'].forEach(n=>{ const f=window[n]; if(typeof f==='function'&&!f._zb){ const w=function(){ const r=f.apply(this,arguments); zbVerouderd(); return r; }; w._zb=true; window[n]=w; } });
+  if(window.MTContacten&&MTContacten.opslag&&!MTContacten.opslag._zb){ const s=MTContacten.opslag.schrijf; MTContacten.opslag.schrijf=function(){ const r=s.apply(this,arguments); zbVerouderd(); return r; }; MTContacten.opslag._zb=true; }
+  window.addEventListener('storage',zbVerouderd);
   const cin=document.getElementById('tbchat-in'), csend=document.getElementById('tbchat-send');
   if(cin&&!cin._tb){ cin._tb=true;
     cin.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); tbChatSend(); } else if(e.key==='Escape') tbChatClose(); });
     csend.addEventListener('click',()=>tbChatSend()); }
   const veld=document.getElementById('zb-veld'); if(!veld||!window.MTZoekbalk||veld._zb) return;
+  window.addEventListener('mt-rol',()=>{ zbVerouderd(); if(veld._zb) veld._zb.herlaad(); });   // de rol komt (later) binnen: lijst sluiten en met de juiste rechten opnieuw opbouwen
   veld.addEventListener('input',()=>{ if(veld.value.trim()) tbChatClose(); });   // de dropdown neemt de plek van het chatpaneel in
   // Externe bronnen: Moneybird (zoekindex in de worker) en SharePoint (Graph-search binnen de projectbibliotheek); debounce 400 ms, vanaf 3 tekens.
   const ext=window.MTZoekExtern?MTZoekExtern.maak({
@@ -11638,7 +11645,7 @@ function zoekbalkInit(){
       MTZoekExtern.bronSharePoint({token:()=>window.getGraphToken(),drive:_SP.PROJ_DRIVE,root:PROJ_ROOT,fetch:(u,i)=>fetch(u,i),nu:()=>Date.now()})],
     mag:MTZoek.magUitRollen(),
     onWijziging:()=>{ if(veld._zb) veld._zb.ververs({behoud:true}); }}):null;
-  veld._zb=MTZoekbalk.init({veld,zoek:zbZoek,open:zoekbalkOpen,extern:ext,
+  veld._zb=MTZoekbalk.init({veld,zoek:zbZoek,open:zoekbalkOpen,extern:ext,rechten:()=>MTZoek.rolStatus(),mag:MTZoek.magUitRollen(),
     vraag:q=>tbChatSend(q),vraagMag:()=>!window.MTRol||MTRol.mag('ai'),
     isVraag:MTZoek.isVraag});
 }
