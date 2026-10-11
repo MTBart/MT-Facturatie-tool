@@ -20,11 +20,11 @@
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
-<script src="mt-dialog.js?v=2026-07-03b"></script>
+<script src="mt-dialog.js?v=2026-10-11a"></script>
 <script src="mt-toggl.js?v=2026-10-07a"></script>
 <script src="mt-koppel.js?v=2026-10-07a"></script>
-<script src="mt-contacten.js?v=2026-10-07a"></script>
-<script src="mt-inbox.js?v=2026-10-09a"></script>
+<script src="mt-contacten.js?v=2026-10-11a"></script>
+<script src="mt-inbox.js?v=2026-10-11a"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -15849,7 +15849,7 @@ async function _vbVerstuur() {
     '<tr><td style="padding:4px 8px 4px 0;color:#666;vertical-align:top">Omschrijving</td><td style="padding:4px 0">' + esc(omschrijving || '(leeg)').replace(/\n/g, '<br>') + '</td></tr>' +
     (heeftSam ? '<tr><td style="padding:4px 8px 4px 0;color:#666;vertical-align:top">Larry&#8217;s samenvatting</td><td style="padding:4px 0;font-style:italic">' + esc(_vbLarrySamenvatting).replace(/\n/g, '<br>') + '</td></tr>' : '') +
     '</table>';
-  const ok = await mtDialog.confirm({title: 'Verstuur naar Bart?', html: previewHtml, okLabel: 'Verstuur', cancelLabel: 'Annuleren'});
+  const ok = await mtDialog.confirm({title: 'Verstuur naar Bart?', html: mtDialog.vertrouwdeHtml(previewHtml), okLabel: 'Verstuur', cancelLabel: 'Annuleren'});   // elke waarde hierboven via esc()
   if (!ok) return;
 
   // Graph sendMail — rechtstreeks vanuit de browser (Mail.Send-scope is aangevraagd in GRAPH_SCOPES).

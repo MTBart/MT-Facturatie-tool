@@ -864,6 +864,11 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 </div>
 
 <script>
+// F7 release 2 — veilige weergave. esc: HTML-tekst én attribuutwaarde (& < > " '). ja: argument in een inline handler:
+// een JSON-letterlijke (JS-veilig), daarna HTML-geëscapet (attribuut-veilig). kleurCss: alleen kleurwaarden in style.
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ja=s=>esc(JSON.stringify(s==null?'':String(s)));
+const kleurCss=k=>{const x=String(k==null?'':k).trim();return /^#[0-9a-f]{3,8}$|^var\(--[a-z0-9-]+\)$|^(rgb|hsl)a?\([0-9.,%\s]+\)$|^[a-z]{3,20}$/i.test(x)?x:'#888';};
 // ════════════════════════════════════════════
 // DEFAULTS & STATE
 // ════════════════════════════════════════════
@@ -898,8 +903,8 @@ const FACTUUR_STATUS = {
 function factuurBadge(status,code,stopProp){
   const k=status||'geen';
   const s=FACTUUR_STATUS[k]||FACTUUR_STATUS.geen;
-  const onclick=code?`cycleFactuurStatus('${code}',event)`:'';
-  return `<span class="factuur-badge" style="background:${s.bg};color:${s.c};border-color:${s.bc}" onclick="${onclick}" title="Klik om factuurstatus te wijzigen">${s.label}</span>`;
+  const onclick=code?`cycleFactuurStatus(${JSON.stringify(String(code))},event)`:'';
+  return `<span class="factuur-badge" style="background:${s.bg};color:${s.c};border-color:${s.bc}" onclick="${esc(onclick)}" title="Klik om factuurstatus te wijzigen">${s.label}</span>`;
 }
 function cycleFactuurStatus(code,event){
   if(event) event.stopPropagation();
@@ -993,8 +998,8 @@ function showWelkom(){
   document.getElementById('app').classList.add('hidden');
   const tl=getTeamleden();
   document.getElementById('naam-knoppen').innerHTML=tl.map(t=>`
-    <button class="naam-knop" onclick="kiesIk('${t.naam}')">
-      <span class="naam-knop-dot" style="background:${t.kleur}"></span>${t.label}
+    <button class="naam-knop" onclick="kiesIk(${ja(t.naam)})">
+      <span class="naam-knop-dot" style="background:${kleurCss(t.kleur)}"></span>${esc(t.label)}
     </button>`).join('');
 }
 function kiesIk(naam){
@@ -1047,14 +1052,14 @@ function renderRecentEntries(){
     const p=projecten.find(x=>x.code===e.project_code);
     const kleur=p?var2hex(e.project_code):'var(--gold)';
     const tijdGel=fmtTijdGel(e.stop||e.start);
-    return `<div class="recent-item" onclick="recentStart('${e.project_code}','${e.taak_id||''}','${(e.taak_naam||'').replace(/'/g,'\\\'')}')" >
-      <div class="recent-dot" style="background:${kleur}"></div>
+    return `<div class="recent-item" onclick="recentStart(${ja(e.project_code)},${ja(e.taak_id||'')},${ja(e.taak_naam||'')})" >
+      <div class="recent-dot" style="background:${kleurCss(kleur)}"></div>
       <div class="recent-info">
-        <div class="recent-code">${e.project_code}</div>
-        <div class="recent-taak">${e.taak_naam||e.omschrijving||'Geen taak'}</div>
+        <div class="recent-code">${esc(e.project_code)}</div>
+        <div class="recent-taak">${esc(e.taak_naam||e.omschrijving||'Geen taak')}</div>
       </div>
-      <div class="recent-tijd">${tijdGel}</div>
-      <button class="recent-start-btn" onclick="event.stopPropagation();recentStart('${e.project_code}','${e.taak_id||''}','${(e.taak_naam||'').replace(/'/g,'\\\'')}')" >▶</button>
+      <div class="recent-tijd">${esc(tijdGel)}</div>
+      <button class="recent-start-btn" onclick="event.stopPropagation();recentStart(${ja(e.project_code)},${ja(e.taak_id||'')},${ja(e.taak_naam||'')})" >▶</button>
     </div>`;
   }).join('');
 }
@@ -1097,12 +1102,12 @@ function renderMijnTaken(){
   sectie.classList.remove('hidden');
   if(countEl) countEl.textContent=mijnTaken.length;
   lijst.innerHTML=mijnTaken.slice(0,8).map(({pc,taak,p,kleur})=>`
-    <div class="mt-item" onclick="recentStart('${pc}','${taak.id}','${(taak.naam||'').replace(/'/g,"\\'")}')">
-      <div class="mt-dot" style="background:${kleur}"></div>
-      <div class="mt-proj">${pc}</div>
-      <div class="mt-taak">${taak.naam}</div>
-      ${taak.estimate_uren?`<span class="mt-est">${taak.estimate_uren}u</span>`:''}
-      <button class="mt-start-btn" onclick="event.stopPropagation();recentStart('${pc}','${taak.id}','${(taak.naam||'').replace(/'/g,"\\'")}')">▶</button>
+    <div class="mt-item" onclick="recentStart(${ja(pc)},${ja(taak.id)},${ja(taak.naam||'')})">
+      <div class="mt-dot" style="background:${kleurCss(kleur)}"></div>
+      <div class="mt-proj">${esc(pc)}</div>
+      <div class="mt-taak">${esc(taak.naam)}</div>
+      ${taak.estimate_uren?`<span class="mt-est">${esc(taak.estimate_uren)}u</span>`:''}
+      <button class="mt-start-btn" onclick="event.stopPropagation();recentStart(${ja(pc)},${ja(taak.id)},${ja(taak.naam||'')})">▶</button>
     </div>`).join('');
 }
 
@@ -1130,10 +1135,10 @@ function renderTimer(){
     const dlBadge=dl!==null?(dl<0?`<span class="deadline-badge urgent">⚠ ${Math.abs(dl)}d over</span>`:dl<=7?`<span class="deadline-badge bijna">📅 ${dl}d</span>`:dl<=14?`<span class="deadline-badge ok">📅 ${dl}d</span>`:null):null;
     // Rode rand als deadline overschreden of urgent
     const urgentStyle=dl!==null&&dl<0?';border-color:var(--red);background:#FDE8E8':dl!==null&&dl<=3?';border-color:#E8A020':''
-    return `<div class="project-card${actief?' actief':''}" style="--proj-kleur:${var2hex(p.code)}${urgentStyle}" onclick="openStartModal('${p.code}')">
-      <button class="pc-info-btn" onclick="event.stopPropagation();openProjectDetail('${p.code}')" title="Project details">ℹ</button>
-      <div class="pc-code" style="color:${var2hex(p.code)}">${p.code}</div>
-      <div class="pc-naam">${p.naam||p.code}</div>
+    return `<div class="project-card${actief?' actief':''}" style="--proj-kleur:${var2hex(p.code)}${urgentStyle}" onclick="openStartModal(${ja(p.code)})">
+      <button class="pc-info-btn" onclick="event.stopPropagation();openProjectDetail(${ja(p.code)})" title="Project details">ℹ</button>
+      <div class="pc-code" style="color:${var2hex(p.code)}">${esc(p.code)}</div>
+      <div class="pc-naam">${esc(p.naam||p.code)}</div>
       <div class="pc-meta">
         ${p.status?statusBadge(p.status):''}
         ${takenLijst.length?`<span class="pc-taken-count">${takenLijst.length} taken</span>`:''}
@@ -1161,16 +1166,16 @@ function renderStartTaakLijst(){
   const wrap=document.getElementById('start-taak-lijst');
   if(!taken.length){wrap.innerHTML='';return;}
   wrap.innerHTML=taken.map(t=>`
-    <div class="taak-item${gekozenTaak===t.id&&!gekozenSubtaak?' actief':''}" onclick="kiesTaak('${t.id}')">
+    <div class="taak-item${gekozenTaak===t.id&&!gekozenSubtaak?' actief':''}" onclick="kiesTaak(${ja(t.id)})">
       <div>
-        <div class="taak-item-naam">${t.naam}</div>
+        <div class="taak-item-naam">${esc(t.naam)}</div>
         ${t.subtaken?.length?`<div class="taak-item-sub">${t.subtaken.length} subtaken</div>`:''}
       </div>
       <span style="color:var(--text-faint);font-size:12px">${gekozenTaak===t.id?'✓':''}</span>
     </div>
     ${gekozenTaak===t.id&&t.subtaken?.length?`<div class="subtaak-lijst">${t.subtaken.map(s=>`
-      <div class="subtaak-item${gekozenSubtaak===s.id?' actief':''}" onclick="event.stopPropagation();kiesSubtaak('${s.id}')">
-        <span class="subtaak-chevron">↳</span>${s.naam}
+      <div class="subtaak-item${gekozenSubtaak===s.id?' actief':''}" onclick="event.stopPropagation();kiesSubtaak(${ja(s.id)})">
+        <span class="subtaak-chevron">↳</span>${esc(s.naam)}
         ${gekozenSubtaak===s.id?'<span style="margin-left:auto;font-size:11px;color:var(--green)">✓</span>':''}
       </div>`).join('')}</div>`:''}`).join('');
 }
@@ -1254,7 +1259,7 @@ function renderDag(){
     const totaal=mine.reduce((s,e)=>s+(e.duur||0),0);
     return `<div class="teamlid-blok">
       <div class="teamlid-header">
-        <div class="tl-naam"><span class="tl-dot" style="background:${t.kleur}"></span>${t.label}</div>
+        <div class="tl-naam"><span class="tl-dot" style="background:${kleurCss(t.kleur)}"></span>${esc(t.label)}</div>
         <span class="tl-totaal">${totaal?fmtUren(totaal):''}</span>
       </div>
       <div>
@@ -1266,14 +1271,14 @@ function renderDag(){
 
 function entryRowHTML(e){
   return `<div class="entry-row">
-    <div class="entry-tijd">${fmtTijd(e.start)}–${fmtTijd(e.stop)||'…'}</div>
-    <div class="entry-project">${e.project_code}</div>
-    <div class="entry-taak">${e.taak_naam||''}</div>
-    <div class="entry-desc">${e.omschrijving||''}</div>
+    <div class="entry-tijd">${esc(fmtTijd(e.start))}–${esc(fmtTijd(e.stop)||'…')}</div>
+    <div class="entry-project">${esc(e.project_code)}</div>
+    <div class="entry-taak">${esc(e.taak_naam||'')}</div>
+    <div class="entry-desc">${esc(e.omschrijving||'')}</div>
     <div class="entry-duur">${e.duur?fmtUren(e.duur):''}</div>
     <div class="entry-actions">
-      <button class="entry-btn" onclick="openEditEntry('${e.id}')">✏</button>
-      <button class="entry-btn del" onclick="verwijderEntry('${e.id}')">✕</button>
+      <button class="entry-btn" onclick="openEditEntry(${ja(e.id)})">✏</button>
+      <button class="entry-btn del" onclick="verwijderEntry(${ja(e.id)})">✕</button>
     </div>
   </div>`;
 }
@@ -1350,10 +1355,10 @@ function renderTimeline(){
   rows.forEach(row=>{
     html+=`<div class="tl-rij" style="grid-template-columns:${cols}">
       <div class="tl-label">
-        <div class="tl-label-code" style="color:${row.kleur||'var(--gold)'}">
-          ${row.isPersoon?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${row.kleur};margin-right:5px"></span>`:''}${row.label}
+        <div class="tl-label-code" style="color:${kleurCss(row.kleur||'var(--gold)')}">
+          ${row.isPersoon?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${kleurCss(row.kleur)};margin-right:5px"></span>`:''}${esc(row.label)}
         </div>
-        ${row.sub?`<div class="tl-label-naam">${row.sub}</div>`:''}
+        ${row.sub?`<div class="tl-label-naam">${esc(row.sub)}</div>`:''}
       </div>`;
 
     dagen.forEach(dag=>{
@@ -1366,21 +1371,21 @@ function renderTimeline(){
         actBlokken=tl.map(t=>({teamlid:t.naam,kleur:t.kleur,label:t.label,som:entries.filter(e=>e.datum===dag&&e.project_code===row.id&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
       }
 
-      html+=`<div class="tl-dag-cel${dag===vandaag?' vandaag':''}" onclick="tlCelKlik('${dag}','${row.id}')">
+      html+=`<div class="tl-dag-cel${dag===vandaag?' vandaag':''}" onclick="tlCelKlik(${ja(dag)},${ja(row.id)})">
         ${planBlokken.map(pb=>{
           const klr=tlView==='persoon'?row.kleur:(tl.find(t=>t.naam===pb.teamlid)||{kleur:'#999'}).kleur;
           const naam=tlView==='project'?(tl.find(t=>t.naam===pb.teamlid)||{label:pb.teamlid}).label:'';
-          return `<div class="tl-blok tl-blok-plan" style="border-color:${klr}55" onclick="event.stopPropagation()">
-            <div class="tl-blok-label" style="color:${klr}">${naam||pb.uren_gepland+'u gepland'}</div>
+          return `<div class="tl-blok tl-blok-plan" style="border-color:${kleurCss(klr)}55" onclick="event.stopPropagation()">
+            <div class="tl-blok-label" style="color:${kleurCss(klr)}">${esc(naam||pb.uren_gepland+'u gepland')}</div>
             ${naam?`<div class="tl-blok-sub">${pb.uren_gepland}u gepland</div>`:''}
-            <button class="tl-blok-del" onclick="event.stopPropagation();verwijderPlan('${pb.id}')">✕</button>
+            <button class="tl-blok-del" onclick="event.stopPropagation();verwijderPlan(${ja(pb.id)})">✕</button>
           </div>`;
         }).join('')}
         ${actBlokken.map(b=>{
           const klr=b.kleur||row.kleur;
           const lab=tlView==='project'?b.label:fmtUren(b.som);
-          return `<div class="tl-blok tl-blok-act" style="background:${klr}">
-            <div class="tl-blok-label" style="color:#fff">${lab}</div>
+          return `<div class="tl-blok tl-blok-act" style="background:${kleurCss(klr)}">
+            <div class="tl-blok-label" style="color:#fff">${esc(lab)}</div>
             ${tlView==='project'?`<div class="tl-blok-sub" style="color:rgba(255,255,255,0.7)">${fmtUren(b.som)}</div>`:''}
           </div>`;
         }).join('')}
@@ -1469,9 +1474,9 @@ function renderRapport(){
       const lbl=new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric'});
       const val=(perDag[d]/3600).toFixed(1)+'u';
       return `<div class="dag-bar-col">
-        <div class="dag-bar-val">${val}</div>
+        <div class="dag-bar-val">${esc(val)}</div>
         <div class="dag-bar ${cls}" style="height:${h}px"></div>
-        <div class="dag-bar-label">${lbl}</div>
+        <div class="dag-bar-label">${esc(lbl)}</div>
       </div>`;
     }).join('');
     dagChartHtml=`<div class="dag-chart">
@@ -1482,10 +1487,10 @@ function renderRapport(){
 
   wrap.innerHTML=dagChartHtml+sorted.map(([code,data])=>{
     const p=projecten.find(x=>x.code===code);
-    const breakdown=tl.filter(t=>data.pp[t.naam]).map(t=>`<span class="pr-persoon"><span class="pr-dot" style="background:${t.kleur}"></span>${t.label} ${fmtUren(data.pp[t.naam])}</span>`).join('');
+    const breakdown=tl.filter(t=>data.pp[t.naam]).map(t=>`<span class="pr-persoon"><span class="pr-dot" style="background:${kleurCss(t.kleur)}"></span>${esc(t.label)} ${fmtUren(data.pp[t.naam])}</span>`).join('');
     return `<div class="pr-item">
       <div class="pr-header">
-        <div><div class="pr-code">${code}</div><div class="pr-naam">${p?.naam||''}</div></div>
+        <div><div class="pr-code">${esc(code)}</div><div class="pr-naam">${esc(p?.naam||'')}</div></div>
         <div class="pr-totaal">${fmtUren(data.totaal)}</div>
       </div>
       <div class="pr-bar-wrap"><div class="pr-bar" style="width:${Math.round(data.totaal/max*100)}%"></div></div>
@@ -1541,8 +1546,8 @@ function renderBordWerkdruk(){
     const isOver=gepland>capUren||geboekt>capUren;
     return `<div class="werkdruk-kaart">
       <div class="wk-naam">
-        <span style="width:9px;height:9px;border-radius:50%;background:${t.kleur};display:inline-block;flex-shrink:0"></span>
-        ${t.label}
+        <span style="width:9px;height:9px;border-radius:50%;background:${kleurCss(t.kleur)};display:inline-block;flex-shrink:0"></span>
+        ${esc(t.label)}
         ${isOver?'<span style="color:var(--red);font-size:10px;margin-left:auto">⚠ vol</span>':''}
       </div>
       <div class="wk-bar-wrap">
@@ -1572,18 +1577,18 @@ function renderBordActief(){
     const p=entry?projecten.find(x=>x.code===entry.project_code):null;
     const dagTotaal=entries.filter(e=>e.teamlid===t.naam&&e.datum===vandaag&&e.duur).reduce((s,e)=>s+(e.duur||0),0);
     const sec=entry?Math.round((Date.now()-new Date(entry.start))/1000):0;
-    return `<div class="bord-kaart${entry?' loopt':''}" onclick="bordKaartKlik('${t.naam}')">
+    return `<div class="bord-kaart${entry?' loopt':''}" onclick="bordKaartKlik(${ja(t.naam)})">
       <div class="bord-kaart-glow"></div>
       <div class="bord-kaart-persoon">
-        <span class="bk-dot" style="background:${t.kleur}"></span>
-        <span class="bk-naam">${t.label}</span>
+        <span class="bk-dot" style="background:${kleurCss(t.kleur)}"></span>
+        <span class="bk-naam">${esc(t.label)}</span>
         ${entry?'<span class="bk-pulse"></span>':''}
       </div>
       ${entry
-        ?`<div class="bk-project">${entry.project_code}</div>
-          <div class="bk-taak">${entry.taak_naam||entry.omschrijving||'—'}</div>
+        ?`<div class="bk-project">${esc(entry.project_code)}</div>
+          <div class="bk-taak">${esc(entry.taak_naam||entry.omschrijving||'—')}</div>
           <div class="bk-bottom">
-            <div class="bk-timer" data-start="${entry.start}">${fmtDuur(sec)}</div>
+            <div class="bk-timer" data-start="${esc(entry.start)}">${fmtDuur(sec)}</div>
             <div class="bk-vandaag">${dagTotaal?fmtUren(dagTotaal)+' vandaag':''}</div>
           </div>`
         :`<div class="bk-taak" style="font-style:italic">${dagTotaal?'Gestopt':'Geen timer'}</div>
@@ -1592,7 +1597,7 @@ function renderBordActief(){
             <div class="bk-vandaag">${dagTotaal?fmtUren(dagTotaal)+' vandaag':''}</div>
           </div>`
       }
-      <div class="bord-start-hint">${IK===t.naam?'Tik om timer te starten':'Tik om timer te starten als '+t.label}</div>
+      <div class="bord-start-hint">${esc(IK===t.naam?'Tik om timer te starten':'Tik om timer te starten als '+t.label)}</div>
     </div>`;
   }).join('');
 }
@@ -1632,17 +1637,17 @@ function renderBordWeek(){
   [...rel].sort().forEach(code=>{
     const p=projecten.find(x=>x.code===code);
     html+=`<div class="bord-rij" style="grid-template-columns:${cols}">
-      <div class="bord-pl" onclick="openProjectDetail('${code}')">
-        <div class="bord-pl-code">${code}</div>
-        <div class="bord-pl-naam">${p?.naam||''}</div>
+      <div class="bord-pl" onclick="openProjectDetail(${ja(code)})">
+        <div class="bord-pl-code">${esc(code)}</div>
+        <div class="bord-pl-naam">${esc(p?.naam||'')}</div>
         ${p?.status?`<div style="margin-top:3px">${statusBadge(p.status)}</div>`:''}
       </div>`;
     dagen.forEach(dag=>{
       const plans=planning.filter(pb=>pb.datum===dag&&pb.project_code===code);
       const acts=tl.map(t=>({...t,som:entries.filter(e=>e.datum===dag&&e.project_code===code&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
       html+=`<div class="bord-dag-cel${dag===vandaag?' vandaag':''}">
-        ${plans.map(pb=>{const tlid=tl.find(t=>t.naam===pb.teamlid);return`<div class="bord-blok-plan">${tlid?.label||pb.teamlid} ${pb.uren_gepland}u</div>`;}).join('')}
-        ${acts.map(b=>`<div class="bord-blok-act" style="background:${b.kleur}">${b.label} ${fmtUren(b.som)}</div>`).join('')}
+        ${plans.map(pb=>{const tlid=tl.find(t=>t.naam===pb.teamlid);return`<div class="bord-blok-plan">${esc(tlid?.label||pb.teamlid)} ${esc(pb.uren_gepland)}u</div>`;}).join('')}
+        ${acts.map(b=>`<div class="bord-blok-act" style="background:${kleurCss(b.kleur)}">${esc(b.label)} ${fmtUren(b.som)}</div>`).join('')}
       </div>`;
     });
     html+=`</div>`;
@@ -1728,29 +1733,29 @@ function renderTakenBeheer(){
   const taken=getTaken();
   document.getElementById('taken-beheer-inhoud').innerHTML=projecten.map(p=>`
     <div class="taken-blok">
-      <div class="taken-blok-header" onclick="toggleTakenBlok('tb-${p.code}')">
-        <span class="taken-project-label">${p.code}</span>
+      <div class="taken-blok-header" onclick="toggleTakenBlok(${ja('tb-'+p.code)})">
+        <span class="taken-project-label">${esc(p.code)}</span>
         <span style="font-size:11px;color:var(--text-faint)">${(taken[p.code]||[]).length} taken ▾</span>
       </div>
       <div id="tb-${p.code.replace(/[^a-z0-9]/gi,'_')}" style="display:none">
         ${(taken[p.code]||[]).map(t=>`
           <div class="taak-rij">
-            <span class="taak-rij-naam">${t.naam}</span>
-            <button class="icon-knop" onclick="voegSubtaakToe('${p.code}','${t.id}')">+ sub</button>
-            <button class="icon-knop del" onclick="verwijderTaak('${p.code}','${t.id}')">✕</button>
+            <span class="taak-rij-naam">${esc(t.naam)}</span>
+            <button class="icon-knop" onclick="voegSubtaakToe(${ja(p.code)},${ja(t.id)})">+ sub</button>
+            <button class="icon-knop del" onclick="verwijderTaak(${ja(p.code)},${ja(t.id)})">✕</button>
           </div>
           ${(t.subtaken||[]).map(s=>`
             <div class="subtaak-rij">
-              <span class="subtaak-rij-naam">↳ ${s.naam}</span>
-              <button class="icon-knop del" onclick="verwijderSubtaak('${p.code}','${t.id}','${s.id}')">✕</button>
+              <span class="subtaak-rij-naam">↳ ${esc(s.naam)}</span>
+              <button class="icon-knop del" onclick="verwijderSubtaak(${ja(p.code)},${ja(t.id)},${ja(s.id)})">✕</button>
             </div>`).join('')}
           <div class="add-taak-row" style="padding-left:2rem">
-            <input class="add-taak-input" id="sub-inp-${t.id}" placeholder="Subtaak toevoegen…" onkeydown="if(event.key==='Enter')voegSubtaakToeInp('${p.code}','${t.id}')">
-            <button class="add-taak-btn" onclick="voegSubtaakToeInp('${p.code}','${t.id}')">+</button>
+            <input class="add-taak-input" id="sub-inp-${esc(t.id)}" placeholder="Subtaak toevoegen…" onkeydown="if(event.key==='Enter')voegSubtaakToeInp(${ja(p.code)},${ja(t.id)})">
+            <button class="add-taak-btn" onclick="voegSubtaakToeInp(${ja(p.code)},${ja(t.id)})">+</button>
           </div>`).join('')}
         <div class="add-taak-row">
-          <input class="add-taak-input" id="taak-inp-${p.code.replace(/[^a-z0-9]/gi,'_')}" placeholder="Taak toevoegen…" onkeydown="if(event.key==='Enter')voegTaakToe('${p.code}')">
-          <button class="add-taak-btn" onclick="voegTaakToe('${p.code}')">+</button>
+          <input class="add-taak-input" id="taak-inp-${p.code.replace(/[^a-z0-9]/gi,'_')}" placeholder="Taak toevoegen…" onkeydown="if(event.key==='Enter')voegTaakToe(${ja(p.code)})">
+          <button class="add-taak-btn" onclick="voegTaakToe(${ja(p.code)})">+</button>
         </div>
       </div>
     </div>`).join('');
@@ -1799,8 +1804,8 @@ function renderInstTeamleden(){
   const tl=getTeamleden();
   document.getElementById('inst-teamleden').innerHTML=tl.map((t,i)=>`
     <div class="tl-rij">
-      <input type="color" class="kleur-input" value="${t.kleur}" onchange="tlUpdate(${i},'kleur',this.value)">
-      <input class="tl-inp" value="${t.label}" onchange="tlUpdate(${i},'label',this.value)">
+      <input type="color" class="kleur-input" value="${esc(t.kleur)}" onchange="tlUpdate(${i},'kleur',this.value)">
+      <input class="tl-inp" value="${esc(t.label)}" onchange="tlUpdate(${i},'label',this.value)">
       <select class="tl-sel" onchange="tlUpdate(${i},'rol',this.value)">
         <option ${t.rol==='admin'?'selected':''} value="admin">Admin</option>
         <option ${t.rol==='medewerker'?'selected':''} value="medewerker">Medewerker</option>
@@ -1820,12 +1825,12 @@ function renderInstCapaciteit(){
   el.innerHTML=tl.map(t=>`
     <div class="tl-rij">
       <span style="display:flex;align-items:center;gap:6px;flex:1;font-size:13px">
-        <span style="width:10px;height:10px;border-radius:50%;background:${t.kleur};display:inline-block;flex-shrink:0"></span>
-        ${t.label}
+        <span style="width:10px;height:10px;border-radius:50%;background:${kleurCss(t.kleur)};display:inline-block;flex-shrink:0"></span>
+        ${esc(t.label)}
       </span>
       <input class="tl-inp" type="number" style="width:70px;flex:none;text-align:right;font-family:var(--mono)"
-        value="${cap[t.naam]||40}" min="1" max="80" step="1"
-        onchange="setCapPersoon('${t.naam}',this.value)">
+        value="${esc(cap[t.naam]||40)}" min="1" max="80" step="1"
+        onchange="setCapPersoon(${ja(t.naam)},this.value)">
       <span style="font-size:12px;color:var(--text-faint);flex-shrink:0">u/week</span>
     </div>`).join('');
 }
@@ -1880,44 +1885,44 @@ function renderProjectDetail(){
   const statusHtml=Object.entries(PROJ_STATUS).map(([k,v])=>`
     <button class="status-opt${p.status===k?' actief':''}"
       style="${p.status===k?`background:${v.bg};color:${v.c};border-color:${v.bc}`:''}"
-      onclick="setProjectStatus('${code}','${k}')">${v.label}</button>`).join('');
+      onclick="setProjectStatus(${ja(code)},${ja(k)})">${v.label}</button>`).join('');
 
   const takenHtml=taken.map(t=>{
     const assigneeChips=(t.toegewezen||[]).map(naam=>{
       const tm=tl.find(x=>x.naam===naam);
-      return tm?`<span class="pd-assignee-chip"><span class="pd-assignee-dot" style="background:${tm.kleur}"></span>${tm.label}</span>`:'';
+      return tm?`<span class="pd-assignee-chip"><span class="pd-assignee-dot" style="background:${kleurCss(tm.kleur)}"></span>${esc(tm.label)}</span>`:'';
     }).join('');
     const subtakenHtml=(t.subtaken||[]).map(s=>`
       <div class="pd-subtaak-rij">
-        <span class="pd-sub-naam">↳ ${s.naam}</span>
-        <button class="icon-knop del" onclick="pdVerwijderSubtaak('${code}','${t.id}','${s.id}')">✕</button>
+        <span class="pd-sub-naam">↳ ${esc(s.naam)}</span>
+        <button class="icon-knop del" onclick="pdVerwijderSubtaak(${ja(code)},${ja(t.id)},${ja(s.id)})">✕</button>
       </div>`).join('');
-    const tlOptions=tl.map(tm=>`<option value="${tm.naam}"${(t.toegewezen||[]).includes(tm.naam)?' selected':''}>${tm.label}</option>`).join('');
+    const tlOptions=tl.map(tm=>`<option value="${esc(tm.naam)}"${(t.toegewezen||[]).includes(tm.naam)?' selected':''}>${esc(tm.label)}</option>`).join('');
     return `<div class="pd-taak">
-      <div class="pd-taak-bar" onclick="togglePdTaak('pdb-${t.id}')">
-        <span class="pd-taak-naam">${t.naam}</span>
+      <div class="pd-taak-bar" onclick="togglePdTaak(${ja('pdb-'+t.id)})">
+        <span class="pd-taak-naam">${esc(t.naam)}</span>
         ${t.estimate_uren?`<span class="pd-taak-est">${t.estimate_uren}u</span>`:''}
         ${assigneeChips}
-        <button class="icon-knop del" onclick="event.stopPropagation();pdVerwijderTaak('${code}','${t.id}')">✕</button>
+        <button class="icon-knop del" onclick="event.stopPropagation();pdVerwijderTaak(${ja(code)},${ja(t.id)})">✕</button>
       </div>
-      <div class="pd-body" id="pdb-${t.id}">
+      <div class="pd-body" id="pdb-${esc(t.id)}">
         ${subtakenHtml}
         <div class="pd-taak-form">
           <div class="pd-row">
             <label style="font-size:11px;color:var(--text-faint);width:70px;flex-shrink:0">Estimate</label>
             <input class="pd-inp pd-inp-est" type="number" step="0.5" min="0" placeholder="uren"
-              value="${t.estimate_uren||''}" onchange="pdSetEstimate('${code}','${t.id}',this.value)">
+              value="${esc(t.estimate_uren||'')}" onchange="pdSetEstimate(${ja(code)},${ja(t.id)},this.value)">
             <span style="font-size:11px;color:var(--text-faint)">uur</span>
           </div>
           <div class="pd-row" style="align-items:flex-start">
             <label style="font-size:11px;color:var(--text-faint);width:70px;flex-shrink:0;padding-top:5px">Toegewezen</label>
             <select class="pd-inp-sel" multiple size="${Math.min(tl.length,4)}" style="flex:1"
-              onchange="pdSetToegewezen('${code}','${t.id}',this)">${tlOptions}</select>
+              onchange="pdSetToegewezen(${ja(code)},${ja(t.id)},this)">${tlOptions}</select>
           </div>
           <div class="pd-row" style="margin-top:0.3rem">
-            <input class="pd-inp" id="sub-inp-pd-${t.id}" placeholder="Subtaak toevoegen…" style="flex:1"
-              onkeydown="if(event.key==='Enter')pdVoegSubtaakToe('${code}','${t.id}')">
-            <button class="pd-btn-sm" onclick="pdVoegSubtaakToe('${code}','${t.id}')">+</button>
+            <input class="pd-inp" id="sub-inp-pd-${esc(t.id)}" placeholder="Subtaak toevoegen…" style="flex:1"
+              onkeydown="if(event.key==='Enter')pdVoegSubtaakToe(${ja(code)},${ja(t.id)})">
+            <button class="pd-btn-sm" onclick="pdVoegSubtaakToe(${ja(code)},${ja(t.id)})">+</button>
           </div>
         </div>
       </div>
@@ -1927,8 +1932,8 @@ function renderProjectDetail(){
   document.getElementById('proj-detail-inhoud').innerHTML=`
     <div class="proj-detail-head">
       <div style="flex:1">
-        <div class="proj-detail-code">${p.code}${p.klant?' · '+p.klant:''}</div>
-        <div class="proj-detail-naam">${p.naam||p.code}</div>
+        <div class="proj-detail-code">${esc(p.code)}${p.klant?' · '+esc(p.klant):''}</div>
+        <div class="proj-detail-naam">${esc(p.naam||p.code)}</div>
       </div>
       <div>${p.status?statusBadge(p.status):''}</div>
     </div>
@@ -1941,13 +1946,13 @@ function renderProjectDetail(){
       <div style="display:flex;gap:0.4rem;flex-wrap:wrap">${Object.entries(FACTUUR_STATUS).map(([k,v])=>`
         <button class="factuur-badge${(p.factuur_status||'geen')===k?' actief':''}"
           style="background:${v.bg};color:${v.c};border-color:${v.bc};${(p.factuur_status||'geen')===k?'box-shadow:0 0 0 2px '+v.bc+';font-weight:700':''}"
-          onclick="pdSetVeld('${code}','factuur_status','${k}');renderProjectDetail();if(actTab==='projecten')renderProjectenTab()">${v.label}</button>`).join('')}</div>
+          onclick="pdSetVeld(${ja(code)},'factuur_status',${ja(k)});renderProjectDetail();if(actTab==='projecten')renderProjectenTab()">${v.label}</button>`).join('')}</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1.25rem">
       <div>
         <label class="form-label">Deadline</label>
-        <input class="form-input" type="date" value="${p.deadline||''}"
-          onchange="pdSetVeld('${code}','deadline',this.value)">
+        <input class="form-input" type="date" value="${esc(p.deadline||'')}"
+          onchange="pdSetVeld(${ja(code)},'deadline',this.value)">
       </div>
       <div>
         <label class="form-label">Geboekte uren (totaal)</label>
@@ -1957,15 +1962,15 @@ function renderProjectDetail(){
     <div class="detail-section">
       <div class="detail-section-title">Omschrijving</div>
       <textarea class="form-input" rows="2" placeholder="Project omschrijving…"
-        onchange="pdSetVeld('${code}','omschrijving',this.value)">${p.omschrijving||''}</textarea>
+        onchange="pdSetVeld(${ja(code)},'omschrijving',this.value)">${esc(p.omschrijving||'')}</textarea>
     </div>
     <div class="detail-section">
       <div class="detail-section-title">Taken — klik om uit te klappen en in te stellen</div>
       ${takenHtml||'<div style="font-size:13px;color:var(--text-faint);font-style:italic;padding:0.5rem 0">Geen taken. Voeg hieronder een taak toe.</div>'}
       <div class="pd-add-taak-form">
         <input class="pd-inp" id="pd-add-taak-inp" placeholder="Nieuwe taak toevoegen…" style="flex:1"
-          onkeydown="if(event.key==='Enter')pdVoegTaakToe('${code}')">
-        <button class="pd-btn-sm" onclick="pdVoegTaakToe('${code}')">+ Taak</button>
+          onkeydown="if(event.key==='Enter')pdVoegTaakToe(${ja(code)})">
+        <button class="pd-btn-sm" onclick="pdVoegTaakToe(${ja(code)})">+ Taak</button>
       </div>
     </div>`;
 }
@@ -2048,14 +2053,14 @@ function sluitModal(naam){document.getElementById(`modal-${naam}-overlay`).class
 function vulSelect(elId,opties,geselecteerd=''){
   const sel=document.getElementById(elId);
   if(!sel) return;
-  sel.innerHTML=`<option value="">— Kies —</option>`+opties.map(o=>`<option value="${o.v}"${o.v===geselecteerd?' selected':''}>${o.l}</option>`).join('');
+  sel.innerHTML=`<option value="">— Kies —</option>`+opties.map(o=>`<option value="${esc(o.v)}"${o.v===geselecteerd?' selected':''}>${esc(o.l)}</option>`).join('');
 }
 function vulProjectSelect(elId, geselecteerd=''){
   const sel=document.getElementById(elId);
   if(!sel) return;
   const projecten=getProjecten();
   sel.innerHTML=`<option value="">— Kies project —</option>`
-    +projecten.map(p=>`<option value="${p.code}"${p.code===geselecteerd?' selected':''}>${p.code}${p.naam?' — '+p.naam:''}</option>`).join('')
+    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===geselecteerd?' selected':''}>${esc(p.code)}${p.naam?' — '+esc(p.naam):''}</option>`).join('')
     +`<option value="__nieuw__">＋ Nieuw project aanmaken</option>`;
   sel.onchange=function(){
     if(this.value==='__nieuw__'){
@@ -2069,7 +2074,7 @@ function vulTaakSelect(elId,projectCode,geselecteerd=''){
   if(!sel) return;
   const taken=getTaken()[projectCode]||[];
   sel.innerHTML=`<option value="">— Geen taak —</option>`
-    +taken.map(t=>`<option value="${t.id}"${t.id===geselecteerd?' selected':''}>${t.naam}</option>`).join('')
+    +taken.map(t=>`<option value="${esc(t.id)}"${t.id===geselecteerd?' selected':''}>${esc(t.naam)}</option>`).join('')
     +(projectCode?`<option value="__nieuwe_taak__">＋ Nieuwe taak aanmaken</option>`:'');
   sel.onchange=function(){
     if(this.value==='__nieuwe_taak__'){
@@ -2141,7 +2146,7 @@ function vulTbProjectSelect(){
   const huidig=sel.value;
   const projecten=getProjecten();
   sel.innerHTML=`<option value="">— Kies project —</option>`
-    +projecten.map(p=>`<option value="${p.code}"${p.code===huidig?' selected':''}>${p.code}${p.naam?' — '+p.naam:''}</option>`).join('')
+    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===huidig?' selected':''}>${esc(p.code)}${p.naam?' — '+esc(p.naam):''}</option>`).join('')
     +`<option value="__nieuw__">＋ Nieuw project aanmaken</option>`;
   tbProjectChange();
 }
@@ -2163,7 +2168,7 @@ function tbProjectChange(){
   if(sel.value){
     const taken=getTaken()[sel.value]||[];
     taakSel.innerHTML=`<option value="">— Taak (optioneel) —</option>`
-      +taken.map(t=>`<option value="${t.id}">${t.naam}</option>`).join('')
+      +taken.map(t=>`<option value="${esc(t.id)}">${esc(t.naam)}</option>`).join('')
       +`<option value="__nieuwe_taak__">＋ Nieuwe taak aanmaken</option>`;
     taakSel.classList.remove('hidden');
   } else {
@@ -2243,10 +2248,10 @@ function renderProjectenTab(){
       <div class="proj-uren-balk-wrap"><div class="proj-uren-balk" style="width:${pct}%"></div></div>
     </div>`:`<div class="proj-uren-col"></div>`;
     const dl=deadlineBadge(p.deadline);
-    return `<div class="proj-item" onclick="openProjectDetail('${p.code}')">
-      <div class="proj-code">${p.code}${dl?' '+dl:''}</div>
-      <div class="proj-naam">${p.naam||'—'}</div>
-      <div class="proj-klant">${p.klant||''}</div>
+    return `<div class="proj-item" onclick="openProjectDetail(${ja(p.code)})">
+      <div class="proj-code">${esc(p.code)}${dl?' '+dl:''}</div>
+      <div class="proj-naam">${esc(p.naam||'—')}</div>
+      <div class="proj-klant">${esc(p.klant||'')}</div>
       <div class="proj-status-col">${p.status?statusBadge(p.status):''}</div>
       ${urenHtml}
       <div class="proj-factuur-col">${factuurBadge(p.factuur_status,p.code)}</div>
@@ -2439,12 +2444,12 @@ async function laadTogglMapping(){
   const projEl=document.getElementById('toggl-project-map');
   if(projEl&&projecten){
     projEl.innerHTML=(projecten||[]).map(p=>`
-      <div class="toggl-map-rij" data-toggl-proj-id="${p.id}">
-        <span class="toggl-map-naam" title="${p.name}">${p.name}</span>
+      <div class="toggl-map-rij" data-toggl-proj-id="${esc(p.id)}">
+        <span class="toggl-map-naam" title="${esc(p.name)}">${esc(p.name)}</span>
         <span class="toggl-map-arrow">→</span>
-        <select class="toggl-map-sel" id="tpm-${p.id}">
+        <select class="toggl-map-sel" id="tpm-${esc(p.id)}">
           <option value="">— niet koppelen —</option>
-          ${mtProjecten.map(mp=>`<option value="${mp.code}"${projectMap[p.id]===mp.code?' selected':''}>${mp.code}${mp.naam?' — '+mp.naam:''}</option>`).join('')}
+          ${mtProjecten.map(mp=>`<option value="${esc(mp.code)}"${projectMap[p.id]===mp.code?' selected':''}>${esc(mp.code)}${mp.naam?' — '+esc(mp.naam):''}</option>`).join('')}
         </select>
       </div>`).join('');
   }
@@ -2453,12 +2458,12 @@ async function laadTogglMapping(){
   const userEl=document.getElementById('toggl-user-map');
   if(userEl&&gebruikers){
     userEl.innerHTML=(gebruikers||[]).map(u=>`
-      <div class="toggl-map-rij" data-toggl-user-id="${u.user_id||u.id}">
-        <span class="toggl-map-naam">${u.name||u.email||u.user_id}</span>
+      <div class="toggl-map-rij" data-toggl-user-id="${esc(u.user_id||u.id)}">
+        <span class="toggl-map-naam">${esc(u.name||u.email||u.user_id)}</span>
         <span class="toggl-map-arrow">→</span>
-        <select class="toggl-map-sel" id="tum-${u.user_id||u.id}">
+        <select class="toggl-map-sel" id="tum-${esc(u.user_id||u.id)}">
           <option value="">— niet koppelen —</option>
-          ${teamleden.map(t=>`<option value="${t.naam}"${userMap[u.user_id||u.id]===t.naam?' selected':''}>${t.label}</option>`).join('')}
+          ${teamleden.map(t=>`<option value="${esc(t.naam)}"${userMap[u.user_id||u.id]===t.naam?' selected':''}>${esc(t.label)}</option>`).join('')}
         </select>
       </div>`).join('');
   }

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F5 stap 2: verhuisknop (uit tot het domein gekoppeld is)
+- Commit: `19c99e3` | Auteur: Bart Witte
+
 ## 2026-10-11 — F5 stap 1b: ook de back-upkopie van de klantenlijst uit de repo
 - Commit: `6d21e01` | Auteur: Bart Witte
 

@@ -1092,6 +1092,8 @@
     if (op && op.isConnected && op.focus) { try { op.focus(); } catch (e) {} }
   }
   const ovVan = el => el && el.closest ? el.closest('.mtc-ov') : null;
+  // F7 r2: zelf opgebouwde HTML (met esc rond elke waarde) bewust als vertrouwd markeren voor mtDialog.
+  const vertrouwd = h => (root.mtDialog && typeof root.mtDialog.vertrouwdeHtml === 'function') ? root.mtDialog.vertrouwdeHtml(h) : h;
   async function vraag(o) {
     try { if (root.mtDialog && typeof root.mtDialog.confirm === 'function') return await root.mtDialog.confirm(o); } catch (e) {}
     return typeof root.confirm === 'function' ? root.confirm((o.title ? o.title + '\n\n' : '') + (o.message || '')) : false;
@@ -1323,11 +1325,11 @@
       const plan = C.bereken(C.lees(), items);
       const s = plan.samenvatting;
       if (!s.nieuw && !s.aangevuld && !s.voorstellen) {
-        if (root.mtDialog && root.mtDialog.alert) await root.mtDialog.alert({ title: 'Contacten bijwerken', html: '<p>Alles is al bijgewerkt — er valt niets aan te vullen.</p><p style="font-size:12px;color:var(--text-dim)">Gelezen: Moneybird ' + info.mb.n + ' (' + esc(info.mb.bron) + '), ' + (info.projecten || 0) + ' projecten, ' + (info.mails || 0) + ' mail-afzenders.</p>' });
+        if (root.mtDialog && root.mtDialog.alert) await root.mtDialog.alert({ title: 'Contacten bijwerken', html: vertrouwd('<p>Alles is al bijgewerkt — er valt niets aan te vullen.</p><p style="font-size:12px;color:var(--text-dim)">Gelezen: Moneybird ' + info.mb.n + ' (' + esc(info.mb.bron) + '), ' + (info.projecten || 0) + ' projecten, ' + (info.mails || 0) + ' mail-afzenders.</p>') });
         else toast('Contacten zijn al bijgewerkt');
         return;
       }
-      const ja = await vraag({ title: 'Contacten bijwerken — controleer eerst', html: planHtml(plan, info), message: plan.tekst, okLabel: 'Opslaan', cancelLabel: 'Annuleren' });
+      const ja = await vraag({ title: 'Contacten bijwerken — controleer eerst', html: vertrouwd(planHtml(plan, info)), message: plan.tekst, okLabel: 'Opslaan', cancelLabel: 'Annuleren' });   // planHtml escapet elke waarde
       if (!ja) { toast('Niets opgeslagen'); return; }
       // het register kan tijdens het wachten zijn gewijzigd: opnieuw rekenen op de verse lijst;
       // wijkt dat af van wat je zag, dan eerst nogmaals akkoord vragen
