@@ -45,7 +45,7 @@
     const heeftProg = (data.events || []).some(e => e.zekerheid === 'prognose');
     const zonder = heeftProg && low ? G.laagste(kasLijn({ prognose: false }), tot) : null;
     const L = (data.saldo && data.saldo.lopend) || {};
-    const soort = G.drempelSoort ? G.drempelSoort(data, cfg) : cfg && cfg.buffer_lopend != null ? 'ondergrens' : 'nul';   // 'fictief' = de gele lijn, 'ondergrens' = eigen ondergrens, 'nul' = de nullijn
+    const soort = G.drempelSoort ? G.drempelSoort(data, cfg) : 'nul';   // 'fictief' = de gele lijn (eigen bedrag of advies), 'nul' = de nullijn
     const W = data.waarschuwingen || [];
     const kas = { laagste: low, zonderPrognose: zonder, ondergrens: low ? G.drempel(data, cfg, low.datum) : null, soort, bron: G.fictiefBron ? G.fictiefBron(data, cfg) : null, kredietlimiet: L.kredietlimiet != null ? L.kredietlimiet : null,
       vasteLasten: G.vasteLastenMaand(data), onvolledig: K.onvolledig(W).filter((x, i, a) => a.indexOf(x) === i) };
@@ -81,7 +81,7 @@
   function kasMeter(k) {
     const m = { id: 'kas', titel: 'Kasruimte 8 weken', kleur: 'onbekend', waarde: '—', sub: [], waarom: [], getal: null,
       bron: 'Geldtijdlijn: banksaldo (Moneybird/ijkpunt), open facturen, vaste patronen, BTW en de aangevinkte prognosetermijnen.' };
-    const buffer = k && k.vasteLasten > 0 ? k.vasteLasten : KAS_BUFFER, grensNaam = !k || !k.soort || k.soort === 'nul' ? 'nullijn' : k.soort === 'ondergrens' ? 'eigen ondergrens' : k.soort === 'fictief' ? 'gele lijn' : 'nullijn';
+    const buffer = k && k.vasteLasten > 0 ? k.vasteLasten : KAS_BUFFER, grensNaam = !k || k.soort !== 'fictief' ? 'nullijn' : 'gele lijn';
     m.uitleg = `Het laagste besteedbaar budget (lopende rekening min de btw die de BTW-pot niet dekt, zonder noodbuffer) in de komende ${KAS_DAGEN} dagen, met alles wat gepland staat (facturen, vaste lasten, BTW) en de aangevinkte prognosetermijnen. Vergeleken met je ${grensNaam}. Groen: minstens ${k && k.vasteLasten > 0 ? 'één maand vaste lasten (' + kort(buffer) + ')' : kort(KAS_BUFFER) + ' (vaste lasten nog onbekend)'} boven de grens. Oranje: erboven, maar minder dan dat. Rood: eronder.`;
     if (!k || !k.laagste) { m.waarom.push('geen saldo of verwachte lijn: de lopende rekening is (nog) onbekend'); return m; }
     const grens = k.ondergrens != null ? k.ondergrens : 0, ruimte = k.laagste.saldo - grens;

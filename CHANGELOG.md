@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — G7 aanvulling: streefbedragen volgen standaard het advies; een eigen bedrag wint, leeg = weer het advies
+- Commit: `b93e786` | Auteur: Bart Witte
+
 ## 2026-10-11 — G7 Besteedbaar budget in Geld: hoofdgetal, noodbuffer met vinkje, fictieve buffer als gele lijn, lijnen en adviezen
 - Commit: `5f13848` | Auteur: Bart Witte
 

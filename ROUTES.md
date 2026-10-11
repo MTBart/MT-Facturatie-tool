@@ -175,7 +175,8 @@ gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.m
   Koude cache (alle maanden ontbreken): ontbrekende maanden worden over de voorverversingen en pogingen aangevuld; lukt het niet in 3 pogingen dan is het oordeel die dag onbetrouwbaar.
 - De run roept `/geld/tijdlijn` (vers), `/geld/config` en `/geld/cijfers` intern aan als eigenaar en rekent met dezelfde `mt-geld.js`/`mt-koers.js`
   als het scherm (dynamische import; `K.invoer` → `K.oordeel` → `K.dagfotoOpslag`, `K.moetMelden`, `K.actie`): geen tweede rekenlogica.
-- G7 (besteedbaar budget): de kasruimte rekent op `G.kasLijn` = de lijn van het besteedbaar budget (lopend − max(0, btw_verschuldigd − btw-pot); btw uit de aangifte-events `bron:'btw'`, schatting ±10%), zonder noodbuffer
+- G7 (besteedbaar budget): de kasruimte rekent op `G.kasLijn` = de lijn van het besteedbaar budget (lopend − (btw_verschuldigd − dekking); btw uit de aangifte-events `bron:'btw'`, schatting ±10%; dekking = alleen wat de worker als `:terug`-event
+  (terugboeking van de BTW-pot, `btw.modus:'apart'` + `terugboeking_van`) aan de aangifte koppelt, dus zonder terugboeking 0), zonder noodbuffer
   (het vinkje "Noodbuffer meenemen" in Geld werkt niet door in de Koersmeter). Onderkant = de gele lijn (fictieve buffer: een eigen bedrag in `cfg.fictieve_buffer`, anders het berekende advies — `G.effCfg`); zonder beide de eigen ondergrens `buffer_lopend`, anders 0.
   Het streefniveau van lopend en de streefomvang van de noodbuffer volgen eveneens standaard het advies; een eigen bedrag wint, leeg = weer het advies. `cfg.streef_herkomst` (afgeleid door de worker) legt per bedrag vast of het `advies` of `handmatig` is, met datum en naam van de laatste wijziging;
   de Koersmeter en de kaarten tonen "(volgt advies)" of "(eigen bedrag)".
@@ -377,3 +378,7 @@ Projectcode zit als `[CODE]`-suffix in de Toggl-projectnaam.
 - In-app chat (Larry in de tool) mag niets aan de tool/mappen wijzigen —
   hooguit helpen een project aan te maken; al het chatgebruik wordt gelogd
   (feedback-/leerlus).
+
+- BTW-kwartalen (G7, Codex): `geldBtwAangifte` bouwt alle kwartalen van vorig en dit jaar op die niet aantoonbaar betaald zijn. Betaald = een btw-betaling (bankmutatie gekoppeld aan een btw-document of met "omzetbelasting" in omschrijving/tegenpartij; of een bedrag binnen ±1% van de aangifte) in het venster na het kwartaaleinde.
+  Niet te vinden en over de vervaldatum: open schuld met `onvolledig:true` + `onvolledig_reden:'betaling niet gevonden'` en een waarschuwing `bron:'btw-schuld'` (permanent: geen nieuwe pogingen van de cron; het oordeel is onbetrouwbaar). De eigenaar kan een kwartaal als betaald markeren (`btw.betaald_kwartalen`, JJJJ-K1..K4, max 12).
+  Moneybird-verzoeken: lopend en vorig kwartaal altijd, van de oudere hooguit twee per aanroep (nieuwste eerst; afgesloten bedragen 24 uur in KV `geld:btw:kwartalen`, het vorige kwartaal 1 uur); oudere kwartalen met een btw-betaling in het venster zijn betaald zonder overzicht. `buffer_lopend` is samengevoegd met `fictieve_buffer` (gezet oud veld wordt het eigen bedrag, negatief → 0).

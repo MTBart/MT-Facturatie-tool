@@ -1613,9 +1613,10 @@ function geldConfigNorm(c) {
     contact_ids: (Array.isArray(g.contact_ids) ? g.contact_ids : []).map(String).filter(x => /^\d{6,25}$/.test(x)).slice(0, 200) }))
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
   const uit = { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
-    buffer_lopend: typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? c.buffer_lopend : null,
+    // buffer_lopend (eigen ondergrens) is samengevoegd met de fictieve buffer: een gezet oud veld wordt het eigen bedrag (negatief → 0) en het oude veld is leeg
+    buffer_lopend: null,
     // G7: fictieve buffer op lopend (≥ 0). Alleen een gele lijn in de grafiek en de onderkant van de kasruimte/Koersmeter; nooit als getal in Geld (behalve Instellingen).
-    fictieve_buffer: getal(c.fictieve_buffer, 0, 1e9),
+    fictieve_buffer: getal(c.fictieve_buffer, 0, 1e9) != null ? getal(c.fictieve_buffer, 0, 1e9) : (typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? Math.max(0, c.buffer_lopend) : null),
     // cijfers (G9): indeling grootboek → categorie, privé- en aflossingsgrootboeken, loonpatronen, branche; null = voorstel
     cijfers: geldCijferCfgNorm(c.cijfers),
     // spaarrente op de potjes (fractie per jaar), door de eigenaar ingevuld; leeg = afleiden uit rentebijschrijvingen
@@ -1627,7 +1628,9 @@ function geldConfigNorm(c) {
     // modus 'in_lopend' (standaard): de BTW-pot telt mee als lopende rekening, aangifte van die gecombineerde stand, geen
     // terugboeking; 'apart': BTW-pot als eigen rekening met aangifte_van/terugboeking_van.
     btw: { modus: btw.modus === 'apart' ? 'apart' : 'in_lopend', spaarpercentage: getal(btw.spaarpercentage, 0, 1), spaarpot: uniek.some(p => p.id === btw.spaarpot && !p.virtueel) ? btw.spaarpot : null,
-      aangifte_van: rek(btw.aangifte_van), terugboeking_van: rek(btw.terugboeking_van) },
+      aangifte_van: rek(btw.aangifte_van), terugboeking_van: rek(btw.terugboeking_van),
+      // kwartalen die de eigenaar als betaald heeft gemarkeerd (de betaling is niet automatisch terug te vinden)
+      betaald_kwartalen: [...new Set((Array.isArray(btw.betaald_kwartalen) ? btw.betaald_kwartalen : []).map(String).filter(x => /^\d{4}-K[1-4]$/.test(x)))].sort().slice(0, 12) },
     gewijzigd: c.gewijzigd || null, door: c.door || null, revisie: Number.isInteger(c.revisie) ? c.revisie : 0 };
   uit.streef_herkomst = geldStreefHerkomst(c.streef_herkomst, uit);
   return uit;
@@ -2120,7 +2123,7 @@ async function geldPatronenBereken(env) {
       const pm = tekstRc.match(/T\/M\s+\d{2}\.(\d{2})\.(\d{4})/i);
       rc.push({ datum: m.date, maand: pm ? `${pm[2]}-${pm[1]}` : m.date.slice(0, 7), soort: /DEBETRENTE/i.test(tekstRc) ? 'rente' : /PROVISIE/i.test(tekstRc) ? 'provisie' : 'overig', bedrag: geldRond(-bedrag) });
     }
-    if (pays.some(p => p.invoice_type === 'VatDocument')) { btw.push({ datum: m.date, bedrag: geldRond(bedrag) }); continue; }
+    if (geldBtwBetaling(m)) { btw.push({ datum: m.date, bedrag: geldRond(bedrag) }); continue; }
     const sp = geldPotVan(m, cfg.potten);
     if (bedrag < 0 && !(sp.pot && sp.pot === btwPot)) maandUit[m.date.slice(0, 7)] = geldRond((maandUit[m.date.slice(0, 7)] || 0) - bedrag);   // uitgaven (BTW-sparen telt niet)
     // rentebijschrijving vanaf een spaarpotje (herkend potje, binnenkomend, "rente"/"interest" in de omschrijving)
@@ -2220,38 +2223,70 @@ function geldBtwSparen(events, cfg) {
     tegenpartij: '', document_id: null, bron_url: null, van_event: e.id, uitleg: `BTW-sparen: ${Math.round(pct * 10000) / 100}% van deze ontvangst gaat naar de BTW-pot (interne overboeking).` }));
 }
 const geldKwartaal = d => { const j = Number(d.slice(0, 4)), q = Math.floor((Number(d.slice(5, 7)) - 1) / 3); return { j, q: q + 1, van: `${j}-${String(q * 3 + 1).padStart(2, '0')}-01`, tot: new Date(Date.UTC(j, q * 3 + 3, 0)).toISOString().slice(0, 10) }; };
-async function geldBtwAangifte(get, vandaag, cfg, betalingen, w) {
-  const nu = geldKwartaal(vandaag), vorig = geldKwartaal(geldDag(nu.van, -1)), uit = [];
-  for (const [k, loopt] of [[vorig, false], [nu, true]]) {
-    const vervalt = new Date(Date.UTC(Number(k.tot.slice(0, 4)), Number(k.tot.slice(5, 7)) + 1, 0)).toISOString().slice(0, 10);
-    const r = await get(`reports/tax?period=${k.van.replace(/-/g, '')}..${k.tot.replace(/-/g, '')}`);
-    if (!r.ok || !r.data || !Array.isArray(r.data.tax_rates)) { w.push({ onvolledig: true, bron: 'btw', fout: `BTW-overzicht ${k.j}-K${k.q} niet op te halen — aangifte niet ingepland`, status: r.status }); continue; }
-    const som = t => r.data.tax_rates.filter(x => x.type === t).reduce((a, x) => a + geldGetal(x.tax), 0);
-    let bedrag = geldRond(som('sales_invoice') - som('purchase_invoice')), deel = false;
+// Een betaling van de omzetbelasting: gekoppeld aan een btw-document in Moneybird, of "omzetbelasting" in de omschrijving/tegenpartij (niet de loonheffing).
+const geldBtwBetaling = m => { const t = `${m.message || ''} ${m.contra_account_name || ''}`; return (m.payments || []).some(x => x.invoice_type === 'VatDocument') || (/omzetbelasting/i.test(t) && !/loonheffing/i.test(t)); };
+const GELD_BTW_KW = 'geld:btw:kwartalen';   // bedragen van afgesloten kwartalen (12 uur), tegen te veel Moneybird-verzoeken
+async function geldBtwAangifte(get, vandaag, cfg, betalingen, w, env, mutaties) {
+  // Alle kwartalen van vorig jaar t/m het lopende die niet aantoonbaar betaald zijn (Codex G7): oudere onbetaalde kwartalen mogen niet ontbreken.
+  // Een afgesloten kwartaal dat niet als betaald terug te vinden is, telt als open schuld met onvolledig:true ("betaling niet gevonden"), behalve als de
+  // eigenaar het in de instellingen als betaald heeft gemarkeerd (btw.betaald_kwartalen).
+  const nu = geldKwartaal(vandaag), uit = [], markeerd = new Set((cfg.btw && cfg.btw.betaald_kwartalen) || []), kws = [];
+  for (let j = nu.j - 1; j <= nu.j; j++) for (let q = 1; q <= 4; q++) { const k = geldKwartaal(`${j}-${String(q * 3 - 2).padStart(2, '0')}-01`); if (k.van <= nu.van) kws.push([k, k.van === nu.van]); }
+  const cache = (env && await kvJson(env, GELD_BTW_KW)) || {}; let cacheNieuw = false;
+  const gebruikt = new Set(), bet = (betalingen || []).slice().sort((x, y) => x.datum.localeCompare(y.datum));
+  const verval = k => new Date(Date.UTC(Number(k.tot.slice(0, 4)), Number(k.tot.slice(5, 7)) + 1, 0)).toISOString().slice(0, 10), naam = k => `${k.j}-K${k.q}`;
+  // Kwartalen die meer dan één kwartaal terug liggen en waarvan een btw-betaling in het venster staat: betaald, zonder het overzicht op te halen (spaart Moneybird-verzoeken).
+  const betaaldZonder = new Set();
+  kws.forEach(([k, loopt], i) => { if (loopt || i >= kws.length - 2 || markeerd.has(naam(k))) return; const v = verval(k), b = bet.find(x => !gebruikt.has(x) && x.datum > k.tot && x.datum <= geldDag(v, 60)); if (b) { gebruikt.add(b); betaaldZonder.add(naam(k)); } });
+  // Het overzicht van het lopende en het vorige kwartaal altijd verversen; van de oudere hooguit twee per aanroep (nieuwste eerst), de rest komt uit de cache of bij een volgende aanroep.
+  const magOphalen = new Set(); let nOud = 0;
+  for (let i = kws.length - 1; i >= 0; i--) { const [k, loopt] = kws[i], c = cache[naam(k)]; if (loopt || i >= kws.length - 2) { magOphalen.add(naam(k)); continue; } if (markeerd.has(naam(k)) || betaaldZonder.has(naam(k)) || (c && Date.now() - c.ts < 24 * 36e5)) continue; if (nOud++ < 2) magOphalen.add(naam(k)); }
+  const vorigKw = kws.length > 1 ? naam(kws[kws.length - 2][0]) : null;   // het vorige kwartaal wordt nog geboekt: elk uur verversen, oudere 24 uur
+  for (const [k, loopt] of kws) {
+    const kw = naam(k), vervalt = verval(k), id = `btw:${kw}`;
+    if (!loopt && (markeerd.has(kw) || betaaldZonder.has(kw))) continue;
+    let bedrag = null; const c = cache[kw];
+    if (!loopt && c && typeof c.bedrag === 'number' && (Date.now() - c.ts < (kw === vorigKw ? 36e5 : 24 * 36e5) || !magOphalen.has(kw))) bedrag = c.bedrag;
+    else if (!loopt && !magOphalen.has(kw)) { w.push({ onvolledig: true, bron: 'btw', fout: `BTW-overzicht ${kw} nog niet opgehaald (wordt bij een volgende keer aangevuld) — aangifte niet ingepland` }); continue; }
+    else {
+      const r = await get(`reports/tax?period=${k.van.replace(/-/g, '')}..${k.tot.replace(/-/g, '')}`);
+      if (r.ok && r.data && Array.isArray(r.data.tax_rates)) {
+        const som = t => r.data.tax_rates.filter(x => x.type === t).reduce((a2, x) => a2 + geldGetal(x.tax), 0);
+        bedrag = geldRond(som('sales_invoice') - som('purchase_invoice'));
+        if (!loopt) { cache[kw] = { bedrag, ts: Date.now() }; cacheNieuw = true; }
+      } else if (!loopt && c && typeof c.bedrag === 'number') bedrag = c.bedrag;   // een oude waarde is beter dan niets
+      else { w.push({ onvolledig: true, bron: 'btw', fout: `BTW-overzicht ${kw} niet op te halen — aangifte niet ingepland`, status: r.status }); continue; }
+    }
     if (bedrag === 0) continue;
-    if (!loopt) {                                                          // al betaald? alleen een BTW-betaling binnen het venster die bij de schatting past
-      const kand = betalingen.filter(b => b.datum > k.tot && b.datum <= geldDag(vervalt, 60) && (bedrag > 0 ? b.bedrag < 0 : b.bedrag > 0));
-      const betaald = geldRond(kand.reduce((a, b) => a + Math.abs(b.bedrag), 0));
+    let deel = false, gevonden = true;
+    if (!loopt) {                                                          // al betaald? een BTW-betaling binnen het venster die bij de schatting past
+      const venster = b => b.datum > k.tot && b.datum <= geldDag(vervalt, 60) && (bedrag > 0 ? b.bedrag < 0 : b.bedrag > 0);
+      const kand = []; let betaald = 0;
+      for (const b of bet) { if (gebruikt.has(b) || !venster(b)) continue; if (betaald >= Math.abs(bedrag) * 0.9) break; kand.push(b); betaald = geldRond(betaald + Math.abs(b.bedrag)); }
+      if (betaald === 0 && mutaties) { const m = mutaties.find(x => !gebruikt.has(x) && venster(x) && Math.abs(Math.abs(x.bedrag) - Math.abs(bedrag)) <= Math.abs(bedrag) * 0.01); if (m) { kand.push(m); betaald = Math.abs(m.bedrag); } }   // bedrag binnen ±1%
+      kand.forEach(b => gebruikt.add(b));
       if (betaald > 0) {                                                   // betalingen opgeteld; restant (buiten de ±10%-schatting) blijft staan
         const rest = geldRond(Math.abs(bedrag) - betaald);
         if (rest <= Math.max(Math.abs(bedrag) * 0.1, 100)) continue;
-        w.push({ bron: 'btw', fout: `BTW-betaling na ${k.j}-K${k.q} gezien die lager is dan de schatting — het restant is ingepland, controleer` });
+        w.push({ bron: 'btw', fout: `BTW-betaling na ${kw} gezien die lager is dan de schatting — het restant is ingepland, controleer` });
         bedrag = (bedrag > 0 ? 1 : -1) * rest; deel = true;
-      }
+      } else gevonden = false;
     }
-    const apart = cfg.btw.modus === 'apart', datum = vervalt < vandaag ? vandaag : vervalt, rek = apart ? (cfg.btw.aangifte_van || 'lopend') : 'lopend', id = `btw:${k.j}-K${k.q}`;
+    const apart = cfg.btw.modus === 'apart', datum = vervalt < vandaag ? vandaag : vervalt, rek = apart ? (cfg.btw.aangifte_van || 'lopend') : 'lopend';
     const marge = { min: geldRond(bedrag * 0.9), max: geldRond(bedrag * 1.1) };
     const ev = { id, bron: 'btw', richting: bedrag > 0 ? 'uit' : 'in', bedrag: Math.abs(bedrag), datum, datumtype: 'aangifte', zekerheid: 'schatting', rekening: rek, tegenpartij: 'Belastingdienst',
-      document_id: null, bron_url: null, kwartaal: `${k.j}-K${k.q}`, marge,
+      document_id: null, bron_url: null, kwartaal: kw, marge,
       uitleg: `BTW-aangifte ${k.j} kwartaal ${k.q}: verkoop-btw min inkoop-btw uit Moneybird, schatting ±10%${deel ? ' — restant na een eerdere (deel)betaling' : ''}${loopt ? ' — het kwartaal loopt nog, dit is de stand tot nu toe en loopt nog op' : ''}${vervalt < vandaag ? ` — uiterste betaaldatum ${vervalt} is voorbij en er is geen betaling gezien` : ''}.` };
     if (vervalt < vandaag) ev.achterstallig = true;
+    if (!loopt && !gevonden && vervalt < vandaag) { ev.onvolledig = true; ev.onvolledig_reden = 'betaling niet gevonden'; ev.uitleg += ' Betaling niet gevonden in de bankmutaties: behoudend als open schuld meegenomen.'; w.push({ onvolledig: true, bron: 'btw-schuld', kwartaal: kw, fout: `BTW ${kw}: betaling niet gevonden — als open schuld meegenomen (markeer het kwartaal als betaald in Instellingen als dat klopt)` }); }
     if (apart && !cfg.btw.aangifte_van) w.push({ bron: 'config', fout: 'BTW-instellingen: van welke rekening de aangifte betaald wordt is niet ingesteld — lopende rekening aangenomen' });
-    if (!apart) ev.uitleg += ' Betaald van de lopende rekening; de BTW-pot telt daar al in mee.';
+    if (!apart) ev.uitleg += ' Betaald van de lopende rekening; zonder terugboeking van de BTW-pot telt de pot niet mee in Besteedbaar.';
     uit.push(ev);
     const terug = apart ? cfg.btw.terugboeking_van : null;   // in_lopend: geen terugboeking (de BTW-pot hoort al bij lopend)
-    if (bedrag > 0 && rek === 'lopend' && terug && terug !== 'lopend') uit.push(Object.assign({}, ev, { id: id + ':terug', richting: 'in', rekening: 'lopend', intern: true, pot: terug, tegenpartij: '',
+    if (bedrag > 0 && rek === 'lopend' && terug && terug !== 'lopend') uit.push(Object.assign({}, ev, { onvolledig: undefined, onvolledig_reden: undefined, id: id + ':terug', richting: 'in', rekening: 'lopend', intern: true, pot: terug, tegenpartij: '',
       uitleg: `Terugboeking van de BTW-pot op dezelfde dag als de aangifte (lopende rekening netto 0, de BTW-pot daalt).` }));
   }
+  if (cacheNieuw && env) { try { await kvZet(env, GELD_BTW_KW, cache); } catch (e) { /* cache is een extraatje */ } }
   return uit;
 }
 
@@ -2498,7 +2533,7 @@ async function geldTijdlijn(env, url, hint) {
   const inlegEv = geldInlegEvents(cfg, patronen, pctx, w).map(metDelta);
   const btwBet = new Map();
   for (const b of (patronen && patronen.btw_betalingen) || []) btwBet.set(b.datum + '|' + b.bedrag, b);
-  for (const m of muts.lijst) if ((m.payments || []).some(x => x.invoice_type === 'VatDocument')) btwBet.set(m.date + '|' + geldRond(geldGetal(m.amount)), { datum: m.date, bedrag: geldRond(geldGetal(m.amount)) });
+  for (const m of muts.lijst) if (geldBtwBetaling(m)) btwBet.set(m.date + '|' + geldRond(geldGetal(m.amount)), { datum: m.date, bedrag: geldRond(geldGetal(m.amount)) });
   // ── G5: prognose (projecten die zeker doorgaan, handmatige posten); echte facturen gaan voor
   let progEv = [], progOverzicht = [];
   const progItems = prognose.items || {};
@@ -2533,7 +2568,7 @@ async function geldTijdlijn(env, url, hint) {
   };
   const gepland = bankdagen([...factEv, ...patEv, ...inlegEv, ...progEv]);
   gepland.push(...geldBtwSparen(gepland, cfg).map(metDelta));
-  const btwEv = bankdagen((await geldBtwAangifte(get, vandaag, cfg, [...btwBet.values()], w)).map(metDelta));
+  const btwEv = bankdagen((await geldBtwAangifte(get, vandaag, cfg, [...btwBet.values()], w, env, muts.lijst.map(m => ({ datum: m.date, bedrag: geldRond(geldGetal(m.amount)) })))).map(metDelta));
   // Terugboeking uit de BTW-pot: hooguit wat er (verwacht) in de pot zit op die dag; onbekend potsaldo → niet terugboeken.
   for (const t of btwEv.filter(e => e.id.endsWith(':terug')).sort((a, b) => a.datum.localeCompare(b.datum))) {
     const aangifte = btwEv.find(e => e.id === t.id.replace(/:terug$/, '')), ps = saldo.potten[t.pot];
@@ -3436,7 +3471,7 @@ async function handleGeld(p, request, env, ik, json0) {
       nieuw.reserve = b.reserve; gewijzigd.push('reserve');
     }
     if ('fictieve_buffer' in b) { if (b.fictieve_buffer !== null && !(typeof b.fictieve_buffer === 'number' && isFinite(b.fictieve_buffer) && b.fictieve_buffer >= 0 && b.fictieve_buffer <= 1e9)) return json({ error: 'fictieve_buffer: getal ≥ 0 of null' }, 400); nieuw.fictieve_buffer = b.fictieve_buffer; gewijzigd.push('fictieve_buffer'); }
-    if ('buffer_lopend' in b) { if (b.buffer_lopend !== null && !(typeof b.buffer_lopend === 'number' && isFinite(b.buffer_lopend))) return json({ error: 'buffer_lopend: getal of null' }, 400); nieuw.buffer_lopend = b.buffer_lopend; gewijzigd.push('buffer_lopend'); }
+    if ('buffer_lopend' in b) { if (b.buffer_lopend !== null && !(typeof b.buffer_lopend === 'number' && isFinite(b.buffer_lopend))) return json({ error: 'buffer_lopend: getal of null' }, 400); if (!('fictieve_buffer' in b)) nieuw.fictieve_buffer = b.buffer_lopend === null ? null : Math.max(0, b.buffer_lopend); nieuw.buffer_lopend = null; gewijzigd.push('fictieve_buffer'); }   // oud veld: nu de fictieve buffer
     if ('cijfers' in b) { if (b.cijfers !== null && (typeof b.cijfers !== 'object' || Array.isArray(b.cijfers))) return json({ error: 'cijfers: object of null' }, 400);
       const cb = b.cijfers || {};
       if (cb.loon_wv != null && (!Array.isArray(cb.loon_wv) || cb.loon_wv.length > 30 || cb.loon_wv.some(x => !geldId(x)) || new Set(cb.loon_wv.map(String)).size !== cb.loon_wv.length)) return json({ error: 'cijfers.loon_wv: lijst van hooguit 30 unieke grootboek-ids' }, 400);
@@ -3490,6 +3525,7 @@ async function handleGeld(p, request, env, ik, json0) {
       const t = b.btw || {};
       if (t.spaarpercentage != null && !(typeof t.spaarpercentage === 'number' && t.spaarpercentage >= 0 && t.spaarpercentage <= 1)) return json({ error: 'btw.spaarpercentage: fractie tussen 0 en 1' }, 400);
       if (t.modus != null && !['in_lopend', 'apart'].includes(t.modus)) return json({ error: "btw.modus: 'in_lopend' of 'apart'" }, 400);
+      if (t.betaald_kwartalen != null && !(Array.isArray(t.betaald_kwartalen) && t.betaald_kwartalen.length <= 12 && t.betaald_kwartalen.every(x => /^\d{4}-K[1-4]$/.test(String(x))))) return json({ error: 'btw.betaald_kwartalen: lijst (max 12) met kwartalen als JJJJ-K1..K4' }, 400);
       nieuw.btw = Object.assign({}, oud.btw, t); gewijzigd.push('btw');
     }
     if (!gewijzigd.length) return json({ error: 'niets te wijzigen' }, 400);
