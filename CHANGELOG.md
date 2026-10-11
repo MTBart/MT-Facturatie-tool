@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — P3b Codex 3bcf037: offertenummer alleen automatisch bij hetzelfde contact + eigen koppeling, persistente throttle, rechten, write-ahead + ongedaan maken, centrale werkcode-validatie
+- Commit: `f20ae19` | Auteur: Bart Witte
+
 ## 2026-10-11 — Geld op mobiel: de €-knop opent een Geld-laag binnen mobiel.html (geen v2.html meer), met mt-geld.js in compacte weergave
 - Commit: `c4107e8` | Auteur: Bart Witte
 

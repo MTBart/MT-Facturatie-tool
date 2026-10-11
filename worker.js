@@ -1820,9 +1820,20 @@ const geldEurTekst = n => String(geldRond(n).toFixed(2)).replace('.', ',');
 // geld binnen, de uitgaven worden lager. Per leverancier (contact_id) gaat de creditnota eerst van de vroegste vervaldag af. Wat overblijft (geen open
 // facturen, of minder dan het tegoed) is "tegoed bij leverancier": telt standaard NIET als ontvangst (de eigenaar kan dat per creditnota aanzetten).
 // Alleen inkoopfacturen van hetzelfde contact worden verrekend, nooit verkoopfacturen. Muteert de events; geeft de verrekeningen terug.
-function geldCreditVerrekening(paren) {
+function geldCreditVerrekening(paren, w) {
   const per = new Map(), verrekend = [];
-  for (const [, e] of paren) { if (!e.contact_id) continue; if (!per.has(e.contact_id)) per.set(e.contact_id, []); per.get(e.contact_id).push(e); }
+  for (const [, e] of paren) {
+    if (e.valuta_onzeker) continue;                                  // vreemde valuta zonder bruikbaar EUR-bedrag: buiten de cashflow én buiten de verrekening
+    if (!e.contact_id) {
+      // Zonder stabiele leverancier-id kan er niet veilig verrekend worden, en een creditnota is nooit een ontvangst zonder dat het zeker is: tegoed, telt niet, melden.
+      if (e.bedrag < 0) {
+        e.tegoed = true; e.tegoed_onbekend = true; e.uitleg = 'Creditnota van een leverancier zonder bekend contact (geen contact-id in Moneybird): niet te verrekenen, dus tegoed — telt niet als ontvangst.';
+        if (w) w.push({ onvolledig: true, bron: 'inkoopfacturen', fout: 'creditnota zonder contact-id: niet verrekend en niet als ontvangst meegeteld — controleer in Moneybird' + (e.tegenpartij ? ' (' + e.tegenpartij + ')' : ''), document_id: e.document_id, url: e.bron_url });
+      }
+      continue;
+    }
+    if (!per.has(e.contact_id)) per.set(e.contact_id, []); per.get(e.contact_id).push(e);
+  }
   for (const lijst of per.values()) {
     const credits = lijst.filter(e => e.bedrag < 0).sort((a, b) => String(a.datum || a.factuurdatum || '9999').localeCompare(String(b.datum || b.factuurdatum || '9999')));
     const open = lijst.filter(e => e.bedrag > 0).sort((a, b) => String(a.datum || '9999').localeCompare(String(b.datum || '9999')) || String(a.id).localeCompare(String(b.id)));
@@ -1849,7 +1860,10 @@ function geldCreditVerrekening(paren) {
 }
 function geldFactuurEvent(soort, d, vandaag, w) {
   const verkoop = soort === 'verkoop';
-  if (d.total_price_incl_tax_base == null && d.currency && d.currency !== 'EUR') w.push({ onvolledig: true, bron: soort + 'facturen', fout: 'factuur in ' + d.currency + ' zonder bedrag in euro — bedrag onzeker', document_id: d.id });
+  // Vreemde valuta: alleen met een geldig bedrag in euro (de *_base-velden). Anders buiten de cashflow én buiten de verrekening, en de bron wordt onvolledig.
+  const eurOk = v => v != null && v !== '' && isFinite(parseFloat(v)), vreemd = !!d.currency && d.currency !== 'EUR';
+  const valutaOnzeker = vreemd && !(eurOk(d.total_price_incl_tax_base) && (verkoop ? eurOk(d.total_unpaid_base) : (d.payments || []).every(p => eurOk(p.price_base))));
+  if (valutaOnzeker) w.push({ onvolledig: true, bron: soort + 'facturen', fout: 'factuur in ' + d.currency + ' zonder (volledig) bedrag in euro — niet meegeteld in de cashflow en niet verrekend, controleer in Moneybird', document_id: d.id, url: geldUrl(verkoop ? 'sales_invoices' : 'documents', d.id) });
   const totaal = geldGetal(d.total_price_incl_tax_base != null ? d.total_price_incl_tax_base : d.total_price_incl_tax);
   const betaald = (d.payments || []).reduce((s, p) => s + geldGetal(p.price_base != null ? p.price_base : p.price), 0);
   const open = geldRond(verkoop ? (d.total_unpaid_base != null ? geldGetal(d.total_unpaid_base) : totaal - betaald) : totaal - betaald);
@@ -1866,6 +1880,7 @@ function geldFactuurEvent(soort, d, vandaag, w) {
   };
   if (open < 0) ev.creditnota = true;
   const cid = d.contact_id != null ? String(d.contact_id) : (c.id != null ? String(c.id) : ''); if (cid) ev.contact_id = cid;
+  if (valutaOnzeker) { ev.valuta_onzeker = true; ev.telt_niet = { soort: 'valuta', reden: 'Factuur in ' + d.currency + ' zonder bedrag in euro: niet meegeteld — controleer in Moneybird.' }; ev.uitleg = ev.telt_niet.reden; }
   if (verkoop && geldVerkoopConcept(d)) {
     ev.telt_niet = { soort: 'concept', reden: 'Verkoopfactuur zonder factuurdatum of factuurnummer (concept, niet verstuurd): telt niet als verwachte ontvangst — controleer in Moneybird.' };
     ev.uitleg = ev.telt_niet.reden;
@@ -2570,7 +2585,7 @@ async function geldTijdlijn(env, url, hint) {
   const events = bankEv.filter(e => e.datum >= van && e.datum <= tot);
   const plan = { vandaag, profiel, overrides: overrides.items || {}, cfg, gebruikt: new Set() };
   const inkoopPar = fact.inkoop.map(d => [d, geldFactuurEvent('inkoop', d, vandaag, w)]), verkoopPar = fact.verkoop.map(d => [d, geldFactuurEvent('verkoop', d, vandaag, w)]);
-  const verrekend = geldCreditVerrekening(inkoopPar);
+  const verrekend = geldCreditVerrekening(inkoopPar, w);
   const factEv = [...inkoopPar, ...verkoopPar].filter(([, e]) => e.bedrag !== 0).flatMap(([d, e]) => geldPlan(e.bron, d, e, plan));
   // Overrides voor facturen die niet (meer) open zijn: melden zodat ze opgeruimd kunnen worden (niet stil laten liggen).
   const vervallenOv = Object.keys(plan.overrides).filter(id => !plan.gebruikt.has(id));
@@ -2580,7 +2595,7 @@ async function geldTijdlijn(env, url, hint) {
   for (const e of factEv) {
     if (e.verrekend_tekst) { e.uitleg += e.verrekend_tekst; delete e.verrekend_tekst; }
     if (e.tegoed) {
-      if (e.override && e.override.type === 'tegoed') { e.tegoed_telt = true; e.uitleg += ' Op jouw keuze als ontvangst meegeteld.'; }
+      if (e.override && e.override.type === 'tegoed' && !e.tegoed_onbekend) { e.tegoed_telt = true; e.uitleg += ' Op jouw keuze als ontvangst meegeteld.'; }
       else e.telt_niet = { soort: 'tegoed', reden: e.uitleg };
     }
     if (e.telt_niet) { e.delta = 0; if (e.pot_delta != null) e.pot_delta = 0; }
