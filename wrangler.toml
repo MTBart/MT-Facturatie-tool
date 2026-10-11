@@ -134,3 +134,7 @@ crons = ["*/30 3-5 * * *"]
 ROLLEN_MODUS = "log"
 # F2–F4: proxy-contract + bevestiging bij Moneybird-writes. Eerst "log", later "afdwingen".
 PROXY_MODUS = "log"
+# F6: AI-limieten per gebruiker (tokens per dag, verzoeken per minuut, gelijktijdig, plus een dagplafond voor de hele tool). Zonder deze
+# variabele geldt "afdwingen" (429 met uitleg); "log" telt en logt alleen wat geweigerd zou worden; "uit" doet niets. De waarden zelf
+# staan in worker.js (AI_LIMIET_STD) en zijn door de eigenaar aan te passen via POST /beheer/ai-limieten (KV instelling:ai_limieten).
+# AI_LIMIET_MODUS = "afdwingen"

@@ -1407,6 +1407,7 @@ export class MtTeller {
     const op = new URL(request.url).pathname.slice(1);
     let b = {}; try { b = await request.json(); } catch {}
     const st = this.state.storage, antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    if (op.startsWith('ai-')) return await this.ai(op, b);
     if (op === 'alle') {
       const m = await st.list({ prefix: 'pid:' }), werkcodes = {};
       for (const [k, w] of m) werkcodes[k.slice(4)] = w.code;
@@ -1438,6 +1439,154 @@ export class MtTeller {
     if (uit && uit.fout) return antw({ error: uit.fout }, 400);
     return antw({ uit, proef: op === 'proef' || undefined });
   }
+  // F6: AI-gebruik per gebruiker. Eén instantie (idFromName('ai')); alles in één geserialiseerd blok (atomair, ook bij gelijktijdige verzoeken).
+  // Per verzoek: claim (limieten toetsen + tokens reserveren) → afrond (werkelijk gebruik; bij een fout de reservering terug).
+  // Opgeslagen: tellers per gebruiker-hash en dag, een globale dagteller, het minuutvenster, lopende claims en een logboek
+  // ZONDER inhoud (alleen tijd, gebruiker-hash, rol, model, aantallen tokens, status). Een claim die nooit afgerond wordt (afgebroken
+  // verbinding) vervalt na 5 minuten; de reservering blijft dan staan (behoudend).
+  async ai(op, b) {
+    const st = this.state.storage, antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    const dag = String(b.dag || ''), nu = Number(b.nu) || Date.now(), h = String(b.oid || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dag) || (op !== 'ai-overzicht' && !/^[0-9a-f]{10}$/.test(h))) return antw({ error: 'ongeldig' }, 400);
+    const kort = x => (x == null ? undefined : String(x).slice(0, 60)), getal = x => (typeof x === 'number' && isFinite(x) && x >= 0 ? Math.round(x) : null);
+    const logZet = e => st.put('log:' + String(9e15 - nu).padStart(16, '0') + ':' + randHex(3), e);
+    return await this.state.blockConcurrencyWhile(async () => {
+      try {
+        const dk = 'u:' + h + ':' + dag, gk = 'g:' + dag;
+        if (op === 'ai-claim') {
+          const l = b.limiet || {}, lim = { dag: getal(l.dag), minuut: getal(l.minuut), gelijktijdig: getal(l.gelijktijdig), totaal_dag: getal(l.totaal_dag) };
+          if (Object.values(lim).some(x => x == null)) return antw({ error: 'ongeldige-limieten' }, 400);
+          const reserve = Math.max(1, Math.min(2e6, Math.ceil(Number(b.reserve) || 0)));
+          let inflight = 0; const verlopen = [];
+          for (const [k, f] of await st.list({ prefix: 'f:' + h + ':' })) { if (nu - f.ts > AI_CLAIM_VERLOOP_MS) verlopen.push(k); else inflight++; }
+          if (verlopen.length) { await st.delete(verlopen); await logZet({ ts: nu, oid: h, status: 'verlopen', n: verlopen.length }); }
+          const u = (await st.get(dk)) || { tokens: 0, calls: 0, in: 0, uit: 0, afgewezen: 0 }, g = (await st.get(gk)) || { tokens: 0, calls: 0, afgewezen: 0 };
+          u.rol = kort(b.rol); u.naam = kort(b.naam);
+          const vk = 'v:' + h, v = ((await st.get(vk)) || []).filter(t => nu - t < 60000);
+          let reden = null, wacht = 0;
+          if (inflight >= lim.gelijktijdig) reden = 'gelijktijdig';
+          else if (v.length >= lim.minuut) { reden = 'minuut'; wacht = Math.max(1, Math.ceil((60000 - (nu - v[0])) / 1000)); }
+          else if (u.tokens + reserve > lim.dag) reden = 'dag';
+          else if (g.tokens + reserve > lim.totaal_dag) reden = 'totaal';
+          if (reden && b.modus === 'afdwingen') {
+            u.afgewezen++; g.afgewezen++;
+            await st.put({ [dk]: u, [gk]: g }); await logZet({ ts: nu, oid: h, rol: u.rol, naam: u.naam, model: kort(b.model), status: 'geweigerd', reden, reserve });
+            return antw({ ok: false, reden, wacht_s: wacht || undefined, dag_gebruikt: u.tokens, dag_limiet: lim.dag });
+          }
+          const claim = randHex(6);
+          u.tokens += reserve; u.calls++; g.tokens += reserve; g.calls++; v.push(nu);
+          await st.put({ [dk]: u, [gk]: g, [vk]: v, ['f:' + h + ':' + claim]: { ts: nu, reserve, zou: reden || undefined } });
+          if ((await st.get('opruim')) !== dag) {                      // één keer per dag: oude tellers (> AI_BEWAAR_DAGEN) weg
+            const grens = geldDag(dag, -AI_BEWAAR_DAGEN), oud = [...(await st.list({ prefix: 'u:' })), ...(await st.list({ prefix: 'g:' }))].map(([k]) => k).filter(k => k.slice(-10) < grens);
+            for (let i = 0; i < oud.length; i += 100) await st.delete(oud.slice(i, i + 100));
+            await st.put('opruim', dag);
+          }
+          return antw({ ok: true, claim, zou_weigeren: reden || undefined });
+        }
+        if (op === 'ai-afrond') {
+          const fk = 'f:' + h + ':' + String(b.claim || ''), f = await st.get(fk);
+          const u = (await st.get(dk)) || { tokens: 0, calls: 0, in: 0, uit: 0, afgewezen: 0 }, g = (await st.get(gk)) || { tokens: 0, calls: 0, afgewezen: 0 };
+          const tin = getal(b.in), tuit = getal(b.uit), status = ['ok', 'fout'].includes(b.status) ? b.status : 'fout';
+          let delta = 0;
+          if (f) {
+            if (status === 'fout' && tin == null && tuit == null) delta = -f.reserve;                       // niets verbruikt: de reservering terug
+            else if (tin != null && tuit != null) delta = (tin + tuit) - f.reserve;                          // werkelijk gebruik i.p.v. de schatting
+            await st.delete(fk);
+          }
+          u.tokens = Math.max(0, u.tokens + delta); g.tokens = Math.max(0, g.tokens + delta);
+          if (tin != null) u.in += tin; if (tuit != null) u.uit += tuit;
+          await st.put({ [dk]: u, [gk]: g });
+          await logZet({ ts: nu, oid: h, rol: u.rol, naam: u.naam, model: kort(b.model), in: tin == null ? undefined : tin, uit: tuit == null ? undefined : tuit, status, http: getal(b.http) == null ? undefined : getal(b.http), ms: getal(b.ms) == null ? undefined : getal(b.ms), zou: f && f.zou, niet_gevonden: f ? undefined : true });
+          const logs = [...(await st.list({ prefix: 'log:', limit: AI_LOG_MAX + 50 }))].map(([k]) => k);
+          if (logs.length > AI_LOG_MAX) await st.delete(logs.slice(AI_LOG_MAX));
+          return antw({ ok: true });
+        }
+        if (op === 'ai-overzicht') {
+          const n = Math.max(1, Math.min(31, Number(b.dagen) || 7)), vanaf = geldDag(dag, -(n - 1));
+          const gebruikers = [...(await st.list({ prefix: 'u:' }))].map(([k, r]) => ({ oid: k.slice(2, 12), dag: k.slice(13), naam: r.naam, rol: r.rol, tokens: r.tokens, calls: r.calls, in: r.in, uit: r.uit, afgewezen: r.afgewezen })).filter(x => x.dag >= vanaf && x.dag <= dag).sort((a, c) => c.dag.localeCompare(a.dag) || c.tokens - a.tokens);
+          const totaal = [...(await st.list({ prefix: 'g:' }))].map(([k, r]) => ({ dag: k.slice(2), tokens: r.tokens, calls: r.calls, afgewezen: r.afgewezen })).filter(x => x.dag >= vanaf && x.dag <= dag).sort((a, c) => c.dag.localeCompare(a.dag));
+          const recent = [...(await st.list({ prefix: 'log:', limit: Math.max(1, Math.min(100, Number(b.log) || 50)) }))].map(([, r]) => r);
+          const lopend = [...(await st.list({ prefix: 'f:' }))].filter(([, f]) => nu - f.ts <= AI_CLAIM_VERLOOP_MS).length;
+          return antw({ gebruikers, totaal, recent, lopend });
+        }
+        return antw({ error: 'onbekend' }, 404);
+      } catch (e) { return antw({ error: 'opslag', detail: String((e && e.message) || e).slice(0, 120) }, 503); }
+    });
+  }
+}
+// ── F6: AI-limieten (zie MtTeller.ai) ─────────────────────────────────────────
+// Eén serversleutel (CLAUDE_KEY); de worker toetst per verzoek een limiet per gebruiker: tokens per dag (invoer + uitvoer, vooraf geschat en
+// achteraf met het werkelijke gebruik uit de stream bijgesteld), verzoeken per minuut en gelijktijdige verzoeken, plus een dagplafond voor de
+// hele tool. Standaardwaarden hieronder; de eigenaar kan ze aanpassen (POST /beheer/ai-limieten, KV instelling:ai_limieten).
+// Modus (wrangler-var AI_LIMIET_MODUS): 'afdwingen' (standaard) weigert met 429, 'log' telt en logt alleen wat geweigerd zóu worden, 'uit' doet niets.
+// Het logboek bevat nooit de inhoud van vragen of antwoorden.
+const AI_CLAIM_VERLOOP_MS = 5 * 60 * 1000, AI_LOG_MAX = 300, AI_BEWAAR_DAGEN = 45;
+const AI_LIMIET_STD = { totaal_dag: 4000000, rollen: { eigenaar: { dag: 1500000, minuut: 30, gelijktijdig: 4 }, beheerder: { dag: 1000000, minuut: 20, gelijktijdig: 3 },
+  kantoor: { dag: 600000, minuut: 20, gelijktijdig: 3 }, werkplaats: { dag: 150000, minuut: 10, gelijktijdig: 2 } } };
+const AI_LIMIET_GRENS = { dag: [0, 50e6], minuut: [1, 600], gelijktijdig: [1, 20], totaal_dag: [0, 200e6] };
+const aiModus = env => { const m = String((env && env.AI_LIMIET_MODUS) || '').toLowerCase(); return ['uit', 'log', 'afdwingen'].includes(m) ? m : 'afdwingen'; };
+function aiLimietNorm(r) {   // standaard + geldige overschrijvingen (ongeldige velden worden genegeerd)
+  const uit = JSON.parse(JSON.stringify(AI_LIMIET_STD)), ok = (k, v) => Number.isInteger(v) && v >= AI_LIMIET_GRENS[k][0] && v <= AI_LIMIET_GRENS[k][1];
+  if (r && typeof r === 'object') {
+    if (ok('totaal_dag', r.totaal_dag)) uit.totaal_dag = r.totaal_dag;
+    for (const rol of Object.keys(uit.rollen)) { const x = r.rollen && r.rollen[rol]; if (x) for (const k of ['dag', 'minuut', 'gelijktijdig']) if (ok(k, x[k])) uit.rollen[rol][k] = x[k]; }
+  }
+  return uit;
+}
+async function aiLimieten(env) { let r = null; try { r = await kvJson(env, 'instelling:ai_limieten'); } catch {} return aiLimietNorm(r); }
+// Geschatte invoertokens (behoudend): tekst ≈ 1 token per 3 tekens, afbeelding vast, document naar grootte met een plafond. Geen inhoud bewaard.
+function aiSchatTokens(p) {
+  let n = 50; const blok = b => { if (!b) return; if (typeof b === 'string') n += Math.ceil(b.length / 3); else if (b.type === 'text') n += Math.ceil(String(b.text || '').length / 3);
+    else if (b.type === 'image') n += 1600; else if (b.type === 'document') n += Math.min(60000, Math.ceil(String((b.source && b.source.data) || '').length / 12)); else n += Math.ceil(JSON.stringify(b).length / 3); };
+  const lijst = c => { if (typeof c === 'string') blok(c); else if (Array.isArray(c)) c.forEach(blok); };
+  lijst(p && p.system); for (const m of (p && Array.isArray(p.messages) ? p.messages : [])) lijst(m && m.content);
+  return n;
+}
+const AI_WEIGER = { dag: 'Je AI-limiet voor vandaag is bereikt. Morgen kun je weer verder; vraag de eigenaar om meer ruimte als het dringend is.',
+  minuut: 'Even rustig aan: er zijn te veel AI-verzoeken in één minuut gedaan. Probeer het zo opnieuw.',
+  gelijktijdig: 'Er loopt al een AI-verzoek van jou. Wacht tot dat klaar is en probeer het dan opnieuw.',
+  totaal: 'De AI-limiet van de hele tool voor vandaag is bereikt. Probeer het morgen opnieuw of vraag de eigenaar om hulp.' };
+async function aiDO(env, op, body) {
+  const ns = env.MT_TELLER; if (!ns || !ns.idFromName) return null;
+  const r = await ns.get(ns.idFromName('ai')).fetch('https://mt-teller/' + op, { method: 'POST', body: JSON.stringify(body) });
+  return { status: r.status, j: await r.json().catch(() => null) };
+}
+// Toetsen vóór het verzoek naar Anthropic gaat. → { ok:true, claim?, ... } of { ok:false, status, body, wacht_s }
+async function aiClaim(env, ik, parsed) {
+  const modus = aiModus(env); if (modus === 'uit') return { ok: true };
+  const lim = await aiLimieten(env), rolLim = lim.rollen[ik.rol];
+  if (!rolLim) return { ok: true };                                        // rol zonder AI wordt al door de rolmatrix geweigerd
+  const oid = await oidHash(ik.oid), dag = geldVandaag();
+  const reserve = aiSchatTokens(parsed) + Math.max(1, Number(parsed.max_tokens) || 1);
+  let r = null;
+  try { r = await aiDO(env, 'ai-claim', { oid, dag, nu: Date.now(), modus, rol: ik.rol, naam: (ik.rec && ik.rec.naam) || ik.email || '', model: parsed.model, reserve, limiet: { dag: rolLim.dag, minuut: rolLim.minuut, gelijktijdig: rolLim.gelijktijdig, totaal_dag: lim.totaal_dag } }); } catch (e) { r = { status: 503, j: null }; }
+  if (!r) { console.log(JSON.stringify({ ai: 'geen-binding', modus })); return { ok: true }; }   // zonder teller-binding is er niets te toetsen
+  if (r.status === 200 && r.j && r.j.ok) { if (r.j.zou_weigeren) console.log(JSON.stringify({ ai: 'zou-weigeren', reden: r.j.zou_weigeren, oid, rol: ik.rol })); return { ok: true, claim: r.j.claim, oid, dag }; }
+  if (r.status === 200 && r.j && r.j.ok === false) {
+    const reden = r.j.reden;
+    console.log(JSON.stringify({ ai: 'geweigerd', reden, oid, rol: ik.rol }));
+    return { ok: false, status: 429, wacht_s: r.j.wacht_s || (reden === 'dag' || reden === 'totaal' ? 3600 : 5),
+      body: { type: 'error', error: { type: 'mt_ai_limiet', reden, message: AI_WEIGER[reden] || 'AI-limiet bereikt.' }, limiet: { dag_gebruikt: r.j.dag_gebruikt, dag_limiet: r.j.dag_limiet } } };
+  }
+  // De teller zelf is stuk: in 'afdwingen' geen onbewaakt AI-gebruik (503), in 'log' gewoon doorlaten.
+  console.log(JSON.stringify({ ai: 'teller-fout', modus, status: r.status }));
+  return modus === 'afdwingen' ? { ok: false, status: 503, wacht_s: 10, body: { type: 'error', error: { type: 'mt_ai_teller', message: 'De AI-limiet kon niet gecontroleerd worden; probeer het zo opnieuw.' } } } : { ok: true };
+}
+function aiAfrond(env, ctx, claim, gegevens) {
+  if (!claim || !claim.claim) return;
+  waitUntil(ctx, aiDO(env, 'ai-afrond', Object.assign({ oid: claim.oid, dag: claim.dag, nu: Date.now(), claim: claim.claim }, gegevens)).catch(() => {}));
+}
+// Het antwoord ongewijzigd doorgeven en onderweg alleen de getallen (usage) opvangen; aan het eind het werkelijke gebruik afrekenen.
+function aiMeet(response, env, ctx, claim, model, t0) {
+  let tin = null, tuit = null, fout = false, rest = ''; const dec = new TextDecoder();
+  const regel = r => { const x = r.trim(); if (!x.startsWith('data:')) return; let ev; try { ev = JSON.parse(x.slice(5)); } catch { return; }
+    if (ev.type === 'message_start' && ev.message && ev.message.usage) { const u = ev.message.usage; tin = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0); if (typeof u.output_tokens === 'number') tuit = u.output_tokens; }
+    else if (ev.type === 'message_delta' && ev.usage && typeof ev.usage.output_tokens === 'number') tuit = ev.usage.output_tokens;
+    else if (ev.type === 'error') fout = true; };
+  const ts = new TransformStream({
+    transform(chunk, c) { c.enqueue(chunk); rest += dec.decode(chunk, { stream: true }); let i; while ((i = rest.indexOf('\n')) >= 0) { regel(rest.slice(0, i)); rest = rest.slice(i + 1); } if (rest.length > 200000) rest = ''; },
+    flush() { regel(rest); aiAfrond(env, ctx, claim, { in: tin, uit: tuit, status: fout && tin == null ? 'fout' : 'ok', http: response.status, ms: Date.now() - t0, model }); } });
+  return response.body.pipeThrough(ts);
 }
 // Centrale instellingen (KV MT_ROLLEN `instelling:<sleutel>`); alleen bekende sleutels/waarden.
 const INSTELLINGEN = { projectcode: { naam: 'Projectcode tonen als', waarden: ['offerte', 'werkcode', 'beide'], standaard: 'offerte' } };
@@ -3802,6 +3951,30 @@ async function handleBeheer(pathname, request, env, ik, json) {
     const n = Math.max(1, Math.min(500, parseInt(new URL(request.url).searchParams.get('limit') || '100', 10) || 100));
     return json({ audit: await lijstKV(env, 'audit:', n) });
   }
+  if (p === '/beheer/ai' && m === 'GET') {                           // F6: AI-gebruik per gebruiker en dag + logboek (zonder inhoud) + de geldende limieten
+    const u = new URL(request.url), dagen = Math.max(1, Math.min(31, parseInt(u.searchParams.get('dagen') || '7', 10) || 7));
+    let o = null; try { o = await aiDO(env, 'ai-overzicht', { dag: geldVandaag(), nu: Date.now(), dagen, log: 50 }); } catch {}
+    if (!o || o.status !== 200) return json({ error: 'geen-teller', modus: aiModus(env), limieten: await aiLimieten(env) }, 503);
+    return json(Object.assign({ modus: aiModus(env), limieten: await aiLimieten(env), vandaag: geldVandaag(), dagen }, o.j));
+  }
+  if (p === '/beheer/ai-limieten' && m === 'POST') {                  // alleen de eigenaar; ongeldige of onbekende velden → 400, niets bewaard
+    if (ik.rol !== 'eigenaar') return json({ error: 'alleen-eigenaar' }, 403);
+    const b = await body(); if (!b || typeof b !== 'object' || Array.isArray(b)) return json({ error: 'ongeldige-body' }, 400);
+    if (b.standaard === true) { await env.MT_ROLLEN.delete('instelling:ai_limieten'); await audit(env, { ...door, actie: 'ai-limieten', doel: 'standaard' }); return json({ ok: true, limieten: aiLimietNorm(null) }); }
+    const toegestaan = new Set(['totaal_dag', 'rollen']); if (Object.keys(b).some(k => !toegestaan.has(k))) return json({ error: 'onbekend-veld' }, 400);
+    const nieuw = { totaal_dag: undefined, rollen: {} }, grens = (k, v) => Number.isInteger(v) && v >= AI_LIMIET_GRENS[k][0] && v <= AI_LIMIET_GRENS[k][1];
+    if (b.totaal_dag !== undefined) { if (!grens('totaal_dag', b.totaal_dag)) return json({ error: 'ongeldig', veld: 'totaal_dag' }, 400); nieuw.totaal_dag = b.totaal_dag; }
+    for (const [rol, x] of Object.entries(b.rollen || {})) {
+      if (!AI_LIMIET_STD.rollen[rol] || !x || typeof x !== 'object') return json({ error: 'onbekende-rol', rol }, 400);
+      for (const [k, v] of Object.entries(x)) { if (!['dag', 'minuut', 'gelijktijdig'].includes(k) || !grens(k, v)) return json({ error: 'ongeldig', veld: rol + '.' + k }, 400); }
+      nieuw.rollen[rol] = x;
+    }
+    const huidig = (await kvJson(env, 'instelling:ai_limieten')) || {}, samen = { totaal_dag: nieuw.totaal_dag !== undefined ? nieuw.totaal_dag : huidig.totaal_dag, rollen: Object.assign({}, huidig.rollen || {}) };
+    for (const [rol, x] of Object.entries(nieuw.rollen)) samen.rollen[rol] = Object.assign({}, samen.rollen[rol] || {}, x);
+    await kvZet(env, 'instelling:ai_limieten', Object.assign(samen, { ts: Date.now(), door: ik.oid }));
+    await audit(env, { ...door, actie: 'ai-limieten', doel: 'gewijzigd' });   // geen bedragen of inhoud in het logboek
+    return json({ ok: true, limieten: aiLimietNorm(samen) });
+  }
   if (p === '/beheer/log' && m === 'GET') {
     const dagen = Math.max(1, Math.min(31, parseInt(new URL(request.url).searchParams.get('dagen') || '7', 10) || 7));
     const tot = { totaal: 0, geweigerd: 0, redenen: {}, proxy: {}, proxyTotaal: 0 }, perDag = [];
@@ -4439,20 +4612,31 @@ export default {
 
      if (target === 'claude') {
   const body = await request.text();
-  const parsed = JSON.parse(body);
+  let parsed; try { parsed = JSON.parse(body); } catch { return json({ error: 'ongeldige-json' }, 400); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return json({ error: 'ongeldige-json' }, 400);
   delete parsed.api_key;
   parsed.stream = true;
+  parsed.max_tokens = Math.min(Math.max(1, Number(parsed.max_tokens) || 1024), CLAUDE_MAX_TOKENS);
   // Werkplaats: AI "beperkt" → kortere antwoorden.
   if (beperkt) parsed.max_tokens = Math.min(Number(parsed.max_tokens) || AI_BEPERKT_MAX_TOKENS, AI_BEPERKT_MAX_TOKENS);
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': env.CLAUDE_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(parsed)
-  });
+  // F6: limiet per gebruiker toetsen vóór het verzoek naar Anthropic gaat.
+  const gate = await aiClaim(env, ik, parsed);
+  if (!gate.ok) return new Response(JSON.stringify(gate.body), { status: gate.status, headers: { 'Content-Type': 'application/json', 'Retry-After': String(gate.wacht_s || 5), ...corsHeaders } });
+  const t0 = Date.now();
+  let response;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': env.CLAUDE_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(parsed)
+    });
+  } catch (e) { aiAfrond(env, ctx, gate, { status: 'fout', model: parsed.model, ms: Date.now() - t0 }); throw e; }
+  if (!response.ok) aiAfrond(env, ctx, gate, { status: 'fout', http: response.status, model: parsed.model, ms: Date.now() - t0 });   // niets verbruikt: reservering terug
+  else if (gate.claim) { return new Response(aiMeet(response, env, ctx, gate, parsed.model, t0), { status: response.status, headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', ...corsHeaders } }); }
   return new Response(response.body, {
     status: response.status,
     headers: {

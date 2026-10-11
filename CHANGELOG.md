@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Release v2.13.1: Geld op je telefoon, geen leveranciersposten meer als ontvangst, offertenummer automatisch uit Moneybird; backup = v2.13.0
+- Commit: `09e1031` | Auteur: Bart Witte
+
 ## 2026-10-11 — Geld Codex b5b069a/c4107e8: creditnota zonder contact-id en vreemde valuta zonder EUR-bedrag tellen nooit mee; kaart Ruimte ook op mobiel
 - Commit: `c10870e` | Auteur: Bart Witte
 
