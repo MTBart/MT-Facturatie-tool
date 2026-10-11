@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Codex-verificatie A+B: F1-F5 (klanten-writes via Durable Object, fail-closed back-up en changelog, persistent importjournaal)
+- Commit: `8f12d5b` | Auteur: Bart Witte
+
 ## 2026-10-11 — Koersmeter: Codex-bevindingen E1-E2 (onbevestigde koppelingen zijn onvolledig, geen dubbele ontvangst)
 - Commit: `b340eee` | Auteur: Bart Witte
 
@@ -908,7 +911,7 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-06-02 — @ Bijlagen per project: opslaan in projectmap op SharePoint, tool linkt alleen
 - Commit: `1e09848` | Auteur: Bart Witte
 
-## 2026-06-02 — @ Fix De Verbouwer-bug + SharePoint-canonieke klantregistry
+## 2026-06-02 — @ Fix [klant]-bug + SharePoint-canonieke klantregistry
 - Commit: `b3b519f` | Auteur: Bart Witte
 
 ## 2026-06-02 — #20: Excel-upload (.xlsx/.xls) naast CSV bij VW-kostenimport
@@ -938,7 +941,7 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-06-01 — Fase B increment 1: project-detail bidirectionele links
 - Commit: `22fbae0` | Auteur: Bart Witte
 
-## 2026-06-01 — Klant-registry: [klant] & Meubel + [klant] toegevoegd
+## 2026-06-01 — Klant-registry: [klant] + [klant] toegevoegd
 - Commit: `9e3997b` | Auteur: Bart Witte
 
 ## 2026-06-01 — Fase A fix: klant-registry tegen Moneybird gecorrigeerd

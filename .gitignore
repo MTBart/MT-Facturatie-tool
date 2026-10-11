@@ -73,6 +73,8 @@ Claude-context/*
 
 # ---------- 3. RUNTIME / BACKUPS / TOOLING-ARTEFACTEN ----------
 _backups/
+backup.nieuw-*/
+backup.oud-*/
 _archief/
 _archive/
 toggl-preview/

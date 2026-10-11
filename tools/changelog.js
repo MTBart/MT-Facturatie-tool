@@ -32,17 +32,31 @@ try {
     huidig = termenUitLijst(j.klanten);
   }
   const historieTekst = lees('klanten-historie.txt');
-  const historie = new Set((historieTekst || '').split(/\r?\n/).map(r => r.trim()).filter(r => r.length >= 6));
+  // De historie moet EENMALIG geseed zijn uit de volledige git-geschiedenis (node tools/changelog-seed.js): alle oude versies van
+  // klanten.json en de oude hardcoded registry's. Zonder die marker is de lijst onvolledig en weigeren we (fail closed).
+  const markerRegel = ((historieTekst || '').split(/\r?\n/).find(r => r.startsWith('# SEED-HISTORIE ')) || '');
+  if (!markerRegel) stop(2, 'klanten-historie.txt is niet geseed uit de volledige git-geschiedenis: draai eenmalig  node tools/changelog-seed.js');
+  const historie = new Set((historieTekst || '').split(/\r?\n/).filter(r => !r.startsWith('#')).map(r => r.trim()).filter(r => r.length >= 6));
   const bekend = new Set(historie);
   for (const x of huidig) historie.add(x);
   if ([...historie].some(x => !bekend.has(x))) {                  // alleen schrijven als er iets bij is gekomen; nooit verwijderen
-    try { fs.writeFileSync(path.join(dir, 'klanten-historie.txt'), [...historie].sort().join('\n') + '\n', 'utf8'); }
+    try { fs.writeFileSync(path.join(dir, 'klanten-historie.txt'), markerRegel + '\n' + [...historie].sort().join('\n') + '\n', 'utf8'); }
     catch (e) { stop(3, 'kon klanten-historie.txt niet bijwerken: ' + e.message); }   // liever geen changelog dan een verlies van de geschiedenis
   }
   for (const x of historie) termen.add(x);
   const extra = lees('privacy-termen.txt');
   if (extra != null) for (const r of extra.split(/\r?\n/)) if (r.trim().length >= 3) termen.add(r.trim());
   if (!termen.size) stop(2, 'geen woordenlijst (data/klanten.json ontbreekt)');
+  // Korte vormen: commitberichten zeggen zelden de volledige naam. Daarom ook de naam zonder rechtsvorm (B.V./N.V.) en de
+  // onderscheidende woorden (>= 7 letters, geen gewoon bedrijfswoord) van elke naam. Cijferreeksen (id's) blijven zoals ze zijn.
+  const GEWOON = new Set(['aannemers', 'installatiebedrijf', 'projecten', 'interior', 'interiors', 'interieur', 'interieurs', 'concepts', 'college', 'holding', 'groep', 'bedrijf',
+    'beheer', 'service', 'techniek', 'bouw', 'meubel', 'meubelen', 'administratie', 'werkplaats', 'keuken', 'kasten', 'mortise', 'tenon', 'verbouwing', 'stichting', 'vereniging']);
+  for (const x of [...termen]) {
+    if (/\d{5,}/.test(x)) continue;
+    const kaal = x.replace(/[\s,]*\b(B\.?\s?V\.?|N\.?\s?V\.?)\s*$/i, '').trim();
+    if (kaal.length >= 6 && kaal !== x) termen.add(kaal);
+    for (const w of (x.match(/[A-Za-zÀ-ÿ]{7,}/g) || [])) if (!GEWOON.has(w.toLowerCase())) termen.add(w);
+  }
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp([...termen].sort((a, b) => b.length - a.length).map(esc).join('|'), 'gi');
   const invoer = fs.readFileSync(0, 'utf8');

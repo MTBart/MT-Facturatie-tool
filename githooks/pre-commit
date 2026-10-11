@@ -73,8 +73,8 @@ for FILE in index.html uren.html; do
 done
 
 # De repo is PUBLIC en commitonderwerpen kunnen klantnamen bevatten: de CHANGELOG gaat door tools/changelog.js, dat de
-# namen uit de LOKALE data/klanten.json (+ data/privacy-termen.txt) vervangt. Is er geen woordenlijst (bv. verse clone),
-# dan blijft de bestaande CHANGELOG.md ongemoeid in plaats van ongefilterd herschreven te worden.
+# namen uit de LOKALE data/klanten.json, de geseede data/klanten-historie.txt en data/privacy-termen.txt vervangt.
+# Lukt dat niet (geen woordenlijst, verse clone, fout) dan stopt de commit (fail closed, zie hieronder).
 CL_RAW="$(mktemp)"; CL_TMP="$(mktemp)"
 {
   echo "# CHANGELOG — Mortise & Tenon Claude Tools"
@@ -86,14 +86,26 @@ CL_RAW="$(mktemp)"; CL_TMP="$(mktemp)"
   echo ""
   git log --pretty=format:"## %ad — %s%n- Commit: \`%h\` | Auteur: %an%n" --date=format:"%Y-%m-%d"
 } > "$CL_RAW"
-node "$REPO_DIR/tools/changelog.js" < "$CL_RAW" > "$CL_TMP" 2>/dev/null
+CL_ERR="$(mktemp)"
+node "$REPO_DIR/tools/changelog.js" < "$CL_RAW" > "$CL_TMP" 2> "$CL_ERR"
 CL_RC=$?
-# Fail closed: alleen bij exitcode 0 EN uitvoer wordt de CHANGELOG vervangen (parse-/runtimefout of geen woordenlijst = oude laten staan).
+# FAIL CLOSED: alleen bij exitcode 0 EN uitvoer wordt de CHANGELOG vervangen. Bij elke fout (parse-/runtimefout, geen of niet-geseede
+# woordenlijst, node ontbreekt, lege uitvoer) STOPT DE COMMIT: liever geen commit dan een CHANGELOG met klantnamen of een oude die
+# stilletjes achterloopt. Bewust overslaan (de oude CHANGELOG.md blijft dan ongewijzigd):  MT_CHANGELOG_OVERSLAAN=1 git commit ...
 if [ "$CL_RC" -eq 0 ] && [ -s "$CL_TMP" ]; then
   cp "$CL_TMP" "$REPO_DIR/CHANGELOG.md"
   git add "$REPO_DIR/CHANGELOG.md"
   echo "✓ CHANGELOG.md bijgewerkt (klantnamen neutraal)"
+elif [ "$MT_CHANGELOG_OVERSLAAN" = "1" ]; then
+  echo "⚠ CHANGELOG.md bewust NIET bijgewerkt (MT_CHANGELOG_OVERSLAAN=1; exitcode $CL_RC)"
 else
-  echo "⚠ CHANGELOG.md niet bijgewerkt (exitcode $CL_RC): geen lokale woordenlijst, een fout daarin, of node ontbreekt"
+  echo ""
+  echo "🛑 COMMIT GEBLOKKEERD — CHANGELOG.md kon niet veilig worden bijgewerkt (exitcode $CL_RC)."
+  [ -s "$CL_ERR" ] && sed 's/^/   /' "$CL_ERR"
+  echo "   Oplossen: zorg voor een goed data/klanten.json en een geseede data/klanten-historie.txt (node tools/changelog-seed.js),"
+  echo "   en dat node werkt. Bewust zonder CHANGELOG-update committen:  MT_CHANGELOG_OVERSLAAN=1 git commit ..."
+  echo ""
+  rm -f "$CL_TMP" "$CL_RAW" "$CL_ERR"
+  exit 1
 fi
-rm -f "$CL_TMP" "$CL_RAW"
+rm -f "$CL_TMP" "$CL_RAW" "$CL_ERR"

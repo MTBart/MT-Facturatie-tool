@@ -8,11 +8,13 @@
 # roteren wordt dat uit de KOPIE in backup/ gehaald (de live bestanden blijven zoals ze zijn): zie neutraliseer().
 # De hash-check vergelijkt dus met de live versie NA neutralisatie, plus de drie invoegingen (noindex, titel, rode balk).
 #
-# FAIL CLOSED: alles wordt eerst in het geheugen opgebouwd en gecontroleerd. Pas als de hash-check klopt én de eindscan (lokale
-# klantenlijst als woordenlijst: namen, aliassen, locaties, Moneybird-id's) geen enkele rest vindt, wordt er in backup/ geschreven.
-# Anders: melding + exitcode ≠ 0 en backup/ blijft precies zoals hij was. (0 = gelukt, 1 = hash-fout, 2 = rest gevonden,
-# 3 = geen woordenlijst, 4 = onbekende fout.)
-import subprocess, io, os, tarfile, hashlib, re, sys, fnmatch, functools, json
+# FAIL CLOSED + ATOMAIR: alles wordt eerst in het geheugen opgebouwd en gecontroleerd. Pas als de hash-check klopt én de eindscan
+# (lokale klantenlijst als woordenlijst) geen enkele rest vindt, wordt de nieuwe backup in een tijdelijke map naast backup/
+# (backup.nieuw-<pid>) opgebouwd, daar OPNIEUW van schijf gecontroleerd en pas dan omgewisseld: backup/ -> backup.oud-<pid>,
+# backup.nieuw-<pid> -> backup/ (os.replace). Mislukt de wissel halverwege, dan wordt de oude backup/ teruggezet (herstelpad) en de
+# tijdelijke map opgeruimd. Anders: melding + exitcode != 0 en backup/ blijft precies zoals hij was.
+# (0 = gelukt, 1 = hash-fout, 2 = rest gevonden of wissel mislukt, 3 = geen woordenlijst of een kapotte data/klanten.json, 4 = onbekende fout.)
+import subprocess, io, os, tarfile, hashlib, re, sys, fnmatch, functools, json, shutil, stat, time
 REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')).replace('\\', '/')
 PATRONEN = ['v2.html', 'mobiel.html', 'uren.html', 'index.html', 'calc-engine.js', 'mt-*.js', 'track.js', 'sw.js', 'manifest-mobiel.json', 'icons/*', 'vendor/*']
 HTML = {'v2.html', 'mobiel.html', 'uren.html', 'index.html'}
@@ -21,13 +23,20 @@ NEUTRAAL_KLANTEN = "KLANTEN=[{code:'INT',naam:'Intern — Mortise & Tenon',mb_co
 NEUTRAAL_ALIAS = "KLANT_REGISTRY={ 'intern':'INT','mortise':'INT' };"
 
 class Rest(Exception): pass
+class KapotLijst(Exception): pass
 
 @functools.lru_cache(maxsize=1)
 def klantenlijst():
     """De LOKALE data/klanten.json (niet in de repo) → lijst klanten, of None als hij ontbreekt."""
     pad = os.path.join(REPO, 'data', 'klanten.json')
     if not os.path.exists(pad): return None
-    return [k for k in json.load(io.open(pad, encoding='utf-8-sig')).get('klanten', []) if k.get('code') != 'INT']
+    try:
+        j = json.load(io.open(pad, encoding='utf-8-sig'))
+        lijst = j['klanten']
+        assert isinstance(lijst, list)
+        return [k for k in lijst if isinstance(k, dict) and k.get('code') != 'INT']
+    except Exception as e:
+        raise KapotLijst(f'data/klanten.json is onleesbaar of heeft geen klantenlijst ({type(e).__name__}): zonder betrouwbare woordenlijst rotere ik niet')
 
 @functools.lru_cache(maxsize=1)
 def voorbeeldnamen():
@@ -135,10 +144,57 @@ def controleer(gepland, zonder_lijst):
         print('Er is NIETS geschreven; backup/ is ongewijzigd. Pas tools/backup-roteer.py aan (neutraliseer()) of de live versie.', file=sys.stderr)
         sys.exit(2)
 
-def schrijf(gepland):
-    for pad, data in gepland.items():
-        doel = os.path.join(REPO, 'backup', pad); os.makedirs(os.path.dirname(doel), exist_ok=True)
-        open(doel, 'wb').write(data)
+BACKUP = os.path.join(REPO, 'backup')
+
+def _testfout(punt):
+    if os.environ.get('MT_ROTEER_TESTFOUT') == punt: raise OSError(f'testfout bij {punt}')
+
+def ruim_op(d):
+    """Verwijdert een map, ook op OneDrive/Windows (alleen-lezen bestanden, even vergrendeld): enkele pogingen; geeft True als weg."""
+    def fout(f, pad, _e):
+        try: os.chmod(pad, stat.S_IWRITE); f(pad)
+        except OSError: pass
+    for _ in range(6):
+        if not os.path.exists(d): return True
+        shutil.rmtree(d, onerror=fout)
+        if not os.path.exists(d): return True
+        time.sleep(0.4)
+    return not os.path.exists(d)
+
+def schrijf_atomair(gepland):
+    """Bouwt de nieuwe backup/ in backup.nieuw-<pid>, controleert die van schijf en wisselt dan om. Faalt iets: backup/ blijft/komt terug."""
+    if not gepland: return                                   # niets te wijzigen: backup/ niet aanraken
+    nieuw, oud = f'{BACKUP}.nieuw-{os.getpid()}', f'{BACKUP}.oud-{os.getpid()}'
+    for d in (nieuw, oud):
+        if os.path.exists(d): ruim_op(d)
+    try:
+        shutil.copytree(BACKUP, nieuw)                       # bestaande inhoud blijft (ook bestanden die live niet meer bestaan: die worden gemeld)
+        for pad, data in gepland.items():
+            doel = os.path.join(nieuw, pad); os.makedirs(os.path.dirname(doel), exist_ok=True)
+            open(doel, 'wb').write(data)
+        # controle VAN SCHIJF in de tijdelijke map: elke geplande file byte-gelijk en geen enkele rest in de hele nieuwe map
+        for pad, data in gepland.items():
+            if hashlib.sha256(open(os.path.join(nieuw, pad), 'rb').read()).hexdigest() != hashlib.sha256(data).hexdigest(): raise Rest(f'controle van schijf mislukt voor {pad}')
+        if zoektermen():
+            r = {}
+            for root, _, files in os.walk(nieuw):
+                for f in files:
+                    if is_tekst(f):
+                        low = io.open(os.path.join(root, f), encoding='utf-8', errors='replace', newline='').read().lower()
+                        if any(x in low for x in zoektermen()): r[os.path.relpath(os.path.join(root, f), nieuw)] = 1
+            if r: raise Rest('rest gevonden in de tijdelijke map: ' + ', '.join(sorted(r)))
+        _testfout('voor-wissel')
+        os.replace(BACKUP, oud)                              # 1. oude weg
+        try:
+            _testfout('midden-wissel')
+            os.replace(nieuw, BACKUP)                        # 2. nieuwe erin
+        except BaseException:
+            os.replace(oud, BACKUP)                          # herstelpad: de oude backup/ terug
+            raise
+        if not ruim_op(oud): print('WAARSCHUWING: kon', oud, 'niet opruimen; verwijder die map zelf (staat in .gitignore)', file=sys.stderr)
+    finally:
+        if os.path.exists(nieuw): ruim_op(nieuw)
+        if os.path.exists(oud) and os.path.exists(BACKUP): ruim_op(oud)
 
 def saneer_bestaand(zonder_lijst):
     gepland, n_tot = {}, 0
@@ -147,7 +203,8 @@ def saneer_bestaand(zonder_lijst):
         if n: print('geneutraliseerd:', pad, n); n_tot += n
         gepland[pad] = t2.encode('utf-8')
     controleer(gepland, zonder_lijst)
-    schrijf({p: b for p, b in gepland.items() if lees_backup().get(p) is not None and b.decode('utf-8') != lees_backup()[p]})
+    huidig = lees_backup()
+    schrijf_atomair({p: b for p, b in gepland.items() if huidig.get(p) is not None and b.decode('utf-8') != huidig[p]})
     print('ingrepen totaal:', n_tot)
 
 def roteer(VERSIE, DATUM, zonder_lijst):
@@ -192,7 +249,7 @@ def roteer(VERSIE, DATUM, zonder_lijst):
     if fout:
         print('HASH-FOUT in', fout, '— er is NIETS geschreven.', file=sys.stderr); sys.exit(1)
     controleer(gepland, zonder_lijst)   # fail closed: rest of geen woordenlijst → exit, niets geschreven
-    schrijf(gepland)
+    schrijf_atomair(gepland)
     # bestanden in backup/ die live niet meer bestaan (binnen de patronen) -> melden, niet stil laten staan
     namen = {m.name for m in leden}; weg = []
     for root, _, files in os.walk(os.path.join(REPO, 'backup')):
@@ -214,5 +271,7 @@ if __name__ == '__main__':
             print('resten in backup/ (lokale klantenlijst als woordenlijst): geen')
         else: print('resten-scan overgeslagen (geen lokale data/klanten.json)')
     except SystemExit: raise
-    except Rest as e: print('FOUT:', e, '— er is NIETS geschreven.', file=sys.stderr); sys.exit(2)
+    except KapotLijst as e: print('FOUT:', e, '— er is NIETS geschreven.', file=sys.stderr); sys.exit(3)
+    except Rest as e: print('FOUT:', e, '— er is NIETS geschreven; backup/ is ongewijzigd.', file=sys.stderr); sys.exit(2)
+    except OSError as e: print('FOUT bij het omwisselen:', e, '— backup/ is teruggezet of ongewijzigd; controleer met git status.', file=sys.stderr); sys.exit(2)
     except Exception as e: print('ONVERWACHTE FOUT:', repr(e), '— backup/ kan onvolledig zijn; controleer met git status/diff.', file=sys.stderr); sys.exit(4)
