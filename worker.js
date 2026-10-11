@@ -4028,7 +4028,7 @@ async function zoekMbOpbouwen(env) {
   const bronnen = [['v', 'sales_invoices', 'invoice_id', 'invoice_date'], ['i', 'documents/purchase_invoices', 'reference', 'date'], ['o', 'estimates', 'estimate_id', 'estimate_date']];
   let pauze = 0;
   for (const [s, pad, nrVeld, datumVeld] of bronnen) {
-    for (const periode of ['this_year', 'last_year']) {
+    for (const periode of ['this_year', 'prev_year']) {
       const l = await geldLijst(get, `${pad}?filter=period:${periode}`, w, s);
       l.lijst.forEach(x => items.push({ s, id: String(x.id), nr: String((s === 'i' ? '' : x[nrVeld]) || ''), ref: String(x.reference || '').slice(0, 80), c: zoekMbContact(x.contact).slice(0, 80), d: String(x[datumVeld] || '').slice(0, 10) }));
     }
