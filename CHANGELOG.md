@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Codex a7fcc3f: Attentie escapet één keer; links uit data via veiligeLink; baselines voor plakwerk en url-sinks
+- Commit: `3a74f4b` | Auteur: Bart Witte
+
 ## 2026-10-11 — F7 3b groep 4: tekstsinks in mobiel.html
 - Commit: `121e465` | Auteur: Bart Witte
 

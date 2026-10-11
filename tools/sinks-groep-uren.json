@@ -1,0 +1,206 @@
+{
+ "omschrijving": "uren.html: de uren-app (timer, bord, rapport, projecten, taken)",
+ "heleBestand": true,
+ "fragmentFns": [
+  "statusBadge",
+  "factuurBadge",
+  "deadlineBadge"
+ ],
+ "houd": [
+  {
+   "fn": "showWelkom",
+   "expr": "ja(t.naam)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderRecentEntries",
+   "expr": "ja(e.project_code)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderRecentEntries",
+   "expr": "ja(e.taak_id||'')",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderRecentEntries",
+   "expr": "ja(e.taak_naam||'')",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderMijnTaken",
+   "expr": "ja(pc)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderMijnTaken",
+   "expr": "ja(taak.id)",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderMijnTaken",
+   "expr": "ja(taak.naam||'')",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderTimer",
+   "expr": "urgentStyle",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderTimer",
+   "expr": "ja(p.code)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTimer",
+   "expr": "dlBadge||''",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "renderStartTaakLijst",
+   "expr": "ja(s.id)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderStartTaakLijst",
+   "expr": "ja(t.id)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderStartTaakLijst",
+   "expr": "t.subtaken?.length?`<div class=\"taak-item-sub\">${t.subtaken.length} subtaken</div>`:''",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "entryRowHTML",
+   "expr": "ja(e.id)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTimeline",
+   "expr": "ja(pb.id)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTimeline",
+   "expr": "ja(dag)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTimeline",
+   "expr": "ja(row.id)",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderRapport",
+   "expr": "bars",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderRapport",
+   "expr": "breakdown",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderBordActief",
+   "expr": "ja(t.naam)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderBordWeek",
+   "expr": "ja(code)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderBordWeek",
+   "expr": "p?.status?`<div style=\"margin-top:3px\">${statusBadge(p.status)}</div>`:''",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(p.code)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(t.id)",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja(s.id)",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderTakenBeheer",
+   "expr": "ja('tb-'+p.code)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderInstCapaciteit",
+   "expr": "ja(t.naam)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(code)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(k)",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(t.id)",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja(s.id)",
+   "reden": "al geëscaped: ja()"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "ja('pdb-'+t.id)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "assigneeChips",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "subtakenHtml",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "tlOptions",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "statusHtml",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "takenHtml||'<div style=\"font-size:13px;color:var(--text-faint);font-style:italic;padding:0.5rem 0\">Geen taken. Voeg hieronder een taak toe.<",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "renderProjectenTab",
+   "expr": "ja(p.code)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "renderProjectenTab",
+   "expr": "urenHtml",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  }
+ ]
+}

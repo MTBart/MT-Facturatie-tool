@@ -239,7 +239,7 @@
   },
   {
    "bestand": "mt-toggl.js",
-   "tekst": "for(let i=0;i<7;i++){ html+=`<div class=\"ag-daycol\" style=\"height:${hoogte}px;background:${lijn}\">`+agBlokkenHtml(perDag[i])+'</div>'; }"
+   "tekst": "for(let i=0;i<7;i++){ html+=`<div class=\"ag-daycol\" style=\"height:${esc(hoogte)}px;background:${esc(lijn)}\">`+agBlokkenHtml(perDag[i])+'</div>'; }"
   },
   {
    "bestand": "mt-toggl.js",

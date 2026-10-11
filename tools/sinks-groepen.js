@@ -97,3 +97,9 @@ module.exports['v2-overig'] = { bestand: 'v2.html', omschrijving: _v2o.omschrijv
 // Groep 4: mobiel.html (houd-lijst met redenen in sinks-groep-mobiel.json).
 const _mob = require('./sinks-groep-mobiel.json');
 module.exports['mobiel'] = { bestand: 'mobiel.html', omschrijving: _mob.omschrijving, heleBestand: true, veiligeFns: _g1.veiligeFns, fragmentFns: _g1.fragmentFns.concat(_mob.fragmentFns), houd: _mob.houd, overslaan: [] };
+// Groep uren: uren.html (houd-lijst met redenen in sinks-groep-uren.json).
+const _g_uren = require('./sinks-groep-uren.json');
+module.exports['uren'] = { bestand: 'uren.html', omschrijving: _g_uren.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_uren.fragmentFns, houd: _g_uren.houd, overslaan: [] };
+// Groep toggl: mt-toggl.js (houd-lijst met redenen in sinks-groep-toggl.json).
+const _g_toggl = require('./sinks-groep-toggl.json');
+module.exports['toggl'] = { bestand: 'mt-toggl.js', omschrijving: _g_toggl.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_toggl.fragmentFns, houd: _g_toggl.houd, overslaan: [] };

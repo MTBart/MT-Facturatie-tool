@@ -1,0 +1,172 @@
+{
+ "omschrijving": "mt-toggl.js: Toggl-tabblad (recent, projecten, taken, board, rapport, beheer)",
+ "heleBestand": true,
+ "fragmentFns": [],
+ "houd": [
+  {
+   "fn": "tgVulProjectSelect",
+   "expr": "tgEsc(p.name||('project '+p.id))",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadRecent",
+   "expr": "tgEsc(p.name)",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadRecent",
+   "expr": "tgEsc(e.description||'(geen omschrijving)')",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadRecent",
+   "expr": "code",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgLaadRecent",
+   "expr": "bill",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgLaadRecent",
+   "expr": "rijen",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgLaadProjecten",
+   "expr": "tgEsc(typeof projKeuzeLabel==='function'?projKeuzeLabel(mt):mt.code)",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadProjecten",
+   "expr": "tgEsc(t.name||t)",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadProjecten",
+   "expr": "tgEsc(p.name||('project '+p.id))",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadProjecten",
+   "expr": "mtbadge",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgOpenProject",
+   "expr": "tgEsc((typeof projLabelCode==='function'?projLabelCode(mt):mt.code)||'—')",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgOpenProject",
+   "expr": "tgEsc(klantNaam)||'—'",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgOpenProject",
+   "expr": "mbChip",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgOpenProject",
+   "expr": "mails",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "tgOpenProject",
+   "expr": "tgEsc(p.name||('project '+p.id))",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgOpenProject",
+   "expr": "mtBlok",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgLaadTaken",
+   "expr": "tgEsc(t.name||('taak '+t.id))",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadTaken",
+   "expr": "t.project?tgEsc(t.project.name):'geen project'",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "tgLaadTaken",
+   "expr": "t.client?(' · '+tgEsc(t.client.name)):''",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "tgLaadTaken",
+   "expr": "sub",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgLaadTaken",
+   "expr": "asg.length?tgEsc(asg.join(', ')):'—'",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "tgLaadBoard",
+   "expr": "tgEsc(asg.join(', '))",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadBoard",
+   "expr": "tgEsc(t.project.name)",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadBoard",
+   "expr": "subB",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgLaadBoard",
+   "expr": "tgEsc(t.name)",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadBoard",
+   "expr": "prB",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgLaadBoard",
+   "expr": "tgEsc(t.name||('taak '+t.id))",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadBoard",
+   "expr": "t.project?`<div class=\"tg-sub\">${tgEsc(t.project.name)}${subB}</div>`:subB",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "tgLaadBoard",
+   "expr": "asgB",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgLaadBoard",
+   "expr": "tiles",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "tgLaadReport",
+   "expr": "tgEsc(k)",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadBeheer",
+   "expr": "tgEsc(c.name)",
+   "reden": "al geëscaped: tgEsc()"
+  },
+  {
+   "fn": "tgLaadBeheer",
+   "expr": "tgEsc(t.name)",
+   "reden": "al geëscaped: tgEsc()"
+  }
+ ]
+}
