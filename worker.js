@@ -2261,7 +2261,7 @@ function geldPrognoseEvents(items, facturen, ctx, w) {
     const bev = projecten.filter(([, it]) => it.k.includes(f.id)).map(([sl]) => sl), kand = projecten.filter(([, it]) => zeker(it, f)).map(([sl]) => sl);
     if (bev.length === 1) toe.set(f.id, bev[0]);
     else if (!bev.length && kand.length === 1) toe.set(f.id, kand[0]);
-    else if (bev.length > 1 || kand.length > 1) { meer.set(f.id, [...new Set(bev.concat(kand))]); w.push({ bron: 'prognose', fout: `factuur ${f.nummer || f.id} past bij meerdere prognoseprojecten — bevestig bij welk project hij hoort (nu bij geen enkel afgetrokken)` }); }
+    else if (bev.length > 1 || kand.length > 1) { meer.set(f.id, [...new Set(bev.concat(kand))]); w.push({ onvolledig: true, bron: 'prognose', fout: `factuur ${f.nummer || f.id} past bij meerdere prognoseprojecten — bevestig bij welk project hij hoort (tot dan telt de prognose-ontvangst van die projecten voor dit bedrag niet mee)` }); }
   }
   for (const [sleutel, it] of lijst) {
     if (it.soort === 'post') {
@@ -2277,15 +2277,21 @@ function geldPrognoseEvents(items, facturen, ctx, w) {
     const gefactureerd = geldRond(mijn.reduce((a, f) => a + f.bedrag, 0));   // creditnota's (negatief) tellen terug
     const vragen = facturen.filter(f => !it.x.includes(f.id) && f.bedrag > 0 && !toe.has(f.id) && ((meer.get(f.id) || []).includes(sleutel) || (!meer.has(f.id) && it.contact_id && f.contact_id === it.contact_id)))
       .map(f => ({ id: f.id, nummer: f.nummer, datum: f.datum, bedrag: f.bedrag, ref: f.ref, meerdere: meer.has(f.id) || undefined }));
+    // Een factuur die bij meerdere projecten past is zelf al een echte ontvangst; de prognose-termijnen van die kandidaat-projecten
+    // tellen voor dat bedrag NIET mee (anders staat dezelfde ontvangst dubbel in de tijdlijn) tot de eigenaar de koppeling kiest.
+    const onbesliste = geldRond(facturen.filter(f => f.bedrag > 0 && !toe.has(f.id) && (meer.get(f.id) || []).includes(sleutel)).reduce((a, f) => a + f.bedrag, 0));
     const ov = { sleutel, soort: 'project', naam: it.naam, code: it.code, aan: it.aan, totaal: it.totaal, gefactureerd, facturen: mijn.map(f => f.id), vragen, termijnen: [] };
+    if (onbesliste > 0) ov.onbeslist = onbesliste;
     overzicht.push(ov);
     if (!it.aan) continue;
     const v = geldVerwachtVerkoop({ contact_id: it.contact_id, contact: { company_name: it.naam } }, profiel, cfg), vertraging = v.basis !== 'vervaldag' ? v.mediaan : 0;
-    let rest = gefactureerd;
+    let rest = gefactureerd, onbRest = onbesliste, onbGebruikt = 0;
     for (const t of it.termijnen.slice().sort((a, b) => a.factuurdatum.localeCompare(b.factuurdatum) || a.id.localeCompare(b.id))) {
       const dekking = Math.min(t.bedrag, Math.max(0, rest)); rest = geldRond(rest - dekking);
-      const over = geldRond(t.bedrag - dekking);
-      ov.termijnen.push({ id: t.id, label: t.label, bedrag: t.bedrag, gefactureerd: geldRond(dekking), open: over, factuurdatum: t.factuurdatum, aan: t.aan });
+      const overRuw = geldRond(t.bedrag - dekking);
+      const onb = t.aan ? Math.min(overRuw, onbRest) : 0; onbRest = geldRond(onbRest - onb); onbGebruikt = geldRond(onbGebruikt + onb);
+      const over = geldRond(overRuw - onb);
+      ov.termijnen.push({ id: t.id, label: t.label, bedrag: t.bedrag, gefactureerd: geldRond(dekking), open: overRuw, factuurdatum: t.factuurdatum, aan: t.aan, onbeslist: onb > 0 ? geldRond(onb) : undefined });
       if (!t.aan || over <= 0.004) continue;
       const fd = t.factuurdatum < vandaag ? vandaag : t.factuurdatum;
       if (t.factuurdatum < vandaag) w.push({ bron: 'prognose', fout: `${it.naam || it.code}: ${t.label} had op ${t.factuurdatum} gefactureerd moeten worden en er is nog geen factuur gezien` });
@@ -2294,6 +2300,7 @@ function geldPrognoseEvents(items, facturen, ctx, w) {
         datumtype: 'prognose', zekerheid: 'prognose', rekening: 'lopend', tegenpartij: `${it.naam || it.code} — ${t.label}`, document_id: null, bron_url: null, prognose: sleutel, termijn_id: t.id,
         uitleg: `Prognose (gaat zeker door, nog geen factuur): factureren op ${fd}, betaaltermijn ${it.betaaltermijn} dagen${vertraging ? ` + ${vertraging} dag(en) zoals ${v.basis === 'klant' ? 'deze klant' : v.basis === 'groep' ? 'de groep' : 'klanten'} meestal later betalen` : ''}.${dekking > 0 ? ` Al gefactureerd van deze termijn: ${dekking}.` : ''} Komt de echte factuur, dan vervangt die deze regel.` });
     }
+    if (onbGebruikt > 0.004) w.push({ onvolledig: true, bron: 'prognose', fout: `${it.naam || it.code}: ${onbGebruikt} van de prognose-ontvangst telt nog niet mee, omdat een factuur bij meerdere prognoseprojecten past — bevestig bij welk project hij hoort` });
     if (rest > 0.004) w.push({ bron: 'prognose', fout: `${it.naam || it.code}: er is meer gefactureerd dan het prognosetotaal — controleer het totaal` });
   }
   return { events: uit, overzicht };
@@ -2417,7 +2424,7 @@ async function geldTijdlijn(env, url, hint) {
       zekerheid: pt.zekerheid, factuur: pt.factuur, n: pt.n, aan, uit_door: k && k.aan === false ? k.door : undefined, potje: pot || undefined });
     if (aan && !pot) patEv.push(...geldPatroonEvents(pt, pctx).map(metDelta));
   }
-  for (const [, x] of pctx.mogelijkDubbel || []) w.push({ bron: 'patronen', fout: `mogelijk dubbel: vast patroon "${x.patroon}" lijkt op een afbetaling van factuur ${x.factuur} — zet het patroon uit als het dezelfde betaling is` });
+  for (const [, x] of pctx.mogelijkDubbel || []) w.push({ onvolledig: true, bron: 'patronen', fout: `mogelijk dubbel: vast patroon "${x.patroon}" lijkt op een afbetaling van factuur ${x.factuur} — beide staan ingepland, dus de uitgave kan dubbel meetellen tot je het patroon uitzet (als het dezelfde betaling is)` });
   const inlegEv = geldInlegEvents(cfg, patronen, pctx, w).map(metDelta);
   const btwBet = new Map();
   for (const b of (patronen && patronen.btw_betalingen) || []) btwBet.set(b.datum + '|' + b.bedrag, b);

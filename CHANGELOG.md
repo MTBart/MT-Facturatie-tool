@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F7 release 2: Codex-bevindingen C1-C6 (ruwe waarden in innerHTML, bijlage-link, vertrouwde HTML in een private WeakSet)
+- Commit: `b41141b` | Auteur: Bart Witte
+
 ## 2026-10-11 — F5 stap 2: Codex-bevindingen B1-B8 (verhuisknop: alles of niets, per gebruiker, geen versie-bump)
 - Commit: `859108b` | Auteur: Bart Witte
 
