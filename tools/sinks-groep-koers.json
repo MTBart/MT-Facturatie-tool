@@ -8,7 +8,7 @@
   {
    "fn": "cap",
    "expr": "x.onbetrouwbaar ? ' \\u2014 oordeel onbetrouwbaar' : x.titel ? ' \\u2014 ' + esc(x.titel) : ''",
-   "fp": "f45e4936a3",
+   "fp": "f085de56dc",
    "reden": "tekst met esc(x.titel) en vaste tekst"
   }
  ]

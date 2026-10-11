@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F6: AI-limieten de eerste week in log-modus (AI_LIMIET_MODUS = "log")
+- Commit: `954e3c9` | Auteur: Bart Witte
+
 ## 2026-10-11 — F6: AI-limieten in de worker (één serversleutel, limiet per gebruiker, logboek zonder inhoud)
 - Commit: `a4b31cb` | Auteur: Bart Witte
 

@@ -3506,9 +3506,12 @@ async function handleGeld(p, request, env, ik, json0) {
   // Alleen met recht `geld` (die controle staat hierboven); afvinken mag ook wie alleen mag lezen (het is een eigen markering).
   if (p === '/geld/koers/meldingen' && m === 'GET') {
     const n = Math.max(1, Math.min(30, Number(url.searchParams.get('dagen')) || 7)), vandaag = geldVandaag();
-    const recs = await Promise.all(Array.from({ length: n }, (_, i) => kvJson(env, KOERS_MELDING + geldDag(vandaag, -i))));
+    const dagen = Array.from({ length: n }, (_, i) => geldDag(vandaag, -i)), van = dagen[dagen.length - 1];
+    // Maandagberichten: één list (hooguit een stuk of dertien sleutels in 90 dagen) en dan alleen de berichten binnen het venster lezen (hooguit 5), zodat dit verzoek ruim onder het subrequest-plafond blijft.
+    let weekDagen = []; try { weekDagen = (await geldKvNamen(env, KOERS_WEEK, 1)).keys.map(k => String(k.name).slice(KOERS_WEEK.length)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= van && d <= vandaag).sort().slice(-5); } catch {}
+    const recs = await Promise.all([...dagen.map(d => kvJson(env, KOERS_MELDING + d)), ...weekDagen.map(d => kvJson(env, KOERS_WEEK + d))]);
     const gel = (await kvJson(env, KOERS_GELEZEN + ik.oid)) || {};
-    const lijst = recs.filter(Boolean).map(x => Object.assign({}, x, { gelezen: !!(gel.datum && x.datum <= gel.datum) }));
+    const lijst = recs.filter(Boolean).map(x => Object.assign({}, x, { gelezen: !!(gel.datum && x.datum <= gel.datum) })).sort((a, b) => b.datum.localeCompare(a.datum) || (a.soort === 'week' ? -1 : 1));
     return json({ meldingen: lijst, ongelezen: lijst.filter(x => !x.gelezen).length });
   }
   // Koersmeter: status van de ochtendrun per dag (bezig / klaar / mislukt, pogingen, laatste fout) uit de dagclaim (Durable Object MT_KOERSDAG).
@@ -4117,8 +4120,10 @@ async function handleKlanten(request, env, ik, json, ctx) {
 // (dagfoto, melding, claim afsluiten) is. Is het budget op, dan is het oordeel "onbetrouwbaar", nooit groen, en nooit een crash.
 // KV: geld:koers:dag:<datum> (de dagfoto, zoals het scherm hem ook bewaart), geld:koers:melding:<datum> (hooguit één per dag),
 // geld:koers:gelezen:<oid> (per gebruiker tot en met welke datum afgevinkt), geld:koers:tijdlijn:<datum> (volledige tijdlijn van vandaag, 6 uur, voor de volgende run).
-const KOERS_MELDING = 'geld:koers:melding:', KOERS_GELEZEN = 'geld:koers:gelezen:', KOERS_TIJDLIJN = 'geld:koers:tijdlijn:';
+// G6: het maandagbericht (geld:koers:week:<datum>, 90 dagen): één per maandag, door de cron geschreven, als melding in de app naast de ochtendmelding. Niets naar derden.
+const KOERS_WEEK = 'geld:koers:week:', KOERS_MELDING = 'geld:koers:melding:', KOERS_GELEZEN = 'geld:koers:gelezen:', KOERS_TIJDLIJN = 'geld:koers:tijdlijn:';
 const KOERS_POGINGEN = 3, KOERS_SUB_MAX = 45, KOERS_SUB_RESERVE = 5, KOERS_BEZIG_MS = 20 * 60 * 1000;   // 20 min > de maximale looptijd van een cron-run: een levende run wordt nooit overgenomen
+const maandagLokaal = ms => new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Amsterdam', weekday: 'short' }).format(new Date(ms)) === 'Mon';
 function amsterdamTijd(ms) {
   const d = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms)), g = t => Number((d.find(x => x.type === t) || {}).value);
   return { uur: g('hour'), min: g('minute') };
@@ -4281,10 +4286,28 @@ async function koersCron(env, tijd) {
         tekst: verschil ? verschil.tekst : null, actie: o ? String(K.actie(o, inv)).slice(0, 300) : null, onbetrouwbaar: !nu || nu.kleur === 'onbetrouwbaar' };
       if (!(await kvJson(envR, KOERS_MELDING + vandaag))) await kvZet(envR, KOERS_MELDING + vandaag, melding, { expirationTtl: 60 * 86400 });   // hooguit één per dag
     }
+    // G6: op maandag (lokale tijd van de trigger) het maandagbericht, één keer per datum; alleen met een leesbare tijdlijn en config en een oordeel.
+    // Past het lezen + schrijven niet meer in het budget (reserve), dan geldt dat als een mislukte poging: de volgende trigger (30 min later) doet het opnieuw
+    // (dagfoto en melding bestaan dan al, dus die kosten minder); pas de laatste poging geeft het op en meldt dat in de dagclaim.
+    let week = 'geen-maandag';
+    if (maandagLokaal(tijd)) {
+      try {
+        week = 'bestond';
+        if (!(await kvJson(envR, KOERS_WEEK + vandaag))) {
+          if (o && inv && t && t.j && t.j.vandaag && c && c.j && c.j.config) {
+            const wb = K.weekbericht(o, inv, t.j, c.j.config, G);
+            await kvZet(envR, KOERS_WEEK + vandaag, wb, { expirationTtl: 90 * 86400 }); week = 'gemaakt';
+          } else week = 'geen-data';
+        }
+      } catch (e) {
+        week = 'budget-of-opslag';
+        if (!laatste) { await claimDo('afrond', { status: 'mislukt', fout: 'maandagbericht niet geschreven: ' + String((e && e.message) || e).slice(0, 80) }); koersLog({ status: 'mislukt', poging, fout: 'maandagbericht', subrequests: sub.n, soorten: sub.soort }); return { status: 'mislukt', poging, week, fout: 'maandagbericht', subrequests: sub.n, soorten: sub.soort }; }
+      }
+    }
     const status = bronFout ? 'bron-fout' : 'klaar';
-    await claimDo('afrond', { status: 'klaar', kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || (onvolledigRun ? 'onvolledig na ' + poging + ' pogingen' : undefined) });
-    koersLog({ status, poging, subrequests: sub.n, soorten: sub.soort });
-    return { status, poging, kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || undefined, subrequests: sub.n, soorten: sub.soort };
+    await claimDo('afrond', { status: 'klaar', kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || (onvolledigRun ? 'onvolledig na ' + poging + ' pogingen' : undefined) || (week === 'budget-of-opslag' ? 'maandagbericht niet geschreven' : undefined) });
+    koersLog({ status, poging, subrequests: sub.n, soorten: sub.soort, week });
+    return { status, poging, week, kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || undefined, subrequests: sub.n, soorten: sub.soort };
   } catch (e) {
     const fout = String((e && e.message) || e).slice(0, 200);
     try { await claimDo('afrond', { status: 'mislukt', fout }); } catch {}

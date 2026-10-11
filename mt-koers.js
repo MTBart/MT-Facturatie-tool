@@ -218,6 +218,32 @@
     return 'Geen actie nodig.';
   };
 
+  // ── Maandagbericht (G6): elke maandagochtend schrijft de cron er één (KV geld:koers:week:<datum>), als melding in de app; er gaat niets naar derden. ──
+  // Puur en serialiseerbaar: de wekelijkse stand in gewone zinnen + de grootste posten van de komende 7 dagen + wat aandacht vraagt + één actie.
+  // o/inv = het Koersmeter-oordeel (K.oordeel/K.invoer), data = de geldtijdlijn, cfg = de config, G = MTGeld. Alles wat niet zeker is blijft buiten (geen prognose).
+  K.weekbericht = function (o, inv, data, cfg, G, opt) {
+    opt = opt || {};
+    const v = data.vandaag, tot = dagPlus(v, 6), kasOpt = { prognose: false, nood: false };
+    const bes = G.besteedbaar(data, cfg, kasOpt), lijn = G.kasLijn(data, cfg, kasOpt), low = lijn.onbekend ? null : G.laagste(lijn, dagPlus(v, KAS_DAGEN));
+    const onder = G.drempel(data, cfg);
+    const evs = (data.events || []).filter(e => e && e.bron !== 'bank' && e.bron !== 'ijkpunt' && !e.saldo_ijkpunt && e.datum && e.datum >= v && e.datum <= tot && typeof e.delta === 'number' && e.delta !== 0
+      && (e.rekening || 'lopend') === 'lopend' && !(e.intern && e.bron === 'btw-sparen') && G.telt(e, { prognose: false }));
+    const inn = evs.filter(e => e.delta > 0).sort((a, b) => b.delta - a.delta), uit = evs.filter(e => e.delta < 0).sort((a, b) => a.delta - b.delta);
+    const som = l => Math.round(l.reduce((a, e) => a + e.delta, 0));
+    const top = l => l.slice(0, 3).map(e => ({ tegenpartij: String(e.tegenpartij || e.bron || '').slice(0, 60), bedrag: Math.round(e.delta), datum: e.datum }));
+    const groep = l => ({ aantal: l.length, som: som(l), top: top(l) }), eur0 = n => (n < 0 ? '\u2212' : '') + '\u20ac ' + Math.abs(Math.round(n)).toLocaleString('nl-NL');
+    const regels = [];
+    regels.push('Koersmeter: ' + o.titel + '. ' + o.zin);
+    regels.push(bes ? 'Besteedbaar nu: ' + eur0(bes.besteedbaar) + '.' : 'Besteedbaar nu: onbekend (de lopende rekening is nog niet geijkt).');
+    if (low) regels.push('Laagste punt de komende 8 weken: ' + eur0(low.saldo) + ' op ' + datum(low.datum) + (onder > 0 ? (low.saldo >= onder ? '; ' + eur0(low.saldo - onder) + ' boven de fictieve buffer.' : '; ' + eur0(onder - low.saldo) + ' ONDER de fictieve buffer.') : (low.saldo >= 0 ? '.' : '; onder nul.')));
+    const lijst = (l, een, meer) => l.length ? l.length + ' ' + (l.length === 1 ? een : meer) + ' van samen ' + eur0(Math.abs(som(l))) + ' (grootste: ' + top(l).map(x => x.tegenpartij + ' ' + eur0(Math.abs(x.bedrag)) + ' op ' + datum(x.datum)).join(', ') + ')' : 'geen ' + meer;
+    regels.push('Komende 7 dagen: ' + lijst(inn, 'ontvangst', 'ontvangsten') + '; ' + lijst(uit, 'betaling', 'betalingen') + '. Alleen wat zeker of vast is; prognose telt niet mee.');
+    const aandacht = (data.waarschuwingen || []).filter(x => x && (x.onvolledig === true || /zonder datum|creditnota|vreemde valuta|mogelijk dubbel|niet gedekt|tekort|controleer/i.test(x.fout || ''))).map(x => String(x.fout || '').slice(0, 160)).filter(Boolean);
+    const unieke = [...new Set(aandacht)];
+    return { soort: 'week', datum: v, ts: Date.now(), kleur: o.kleur, titel: 'Maandagbericht ' + datum(v), oordeel: o.titel, regels,
+      besteedbaar: bes ? Math.round(bes.besteedbaar) : null, laagste: low ? { datum: low.datum, saldo: Math.round(low.saldo) } : null,
+      week: { in: groep(inn), uit: groep(uit) }, let_op: unieke.slice(0, 4), let_op_totaal: unieke.length, actie: String(K.actie(o, inv)).slice(0, 300), onbetrouwbaar: o.kleur === 'onbetrouwbaar' };
+  };
   // ── Weergave ──
   K.css = function () {
     if (!root.document || document.getElementById('mtk-css')) return;
@@ -234,6 +260,9 @@
 .mtk-melding{font-size:13px;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fbe3dd;border-left:4px solid #B4412F}
 .mtk-och{background:#fbe3dd;border:1px solid #e9b8ab;border-left:8px solid #B4412F;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:14px;line-height:1.45}
 .mtk-och-rij{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}.mtk-och-rij+.mtk-och-rij{margin-top:8px;padding-top:8px;border-top:1px solid #e9b8ab}
+.mtk-week{background:var(--card,#fff);border:1px solid var(--border,#e4e2da);border-left:8px solid #3a5a8a;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:14px;line-height:1.45}
+.mtk-week .mtk-och-rij+.mtk-och-rij{margin-top:8px;padding-top:8px;border-top:1px solid var(--border,#e4e2da)}
+.mtk-week .mtk-gelezen{border-color:#3a5a8a;color:#3a5a8a}
 .mtk-gelezen{min-height:40px;padding:0 14px;border-radius:8px;border:1px solid #B4412F;background:#fff;color:#B4412F;font:inherit;font-weight:600;cursor:pointer}
 .mtk-meters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
 .mtk-m{border:1px solid var(--border,#e4e2da);border-top:4px solid #c9d0d6;border-radius:8px;padding:8px 10px;min-width:0}
@@ -261,11 +290,15 @@
   };
   // Ochtendmeldingen (door de cron in KV gezet, /geld/koers/meldingen): bovenaan Geld, per gebruiker af te vinken. Alle tekst geëscapet.
   K.meldingHtml = function (lijst) {
-    const open = (lijst || []).filter(x => x && !x.gelezen && /^\d{4}-\d{2}-\d{2}$/.test(String(x.datum || '')));
+    const open = (lijst || []).filter(x => x && !x.gelezen && /^\d{4}-\d{2}-\d{2}$/.test(String(x.datum || ''))).sort((a, b) => b.datum.localeCompare(a.datum));
     if (!open.length) return '';
-    return `<section class="mtk-och" role="alert" aria-label="Ochtendmelding Koersmeter">${open.map(x => `<div class="mtk-och-rij"><div><b>Ochtendmelding ${esc(datum(x.datum))}${x.onbetrouwbaar ? ' \u2014 oordeel onbetrouwbaar' : x.titel ? ' \u2014 ' + esc(x.titel) : ''}</b>
+    const alarm = open.filter(x => x.soort !== 'week'), wk = open.filter(x => x.soort === 'week');
+    const week = x => `<div class="mtk-och-rij"><div><b>${esc(x.titel || 'Maandagbericht')} \u2014 ${esc(x.oordeel || '')}</b>${(x.regels || []).map(r => `<div>${esc(r)}</div>`).join('')}${(x.let_op || []).length ? `<div class="mtk-noot">Let op: ${esc(x.let_op.join(' \u00b7 '))}${x.let_op_totaal > x.let_op.length ? ` (+${esc(x.let_op_totaal - x.let_op.length)})` : ''}</div>` : ''}${x.actie ? `<div class="mtk-actie"><b>Actie:</b> ${esc(x.actie)}</div>` : ''}</div>
+      <button class="mtk-gelezen" data-koers-gelezen="${esc(x.datum)}" aria-label="Markeer het maandagbericht van ${esc(datum(x.datum))} als gelezen">Gelezen</button></div>`;
+    const weekHtml = wk.length ? `<section class="mtk-week" role="region" aria-label="Maandagbericht">${wk.map(week).join('')}</section>` : '';
+    return weekHtml + (!alarm.length ? '' : `<section class="mtk-och" role="alert" aria-label="Ochtendmelding Koersmeter">${alarm.map(x => `<div class="mtk-och-rij"><div><b>Ochtendmelding ${esc(datum(x.datum))}${x.onbetrouwbaar ? ' \u2014 oordeel onbetrouwbaar' : x.titel ? ' \u2014 ' + esc(x.titel) : ''}</b>
       <div>${esc((x.redenen || []).join('; '))}.</div>${x.tekst ? `<div class="mtk-noot">${esc(x.tekst)}</div>` : ''}${x.actie ? `<div class="mtk-actie"><b>Actie:</b> ${esc(x.actie)}</div>` : ''}</div>
-      <button class="mtk-gelezen" data-koers-gelezen="${esc(x.datum)}" aria-label="Markeer de melding van ${esc(datum(x.datum))} als gelezen">Gelezen</button></div>`).join('')}</section>`;
+      <button class="mtk-gelezen" data-koers-gelezen="${esc(x.datum)}" aria-label="Markeer de melding van ${esc(datum(x.datum))} als gelezen">Gelezen</button></div>`).join('')}</section>`);
   };
   K.kaartHtml = function (o, extra) {
     return `<section class="mtk ${esc(o.kleur)}" aria-label="Koersmeter: ${esc(o.titel)}">
