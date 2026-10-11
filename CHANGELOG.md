@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Geld: pot herkennen ook als de naam letter + rekeningnummer heeft ("spaarrekening Z96824563")
+- Commit: `0d52c40` | Auteur: Bart Witte
+
 ## 2026-10-11 — Release v2.12.2: spaarpotjes volgen de echte overboekingen, melding vóór 07:00, veiliger; backup = v2.12.1
 - Commit: `a5e3e2c` | Auteur: Bart Witte
 

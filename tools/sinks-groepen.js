@@ -91,3 +91,6 @@ module.exports = {
     ],
   },
 };
+// Groep 3: de rest van v2.html (alles wat niet in groep 1 zit). De houd-lijst met redenen staat in sinks-groep-v2overig.json (gegenereerd door de scan, met de hand gecontroleerd).
+const _v2o = require('./sinks-groep-v2overig.json'), _g1 = module.exports['v2-mail-mb-sharepoint'];
+module.exports['v2-overig'] = { bestand: 'v2.html', omschrijving: _v2o.omschrijving, heleBestand: true, uitgezonderd: _g1.functies, veiligeFns: _g1.veiligeFns, fragmentFns: _g1.fragmentFns.concat(_v2o.fragmentFns), houd: _v2o.houd, overslaan: [] };

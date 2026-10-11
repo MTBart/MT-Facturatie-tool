@@ -1,0 +1,539 @@
+{
+ "omschrijving": "v2.html overig: voorraad, planning, projecten, nacalculatie/calculator, attentie, agenda, admin (alles buiten groep 1)",
+ "heleBestand": true,
+ "fragmentFns": [
+  "kb",
+  "th",
+  "rij",
+  "sel",
+  "modusBalk",
+  "ncVergelijkHtml",
+  "ncTogglHtml",
+  "projectKoppelOpties",
+  "selOpts",
+  "_mbPreviewHtml",
+  "defaultsPaneel",
+  "vergetenPaneelHtml",
+  "projectPlanning",
+  "projectTakenHtml",
+  "nacalcHtml",
+  "geldProjectRijHtml",
+  "randChipHtml",
+  "levChipHtml",
+  "_bhRolUitleg",
+  "_bhProjectcode",
+  "_bhControlelijst",
+  "rolOpt",
+  "renderNcrTabel",
+  "renderSectie",
+  "_oplRapportHtml",
+  "_tlDetailHtml",
+  "agProjChip",
+  "agPersChip",
+  "levLink",
+  "matRij",
+  "uurRij",
+  "ncUurRij",
+  "agBlokkenHtml",
+  "knop",
+  "tdsActieHtml",
+  "balk"
+ ],
+ "houd": [
+  {
+   "fn": "q",
+   "expr": "head",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "q",
+   "expr": "body",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "hoogte",
+   "expr": "lijn",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "agRenderTotalen",
+   "expr": "proj",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "agRenderTotalen",
+   "expr": "pers",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "agRenderTotalen",
+   "expr": "aProj",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "agRenderTotalen",
+   "expr": "aPers",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "agRenderTotalen",
+   "expr": "wkBlok",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "agRenderTotalen",
+   "expr": "allBlok",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "th",
+   "expr": "pendBadge",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "bewerkVoorraadRegel",
+   "expr": "eid",
+   "reden": "al geëscaped: variabele = esc(...)"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "_escAtt(l.url)",
+   "reden": "al geëscaped: _escAtt()"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "_escAtt(l.label||'open')",
+   "reden": "al geëscaped: _escAtt()"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "_escAtt(c.categorie)",
+   "reden": "al geëscaped: _escAtt()"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "_escAtt(c.bevinding).replace(/\\n/g,'<br>')",
+   "reden": "al geëscaped: _escAtt()"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "_escAtt(c.voorstel).replace(/\\n/g,'<br>')",
+   "reden": "al geëscaped: _escAtt()"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "links",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "_escAtt(c.id)",
+   "reden": "al geëscaped: _escAtt()"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "_escAtt(c.reactie).replace(/\\n/g,'<br>')",
+   "reden": "al geëscaped: _escAtt()"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "_escAtt(c.resultaat).replace(/\\n/g,'<br>')",
+   "reden": "al geëscaped: _escAtt()"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "statusBadge",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderAttentie",
+   "expr": "_escAtt(c.titel||'(geen titel)')",
+   "reden": "al geëscaped: _escAtt()"
+  },
+  {
+   "fn": "deel",
+   "expr": "extra",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "renderProjectDetail",
+   "expr": "nav",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "kb",
+   "expr": "x",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "kb",
+   "expr": "c.klantChip",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "kb",
+   "expr": "c.mbNrBlok",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "kb",
+   "expr": "stappen.join('')",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "mapInfo",
+   "expr": "mapInfo?(mapInfo.fout?`<span style=\"color:#c0392b\">${esc(mapInfo.fout)}</span>`:(mapInfo.pad?`${mapInfo.bestanden.length} bestanden · ${esc(",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "uf",
+   "expr": "tgTekst",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "uf",
+   "expr": "segs",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "lijn",
+   "expr": "html",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "lijn",
+   "expr": "lijn",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "_tlDetailHtml",
+   "expr": "rij||'<span class=\"dos-meta\">Niets gepland of gewerkt.</span>'",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "_tlDetailHtml",
+   "expr": "bl||ur?bl+ur:'<span class=\"dos-meta\">Niets gepland of gewerkt voor dit project.</span>'",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "sel",
+   "expr": "label",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "icoon",
+   "expr": "titel",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "icoon",
+   "expr": "bijl",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "dossierKoppelPop",
+   "expr": "acties",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "openKlant",
+   "expr": "locSel",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "kb",
+   "expr": "zicht.length?projSorteerNieuwst(zicht).map(kaart).join(''):'<div class=\"ov-act\" style=\"color:var(--text-faint)\">Geen projecten'+(verborgen?'",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "blok",
+   "expr": "inhoud",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "tabel",
+   "expr": "leeg",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "tabel",
+   "expr": "!info.mbId?'<p class=\"dos-leeg\">Geen Moneybird-contact bekend — facturen en offertes zijn niet op te halen.</p>' :!g?'<p class=\"dos-leeg\"><s",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "_pl",
+   "expr": "planLink",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "_pl",
+   "expr": "rows",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "projTaakTemplateKies",
+   "expr": "rows",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "cap",
+   "expr": "urenRijen",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "eur",
+   "expr": "tr",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "breedte",
+   "expr": "bron?(window.MTKoppelUI?'<span class=\"kb-mini\" title=\"Gekoppeld aan een taak\" aria-label=\"Gekoppeld aan een taak\">'+MTKoppelUI.SVG_DICHT+'</",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "breedte",
+   "expr": "ticks",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "breedte",
+   "expr": "rows",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "mapInfo",
+   "expr": "dossierKop",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "rij",
+   "expr": "dossierKop",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "_num",
+   "expr": "!heeftVoorraad ?`<span style=\"color:var(--orange);font-size:11px\">⚠ Altijd bestellen</span>` :voorraadOk ?`<span style=\"color:var(--green);f",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "_oplRenderLijst",
+   "expr": "badges",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "oplSelectProject",
+   "expr": "typ",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "oplSelectProject",
+   "expr": "rows",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "_oplRapportHtml",
+   "expr": "door",
+   "reden": "al geëscaped: variabele = esc(...)"
+  },
+  {
+   "fn": "_oplRapFooter",
+   "expr": "door",
+   "reden": "al geëscaped: variabele = esc(...)"
+  },
+  {
+   "fn": "_oplPdfPrintFallback",
+   "expr": "_OPL_PDF_CSS",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "_oplPdfPrintFallback",
+   "expr": "paper.outerHTML",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+  },
+  {
+   "fn": "rolOpt",
+   "expr": "vast?esc(u.rolNaam||u.role)+vastTxt:`<select aria-label=\"Rol van ${esc(u.naam||u.email||'')}\" onchange=\"beheerRol(${jsArg(u.oid)},this.value",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "auditR",
+   "expr": "inv",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "auditR",
+   "expr": "aanv",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "auditR",
+   "expr": "modusTekst",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "auditR",
+   "expr": "rijen||'<tr><td colspan=\"6\">Nog geen gebruikers.</td></tr>'",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "auditR",
+   "expr": "top",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "auditR",
+   "expr": "auditR||'<tr><td colspan=\"5\">Nog niets.</td></tr>'",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "rij",
+   "expr": "_ctlArg(p.code)",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "rij",
+   "expr": "klant",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "rij",
+   "expr": "projOfferteNr(p)?`<span class=\"code\">${esc(projOfferteNr(p))}</span>`:(app?'':intern?'<span class=\"dos-meta\">intern, geen offerte</span>':`<",
+   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
+  },
+  {
+   "fn": "wrij",
+   "expr": "a",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "wrij",
+   "expr": "knoppen",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "lrij",
+   "expr": "a",
+   "reden": "handler-argument dat al met _ctlArg()/jsArg() (JSON + HTML-escape) is gemaakt"
+  },
+  {
+   "fn": "lrij",
+   "expr": "knop",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "lrij",
+   "expr": "af",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "actLoadOnline",
+   "expr": "_esc(d.__err)",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "actLoadOnline",
+   "expr": "_esc((u.user||'').split('@')[0])",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "actLoadOnline",
+   "expr": "_esc(u.tab||'')",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "actLoadOnline",
+   "expr": "_esc(_actGeleden(u.sinds))",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "actLoadUsage",
+   "expr": "_esc(v)",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "actLoadUsage",
+   "expr": "_esc(l)",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "actLoadUsage",
+   "expr": "_esc(r.action)",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "actLoadUsage",
+   "expr": "_esc(r.event)",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "actLoadUsage",
+   "expr": "_esc((u.user||'').split('@')[0])",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "actLoadUsage",
+   "expr": "_esc(r.detail)",
+   "reden": "al geëscaped: _esc()"
+  },
+  {
+   "fn": "defaultsPaneel",
+   "expr": "rows",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "ncTogglHtml",
+   "expr": "rows",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "ncTogglHtml",
+   "expr": "keuze",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "ncTogglHtml",
+   "expr": "voorstel",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderNacalc",
+   "expr": "matBody",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderNacalc",
+   "expr": "uurBody",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderNacalc",
+   "expr": "kopHtml",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderNacalc",
+   "expr": "summary",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderNacalc",
+   "expr": "kpis",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderNacalc",
+   "expr": "matTabel",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "renderNacalc",
+   "expr": "uurTabel",
+   "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "verwerNCR",
+   "expr": "safeId",
+   "reden": "naam van een globale variabele in een handler; safeId bestaat nu alleen uit letters, cijfers en _"
+  }
+ ]
+}

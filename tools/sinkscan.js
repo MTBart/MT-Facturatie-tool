@@ -162,7 +162,8 @@ function fnVanRegel(regels, reg) {
 function letOpInGroep(tekst, isHtml, groep) {
   const t = tekst.replace(/\r\n/g, '\n'), regels = t.split('\n'), F = groep.heleBestand ? null : new Set(groep.functies);   // heleBestand: elke functie in het bestand telt mee
   const r = scanBestand(t, isHtml, { veiligeFns: groep.veiligeFns, fragmentFns: groep.fragmentFns });
-  return r.items.filter(i => i.klasse === 'let-op').map(i => Object.assign({ fn: fnVanRegel(regels, i.regel) }, i)).filter(i => !F || F.has(i.fn));
+  const uitgez = new Set(groep.uitgezonderd || []);   // functies van een eerdere groep in hetzelfde bestand
+  return r.items.filter(i => i.klasse === 'let-op').map(i => Object.assign({ fn: fnVanRegel(regels, i.regel) }, i)).filter(i => (!F || F.has(i.fn)) && !uitgez.has(i.fn));
 }
 // Dekt een houd-/overslaan-regel een gevonden ruwe interpolatie? Op functie + expressie (of het begin ervan, voor lange expressies) en eventueel context.
 const dekt = (e, i) => e.fn === i.fn && (e.expr !== undefined ? e.expr === i.expr : (e.exprBegin !== undefined && i.expr.startsWith(e.exprBegin))) && (!e.ctx || e.ctx === i.ctx);
