@@ -32,6 +32,7 @@
 <script src="mt-geld.js?v=2026-10-10b"></script>
 <script src="mt-koers.js?v=2026-10-10a"></script>
 <script src="mt-schulden.js?v=2026-10-10a"></script>
+<script src="mt-verhuis.js?v=2026-10-11a"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -1421,6 +1422,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   </div>
 
   <div id="tab-instellingen" class="tab-content">
+    <!-- F5: verhuisknop (alleen zichtbaar met de proefvlag mt_verhuis_proef tot het nieuwe domein gekoppeld is) -->
+    <div class="card" id="verhuis-kaart" style="display:none"><div class="card-title">Verhuizen naar het nieuwe adres</div><div id="verhuis-plek"></div></div>
     <div class="card" id="beheer-kaart" style="display:none">
       <div class="card-title">Beheer — gebruikers &amp; rollen</div>
       <div id="beheer-inhoud" style="font-size:13px">Laden…</div>
@@ -2597,6 +2600,15 @@ function _klantenZet(lijst){
   if(!Array.isArray(lijst)||!lijst.length) return false;
   KLANTEN=lijst; try{ localStorage.setItem(_KL_CACHE,JSON.stringify({klanten:lijst,t:Date.now()})); }catch(e){}
   return true;
+}
+// F5 verhuisknop: balk "verhuisd" (oud adres) en de kaart in Instellingen — alleen met de proefvlag (MTVerhuis.aan()).
+function verhuisZet(){
+  if(!window.MTVerhuis) return;
+  MTVerhuis.balk();
+  const k=document.getElementById('verhuis-kaart'); if(!k||!MTVerhuis.aan()) return;
+  k.style.display=''; MTVerhuis.css();
+  const p=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'pc';
+  MTVerhuis.paneel(document.getElementById('verhuis-plek'),{gebruiker:(typeof mtMijEmail==='function'&&mtMijEmail())||'',apparaat:'pc-'+p,toast:planToast});
 }
 async function laadKlantRegistry(){
   try{ const c=JSON.parse(localStorage.getItem(_KL_CACHE)||'null'); if(c&&Array.isArray(c.klanten)&&c.klanten.length) KLANTEN=c.klanten; }catch(e){}
@@ -12462,6 +12474,7 @@ async function toonApp(account) {
   mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
   // Deep-link uit de URL-hash honoreren (bv. een "apart venster" met #tab=inbox).
   try{ tbApplyHashTab(); }catch(e){}
+  verhuisZet();   // F5: alleen met de proefvlag zichtbaar
 }
 
 // ═══ ROLLEN (F1c): /me + verbergen (alleen modus 'afdwingen') + Beheer ═══

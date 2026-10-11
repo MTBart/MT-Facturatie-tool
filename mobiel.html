@@ -28,6 +28,7 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-fotostore.js?v=2026-07-31"></script>
+<script src="mt-verhuis.js?v=2026-10-11a"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -784,6 +785,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     <button class="header-info-btn" id="geldKnop" style="display:none" onclick="location.href='v2.html#tab=geld'" aria-label="Geld (geldtijdlijn)" title="Geld">€</button>
     <button class="header-info-btn notif-btn" onclick="openNotifs()" aria-label="Notificaties">🔔<span class="notif-badge" id="notifBadge" style="display:none">0</span></button>
     <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
+    <button class="user-avatar-btn" id="verhuisBtn" style="display:none" onclick="verhuisOpen()" title="Verhuizen naar het nieuwe adres" aria-label="Verhuizen naar het nieuwe adres">⇄</button>
     <button class="user-avatar-btn" id="userAvatarBtn" style="display:none" onclick="msLogout()" title="Uitloggen"></button>
   </div>
 </header>
@@ -2282,6 +2284,8 @@ async function toonApp(account) {
   const avatar = document.getElementById('userAvatarBtn');
   avatar.textContent = naam.charAt(0).toUpperCase();
   avatar.style.display = 'flex';
+  // F5 verhuisknop: balk "verhuisd" (oud adres) + knop alleen met de proefvlag
+  if (window.MTVerhuis) { MTVerhuis.balk(); if (MTVerhuis.aan()) document.getElementById('verhuisBtn').style.display = 'flex'; }
   document.getElementById('demoBadge').style.display = 'none';
   // F1c: rol ophalen (verbergen alleen in modus 'afdwingen'; de worker beslist)
   rolLaadMobiel().then(() => { if (window.MTToggl) MTToggl.laad(WORKER); aanwezigLaadMobiel(); });
@@ -7123,6 +7127,10 @@ async function vcUpload(entry) {
    TOAST
    ===================================================================== */
 let toastTimeout = null;
+function verhuisOpen() {
+  if (!window.MTVerhuis) return;
+  MTVerhuis.overlay({ gebruiker: (_msAccount && _msAccount.username) || '', apparaat: /iphone|ipad/i.test(navigator.userAgent) ? 'iphone' : /android/i.test(navigator.userAgent) ? 'android' : 'mobiel', toast: showToast });
+}
 function showToast(msg) {
   const t = document.getElementById("toast");
   t.textContent = msg;
