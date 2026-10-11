@@ -137,4 +137,5 @@ PROXY_MODUS = "log"
 # F6: AI-limieten per gebruiker (tokens per dag, verzoeken per minuut, gelijktijdig, plus een dagplafond voor de hele tool). Zonder deze
 # variabele geldt "afdwingen" (429 met uitleg); "log" telt en logt alleen wat geweigerd zou worden; "uit" doet niets. De waarden zelf
 # staan in worker.js (AI_LIMIET_STD) en zijn door de eigenaar aan te passen via POST /beheer/ai-limieten (KV instelling:ai_limieten).
-# AI_LIMIET_MODUS = "afdwingen"
+# Eerste week op "log" (tot ±18-10), zodat niemand plotseling geblokkeerd wordt en /beheer/ai laat zien wat er geweigerd zou worden; daarna "afdwingen" (of de regel weghalen).
+AI_LIMIET_MODUS = "log"

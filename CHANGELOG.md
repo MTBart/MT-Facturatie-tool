@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F6: AI-limieten in de worker (één serversleutel, limiet per gebruiker, logboek zonder inhoud)
+- Commit: `a4b31cb` | Auteur: Bart Witte
+
 ## 2026-10-11 — Release v2.13.1: Geld op je telefoon, geen leveranciersposten meer als ontvangst, offertenummer automatisch uit Moneybird; backup = v2.13.0
 - Commit: `09e1031` | Auteur: Bart Witte
 
