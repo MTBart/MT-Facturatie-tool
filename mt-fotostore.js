@@ -20,8 +20,16 @@
 (function (global) {
   "use strict";
 
+  // Eén gedeelde schemadefinitie voor de lokale databases van de app. Ook mt-verhuis.js (verhuisknop) en mobiel.html
+  // (losse opname, 'mt-app') gebruiken deze: de verhuizer verhoogt NOOIT een databaseversie en maakt alleen een
+  // ontbrekende database aan met precies dit schema.
+  const SCHEMAS = [
+    { naam: "mt-rapporten", versie: 1, stores: ["fotos", "drafts"] },
+    { naam: "mt-app", versie: 1, stores: ["drafts"] },
+  ];
+  const schema = naam => SCHEMAS.find(s => s.naam === naam) || null;
   const DB_NAME = "mt-rapporten";
-  const DB_VERSION = 1;
+  const DB_VERSION = schema(DB_NAME).versie;
   let _db = null;
 
   function open() {
@@ -30,8 +38,7 @@
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
         const db = req.result;
-        if (!db.objectStoreNames.contains("fotos")) db.createObjectStore("fotos");
-        if (!db.objectStoreNames.contains("drafts")) db.createObjectStore("drafts");
+        for (const st of schema(DB_NAME).stores) if (!db.objectStoreNames.contains(st)) db.createObjectStore(st);
       };
       req.onsuccess = () => { _db = req.result; _db.onclose = () => { _db = null; }; resolve(_db); };
       req.onerror = () => reject(req.error);
@@ -55,6 +62,8 @@
 
   const MTFotoStore = {
     newId,
+    SCHEMAS,
+    schema,
 
     /* ── foto's ── */
     // rec: {id, rapportId, hoofdstukId, naam, mime, opmerking, soort, ts, status, blob, bewerktBlob}

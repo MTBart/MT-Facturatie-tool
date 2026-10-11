@@ -27,8 +27,8 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-fotostore.js?v=2026-07-31"></script>
-<script src="mt-verhuis.js?v=2026-10-11a"></script>
+<script src="mt-fotostore.js?v=2026-10-11a"></script>
+<script src="mt-verhuis.js?v=2026-10-11b"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2285,7 +2285,7 @@ async function toonApp(account) {
   avatar.textContent = naam.charAt(0).toUpperCase();
   avatar.style.display = 'flex';
   // F5 verhuisknop: balk "verhuisd" (oud adres) + knop alleen met de proefvlag
-  if (window.MTVerhuis) { MTVerhuis.balk(); if (MTVerhuis.aan()) document.getElementById('verhuisBtn').style.display = 'flex'; }
+  if (window.MTVerhuis) { MTVerhuis.zetContext(verhuisCtx()); MTVerhuis.balk(); if (MTVerhuis.aan()) document.getElementById('verhuisBtn').style.display = 'flex'; }
   document.getElementById('demoBadge').style.display = 'none';
   // F1c: rol ophalen (verbergen alleen in modus 'afdwingen'; de worker beslist)
   rolLaadMobiel().then(() => { if (window.MTToggl) MTToggl.laad(WORKER); aanwezigLaadMobiel(); });
@@ -4333,11 +4333,13 @@ function _voIdb() {
   if (_VODB._db) return Promise.resolve(_VODB._db);
   return new Promise((res, rej) => {
     let r;
-    try { r = indexedDB.open(_VODB.name, 1); }
+    // Schema (versie + stores) uit mt-fotostore.js: één definitie, ook voor de verhuisknop.
+    const sch = (window.MTFotoStore && MTFotoStore.schema(_VODB.name)) || { versie: 1, stores: [_VODB.store] };
+    try { r = indexedDB.open(_VODB.name, sch.versie); }
     catch (e) { rej(e); return; }
     r.onupgradeneeded = () => {
       const db = r.result;
-      if (!db.objectStoreNames.contains(_VODB.store)) db.createObjectStore(_VODB.store);
+      for (const st of sch.stores) if (!db.objectStoreNames.contains(st)) db.createObjectStore(st);
     };
     r.onsuccess = () => { _VODB._db = r.result; res(r.result); };
     r.onerror = () => rej(r.error);
@@ -7129,9 +7131,13 @@ async function vcUpload(entry) {
 let toastTimeout = null;
 // F7 r2: argument voor een inline handler — JSON-letterlijke (JS-veilig), daarna HTML-geëscapet (attribuut-veilig).
 function jsArg(s) { return escHtml(JSON.stringify(String(s == null ? '' : s))); }
+function verhuisCtx() {
+  return { gebruiker: (_msAccount && _msAccount.username) || '', apparaat: /iphone|ipad/i.test(navigator.userAgent) ? 'iphone' : /android/i.test(navigator.userAgent) ? 'android' : 'mobiel', mobiel: true, toast: showToast };
+}
 function verhuisOpen() {
   if (!window.MTVerhuis) return;
-  MTVerhuis.overlay({ gebruiker: (_msAccount && _msAccount.username) || '', apparaat: /iphone|ipad/i.test(navigator.userAgent) ? 'iphone' : /android/i.test(navigator.userAgent) ? 'android' : 'mobiel', toast: showToast });
+  MTVerhuis.zetContext(verhuisCtx());
+  MTVerhuis.overlay(verhuisCtx());
 }
 function showToast(msg) {
   const t = document.getElementById("toast");

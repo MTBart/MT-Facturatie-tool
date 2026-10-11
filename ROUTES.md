@@ -283,6 +283,22 @@ Per-user mapping (`userKey()`): e-mailprefix uit het MSAL-token →
 | `mt_auditlog.json` | cockpit | cockpit | admin-audit |
 | `mt_klant_codes` (SP-synced store) | cockpit | cockpit | zelflerende KLANT-code-overrides |
 
+## Verhuisknop (`mt-verhuis.js`, F5 stap 2) — uit tot het domein gekoppeld is
+
+Zet de lokale gegevens van één apparaat over van het oude naar het nieuwe adres (browseropslag is per adres). Alleen aan met de
+proefvlag `localStorage.mt_verhuis_proef = '1'`. Het oude adres wordt nooit leeggemaakt.
+- **Pakket:** een expliciete lijst localStorage-sleutels (`V.SLEUTELS`/`V.PREFIXEN`; geen tokens, caches of timers; een sleutel met een
+  JWT of kale base64-waarde gaat nooit mee) + IndexedDB `mt-rapporten` (fotos, drafts) en `mt-app` (drafts), checksums per onderdeel en per foto.
+  Een nieuwe localStorage-sleutel in de code moet in die lijst of bewust in de uitsluitingen van `b-verhuis-harness.js` (de test faalt anders).
+- **SharePoint:** `MT-Bedrijfstool/_verhuizing/<Entra oid>/<apparaat>-<tijd>-<uuid>/` — eerst `blobs/*`, als laatste `pakket.json`
+  (`conflictBehavior: fail`; dat bestand = "compleet"). Grote bestanden via een uploadsessie in brokken van 5 MiB, elk brok 3 pogingen met `nextExpectedRanges`.
+  De lijst op het nieuwe adres toont alleen pakketten met een manifest waarvan alle foto's bestaan en dat bij de ingelogde oid hoort.
+- **Importeren:** alleen een pakket van dezelfde oid; alles of niets (journaal van wat deze run toevoegde, bij een fout precies dat terug);
+  IndexedDB `add()` in één transactie per store (ConstraintError = "al aanwezig"), localStorage met hercontrole en een importlock (`mt_verhuis_lock`, 10 min).
+- **Schema:** `MTFotoStore.SCHEMAS` (mt-fotostore.js) is de ene definitie; de verhuizer verhoogt nooit een databaseversie en stopt met een melding als er een store ontbreekt.
+- **Grootte:** het paneel toont de totale grootte; het download-vangnet is op een telefoon uit boven 150 MB.
+- **Oud adres na verhuizen:** alleen-lezen-balk met de eerlijke tekst en de knop "Nieuw pakket maken".
+
 ## Projecten & toewijzing (sinds 12-6)
 
 App-projectenlijst = **admin-route** (`toggl_admin_projects`, alle projecten,

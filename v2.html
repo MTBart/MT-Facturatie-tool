@@ -32,7 +32,8 @@
 <script src="mt-geld.js?v=2026-10-11a"></script>
 <script src="mt-koers.js?v=2026-10-11a"></script>
 <script src="mt-schulden.js?v=2026-10-10a"></script>
-<script src="mt-verhuis.js?v=2026-10-11a"></script>
+<script src="mt-fotostore.js?v=2026-10-11a"></script>
+<script src="mt-verhuis.js?v=2026-10-11b"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -2604,11 +2605,13 @@ function _klantenZet(lijst){
 // F5 verhuisknop: balk "verhuisd" (oud adres) en de kaart in Instellingen — alleen met de proefvlag (MTVerhuis.aan()).
 function verhuisZet(){
   if(!window.MTVerhuis) return;
-  MTVerhuis.balk();
+  const p=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'pc';
+  // oid komt uit het token (MTVerhuis.oidVan); de context hoort ook bij de knop "Nieuw pakket maken" in de balk.
+  const ctx={gebruiker:(typeof mtMijEmail==='function'&&mtMijEmail())||'',apparaat:'pc-'+p,mobiel:false,toast:planToast};
+  MTVerhuis.zetContext(ctx); MTVerhuis.balk();
   const k=document.getElementById('verhuis-kaart'); if(!k||!MTVerhuis.aan()) return;
   k.style.display=''; MTVerhuis.css();
-  const p=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'pc';
-  MTVerhuis.paneel(document.getElementById('verhuis-plek'),{gebruiker:(typeof mtMijEmail==='function'&&mtMijEmail())||'',apparaat:'pc-'+p,toast:planToast});
+  MTVerhuis.paneel(document.getElementById('verhuis-plek'),ctx);
 }
 async function laadKlantRegistry(){
   let metCache=false;
