@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F5 stap 2: Codex-bevindingen B1-B8 (verhuisknop: alles of niets, per gebruiker, geen versie-bump)
+- Commit: `859108b` | Auteur: Bart Witte
+
 ## 2026-10-11 — F5 stap 1: CHANGELOG.md zonder klantnamen (hook neutraliseert via tools/changelog.js)
 - Commit: `56ca7f2` | Auteur: Bart Witte
 

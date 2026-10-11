@@ -1335,7 +1335,7 @@
       // wijkt dat af van wat je zag, dan eerst nogmaals akkoord vragen
       let vers = C.bereken(C.lees(), items);
       if (vers.tekst !== plan.tekst) {
-        const ja2 = await vraag({ title: 'Contacten bijwerken — intussen is er iets veranderd', html: planHtml(vers, info), message: vers.tekst, okLabel: 'Opslaan', cancelLabel: 'Annuleren' });
+        const ja2 = await vraag({ title: 'Contacten bijwerken — intussen is er iets veranderd', html: vertrouwd(planHtml(vers, info)), message: vers.tekst, okLabel: 'Opslaan', cancelLabel: 'Annuleren' });
         if (!ja2) { toast('Niets opgeslagen'); return; }
         vers = C.bereken(C.lees(), items);
       }

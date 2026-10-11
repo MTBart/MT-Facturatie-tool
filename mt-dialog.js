@@ -36,8 +36,11 @@
   if (!root || !root.document) return;
   const doc = root.document;
 
-  // Merk voor bewust vertrouwde HTML (niet na te maken met JSON of gekopieerde data).
-  const MERK = typeof Symbol === 'function' ? Symbol('mtDialog.vertrouwd') : '__mtDialogVertrouwd';
+  // Registratie van bewust vertrouwde HTML: alleen objecten die vertrouwdeHtml() zelf maakte zitten in deze (private) WeakSet.
+  // Geen eigenschap op het object, dus niet na te maken met JSON, gekopieerde data of een voorspelbare sleutel. Zonder WeakSet
+  // (zeer oude browser) is er niets vertrouwd: alles wordt dan als tekst getoond (fail closed).
+  const VERTROUWD = typeof WeakSet === 'function' ? new WeakSet() : null;
+  const VERTROUWD_PROTO = { toString() { return this.html; } };   // fail closed: zonder registratie wordt de markup als tekst getoond
   // esc — leun op de canonieke escaper uit mt-core; val faalveilig terug.
   const esc = typeof root.esc === 'function'
     ? root.esc
@@ -105,7 +108,7 @@
       dlg.className = 'mt-dialog';
 
       // F7 r2: html alleen als bewust gemerkte uitzondering; een kale string wordt tekst (geen HTML-injectie via de makkelijke weg).
-      const vertrouwd = opts.html && typeof opts.html === 'object' && opts.html[MERK] === true;
+      const vertrouwd = !!(VERTROUWD && opts.html && typeof opts.html === 'object' && VERTROUWD.has(opts.html));
       if (opts.html != null && !vertrouwd) { try { console.warn('mtDialog: html zonder mtDialog.vertrouwdeHtml() wordt als tekst getoond'); } catch (e) {} }
       const bodyHtml = vertrouwd ? String(opts.html.html)
         : opts.html != null ? textToHtml(String(opts.html))
@@ -191,7 +194,7 @@
     choose: (opts) => open('choose', opts),
     alert: (opts) => open('alert', opts),
     // Bewuste uitzondering: alleen HTML die de caller zelf met esc() rond elke waarde heeft opgebouwd.
-    vertrouwdeHtml: (html) => { const o = { html: String(html == null ? '' : html) }; o[MERK] = true; return o; }
+    vertrouwdeHtml: (html) => { const o = Object.create(VERTROUWD_PROTO); o.html = String(html == null ? '' : html); if (VERTROUWD) VERTROUWD.add(o); return o; }
   };
 
 })(typeof window !== 'undefined' ? window : null);

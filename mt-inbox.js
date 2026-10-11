@@ -1196,7 +1196,7 @@ async function inboxBijlagenDialoog(mailId,code){
     const rij=(it,i)=>`<tr>
       <td style="padding:4px 6px"><input type="checkbox" ${it.aan?'checked':''} onchange="_ibBijl.items[${i}].aan=this.checked"></td>
       <td style="padding:4px 6px;font-size:12px;word-break:break-all">${ibEsc(it.naam)} <span style="color:var(--text-faint)">(${Math.max(1,Math.round(it.grootte/1024))} kB)</span>
-        ${it.al?`<div style="font-size:10px">${window.MTKoppelUI?MTKoppelUI.badge({status:'gekoppeld',klein:true,label:it.al.sub,titel:'Al opgeslagen in de projectmap ('+it.al.sub+')'}):'✓ al opgeslagen in '+ibEsc(it.al.sub)}${it.al.webUrl?` · <a href="${ibEsc(it.al.webUrl)}" target="_blank">openen</a>`:''}</div>`:''}</td>
+        ${it.al?`<div style="font-size:10px">${window.MTKoppelUI?MTKoppelUI.badge({status:'gekoppeld',klein:true,label:it.al.sub,titel:'Al opgeslagen in de projectmap ('+it.al.sub+')'}):'✓ al opgeslagen in '+ibEsc(it.al.sub)}${veiligeUrl(it.al.webUrl,{hosts:['sharepoint.com','office.com','office365.com','microsoft.com']})?` · <a href="${ibEsc(veiligeUrl(it.al.webUrl,{hosts:['sharepoint.com','office.com','office365.com','microsoft.com']}))}" target="_blank" rel="noopener noreferrer">openen</a>`:''}</div>`:''}</td>
       <td style="padding:4px 6px"><select onchange="_ibBijl.items[${i}].sub=this.value" style="font-size:12px">${IB_SUBMAPPEN.map(s=>`<option${s===it.sub?' selected':''}>${s}</option>`).join('')}</select></td>
     </tr>`;
     const oud=document.getElementById('bijl-overlay'); if(oud) oud.remove();

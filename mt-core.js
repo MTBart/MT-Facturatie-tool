@@ -57,12 +57,14 @@
   // jsLit: JS-letterlijke (string) voor handler-tekst die de ontvanger zelf nog als attribuut escapet.
   function jsLit(s) { return JSON.stringify(String(s == null ? '' : s)); }
   // html-tag: interpolaties standaard als tekst; vertrouwde fragmenten alleen via veiligeHtml() of html`…`.
-  const VEILIG = typeof Symbol === 'function' ? Symbol('mtVeiligeHtml') : '__mtVeiligeHtml';
-  function veiligeHtml(s) { const o = { html: String(s == null ? '' : s), toString() { return this.html; } }; o[VEILIG] = true; return o; }
+  // Registratie in een private WeakSet (geen eigenschap op het object, dus niet na te maken met JSON of een voorspelbare sleutel).
+  // Zonder WeakSet is niets vertrouwd: elke interpolatie wordt dan als tekst geëscapet (fail closed).
+  const VEILIG = typeof WeakSet === 'function' ? new WeakSet() : null;
+  function veiligeHtml(s) { const o = { html: String(s == null ? '' : s), toString() { return this.html; } }; if (VEILIG) VEILIG.add(o); return o; }
   function _render(v) {
     if (v == null || v === false) return '';
     if (Array.isArray(v)) return v.map(_render).join('');
-    if (typeof v === 'object' && v[VEILIG] === true) return v.html;
+    if (VEILIG && typeof v === 'object' && VEILIG.has(v)) return v.html;
     return esc(v);
   }
   function html(delen, ...waarden) {

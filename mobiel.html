@@ -19,11 +19,11 @@
 <!-- Gedeelde kernlaag (esc, _encPath, authHeader, MSAL-tokenhelpers, _SP-synclaag) —
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
-<script src="mt-core.js?v=2026-10-11a"></script>
+<script src="mt-core.js?v=2026-10-11b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
-<script src="mt-dialog.js?v=2026-10-11a"></script>
+<script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-11a"></script>
-<script src="mt-contacten.js?v=2026-10-11a"></script>
+<script src="mt-contacten.js?v=2026-10-11b"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
@@ -2913,7 +2913,7 @@ async function saveTimerEdit() {
 function openManualEntry() {
   const sel = document.getElementById("manProject");
   sel.innerHTML = `<option value="">— kies project —</option>` +
-    allProjects().map(p => `<option value="${p.code}" ${activeProject && p.code===activeProject.code ? "selected" : ""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("");
+    allProjects().map(p => `<option value="${escHtml(p.code)}" ${activeProject && p.code===activeProject.code ? "selected" : ""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("");
   document.getElementById("manDesc").value = "";
   document.getElementById("manDate").value = _isoDate(new Date());
   // standaard: het afgelopen uur, op kwartieren afgerond
@@ -3272,7 +3272,7 @@ function selectProject(id) {
   updateTimerUI();
   updateSpMockPath();
   // scroll picker item into view
-  const el = document.querySelector(`.picker-item[data-id="${id}"]`);
+  const el = document.querySelector(`.picker-item[data-id="${CSS.escape(String(id))}"]`);
   if (el) el.scrollIntoView({block:"nearest"});
 }
 
@@ -3325,7 +3325,7 @@ function renderProjectCards() {
   const dl = document.getElementById("projSuggest");
   if (dl) {
     dl.innerHTML = lijst.map(p =>
-      `<option value="${(p.code || "").replace(/"/g,"&quot;")}">${(p.name || "").replace(/</g,"&lt;")}</option>`
+      `<option value="${escHtml(p.code || "")}">${escHtml(p.name || "")}</option>`
     ).join("");
   }
   if (projectFilter) {
@@ -3350,7 +3350,7 @@ function renderProjectCards() {
         <span class="badge ${cls}">${label}</span>
       </div>
       ${(p.pending || p.spPending) ? `<div style="font-size:11px;color:var(--gold,#d6a93a);margin-top:2px" title="Wordt automatisch opnieuw geprobeerd">⏳ ${p.spPending ? 'nog niet gedeeld met het team' : 'Toggl-koppeling volgt'} — sync loopt automatisch</div>` : ''}
-      <div class="project-card-addr">📍 ${addrFor(p) || "– adres ontbreekt"}</div>
+      <div class="project-card-addr">📍 ${addrFor(p) ? escHtml(addrFor(p)) : "– adres ontbreekt"}</div>
       <div class="project-card-footer">
         <div class="project-last">🕐 ${p.lastActivity}</div>
         ${p.assigned ? '<span class="badge badge-ok">Toegewezen</span>' : ''}
@@ -3931,7 +3931,7 @@ function closeBlokSheet() {
 function fillBlokProjectSelect(selectedCode) {
   const sel = document.getElementById("blokProject");
   sel.innerHTML = `<option value="">— kies project —</option>` +
-    allProjects().map(p => `<option value="${p.code}" ${p.code===selectedCode?"selected":""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("") +
+    allProjects().map(p => `<option value="${escHtml(p.code)}" ${p.code===selectedCode?"selected":""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("") +
     `<option value="__new">＋ Nieuw project…</option>`;
 }
 
@@ -6416,7 +6416,7 @@ function updateNpPreview() {
 function openNewProject() {
   // datalist vullen met bestaande klantcodes (CN/HWC/INT/MOS/STY + eigen)
   const codes = [...new Set(allProjects().map(p => p.code.split("-")[0]))].sort();
-  document.getElementById("klantCodes").innerHTML = codes.map(c => `<option value="${c}">`).join("");
+  document.getElementById("klantCodes").innerHTML = codes.map(c => `<option value="${escHtml(c)}">`).join("");
   ["npName","npKlant","npLoc","npProd"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("npMaatwerk").checked = false;
   updateNpPreview();
