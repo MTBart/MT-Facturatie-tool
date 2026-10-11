@@ -113,13 +113,16 @@ Getoond wordt alleen titel, klant, datum en soort; openen gebeurt in Moneybird/S
   opnieuw geprobeerd (een 403 op de eigen postbus is wel een fout). Alleen onderwerp, afzender, datum en soort worden getoond (`$select` zonder
   body); dezelfde mail in beide postbussen telt één keer. Klik: is de mail al aan een project gekoppeld (`MTKoppel.mailProjecten`) dan opent het dossier
   (`#projecten/<CODE>`, sectie dossier), anders de webLink in Outlook (nieuw tabblad, hosts office.com/office365.com/outlook.com/microsoft.com).
-  429/Retry-After en afbreken zoals bij de andere bronnen. De app (mobiel) heeft geen Mail-scope en dus geen mailgroep.
+  De zoekfrase is voorspelbaar gemaakt (`kqlVeilig`): `"`, `\`, `:` en haakjes weg, alles kleine letters (KQL-operatoren werken alleen in hoofdletters),
+  hooguit 100 tekens; "from:naam OR to:klant" is dus gewoon "from naam or to klant". Een **429 geldt per postbus**: alleen die postbus wordt tot het Retry-After-moment
+  overgeslagen; de andere levert gewoon en de groep meldt "info@ even niet beschikbaar" (zo ook bij een serverfout op één postbus). Zijn alle postbussen geblokkeerd,
+  dan is het een limiet met de langste resterende wachttijd. Afbreken (AbortController) en debounce zoals bij de andere bronnen. De app (mobiel) heeft geen Mail-scope en dus geen mailgroep.
 - **Moneybird:** worker-route `GET /zoek/moneybird?q=&max=` (alleen lezen). Het recht `moneybird` geldt ALTIJD, ook in ROLLEN_MODUS=log/uit:
   geen rol of geen recht = 403. De route leest uitsluitend een compacte zoekindex in KV (`zoek:mb:index:v1`: nummer, referentie, contactnaam,
   datum; nooit bedragen) van dit en vorig jaar (`period:this_year` en `period:prev_year`; `last_year` bestaat niet). Ontbreekt de index of is hij
   ouder dan 15 min (onvolledig: 2 min), dan **start** het verzoek de opbouw en antwoordt meteen met `opbouwen` of de oude index (`verouderd:true`).
   **De opbouw is hervatbaar en atomair:** de Durable Object `MT_ZOEKINDEX` (`MtZoekIndex`, migratie v5) verwerkt per alarm-run hooguit 8 pagina's /
-  20 s, bewaart de cursor (lijst, pagina) en de ruwe pagina's in zijn eigen opslag en plant het volgende alarm; een gestorven isolate of een
+  15 s (een AbortController breekt elke Moneybird-fetch op die deadline af: een hangende fetch kan de run niet blokkeren), bewaart de cursor (lijst, pagina) en de ruwe pagina's in zijn eigen opslag en plant het volgende alarm; een gestorven isolate of een
   afgebroken run hervat bij de cursor (geen dubbele pagina's). Tijdelijke fouten (netwerk, 5xx) worden per pagina drie keer geprobeerd, een 4xx
   niet; elke overgeslagen lijst maakt de index onvolledig. Pas na de laatste pagina gaat de index naar KV: `compleet:true` alleen zonder enige
   waarschuwing, en een complete index wordt alleen door een complete vervangen (anders blijft hij staan en volgt 120 s pauze). Een nieuwe start

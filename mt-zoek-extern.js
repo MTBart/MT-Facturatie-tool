@@ -55,53 +55,68 @@
   // Toegang tot info@ wordt niet vooraf aangenomen: een 403/404 van die postbus betekent "geen toegang" en wordt stil overgeslagen (en niet
   // opnieuw geprobeerd in deze sessie); een 403 op de eigen postbus is wél een fout. Graph geeft geen bodytekst terug: alleen onderwerp,
   // afzender, datum en de webLink; de inhoud staat pas na openen in Outlook.
+  // Zoekfrase voor Graph $search (KQL): operatoren en velden worden onschadelijk gemaakt, zodat elke invoer een gewone woordenzoekopdracht is:
+  // aanhalingstekens, backslash, dubbele punt en haakjes weg, alles kleine letters (AND/OR/NOT werken alleen in hoofdletters), max. 100 tekens.
+  // "from:naam OR to:klant" wordt dus "from naam or to klant".
+  const kqlVeilig = q => String(q == null ? '' : q).toLowerCase().replace(/["\\:()]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100).trim();
   function bronMail(o) {
     const SEL = 'id,internetMessageId,conversationId,subject,from,receivedDateTime,webLink';
-    const bussen = [{ id: 'me', label: '', base: 'https://graph.microsoft.com/v1.0/me', mbx: 'me' }];
-    if (o.infoAdres) bussen.push({ id: 'info', label: 'info@', base: 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent(o.infoAdres), mbx: String(o.infoAdres).toLowerCase(), optioneel: true });
-    const geenToegang = new Set();
+    const bussen = [{ id: 'me', label: 'je eigen postbus', base: 'https://graph.microsoft.com/v1.0/me', mbx: 'me', tag: '' }];
+    if (o.infoAdres) bussen.push({ id: 'info', label: 'info@', base: 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent(o.infoAdres), mbx: String(o.infoAdres).toLowerCase(), optioneel: true, tag: 'info@' });
+    const geenToegang = new Set(), blokTot = {};   // blokTot: per postbus het tijdstip (ms) tot wanneer die na een 429 wordt overgeslagen
+    const nuMs = () => (o.nu ? o.nu() : Date.now());
     return {
-      soort: 'mail', label: 'E-mail', geenToegang,
+      soort: 'mail', label: 'E-mail', geenToegang, blokTot,
       async haal(q, signal) {
         const token = await o.token();
         if (!token) throw new Error('E-mail: niet ingelogd');
-        const zoek = String(q).replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim();   // aanhalingstekens/backslash weg: één zoekfrase
+        const zoek = kqlVeilig(q);
+        if (!zoek) return { items: [], totaal: 0 };
         const een = async b => {
           const r = await o.fetch(b.base + '/messages?$search=' + encodeURIComponent('"' + zoek + '"') + '&$top=10&$select=' + SEL,
             { signal, headers: { Authorization: 'Bearer ' + token, Prefer: 'IdType="ImmutableId"' } });
-          if (r.status === 429) throw limietFout(retryAfterVan(r, o.nu && o.nu()));
-          if (r.status === 403 || r.status === 404) { const e = new Error('E-mail: geen toegang tot ' + (b.label || 'je postbus')); e.geenToegang = true; throw e; }
+          if (r.status === 429) { const ra = retryAfterVan(r, nuMs()) || 30; blokTot[b.id] = nuMs() + ra * 1000; throw limietFout(ra); }
+          if (r.status === 403 || r.status === 404) { const e = new Error('E-mail: geen toegang tot ' + b.label); e.geenToegang = true; throw e; }
           if (!r.ok) throw new Error('E-mail: HTTP ' + r.status);
           const j = await r.json();
           return (j && Array.isArray(j.value) ? j.value : []).map(m => Object.assign({ _bus: b }, m));
         };
-        const actief = bussen.filter(b => !geenToegang.has(b.id));
-        const uitkomsten = await Promise.allSettled(actief.map(een));
-        const goed = [], fouten = [];
-        uitkomsten.forEach((u, i) => {
-          if (u.status === 'fulfilled') goed.push(...u.value);
-          else if (u.reason && u.reason.geenToegang && actief[i].optioneel) geenToegang.add(actief[i].id);   // geen recht op info@: stil overslaan
-          else fouten.push(u.reason);
-        });
-        if (!goed.length && fouten.length) {
-          const lim = fouten.filter(e => e && e.limiet).sort((a, b) => b.retryAfter - a.retryAfter)[0];
-          if (lim) throw lim;
+        const nu = nuMs();
+        const beschikbaar = bussen.filter(b => !geenToegang.has(b.id));
+        const geblokt = beschikbaar.filter(b => (blokTot[b.id] || 0) > nu), aanvragen = beschikbaar.filter(b => !((blokTot[b.id] || 0) > nu));
+        const notities = geblokt.map(b => b.label);
+        const goed = []; const fouten = []; let gelukt = 0;
+        if (aanvragen.length) {
+          const uitkomsten = await Promise.allSettled(aanvragen.map(een));
+          uitkomsten.forEach((u, i) => {
+            if (u.status === 'fulfilled') { gelukt++; goed.push(...u.value); }
+            else if (u.reason && u.reason.geenToegang && aanvragen[i].optioneel) geenToegang.add(aanvragen[i].id);   // geen recht op info@: stil overslaan
+            else { fouten.push(u.reason); notities.push(aanvragen[i].label); }
+          });
+        }
+        if (!gelukt) {
+          // geen enkele postbus leverde iets: de langste wachttijd (ook die van al geblokkeerde postbussen) of de eerste fout
+          const rest = geblokt.map(b => Math.ceil((blokTot[b.id] - nu) / 1000));
+          const lim = fouten.filter(e => e && e.limiet).map(e => e.retryAfter).concat(rest).sort((a, c) => c - a)[0];
+          if (lim) throw limietFout(lim);
           if (signal && signal.aborted) { const e = new Error('afgebroken'); e.name = 'AbortError'; throw e; }
-          throw fouten[0];
+          if (fouten.length) throw fouten[0];
+          return { items: [], totaal: 0 };
         }
         const gezien = new Set(), uit = [];
-        goed.sort((a, b) => tekst(b.receivedDateTime).localeCompare(tekst(a.receivedDateTime))).forEach(m => {
+        goed.sort((a, c) => tekst(c.receivedDateTime).localeCompare(tekst(a.receivedDateTime))).forEach(m => {
           const sl = m.internetMessageId || m.id; if (!sl || gezien.has(sl)) return; gezien.add(sl);
           const van = m.from && m.from.emailAddress ? (m.from.emailAddress.name || m.from.emailAddress.address || '') : '';
           const msg = { id: tekst(m.id), internetMessageId: tekst(m.internetMessageId), conversationId: tekst(m.conversationId), subject: tekst(m.subject), mbx: m._bus.mbx, idType: 'immutable' };
           let codes = []; try { codes = o.gekoppeld ? o.gekoppeld(msg) || [] : []; } catch (e) { codes = []; }
           uit.push({
             soort: 'mail', id: tekst(m.internetMessageId || m.id) + '|' + m._bus.id, titel: tekst(m.subject) || '(geen onderwerp)',
-            sub: [tekst(van), nlDatum(m.receivedDateTime), m._bus.label].filter(Boolean).join(' · '), tag: codes.length ? 'mail · dossier' : 'mail',
+            sub: [tekst(van), nlDatum(m.receivedDateTime), m._bus.tag].filter(Boolean).join(' · '), tag: codes.length ? 'mail · dossier' : 'mail',
             data: { url: tekst(m.webLink), msg }
           });
         });
-        return { items: uit.slice(0, 10), totaal: uit.length };
+        // Deelresultaat: een postbus die even niet kon (429 of fout) wordt gemeld; de andere levert gewoon.
+        return { items: uit.slice(0, 10), totaal: uit.length, notitie: notities.length ? notities.join(' en ') + ' even niet beschikbaar' : '' };
       }
     };
   }
@@ -163,11 +178,11 @@
     const nu = o.nu || (() => Date.now()), zetT = o.setTimeout || root.setTimeout.bind(root), wisT = o.clearTimeout || root.clearTimeout.bind(root);
     const AC = o.AbortController || root.AbortController;
     const staat = {}, regels = {};
-    (o.bronnen || []).forEach(b => { staat[b.soort] = { status: 'idle', items: [], totaal: 0, melding: '', retryAfter: 0 }; regels[b.soort] = { ctl: null, blokTot: 0, poging: 0, retryT: null }; });
+    (o.bronnen || []).forEach(b => { staat[b.soort] = { status: 'idle', items: [], totaal: 0, melding: '', notitie: '', retryAfter: 0 }; regels[b.soort] = { ctl: null, blokTot: 0, poging: 0, retryT: null }; });
     let timer = null, ronde = 0, laatsteQ = '';
     const meld = () => { try { if (o.onWijziging) o.onWijziging(); } catch (e) {} };
     const mag = soort => typeof o.mag !== 'function' || !!o.mag(soort);
-    const zet = (soort, v) => { Object.assign(staat[soort], { items: [], totaal: 0, melding: '', retryAfter: 0 }, v); };
+    const zet = (soort, v) => { Object.assign(staat[soort], { items: [], totaal: 0, melding: '', retryAfter: 0, notitie: '' }, v); };
 
     function stop() {
       if (timer) { wisT(timer); timer = null; }
@@ -186,8 +201,8 @@
           zet(soort, { status: 'laden', melding: b.label + ' wordt voor het eerst ingelezen…' });
           if (r.poging++ < 3) r.retryT = zetT(() => { r.retryT = null; if (mijn === ronde) ronde1(b, q, mijn); }, Math.max(1, res.retryAfter || 5) * 1000);
           else zet(soort, { status: 'fout', melding: b.label + ' is nog niet klaar met inlezen. Probeer het over een minuut opnieuw.' });
-        } else if (!res || !res.items || !res.items.length) zet(soort, { status: 'leeg' });
-        else zet(soort, { status: 'klaar', items: res.items, totaal: res.totaal || res.items.length });
+        } else if (!res || !res.items || !res.items.length) zet(soort, res && res.notitie ? { status: 'klaar', notitie: res.notitie } : { status: 'leeg' });
+        else zet(soort, { status: 'klaar', items: res.items, totaal: res.totaal || res.items.length, notitie: res.notitie || '' });
       } catch (e) {
         if (mijn !== ronde || r.ctl !== ctl) return;
         r.ctl = null;
@@ -212,8 +227,8 @@
       groepen() {
         return (o.bronnen || []).filter(b => mag(b.soort)).map(b => {
           const s = staat[b.soort];
-          return { soort: b.soort, label: b.label, status: s.status, melding: s.melding, retryAfter: s.retryAfter, items: s.items.slice(0, MAX), totaal: s.totaal, meer: Math.max(0, s.totaal - Math.min(MAX, s.items.length)) };
-        }).filter(g => g.status === 'laden' || g.status === 'limiet' || g.status === 'fout' || g.items.length);
+          return { soort: b.soort, label: b.label, status: s.status, melding: s.melding, notitie: s.notitie, retryAfter: s.retryAfter, items: s.items.slice(0, MAX), totaal: s.totaal, meer: Math.max(0, s.totaal - Math.min(MAX, s.items.length)) };
+        }).filter(g => g.status === 'laden' || g.status === 'limiet' || g.status === 'fout' || g.items.length || g.notitie);
       },
       // Staat van alle bronnen (voor "Geen treffers": pas als niets meer laadt en alles leeg is).
       bezig() { return Object.values(staat).some(s => s.status === 'laden') || !!timer; },
@@ -241,5 +256,5 @@
     return true;
   }
 
-  root.MTZoekExtern = { EXTERN, HOSTS, MAX, MAX_WACHT, wachtTekst, maak, bronMail, bronMoneybird, bronSharePoint, openUrl, openItem, retryAfterVan, veiligeLinkVoor };
+  root.MTZoekExtern = { EXTERN, HOSTS, MAX, MAX_WACHT, wachtTekst, kqlVeilig, maak, bronMail, bronMoneybird, bronSharePoint, openUrl, openItem, retryAfterVan, veiligeLinkVoor };
 })(typeof window !== 'undefined' ? window : globalThis);

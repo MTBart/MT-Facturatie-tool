@@ -65,7 +65,7 @@
       '.zb-vraag{border-top:1px solid var(--border,#D6DEDB);margin-top:4px}',
       '.zb-vraag .zb-titel{font-weight:600}',
       '.zb-lijst.zb-inline{position:static;transform:none;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;padding:0 0 24px;overflow:visible}',
-      '.zb-limiet,.zb-fout{color:var(--warning,#B8762E)}',
+      '.zb-limiet,.zb-fout,.zb-notitie{color:var(--warning,#B8762E)}',
       '.zb-rij.zb-actief::after{content:"↵";flex:0 0 auto;margin-left:6px;color:var(--text-dim,#5A6862);font-size:14px}',
       '.zb-toetsen{padding:4px 14px 2px;font-size:11px;color:var(--text-faint,#8B9893)}',
       '@media (pointer:coarse){.zb-rij.zb-actief::after,.zb-toetsen{display:none}}',
@@ -136,8 +136,8 @@
         rijen = []; let h = '';
         const nLokaal = (res.groepen || []).reduce((a, g) => a + ((g && g.items && g.items.length) || 0), 0);
         (res.groepen || []).concat(ext).forEach((g, gi) => {
-          const heeft = g && g.items && g.items.length, melding = g && !heeft && (g.status === 'laden' || g.status === 'limiet' || g.status === 'fout');
-          if (!heeft && !melding) return;
+          const heeft = g && g.items && g.items.length, melding = g && !heeft && (g.status === 'laden' || g.status === 'limiet' || g.status === 'fout'), notitie = g && g.notitie && g.status === 'klaar';
+          if (!heeft && !melding && !notitie) return;
           const kopId = lijstId + '-g' + gi;
           h += '<div role="group" aria-labelledby="' + esc(kopId) + '"><div class="zb-kop" role="presentation" id="' + esc(kopId) + '">' + esc(g.label) + '</div>';
           if (melding) h += '<div class="zb-leeg zb-' + esc(g.status) + '" role="presentation">' + esc(g.status === 'laden' ? (g.melding || 'Zoeken…') : g.melding || 'Niet beschikbaar.') + '</div>';
@@ -148,6 +148,7 @@
               + '<span class="zb-tekst"><span class="zb-titel">' + esc(it.titel) + '</span>' + (it.sub ? '<span class="zb-sub">' + esc(it.sub) + '</span>' : '') + '</span>'
               + (it.tag ? '<span class="zb-tag">' + esc(it.tag) + '</span>' : '') + '</div>';
           });
+          if (notitie) h += '<div class="zb-leeg zb-notitie" role="presentation">' + esc(g.notitie) + '</div>';
           if (g.meer > 0) h += '<div class="zb-meer" role="presentation">+' + esc(g.meer) + ' meer — typ verder om te verfijnen</div>';
           h += '</div>';
         });

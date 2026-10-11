@@ -1685,7 +1685,7 @@ function geldMb(env, budget, opties) {
   let bezig = 0; const rij = [];
   const slot = () => bezig < GELD_MB_TEGELIJK ? (bezig++, Promise.resolve()) : new Promise(res => rij.push(res));
   const vrij = () => { const n = rij.shift(); if (n) n(); else bezig--; };
-  const haal = async pad => { if (env.__sub && !env.__sub.neem()) return { netwerk: 'subrequest-budget-op' }; try { return await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/${pad}`, { headers: hdr }); } catch (e) { return { netwerk: String(e.message || e).slice(0, 80) }; } };
+  const haal = async pad => { if (env.__sub && !env.__sub.neem()) return { netwerk: 'subrequest-budget-op' }; try { return await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/${pad}`, { headers: hdr, signal: opties && opties.signal }); } catch (e) { return { netwerk: String(e.message || e).slice(0, 80) }; } };
   return async function get(pad) {
     if (budget.rest <= 0) return { ok: false, status: 0, fout: 'budget-op' };
     budget.rest--;
@@ -4133,7 +4133,7 @@ async function handleZoekMb(request, env, ik, json, ctx, modus) {
 // volgende alarm. Pas als alle lijsten binnen zijn wordt de index in KV gezet (en alleen `compleet` als er geen enkele waarschuwing was).
 // Een afgebroken of gecrashte run hervat bij de bewaarde cursor (geen dubbele pagina's, nooit een halve index als compleet). Een opbouw
 // zonder voortgang van ZOEK_MB_STIL_MS wordt door een nieuwe start overgenomen. Een Moneybird-429 stopt alles direct (pauze = echte Retry-After).
-const ZOEK_MB_PAGINAS_PER_RUN = 8, ZOEK_MB_RUN_MS = 20000, ZOEK_MB_STIL_MS = 5 * 60 * 1000, ZOEK_MB_TOTAAL = 80, ZOEK_MB_FOUT_MAX = 3;
+const ZOEK_MB_PAGINAS_PER_RUN = 8, ZOEK_MB_RUN_MS = 15000, ZOEK_MB_STIL_MS = 5 * 60 * 1000, ZOEK_MB_TOTAAL = 80, ZOEK_MB_FOUT_MAX = 3;
 export class MtZoekIndex {
   constructor(state, env) { this.state = state; this.env = env || {}; }
   async fetch(request) {
@@ -4163,12 +4163,16 @@ export class MtZoekIndex {
   async alarm() {
     const st = this.state.storage, env = this.env;
     const b = await st.get('bouw'); if (!b) return;
+    // Harde grens: een AbortController breekt elke Moneybird-fetch in deze run af op de deadline (standaard 15 s, ruim onder de limiet van een
+    // alarm-run); de lus stopt dan, de cursor wordt bewaard en het volgende alarm gepland. Een hangende fetch kan de run dus nooit blokkeren.
     const t0 = Date.now(), maxP = Number(env.ZOEK_MB_STAP) > 0 ? Number(env.ZOEK_MB_STAP) : ZOEK_MB_PAGINAS_PER_RUN;
-    const get = geldMb(env, { rest: maxP + 2 }, { geen429Retry: true });
+    const runMs = Number(env.ZOEK_MB_RUN_MS) > 0 ? Number(env.ZOEK_MB_RUN_MS) : ZOEK_MB_RUN_MS;
+    const ac = new AbortController(), dl = setTimeout(() => { try { ac.abort(); } catch {} }, runMs);
+    const get = geldMb(env, { rest: maxP + 2 }, { geen429Retry: true, signal: ac.signal });
     const volgende = () => { b.L++; b.pagina = 1; b.fouten = 0; };
     try {
       let gedaan = 0;
-      while (b.L < ZOEK_MB_LIJSTEN.length && gedaan < maxP && Date.now() - t0 < ZOEK_MB_RUN_MS) {
+      while (b.L < ZOEK_MB_LIJSTEN.length && gedaan < maxP && Date.now() - t0 < runMs) {
         if (b.verzoeken >= ZOEK_MB_TOTAAL) { b.warn++; b.L = ZOEK_MB_LIJSTEN.length; break; }   // totaalbudget op: onvolledig
         const l = ZOEK_MB_LIJSTEN[b.L];
         const r = await get(`${l.pad}?filter=period:${l.periode}&per_page=100&page=${b.pagina}`);
@@ -4200,7 +4204,7 @@ export class MtZoekIndex {
         if (b.fouten >= ZOEK_MB_FOUT_MAX) { await this.opruimen(); await zoekMbPauze(env, 120, 'onvolledig'); }
         else { await st.put('bouw', b); await st.setAlarm(Date.now() + 5000); }
       } catch {}
-    }
+    } finally { clearTimeout(dl); }
   }
 }
 
