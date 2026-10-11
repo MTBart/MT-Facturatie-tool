@@ -571,6 +571,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const resLow = metRes && low ? G.reserveOp(d, st.cfg, low.datum, { prognose: st.prognose }) : 0, kosten = G.rcKosten(d);
     st.meegroei = st.mag && st.cfg ? G.meegroeiPlan(d, st.cfg) : { wijzig: [], voorstel: [] };
     const nu = G.groepSaldo(d);
+    // De BTW-pot hoort bij lopend (modus in_lopend) maar zijn stand is onbekend: dan telt "Nu" stil alleen lopend. Dat zeggen we hardop.
+    const potOnbekend = !metBtw && !!btwPot && !((d.instellingen || {}).btw && d.instellingen.btw.modus === 'apart') && !!(d.saldo.potten || {})[btwPot];
     const ruimte = limiet != null && low ? low.saldo + limiet : null;
     const introWeg = ls.get('mtg:intro:' + st.wie) === 'weg';
     st.el.innerHTML = `<div class="mtg">
@@ -586,7 +588,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   ${verseKs().length ? '<div class="mtg-melding">✓ Net opgeslagen — wordt verwerkt (op andere apparaten kan het een minuut duren).</div>' : ''}
   ${st.bezig ? '<div class="mtg-uitleg">Betaalgedrag en vaste patronen worden bijgewerkt… (de lijn ververst vanzelf)</div>' : ''}
   <div class="mtg-kaarten">
-    ${kaart('nu', metBtw ? 'Nu (lopend + BTW-pot)' : 'Nu', eur(nu), nu != null && nu < 0, (metBtw ? `lopend ${eur(L.gerapporteerd)} · BTW-pot ${eur(d.saldo.potten[btwPot].gerapporteerd)} · ` : '') + (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''))}
+    ${kaartNu(metBtw ? 'Nu (lopend + BTW-pot)' : potOnbekend ? 'Nu (alleen lopend, BTW-pot onbekend)' : 'Nu', eur(nu), nu != null && nu < 0, (metBtw ? `lopend ${eur(L.gerapporteerd)} · ` : '') + (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''), metBtw || potOnbekend ? d.saldo.potten[btwPot] : null, 'BTW-pot')}
     <div class="mtg-k ${low && (metRes ? (low.saldo < -resLow ? 'rood' : low.saldo < 0 ? 'amber' : '') : (limiet != null ? low.saldo < -limiet * 0.9 : low.saldo < 0) ? 'rood' : '')}"><div class="l"><span>${heeftProg && st.prognose ? 'Laagste punt (incl. prognose)' : 'Laagste punt'}</span><button class="mtg-vraag" data-uitleg="laagste">?</button></div>
       <div class="w">${low ? eur(low.saldo) : '—'}</div><div class="s">${low ? `<a href="#" data-laag="1" title="Naar die dag in de grafiek, met de grootste oorzaken">${esc(datumTekst(low.datum, true))} · waardoor?</a> · komende ${st.zoom === 'week' ? '2 weken' : esc(st.zoom)}${lowZonder ? ` · zonder prognose: ${esc(eur(lowZonder.saldo))} op ${esc(datumTekst(lowZonder.datum))}` : ''}${(st.zoom === 'kwartaal' || st.zoom === 'jaar') && low.datum > G.onzekerVanaf(d, { prognose: st.prognose }) ? ' · let op: valt waar alleen vaste lasten bekend zijn (vul de prognose aan)' : ''}` : ''}</div></div>
     ${metRes && low ? kaart('ruimte', 'Ruimte op laagste punt', eur(low.saldo + resLow), low.saldo + resLow < 0, `tot de onderkant van je reserve${limiet != null ? ` · tot de kredietlimiet ${eur(low.saldo + limiet)}` : ''}`)
@@ -729,6 +731,34 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     }
     ls.set('mtg:mp-init:' + st.wie, '1');
     if (nieuw.length) toast('⚑ ' + nieuw[0] + (nieuw.length > 1 ? ` (+${nieuw.length - 1})` : '') + ' — mooi!');
+  }
+  // Potstand met de herkomst: "BTW-pot € 7.533 (ijkpunt 7 okt € 24.542 − opname 8 okt € 23.500 + inleg € 6.338)". Een onzekere stand zegt dat, met de reden.
+  function potUitleg(s, naam) {
+    if (!s) return '';
+    if (s.gerapporteerd == null) return `${naam} onbekend${s.onzeker_reden ? ' — ' + s.onzeker_reden : ' (nog niet geijkt)'}; "Nu" telt daarom alleen de lopende rekening`;
+    const b = s.beweging;
+    if (s.bron !== 'ijkpunt' || !s.ijkpunt) return `${naam} ${eur(s.gerapporteerd)} (stand Moneybird)`;
+    if (!b) return `${naam} ${eur(s.gerapporteerd)} (vanaf ijkpunt ${datumTekst(s.ijkpunt.datum)})`;
+    const opnames = b.mutaties.filter(m => m.pot_bedrag < 0), inleggen = b.mutaties.filter(m => m.pot_bedrag > 0);
+    const delen = [`ijkpunt ${datumTekst(s.ijkpunt.datum)} ${eur(s.ijkpunt.bedrag)}`];
+    if (b.n_opname) delen.push(`− opname${b.n_opname === 1 && opnames[0] ? ' ' + datumTekst(opnames[0].datum) : 's'} ${eur(b.opname)}`);
+    if (b.n_inleg) delen.push(`+ inleg${b.n_inleg === 1 && inleggen[0] ? ' ' + datumTekst(inleggen[0].datum) : ''} ${eur(b.inleg)}`);
+    return `${naam} ${eur(s.gerapporteerd)} (${delen.join(' ')})`;
+  }
+  function kaartNu(titel, waarde, rood, sub, pot, potNaam) {
+    const tekst = pot ? potUitleg(pot, potNaam) : '', onzeker = pot && pot.onzeker && pot.onzeker_reden;
+    return `<div class="mtg-k ${rood ? 'rood' : ''}"><div class="l"><span>${esc(titel)}</span><button class="mtg-vraag" data-uitleg="nu">?</button></div><div class="w">${esc(waarde)}</div><div class="s">${esc(sub)}</div>
+      ${pot ? `<div class="s">${esc(tekst)}${pot.beweging && pot.beweging.mutaties.length ? ` · <a href="#" data-potmuts="${esc(pot.id)}" title="De overboekingen tussen lopend en deze pot sinds het ijkpunt">mutaties</a>` : ''}</div>` : ''}
+      ${onzeker ? `<div class="s" style="color:var(--rood,#b3261e)">⚠ ${esc(onzeker)}</div>` : ''}</div>`;
+  }
+  // De overboekingen tussen lopend en een pot sinds het ijkpunt (inleg en opname), nieuwste eerst; tik op een regel voor de details.
+  function potMutaties(id) {
+    const s = (st.data.saldo.potten || {})[id]; if (!s || !s.beweging) return;
+    const b = s.beweging, bestaat = mid => (st.data.events || []).some(e => e.id === mid);
+    blad(`<h3>${esc(s.naam || id)}: overboekingen sinds ${esc(datumTekst(b.sinds, true))}</h3>
+      <p style="font-size:12px;color:var(--text-dim)">${esc(s.bron === 'ijkpunt' ? 'ijkpunt' : 'stand Moneybird')} ${esc(eur(b.start, true))} ${b.n_opname ? `− opnames ${esc(eur(b.opname, true))} (${b.n_opname})` : ''} ${b.n_inleg ? `+ inleg ${esc(eur(b.inleg, true))} (${b.n_inleg})` : ''} = <b>${esc(eur(s.gerapporteerd, true))}</b></p>
+      ${b.mutaties.length ? b.mutaties.map(m => `<div class="mtg-rij" ${bestaat(m.id) ? `data-ev="${esc(m.id)}" style="cursor:pointer"` : ''}><span>${esc(datumTekst(m.datum, true))}</span> <b class="${m.pot_bedrag > 0 ? 'mtg-in' : 'mtg-uit'}">${m.pot_bedrag > 0 ? 'inleg' : 'opname'} ${esc(eur(Math.abs(m.pot_bedrag), true))}</b> <span style="color:var(--text-dim)">${esc(m.tegenpartij || '')}</span></div>`).join('') : '<p>Geen overboekingen sinds het ijkpunt.</p>'}
+      ${b.mutaties.length >= 30 ? '<p style="font-size:11px">Alleen de laatste 30 getoond.</p>' : ''}`);
   }
   function kaart(sleutel, titel, waarde, rood, sub) {
     return `<div class="mtg-k ${rood ? 'rood' : ''}"><div class="l"><span>${esc(titel)}</span><button class="mtg-vraag" data-uitleg="${sleutel}">?</button></div><div class="w">${esc(waarde)}</div><div class="s">${esc(sub || '')}</div></div>`;
@@ -1323,6 +1353,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   function klik(e) {
     if (e.target.closest('.mtg-fd')) return;
     if (e.target.closest('[data-laag]')) { e.preventDefault(); return laagsteUitleg(); }
+    const pm = e.target.closest('[data-potmuts]'); if (pm) { e.preventDefault(); return potMutaties(pm.dataset.potmuts); }
     const kg = e.target.closest('[data-koers-gelezen]');
     if (kg) { e.stopPropagation(); return koersGelezen(kg.dataset.koersGelezen); }
     const kz = e.target.closest('[data-koers]');

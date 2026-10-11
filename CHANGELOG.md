@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Koersmeter-cron: klaar vóór 07:00 (run vanaf 05:30 lokaal, voorverversing van de caches)
+- Commit: `6e019b4` | Auteur: Bart Witte
+
 ## 2026-10-11 — F7 3b groep 2: tekstsinks in mt-inbox.js (mail, To Do, mappen, bijlagen)
 - Commit: `e9af7bc` | Auteur: Bart Witte
 

@@ -182,6 +182,16 @@ gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.m
   meldingen bovenaan Geld; mobiel een badge op de €-knop (`geldBadgeLaad`).
 - Een mislukte run gooit niet (logt `koerscron`).
 
+**Potstand (`GET /geld/tijdlijn`, `saldo.potten.<id>`).** Potstand = ijkpunt + wat er sinds de ijkdag echt tussen lopend en de pot is overgeboekt (inleg: lopend → pot, opname: pot → lopend);
+een mutatie van op of vóór de ijkdag telt niet. Geldt voor alle potten (BTW, buffer, winst, vakantie). Herkenning van een overboeking, in volgorde: (1) alle boekingen op het pot-grootboek;
+(2) de EXACTE tegenrekening van de pot (`herkenning.tegenrekening`), ook als de mutatie elders is geboekt (`geboekt_elders`) en ook als het IBAN alleen in de omschrijving staat (bij een lege
+tegenrekening); een mutatie die aan een factuur hangt is nooit stil intern (pot onzeker). Per pot staat in `beweging` waar de stand vandaan komt: `{ sinds, start, inleg, n_inleg, opname, n_opname,
+mutaties[≤30, nieuwste eerst] }`; de Geld-kaart "Nu" toont dat als "BTW-pot € 7.533 (ijkpunt 7 okt € 24.542 − opname 8 okt € 23.500 + inleg 9 okt € 6.338)" met een tik naar de mutaties.
+Niet herkend maar lijkt een overboeking tussen eigen rekeningen (geen boeking, geen factuur; naam met spaar/online bankieren/eigen rekening/interne overboeking, of een tegenrekening zonder naam) of
+de tegenrekening hoort bij een inactieve pot: `intern_vermoed` + een waarschuwing met `onvolledig: true` (met de IBAN's en het netto bedrag), de pot en het totaal worden `onzeker` (met reden) en de
+Koersmeter krijgt een onvolledige bron (kas-meter onbekend, oordeel nooit groen). Is de stand van de BTW-pot onbekend, dan zegt de kaart "Nu (alleen lopend, BTW-pot onbekend)".
+Verwachte inleg (weekinleg, BTW-sparen 21/121 van openstaande facturen en prognose) wordt alleen voor vandaag en later ingepland, en niet voor een week waarin al is ingelegd.
+
 **Klantenlijst — `GET|POST /klanten` (F5).** Bron = KV `klanten:registry` (niet meer een bestand in de repo).
 - `GET`: iedereen met een rol (modus `afdwingen`: zonder rol 403 `geen-toegang`). In modus `log` mag een
   **rolloze** GET nog wel, maar wordt apart geteld/gelogd als `klanten.zonder_rol` (alleen oid-hash, geen naam of
