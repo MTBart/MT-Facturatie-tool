@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F7 release 2: uren.html, koppel-popovers, mobiel-handlers, mt-dialog html alleen bewust
+- Commit: `4ba1baa` | Auteur: Bart Witte
+
 ## 2026-10-11 — F5 stap 2: verhuisknop (uit tot het domein gekoppeld is)
 - Commit: `19c99e3` | Auteur: Bart Witte
 
