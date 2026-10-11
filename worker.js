@@ -1600,10 +1600,11 @@ function geldConfigNorm(c) {
     id: String(p.id), naam: String(p.naam || p.id).slice(0, 40), doel: GELD_POT_DOELEN.includes(p.doel) ? p.doel : 'overig',
     ledger: /^\d{6,25}$/.test(String(p.ledger || '')) ? String(p.ledger) : null,
     herkenning: { tegenrekening: String((p.herkenning && p.herkenning.tegenrekening) || '').replace(/\s+/g, '').toUpperCase().slice(0, 40),
-      omschrijving: String((p.herkenning && p.herkenning.omschrijving) || '').trim().slice(0, 60) },
+      omschrijving: String((p.herkenning && p.herkenning.omschrijving) || '').trim().slice(0, 60),
+      letter: /^[A-Za-z]$/.test(String((p.herkenning && p.herkenning.letter) || '')) ? String(p.herkenning.letter).toUpperCase() : '' },
     weekinleg: getal(p.weekinleg, 0, 1e7), weekdag: Number.isInteger(p.weekdag) && p.weekdag >= 1 && p.weekdag <= 7 ? p.weekdag : null, actief: p.actief !== false,
     streef: geldStreefNorm(p.streef), virtueel: p.virtueel === true }))
-    .map(p => p.virtueel ? Object.assign(p, { ledger: null, herkenning: { tegenrekening: '', omschrijving: '' } }) : p);   // virtueel: geen eigen rekening
+    .map(p => p.virtueel ? Object.assign(p, { ledger: null, herkenning: { tegenrekening: '', omschrijving: '', letter: '' } }) : p);   // virtueel: geen eigen rekening
   const ids = new Set(), uniek = potten.filter(p => !ids.has(p.id) && ids.add(p.id));
   const btw = c.btw && typeof c.btw === 'object' ? c.btw : {};
   const rek = x => (x === 'lopend' || uniek.some(p => p.id === x && !p.virtueel)) ? x : null;   // virtueel heeft geen eigen saldo
@@ -1717,6 +1718,15 @@ async function geldMutaties(get, van, tot, w) {
 // (ook als de mutatie elders is geboekt, bv. op een tussenrekening: een overboeking van of naar een pot-IBAN is altijd intern) — tenzij de
 // mutatie aan een factuur hangt (dan nooit stil intern). Heeft de mutatie geen tegenrekening, dan telt een pot-IBAN in de omschrijving.
 // Alleen een naam/omschrijving zonder IBAN → onzeker (te bevestigen). Meer dan één pot, of deels op een pot-grootboek → onzeker (melden, niet gokken).
+// Bij een lege tegenrekening (zo levert de bank de overboekingen tussen eigen rekeningen) zit de pot in de naam: "Zakelijke oranje spaarrekening Z". De letter
+// erachter hoort bij één pot: `herkenning.letter`, anders de letter waarmee de naam, de omschrijving of het id van de pot eindigt ("BTW Z"). Onbekende letter → niet herkend (gemeld).
+const GELD_SPAAR_LETTER = /spaarrekening\s+([A-Z])\s*$/i;
+const geldPotLetters = p => {
+  const uit = new Set(), eind = t => { const m = /(?:^|[\s(\-–])([A-Za-z])\)?\s*$/.exec(String(t || '').trim()); return m ? m[1].toUpperCase() : null; };
+  const h = p.herkenning || {};
+  for (const l of [h.letter, eind(h.omschrijving), eind(p.naam), String(h.tegenrekening || '').length === 1 ? h.tegenrekening : null, String(p.id || '').length === 1 ? p.id : null]) if (l && /^[A-Za-z]$/.test(l)) uit.add(l.toUpperCase());
+  return uit;
+};
 // `inactief` = de tegenrekening hoort bij een pot die op inactief staat: die wordt niet meer herkend, maar mag ook niet stil verdwijnen.
 function geldPotVan(m, potten) {
   const ids = (m.ledger_account_bookings || []).map(b => String(b.ledger_account_id));
@@ -1726,13 +1736,16 @@ function geldPotVan(m, potten) {
   const tekst = (String(m.message || '') + ' ' + String(m.contra_account_name || '')).toLowerCase();
   const tegen = String(m.contra_account_number || '').replace(/\s+/g, '').toUpperCase();
   const tekstCompact = String(m.message || '').replace(/\s+/g, '').toUpperCase();
-  const ibanVan = p => !!p.herkenning.tegenrekening && (tegen ? tegen === p.herkenning.tegenrekening : tekstCompact.includes(p.herkenning.tegenrekening));
-  const zeker = potten.filter(p => p.actief && ((!metFactuur && p.ledger && ids.length && ids.every(id => id === p.ledger)) || (!metFactuur && ibanVan(p))));
-  const viaTekst = potten.filter(p => p.actief && vrij && !zeker.includes(p) && p.herkenning.omschrijving && tekst.includes(p.herkenning.omschrijving.toLowerCase()));
+  const naamLetter = ((GELD_SPAAR_LETTER.exec(String(m.contra_account_name || '').trim()) || [])[1] || '').toUpperCase();
+  const ibanVan = p => String(p.herkenning.tegenrekening || '').length >= 12 && (tegen ? tegen === p.herkenning.tegenrekening : tekstCompact.includes(p.herkenning.tegenrekening));   // een IBAN, geen losse letter of woord
+  const letterVan = p => !!naamLetter && !tegen && geldPotLetters(p).has(naamLetter);
+  const eigenVan = p => ibanVan(p) || letterVan(p);
+  const zeker = potten.filter(p => p.actief && ((!metFactuur && p.ledger && ids.length && ids.every(id => id === p.ledger)) || (!metFactuur && eigenVan(p))));
+  const viaTekst = potten.filter(p => p.actief && vrij && !zeker.includes(p) && p.herkenning.omschrijving.length >= 4 && tekst.includes(p.herkenning.omschrijving.toLowerCase()));
   const deels = ids.some(id => potLedgers.has(id)) && !ids.every(id => potLedgers.has(id));
-  const viaIbanFactuur = metFactuur ? potten.filter(p => p.actief && ibanVan(p)) : [];
+  const viaIbanFactuur = metFactuur ? potten.filter(p => p.actief && eigenVan(p)) : [];
   const kandidaten = [...new Set([...zeker, ...viaTekst, ...viaIbanFactuur, ...(deels || metFactuur ? potten.filter(p => p.ledger && ids.includes(p.ledger)) : [])].map(p => p.id))];
-  const inactief = potten.filter(p => !p.actief && ibanVan(p)).map(p => p.id);
+  const inactief = potten.filter(p => !p.actief && eigenVan(p)).map(p => p.id);
   const geboekt = ids.length > 0 && !ids.every(id => potLedgers.has(id));
   if (zeker.length === 1 && !deels && !viaTekst.length) return { pot: zeker[0].id, onzeker: false, kandidaten, geboekt, inactief };
   return { pot: null, onzeker: kandidaten.length > 0, kandidaten, alleenTekst: !zeker.length && !deels && !viaIbanFactuur.length && viaTekst.length > 0, inactief };
@@ -1756,7 +1769,7 @@ function geldBankEvent(m, potten) {
   if (sp.pot) { ev.intern = true; ev.pot = sp.pot; ev.uitleg = (bedrag < 0 ? 'Inleg in' : 'Opname uit') + ' spaarpot (interne overboeking: telt niet mee in "totaal").'; if (sp.geboekt) { ev.geboekt_elders = true; ev.uitleg += ' Herkend op de tegenrekening van de pot, hoewel de mutatie elders is geboekt.'; } }
   else if (sp.onzeker) { ev.intern_onzeker = true; ev.pot_kandidaten = sp.kandidaten; ev.uitleg += sp.alleenTekst ? ' Omschrijving lijkt op een spaarpot — te bevestigen (stel de tegenrekening van de pot in).' : ' Mogelijk (deels) een overboeking naar een spaarpot — controleer.'; }
   else if (sp.inactief.length) { ev.intern_vermoed = true; ev.vermoed_reden = 'inactieve pot'; ev.uitleg += ` Tegenrekening van de pot "${sp.inactief[0]}", die op inactief staat: niet meer herkend, dus de potstand klopt niet meer — zet de pot weer actief.`; }
-  else if (!(m.ledger_account_bookings || []).length && !(m.payments || []).length && geldInternVermoed(m)) { ev.intern_vermoed = true; ev.vermoed_reden = 'lijkt intern'; ev.uitleg += ' Lijkt een overboeking tussen lopend en een spaarpot, maar hoort bij geen ingestelde pot: de potstand klopt dan niet (stel de tegenrekening van de pot in).'; }
+  else if (!(m.payments || []).length && ((!(m.ledger_account_bookings || []).length && geldInternVermoed(m)) || GELD_SPAAR_LETTER.test(String(m.contra_account_name || '').trim()))) { ev.intern_vermoed = true; ev.vermoed_reden = 'lijkt intern'; ev.uitleg += ' Lijkt een overboeking tussen lopend en een spaarpot, maar hoort bij geen ingestelde pot: de potstand klopt dan niet (stel de tegenrekening van de pot in).'; }
   return ev;
 }
 // Open factuur → event op de vervaldag (betaaldag-logica volgt in G2). Achterstallig blijft staan; zonder
@@ -2383,8 +2396,8 @@ async function geldTijdlijn(env, url, hint) {
   // maar de pot niet. Nooit stil: onvolledig, de IBAN's erbij (om de tegenrekening van de pot in te stellen), en de potten zelf worden onzeker.
   const vermoed = bankEv.filter(e => e.intern_vermoed && !e.intern && !e.intern_onzeker);
   if (vermoed.length) {
-    const ibans = [...new Set(vermoed.map(e => e.iban).filter(Boolean))].slice(0, 5), netto = geldRond(vermoed.reduce((a, e) => a + e.bedrag, 0));
-    w.push({ onvolledig: true, bron: 'bankmutaties', fout: `${vermoed.length} mutatie(s) lijken een overboeking tussen lopend en een spaarpot (netto ${String(netto.toFixed(2)).replace('.', ',')}) maar horen bij geen ingestelde pot${ibans.length ? ' (tegenrekening ' + ibans.join(', ') + ')' : ''}: de potstand en "Nu" kunnen daardoor afwijken — stel de tegenrekening van de pot in`, ids: vermoed.slice(0, 10).map(e => e.id), ibans, netto });
+    const ibans = [...new Set(vermoed.map(e => e.iban).filter(Boolean))].slice(0, 5), namen = [...new Set(vermoed.map(e => e.tegenpartij).filter(Boolean))].slice(0, 5), netto = geldRond(vermoed.reduce((a, e) => a + e.bedrag, 0));
+    w.push({ onvolledig: true, bron: 'bankmutaties', fout: `${vermoed.length} mutatie(s) lijken een overboeking tussen lopend en een spaarpot (netto ${String(netto.toFixed(2)).replace('.', ',')}) maar horen bij geen ingestelde pot${ibans.length ? ' (tegenrekening ' + ibans.join(', ') + ')' : ''}${namen.length ? ' (naam ' + namen.map(n => '"' + n + '"').join(', ') + ')' : ''}: de potstand en "Nu" kunnen daardoor afwijken — stel de tegenrekening of de letter van de pot in`, ids: vermoed.slice(0, 10).map(e => e.id), ibans, namen, netto });
   }
   const som = (lijst, filt) => geldRond(lijst.filter(filt).reduce((s, e) => s + e.bedrag, 0));
   // ── saldo per rekening (lopend + potten); een inleg is −bedrag op lopend en +bedrag in de pot

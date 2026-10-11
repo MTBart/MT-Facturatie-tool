@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Geld: potstand volgt de werkelijke overboekingen; niet-herkende overboekingen zijn nooit stil
+- Commit: `78ba980` | Auteur: Bart Witte
+
 ## 2026-10-11 — Koersmeter-cron: klaar vóór 07:00 (run vanaf 05:30 lokaal, voorverversing van de caches)
 - Commit: `6e019b4` | Auteur: Bart Witte
 

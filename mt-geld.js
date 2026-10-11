@@ -1474,6 +1474,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       ${lopend ? '' : `<div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Weekinleg (€)</span><input type="number" name="weekinleg" value="${p.weekinleg != null ? p.weekinleg : ''}"></label>
       <label class="mtg-veld" style="flex:1"><span>Op</span><select name="weekdag"><option value="">${p.weekdag ? '' : 'afleiden uit de bank'}</option>${[1, 2, 3, 4, 5, 6, 7].map(i => `<option value="${i}" ${p.weekdag === i ? 'selected' : ''}>${dagen[i]}</option>`).join('')}</select></label></div>
       <div class="pot-echt"><label class="mtg-veld"><span>Herkenning: tegenrekening van de overboekingen</span><input name="tegenrekening" list="mtg-kand" value="${esc(p.herkenning ? p.herkenning.tegenrekening : '')}"><datalist id="mtg-kand">${kand.map(k => `<option value="${esc(k.iban)}">${esc(k.naam)}</option>`).join('')}</datalist></label>
+      <label class="mtg-veld"><span>…of de letter in de naam van de overboeking (bij "Zakelijke oranje spaarrekening <b>Z</b>"; de bank geeft dan geen tegenrekening mee)</span><input name="letter" maxlength="1" size="2" list="mtg-letters" value="${esc(p.herkenning && p.herkenning.letter ? p.herkenning.letter : '')}" style="width:60px"><datalist id="mtg-letters">${letterKandidaten().map(k => `<option value="${esc(k.letter)}">${esc(k.naam)}</option>`).join('')}</datalist></label>
       ${kand.length ? `<div class="mtg-melding">Herkende overboekingen: ${kand.slice(0, 4).map(k => esc(k.naam + ' ' + k.iban)).join(' · ')}</div>` : ''}</div>
       ${!nieuw ? `<label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="actief" style="width:auto" ${p.actief !== false ? 'checked' : ''}> <span style="margin:0">Actief (uitvinken = archiveren; het saldo blijft meetellen)</span></label>` : ''}`}
       <button class="mtg-knop aan" data-ok="1">Opslaan</button>
@@ -1496,7 +1497,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
         const nieuwId = nieuw ? (String(f('naam') || 'potje').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'potje') : id;
         let pid = nieuwId; for (let i = 2; nieuw && potten.some(x => x.id === pid); i++) pid = nieuwId + '-' + i;
         const pot = Object.assign(nieuw ? { id: /^[a-z]/.test(pid) ? pid : 'p-' + pid } : potten.find(x => x.id === id), { naam: f('naam') || p.naam, doel: f('doel') || p.doel, weekinleg: getal('weekinleg'), weekdag: f('weekdag') ? Number(f('weekdag')) : null, streef });
-        if (!pot.virtueel && !(nieuw && f('virtueel'))) pot.herkenning = Object.assign({}, pot.herkenning || {}, { tegenrekening: f('tegenrekening') || '' });
+        if (!pot.virtueel && !(nieuw && f('virtueel'))) pot.herkenning = Object.assign({}, pot.herkenning || {}, { tegenrekening: f('tegenrekening') || '', letter: String(f('letter') || '').trim().slice(0, 1).toUpperCase() });
         if (nieuw && f('virtueel')) { pot.virtueel = true; delete pot.herkenning; }
         if (!nieuw) pot.actief = !!f('actief');
         if (nieuw) potten.push(pot);
@@ -1510,6 +1511,12 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       if (!o.querySelector('[name="ijk"]').value) return toast('Vul een saldo in');
       o.remove(); opslaan(() => stuur('/geld/ijkpunt', { rekening: id, bedrag, datum }), 'Saldo geijkt');
     });
+  }
+  // Letters uit namen als "… spaarrekening Z" van overboekingen die bij geen pot horen of juist wel (om de letter van een pot te kiezen).
+  function letterKandidaten() {
+    const uit = new Map();
+    for (const e of st.data.events || []) { const m = e.bron === 'bank' && /spaarrekening\s+([A-Z])\s*$/i.exec(e.tegenpartij || ''); if (m) uit.set(m[1].toUpperCase(), { letter: m[1].toUpperCase(), naam: e.tegenpartij }); }
+    return [...uit.values()];
   }
   // Kandidaten voor potjes-herkenning: tegenrekeningen van overboekingen die op spaar lijken, en wekelijkse patronen.
   function herkenningKandidaten() {
