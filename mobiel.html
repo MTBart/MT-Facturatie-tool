@@ -4652,11 +4652,14 @@ function _voRuimteRender() {
   const sel = document.getElementById('voRuimteSelect');
   const info = document.getElementById('voRuimteNavInfo');
   if (!tabs) return;
+  // De ruimtenaam staat NIET in een inline handler (F7: een naam met &quot;… werd door de browser teruggedecodeerd en brak uit de JS-tekenreeks):
+  // de knop draagt alleen een numerieke index; de naam komt uit de array.
+  tabs.onclick = e => { const b = e.target.closest('[data-ridx]'); if (!b) return; if (b.dataset.ract === 'rename') voRuimteRename(); else voRuimteKies(_voRuimtes[Number(b.dataset.ridx)]); };
   const zonder = voorOpnamePhotos.filter(p => !(p.ruimte || '')).length;
-  let h = _voRuimtes.map(r => {
+  let h = _voRuimtes.map((r, ri) => {
     const act = (r === _voRuimteActief);
     return `<button class="btn ${act ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px"
-      onclick="${act ? 'voRuimteRename()' : `voRuimteKies(${JSON.stringify(r).replace(/"/g,'&quot;')})`}">${escHtml(r)} (${esc(_voRuimteCount(r))})</button>`;
+      data-ridx="${esc(ri)}" data-ract="${act ? 'rename' : 'kies'}">${escHtml(r)} (${esc(_voRuimteCount(r))})</button>`;
   }).join('');
   if (zonder) h += `<button class="btn ${_voRuimteActief === '' ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px" onclick="voRuimteKies('')">Zonder ruimte (${esc(zonder)})</button>`;
   tabs.innerHTML = h;
@@ -7394,10 +7397,12 @@ function veiligeSpUrl(u) { return window.veiligeUrl(u, { hosts: ['sharepoint.com
     const nav = document.getElementById("ruimteNav");
     if (!tabs || !nav) return;
     _ruimteInit();
+    // Zie _voRuimteRender: geen ruimtenaam in een inline handler, alleen een numerieke index.
+    tabs.onclick = e => { const b = e.target.closest("[data-ridx]"); if (!b) return; if (b.dataset.ract === "rename") window.ruimteRename(); else window.ruimteKies(_ruimtes[Number(b.dataset.ridx)]); };
     const zonder = inmFotos.filter(f => !f._fsHoofdstuk).length;
-    tabs.innerHTML = _ruimtes.map(r => {
+    tabs.innerHTML = _ruimtes.map((r, ri) => {
       const actief = r === _ruimteActief;
-      return `<button type="button" onclick="${actief ? "ruimteRename()" : `ruimteKies(${JSON.stringify(r).replace(/"/g, "&quot;")})`}"
+      return `<button type="button" data-ridx="${esc(ri)}" data-ract="${actief ? "rename" : "kies"}"
         style="border:1px solid ${actief ? "var(--gold,#b8860b)" : "#ccc"};background:${actief ? "var(--gold,#b8860b)" : "transparent"};color:${actief ? "#fff" : "inherit"};border-radius:16px;padding:6px 12px;font-size:13px;min-height:36px">${escHtml(r)} <span style="opacity:.75;font-size:11px">${esc(_ruimteCount(r))}</span>${actief ? " ✏️" : ""}</button>`;
     }).join("") + (zonder ? `<button type="button" onclick="ruimteKies('')" style="border:1px dashed #999;background:${_ruimteActief === "" ? "#8882" : "transparent"};border-radius:16px;padding:6px 12px;font-size:13px;min-height:36px">Zonder ruimte <span style="opacity:.75;font-size:11px">${esc(zonder)}</span></button>` : "");
     // onderaan: dropdown + vorige/volgende voor snel navigeren

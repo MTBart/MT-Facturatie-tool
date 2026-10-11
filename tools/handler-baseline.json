@@ -1,0 +1,105 @@
+{
+ "toelichting": "Interpolaties in on*-attributen die niet door jsArg/ja/ibJa/_ctlArg/jsLit/Number gaan, per stuk beoordeeld op 2026-10-11: alleen getallen en vaste teksten. Een met esc() geëscapete waarde in een JS-tekenreeks decodeert terug en breekt uit.",
+ "regels": [
+  {
+   "bestand": "mobiel.html",
+   "expr": "w",
+   "reden": "getal: weekindex of dagnummer uit rekenwerk"
+  },
+  {
+   "bestand": "mobiel.html",
+   "expr": "a.w",
+   "reden": "getal: weekindex of dagnummer uit rekenwerk"
+  },
+  {
+   "bestand": "mobiel.html",
+   "expr": "p.w",
+   "reden": "getal: weekindex of dagnummer uit rekenwerk"
+  },
+  {
+   "bestand": "mobiel.html",
+   "expr": "c.w",
+   "reden": "getal: weekindex of dagnummer uit rekenwerk"
+  },
+  {
+   "bestand": "mobiel.html",
+   "expr": "i",
+   "reden": "getal: volgnummer/index uit rekenwerk of een lus, geen tekst uit data"
+  },
+  {
+   "bestand": "mobiel.html",
+   "expr": "oi",
+   "reden": "getal: volgnummer/index uit rekenwerk of een lus, geen tekst uit data"
+  },
+  {
+   "bestand": "mobiel.html",
+   "expr": "retryJs",
+   "reden": "vaste JS-tekst die de aanroeper meegeeft (bv. rapDraftSave()), geen data"
+  },
+  {
+   "bestand": "mt-aanwezig.js",
+   "expr": "o.opener",
+   "reden": "functienaam uit de aanroeper (constante), geen data"
+  },
+  {
+   "bestand": "mt-inbox.js",
+   "expr": "cc",
+   "reden": "waarde die eerder met ibJa() is gemaakt (JSON + HTML-escape)"
+  },
+  {
+   "bestand": "mt-inbox.js",
+   "expr": "mid",
+   "reden": "waarde die eerder met ibJa() is gemaakt (JSON + HTML-escape)"
+  },
+  {
+   "bestand": "mt-inbox.js",
+   "expr": "i",
+   "reden": "getal: volgnummer/index uit rekenwerk of een lus, geen tekst uit data"
+  },
+  {
+   "bestand": "mt-toggl.js",
+   "expr": "i",
+   "reden": "getal: volgnummer/index uit rekenwerk of een lus, geen tekst uit data"
+  },
+  {
+   "bestand": "uren.html",
+   "expr": "esc(onclick)",
+   "reden": "onclick is JS-tekst met JSON.stringify(String(code)): na esc() een geldige JS-letterlijke"
+  },
+  {
+   "bestand": "uren.html",
+   "expr": "i",
+   "reden": "getal: volgnummer/index uit rekenwerk of een lus, geen tekst uit data"
+  },
+  {
+   "bestand": "v2.html",
+   "expr": "id",
+   "reden": "volgnummer (regelCount++), geen data"
+  },
+  {
+   "bestand": "v2.html",
+   "expr": "esc(JSON.stringify(route))",
+   "reden": "esc(JSON.stringify(...)) = JSON-letterlijke met HTML-escape (zelfde als jsArg)"
+  },
+  {
+   "bestand": "v2.html",
+   "expr": "safeId",
+   "reden": "alleen letters, cijfers en _ (replace(/[^A-Za-z0-9_]/g,\"\"))"
+  },
+  {
+   "bestand": "v2.html",
+   "expr": "i",
+   "reden": "getal: volgnummer/index uit rekenwerk of een lus, geen tekst uit data"
+  },
+  {
+   "bestand": "v2.html",
+   "expr": "a",
+   "reden": "waarde die eerder met _ctlArg() is gemaakt (JSON + HTML-escape)"
+  },
+  {
+   "bestand": "v2.html",
+   "expr": "esc(kies)",
+   "reden": "kies is JS-tekst opgebouwd met jsLit(...): na esc() een geldige JS-letterlijke"
+  }
+ ]
+}

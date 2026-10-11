@@ -188,7 +188,14 @@ function urlSinks(tekst) {
   tekst.replace(/\r\n/g, '\n').split('\n').forEach((l, i) => { let m; re.lastIndex = 0; while ((m = re.exec(l))) { const e = m[3]; if (/^(esc\()?\s*veilige/.test(e) || /^(escHtml|esc|_escH)\(\s*veilige/.test(e)) continue; uit.push({ regel: i + 1, attr: m[1], expr: e.slice(0, 100) }); } });
   return uit;
 }
-module.exports.plakwerk = plakwerk; module.exports.urlSinks = urlSinks;
+// handlerCtx(): interpolaties in een on*-attribuut die niet door een JS-letterlijke (jsArg/ja/ibJa/_ctlArg/jsLit/Number) gaan. Een met esc() geëscapete
+// waarde in een JS-tekenreeks wordt door de browser teruggedecodeerd en breekt dus uit (Codex 121e465); alleen getallen en vaste teksten mogen hier ruw staan.
+function handlerCtx(tekst, isHtml) {
+  const r = scanBestand(tekst, isHtml, {}), uit = [], JS = /^(jsArg|jsLit|ja|ibJa|_ctlArg|jsA|Number)\(/;
+  for (const i of r.items) { if (i.ctx !== 'handler') continue; const e = i.expr.trim(); if (JS.test(e)) continue; uit.push({ regel: i.regel, expr: e.slice(0, 100) }); }
+  return uit;
+}
+module.exports.plakwerk = plakwerk; module.exports.urlSinks = urlSinks; module.exports.handlerCtx = handlerCtx;
 module.exports.fnVanRegel = fnVanRegel; module.exports.letOpInGroep = letOpInGroep;
 if (require.main === module) {
   const fs = require('fs'), path = require('path'), f = process.argv[2], G = require('./sinks-groepen.js');
