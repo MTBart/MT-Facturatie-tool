@@ -493,6 +493,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const k = st.koers; if (!root.MTKoers || !k || k.laden || (k.r && !k.fout && (k.r.compleet || k.klaar))) return;
     k.laden = true; k.fout = null; koersTeken();
     const v = st.data.vandaag, mislukt = new Set();
+    // Koersmeter A2: de ochtendmeldingen van de laatste dagen (oude worker → geen). Eerst tekenen, dan pas de zware cijfers.
+    if (!k.meldingen) { try { const d = await st.bron.haal('/geld/koers/meldingen?dagen=7'); k.meldingen = d && Array.isArray(d.meldingen) ? d.meldingen : []; } catch (e) { k.meldingen = []; } koersTeken(); }
     // Koersmeter C: de dagfoto's van de laatste dagen (oude worker → leeg; dan geen "sinds gisteren").
     if (!k.dagfotos) { try { const d = await st.bron.haal('/geld/koers/dagfotos?dagen=7'); k.dagfotos = d && Array.isArray(d.dagfotos) ? d.dagfotos : null; } catch (e) { k.dagfotos = null; } }   // null = oude worker / fout: geen vergelijking, ook geen 'eerste dagfoto'
     for (k.rondes = 0; k.rondes < KOERS_RONDES; k.rondes++) {
@@ -523,8 +525,19 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
         const v = st.data.vandaag, gisteren = (st.koers.dagfotos || []).filter(x => x.datum < v).sort((a, b) => b.datum.localeCompare(a.datum))[0] || null, nu = K.dagfotoOpslag(o);
         extra = { actie: K.actie(o, inv), verschil: K.verschil(gisteren, nu), melding: K.moetMelden(gisteren, nu), eersteDag: !gisteren && !!st.koers.dagfotos };
       }
-      return K.kaartHtml(o, extra);
+      return K.meldingHtml(st.koers && st.koers.meldingen) + K.kaartHtml(o, extra);
     } catch (e) { return `<div class="mtg-melding">Koersmeter kon niet rekenen (${esc(e.message)}).</div>`; }
+  }
+  // Een ochtendmelding als gelezen afvinken (per gebruiker, tot en met die datum).
+  async function koersGelezen(datum) {
+    const k = st.koers; if (!k || !/^\d{4}-\d{2}-\d{2}$/.test(String(datum))) return;
+    try {
+      const r = await st.bron.haal('/geld/koers/gelezen', { method: 'POST', body: { datum } });
+      if (!r || r.error || !r.ok) throw new Error((r && r.error) || 'niet opgeslagen');
+      (k.meldingen || []).forEach(x => { if (x.datum <= datum) x.gelezen = true; });
+      koersTeken();
+      if (root.dispatchEvent && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('mtg-koers-gelezen', { detail: { datum } }));
+    } catch (e) { toast('Afvinken lukte niet (' + (e.message || e) + ') — probeer het zo nog eens'); }
   }
   function koersTeken() { const p = st.el && st.el.querySelector('#mtk-plek'); if (p) p.innerHTML = koersHtml(); }
   // Betaalgedrag en vaste patronen: zonder cron — de eigenaar ververst ze op de achtergrond bij het openen.
@@ -1310,6 +1323,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   function klik(e) {
     if (e.target.closest('.mtg-fd')) return;
     if (e.target.closest('[data-laag]')) { e.preventDefault(); return laagsteUitleg(); }
+    const kg = e.target.closest('[data-koers-gelezen]');
+    if (kg) { e.stopPropagation(); return koersGelezen(kg.dataset.koersGelezen); }
     const kz = e.target.closest('[data-koers]');
     if (kz) { e.stopPropagation(); return blad(root.MTKoers.uitlegHtml(st.koersOordeel, kz.dataset.koers)); }
     const vl = e.target.closest('[data-doeladvies]');

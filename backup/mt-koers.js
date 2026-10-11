@@ -229,6 +229,9 @@
 .mtk-noot{font-size:12px;color:var(--mtg-zacht,#8a8a80);margin-top:2px}
 .mtk-actie{font-size:14px;margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--gold-50,#FBF5E0)}
 .mtk-melding{font-size:13px;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fbe3dd;border-left:4px solid #B4412F}
+.mtk-och{background:#fbe3dd;border:1px solid #e9b8ab;border-left:8px solid #B4412F;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:14px;line-height:1.45}
+.mtk-och-rij{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}.mtk-och-rij+.mtk-och-rij{margin-top:8px;padding-top:8px;border-top:1px solid #e9b8ab}
+.mtk-gelezen{min-height:40px;padding:0 14px;border-radius:8px;border:1px solid #B4412F;background:#fff;color:#B4412F;font:inherit;font-weight:600;cursor:pointer}
 .mtk-meters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
 .mtk-m{border:1px solid var(--border,#e4e2da);border-top:4px solid #c9d0d6;border-radius:8px;padding:8px 10px;min-width:0}
 .mtk-m.groen{border-top-color:#2A7A4A}.mtk-m.oranje{border-top-color:#b7791f}.mtk-m.rood{border-top-color:#B4412F}.mtk-m.onbekend{border-top-style:dashed;border-top-color:#8c96a0}
@@ -252,6 +255,14 @@
     else if (extra.eersteDag) d.push('<div class="mtk-noot">Eerste dagfoto: vanaf morgen staat hier wat er sinds gisteren veranderde.</div>');
     if (extra.actie) d.push(`<div class="mtk-actie"><b>Actie:</b> ${esc(extra.actie)}</div>`);
     return d.join('');
+  };
+  // Ochtendmeldingen (door de cron in KV gezet, /geld/koers/meldingen): bovenaan Geld, per gebruiker af te vinken. Alle tekst geëscapet.
+  K.meldingHtml = function (lijst) {
+    const open = (lijst || []).filter(x => x && !x.gelezen && /^\d{4}-\d{2}-\d{2}$/.test(String(x.datum || '')));
+    if (!open.length) return '';
+    return `<section class="mtk-och" role="alert" aria-label="Ochtendmelding Koersmeter">${open.map(x => `<div class="mtk-och-rij"><div><b>Ochtendmelding ${esc(datum(x.datum))}${x.onbetrouwbaar ? ' \u2014 oordeel onbetrouwbaar' : x.titel ? ' \u2014 ' + esc(x.titel) : ''}</b>
+      <div>${esc((x.redenen || []).join('; '))}.</div>${x.tekst ? `<div class="mtk-noot">${esc(x.tekst)}</div>` : ''}${x.actie ? `<div class="mtk-actie"><b>Actie:</b> ${esc(x.actie)}</div>` : ''}</div>
+      <button class="mtk-gelezen" data-koers-gelezen="${esc(x.datum)}" aria-label="Markeer de melding van ${esc(datum(x.datum))} als gelezen">Gelezen</button></div>`).join('')}</section>`;
   };
   K.kaartHtml = function (o, extra) {
     return `<section class="mtk ${o.kleur}" aria-label="Koersmeter: ${esc(o.titel)}">

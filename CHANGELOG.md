@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Geld: potten herkennen aan de letter in de naam ("Zakelijke oranje spaarrekening Z")
+- Commit: `9991dc7` | Auteur: Bart Witte
+
 ## 2026-10-11 — Geld: potstand volgt de werkelijke overboekingen; niet-herkende overboekingen zijn nooit stil
 - Commit: `78ba980` | Auteur: Bart Witte
 

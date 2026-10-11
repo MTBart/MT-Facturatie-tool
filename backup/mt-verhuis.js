@@ -101,6 +101,21 @@
     // Voegt records toe in ÉÉN transactie per store met add(): is de key er al (ConstraintError, bv. door een gelijktijdige
     // schrijver), dan wordt hij overgeslagen en nooit overschreven. Een andere fout (bv. QuotaExceeded) breekt de hele
     // transactie af: dan is er in deze store niets toegevoegd. → { toegevoegd: [keys], bestond: [keys] }
+    // Alle keys van een store (zonder de waarden/foto's te laden) en één record. Voor het journaal en het herstel.
+    async sleutels(db, store) {
+      const d = await idbOpen(db, null); if (!d) return []; if (!d.objectStoreNames.contains(store)) { d.close(); return []; }
+      return await new Promise((res, rej) => {
+        const tx = d.transaction(store, 'readonly'), os = tx.objectStore(store);
+        let uit = [];
+        if (typeof os.getAllKeys === 'function') { const q = os.getAllKeys(); q.onsuccess = () => { uit = q.result || []; }; }
+        else { const c = os.openCursor(); c.onsuccess = () => { const cur = c.result; if (cur) { uit.push(cur.key); cur.continue(); } }; }
+        tx.oncomplete = () => { d.close(); res(uit); }; tx.onerror = tx.onabort = () => { d.close(); rej(tx.error); };
+      });
+    },
+    async haal(db, store, key) {
+      const d = await idbOpen(db, null); if (!d) return undefined; if (!d.objectStoreNames.contains(store)) { d.close(); return undefined; }
+      return await new Promise((res, rej) => { const tx = d.transaction(store, 'readonly'), q = tx.objectStore(store).get(key); tx.oncomplete = () => { d.close(); res(q.result); }; tx.onerror = tx.onabort = () => { d.close(); rej(tx.error); }; });
+    },
     async voegToe(db, store, recs) {
       const d = await idbOpen(db, null); if (!d) throw new Error(`database ${db} bestaat niet`);
       if (!d.objectStoreNames.contains(store)) { d.close(); throw new Error(`database ${db} mist store ${store}`); }
@@ -259,35 +274,76 @@
   // pakket = pakket.json (object); blobVan(id) → Blob (SharePoint of uit het downloadbestand); opt.oid = de ingelogde gebruiker.
   // Nooit overschrijven. Wat DEZE run toevoegt komt in een journaal; gaat er iets mis (bv. QuotaExceeded), dan draait precies
   // dat terug en volgt "onderbroken, niets veranderd, opnieuw proberen".
-  // Het journaal staat ook in localStorage (mt_verhuis_journaal, wordt bijgewerkt vóór elke schrijfactie): sluit de tab midden in
-  // een import, dan blijft er een spoor en draait de volgende import (of V.herstelJournaal) eerst terug wat al was toegevoegd.
-  // Alleen een volledig geslaagde import wist het. De lock heeft een hartslag (elke stap), dus een verlaten lock is na 2 minuten oud.
-  const LOCK = 'mt_verhuis_lock', JOURNAAL = 'mt_verhuis_journaal', LOCK_MS = 2 * 60 * 1000;
-  const fp = v => { v = String(v); let h = 5381; for (let i = 0; i < v.length; i++) h = (((h << 5) + h) + v.charCodeAt(i)) | 0; return v.length + ':' + (h >>> 0).toString(16); };
+  //
+  // CRASHVEILIG: het journaal staat ook in localStorage (mt_verhuis_journaal) en wordt vastgelegd VÓÓR elke schrijfactie:
+  //  - localStorage: de sleutel + een vingerafdruk van de waarde, daarna pas setItem.
+  //  - IndexedDB: per store eerst de KANDIDAAT-records (alleen keys die er nog niet waren, met een vingerafdruk van de inhoud), daarna pas
+  //    de add-transactie, en daarna de bevestiging met de echt toegevoegde keys. Sluit de tab precies tussen "transactie klaar" en
+  //    "bevestigd", dan weet het herstel toch wat het mocht opruimen: een kandidaat die er nu staat met EXACT dezelfde inhoud.
+  //    Een record dat al bestond (niet in de kandidaten) of dat nu iets anders bevat, blijft staan.
+  // EXCLUSIEF: alles wat het journaal of de data raakt (herstel én import) draait binnen navigator.locks.request(exclusief). Het
+  // slot verdwijnt zodra de tab sluit, dus een gecrashte import is meteen te herstellen; en twee tabbladen kunnen nooit tegelijk
+  // importeren of herstellen. Zonder navigator.locks wordt er NIET geïmporteerd (geen onveilige terugval).
+  const JOURNAAL = 'mt_verhuis_journaal', LOCKNAAM = 'mt-verhuis-import';
+  // Vingerafdruk = SHA-256 (geen 32-bit hash): het herstel verwijdert alleen bij een EXACTE digest-match, dus nooit gewijzigde gebruikersdata.
+  // Een vingerafdruk uit een oud journaal (zonder "sha256:") komt nooit overeen: dan blijft alles staan (liever een overbodig record dan een kwijt record).
+  const fp = async v => 'sha256:' + await V.hash(String(v));
+  // Canonieke inhoud van een IndexedDB-record: de structuur, alle gewone waarden en van elke foto grootte, type EN de bytes (SHA-256).
+  // Onbekende soorten (Map, Set, class-instanties…) geven een vingerafdruk die nooit overeenkomt: die worden dus nooit verwijderd.
+  async function stabiel(w) {
+    if (w instanceof Blob) return 'B' + w.size + ':' + w.type + ':' + await V.hash(w);
+    if (w instanceof Date) return 'D' + w.getTime();
+    if (Array.isArray(w)) { const d = []; for (const x of w) d.push(await stabiel(x)); return '[' + d.join(',') + ']'; }
+    if (root.ArrayBuffer && (w instanceof root.ArrayBuffer || root.ArrayBuffer.isView(w))) return 'A' + await V.hash(new Blob([w]));
+    if (isGewoon(w)) { const d = []; for (const k of Object.keys(w).sort()) d.push(JSON.stringify(k) + ':' + await stabiel(w[k])); return '{' + d.join(',') + '}'; }
+    if (w && typeof w === 'object') return '?' + nieuwId();
+    let j; try { j = JSON.stringify(w); } catch (e) { return '?' + nieuwId(); }
+    return j === undefined ? 'u' : j;
+  }
+  const fpRecord = async w => fp(await stabiel(w));
   const leesJournaal = () => { try { return JSON.parse(ls().getItem(JOURNAAL) || 'null'); } catch (e) { return null; } };
-  const leesLock = () => { try { return JSON.parse(ls().getItem(LOCK) || 'null'); } catch (e) { return null; } };
-  const BEZET = 'er loopt al een import (in een ander tabblad?): wacht even. Niets veranderd';
-  // Draait terug wat het journaal bevat: een sleutel alleen als hij nog onze waarde heeft, records op key. → lijst mislukte onderdelen.
+  const BEZET = 'er loopt al een import of herstel in een ander tabblad: wacht even. Niets veranderd';
+  const GEEN_LOCKS = 'deze browser kan tabbladen niet op slot zetten (navigator.locks ontbreekt): importeren staat uit, omdat twee tabbladen elkaars werk zouden kunnen verstoren. Gebruik een recente Chrome, Edge, Firefox of Safari. Niets veranderd';
+  V.heeftSlot = () => { const L = root.navigator && root.navigator.locks; return !!L && typeof L.request === 'function'; };
+  async function metSlot(fn) {
+    if (!V.heeftSlot()) throw new Error(GEEN_LOCKS);
+    return await root.navigator.locks.request(LOCKNAAM, { mode: 'exclusive', ifAvailable: true }, async slot => { if (!slot) throw new Error(BEZET); return await fn(); });
+  }
+  // Draait terug wat het journaal bevat. → { fouten: [onderdelen], sleutels, records }.
+  //  - localStorage: een sleutel alleen als hij nog onze waarde heeft (vingerafdruk).
+  //  - IndexedDB bevestigd: precies de toegevoegde keys. Afgebroken transactie: niets (was atomair). Niet bevestigd (crash): alleen kandidaten
+  //    die er nu staan met dezelfde vingerafdruk als wat wij zouden schrijven.
   async function terugdraaien(journaal) {
-    const s = ls(), fouten = [];
-    for (const [k, f] of (journaal.ls || []).slice().reverse()) { try { const w = s.getItem(k); if (w != null && fp(w) === f) s.removeItem(k); } catch (e) { fouten.push(k); } }
-    for (const j of (journaal.idb || []).slice().reverse()) { try { await V.idb.verwijder(j.db, j.store, j.keys); } catch (e) { fouten.push(`${j.db}/${j.store}`); } }
-    return fouten;
+    const s = ls(), fouten = []; let sl = 0, rec = 0;
+    for (const [k, f] of (journaal.ls || []).slice().reverse()) { try { const w = s.getItem(k); if (w != null && await fp(w) === f) { s.removeItem(k); sl++; } } catch (e) { fouten.push(k); } }
+    for (const j of (journaal.idb || []).slice().reverse()) {
+      try {
+        if (j.afgebroken) continue;
+        let keys = j.keys;
+        if (!Array.isArray(keys)) {
+          keys = [];
+          for (const c of (j.kand || [])) { const w = await V.idb.haal(j.db, j.store, c.key); if (w !== undefined && await fpRecord(w) === c.fp) keys.push(c.key); }
+        }
+        if (keys.length) { await V.idb.verwijder(j.db, j.store, keys); rec += keys.length; }
+      } catch (e) { fouten.push(`${j.db}/${j.store}`); }
+    }
+    return { fouten, sleutels: sl, records: rec };
+  }
+  async function herstelBinnenSlot() {
+    const s = ls(), j = leesJournaal(); if (!j) return null;
+    const r = await terugdraaien(j);
+    if (r.fouten.length) throw new Error(`een eerder onderbroken import kon niet volledig worden teruggedraaid (${r.fouten.join(', ')}): start geen nieuwe import maar laat dit nakijken`);
+    try { s.removeItem(JOURNAAL); } catch (e) {}
+    return { sleutels: r.sleutels, records: r.records };
   }
   // Herstelt een onderbroken import (journaal blijft staan na een crash). → null (niets te doen) of { sleutels, records }.
-  V.herstelJournaal = async function () {
-    const s = ls(), j = leesJournaal(); if (!j) return null;
-    const l = leesLock(); if (l && Date.now() - l.t < LOCK_MS) throw new Error(BEZET);
-    const fouten = await terugdraaien(j);
-    if (fouten.length) throw new Error(`een eerder onderbroken import kon niet volledig worden teruggedraaid (${fouten.join(', ')}): start geen nieuwe import maar laat dit nakijken`);
-    try { s.removeItem(JOURNAAL); s.removeItem(LOCK); } catch (e) {}
-    return { sleutels: (j.ls || []).length, records: (j.idb || []).reduce((a, x) => a + x.keys.length, 0) };
-  };
+  V.herstelJournaal = () => metSlot(herstelBinnenSlot);
   V.importeer = async function (pakket, blobVan, opt) {
     if (!pakket || pakket.soort !== 'mt-verhuispakket') throw new Error('geen verhuispakket');
     if (pakket.versie !== V.VERSIE) throw new Error('pakket van een oude of nieuwere versie: maak op het oude adres een nieuw pakket');
     const oid = opt && opt.oid; if (!OID.test(oid || '')) throw new Error('niet ingelogd (geen gebruiker-id): log in en probeer nog eens');
     if (String(pakket.gebruiker_oid || '').toLowerCase() !== String(oid).toLowerCase()) throw new Error('dit pakket is van een andere gebruiker: niets geïmporteerd');
+    if (!V.heeftSlot()) throw new Error(GEEN_LOCKS);
     if (await V.hash(JSON.stringify(pakket.localStorage)) !== pakket.sha256.localStorage || await V.hash(JSON.stringify(pakket.idb)) !== pakket.sha256.idb) throw new Error('checksum van het pakket klopt niet: niets geïmporteerd');
     const perId = {};
     for (const b of pakket.blobs || []) {                 // eerst álle foto's ophalen en controleren — pas daarna iets schrijven
@@ -295,51 +351,56 @@
       if (blob.size !== b.grootte || await V.hash(blob) !== b.sha256) throw new Error(`foto ${b.id}: checksum klopt niet: niets geïmporteerd`);
       perId[b.id] = blob.type || !b.mime ? blob : new Blob([blob], { type: b.mime });
     }
-    // Voorcontrole van alle databases waar iets in moet: ontbreekt er een store, dan stoppen we vóór er iets geschreven is.
-    const plan = [];
-    for (const sch of V.schemas()) {
-      const recs = []; for (const st of sch.stores) { const lijst = ((pakket.idb || {})[sch.naam] || {})[st] || []; if (lijst.length) recs.push([st, lijst]); }
-      if (!recs.length) continue;
-      const c = await V.idb.controle(sch.naam, sch.stores);
-      if (c.status === 'mist') throw new Error(`database ${sch.naam} mist onderdeel ${c.ontbreekt.join(', ')}: de verhuizer wijzigt nooit een databaseversie. Niets veranderd; open eerst de app op dit adres of neem contact op`);
-      plan.push({ sch, status: c.status, recs });
-    }
-    const s = ls(), uit = { sleutels: 0, sleutelsAlAanwezig: [], overgeslagen: (pakket.overgeslagen || []).length, fotos: 0, fotosAlAanwezig: 0, concepten: 0, conceptenAlAanwezig: 0 };
-    // Importlock (sleutel met tijdstempel): geen tweede import tegelijk (ander tabblad). Daarna eerst een onderbroken eerdere import terugdraaien.
-    const ikId = nieuwId();
-    { const l = leesLock(); if (l && Date.now() - l.t < LOCK_MS) throw new Error(BEZET); }
-    const hersteld = await V.herstelJournaal();
-    uit.hersteld = hersteld;
-    { s.setItem(LOCK, JSON.stringify({ t: Date.now(), id: ikId })); const na = leesLock(); if (!na || na.id !== ikId) throw new Error(BEZET); }
-    const journaal = { id: ikId, gemaakt: pakket.gemaakt, t: Date.now(), ls: [], idb: [] };
-    const bewaar = () => { journaal.t = Date.now(); s.setItem(JOURNAAL, JSON.stringify(journaal)); s.setItem(LOCK, JSON.stringify({ t: journaal.t, id: ikId })); };   // journaal + hartslag
-    try {
-      bewaar();
-      for (const [k, v] of Object.entries(pakket.localStorage || {})) {
-        if (!V.sleutelMee(k) || V.waardeVerdacht(v)) continue;
-        if (s.getItem(k) != null) { uit.sleutelsAlAanwezig.push(k); continue; }   // al hier (bv. uit SharePoint, of net door een ander tabblad): niet overschrijven
-        journaal.ls.push([k, fp(v)]); bewaar();   // eerst vastleggen (write-ahead), dan schrijven
-        s.setItem(k, v); uit.sleutels++; if (/^mt_rapdraft_/.test(k)) uit.concepten++;   // controle en schrijven zonder tussenruimte
+    return await metSlot(async () => {                    // vanaf hier raakt alles de data: exclusief over alle tabbladen
+      // Voorcontrole van alle databases waar iets in moet: ontbreekt er een store, dan stoppen we vóór er iets geschreven is.
+      const plan = [];
+      for (const sch of V.schemas()) {
+        const recs = []; for (const st of sch.stores) { const lijst = ((pakket.idb || {})[sch.naam] || {})[st] || []; if (lijst.length) recs.push([st, lijst]); }
+        if (!recs.length) continue;
+        const c = await V.idb.controle(sch.naam, sch.stores);
+        if (c.status === 'mist') throw new Error(`database ${sch.naam} mist onderdeel ${c.ontbreekt.join(', ')}: de verhuizer wijzigt nooit een databaseversie. Niets veranderd; open eerst de app op dit adres of neem contact op`);
+        plan.push({ sch, status: c.status, recs });
       }
-      for (const p of plan) {
-        if (p.status === 'afwezig') { try { await V.idb.maak(p.sch); } catch (e) { const c2 = await V.idb.controle(p.sch.naam, p.sch.stores); if (c2.status !== 'ok') throw e; } }
-        for (const [st, lijst] of p.recs) {
-          const foto = p.sch.naam === 'mt-rapporten' && st === 'fotos';
-          const recs = lijst.map(r => ({ key: r.key, value: zetBlobs(r.value, perId) }));
-          const res = await V.idb.voegToe(p.sch.naam, st, recs);
-          if (res.toegevoegd.length) { journaal.idb.push({ db: p.sch.naam, store: st, keys: res.toegevoegd }); bewaar(); }   // een store is atomair; direct na het slagen vastleggen
-          if (foto) { uit.fotos += res.toegevoegd.length; uit.fotosAlAanwezig += res.bestond.length; } else { uit.concepten += res.toegevoegd.length; uit.conceptenAlAanwezig += res.bestond.length; }
+      const s = ls(), uit = { sleutels: 0, sleutelsAlAanwezig: [], overgeslagen: (pakket.overgeslagen || []).length, fotos: 0, fotosAlAanwezig: 0, concepten: 0, conceptenAlAanwezig: 0 };
+      // Een journaal van een eerdere, onderbroken import (tab gesloten): met het slot in handen weten we dat niemand het nog gebruikt.
+      uit.hersteld = await herstelBinnenSlot();
+      const journaal = { id: nieuwId(), gemaakt: pakket.gemaakt, t: Date.now(), ls: [], idb: [] };
+      const bewaar = () => { journaal.t = Date.now(); s.setItem(JOURNAAL, JSON.stringify(journaal)); };
+      try {
+        bewaar();
+        for (const [k, v] of Object.entries(pakket.localStorage || {})) {
+          if (!V.sleutelMee(k) || V.waardeVerdacht(v)) continue;
+          if (s.getItem(k) != null) { uit.sleutelsAlAanwezig.push(k); continue; }   // al hier (bv. uit SharePoint): niet overschrijven
+          journaal.ls.push([k, await fp(v)]); bewaar();   // eerst vastleggen (write-ahead), dan schrijven
+          s.setItem(k, v); uit.sleutels++; if (/^mt_rapdraft_/.test(k)) uit.concepten++;   // controle en schrijven zonder tussenruimte
         }
+        for (const p of plan) {
+          if (p.status === 'afwezig') { try { await V.idb.maak(p.sch); } catch (e) { const c2 = await V.idb.controle(p.sch.naam, p.sch.stores); if (c2.status !== 'ok') throw e; } }
+          for (const [st, lijst] of p.recs) {
+            const foto = p.sch.naam === 'mt-rapporten' && st === 'fotos';
+            const recs = lijst.map(r => ({ key: r.key, value: zetBlobs(r.value, perId) }));
+            // 1. kandidaten VASTLEGGEN vóór de write: alleen keys die er nu nog niet zijn, met een vingerafdruk van wat wij erin zetten
+            const bestond = new Set((await V.idb.sleutels(p.sch.naam, st)).map(k => JSON.stringify(k)));
+            const kand = []; for (const r of recs) if (!bestond.has(JSON.stringify(r.key))) kand.push({ key: r.key, fp: await fpRecord(r.value) });
+            const entry = { db: p.sch.naam, store: st, kand, keys: null };
+            journaal.idb.push(entry); bewaar();
+            // 2. de write: één transactie, dus alles of niets in deze store
+            let res; try { res = await V.idb.voegToe(p.sch.naam, st, recs); } catch (e) { entry.afgebroken = true; try { bewaar(); } catch (e2) {} throw e; }
+            // 3. bevestigen met wat er echt is toegevoegd
+            entry.keys = res.toegevoegd; bewaar();
+            if (foto) { uit.fotos += res.toegevoegd.length; uit.fotosAlAanwezig += res.bestond.length; } else { uit.concepten += res.toegevoegd.length; uit.conceptenAlAanwezig += res.bestond.length; }
+          }
+        }
+      } catch (e) {
+        const r = await terugdraaien(journaal), mis = r.fouten;
+        try { if (!mis.length) s.removeItem(JOURNAAL); } catch (e2) {}   // bij een mislukt terugdraaien blijft het journaal voor de volgende keer
+        const m = mis.length ? `onderbroken; terugdraaien deels mislukt (${mis.join(', ')}): importeer opnieuw, wat er al staat wordt overgeslagen` : 'onderbroken, niets veranderd, opnieuw proberen';
+        const er = new Error(`${m} (${e && e.name === 'QuotaExceededError' ? 'opslag vol' : (e && e.message) || e})`); er.oorzaak = e; er.terugdraaienMislukt = mis; throw er;
       }
-    } catch (e) {
-      const mis = await terugdraaien(journaal);
-      try { if (!mis.length) s.removeItem(JOURNAAL); s.removeItem(LOCK); } catch (e2) {}   // bij een mislukt terugdraaien blijft het journaal voor de volgende keer
-      const m = mis.length ? `onderbroken; terugdraaien deels mislukt (${mis.join(', ')}): importeer opnieuw, wat er al staat wordt overgeslagen` : 'onderbroken, niets veranderd, opnieuw proberen';
-      const er = new Error(`${m} (${e && e.name === 'QuotaExceededError' ? 'opslag vol' : (e && e.message) || e})`); er.oorzaak = e; er.terugdraaienMislukt = mis; throw er;
-    }
-    try { s.removeItem(JOURNAAL); s.removeItem(LOCK); } catch (e) {}   // pas na volledig succes
-    try { s.setItem('mt_verhuis_import:' + pakket.gemaakt, JSON.stringify({ t: Date.now(), bron: pakket.bron, uit: Object.assign({}, uit, { sleutelsAlAanwezig: uit.sleutelsAlAanwezig.length }) })); } catch (e) {}
-    return uit;
+      try { s.removeItem(JOURNAAL); } catch (e) {}   // pas na volledig succes
+      try { s.setItem('mt_verhuis_import:' + pakket.gemaakt, JSON.stringify({ t: Date.now(), bron: pakket.bron, uit: Object.assign({}, uit, { sleutelsAlAanwezig: uit.sleutelsAlAanwezig.length }) })); } catch (e) {}
+      return uit;
+    });
   };
   V.importeerVanSharePoint = async function (map, opt) {
     const p = await V.sp.lees(`${map}/pakket.json`); if (!p) throw new Error('pakket.json niet gevonden (nog niet compleet?)');
@@ -385,7 +446,8 @@
       inv.timer ? 'Er loopt een timer: stop die eerst (Toggl is de bron; de timer gaat niet mee).' : '',
       inv.nogTeVersturen ? `Nog niet verstuurd: ${inv.wachtrij} in de wachtrij, ${inv.fotos.lokaal + inv.fotos.wacht + inv.fotos.fout} foto's. Ga eerst online zodat het zelf verstuurt; wat overblijft gaat mee in het pakket.` : '',
       inv.onbekend.length ? 'Onbekende lokale gegevens, niet meegenomen — laat beoordelen of ze mee moeten (geen waarden getoond): ' + inv.onbekend.join(', ') + '.' : '',
-      inv.onderbrokenImport ? 'Een eerdere import is onderbroken (tab dichtgegaan?). Bij de volgende import wordt eerst teruggedraaid wat die al had toegevoegd.' : '',
+      !V.heeftSlot() ? 'Deze browser kan tabbladen niet op slot zetten (navigator.locks): importeren is uitgeschakeld. Gebruik een recente browser.' : '',
+      inv.onderbrokenImport ? 'Er staat een import-journaal van een onderbroken (of nog lopende) import. Bij de volgende import wordt eerst teruggedraaid wat die al had toegevoegd.' : '',
       verdacht.length ? 'Niet meegenomen omdat de waarde op een token of sleutel lijkt (geen waarden getoond): ' + verdacht.map(o => o.sleutel).join(', ') + '.' : '',
       inv.fouten.length ? 'Niet alles leesbaar: ' + inv.fouten.join('; ') : ''].filter(Boolean);
     el.innerHTML = `<div class="mtv">

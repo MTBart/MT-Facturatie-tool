@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.12.0 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.12.1 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -30,11 +30,11 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-geld.js?v=2026-10-11a"></script>
-<script src="mt-koers.js?v=2026-10-11a"></script>
+<script src="mt-geld.js?v=2026-10-11e"></script>
+<script src="mt-koers.js?v=2026-10-11e"></script>
 <script src="mt-schulden.js?v=2026-10-10a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-11c"></script>
+<script src="mt-verhuis.js?v=2026-10-11e"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -771,7 +771,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.12.0, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.12.1, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -792,7 +792,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.12.0</span>
+    <span class="header-version">v2.12.1</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -3806,7 +3806,7 @@ async function loadLedgers(){
     const ink=ledgers.filter(l=>l.account_type==='expenses');
     document.getElementById('ledger-list').innerHTML=ink.map(l=>
       `<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;gap:1rem;font-size:12px">
-        <span class="code">${l.account_id||l.id}</span><span>${l.name}</span>
+        <span class="code">${esc(l.account_id||l.id)}</span><span>${esc(l.name)}</span>
       </div>`).join('');
     updateLedgerDropdowns();
   }catch(e){}
@@ -3833,7 +3833,7 @@ function getLedgerIdByName(naam){
 // ═══ PROJECT OPTIONS ═══
 function projectOptiesHTML(geselecteerd=''){
   return`<option value="">— Kies project —</option>`+
-    PROJECT_CODES.map(p=>`<option value="${p.code}" ${p.code===geselecteerd?'selected':''}>${esc(projKeuzeLabel(p))}</option>`).join('')+
+    PROJECT_CODES.map(p=>`<option value="${esc(p.code)}" ${p.code===geselecteerd?'selected':''}>${esc(projKeuzeLabel(p))}</option>`).join('')+
     `<option value="__nieuw__">+ Nieuw project aanmaken</option>`;
 }
 
@@ -3842,7 +3842,7 @@ function renderFactuurFormulier(data={}){
   const c=document.getElementById('factuur-form-inhoud');
   c.innerHTML=`
     <div class="grid2">
-      <div class="field"><label>Leverancier</label><input type="text" id="f-contact" placeholder="Naam leverancier" value="${data.leverancier||''}"></div>
+      <div class="field"><label>Leverancier</label><input type="text" id="f-contact" placeholder="Naam leverancier" value="${esc(data.leverancier||'')}"></div>
       <div class="field">
         <label>Hoofd-project</label>
         <select id="f-project" onchange="projectGewijzigd(this);pasHoofdprojectToe()">${projectOptiesHTML(data.project_code||'')}</select>
@@ -3850,9 +3850,9 @@ function renderFactuurFormulier(data={}){
       </div>
     </div>
     <div class="grid3">
-      <div class="field"><label>Factuurnummer</label><input type="text" id="f-ref" placeholder="Ref. leverancier" value="${data.factuurnummer||''}"></div>
-      <div class="field"><label>Factuurdatum</label><input type="date" id="f-date" value="${data.datum||''}"></div>
-      <div class="field"><label>Vervaldatum</label><input type="date" id="f-due" value="${data.vervaldatum||''}" onchange="updateBetaling()"></div>
+      <div class="field"><label>Factuurnummer</label><input type="text" id="f-ref" placeholder="Ref. leverancier" value="${esc(data.factuurnummer||'')}"></div>
+      <div class="field"><label>Factuurdatum</label><input type="date" id="f-date" value="${esc(data.datum||'')}"></div>
+      <div class="field"><label>Vervaldatum</label><input type="date" id="f-due" value="${esc(data.vervaldatum||'')}" onchange="updateBetaling()"></div>
     </div>
     <hr class="divider">
     <div class="card-title">Factuurregels</div>
@@ -3895,13 +3895,13 @@ function addRegel(oms='',ledger='',aantal=1,prijs='',btw='21',project='',voorraa
   if(!cat&&oms) cat=categoriseerMateriaal(oms);
   const div=document.createElement('div');div.className='regel-row';div.id=`regel-${id}`;
   div.innerHTML=`
-    <input type="text" placeholder="Omschrijving" value="${oms}" oninput="updateTotalen();autoDetectCat(this,${id})">
+    <input type="text" placeholder="Omschrijving" value="${esc(oms)}" oninput="updateTotalen();autoDetectCat(this,${id})">
     <select class="ledger-select" onchange="updateTotalen()">
       <option value="">— Grootboek —</option>
-      ${ledgers.map(l=>`<option value="${l.id}" ${l.id===ledger?'selected':''}>${l.name}</option>`).join('')}
+      ${ledgers.map(l=>`<option value="${esc(l.id)}" ${l.id===ledger?'selected':''}>${esc(l.name)}</option>`).join('')}
     </select>
     <input type="number" step="1" min="0" placeholder="1" value="${aantal}" oninput="updateTotalen()" style="font-family:var(--mono)">
-    <input type="number" step="0.01" placeholder="0,00" value="${prijs}" oninput="updateTotalen()" style="font-family:var(--mono)">
+    <input type="number" step="0.01" placeholder="0,00" value="${esc(prijs)}" oninput="updateTotalen()" style="font-family:var(--mono)">
     <select onchange="updateTotalen()">
       <option value="21" ${btw==21?'selected':''}>21%</option>
       <option value="9" ${btw==9?'selected':''}>9%</option>
@@ -4044,7 +4044,7 @@ async function scanEmailFacturen(forceer=false) {
     }
     if (!onverwerkt.length && alvast.length) html = `<p style="font-size:12px;color:var(--green);margin-bottom:8px">✓ Alle facturen verwerkt</p>` + html;
     el.innerHTML = html;
-  } catch(e) { el.innerHTML = `<p style="font-size:12px;color:var(--red)">Scan mislukt: ${e.message}</p>`; }
+  } catch(e) { el.innerHTML = `<p style="font-size:12px;color:var(--red)">Scan mislukt: ${esc(e.message)}</p>`; }
 }
 
 function emailRij(i, dimmed=false) {
@@ -4057,7 +4057,7 @@ function emailRij(i, dimmed=false) {
       <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.van)}</div>
       <div style="font-size:11px;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.naam)} · ${esc(i.onderwerp)}</div>
     </div>
-    <div style="font-size:11px;color:var(--text-faint);white-space:nowrap">${datum}</div>
+    <div style="font-size:11px;color:var(--text-faint);white-space:nowrap">${esc(datum)}</div>
     <button class="btn btn-gold btn-xs" title="Analyseren met Claude" onclick="event.stopPropagation();laadEmailPDF(${jsArg(mid)},${jsArg(aid)},${jsArg(nam)})">✨ Analyseren</button>
   </div>`;
 }
@@ -4084,9 +4084,9 @@ async function bekijkEmailPDF(mailId, attId, filename) {
     const file = await _haalEmailPDFOp(mailId, attId, filename);
     currentFile = file;
     toonPdfInViewer('pdf-viewer-verwerk', URL.createObjectURL(file));
-    rd.innerHTML = `<span style="font-size:12px;color:var(--text-dim)">📄 ${filename}</span>
+    rd.innerHTML = `<span style="font-size:12px;color:var(--text-dim)">📄 ${esc(filename)}</span>
       <button class="btn btn-gold btn-sm" style="margin-left:10px" onclick="laadEmailPDF(${jsArg(mailId)},${jsArg(attId)},${jsArg(filename)})">✨ Analyseren met Claude</button>`;
-  } catch(e) { rd.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${e.message}</p>`; }
+  } catch(e) { rd.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${esc(e.message)}</p>`; }
 }
 
 // Knop: analyseren met Claude
@@ -4098,7 +4098,7 @@ async function laadEmailPDF(mailId, attId, filename) {
     let file = currentFile?.name === filename ? currentFile : await _haalEmailPDFOp(mailId, attId, filename);
     toonPdfInViewer('pdf-viewer-verwerk', URL.createObjectURL(file));
     await handleFile(file);
-  } catch(e) { rd.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${e.message}</p>`; }
+  } catch(e) { rd.innerHTML = `<p style="color:var(--red);font-size:12px">Fout: ${esc(e.message)}</p>`; }
 }
 
 async function handleFile(file){
@@ -4125,14 +4125,14 @@ Projectcodes: ${PROJECT_CODES.map(p=>p.code).join(', ')}. BTW: 21, 9 of 0.`}
     window._factuurTotalen={excl:parsed.totaal_excl_btw||null,btw:parsed.totaal_btw||null,incl:parsed.totaal_incl_btw||null};
     renderFactuurFormulier(parsed);
     const hints=[];
-    if(parsed.project_code) hints.push(parsed.project_zeker?`✓ Project: <strong>${parsed.project_code}</strong>`:`💡 <strong>${parsed.project_code}</strong> — controleer`);
+    if(parsed.project_code) hints.push(parsed.project_zeker?`✓ Project: <strong>${esc(parsed.project_code)}</strong>`:`💡 <strong>${esc(parsed.project_code)}</strong> — controleer`);
     else hints.push('⚠ Project niet herkend');
     const onzeker=parsed.regels?.filter(r=>!r.grootboek_zeker).length||0;
     if(onzeker>0) hints.push(`💡 ${onzeker} grootboek(en) onzeker`);
     if(isVoorraadLeverancier(parsed.leverancier||'')) hints.push('📦 Voorraad-leverancier');
     if(parsed.totaal_incl_btw) hints.push(`Factuur: <strong>${fmt(parsed.totaal_incl_btw)}</strong> incl.`);
     rd.innerHTML=`✓ Factuur gelezen — ${hints.join(' · ')}`;
-  }catch(e){rd.innerHTML=`Analyse mislukt: ${e.message}`;renderFactuurFormulier();}
+  }catch(e){rd.innerHTML=`Analyse mislukt: ${esc(e.message)}`;renderFactuurFormulier();}
 }
 function handleDrop(e){
   e.preventDefault();document.getElementById('drop-zone').classList.remove('over');
@@ -4167,7 +4167,7 @@ function toonBoekDeelfout(status,voortgang,stap,fout){
   if(voortgang.moneybird) gelukt.push(`Moneybird-boeking (id ${voortgang.invoiceId})`);
   if(voortgang.moneybirdPdf) gelukt.push('PDF-bijlage in Moneybird');
   if(voortgang.sharepointPdf) gelukt.push('PDF-opslag');
-  status.innerHTML=`<span style="color:var(--red)">✕ ${stap} mislukt: ${fout}</span><br><span style="font-size:11px;color:var(--text-dim)">Wel gelukt: ${gelukt.join(', ')||'nog niets'}. De e-mail blijft in de map Facturen. Klik opnieuw op Boeken om alleen de ontbrekende stap(pen) te herhalen.</span>`;
+  status.innerHTML=`<span style="color:var(--red)">✕ ${esc(stap)} mislukt: ${esc(fout)}</span><br><span style="font-size:11px;color:var(--text-dim)">Wel gelukt: ${esc(gelukt.join(', ')||'nog niets')}. De e-mail blijft in de map Facturen. Klik opnieuw op Boeken om alleen de ontbrekende stap(pen) te herhalen.</span>`;
 }
 async function boekInMoneybirdOud(){
   const status=document.getElementById('boek-status');
@@ -4230,7 +4230,7 @@ async function boekInMoneybirdOud(){
     // Mail verplaatsen naar "Facturen verwerkt" als hij uit mail geladen was
     if (_huidigMailId) { verplaatsMailNaarVerwerkt(_huidigMailId); _huidigMailId = null; scanEmailFacturen(true); }
     try{ if(window.track) track('action','factuur_boeken',{detail:hoofdProject?('proj:'+hoofdProject):'geen_project',ok:true}); }catch(e){}
-    setTimeout(()=>{resetFormulier();status.innerHTML=`✓ Klaar — <a href="https://moneybird.com/${getAdmin()}/documents/${invoiceId}/payment_initiations/new" target="_blank" style="color:var(--green)">💳 Betaling inplannen →</a>`;},1500);
+    setTimeout(()=>{resetFormulier();status.innerHTML=`✓ Klaar — <a href="https://moneybird.com/${esc(getAdmin())}/documents/${esc(invoiceId)}/payment_initiations/new" target="_blank" style="color:var(--green)">💳 Betaling inplannen →</a>`;},1500);
   }catch(e){status.textContent=`✗ ${e.message}`;
     try{ if(window.track) track('action','factuur_boeken',{detail:'exception',ok:false}); }catch(_){}
   }
@@ -4269,7 +4269,7 @@ async function boekInMoneybird(){
     if(!voortgang){
       status.innerHTML='<span class="spinner"></span> Duplicaatcontrole in Moneybird...';
       const bestaand=await zoekBestaandeFactuur(contact,ref);
-      if(bestaand){status.innerHTML=`<span style="color:var(--red)">✕ Niet geboekt: deze factuur bestaat al in Moneybird (leverancier: ${contact}, factuurnummer: ${ref}, id: ${bestaand.id}).</span>`;return;}
+      if(bestaand){status.innerHTML=`<span style="color:var(--red)">✕ Niet geboekt: deze factuur bestaat al in Moneybird (leverancier: ${esc(contact)}, factuurnummer: ${esc(ref)}, id: ${esc(bestaand.id)}).</span>`;return;}
       status.innerHTML='<span class="spinner"></span> Contact zoeken...';
       const cR=await mbGet(`${getAdmin()}/contacts?query=${encodeURIComponent(contact)}`);if(!cR.ok)throw new Error(`Contact zoeken mislukt (HTTP ${cR.status})`);
       const contacts=await cR.json();let contactId=contacts?.[0]?.id;
@@ -4292,7 +4292,7 @@ async function boekInMoneybird(){
       try{await verplaatsMailNaarVerwerkt(_huidigMailId);}catch(e){toonBoekDeelfout(status,voortgang,'E-mail verplaatsen',e.message);return;}
       _huidigMailId=null;scanEmailFacturen(true);
     }
-    if(due){try{const dD=new Date(due),pD=new Date(dD);pD.setDate(pD.getDate()-1);const note=await mbPost(`${getAdmin()}/documents/purchase_invoices/${voortgang.invoiceId}/notes`,{note:{note:`Betalen voor: ${pD.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}`}},{bevestiging:bev,actie:bev+':notitie'});if(!note.ok)throw new Error(`HTTP ${note.status}`);}catch(e){status.innerHTML=`<span style="color:var(--orange)">⚠ Factuur is geboekt en de PDF is opgeslagen, maar betaalnotitie opslaan mislukte: ${e.message}</span>`;return;}}
+    if(due){try{const dD=new Date(due),pD=new Date(dD);pD.setDate(pD.getDate()-1);const note=await mbPost(`${getAdmin()}/documents/purchase_invoices/${voortgang.invoiceId}/notes`,{note:{note:`Betalen voor: ${pD.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}`}},{bevestiging:bev,actie:bev+':notitie'});if(!note.ok)throw new Error(`HTTP ${note.status}`);}catch(e){status.innerHTML=`<span style="color:var(--orange)">⚠ Factuur is geboekt en de PDF is opgeslagen, maar betaalnotitie opslaan mislukte: ${esc(e.message)}</span>`;return;}}
     voorraadRegels.forEach(r=>slaVoorraadOp(r));let payDateStr='';if(due){const d=new Date(due);d.setDate(d.getDate()-1);payDateStr=d.toISOString().split('T')[0];}
     status.innerHTML=`✓ Geboekt — <strong>betaal voor ${fmtDatum(payDateStr)}</strong>${voorraadRegels.length?` · 📦 ${voorraadRegels.length} voorraad`:''}`;
     const hist=JSON.parse(localStorage.getItem('mt_history')||'[]');hist.unshift({id:voortgang.invoiceId,contact,ref,date,due,payDate:payDateStr,project:hoofdProject,totaal:document.getElementById('totaal-incl').textContent,ts:Date.now()});
@@ -4303,7 +4303,7 @@ async function boekInMoneybird(){
     }
     localStorage.setItem('mt_history',JSON.stringify(hist));
     _factuurBoekVoortgang=null;try{if(window.track)track('action','factuur_boeken',{detail:hoofdProject?('proj:'+hoofdProject):'geen_project',ok:true});}catch(e){}
-    setTimeout(()=>{resetFormulier();status.innerHTML=`✓ Klaar — <a href="https://moneybird.com/${getAdmin()}/documents/${voortgang.invoiceId}/payment_initiations/new" target="_blank" style="color:var(--green)">💳 Betaling inplannen →</a>`;},1500);
+    setTimeout(()=>{resetFormulier();status.innerHTML=`✓ Klaar — <a href="https://moneybird.com/${esc(getAdmin())}/documents/${esc(voortgang.invoiceId)}/payment_initiations/new" target="_blank" style="color:var(--green)">💳 Betaling inplannen →</a>`;},1500);
   }catch(e){status.textContent=`✕ ${e.message}`;try{if(window.track)track('action','factuur_boeken',{detail:'exception',ok:false});}catch(_){}}
 }
 
@@ -6555,7 +6555,7 @@ async function klantGeldLaad(info){
 function klantMbPop(el){
   if(!window.MTKoppelUI) return;
   MTKoppelUI.popover(el,`<div class="dos-meta">Voor deze klant is geen Moneybird-contact bekend. Het contact komt uit de klantregistry, of uit een project (Moneybird-koppeling op het project).</div>
-    <div class="kb-pop-acties"><a class="btn btn-xs btn-secondary" href="https://moneybird.com/${getAdmin()}/contacts" target="_blank" rel="noopener">Moneybird-contacten ↗</a></div>`,{titel:'Niet gekoppeld · Moneybird'});
+    <div class="kb-pop-acties"><a class="btn btn-xs btn-secondary" href="https://moneybird.com/${esc(getAdmin())}/contacts" target="_blank" rel="noopener">Moneybird-contacten ↗</a></div>`,{titel:'Niet gekoppeld · Moneybird'});
 }
 function klantKlik(mbId){
   const code=klantCodeVoorMb(mbId);
@@ -6905,7 +6905,7 @@ function mbPop(el,code){
   const proj=projVind(code); if(!proj||!window.MTKoppelUI) return;
   const auto=resolveMbContact(proj), eff=proj.mb_nr||auto, bron=proj.mb_nr?'handmatig gekoppeld':'automatisch via de klantregistry';
   MTKoppelUI.popover(el,`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:mbContactNaam(eff)||'Moneybird'})}<span class="kb-pop-n dos-meta">${esc(bron)} · contact-id ${esc(eff)}</span></div>
-    <div class="kb-pop-acties"><a class="btn btn-xs btn-secondary" href="https://moneybird.com/${getAdmin()}/contacts/${esc(eff)}" target="_blank" rel="noopener">Open in Moneybird ↗</a>
+    <div class="kb-pop-acties"><a class="btn btn-xs btn-secondary" href="https://moneybird.com/${esc(getAdmin())}/contacts/${esc(eff)}" target="_blank" rel="noopener">Open in Moneybird ↗</a>
     <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();bewerkProjectMbNr(${jsArg(_jsCode(code))})">Wijzigen</button>
     ${proj.mb_nr?`<button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();mbOntkoppel(${jsArg(_jsCode(code))})">Handmatige koppeling weghalen</button>`:''}</div>
     ${!proj.mb_nr?'<div class="dos-meta" style="margin-top:4px">Automatische koppeling: pas de klantregistry aan om dit te wijzigen, of koppel handmatig.</div>':''}`,{titel:'Moneybird-contact'});
@@ -7323,8 +7323,8 @@ async function nacalcLaadOfferte(code,mbId){
     const proj=projVind(code);
     const werk=(proj?nacalcData(proj).arbeid:0)+nacalcMatTotaal(code);
     const diff=beg-werk;
-    el.innerHTML=`📄 Offerte <a href="https://moneybird.com/${getAdmin()}/estimates/${o.id}" target="_blank" style="color:var(--gold)">${o.estimate_id||o.id} ↗</a>
-      <span class="badge ${goedgekeurd?'badge-ok':''}">${goedgekeurd?'✓ goedgekeurd':o.state}</span> — begroot <b style="font-family:var(--mono)">${fmt(beg)}</b> excl. btw ·
+    el.innerHTML=`📄 Offerte <a href="https://moneybird.com/${esc(getAdmin())}/estimates/${esc(o.id)}" target="_blank" style="color:var(--gold)">${esc(o.estimate_id||o.id)} ↗</a>
+      <span class="badge ${goedgekeurd?'badge-ok':''}">${esc(goedgekeurd?'✓ goedgekeurd':o.state)}</span> — begroot <b style="font-family:var(--mono)">${fmt(beg)}</b> excl. btw ·
       werkelijk <b style="font-family:var(--mono)">${fmt(werk)}</b> ·
       marge <b style="font-family:var(--mono);color:${diff>=0?'var(--green)':'#c0392b'}">${fmt(diff)}</b>
       ${over.length>1?`<span style="color:var(--text-faint)">(${over.length} van ${est.length} offertes)</span>`:''}
@@ -7376,7 +7376,7 @@ async function nacalcMaakFactuur(code,opts){
       if(res.controleren){ if(st)st.innerHTML=mbControleerHtml(res,'factuur',opnieuwKnop); return; }
       if(!res.ok)throw new Error(res.fout);
       const inv=res.data;
-      if(st)st.innerHTML=`✓ Concept-factuur aangemaakt — <a href="https://moneybird.com/${getAdmin()}/sales_invoices/${inv.id}" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>`;
+      if(st)st.innerHTML=`✓ Concept-factuur aangemaakt — <a href="https://moneybird.com/${esc(getAdmin())}/sales_invoices/${esc(inv.id)}" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>`;
     }catch(e){if(st)st.textContent='❌ Omzetten mislukt: '+e.message;}
     return;
   }
@@ -8837,7 +8837,7 @@ function renderAgingBars(elId,items){
     const pct=Math.round(bedrag/totaal*100);
     const kleur=naam.includes('Ouder')?'var(--red)':naam.includes('30 - 60')?'var(--orange)':'var(--green)';
     return`<div class="mini-bar-row" style="margin-bottom:8px">
-      <div class="mini-bar-label" style="width:100px">${naam}</div>
+      <div class="mini-bar-label" style="width:100px">${esc(naam)}</div>
       <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${pct}%;background:${kleur}"></div></div>
       <div class="mini-bar-val">${fmt(bedrag)}</div>
     </div>`;
@@ -8852,7 +8852,7 @@ function renderLeveranciersBar(items){
     const bedrag=parseFloat(item.amount);
     const pct=Math.round(bedrag/max*100);
     return`<div class="mini-bar-row" style="margin-bottom:8px">
-      <div class="mini-bar-label" style="width:130px;font-size:11px">${item.contact_id||'Onbekend'}</div>
+      <div class="mini-bar-label" style="width:130px;font-size:11px">${esc(item.contact_id||'Onbekend')}</div>
       <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${pct}%"></div></div>
       <div class="mini-bar-val">${fmt(bedrag)}</div>
     </div>`;
@@ -9252,9 +9252,9 @@ function _cfRenderTeFact(items){
   el.innerHTML=`<table class="data-table data-table--compact" style="margin-top:0.25rem">
     <thead><tr><th>Klant</th><th class="num">Excl. BTW</th><th>Dagen</th></tr></thead>
     <tbody>${items.map(i=>`<tr>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.contact||'—'}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.contact||'—')}</td>
       <td class="num">${cfFmt2(i.bedrag_excl)}</td>
-      <td class="num" style="color:${(i.days_since_accepted||0)>30?'var(--error)':'var(--text-dim)'}">${i.days_since_accepted!=null?i.days_since_accepted+'d':'—'}</td>
+      <td class="num" style="color:${(i.days_since_accepted||0)>30?'var(--error)':'var(--text-dim)'}">${esc(i.days_since_accepted!=null?i.days_since_accepted+'d':'—')}</td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
@@ -9265,8 +9265,8 @@ function _cfRenderOnderhanden(items){
   el.innerHTML=`<table class="data-table data-table--compact">
     <thead><tr><th>Project</th><th class="num">Uren</th><th class="num">Geschat</th></tr></thead>
     <tbody>${items.map(i=>`<tr>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.project}</td>
-      <td class="num">${i.uren}u</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.project)}</td>
+      <td class="num">${esc(i.uren)}u</td>
       <td class="num">${cfFmt2(i.geschat_bedrag)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -9283,10 +9283,10 @@ function _cfRenderPijplijn(cfData){
       <tbody>${items.map(i=>{
         const kans=i.days_since_accepted!=null?'zeker':'verwacht';
         return`<tr>
-          <td>${i.contact||'—'}</td>
-          <td style="font-family:var(--mono);font-size:11px">${i.due_date||'—'}</td>
+          <td>${esc(i.contact||'—')}</td>
+          <td style="font-family:var(--mono);font-size:11px">${esc(i.due_date||'—')}</td>
           <td class="num">${cfFmt2(i.bedrag_incl)}</td>
-          <td><span class="cf-pipe-kans ${kans}">${kans}</span></td>
+          <td><span class="cf-pipe-kans ${esc(kans)}">${esc(kans)}</span></td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
@@ -9371,7 +9371,7 @@ async function laadKlanten(){
     klantenGeladen=true;
     localStorage.setItem('mt_cache_klanten',JSON.stringify({data:alleKlanten,ts:Date.now()}));
     renderKlantenGrid(alleKlanten);
-  }catch(e){el.innerHTML=`<p style="color:var(--red);font-size:13px">Fout: ${e.message}</p>`;}
+  }catch(e){el.innerHTML=`<p style="color:var(--red);font-size:13px">Fout: ${esc(e.message)}</p>`;}
 }
 function toggleKlantenView(){
   klantenView=klantenView==='grid'?'lijst':'grid';
@@ -9392,15 +9392,15 @@ function renderKlantenGrid(klanten){
         const initialen=naam.split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
         return`<tr style="cursor:pointer" onclick="klantKlik(${jsArg(k.id)})">
           <td><div style="display:flex;align-items:center;gap:10px">
-            <div style="width:32px;height:32px;border-radius:50%;background:${kleur}22;border:2px solid ${kleur}55;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${kleur};flex-shrink:0">${initialen}</div>
-            <div><strong style="font-size:13px">${naam}</strong>${k.customer_id?`<div style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">nr. ${k.customer_id}</div>`:''}</div>
+            <div style="width:32px;height:32px;border-radius:50%;background:${kleur}22;border:2px solid ${kleur}55;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${kleur};flex-shrink:0">${esc(initialen)}</div>
+            <div><strong style="font-size:13px">${esc(naam)}</strong>${k.customer_id?`<div style="font-family:var(--mono);font-size:10px;color:var(--text-faint)">nr. ${esc(k.customer_id)}</div>`:''}</div>
           </div></td>
-          <td style="font-size:12px">${k.email?`<a href="mailto:${k.email}" style="color:var(--green);text-decoration:none" onclick="event.stopPropagation()">${k.email}</a>`:'—'}</td>
-          <td style="font-size:12px">${k.phone?`<a href="tel:${k.phone}" style="color:var(--green);text-decoration:none" onclick="event.stopPropagation()">${k.phone}</a>`:'—'}</td>
+          <td style="font-size:12px">${k.email?`<a href="mailto:${esc(k.email)}" style="color:var(--green);text-decoration:none" onclick="event.stopPropagation()">${esc(k.email)}</a>`:'—'}</td>
+          <td style="font-size:12px">${k.phone?`<a href="tel:${esc(k.phone)}" style="color:var(--green);text-decoration:none" onclick="event.stopPropagation()">${esc(k.phone)}</a>`:'—'}</td>
           <td style="text-align:right;font-family:var(--mono);font-weight:600;color:${k.total_outstanding_invoices_count>0?'var(--orange)':'var(--text-faint)'}">
             ${k.total_outstanding_invoices_count>0?fmt(parseFloat(k.total_outstanding_invoices_amount||0)):'—'}
           </td>
-          <td><a href="https://moneybird.com/${getAdmin()}/contacts/${k.id}" target="_blank" style="font-size:11px;color:var(--green);text-decoration:none" onclick="event.stopPropagation()">Moneybird →</a></td>
+          <td><a href="https://moneybird.com/${esc(getAdmin())}/contacts/${esc(k.id)}" target="_blank" style="font-size:11px;color:var(--green);text-decoration:none" onclick="event.stopPropagation()">Moneybird →</a></td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
@@ -9418,24 +9418,24 @@ function renderKlantenGrid(klanten){
         <div style="height:6px;background:${kleur}"></div>
         <div style="padding:1.25rem">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
-            <div style="width:48px;height:48px;border-radius:50%;background:${kleur}18;border:2px solid ${kleur}44;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:16px;font-weight:700;color:${kleur};flex-shrink:0">${initialen}</div>
+            <div style="width:48px;height:48px;border-radius:50%;background:${kleur}18;border:2px solid ${kleur}44;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:16px;font-weight:700;color:${kleur};flex-shrink:0">${esc(initialen)}</div>
             <div style="min-width:0">
-              <div style="font-weight:700;font-size:15px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${naam}</div>
-              ${k.customer_id?`<div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:2px">klant nr. ${k.customer_id}</div>`:''}
+              <div style="font-weight:700;font-size:15px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(naam)}</div>
+              ${k.customer_id?`<div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:2px">klant nr. ${esc(k.customer_id)}</div>`:''}
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text-dim);margin-bottom:1rem">
-            ${k.email?`<div style="display:flex;align-items:center;gap:6px">📧 <a href="mailto:${k.email}" style="color:var(--green);text-decoration:none" onclick="event.stopPropagation()">${k.email}</a></div>`:''}
-            ${k.phone?`<div style="display:flex;align-items:center;gap:6px">📞 <a href="tel:${k.phone}" style="color:var(--green);text-decoration:none" onclick="event.stopPropagation()">${k.phone}</a></div>`:''}
-            ${k.address1?`<div style="display:flex;align-items:center;gap:6px">📍 ${k.address1}${k.city?', '+k.city:''}</div>`:''}
+            ${k.email?`<div style="display:flex;align-items:center;gap:6px">📧 <a href="mailto:${esc(k.email)}" style="color:var(--green);text-decoration:none" onclick="event.stopPropagation()">${esc(k.email)}</a></div>`:''}
+            ${k.phone?`<div style="display:flex;align-items:center;gap:6px">📞 <a href="tel:${esc(k.phone)}" style="color:var(--green);text-decoration:none" onclick="event.stopPropagation()">${esc(k.phone)}</a></div>`:''}
+            ${k.address1?`<div style="display:flex;align-items:center;gap:6px">📍 ${esc(k.address1)}${k.city?', '+esc(k.city):''}</div>`:''}
           </div>
           ${k.total_outstanding_invoices_count>0?`
           <div style="background:var(--orange-light);border-radius:6px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
-            <span style="font-size:11px;color:var(--orange)">${k.total_outstanding_invoices_count} openstaande factuur/facturen</span>
+            <span style="font-size:11px;color:var(--orange)">${esc(k.total_outstanding_invoices_count)} openstaande factuur/facturen</span>
             <span style="font-family:var(--mono);font-weight:700;font-size:13px;color:var(--orange)">${fmt(parseFloat(k.total_outstanding_invoices_amount||0))}</span>
           </div>`:''}
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <a href="https://moneybird.com/${getAdmin()}/contacts/${k.id}" target="_blank" style="font-size:11px;color:var(--green);text-decoration:none;padding:4px 10px;border:1px solid var(--green);border-radius:4px" onclick="event.stopPropagation()">Moneybird →</a>
+            <a href="https://moneybird.com/${esc(getAdmin())}/contacts/${esc(k.id)}" target="_blank" style="font-size:11px;color:var(--green);text-decoration:none;padding:4px 10px;border:1px solid var(--green);border-radius:4px" onclick="event.stopPropagation()">Moneybird →</a>
             ${kCode?`<span style="font-size:11px;color:var(--text-dim)"><span class="code">${esc(kCode)}</span> · ${projVanKlant.length} project${projVanKlant.length===1?'':'en'} →</span>`:''}
           </div>
         </div>
@@ -9458,16 +9458,16 @@ async function openKlantDetail(contactId){
     modal.style.cssText='position:fixed;inset:0;background:rgba(28,26,22,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)';
     modal.innerHTML=`<div style="background:var(--surface);border-radius:14px;width:640px;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg);border:1px solid var(--border)">
       <div style="padding:1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:1rem;position:sticky;top:0;background:var(--surface);z-index:1">
-        <div style="font-family:var(--serif);font-size:20px;font-weight:300;font-style:italic;flex:1">${naam}</div>
-        <a href="https://moneybird.com/${getAdmin()}/contacts/${k.id}" target="_blank" class="btn btn-secondary btn-sm">Moneybird →</a>
+        <div style="font-family:var(--serif);font-size:20px;font-weight:300;font-style:italic;flex:1">${esc(naam)}</div>
+        <a href="https://moneybird.com/${esc(getAdmin())}/contacts/${esc(k.id)}" target="_blank" class="btn btn-secondary btn-sm">Moneybird →</a>
         <button class="btn btn-secondary btn-sm" onclick="this.closest('.modal-overlay').remove()">✕</button>
       </div>
       <div style="padding:1.5rem">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem">
-          ${k.email?`<div><div class="card-title">Email</div><a href="mailto:${k.email}" style="color:var(--green);text-decoration:none;font-size:13px">${k.email}</a></div>`:''}
-          ${k.phone?`<div><div class="card-title">Telefoon</div><a href="tel:${k.phone}" style="color:var(--green);text-decoration:none;font-size:13px">${k.phone}</a></div>`:''}
-          ${k.address1?`<div><div class="card-title">Adres</div><div style="font-size:13px">${k.address1}${k.city?'<br>'+k.city:''}</div></div>`:''}
-          ${k.customer_id?`<div><div class="card-title">Klantnummer</div><span class="code">${k.customer_id}</span></div>`:''}
+          ${k.email?`<div><div class="card-title">Email</div><a href="mailto:${esc(k.email)}" style="color:var(--green);text-decoration:none;font-size:13px">${esc(k.email)}</a></div>`:''}
+          ${k.phone?`<div><div class="card-title">Telefoon</div><a href="tel:${esc(k.phone)}" style="color:var(--green);text-decoration:none;font-size:13px">${esc(k.phone)}</a></div>`:''}
+          ${k.address1?`<div><div class="card-title">Adres</div><div style="font-size:13px">${esc(k.address1)}${k.city?'<br>'+esc(k.city):''}</div></div>`:''}
+          ${k.customer_id?`<div><div class="card-title">Klantnummer</div><span class="code">${esc(k.customer_id)}</span></div>`:''}
         </div>
         <div class="card-title">Recente facturen</div>
         ${facturen.length?`<table class="v-table">
@@ -9478,7 +9478,7 @@ async function openKlantDetail(contactId){
               '<span class="badge badge-warn">Open</span>';
             return`<tr>
               <td style="font-size:12px">${fmtDatum(f.date)}</td>
-              <td style="font-size:12px">${f.reference||'—'}</td>
+              <td style="font-size:12px">${esc(f.reference||'—')}</td>
               <td style="text-align:right;font-family:var(--mono);font-size:12px">${fmt(parseFloat(f.total_price_incl_tax||0))}</td>
               <td>${state}</td>
             </tr>`;
@@ -9535,7 +9535,7 @@ async function laadFacturen(){
     alleFacturen=[];
     factuurCache={filterStr:'',facturen:[]};
     localStorage.removeItem('mt_cache_facturen');
-    status.innerHTML=`<span style="color:var(--red)">✕ ${e.message}</span> <button class="btn btn-secondary btn-xs" onclick="laadFacturen()">Opnieuw proberen</button>`;
+    status.innerHTML=`<span style="color:var(--red)">✕ ${esc(e.message)}</span> <button class="btn btn-secondary btn-xs" onclick="laadFacturen()">Opnieuw proberen</button>`;
   }
   finally{spinner.classList.add('hidden');}
 }
@@ -9569,9 +9569,9 @@ function renderControleLijst(facturen){
   const klaar=facturen.length-aandacht;
   document.getElementById('stat-bar').innerHTML=`
     <span style="color:var(--text-dim)">${facturen.length} facturen</span>
-    ${aandacht>0?`<span style="color:var(--orange)">⚠ ${aandacht} aandacht</span>`:''}
-    ${dup.size>0?`<span style="color:var(--red)">⚠ ${dup.size} dup</span>`:''}
-    <span style="color:var(--green)">✓ ${klaar} klaar</span>`;
+    ${aandacht>0?`<span style="color:var(--orange)">⚠ ${esc(aandacht)} aandacht</span>`:''}
+    ${dup.size>0?`<span style="color:var(--red)">⚠ ${esc(dup.size)} dup</span>`:''}
+    <span style="color:var(--green)">✓ ${esc(klaar)} klaar</span>`;
   document.getElementById('voortgang-inner').style.width=(facturen.length?Math.round(klaar/facturen.length*100):0)+'%';
   const lijst=document.getElementById('factuur-lijst');
   lijst.innerHTML=facturen.map((f,i)=>{
@@ -9585,9 +9585,9 @@ function renderControleLijst(facturen){
       f.due_date&&new Date(f.due_date)<new Date()?`<span class="badge" style="background:var(--red-light);color:var(--red)">⚠ Te laat</span>`:
       `<span class="badge" style="background:var(--orange-light);color:var(--orange)">Open</span>`;
     const voorraadBadge=isVoorraadLeverancier(f.contact?.company_name||'')?`<span class="badge" style="background:var(--purple-light);color:var(--purple)" title="Voorraadleverancier">📦</span>`:'';
-    return`<div class="factuur-item" data-index="${i}" data-heeft-proj="${heeftProj}" data-is-dup="${isDup}" data-aandacht="${!volledig}" data-naam="${(f.contact?.company_name||'').toLowerCase()}" data-ref="${(f.reference||'').toLowerCase()}" data-bedrag="${bedrag}" onclick="selecteerControleFactuur(${i},this)">
-      <div class="factuur-item-naam">${f.contact?.company_name||'—'}</div>
-      <div class="factuur-item-sub"><span>${datum} · ${bedrag}</span><span style="display:flex;gap:3px">${voorraadBadge}${betaalStatus}${badge}</span></div>
+    return`<div class="factuur-item" data-index="${i}" data-heeft-proj="${esc(heeftProj)}" data-is-dup="${esc(isDup)}" data-aandacht="${esc(!volledig)}" data-naam="${esc((f.contact?.company_name||'').toLowerCase())}" data-ref="${esc((f.reference||'').toLowerCase())}" data-bedrag="${esc(bedrag)}" onclick="selecteerControleFactuur(${i},this)">
+      <div class="factuur-item-naam">${esc(f.contact?.company_name||'—')}</div>
+      <div class="factuur-item-sub"><span>${esc(datum)} · ${esc(bedrag)}</span><span style="display:flex;gap:3px">${voorraadBadge}${betaalStatus}${badge}</span></div>
     </div>`;
   }).join('');
   window._controleLijst=facturen;window._controleDup=dup;
@@ -9646,7 +9646,7 @@ async function laadControlePDF(f) {
       try { await spUploadPDF(f.id+'.pdf', bytes.buffer); }
       catch(e) { document.getElementById('ctrl-status').textContent=`⚠ PDF staat in Moneybird, maar PDF-opslag mislukt: ${e.message}`; }
     }
-  } catch(e) { viewer.innerHTML = `<div class="pdf-placeholder">PDF laden mislukt: ${e.message}</div>`; }
+  } catch(e) { viewer.innerHTML = `<div class="pdf-placeholder">PDF laden mislukt: ${esc(e.message)}</div>`; }
 }
 function renderControleDetail(f){
   const dup=window._controleDup;
@@ -9659,19 +9659,19 @@ function renderControleDetail(f){
   document.getElementById('factuur-detail').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1rem">
       <div>
-        <div style="font-size:16px;font-weight:600;margin-bottom:4px">${f.contact?.company_name||'—'}</div>
-        <div style="font-size:12px;color:var(--text-dim)">${f.reference||'Geen referentie'} · ${datum}</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:4px">${esc(f.contact?.company_name||'—')}</div>
+        <div style="font-size:12px;color:var(--text-dim)">${esc(f.reference||'Geen referentie')} · ${esc(datum)}</div>
         ${isDup?`<span class="badge badge-danger" style="margin-top:4px">Mogelijk duplicaat</span> <button class="btn btn-xs btn-secondary" onclick="markeerGeenDuplicaat(${jsArg(f.id)})">Geen dup</button>`:''}
         ${isVL?`<span class="badge badge-purple" style="margin-top:4px">📦 Voorraad-lev</span>`:''}
-        <span class="badge ${f.state==='paid'?'badge-ok':f.state==='open'?'badge-info':'badge-warn'}" style="margin-top:4px">${f.state==='paid'?'✓ Betaald':f.state==='open'?'Open':'Wacht'}</span>
+        <span class="badge ${esc(f.state==='paid'?'badge-ok':f.state==='open'?'badge-info':'badge-warn')}" style="margin-top:4px">${esc(f.state==='paid'?'✓ Betaald':f.state==='open'?'Open':'Wacht')}</span>
       </div>
       <div style="text-align:right">
-        <div style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--green)">${bedragIncl}</div>
-        <div style="font-size:11px;color:var(--text-faint)">verval: ${verval}</div>
+        <div style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--green)">${esc(bedragIncl)}</div>
+        <div style="font-size:11px;color:var(--text-faint)">verval: ${esc(verval)}</div>
       </div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <a href="https://moneybird.com/${getAdmin()}/documents/${f.id}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none">📎 Openen in Moneybird →</a>
+      <a href="https://moneybird.com/${esc(getAdmin())}/documents/${esc(f.id)}" target="_blank" style="font-size:12px;color:var(--green);text-decoration:none">📎 Openen in Moneybird →</a>
       ${f.state!=='paid'?`<button class="btn btn-danger btn-xs" data-recht="mb_verwijderen" onclick="verwijderControleFactuur(${jsArg(f.id)})">🗑 Verwijderen</button>`:''}
     </div>
     <hr class="divider">
@@ -9697,7 +9697,7 @@ function renderControleDetail(f){
     <div class="flex mt2">
       <button class="btn btn-primary" onclick="slaControleOp(false)">Opslaan</button>
       <button class="btn btn-primary" onclick="slaControleOp(true)" style="background:var(--green-700)">Opslaan &amp; volgende →</button>
-      ${f.state!=='paid'?`<a href="https://moneybird.com/${getAdmin()}/documents/${f.id}/payment_initiations/new" target="_blank" class="btn btn-info btn-sm">💳 Betalen</a>`:''}
+      ${f.state!=='paid'?`<a href="https://moneybird.com/${esc(getAdmin())}/documents/${esc(f.id)}/payment_initiations/new" target="_blank" class="btn btn-info btn-sm">💳 Betalen</a>`:''}
       <button class="btn btn-danger btn-sm" data-recht="mb_verwijderen" onclick="verwijderControleFactuur()">Verwijderen</button>
       <span id="ctrl-status" style="font-size:12px;color:var(--text-dim)"></span>
     </div>`;
@@ -9706,13 +9706,13 @@ function renderControleDetail(f){
     ctrlCount++;const id=ctrlCount;const div=document.createElement('div');div.className='ctrl-regel-row regel-row';div.id=`ctrl-regel-${id}`;
     const btwVal=d.tax_rate_id===BTW_IDS['9']?'9':d.tax_rate_id===BTW_IDS['0']?'0':'21';
     div.innerHTML=`
-      <input type="text" placeholder="Omschrijving" value="${(d.description||'').replace(/"/g,'&quot;')}" oninput="updateCtrlTotalen()">
+      <input type="text" placeholder="Omschrijving" value="${esc(d.description||'')}" oninput="updateCtrlTotalen()">
       <select class="ctrl-ledger-select" onchange="updateCtrlTotalen()">
         <option value="">— Grootboek —</option>
-        ${ledgers.map(l=>`<option value="${l.id}" ${l.id===d.ledger_account_id?'selected':''}>${l.name}</option>`).join('')}
+        ${ledgers.map(l=>`<option value="${esc(l.id)}" ${l.id===d.ledger_account_id?'selected':''}>${esc(l.name)}</option>`).join('')}
       </select>
-      <input type="number" step="1" value="${d.amount||1}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
-      <input type="number" step="0.01" value="${d.price||''}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
+      <input type="number" step="1" value="${esc(d.amount||1)}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
+      <input type="number" step="0.01" value="${esc(d.price||'')}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
       <select onchange="updateCtrlTotalen()">
         <option value="21" ${btwVal==='21'?'selected':''}>21%</option>
         <option value="9" ${btwVal==='9'?'selected':''}>9%</option>
@@ -9720,7 +9720,7 @@ function renderControleDetail(f){
       </select>
       <select class="project-select">${projectOptiesHTML(hProj)}</select>
       <button class="voorraad-btn ${isVL?'actief':''}" onclick="toggleVoorraad(this)">📦</button>
-      <button class="remove-btn" onclick="document.getElementById('ctrl-regel-${id}').remove();updateCtrlTotalen()">×</button>`;
+      <button class="remove-btn" onclick="document.getElementById('ctrl-regel-${esc(id)}').remove();updateCtrlTotalen()">×</button>`;
     div.querySelector('.project-select').addEventListener('change',function(){if(this.value==='__nieuw__'){this.value='';openModal();}});
     ctrlContainer.appendChild(div);
   });
@@ -9732,14 +9732,14 @@ function addCtrlRegel(oms='',ledger='',aantal=1,prijs='',btw='21',project=''){
   window._ctrlRegelCount=(window._ctrlRegelCount||0)+1;const id=window._ctrlRegelCount;
   const div=document.createElement('div');div.className='ctrl-regel-row regel-row';div.id=`ctrl-regel-${id}`;
   div.innerHTML=`
-    <input type="text" placeholder="Omschrijving" value="${oms}" oninput="updateCtrlTotalen()">
-    <select class="ctrl-ledger-select" onchange="updateCtrlTotalen()"><option value="">— Grootboek —</option>${ledgers.map(l=>`<option value="${l.id}" ${l.id===ledger?'selected':''}>${l.name}</option>`).join('')}</select>
+    <input type="text" placeholder="Omschrijving" value="${esc(oms)}" oninput="updateCtrlTotalen()">
+    <select class="ctrl-ledger-select" onchange="updateCtrlTotalen()"><option value="">— Grootboek —</option>${ledgers.map(l=>`<option value="${esc(l.id)}" ${l.id===ledger?'selected':''}>${esc(l.name)}</option>`).join('')}</select>
     <input type="number" step="1" value="${aantal}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
-    <input type="number" step="0.01" value="${prijs}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
+    <input type="number" step="0.01" value="${esc(prijs)}" oninput="updateCtrlTotalen()" style="font-family:var(--mono)">
     <select onchange="updateCtrlTotalen()"><option value="21" ${btw==21?'selected':''}>21%</option><option value="9" ${btw==9?'selected':''}>9%</option><option value="0" ${btw==0?'selected':''}>0%</option></select>
     <select class="project-select">${projectOptiesHTML(project)}</select>
     <button class="voorraad-btn" onclick="toggleVoorraad(this)">📦</button>
-    <button class="remove-btn" onclick="document.getElementById('ctrl-regel-${id}').remove();updateCtrlTotalen()">×</button>`;
+    <button class="remove-btn" onclick="document.getElementById('ctrl-regel-${esc(id)}').remove();updateCtrlTotalen()">×</button>`;
   div.querySelector('.project-select').addEventListener('change',function(){if(this.value==='__nieuw__'){this.value='';openModal();}});
   document.getElementById('ctrl-regels-container').appendChild(div);updateCtrlTotalen();
 }
@@ -9783,14 +9783,14 @@ async function analyseerdControleFactuur(){
       parsed.regels.forEach(r=>addCtrlRegel(r.omschrijving,getLedgerIdByName(r.grootboek),r.aantal||1,r.stukprijs||r.bedrag_excl,r.btw_pct,parsed.project_code||''));
     }else if(parsed.regels?.length>0){
       window._claudeSuggestie=parsed;
-      suggestie.innerHTML=`${parsed.project_zeker?'✓':'💡'} <strong>${parsed.project_code||'Geen project'}</strong> — ${parsed.uitleg}<br>
+      suggestie.innerHTML=`${parsed.project_zeker?'✓':'💡'} <strong>${esc(parsed.project_code||'Geen project')}</strong> — ${esc(parsed.uitleg)}<br>
         <div style="margin-top:6px;display:flex;gap:6px">
           <button class="btn btn-secondary btn-sm" onclick="neemSuggestieOver()">Overnemen</button>
           <button class="btn btn-secondary btn-sm" onclick="neemAlleenProjectOver()">Alleen project</button>
         </div>`;
       return;
     }
-    suggestie.innerHTML=`${parsed.project_zeker?'✓':'💡'} <strong>${parsed.project_code||'Geen project'}</strong> — ${parsed.uitleg}`;
+    suggestie.innerHTML=`${parsed.project_zeker?'✓':'💡'} <strong>${esc(parsed.project_code||'Geen project')}</strong> — ${esc(parsed.uitleg)}`;
   }catch(e){suggestie.textContent=`Mislukt: ${e.message}`;}
   finally{spinner.classList.add('hidden');}
 }
@@ -9877,7 +9877,7 @@ function neemSuggestieOver(){
 function neemAlleenProjectOver(){
   const p=window._claudeSuggestie;if(!p?.project_code) return;
   const s=document.getElementById('ctrl-project');for(let o of s.options){if(o.value===p.project_code){o.selected=true;break;}}
-  document.getElementById('ctrl-suggestie').innerHTML=`✓ Project: <strong>${p.project_code}</strong>`;window._claudeSuggestie=null;
+  document.getElementById('ctrl-suggestie').innerHTML=`✓ Project: <strong>${esc(p.project_code)}</strong>`;window._claudeSuggestie=null;
 }
 
 // ═══ GESCHIEDENIS ═══
@@ -9889,12 +9889,12 @@ function renderHistory(filter=''){
   list.innerHTML=filtered.map(h=>`
     <div class="geschiedenis-item" onclick="openFactuurInControle(${jsArg(h.id)})" style="cursor:pointer;border-radius:8px;padding:0.875rem 0.75rem;margin:0 -0.75rem;transition:background 0.12s" onmouseenter="this.style.background='var(--gold-light)'" onmouseleave="this.style.background=''">
       <span class="badge badge-ok">✓</span>
-      <strong>${h.contact}</strong>
+      <strong>${esc(h.contact)}</strong>
       ${h.project?projKortHtml(h.project):'<span class="code">—</span>'}
       <span style="color:var(--text-faint);font-size:11px">${fmtDatum(h.date)}</span>
-      <span style="margin-left:auto;font-family:var(--mono);font-weight:600;color:var(--green)">${h.totaal||''}</span>
+      <span style="margin-left:auto;font-family:var(--mono);font-weight:600;color:var(--green)">${esc(h.totaal||'')}</span>
       <span style="color:var(--text-faint);font-size:11px">verval: ${fmtDatum(h.due)}</span>
-      <a href="https://moneybird.com/${getAdmin()}/documents/${h.id}/payment_initiations/new" target="_blank" style="font-size:11px;color:var(--green);text-decoration:none;padding:3px 10px;border:1px solid var(--green);border-radius:4px" onclick="event.stopPropagation()">Betalen →</a>
+      <a href="https://moneybird.com/${esc(getAdmin())}/documents/${esc(h.id)}/payment_initiations/new" target="_blank" style="font-size:11px;color:var(--green);text-decoration:none;padding:3px 10px;border:1px solid var(--green);border-radius:4px" onclick="event.stopPropagation()">Betalen →</a>
     </div>`).join('');
 }
 function zoekGeschiedenis(v){renderHistory(v);}

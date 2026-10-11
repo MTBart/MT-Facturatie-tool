@@ -1,11 +1,31 @@
 [
   {
-    "versie": "2.12.1",
+    "versie": "2.12.2",
     "datum": "2026-10-11",
-    "titel": "Koersmeter meldt het vóór 07:00 als het slechter gaat",
+    "titel": "Spaarpotjes volgen de echte overboekingen",
     "voor": "geld",
     "punten": [
-      "De Koersmeter kijkt elke ochtend vanzelf, vanaf half zes, of het oordeel slechter is dan gisteren, zodat de melding klaar staat voordat we om 07:00 beginnen. Is het slechter, dan staat er bovenaan Geld een melding met de reden en de ene actie voor vandaag. Op de telefoon staat er een stipje op de €-knop. Lukt het ophalen van de cijfers niet in één keer, dan probeert hij het tot drie keer opnieuw (uiterlijk om half zeven); blijven er gegevens ontbreken, dan zegt hij eerlijk dat het oordeel niet betrouwbaar is in plaats van groen te tonen."
+      "De stand van de spaarpotjes (BTW, Buffer, Winst, Vakantie) klopt nu met wat er echt is overgeboekt: het ijkpunt, plus wat er sindsdien in is gegaan, min wat er uit is gehaald. Dat geldt ook voor overboekingen waar de bank geen rekeningnummer bij zet; de pot wordt dan herkend aan de letter in de naam van de spaarrekening.",
+      "Op de kaart Nu staat hoe de stand van de BTW-pot is opgebouwd, met een tik naar de overboekingen. Kan de tool een overboeking niet bij een pot onderbrengen, of is de stand van de BTW-pot onbekend, dan zegt hij dat op de kaart in plaats van een te hoog bedrag te tonen, en geeft de Koersmeter geen groen oordeel.",
+      "Bij een spaarpotje kun je de letter instellen die in de naam van de overboeking staat (bij Instellingen, potje bewerken)."
+    ]
+  },
+  {
+    "versie": "2.12.2",
+    "datum": "2026-10-11",
+    "titel": "Koersmeter: melding vóór 07:00",
+    "voor": "geld",
+    "punten": [
+      "De Koersmeter bereidt zich om 05:00 voor en kijkt vanaf half zes of het oordeel slechter is dan gisteren. De melding staat dus klaar voordat we om 07:00 beginnen. Lukt het ophalen van de cijfers niet in één keer, dan probeert hij het tot drie keer opnieuw (uiterlijk om half zeven)."
+    ]
+  },
+  {
+    "versie": "2.12.1",
+    "datum": "2026-10-11",
+    "titel": "Koersmeter meldt het 's ochtends als het slechter gaat",
+    "voor": "geld",
+    "punten": [
+      "De Koersmeter kijkt elke ochtend vanzelf, vanaf half acht, of het oordeel slechter is dan gisteren. Is dat zo, dan staat er bovenaan Geld een melding met de reden en de ene actie voor vandaag. Op de telefoon staat er een stipje op de €-knop. Lukt het ophalen van de cijfers niet in één keer, dan probeert hij het tot drie keer opnieuw; blijven er gegevens ontbreken, dan zegt hij eerlijk dat het oordeel niet betrouwbaar is in plaats van groen te tonen."
     ]
   },
   {
