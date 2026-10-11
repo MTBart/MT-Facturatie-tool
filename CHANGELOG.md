@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — CSP: afgedwongen minimale meta-CSP, Report-Only-beleid in _headers (Cloudflare Pages) en de worker-route /csp-rapport
+- Commit: `f975c86` | Auteur: Bart Witte
+
 ## 2026-10-12 — Release v2.13.2: "Kan ik dit uitgeven?" en het maandagbericht in Geld, AI-limieten (eerst in log-modus); backup = v2.13.1
 - Commit: `305023d` | Auteur: Bart Witte
 
