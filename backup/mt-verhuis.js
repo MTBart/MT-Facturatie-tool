@@ -451,11 +451,11 @@
       verdacht.length ? 'Niet meegenomen omdat de waarde op een token of sleutel lijkt (geen waarden getoond): ' + verdacht.map(o => o.sleutel).join(', ') + '.' : '',
       inv.fouten.length ? 'Niet alles leesbaar: ' + inv.fouten.join('; ') : ''].filter(Boolean);
     el.innerHTML = `<div class="mtv">
-      <p><b>Op dit apparaat:</b> ${inv.sleutels} instellingen/lokale gegevens, ${inv.fotos.totaal} foto's (${inv.fotos.sync} al op SharePoint), ${inv.concepten + inv.idbConcepten} concepten, ${inv.agendaBlokken} eigen agendablokken, ${inv.wachtrij} in de wachtrij. <b>Totale grootte: ${mb(inv.bytes.totaal)}.</b> Tokens en tijdelijke caches (${inv.nietMee}) gaan niet mee: op het nieuwe adres log je opnieuw in, koppel je Toggl opnieuw en bouwen de lijsten zich vanzelf weer op.</p>
+      <p><b>Op dit apparaat:</b> ${esc(inv.sleutels)} instellingen/lokale gegevens, ${esc(inv.fotos.totaal)} foto's (${esc(inv.fotos.sync)} al op SharePoint), ${esc(inv.concepten + inv.idbConcepten)} concepten, ${esc(inv.agendaBlokken)} eigen agendablokken, ${esc(inv.wachtrij)} in de wachtrij. <b>Totale grootte: ${esc(mb(inv.bytes.totaal))}.</b> Tokens en tijdelijke caches (${esc(inv.nietMee)}) gaan niet mee: op het nieuwe adres log je opnieuw in, koppel je Toggl opnieuw en bouwen de lijsten zich vanzelf weer op.</p>
       ${waarsch.map(w => `<div class="mtv-let">${esc(w)}</div>`).join('')}
       ${al ? `<div class="mtv-let"><b>Dit apparaat is al verhuisd</b> (${esc(new Date(al.t).toLocaleString('nl-NL'))}). Er is niets gewist, maar wat je hier sindsdien nog invoerde, gaat niet vanzelf mee naar het nieuwe adres. Maak een nieuw pakket en importeer dat daar: wat daar al staat wordt nooit overschreven.</div>` : ''}
       ${nieuw ? '' : `<div class="mtv-rij"><button class="mtv-knop aan" data-v="maak"${oid ? '' : ' disabled'}>${al ? 'Nieuw pakket maken (naar SharePoint)' : 'Verhuispakket maken (naar SharePoint)'}</button></div>`}
-      ${!nieuw && !dlMag ? `<div class="mtv-let">Het download-vangnet staat uit: boven ${mb(V.LIMIET_DOWNLOAD_MOBIEL)} past het niet veilig in het geheugen van een telefoon. Het pakket gaat dan alleen via SharePoint; verhuis zo nodig vanaf een pc.</div>` : ''}
+      ${!nieuw && !dlMag ? `<div class="mtv-let">Het download-vangnet staat uit: boven ${esc(mb(V.LIMIET_DOWNLOAD_MOBIEL))} past het niet veilig in het geheugen van een telefoon. Het pakket gaat dan alleen via SharePoint; verhuis zo nodig vanaf een pc.</div>` : ''}
       <div class="mtv-uit" data-v="uit"></div>
       <hr><p><b>Op het nieuwe adres:</b> pakket ophalen en importeren. Er wordt niets overschreven wat er al staat, en een onderbroken import draait volledig terug.</p>
       <div class="mtv-rij"><button class="mtv-knop" data-v="lijst"${oid ? '' : ' disabled'}>Mijn verhuispakketten zoeken</button><label class="mtv-knop">Bestand importeren (vangnet)<input type="file" accept="application/json" data-v="bestand" hidden></label></div>
@@ -463,7 +463,7 @@
     const uit = el.querySelector('[data-v="uit"]'), lijst = el.querySelector('[data-v="pakketten"]');
     const toon = (doel, html) => { doel.innerHTML = html; };
     const dlKnop = () => dlMag ? '<button class="mtv-knop" data-v="download">Ook downloaden (vangnet)</button>' : '';
-    const resultaat = u => `<div class="mtv-ok">Overgezet: ${u.fotos} foto's, ${u.concepten} concepten, ${u.sleutels} lokale gegevens.${u.sleutelsAlAanwezig.length || u.fotosAlAanwezig || u.conceptenAlAanwezig ? ` Al aanwezig en dus overgeslagen: ${u.sleutelsAlAanwezig.length} gegevens, ${u.fotosAlAanwezig} foto's, ${u.conceptenAlAanwezig} concepten.` : ''}</div>`;
+    const resultaat = u => `<div class="mtv-ok">Overgezet: ${esc(u.fotos)} foto's, ${esc(u.concepten)} concepten, ${esc(u.sleutels)} lokale gegevens.${u.sleutelsAlAanwezig.length || u.fotosAlAanwezig || u.conceptenAlAanwezig ? ` Al aanwezig en dus overgeslagen: ${u.sleutelsAlAanwezig.length} gegevens, ${u.fotosAlAanwezig} foto's, ${u.conceptenAlAanwezig} concepten.` : ''}</div>`;
     let laatste = null;
     el.addEventListener('click', async e => {
       const k = e.target.closest('[data-v]'); if (!k || k.tagName === 'INPUT') return;
@@ -474,7 +474,7 @@
           laatste = await V.maakPakket({ gebruiker: ctx.gebruiker, oid, apparaat: ctx.apparaat });
           const grootte = laatste.blobs.reduce((a, b) => a + b.blob.size, 0);
           const map = await V.naarSharePoint(laatste, { voortgang: (n, t) => toon(uit, `Foto's naar SharePoint: ${n} van ${t}…`) });
-          toon(uit, `<div class="mtv-ok">Pakket staat op SharePoint (${esc(map)}): ${laatste.pakket.tellingen.sleutels} gegevens, ${laatste.pakket.tellingen.fotos} foto's, ${laatste.pakket.tellingen.concepten} concepten (${mb(grootte)}), met checksums.</div>
+          toon(uit, `<div class="mtv-ok">Pakket staat op SharePoint (${esc(map)}): ${esc(laatste.pakket.tellingen.sleutels)} gegevens, ${esc(laatste.pakket.tellingen.fotos)} foto's, ${esc(laatste.pakket.tellingen.concepten)} concepten (${esc(mb(grootte))}), met checksums.</div>
             <div class="mtv-rij">${dlKnop()}<button class="mtv-knop" data-v="klaar">Dit apparaat is verhuisd</button></div>`);
           laatste.map = map;
         } catch (er) { toon(uit, `<div class="mtv-let">Niet gelukt: ${esc(er.message)}. Er is niets gewist; probeer opnieuw${dlMag ? ' of gebruik de download' : ''}.</div><div class="mtv-rij">${dlMag ? '<button class="mtv-knop" data-v="download">Downloaden (vangnet)</button>' : ''}</div>`); }
@@ -486,7 +486,7 @@
         V.markeerVerhuisd(laatste && laatste.map, laatste && laatste.pakket.tellingen); V.balk(); toast('Gemarkeerd als verhuisd — er is niets gewist');
       } else if (w === 'lijst') {
         toon(lijst, 'Zoeken…');
-        try { const ps = await V.pakketten(oid); toon(lijst, ps.length ? ps.map(p => `<div class="mtv-rij"><span>${esc(p.apparaat || p.naam)} — ${esc(new Date(p.gemaakt).toLocaleString('nl-NL'))} (${p.tellingen.fotos || 0} foto's)</span><button class="mtv-knop" data-v="import" data-map="${esc(p.map)}">Importeren</button></div>`).join('') : 'Geen complete pakketten gevonden.'); }
+        try { const ps = await V.pakketten(oid); toon(lijst, ps.length ? ps.map(p => `<div class="mtv-rij"><span>${esc(p.apparaat || p.naam)} — ${esc(new Date(p.gemaakt).toLocaleString('nl-NL'))} (${esc(p.tellingen.fotos || 0)} foto's)</span><button class="mtv-knop" data-v="import" data-map="${esc(p.map)}">Importeren</button></div>`).join('') : 'Geen complete pakketten gevonden.'); }
         catch (er) { toon(lijst, `<div class="mtv-let">Zoeken mislukt: ${esc(er.message)}</div>`); }
       } else if (w === 'import') {
         k.disabled = true;

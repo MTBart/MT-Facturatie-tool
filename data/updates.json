@@ -1,5 +1,28 @@
 [
   {
+    "versie": "2.13.0",
+    "datum": "2026-10-11",
+    "titel": "Zoekbalk bovenin",
+    "voor": "iedereen",
+    "punten": [
+      "Bovenin staat nu altijd een zoekbalk, ook op de telefoon. Typ een projectcode, klant, locatie, taak of contact en tik op een resultaat om het te openen.",
+      "Na een paar letters zoekt hij ook in SharePoint (mappen en bestanden), in Moneybird (facturen en offertes) en in je mail; een mail opent in Outlook. Dit is alleen lezen: er verandert niets.",
+      "Onderaan de lijst staat \"Vraag Claude\": dezelfde vraag stel je daar aan Claude."
+    ]
+  },
+  {
+    "versie": "2.13.0",
+    "datum": "2026-10-11",
+    "titel": "Besteedbaar budget in Geld",
+    "voor": "geld",
+    "punten": [
+      "Het grote getal in Geld heet nu Besteedbaar: je lopende rekening min de btw die je nog moet betalen en die niet van de BTW-rekening wordt teruggeboekt (een schatting van ±10%). Alle kwartalen waarvan de betaling niet te vinden is tellen mee, tot de eigenaar ze als betaald markeert.",
+      "Het potje Buffer heet Noodbuffer en telt standaard niet mee; met het vinkje \"Noodbuffer meenemen\" wel.",
+      "De fictieve buffer, de streefomvang van de noodbuffer en het streefniveau van de lopende rekening volgen standaard een advies uit je eigen cijfers. Vul je zelf een bedrag in, dan geldt dat; maak je het leeg, dan geldt weer het advies. In de grafiek staan een gele, een oranje en een rode lijn.",
+      "De Koersmeter rekent op dezelfde basis."
+    ]
+  },
+  {
     "versie": "2.12.4",
     "datum": "2026-10-11",
     "titel": "Veiliger, ook Geld en Rapporten",

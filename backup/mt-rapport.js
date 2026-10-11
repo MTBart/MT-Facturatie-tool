@@ -139,13 +139,13 @@
     const onvolledig = st.data.compleet === false || !st.ixCompleet;
     const vs = R.verschil(r, st.vorige);
     const veranderd = !vs ? '' : `<div class="mtr-veranderd" style="margin-top:10px"><b>Wat is er veranderd t.o.v. ${esc((st.index.find(x => x.id === st.vorige._id) || {}).titel || st.vorige._id)}</b>
-      ${vs.anders.length || vs.nieuw.length || vs.weg.length ? `<ul>${vs.anders.map(x => `<li>${esc(x.sectie.titel || x.sectie.id)}: <span class="mtr-chip ${oordeel(x.van).k}">${esc(oordeel(x.van).l)}</span> → <span class="mtr-chip ${oordeel(x.naar).k}">${esc(oordeel(x.naar).l)}</span>${x.richting ? ` (${x.richting})` : ''}</li>`).join('')}
+      ${vs.anders.length || vs.nieuw.length || vs.weg.length ? `<ul>${vs.anders.map(x => `<li>${esc(x.sectie.titel || x.sectie.id)}: <span class="mtr-chip ${esc(oordeel(x.van).k)}">${esc(oordeel(x.van).l)}</span> → <span class="mtr-chip ${esc(oordeel(x.naar).k)}">${esc(oordeel(x.naar).l)}</span>${x.richting ? ` (${x.richting})` : ''}</li>`).join('')}
         ${vs.nieuw.map(s => `<li>Nieuw: ${esc(s.titel || s.id)}</li>`).join('')}${vs.weg.map(s => `<li>Niet meer in dit rapport: ${esc(s.titel || s.id)}</li>`).join('')}</ul>` : '<div class="mtr-zacht">Geen oordelen veranderd.</div>'}</div>`;
     scherm(`
-  <div class="mtr-kop"><h2>Rapporten</h2>${st.dash ? '' : `<div class="mtr-horizon" role="group" aria-label="Horizon advies">${Object.entries(HORIZON).map(([k, [t]]) => `<button data-horizon="${k}" class="${st.horizon === k ? 'aan' : ''}">${t}</button>`).join('')}</div>`}${st.index.length > 1 ? `<select data-kies="1" aria-label="Kies een rapport">${st.index.map(x => `<option value="${esc(x.id)}" ${x.id === st.id ? 'selected' : ''}>${esc(x.titel)}${x.periode ? ' — ' + esc(x.periode) : ''}${st.open[x.id] ? ` (${st.open[x.id]} open)` : ''}</option>`).join('')}</select>` : ''}</div>
+  <div class="mtr-kop"><h2>Rapporten</h2>${st.dash ? '' : `<div class="mtr-horizon" role="group" aria-label="Horizon advies">${Object.entries(HORIZON).map(([k, [t]]) => `<button data-horizon="${k}" class="${st.horizon === k ? 'aan' : ''}">${esc(t)}</button>`).join('')}</div>`}${st.index.length > 1 ? `<select data-kies="1" aria-label="Kies een rapport">${st.index.map(x => `<option value="${esc(x.id)}" ${x.id === st.id ? 'selected' : ''}>${esc(x.titel)}${x.periode ? ' — ' + esc(x.periode) : ''}${st.open[x.id] ? ` (${st.open[x.id]} open)` : ''}</option>`).join('')}</select>` : ''}</div>
   <div class="mtr-kaart"><h3 style="margin:0">${esc(r.titel || st.id)}</h3><div class="mtr-zacht">${esc([r.periode, r.gemaakt ? 'gemaakt ' + r.gemaakt : ''].filter(Boolean).join(' · '))}</div>
     ${Array.isArray(r.samenvatting) && r.samenvatting.length ? `<ul>${r.samenvatting.map(z => `<li>${R.md(z).replace(/^<p>|<\/p>$/g, '')}</li>`).join('')}</ul>` : ''}
-    <div class="mtr-chips">${secties.map(s => `<button class="mtr-chip ${oordeel(s.oordeel).k}" data-naar="${esc(s.id)}" title="${esc(oordeel(s.oordeel).l)}">${esc(s.titel || s.id)}${openPer[s.id] ? ` <span class="mtr-badge">${openPer[s.id]}</span>` : ''}</button>`).join('')}</div>
+    <div class="mtr-chips">${secties.map(s => `<button class="mtr-chip ${esc(oordeel(s.oordeel).k)}" data-naar="${esc(s.id)}" title="${esc(oordeel(s.oordeel).l)}">${esc(s.titel || s.id)}${openPer[s.id] ? ` <span class="mtr-badge">${esc(openPer[s.id])}</span>` : ''}</button>`).join('')}</div>
     ${veranderd}${onvolledig ? '<div class="mtr-zacht" style="margin-top:8px">Let op: niet alle vragen konden worden geladen (te veel); tellingen kunnen hoger zijn.</div>' : ''}</div>
   ${secties.map(s => sectieHtml(s, vr.filter(q => q.sectie_id === String(s.id)), openPer[s.id] || 0)).join('')}`);
     st.el.querySelectorAll('details.mtr-sec').forEach(d => d.addEventListener('toggle', () => {
@@ -163,7 +163,7 @@
     const acties = Array.isArray(s.acties) ? s.acties.filter(a => a && a.id != null) : [], bronnen = Array.isArray(s.bronnen) ? s.bronnen : s.bronnen ? [s.bronnen] : [];
     const bron = b => typeof b === 'string' ? esc(b) : b && typeof b === 'object' ? (/^https:\/\//i.test(String(b.url || '')) ? `<a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(b.titel || b.url)}</a>` : esc(b.titel || '')) : '';
     return `<details class="mtr-sec" id="mtr-sec-${esc(id)}" data-sec="${esc(id)}" ${st.openSec[id] ? 'open' : ''}>
-  <summary><span class="mtr-chip ${o.k}">${esc(o.l)}</span><span class="t">${esc(s.titel || id)}</span>${nOpen ? `<span class="mtr-badge">${nOpen} open vra${nOpen === 1 ? 'ag' : 'gen'}</span>` : ''}${s.kern ? `<div class="mtr-kern">${esc(s.kern)}</div>` : ''}</summary>
+  <summary><span class="mtr-chip ${esc(o.k)}">${esc(o.l)}</span><span class="t">${esc(s.titel || id)}</span>${nOpen ? `<span class="mtr-badge">${esc(nOpen)} open vra${nOpen === 1 ? 'ag' : 'gen'}</span>` : ''}${s.kern ? `<div class="mtr-kern">${esc(s.kern)}</div>` : ''}</summary>
   ${cijfers.length ? `<div class="mtr-tabel"><table class="mtr-cijfers"><thead><tr><th>Cijfer</th><th>Waarde</th>${branche ? '<th>Branche</th>' : ''}${toel ? '<th>Toelichting</th>' : ''}</tr></thead><tbody>${cijfers.map(c => `<tr><td><b>${esc(c.label)}</b></td><td data-l="Waarde">${esc(c.waarde)}</td>${branche ? `<td data-l="Branche">${esc(c.branche == null ? '—' : c.branche)}</td>` : ''}${toel ? `<td data-l="Toelichting">${esc(c.toelichting || '')}</td>` : ''}</tr>`).join('')}</tbody></table></div>` : ''}
   ${adviesHtml(s)}
   ${s.grafiek && st.dash ? `<div><button class="mtr-knop" data-grafiek="${esc(id)}">Toon de grafiek hierbij</button></div>` : ''}
@@ -172,7 +172,7 @@
   ${bronnen.length ? `<div class="mtr-zacht">Bronnen: ${bronnen.map(bron).filter(Boolean).join(' · ')}</div>` : ''}
   <div class="mtr-draad"><b>Vraag / opmerking</b>
     ${draad.map(q => `<div class="mtr-bericht"><div class="wie">${esc(q.door || 'onbekend')} · ${esc(wanneer(q.ts))}${q.open ? ' · wacht op antwoord' : ''}</div>${esc(q.tekst)}</div>${(q.antwoorden || []).map(a => `<div class="mtr-bericht claude"><div class="wie">${esc(a.door || 'Claude')}${a.ts ? ' · ' + esc(wanneer(a.ts)) : ''}</div>${esc(a.tekst)}</div>`).join('')}${q.antwoorden_afgekapt ? '<div class="mtr-zacht">(meer antwoorden niet getoond)</div>' : ''}`).join('')}
-    ${st.magVragen ? `<textarea data-tekst="${esc(id)}" maxlength="${MAX_TEKST}" placeholder="Stel een vraag of zet een opmerking bij ${esc(s.titel || id)}…">${esc(st.concept[st.id + ':' + id] || '')}</textarea>
+    ${st.magVragen ? `<textarea data-tekst="${esc(id)}" maxlength="${esc(MAX_TEKST)}" placeholder="Stel een vraag of zet een opmerking bij ${esc(s.titel || id)}…">${esc(st.concept[st.id + ':' + id] || '')}</textarea>
     <div style="text-align:right;margin-top:6px"><button class="mtr-knop aan" data-vraag="${esc(id)}">Versturen</button></div>` : ''}</div>
 </details>`;
   }

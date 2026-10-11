@@ -589,19 +589,19 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   ${st.bezig ? '<div class="mtg-uitleg">Betaalgedrag en vaste patronen worden bijgewerkt… (de lijn ververst vanzelf)</div>' : ''}
   <div class="mtg-kaarten">
     ${kaartNu(metBtw ? 'Nu (lopend + BTW-pot)' : potOnbekend ? 'Nu (alleen lopend, BTW-pot onbekend)' : 'Nu', eur(nu), nu != null && nu < 0, (metBtw ? `lopend ${eur(L.gerapporteerd)} · ` : '') + (L.bron === 'ijkpunt' ? 'vanaf ijkpunt ' + datumTekst(L.ijkpunt && L.ijkpunt.datum) : 'stand Moneybird') + (L.verschil ? ` · verschil met Moneybird ${eur(L.verschil)}` : ''), metBtw || potOnbekend ? d.saldo.potten[btwPot] : null, 'BTW-pot')}
-    <div class="mtg-k ${low && (metRes ? (low.saldo < -resLow ? 'rood' : low.saldo < 0 ? 'amber' : '') : (limiet != null ? low.saldo < -limiet * 0.9 : low.saldo < 0) ? 'rood' : '')}"><div class="l"><span>${heeftProg && st.prognose ? 'Laagste punt (incl. prognose)' : 'Laagste punt'}</span><button class="mtg-vraag" data-uitleg="laagste">?</button></div>
-      <div class="w">${low ? eur(low.saldo) : '—'}</div><div class="s">${low ? `<a href="#" data-laag="1" title="Naar die dag in de grafiek, met de grootste oorzaken">${esc(datumTekst(low.datum, true))} · waardoor?</a> · komende ${st.zoom === 'week' ? '2 weken' : esc(st.zoom)}${lowZonder ? ` · zonder prognose: ${esc(eur(lowZonder.saldo))} op ${esc(datumTekst(lowZonder.datum))}` : ''}${(st.zoom === 'kwartaal' || st.zoom === 'jaar') && low.datum > G.onzekerVanaf(d, { prognose: st.prognose }) ? ' · let op: valt waar alleen vaste lasten bekend zijn (vul de prognose aan)' : ''}` : ''}</div></div>
+    <div class="mtg-k ${esc(low && (metRes ? (low.saldo < -resLow ? 'rood' : low.saldo < 0 ? 'amber' : '') : (limiet != null ? low.saldo < -limiet * 0.9 : low.saldo < 0) ? 'rood' : ''))}"><div class="l"><span>${heeftProg && st.prognose ? 'Laagste punt (incl. prognose)' : 'Laagste punt'}</span><button class="mtg-vraag" data-uitleg="laagste">?</button></div>
+      <div class="w">${esc(low ? eur(low.saldo) : '—')}</div><div class="s">${low ? `<a href="#" data-laag="1" title="Naar die dag in de grafiek, met de grootste oorzaken">${esc(datumTekst(low.datum, true))} · waardoor?</a> · komende ${st.zoom === 'week' ? '2 weken' : esc(st.zoom)}${lowZonder ? ` · zonder prognose: ${esc(eur(lowZonder.saldo))} op ${esc(datumTekst(lowZonder.datum))}` : ''}${(st.zoom === 'kwartaal' || st.zoom === 'jaar') && low.datum > G.onzekerVanaf(d, { prognose: st.prognose }) ? ' · let op: valt waar alleen vaste lasten bekend zijn (vul de prognose aan)' : ''}` : ''}</div></div>
     ${metRes && low ? kaart('ruimte', 'Ruimte op laagste punt', eur(low.saldo + resLow), low.saldo + resLow < 0, `tot de onderkant van je reserve${limiet != null ? ` · tot de kredietlimiet ${eur(low.saldo + limiet)}` : ''}`)
       : kaart('ruimte', 'Ruimte op laagste punt', ruimte == null ? '—' : eur(ruimte), ruimte != null && ruimte < 0, limiet == null ? 'kredietlimiet nog niet ingesteld' : `tot de kredietlimiet (${eur(-limiet)}) · nu: ${eur(nu != null ? nu + limiet : null)}`)}
-    ${metRes ? `<div class="mtg-k ${resInfo && resInfo.krediet > 0 ? 'rood' : resInfo && resInfo.gebruikt > 0 ? 'amber' : ''}"><div class="l"><span>Eigen reserve (Buffer)</span><button class="mtg-vraag" data-uitleg="reserve">?</button></div>
-      <div class="w">${resInfo ? eur(resInfo.gebruikt) : '—'} <span style="font-size:13px;font-weight:400">gebruikt van ${resInfo ? eur(resInfo.reserve) : '—'}</span></div>
+    ${metRes ? `<div class="mtg-k ${esc(resInfo && resInfo.krediet > 0 ? 'rood' : resInfo && resInfo.gebruikt > 0 ? 'amber' : '')}"><div class="l"><span>Eigen reserve (Buffer)</span><button class="mtg-vraag" data-uitleg="reserve">?</button></div>
+      <div class="w">${esc(resInfo ? eur(resInfo.gebruikt) : '—')} <span style="font-size:13px;font-weight:400">gebruikt van ${esc(resInfo ? eur(resInfo.reserve) : '—')}</span></div>
       <div class="s">${resInfo ? `fictief: je zit ${esc(eur(resInfo.gebruikt))} in je eigen reserve · bankkrediet ${esc(eur(resInfo.krediet))}` : '—'}</div>
       <div class="s">${bankTekst(d, kosten, metBtw)}</div></div>`
       : st.mag ? `<div class="mtg-k"><div class="l"><span>Eigen reserve (Buffer)</span><button class="mtg-vraag" data-uitleg="reserve">?</button></div><div class="w" style="font-size:15px">nog niet ingesteld</div><div class="s"><a href="#" data-inst="algemeen">instellen${(() => { const rp = G.reservePot(d, st.cfg), pt = ((st.cfg || {}).potten || []).find(p => p.id === rp), a = G.reserveAdvies(d, pt && pt.streef); return a ? ` (voorstel ${esc(eur(a.bedrag))})` : ''; })()}</a></div></div>` : ''}
   </div>
   <div class="mtg-kaart">
     <div class="mtg-kop" style="margin:0 0 6px"><b style="flex:1">Verloop ${st.modus === 'totaal' ? 'totaal' : 'lopende rekening'}</b>
-      <div class="mtg-knoppen">${Object.keys(ZOOM).map(z => `<button class="mtg-knop klein ${st.zoom === z ? 'aan' : ''}" data-zoom="${z}">${z}</button>`).join('')}
+      <div class="mtg-knoppen">${Object.keys(ZOOM).map(z => `<button class="mtg-knop klein ${st.zoom === z ? 'aan' : ''}" data-zoom="${esc(z)}">${esc(z)}</button>`).join('')}
       ${st.offset ? '<button class="mtg-knop klein" data-terug="1">vandaag</button>' : ''}
       ${heeftProg ? `<button class="mtg-knop klein ${st.prognose ? 'aan' : ''}" data-prognose="1" title="Prognose meenemen">prognose</button>` : ''}
       ${metBtw && st.modus === 'lopend' ? `<button class="mtg-knop klein ${st.alleenLopend ? 'aan' : ''}" data-alleen="1" title="Stand van alleen de lopende rekening (zonder BTW-pot)">alleen lopend</button>` : ''}
@@ -651,7 +651,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const d = st.data, r = G.roodKosten(d, st.cfg); if (!r) return '';
     const pct = x => (x * 100).toFixed(1).replace('.', ',') + '%', namen = r.potIds.map(id => (((st.cfg || {}).potten || []).find(p => p.id === id) || {}).naam || id).join(' + ');
     const max = Math.max(1, ...r.maanden.map(m => m.rente + m.provisie)), h = x => Math.round(x / max * 46);
-    const staaf = r.maanden.length ? `<div class="mtg-staafjes">${r.maanden.map(m => `<div title="${esc(m.maand)}: debetrente ${esc(eur(m.rente))} · provisie ${esc(eur(m.provisie))}"><i class="re" style="height:${h(m.rente)}px"></i><i class="pr" style="height:${h(m.provisie)}px"></i><span>${esc(m.maand.slice(5))}</span></div>`).join('')}</div>
+    const staaf = r.maanden.length ? `<div class="mtg-staafjes">${r.maanden.map(m => `<div title="${esc(m.maand)}: debetrente ${esc(eur(m.rente))} · provisie ${esc(eur(m.provisie))}"><i class="re" style="height:${esc(h(m.rente))}px"></i><i class="pr" style="height:${esc(h(m.provisie))}px"></i><span>${esc(m.maand.slice(5))}</span></div>`).join('')}</div>
       <div class="mtg-legenda"><span><i style="border-top:8px solid var(--mtg-uit,#c0392b);vertical-align:-2px"></i>debetrente</span><span><i style="border-top:8px solid #b9b6aa;vertical-align:-2px"></i>provisie</span></div>` : '';
     const delen = [];
     delen.push(r.maanden.length ? `<p><b>Afgelopen ${r.maanden.length} maand${r.maanden.length === 1 ? '' : 'en'}</b>: ${esc(eur(r.totaal))} aan ING-kosten (debetrente ${esc(eur(r.totRente))}, provisie ${esc(eur(r.totProvisie))}).</p>${staaf}`
@@ -672,26 +672,26 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     if (r.provisie != null) delen.push(`<p>De bereidstellingsprovisie (≈${esc(eur(r.provisie))}/mnd, ≈${esc(eur(r.provisie * 12))}/jr) blijft zolang de kredietfaciliteit er is, ook als je niet rood staat. Die verdwijnt alleen als je de limiet laat verlagen. Ter informatie, geen advies om op te zeggen.</p>`);
     if (r.historisch) {
       const hs = r.historisch, bed = x => hs.length > 1 ? `${esc(eur(x(hs[0])))}–${esc(eur(x(hs[1])))}` : esc(eur(x(hs[0])));
-      delen.push(`<p><b>Doelpad</b>: met een volle eigen reserve van ${hs.length > 1 ? `${esc(kort(hs[0].R))}–${esc(kort(hs[1].R))}` : esc(kort(hs[0].R))} op de lopende rekening (in plaats van op een spaarpotje) bespaar je historisch ±${r.sp ? bed(x => x.netto) : bed(x => x.bruto)}/jr${r.sp ? ' netto (na gemiste spaarrente)' : ' aan debetrente (vóór gemiste spaarrente; spaarrente onbekend)'}, berekend op de werkelijke rode dagsaldi van de lopende rekening (${r.histDagen} dagen).</p>`);
+      delen.push(`<p><b>Doelpad</b>: met een volle eigen reserve van ${hs.length > 1 ? `${esc(kort(hs[0].R))}–${esc(kort(hs[1].R))}` : esc(kort(hs[0].R))} op de lopende rekening (in plaats van op een spaarpotje) bespaar je historisch ±${esc(r.sp ? bed(x => x.netto) : bed(x => x.bruto))}/jr${r.sp ? ' netto (na gemiste spaarrente)' : ' aan debetrente (vóór gemiste spaarrente; spaarrente onbekend)'}, berekend op de werkelijke rode dagsaldi van de lopende rekening (${esc(r.histDagen)} dagen).</p>`);
     }
     return `<details class="mtg-kaart" id="mtg-rood" ${st.roodOpen ? 'open' : ''}><summary>Roodstaan: kosten en besparing${r.nu != null ? ` <span class="mtg-chip">≈${esc(eur(r.nu))}/mnd</span>` : ''}</summary>${delen.join('')}</details>`;
   }
   // Uitleg bij het advies naast een doel: bronnen, getallen en welke regel wint.
   function adviesUitleg(id) {
-    const d = st.data, b = x => `<b>${x == null ? 'onbekend' : esc(eur(x))}</b>`;
+    const d = st.data, eurVetHtml = x => `<b>${x == null ? 'onbekend' : esc(eur(x))}</b>`;
     if (id === 'lopend') {
       const a = G.lopendAdvies(d); if (!a) return;
       return blad(`<h3>Advies lopende rekening: ${esc(eur(a.bedrag))}</h3><div class="mtg-uitleg">
-        <p>Maandpieken: p75 van het hoogste saldo per maand (lopend + BTW-pot, laatste ${a.maanden} maanden): ${b(a.p75)}${a.wint === 'pieken' ? ' ← wint' : ''}</p>
-        <p>Vaste lasten per maand: patronen + inleg in de potjes (komende 13 weken), zonder inkoopfacturen en BTW-sparen: ${b(a.vast)}${a.wint === 'vast' ? ' ← wint' : ''}</p>
-        <p>Gemiddelde bruto uitgaven per maand (alles, incl. inkoop en potinleg, zonder BTW-sparen): ${b(a.bruto)}</p>
-        <p>Regel: het hoogste van maandpieken en vaste lasten, naar boven afgerond op € 5.000 → ${b(a.bedrag)}.</p>
-        ${a.brutoAdvies != null ? `<p>Ter referentie (telt niet mee): 2× gemiddelde maanduitgaven incl. inkoop en potinleg = ${b(a.brutoAdvies)}${a.brutoAdvies > a.bedrag ? ' (hoger dan het advies)' : ''}.</p>` : ''}</div>`);
+        <p>Maandpieken: p75 van het hoogste saldo per maand (lopend + BTW-pot, laatste ${esc(a.maanden)} maanden): ${eurVetHtml(a.p75)}${a.wint === 'pieken' ? ' ← wint' : ''}</p>
+        <p>Vaste lasten per maand: patronen + inleg in de potjes (komende 13 weken), zonder inkoopfacturen en BTW-sparen: ${eurVetHtml(a.vast)}${a.wint === 'vast' ? ' ← wint' : ''}</p>
+        <p>Gemiddelde bruto uitgaven per maand (alles, incl. inkoop en potinleg, zonder BTW-sparen): ${eurVetHtml(a.bruto)}</p>
+        <p>Regel: het hoogste van maandpieken en vaste lasten, naar boven afgerond op € 5.000 → ${eurVetHtml(a.bedrag)}.</p>
+        ${a.brutoAdvies != null ? `<p>Ter referentie (telt niet mee): 2× gemiddelde maanduitgaven incl. inkoop en potinleg = ${eurVetHtml(a.brutoAdvies)}${a.brutoAdvies > a.bedrag ? ' (hoger dan het advies)' : ''}.</p>` : ''}</div>`);
     }
     const pot = ((st.cfg || {}).potten || []).find(p => p.id === id), a = pot && G.reserveAdvies(d, pot.streef); if (!a) return;
     blad(`<h3>Advies ${esc(pot.naam)}: ${esc(eur(a.bedrag))}</h3><div class="mtg-uitleg">
-      <p>Dips onder 0: de laagste stand per maand van lopend + BTW-pot, laatste ${a.maanden} maanden; p90 daarvan: ${b(a.p90)}</p>
-      <p>Naar boven afgerond op € 5.000: ${b(a.onbegrensd)}${a.band ? `; binnen je band ${esc(kort(a.band[0]))}–${esc(kort(a.band[1]))} → ${b(a.bedrag)}` : ''}.</p>
+      <p>Dips onder 0: de laagste stand per maand van lopend + BTW-pot, laatste ${esc(a.maanden)} maanden; p90 daarvan: ${eurVetHtml(a.p90)}</p>
+      <p>Naar boven afgerond op € 5.000: ${eurVetHtml(a.onbegrensd)}${a.band ? `; binnen je band ${esc(kort(a.band[0]))}–${esc(kort(a.band[1]))} → ${eurVetHtml(a.bedrag)}` : ''}.</p>
       <p>Regel: de reserve dekt 9 van de 10 maanddips.</p></div>`);
   }
   function rcUitleg() {
@@ -699,7 +699,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const pct = x => (x * 100).toFixed(1).replace('.', ',') + '%';
     blad(`<h3>Kosten rekening-courant</h3><div class="mtg-uitleg">${k.schatting != null
       ? `≈ ${esc(eur(k.schatting))} per maand = debetrente ≈${esc(eur(k.rente))} (±${esc(pct(k.tariefJaar))}/jr ÷ 12 × het huidige rode saldo van de lopende rekening ${esc(eur(Math.max(0, -(lop || 0))))}) + bereidstellingsprovisie ${esc(eur(k.provisie))} (mediaan per maand; die rekent de bank over het ongebruikte deel van het krediet). Het tarief is afgeleid uit je ING-afrekeningen: debetrente ÷ het gemiddelde rode dagsaldo in die maand, omgerekend naar een jaar (mediaan over ${k.tariefMaanden} maand${k.tariefMaanden === 1 ? '' : 'en'}).`
-      : `Er is (nog) geen debetrente in de afrekeningen gezien, dus geen tarief; alleen wat het historisch kostte.`} Historisch: ${esc(eur(k.min))}–${esc(eur(k.max))} per maand over ${k.maanden} maand${k.maanden === 1 ? '' : 'en'}. Een indicatie: de bank rekent per dag over de lopende rekening zelf, los van wat er in de potjes staat.</div>`);
+      : `Er is (nog) geen debetrente in de afrekeningen gezien, dus geen tarief; alleen wat het historisch kostte.`} Historisch: ${esc(eur(k.min))}–${esc(eur(k.max))} per maand over ${esc(k.maanden)} maand${k.maanden === 1 ? '' : 'en'}. Een indicatie: de bank rekent per dag over de lopende rekening zelf, los van wat er in de potjes staat.</div>`);
   }
   // Eigenaar opent het scherm: wat deze maand nog niet herberekend is, verwerken (kleine stap omhoog, met melding).
   async function meegroeiUitvoeren() {
@@ -761,7 +761,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       ${b.mutaties.length >= 30 ? '<p style="font-size:11px">Alleen de laatste 30 getoond.</p>' : ''}`);
   }
   function kaart(sleutel, titel, waarde, rood, sub) {
-    return `<div class="mtg-k ${rood ? 'rood' : ''}"><div class="l"><span>${esc(titel)}</span><button class="mtg-vraag" data-uitleg="${sleutel}">?</button></div><div class="w">${esc(waarde)}</div><div class="s">${esc(sub || '')}</div></div>`;
+    return `<div class="mtg-k ${rood ? 'rood' : ''}"><div class="l"><span>${esc(titel)}</span><button class="mtg-vraag" data-uitleg="${esc(sleutel)}">?</button></div><div class="w">${esc(waarde)}</div><div class="s">${esc(sub || '')}</div></div>`;
   }
   // Lijst: vandaag t/m +14, inclusief achterstallig (staat op vandaag); zonder datum apart.
   function lijstHtml() {
@@ -778,14 +778,14 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       if (e.bron !== 'inleg') { h += rijHtml(e); continue; }
       const l = inleg[e.datum]; if (l[0] !== e) continue;      // één regel per dag voor alle weekinleg
       const som = rond(l.reduce((a, x) => a + x.delta, 0));
-      h += `<div class="mtg-rij" data-dag="${esc(e.datum)}"><span class="p mtg-uit">▼</span><span class="n">Weekinleg potjes: ${esc(l.map(x => x.tegenpartij || x.pot).join(', '))}</span><span class="mtg-chip">intern</span><span class="b mtg-uit">${eur(som)}</span></div>`;
+      h += `<div class="mtg-rij" data-dag="${esc(e.datum)}"><span class="p mtg-uit">▼</span><span class="n">Weekinleg potjes: ${esc(l.map(x => x.tegenpartij || x.pot).join(', '))}</span><span class="mtg-chip">intern</span><span class="b mtg-uit">${esc(eur(som))}</span></div>`;
     }
     if (zonder.length) h += `<div class="mtg-dag">zonder datum (niet in de lijn)</div>` + zonder.map(rijHtml).join('');
     return h;
   }
   function rijHtml(e) {
     const inn = e.delta > 0, chip = e.achterstallig ? '<span class="mtg-chip achter">achterstallig</span>' : e.zekerheid === 'prognose' ? '<span class="mtg-chip prog">prognose</span>' : e.intern ? '<span class="mtg-chip">intern</span>' : `<span class="mtg-chip">${esc(ZEKER[e.zekerheid] || e.zekerheid || '')}</span>`;
-    return `<div class="mtg-rij" data-ev="${esc(e.id)}"${e.scenario ? ' style="background:#eef3fb"' : ''}><span class="p ${inn ? 'mtg-in' : 'mtg-uit'}">${inn ? '▲' : '▼'}</span><span class="n">${esc(e.tegenpartij || BRON[e.bron] || e.bron)}${e.termijn ? ` · termijn ${esc(e.termijn)}` : ''}</span>${chip}<span class="b ${inn ? 'mtg-in' : 'mtg-uit'}">${eur(e.delta != null ? e.delta : e.bedrag)}</span></div>`;
+    return `<div class="mtg-rij" data-ev="${esc(e.id)}"${e.scenario ? ' style="background:#eef3fb"' : ''}><span class="p ${inn ? 'mtg-in' : 'mtg-uit'}">${inn ? '▲' : '▼'}</span><span class="n">${esc(e.tegenpartij || BRON[e.bron] || e.bron)}${e.termijn ? ` · termijn ${esc(e.termijn)}` : ''}</span>${chip}<span class="b ${inn ? 'mtg-in' : 'mtg-uit'}">${esc(eur(e.delta != null ? e.delta : e.bedrag))}</span></div>`;
   }
   // Potjes: lopende rekening + elk potje (ook virtueel), met doel, balk en tempo.
   function potjesHtml() {
@@ -805,9 +805,9 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   }
   function potRij(id, naam, nu, streef, tempo, pot, btw) {
     const v = G.voortgang(streef, nu, tempo, st.data.vandaag);
-    if (btw) return `<div class="mtg-pot" ${st.mag ? `data-pot="${esc(id)}" style="cursor:pointer"` : ''}><div class="r1"><b>${esc(naam)}</b><span style="font-weight:600">${nu == null ? 'saldo onbekend' : eur(nu)}</span>
-      <span class="mtg-chip">doel: BTW-aangifte ${esc(btw.kwartaal)} (≈${kort(btw.bedrag)})</span></div>
-      <div class="mtg-balk"><div style="width:${btw.pct}%"></div></div><div class="r3">${btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(btw.kwartaal)} (≈${eur(btw.bedrag)}) ✓ — verwacht ${eur(btw.pot)} op ${esc(datumTekst(btw.datum))}` : `tekort ${eur(btw.tekort)} vóór ${esc(datumTekst(btw.datum))} (aangifte ${esc(btw.kwartaal)} ≈${eur(btw.bedrag)})${G.btwInLopend(st.data) && (st.data.instellingen || {}).btw_pot === id ? ' — als reserve; de aangifte zelf gaat van de lopende rekening (+ BTW-pot)' : ''}`}${pot && pot.weekinleg ? ' · inleg ' + eur(pot.weekinleg) + '/week' : ''} · automatisch doel; een eigen doel overschrijft het${G.btwInLopend(st.data) && (st.data.instellingen || {}).btw_pot === id ? ' · telt mee in je lopende rekening' : ''}</div></div>`;
+    if (btw) return `<div class="mtg-pot" ${st.mag ? `data-pot="${esc(id)}" style="cursor:pointer"` : ''}><div class="r1"><b>${esc(naam)}</b><span style="font-weight:600">${esc(nu == null ? 'saldo onbekend' : eur(nu))}</span>
+      <span class="mtg-chip">doel: BTW-aangifte ${esc(btw.kwartaal)} (≈${esc(kort(btw.bedrag))})</span></div>
+      <div class="mtg-balk"><div style="width:${esc(btw.pct)}%"></div></div><div class="r3">${btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(btw.kwartaal)} (≈${eur(btw.bedrag)}) ✓ — verwacht ${eur(btw.pot)} op ${esc(datumTekst(btw.datum))}` : `tekort ${eur(btw.tekort)} vóór ${esc(datumTekst(btw.datum))} (aangifte ${esc(btw.kwartaal)} ≈${eur(btw.bedrag)})${G.btwInLopend(st.data) && (st.data.instellingen || {}).btw_pot === id ? ' — als reserve; de aangifte zelf gaat van de lopende rekening (+ BTW-pot)' : ''}`}${esc(pot && pot.weekinleg ? ' · inleg ' + eur(pot.weekinleg) + '/week' : '')} · automatisch doel; een eigen doel overschrijft het${G.btwInLopend(st.data) && (st.data.instellingen || {}).btw_pot === id ? ' · telt mee in je lopende rekening' : ''}</div></div>`;
     const doelTekst = !streef ? (st.mag ? 'nog geen doel — tik om er een te geven' : 'geen doel') : streef.van != null && streef.tot != null ? `doel ${kort(streef.van)}–${kort(streef.tot)}` : `doel ${kort(streef.bedrag)}`;
     const adv = !streef ? null : id === 'lopend' ? G.lopendAdvies(st.data) : id === G.reservePot(st.data, st.cfg) ? G.reserveAdvies(st.data, streef) : null;   // ook met meegroeien uit
     const advTitel = !adv ? '' : id === 'lopend' ? `hoogste van maandpieken ${kort(adv.p75)} en vaste lasten ${kort(adv.vast)}${adv.brutoAdvies != null ? ` (referentie 2× bruto uitgaven ${kort(adv.brutoAdvies)})` : ''} — klik voor de uitleg` : `p90 van de maanddips ${kort(adv.p90)}${adv.band ? `, binnen je band ${kort(adv.band[0])}–${kort(adv.band[1])}` : ''} — klik voor de uitleg`;
@@ -834,8 +834,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
         : `Voorstel: doel verlagen naar ${esc(eur(vs.naar))} — ${esc(vs.reden)}. ${st.mag ? `<button class="mtg-knop klein aan" data-doeladvies="${esc(id)}">Ja, verlagen</button>` : ''}`}</div>` : '')
       + (streef && streef.meegroeien !== false && (id === 'lopend' || id === G.reservePot(st.data, st.cfg)) ? `<div class="r3">doel groeit mee met de bankhistorie: automatisch alleen kleine stappen (max +10%, hooguit 1× per maand${streef.meegroei_max != null || streef.tot != null ? `, tot ${esc(eur(streef.meegroei_max != null ? streef.meegroei_max : streef.tot))}` : ', stel een bovengrens in'})${streef.advies_akkoord ? '' : ', na het eerste overgenomen advies'}</div>` : '');
     return `<div class="mtg-pot" ${st.mag ? `data-pot="${esc(id)}" style="cursor:pointer"` : ''}>
-  <div class="r1"><b>${esc(naam)}</b><span class="${nu != null && nu < 0 ? 'mtg-uit' : ''}" style="font-weight:600">${nu == null ? 'saldo onbekend' : eur(nu)}</span><span class="mtg-chip">${esc(doelTekst)}${advHtml}${streef && streef.datum ? ' · ' + esc(datumTekst(streef.datum)) : ''}</span></div>
-  ${v ? `<div class="mtg-balk" title="${v.pct}% van de weg vanaf het startpunt"><div style="width:${v.pct}%"></div></div>` : ''}
+  <div class="r1"><b>${esc(naam)}</b><span class="${nu != null && nu < 0 ? 'mtg-uit' : ''}" style="font-weight:600">${esc(nu == null ? 'saldo onbekend' : eur(nu))}</span><span class="mtg-chip">${esc(doelTekst)}${advHtml}${streef && streef.datum ? ' · ' + esc(datumTekst(streef.datum)) : ''}</span></div>
+  ${v ? `<div class="mtg-balk" title="${esc(v.pct)}% van de weg vanaf het startpunt"><div style="width:${esc(v.pct)}%"></div></div>` : ''}
   <div class="r3">${esc([r3, extra].filter(Boolean).join(' · '))}</div>${meeTekst}</div>`;
   }
   // Waarschuwingen in drie soorten: Moneybird even druk (429), nog in te stellen (verwacht tot de eigenaar het
@@ -869,10 +869,10 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   function patronenHtml() {
     const p = st.data.patronen; if (!p || !p.lijst.length) return '';
     const dagen = ['', 'ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
-    return `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Vaste patronen (${p.aan} actief)</b><button class="mtg-vraag" data-uitleg="patronen">?</button></div>
+    return `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Vaste patronen (${esc(p.aan)} actief)</b><button class="mtg-vraag" data-uitleg="patronen">?</button></div>
       <details><summary class="mtg-melding" style="cursor:pointer">tonen</summary>${p.lijst.map(x => `<div class="mtg-rij" style="cursor:default"><span class="p ${x.richting === 'in' ? 'mtg-in' : 'mtg-uit'}">${x.richting === 'in' ? '▲' : '▼'}</span>
-        <span class="n">${esc(x.tegenpartij)} <span class="mtg-chip">${x.frequentie === 'week' ? 'elke ' + dagen[x.weekdag] : 'rond de ' + (((x.dag + (x.verschuiving || 0) - 1) % 31) + 1) + 'e'}</span>${x.potje ? ' <span class="mtg-chip">potje</span>' : ''}</span>
-        <span class="b">${eur(x.bedrag)}</span>${st.mag && !x.potje ? `<button class="mtg-knop klein ${x.aan ? 'aan' : ''}" data-patroon="${esc(x.id)}" data-aan="${x.aan ? 0 : 1}">${x.aan ? 'aan' : 'uit'}</button>` : ''}</div>`).join('')}</details></div>`;
+        <span class="n">${esc(x.tegenpartij)} <span class="mtg-chip">${esc(x.frequentie === 'week' ? 'elke ' + dagen[x.weekdag] : 'rond de ' + (((x.dag + (x.verschuiving || 0) - 1) % 31) + 1) + 'e')}</span>${x.potje ? ' <span class="mtg-chip">potje</span>' : ''}</span>
+        <span class="b">${esc(eur(x.bedrag))}</span>${st.mag && !x.potje ? `<button class="mtg-knop klein ${x.aan ? 'aan' : ''}" data-patroon="${esc(x.id)}" data-aan="${x.aan ? 0 : 1}">${x.aan ? 'aan' : 'uit'}</button>` : ''}</div>`).join('')}</details></div>`;
   }
   // ── Schulden (mt-schulden.js): per lening restschuld, rente, termijn, einde, nog te betalen rente + rekenhulp extra aflossen ──
   // De rekening-courant (kredietlimiet ingesteld) staat er altijd bij als "rood staan": geen lening om in te vullen.
@@ -929,14 +929,14 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const cent = x => x == null ? '' : (x / 100).toLocaleString('nl-NL', { minimumFractionDigits: x % 100 ? 2 : 0, maximumFractionDigits: 2 });
     const veld = (s, i) => `<div class="mtg-kaart" data-i="${i}">
       <label class="mtg-veld"><span>Naam (max. 60 tekens)</span><input name="naam" maxlength="60" value="${esc(s.naam || '')}"></label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Soort</span><select name="soort">${S.SOORTEN.map(([k, t]) => `<option value="${k}" ${s.soort === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-        <label class="mtg-veld" style="flex:1"><span>Vorm</span><select name="vorm">${S.VORMEN.map(([k, t]) => `<option value="${k}" ${s.vorm === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Restschuld (€)</span><input name="rest" inputmode="decimal" value="${cent(s.restschuld_cent)}"></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Soort</span><select name="soort">${S.SOORTEN.map(([k, t]) => `<option value="${k}" ${s.soort === k ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+        <label class="mtg-veld" style="flex:1"><span>Vorm</span><select name="vorm">${S.VORMEN.map(([k, t]) => `<option value="${k}" ${s.vorm === k ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Restschuld (€)</span><input name="rest" inputmode="decimal" value="${esc(cent(s.restschuld_cent))}"></label>
         <label class="mtg-veld" style="flex:1"><span>Stand op datum</span><input type="date" name="stand" value="${esc(s.stand_datum || st.data.vandaag)}"></label></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Rente (% per jaar) — leeg = onbekend</span><input name="rente" inputmode="decimal" value="${s.rente_bp == null ? '' : (s.rente_bp / 100).toLocaleString('nl-NL', { maximumFractionDigits: 2 })}"></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Rente (% per jaar) — leeg = onbekend</span><input name="rente" inputmode="decimal" value="${esc(s.rente_bp == null ? '' : (s.rente_bp / 100).toLocaleString('nl-NL', { maximumFractionDigits: 2 }))}"></label>
         <label class="mtg-veld" style="flex:1"><span>Einddatum (optioneel)</span><input type="date" name="einde" value="${esc(s.einde || '')}"></label></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Termijn per maand, rente + aflossing (€)</span><input name="termijn" inputmode="decimal" value="${cent(s.maandtermijn_cent)}"></label>
-        <label class="mtg-veld" style="flex:1"><span>Aflossing per maand (€, lineair)</span><input name="aflossing" inputmode="decimal" value="${cent(s.aflossing_cent)}"></label></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="mtg-veld" style="flex:1"><span>Termijn per maand, rente + aflossing (€)</span><input name="termijn" inputmode="decimal" value="${esc(cent(s.maandtermijn_cent))}"></label>
+        <label class="mtg-veld" style="flex:1"><span>Aflossing per maand (€, lineair)</span><input name="aflossing" inputmode="decimal" value="${esc(cent(s.aflossing_cent))}"></label></div>
       <label class="mtg-veld"><span>Moneybird-grootboek (id, optioneel)</span><input name="ledger" inputmode="numeric" value="${esc(s.ledger_id || '')}"></label>
       <button class="mtg-knop klein" data-weg="${i}">Lening verwijderen</button></div>`;
     const o = blad(`<h3>Leningen</h3><div class="mtg-melding">${esc(S.INFO)} Bedragen in euro's; de rekenhulp rekent in hele centen.</div>
@@ -968,7 +968,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   function instellingenHtml() {
     const c = st.cfg || {}, b = c.btw || {};
     return `<div class="mtg-kaart"><details><summary style="cursor:pointer"><b>Instellingen</b> <span class="mtg-melding">kredietlimiet, BTW, klantgroepen</span></summary>
-      <dl class="mtg-dl"><dt>Kredietlimiet</dt><dd>${c.kredietlimiet == null ? 'niet ingesteld' : eur(c.kredietlimiet)}</dd>
+      <dl class="mtg-dl"><dt>Kredietlimiet</dt><dd>${esc(c.kredietlimiet == null ? 'niet ingesteld' : eur(c.kredietlimiet))}</dd>
       <dt>BTW-sparen</dt><dd>${b.spaarpercentage ? Math.round(b.spaarpercentage * 10000) / 100 + '% naar ' + esc(b.spaarpot || '?') : 'uit'}</dd>
       <dt>BTW-aangifte</dt><dd>${b.modus === 'apart' ? `van ${esc(b.aangifte_van || 'lopend (aangenomen)')}${b.terugboeking_van ? ', terug uit ' + esc(b.terugboeking_van) : ''}` : 'van de lopende rekening; de BTW-pot telt daarin mee'}</dd>
       <dt>Klantgroepen</dt><dd>${(c.klantgroepen || []).map(g => esc(g.naam) + (g.prefix ? ` (begint met "${esc(g.prefix)}")` : ` (${g.contact_ids.length} klanten)`)).join(', ') || 'geen'}</dd>
@@ -1010,7 +1010,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     // ▲▼ op een eigen strook onder de datums, grootte naar het bedrag (kleine posten weg: < 4% van het bereik).
     const drempel = (hi - lo) * 0.04, groot = Math.max(1, ...Object.values(perDag).map(s => Math.max(s.in, -s.uit)));
     const maat = b => (9 + 9 * Math.sqrt(Math.min(1, Math.abs(b) / groot))).toFixed(1);
-    const pijlen = Object.entries(perDag).flatMap(([dd, s]) => [s.in > drempel ? `<text x="${x(dd)}" y="${H - 18}" text-anchor="middle" font-size="${maat(s.in)}" fill="var(--mtg-in)">▲</text>` : '', s.uit < -drempel ? `<text x="${x(dd)}" y="${H - 3}" text-anchor="middle" font-size="${maat(s.uit)}" fill="var(--mtg-uit)">▼</text>` : '']).join('');
+    const pijlen = Object.entries(perDag).flatMap(([dd, s]) => [s.in > drempel ? `<text x="${esc(x(dd))}" y="${esc(H - 18)}" text-anchor="middle" font-size="${esc(maat(s.in))}" fill="var(--mtg-in)">▲</text>` : '', s.uit < -drempel ? `<text x="${esc(x(dd))}" y="${esc(H - 3)}" text-anchor="middle" font-size="${esc(maat(s.uit))}" fill="var(--mtg-uit)">▼</text>` : '']).join('');
     const vlaggen = mijlpaalVlaggen(vanD, totD, x, y);
     // Zones: 0 tot −reserve amber (eigen reserve), −reserve tot de kredietlimiet licht rood (bankkrediet, kost rente).
     let zones = '';
@@ -1024,26 +1024,26 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
         if (yl != null && yl > yr) rood += `M${xa.toFixed(1)},${yr.toFixed(1)}H${xb.toFixed(1)}V${yl.toFixed(1)}H${xa.toFixed(1)}Z`;
       }
       const res0 = G.reserveOp(d, st.cfg, pts[0].datum, { prognose: st.prognose });
-      zones = `<path d="${amber}" fill="#e8b04a" fill-opacity="0.16" class="mtg-zone-reserve"/>${rood ? `<path d="${rood}" fill="#d9574a" fill-opacity="0.08" class="mtg-zone-krediet"/>` : ''}`
-        + (res0 > 0 && -res0 / 2 > lo ? `<text x="${pl + 4}" y="${y(-res0 / 2) + 3}" font-size="10" fill="#9a6a12">eigen reserve (Buffer)</text>` : '')
-        + (limiet != null && (-res0 + limiet) / 2 > lo ? `<text x="${pl + 4}" y="${y((-res0 + limiet) / 2) + 3}" font-size="10" fill="#a33">bankkrediet (kost rente)</text>` : '');   // limiet is hier al negatief
+      zones = `<path d="${esc(amber)}" fill="#e8b04a" fill-opacity="0.16" class="mtg-zone-reserve"/>${rood ? `<path d="${esc(rood)}" fill="#d9574a" fill-opacity="0.08" class="mtg-zone-krediet"/>` : ''}`
+        + (res0 > 0 && -res0 / 2 > lo ? `<text x="${esc(pl + 4)}" y="${esc(y(-res0 / 2) + 3)}" font-size="10" fill="#9a6a12">eigen reserve (Buffer)</text>` : '')
+        + (limiet != null && (-res0 + limiet) / 2 > lo ? `<text x="${esc(pl + 4)}" y="${esc(y((-res0 + limiet) / 2) + 3)}" font-size="10" fill="#a33">bankkrediet (kost rente)</text>` : '');   // limiet is hier al negatief
     }
-    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Verloop saldo">
-      ${ticks.map(t => `<line x1="${pl}" x2="${W - pr}" y1="${y(t)}" y2="${y(t)}" stroke="#e8e6de" stroke-width="1"/><text x="${pl - 4}" y="${y(t) + 3}" text-anchor="end" font-size="10" fill="#8a8a80">${kort(t)}</text>`).join('')}
-      ${maandStreep.map(dd => `<line x1="${x(dd)}" x2="${x(dd)}" y1="${pt}" y2="${H - pb}" stroke="#f0eee6"/><text x="${x(dd) + 2}" y="${H - pb + 12}" font-size="10" fill="#8a8a80">${datumTekst(dd)}</text>`).join('')}
+    box.innerHTML = `<svg viewBox="0 0 ${esc(W)} ${esc(H)}" preserveAspectRatio="none" role="img" aria-label="Verloop saldo">
+      ${ticks.map(t => `<line x1="${esc(pl)}" x2="${esc(W - pr)}" y1="${esc(y(t))}" y2="${esc(y(t))}" stroke="#e8e6de" stroke-width="1"/><text x="${esc(pl - 4)}" y="${esc(y(t) + 3)}" text-anchor="end" font-size="10" fill="#8a8a80">${esc(kort(t))}</text>`).join('')}
+      ${maandStreep.map(dd => `<line x1="${esc(x(dd))}" x2="${esc(x(dd))}" y1="${esc(pt)}" y2="${esc(H - pb)}" stroke="#f0eee6"/><text x="${esc(x(dd) + 2)}" y="${esc(H - pb + 12)}" font-size="10" fill="#8a8a80">${esc(datumTekst(dd))}</text>`).join('')}
       ${zones}
-      ${lo < 0 && hi > 0 ? `<line x1="${pl}" x2="${W - pr}" y1="${y(0)}" y2="${y(0)}" stroke="#bbb" stroke-width="1"/>` : ''}
-      ${limiet != null && limiet >= lo ? `<line x1="${pl}" x2="${W - pr}" y1="${y(limiet)}" y2="${y(limiet)}" stroke="var(--mtg-uit)" stroke-width="1.5"/><text x="${W - pr - 2}" y="${y(limiet) - 3}" text-anchor="end" font-size="10" fill="var(--mtg-uit)">kredietlimiet</text>` : ''}
-      ${d.vandaag >= vanD && d.vandaag <= totD ? `<line x1="${x(d.vandaag)}" x2="${x(d.vandaag)}" y1="${pt}" y2="${H - pb}" stroke="var(--gold,#B8962E)" stroke-dasharray="3 3"/>` : ''}
-      ${st.markeer && st.markeer >= vanD && st.markeer <= totD ? `<line x1="${x(st.markeer)}" x2="${x(st.markeer)}" y1="${pt}" y2="${H - pb}" stroke="var(--mtg-uit)" stroke-width="1.5" stroke-dasharray="2 2"/><text x="${x(st.markeer) + 3}" y="${pt + 20}" font-size="10" fill="var(--mtg-uit)">laagste punt</text>` : ''}
-      ${ver.length > 1 ? `<path d="${pad(ver)}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2"/>` : ''}
-      ${(zonder || toek).filter(p => p.datum >= d.vandaag).length > 1 ? `<path d="${pad((zonder || toek).filter(p => p.datum >= d.vandaag))}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2" stroke-dasharray="6 4"/>` : ''}
-      ${zonder && toek.length > 1 ? `<path d="${afwijk(toek, zonder.filter(p => p.datum >= d.vandaag))}" fill="none" stroke="#3a5a8a" stroke-width="2" stroke-dasharray="1 3"/>` : ''}
-      ${alleen && alleen.length > 1 ? `<path d="${pad(alleen)}" fill="none" stroke="#9a9a92" stroke-width="1.2"/>` : ''}
+      ${lo < 0 && hi > 0 ? `<line x1="${esc(pl)}" x2="${esc(W - pr)}" y1="${esc(y(0))}" y2="${esc(y(0))}" stroke="#bbb" stroke-width="1"/>` : ''}
+      ${limiet != null && limiet >= lo ? `<line x1="${esc(pl)}" x2="${esc(W - pr)}" y1="${esc(y(limiet))}" y2="${esc(y(limiet))}" stroke="var(--mtg-uit)" stroke-width="1.5"/><text x="${esc(W - pr - 2)}" y="${esc(y(limiet) - 3)}" text-anchor="end" font-size="10" fill="var(--mtg-uit)">kredietlimiet</text>` : ''}
+      ${d.vandaag >= vanD && d.vandaag <= totD ? `<line x1="${esc(x(d.vandaag))}" x2="${esc(x(d.vandaag))}" y1="${esc(pt)}" y2="${esc(H - pb)}" stroke="var(--gold,#B8962E)" stroke-dasharray="3 3"/>` : ''}
+      ${st.markeer && st.markeer >= vanD && st.markeer <= totD ? `<line x1="${esc(x(st.markeer))}" x2="${esc(x(st.markeer))}" y1="${esc(pt)}" y2="${esc(H - pb)}" stroke="var(--mtg-uit)" stroke-width="1.5" stroke-dasharray="2 2"/><text x="${esc(x(st.markeer) + 3)}" y="${esc(pt + 20)}" font-size="10" fill="var(--mtg-uit)">laagste punt</text>` : ''}
+      ${ver.length > 1 ? `<path d="${esc(pad(ver))}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2"/>` : ''}
+      ${(zonder || toek).filter(p => p.datum >= d.vandaag).length > 1 ? `<path d="${esc(pad((zonder || toek).filter(p => p.datum >= d.vandaag)))}" fill="none" stroke="var(--mtg-lijn)" stroke-width="2" stroke-dasharray="6 4"/>` : ''}
+      ${zonder && toek.length > 1 ? `<path d="${esc(afwijk(toek, zonder.filter(p => p.datum >= d.vandaag)))}" fill="none" stroke="#3a5a8a" stroke-width="2" stroke-dasharray="1 3"/>` : ''}
+      ${alleen && alleen.length > 1 ? `<path d="${esc(pad(alleen))}" fill="none" stroke="#9a9a92" stroke-width="1.2"/>` : ''}
       ${(() => { const z = G.onzekerVanaf(d, { prognose: st.prognose }); if (z >= totD) return ''; const x0 = Math.max(pl, x(z < vanD ? vanD : z));
-        return `<defs><pattern id="mtg-arc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#8a8a80" stroke-opacity="0.22" stroke-width="2"/></pattern></defs><rect x="${x0}" y="${pt}" width="${Math.max(0, W - pr - x0)}" height="${H - pt - pb}" fill="url(#mtg-arc)" class="mtg-zone"/><text x="${Math.min(x0 + 4, W - pr - 4)}" y="${pt + 32}" font-size="10" fill="#7a7a70">verder weg: alleen vaste lasten bekend — vul de prognose aan</text>`; })()}
+        return `<defs><pattern id="mtg-arc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#8a8a80" stroke-opacity="0.22" stroke-width="2"/></pattern></defs><rect x="${esc(x0)}" y="${esc(pt)}" width="${Math.max(0, W - pr - x0)}" height="${esc(H - pt - pb)}" fill="url(#mtg-arc)" class="mtg-zone"/><text x="${Math.min(x0 + 4, W - pr - 4)}" y="${esc(pt + 32)}" font-size="10" fill="#7a7a70">verder weg: alleen vaste lasten bekend — vul de prognose aan</text>`; })()}
       ${pijlen}${vlaggen}
-      <rect x="${pl}" y="0" width="${W - pl - pr}" height="${H}" fill="transparent" class="mtg-vang"/></svg><div class="mtg-tip" style="display:none"></div>`;
+      <rect x="${esc(pl)}" y="0" width="${esc(W - pl - pr)}" height="${esc(H)}" fill="transparent" class="mtg-vang"/></svg><div class="mtg-tip" style="display:none"></div>`;
     st.geo = { vanD, n, W, pl, pr };
     gebaren(box);
   }
@@ -1054,13 +1054,13 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     let h = '';
     for (const mp of m) {
       const p = punten.find(q => !q.verleden && q.datum >= st.data.vandaag && q.saldo >= mp && q.datum >= vanD && q.datum <= totD);
-      if (p && G.groepSaldo(st.data) < mp) h += `<text x="${x(p.datum)}" y="${y(mp) - 4}" font-size="12" fill="var(--gold,#B8962E)">⚑</text>`;
+      if (p && G.groepSaldo(st.data) < mp) h += `<text x="${esc(x(p.datum))}" y="${esc(y(mp) - 4)}" font-size="12" fill="var(--gold,#B8962E)">⚑</text>`;
     }
     if (streef && streef.datum && (streef.bedrag != null || streef.van != null)) {   // doelpad: stippellijn van nu naar het doel op de streefdatum
       const doel = streef.bedrag != null ? streef.bedrag : streef.van, nu = G.groepSaldo(st.data);
       if (nu != null && streef.datum > st.data.vandaag) {
         const a = st.data.vandaag < vanD ? vanD : st.data.vandaag, b = streef.datum > totD ? totD : streef.datum, f = dd => nu + (doel - nu) * dagenTussen(st.data.vandaag, dd) / dagenTussen(st.data.vandaag, streef.datum);
-        if (a < b) h += `<path d="M${x(a)},${y(f(a))}L${x(b)},${y(f(b))}" stroke="var(--gold,#B8962E)" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/>`;
+        if (a < b) h += `<path d="M${esc(x(a))},${esc(y(f(a)))}L${esc(x(b))},${esc(y(f(b)))}" stroke="var(--gold,#B8962E)" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/>`;
       }
     }
     return h;
@@ -1122,13 +1122,13 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const low = st.low; if (!low) return;
     const n = ZOOM[st.zoom]; st.markeer = low.datum; st.offset = dagenTussen(st.data.vandaag, low.datum) - Math.round(n * 0.5) + Math.round(n * 0.25); begrens(); teken();
     const oorz = G.laagsteOorzaken(st.dataS || st.data, low, { prognose: st.prognose });
-    blad(`<h3>Laagste punt: ${eur(low.saldo)}</h3><div class="mtg-melding">${esc(datumTekst(low.datum, true))} — in de grafiek gemarkeerd. Vertrekpunt: het saldo van nu, ${eur(G.groepSaldo(st.data))}. De grootste geplande posten die er (tot en met die dag) aan bijdragen:</div>
+    blad(`<h3>Laagste punt: ${esc(eur(low.saldo))}</h3><div class="mtg-melding">${esc(datumTekst(low.datum, true))} — in de grafiek gemarkeerd. Vertrekpunt: het saldo van nu, ${esc(eur(G.groepSaldo(st.data)))}. De grootste geplande posten die er (tot en met die dag) aan bijdragen:</div>
       ${oorz.length ? oorz.map(rijHtml).join('') : '<div class="mtg-melding">Geen geplande uitgaven vóór die dag — het laagste punt is het saldo van nu.</div>'}`);
   }
   function dagInfo(dd) {
     const ev = ((st.dataS || st.data).events || []).filter(e => (e.datum === dd || (dd === st.data.vandaag && isGepland(e) && e.datum < dd)) && !e.saldo_ijkpunt && G.telt(e, { prognose: st.prognose }));
     const p = st.lijn.punten.find(q => q.datum === dd);
-    blad(`<h3>${esc(datumTekst(dd, true))}</h3><div class="mtg-melding">Saldo ${dd < st.data.vandaag ? 'aan het eind van de dag' : 'verwacht'}: <b>${eur(p ? (p.saldo_gepland != null ? p.saldo_gepland : p.saldo) : null)}</b></div>
+    blad(`<h3>${esc(datumTekst(dd, true))}</h3><div class="mtg-melding">Saldo ${dd < st.data.vandaag ? 'aan het eind van de dag' : 'verwacht'}: <b>${esc(eur(p ? (p.saldo_gepland != null ? p.saldo_gepland : p.saldo) : null))}</b></div>
       ${ev.length ? ev.map(rijHtml).join('') : '<div class="mtg-melding">Geen bewegingen op deze dag.</div>'}`);
   }
 
@@ -1208,21 +1208,21 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const advies = st.prognose ? G.factuurAdvies(st.data, st.cfg, sc, dagPlus(st.data.vandaag, 180)) : null;   // alleen met prognose aan
     let h = `<div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Prognose</b>
       <button class="mtg-knop klein ${st.prognose ? 'aan' : ''}" data-prognose="1">${st.prognose ? 'meegenomen' : 'niet meegenomen'}</button><button class="mtg-vraag" data-uitleg="prognose">?</button></div>`;
-    if (heeft) h += `<div class="mtg-uitleg">Scenario (nog niet opgeslagen): ${Object.values(sc).reduce((a, x) => a + Object.keys(x).length, 0)} termijn(en) verschoven. ${st.mag ? '<button class="mtg-knop klein aan" data-sc="opslaan">Opslaan</button> ' : ''}<button class="mtg-knop klein" data-sc="terug">Terug</button></div>`;
+    if (heeft) h += `<div class="mtg-uitleg">Scenario (nog niet opgeslagen): ${esc(Object.values(sc).reduce((a, x) => a + Object.keys(x).length, 0))} termijn(en) verschoven. ${st.mag ? '<button class="mtg-knop klein aan" data-sc="opslaan">Opslaan</button> ' : ''}<button class="mtg-knop klein" data-sc="terug">Terug</button></div>`;
     const grens = st.cfg && st.cfg.buffer_lopend != null ? 'je eigen ondergrens' : G.reserveCfg(st.data, st.cfg) && G.reserveCfg(st.data, st.cfg).bedrag > 0 ? 'je eigen reserve (Buffer)' : 'de kredietlimiet';
-    if (advies && !advies.ok) h += `<div class="mtg-uitleg" style="background:#fbe3dd;border-color:#f0b8aa"><b>Krap:</b> laagste punt ${eur(advies.low.saldo)} op ${esc(datumTekst(advies.low.datum))}, onder ${grens} (${eur(advies.drempel)}). <button class="mtg-vraag" data-uitleg="advies">?</button><br>`
-      + (advies.voorstel ? `Factureer <b>${esc(advies.voorstel.event.tegenpartij)}</b> op ${esc(datumTekst(advies.voorstel.naar))} i.p.v. ${esc(datumTekst(advies.voorstel.van))} → laagste punt +${eur(advies.voorstel.winst)}${advies.voorstel.low.saldo >= advies.drempel ? ' (weer boven ' + grens + ')' : `, maar nog steeds onder ${grens}`}${advies.voorstel.opTijd ? '' : ' — de betaling komt pas na het dieptepunt binnen, eerder factureren kan niet meer'}${advies.voorstel.doelpad ? ' → doelpad gehaald' : ''}. <button class="mtg-knop klein" data-advies="1">Probeer</button>`
+    if (advies && !advies.ok) h += `<div class="mtg-uitleg" style="background:#fbe3dd;border-color:#f0b8aa"><b>Krap:</b> laagste punt ${esc(eur(advies.low.saldo))} op ${esc(datumTekst(advies.low.datum))}, onder ${esc(grens)} (${esc(eur(advies.drempel))}). <button class="mtg-vraag" data-uitleg="advies">?</button><br>`
+      + (advies.voorstel ? `Factureer <b>${esc(advies.voorstel.event.tegenpartij)}</b> op ${esc(datumTekst(advies.voorstel.naar))} i.p.v. ${esc(datumTekst(advies.voorstel.van))} → laagste punt +${esc(eur(advies.voorstel.winst))}${advies.voorstel.low.saldo >= advies.drempel ? ' (weer boven ' + grens + ')' : `, maar nog steeds onder ${grens}`}${advies.voorstel.opTijd ? '' : ' — de betaling komt pas na het dieptepunt binnen, eerder factureren kan niet meer'}${advies.voorstel.doelpad ? ' → doelpad gehaald' : ''}. <button class="mtg-knop klein" data-advies="1">Probeer</button>`
         : 'Geen prognosetermijn die op tijd gefactureerd kan worden om dit op te lossen.') + '</div>';
     const posten = p.posten || [];
     if (!posten.length) h += `<div class="mtg-melding">Nog geen prognose. ${st.mag ? 'Vink in een project "gaat zeker door" aan, of voeg hier een project of post toe.' : ''}</div>`;
     for (const x of posten) {
       if (x.soort === 'post') { const e = (st.data.events || []).find(q => q.prognose === x.sleutel); h += `<div class="mtg-rij" ${st.mag ? `data-prog="${esc(x.sleutel)}"` : ''}><span class="p ${e && e.delta > 0 ? 'mtg-in' : 'mtg-uit'}">${e && e.delta > 0 ? '▲' : '▼'}</span><span class="n">${esc(x.omschrijving)} <span class="mtg-chip">handmatig</span>${x.aan ? '' : ' <span class="mtg-chip">uit</span>'}</span><span class="b">${e ? esc(datumTekst(e.datum)) + ' ' + eur(e.delta) : ''}</span></div>`; continue; }
-      h += `<div class="mtg-pot" ${st.mag ? `data-prog="${esc(x.sleutel)}" style="cursor:pointer"` : ''}><div class="r1"><b>${esc(x.naam || x.code)}</b>${x.aan ? '' : '<span class="mtg-chip">uit</span>'}<span>${eur(x.totaal)}</span><span class="mtg-chip">${x.gefactureerd > 0 ? 'gefactureerd ' + kort(x.gefactureerd) : 'nog niets gefactureerd'}</span></div>
+      h += `<div class="mtg-pot" ${st.mag ? `data-prog="${esc(x.sleutel)}" style="cursor:pointer"` : ''}><div class="r1"><b>${esc(x.naam || x.code)}</b>${x.aan ? '' : '<span class="mtg-chip">uit</span>'}<span>${esc(eur(x.totaal))}</span><span class="mtg-chip">${esc(x.gefactureerd > 0 ? 'gefactureerd ' + kort(x.gefactureerd) : 'nog niets gefactureerd')}</span></div>
         <div class="r3">${(x.termijnen || []).map(t => {
           const nieuw = sc[x.sleutel] && sc[x.sleutel][t.id], ev = (st.data.events || []).find(q => q.prognose === x.sleutel && q.termijn_id === t.id);
-          return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:3px 0">${esc(t.label)}: ${eur(t.bedrag)}${t.gefactureerd > 0 ? ` (${t.open > 0 ? 'deels ' : ''}gefactureerd ${kort(t.gefactureerd)})` : ''}${t.open > 0 && t.aan && x.aan ? ` · factuur <input type="date" class="mtg-fd" data-sl="${esc(x.sleutel)}" data-tm="${esc(t.id)}" value="${esc(nieuw || t.factuurdatum)}" style="font-size:12px;padding:2px 4px;border:1px solid var(--border,#ccc);border-radius:4px">${ev ? ` → binnen rond ${esc(datumTekst(ev.datum))}` : ''}${nieuw ? ' <span class="mtg-chip prog">scenario</span>' : ''}` : t.aan ? '' : ' · uit'}</div>`;
+          return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:3px 0">${esc(t.label)}: ${esc(eur(t.bedrag))}${t.gefactureerd > 0 ? ` (${t.open > 0 ? 'deels ' : ''}gefactureerd ${kort(t.gefactureerd)})` : ''}${t.open > 0 && t.aan && x.aan ? ` · factuur <input type="date" class="mtg-fd" data-sl="${esc(x.sleutel)}" data-tm="${esc(t.id)}" value="${esc(nieuw || t.factuurdatum)}" style="font-size:12px;padding:2px 4px;border:1px solid var(--border,#ccc);border-radius:4px">${ev ? ` → binnen rond ${esc(datumTekst(ev.datum))}` : ''}${nieuw ? ' <span class="mtg-chip prog">scenario</span>' : ''}` : t.aan ? '' : ' · uit'}</div>`;
         }).join('')}</div>
-        ${(x.vragen || []).slice(0, 3).map(f => `<div class="mtg-uitleg">Hoort factuur ${esc(f.nummer || f.id)} (${eur(f.bedrag)}, ${esc(datumTekst(f.datum))}${f.ref ? ', "' + esc(f.ref) + '"' : ''}) bij dit project?${f.meerdere ? ' <b>Hij past bij meer dan één project.</b>' : ''} ${st.mag ? `<button class="mtg-knop klein aan" data-vraag="ja" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Ja</button> <button class="mtg-knop klein" data-vraag="nee" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Nee</button>` : ''}</div>`).join('')}</div>`;
+        ${(x.vragen || []).slice(0, 3).map(f => `<div class="mtg-uitleg">Hoort factuur ${esc(f.nummer || f.id)} (${esc(eur(f.bedrag))}, ${esc(datumTekst(f.datum))}${f.ref ? ', "' + esc(f.ref) + '"' : ''}) bij dit project?${f.meerdere ? ' <b>Hij past bij meer dan één project.</b>' : ''} ${st.mag ? `<button class="mtg-knop klein aan" data-vraag="ja" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Ja</button> <button class="mtg-knop klein" data-vraag="nee" data-sl="${esc(x.sleutel)}" data-f="${esc(f.id)}">Nee</button>` : ''}</div>`).join('')}</div>`;
     }
     if (st.mag) h += `<div class="mtg-knoppen" style="margin-top:8px"><button class="mtg-knop" data-prog="nieuw-project">+ project</button><button class="mtg-knop" data-prog="nieuw-post">+ handmatige post</button></div>`;
     return h + '</div>';
@@ -1273,8 +1273,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     let termijnen = oud ? oud.termijnen.map(t => Object.assign({}, t)) : [];
     const o = blad(`<h3>Prognose: ${esc(pr ? pr.label : (oud && oud.naam) || '')}</h3>
       <label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="aan" style="width:auto" ${!oud || oud.aan ? 'checked' : ''}> <span style="margin:0"><b>Gaat zeker door</b> — meenemen in de prognose</span></label>
-      <label class="mtg-veld"><span>Totaal incl. btw (€)${voorstel ? ` — offerte: <a href="#" data-voorstel="1">${eur(voorstel, true)} overnemen</a>` : ''}</span><input type="number" step="0.01" name="totaal" value="${totaal != null ? totaal : ''}"></label>
-      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Akkoord</span><input type="date" name="akkoord" value="${esc(akkoord)}"></label><label class="mtg-veld" style="flex:1"><span>Betaaltermijn (dagen)</span><input type="number" name="bt" value="${oud ? oud.betaaltermijn : (schema && schema.betaaltermijn != null ? schema.betaaltermijn : 14)}"></label></div>
+      <label class="mtg-veld"><span>Totaal incl. btw (€)${voorstel ? ` — offerte: <a href="#" data-voorstel="1">${esc(eur(voorstel, true))} overnemen</a>` : ''}</span><input type="number" step="0.01" name="totaal" value="${esc(totaal != null ? totaal : '')}"></label>
+      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Akkoord</span><input type="date" name="akkoord" value="${esc(akkoord)}"></label><label class="mtg-veld" style="flex:1"><span>Betaaltermijn (dagen)</span><input type="number" name="bt" value="${esc(oud ? oud.betaaltermijn : (schema && schema.betaaltermijn != null ? schema.betaaltermijn : 14))}"></label></div>
       <div class="mtg-melding">${datums.start || datums.oplevering ? `Planning: start ${esc(datumTekst(datums.start))}, oplevering ${esc(datumTekst(datums.oplevering))}.` : 'Geen planning bekend: datums volgens het schema vanaf akkoord.'}${schema ? '' : ' <b>Standaardschema nog niet ingesteld</b> (Instellingen) — vul de termijnen zelf in.'}</div>
       <button class="mtg-knop klein" data-schema="1">Termijnen volgens het standaardschema</button>
       <div class="tms" style="margin-top:8px"></div><button class="mtg-knop klein" data-tm-bij="1">+ termijn</button>
@@ -1284,7 +1284,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const tekenTm = () => {
       tms.innerHTML = termijnen.map((t, i) => `<div style="display:flex;gap:4px;align-items:center;margin:4px 0;flex-wrap:wrap" data-i="${i}">
         <input name="l" value="${esc(t.label)}" maxlength="24" style="flex:2;min-width:90px;padding:6px;border:1px solid #ccc;border-radius:5px">
-        <input name="b" type="number" step="0.01" value="${t.bedrag}" style="flex:1;min-width:80px;padding:6px;border:1px solid #ccc;border-radius:5px">
+        <input name="b" type="number" step="0.01" value="${esc(t.bedrag)}" style="flex:1;min-width:80px;padding:6px;border:1px solid #ccc;border-radius:5px">
         <input name="d" type="date" value="${esc(t.factuurdatum)}" style="flex:1;min-width:120px;padding:6px;border:1px solid #ccc;border-radius:5px">
         <label style="font-size:12px"><input name="a" type="checkbox" ${t.aan !== false ? 'checked' : ''}> aan</label><button class="mtg-knop klein" data-tm-weg="${i}">×</button></div>`).join('');
       const som = rond(termijnen.reduce((a, t) => a + (Number(t.bedrag) || 0), 0)), tt = Number(o.querySelector('[name="totaal"]').value) || 0;
@@ -1318,7 +1318,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const o = blad(`<h3>${oud ? 'Handmatige post' : 'Nieuwe handmatige post'}</h3><div class="mtg-melding">Bijvoorbeeld een machine, subsidie of andere verwachte post zonder factuur. Telt mee als prognose.</div>
       <label class="mtg-veld"><span>Omschrijving</span><input name="om" maxlength="60" value="${esc(oud ? oud.omschrijving : '')}"></label>
       <label class="mtg-veld"><span>Richting</span><select name="ri"><option value="uit" ${oud && oud.richting === 'in' ? '' : 'selected'}>uitgave</option><option value="in" ${oud && oud.richting === 'in' ? 'selected' : ''}>inkomst</option></select></label>
-      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Bedrag (€)</span><input type="number" step="0.01" name="b" value="${oud ? oud.bedrag : ''}"></label><label class="mtg-veld" style="flex:1"><span>Datum</span><input type="date" name="d" value="${esc(oud ? oud.datum : st.data.vandaag)}"></label></div>
+      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Bedrag (€)</span><input type="number" step="0.01" name="b" value="${esc(oud ? oud.bedrag : '')}"></label><label class="mtg-veld" style="flex:1"><span>Datum</span><input type="date" name="d" value="${esc(oud ? oud.datum : st.data.vandaag)}"></label></div>
       <label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="aan" style="width:auto" ${!oud || oud.aan ? 'checked' : ''}> <span style="margin:0">Meenemen</span></label>
       <button class="mtg-knop aan" data-ok="1">Opslaan</button>${oud ? ' <button class="mtg-knop" data-wis="1">Verwijderen</button>' : ''}`);
     o.addEventListener('click', ev => {
@@ -1335,9 +1335,9 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const c = st.cfg || {}, s = c.prognose_schema || null, v = s || G.SCHEMA_VOORSTEL;
     const rijen = k => (v[k] || []).map(r => `${r.pct}% ${r.label} (${r.anker === 'akkoord' ? 'akkoord + ' + r.dagen + ' d' : r.anker + ', anders akkoord + ' + r.dagen + ' d'})`).join(' · ');
     const o = blad(`<h3>Standaardschema prognose</h3>${s ? '' : '<div class="mtg-uitleg">Nog niet ingesteld. De verdeling hieronder is een voorstel (uit de analyse van eerdere facturen); vul zelf de grensbedragen in en sla op.</div>'}
-      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Klein onder (€)</span><input type="number" name="gk" value="${v.grens_klein != null ? v.grens_klein : ''}"></label><label class="mtg-veld" style="flex:1"><span>Groot vanaf (€)</span><input type="number" name="gg" value="${v.grens_groot != null ? v.grens_groot : ''}"></label><label class="mtg-veld" style="flex:1"><span>Betaaltermijn</span><input type="number" name="bt" value="${v.betaaltermijn != null ? v.betaaltermijn : 14}"></label></div>
+      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Klein onder (€)</span><input type="number" name="gk" value="${esc(v.grens_klein != null ? v.grens_klein : '')}"></label><label class="mtg-veld" style="flex:1"><span>Groot vanaf (€)</span><input type="number" name="gg" value="${esc(v.grens_groot != null ? v.grens_groot : '')}"></label><label class="mtg-veld" style="flex:1"><span>Betaaltermijn</span><input type="number" name="bt" value="${esc(v.betaaltermijn != null ? v.betaaltermijn : 14)}"></label></div>
       ${['klein', 'middel', 'groot'].map(k => `<label class="mtg-veld"><span>${k} — per regel: % ; omschrijving ; anker (akkoord/start/oplevering) ; dagen na akkoord</span><textarea name="${k}" rows="3" style="width:100%;font-size:13px;padding:6px;border:1px solid #ccc;border-radius:6px">${esc((v[k] || []).map(r => `${r.pct};${r.label};${r.anker};${r.dagen}`).join('\n'))}</textarea><span>${esc(rijen(k))}</span></label>`).join('')}
-      <label class="mtg-veld"><span>Eigen ondergrens lopende rekening (€) — signaal als het laagste punt hieronder komt (leeg = de kredietlimiet)</span><input type="number" name="buf" value="${c.buffer_lopend != null ? c.buffer_lopend : ''}"></label>
+      <label class="mtg-veld"><span>Eigen ondergrens lopende rekening (€) — signaal als het laagste punt hieronder komt (leeg = de kredietlimiet)</span><input type="number" name="buf" value="${esc(c.buffer_lopend != null ? c.buffer_lopend : '')}"></label>
       <button class="mtg-knop aan" data-ok="1">Opslaan</button>`);
     o.querySelector('[data-ok]').addEventListener('click', () => {
       const f = n => o.querySelector(`[name="${n}"]`).value;
@@ -1409,7 +1409,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const v = e.verwacht, link0 = e.document_url || e.bron_url, link = /^https:\/\/moneybird\.com\//.test(String(link0 || '')) ? link0 : null;   // alleen Moneybird-links
     const factuur = (e.bron === 'inkoop' || e.bron === 'verkoop') && e.document_id;
     blad(`<h3>${esc(e.tegenpartij || BRON[e.bron] || '')}</h3>
-      <dl class="mtg-dl"><dt>Bedrag</dt><dd class="${e.delta > 0 ? 'mtg-in' : 'mtg-uit'}"><b>${eur(e.delta, true)}</b>${e.marge ? ` <span class="mtg-chip">${eur(e.marge.min)} tot ${eur(e.marge.max)}</span>` : ''}</dd>
+      <dl class="mtg-dl"><dt>Bedrag</dt><dd class="${e.delta > 0 ? 'mtg-in' : 'mtg-uit'}"><b>${esc(eur(e.delta, true))}</b>${e.marge ? ` <span class="mtg-chip">${esc(eur(e.marge.min))} tot ${esc(eur(e.marge.max))}</span>` : ''}</dd>
       <dt>Datum</dt><dd>${esc(datumTekst(e.datum, true))}${e.vervaldag && e.vervaldag !== e.datum ? ` <span class="mtg-chip">vervaldag ${esc(datumTekst(e.vervaldag))}</span>` : ''}</dd>
       ${e.datum_vroeg ? `<dt>Marge</dt><dd>${esc(datumTekst(e.datum_vroeg))} – ${esc(datumTekst(e.datum_laat))}</dd>` : ''}
       <dt>Bron</dt><dd>${esc(BRON[e.bron] || e.bron)}${e.referentie ? ' ' + esc(e.referentie) : ''}</dd>
@@ -1428,10 +1428,10 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   function overrideBlad(e, type) {
     const soort = e.bron, basis = { document_id: e.document_id, soort, vorige_ts: e.override ? e.override.ts : null };
     if (type === 'wissen') return opslaan(() => stuur('/geld/override', Object.assign(basis, { type: 'wissen' })), 'Eigen afspraak gewist');
-    const o = blad(type === 'datum' ? `<h3>Andere betaaldatum</h3><div class="mtg-melding">Voor ${esc(e.tegenpartij)} (${eur(e.delta)}). Alleen in deze tool; er gaat niets naar Moneybird.</div>
+    const o = blad(type === 'datum' ? `<h3>Andere betaaldatum</h3><div class="mtg-melding">Voor ${esc(e.tegenpartij)} (${esc(eur(e.delta))}). Alleen in deze tool; er gaat niets naar Moneybird.</div>
       <label class="mtg-veld"><span>Datum</span><input type="date" name="datum" value="${esc(e.datum || '')}"></label><label class="mtg-veld"><span>Reden (optioneel)</span><input name="reden" maxlength="120"></label>
       <button class="mtg-knop aan" data-ok="1">Opslaan</button>`
-      : `<h3>Afbetaling</h3><div class="mtg-melding">Open: ${eur(Math.abs(e.delta), true)}. De termijnen tellen samen precies op tot het open bedrag; de laatste termijn neemt de rest.</div>
+      : `<h3>Afbetaling</h3><div class="mtg-melding">Open: ${esc(eur(Math.abs(e.delta), true))}. De termijnen tellen samen precies op tot het open bedrag; de laatste termijn neemt de rest.</div>
       <label class="mtg-veld"><span>Bedrag per termijn (€)</span><input type="number" step="0.01" min="0.01" name="bedrag"></label>
       <label class="mtg-veld"><span>Eerste termijn</span><input type="date" name="eerste" value="${esc(st.data.vandaag)}"></label>
       <label class="mtg-veld"><span>Elke</span><select name="interval"><option value="maand">maand</option><option value="week">week</option></select></label>
@@ -1463,22 +1463,22 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const dagen = ['', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'];
     const o = blad(`<h3>${nieuw ? 'Nieuw potje of doel' : esc(p.naam)}</h3>
       ${lopend ? '' : `<label class="mtg-veld"><span>Naam</span><input name="naam" value="${esc(p.naam)}" maxlength="40"></label>
-      <label class="mtg-veld"><span>Soort</span><select name="doel">${['buffer', 'winst', 'vakantie', 'btw', 'overig'].map(x => `<option ${p.doel === x ? 'selected' : ''} value="${x}">${{ buffer: 'buffer', winst: 'winstuitkering', vakantie: 'vakantiegeld', btw: 'BTW', overig: 'eigen doel' }[x]}</option>`).join('')}</select></label>
+      <label class="mtg-veld"><span>Soort</span><select name="doel">${['buffer', 'winst', 'vakantie', 'btw', 'overig'].map(x => `<option ${p.doel === x ? 'selected' : ''} value="${esc(x)}">${esc({ buffer: 'buffer', winst: 'winstuitkering', vakantie: 'vakantiegeld', btw: 'BTW', overig: 'eigen doel' }[x])}</option>`).join('')}</select></label>
       ${nieuw ? `<label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="virtueel" style="width:auto"> <span style="margin:0">Doel zonder eigen rekening (virtueel, bv. "machine-sparen" binnen de buffer) — telt niet mee in het totaal</span></label>` : ''}`}
-      <label class="mtg-veld"><span>Doelbedrag (€) — of vul hieronder een bandbreedte in</span><input type="number" name="bedrag" value="${s.bedrag != null ? s.bedrag : ''}"></label>
-      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Van (€)</span><input type="number" name="van" value="${s.van != null ? s.van : ''}"></label><label class="mtg-veld" style="flex:1"><span>Tot (€)</span><input type="number" name="tot" value="${s.tot != null ? s.tot : ''}"></label></div>
+      <label class="mtg-veld"><span>Doelbedrag (€) — of vul hieronder een bandbreedte in</span><input type="number" name="bedrag" value="${esc(s.bedrag != null ? s.bedrag : '')}"></label>
+      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Van (€)</span><input type="number" name="van" value="${esc(s.van != null ? s.van : '')}"></label><label class="mtg-veld" style="flex:1"><span>Tot (€)</span><input type="number" name="tot" value="${esc(s.tot != null ? s.tot : '')}"></label></div>
       <label class="mtg-veld"><span>Streefdatum</span><input type="date" name="datum" value="${esc(s.datum || '')}"></label>
       <label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="mee" style="width:auto" ${s.meegroeien === false ? '' : 'checked'}> <span style="margin:0">Doel laten meegroeien met de bankhistorie (automatisch alleen kleine stappen tot +10% per maand en onder de bovengrens, met melding; het eerste advies, grotere sprongen en verlagen alleen als voorstel)</span></label>
-      <label class="mtg-veld"><span>Bovengrens voor automatisch meegroeien (€) — leeg = de "tot" van de band, of niets automatisch</span><input type="number" name="meemax" value="${s.meegroei_max != null ? s.meegroei_max : ''}"></label>
+      <label class="mtg-veld"><span>Bovengrens voor automatisch meegroeien (€) — leeg = de "tot" van de band, of niets automatisch</span><input type="number" name="meemax" value="${esc(s.meegroei_max != null ? s.meegroei_max : '')}"></label>
       <label class="mtg-veld"><span>Mijlpalen (€, komma-gescheiden; leeg = standaard)</span><input name="mijlpalen" value="${esc((s.mijlpalen || []).join(', '))}"></label>
-      ${lopend ? '' : `<div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Weekinleg (€)</span><input type="number" name="weekinleg" value="${p.weekinleg != null ? p.weekinleg : ''}"></label>
-      <label class="mtg-veld" style="flex:1"><span>Op</span><select name="weekdag"><option value="">${p.weekdag ? '' : 'afleiden uit de bank'}</option>${[1, 2, 3, 4, 5, 6, 7].map(i => `<option value="${i}" ${p.weekdag === i ? 'selected' : ''}>${dagen[i]}</option>`).join('')}</select></label></div>
+      ${lopend ? '' : `<div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Weekinleg (€)</span><input type="number" name="weekinleg" value="${esc(p.weekinleg != null ? p.weekinleg : '')}"></label>
+      <label class="mtg-veld" style="flex:1"><span>Op</span><select name="weekdag"><option value="">${p.weekdag ? '' : 'afleiden uit de bank'}</option>${[1, 2, 3, 4, 5, 6, 7].map(i => `<option value="${i}" ${p.weekdag === i ? 'selected' : ''}>${esc(dagen[i])}</option>`).join('')}</select></label></div>
       <div class="pot-echt"><label class="mtg-veld"><span>Herkenning: tegenrekening van de overboekingen</span><input name="tegenrekening" list="mtg-kand" value="${esc(p.herkenning ? p.herkenning.tegenrekening : '')}"><datalist id="mtg-kand">${kand.map(k => `<option value="${esc(k.iban)}">${esc(k.naam)}</option>`).join('')}</datalist></label>
       <label class="mtg-veld"><span>…of de letter in de naam van de overboeking (bij "Zakelijke oranje spaarrekening <b>Z</b>"; de bank geeft dan geen tegenrekening mee)</span><input name="letter" maxlength="1" size="2" list="mtg-letters" value="${esc(p.herkenning && p.herkenning.letter ? p.herkenning.letter : '')}" style="width:60px"><datalist id="mtg-letters">${letterKandidaten().map(k => `<option value="${esc(k.letter)}">${esc(k.naam)}</option>`).join('')}</datalist></label>
       ${kand.length ? `<div class="mtg-melding">Herkende overboekingen: ${kand.slice(0, 4).map(k => esc(k.naam + ' ' + k.iban)).join(' · ')}</div>` : ''}</div>
       ${!nieuw ? `<label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="actief" style="width:auto" ${p.actief !== false ? 'checked' : ''}> <span style="margin:0">Actief (uitvinken = archiveren; het saldo blijft meetellen)</span></label>` : ''}`}
       <button class="mtg-knop aan" data-ok="1">Opslaan</button>
-      ${!nieuw && !p.virtueel ? `<hr><b>Saldo ijken</b><div class="mtg-melding">Vul het echte banksaldo aan het eind van een dag in (uit de bank-app). Huidig: ${eur(saldo ? saldo.gerapporteerd : null, true)}${saldo && saldo.ijkpunt ? ', laatst geijkt ' + esc(datumTekst(saldo.ijkpunt.datum)) : ''}.</div>
+      ${!nieuw && !p.virtueel ? `<hr><b>Saldo ijken</b><div class="mtg-melding">Vul het echte banksaldo aan het eind van een dag in (uit de bank-app). Huidig: ${esc(eur(saldo ? saldo.gerapporteerd : null, true))}${saldo && saldo.ijkpunt ? ', laatst geijkt ' + esc(datumTekst(saldo.ijkpunt.datum)) : ''}.</div>
       <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Saldo (€)</span><input type="number" step="0.01" name="ijk"></label><label class="mtg-veld" style="flex:1"><span>Eind van de dag</span><input type="date" name="ijkdatum" value="${esc(st.data.vandaag)}" max="${esc(st.data.vandaag)}"></label></div>
       <button class="mtg-knop" data-ijk="1">Saldo opslaan</button>` : ''}`);
     o.querySelector('[data-ok]').addEventListener('click', () => {
@@ -1529,8 +1529,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const c = st.cfg || {}, b = c.btw || {}, pot = (c.potten || []).filter(p => !p.virtueel);
     const o = blad(`<h3>Kredietlimiet en BTW</h3>
       <label class="mtg-veld" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="inl" style="width:auto" ${b.modus === 'apart' ? '' : 'checked'}> <span style="margin:0">BTW-rekening telt mee als lopende rekening (aangifte gaat van de gezamenlijke stand, geen terugboeking)</span></label>
-      <label class="mtg-veld"><span>Kredietlimiet lopende rekening (€)</span><input type="number" name="kl" value="${c.kredietlimiet != null ? c.kredietlimiet : ''}"></label>
-      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Eigen reserve (€) — leeg = geen${(() => { const rp = G.reservePot(st.data, c), pt = (c.potten || []).find(p => p.id === rp), a = G.reserveAdvies(st.data, pt && pt.streef); return a ? `; voorstel uit de historie: ${eur(a.bedrag)}` : ''; })()}</span><input type="number" name="res" value="${c.reserve && c.reserve.bedrag != null ? c.reserve.bedrag : ''}"></label>
+      <label class="mtg-veld"><span>Kredietlimiet lopende rekening (€)</span><input type="number" name="kl" value="${esc(c.kredietlimiet != null ? c.kredietlimiet : '')}"></label>
+      <div style="display:flex;gap:8px"><label class="mtg-veld" style="flex:1"><span>Eigen reserve (€) — leeg = geen${(() => { const rp = G.reservePot(st.data, c), pt = (c.potten || []).find(p => p.id === rp), a = G.reserveAdvies(st.data, pt && pt.streef); return a ? `; voorstel uit de historie: ${eur(a.bedrag)}` : ''; })()}</span><input type="number" name="res" value="${esc(c.reserve && c.reserve.bedrag != null ? c.reserve.bedrag : '')}"></label>
       <label class="mtg-veld" style="flex:1"><span>Uit potje</span><select name="respot">${pot.filter(p => p.doel !== 'btw' && p.id !== (st.data.instellingen || {}).btw_pot).map(p => `<option value="${esc(p.id)}" ${(c.reserve && c.reserve.pot ? c.reserve.pot === p.id : G.reservePot(st.data, c) === p.id) ? 'selected' : ''}>${esc(p.naam)}</option>`).join('')}</select></label></div>
       <label class="mtg-veld"><span>Spaarrente op de potjes (% per jaar) — leeg = afleiden uit de rentebijschrijvingen${(() => { const sp = G.spaarRente(Object.assign({}, st.data, { instellingen: Object.assign({}, st.data.instellingen, { spaarrente: null }) }), Object.assign({}, c, { spaarrente: null })); return sp ? ` (afgeleid: ${(sp.tarief * 100).toFixed(2).replace('.', ',')}%)` : ' (niet gevonden)'; })()}</span><input type="number" step="0.01" name="spr" value="${c.spaarrente != null ? Math.round(c.spaarrente * 10000) / 100 : ''}"></label>
       <label class="mtg-veld"><span>BTW-sparen: percentage van elke ontvangst (bv. 17,36 = 21/121)</span><input type="number" step="0.01" name="pct" value="${b.spaarpercentage != null ? Math.round(b.spaarpercentage * 10000) / 100 : ''}"></label>
