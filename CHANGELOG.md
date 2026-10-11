@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Geld Codex b5b069a/c4107e8: creditnota zonder contact-id en vreemde valuta zonder EUR-bedrag tellen nooit mee; kaart Ruimte ook op mobiel
+- Commit: `c10870e` | Auteur: Bart Witte
+
 ## 2026-10-11 — P3b Codex 3bcf037: offertenummer alleen automatisch bij hetzelfde contact + eigen koppeling, persistente throttle, rechten, write-ahead + ongedaan maken, centrale werkcode-validatie
 - Commit: `f20ae19` | Auteur: Bart Witte
 

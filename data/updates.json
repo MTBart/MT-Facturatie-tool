@@ -1,5 +1,26 @@
 [
   {
+    "versie": "2.13.1",
+    "datum": "2026-10-11",
+    "titel": "Offertenummer automatisch uit Moneybird",
+    "voor": "iedereen",
+    "punten": [
+      "Is een offerte uit de calculatie in Moneybird verstuurd en heeft hij een nummer gekregen, dan neemt het project dat nummer over zodra je het project opent (alleen als het om dezelfde klant gaat). Gaat het om een tweede of andere offerte, dan vraagt de tool eerst wat het is: meerwerk, vervangt de eerste, of hoort niet bij dit project. Niets wordt gewist en je kunt het ongedaan maken.",
+      "Een nieuw project krijgt geen lange projectcode meer maar een eigen werkcode; de projectmap heet \"volledige naam [werkcode]\". Bestaande mappen blijven zoals ze waren."
+    ]
+  },
+  {
+    "versie": "2.13.1",
+    "datum": "2026-10-11",
+    "titel": "Geld op je telefoon",
+    "voor": "geld",
+    "punten": [
+      "De €-knop op je telefoon opent nu Geld in de app zelf, in plaats van de computerversie. Bovenaan staan de ochtendmeldingen en het oordeel van de Koersmeter, daarna Besteedbaar, het laagste punt, de ruimte op het laagste punt en de noodbuffer, een grafiek en de komende 14 dagen. Met \"← Terug\" (of de terugknop van je telefoon) ga je terug naar waar je was.",
+      "Potjes, prognose, instellingen en rapporten staan nog op de computer; onderaan staat een link.",
+      "In Geld telt een factuur van een leverancier niet meer als geld dat binnenkomt. Een verkoopfactuur zonder datum of nummer, een creditnota van een leverancier en een factuur in vreemde valuta zonder bedrag in euro tellen niet mee, staan er wel nog in met uitleg en een waarschuwing. Een creditnota wordt verrekend met de open facturen van dezelfde leverancier; blijft er tegoed over, dan kun je zelf kiezen of dat meetelt."
+    ]
+  },
+  {
     "versie": "2.13.0",
     "datum": "2026-10-11",
     "titel": "Zoekbalk bovenin",

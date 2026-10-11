@@ -130,7 +130,8 @@
   S.kasEffect = function (data, cfg, opt, G) {
     G = G || root.MTGeld;
     const v = data.vandaag, tot = dagPlus(v, KAS_DAGEN), start = opt.datum && opt.datum > v ? opt.datum : v;
-    const ruimte = d => { const lijn = G.lijn(d, { modus: 'lopend', prognose: true }); if (lijn.onbekend) return null; const low = G.laagste(lijn, tot); if (!low) return null;
+    const ruimte = d => { const lijn = G.kasLijn ? G.kasLijn(d, cfg, { prognose: true, nood: !!opt.nood }) : G.lijn(d, { modus: 'lopend', prognose: true });   // G7: dezelfde basis als Geld en de Koersmeter
+      if (lijn.onbekend) return null; const low = G.laagste(lijn, tot); if (!low) return null;
       const g = G.drempel(d, cfg, low.datum); return { datum: low.datum, saldo: low.saldo, grens: g == null ? 0 : g, ruimte: Math.round((low.saldo - (g == null ? 0 : g)) * 100) / 100 }; };
     const ev = [], uit = (d, c, i) => ev.push({ id: 'scenario:aflossen:' + i, bron: 'scenario', datum: d, delta: -c / 100, rekening: 'lopend', zekerheid: 'gepland', tegenpartij: 'extra aflossing (rekenhulp)' });
     if (opt.eenmaligCent > 0) uit(start, opt.eenmaligCent, 'e');
@@ -240,7 +241,7 @@
     const v = kas.verschil, kl = kas.onderGrens ? 'rood' : v < 0 ? 'oranje' : '', van = `van ${eur(kas.voor.ruimte)} naar ${eur(kas.na.ruimte)} op ${datum(kas.na.datum)}`;
     const kop = Math.abs(v) < 0.5 ? `De kasruimte (laagste punt komende 8 weken) blijft gelijk${ctx.uitPot ? `: het geld verschuift alleen van ${esc(ctx.uitPot)} naar de lopende rekening (het was al van jou)` : ''} (${eur(kas.voor.ruimte)}).`
       : `Dit ${v < 0 ? 'verlaagt' : 'verhoogt'} de kasruimte (laagste punt komende 8 weken) met <b>${esc(eur(Math.abs(v)))}</b>: ${esc(van)}.`;
-    const potNoot = ctx.uitPot && v >= 0.5 ? ` Dat komt doordat er in ${esc(ctx.uitPot)} meer staat dan je eigen reserve-doel; zakt het potje daaronder, dan blijft de kasruimte verder gelijk.` : '';
+    const potNoot = ctx.uitPot && v >= 0.5 ? ` Dat komt doordat ${esc(ctx.uitPot)} niet meetelt in je besteedbaar budget; op de lopende rekening telt het geld wel mee.` : '';
     return `<div class="mts-kas ${esc(kl)}">${kop}${potNoot}${kas.onderGrens && !kas.wasOnder ? ' <b>Daarmee zakt de kas onder je ondergrens.</b>' : kas.onderGrens ? ' De kas zit dan (nog) onder je ondergrens.' : ''}${kas.onderLimiet ? ' Ook onder de kredietlimiet.' : ''}</div>`;
   };
   const pctJ = x => (x * 100).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';

@@ -36,13 +36,13 @@
     'mt_instellingen', 'mt_adminconfig', 'mt_opl_codes', 'mt_mb_admin', 'mt_vrijedagen', 'mt_verlof', 'mt_proj_adressen', 'mt_contacten_mobiel', 'mt_email_verwerkt',
     'mt_cf_vasten_uit', 'mt_fb_sent', 'mt_notif_read', 'mt_pv_gezien', 'mt_klant_sectie', 'mt_proj_sectie', 'mt_proj_sectie_per', 'mt_aanwezig_kaart', 'ncr_lev_overrides',
   ]);
-  V.PREFIXEN = ['mt_rapdraft_', 'mt_csv_prijzen_', 'mt_bestellijst_onleesbaar_', 'mt_updates_gezien:', 'mtg:zoom:', 'mtg:alleen:', 'mtg:intro:', 'mtg:mp-init:', 'mtg:mp:', 'mtg:prognose:'];
+  V.PREFIXEN = ['mt_rapdraft_', 'mt_csv_prijzen_', 'mt_bestellijst_onleesbaar_', 'mt_updates_gezien:', 'mtg:zoom:', 'mtg:alleen:', 'mtg:nood:', 'mtg:intro:', 'mtg:mp-init:', 'mtg:mp:', 'mtg:prognose:'];
   // Bewust NIET mee (token, cache, afgeleid, lopende timer, sessie). Alles wat noch hier noch in SLEUTELS/PREFIXEN staat is "onbekend":
   // dat gaat niet mee maar wordt in het paneel genoemd, zodat iemand beoordeelt of er een nieuwe sleutel bij moet.
   V.UITGESLOTEN = new Set(['mt_toggl_token', 'mt_toggl_last_sync', 'mt_toggl_user_names', 'mt_toggl_user_map', 'mt_toggl_project_map', 'mt_toggl_proj_names', 'mt_toggl_names_ver',
     'mt_toggl_users_raw', 'mt_toggl_projecten_raw', 'mt_cache_facturen', 'mt_cache_klanten', 'mt_klanten_cache', 'mt_notificaties', 'mt_auditlog', 'mt_chatlog_buffer', 'mt_calc_map_state',
     'mt_timer', 'mt_uren_lopend']);
-  V.UITGESLOTEN_PREFIXEN = ['mt_csv_'];   // mt_csv_<project>: sessionStorage (mt_csv_prijzen_<project> in localStorage staat wél bij PREFIXEN)
+  V.UITGESLOTEN_PREFIXEN = ['mt_csv_', 'mtg:advies:'];   // mtg:advies:<datum>: het dagelijkse advies van Geld, afgeleid (wordt zo opnieuw berekend)   // mt_csv_<project>: sessionStorage (mt_csv_prijzen_<project> in localStorage staat wél bij PREFIXEN)
   V.sleutelMee = k => typeof k === 'string' && (V.SLEUTELS.has(k) || V.PREFIXEN.some(p => k.startsWith(p) && k.length > p.length));
   // Bijna-zeker-een-geheim in de waarde (ook bij een toegestane sleutel): JWT overal erin, of een kale base64-achtige reeks.
   const JWT = /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/, KALE_B64 = /^[A-Za-z0-9+/_=-]{200,}$/;

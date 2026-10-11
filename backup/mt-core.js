@@ -217,6 +217,9 @@
       // die bewust last-write-wins wil, geeft een expliciete (kleinere) Set mee.
       etagKeys: config.etagKeys instanceof Set ? config.etagKeys : null,
       _etags: {},                  // filename -> laatst gelezen ETag
+      // filename -> true als het laatste lezen/listen "bestaat niet" gaf. Zo'n bestand wordt aangemaakt met If-None-Match: *; dan kan een
+      // gelijktijdige eerste schrijfactie van een andere pc of het Outlook-paneel er niet stil overheen schrijven (412 → lezen, samenvoegen, herschrijven).
+      _ontbreekt: {},
 
       lastSync: null,              // {ts, ok, key, error} — alleen gevuld als trackLastSync
 
@@ -241,13 +244,14 @@
         const { base, token } = await this._driveBase();
         const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
           { headers: { 'Authorization': `Bearer ${token}` } });
-        if (r.status === 404) { delete this._etags[filename]; return null; }
+        if (r.status === 404) { delete this._etags[filename]; this._ontbreekt[filename] = true; return null; }
         if (!r.ok) {
           console.warn('SP read faalde:', filename, 'HTTP', r.status);
           throw new Error(`SP read ${filename}: HTTP ${r.status}`);
         }
         const et = r.headers.get('ETag');
         if (et) this._etags[filename] = et; else delete this._etags[filename];
+        delete this._ontbreekt[filename];
         return await r.json();
       },
 
@@ -255,15 +259,18 @@
         try {
           const { base, token } = await this._driveBase();
           const key = filename.replace(/\.json$/, '');
-          const useEtag = (!this.etagKeys || this.etagKeys.has(key)) && this._etags[filename];
+          const beschermd = !this.etagKeys || this.etagKeys.has(key);
+          const useEtag = beschermd && this._etags[filename];
+          const maakAan = beschermd && !useEtag && this._ontbreekt[filename];     // bewezen afwezig: alleen aanmaken als het er nog steeds niet is
           const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-          if (useEtag) headers['If-Match'] = this._etags[filename];
+          if (useEtag) headers['If-Match'] = this._etags[filename]; else if (maakAan) headers['If-None-Match'] = '*';
           const body = typeof data === 'string' ? data : JSON.stringify(data);
           const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
             { method: 'PUT', headers, body });
           // S1: 412 = SP-versie nieuwer dan onze ETag → re-read, mergen, herschrijven.
-          if (r.status === 412 && useEtag) return await this._resolveConflict(filename, data, conflictMerge);
-          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; }
+          // (ook bij aanmaken: 412 = iemand was ons voor)
+          if (r.status === 412 && (useEtag || maakAan)) return await this._resolveConflict(filename, data, conflictMerge);
+          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; }
           if (trackLastSync) this.lastSync = { ts: Date.now(), ok: r.ok, key: filename, error: r.ok ? null : `HTTP ${r.status}` };
           if (!r.ok) console.warn('SP write faalde:', filename, 'HTTP', r.status);
           syncStatus();
@@ -310,15 +317,16 @@
         }
         const { base, token } = await this._driveBase();
         const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-        if (this._etags[filename]) headers['If-Match'] = this._etags[filename];
+        if (this._etags[filename]) headers['If-Match'] = this._etags[filename]; else if (this._ontbreekt[filename]) headers['If-None-Match'] = '*';
         const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content`,
           { method: 'PUT', headers, body: JSON.stringify(merged) });
         // Schreef iemand precies tussen onze re-read en PUT? Dan nog (beperkt) een keer
         // lezen-samenvoegen-schrijven, anders bereikt de samengevoegde stand SharePoint niet.
-        if (r.status === 412 && this._etags[filename] && poging < 3)
+        if (r.status === 412 && (this._etags[filename] || this._ontbreekt[filename]) && poging < 3)
           return await this._resolveConflict(filename, localData, conflictMerge, poging + 1);
         if (r.ok) {
           const et = r.headers.get('ETag'); if (et) this._etags[filename] = et;
+          delete this._ontbreekt[filename];
           if (trackLastSync) this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null };
         } else {
           console.warn('SP 412-merge herschrijf faalde:', filename, 'HTTP', r.status);
@@ -358,12 +366,13 @@
         await Promise.all(filenames.map(async (filename) => {
           const meta = byName.get(filename);
           if (!meta) {                       // bestaat niet → zelfde als een echte 404
-            delete this._etags[filename];
+            delete this._etags[filename]; this._ontbreekt[filename] = true;
             out.set(filename, { ok: true, status: 404, data: null });
             return;
           }
           // S1: eTag uit de listing bewaren zodat write() 'm als If-Match meestuurt.
           if (meta.eTag) this._etags[filename] = meta.eTag; else delete this._etags[filename];
+          delete this._ontbreekt[filename];
           const dl = meta['@microsoft.graph.downloadUrl'];
           if (!dl) {                         // geen downloadUrl (bv. lege map-item) → val terug op losse read
             try { out.set(filename, { ok: true, status: 200, data: await this.read(filename) }); }

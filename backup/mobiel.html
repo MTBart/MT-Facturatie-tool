@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.12.4 — M&T Mobiel</title>
+<title>BACKUP v2.13.0 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -20,16 +20,19 @@
 <!-- Gedeelde kernlaag (esc, _encPath, authHeader, MSAL-tokenhelpers, _SP-synclaag) —
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
-<script src="mt-core.js?v=2026-10-11b"></script>
+<script src="mt-core.js?v=2026-10-11c"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-koppel.js?v=2026-10-11a"></script>
+<script src="mt-koppel.js?v=2026-10-11b"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
+<script src="mt-zoek.js?v=2026-10-11d"></script>
+<script src="mt-zoek-extern.js?v=2026-10-11d"></script>
+<script src="mt-zoekbalk.js?v=2026-10-11h"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-11e"></script>
+<script src="mt-verhuis.js?v=2026-10-12a"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -124,6 +127,15 @@ body{
 .header-info-btn:active{background:rgba(255,255,255,.3)}
 #geldKnop{position:relative}
 .geld-badge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#B4412F;color:#fff;border:2px solid #fff;font:700 10px/13px system-ui,sans-serif;text-align:center}
+
+/* ── ZOEKLAAG (zoekicoon in de kop → laag over het hele scherm) ── */
+.zb-laag{position:fixed;left:0;top:0;width:100%;height:100%;z-index:1200;background:var(--n-0,#fff);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+.zb-laag[hidden]{display:none}
+.zb-laag-kop{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)}
+.zb-laag-kop .zb-veld{flex:1 1 auto;width:auto;font-size:16px;padding:10px 16px}   /* 16px: iOS zoomt anders in op het veld */
+.zb-terug{flex:0 0 44px;height:44px;border:0;border-radius:50%;background:var(--n-150,#EDF1F0);color:var(--text,#172521);font-size:20px;cursor:pointer}
+.zb-laag-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.zb-hint{padding:18px 16px;font-size:13px;color:var(--text-faint)}
 
 /* ── TIMER BAR (sticky, elke tab) ── */
 .timer-bar{
@@ -764,7 +776,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.12.4, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.13.0, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -786,6 +798,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 <header class="app-header">
   <div class="app-title" style="display:flex;align-items:center">M<span>&amp;</span>T<span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></div>
   <div class="header-btns">
+    <button class="header-info-btn" id="zoekKnop" type="button" aria-label="Zoeken" aria-haspopup="dialog" title="Zoeken">🔍</button>
     <button class="header-info-btn" id="geldKnop" style="display:none" onclick="location.href='v2.html#tab=geld'" aria-label="Geld (geldtijdlijn)" title="Geld">€</button>
     <button class="header-info-btn notif-btn" onclick="openNotifs()" aria-label="Notificaties">🔔<span class="notif-badge" id="notifBadge" style="display:none">0</span></button>
     <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
@@ -793,6 +806,15 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     <button class="user-avatar-btn" id="userAvatarBtn" style="display:none" onclick="msLogout()" title="Uitloggen"></button>
   </div>
 </header>
+
+<!-- ── ZOEKLAAG (opent met het zoekicoon in de kop) ── -->
+<div class="zb-laag" id="zbLaag" role="dialog" aria-modal="true" aria-label="Zoeken" hidden>
+  <div class="zb-laag-kop">
+    <button type="button" class="zb-terug" id="zbTerug" aria-label="Zoeken sluiten">←</button>
+    <input id="zb-veld" class="zb-veld" type="text" placeholder="Zoek een project, taak of contact" aria-label="Zoeken" enterkeyhint="search" spellcheck="false">
+  </div>
+  <div class="zb-laag-body" id="zbLaagBody"><p class="zb-hint" id="zbHint">Typ een projectnaam, taak, naam of nummer.</p></div>
+</div>
 
 <!-- ── LOPENDE TIMER BAR ── -->
 <div class="timer-bar" id="timerBar">
@@ -6235,6 +6257,85 @@ function bevestigHandtekening() {
 function openLarry() { document.getElementById("larrySheet").classList.add("visible"); }
 function closeLarry() { document.getElementById("larrySheet").classList.remove("visible"); }
 function closeLarryOuter(e) { if (e.target === document.getElementById("larrySheet")) closeLarry(); }
+
+/* =====================================================================
+   ZOEKBALK (brok 1: kader) — component = mt-zoekbalk.js. De app heeft geen Claude-chat, dus geen "Vraag Claude".
+   Zoekbron (brok 2) = mt-zoek.js, gevoed met de projecten, taken en contacten van de app. Klanten en locaties
+   hebben in de app geen eigen scherm en worden dus niet getoond.
+   ===================================================================== */
+let _zbIdxM = null, _zbIdxMT = 0, _zbSigM = "";
+// Opnieuw opbouwen na opslaan van taken/projecten (zbVerouderdM), bij een andere projectenlijst (handtekening) of na 60 s (vangnet).
+function zbVerouderdM() { _zbIdxM = null; }
+function zbIndexM() {
+  const nu = Date.now(), sig = allProjects().length + ":" + (MT_PROJ_INFO ? Object.keys(MT_PROJ_INFO).length : 0);
+  if (_zbIdxM && nu - _zbIdxMT < 60000 && sig === _zbSigM) return _zbIdxM;
+  _zbSigM = sig;
+  const projecten = allProjects().map(p => Object.assign({}, MT_PROJ_INFO[p.code] || {}, { code: p.code, naam: mProjNaam(p), offertenr: mProjNr(p) }));
+  const taken = {}; Object.keys(TASKS || {}).forEach(c => { taken[c] = tasksFor(c).map(x => ({ id: x.id, naam: x.name, status: x.status })); });
+  let contacten = []; try { contacten = window.MTContacten ? MTContacten.actieven() : []; } catch (e) {}
+  _zbIdxM = MTZoek.index(MTZoek.bronVan({ projecten, taken, contacten }, { contactNaam: MTContacten.weergave }));
+  _zbIdxMT = nu; return _zbIdxM;
+}
+function zbZoekM(q) { return MTZoek.zoek(zbIndexM(), q, { mag: (typeof _demoMode !== "undefined" && _demoMode) ? () => true : MTZoek.magUitRollen(), soorten: ["project", "taak", "contact"] }); }
+function zoekbalkOpenM(it) {
+  const d = (it && it.data) || {};
+  if (it.soort === "moneybird" || it.soort === "sharepoint") { MTZoekExtern.openUrl(it); return; }   // https + vaste hosts, nieuw tabblad
+  if (it.soort === "contact") { if (window.MTContactenUI) MTContactenUI.detail(d.id); return; }
+  const p = allProjects().find(y => y.code === d.code);   // project en taak: het project-blad met de taken
+  if (p) openProjectSheet(p.id);
+}
+function zoekbalkInitM() {
+  const veld = document.getElementById("zb-veld"); if (!veld || !window.MTZoekbalk || veld._zb) return;
+  const laag = document.getElementById("zbLaag"), body = document.getElementById("zbLaagBody"), hint = document.getElementById("zbHint"), knop = document.getElementById("zoekKnop");
+  let vorigeFocus = null, geblokkeerd = [], histActief = false, naTerug = null, terugTimer = null;
+  ["saveTasks", "saveUserProjects"].forEach(n => { const f = window[n]; if (typeof f === "function" && !f._zb) { const w = function () { const r = f.apply(this, arguments); zbVerouderdM(); return r; }; w._zb = true; window[n] = w; } });
+  if (window.MTContacten && MTContacten.opslag && !MTContacten.opslag._zb) { const s = MTContacten.opslag.schrijf; MTContacten.opslag.schrijf = function () { const r = s.apply(this, arguments); zbVerouderdM(); return r; }; MTContacten.opslag._zb = true; }
+  const zet = () => {   // laag precies boven het toetsenbord (iOS verkleint alleen de visuele viewport)
+    const vv = window.visualViewport; if (vv) { laag.style.height = vv.height + "px"; laag.style.top = vv.offsetTop + "px"; }
+  };
+  function laagOpen() {
+    vorigeFocus = document.activeElement; laag.hidden = false; zet();
+    geblokkeerd = [...document.body.children].filter(el => el !== laag && el.tagName !== "SCRIPT" && !el.inert);
+    geblokkeerd.forEach(el => { el.inert = true; });
+    veld.value = ""; veld._zb.ververs(); hint.hidden = false; veld.focus();
+    try { history.pushState({ zbLaag: 1 }, ""); histActief = true; } catch (e) { histActief = false; }   // de Android-terugknop sluit dan de laag
+  }
+  function laagDicht() {
+    laag.hidden = true; geblokkeerd.forEach(el => { el.inert = false; }); geblokkeerd = [];
+    veld.value = ""; if (ext) ext.annuleer(); veld._zb.ververs();
+    if (vorigeFocus && vorigeFocus.focus) { try { vorigeFocus.focus(); } catch (e) {} } else knop.focus();
+  }
+  // Sluiten via de interface (terugknop, Esc, resultaat gekozen): de eigen history-entry weer weghalen. Een vervolgactie (bv. het
+  // project-blad openen) wacht tot die history.back() klaar is, anders staat zijn eigen history-wijziging tussen onze entry en "terug".
+  function laagSluit(na) {
+    if (laag.hidden) { if (na) na(); return; }
+    laagDicht();
+    if (!histActief) { if (na) na(); return; }
+    histActief = false; naTerug = na || null;
+    terugTimer = setTimeout(() => { terugTimer = null; const f = naTerug; naTerug = null; if (f) f(); }, 400);   // vangnet als popstate uitblijft
+    try { history.back(); } catch (e) {}
+  }
+  window.addEventListener("popstate", () => {
+    if (terugTimer) { clearTimeout(terugTimer); terugTimer = null; const f = naTerug; naTerug = null; if (f) f(); return; }   // onze eigen history.back()
+    if (!laag.hidden && histActief) { histActief = false; laagDicht(); }                                                   // terugknop van het toestel
+  });
+  // Externe bronnen: Moneybird (zoekindex in de worker) en SharePoint (Graph-search binnen "Nieuwe mappenstructuur").
+  const ext = window.MTZoekExtern ? MTZoekExtern.maak({
+    bronnen: [MTZoekExtern.bronMoneybird({ basis: WORKER, fetch: (u, o) => fetchMetAuth(u, o), nu: () => Date.now() }),
+      MTZoekExtern.bronSharePoint({ token: () => window.getGraphToken(), drive: _SPProj.DRIVE, root: "Nieuwe mappenstructuur", fetch: (u, i) => fetch(u, i), nu: () => Date.now() })],
+    mag: MTZoek.magUitRollen(),
+    onWijziging: () => { if (veld._zb) veld._zb.ververs({ behoud: true }); } }) : null;
+  const demo = () => typeof _demoMode !== "undefined" && _demoMode, magRol = MTZoek.magUitRollen();   // demo-modus heeft geen rollen
+  const rechten = () => demo() ? { klaar: true } : MTZoek.rolStatus();
+  veld._zb = MTZoekbalk.init({ veld, zoek: zbZoekM, open: it => { laagSluit(() => zoekbalkOpenM(it)); }, host: body, inline: true, extern: ext, rechten, mag: soort => demo() || magRol(soort) });
+  window.addEventListener("mt-rol", () => { zbVerouderdM(); if (!laag.hidden) veld._zb.herlaad(); });   // de rol komt (later) binnen: opnieuw opbouwen met de juiste rechten
+  veld.addEventListener("input", () => { hint.hidden = !!veld.value.trim(); });
+  knop.addEventListener("click", laagOpen);
+  document.getElementById("zbTerug").addEventListener("click", () => laagSluit());
+  laag.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); laagSluit(); } });
+  if (window.visualViewport) { window.visualViewport.addEventListener("resize", () => { if (!laag.hidden) zet(); }); window.visualViewport.addEventListener("scroll", () => { if (!laag.hidden) zet(); }); }
+}
+zoekbalkInitM();
 
 /* =====================================================================
    TAKEN PER PROJECT (punt 2) — in project-detail-sheet

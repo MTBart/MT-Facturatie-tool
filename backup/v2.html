@@ -4,7 +4,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.12.4 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.13.0 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -17,24 +17,27 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-10-11b"></script>
+<script src="mt-core.js?v=2026-10-11c"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-toggl.js?v=2026-10-11b"></script>
-<script src="mt-koppel.js?v=2026-10-11a"></script>
+<script src="mt-koppel.js?v=2026-10-11b"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
+<script src="mt-zoek.js?v=2026-10-11d"></script>
+<script src="mt-zoek-extern.js?v=2026-10-11d"></script>
+<script src="mt-zoekbalk.js?v=2026-10-11h"></script>
 <script src="mt-inbox.js?v=2026-10-11c"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-geld.js?v=2026-10-11h"></script>
-<script src="mt-koers.js?v=2026-10-11e"></script>
-<script src="mt-schulden.js?v=2026-10-10a"></script>
+<script src="mt-geld.js?v=2026-10-12a"></script>
+<script src="mt-koers.js?v=2026-10-12a"></script>
+<script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-11e"></script>
+<script src="mt-verhuis.js?v=2026-10-12a"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -173,11 +176,8 @@ header h1 span{color:var(--gold);font-style:italic}
 .api-dot.err{background:var(--error);box-shadow:0 0 0 3px var(--error-50)}
 .api-label{font-size:11px;font-family:var(--mono);color:var(--text-dim)}
 /* ── Topbalk Larry-chat ── */
-.header-center{position:absolute;left:50%;transform:translateX(-50%);z-index:101}
-.tbchat-field{width:340px;max-width:44vw;background:var(--n-0);color:var(--n-900);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-size:13px;font-family:inherit;outline:none;box-shadow:var(--shadow-sm)}
-.tbchat-field::placeholder{color:#9a9a9a}
-.tbchat-field:focus{border-color:var(--gold,#B8962E);box-shadow:0 2px 12px rgba(0,0,0,0.18)}
-.tbchat-panel{position:absolute;top:46px;left:50%;transform:translateX(-50%);width:460px;max-width:92vw;height:480px;max-height:74vh;background:#fff;border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,0.32);display:flex;flex-direction:column;overflow:hidden;color:#222}
+.header-center{position:absolute;left:50%;transform:translateX(-50%);z-index:101;width:380px;max-width:44vw}
+.tbchat-panel{z-index:2;position:absolute;top:46px;left:50%;transform:translateX(-50%);width:460px;max-width:92vw;height:480px;max-height:74vh;background:#fff;border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,0.32);display:flex;flex-direction:column;overflow:hidden;color:#222}
 .tbchat-head{background:linear-gradient(135deg,var(--green),var(--green-700));color:var(--n-0);padding:11px 14px;font-size:13px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .tbchat-x{background:none;border:none;color:var(--n-0);cursor:pointer;font-size:14px;line-height:1}
 .tbchat-log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:13px;background:var(--n-50)}
@@ -187,7 +187,7 @@ header h1 span{color:var(--gold);font-style:italic}
 .tbchat-input{display:flex;gap:6px;padding:10px;border-top:1px solid #eee;background:#fff;flex-shrink:0}
 .tbchat-input textarea{flex:1;resize:none;border:1px solid #ddd;border-radius:8px;padding:8px;font-family:inherit;font-size:13px;max-height:90px}
 .tbchat-input button{background:var(--green);color:#fff;border:none;border-radius:8px;width:40px;cursor:pointer;font-size:15px}
-@media(max-width:760px){.header-center{position:static;transform:none}.tbchat-panel{position:fixed;top:60px;left:50%}}
+@media(max-width:760px){.header-center{position:static;transform:none;width:auto;max-width:none;flex:1 1 120px;min-width:0;margin:0 8px}.tbchat-panel{position:fixed;top:60px;left:50%}}
 
 /* ── Per-tab help ("wat is dit?") + feedback-chat ── */
 .tab-help-btn{margin-left:auto;align-self:center;flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:none;border:1px solid var(--border);border-radius:14px;padding:4px 11px;font-family:var(--sans);font-size:12px;color:var(--text-faint);cursor:pointer;white-space:nowrap}
@@ -771,7 +771,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.12.4, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.13.0, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -792,16 +792,16 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.12.4</span>
+    <span class="header-version">v2.13.0</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
   <div class="header-center">
-    <input id="tbchat-field" class="tbchat-field" placeholder="stel me een vraag?" autocomplete="off"
-      onfocus="tbChatOpen()" onkeydown="if(event.key==='Enter'){event.preventDefault();tbChatSend();}">
+    <input id="zb-veld" class="zb-veld" type="text" placeholder="Zoek een project, klant of taak — of vraag iets" aria-label="Zoeken, of een vraag aan Claude" enterkeyhint="search" spellcheck="false">
     <div id="tbchat-panel" class="tbchat-panel" style="display:none">
       <div class="tbchat-head"><span>✨ Larry — vraag iets of laat iets doen</span><button class="tbchat-x" onclick="tbChatClose()">✕</button></div>
       <div id="tbchat-log" class="tbchat-log"></div>
+      <div class="tbchat-input"><textarea id="tbchat-in" rows="1" placeholder="Vraag Larry iets…" aria-label="Vraag aan Larry"></textarea><button type="button" id="tbchat-send" aria-label="Verstuur">➤</button></div>
     </div>
   </div>
   <div class="header-right">
@@ -10058,28 +10058,8 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // ontkoppelde mail niet terugzetten en een nieuwe koppeling niet wegdrukken.
     // Niets valt weg: een koppeling die alleen aan één kant bestaat, blijft staan.
     mt_mail_links(lokaal, spData) {
-      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
-      const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
-      const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {};
-      const ident = x => x && (x.internetMessageId || x.id);
-      const tijd = x => Math.max(Number(x && x.gewijzigd) || 0, Number(x && x.ontkoppeld) || 0, Number(x && x.ts) || 0);
-      const uit = {};
-      for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
-        const per = new Map(), los = [];
-        for (const x of [...(Array.isArray(R[code]) ? R[code] : []), ...(Array.isArray(L[code]) ? L[code] : [])]) {
-          const k = ident(x);
-          if (!k) { los.push(x); continue; }                    // zonder identiteit: bewaren, nooit weggooien
-          const oud = per.get(k);
-          // gelijk → lokaal (komt als tweede). Een immutable id (`iid`, B5) hoort bij de mail,
-          // niet bij de koppelstand: altijd meenemen als de winnaar hem nog niet heeft.
-          // Alleen bij dezelfde mailbox (dezelfde mail heeft per mailbox een ander id).
-          const win = (!oud || tijd(x) >= tijd(oud)) ? x : oud, ander = win === x ? oud : x;
-          const mb = r => String((r && r.mbx) || 'info@mortiseandtenon.nl').toLowerCase();
-          per.set(k, (ander && ander.iid && !win.iid && mb(ander) === mb(win)) ? Object.assign({}, win, { iid: ander.iid, id_bijgewerkt: ander.id_bijgewerkt }) : win);
-        }
-        uit[code] = [...per.values(), ...los];
-      }
-      return uit;
+      // één gedeelde samenvoeger (mt-koppel.js), ook gebruikt door het Outlook-paneel; identiteit = mailbox + mail (dezelfde mail in twee postbussen = twee records)
+      return MTKoppel.linksSamen(lokaal, spData);
     },
     mt_calc_offertes(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
@@ -11558,8 +11538,9 @@ function tbChatOpen(){
   const p=document.getElementById('tbchat-panel');
   if(p.style.display!=='none')return;
   p.style.display='flex';
+  setTimeout(()=>{ const c=document.getElementById('tbchat-in'); if(c) c.focus(); },0);
   if(!_tbHist.length) tbBubble('b','Hoi, ik ben Larry 👋 Vraag me iets, of geef een opdracht — bijv. "open de agenda", "ga naar facturen", "ververs de uren".');
-  if(!_tbBound){_tbBound=true;document.addEventListener('click',e=>{const pn=document.getElementById('tbchat-panel');const fld=document.getElementById('tbchat-field');if(pn.style.display!=='none'&&!pn.contains(e.target)&&e.target!==fld)pn.style.display='none';});}
+  if(!_tbBound){_tbBound=true;document.addEventListener('click',e=>{const pn=document.getElementById('tbchat-panel');if(pn.style.display!=='none'&&!pn.contains(e.target))pn.style.display='none';});}
 }
 function tbChatClose(){document.getElementById('tbchat-panel').style.display='none';}
 const TB_TABS=['dashboard','inbox','verwerk','controle','projecten','klanten','voorraad','bestelling','historie','agenda','instellingen','cn','migratie'];
@@ -11574,9 +11555,10 @@ function tbExec(key,val){
     default: return 'onbekende actie: '+key;
   }
 }
-async function tbChatSend(){
-  const inp=document.getElementById('tbchat-field');const q=(inp.value||'').trim();if(!q)return;
-  tbChatOpen();inp.value='';tbBubble('u',q);_tbHist.push({role:'user',content:q});
+async function tbChatSend(vraag){
+  // De zoekbalk geeft de vraag mee; zonder argument komt de tekst uit het eigen invoerveld van het chatpaneel (#tbchat-in).
+  const inp=document.getElementById('tbchat-in');const q=(typeof vraag==='string'?vraag:(inp&&inp.value)||'').trim();if(!q)return;
+  tbChatOpen();if(inp&&typeof vraag!=='string')inp.value='';tbBubble('u',q);_tbHist.push({role:'user',content:q});
   const wait=tbBubble('b','…');
   const sys=`Je bent Larry, de orchestrator in de M&T-cockpit (interne tool van Mortise & Tenon). Antwoord kort en concreet in het Nederlands.
 Je kunt ACTIES in de tool uitvoeren door aan het EIND van je antwoord directives op een eigen regel te zetten, exact zo: [[ACTIE:sleutel=waarde]].
@@ -11599,6 +11581,61 @@ HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of map
     if(window._LOG)_LOG.add('tbchat',helpActieveTab(),q,clean);
   }catch(e){wait.textContent='fout: '+e.message;if(window._LOG)_LOG.add('tbchat-fout',helpActieveTab(),q,e.message);}
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZOEKBALK (brok 1: kader) — het altijd zichtbare veld bovenin; component = mt-zoekbalk.js.
+// Treffers openen via de router (mtRoute.go) of de bestaande open-functies; "Vraag Claude" = tbChatSend.
+// Zoekbron (brok 2) = mt-zoek.js: één index over projecten, klanten, locaties, taken en contacten uit de lokale
+// stores, met vaste rangorde; alleen de soorten waar de rol recht op heeft.
+// ═══════════════════════════════════════════════════════════════════════════
+let _zbIdx=null, _zbIdxT=0;
+// De index wordt opnieuw opgebouwd zodra projecten, taken, contacten of klanten zijn opgeslagen (zbVerouderd, zie de hooks in zoekbalkInit);
+// een TTL van 60 s is het vangnet voor wat die hooks missen. Bij het opbouwen worden klant- en locatienamen één keer per code uitgerekend (MTZoek.bronVan).
+function zbVerouderd(){ _zbIdx=null; }
+function zbIndex(){
+  const nu=Date.now(); if(_zbIdx&&nu-_zbIdxT<60000) return _zbIdx;
+  let contacten=[]; try{ contacten=window.MTContacten?MTContacten.actieven():[]; }catch(e){}
+  _zbIdx=MTZoek.index(MTZoek.bronVan({projecten:PROJECT_CODES,klanten:KLANTEN,taken:projTakenAll(),contacten},
+    {projectNaam:projNaamVol,klantNaam:projKlantNaam,locNaam:projLocLabel,projectLabel:projLabelCode,contactNaam:MTContacten.weergave}));
+  _zbIdxT=nu; return _zbIdx;
+}
+function zbZoek(q){ return MTZoek.zoek(zbIndex(),q,{mag:MTZoek.magUitRollen()}); }
+function zoekbalkOpen(it){
+  const d=(it&&it.data)||{};
+  if(it.soort==='mail'){   // gekoppelde mail → het dossier van het project; anders de webLink in Outlook (veilige host, nieuw tabblad)
+    MTZoekExtern.openItem(it,{gekoppeld:m=>(window.MTKoppel&&MTKoppel.mailProjecten)?MTKoppel.mailProjecten(m):[],naarDossier:code=>mtRoute.go({tab:'projecten',code,sectie:'dossier'})}); return; }
+  if(it.soort==='moneybird'||it.soort==='sharepoint'){ MTZoekExtern.openUrl(it); return; }   // https + vaste hosts (veiligeUrl), nieuw tabblad
+  if(it.soort==='project') mtRoute.go({tab:'projecten',code:d.code});
+  else if(it.soort==='klant') mtRoute.go({tab:'projecten',klant:d.klant});
+  else if(it.soort==='locatie') mtRoute.go({tab:'projecten',klant:d.klant,loc:d.loc});
+  else if(it.soort==='taak') mtRoute.go({tab:'projecten',code:d.code,sectie:'planning'});
+  else if(it.soort==='contact'&&window.MTContactenUI) MTContactenUI.detail(d.id);
+}
+function zoekbalkInit(){
+  // Index-invalidatie via de opslagfuncties (en storage-events van andere tabbladen) i.p.v. alleen een TTL.
+  ['slaProjectenOp','projTakenSave','projLaad','_klantenZet'].forEach(n=>{ const f=window[n]; if(typeof f==='function'&&!f._zb){ const w=function(){ const r=f.apply(this,arguments); zbVerouderd(); return r; }; w._zb=true; window[n]=w; } });
+  if(window.MTContacten&&MTContacten.opslag&&!MTContacten.opslag._zb){ const s=MTContacten.opslag.schrijf; MTContacten.opslag.schrijf=function(){ const r=s.apply(this,arguments); zbVerouderd(); return r; }; MTContacten.opslag._zb=true; }
+  window.addEventListener('storage',zbVerouderd);
+  const cin=document.getElementById('tbchat-in'), csend=document.getElementById('tbchat-send');
+  if(cin&&!cin._tb){ cin._tb=true;
+    cin.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); tbChatSend(); } else if(e.key==='Escape') tbChatClose(); });
+    csend.addEventListener('click',()=>tbChatSend()); }
+  const veld=document.getElementById('zb-veld'); if(!veld||!window.MTZoekbalk||veld._zb) return;
+  window.addEventListener('mt-rol',()=>{ zbVerouderd(); if(veld._zb) veld._zb.herlaad(); });   // de rol komt (later) binnen: lijst sluiten en met de juiste rechten opnieuw opbouwen
+  veld.addEventListener('input',()=>{ if(veld.value.trim()) tbChatClose(); });   // de dropdown neemt de plek van het chatpaneel in
+  // Externe bronnen: Moneybird (zoekindex in de worker) en SharePoint (Graph-search binnen de projectbibliotheek); debounce 400 ms, vanaf 3 tekens.
+  const ext=window.MTZoekExtern?MTZoekExtern.maak({
+    bronnen:[MTZoekExtern.bronMail({token:()=>window.getGraphToken(),fetch:(u,i)=>fetch(u,i),nu:()=>Date.now(),infoAdres:'info@mortiseandtenon.nl',
+        gekoppeld:m=>(window.MTKoppel&&MTKoppel.mailProjecten)?MTKoppel.mailProjecten(m):[]}),
+      MTZoekExtern.bronMoneybird({basis:WORKER,fetch:(u,o)=>fetchMetAuth(u,o),nu:()=>Date.now()}),
+      MTZoekExtern.bronSharePoint({token:()=>window.getGraphToken(),drive:_SP.PROJ_DRIVE,root:PROJ_ROOT,fetch:(u,i)=>fetch(u,i),nu:()=>Date.now()})],
+    mag:MTZoek.magUitRollen(),
+    onWijziging:()=>{ if(veld._zb) veld._zb.ververs({behoud:true}); }}):null;
+  veld._zb=MTZoekbalk.init({veld,zoek:zbZoek,open:zoekbalkOpen,extern:ext,rechten:()=>MTZoek.rolStatus(),mag:MTZoek.magUitRollen(),
+    vraag:q=>tbChatSend(q),vraagMag:()=>!window.MTRol||MTRol.mag('ai'),
+    isVraag:MTZoek.isVraag});
+}
+zoekbalkInit();
 </script>
 
 <script>
