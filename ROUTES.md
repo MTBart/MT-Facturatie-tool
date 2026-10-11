@@ -152,6 +152,18 @@ gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.m
 `https://mt-tool.pages.dev`; een onbekende of ontbrekende `Origin` krijgt **geen** `Access-Control-*`-headers
 (alleen `Vary: Origin`), dus de oude origin wordt niet meer gespiegeld.
 
+**Koersmeter-ochtendrun (A+A2) — Cron Trigger + `GET /geld/koers/meldingen` + `POST /geld/koers/gelezen`.**
+- `scheduled()` draait twee keer per dag (`[triggers]` in wrangler.toml: 05:30 en 06:30 UTC). Alleen de run waarvan de tijd in Europe/Amsterdam
+  07:30–07:59 is gaat door (zomer 05:30 UTC, winter 06:30 UTC); de andere doet niets. Eén run per dag (`geld:koers:cron:<datum>`).
+- De run roept `/geld/tijdlijn` (vers), `/geld/config` en `/geld/cijfers` intern aan als eigenaar en rekent met dezelfde `mt-geld.js`/`mt-koers.js`
+  als het scherm (dynamische import; `K.invoer` → `K.oordeel` → `K.dagfotoOpslag`, `K.moetMelden`, `K.actie`): geen tweede rekenlogica.
+- KV: de dagfoto `geld:koers:dag:<datum>` (met `via:'cron'`), bij verslechtering `geld:koers:melding:<datum>` (hooguit één per dag, nooit overschreven),
+  `geld:koers:gelezen:<oid>` (per gebruiker tot en met welke datum afgevinkt). Meldregel: `K.moetMelden` (slechtere kleur, nieuwe onvolledige bron, kasruimte ≥ € 5k lager).
+  Onvolledige bronnen: nooit groen ("Oordeel onbetrouwbaar"), met een melding alleen als het oordeel gisteren betrouwbaar was.
+- Rechten: alleen met recht `geld` (eigenaar en administratie) lezen; afvinken mag ook de administratie (eigen markering). Het scherm toont de ongelezen
+  meldingen bovenaan Geld; mobiel een badge op de €-knop (`geldBadgeLaad`).
+- Een mislukte run gooit niet (logt `koerscron`), de volgende ochtend probeert opnieuw. Subrequests: één run doet net zoveel Moneybird-verzoeken als het openen van Geld.
+
 **Klantenlijst — `GET|POST /klanten` (F5).** Bron = KV `klanten:registry` (niet meer een bestand in de repo).
 - `GET`: iedereen met een rol (modus `afdwingen`: zonder rol 403 `geen-toegang`). In modus `log` mag een
   **rolloze** GET nog wel, maar wordt apart geteld/gelogd als `klanten.zonder_rol` (alleen oid-hash, geen naam of

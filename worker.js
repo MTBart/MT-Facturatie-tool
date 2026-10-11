@@ -3150,6 +3150,25 @@ async function handleGeld(p, request, env, ik, json0) {
   }
   // Rapporten: ook wie alleen mag lezen (administratie) mag er vragen bij stellen; afvinken alleen de eigenaar.
   if (p === '/geld/rapporten' || p === '/geld/rapport' || p.startsWith('/geld/rapport/')) return await geldRapportRoute(p, request, env, ik, json, R, url);
+  // Koersmeter A2: de ochtendmeldingen (geschreven door de cron, zie koersCron) lezen en per gebruiker als gelezen afvinken.
+  // Alleen met recht `geld` (die controle staat hierboven); afvinken mag ook wie alleen mag lezen (het is een eigen markering).
+  if (p === '/geld/koers/meldingen' && m === 'GET') {
+    const n = Math.max(1, Math.min(30, Number(url.searchParams.get('dagen')) || 7)), vandaag = geldVandaag();
+    const recs = await Promise.all(Array.from({ length: n }, (_, i) => kvJson(env, KOERS_MELDING + geldDag(vandaag, -i))));
+    const gel = (await kvJson(env, KOERS_GELEZEN + ik.oid)) || {};
+    const lijst = recs.filter(Boolean).map(x => Object.assign({}, x, { gelezen: !!(gel.datum && x.datum <= gel.datum) }));
+    return json({ meldingen: lijst, ongelezen: lijst.filter(x => !x.gelezen).length });
+  }
+  if (p === '/geld/koers/gelezen' && m === 'POST') {
+    if (!env.MT_ROLLEN) return json({ error: 'geen-opslag' }, 503);
+    let b = null; try { b = await request.json(); } catch {}
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return json({ error: 'gelezen: object verwacht' }, 400);
+    const vreemd = Object.keys(b).find(k => k !== 'datum'); if (vreemd !== undefined) return json({ error: `onbekend veld "${String(vreemd).slice(0, 40)}"` }, 400);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.datum || '')) || b.datum > geldVandaag()) return json({ error: 'datum: JJJJ-MM-DD, niet in de toekomst' }, 400);
+    const oud = (await kvJson(env, KOERS_GELEZEN + ik.oid)) || {}, datum = oud.datum && oud.datum > b.datum ? oud.datum : b.datum;   // alleen vooruit: een oudere afvinking maakt niets ongedaan
+    await kvZet(env, KOERS_GELEZEN + ik.oid, { datum, ts: Date.now() }, { expirationTtl: 400 * 86400 });
+    return json({ ok: true, datum });
+  }
   if (!['GET', 'HEAD'].includes(m.toUpperCase()) && R.geld !== 'wijzigen') return json({ error: 'geen-toegang', reden: 'geld-wijzigen' }, 403);
   if (p === '/geld/tijdlijn' && m === 'GET') {
     let ver = await geldCacheVersie(env), vooruit = false;
@@ -3680,9 +3699,82 @@ async function handleKlanten(request, env, ik, json, ctx) {
   return json({ ok: true, aantal: schoon.length, rev });
 }
 
+// ── Koersmeter A+A2: elke ochtend om 07:30 (Europe/Amsterdam) de dagfoto bewaren en bij verslechtering een melding in KV ─────────
+// Cron Triggers staan in UTC. Daarom twee triggers (05:30 en 06:30 UTC, zie wrangler.toml); in de code laten we alleen de run door waarvan
+// de Amsterdamse tijd 07:30 is (zomer- en wintertijd kloppen dan vanzelf). De berekening is dezelfde als in het scherm: de routes van
+// handleGeld worden intern als eigenaar aangeroepen en mt-geld.js/mt-koers.js (K.invoer, K.oordeel, K.moetMelden, K.actie) doen het rekenwerk.
+// KV: geld:koers:dag:<datum> (de dagfoto, zoals het scherm hem ook bewaart), geld:koers:melding:<datum> (hooguit één per dag),
+// geld:koers:gelezen:<oid> (per gebruiker tot en met welke datum afgevinkt), geld:koers:cron:<datum> (de run is gedaan).
+const KOERS_MELDING = 'geld:koers:melding:', KOERS_GELEZEN = 'geld:koers:gelezen:', KOERS_CRON = 'geld:koers:cron:';
+function amsterdamTijd(ms) {
+  const d = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms)), g = t => Number((d.find(x => x.type === t) || {}).value);
+  return { uur: g('hour'), min: g('minute') };
+}
+const koersMoment = ms => { const a = amsterdamTijd(ms); return a.uur === 7 && a.min >= 30; };   // 07:30 tot 07:59 (een cron start soms een paar minuten later)
+async function geldModules() { await import('./mt-geld.js'); await import('./mt-koers.js'); return { G: globalThis.MTGeld, K: globalThis.MTKoers }; }
+// Een /geld-route intern aanroepen als eigenaar (zelfde code als het scherm, geen tweede berekening).
+async function geldIntern(env, pad) {
+  const ik = { rol: 'eigenaar', oid: 'cron-koersmeter', rec: { naam: 'Koersmeter 07:30' }, email: '' };
+  const r = await handleGeld(pad.split('?')[0], new Request('https://intern.invalid' + pad), env, ik, (b, st = 200) => new Response(JSON.stringify(b), { status: st, headers: { 'Content-Type': 'application/json' } }));
+  let j = null; try { j = await r.json(); } catch {}
+  return { status: r.status, j };
+}
+async function koersCron(env, tijd) {
+  if (!koersMoment(tijd)) return { status: 'niet-nu' };
+  if (!env.MT_ROLLEN) return { status: 'geen-opslag' };
+  const vandaag = geldVandaag();
+  const klaar = await kvJson(env, KOERS_CRON + vandaag);
+  if (klaar && klaar.status === 'klaar') return { status: 'al-gedaan' };
+  const { G, K } = await geldModules();
+  const jaar = Number(vandaag.slice(0, 4)), pauze = Number(env.KOERS_CRON_PAUZE_MS != null ? env.KOERS_CRON_PAUZE_MS : 1500);
+  // De dagfoto van "gisteren": de laatste van de zeven dagen vóór vandaag (zoals het scherm).
+  const eerder = (await Promise.all(Array.from({ length: 7 }, (_, i) => kvJson(env, GELD_DAGFOTO + geldDag(vandaag, -(i + 1)))))).filter(Boolean);
+  const gisteren = eerder[0] || null;   // nieuwste eerst
+  let nu = null, o = null, inv = null, bronFout = null;
+  const t = await geldIntern(env, `/geld/tijdlijn?van=${geldDag(vandaag, -35)}&tot=${geldDag(vandaag, 364)}&historie=1&vers=1`);
+  const c = await geldIntern(env, '/geld/config');
+  if (t.status !== 200 || !t.j || !t.j.vandaag) bronFout = `geldtijdlijn niet te lezen (${(t.j && t.j.error) || 'HTTP ' + t.status})`;
+  else if (c.status !== 200 || !c.j) bronFout = `instellingen niet te lezen (${(c.j && c.j.error) || 'HTTP ' + c.status})`;
+  else {
+    // Cijfers: de worker vult ontbrekende maanden in stukken aan; een paar rondes zoals het scherm.
+    let r = null, fout = null; const mislukt = new Set();
+    for (let i = 0; i < 6; i++) {
+      const x = await geldIntern(env, `/geld/cijfers?per=maand&van=${jaar - 1}-01&tot=${vandaag.slice(0, 7)}`);
+      if (x.status !== 200 || !x.j || x.j.error) { fout = (x.j && x.j.error) || 'geen antwoord'; break; }
+      r = x.j; (r.mislukt || []).forEach(mm => mislukt.add(mm));
+      if (r.compleet || (r.ontbrekend || []).every(mm => mislukt.has(mm))) break;
+      if (pauze > 0) await new Promise(res => setTimeout(res, pauze));
+    }
+    inv = K.invoer(t.j, c.j.config, { r, laden: false, fout }, G); o = K.oordeel(inv); nu = K.dagfotoOpslag(o);
+    await kvZet(env, GELD_DAGFOTO + vandaag, { datum: vandaag, jaar: nu.jaar, kleur: nu.kleur, meters: nu.meters, bronnen: nu.bronnen, ts: Date.now(), via: 'cron' }, { expirationTtl: 400 * 86400 });
+  }
+  // Melden: alleen bij verslechtering (K.moetMelden). Is een bron onvolledig, dan is er geen groen oordeel maar "oordeel onbetrouwbaar";
+  // die melding komt alleen als het oordeel gisteren betrouwbaar was (anders is het geen verandering).
+  const gisterenBetrouwbaar = !!gisteren && gisteren.kleur !== 'onbetrouwbaar';
+  let redenen = [], verschil = null;
+  if (nu) {
+    const mm = K.moetMelden(gisteren, nu); redenen = mm.redenen.slice(); verschil = mm.verschil || null;
+    if (nu.kleur === 'onbetrouwbaar' && gisterenBetrouwbaar && !redenen.some(x => /onbetrouwbaar/.test(x))) redenen.unshift('oordeel onbetrouwbaar: ' + (nu.bronnen[0] || 'een bron is onvolledig'));
+  } else if (gisterenBetrouwbaar) redenen = ['oordeel onbetrouwbaar: ' + bronFout];
+  let melding = null;
+  if (redenen.length) {
+    melding = { datum: vandaag, ts: Date.now(), kleur: nu ? nu.kleur : 'onbetrouwbaar', titel: nu ? K.TITEL[nu.kleur] : K.TITEL.onbetrouwbaar, van: gisteren ? gisteren.kleur : null, redenen: redenen.map(x => String(x).slice(0, 200)).slice(0, 6),
+      tekst: verschil ? verschil.tekst : null, actie: o ? String(K.actie(o, inv)).slice(0, 300) : null, onbetrouwbaar: !nu || nu.kleur === 'onbetrouwbaar' };
+    if (!(await kvJson(env, KOERS_MELDING + vandaag))) await kvZet(env, KOERS_MELDING + vandaag, melding, { expirationTtl: 60 * 86400 });   // hooguit één per dag
+  }
+  await kvZet(env, KOERS_CRON + vandaag, { status: bronFout ? 'bron-fout' : 'klaar', ts: Date.now(), kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || undefined }, { expirationTtl: 7 * 86400 });
+  return { status: bronFout ? 'bron-fout' : 'klaar', kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || undefined };
+}
+
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
 export default {
+  // Cron Triggers (wrangler.toml [triggers]): zie koersCron. Fouten worden gelogd, nooit gegooid (de volgende ochtend probeert opnieuw).
+  async scheduled(event, env, ctx) {
+    const taak = koersCron(env, event && event.scheduledTime != null ? event.scheduledTime : Date.now()).catch(e => { try { console.log(JSON.stringify({ koerscron: 'fout', fout: String((e && e.message) || e).slice(0, 200) })); } catch {} return { status: 'fout' }; });
+    waitUntil(ctx, taak);
+    return await taak;
+  },
   async fetch(request, env, ctx) {
     const herkomst = request.headers.get('Origin') || '';
     // Onbekende herkomst: géén CORS-headers (dan blokkeert de browser het antwoord); alleen Vary.

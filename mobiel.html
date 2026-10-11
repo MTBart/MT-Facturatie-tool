@@ -121,6 +121,8 @@ body{
   transition:background .15s;
 }
 .header-info-btn:active{background:rgba(255,255,255,.3)}
+#geldKnop{position:relative}
+.geld-badge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#B4412F;color:#fff;border:2px solid #fff;font:700 10px/13px system-ui,sans-serif;text-align:center}
 
 /* ── TIMER BAR (sticky, elke tab) ── */
 .timer-bar{
@@ -2174,6 +2176,26 @@ async function msLogout() {
   document.getElementById('demoBadge').style.display = 'none';
 }
 
+// Koersmeter A2: badge op de €-knop met het aantal ongelezen ochtendmeldingen (alleen wie het Geld-recht heeft ziet de knop; de worker
+// geeft zonder dat recht een 403). Afvinken gebeurt bovenaan Geld in de cockpit. Opnieuw ophalen als de app weer in beeld komt.
+function geldBadgeZet(n) {
+  const gk = document.getElementById('geldKnop'); if (!gk) return;
+  let b = gk.querySelector('.geld-badge');
+  if (!n) { if (b) b.remove(); gk.title = 'Geld'; gk.setAttribute('aria-label', 'Geld (geldtijdlijn)'); return; }
+  if (!b) { b = document.createElement('span'); b.className = 'geld-badge'; gk.appendChild(b); }
+  b.textContent = n > 9 ? '9+' : String(n);
+  gk.title = `Geld — ${n} ongelezen Koersmeter-melding${n === 1 ? '' : 'en'}`;
+  gk.setAttribute('aria-label', `Geld, ${n} ongelezen Koersmeter-melding${n === 1 ? '' : 'en'}`);
+}
+async function geldBadgeLaad() {
+  try {
+    if (!window.fetchMetAuth) return;
+    const r = await window.fetchMetAuth(WORKER + '/geld/koers/meldingen?dagen=7');
+    if (!r || !r.ok) return;
+    const j = await r.json(); geldBadgeZet(Math.max(0, Number(j && j.ongelezen) || 0));
+  } catch (e) { /* geen badge is geen ramp */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { const gk = document.getElementById('geldKnop'); if (gk && gk.style.display === '') geldBadgeLaad(); } });
 async function rolLaadMobiel() {
   if (!window.MTRol) return;
   const me = await MTRol.laad(WORKER); if (!me) return;
@@ -2181,6 +2203,7 @@ async function rolLaadMobiel() {
   MTRol.pasToe();
   // Geld (geldtijdlijn) staat in de cockpit (responsive): alleen een knop voor wie het recht heeft, op een worker die het kent.
   const gk = document.getElementById('geldKnop'); if (gk) gk.style.display = me.rechten && ('geld' in me.rechten) && MTRol.magGeld() ? '' : 'none';
+  if (gk && gk.style.display === '') geldBadgeLaad();   // ongelezen ochtendmeldingen van de Koersmeter
   const act = document.querySelector('.bottom-nav .nav-btn.active');
   if (act && act.classList.contains('mt-rol-verborgen')) { const vrij = [...document.querySelectorAll('.bottom-nav .nav-btn')].find(b => !b.classList.contains('mt-rol-verborgen')); if (vrij) vrij.click(); }
 }

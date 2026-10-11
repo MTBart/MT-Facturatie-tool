@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Verhuizer: IDB-kandidaten vóór de write (crashvenster dicht) en exclusief slot via navigator.locks
+- Commit: `8ef0deb` | Auteur: Bart Witte
+
 ## 2026-10-11 — Release v2.12.0: veiligheid, klantenlijst via de server, Koersmeter vergelijkt met gisteren, verhuisknop voorbereid; backup = v2.11.10
 - Commit: `77dc642` | Auteur: Bart Witte
 
