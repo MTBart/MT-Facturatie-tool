@@ -1720,7 +1720,7 @@ async function geldMutaties(get, van, tot, w) {
 // Alleen een naam/omschrijving zonder IBAN → onzeker (te bevestigen). Meer dan één pot, of deels op een pot-grootboek → onzeker (melden, niet gokken).
 // Bij een lege tegenrekening (zo levert de bank de overboekingen tussen eigen rekeningen) zit de pot in de naam: "Zakelijke oranje spaarrekening Z". De letter
 // erachter hoort bij één pot: `herkenning.letter`, anders de letter waarmee de naam, de omschrijving of het id van de pot eindigt ("BTW Z"). Onbekende letter → niet herkend (gemeld).
-const GELD_SPAAR_LETTER = /spaarrekening\s+([A-Z])\s*$/i;
+const GELD_SPAAR_LETTER = /spaarrekening\s+([A-Z])(\d{6,})?\s*$/i;   // "…spaarrekening Z" of, zoals de bank het levert, "…spaarrekening Z96824563" (letter + rekeningnummer)
 const geldPotLetters = p => {
   const uit = new Set(), eind = t => { const m = /(?:^|[\s(\-–])([A-Za-z])\)?\s*$/.exec(String(t || '').trim()); return m ? m[1].toUpperCase() : null; };
   const h = p.herkenning || {};
@@ -1736,9 +1736,11 @@ function geldPotVan(m, potten) {
   const tekst = (String(m.message || '') + ' ' + String(m.contra_account_name || '')).toLowerCase();
   const tegen = String(m.contra_account_number || '').replace(/\s+/g, '').toUpperCase();
   const tekstCompact = String(m.message || '').replace(/\s+/g, '').toUpperCase();
-  const naamLetter = ((GELD_SPAAR_LETTER.exec(String(m.contra_account_name || '').trim()) || [])[1] || '').toUpperCase();
+  const naamDelen = GELD_SPAAR_LETTER.exec(String(m.contra_account_name || '').trim()) || [], naamLetter = String(naamDelen[1] || '').toUpperCase(), naamNummer = String(naamDelen[2] || '');
   const ibanVan = p => String(p.herkenning.tegenrekening || '').length >= 12 && (tegen ? tegen === p.herkenning.tegenrekening : tekstCompact.includes(p.herkenning.tegenrekening));   // een IBAN, geen losse letter of woord
-  const letterVan = p => !!naamLetter && !tegen && geldPotLetters(p).has(naamLetter);
+  // De pot hoort bij de letter, of — als de pot een rekeningnummer als tegenrekening heeft — bij het nummer achter de letter.
+  const nummerVan = p => !!naamNummer && [naamLetter + naamNummer, naamNummer].includes(String(p.herkenning.tegenrekening || ''));
+  const letterVan = p => !!naamLetter && !tegen && (geldPotLetters(p).has(naamLetter) || nummerVan(p));
   const eigenVan = p => ibanVan(p) || letterVan(p);
   const zeker = potten.filter(p => p.actief && ((!metFactuur && p.ledger && ids.length && ids.every(id => id === p.ledger)) || (!metFactuur && eigenVan(p))));
   const viaTekst = potten.filter(p => p.actief && vrij && !zeker.includes(p) && p.herkenning.omschrijving.length >= 4 && tekst.includes(p.herkenning.omschrijving.toLowerCase()));

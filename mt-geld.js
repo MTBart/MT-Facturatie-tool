@@ -1515,7 +1515,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
   // Letters uit namen als "… spaarrekening Z" van overboekingen die bij geen pot horen of juist wel (om de letter van een pot te kiezen).
   function letterKandidaten() {
     const uit = new Map();
-    for (const e of st.data.events || []) { const m = e.bron === 'bank' && /spaarrekening\s+([A-Z])\s*$/i.exec(e.tegenpartij || ''); if (m) uit.set(m[1].toUpperCase(), { letter: m[1].toUpperCase(), naam: e.tegenpartij }); }
+    for (const e of st.data.events || []) { const m = e.bron === 'bank' && /spaarrekening\s+([A-Z])(\d{6,})?\s*$/i.exec(e.tegenpartij || ''); if (m) uit.set(m[1].toUpperCase(), { letter: m[1].toUpperCase(), naam: e.tegenpartij }); }
     return [...uit.values()];
   }
   // Kandidaten voor potjes-herkenning: tegenrekeningen van overboekingen die op spaar lijken, en wekelijkse patronen.
