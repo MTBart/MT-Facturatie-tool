@@ -153,8 +153,14 @@ gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.m
 (alleen `Vary: Origin`), dus de oude origin wordt niet meer gespiegeld.
 
 **Koersmeter-ochtendrun (A+A2, blok G) — Cron Trigger + `GET /geld/koers/meldingen` + `POST /geld/koers/gelezen` + `GET /geld/koers/cron`.**
-- `scheduled()` draait elke 30 minuten van 05:00 tot 08:30 UTC (`[triggers]`: `*/30 5-8 * * *`). Een run mag alleen als het in Europe/Amsterdam 07:30 of later is
-  (zomer eerste kans 05:30 UTC, winter 06:30 UTC), de dag nog niet klaar is en er minder dan 3 pogingen zijn gedaan; de triggers erna zijn de retry's.
+- **Venster (het werk begint om 07:00; de melding moet dan klaar zijn):** `scheduled()` draait elke 30 minuten van 03:00 tot 05:30 UTC (`[triggers]`: `*/30 3-5 * * *`). De code kijkt naar de
+  lokale tijd in Europe/Amsterdam (zomer- en wintertijd kloppen vanzelf):
+  - **04:00 tot 05:30 lokaal: voorverversing** (`koersVoor`): alleen de caches vullen (de volledige tijdlijn van vandaag in KV en de maandcijfers), binnen één run van 45 subrequests.
+    Geen claim, geen dagfoto, geen melding, de 3 pogingen blijven onaangeroerd. Zomer is dat één trigger (05:00), winter drie (04:00, 04:30, 05:00).
+  - **05:30 tot 07:00 lokaal: de run.** Poging 1 om 05:30, poging 2 om 06:00, poging 3 (reserve) om 06:30 (zomer 03:30/04:00/04:30 UTC, winter 04:30/05:00/05:30 UTC), als de dag nog niet klaar is
+    en er minder dan 3 pogingen zijn gedaan. Vanaf 07:00 lokaal doet geen trigger meer mee.
+  - Normale dag (de cijfers van eerdere maanden staan in KV): voorverversing 05:00 en de run om 05:30 is klaar bij poging 1 (±13 subrequests). Koude cache (bv. de eerste dag na de uitrol): de run is
+    klaar uiterlijk bij poging 2 (winter, getest) of 3 (zomer); lukt het dan nog niet, dan sluit poging 3 af met een oordeel "onbetrouwbaar", nog steeds vóór 07:00.
 - **Dagclaim (atomair):** Durable Object `MT_KOERSDAG` (class `MtKoersDag`, migratie `v4-mt-koersdag`), één instantie `koers`, per datum `{ status: bezig | klaar | mislukt,
   pogingen, token, ts, fout, kleur, gemeld }`. `claim` geeft de run aan hooguit één trigger tegelijk (een `bezig` van < 20 min wordt nooit overgenomen; een afgebroken run
   telt als poging), `afrond` mag alleen de claim-eigenaar (token). Dagfoto en melding schrijft alleen de claim-eigenaar. Zonder de binding doet de cron niets (`geen-dagclaim`).
@@ -165,8 +171,8 @@ gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.m
   afronden (dagfoto, melding, claim). KV-binding en Moneybird-`fetch` (`geldMb`) tellen mee via `env.__sub`; de lokale budgetten van tijdlijn en cijfers volgen het restant (`geldBudget`).
   Budget op = die aanvraag wordt geweigerd, het oordeel wordt "onbetrouwbaar" (nooit groen), nooit een crash.
 - **Cache vóór Moneybird:** de maandcijfers komen uit de KV-cache; alleen wat ontbreekt wordt aangehaald met het restant (één ronde, geen vervolgrondes). De volledige tijdlijn van vandaag
-  wordt na poging 1 bewaard (`geld:koers:tijdlijn:<datum>`, 6 uur) zodat de volgende poging het budget aan de cijfers besteedt. Een tijdlijn met een Moneybird-hapering wordt nooit bewaard.
-  Koude cache (alle maanden ontbreken, bv. de eerste dag na de uitrol of een nieuwe maand): ontbrekende maanden worden over de pogingen aangevuld; lukt het niet in 3 pogingen dan is het oordeel die dag onbetrouwbaar.
+  wordt door de voorverversing (of poging 1) bewaard (`geld:koers:tijdlijn:<datum>`, 6 uur) zodat de volgende run het budget aan de cijfers besteedt. Een tijdlijn met een Moneybird-hapering wordt nooit bewaard.
+  Koude cache (alle maanden ontbreken): ontbrekende maanden worden over de voorverversingen en pogingen aangevuld; lukt het niet in 3 pogingen dan is het oordeel die dag onbetrouwbaar.
 - De run roept `/geld/tijdlijn` (vers), `/geld/config` en `/geld/cijfers` intern aan als eigenaar en rekent met dezelfde `mt-geld.js`/`mt-koers.js`
   als het scherm (dynamische import; `K.invoer` → `K.oordeel` → `K.dagfotoOpslag`, `K.moetMelden`, `K.actie`): geen tweede rekenlogica.
 - KV: de dagfoto `geld:koers:dag:<datum>` (met `via:'cron'`), bij verslechtering `geld:koers:melding:<datum>` (hooguit één per dag, nooit overschreven),

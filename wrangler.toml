@@ -114,11 +114,11 @@ tag = "v4-mt-koersdag"
 new_sqlite_classes = ["MtKoersDag"]
 
 # ─── Koersmeter: ochtendrun (Cron Triggers staan in UTC) ───────────────────────
-# Elke 30 minuten van 05:00 tot 08:30 UTC. De code laat een run alleen door als het in Europe/Amsterdam 07:30 of later is
-# (zomer 05:30 UTC, winter 06:30 UTC), de dag nog niet klaar is en er minder dan 3 pogingen zijn gedaan: mislukt of
-# onvolledig (Moneybird, subrequest-budget), dan probeert de volgende trigger het opnieuw.
+# Het werk begint om 07:00: de melding moet dan klaar zijn. Elke 30 minuten van 03:00 tot 05:30 UTC. De code kijkt naar de lokale tijd in
+# Europe/Amsterdam: 04:00-05:30 vult alleen de caches (tijdlijn + maandcijfers), 05:30-07:00 is de eigenlijke run (poging 1 om 05:30, 2 om 06:00,
+# 3 om 06:30; zomer 03:30/04:00/04:30 UTC, winter 04:30/05:00/05:30 UTC), de dag nog niet klaar en minder dan 3 pogingen. Daarna doet niets meer mee.
 [triggers]
-crons = ["*/30 5-8 * * *"]
+crons = ["*/30 3-5 * * *"]
 
 [vars]
 ROLLEN_MODUS = "log"

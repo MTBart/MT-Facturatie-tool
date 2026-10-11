@@ -6,7 +6,7 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ---
 
 ## 2026-10-11 — F7 3b groep 2: tekstsinks in mt-inbox.js (mail, To Do, mappen, bijlagen)
-- Commit: `32ea4e6` | Auteur: Bart Witte
+- Commit: `e9af7bc` | Auteur: Bart Witte
 
 ## 2026-10-11 — Release v2.12.1: Koersmeter meldt 's ochtends, veiliger; backup = v2.12.0
 - Commit: `369ade0` | Auteur: Bart Witte

@@ -3709,10 +3709,13 @@ async function handleKlanten(request, env, ik, json, ctx) {
   return json({ ok: true, aantal: schoon.length, rev });
 }
 
-// ── Koersmeter A+A2: elke ochtend na 07:30 (Europe/Amsterdam) de dagfoto bewaren en bij verslechtering een melding in KV ─────────
-// Cron Triggers staan in UTC. Daarom elke 30 minuten van 05:00 tot 08:30 UTC (wrangler.toml [triggers]); de code laat een run alleen door als het
-// in Amsterdam 07:30 of later is (zomer- en wintertijd kloppen dan vanzelf), de dag nog niet klaar is en er minder dan KOERS_POGINGEN pogingen zijn gedaan.
-// Eerste trigger na 07:30 doet de run; mislukt of onvolledig (Moneybird, subrequest-budget), dan probeert de volgende trigger het nog een keer.
+// ── Koersmeter A+A2: elke ochtend vóór 07:00 (Europe/Amsterdam) de dagfoto bewaren en bij verslechtering een melding in KV ─────────
+// Het werk begint om 07:00: de melding moet dan klaar zijn. Cron Triggers staan in UTC. Daarom elke 30 minuten van 03:00 tot 05:30 UTC
+// (wrangler.toml [triggers]); de code kijkt naar de lokale tijd in Europe/Amsterdam (zomer- en wintertijd kloppen dan vanzelf):
+//   - 04:00 tot 05:30 lokaal: alleen caches vullen (koersVoor): de volledige tijdlijn van vandaag en de maandcijfers in KV, binnen één run van 45; geen claim,
+//     geen dagfoto, geen melding. Zomer is dat één trigger (05:00), winter drie (04:00, 04:30, 05:00).
+//   - 05:30 tot 07:00 lokaal: de eigenlijke run (poging 1 om 05:30, 2 om 06:00, 3 om 06:30), als de dag nog niet klaar is en er minder dan KOERS_POGINGEN
+//     pogingen zijn gedaan. Mislukt of onvolledig (Moneybird, subrequest-budget), dan probeert de volgende trigger het nog een keer. Vanaf 07:00 doet niets meer mee.
 // De berekening is dezelfde als in het scherm: de routes van handleGeld worden intern als eigenaar aangeroepen en mt-geld.js/mt-koers.js
 // (K.invoer, K.oordeel, K.moetMelden, K.actie) doen het rekenwerk.
 // Eén run per dag, atomair: de dagclaim staat in de Durable Object MT_KOERSDAG (class MtKoersDag; bezig / klaar / mislukt, pogingen, fout).
@@ -3720,14 +3723,15 @@ async function handleKlanten(request, env, ik, json, ctx) {
 // KV, Moneybird en Durable Object tellen allemaal mee): één gedeeld budget (koersBudget), waarvan KOERS_SUB_RESERVE alleen voor het afronden
 // (dagfoto, melding, claim afsluiten) is. Is het budget op, dan is het oordeel "onbetrouwbaar", nooit groen, en nooit een crash.
 // KV: geld:koers:dag:<datum> (de dagfoto, zoals het scherm hem ook bewaart), geld:koers:melding:<datum> (hooguit één per dag),
-// geld:koers:gelezen:<oid> (per gebruiker tot en met welke datum afgevinkt), geld:koers:tijdlijn:<datum> (volledige tijdlijn van vandaag, 6 uur, voor de volgende poging).
+// geld:koers:gelezen:<oid> (per gebruiker tot en met welke datum afgevinkt), geld:koers:tijdlijn:<datum> (volledige tijdlijn van vandaag, 6 uur, voor de volgende run).
 const KOERS_MELDING = 'geld:koers:melding:', KOERS_GELEZEN = 'geld:koers:gelezen:', KOERS_TIJDLIJN = 'geld:koers:tijdlijn:';
 const KOERS_POGINGEN = 3, KOERS_SUB_MAX = 45, KOERS_SUB_RESERVE = 5, KOERS_BEZIG_MS = 20 * 60 * 1000;   // 20 min > de maximale looptijd van een cron-run: een levende run wordt nooit overgenomen
 function amsterdamTijd(ms) {
   const d = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms)), g = t => Number((d.find(x => x.type === t) || {}).value);
   return { uur: g('hour'), min: g('minute') };
 }
-const koersMoment = ms => { const a = amsterdamTijd(ms); return a.uur > 7 || (a.uur === 7 && a.min >= 30); };   // vanaf 07:30 (de triggers houden het venster tot 08:30 UTC)
+// Fase op lokale tijd: 'run' van 05:30 tot 07:00, 'voor' (caches vullen) van 04:00 tot 05:30, anders null.
+const koersFase = ms => { const a = amsterdamTijd(ms), m = a.uur * 60 + a.min; return m >= 330 && m < 420 ? 'run' : m >= 240 && m < 330 ? 'voor' : null; };
 // Gedeeld subrequest-budget van één run. neem() telt er één bij; reserve = alleen voor het afronden. Geweigerde aanvragen worden onthouden (geweigerd).
 function koersBudget(max, reserve) {
   const s = { n: 0, max, reserve, geweigerd: 0, soort: {},
@@ -3779,7 +3783,7 @@ export class MtKoersDag {
 async function geldModules() { await import('./mt-geld.js'); await import('./mt-koers.js'); return { G: globalThis.MTGeld, K: globalThis.MTKoers }; }
 // Een /geld-route intern aanroepen als eigenaar (zelfde code als het scherm, geen tweede berekening).
 async function geldIntern(env, pad) {
-  const ik = { rol: 'eigenaar', oid: 'cron-koersmeter', rec: { naam: 'Koersmeter 07:30' }, email: '' };
+  const ik = { rol: 'eigenaar', oid: 'cron-koersmeter', rec: { naam: 'Koersmeter' }, email: '' };
   const r = await handleGeld(pad.split('?')[0], new Request('https://intern.invalid' + pad), env, ik, (b, st = 200) => new Response(JSON.stringify(b), { status: st, headers: { 'Content-Type': 'application/json' } }));
   let j = null; try { j = await r.json(); } catch {}
   return { status: r.status, j };
@@ -3788,10 +3792,40 @@ async function geldIntern(env, pad) {
 // prognose, instellingen) verdwijnt niet door wachten en telt dus niet mee. De K.invoer-regels maken er in beide gevallen "onbetrouwbaar" van.
 const KOERS_TIJDELIJK = new Set(['balans', 'bankmutaties', 'grootboeken', 'btw', 'algemeen']);
 const koersTijdelijk = w => (Array.isArray(w) ? w : []).some(x => x && x.onvolledig && (x.pad || KOERS_TIJDELIJK.has(x.bron)));
+// De volledige tijdlijn van vandaag: uit KV als een eerdere run/voorverversing hem bewaarde, anders berekenen en (als hij volledig is) bewaren.
+async function koersTijdlijn(envT, sub, vandaag) {
+  const tl = await kvJson(envT, KOERS_TIJDLIJN + vandaag);
+  if (tl && tl.vandaag) return { status: 200, j: tl, uitCache: true };
+  const voor = sub.geweigerd;
+  const t = await geldIntern(envT, `/geld/tijdlijn?van=${geldDag(vandaag, -35)}&tot=${geldDag(vandaag, 364)}&historie=1&vers=1`);
+  const vol = t.status === 200 && t.j && t.j.vandaag && sub.geweigerd === voor && !koersTijdelijk(t.j.waarschuwingen);   // een tijdlijn met een Moneybird-hapering nooit bewaren
+  if (vol) { try { await kvZet(envT, KOERS_TIJDLIJN + vandaag, t.j, { expirationTtl: 6 * 3600 }); } catch {} }
+  return t;
+}
+const koersCijfersPad = vandaag => `/geld/cijfers?per=maand&van=${Number(vandaag.slice(0, 4)) - 1}-01&tot=${vandaag.slice(0, 7)}`;
+// Voorverversing (04:00-05:30 lokaal): de tijdlijn en de maandcijfers in KV zetten, zodat de run van 05:30 alleen nog hoeft te rekenen.
+// Geen dagclaim, geen dagfoto, geen melding; een volledig budget van 45 (er is geen afrondfase). Fouten worden gelogd, nooit gegooid.
+async function koersVoor(env) {
+  const sub = koersBudget(KOERS_SUB_MAX, 0), vandaag = geldVandaag();
+  const envT = Object.assign({}, env, { MT_ROLLEN: telKv(env.MT_ROLLEN, sub, false), __sub: sub });
+  try {
+    const t = await koersTijdlijn(envT, sub, vandaag);   // eerst de tijdlijn: alles-of-niets (31+ aanvragen); de cijfers vullen zich ook in stukken aan
+    const x = await geldIntern(envT, koersCijfersPad(vandaag));
+    const uit = { status: 'voorverwarmd', tijdlijn: !!(t.status === 200 && t.j && t.j.vandaag), cijfersCompleet: !!(x.status === 200 && x.j && x.j.compleet), subrequests: sub.n, soorten: sub.soort };
+    koersLog(uit);
+    return uit;
+  } catch (e) {
+    const fout = String((e && e.message) || e).slice(0, 200);
+    koersLog({ status: 'voor-fout', fout, subrequests: sub.n });
+    return { status: 'voor-fout', fout, subrequests: sub.n };
+  }
+}
 function koersLog(o) { try { console.log(JSON.stringify(Object.assign({ koerscron: true }, o))); } catch {} }
 async function koersCron(env, tijd) {
-  if (!koersMoment(tijd)) return { status: 'niet-nu' };
+  const fase = koersFase(tijd);
+  if (!fase) return { status: 'niet-nu' };
   if (!env.MT_ROLLEN) return { status: 'geen-opslag' };
+  if (fase === 'voor') return await koersVoor(env);
   const ns = env.MT_KOERSDAG;
   if (!ns || !ns.idFromName) { koersLog({ status: 'geen-dagclaim' }); return { status: 'geen-dagclaim' }; }   // zonder atomaire claim geen run (liever geen dagfoto dan twee)
   const sub = koersBudget(KOERS_SUB_MAX, KOERS_SUB_RESERVE), vandaag = geldVandaag(), token = randHex(8);
@@ -3809,28 +3843,20 @@ async function koersCron(env, tijd) {
   const envR = Object.assign({}, env, { MT_ROLLEN: telKv(env.MT_ROLLEN, sub, true) });             // afronden: mag het gereserveerde deel gebruiken
   try {
     const { G, K } = await geldModules();
-    const jaar = Number(vandaag.slice(0, 4));
     // De dagfoto van "gisteren": de laatste van de zeven dagen vóór vandaag (zoals het scherm); meestal is de eerste al raak.
     let gisteren = null;
     for (let i = 1; i <= 7 && !gisteren; i++) gisteren = await kvJson(envT, GELD_DAGFOTO + geldDag(vandaag, -i));
     let r = null, fout = null;
-    // De tijdlijn is het duurste deel (tientallen Moneybird-/KV-aanvragen) en past met de cijfers niet in één run van 45. Daarom bewaart een volledige
-    // tijdlijn zich voor de rest van de ochtend (KOERS_TIJDLIJN): de volgende poging leest hem uit KV en besteedt het budget aan de cijfers.
-    let t = null, tl = await kvJson(envT, KOERS_TIJDLIJN + vandaag);
-    if (tl && tl.vandaag) t = { status: 200, j: tl };
-    else {
-      const voor = sub.geweigerd;
-      t = await geldIntern(envT, `/geld/tijdlijn?van=${geldDag(vandaag, -35)}&tot=${geldDag(vandaag, 364)}&historie=1&vers=1`);
-      const vol = t.status === 200 && t.j && t.j.vandaag && sub.geweigerd === voor && !koersTijdelijk(t.j.waarschuwingen);   // een tijdlijn met een Moneybird-hapering nooit bewaren
-      if (vol) { try { await kvZet(envT, KOERS_TIJDLIJN + vandaag, t.j, { expirationTtl: 6 * 3600 }); } catch {} }
-    }
+    // De tijdlijn is het duurste deel (tientallen Moneybird-/KV-aanvragen) en past met de cijfers niet in één run van 45. Daarom staat hij na de
+    // voorverversing (of poging 1) in KV (KOERS_TIJDLIJN): een volgende run leest hem daar en besteedt het budget aan de cijfers.
+    const t = await koersTijdlijn(envT, sub, vandaag);
     const c = await geldIntern(envT, '/geld/config');
     if (t.status !== 200 || !t.j || !t.j.vandaag) bronFout = `geldtijdlijn niet te lezen (${(t.j && t.j.error) || 'HTTP ' + t.status})`;
     else if (c.status !== 200 || !c.j) bronFout = `instellingen niet te lezen (${(c.j && c.j.error) || 'HTTP ' + c.status})`;
     else {
       // Cijfers: uit de KV-cache van de maandrecords; wat ontbreekt haalt de route aan met het restant van het budget (één ronde, geen vervolgrondes).
       // Blijft er iets over, dan is het oordeel "onbetrouwbaar" en vult de volgende poging (30 min later) verder aan: gehaalde maanden staan dan in de cache.
-      const x = await geldIntern(envT, `/geld/cijfers?per=maand&van=${jaar - 1}-01&tot=${vandaag.slice(0, 7)}`);
+      const x = await geldIntern(envT, koersCijfersPad(vandaag));
       if (x.status !== 200 || !x.j || x.j.error) fout = (x.j && x.j.error) || 'geen antwoord'; else r = x.j;
       inv = K.invoer(t.j, c.j.config, { r, laden: false, fout }, G); o = K.oordeel(inv); nu = K.dagfotoOpslag(o);
       if (sub.geweigerd > 0 && nu.kleur !== 'onbetrouwbaar') {   // een geweigerde aanvraag kan als "leeg" zijn gelezen: dan nooit een groen oordeel

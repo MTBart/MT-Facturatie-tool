@@ -2,10 +2,10 @@
   {
     "versie": "2.12.1",
     "datum": "2026-10-11",
-    "titel": "Koersmeter meldt het 's ochtends als het slechter gaat",
+    "titel": "Koersmeter meldt het vóór 07:00 als het slechter gaat",
     "voor": "geld",
     "punten": [
-      "De Koersmeter kijkt elke ochtend vanzelf, vanaf half acht, of het oordeel slechter is dan gisteren. Is dat zo, dan staat er bovenaan Geld een melding met de reden en de ene actie voor vandaag. Op de telefoon staat er een stipje op de €-knop. Lukt het ophalen van de cijfers niet in één keer, dan probeert hij het tot drie keer opnieuw; blijven er gegevens ontbreken, dan zegt hij eerlijk dat het oordeel niet betrouwbaar is in plaats van groen te tonen."
+      "De Koersmeter kijkt elke ochtend vanzelf, vanaf half zes, of het oordeel slechter is dan gisteren, zodat de melding klaar staat voordat we om 07:00 beginnen. Is het slechter, dan staat er bovenaan Geld een melding met de reden en de ene actie voor vandaag. Op de telefoon staat er een stipje op de €-knop. Lukt het ophalen van de cijfers niet in één keer, dan probeert hij het tot drie keer opnieuw (uiterlijk om half zeven); blijven er gegevens ontbreken, dan zegt hij eerlijk dat het oordeel niet betrouwbaar is in plaats van groen te tonen."
     ]
   },
   {
