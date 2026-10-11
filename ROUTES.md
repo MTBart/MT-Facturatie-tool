@@ -84,6 +84,26 @@ UI-laag verschilt. Omgezet tot nu toe: mail-koppelen in de offerte-calc + de
 verwijder-/ontkoppel-confirms van projecten/taken/bijlagen. De rest blijft
 voorlopig `prompt`/`confirm` (S6 is doorlopend, per flow).
 
+### Zoekbalk (`mt-zoekbalk.js` + `mt-zoek.js`, sinds 11-10)
+
+Het altijd zichtbare zoekveld bovenin cockpit (`#zb-veld` in de topbalk) en app (balk onder de header).
+Twee bestanden, in deze volgorde geladen (na `mt-contacten.js`): `mt-zoek.js` vóór `mt-zoekbalk.js`.
+
+| Bestand | Wat |
+|---|---|
+| `mt-zoek.js` | **Zoeklogica, DOM-vrij** (`window.MTZoek`). `bronVan(data, h)` zet projecten, klantenregistry, taken en contacten om naar bron-items; `index(items)` normaliseert één keer; `zoek(index, q, opts)` geeft `{groepen:[{soort,label,items,totaal,meer}]}`. Ook bruikbaar vanuit het Outlook-paneel: dat geeft zijn eigen gegevens/hulpfuncties mee. |
+| `mt-zoekbalk.js` | **UI-component** (`window.MTZoekbalk.init({veld, zoek, open, vraag?, vraagMag?, isVraag?})`): ARIA-combobox + listbox, pijltjes/Enter/Esc/Tab, delegatie (geen inline handlers), alles via `esc()`. |
+
+Rangorde (vast, per soort): 0 exacte code/alias · 1 begint met · 2 klant (zoekterm zit in de klantnaam/organisatie) ·
+3 recente activiteit (≤ 30 dagen) · 4 overige; binnen een rang eerst woordbegin-treffers, dan meest recent, dan op naam.
+Treffers op code (project-, werk-, offertecode, oude codes; ook zonder streepjes), naam, alias, klantnaam en extra zoektekst
+(locatie, functie, telefoon). Soorten en rechten: Projecten/Klanten/Locaties/Contacten = recht `projecten`, Taken = `taken`
+(`MTZoek.magUitRollen()`); "Vraag Claude" onderaan = recht `ai` en alleen in de cockpit (roept `tbChatSend(q)` aan).
+Een treffer opent via `mtRoute.go` (project `#projecten/<CODE>`, klant `#klant/<KL>[/<LOC>]`, taak = project-sectie
+planning) of `MTContactenUI.detail`. De pagina bouwt de index hooguit elke 3 s opnieuw (`zbIndex`/`zbIndexM`).
+De lijst-zoekvelden (`zoekProjecten`, `zoekKlanten`, `zoekInLijst`, `zoekGeschiedenis`) zijn ongewijzigd.
+Later (brok 3/4): SharePoint, Moneybird en mail komen als extra groepen na 3 letters + debounce.
+
 ### Event-delegatie voor NIEUWE code (S7-conventie, sinds 3-7)
 
 Nieuwe interactieve elementen krijgen **geen inline `onclick`** meer, maar een

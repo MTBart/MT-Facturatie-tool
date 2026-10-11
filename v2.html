@@ -24,6 +24,7 @@
 <script src="mt-toggl.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-11a"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
+<script src="mt-zoek.js?v=2026-10-11a"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11a"></script>
 <script src="mt-inbox.js?v=2026-10-11c"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
@@ -11599,26 +11600,19 @@ HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of map
 // ═══════════════════════════════════════════════════════════════════════════
 // ZOEKBALK (brok 1: kader) — het altijd zichtbare veld bovenin; component = mt-zoekbalk.js.
 // Treffers openen via de router (mtRoute.go) of de bestaande open-functies; "Vraag Claude" = tbChatSend.
-// De zoekbron hieronder is een eenvoudige tussenstap; brok 2 vervangt hem door mt-zoek.js.
+// Zoekbron (brok 2) = mt-zoek.js: één index over projecten, klanten, locaties, taken en contacten uit de lokale
+// stores, met vaste rangorde; alleen de soorten waar de rol recht op heeft.
 // ═══════════════════════════════════════════════════════════════════════════
-function zbMag(soort){ return !window.MTRol||MTRol.mag(soort==='taak'?'taken':'projecten'); }
-function zbBronSimpel(q){
-  const t=String(q||'').toLowerCase().trim(); if(!t) return {groepen:[]};
-  const groepen=[];
-  const groep=(soort,label,alle)=>{ if(alle.length&&zbMag(soort)) groepen.push({soort,label,items:alle.slice(0,6),totaal:alle.length,meer:Math.max(0,alle.length-6)}); };
-  groep('project','Projecten',PROJECT_CODES.filter(p=>projZoekTekst(p).includes(t)).map(p=>({soort:'project',id:p.code,titel:projNaamVol(p),sub:projKlantNaam(p),tag:projLabelCode(p),data:{code:p.code}})));
-  groep('klant','Klanten',KLANTEN.filter(k=>[k.naam].concat(k.aliassen||[]).join(' ').toLowerCase().includes(t)).map(k=>({soort:'klant',id:k.code,titel:k.naam,sub:'',tag:'',data:{klant:k.code}})));
-  const loc=new Map();
-  PROJECT_CODES.forEach(p=>{ const lc=String(p.loc||'').toUpperCase(), kl=String(p.klant||'').toUpperCase(), ln=projLocLabel(p);
-    if(kl&&lc&&ln&&ln.toLowerCase().includes(t)&&!loc.has(kl+'/'+lc)) loc.set(kl+'/'+lc,{soort:'locatie',id:kl+'/'+lc,titel:ln,sub:projKlantNaam(p),tag:'',data:{klant:kl,loc:lc}}); });
-  groep('locatie','Locaties',[...loc.values()]);
-  const taken=[]; const pt=projTakenAll();
-  Object.keys(pt).forEach(code=>{ (Array.isArray(pt[code])?pt[code]:[]).forEach(x=>{ if(x&&x.id&&String(x.naam||'').toLowerCase().includes(t)){ const p=projVind(code); taken.push({soort:'taak',id:code+'/'+x.id,titel:x.naam,sub:p?projNaamVol(p):'',tag:'',data:{code,id:x.id}}); } }); });
-  groep('taak','Taken',taken);
-  let cs=[]; try{ cs=window.MTContacten?MTContacten.zoek(q,{max:30}):[]; }catch(e){}
-  groep('contact','Contacten',cs.map(c=>({soort:'contact',id:c.id,titel:MTContacten.weergave(c),sub:((c.organisatie&&c.organisatie.naam)||''),tag:'',data:{id:c.id}})));
-  return {groepen};
+let _zbIdx=null, _zbIdxT=0;
+// De index wordt hooguit elke 3 s opnieuw opgebouwd (nieuwe projecten/taken/contacten zijn dus direct vindbaar).
+function zbIndex(){
+  const nu=Date.now(); if(_zbIdx&&nu-_zbIdxT<3000) return _zbIdx;
+  let contacten=[]; try{ contacten=window.MTContacten?MTContacten.actieven():[]; }catch(e){}
+  _zbIdx=MTZoek.index(MTZoek.bronVan({projecten:PROJECT_CODES,klanten:KLANTEN,taken:projTakenAll(),contacten},
+    {projectNaam:projNaamVol,klantNaam:projKlantNaam,locNaam:projLocLabel,projectLabel:projLabelCode,contactNaam:MTContacten.weergave}));
+  _zbIdxT=nu; return _zbIdx;
 }
+function zbZoek(q){ return MTZoek.zoek(zbIndex(),q,{mag:MTZoek.magUitRollen()}); }
 function zoekbalkOpen(it){
   const d=(it&&it.data)||{};
   if(it.soort==='project') mtRoute.go({tab:'projecten',code:d.code});
@@ -11629,9 +11623,9 @@ function zoekbalkOpen(it){
 }
 function zoekbalkInit(){
   const veld=document.getElementById('zb-veld'); if(!veld||!window.MTZoekbalk||veld._zb) return;
-  veld._zb=MTZoekbalk.init({veld,zoek:zbBronSimpel,open:zoekbalkOpen,
+  veld._zb=MTZoekbalk.init({veld,zoek:zbZoek,open:zoekbalkOpen,
     vraag:q=>tbChatSend(q),vraagMag:()=>!window.MTRol||MTRol.mag('ai'),
-    isVraag:q=>/\?/.test(q)||q.trim().split(/\s+/).length>=4});
+    isVraag:MTZoek.isVraag});
 }
 zoekbalkInit();
 </script>
