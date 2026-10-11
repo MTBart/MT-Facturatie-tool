@@ -50,8 +50,27 @@
   {
    "fn": "rijHtml",
    "expr": "chip",
-   "fp": "5852f9eb40",
+   "fp": "92c9b42df7",
    "reden": "fragment: variabele die uit HTML-templates is opgebouwd"
+  },
+  {
+   "fn": "rijHtml",
+   "expr": "nt ? '' : inn ? 'mtg-in' : 'mtg-uit'",
+   "fp": "92c9b42df7",
+   "aantal": 2,
+   "reden": "keuze uit vaste class-namen (geen data)"
+  },
+  {
+   "fn": "rijHtml",
+   "expr": "nt ? '○' : inn ? '▲' : '▼'",
+   "fp": "92c9b42df7",
+   "reden": "keuze uit vaste tekens (geen data)"
+  },
+  {
+   "fn": "eventDetail",
+   "expr": "e.telt_niet ? '' : e.delta > 0 ? 'mtg-in' : 'mtg-uit'",
+   "fp": "951b7d2c01",
+   "reden": "keuze uit vaste class-namen (geen data)"
   },
   {
    "fn": "potRij",

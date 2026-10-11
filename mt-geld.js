@@ -927,8 +927,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     return h;
   }
   function rijHtml(e) {
-    const inn = e.delta > 0, chip = e.achterstallig ? '<span class="mtg-chip achter">achterstallig</span>' : e.zekerheid === 'prognose' ? '<span class="mtg-chip prog">prognose</span>' : e.intern ? '<span class="mtg-chip">intern</span>' : `<span class="mtg-chip">${esc(ZEKER[e.zekerheid] || e.zekerheid || '')}</span>`;
-    return `<div class="mtg-rij" data-ev="${esc(e.id)}"${e.scenario ? ' style="background:#eef3fb"' : ''}><span class="p ${inn ? 'mtg-in' : 'mtg-uit'}">${inn ? '▲' : '▼'}</span><span class="n">${esc(e.tegenpartij || BRON[e.bron] || e.bron)}${e.termijn ? ` · termijn ${esc(e.termijn)}` : ''}</span>${chip}<span class="b ${inn ? 'mtg-in' : 'mtg-uit'}">${esc(eur(e.delta != null ? e.delta : e.bedrag))}</span></div>`;
+    const nt = e.telt_niet, inn = !nt && e.delta > 0, chip = nt ? `<span class="mtg-chip achter">${esc(nt.soort === 'tegoed' ? 'tegoed — telt niet mee' : 'zonder datum/nummer — telt niet mee')}</span>` : e.achterstallig ? '<span class="mtg-chip achter">achterstallig</span>' : e.zekerheid === 'prognose' ? '<span class="mtg-chip prog">prognose</span>' : e.intern ? '<span class="mtg-chip">intern</span>' : `<span class="mtg-chip">${esc(ZEKER[e.zekerheid] || e.zekerheid || '')}</span>`;
+    return `<div class="mtg-rij" data-ev="${esc(e.id)}"${e.scenario ? ' style="background:#eef3fb"' : ''}><span class="p ${nt ? '' : inn ? 'mtg-in' : 'mtg-uit'}">${nt ? '○' : inn ? '▲' : '▼'}</span><span class="n">${esc(e.tegenpartij || BRON[e.bron] || e.bron)}${e.termijn ? ` · termijn ${esc(e.termijn)}` : ''}</span>${chip}<span class="b ${nt ? '' : inn ? 'mtg-in' : 'mtg-uit'}">${esc(eur(nt ? Math.abs(e.bedrag) : e.delta != null ? e.delta : e.bedrag))}</span></div>`;
   }
   // Potjes: lopende rekening + elk potje (ook virtueel), met doel, balk en tempo.
   function potjesHtml() {
@@ -1544,16 +1544,20 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const v = e.verwacht, link0 = e.document_url || e.bron_url, link = /^https:\/\/moneybird\.com\//.test(String(link0 || '')) ? link0 : null;   // alleen Moneybird-links
     const factuur = (e.bron === 'inkoop' || e.bron === 'verkoop') && e.document_id;
     blad(`<h3>${esc(e.tegenpartij || BRON[e.bron] || '')}</h3>
-      <dl class="mtg-dl"><dt>Bedrag</dt><dd class="${e.delta > 0 ? 'mtg-in' : 'mtg-uit'}"><b>${esc(eur(e.delta, true))}</b>${e.marge ? ` <span class="mtg-chip">${esc(eur(e.marge.min))} tot ${esc(eur(e.marge.max))}</span>` : ''}</dd>
+      <dl class="mtg-dl"><dt>Bedrag</dt><dd class="${e.telt_niet ? '' : e.delta > 0 ? 'mtg-in' : 'mtg-uit'}"><b>${esc(eur(e.telt_niet ? Math.abs(e.bedrag) : e.delta, true))}</b>${e.telt_niet ? ' <span class="mtg-chip achter">telt niet mee in de lijn</span>' : ''}${e.marge ? ` <span class="mtg-chip">${esc(eur(e.marge.min))} tot ${esc(eur(e.marge.max))}</span>` : ''}</dd>
       <dt>Datum</dt><dd>${esc(datumTekst(e.datum, true))}${e.vervaldag && e.vervaldag !== e.datum ? ` <span class="mtg-chip">vervaldag ${esc(datumTekst(e.vervaldag))}</span>` : ''}</dd>
       ${e.datum_vroeg ? `<dt>Marge</dt><dd>${esc(datumTekst(e.datum_vroeg))} – ${esc(datumTekst(e.datum_laat))}</dd>` : ''}
       <dt>Bron</dt><dd>${esc(BRON[e.bron] || e.bron)}${e.referentie ? ' ' + esc(e.referentie) : ''}</dd>
       <dt>Zekerheid</dt><dd>${esc(ZEKER[e.zekerheid] || e.zekerheid)}${e.achterstallig ? ' · <span class="mtg-uit">achterstallig</span>' : ''}${e.intern ? ' · intern (potje ' + esc(e.pot) + ')' : ''}</dd></dl>
       <div class="mtg-uitleg"><b>Waarom deze datum?</b> ${esc(e.uitleg || '')}${v && v.n ? ` (gebaseerd op ${v.n} betaalde facturen)` : ''}</div>
       ${link ? `<p><a href="${esc(link)}" target="_blank" rel="noopener">Openen in Moneybird ↗</a></p>` : ''}
-      ${st.mag && factuur ? `<div class="mtg-knoppen"><button class="mtg-knop" data-ov="datum">Andere datum…</button><button class="mtg-knop" data-ov="afbetaling">Afbetaling…</button>${e.override ? '<button class="mtg-knop" data-ov="wissen">Eigen afspraak wissen</button>' : ''}</div>` : ''}
+      ${e.telt_niet && e.telt_niet.soort === 'concept' ? '<div class="mtg-melding">Controleer deze factuur in Moneybird: zonder factuurdatum of -nummer is hij nooit verstuurd (of staat een inkoopfactuur per ongeluk bij de verkoop). Pas na het versturen telt hij mee.</div>' : ''}
+      ${(e.tegoed && st.mag) ? `<label class="mtg-veld" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" data-tegoed="1"${e.tegoed_telt ? ' checked' : ''} style="width:22px;height:22px"><span>Als ontvangst meetellen (het tegoed wordt echt uitbetaald)</span></label>` : ''}
+      ${st.mag && factuur && !e.tegoed ? `<div class="mtg-knoppen"><button class="mtg-knop" data-ov="datum">Andere datum…</button><button class="mtg-knop" data-ov="afbetaling">Afbetaling…</button>${e.override ? '<button class="mtg-knop" data-ov="wissen">Eigen afspraak wissen</button>' : ''}</div>` : ''}
       ${st.mag && e.patroon_id ? `<div class="mtg-knoppen"><button class="mtg-knop" data-pt="uit">Dit patroon niet meer meenemen</button></div>` : ''}`, o => {
       o.addEventListener('click', async ev => {
+        const tg = ev.target.closest('[data-tegoed]');
+        if (tg) { const aan = tg.checked; o.remove(); return opslaan(() => stuur('/geld/override', aan ? { document_id: e.document_id, soort: 'inkoop', type: 'tegoed', vorige_ts: e.override ? e.override.ts : null } : { document_id: e.document_id, soort: 'inkoop', type: 'wissen', vorige_ts: e.override ? e.override.ts : null }), aan ? 'Het tegoed telt nu als ontvangst mee' : 'Het tegoed telt niet meer als ontvangst mee'); }
         const k = ev.target.closest('[data-ov],[data-pt]'); if (!k) return;
         if (k.dataset.pt) { o.remove(); return patroonZet(e.patroon_id, false); }
         o.remove(); overrideBlad(e, k.dataset.ov);

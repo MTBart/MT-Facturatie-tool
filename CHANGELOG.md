@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — P3b: generator uit, offertenummer overnemen bij versturen, meerwerk-offertes, mapnaam "Volledige naam [code]" voor nieuwe projecten
+- Commit: `3bcf037` | Auteur: Bart Witte
+
 ## 2026-10-11 — G7 Codex 94e4ced: btw-tekst verankerd in de omschrijving, tegenpartij moet Belastingdienst zijn
 - Commit: `ed6b8be` | Auteur: Bart Witte
 

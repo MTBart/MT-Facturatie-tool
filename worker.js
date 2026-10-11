@@ -1812,6 +1812,41 @@ function geldBankEvent(m, potten) {
 }
 // Open factuur → event op de vervaldag (betaaldag-logica volgt in G2). Achterstallig blijft staan; zonder
 // vervaldag geen gok: zekerheid "invullen".
+// Een "verkoopfactuur" zonder factuurdatum of factuurnummer is een concept dat nooit verstuurd is (of een inkoopfactuur die per ongeluk als
+// verkoop is aangemaakt): daar komt geen geld voor binnen. Telt dus niet als verwachte ontvangst; wel zichtbaar, met een waarschuwing en de link.
+const geldVerkoopConcept = d => d.state === 'draft' || !String(d.invoice_id || '').trim() || !geldIsDatum(d.invoice_date);
+const geldEurTekst = n => String(geldRond(n).toFixed(2)).replace('.', ',');
+// Inkoop-creditnota's (negatieve inkoopfactuur) worden in de praktijk VERREKEND met de volgende facturen van DEZELFDE leverancier: er komt dan geen
+// geld binnen, de uitgaven worden lager. Per leverancier (contact_id) gaat de creditnota eerst van de vroegste vervaldag af. Wat overblijft (geen open
+// facturen, of minder dan het tegoed) is "tegoed bij leverancier": telt standaard NIET als ontvangst (de eigenaar kan dat per creditnota aanzetten).
+// Alleen inkoopfacturen van hetzelfde contact worden verrekend, nooit verkoopfacturen. Muteert de events; geeft de verrekeningen terug.
+function geldCreditVerrekening(paren) {
+  const per = new Map(), verrekend = [];
+  for (const [, e] of paren) { if (!e.contact_id) continue; if (!per.has(e.contact_id)) per.set(e.contact_id, []); per.get(e.contact_id).push(e); }
+  for (const lijst of per.values()) {
+    const credits = lijst.filter(e => e.bedrag < 0).sort((a, b) => String(a.datum || a.factuurdatum || '9999').localeCompare(String(b.datum || b.factuurdatum || '9999')));
+    const open = lijst.filter(e => e.bedrag > 0).sort((a, b) => String(a.datum || '9999').localeCompare(String(b.datum || '9999')) || String(a.id).localeCompare(String(b.id)));
+    for (const c of credits) {
+      let rest = geldRond(-c.bedrag); const met = [];
+      for (const f of open) {
+        if (rest <= 0.004) break; if (f.bedrag <= 0.004) continue;
+        const neem = geldRond(Math.min(rest, f.bedrag)), nr = c.referentie || c.document_id;
+        f.bedrag = geldRond(f.bedrag - neem); rest = geldRond(rest - neem);
+        f.verrekend = (f.verrekend || []).concat({ credit: String(c.document_id), bedrag: neem });
+        f.verrekend_tekst = (f.verrekend_tekst || '') + ` Verrekend met creditnota ${nr} (−€ ${geldEurTekst(neem)}).`;
+        met.push({ document_id: String(f.document_id), bedrag: neem });
+      }
+      const verr = geldRond(-c.bedrag - rest);
+      if (verr > 0.004) verrekend.push({ credit_id: String(c.document_id), tegenpartij: c.tegenpartij, bedrag: verr, met });
+      if (rest <= 0.004) { c.bedrag = 0; c.verrekend_volledig = true; }
+      else {
+        c.bedrag = -rest; c.tegoed = true;
+        c.uitleg = (verr > 0.004 ? `Creditnota van de leverancier: € ${geldEurTekst(verr)} is verrekend met open facturen, het restant van € ${geldEurTekst(rest)}` : 'Creditnota van de leverancier zonder open facturen om mee te verrekenen') + ' is tegoed bij de leverancier: er komt geen geld binnen, dus het telt niet als ontvangst.';
+      }
+    }
+  }
+  return verrekend;
+}
 function geldFactuurEvent(soort, d, vandaag, w) {
   const verkoop = soort === 'verkoop';
   if (d.total_price_incl_tax_base == null && d.currency && d.currency !== 'EUR') w.push({ onvolledig: true, bron: soort + 'facturen', fout: 'factuur in ' + d.currency + ' zonder bedrag in euro — bedrag onzeker', document_id: d.id });
@@ -1826,10 +1861,16 @@ function geldFactuurEvent(soort, d, vandaag, w) {
     datum: due, datumtype: due ? 'vervaldag' : 'onbekend', zekerheid: due ? 'vastgelegd' : 'invullen',
     rekening: 'lopend', tegenpartij: c.company_name || [c.firstname, c.lastname].filter(Boolean).join(' ') || '', iban: String(c.bank_account || '').replace(/\s+/g, '').toUpperCase() || undefined,
     document_id: d.id, bron_url: geldUrl(verkoop ? 'sales_invoices' : 'documents', d.id), bron_url_zeker: true,
-    factuurdatum: (verkoop ? d.invoice_date : d.date) || null, referentie: d.reference || d.invoice_id || '', status: d.state,
+    factuurdatum: (verkoop ? d.invoice_date : d.date) || null, referentie: d.reference || d.invoice_id || '', factuurnummer: verkoop ? String(d.invoice_id || '') : undefined, status: d.state,
     uitleg: due ? (verkoop ? 'Open verkoopfactuur op de vervaldag.' : 'Open inkoopfactuur op de vervaldag.') : 'Geen vervaldag in Moneybird — datum invullen.',
   };
   if (open < 0) ev.creditnota = true;
+  const cid = d.contact_id != null ? String(d.contact_id) : (c.id != null ? String(c.id) : ''); if (cid) ev.contact_id = cid;
+  if (verkoop && geldVerkoopConcept(d)) {
+    ev.telt_niet = { soort: 'concept', reden: 'Verkoopfactuur zonder factuurdatum of factuurnummer (concept, niet verstuurd): telt niet als verwachte ontvangst — controleer in Moneybird.' };
+    ev.uitleg = ev.telt_niet.reden;
+    w.push({ bron: 'verkoopfacturen', fout: 'verkoopfactuur zonder datum/nummer: controleer in Moneybird' + (ev.tegenpartij ? ' (' + ev.tegenpartij + ')' : ''), document_id: d.id, url: ev.bron_url });
+  }
   // Al (deels) betaald via een andere rekening dan de betaalrekening (kas, privé): die betaling staat niet bij de bankmutaties.
   if ((d.payments || []).some(p => p.financial_account_id && String(p.financial_account_id) !== GELD.bank.account)) ev.betaald_buiten_bank = true;
   if (due && due < vandaag) { ev.achterstallig = true; ev.uitleg = (verkoop ? 'Vervallen verkoopfactuur' : 'Vervallen inkoopfactuur') + ' — nog niet betaald (blijft staan tot het betaald is).'; }
@@ -1972,8 +2013,10 @@ function geldTermijnen(basis, ov, vandaag) {
 }
 // Eén open factuur → één of meer geplande events (G1-basis + betaaldag-logica).
 function geldPlan(soort, d, basis, ctx) {
-  const { vandaag, profiel, overrides, cfg } = ctx, sleutel = `${soort}:${d.id}`, ov = overrides[sleutel];
+  const { vandaag, profiel, overrides, cfg } = ctx, sleutel = `${soort}:${d.id}`;
+  let ov = overrides[sleutel];
   const due = basis.datum, ev = Object.assign({}, basis, { vervaldag: due });
+  if (ov && ov.type === 'tegoed') { ctx.gebruikt.add(sleutel); ev.override = ov; ov = null; }   // geen datum-override: alleen de keuze dat het tegoed als ontvangst telt
   const nooitVerleden = e => { if (e.datum && e.datum < vandaag) { e.datum = vandaag; e.uitleg += ' (nog open: vandaag ingepland)'; } return e; };
   if (ov) {
     ctx.gebruikt.add(sleutel);
@@ -2526,12 +2569,22 @@ async function geldTijdlijn(env, url, hint) {
   // ── events: verleden (bank, binnen de tijdlijn) + toekomst/open (facturen) + ijkpunten
   const events = bankEv.filter(e => e.datum >= van && e.datum <= tot);
   const plan = { vandaag, profiel, overrides: overrides.items || {}, cfg, gebruikt: new Set() };
-  const factEv = [...fact.inkoop.map(d => [d, geldFactuurEvent('inkoop', d, vandaag, w)]), ...fact.verkoop.map(d => [d, geldFactuurEvent('verkoop', d, vandaag, w)])]
-    .filter(([, e]) => e.bedrag !== 0).flatMap(([d, e]) => geldPlan(e.bron, d, e, plan));
+  const inkoopPar = fact.inkoop.map(d => [d, geldFactuurEvent('inkoop', d, vandaag, w)]), verkoopPar = fact.verkoop.map(d => [d, geldFactuurEvent('verkoop', d, vandaag, w)]);
+  const verrekend = geldCreditVerrekening(inkoopPar);
+  const factEv = [...inkoopPar, ...verkoopPar].filter(([, e]) => e.bedrag !== 0).flatMap(([d, e]) => geldPlan(e.bron, d, e, plan));
   // Overrides voor facturen die niet (meer) open zijn: melden zodat ze opgeruimd kunnen worden (niet stil laten liggen).
   const vervallenOv = Object.keys(plan.overrides).filter(id => !plan.gebruikt.has(id));
   const metDelta = e => { if (!e.saldo_ijkpunt) { e.delta = geldRond((e.richting === 'in' ? 1 : -1) * Math.abs(e.bedrag)); if (e.intern && e.pot) e.pot_delta = -e.delta; } return e; };
   factEv.forEach(metDelta);
+  // Wat niet als geldstroom telt (concept-verkoopfactuur, tegoed bij een leverancier) blijft zichtbaar maar beweegt de lijn niet (delta 0).
+  for (const e of factEv) {
+    if (e.verrekend_tekst) { e.uitleg += e.verrekend_tekst; delete e.verrekend_tekst; }
+    if (e.tegoed) {
+      if (e.override && e.override.type === 'tegoed') { e.tegoed_telt = true; e.uitleg += ' Op jouw keuze als ontvangst meegeteld.'; }
+      else e.telt_niet = { soort: 'tegoed', reden: e.uitleg };
+    }
+    if (e.telt_niet) { e.delta = 0; if (e.pot_delta != null) e.pot_delta = 0; }
+  }
   // ── G3: vaste patronen (niet voor potjes-overboekingen), weekinleg, BTW-aangifte en BTW-sparen
   const potLedgers = new Set(potten.filter(p => p.ledger).map(p => p.ledger)), potIbans = new Set(potten.map(p => p.herkenning.tegenrekening).filter(Boolean));
   const eersteDag = {};
@@ -2564,7 +2617,7 @@ async function geldTijdlijn(env, url, hint) {
       for (const x of rec.lijst) fk.set(String(x.id), geldFactuurKort(x));
       if (rec.onvolledig) w.push({ onvolledig: true, bron: 'prognose', fout: 'recent betaalde facturen onvolledig — een al gefactureerde termijn kan dubbel staan' });
     }
-    for (const x of fact.verkoop) fk.set(String(x.id), geldFactuurKort(x));
+    for (const x of fact.verkoop) if (!geldVerkoopConcept(x)) fk.set(String(x.id), geldFactuurKort(x));   // een concept zonder nummer is geen echte factuur: de prognoseterm mag er niet door verdwijnen
     const r = geldPrognoseEvents(progItems, [...fk.values()], { vandaag, profiel, cfg }, w);
     progEv = r.events.map(metDelta); progOverzicht = r.overzicht;
   }
@@ -2620,7 +2673,7 @@ async function geldTijdlijn(env, url, hint) {
     bronnen: { bankmutaties: { as_of: new Date().toISOString(), van: mutVan, tot: vandaag, aantal: muts.lijst.length, onvolledig: muts.onvolledig },
       facturen: { as_of: new Date().toISOString(), jaren: fact.jaren, inkoop: fact.inkoop.length, verkoop: fact.verkoop.length, buiten_periode: buiten, buiten_periode_bedrag: buitenBedrag, onvolledig: fact.onvolledig },
       balans: { as_of: new Date().toISOString(), maandeinde: balans.maandeinde, gevonden: !!metBalans } },
-    saldo, events, waarschuwingen: w, verzoeken: GELD.budget - budget.rest,
+    saldo, events, waarschuwingen: w, verzoeken: GELD.budget - budget.rest, verrekend,
     profiel: profiel ? { as_of: profiel.as_of, klanten: Object.keys(profiel.klanten || {}).length, incasso_leveranciers: Object.keys(profiel.incasso || {}).length, onvolledig: !!profiel.onvolledig } : null,
     overrides: { aantal: Object.keys(plan.overrides).length, niet_meer_open: vervallenOv, compleet: overrides.compleet },
     patronen: patronen ? { as_of: patronen.as_of, aantal: patLijst.length, aan: patLijst.filter(x => x.aan && !x.potje).length, vervangen_door_factuur: pctx.vervangen, lijst: patLijst } : null,
@@ -2632,6 +2685,19 @@ async function geldTijdlijn(env, url, hint) {
     prognose: { posten: progOverzicht, compleet: prognose.compleet },
     instellingen: { kredietlimiet: cfg.kredietlimiet, potten: cfg.potten.map(p => ({ id: p.id, naam: p.naam, doel: p.doel, actief: p.actief, weekinleg: p.weekinleg, weekdag: p.weekdag, virtueel: p.virtueel, streef: p.streef })), btw: cfg.btw, btw_pot: geldBtwPot(cfg), lopend_streef: cfg.lopend_streef, reserve: cfg.reserve, buffer_lopend: cfg.buffer_lopend, spaarrente: cfg.spaarrente },
   } };
+}
+// Audit van de ▲-posten (ontvangsten) in de tijdlijn: welke regel classificeert ze, en wat is verdacht (ook leverancier, geen datum/nummer, negatieve inkoop).
+function geldOntvangstAudit(body) {
+  const ev = body.events || [], inkoopContacten = new Set(ev.filter(e => e.bron === 'inkoop' && e.contact_id).map(e => e.contact_id)), inkoopNamen = new Set(ev.filter(e => e.bron === 'inkoop' && e.tegenpartij).map(e => e.tegenpartij.toLowerCase()));
+  const regel = e => e.bron === 'verkoop' ? (e.telt_niet ? 'verkoopfactuur zonder datum/nummer: telt niet' : 'open verkoopfactuur (open ≥ 0) = ontvangst op de verwachte betaaldatum')
+    : e.bron === 'inkoop' ? (e.creditnota ? (e.tegoed ? (e.tegoed_telt ? 'inkoop-creditnota (tegoed) op jouw keuze als ontvangst' : 'inkoop-creditnota zonder (genoeg) open facturen: tegoed, telt niet') : 'inkoop-creditnota (open < 0) = ontvangst') : 'inkoopfactuur (uitgave)')
+    : e.bron === 'prognose' ? 'prognose (project/handmatige post)' : e.bron === 'patroon' ? 'vast patroon (richting in)' : e.id && String(e.id).endsWith(':terug') ? 'btw-terugboeking uit de pot' : e.bron;
+  const items = ev.filter(e => e.bron !== 'bank' && e.bron !== 'ijkpunt' && (e.richting === 'in' || e.delta > 0)).map(e => ({
+    id: e.id, bron: e.bron, regel: regel(e), tegenpartij: e.tegenpartij || '', contact_id: e.contact_id || null, bedrag: e.bedrag, delta: e.delta, datum: e.datum, zekerheid: e.zekerheid, datumtype: e.datumtype,
+    factuurdatum: e.factuurdatum || null, referentie: e.referentie || null, status: e.status || null, url: e.bron_url || null, telt_niet: e.telt_niet || null,
+    flags: [ e.bron === 'verkoop' && ((e.contact_id && inkoopContacten.has(e.contact_id)) || (e.tegenpartij && inkoopNamen.has(e.tegenpartij.toLowerCase()))) ? 'contact_ook_leverancier' : null,
+      e.bron === 'verkoop' && (!e.factuurdatum || !e.factuurnummer) ? 'zonder_datum_of_nummer' : null, e.bron === 'inkoop' && e.bedrag < 0 ? 'negatieve_inkoop' : null, e.telt_niet ? 'telt_niet' : null ].filter(Boolean) }));
+  return { as_of: body.as_of, vandaag: body.vandaag, aantal: items.length, per_bron: items.reduce((a, x) => (a[x.bron] = (a[x.bron] || 0) + 1, a), {}), verdacht: items.filter(x => x.flags.length).length, verrekend: body.verrekend || [], items };
 }
 // ── Cijfers (G9): maandcijfers uit Moneybird voor de grafieken bij de rapporten ────────
 // Per maand: de W&V per grootboek (reports/profit_loss), de balans op het maandeinde (kasstand) en de bankmutaties
@@ -3316,6 +3382,11 @@ async function handleGeld(p, request, env, ik, json0) {
     // (de cachesleutel bevat de versie van ná de laatste wijziging; een wijziging maakt een nieuwe, unieke versie)
     return json(r.body, r.status);
   }
+  if (p === '/geld/audit/ontvangsten' && m === 'GET') {          // alleen lezen: alle ▲-posten van de tijdlijn met bron, contact en de regel die ze als ontvangst classificeert
+    if (R.geld !== 'wijzigen') return json({ error: 'geen-toegang', reden: 'geld-wijzigen' }, 403);
+    const r = await geldTijdlijn(env, url, { ks: [] });
+    return json(r.status === 200 ? geldOntvangstAudit(r.body) : r.body, r.status);
+  }
   if (p === '/geld/ijkpunten' && m === 'GET') {
     try { return json({ ijkpunten: await geldIjkpunten(env, 50, geldRekeningen(await geldConfig(env)), 3) }); } catch (e) { return json({ error: 'ijkpunten niet te lezen' }, 503); }
   }
@@ -3399,7 +3470,10 @@ async function handleGeld(p, request, env, ik, json0) {
       if (!['maand', 'week'].includes(b.interval || 'maand')) return json({ error: "interval: 'maand' of 'week'" }, 400);
       if (b.termijnen != null && !(Number.isInteger(b.termijnen) && b.termijnen > 0 && b.termijnen <= 240)) return json({ error: 'termijnen: geheel getal 1..240' }, 400);
       item = { soort, type, bedrag: geldRond(b.bedrag), eerste: b.eerste, interval: b.interval || 'maand', termijnen: b.termijnen || null };
-    } else return json({ error: "type: 'datum', 'afbetaling' of 'wissen'" }, 400);
+    } else if (type === 'tegoed') {
+      if (soort !== 'inkoop') return json({ error: "type 'tegoed' kan alleen bij een inkoopfactuur (creditnota van een leverancier)" }, 400);
+      item = { soort, type };
+    } else return json({ error: "type: 'datum', 'afbetaling', 'tegoed' of 'wissen'" }, 400);
     const ts = Date.now(), door = String((ik.rec && ik.rec.naam) || ik.email || ik.oid).slice(0, 60);
     if (item) Object.assign(item, { reden: String(b.reden || '').slice(0, 120), door, ts });
     await kvZet(env, `geld:ov-historie:${String(9e15 - ts).padStart(16, '0')}:${randHex(4)}`, { sleutel: `${soort}:${id}`, vorige, nieuw: item, door, ts });   // elke wijziging bewaard
