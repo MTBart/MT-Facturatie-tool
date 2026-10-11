@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — F6 Codex a4b31cb: afgebroken streams, documenten, ontbrekende binding, logboek zonder namen, max_tokens alleen begrenzen in afdwingen
+- Commit: `d8a0aaf` | Auteur: Bart Witte
+
 ## 2026-10-11 — G6: "Kan ik € X uitgeven op datum Y?" in Geld (desktop en mobiele laag) en het maandagbericht als melding in de app
 - Commit: `cf91ab0` | Auteur: Bart Witte
 
