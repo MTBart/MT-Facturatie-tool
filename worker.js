@@ -1614,6 +1614,8 @@ function geldConfigNorm(c) {
     .filter(g => g.prefix.length >= 3 || g.contact_ids.length);
   return { kredietlimiet: getal(c.kredietlimiet, 0, 1e9), potten: uniek, klantgroepen: groepen, lopend_streef: geldStreefNorm(c.lopend_streef), prognose_schema: geldSchemaNorm(c.prognose_schema),
     buffer_lopend: typeof c.buffer_lopend === 'number' && isFinite(c.buffer_lopend) && Math.abs(c.buffer_lopend) <= 1e9 ? c.buffer_lopend : null,
+    // G7: fictieve buffer op lopend (≥ 0). Alleen een gele lijn in de grafiek en de onderkant van de kasruimte/Koersmeter; nooit als getal in Geld (behalve Instellingen).
+    fictieve_buffer: getal(c.fictieve_buffer, 0, 1e9),
     // cijfers (G9): indeling grootboek → categorie, privé- en aflossingsgrootboeken, loonpatronen, branche; null = voorstel
     cijfers: geldCijferCfgNorm(c.cijfers),
     // spaarrente op de potjes (fractie per jaar), door de eigenaar ingevuld; leeg = afleiden uit rentebijschrijvingen
@@ -3413,6 +3415,7 @@ async function handleGeld(p, request, env, ik, json0) {
       if (b.reserve && b.reserve.pot != null && ((nieuw.potten || oud.potten).some(p => p.id === b.reserve.pot && p.doel === 'btw') || b.reserve.pot === ((nieuw.btw || oud.btw) || {}).spaarpot)) return json({ error: 'reserve.pot: niet de BTW-pot (die telt al mee in de lopende rekening)' }, 400);
       nieuw.reserve = b.reserve; gewijzigd.push('reserve');
     }
+    if ('fictieve_buffer' in b) { if (b.fictieve_buffer !== null && !(typeof b.fictieve_buffer === 'number' && isFinite(b.fictieve_buffer) && b.fictieve_buffer >= 0 && b.fictieve_buffer <= 1e9)) return json({ error: 'fictieve_buffer: getal ≥ 0 of null' }, 400); nieuw.fictieve_buffer = b.fictieve_buffer; gewijzigd.push('fictieve_buffer'); }
     if ('buffer_lopend' in b) { if (b.buffer_lopend !== null && !(typeof b.buffer_lopend === 'number' && isFinite(b.buffer_lopend))) return json({ error: 'buffer_lopend: getal of null' }, 400); nieuw.buffer_lopend = b.buffer_lopend; gewijzigd.push('buffer_lopend'); }
     if ('cijfers' in b) { if (b.cijfers !== null && (typeof b.cijfers !== 'object' || Array.isArray(b.cijfers))) return json({ error: 'cijfers: object of null' }, 400);
       const cb = b.cijfers || {};

@@ -21,21 +21,12 @@
   "rijHtml",
   "potRij",
   "bankTekst",
-  "eurVetHtml"
+  "eurVetHtml",
+  "kaartBesteed",
+  "noodKaart",
+  "adv"
  ],
  "houd": [
-  {
-   "fn": "teken",
-   "expr": "(() => { const rp = G.reservePot(d, st.cfg), pt = ((st.cfg || {}).potten || []).find(p => p.id === rp), a = G.reserveAdvies(d, pt && pt.stre",
-   "fp": "24017bfcbc",
-   "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
-  },
-  {
-   "fn": "teken",
-   "expr": "metRes ? `<div class=\"mtg-k ${esc(resInfo && resInfo.krediet > 0 ? 'rood' : resInfo && resInfo.gebruikt > 0 ? 'amber' : '')}\"><div class=\"l\"",
-   "fp": "1bdfeb69c2",
-   "reden": "fragment: samengestelde HTML-uitdrukking (vaste tekst en geëscapete delen; geneste templates worden apart gescand)"
-  },
   {
    "fn": "roodHtml",
    "expr": "staaf",
@@ -63,7 +54,7 @@
   {
    "fn": "potRij",
    "expr": "btw.gedekt == null ? 'saldo onbekend — ijk de pot om de dekking te zien' : btw.gedekt ? `dekt ${esc(btw.kwartaal)} (≈${eur(btw.bedrag)}) ✓ —",
-   "fp": "fd3c76c19c",
+   "fp": "e2476d6078",
    "reden": "tekst met esc()-delen (kwartaal en datum geëscaped)"
   },
   {
@@ -158,15 +149,15 @@
   },
   {
    "fn": "instBlad",
-   "expr": "(() => { const rp = G.reservePot(st.data, c), pt = (c.potten || []).find(p => p.id === rp), a = G.reserveAdvies(st.data, pt && pt.streef); r",
-   "fp": "9e44e7e6d3",
+   "expr": "(() => { const sp = G.spaarRente(Object.assign({}, st.data, { instellingen: Object.assign({}, st.data.instellingen, { spaarrente: null }) })",
+   "fp": "2002d8ddbe",
    "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
   },
   {
    "fn": "instBlad",
-   "expr": "(() => { const sp = G.spaarRente(Object.assign({}, st.data, { instellingen: Object.assign({}, st.data.instellingen, { spaarrente: null }) })",
-   "fp": "2002d8ddbe",
-   "reden": "IIFE geeft een HTML-/tekstfragment met esc()-delen terug"
+   "exprBegin": "(() => { const np = G.noodPot(st.data, c), npot = (c.potten || []).find(x => x.id === np), ns = npot && npot.streef",
+   "fp": "b68c8be750",
+   "reden": "IIFE geeft de drie instellingenvelden terug als HTML-fragment: alle bedragen en teksten gaan via esc() (adv(), value=esc(...))"
   }
  ]
 }

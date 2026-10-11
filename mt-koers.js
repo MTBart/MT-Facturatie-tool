@@ -38,12 +38,14 @@
     G = G || root.MTGeld;
     const v = data.vandaag, jaar = Number(v.slice(0, 4)), vj = jaar - 1, mnd = Number(v.slice(5, 7)), tm = mnd - 1;
     // a. kas
-    const tot = dagPlus(v, KAS_DAGEN), lijn = G.lijn(data, { modus: 'lopend', prognose: true });
+    // G7: dezelfde basis als het hoofdgetal in Geld (G.kasLijn = besteedbaar budget); de noodbuffer telt hier nooit mee (vaste basis, ook voor de ochtendmelding)
+    const kasLijn = o => (G.kasLijn ? G.kasLijn(data, cfg, o) : G.lijn(data, Object.assign({ modus: 'lopend' }, o)));
+    const tot = dagPlus(v, KAS_DAGEN), lijn = kasLijn({ prognose: true });
     const low = lijn.onbekend ? null : G.laagste(lijn, tot);
     const heeftProg = (data.events || []).some(e => e.zekerheid === 'prognose');
-    const zonder = heeftProg && low ? G.laagste(G.lijn(data, { modus: 'lopend', prognose: false }), tot) : null;
-    const L = (data.saldo && data.saldo.lopend) || {}, res = G.reserveCfg(data, cfg);
-    const soort = cfg && cfg.buffer_lopend != null ? 'ondergrens' : res && res.bedrag > 0 ? 'reserve' : L.kredietlimiet != null ? 'kredietlimiet' : null;
+    const zonder = heeftProg && low ? G.laagste(kasLijn({ prognose: false }), tot) : null;
+    const L = (data.saldo && data.saldo.lopend) || {};
+    const soort = G.drempelSoort ? G.drempelSoort(data, cfg) : cfg && cfg.buffer_lopend != null ? 'ondergrens' : 'nul';   // 'fictief' = de gele lijn, 'ondergrens' = eigen ondergrens, 'nul' = de nullijn
     const W = data.waarschuwingen || [];
     const kas = { laagste: low, zonderPrognose: zonder, ondergrens: low ? G.drempel(data, cfg, low.datum) : null, soort, kredietlimiet: L.kredietlimiet != null ? L.kredietlimiet : null,
       vasteLasten: G.vasteLastenMaand(data), onvolledig: K.onvolledig(W).filter((x, i, a) => a.indexOf(x) === i) };
@@ -79,14 +81,15 @@
   function kasMeter(k) {
     const m = { id: 'kas', titel: 'Kasruimte 8 weken', kleur: 'onbekend', waarde: '—', sub: [], waarom: [], getal: null,
       bron: 'Geldtijdlijn: banksaldo (Moneybird/ijkpunt), open facturen, vaste patronen, BTW en de aangevinkte prognosetermijnen.' };
-    const buffer = k && k.vasteLasten > 0 ? k.vasteLasten : KAS_BUFFER, grensNaam = !k || !k.soort ? 'nullijn' : k.soort === 'ondergrens' ? 'eigen ondergrens' : k.soort === 'reserve' ? 'onderkant eigen reserve' : 'kredietlimiet';
-    m.uitleg = `De laagste stand van de lopende rekening + BTW-pot in de komende ${KAS_DAGEN} dagen, met alles wat gepland staat (facturen, vaste lasten, BTW) en de aangevinkte prognosetermijnen. Vergeleken met je ${grensNaam}. Groen: minstens ${k && k.vasteLasten > 0 ? 'één maand vaste lasten (' + kort(buffer) + ')' : kort(KAS_BUFFER) + ' (vaste lasten nog onbekend)'} boven de grens. Oranje: erboven, maar minder dan dat. Rood: eronder.`;
+    const buffer = k && k.vasteLasten > 0 ? k.vasteLasten : KAS_BUFFER, grensNaam = !k || !k.soort || k.soort === 'nul' ? 'nullijn' : k.soort === 'ondergrens' ? 'eigen ondergrens' : k.soort === 'fictief' ? 'gele lijn' : 'nullijn';
+    m.uitleg = `Het laagste besteedbaar budget (lopende rekening min de btw die de BTW-pot niet dekt, zonder noodbuffer) in de komende ${KAS_DAGEN} dagen, met alles wat gepland staat (facturen, vaste lasten, BTW) en de aangevinkte prognosetermijnen. Vergeleken met je ${grensNaam}. Groen: minstens ${k && k.vasteLasten > 0 ? 'één maand vaste lasten (' + kort(buffer) + ')' : kort(KAS_BUFFER) + ' (vaste lasten nog onbekend)'} boven de grens. Oranje: erboven, maar minder dan dat. Rood: eronder.`;
     if (!k || !k.laagste) { m.waarom.push('geen saldo of verwachte lijn: de lopende rekening is (nog) onbekend'); return m; }
     const grens = k.ondergrens != null ? k.ondergrens : 0, ruimte = k.laagste.saldo - grens;
     m.getal = Math.round(ruimte); m.datum = k.laagste.datum; m.grensNaam = grensNaam;
     m.waarde = (ruimte < 0 ? '' : '+') + kort(ruimte);
-    m.sub.push(`laagste punt ${kort(k.laagste.saldo)} op ${datum(k.laagste.datum)} · ${grensNaam} ${kort(grens)}`);
-    if (k.ondergrens == null) m.sub.push('geen ondergrens ingesteld: gerekend vanaf € 0');
+    // de fictieve buffer staat als bedrag alleen in Instellingen: hier geen getal van de gele lijn
+    m.sub.push(k.soort === 'fictief' ? `laagste punt ${kort(k.laagste.saldo)} op ${datum(k.laagste.datum)} · tot de gele lijn` : `laagste punt ${kort(k.laagste.saldo)} op ${datum(k.laagste.datum)} · ${grensNaam} ${kort(grens)}`);
+    if (!k.soort || k.soort === 'nul') m.sub.push('geen fictieve buffer ingesteld: gerekend vanaf € 0');
     if (k.kredietlimiet != null && k.laagste.saldo < -k.kredietlimiet) m.sub.push(`onder de kredietlimiet (${kort(-k.kredietlimiet)})`);
     if (k.zonderPrognose && Math.round(k.zonderPrognose.saldo) !== Math.round(k.laagste.saldo)) m.sub.push(`zonder prognose: ruimte ${kort(k.zonderPrognose.saldo - grens)} op ${datum(k.zonderPrognose.datum)}`);
     if (k.onvolledig && k.onvolledig.length) { m.waarom.push(...k.onvolledig); return m; }

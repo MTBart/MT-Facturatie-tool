@@ -175,6 +175,9 @@ gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.m
   Koude cache (alle maanden ontbreken): ontbrekende maanden worden over de voorverversingen en pogingen aangevuld; lukt het niet in 3 pogingen dan is het oordeel die dag onbetrouwbaar.
 - De run roept `/geld/tijdlijn` (vers), `/geld/config` en `/geld/cijfers` intern aan als eigenaar en rekent met dezelfde `mt-geld.js`/`mt-koers.js`
   als het scherm (dynamische import; `K.invoer` → `K.oordeel` → `K.dagfotoOpslag`, `K.moetMelden`, `K.actie`): geen tweede rekenlogica.
+- G7 (besteedbaar budget): de kasruimte rekent op `G.kasLijn` = de lijn van het besteedbaar budget (lopend − max(0, btw_verschuldigd − btw-pot); btw uit de aangifte-events `bron:'btw'`, schatting ±10%), zonder noodbuffer
+  (het vinkje "Noodbuffer meenemen" in Geld werkt niet door in de Koersmeter). Onderkant = `cfg.fictieve_buffer` (de gele lijn); zonder dat veld de eigen ondergrens `buffer_lopend`, anders 0.
+  `POST /geld/config` accepteert `fictieve_buffer` (getal ≥ 0 of null). Het bedrag staat nergens in Geld behalve in Instellingen, en ook niet in de dagfoto of ochtendmelding.
 - KV: de dagfoto `geld:koers:dag:<datum>` (met `via:'cron'`), bij verslechtering `geld:koers:melding:<datum>` (hooguit één per dag, nooit overschreven),
   `geld:koers:gelezen:<oid>` (per gebruiker tot en met welke datum afgevinkt). Meldregel: `K.moetMelden` (slechtere kleur, nieuwe onvolledige bron, kasruimte ≥ € 5k lager).
   Onvolledige bronnen: nooit groen ("Oordeel onbetrouwbaar"), met een melding alleen als het oordeel gisteren betrouwbaar was.
