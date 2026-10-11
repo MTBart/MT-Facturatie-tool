@@ -305,6 +305,12 @@ referentie, laatste 24 u) en toont "controleer concept" i.p.v. opnieuw te posten
 | `toggl_admin_projects` | volledige workspace-projectenlijst; **GET-only + pad-whitelist** (alleen `workspaces/<id>/projects`) — gewone tokens zien privé-projecten zonder lidmaatschap niet | admin `TOGGL_KEY` |
 | `toggl_reports` | Reports API v3 (aggregeert over álle gebruikers) | admin `TOGGL_KEY` |
 
+**Toggl-capaciteit voor de projecttijdlijn (alleen lezen, `GET O/capacities/users`).** Wat bewezen is en wat niet:
+- *Bewezen* (3-4 okt, met een sleutel die ver vooruit mocht kijken; vastgelegd in Deliverables/2026-10-03-toggl-planner-capaciteit-api.md): het endpoint bestaat, `unit=day` werkt en het antwoord is `[{id, type:'user', computations:[{date, working_minutes, estimated_minutes, time_off_minutes, …}], task_estimates}]`. Beschikbaar = `working_minutes` (al netto van feestdagen en verlof), vrij = `working_minutes − estimated_minutes`.
+- *Niet bewezen*: (1) dat de sleutel waarmee de worker NU aanroept (per gebruiker `TOGGL_FOCUS_KEY_<NAAM>`, anders `TOGGL_FOCUS_KEY`) het mag. Het endpoint is afgeschermd: 402 bij een plan zonder de functie, 403 zonder rechten; of een gewone gebruiker de uren van collega's ziet is niet vastgesteld (sleutel- en rolafhankelijk). (2) Een kommalijst in `user_id`; de app vraagt daarom per persoon één `user_id` op (parallel, hooguit zes aanroepen per sessie en periode, uitkomst gecachet; een mislukte persoon wordt 5 minuten niet opnieuw geprobeerd).
+- *Gedrag in de app*: per persoon Toggl als alle werkdagen (ma-vr) van die week binnenkomen, anders de capaciteit uit Beheer (werkuren − verlof − vrije dagen). De legenda van de projecttijdlijn zegt welke bron gebruikt is en waarom Toggl niet (`402: jullie Toggl-abonnement heeft capaciteit niet`, `403: geen rechten`, `onverwacht antwoord`, `HTTP …`). **De eerste keer dat iemand met een echte sleutel een projecttijdlijn opent is dus het bewijs**: staat er "capaciteit: Toggl", dan werkt het voor die gebruiker; staat er "— Toggl: 403 …", dan niet en blijft de Beheer-terugval gewoon staan. Er is geen aparte knop en niets dat schrijft.
+- *Worker*: geen wijziging nodig; het contract kent `O/capacities/users` al met de queryparameters `user_id`, `unit`, `start_date`, `end_date` (dubbele sleutels worden geweigerd).
+
 #### Tracking-routes (pad-gebaseerd, niet `?target=`)
 
 Usage-/presence-tracking. Auth = zelfde Worker-auth (MSAL-token of server-key).

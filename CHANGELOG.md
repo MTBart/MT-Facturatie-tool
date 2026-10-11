@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — F6-rest: veilige bovengrens voor documenten en een DO-alarm voor verlopen claims
+- Commit: `b9fd47a` | Auteur: Bart Witte
+
 ## 2026-10-12 — CSP: afgedwongen minimale meta-CSP, Report-Only-beleid in _headers (Cloudflare Pages) en de worker-route /csp-rapport
 - Commit: `f975c86` | Auteur: Bart Witte
 

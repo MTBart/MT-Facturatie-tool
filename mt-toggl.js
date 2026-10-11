@@ -143,22 +143,52 @@ async function tgReportsUren(codes,van,tot){
   }
   return {per,geenKoppeling:false,zonderKoppeling};
 }
-// Capaciteit uit Toggl (vrij = working − estimated, per gebruiker per dag). Let op: deze call staat
-// (nog) niet in toggl2-api-bewezen.md; faalt hij, dan valt de tijdlijn terug op de eigen capaciteit
-// (werkuren − verlof − vrije dagen, uit Beheer).
-async function tgCapaciteit(userIds,van,tot){
-  const ids=[...new Set((userIds||[]).filter(Boolean))]; if(!ids.length) return {};
-  const k='mt_tgcap|'+ids.join(',')+'|'+van+'|'+tot+'|'+_tgVandaag(), c=_tgCacheLees(k); if(c) return c;
-  const d=await _tgEenmalig(k,()=>focusFetch(`capacities/users?user_id=${ids.join(',')}&unit=day&start_date=${van}&end_date=${tot}`));
+// Capaciteit uit Toggl (vrij = working − estimated, per gebruiker per dag), alleen lezen:
+// GET O/capacities/users?user_id=<één id>&unit=day&start_date&end_date. Antwoord (bewezen op 3-4 okt, zie
+// Deliverables/2026-10-03-toggl-planner-capaciteit-api.md): [{id, type:'user', computations:[{date, working_minutes,
+// estimated_minutes, time_off_minutes, …}], task_estimates}]. Eén aanroep PER PERSOON: het documenteerde formaat is één
+// user_id; een kommalijst is niet bewezen. Faalt een persoon (402 plan zonder de functie, 403 rechten, netwerk, onbekend
+// antwoord), dan ontbreekt alleen die persoon en valt de tijdlijn voor hem/haar terug op de eigen capaciteit
+// (werkuren − verlof − vrije dagen, uit Beheer). De uitkomst van de laatste ronde staat in tgCapaciteit.laatste.
+const _tgCapFout={};                                    // sleutel → {ts,code}: een mislukte persoon niet bij elke navigatie opnieuw proberen
+function _tgCapLees(d,uid){
   const rijen=Array.isArray(d)?d:((d&&(d.data||d.capacities||d.users))||[]);
-  const uit={};
-  rijen.forEach(r=>{ const uid=r.user_id||r.user_account_id; const dagen=Array.isArray(r.days)?r.days:[r];
-    dagen.forEach(x=>{ const dag=String(x.date||x.day||'').slice(0,10); if(!uid||!dag) return;
-      // Alleen dagen met echte getallen; ontbrekende velden worden niet als 0 gelezen.
-      if(!isFinite(parseFloat(x.working_minutes))||!isFinite(parseFloat(x.estimated_minutes))) return;
+  const dagen={};
+  rijen.forEach(r=>{ if(!r||typeof r!=='object') return;
+    const id=r.id!=null&&r.type!=='project'?r.id:(r.user_id!=null?r.user_id:r.user_account_id);
+    if(id!=null&&String(id)!==String(uid)) return;      // alleen de gevraagde persoon
+    const lijst=Array.isArray(r.computations)?r.computations:(Array.isArray(r.days)?r.days:[r]);
+    lijst.forEach(x=>{ if(!x||typeof x!=='object') return; const dag=String(x.date||x.day||'').slice(0,10);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(dag)) return;
+      // Alleen dagen met echte getallen (ook echte 0 is een getal); ontbrekende velden worden niet als 0 gelezen.
+      if(x.working_minutes==null||x.estimated_minutes==null||!isFinite(Number(x.working_minutes))||!isFinite(Number(x.estimated_minutes))) return;
       const werk=Number(x.working_minutes), gepland=Number(x.estimated_minutes);
-      (uit[uid]=uit[uid]||{})[dag]={werk:werk/60,gepland:gepland/60,vrij:(werk-gepland)/60}; }); });
-  _tgCacheZet(k,uit); return uit;
+      dagen[dag]={werk:werk/60,gepland:gepland/60,vrij:(werk-gepland)/60}; }); });
+  return dagen;
+}
+async function tgCapaciteit(userIds,van,tot){
+  const ids=[...new Set((userIds||[]).filter(Boolean))]; const uit={}, fouten={};
+  tgCapaciteit.laatste={totaal:ids.length,ok:0,fouten,van,tot};
+  if(!ids.length) return uit;
+  await Promise.all(ids.map(async uid=>{
+    const k='mt_tgcap1|'+uid+'|'+van+'|'+tot+'|'+_tgVandaag(), c=_tgCacheLees(k);
+    if(c){ uit[uid]=c; tgCapaciteit.laatste.ok++; return; }
+    const f=_tgCapFout[k]; if(f&&Date.now()-f.ts<300000){ fouten[uid]=f.code; return; }
+    try{
+      const d=await _tgEenmalig(k,()=>focusFetch(`capacities/users?user_id=${encodeURIComponent(uid)}&unit=day&start_date=${van}&end_date=${tot}`));
+      const dagen=_tgCapLees(d,uid);
+      if(!Object.keys(dagen).length) throw new Error('leeg of onbekend antwoord');
+      _tgCacheZet(k,dagen); uit[uid]=dagen; tgCapaciteit.laatste.ok++;
+    }catch(e){ const code=(String(e&&e.message||'').match(/HTTP (\d{3})/)||[])[1]||'antwoord'; fouten[uid]=code; _tgCapFout[k]={ts:Date.now(),code}; }
+  }));
+  return uit;
+}
+// Reden voor de legenda van de projecttijdlijn: leeg als Toggl voor iedereen werkte, anders waarom (een deel van) de personen terugvalt op Beheer.
+function tgCapaciteitStatus(){
+  const l=tgCapaciteit.laatste; if(!l||l.ok===l.totaal) return '';
+  const codes=[...new Set(Object.values(l.fouten))];
+  const uitleg=c=>c==='402'?'402: jullie Toggl-abonnement heeft capaciteit niet':c==='403'?'403: geen rechten':c==='429'?'429: even wachten':c==='antwoord'?'onverwacht antwoord':'HTTP '+c;
+  return (l.ok>0?l.ok+' van '+l.totaal+' personen via Toggl, rest Beheer — ':'')+codes.map(uitleg).join(', ');
 }
 // Statussen dynamisch (M&T heeft er 8: Todo, In progress, Productie, Blocked, Klaar voor
 // levering, Factureren, Backlog, Done). De vaste id's blijven alleen als terugval.

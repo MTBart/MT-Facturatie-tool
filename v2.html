@@ -22,7 +22,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2026-10-11b"></script>
+<script src="mt-toggl.js?v=2026-10-12b"></script>
 <script src="mt-koppel.js?v=2026-10-11b"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
 <script src="mt-zoek.js?v=2026-10-11d"></script>
@@ -5893,7 +5893,7 @@ function _tlTeken(key){
   const lijn=(vandaag>=D.van&&vandaag<=D.tot)?`<div class="tl-vandaag" style="left:${esc(TL_NAAM+(_tlDagen(D.van,vandaag)+0.5)/7*TL_KOL)}px" aria-hidden="true"></div>`:'';
   const legenda=`<div class="tl-legenda"><span><i class="tl-lg cap-ruim"></i>ruim</span><span><i class="tl-lg cap-krap"></i>krap</span><span><i class="tl-lg cap-vol"></i>vol</span>
     <span><i class="tl-lg p"></i>📅 gepland</span><span><i class="tl-lg w"></i>⏱ gewerkt (Toggl)</span>
-    <span class="dos-meta">capaciteit: ${st.tgcap?'Toggl':'werkuren − verlof − vrije dagen (Beheer)'}</span>
+    <span class="dos-meta">capaciteit: ${esc((st.tgcap?'Toggl':'werkuren − verlof − vrije dagen (Beheer)')+(st.tgcapTekst?(st.tgcap?' (':' — Toggl: ')+st.tgcapTekst+(st.tgcap?')':''):''))}</span>
     ${meer?st.codes.map(c=>`<span><i class="tl-lg" style="background:${esc(agProjKleur(c))}"></i>${esc(projKort(c))}</span>`).join(''):''}</div>`;
   el.innerHTML=kop+`<div class="tl-veeg" aria-hidden="true">↔ veeg voor meer weken</div><div class="tl-scroll"><div class="tl-grid" style="width:${esc(TL_NAAM+D.weken.length*TL_KOL)}px">${html}${lijn}</div></div>`+legenda+`<div class="tl-detail" aria-live="polite">${st.detail?_tlDetailHtml(key,D,st.detail):'<span class="dos-meta">Klik op een week, fase of cel voor details.</span>'}</div>`;
 }
@@ -5912,8 +5912,10 @@ async function _tlLaadToggl(key){
     // Toggl-capaciteit (optioneel): faalt stil → eigen capaciteit uit Beheer
     try{
       const map={}; MT_TEAM.forEach(m=>{ const u=users.find(x=>x.email===m.email.toLowerCase()); if(u) map[m.slug]=u.id; });
-      const ids=Object.values(map); if(ids.length&&typeof tgCapaciteit==='function'){ const cap=await tgCapaciteit(ids,van,tot); if(cap&&Object.keys(cap).length){ st.tgcap=cap; st.tgcapUser=map; } }
-    }catch(e){ st.tgcap=null; }
+      const ids=Object.values(map); st.tgcap=null; st.tgcapTekst='';
+      if(ids.length&&typeof tgCapaciteit==='function'){ const cap=await tgCapaciteit(ids,van,tot); if(cap&&Object.keys(cap).length){ st.tgcap=cap; st.tgcapUser=map; } st.tgcapTekst=(typeof tgCapaciteitStatus==='function')?tgCapaciteitStatus():''; }
+      else if(!ids.length) st.tgcapTekst='geen Toggl-gebruikers gekoppeld';
+    }catch(e){ st.tgcap=null; st.tgcapTekst=String(e&&e.message||'fout').slice(0,60); }
   }catch(e){ if(st.tgSig!==sig) return; st.toggl={status:'fout',fout:(typeof _tgFoutTekst==='function')?_tgFoutTekst(e):(e.message||String(e))}; }
   _tlTeken(key);
 }
