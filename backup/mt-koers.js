@@ -68,7 +68,11 @@
     const omzet = { laden: marge.laden, gerealiseerd: r ? som(alles).omzet : null, prognose: termijnen.reduce((a, e) => a + (e.bedrag != null ? e.bedrag : Math.max(0, e.delta || 0)), 0) / BTW,
       termijnen: termijnen.length, vorigJaar: r ? som(heelVj).omzet : null,
       onvolledig: lijst(cijferFout, ...cijferW, mo.length && 'maanden ontbreken in de cijfers: ' + maandTekst(mo), ...K.onvolledig(W, 'prognose')) };
-    return { vandaag: v, jaar, kas, marge, omzet };
+    // Voor de ene actie (Koersmeter C): de grootste achterstallige verkoopfactuur en het factuurmoment-advies.
+    const achter = (data.events || []).filter(e => e.bron === 'verkoop' && e.achterstallig && e.delta > 0).sort((a, b) => b.delta - a.delta)[0];
+    let advies = null; try { const a = G.factuurAdvies ? G.factuurAdvies(data, cfg, {}, tot) : null; if (a && a.voorstel) advies = { tegenpartij: a.voorstel.event.tegenpartij || '', van: a.voorstel.van, naar: a.voorstel.naar, winst: a.voorstel.winst }; } catch (e) {}
+    const acties = { achterstallig: achter ? { tegenpartij: achter.tegenpartij || '', bedrag: achter.delta, sinds: achter.vervaldag || null } : null, advies };
+    return { vandaag: v, jaar, kas, marge, omzet, acties };
   };
 
   // ── De drie meters ──
@@ -161,6 +165,55 @@
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   // Dagfoto (voor later: ochtendmelding alleen bij verslechtering): alleen kleuren en getallen, geen tekst.
   K.dagfoto = o => ({ datum: o.datum, jaar: o.jaar, kleur: o.kleur, meters: o.meters.map(m => ({ id: m.id, kleur: m.kleur, getal: m.getal })) });
+  // Wat de worker bewaart (POST /geld/koers/dagfoto): kleur, getallen per meter en de onvolledige bronnen (korte teksten).
+  K.dagfotoOpslag = o => ({ jaar: o.jaar, kleur: o.kleur, meters: o.meters.map(m => ({ id: m.id, kleur: m.kleur, getal: m.getal })),
+    bronnen: [...new Set(o.meters.filter(m => m.kleur === 'onbekend').flatMap(m => m.waarom || []).map(x => String(x).slice(0, 160)))].slice(0, 20) });
+
+  // ── Koersmeter C: verandering sinds gisteren, meldregel en één actie ──
+  const RANG = { groen: 0, oranje: 1, rood: 2 };
+  K.MELD_KAS = 5000;   // kasruimte zoveel slechter dan gisteren = melden
+  // g/v = dagfoto's ({kleur, meters:[{id,kleur,getal}], bronnen}). Geen gisteren → geen vergelijking.
+  K.verschil = function (g, v) {
+    if (!g || !v) return null;
+    const kas = x => { const m = (x.meters || []).find(y => y.id === 'kas'); return m && typeof m.getal === 'number' ? m.getal : null; };
+    const kg = kas(g), kv = kas(v), oudB = new Set(g.bronnen || []);
+    let kleur = 'gelijk';
+    if (v.kleur in RANG && g.kleur in RANG) kleur = RANG[v.kleur] > RANG[g.kleur] ? 'slechter' : RANG[v.kleur] < RANG[g.kleur] ? 'beter' : 'gelijk';
+    else if (v.kleur === 'onbetrouwbaar' && g.kleur !== 'onbetrouwbaar') kleur = 'onbetrouwbaar';
+    else if (g.kleur === 'onbetrouwbaar' && v.kleur in RANG) kleur = 'weer';
+    const r = { kleur, van: g.kleur, naar: v.kleur, kasDelta: kg != null && kv != null ? Math.round(kv - kg) : null, nieuweBronnen: (v.bronnen || []).filter(b => !oudB.has(b)), datumGisteren: g.datum || null };
+    const delen = [];
+    if (kleur === 'slechter' || kleur === 'beter') delen.push(`${kleur === 'slechter' ? 'slechter' : 'beter'}: van ${TITEL[g.kleur]} naar ${TITEL[v.kleur]}`);
+    else if (kleur === 'onbetrouwbaar') delen.push('nu geen betrouwbaar oordeel (bron onvolledig)');
+    else if (kleur === 'weer') delen.push(`weer een oordeel: ${TITEL[v.kleur]}`);
+    if (r.kasDelta != null && Math.abs(r.kasDelta) >= 100) delen.push(`kasruimte ${kort(Math.abs(r.kasDelta))} ${r.kasDelta > 0 ? 'beter' : 'slechter'}`);
+    if (r.nieuweBronnen.length) delen.push(`nieuw onvolledig: ${r.nieuweBronnen[0]}${r.nieuweBronnen.length > 1 ? ` (+${r.nieuweBronnen.length - 1})` : ''}`);
+    r.tekst = delen.length ? 'Sinds gisteren ' + delen.join('; ') + '.' : 'Sinds gisteren niets wezenlijks veranderd.';
+    return r;
+  };
+  // Ochtendmelding alleen bij verslechtering: kleurwissel naar slechter, een nieuwe onvolledige bron, of kasruimte ≥ € 5k lager.
+  K.moetMelden = function (g, v) {
+    const d = K.verschil(g, v); if (!d) return { melden: false, redenen: [] };
+    const redenen = [];
+    if (d.kleur === 'slechter') redenen.push(`oordeel van ${TITEL[d.van]} naar ${TITEL[d.naar]}`);
+    if (d.nieuweBronnen.length) redenen.push('nieuwe onvolledige bron: ' + d.nieuweBronnen.join('; '));
+    if (d.kasDelta != null && d.kasDelta <= -K.MELD_KAS) redenen.push(`kasruimte ${kort(-d.kasDelta)} lager dan gisteren`);
+    return { melden: redenen.length > 0, redenen, verschil: d };
+  };
+  // Precies één actie, op de slechtste meter (kas gaat voor), altijd met een concreet bedrag of een concrete stap.
+  K.actie = function (o, inv) {
+    const m = id => o.meters.find(x => x.id === id), a = (inv && inv.acties) || {};
+    if (o.kleur === 'onbetrouwbaar') { const z = o.meters.find(x => x.kleur === 'onbekend'); return `Werk eerst de ontbrekende bron bij: ${z && z.waarom[0] ? z.waarom[0] : 'zie de meter met "onvolledig"'}.`; }
+    const kas = m('kas');
+    if (kas && (kas.kleur === 'rood' || kas.kleur === 'oranje')) {
+      if (a.achterstallig) return `Bel vandaag over de grootste achterstallige factuur: ${a.achterstallig.tegenpartij} (${kort(a.achterstallig.bedrag)}).`;
+      if (a.advies) return `Factureer ${a.advies.tegenpartij} op ${datum(a.advies.naar)} in plaats van ${datum(a.advies.van)}: het laagste punt wordt ${kort(a.advies.winst)} beter.`;
+      return 'Stel een niet-noodzakelijke uitgave uit of vraag bij de volgende opdracht een aanbetaling.';
+    }
+    const mg = m('marge'); if (mg && (mg.kleur === 'rood' || mg.kleur === 'oranje')) return 'Check materiaal en uitbesteed werk van de grootste lopende klus tegen de offerte.';
+    const om = m('omzet'); if (om && (om.kleur === 'rood' || om.kleur === 'oranje')) return 'Zet projecten die zeker doorgaan in de prognose, of plan deze week acquisitie: met wat nu vastligt halen we vorig jaar niet.';
+    return 'Geen actie nodig.';
+  };
 
   // ── Weergave ──
   K.css = function () {
@@ -174,6 +227,8 @@
 .mtk-jaar{font-size:12px;color:var(--mtg-zacht,#8a8a80);margin-left:auto}
 .mtk-zin{font-size:15px;margin:4px 0 2px;line-height:1.45}
 .mtk-noot{font-size:12px;color:var(--mtg-zacht,#8a8a80);margin-top:2px}
+.mtk-actie{font-size:14px;margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--gold-50,#FBF5E0)}
+.mtk-melding{font-size:13px;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fbe3dd;border-left:4px solid #B4412F}
 .mtk-meters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
 .mtk-m{border:1px solid var(--border,#e4e2da);border-top:4px solid #c9d0d6;border-radius:8px;padding:8px 10px;min-width:0}
 .mtk-m.groen{border-top-color:#2A7A4A}.mtk-m.oranje{border-top-color:#b7791f}.mtk-m.rood{border-top-color:#B4412F}.mtk-m.onbekend{border-top-style:dashed;border-top-color:#8c96a0}
@@ -188,10 +243,20 @@
     document.head.appendChild(s);
   };
   const KLEURWOORD = { groen: 'goed', oranje: 'opletten', rood: 'te laag', neutraal: 'nog niet te beoordelen', onbekend: 'onvolledig' };
-  K.kaartHtml = function (o) {
+  // extra (Koersmeter C): { verschil, actie, melding } — alle tekst wordt geëscapet.
+  K.dagHtml = function (extra) {
+    if (!extra) return '';
+    const d = [];
+    if (extra.melding && extra.melding.melden) d.push(`<div class="mtk-melding" role="alert"><b>Verslechterd sinds gisteren:</b> ${esc(extra.melding.redenen.join('; '))}.</div>`);
+    if (extra.verschil) d.push(`<div class="mtk-noot">${esc(extra.verschil.tekst)}</div>`);
+    else if (extra.eersteDag) d.push('<div class="mtk-noot">Eerste dagfoto: vanaf morgen staat hier wat er sinds gisteren veranderde.</div>');
+    if (extra.actie) d.push(`<div class="mtk-actie"><b>Actie:</b> ${esc(extra.actie)}</div>`);
+    return d.join('');
+  };
+  K.kaartHtml = function (o, extra) {
     return `<section class="mtk ${o.kleur}" aria-label="Koersmeter: ${esc(o.titel)}">
   <div class="mtk-kop"><span class="mtk-titel">${esc(o.titel)}</span><span class="mtk-jaar">Koersmeter · boekjaar ${o.jaar}</span></div>
-  <div class="mtk-zin">${esc(o.zin)}</div>${o.noten.map(n => `<div class="mtk-noot">${esc(n)}</div>`).join('')}
+  <div class="mtk-zin">${esc(o.zin)}</div>${o.noten.map(n => `<div class="mtk-noot">${esc(n)}</div>`).join('')}${K.dagHtml(extra)}
   <div class="mtk-meters">${o.meters.map(m => `<div class="mtk-m ${m.kleur}"><div class="l"><span>${esc(m.titel)}${m.schatting ? ' (schatting)' : ''}</span><button class="mtk-i" data-koers="${m.id}" aria-label="Uitleg en bron: ${esc(m.titel)}" title="Uitleg en bron">i</button></div>
     <div class="w">${esc(m.waarde)}</div><div class="k">${esc(KLEURWOORD[m.kleur])}${m.gedempt ? ' (vroeg in het jaar)' : ''}</div>${m.sub.map(s => `<div class="s">${esc(s)}</div>`).join('')}${m.kleur === 'onbekend' && m.waarom.length ? `<div class="s">${esc(m.waarom[0])}</div>` : ''}</div>`).join('')}</div>
 </section>`;

@@ -22,8 +22,10 @@
  * opts (string wordt als {message} opgevat):
  *   { title?, message?, html?, okLabel?, cancelLabel?, danger?, defaultValue?,
  *     placeholder?, multiline?, choices?: [{label, sublabel?}], defaultIndex? }
- *   - html: vertrouwde HTML-body (bv. mail-preview). message: platte tekst,
- *     wordt ge-escaped en \n → <br>.
+ *   - html: ALLEEN als expliciete uitzondering: mtDialog.vertrouwdeHtml('<p>…</p>') — HTML die de caller zelf
+ *     heeft opgebouwd met esc() rond elke waarde. Een gewone string in html wordt als TEKST getoond (veilig),
+ *     met een waarschuwing in de console. Mail-, AI-, rapport- of collega-tekst hoort nooit in vertrouwdeHtml.
+ *   - message: platte tekst, wordt ge-escaped en \n → <br>.
  *   - danger: kleurt de OK-knop rood (verwijder-acties).
  *
  * Gedrag is bewust IDENTIEK aan de vervangen prompt/confirm: zelfde teksten en
@@ -34,6 +36,11 @@
   if (!root || !root.document) return;
   const doc = root.document;
 
+  // Registratie van bewust vertrouwde HTML: alleen objecten die vertrouwdeHtml() zelf maakte zitten in deze (private) WeakSet.
+  // Geen eigenschap op het object, dus niet na te maken met JSON, gekopieerde data of een voorspelbare sleutel. Zonder WeakSet
+  // (zeer oude browser) is er niets vertrouwd: alles wordt dan als tekst getoond (fail closed).
+  const VERTROUWD = typeof WeakSet === 'function' ? new WeakSet() : null;
+  const VERTROUWD_PROTO = { toString() { return this.html; } };   // fail closed: zonder registratie wordt de markup als tekst getoond
   // esc — leun op de canonieke escaper uit mt-core; val faalveilig terug.
   const esc = typeof root.esc === 'function'
     ? root.esc
@@ -100,7 +107,11 @@
       const dlg = doc.createElement('dialog');
       dlg.className = 'mt-dialog';
 
-      const bodyHtml = opts.html != null ? String(opts.html)
+      // F7 r2: html alleen als bewust gemerkte uitzondering; een kale string wordt tekst (geen HTML-injectie via de makkelijke weg).
+      const vertrouwd = !!(VERTROUWD && opts.html && typeof opts.html === 'object' && VERTROUWD.has(opts.html));
+      if (opts.html != null && !vertrouwd) { try { console.warn('mtDialog: html zonder mtDialog.vertrouwdeHtml() wordt als tekst getoond'); } catch (e) {} }
+      const bodyHtml = vertrouwd ? String(opts.html.html)
+        : opts.html != null ? textToHtml(String(opts.html))
         : (opts.message != null ? textToHtml(opts.message) : '');
       let inner = '';
       if (opts.title) inner += `<div class="mtd-head">${esc(opts.title)}</div>`;
@@ -181,7 +192,9 @@
     confirm: (opts) => open('confirm', opts),
     prompt: (opts) => open('prompt', opts),
     choose: (opts) => open('choose', opts),
-    alert: (opts) => open('alert', opts)
+    alert: (opts) => open('alert', opts),
+    // Bewuste uitzondering: alleen HTML die de caller zelf met esc() rond elke waarde heeft opgebouwd.
+    vertrouwdeHtml: (html) => { const o = Object.create(VERTROUWD_PROTO); o.html = String(html == null ? '' : html); if (VERTROUWD) VERTROUWD.add(o); return o; }
   };
 
 })(typeof window !== 'undefined' ? window : null);

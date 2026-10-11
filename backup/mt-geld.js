@@ -493,6 +493,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const k = st.koers; if (!root.MTKoers || !k || k.laden || (k.r && !k.fout && (k.r.compleet || k.klaar))) return;
     k.laden = true; k.fout = null; koersTeken();
     const v = st.data.vandaag, mislukt = new Set();
+    // Koersmeter C: de dagfoto's van de laatste dagen (oude worker → leeg; dan geen "sinds gisteren").
+    if (!k.dagfotos) { try { const d = await st.bron.haal('/geld/koers/dagfotos?dagen=7'); k.dagfotos = d && Array.isArray(d.dagfotos) ? d.dagfotos : null; } catch (e) { k.dagfotos = null; } }   // null = oude worker / fout: geen vergelijking, ook geen 'eerste dagfoto'
     for (k.rondes = 0; k.rondes < KOERS_RONDES; k.rondes++) {
       let r = null;
       try { r = await st.bron.haal(`/geld/cijfers?per=maand&van=${Number(v.slice(0, 4)) - 1}-01&tot=${v.slice(0, 7)}`); } catch (e) { r = { error: e.message || String(e) }; }
@@ -502,11 +504,27 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       await new Promise(res => setTimeout(res, G._pauze != null ? G._pauze : 1500));
     }
     k.laden = false; k.klaar = true; koersTeken();
+    koersDagfotoBewaar();
+  }
+  // De dagfoto van vandaag bewaren (alleen de eigenaar; de worker weigert anders): één keer per openen, als de cijfers binnen zijn.
+  async function koersDagfotoBewaar() {
+    const k = st.koers, K = root.MTKoers; if (!K || !st.mag || !k || k.fotoBewaard || !st.koersOordeel || k.fout) return;
+    k.fotoBewaard = true;
+    try { const r = await st.bron.haal('/geld/koers/dagfoto', { method: 'POST', body: K.dagfotoOpslag(st.koersOordeel) }); if (r && r.ok) k.fotoVandaag = r.datum; } catch (e) { }
   }
   function koersHtml() {
     if (!root.MTKoers || !st.data) return '';
-    try { root.MTKoers.css(); st.koersOordeel = root.MTKoers.oordeel(root.MTKoers.invoer(st.data, st.cfg, st.koers, G)); return root.MTKoers.kaartHtml(st.koersOordeel); }
-    catch (e) { return `<div class="mtg-melding">Koersmeter kon niet rekenen (${esc(e.message)}).</div>`; }
+    try {
+      const K = root.MTKoers; K.css();
+      const inv = K.invoer(st.data, st.cfg, st.koers, G), o = st.koersOordeel = K.oordeel(inv);
+      // Koersmeter C (alleen als de cijfers binnen zijn): sinds gisteren, één actie, melding bij verslechtering.
+      let extra = null;
+      if (st.koers && st.koers.klaar && !st.koers.laden) {
+        const v = st.data.vandaag, gisteren = (st.koers.dagfotos || []).filter(x => x.datum < v).sort((a, b) => b.datum.localeCompare(a.datum))[0] || null, nu = K.dagfotoOpslag(o);
+        extra = { actie: K.actie(o, inv), verschil: K.verschil(gisteren, nu), melding: K.moetMelden(gisteren, nu), eersteDag: !gisteren && !!st.koers.dagfotos };
+      }
+      return K.kaartHtml(o, extra);
+    } catch (e) { return `<div class="mtg-melding">Koersmeter kon niet rekenen (${esc(e.message)}).</div>`; }
   }
   function koersTeken() { const p = st.el && st.el.querySelector('#mtk-plek'); if (p) p.innerHTML = koersHtml(); }
   // Betaalgedrag en vaste patronen: zonder cron — de eigenaar ververst ze op de achtergrond bij het openen.

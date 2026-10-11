@@ -909,7 +909,7 @@ function tgOpenProject(id){
         ${mails}
       </div>
       <div style="margin-top:12px">
-        <button class="btn btn-sm btn-gold" onclick="tgNaarVolledigProject('${tgEsc(mt.code)}')">→ Volledig project openen</button>
+        <button class="btn btn-sm btn-gold" onclick="tgNaarVolledigProject(${jsArg(mt.code)})">→ Volledig project openen</button>
       </div>`;
   } else {
     mtBlok=`<div class="card">
@@ -948,7 +948,7 @@ function tgNaarVolledigProject(code){
   if(typeof tbDoTab==='function') tbDoTab('projecten');
   setTimeout(()=>{
     if(typeof renderProjectLijst==='function') renderProjectLijst();
-    const el=document.querySelector(`#project-lijst .factuur-item[onclick*="selecteerProject('${code}'"]`);
+    const el=[...document.querySelectorAll('#project-lijst .factuur-item')].find(x=>x.dataset.code===String(code));   // F7 r3: niet meer op de onclick-tekst zoeken
     if(el&&typeof selecteerProject==='function'){ selecteerProject(code,el); el.scrollIntoView({block:'center'}); }
     else if(typeof renderProjectDetail==='function'){ huidigProject=mt; renderProjectDetail(mt); }
   },120);
@@ -1158,10 +1158,10 @@ async function tgLaadBeheer(){
   const cb=document.getElementById('tg-clients'), tb=document.getElementById('tg-tags');
   cb.innerHTML='<div class="tg-leeg">Laden…</div>'; tb.innerHTML='<div class="tg-leeg">Laden…</div>';
   try{ const cs=await tgStore.clients();
-    cb.innerHTML=cs.length?cs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<div class="tg-row"><span style="flex:1">${tgEsc(c.name)}</span><button class="btn btn-sm btn-secondary" title="Hernoemen" onclick="tgRenameClient(${c.id},this.parentNode.querySelector('span').textContent)">✎</button><button class="btn btn-sm btn-secondary" title="Verwijderen" onclick="tgVerwijderClient(${c.id},'${tgEsc(c.name).replace(/'/g,"\\'")}')">🗑</button></div>`).join(''):'<div class="tg-leeg">Geen clients.</div>';
+    cb.innerHTML=cs.length?cs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<div class="tg-row"><span style="flex:1">${tgEsc(c.name)}</span><button class="btn btn-sm btn-secondary" title="Hernoemen" onclick="tgRenameClient(${Number(c.id)||0},this.parentNode.querySelector('span').textContent)">✎</button><button class="btn btn-sm btn-secondary" title="Verwijderen" onclick="tgVerwijderClient(${Number(c.id)||0},${jsArg(c.name)})">🗑</button></div>`).join(''):'<div class="tg-leeg">Geen clients.</div>';
   }catch(e){ cb.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
   try{ const ts=await tgStore.tags();
-    tb.innerHTML=ts.length?ts.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(t=>`<span class="tg-pill" style="font-size:12px"><span style="cursor:pointer" title="Klik om te hernoemen" onclick="tgRenameTag(${t.id},'${tgEsc(t.name).replace(/'/g,"\\'")}')">${tgEsc(t.name)} ✎</span> <span style="cursor:pointer;color:#c0392b" title="Verwijderen" onclick="tgVerwijderTag(${t.id},'${tgEsc(t.name).replace(/'/g,"\\'")}')">✕</span></span>`).join(' '):'<div class="tg-leeg">Geen tags.</div>';
+    tb.innerHTML=ts.length?ts.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(t=>`<span class="tg-pill" style="font-size:12px"><span style="cursor:pointer" title="Klik om te hernoemen" onclick="tgRenameTag(${Number(t.id)||0},${jsArg(t.name)})">${tgEsc(t.name)} ✎</span> <span style="cursor:pointer;color:#c0392b" title="Verwijderen" onclick="tgVerwijderTag(${Number(t.id)||0},${jsArg(t.name)})">✕</span></span>`).join(' '):'<div class="tg-leeg">Geen tags.</div>';
   }catch(e){ tb.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
 }
 async function tgVerwijderClient(id,naam){

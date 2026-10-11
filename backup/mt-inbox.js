@@ -44,6 +44,8 @@ const IB_FILTERS={ongelezen:'Ongelezen',nietGekoppeld:'Niet gekoppeld',bijlage:'
 let _inbox={mbx:INBOX_DEFAULT,folderId:null,folderName:'',folders:[],msgs:[],cur:null,undo:null,loaded:false,q:'',nextLink:null,loadingMore:false,threadMode:false,curThread:null};
 
 function ibEsc(s){return esc(s);}   // alias van de canonieke esc() bovenin (was identieke kopie)
+// F7 r2: argument voor een inline handler — JSON-letterlijke (JS-veilig), daarna HTML-geëscapet (attribuut-veilig).
+function ibJa(s){return esc(JSON.stringify(String(s==null?'':s)));}
 function ibBase(){return _inbox.mbx==='me'?'https://graph.microsoft.com/v1.0/me':`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(_inbox.mbx)}`;}
 // Mail-calls (berichten/mappen) vragen immutable ids: die blijven gelijk als een mail
 // verplaatst wordt, zodat koppelingen en chips blijven kloppen (brok B5). Een eigen Prefer
@@ -206,7 +208,7 @@ function todoRow(t){
   const due=(t.dueDateTime&&t.dueDateTime.dateTime)?new Date(t.dueDateTime.dateTime).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'';
   const imp=t.importance==='high'?'<span title="hoog" style="color:#c0392b">‼</span> ':'';
   return `<div style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid #f0f0f0">
-    <input type="checkbox" ${done?'checked':''} onchange="todoToggle('${t.id}',this.checked)" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto">
+    <input type="checkbox" ${done?'checked':''} onchange="todoToggle(${ibJa(t.id)},this.checked)" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto">
     <span style="flex:1;font-size:13px;${done?'text-decoration:line-through;color:#aaa':''}">${imp}${ibEsc(t.title||'(geen titel)')}</span>
     ${due?`<span style="font-size:11px;color:var(--text-faint,#999);white-space:nowrap">📅 ${due}</span>`:''}
   </div>`;
@@ -484,7 +486,7 @@ function ibFilterToepassen(msgs){
 function inboxFilterChipsTekenen(){
   const el=document.getElementById('inbox-filters'); if(!el) return;
   const f=_inbox.filter||{};
-  el.innerHTML=Object.entries(IB_FILTERS).map(([k,l])=>`<button type="button" class="ib-fchip${f[k]?' actief':''}" aria-pressed="${!!f[k]}" onclick="inboxFilterToggle('${k}')">${l}</button>`).join('');
+  el.innerHTML=Object.entries(IB_FILTERS).map(([k,l])=>`<button type="button" class="ib-fchip${f[k]?' actief':''}" aria-pressed="${!!f[k]}" onclick="inboxFilterToggle(${ibJa(k)})">${l}</button>`).join('');
 }
 function inboxFilterToggle(k){
   _inbox.filter=Object.assign({},_inbox.filter||{}); _inbox.filter[k]=!_inbox.filter[k];
@@ -628,7 +630,7 @@ function inboxRenderThread(items){
     const fid=`ibthr-${i}`;
     return `<div class="inbox-thread-item">
       <div class="inbox-thread-hdr"><span><b>${ibEsc(van)}</b>${clip}</span><span>${dt}</span></div>
-      <div class="inbox-thread-body"><button class="btn btn-sm btn-secondary" style="margin:8px 11px" onclick="inboxThreadExpand('${m.id}','${fid}')">📖 Volledig bericht openen</button>
+      <div class="inbox-thread-body"><button class="btn btn-sm btn-secondary" style="margin:8px 11px" onclick="inboxThreadExpand(${ibJa(m.id)},${ibJa(fid)})">📖 Volledig bericht openen</button>
         <div style="padding:0 11px 10px;font-size:12.5px;color:var(--text-dim,#666)">${ibEsc(m.bodyPreview||'')}</div>
         <div id="${fid}"></div></div>
     </div>`;
@@ -822,7 +824,7 @@ function ibProjecten(m){ return (window.MTKoppel&&m)?MTKoppel.mailProjecten(m):[
 // Koppel-badge (B11, Moneybird-stijl) voor één mail: groen dicht = gekoppeld, geel open = niet
 // gekoppeld (met "Koppel? CODE" bij een sterk voorstel). Klik = popover met voorstellen of details.
 function ibKoppelBadge(m,{klein=false}={}){
-  const codes=ibProjecten(m), id=ibEsc(m.id).replace(/'/g,''), klik=`event.stopPropagation();event.preventDefault();inboxKoppelPop(this,'${id}')`;
+  const codes=ibProjecten(m), klik=`event.stopPropagation();event.preventDefault();inboxKoppelPop(this,${JSON.stringify(String(m.id))})`;
   if(!window.MTKoppelUI) return '';
   if(codes.length) return MTKoppelUI.badge({status:'gekoppeld',klein,label:(typeof projKort==='function'?projKort(codes[0]):codes[0])+(codes.length>1?' +'+(codes.length-1):''),titel:'Gekoppeld aan '+codes.map(c=>typeof projKort==='function'?projKort(c):c).join(', ')+' — klik voor details of ontkoppelen',onclick:klik});
   const v=ibVoorstel(m)[0];
@@ -841,23 +843,23 @@ function inboxKoppelKnopHtml(m){ return `<span id="inbox-koppelknop">${ibKoppelB
 function _ibMailVia(id){ return (_inbox.cur&&_inbox.cur.id===id&&_inbox.cur)||(_inbox.msgs||[]).find(x=>x.id===id)||(_inbox.curThreadItems||[]).find(x=>x.id===id)||null; }
 function inboxKoppelPop(el,id){
   const m=_ibMailVia(id); if(!m||!window.MTKoppelUI) return;
-  const codes=ibProjecten(m), mid=ibEsc(id).replace(/'/g,'');
+  const codes=ibProjecten(m), mid=ibJa(id);
   const proj=c=>(typeof PROJECT_CODES!=='undefined'&&(typeof projVind==='function'?projVind(c):PROJECT_CODES.find(x=>x.code===c)))||null;
   const naam=c=>{ const p=proj(c)||{}; const n=typeof projNaamVol==='function'?(p.code?projNaamVol(p):''):p.naam; return n?' '+ibEsc(n):''; };
   const nr=c=>(typeof projLabelCode==='function'?projLabelCode(proj(c)):c);
   let html='';
   if(codes.length){
-    html+=codes.map(c=>{ const cc=ibEsc(c).replace(/'/g,''); return `<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:(typeof projKort==='function'?projKort(c):c)})}<span class="kb-pop-n">${nr(c)?naam(c):''}</span>
-      <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxNaarProject('${cc}')">Open</button>
-      <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();ibOntkoppelVia('${mid}','${cc}')">Ontkoppelen</button></div>`; }).join('');
-    html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();ibAnderVia('${mid}')">+ nog een koppeling</button></div>`;
+    html+=codes.map(c=>{ const cc=ibJa(c); return `<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:(typeof projKort==='function'?projKort(c):c)})}<span class="kb-pop-n">${nr(c)?naam(c):''}</span>
+      <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxNaarProject(${cc})">Open</button>
+      <button class="btn btn-xs btn-danger" onclick="MTKoppelUI.sluit();ibOntkoppelVia(${mid},${cc})">Ontkoppelen</button></div>`; }).join('');
+    html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();ibAnderVia(${mid})">+ nog een koppeling</button></div>`;
   } else {
     const v=ibVoorstel(m);
-    html+=v.length?v.map((o,i)=>{ const cc=ibEsc(o.code).replace(/'/g,''); return `<div class="kb-pop-rij"><div class="kb-pop-n"><b>${naam(o.code)||ibEsc((typeof projKort==='function'?projKort(o.code):o.code))}</b>${nr(o.code)?' <span class="code">'+ibEsc(nr(o.code))+'</span>':''}<div class="dos-meta">${ibEsc(o.redenen.join('; '))}</div></div>
-      <button class="btn btn-xs ${i===0&&o.score>=MTKoppel.VOORSTEL_STERK?'btn-primary':'btn-secondary'}" onclick="MTKoppelUI.sluit();ibKoppelVia('${mid}','${cc}','voorstel')">✓ Koppel</button></div>`; }).join('')
+    html+=v.length?v.map((o,i)=>{ const cc=ibJa(o.code); return `<div class="kb-pop-rij"><div class="kb-pop-n"><b>${naam(o.code)||ibEsc((typeof projKort==='function'?projKort(o.code):o.code))}</b>${nr(o.code)?' <span class="code">'+ibEsc(nr(o.code))+'</span>':''}<div class="dos-meta">${ibEsc(o.redenen.join('; '))}</div></div>
+      <button class="btn btn-xs ${i===0&&o.score>=MTKoppel.VOORSTEL_STERK?'btn-primary':'btn-secondary'}" onclick="MTKoppelUI.sluit();ibKoppelVia(${mid},${cc},'voorstel')">✓ Koppel</button></div>`; }).join('')
       :'<div class="dos-meta" style="margin-bottom:6px">Geen voorstel gevonden.</div>';
-    if(v.length&&m.conversationId) html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxKoppelGesprek('${ibEsc(v[0].code).replace(/'/g,'')}','${ibEsc(m.conversationId).replace(/'/g,'')}')">✓ Koppel hele gesprek aan ${ibEsc(v[0].code)}</button></div>`;
-    html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();ibAnderVia('${mid}')">🔍 Ander project…</button>${_inbox.cur&&_inbox.cur.id===id?` <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxMaakProject()">📁 Nieuw project van deze mail</button>`:''}</div>`;
+    if(v.length&&m.conversationId) html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxKoppelGesprek(${ibJa(v[0].code)},${ibJa(m.conversationId)})">✓ Koppel hele gesprek aan ${ibEsc(v[0].code)}</button></div>`;
+    html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();ibAnderVia(${mid})">🔍 Ander project…</button>${_inbox.cur&&_inbox.cur.id===id?` <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxMaakProject()">📁 Nieuw project van deze mail</button>`:''}</div>`;
   }
   MTKoppelUI.popover(el,html,{titel:codes.length?'Gekoppeld':'Niet gekoppeld — voorstellen'});
 }
@@ -906,7 +908,7 @@ function ntkLijst(key){
     return `<div class="ntk-rij"><div class="dos-hoofd"><div class="dos-titel">${m.hasAttachments?'📎 ':''}${ibEsc(m.subject||'(geen onderwerp)')}</div>
       <div class="dos-meta">${ibEsc(van)} · ${m.receivedDateTime?ibEsc(m.receivedDateTime.slice(0,10)):''} · ${ibEsc(m.mbxLabel||m.mbx||'')}</div></div>
       <div class="dos-acties">${st.codes.length>1?`<select class="dos-sel" aria-label="Project" id="ntk-sel-${ibEsc(key).replace(/[^A-Za-z0-9]/g,'')}-${i}">${projOpt(m)}</select>`:''}
-        ${window.MTKoppelUI?MTKoppelUI.badge(st.codes.length===1?{status:'voorstel',label:(typeof projKort==='function'?projKort(st.codes[0]):st.codes[0]),titel:'Voorstel: koppel aan '+(typeof projKort==='function'?projKort(st.codes[0]):st.codes[0])+' — klik om te koppelen',onclick:`ntkKoppel('${ibEsc(key)}',${i})`}:{status:'open',label:'project',titel:'Niet gekoppeld — klik om een project te kiezen',onclick:`ntkKoppel('${ibEsc(key)}',${i})`}):`<button class="btn btn-xs btn-primary" onclick="ntkKoppel('${ibEsc(key)}',${i})">✓ koppel</button>`}</div></div>`; }).join('');
+        ${window.MTKoppelUI?MTKoppelUI.badge(st.codes.length===1?{status:'voorstel',label:(typeof projKort==='function'?projKort(st.codes[0]):st.codes[0]),titel:'Voorstel: koppel aan '+(typeof projKort==='function'?projKort(st.codes[0]):st.codes[0])+' — klik om te koppelen',onclick:`ntkKoppel(${JSON.stringify(String(key))},${i})`}:{status:'open',label:'project',titel:'Niet gekoppeld — klik om een project te kiezen',onclick:`ntkKoppel(${JSON.stringify(String(key))},${i})`}):`<button class="btn btn-xs btn-primary" onclick="ntkKoppel(${JSON.stringify(String(key))},${i})">✓ koppel</button>`}</div></div>`; }).join('');
 }
 async function ntkLaad(key,{forceer=false}={}){
   const st=_ntk[key]; if(!st) return;
@@ -990,15 +992,15 @@ function inboxGesprekKoppelTekenen(){
 }
 function inboxGesprekPop(el){
   const items=_inbox.curThreadItems||[]; if(!items.length||!window.MTKoppelUI) return;
-  const codes=[...new Set(items.flatMap(m=>ibProjecten(m)))], nieuwste=items[items.length-1], cid=ibEsc(nieuwste.conversationId||'').replace(/'/g,'');
+  const codes=[...new Set(items.flatMap(m=>ibProjecten(m)))], nieuwste=items[items.length-1], cid=nieuwste.conversationId||'';
   if(!_ibVoorstelIx) _ibVoorstelIx=MTKoppel.voorstelIndex();
   const v=nieuwste.conversationId?MTKoppel.koppelVoorstel(nieuwste,{index:_ibVoorstelIx,gesprek:items}).filter(x=>!codes.includes(x.code)):[];
   let html=codes.map(c=>`<div class="kb-pop-rij">${MTKoppelUI.badge({status:'gekoppeld',klein:true,label:c})}<span class="kb-pop-n">${items.filter(m=>ibProjecten(m).includes(c)).length} van ${items.length} mails</span>
-    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxNaarProject('${ibEsc(c).replace(/'/g,'')}')">Open</button>
-    ${cid?`<button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxKoppelGesprek('${ibEsc(c).replace(/'/g,'')}','${cid}')">Rest ook koppelen</button>`:''}</div>`).join('');
+    <button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxNaarProject(${ibJa(c)})">Open</button>
+    ${cid?`<button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxKoppelGesprek(${ibJa(c)},${ibJa(cid)})">Rest ook koppelen</button>`:''}</div>`).join('');
   html+=v.map(o=>`<div class="kb-pop-rij"><div class="kb-pop-n"><b>${ibEsc((typeof projKort==='function'?projKort(o.code):o.code))}</b><div class="dos-meta">${ibEsc(o.redenen.join('; '))}</div></div>
-    <button class="btn btn-xs btn-primary" onclick="MTKoppelUI.sluit();inboxKoppelGesprek('${ibEsc(o.code).replace(/'/g,'')}','${cid}')">✓ Koppel hele gesprek</button></div>`).join('');
-  if(cid) html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxKoppelGesprekKies('${cid}')">🔍 Gesprek koppelen aan ander project…</button></div>`;
+    <button class="btn btn-xs btn-primary" onclick="MTKoppelUI.sluit();inboxKoppelGesprek(${ibJa(o.code)},${ibJa(cid)})">✓ Koppel hele gesprek</button></div>`).join('');
+  if(cid) html+=`<div class="kb-pop-acties"><button class="btn btn-xs btn-secondary" onclick="MTKoppelUI.sluit();inboxKoppelGesprekKies(${ibJa(cid)})">🔍 Gesprek koppelen aan ander project…</button></div>`;
   MTKoppelUI.popover(el,html||'<div class="dos-meta">Geen gesprek-id; koppel de mails los.</div>',{titel:'Gesprek ('+items.length+' mails)'});
 }
 function inboxKoppelGesprekKies(cid){ _inbox.koppelModus={gesprek:cid}; inboxKoppelProject(); }
@@ -1045,7 +1047,7 @@ function inboxKoppelProject(){
   const ov=document.createElement('div');ov.id='koppel-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(28,26,22,.45);z-index:10000;display:flex;align-items:center;justify-content:center';
   ov.onclick=e=>{if(e.target===ov){ov.remove();_inbox.koppelModus=null;}};
-  const lijst=PROJECT_CODES.map(p=>`<div class="kp-row" data-zoek="${ibEsc((p.code+' '+(p.naam||'')+' '+(p.klant||'')).toLowerCase())}" onclick="inboxKoppelProjectDo('${ibEsc(p.code).replace(/'/g,'')}')" style="padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer">
+  const lijst=PROJECT_CODES.map(p=>`<div class="kp-row" data-zoek="${ibEsc((p.code+' '+(p.naam||'')+' '+(p.klant||'')).toLowerCase())}" onclick="inboxKoppelProjectDo(${ibJa(p.code)})" style="padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer">
       <div style="font-weight:600;font-size:13px">${ibEsc(typeof projNaamVol==='function'?projNaamVol(p):(p.naam||p.code))}</div>
       <div style="font-size:11px;color:var(--text-dim)">${typeof projLabelCode==='function'?(projLabelCode(p)?`<span style="font-family:var(--mono)">${ibEsc(projLabelCode(p))}</span> · `:''):`<span style="font-family:var(--mono)">${ibEsc(p.code)}</span> · `}${ibEsc((typeof projKlantNaam==='function'&&projKlantNaam(p))||'')}${al.has(p.code)&&window.MTKoppelUI?' '+MTKoppelUI.badge({status:'gekoppeld',klein:true}):''}</div>
     </div>`).join('');
@@ -1194,7 +1196,7 @@ async function inboxBijlagenDialoog(mailId,code){
     const rij=(it,i)=>`<tr>
       <td style="padding:4px 6px"><input type="checkbox" ${it.aan?'checked':''} onchange="_ibBijl.items[${i}].aan=this.checked"></td>
       <td style="padding:4px 6px;font-size:12px;word-break:break-all">${ibEsc(it.naam)} <span style="color:var(--text-faint)">(${Math.max(1,Math.round(it.grootte/1024))} kB)</span>
-        ${it.al?`<div style="font-size:10px">${window.MTKoppelUI?MTKoppelUI.badge({status:'gekoppeld',klein:true,label:it.al.sub,titel:'Al opgeslagen in de projectmap ('+it.al.sub+')'}):'✓ al opgeslagen in '+ibEsc(it.al.sub)}${it.al.webUrl?` · <a href="${ibEsc(it.al.webUrl)}" target="_blank">openen</a>`:''}</div>`:''}</td>
+        ${it.al?`<div style="font-size:10px">${window.MTKoppelUI?MTKoppelUI.badge({status:'gekoppeld',klein:true,label:it.al.sub,titel:'Al opgeslagen in de projectmap ('+it.al.sub+')'}):'✓ al opgeslagen in '+ibEsc(it.al.sub)}${veiligeUrl(it.al.webUrl,{hosts:['sharepoint.com','office.com','office365.com','microsoft.com']})?` · <a href="${ibEsc(veiligeUrl(it.al.webUrl,{hosts:['sharepoint.com','office.com','office365.com','microsoft.com']}))}" target="_blank" rel="noopener noreferrer">openen</a>`:''}</div>`:''}</td>
       <td style="padding:4px 6px"><select onchange="_ibBijl.items[${i}].sub=this.value" style="font-size:12px">${IB_SUBMAPPEN.map(s=>`<option${s===it.sub?' selected':''}>${s}</option>`).join('')}</select></td>
     </tr>`;
     const oud=document.getElementById('bijl-overlay'); if(oud) oud.remove();

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Blok G (Codex op 8ef0deb + 08abc05): SHA-256-vingerafdruk verhuizer, cron-budget en dagclaim
+- Commit: `48fc0cd` | Auteur: Bart Witte
+
 ## 2026-10-11 — F7 3b groep 1: tekstsinks v2 Moneybird/mail/SharePoint door esc()
 - Commit: `28fe44c` | Auteur: Bart Witte
 

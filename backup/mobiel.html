@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.11.10 — M&T Mobiel</title>
+<title>BACKUP v2.12.0 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -20,15 +20,16 @@
 <!-- Gedeelde kernlaag (esc, _encPath, authHeader, MSAL-tokenhelpers, _SP-synclaag) —
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
-<script src="mt-core.js?v=2026-10-09a"></script>
+<script src="mt-core.js?v=2026-10-11b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
-<script src="mt-dialog.js?v=2026-07-03b"></script>
-<script src="mt-koppel.js?v=2026-10-07a"></script>
-<script src="mt-contacten.js?v=2026-10-07a"></script>
+<script src="mt-dialog.js?v=2026-10-11b"></script>
+<script src="mt-koppel.js?v=2026-10-11a"></script>
+<script src="mt-contacten.js?v=2026-10-11b"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-fotostore.js?v=2026-07-31"></script>
+<script src="mt-fotostore.js?v=2026-10-11a"></script>
+<script src="mt-verhuis.js?v=2026-10-11c"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -761,7 +762,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.11.10, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.12.0, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -786,6 +787,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     <button class="header-info-btn" id="geldKnop" style="display:none" onclick="location.href='v2.html#tab=geld'" aria-label="Geld (geldtijdlijn)" title="Geld">€</button>
     <button class="header-info-btn notif-btn" onclick="openNotifs()" aria-label="Notificaties">🔔<span class="notif-badge" id="notifBadge" style="display:none">0</span></button>
     <button class="header-info-btn" onclick="openLarry()" aria-label="Larry helpt">ⓘ</button>
+    <button class="user-avatar-btn" id="verhuisBtn" style="display:none" onclick="verhuisOpen()" title="Verhuizen naar het nieuwe adres" aria-label="Verhuizen naar het nieuwe adres">⇄</button>
     <button class="user-avatar-btn" id="userAvatarBtn" style="display:none" onclick="msLogout()" title="Uitloggen"></button>
   </div>
 </header>
@@ -2228,9 +2230,9 @@ function pvTekenMobiel() {
   const el = document.getElementById('pv-meldingen-m'); if (!el || !window.MTPlanVoorstel) return;
   const PV = MTPlanVoorstel, mijn = PV.meldingen(_pvBlokken, _mijnEmail(), PV.gezien()), open = _pvMagBeslissen() ? PV.open(_pvBlokken) : [];
   el.innerHTML = mijn.map(m => `<div class="pv-melding ${m.soort === 'goedgekeurd' ? 'goed' : 'af'}" role="status">${m.soort === 'goedgekeurd' ? '✓ Voorstel goedgekeurd' : '✗ Voorstel afgewezen'}: <b>${escHtml(m.blok.taak || m.blok.project_code || 'planblok')}</b> ${escHtml(m.blok.datum)} ${escHtml(m.blok.start || '')}${m.reden ? ' — “' + escHtml(m.reden) + '”' : ''}
-      <button class="timer-mini-btn" onclick="MTPlanVoorstel.markeerGezien('${escHtml(m.sleutel)}');pvTekenMobiel()">OK</button></div>`).join('')
+      <button class="timer-mini-btn" onclick="MTPlanVoorstel.markeerGezien(${jsArg(m.sleutel)});pvTekenMobiel()">OK</button></div>`).join('')
     + open.map(b => `<div class="pv-melding open"><span>Voorstel ${escHtml((b.voorstel && b.voorstel.doorNaam) || '')}: <b>${escHtml(b.taak || b.project_code || '')}</b> ${escHtml(b.datum)} ${escHtml(b.start || '')}</span>
-      <button class="timer-mini-btn" onclick="pvBeslisMobiel('${escHtml(b.id)}',true)">✓ Goedkeuren</button><button class="timer-mini-btn" onclick="pvBeslisMobiel('${escHtml(b.id)}',false)">✗ Afwijzen</button></div>`).join('');
+      <button class="timer-mini-btn" onclick="pvBeslisMobiel(${jsArg(b.id)},true)">✓ Goedkeuren</button><button class="timer-mini-btn" onclick="pvBeslisMobiel(${jsArg(b.id)},false)">✗ Afwijzen</button></div>`).join('');
 }
 async function pvBeslisMobiel(id, goed) {
   const PV = MTPlanVoorstel, b = _pvBlokken.find(x => x.id === id); if (!b) return;
@@ -2284,6 +2286,8 @@ async function toonApp(account) {
   const avatar = document.getElementById('userAvatarBtn');
   avatar.textContent = naam.charAt(0).toUpperCase();
   avatar.style.display = 'flex';
+  // F5 verhuisknop: balk "verhuisd" (oud adres) + knop alleen met de proefvlag
+  if (window.MTVerhuis) { MTVerhuis.zetContext(verhuisCtx()); MTVerhuis.balk(); if (MTVerhuis.aan()) document.getElementById('verhuisBtn').style.display = 'flex'; }
   document.getElementById('demoBadge').style.display = 'none';
   // F1c: rol ophalen (verbergen alleen in modus 'afdwingen'; de worker beslist)
   rolLaadMobiel().then(() => { if (window.MTToggl) MTToggl.laad(WORKER); aanwezigLaadMobiel(); });
@@ -2911,7 +2915,7 @@ async function saveTimerEdit() {
 function openManualEntry() {
   const sel = document.getElementById("manProject");
   sel.innerHTML = `<option value="">— kies project —</option>` +
-    allProjects().map(p => `<option value="${p.code}" ${activeProject && p.code===activeProject.code ? "selected" : ""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("");
+    allProjects().map(p => `<option value="${escHtml(p.code)}" ${activeProject && p.code===activeProject.code ? "selected" : ""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("");
   document.getElementById("manDesc").value = "";
   document.getElementById("manDate").value = _isoDate(new Date());
   // standaard: het afgelopen uur, op kwartieren afgerond
@@ -3249,7 +3253,7 @@ function renderPickerList(list) {
 }
 
 function pickerItemHtml(p) {
-  return `<div class="picker-item" data-id="${p.id}" onclick="selectProject('${p.id}')">
+  return `<div class="picker-item" data-id="${escHtml(p.id)}" onclick="selectProject(${jsArg(p.id)})">
     <div>
       <div class="picker-item-name">${escHtml(mProjNaam(p))}</div>
     </div>
@@ -3270,7 +3274,7 @@ function selectProject(id) {
   updateTimerUI();
   updateSpMockPath();
   // scroll picker item into view
-  const el = document.querySelector(`.picker-item[data-id="${id}"]`);
+  const el = document.querySelector(`.picker-item[data-id="${CSS.escape(String(id))}"]`);
   if (el) el.scrollIntoView({block:"nearest"});
 }
 
@@ -3288,7 +3292,7 @@ function renderRecentList() {
   const recents = allProjects().filter(p => p.assigned).slice(0,3);
   if (!recents.length) { el.innerHTML = `<div class="empty-state"><div class="empty-text">Geen recente activiteit</div></div>`; return; }
   el.innerHTML = recents.map(p => `
-    <div class="recent-entry" onclick="selectProject('${p.id}')">
+    <div class="recent-entry" onclick="selectProject(${jsArg(p.id)})">
       <div class="recent-dot"></div>
       <div class="recent-info">
         <div class="recent-name">${escHtml(mProjNaam(p))}</div>
@@ -3323,7 +3327,7 @@ function renderProjectCards() {
   const dl = document.getElementById("projSuggest");
   if (dl) {
     dl.innerHTML = lijst.map(p =>
-      `<option value="${(p.code || "").replace(/"/g,"&quot;")}">${(p.name || "").replace(/</g,"&lt;")}</option>`
+      `<option value="${escHtml(p.code || "")}">${escHtml(p.name || "")}</option>`
     ).join("");
   }
   if (projectFilter) {
@@ -3341,14 +3345,14 @@ function renderProjectCards() {
   }
   el.innerHTML = lijst.map(p => {
     const [cls,label] = STATUS_MAP[p.status] || ["badge-gray","–"];
-    return `<div class="project-card" onclick="openProjectSheet('${p.id}')">
+    return `<div class="project-card" onclick="openProjectSheet(${jsArg(p.id)})">
       ${mProjNr(p) ? `<div class="project-card-code">${escHtml(mProjNr(p))}</div>` : ''}
       <div class="project-card-top">
         <div class="project-card-name">${escHtml(mProjNaam(p))}</div>
         <span class="badge ${cls}">${label}</span>
       </div>
       ${(p.pending || p.spPending) ? `<div style="font-size:11px;color:var(--gold,#d6a93a);margin-top:2px" title="Wordt automatisch opnieuw geprobeerd">⏳ ${p.spPending ? 'nog niet gedeeld met het team' : 'Toggl-koppeling volgt'} — sync loopt automatisch</div>` : ''}
-      <div class="project-card-addr">📍 ${addrFor(p) || "– adres ontbreekt"}</div>
+      <div class="project-card-addr">📍 ${addrFor(p) ? escHtml(addrFor(p)) : "– adres ontbreekt"}</div>
       <div class="project-card-footer">
         <div class="project-last">🕐 ${p.lastActivity}</div>
         ${p.assigned ? '<span class="badge badge-ok">Toegewezen</span>' : ''}
@@ -3377,7 +3381,7 @@ function openProjectSheet(id) {
   renderSheetNas(p);
   document.getElementById("sheetActivity").textContent = p.lastActivity;
   document.getElementById("sheetActions").innerHTML = `
-    <div class="sheet-action-btn" onclick="sheetStartTimer('${p.id}')">
+    <div class="sheet-action-btn" onclick="sheetStartTimer(${jsArg(p.id)})">
       <div class="sheet-action-icon">⏱</div>
       <div class="sheet-action-label">
         <div class="sheet-action-title">Start timer</div>
@@ -3385,7 +3389,7 @@ function openProjectSheet(id) {
       </div>
       <div class="sheet-action-arrow">›</div>
     </div>
-    <div class="sheet-action-btn" onclick="sheetGoCapture('${p.id}')">
+    <div class="sheet-action-btn" onclick="sheetGoCapture(${jsArg(p.id)})">
       <div class="sheet-action-icon">📷</div>
       <div class="sheet-action-label">
         <div class="sheet-action-title">Foto's / notitie</div>
@@ -3393,7 +3397,7 @@ function openProjectSheet(id) {
       </div>
       <div class="sheet-action-arrow">›</div>
     </div>
-    <div class="sheet-action-btn" onclick="sheetGoOplevering('${p.id}')">
+    <div class="sheet-action-btn" onclick="sheetGoOplevering(${jsArg(p.id)})">
       <div class="sheet-action-icon">📋</div>
       <div class="sheet-action-label">
         <div class="sheet-action-title">Rapportage starten</div>
@@ -3455,7 +3459,7 @@ function renderSheetAddr(p) {
     el.innerHTML = `<div style="color:var(--text-faint);font-size:12px;margin-bottom:6px">⚠ Adres ontbreekt nog — vul aan:</div>
       <div style="display:flex;gap:8px">
         <input type="text" id="sheetAddrInput" placeholder="Straat huisnr, plaats" style="flex:1;min-width:0">
-        <button class="btn btn-secondary btn-sm" onclick="saveSheetAddr('${p.id}')">Opslaan</button>
+        <button class="btn btn-secondary btn-sm" onclick="saveSheetAddr(${jsArg(p.id)})">Opslaan</button>
       </div>`;
   }
 }
@@ -3799,7 +3803,7 @@ function renderAgenda() {
       const height = Math.max(20, (toMin(b.end) - toMin(b.start)) / 60 * TG_PX - 2);
       const cls = b.real ? b.kind : (b.mock ? b.who : "eigen");
       body += `<div class="tg-block ${cls}" style="top:${top}px;height:${height}px"
-        onclick="event.stopPropagation();tapBlok('${b.id}')">
+        onclick="event.stopPropagation();tapBlok(${jsArg(b.id)})">
         <div class="tg-block-name">${escHtml(b.name)}</div>
         <div class="tg-block-time">${b.start}–${b.end}${b.taskName ? " · " + escHtml(b.taskName) : ""}</div>
       </div>`;
@@ -3929,7 +3933,7 @@ function closeBlokSheet() {
 function fillBlokProjectSelect(selectedCode) {
   const sel = document.getElementById("blokProject");
   sel.innerHTML = `<option value="">— kies project —</option>` +
-    allProjects().map(p => `<option value="${p.code}" ${p.code===selectedCode?"selected":""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("") +
+    allProjects().map(p => `<option value="${escHtml(p.code)}" ${p.code===selectedCode?"selected":""}>${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))}</option>`).join("") +
     `<option value="__new">＋ Nieuw project…</option>`;
 }
 
@@ -4331,11 +4335,13 @@ function _voIdb() {
   if (_VODB._db) return Promise.resolve(_VODB._db);
   return new Promise((res, rej) => {
     let r;
-    try { r = indexedDB.open(_VODB.name, 1); }
+    // Schema (versie + stores) uit mt-fotostore.js: één definitie, ook voor de verhuisknop.
+    const sch = (window.MTFotoStore && MTFotoStore.schema(_VODB.name)) || { versie: 1, stores: [_VODB.store] };
+    try { r = indexedDB.open(_VODB.name, sch.versie); }
     catch (e) { rej(e); return; }
     r.onupgradeneeded = () => {
       const db = r.result;
-      if (!db.objectStoreNames.contains(_VODB.store)) db.createObjectStore(_VODB.store);
+      for (const st of sch.stores) if (!db.objectStoreNames.contains(st)) db.createObjectStore(st);
     };
     r.onsuccess = () => { _VODB._db = r.result; res(r.result); };
     r.onerror = () => rej(r.error);
@@ -4880,15 +4886,24 @@ const _SPProj = {
   }
 };
 
-// Klant-registry (zelfde data/klanten.json als pc-tool; same-origin fetch)
+// Klant-registry: na login via de worker (/klanten, F5), met cache op dit apparaat; data/klanten.json alleen nog als overgang.
 let _KLANTEN = null;
 async function loadKlantRegistry() {
   if (_KLANTEN) return _KLANTEN;
+  const goed = l => Array.isArray(l) && l.length ? l : null;
   try {
-    const r = await fetch('data/klanten.json');
-    if (r.ok) { const j = await r.json(); _KLANTEN = j.klanten || []; }
-  } catch(e) { console.warn('klanten.json laden mislukt:', e.message); }
-  return _KLANTEN || [];
+    const h = window.authHeader ? await window.authHeader() : {};
+    if (h && h['X-Auth-Token'] && window.fetchMetAuth) {
+      const r = await window.fetchMetAuth(WORKER + '/klanten');
+      if (r.ok) { const j = await r.json(); if (goed(j.klanten)) _KLANTEN = j.klanten; }
+    }
+  } catch(e) { console.warn('klantenlijst (worker) laden mislukt:', e.message); }
+  // Alleen de worker-lijst gaat in de cache. Zonder worker: eerst de cache van dit apparaat; het bestand (overgang) alleen als er
+  // geen bruikbare cache is, en dat wordt niet bewaard, zodat het een recentere lijst nooit overschrijft.
+  if (_KLANTEN) { try { localStorage.setItem('mt_klanten_cache', JSON.stringify({ klanten: _KLANTEN, t: Date.now() })); } catch(e) {} return _KLANTEN; }
+  try { const c = JSON.parse(localStorage.getItem('mt_klanten_cache') || 'null'); if (c && goed(c.klanten)) return c.klanten; } catch(e) {}
+  try { const r = await fetch('data/klanten.json'); if (r.ok) { const j = await r.json(); if (goed(j.klanten)) return j.klanten; } } catch(e) {}
+  return [];
 }
 
 // Vaste projectmappenstructuur (één bron van waarheid; gebruikt door zowel het
@@ -5330,7 +5345,7 @@ function renderOplFotos() {
     let html = _oplUploaded[soort].map(naam =>
       `<div class="thumb-cell" title="${escHtml(naam)}"><div class="thumb-placeholder">📷<div style="font-size:8px;line-height:1.2">opgeslagen</div></div></div>`).join("");
     html += oplFotos[soort].map((p, i) =>
-      `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos['${soort}'][${i}], renderOplFotos)" title="Tik om aantekeningen te zetten"><img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto('${soort}',${i})">×</button></div>`).join("");
+      `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos[${jsArg(soort)}][${i}], renderOplFotos)" title="Tik om aantekeningen te zetten"><img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto(${jsArg(soort)},${i})">×</button></div>`).join("");
     grid.innerHTML = html;
   });
 }
@@ -5357,7 +5372,7 @@ function renderOplVlakGrid() {
     const og = (v.ondergronden || [])[ (v.ondergronden||[]).length - 1 ];
     const src = og && og._url ? og._url : "";
     const n = (v.pins || []).length;
-    return `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="pinVlakOpen('${v.id}')" title="${escHtml(v.naam||'')}">`
+    return `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="pinVlakOpen(${jsArg(v.id)})" title="${escHtml(v.naam||'')}">`
       + (src ? `<img src="${veiligeFoto(src)}" alt="vlak">` : `<div class="thumb-placeholder">📍</div>`)
       + `<span class="foto-bewerkt-badge">${n}📍</span></div>`;
   }).join("");
@@ -5384,11 +5399,11 @@ function _pinRenderManager() {
     const src = og && og._url ? og._url : "";
     const n = (v.pins || []).length;
     const versies = (v.ondergronden || []).length;
-    return `<div class="card" style="display:flex;gap:12px;align-items:center;margin-bottom:10px;cursor:pointer" onclick="pinVlakOpen('${v.id}')">`
+    return `<div class="card" style="display:flex;gap:12px;align-items:center;margin-bottom:10px;cursor:pointer" onclick="pinVlakOpen(${jsArg(v.id)})">`
       + (src ? `<img src="${veiligeFoto(src)}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex:0 0 auto">` : `<div style="width:64px;height:64px;border-radius:8px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:24px;flex:0 0 auto">📍</div>`)
       + `<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.naam || '(zonder naam)')}</div>`
       + `<div style="font-size:12px;color:var(--text-faint,#888)">${n} pin${n===1?'':'s'} · ${versies} versie${versies===1?'':'s'} · ${v.type}</div></div>`
-      + `<button onclick="event.stopPropagation();pinVlakVerwijder('${v.id}')" style="background:none;border:none;color:#c00;font-size:20px;padding:4px 8px">×</button></div>`;
+      + `<button onclick="event.stopPropagation();pinVlakVerwijder(${jsArg(v.id)})" style="background:none;border:none;color:#c00;font-size:20px;padding:4px 8px">×</button></div>`;
   }).join("");
 }
 
@@ -6221,8 +6236,8 @@ function renderSheetTasks() {
           <input id="tfEst" value="${t.est||""}" placeholder="Schatting (bv. 2u)" style="flex:1">
         </div>
         <div style="display:flex;gap:8px;margin-top:4px">
-          <button class="btn btn-primary btn-sm" style="flex:2" data-recht="taken:alles" onclick="saveTaskEdit('${t.id}')">💾 Opslaan</button>
-          <button class="btn btn-danger btn-sm" style="flex:1" data-recht="taken:alles" onclick="deleteTask('${t.id}')">🗑</button>
+          <button class="btn btn-primary btn-sm" style="flex:2" data-recht="taken:alles" onclick="saveTaskEdit(${jsArg(t.id)})">💾 Opslaan</button>
+          <button class="btn btn-danger btn-sm" style="flex:1" data-recht="taken:alles" onclick="deleteTask(${jsArg(t.id)})">🗑</button>
           <button class="btn btn-ghost btn-sm" style="flex:1" onclick="cancelTaskEdit()">×</button>
         </div>
       </div>`;
@@ -6233,8 +6248,8 @@ function renderSheetTasks() {
       ? `<span class="task-sync-dot ${t.togglTaskId ? 'synced' : 'unsynced'}" title="${t.togglTaskId ? 'Gesynchroniseerd met Toggl 2.0' : 'Nog niet gesynchroniseerd'}"></span>`
       : '';
     html += `<div class="task-row">
-      <button class="task-toggle ${t.status}" onclick="toggleTaskStatus('${t.id}')" aria-label="Status wisselen">${TASK_ICON[t.status]||"○"}</button>
-      <div class="task-main" onclick="editTask('${t.id}')">
+      <button class="task-toggle ${t.status}" onclick="toggleTaskStatus(${jsArg(t.id)})" aria-label="Status wisselen">${TASK_ICON[t.status]||"○"}</button>
+      <div class="task-main" onclick="editTask(${jsArg(t.id)})">
         <div class="task-name ${t.status==='klaar'?'klaar':''}">${escHtml(t.name)} ${t.tag?`<span class="task-tag">${escHtml(t.tag)}</span>`:""} ${syncDot}${t._pending?` <span style="font-size:10px;color:var(--gold,#d6a93a)" title="Nog niet gedeeld — wordt automatisch opnieuw geprobeerd">⏳ wacht op sync</span>`:""}</div>
         ${meta ? `<div class="task-meta">${escHtml(meta)}</div>` : ""}
         ${t.note ? `<div class="task-meta">📝 ${escHtml(t.note)}</div>` : ""}
@@ -6403,7 +6418,7 @@ function updateNpPreview() {
 function openNewProject() {
   // datalist vullen met bestaande klantcodes (CN/HWC/INT/MOS/STY + eigen)
   const codes = [...new Set(allProjects().map(p => p.code.split("-")[0]))].sort();
-  document.getElementById("klantCodes").innerHTML = codes.map(c => `<option value="${c}">`).join("");
+  document.getElementById("klantCodes").innerHTML = codes.map(c => `<option value="${escHtml(c)}">`).join("");
   ["npName","npKlant","npLoc","npProd"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("npMaatwerk").checked = false;
   updateNpPreview();
@@ -6685,7 +6700,7 @@ function renderNotifList() {
     return;
   }
   el.innerHTML = notifs.map(n => `
-    <div class="notif-item ${notifRead.includes(n.id) ? "read" : ""}" onclick="tapNotif('${n.id}')">
+    <div class="notif-item ${notifRead.includes(n.id) ? "read" : ""}" onclick="tapNotif(${jsArg(n.id)})">
       <div class="notif-dot"></div>
       <div class="notif-content">
         <div class="notif-title">${escHtml(n.title)}</div>
@@ -7116,6 +7131,16 @@ async function vcUpload(entry) {
    TOAST
    ===================================================================== */
 let toastTimeout = null;
+// F7 r2: argument voor een inline handler — JSON-letterlijke (JS-veilig), daarna HTML-geëscapet (attribuut-veilig).
+function jsArg(s) { return escHtml(JSON.stringify(String(s == null ? '' : s))); }
+function verhuisCtx() {
+  return { gebruiker: (_msAccount && _msAccount.username) || '', apparaat: /iphone|ipad/i.test(navigator.userAgent) ? 'iphone' : /android/i.test(navigator.userAgent) ? 'android' : 'mobiel', mobiel: true, toast: showToast };
+}
+function verhuisOpen() {
+  if (!window.MTVerhuis) return;
+  MTVerhuis.zetContext(verhuisCtx());
+  MTVerhuis.overlay(verhuisCtx());
+}
 function showToast(msg) {
   const t = document.getElementById("toast");
   t.textContent = msg;
@@ -7419,7 +7444,7 @@ function veiligeSpUrl(u) { return window.veiligeUrl(u, { hosts: ['sharepoint.com
       let html = _oplUploaded[soort].map(naam =>
         `<div class="thumb-cell" title="${escHtml(naam)}"><div class="thumb-placeholder">📷<div style="font-size:8px;line-height:1.2">☁️ gesynchroniseerd</div></div></div>`).join("");
       html += oplFotos[soort].map((p, i) =>
-        `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos['${soort}'][${i}], renderOplFotos)" title="${escHtml(p.opmerking || "")}"><img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto('${soort}',${i})">×</button><div style="position:absolute;left:2px;bottom:2px;right:2px;z-index:2;overflow:hidden">${_chipHtml(p, "rapDraftSave()")}</div></div>`).join("");
+        `<div class="thumb-cell foto-row-thumb" style="position:relative" onclick="openFotoEdit(oplFotos[${jsArg(soort)}][${i}], renderOplFotos)" title="${escHtml(p.opmerking || "")}"><img src="${veiligeFoto(p.bewerktUrl || p.url)}" alt="foto">${p.bewerktFile ? '<span class="foto-bewerkt-badge">✏️</span>' : '<span class="foto-edit-hint">✏️</span>'}<button class="note-del" style="position:absolute;top:2px;right:2px;z-index:2" onclick="event.stopPropagation();delOplFoto(${jsArg(soort)},${i})">×</button><div style="position:absolute;left:2px;bottom:2px;right:2px;z-index:2;overflow:hidden">${_chipHtml(p, "rapDraftSave()")}</div></div>`).join("");
       grid.innerHTML = html;
     });
   };

@@ -1,5 +1,24 @@
 [
   {
+    "versie": "2.12.1",
+    "datum": "2026-10-11",
+    "titel": "Koersmeter meldt het 's ochtends als het slechter gaat",
+    "voor": "geld",
+    "punten": [
+      "De Koersmeter kijkt elke ochtend vanzelf, vanaf half acht, of het oordeel slechter is dan gisteren. Is dat zo, dan staat er bovenaan Geld een melding met de reden en de ene actie voor vandaag. Op de telefoon staat er een stipje op de €-knop. Lukt het ophalen van de cijfers niet in één keer, dan probeert hij het tot drie keer opnieuw; blijven er gegevens ontbreken, dan zegt hij eerlijk dat het oordeel niet betrouwbaar is in plaats van groen te tonen."
+    ]
+  },
+  {
+    "versie": "2.12.1",
+    "datum": "2026-10-11",
+    "titel": "Veiliger",
+    "voor": "beheer",
+    "punten": [
+      "Gegevens uit Moneybird, mail en bijlagen (namen, referenties, projectcodes) worden in de facturen-, controle- en klantschermen overal als gewone tekst getoond, nooit meer als werkende code.",
+      "De verhuisknop (nog niet in gebruik) controleert voor het terugdraaien nauwkeuriger of een gegeven echt van de verhuizing is, zodat er nooit iets van jezelf wordt weggehaald."
+    ]
+  },
+  {
     "versie": "2.12.0",
     "datum": "2026-10-11",
     "titel": "Veiliger, en de klantenlijst komt van de server",
