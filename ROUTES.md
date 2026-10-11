@@ -108,11 +108,16 @@ lopende aanvragen af (AbortController); een verouderd antwoord wordt genegeerd. 
 fout, of 429 met Retry-After (die bron wordt dan niet opnieuw gevraagd tot de tijd om is; de andere bron loopt door).
 Getoond wordt alleen titel, klant, datum en soort; openen gebeurt in Moneybird/SharePoint zelf (nieuw tabblad,
 `MTZoekExtern.openUrl` → `veiligeUrl` met hosts `moneybird.com` resp. de `veiligeLink`-hosts).
-- **Moneybird:** worker-route `GET /zoek/moneybird?q=&max=` (recht `moneybird`, alleen lezen). De route leest uitsluitend een compacte zoekindex in
-  KV (`zoek:mb:index:v1`: nummer, referentie, contactnaam, datum; nooit bedragen) van dit en vorig jaar. Ontbreekt de index of is hij ouder dan
-  15 min (onvolledig: 2 min), dan start een achtergrondtaak (`waitUntil`, één tegelijk) de opbouw met een vast subrequest-budget; het verzoek
-  zelf antwoordt direct met `opbouwen` of de oude index (`verouderd:true`). Bij een Moneybird-429 komt er een pauze-markering
-  (`zoek:mb:pauze`) en geeft de route 429 + `Retry-After` zolang er geen index is; een bestaande index blijft dan in gebruik.
+- **Moneybird:** worker-route `GET /zoek/moneybird?q=&max=` (alleen lezen). Het recht `moneybird` geldt ALTIJD, ook in ROLLEN_MODUS=log/uit:
+  geen rol of geen recht = 403. De route leest uitsluitend een compacte zoekindex in KV (`zoek:mb:index:v1`: nummer, referentie, contactnaam,
+  datum; nooit bedragen) van dit en vorig jaar (`period:this_year` en `period:prev_year`; `last_year` bestaat niet). Ontbreekt de index of is hij
+  ouder dan 15 min (onvolledig: 2 min), dan start een achtergrondtaak (`waitUntil`) de opbouw met een vast subrequest-budget (45); het verzoek
+  zelf antwoordt direct met `opbouwen` of de oude index (`verouderd:true`). **Eén opbouw tegelijk** wordt afgedwongen door de Durable Object
+  `MT_ZOEKINDEX` (`MtZoekIndex`, migratie v5; claim met levensduur 120 s); onbereikbaar = niet bouwen; zonder binding een KV-slot (bij benadering).
+  Een index is `compleet:true` alleen als de opbouw zonder enige waarschuwing klaar was; een complete index wordt alleen door een complete
+  vervangen (anders blijft hij staan en volgt 120 s pauze). **Een Moneybird-429 is terminaal:** geen retries, geen verdere bron/periode, niets
+  bewaard, de echte Retry-After (default 60 s) wordt de pauze (`zoek:mb:pauze`, reden 429); de bestaande index blijft onaangetast en in gebruik; zonder
+  index antwoordt de route 429 met `Retry-After` (andere pauze-redenen: 503 `moneybird-onbereikbaar`).
 - **SharePoint:** Graph drive-search (`/drives/<PROJ_DRIVE>/root:/Nieuwe mappenstructuur:/search(q='…')`) met het Graph-token van de gebruiker;
   alleen treffers waarvan de webUrl in `Nieuwe mappenstructuur` ligt; de klant komt uit de webUrl (de drive-search geeft geen parentReference.path).
 Later (brok 4): e-mail (Graph) als groep tussen de lokale groepen en Moneybird.

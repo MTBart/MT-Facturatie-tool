@@ -1671,7 +1671,7 @@ const geldUrl = (soort, id) => `https://moneybird.com/${MB_ADMIN}/${soort}/${id}
 // Hooguit GELD_MB_TEGELIJK tegelijk (anders "429 Retry later" bij de eerste keer laden); bij 429 hooguit twee
 // nieuwe pogingen, na Retry-After (max 8 s) of 1,5 s / 3 s — elke poging telt mee in het budget.
 const GELD_MB_TEGELIJK = 3;
-function geldMb(env, budget) {
+function geldMb(env, budget, opties) {
   const hdr = { Authorization: `Bearer ${env.MONEYBIRD_KEY}`, Accept: 'application/json' };
   let bezig = 0; const rij = [];
   const slot = () => bezig < GELD_MB_TEGELIJK ? (bezig++, Promise.resolve()) : new Promise(res => rij.push(res));
@@ -1684,7 +1684,7 @@ function geldMb(env, budget) {
     let r;
     try {
       r = await haal(pad);
-      for (let poging = 1; r.status === 429 && poging <= 2 && budget.rest > 0; poging++) {
+      for (let poging = 1; r.status === 429 && poging <= 2 && budget.rest > 0 && !(opties && opties.geen429Retry); poging++) {
         budget.rest--;                                               // eerst reserveren, dan wachten (anders kan een ander verzoek het restant opmaken)
         const ra = Number(r.headers && r.headers.get && r.headers.get('Retry-After'));
         await new Promise(res => setTimeout(res, ra > 0 ? Math.min(ra, 8) * 1000 : 1500 * poging));
@@ -1692,7 +1692,7 @@ function geldMb(env, budget) {
       }
     } finally { vrij(); }
     if (r.netwerk) return { ok: false, status: 0, fout: 'netwerk: ' + r.netwerk };
-    if (r.status === 429) return { ok: false, status: 429, fout: 'Moneybird is even druk (429) — over een minuut opnieuw' };
+    if (r.status === 429) { const ra = Number(r.headers && r.headers.get && r.headers.get('Retry-After')); return { ok: false, status: 429, retryAfter: ra > 0 ? Math.min(ra, 3600) : 0, fout: 'Moneybird is even druk (429) — over een minuut opnieuw' }; }
     let data = null, tekst = '';
     try { tekst = await r.text(); data = JSON.parse(tekst); } catch {}
     if (!r.ok) return { ok: false, status: r.status, fout: (data && (data.error || data.message)) || tekst.slice(0, 120) || ('HTTP ' + r.status) };
@@ -1707,7 +1707,7 @@ async function geldLijst(get, pad, w, label) {
   const uit = [], gezien = new Set(); let page = 1, onvolledig = false;
   for (;;) {
     const r = await get(`${pad}${pad.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
-    if (!r.ok) { w.push({ onvolledig: true, bron: label, fout: r.fout, status: r.status, pad: pad.split('?')[0] }); onvolledig = true; break; }
+    if (!r.ok) { w.push({ onvolledig: true, bron: label, fout: r.fout, status: r.status, retryAfter: r.retryAfter, pad: pad.split('?')[0] }); onvolledig = true; break; }
     if (!Array.isArray(r.data)) { w.push({ onvolledig: true, bron: label, fout: 'onverwacht antwoord (geen lijst)', pad: pad.split('?')[0] }); onvolledig = true; break; }
     const d = r.data;
     const nieuw = d.filter(x => x && x.id && !gezien.has(x.id));
@@ -4022,39 +4022,65 @@ const zoekNorm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').
 const ZOEK_MB_SOORT = { v: 'verkoopfactuur', i: 'inkoopfactuur', o: 'offerte' };
 const ZOEK_MB_PAD = { v: 'sales_invoices', i: 'documents', o: 'estimates' };
 function zoekMbContact(c) { if (!c || typeof c !== 'object') return ''; return String(c.company_name || [c.firstname, c.lastname].filter(Boolean).join(' ') || '').trim(); }
-// Index opbouwen: drie lijsten × twee jaren, binnen een vast subrequest-budget. Geeft {items, onvolledig, pauze?}.
+// Index opbouwen: drie lijsten × twee jaren, binnen een vast subrequest-budget. Een Moneybird-429 is TERMINAAL: geen retries, geen verdere
+// bron/periode-combinaties, niets wordt bewaard; de echte Retry-After komt terug. Alleen een volledige opbouw (geen enkele waarschuwing) is `compleet`.
 async function zoekMbOpbouwen(env) {
-  const budget = { rest: ZOEK_MB_BUDGET }, w = [], get = geldMb(env, budget), items = [];
+  const budget = { rest: ZOEK_MB_BUDGET }, w = [], get = geldMb(env, budget, { geen429Retry: true }), items = [];
   const bronnen = [['v', 'sales_invoices', 'invoice_id', 'invoice_date'], ['i', 'documents/purchase_invoices', 'reference', 'date'], ['o', 'estimates', 'estimate_id', 'estimate_date']];
-  let pauze = 0;
   for (const [s, pad, nrVeld, datumVeld] of bronnen) {
     for (const periode of ['this_year', 'prev_year']) {
       const l = await geldLijst(get, `${pad}?filter=period:${periode}`, w, s);
+      const t429 = w.find(x => x.status === 429);
+      if (t429) return { items: [], compleet: false, afgebroken: '429', retryAfter: t429.retryAfter > 0 ? t429.retryAfter : 60, fouten: w.length };
       l.lijst.forEach(x => items.push({ s, id: String(x.id), nr: String((s === 'i' ? '' : x[nrVeld]) || ''), ref: String(x.reference || '').slice(0, 80), c: zoekMbContact(x.contact).slice(0, 80), d: String(x[datumVeld] || '').slice(0, 10) }));
     }
   }
-  w.forEach(x => { if (x.status === 429) pauze = Math.max(pauze, 60); });
   items.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
-  return { items: items.slice(0, 6000), onvolledig: w.length > 0, fouten: w.length, pauze };
+  return { items: items.slice(0, 6000), compleet: w.length === 0 && items.length <= 6000, fouten: w.length };
 }
-// Achtergrondtaak: één opbouw tegelijk (slot met korte TTL), nooit meteen opnieuw na een fout.
-let zoekMbBezig = null;   // in deze isolate: één opbouw tegelijk (KV is niet atomair; het slot hieronder dekt andere isolates bij benadering)
+// Eén opbouw tegelijk, atomair via de Durable Object MT_ZOEKINDEX (claim met korte levensduur). Zonder binding (oude deploy): KV-slot, bij
+// benadering. Is de Durable Object onbereikbaar dan wordt er NIET gebouwd (liever een oude index dan twee gelijktijdige opbouwen).
+async function zoekMbClaim(env) {
+  const token = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/-/g, '').slice(0, 32);
+  const ns = env.MT_ZOEKINDEX;
+  if (ns && ns.idFromName) {
+    try {
+      const r = await ns.get(ns.idFromName('mb')).fetch('https://mt-zoekindex/claim', { method: 'POST', body: JSON.stringify({ token, ttl: ZOEK_MB_SLOT_S, nu: Date.now() }) });
+      const j = await r.json(); return j && j.ok ? token : null;
+    } catch { return null; }
+  }
+  if (await kvJson(env, ZOEK_MB_SLOT)) return null;
+  await kvZet(env, ZOEK_MB_SLOT, { ts: Date.now(), token }, { expirationTtl: ZOEK_MB_SLOT_S });
+  return token;
+}
+async function zoekMbVrij(env, token) {
+  const ns = env.MT_ZOEKINDEX;
+  try {
+    if (ns && ns.idFromName) await ns.get(ns.idFromName('mb')).fetch('https://mt-zoekindex/vrij', { method: 'POST', body: JSON.stringify({ token }) });
+    else if (env.MT_ROLLEN) await env.MT_ROLLEN.delete(ZOEK_MB_SLOT);
+  } catch {}
+}
+const zoekMbPauze = (env, seconden, reden) => kvZet(env, ZOEK_MB_PAUZE, { tot: Date.now() + seconden * 1000, ra: seconden, reden }, { expirationTtl: Math.max(60, seconden) });
+let zoekMbBezig = null;   // binnen deze isolate hooguit één opbouw (goedkoop; het echte slot is de Durable Object)
 function zoekMbVerversen(env) {
   if (zoekMbBezig) return zoekMbBezig;
   zoekMbBezig = zoekMbVerversen1(env).catch(() => {}).finally(() => { zoekMbBezig = null; });
   return zoekMbBezig;
 }
 async function zoekMbVerversen1(env) {
-  if (await kvJson(env, ZOEK_MB_SLOT)) return;
-  await kvZet(env, ZOEK_MB_SLOT, { ts: Date.now() }, { expirationTtl: ZOEK_MB_SLOT_S });
-  let res;
-  try { res = await zoekMbOpbouwen(env); } catch (e) { res = { items: [], onvolledig: true, fouten: 1, pauze: 30, mislukt: true }; }
-  const oud = await kvJson(env, ZOEK_MB_INDEX);
-  // Een lege/mislukte opbouw overschrijft nooit een bruikbare oude index.
-  if (res.items.length && !(res.onvolledig && oud && oud.items && oud.items.length > res.items.length)) {
-    await kvZet(env, ZOEK_MB_INDEX, { ts: Date.now(), items: res.items, onvolledig: res.onvolledig }, { expirationTtl: 7 * 86400 });
-  }
-  if (res.pauze || (res.onvolledig && !res.items.length)) await kvZet(env, ZOEK_MB_PAUZE, { tot: Date.now() + (res.pauze || 30) * 1000, ra: res.pauze || 30 }, { expirationTtl: Math.max(60, res.pauze || 30) });
+  const pauze = await kvJson(env, ZOEK_MB_PAUZE);
+  if (pauze && pauze.tot > Date.now()) return;                       // tijdens een pauze nooit opnieuw proberen
+  const token = await zoekMbClaim(env); if (!token) return;
+  try {
+    let res; try { res = await zoekMbOpbouwen(env); } catch (e) { res = { items: [], compleet: false, mislukt: true, fouten: 1 }; }
+    if (res.afgebroken === '429') { await zoekMbPauze(env, res.retryAfter, '429'); return; }   // terminaal: oude index blijft onaangetast, echte Retry-After
+    const oud = await kvJson(env, ZOEK_MB_INDEX);
+    // Een complete index wordt alleen vervangen door een aantoonbaar complete nieuwe; anders blijft de laatste complete versie staan.
+    if (res.items.length && (res.compleet || !oud || !oud.compleet)) {
+      await kvZet(env, ZOEK_MB_INDEX, { ts: Date.now(), items: res.items, compleet: !!res.compleet, onvolledig: !res.compleet }, { expirationTtl: 7 * 86400 });
+    }
+    if (!res.compleet) await zoekMbPauze(env, 120, 'onvolledig');      // niet elk verzoek opnieuw laten proberen
+  } finally { await zoekMbVrij(env, token); }
 }
 function zoekMbTreffers(index, q, max) {
   const termen = zoekNorm(q).split(' ').filter(Boolean), qn = termen.join(' ');
@@ -4071,8 +4097,9 @@ function zoekMbTreffers(index, q, max) {
 }
 async function handleZoekMb(request, env, ik, json, ctx, modus) {
   if (String(request.method).toUpperCase() !== 'GET') return json({ error: 'alleen GET' }, 405);
-  const R = RECHTEN[ik.rol];
-  if ((modus === 'afdwingen' || R) && !(R && R.moneybird)) return json({ error: 'geen-toegang', reden: 'moneybird' }, 403);
+  // Geld/facturen: het recht `moneybird` geldt hier ALTIJD, ook in ROLLEN_MODUS=log (zoals /geld/*): geen rol of geen recht = 403.
+  const R = ik && ik.rol ? RECHTEN[ik.rol] : null;
+  if (!R || !R.moneybird) return json({ error: 'geen-toegang', reden: 'moneybird' }, 403);
   if (!env.MT_ROLLEN) return json({ error: 'geen-opslag' }, 503);
   const url = new URL(request.url), q = (url.searchParams.get('q') || '').trim();
   if (zoekNorm(q).replace(/ /g, '').length < ZOEK_MB_MIN) return json({ error: `q: minimaal ${ZOEK_MB_MIN} tekens` }, 400);
@@ -4083,11 +4110,35 @@ async function handleZoekMb(request, env, ik, json, ctx, modus) {
   const versMs = index && index.onvolledig ? ZOEK_MB_ONVOLLEDIG_MS : ZOEK_MB_VERS_MS;   // een onvolledige index (bv. na een 429) wordt snel opnieuw geprobeerd
   if (leeftijd > versMs && !pauzeNog) waitUntil(ctx, zoekMbVerversen(env).catch(() => {}));   // achtergrond, nooit in dit verzoek
   if (!index || leeftijd > ZOEK_MB_OUD_MS || !index.items) {
-    if (pauzeNog) { const r = json({ error: 'moneybird-429', retry_after: pauzeNog }, 429); r.headers.set('Retry-After', String(pauzeNog)); return r; }
+    if (pauzeNog) {
+      const is429 = !pauze || pauze.reden === '429';
+      const r = json({ error: is429 ? 'moneybird-429' : 'moneybird-onbereikbaar', retry_after: pauzeNog }, is429 ? 429 : 503); r.headers.set('Retry-After', String(pauzeNog)); return r;
+    }
     return json({ status: 'opbouwen', retry_after: 5, items: [], totaal: 0 });
   }
   const t = zoekMbTreffers(index, q, max);
   return json({ status: 'klaar', verouderd: leeftijd > versMs, onvolledig: !!index.onvolledig, ts: index.ts, totaal: t.totaal, items: t.items });
+}
+
+// Zoekindex-claim (Durable Object MT_ZOEKINDEX): maakt "één opbouw tegelijk" atomair (KV is dat niet). Een claim vervalt vanzelf na `ttl` seconden.
+export class MtZoekIndex {
+  constructor(state) { this.state = state; }
+  async fetch(request) {
+    const op = new URL(request.url).pathname.slice(1), st = this.state.storage;
+    const antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    let b = {}; try { b = await request.json(); } catch {}
+    if (!['claim', 'vrij'].includes(op)) return antw({ error: 'onbekend' }, 404);
+    if (typeof b.token !== 'string' || b.token.length < 6 || b.token.length > 40) return antw({ error: 'ongeldig' }, 400);
+    return await this.state.blockConcurrencyWhile(async () => {
+      try {
+        const rec = await st.get('claim'), nu = Number(b.nu) || Date.now();
+        if (op === 'vrij') { if (rec && rec.token === b.token) await st.delete('claim'); return antw({ ok: true }); }
+        if (rec && rec.tot > nu) return antw({ ok: false, reden: 'bezig' });
+        await st.put('claim', { token: b.token, tot: nu + Math.max(10, Math.min(600, Number(b.ttl) || 120)) * 1000 });
+        return antw({ ok: true });
+      } catch (e) { return antw({ error: 'opslag' }, 503); }
+    });
+  }
 }
 
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.

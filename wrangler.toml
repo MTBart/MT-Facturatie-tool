@@ -113,6 +113,16 @@ class_name = "MtKoersDag"
 tag = "v4-mt-koersdag"
 new_sqlite_classes = ["MtKoersDag"]
 
+# ─── Zoekbalk: index-claim (Durable Object MT_ZOEKINDEX) ──────────────────────────
+# Maakt "één opbouw van de Moneybird-zoekindex tegelijk" atomair (een KV-slot is dat niet). Zonder deze binding valt de worker terug op een KV-slot.
+[[durable_objects.bindings]]
+name = "MT_ZOEKINDEX"
+class_name = "MtZoekIndex"
+
+[[migrations]]
+tag = "v5-mt-zoekindex"
+new_sqlite_classes = ["MtZoekIndex"]
+
 # ─── Koersmeter: ochtendrun (Cron Triggers staan in UTC) ───────────────────────
 # Het werk begint om 07:00: de melding moet dan klaar zijn. Elke 30 minuten van 03:00 tot 05:30 UTC. De code kijkt naar de lokale tijd in
 # Europe/Amsterdam: 04:00-05:30 vult alleen de caches (tijdlijn + maandcijfers), 05:30-07:00 is de eigenlijke run (poging 1 om 05:30, 2 om 06:00,
