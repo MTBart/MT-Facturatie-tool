@@ -285,16 +285,22 @@
   // slot verdwijnt zodra de tab sluit, dus een gecrashte import is meteen te herstellen; en twee tabbladen kunnen nooit tegelijk
   // importeren of herstellen. Zonder navigator.locks wordt er NIET geïmporteerd (geen onveilige terugval).
   const JOURNAAL = 'mt_verhuis_journaal', LOCKNAAM = 'mt-verhuis-import';
-  const fp = v => { v = String(v); let h = 5381; for (let i = 0; i < v.length; i++) h = (((h << 5) + h) + v.charCodeAt(i)) | 0; return v.length + ':' + (h >>> 0).toString(16); };
-  // Vingerafdruk van een IndexedDB-record: de structuur, alle gewone waarden en van elke foto grootte + type (niet de bytes).
-  function stabiel(w) {
-    if (w instanceof Blob) return 'B' + w.size + ':' + w.type;
+  // Vingerafdruk = SHA-256 (geen 32-bit hash): het herstel verwijdert alleen bij een EXACTE digest-match, dus nooit gewijzigde gebruikersdata.
+  // Een vingerafdruk uit een oud journaal (zonder "sha256:") komt nooit overeen: dan blijft alles staan (liever een overbodig record dan een kwijt record).
+  const fp = async v => 'sha256:' + await V.hash(String(v));
+  // Canonieke inhoud van een IndexedDB-record: de structuur, alle gewone waarden en van elke foto grootte, type EN de bytes (SHA-256).
+  // Onbekende soorten (Map, Set, class-instanties…) geven een vingerafdruk die nooit overeenkomt: die worden dus nooit verwijderd.
+  async function stabiel(w) {
+    if (w instanceof Blob) return 'B' + w.size + ':' + w.type + ':' + await V.hash(w);
     if (w instanceof Date) return 'D' + w.getTime();
-    if (Array.isArray(w)) return '[' + w.map(stabiel).join(',') + ']';
-    if (isGewoon(w)) return '{' + Object.keys(w).sort().map(k => JSON.stringify(k) + ':' + stabiel(w[k])).join(',') + '}';
-    const j = JSON.stringify(w); return j === undefined ? 'u' : j;
+    if (Array.isArray(w)) { const d = []; for (const x of w) d.push(await stabiel(x)); return '[' + d.join(',') + ']'; }
+    if (root.ArrayBuffer && (w instanceof root.ArrayBuffer || root.ArrayBuffer.isView(w))) return 'A' + await V.hash(new Blob([w]));
+    if (isGewoon(w)) { const d = []; for (const k of Object.keys(w).sort()) d.push(JSON.stringify(k) + ':' + await stabiel(w[k])); return '{' + d.join(',') + '}'; }
+    if (w && typeof w === 'object') return '?' + nieuwId();
+    let j; try { j = JSON.stringify(w); } catch (e) { return '?' + nieuwId(); }
+    return j === undefined ? 'u' : j;
   }
-  const fpRecord = w => fp(stabiel(w));
+  const fpRecord = async w => fp(await stabiel(w));
   const leesJournaal = () => { try { return JSON.parse(ls().getItem(JOURNAAL) || 'null'); } catch (e) { return null; } };
   const BEZET = 'er loopt al een import of herstel in een ander tabblad: wacht even. Niets veranderd';
   const GEEN_LOCKS = 'deze browser kan tabbladen niet op slot zetten (navigator.locks ontbreekt): importeren staat uit, omdat twee tabbladen elkaars werk zouden kunnen verstoren. Gebruik een recente Chrome, Edge, Firefox of Safari. Niets veranderd';
@@ -309,14 +315,14 @@
   //    die er nu staan met dezelfde vingerafdruk als wat wij zouden schrijven.
   async function terugdraaien(journaal) {
     const s = ls(), fouten = []; let sl = 0, rec = 0;
-    for (const [k, f] of (journaal.ls || []).slice().reverse()) { try { const w = s.getItem(k); if (w != null && fp(w) === f) { s.removeItem(k); sl++; } } catch (e) { fouten.push(k); } }
+    for (const [k, f] of (journaal.ls || []).slice().reverse()) { try { const w = s.getItem(k); if (w != null && await fp(w) === f) { s.removeItem(k); sl++; } } catch (e) { fouten.push(k); } }
     for (const j of (journaal.idb || []).slice().reverse()) {
       try {
         if (j.afgebroken) continue;
         let keys = j.keys;
         if (!Array.isArray(keys)) {
           keys = [];
-          for (const c of (j.kand || [])) { const w = await V.idb.haal(j.db, j.store, c.key); if (w !== undefined && fpRecord(w) === c.fp) keys.push(c.key); }
+          for (const c of (j.kand || [])) { const w = await V.idb.haal(j.db, j.store, c.key); if (w !== undefined && await fpRecord(w) === c.fp) keys.push(c.key); }
         }
         if (keys.length) { await V.idb.verwijder(j.db, j.store, keys); rec += keys.length; }
       } catch (e) { fouten.push(`${j.db}/${j.store}`); }
@@ -365,7 +371,7 @@
         for (const [k, v] of Object.entries(pakket.localStorage || {})) {
           if (!V.sleutelMee(k) || V.waardeVerdacht(v)) continue;
           if (s.getItem(k) != null) { uit.sleutelsAlAanwezig.push(k); continue; }   // al hier (bv. uit SharePoint): niet overschrijven
-          journaal.ls.push([k, fp(v)]); bewaar();   // eerst vastleggen (write-ahead), dan schrijven
+          journaal.ls.push([k, await fp(v)]); bewaar();   // eerst vastleggen (write-ahead), dan schrijven
           s.setItem(k, v); uit.sleutels++; if (/^mt_rapdraft_/.test(k)) uit.concepten++;   // controle en schrijven zonder tussenruimte
         }
         for (const p of plan) {
@@ -375,7 +381,8 @@
             const recs = lijst.map(r => ({ key: r.key, value: zetBlobs(r.value, perId) }));
             // 1. kandidaten VASTLEGGEN vóór de write: alleen keys die er nu nog niet zijn, met een vingerafdruk van wat wij erin zetten
             const bestond = new Set((await V.idb.sleutels(p.sch.naam, st)).map(k => JSON.stringify(k)));
-            const entry = { db: p.sch.naam, store: st, kand: recs.filter(r => !bestond.has(JSON.stringify(r.key))).map(r => ({ key: r.key, fp: fpRecord(r.value) })), keys: null };
+            const kand = []; for (const r of recs) if (!bestond.has(JSON.stringify(r.key))) kand.push({ key: r.key, fp: await fpRecord(r.value) });
+            const entry = { db: p.sch.naam, store: st, kand, keys: null };
             journaal.idb.push(entry); bewaar();
             // 2. de write: één transactie, dus alles of niets in deze store
             let res; try { res = await V.idb.voegToe(p.sch.naam, st, recs); } catch (e) { entry.afgebroken = true; try { bewaar(); } catch (e2) {} throw e; }

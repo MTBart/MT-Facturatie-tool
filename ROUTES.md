@@ -152,9 +152,21 @@ gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.m
 `https://mt-tool.pages.dev`; een onbekende of ontbrekende `Origin` krijgt **geen** `Access-Control-*`-headers
 (alleen `Vary: Origin`), dus de oude origin wordt niet meer gespiegeld.
 
-**Koersmeter-ochtendrun (A+A2) — Cron Trigger + `GET /geld/koers/meldingen` + `POST /geld/koers/gelezen`.**
-- `scheduled()` draait twee keer per dag (`[triggers]` in wrangler.toml: 05:30 en 06:30 UTC). Alleen de run waarvan de tijd in Europe/Amsterdam
-  07:30–07:59 is gaat door (zomer 05:30 UTC, winter 06:30 UTC); de andere doet niets. Eén run per dag (`geld:koers:cron:<datum>`).
+**Koersmeter-ochtendrun (A+A2, blok G) — Cron Trigger + `GET /geld/koers/meldingen` + `POST /geld/koers/gelezen` + `GET /geld/koers/cron`.**
+- `scheduled()` draait elke 30 minuten van 05:00 tot 08:30 UTC (`[triggers]`: `*/30 5-8 * * *`). Een run mag alleen als het in Europe/Amsterdam 07:30 of later is
+  (zomer eerste kans 05:30 UTC, winter 06:30 UTC), de dag nog niet klaar is en er minder dan 3 pogingen zijn gedaan; de triggers erna zijn de retry's.
+- **Dagclaim (atomair):** Durable Object `MT_KOERSDAG` (class `MtKoersDag`, migratie `v4-mt-koersdag`), één instantie `koers`, per datum `{ status: bezig | klaar | mislukt,
+  pogingen, token, ts, fout, kleur, gemeld }`. `claim` geeft de run aan hooguit één trigger tegelijk (een `bezig` van < 20 min wordt nooit overgenomen; een afgebroken run
+  telt als poging), `afrond` mag alleen de claim-eigenaar (token). Dagfoto en melding schrijft alleen de claim-eigenaar. Zonder de binding doet de cron niets (`geen-dagclaim`).
+- **Retry:** mislukt of onvolledig (Moneybird-hapering in de tijdlijn, cijfers onvolledig, budget op) en er is nog een poging over: niets bewaren of melden, claim op `mislukt` met de
+  fout; de volgende trigger probeert opnieuw. De laatste poging (3) sluit altijd af, met een oordeel dat dan zo nodig "onbetrouwbaar" is. De status per dag staat in `GET /geld/koers/cron?dagen=7`
+  (recht `geld`; geen tokens of bedragen) en in de logregel `koerscron`.
+- **Subrequest-budget:** gratis plan = 50 per invocation, KV + Moneybird + Durable Object tellen allemaal. Eén gedeeld budget per run (`koersBudget`): harde limiet 45, waarvan 5 gereserveerd voor
+  afronden (dagfoto, melding, claim). KV-binding en Moneybird-`fetch` (`geldMb`) tellen mee via `env.__sub`; de lokale budgetten van tijdlijn en cijfers volgen het restant (`geldBudget`).
+  Budget op = die aanvraag wordt geweigerd, het oordeel wordt "onbetrouwbaar" (nooit groen), nooit een crash.
+- **Cache vóór Moneybird:** de maandcijfers komen uit de KV-cache; alleen wat ontbreekt wordt aangehaald met het restant (één ronde, geen vervolgrondes). De volledige tijdlijn van vandaag
+  wordt na poging 1 bewaard (`geld:koers:tijdlijn:<datum>`, 6 uur) zodat de volgende poging het budget aan de cijfers besteedt. Een tijdlijn met een Moneybird-hapering wordt nooit bewaard.
+  Koude cache (alle maanden ontbreken, bv. de eerste dag na de uitrol of een nieuwe maand): ontbrekende maanden worden over de pogingen aangevuld; lukt het niet in 3 pogingen dan is het oordeel die dag onbetrouwbaar.
 - De run roept `/geld/tijdlijn` (vers), `/geld/config` en `/geld/cijfers` intern aan als eigenaar en rekent met dezelfde `mt-geld.js`/`mt-koers.js`
   als het scherm (dynamische import; `K.invoer` → `K.oordeel` → `K.dagfotoOpslag`, `K.moetMelden`, `K.actie`): geen tweede rekenlogica.
 - KV: de dagfoto `geld:koers:dag:<datum>` (met `via:'cron'`), bij verslechtering `geld:koers:melding:<datum>` (hooguit één per dag, nooit overschreven),
@@ -162,7 +174,7 @@ gebruiker gevonden). CORS exact voor `https://mtbart.github.io`, `https://tool.m
   Onvolledige bronnen: nooit groen ("Oordeel onbetrouwbaar"), met een melding alleen als het oordeel gisteren betrouwbaar was.
 - Rechten: alleen met recht `geld` (eigenaar en administratie) lezen; afvinken mag ook de administratie (eigen markering). Het scherm toont de ongelezen
   meldingen bovenaan Geld; mobiel een badge op de €-knop (`geldBadgeLaad`).
-- Een mislukte run gooit niet (logt `koerscron`), de volgende ochtend probeert opnieuw. Subrequests: één run doet net zoveel Moneybird-verzoeken als het openen van Geld.
+- Een mislukte run gooit niet (logt `koerscron`).
 
 **Klantenlijst — `GET|POST /klanten` (F5).** Bron = KV `klanten:registry` (niet meer een bestand in de repo).
 - `GET`: iedereen met een rol (modus `afdwingen`: zonder rol 403 `geen-toegang`). In modus `log` mag een

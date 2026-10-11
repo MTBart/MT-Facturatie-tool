@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F7 3b groep 1: tekstsinks v2 Moneybird/mail/SharePoint door esc()
+- Commit: `28fe44c` | Auteur: Bart Witte
+
 ## 2026-10-11 — Koersmeter A+A2: ochtendrun via Cron Trigger, melding in KV, getoond bovenaan Geld en als badge op mobiel
 - Commit: `08abc05` | Auteur: Bart Witte
 

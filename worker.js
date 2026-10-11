@@ -1511,6 +1511,8 @@ const GELD = {
   // Subrequest-limiet (gratis plan 50 per verzoek): Moneybird-verzoeken + KV-bewerkingen samen, met reserve.
   budget: 34, kvReserve: 14,
 };
+// Cron-run (Koersmeter): één gedeeld budget voor ALLE subrequests van de run (KV, Moneybird, Durable Object); zie koersBudget.
+const geldBudget = env => ({ rest: env && env.__sub ? Math.min(GELD.budget, env.__sub.rest()) : GELD.budget });
 const GELD_POT_DOELEN = ['buffer', 'winst', 'vakantie', 'btw', 'overig'];
 const GELD_POT_ID = /^[a-z][a-z0-9-]{1,30}$/;
 // Configuratie normaliseren: alleen geldige velden; ontbrekend = leeg/null (niets verzinnen).
@@ -1648,7 +1650,7 @@ function geldMb(env, budget) {
   let bezig = 0; const rij = [];
   const slot = () => bezig < GELD_MB_TEGELIJK ? (bezig++, Promise.resolve()) : new Promise(res => rij.push(res));
   const vrij = () => { const n = rij.shift(); if (n) n(); else bezig--; };
-  const haal = async pad => { try { return await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/${pad}`, { headers: hdr }); } catch (e) { return { netwerk: String(e.message || e).slice(0, 80) }; } };
+  const haal = async pad => { if (env.__sub && !env.__sub.neem()) return { netwerk: 'subrequest-budget-op' }; try { return await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/${pad}`, { headers: hdr }); } catch (e) { return { netwerk: String(e.message || e).slice(0, 80) }; } };
   return async function get(pad) {
     if (budget.rest <= 0) return { ok: false, status: 0, fout: 'budget-op' };
     budget.rest--;
@@ -2313,7 +2315,7 @@ async function geldTijdlijn(env, url, hint) {
     if (!env.MT_ROLLEN) break;
     try { const raw = await env.MT_ROLLEN.get('geld:' + k); ksWaarde[k] = raw ? JSON.parse(raw) : null; } catch (e) { ksFout.push(k); }
   }
-  const vandaag = geldVandaag(), w = [], budget = { rest: GELD.budget };   // + GELD.kvReserve voor KV (cache, ijkpunten)
+  const vandaag = geldVandaag(), w = [], budget = geldBudget(env);   // + GELD.kvReserve voor KV (cache, ijkpunten)
   if (ksFout.length) w.push({ onvolledig: true, bron: 'opslag', fout: 'een net opgeslagen wijziging kon niet direct gelezen worden — over een minuut opnieuw laden' });
   let van = url.searchParams.get('van') || geldDag(vandaag, -30), tot = url.searchParams.get('tot') || geldDag(vandaag, 90);
   if (!geldIsDatum(van) || !geldIsDatum(tot) || van > tot) return { status: 400, body: { error: 'ongeldige periode (van/tot = JJJJ-MM-DD, van ≤ tot)' } };
@@ -2866,7 +2868,7 @@ async function geldCijferDiagnose(env, jaar, cfg, ledgers) {
     niet_herkend: [...niet.values()].map(o => Object.assign(o, { bedrag: geldRond(o.bedrag) })).sort((a, b2) => b2.bedrag - a.bedrag).slice(0, 25), ontbrekend: alle.filter(m => !recs[m]) };
 }
 async function geldCijfersRoute(p, env, url, R, json) {
-  const w = [], budget = { rest: GELD.budget }, get = geldMb(env, budget), cfg = await geldConfig(env), cc = cfg.cijfers || geldCijferCfgNorm(null);
+  const w = [], budget = geldBudget(env), get = geldMb(env, budget), cfg = await geldConfig(env), cc = cfg.cijfers || geldCijferCfgNorm(null);
   const ledgers = await geldLedgers(env, get, w);
   if (!ledgers) return json({ error: 'grootboeken niet op te halen', waarschuwingen: w }, 502);
   const idl = geldCijferIndeling(ledgers, cc), huidig = geldVandaag().slice(0, 7);
@@ -3158,6 +3160,14 @@ async function handleGeld(p, request, env, ik, json0) {
     const gel = (await kvJson(env, KOERS_GELEZEN + ik.oid)) || {};
     const lijst = recs.filter(Boolean).map(x => Object.assign({}, x, { gelezen: !!(gel.datum && x.datum <= gel.datum) }));
     return json({ meldingen: lijst, ongelezen: lijst.filter(x => !x.gelezen).length });
+  }
+  // Koersmeter: status van de ochtendrun per dag (bezig / klaar / mislukt, pogingen, laatste fout) uit de dagclaim (Durable Object MT_KOERSDAG).
+  if (p === '/geld/koers/cron' && m === 'GET') {
+    const n = Math.max(1, Math.min(14, Number(url.searchParams.get('dagen')) || 7)), ns = env.MT_KOERSDAG;
+    if (!ns || !ns.idFromName) return json({ error: 'geen-dagclaim', uitleg: 'Durable Object-binding MT_KOERSDAG ontbreekt (zie wrangler.toml)' }, 503);
+    let r; try { r = await ns.get(ns.idFromName('koers')).fetch('https://mt-koersdag/lees', { method: 'POST', body: JSON.stringify({ dagen: n }) }); } catch { return json({ error: 'opslag' }, 503); }
+    const uit = await r.json().catch(() => ({}));
+    return r.ok ? json({ dagen: Array.isArray(uit.dagen) ? uit.dagen : [] }) : json({ error: 'opslag' }, 503);
   }
   if (p === '/geld/koers/gelezen' && m === 'POST') {
     if (!env.MT_ROLLEN) return json({ error: 'geen-opslag' }, 503);
@@ -3699,18 +3709,73 @@ async function handleKlanten(request, env, ik, json, ctx) {
   return json({ ok: true, aantal: schoon.length, rev });
 }
 
-// ── Koersmeter A+A2: elke ochtend om 07:30 (Europe/Amsterdam) de dagfoto bewaren en bij verslechtering een melding in KV ─────────
-// Cron Triggers staan in UTC. Daarom twee triggers (05:30 en 06:30 UTC, zie wrangler.toml); in de code laten we alleen de run door waarvan
-// de Amsterdamse tijd 07:30 is (zomer- en wintertijd kloppen dan vanzelf). De berekening is dezelfde als in het scherm: de routes van
-// handleGeld worden intern als eigenaar aangeroepen en mt-geld.js/mt-koers.js (K.invoer, K.oordeel, K.moetMelden, K.actie) doen het rekenwerk.
+// ── Koersmeter A+A2: elke ochtend na 07:30 (Europe/Amsterdam) de dagfoto bewaren en bij verslechtering een melding in KV ─────────
+// Cron Triggers staan in UTC. Daarom elke 30 minuten van 05:00 tot 08:30 UTC (wrangler.toml [triggers]); de code laat een run alleen door als het
+// in Amsterdam 07:30 of later is (zomer- en wintertijd kloppen dan vanzelf), de dag nog niet klaar is en er minder dan KOERS_POGINGEN pogingen zijn gedaan.
+// Eerste trigger na 07:30 doet de run; mislukt of onvolledig (Moneybird, subrequest-budget), dan probeert de volgende trigger het nog een keer.
+// De berekening is dezelfde als in het scherm: de routes van handleGeld worden intern als eigenaar aangeroepen en mt-geld.js/mt-koers.js
+// (K.invoer, K.oordeel, K.moetMelden, K.actie) doen het rekenwerk.
+// Eén run per dag, atomair: de dagclaim staat in de Durable Object MT_KOERSDAG (class MtKoersDag; bezig / klaar / mislukt, pogingen, fout).
+// Dagfoto en melding schrijft alleen de claim-eigenaar. Een run mag nooit meer dan KOERS_SUB_MAX subrequests doen (gratis plan: 50 per invocation;
+// KV, Moneybird en Durable Object tellen allemaal mee): één gedeeld budget (koersBudget), waarvan KOERS_SUB_RESERVE alleen voor het afronden
+// (dagfoto, melding, claim afsluiten) is. Is het budget op, dan is het oordeel "onbetrouwbaar", nooit groen, en nooit een crash.
 // KV: geld:koers:dag:<datum> (de dagfoto, zoals het scherm hem ook bewaart), geld:koers:melding:<datum> (hooguit één per dag),
-// geld:koers:gelezen:<oid> (per gebruiker tot en met welke datum afgevinkt), geld:koers:cron:<datum> (de run is gedaan).
-const KOERS_MELDING = 'geld:koers:melding:', KOERS_GELEZEN = 'geld:koers:gelezen:', KOERS_CRON = 'geld:koers:cron:';
+// geld:koers:gelezen:<oid> (per gebruiker tot en met welke datum afgevinkt), geld:koers:tijdlijn:<datum> (volledige tijdlijn van vandaag, 6 uur, voor de volgende poging).
+const KOERS_MELDING = 'geld:koers:melding:', KOERS_GELEZEN = 'geld:koers:gelezen:', KOERS_TIJDLIJN = 'geld:koers:tijdlijn:';
+const KOERS_POGINGEN = 3, KOERS_SUB_MAX = 45, KOERS_SUB_RESERVE = 5, KOERS_BEZIG_MS = 20 * 60 * 1000;   // 20 min > de maximale looptijd van een cron-run: een levende run wordt nooit overgenomen
 function amsterdamTijd(ms) {
   const d = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms)), g = t => Number((d.find(x => x.type === t) || {}).value);
   return { uur: g('hour'), min: g('minute') };
 }
-const koersMoment = ms => { const a = amsterdamTijd(ms); return a.uur === 7 && a.min >= 30; };   // 07:30 tot 07:59 (een cron start soms een paar minuten later)
+const koersMoment = ms => { const a = amsterdamTijd(ms); return a.uur > 7 || (a.uur === 7 && a.min >= 30); };   // vanaf 07:30 (de triggers houden het venster tot 08:30 UTC)
+// Gedeeld subrequest-budget van één run. neem() telt er één bij; reserve = alleen voor het afronden. Geweigerde aanvragen worden onthouden (geweigerd).
+function koersBudget(max, reserve) {
+  const s = { n: 0, max, reserve, geweigerd: 0, soort: {},
+    neem(gereserveerd, soort) { if (s.n >= (gereserveerd ? max : max - reserve)) { s.geweigerd++; return false; } s.n++; const k = soort || 'mb'; s.soort[k] = (s.soort[k] || 0) + 1; return true; },
+    rest() { return Math.max(0, max - reserve - s.n); } };
+  return s;
+}
+// KV-binding die meetelt in het budget; bij een op budget gooit elke aanroep (kvJson vangt dat op en geeft null, kvZet gooit door).
+function telKv(kv, sub, gereserveerd) {
+  const tel = naam => (...a) => { if (!sub.neem(gereserveerd, 'kv:' + naam)) throw new Error('subrequest-budget-op'); return kv[naam](...a); };
+  return { get: tel('get'), put: tel('put'), delete: tel('delete'), list: tel('list'), getWithMetadata: tel('getWithMetadata') };
+}
+// Durable Object: de dagclaim. Eén instantie ('koers'), geserialiseerd; per datum { status, pogingen, token, ts, fout, kleur, gemeld }.
+export class MtKoersDag {
+  constructor(state) { this.state = state; }
+  async fetch(request) {
+    const op = new URL(request.url).pathname.slice(1), st = this.state.storage;
+    const antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+    let b = {}; try { b = await request.json(); } catch {}
+    if (!['claim', 'afrond', 'lees'].includes(op)) return antw({ error: 'onbekend' }, 404);
+    const datum = String(b.datum || ''), tekst = x => (x == null ? undefined : String(x).slice(0, 200));
+    return await this.state.blockConcurrencyWhile(async () => {
+      try {
+        if (op === 'lees') {
+          const n = Math.max(1, Math.min(14, Number(b.dagen) || 7)), m = await st.list({ prefix: 'dag:', reverse: true, limit: n });
+          return antw({ dagen: [...m].map(([k, r]) => ({ datum: k.slice(4), status: r.status, pogingen: r.pogingen, ts: r.ts, kleur: r.kleur || null, gemeld: !!r.gemeld, fout: r.fout || null })) });
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(datum) || typeof b.token !== 'string' || b.token.length < 6 || b.token.length > 40) return antw({ error: 'ongeldig' }, 400);
+        const sleutel = 'dag:' + datum, rec = await st.get(sleutel), nu = Number(b.nu) || Date.now();
+        if (op === 'afrond') {
+          if (!rec || rec.token !== b.token || rec.status !== 'bezig') return antw({ ok: false, reden: 'geen-eigenaar' });   // alleen de claim-eigenaar sluit af
+          if (!['klaar', 'mislukt'].includes(b.status)) return antw({ error: 'ongeldig' }, 400);
+          await st.put(sleutel, Object.assign({}, rec, { status: b.status, ts: nu, fout: tekst(b.fout) || (b.status === 'mislukt' ? 'onbekend' : undefined), kleur: tekst(b.kleur), gemeld: !!b.gemeld }));
+          return antw({ ok: true });
+        }
+        const max = Math.max(1, Math.min(10, Number(b.max) || KOERS_POGINGEN)), p = rec ? rec.pogingen || 0 : 0;
+        if (rec && rec.status === 'klaar') return antw({ ok: false, reden: 'klaar' });
+        if (rec && rec.status === 'bezig' && nu - rec.ts < KOERS_BEZIG_MS) return antw({ ok: false, reden: 'bezig' });
+        if (rec && rec.status === 'bezig') await st.put(sleutel, Object.assign({}, rec, { status: 'mislukt', fout: 'run afgebroken (niet afgesloten)', ts: nu }));   // afgebroken run: telt als poging
+        if (p >= max) return antw({ ok: false, reden: 'pogingen-op', pogingen: p });
+        await st.put(sleutel, { status: 'bezig', pogingen: p + 1, token: b.token, ts: nu, fout: rec && rec.fout ? String(rec.fout).slice(0, 200) : undefined });
+        const oud = [...await st.list({ prefix: 'dag:' })].map(([k]) => k).sort();
+        if (oud.length > 30) await st.delete(oud.slice(0, oud.length - 30));
+        return antw({ ok: true, poging: p + 1 });
+      } catch (e) { return antw({ error: 'opslag', detail: String((e && e.message) || e).slice(0, 120) }, 503); }
+    });
+  }
+}
 async function geldModules() { await import('./mt-geld.js'); await import('./mt-koers.js'); return { G: globalThis.MTGeld, K: globalThis.MTKoers }; }
 // Een /geld-route intern aanroepen als eigenaar (zelfde code als het scherm, geen tweede berekening).
 async function geldIntern(env, pad) {
@@ -3719,51 +3784,94 @@ async function geldIntern(env, pad) {
   let j = null; try { j = await r.json(); } catch {}
   return { status: r.status, j };
 }
+// Een Moneybird-hapering in de tijdlijn (aanvraag mislukt, lijst afgebroken) loont een nieuwe poging; "nog niet berekend" (profiel, patronen,
+// prognose, instellingen) verdwijnt niet door wachten en telt dus niet mee. De K.invoer-regels maken er in beide gevallen "onbetrouwbaar" van.
+const KOERS_TIJDELIJK = new Set(['balans', 'bankmutaties', 'grootboeken', 'btw', 'algemeen']);
+const koersTijdelijk = w => (Array.isArray(w) ? w : []).some(x => x && x.onvolledig && (x.pad || KOERS_TIJDELIJK.has(x.bron)));
+function koersLog(o) { try { console.log(JSON.stringify(Object.assign({ koerscron: true }, o))); } catch {} }
 async function koersCron(env, tijd) {
   if (!koersMoment(tijd)) return { status: 'niet-nu' };
   if (!env.MT_ROLLEN) return { status: 'geen-opslag' };
-  const vandaag = geldVandaag();
-  const klaar = await kvJson(env, KOERS_CRON + vandaag);
-  if (klaar && klaar.status === 'klaar') return { status: 'al-gedaan' };
-  const { G, K } = await geldModules();
-  const jaar = Number(vandaag.slice(0, 4)), pauze = Number(env.KOERS_CRON_PAUZE_MS != null ? env.KOERS_CRON_PAUZE_MS : 1500);
-  // De dagfoto van "gisteren": de laatste van de zeven dagen vóór vandaag (zoals het scherm).
-  const eerder = (await Promise.all(Array.from({ length: 7 }, (_, i) => kvJson(env, GELD_DAGFOTO + geldDag(vandaag, -(i + 1)))))).filter(Boolean);
-  const gisteren = eerder[0] || null;   // nieuwste eerst
-  let nu = null, o = null, inv = null, bronFout = null;
-  const t = await geldIntern(env, `/geld/tijdlijn?van=${geldDag(vandaag, -35)}&tot=${geldDag(vandaag, 364)}&historie=1&vers=1`);
-  const c = await geldIntern(env, '/geld/config');
-  if (t.status !== 200 || !t.j || !t.j.vandaag) bronFout = `geldtijdlijn niet te lezen (${(t.j && t.j.error) || 'HTTP ' + t.status})`;
-  else if (c.status !== 200 || !c.j) bronFout = `instellingen niet te lezen (${(c.j && c.j.error) || 'HTTP ' + c.status})`;
-  else {
-    // Cijfers: de worker vult ontbrekende maanden in stukken aan; een paar rondes zoals het scherm.
-    let r = null, fout = null; const mislukt = new Set();
-    for (let i = 0; i < 6; i++) {
-      const x = await geldIntern(env, `/geld/cijfers?per=maand&van=${jaar - 1}-01&tot=${vandaag.slice(0, 7)}`);
-      if (x.status !== 200 || !x.j || x.j.error) { fout = (x.j && x.j.error) || 'geen antwoord'; break; }
-      r = x.j; (r.mislukt || []).forEach(mm => mislukt.add(mm));
-      if (r.compleet || (r.ontbrekend || []).every(mm => mislukt.has(mm))) break;
-      if (pauze > 0) await new Promise(res => setTimeout(res, pauze));
+  const ns = env.MT_KOERSDAG;
+  if (!ns || !ns.idFromName) { koersLog({ status: 'geen-dagclaim' }); return { status: 'geen-dagclaim' }; }   // zonder atomaire claim geen run (liever geen dagfoto dan twee)
+  const sub = koersBudget(KOERS_SUB_MAX, KOERS_SUB_RESERVE), vandaag = geldVandaag(), token = randHex(8);
+  const claimDo = async (op, body) => {   // elke Durable Object-aanroep telt als subrequest (uit het gereserveerde deel)
+    if (!sub.neem(true, 'do')) throw new Error('subrequest-budget-op');
+    const r = await ns.get(ns.idFromName('koers')).fetch('https://mt-koersdag/' + op, { method: 'POST', body: JSON.stringify(Object.assign({ datum: vandaag, token, nu: Date.now() }, body)) });
+    return await r.json().catch(() => ({}));
+  };
+  let claim;
+  try { claim = await claimDo('claim', { max: KOERS_POGINGEN }); } catch (e) { koersLog({ status: 'claim-fout', fout: String((e && e.message) || e).slice(0, 120) }); return { status: 'claim-fout' }; }
+  if (!claim.ok) return { status: claim.reden === 'klaar' ? 'al-gedaan' : (claim.reden || 'geen-claim') };
+  const poging = claim.poging, laatste = poging >= KOERS_POGINGEN;
+  let nu = null, o = null, inv = null, bronFout = null, onvolledigRun = false;
+  const envT = Object.assign({}, env, { MT_ROLLEN: telKv(env.MT_ROLLEN, sub, false), __sub: sub });   // alles wat de routes doen telt mee in het gedeelde budget
+  const envR = Object.assign({}, env, { MT_ROLLEN: telKv(env.MT_ROLLEN, sub, true) });             // afronden: mag het gereserveerde deel gebruiken
+  try {
+    const { G, K } = await geldModules();
+    const jaar = Number(vandaag.slice(0, 4));
+    // De dagfoto van "gisteren": de laatste van de zeven dagen vóór vandaag (zoals het scherm); meestal is de eerste al raak.
+    let gisteren = null;
+    for (let i = 1; i <= 7 && !gisteren; i++) gisteren = await kvJson(envT, GELD_DAGFOTO + geldDag(vandaag, -i));
+    let r = null, fout = null;
+    // De tijdlijn is het duurste deel (tientallen Moneybird-/KV-aanvragen) en past met de cijfers niet in één run van 45. Daarom bewaart een volledige
+    // tijdlijn zich voor de rest van de ochtend (KOERS_TIJDLIJN): de volgende poging leest hem uit KV en besteedt het budget aan de cijfers.
+    let t = null, tl = await kvJson(envT, KOERS_TIJDLIJN + vandaag);
+    if (tl && tl.vandaag) t = { status: 200, j: tl };
+    else {
+      const voor = sub.geweigerd;
+      t = await geldIntern(envT, `/geld/tijdlijn?van=${geldDag(vandaag, -35)}&tot=${geldDag(vandaag, 364)}&historie=1&vers=1`);
+      const vol = t.status === 200 && t.j && t.j.vandaag && sub.geweigerd === voor && !koersTijdelijk(t.j.waarschuwingen);   // een tijdlijn met een Moneybird-hapering nooit bewaren
+      if (vol) { try { await kvZet(envT, KOERS_TIJDLIJN + vandaag, t.j, { expirationTtl: 6 * 3600 }); } catch {} }
     }
-    inv = K.invoer(t.j, c.j.config, { r, laden: false, fout }, G); o = K.oordeel(inv); nu = K.dagfotoOpslag(o);
-    await kvZet(env, GELD_DAGFOTO + vandaag, { datum: vandaag, jaar: nu.jaar, kleur: nu.kleur, meters: nu.meters, bronnen: nu.bronnen, ts: Date.now(), via: 'cron' }, { expirationTtl: 400 * 86400 });
+    const c = await geldIntern(envT, '/geld/config');
+    if (t.status !== 200 || !t.j || !t.j.vandaag) bronFout = `geldtijdlijn niet te lezen (${(t.j && t.j.error) || 'HTTP ' + t.status})`;
+    else if (c.status !== 200 || !c.j) bronFout = `instellingen niet te lezen (${(c.j && c.j.error) || 'HTTP ' + c.status})`;
+    else {
+      // Cijfers: uit de KV-cache van de maandrecords; wat ontbreekt haalt de route aan met het restant van het budget (één ronde, geen vervolgrondes).
+      // Blijft er iets over, dan is het oordeel "onbetrouwbaar" en vult de volgende poging (30 min later) verder aan: gehaalde maanden staan dan in de cache.
+      const x = await geldIntern(envT, `/geld/cijfers?per=maand&van=${jaar - 1}-01&tot=${vandaag.slice(0, 7)}`);
+      if (x.status !== 200 || !x.j || x.j.error) fout = (x.j && x.j.error) || 'geen antwoord'; else r = x.j;
+      inv = K.invoer(t.j, c.j.config, { r, laden: false, fout }, G); o = K.oordeel(inv); nu = K.dagfotoOpslag(o);
+      if (sub.geweigerd > 0 && nu.kleur !== 'onbetrouwbaar') {   // een geweigerde aanvraag kan als "leeg" zijn gelezen: dan nooit een groen oordeel
+        nu = Object.assign({}, nu, { kleur: 'onbetrouwbaar', bronnen: ['subrequest-budget van de run was op — gegevens onvolledig'].concat(nu.bronnen || []), meters: (nu.meters || []).map(mm => mm.kleur === 'groen' ? Object.assign({}, mm, { kleur: 'onbekend' }) : mm) });
+      }
+      onvolledigRun = !!fout || sub.geweigerd > 0 || !(r && r.compleet) || koersTijdelijk(t.j.waarschuwingen);   // ook een Moneybird-hapering in de tijdlijn: eerst nog een poging
+    }
+    if (bronFout || onvolledigRun) {
+      const reden = bronFout || (fout ? 'cijfers: ' + fout : sub.geweigerd > 0 ? 'subrequest-budget op' : (r && !r.compleet) ? 'cijfers onvolledig' : 'tijdlijn onvolledig');
+      if (!laatste) {   // nog een poging te goed: niets bewaren of melden, de volgende trigger probeert het opnieuw
+        await claimDo('afrond', { status: 'mislukt', fout: reden });
+        koersLog({ status: 'mislukt', poging, fout: reden, subrequests: sub.n, soorten: sub.soort });
+        return { status: 'mislukt', poging, fout: reden, subrequests: sub.n, soorten: sub.soort };
+      }
+    }
+    // Laatste poging, of alles gelukt: bewaren en melden (alleen de claim-eigenaar komt hier).
+    if (nu) await kvZet(envR, GELD_DAGFOTO + vandaag, { datum: vandaag, jaar: nu.jaar, kleur: nu.kleur, meters: nu.meters, bronnen: nu.bronnen, ts: Date.now(), via: 'cron' }, { expirationTtl: 400 * 86400 });
+    // Melden: alleen bij verslechtering (K.moetMelden). Is een bron onvolledig, dan is er geen groen oordeel maar "oordeel onbetrouwbaar";
+    // die melding komt alleen als het oordeel gisteren betrouwbaar was (anders is het geen verandering).
+    const gisterenBetrouwbaar = !!gisteren && gisteren.kleur !== 'onbetrouwbaar';
+    let redenen = [], verschil = null;
+    if (nu) {
+      const mm = K.moetMelden(gisteren, nu); redenen = mm.redenen.slice(); verschil = mm.verschil || null;
+      if (nu.kleur === 'onbetrouwbaar' && gisterenBetrouwbaar && !redenen.some(x => /onbetrouwbaar/.test(x))) redenen.unshift('oordeel onbetrouwbaar: ' + (nu.bronnen[0] || 'een bron is onvolledig'));
+    } else if (gisterenBetrouwbaar) redenen = ['oordeel onbetrouwbaar: ' + bronFout];
+    let melding = null;
+    if (redenen.length) {
+      melding = { datum: vandaag, ts: Date.now(), kleur: nu ? nu.kleur : 'onbetrouwbaar', titel: nu ? K.TITEL[nu.kleur] : K.TITEL.onbetrouwbaar, van: gisteren ? gisteren.kleur : null, redenen: redenen.map(x => String(x).slice(0, 200)).slice(0, 6),
+        tekst: verschil ? verschil.tekst : null, actie: o ? String(K.actie(o, inv)).slice(0, 300) : null, onbetrouwbaar: !nu || nu.kleur === 'onbetrouwbaar' };
+      if (!(await kvJson(envR, KOERS_MELDING + vandaag))) await kvZet(envR, KOERS_MELDING + vandaag, melding, { expirationTtl: 60 * 86400 });   // hooguit één per dag
+    }
+    const status = bronFout ? 'bron-fout' : 'klaar';
+    await claimDo('afrond', { status: 'klaar', kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || (onvolledigRun ? 'onvolledig na ' + poging + ' pogingen' : undefined) });
+    koersLog({ status, poging, subrequests: sub.n, soorten: sub.soort });
+    return { status, poging, kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || undefined, subrequests: sub.n, soorten: sub.soort };
+  } catch (e) {
+    const fout = String((e && e.message) || e).slice(0, 200);
+    try { await claimDo('afrond', { status: 'mislukt', fout }); } catch {}
+    koersLog({ status: 'fout', poging, fout, subrequests: sub.n, soorten: sub.soort });
+    return { status: 'fout', poging, fout, subrequests: sub.n, soorten: sub.soort };
   }
-  // Melden: alleen bij verslechtering (K.moetMelden). Is een bron onvolledig, dan is er geen groen oordeel maar "oordeel onbetrouwbaar";
-  // die melding komt alleen als het oordeel gisteren betrouwbaar was (anders is het geen verandering).
-  const gisterenBetrouwbaar = !!gisteren && gisteren.kleur !== 'onbetrouwbaar';
-  let redenen = [], verschil = null;
-  if (nu) {
-    const mm = K.moetMelden(gisteren, nu); redenen = mm.redenen.slice(); verschil = mm.verschil || null;
-    if (nu.kleur === 'onbetrouwbaar' && gisterenBetrouwbaar && !redenen.some(x => /onbetrouwbaar/.test(x))) redenen.unshift('oordeel onbetrouwbaar: ' + (nu.bronnen[0] || 'een bron is onvolledig'));
-  } else if (gisterenBetrouwbaar) redenen = ['oordeel onbetrouwbaar: ' + bronFout];
-  let melding = null;
-  if (redenen.length) {
-    melding = { datum: vandaag, ts: Date.now(), kleur: nu ? nu.kleur : 'onbetrouwbaar', titel: nu ? K.TITEL[nu.kleur] : K.TITEL.onbetrouwbaar, van: gisteren ? gisteren.kleur : null, redenen: redenen.map(x => String(x).slice(0, 200)).slice(0, 6),
-      tekst: verschil ? verschil.tekst : null, actie: o ? String(K.actie(o, inv)).slice(0, 300) : null, onbetrouwbaar: !nu || nu.kleur === 'onbetrouwbaar' };
-    if (!(await kvJson(env, KOERS_MELDING + vandaag))) await kvZet(env, KOERS_MELDING + vandaag, melding, { expirationTtl: 60 * 86400 });   // hooguit één per dag
-  }
-  await kvZet(env, KOERS_CRON + vandaag, { status: bronFout ? 'bron-fout' : 'klaar', ts: Date.now(), kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || undefined }, { expirationTtl: 7 * 86400 });
-  return { status: bronFout ? 'bron-fout' : 'klaar', kleur: nu ? nu.kleur : null, gemeld: !!melding, fout: bronFout || undefined };
 }
 
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.

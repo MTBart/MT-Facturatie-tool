@@ -102,11 +102,23 @@ class_name = "MtKlanten"
 tag = "v3-mt-klanten"
 new_sqlite_classes = ["MtKlanten"]
 
+# ─── Koersmeter: dagclaim (Durable Object MT_KOERSDAG) ─────────────────────────────
+# Maakt de ochtendrun atomair: één run per dag (bezig / klaar / mislukt, max. 3 pogingen). Zonder deze binding doet de
+# cron niets (liever geen dagfoto dan twee).
+[[durable_objects.bindings]]
+name = "MT_KOERSDAG"
+class_name = "MtKoersDag"
+
+[[migrations]]
+tag = "v4-mt-koersdag"
+new_sqlite_classes = ["MtKoersDag"]
+
 # ─── Koersmeter: ochtendrun (Cron Triggers staan in UTC) ───────────────────────
-# De code laat alleen de run door waarvan de tijd in Europe/Amsterdam 07:30 is: 05:30 UTC = 07:30 in de zomer (CEST),
-# 06:30 UTC = 07:30 in de winter (CET). De andere trigger van die dag doet niets.
+# Elke 30 minuten van 05:00 tot 08:30 UTC. De code laat een run alleen door als het in Europe/Amsterdam 07:30 of later is
+# (zomer 05:30 UTC, winter 06:30 UTC), de dag nog niet klaar is en er minder dan 3 pogingen zijn gedaan: mislukt of
+# onvolledig (Moneybird, subrequest-budget), dan probeert de volgende trigger het opnieuw.
 [triggers]
-crons = ["30 5 * * *", "30 6 * * *"]
+crons = ["*/30 5-8 * * *"]
 
 [vars]
 ROLLEN_MODUS = "log"
