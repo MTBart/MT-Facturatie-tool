@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#2A4A38">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>BACKUP v2.12.2 — M&T Uren</title>
+<title>BACKUP v2.12.3 — M&T Uren</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Figtree:wght@300;400;500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -481,7 +481,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.12.2, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.12.3, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <header>
   <div class="header-left">
@@ -893,7 +893,7 @@ const PROJ_STATUS = {
 function statusBadge(status){
   const s=PROJ_STATUS[status];
   if(!s) return '';
-  return `<span class="status-badge" style="background:${s.bg};color:${s.c};border-color:${s.bc}">${s.label}</span>`;
+  return `<span class="status-badge" style="background:${esc(s.bg)};color:${esc(s.c)};border-color:${esc(s.bc)}">${esc(s.label)}</span>`;
 }
 
 const FACTUUR_STATUS = {
@@ -906,7 +906,7 @@ function factuurBadge(status,code,stopProp){
   const k=status||'geen';
   const s=FACTUUR_STATUS[k]||FACTUUR_STATUS.geen;
   const onclick=code?`cycleFactuurStatus(${JSON.stringify(String(code))},event)`:'';
-  return `<span class="factuur-badge" style="background:${s.bg};color:${s.c};border-color:${s.bc}" onclick="${esc(onclick)}" title="Klik om factuurstatus te wijzigen">${s.label}</span>`;
+  return `<span class="factuur-badge" style="background:${esc(s.bg)};color:${esc(s.c)};border-color:${esc(s.bc)}" onclick="${esc(onclick)}" title="Klik om factuurstatus te wijzigen">${esc(s.label)}</span>`;
 }
 function cycleFactuurStatus(code,event){
   if(event) event.stopPropagation();
@@ -923,8 +923,8 @@ function deadlineBadge(deadline){
   if(!deadline) return '';
   const diff=Math.round((new Date(deadline+'T12:00:00')-new Date())/86400000);
   if(diff<0) return `<span class="deadline-badge urgent">⚠ ${Math.abs(diff)}d over</span>`;
-  if(diff<=7) return `<span class="deadline-badge bijna">📅 ${diff}d</span>`;
-  if(diff<=14) return `<span class="deadline-badge ok">📅 ${diff}d</span>`;
+  if(diff<=7) return `<span class="deadline-badge bijna">📅 ${esc(diff)}d</span>`;
+  if(diff<=14) return `<span class="deadline-badge ok">📅 ${esc(diff)}d</span>`;
   return '';
 }
 
@@ -1001,7 +1001,7 @@ function showWelkom(){
   const tl=getTeamleden();
   document.getElementById('naam-knoppen').innerHTML=tl.map(t=>`
     <button class="naam-knop" onclick="kiesIk(${ja(t.naam)})">
-      <span class="naam-knop-dot" style="background:${kleurCss(t.kleur)}"></span>${esc(t.label)}
+      <span class="naam-knop-dot" style="background:${esc(kleurCss(t.kleur))}"></span>${esc(t.label)}
     </button>`).join('');
 }
 function kiesIk(naam){
@@ -1055,7 +1055,7 @@ function renderRecentEntries(){
     const kleur=p?var2hex(e.project_code):'var(--gold)';
     const tijdGel=fmtTijdGel(e.stop||e.start);
     return `<div class="recent-item" onclick="recentStart(${ja(e.project_code)},${ja(e.taak_id||'')},${ja(e.taak_naam||'')})" >
-      <div class="recent-dot" style="background:${kleurCss(kleur)}"></div>
+      <div class="recent-dot" style="background:${esc(kleurCss(kleur))}"></div>
       <div class="recent-info">
         <div class="recent-code">${esc(e.project_code)}</div>
         <div class="recent-taak">${esc(e.taak_naam||e.omschrijving||'Geen taak')}</div>
@@ -1105,7 +1105,7 @@ function renderMijnTaken(){
   if(countEl) countEl.textContent=mijnTaken.length;
   lijst.innerHTML=mijnTaken.slice(0,8).map(({pc,taak,p,kleur})=>`
     <div class="mt-item" onclick="recentStart(${ja(pc)},${ja(taak.id)},${ja(taak.naam||'')})">
-      <div class="mt-dot" style="background:${kleurCss(kleur)}"></div>
+      <div class="mt-dot" style="background:${esc(kleurCss(kleur))}"></div>
       <div class="mt-proj">${esc(pc)}</div>
       <div class="mt-taak">${esc(taak.naam)}</div>
       ${taak.estimate_uren?`<span class="mt-est">${esc(taak.estimate_uren)}u</span>`:''}
@@ -1134,17 +1134,17 @@ function renderTimer(){
     const takenLijst=taken[p.code]||[];
     const uren=urenV[p.code];
     const dl=p.deadline?Math.round((new Date(p.deadline+'T12:00:00')-new Date())/86400000):null;
-    const dlBadge=dl!==null?(dl<0?`<span class="deadline-badge urgent">⚠ ${Math.abs(dl)}d over</span>`:dl<=7?`<span class="deadline-badge bijna">📅 ${dl}d</span>`:dl<=14?`<span class="deadline-badge ok">📅 ${dl}d</span>`:null):null;
+    const dlBadge=dl!==null?(dl<0?`<span class="deadline-badge urgent">⚠ ${Math.abs(dl)}d over</span>`:dl<=7?`<span class="deadline-badge bijna">📅 ${esc(dl)}d</span>`:dl<=14?`<span class="deadline-badge ok">📅 ${esc(dl)}d</span>`:null):null;
     // Rode rand als deadline overschreden of urgent
     const urgentStyle=dl!==null&&dl<0?';border-color:var(--red);background:#FDE8E8':dl!==null&&dl<=3?';border-color:#E8A020':''
-    return `<div class="project-card${actief?' actief':''}" style="--proj-kleur:${var2hex(p.code)}${urgentStyle}" onclick="openStartModal(${ja(p.code)})">
+    return `<div class="project-card${actief?' actief':''}" style="--proj-kleur:${esc(var2hex(p.code))}${urgentStyle}" onclick="openStartModal(${ja(p.code)})">
       <button class="pc-info-btn" onclick="event.stopPropagation();openProjectDetail(${ja(p.code)})" title="Project details">ℹ</button>
-      <div class="pc-code" style="color:${var2hex(p.code)}">${esc(p.code)}</div>
+      <div class="pc-code" style="color:${esc(var2hex(p.code))}">${esc(p.code)}</div>
       <div class="pc-naam">${esc(p.naam||p.code)}</div>
       <div class="pc-meta">
         ${p.status?statusBadge(p.status):''}
         ${takenLijst.length?`<span class="pc-taken-count">${takenLijst.length} taken</span>`:''}
-        ${uren?`<span>${fmtUren(uren)} vandaag</span>`:''}
+        ${uren?`<span>${esc(fmtUren(uren))} vandaag</span>`:''}
         ${dlBadge||''}
       </div>
     </div>`;
@@ -1261,8 +1261,8 @@ function renderDag(){
     const totaal=mine.reduce((s,e)=>s+(e.duur||0),0);
     return `<div class="teamlid-blok">
       <div class="teamlid-header">
-        <div class="tl-naam"><span class="tl-dot" style="background:${kleurCss(t.kleur)}"></span>${esc(t.label)}</div>
-        <span class="tl-totaal">${totaal?fmtUren(totaal):''}</span>
+        <div class="tl-naam"><span class="tl-dot" style="background:${esc(kleurCss(t.kleur))}"></span>${esc(t.label)}</div>
+        <span class="tl-totaal">${esc(totaal?fmtUren(totaal):'')}</span>
       </div>
       <div>
         ${mine.length?mine.map(e=>entryRowHTML(e)).join(''):`<div class="geen-entries">Geen uren</div>`}
@@ -1277,7 +1277,7 @@ function entryRowHTML(e){
     <div class="entry-project">${esc(e.project_code)}</div>
     <div class="entry-taak">${esc(e.taak_naam||'')}</div>
     <div class="entry-desc">${esc(e.omschrijving||'')}</div>
-    <div class="entry-duur">${e.duur?fmtUren(e.duur):''}</div>
+    <div class="entry-duur">${esc(e.duur?fmtUren(e.duur):'')}</div>
     <div class="entry-actions">
       <button class="entry-btn" onclick="openEditEntry(${ja(e.id)})">✏</button>
       <button class="entry-btn del" onclick="verwijderEntry(${ja(e.id)})">✕</button>
@@ -1349,16 +1349,16 @@ function renderTimeline(){
   }
 
   let html=`<div class="tl-grid-wrap"><div class="tl-grid">
-    <div class="tl-header-row" style="grid-template-columns:${cols}">
+    <div class="tl-header-row" style="grid-template-columns:${esc(cols)}">
       <div class="tl-header-cel">${tlView==='persoon'?'Teamlid':'Project'}</div>
-      ${dagen.map(d=>`<div class="tl-header-cel${d===vandaag?' vandaag':''}">${weekdagKort(d)}<br><span style="font-size:10px;font-weight:400">${new Date(d+'T12:00:00').getDate()} ${new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{month:'short'})}</span></div>`).join('')}
+      ${dagen.map(d=>`<div class="tl-header-cel${d===vandaag?' vandaag':''}">${esc(weekdagKort(d))}<br><span style="font-size:10px;font-weight:400">${esc(new Date(d+'T12:00:00').getDate())} ${esc(new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{month:'short'}))}</span></div>`).join('')}
     </div>`;
 
   rows.forEach(row=>{
-    html+=`<div class="tl-rij" style="grid-template-columns:${cols}">
+    html+=`<div class="tl-rij" style="grid-template-columns:${esc(cols)}">
       <div class="tl-label">
-        <div class="tl-label-code" style="color:${kleurCss(row.kleur||'var(--gold)')}">
-          ${row.isPersoon?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${kleurCss(row.kleur)};margin-right:5px"></span>`:''}${esc(row.label)}
+        <div class="tl-label-code" style="color:${esc(kleurCss(row.kleur||'var(--gold)'))}">
+          ${row.isPersoon?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${esc(kleurCss(row.kleur))};margin-right:5px"></span>`:''}${esc(row.label)}
         </div>
         ${row.sub?`<div class="tl-label-naam">${esc(row.sub)}</div>`:''}
       </div>`;
@@ -1377,18 +1377,18 @@ function renderTimeline(){
         ${planBlokken.map(pb=>{
           const klr=tlView==='persoon'?row.kleur:(tl.find(t=>t.naam===pb.teamlid)||{kleur:'#999'}).kleur;
           const naam=tlView==='project'?(tl.find(t=>t.naam===pb.teamlid)||{label:pb.teamlid}).label:'';
-          return `<div class="tl-blok tl-blok-plan" style="border-color:${kleurCss(klr)}55" onclick="event.stopPropagation()">
-            <div class="tl-blok-label" style="color:${kleurCss(klr)}">${esc(naam||pb.uren_gepland+'u gepland')}</div>
-            ${naam?`<div class="tl-blok-sub">${pb.uren_gepland}u gepland</div>`:''}
+          return `<div class="tl-blok tl-blok-plan" style="border-color:${esc(kleurCss(klr))}55" onclick="event.stopPropagation()">
+            <div class="tl-blok-label" style="color:${esc(kleurCss(klr))}">${esc(naam||pb.uren_gepland+'u gepland')}</div>
+            ${naam?`<div class="tl-blok-sub">${esc(pb.uren_gepland)}u gepland</div>`:''}
             <button class="tl-blok-del" onclick="event.stopPropagation();verwijderPlan(${ja(pb.id)})">✕</button>
           </div>`;
         }).join('')}
         ${actBlokken.map(b=>{
           const klr=b.kleur||row.kleur;
           const lab=tlView==='project'?b.label:fmtUren(b.som);
-          return `<div class="tl-blok tl-blok-act" style="background:${kleurCss(klr)}">
+          return `<div class="tl-blok tl-blok-act" style="background:${esc(kleurCss(klr))}">
             <div class="tl-blok-label" style="color:#fff">${esc(lab)}</div>
-            ${tlView==='project'?`<div class="tl-blok-sub" style="color:rgba(255,255,255,0.7)">${fmtUren(b.som)}</div>`:''}
+            ${tlView==='project'?`<div class="tl-blok-sub" style="color:rgba(255,255,255,0.7)">${esc(fmtUren(b.som))}</div>`:''}
           </div>`;
         }).join('')}
       </div>`;
@@ -1477,23 +1477,23 @@ function renderRapport(){
       const val=(perDag[d]/3600).toFixed(1)+'u';
       return `<div class="dag-bar-col">
         <div class="dag-bar-val">${esc(val)}</div>
-        <div class="dag-bar ${cls}" style="height:${h}px"></div>
+        <div class="dag-bar ${esc(cls)}" style="height:${esc(h)}px"></div>
         <div class="dag-bar-label">${esc(lbl)}</div>
       </div>`;
     }).join('');
     dagChartHtml=`<div class="dag-chart">
-      <div class="dag-chart-titel">Uren per dag <span class="dag-chart-totaal">${fmtUren(totaalSec)} totaal</span></div>
+      <div class="dag-chart-titel">Uren per dag <span class="dag-chart-totaal">${esc(fmtUren(totaalSec))} totaal</span></div>
       <div class="dag-bars">${bars}</div>
     </div>`;
   }
 
   wrap.innerHTML=dagChartHtml+sorted.map(([code,data])=>{
     const p=projecten.find(x=>x.code===code);
-    const breakdown=tl.filter(t=>data.pp[t.naam]).map(t=>`<span class="pr-persoon"><span class="pr-dot" style="background:${kleurCss(t.kleur)}"></span>${esc(t.label)} ${fmtUren(data.pp[t.naam])}</span>`).join('');
+    const breakdown=tl.filter(t=>data.pp[t.naam]).map(t=>`<span class="pr-persoon"><span class="pr-dot" style="background:${esc(kleurCss(t.kleur))}"></span>${esc(t.label)} ${esc(fmtUren(data.pp[t.naam]))}</span>`).join('');
     return `<div class="pr-item">
       <div class="pr-header">
         <div><div class="pr-code">${esc(code)}</div><div class="pr-naam">${esc(p?.naam||'')}</div></div>
-        <div class="pr-totaal">${fmtUren(data.totaal)}</div>
+        <div class="pr-totaal">${esc(fmtUren(data.totaal))}</div>
       </div>
       <div class="pr-bar-wrap"><div class="pr-bar" style="width:${Math.round(data.totaal/max*100)}%"></div></div>
       <div class="pr-breakdown">${breakdown}</div>
@@ -1548,19 +1548,19 @@ function renderBordWerkdruk(){
     const isOver=gepland>capUren||geboekt>capUren;
     return `<div class="werkdruk-kaart">
       <div class="wk-naam">
-        <span style="width:9px;height:9px;border-radius:50%;background:${kleurCss(t.kleur)};display:inline-block;flex-shrink:0"></span>
+        <span style="width:9px;height:9px;border-radius:50%;background:${esc(kleurCss(t.kleur))};display:inline-block;flex-shrink:0"></span>
         ${esc(t.label)}
         ${isOver?'<span style="color:var(--red);font-size:10px;margin-left:auto">⚠ vol</span>':''}
       </div>
       <div class="wk-bar-wrap">
-        <div class="wk-bar-gepland" style="width:${gepPct}%"></div>
-        <div class="wk-bar-geboekt" style="width:${gbkPct}%"></div>
+        <div class="wk-bar-gepland" style="width:${esc(gepPct)}%"></div>
+        <div class="wk-bar-geboekt" style="width:${esc(gbkPct)}%"></div>
       </div>
       <div class="wk-stats">
         <span style="color:var(--gold)">▬ ${gepland.toFixed(1)}u gepland</span>
         <span style="color:var(--green-mid)">▬ ${geboekt.toFixed(1)}u geboekt</span>
-        <span>/ ${capUren}u cap</span>
-        ${estTotaal?`<span style="color:var(--blue)">≈ ${estTotaal}u estimate</span>`:''}
+        <span>/ ${esc(capUren)}u cap</span>
+        ${estTotaal?`<span style="color:var(--blue)">≈ ${esc(estTotaal)}u estimate</span>`:''}
       </div>
     </div>`;
   }).join('')}</div>`;
@@ -1582,7 +1582,7 @@ function renderBordActief(){
     return `<div class="bord-kaart${entry?' loopt':''}" onclick="bordKaartKlik(${ja(t.naam)})">
       <div class="bord-kaart-glow"></div>
       <div class="bord-kaart-persoon">
-        <span class="bk-dot" style="background:${kleurCss(t.kleur)}"></span>
+        <span class="bk-dot" style="background:${esc(kleurCss(t.kleur))}"></span>
         <span class="bk-naam">${esc(t.label)}</span>
         ${entry?'<span class="bk-pulse"></span>':''}
       </div>
@@ -1590,13 +1590,13 @@ function renderBordActief(){
         ?`<div class="bk-project">${esc(entry.project_code)}</div>
           <div class="bk-taak">${esc(entry.taak_naam||entry.omschrijving||'—')}</div>
           <div class="bk-bottom">
-            <div class="bk-timer" data-start="${esc(entry.start)}">${fmtDuur(sec)}</div>
-            <div class="bk-vandaag">${dagTotaal?fmtUren(dagTotaal)+' vandaag':''}</div>
+            <div class="bk-timer" data-start="${esc(entry.start)}">${esc(fmtDuur(sec))}</div>
+            <div class="bk-vandaag">${esc(dagTotaal?fmtUren(dagTotaal)+' vandaag':'')}</div>
           </div>`
         :`<div class="bk-taak" style="font-style:italic">${dagTotaal?'Gestopt':'Geen timer'}</div>
           <div class="bk-bottom">
             <div class="bk-timer" style="opacity:0.25">—</div>
-            <div class="bk-vandaag">${dagTotaal?fmtUren(dagTotaal)+' vandaag':''}</div>
+            <div class="bk-vandaag">${esc(dagTotaal?fmtUren(dagTotaal)+' vandaag':'')}</div>
           </div>`
       }
       <div class="bord-start-hint">${esc(IK===t.naam?'Tik om timer te starten':'Tik om timer te starten als '+t.label)}</div>
@@ -1629,16 +1629,16 @@ function renderBordWeek(){
   if(!rel.size){wrap.innerHTML=`<div class="bord-leeg">Geen planning of uren deze week</div>`;return;}
   const labelW=130;
   const cols=`${labelW}px repeat(5,1fr)`;
-  let html=`<div class="bord-week-grid"><div class="bord-wh" style="grid-template-columns:${cols}">
+  let html=`<div class="bord-week-grid"><div class="bord-wh" style="grid-template-columns:${esc(cols)}">
     <div class="bord-wh-cel"></div>
     ${dagen.map(d=>{
       const dO=new Date(d+'T12:00:00');
-      return`<div class="bord-wh-cel${d===vandaag?' vandaag':''}">${weekdagKort(d)}<br><span style="font-size:9px;opacity:0.7">${dO.getDate()} ${dO.toLocaleDateString('nl-NL',{month:'short'})}</span></div>`;
+      return`<div class="bord-wh-cel${d===vandaag?' vandaag':''}">${esc(weekdagKort(d))}<br><span style="font-size:9px;opacity:0.7">${esc(dO.getDate())} ${esc(dO.toLocaleDateString('nl-NL',{month:'short'}))}</span></div>`;
     }).join('')}
   </div>`;
   [...rel].sort().forEach(code=>{
     const p=projecten.find(x=>x.code===code);
-    html+=`<div class="bord-rij" style="grid-template-columns:${cols}">
+    html+=`<div class="bord-rij" style="grid-template-columns:${esc(cols)}">
       <div class="bord-pl" onclick="openProjectDetail(${ja(code)})">
         <div class="bord-pl-code">${esc(code)}</div>
         <div class="bord-pl-naam">${esc(p?.naam||'')}</div>
@@ -1649,7 +1649,7 @@ function renderBordWeek(){
       const acts=tl.map(t=>({...t,som:entries.filter(e=>e.datum===dag&&e.project_code===code&&e.teamlid===t.naam&&e.duur).reduce((s,e)=>s+(e.duur||0),0)})).filter(b=>b.som>0);
       html+=`<div class="bord-dag-cel${dag===vandaag?' vandaag':''}">
         ${plans.map(pb=>{const tlid=tl.find(t=>t.naam===pb.teamlid);return`<div class="bord-blok-plan">${esc(tlid?.label||pb.teamlid)} ${esc(pb.uren_gepland)}u</div>`;}).join('')}
-        ${acts.map(b=>`<div class="bord-blok-act" style="background:${kleurCss(b.kleur)}">${esc(b.label)} ${fmtUren(b.som)}</div>`).join('')}
+        ${acts.map(b=>`<div class="bord-blok-act" style="background:${esc(kleurCss(b.kleur))}">${esc(b.label)} ${esc(fmtUren(b.som))}</div>`).join('')}
       </div>`;
     });
     html+=`</div>`;
@@ -1739,7 +1739,7 @@ function renderTakenBeheer(){
         <span class="taken-project-label">${esc(p.code)}</span>
         <span style="font-size:11px;color:var(--text-faint)">${(taken[p.code]||[]).length} taken ▾</span>
       </div>
-      <div id="tb-${p.code.replace(/[^a-z0-9]/gi,'_')}" style="display:none">
+      <div id="tb-${esc(p.code.replace(/[^a-z0-9]/gi,'_'))}" style="display:none">
         ${(taken[p.code]||[]).map(t=>`
           <div class="taak-rij">
             <span class="taak-rij-naam">${esc(t.naam)}</span>
@@ -1756,7 +1756,7 @@ function renderTakenBeheer(){
             <button class="add-taak-btn" onclick="voegSubtaakToeInp(${ja(p.code)},${ja(t.id)})">+</button>
           </div>`).join('')}
         <div class="add-taak-row">
-          <input class="add-taak-input" id="taak-inp-${p.code.replace(/[^a-z0-9]/gi,'_')}" placeholder="Taak toevoegen…" onkeydown="if(event.key==='Enter')voegTaakToe(${ja(p.code)})">
+          <input class="add-taak-input" id="taak-inp-${esc(p.code.replace(/[^a-z0-9]/gi,'_'))}" placeholder="Taak toevoegen…" onkeydown="if(event.key==='Enter')voegTaakToe(${ja(p.code)})">
           <button class="add-taak-btn" onclick="voegTaakToe(${ja(p.code)})">+</button>
         </div>
       </div>
@@ -1827,7 +1827,7 @@ function renderInstCapaciteit(){
   el.innerHTML=tl.map(t=>`
     <div class="tl-rij">
       <span style="display:flex;align-items:center;gap:6px;flex:1;font-size:13px">
-        <span style="width:10px;height:10px;border-radius:50%;background:${kleurCss(t.kleur)};display:inline-block;flex-shrink:0"></span>
+        <span style="width:10px;height:10px;border-radius:50%;background:${esc(kleurCss(t.kleur))};display:inline-block;flex-shrink:0"></span>
         ${esc(t.label)}
       </span>
       <input class="tl-inp" type="number" style="width:70px;flex:none;text-align:right;font-family:var(--mono)"
@@ -1887,12 +1887,12 @@ function renderProjectDetail(){
   const statusHtml=Object.entries(PROJ_STATUS).map(([k,v])=>`
     <button class="status-opt${p.status===k?' actief':''}"
       style="${p.status===k?`background:${v.bg};color:${v.c};border-color:${v.bc}`:''}"
-      onclick="setProjectStatus(${ja(code)},${ja(k)})">${v.label}</button>`).join('');
+      onclick="setProjectStatus(${ja(code)},${ja(k)})">${esc(v.label)}</button>`).join('');
 
   const takenHtml=taken.map(t=>{
     const assigneeChips=(t.toegewezen||[]).map(naam=>{
       const tm=tl.find(x=>x.naam===naam);
-      return tm?`<span class="pd-assignee-chip"><span class="pd-assignee-dot" style="background:${kleurCss(tm.kleur)}"></span>${esc(tm.label)}</span>`:'';
+      return tm?`<span class="pd-assignee-chip"><span class="pd-assignee-dot" style="background:${esc(kleurCss(tm.kleur))}"></span>${esc(tm.label)}</span>`:'';
     }).join('');
     const subtakenHtml=(t.subtaken||[]).map(s=>`
       <div class="pd-subtaak-rij">
@@ -1903,7 +1903,7 @@ function renderProjectDetail(){
     return `<div class="pd-taak">
       <div class="pd-taak-bar" onclick="togglePdTaak(${ja('pdb-'+t.id)})">
         <span class="pd-taak-naam">${esc(t.naam)}</span>
-        ${t.estimate_uren?`<span class="pd-taak-est">${t.estimate_uren}u</span>`:''}
+        ${t.estimate_uren?`<span class="pd-taak-est">${esc(t.estimate_uren)}u</span>`:''}
         ${assigneeChips}
         <button class="icon-knop del" onclick="event.stopPropagation();pdVerwijderTaak(${ja(code)},${ja(t.id)})">✕</button>
       </div>
@@ -1947,8 +1947,8 @@ function renderProjectDetail(){
       <div class="detail-section-title">Factuurstatus</div>
       <div style="display:flex;gap:0.4rem;flex-wrap:wrap">${Object.entries(FACTUUR_STATUS).map(([k,v])=>`
         <button class="factuur-badge${(p.factuur_status||'geen')===k?' actief':''}"
-          style="background:${v.bg};color:${v.c};border-color:${v.bc};${(p.factuur_status||'geen')===k?'box-shadow:0 0 0 2px '+v.bc+';font-weight:700':''}"
-          onclick="pdSetVeld(${ja(code)},'factuur_status',${ja(k)});renderProjectDetail();if(actTab==='projecten')renderProjectenTab()">${v.label}</button>`).join('')}</div>
+          style="background:${esc(v.bg)};color:${esc(v.c)};border-color:${esc(v.bc)};${esc((p.factuur_status||'geen')===k?'box-shadow:0 0 0 2px '+v.bc+';font-weight:700':'')}"
+          onclick="pdSetVeld(${ja(code)},'factuur_status',${ja(k)});renderProjectDetail();if(actTab==='projecten')renderProjectenTab()">${esc(v.label)}</button>`).join('')}</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1.25rem">
       <div>
@@ -1958,7 +1958,7 @@ function renderProjectDetail(){
       </div>
       <div>
         <label class="form-label">Geboekte uren (totaal)</label>
-        <div style="font-family:var(--mono);font-size:18px;font-weight:500;padding:8px 0;color:var(--text)">${fmtUren(totalSec)}</div>
+        <div style="font-family:var(--mono);font-size:18px;font-weight:500;padding:8px 0;color:var(--text)">${esc(fmtUren(totalSec))}</div>
       </div>
     </div>
     <div class="detail-section">
@@ -2246,12 +2246,12 @@ function renderProjectenTab(){
     const sec=urenPP[p.code]||0;
     const pct=Math.round(sec/maxU*100);
     const urenHtml=sec?`<div class="proj-uren-col">
-      <div class="proj-uren">${fmtUren(sec)}</div>
-      <div class="proj-uren-balk-wrap"><div class="proj-uren-balk" style="width:${pct}%"></div></div>
+      <div class="proj-uren">${esc(fmtUren(sec))}</div>
+      <div class="proj-uren-balk-wrap"><div class="proj-uren-balk" style="width:${esc(pct)}%"></div></div>
     </div>`:`<div class="proj-uren-col"></div>`;
     const dl=deadlineBadge(p.deadline);
     return `<div class="proj-item" onclick="openProjectDetail(${ja(p.code)})">
-      <div class="proj-code">${esc(p.code)}${dl?' '+dl:''}</div>
+      <div class="proj-code">${esc(p.code)}${esc(dl?' '+dl:'')}</div>
       <div class="proj-naam">${esc(p.naam||'—')}</div>
       <div class="proj-klant">${esc(p.klant||'')}</div>
       <div class="proj-status-col">${p.status?statusBadge(p.status):''}</div>

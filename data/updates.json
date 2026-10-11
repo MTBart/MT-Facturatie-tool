@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.12.4",
+    "datum": "2026-10-11",
+    "titel": "Veiliger, ook Geld en Rapporten",
+    "voor": "beheer",
+    "punten": [
+      "Ook in het Geld-tabblad, de rapporten, de cijfers, de schulden, de verhuisknop, het aanwezigheidsbord en de meldingen wordt alles uit de gegevens als gewone tekst getoond en nooit als code uitgevoerd. Er verandert niets aan hoe het eruitziet.",
+      "Het aanwezigheidsbord en de kaart met de ochtendmelding zijn extra dichtgezet tegen vreemde tekens in gegevens die van de server komen."
+    ]
+  },
+  {
     "versie": "2.12.3",
     "datum": "2026-10-11",
     "titel": "Veiliger",

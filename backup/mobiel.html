@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.12.2 — M&T Mobiel</title>
+<title>BACKUP v2.12.3 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -764,7 +764,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.12.2, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.12.3, 2026-10-11). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -2275,7 +2275,7 @@ function pvFormulierMobiel() {
   const morgen = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
   el.innerHTML = `<div class="pv-form">
     <label class="vol" style="font-size:12px;color:var(--text-dim)">${_pvMoetVoorstel() ? 'Je planblok wordt een voorstel; kantoor keurt het goed.' : 'Nieuw planblok voor jezelf.'}</label>
-    <input id="pv-datum" type="date" value="${morgen}" aria-label="Datum"><input id="pv-start" type="time" value="08:00" aria-label="Starttijd">
+    <input id="pv-datum" type="date" value="${esc(morgen)}" aria-label="Datum"><input id="pv-start" type="time" value="08:00" aria-label="Starttijd">
     <input id="pv-duur" type="number" min="15" step="15" value="120" aria-label="Duur in minuten"><input id="pv-proj" placeholder="Projectcode" aria-label="Projectcode">
     <input id="pv-taak" class="vol" placeholder="Wat ga je doen? (bv. meubel fout → opdracht tekenaar)" aria-label="Omschrijving">
     <button class="btn btn-primary vol" onclick="pvIndienenMobiel()">${_pvMoetVoorstel() ? 'Voorstel indienen' : 'Planblok opslaan'}</button></div>`;
@@ -3319,7 +3319,7 @@ function renderRecentList() {
       <div class="recent-dot"></div>
       <div class="recent-info">
         <div class="recent-name">${escHtml(mProjNaam(p))}</div>
-        <div class="recent-meta">${mProjNr(p) ? escHtml(mProjNr(p)) + ' · ' : ''}${p.lastActivity}</div>
+        <div class="recent-meta">${mProjNr(p) ? escHtml(mProjNr(p)) + ' · ' : ''}${esc(p.lastActivity)}</div>
       </div>
       <div style="font-size:13px;color:var(--text-faint)">▶</div>
     </div>
@@ -3372,12 +3372,12 @@ function renderProjectCards() {
       ${mProjNr(p) ? `<div class="project-card-code">${escHtml(mProjNr(p))}</div>` : ''}
       <div class="project-card-top">
         <div class="project-card-name">${escHtml(mProjNaam(p))}</div>
-        <span class="badge ${cls}">${label}</span>
+        <span class="badge ${esc(cls)}">${esc(label)}</span>
       </div>
       ${(p.pending || p.spPending) ? `<div style="font-size:11px;color:var(--gold,#d6a93a);margin-top:2px" title="Wordt automatisch opnieuw geprobeerd">⏳ ${p.spPending ? 'nog niet gedeeld met het team' : 'Toggl-koppeling volgt'} — sync loopt automatisch</div>` : ''}
       <div class="project-card-addr">📍 ${addrFor(p) ? escHtml(addrFor(p)) : "– adres ontbreekt"}</div>
       <div class="project-card-footer">
-        <div class="project-last">🕐 ${p.lastActivity}</div>
+        <div class="project-last">🕐 ${esc(p.lastActivity)}</div>
         ${p.assigned ? '<span class="badge badge-ok">Toegewezen</span>' : ''}
       </div>
     </div>`;
@@ -3397,7 +3397,7 @@ function openProjectSheet(id) {
   const [cls,label] = STATUS_MAP[p.status] || ["badge-gray","–"];
   document.getElementById("sheetTitle").textContent = p.name;
   document.getElementById("sheetSub").textContent = p.code;
-  document.getElementById("sheetStatus").innerHTML = `<span class="badge ${cls}">${label}</span>`;
+  document.getElementById("sheetStatus").innerHTML = `<span class="badge ${esc(cls)}">${esc(label)}</span>`;
   renderSheetAddr(p);
   try { if (window.MTContactenUI) MTContactenUI.mobielSheet(p, document.getElementById("sheetContacten"), addrFor(p)); } catch(e) { console.warn("contacten:", e); }
   renderSheetNotes(p);
@@ -3525,7 +3525,7 @@ function _sheetNotesHtml(list) {
   return list.slice(0, 10).map(n => `
     <div style="padding:8px 10px;background:var(--n-800);border-radius:8px;margin-bottom:6px">
       <div style="font-size:13px;color:#fff">${escHtml(n.text || "")}</div>
-      <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:3px">${noteStamp(n)}${n.doorNaam ? " · " + escHtml(n.doorNaam) : ""}${n.fotos && n.fotos.length ? ` · 📷 ${n.fotos.length} foto('s)` : ""}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:3px">${esc(noteStamp(n))}${n.doorNaam ? " · " + escHtml(n.doorNaam) : ""}${n.fotos && n.fotos.length ? ` · 📷 ${n.fotos.length} foto('s)` : ""}</div>
     </div>`).join("");
 }
 
@@ -3561,7 +3561,7 @@ async function _nasFolders(code) {
   mappen.sort((a, b) => a.name.localeCompare(b.name));
   const icoon = n => /foto/i.test(n) ? "📷" : /ontwerp|werkteken|teken/i.test(n) ? "📐" : /offerte|contract/i.test(n) ? "📄" : /cnc/i.test(n) ? "⚙" : "📁";
   return `<div style="display:flex;flex-wrap:wrap;gap:6px">` + mappen.map(m =>
-    `<a href="${escHtml(veiligeSpUrl(m.webUrl) || '#')}" target="_blank" rel="noopener" style="text-decoration:none;font-size:12px;padding:6px 10px;border-radius:8px;background:var(--n-800);color:#fff;border:1px solid rgba(255,255,255,.1)">${icoon(m.name)} ${escHtml(m.name)}</a>`
+    `<a href="${escHtml(veiligeSpUrl(m.webUrl) || '#')}" target="_blank" rel="noopener" style="text-decoration:none;font-size:12px;padding:6px 10px;border-radius:8px;background:var(--n-800);color:#fff;border:1px solid rgba(255,255,255,.1)">${esc(icoon(m.name))} ${escHtml(m.name)}</a>`
   ).join("") + `</div>`;
 }
 
@@ -3634,9 +3634,9 @@ function renderWeekStrip() {
       else if (w === CURRENT_WEEK_NR) cls += " today";
       if (w === CURRENT_WEEK_NR && HOLIDAY.idx !== null) cls += " holiday";
       const hasDots = [0,1,2,3,4].some(i => blocksFor(w, i).length > 0);
-      return `<div class="${cls}" onclick="selectWeekAbs(${w})">
-        <div class="day-name">W${isoWeekNr(mondayOfWeek(w))}</div>
-        <div class="day-num">${ma.date.getDate()}–${vr.date.getDate()}</div>
+      return `<div class="${esc(cls)}" onclick="selectWeekAbs(${w})">
+        <div class="day-name">W${esc(isoWeekNr(mondayOfWeek(w)))}</div>
+        <div class="day-num">${esc(ma.date.getDate())}–${esc(vr.date.getDate())}</div>
         ${hasDots ? '<div class="day-dot"></div>' : ''}
       </div>`;
     }).join("");
@@ -3648,9 +3648,9 @@ function renderWeekStrip() {
       if (off === 0) cls += " selected";
       else if (TODAY_LIN >= lin + off*3 && TODAY_LIN <= lin + off*3 + 2) cls += " today";
       const hasDots = [0,1,2].some(k => { const c = agLin(lin + off*3 + k); return blocksFor(c.w, c.i).length > 0; });
-      return `<div class="${cls}" onclick="selectDayAbs(${a.w},${a.i})">
-        <div class="day-name">${WEEK_DAYS[a.i]}–${WEEK_DAYS[z.i]}</div>
-        <div class="day-num">${a.date.getDate()}–${z.date.getDate()}</div>
+      return `<div class="${esc(cls)}" onclick="selectDayAbs(${a.w},${esc(a.i)})">
+        <div class="day-name">${esc(WEEK_DAYS[a.i])}–${esc(WEEK_DAYS[z.i])}</div>
+        <div class="day-num">${esc(a.date.getDate())}–${esc(z.date.getDate())}</div>
         ${hasDots ? '<div class="day-dot"></div>' : ''}
       </div>`;
     }).join("");
@@ -3663,9 +3663,9 @@ function renderWeekStrip() {
       else if (p.w === CURRENT_WEEK_NR && p.i === TODAY_IDX) cls += " today";
       if (p.w === CURRENT_WEEK_NR && HOLIDAY.idx === p.i) cls += " holiday";
       const hasDots = blocksFor(p.w, p.i).length > 0;
-      return `<div class="${cls}" onclick="selectDayAbs(${p.w},${p.i})">
-        <div class="day-name">${WEEK_DAYS[p.i]}</div>
-        <div class="day-num">${p.date.getDate()}</div>
+      return `<div class="${esc(cls)}" onclick="selectDayAbs(${p.w},${esc(p.i)})">
+        <div class="day-name">${esc(WEEK_DAYS[p.i])}</div>
+        <div class="day-num">${esc(p.date.getDate())}</div>
         ${hasDots ? '<div class="day-dot"></div>' : ''}
       </div>`;
     }).join("");
@@ -3794,7 +3794,7 @@ function renderAgenda() {
   let html = "";
 
   if (HOLIDAY.idx !== null && cols.some(c => c.w === CURRENT_WEEK_NR && c.i === HOLIDAY.idx)) {
-    html += `<div class="holiday-banner">🏖 ${HOLIDAY.name}</div>`;
+    html += `<div class="holiday-banner">🏖 ${esc(HOLIDAY.name)}</div>`;
   }
 
   const d0 = cols[0].date, dN = cols[cols.length-1].date;
@@ -3805,12 +3805,12 @@ function renderAgenda() {
     : (d0.getMonth() === dN.getMonth()
       ? `${d0.getDate()}–${dN.getDate()} ${MAAND_KORT[dN.getMonth()]}`
       : `${d0.getDate()} ${MAAND_KORT[d0.getMonth()]} – ${dN.getDate()} ${MAAND_KORT[dN.getMonth()]}`);
-  html += `<div class="section-head">${wkLbl} · ${rangeLbl} ${dN.getFullYear()} · tik een leeg vak voor een nieuw blok</div>`;
+  html += `<div class="section-head">${esc(wkLbl)} · ${esc(rangeLbl)} ${esc(dN.getFullYear())} · tik een leeg vak voor een nieuw blok</div>`;
 
   // tijdkolom
   let timesHtml = "";
   for (let h = TG_START; h < TG_END; h++) {
-    timesHtml += `<div class="tg-time-cell">${String(h).padStart(2,"0")}:00</div>`;
+    timesHtml += `<div class="tg-time-cell">${esc(String(h).padStart(2,"0"))}:00</div>`;
   }
 
   // dagkolommen
@@ -3819,21 +3819,21 @@ function renderAgenda() {
     const isToday = (c.w === CURRENT_WEEK_NR && c.i === TODAY_IDX);
     let body = "";
     for (let h = TG_START+1; h < TG_END; h++) {
-      body += `<div class="tg-hourline" style="top:${(h-TG_START)*TG_PX}px"></div>`;
+      body += `<div class="tg-hourline" style="top:${esc((h-TG_START)*TG_PX)}px"></div>`;
     }
     blocksFor(c.w, c.i).forEach(b => {
       const top = (toMin(b.start) - TG_START*60) / 60 * TG_PX;
       const height = Math.max(20, (toMin(b.end) - toMin(b.start)) / 60 * TG_PX - 2);
       const cls = b.real ? b.kind : (b.mock ? b.who : "eigen");
-      body += `<div class="tg-block ${cls}" style="top:${top}px;height:${height}px"
+      body += `<div class="tg-block ${esc(cls)}" style="top:${esc(top)}px;height:${esc(height)}px"
         onclick="event.stopPropagation();tapBlok(${jsArg(b.id)})">
         <div class="tg-block-name">${escHtml(b.name)}</div>
-        <div class="tg-block-time">${b.start}–${b.end}${b.taskName ? " · " + escHtml(b.taskName) : ""}</div>
+        <div class="tg-block-time">${esc(b.start)}–${esc(b.end)}${b.taskName ? " · " + escHtml(b.taskName) : ""}</div>
       </div>`;
     });
     colsHtml += `<div class="tg-col">
-      <div class="tg-col-head ${isToday?"today":""}">${WEEK_DAYS[c.i]} ${c.date.getDate()}</div>
-      <div class="tg-body" onclick="gridTap(event,${c.w},${c.i})">${body}</div>
+      <div class="tg-col-head ${isToday?"today":""}">${esc(WEEK_DAYS[c.i])} ${esc(c.date.getDate())}</div>
+      <div class="tg-body" onclick="gridTap(event,${c.w},${esc(c.i)})">${body}</div>
     </div>`;
   });
 
@@ -3860,7 +3860,7 @@ function renderAgenda() {
     }
     if (bars) {
       html += `<div class="card" style="margin-top:10px">
-        <div class="card-label">Capaciteit ${WEEK_DAYS[cols[0].i]} ${cols[0].date.getDate()} ${MAAND_KORT[cols[0].date.getMonth()]}</div>
+        <div class="card-label">Capaciteit ${esc(WEEK_DAYS[cols[0].i])} ${esc(cols[0].date.getDate())} ${esc(MAAND_KORT[cols[0].date.getMonth()])}</div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">${bars}</div>
       </div>`;
     }
@@ -3876,11 +3876,11 @@ function capacityBar(name,uren,max,who) {
   const urenStr = (uren % 1 === 0 ? uren : uren.toFixed(1)).toString().replace(".",",");
   return `<div>
     <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-      <span style="font-size:12px;font-weight:600;color:var(--text-dim)">${name}</span>
-      <span style="font-family:var(--mono);font-size:11px;color:${over?"var(--error)":"var(--text-faint)"}">${urenStr}u${over?" ⚠️ overboeking":""}</span>
+      <span style="font-size:12px;font-weight:600;color:var(--text-dim)">${esc(name)}</span>
+      <span style="font-family:var(--mono);font-size:11px;color:${over?"var(--error)":"var(--text-faint)"}">${esc(urenStr)}u${over?" ⚠️ overboeking":""}</span>
     </div>
     <div style="height:6px;background:var(--n-200);border-radius:3px;overflow:hidden">
-      <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
+      <div style="width:${esc(pct)}%;height:100%;background:${esc(color)};border-radius:3px"></div>
     </div>
   </div>`;
 }
@@ -4181,7 +4181,7 @@ function renderNotes() {
     <div class="note-item">
       <div>
         <div class="note-item-text">${escHtml(n.text)}</div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:3px">${n.project} · ${noteStamp(n)}${n.fotos && n.fotos.length ? ` · 📷 ${n.fotos.length}` : ""}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-top:3px">${esc(n.project)} · ${esc(noteStamp(n))}${n.fotos && n.fotos.length ? ` · 📷 ${n.fotos.length}` : ""}</div>
       </div>
       <button class="note-del" onclick="deleteNote(${i})">×</button>
     </div>
@@ -4552,7 +4552,7 @@ async function renderVoorOpnameLijst(forceFetch) {
     return `<div class="foto-row" style="align-items:flex-start;cursor:pointer" onclick="voHervatOpname(${oi})">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600">${klant}</div>
-        <div style="font-size:12px;color:var(--text-faint);margin-top:1px">${dt ? dt+' · ' : ''}${n} foto${n===1?'':"'s"} · ${badge}</div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:1px">${esc(dt ? dt+' · ' : '')}${n} foto${n===1?'':"'s"} · ${badge}</div>
         ${not ? `<div style="font-size:12px;color:var(--text-faint);margin-top:3px">${not}</div>` : ''}
         <div style="font-size:12px;color:#d6a93a;margin-top:3px">✏️ Tik om verder te werken</div>
       </div>
@@ -4654,17 +4654,20 @@ function _voRuimteRender() {
   const sel = document.getElementById('voRuimteSelect');
   const info = document.getElementById('voRuimteNavInfo');
   if (!tabs) return;
+  // De ruimtenaam staat NIET in een inline handler (F7: een naam met &quot;… werd door de browser teruggedecodeerd en brak uit de JS-tekenreeks):
+  // de knop draagt alleen een numerieke index; de naam komt uit de array.
+  tabs.onclick = e => { const b = e.target.closest('[data-ridx]'); if (!b) return; if (b.dataset.ract === 'rename') voRuimteRename(); else voRuimteKies(_voRuimtes[Number(b.dataset.ridx)]); };
   const zonder = voorOpnamePhotos.filter(p => !(p.ruimte || '')).length;
-  let h = _voRuimtes.map(r => {
+  let h = _voRuimtes.map((r, ri) => {
     const act = (r === _voRuimteActief);
     return `<button class="btn ${act ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px"
-      onclick="${act ? 'voRuimteRename()' : `voRuimteKies(${JSON.stringify(r).replace(/"/g,'&quot;')})`}">${escHtml(r)} (${_voRuimteCount(r)})</button>`;
+      data-ridx="${esc(ri)}" data-ract="${act ? 'rename' : 'kies'}">${escHtml(r)} (${esc(_voRuimteCount(r))})</button>`;
   }).join('');
-  if (zonder) h += `<button class="btn ${_voRuimteActief === '' ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px" onclick="voRuimteKies('')">Zonder ruimte (${zonder})</button>`;
+  if (zonder) h += `<button class="btn ${_voRuimteActief === '' ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px" onclick="voRuimteKies('')">Zonder ruimte (${esc(zonder)})</button>`;
   tabs.innerHTML = h;
   if (sel) {
-    sel.innerHTML = _voRuimtes.map(r => `<option value="${escHtml(r)}"${r === _voRuimteActief ? ' selected' : ''}>${escHtml(r)} (${_voRuimteCount(r)} foto's)</option>`).join('')
-      + (zonder ? `<option value=""${_voRuimteActief === '' ? ' selected' : ''}>Zonder ruimte (${zonder})</option>` : '');
+    sel.innerHTML = _voRuimtes.map(r => `<option value="${escHtml(r)}"${r === _voRuimteActief ? ' selected' : ''}>${escHtml(r)} (${esc(_voRuimteCount(r))} foto's)</option>`).join('')
+      + (zonder ? `<option value=""${_voRuimteActief === '' ? ' selected' : ''}>Zonder ruimte (${esc(zonder)})</option>` : '');
   }
   if (info) {
     const idx = _voRuimtes.indexOf(_voRuimteActief);
@@ -4843,7 +4846,7 @@ async function uploadVoorOpname() {
     if (res) {
       res.style.display = 'block';
       res.innerHTML = `<div style="background:#0f2a18;border:1px solid #2ea043;border-radius:10px;padding:12px;margin-top:10px;font-size:14px">
-        ✅ <b>${ok} foto${ok===1?'':'\'s'}</b> opgeslagen in Voor-opname<br>
+        ✅ <b>${esc(ok)} foto${ok===1?'':'\'s'}</b> opgeslagen in Voor-opname<br>
         <span style="color:var(--text-faint);font-size:12px">${escHtml(klantNaam)} · ${escHtml(bucket)}${fail?` · ${fail} mislukt`:''}</span><br>
         <span style="color:var(--text-faint);font-size:12px">Thuis op kantoor in de cockpit aan het juiste project koppelen.</span>
       </div>`;
@@ -5149,7 +5152,7 @@ function _captureResult(succes, msg) {
     border:1px solid ${succes ? 'rgba(46,160,67,.5)' : 'rgba(255,166,0,.5)'};
     color:${succes ? '#3fb950' : '#e3a008'}">
     ${escHtml(msg)}
-    <div style="font-size:10px;color:var(--text-faint);margin-top:4px">${stamp}</div>
+    <div style="font-size:10px;color:var(--text-faint);margin-top:4px">${esc(stamp)}</div>
   </div>`;
 }
 
@@ -5425,7 +5428,7 @@ function _pinRenderManager() {
     return `<div class="card" style="display:flex;gap:12px;align-items:center;margin-bottom:10px;cursor:pointer" onclick="pinVlakOpen(${jsArg(v.id)})">`
       + (src ? `<img src="${veiligeFoto(src)}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex:0 0 auto">` : `<div style="width:64px;height:64px;border-radius:8px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:24px;flex:0 0 auto">📍</div>`)
       + `<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.naam || '(zonder naam)')}</div>`
-      + `<div style="font-size:12px;color:var(--text-faint,#888)">${n} pin${n===1?'':'s'} · ${versies} versie${versies===1?'':'s'} · ${v.type}</div></div>`
+      + `<div style="font-size:12px;color:var(--text-faint,#888)">${n} pin${n===1?'':'s'} · ${esc(versies)} versie${versies===1?'':'s'} · ${esc(v.type)}</div></div>`
       + `<button onclick="event.stopPropagation();pinVlakVerwijder(${jsArg(v.id)})" style="background:none;border:none;color:#c00;font-size:20px;padding:4px 8px">×</button></div>`;
   }).join("");
 }
@@ -5817,7 +5820,7 @@ function showOpnameRapport() {
   const now = new Date().toLocaleDateString("nl-NL", {day:"2-digit", month:"long", year:"numeric"});
   const door = _msAccount ? (_msAccount.name || _msAccount.username) : "Demo";
   let html = `<div class="rapport-title">Opnamerapport</div>
-    <div class="rapport-sub">${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))} · ${now} · ingemeten door ${escHtml(door)}</div>`;
+    <div class="rapport-sub">${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))} · ${esc(now)} · ingemeten door ${escHtml(door)}</div>`;
   if (notitie) {
     html += `<div class="rapport-section">📝 Omschrijving / maten / afspraken</div>
       <div class="rapport-item"><div class="rapport-item-content"><div class="rapport-item-name" style="white-space:pre-wrap">${escHtml(notitie)}</div></div></div>`;
@@ -5839,7 +5842,7 @@ function showOpnameRapport() {
       });
     });
   }
-  html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${now} · ${escHtml(door)} · M&T</div>`;
+  html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${esc(now)} · ${escHtml(door)} · M&T</div>`;
   document.getElementById("rapportContent").innerHTML = html;
   document.getElementById("rapportHead").textContent = "Opnamerapport";
   document.getElementById("rapportActiesOpname").classList.remove("view-hidden");
@@ -5915,16 +5918,16 @@ function renderChecklist() {
     const okActive = state === "ok" ? "active-ok" : "";
     const herstelActive = state === "herstel" ? "active-herstel" : "";
     const itemCls = state === "ok" ? "ok" : state === "herstel" ? "herstel" : "";
-    return `<div class="checklist-item ${itemCls}" id="cl-item-${i}">
+    return `<div class="checklist-item ${esc(itemCls)}" id="cl-item-${i}">
       <div class="checklist-top">
         <div class="checklist-name">${escHtml(item)}</div>
         <div class="checklist-btns">
-          <button class="check-btn ${okActive}" onclick="setCheck(${i},'ok')" title="OK">✅</button>
-          <button class="check-btn ${herstelActive}" onclick="setCheck(${i},'herstel')" title="Herstelpunt">⚠️</button>
+          <button class="check-btn ${esc(okActive)}" onclick="setCheck(${i},'ok')" title="OK">✅</button>
+          <button class="check-btn ${esc(herstelActive)}" onclick="setCheck(${i},'herstel')" title="Herstelpunt">⚠️</button>
         </div>
       </div>
       <div class="herstel-extra ${state==='herstel'?'visible':''}" id="herstel-${i}">
-        <textarea placeholder="Omschrijf het herstelpunt…" id="herstel-note-${i}" onchange="setHerstelNote(${i},this.value)" style="font-size:13px;min-height:60px">${checklistNotes[i]||""}</textarea>
+        <textarea placeholder="Omschrijf het herstelpunt…" id="herstel-note-${i}" onchange="setHerstelNote(${i},this.value)" style="font-size:13px;min-height:60px">${esc(checklistNotes[i]||"")}</textarea>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <div class="photo-input-wrap" style="display:inline-block">
             <label style="margin:0;font-weight:400;text-transform:none">
@@ -5999,7 +6002,7 @@ function showRapport() {
   const now = new Date().toLocaleDateString("nl-NL",{day:"2-digit",month:"long",year:"numeric"});
   const door = _msAccount ? (_msAccount.name || _msAccount.username) : "Demo";
   let html = `<div class="rapport-title">Opleveringsrapport</div>
-    <div class="rapport-sub">${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))} · ${now} · ingevuld door ${escHtml(door)}</div>`;
+    <div class="rapport-sub">${escHtml([mProjNaam(p), mProjNr(p)].filter(Boolean).join(' · '))} · ${esc(now)} · ingevuld door ${escHtml(door)}</div>`;
   if (oks.length) {
     html += `<div class="rapport-section">✅ Goedgekeurd (${oks.length})</div>`;
     html += oks.map(item => `<div class="rapport-item">
@@ -6031,16 +6034,16 @@ function showRapport() {
   const fVoor = _oplUploaded.voor.length + oplFotos.voor.length;
   const fNa = _oplUploaded.na.length + oplFotos.na.length;
   if (fVoor) {
-    html += `<div class="rapport-section">📷 Aangetroffen situatie (${fVoor})</div>`;
+    html += `<div class="rapport-section">📷 Aangetroffen situatie (${esc(fVoor)})</div>`;
     if (_oplUploaded.voor.length) html += `<div class="rapport-item-note">${_oplUploaded.voor.length} foto('s) eerder opgeslagen op SharePoint</div>`;
     html += oplFotos.voor.map(f => `<img src="${veiligeFoto(f.url)}" style="width:100%;border-radius:8px;margin-top:8px">`).join("");
   }
   if (fNa) {
-    html += `<div class="rapport-section">📷 Opgeleverd resultaat (${fNa})</div>`;
+    html += `<div class="rapport-section">📷 Opgeleverd resultaat (${esc(fNa)})</div>`;
     if (_oplUploaded.na.length) html += `<div class="rapport-item-note">${_oplUploaded.na.length} foto('s) eerder opgeslagen op SharePoint</div>`;
     html += oplFotos.na.map(f => `<img src="${veiligeFoto(f.url)}" style="width:100%;border-radius:8px;margin-top:8px">`).join("");
   }
-  html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${now} · ${escHtml(door)} · M&T</div>`;
+  html += `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--n-200);font-size:12px;color:var(--text-faint);font-family:var(--mono)">Rapport gegenereerd · ${esc(now)} · ${escHtml(door)} · M&T</div>`;
   document.getElementById("rapportContent").innerHTML = html;
   document.getElementById("rapportHead").textContent = "Opleverrapport";
   document.getElementById("rapportActiesOplevering").classList.remove("view-hidden");
@@ -6255,8 +6258,8 @@ function renderSheetTasks() {
       html += `<div class="task-form">
         <input id="tfName" value="${escHtml(t.name)}" placeholder="Taaknaam…">
         <div style="display:flex;gap:8px">
-          <input id="tfDate" value="${t.date||""}" placeholder="Datum (bv. 12-06)" style="flex:1">
-          <input id="tfEst" value="${t.est||""}" placeholder="Schatting (bv. 2u)" style="flex:1">
+          <input id="tfDate" value="${esc(t.date||"")}" placeholder="Datum (bv. 12-06)" style="flex:1">
+          <input id="tfEst" value="${esc(t.est||"")}" placeholder="Schatting (bv. 2u)" style="flex:1">
         </div>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button class="btn btn-primary btn-sm" style="flex:2" data-recht="taken:alles" onclick="saveTaskEdit(${jsArg(t.id)})">💾 Opslaan</button>
@@ -6271,7 +6274,7 @@ function renderSheetTasks() {
       ? `<span class="task-sync-dot ${t.togglTaskId ? 'synced' : 'unsynced'}" title="${t.togglTaskId ? 'Gesynchroniseerd met Toggl 2.0' : 'Nog niet gesynchroniseerd'}"></span>`
       : '';
     html += `<div class="task-row">
-      <button class="task-toggle ${t.status}" onclick="toggleTaskStatus(${jsArg(t.id)})" aria-label="Status wisselen">${TASK_ICON[t.status]||"○"}</button>
+      <button class="task-toggle ${esc(t.status)}" onclick="toggleTaskStatus(${jsArg(t.id)})" aria-label="Status wisselen">${esc(TASK_ICON[t.status]||"○")}</button>
       <div class="task-main" onclick="editTask(${jsArg(t.id)})">
         <div class="task-name ${t.status==='klaar'?'klaar':''}">${escHtml(t.name)} ${t.tag?`<span class="task-tag">${escHtml(t.tag)}</span>`:""} ${syncDot}${t._pending?` <span style="font-size:10px;color:var(--gold,#d6a93a)" title="Nog niet gedeeld — wordt automatisch opnieuw geprobeerd">⏳ wacht op sync</span>`:""}</div>
         ${meta ? `<div class="task-meta">${escHtml(meta)}</div>` : ""}
@@ -6880,7 +6883,7 @@ function renderFbList() {
   el.innerHTML = all.slice(0, 20).map(e => `
     <div style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--n-0)">
       <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-faint)">
-        <span>${ico[e.type] || "💬"} ${escHtml(e.type || "")}</span>
+        <span>${esc(ico[e.type] || "💬")} ${escHtml(e.type || "")}</span>
         <span>${e._pending ? "⏳ wacht op verbinding" : "✓ verstuurd"}</span>
       </div>
       <div style="font-size:14px;margin-top:4px">${escHtml(e.tekst || "")}</div>
@@ -6979,7 +6982,7 @@ async function initVoorraadApp() {
   const sel = document.getElementById("vraCat");
   if (sel && !sel.options.length) {
     sel.innerHTML = `<option value="">Alle categorieën</option>` +
-      VRA_CATS.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
+      VRA_CATS.map(c => `<option value="${esc(c.key)}">${esc(c.label)}</option>`).join('');
     sel.value = 'gereedschap';
   }
   if (!_vraGeladen) await laadVoorraadApp();
@@ -7035,25 +7038,25 @@ function renderVoorraadApp() {
     `<div style="border:1px dashed var(--accent,#b8860b);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--n-0);opacity:.85">
       <div style="font-weight:600;font-size:13px">${escHtml(e.omschrijving)} <span style="font-size:10px;color:var(--accent,#b8860b)">⏳ nieuw, in afwachting</span></div>
       <div style="font-size:11px;color:var(--text-faint);margin-top:2px">
-        ${e.artikelnummer?escHtml(e.artikelnummer)+' · ':''}${escHtml(e.leverancier||'—')} · gemeld aantal: <strong>${e.nieuwAantal||0}</strong> · wacht op akkoord
+        ${e.artikelnummer?escHtml(e.artikelnummer)+' · ':''}${escHtml(e.leverancier||'—')} · gemeld aantal: <strong>${esc(e.nieuwAantal||0)}</strong> · wacht op akkoord
       </div>
     </div>`).join('');
   el.innerHTML = nieuweHtml + items.map(v => {
     const safeId = "vc_" + btoa(unescape(encodeURIComponent(v.omschrijving))).replace(/[^A-Za-z0-9]/g,'');
     const open = _openVoorstelVoor(v.omschrijving);
     const pendBadge = open
-      ? `<div style="font-size:11px;color:var(--accent,#b8860b);margin:0 0 6px">⏳ Voorstel in afwachting van akkoord${open.type==='telling'?`: ${open.huidigAantal} → <strong>${open.geteld}</strong>`:''} — niet opnieuw indienen</div>`
+      ? `<div style="font-size:11px;color:var(--accent,#b8860b);margin:0 0 6px">⏳ Voorstel in afwachting van akkoord${open.type==='telling'?`: ${esc(open.huidigAantal)} → <strong>${esc(open.geteld)}</strong>`:''} — niet opnieuw indienen</div>`
       : '';
     const inputBlok = open
       ? `<div style="font-size:12px;color:var(--text-faint)">Geteld voorstel staat al klaar in de cockpit.</div>`
       : `<div style="display:flex;align-items:center;gap:8px">
         <label style="font-size:12px;color:var(--text-dim)">Geteld:</label>
-        <input type="number" id="${safeId}" data-oms="${escHtml(v.omschrijving)}" data-huidig="${v.aantal}" data-cat="${v.categorie}" data-art="${escHtml(v.artikelnummer||'')}"
-          placeholder="${v.aantal}" min="0" step="1" style="width:90px" oninput="vraUpdateSamenvatting()"></div>`;
+        <input type="number" id="${esc(safeId)}" data-oms="${escHtml(v.omschrijving)}" data-huidig="${esc(v.aantal)}" data-cat="${esc(v.categorie)}" data-art="${escHtml(v.artikelnummer||'')}"
+          placeholder="${esc(v.aantal)}" min="0" step="1" style="width:90px" oninput="vraUpdateSamenvatting()"></div>`;
     return `<div style="border:1px solid ${open?'var(--accent,#b8860b)':'var(--border)'};border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--n-0)">
       <div style="font-weight:600;font-size:13px">${escHtml(v.omschrijving)}</div>
       <div style="font-size:11px;color:var(--text-faint);margin:2px 0 8px">
-        ${v.artikelnummer?escHtml(v.artikelnummer)+' · ':''}${escHtml(v.leverancier||'—')} · voorraad nu: <strong>${v.aantal}</strong>${v.eenheid?' '+escHtml(v.eenheid):''}
+        ${v.artikelnummer?escHtml(v.artikelnummer)+' · ':''}${escHtml(v.leverancier||'—')} · voorraad nu: <strong>${esc(v.aantal)}</strong>${v.eenheid?' '+escHtml(v.eenheid):''}
       </div>
       ${pendBadge}${inputBlok}
     </div>`;
@@ -7079,7 +7082,7 @@ function vraUpdateSamenvatting() {
   if (!tellingen.length) { el.innerHTML = ""; return; }
   el.innerHTML = `<div style="border:1px solid var(--accent,#b8860b);border-radius:12px;padding:12px;background:var(--n-0)">
     <div style="font-weight:600;font-size:13px;margin-bottom:6px">${tellingen.length} correctie(s) klaar om in te dienen</div>
-    <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${tellingen.map(t=>`${escHtml(t.omschrijving)}: ${t.huidigAantal} → <strong>${t.geteld}</strong>`).join('<br>')}</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${tellingen.map(t=>`${escHtml(t.omschrijving)}: ${esc(t.huidigAantal)} → <strong>${esc(t.geteld)}</strong>`).join('<br>')}</div>
     <button class="btn btn-primary" onclick="dienVoorraadCorrectiesIn()" style="width:100%">📤 Indienen ter akkoord</button>
   </div>`;
 }
@@ -7218,7 +7221,7 @@ function veiligeSpUrl(u) { return window.veiligeUrl(u, { hosts: ['sharepoint.com
     const st = f._fsStatus || "lokaal";
     const c = CHIP[st] || CHIP.lokaal;
     const click = (st === "fout" && retryJs) ? ` onclick="event.stopPropagation();${retryJs}" style="cursor:pointer;` : ` style="`;
-    return `<span class="fs-chip"${click}display:inline-block;font-size:10px;line-height:1.4;padding:1px 6px;border-radius:8px;background:${c[1]}22;color:${c[1]};white-space:nowrap">${c[0]}</span>`;
+    return `<span class="fs-chip"${click}display:inline-block;font-size:10px;line-height:1.4;padding:1px 6px;border-radius:8px;background:${esc(c[1])}22;color:${esc(c[1])};white-space:nowrap">${esc(c[0])}</span>`;
   }
 
   /* ── rapport-id ── */
@@ -7396,15 +7399,17 @@ function veiligeSpUrl(u) { return window.veiligeUrl(u, { hosts: ['sharepoint.com
     const nav = document.getElementById("ruimteNav");
     if (!tabs || !nav) return;
     _ruimteInit();
+    // Zie _voRuimteRender: geen ruimtenaam in een inline handler, alleen een numerieke index.
+    tabs.onclick = e => { const b = e.target.closest("[data-ridx]"); if (!b) return; if (b.dataset.ract === "rename") window.ruimteRename(); else window.ruimteKies(_ruimtes[Number(b.dataset.ridx)]); };
     const zonder = inmFotos.filter(f => !f._fsHoofdstuk).length;
-    tabs.innerHTML = _ruimtes.map(r => {
+    tabs.innerHTML = _ruimtes.map((r, ri) => {
       const actief = r === _ruimteActief;
-      return `<button type="button" onclick="${actief ? "ruimteRename()" : `ruimteKies(${JSON.stringify(r).replace(/"/g, "&quot;")})`}"
-        style="border:1px solid ${actief ? "var(--gold,#b8860b)" : "#ccc"};background:${actief ? "var(--gold,#b8860b)" : "transparent"};color:${actief ? "#fff" : "inherit"};border-radius:16px;padding:6px 12px;font-size:13px;min-height:36px">${escHtml(r)} <span style="opacity:.75;font-size:11px">${_ruimteCount(r)}</span>${actief ? " ✏️" : ""}</button>`;
-    }).join("") + (zonder ? `<button type="button" onclick="ruimteKies('')" style="border:1px dashed #999;background:${_ruimteActief === "" ? "#8882" : "transparent"};border-radius:16px;padding:6px 12px;font-size:13px;min-height:36px">Zonder ruimte <span style="opacity:.75;font-size:11px">${zonder}</span></button>` : "");
+      return `<button type="button" data-ridx="${esc(ri)}" data-ract="${actief ? "rename" : "kies"}"
+        style="border:1px solid ${actief ? "var(--gold,#b8860b)" : "#ccc"};background:${actief ? "var(--gold,#b8860b)" : "transparent"};color:${actief ? "#fff" : "inherit"};border-radius:16px;padding:6px 12px;font-size:13px;min-height:36px">${escHtml(r)} <span style="opacity:.75;font-size:11px">${esc(_ruimteCount(r))}</span>${actief ? " ✏️" : ""}</button>`;
+    }).join("") + (zonder ? `<button type="button" onclick="ruimteKies('')" style="border:1px dashed #999;background:${_ruimteActief === "" ? "#8882" : "transparent"};border-radius:16px;padding:6px 12px;font-size:13px;min-height:36px">Zonder ruimte <span style="opacity:.75;font-size:11px">${esc(zonder)}</span></button>` : "");
     // onderaan: dropdown + vorige/volgende voor snel navigeren
     const sel = document.getElementById("ruimteSelect");
-    sel.innerHTML = _ruimtes.map(r => `<option value="${escHtml(r)}"${r === _ruimteActief ? " selected" : ""}>${escHtml(r)} (${_ruimteCount(r)} foto's)</option>`).join("");
+    sel.innerHTML = _ruimtes.map(r => `<option value="${escHtml(r)}"${r === _ruimteActief ? " selected" : ""}>${escHtml(r)} (${esc(_ruimteCount(r))} foto's)</option>`).join("");
     const idx = _ruimtes.indexOf(_ruimteActief);
     document.getElementById("ruimteNavInfo").textContent = idx >= 0 ? `Ruimte ${idx + 1} van ${_ruimtes.length} — tik op het actieve tabblad om te hernoemen` : "";
     nav.style.display = "block";

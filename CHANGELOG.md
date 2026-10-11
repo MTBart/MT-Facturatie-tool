@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Codex fa47ed9: potnaam niet dubbel escapen, hook controleert de index, recursieve bronnen, houd-lijsten met vingerafdruk
+- Commit: `a0b3632` | Auteur: Bart Witte
+
 ## 2026-10-11 — F7 3b groep 6: tekstsinks in mt-geld, mt-cijfers, mt-schulden, mt-verhuis, mt-rapport, mt-aanwezig, mt-dialog en mt-koers (3b af)
 - Commit: `fa47ed9` | Auteur: Bart Witte
 

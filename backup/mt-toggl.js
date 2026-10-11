@@ -244,7 +244,7 @@ async function focusLaadTaken(){
     }
     const sel=document.getElementById('focus-taak');
     if(!alle.length){sel.innerHTML='<option value="">— geen taken gevonden —</option>';focusStatus('Geen taken.');return;}
-    sel.innerHTML=alle.map(t=>`<option value="${t.id}">${(t.name||'taak '+t.id).replace(/</g,'&lt;')}</option>`).join('');
+    sel.innerHTML=alle.map(t=>`<option value="${esc(t.id)}">${esc(t.name||'taak '+t.id)}</option>`).join('');
     focusStatus(`✓ ${alle.length} taken geladen`,'var(--text-faint)');
   }catch(e){focusStatus('❌ '+e.message,'#c0392b');}
 }
@@ -453,19 +453,19 @@ function tgTlRender(){
   const hoogte=(AG_EIND-AG_START)*AG_UURPX;
   let html='<div class="ag-grid">';
   html+='<div class="ag-hcell"></div>';
-  for(let i=0;i<7;i++){ const dd=new Date(ws.getTime()+i*864e5); const isV=dd.toDateString()===new Date().toDateString(); html+=`<div class="ag-hcell${isV?' vandaag':''}">${dagen[i]} ${dd.getDate()}</div>`; }
+  for(let i=0;i<7;i++){ const dd=new Date(ws.getTime()+i*864e5); const isV=dd.toDateString()===new Date().toDateString(); html+=`<div class="ag-hcell${isV?' vandaag':''}">${esc(dagen[i])} ${esc(dd.getDate())}</div>`; }
   html+='<div class="ag-gutter">';
-  for(let u=AG_START;u<AG_EIND;u++) html+=`<div class="gh" style="--aguur:${AG_UURPX}px">${String(u).padStart(2,'0')}:00</div>`;
+  for(let u=AG_START;u<AG_EIND;u++) html+=`<div class="gh" style="--aguur:${esc(AG_UURPX)}px">${esc(String(u).padStart(2,'0'))}:00</div>`;
   html+='</div>';
   const lijn=`repeating-linear-gradient(to bottom,transparent,transparent ${AG_UURPX-1}px,#eee ${AG_UURPX-1}px,#eee ${AG_UURPX}px)`;
-  for(let i=0;i<7;i++){ html+=`<div class="ag-daycol" style="height:${hoogte}px;background:${lijn}">`+agBlokkenHtml(perDag[i])+'</div>'; }
+  for(let i=0;i<7;i++){ html+=`<div class="ag-daycol" style="height:${esc(hoogte)}px;background:${esc(lijn)}">`+agBlokkenHtml(perDag[i])+'</div>'; }
   html+='</div>';
   const g=document.getElementById('tg-tl-grid');
   if(g) g.innerHTML=(wk.length||localStorage.getItem('mt_toggl_last_sync'))?html:'<div class="tg-leeg">Nog geen uren in beeld — klik “↻ Sync week”.</div>';
   const perProj={}; wk.forEach(e=>{perProj[e.project_code]=(perProj[e.project_code]||0)+e.duur;});
   const tot=document.getElementById('tg-tl-totalen');
   if(tot){ const totaal=wk.reduce((s,e)=>s+e.duur,0);
-    tot.innerHTML=(wk.length?`<span class="ag-tot"><b>Week: ${agUur(totaal)}u</b></span>`:'')
+    tot.innerHTML=(wk.length?`<span class="ag-tot"><b>Week: ${esc(agUur(totaal))}u</b></span>`:'')
       +Object.entries(perProj).sort((a,b)=>b[1]-a[1]).map(([c,s])=>agProjChip(c,s)).join(''); }
   const st=document.getElementById('tg-tl-status');
   if(st&&st.textContent.indexOf('Sync')<0&&st.textContent.indexOf('❌')<0){ const ls=localStorage.getItem('mt_toggl_last_sync'); st.style.color=''; st.textContent=`${wk.length} entries${ls?' · sync '+new Date(ls).toLocaleString('nl-NL'):''}`; }
@@ -479,7 +479,7 @@ async function tgVulProjectSelect(){
     const huidig=sel.value;
     sel.innerHTML='<option value="">— project —</option>'+ps.filter(p=>p.active!==false&&!p.archived_at)
       .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
-      .map(p=>`<option value="${p.id}">${tgEsc(p.name||('project '+p.id))}</option>`).join('');
+      .map(p=>`<option value="${esc(p.id)}">${tgEsc(p.name||('project '+p.id))}</option>`).join('');
     if(huidig) sel.value=huidig;
   }catch(e){/* stil; select blijft leeg */}
 }
@@ -570,8 +570,8 @@ async function tgLaadRecent(){
       if(!(k in idx)){ idx[k]=groepen.length; groepen.push({k,items:[],tot:0}); }
       const g=groepen[idx[k]]; g.items.push({e,i}); g.tot+=durOf(e); });
     const hero=`<div class="tg-daysum">
-      <div class="tg-stat hero"><div class="lbl">Vandaag</div><div class="val">${tgSec2hms(totVandaag)}</div><div class="sub2">geboekte tijd</div></div>
-      <div class="tg-stat"><div class="lbl">Deze week</div><div class="val">${tgSec2hms(totWeek)}</div><div class="sub2">sinds maandag</div></div>
+      <div class="tg-stat hero"><div class="lbl">Vandaag</div><div class="val">${esc(tgSec2hms(totVandaag))}</div><div class="sub2">geboekte tijd</div></div>
+      <div class="tg-stat"><div class="lbl">Deze week</div><div class="val">${esc(tgSec2hms(totWeek))}</div><div class="sub2">sinds maandag</div></div>
       <div class="tg-stat"><div class="lbl">Entries</div><div class="val">${_tgRecent.length}</div><div class="sub2">laatste 14 dagen</div></div>
     </div>`;
     const dagRender=g=>{
@@ -585,20 +585,20 @@ async function tgLaadRecent(){
         const tijd=ds.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})+'–'+de.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
         const code=p?`<span class="tg-code">${tgEsc(p.name)}</span>`:'<span class="tg-sub">geen project</span>';
         const bill=e.billable?'<span class="tg-bill" title="Facturabel">€</span>':'';
-        return `<div class="tg-row"><span class="tg-dot" style="background:${kl}"></span>
+        return `<div class="tg-row"><span class="tg-dot" style="background:${esc(kl)}"></span>
           <span style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden">
             <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tgEsc(e.description||'(geen omschrijving)')}</span>
             ${code}${bill}</span>
-          <span class="tg-time">${tijd}</span>
-          <span class="tg-dur">${tgSec2hms(dur)}</span>
+          <span class="tg-time">${esc(tijd)}</span>
+          <span class="tg-dur">${esc(tgSec2hms(dur))}</span>
           <span class="tg-rowacts">
           <button class="tg-ib tg-resume" title="Opnieuw starten" onclick="tgHervat(${i})">▶</button>
           <button class="tg-ib" title="Bewerken" onclick="tgEditEntry(${i})">✎</button>
           <button class="tg-ib" title="Verwijderen" onclick="tgDelEntry(${i})">🗑</button></span></div>`;
       }).join('');
       return `<div class="tg-daygroup"><div class="tg-dayhdr">
-        <span class="dname">${naam}<small>${datum}</small></span>
-        <span class="dtot">${tgSec2hms(g.tot)}</span></div>${rijen}</div>`;
+        <span class="dname">${esc(naam)}<small>${esc(datum)}</small></span>
+        <span class="dtot">${esc(tgSec2hms(g.tot))}</span></div>${rijen}</div>`;
     };
     const sumBox=document.getElementById('tg-timer-summary'); if(sumBox) sumBox.innerHTML=hero;
     box.innerHTML=groepen.map(dagRender).join('');
@@ -751,15 +751,15 @@ async function tgLaadProjecten(){
       const mt=_mtProjVoorToggl(p);
       const mtbadge=mt?` <span class="tg-mtbadge" title="Gekoppeld M&T-project ${tgEsc(typeof projKeuzeLabel==='function'?projKeuzeLabel(mt):mt.code)}">M&amp;T</span>`:'';
       return `<div class="tg-card">
-        <h4 style="cursor:pointer" title="Project openen" onclick="tgOpenProject(${p.id})"><span class="tg-dot" style="background:${kl}"></span>${tgEsc(p.name||('project '+p.id))}${mtbadge}</h4>
-        <div class="tg-sub">${p.total_tasks||0} taken · ${p.billable?'billable':'niet-billable'}</div>
-        <div class="tg-bar"><span style="width:${pct}%;background:${kl}"></span></div>
-        <div class="tg-sub"><b>${tgSec2u(sec)}</b>${est}</div>
+        <h4 style="cursor:pointer" title="Project openen" onclick="tgOpenProject(${Number(p.id)})"><span class="tg-dot" style="background:${esc(kl)}"></span>${tgEsc(p.name||('project '+p.id))}${mtbadge}</h4>
+        <div class="tg-sub">${esc(p.total_tasks||0)} taken · ${p.billable?'billable':'niet-billable'}</div>
+        <div class="tg-bar"><span style="width:${esc(pct)}%;background:${esc(kl)}"></span></div>
+        <div class="tg-sub"><b>${esc(tgSec2u(sec))}</b>${esc(est)}</div>
         ${(p.tags||[]).slice(0,6).map(t=>`<span class="tg-pill">${tgEsc(t.name||t)}</span>`).join('')}
         <div class="tg-cardacts">
-          <button class="btn btn-sm btn-gold" title="Openen" onclick="tgOpenProject(${p.id})">📂 Openen</button>
-          <button class="btn btn-sm btn-secondary" data-recht="projecten:wijzigen" title="Bewerken" onclick="tgEditProject(${p.id})">✎</button>
-          <button class="btn btn-sm btn-secondary" data-recht="projecten:wijzigen" title="Archiveren" onclick="tgArchiveProject(${p.id})">📦</button>
+          <button class="btn btn-sm btn-gold" title="Openen" onclick="tgOpenProject(${Number(p.id)})">📂 Openen</button>
+          <button class="btn btn-sm btn-secondary" data-recht="projecten:wijzigen" title="Bewerken" onclick="tgEditProject(${Number(p.id)})">✎</button>
+          <button class="btn btn-sm btn-secondary" data-recht="projecten:wijzigen" title="Archiveren" onclick="tgArchiveProject(${Number(p.id)})">📦</button>
         </div>
       </div>`;
     }).join('')+'</div>';
@@ -892,7 +892,7 @@ function tgOpenProject(id){
     const autoMb=(typeof resolveMbContact==='function')?resolveMbContact(mt):null;
     const effMb=mt.mb_nr||autoMb;
     const mbChip=effMb
-      ? `<a href="https://moneybird.com/${getAdmin()}/contacts/${effMb}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${effMb} ↗</a>`
+      ? `<a href="https://moneybird.com/${esc(getAdmin())}/contacts/${esc(effMb)}" target="_blank" style="color:var(--green);text-decoration:none;font-family:var(--mono)">${esc(effMb)} ↗</a>`
       : '<span style="color:var(--text-faint)">geen MB-contact</span>';
     const mails=(typeof gekoppeldeMailsHtml==='function')?gekoppeldeMailsHtml(mt):'';
     mtBlok=`
@@ -924,8 +924,8 @@ function tgOpenProject(id){
       <button class="btn btn-sm btn-secondary" onclick="tgLaadProjecten()">← Projecten</button>
     </div>
     <h3 style="display:flex;align-items:center;gap:8px;margin:0 0 12px;font-family:var(--serif)">
-      <span class="tg-dot" style="background:${kl};width:12px;height:12px"></span>${tgEsc(p.name||('project '+p.id))}
-      <span class="tg-sub" style="font-weight:400">· ${tgSec2u(sec)} geboekt · ${p.billable?'billable':'niet-billable'}</span>
+      <span class="tg-dot" style="background:${esc(kl)};width:12px;height:12px"></span>${tgEsc(p.name||('project '+p.id))}
+      <span class="tg-sub" style="font-weight:400">· ${esc(tgSec2u(sec))} geboekt · ${p.billable?'billable':'niet-billable'}</span>
     </h3>
     ${mtBlok}`;
 }
@@ -967,22 +967,22 @@ async function tgLaadTaken(){
       const st=tgStatusById(t.status_id), kl=(t.project&&t.project.color)||'#9a9a9a', sec=t.total_tracked_time||0;
       const pr=tgPrioById(t.priority);
       const asg=(t.assignee_user_ids||[]).map(id=>un[String(id)]||('#'+id));
-      const sub=t.sub_task_total_count?` <span class="tg-sub">(${t.sub_task_done_count||0}/${t.sub_task_total_count} sub)</span>`:'';
+      const sub=t.sub_task_total_count?` <span class="tg-sub">(${esc(t.sub_task_done_count||0)}/${esc(t.sub_task_total_count)} sub)</span>`:'';
       return `<div class="tg-row">
-        <span class="tg-dot" style="background:${kl}"></span>
+        <span class="tg-dot" style="background:${esc(kl)}"></span>
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tgEsc(t.name||('taak '+t.id))}
         <span class="tg-sub"> · ${t.project?tgEsc(t.project.name):'geen project'}${t.client?(' · '+tgEsc(t.client.name)):''}</span>${sub}</span>
-        <span class="tg-prio" title="Prioriteit wijzigen" style="background:${pr.kleur}22;color:${pr.kleur}" onclick="tgZetPriority(${t.id})">${pr.kort||'—'}</span>
-        <span class="tg-asg" title="Toewijzing wijzigen" onclick="tgZetAssignee(${t.id})">👤 ${asg.length?tgEsc(asg.join(', ')):'—'}</span>
-        <span class="tg-pill" style="background:${st.kleur}22;color:${st.kleur}">${st.label}</span>
-        <span class="tg-dur">${tgSec2u(sec)}</span>
-        <select class="zoek-input" style="width:auto;font-size:11px" onchange="tgZetTaakStatus(${t.id},this.value)">
-          ${TG_STATUS.map(s=>`<option value="${s.id}"${s.id===t.status_id?' selected':''}>${s.label}</option>`).join('')}
+        <span class="tg-prio" title="Prioriteit wijzigen" style="background:${esc(pr.kleur)}22;color:${esc(pr.kleur)}" onclick="tgZetPriority(${Number(t.id)})">${esc(pr.kort||'—')}</span>
+        <span class="tg-asg" title="Toewijzing wijzigen" onclick="tgZetAssignee(${Number(t.id)})">👤 ${asg.length?tgEsc(asg.join(', ')):'—'}</span>
+        <span class="tg-pill" style="background:${esc(st.kleur)}22;color:${esc(st.kleur)}">${esc(st.label)}</span>
+        <span class="tg-dur">${esc(tgSec2u(sec))}</span>
+        <select class="zoek-input" style="width:auto;font-size:11px" onchange="tgZetTaakStatus(${Number(t.id)},this.value)">
+          ${TG_STATUS.map(s=>`<option value="${esc(s.id)}"${s.id===t.status_id?' selected':''}>${esc(s.label)}</option>`).join('')}
         </select>
         <span class="tg-rowacts">
-          <button class="tg-ib" title="Subtaak toevoegen" onclick="tgNieuweSubtaak(${t.id})">＋</button>
-          <button class="tg-ib" data-recht="taken:alles" title="Hernoemen" onclick="tgHernoemTaak(${t.id})">✎</button>
-          <button class="tg-ib" data-recht="taken:alles" title="Verwijderen" onclick="tgVerwijderTaak(${t.id})">🗑</button>
+          <button class="tg-ib" title="Subtaak toevoegen" onclick="tgNieuweSubtaak(${Number(t.id)})">＋</button>
+          <button class="tg-ib" data-recht="taken:alles" title="Hernoemen" onclick="tgHernoemTaak(${Number(t.id)})">✎</button>
+          <button class="tg-ib" data-recht="taken:alles" title="Verwijderen" onclick="tgVerwijderTaak(${Number(t.id)})">🗑</button>
         </span></div>`;
     }).join('');
   }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
@@ -1081,17 +1081,17 @@ async function tgLaadBoard(){
       const tiles=taken.map(t=>{
         const kl=(t.project&&t.project.color)||'#9a9a9a';
         const pr=tgPrioById(t.priority);
-        const prB=pr.kort?`<span class="tg-prio" style="background:${pr.kleur}22;color:${pr.kleur}">${pr.kort}</span> `:'';
+        const prB=pr.kort?`<span class="tg-prio" style="background:${esc(pr.kleur)}22;color:${esc(pr.kleur)}">${esc(pr.kort)}</span> `:'';
         const asg=(t.assignee_user_ids||[]).map(id=>un[String(id)]||('#'+id));
         const asgB=asg.length?`<span class="tg-sub" style="display:block">👤 ${tgEsc(asg.join(', '))}</span>`:'';
-        const subB=t.sub_task_total_count?`<span class="tg-sub"> · ${t.sub_task_done_count||0}/${t.sub_task_total_count} sub</span>`:'';
-        return `<div class="tg-tile" draggable="true" data-id="${t.id}" data-naam="${tgEsc(t.name)}"
+        const subB=t.sub_task_total_count?`<span class="tg-sub"> · ${esc(t.sub_task_done_count||0)}/${esc(t.sub_task_total_count)} sub</span>`:'';
+        return `<div class="tg-tile" draggable="true" data-id="${esc(t.id)}" data-naam="${tgEsc(t.name)}"
           ondragstart="tgDragStart(event)" ondragend="tgDragEnd(event)">
-          <span class="tg-dot" style="background:${kl}"></span> ${prB}${tgEsc(t.name||('taak '+t.id))}
+          <span class="tg-dot" style="background:${esc(kl)}"></span> ${prB}${tgEsc(t.name||('taak '+t.id))}
           ${t.project?`<div class="tg-sub">${tgEsc(t.project.name)}${subB}</div>`:subB}${asgB}</div>`;
       }).join('')||'<div class="tg-sub" style="padding:6px">—</div>';
-      return `<div class="tg-col" data-status="${s.id}" ondragover="tgDragOver(event)" ondragleave="tgDragLeave(event)" ondrop="tgDrop(event)">
-        <h5><span>${s.label}</span><span>${taken.length}</span></h5>${tiles}</div>`;
+      return `<div class="tg-col" data-status="${esc(s.id)}" ondragover="tgDragOver(event)" ondragleave="tgDragLeave(event)" ondrop="tgDrop(event)">
+        <h5><span>${esc(s.label)}</span><span>${taken.length}</span></h5>${tiles}</div>`;
     }).join('');
     box.innerHTML='<div class="tg-board">'+cols+'</div>';
   }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
@@ -1144,11 +1144,11 @@ async function tgLaadReport(){
     const items=Object.entries(agg).sort((a,b)=> group==='dag'?a[0].localeCompare(b[0]):b[1].sec-a[1].sec);
     const maxSec=Math.max(1,...items.map(([,v])=>v.sec));
     box.innerHTML=`<div class="card" style="padding:14px">
-      <div style="font-weight:600;margin-bottom:10px">Totaal: ${tgSec2u(totaal)} · ${rows.length} regels</div>
-      <table class="tg-tbl"><thead><tr><th>${group==='project'?'Project':group==='user'?'Persoon':'Dag'}</th><th class="num">Uren</th><th style="width:40%">&nbsp;</th></tr></thead><tbody>
-      ${items.map(([k,v])=>`<tr><td><span class="tg-dot" style="background:${v.kl};margin-right:6px"></span>${tgEsc(k)}</td>
-        <td class="num">${tgSec2u(v.sec)}</td>
-        <td><div class="tg-bar" style="margin:0"><span style="width:${Math.round(v.sec/maxSec*100)}%;background:${v.kl}"></span></div></td></tr>`).join('')}
+      <div style="font-weight:600;margin-bottom:10px">Totaal: ${esc(tgSec2u(totaal))} · ${rows.length} regels</div>
+      <table class="tg-tbl"><thead><tr><th>${esc(group==='project'?'Project':group==='user'?'Persoon':'Dag')}</th><th class="num">Uren</th><th style="width:40%">&nbsp;</th></tr></thead><tbody>
+      ${items.map(([k,v])=>`<tr><td><span class="tg-dot" style="background:${esc(v.kl)};margin-right:6px"></span>${tgEsc(k)}</td>
+        <td class="num">${esc(tgSec2u(v.sec))}</td>
+        <td><div class="tg-bar" style="margin:0"><span style="width:${Math.round(v.sec/maxSec*100)}%;background:${esc(v.kl)}"></span></div></td></tr>`).join('')}
       </tbody></table></div>`;
   }catch(e){ box.innerHTML='<div class="tg-leeg">❌ '+tgEsc(e.message)+'</div>'; }
 }
