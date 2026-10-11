@@ -1147,6 +1147,8 @@ async function flushTeller(env) {
 const CSP_MAX_BODY = 16384, CSP_PER_MIN = 120, CSP_PER_BERICHT = 10, CSP_DO_PER_MIN = 60, CSP_DO_DAGBUDGET = 500, CSP_MAX_SLEUTELS = 200, CSP_BEWAAR_DAGEN = 35;
 const CSP_KOP = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400', 'Cache-Control': 'no-store' };
 const _cspVenster = { t: 0, n: 0 };
+const _cspStop = { tot: 0, dag: '' };   // DO-budget op: tot dat tijdstip (minuut) of voor die dag geen DO-aanroep meer vanuit deze isolate
+const cspGestopt = () => Date.now() < _cspStop.tot || (_cspStop.dag !== '' && _cspStop.dag === new Date().toISOString().slice(0, 10));
 function cspHost(u) {
   const s = String(u == null ? '' : u).trim().toLowerCase();
   if (!s) return 'leeg';
@@ -1166,6 +1168,7 @@ function cspVeld(b) {   // b = het rapportlichaam (oud: csp-report; nieuw: Repor
 async function cspRapport(request, env, ctx) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CSP_KOP });
   if (request.method !== 'POST') return new Response(null, { status: 405, headers: CSP_KOP });
+  if (cspGestopt()) return new Response(null, { status: 204, headers: CSP_KOP });   // budget in de DO op: alleen een lege 204, geen DO-aanroep, geen schrijfactie
   const cl = Number(request.headers.get('content-length'));
   if (isFinite(cl) && cl > CSP_MAX_BODY) return new Response(null, { status: 413, headers: CSP_KOP });
   let tekst = ''; try { tekst = await request.text(); } catch { return new Response(null, { status: 400, headers: CSP_KOP }); }
@@ -1182,7 +1185,11 @@ async function cspRapport(request, env, ctx) {
     console.log(JSON.stringify({ csp: v.directive, host: v.host }));
   }
   // Tellen in de DO (nooit KV); zonder binding of bij een fout gaat het rapport verloren, de browser merkt niets.
-  if (items.length && env.MT_TELLER && env.MT_TELLER.idFromName) waitUntil(ctx, (async () => { try { await env.MT_TELLER.get(env.MT_TELLER.idFromName('csp')).fetch('https://mt-teller/csp-tel', { method: 'POST', body: JSON.stringify({ dag: new Date().toISOString().slice(0, 10), nu: Date.now(), items }) }); } catch {} })());
+  if (items.length && env.MT_TELLER && env.MT_TELLER.idFromName) waitUntil(ctx, (async () => { try {
+    const dag = new Date().toISOString().slice(0, 10), x = await env.MT_TELLER.get(env.MT_TELLER.idFromName('csp')).fetch('https://mt-teller/csp-tel', { method: 'POST', body: JSON.stringify({ dag, nu: Date.now(), items }) });
+    const j = await x.json().catch(() => null);
+    if (j && j.vol === 'dag') _cspStop.dag = dag; else if (j && j.vol === 'minuut') _cspStop.tot = Number(j.tot) || Date.now() + 60000;
+  } catch {} })());
   return new Response(null, { status: 204, headers: CSP_KOP });
 }
 async function noteerBesluit(env, ctx, b) {
@@ -1583,6 +1590,8 @@ export class MtTeller {
           if (!items.length) return antw({ ok: true, geteld: 0 });
           let w = (await st.get('venster')) || { t: 0, n: 0 }; if (nu - w.t > 60000 || nu < w.t) w = { t: nu, n: 0 };
           const ck = 'c:' + dag, rec = (await st.get(ck)) || { totaal: 0, afgewezen: 0, sleutels: {} };
+          const vol = () => rec.totaal >= CSP_DO_DAGBUDGET ? { vol: 'dag' } : w.n >= CSP_DO_PER_MIN ? { vol: 'minuut', tot: w.t + 60000 } : {};
+          if (vol().vol) return antw({ ok: true, geteld: 0, ...vol() });   // al vol: geen enkele schrijfactie (ook niet voor 'afgewezen'); de aanroeper stopt tot het einde van de minuut/dag
           let geteld = 0;
           for (const k of items) {
             if (w.n >= CSP_DO_PER_MIN || rec.totaal >= CSP_DO_DAGBUDGET) { rec.afgewezen++; continue; }
@@ -1595,7 +1604,7 @@ export class MtTeller {
             for (let i = 0; i < oud.length; i += 100) await st.delete(oud.slice(i, i + 100));
             await st.put('opruim', dag);
           }
-          return antw({ ok: true, geteld });
+          return antw({ ok: true, geteld, ...vol() });
         }
         if (op === 'csp-overzicht') {
           const n = Math.max(1, Math.min(31, Number(b.dagen) || 7)), vanaf = geldDag(dag, -(n - 1)), uit = { totaal: 0, afgewezen: 0, sleutels: {} };
@@ -1681,6 +1690,7 @@ function aiSchatTokens(p) {
     } else tb += utf8Len(JSON.stringify(b)); };
   const lijst = c => { if (typeof c === 'string') blok(c); else if (Array.isArray(c)) c.forEach(blok); };
   lijst(p && p.system); for (const m of (p && Array.isArray(p.messages) ? p.messages : [])) lijst(m && m.content);
+  if (p && p.tools !== undefined) tb += utf8Len(JSON.stringify(p.tools));   // de tool-schema's tellen mee als invoer (UTF-8-bytes)
   const n = 50 + Math.ceil(tb / 3) + doc + 1600 * beelden, nCons = 50 + tb + bytes + 1600 * beelden;
   return { n, nCons, doc, bytes, onbekend, tekstBytes: tb, teltExact: docs > 0 || beelden > 0 || tb > AI_TEL_DREMPEL };
 }
@@ -1750,7 +1760,7 @@ function aiMeet(response, env, ctx, claim, model, t0) {
   // Hartslag: een lopende stream verlengt zijn claim elke minuut (ai-verleng), zodat het alarm hem niet als verlopen afrekent. Stopt bij het einde, bij annuleren, bij een weggevallen claim en na AI_HARTSLAG_MAX slagen.
   let slagen = 0, hartslag = null;
   const stopSlag = () => { if (hartslag != null) { clearInterval(hartslag); hartslag = null; } };
-  if (claim && claim.claim) {
+  if (claim && claim.claim && aiModus(env) === 'afdwingen') {   // in 'log' (meetweek) tellen claim en afronding wel, maar geen hartslag
     hartslag = setInterval(() => {
       if (klaar || ++slagen > AI_HARTSLAG_MAX) { stopSlag(); return; }
       waitUntil(ctx, aiDO(env, 'ai-verleng', { oid: claim.oid, dag: claim.dag, nu: Date.now(), claim: claim.claim }).then(x => { if (x && x.j && x.j.bestaat === false) stopSlag(); }).catch(() => {}));

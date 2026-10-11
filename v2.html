@@ -5810,7 +5810,7 @@ function tijdlijnData(codes,st){
   werk.forEach(r=>{ const s=slugVanUser(r.user); if(!pers.some(p=>p.slug===s)){ const u=tgUsers.find(x=>String(x.id)===String(r.user)); pers.push({slug:s,naam:(u&&u.naam)||('Toggl '+r.user),email:(u&&u.email)||''}); } });
   const cel={}, norm=x=>String(x||'').trim().toLowerCase();
   const vanPersoon=(b,p)=>{ const x=norm(b.persoon); return x===p.slug||(p.email&&x===norm(p.email)); };
-  const capStat={toggl:0,eigen:0,redenen:{}};   // per teamlid-week: Toggl of Beheer, en waarom niet Toggl
+  const capStat={toggl:0,eigen:0,redenen:{},extra:[]};   // per teamlid-week: Toggl of Beheer, en waarom niet Toggl
   pers.forEach(p=>{ cel[p.slug]={};
     weken.forEach(w=>{
       const bk=blokCodes.filter(b=>vanPersoon(b,p)&&b.datum>=w.ws&&b.datum<=w.we);
@@ -5832,7 +5832,9 @@ function tijdlijnData(codes,st){
       wr.forEach(r=>{ const pc=((typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]).find(x=>Number(x.tg_project_id)===Number(r.project))||{}).code||'?'; (perProj[pc]=perProj[pc]||{p:0,w:0}).w+=r.uren; });
       const niveau=cap===null?'':(cap<=0?'geen':(vrij/cap>=0.3?'ruim':(vrij>0?'krap':'vol')));
       cel[p.slug][w.ws]={gepland,geplandAlle,gewerkt,cap,vrij,capBron,niveau,blokken:bk,uren:wr,perProj};
-    }); });
+    });
+    if(!MT_TEAM.some(m=>m.slug===p.slug)) capStat.extra.push(p.naam);   // geen teamlid: geen capaciteit, ook niet uit Toggl
+  });
   // Fasen per project (met berekende datums als ze ontbreken)
   const fasen=[];
   codes.forEach(code=>{ let plan=(typeof planVoor==='function')?planVoor(code):null; if(!plan||!plan.fases) return;
@@ -5899,7 +5901,7 @@ function _tlTeken(key){
   const lijn=(vandaag>=D.van&&vandaag<=D.tot)?`<div class="tl-vandaag" style="left:${esc(TL_NAAM+(_tlDagen(D.van,vandaag)+0.5)/7*TL_KOL)}px" aria-hidden="true"></div>`:'';
   const legenda=`<div class="tl-legenda"><span><i class="tl-lg cap-ruim"></i>ruim</span><span><i class="tl-lg cap-krap"></i>krap</span><span><i class="tl-lg cap-vol"></i>vol</span>
     <span><i class="tl-lg p"></i>📅 gepland</span><span><i class="tl-lg w"></i>⏱ gewerkt (Toggl)</span>
-    <span class="dos-meta">capaciteit: ${esc(capTekst)}</span>
+    <span class="dos-meta">capaciteit: ${esc(capTekst+(cs.extra.length?' — niet in het team, geen capaciteit: '+cs.extra.join(', '):''))}</span>
     ${meer?st.codes.map(c=>`<span><i class="tl-lg" style="background:${esc(agProjKleur(c))}"></i>${esc(projKort(c))}</span>`).join(''):''}</div>`;
   el.innerHTML=kop+`<div class="tl-veeg" aria-hidden="true">↔ veeg voor meer weken</div><div class="tl-scroll"><div class="tl-grid" style="width:${esc(TL_NAAM+D.weken.length*TL_KOL)}px">${html}${lijn}</div></div>`+legenda+`<div class="tl-detail" aria-live="polite">${st.detail?_tlDetailHtml(key,D,st.detail):'<span class="dos-meta">Klik op een week, fase of cel voor details.</span>'}</div>`;
 }

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — F6: invoer exact tellen, hartslag tegen het alarm, late afronding; Toggl-capaciteit "deels Toggl, deels Beheer" (Codex-punten)
+- Commit: `be4e50f` | Auteur: Bart Witte
+
 ## 2026-10-12 — CSP-rapporten tellen in de teller-DO in plaats van in KV (Codex-punt)
 - Commit: `8b21363` | Auteur: Bart Witte
 
