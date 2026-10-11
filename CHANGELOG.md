@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — G6: "Kan ik € X uitgeven op datum Y?" in Geld (desktop en mobiele laag) en het maandagbericht als melding in de app
+- Commit: `cf91ab0` | Auteur: Bart Witte
+
 ## 2026-10-11 — F6: AI-limieten de eerste week in log-modus (AI_LIMIET_MODUS = "log")
 - Commit: `954e3c9` | Auteur: Bart Witte
 
