@@ -1,7 +1,8 @@
 #!/bin/bash
 # Mortise & Tenon — pre-commit hook (VERSION-CONTROLLED via core.hooksPath=githooks)
 # SLOT 1: secret/PII-guard  (blokkeert commit bij verboden bestand of token)
-# SLOT 2: backup grote bestanden + CHANGELOG bijwerken
+# SLOT 2: sink-guard (F7): tools/check-sinks.js bij gewijzigde .html/.js/tools-bestanden
+# SLOT 3: backup grote bestanden + CHANGELOG bijwerken
 # Overzicht: zie REPO-VEILIGHEID.md
 #
 # Activeren na re-clone (eenmalig):  git config core.hooksPath githooks
@@ -53,6 +54,32 @@ if [ -n "$VIOLATIONS" ]; then
   exit 1
 fi
 echo "✓ Secret-guard: schoon"
+
+# ============================================================
+#  SINK-GUARD (F7) — HTML/JS-injectie: alle sink-baselines (tools/check-sinks.js, <1 s). Controleert de werkmap.
+#  Blokkeert bij elke ruwe ${...}-interpolatie, link uit data, handler-interpolatie of HTML-plakwerk die niet beoordeeld is.
+#  Bewust overslaan (zeer ongebruikelijk, en dan in de release alsnog oplossen):  MT_SINKS_OVERSLAAN=1 git commit ...
+# ============================================================
+if echo "$STAGED" | grep -Eq '(^[^/]+\.(html|js)$)|(^tools/.*\.(js|json)$)'; then
+  if [ "$MT_SINKS_OVERSLAAN" = "1" ]; then
+    echo "⚠ Sink-guard bewust OVERGESLAGEN (MT_SINKS_OVERSLAAN=1)"
+  elif ! command -v node >/dev/null 2>&1; then
+    echo ""
+    echo "🛑 COMMIT GEBLOKKEERD — node ontbreekt, dus de sink-guard (tools/check-sinks.js) kan niet draaien (fail closed)."
+    echo ""
+    exit 1
+  else
+    SINK_UIT="$(node "$REPO_DIR/tools/check-sinks.js" --stil 2>&1)"
+    if [ $? -ne 0 ]; then
+      echo ""
+      echo "🛑 COMMIT GEBLOKKEERD — sink-guard (F7): niet-beoordeelde ruwe plek(ken) gevonden."
+      echo "$SINK_UIT" | sed 's/^/   /'
+      echo ""
+      exit 1
+    fi
+    echo "✓ Sink-guard: in orde"
+  fi
+fi
 
 # ============================================================
 #  BACKUP grote bestanden + CHANGELOG

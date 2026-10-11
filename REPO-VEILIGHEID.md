@@ -63,5 +63,13 @@ echo '{"refresh_token":"1.fake"}' > _t.json && git add -f _t.json && git commit 
 
 ---
 
+## HTML/JS-injectie (F7): `tools/check-sinks.js`
+Gegevens uit Moneybird, mail, SharePoint, Toggl, AI en collega-invoer mogen alleen via `esc()`, `jsArg()`/`ja()`/`ibJa()` (handlers), `veiligeUrl()`/`veiligeLink()` (links) of `html```
+in innerHTML. `node tools/check-sinks.js` controleert dat op alle .html/.js-bestanden (groepen met houd-lijsten in `tools/sinks-groepen.js` en `tools/sinks-groep-*.json`,
+`plakwerk-baseline.json`, `url-sinks-baseline.json`, `handler-baseline.json`, `sinks-nog-open.json`) en draait in de pre-commit-hook en als verplichte stap in RELEASE.md.
+Nieuwe afwijking: oplossen, of beoordelen en met reden in de juiste baseline zetten. Overslaan kan alleen bewust met `MT_SINKS_OVERSLAAN=1`.
+
+---
+
 ## Bij twijfel
 Een nieuw bestand met een token, wachtwoord, klant-PII of een `.env`? → **niet committen.** De `.gitignore` vangt de bekende patronen; staat jouw geval er niet bij, voeg de regel toe vóór je commit. Vuistregel: *zou een vreemde dit op internet mogen zien?* Zo nee → het hoort in `~/.mt-secret\` of in de `.gitignore`.

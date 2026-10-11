@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — Release v2.12.3: tekstbeveiliging in alle schermen (F7 3b groepen 1-5), ruimtenaam-fix, spaarpot-herkenning met rekeningnummer; backup = v2.12.2
+- Commit: `cde3c78` | Auteur: Bart Witte
+
 ## 2026-10-11 — HOOG (Codex 121e465): ruimtenaam in een inline onclick van mobiel.html; handler-baseline
 - Commit: `e5bedd9` | Auteur: Bart Witte
 

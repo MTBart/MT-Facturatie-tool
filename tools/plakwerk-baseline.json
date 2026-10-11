@@ -2,114 +2,6 @@
  "toelichting": "Regels waar HTML met + aan een variabele wordt geplakt (buiten het zicht van de template-scanner), doorgelezen op 2026-10-11: de variabelen zijn ids/constanten, uitkomsten van esc()/jsArg()/UI_ESC()/tgEsc() of HTML-fragmenten uit gescande templates. Een nieuwe regel moet eerst beoordeeld worden.",
  "regels": [
   {
-   "bestand": "v2.html",
-   "tekst": "const q=(r.sectie&&ks.length)?'?'+ks.map(k=>enc(k)+'='+enc(f[k])).join('&'):'';"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "const delen=(r.sectie?['sectie='+enc(r.sectie)]:[]).concat(r.sectie?ks.map(k=>enc(k)+'='+enc(f[k])):[]);"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "return '<tr>'+common+'</tr>';"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "<div class=\"plan-rowlabel${esc(koppel)}\"${esc(naarTaak)}>${bron?(window.MTKoppelUI?'<span class=\"kb-mini\" title=\"Gekoppeld aan een taak\" aria-label=\"Gekoppeld aan een taak\">'+MTKoppelUI.SVG_DICHT+'</span> ':'🔗 '):''}${f"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "document.getElementById('help-uitleg').innerHTML='<p>'+info.uitleg+'</p>';"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "n=n.replace(new RegExp('^'+reEsc(w)+'(?='+SEP+'|$)'+SEP+'*','i'),'').replace(new RegExp(SEP+'+'+reEsc(w)+'$','i'),'').trim();"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "_datalist='<datalist id=\"calc-mat-list\">'+opts.join('')+'</datalist>';"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "const wrap=s=>'<div style=\"display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px\">'+s+'</div>';"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "el.innerHTML='<div style=\"display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px\"><span style=\"font-size:10px;color:var(--text-dim)\">Wijzig leverancier:</span> '+chips+' <button class=\"btn btn-xs\" style=\"o"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<span class=\"calc-dd-meta\">'+tag+(h.id?'<span class=\"calc-dd-art\">'+esc(h.id)+'</span>':'')+(pr?'<span class=\"calc-dd-pr\">'+pr+'</span>':'')+'</span></div>';"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "return '<div class=\"calc-rand\">↳ randafwerking: <b>'+esc(sug.label)+'</b> <span class=\"calc-rand-t\">'+tag+'</span>'"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "const act = w.actie ? '<button class=\"btn btn-xs btn-gold\" onmousedown=\"event.preventDefault()\" onclick=\"'+w.actie.onclick+'\">'+esc(w.actie.label)+'</button>' : '';"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "return '<div class=\"calc-vg-item\"><span class=\"calc-vg-ic\">'+w.icon+'</span><span class=\"calc-vg-tx\">'+esc(w.tekst)+'</span>'+act"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "return '<div class=\"calc-vergeten\"><div class=\"calc-vg-h\">⚠ Mogelijk vergeten kostenposten <span class=\"calc-vg-sub\">— check vóór je de offerte verstuurt</span></div>'+items+'</div>';"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<td><input class=\"calc-inp calc-prev-desc\" value=\"'+esc(r.description)+'\" onchange=\"calcPrevSetRegel('+jsArg(key)+','+i+',\\'description\\',this.value)\"></td>'"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<td class=\"calc-num\"><input class=\"calc-inp calc-num calc-prev-pr\" value=\"'+esc(inval((+r.price).toFixed(2)))+'\" onchange=\"calcPrevSetRegel('+jsArg(key)+','+i+',\\'price\\',this.value)\"></td>'"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<td><button class=\"btn btn-xs btn-secondary\" title=\"regel verwijderen\" onmousedown=\"event.preventDefault()\" onclick=\"calcPrevDelRegel('+jsArg(key)+','+i+')\">×</button></td>'"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<textarea id=\"calc-prevtekst-'+c+'\" class=\"calc-inp\" style=\"width:100%;min-height:46px;resize:vertical;font-family:inherit\" onchange=\"calcPrevSetTekst('+jsArg(key)+',this.value)\">'+esc(p.tekst||'')+'</textarea>'"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<table class=\"calc-mbprev-tbl\"><thead><tr><th>Omschrijving (klant ziet dit)</th><th class=\"calc-num\">Prijs ex. btw</th><th></th></tr></thead><tbody>'+regelsH+'</tbody>'"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<tfoot><tr><td style=\"text-align:right;font-weight:600\">Totaal ex. btw</td><td class=\"calc-num\" style=\"font-weight:700\" id=\"calc-prevsom-'+c+'\">'+eur(som)+'</td><td></td></tr></tfoot></table>'"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<span id=\"calc-prevdelta-'+c+'\" style=\"font-size:11px\">'+_prevDeltaHtml(key)+'</span></div>'"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<input id=\"calc-prevchat-'+c+'\" class=\"calc-inp\" style=\"flex:1\" placeholder=\"laat Larry bijschaven, bv. \\'splits productie en montage\\' of \\'maak de tekst korter\\'\" onkeydown=\"if(event.key===\\'Enter\\')calcPreviewChat('"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<div id=\"offerte-calc-'+cid(key)+'\"><p style=\"color:var(--text-faint);font-size:13px\">Laden…</p></div></div>';"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "+'<div style=\"font-size:11px;color:var(--text-dim);margin-bottom:6px\">'+esc(mc.from||'')+(mc.received?(' · '+esc(mc.received)):'')+(wl?(' · '+wl):'')+'</div>'"
-  },
-  {
-   "bestand": "v2.html",
-   "tekst": "'<button class=\"btn btn-secondary btn-sm\" style=\"white-space:nowrap;color:' + kleur + ';border-color:' + kleur + '\" data-action=\"vb-status\" data-id=\"' + esc(p.id) + '\" data-huidig=\"' + esc(p.status) + '\">' + label + '</b"
-  },
-  {
-   "bestand": "mt-inbox.js",
-   "tekst": "const q='('+st.domeinen.map(d=>'from:'+d).join(' OR ')+') AND received>='+sinds;"
-  },
-  {
-   "bestand": "mt-inbox.js",
-   "tekst": "const d=await ibFetch(base+'/messages?$search='+encodeURIComponent('\"'+q.replace(/\"/g,'')+'\"')+'&$top=25&$select='+sel);"
-  },
-  {
    "bestand": "mt-contacten.js",
    "tekst": "return '<span class=\"mtc-herk-i\" role=\"img\" aria-label=\"Bron: ' + esc(h[1]) + '\" title=\"Bron: ' + esc(h[1]) + '\">' + h[0] + '</span>';"
   },
@@ -226,6 +118,14 @@
    "tekst": "if (host) host.innerHTML = r.contact ? '<div class=\"mtc-inbox\" role=\"status\">📇 <span>' + r.nieuwVoorstellen.length + ' voorstel' + (r.nieuwVoorstellen.length === 1 ? '' : 'len') + ' bewaard bij <b>' + esc(C.weergave(r.c"
   },
   {
+   "bestand": "mt-inbox.js",
+   "tekst": "const q='('+st.domeinen.map(d=>'from:'+d).join(' OR ')+') AND received>='+sinds;"
+  },
+  {
+   "bestand": "mt-inbox.js",
+   "tekst": "const d=await ibFetch(base+'/messages?$search='+encodeURIComponent('\"'+q.replace(/\"/g,'')+'\"')+'&$top=25&$select='+sel);"
+  },
+  {
    "bestand": "mt-koppel.js",
    "tekst": "return o.onclick ? '<button type=\"button\"' + attr + ' onclick=\"' + UI_ESC(o.onclick) + '\">' + inhoud + '</button>'"
   },
@@ -238,6 +138,10 @@
    "tekst": "p.innerHTML = '<div class=\"kb-pop-kop\"><b>' + UI_ESC(opts.titel || 'Koppeling') + '</b><button type=\"button\" class=\"kb-pop-x\" aria-label=\"Sluiten\" onclick=\"MTKoppelUI.sluit()\">✕</button></div><div class=\"kb-pop-in\">' + h"
   },
   {
+   "bestand": "mt-rapport.js",
+   "tekst": "const [d, v] = await Promise.all([st.bron.haal('/geld/rapport?id=' + encodeURIComponent(id)), vorigeId ? st.bron.haal('/geld/rapport?id=' + encodeURIComponent(vorigeId)) : Promise.resolve(null)]);"
+  },
+  {
    "bestand": "mt-toggl.js",
    "tekst": "for(let i=0;i<7;i++){ html+=`<div class=\"ag-daycol\" style=\"height:${esc(hoogte)}px;background:${esc(lijn)}\">`+agBlokkenHtml(perDag[i])+'</div>'; }"
   },
@@ -248,6 +152,106 @@
   {
    "bestand": "mt-verhuis.js",
    "tekst": "const r = await fetch(url + ':/content?@microsoft.graph.conflictBehavior=' + conflict, { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': blob.type || 'application/octet-stream' }, body: blob }"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "const q=(r.sectie&&ks.length)?'?'+ks.map(k=>enc(k)+'='+enc(f[k])).join('&'):'';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "const delen=(r.sectie?['sectie='+enc(r.sectie)]:[]).concat(r.sectie?ks.map(k=>enc(k)+'='+enc(f[k])):[]);"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "return '<tr>'+common+'</tr>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "<div class=\"plan-rowlabel${esc(koppel)}\"${esc(naarTaak)}>${bron?(window.MTKoppelUI?'<span class=\"kb-mini\" title=\"Gekoppeld aan een taak\" aria-label=\"Gekoppeld aan een taak\">'+MTKoppelUI.SVG_DICHT+'</span> ':'🔗 '):''}${f"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "document.getElementById('help-uitleg').innerHTML='<p>'+info.uitleg+'</p>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "n=n.replace(new RegExp('^'+reEsc(w)+'(?='+SEP+'|$)'+SEP+'*','i'),'').replace(new RegExp(SEP+'+'+reEsc(w)+'$','i'),'').trim();"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "_datalist='<datalist id=\"calc-mat-list\">'+opts.join('')+'</datalist>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "const wrap=s=>'<div style=\"display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px\">'+s+'</div>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "el.innerHTML='<div style=\"display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px\"><span style=\"font-size:10px;color:var(--text-dim)\">Wijzig leverancier:</span> '+chips+' <button class=\"btn btn-xs\" style=\"o"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<span class=\"calc-dd-meta\">'+tag+(h.id?'<span class=\"calc-dd-art\">'+esc(h.id)+'</span>':'')+(pr?'<span class=\"calc-dd-pr\">'+pr+'</span>':'')+'</span></div>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "return '<div class=\"calc-rand\">↳ randafwerking: <b>'+esc(sug.label)+'</b> <span class=\"calc-rand-t\">'+tag+'</span>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "const act = w.actie ? '<button class=\"btn btn-xs btn-gold\" onmousedown=\"event.preventDefault()\" onclick=\"'+w.actie.onclick+'\">'+esc(w.actie.label)+'</button>' : '';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "return '<div class=\"calc-vg-item\"><span class=\"calc-vg-ic\">'+w.icon+'</span><span class=\"calc-vg-tx\">'+esc(w.tekst)+'</span>'+act"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "return '<div class=\"calc-vergeten\"><div class=\"calc-vg-h\">⚠ Mogelijk vergeten kostenposten <span class=\"calc-vg-sub\">— check vóór je de offerte verstuurt</span></div>'+items+'</div>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<td><input class=\"calc-inp calc-prev-desc\" value=\"'+esc(r.description)+'\" onchange=\"calcPrevSetRegel('+jsArg(key)+','+i+',\\'description\\',this.value)\"></td>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<td class=\"calc-num\"><input class=\"calc-inp calc-num calc-prev-pr\" value=\"'+esc(inval((+r.price).toFixed(2)))+'\" onchange=\"calcPrevSetRegel('+jsArg(key)+','+i+',\\'price\\',this.value)\"></td>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<td><button class=\"btn btn-xs btn-secondary\" title=\"regel verwijderen\" onmousedown=\"event.preventDefault()\" onclick=\"calcPrevDelRegel('+jsArg(key)+','+i+')\">×</button></td>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<textarea id=\"calc-prevtekst-'+c+'\" class=\"calc-inp\" style=\"width:100%;min-height:46px;resize:vertical;font-family:inherit\" onchange=\"calcPrevSetTekst('+jsArg(key)+',this.value)\">'+esc(p.tekst||'')+'</textarea>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<table class=\"calc-mbprev-tbl\"><thead><tr><th>Omschrijving (klant ziet dit)</th><th class=\"calc-num\">Prijs ex. btw</th><th></th></tr></thead><tbody>'+regelsH+'</tbody>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<tfoot><tr><td style=\"text-align:right;font-weight:600\">Totaal ex. btw</td><td class=\"calc-num\" style=\"font-weight:700\" id=\"calc-prevsom-'+c+'\">'+eur(som)+'</td><td></td></tr></tfoot></table>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<span id=\"calc-prevdelta-'+c+'\" style=\"font-size:11px\">'+_prevDeltaHtml(key)+'</span></div>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<input id=\"calc-prevchat-'+c+'\" class=\"calc-inp\" style=\"flex:1\" placeholder=\"laat Larry bijschaven, bv. \\'splits productie en montage\\' of \\'maak de tekst korter\\'\" onkeydown=\"if(event.key===\\'Enter\\')calcPreviewChat('"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<div id=\"offerte-calc-'+cid(key)+'\"><p style=\"color:var(--text-faint);font-size:13px\">Laden…</p></div></div>';"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "+'<div style=\"font-size:11px;color:var(--text-dim);margin-bottom:6px\">'+esc(mc.from||'')+(mc.received?(' · '+esc(mc.received)):'')+(wl?(' · '+wl):'')+'</div>'"
+  },
+  {
+   "bestand": "v2.html",
+   "tekst": "'<button class=\"btn btn-secondary btn-sm\" style=\"white-space:nowrap;color:' + kleur + ';border-color:' + kleur + '\" data-action=\"vb-status\" data-id=\"' + esc(p.id) + '\" data-huidig=\"' + esc(p.status) + '\">' + label + '</b"
   }
  ]
 }
