@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-11 — F5 stap 1: CORS oud+nieuw, klantenlijst via de worker, opruimen, privé-notities uit git
+- Commit: `4ffd483` | Auteur: Bart Witte
+
 ## 2026-10-10 — Release v2.11.10: Schulden en aflossen in Geld; backup = v2.11.9
 - Commit: `21a25ec` | Auteur: Bart Witte
 
