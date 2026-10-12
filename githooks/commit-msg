@@ -1,0 +1,9 @@
+#!/bin/bash
+# Mortise & Tenon — commit-msg hook (VERSION-CONTROLLED via core.hooksPath=githooks)
+# Zelfde privacy-/secret-controle als pre-commit, maar op het commitbericht. Zie githooks/README.md.
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+if ! command -v node >/dev/null 2>&1; then
+  echo "COMMIT GEBLOKKEERD — node ontbreekt, dus de privacy-scan van het commitbericht kan niet draaien (fail closed)."
+  exit 1
+fi
+node "$HOOK_DIR/privacy-scan.js" --bericht "$1"
