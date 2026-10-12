@@ -1475,9 +1475,10 @@ const NR_MIG_RE = /^m_[0-9a-z]{6,40}$/;
 const NR_WCODE_RE = /^W\d{2}-\d{3,}$/;
 // Schemaversie van de cockpit (v2.html PROJ_SCHEMA) staat hier en NIET in mt_projecten.json: oudere apps (uren) gooien
 // records zonder code daar weg. `cfg:schema_min` = de laagste versie die mt_projecten nog mag schrijven (standaard 2;
-// de cockpit vraagt het op via GET /teller/status?schema=<eigen versie> en stopt met schrijven als hij te oud is).
-// `cfg:schema_gezien` = de hoogste versie die zich bij de teller meldde: de reeks en een hoger minimum kunnen pas aan als
-// zo'n app er echt is (anders kan niemand meer projecten aanmaken).
+// de cockpit leest het via GET /teller/status (alleen lezen) en stopt met schrijven als hij te oud is).
+// `cfg:schema_uitgerold` = de app-versie die volgens de eigenaar live staat (POST /teller/schema {uitgerold, bevestig},
+// met audit; de regie doet dit bij de release). De reeks en een hoger minimum kunnen pas aan als die versie er echt is
+// (anders kan niemand meer projecten aanmaken). Een gewone gebruiker kan dit dus niet vervroegen.
 const NR_SCHEMA_STANDAARD = 2;
 const nrAntw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 async function nrHash(o) {
@@ -1536,11 +1537,9 @@ export class MtTeller {
     const st = this.state.storage;
     if (op === 'nr-status') {
       const c = (await st.get('cfg:reeks')) || {}, n = (await st.get('n:reeks')) || NR_START - 1;
-      let gezien = (await st.get('cfg:schema_gezien')) || 0;
-      const meld = Math.floor(Number(b.schema) || 0);
-      if (meld > gezien && meld <= 99) { gezien = meld; await st.put('cfg:schema_gezien', meld); }   // alleen omhoog
+      const uitgerold = (await st.get('cfg:schema_uitgerold')) || null;
       return nrAntw({ reeks: { aan: !!c.aan, sinds: c.ts || null, door: c.doorNaam || null, volgende: n + 1, laatste: n >= NR_START ? n : null },
-        schema_min: (await st.get('cfg:schema_min')) || NR_SCHEMA_STANDAARD, schema_gezien: gezien || null, laatste_migratie: (await st.get('cfg:laatste_mig')) || null });
+        schema_min: (await st.get('cfg:schema_min')) || NR_SCHEMA_STANDAARD, schema_uitgerold: uitgerold, laatste_migratie: (await st.get('cfg:laatste_mig')) || null });
     }
     if (op === 'nr-binding') {
       const pid = await this._nrZoek(String(b.sleutel || ''));
@@ -1586,20 +1585,21 @@ export class MtTeller {
         const aan = b.aan === true, c = (await st.get('cfg:reeks')) || {};
         if (!!c.aan === aan) return { j: { reeks: { aan }, gewijzigd: false } };
         // Aanzetten alleen als er al een app is die nummers aankan (anders kan niemand meer een project aanmaken).
-        if (aan && ((await st.get('cfg:schema_gezien')) || 0) < NR_MIN_SCHEMA) return { s: 409, j: { error: 'nog-geen-app-met-nummers', uitleg: 'De reeks kan pas aan als een cockpit met schema ' + NR_MIN_SCHEMA + ' (brok C) zich bij de teller heeft gemeld' } };
+        if (aan && ((await st.get('cfg:schema_uitgerold')) || 0) < NR_MIN_SCHEMA) return { s: 409, j: { error: 'nog-geen-app-met-nummers', uitleg: 'De reeks kan pas aan als de eigenaar heeft vastgelegd dat de cockpit met schema ' + NR_MIN_SCHEMA + ' (brok C) is uitgerold' } };
         schrijf['cfg:reeks'] = Object.assign({ aan, ts }, door);
         log({ actie: aan ? 'reeks-aan' : 'reeks-uit', project_id: null, oud: !!c.aan, nieuw: aan, mig: null, resultaat: 'gezet' });
         await st.put(schrijf);
         return { j: { reeks: { aan }, gewijzigd: true } };
       }
       if (op === 'nr-schema') {
-        const min = b.min, oud = (await st.get('cfg:schema_min')) || NR_SCHEMA_STANDAARD, gezien = (await st.get('cfg:schema_gezien')) || 0;
-        if (min === oud) return { j: { schema_min: min, gewijzigd: false } };
-        if (min > Math.max(gezien, NR_SCHEMA_STANDAARD)) return { s: 409, j: { error: 'nog-geen-app-met-dit-schema', uitleg: 'Er heeft zich nog geen cockpit met schema ' + min + ' gemeld' } };
-        schrijf['cfg:schema_min'] = min;
-        log({ actie: 'schema-min', project_id: null, oud, nieuw: min, mig: null, resultaat: 'gezet' });
+        const oudMin = (await st.get('cfg:schema_min')) || NR_SCHEMA_STANDAARD, oudUit = (await st.get('cfg:schema_uitgerold')) || 0;
+        const uit = b.uitgerold != null ? b.uitgerold : oudUit, min = b.min != null ? b.min : oudMin;
+        if (min > Math.max(uit, NR_SCHEMA_STANDAARD)) return { s: 409, j: { error: 'nog-geen-app-met-dit-schema', uitleg: 'Minimum ' + min + ' is hoger dan de uitgerolde versie (' + (uit || 'onbekend') + ')' } };
+        if (min === oudMin && uit === oudUit) return { j: { schema_min: min, schema_uitgerold: uit || null, gewijzigd: false } };
+        if (uit !== oudUit) { schrijf['cfg:schema_uitgerold'] = uit; log({ actie: 'schema-uitgerold', project_id: null, oud: oudUit || null, nieuw: uit, mig: null, resultaat: 'gezet' }); }
+        if (min !== oudMin) { schrijf['cfg:schema_min'] = min; log({ actie: 'schema-min', project_id: null, oud: oudMin, nieuw: min, mig: null, resultaat: 'gezet' }); }
         await st.put(schrijf);
-        return { j: { schema_min: min, gewijzigd: true } };
+        return { j: { schema_min: min, schema_uitgerold: uit || null, gewijzigd: true } };
       }
       if (op === 'nr-mig-proef' || op === 'nr-mig-toepassen') {
         const items = Array.isArray(b.items) ? b.items : [];
@@ -2041,7 +2041,7 @@ async function handleTeller(p, request, env, ik, json) {
   if (p === '/teller/werkcodes' && m === 'GET') { const r = await doe('alle'); return json(r.j, r.status); }
   const q = new URL(request.url).searchParams, door = { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email };
   // Projectnummers (brok B): lezen mag elke rol; droogloop/status/log: beheer; reeks, toepassen en terugrol: alleen de eigenaar.
-  if (m === 'GET' && p === '/teller/status') { const r = await doe('nr-status', { schema: Number(q.get('schema')) || 0 }); return json(r.j, r.status); }
+  if (m === 'GET' && p === '/teller/status') { const r = await doe('nr-status'); return json(r.j, r.status); }   // alleen lezen
   if (m === 'GET' && p === '/teller/binding') { const r = await doe('nr-binding', { sleutel: String(q.get('sleutel') || '').slice(0, 60) }); return json(r.j, r.status); }
   if (m === 'GET' && (p === '/teller/log' || p === '/teller/migratie/status')) {
     if (!R.beheer) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
@@ -2053,9 +2053,11 @@ async function handleTeller(p, request, env, ik, json) {
     const eigenaar = R.beheer === 'alles';
     if (p === '/teller/schema') {
       if (!eigenaar) return json({ error: 'geen-toegang', reden: 'eigenaar' }, 403);
-      if (!Number.isInteger(b.min) || b.min < NR_SCHEMA_STANDAARD || b.min > 99 || b.bevestig !== 'schema-min') return json({ error: 'ongeldig', uitleg: 'min: geheel getal ≥ ' + NR_SCHEMA_STANDAARD + ', bevestig: "schema-min"' }, 400);
-      const r = await doe('nr-schema', { min: b.min, ...door });
-      if (r.status === 200 && r.j.gewijzigd) await audit(env, { ...door, actie: 'schema-min', doel: 'teller', doelNaam: 'minimale app-versie projecten', nieuw: String(b.min) });
+      // {uitgerold: N} = "de cockpit met schema N staat live" (regie, bij de release); {min: N} = vanaf nu mag alleen schema ≥ N schrijven
+      const geldig = v => v == null || (Number.isInteger(v) && v >= NR_SCHEMA_STANDAARD && v <= 99);
+      if ((b.min == null && b.uitgerold == null) || !geldig(b.min) || !geldig(b.uitgerold) || b.bevestig !== 'schema') return json({ error: 'ongeldig', uitleg: 'uitgerold en/of min: geheel getal ≥ ' + NR_SCHEMA_STANDAARD + ', bevestig: "schema"' }, 400);
+      const r = await doe('nr-schema', { min: b.min, uitgerold: b.uitgerold, ...door });
+      if (r.status === 200 && r.j.gewijzigd) await audit(env, { ...door, actie: 'schema', doel: 'teller', doelNaam: 'app-versie projecten', nieuw: 'uitgerold ' + (r.j.schema_uitgerold || '-') + ', minimum ' + r.j.schema_min });
       return json(r.j, r.status);
     }
     if (p === '/teller/reeks') {
