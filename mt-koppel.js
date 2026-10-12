@@ -220,7 +220,11 @@
         const nr = nummer(p), eigen = new Set([p.code, nr && /^\d{6}$/.test(String(nr)) ? String(nr) : '', p.werkcode, ...(Array.isArray(p.legacy_codes) ? p.legacy_codes : [])].filter(Boolean).map(String));
         eigen.forEach(k => { sl.push({ code: p.code, k, nr: /^\d{6}$/.test(k) }); telSl.set(k.toUpperCase(), (telSl.get(k.toUpperCase()) || 0) + 1); });
       });
-      const codes = sl.filter(x => telSl.get(x.k.toUpperCase()) === 1).map(x => ({ code: x.code, sleutel: x.k, nummer: x.nr, re: new RegExp('(^|[^A-Za-z0-9-])' + esc(x.k) + '($|[^A-Za-z0-9-])', 'i') }));
+      // Een projectnummer telt alleen in expliciete vorm — "[260812]", "project 260812", "projectnr. 260812", "projectnummer 260812"
+      // (ook met een dubbele punt; hoofdletters maken niet uit) — want een los getal kan een leveranciersnummer of bedrag zijn.
+      // "Projectnr. 260812" is ook de vorm voor de referentie in Moneybird.
+      const nrRe = k => new RegExp('(\\[\\s*' + esc(k) + '\\s*\\]|(^|[^A-Za-z0-9])project(nr\\.?|nummer)?\\s*:?\\s*' + esc(k) + ')($|[^0-9])', 'i');
+      const codes = sl.filter(x => telSl.get(x.k.toUpperCase()) === 1).map(x => ({ code: x.code, sleutel: x.k, nummer: x.nr, re: x.nr ? nrRe(x.k) : new RegExp('(^|[^A-Za-z0-9-])' + esc(x.k) + '($|[^A-Za-z0-9-])', 'i') }));
       const offSl = [];
       projecten.forEach(p => new Set([p.offertenr, ...(Array.isArray(p.offertes) ? p.offertes.filter(o => o && o.rol !== 'genegeerd').map(o => o.nummer) : [])].filter(Boolean).map(String)).forEach(nr => offSl.push({ code: p.code, nr })));
       const telOff = new Map(); offSl.forEach(o => telOff.set(o.nr, (telOff.get(o.nr) || 0) + 1));

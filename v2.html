@@ -2859,7 +2859,8 @@ function _projSamen(lokaal,spData){
 // De laagste app-versie die mt_projecten nog mag schrijven staat in de teller (GET /teller/status → schema_min), NIET in
 // mt_projecten.json zelf: oudere apps (uren) gooien records zonder code daar weg, en een meta-record zou in oude code als
 // project kunnen opduiken. Bij het laden/hydrateren en hooguit eens per 5 minuten vóór het wegschrijven leest de cockpit
-// het (alleen lezen; "versie N is uitgerold" legt de eigenaar vast via POST /teller/schema). Is zijn PROJ_SCHEMA te laag,
+// het (alleen lezen; "versie N is uitgerold" legt de eigenaar vast via POST /teller/schema); vóór elke write van
+// mt_projecten opnieuw, zonder cache (schedule). Is zijn PROJ_SCHEMA te laag,
 // dan schrijft hij mt_projecten niet meer (geen samenvoegen, geen terugschrijven, de lokale stand blijft ongemoeid) en
 // vraagt hij om te herladen. Bewuste keuze bij een onbereikbare teller (of niet ingelogd):
 //   - nog niets bekend (eerste vraag mislukt) → geen blokkade (fail-open: anders legt een storing het werk stil);
@@ -7038,9 +7039,13 @@ async function _tgProjectIdVoorMt(mt){
       mt.legacy_track_id=mt.tg_project_id; delete mt.tg_project_id; slaProjectenOp();
     }
   }
+  // Nooit stil koppelen (Codex, brok C): ook bij één passend project alleen een VOORSTEL; de mens bevestigt via "Toggl-project
+  // kiezen". Alleen een al opgeslagen tg_project_id (hierboven) wordt zonder bevestiging gebruikt.
   const kand=_t2Kandidaten(mt,ps).filter(k=>k.score>=10);
-  if(kand.length===1){ mt.tg_project_id=kand[0].p.id; slaProjectenOp(); return kand[0].p.id; }
-  if(kand.length>1) throw new Error(`Meerdere Toggl-projecten passen bij ${mt.code} — kies er één via "Toggl-project kiezen"`);
+  if(kand.length){
+    const e=new Error(kand.length===1?`Toggl-project „${kand[0].p.name}” lijkt bij ${typeof projKort==="function"?projKort(mt):mt.code} te horen — bevestig via "Toggl-project kiezen"`:`Meerdere Toggl-projecten passen bij ${typeof projKort==="function"?projKort(mt):mt.code} — kies er één via "Toggl-project kiezen"`);
+    e.voorstel=kand.map(k=>({id:k.p.id,naam:k.p.name,score:k.score})); throw e;
+  }
   return null;
 }
 // Score per Toggl-project: exacte naam/code/[CODE]/offertenummer = zeker (≥10), woorden = voorstel.
@@ -7206,8 +7211,10 @@ async function t2OffertenummerToekennen(code){
     if(i==null) return;
     const nr=est[i].estimate_id, oudNr=mt.offertenr||'', oudNaam=t2ProjectNaam(mt);
     const nieuwNaam=t2ProjectNaam(Object.assign({},mt,{offertenr:nr}));
-    const pid=await _tgProjectIdVoorMt(mt);   // meerdere kandidaten → fout, niets gewijzigd
-    const msg='Offertenummer: '+(oudNr||'(geen)')+' → '+nr+'\n'+(pid?('Toggl-projectnaam: "'+((_tgCache.projecten||[]).find(p=>p.id===pid)||{}).name+'" → "'+nieuwNaam+'"'):'Er is nog geen Toggl-project gekoppeld; alleen het nummer wordt opgeslagen.')+'\n\nDe projectmap wordt niet hernoemd.';
+    // meerdere kandidaten → fout, niets gewijzigd; één kandidaat → alleen een voorstel (geen stille koppeling), het offertenummer kan wel
+    let pid=null, tgVoorstel='';
+    try{ pid=await _tgProjectIdVoorMt(mt); }catch(eV){ if(!(eV.voorstel&&eV.voorstel.length===1)) throw eV; tgVoorstel=eV.message; }
+    const msg='Offertenummer: '+(oudNr||'(geen)')+' → '+nr+'\n'+(pid?('Toggl-projectnaam: "'+((_tgCache.projecten||[]).find(p=>p.id===pid)||{}).name+'" → "'+nieuwNaam+'"'):'Er is nog geen Toggl-project gekoppeld; alleen het nummer wordt opgeslagen.'+(tgVoorstel?'\n('+tgVoorstel+')':''))+'\n\nDe projectmap wordt niet hernoemd.';
     if(!await mtDialog.confirm({title:'Offertenummer toekennen',message:msg,okLabel:'Toekennen'})) return;
     if(typeof _ptJournaal==='function') _ptJournaal('offertenummer',code,{offertenr_oud:oudNr,offertenr_nieuw:nr,toggl_naam_oud:oudNaam,toggl_naam_nieuw:nieuwNaam,tg_project_id:pid,mb_estimate:est[i].id});
     let hernoemd=false;
@@ -10473,8 +10480,9 @@ const _SP = Object.assign(window.MTCore.makeSP({
     if (this.blockedKeys.has(key)) { console.warn('SP auto-sync geblokkeerd voor', key, '(hydrate faalde — herlaad de pagina)'); return; }
     clearTimeout(this._q[key]);
     this._q[key] = setTimeout(async () => {
-      // Projecten: mag deze app-versie nog schrijven? (teller, hooguit eens per 5 min; zie projSchemaCheck)
-      if (key === 'mt_projecten' && typeof projSchemaCheck === 'function' && await projSchemaCheck()) return;
+      // Projecten: mag deze app-versie nog schrijven? Vóór ELKE write een verse vraag aan de teller (zie projSchemaCheck:
+      // mislukt hij, dan fail-open zonder kennis en fail-closed als de app al eerder te oud bleek).
+      if (key === 'mt_projecten' && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) return;
       const tekst=rawValue===null?'':String(rawValue).trim();
       let data;
       try{ data=JSON.parse(tekst); }catch(e){ data=undefined; }

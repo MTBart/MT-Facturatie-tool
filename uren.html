@@ -618,22 +618,11 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
   <!-- PROJECTEN -->
   <div id="tab-projecten" class="tab-content">
     <div class="main">
-      <div class="nieuw-project-form" id="nieuw-proj-form" style="display:none">
-        <div class="section-label" style="margin-bottom:0.6rem">Nieuw project aanmaken</div>
-        <div class="flex" style="flex-wrap:wrap;gap:0.6rem;margin-bottom:0.6rem">
-          <input class="proj-inp" id="np-code" placeholder="CODE bijv. CN-PRINSENGRACHT-KAD" style="flex:1;min-width:180px;max-width:280px" oninput="this.value=this.value.toUpperCase()">
-          <input class="proj-inp proj-inp-naam" id="np-naam" placeholder="Volledige naam" style="flex:2;min-width:180px">
-          <input class="proj-inp" id="np-klant" placeholder="Klantcode bijv. CN" style="width:90px" oninput="this.value=this.value.toUpperCase()">
-        </div>
-        <div class="flex" style="gap:0.5rem">
-          <button class="btn btn-primary btn-sm" onclick="slaProjectOp()">Aanmaken</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='none'">Annuleer</button>
-        </div>
-      </div>
       <div class="flex" style="justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
         <div class="section-label" style="margin-bottom:0">Projecten — gesynchroniseerd met M&T Bedrijfstool</div>
-        <button class="btn btn-primary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='block';document.getElementById('np-code').focus()">+ Nieuw project</button>
+        <a class="btn btn-secondary btn-sm" href="v2.html#projecten" title="Projecten maak, hernoem of verwijder je in de cockpit">Projecten beheren in de cockpit ↗</a>
       </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:0.8rem">Een nieuw project krijgt zijn projectnummer in de <a href="v2.html#projecten" style="color:var(--green)">cockpit</a>; hier zie je de projecten en schrijf je uren.</div>
       <div class="proj-lijst" id="proj-lijst"></div>
       <div style="font-size:11px;color:var(--text-faint);font-family:var(--mono);padding-top:0.5rem">Projecten worden automatisch gesynchroniseerd met de <a href="v2.html" style="color:var(--green)">M&T cockpit</a> via gedeelde opslag.</div>
     </div>
@@ -2242,7 +2231,7 @@ function renderProjectenTab(){
   const wrap=document.getElementById('proj-lijst');
   if(!wrap) return;
   if(!projecten.length){
-    wrap.innerHTML=`<div style="padding:1rem;color:var(--text-faint);font-size:13px;font-style:italic">Nog geen projecten. Maak het eerste aan.</div>`;
+    wrap.innerHTML=`<div style="padding:1rem;color:var(--text-faint);font-size:13px;font-style:italic">Nog geen projecten. Projecten maak je in de <a href="v2.html#projecten" style="color:var(--green)">cockpit</a>.</div>`;
     return;
   }
   // Bereken totale uren per project (alle tijd)
@@ -2258,16 +2247,13 @@ function renderProjectenTab(){
     </div>`:`<div class="proj-uren-col"></div>`;
     const dl=deadlineBadge(p.deadline);
     return `<div class="proj-item" onclick="openProjectDetail(${ja(p.code)})">
-      <div class="proj-code">${esc(p.code)}${esc(dl?' '+dl:'')}</div>
+      <div class="proj-code">${esc(urenProjNr(p))}${esc(dl?' '+dl:'')}</div>
       <div class="proj-naam">${esc(p.naam||'—')}</div>
       <div class="proj-klant">${esc(p.klant||'')}</div>
       <div class="proj-status-col">${p.status?statusBadge(p.status):''}</div>
       ${urenHtml}
       <div class="proj-factuur-col">${factuurBadge(p.factuur_status,p.code)}</div>
-      <div class="proj-acties" onclick="event.stopPropagation()">
-        <button class="entry-btn" onclick="bewerkProject(${i})" title="Bewerken">✏</button>
-        <button class="entry-btn del" onclick="verwijderProject(${i})" title="Verwijderen">✕</button>
-      </div>
+      <div class="proj-acties"></div>
     </div>`;
   }).join('');
 }
@@ -2276,7 +2262,7 @@ function renderProjectenTab(){
 // de code uit één teller (projectnummer of werkcode) en blijft de geschiedenis (tombstones, oude codes) bewaard. Hier zou
 // een code buiten de teller om ontstaan, of een project zonder spoor verdwijnen. Status- en factuurvelden blijven werken.
 function _urenProjectBeheerUit(){
-  alert('Projecten maak, hernoem of verwijder je in de cockpit (Projecten). Daar krijgt een project zijn projectnummer uit de teller.');
+  alert('Projecten maak, hernoem of verwijder je in de cockpit (v2.html#projecten). Daar krijgt een project zijn projectnummer uit de teller.');
   return true;
 }
 function slaProjectOp(){
