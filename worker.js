@@ -1473,6 +1473,12 @@ const NR_ALIAS_MAX = 3;                  // extra oude codes per project, naast 
 const NR_ALIAS_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/;
 const NR_MIG_RE = /^m_[0-9a-z]{6,40}$/;
 const NR_WCODE_RE = /^W\d{2}-\d{3,}$/;
+// Schemaversie van de cockpit (v2.html PROJ_SCHEMA) staat hier en NIET in mt_projecten.json: oudere apps (uren) gooien
+// records zonder code daar weg. `cfg:schema_min` = de laagste versie die mt_projecten nog mag schrijven (standaard 2;
+// de cockpit vraagt het op via GET /teller/status?schema=<eigen versie> en stopt met schrijven als hij te oud is).
+// `cfg:schema_gezien` = de hoogste versie die zich bij de teller meldde: de reeks en een hoger minimum kunnen pas aan als
+// zo'n app er echt is (anders kan niemand meer projecten aanmaken).
+const NR_SCHEMA_STANDAARD = 2;
 const nrAntw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 async function nrHash(o) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(o)));
@@ -1530,7 +1536,11 @@ export class MtTeller {
     const st = this.state.storage;
     if (op === 'nr-status') {
       const c = (await st.get('cfg:reeks')) || {}, n = (await st.get('n:reeks')) || NR_START - 1;
-      return nrAntw({ reeks: { aan: !!c.aan, sinds: c.ts || null, door: c.doorNaam || null, volgende: n + 1, laatste: n >= NR_START ? n : null }, laatste_migratie: (await st.get('cfg:laatste_mig')) || null });
+      let gezien = (await st.get('cfg:schema_gezien')) || 0;
+      const meld = Math.floor(Number(b.schema) || 0);
+      if (meld > gezien && meld <= 99) { gezien = meld; await st.put('cfg:schema_gezien', meld); }   // alleen omhoog
+      return nrAntw({ reeks: { aan: !!c.aan, sinds: c.ts || null, door: c.doorNaam || null, volgende: n + 1, laatste: n >= NR_START ? n : null },
+        schema_min: (await st.get('cfg:schema_min')) || NR_SCHEMA_STANDAARD, schema_gezien: gezien || null, laatste_migratie: (await st.get('cfg:laatste_mig')) || null });
     }
     if (op === 'nr-binding') {
       const pid = await this._nrZoek(String(b.sleutel || ''));
@@ -1545,7 +1555,7 @@ export class MtTeller {
       const r = await this._nrMigStand(String(b.mig_id || ''));
       return r ? nrAntw(r) : nrAntw({ error: 'onbekende-migratie' }, 404);
     }
-    if (!['nr-nieuw', 'nr-reeks', 'nr-mig-proef', 'nr-mig-toepassen', 'nr-mig-terugrol'].includes(op)) return nrAntw({ error: 'onbekend' }, 404);
+    if (!['nr-nieuw', 'nr-reeks', 'nr-schema', 'nr-mig-proef', 'nr-mig-toepassen', 'nr-mig-terugrol'].includes(op)) return nrAntw({ error: 'onbekend' }, 404);
     const uit = await this.state.blockConcurrencyWhile(async () => {
       const ts = Date.now(), schrijf = {}, door = { door: b.door || null, doorNaam: b.doorNaam || null };
       let logn = (await st.get('logn')) || 0;
@@ -1575,16 +1585,28 @@ export class MtTeller {
       if (op === 'nr-reeks') {
         const aan = b.aan === true, c = (await st.get('cfg:reeks')) || {};
         if (!!c.aan === aan) return { j: { reeks: { aan }, gewijzigd: false } };
+        // Aanzetten alleen als er al een app is die nummers aankan (anders kan niemand meer een project aanmaken).
+        if (aan && ((await st.get('cfg:schema_gezien')) || 0) < NR_MIN_SCHEMA) return { s: 409, j: { error: 'nog-geen-app-met-nummers', uitleg: 'De reeks kan pas aan als een cockpit met schema ' + NR_MIN_SCHEMA + ' (brok C) zich bij de teller heeft gemeld' } };
         schrijf['cfg:reeks'] = Object.assign({ aan, ts }, door);
         log({ actie: aan ? 'reeks-aan' : 'reeks-uit', project_id: null, oud: !!c.aan, nieuw: aan, mig: null, resultaat: 'gezet' });
         await st.put(schrijf);
         return { j: { reeks: { aan }, gewijzigd: true } };
       }
+      if (op === 'nr-schema') {
+        const min = b.min, oud = (await st.get('cfg:schema_min')) || NR_SCHEMA_STANDAARD, gezien = (await st.get('cfg:schema_gezien')) || 0;
+        if (min === oud) return { j: { schema_min: min, gewijzigd: false } };
+        if (min > Math.max(gezien, NR_SCHEMA_STANDAARD)) return { s: 409, j: { error: 'nog-geen-app-met-dit-schema', uitleg: 'Er heeft zich nog geen cockpit met schema ' + min + ' gemeld' } };
+        schrijf['cfg:schema_min'] = min;
+        log({ actie: 'schema-min', project_id: null, oud, nieuw: min, mig: null, resultaat: 'gezet' });
+        await st.put(schrijf);
+        return { j: { schema_min: min, gewijzigd: true } };
+      }
       if (op === 'nr-mig-proef' || op === 'nr-mig-toepassen') {
         const items = Array.isArray(b.items) ? b.items : [];
         if (op === 'nr-mig-toepassen' && b.mig_id) {        // hervatten/herhalen: een toegepaste migratie nooit twee keer
           const m = await st.get('mig:' + b.mig_id);
-          if (m) return m.hash === b.hash ? { j: { mig_id: m.id, plan: m.items.map(({ voor, na, ...x }) => x), herhaald: true } } : { s: 409, j: { error: 'migratie-id-bestaat' } };
+          if (m && m.status !== 'toegepast') return { s: 409, j: { error: 'migratie-' + m.status, status: m.status, mig_id: m.id } };   // bv. teruggerold: niet stil "herhaald"
+          if (m) return m.hash === b.hash ? { j: { mig_id: m.id, plan: m.items.map(({ voor, na, ...x }) => x), herhaald: true, status: m.status } } : { s: 409, j: { error: 'migratie-id-bestaat', status: m.status } };
         }
         const { plan, conflicten, n } = await this._nrMigPlan(items);
         const hash = await nrHash({ plan, conflicten });
@@ -2019,19 +2041,28 @@ async function handleTeller(p, request, env, ik, json) {
   if (p === '/teller/werkcodes' && m === 'GET') { const r = await doe('alle'); return json(r.j, r.status); }
   const q = new URL(request.url).searchParams, door = { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email };
   // Projectnummers (brok B): lezen mag elke rol; droogloop/status/log: beheer; reeks, toepassen en terugrol: alleen de eigenaar.
-  if (m === 'GET' && p === '/teller/status') { const r = await doe('nr-status'); return json(r.j, r.status); }
+  if (m === 'GET' && p === '/teller/status') { const r = await doe('nr-status', { schema: Number(q.get('schema')) || 0 }); return json(r.j, r.status); }
   if (m === 'GET' && p === '/teller/binding') { const r = await doe('nr-binding', { sleutel: String(q.get('sleutel') || '').slice(0, 60) }); return json(r.j, r.status); }
   if (m === 'GET' && (p === '/teller/log' || p === '/teller/migratie/status')) {
     if (!R.beheer) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
     const r = p === '/teller/log' ? await doe('nr-log', { limiet: Number(q.get('limiet')) || 100 }) : await doe('nr-mig-status', { mig_id: String(q.get('mig_id') || '') });
     return json(r.j, r.status);
   }
-  if (m === 'POST' && (p === '/teller/reeks' || p.startsWith('/teller/migratie/'))) {
+  if (m === 'POST' && (p === '/teller/reeks' || p === '/teller/schema' || p.startsWith('/teller/migratie/'))) {
     let b = {}; try { b = await request.json(); } catch {}
     const eigenaar = R.beheer === 'alles';
+    if (p === '/teller/schema') {
+      if (!eigenaar) return json({ error: 'geen-toegang', reden: 'eigenaar' }, 403);
+      if (!Number.isInteger(b.min) || b.min < NR_SCHEMA_STANDAARD || b.min > 99 || b.bevestig !== 'schema-min') return json({ error: 'ongeldig', uitleg: 'min: geheel getal ≥ ' + NR_SCHEMA_STANDAARD + ', bevestig: "schema-min"' }, 400);
+      const r = await doe('nr-schema', { min: b.min, ...door });
+      if (r.status === 200 && r.j.gewijzigd) await audit(env, { ...door, actie: 'schema-min', doel: 'teller', doelNaam: 'minimale app-versie projecten', nieuw: String(b.min) });
+      return json(r.j, r.status);
+    }
     if (p === '/teller/reeks') {
       if (!eigenaar) return json({ error: 'geen-toegang', reden: 'eigenaar' }, 403);
       if (typeof b.aan !== 'boolean') return json({ error: 'ongeldig', uitleg: 'aan: true of false' }, 400);
+      // aanzetten is onomkeerbaar in zijn gevolgen (verbruikte nummers): expliciete bevestiging verplicht
+      if (b.aan && b.bevestig !== 'projectnummers-aan') return json({ error: 'bevestiging-nodig', uitleg: 'bevestig: "projectnummers-aan"' }, 400);
       const r = await doe('nr-reeks', { aan: b.aan, ...door });
       if (r.status === 200 && r.j.gewijzigd) await audit(env, { ...door, actie: b.aan ? 'projectnummers-aan' : 'projectnummers-uit', doel: 'teller', doelNaam: 'projectnummerreeks', nieuw: b.aan ? 'aan' : 'uit' });
       return json(r.j, r.status);

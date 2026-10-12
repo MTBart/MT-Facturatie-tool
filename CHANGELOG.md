@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Projectnummers B (cockpit): nummers uit de teller overnemen; schemaversie bij de uitgifte
+- Commit: `790e380` | Auteur: Bart Witte
+
 ## 2026-10-12 — Projectnummers B: MtTeller-reeks vanaf 260801 achter een vlag, aliasregister, audit en migratie met terugrol
 - Commit: `a37307e` | Auteur: Bart Witte
 
