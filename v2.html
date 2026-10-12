@@ -792,7 +792,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.13.3</span>
+    <span class="header-version">v2.13.4</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -817,8 +817,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </header>
 
 <div class="tabs-wrap">
-  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Geld</button>
-  <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
+  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Dashboard</button>
+  <button class="tab-btn active" id="tab-btn-dashboard-oud" style="display:none" data-recht="moneybird" onclick="showTab('dashboard',this)">Oud dashboard</button>
   <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
@@ -3298,6 +3298,7 @@ const mtRoute={
     this._stil=true;
     try{
       if(!document.getElementById('tab-'+r.tab)) return;
+      if(r.tab==='dashboard'&&!_oudDashboardAan()) return;   // oud dashboard is gearchiveerd: een oude link/bladwijzer laat de startpagina haar werk doen
       const tabEl=document.getElementById('tab-'+r.tab);
       if(!tabEl.classList.contains('active')){
         const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+r.tab+"'"));
@@ -9288,7 +9289,7 @@ async function laadCashflowDashboard(){
     if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none';
     const dash=document.getElementById('tab-dashboard');
     if(dash&&!document.getElementById('cf-naar-geld')){ const d=document.createElement('div'); d.id='cf-naar-geld'; d.className='card'; d.style.cssText='margin-bottom:1rem;font-size:13px';
-      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Geld</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Geld →</button>';
+      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Dashboard</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Dashboard →</button>';
       dash.insertBefore(d,dash.firstElementChild); }
     return;
   }
@@ -12926,7 +12927,8 @@ async function toonApp(account) {
   if (window.initStorage) await window.initStorage();
   updateApiStatus();
   loadLedgers();
-  laadDashboard();
+  oudDashboardZet();
+  if(_oudDashboardAan()) laadDashboard();   // het oude dashboard is verborgen: dan ook geen zware Moneybird-aanroepen bij het laden (showTab('dashboard') laadt op verzoek)
   if(typeof admInitKnop==='function') admInitKnop();
   rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); updStipZet(); klantRegistryNaLogin(); });
   mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
@@ -12959,7 +12961,13 @@ async function rolLaad(){
   _rolBezig=(async()=>{
     try{
       const me=await MTRol.laad(WORKER);
-      if(!me){ if(MTRol.laadReden!=='geen-token') _rolFout++; rolOpnieuwPlannen(); return null; }
+      if(!me){
+        if(MTRol.laadReden!=='geen-token') _rolFout++;
+        rolOpnieuwPlannen();
+        // Geen rol meer te verwachten (oude worker, vaste fout, pogingen op): niet op het verborgen oude dashboard blijven staan.
+        if(_rolStoppen()||(_rolPoging>=ROL_PAUZES.length&&!_rolTimer)) _verborgenTabTerugval();
+        return null;
+      }
       if(_rolTimer){ clearTimeout(_rolTimer); _rolTimer=null; }
       const r=rolToepassen(me);
       if(!eerder&&_rolPoging&&typeof updStipZet==='function') updStipZet();   // pas later gelukt: ook het "nieuw"-stipje (beheer-items) bijwerken
@@ -12989,6 +12997,13 @@ function rolToepassen(me){
   startTabZet();
   return me;
 }
+// Het oude dashboard (tab 'dashboard') is voorlopig gearchiveerd: de knop is verborgen, alleen ?oud-dashboard=1 in de URL
+// brengt hem terug (achterdeur). Het tabblad 'geld' heet in de kop nu "Dashboard"; id, route (#tab=geld) en recht blijven 'geld'.
+function _oudDashboardAan(){ try{ return new URLSearchParams(location.search).get('oud-dashboard')==='1'; }catch(e){ return false; } }
+function oudDashboardZet(){ const b=document.getElementById('tab-btn-dashboard-oud'); if(b&&_oudDashboardAan()) b.style.display=''; }
+const _tabVerborgen=b=>!!b&&(b.style.display==='none'||b.classList.contains('mt-rol-verborgen'));
+// Staat de actieve knop op een verborgen tab (oud dashboard zonder achterdeur, of Dashboard zonder recht), ga dan naar de eerste vrije tab.
+function _verborgenTabTerugval(){ const act=document.querySelector('.tabs-wrap .tab-btn.active'); if(_tabVerborgen(act)) _eersteVrijeTab(); }
 function _eersteVrijeTab(){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
 // ── Startpagina per rol (Bart 9-10): wie Geld mag, begint op Geld; alle anderen (kantoor, werkplaats, …) op
 // Agenda → Planning, gefilterd op hun eigen planblokken (wie niet in MT_TEAM staat: de hele teamplanning).
@@ -13020,8 +13035,7 @@ function startTabZet(){
     if(lid) _agenda.fPers=new Set([lid.slug,lid.email]);   // planblokken staan op slug of e-mail
     showTab('agenda',a);
   }
-  const act=document.querySelector('.tabs-wrap .tab-btn.active');
-  if(act&&act.classList.contains('mt-rol-verborgen')) _eersteVrijeTab();   // niets te kiezen en Dashboard verborgen
+  _verborgenTabTerugval();   // niets te kiezen (geen rol, oude worker, geen Agenda) en het oude dashboard is verborgen
 }
 // ── Geld (geldtijdlijn) ──
 // Alleen als de worker de geldtijdlijn kent (kolom `geld` in /me) én je dat recht hebt; dan vervangt het

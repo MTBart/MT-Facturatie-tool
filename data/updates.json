@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.13.4",
+    "datum": "2026-10-12",
+    "titel": "Het tabblad Geld heet nu Dashboard",
+    "voor": "iedereen",
+    "punten": [
+      "Het tabblad Geld heet nu Dashboard. Het is hetzelfde scherm als voorheen, alleen de naam is anders; wie Geld mag, begint er nog steeds.",
+      "Het oude dashboard met de grafieken is voorlopig verborgen, omdat het weinig nuttigs liet zien. Er is niets weggegooid; het kan later terugkomen."
+    ]
+  },
+  {
     "versie": "2.13.3",
     "datum": "2026-10-12",
     "titel": "Capaciteit uit Toggl op de projecttijdlijn",
