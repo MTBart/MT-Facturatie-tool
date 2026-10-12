@@ -1456,6 +1456,28 @@ export class MtActies {
 const WERKCODE_PID_RE = /^p_[0-9a-z]{4,40}$/;
 const WERKCODE_BATCH_MAX = 40;          // × 3 sleutels + tellers ≤ 128 sleutels per put (DO-limiet)
 function jaarNu() { return Number(new Intl.DateTimeFormat('en', { timeZone: 'Europe/Amsterdam', year: 'numeric' }).format(new Date())); }
+// ── Projectnummers (brok B) ──
+// Eén doorlopende reeks zonder jaar: het eerste nummer is 260801, daarna +1 (ook na de jaarwisseling), nooit hergebruikt —
+// ook niet na een terugrol (het nummer wordt dan "ingetrokken"). Uitgifte idempotent per project_id. Bestaande W-codes blijven
+// gelden; het aliasregister (`alias:<oud>` → project_id) en `pid:<project_id>` (code, nummer, aliassen) geven de binding.
+// De nieuwe reeks staat achter een vlag in deze DO (`cfg:reeks`, standaard UIT): pas als die aan staat, geeft de teller voor
+// nieuwe projecten nummers uit in plaats van W-codes, en alleen aan een app die nummers aankan (schema ≥ NR_MIN_SCHEMA).
+// Omnummeren van bestaande projecten = een migratie: droogloop (plan + hash) → toepassen (alleen met die hash, atomair) →
+// status → terugrol (alleen zolang alles nog precies is zoals de migratie het achterliet; anders conflict).
+// Audit: elk uitgegeven nummer, elke migratie, terugrol en elk conflict komt als `log:<volgnummer>` in dezelfde schrijfactie
+// (actor, project_id, oud, nieuw, migratie-id, resultaat) en daarnaast samengevat in de KV-audit.
+const NR_START = 260801;
+const NR_MIN_SCHEMA = 3;                 // v2.html PROJ_SCHEMA: pas vanaf 3 (brok C: mappen, Toggl, mobiel, uren lezen nummers) krijgt de cockpit nummers
+const NR_MIG_MAX = 15;                   // × ≤ 7 sleutels (pid, nr, ≤ 4 aliassen, log) + 3 ≤ 128 sleutels per put (DO-limiet)
+const NR_ALIAS_MAX = 3;                  // extra oude codes per project, naast de W-code
+const NR_ALIAS_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/;
+const NR_MIG_RE = /^m_[0-9a-z]{6,40}$/;
+const NR_WCODE_RE = /^W\d{2}-\d{3,}$/;
+const nrAntw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+async function nrHash(o) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(o)));
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
 export class MtTeller {
   constructor(state) { this.state = state; }
   async fetch(request) {
@@ -1464,12 +1486,20 @@ export class MtTeller {
     const st = this.state.storage, antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
     if (op.startsWith('ai-')) return await this.ai(op, b);
     if (op.startsWith('csp-')) return await this.csp(op, b);
+    if (op.startsWith('nr-')) return await this.nummers(op, b);
     if (op === 'alle') {
-      const m = await st.list({ prefix: 'pid:' }), werkcodes = {};
-      for (const [k, w] of m) werkcodes[k.slice(4)] = w.code;
-      return antw({ werkcodes });
+      const m = await st.list({ prefix: 'pid:' }), werkcodes = {}, nummers = {}, aliassen = {};
+      for (const [k, w] of m) {
+        const pid = k.slice(4);
+        if (NR_WCODE_RE.test(String(w.code))) werkcodes[pid] = w.code;
+        if (w.nummer) nummers[pid] = w.nummer;
+        for (const a of w.aliassen || []) aliassen[a] = pid;
+      }
+      const c = (await st.get('cfg:reeks')) || {};
+      return antw({ werkcodes, nummers, aliassen, reeks: { aan: !!c.aan } });
     }
     if (op !== 'ken' && op !== 'proef') return antw({ error: 'onbekend' }, 404);
+    if (((await st.get('cfg:reeks')) || {}).aan) return antw({ error: 'w-reeks-gestopt', uitleg: 'De nieuwe projectnummers staan aan: er worden geen W-codes meer uitgegeven' }, 409);
     const items = (Array.isArray(b.items) ? b.items : []).slice();
     if (b.sorteer) items.sort((x, y) => (x.jaar - y.jaar) || String(x.created || '').localeCompare(String(y.created || '')) || String(x.project_id).localeCompare(String(y.project_id)));
     const uit = await this.state.blockConcurrencyWhile(async () => {
@@ -1494,6 +1524,175 @@ export class MtTeller {
     }).catch(e => ({ fout: String(e.message || e) }));
     if (uit && uit.fout) return antw({ error: uit.fout }, 400);
     return antw({ uit, proef: op === 'proef' || undefined });
+  }
+  // Projectnummers (brok B): zie de uitleg bij NR_START. Lezen buiten het slot; alles wat schrijft in één geserialiseerd blok.
+  async nummers(op, b) {
+    const st = this.state.storage;
+    if (op === 'nr-status') {
+      const c = (await st.get('cfg:reeks')) || {}, n = (await st.get('n:reeks')) || NR_START - 1;
+      return nrAntw({ reeks: { aan: !!c.aan, sinds: c.ts || null, door: c.doorNaam || null, volgende: n + 1, laatste: n >= NR_START ? n : null }, laatste_migratie: (await st.get('cfg:laatste_mig')) || null });
+    }
+    if (op === 'nr-binding') {
+      const pid = await this._nrZoek(String(b.sleutel || ''));
+      const bi = pid && await this._nrBinding(pid);
+      return bi ? nrAntw(bi) : nrAntw({ error: 'onbekend' }, 404);
+    }
+    if (op === 'nr-log') {
+      const m = await st.list({ prefix: 'log:' }), uit = [...m.values()].reverse().slice(0, Math.min(500, Math.max(1, Number(b.limiet) || 100)));
+      return nrAntw({ log: uit });
+    }
+    if (op === 'nr-mig-status') {
+      const r = await this._nrMigStand(String(b.mig_id || ''));
+      return r ? nrAntw(r) : nrAntw({ error: 'onbekende-migratie' }, 404);
+    }
+    if (!['nr-nieuw', 'nr-reeks', 'nr-mig-proef', 'nr-mig-toepassen', 'nr-mig-terugrol'].includes(op)) return nrAntw({ error: 'onbekend' }, 404);
+    const uit = await this.state.blockConcurrencyWhile(async () => {
+      const ts = Date.now(), schrijf = {}, door = { door: b.door || null, doorNaam: b.doorNaam || null };
+      let logn = (await st.get('logn')) || 0;
+      const log = e => { logn++; schrijf['log:' + String(logn).padStart(12, '0')] = Object.assign({ ts }, door, e); schrijf.logn = logn; };
+      if (op === 'nr-nieuw') {
+        const pid = String(b.project_id);
+        const al = await this._nrBinding(pid);
+        if (al) return { j: Object.assign(al, { nieuw: false }) };
+        const cfg = (await st.get('cfg:reeks')) || {};
+        if (!cfg.aan) {                                  // W-reeks (zoals voorheen): per jaar doorlopend
+          const jaar = String(b.jaar), jj = jaar.slice(-2);
+          let n = (await st.get('n:' + jaar)) || 0, code;
+          do { n++; code = `W${jj}-${String(n).padStart(3, '0')}`; } while (await st.get('code:' + code) || await st.get('alias:' + code));
+          Object.assign(schrijf, { ['n:' + jaar]: n, ['pid:' + pid]: { code, ts }, ['code:' + code]: pid });
+          log({ actie: 'werkcode-uitgegeven', project_id: pid, oud: null, nieuw: code, mig: null, resultaat: 'uitgegeven' });
+          await st.put(schrijf);
+          return { j: { project_id: pid, code, werkcode: code, projectnummer: null, aliassen: [], nieuw: true } };
+        }
+        if (!(Number(b.schema) >= NR_MIN_SCHEMA)) return { s: 409, j: { error: 'verouderde-app', uitleg: 'Deze pagina is verouderd — herlaad de pagina om een projectnummer te krijgen' } };
+        let n = (await st.get('n:reeks')) || NR_START - 1, nr;
+        do { n++; nr = String(n); } while (await st.get('nr:' + nr) || await st.get('code:' + nr) || await st.get('alias:' + nr));
+        Object.assign(schrijf, { 'n:reeks': n, ['pid:' + pid]: { code: nr, nummer: nr, ts }, ['nr:' + nr]: { pid, ts } });
+        log({ actie: 'projectnummer-uitgegeven', project_id: pid, oud: null, nieuw: nr, mig: null, resultaat: 'uitgegeven' });
+        await st.put(schrijf);
+        return { j: { project_id: pid, code: nr, werkcode: null, projectnummer: nr, aliassen: [], nieuw: true } };
+      }
+      if (op === 'nr-reeks') {
+        const aan = b.aan === true, c = (await st.get('cfg:reeks')) || {};
+        if (!!c.aan === aan) return { j: { reeks: { aan }, gewijzigd: false } };
+        schrijf['cfg:reeks'] = Object.assign({ aan, ts }, door);
+        log({ actie: aan ? 'reeks-aan' : 'reeks-uit', project_id: null, oud: !!c.aan, nieuw: aan, mig: null, resultaat: 'gezet' });
+        await st.put(schrijf);
+        return { j: { reeks: { aan }, gewijzigd: true } };
+      }
+      if (op === 'nr-mig-proef' || op === 'nr-mig-toepassen') {
+        const items = Array.isArray(b.items) ? b.items : [];
+        if (op === 'nr-mig-toepassen' && b.mig_id) {        // hervatten/herhalen: een toegepaste migratie nooit twee keer
+          const m = await st.get('mig:' + b.mig_id);
+          if (m) return m.hash === b.hash ? { j: { mig_id: m.id, plan: m.items.map(({ voor, na, ...x }) => x), herhaald: true } } : { s: 409, j: { error: 'migratie-id-bestaat' } };
+        }
+        const { plan, conflicten, n } = await this._nrMigPlan(items);
+        const hash = await nrHash({ plan, conflicten });
+        if (op === 'nr-mig-proef') return { j: { plan: plan.map(({ voor, ...x }) => x), conflicten, hash } };
+        if (conflicten.length || b.hash !== hash) {
+          const reden = conflicten.length ? 'conflict' : 'droogloop-verouderd';
+          for (const c of conflicten.length ? conflicten : [{ project_id: null }]) log({ actie: 'projectnummer-migratie', project_id: c.project_id || null, oud: c.oud || null, nieuw: null, mig: b.mig_id || null, resultaat: reden + (c.reden ? ': ' + c.reden : '') });
+          await st.put(schrijf);
+          return { s: 409, j: { error: reden, conflicten, hash } };
+        }
+        const id = b.mig_id || ('m_' + ts.toString(36) + [...crypto.getRandomValues(new Uint8Array(4))].map(x => x.toString(16).padStart(2, '0')).join(''));
+        const mItems = [];
+        for (const p of plan) {
+          const na = Object.assign({}, p.voor, { nummer: p.nieuw, aliassen: [...(p.voor.aliassen || []), ...p.aliassen], mig: id, ts });
+          schrijf['pid:' + p.project_id] = na;
+          schrijf['nr:' + p.nieuw] = { pid: p.project_id, ts, mig: id };
+          for (const a of p.aliassen) schrijf['alias:' + a] = { pid: p.project_id, ts, mig: id };
+          log({ actie: 'projectnummer-migratie', project_id: p.project_id, oud: p.oud, nieuw: p.nieuw, mig: id, resultaat: 'toegepast' });
+          mItems.push(Object.assign({}, p, { na }));
+        }
+        schrijf['n:reeks'] = n;
+        schrijf['mig:' + id] = Object.assign({ id, ts, status: 'toegepast', hash, items: mItems }, door);
+        schrijf['cfg:laatste_mig'] = id;
+        if (Object.keys(schrijf).length > 128) throw new Error('te-veel-sleutels');
+        await st.put(schrijf);
+        return { j: { mig_id: id, plan: plan.map(({ voor, ...x }) => x) } };
+      }
+      // nr-mig-terugrol
+      const id = String(b.mig_id || ''), stand = await this._nrMigStand(id);
+      if (!stand) return { s: 404, j: { error: 'onbekende-migratie' } };
+      if (!stand.terugrolbaar) {
+        const gewijzigd = stand.items.filter(x => !x.ongewijzigd);
+        for (const x of gewijzigd.length ? gewijzigd : [{ project_id: null }]) log({ actie: 'projectnummer-terugrol', project_id: x.project_id, oud: x.nieuw || null, nieuw: x.oud || null, mig: id, resultaat: 'conflict: ' + (stand.status !== 'toegepast' ? 'status ' + stand.status : 'gewijzigd na de migratie') });
+        await st.put(schrijf);
+        return { s: 409, j: { error: 'conflict', reden: stand.status !== 'toegepast' ? 'migratie is ' + stand.status : 'de toestand is gewijzigd na deze migratie', items: stand.items } };
+      }
+      const m = await st.get('mig:' + id);
+      for (const x of m.items) {
+        schrijf['pid:' + x.project_id] = x.voor;
+        schrijf['nr:' + x.nieuw] = { pid: x.project_id, ts, mig: id, ingetrokken: true };   // nummer blijft verbruikt: nooit opnieuw uitgegeven
+        for (const a of x.aliassen) schrijf['alias:' + a] = { pid: null, ts, mig: id, ingetrokken: true };
+        log({ actie: 'projectnummer-terugrol', project_id: x.project_id, oud: x.nieuw, nieuw: x.oud, mig: id, resultaat: 'teruggerold' });
+      }
+      schrijf['mig:' + id] = Object.assign({}, m, { status: 'teruggerold', terug_ts: ts, terug_door: door.door, terug_doorNaam: door.doorNaam });
+      if (Object.keys(schrijf).length > 128) throw new Error('te-veel-sleutels');
+      await st.put(schrijf);
+      return { j: { mig_id: id, teruggerold: m.items.map(x => x.project_id) } };
+    }).catch(e => ({ s: 500, j: { error: String(e.message || e) } }));
+    return nrAntw(uit.j, uit.s || 200);
+  }
+  async _nrBinding(pid) {
+    const r = await this.state.storage.get('pid:' + pid);
+    if (!r) return null;
+    return { project_id: pid, code: r.code, werkcode: NR_WCODE_RE.test(String(r.code)) ? r.code : null, projectnummer: r.nummer || null, aliassen: (r.aliassen || []).slice() };
+  }
+  async _nrZoek(s) {
+    if (!s) return null;
+    const st = this.state.storage;
+    if (WERKCODE_PID_RE.test(s)) return (await st.get('pid:' + s)) ? s : null;
+    const n = await st.get('nr:' + s); if (n && n.pid && !n.ingetrokken) return n.pid;
+    const c = await st.get('code:' + s); if (c) return c;
+    const a = await st.get('alias:' + s); if (a && a.pid && !a.ingetrokken) return a.pid;
+    return null;
+  }
+  // Plan voor het omnummeren (in de volgorde van de lijst): per project het volgende nummer, de W-code (en eventuele extra
+  // oude codes) als alias. Conflicten: onbekend bij de teller, al genummerd, afwijkende oude code, alias van een ander project.
+  async _nrMigPlan(items) {
+    const st = this.state.storage, plan = [], conflicten = [], pids = new Set(), aliasVan = new Map();
+    let n = (await st.get('n:reeks')) || NR_START - 1;
+    for (const it of items) {
+      const pid = String(it.project_id), fout = reden => conflicten.push({ project_id: pid, oud: it.oud || null, reden });
+      if (pids.has(pid)) { fout('dubbel in de lijst'); continue; }
+      pids.add(pid);
+      const voor = await st.get('pid:' + pid);
+      if (!voor) { fout('onbekend bij de teller'); continue; }
+      if (voor.nummer) { fout('heeft al projectnummer ' + voor.nummer); continue; }
+      if (it.oud != null && String(it.oud) !== voor.code) { fout('oude code wijkt af (teller: ' + voor.code + ')'); continue; }
+      const nieuweAliassen = [], al = voor.aliassen || [];
+      let mis = '';
+      for (const a of [voor.code, ...(it.aliassen || [])].map(String)) {
+        if (al.includes(a) || nieuweAliassen.includes(a)) continue;
+        const ap = await st.get('alias:' + a), cp = await st.get('code:' + a), np = await st.get('nr:' + a);
+        if (ap && ap.pid && !ap.ingetrokken && ap.pid !== pid) { mis = 'alias ' + a + ' hoort bij een ander project'; break; }
+        if (cp && cp !== pid) { mis = 'code ' + a + ' hoort bij een ander project'; break; }
+        if (np) { mis = a + ' is een projectnummer'; break; }
+        if (aliasVan.has(a) && aliasVan.get(a) !== pid) { mis = 'alias ' + a + ' staat twee keer in de lijst'; break; }
+        aliasVan.set(a, pid); nieuweAliassen.push(a);
+      }
+      if (mis) { fout(mis); continue; }
+      let nr;
+      do { n++; nr = String(n); } while (await st.get('nr:' + nr) || await st.get('code:' + nr) || await st.get('alias:' + nr));
+      plan.push({ project_id: pid, oud: voor.code, nieuw: nr, aliassen: nieuweAliassen, voor });
+    }
+    return { plan, conflicten, n };
+  }
+  // Stand van een migratie: per project of alles nog precies is zoals de migratie het achterliet (dan mag terugrollen).
+  async _nrMigStand(id) {
+    if (!NR_MIG_RE.test(id)) return null;
+    const st = this.state.storage, m = await st.get('mig:' + id);
+    if (!m) return null;
+    const items = [];
+    for (const x of m.items) {
+      const cur = await st.get('pid:' + x.project_id), nr = await st.get('nr:' + x.nieuw);
+      let ok = JSON.stringify(cur) === JSON.stringify(x.na) && !!nr && nr.pid === x.project_id && nr.mig === id && !nr.ingetrokken;
+      for (const a of x.aliassen) { const ap = await st.get('alias:' + a); if (!ap || ap.pid !== x.project_id || ap.mig !== id || ap.ingetrokken) ok = false; }
+      items.push({ project_id: x.project_id, oud: x.oud, nieuw: x.nieuw, aliassen: x.aliassen, ongewijzigd: ok });
+    }
+    return { mig_id: m.id, ts: m.ts, door: m.doorNaam || null, status: m.status, hash: m.hash, items, terugrolbaar: m.status === 'toegepast' && items.every(x => x.ongewijzigd) };
   }
   // F6: AI-gebruik per gebruiker. Eén instantie (idFromName('ai')); alles in één geserialiseerd blok (atomair, ook bij gelijktijdige verzoeken).
   // Per verzoek: claim (limieten toetsen + tokens reserveren) → afrond (werkelijk gebruik; bij een fout de reservering terug).
@@ -1818,18 +2017,60 @@ async function handleTeller(p, request, env, ik, json) {
   const stub = ns.get(ns.idFromName('werkcode'));
   const doe = async (op, b) => { const r = await stub.fetch('https://mt-teller/' + op, { method: 'POST', body: JSON.stringify(b || {}) }); return { status: r.status, j: await r.json() }; };
   if (p === '/teller/werkcodes' && m === 'GET') { const r = await doe('alle'); return json(r.j, r.status); }
+  const q = new URL(request.url).searchParams, door = { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email };
+  // Projectnummers (brok B): lezen mag elke rol; droogloop/status/log: beheer; reeks, toepassen en terugrol: alleen de eigenaar.
+  if (m === 'GET' && p === '/teller/status') { const r = await doe('nr-status'); return json(r.j, r.status); }
+  if (m === 'GET' && p === '/teller/binding') { const r = await doe('nr-binding', { sleutel: String(q.get('sleutel') || '').slice(0, 60) }); return json(r.j, r.status); }
+  if (m === 'GET' && (p === '/teller/log' || p === '/teller/migratie/status')) {
+    if (!R.beheer) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
+    const r = p === '/teller/log' ? await doe('nr-log', { limiet: Number(q.get('limiet')) || 100 }) : await doe('nr-mig-status', { mig_id: String(q.get('mig_id') || '') });
+    return json(r.j, r.status);
+  }
+  if (m === 'POST' && (p === '/teller/reeks' || p.startsWith('/teller/migratie/'))) {
+    let b = {}; try { b = await request.json(); } catch {}
+    const eigenaar = R.beheer === 'alles';
+    if (p === '/teller/reeks') {
+      if (!eigenaar) return json({ error: 'geen-toegang', reden: 'eigenaar' }, 403);
+      if (typeof b.aan !== 'boolean') return json({ error: 'ongeldig', uitleg: 'aan: true of false' }, 400);
+      const r = await doe('nr-reeks', { aan: b.aan, ...door });
+      if (r.status === 200 && r.j.gewijzigd) await audit(env, { ...door, actie: b.aan ? 'projectnummers-aan' : 'projectnummers-uit', doel: 'teller', doelNaam: 'projectnummerreeks', nieuw: b.aan ? 'aan' : 'uit' });
+      return json(r.j, r.status);
+    }
+    const welke = p.slice('/teller/migratie/'.length);
+    if (!['droogloop', 'toepassen', 'terugrol'].includes(welke)) return json({ error: 'onbekende-route' }, 404);
+    if (!R.beheer || (welke !== 'droogloop' && !eigenaar)) return json({ error: 'geen-toegang', reden: welke === 'droogloop' ? 'beheer' : 'eigenaar' }, 403);
+    if (b.mig_id != null && !NR_MIG_RE.test(String(b.mig_id))) return json({ error: 'ongeldig-mig_id' }, 400);
+    if (welke === 'terugrol') {
+      const r = await doe('nr-mig-terugrol', { mig_id: String(b.mig_id || ''), ...door });
+      await audit(env, { ...door, actie: 'projectnummers-terugrol', doel: String(b.mig_id || ''), doelNaam: r.status === 200 ? r.j.teruggerold.length + ' project(en)' : 'geweigerd', nieuw: r.status === 200 ? 'teruggerold' : String(r.j.error || r.status) });
+      return json(r.j, r.status);
+    }
+    const items = Array.isArray(b.items) ? b.items : null;
+    if (!items || !items.length || items.length > NR_MIG_MAX) return json({ error: 'ongeldige-items', max: NR_MIG_MAX }, 400);
+    const schoon = [];
+    for (const x of items) {
+      const pid = String((x && x.project_id) || ''), oud = x && x.oud != null ? String(x.oud) : null, al = x && Array.isArray(x.aliassen) ? x.aliassen.map(String) : [];
+      if (!WERKCODE_PID_RE.test(pid) || (oud !== null && !NR_WCODE_RE.test(oud) && !NR_ALIAS_RE.test(oud)) || (x.aliassen != null && !Array.isArray(x.aliassen)) || al.length > NR_ALIAS_MAX
+        || al.some(a => !NR_ALIAS_RE.test(a) || /^\d{6}$/.test(a))) return json({ error: 'ongeldig-item', project_id: pid }, 400);
+      schoon.push({ project_id: pid, oud, aliassen: al });
+    }
+    if (welke === 'droogloop') { const r = await doe('nr-mig-proef', { items: schoon }); return json(r.j, r.status); }
+    const r = await doe('nr-mig-toepassen', { items: schoon, hash: String(b.hash || ''), mig_id: b.mig_id || null, ...door });
+    if (!(r.status === 200 && r.j.herhaald)) await audit(env, { ...door, actie: 'projectnummers-migratie', doel: (r.j && r.j.mig_id) || String(b.mig_id || '') || 'teller', doelNaam: r.status === 200 ? r.j.plan.length + ' project(en)' : 'geweigerd', nieuw: r.status === 200 ? r.j.plan.map(x => x.oud + '→' + x.nieuw).join(', ').slice(0, 300) : String(r.j.error || r.status) });
+    return json(r.j, r.status);
+  }
   if (m !== 'POST' || (p !== '/teller/werkcode' && p !== '/teller/werkcode/batch')) return json({ error: 'onbekende-route' }, 404);
   // Nummers uitgeven: in élke modus afgedwongen (een verbruikt nummer komt nooit terug).
   if (R.projecten !== 'wijzigen') return json({ error: 'geen-toegang', reden: 'projecten-wijzigen' }, 403);
   let body = {}; try { body = await request.json(); } catch {}
-  const door = { door: ik.oid, doorNaam: (ik.rec && ik.rec.naam) || ik.email };
   if (p === '/teller/werkcode') {
     const pid = String((body && body.project_id) || '');
     if (!WERKCODE_PID_RE.test(pid)) return json({ error: 'ongeldig-project_id' }, 400);
-    const r = await doe('ken', { items: [{ project_id: pid, jaar: jaarNu() }] });   // nieuw project: jaar van nu (server)
+    // nieuw project: W-code met het jaar van nu (server), of — als de nieuwe reeks aan staat — een projectnummer
+    const r = await doe('nr-nieuw', { project_id: pid, jaar: jaarNu(), schema: Number(body.schema) || 1, ...door });
     if (r.status !== 200) return json(r.j, r.status);
-    const u = r.j.uit[0];
-    if (u.nieuw) await audit(env, { ...door, actie: 'werkcode-toegekend', doel: pid, doelNaam: u.werkcode, nieuw: u.werkcode });
+    const u = r.j;
+    if (u.nieuw) await audit(env, { ...door, actie: u.projectnummer ? 'projectnummer-toegekend' : 'werkcode-toegekend', doel: pid, doelNaam: u.code, nieuw: u.code });
     return json(u);
   }
   // Bestaande projecten (eenmalige migratie, of nagekomen projecten): alleen beheer.
