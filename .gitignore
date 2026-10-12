@@ -103,3 +103,6 @@ Agents/opdrachten/inbox/*.txt
 Agents/opdrachten/verwerkt/
 Agents/opdrachten/voor_claude/
 !Agents/opdrachten/inbox/README.md
+_backup/
+_patches/
+__pycache__/

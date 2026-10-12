@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — F6: grafstenen ook zonder nieuwe verlopen claim opruimen en het verlopen/afronden van claims in een atomaire transactie
+- Commit: `9ec54dc` | Auteur: Bart Witte
+
 ## 2026-10-12 — Release v2.13.3: Toggl-capaciteit op de projecttijdlijn, AI-limieten met exacte telling, CSP-meldingen in de teller-DO; backup = v2.13.2
 - Commit: `25d6b93` | Auteur: Bart Witte
 
