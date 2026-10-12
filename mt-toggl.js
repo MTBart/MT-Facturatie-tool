@@ -210,9 +210,11 @@ async function t2StatusId(soort){
   }catch(e){ console.warn('statussen ophalen mislukt, vaste id gebruikt:',e.message); }
   return T2_STATUS_VAST[soort]||T2_STATUS_VAST.todo;
 }
-// Projectnaam in Toggl: "<offertenummer> <naam>" zodra het nummer bekend is, anders de naam.
+// Projectnaam in Toggl (brok C): "<projectnummer> <naam>" ("260812 Keuken"); zonder projectnummer de oude vorm
+// "<offertenummer> <naam>", en zonder offertenummer de naam. Bestaande Toggl-namen worden niet vanzelf hernoemd.
 function t2ProjectNaam(mt){
   const naam=String((mt&&(mt.naam||mt.product_naam))||(mt&&mt.code)||'').trim();
+  if(typeof MTProject!=='undefined') return MTProject.togglNaam(Object.assign({},mt,{naam}),{nummer:typeof projNummer==='function'?projNummer:null});
   return (mt&&mt.offertenr)?`${mt.offertenr} ${naam}`:naam;
 }
 async function t2Projecten(vers){
@@ -886,6 +888,8 @@ async function tgArchiveProject(id){
 //  • cockpit-stijl "KOBALT-5013-KEUKEN"       → kale code (hele naam is een geldige code)
 // Geeft de code in UPPERCASE terug, of '' als er geen code in zit. Puur lezen, geen mutatie.
 function codeUitTogglNaam(name){
+  // Brok C: eerst tegen de gedeelde index (mt-project.js): "260812 Naam", "W26-003 Naam", offertenummer voorop, [CODE], kale code.
+  if(typeof MTProject!=='undefined'&&typeof projIndex==='function'){ const r=MTProject.uitToggl(projIndex(),name); if(r.soort==='een') return String(r.project.code).toUpperCase(); }
   const s=String(name||'').trim();
   const m=s.match(/\[([A-Z0-9\-]+)\]$/);
   if(m) return m[1].toUpperCase();
@@ -901,6 +905,8 @@ function _mtProjVoorToggl(p){
   if(!p||typeof PROJECT_CODES==='undefined') return null;
   const byId=PROJECT_CODES.find(x=>x.tg_project_id&&String(x.tg_project_id)===String(p.id));
   if(byId) return byId;
+  // Gedeelde resolver: alle naamvormen, gecontroleerd tegen de index; past de naam bij twee projecten, dan geen koppeling.
+  if(typeof MTProject!=='undefined'&&typeof projIndex==='function'){ const r=MTProject.uitToggl(projIndex(),p.name); if(r.soort==='een') return r.project; if(r.soort==='ambigu') return null; }
   const code=codeUitTogglNaam(p.name);
   if(code){
     const byCode=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===code)||(typeof projVind==='function'&&projVind(code));   // ook een oude code in de Toggl-naam

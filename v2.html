@@ -5528,7 +5528,10 @@ function projKlantNaam(proj){
 // nog een technische sleutel (URL, opslag, koppelingen) en wordt nergens meer getoond. Zichtbaar is het
 // offertenummer — of, volgens de centrale instelling "Projectcode tonen als", de werkcode of beide.
 // Onbekend → leeg: dan is de volledige projectnaam de identificatie (niets verzinnen).
+// Waarde 'werkcode' heet in de app "Projectnummer" (brok C): het projectnummer (teller), en zolang een project dat nog niet
+// heeft de werkcode W<jj>-<nnn>.
 function projCodeModus(){ const m=window.MT_INSTELLINGEN&&MT_INSTELLINGEN.projectcode; return m==='werkcode'||m==='beide'?m:'offerte'; }
+function projHoofdNr(p){ return p?(projNummer(p)||String(p.werkcode||'').trim()):''; }
 function projOfferteNr(p){
   if(!p) return '';
   const h=Array.isArray(p.offertes)?p.offertes.find(o=>o&&o.rol==='hoofd'&&o.nummer):null;
@@ -5536,7 +5539,7 @@ function projOfferteNr(p){
 }
 function projLabelCode(p){
   if(!p) return '';
-  const o=projOfferteNr(p), w=String(p.werkcode||'').trim(), m=projCodeModus();
+  const o=projOfferteNr(p), w=projHoofdNr(p), m=projCodeModus();
   return m==='werkcode'?w:m==='beide'?[w,o].filter(Boolean).join(' · '):o;
 }
 // Volledige projectnaam, zonder de generator-code (ook niet als voorvoegsel); geen naam → klant/locatie/product.
@@ -5557,7 +5560,8 @@ function projKeuzeLabel(c,reserve){ const p=_projVoorCode(c); return p?[projNaam
 // Zoeken vindt ook op wat niet getoond wordt (generator-/oude code, werkcode, offertenummers).
 function projZoekTekst(p){
   if(!p) return '';
-  return [p.code,p.naam,projNaamVol(p),p.offertenr,p.werkcode,...(Array.isArray(p.legacy_codes)?p.legacy_codes:[]),
+  const al=Object.entries(_projectnummerKaart()._aliassen||{}).filter(([,pid])=>pid===p.project_id).map(([a])=>a);
+  return [p.code,p.naam,projNaamVol(p),p.offertenr,p.werkcode,projNummer(p),...al,...(Array.isArray(p.legacy_codes)?p.legacy_codes:[]),
     ...(Array.isArray(p.offertes)?p.offertes.map(o=>o&&o.nummer):[]),p.klant_naam,projKlantNaam(p),p.loc_naam,projLocLabel(p)].filter(Boolean).join(' ').toLowerCase();
 }
 // "+ invullen"-knopje in open-gele koppelbadge-stijl (alleen voor wie projecten mag wijzigen).
@@ -7040,8 +7044,11 @@ async function _tgProjectIdVoorMt(mt){
 function _t2Kandidaten(mt,ps){
   const naam=t2ProjectNaam(mt).toLowerCase(), code=String(mt.code||'').toLowerCase(), nr=String(mt.offertenr||'').toLowerCase();
   const woorden=[...new Set([...code.split(/[-_\s]+/),...String(mt.naam||'').toLowerCase().split(/\W+/)])].filter(w=>w.length>=4);
+  const ix=typeof projIndex==='function'?projIndex():null;
   return ps.map(p=>{ const n=String(p.name||'').trim().toLowerCase(); let score=0;
     if(n===naam||n===code||n.includes('['+code+']')) score+=20;
+    // brok C: de naam wijst via de gedeelde resolver eenduidig naar dit project ("260812 Naam", "W26-003 Naam", …)
+    else if(ix){ const r=MTProject.uitToggl(ix,p.name); if(r.soort==='een'&&r.project===mt) score+=20; }
     if(nr&&(n===nr||n.startsWith(nr+' '))) score+=15;
     woorden.forEach(w=>{ if(n.includes(w)) score+=2; });
     return {p,score}; }).filter(k=>k.score>0).sort((a,b)=>b.score-a.score);
@@ -13308,12 +13315,12 @@ function _bhRolUitleg(g){
 }
 // Beheer → Projectcode: wat staat zichtbaar bij een project (alleen de eigenaar wijzigt), en werkcodes
 // voor bestaande projecten (eenmalig, in volgorde van aanmaakdatum; eerst een proef).
-const _PC_KEUZES=[['offerte','Offertenummer','2026-071'],['werkcode','Werkcode','W26-014'],['beide','Beide','W26-014 · 2026-071']];
+const _PC_KEUZES=[['offerte','Offertenummer','2026-071'],['werkcode','Projectnummer','260812'],['beide','Beide','260812 · 2026-071']];
 function _bhZonderWerkcode(){ return PROJECT_CODES.filter(p=>p&&p.project_id&&!p.werkcode&&!p._vervallen); }
 function _bhProjectcode(ikEig){
   const huidig=projCodeModus(), zonder=_bhZonderWerkcode().length;
-  const vb=PROJECT_CODES.find(p=>p&&projOfferteNr(p)&&p.werkcode)||null;
-  const voorbeeld=k=>vb?[k[0]==='offerte'?'':vb.werkcode,k[0]==='werkcode'?'':projOfferteNr(vb)].filter(Boolean).join(' · '):k[2];
+  const vb=PROJECT_CODES.find(p=>p&&projOfferteNr(p)&&projHoofdNr(p))||null;
+  const voorbeeld=k=>vb?[k[0]==='offerte'?'':projHoofdNr(vb),k[0]==='werkcode'?'':projOfferteNr(vb)].filter(Boolean).join(' · '):k[2];
   return `<div class="bh-blok"><h4>Projectcode</h4>
     <div class="dos-meta" style="margin-bottom:6px">Welke code bij een project staat (lijst, contextbalk, koppelingen, mobiel). Geen nummer bekend → alleen de naam. De technische sleutel en links veranderen niet.</div>
     <div class="bh-form" role="radiogroup" aria-label="Projectcode tonen als">${_PC_KEUZES.map(k=>`<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="bh-projectcode" value="${esc(k[0])}"${k[0]===huidig?' checked':''}${ikEig?'':' disabled'} onchange="beheerProjectcode(this.value)"> ${esc(k[1])} <span class="code">${esc(voorbeeld(k))}</span></label>`).join('')}</div>

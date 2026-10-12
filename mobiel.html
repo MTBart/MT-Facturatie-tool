@@ -21,6 +21,7 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-11c"></script>
+<script src="mt-project.js?v=2026-10-12a"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-11b"></script>
@@ -2533,10 +2534,19 @@ async function spSyncProjInfo() {
 function mProjNr(p) {
   const i = p && MT_PROJ_INFO[p.code]; if (!i) return '';
   const h = Array.isArray(i.offertes) ? i.offertes.find(o => o && o.rol === 'hoofd' && o.nummer) : null;
-  const o = String(i.offertenr || (h && h.nummer) || '').trim(), w = String(i.werkcode || '').trim();
+  // 'werkcode' heet "Projectnummer" (brok C): het projectnummer, zolang er geen is de werkcode.
+  const o = String(i.offertenr || (h && h.nummer) || '').trim(), w = String((i.projectnummer && /^\d{6}$/.test(String(i.projectnummer)) ? i.projectnummer : '') || i.werkcode || '').trim();
   const m = window.MT_INSTELLINGEN && MT_INSTELLINGEN.projectcode;
   return m === 'werkcode' ? w : m === 'beide' ? [w, o].filter(Boolean).join(' · ') : o;
 }
+// Zoeken (picker en projectlijst) vindt ook projectnummer, werkcode, oude codes en offertenummers uit de cockpit.
+function mProjZoek(p) {
+  const i = p && MT_PROJ_INFO[p.code]; if (!i) return '';
+  return [i.projectnummer, i.werkcode, i.offertenr, ...(Array.isArray(i.legacy_codes) ? i.legacy_codes : []), ...(Array.isArray(i.offertes) ? i.offertes.map(o => o && o.nummer) : [])].filter(Boolean).join(' ').toLowerCase();
+}
+// Gedeelde resolver (mt-project.js) over de cockpitprojecten; opnieuw opgebouwd zodra MT_PROJ_INFO wordt vervangen.
+let _mIx = null;
+function _mProjIndex() { if (!_mIx || _mIx.bron !== MT_PROJ_INFO) { _mIx = window.MTProject ? MTProject.index(Object.values(MT_PROJ_INFO)) : null; if (_mIx) _mIx.bron = MT_PROJ_INFO; } return _mIx; }
 function mProjNaam(p) {
   if (!p) return '';
   const c = String(p.code || '').trim().toUpperCase(), i = MT_PROJ_INFO[p.code];
@@ -2775,6 +2785,8 @@ async function loadAgendaWeek(week) {
 //    Barts 15-6-besluit). Zo herkent de app ook in de cockpit aangemaakte projecten i.p.v.
 //    ze als los 'TG-<id>' te tonen. Geeft UPPERCASE code terug, of '' als er niets in zit.
 function codeUitTogglNaam(name){
+  // Brok C: eerst tegen de cockpitprojecten (gedeelde resolver): "260812 Naam", "W26-003 Naam", offertenummer voorop, [CODE].
+  const ix = _mProjIndex(); if (ix) { const r = MTProject.uitToggl(ix, name); if (r.soort === 'een') return String(r.project.code).toUpperCase(); }
   const s=String(name||'').trim();
   const m=s.match(/\[([A-Z0-9\-]+)\]$/);
   if(m) return m[1].toUpperCase();
@@ -3342,7 +3354,7 @@ function selectProject(id) {
 function filterPicker(q) {
   const lower = q.toLowerCase();
   const filtered = lower
-    ? allProjects().filter(p => p.name.toLowerCase().includes(lower) || p.code.toLowerCase().includes(lower))
+    ? allProjects().filter(p => p.name.toLowerCase().includes(lower) || p.code.toLowerCase().includes(lower) || mProjZoek(p).includes(lower))
     : allProjects();
   renderPickerList(filtered);
   updateTimerUI();
@@ -3395,6 +3407,7 @@ function renderProjectCards() {
     lijst = lijst.filter(p =>
       (p.name || "").toLowerCase().includes(projectFilter) ||
       (p.code || "").toLowerCase().includes(projectFilter) ||
+      mProjZoek(p).includes(projectFilter) ||
       (addrFor(p) || "").toLowerCase().includes(projectFilter));
   }
   if (!lijst.length) {
