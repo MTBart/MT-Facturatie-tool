@@ -23,13 +23,13 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2026-10-12c"></script>
-<script src="mt-koppel.js?v=2026-10-11b"></script>
+<script src="mt-toggl.js?v=2026-10-12n"></script>
+<script src="mt-koppel.js?v=2026-10-12n"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
-<script src="mt-zoek.js?v=2026-10-11d"></script>
+<script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2026-10-11c"></script>
+<script src="mt-inbox.js?v=2026-10-12n"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -11994,7 +11994,8 @@ function zbIndex(){
   const nu=Date.now(); if(_zbIdx&&nu-_zbIdxT<60000) return _zbIdx;
   let contacten=[]; try{ contacten=window.MTContacten?MTContacten.actieven():[]; }catch(e){}
   _zbIdx=MTZoek.index(MTZoek.bronVan({projecten:PROJECT_CODES,klanten:KLANTEN,taken:projTakenAll(),contacten},
-    {projectNaam:projNaamVol,klantNaam:projKlantNaam,locNaam:projLocLabel,projectLabel:projLabelCode,contactNaam:MTContacten.weergave}));
+    {projectNaam:projNaamVol,klantNaam:projKlantNaam,locNaam:projLocLabel,projectLabel:projLabelCode,contactNaam:MTContacten.weergave,
+     projectNummer:projNummer,projectAliassen:p=>Object.entries(_projectnummerKaart()._aliassen||{}).filter(([,pid])=>pid===p.project_id).map(([a])=>a)}));
   _zbIdxT=nu; return _zbIdx;
 }
 function zbZoek(q){ return MTZoek.zoek(zbIndex(),q,{mag:MTZoek.magUitRollen()}); }

@@ -2264,7 +2264,15 @@ function renderProjectenTab(){
   }).join('');
 }
 
+// Brok C (projectnummers): uren maakt, hernoemt of verwijdert geen projecten meer. Dat gaat alleen via de cockpit: daar komt
+// de code uit één teller (projectnummer of werkcode) en blijft de geschiedenis (tombstones, oude codes) bewaard. Hier zou
+// een code buiten de teller om ontstaan, of een project zonder spoor verdwijnen. Status- en factuurvelden blijven werken.
+function _urenProjectBeheerUit(){
+  alert('Projecten maak, hernoem of verwijder je in de cockpit (Projecten). Daar krijgt een project zijn projectnummer uit de teller.');
+  return true;
+}
 function slaProjectOp(){
+  if(_urenProjectBeheerUit()) return;
   const code=document.getElementById('np-code').value.trim().toUpperCase();
   const naam=document.getElementById('np-naam').value.trim();
   const klant=document.getElementById('np-klant').value.trim().toUpperCase();
@@ -2283,6 +2291,7 @@ function slaProjectOp(){
 }
 
 function beverkProject(i){
+  if(_urenProjectBeheerUit()) return;
   const lijst=getProjecten();
   const p=lijst[i];
   const code=prompt('Projectcode:',p.code);
@@ -2298,6 +2307,7 @@ function beverkProject(i){
 
 function beverkProject(i){ beverkProject(i); } // alias fix
 function beverkProject(i){
+  if(_urenProjectBeheerUit()) return;
   const lijst=getProjecten();
   const p=lijst[i];
   document.getElementById('np-code').value=p.code;
@@ -2313,6 +2323,7 @@ function beworkProject(i){beverkProject(i);}
 function bewerkProject(i){beverkProject(i);}
 
 function verwijderProject(i){
+  if(_urenProjectBeheerUit()) return;
   if(!confirm('Project verwijderen? Geregistreerde uren blijven bewaard.')) return;
   const lijst=getProjecten();
   lijst.splice(i,1);
@@ -2325,6 +2336,7 @@ function verwijderProject(i){
 // Snel project aanmaken vanuit dropdown
 let snelProjectCallback=null;
 function openSnelProject(voorProject, callback){
+  if(_urenProjectBeheerUit()) return;
   snelProjectCallback=callback||null;
   document.getElementById('sp-code').value=voorProject||'';
   document.getElementById('sp-naam').value='';
@@ -2333,6 +2345,7 @@ function openSnelProject(voorProject, callback){
   setTimeout(()=>document.getElementById('sp-code').focus(),100);
 }
 function slaSnelProjectOp(){
+  if(_urenProjectBeheerUit()) return;
   const code=document.getElementById('sp-code').value.trim().toUpperCase();
   const naam=document.getElementById('sp-naam').value.trim();
   const klant=document.getElementById('sp-klant').value.trim().toUpperCase();

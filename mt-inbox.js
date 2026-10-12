@@ -1047,7 +1047,7 @@ function inboxKoppelProject(){
   const ov=document.createElement('div');ov.id='koppel-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(28,26,22,.45);z-index:10000;display:flex;align-items:center;justify-content:center';
   ov.onclick=e=>{if(e.target===ov){ov.remove();_inbox.koppelModus=null;}};
-  const lijst=PROJECT_CODES.map(p=>`<div class="kp-row" data-zoek="${ibEsc((p.code+' '+(p.naam||'')+' '+(p.klant||'')).toLowerCase())}" onclick="inboxKoppelProjectDo(${ibJa(p.code)})" style="padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer">
+  const lijst=PROJECT_CODES.map(p=>`<div class="kp-row" data-zoek="${ibEsc(typeof projZoekTekst==='function'?projZoekTekst(p):(p.code+' '+(p.naam||'')+' '+(p.klant||'')).toLowerCase())}" onclick="inboxKoppelProjectDo(${ibJa(p.code)})" style="padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer">
       <div style="font-weight:600;font-size:13px">${ibEsc(typeof projNaamVol==='function'?projNaamVol(p):(p.naam||p.code))}</div>
       <div style="font-size:11px;color:var(--text-dim)">${typeof projLabelCode==='function'?(projLabelCode(p)?`<span style="font-family:var(--mono)">${ibEsc(projLabelCode(p))}</span> · `:''):`<span style="font-family:var(--mono)">${ibEsc(p.code)}</span> · `}${ibEsc((typeof projKlantNaam==='function'&&projKlantNaam(p))||'')}${al.has(p.code)&&window.MTKoppelUI?' '+MTKoppelUI.badge({status:'gekoppeld',klein:true}):''}</div>
     </div>`).join('');
