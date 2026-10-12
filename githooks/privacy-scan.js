@@ -363,4 +363,4 @@ function main() {
 if (require.main === module) {
   try { main(); } catch (e) { process.stderr.write('privacy-scan.js: fout, dus GEBLOKKEERD (fail closed): ' + e.message + '\n'); process.exit(3); }
 }
-module.exports = { scanRegel, scanPad, parseDiff, bsn11, mod97, vindIbans, MARK, scanDiffTekst, scanBerichtTekst, nieuwResultaat };
+module.exports = { IBAN_LEN, scanRegel, scanPad, parseDiff, bsn11, mod97, vindIbans, MARK, scanDiffTekst, scanBerichtTekst, nieuwResultaat };

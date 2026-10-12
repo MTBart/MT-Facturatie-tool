@@ -204,6 +204,32 @@ try {
   try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* tijdelijke map blijft staan */ }
 }
 
+// ---------- CHANGELOG-neutralisatie (tools/changelog.js + tools/rekening-neutraal.js) ----------
+{
+  const { neutraal } = require('../tools/rekening-neutraal.js');
+  const SPAAR = 'Z' + '123456789';
+  check('neutraal: IBAN zonder spaties', neutraal('a ' + NL + ' b') === 'a [rekening] b');
+  check('neutraal: IBAN met spaties, rest van de zin blijft', neutraal('NL91 ' + 'ABNA 0417 ' + '1643 00 en meer') === '[rekening] en meer');
+  check('neutraal: IBAN GB en DE', neutraal(GB + ';' + DE) === '[rekening];[rekening]');
+  check('neutraal: spaarrekening letter+cijfers', neutraal('Zakelijke oranje spaarrekening ' + SPAAR + ' ok') === 'Zakelijke oranje spaarrekening [rekening] ok');
+  check('neutraal: 6 cijfers ook', neutraal('rekening Z' + '000000') === 'rekening [rekening]');
+  check('neutraal: placeholder en gewone tekst blijven', neutraal('spaarrekening <nummer> en DE12 woord, rekening Z') === 'spaarrekening <nummer> en DE12 woord, rekening Z');
+  check('neutraal: te kort of te lang woord geen IBAN', neutraal('NL91' + 'ABNA04171643') === 'NL91' + 'ABNA04171643' && neutraal('NL91' + 'ABNA0417164300EXTRA') === 'NL91' + 'ABNA0417164300EXTRA');
+
+  const t2 = fs.mkdtempSync(path.join(os.tmpdir(), 'changelog-test-'));
+  try {
+    for (const d of ['tools', 'githooks', 'data']) fs.mkdirSync(path.join(t2, d));
+    fs.copyFileSync(path.join(HOOKS, '..', 'tools', 'changelog.js'), path.join(t2, 'tools', 'changelog.js'));
+    fs.copyFileSync(path.join(HOOKS, '..', 'tools', 'rekening-neutraal.js'), path.join(t2, 'tools', 'rekening-neutraal.js'));
+    fs.copyFileSync(path.join(HOOKS, 'privacy-scan.js'), path.join(t2, 'githooks', 'privacy-scan.js'));
+    fs.writeFileSync(path.join(t2, 'data', 'klanten.json'), JSON.stringify({ klanten: [{ code: 'ZT', naam: 'Zonnebloem Testkeukens', aliassen: [], locaties: [] }] }));
+    fs.writeFileSync(path.join(t2, 'data', 'klanten-historie.txt'), '# SEED-HISTORIE fictief\n');
+    const invoer = '## 2026-10-11 - Geld: pot spaarrekening ' + SPAAR + ' voor Zonnebloem Testkeukens, ' + NL + ' en NL91 ' + 'ABNA 0417 ' + '1643 00\n';
+    const r = cp.spawnSync('node', [path.join(t2, 'tools', 'changelog.js')], { input: invoer, encoding: 'utf8' });
+    check('changelog.js: klant en rekeningnummers neutraal', r.status === 0 && r.stdout === '## 2026-10-11 - Geld: pot spaarrekening [rekening] voor [klant], [rekening] en [rekening]\n', r.stdout + r.stderr);
+  } finally { try { fs.rmSync(t2, { recursive: true, force: true }); } catch (e) { /* laat staan */ } }
+}
+
 // ---------- HEAD moet schoon zijn ----------
 if (!process.argv.includes('--geen-head')) {
   const h = cp.spawnSync('node', [path.join(HOOKS, 'privacy-scan.js'), '--tree', 'HEAD'], { cwd: path.join(HOOKS, '..'), encoding: 'utf8' });
