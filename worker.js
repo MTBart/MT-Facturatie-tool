@@ -1514,6 +1514,7 @@ export class MtTeller {
           if (Object.values(lim).some(x => x == null)) return antw({ error: 'ongeldige-limieten' }, 400);
           const reserve = Math.max(1, Math.min(2e6, Math.ceil(Number(b.reserve) || 0)));
           await this.aiRuimVerlopen(nu, 'f:' + h + ':', dag);
+          await this.aiRuimGraven(nu);
           let inflight = 0;
           for (const [, f] of await st.list({ prefix: 'f:' + h + ':' })) inflight++;   // wat na het opruimen overblijft is niet verlopen
           const u = (await st.get(dk)) || { tokens: 0, calls: 0, in: 0, uit: 0, afgewezen: 0 }, g = (await st.get(gk)) || { tokens: 0, calls: 0, afgewezen: 0 };
@@ -1557,11 +1558,10 @@ export class MtTeller {
           if (status === 'fout' && tin == null && tuit == null) delta = -bron.reserve;                       // niets verbruikt: de reservering terug
           else if (tin != null && tuit != null) delta = (tin + tuit) - bron.reserve;                          // werkelijk gebruik i.p.v. de schatting (ook bij een afgebroken stream: wat al binnen was)
           else if (status === 'afgebroken') delta = -Math.max(0, Math.min(bron.reserve, bron.uit || 0));      // afgebroken zonder cijfers: minstens de ongebruikte output-reservering terug
-          if (f) await st.delete(fk); else await st.delete(tk);
           u.tokens = Math.max(0, u.tokens + delta); g.tokens = Math.max(0, g.tokens + delta);
           if (tin != null) u.in += tin; if (tuit != null) u.uit += tuit;
-          await st.put({ [uk]: u, [gk3]: g });
-          await logZet({ ts: nu, oid: h, rol: u.rol, model: kort(b.model), in: tin == null ? undefined : tin, uit: tuit == null ? undefined : tuit, status, http: getal(b.http) == null ? undefined : getal(b.http), ms: getal(b.ms) == null ? undefined : getal(b.ms), zou: bron.zou, laat: graf ? true : undefined });
+          // Claim/grafsteen weg, tellers bijgesteld en logregel: ALLES of NIETS (een crash halverwege laat de claim staan en de tellers ongemoeid; de afronding kan dan opnieuw).
+          await this.aiAtomair(async w => { await w.delete(f ? fk : tk); await w.put({ [uk]: u, [gk3]: g }); await w.put('log:' + String(9e15 - nu).padStart(16, '0') + ':' + randHex(3), { ts: nu, oid: h, rol: u.rol, model: kort(b.model), in: tin == null ? undefined : tin, uit: tuit == null ? undefined : tuit, status, http: getal(b.http) == null ? undefined : getal(b.http), ms: getal(b.ms) == null ? undefined : getal(b.ms), zou: bron.zou, laat: graf ? true : undefined }); });
           const logs = [...(await st.list({ prefix: 'log:', limit: AI_LOG_MAX + 50 }))].map(([k]) => k);
           if (logs.length > AI_LOG_MAX) await st.delete(logs.slice(AI_LOG_MAX));
           return antw({ ok: true });
@@ -1617,6 +1617,9 @@ export class MtTeller {
   }
   // Een claim die nooit werd afgerond (afgebroken verbinding, crash): de invoerschatting blijft staan (behoudend), de ONGEBRUIKTE output-reservering gaat terug.
   // Alleen de claims onder `prefix` ('f:' = alle gebruikers, 'f:<oid>:' = één gebruiker). Aanroepen binnen blockConcurrencyWhile. → aantal opgeruimde claims.
+  // Alle wijzigingen van één opruiming gaan in ÉÉN transactie (alles of niets): tellers terugboeken, grafstenen schrijven, claims verwijderen en loggen. Valt de DO halverwege uit, dan
+  // blijven de claims staan en de tellers ongemoeid; de volgende opruiming doet het dan opnieuw (nooit dubbel terugboeken, nooit een claim zonder grafsteen).
+  async aiAtomair(fn) { const st = this.state.storage; return typeof st.transaction === 'function' ? await st.transaction(async txn => await fn(txn)) : await fn(st); }
   async aiRuimVerlopen(nu, prefix, dagStd) {
     const st = this.state.storage, verlopen = [];
     for (const [k, f] of await st.list({ prefix })) if (nu - f.ts > AI_CLAIM_VERLOOP_MS) verlopen.push([k, f]);
@@ -1626,24 +1629,35 @@ export class MtTeller {
       const o = k.split(':')[1], d = /^\d{4}-\d{2}-\d{2}$/.test(String(f.dag || '')) ? f.dag : dagStd, x = Math.max(0, Math.min(f.reserve, f.uit || 0));
       const e = per.get(o) || { n: 0, som: 0, dagen: new Map() }; e.n++; e.som += x; e.dagen.set(d, (e.dagen.get(d) || 0) + x); per.set(o, e);
     }
+    const doc = {}, schrijf = {};                                                // eerst alles uitrekenen (lezen), dan in één keer schrijven
+    const haal = async k => { if (!(k in doc)) doc[k] = await st.get(k); return doc[k]; };
+    let logN = 0;
     for (const [o, e] of per) {
-      for (const [d, x] of e.dagen) { const uk = 'u:' + o + ':' + d, gk = 'g:' + d, u2 = await st.get(uk), g2 = await st.get(gk); if (u2) u2.tokens = Math.max(0, u2.tokens - x); if (g2) g2.tokens = Math.max(0, g2.tokens - x); await st.put({ ...(u2 ? { [uk]: u2 } : {}), ...(g2 ? { [gk]: g2 } : {}) }); }
-      await st.put('log:' + String(9e15 - nu).padStart(16, '0') + ':' + randHex(3), { ts: nu, oid: o, status: 'verlopen', n: e.n, teruggeboekt: e.som });
+      for (const [d, x] of e.dagen) { const uk = 'u:' + o + ':' + d, gk = 'g:' + d, u2 = await haal(uk), g2 = await haal(gk); if (u2) { u2.tokens = Math.max(0, u2.tokens - x); schrijf[uk] = u2; } if (g2) { g2.tokens = Math.max(0, g2.tokens - x); schrijf[gk] = g2; } }
+      schrijf['log:' + String(9e15 - nu).padStart(16, '0') + ':' + randHex(3) + (logN++ ? '-' + logN : '')] = { ts: nu, oid: o, status: 'verlopen', n: e.n, teruggeboekt: e.som };
     }
     // Grafsteen per verlopen claim (24 uur): komt de stream later toch nog tot een afronding, dan wordt het verschil alsnog afgerekend.
-    for (let i = 0; i < verlopen.length; i += 100) await st.put(Object.fromEntries(verlopen.slice(i, i + 100).map(([k, f]) => { const [, o, cid] = k.split(':'); return ['x:' + o + ':' + cid, { dag: /^\d{4}-\d{2}-\d{2}$/.test(String(f.dag || '')) ? f.dag : dagStd, reserve: f.reserve, terug: Math.max(0, Math.min(f.reserve, f.uit || 0)), ts: nu, zou: f.zou }]; })));
-    const oudeGraven = [...(await st.list({ prefix: 'x:' }))].filter(([, x]) => nu - x.ts > 24 * 3600 * 1000).map(([k]) => k);
-    for (let i = 0; i < oudeGraven.length; i += 100) await st.delete(oudeGraven.slice(i, i + 100));
-    for (let i = 0; i < verlopen.length; i += 100) await st.delete(verlopen.slice(i, i + 100).map(([k]) => k));
+    for (const [k, f] of verlopen) { const [, o, cid] = k.split(':'); schrijf['x:' + o + ':' + cid] = { dag: /^\d{4}-\d{2}-\d{2}$/.test(String(f.dag || '')) ? f.dag : dagStd, reserve: f.reserve, terug: Math.max(0, Math.min(f.reserve, f.uit || 0)), ts: nu, zou: f.zou }; }
+    const weg = verlopen.map(([k]) => k).concat(await this.aiOudeGraven(nu)), sl = Object.keys(schrijf);
+    await this.aiAtomair(async w => {
+      for (let i = 0; i < sl.length; i += 100) await w.put(Object.fromEntries(sl.slice(i, i + 100).map(k => [k, schrijf[k]])));
+      for (let i = 0; i < weg.length; i += 100) await w.delete(weg.slice(i, i + 100));
+    });
     return verlopen.length;
   }
+  // Grafstenen (x:) ouder dan 24 uur. Ook los van een nieuw verlopen claim op te ruimen (alarm en claim-pad).
+  async aiOudeGraven(nu) { return [...(await this.state.storage.list({ prefix: 'x:' }))].filter(([, x]) => nu - x.ts > 24 * 3600 * 1000).map(([k]) => k); }
+  async aiRuimGraven(nu) { const oud = await this.aiOudeGraven(nu); if (oud.length) await this.aiAtomair(async w => { for (let i = 0; i < oud.length; i += 100) await w.delete(oud.slice(i, i + 100)); }); return oud.length; }
   // DO-alarm: rekent verlopen claims (> 5 minuten) af, onafhankelijk van een volgend verzoek, en plant zichzelf op de eerstvolgende verloopdatum.
   async alarm() {
     await this.state.blockConcurrencyWhile(async () => {
       const st = this.state.storage, nu = Date.now();
       await this.aiRuimVerlopen(nu, 'f:', geldVandaag());
-      let eerste = null; for (const [, f] of await st.list({ prefix: 'f:' })) if (eerste == null || f.ts < eerste) eerste = f.ts;
-      if (eerste != null) await st.setAlarm(Math.max(nu + 1000, eerste + AI_CLAIM_VERLOOP_MS + 1000));
+      await this.aiRuimGraven(nu);
+      let volgende = null; const min = t => { if (volgende == null || t < volgende) volgende = t; };
+      for (const [, f] of await st.list({ prefix: 'f:' })) min(f.ts + AI_CLAIM_VERLOOP_MS + 1000);
+      for (const [, x] of await st.list({ prefix: 'x:' })) min(x.ts + 24 * 3600 * 1000 + 1000);   // een grafsteen die niet meer gebruikt wordt, verdwijnt ook zonder nieuw verzoek
+      if (volgende != null) await st.setAlarm(Math.max(nu + 1000, volgende));
     });
   }
 }
