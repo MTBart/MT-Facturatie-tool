@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Projectnummers (Codex): geen meta-record meer in mt_projecten; schema uit de teller; projNummer() voor de weergave
+- Commit: `2b87fa1` | Auteur: Bart Witte
+
 ## 2026-10-12 — Projectnummers (Codex): reeks pas aan na een schema-3-app + bevestiging; schema_min in de teller; geen "herhaald" na terugrol
 - Commit: `6317592` | Auteur: Bart Witte
 
