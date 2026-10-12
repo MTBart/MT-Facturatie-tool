@@ -18,6 +18,7 @@
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-11c"></script>
+<script src="mt-project.js?v=2026-10-12a"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
@@ -2730,14 +2731,37 @@ function projNummer(p){
   return p.projectnummer&&PROJNR_RE.test(String(p.projectnummer))?String(p.projectnummer):null;
 }
 // Eén ingang om een (actief) project te vinden: project_id, huidige code, projectnummer of een oude code.
+// Via de gedeelde resolver (mt-project.js, brok C): ook op werkcode, aliassen van de teller en offertenummer. De index
+// wordt hergebruikt zolang de sleutels niet veranderen: een goedkope vingerafdruk van alle sleutelvelden (ook een record
+// dat net in het geheugen is gewijzigd) plus een versie die bij opslaan/laden/een nieuwe teller-kaart omhoog gaat.
+let _projIx=null, _projIxVersie=0, _projIxSig='';
+function projIndexVerouderd(){ _projIxVersie++; }
+function _projIxVinger(){
+  let s=_projIxVersie+'|'+PROJECT_CODES.length;
+  for(const p of PROJECT_CODES) if(p) s+='|'+p.project_id+':'+p.code+':'+(p.projectnummer||'')+':'+(p.werkcode||'')+':'+(p.offertenr||'')+':'
+    +(Array.isArray(p.legacy_codes)?p.legacy_codes.join(','):'')+':'+(Array.isArray(p.offertes)?p.offertes.map(o=>o&&o.nummer+'/'+o.rol).join(','):'')+(p._vervallen?':x':'');
+  return s;
+}
+function projIndex(vers){
+  const sig=_projIxVinger();
+  if(!vers&&_projIx&&sig===_projIxSig&&_projIx.bron===PROJECT_CODES) return _projIx;
+  _projIx=MTProject.index(PROJECT_CODES,{nummer:projNummer,aliassen:_projectnummerKaart()._aliassen||{}});
+  _projIx.bron=PROJECT_CODES; _projIxSig=sig;
+  return _projIx;
+}
 function projVind(x){
   if(x==null||x==='') return null;
-  const s=String(x), l=s.toLowerCase();
-  return PROJECT_CODES.find(p=>p&&p.project_id&&String(p.project_id).toLowerCase()===l)
-    ||PROJECT_CODES.find(p=>p&&p.code===s)
-    ||PROJECT_CODES.find(p=>p&&p.projectnummer===s)
-    ||PROJECT_CODES.find(p=>p&&Array.isArray(p.legacy_codes)&&p.legacy_codes.includes(s))||null;
+  let r=MTProject.vind(projIndex(),x);
+  // de lijst kreeg verse objecten met dezelfde inhoud (bv. na herladen zonder projLaad): opnieuw opbouwen
+  if(r.project&&!PROJECT_CODES.includes(r.project)) r=MTProject.vind(projIndex(true),x);
+  if(r.soort==='een') return r.project;
+  // Dubbel id of dubbele code is een conflict in de gegevens (projConflicten meldt het): dan zoals altijd de eerste.
+  // Verder nooit gokken: een nummer, alias of offertenummer bij twee projecten vindt niets.
+  if(r.soort==='ambigu'&&(r.via==='id'||r.via==='code')) return r.kandidaten[0];
+  return null;
 }
+// Project uit een referentie (inkoopfactuur, MB): alleen een bekende sleutel vooraan telt → {soort:'geen'|'een'|'ambigu',…}.
+function projUitReferentie(ref){ return MTProject.uitPrefix(projIndex(),ref); }
 // ── Samenvoegen op project_id (brok A) ──
 // Eén project = één project_id, ook als twee kopieën een andere code dragen (een oude cache, een hernoeming van vóór
 // P2). Sleutel per record: 'pid:'+project_id; een hernoem-tombstone (`_vervallen` + `_hernoemd_naar`) houdt zijn eigen
@@ -2911,6 +2935,7 @@ function _projLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_projecten
 function projLaad(){
   const alle=_projSamen(_projLees(),[]).map(projAanvullen);   // oude kopieën van hetzelfde project worden één record
   _projBasisZet(alle);
+  if(typeof projIndexVerouderd==='function') projIndexVerouderd();
   const actief=alle.filter(p=>p&&typeof p==='object'&&!p._vervallen);
   projConflicten(actief).forEach(c=>console.warn('projectsleutel-conflict ('+c.soort+'):',c.code,c.projecten.join(' / ')));
   return actief;
@@ -2949,6 +2974,7 @@ function slaProjectenOp(){
   const tekst=JSON.stringify(uit);
   if(tekst!==localStorage.getItem('mt_projecten')) localStorage.setItem('mt_projecten',tekst);
   _projBasisZet(uit);
+  projIndexVerouderd();
 }
 // Project verwijderen/hernoemen zonder te wissen: de opgeslagen stand wordt een tombstone
 // (`_vervallen` met tijd+door, evt. `_hernoemd_naar`), zodat een oude kopie elders hem
@@ -9868,7 +9894,7 @@ function detecteerDuplicaten(facturen){
   return dup;
 }
 function isVolledigVerwerkt(f,dup){
-  const heeftProj=f.reference&&PROJECT_CODES.some(p=>f.reference.startsWith(p.code));
+  const heeftProj=!!f.reference&&projUitReferentie(f.reference).soort==='een';
   return heeftProj&&(!dup.has(f.id)||geenDuplicaat.has(f.id));
 }
 async function verwijderControleFactuurUitgevoerd(id) {
@@ -9898,11 +9924,11 @@ function renderControleLijst(facturen){
   document.getElementById('voortgang-inner').style.width=(facturen.length?Math.round(klaar/facturen.length*100):0)+'%';
   const lijst=document.getElementById('factuur-lijst');
   lijst.innerHTML=facturen.map((f,i)=>{
-    const heeftProj=f.reference&&PROJECT_CODES.some(p=>f.reference.startsWith(p.code));
+    const rp=f.reference?projUitReferentie(f.reference):{soort:'geen'}, heeftProj=rp.soort==='een';
     const isDup=dup.has(f.id);const volledig=isVolledigVerwerkt(f,dup);
     const datum=new Date(f.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
     const bedrag=parseFloat(f.total_price_incl_tax).toLocaleString('nl-NL',{style:'currency',currency:'EUR'});
-    const badge=isDup?`<span class="badge badge-danger">Dup</span>`:heeftProj?`<span class="badge badge-ok">✓</span>`:`<span class="badge badge-warn">Project</span>`;
+    const badge=isDup?`<span class="badge badge-danger">Dup</span>`:heeftProj?`<span class="badge badge-ok">✓</span>`:rp.soort==='ambigu'?`<span class="badge badge-warn" title="De referentie past bij meer dan één project">Project?</span>`:`<span class="badge badge-warn">Project</span>`;
     const betaalStatus=f.state==='paid'?`<span class="badge" style="background:var(--green-light);color:var(--green)">✓ Betaald</span>`:
       f.state==='pending_payment'?`<span class="badge" style="background:var(--blue-light);color:var(--blue)">⏳ In betaling</span>`:
       f.due_date&&new Date(f.due_date)<new Date()?`<span class="badge" style="background:var(--red-light);color:var(--red)">⚠ Te laat</span>`:
@@ -9977,7 +10003,7 @@ function renderControleDetail(f){
   const verval=f.due_date?new Date(f.due_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'}):'—';
   const bedragIncl=parseFloat(f.total_price_incl_tax).toLocaleString('nl-NL',{style:'currency',currency:'EUR'});
   const isDup=dup?.has(f.id);
-  const hProj=PROJECT_CODES.find(p=>f.reference?.startsWith(p.code))?.code||'';
+  const rp=f.reference?projUitReferentie(f.reference):{soort:'geen'}, hProj=rp.soort==='een'?rp.project.code:'';
   const isVL=isVoorraadLeverancier(f.contact?.company_name||'');
   document.getElementById('factuur-detail').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1rem">
@@ -10121,7 +10147,7 @@ async function slaControleOp(gaNaarVolgende=false){
   const status=document.getElementById('ctrl-status');const f=huidigeFactuur;
   const project=document.getElementById('ctrl-project').value;
   const bestaand=f.reference||'';
-  const heeftAlProj=PROJECT_CODES.some(p=>bestaand.startsWith(p.code));
+  const heeftAlProj=!!bestaand&&projUitReferentie(bestaand).soort!=='geen';   // ook ambigu: dat voorvoegsel wordt vervangen
   let nieuweRef=bestaand;
   if(project&&!heeftAlProj) nieuweRef=`${project}${bestaand?' - '+bestaand:''}`;
   else if(project&&heeftAlProj) nieuweRef=`${project}${bestaand.includes(' - ')?' - '+bestaand.split(' - ').slice(1).join(' - '):''}`;
@@ -13145,9 +13171,11 @@ async function projWerkcodeVraag(p){
 }
 // Projectnummers (brok B) uit de teller: de volledige kaart project_id → nummer vervangt de lokale kopie (`_volledig`: vanaf
 // dan geldt "de teller kent dit project zonder nummer" als bewust leeg, zie projAanvullen). Zonder stempel, zoals de werkcodes.
-function _projectnummersZet(kaart){
-  const k={_volledig:true};
+function _projectnummersZet(kaart,aliassen){
+  const k={_volledig:true}, al={};
   for(const [pid,nr] of Object.entries(kaart||{})) if(/^p_/.test(pid)&&PROJNR_RE.test(String(nr))) k[pid]=String(nr);
+  for(const [a,pid] of Object.entries(aliassen||{})) if(/^p_/.test(String(pid))&&/^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/.test(a)) al[a]=String(pid);
+  if(Object.keys(al).length) k._aliassen=al;   // aliasregister van de teller (oude codes → project_id), voor de resolver
   if(JSON.stringify(k)===JSON.stringify(_projectnummerKaart())) return 0;
   _pnMem=k; try{ localStorage.setItem('mt_projectnummers',JSON.stringify(k)); }catch(e){}
   let n=0;
@@ -13162,7 +13190,7 @@ function _projectnummersZet(kaart){
   return n;
 }
 async function werkcodesLaad(){
-  try{ const j=await _tellerApi('/teller/werkcodes'); if(j&&j.werkcodes) _werkcodesZet(j.werkcodes); if(j&&j.nummers) _projectnummersZet(j.nummers); }catch(e){ return; }
+  try{ const j=await _tellerApi('/teller/werkcodes'); if(j&&j.werkcodes) _werkcodesZet(j.werkcodes); if(j&&j.nummers) _projectnummersZet(j.nummers,j.aliassen); }catch(e){ return; }
   for(const pid of _werkcodeWacht(null,false)){ const p=projVind(pid); if(p&&!p.werkcode) await projWerkcodeVraag(p); else _werkcodeWacht(pid,false); }
 }
 // ── Vandaag aanwezig (F1e-C): worker (/aanwezig) + lokaal: planblokken van vandaag en verlof ──

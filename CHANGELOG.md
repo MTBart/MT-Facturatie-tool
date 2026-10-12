@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Projectnummers C1: gedeelde projectresolver mt-project.js
+- Commit: `bf6908a` | Auteur: Bart Witte
+
 ## 2026-10-12 — Projectnummers (Codex): geen meta-record meer in mt_projecten; schema uit de teller; projNummer() voor de weergave
 - Commit: `2b87fa1` | Auteur: Bart Witte
 
