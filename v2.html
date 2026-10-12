@@ -2710,7 +2710,10 @@ function projAanvullen(p){
   if(!p||typeof p!=='object'||p._mt_meta||(!p.code&&!p.project_id)) return p;
   if(!p.project_id) p.project_id=projIdVoor(p);
   if(!p.werkcode){ const w=_werkcodeKaart()[p.project_id]; if(w) p.werkcode=w; }
-  if(!p.projectnummer){ const n=_projectnummerKaart()[p.project_id]; if(n&&PROJNR_RE.test(String(n))) p.projectnummer=String(n); }
+  { // de teller is de bron: zijn nummer wint; kent hij het project (werkcode) zonder nummer, dan bewust leeg (null, bv. na een terugrol)
+    const kaart=_projectnummerKaart(), n=kaart[p.project_id];
+    if(n&&PROJNR_RE.test(String(n))) p.projectnummer=String(n);
+    else if(p.projectnummer&&kaart._volledig&&_werkcodeKaart()[p.project_id]) p.projectnummer=null; }
   if(!Array.isArray(p.legacy_codes)) p.legacy_codes=p.code?[p.code]:[];
   if(!p.soort) p.soort='klant';
   if(!Array.isArray(p.offertes)||(!p.offertes.length&&p.offertenr))
@@ -2744,7 +2747,7 @@ function _projIndex(lijst){
   const huidig=new Map(), graf=new Map(), oud=new Map(), teller=new Map();
   const zet=(m,c,pid)=>{ if(c!=null&&c!==''&&!m.has(String(c))) m.set(String(c),pid); };
   // de lokale kopie van de teller (werkcode/projectnummer → project_id) is de bron voor uitgegeven codes
-  try{ Object.entries(_werkcodeKaart()).forEach(([pid,c])=>zet(teller,c,pid)); Object.entries(_projectnummerKaart()).forEach(([pid,c])=>zet(teller,c,pid)); }catch(e){}
+  try{ Object.entries(_werkcodeKaart()).forEach(([pid,c])=>zet(teller,c,pid)); Object.entries(_projectnummerKaart()).forEach(([pid,c])=>{ if(/^p_/.test(pid)) zet(teller,c,pid); }); }catch(e){}
   const met=lijst.filter(x=>x&&typeof x==='object'&&x.project_id&&!x._mt_meta);
   met.filter(x=>x._vervallen&&x._hernoemd_naar).forEach(x=>zet(graf,x.code,x.project_id));
   const rest=met.filter(x=>!(x._vervallen&&x._hernoemd_naar)), r=x=>(x._vervallen?2:0)+(_projIdZacht(x)?1:0);
@@ -2773,7 +2776,8 @@ function _projMetId(x,idx){
 // zonder die velden); oude codes worden verenigd, en de code van de andere kopie wordt een oude code.
 function _projErf(w,o){
   if(!w||!o||w===o) return w;
-  ['project_id','soort','werkcode','map_stijl','projectnummer'].forEach(v=>{ if(o[v]&&!w[v]) w[v]=o[v]; });
+  ['project_id','soort','werkcode','map_stijl'].forEach(v=>{ if(o[v]&&!w[v]) w[v]=o[v]; });
+  if(o.projectnummer&&!('projectnummer' in w)) w.projectnummer=o.projectnummer;   // null = bewust leeg (teller), niet terugzetten
   const leg=Array.isArray(w.legacy_codes)?w.legacy_codes:(w.legacy_codes=w.code?[w.code]:[]);
   [...(Array.isArray(o.legacy_codes)?o.legacy_codes:[]),o.code].forEach(c=>{ if(c&&!leg.includes(c)) leg.push(c); });
   if(Array.isArray(o.offertes)&&o.offertes.length&&!(Array.isArray(w.offertes)&&w.offertes.length)) w.offertes=JSON.parse(JSON.stringify(o.offertes));
@@ -8980,7 +8984,7 @@ async function maakProjectAan(){
   const projectId=projNieuwId();
   status.style.color='var(--text-dim)'; status.textContent='Werkcode ophalen…';
   let code=null, wcFout='';
-  try{ const j=await _tellerApi('/teller/werkcode',{project_id:projectId}); code=(j&&j.werkcode)?String(j.werkcode):null; if(!code) wcFout=j===null?'niet ingelogd':'geen werkcode ontvangen'; }
+  try{ const j=await _tellerApi('/teller/werkcode',{project_id:projectId,schema:PROJ_SCHEMA}); code=(j&&j.werkcode)?String(j.werkcode):null; if(!code) wcFout=j===null?'niet ingelogd':'geen werkcode ontvangen'; }
   catch(e){ wcFout=String(e.message||e); }
   if(!code){status.style.color='var(--red)';status.textContent='Werkcode niet beschikbaar ('+wcFout+') — er is niets aangemaakt. Probeer het zo opnieuw.';return;}
   if(projVind(code)){status.style.color='var(--red)';status.textContent='Werkcode '+code+' is al in gebruik — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
@@ -13127,14 +13131,32 @@ function _werkcodeWacht(pid,erbij){
 async function projWerkcodeVraag(p){
   if(!p||!p.project_id||p.werkcode) return p&&p.werkcode||null;
   try{
-    const j=await _tellerApi('/teller/werkcode',{project_id:p.project_id});
+    const j=await _tellerApi('/teller/werkcode',{project_id:p.project_id,schema:PROJ_SCHEMA});
     if(j&&j.werkcode){ _werkcodeWacht(p.project_id,false); _werkcodesZet({[p.project_id]:j.werkcode}); return j.werkcode; }
   }catch(e){ console.warn('werkcode nog niet toegekend (volgt later):',e.message); }
   _werkcodeWacht(p.project_id,true);
   return null;
 }
+// Projectnummers (brok B) uit de teller: de volledige kaart project_id → nummer vervangt de lokale kopie (`_volledig`: vanaf
+// dan geldt "de teller kent dit project zonder nummer" als bewust leeg, zie projAanvullen). Zonder stempel, zoals de werkcodes.
+function _projectnummersZet(kaart){
+  const k={_volledig:true};
+  for(const [pid,nr] of Object.entries(kaart||{})) if(/^p_/.test(pid)&&PROJNR_RE.test(String(nr))) k[pid]=String(nr);
+  if(JSON.stringify(k)===JSON.stringify(_projectnummerKaart())) return 0;
+  _pnMem=k; try{ localStorage.setItem('mt_projectnummers',JSON.stringify(k)); }catch(e){}
+  let n=0;
+  for(const p of PROJECT_CODES){
+    if(!p||!p.project_id) continue;
+    const sl=_projSleutel(p), voor=_projJson(p), was=sl&&_projBasis.get(sl)===voor;
+    projAanvullen(p);
+    if(_projJson(p)===voor) continue;
+    n++; if(was) _projBasis.set(sl,_projJson(p));
+  }
+  slaProjectenOp(); _namenVernieuwd();
+  return n;
+}
 async function werkcodesLaad(){
-  try{ const j=await _tellerApi('/teller/werkcodes'); if(j&&j.werkcodes) _werkcodesZet(j.werkcodes); }catch(e){ return; }
+  try{ const j=await _tellerApi('/teller/werkcodes'); if(j&&j.werkcodes) _werkcodesZet(j.werkcodes); if(j&&j.nummers) _projectnummersZet(j.nummers); }catch(e){ return; }
   for(const pid of _werkcodeWacht(null,false)){ const p=projVind(pid); if(p&&!p.werkcode) await projWerkcodeVraag(p); else _werkcodeWacht(pid,false); }
 }
 // ── Vandaag aanwezig (F1e-C): worker (/aanwezig) + lokaal: planblokken van vandaag en verlof ──

@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Projectnummers B: MtTeller-reeks vanaf 260801 achter een vlag, aliasregister, audit en migratie met terugrol
+- Commit: `a37307e` | Auteur: Bart Witte
+
 ## 2026-10-12 — Projectnummers A2: schemaversie voor mt_projecten; een verouderde app schrijft niet meer
 - Commit: `2263592` | Auteur: Bart Witte
 
