@@ -2695,45 +2695,131 @@ function _werkcodeKaart(){
   try{ const m=JSON.parse(localStorage.getItem('mt_werkcodes')||'{}'); _wcMem=m&&typeof m==='object'&&!Array.isArray(m)?m:{}; }catch(e){ _wcMem={}; }
   return _wcMem;
 }
+// Projectnummer (brok A): het zichtbare hoofdnummer, zes cijfers, doorlopend vanaf 260801 (ook na de jaarwisseling).
+// `code` blijft de onveranderlijke technische sleutel: bestaande projecten houden W<jj>-<nnn>, nieuwe projecten krijgen
+// code = projectnummer. De teller is de bron; mt_projectnummers (project_id → nummer) is een lokale kopie die bij het lezen
+// wordt aangevuld, zonder stempel. Een app die het veld nog niet kent en het wegschrijft, kan het dus niet echt wissen.
+const PROJNR_RE=/^\d{6}$/;
+let _pnMem=null;
+function _projectnummerKaart(){
+  if(_pnMem) return _pnMem;
+  try{ const m=JSON.parse(localStorage.getItem('mt_projectnummers')||'{}'); _pnMem=m&&typeof m==='object'&&!Array.isArray(m)?m:{}; }catch(e){ _pnMem={}; }
+  return _pnMem;
+}
 function projAanvullen(p){
-  if(!p||typeof p!=='object'||(!p.code&&!p.project_id)) return p;
+  if(!p||typeof p!=='object'||p._mt_meta||(!p.code&&!p.project_id)) return p;
   if(!p.project_id) p.project_id=projIdVoor(p);
   if(!p.werkcode){ const w=_werkcodeKaart()[p.project_id]; if(w) p.werkcode=w; }
+  if(!p.projectnummer){ const n=_projectnummerKaart()[p.project_id]; if(n&&PROJNR_RE.test(String(n))) p.projectnummer=String(n); }
   if(!Array.isArray(p.legacy_codes)) p.legacy_codes=p.code?[p.code]:[];
   if(!p.soort) p.soort='klant';
   if(!Array.isArray(p.offertes)||(!p.offertes.length&&p.offertenr))
     p.offertes=p.offertenr?[{nummer:String(p.offertenr),mb_id:p.offertenr_mb_id!=null?String(p.offertenr_mb_id):null,rol:'hoofd',status:''}]:[];
   return p;
 }
-// Eén ingang om een (actief) project te vinden: project_id, huidige code of een oude code.
+// Eén ingang om een (actief) project te vinden: project_id, huidige code, projectnummer of een oude code.
 function projVind(x){
   if(x==null||x==='') return null;
   const s=String(x), l=s.toLowerCase();
   return PROJECT_CODES.find(p=>p&&p.project_id&&String(p.project_id).toLowerCase()===l)
     ||PROJECT_CODES.find(p=>p&&p.code===s)
+    ||PROJECT_CODES.find(p=>p&&p.projectnummer===s)
     ||PROJECT_CODES.find(p=>p&&Array.isArray(p.legacy_codes)&&p.legacy_codes.includes(s))||null;
 }
-// P2-velden behouden als de winnende kant ze mist (geschreven door een app-versie van vóór P2):
-// project_id/soort van de andere kant, legacy_codes samengevoegd, offertes als de winnaar er geen heeft.
-function _projP2Behoud(uit, lokaal, spData){
-  if(!Array.isArray(uit)) return uit;
-  const per=new Map();
-  [lokaal,spData].forEach(l=>{ if(typeof l==='string'){ try{ l=JSON.parse(l); }catch(e){ l=null; } } (Array.isArray(l)?l:[]).forEach(x=>{ if(x&&x.code){ if(!per.has(x.code)) per.set(x.code,[]); per.get(x.code).push(x); } }); });
-  return uit.map(u=>{
-    if(!u||!u.code) return u;
-    let k=null; const z=()=>k||(k=JSON.parse(JSON.stringify(u)));
-    for(const o of per.get(u.code)||[]){
-      if(o===u) continue;
-      if(o.project_id&&!u.project_id&&!(k&&k.project_id)) z().project_id=o.project_id;
-      if(o.soort&&!(k||u).soort) z().soort=o.soort;
-      if(o.werkcode&&!(k||u).werkcode) z().werkcode=o.werkcode;
-      if(o.map_stijl&&!(k||u).map_stijl) z().map_stijl=o.map_stijl;
-      if(Array.isArray(o.legacy_codes)){ const mis=o.legacy_codes.filter(c=>!((k||u).legacy_codes||[]).includes(c)); if(mis.length){ const w=z(); w.legacy_codes=(Array.isArray(w.legacy_codes)?w.legacy_codes:[]).concat(mis); } }
-      if(Array.isArray(o.offertes)&&o.offertes.length&&!(Array.isArray((k||u).offertes)&&(k||u).offertes.length)) z().offertes=JSON.parse(JSON.stringify(o.offertes));
-    }
-    return k||u;
-  });
+// ── Samenvoegen op project_id (brok A) ──
+// Eén project = één project_id, ook als twee kopieën een andere code dragen (een oude cache, een hernoeming van vóór
+// P2). Sleutel per record: 'pid:'+project_id; een hernoem-tombstone (`_vervallen` + `_hernoemd_naar`) houdt zijn eigen
+// sleutel 'graf:'+code, zodat een oude kopie met die code niet terugkomt en het actieve record niet verdwijnt.
+// Overgangsindex: een record zonder project_id (oude app) krijgt het id van het project dat zijn code als huidige
+// code, projectnummer, werkcode of oude code kent; anders het deterministische projIdVoor(code + created).
+function _projSleutel(p){
+  if(!p||typeof p!=='object'||p._mt_meta) return null;
+  if(p._vervallen&&p._hernoemd_naar&&p.code) return 'graf:'+p.code;
+  return p.project_id?'pid:'+p.project_id:null;
 }
+// Een "zacht" id is afgeleid van code + created (projIdVoor, bestaande projecten van vóór P2) en dus niet uitgegeven: twee
+// kopieën met een andere created krijgen een ander zacht id. Een uitgegeven ("hard") id gaat daarom voor.
+function _projIdZacht(x){ return !!(x&&x.project_id&&x.code&&x.project_id===projIdVoor(x)); }
+function _projIndex(lijst){
+  const huidig=new Map(), graf=new Map(), oud=new Map(), teller=new Map();
+  const zet=(m,c,pid)=>{ if(c!=null&&c!==''&&!m.has(String(c))) m.set(String(c),pid); };
+  // de lokale kopie van de teller (werkcode/projectnummer → project_id) is de bron voor uitgegeven codes
+  try{ Object.entries(_werkcodeKaart()).forEach(([pid,c])=>zet(teller,c,pid)); Object.entries(_projectnummerKaart()).forEach(([pid,c])=>zet(teller,c,pid)); }catch(e){}
+  const met=lijst.filter(x=>x&&typeof x==='object'&&x.project_id&&!x._mt_meta);
+  met.filter(x=>x._vervallen&&x._hernoemd_naar).forEach(x=>zet(graf,x.code,x.project_id));
+  const rest=met.filter(x=>!(x._vervallen&&x._hernoemd_naar)), r=x=>(x._vervallen?2:0)+(_projIdZacht(x)?1:0);
+  rest.sort((a,b)=>r(a)-r(b));                                   // hard en actief eerst (stabiel)
+  rest.forEach(x=>{ if(_projIdZacht(x)) return; zet(huidig,x.code,x.project_id); zet(huidig,x.projectnummer,x.project_id); zet(huidig,x.werkcode,x.project_id); });
+  rest.forEach(x=>(Array.isArray(x.legacy_codes)?x.legacy_codes:[]).forEach(c=>zet(oud,c,x.project_id)));
+  return {huidig,graf,oud,teller};
+}
+// Overgangsindex: zonder id (oude app) → het project dat de code uitgaf (teller), als huidige code/nummer/werkcode heeft,
+// hernoemde (tombstone), of als oude code kent; anders projIdVoor. Een zacht id wordt alleen vervangen door een
+// uitgegeven id van hetzelfde project (teller, huidige code van een hard record, hernoem-tombstone) — nooit via een
+// oude code, want die kan na een hernoeming opnieuw zijn gebruikt.
+function _projMetId(x,idx){
+  if(!x||typeof x!=='object'||x._mt_meta||!x.code) return x;
+  const c0=String(x.code), w0=x.werkcode?String(x.werkcode):'';
+  let pid=null;
+  if(!x.project_id) pid=idx.teller.get(c0)||(w0&&idx.teller.get(w0))||idx.huidig.get(c0)||(w0&&idx.huidig.get(w0))||idx.graf.get(c0)||idx.oud.get(c0)||projIdVoor(x);
+  else if(_projIdZacht(x)) pid=idx.teller.get(c0)||(w0&&idx.teller.get(w0))||idx.huidig.get(c0)||(w0&&idx.huidig.get(w0))||idx.graf.get(c0)||x.project_id;
+  else return x;
+  if(pid===x.project_id) return x;
+  const c=JSON.parse(JSON.stringify(x));   // invoer nooit wijzigen
+  c.project_id=pid;
+  return c;
+}
+// Velden die de winnaar mist overnemen van een andere kopie van hetzelfde project (bv. geschreven door een app
+// zonder die velden); oude codes worden verenigd, en de code van de andere kopie wordt een oude code.
+function _projErf(w,o){
+  if(!w||!o||w===o) return w;
+  ['project_id','soort','werkcode','map_stijl','projectnummer'].forEach(v=>{ if(o[v]&&!w[v]) w[v]=o[v]; });
+  const leg=Array.isArray(w.legacy_codes)?w.legacy_codes:(w.legacy_codes=w.code?[w.code]:[]);
+  [...(Array.isArray(o.legacy_codes)?o.legacy_codes:[]),o.code].forEach(c=>{ if(c&&!leg.includes(c)) leg.push(c); });
+  if(Array.isArray(o.offertes)&&o.offertes.length&&!(Array.isArray(w.offertes)&&w.offertes.length)) w.offertes=JSON.parse(JSON.stringify(o.offertes));
+  return w;
+}
+// Samenvoeger voor mt_projecten (lokaal, SharePoint). Per sleutel wint de nieuwste stempel (gelijk → lokaal; beide
+// zonder stempel → SharePoint), zoals _spSamenPerSleutel. Uitzondering binnen één project: een actief record met een
+// code die hernoemd is (er bestaat een hernoem-tombstone voor die code) verliest van een actief record met de
+// huidige code (of een record waarvan de code bij de ander als oude code staat) — een oude cache zet een hernoeming
+// dus niet terug. Records zonder sleutel blijven staan.
+function _projSamen(lokaal,spData){
+  const lees=v=>{ try{ return typeof v==='string'?JSON.parse(v):v; }catch(e){ return null; } };
+  const L0=Array.isArray(lees(lokaal))?lees(lokaal):[], R0=Array.isArray(lees(spData))?lees(spData):[];
+  const idx=_projIndex([...R0,...L0]);
+  const R=R0.map(x=>_projMetId(x,idx)), L=L0.map(x=>_projMetId(x,idx));
+  const hernoemd=new Set([...R,...L].filter(x=>x&&x._vervallen&&x._hernoemd_naar&&x.code).map(x=>String(x.code)));
+  // >0: x is de actuelere identiteit van het project, <0: o, 0: onbeslist (dan de stempel)
+  const rang=(x,o)=>{
+    if(x._vervallen||o._vervallen||x.code===o.code) return 0;
+    const hx=hernoemd.has(String(x.code)), ho=hernoemd.has(String(o.code));
+    if(hx!==ho) return hx?-1:1;
+    const xl=Array.isArray(x.legacy_codes)&&x.legacy_codes.includes(o.code), ol=Array.isArray(o.legacy_codes)&&o.legacy_codes.includes(x.code);
+    return xl===ol?0:(xl?1:-1);
+  };
+  const per=new Map(), groep=new Map(), los=new Map();
+  for(const x of [...R,...L]){
+    const k=_projSleutel(x);
+    if(!k){ if(x&&typeof x==='object'&&x._mt_meta) continue; los.set(JSON.stringify(x),x); continue; }
+    if(!groep.has(k)) groep.set(k,[]); groep.get(k).push(x);
+    const o=per.get(k);
+    if(!o){ per.set(k,x); continue; }
+    const r=rang(x,o);
+    if(r>0||(r===0&&_spLokaalWint(_spTijd(x),_spTijd(o)))) per.set(k,x);
+  }
+  const uit=[];
+  for(const [k,w0] of per){
+    const andere=groep.get(k).filter(o=>o!==w0);
+    if(!andere.length){ uit.push(w0); continue; }
+    const w=JSON.parse(JSON.stringify(w0));
+    andere.forEach(o=>_projErf(w,o));
+    uit.push(w);
+  }
+  return [...uit,...los.values()];
+}
+// Basis = hoe elk record eruitzag bij laden/opslaan (per sleutel), zodat slaProjectenOp ziet wat déze pc wijzigde.
+function _projBasisZet(lijst){ _projBasis=new Map(); (lijst||[]).forEach(p=>{ const k=_projSleutel(p); if(k) _projBasis.set(k,_projJson(p)); }); }
 // Hernoemd vóór P2: tombstone OUD (`_hernoemd_naar` NIEUW, zelfde `created`) + actief record NIEUW.
 // Beide krijgen het id van het oudste record in de keten en NIEUW krijgt de oude codes als legacy,
 // zodat oude links blijven werken. Deterministisch: tombstone en nieuw record staan samen in de store.
@@ -2775,39 +2861,47 @@ function projConflicten(lijst){
   const ids=new Map(), wcs=new Map();
   huidig.forEach(p=>{ if(!p.project_id) return; if(ids.has(p.project_id)) uit.push({code:p.project_id,soort:'dubbel project_id',projecten:[ids.get(p.project_id),p.code]}); else ids.set(p.project_id,p.code); });
   huidig.forEach(p=>{ if(!p.werkcode) return; if(wcs.has(p.werkcode)) uit.push({code:p.werkcode,soort:'dubbele werkcode',projecten:[wcs.get(p.werkcode),p.code]}); else wcs.set(p.werkcode,p.code); });
+  const nrs=new Map();
+  huidig.forEach(p=>{ if(!p.projectnummer) return; const n=String(p.projectnummer);
+    if(nrs.has(n)) uit.push({code:n,soort:'dubbel projectnummer',projecten:[nrs.get(n),p.code]}); else nrs.set(n,p.code);
+    if(n!==p.code&&huidig.has(n)) uit.push({code:n,soort:'projectnummer is huidige code van ander project',projecten:[p.code,n]});
+    if(oud.has(n)&&oud.get(n)!==p) uit.push({code:n,soort:'projectnummer is oude code van ander project',projecten:[oud.get(n).code,p.code]}); });
   return uit;
 }
 function _projLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_projecten')||'[]'); return Array.isArray(a)?_projHernoemKetens(a).map(projAanvullen):[]; }catch(e){ return []; } }
 function projLaad(){
-  const alle=_projLees();
-  _projBasis=new Map(alle.filter(p=>p&&p.code).map(p=>[p.code,_projJson(p)]));
+  const alle=_projSamen(_projLees(),[]).map(projAanvullen);   // oude kopieën van hetzelfde project worden één record
+  _projBasisZet(alle);
   const actief=alle.filter(p=>p&&typeof p==='object'&&!p._vervallen);
   projConflicten(actief).forEach(c=>console.warn('projectsleutel-conflict ('+c.soort+'):',c.code,c.projecten.join(' / ')));
   return actief;
 }
 function slaProjectenOp(){
-  const opslag=_projLees(), perCode=new Map(), losOpslag=[];
-  opslag.forEach(p=>{ if(p&&p.code) perCode.set(p.code,p); else losOpslag.push(p); });
+  // De opslag eerst op project_id samenvoegen (oude kopieën van hetzelfde project worden één record).
+  const opslag=_projSamen(_projLees(),[]).map(projAanvullen), perSl=new Map(), losOpslag=[];
+  opslag.forEach(p=>{ const k=_projSleutel(p); if(k) perSl.set(k,p); else losOpslag.push(p); });
   const uit=[], gezien=new Set(), weg=new Set();
   for(const p of PROJECT_CODES){
     if(!p||p.bron==='app') continue;
     projAanvullen(p);                                   // zelfde afgeleide velden als bij het lezen → geen schijnwijziging
-    if(!p.code){ uit.push(p); continue; }
-    if(gezien.has(p.code)){ console.warn('dubbele projectcode in PROJECT_CODES — tweede record niet opgeslagen:',p.code,p); continue; }
-    gezien.add(p.code);
-    const s=perCode.get(p.code), j=_projJson(p);
-    if(s && j===_projBasis.get(p.code)){
+    const k=_projSleutel(p);
+    if(!k){ uit.push(p); continue; }
+    if(gezien.has(k)){ console.warn('dubbel project_id in PROJECT_CODES — tweede record niet opgeslagen:',p.code,p.project_id); continue; }
+    gezien.add(k);
+    const s=perSl.get(k), j=_projJson(p);
+    if(s && j===_projBasis.get(k)){
       // Hier niets gewijzigd → de opgeslagen stand overnemen (in place, zodat huidigProject klopt).
       if(s._vervallen){ weg.add(p); uit.push(s); continue; }
-      if(_projJson(s)!==j||s._gewijzigd!==p._gewijzigd){ Object.keys(p).forEach(k=>delete p[k]); Object.assign(p,JSON.parse(JSON.stringify(s))); }
+      if(_projJson(s)!==j||s._gewijzigd!==p._gewijzigd){ Object.keys(p).forEach(k2=>delete p[k2]); Object.assign(p,JSON.parse(JSON.stringify(s))); }
       uit.push(p); continue;
     }
-    if(!s||_projJson(s)!==j) _spStempel(p,s);
+    if(s) _projErf(p,s);                                // hier gewijzigd: oude codes/velden van de opgeslagen kopie behouden
+    if(!s||_projJson(s)!==_projJson(p)) _spStempel(p,s);
     uit.push(p);
   }
   // Alleen in de opslag (andere pc, tombstones): bewaren; actieve ook tonen.
-  for(const [code,s] of perCode){
-    if(gezien.has(code)) continue;
+  for(const [k,s] of perSl){
+    if(gezien.has(k)) continue;
     uit.push(s);
     if(!s._vervallen && s.bron!=='app') PROJECT_CODES.push(JSON.parse(JSON.stringify(s)));
   }
@@ -2815,7 +2909,7 @@ function slaProjectenOp(){
   if(weg.size) PROJECT_CODES=PROJECT_CODES.filter(p=>!weg.has(p));
   const tekst=JSON.stringify(uit);
   if(tekst!==localStorage.getItem('mt_projecten')) localStorage.setItem('mt_projecten',tekst);
-  _projBasis=new Map(uit.filter(p=>p&&p.code).map(p=>[p.code,_projJson(p)]));
+  _projBasisZet(uit);
 }
 // Project verwijderen/hernoemen zonder te wissen: de opgeslagen stand wordt een tombstone
 // (`_vervallen` met tijd+door, evt. `_hernoemd_naar`), zodat een oude kopie elders hem
@@ -2828,7 +2922,7 @@ function projTombstone(code,extra){
   _spStempel(t,i>=0&&_spTijd(opslag[i])>_spTijd(bron)?opslag[i]:bron);
   if(i>=0) opslag[i]=t; else opslag.push(t);
   localStorage.setItem('mt_projecten',JSON.stringify(opslag));
-  _projBasis.set(code,_projJson(t));
+  { const k=_projSleutel(t); if(k) _projBasis.set(k,_projJson(t)); }
   PROJECT_CODES=PROJECT_CODES.filter(p=>!(p&&p.code===code));
   return t;
 }
@@ -10141,9 +10235,9 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
   // Een samenvoeger krijgt (lokale tekst, SP-data) en geeft het samengevoegde object terug.
   mergers: {
-    // Projecten (brok B2): per code wint de nieuwste `_gewijzigd`; verwijderen/hernoemen is
-    // een tombstone (`_vervallen`, evt. `_hernoemd_naar`). Eén-zijdig blijft; zie _spSamenPerSleutel.
-    mt_projecten(lokaal, spData) { return _projP2Behoud(_spSamenPerSleutel(lokaal, spData, x => x.code, _spTijd), lokaal, spData); },
+    // Projecten (brok B2, brok A): per project_id wint de nieuwste `_gewijzigd`; verwijderen/hernoemen is
+    // een tombstone (`_vervallen`, evt. `_hernoemd_naar`). Eén-zijdig blijft; zie _projSamen.
+    mt_projecten(lokaal, spData) { return _projSamen(lokaal, spData); },
     // Planning { code: plan }: zelfde regels per code (ook: beide ongestempeld → SharePoint);
     // planVerwijder zet een tombstone.
     mt_planning(lokaal, spData) {
@@ -12976,9 +13070,9 @@ function _werkcodesZet(kaart){
   for(const p of PROJECT_CODES){
     if(!p||!p.project_id||!k[p.project_id]||p.werkcode===k[p.project_id]) continue;
     if(p.werkcode){ console.warn('werkcode gecorrigeerd volgens de teller:',p.code,p.werkcode,'→',k[p.project_id]); p.werkcode=k[p.project_id]; continue; }
-    const was=p.code&&_projBasis.get(p.code)===_projJson(p);
+    const sl=_projSleutel(p), was=sl&&_projBasis.get(sl)===_projJson(p);
     p.werkcode=k[p.project_id];
-    if(was) _projBasis.set(p.code,_projJson(p));
+    if(was) _projBasis.set(sl,_projJson(p));
   }
   slaProjectenOp(); _namenVernieuwd();
   return n;
