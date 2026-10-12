@@ -792,7 +792,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.13.4</span>
+    <span class="header-version">v2.14.0</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -846,11 +846,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
   <!-- ═══ TAB: DASHBOARD ═══ -->
   <div id="tab-dashboard" class="tab-content active">
-    <div class="card" id="aw-kaart" style="display:none;margin-bottom:1rem">
-      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">Vandaag aanwezig
-        <button class="btn btn-xs btn-secondary" onclick="aanwezigLaad(true)" title="Verversen" aria-label="Aanwezigheid verversen">↻</button></div>
-      <div id="aw-inhoud" style="font-size:13px"></div>
-    </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem" id="dash-kpi-row">
       <div class="kpi-card green" style="cursor:default">
         <div class="kpi-label">Omzet dit jaar</div>
@@ -1636,6 +1631,12 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       #tab-agenda .ag-ltijd{flex:0 0 auto;font-size:11.5px;color:var(--text-faint,#999);font-variant-numeric:tabular-nums}
       #tab-agenda .ag-ldur{flex:0 0 auto;font-weight:600;font-variant-numeric:tabular-nums;min-width:48px;text-align:right}
     </style>
+    <!-- Vandaag aanwezig (Bart 12-10): van het oude dashboard naar de Agenda, zichtbaar voor iedereen; zelfde feature-flag (MTAanwezig.kaartAan) -->
+    <div class="card" id="aw-kaart" style="display:none;margin-bottom:1rem">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">Vandaag aanwezig
+        <button class="btn btn-xs btn-secondary" onclick="aanwezigLaad(true)" title="Verversen" aria-label="Aanwezigheid verversen">↻</button></div>
+      <div id="aw-inhoud" style="font-size:13px"></div>
+    </div>
     <div class="card" style="padding:1rem;margin-bottom:1rem">
       <div class="flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div class="flex" style="gap:6px;align-items:center">
@@ -3184,7 +3185,7 @@ function showTab(name,btn){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   if(btn && btn.classList.contains('tab-btn')) btn.classList.add('active');
-  if(name==='dashboard'){ laadDashboard(); if(typeof aanwezigLaad==='function') aanwezigLaad(); }
+  if(name==='dashboard') laadDashboard();
   if(name==='voorraad') renderVoorraadActief();
   if(name==='historie') renderHistory();
   if(name==='bestelling') renderBestellijst();
@@ -3198,7 +3199,7 @@ function showTab(name,btn){
   if(name==='instellingen') beheerLaad();
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
-  if(name==='agenda') renderAgenda();
+  if(name==='agenda'){ renderAgenda(); if(typeof aanwezigLaad==='function') aanwezigLaad(); }
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
   if(name==='attentie') renderAttentie();

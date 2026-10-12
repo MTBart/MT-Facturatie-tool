@@ -5,6 +5,12 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Tabblad Geld heet nu Dashboard; het oude dashboard is (voorlopig) verborgen (achterdeur ?oud-dashboard=1)
+- Commit: `60bd0b2` | Auteur: Bart Witte
+
+## 2026-10-12 — Projectnummers (Codex C-review): verse schema-check per write, Toggl nooit stil koppelen, nummer alleen expliciet in mail, uren zonder beheerknoppen
+- Commit: `75f4fa6` | Auteur: Bart Witte
+
 ## 2026-10-12 — Projectnummers (Codex): mobiel en uren tonen het nummer via de teller-kaart
 - Commit: `1b6f457` | Auteur: Bart Witte
 

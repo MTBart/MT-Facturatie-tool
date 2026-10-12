@@ -1,12 +1,17 @@
 [
   {
-    "versie": "2.13.4",
+    "versie": "2.14.0",
     "datum": "2026-10-12",
-    "titel": "Het tabblad Geld heet nu Dashboard",
+    "titel": "Projectnummers voorbereid, Geld heet nu Dashboard, aanwezigheid in de Agenda",
     "voor": "iedereen",
     "punten": [
       "Het tabblad Geld heet nu Dashboard. Het is hetzelfde scherm als voorheen, alleen de naam is anders; wie Geld mag, begint er nog steeds.",
-      "Het oude dashboard met de grafieken is voorlopig verborgen, omdat het weinig nuttigs liet zien. Er is niets weggegooid; het kan later terugkomen."
+      "Het oude dashboard met de grafieken is voorlopig verborgen. Er is niets weggegooid; het kan later terugkomen.",
+      "De kaart 'Vandaag aanwezig' staat nu in de Agenda, zodat iedereen hem ziet.",
+      "De tool is klaar voor de nieuwe projectnummers (260801, 260802, …). Er verandert nog niets: de nummering gaat pas aan na een bevestiging. Projecten blijven ook vindbaar op hun oude code, werkcode en offertenummer.",
+      "De keuze 'Werkcode' bij 'Projectcode tonen als' heet nu 'Projectnummer'.",
+      "Nieuwe projecten maak je in de cockpit; in de uren-app kan dat niet meer, zodat elk project zijn nummer uit dezelfde teller krijgt.",
+      "Een Toggl-project wordt niet meer vanzelf aan een project gekoppeld: de tool stelt het voor en jij bevestigt."
     ]
   },
   {
