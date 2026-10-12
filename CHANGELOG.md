@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Projectnummers (Codex): status-route alleen lezen; "schema uitgerold" alleen via de eigenaar
+- Commit: `57066cb` | Auteur: Bart Witte
+
 ## 2026-10-12 — Projectnummers C6: uren maakt geen projecten meer; mailvoorstellen, zoekbalk en koppeldialoog kennen nummer en aliassen
 - Commit: `d67979f` | Auteur: Bart Witte
 

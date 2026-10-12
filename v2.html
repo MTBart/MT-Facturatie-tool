@@ -2724,10 +2724,10 @@ function projAanvullen(p){
 // Het projectnummer om te TONEN (brok C gebruikt alleen deze): eerst de teller-kaart, dan het veld. Zo blijft het juiste
 // nummer zichtbaar, ook als een oude app het uit mt_projecten.json haalde; de volgende opslag zet het daar terug.
 function projNummer(p){
-  if(!p||!p.project_id) return null;
-  const k=_projectnummerKaart(), n=k[p.project_id];
+  if(!p) return null;
+  const k=_projectnummerKaart(), n=p.project_id?k[p.project_id]:null;
   if(n&&PROJNR_RE.test(String(n))) return String(n);
-  if(k._volledig&&_werkcodeKaart()[p.project_id]) return null;   // de teller kent het project zonder nummer
+  if(p.project_id&&k._volledig&&_werkcodeKaart()[p.project_id]) return null;   // de teller kent het project zonder nummer
   return p.projectnummer&&PROJNR_RE.test(String(p.projectnummer))?String(p.projectnummer):null;
 }
 // Eén ingang om een (actief) project te vinden: project_id, huidige code, projectnummer of een oude code.
@@ -2858,17 +2858,20 @@ function _projSamen(lokaal,spData){
 // ── Schemaversie (brok A) ──
 // De laagste app-versie die mt_projecten nog mag schrijven staat in de teller (GET /teller/status → schema_min), NIET in
 // mt_projecten.json zelf: oudere apps (uren) gooien records zonder code daar weg, en een meta-record zou in oude code als
-// project kunnen opduiken. Bij het laden/hydrateren en hooguit eens per 5 minuten vóór het wegschrijven vraagt de cockpit
-// het op (en meldt daarmee zijn eigen versie). Is zijn PROJ_SCHEMA te laag, dan schrijft hij mt_projecten niet meer
-// (geen samenvoegen, geen terugschrijven, de lokale stand blijft ongemoeid) en vraagt hij om te herladen. Niet bereikbaar
-// of niet ingelogd → geen blokkade (de teller beslist alleen als hij antwoordt).
+// project kunnen opduiken. Bij het laden/hydrateren en hooguit eens per 5 minuten vóór het wegschrijven leest de cockpit
+// het (alleen lezen; "versie N is uitgerold" legt de eigenaar vast via POST /teller/schema). Is zijn PROJ_SCHEMA te laag,
+// dan schrijft hij mt_projecten niet meer (geen samenvoegen, geen terugschrijven, de lokale stand blijft ongemoeid) en
+// vraagt hij om te herladen. Bewuste keuze bij een onbereikbare teller (of niet ingelogd):
+//   - nog niets bekend (eerste vraag mislukt) → geen blokkade (fail-open: anders legt een storing het werk stil);
+//   - eerder al "te oud" gebleken → blijft blokkeren tot herladen (fail-closed: een storing heft de blokkade niet op).
+// Een geslaagd antwoord vervangt de kennis; een blokkade die al getoond is (blockedKeys) geldt tot herladen.
 const PROJ_SCHEMA=3;   // 3 (brok C): resolver, mappen, Toggl, mobiel en uren lezen projectnummers → de teller geeft deze app nummers
 let _projSchemaMin=null, _projSchemaTijd=0;
 function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
 async function projSchemaCheck(forceer){
   if(!forceer&&Date.now()-_projSchemaTijd<5*60*1000) return projSchemaGeblokkeerd();
   _projSchemaTijd=Date.now();
-  try{ const j=typeof _tellerApi==='function'?await _tellerApi('/teller/status?schema='+PROJ_SCHEMA):null; if(j&&Number.isFinite(Number(j.schema_min))) _projSchemaMin=Number(j.schema_min); }catch(e){}
+  try{ const j=typeof _tellerApi==='function'?await _tellerApi('/teller/status'):null; if(j&&Number.isFinite(Number(j.schema_min))) _projSchemaMin=Number(j.schema_min); }catch(e){}   // mislukt → vorige kennis blijft gelden
   if(projSchemaGeblokkeerd()) projSchemaBlok();
   return projSchemaGeblokkeerd();
 }
@@ -2925,7 +2928,7 @@ function projConflicten(lijst){
   huidig.forEach(p=>{ if(!p.project_id) return; if(ids.has(p.project_id)) uit.push({code:p.project_id,soort:'dubbel project_id',projecten:[ids.get(p.project_id),p.code]}); else ids.set(p.project_id,p.code); });
   huidig.forEach(p=>{ if(!p.werkcode) return; if(wcs.has(p.werkcode)) uit.push({code:p.werkcode,soort:'dubbele werkcode',projecten:[wcs.get(p.werkcode),p.code]}); else wcs.set(p.werkcode,p.code); });
   const nrs=new Map();
-  huidig.forEach(p=>{ if(!p.projectnummer) return; const n=String(p.projectnummer);
+  huidig.forEach(p=>{ const n=projNummer(p); if(!n) return;
     if(nrs.has(n)) uit.push({code:n,soort:'dubbel projectnummer',projecten:[nrs.get(n),p.code]}); else nrs.set(n,p.code);
     if(n!==p.code&&huidig.has(n)) uit.push({code:n,soort:'projectnummer is huidige code van ander project',projecten:[p.code,n]});
     if(oud.has(n)&&oud.get(n)!==p) uit.push({code:n,soort:'projectnummer is oude code van ander project',projecten:[oud.get(n).code,p.code]}); });
