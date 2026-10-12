@@ -2531,22 +2531,46 @@ async function spSyncProjInfo() {
     if (Array.isArray(lijst)) { const m = {}; lijst.forEach(p => { if (p && p.code && !p._vervallen) m[p.code] = p; }); MT_PROJ_INFO = m; }
   } catch (e) {}
 }
+// Projectnummer (brok C), zoals projNummer in de cockpit: de teller is de bron. De kaart project_id → nummer (+ aliassen)
+// komt uit GET /teller/werkcodes, in dezelfde opslag als de cockpit (mt_projectnummers); het veld in mt_projecten.json is
+// de terugval. Zo blijft het juiste nummer zichtbaar, ook als een oude app het uit de JSON haalde.
+function _mNrKaart() { try { const k = JSON.parse(localStorage.getItem('mt_projectnummers') || '{}'); return k && typeof k === 'object' && !Array.isArray(k) ? k : {}; } catch (e) { return {}; } }
+function mProjNummer(i) {
+  if (!i) return null;
+  const k = _mNrKaart(), n = i.project_id ? k[i.project_id] : null;
+  if (n && /^\d{6}$/.test(String(n))) return String(n);
+  if (i.project_id && k._volledig && i.werkcode) return null;   // de teller kent het project (werkcode) zonder nummer
+  return i.projectnummer && /^\d{6}$/.test(String(i.projectnummer)) ? String(i.projectnummer) : null;
+}
+async function mNummersLaad() {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const r = await fetch(WORKER + '/teller/werkcodes', { headers: await authHeader() }); if (!r.ok) return;
+    const j = await r.json(); if (!j || !j.nummers) return;
+    const k = { _volledig: true }, al = {};
+    for (const [pid, nr] of Object.entries(j.nummers)) if (/^p_/.test(pid) && /^\d{6}$/.test(String(nr))) k[pid] = String(nr);
+    for (const [a, pid] of Object.entries(j.aliassen || {})) if (/^p_/.test(String(pid)) && /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/.test(a)) al[a] = String(pid);
+    if (Object.keys(al).length) k._aliassen = al;
+    localStorage.setItem('mt_projectnummers', JSON.stringify(k)); _mIx = null;
+  } catch (e) {}
+}
 function mProjNr(p) {
   const i = p && MT_PROJ_INFO[p.code]; if (!i) return '';
   const h = Array.isArray(i.offertes) ? i.offertes.find(o => o && o.rol === 'hoofd' && o.nummer) : null;
   // 'werkcode' heet "Projectnummer" (brok C): het projectnummer, zolang er geen is de werkcode.
-  const o = String(i.offertenr || (h && h.nummer) || '').trim(), w = String((i.projectnummer && /^\d{6}$/.test(String(i.projectnummer)) ? i.projectnummer : '') || i.werkcode || '').trim();
+  const o = String(i.offertenr || (h && h.nummer) || '').trim(), w = String(mProjNummer(i) || i.werkcode || '').trim();
   const m = window.MT_INSTELLINGEN && MT_INSTELLINGEN.projectcode;
   return m === 'werkcode' ? w : m === 'beide' ? [w, o].filter(Boolean).join(' · ') : o;
 }
 // Zoeken (picker en projectlijst) vindt ook projectnummer, werkcode, oude codes en offertenummers uit de cockpit.
 function mProjZoek(p) {
   const i = p && MT_PROJ_INFO[p.code]; if (!i) return '';
-  return [i.projectnummer, i.werkcode, i.offertenr, ...(Array.isArray(i.legacy_codes) ? i.legacy_codes : []), ...(Array.isArray(i.offertes) ? i.offertes.map(o => o && o.nummer) : [])].filter(Boolean).join(' ').toLowerCase();
+  const al = Object.entries(_mNrKaart()._aliassen || {}).filter(([, pid]) => pid === i.project_id).map(([a]) => a);
+  return [mProjNummer(i), i.werkcode, i.offertenr, ...al, ...(Array.isArray(i.legacy_codes) ? i.legacy_codes : []), ...(Array.isArray(i.offertes) ? i.offertes.map(o => o && o.nummer) : [])].filter(Boolean).join(' ').toLowerCase();
 }
 // Gedeelde resolver (mt-project.js) over de cockpitprojecten; opnieuw opgebouwd zodra MT_PROJ_INFO wordt vervangen.
 let _mIx = null;
-function _mProjIndex() { if (!_mIx || _mIx.bron !== MT_PROJ_INFO) { _mIx = window.MTProject ? MTProject.index(Object.values(MT_PROJ_INFO)) : null; if (_mIx) _mIx.bron = MT_PROJ_INFO; } return _mIx; }
+function _mProjIndex() { if (!_mIx || _mIx.bron !== MT_PROJ_INFO) { _mIx = window.MTProject ? MTProject.index(Object.values(MT_PROJ_INFO), { nummer: mProjNummer, aliassen: _mNrKaart()._aliassen || {} }) : null; if (_mIx) _mIx.bron = MT_PROJ_INFO; } return _mIx; }
 function mProjNaam(p) {
   if (!p) return '';
   const c = String(p.code || '').trim().toUpperCase(), i = MT_PROJ_INFO[p.code];
@@ -2826,7 +2850,7 @@ async function loadRealProjects() {
     REAL_PROJECTS.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nl'));
     // Sync user-projecten + adres-overlay van SP (merge)
     await spSyncUserProjects();
-    await Promise.all([spSyncProjInfo(), mInstellingenLaad()]);
+    await Promise.all([spSyncProjInfo(), mInstellingenLaad(), mNummersLaad()]);
     spSyncAddr().then(() => renderProjectCards());
     // Herrender
     renderPickerList(allProjects());

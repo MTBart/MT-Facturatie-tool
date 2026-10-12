@@ -980,6 +980,16 @@ function getTogglUserMap(){return JSON.parse(localStorage.getItem('mt_toggl_user
 function setTogglUserMap(m){localStorage.setItem('mt_toggl_user_map',JSON.stringify(m));}
 function getLopende(){return JSON.parse(localStorage.getItem('mt_uren_lopend')||'null')}
 function setLopende(e){e?localStorage.setItem('mt_uren_lopend',JSON.stringify(e)):localStorage.removeItem('mt_uren_lopend')}
+// Zichtbaar nummer (brok C): het projectnummer uit de teller-kaart van de cockpit (mt_projectnummers, zelfde browser) of
+// het veld, anders de werkcode, anders de code. De code blijft overal de sleutel (uren, planning, taken).
+function urenProjNr(p){
+  if(!p) return '';
+  let k={}; try{ k=JSON.parse(localStorage.getItem('mt_projectnummers')||'{}')||{}; }catch(e){}
+  const n=p.project_id&&k[p.project_id];
+  if(n&&/^\d{6}$/.test(String(n))) return String(n);
+  if(p.projectnummer&&/^\d{6}$/.test(String(p.projectnummer))&&!(k._volledig&&p.werkcode)) return String(p.projectnummer);
+  return p.werkcode||p.code||'';
+}
 function getProjecten(){
   // Vervallen projecten (tombstones uit de cockpit, `_vervallen`) niet tonen.
   const raw=JSON.parse(localStorage.getItem('mt_projecten')||'null');
@@ -1138,7 +1148,7 @@ function renderTimer(){
     const urgentStyle=dl!==null&&dl<0?';border-color:var(--red);background:#FDE8E8':dl!==null&&dl<=3?';border-color:#E8A020':''
     return `<div class="project-card${actief?' actief':''}" style="--proj-kleur:${esc(var2hex(p.code))}${urgentStyle}" onclick="openStartModal(${ja(p.code)})">
       <button class="pc-info-btn" onclick="event.stopPropagation();openProjectDetail(${ja(p.code)})" title="Project details">ℹ</button>
-      <div class="pc-code" style="color:${esc(var2hex(p.code))}">${esc(p.code)}</div>
+      <div class="pc-code" style="color:${esc(var2hex(p.code))}">${esc(urenProjNr(p))}</div>
       <div class="pc-naam">${esc(p.naam||p.code)}</div>
       <div class="pc-meta">
         ${p.status?statusBadge(p.status):''}
@@ -2061,8 +2071,7 @@ function vulProjectSelect(elId, geselecteerd=''){
   if(!sel) return;
   const projecten=getProjecten();
   sel.innerHTML=`<option value="">— Kies project —</option>`
-    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===geselecteerd?' selected':''}>${esc(p.code)}${p.naam?' — '+esc(p.naam):''}</option>`).join('')
-    +`<option value="__nieuw__">＋ Nieuw project aanmaken</option>`;
+    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===geselecteerd?' selected':''}>${esc(urenProjNr(p))}${p.naam?' — '+esc(p.naam):''}</option>`).join('');   // nieuwe projecten alleen in de cockpit (brok C)
   sel.onchange=function(){
     if(this.value==='__nieuw__'){
       this.value=geselecteerd;
@@ -2147,8 +2156,7 @@ function vulTbProjectSelect(){
   const huidig=sel.value;
   const projecten=getProjecten();
   sel.innerHTML=`<option value="">— Kies project —</option>`
-    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===huidig?' selected':''}>${esc(p.code)}${p.naam?' — '+esc(p.naam):''}</option>`).join('')
-    +`<option value="__nieuw__">＋ Nieuw project aanmaken</option>`;
+    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===huidig?' selected':''}>${esc(urenProjNr(p))}${p.naam?' — '+esc(p.naam):''}</option>`).join('');   // nieuwe projecten alleen in de cockpit (brok C)
   tbProjectChange();
 }
 

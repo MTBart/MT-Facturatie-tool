@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Projectnummers (Codex): schema alleen lezen; fail-open/fail-closed vastgelegd; projNummer ook zonder project_id
+- Commit: `6c8947d` | Auteur: Bart Witte
+
 ## 2026-10-12 — Projectnummers (Codex): status-route alleen lezen; "schema uitgerold" alleen via de eigenaar
 - Commit: `57066cb` | Auteur: Bart Witte
 
