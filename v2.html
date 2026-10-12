@@ -2862,7 +2862,7 @@ function _projSamen(lokaal,spData){
 // het op (en meldt daarmee zijn eigen versie). Is zijn PROJ_SCHEMA te laag, dan schrijft hij mt_projecten niet meer
 // (geen samenvoegen, geen terugschrijven, de lokale stand blijft ongemoeid) en vraagt hij om te herladen. Niet bereikbaar
 // of niet ingelogd → geen blokkade (de teller beslist alleen als hij antwoordt).
-const PROJ_SCHEMA=2;
+const PROJ_SCHEMA=3;   // 3 (brok C): resolver, mappen, Toggl, mobiel en uren lezen projectnummers → de teller geeft deze app nummers
 let _projSchemaMin=null, _projSchemaTijd=0;
 function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
 async function projSchemaCheck(forceer){
@@ -9017,18 +9017,26 @@ async function maakProjectAan(){
   const np=document.getElementById('modal-naam-product').value.trim();
   const status=document.getElementById('modal-status');
   if(!k||!p){status.style.color='var(--red)';status.textContent='Vul minimaal klant en product in';return;}
-  // P3b: de generator-code (KLANT-LOC-PROD) is uit. De technische sleutel `code` is de werkcode (W<jj>-<nnn>) uit de
-  // centrale teller, idempotent per project_id. Lukt dat niet, dan wordt er NIETS aangemaakt (geen gok, geen halve start).
+  // P3b: de generator-code (KLANT-LOC-PROD) is uit. De technische sleutel `code` komt uit de centrale teller, idempotent per
+  // project_id: een werkcode (W<jj>-<nnn>) of — als de nieuwe reeks aan staat (brok C) — het projectnummer, dan is
+  // {code, projectnummer, werkcode:null} en code = projectnummer. Lukt dat niet, dan wordt er NIETS aangemaakt.
   const projectId=projNieuwId();
-  status.style.color='var(--text-dim)'; status.textContent='Werkcode ophalen…';
-  let code=null, wcFout='';
-  try{ const j=await _tellerApi('/teller/werkcode',{project_id:projectId,schema:PROJ_SCHEMA}); code=(j&&j.werkcode)?String(j.werkcode):null; if(!code) wcFout=j===null?'niet ingelogd':'geen werkcode ontvangen'; }
-  catch(e){ wcFout=String(e.message||e); }
-  if(!code){status.style.color='var(--red)';status.textContent='Werkcode niet beschikbaar ('+wcFout+') — er is niets aangemaakt. Probeer het zo opnieuw.';return;}
-  if(projVind(code)){status.style.color='var(--red)';status.textContent='Werkcode '+code+' is al in gebruik — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
+  status.style.color='var(--text-dim)'; status.textContent='Projectnummer ophalen…';
+  let code=null, wcFout='', nummer=null, werkcode=null;
+  try{
+    const j=await _tellerApi('/teller/werkcode',{project_id:projectId,schema:PROJ_SCHEMA});
+    nummer=j&&j.projectnummer&&PROJNR_RE.test(String(j.projectnummer))?String(j.projectnummer):null;
+    werkcode=j&&j.werkcode?String(j.werkcode):null;
+    code=j&&(j.code||j.werkcode)?String(j.code||j.werkcode):null;
+    if(code&&nummer&&code!==nummer) code=null;   // nieuw project met een nummer: de code ís het nummer
+    if(!code) wcFout=j===null?'niet ingelogd':'geen projectnummer ontvangen';
+  }catch(e){ wcFout=String(e.message||e); }
+  if(!code){status.style.color='var(--red)';status.textContent='Projectnummer niet beschikbaar ('+wcFout+') — er is niets aangemaakt. Probeer het zo opnieuw.';return;}
+  if(projVind(code)){status.style.color='var(--red)';status.textContent='Projectnummer '+code+' is al in gebruik — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
   const wcOngeldig=projWerkcodeFout(code);
-  if(wcOngeldig){status.style.color='var(--red)';status.textContent='Werkcode ongeldig ('+wcOngeldig+') — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
-  _werkcodesZet({[projectId]:code});
+  if(wcOngeldig){status.style.color='var(--red)';status.textContent='Projectnummer ongeldig ('+wcOngeldig+') — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
+  if(werkcode) _werkcodesZet({[projectId]:werkcode});
+  if(nummer) _projectnummerLokaal(projectId,nummer);
   const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim()||code;
   // Auto-koppeling Moneybird-contact: getypte klantnaam tegen verrijkte registry.
   const kv=klantVolByNaam(nk);
@@ -9044,7 +9052,9 @@ async function maakProjectAan(){
     klant_telefoon:(kv&&kv.telefoon)||'',klant_kvk:(kv&&kv.kvk)||'',
     klant_btw:(kv&&kv.btw)||'',klant_customer_id:(kv&&kv.customer_id)||null,
     created:new Date().toISOString().slice(0,10),
-    project_id:projectId,werkcode:code,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:_MAP_NAAM_CODE};
+    project_id:projectId,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:_MAP_NAAM_CODE};
+  if(werkcode) nieuwProj.werkcode=werkcode;
+  if(nummer) nieuwProj.projectnummer=nummer;
   // Kwam dit project uit een mail (inbox → "Maak project")? Leg de bron vast.
   if(_ibProjBron) nieuwProj.bron_mail={internetMessageId:_ibProjBron.internetMessageId,
     subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,mbx:_ibProjBron.mbx};
@@ -10609,12 +10619,13 @@ function _projLocNaam(proj){
 // "code - naam" en worden NOOIT hernoemd. De code in de tag is de technische sleutel (werkcode) en verandert niet,
 // ook niet als het offertenummer later volgt of de projectnaam wijzigt (gevonden wordt de map via itemId of via de tag).
 const _MAP_NAAM_CODE='naam-code';
-// Eén centrale validatie van een werkcode vóór hij ergens als sleutel of in een mapnaam komt: W<jj>-<nnn>, NFC, kort genoeg en geen gereserveerde SharePoint-naam. '' = goed.
-const _WERKCODE_RE=/^W\d{2}-\d{3,}$/, _SP_GERESERVEERD=/^(con|prn|aux|nul|com\d|lpt\d)$/i;
+// Eén centrale validatie van een code uit de teller vóór hij ergens als sleutel of in een mapnaam komt: een werkcode
+// W<jj>-<nnn> of (brok C) een projectnummer van 6 cijfers vanaf 260801; NFC, kort genoeg en geen gereserveerde SharePoint-naam. '' = goed.
+const _WERKCODE_RE=/^(W\d{2}-\d{3,}|\d{6})$/, _SP_GERESERVEERD=/^(con|prn|aux|nul|com\d|lpt\d)$/i;
 function projWerkcodeFout(code){
   if(typeof code!=='string') return 'geen tekst';
   if(code!==code.normalize('NFC')) return 'niet genormaliseerd (NFC)';
-  if(!_WERKCODE_RE.test(code)) return 'verwacht W<jj>-<nnn>';
+  if(!_WERKCODE_RE.test(code)||(/^\d{6}$/.test(code)&&Number(code)<260801)) return 'verwacht W<jj>-<nnn> of een projectnummer (6 cijfers, vanaf 260801)';
   if(code.length>20) return 'te lang';
   if(_SP_GERESERVEERD.test(code)||/^[.~]|_vti_|\.lock$/i.test(code)) return 'gereserveerde naam';
   return '';
@@ -10636,7 +10647,8 @@ async function _projMapZoek(proj, lijst){
   const kl = kids.find(c=>c.folder&&c.name===kn) || kids.find(c=>c.folder&&_SP._norm(c.name)===_SP._norm(kn));
   if(!kl) return { pad:null, kandidaten:[], reden:'geen klantmap "'+kn+'"' };
   const klPad = `${PROJ_ROOT}/${kl.name}`;
-  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']');
+  const nr = typeof projNummer==='function' ? projNummer(proj) : null;   // na de omnummering mag de tag ook het projectnummer zijn
+  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']') || (!!nr && n.endsWith(' ['+nr+']'));
   const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n) || / \[[A-Z0-9][A-Z0-9-]*\]$/.test(n);   // ziet eruit als een (andere) projectmap → niet induiken
   const kandidaten = [];
   const klKids = await lees(klPad);
@@ -13168,10 +13180,12 @@ function _werkcodeWacht(pid,erbij){
   return l;
 }
 async function projWerkcodeVraag(p){
-  if(!p||!p.project_id||p.werkcode) return p&&p.werkcode||null;
+  if(!p||!p.project_id||p.werkcode||projNummer(p)) return p&&(p.werkcode||projNummer(p))||null;
   try{
     const j=await _tellerApi('/teller/werkcode',{project_id:p.project_id,schema:PROJ_SCHEMA});
     if(j&&j.werkcode){ _werkcodeWacht(p.project_id,false); _werkcodesZet({[p.project_id]:j.werkcode}); return j.werkcode; }
+    // reeks aan (brok C): een bestaand project zonder werkcode krijgt een projectnummer; zijn code blijft de sleutel
+    if(j&&j.projectnummer&&PROJNR_RE.test(String(j.projectnummer))){ _werkcodeWacht(p.project_id,false); _projectnummerLokaal(p.project_id,String(j.projectnummer)); return String(j.projectnummer); }
   }catch(e){ console.warn('werkcode nog niet toegekend (volgt later):',e.message); }
   _werkcodeWacht(p.project_id,true);
   return null;
@@ -13196,9 +13210,18 @@ function _projectnummersZet(kaart,aliassen){
   slaProjectenOp(); _namenVernieuwd();
   return n;
 }
+// Eén net uitgegeven nummer in de lokale kaart en op het project zetten (zonder stempel); de volledige kaart volgt bij werkcodesLaad.
+function _projectnummerLokaal(pid,nr){
+  if(!pid||!PROJNR_RE.test(String(nr))) return;
+  const k=_projectnummerKaart(); if(k[pid]===String(nr)) return;
+  k[pid]=String(nr); _pnMem=k; try{ localStorage.setItem('mt_projectnummers',JSON.stringify(k)); }catch(e){}
+  const p=PROJECT_CODES.find(x=>x&&x.project_id===pid);
+  if(p&&p.projectnummer!==String(nr)){ const sl=_projSleutel(p), was=sl&&_projBasis.get(sl)===_projJson(p); p.projectnummer=String(nr); if(was) _projBasis.set(sl,_projJson(p)); slaProjectenOp(); }
+  if(typeof _namenVernieuwd==='function') _namenVernieuwd();
+}
 async function werkcodesLaad(){
   try{ const j=await _tellerApi('/teller/werkcodes'); if(j&&j.werkcodes) _werkcodesZet(j.werkcodes); if(j&&j.nummers) _projectnummersZet(j.nummers,j.aliassen); }catch(e){ return; }
-  for(const pid of _werkcodeWacht(null,false)){ const p=projVind(pid); if(p&&!p.werkcode) await projWerkcodeVraag(p); else _werkcodeWacht(pid,false); }
+  for(const pid of _werkcodeWacht(null,false)){ const p=projVind(pid); if(p&&!p.werkcode&&!projNummer(p)) await projWerkcodeVraag(p); else _werkcodeWacht(pid,false); }
 }
 // ── Vandaag aanwezig (F1e-C): worker (/aanwezig) + lokaal: planblokken van vandaag en verlof ──
 function _awSlug(persoon){ const p=String(persoon||'').toLowerCase(); return p.includes('@')?p.split('@')[0]:p; }

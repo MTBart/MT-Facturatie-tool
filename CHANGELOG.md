@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — Projectnummers C3: Toggl en mobiel via de resolver; "Projectnummer" in beeld; zoeken op nummer en aliassen
+- Commit: `caa6b23` | Auteur: Bart Witte
+
 ## 2026-10-12 — Projectnummers C2: cockpit zoekt projecten via de gedeelde resolver; inkoopcontrole zonder startsWith(p.code)
 - Commit: `b54284c` | Auteur: Bart Witte
 
