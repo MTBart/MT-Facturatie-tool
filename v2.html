@@ -2720,6 +2720,15 @@ function projAanvullen(p){
     p.offertes=p.offertenr?[{nummer:String(p.offertenr),mb_id:p.offertenr_mb_id!=null?String(p.offertenr_mb_id):null,rol:'hoofd',status:''}]:[];
   return p;
 }
+// Het projectnummer om te TONEN (brok C gebruikt alleen deze): eerst de teller-kaart, dan het veld. Zo blijft het juiste
+// nummer zichtbaar, ook als een oude app het uit mt_projecten.json haalde; de volgende opslag zet het daar terug.
+function projNummer(p){
+  if(!p||!p.project_id) return null;
+  const k=_projectnummerKaart(), n=k[p.project_id];
+  if(n&&PROJNR_RE.test(String(n))) return String(n);
+  if(k._volledig&&_werkcodeKaart()[p.project_id]) return null;   // de teller kent het project zonder nummer
+  return p.projectnummer&&PROJNR_RE.test(String(p.projectnummer))?String(p.projectnummer):null;
+}
 // Eén ingang om een (actief) project te vinden: project_id, huidige code, projectnummer of een oude code.
 function projVind(x){
   if(x==null||x==='') return null;
@@ -2791,8 +2800,6 @@ function _projErf(w,o){
 function _projSamen(lokaal,spData){
   const lees=v=>{ try{ return typeof v==='string'?JSON.parse(v):v; }catch(e){ return null; } };
   const L0=Array.isArray(lees(lokaal))?lees(lokaal):[], R0=Array.isArray(lees(spData))?lees(spData):[];
-  // Nooit samenvoegen met gegevens van een nieuwere app-versie (zie PROJ_SCHEMA): de aanroeper toont "herlaad de pagina".
-  if(projSchemaTeNieuw(R0)) throw new Error('projectgegevens-schema-te-nieuw');
   const idx=_projIndex([...R0,...L0]);
   const R=R0.map(x=>_projMetId(x,idx)), L=L0.map(x=>_projMetId(x,idx));
   const hernoemd=new Set([...R,...L].filter(x=>x&&x._vervallen&&x._hernoemd_naar&&x.code).map(x=>String(x.code)));
@@ -2807,7 +2814,7 @@ function _projSamen(lokaal,spData){
   const per=new Map(), groep=new Map(), los=new Map();
   for(const x of [...R,...L]){
     const k=_projSleutel(x);
-    if(!k){ if(x&&typeof x==='object'&&x._mt_meta) continue; los.set(JSON.stringify(x),x); continue; }
+    if(!k){ if(x&&typeof x==='object'&&x._mt_meta) continue; los.set(JSON.stringify(x),x); continue; }   // een meta-record (proefversie) valt weg
     if(!groep.has(k)) groep.set(k,[]); groep.get(k).push(x);
     const o=per.get(k);
     if(!o){ per.set(k,x); continue; }
@@ -2822,22 +2829,24 @@ function _projSamen(lokaal,spData){
     andere.forEach(o=>_projErf(w,o));
     uit.push(w);
   }
-  return [...uit,...los.values(),_projMetaRecord(R0,L0)];
+  return [...uit,...los.values()];
 }
-// ── Schemaversie van mt_projecten (brok A) ──
-// Eén meta-record in de lijst: {_mt_meta:'projecten', schema, min_schema, _vervallen}. Een app van vóór brok A ziet het
-// als tombstone zonder code: die laat het staan en toont het nergens. Elke app schrijft min_schema = de laagste versie die
-// zijn gegevens veilig kan samenvoegen. Leest een app een min_schema dat hoger is dan zijn eigen PROJ_SCHEMA, dan schrijft
-// hij niets meer (geen samenvoegen, geen terugschrijven, de lokale stand blijft ongemoeid) en vraagt hij om te herladen.
-const PROJ_SCHEMA=2, PROJ_MIN_SCHEMA=2;
-function _projMeta(lijst){ return (Array.isArray(lijst)?lijst:[]).find(x=>x&&typeof x==='object'&&x._mt_meta==='projecten')||null; }
-function projSchemaTeNieuw(data){
-  let l=data; if(typeof l==='string'){ try{ l=JSON.parse(l); }catch(e){ return false; } }
-  const m=_projMeta(l); return !!(m&&Number(m.min_schema)>PROJ_SCHEMA);
-}
-function _projMetaRecord(...lijsten){
-  const ms=lijsten.map(_projMeta).filter(Boolean), max=(v,d)=>Math.max(d,...ms.map(m=>Number(m[v])||0));
-  return {_mt_meta:'projecten',schema:max('schema',PROJ_SCHEMA),min_schema:max('min_schema',PROJ_MIN_SCHEMA),_vervallen:{tijd:'2026-10-12T00:00:00.000Z',door:'schema'}};
+// ── Schemaversie (brok A) ──
+// De laagste app-versie die mt_projecten nog mag schrijven staat in de teller (GET /teller/status → schema_min), NIET in
+// mt_projecten.json zelf: oudere apps (uren) gooien records zonder code daar weg, en een meta-record zou in oude code als
+// project kunnen opduiken. Bij het laden/hydrateren en hooguit eens per 5 minuten vóór het wegschrijven vraagt de cockpit
+// het op (en meldt daarmee zijn eigen versie). Is zijn PROJ_SCHEMA te laag, dan schrijft hij mt_projecten niet meer
+// (geen samenvoegen, geen terugschrijven, de lokale stand blijft ongemoeid) en vraagt hij om te herladen. Niet bereikbaar
+// of niet ingelogd → geen blokkade (de teller beslist alleen als hij antwoordt).
+const PROJ_SCHEMA=2;
+let _projSchemaMin=null, _projSchemaTijd=0;
+function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
+async function projSchemaCheck(forceer){
+  if(!forceer&&Date.now()-_projSchemaTijd<5*60*1000) return projSchemaGeblokkeerd();
+  _projSchemaTijd=Date.now();
+  try{ const j=typeof _tellerApi==='function'?await _tellerApi('/teller/status?schema='+PROJ_SCHEMA):null; if(j&&Number.isFinite(Number(j.schema_min))) _projSchemaMin=Number(j.schema_min); }catch(e){}
+  if(projSchemaGeblokkeerd()) projSchemaBlok();
+  return projSchemaGeblokkeerd();
 }
 // Eén keer melden (sync-status + toast) en mt_projecten niet meer naar SharePoint schrijven tot herladen.
 let _projSchemaGemeld=false;
@@ -2900,9 +2909,7 @@ function projConflicten(lijst){
 }
 function _projLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_projecten')||'[]'); return Array.isArray(a)?_projHernoemKetens(a).map(projAanvullen):[]; }catch(e){ return []; } }
 function projLaad(){
-  const ruw=_projLees(), nieuwer=projSchemaTeNieuw(ruw);
-  if(nieuwer) projSchemaBlok();
-  const alle=(nieuwer?ruw:_projSamen(ruw,[])).map(projAanvullen);   // oude kopieën van hetzelfde project worden één record
+  const alle=_projSamen(_projLees(),[]).map(projAanvullen);   // oude kopieën van hetzelfde project worden één record
   _projBasisZet(alle);
   const actief=alle.filter(p=>p&&typeof p==='object'&&!p._vervallen);
   projConflicten(actief).forEach(c=>console.warn('projectsleutel-conflict ('+c.soort+'):',c.code,c.projecten.join(' / ')));
@@ -2910,9 +2917,7 @@ function projLaad(){
 }
 function slaProjectenOp(){
   // De opslag eerst op project_id samenvoegen (oude kopieën van hetzelfde project worden één record).
-  const ruw=_projLees();
-  if(projSchemaTeNieuw(ruw)){ projSchemaBlok(); return; }   // lokale opslag komt van een nieuwere versie: niets overschrijven
-  const opslag=_projSamen(ruw,[]).map(projAanvullen), perSl=new Map(), losOpslag=[];
+  const opslag=_projSamen(_projLees(),[]).map(projAanvullen), perSl=new Map(), losOpslag=[];
   opslag.forEach(p=>{ const k=_projSleutel(p); if(k) perSl.set(k,p); else losOpslag.push(p); });
   const uit=[], gezien=new Set(), weg=new Set();
   for(const p of PROJECT_CODES){
@@ -2939,7 +2944,7 @@ function slaProjectenOp(){
     uit.push(s);
     if(!s._vervallen && s.bron!=='app') PROJECT_CODES.push(JSON.parse(JSON.stringify(s)));
   }
-  uit.push(...losOpslag.filter(x=>!uit.includes(x)&&!(x&&x._mt_meta)), _projMetaRecord(opslag));
+  uit.push(...losOpslag.filter(x=>!uit.includes(x)&&!(x&&x._mt_meta)));
   if(weg.size) PROJECT_CODES=PROJECT_CODES.filter(p=>!weg.has(p));
   const tekst=JSON.stringify(uit);
   if(tekst!==localStorage.getItem('mt_projecten')) localStorage.setItem('mt_projecten',tekst);
@@ -10422,6 +10427,8 @@ const _SP = Object.assign(window.MTCore.makeSP({
     if (this.blockedKeys.has(key)) { console.warn('SP auto-sync geblokkeerd voor', key, '(hydrate faalde — herlaad de pagina)'); return; }
     clearTimeout(this._q[key]);
     this._q[key] = setTimeout(async () => {
+      // Projecten: mag deze app-versie nog schrijven? (teller, hooguit eens per 5 min; zie projSchemaCheck)
+      if (key === 'mt_projecten' && typeof projSchemaCheck === 'function' && await projSchemaCheck()) return;
       const tekst=rawValue===null?'':String(rawValue).trim();
       let data;
       try{ data=JSON.parse(tekst); }catch(e){ data=undefined; }
@@ -10442,7 +10449,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const conflictMerge = mg ? ((remote, local) => {
         // SharePoint is intussen door een nieuwere app-versie geschreven: niet samenvoegen en niet schrijven (null →
         // mt-core slaat de write over); de lokale stand blijft staan en gaat na herladen gewoon mee.
-        if (key === 'mt_projecten' && projSchemaTeNieuw(remote)) { projSchemaBlok(); return null; }
+        if (key === 'mt_projecten' && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
         const samen = mg(typeof local === 'string' ? local : JSON.stringify(local), remote);
         try { if (typeof _lsSet === 'function') _lsSet(key, JSON.stringify(samen)); } catch(e) {}
         // Live calculatie bijwerken zonder typwerk van ná de start van deze resolve
@@ -11729,9 +11736,8 @@ window.initStorage = async function() {
       console.warn('SP hydrate faalde voor', key, '— migratie en auto-sync geblokkeerd');
       return;
     }
-    if (spData !== null && key === 'mt_projecten' && typeof projSchemaTeNieuw === 'function' && projSchemaTeNieuw(spData)) {
-      projSchemaBlok();                    // nieuwere app-versie: lokaal niets overschrijven, niets terugschrijven
-      return;
+    if (key === 'mt_projecten' && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) {
+      return;                              // te oude app-versie (teller): lokaal niets overschrijven, niets terugschrijven
     }
     if (spData !== null) {
       const merger = _SP.mergers && _SP.mergers[key];
@@ -11746,7 +11752,7 @@ window.initStorage = async function() {
         // Ook hier bij een 412 de samenvoeger gebruiken (de generieke merge kan geen
         // projecten/planning aan en zou de write overslaan).
         const opnieuw = (remote, local) => {
-          if (key === 'mt_projecten' && typeof projSchemaTeNieuw === 'function' && projSchemaTeNieuw(remote)) { projSchemaBlok(); return null; }
+          if (key === 'mt_projecten' && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
           const s2 = merger(JSON.stringify(local), remote); _lsSet(key, JSON.stringify(s2)); return s2;
         };
         try { await _SP.write(key + '.json', samen, opnieuw); }
