@@ -25,7 +25,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2026-10-13a"></script>
+<script src="mt-toggl.js?v=2026-10-13b"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -38,12 +38,12 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-13c"></script>
+<script src="mt-planning.js?v=2026-10-13d"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-13b"></script>
+<script src="mt-verhuis.js?v=2026-10-13c"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -3011,7 +3011,11 @@ function _projSamen(lokaal,spData){
 //   - nog niets bekend (eerste vraag mislukt) → geen blokkade (fail-open: anders legt een storing het werk stil);
 //   - eerder al "te oud" gebleken → blijft blokkeren tot herladen (fail-closed: een storing heft de blokkade niet op).
 // Een geslaagd antwoord vervangt de kennis; een blokkade die al getoond is (blockedKeys) geldt tot herladen.
-const PROJ_SCHEMA=4;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins
+const PROJ_SCHEMA=5;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
+// De schema-controle geldt voor élke SharePoint-sleutel waarvan het formaat per schema verandert: de projecten én de projecttaken
+// (een oudere tab zou de taken zonder stempels/tombstones terugschrijven).
+const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken'];
+function projSchemaSleutel(k){ return _PROJ_SCHEMA_SLEUTELS.includes(k); }
 let _projSchemaMin=null, _projSchemaTijd=0;
 function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
 async function projSchemaCheck(forceer){
@@ -3024,8 +3028,8 @@ async function projSchemaCheck(forceer){
 // Eén keer melden (sync-status + toast) en mt_projecten niet meer naar SharePoint schrijven tot herladen.
 let _projSchemaGemeld=false;
 function projSchemaBlok(){
-  try{ if(typeof _SP!=='undefined'&&_SP&&_SP.blockedKeys) _SP.blockedKeys.add('mt_projecten'); }catch(e){}
-  const melding='Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Projectwijzigingen worden tot dan niet opgeslagen in SharePoint.';
+  try{ if(typeof _SP!=='undefined'&&_SP&&_SP.blockedKeys) _PROJ_SCHEMA_SLEUTELS.forEach(k=>_SP.blockedKeys.add(k)); }catch(e){}
+  const melding='Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
   try{ if(typeof _SP!=='undefined'&&_SP) _SP.lastSync={ts:Date.now(),ok:false,key:'mt_projecten',error:melding}; }catch(e){}
   try{ if(typeof window!=='undefined'&&typeof window.updateSyncStatus==='function') window.updateSyncStatus(); }catch(e){}
   if(!_projSchemaGemeld){ _projSchemaGemeld=true; try{ if(typeof planToast==='function') planToast('⚠ '+melding); }catch(e){} }
@@ -5470,7 +5474,7 @@ function _blWijzig(id,actie,fn){
   if(_blKapot){ _blBewaar(l); return null; }        // meldt en weigert
   const voor=JSON.parse(JSON.stringify(b));
   const na=JSON.parse(JSON.stringify(b)); fn(na); _blStempel(na,voor._gewijzigd);
-  MTPlanning.bestelVeldStempel(voor,na,{t:Date.parse(na._gewijzigd)||Date.now(),door:_blWie()});   // P2: per veld een stempel
+  MTPlanning.bestelVeldStempel(voor,na,{t:Date.parse(na._gewijzigd)||Date.now(),door:_blWie(),dev:_spDev()});   // P2: per veld een stempel
   if(!_blJournaal(actie,voor,na)) return null;          // geen herstelkopie = geen wijziging
   Object.keys(b).forEach(k=>delete b[k]); Object.assign(b,na);
   return _blBewaar(l)?b:null;
@@ -5480,7 +5484,7 @@ function _blNieuw(item,actie){
   if(item.id===undefined||item.id===null||item.id==='') item.id='bl_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   if(_blKapot){ _blBewaar(l); return null; }        // meldt en weigert
   _blStempel(item);
-  MTPlanning.bestelVeldStempel(null,item,{t:Date.parse(item._gewijzigd)||Date.now(),door:_blWie()});
+  MTPlanning.bestelVeldStempel(null,item,{t:Date.parse(item._gewijzigd)||Date.now(),door:_blWie(),dev:_spDev()});
   if(!_blJournaal(actie||'nieuw',null,item)) return null;
   l.push(item);
   return _blBewaar(l)?item:null;
@@ -6972,11 +6976,16 @@ function projTakenRuw(){try{const o=JSON.parse(localStorage.getItem('mt_project_
 function projTakenAll(){const r=projTakenRuw(), o={}; Object.keys(r).forEach(c=>{ o[c]=MTPlanning.takenActief(r[c]); }); return o;}
 function projTakenSave(o){localStorage.setItem('mt_project_taken',JSON.stringify(o));}
 function projTaken(code){return MTPlanning.takenActief(projTakenRuw()[code]);}
+// Apparaat-id voor de stempels (volgorde bij gelijke tijd); per browser, blijft staan, gaat niet mee in de verhuizing.
+function _spDev(){ try{ let d=localStorage.getItem('mt_device_id'); if(!d){ d='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem('mt_device_id',d); } return d; }catch(e){ return 'd-onbekend'; } }
 function projTakenZet(code,arr){
   const ruw=projTakenRuw(), pr=(typeof projVind==='function')?projVind(code):null;
-  ruw[code]=MTPlanning.takenStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),projectId:(pr&&pr.project_id)||''});
+  ruw[code]=MTPlanning.takenStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),dev:_spDev(),projectId:(pr&&pr.project_id)||''});
   projTakenSave(ruw);
 }
+// Oude taken (zonder id of zonder stempels) eenmalig migreren; idempotent, dus bij elke start veilig. Zie MTPlanning.takenMigreer.
+function projTakenMigreer(){ const m=MTPlanning.takenMigreer(projTakenRuw()); if(m.gewijzigd) projTakenSave(m.obj); return m.gewijzigd; }
+try{ projTakenMigreer(); }catch(e){ console.warn('taken migreren:',e); }
 function _ptId(){return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 const _PT_PRIO={low:{l:'P3',c:'#6b7280'},medium:{l:'P2',c:'#B8962E'},high:{l:'P1',c:'#c0392b'}};
 const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},klaar:{l:'Klaar',c:'#2A4A38'}};
@@ -7042,6 +7051,7 @@ function projectTakenHtml(proj){
         ${MTPlanning.tgActie(t)==='actueel'?`<span class="badge badge-ok" title="${esc('Zichtbaar in Toggl-project en gelijk aan MT'+(t.tg_sync&&t.tg_sync.laatst_gezien?' — gesynchroniseerd '+new Date(t.tg_sync.laatst_gezien).toLocaleString('nl-NL'):''))}">Toggl ✓</span>`:''}
         ${MTPlanning.tgActie(t)==='koppelen'?`<button class="btn btn-xs btn-secondary" title="Maakt de taak in het Toggl-project aan (met bevestiging)" onclick="projTaakTogglSync(${jsArg(proj.code)},${jsArg(t.id)})">→ Toggl</button>`:''}
         ${MTPlanning.tgActie(t)==='extern-verwijderd'?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="De taak is in Toggl verwijderd — klik om te kiezen wat er gebeurt" onclick="projTaakTogglSync(${jsArg(proj.code)},${jsArg(t.id)})">⚠ weg in Toggl</button>`:''}
+        ${MTPlanning.tgActie(t)==='herkoppelen'?`<button class="btn btn-xs btn-secondary" title="De koppeling met Toggl is niet bevestigd (of hoort bij een andere Toggl-taak) — zet naam en status in Toggl gelijk met MT (met bevestiging)" onclick="projTaakTogglSync(${jsArg(proj.code)},${jsArg(t.id)})">↻ opnieuw koppelen</button>`:''}
         ${MTPlanning.tgActie(t)==='bijwerken'?`<button class="btn btn-xs btn-secondary" title="${esc((t.tg_sync&&t.tg_sync.status==='fout'?'Laatste poging mislukt: '+(t.tg_sync.fout||'')+' — ':'')+'Zet naam en status in Toggl gelijk met MT (met bevestiging)')}" onclick="projTaakTogglSync(${jsArg(proj.code)},${jsArg(t.id)})">↻ Toggl${t.tg_sync&&t.tg_sync.status==='fout'?' ⚠':''}</button>`:''}
         <button class="btn btn-xs btn-secondary" title="Status wisselen" onclick="projTaakStatus(${jsArg(proj.code)},${jsArg(t.id)})">⟳</button>
         <button class="btn btn-xs btn-danger" data-recht="taken:alles" title="Verwijderen" onclick="projTaakVerwijder(${jsArg(proj.code)},${jsArg(t.id)})">×</button>
@@ -7095,7 +7105,7 @@ function projAfhRuw(){try{const o=JSON.parse(localStorage.getItem('mt_project_af
 function projAfhActief(code){return MTPlanning.afhActief(projAfhRuw()[code]);}
 function projAfhZet(code,arr){
   const ruw=projAfhRuw(), pr=(typeof projVind==='function')?projVind(code):null;
-  ruw[code]=MTPlanning.afhStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),projectId:(pr&&pr.project_id)||''});
+  ruw[code]=MTPlanning.afhStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),dev:_spDev(),projectId:(pr&&pr.project_id)||''});
   localStorage.setItem('mt_project_afhank',JSON.stringify(ruw));
 }
 function _p2Vrij(){ try{ return (admVrijdagen()||[]).filter(v=>v&&v.datum&&v.type!=='optioneel').map(v=>v.datum); }catch(e){ return []; } }   // vrije dagen uit Beheer (mt_vrijedagen); "optioneel" (bv. een brugdag) telt als gewone werkdag
@@ -7585,7 +7595,7 @@ async function blConflictKies(id){
       if(k==null) break;
       if(veld==='status') kStatus=k;
     }
-    _blWijzig(id,'conflict opgelost ('+veld+')',x=>{ MTPlanning.conflictOplos(x,veld,k===1?'andere':'eigen',{door:_blWie()}); if(x.status) x.besteld=x.status!=='nodig'; });
+    _blWijzig(id,'conflict opgelost ('+veld+')',x=>{ MTPlanning.conflictOplos(x,veld,k===1?'andere':'eigen',{door:_blWie(),dev:_spDev()}); if(x.status) x.besteld=x.status!=='nodig'; });
   }
   _blNaWijziging();
 }
@@ -7682,7 +7692,7 @@ async function projMeterLaad(code,ververs){
     const van=[String(proj.created||'').slice(0,10),eerste].filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)).sort()[0]||jaar;
     const r=await tgReportsTaken([code],van<jaar?jaar:van,_tgVandaag(),!!ververs);
     if(r.geenKoppeling){ st.per=null; st.fout='geen Toggl-project gekoppeld'; }
-    else { st.per=r.per; st.tijd=r.tijd; st.fout=''; st.afgekapt=!!r.afgekapt; }
+    else { st.per=r.per; st.tijd=r.tijd; st.fout=''; st.afgekapt=!!r.afgekapt; st.periode=r.periode||null; }
   }catch(e){ st.per=null; st.fout=(typeof _tgFoutTekst==='function')?_tgFoutTekst(e):(e.message||String(e)); }
   finally{ st.bezig=false; }
   projMeterTeken(code);
@@ -7711,7 +7721,7 @@ function projMeterTeken(code){
   if(st.afgekapt) waarsch.push(_pmEl('div',{class:'pm-w pm-let-op',role:'status'},'⚠ Het project loopt langer dan de ophaalperiode: oudere uren ontbreken.'));
   const soorten=Object.entries(MTPlanning.SOORTEN).filter(([k])=>k!=='overig'&&(m.perSoort[k].budget||m.perSoort[k].gekoppeld||m.perSoort[k].gepland)).map(([k,l])=>l+': '+_pmU(m.perSoort[k].gekoppeld)+' geklokt van '+_pmU(m.perSoort[k].budget)+' budget');
   const laatstTaken=Math.max(0,...taken.map(t=>(t.tg_sync&&t.tg_sync.laatst_gezien)||0));
-  const syncTekst=(bron==='toggl'?'Uren uit Toggl: '+_pmTijd(st.tijd):'Uren: lokaal gesynchroniseerd ('+_pmTijd(Date.parse(localStorage.getItem('mt_toggl_last_sync')||'')||0)+')')+' · Taken naar Toggl: '+_pmTijd(laatstTaken||0);
+  const syncTekst=(bron==='toggl'?'Uren uit Toggl: '+_pmTijd(st.tijd)+(st.periode?' (periode '+st.periode.van+' t/m '+st.periode.tot+')':''):'Uren: lokaal gesynchroniseerd ('+_pmTijd(Date.parse(localStorage.getItem('mt_toggl_last_sync')||'')||0)+')')+' · Taken naar Toggl: '+_pmTijd(laatstTaken||0);
   const badge=sig?_pmEl('span',{class:'pm-badge pm-'+sig.niveau,title:sig.tekst},(sig.soort==='budget-100'?'Over budget ':'⚠ ')+Math.round((tt.pct||0)*100)+'%'):null;
   host.replaceChildren(_pmEl('section',{class:'pm','aria-label':'Budget en uren'},
     _pmEl('div',{class:'pm-kop'},_pmEl('div',{class:'card-title',style:'margin:0',tekst:'⏱ Budget en uren'}),badge,
@@ -7736,10 +7746,11 @@ function projTaakVeldZet(code,id,veld,waarde){
   try{ if(window.track) track('taken','veld_'+veld,{detail:code}); }catch(e){}
   _rerenderDetailKeepScroll();
 }
-const _PT_VELDLABEL={naam:'Naam',omschrijving:'Omschrijving',duur_uur:'Raming (uren)',activiteit:'Activiteit',status:'Status',toegewezen:'Toegewezen',prioriteit:'Prioriteit',afhankelijk_van:'Afhankelijk van',tg_task_id:'Toggl-taak'};
+const _PT_VELDLABEL={naam:'Naam',omschrijving:'Omschrijving',duur_uur:'Raming (uren)',activiteit:'Activiteit',status:'Status',toegewezen:'Toegewezen',prioriteit:'Prioriteit',afhankelijk_van:'Afhankelijk van',tg_task_id:'Toggl-taak',tg_sync:'Toggl-koppeling'};
 function _ptWaardeTekst(veld,w){
   if(w===null||w===undefined||w==='') return '(leeg)';
   if(veld==='activiteit'){ const a=MTPlanning.activiteit(w); return a?a.l:String(w); }
+  if(veld==='tg_sync') return (w.status||'?')+(w.fout?': '+w.fout:'');
   if(Array.isArray(w)) return w.length+' taak/taken';
   return String(w);
 }
@@ -7752,7 +7763,7 @@ async function projTaakConflict(code,id){
       message:'Twee mensen of apparaten hebben dit tegelijk gewijzigd.\nNu staat: '+_ptWaardeTekst(veld,t[veld])+'\nDe andere wijziging'+(c.door?' (door '+c.door+')':'')+': '+_ptWaardeTekst(veld,c.waarde),
       choices:[{label:'Houd wat er nu staat',sublabel:_ptWaardeTekst(veld,t[veld])},{label:'Neem de andere wijziging over',sublabel:_ptWaardeTekst(veld,c.waarde)}]});
     if(k===null||k===undefined) return;   // geannuleerd: niets wijzigen
-    MTPlanning.conflictOplos(t,veld,k===1?'andere':'eigen',{door:_spWie()});
+    MTPlanning.conflictOplos(t,veld,k===1?'andere':'eigen',{door:_spWie(),dev:_spDev()});
   }
   projTakenZet(code,arr);
   _rerenderDetailKeepScroll();
@@ -7803,10 +7814,10 @@ async function projTaakTogglSync(code,id){
     stOk(actie==='koppelen'?'✓ Taak staat in Toggl.':'✓ Toggl-taak bijgewerkt.');
     try{ if(window.track) track('taken','toggl_sync_'+actie,{detail:t.bron||'handmatig',ok:true}); }catch(e){}
   }catch(e){
-    const weg=/HTTP 404/.test(String(e.message||''));
-    _ptSyncMerk(t,weg&&actie==='bijwerken'?'extern-verwijderd':'fout',e.message||e);
+    const weg=/HTTP 404/.test(String(e.message||'')), bestaand=actie==='bijwerken'||actie==='herkoppelen';
+    _ptSyncMerk(t,weg&&bestaand?'extern-verwijderd':'fout',e.message||e);
     projTakenZet(code,arr);
-    stFout(weg&&actie==='bijwerken'?'⚠ De taak bestaat niet meer in Toggl. De MT-taak blijft staan; klik opnieuw om te kiezen.':'❌ '+(e.message||e));
+    stFout(weg&&bestaand?'⚠ De taak bestaat niet meer in Toggl. De MT-taak blijft staan; klik opnieuw om te kiezen.':'❌ '+(e.message||e));
     try{ if(window.track) track('taken','toggl_sync_'+actie,{detail:e.message,ok:false}); }catch(_){}
   }
   renderProjectDetail(huidigProject);
@@ -8513,7 +8524,7 @@ Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.
 // Altijd CONCEPT — versturen doet Bart zelf in Moneybird.
 // Uurtarieven zijn financiële gegevens: zien mag wie het geld-recht heeft (lezen), aanpassen alleen wie 'wijzigen' op geld heeft
 // (eigenaar/beheer). Zelfde controle als de rest van Geld (MTRol.magGeld). Zonder rollenlaag (MTRol) gedraagt de tool zich als altijd.
-function uurtarievenMag(niveau){ return !(window.MTRol&&MTRol.magGeld)||MTRol.magGeld(niveau==='wijzigen'?'wijzigen':undefined); }
+function uurtarievenMag(niveau){ return !!(window.MTRol&&MTRol.magGeld&&MTRol.me&&MTRol.magGeld(niveau==='wijzigen'?'wijzigen':undefined)); }   // fail-closed: zonder geslaagde rolbepaling niets zien of wijzigen
 function uurtarieven(){try{return JSON.parse(localStorage.getItem('mt_uurtarieven')||'{}');}catch(e){return{};}}
 function uurtariefVoor(naam){
   return MTPlanning.uurtarief(uurtarieven(),naam);   // één bron: Instellingen ▸ Uurtarieven (_std), anders de kerndefault in mt-planning.js
@@ -12007,7 +12018,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
     this._q[key] = setTimeout(async () => {
       // Projecten: mag deze app-versie nog schrijven? Vóór ELKE write een verse vraag aan de teller (zie projSchemaCheck:
       // mislukt hij, dan fail-open zonder kennis en fail-closed als de app al eerder te oud bleek).
-      if (key === 'mt_projecten' && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) return;
+      if (projSchemaSleutel(key) && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) return;
       const tekst=rawValue===null?'':String(rawValue).trim();
       let data;
       try{ data=JSON.parse(tekst); }catch(e){ data=undefined; }
@@ -12028,7 +12039,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const conflictMerge = mg ? ((remote, local) => {
         // SharePoint is intussen door een nieuwere app-versie geschreven: niet samenvoegen en niet schrijven (null →
         // mt-core slaat de write over); de lokale stand blijft staan en gaat na herladen gewoon mee.
-        if (key === 'mt_projecten' && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
+        if (projSchemaSleutel(key) && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
         const samen = mg(typeof local === 'string' ? local : JSON.stringify(local), remote);
         try { if (typeof _lsSet === 'function') _lsSet(key, JSON.stringify(samen)); } catch(e) {}
         // Live calculatie bijwerken zonder typwerk van ná de start van deze resolve
@@ -13317,7 +13328,7 @@ window.initStorage = async function() {
       console.warn('SP hydrate faalde voor', key, '— migratie en auto-sync geblokkeerd');
       return;
     }
-    if (key === 'mt_projecten' && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) {
+    if (projSchemaSleutel(key) && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) {
       return;                              // te oude app-versie (teller): lokaal niets overschrijven, niets terugschrijven
     }
     if (spData !== null) {
@@ -13333,7 +13344,7 @@ window.initStorage = async function() {
         // Ook hier bij een 412 de samenvoeger gebruiken (de generieke merge kan geen
         // projecten/planning aan en zou de write overslaan).
         const opnieuw = (remote, local) => {
-          if (key === 'mt_projecten' && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
+          if (projSchemaSleutel(key) && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
           const s2 = merger(JSON.stringify(local), remote); _lsSet(key, JSON.stringify(s2)); return s2;
         };
         try { await _SP.write(key + '.json', samen, opnieuw); }
@@ -17171,7 +17182,7 @@ function activiteitOpen(force){
   window.calcSetDefMarge=function(val){CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));};
   window.calcSetDefMargeOndergrens=function(val){const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));};
   // Instellingen ▸ Uurtarieven: standaardregels op het standaardtarief zetten (alleen na bevestiging daar).
-  window.calcStdTarievenGelijk=async function(std){ if(window.MTRol&&MTRol.magGeld&&!MTRol.magGeld('wijzigen')) throw new Error('Je mag de uurtarieven niet wijzigen'); await hydrateCalc(); const n=MTPlanning.defaultsGelijkTrekken(CALC.defaults,std); if(n) saveCalc('def',{direct:true}); return n; };
+  window.calcStdTarievenGelijk=async function(std){ if(!(window.MTRol&&MTRol.magGeld&&MTRol.me&&MTRol.magGeld('wijzigen'))) throw new Error('Je mag de uurtarieven niet wijzigen'); await hydrateCalc(); const n=MTPlanning.defaultsGelijkTrekken(CALC.defaults,std); if(n) saveCalc('def',{direct:true}); return n; };
   window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));};
   window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:stdTarief(),marge:2});renderOfferteCalc(key);};
   window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);renderOfferteCalc(key);};

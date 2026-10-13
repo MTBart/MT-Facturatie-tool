@@ -84,7 +84,7 @@ async function focusFetchPad(pad,method='GET',body=null){
   const res=await fetch(`${WORKER}?target=toggl_focus&path=${encodeURIComponent(pad)}`,opts);
   if(res.status===204) return true;
   const txt=await res.text();
-  if(!res.ok){ const e=new Error('Toggl HTTP '+res.status+(txt?(' — '+txt.slice(0,120)):'')); e.status=res.status; throw e; }
+  if(!res.ok){ const e=new Error('Toggl HTTP '+res.status+(txt?(' — '+txt.slice(0,120)):'')); e.status=res.status; try{ e.retryAfter=Number(res.headers.get('Retry-After'))||0; }catch(_){} throw e; }
   try{return JSON.parse(txt);}catch(e){return txt;}
 }
 // ═══ B10 — werkelijke uren en capaciteit voor de projecttijdlijn (alleen lezen) ═══
@@ -135,7 +135,7 @@ async function tgReportsUren(codes,van,tot){
         aggregations:[{property:'duration',function:'sum'}],
         filters:[{property:'start',operator:'between',value:[a.toISOString(),e.toISOString()]},
           {property:'project_id',operator:'in',value:ids}]};
-      const r=await _tgEenmalig(k,()=>focusFetchPad(`reports/workspaces/${FOCUS_WS}/query`,'POST',body));
+      const r=await _tgEenmalig(k,()=>_tgQueue(()=>focusFetchPad(`reports/workspaces/${FOCUS_WS}/query`,'POST',body)));
       rijen=((r&&r.data_json_row)||[]).map(x=>({user:x.user_account_id,task:x.task_id||null,project:x.project_id,uren:Math.round((Number(x.sum_duration)||0)/36)/100}));
       _tgCacheZet(k,rijen);
     }
@@ -143,22 +143,50 @@ async function tgReportsUren(codes,van,tot){
   }
   return {per,geenKoppeling:false,zonderKoppeling};
 }
+// ── Gedeelde wachtrij voor Reports-queries ──
+// Hooguit 2 tegelijk, minstens 150 ms tussen twee starts; bij 429 (te veel verzoeken) wachten we de Retry-After af (anders 2, 4, 8 s,
+// maximaal 30) en proberen opnieuw, hooguit 3 keer. Alle Reports-aanroepen (tgReportsUren, tgReportsTaken) lopen hierdoorheen.
+const _tgQ={actief:0,wacht:[],laatste:0,max:2,tussen:150,slaap:ms=>new Promise(r=>setTimeout(r,ms))};
+function _tgQueue(fn){ return new Promise((res,rej)=>{ _tgQ.wacht.push({fn,res,rej}); _tgQpomp(); }); }
+function _tgQpomp(){
+  while(_tgQ.actief<_tgQ.max&&_tgQ.wacht.length){
+    const j=_tgQ.wacht.shift(); _tgQ.actief++;
+    const wacht=Math.max(0,_tgQ.laatste+_tgQ.tussen-Date.now()); _tgQ.laatste=Date.now()+wacht;
+    _tgQ.slaap(wacht).then(()=>_tgMet429(j.fn)).then(j.res,j.rej).finally(()=>{ _tgQ.actief--; _tgQpomp(); });
+  }
+}
+async function _tgMet429(fn){
+  for(let n=0;;n++){
+    try{ return await fn(); }
+    catch(e){ if(e&&e.status===429&&n<3){ await _tgQ.slaap(Math.min(30,Math.max(1,Number(e.retryAfter)||(2<<n)))*1000); continue; } throw e; }
+  }
+}
+// Contract van de Focus Reports-query (groepering project_id + task_id + user, som van de duur): { data_json_row: [ {project_id, task_id|null,
+// user_account_id, sum_duration (seconden)} ] }. Zijn er regels maar mist `task_id` (de sleutel zelf, niet de waarde) of `sum_duration`, dan
+// is het contract gewijzigd en kunnen we uren niet aan taken toerekenen: een zichtbare fout in plaats van stil "alles zonder taak".
+function tgReportsRijen(r){
+  const lijst=r&&r.data_json_row;
+  if(!Array.isArray(lijst)) return {rijen:[],contractFout:'Toggl gaf een onverwacht antwoord (geen data_json_row)'};
+  const echt=lijst.filter(x=>x&&typeof x==='object');
+  if(echt.length&&!echt.some(x=>'task_id' in x)) return {rijen:[],contractFout:'Toggl geeft geen task_id mee in de urenrapportage: uren per taak zijn niet te bepalen'};
+  if(echt.length&&!echt.some(x=>'sum_duration' in x)) return {rijen:[],contractFout:'Toggl geeft geen duur (sum_duration) mee in de urenrapportage'};
+  return {rijen:echt.map(x=>({taak_id:x.task_id||null,project:x.project_id,sec:Number(x.sum_duration)||0})),contractFout:''};
+}
 // Geklokte MINUTEN per Toggl-taak voor de projecten van `codes` (P1: de projectmeter). Zelfde Reports-query als hierboven
 // (project_id + task_id + user, datums via filters), maar over een langere periode in blokken van 4 weken en samengeteld per
-// project en taak; een entry zonder taak komt terug met taak_id null. `ververs` slaat de sessie-cache over.
-// → {per:[{taak_id, project, min}], geenKoppeling, zonderKoppeling, tijd, afgekapt}
+// project en taak; een entry zonder taak komt terug met taak_id null. `ververs` slaat de sessie-cache over (cache per project en
+// periode: sleutel = projecten + blok + dag).
+// → {per:[{taak_id, project, min}], geenKoppeling, zonderKoppeling, tijd, afgekapt, periode:{van, tot}}
 async function tgReportsTaken(codes,van,tot,ververs){
   const PC=(typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]);
   const zonderKoppeling=(codes||[]).filter(c=>!((PC.find(p=>p.code===c)||{}).tg_project_id));
   const ids=[...new Set((codes||[]).map(c=>(PC.find(p=>p.code===c)||{}).tg_project_id).filter(Boolean).map(Number))].sort((a,b)=>a-b);
-  if(!ids.length) return {per:[],geenKoppeling:true,zonderKoppeling,tijd:Date.now(),afgekapt:false};
+  if(!ids.length) return {per:[],geenKoppeling:true,zonderKoppeling,tijd:Date.now(),afgekapt:false,periode:null};
   const vandaag=_tgVandaag(), blokken=[];
+  const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   const [y,m,d]=String(van).split('-').map(Number); const w=new Date(y,m-1,d);
-  for(;blokken.length<14;w.setDate(w.getDate()+28)){
-    const a=w.getFullYear()+'-'+String(w.getMonth()+1).padStart(2,'0')+'-'+String(w.getDate()).padStart(2,'0');
-    if(a>tot||a>vandaag) break; blokken.push(a);
-  }
-  const afgekapt=blokken.length===14&&(()=>{ const n=new Date(w); const a=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); return a<=tot&&a<=vandaag; })();
+  for(;blokken.length<14;w.setDate(w.getDate()+28)){ const a=ymd(w); if(a>tot||a>vandaag) break; blokken.push(a); }
+  const afgekapt=blokken.length===14&&ymd(w)<=tot&&ymd(w)<=vandaag;
   const som={};
   for(const ws of blokken){
     const k='mt_tgtk|'+ids.join(',')+'|'+ws+'|'+vandaag;
@@ -169,14 +197,15 @@ async function tgReportsTaken(codes,van,tot,ververs){
         aggregations:[{property:'duration',function:'sum'}],
         filters:[{property:'start',operator:'between',value:[a.toISOString(),e.toISOString()]},
           {property:'project_id',operator:'in',value:ids}]};
-      const r=await _tgEenmalig(k,()=>focusFetchPad(`reports/workspaces/${FOCUS_WS}/query`,'POST',body));
-      rijen=((r&&r.data_json_row)||[]).map(x=>({taak_id:x.task_id||null,project:x.project_id,sec:Number(x.sum_duration)||0}));
-      _tgCacheZet(k,rijen);
+      const r=await _tgEenmalig(k,()=>_tgQueue(()=>focusFetchPad(`reports/workspaces/${FOCUS_WS}/query`,'POST',body)));
+      const c=tgReportsRijen(r);
+      if(c.contractFout) throw new Error(c.contractFout);
+      rijen=c.rijen; _tgCacheZet(k,rijen);
     }
     rijen.forEach(x=>{ const sl=(x.taak_id==null?'':x.taak_id)+'|'+x.project; (som[sl]=som[sl]||{taak_id:x.taak_id,project:x.project,sec:0}).sec+=x.sec; });
   }
   const per=Object.values(som).map(x=>({taak_id:x.taak_id,project:x.project,min:Math.round(x.sec/60)})).filter(x=>x.min>0);
-  return {per,geenKoppeling:false,zonderKoppeling,tijd:Date.now(),afgekapt};
+  return {per,geenKoppeling:false,zonderKoppeling,tijd:Date.now(),afgekapt,periode:blokken.length?{van:blokken[0],tot:tot<vandaag?tot:vandaag}:null};
 }
 // Capaciteit uit Toggl (vrij = working − estimated, per gebruiker per dag), alleen lezen:
 // GET O/capacities/users?user_id=<één id>&unit=day&start_date&end_date. Antwoord (bewezen op 3-4 okt, zie
