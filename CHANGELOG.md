@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — Toggl-overname (Codex): atomische claim op het Toggl-project in de teller
+- Commit: `84cd423` | Auteur: Bart Witte
+
 ## 2026-10-13 — v2.14.1 voorbereid: versielabel, "wat is er verbeterd" (Uit Toggl overnemen), mt-project.js-versie omhoog
 - Commit: `02920bf` | Auteur: Bart Witte
 

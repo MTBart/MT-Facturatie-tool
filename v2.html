@@ -8976,7 +8976,16 @@ function tgOverKandidaten(ps){
   return {lijst:uit,viaNaam};
 }
 function tgOverKlantNaam(p){ return String((p&&((p.client&&p.client.name)||p.client_name))||'').trim(); }
-function tgOverKlant(p){ const n=tgOverKlantNaam(p); if(!n) return null; const kv=klantVolByNaam(n); return kv&&kv.soort!=='leverancier'?kv:null; }
+// Klantvoorstel: ALLE registry-namen die genormaliseerd gelijk zijn; alleen bij precies één, en geen leverancier (klantVolByNaam
+// pakt de eerste match en blijft voor de andere aanroepers zoals hij is). {kv, reden: ''|'geen'|'meerdere'|'leverancier'}.
+function tgOverKlantMatch(p){
+  const n=_normNaam(tgOverKlantNaam(p)); if(!n) return {kv:null,reden:'geen'};
+  const m=(KLANTEN_VOL||[]).filter(k=>k&&_normNaam(k.naam)===n);
+  if(!m.length) return {kv:null,reden:'geen'};
+  if(m.length>1) return {kv:null,reden:'meerdere'};
+  return m[0].soort==='leverancier'?{kv:null,reden:'leverancier'}:{kv:m[0],reden:''};
+}
+function tgOverKlant(p){ return tgOverKlantMatch(p).kv; }
 function _tgOverUren(sec){ const u=Math.round((Number(sec)||0)/360)/10; return u?String(u).replace('.',',')+' u':''; }
 async function tgOvernemenOpen(){
   if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return mtDialog.alert({title:'Uit Toggl overnemen',message:'Je mag geen projecten aanmaken.'});
@@ -9005,7 +9014,7 @@ function tgOvernemenKies(id){
   tgOvernemenSluit();
   if(typeof tbDoTab==='function') tbDoTab('projecten');
   openModal();   // wist de velden en de bronnen
-  const n=MTProject.naamZonderCode(x.p.name), kv=tgOverKlant(x.p), kn=tgOverKlantNaam(x.p);
+  const n=MTProject.naamZonderCode(x.p.name), km=tgOverKlantMatch(x.p), kv=km.kv, kn=tgOverKlantNaam(x.p);
   _tgProjBron={id:x.p.id,naam:String(x.p.name||''),nummer:n.nummer};
   const nk=document.getElementById('modal-naam-klant'); if(nk) nk.value=kv?kv.naam:'';
   const np=document.getElementById('modal-naam-product'); if(np) np.value=n.naam.slice(0,60);
@@ -9014,7 +9023,10 @@ function tgOvernemenKies(id){
   const st=document.getElementById('modal-status');
   if(st){ st.style.color='var(--text-dim)';
     st.textContent='Overname uit Toggl: „'+x.p.name+'” wordt aan dit project gekoppeld; de naam in Toggl blijft zoals hij is.'
-      +(kv?' Klant herkend: '+kv.naam+'.':kn?' Toggl-klant „'+kn+'” staat niet (eenduidig) in de registry — vul de klant zelf in.':' Geen Toggl-klant — vul de klant zelf in.')
+      +(kv?' Klant herkend: '+kv.naam+'.':!kn?' Geen Toggl-klant — vul de klant zelf in.'
+        :km.reden==='meerdere'?' Toggl-klant „'+kn+'” past bij meerdere registry-contacten — vul de klant zelf in.'
+        :km.reden==='leverancier'?' Toggl-klant „'+kn+'” staat in de registry als leverancier — vul de klant zelf in.'
+        :' Toggl-klant „'+kn+'” staat niet in de registry — vul de klant zelf in.')
       +(al?' Let op: '+n.nummer+' hoort al bij '+projKort(al)+' — controleer of dit niet hetzelfde project is.'
         :n.nummer?' In de Toggl-naam staat '+n.nummer+'; de teller geeft nummers op volgorde uit, dit project krijgt het volgende vrije nummer.':'')
       +(x.ambigu?' ⚠ De naam past bij meer dan één project.':''); }
@@ -9128,13 +9140,18 @@ async function maakProjectAan(){
   status.style.color='var(--text-dim)'; status.textContent='Projectnummer ophalen…';
   let code=null, wcFout='', nummer=null, werkcode=null;
   try{
-    const j=await _tellerApi('/teller/werkcode',{project_id:projectId,schema:PROJ_SCHEMA});
+    const j=await _tellerApi('/teller/werkcode',Object.assign({project_id:projectId,schema:PROJ_SCHEMA},tgBron?{tg_project_id:String(tgBron.id)}:{}));
     nummer=j&&j.projectnummer&&PROJNR_RE.test(String(j.projectnummer))?String(j.projectnummer):null;
     werkcode=j&&j.werkcode?String(j.werkcode):null;
     code=j&&(j.code||j.werkcode)?String(j.code||j.werkcode):null;
     if(code&&nummer&&code!==nummer) code=null;   // nieuw project met een nummer: de code ís het nummer
     if(!code) wcFout=j===null?'niet ingelogd':'geen projectnummer ontvangen';
-  }catch(e){ wcFout=String(e.message||e); }
+  }catch(e){
+    // Overname uit Toggl: de teller claimt het Toggl-project atomisch; een tweede overname (ander venster, andere pc) krijgt het project terug.
+    if(e&&e.data&&e.data.error==='toggl-al-overgenomen'){ const al=projVind(e.data.project_id)||projVind(e.data.code); status.style.color='var(--red)';
+      status.textContent='Dit Toggl-project is al overgenomen als '+(al?projKort(al):(e.data.projectnummer||e.data.code||'een ander project'))+' — er is niets aangemaakt.'; return; }
+    wcFout=String(e.message||e);
+  }
   if(!code){status.style.color='var(--red)';status.textContent='Projectnummer niet beschikbaar ('+wcFout+') — er is niets aangemaakt. Probeer het zo opnieuw.';return;}
   if(projVind(code)){status.style.color='var(--red)';status.textContent='Projectnummer '+code+' is al in gebruik — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
   if(tgBron&&tgOverAlGekoppeld(tgBron.id)){status.style.color='var(--red)';status.textContent='Dit Toggl-project is intussen al gekoppeld — er is niets aangemaakt.';return;}
@@ -13308,7 +13325,7 @@ async function _tellerApi(pad,body){
   const h=await authHeader(); if(!h['X-Auth-Token']) return null;
   const r=await fetch(WORKER+pad,body===undefined?{headers:h}:{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>null);
-  if(!r.ok){ const e=new Error((j&&(j.uitleg||j.error))||('HTTP '+r.status)); e.status=r.status; throw e; }
+  if(!r.ok){ const e=new Error((j&&(j.uitleg||j.error))||('HTTP '+r.status)); e.status=r.status; e.data=j; throw e; }
   return j;
 }
 async function instellingenLaad(){
