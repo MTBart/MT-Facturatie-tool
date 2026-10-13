@@ -1871,7 +1871,9 @@ export class MtTeller {
   async aiOudeGraven(nu) { return [...(await this.state.storage.list({ prefix: 'x:' }))].filter(([, x]) => nu - x.ts > 24 * 3600 * 1000).map(([k]) => k); }
   async aiRuimGraven(nu) { const oud = await this.aiOudeGraven(nu); if (oud.length) await this.aiAtomair(async w => { for (let i = 0; i < oud.length; i += 100) await w.delete(oud.slice(i, i + 100)); }); return oud.length; }
   // DO-alarm: rekent verlopen claims (> 5 minuten) af, onafhankelijk van een volgend verzoek, en plant zichzelf op de eerstvolgende verloopdatum.
+  // De signalen-instantie (merkteken sig:instantie) gebruikt het alarm voor de gebundelde pushmelding (PushDO.alarm).
   async alarm() {
+    if (await this.state.storage.get('sig:instantie')) { await PushDO.alarm(this); return; }
     await this.state.blockConcurrencyWhile(async () => {
       const st = this.state.storage, nu = Date.now();
       await this.aiRuimVerlopen(nu, 'f:', geldVandaag());
@@ -5100,6 +5102,7 @@ const SigDO = {
           for (let i = 0; i < weg.length; i += 100) await st.delete(weg.slice(i, i + 100));
           return sigAntw({ ok: true, opgeruimd: weg.length });
         }
+        if (op.startsWith('sig-sub-')) return await PushDO.ops(self, op, b, nu, logZet);   // push-subscriptions (L3b)
         if (op === 'sig-wh-claim' || op === 'sig-wh-klaar' || op === 'sig-wh-wis') {   // idempotentie van de Moneybird-webhook
           const sl = String(b.sleutel || ''); if (!MB_WH_SLEUTEL_RE.test(sl)) return sigAntw({ error: 'ongeldig' }, 400);
           const k = 'wh:' + sl, w = await st.get(k);
@@ -5137,7 +5140,7 @@ const SigDO = {
       mb_id: SIG_MBID_RE.test(String(b.mb_id || '')) ? String(b.mb_id) : undefined, status: 'open', aangemaakt: nu, gewijzigd: nu, via: b.via || 'systeem' };
     await st.put({ ['i:' + sleutel]: item, ['o:' + oorzaak]: sleutel, ['k:' + sleutel]: nu });
     await logZet({ actie: 'signaal-nieuw', sleutel, soort: b.soort, project_id: b.project_id, mb_id: item.mb_id, via: item.via });
-    if (SigDO.naNieuw) await SigDO.naNieuw(self, nu);
+    await PushDO.plan(self, nu);   // push (L3b): gebundeld, buiten de stille uren
     return { status: 200, body: { ok: true, nieuw: true, sleutel } };
   },
   // Statusovergang door een gebruiker (binnen het slot).
@@ -5202,7 +5205,7 @@ async function handleSignalen(p, request, env, ik, json) {
   const R = ik.rol ? RECHTEN[ik.rol] : null, m = request.method;
   const zien = !!(R && (R.offertes || R.projecten)), wijzigen = !!(R && R.offertes === 'wijzigen');
   if (!zien) return json({ error: 'geen-toegang', reden: R ? 'offertes' : (ik.reden || 'geen-rol') }, 403);
-  if (typeof handlePush === 'function' && p.startsWith('/push/')) return await handlePush(p, request, env, ik, json, R);
+  if (p.startsWith('/push/')) return await handlePush(p, request, env, ik, json, R);
   const doe = sigStub(env);
   if (!doe) return json({ error: 'geen-signalen-opslag', uitleg: 'Durable Object-binding MT_TELLER ontbreekt (zie wrangler.toml)' }, 503);
   const leesBody = async () => { const t = await geldLeesMax(request, 64 * KB); if (t == null) return { fout: 413 }; try { const j = JSON.parse(t || '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? { j } : { fout: 400 }; } catch { return { fout: 400 }; } };
@@ -5377,6 +5380,175 @@ async function sigReconciliatie(env) {
   try { await doe('sig-opruim', {}); } catch {}
   sigLog({ controle: uit.status, ...uit, subrequests: budget.n });
   return uit;
+}
+
+// ══ WEB-PUSH (L3b) ═════════════════════════════════════════════════════════════
+// Een algemene pushmelding op de telefoon als er nieuwe signalen zijn. NOOIT klantnaam, bedrag, nummer of project in de melding: de tekst
+// is altijd "M&T: N acties vragen aandacht"; de details staan pas na inloggen in de app.
+//   Sleutels: VAPID_PUBLIC (base64url, 65 bytes ongecomprimeerd P-256) en VAPID_PRIVATE (base64url, 32 bytes `d`), allebei als worker-secret
+//   (de publieke mag ook een var zijn); optioneel VAPID_SUBJECT (https:// of mailto:). Zonder sleutels: /push/sleutel en /push/aanmelden
+//   geven 503 en er wordt niets verstuurd. Aanmaken: zie wrangler.toml (instructie; niet door Claude uitgevoerd).
+//   Subscriptions per gebruiker en per apparaat: DO-sleutel `s:<oid>:<sha256(endpoint)[:32]>` in de signalen-instantie; hooguit
+//   PUSH_SUBS_PER_GEBRUIKER per gebruiker (de oudste valt af). Alleen endpoints van de bekende pushdiensten (geen willekeurige URL's).
+//   Aanmelden alleen met verkooprecht (`offertes`); bij het versturen wordt de rol opnieuw gecontroleerd (geen recht meer = subscription weg).
+//   De pushdienst zegt 404/410 → subscription opgeruimd.
+//   Encryptie: RFC 8291 (aes128gcm, ECDH P-256 + HKDF + AES-128-GCM) en VAPID (RFC 8292, ES256-JWT), alles via WebCrypto.
+//   Bundeling en stille uren (alleen voor push; de lijst in de app toont alles meteen): een nieuw signaal zet een DO-alarm op
+//   max(nu + 1 min, vorige push + 15 min), en nooit tussen PUSH_STIL_VAN en PUSH_STIL_TOT (Europe/Amsterdam): dan op het eind van de stille uren.
+const PUSH_BUNDEL_MS = 15 * 60 * 1000, PUSH_VERZAMEL_MS = 60 * 1000, PUSH_STIL_VAN = 21, PUSH_STIL_TOT = 7;
+const PUSH_SUBS_PER_GEBRUIKER = 10, PUSH_MAX_SUBS = 200, PUSH_TTL_S = 24 * 3600, PUSH_URL = 'mobiel.html';
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^([a-z0-9-]+\.)*push\.apple\.com$/, /^([a-z0-9-]+\.)*notify\.windows\.com$/];
+const PUSH_HASH_RE = /^[0-9a-f]{32}$/;
+const PUSH_OID_RE = /^[0-9a-fA-F-]{36}$/;
+function pushTekst(n) { return `M&T: ${n} ${n === 1 ? 'actie vraagt' : 'acties vragen'} aandacht`; }
+function pushStil(ms) { const u = amsterdamTijd(ms).uur; return PUSH_STIL_VAN > PUSH_STIL_TOT ? (u >= PUSH_STIL_VAN || u < PUSH_STIL_TOT) : (u >= PUSH_STIL_VAN && u < PUSH_STIL_TOT); }
+function pushNaStil(ms) { let x = ms; for (let i = 0; i < 96 && pushStil(x); i++) x += 15 * 60 * 1000; return x; }
+function pushEndpointOk(e) {
+  try { const s = String(e || ''), u = new URL(s); return s.length <= 1024 && u.protocol === 'https:' && !u.port && !u.username && PUSH_HOSTS.some(r => r.test(u.hostname)); } catch { return false; }
+}
+const b64uVan = bytes => { const b = new Uint8Array(bytes); let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const b64uNaar = s => { try { return /^[A-Za-z0-9_-]+={0,2}$/.test(String(s || '')) ? b64urlDecode(String(s).replace(/=+$/, '')) : null; } catch { return null; } };
+const bytesSamen = (...delen) => { const n = delen.reduce((a, d) => a + d.length, 0), uit = new Uint8Array(n); let o = 0; for (const d of delen) { uit.set(d, o); o += d.length; } return uit; };
+function pushPubliek(env) {
+  const k = String((env && env.VAPID_PUBLIC) || '').trim(), b = b64uNaar(k);
+  return b && b.length === 65 && b[0] === 4 && String(env.VAPID_PRIVATE || '').trim() ? k : null;
+}
+let _vapid = null;
+async function pushVapid(env) {
+  const pub = pushPubliek(env); if (!pub) return null;
+  const d = String(env.VAPID_PRIVATE).trim();
+  if (_vapid && _vapid.pub === pub && _vapid.d === d) return _vapid;
+  const b = b64uNaar(pub);
+  const key = await crypto.subtle.importKey('jwk', { kty: 'EC', crv: 'P-256', x: b64uVan(b.slice(1, 33)), y: b64uVan(b.slice(33, 65)), d, ext: true }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  _vapid = { pub, d, key };
+  return _vapid;
+}
+async function pushVapidKop(v, endpoint, env, nu) {
+  const enc = x => b64uVan(new TextEncoder().encode(JSON.stringify(x)));
+  const onder = enc({ typ: 'JWT', alg: 'ES256' }) + '.' + enc({ aud: new URL(endpoint).origin, exp: Math.floor(nu / 1000) + 12 * 3600, sub: String(env.VAPID_SUBJECT || 'https://mortiseandtenon.nl') });
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, v.key, new TextEncoder().encode(onder));   // WebCrypto geeft r||s (64 bytes), precies wat ES256 vraagt
+  return `vapid t=${onder}.${b64uVan(sig)}, k=${v.pub}`;
+}
+// RFC 8291: één record, aes128gcm. → body (salt | rs | idlen | keyid | ciphertext).
+async function pushVersleutel(tekst, p256dh, auth) {
+  const S = crypto.subtle, uaPub = b64uNaar(p256dh), geheim = b64uNaar(auth);
+  if (!uaPub || uaPub.length !== 65 || uaPub[0] !== 4 || !geheim || geheim.length !== 16) throw new Error('ongeldige-sleutels');
+  const eph = await S.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const asPub = new Uint8Array(await S.exportKey('raw', eph.publicKey));
+  const uaKey = await S.importKey('raw', uaPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const ecdh = new Uint8Array(await S.deriveBits({ name: 'ECDH', public: uaKey }, eph.privateKey, 256));
+  const hkdf = async (salt, ikm, info, len) => new Uint8Array(await S.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, await S.importKey('raw', ikm, 'HKDF', false, ['deriveBits']), len * 8));
+  const te = x => new TextEncoder().encode(x);
+  const ikm = await hkdf(geheim, ecdh, bytesSamen(te('WebPush: info\0'), uaPub, asPub), 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, te('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, te('Content-Encoding: nonce\0'), 12);
+  const ct = new Uint8Array(await S.encrypt({ name: 'AES-GCM', iv: nonce }, await S.importKey('raw', cek, 'AES-GCM', false, ['encrypt']), bytesSamen(te(tekst), new Uint8Array([2]))));
+  const kop = new Uint8Array(21); kop.set(salt, 0); new DataView(kop.buffer).setUint32(16, 4096); kop[20] = 65;
+  return bytesSamen(kop, asPub, ct);
+}
+async function pushStuur(env, v, sub, tekst, nu) {
+  const body = await pushVersleutel(tekst, sub.p256dh, sub.auth);
+  const r = await fetch(sub.endpoint, { method: 'POST', body, headers: { 'Authorization': await pushVapidKop(v, sub.endpoint, env, nu), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', 'TTL': String(PUSH_TTL_S), 'Urgency': 'normal' } });
+  return r.status;
+}
+// Mag deze gebruiker (nog) meldingen krijgen? true / false / null (onbekend: KV-fout → deze keer overslaan, niet weggooien).
+async function pushMag(env, oid) {
+  if (vasteEigenaar(env, oid, null)) return true;
+  if (!env.MT_ROLLEN) return false;
+  let rec; try { const v = await env.MT_ROLLEN.get('user:' + oid); rec = v ? JSON.parse(v) : null; } catch { return null; }
+  return !!(rec && rec.active !== false && ROLLEN.includes(rec.role) && RECHTEN[rec.role].offertes);
+}
+// DO-kant van push (signalen-instantie).
+const PushDO = {
+  async ops(self, op, b, nu, logZet) {
+    const st = self.state.storage, oid = String(b.oid || ''), hash = String(b.hash || '');
+    if (!PUSH_OID_RE.test(oid)) return sigAntw({ error: 'ongeldig' }, 400);
+    if (op === 'sig-sub-status') return sigAntw({ apparaten: (await st.list({ prefix: 's:' + oid + ':' })).size });
+    if (!PUSH_HASH_RE.test(hash)) return sigAntw({ error: 'ongeldig' }, 400);
+    const k = 's:' + oid + ':' + hash;
+    if (op === 'sig-sub-zet') {
+      if (!pushEndpointOk(b.endpoint) || !b64uNaar(b.p256dh) || !b64uNaar(b.auth)) return sigAntw({ error: 'ongeldig' }, 400);
+      const bestaand = await st.get(k), eigen = [...(await st.list({ prefix: 's:' + oid + ':' }))].filter(([x]) => x !== k).sort(([, x], [, y]) => (x.ts || 0) - (y.ts || 0));
+      const teVeel = eigen.length - (PUSH_SUBS_PER_GEBRUIKER - 1);
+      if (teVeel > 0) await st.delete(eigen.slice(0, teVeel).map(([x]) => x));
+      await st.put(k, { endpoint: String(b.endpoint), p256dh: String(b.p256dh), auth: String(b.auth), ts: nu });
+      if (!bestaand) await logZet({ actie: 'push-aangemeld', door: b.door });
+      return sigAntw({ ok: true, nieuw: !bestaand, apparaten: Math.min(eigen.length, PUSH_SUBS_PER_GEBRUIKER - 1) + 1 });
+    }
+    if (op === 'sig-sub-weg') {
+      const was = !!(await st.get(k)); if (was) { await st.delete(k); await logZet({ actie: 'push-afgemeld', door: b.door }); }
+      return sigAntw({ ok: true, verwijderd: was });
+    }
+    return sigAntw({ error: 'onbekend' }, 404);
+  },
+  // Na een nieuw signaal (binnen het slot): bundelen en stille uren respecteren via het DO-alarm.
+  async plan(self, nu) {
+    const st = self.state.storage;
+    if (!(await st.list({ prefix: 's:', limit: 1 })).size) return;            // niemand aangemeld: niets te plannen
+    const p = (await st.get('p:stand')) || { laatst: 0 };
+    if (!p.wachtend) { p.wachtend = true; await st.put('p:stand', p); }
+    const tijd = pushNaStil(Math.max(nu + PUSH_VERZAMEL_MS, (p.laatst || 0) + PUSH_BUNDEL_MS));
+    const huidig = await st.getAlarm();
+    if (huidig == null || huidig > tijd) await st.setAlarm(tijd);
+  },
+  // Het alarm: één algemene melding met het aantal open acties naar alle aangemelde apparaten (buiten het slot versturen).
+  async alarm(self, nu = Date.now()) {
+    const st = self.state.storage;
+    const plan = await self.state.blockConcurrencyWhile(async () => {
+      const p = (await st.get('p:stand')) || {};
+      if (!p.wachtend) return null;
+      if (pushStil(nu)) { await st.setAlarm(pushNaStil(nu)); return null; }
+      if (p.laatst && nu - p.laatst < PUSH_BUNDEL_MS) { await st.setAlarm(p.laatst + PUSH_BUNDEL_MS); return null; }
+      const n = sigTelling([...(await st.list({ prefix: 'i:' })).values()], geldVandaag()).open;
+      const subs = n ? [...(await st.list({ prefix: 's:' }))].slice(0, PUSH_MAX_SUBS) : [];
+      await st.put('p:stand', { laatst: subs.length ? nu : (p.laatst || 0), wachtend: false });
+      return subs.length ? { n, subs } : null;
+    });
+    if (!plan) return { verstuurd: 0 };
+    const env = self.env || {}, v = await pushVapid(env).catch(() => null);
+    const log = e => self.state.blockConcurrencyWhile(() => st.put('log:' + String(9e15 - nu).padStart(16, '0') + ':' + randHex(3), { ts: nu, ...e }));
+    if (!v) { await log({ actie: 'push', resultaat: 'niet-ingericht', n: plan.n }); return { verstuurd: 0 }; }
+    const tekst = JSON.stringify({ titel: 'M&T', tekst: pushTekst(plan.n), n: plan.n, url: PUSH_URL });
+    const weg = [], mag = new Map(); let verstuurd = 0, fouten = 0;
+    for (const [k, s] of plan.subs) {
+      const oid = k.split(':')[1];
+      if (!mag.has(oid)) mag.set(oid, await pushMag(env, oid));
+      if (mag.get(oid) === false) { weg.push(k); continue; }
+      if (mag.get(oid) == null) continue;
+      try { const status = await pushStuur(env, v, s, tekst, nu); if (status === 404 || status === 410) weg.push(k); else if (status >= 200 && status < 300) verstuurd++; else fouten++; }
+      catch { fouten++; }
+    }
+    if (weg.length) await self.state.blockConcurrencyWhile(() => st.delete(weg));
+    await log({ actie: 'push', n: plan.n, verstuurd, opgeruimd: weg.length, fouten });
+    return { verstuurd, opgeruimd: weg.length, fouten };
+  },
+};
+// Routes /push/* (via handleSignalen: wie de signalen mag zien). Aanmelden alleen met verkooprecht.
+async function handlePush(p, request, env, ik, json, R) {
+  const m = request.method;
+  if (p === '/push/sleutel' && m === 'GET') {
+    const k = pushPubliek(env);
+    return k ? json({ publicKey: k }) : json({ error: 'push-niet-ingericht', uitleg: 'VAPID_PUBLIC en VAPID_PRIVATE ontbreken (zie wrangler.toml)' }, 503);
+  }
+  const doe = sigStub(env);
+  if (!doe) return json({ error: 'geen-signalen-opslag', uitleg: 'Durable Object-binding MT_TELLER ontbreekt (zie wrangler.toml)' }, 503);
+  const door = await oidHash(ik.oid);
+  if (p === '/push/status' && m === 'GET') { const r = await doe('sig-sub-status', { oid: ik.oid }); return json({ ingericht: !!pushPubliek(env), mag: !!R.offertes, ...(r.j || {}) }, r.status); }
+  if (m !== 'POST' || !['/push/aanmelden', '/push/afmelden'].includes(p)) return json({ error: 'onbekende-route' }, 404);
+  const t = await geldLeesMax(request, 8 * KB); if (t == null) return json({ error: 'te-groot' }, 413);
+  let b; try { b = JSON.parse(t || '{}'); } catch { return json({ error: 'ongeldige-json' }, 400); }
+  const sub = b && typeof b === 'object' ? (b.subscription && typeof b.subscription === 'object' ? b.subscription : b) : {};
+  const endpoint = String(sub.endpoint || '');
+  if (!pushEndpointOk(endpoint)) return json({ error: 'ongeldig', uitleg: 'endpoint van een bekende pushdienst (https) verplicht' }, 400);
+  const hash = (await sha256Hex(endpoint)).slice(0, 32);
+  if (p === '/push/afmelden') { const r = await doe('sig-sub-weg', { oid: ik.oid, hash, door }); return json(r.j, r.status); }
+  if (!R.offertes) return json({ error: 'geen-toegang', reden: 'offertes' }, 403);
+  if (!pushPubliek(env)) return json({ error: 'push-niet-ingericht', uitleg: 'VAPID_PUBLIC en VAPID_PRIVATE ontbreken (zie wrangler.toml)' }, 503);
+  const keys = sub.keys || {}, p256 = b64uNaar(keys.p256dh), au = b64uNaar(keys.auth);
+  if (!p256 || p256.length !== 65 || p256[0] !== 4 || !au || au.length !== 16) return json({ error: 'ongeldig', uitleg: 'keys.p256dh (65 bytes) en keys.auth (16 bytes), base64url' }, 400);
+  const r = await doe('sig-sub-zet', { oid: ik.oid, hash, endpoint, p256dh: String(keys.p256dh), auth: String(keys.auth), door });
+  return json(r.j, r.status);
 }
 
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
