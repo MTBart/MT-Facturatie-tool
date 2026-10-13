@@ -511,6 +511,26 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .proj-secknop.actief{background:var(--green);color:var(--n-0)}
 .proj-secn{font:600 10px var(--mono);opacity:.75;margin-left:2px}
 .proj-sectie{min-width:0;overflow-wrap:anywhere}
+/* Projectmeter (P1) */
+.pm-host{margin-bottom:var(--space-3)}
+.pm{border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;background:var(--surface);min-width:0}
+.pm-kop{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.pm-bron{font-size:11.5px;color:var(--text-faint);margin-right:auto}
+.pm-badge{font:600 11px var(--mono);padding:2px 8px;border-radius:20px}
+.pm-let-op,.pm-badge.pm-let-op{background:var(--warning-50);color:var(--gold-text)}
+.pm-fout,.pm-badge.pm-fout{background:var(--error-50);color:var(--error)}
+.pm-info{background:var(--surface-sunken);color:var(--text-dim)}
+.pm-w{font-size:12.5px;padding:5px 9px;border-radius:var(--radius-sm);margin:4px 0}
+.pm-tabel{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+.pm-tabel th,.pm-tabel td{padding:5px 8px;border-bottom:1px solid var(--border-hair);text-align:left;white-space:nowrap}
+.pm-tabel th{font-size:11px;color:var(--text-dim);font-weight:600}
+.pm-tabel .pm-num{text-align:right;font-family:var(--mono)}
+.pm-tabel .pm-dim{color:var(--text-faint)}
+.pm-tabel .pm-over{color:var(--error);font-weight:600}
+.pm-tabel .pm-totaal td{border-top:2px solid var(--border);font-weight:600}
+.pm-tabel .pm-zonder td{font-style:italic}
+.pm-soort,.pm-sync{font-size:11.5px;color:var(--text-dim);margin-top:6px}
+.pt-sel{font-size:11px;height:26px;min-height:0;padding:0 4px;max-width:104px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)}
 .tabel-scroll{overflow-x:auto;max-width:100%}
 .kpi-grid.ov-kpi{grid-template-columns:repeat(3,minmax(0,1fr))}
 .ov-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);margin-bottom:var(--space-3)}
@@ -3953,7 +3973,7 @@ async function agSyncAlleMedewerkers(since,tot){
       if(!te.stop) continue; n++;
       remoteIds.add(String(te.id));
       nieuw+=agMergeEntry(entries,{id:'ag'+te.id,toggl_id:te.id,teamlid:tl,project_code:pc,
-        taak_naam:row.description||null,omschrijving:row.description||'',start:te.start,stop:te.stop,
+        taak_naam:row.description||null,taak_id:row.task_id!=null?row.task_id:null,omschrijving:row.description||'',start:te.start,stop:te.stop,
         duur:te.seconds!=null?te.seconds:(te.duration||0),datum:(te.start||'').slice(0,10)});
     }
   }
@@ -3988,7 +4008,7 @@ async function agSyncEigen(since,tot){
     const pc=pmap[te.project_id]||null, tl=umap[te.user_id]||null;
     if(!pc||!tl) continue;
     nieuw+=agMergeEntry(entries,{id:'ag'+te.id,toggl_id:te.id,teamlid:tl,project_code:pc,
-      taak_naam:te.description||null,omschrijving:te.description||'',start:te.start,stop:te.stop,
+      taak_naam:te.description||null,taak_id:te.task_id!=null?te.task_id:null,omschrijving:te.description||'',start:te.start,stop:te.stop,
       duur:te.duration,datum:te.start.slice(0,10)});
   }
   // Extern verwijderde entries ook lokaal opruimen binnen het gesyncte venster.
@@ -5885,6 +5905,7 @@ function _projSectieRender(proj){
   if(_projSectie==='planning'){
     // Een fout in de tijdlijn mag de rest van de sectie (Gantt, taken) nooit blokkeren.
     const tl=document.getElementById('proj-tijdlijn-'+c.cid);
+    try{ projMeterLaad(proj.code); }catch(e){ console.warn('meter:',e); }
     try{ projPlanTijdlijn(tl,[proj.code],{key:'proj:'+proj.code}); }
     catch(e){ console.warn('tijdlijn:',e); if(tl) tl.innerHTML='<p class="dos-leeg">Tijdlijn kon niet laden: '+esc(e.message||String(e))+'</p>'; }
   }
@@ -5991,7 +6012,8 @@ function projSecDossier(proj,c){
 }
 // ── Planning: Gantt + taken (taken voeden de planning; "📅 → Planning" zet ze om) ──
 function projSecPlanning(proj,c){
-  return `<div class="card-title" style="margin:0 0 .4rem">📊 Tijdlijn — wie, wanneer, past het?</div>
+  return `<div id="proj-meter-${esc(c.cid)}" class="pm-host"></div>
+      <div class="card-title" style="margin:0 0 .4rem">📊 Tijdlijn — wie, wanneer, past het?</div>
       <div id="proj-tijdlijn-${esc(c.cid)}" class="proj-b10-plek"></div>
       ${projectPlanning(proj)}
       ${projectTakenHtml(proj)}`;
@@ -6934,6 +6956,11 @@ function projectTakenHtml(proj){
       <td style="width:24px;text-align:center"><input type="checkbox" class="pt-check" value="${esc(t.id)}" title="Selecteer om in één keer te verwijderen"></td>
       <td><span class="badge" style="background:${esc(stt.c)}22;color:${esc(stt.c)}">${esc(stt.l)}</span></td>
       <td style="font-size:13px">${esc(t.naam)}${planLink}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
+      <td style="white-space:nowrap">
+        <select class="pt-sel" aria-label="Activiteit" title="Activiteit (tekenwerk telt als tekenuren, werkplaats als WP-uren)" onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'activiteit',this.value)">${[['','— activiteit —']].concat(MTPlanning.ACTIVITEITEN.map(a=>[a.k,a.l])).map(([k,l])=>`<option value="${esc(k)}"${(t.activiteit||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
+        <select class="pt-sel" aria-label="Toegewezen aan" title="Toegewezen aan (optioneel)" onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'toegewezen',this.value)">${[['','— wie —']].concat(MT_TEAM.map(m=>[m.slug,m.naam])).map(([k,l])=>`<option value="${esc(k)}"${(t.toegewezen||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
+        ${t._veldconflict&&Object.keys(t._veldconflict).length?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="Twee gelijktijdige wijzigingen — klik om te kiezen" onclick="projTaakConflict(${jsArg(proj.code)},${jsArg(t.id)})">⚠ conflict</button>`:''}
+      </td>
       <td>${pr?`<span class="badge" style="background:${esc(pr.c)}22;color:${esc(pr.c)}">${esc(pr.l)}</span>`:''}</td>
       <td style="white-space:nowrap;text-align:right;font-family:var(--mono)">
         <button class="btn btn-xs btn-secondary" title="−1 uur" onclick="projTaakUur(${jsArg(proj.code)},${jsArg(t.id)},-1)">−</button>
@@ -6942,11 +6969,14 @@ function projectTakenHtml(proj){
       </td>
       <td style="white-space:nowrap;text-align:right">
         ${t.tg_pending?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="De wijziging is nog niet in Toggl gelukt — klik om opnieuw te proberen" onclick="projTakenHerkans(${jsArg(proj.code)})">⏳ ${t.tg_pending.verwijderen?'verwijderen':'status'} wacht op Toggl</button>`:''}
-        ${t.tg_task_id?'<span class="badge badge-ok" title="Zichtbaar in Toggl-project">Toggl ✓</span>':`<button class="btn btn-xs btn-secondary" title="Naar Toggl-project sturen" onclick="projTaakNaarToggl(${jsArg(proj.code)},${jsArg(t.id)}).then(()=>renderProjectDetail(huidigProject))">→ Toggl</button>`}
+        ${MTPlanning.tgActie(t)==='actueel'?`<span class="badge badge-ok" title="${esc('Zichtbaar in Toggl-project en gelijk aan MT'+(t.tg_sync&&t.tg_sync.laatst_gezien?' — gesynchroniseerd '+new Date(t.tg_sync.laatst_gezien).toLocaleString('nl-NL'):''))}">Toggl ✓</span>`:''}
+        ${MTPlanning.tgActie(t)==='koppelen'?`<button class="btn btn-xs btn-secondary" title="Maakt de taak in het Toggl-project aan (met bevestiging)" onclick="projTaakTogglSync(${jsArg(proj.code)},${jsArg(t.id)})">→ Toggl</button>`:''}
+        ${MTPlanning.tgActie(t)==='extern-verwijderd'?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="De taak is in Toggl verwijderd — klik om te kiezen wat er gebeurt" onclick="projTaakTogglSync(${jsArg(proj.code)},${jsArg(t.id)})">⚠ weg in Toggl</button>`:''}
+        ${MTPlanning.tgActie(t)==='bijwerken'?`<button class="btn btn-xs btn-secondary" title="${esc((t.tg_sync&&t.tg_sync.status==='fout'?'Laatste poging mislukt: '+(t.tg_sync.fout||'')+' — ':'')+'Zet naam en status in Toggl gelijk met MT (met bevestiging)')}" onclick="projTaakTogglSync(${jsArg(proj.code)},${jsArg(t.id)})">↻ Toggl${t.tg_sync&&t.tg_sync.status==='fout'?' ⚠':''}</button>`:''}
         <button class="btn btn-xs btn-secondary" title="Status wisselen" onclick="projTaakStatus(${jsArg(proj.code)},${jsArg(t.id)})">⟳</button>
         <button class="btn btn-xs btn-danger" data-recht="taken:alles" title="Verwijderen" onclick="projTaakVerwijder(${jsArg(proj.code)},${jsArg(t.id)})">×</button>
       </td></tr>`;
-  }).join(''):'<tr><td colspan="6" style="color:var(--text-faint);font-size:13px;padding:.5rem">Nog geen taken — gebruik ✨ AI-voorstel of + Taak.</td></tr>';
+  }).join(''):'<tr><td colspan="7" style="color:var(--text-faint);font-size:13px;padding:.5rem">Nog geen taken — gebruik ✨ AI-voorstel of + Taak.</td></tr>';
   const onbesp=arr.filter(t=>!t.tg_task_id).length;
   return `
     <hr class="divider">
@@ -6965,6 +6995,177 @@ function projectTakenHtml(proj){
 }
 function _ptStatus(code,msg,kleur){const el=document.getElementById('pt-status-'+code.replace(/-/g,''));if(el){el.textContent=msg;el.style.color=kleur||'var(--text-dim)';}}
 
+// ═══ PROJECTMETER (P1): budget / gepland / geklokt / resterend, per activiteit ═══
+// Rekenregels: MTPlanning.meter (mt-planning.js). Hier alleen de gegevens verzamelen en tekenen (met DOM-calls, geen
+// innerHTML). Geklokt komt per Toggl-taak uit de Reports-query (tgReportsTaken); lukt dat niet, dan uit de lokaal gesyncte
+// uren (zonder taak, dus "ongekoppeld") met een melding. Bij ≥ 90% van het budget een badge (hier en in de sectienaam).
+const _pmState={};   // code → {tijd, per, fout, bezig, afgekapt}
+function _pmEl(tag,props,...kids){
+  const e=document.createElement(tag);
+  Object.entries(props||{}).forEach(([k,v])=>{
+    if(v==null||v===false) return;
+    if(k==='tekst') e.textContent=v; else if(k==='klik') e.addEventListener('click',v); else e.setAttribute(k,v);
+  });
+  kids.flat(2).forEach(x=>{ if(x==null||x===false) return; e.appendChild(typeof x==='string'?document.createTextNode(x):x); });
+  return e;
+}
+const _pmU=min=>min?MTPlanning.fmtUur(min):'—';
+const _pmTijd=ms=>ms?new Date(ms).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'nog niet';
+function projMeterBereken(code){
+  const proj=projVind(code), st=_pmState[code]||{};
+  const taken=projTaken(code);
+  const blokken=(typeof agPlanActief==='function'?agPlanActief():[]).filter(b=>b.project_code===code);
+  const calc=(window.CALC&&CALC.offertes)?(CALC.offertes[code]||Object.values(CALC.offertes).find(o=>o&&o.project_code===code)||null):null;
+  let geklokt, bron;
+  if(st.per){ geklokt=st.per.map(x=>({taak_id:x.taak_id,min:x.min})); bron='toggl'; }
+  else { geklokt=MTPlanning.entriesFilter(agEntries(),{codes:[code]}).map(e=>({taak_id:e.taak_id!=null?e.taak_id:null,min:MTPlanning.entryMin(e)})); bron='lokaal'; }
+  const m=MTPlanning.meter({taken,blokken,geklokt,calc,tgProject:!!(proj&&proj.tg_project_id),tgTijd:st.tijd||null});
+  return {m,bron,st,proj,taken};
+}
+async function projMeterLaad(code,ververs){
+  const st=_pmState[code]=_pmState[code]||{};
+  projMeterTeken(code);
+  const proj=projVind(code);
+  if(st.bezig||!proj||!proj.tg_project_id||typeof tgReportsTaken!=='function') return;
+  if(!ververs&&st.tijd&&Date.now()-st.tijd<5*60*1000) return;
+  st.bezig=true; projMeterTeken(code);
+  try{
+    // vanaf het oudste teken van werk (project aangemaakt, eerste lokale entry), maximaal een jaar terug
+    const jaar=new Date(Date.now()-365*864e5).toISOString().slice(0,10);
+    const eerste=MTPlanning.entriesFilter(agEntries(),{codes:[code]}).map(e=>String(e.datum||e.start||'').slice(0,10)).filter(Boolean).sort()[0]||'';
+    const van=[String(proj.created||'').slice(0,10),eerste].filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)).sort()[0]||jaar;
+    const r=await tgReportsTaken([code],van<jaar?jaar:van,_tgVandaag(),!!ververs);
+    if(r.geenKoppeling){ st.per=null; st.fout='geen Toggl-project gekoppeld'; }
+    else { st.per=r.per; st.tijd=r.tijd; st.fout=''; st.afgekapt=!!r.afgekapt; }
+  }catch(e){ st.per=null; st.fout=(typeof _tgFoutTekst==='function')?_tgFoutTekst(e):(e.message||String(e)); }
+  finally{ st.bezig=false; }
+  projMeterTeken(code);
+}
+function projMeterTeken(code){
+  const host=document.getElementById('proj-meter-'+code.replace(/[^A-Za-z0-9]/g,'')); if(!host) return;
+  let d; try{ d=projMeterBereken(code); }catch(e){ console.warn('meter:',e); host.replaceChildren(_pmEl('p',{class:'dos-leeg',tekst:'De meter kon niet berekend worden: '+(e.message||e)})); return; }
+  const {m,bron,st,taken}=d, tt=m.totaal, sig=MTPlanning.signaal(m);
+  // stand onthouden voor de badge bij de sectienaam
+  try{ const o=JSON.parse(localStorage.getItem('mt_meter_stand')||'{}'); if(sig) o[code]={niveau:sig.niveau,pct:Math.round((tt.pct||0)*100),t:Date.now()}; else delete o[code];
+    const ks=Object.keys(o); if(ks.length>100) ks.slice(0,ks.length-100).forEach(k=>delete o[k]); localStorage.setItem('mt_meter_stand',JSON.stringify(o)); }catch(e){}
+  const kolommen=['Activiteit','Budget','Gepland','Geklokt (aan taak)','Geklokt (zonder taak)','Resterend'];
+  const celNum=(v,extra)=>_pmEl('td',{class:'pm-num'+(extra?' '+extra:'')},_pmU(v));
+  const rijen=m.rijen.map(r=>_pmEl('tr',null,
+    _pmEl('td',{tekst:r.l+(r.taken?'':' (alleen gepland/geklokt)')}),
+    _pmEl('td',{class:'pm-num',title:m.budgetBron==='calculatie'?('Calculatie. Taken: '+_pmU(r.taakBudget)):('Optelling van de taakramingen ('+r.taken+' taken)')},_pmU(r.budget)),
+    celNum(r.gepland),celNum(r.gekoppeld),_pmEl('td',{class:'pm-num pm-dim'},'—'),
+    celNum(r.resterend,r.resterend<0?'pm-over':'')));
+  const zonder=tt.ongekoppeld?[_pmEl('tr',{class:'pm-zonder'},_pmEl('td',{tekst:'Zonder taak (ongekoppeld)'}),_pmEl('td',{class:'pm-num pm-dim'},'—'),_pmEl('td',{class:'pm-num pm-dim'},'—'),_pmEl('td',{class:'pm-num pm-dim'},'—'),celNum(tt.ongekoppeld),_pmEl('td',{class:'pm-num pm-dim'},'—'))]:[];
+  const totaal=_pmEl('tr',{class:'pm-totaal'},_pmEl('td',{tekst:'Totaal'}),celNum(tt.budget),celNum(tt.gepland),celNum(tt.gekoppeld),celNum(tt.ongekoppeld),celNum(tt.resterend,tt.resterend<0?'pm-over':''));
+  const tabel=m.rijen.length||tt.geklokt||tt.gepland
+    ?_pmEl('div',{class:'tabel-scroll'},_pmEl('table',{class:'pm-tabel'},_pmEl('thead',null,_pmEl('tr',null,kolommen.map((k,i)=>_pmEl('th',{class:i?'pm-num':'',tekst:k})))),_pmEl('tbody',null,rijen,zonder,totaal)))
+    :_pmEl('p',{class:'dos-leeg',tekst:'Nog geen budget, planning of uren. Geef de taken hieronder een raming en een activiteit.'});
+  const waarsch=m.waarschuwingen.filter(w=>w.soort!=='budget-90'&&w.soort!=='budget-100').map(w=>_pmEl('div',{class:'pm-w pm-'+w.niveau,role:'status'},'⚠ '+w.tekst));
+  if(st.fout) waarsch.push(_pmEl('div',{class:'pm-w pm-let-op',role:'status'},'⚠ Uren per Toggl-taak niet beschikbaar ('+st.fout+'): getoond zijn de lokaal gesyncte uren, zonder taakkoppeling.'));
+  if(st.afgekapt) waarsch.push(_pmEl('div',{class:'pm-w pm-let-op',role:'status'},'⚠ Het project loopt langer dan de ophaalperiode: oudere uren ontbreken.'));
+  const soorten=Object.entries(MTPlanning.SOORTEN).filter(([k])=>k!=='overig'&&(m.perSoort[k].budget||m.perSoort[k].gekoppeld||m.perSoort[k].gepland)).map(([k,l])=>l+': '+_pmU(m.perSoort[k].gekoppeld)+' geklokt van '+_pmU(m.perSoort[k].budget)+' budget');
+  const laatstTaken=Math.max(0,...taken.map(t=>(t.tg_sync&&t.tg_sync.laatst_gezien)||0));
+  const syncTekst=(bron==='toggl'?'Uren uit Toggl: '+_pmTijd(st.tijd):'Uren: lokaal gesynchroniseerd ('+_pmTijd(Date.parse(localStorage.getItem('mt_toggl_last_sync')||'')||0)+')')+' · Taken naar Toggl: '+_pmTijd(laatstTaken||0);
+  const badge=sig?_pmEl('span',{class:'pm-badge pm-'+sig.niveau,title:sig.tekst},(sig.soort==='budget-100'?'Over budget ':'⚠ ')+Math.round((tt.pct||0)*100)+'%'):null;
+  host.replaceChildren(_pmEl('section',{class:'pm','aria-label':'Budget en uren'},
+    _pmEl('div',{class:'pm-kop'},_pmEl('div',{class:'card-title',style:'margin:0',tekst:'⏱ Budget en uren'}),badge,
+      _pmEl('span',{class:'pm-bron',tekst:'Budget uit '+(m.budgetBron==='calculatie'?'de calculatie':m.budgetBron==='taken'?'de taakramingen':'— (nog niets ingevuld)')}),
+      _pmEl('button',{type:'button',class:'btn btn-xs btn-secondary',title:'Haal de geklokte uren opnieuw op uit Toggl',klik:()=>projMeterLaad(code,true),disabled:st.bezig?'disabled':null},st.bezig?'laden…':'↻ Toggl')),
+    sig?_pmEl('div',{class:'pm-w pm-'+sig.niveau,role:'status'},(sig.niveau==='fout'?'⛔ ':'⚠ ')+sig.tekst):null,
+    waarsch,tabel,
+    soorten.length?_pmEl('div',{class:'pm-soort',tekst:soorten.join(' · ')}):null,
+    _pmEl('div',{class:'pm-sync',tekst:syncTekst})));
+  // badge bij de sectienaam "Planning"
+  try{ const knop=document.querySelector('#project-detail .proj-secknop[data-sectie="planning"]');
+    if(knop){ const oud=knop.querySelector('.pm-nav'); if(oud) oud.remove();
+      if(sig) knop.appendChild(_pmEl('span',{class:'proj-secn pm-nav',title:sig.tekst},(sig.niveau==='fout'?' ⛔':' ⚠')+Math.round((tt.pct||0)*100)+'%')); } }catch(e){}
+}
+// Activiteit of toegewezen op een taak zetten (keuzelijsten in de takenlijst).
+function projTaakVeldZet(code,id,veld,waarde){
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
+  if(veld==='activiteit'&&waarde&&!MTPlanning.activiteit(waarde)) return;
+  if(veld==='toegewezen'&&waarde&&!MT_TEAM.some(m=>m.slug===waarde)) return;
+  if(!waarde) delete t[veld]; else t[veld]=waarde;
+  projTakenZet(code,arr);
+  try{ if(window.track) track('taken','veld_'+veld,{detail:code}); }catch(e){}
+  _rerenderDetailKeepScroll();
+}
+const _PT_VELDLABEL={naam:'Naam',omschrijving:'Omschrijving',duur_uur:'Raming (uren)',activiteit:'Activiteit',status:'Status',toegewezen:'Toegewezen',prioriteit:'Prioriteit',afhankelijk_van:'Afhankelijk van',tg_task_id:'Toggl-taak'};
+function _ptWaardeTekst(veld,w){
+  if(w===null||w===undefined||w==='') return '(leeg)';
+  if(veld==='activiteit'){ const a=MTPlanning.activiteit(w); return a?a.l:String(w); }
+  if(Array.isArray(w)) return w.length+' taak/taken';
+  return String(w);
+}
+// Twee gelijktijdige wijzigingen van hetzelfde veld: de mens kiest.
+async function projTaakConflict(code,id){
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||!t._veldconflict) return;
+  for(const veld of Object.keys(t._veldconflict)){
+    const c=t._veldconflict[veld];
+    const k=await mtDialog.choose({title:'Conflict: '+(_PT_VELDLABEL[veld]||veld)+' — '+t.naam,
+      message:'Twee mensen of apparaten hebben dit tegelijk gewijzigd.\nNu staat: '+_ptWaardeTekst(veld,t[veld])+'\nDe andere wijziging'+(c.door?' (door '+c.door+')':'')+': '+_ptWaardeTekst(veld,c.waarde),
+      choices:[{label:'Houd wat er nu staat',sublabel:_ptWaardeTekst(veld,t[veld])},{label:'Neem de andere wijziging over',sublabel:_ptWaardeTekst(veld,c.waarde)}]});
+    if(k===null||k===undefined) return;   // geannuleerd: niets wijzigen
+    MTPlanning.conflictOplos(t,veld,k===1?'andere':'eigen',{door:_spWie()});
+  }
+  projTakenZet(code,arr);
+  _rerenderDetailKeepScroll();
+}
+// Koppeltabel bijhouden na een geslaagde of mislukte Toggl-actie.
+function _ptSyncMerk(t,status,fout){
+  const oud=t.tg_sync||{};
+  t.tg_sync={provider:'toggl',external_id:t.tg_task_id!=null?String(t.tg_task_id):(oud.external_id||''),laatst_gezien:status==='ok'?Date.now():(oud.laatst_gezien||0),
+    hash:status==='ok'?MTPlanning.tgHash(t):(oud.hash||''),status,fout:fout?String(fout).slice(0,160):''};
+}
+// "Maak/actualiseer Toggl-taak": één richting (MT → Toggl), altijd met bevestiging. Het Toggl-project komt uitsluitend uit de
+// opgeslagen koppeling (nooit stil op naam gekoppeld, nooit stil een project aangemaakt). Een taak wordt alleen gekoppeld via
+// het mt:-kenmerk in de notitie (t2VindOfMaakTaak), nooit op naam. Is de Toggl-taak verwijderd, dan blijft de MT-taak staan
+// en beslis jij wat er gebeurt.
+async function projTaakTogglSync(code,id){
+  const mt=projVind(code); const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!mt||!t) return;
+  let actie=MTPlanning.tgActie(t);
+  const stOk=(msg)=>_ptStatus(code,msg,'var(--green)'), stFout=(msg)=>_ptStatus(code,msg,'#c0392b');
+  if(actie==='actueel'){ stOk('✓ Toggl is al actueel voor deze taak.'); return; }
+  let pid=null;
+  try{ pid=await _tgProjectIdVoorMt(mt); }catch(e){ stFout('⚠ '+(e.message||e)); return; }
+  if(!pid){ stFout('⚠ Dit project heeft nog geen Toggl-project — koppel dat eerst bij Overzicht ▸ Toggl.'); return; }
+  const projNaam=((typeof _tgProjById==='function'?_tgProjById(pid):null)||{}).name||('project '+pid);
+  const stat=(_PT_STAT[t.status]||_PT_STAT.todo).l;
+  if(actie==='extern-verwijderd'){
+    const k=await mtDialog.choose({title:'Toggl-taak is verwijderd',message:'De taak „'+t.naam+'” bestaat niet meer in Toggl. De MT-taak blijft staan (en haar uren-historie). Wat wil je?',
+      choices:[{label:'Opnieuw aanmaken in Toggl',sublabel:'Project: '+projNaam},{label:'Alleen ontkoppelen',sublabel:'De MT-taak blijft, zonder Toggl-taak'}]});
+    if(k===null||k===undefined) return;
+    if(k===1){ _ptJournaal('toggl-ontkoppeld',code,t); delete t.tg_task_id; delete t.tg_sync; projTakenZet(code,arr); stOk('Ontkoppeld van Toggl.'); renderProjectDetail(huidigProject); return; }
+    delete t.tg_task_id; delete t.tg_sync; actie='koppelen';
+  }
+  const vraag=actie==='koppelen'
+    ?'In het Toggl-project „'+projNaam+'” wordt een taak aangemaakt:\n\n„'+t.naam+'” (status '+stat+')\n\nBestaat er al een Toggl-taak met het MT-kenmerk van deze taak, dan wordt die gekoppeld; er wordt nooit op naam gekoppeld.'
+    :'De Toggl-taak wordt gelijkgezet met MT:\n\nnaam „'+t.naam+'”, status '+stat+'\n\nMT is de bron: wijzigingen die je in Toggl aan naam of status deed, worden overschreven.';
+  if(!await mtDialog.confirm({title:actie==='koppelen'?'Toggl-taak aanmaken':'Toggl-taak bijwerken',message:vraag,okLabel:actie==='koppelen'?'Aanmaken':'Bijwerken'})) return;
+  _ptStatus(code,actie==='koppelen'?'Toggl: taak aanmaken…':'Toggl: taak bijwerken…','var(--gold-text)');
+  try{
+    if(actie==='koppelen'){
+      const r=await t2VindOfMaakTaak(code+'/'+t.id,{name:t.naam,project_id:pid},true);
+      t.tg_task_id=r.id;
+      if(t.status&&t.status!=='todo') await focusFetch('tasks/'+r.id,'PATCH',{status_id:await _ptStatusId(t.status)});
+    } else {
+      await focusFetch('tasks/'+t.tg_task_id,'PATCH',{name:t.naam,status_id:await _ptStatusId(t.status)});
+    }
+    delete t.tg_pending; _ptSyncMerk(t,'ok');
+    if(typeof _tgCache!=='undefined') _tgCache.taken=null;
+    projTakenZet(code,arr);
+    stOk(actie==='koppelen'?'✓ Taak staat in Toggl.':'✓ Toggl-taak bijgewerkt.');
+    try{ if(window.track) track('taken','toggl_sync_'+actie,{detail:t.bron||'handmatig',ok:true}); }catch(e){}
+  }catch(e){
+    const weg=/HTTP 404/.test(String(e.message||''));
+    _ptSyncMerk(t,weg&&actie==='bijwerken'?'extern-verwijderd':'fout',e.message||e);
+    projTakenZet(code,arr);
+    stFout(weg&&actie==='bijwerken'?'⚠ De taak bestaat niet meer in Toggl. De MT-taak blijft staan; klik opnieuw om te kiezen.':'❌ '+(e.message||e));
+    try{ if(window.track) track('taken','toggl_sync_'+actie,{detail:e.message,ok:false}); }catch(_){}
+  }
+  renderProjectDetail(huidigProject);
+}
+
 function nieuweProjectTaak(code){
   const naam=prompt('Taaknaam:'); if(!naam) return;
   const duur=parseFloat((prompt('Geschatte duur in uren (leeg = geen):')||'').replace(',','.'))||0;
@@ -6976,7 +7177,7 @@ function nieuweProjectTaak(code){
     const dep=prompt(`Afhankelijk van welke taak? (nummer, leeg = geen)\n${lijst}`);
     if(dep){ const idx=parseInt(dep)-1; if(arr[idx]) afhankelijk_van=[arr[idx].id]; }
   }
-  const t={id:_ptId(),naam,omschrijving:'',duur_uur:duur,prioriteit,afhankelijk_van,status:'todo',tg_task_id:null,bron:'handmatig'};
+  const t={id:_ptId(),naam,omschrijving:'',duur_uur:duur,prioriteit,afhankelijk_van,status:'todo',tg_task_id:null,bron:'handmatig',activiteit:MTPlanning.activiteitUitNaam(naam)||undefined};
   arr.push(t); projTakenZet(code,arr); renderProjectDetail(huidigProject);
   try{ if(window.track) track('taken','taak_handmatig',{detail:code,ok:true}); }catch(e){}
 }
@@ -6986,7 +7187,7 @@ async function projTaakStatus(code,id){
   const order=['todo','bezig','klaar']; t.status=order[(order.indexOf(t.status||'todo')+1)%3];
   // Niet meer "fire and forget": lukt Toggl niet, dan blijft dat zichtbaar (⏳) met herkansing.
   if(t.tg_task_id){
-    try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await _ptStatusId(t.status)}); delete t.tg_pending; }
+    try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await _ptStatusId(t.status)}); delete t.tg_pending; _ptSyncMerk(t,'ok'); }
     catch(e){ t.tg_pending={status:true}; _ptStatus(code,'⚠ Status lokaal gewijzigd, maar nog niet in Toggl: '+(e.message||e)+' — klik ⏳ om opnieuw te proberen','#c0392b'); }
   }
   projTakenZet(code,arr);
@@ -7138,7 +7339,7 @@ function projTaakTemplateInvoeg(code,key){
   const ov=document.getElementById('tpl-overlay');if(ov)ov.remove();
   const tpl=_PT_TEMPLATES[key];if(!tpl)return;
   const nieuwe=tpl.taken.map(v=>({id:_ptId(),naam:v.naam,omschrijving:v.omschrijving||'',duur_uur:v.uur||0,
-    prioriteit:['low','medium','high'].includes(v.prio)?v.prio:'',afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'template'}));
+    prioriteit:['low','medium','high'].includes(v.prio)?v.prio:'',afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'template',activiteit:MTPlanning.activiteitUitNaam(v.naam)||undefined}));
   tpl.taken.forEach((v,i)=>{ if(Array.isArray(v.na)) nieuwe[i].afhankelijk_van=v.na.map(j=>nieuwe[j]&&nieuwe[j].id).filter(Boolean); });
   projTakenZet(code,projTaken(code).concat(nieuwe));
   renderProjectDetail(huidigProject);
@@ -7543,7 +7744,7 @@ async function projTaakNaarToggl(code,id,vers=true){
     // antwoord koppelt de bestaande Toggl-taak in plaats van een tweede te maken.
     const r=await t2VindOfMaakTaak(code+'/'+t.id,body,vers);
     const tid=r&&r.id;
-    if(tid){ t.tg_task_id=tid; projTakenZet(code,arr); }
+    if(tid){ t.tg_task_id=tid; _ptSyncMerk(t,'ok'); projTakenZet(code,arr); }
     if(typeof _tgCache!=='undefined') _tgCache.taken=null;
     _ptStatus(code,'✓ In Toggl-project','var(--green)');
     try{ if(window.track) track('taken','naar_toggl',{detail:t.bron||'handmatig',ok:true}); }catch(e){}
@@ -7555,6 +7756,7 @@ async function projTaakNaarToggl(code,id,vers=true){
 async function projTakenSpiegelAlles(code){
   const arr=projTaken(code).filter(t=>!t.tg_task_id);
   if(!arr.length) return;
+  if(!await mtDialog.confirm({title:'Taken naar Toggl',message:arr.length+' taak/taken in het Toggl-project aanmaken (of koppelen via het MT-kenmerk, nooit op naam)?'+((projVind(code)||{}).tg_project_id?'':'\n\nDit project heeft nog geen Toggl-project; dat wordt dan ook aangemaakt.'),okLabel:'Aanmaken'})) return;
   try{ if(window.track) track('taken','spiegel_alles',{detail:arr.length+' taken'}); }catch(e){}
   _ptStatus(code,'Toggl: project klaarzetten…','var(--gold-text)');
   // Project éénmalig aanmaken (stil), daarna alle taken er stil aan hangen.
@@ -7634,7 +7836,7 @@ Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.
     const nieuwe=voorstel.map(v=>({id:_ptId(),naam:String(v.naam||'taak').slice(0,80),
       omschrijving:String(v.omschrijving||'').slice(0,160),duur_uur:parseFloat(v.duur_uur)||0,
       prioriteit:['low','medium','high'].includes(v.prioriteit)?v.prioriteit:'',
-      afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'ai'}));
+      afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'ai',activiteit:MTPlanning.activiteitUitNaam(String(v.naam||''))||undefined}));
     voorstel.forEach((v,i)=>{ if(Array.isArray(v.na)) nieuwe[i].afhankelijk_van=v.na.map(j=>nieuwe[j]&&nieuwe[j].id).filter(Boolean); });
     projTakenZet(code,projTaken(code).concat(nieuwe));
     try{ if(window.track) track('taken','ai_voorstel',{detail:nieuwe.length+' taken · '+ctx.n+' mails',ok:true,ms:(typeof performance!=='undefined'?performance.now():Date.now())-_t0}); }catch(e){}
