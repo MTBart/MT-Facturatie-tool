@@ -500,7 +500,9 @@
     T.forEach(t => (Array.isArray(t.afhankelijk_van) ? t.afhankelijk_van : []).forEach(v => {
       if (!ids.has(v)) { overgeslagen.push({ van: v, naar: t.id, reden: 'voorganger bestaat niet meer' }); return; }
       if (paren.has(v + '>' + t.id)) return;   // al omgezet (of bewust verwijderd)
-      const r = P.depNieuw(T, werk, { van: v, naar: t.id, project_id, id: nieuwId ? nieuwId(n++) : '' });
+      // controleren zonder de oude koppeling zelf (die telt in het rooster al mee en zou als "bestaat al" tellen)
+      const T2 = T.map(x => x.id === t.id ? Object.assign({}, x, { afhankelijk_van: (x.afhankelijk_van || []).filter(y => y !== v) }) : x);
+      const r = P.depNieuw(T2, werk, { van: v, naar: t.id, project_id, id: nieuwId ? nieuwId(n++) : '' });
       if (!r.ok) { overgeslagen.push({ van: v, naar: t.id, reden: r.fout }); return; }
       nieuw.push(r.dep); werk = werk.concat([r.dep]); paren.add(v + '>' + t.id);
     }));
@@ -725,17 +727,32 @@
     });
     return uit;
   };
+  // Een kopie van het sjabloon zonder bepaalde taken (die je bij het toepassen overslaat). De keten blijft heel: elke voorganger wordt
+  // gekoppeld aan elke opvolger van de weggelaten taak, met de wachttijden opgeteld. Het aandeel van de weggelaten taak vervalt (de
+  // verdeling rekent de overige aandelen naar verhouding om).
+  P.sjabloonZonder = function (s, keys) {
+    const uit = new Set(keys || []), z = kopie(s);
+    let deps = (z.deps || []).map(d => ({ van: d.van, naar: d.naar, lag_dagen: Math.max(0, Math.round(getal(d.lag_dagen))) }));
+    uit.forEach(k => {
+      const inn = deps.filter(d => d.naar === k), uitg = deps.filter(d => d.van === k);
+      deps = deps.filter(d => d.van !== k && d.naar !== k);
+      inn.forEach(a => uitg.forEach(b => { if (a.van !== b.naar && !deps.some(d => d.van === a.van && d.naar === b.naar)) deps.push({ van: a.van, naar: b.naar, lag_dagen: a.lag_dagen + b.lag_dagen }); }));
+    });
+    z.taken = (z.taken || []).filter(t => !uit.has(t.k)); z.deps = deps; if (uit.size) z._aangepast = true;
+    return z;
+  };
   // Het sjabloon omzetten in taken en afhankelijkheden voor een project (alleen berekenen; opslaan doet de aanroeper).
   // budget: { kantoor, wp } in minuten of null; leverdatum: ymd of ''; modus: 'terug' | 'vooruit' | '' (automatisch: terug met leverdatum).
   P.sjabloonToepassen = function (s, { budget = null, leverdatum = '', start = '', vrij = null, projectId = '', nieuwId = null, dagMin = 0, bestaand = [], modus = '' } = {}) {
-    const ctl = P.sjabloonControle(s), waarsch = ctl.waarschuwingen.slice();
+    const ctl = P.sjabloonControle(s), waarsch = ctl.waarschuwingen.filter(w => !(s && s._aangepast && /tellen op tot/.test(w)));   // na weglaten rekent de verdeling naar verhouding om
     if (ctl.fouten.length) return { ok: false, fouten: ctl.fouten, waarschuwingen: waarsch };
     const mk = nieuwId || ((soort, k) => (soort === 'dep' ? 'd' : 't') + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + k);
     const fase = {}; (s.fases || []).forEach(f => { fase[f.k] = f.naam; });
     const verd = P.sjabloonVerdeling(s, budget), idVan = {}, taken = [];
     s.taken.forEach(t => {
       const mijl = t.soort === 'mijlpaal', min = verd[t.k] || 0, mensen = Math.max(1, Math.round(getal(t.mensen)) || 1);
-      const dagen = mijl ? 0 : (min > 0 ? Math.max(1, Math.ceil(min / ((dagMin || P.DAG_MIN) * mensen))) : Math.max(1, Math.round(getal(t.duur_dagen)) || 1));
+      const vast = Math.round(getal(t.vast_dagen));   // bij het toepassen met de hand aangepast
+      const dagen = mijl ? 0 : (vast >= 1 ? vast : (min > 0 ? Math.max(1, Math.ceil(min / ((dagMin || P.DAG_MIN) * mensen))) : Math.max(1, Math.round(getal(t.duur_dagen)) || 1)));
       const x = { id: mk('taak', t.k), naam: t.naam, omschrijving: '', duur_uur: mijl ? 0 : P.minNaarUren(min), status: 'todo', tg_task_id: null, bron: 'sjabloon',
         soort: mijl ? 'mijlpaal' : 'taak', duur_dagen: dagen, sleutel: t.k, sjabloon_id: s.id };
       if (!mijl && t.activiteit) x.activiteit = t.activiteit;
