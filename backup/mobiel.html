@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.13.3 — M&T Mobiel</title>
+<title>BACKUP v2.14.2 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -22,11 +22,12 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-11c"></script>
+<script src="mt-project.js?v=2026-10-13a"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-koppel.js?v=2026-10-11b"></script>
+<script src="mt-koppel.js?v=2026-10-12n"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
-<script src="mt-zoek.js?v=2026-10-11d"></script>
+<script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
@@ -785,7 +786,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.13.3, 2026-10-12). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.14.2, 2026-10-13). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -1471,6 +1472,10 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     </div>
     <div class="sheet-body">
       <div id="notifList"></div>
+      <div id="pushBlok" style="display:none;margin-top:14px">
+        <button id="pushKnop" type="button" class="btn btn-secondary btn-sm" style="display:none">Meldingen aanzetten</button>
+        <div id="pushStatus" class="sheet-sub" style="margin-top:6px" aria-live="polite"></div>
+      </div>
       <button id="demoNotifBtn" class="btn btn-secondary btn-full" style="margin-top:14px;display:none" onclick="demoNotif()">▶ Demo: ontvang notificatie</button>
     </div>
   </div>
@@ -2532,13 +2537,46 @@ async function spSyncProjInfo() {
     if (Array.isArray(lijst)) { const m = {}; lijst.forEach(p => { if (p && p.code && !p._vervallen) m[p.code] = p; }); MT_PROJ_INFO = m; }
   } catch (e) {}
 }
+// Projectnummer (brok C), zoals projNummer in de cockpit: de teller is de bron. De kaart project_id → nummer (+ aliassen)
+// komt uit GET /teller/werkcodes, in dezelfde opslag als de cockpit (mt_projectnummers); het veld in mt_projecten.json is
+// de terugval. Zo blijft het juiste nummer zichtbaar, ook als een oude app het uit de JSON haalde.
+function _mNrKaart() { try { const k = JSON.parse(localStorage.getItem('mt_projectnummers') || '{}'); return k && typeof k === 'object' && !Array.isArray(k) ? k : {}; } catch (e) { return {}; } }
+function mProjNummer(i) {
+  if (!i) return null;
+  const k = _mNrKaart(), n = i.project_id ? k[i.project_id] : null;
+  if (n && /^\d{6}$/.test(String(n))) return String(n);
+  if (i.project_id && k._volledig && i.werkcode) return null;   // de teller kent het project (werkcode) zonder nummer
+  return i.projectnummer && /^\d{6}$/.test(String(i.projectnummer)) ? String(i.projectnummer) : null;
+}
+async function mNummersLaad() {
+  if (_demoMode || !_msAccount) return;
+  try {
+    const r = await fetch(WORKER + '/teller/werkcodes', { headers: await authHeader() }); if (!r.ok) return;
+    const j = await r.json(); if (!j || !j.nummers) return;
+    const k = { _volledig: true }, al = {};
+    for (const [pid, nr] of Object.entries(j.nummers)) if (/^p_/.test(pid) && /^\d{6}$/.test(String(nr))) k[pid] = String(nr);
+    for (const [a, pid] of Object.entries(j.aliassen || {})) if (/^p_/.test(String(pid)) && /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/.test(a)) al[a] = String(pid);
+    if (Object.keys(al).length) k._aliassen = al;
+    localStorage.setItem('mt_projectnummers', JSON.stringify(k)); _mIx = null;
+  } catch (e) {}
+}
 function mProjNr(p) {
   const i = p && MT_PROJ_INFO[p.code]; if (!i) return '';
   const h = Array.isArray(i.offertes) ? i.offertes.find(o => o && o.rol === 'hoofd' && o.nummer) : null;
-  const o = String(i.offertenr || (h && h.nummer) || '').trim(), w = String(i.werkcode || '').trim();
+  // 'werkcode' heet "Projectnummer" (brok C): het projectnummer, zolang er geen is de werkcode.
+  const o = String(i.offertenr || (h && h.nummer) || '').trim(), w = String(mProjNummer(i) || i.werkcode || '').trim();
   const m = window.MT_INSTELLINGEN && MT_INSTELLINGEN.projectcode;
   return m === 'werkcode' ? w : m === 'beide' ? [w, o].filter(Boolean).join(' · ') : o;
 }
+// Zoeken (picker en projectlijst) vindt ook projectnummer, werkcode, oude codes en offertenummers uit de cockpit.
+function mProjZoek(p) {
+  const i = p && MT_PROJ_INFO[p.code]; if (!i) return '';
+  const al = Object.entries(_mNrKaart()._aliassen || {}).filter(([, pid]) => pid === i.project_id).map(([a]) => a);
+  return [mProjNummer(i), i.werkcode, i.offertenr, ...al, ...(Array.isArray(i.legacy_codes) ? i.legacy_codes : []), ...(Array.isArray(i.offertes) ? i.offertes.map(o => o && o.nummer) : [])].filter(Boolean).join(' ').toLowerCase();
+}
+// Gedeelde resolver (mt-project.js) over de cockpitprojecten; opnieuw opgebouwd zodra MT_PROJ_INFO wordt vervangen.
+let _mIx = null;
+function _mProjIndex() { if (!_mIx || _mIx.bron !== MT_PROJ_INFO) { _mIx = window.MTProject ? MTProject.index(Object.values(MT_PROJ_INFO), { nummer: mProjNummer, aliassen: _mNrKaart()._aliassen || {} }) : null; if (_mIx) _mIx.bron = MT_PROJ_INFO; } return _mIx; }
 function mProjNaam(p) {
   if (!p) return '';
   const c = String(p.code || '').trim().toUpperCase(), i = MT_PROJ_INFO[p.code];
@@ -2777,6 +2815,8 @@ async function loadAgendaWeek(week) {
 //    Barts 15-6-besluit). Zo herkent de app ook in de cockpit aangemaakte projecten i.p.v.
 //    ze als los 'TG-<id>' te tonen. Geeft UPPERCASE code terug, of '' als er niets in zit.
 function codeUitTogglNaam(name){
+  // Brok C: eerst tegen de cockpitprojecten (gedeelde resolver): "260812 Naam", "W26-003 Naam", offertenummer voorop, [CODE].
+  const ix = _mProjIndex(); if (ix) { const r = MTProject.uitToggl(ix, name); if (r.soort === 'een') return String(r.project.code).toUpperCase(); }
   const s=String(name||'').trim();
   const m=s.match(/\[([A-Z0-9\-]+)\]$/);
   if(m) return m[1].toUpperCase();
@@ -2816,7 +2856,7 @@ async function loadRealProjects() {
     REAL_PROJECTS.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'nl'));
     // Sync user-projecten + adres-overlay van SP (merge)
     await spSyncUserProjects();
-    await Promise.all([spSyncProjInfo(), mInstellingenLaad()]);
+    await Promise.all([spSyncProjInfo(), mInstellingenLaad(), mNummersLaad()]);
     spSyncAddr().then(() => renderProjectCards());
     // Herrender
     renderPickerList(allProjects());
@@ -3344,7 +3384,7 @@ function selectProject(id) {
 function filterPicker(q) {
   const lower = q.toLowerCase();
   const filtered = lower
-    ? allProjects().filter(p => p.name.toLowerCase().includes(lower) || p.code.toLowerCase().includes(lower))
+    ? allProjects().filter(p => p.name.toLowerCase().includes(lower) || p.code.toLowerCase().includes(lower) || mProjZoek(p).includes(lower))
     : allProjects();
   renderPickerList(filtered);
   updateTimerUI();
@@ -3397,6 +3437,7 @@ function renderProjectCards() {
     lijst = lijst.filter(p =>
       (p.name || "").toLowerCase().includes(projectFilter) ||
       (p.code || "").toLowerCase().includes(projectFilter) ||
+      mProjZoek(p).includes(projectFilter) ||
       (addrFor(p) || "").toLowerCase().includes(projectFilter));
   }
   if (!lijst.length) {
@@ -6910,6 +6951,41 @@ function renderNotifBadge() {
 function openNotifs() {
   renderNotifList();
   document.getElementById("notifSheet").classList.add("visible");
+  pushBlokToon();
+}
+
+// ── Pushmeldingen (L3b): alleen na een klik op de knop (nooit vanzelf om toestemming vragen), alleen met verkooprecht.
+// De melding zelf is altijd algemeen ("M&T: N acties vragen aandacht"; zie sw.js); de details staan in de app.
+const _pushKan = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function _pushStatus(t) { const el = document.getElementById('pushStatus'); if (el) el.textContent = t; }
+function _b64uNaarBytes(s) { const b = atob(String(s).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(s).length + 3) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+async function pushBlokToon() {
+  const blok = document.getElementById('pushBlok'), knop = document.getElementById('pushKnop'); if (!blok || !knop) return;
+  const mag = !!(window.MTRol && MTRol.me && MTRol.recht('offertes'));   // in élke modus: de worker dwingt dit recht bij /push altijd af
+  blok.style.display = mag ? '' : 'none'; if (!mag) return;
+  if (!knop._mtGebonden) { knop.addEventListener('click', pushAanzetten); knop._mtGebonden = true; }
+  knop.style.display = 'none';
+  if (!_pushKan()) { _pushStatus(/iPhone|iPad/.test(navigator.userAgent) ? 'Meldingen: zet de app eerst op het beginscherm (iOS 16.4 of nieuwer).' : 'Deze browser ondersteunt geen pushmeldingen.'); return; }
+  if (Notification.permission === 'denied') { _pushStatus('Meldingen zijn geblokkeerd in de instellingen van je telefoon of browser.'); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+    knop.style.display = sub ? 'none' : '';
+    _pushStatus(sub ? 'Meldingen staan aan op dit apparaat.' : 'Meldingen staan uit op dit apparaat.');
+  } catch (e) { _pushStatus('Status van meldingen onbekend.'); }
+}
+async function pushAanzetten() {
+  const knop = document.getElementById('pushKnop'); knop.disabled = true; _pushStatus('Bezig…');
+  try {
+    if (await Notification.requestPermission() !== 'granted') { _pushStatus('Geen toestemming gegeven: meldingen blijven uit.'); return; }
+    const r = await window.fetchMetAuth(WORKER + '/push/sleutel');
+    if (!r || !r.ok) { _pushStatus('Meldingen zijn nog niet ingericht op de server.'); return; }
+    const sleutel = (await r.json()).publicKey, reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _b64uNaarBytes(sleutel) });
+    const a = await window.fetchMetAuth(WORKER + '/push/aanmelden', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON() }) });
+    if (!a || !a.ok) { try { await sub.unsubscribe(); } catch (e) {} _pushStatus('Aanmelden mislukt. Probeer het later opnieuw.'); return; }
+    knop.style.display = 'none'; _pushStatus('Meldingen staan aan op dit apparaat.');
+  } catch (e) { _pushStatus('Aanzetten mislukt. Probeer het later opnieuw.'); }
+  finally { knop.disabled = false; }
 }
 function closeNotifs() {
   document.getElementById("notifSheet").classList.remove("visible");

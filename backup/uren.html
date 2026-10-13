@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#2A4A38">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>BACKUP v2.13.3 — M&T Uren</title>
+<title>BACKUP v2.14.2 — M&T Uren</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&family=Figtree:wght@300;400;500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -482,7 +482,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.13.3, 2026-10-12). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.14.2, 2026-10-13). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <header>
   <div class="header-left">
@@ -620,22 +620,11 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
   <!-- PROJECTEN -->
   <div id="tab-projecten" class="tab-content">
     <div class="main">
-      <div class="nieuw-project-form" id="nieuw-proj-form" style="display:none">
-        <div class="section-label" style="margin-bottom:0.6rem">Nieuw project aanmaken</div>
-        <div class="flex" style="flex-wrap:wrap;gap:0.6rem;margin-bottom:0.6rem">
-          <input class="proj-inp" id="np-code" placeholder="CODE bijv. CN-PRINSENGRACHT-KAD" style="flex:1;min-width:180px;max-width:280px" oninput="this.value=this.value.toUpperCase()">
-          <input class="proj-inp proj-inp-naam" id="np-naam" placeholder="Volledige naam" style="flex:2;min-width:180px">
-          <input class="proj-inp" id="np-klant" placeholder="Klantcode bijv. CN" style="width:90px" oninput="this.value=this.value.toUpperCase()">
-        </div>
-        <div class="flex" style="gap:0.5rem">
-          <button class="btn btn-primary btn-sm" onclick="slaProjectOp()">Aanmaken</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='none'">Annuleer</button>
-        </div>
-      </div>
       <div class="flex" style="justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
         <div class="section-label" style="margin-bottom:0">Projecten — gesynchroniseerd met M&T Bedrijfstool</div>
-        <button class="btn btn-primary btn-sm" onclick="document.getElementById('nieuw-proj-form').style.display='block';document.getElementById('np-code').focus()">+ Nieuw project</button>
+        <a class="btn btn-secondary btn-sm" href="v2.html#projecten" title="Projecten maak, hernoem of verwijder je in de cockpit">Projecten beheren in de cockpit ↗</a>
       </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:0.8rem">Een nieuw project krijgt zijn projectnummer in de <a href="v2.html#projecten" style="color:var(--green)">cockpit</a>; hier zie je de projecten en schrijf je uren.</div>
       <div class="proj-lijst" id="proj-lijst"></div>
       <div style="font-size:11px;color:var(--text-faint);font-family:var(--mono);padding-top:0.5rem">Projecten worden automatisch gesynchroniseerd met de <a href="v2.html" style="color:var(--green)">M&T cockpit</a> via gedeelde opslag.</div>
     </div>
@@ -769,7 +758,7 @@ body.bord-fs .wk-stats{font-size:11px;color:rgba(255,255,255,0.3)}
   <div class="modal" style="max-width:380px">
     <div class="modal-title">Nieuw project <button class="modal-close" onclick="sluitModal('snel-project')">✕</button></div>
     <div class="form-row">
-      <label class="form-label">Code <span style="font-size:10px;font-weight:400;text-transform:none">(bijv. CN-PRINSENGRACHT-KEUKEN)</span></label>
+      <label class="form-label">Code <span style="font-size:10px;font-weight:400;text-transform:none">(bijv. KLANT-LOCATIE-PRODUCT)</span></label>
       <input class="form-input" id="sp-code" placeholder="KLANT-LOCATIE-PRODUCT" oninput="this.value=this.value.toUpperCase()">
     </div>
     <div class="form-row">
@@ -982,6 +971,16 @@ function getTogglUserMap(){return JSON.parse(localStorage.getItem('mt_toggl_user
 function setTogglUserMap(m){localStorage.setItem('mt_toggl_user_map',JSON.stringify(m));}
 function getLopende(){return JSON.parse(localStorage.getItem('mt_uren_lopend')||'null')}
 function setLopende(e){e?localStorage.setItem('mt_uren_lopend',JSON.stringify(e)):localStorage.removeItem('mt_uren_lopend')}
+// Zichtbaar nummer (brok C): het projectnummer uit de teller-kaart van de cockpit (mt_projectnummers, zelfde browser) of
+// het veld, anders de werkcode, anders de code. De code blijft overal de sleutel (uren, planning, taken).
+function urenProjNr(p){
+  if(!p) return '';
+  let k={}; try{ k=JSON.parse(localStorage.getItem('mt_projectnummers')||'{}')||{}; }catch(e){}
+  const n=p.project_id&&k[p.project_id];
+  if(n&&/^\d{6}$/.test(String(n))) return String(n);
+  if(p.projectnummer&&/^\d{6}$/.test(String(p.projectnummer))&&!(k._volledig&&p.werkcode)) return String(p.projectnummer);
+  return p.werkcode||p.code||'';
+}
 function getProjecten(){
   // Vervallen projecten (tombstones uit de cockpit, `_vervallen`) niet tonen.
   const raw=JSON.parse(localStorage.getItem('mt_projecten')||'null');
@@ -1140,7 +1139,7 @@ function renderTimer(){
     const urgentStyle=dl!==null&&dl<0?';border-color:var(--red);background:#FDE8E8':dl!==null&&dl<=3?';border-color:#E8A020':''
     return `<div class="project-card${actief?' actief':''}" style="--proj-kleur:${esc(var2hex(p.code))}${urgentStyle}" onclick="openStartModal(${ja(p.code)})">
       <button class="pc-info-btn" onclick="event.stopPropagation();openProjectDetail(${ja(p.code)})" title="Project details">ℹ</button>
-      <div class="pc-code" style="color:${esc(var2hex(p.code))}">${esc(p.code)}</div>
+      <div class="pc-code" style="color:${esc(var2hex(p.code))}">${esc(urenProjNr(p))}</div>
       <div class="pc-naam">${esc(p.naam||p.code)}</div>
       <div class="pc-meta">
         ${p.status?statusBadge(p.status):''}
@@ -2063,8 +2062,7 @@ function vulProjectSelect(elId, geselecteerd=''){
   if(!sel) return;
   const projecten=getProjecten();
   sel.innerHTML=`<option value="">— Kies project —</option>`
-    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===geselecteerd?' selected':''}>${esc(p.code)}${p.naam?' — '+esc(p.naam):''}</option>`).join('')
-    +`<option value="__nieuw__">＋ Nieuw project aanmaken</option>`;
+    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===geselecteerd?' selected':''}>${esc(urenProjNr(p))}${p.naam?' — '+esc(p.naam):''}</option>`).join('');   // nieuwe projecten alleen in de cockpit (brok C)
   sel.onchange=function(){
     if(this.value==='__nieuw__'){
       this.value=geselecteerd;
@@ -2149,8 +2147,7 @@ function vulTbProjectSelect(){
   const huidig=sel.value;
   const projecten=getProjecten();
   sel.innerHTML=`<option value="">— Kies project —</option>`
-    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===huidig?' selected':''}>${esc(p.code)}${p.naam?' — '+esc(p.naam):''}</option>`).join('')
-    +`<option value="__nieuw__">＋ Nieuw project aanmaken</option>`;
+    +projecten.map(p=>`<option value="${esc(p.code)}"${p.code===huidig?' selected':''}>${esc(urenProjNr(p))}${p.naam?' — '+esc(p.naam):''}</option>`).join('');   // nieuwe projecten alleen in de cockpit (brok C)
   tbProjectChange();
 }
 
@@ -2236,7 +2233,7 @@ function renderProjectenTab(){
   const wrap=document.getElementById('proj-lijst');
   if(!wrap) return;
   if(!projecten.length){
-    wrap.innerHTML=`<div style="padding:1rem;color:var(--text-faint);font-size:13px;font-style:italic">Nog geen projecten. Maak het eerste aan.</div>`;
+    wrap.innerHTML=`<div style="padding:1rem;color:var(--text-faint);font-size:13px;font-style:italic">Nog geen projecten. Projecten maak je in de <a href="v2.html#projecten" style="color:var(--green)">cockpit</a>.</div>`;
     return;
   }
   // Bereken totale uren per project (alle tijd)
@@ -2252,21 +2249,26 @@ function renderProjectenTab(){
     </div>`:`<div class="proj-uren-col"></div>`;
     const dl=deadlineBadge(p.deadline);
     return `<div class="proj-item" onclick="openProjectDetail(${ja(p.code)})">
-      <div class="proj-code">${esc(p.code)}${esc(dl?' '+dl:'')}</div>
+      <div class="proj-code">${esc(urenProjNr(p))}${esc(dl?' '+dl:'')}</div>
       <div class="proj-naam">${esc(p.naam||'—')}</div>
       <div class="proj-klant">${esc(p.klant||'')}</div>
       <div class="proj-status-col">${p.status?statusBadge(p.status):''}</div>
       ${urenHtml}
       <div class="proj-factuur-col">${factuurBadge(p.factuur_status,p.code)}</div>
-      <div class="proj-acties" onclick="event.stopPropagation()">
-        <button class="entry-btn" onclick="bewerkProject(${i})" title="Bewerken">✏</button>
-        <button class="entry-btn del" onclick="verwijderProject(${i})" title="Verwijderen">✕</button>
-      </div>
+      <div class="proj-acties"></div>
     </div>`;
   }).join('');
 }
 
+// Brok C (projectnummers): uren maakt, hernoemt of verwijdert geen projecten meer. Dat gaat alleen via de cockpit: daar komt
+// de code uit één teller (projectnummer of werkcode) en blijft de geschiedenis (tombstones, oude codes) bewaard. Hier zou
+// een code buiten de teller om ontstaan, of een project zonder spoor verdwijnen. Status- en factuurvelden blijven werken.
+function _urenProjectBeheerUit(){
+  alert('Projecten maak, hernoem of verwijder je in de cockpit (v2.html#projecten). Daar krijgt een project zijn projectnummer uit de teller.');
+  return true;
+}
 function slaProjectOp(){
+  if(_urenProjectBeheerUit()) return;
   const code=document.getElementById('np-code').value.trim().toUpperCase();
   const naam=document.getElementById('np-naam').value.trim();
   const klant=document.getElementById('np-klant').value.trim().toUpperCase();
@@ -2285,6 +2287,7 @@ function slaProjectOp(){
 }
 
 function beverkProject(i){
+  if(_urenProjectBeheerUit()) return;
   const lijst=getProjecten();
   const p=lijst[i];
   const code=prompt('Projectcode:',p.code);
@@ -2300,6 +2303,7 @@ function beverkProject(i){
 
 function beverkProject(i){ beverkProject(i); } // alias fix
 function beverkProject(i){
+  if(_urenProjectBeheerUit()) return;
   const lijst=getProjecten();
   const p=lijst[i];
   document.getElementById('np-code').value=p.code;
@@ -2315,6 +2319,7 @@ function beworkProject(i){beverkProject(i);}
 function bewerkProject(i){beverkProject(i);}
 
 function verwijderProject(i){
+  if(_urenProjectBeheerUit()) return;
   if(!confirm('Project verwijderen? Geregistreerde uren blijven bewaard.')) return;
   const lijst=getProjecten();
   lijst.splice(i,1);
@@ -2327,6 +2332,7 @@ function verwijderProject(i){
 // Snel project aanmaken vanuit dropdown
 let snelProjectCallback=null;
 function openSnelProject(voorProject, callback){
+  if(_urenProjectBeheerUit()) return;
   snelProjectCallback=callback||null;
   document.getElementById('sp-code').value=voorProject||'';
   document.getElementById('sp-naam').value='';
@@ -2335,6 +2341,7 @@ function openSnelProject(voorProject, callback){
   setTimeout(()=>document.getElementById('sp-code').focus(),100);
 }
 function slaSnelProjectOp(){
+  if(_urenProjectBeheerUit()) return;
   const code=document.getElementById('sp-code').value.trim().toUpperCase();
   const naam=document.getElementById('sp-naam').value.trim();
   const klant=document.getElementById('sp-klant').value.trim().toUpperCase();

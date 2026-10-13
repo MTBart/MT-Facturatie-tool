@@ -31,7 +31,7 @@
     'mt_mail_links', 'mt_planning', 'mt_klant_codes', 'mt_offerte_keuze', 'mt_project_taken', 'mt_supplier_map', 'mt_calc_offertes', 'mt_calc_defaults',
     'mt_taken_journaal', 'mt_bijlage_index', 'mt_todo_sync', 'mt_bestellijst_journaal', 'mt_koppel_journaal', 'mt_contacten', 'mt_contacten_journaal', 'mt_project_controle',
     // alleen lokaal, niet te herbouwen
-    'mt_retry_queue', 'mt_agenda_blocks', 'mt_planblokken', 'mt_notes', 'mt_tasks', 'mt_werkcodes', 'mt_werkcode_wacht', 'mt_timer_stop_pending', 'mt_calc_offertes_backup',
+    'mt_retry_queue', 'mt_agenda_blocks', 'mt_planblokken', 'mt_notes', 'mt_tasks', 'mt_werkcodes', 'mt_projectnummers', 'mt_werkcode_wacht', 'mt_timer_stop_pending', 'mt_calc_offertes_backup',
     'mt_uren_entries', 'mt_uren_ik', 'mt_uren_planning', 'mt_uren_taken', 'mt_uren_capaciteit', 'mt_uren_projecten', 'mt_uren_teamleden', 'mt_user_projects', 'mt_uurtarieven',
     'mt_instellingen', 'mt_adminconfig', 'mt_opl_codes', 'mt_mb_admin', 'mt_vrijedagen', 'mt_verlof', 'mt_proj_adressen', 'mt_contacten_mobiel', 'mt_email_verwerkt',
     'mt_cf_vasten_uit', 'mt_fb_sent', 'mt_notif_read', 'mt_pv_gezien', 'mt_klant_sectie', 'mt_proj_sectie', 'mt_proj_sectie_per', 'mt_aanwezig_kaart', 'ncr_lev_overrides',

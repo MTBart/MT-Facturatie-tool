@@ -221,7 +221,7 @@
       items.push({
         soort: 'project', id: p.code, titel: pNaam(p) || label || 'Project zonder naam',
         sub: [klantNaam, locNaam].filter(Boolean).join(' · '), tag: label,
-        codes: [p.code, p.werkcode, p.offertenr, label].concat(lijst(p.legacy_codes), lijst(p.offertes).map(o => o && o.nummer)),
+        codes: [p.code, p.werkcode, h.projectNummer ? h.projectNummer(p) : p.projectnummer, p.offertenr, label].concat(lijst(p.legacy_codes), lijst(p.offertes).map(o => o && o.nummer), h.projectAliassen ? lijst(h.projectAliassen(p)) : []),
         alias: [], klant: klantNaam, extra: [locNaam, p.product_naam],
         recent: Math.max(tijd(p._gewijzigd), tijd(p.created)), data: { code: p.code }
       });
