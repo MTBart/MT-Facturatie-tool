@@ -9464,7 +9464,7 @@ function openModal(){
   _projAanmaakVrij();
   _ibProjBron=null;   // schone start; inboxMaakProject() zet 'm daarna evt. opnieuw
   _tgProjBron=null;   // idem voor "Uit Toggl overnemen" (tgOvernemenKies)
-  _leadGesprek=null; _leadVoorstel=null;
+  try{ _leadGesprek=null; _leadVoorstel=null; }catch(e){}
   _leadModus=false; { const lv=document.getElementById('modal-lead-velden'); if(lv) lv.hidden=true; const ti=document.getElementById('modal-titel'); if(ti) ti.textContent='Nieuw project (direct, zonder lead)'; }
   ['modal-naam-klant','modal-naam-locatie','modal-naam-product','modal-klant','modal-locatie','modal-product'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
@@ -9603,7 +9603,7 @@ async function maakProjectAan(){
   // Direct project (L1b): geen lead of offerte → meteen in werkvoorbereiding. Een overname uit Toggl krijgt (nog) geen fase.
   else if(!tgBron){ projVeldZet(nieuwProj,'fase','werkvoorbereiding'); nieuwProj.direct_project=true; nieuwProj.status='lopend'; }
   // Lead uit een mail (L2): het e-mailadres van de afzender als contact, als de klantenlijst er geen kent.
-  if(_leadVoorstel&&_leadVoorstel.klant_email&&!nieuwProj.klant_email) nieuwProj.klant_email=_leadVoorstel.klant_email;
+  if(typeof _leadVoorstel!=='undefined'&&_leadVoorstel&&_leadVoorstel.klant_email&&!nieuwProj.klant_email) nieuwProj.klant_email=_leadVoorstel.klant_email;
   // Kwam dit project uit een mail (inbox → "Maak project")? Leg de bron vast.
   if(_ibProjBron) nieuwProj.bron_mail={internetMessageId:_ibProjBron.internetMessageId,
     subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,mbx:_ibProjBron.mbx};
@@ -9619,7 +9619,7 @@ async function maakProjectAan(){
       if(r.status!=='fout'&&_ibProjBron.hasAttachments) bijlagenNa={id:_ibProjBron.id,mbx:_ibProjBron.mbx};
     }catch(e){console.warn('bron-mail koppelen faalde:',e);}
     // Lead uit een mail: de rest van het gesprek erbij (dezelfde koppelroute als het Outlook-paneel).
-    if(_leadGesprek){
+    if(typeof _leadGesprek!=='undefined'&&_leadGesprek){
       try{ _leadGesprek.berichten.forEach(x=>{ if(x&&x.id!==_ibProjBron.id) MTKoppel.koppelMail(code,x,{bron:'lead-mail',mbx:_leadGesprek.mbx,idType:'immutable'}); }); }
       catch(e){ console.warn('gesprek koppelen faalde:',e); }
       _leadGesprek=null; _leadVoorstel=null;
@@ -10875,7 +10875,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_mail_oppak']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.

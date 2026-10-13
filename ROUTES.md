@@ -153,6 +153,8 @@ via `getSharedPropertiesAsync`) → gespreks-mails via `$filter=conversationId e
 `MTKoppel.koppelMail(… {bron:'paneel', mbx, idType:'immutable'})` en schrijven van `mt_mail_links.json` + `mt_koppel_journaal.json` met `If-Match`. Alleen bekijken schrijft niets;
 een leesfout van SharePoint geldt nooit als "leeg". Het dossier opent als `<tool>/v2.html#projecten/<CODE>/dossier` (zelfde host als het paneel). `ItemChanged` ververst een vastgepind paneel.
 
+L2 (13-10): `#lead/nieuw?mbx=<postbus>&mail=<mail-id>` (router `mtRoute.parse`, recht `projecten:wijzigen` via `_routeMag`) opent het lead-formulier voorgevuld met de afzender en het onderwerp van die mail (`leadVanMailOpen` in v2.html, via Graph); het hele gesprek wordt na het aanmaken gekoppeld, een al gekoppeld gesprek opent het bestaande dossier. De kaart **Binnenkomend** (Projecten, `mt-binnenkomend.js`, recht `inbox`) toont de info@-gesprekken met de status Nieuw / Opgepakt door X / Gekoppeld / Afgehandeld (`MTMail.binnenStatus` in `mt-mailactie.js`). Automatisch info@ in de cc: alleen het testmanifest `outlook/manifest-gebeurtenissen.xml` + `outlook/launchevent.js` (standaard uit; zie de README). Zie `outlook/README.md`.
+
 ### Event-delegatie voor NIEUWE code (S7-conventie, sinds 3-7)
 
 Nieuwe interactieve elementen krijgen **geen inline `onclick`** meer, maar een
@@ -408,6 +410,7 @@ Per-user mapping (`userKey()`): e-mailprefix uit het MSAL-token →
 | `mt_planblokken.json` | cockpit | cockpit | planning-blokken |
 | `mt_auditlog.json` | cockpit | cockpit | admin-audit |
 | `mt_klant_codes` (SP-synced store) | cockpit | cockpit | zelflerende KLANT-code-overrides |
+| `mt_mail_oppak.json` | cockpit (kaart Binnenkomend) + Outlook-paneel | cockpit + paneel | wie een info@-gesprek oppakte of afhandelde (met reden): `{postbus\|gesprek-id: record}`, samengevoegd per sleutel (`MTMail.oppakSamen`); geen onderwerp, afzender of mailtekst |
 
 ## Verhuisknop (`mt-verhuis.js`, F5 stap 2) — uit tot het domein gekoppeld is
 
