@@ -18,8 +18,9 @@
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-11c"></script>
-<script src="mt-project.js?v=2026-10-13a"></script>
+<script src="mt-project.js?v=2026-10-13b"></script>
 <script src="mt-lead.js?v=2026-10-13a"></script>
+<script src="mt-vw.js?v=2026-10-13a"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
@@ -782,6 +783,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .lead-conflict{background:var(--orange-light,#fdf0e0);border-radius:6px;padding:6px 8px;margin:4px 0;font-size:12px}
 .lead-let{color:var(--orange);font-size:12px;margin-top:4px}
 .lead-doorzet{border-top:1px dashed var(--border);margin-top:6px;padding-top:6px}
+.proj-gegevens .gegevens-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 10px;margin:6px 0}
+.proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 </head>
 <body>
@@ -5925,6 +5928,7 @@ function projSecOverzicht(proj,c){
       ${t2ProjectRijHtml(proj)}
       ${typeof geldProjectRijHtml==='function'?geldProjectRijHtml(proj):''}
       ${typeof leadKaartHtml==='function'?leadKaartHtml(proj):''}
+      ${typeof projGegevensHtml==='function'?projGegevensHtml(proj):''}
       <div class="ov-grid">
         <section class="ov-blok"><div class="card-title">Volgende stap</div>${stappen.join('')}</section>
         <section class="ov-blok"><div class="card-title">Laatste activiteit</div>
@@ -9193,6 +9197,89 @@ function vandaagTeken(){
         <span class="vandaag-naam">${esc(projNaamVol(x.p))}</span>${x.soort==='geen_actie'?'':`<span class="vandaag-actie">${esc(x.soort==='geparkeerd_terug'?'geparkeerd tot vandaag':(a.tekst||''))}</span>`}</div>`; }).join('')
     +(lijst.length>40?`<div class="dos-meta">… en nog ${esc(lijst.length-40)}</div>`:'');
   return lijst;
+}
+// ── Projectgegevens en Vectorworks (L1c) ──
+// Dezelfde velden als interiorcad ▸ Projectgegevens: projectleider, projectonderdeel, leverdatum (week en jaar volgen),
+// contactpersoon (aanhef, voor- en achternaam) en het adres. Opgeslagen in proj.gegevens. Voorstellen komen uit het
+// Moneybird-contact van het project (adres, voor- en achternaam, klantnummer), het product (onderdeel) en de planning
+// (leverdatum); ze worden pas ingevuld als iemand op "Voorstellen invullen" drukt. Leeg als het niet zeker is.
+const PROJ_GEGEVENS=[['projectleider','Projectleider'],['projectonderdeel','Projectonderdeel'],['leverdatum','Leverdatum'],['aanhef','Aanhef'],['voornaam','Voornaam'],['achternaam','Achternaam'],['straat','Straat + huisnummer'],['postcode','Postcode'],['plaats','Plaats']];
+function _projMbContact(proj){
+  const id=proj.mb_contact_id||proj.mb_nr||(typeof resolveMbContact==='function'?resolveMbContact(proj):null); if(!id) return null;
+  try{ const c=JSON.parse(localStorage.getItem('mt_cache_klanten')||'null'); const l=(c&&Array.isArray(c.data))?c.data:[]; return l.find(x=>x&&String(x.id)===String(id))||null; }catch(e){ return null; }
+}
+function projGegevensVoorstel(proj){
+  const mb=_projMbContact(proj), uit={};
+  if(mb){ if(mb.address1) uit.straat=String(mb.address1).trim(); if(mb.zipcode) uit.postcode=String(mb.zipcode).trim(); if(mb.city) uit.plaats=String(mb.city).trim();
+    if(mb.firstname) uit.voornaam=String(mb.firstname).trim(); if(mb.lastname) uit.achternaam=String(mb.lastname).trim(); }
+  if(proj.product_naam) uit.projectonderdeel=String(proj.product_naam).trim();
+  const plan=(typeof planVoor==='function')?planVoor(proj.code):null;
+  const lev=plan&&Array.isArray(plan.fases)?plan.fases.find(f=>f&&['levering','montage','oplevering'].includes(f.key)&&/^\d{4}-\d{2}-\d{2}$/.test(String(f.eind||''))):null;
+  if(lev) uit.leverdatum=lev.eind;
+  Object.keys(uit).forEach(k=>{ if(!uit[k]) delete uit[k]; });
+  return uit;
+}
+function projGegevensZet(code,veld,waarde){
+  const p=projVind(code); if(!p||!PROJ_GEGEVENS.some(x=>x[0]===veld)) return;
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return;
+  let w=String(waarde==null?'':waarde).trim().slice(0,120);
+  if(veld==='leverdatum'&&w&&!MTVW.isoWeek(w)) w='';
+  const g=Object.assign({},p.gegevens||{}); if(w) g[veld]=w; else delete g[veld];
+  p.gegevens=g; slaProjectenOp(); try{ _projHerteken(p.code); }catch(e){}
+}
+function projGegevensVoorstelIn(code){
+  const p=projVind(code); if(!p) return;
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return;
+  const v=projGegevensVoorstel(p), g=Object.assign({},p.gegevens||{}); let n=0;
+  Object.entries(v).forEach(([k,w])=>{ if(!g[k]){ g[k]=w; n++; } });   // alleen lege velden; wat er staat blijft staan
+  if(!n) return;
+  p.gegevens=g; slaProjectenOp(); try{ _projHerteken(p.code); }catch(e){}
+}
+function projAdresTekst(proj){ const g=proj.gegevens||{}; return [g.straat,[g.postcode,g.plaats].filter(Boolean).join(' ')].filter(Boolean).join(', '); }
+function projNavUrl(adres){ return veiligeUrl(MTProject.navUrl(adres,(typeof navigator!=='undefined'&&navigator.userAgent)||''),{hosts:['google.com','apple.com']}); }
+function projGegevensHtml(proj){
+  if(!window.MTVW) return '';
+  const g=proj.gegevens||{}, pc=_jsCode(proj.code), mag=!(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen'));
+  const v=projGegevensVoorstel(proj), nieuw=Object.keys(v).filter(k=>!g[k]), w=MTVW.isoWeek(g.leverdatum), adres=projAdresTekst(proj), mb=_projMbContact(proj);
+  return `<section class="ov-blok proj-gegevens"><div class="card-title">Projectgegevens</div>
+    <div class="dos-meta">Projectnummer <b>${esc(projNummer(proj)||proj.code)}</b> · ${esc(projNaamVol(proj))}${mb&&mb.customer_id?` · klantnummer ${esc(mb.customer_id)}`:''}${projKlantNaam(proj)?' · '+esc(projKlantNaam(proj)):''}</div>
+    <div class="gegevens-grid">${PROJ_GEGEVENS.map(([k,l])=>`<label><span class="kpi-label">${esc(l)}</span>
+      <input type="${k==='leverdatum'?'date':'text'}" maxlength="120" value="${esc(g[k]||'')}" placeholder="${esc(v[k]?'voorstel: '+v[k]:'')}"${mag?'':' disabled'} onchange="projGegevensZet(${jsArg(pc)},${jsArg(k)},this.value)"></label>`).join('')}</div>
+    ${w?`<div class="dos-meta">Levering in week ${esc(w.week)} van ${esc(w.jaar)}</div>`:''}
+    <div class="lead-rij">${mag&&nieuw.length?`<button class="btn btn-xs btn-secondary" onclick="projGegevensVoorstelIn(${jsArg(pc)})" title="${esc('Alleen lege velden: '+nieuw.map(k=>(PROJ_GEGEVENS.find(x=>x[0]===k)||[])[1]).join(', '))}">Voorstellen invullen (${esc(nieuw.length)})</button>`:''}
+      ${adres&&projNavUrl(adres)?`<a class="btn btn-xs btn-secondary" target="_blank" rel="noopener" href="${esc(veiligeUrl(MTProject.navUrl(adres,(typeof navigator!=='undefined'&&navigator.userAgent)||''),{hosts:['google.com','apple.com']}))}" title="${esc('Navigeer naar '+adres)}">🧭 ${esc(adres)}</a>`:''}
+      <button class="btn btn-xs btn-gold" onclick="projVwExport(${jsArg(pc)})" title="Maakt ${esc(MTVW.bestandsnaam(projNummer(proj)||proj.code))} in 03_Vectorworks (of als download)">Projectgegevens voor Vectorworks</button></div></section>`;
+}
+// De XML voor interiorcad: PROJECT_ID = projectnummer (of code), COMMISSION = projectnaam, … (zie mt-vw.js).
+function projVwGegevens(proj){
+  const g=proj.gegevens||{}, mb=_projMbContact(proj);
+  return {projectnummer:projNummer(proj)||proj.code,naam:projNaamVol(proj),onderdeel:g.projectonderdeel||'',leider:g.projectleider||'',leverdatum:g.leverdatum||'',
+    klantnummer:(mb&&mb.customer_id)||'',bedrijf:projKlantNaam(proj)||(mb&&mb.company_name)||'',aanhef:g.aanhef||'',voornaam:g.voornaam||'',achternaam:g.achternaam||'',
+    straat:g.straat||'',postcode:g.postcode||'',plaats:g.plaats||'',items:[]};
+}
+function _projDownload(naam,tekst){
+  const url=URL.createObjectURL(new Blob([tekst],{type:'application/xml'})), a=document.createElement('a');
+  a.href=veiligeUrl(url,{protocollen:['blob:']}); a.download=naam; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
+// Upload naar <projectmap>/03_Vectorworks (Graph). Bestaat het bestand al, dan eerst vragen; zonder map of bij een fout: download.
+async function projVwExport(code){
+  const p=projVind(code); if(!p) return;
+  const xml=MTVW.projectgegevensXml(projVwGegevens(p)), naam=MTVW.bestandsnaam(projNummer(p)||p.code);
+  let pad=null;
+  try{ const z=(p.map&&p.map.pad)?{pad:p.map.pad}:await _projMapZoek(p); pad=z&&z.pad; }catch(e){ pad=null; }
+  if(!pad){ _projDownload(naam,xml); return mtDialog.alert({title:'Projectgegevens',message:'Er is (nog) geen projectmap gevonden; '+naam+' is gedownload. Zet hem in 03_Vectorworks of importeer hem in interiorcad ▸ Projectgegevens.'}); }
+  try{
+    const sub=await _SP.ensureFolder(pad,'03_Vectorworks',false), doel=pad+'/'+sub+'/'+naam;
+    const zet=async gedrag=>{ const token=await window.getGraphToken(); if(!token) throw new Error('niet ingelogd bij Microsoft');
+      return fetch(`https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(doel)}:/content?@microsoft.graph.conflictBehavior=${gedrag}`,{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/xml'},body:xml}); };
+    let r=await zet('fail');
+    if(r.status===409){
+      if(!await mtDialog.confirm({title:'Projectgegevens',message:naam+' staat al in 03_Vectorworks. Overschrijven met de huidige gegevens?',okLabel:'Overschrijven'})) return;
+      r=await zet('replace');
+    }
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    mtDialog.alert({title:'Projectgegevens',message:naam+' staat in 03_Vectorworks. Importeer hem in interiorcad ▸ Projectgegevens ▸ Importeer.'});
+  }catch(e){ _projDownload(naam,xml); mtDialog.alert({title:'Projectgegevens',message:'Opslaan in de projectmap lukte niet ('+(e.message||e)+'); '+naam+' is gedownload.'}); }
 }
 // ── Project overnemen uit Toggl (v2.14.1, Bart: "andersom werken") ──
 // Een actief Toggl-project dat nog bij geen project hoort (geen tg_project_id; de naam wijst via de resolver ook niet naar

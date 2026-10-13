@@ -21,7 +21,7 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-11c"></script>
-<script src="mt-project.js?v=2026-10-13a"></script>
+<script src="mt-project.js?v=2026-10-13b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-12n"></script>
@@ -3551,7 +3551,7 @@ function renderSheetAddr(p) {
     el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span>📍 ${escHtml(adres)}</span>
       <a class="btn btn-secondary btn-sm" style="text-decoration:none" target="_blank" rel="noopener"
-         href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adres)}">🧭 Navigeer</a>
+         href="${escHtml(veiligeUrl(window.MTProject ? MTProject.navUrl(adres, navigator.userAgent) : 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(adres) + '&dir_action=navigate', { hosts: ['google.com', 'apple.com'] }))}">🧭 Navigeer</a>
     </div>`;
   } else {
     el.innerHTML = `<div style="color:var(--text-faint);font-size:12px;margin-bottom:6px">⚠ Adres ontbreekt nog — vul aan:</div>

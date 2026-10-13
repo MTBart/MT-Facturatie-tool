@@ -1,5 +1,5 @@
 {
- "toelichting": "Regels waar HTML met + aan een variabele wordt geplakt (buiten het zicht van de template-scanner), doorgelezen op 2026-10-11: de variabelen zijn ids/constanten, uitkomsten van esc()/jsArg()/UI_ESC()/tgEsc() of HTML-fragmenten uit gescande templates. Een nieuwe regel moet eerst beoordeeld worden. Zoekbalk (11-10): mt-zoek-extern.js plakt drie fetch-URLs (geen HTML; Moneybird-route, Graph-bestandszoeker en Graph-mailzoeker): constante basis/drive/map plus de zoekterm via encodeURIComponent.",
+ "toelichting": "Regels waar HTML met + aan een variabele wordt geplakt (buiten het zicht van de template-scanner), doorgelezen op 2026-10-11: de variabelen zijn ids/constanten, uitkomsten van esc()/jsArg()/UI_ESC()/tgEsc() of HTML-fragmenten uit gescande templates. Een nieuwe regel moet eerst beoordeeld worden. Zoekbalk (11-10): mt-zoek-extern.js plakt drie fetch-URLs (geen HTML; Moneybird-route, Graph-bestandszoeker en Graph-mailzoeker): constante basis/drive/map plus de zoekterm via encodeURIComponent. L1c (13-10): mt-vw.js bouwt XML voor interiorcad (geen HTML): tag en inspringing zijn constanten uit de code, elke waarde gaat door xmlEsc.",
  "regels": [
   {
    "bestand": "mt-contacten.js",
@@ -264,6 +264,10 @@
   {
    "bestand": "mt-zoek-extern.js",
    "tekst": "const r = await o.fetch(b.base + '/messages?$search=' + encodeURIComponent('\"' + zoek + '\"') + '&$top=10&$select=' + SEL,"
+  },
+  {
+   "bestand": "mt-vw.js",
+   "tekst": "const e = (tag, v, ind) => ind + '<' + tag + '>' + xmlEsc(v) + '</' + tag + '>';   // XML, geen HTML: xmlEsc rond elke waarde"
   }
  ]
 }

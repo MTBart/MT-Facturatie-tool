@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — L1b: "Gewonnen → project" in één klik met voorstellen, en "Direct project"
+- Commit: `cbfa8ac` | Auteur: Bart Witte
+
 ## 2026-10-13 — L1a: velden met een eigen stempel, delete-wins, "+ Lead", fase en "Vandaag" in de cockpit
 - Commit: `52acb85` | Auteur: Bart Witte
 
