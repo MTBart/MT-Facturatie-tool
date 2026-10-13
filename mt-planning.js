@@ -140,17 +140,27 @@
   // Opslag = het bestaande mt_project_taken { projectcode: [taak…] }; elke taak: id, project_id, naam, omschrijving,
   // duur_uur (de raming; budget in minuten = duur_uur × 60), activiteit, status, toegewezen (team-slug, optioneel),
   // prioriteit, afhankelijk_van, tg_task_id (optionele Toggl-koppeling), tg_sync (koppeltabel), _vs, _veldconflict, _vervallen.
-  P.TAAK_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'status', 'toegewezen', 'prioriteit', 'afhankelijk_van', 'tg_task_id'];
+  // Stempel per veld: {t (ms), dev (apparaat), rev (teller per veld), door, basis (t van de stand waarop de wijziging voortbouwde)}.
+  // Totale volgorde: t, dan dev, dan rev. Identieke stempels met verschillende waarden zijn altijd een conflict.
+  // tg_sync is een eigen veld met een eigen stempel en hoort bij precies één tg_task_id (external_id); wijzigt tg_task_id, dan vervalt tg_sync.
+  P.TAAK_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'status', 'toegewezen', 'prioriteit', 'afhankelijk_van', 'tg_task_id', 'tg_sync'];
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+  const leeg = v => v === undefined || v === null || v === '';
   const tijdVan = s => Number(s && s.t) || 0;
+  const revVan = s => Number(s && s.rev) || 0;
+  const devVan = s => String((s && s.dev) || '');
+  // <0: a is ouder dan b; 0: identiek (of beide zonder stempel)
+  const volgorde = (a, b) => (tijdVan(a) - tijdVan(b)) || (devVan(a) < devVan(b) ? -1 : devVan(a) > devVan(b) ? 1 : 0) || (revVan(a) - revVan(b));
   P.taakBudgetMin = t => (t && t.budget_min != null && isFinite(Number(t.budget_min)) && Number(t.budget_min) > 0) ? Math.round(Number(t.budget_min)) : P.urenNaarMin(t && t.duur_uur);
   const maxStempel = t => Math.max(Number(t && t._gewijzigd) || 0, ...Object.values((t && t._vs) || {}).map(tijdVan));
+  // zonder tg_task_id is alleen een mislukte poging (external_id leeg) een geldige koppeltabel
+  const syncGeldig = x => !x.tg_sync || ((x.tg_task_id == null || x.tg_task_id === '') ? String(x.tg_sync.external_id || '') === '' : String(x.tg_sync.external_id) === String(x.tg_task_id));
 
   // Nieuwe stand van één project wegschrijven: oud = ruwe opslag (met tombstones), nieuw = de actieve taken zoals de
-  // bewerkers ze nu hebben. Gewijzigde velden krijgen een stempel {t, door, basis}; verdwenen taken een tombstone.
-  P.takenStempel = function (oud, nieuw, { nu = Date.now(), door = '', projectId = '' } = {}) {
+  // bewerkers ze nu hebben. Gewijzigde velden krijgen een stempel; verdwenen taken een tombstone.
+  P.takenStempel = function (oud, nieuw, { nu = Date.now(), door = '', dev = '', projectId = '' } = {}) {
     const per = new Map(); (oud || []).forEach(o => { if (o && o.id) per.set(o.id, o); });
     const gezien = new Set(), uit = [];
     (nieuw || []).forEach(t => {
@@ -159,6 +169,9 @@
       if (x.id) gezien.add(x.id);
       if (projectId && !x.project_id) x.project_id = projectId;
       if (o && o.project_id && !x.project_id) x.project_id = o.project_id;
+      // een koppeltabel van een andere Toggl-taak is waardeloos: nieuwe tg_task_id → oude tg_sync vervalt
+      if (o && !gelijk(x.tg_task_id, o.tg_task_id) && gelijk(x.tg_sync, o.tg_sync)) delete x.tg_sync;
+      if (!syncGeldig(x)) delete x.tg_sync;
       const vs = Object.assign({}, kopie(o && o._vs) || {}, kopie(x._vs) || {});
       const ovs = (o && o._vs) || {};
       P.TAAK_VELDEN.forEach(f => {
@@ -167,7 +180,7 @@
         if (!veranderd || bewust) return;
         if (!o && x[f] === undefined) return;
         const vorig = tijdVan(ovs[f]);
-        vs[f] = { t: Math.max(nu, vorig + 1), door, basis: vorig };
+        vs[f] = { t: Math.max(nu, vorig + 1), dev, rev: revVan(ovs[f]) + 1, door, basis: vorig };
       });
       if (Object.keys(vs).length) x._vs = vs;
       delete x._vervallen;
@@ -186,43 +199,82 @@
   };
   P.takenActief = lijst => (Array.isArray(lijst) ? lijst : []).filter(t => t && typeof t === 'object' && !t._vervallen);
 
-  // Eén taak samenvoegen: per veld wint de nieuwste stempel (gelijk → lokaal; beide zonder stempel → de andere kant,
-  // zoals SharePoint bij de projecten). Een verwijdering wint altijd (L1a). Een wijziging die de winnaar niet kende
-  // (stempel nieuwer dan zijn basis) en een andere waarde heeft, wordt bewaard als _veldconflict[veld].
+  // Eenmalige (idempotente) migratie van oude taken, vóór het samenvoegen en bij het opstarten:
+  //  • een taak zonder id krijgt een stabiel id uit zijn inhoud (twee pc's krijgen hetzelfde id, dus niet samengevoegd tot één);
+  //  • elk ingevuld veld zonder stempel krijgt er een met het record-stempel (`_gewijzigd`) als tijd, anders 1 (= "oud"), mig:true.
+  //    Bewust NIET de laadtijd: die zou een oude, nooit gestempelde waarde stil boven een echte wijziging van een ander zetten.
+  //    Verschilt zo'n oude waarde van een andere kopie, dan wordt dat een zichtbaar conflict (gelijke stempels, andere waarde).
+  // → { obj, gewijzigd }; werkt op een kopie.
+  const hash36 = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
+  P.takenMigreer = function (obj) {
+    const uit = {}; let gewijzigd = false;
+    const o = obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+    for (const code of Object.keys(o)) {
+      if (!Array.isArray(o[code])) { uit[code] = o[code]; continue; }
+      const teller = new Map();
+      uit[code] = o[code].map(t0 => {
+        if (!t0 || typeof t0 !== 'object') return t0;
+        let t = t0, kopieGemaakt = false;
+        const wijzig = () => { if (!kopieGemaakt) { t = kopie(t0); kopieGemaakt = true; } gewijzigd = true; };
+        if (!t.id) {
+          wijzig();
+          const basis = hash36([code, t.naam, t.omschrijving, t.bron, t.duur_uur].map(v => String(v == null ? '' : v)).join('|'));
+          const n = (teller.get(basis) || 0) + 1; teller.set(basis, n);
+          t.id = 'm' + basis + (n > 1 ? '-' + n : '');
+        }
+        const base = Number(t._gewijzigd) || 1;
+        P.TAAK_VELDEN.forEach(f => {
+          if (t[f] === undefined || (t._vs && t._vs[f])) return;
+          wijzig(); t._vs = t._vs || {}; t._vs[f] = { t: base, dev: '', rev: 1, door: '', basis: 0, mig: true };
+        });
+        if (kopieGemaakt && !t._gewijzigd && t._vs) t._gewijzigd = maxStempel(t);
+        return t;
+      });
+    }
+    return { obj: uit, gewijzigd };
+  };
+
+  // Eén taak samenvoegen: per veld wint de hoogste stempel (t, dev, rev). Een verwijdering wint altijd (L1a). Een wijziging die
+  // de winnaar niet kende (haar stempel nieuwer dan de basis van de winnaar) of een identieke stempel met een andere waarde
+  // wordt bewaard als _veldconflict[veld]; een oude, ongestempelde waarde is nooit "stil" weg. Alleen de koppeltabel (tg_sync)
+  // houdt een afwijkende status 'fout' of 'extern-verwijderd' in een conflict; verder wint de nieuwste.
   function taakSamen(l, r) {
     if (l._vervallen || r._vervallen) {
       const d = [l, r].filter(x => x._vervallen).sort((a, b) => (Number(b._gewijzigd) || 0) - (Number(a._gewijzigd) || 0))[0];
       return kopie(d);
     }
     const nl = maxStempel(l), nr = maxStempel(r);
-    const basis = kopie(nl > nr ? l : r);   // niet-getrackte velden (tg_sync, bron, project_id…) van de nieuwste kant
+    const basis = kopie(nl > nr ? l : r);   // niet-getrackte velden (bron, project_id…) van de nieuwste kant
     const andere = nl > nr ? r : l;
     Object.keys(andere).forEach(k => { if (!(k in basis) && !k.startsWith('_')) basis[k] = kopie(andere[k]); });
     const w = basis; w._vs = {}; const conflicten = {};
     P.TAAK_VELDEN.forEach(f => {
-      const sl = (l._vs || {})[f], sr = (r._vs || {})[f], tl = tijdVan(sl), tr = tijdVan(sr);
+      const sl = (l._vs || {})[f], sr = (r._vs || {})[f], c0 = volgorde(sl, sr);
       let win, ander, sw, so;
-      if (!tl && !tr) { const heeft = f in r; win = heeft ? r : l; ander = heeft ? l : r; sw = sr; so = sl; }
-      else if (tl > tr || (tl === tr && tl > 0)) { win = l; ander = r; sw = sl; so = sr; }
-      else { win = r; ander = l; sw = sr; so = sl; }
+      if (c0 > 0) { win = l; ander = r; sw = sl; so = sr; } else { win = r; ander = l; sw = sr; so = sl; }   // gelijk → de andere kant (SharePoint)
       if (win[f] === undefined) delete w[f]; else w[f] = kopie(win[f]);
       if (sw) w._vs[f] = kopie(sw);
-      const bt = tijdVan(sw), bb = Number(sw && sw.basis) || 0, ot = tijdVan(so);
+      const bt = tijdVan(sw), bb = Number(sw && sw.basis) || 0, ot = tijdVan(so), verschil = !gelijk(ander[f], win[f]);
       let c = null;
-      if (ot && ot !== bt && ot > bb && !gelijk(ander[f], win[f])) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot };
+      if (verschil && !(f === 'tg_sync' && !(ander[f] && (ander[f].status === 'fout' || ander[f].status === 'extern-verwijderd')))) {
+        const identiek = c0 === 0, ongestempeld = !ot && !!bt;
+        if (identiek || (ot && ot > bb) || (ongestempeld && !leeg(ander[f]))) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot || bt };
+      }
       [l, r].forEach(z => { const oc = z._veldconflict && z._veldconflict[f]; if (oc && Number(oc.t) > bb && !gelijk(oc.waarde, win[f]) && (!c || Number(oc.t) > c.t)) c = kopie(oc); });
       if (c) conflicten[f] = c;
     });
+    if (!syncGeldig(w)) { delete w.tg_sync; delete w._vs.tg_sync; delete conflicten.tg_sync; }   // koppeltabel van een andere Toggl-taak vervalt
     if (Object.keys(conflicten).length) w._veldconflict = conflicten; else delete w._veldconflict;
     if (!Object.keys(w._vs).length) delete w._vs;
     const m = Math.max(maxStempel(w), Number(l._gewijzigd) || 0, Number(r._gewijzigd) || 0); if (m) w._gewijzigd = m;
     return w;
   }
-  // Samenvoeger voor het hele bestand { code: [taak…] }: per code, per taak-id. Wat aan één kant staat, blijft staan.
+  // Samenvoeger voor het hele bestand { code: [taak…] }: eerst beide kanten migreren (ids en stempels voor oude taken), dan per code
+  // en taak-id samenvoegen. Wat aan één kant staat, blijft staan.
   P.takenSamen = function (lokaal, remote) {
     const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
     const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-    const L = obj(lees(lokaal)), R = obj(lees(remote)), uit = {};
+    const L = P.takenMigreer(obj(lees(lokaal))).obj, R = P.takenMigreer(obj(lees(remote))).obj, uit = {};
     for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
       const a = Array.isArray(L[code]) ? L[code] : [], b = Array.isArray(R[code]) ? R[code] : [];
       const per = new Map(), los = new Map();
@@ -234,27 +286,30 @@
   };
   // Een conflict oplossen: 'andere' neemt de bewaarde waarde over, 'eigen' houdt de huidige. Beide krijgen een nieuwe stempel
   // die boven het conflict ligt, zodat de keuze ook op de andere pc het conflict wegneemt. Wijzigt `taak` ter plekke.
-  P.conflictOplos = function (taak, veld, kies, { nu = Date.now(), door = '' } = {}) {
+  P.conflictOplos = function (taak, veld, kies, { nu = Date.now(), door = '', dev = '' } = {}) {
     const c = taak && taak._veldconflict && taak._veldconflict[veld]; if (!c) return false;
-    const vorig = tijdVan((taak._vs || {})[veld]);
+    const vs0 = (taak._vs || {})[veld], vorig = tijdVan(vs0);
     if (kies === 'andere') { if (c.waarde === null || c.waarde === undefined) delete taak[veld]; else taak[veld] = kopie(c.waarde); }
     taak._vs = taak._vs || {};
-    taak._vs[veld] = { t: Math.max(nu, vorig + 1, Number(c.t) + 1), door, basis: Math.max(vorig, Number(c.t)) };
+    taak._vs[veld] = { t: Math.max(nu, vorig + 1, Number(c.t) + 1), dev, rev: revVan(vs0) + 1, door, basis: Math.max(vorig, Number(c.t)) };
     delete taak._veldconflict[veld]; if (!Object.keys(taak._veldconflict).length) delete taak._veldconflict;
     taak._gewijzigd = maxStempel(taak);
     return true;
   };
 
   // ── Toggl-koppeltabel per taak ─────────────────────────────────────────────────────────────────────
-  // tg_sync = {provider:'toggl', external_id, laatst_gezien (ms), hash (van de gespiegelde velden), status:'ok'|'fout'|'extern-verwijderd', fout}
+  // tg_sync = {provider:'toggl', external_id (= tg_task_id), laatst_gezien (ms), hash (van de gespiegelde velden), status:'ok'|'fout'|'extern-verwijderd', fout}
   // Eenrichting MT → Toggl: gespiegeld worden alleen naam en status. De taak in MT blijft altijd de bron.
   P.tgHash = t => { const s = JSON.stringify([String((t && t.naam) || ''), String((t && t.status) || 'todo')]); let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
-  // 'koppelen' (nog geen Toggl-taak), 'bijwerken' (MT wijkt af van wat we laatst naar Toggl stuurden), 'actueel', 'extern-verwijderd'
+  // 'koppelen' (nog geen Toggl-taak), 'herkoppelen' (koppeltabel ontbreekt of hoort bij een andere Toggl-taak), 'bijwerken' (MT wijkt af
+  // van wat we laatst naar Toggl stuurden), 'actueel', 'extern-verwijderd'
   P.tgActie = t => {
     if (!t) return 'actueel';
-    if (t.tg_sync && t.tg_sync.status === 'extern-verwijderd') return 'extern-verwijderd';
     if (!t.tg_task_id) return 'koppelen';
-    return (t.tg_sync && t.tg_sync.hash === P.tgHash(t)) ? 'actueel' : 'bijwerken';
+    const s = t.tg_sync;
+    if (!s || String(s.external_id) !== String(t.tg_task_id)) return 'herkoppelen';
+    if (s.status === 'extern-verwijderd') return 'extern-verwijderd';
+    return s.hash === P.tgHash(t) ? 'actueel' : 'bijwerken';
   };
 
   // ── De meter: budget / gepland / geklokt (gekoppeld, ongekoppeld) / resterend ────────────────────────
