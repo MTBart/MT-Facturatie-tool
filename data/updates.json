@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.14.2",
+    "datum": "2026-10-13",
+    "titel": "Achter de schermen",
+    "voor": "beheer",
+    "punten": [
+      "Achter de schermen: seintjes en pushmeldingen voorbereid, strengere privacycontrole."
+    ]
+  },
+  {
     "versie": "2.14.1",
     "datum": "2026-10-13",
     "titel": "Project overnemen uit Toggl",

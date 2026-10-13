@@ -30,7 +30,7 @@ while IFS= read -r f; do
 done <<< "$STAGED"
 
 # ---- 1b. content-scan: token-achtige literals in staged blobs ----
-CONTENT_RE='ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|toggl_sk_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ0eXAiOiJKV1Q|"refresh_token"[[:space:]]*:[[:space:]]*"[A-Za-z0-9]|NL[0-9]{2}[A-Z]{4}[0-9]{10}'
+CONTENT_RE='ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|toggl_sk_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ0eXAiOiJKV1Q|"refresh_token"[[:space:]]*:[[:space:]]*"[A-Za-z0-9]|NL[0-9]{2}[A-Z]{4}[0-9]{10}'  # privacy-ok: detectiepatronen van de hook zelf
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -54,6 +54,21 @@ if [ -n "$VIOLATIONS" ]; then
   exit 1
 fi
 echo "✓ Secret-guard: schoon"
+
+# ---- 1c. privacy-scan (githooks/privacy-scan.js): IBAN, hex-tokens, Bearer, Cloudflare/Azure, PEM, e-mail, telefoon, BSN,
+#          verboden paden en de LOKALE namenlijst, op de TOEGEVOEGDE regels van de index. Uitzondering alleen per regel via een
+#          commentaar met de privacy-ok-markering en een reden. Zie githooks/README.md. (fail closed zonder node)
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+if ! command -v node >/dev/null 2>&1; then
+  echo ""
+  echo "🛑 COMMIT GEBLOKKEERD — node ontbreekt, dus de privacy-scan kan niet draaien (fail closed)."
+  echo ""
+  exit 1
+fi
+if ! node "$HOOK_DIR/privacy-scan.js" --staged; then
+  echo "Bewust tóch committen? Alleen per regel met een privacy-ok-markering (--no-verify wordt bij het pushen alsnog gevangen)."
+  exit 1
+fi
 
 # ============================================================
 #  SINK-GUARD (F7) — HTML/JS-injectie: alle sink-baselines (tools/check-sinks.js, <1 s). Controleert de GESTAGEDE inhoud: de index (.html, .js en tools/)

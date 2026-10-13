@@ -1470,6 +1470,10 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     </div>
     <div class="sheet-body">
       <div id="notifList"></div>
+      <div id="pushBlok" style="display:none;margin-top:14px">
+        <button id="pushKnop" type="button" class="btn btn-secondary btn-sm" style="display:none">Meldingen aanzetten</button>
+        <div id="pushStatus" class="sheet-sub" style="margin-top:6px" aria-live="polite"></div>
+      </div>
       <button id="demoNotifBtn" class="btn btn-secondary btn-full" style="margin-top:14px;display:none" onclick="demoNotif()">▶ Demo: ontvang notificatie</button>
     </div>
   </div>
@@ -6945,6 +6949,41 @@ function renderNotifBadge() {
 function openNotifs() {
   renderNotifList();
   document.getElementById("notifSheet").classList.add("visible");
+  pushBlokToon();
+}
+
+// ── Pushmeldingen (L3b): alleen na een klik op de knop (nooit vanzelf om toestemming vragen), alleen met verkooprecht.
+// De melding zelf is altijd algemeen ("M&T: N acties vragen aandacht"; zie sw.js); de details staan in de app.
+const _pushKan = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function _pushStatus(t) { const el = document.getElementById('pushStatus'); if (el) el.textContent = t; }
+function _b64uNaarBytes(s) { const b = atob(String(s).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(s).length + 3) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+async function pushBlokToon() {
+  const blok = document.getElementById('pushBlok'), knop = document.getElementById('pushKnop'); if (!blok || !knop) return;
+  const mag = !!(window.MTRol && MTRol.me && MTRol.recht('offertes'));   // in élke modus: de worker dwingt dit recht bij /push altijd af
+  blok.style.display = mag ? '' : 'none'; if (!mag) return;
+  if (!knop._mtGebonden) { knop.addEventListener('click', pushAanzetten); knop._mtGebonden = true; }
+  knop.style.display = 'none';
+  if (!_pushKan()) { _pushStatus(/iPhone|iPad/.test(navigator.userAgent) ? 'Meldingen: zet de app eerst op het beginscherm (iOS 16.4 of nieuwer).' : 'Deze browser ondersteunt geen pushmeldingen.'); return; }
+  if (Notification.permission === 'denied') { _pushStatus('Meldingen zijn geblokkeerd in de instellingen van je telefoon of browser.'); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+    knop.style.display = sub ? 'none' : '';
+    _pushStatus(sub ? 'Meldingen staan aan op dit apparaat.' : 'Meldingen staan uit op dit apparaat.');
+  } catch (e) { _pushStatus('Status van meldingen onbekend.'); }
+}
+async function pushAanzetten() {
+  const knop = document.getElementById('pushKnop'); knop.disabled = true; _pushStatus('Bezig…');
+  try {
+    if (await Notification.requestPermission() !== 'granted') { _pushStatus('Geen toestemming gegeven: meldingen blijven uit.'); return; }
+    const r = await window.fetchMetAuth(WORKER + '/push/sleutel');
+    if (!r || !r.ok) { _pushStatus('Meldingen zijn nog niet ingericht op de server.'); return; }
+    const sleutel = (await r.json()).publicKey, reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _b64uNaarBytes(sleutel) });
+    const a = await window.fetchMetAuth(WORKER + '/push/aanmelden', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON() }) });
+    if (!a || !a.ok) { try { await sub.unsubscribe(); } catch (e) {} _pushStatus('Aanmelden mislukt. Probeer het later opnieuw.'); return; }
+    knop.style.display = 'none'; _pushStatus('Meldingen staan aan op dit apparaat.');
+  } catch (e) { _pushStatus('Aanzetten mislukt. Probeer het later opnieuw.'); }
+  finally { knop.disabled = false; }
 }
 function closeNotifs() {
   document.getElementById("notifSheet").classList.remove("visible");

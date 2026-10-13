@@ -1,0 +1,10 @@
+#!/bin/bash
+# Mortise & Tenon — pre-push hook (VERSION-CONTROLLED via core.hooksPath=githooks)
+# Vangnet voor 'git commit --no-verify': scant alle NIEUWE commits van de push (diff, bestandsnamen, berichten).
+# Zie githooks/README.md.
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+if ! command -v node >/dev/null 2>&1; then
+  echo "PUSH GEBLOKKEERD — node ontbreekt, dus de privacy-scan kan niet draaien (fail closed)."
+  exit 1
+fi
+node "$HOOK_DIR/privacy-scan.js" --pre-push "$1" "$2"

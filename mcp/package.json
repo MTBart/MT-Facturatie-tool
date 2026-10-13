@@ -1,0 +1,13 @@
+{
+  "name": "mt-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP-proefserver van de MT tool (OAuth via Entra, alleen whoami)",
+  "type": "module",
+  "scripts": {
+    "test": "node test/mcp-harness.mjs"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.3"
+  }
+}
