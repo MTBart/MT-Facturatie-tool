@@ -7648,16 +7648,13 @@ Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.
 // Altijd CONCEPT — versturen doet Bart zelf in Moneybird.
 function uurtarieven(){try{return JSON.parse(localStorage.getItem('mt_uurtarieven')||'{}');}catch(e){return{};}}
 function uurtariefVoor(naam){
-  const t=uurtarieven();const k=String(naam||'').toLowerCase().trim();
-  const k1=k.split(/[ @.]/)[0]; // "bart witte" / "bart@…" → "bart"
-  const v=t[k]!=null?t[k]:(t[k1]!=null?t[k1]:t._std);
-  return Number(v!=null?v:55);
+  return MTPlanning.uurtarief(uurtarieven(),naam);   // één bron: Instellingen ▸ Uurtarieven (_std), anders de kerndefault in mt-planning.js
 }
 function renderUurtarieven(){
   const el=document.getElementById('uurtarief-velden');if(!el)return;
   const t=uurtarieven();
-  el.innerHTML=agTeam().map(m=>`<div class="field"><label>${esc(m.label||m.naam)} (€/u)</label><input type="number" id="s-tarief-${esc(m.naam)}" value="${esc(t[m.naam]!=null?t[m.naam]:55)}" step="2.5"></div>`).join('')
-    +`<div class="field"><label>Standaard / overig (€/u)</label><input type="number" id="s-tarief-std" value="${esc(t._std!=null?t._std:55)}" step="2.5"></div>`;
+  el.innerHTML=agTeam().map(m=>`<div class="field"><label>${esc(m.label||m.naam)} (€/u)</label><input type="number" id="s-tarief-${esc(m.naam)}" value="${esc(t[m.naam]!=null?t[m.naam]:MTPlanning.uurtariefStd(t))}" step="2.5"></div>`).join('')
+    +`<div class="field"><label>Standaard / overig (€/u)</label><input type="number" id="s-tarief-std" value="${esc(MTPlanning.uurtariefStd(t))}" step="2.5"></div>`;
 }
 function saveUurtarieven(){
   const t=uurtarieven();
@@ -14953,25 +14950,27 @@ function activiteitOpen(force){
   'use strict';
   const LS = { def:'mt_calc_defaults', off:'mt_calc_offertes' };
   const SP = { def:'mt_calc_defaults.json', off:'mt_calc_offertes.json' };
-  const DEFAULT_DEFAULTS = {
+  // Het standaard-uurtarief komt uit dezelfde bron als de nacalculatie (Instellingen ▸ Uurtarieven, anders mt-planning.js).
+  const stdTarief = () => { try { return MTPlanning.uurtariefStd(JSON.parse(localStorage.getItem('mt_uurtarieven') || '{}')); } catch (e) { return MTPlanning.UURTARIEF_STD; } };
+  const defaultDefaults = () => ({
     materiaal_marge: 1.5,
     marge_ondergrens: 0.15,              // waarschuwings-drempel voor "marge te laag" (fractie)
     uren: [
-      { omschrijving:'Calculatie',        uurtarief:45,  marge:2 },
-      { omschrijving:'Ontwerpen',         uurtarief:45,  marge:2 },
-      { omschrijving:'Werkvoorbereiding', uurtarief:45,  marge:2 },
-      { omschrijving:'Productie',         uurtarief:45,  marge:2 },
-      { omschrijving:'Afwerking',         uurtarief:45,  marge:2 },
+      { omschrijving:'Calculatie',        uurtarief:stdTarief(),  marge:2 },
+      { omschrijving:'Ontwerpen',         uurtarief:stdTarief(),  marge:2 },
+      { omschrijving:'Werkvoorbereiding', uurtarief:stdTarief(),  marge:2 },
+      { omschrijving:'Productie',         uurtarief:stdTarief(),  marge:2 },
+      { omschrijving:'Afwerking',         uurtarief:stdTarief(),  marge:2 },
       { omschrijving:'Transport',         uurtarief:110, marge:1 },
-      { omschrijving:'Montage',           uurtarief:45,  marge:2 },
+      { omschrijving:'Montage',           uurtarief:stdTarief(),  marge:2 },
     ],
-  };
+  });
   const STATUS_OPTIES = ['To do','Bezig','Verstuurd','Geaccepteerd','Afgewezen','Geannuleerd'];
   const LEGE_MAT_REGELS = 10;
 
   const CALC = window.CALC = {
     loaded:false, hydrating:null,
-    defaults: JSON.parse(JSON.stringify(DEFAULT_DEFAULTS)),
+    defaults: defaultDefaults(),
     offertes:{},                         // { [key]: offerte }
   };
 
@@ -15156,7 +15155,7 @@ function activiteitOpen(force){
     return CALC.hydrating;
   }
   function mergeDefaults(d){
-    const out=JSON.parse(JSON.stringify(DEFAULT_DEFAULTS));
+    const out=defaultDefaults();
     if(d&&d.materiaal_marge!=null&&d.materiaal_marge!=='') out.materiaal_marge=d.materiaal_marge;
     if(d&&d.marge_ondergrens!=null&&d.marge_ondergrens!=='') out.marge_ondergrens=d.marge_ondergrens;
     if(d&&Array.isArray(d.uren)&&d.uren.length) out.uren=d.uren.map(u=>({omschrijving:u.omschrijving||'',uurtarief:u.uurtarief,marge:u.marge}));
@@ -15642,7 +15641,7 @@ function activiteitOpen(force){
   window.calcVergetenAddKant=function(key){ const o=getOfferte(key); const m=_plaatZonderKant(o); if(m){ if(o._vergeten_dismissed)delete o._vergeten_dismissed.kantenband; calcAddRand(key,m.id); } else { _renderVergeten(key); } };
   window.calcVergetenAddMontage=function(key){
     const o=getOfferte(key); const def=(CALC.defaults.uren||[]).find(u=>VERGETEN_CFG.montage_woorden.test(u.omschrijving||''));
-    o.uren.push({id:uid('u'),omschrijving:'Montage',uren:'',uurtarief:def?def.uurtarief:(CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:45),marge:def?def.marge:2});
+    o.uren.push({id:uid('u'),omschrijving:'Montage',uren:'',uurtarief:def?def.uurtarief:(CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:stdTarief()),marge:def?def.marge:2});
     if(o._vergeten_dismissed)delete o._vergeten_dismissed.montage; saveCalc('off',{key:key}); renderOfferteCalc(key);
   };
   window.calcVergetenAddTransport=function(key){
@@ -16141,14 +16140,14 @@ function activiteitOpen(force){
   };
 
   window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u)return;u[field]=val;saveCalc('off',{key:key});recalcView(key);};
-  window.calcAddUur=function(key){const o=getOfferte(key);o.uren.push({id:uid('u'),omschrijving:'',uren:'',uurtarief:CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:45,marge:2});saveCalc('off',{key:key});renderOfferteCalc(key);};
+  window.calcAddUur=function(key){const o=getOfferte(key);o.uren.push({id:uid('u'),omschrijving:'',uren:'',uurtarief:CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:stdTarief(),marge:2});saveCalc('off',{key:key});renderOfferteCalc(key);};
   window.calcDelUur=function(key,rid){const o=getOfferte(key);o.uren=o.uren.filter(u=>u.id!==rid);saveCalc('off',{key:key});renderOfferteCalc(key);};
 
   // standaardwaarden (leeg rekenblad)
   window.calcSetDefMarge=function(val){CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));};
   window.calcSetDefMargeOndergrens=function(val){const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));};
   window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));};
-  window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:45,marge:2});renderOfferteCalc(key);};
+  window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:stdTarief(),marge:2});renderOfferteCalc(key);};
   window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);renderOfferteCalc(key);};
   window.calcSaveDefaults=function(key){saveCalc('def');flash(key,'✓ opgeslagen als standaard — nieuwe offertes starten hiermee',true);};
 
@@ -16263,7 +16262,7 @@ function activiteitOpen(force){
     return `<tr>
       <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'omschrijving',this.value)"></td>
       <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${esc(inval(u.uren))}" placeholder="0" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'uren',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${esc(inval(u.uurtarief))}" placeholder="45" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'uurtarief',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${esc(inval(u.uurtarief))}" placeholder="${esc(stdTarief())}" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'uurtarief',this.value)"></td>
       <td class="calc-num" id="uk-${esc(u.id)}">${esc(eur(r.kost))}</td>
       <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${esc(inval(u.marge))}" placeholder="2" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'marge',this.value)"></td>
       <td class="calc-num" style="font-weight:600" id="uv-${esc(u.id)}">${esc(eur(r.verkoop))}</td>
@@ -16521,7 +16520,7 @@ function activiteitOpen(force){
       <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'omschrijving',this.value)"></td>
       <td class="calc-num" style="color:var(--text-dim)">${esc(begroot==null||begroot===''?'—':inval(begroot))}</td>
       <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${esc(inval(u.uren))}" placeholder="0" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'uren',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${esc(inval(u.uurtarief))}" placeholder="45" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'uurtarief',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${esc(inval(u.uurtarief))}" placeholder="${esc(stdTarief())}" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'uurtarief',this.value)"></td>
       <td class="calc-num" id="uk-${esc(u.id)}">${esc(eur(r.kost))}</td>
       <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur(${jsArg(nk)},${jsArg(u.id)})">×</button></td>
     </tr>`;
