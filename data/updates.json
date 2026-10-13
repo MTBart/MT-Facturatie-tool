@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.15.0",
+    "datum": "2026-10-13",
+    "titel": "Leads, projectgegevens en navigatie",
+    "voor": "iedereen",
+    "punten": [
+      "Leads: '+ Lead' met fase en volgende actie, de lijst 'Vandaag', 'Gewonnen → project' en 'Direct project'.",
+      "Projectgegevens bij een project, met de knop 'Projectgegevens voor Vectorworks', en navigatie naar het adres."
+    ]
+  },
+  {
     "versie": "2.14.2",
     "datum": "2026-10-13",
     "titel": "Achter de schermen",
