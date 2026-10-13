@@ -106,3 +106,6 @@ Agents/opdrachten/voor_claude/
 _backup/
 _patches/
 __pycache__/
+
+# Lokale namenlijst voor githooks/privacy-scan.js (nooit committen)
+verboden-namen*.txt

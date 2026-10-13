@@ -2408,7 +2408,7 @@ async function geldMutaties(get, van, tot, w) {
 // Alleen een naam/omschrijving zonder IBAN → onzeker (te bevestigen). Meer dan één pot, of deels op een pot-grootboek → onzeker (melden, niet gokken).
 // Bij een lege tegenrekening (zo levert de bank de overboekingen tussen eigen rekeningen) zit de pot in de naam: "Zakelijke oranje spaarrekening Z". De letter
 // erachter hoort bij één pot: `herkenning.letter`, anders de letter waarmee de naam, de omschrijving of het id van de pot eindigt ("BTW Z"). Onbekende letter → niet herkend (gemeld).
-const GELD_SPAAR_LETTER = /spaarrekening\s+([A-Z])(\d{6,})?\s*$/i;   // "…spaarrekening Z" of, zoals de bank het levert, "…spaarrekening Z96824563" (letter + rekeningnummer)
+const GELD_SPAAR_LETTER = /spaarrekening\s+([A-Z])(\d{6,})?\s*$/i;   // "…spaarrekening Z" of, zoals de bank het levert, "…spaarrekening Z<nummer>" (letter + rekeningnummer)
 const geldPotLetters = p => {
   const uit = new Set(), eind = t => { const m = /(?:^|[\s(\-–])([A-Za-z])\)?\s*$/.exec(String(t || '').trim()); return m ? m[1].toUpperCase() : null; };
   const h = p.herkenning || {};
