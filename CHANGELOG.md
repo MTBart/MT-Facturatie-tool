@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — v2.14.0 (Codex): achterdeur oud dashboard pas na de rol en met recht; router opent geen verborgen tab; terugval na de rol
+- Commit: `b51064d` | Auteur: Bart Witte
+
 ## 2026-10-12 — v2.14.0 voorbereid: "Vandaag aanwezig" naar de Agenda; versielabel en één release-entry
 - Commit: `83ebdb0` | Auteur: Bart Witte
 
