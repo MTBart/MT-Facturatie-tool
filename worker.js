@@ -5622,7 +5622,7 @@ export default {
       'Vary': 'Origin',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PATCH, DELETE',
       'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token, X-MT-Bevestiging, X-MT-Actie',
-      'Access-Control-Expose-Headers': 'X-MT-Herhaald',
+      'Access-Control-Expose-Headers': 'X-MT-Herhaald, Retry-After',
     } : { 'Vary': 'Origin' };
 
     if (request.method === 'OPTIONS') {
@@ -5835,7 +5835,7 @@ export default {
           body
         });
         const text = await response.text();
-        return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders, ...(response.headers.get('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After') } : {}) } });   // Retry-After van Toggl doorgeven (429)
 
       } else if (target === 'toggl_focus') {
         // Toggl Focus API — Bearer auth, aparte base URL
@@ -5851,7 +5851,7 @@ export default {
           body
         });
         const text = await response.text();
-        return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders, ...(response.headers.get('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After') } : {}) } });   // Retry-After van Toggl doorgeven (429)
 
       } else if (target === 'toggl_admin_projects') {
         // Volledige workspace-projectenlijst met het admin-token. Gewone
@@ -5884,7 +5884,7 @@ export default {
           body
         });
         const text = await response.text();
-        return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        return new Response(text, { status: response.status, headers: { 'Content-Type': 'application/json', ...corsHeaders, ...(response.headers.get('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After') } : {}) } });   // Retry-After van Toggl doorgeven (429)
       }
 
       return new Response('Bad request', { status: 400, headers: corsHeaders });

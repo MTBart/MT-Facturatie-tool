@@ -136,6 +136,7 @@ async function tgReportsUren(codes,van,tot){
         filters:[{property:'start',operator:'between',value:[a.toISOString(),e.toISOString()]},
           {property:'project_id',operator:'in',value:ids}]};
       const r=await _tgEenmalig(k,()=>_tgQueue(()=>focusFetchPad(`reports/workspaces/${FOCUS_WS}/query`,'POST',body)));
+      const cc=tgReportsRijen(r); if(cc.contractFout) throw new Error(cc.contractFout);   // hetzelfde contract als tgReportsTaken
       rijen=((r&&r.data_json_row)||[]).map(x=>({user:x.user_account_id,task:x.task_id||null,project:x.project_id,uren:Math.round((Number(x.sum_duration)||0)/36)/100}));
       _tgCacheZet(k,rijen);
     }
@@ -168,8 +169,10 @@ function tgReportsRijen(r){
   const lijst=r&&r.data_json_row;
   if(!Array.isArray(lijst)) return {rijen:[],contractFout:'Toggl gaf een onverwacht antwoord (geen data_json_row)'};
   const echt=lijst.filter(x=>x&&typeof x==='object');
-  if(echt.length&&!echt.some(x=>'task_id' in x)) return {rijen:[],contractFout:'Toggl geeft geen task_id mee in de urenrapportage: uren per taak zijn niet te bepalen'};
-  if(echt.length&&!echt.some(x=>'sum_duration' in x)) return {rijen:[],contractFout:'Toggl geeft geen duur (sum_duration) mee in de urenrapportage'};
+  if(echt.length<lijst.length) return {rijen:[],contractFout:'Toggl gaf een onverwachte regel in de urenrapportage'};
+  // per rij: de sleutels moeten er zijn (task_id mag null zijn); één rij zonder sleutel is al een gewijzigd contract
+  if(!echt.every(x=>'task_id' in x)) return {rijen:[],contractFout:'Toggl geeft geen task_id mee in (alle regels van) de urenrapportage: uren per taak zijn niet te bepalen'};
+  if(!echt.every(x=>'sum_duration' in x)) return {rijen:[],contractFout:'Toggl geeft geen duur (sum_duration) mee in (alle regels van) de urenrapportage'};
   return {rijen:echt.map(x=>({taak_id:x.task_id||null,project:x.project_id,sec:Number(x.sum_duration)||0})),contractFout:''};
 }
 // Geklokte MINUTEN per Toggl-taak voor de projecten van `codes` (P1: de projectmeter). Zelfde Reports-query als hierboven
