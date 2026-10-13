@@ -2843,7 +2843,15 @@ function _projMetId(x,idx){
 const PROJ_VELDEN=['fase','volgende_actie','kans_pct','waarde_excl','verwachte_beslisdatum','verlies','geparkeerd_tot','gewonnen_op','bron'];
 // Projectgegevens (L1c) per sleutel met een eigen stempel: veldnaam "gegevens.<sleutel>" (zelfde merge en conflicten).
 const PROJ_GEGEVENS_VELDEN=['projectleider','projectonderdeel','leverdatum','aanhef','voornaam','achternaam','straat','postcode','plaats'];
-const _projVeldPaden=()=>PROJ_VELDEN.concat(PROJ_GEGEVENS_VELDEN.map(k=>'gegevens.'+k));
+// Generiek: de vaste sleutels plus elke sleutel die in `gegevens` of in `_vs` van een van de kopieën voorkomt (een onbekende sleutel
+// zonder stempel valt terug op de nieuwste record-stempel en gaat nooit verloren als hij aan één kant bestaat).
+const _projVeldPaden=(alle)=>{
+  const set=new Set(PROJ_GEGEVENS_VELDEN);
+  (alle||[]).forEach(x=>{ if(!x||typeof x!=='object') return;
+    if(x.gegevens&&typeof x.gegevens==='object'&&!Array.isArray(x.gegevens)) Object.keys(x.gegevens).forEach(k=>set.add(k));
+    if(x._vs&&typeof x._vs==='object') Object.keys(x._vs).forEach(v=>{ if(v.startsWith('gegevens.')&&v.length>9) set.add(v.slice(9)); }); });
+  return PROJ_VELDEN.concat([...set].map(k=>'gegevens.'+k));
+};
 function _vDeel(veld){ const i=veld.indexOf('.'); return i<0?[veld,null]:[veld.slice(0,i),veld.slice(i+1)]; }
 function _vHeeft(x,veld){ const [h,k]=_vDeel(veld); if(k===null) return veld in x; const o=x[h]; return !!o&&typeof o==='object'&&(k in o); }
 function _vGet(x,veld){ const [h,k]=_vDeel(veld); if(k===null) return x[veld]; const o=x[h]; return o&&typeof o==='object'?o[k]:undefined; }
@@ -2856,6 +2864,11 @@ function _vZet(x,veld,v){
 }
 // Status (compatibiliteitslaag) volgt altijd de fase (mapping in mt-lead.js); na elke merge en bij elke lezing opnieuw.
 function _projStatusUitFase(p){ if(p&&p.fase&&typeof MTLead!=='undefined'&&MTLead.statusVoor){ const st=MTLead.statusVoor(p.fase); if(st) p.status=st; } return p; }
+// Een record uit de merge: status afgeleid van fase, ook zonder concurrent (kopie als er iets verandert; de invoer blijft heel).
+function _projNormaal(x){
+  if(x&&x.fase&&typeof MTLead!=='undefined'&&MTLead.statusVoor){ const st=MTLead.statusVoor(x.fase); if(st&&x.status!==st) return Object.assign({},x,{status:st}); }
+  return x;
+}
 function projVeldZet(p,veld,waarde){
   const vs=(p._vs&&typeof p._vs==='object')?p._vs:(p._vs={}), oud=vs[veld];
   vs[veld]={t:Math.max(Date.now(),((oud&&Number(oud.t))||0)+1),door:typeof _spWie==='function'?_spWie():'',basis:(oud&&Number(oud.t))||0};
@@ -2866,7 +2879,7 @@ function projVeldZet(p,veld,waarde){
 }
 function _projVeldSamen(w,andere){
   const kopie=v=>v===undefined?undefined:JSON.parse(JSON.stringify(v));
-  for(const veld of _projVeldPaden()){
+  for(const veld of _projVeldPaden([w,...andere])){
     const alle=[w,...andere].filter(Boolean), st=x=>(x._vs&&x._vs[veld])||null;
     const orig=alle.map(x=>({v:kopie(_vGet(x,veld)),s:kopie(st(x)),c:kopie(x._veldconflict&&x._veldconflict[veld]),heeft:_vHeeft(x,veld)}));
     let bi=0; orig.forEach((o,i)=>{ if((Number((o.s||{}).t)||0)>(Number((orig[bi].s||{}).t)||0)) bi=i; });
@@ -2934,7 +2947,7 @@ function _projSamen(lokaal,spData){
   const uit=[];
   for(const [k,w0] of per){
     const andere=groep.get(k).filter(o=>o!==w0);
-    if(!andere.length){ uit.push(w0); continue; }
+    if(!andere.length){ uit.push(_projNormaal(w0)); continue; }   // ook een enkelvoudig record: status volgt de fase
     const w=JSON.parse(JSON.stringify(w0));
     andere.forEach(o=>_projErf(w,o));
     _projVeldSamen(w,andere);
@@ -9490,7 +9503,7 @@ async function maakProjectAan(){
   if(!k||!p){status.style.color='var(--red)';status.textContent='Vul minimaal klant en product in';return;}
   // Lead (L1a): de volgende actie met datum is verplicht; pas daarna wordt er een nummer uitgegeven.
   const lead=(typeof _leadModus!=='undefined'&&_leadModus)?leadModalWaarden():null;
-  if(lead&&window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')){status.style.color='var(--red)';status.textContent='Je mag geen leads aanmaken.';return;}
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')){status.style.color='var(--red)';status.textContent='Je mag geen leads of projecten aanmaken.';return;}   // elke aanmaak: lead, direct project, overname uit Toggl
   if(lead&&lead.fout){status.style.color='var(--red)';status.textContent=lead.fout;return;}
   // Overname uit Toggl: hetzelfde Toggl-project nooit twee keer (ook niet vanuit een tweede venster); geen nummer verbruiken.
   const tgBron=typeof _tgProjBron!=='undefined'?_tgProjBron:null;
