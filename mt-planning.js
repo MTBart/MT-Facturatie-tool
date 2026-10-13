@@ -110,6 +110,231 @@
     return v != null && v !== '' && isFinite(Number(v)) ? Number(v) : P.uurtariefStd(t);
   };
 
+  // ══ P1: taken per project, activiteiten, meter ═══════════════════════════════════════════════════════
+  // ── Activiteitencatalogus (stabiele sleutels; dezelfde lijst geldt later voor uursoorten en tarieven) ──
+  // `soort` is de rollup voor de meter: tekenwerk telt als tekenuren, werkplaatstaken als WP-uren.
+  // Aanname (Bart bevestigt): werkvoorbereiding = tekenuren; spuiten en montage = WP-uren; reizen en kantoor = overig.
+  P.ACTIVITEITEN = [
+    { k: 'tekenwerk', l: 'Tekenwerk', soort: 'teken' },
+    { k: 'werkvoorbereiding', l: 'Werkvoorbereiding', soort: 'teken' },
+    { k: 'werkplaats', l: 'Werkplaats', soort: 'wp' },
+    { k: 'spuiten', l: 'Spuiten', soort: 'wp' },
+    { k: 'montage', l: 'Montage', soort: 'wp' },
+    { k: 'reizen', l: 'Reizen', soort: 'overig' },
+    { k: 'kantoor', l: 'Kantoor', soort: 'overig' }];
+  P.SOORTEN = { teken: 'Tekenuren', wp: 'WP-uren', overig: 'Overig' };
+  P.activiteit = k => P.ACTIVITEITEN.find(a => a.k === k) || null;
+  // De uursoorten van de calculatie (Instellingen/Calculatie) → activiteit.
+  const UURSOORT_ACT = { calculatie: 'kantoor', ontwerpen: 'tekenwerk', werkvoorbereiding: 'werkvoorbereiding', productie: 'werkplaats', afwerking: 'spuiten', transport: 'reizen', montage: 'montage' };
+  // Voorstel voor een activiteit op grond van de naam (alleen een suggestie bij het aanmaken; de mens kan het wijzigen).
+  const SLEUTELWOORDEN = [['reizen', /\b(transport|reis|reizen|rijden|levering|leveren|ophalen)\b/i], ['montage', /\b(montage|monteren|plaatsen|installeren|opleveren|oplevering)\b/i],
+    ['spuiten', /\b(spuit|spuiten|lakken|lak|verf|schilder|afwerk|olie|oliën|beits)/i], ['werkvoorbereiding', /\b(wvb|werkvoorbereiding|stuklijst|nesten|nesting|cnc-?programma|productietekening)/i],
+    ['tekenwerk', /\b(teken|tekenen|tekening|tekeningen|ontwerp|ontwerpen|schets|3d|render|opname)\b/i], ['werkplaats', /\b(zagen|cnc|frezen|kantenband|assemblage|samenbouwen|bankwerk|productie|werkplaats|slijpen|monteren in de werkplaats)\b/i],
+    ['kantoor', /\b(offerte|calculatie|bestel|bestellen|inkoop|administratie|factuur|overleg|mail|afspraak|plannen|planning)\b/i]];
+  P.activiteitUitNaam = naam => { const s = String(naam || ''); for (const [k, re] of SLEUTELWOORDEN) if (re.test(s)) return k; return ''; };
+  P.activiteitUitUursoort = oms => { const s = String(oms || '').toLowerCase().trim(); return UURSOORT_ACT[s] || P.activiteitUitNaam(s); };
+
+  // ── Taken: velden met een eigen stempel (zoals de projectvelden van L1) ───────────────────────────────
+  // Opslag = het bestaande mt_project_taken { projectcode: [taak…] }; elke taak: id, project_id, naam, omschrijving,
+  // duur_uur (de raming; budget in minuten = duur_uur × 60), activiteit, status, toegewezen (team-slug, optioneel),
+  // prioriteit, afhankelijk_van, tg_task_id (optionele Toggl-koppeling), tg_sync (koppeltabel), _vs, _veldconflict, _vervallen.
+  P.TAAK_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'status', 'toegewezen', 'prioriteit', 'afhankelijk_van', 'tg_task_id'];
+  const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+  const norm = v => v === undefined ? null : v;
+  const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+  const tijdVan = s => Number(s && s.t) || 0;
+  P.taakBudgetMin = t => (t && t.budget_min != null && isFinite(Number(t.budget_min)) && Number(t.budget_min) > 0) ? Math.round(Number(t.budget_min)) : P.urenNaarMin(t && t.duur_uur);
+  const maxStempel = t => Math.max(Number(t && t._gewijzigd) || 0, ...Object.values((t && t._vs) || {}).map(tijdVan));
+
+  // Nieuwe stand van één project wegschrijven: oud = ruwe opslag (met tombstones), nieuw = de actieve taken zoals de
+  // bewerkers ze nu hebben. Gewijzigde velden krijgen een stempel {t, door, basis}; verdwenen taken een tombstone.
+  P.takenStempel = function (oud, nieuw, { nu = Date.now(), door = '', projectId = '' } = {}) {
+    const per = new Map(); (oud || []).forEach(o => { if (o && o.id) per.set(o.id, o); });
+    const gezien = new Set(), uit = [];
+    (nieuw || []).forEach(t => {
+      if (!t || typeof t !== 'object') return;
+      const x = kopie(t), o = x.id ? per.get(x.id) : null;
+      if (x.id) gezien.add(x.id);
+      if (projectId && !x.project_id) x.project_id = projectId;
+      if (o && o.project_id && !x.project_id) x.project_id = o.project_id;
+      const vs = Object.assign({}, kopie(o && o._vs) || {}, kopie(x._vs) || {});
+      const ovs = (o && o._vs) || {};
+      P.TAAK_VELDEN.forEach(f => {
+        const veranderd = !o || !gelijk(x[f], o[f]);
+        const bewust = x._vs && x._vs[f] && JSON.stringify(x._vs[f]) !== JSON.stringify(ovs[f]);   // stempel zelf gezet (conflictkeuze)
+        if (!veranderd || bewust) return;
+        if (!o && x[f] === undefined) return;
+        const vorig = tijdVan(ovs[f]);
+        vs[f] = { t: Math.max(nu, vorig + 1), door, basis: vorig };
+      });
+      if (Object.keys(vs).length) x._vs = vs;
+      delete x._vervallen;
+      const m = maxStempel(x); if (m) x._gewijzigd = m; else if (o && o._gewijzigd) x._gewijzigd = o._gewijzigd;
+      if (o && o._vervallen) x._gewijzigd = Math.max(nu, (Number(o._gewijzigd) || 0) + 1);   // teruggezet na verwijderen
+      uit.push(x);
+    });
+    per.forEach(o => {   // verdwenen = tombstone (niet fysiek wissen: een oude kopie zet de taak anders terug)
+      if (gezien.has(o.id)) return;
+      if (o._vervallen) { uit.push(o); return; }
+      const g = Object.assign({}, kopie(o), { _vervallen: true, _gewijzigd: Math.max(nu, (Number(o._gewijzigd) || 0) + 1) });
+      if (door) g._door = door;
+      uit.push(g);
+    });
+    return uit;
+  };
+  P.takenActief = lijst => (Array.isArray(lijst) ? lijst : []).filter(t => t && typeof t === 'object' && !t._vervallen);
+
+  // Eén taak samenvoegen: per veld wint de nieuwste stempel (gelijk → lokaal; beide zonder stempel → de andere kant,
+  // zoals SharePoint bij de projecten). Een verwijdering wint altijd (L1a). Een wijziging die de winnaar niet kende
+  // (stempel nieuwer dan zijn basis) en een andere waarde heeft, wordt bewaard als _veldconflict[veld].
+  function taakSamen(l, r) {
+    if (l._vervallen || r._vervallen) {
+      const d = [l, r].filter(x => x._vervallen).sort((a, b) => (Number(b._gewijzigd) || 0) - (Number(a._gewijzigd) || 0))[0];
+      return kopie(d);
+    }
+    const nl = maxStempel(l), nr = maxStempel(r);
+    const basis = kopie(nl > nr ? l : r);   // niet-getrackte velden (tg_sync, bron, project_id…) van de nieuwste kant
+    const andere = nl > nr ? r : l;
+    Object.keys(andere).forEach(k => { if (!(k in basis) && !k.startsWith('_')) basis[k] = kopie(andere[k]); });
+    const w = basis; w._vs = {}; const conflicten = {};
+    P.TAAK_VELDEN.forEach(f => {
+      const sl = (l._vs || {})[f], sr = (r._vs || {})[f], tl = tijdVan(sl), tr = tijdVan(sr);
+      let win, ander, sw, so;
+      if (!tl && !tr) { const heeft = f in r; win = heeft ? r : l; ander = heeft ? l : r; sw = sr; so = sl; }
+      else if (tl > tr || (tl === tr && tl > 0)) { win = l; ander = r; sw = sl; so = sr; }
+      else { win = r; ander = l; sw = sr; so = sl; }
+      if (win[f] === undefined) delete w[f]; else w[f] = kopie(win[f]);
+      if (sw) w._vs[f] = kopie(sw);
+      const bt = tijdVan(sw), bb = Number(sw && sw.basis) || 0, ot = tijdVan(so);
+      let c = null;
+      if (ot && ot !== bt && ot > bb && !gelijk(ander[f], win[f])) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot };
+      [l, r].forEach(z => { const oc = z._veldconflict && z._veldconflict[f]; if (oc && Number(oc.t) > bb && !gelijk(oc.waarde, win[f]) && (!c || Number(oc.t) > c.t)) c = kopie(oc); });
+      if (c) conflicten[f] = c;
+    });
+    if (Object.keys(conflicten).length) w._veldconflict = conflicten; else delete w._veldconflict;
+    if (!Object.keys(w._vs).length) delete w._vs;
+    const m = Math.max(maxStempel(w), Number(l._gewijzigd) || 0, Number(r._gewijzigd) || 0); if (m) w._gewijzigd = m;
+    return w;
+  }
+  // Samenvoeger voor het hele bestand { code: [taak…] }: per code, per taak-id. Wat aan één kant staat, blijft staan.
+  P.takenSamen = function (lokaal, remote) {
+    const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
+    const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    const L = obj(lees(lokaal)), R = obj(lees(remote)), uit = {};
+    for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
+      const a = Array.isArray(L[code]) ? L[code] : [], b = Array.isArray(R[code]) ? R[code] : [];
+      const per = new Map(), los = new Map();
+      b.forEach(x => { if (x && x.id) per.set(x.id, { r: x, l: null }); else if (x != null) los.set(JSON.stringify(x), x); });
+      a.forEach(x => { if (x && x.id) { const e = per.get(x.id); if (e) e.l = x; else per.set(x.id, { r: null, l: x }); } else if (x != null) los.set(JSON.stringify(x), x); });
+      uit[code] = [...[...per.values()].map(e => e.l && e.r ? taakSamen(e.l, e.r) : kopie(e.l || e.r)), ...los.values()];
+    }
+    return uit;
+  };
+  // Een conflict oplossen: 'andere' neemt de bewaarde waarde over, 'eigen' houdt de huidige. Beide krijgen een nieuwe stempel
+  // die boven het conflict ligt, zodat de keuze ook op de andere pc het conflict wegneemt. Wijzigt `taak` ter plekke.
+  P.conflictOplos = function (taak, veld, kies, { nu = Date.now(), door = '' } = {}) {
+    const c = taak && taak._veldconflict && taak._veldconflict[veld]; if (!c) return false;
+    const vorig = tijdVan((taak._vs || {})[veld]);
+    if (kies === 'andere') { if (c.waarde === null || c.waarde === undefined) delete taak[veld]; else taak[veld] = kopie(c.waarde); }
+    taak._vs = taak._vs || {};
+    taak._vs[veld] = { t: Math.max(nu, vorig + 1, Number(c.t) + 1), door, basis: Math.max(vorig, Number(c.t)) };
+    delete taak._veldconflict[veld]; if (!Object.keys(taak._veldconflict).length) delete taak._veldconflict;
+    taak._gewijzigd = maxStempel(taak);
+    return true;
+  };
+
+  // ── Toggl-koppeltabel per taak ─────────────────────────────────────────────────────────────────────
+  // tg_sync = {provider:'toggl', external_id, laatst_gezien (ms), hash (van de gespiegelde velden), status:'ok'|'fout'|'extern-verwijderd', fout}
+  // Eenrichting MT → Toggl: gespiegeld worden alleen naam en status. De taak in MT blijft altijd de bron.
+  P.tgHash = t => { const s = JSON.stringify([String((t && t.naam) || ''), String((t && t.status) || 'todo')]); let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
+  // 'koppelen' (nog geen Toggl-taak), 'bijwerken' (MT wijkt af van wat we laatst naar Toggl stuurden), 'actueel', 'extern-verwijderd'
+  P.tgActie = t => {
+    if (!t) return 'actueel';
+    if (t.tg_sync && t.tg_sync.status === 'extern-verwijderd') return 'extern-verwijderd';
+    if (!t.tg_task_id) return 'koppelen';
+    return (t.tg_sync && t.tg_sync.hash === P.tgHash(t)) ? 'actueel' : 'bijwerken';
+  };
+
+  // ── De meter: budget / gepland / geklokt (gekoppeld, ongekoppeld) / resterend ────────────────────────
+  const nrm = s => String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
+  const actKey = k => (P.activiteit(k) ? k : '');
+  // Budget (min) uit een offerte-calculatie: uren per uursoort → activiteit. null = geen (ingevulde) calculatie.
+  P.calcBudget = function (offerte) {
+    const rijen = offerte && Array.isArray(offerte.uren) ? offerte.uren : [];
+    const per = {}; let totaal = 0;
+    rijen.forEach(u => { const min = P.urenNaarMin(u && u.uren); if (min <= 0) return; const k = P.activiteitUitUursoort(u.omschrijving) || ''; per[k] = (per[k] || 0) + min; totaal += min; });
+    return totaal > 0 ? { per, totaal } : null;
+  };
+  // taken: actieve taken; blokken: planblokken van het project; geklokt: [{taak_id, min}] (taak_id = Toggl-taak of null);
+  // calc: de offerte of null; opties: tgProject (heeft het project een Toggl-project), tgTijd (laatste sync, ms).
+  P.meter = function ({ taken = [], blokken = [], geklokt = [], calc = null, tgProject = true, tgTijd = null } = {}) {
+    taken = P.takenActief(taken);
+    const rij = {}, rijVoor = k => rij[k] || (rij[k] = { k, l: k ? P.activiteit(k).l : 'Niet ingedeeld', soort: k ? P.activiteit(k).soort : 'overig', taakBudget: 0, calcBudget: 0, gepland: 0, gekoppeld: 0, taken: 0 });
+    const perTaak = {}, taakVoorTg = new Map(), taakVoorId = new Map(), taakVoorNaam = new Map();
+    taken.forEach(t => {
+      const k = actKey(t.activiteit), b = P.taakBudgetMin(t), r = rijVoor(k);
+      r.taakBudget += b; r.taken++;
+      perTaak[t.id] = { id: t.id, k, budget: b, gepland: 0, gekoppeld: 0 };
+      taakVoorId.set(String(t.id), t);
+      if (t.tg_task_id != null && t.tg_task_id !== '') taakVoorTg.set(String(t.tg_task_id), t);
+      const n = nrm(t.naam); if (n) taakVoorNaam.set(n, taakVoorNaam.has(n) ? null : t);   // dubbele namen: niet gokken
+    });
+    // gepland
+    let geplandTotaal = 0, geplandLos = 0;
+    (blokken || []).forEach(b => {
+      if (!b || b._vervallen || b.status === 'voorstel') return;
+      const min = Math.round(getal(b.duurMin)); if (min <= 0) return;
+      let t = b.taak_id != null ? taakVoorId.get(String(b.taak_id)) : null;
+      if (!t && b.taak_id == null) t = taakVoorNaam.get(nrm(b.taak)) || null;   // alleen een exacte, unieke naam
+      const k = t ? actKey(t.activiteit) : actKey(b.activiteit);
+      rijVoor(k).gepland += min; geplandTotaal += min;
+      if (t) perTaak[t.id].gepland += min; else geplandLos += min;
+    });
+    // geklokt
+    let gekoppeld = 0, ongekoppeld = 0; const onbekend = new Set();
+    (geklokt || []).forEach(g => {
+      const min = Math.round(getal(g && g.min)); if (min <= 0) return;
+      const tid = g.taak_id == null || g.taak_id === '' ? null : String(g.taak_id), t = tid ? taakVoorTg.get(tid) : null;
+      if (t) { rijVoor(actKey(t.activiteit)).gekoppeld += min; perTaak[t.id].gekoppeld += min; gekoppeld += min; }
+      else { ongekoppeld += min; if (tid) onbekend.add(tid); }
+    });
+    // budget: calculatie als die er is, anders de taakbudgetten
+    const cb = P.calcBudget(calc), bron = cb ? 'calculatie' : (taken.some(t => P.taakBudgetMin(t) > 0) ? 'taken' : 'geen');
+    if (cb) Object.entries(cb.per).forEach(([k, min]) => { rijVoor(actKey(k)).calcBudget += min; });
+    const rijen = [...P.ACTIVITEITEN.map(a => a.k), ''].filter(k => rij[k]).map(k => {
+      const r = rij[k], budget = cb ? r.calcBudget : r.taakBudget;
+      return Object.assign({}, r, { budget, resterend: budget - r.gekoppeld });
+    }).filter(r => r.budget || r.gepland || r.gekoppeld || r.taken);
+    const budget = cb ? cb.totaal : rijen.reduce((s, r) => s + r.taakBudget, 0);
+    const geklokt_ = gekoppeld + ongekoppeld;
+    const totaal = { budget, gepland: geplandTotaal, gekoppeld, ongekoppeld, geklokt: geklokt_, resterend: budget - geklokt_, pct: budget > 0 ? geklokt_ / budget : null };
+    // rollup tekenuren / WP-uren
+    const perSoort = {}; Object.keys(P.SOORTEN).forEach(s => { perSoort[s] = { budget: 0, gepland: 0, gekoppeld: 0 }; });
+    rijen.forEach(r => { const p = perSoort[r.soort]; p.budget += r.budget; p.gepland += r.gepland; p.gekoppeld += r.gekoppeld; });
+    // waarschuwingen
+    const w = [], titels = ts => ts.slice(0, 5).map(t => t.naam).join(', ') + (ts.length > 5 ? ' …' : '');
+    if (!tgProject) w.push({ soort: 'geen-toggl-project', niveau: 'let-op', tekst: 'Dit project heeft geen Toggl-project: geklokte uren kunnen niet aan taken worden gekoppeld.' });
+    const zonderKoppeling = taken.filter(t => t.status !== 'klaar' && (t.tg_task_id == null || t.tg_task_id === ''));
+    if (tgProject && zonderKoppeling.length) w.push({ soort: 'taak-niet-gekoppeld', niveau: 'let-op', tekst: `${zonderKoppeling.length} taak/taken niet aan een Toggl-taak gekoppeld (${titels(zonderKoppeling)}): uren op die taken tellen als ongekoppeld.`, taken: zonderKoppeling.map(t => t.id) });
+    const syncFout = taken.filter(t => t.tg_sync && (t.tg_sync.status === 'fout' || t.tg_sync.status === 'extern-verwijderd'));
+    if (syncFout.length) w.push({ soort: 'sync-fout', niveau: 'fout', tekst: `${syncFout.length} taak/taken met een Toggl-probleem (${titels(syncFout)}): ${syncFout.some(t => t.tg_sync.status === 'extern-verwijderd') ? 'een taak is in Toggl verwijderd, besluit zelf wat er met de MT-taak gebeurt.' : 'de laatste synchronisatie is mislukt.'}`, taken: syncFout.map(t => t.id) });
+    if (onbekend.size) w.push({ soort: 'onbekende-toggltaak', niveau: 'let-op', tekst: `Uren op ${onbekend.size} Toggl-taak/taken die niet aan een MT-taak gekoppeld zijn; ze tellen als ongekoppeld.` });
+    const conflict = taken.filter(t => t._veldconflict && Object.keys(t._veldconflict).length);
+    if (conflict.length) w.push({ soort: 'conflict', niveau: 'let-op', tekst: `${conflict.length} taak/taken met een conflict (twee gelijktijdige wijzigingen): kies welke waarde blijft (${titels(conflict)}).`, taken: conflict.map(t => t.id) });
+    if (budget > 0 && geplandTotaal > budget) w.push({ soort: 'meer-gepland', niveau: 'let-op', tekst: `Er is meer gepland (${P.fmtUur(geplandTotaal)}) dan het budget (${P.fmtUur(budget)}).` });
+    const sig = P.signaal({ totaal });
+    if (sig) w.push(sig);
+    return { rijen, totaal, perSoort, perTaak, budgetBron: bron, geplandLos, waarschuwingen: w, tgTijd };
+  };
+  // Het budget-signaal: ≥ 90% van het budget geklokt (let op), ≥ 100% (over).
+  P.signaal = function (m) {
+    const tt = m && m.totaal; if (!tt || !(tt.budget > 0)) return null;
+    const p = tt.geklokt / tt.budget;
+    if (p >= 1) return { soort: 'budget-100', niveau: 'fout', tekst: `Budget overschreden: ${P.fmtUur(tt.geklokt)} geklokt van ${P.fmtUur(tt.budget)} (${Math.round(p * 100)}%).` };
+    if (p >= 0.9) return { soort: 'budget-90', niveau: 'let-op', tekst: `${Math.round(p * 100)}% van het budget is geklokt (${P.fmtUur(tt.geklokt)} van ${P.fmtUur(tt.budget)}).` };
+    return null;
+  };
+
   root.MTPlanning = P;
   if (typeof module !== 'undefined' && module.exports) module.exports = P;
 })(typeof window !== 'undefined' ? window : globalThis);
