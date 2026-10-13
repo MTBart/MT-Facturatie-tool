@@ -6,7 +6,7 @@
     "voor": "beheer",
     "punten": [
       "Na de uitrol: de eigenaar klikt in Beheer op 'App-versie vastleggen'. Dat zet de minimumversie op 5; tabbladen met een oudere versie vragen dan om te herladen en schrijven geen projecten en taken meer weg.",
-      "Tot die klik, en in een oud tabblad dat niet herlaadt, kan een oude versie de projecttaken nog overschrijven: laat iedereen de pagina herladen (Ctrl+Shift+R) na de uitrol."
+      "De projecttaken staan vanaf nu in een nieuw bestand (mt_project_taken_v2); een oud tabblad schrijft daar niet in. De eerste nieuwe versie die opstart neemt de oude lijst eenmalig over. Heeft een oud tabblad daarna toch taken gewijzigd, dan meldt Beheer dat en kies je zelf wat er overgenomen wordt (Beheer, Taken uit een oude app-versie)."
     ]
   },
   {

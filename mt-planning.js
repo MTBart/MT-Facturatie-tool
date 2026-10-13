@@ -141,7 +141,7 @@
   // (laatste wijziging), `_veldconflict[veld]` en een tombstone `_vervallen`.
   // Stempel per veld: {t (ms), dev (apparaat), rev (teller per veld), door, basis (t van de stand waarop de wijziging voortbouwde)}.
   // Totale volgorde: t, dan dev, dan rev. Identieke stempels met verschillende waarden zijn altijd een conflict.
-  // Opslag taken = het bestaande mt_project_taken { projectcode: [taak…] }; elke taak: id, project_id, naam, omschrijving,
+  // Opslag taken = mt_project_taken_v2 { projectcode: [taak…], __migratie }, een uitbreiding van het oude mt_project_taken; elke taak: id, project_id, naam, omschrijving,
   // duur_uur (de raming; budget in minuten = duur_uur × 60), activiteit, status, toegewezen (team-slug, optioneel),
   // prioriteit, afhankelijk_van (oud, zie de afhankelijkheden hieronder), tg_task_id (optionele Toggl-koppeling), tg_sync
   // (koppeltabel; een eigen veld met een eigen stempel dat bij precies één tg_task_id hoort, external_id; wijzigt tg_task_id, dan vervalt
@@ -206,6 +206,7 @@
       if (gezien.has(o.id)) return;
       if (o._vervallen) { uit.push(o); return; }
       const g = Object.assign({}, kopie(o), { _vervallen: true, _gewijzigd: Math.max(nu, recTijd(o) + 1) });
+      g._ts = { t: g._gewijzigd, dev, rev: revVan(o._ts) + 1, door };
       if (door) g._door = door;
       uit.push(g);
     });
@@ -214,39 +215,66 @@
   P.takenStempel = (oud, nieuw, opts) => stempelMet(P.TAAK_VELDEN, oud, nieuw, opts, true);
   P.takenActief = lijst => (Array.isArray(lijst) ? lijst : []).filter(t => t && typeof t === 'object' && !t._vervallen);
 
-  // Eenmalige (idempotente) migratie van oude taken, vóór het samenvoegen en bij het opstarten:
-  //  • een taak zonder id krijgt een stabiel id uit zijn inhoud (twee pc's krijgen hetzelfde id, dus niet samengevoegd tot één);
-  //  • elk ingevuld veld zonder stempel krijgt er een met het record-stempel (`_gewijzigd`) als tijd, anders 1 (= "oud"), mig:true.
-  //    Bewust NIET de laadtijd: die zou een oude, nooit gestempelde waarde stil boven een echte wijziging van een ander zetten.
-  //    Verschilt zo'n oude waarde van een andere kopie, dan wordt dat een zichtbaar conflict (gelijke stempels, andere waarde).
-  // → { obj, gewijzigd }; werkt op een kopie.
+  // ── Overstap naar mt_project_taken_v2 ─────────────────────────────────────────────────────────────────
+  // De nieuwe app leest en schrijft alleen mt_project_taken_v2; het oude bestand mt_project_taken blijft van oude app-versies en wordt door
+  // de nieuwe app nooit meer geschreven. De overstap gebeurt één keer, door de eerste nieuwe client die v2 niet vindt (het bestand wordt
+  // alleen aangemaakt als het nog niet bestaat; wie een 412/409 krijgt leest dat bestand en migreert NIET opnieuw), zodat de id's maar één
+  // keer ontstaan. Bestaande id's blijven; een taak zonder (of met een dubbel) id krijgt een willekeurig id (uuid). Elk ingevuld veld
+  // krijgt een stempel met het tijdstip van de overstap. In de sleutel "__migratie" staat wat nodig is om later te zien of een oude
+  // app-versie het oude bestand nog wijzigde (hash van het oude bestand, hash per taak, wat de mens al afhandelde).
   const hash36 = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
-  P.takenMigreer = function (obj) {
-    const uit = {}; let gewijzigd = false;
-    const o = obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
-    for (const code of Object.keys(o)) {
-      if (!Array.isArray(o[code])) { uit[code] = o[code]; continue; }
-      const teller = new Map();
-      uit[code] = o[code].map(t0 => {
-        if (!t0 || typeof t0 !== 'object') return t0;
-        let t = t0, kopieGemaakt = false;
-        const wijzig = () => { if (!kopieGemaakt) { t = kopie(t0); kopieGemaakt = true; } gewijzigd = true; };
-        if (!t.id) {
-          wijzig();
-          const basis = hash36([code, t.naam, t.omschrijving, t.bron, t.duur_uur].map(v => String(v == null ? '' : v)).join('|'));
-          const n = (teller.get(basis) || 0) + 1; teller.set(basis, n);
-          t.id = 'm' + basis + (n > 1 ? '-' + n : '');
-        }
-        const base = Number(t._gewijzigd) || 1;
-        P.TAAK_VELDEN.forEach(f => {
-          if (t[f] === undefined || (t._vs && t._vs[f])) return;
-          wijzig(); t._vs = t._vs || {}; t._vs[f] = { t: base, dev: '', rev: 1, door: '', basis: 0, mig: true };
-        });
-        if (kopieGemaakt && !t._gewijzigd && t._vs) t._gewijzigd = maxStempel(t);
-        return t;
-      });
+  const stabiel = v => Array.isArray(v) ? '[' + v.map(stabiel).join(',') + ']' : (v && typeof v === 'object') ? '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stabiel(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v);
+  P.taakInhoudHash = t => hash36(stabiel(P.TAAK_VELDEN.filter(f => f !== 'tg_sync').map(f => norm(t && t[f]))));
+  P.takenBestandHash = obj => hash36(stabiel(obj || {}));
+  P.takenV2Opbouw = function (oud, { nu = Date.now(), dev = '', door = '', uuid = null } = {}) {
+    const maakId = uuid || (() => 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+    const bron = oud && typeof oud === 'object' && !Array.isArray(oud) ? oud : {};
+    const data = {}, basis = {}, gebruikt = new Set();
+    for (const code of Object.keys(bron)) {
+      if (code.startsWith('__') || !Array.isArray(bron[code])) continue;
+      data[code] = [];
+      for (const t0 of bron[code]) {
+        if (!t0 || typeof t0 !== 'object' || t0._vervallen) continue;
+        const t = kopie(t0); delete t._vs; delete t._veldconflict;
+        const orgId = t.id;
+        if (!t.id || gebruikt.has(t.id)) t.id = maakId();
+        gebruikt.add(t.id);
+        if (orgId && orgId === t.id) basis[t.id] = P.taakInhoudHash(t0);
+        const vs = {};
+        P.TAAK_VELDEN.forEach(f => { if (t[f] !== undefined) vs[f] = { t: nu, dev, rev: 1, door, basis: 0 }; });
+        if (Object.keys(vs).length) { t._vs = vs; t._gewijzigd = nu; }
+        data[code].push(t);
+      }
     }
-    return { obj: uit, gewijzigd };
+    data.__migratie = { tijd: nu, dev, door, oud_hash: P.takenBestandHash(bron), basis, afgehandeld: {} };
+    return data;
+  };
+  // Wat is er in het OUDE bestand veranderd sinds de overstap? Per taak: 'nieuw' (er is er een bij gekomen), 'gewijzigd' (andere inhoud dan
+  // bij de overstap én anders dan nu in v2) of 'verwijderd'. Wat de mens al afhandelde (meta.afgehandeld[id] = inhoudshash, of 'weg') telt niet mee.
+  // Nooit automatisch overnemen: de aanroeper laat de mens kiezen. → { gewijzigd, afwijkingen:[{code,id,naam,soort,hash,velden:[{veld,oud,nu}],taak}] }
+  P.takenOudAfwijkingen = function (meta, oudNu, v2) {
+    if (!meta || !oudNu || typeof oudNu !== 'object') return { gewijzigd: false, afwijkingen: [] };
+    const gewijzigd = P.takenBestandHash(oudNu) !== meta.oud_hash;
+    if (!gewijzigd) return { gewijzigd: false, afwijkingen: [] };
+    const klaar = meta.afgehandeld || {}, basis = meta.basis || {}, nu = new Map(), uit = [];
+    Object.keys(v2 || {}).forEach(c => { if (!c.startsWith('__') && Array.isArray(v2[c])) v2[c].forEach(t => { if (t && t.id) nu.set(t.id, { code: c, taak: t }); }); });
+    const inOud = new Set(), dubbel = new Set();
+    Object.keys(oudNu).forEach(code => {
+      if (code.startsWith('__') || !Array.isArray(oudNu[code])) return;
+      oudNu[code].forEach(t => {
+        if (!t || typeof t !== 'object' || !t.id) return;
+        if (inOud.has(t.id)) { dubbel.add(t.id); return; }   // een dubbel id in het oude bestand is niet te volgen: alleen de eerste telt
+        inOud.add(t.id);
+        const h = P.taakInhoudHash(t), eerder = basis[t.id];
+        if (eerder === h || klaar[t.id] === h) return;
+        const huidig = nu.get(t.id);
+        if (eerder === undefined) { if (!huidig || huidig.taak._vervallen) uit.push({ code, id: t.id, naam: t.naam || '', soort: 'nieuw', hash: h, velden: [], taak: kopie(t) }); return; }
+        const velden = P.TAAK_VELDEN.filter(f => f !== 'tg_sync' && !gelijk(t[f], huidig && !huidig.taak._vervallen ? huidig.taak[f] : undefined)).map(f => ({ veld: f, oud: norm(t[f]), nu: huidig ? norm(huidig.taak[f]) : null }));
+        if (velden.length) uit.push({ code, id: t.id, naam: t.naam || '', soort: 'gewijzigd', hash: h, velden, taak: kopie(t) });
+      });
+    });
+    Object.keys(basis).forEach(id => { if (!inOud.has(id) && klaar[id] !== 'weg') { const huidig = nu.get(id); if (huidig && !huidig.taak._vervallen) uit.push({ code: huidig.code, id, naam: huidig.taak.naam || '', soort: 'verwijderd', hash: 'weg', velden: [], taak: null }); } });
+    return { gewijzigd: true, afwijkingen: uit };
   };
 
   // Eén record samenvoegen: per veld wint de hoogste stempel (t, dev, rev). Een wijziging die de winnaar niet kende (haar stempel
@@ -257,9 +285,10 @@
   // aan beide kanten wint het nieuwste record, en een veld zonder stempel telt voor de volgorde met de tijd van zijn record.
   function recSamen(velden, opt, l, r) {
     if (l._vervallen || r._vervallen) {
-      if (opt.verwijderWint) {
-        const d = [l, r].filter(x => x._vervallen).sort((a, b) => recTijd(b) - recTijd(a))[0];
-        return kopie(d);
+      if (opt.verwijderWint) {   // verwijderen wint; twee verwijderingen: dezelfde totale volgorde (tijd, apparaat, teller)
+        if (!(l._vervallen && r._vervallen)) return kopie(l._vervallen ? l : r);
+        const sl = l._ts || { t: recTijd(l) }, sr = r._ts || { t: recTijd(r) };
+        return kopie(volgorde(sl, sr) > 0 ? l : r);
       }
       return kopie(recTijd(l) >= recTijd(r) ? l : r);
     }
@@ -279,9 +308,9 @@
       if (sw) w._vs[f] = kopie(sw);
       const bt = tijdVan(sw), bb = Number(sw && sw.basis) || 0, ot = tijdVan(so), verschil = !gelijk(ander[f], win[f]);
       let c = null;
-      if (verschil && !(f === 'tg_sync' && !(ander[f] && (ander[f].status === 'fout' || ander[f].status === 'extern-verwijderd')))) {
+      if (verschil && !(f === 'tg_sync' && c0 !== 0 && !(ander[f] && (ander[f].status === 'fout' || ander[f].status === 'extern-verwijderd')))) {
         const identiek = c0 === 0 && (!opt.legacy || !!(sl || sr)), ongestempeld = !ot && !!bt && !opt.legacy;
-        if (identiek || (ot && ot > bb) || (ongestempeld && !leeg(ander[f]))) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot || bt };
+        if (identiek || (ot && ot > bb) || (ongestempeld && (f in ander))) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot || bt };
       }
       [l, r].forEach(z => { const oc = z._veldconflict && z._veldconflict[f]; if (oc && Number(oc.t) > bb && !gelijk(oc.waarde, win[f]) && (!c || Number(oc.t) > c.t)) c = kopie(oc); });
       if (c) conflicten[f] = c;
@@ -300,16 +329,27 @@
     (a || []).forEach(x => { if (x && x.id) { const e = per.get(x.id); if (e) e.l = x; else per.set(x.id, { r: null, l: x }); } else if (x != null) los.set(JSON.stringify(x), x); });
     return [...[...per.values()].map(e => e.l && e.r ? recSamen(velden, opt, e.l, e.r) : kopie(e.l || e.r)), ...los.values()];
   }
+  // De overstap-metagegevens: de oudste overstap blijft (er is er maar één), wat afgehandeld is wordt samengevoegd.
+  function metaSamen(a, b) {
+    if (!a || typeof a !== 'object') return b && typeof b === 'object' ? kopie(b) : null;
+    if (!b || typeof b !== 'object') return kopie(a);
+    const basis = (Number(a.tijd) || 0) <= (Number(b.tijd) || 0) ? a : b;
+    const m = kopie(basis); m.afgehandeld = Object.assign({}, kopie(b.afgehandeld) || {}, kopie(a.afgehandeld) || {});
+    return m;
+  }
   // Samenvoeger voor het hele bestand { code: [record…] }: per code, per id. migreer: eerst oude records migreren (alleen taken).
-  function storeSamenMet(velden, opt, lokaal, remote, migreer) {
+  function storeSamenMet(velden, opt, lokaal, remote) {
     const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-    let L = obj(lees(lokaal)), R = obj(lees(remote)); const uit = {};
-    if (migreer) { L = P.takenMigreer(L).obj; R = P.takenMigreer(R).obj; }
-    for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) uit[code] = lijstSamenMet(velden, opt, Array.isArray(L[code]) ? L[code] : [], Array.isArray(R[code]) ? R[code] : []);
+    const L = obj(lees(lokaal)), R = obj(lees(remote)); const uit = {};
+    for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
+      if (code.startsWith('__')) continue;   // metagegevens (zie metaSamen)
+      uit[code] = lijstSamenMet(velden, opt, Array.isArray(L[code]) ? L[code] : [], Array.isArray(R[code]) ? R[code] : []);
+    }
+    if (opt.taak) { const meta = metaSamen(L.__migratie, R.__migratie); if (meta) uit.__migratie = meta; }
     return uit;
   }
   const OPT_VW = { verwijderWint: true };
-  P.takenSamen = (lokaal, remote) => storeSamenMet(P.TAAK_VELDEN, Object.assign({ taak: true }, OPT_VW), lokaal, remote, true);
+  P.takenSamen = (lokaal, remote) => storeSamenMet(P.TAAK_VELDEN, Object.assign({ taak: true }, OPT_VW), lokaal, remote);
   // Een conflict oplossen: 'andere' neemt de bewaarde waarde over, 'eigen' houdt de huidige. Beide krijgen een nieuwe stempel
   // die boven het conflict ligt, zodat de keuze ook op de andere pc het conflict wegneemt. Wijzigt `taak` ter plekke.
   P.conflictOplos = function (taak, veld, kies, { nu = Date.now(), door = '', dev = '' } = {}) {
@@ -896,9 +936,60 @@
   };
   // Samenvoegen van de hele bestellijst (twee arrays): per regel (id) per veld de nieuwste stempel; zonder stempels het nieuwste
   // record (zoals het oude gedrag); een tombstone volgt het nieuwste record, dus terugzetten blijft kunnen.
+  const isMeta = x => !!x && typeof x === 'object' && x.id === '__migratie';
   P.bestelSamen = (lokaal, spData) => {
-    const a = lees(lokaal), b = lees(spData);
-    return lijstSamenMet(P.BESTEL_VELDEN, { iso: true, legacy: true }, Array.isArray(a) ? a : [], Array.isArray(b) ? b : []);
+    const a = lees(lokaal), b = lees(spData), L = Array.isArray(a) ? a : [], R = Array.isArray(b) ? b : [];
+    const uit = lijstSamenMet(P.BESTEL_VELDEN, { iso: true, legacy: true }, L.filter(x => !isMeta(x)), R.filter(x => !isMeta(x)));
+    const meta = metaSamen(L.find(isMeta), R.find(isMeta)); if (meta) { meta.id = '__migratie'; uit.push(meta); }
+    return uit;
+  };
+  // ── Overstap naar mt_bestellijst_v2 (zelfde patroon als mt_project_taken_v2) ──────────────────────────
+  // De nieuwe app leest en schrijft alleen mt_bestellijst_v2; het oude mt_bestellijst blijft van oude app-versies. De overstap gebeurt één keer
+  // (de eerste nieuwe client die v2 niet vindt, aanmaken met If-None-Match: *; wie 412/409 krijgt leest dat bestand). Bestaande regel-id's
+  // blijven; een regel zonder (of met een dubbel) id krijgt een willekeurig id. Alle regels blijven, ook de van de lijst gehaalde (tombstones).
+  // Elk ingevuld veld zonder stempel krijgt er een met het tijdstip van de overstap. In de regel met id "__migratie" staat wat nodig is om later
+  // te zien of een oude app-versie het oude bestand nog wijzigde. lijst = de regels van de overstap; oud (optioneel) = de lijst waarvan de hash komt.
+  P.bestelInhoudHash = b => hash36(stabiel(P.BESTEL_VELDEN.map(f => norm(b && b[f])).concat([!!(b && b._vervallen)])));
+  P.bestelV2Opbouw = function (lijst, { nu = Date.now(), dev = '', door = '', uuid = null, oud = null } = {}) {
+    const maakId = uuid || (() => 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+    const bron = (Array.isArray(lijst) ? lijst : []).filter(x => x && typeof x === 'object' && !isMeta(x));
+    const hashBron = (Array.isArray(oud) ? oud : bron).filter(x => x && typeof x === 'object' && !isMeta(x));
+    const uit = [], basis = {}, gebruikt = new Set();
+    bron.forEach(b0 => {
+      const b = kopie(b0), orgId = b.id;
+      if (b.id === undefined || b.id === null || b.id === '' || gebruikt.has(String(b.id))) b.id = maakId();
+      gebruikt.add(String(b.id));
+      const vs = Object.assign({}, b._vs || {});
+      P.BESTEL_VELDEN.forEach(f => { if (b[f] !== undefined && !vs[f]) vs[f] = { t: nu, dev, rev: 1, door, basis: 0 }; });
+      if (Object.keys(vs).length) b._vs = vs;
+      if (!b._gewijzigd) b._gewijzigd = new Date(nu).toISOString();
+      uit.push(b);
+    });
+    hashBron.forEach(b => { if (b.id !== undefined && b.id !== null && b.id !== '' && gebruikt.has(String(b.id)) && basis[b.id] === undefined) basis[b.id] = P.bestelInhoudHash(b); });
+    uit.push({ id: '__migratie', _meta: true, tijd: nu, dev, door, oud_hash: hash36(stabiel(hashBron)), basis, afgehandeld: {} });
+    return uit;
+  };
+  // Wat is er in het OUDE bestand veranderd sinds de overstap? Per regel: 'nieuw', 'gewijzigd' (andere inhoud dan bij de overstap én anders dan nu
+  // in v2) of 'verwijderd'. Wat de mens al afhandelde telt niet mee. Nooit automatisch overnemen: de aanroeper laat de mens kiezen.
+  P.bestelOudAfwijkingen = function (meta, oudNu, v2) {
+    const oud = (Array.isArray(oudNu) ? oudNu : []).filter(x => x && typeof x === 'object' && !isMeta(x));
+    if (!meta || !Array.isArray(oudNu)) return { gewijzigd: false, afwijkingen: [] };
+    if (hash36(stabiel(oud)) === meta.oud_hash) return { gewijzigd: false, afwijkingen: [] };
+    const klaar = meta.afgehandeld || {}, basis = meta.basis || {}, nu = new Map(), uit = [], inOud = new Set();
+    (Array.isArray(v2) ? v2 : []).forEach(b => { if (b && typeof b === 'object' && !isMeta(b) && b.id !== undefined) nu.set(String(b.id), b); });
+    oud.forEach(b => {
+      if (b.id === undefined || b.id === null || b.id === '' || inOud.has(String(b.id))) return;
+      const id = String(b.id); inOud.add(id);
+      const h = P.bestelInhoudHash(b), eerder = basis[id];
+      if (eerder === h || klaar[id] === h) return;
+      const huidig = nu.get(id);
+      if (eerder === undefined) { if (!huidig) uit.push({ id, naam: P.bestelOms(b), soort: 'nieuw', hash: h, velden: [], regel: kopie(b) }); return; }
+      const velden = P.BESTEL_VELDEN.filter(f => !gelijk(b[f], huidig ? huidig[f] : undefined)).map(f => ({ veld: f, oud: norm(b[f]), nu: huidig ? norm(huidig[f]) : null }));
+      if (!!b._vervallen !== !!(huidig && huidig._vervallen)) velden.push({ veld: '_vervallen', oud: b._vervallen ? 'van de lijst gehaald' : null, nu: huidig && huidig._vervallen ? 'van de lijst gehaald' : null });
+      if (velden.length) uit.push({ id, naam: P.bestelOms(b), soort: 'gewijzigd', hash: h, velden, regel: kopie(b) });
+    });
+    Object.keys(basis).forEach(id => { if (!inOud.has(id) && klaar[id] !== 'weg') { const huidig = nu.get(id); if (huidig && !huidig._vervallen) uit.push({ id, naam: P.bestelOms(huidig), soort: 'verwijderd', hash: 'weg', velden: [], regel: null }); } });
+    return { gewijzigd: true, afwijkingen: uit };
   };
   P.bestelConflictOplos = P.conflictOplos;
 

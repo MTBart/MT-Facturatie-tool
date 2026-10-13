@@ -17,7 +17,7 @@
 <!-- Gedeelde kernlaag (esc, _encPath, MSAL-tokenhelpers, _SP-synclaag) — één bron
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
-<script src="mt-core.js?v=2026-10-11c"></script>
+<script src="mt-core.js?v=2026-10-13a"></script>
 <script src="mt-project.js?v=2026-10-13b"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
 <script src="mt-vw.js?v=2026-10-13b"></script>
@@ -25,7 +25,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2026-10-13b"></script>
+<script src="mt-toggl.js?v=2026-10-13d"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -38,12 +38,12 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-13d"></script>
+<script src="mt-planning.js?v=2026-10-13e"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-13c"></script>
+<script src="mt-verhuis.js?v=2026-10-13d"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -3014,7 +3014,7 @@ function _projSamen(lokaal,spData){
 const PROJ_SCHEMA=5;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
 // De schema-controle geldt voor élke SharePoint-sleutel waarvan het formaat per schema verandert: de projecten én de projecttaken
 // (een oudere tab zou de taken zonder stempels/tombstones terugschrijven).
-const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken'];
+const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2'];
 function projSchemaSleutel(k){ return _PROJ_SCHEMA_SLEUTELS.includes(k); }
 let _projSchemaMin=null, _projSchemaTijd=0;
 function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
@@ -5416,8 +5416,15 @@ function _blIdsToekennen(l){
 // Onleesbare opslag (geen JSON-array) wordt NOOIT overschreven: schrijven weigert en de
 // ruwe inhoud gaat eenmalig naar een eigen herstelsleutel (Codex-review L2 #1).
 let _blKapot=false;
+// P2: de bestellijst staat in mt_bestellijst_v2 (nieuwe app), het oude mt_bestellijst blijft van oude app-versies en wordt door deze app nooit meer
+// geschreven. Zolang v2 lokaal nog niet bestaat (de eenmalige overstap is nog niet gedaan) lezen we het oude bestand; de eerste wijziging bouwt v2 op.
+// Regel "__migratie" in v2 = metagegevens van de overstap (voor het vangnet); die is geen bestelregel en blijft buiten _blAlle().
+function _blIsMeta(x){ return !!x&&typeof x==='object'&&x.id==='__migratie'; }
+function _blSleutel(){ return localStorage.getItem('mt_bestellijst_v2')!==null?'mt_bestellijst_v2':'mt_bestellijst'; }
+function _blMeta(){ try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst_v2')||'null'); return Array.isArray(a)?(a.find(_blIsMeta)||null):null; }catch(e){ return null; } }
+function _blUuid(){ return (typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,12)); }
 function _blAlle(){
-  const raw=localStorage.getItem('mt_bestellijst');
+  const sleutel=_blSleutel(), raw=localStorage.getItem(sleutel);
   let l=[];
   try{ l=JSON.parse(raw||'[]'); }catch(e){ l=null; }
   if(!Array.isArray(l)){
@@ -5430,13 +5437,12 @@ function _blAlle(){
     return [];
   }
   _blKapot=false;
-  const voor=l.filter(x=>x&&typeof x==='object'&&(x.id===undefined||x.id===null||x.id==='')).length;
-  _blIdsToekennen(l);
-  // Nieuw toegekende id's meteen vastleggen, zodat de nummering van dubbele oude regels
-  // (_1, _2) niet meer van de volgorde afhangt (Codex-review L2 #2). Voegt alleen id's toe.
-  if(voor){ try{ localStorage.setItem('mt_bestellijst',JSON.stringify(l)); }catch(e){ console.warn('bestellijst-id\'s vastleggen mislukt:',e); } }
+  l=l.filter(x=>!_blIsMeta(x));
+  _blIdsToekennen(l);   // alleen in het geheugen (het oude bestand wordt niet meer geschreven; v2 heeft altijd id's)
   return l;                                   // ook onleesbare items in de lijst blijven staan
 }
+function _blLees2(){ try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst_v2')||'null'); return Array.isArray(a)?a:null; }catch(e){ return null; } }
+function _blLeesOudLokaal(){ try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst')||'null'); return Array.isArray(a)?a:null; }catch(e){ return null; } }
 function _blActief(){ return _blAlle().filter(b=>b&&typeof b==='object'&&!b._vervallen); }
 function _blVervallenLijst(){ return _blAlle().filter(b=>b&&typeof b==='object'&&b._vervallen); }
 function _blJournaal(actie,voor,na){
@@ -5458,7 +5464,13 @@ function _blJournaal(actie,voor,na){
 }
 function _blBewaar(l){
   if(_blKapot){ if(typeof planToast==='function') planToast('⚠ Bestellijst niet opgeslagen: de bestaande opslag is onleesbaar'); return false; }
-  try{ localStorage.setItem('mt_bestellijst',JSON.stringify(l)); return true; }
+  try{
+    const v2=_blLees2();
+    // v2 bestaat lokaal nog niet: nu opbouwen uit de oude lijst (bestaande id's blijven, willekeurige id's alleen waar er nog geen is); de metagegevens
+    // komen uit de oude lijst zoals die was vóór deze wijziging.
+    const meta=v2?v2.find(_blIsMeta):null;
+    const uit=v2?(meta?l.concat([meta]):l):MTPlanning.bestelV2Opbouw(l,{nu:Date.now(),dev:_spDev(),door:_blWie(),uuid:_blUuid,oud:_blLeesOudLokaal()});
+    localStorage.setItem('mt_bestellijst_v2',JSON.stringify(uit)); return true; }
   catch(e){ console.error('bestellijst opslaan mislukt:',e); if(typeof planToast==='function') planToast('⚠ Bestellijst opslaan mislukt: '+(e.message||e)); return false; }
 }
 // Stempel = nu, maar altijd later dan de stand waarop deze wijziging voortbouwt
@@ -6972,20 +6984,92 @@ async function ontkoppelMail(code,idx){
 // Opslag { projectcode: [taak…] } mét tombstones (mt-planning.js: per veld een stempel, samenvoegen, verwijderen = tombstone).
 // projTakenAll()/projTaken() tonen alleen de actieve taken; projTakenZet() stempelt wat er veranderd is en bewaart een
 // verwijderde taak als tombstone, zodat een oude kopie van een andere pc hem niet terugzet.
-function projTakenRuw(){try{const o=JSON.parse(localStorage.getItem('mt_project_taken')||'{}');return (o&&typeof o==='object'&&!Array.isArray(o))?o:{};}catch(e){return{};}}
-function projTakenAll(){const r=projTakenRuw(), o={}; Object.keys(r).forEach(c=>{ o[c]=MTPlanning.takenActief(r[c]); }); return o;}
-function projTakenSave(o){localStorage.setItem('mt_project_taken',JSON.stringify(o));}
+// De nieuwe app leest en schrijft ALLEEN mt_project_taken_v2. Het oude mt_project_taken is van oudere app-versies: de nieuwe app gebruikt het
+// alleen voor de eenmalige overstap en om, zolang v2 er nog niet is, de oude lijst te tonen. Oude clients kunnen v2 daardoor niet beschadigen.
+function _ptLees(k){ try{ const o=JSON.parse(localStorage.getItem(k)||'null'); return (o&&typeof o==='object'&&!Array.isArray(o))?o:null; }catch(e){ return null; } }
+function projTakenRuw(){ return _ptLees('mt_project_taken_v2')||_ptLees('mt_project_taken')||{}; }
+function projTakenAll(){const r=projTakenRuw(), o={}; Object.keys(r).forEach(c=>{ if(!c.startsWith('__')) o[c]=MTPlanning.takenActief(r[c]); }); return o;}
+function projTakenSave(o){localStorage.setItem('mt_project_taken_v2',JSON.stringify(o));}
 function projTaken(code){return MTPlanning.takenActief(projTakenRuw()[code]);}
 // Apparaat-id voor de stempels (volgorde bij gelijke tijd); per browser, blijft staan, gaat niet mee in de verhuizing.
 function _spDev(){ try{ let d=localStorage.getItem('mt_device_id'); if(!d){ d='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem('mt_device_id',d); } return d; }catch(e){ return 'd-onbekend'; } }
+function _ptUuid(){ return (typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,12)); }
 function projTakenZet(code,arr){
-  const ruw=projTakenRuw(), pr=(typeof projVind==='function')?projVind(code):null;
+  // v2 bestaat lokaal nog niet (de overstap is nog niet gedaan): eerst een lokale v2 uit de oude lijst opbouwen, dan pas wijzigen
+  let ruw=_ptLees('mt_project_taken_v2'); const pr=(typeof projVind==='function')?projVind(code):null;
+  if(!ruw) ruw=MTPlanning.takenV2Opbouw(_ptLees('mt_project_taken')||{},{nu:Date.now(),dev:_spDev(),door:_spWie(),uuid:_ptUuid});
   ruw[code]=MTPlanning.takenStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),dev:_spDev(),projectId:(pr&&pr.project_id)||''});
   projTakenSave(ruw);
 }
-// Oude taken (zonder id of zonder stempels) eenmalig migreren; idempotent, dus bij elke start veilig. Zie MTPlanning.takenMigreer.
-function projTakenMigreer(){ const m=MTPlanning.takenMigreer(projTakenRuw()); if(m.gewijzigd) projTakenSave(m.obj); return m.gewijzigd; }
-try{ projTakenMigreer(); }catch(e){ console.warn('taken migreren:',e); }
+// ── Eenmalige overstap naar mt_project_taken_v2 (aangeroepen door de hydrate als v2 op SharePoint ontbreekt) ──
+// De eerste nieuwe client maakt v2 aan met If-None-Match: * (alleen als het nog niet bestaat); willekeurige id's alleen voor taken zonder id.
+// Krijgt een andere client een 412/409, dan leest hij de bestaande v2 en migreert NIET opnieuw: de id's ontstaan één keer.
+// → {spData} (verder met de gewone samenvoeging) of {stop:true} (niets meer doen; v2 is dan lokaal gezet of de poging mislukte)
+async function projTakenV2Start(){
+  const sleutel='mt_project_taken_v2', bestand=sleutel+'.json';
+  let bron=_ptLees(sleutel);
+  if(!bron){
+    let oud=null; try{ oud=await _SP.read('mt_project_taken.json'); }catch(e){ _SP.blockedKeys.add(sleutel); console.warn('oude takenlijst lezen faalde — overstap niet gestart:',e.message); return {stop:true}; }
+    const lok=_ptLees('mt_project_taken')||{}, samen={};
+    Object.keys(oud||{}).forEach(c=>{ if(Array.isArray(oud[c])) samen[c]=oud[c].slice(); });
+    Object.keys(lok).forEach(c=>{ if(!Array.isArray(lok[c])) return; const ids=new Set((samen[c]||[]).map(x=>x&&x.id)); samen[c]=(samen[c]||[]).concat(lok[c].filter(x=>x&&x.id&&!ids.has(x.id))); });   // lokaal-alleen taken blijven
+    bron=MTPlanning.takenV2Opbouw(samen,{nu:Date.now(),dev:_spDev(),door:_spWie(),uuid:_ptUuid});
+  }
+  const r=await _SP.maakAan(bestand,bron);
+  if(r==='aangemaakt'){ _lsSet(sleutel,JSON.stringify(bron)); return {stop:true}; }
+  if(r==='bestaat'){ try{ const spData=await _SP.read(bestand); return {spData}; }catch(e){ _SP.blockedKeys.add(sleutel); return {stop:true}; } }
+  _SP.blockedKeys.add(sleutel); console.warn('mt_project_taken_v2 aanmaken mislukt — auto-sync uit tot herladen'); return {stop:true};
+}
+// ── Vangnet: heeft een oude app-versie het oude bestand nog gewijzigd na de overstap? Alleen melden en de mens laten kiezen. ──
+async function takenOudAfwijkingen(){
+  const ruw=projTakenRuw(); if(!ruw.__migratie) return null;
+  const oud=await _SP.read('mt_project_taken.json'); if(!oud) return null;
+  return MTPlanning.takenOudAfwijkingen(ruw.__migratie,oud,ruw);
+}
+async function takenOudVangnetMelding(){
+  try{ if(!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())) return;
+    const r=await takenOudAfwijkingen(); if(r&&r.afwijkingen.length) planToast('⚠ Een oude app-versie heeft taken gewijzigd na de overstap ('+r.afwijkingen.length+'): bekijk de verschillen bij Beheer.');
+  }catch(e){}
+}
+async function takenOudVangnet(){
+  const host=document.getElementById('bh-taken-oud'); if(!host) return;
+  host.replaceChildren();
+  let r=null; try{ r=await takenOudAfwijkingen(); }catch(e){ return; }
+  if(!r||!r.afwijkingen.length) return;
+  const knop=document.createElement('button'); knop.type='button'; knop.className='btn btn-secondary btn-sm'; knop.textContent='Bekijk de verschillen'; knop.addEventListener('click',takenOudBekijk);
+  const kop=document.createElement('h4'); kop.textContent='Taken uit een oude app-versie';
+  const p=document.createElement('div'); p.className='dos-meta'; p.style.marginBottom='6px';
+  p.textContent='Een oude app-versie heeft taken gewijzigd na de overstap ('+r.afwijkingen.length+' afwijking'+(r.afwijkingen.length===1?'':'en')+'): bekijk de verschillen. Er wordt niets automatisch overgenomen.';
+  const blok=document.createElement('div'); blok.className='bh-blok'; blok.append(kop,p,knop); host.appendChild(blok);
+}
+function _takenOudAfgehandeld(a){
+  const ruw=projTakenRuw(); if(!ruw.__migratie) return;
+  ruw.__migratie.afgehandeld=ruw.__migratie.afgehandeld||{}; ruw.__migratie.afgehandeld[a.id]=a.hash;
+  projTakenSave(ruw);
+}
+function _takenOudToepassen(a){
+  const arr=projTaken(a.code);
+  if(a.soort==='nieuw'){ const x=JSON.parse(JSON.stringify(a.taak)); delete x._vs; delete x._veldconflict; delete x._gewijzigd; arr.push(x); }
+  else if(a.soort==='gewijzigd'){ const t=arr.find(z=>z.id===a.id); if(t) a.velden.forEach(v=>{ if(v.oud===null) delete t[v.veld]; else t[v.veld]=JSON.parse(JSON.stringify(v.oud)); }); }
+  else if(a.soort==='verwijderd'){ const i=arr.findIndex(z=>z.id===a.id); if(i>=0) arr.splice(i,1); }
+  projTakenZet(a.code,arr);
+}
+async function takenOudBekijk(){
+  let r=null; try{ r=await takenOudAfwijkingen(); }catch(e){ return mtDialog.alert({title:'Oude takenlijst',message:'Lezen mislukt: '+(e.message||e)}); }
+  if(!r||!r.afwijkingen.length) return takenOudVangnet();
+  let n=0;
+  for(const a of r.afwijkingen){
+    n++;
+    const tekst=a.soort==='nieuw'?'Er is een taak bijgekomen in het oude bestand: „'+a.naam+'” ('+a.code+').'
+      :a.soort==='verwijderd'?'In het oude bestand is de taak „'+a.naam+'” verwijderd; in de nieuwe lijst staat hij nog.'
+      :a.velden.map(v=>(_PT_VELDLABEL[v.veld]||v.veld)+': oude app '+_ptWaardeTekst(v.veld,v.oud)+' · nu '+_ptWaardeTekst(v.veld,v.nu)).join('\n');
+    const k=await mtDialog.choose({title:'Afwijking '+n+' van '+r.afwijkingen.length+': '+(a.naam||a.id),message:tekst,
+      choices:[{label:'Overnemen in de nieuwe lijst'},{label:'Niet overnemen',sublabel:'afhandelen, niet meer tonen'},{label:'Later beslissen'}]});
+    if(k===null||k===undefined) break;
+    if(k===0){ _takenOudToepassen(a); _takenOudAfgehandeld(a); } else if(k===1) _takenOudAfgehandeld(a);
+  }
+  takenOudVangnet(); if(typeof huidigProject!=='undefined'&&huidigProject) renderProjectDetail(huidigProject);
+}
 function _ptId(){return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 const _PT_PRIO={low:{l:'P3',c:'#6b7280'},medium:{l:'P2',c:'#B8962E'},high:{l:'P1',c:'#c0392b'}};
 const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},klaar:{l:'Klaar',c:'#2A4A38'}};
@@ -7458,6 +7542,92 @@ function bestelStatusZetId(id,status,bron){
   return _blWijzig(id,'status → '+status+(bron?' ('+bron+')':''),b=>{ MTPlanning.bestelStatusZet(b,status); });
 }
 
+// ── Eenmalige overstap naar mt_bestellijst_v2 (aangeroepen door de hydrate als v2 op SharePoint ontbreekt) ──
+// De eerste nieuwe client maakt v2 aan met If-None-Match: * (alleen als het nog niet bestaat; _SP.maakAan). Krijgt een andere client een 412/409, dan
+// leest hij de bestaande v2 en migreert NIET opnieuw: de id's ontstaan één keer. Lokale regels van het oude bestand die er nog niet in staan, blijven
+// als lokale v2 staan en gaan bij de gewone samenvoeging mee. → {spData} (verder met de gewone samenvoeging) of {stop:true}.
+async function blV2Start(){
+  const sleutel='mt_bestellijst_v2', bestand=sleutel+'.json';
+  let bron=_blLees2();
+  if(!bron){
+    let oud=null; try{ oud=await _SP.read('mt_bestellijst.json'); }catch(e){ _SP.blockedKeys.add(sleutel); console.warn('oude bestellijst lezen faalde — overstap niet gestart:',e.message); return {stop:true}; }
+    const lok=_blLeesOudLokaal()||[], samen=(Array.isArray(oud)?oud:[]).slice(), ids=new Set(samen.map(x=>x&&x.id).filter(Boolean));
+    lok.forEach(x=>{ if(x&&typeof x==='object'&&x.id&&!ids.has(x.id)) samen.push(x); });   // alleen lokaal aanwezige regels blijven
+    bron=MTPlanning.bestelV2Opbouw(samen,{nu:Date.now(),dev:_spDev(),door:_blWie(),uuid:_blUuid,oud:Array.isArray(oud)?oud:samen});
+  }
+  const r=await _SP.maakAan(bestand,bron);
+  if(r==='aangemaakt'){ (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))(sleutel,JSON.stringify(bron)); return {stop:true}; }
+  if(r==='bestaat'){
+    try{
+      const spData=await _SP.read(bestand);
+      if(!_blLees2()){   // lokaal-alleen regels van het oude bestand meenemen als lokale v2 (zodat ze niet verdwijnen); de samenvoeging doet de rest
+        const lok=(_blLeesOudLokaal()||[]).filter(x=>x&&typeof x==='object'&&x.id&&!(Array.isArray(spData)&&spData.some(y=>y&&y.id===x.id)));
+        if(lok.length) (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))(sleutel,JSON.stringify(MTPlanning.bestelV2Opbouw(lok,{nu:Date.now(),dev:_spDev(),door:_blWie(),uuid:_blUuid})));
+      }
+      return {spData};
+    }catch(e){ _SP.blockedKeys.add(sleutel); return {stop:true}; }
+  }
+  _SP.blockedKeys.add(sleutel); console.warn('mt_bestellijst_v2 aanmaken mislukt — auto-sync uit tot herladen'); return {stop:true};
+}
+// mt_project_afhank is nieuw (geen oud bestand): alleen aanmaken als het nog niet bestaat; anders lezen en gewoon samenvoegen.
+async function afhankStart(){
+  const sleutel='mt_project_afhank', bestand=sleutel+'.json';
+  let bron=null; try{ bron=JSON.parse(localStorage.getItem(sleutel)||'null'); }catch(e){}
+  if(!bron||typeof bron!=='object'||Array.isArray(bron)) bron={};
+  const r=await _SP.maakAan(bestand,bron);
+  if(r==='aangemaakt'){ (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))(sleutel,JSON.stringify(bron)); return {stop:true}; }
+  if(r==='bestaat'){ try{ return {spData:await _SP.read(bestand)}; }catch(e){ _SP.blockedKeys.add(sleutel); return {stop:true}; } }
+  _SP.blockedKeys.add(sleutel); console.warn('mt_project_afhank aanmaken mislukt — auto-sync uit tot herladen'); return {stop:true};
+}
+// ── Vangnet: heeft een oude app-versie het oude bestand nog gewijzigd na de overstap? Alleen melden en de mens laten kiezen. ──
+async function blOudAfwijkingen(){
+  const meta=_blMeta(); if(!meta) return null;
+  const oud=await _SP.read('mt_bestellijst.json'); if(!Array.isArray(oud)) return null;
+  return MTPlanning.bestelOudAfwijkingen(meta,oud,_blAlle());
+}
+async function blOudVangnetMelding(){
+  try{ if(!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())) return;
+    const r=await blOudAfwijkingen(); if(r&&r.afwijkingen.length) planToast('⚠ Een oude app-versie heeft de bestellijst gewijzigd na de overstap ('+r.afwijkingen.length+'): bekijk de verschillen bij Beheer.');
+  }catch(e){}
+}
+async function blOudVangnet(){
+  const host=document.getElementById('bh-bestel-oud'); if(!host) return;
+  host.replaceChildren();
+  let r=null; try{ r=await blOudAfwijkingen(); }catch(e){ return; }
+  if(!r||!r.afwijkingen.length) return;
+  const knop=_p2El('button',{type:'button',class:'btn btn-secondary btn-sm',klik:blOudBekijk},'Bekijk de verschillen');
+  host.appendChild(_p2El('div',{class:'bh-blok'},_p2El('h4',{tekst:'Bestellijst uit een oude app-versie'}),
+    _p2El('div',{class:'dos-meta',style:'margin-bottom:6px',tekst:'Een oude app-versie heeft de bestellijst gewijzigd na de overstap ('+r.afwijkingen.length+' afwijking'+(r.afwijkingen.length===1?'':'en')+'): bekijk de verschillen. Er wordt niets automatisch overgenomen.'}),knop));
+}
+function _blOudAfgehandeld(a){
+  const ruw=_blLees2(); if(!ruw) return;
+  const meta=ruw.find(_blIsMeta); if(!meta) return;
+  meta.afgehandeld=meta.afgehandeld||{}; meta.afgehandeld[a.id]=a.hash;
+  localStorage.setItem('mt_bestellijst_v2',JSON.stringify(ruw));
+}
+function _blOudToepassen(a){
+  if(a.soort==='nieuw'){ const x=JSON.parse(JSON.stringify(a.regel)); delete x._vs; delete x._veldconflict; delete x._gewijzigd; _blNieuw(x,'overgenomen uit het oude bestand'); }
+  else if(a.soort==='gewijzigd'){ _blWijzig(a.id,'overgenomen uit het oude bestand',b=>{ a.velden.forEach(v=>{ if(v.veld==='_vervallen'){ if(v.oud) b._vervallen={tijd:new Date().toISOString(),door:_blWie(),reden:'oude app-versie'}; else delete b._vervallen; } else if(v.oud===null) delete b[v.veld]; else b[v.veld]=JSON.parse(JSON.stringify(v.oud)); }); if(b.status) b.besteld=b.status!=='nodig'; }); }
+  else if(a.soort==='verwijderd') _blVervallen(a.id,'verwijderd in het oude bestand');
+}
+async function blOudBekijk(){
+  let r=null; try{ r=await blOudAfwijkingen(); }catch(e){ return mtDialog.alert({title:'Oude bestellijst',message:'Lezen mislukt: '+(e.message||e)}); }
+  if(!r||!r.afwijkingen.length) return blOudVangnet();
+  let n=0;
+  for(const a of r.afwijkingen){
+    n++;
+    const tekst=a.soort==='nieuw'?'Er is een regel bijgekomen in het oude bestand: „'+a.naam+'”.'
+      :a.soort==='verwijderd'?'In het oude bestand is de regel „'+a.naam+'” verwijderd; in de nieuwe lijst staat hij nog.'
+      :a.velden.map(v=>v.veld+': oude app '+(v.oud===null?'(leeg)':v.oud)+' · nu '+(v.nu===null?'(leeg)':v.nu)).join('\n');
+    const k=await mtDialog.choose({title:'Afwijking '+n+' van '+r.afwijkingen.length+': '+(a.naam||a.id),message:tekst,
+      choices:[{label:'Overnemen in de nieuwe lijst'},{label:'Niet overnemen',sublabel:'afhandelen, niet meer tonen'},{label:'Later beslissen'}]});
+    if(k===null||k===undefined) break;
+    if(k===0){ _blOudToepassen(a); _blOudAfgehandeld(a); } else if(k===1) _blOudAfgehandeld(a);
+  }
+  blOudVangnet(); _blNaWijziging();
+}
+
+// ── Het tabblad: gebundeld of per regel ──
 // ── Het tabblad: gebundeld of per regel ──
 function blKopTeken(){
   const kop=document.getElementById('bestellijst-kop'); if(!kop) return;
@@ -8595,7 +8765,28 @@ function nacalcData(proj){
 function nacalcMatTotaal(code){
   try{return JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(v=>v.project===code).reduce((s,v)=>s+(v.aantal||1)*(v.stukprijs||0),0);}catch(e){return 0;}
 }
+// Nacalculatie voor wie het geld-recht niet heeft: alleen uren per medewerker en materiaal als post, geen tarieven, kosten of totalen.
+function nacalcHtmlZonderBedragen(proj,effectiveMb){
+  const nc=nacalcData(proj), cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s, sid=proj.code.replace(/-/g,'');
+  return `
+      <hr class="divider">
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
+        <div class="card-title" style="margin:0">Nacalculatie</div>
+        <button class="btn btn-sm btn-secondary" onclick="nacalcExportCsv(${jsArg(proj.code)})">⬇ CSV</button>
+        <button class="btn btn-sm btn-secondary" onclick="nacalcExportPdf(${jsArg(proj.code)})">🖨 PDF</button>
+        <span style="font-size:11px;color:var(--text-faint)">Tarieven en bedragen zie je alleen met het geld-recht.</span>
+        <span id="nacalc-status-${esc(sid)}" style="font-size:12px;color:var(--text-dim)"></span>
+      </div>
+      <table class="materiaal-lijst">
+        <thead><tr><th>Post</th><th style="text-align:right">Hoeveelheid</th></tr></thead>
+        <tbody>${nc.rijen.length?nc.rijen.map(r=>`<tr><td style="font-size:12px">⏱ Arbeid — ${esc(cap(r.naam))}</td><td style="text-align:right;font-family:var(--mono)">${esc(r.uren.toFixed(1))} u</td></tr>`).join(''):`<tr><td colspan="2" style="font-size:12px;color:var(--text-faint)">Geen uren gevonden voor ${esc(projNaamVol(proj))} — sync de Uren-tab of check de Toggl-projectnaam.</td></tr>`}
+          <tr style="border-top:2px solid var(--border)"><td style="font-weight:600">Totaal uren</td><td style="text-align:right;font-family:var(--mono);font-weight:700">${esc(nc.urenTotaal.toFixed(1))} u</td></tr>
+        </tbody>
+      </table>
+      <div id="nacalc-offerte-${esc(sid)}" style="font-size:12px;color:var(--text-dim);margin-top:0.5rem"></div>`;
+}
 function nacalcHtml(proj,totaalInkoop,effectiveMb){
+  if(!uurtarievenMag('lezen')) return nacalcHtmlZonderBedragen(proj,effectiveMb);   // geen geld-recht: uren, geen tarieven of bedragen
   const nc=nacalcData(proj);
   const totaal=nc.arbeid+totaalInkoop;
   const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
@@ -8643,11 +8834,12 @@ function _nacalcExportRows(code){
   const nc=nacalcData(proj); const mat=nacalcMatTotaal(code);
   const off=_nacalcOfferte[code]; // gezet door nacalcLaadOfferte; veld total_price_excl_tax
   const begroot=off?Number(off.total_price_excl_tax||0):null;
-  const rows=nc.rijen.map(r=>['Arbeid — '+r.naam,r.uren.toFixed(2)+' u','€ '+r.tarief.toFixed(2)+'/u',r.kosten]);
-  rows.push(['Materiaalinkoop (uit facturen)','—','—',mat]);
-  const werkelijk=nc.arbeid+mat;
-  rows.push(['TOTAAL WERKELIJK',nc.urenTotaal.toFixed(2)+' u','',werkelijk]);
-  if(begroot!=null){
+  const toon=uurtarievenMag('lezen');   // zonder geld-recht: uren, geen tarieven, kosten of totalen
+  const rows=nc.rijen.map(r=>['Arbeid — '+r.naam,r.uren.toFixed(2)+' u',toon?'€ '+r.tarief.toFixed(2)+'/u':'—',toon?r.kosten:'—']);
+  rows.push(['Materiaalinkoop (uit facturen)','—','—',toon?mat:'—']);
+  const werkelijk=toon?nc.arbeid+mat:null;
+  rows.push(['TOTAAL WERKELIJK',nc.urenTotaal.toFixed(2)+' u','',toon?werkelijk:'—']);
+  if(toon&&begroot!=null){
     rows.push(['Begroot (offerte)','','',begroot]);
     rows.push(['Verschil (begroot − werkelijk)','','',begroot-werkelijk]);
   }
@@ -8726,6 +8918,7 @@ async function nacalcLaadOfferte(code,mbId){
     const proj=projVind(code);
     const werk=(proj?nacalcData(proj).arbeid:0)+nacalcMatTotaal(code);
     const diff=beg-werk;
+    if(!uurtarievenMag('lezen')){ el.textContent='📄 Offerte '+(o.estimate_id||o.id)+' — bedragen en marge alleen met het geld-recht.'; return; }
     el.innerHTML=`📄 Offerte <a href="https://moneybird.com/${esc(getAdmin())}/estimates/${esc(o.id)}" target="_blank" style="color:var(--gold)">${esc(o.estimate_id||o.id)} ↗</a>
       <span class="badge ${goedgekeurd?'badge-ok':''}">${esc(goedgekeurd?'✓ goedgekeurd':o.state)}</span> — begroot <b style="font-family:var(--mono)">${fmt(beg)}</b> excl. btw ·
       werkelijk <b style="font-family:var(--mono)">${fmt(werk)}</b> ·
@@ -8784,6 +8977,7 @@ async function nacalcMaakFactuur(code,opts){
     return;
   }
   // Geen offerte → concept-factuur met de nacalculatieregels zelf
+  if(!uurtarievenMag('lezen')){ alert('Een nacalculatiefactuur maken kan alleen met het geld-recht (de tarieven).'); return; }
   const nc=nacalcData(proj);
   const mat=nacalcMatTotaal(code);
   if(!nc.rijen.length&&!(mat>0)){alert('Geen uren en geen materiaal gevonden — niets om te factureren.');return;}
@@ -11844,7 +12038,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_project_afhank','mt_project_sjablonen']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst_v2','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken_v2','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_project_afhank','mt_project_sjablonen']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -11876,7 +12070,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
     },
     // Projecttaken (P1): per projectcode, per taak-id; per veld wint de nieuwste stempel, een wijziging die de winnaar niet
     // kende wordt als _veldconflict bewaard; verwijderen = tombstone (wint). Zie MTPlanning.takenSamen.
-    mt_project_taken(lokaal, spData) { return MTPlanning.takenSamen(lokaal, spData); },
+    mt_project_taken_v2(lokaal, spData) { return MTPlanning.takenSamen(lokaal, spData); },
     // Afhankelijkheden tussen taken (P2): { projectcode: [afhankelijkheid…] }, zelfde model als de taken (stempel per veld, conflict,
     // verwijderen = tombstone die wint). Zie MTPlanning.afhSamen.
     mt_project_afhank(lokaal, spData) { return MTPlanning.afhSamen(lokaal, spData); },
@@ -11886,7 +12080,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // stand met de nieuwste `_gewijzigd`. Van de lijst halen is een tombstone
     // (`_vervallen` + nieuwe stempel), dus een oude kopie zet niets terug en wist niets.
     // Een regel die maar aan één kant bestaat, blijft staan. Gelijk → lokaal.
-    mt_bestellijst(lokaal, spData) {
+    mt_bestellijst_v2(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
       const kopie = v => Array.isArray(v) ? JSON.parse(JSON.stringify(v)) : [];
       const L = _blIdsToekennen(kopie(lees(lokaal))), R = _blIdsToekennen(kopie(lees(spData)));
@@ -13331,6 +13525,21 @@ window.initStorage = async function() {
     if (projSchemaSleutel(key) && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) {
       return;                              // te oude app-versie (teller): lokaal niets overschrijven, niets terugschrijven
     }
+    if (key === 'mt_project_taken_v2' && spData === null) {   // eenmalige overstap (zie projTakenV2Start)
+      const st = await projTakenV2Start();
+      if (st.stop) return;
+      spData = st.spData;
+    }
+    if (key === 'mt_bestellijst_v2' && spData === null) {     // eenmalige overstap van de bestellijst (zie blV2Start)
+      const st = await blV2Start();
+      if (st.stop) return;
+      spData = st.spData;
+    }
+    if (key === 'mt_project_afhank' && spData === null) {     // nieuw bestand, geen legacy: alleen aanmaken (zie afhankStart)
+      const st = await afhankStart();
+      if (st.stop) return;
+      spData = st.spData;
+    }
     if (spData !== null) {
       const merger = _SP.mergers && _SP.mergers[key];
       if (merger) {
@@ -13365,6 +13574,7 @@ window.initStorage = async function() {
     }
   });
   await Promise.all(taken);
+  try{ setTimeout(takenOudVangnetMelding,1500); setTimeout(blOudVangnetMelding,2500); }catch(e){}
   _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan (behalve blockedKeys)
   if (_SP.blockedKeys.size) {
     _SP.lastSync = { ts: Date.now(), ok: false, key: [..._SP.blockedKeys].join(', '),
@@ -14883,6 +15093,7 @@ async function beheerLaad(){
 }
 function beheerTeken(){
   const el=document.getElementById('beheer-inhoud'); if(!el||!_bh) return;
+  setTimeout(()=>{ try{ takenOudVangnet(); }catch(e){} try{ blOudVangnet(); }catch(e){} },0);
   const {g,log,au}=_bh, ikEig=g.ikRol==='eigenaar';
   const rolOpt=(huidig,uit)=>g.rollen.filter(r=>ikEig||r.id!=='eigenaar'||r.id===huidig).map(r=>`<option value="${esc(r.id)}"${r.id===huidig?' selected':''}${uit&&r.id!==huidig?' disabled':''}>${esc(r.naam)}</option>`).join('');
   const modusTekst=g.modus==='afdwingen'?'<b>Modus: afdwingen</b> — de worker weigert wat een rol niet mag.'
@@ -14921,6 +15132,8 @@ function beheerTeken(){
     ${_bhRolUitleg(g)}
     ${_bhProjectcode(ikEig)}
     ${_bhControlelijst()}
+    <div id="bh-taken-oud"></div>
+    <div id="bh-bestel-oud"></div>
     <details class="bh-blok"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Auditlog (laatste ${(au.audit||[]).length})</summary>
       <table class="bh-tabel"><thead><tr><th class="bh-opt">Wanneer</th><th>Door</th><th>Actie</th><th>Wie</th><th>Rol</th></tr></thead><tbody>${auditR||'<tr><td colspan="5">Nog niets.</td></tr>'}</tbody></table></details>`;
 }
@@ -15086,7 +15299,7 @@ function ctlWeesData(){
   (_ctlJson('mt_history',[])||[]).forEach(x=>x&&tel(x.project,'facturen',{titel:x.contact,datum:x.date}));
   // alleen tellen (niet automatisch te verplaatsen; handmatig in het project)
   const plan=_ctlJson('mt_planning',{}); Object.entries(plan&&typeof plan==='object'?plan:{}).forEach(([c,x])=>{ if(x&&!x._vervallen) tel(c,'planning'); });
-  const taken=_ctlJson('mt_project_taken',{}); Object.entries(taken&&typeof taken==='object'?taken:{}).forEach(([c,l])=>(Array.isArray(l)?l:[]).filter(x=>x&&!x._vervallen).forEach(()=>tel(c,'taken')));
+  const taken=_ctlJson('mt_project_taken_v2',_ctlJson('mt_project_taken',{})); Object.entries(taken&&typeof taken==='object'?taken:{}).forEach(([c,l])=>(Array.isArray(l)?l:[]).filter(x=>x&&!x._vervallen).forEach(()=>tel(c,'taken')));
   (_ctlJson('mt_planblokken',[])||[]).forEach(b=>b&&!b._vervallen&&tel(b.project_code,'planblokken'));
   const besl=ctlBesluitActueel(), opslag=_projLees()||[];
   const wees=[...per.values()].map(r=>{

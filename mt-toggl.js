@@ -136,6 +136,7 @@ async function tgReportsUren(codes,van,tot){
         filters:[{property:'start',operator:'between',value:[a.toISOString(),e.toISOString()]},
           {property:'project_id',operator:'in',value:ids}]};
       const r=await _tgEenmalig(k,()=>_tgQueue(()=>focusFetchPad(`reports/workspaces/${FOCUS_WS}/query`,'POST',body)));
+      const cc=tgReportsRijen(r); if(cc.contractFout) throw new Error(cc.contractFout);   // hetzelfde contract als tgReportsTaken
       rijen=((r&&r.data_json_row)||[]).map(x=>({user:x.user_account_id,task:x.task_id||null,project:x.project_id,uren:Math.round((Number(x.sum_duration)||0)/36)/100}));
       _tgCacheZet(k,rijen);
     }
@@ -162,14 +163,15 @@ async function _tgMet429(fn){
   }
 }
 // Contract van de Focus Reports-query (groepering project_id + task_id + user, som van de duur): { data_json_row: [ {project_id, task_id|null,
-// user_account_id, sum_duration (seconden)} ] }. Zijn er regels maar mist `task_id` (de sleutel zelf, niet de waarde) of `sum_duration`, dan
-// is het contract gewijzigd en kunnen we uren niet aan taken toerekenen: een zichtbare fout in plaats van stil "alles zonder taak".
+// user_account_id, sum_duration (seconden)} ] }. Een ontbrekende of lege task_id betekent taakloze uren (ongekoppeld). Een contractfout is er alleen
+// als de vorm van het antwoord niet klopt of op een rij het duurveld (sum_duration) ontbreekt: dan zijn de uren niet te lezen.
 function tgReportsRijen(r){
   const lijst=r&&r.data_json_row;
   if(!Array.isArray(lijst)) return {rijen:[],contractFout:'Toggl gaf een onverwacht antwoord (geen data_json_row)'};
   const echt=lijst.filter(x=>x&&typeof x==='object');
-  if(echt.length&&!echt.some(x=>'task_id' in x)) return {rijen:[],contractFout:'Toggl geeft geen task_id mee in de urenrapportage: uren per taak zijn niet te bepalen'};
-  if(echt.length&&!echt.some(x=>'sum_duration' in x)) return {rijen:[],contractFout:'Toggl geeft geen duur (sum_duration) mee in de urenrapportage'};
+  if(echt.length<lijst.length) return {rijen:[],contractFout:'Toggl gaf een onverwachte regel in de urenrapportage'};
+  // een ontbrekende of lege task_id = taakloze uren (null), geen fout; alleen het duurveld is verplicht, op elke rij
+  if(!echt.every(x=>'sum_duration' in x)) return {rijen:[],contractFout:'Toggl geeft geen duur (sum_duration) mee in (alle regels van) de urenrapportage'};
   return {rijen:echt.map(x=>({taak_id:x.task_id||null,project:x.project_id,sec:Number(x.sum_duration)||0})),contractFout:''};
 }
 // Geklokte MINUTEN per Toggl-taak voor de projecten van `codes` (P1: de projectmeter). Zelfde Reports-query als hierboven
