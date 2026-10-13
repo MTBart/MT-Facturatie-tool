@@ -1,0 +1,59 @@
+name = "mt-mcp"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+# Nodig voor Client ID Metadata Documents (ChatGPT en Claude melden zich met een https-URL als client_id): uitgaande
+# fetches mogen dan alleen naar het publieke internet (SSRF-bescherming).
+compatibility_flags = ["global_fetch_strictly_public"]
+
+# Aparte proef-Worker naast mt-claude-proxy. Deelt alleen de rollen (MT_ROLLEN), en die uitsluitend om te LEZEN.
+# Stappen voor Bart: SETUP-BART.md. Niets hier is geheim; secrets gaan via `wrangler secret put` (zie onder).
+
+[vars]
+# Het publieke adres van deze Worker, zonder / aan het eind. Moet exact kloppen: het is de OAuth-issuer en
+# (met /mcp erachter) de resource die in elk MCP-token staat.
+MCP_BASIS = "https://mt-mcp.bart-a12.workers.dev"
+# Application (client) ID van de NIEUWE Entra-app-registratie "MT MCP" (geen geheim). Zie SETUP-BART.md stap 1.
+ENTRA_CLIENT_ID = "VUL_IN"
+# Exacte client-URL('s) (CIMD) van Claude web/desktop/mobiel, komma-gescheiden. Staat niet in de documentatie van
+# Anthropic, dus standaard LEEG = Claude web/mobiel staat uit. Na de eerste poging leest Bart de URL uit `wrangler tail`
+# (regel mcp_client_geweigerd) en zet hem hier. Moet beginnen met https://claude.ai/ (zie SETUP-BART.md stap 5).
+# Claude Code en ChatGPT staan vast in src/gedeeld.js.
+CLAUDE_CIMD = ""
+
+# Secrets (niet hier zetten; via printf | wrangler secret put, zie SETUP-BART.md):
+#   ENTRA_CLIENT_SECRET  ← client secret van de Entra-app "MT MCP"
+#   OWNER_OIDS           ← dezelfde waarde als bij mt-claude-proxy (vaste eigenaren)
+
+# OAuth-opslag van de library (clients, grants, tokens; tokens alleen als hash). Nieuwe namespace:
+#   wrangler kv namespace create OAUTH_KV
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "VUL_IN"
+
+# Eigen opslag: toestemmingen per persoon + client, audit (zonder inhoud), markeringen van gebruikte refresh-tokens.
+#   wrangler kv namespace create MCP_DATA
+[[kv_namespaces]]
+binding = "MCP_DATA"
+id = "VUL_IN"
+
+# Rollen van de MT tool (dezelfde namespace als mt-claude-proxy). Cloudflare kent geen alleen-lezen-binding: de code
+# gebruikt hier uitsluitend get() (zie src/gedeeld.js, en de test "MT_ROLLEN alleen lezen").
+[[kv_namespaces]]
+binding = "MT_ROLLEN"
+id = "f1405a729e4e4f1985c98ad12b194fa2"
+
+# Limiet per gebruiker: 30 toolaanroepen per minuut (Workers Rate Limiting; namespace_id is een vrij te kiezen getal).
+[[ratelimits]]
+name = "MCP_LIMIET"
+namespace_id = "7301"
+simple = { limit = 30, period = 60 }
+
+# Refresh-claims: één Durable Object per grant, zodat claim, refresh en intrekken bij hergebruik atomisch zijn
+# (twee gelijktijdige refreshes met hetzelfde token kunnen nooit allebei slagen). SQLite-opslag (ook op het gratis plan).
+[[durable_objects.bindings]]
+name = "MCP_REFRESH"
+class_name = "RefreshSlot"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RefreshSlot"]
