@@ -137,7 +137,7 @@
 
   // ── "Binnenkomend": status per gesprek ──
   // gesprek = {mbx, conversationId, berichten:[{id, internetMessageId, receivedDateTime, categories}]}
-  // ctx = {links: mt_mail_links ({code:[record]}), oppak: mt_mail_oppak, verzonden: {conversationId: laatste verzendtijd ISO}, nu (ms), teLangUren (24)}
+  // ctx = {links: mt_mail_links ({code:[record]}), oppak: mt_mail_oppak, verzonden: {conversationId: laatste verzendtijd ISO}, nu (ms), teLangUren (24), eigenDomein ('mortiseandtenon.nl')}
   // → {status: 'nieuw'|'opgepakt'|'gekoppeld'|'afgehandeld', codes, door, naam, tijd, reden, beantwoord, teLang, laatste}
   function binnenStatus(gesprek, ctx) {
     ctx = ctx || {};
@@ -150,12 +150,21 @@
         || (String(x.mbx || '').toLowerCase() === mbx && (ids.has(x.id) || ids.has(x.iid)))))) codes.push(code);
     }
     const rec = (ctx.oppak || {})[oppakSleutel(mbx, gesprek.conversationId)] || null;
-    const laatste = msgs.map(m => String(m && m.receivedDateTime || '')).sort().pop() || '';
+    const eigen = '@' + String(ctx.eigenDomein || 'mortiseandtenon.nl').toLowerCase().replace(/^@/, '');
+    const extern = m => { const a = String(m && m.from && m.from.emailAddress && m.from.emailAddress.address || '').toLowerCase(); return !!a && !a.endsWith(eigen); };
+    const tms = m => Date.parse(m && m.receivedDateTime) || 0;
+    // "laatste" = de nieuwste mail van buiten het bedrijf (een bcc-kopie van ons eigen antwoord telt niet als nieuwe vraag); zonder externe mail de nieuwste.
+    const bronMsgs = msgs.some(extern) ? msgs.filter(extern) : msgs;
+    const laatste = bronMsgs.map(m => String(m && m.receivedDateTime || '')).sort((a, b) => (Date.parse(a) || 0) - (Date.parse(b) || 0)).pop() || '';
     const cat = msgs.map(m => (Array.isArray(m && m.categories) ? m.categories : []).find(isOppakCategorie)).find(Boolean) || '';
     const verz = (ctx.verzonden || {})[gesprek.conversationId] || '';
-    const beantwoord = !!(verz && laatste && verz >= laatste);
-    const uit = { status: 'nieuw', codes, door: '', naam: '', tijd: '', reden: '', toelichting: '', beantwoord, teLang: false, laatste };
-    if (rec && rec.status === 'afgehandeld') Object.assign(uit, { status: 'afgehandeld', door: rec.door, naam: rec.naam, tijd: rec.tijd, reden: rec.reden, toelichting: rec.toelichting || '' });
+    const beantwoord = !!(verz && laatste && (Date.parse(verz) || 0) >= (Date.parse(laatste) || 0));
+    const uit = { status: 'nieuw', codes, door: '', naam: '', tijd: '', reden: '', toelichting: '', beantwoord, teLang: false, laatste, heropend: false };
+    // Afgehandeld blijft afgehandeld, tenzij er daarna een mail van buiten het bedrijf in hetzelfde gesprek kwam (de klant reageert opnieuw).
+    const sindsAfgehandeld = rec && rec.status === 'afgehandeld' ? Date.parse(rec.tijd) || 0 : 0;
+    const heropend = !!sindsAfgehandeld && msgs.some(m => extern(m) && tms(m) > sindsAfgehandeld);
+    if (heropend) uit.heropend = true;
+    if (rec && rec.status === 'afgehandeld' && !heropend) Object.assign(uit, { status: 'afgehandeld', door: rec.door, naam: rec.naam, tijd: rec.tijd, reden: rec.reden, toelichting: rec.toelichting || '' });
     else if (codes.length) Object.assign(uit, { status: 'gekoppeld' });
     else if (rec && rec.status === 'opgepakt') Object.assign(uit, { status: 'opgepakt', door: rec.door, naam: rec.naam, tijd: rec.tijd });
     else if (cat) Object.assign(uit, { status: 'opgepakt', naam: cat.slice(CATEGORIE_PREFIX.length) });   // met de hand in Outlook gezet
