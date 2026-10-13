@@ -5,7 +5,7 @@ Dit is de spike (brok 5) met de eerste MVP-onderdelen erbovenop. Het paneel kan 
 - **koppelen:** het hele gesprek aan een project (voorstel of zoeken); projectgegevens (nummer, fase, contact, adres met navigatielink) en "Open dossier";
 - **bijlagen** per bijlage naar de projectmap, met een submapvoorstel dat je kunt wijzigen;
 - **"Maak lead van deze mail"**: opent de tool op `#lead/nieuw?mbx=…&mail=…`; het formulier "+ Lead" (nummer uit de teller, verplichte volgende actie) staat dan voorgevuld met de afzender en het onderwerp, en het hele gesprek wordt na het aanmaken gekoppeld;
-- **"Pak op"** / afhandelen (met reden) voor gesprekken in info@: staat in het gedeelde register `mt_mail_oppak.json`, zichtbaar in het overzicht **Binnenkomend** in de tool (Projecten) en als Outlook-categorie "Opgepakt: naam";
+- **"Pak op"** / afhandelen (met reden), **alleen voor gesprekken in info@** (een vaste lijst met toegestane postbussen in `mt-mailactie.js`; in je eigen of een andere gedeelde postbus bestaat de functie niet): staat in het gedeelde register `mt_mail_oppak.json`, zichtbaar in het overzicht **Binnenkomend** in de tool (Projecten) en als Outlook-categorie "Opgepakt: naam";
 - **"Antwoord als info@"**: een antwoordconcept met Van = info@ en de projecttag `[26xxxx]` in het onderwerp (zie "Antwoorden vanuit info@" hieronder);
 - in een **opstelvenster**: laat zien of info@ in de cc staat (knop om hem erbij te zetten); automatisch kan alleen met het testmanifest (zie "Automatisch info@ in de cc").
 
@@ -16,7 +16,7 @@ Wat erin zit:
 
 | Bestand | Wat |
 |---|---|
-| `manifest.xml` | Add-in-only XML-manifest (Mail, leesmodus, `ReadWriteMailbox`, Mailbox 1.5, vastpinnen en gedeelde postbus aan) |
+| `manifest.xml` | Add-in-only XML-manifest (Mail, leesmodus, `ReadItem`, Mailbox 1.5, vastpinnen en gedeelde postbus aan) |
 | `pane.html`, `pane.js` | Het taakvenster; Office.js + msal-browser 3.30 (NAA) + de gedeelde modules `mt-core.js`, `mt-koppel.js`, `mt-zoek.js` |
 | `maak-manifest.js` | Maakt hetzelfde manifest voor een ander basisadres (zie onderaan) |
 | `icons/` | De iconen (16 t/m 128 px) |
@@ -42,11 +42,25 @@ SharePoint-bestanden als die van de cockpit (`mt_mail_links.json`, `mt_koppel_jo
    alleen de Outlook-categorie en het concept falen met een duidelijke melding.
 
 > Waarom: NAA (nested app authentication) geeft het paneel een Graph-token op naam van onze eigen app, zonder tweede inlogscherm. Daarvoor moet Azure
-> dit `brk-multihub://…`-adres kennen. De scopes die het paneel voor je eigen postbus vraagt (`Files.ReadWrite`, `Sites.ReadWrite.All`, `Mail.Read`) zijn al
+> dit `brk-multihub://…`-adres kennen. Het paneel vraagt **bij het openen alleen leesrechten** (`Sites.Read.All` voor de koppelbestanden op de SharePoint-site, `Mail.Read`). Schrijfrechten komen pas op het moment van de actie die ze nodig heeft
+> (zie de tabel "Rechten per actie" hieronder); `Files.ReadWrite` wordt niet meer gevraagd. Voeg daarom ook **`Sites.Read.All`** (gedelegeerd, met beheerderstoestemming) toe als hij nog niet in de app-registratie staat. De scopes die de cockpit al gebruikt zijn al
 > toegestemd voor de cockpit; `Mail.Read.Shared` wordt alleen gevraagd zodra je een mail uit een gedeelde postbus opent.
 >
-> **Bekende brede scope:** `Sites.ReadWrite.All` blijft staan omdat de cockpit hem al gebruikt (de koppelbestanden staan op de SharePoint-site). Dat is breder dan
-> het paneel nodig heeft; een aparte app-registratie met smallere scopes is een MVP-vervolg.
+> **Bekende brede scope:** `Sites.ReadWrite.All` (alleen bij het opslaan) is breder dan nodig, maar de koppelbestanden staan op de SharePoint-site en de cockpit gebruikt hem al.
+> Een aparte app-registratie met smallere scopes (bijvoorbeeld `Sites.Selected`) is een vervolg.
+
+**Rechten per actie** (alles via Graph met het NAA-token van de eigen app; het paneel gebruikt geen Exchange-callbacktokens):
+
+| Wanneer | Graph-scopes | Waarom |
+|---|---|---|
+| Paneel openen, voorstel, zoeken | `Sites.Read.All`, `Mail.Read` | projecten en koppelingen lezen; onderwerp, afzender en id's van de mail |
+| Mail in info@ openen | + `Mail.Read.Shared` | lezen in een gedeelde postbus |
+| Koppelen, "Pak op" (register), bijlage-index, bijlagen in de projectmap | + `Sites.ReadWrite.All` | schrijven van `mt_mail_links`, `mt_koppel_journaal`, `mt_mail_oppak`, `mt_bijlage_index` en bestanden in de projectmap |
+| Categorie "Opgepakt: naam", antwoordconcept | `Mail.ReadWrite` (+ `Mail.ReadWrite.Shared` in info@) | alleen de categorie en een concept; er wordt nooit iets verstuurd (`Mail.Send` wordt niet gevraagd) |
+
+**Manifest-machtiging** (Exchange, niet Graph): `manifest.xml` vraagt **ReadItem**: het paneel leest alleen eigenschappen van het geopende bericht (item-id, gespreks-id, onderwerp, afzender). `ReadWriteMailbox` is niet nodig (dat geeft toegang tot EWS en callbacktokens, die niet meer worden gebruikt) en
+`ReadWriteItem` ook niet in het gewone manifest. Het testmanifest `manifest-gebeurtenissen.xml` vraagt **ReadWriteItem**, alleen omdat `item.cc.addAsync` (info@ in de cc zetten) dat minimaal eist. Gedeelde postbussen vragen geen hogere machtiging maar `SupportsSharedFolders`.
+*Niet getest in een echte Outlook:* werkt een gedeelde postbus of een categorie niet, probeer dan eerst `ReadWriteItem` en meld het terug; ga pas als laatste naar `ReadWriteMailbox`.
 
 ### 2. Entra: Conditional Access controleren
 NAA werkt niet met de oude regel **"Goedgekeurde client-app vereisen"** (approved client app).
@@ -59,8 +73,7 @@ NAA werkt niet met de oude regel **"Goedgekeurde client-app vereisen"** (approve
 1. Microsoft 365-beheercentrum (admin.microsoft.com) → **Instellingen** → **Geïntegreerde apps** (Integrated apps) → **Aangepaste apps uploaden** (Upload custom apps).
 2. Apptype **Office-invoegtoepassing** (Office Add-in) → **Bestand uploaden** → kies `outlook/manifest.xml` uit deze map.
 3. **Gebruikers toewijzen:** kies **Alleen ik** (*Just me*). Later, na de test, een groep "MT-paneel" met collega's.
-4. Controleer de machtigingen en **Implementeren**. Het manifest vraagt de machtiging **ReadWriteMailbox**: Microsoft schrijft die voor als een add-in Graph
-   gebruikt voor een gedeelde postbus. Het paneel zelf schrijft **niets** in je mail; het leest alleen onderwerp, afzender, datum en id's (zie Veiligheid en privacy).
+4. Controleer de machtigingen en **Implementeren**. Het manifest vraagt alleen **ReadItem** (zie "Manifest-machtiging" in stap 1). Het paneel zelf schrijft niets in je mail zonder dat je op een knop klikt; het leest onderwerp, afzender, datum en id's (zie Veiligheid en privacy).
 5. Het kan een paar uur tot een dag duren voor de knop op het lint staat. Outlook helemaal afsluiten en weer openen. Open een mail → op het lint (of onder "..."/Apps) staat **MT-paneel** (groep M&T).
 
 **Sneller testen zonder beheercentrum (alleen voor jezelf):** Outlook op het web → een mail openen → **Apps** (of "…" → *Get Add-ins*) → **Mijn invoegtoepassingen** →
@@ -151,8 +164,8 @@ ontvangers (Aan/Cc) en geen bijlagen** op. Er is geen worker- of AI-aanroep; nie
 - Alles wat het paneel toont wordt als tekst ingevoegd (geen HTML uit mails); links gaan door `veiligeUrl` (https en dezelfde host als de tool).
 - Schrijven gebeurt alleen na een expliciete bevestiging ("Ja, koppel") en met ETag/samenvoegen (`If-Match`; bestaat het bestand nog niet, dan `If-None-Match: *` en bij een
   gelijktijdige aanmaak worden beide kanten samengevoegd). Alleen bekijken schrijft niets.
-- De manifest-machtiging is `ReadWriteMailbox` (zie stap 3); de Graph-scopes zijn `Files.ReadWrite`, `Sites.ReadWrite.All` (bekende brede scope, zie stap 1), `Mail.Read` en, alleen voor
-  een gedeelde postbus, `Mail.Read.Shared`. Pas op het moment van de klik (categorie "Opgepakt: naam", antwoordconcept) komen `Mail.ReadWrite` (en `.Shared`) erbij. `Mail.Send` en agenda worden niet gevraagd:
+- De manifest-machtiging is `ReadItem` (zie stap 1); de Graph-scopes bij het openen zijn `Sites.Read.All` en `Mail.Read` en, alleen voor
+  een gedeelde postbus, `Mail.Read.Shared`; `Sites.ReadWrite.All` en `Mail.ReadWrite` komen pas bij de actie (zie de tabel in stap 1). Pas op het moment van de klik (categorie "Opgepakt: naam", antwoordconcept) komen `Mail.ReadWrite` (en `.Shared`) erbij. `Mail.Send` en agenda worden niet gevraagd:
   het paneel verstuurt zelf nooit iets.
 - `mt_mail_oppak.json` (het register "Pak op") bewaart per gesprek alleen: postbus, gespreks-id, status, wie (e-mail en naam), wanneer, reden en de gekoppelde projectcodes. **Geen onderwerp, afzender of mailtekst.**
   Het overzicht Binnenkomend in de tool leest onderwerp en afzender wel (via Graph, alleen in het geheugen van de pagina) en toont ze; er wordt niets van bewaard.
@@ -168,15 +181,22 @@ In de tool: **Projecten** → links, onder "Vandaag", staat de kaart **Binnenkom
 - **Maak lead** opent het lead-formulier voor de nieuwste mail van het gesprek (dezelfde route als de paneelknop); **Open dossier** gaat naar het gekoppelde project.
 Het register wordt per gesprek samengevoegd (nooit het hele bestand overschreven): pakken twee mensen verschillende gesprekken op, dan blijven beide staan; pakken ze hetzelfde gesprek tegelijk op, dan wint de laatste.
 
+## "Pak op": rechten, allowlist en gelijktijdig oppakken
+- **Alleen info@:** `MTMail.OPPAK_POSTBUSSEN` is de lijst met toegestane postbussen. Buiten die lijst is de registersleutel leeg: het paneel toont de sectie niet, Binnenkomend toont de knoppen niet en `oppakRecord` weigert te schrijven.
+- **Recht in de tool:** de knoppen in Binnenkomend (Pak op, Afhandelen, Vrijgeven, Weer oppakken) en het schrijven in `mt_mail_oppak` vragen het bestaande recht `inbox` met niveau **alles** of **verwerken** (`RECHTEN` in `worker.js`); alleen kijken kan met elk inbox-recht.
+- **Open punt:** het Outlook-paneel praat rechtstreeks met Graph en kent de rol uit de worker niet; daar is het alleen de allowlist en wat de gebruiker in Outlook en SharePoint mag. Iedereen die het paneel en schrijfrechten op de SharePoint-site heeft, kan dus oppakken. Wil je dat ook in het paneel beperken, dan is een worker-aanroep (`/me`) met een NAA-token nodig of een lijst met gebruikers in de app-instellingen.
+- **Gelijktijdig oppakken:** het paneel leest eerst de actuele stand; staat het gesprek al op iemand anders, dan meldt het "Al opgepakt door X" en bied het "Overnemen" aan. Na het schrijven wordt de stand teruggelezen; de winnaar is de nieuwste `gewijzigd`, bij gelijke tijd de hoogste actor-id (`door`), in elke browser hetzelfde (`MTMail.oppakWint`). De Outlook-categorie wordt alleen gezet als jouw eigen record heeft gewonnen; anders meldt het paneel wie het wél is en wijzigt het niets in Outlook.
+
 ## Lead maken uit een mail
 De knop **Maak lead van deze mail** opent `…/v2.html#lead/nieuw?mbx=<postbus>&mail=<mail-id>` in een nieuw tabblad. De tool leest die mail en het gesprek via Graph, vult het formulier "+ Lead" voor (afzender als klant, het onderwerp
-zonder "RE:" en tags als titel, bron Mail), en vraagt zoals altijd de volgende actie met datum. Pas bij "Aanmaken" ontstaat de lead (nummer uit de teller); dan wordt het hele gesprek aan de lead gekoppeld.
+zonder "RE:" en tags als titel, bron Mail), en vraagt zoals altijd de volgende actie met datum. Pas bij "Aanmaken" ontstaat de lead (nummer uit de teller); dan wordt het gesprek aan de lead gekoppeld. Onder de velden staat een **zichtbaar vinkje** (standaard aan): "Koppel alle N mails van dit gesprek"; uitgevinkt wordt alleen de mail waarvan je kwam gekoppeld. Lukt het koppelen van een deel niet, dan meldt de tool dat met de keuze **Opnieuw proberen**.
 - Er gebeurt niets automatisch: zonder klik op "Aanmaken" wordt niets bewaard. Is het gesprek al aan een project gekoppeld, dan stelt de tool voor dat dossier te openen in plaats van een tweede lead te maken.
 - Het recht `projecten:wijzigen` is nodig (zoals voor de knop "+ Lead"); zonder dat recht of zonder rol blijft de route stil of toont ze een melding. De URL wordt direct een gewone Projecten-URL, dus vernieuwen opent het formulier niet opnieuw.
 - Het kost een regel Graph-lezing; de URL bevat alleen de postbus en het mail-id (geen onderwerp of namen).
 
 ## Automatisch info@ in de cc (proef, standaard uit)
 **Doel:** bij een antwoord op een gekoppeld gesprek (onderwerp met `[26xxxx]`) zet het paneel info@ vanzelf in de cc, zodat de tool het gesprek ziet.
+**Het gesprek moet echt gekoppeld zijn:** een tag in het onderwerp alleen is niet genoeg. Het paneel onthoudt van elk gekoppeld gesprek (zodra je het opent of koppelt) een korte hash van het gespreks-id in je Outlook-instellingen (`mt_gekoppeld`, hooguit 300, geen onderwerp of namen); de handler kijkt daarin. Een gesprek dat een collega of een ander apparaat koppelde, kent deze handler nog niet: dan gebeurt er niets.
 **Gekozen aanpak:** event-based activation. `manifest-gebeurtenissen.xml` registreert `OnNewMessageCompose` (Mailbox 1.10) en wijst naar `launchevent.html` (web, nieuwe Outlook, Mac) en `launchevent.js`
 (klassiek Windows laadt alleen dat JavaScript-bestand). De handler doet niets tenzij `mt_auto_cc` aan staat; dan voegt hij info@ toe aan de cc als: het een antwoord is (er is een gespreks-id), het onderwerp een projecttag heeft,
 info@ nog niet in Aan, Cc of Bcc staat en je niet zelf als info@ schrijft. Dezelfde regel als `MTMail.ccInfoNodig` (de tests vergelijken ze).
@@ -191,6 +211,7 @@ info@ nog niet in Aan, Cc of Bcc staat en je niet zelf als info@ schrijft. Dezel
 - In een nieuw bericht (geen antwoord) of een doorgestuurd bericht zonder gespreks-id gebeurt niets.
 - `roamingSettings` (het vinkje) staat per gebruiker in Exchange; de handler leest de waarde bij elk opstelvenster.
 - Een reservekopie (bcc) via de mailstroomregel (stap 6) blijft nodig als vangnet.
+- Of het gespreks-id dat Office.js in het opstelvenster geeft hetzelfde is als dat in het leesvenster is niet bewezen (beide worden genormaliseerd: base64url = base64, zonder `=`); komt het niet overeen, dan blijft de automatische cc uit en werkt alleen de knop.
 - `clientId` en tenant-id staan al publiek in de cockpit; er zijn geen geheimen in deze map.
 
 ## Bekende grenzen van de spike

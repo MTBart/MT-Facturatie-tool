@@ -16,7 +16,7 @@
   xsi:type="MailApp">
 
   <Id>043d3db1-a2d0-480f-9e8c-f12227df7273</Id>
-  <Version>0.1.0.0</Version>
+  <Version>0.1.1.0</Version>
   <ProviderName>Mortise &amp; Tenon</ProviderName>
   <DefaultLocale>nl-NL</DefaultLocale>
   <DisplayName DefaultValue="MT-paneel (proef cc)"/>
@@ -51,7 +51,8 @@
     </Form>
   </FormSettings>
 
-  <Permissions>ReadWriteMailbox</Permissions>
+  <!-- ReadWriteItem: nodig voor item.cc.addAsync (info@ in de cc zetten) in het opstelvenster; verder niets (geen ReadWriteMailbox). -->
+  <Permissions>ReadWriteItem</Permissions>
   <Rule xsi:type="RuleCollection" Mode="Or">
     <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
     <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit"/>

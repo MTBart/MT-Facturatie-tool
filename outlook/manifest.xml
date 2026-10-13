@@ -12,7 +12,7 @@
   xsi:type="MailApp">
 
   <Id>7f95d4d4-cab9-4389-b015-903dd27be6d2</Id>
-  <Version>0.1.1.0</Version>
+  <Version>0.1.2.0</Version>
   <ProviderName>Mortise &amp; Tenon</ProviderName>
   <DefaultLocale>nl-NL</DefaultLocale>
   <DisplayName DefaultValue="MT-paneel"/>
@@ -42,8 +42,8 @@
     </Form>
   </FormSettings>
 
-  <!-- ReadWriteMailbox: voor Graph-toegang tot een gedeelde postbus (info@) schrijft Microsoft dit voor. Het paneel zelf schrijft niets in de mail. -->
-  <Permissions>ReadWriteMailbox</Permissions>
+  <!-- ReadItem: het paneel leest alleen eigenschappen van het geopende bericht (id, onderwerp, afzender). Alle mail- en SharePoint-toegang loopt via Graph met NAA-aanmelding (eigen Graph-scopes, zie README); de Exchange-rechten ReadWriteMailbox/ReadWriteItem zijn daarvoor niet nodig. Gedeelde postbussen: SupportsSharedFolders. -->
+  <Permissions>ReadItem</Permissions>
   <Rule xsi:type="RuleCollection" Mode="Or">
     <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
   </Rule>
