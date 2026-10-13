@@ -5100,7 +5100,21 @@ const SigDO = {
           for (let i = 0; i < weg.length; i += 100) await st.delete(weg.slice(i, i + 100));
           return sigAntw({ ok: true, opgeruimd: weg.length });
         }
-        if (SigDO.extra && SigDO.extra[op]) return await SigDO.extra[op](self, b, nu, vandaag, logZet);
+        if (op === 'sig-wh-claim' || op === 'sig-wh-klaar' || op === 'sig-wh-wis') {   // idempotentie van de Moneybird-webhook
+          const sl = String(b.sleutel || ''); if (!MB_WH_SLEUTEL_RE.test(sl)) return sigAntw({ error: 'ongeldig' }, 400);
+          const k = 'wh:' + sl, w = await st.get(k);
+          if (op === 'sig-wh-claim') {
+            if (w && w.status === 'klaar') return sigAntw({ dubbel: true });
+            if (w && w.status === 'bezig' && nu - w.ts < MB_WH_BEZIG_MS) return sigAntw({ bezig: true });
+            await st.put(k, { status: 'bezig', ts: nu }); return sigAntw({ nieuw: true });
+          }
+          if (op === 'sig-wh-klaar') {
+            await st.put(k, { status: 'klaar', ts: nu });
+            await logZet({ actie: 'webhook', resultaat: String(b.resultaat || '').slice(0, 30), mb_id: SIG_MBID_RE.test(String(b.mb_id || '')) ? String(b.mb_id) : undefined });
+            return sigAntw({ ok: true });
+          }
+          await st.delete(k); return sigAntw({ ok: true });
+        }
         return sigAntw({ error: 'onbekend' }, 404);
       } catch (e) { return sigAntw({ error: 'opslag', detail: String((e && e.message) || e).slice(0, 120) }, 503); }
     });
@@ -5219,6 +5233,119 @@ async function handleSignalen(p, request, env, ik, json) {
   return json(r.j, r.status);
 }
 
+// ── Moneybird-webhook (L3): POST /mb/webhook ─────────────────────────────────────
+// Server-naar-server, vóór de MS-auth en zonder CORS. Volgorde:
+//  1. Handtekening (developer.moneybird.com/webhooks/verifying-signatures): header `Moneybird-Signature: t=<epoch s>,v1=<hex>`,
+//     v1 = HMAC-SHA256(geheim, "<t>.<ruwe body>") over de exacte bytes; één van de v1-waarden moet kloppen (constant-time) en t mag
+//     hooguit 5 minuten afwijken. Geheim = worker-secret MB_WEBHOOK_SECRET (bij rotatie tijdelijk ook MB_WEBHOOK_SECRET_VORIG).
+//     Zonder geheim: 503 (nooit open). Fout → 401.
+//  2. Idempotentie: header `Idempotency-Key` (anders de SHA-256 van de body) in de signalen-DO. Een herhaalde levering = 200, niets gedaan.
+//  3. Alleen offertes (entity_type Estimate) van onze administratie, en alleen als de offerte een bevestigde koppeling heeft (POST
+//     /signalen/offertes). Dan een read-only GET estimates/{id}: de staat uit de payload wordt nooit vertrouwd.
+//  4. accepted/rejected → één signaal "markeer gewonnen/verloren?". Nooit een MB-write, nooit zelf koppelen, nooit een fase wijzigen.
+// 200 bij alles wat verwerkt of bewust genegeerd is (anders herhaalt Moneybird tot 10 keer); 503 bij een tijdelijke fout (Moneybird of
+// opslag): de claim wordt dan vrijgegeven, zodat de herhaling van Moneybird het opnieuw doet.
+const MB_WH_MAX = 256 * KB, MB_WH_TOLERANTIE_S = 300, MB_WH_BEZIG_MS = 2 * 60 * 1000;
+const MB_WH_SLEUTEL_RE = /^[kh][A-Za-z0-9._:-]{8,130}$/;
+const sigLog = o => { try { console.log(JSON.stringify(Object.assign({ sig: true }, o))); } catch {} };
+const hexVan = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+async function leesRuw(request, max) {   // de exacte bytes (nodig voor de handtekening); null als het te groot is
+  const cl = Number(request.headers.get('Content-Length'));
+  if (isFinite(cl) && cl > max) return null;
+  if (!request.body) return new Uint8Array(0);
+  const r = request.body.getReader(), delen = []; let n = 0;
+  for (;;) {
+    const { done, value } = await r.read(); if (done) break;
+    n += value.byteLength; if (n > max) { try { await r.cancel(); } catch {} return null; }
+    delen.push(value);
+  }
+  const buf = new Uint8Array(n); let o = 0; for (const d of delen) { buf.set(d, o); o += d.byteLength; }
+  return buf;
+}
+function gelijkTijd(a, b) { if (a.length !== b.length) return false; let x = 0; for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i); return x === 0; }
+async function mbHandtekeningOk(kop, ruw, geheimen, nu) {
+  if (!kop || kop.length > 2000) return false;
+  let ts = null; const v1 = [];
+  for (const deel of String(kop).split(',')) {
+    const i = deel.indexOf('='); if (i < 0) continue;
+    const k = deel.slice(0, i).trim(), v = deel.slice(i + 1).trim();
+    if (k === 't') ts = v; else if (k === 'v1' && /^[0-9a-fA-F]{64}$/.test(v)) v1.push(v.toLowerCase());
+  }
+  if (!/^\d{1,12}$/.test(ts || '') || !v1.length) return false;
+  if (Math.abs(nu / 1000 - Number(ts)) > MB_WH_TOLERANTIE_S) return false;
+  const voor = new TextEncoder().encode(ts + '.'), data = new Uint8Array(voor.length + ruw.length); data.set(voor, 0); data.set(ruw, voor.length);
+  for (const g of geheimen) {
+    const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(g), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const h = hexVan(await crypto.subtle.sign('HMAC', k, data));
+    if (v1.some(v => gelijkTijd(v, h))) return true;
+  }
+  return false;
+}
+// Read-only: één offerte ophalen. → { e } of { weg: true }; gooit bij een tijdelijke fout.
+async function sigMbOfferte(env, mbId, budget) {
+  if (budget && !budget.neem(false, 'mb')) throw new Error('subrequest-budget-op');
+  const r = await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/estimates/${mbId}.json`, { method: 'GET', headers: { 'Authorization': `Bearer ${env.MONEYBIRD_KEY}`, 'Accept': 'application/json' } });
+  if (r.status === 404) return { weg: true };
+  if (!r.ok) throw new Error('moneybird-' + r.status);
+  const e = await r.json().catch(() => null);
+  if (!e || String(e.id) !== String(mbId)) throw new Error('moneybird-antwoord');
+  return { e };
+}
+// Staat + een vaste versie/datum van de overgang (het moment van accepteren/afwijzen), zodat webhook en dagelijkse controle dezelfde sleutel maken.
+function sigOfferteStaat(e) {
+  const staat = String(e.state || '').slice(0, 20);
+  const moment = (staat === 'accepted' ? e.accepted_at : staat === 'rejected' ? e.rejected_at : null) || e.updated_at || null;
+  const ms = Date.parse(moment || '');
+  const versie = isFinite(ms) ? String(Math.floor(ms / 1000)) : /^\d{1,20}$/.test(String(e.version || '')) ? String(e.version) : '0';
+  const datum = isFinite(ms) ? new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms)) : geldVandaag();
+  return { staat, versie, datum };
+}
+async function mbWebhook(request, env) {
+  const antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  if (request.method !== 'POST') return antw({ error: 'methode' }, 405);
+  const geheimen = [env.MB_WEBHOOK_SECRET, env.MB_WEBHOOK_SECRET_VORIG].map(x => String(x || '').trim()).filter(Boolean);
+  if (!geheimen.length) return antw({ error: 'niet-ingericht' }, 503);
+  const ruw = await leesRuw(request, MB_WH_MAX);
+  if (!ruw) return antw({ error: 'te-groot' }, 413);
+  if (!(await mbHandtekeningOk(request.headers.get('Moneybird-Signature'), ruw, geheimen, Date.now()))) { sigLog({ webhook: 'handtekening' }); return antw({ error: 'handtekening' }, 401); }
+  let p = null; try { p = JSON.parse(new TextDecoder().decode(ruw)); } catch {}
+  const negeer = reden => { sigLog({ webhook: 'genegeerd', reden }); return antw({ ok: true, genegeerd: reden }); };
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return negeer('json');
+  if (String(p.administration_id || '') !== MB_ADMIN) return negeer('administratie');
+  if (String(p.entity_type || '') !== 'Estimate') return negeer('geen-offerte');
+  const mbId = String(p.entity_id || '');
+  if (!SIG_MBID_RE.test(mbId)) return negeer('id');
+  const doe = sigStub(env);
+  if (!doe) return antw({ error: 'geen-opslag' }, 503);
+  const kop = String(request.headers.get('Idempotency-Key') || '');
+  const idem = /^[A-Za-z0-9._:-]{8,120}$/.test(kop) ? 'k' + kop : 'h' + hexVan(await crypto.subtle.digest('SHA-256', ruw));
+  const c = await doe('sig-wh-claim', { sleutel: idem });
+  if (c.status !== 200 || !c.j) return antw({ error: 'opslag' }, 503);
+  if (c.j.dubbel) return antw({ ok: true, dubbel: true });
+  if (c.j.bezig) return antw({ error: 'bezig' }, 503);
+  try {
+    const k = await doe('sig-off-get', { mb_id: mbId });
+    if (k.status !== 200 || !k.j) throw new Error('opslag');
+    let uit;
+    if (!k.j.koppeling) uit = { resultaat: 'onbekend' };          // geen bevestigde koppeling: geen GET, geen signaal
+    else {
+      const g = await sigMbOfferte(env, mbId);
+      if (g.weg) uit = { resultaat: 'niet-gevonden' };
+      else {
+        const s = sigOfferteStaat(g.e), r = await doe('sig-offerte', { mb_id: mbId, ...s, via: 'webhook' });
+        if (r.status !== 200 || !r.j) throw new Error('opslag');
+        uit = { resultaat: r.j.nieuw ? 'signaal' : r.j.reden, staat: s.staat };
+      }
+    }
+    await doe('sig-wh-klaar', { sleutel: idem, resultaat: uit.resultaat, mb_id: mbId });
+    return antw({ ok: true, ...uit });
+  } catch (e) {
+    sigLog({ webhook: 'tijdelijk', fout: String((e && e.message) || e).slice(0, 80) });
+    try { await doe('sig-wh-wis', { sleutel: idem }); } catch {}
+    return antw({ error: 'tijdelijk' }, 503);
+  }
+}
+
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
 export default {
@@ -5230,6 +5357,8 @@ export default {
   },
   async fetch(request, env, ctx) {
     if (new URL(request.url).pathname === '/csp-rapport') return await cspRapport(request, env, ctx);
+    // Moneybird-webhook (L3): server-naar-server, eigen handtekening (geen MS-token, geen CORS); zie mbWebhook.
+    if (new URL(request.url).pathname === '/mb/webhook') return await mbWebhook(request, env);
     const herkomst = request.headers.get('Origin') || '';
     // Onbekende herkomst: géén CORS-headers (dan blokkeert de browser het antwoord); alleen Vary.
     const corsHeaders = CORS_HERKOMST.includes(herkomst) ? {
