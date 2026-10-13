@@ -37,7 +37,10 @@
   "agBlokkenHtml",
   "knop",
   "tdsActieHtml",
-  "balk"
+  "balk",
+  "leadKaartHtml",
+  "leadOptiesHtml",
+  "leadConflictHtml"
  ],
  "houd": [
   {

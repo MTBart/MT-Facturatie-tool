@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — L1a: mt-lead.js — fases van lead tot afgerond, overgangen, status-mapping en de lijst "Vandaag"
+- Commit: `5ffcc1a` | Auteur: Bart Witte
+
 ## 2026-10-13 — Release v2.14.1: projectnummers voorbereid (resolver, teller, schema), Geld heet Dashboard, aanwezigheid in de Agenda, project overnemen uit Toggl; backup = v2.13.3
 - Commit: `1c78870` | Auteur: Bart Witte
 
