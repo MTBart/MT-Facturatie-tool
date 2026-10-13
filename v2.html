@@ -26,12 +26,14 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-toggl.js?v=2026-10-12n"></script>
-<script src="mt-koppel.js?v=2026-10-12n"></script>
+<script src="mt-koppel.js?v=2026-10-13p"></script>
+<script src="mt-mailactie.js?v=2026-10-13c"></script>
+<script src="mt-binnenkomend.js?v=2026-10-13c"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
 <script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2026-10-12n"></script>
+<script src="mt-inbox.js?v=2026-10-13p"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -40,7 +42,7 @@
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-12b"></script>
+<script src="mt-verhuis.js?v=2026-10-13a"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -771,6 +773,10 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 /* ── GESCHIEDENIS ── */
 .geschiedenis-item{display:flex;align-items:center;gap:1rem;padding:0.875rem 0;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
 .geschiedenis-item:last-child{border-bottom:none}
+.bk-rij{display:flex;flex-direction:column;gap:2px;padding:6px;border-top:1px solid var(--border);font-size:12px}
+.bk-kop{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.bk-pil{font-size:10px;padding:1px 6px;border-radius:10px;background:var(--bg-hover,#eee);color:var(--text-dim)}
+.bk-nieuw .bk-pil{background:var(--gold-bg,#f6ecd0);color:var(--gold-text,#7a5b00)}.bk-opgepakt .bk-pil,.bk-gekoppeld .bk-pil{background:var(--green-bg,#dff0e3);color:var(--green)}
+.bk-let{font-size:10px;color:var(--red);font-weight:600}.bk-van{font-weight:600}.bk-onderwerp{color:var(--text-dim)}.bk-acties{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
 .vandaag-kaart{border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;background:var(--bg-card,#fff)}
 .vandaag-rij{display:flex;flex-direction:column;gap:1px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:12px}
 .vandaag-rij:hover{background:var(--bg-hover,#f5f5f5)}
@@ -808,7 +814,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.15.0</span>
+    <span class="header-version">v2.15.1</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -1169,6 +1175,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           </div>
           <input class="zoek-input" id="project-zoek" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
           <div id="vandaag-kaart" class="vandaag-kaart" hidden></div>
+          <div id="binnenkomend-kaart" class="vandaag-kaart" hidden></div>
           <div id="mobiel-meldingen-container"></div>
           <div id="project-filterchip"></div>
           <div id="project-lijst"></div>
@@ -2424,6 +2431,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="field" style="margin-bottom:0"><label for="modal-lead-datum">Volgende actie op</label><input type="date" id="modal-lead-datum"></div>
       </div>
       <div class="field" style="margin-bottom:0"><label for="modal-lead-actie">Volgende actie (verplicht)</label><input type="text" id="modal-lead-actie" maxlength="140" placeholder="bv. terugbellen, opname plannen"></div>
+      <div id="modal-lead-gesprek-rij" hidden style="margin-top:.5rem"><label style="font-size:12px;display:flex;gap:6px;align-items:flex-start"><input type="checkbox" id="modal-lead-gesprek" checked style="margin-top:2px"><span id="modal-lead-gesprek-tekst">Koppel de mails van dit gesprek aan de lead</span></label></div>
     </div>
     <div class="card-title" style="margin-bottom:0.5rem">2 — Projectcode</div>
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:0.5rem" id="modal-code-uitleg">Wordt automatisch toegekend: een eigen <b>werkcode</b> (W<i>jj</i>-<i>nnn</i>) uit de centrale teller. Het offertenummer komt erbij zodra de offerte in Moneybird is verstuurd. De SharePoint-map van dit nieuwe project heet <b>Volledige naam [werkcode]</b>; bestaande mappen worden nooit hernoemd.</div>
@@ -3295,6 +3303,7 @@ function showTab(name,btn){
     const pd=document.getElementById('project-detail');
     const vers=huidigProject && pd && !pd.dataset.offerte && !pd.dataset.klant && pd.dataset.code!==huidigProject.code && openProject(huidigProject.code,{scroll:false,geschiedenis:'replace'});
     if(!vers) renderProjectLijst();
+    binnenkomendOpen();
   }
   if(name==='oplevering') oplViewerOpen();
   if(name==='instellingen') beheerLaad();
@@ -3335,12 +3344,12 @@ function tbApplyHashTab(){
   const r=mtRoute.parse(hash); if(!r.tab) return false;
   mtRoute.toepassen(r);
   mtRoute.zet(r,false);   // URL terugzetten als iets hem tussendoor overschreef
-  _mtRouteLaatst=mtRoute.format(r);
+  _mtRouteLaatst=mtRoute.format(r.leadNieuw?{tab:'projecten'}:r);
   return true;
 }
 
 // ═══ ROUTER (brok B3) ═══
-// Vormen: #projecten/<CODE>[/<sectie>] · #klant/<KL>[/<LOC>] · #tab=<naam> · #<naam> (oud, blijft werken).
+// Vormen: #projecten/<CODE>[/<sectie>] · #klant/<KL>[/<LOC>] · #lead/nieuw?mbx=<postbus>&mail=<id> (vanuit het Outlook-paneel) · #tab=<naam> · #<naam> (oud, blijft werken).
 // Project openen = pushState, tab/sectie wisselen = replaceState, terug/vooruit (popstate) past de
 // route toe zonder nieuwe history-entry. Alleen project- en klantcodes in de URL, geen persoonsgegevens.
 const mtRoute={
@@ -3359,6 +3368,12 @@ const mtRoute={
       if(delen[2]&&query){ const f={}; new URLSearchParams(query).forEach((v,k)=>{ f[k]=v; }); if(Object.keys(f).length) r.filter=f; }
       return r;
     }
+    if(eerste==='lead'&&delen.length===2&&delen[1].toLowerCase()==='nieuw'){
+      // Alleen een postbus ('me' of een adres) en een Graph-id; de mail zelf komt pas na het openen via Graph (niets uit de URL gaat naar het scherm).
+      const q=new URLSearchParams(query), mbx=String(q.get('mbx')||'').trim().toLowerCase(), mail=String(q.get('mail')||'').trim();
+      if(!/^(me|[^\s@\/?&#]+@[^\s@\/?&#]+\.[a-z]{2,})$/.test(mbx)||!/^[A-Za-z0-9_=+\/.-]{8,800}$/.test(mail)) return {tab:null};
+      return {tab:'projecten',leadNieuw:{mbx,mail}};
+    }
     if(eerste==='klant'&&delen[1]){
       const r=Object.assign({tab:'projecten',klant:delen[1].toUpperCase()},delen[2]?{loc:delen[2].toUpperCase()}:{});
       if(query){ const f={}; new URLSearchParams(query).forEach((v,k)=>{ f[k]=v; });
@@ -3371,6 +3386,7 @@ const mtRoute={
   format(r){
     const enc=encodeURIComponent;
     if(!r) return '';
+    if(r.leadNieuw) return ['#lead/nieuw?mbx=',enc(r.leadNieuw.mbx),'&mail=',enc(r.leadNieuw.mail)].join('');
     if(r.code){
       const f=r.filter||{}, ks=Object.keys(f).filter(k=>f[k]!==''&&f[k]!==undefined&&f[k]!==null).sort();
       const q=(r.sectie&&ks.length)?'?'+ks.map(k=>enc(k)+'='+enc(f[k])).join('&'):'';
@@ -3386,6 +3402,7 @@ const mtRoute={
   // Alleen de URL bijwerken (push = nieuwe history-entry). Geen dubbele entry voor dezelfde route.
   zet(r,push){
     if(this._stil) return;
+    if(r&&r.leadNieuw) return;   // een eenmalige actie, geen plek om te blijven staan (zie _leadRouteUit)
     const h=this.format(r); if(!h) return;
     try{
       if(this.format(this.parse(location.hash))===h) return;
@@ -3394,11 +3411,18 @@ const mtRoute={
     }catch(e){}
   },
   go(r,{push=true}={}){ this.zet(r,push); this.toepassen(r); },
+  _leadRouteUit(){ try{ history.replaceState(null,'','#tab=projecten'); _mtRouteLaatst='#tab=projecten'; }catch(e){} },
   // Route tonen zonder zelf history te schrijven (popstate, deeplink bij opstarten).
   toepassen(r){
     if(!r||!r.tab) return;
     this._stil=true;
     try{
+      // #lead/nieuw: het formulier "+ Lead" vraagt het recht projecten:wijzigen (zoals de knop zelf); tot de rol bekend is wachten.
+      if(r.leadNieuw){
+        const lm=typeof _routeMag==='function'?_routeMag({dataset:{recht:'projecten:wijzigen'}}):'ja';
+        if(lm==='wacht'){ this._wacht=r; return; }
+        if(lm==='nee'){ this._leadRouteUit(); try{ mtDialog.alert({title:'Lead maken',message:'Je hebt geen recht om projecten of leads te maken.'}); }catch(e){} return; }
+      }
       if(!document.getElementById('tab-'+r.tab)) return;
       if(r.tab==='dashboard'&&!_oudDashboardAan()) return;   // oud dashboard is gearchiveerd: een oude link/bladwijzer laat de startpagina haar werk doen
       const tabEl=document.getElementById('tab-'+r.tab);
@@ -3411,6 +3435,16 @@ const mtRoute={
         if(mag==='wacht'){ this._wacht=r; return; }
         if(mag==='nee') return;
         if(btn) btn.click(); else showTab(r.tab);
+      }
+      if(r.leadNieuw){
+        // Eén keer per mail per paginalaad (vernieuwen of terug/vooruit mag geen tweede formulier openen); de URL wordt meteen een gewone Projecten-URL.
+        const sl=r.leadNieuw.mbx+'|'+r.leadNieuw.mail;
+        this._leadRouteUit();
+        if(!this._leadGedaan) this._leadGedaan=new Set();
+        if(this._leadGedaan.has(sl)) return;
+        this._leadGedaan.add(sl);
+        setTimeout(()=>{ if(typeof leadVanMailOpen==='function') leadVanMailOpen(r.leadNieuw); },0);
+        return;
       }
       if(r.tab!=='projecten') return;
       if(r.klant){
@@ -6261,13 +6295,15 @@ function dossierItems({codes}={}){
     // ── mail (actief + ontkoppeld; ontkoppeld standaard verborgen) ──
     // Actieve lijst uit dezelfde lezing (zelfde volgorde als mailLinksVoor → index klopt voor
     // openGekoppeldeMail/ontkoppelMail, die op die index werken).
-    const links=Array.isArray(alleLinks[code])?alleLinks[code]:[], actief=links.filter(y=>y&&!y.ontkoppeld);
+    const links=Array.isArray(alleLinks[code])?alleLinks[code]:[], actief=MTKoppel.uniek(links.filter(y=>y&&!y.ontkoppeld));
     links.forEach(x=>{
       const i=actief.indexOf(x), imid=x.internetMessageId||x.id;
+      // dezelfde mail in een andere postbus: één regel (de kopie die mailLinksVoor kiest); een ontkoppelde kopie van een mail die nog gekoppeld is: niet tonen
+      if(x&&(x.ontkoppeld?actief.some(y=>MTKoppel.zelfdeMail(y,x)):i<0)) return;
       const opgeslagen=idx.filter(r=>r.code===code&&r.status==='opgeslagen'&&r.imid===imid);
       const acties=[];
       if(x.webLink) acties.push({l:'↗',t:'Open in Outlook',snel:true,f:()=>window.open(x.webLink,'_blank','noopener')});
-      if(x.ontkoppeld) acties.push({l:'↺ Opnieuw koppelen',t:'Deze mail weer aan het project koppelen',f:()=>{ MTKoppel.herkoppel(code,x.internetMessageId||x.id); dossierVernieuw(); }});
+      if(x.ontkoppeld) acties.push({l:'↺ Opnieuw koppelen',t:'Deze mail weer aan het project koppelen',f:()=>{ MTKoppel.herkoppel(code,x.internetMessageId||x.id,{mbx:MTKoppel.mbx(x)}); dossierVernieuw(); }});
       if(i>=0&&x.hasAttachments!==false) acties.push({l:'📎',t:'Bijlagen van deze mail naar de projectmap',f:()=>dossierBijlagenNaarMap(code,i)});
       if(i>=0) acties.push({l:'×',t:'Ontkoppelen (mail blijft in Outlook)',gevaar:true,f:()=>ontkoppelMail(code,i)});
       rij({soort:'mail',titel:x.subject||'(geen onderwerp)',van:x.from||'',datum:x.date||x.ts,status:x.ontkoppeld?'ontkoppeld':'gekoppeld',
@@ -9073,6 +9109,82 @@ function openLeadModal(){
   ['modal-lead-waarde','modal-lead-actie'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   const d=document.getElementById('modal-lead-datum'); if(d) d.value=_vandaagYmd();
 }
+// ── Lead uit een mail (L2): de route #lead/nieuw?mbx=…&mail=… vanuit het Outlook-paneel en de knop "Maak lead" in Binnenkomend ──
+// Het formulier is hetzelfde als bij "+ Lead" (nummer uit de teller, verplichte volgende actie); alleen de afzender, het onderwerp en de bron zijn
+// voorgevuld. Het hele gesprek wordt na het aanmaken gekoppeld (zie maakProjectAan). Is het gesprek al gekoppeld, dan opent het dossier.
+let _leadGesprek=null, _leadVoorstel=null;
+async function leadVanMailOpen(o){
+  if(!o||!o.mail) return;
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return mtDialog.alert({title:'Lead maken',message:'Je hebt geen recht om projecten of leads te maken.'});
+  if(!window.MTMail||!window.MTKoppel||typeof ibFetch!=='function') return mtDialog.alert({title:'Lead maken',message:'De mailmodules zijn niet geladen; vernieuw de pagina.'});
+  const mbx=String(o.mbx||'').toLowerCase()||INBOX_DEFAULT;
+  const base=mbx==='me'?'https://graph.microsoft.com/v1.0/me':'https://graph.microsoft.com/v1.0/users/'+encodeURIComponent(mbx);
+  const sel='$select=id,subject,from,receivedDateTime,webLink,internetMessageId,conversationId,hasAttachments';
+  let m=null, gesprek=[];
+  try{
+    m=await ibFetch(base+'/messages/'+encodeURIComponent(o.mail)+'?'+sel);
+    if(m&&m.conversationId){
+      const filt=['conversationId eq ',"'",String(m.conversationId).replace(/'/g,"''"),"'"].join('');
+      let url=[base,'/messages?$filter=',encodeURIComponent(filt),'&',sel,'&$top=50'].join(''), pag=0;
+      while(url&&pag<4){ const r=await ibFetch(url); gesprek=gesprek.concat((r&&r.value)||[]); url=r&&r['@odata.nextLink']; pag++; }
+    }
+  }catch(e){
+    const hint=e&&e.status===404?'De mail is niet gevonden (misschien verplaatst of verwijderd).':e&&e.status===403?'Geen toegang tot deze postbus.':String((e&&e.message)||e).slice(0,160);
+    return mtDialog.alert({title:'Lead maken',message:'De mail kon niet worden gelezen: '+hint});
+  }
+  if(!m) return;
+  if(!gesprek.some(x=>x.id===m.id)) gesprek.push(m);
+  // Al gekoppeld (herhaald klikken of een tweede persoon)? Dan geen tweede lead: naar het bestaande dossier.
+  const al=[...new Set(gesprek.flatMap(x=>MTKoppel.mailProjecten(Object.assign({},x,{mbx}))))];
+  if(al.length){
+    const ok=await mtDialog.confirm({title:'Al gekoppeld',message:'Dit gesprek hangt al aan '+al.map(c=>projKort(c)).join(', ')+'. Een tweede lead is meestal niet nodig. Het dossier openen?',okLabel:'Open dossier',cancelLabel:'Toch een nieuwe lead'});
+    if(ok){ openProject(al[0],{sectie:'dossier'}); return; }
+  }
+  const v=MTMail.leadVoorstel(m), kv=_ibKlantUitMail(m);
+  tbDoTab&&tbDoTab('projecten');
+  openLeadModal();
+  _ibProjBron={id:m.id,internetMessageId:m.internetMessageId||'',subject:m.subject||'',
+    from:(m.from&&m.from.emailAddress)?(m.from.emailAddress.name||m.from.emailAddress.address):'',
+    date:m.receivedDateTime||'',webLink:m.webLink||'',mbx,hasAttachments:!!m.hasAttachments,idType:'immutable'};
+  _leadGesprek={mbx,berichten:gesprek}; _leadVoorstel=v;
+  const zet=(id,w)=>{ const e=document.getElementById(id); if(e) e.value=w; };
+  zet('modal-naam-klant',kv?kv.naam:v.klant_naam); zet('modal-naam-product',v.titel.slice(0,60)); zet('modal-lead-bron','mail');
+  autoCode(true);
+  // Zichtbare keuze (standaard aan): alle mails van het gesprek koppelen, of alleen de mail waarvan je kwam.
+  { const rij=document.getElementById('modal-lead-gesprek-rij'), vink=document.getElementById('modal-lead-gesprek'), tk=document.getElementById('modal-lead-gesprek-tekst');
+    if(rij&&vink&&tk){ rij.hidden=false; vink.checked=true;
+      tk.textContent=gesprek.length>1?('Koppel alle '+gesprek.length+' mails van dit gesprek aan de lead (uitgevinkt: alleen de mail waarvan je kwam)'):'Koppel deze mail aan de lead'; } }
+  const st=document.getElementById('modal-status');
+  if(st){ st.style.color='var(--text-dim)'; st.textContent=(kv?'Klant herkend uit '+v.klant_email+': '+kv.naam+'. ':'Afzender '+v.klant_email+' staat niet in de klantenlijst; controleer de naam. ')+'Het hele gesprek ('+gesprek.length+(gesprek.length===1?' mail':' mails')+') wordt aan de lead gekoppeld. Vul de locatie en de volgende actie aan.'; }
+}
+// "Binnenkomend" (Projecten): wie pakt wat op uit info@. Alleen voor wie de inbox mag zien; de module laadt zelf (hooguit eens per 2 minuten).
+// Wijzigen in Binnenkomend ("Pak op", afhandelen) vraagt het recht inbox = alles of verwerken (RECHTEN in worker.js); alleen kijken kan met elk inbox-recht.
+// Tot de rol bekend is (of zonder rol/rechten) geldt: nog niet bekend = uit; oude worker zonder rechten = als vroeger.
+function binnenkomendMagSchrijven(){
+  if(!window.MTRol) return true;
+  if(!MTRol.me) return !!_rolKlaar;
+  if(!MTRol.me.rechten) return true;
+  return _rechtRuw('inbox:alles|verwerken');
+}
+function binnenkomendOpen(){
+  const k=document.getElementById('binnenkomend-kaart'); if(!k) return;
+  const mag=!window.MTRol||!MTRol.me||!MTRol.me.rechten||_rechtRuw('inbox');
+  if(!mag||!window.MTBinnenkomend){ k.hidden=true; return; }
+  const b=MTBinnenkomend.start(); if(b) b.laad(false);
+}
+// Koppelt de mails van het gesprek (behalve de bronmail, die al gekoppeld is) en meldt mislukte koppelingen met de keuze om het opnieuw te proberen.
+async function leadGesprekKoppel(code,gesprek,bronId){
+  let rest=(gesprek.berichten||[]).filter(x=>x&&x.id!==bronId), n=0;
+  while(rest.length){
+    const mis=[];
+    rest.forEach(x=>{ try{ const r=MTKoppel.koppelMail(code,x,{bron:'lead-mail',mbx:gesprek.mbx,idType:'immutable'}); if(r.status==='fout') mis.push(x); else n++; }catch(e){ console.warn('mail koppelen faalde:',e); mis.push(x); } });
+    if(!mis.length) break;
+    const opnieuw=await mtDialog.confirm({title:'Gesprek koppelen',message:mis.length+' van de '+rest.length+' mails konden niet aan de lead worden gekoppeld. Opnieuw proberen? (Anders kun je ze later koppelen via het dossier of het Outlook-paneel.)',okLabel:'Opnieuw proberen',cancelLabel:'Later'});
+    if(!opnieuw) return {n,mis:mis.length};
+    rest=mis;
+  }
+  return {n,mis:0};
+}
 function leadModalWaarden(){
   const v=id=>{ const e=document.getElementById(id); return e?String(e.value||'').trim():''; };
   const actie=v('modal-lead-actie'), datum=v('modal-lead-datum'), bron=v('modal-lead-bron'), w=v('modal-lead-waarde');
@@ -9421,6 +9533,7 @@ function openModal(){
   _projAanmaakVrij();
   _ibProjBron=null;   // schone start; inboxMaakProject() zet 'm daarna evt. opnieuw
   _tgProjBron=null;   // idem voor "Uit Toggl overnemen" (tgOvernemenKies)
+  try{ _leadGesprek=null; _leadVoorstel=null; }catch(e){}
   _leadModus=false; { const lv=document.getElementById('modal-lead-velden'); if(lv) lv.hidden=true; const ti=document.getElementById('modal-titel'); if(ti) ti.textContent='Nieuw project (direct, zonder lead)'; }
   ['modal-naam-klant','modal-naam-locatie','modal-naam-product','modal-klant','modal-locatie','modal-product'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
@@ -9559,6 +9672,8 @@ async function maakProjectAan(){
     projVeldZet(nieuwProj,'volgende_actie',{tekst:lead.actie,datum:lead.datum}); nieuwProj.status='offerte'; _leadModus=false; }
   // Direct project (L1b): geen lead of offerte → meteen in werkvoorbereiding. Een overname uit Toggl krijgt (nog) geen fase.
   else if(!tgBron){ projVeldZet(nieuwProj,'fase','werkvoorbereiding'); nieuwProj.direct_project=true; nieuwProj.status='lopend'; }
+  // Lead uit een mail (L2): het e-mailadres van de afzender als contact, als de klantenlijst er geen kent.
+  if(typeof _leadVoorstel!=='undefined'&&_leadVoorstel&&_leadVoorstel.klant_email&&!nieuwProj.klant_email) nieuwProj.klant_email=_leadVoorstel.klant_email;
   // Kwam dit project uit een mail (inbox → "Maak project")? Leg de bron vast.
   if(_ibProjBron) nieuwProj.bron_mail={internetMessageId:_ibProjBron.internetMessageId,
     subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,mbx:_ibProjBron.mbx};
@@ -9567,12 +9682,18 @@ async function maakProjectAan(){
   slaProjectenOp();
   // Bron-mail automatisch aan het verse project koppelen (zoals de inbox-knop "koppel project").
   // Had de mail bijlagen, dan na het sluiten van de modal het bijlagen-venster aanbieden.
-  let bijlagenNa=null;
+  let bijlagenNa=null, koppelTekst='';
   if(_ibProjBron){
     try{
       const r=MTKoppel.koppelMail(code,_ibProjBron,{bron:'nieuw-project',mbx:_ibProjBron.mbx});
       if(r.status!=='fout'&&_ibProjBron.hasAttachments) bijlagenNa={id:_ibProjBron.id,mbx:_ibProjBron.mbx};
     }catch(e){console.warn('bron-mail koppelen faalde:',e);}
+    // Lead uit een mail: de rest van het gesprek erbij (dezelfde koppelroute als het Outlook-paneel), alleen als het vinkje aan staat; fouten zijn zichtbaar met opnieuw proberen.
+    if(typeof _leadGesprek!=='undefined'&&_leadGesprek){
+      const vink=document.getElementById('modal-lead-gesprek');
+      if(!vink||vink.checked){ const kr=await leadGesprekKoppel(code,_leadGesprek,_ibProjBron.id); if(kr.n) koppelTekst=' · '+kr.n+(kr.n===1?' extra mail':' extra mails')+' van het gesprek gekoppeld'; }
+      _leadGesprek=null; _leadVoorstel=null;
+    }
     _ibProjBron=null;
   }
   document.querySelectorAll('#f-project,#ctrl-project,.project-select').forEach(sel=>{
@@ -9589,7 +9710,7 @@ async function maakProjectAan(){
   let mapFout='';
   // Mappenstructuur op SharePoint aanmaken (mkdir-p, idempotent)
   try{
-    if(lead){ status.textContent=`✓ Lead ${naam} aangemaakt (map en Toggl volgen bij "Gewonnen → project")`; }
+    if(lead){ status.textContent=`✓ Lead ${naam} aangemaakt${koppelTekst} (map en Toggl volgen bij "Gewonnen → project")`; }
     else if(tgBron){
       // Overname: een bestaand Toggl-project heeft vaak al een map → eerst zoeken en koppelen voorstellen; een nieuwe map alleen na bevestiging.
       projCtxStatus(code,'map zoeken…');
@@ -10824,7 +10945,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -10937,6 +11058,16 @@ const _SP = Object.assign(window.MTCore.makeSP({
     mt_mail_links(lokaal, spData) {
       // één gedeelde samenvoeger (mt-koppel.js), ook gebruikt door het Outlook-paneel; identiteit = mailbox + mail (dezelfde mail in twee postbussen = twee records)
       return MTKoppel.linksSamen(lokaal, spData);
+    },
+    // "Pak op" uit info@ (Binnenkomend + Outlook-paneel): { sleutel (postbus|gesprek-id): record }. Per sleutel wint de nieuwste `gewijzigd`;
+    // een gesprek dat aan één kant bestaat, blijft staan. Nooit last-write-wins over het hele bestand.
+    mt_mail_oppak(lokaal, spData) {
+      if (window.MTMail && MTMail.oppakSamen) return MTMail.oppakSamen(lokaal, spData);
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+      const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {}, uit = {};
+      for (const k of new Set([...Object.keys(R), ...Object.keys(L)])) { const l = L[k], r = R[k]; uit[k] = !isObj(l) ? r : !isObj(r) ? l : (((Number(l.gewijzigd) || 0) !== (Number(r.gewijzigd) || 0) ? (Number(l.gewijzigd) || 0) > (Number(r.gewijzigd) || 0) : String(l.door || '') !== String(r.door || '') ? String(l.door || '') > String(r.door || '') : JSON.stringify(l) >= JSON.stringify(r)) ? l : r); }
+      return uit;
     },
     mt_calc_offertes(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
@@ -14134,15 +14265,15 @@ async function ctlKoppelUitvoeren(van,naar,verwacht,opts){
   const wie=_spWie();
   try{
     for(const m of plan.mail||[]){
-      const {_alBijDoel,...rec}=m, sl=MTKoppel.sleutel(rec);
-      if(voortgang.mail.some(x=>x.sleutel===sl)) continue;
+      const {_alBijDoel,...rec}=m, sl=MTKoppel.sleutel(rec), ik=MTKoppel.ident(rec);   // ik = postbus + mail: twee postbus-kopieën zijn twee stappen
+      if(voortgang.mail.some(x=>x.ident?x.ident===ik:x.sleutel===sl)) continue;
       if(!(MTKoppel.alle()[van]||[]).some(y=>MTKoppel.actief(y)&&MTKoppel.zelfde(y,rec))) continue;   // niet meer actief op de bron
       voortgang.mailBezig=sl; bewaar();                                   // checkpoint vóór de mail
       const r=MTKoppel.koppelMail(naar,rec,{door:wie,bron:'controlelijst'});
       if(!r||r.status==='fout') throw new Error('mail koppelen mislukt — verplaatsen onderbroken (hervatten of terugdraaien kan)');
-      MTKoppel.ontkoppelMail(van,sl,{id:rec.id,door:wie,bron:'controlelijst'});
+      MTKoppel.ontkoppelMail(van,sl,{id:rec.id,mbx:MTKoppel.mbx(rec),door:wie,bron:'controlelijst'});
       const bronRec=(MTKoppel.alle()[van]||[]).find(y=>MTKoppel.zelfde(y,rec)), doelRec=(MTKoppel.alle()[naar]||[]).find(y=>MTKoppel.actief(y)&&MTKoppel.zelfde(y,rec));
-      voortgang.mail.push({sleutel:sl,rec,alBijDoel:!!_alBijDoel||r.status==='al',bronOntkoppeld:bronRec&&bronRec.ontkoppeld||null,doelGewijzigd:doelRec&&doelRec.gewijzigd||null});
+      voortgang.mail.push({sleutel:sl,ident:ik,rec,alBijDoel:!!_alBijDoel||r.status==='al',bronOntkoppeld:bronRec&&bronRec.ontkoppeld||null,doelGewijzigd:doelRec&&doelRec.gewijzigd||null});
       delete voortgang.mailBezig; bewaar();                               // en erna
     }
     const ck=(plan.calc||[]).filter(k=>CALC.offertes[k]&&(CALC.offertes[k].project_code===van||(k===van&&!CALC.offertes[k].project_code)));
@@ -14202,7 +14333,7 @@ async function ctlKoppelTerug(van){
     else if(bron&&MTKoppel.actief(bron)){ /* al terug op de bron */ }
     else { overgeslagen.push('mail „'+(m.rec.subject||m.sleutel)+'” is sindsdien op de oude code gewijzigd'); continue; }
     if(m.alBijDoel) overgeslagen.push('mail „'+(m.rec.subject||m.sleutel)+'” stond al bij het doel — daar blijft hij ook');
-    else if(doelRec&&MTKoppel.actief(doelRec)&&doelRec.gewijzigd===m.doelGewijzigd) MTKoppel.ontkoppelMail(naar,m.sleutel,{id:m.rec.id,door:wie,bron:'controlelijst-terug'});
+    else if(doelRec&&MTKoppel.actief(doelRec)&&doelRec.gewijzigd===m.doelGewijzigd) MTKoppel.ontkoppelMail(naar,m.sleutel,{id:m.rec.id,mbx:MTKoppel.mbx(m.rec),door:wie,bron:'controlelijst-terug'});
     else if(doelRec&&MTKoppel.actief(doelRec)) overgeslagen.push('mail „'+(m.rec.subject||m.sleutel)+'” is sindsdien bij het doel gewijzigd — daar blijft hij');
     terug.mail++;
   }

@@ -1,5 +1,5 @@
 {
- "toelichting": "Regels waar HTML met + aan een variabele wordt geplakt (buiten het zicht van de template-scanner), doorgelezen op 2026-10-11: de variabelen zijn ids/constanten, uitkomsten van esc()/jsArg()/UI_ESC()/tgEsc() of HTML-fragmenten uit gescande templates. Een nieuwe regel moet eerst beoordeeld worden. Zoekbalk (11-10): mt-zoek-extern.js plakt drie fetch-URLs (geen HTML; Moneybird-route, Graph-bestandszoeker en Graph-mailzoeker): constante basis/drive/map plus de zoekterm via encodeURIComponent. L1c (13-10): mt-vw.js bouwt XML voor interiorcad (geen HTML): tag en inspringing zijn constanten uit de code, elke waarde gaat door xmlEsc.",
+ "toelichting": "Regels waar HTML met + aan een variabele wordt geplakt (buiten het zicht van de template-scanner), doorgelezen op 2026-10-11: de variabelen zijn ids/constanten, uitkomsten van esc()/jsArg()/UI_ESC()/tgEsc() of HTML-fragmenten uit gescande templates. Een nieuwe regel moet eerst beoordeeld worden. Zoekbalk (11-10): mt-zoek-extern.js plakt drie fetch-URLs (geen HTML; Moneybird-route, Graph-bestandszoeker en Graph-mailzoeker): constante basis/drive/map plus de zoekterm via encodeURIComponent. L1c (13-10): mt-vw.js bouwt XML voor interiorcad (geen HTML): tag en inspringing zijn constanten uit de code, elke waarde gaat door xmlEsc. Outlook-paneel (11-10): outlook/pane.js plakt twee Graph-URLs (geen HTML): vaste basis (/me of /users/<encodeURIComponent>) plus encodeURIComponent op id en conversationId (met verdubbelde quotes); outlook/maak-manifest.js is een opdrachtregelprogramma dat gevalideerde https-adressen in een XML-bestand vervangt (geen HTML, geen browser). Outlook-paneel (13-10, beoordeeld door Bart en de regie): outlook/pane.js plakt twee URLs (geen HTML): de tool-link #lead/nieuw met postbus en mail-id via encodeURIComponent, en een Graph-zoekopdracht in info@ op internetMessageId, met elke variabele via encodeURIComponent.",
  "regels": [
   {
    "bestand": "mt-contacten.js",
@@ -268,6 +268,26 @@
   {
    "bestand": "mt-vw.js",
    "tekst": "const e = (tag, v, ind) => ind + '<' + tag + '>' + xmlEsc(v) + '</' + tag + '>';   // XML, geen HTML: xmlEsc rond elke waarde"
+  },
+  {
+   "bestand": "outlook/pane.js",
+   "tekst": "let items = [], volgende = base + '/messages?$filter=' + encodeURIComponent(\"conversationId eq '\" + String(cid).replace(/'/g, \"''\") + \"'\") + '&$select=' + cfg.select + '&$top=50', pag = 0;"
+  },
+  {
+   "bestand": "outlook/maak-manifest.js",
+   "tekst": "uit = uit.split('<AppDomain>' + oudOrigin + '</AppDomain>').join('<AppDomain>' + nieuwOrigin + '</AppDomain>');"
+  },
+  {
+   "bestand": "outlook/pane.js",
+   "tekst": "const msg = await graaf(base + '/messages/' + encodeURIComponent(rid) + '?$select=' + cfg.select, { gedeeld });"
+  },
+  {
+   "bestand": "outlook/pane.js",
+   "tekst": "const u = toolUrl('#lead/nieuw?mbx=' + encodeURIComponent(huidig.mbx) + '&mail=' + encodeURIComponent(huidig.msg.id));"
+  },
+  {
+   "bestand": "outlook/pane.js",
+   "tekst": "try { kopie = ((await graaf('/users/' + encodeURIComponent(INFO) + '/messages?$filter=' + encodeURIComponent(\"internetMessageId eq '\" + String(huidig.msg.internetMessageId || '').replace(/'/g, \"''\") + \"'\") + '&$select=id"
   }
  ]
 }
