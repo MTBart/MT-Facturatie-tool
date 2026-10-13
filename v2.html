@@ -7015,7 +7015,9 @@ function projMeterBereken(code){
   const proj=projVind(code), st=_pmState[code]||{};
   const taken=projTaken(code);
   const blokken=(typeof agPlanActief==='function'?agPlanActief():[]).filter(b=>b.project_code===code);
-  const calc=(window.CALC&&CALC.offertes)?(CALC.offertes[code]||Object.values(CALC.offertes).find(o=>o&&o.project_code===code)||null):null;
+  // calculatie: de live stand als de calculatiemodule geladen is, anders de lokale kopie (zoals de controlelijst)
+  const offs=(typeof _ctlOffertes==='function')?_ctlOffertes():((window.CALC&&CALC.offertes)||{});
+  const calc=offs[code]||Object.values(offs).find(o=>o&&o.project_code===code)||null;
   let geklokt, bron;
   if(st.per){ geklokt=st.per.map(x=>({taak_id:x.taak_id,min:x.min})); bron='toggl'; }
   else { geklokt=MTPlanning.entriesFilter(agEntries(),{codes:[code]}).map(e=>({taak_id:e.taak_id!=null?e.taak_id:null,min:MTPlanning.entryMin(e)})); bron='lokaal'; }
@@ -7051,7 +7053,7 @@ function projMeterTeken(code){
   const kolommen=['Activiteit','Budget','Gepland','Geklokt (aan taak)','Geklokt (zonder taak)','Resterend'];
   const celNum=(v,extra)=>_pmEl('td',{class:'pm-num'+(extra?' '+extra:'')},_pmU(v));
   const rijen=m.rijen.map(r=>_pmEl('tr',null,
-    _pmEl('td',{tekst:r.l+(r.taken?'':' (alleen gepland/geklokt)')}),
+    _pmEl('td',{tekst:r.l,title:r.taken?(r.taken+' taak/taken'):'Geen taken met deze activiteit'}),
     _pmEl('td',{class:'pm-num',title:m.budgetBron==='calculatie'?('Calculatie. Taken: '+_pmU(r.taakBudget)):('Optelling van de taakramingen ('+r.taken+' taken)')},_pmU(r.budget)),
     celNum(r.gepland),celNum(r.gekoppeld),_pmEl('td',{class:'pm-num pm-dim'},'—'),
     celNum(r.resterend,r.resterend<0?'pm-over':'')));
