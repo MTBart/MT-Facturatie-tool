@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-12 — v2.14.0 voorbereid: "Vandaag aanwezig" naar de Agenda; versielabel en één release-entry
+- Commit: `83ebdb0` | Auteur: Bart Witte
+
 ## 2026-10-12 — Tabblad Geld heet nu Dashboard; het oude dashboard is (voorlopig) verborgen (achterdeur ?oud-dashboard=1)
 - Commit: `60bd0b2` | Auteur: Bart Witte
 

@@ -3185,7 +3185,7 @@ function showTab(name,btn){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   if(btn && btn.classList.contains('tab-btn')) btn.classList.add('active');
-  if(name==='dashboard') laadDashboard();
+  if(name==='dashboard'){ if(_oudDashboardAan()) laadDashboard(); }   // oud dashboard: alleen via de achterdeur, met rol en recht
   if(name==='voorraad') renderVoorraadActief();
   if(name==='historie') renderHistory();
   if(name==='bestelling') renderBestellijst();
@@ -3303,6 +3303,8 @@ const mtRoute={
       const tabEl=document.getElementById('tab-'+r.tab);
       if(!tabEl.classList.contains('active')){
         const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+r.tab+"'"));
+        // alleen een zichtbare, toegestane knop (een deeplink zet niemand op een verborgen tab, bv. #tab=geld zonder recht)
+        if(btn&&((btn.style&&btn.style.display==='none')||(btn.classList&&btn.classList.contains('mt-rol-verborgen')))) return;
         if(btn) btn.click(); else showTab(r.tab);
       }
       if(r.tab!=='projecten') return;
@@ -12928,8 +12930,8 @@ async function toonApp(account) {
   if (window.initStorage) await window.initStorage();
   updateApiStatus();
   loadLedgers();
-  oudDashboardZet();
-  if(_oudDashboardAan()) laadDashboard();   // het oude dashboard is verborgen: dan ook geen zware Moneybird-aanroepen bij het laden (showTab('dashboard') laadt op verzoek)
+  // Het oude dashboard (achterdeur ?oud-dashboard=1) wordt pas na het laden van de rol getoond en geladen (oudDashboardZet in
+  // rolToepassen): zonder rol of zonder geld-/moneybird-recht geen knop en geen Moneybird-rapporten.
   if(typeof admInitKnop==='function') admInitKnop();
   rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); updStipZet(); klantRegistryNaLogin(); });
   mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
@@ -12995,13 +12997,31 @@ function rolToepassen(me){
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   if(typeof geldTabZet==='function') geldTabZet();
+  oudDashboardZet();
+  // Een deeplink naar een tab waarvan de knop pas nu zichtbaar werd (bv. #tab=rapporten): alsnog openen, zolang er nog niet
+  // zelf gekozen is. De router opent alleen zichtbare, toegestane knoppen.
+  try{ const st=mtRoute.parse(mtRoute._start||location.hash||''); const te=st.tab&&document.getElementById('tab-'+st.tab);
+    if(!_tabWissels&&te&&!te.classList.contains('active')) mtRoute.toepassen(st); }catch(e){}
   startTabZet();
+  _verborgenTabTerugval();   // ook na een deeplink of een late rol: nooit blijven staan op een verborgen of niet-toegestane tab
   return me;
 }
 // Het oude dashboard (tab 'dashboard') is voorlopig gearchiveerd: de knop is verborgen, alleen ?oud-dashboard=1 in de URL
 // brengt hem terug (achterdeur). Het tabblad 'geld' heet in de kop nu "Dashboard"; id, route (#tab=geld) en recht blijven 'geld'.
-function _oudDashboardAan(){ try{ return new URLSearchParams(location.search).get('oud-dashboard')==='1'; }catch(e){ return false; } }
-function oudDashboardZet(){ const b=document.getElementById('tab-btn-dashboard-oud'); if(b&&_oudDashboardAan()) b.style.display=''; }
+// De achterdeur werkt pas als de rol geladen is en alleen voor wie Geld of Moneybird mag (rechten uit /me, in élke ROLLEN_MODUS):
+// anders blijft de knop verborgen en worden er geen Moneybird-rapporten opgehaald.
+function _oudDashboardGevraagd(){ try{ return new URLSearchParams(location.search).get('oud-dashboard')==='1'; }catch(e){ return false; } }
+function _oudDashboardAan(){
+  if(!_oudDashboardGevraagd()||!window.MTRol||!MTRol.me) return false;
+  return !!(MTRol.magGeld()||(typeof MTRol.recht==='function'&&MTRol.recht('moneybird')));
+}
+let _oudDashGeladen=false;
+function oudDashboardZet(){
+  const b=document.getElementById('tab-btn-dashboard-oud'); if(!b) return;
+  const aan=_oudDashboardAan(); b.style.display=aan?'':'none';
+  const t=document.getElementById('tab-dashboard');
+  if(aan&&t&&t.classList.contains('active')&&!_oudDashGeladen){ _oudDashGeladen=true; laadDashboard(); }
+}
 const _tabVerborgen=b=>!!b&&(b.style.display==='none'||b.classList.contains('mt-rol-verborgen'));
 // Staat de actieve knop op een verborgen tab (oud dashboard zonder achterdeur, of Dashboard zonder recht), ga dan naar de eerste vrije tab.
 function _verborgenTabTerugval(){ const act=document.querySelector('.tabs-wrap .tab-btn.active'); if(_tabVerborgen(act)) _eersteVrijeTab(); }
@@ -13048,6 +13068,10 @@ function geldTabZet(){
   b.style.display=ja?'':'none';
   const t=document.getElementById('tab-geld'); if(t&&t.classList.contains('active')&&ja) geldOpen();
   rapportTabZet(ja);
+  // Geld/Rapporten net verborgen terwijl je erop stond (bv. recht ingetrokken): naar de eerste vrije tab. Andere verborgen tabs
+  // (het oude dashboard bij het opstarten) laat geldTabZet aan de startpagina en de terugval in rolToepassen.
+  const act=document.querySelector('.tabs-wrap .tab-btn.active');
+  if(window.MTRol&&MTRol.me&&act&&(act.id==='tab-btn-geld'||act.id==='tab-btn-rapporten')&&act.style.display==='none'&&typeof _eersteVrijeTab==='function') _eersteVrijeTab();
 }
 // ── Rapporten (CEO-avond): zelfde recht als Geld; de eigenaar vinkt acties af, de administratie leest en stelt vragen ──
 function rapportBadge(n){
