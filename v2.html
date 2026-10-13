@@ -5605,7 +5605,7 @@ function exportBestellijst(){
   const lijst=_blActief().filter(b=>MTPlanning.bestelStatus(b)==='nodig');
   if(!lijst.length){alert('Geen openstaande items.');return;}
   if(_blWeergave()==='bundel'){   // P2: gebundeld, met de projectnummers erachter
-    const groepen=MTPlanning.bestelBundel(lijst,{nummerVan:_blNummerVan()});
+    const groepen=MTPlanning.bestelBundel(lijst,{nummerVan:_blNummerVan(),projectSleutel:_blProjectSleutel()});
     const t=`BESTELLIJST M&T — ${new Date().toLocaleDateString('nl-NL')}\n\n`+groepen.map(g=>`□ ${g.tekst}\n  Leverancier: ${g.leveranciers.join(', ')||'—'}\n`).join('\n');
     const a=document.createElement('a');a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(t);
     a.download=`bestellijst-${new Date().toISOString().split('T')[0]}.txt`;a.click();
@@ -7429,6 +7429,15 @@ function _blNummerVan(){
     return cache.get(k);
   };
 }
+// De sleutel waarmee een regel aan zijn project hangt: project_id (ook voor oude regels met alleen een projectcode), zodat één project één groep is.
+function _blProjectSleutel(){
+  const cache=new Map();
+  return b=>{
+    const k=b.project_id||b.project||''; if(!k) return '';
+    if(!cache.has(k)){ let p=null; try{ p=projVind(b.project_id)||projVind(b.project); }catch(e){} cache.set(k,(p&&p.project_id)||k); }
+    return cache.get(k);
+  };
+}
 function _blVanProject(proj){ return _blActief().filter(b=>(proj.project_id&&b.project_id===proj.project_id)||(b.project&&b.project===proj.code)); }
 // Gaat de wijziging van een bestelregel door? Dan overal bijwerken wat getoond wordt.
 function _blNaWijziging(){
@@ -7472,7 +7481,7 @@ const _blStatusOpties=[['nodig','Nodig'],['besteld','Besteld'],['geleverd','Gele
 const _blBronLabel={vw:'VW',hhos:'HHOS',hand:'hand'};
 // De gebundelde lijst (DOM, geen innerHTML).
 function blBundelTeken(el){
-  const bundel=MTPlanning.bestelBundel(_blActief(),{nummerVan:_blNummerVan(),toonGeleverd:_blToonGeleverd});
+  const bundel=MTPlanning.bestelBundel(_blActief(),{nummerVan:_blNummerVan(),projectSleutel:_blProjectSleutel(),toonGeleverd:_blToonGeleverd});
   if(!bundel.length){ el.replaceChildren(_p2El('p',{style:'color:var(--text-faint);font-size:13px',tekst:'Niets te bestellen. Regels komen uit de VW-kostenberekening en de HHOS-upload van een project (tab Productie), of je voegt ze met de hand toe.'})); return; }
   const kop=_p2El('thead',null,_p2El('tr',null,['','Wat','Leverancier','Bron',''].map(k=>_p2El('th',{tekst:k}))));
   const rijen=[];
@@ -7503,7 +7512,7 @@ function _blRegelNoot(b){ const nr=b.project?_blNummerVan()(b):'', st=MTPlanning
 function fmtAantalBl(n){ return (Math.round(n*100)/100).toString().replace('.',','); }
 // Status van een bundel zetten: voor alle regels, of voor een of meer projecten. Bij meer projecten eerst vragen welke.
 async function blBundelStatus(sleutel,eenheid,status,projecten){
-  const g=MTPlanning.bestelBundel(_blActief(),{nummerVan:_blNummerVan(),toonGeleverd:true}).find(x=>x.sleutel===sleutel&&x.eenheid===eenheid);
+  const g=MTPlanning.bestelBundel(_blActief(),{nummerVan:_blNummerVan(),projectSleutel:_blProjectSleutel(),toonGeleverd:true}).find(x=>x.sleutel===sleutel&&x.eenheid===eenheid);
   if(!g){ renderBestellijst(); return; }
   let sel=projecten||null;
   if(!projecten&&MTPlanning.bestelMeerdereProjecten(g)){

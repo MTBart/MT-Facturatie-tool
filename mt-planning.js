@@ -853,7 +853,9 @@
   // Dezelfde artikelsleutel en eenheid worden opgeteld, ook regels zonder project (met de hand toegevoegd). Per groep de verdeling per project.
   // opts.nummerVan(regel) → het projectnummer om te tonen (bv. 260803); zonder: de projectcode.
   const fmtAantal = n => (Math.round(n * 100) / 100).toString().replace('.', ',');
-  P.bestelBundel = function (regels, { nummerVan = null, toonGeleverd = false } = {}) {
+  // opts.projectSleutel(regel) → de sleutel van het project (bv. project_id, ook voor oude regels met alleen een projectcode), zodat één
+  // project niet als twee telt; zonder: project_id, anders de projectcode.
+  P.bestelBundel = function (regels, { nummerVan = null, projectSleutel = null, toonGeleverd = false } = {}) {
     const groepen = new Map();
     (Array.isArray(regels) ? regels : []).forEach(b => {
       if (!b || typeof b !== 'object' || b._vervallen) return;
@@ -861,7 +863,7 @@
       const sleutel = P.bestelSleutelVan(b), eenheid = P.eenheidNorm(b.eenheid), gk = sleutel + '|' + eenheid;
       let g = groepen.get(gk);
       if (!g) { g = { sleutel, eenheid, omschrijving: P.bestelOms(b), aantal: 0, regels: [], perProject: [], statussen: { nodig: 0, besteld: 0, geleverd: 0 }, leveranciers: [] }; groepen.set(gk, g); }
-      const aantal = getal(b.aantal) > 0 ? getal(b.aantal) : 1, pk = P.bestelProject(b);
+      const aantal = getal(b.aantal) > 0 ? getal(b.aantal) : 1, pk = String((projectSleutel && projectSleutel(b)) || P.bestelProject(b) || '');
       const nr = pk ? String((nummerVan && nummerVan(b)) || b.project || pk) : '';
       g.aantal += aantal; g.regels.push({ id: b.id, project: pk, nummer: nr, aantal, status: st, bron: P.bestelBron(b) }); g.statussen[st]++;
       let p = g.perProject.find(x => x.project === pk);
