@@ -751,7 +751,7 @@ async function inboxUndo(){
   document.getElementById('inbox-toast').style.display='none';
   if(u.soort==='koppel'){
     // Precies de net gemaakte koppelingen weer ontkoppelen (tombstone + journaal), niets anders.
-    let n=0; (u.links||[]).forEach(l=>{ n+=MTKoppel.ontkoppelMail(l.code,l.sleutel,{id:l.id,bron:'ongedaan'}); });
+    let n=0; (u.links||[]).forEach(l=>{ n+=MTKoppel.ontkoppelMail(l.code,l.sleutel,{id:l.id,mbx:l.mbx,bron:'ongedaan'}); });
     inboxRefreshKoppelKnop(); if(Array.isArray(_inbox.msgs)&&_inbox.msgs.length) inboxRenderList();
     if(_inbox.curThread&&_inbox.curThreadItems) inboxGesprekKoppelTekenen();
     ibStatus(n+' koppeling'+(n===1?'':'en')+' ongedaan gemaakt'); return;
@@ -869,7 +869,7 @@ function ibKoppelVia(id,code,bron){
   const r=MTKoppel.koppelMail(code,m,{bron:bron||'hand',mbx:_inbox.mbx,idType:'immutable'});
   if(r.status==='al'){ inboxToast('Deze mail was al gekoppeld aan '+code); return; }
   if(r.status==='fout'){ inboxToast('Koppelen mislukt: deze mail heeft geen id'); return; }
-  _ibUndoKoppel([{code,sleutel:m.internetMessageId||m.id,id:m.id}],'✓ Gekoppeld aan '+code);
+  _ibUndoKoppel([{code,sleutel:m.internetMessageId||m.id,id:m.id,mbx:_inbox.mbx}],'✓ Gekoppeld aan '+code);
   inboxRefreshKoppelKnop(); if(Array.isArray(_inbox.msgs)&&_inbox.msgs.length) inboxRenderList();
   if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
   if(m.hasAttachments&&_inbox.cur&&_inbox.cur.id===id&&typeof inboxBijlagenVraag==='function') inboxBijlagenVraag(m.id,code);
@@ -878,7 +878,7 @@ async function ibOntkoppelVia(id,code){
   const m=_ibMailVia(id); if(!m) return;
   const ok=await ibBevestig({title:'Mail ontkoppelen',message:'⚠️ Let op — deze mail is gekoppeld aan project '+code+'.\nKoppeling verbreken?\n\n(De mail zelf blijft gewoon in Outlook staan.)',okLabel:'Ontkoppelen',danger:true});
   if(!ok) return;
-  const n=MTKoppel.ontkoppelMail(code,m.internetMessageId||m.id,{id:m.id});
+  const n=MTKoppel.ontkoppelMail(code,m.internetMessageId||m.id,{id:m.id,mbx:m.mbx||_inbox.mbx});
   inboxToast(n?'Koppeling met '+code+' verbroken':'Deze mail was niet (meer) gekoppeld aan '+code);
   inboxRefreshKoppelKnop(); if(Array.isArray(_inbox.msgs)&&_inbox.msgs.length) inboxRenderList();
   if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
@@ -972,7 +972,7 @@ async function inboxKoppelGesprek(code,cid){
   const ok=await ibBevestig({title:'Hele gesprek koppelen',message:nieuw.length+' mail'+(nieuw.length>1?'s':'')+' van dit gesprek koppelen aan '+code+'?'+(items.length>nieuw.length?'\n('+(items.length-nieuw.length)+' waren al gekoppeld.)':''),okLabel:'Koppel '+nieuw.length});
   if(!ok) return;
   const gedaan=[];
-  nieuw.forEach(m=>{ const r=MTKoppel.koppelMail(code,m,{bron:'voorstel',mbx:_inbox.mbx,idType:'immutable'}); if(r.status==='nieuw'||r.status==='herkoppeld') gedaan.push({code,sleutel:m.internetMessageId||m.id,id:m.id}); });
+  nieuw.forEach(m=>{ const r=MTKoppel.koppelMail(code,m,{bron:'voorstel',mbx:_inbox.mbx,idType:'immutable'}); if(r.status==='nieuw'||r.status==='herkoppeld') gedaan.push({code,sleutel:m.internetMessageId||m.id,id:m.id,mbx:_inbox.mbx}); });
   _ibUndoKoppel(gedaan,'✓ '+gedaan.length+' mail'+(gedaan.length>1?'s':'')+' gekoppeld aan '+code);
   inboxRefreshKoppelKnop(); if(Array.isArray(_inbox.msgs)&&_inbox.msgs.length) inboxRenderList();
   if(_inbox.curThread&&_inbox.curThreadItems) inboxGesprekKoppelTekenen();
@@ -1023,7 +1023,7 @@ async function inboxOntkoppel(code){
   const ok=await ibBevestig({title:'Mail ontkoppelen',message:'⚠️ Let op — deze mail is gekoppeld aan project '+code+'.\n'
     +'Koppeling verbreken?\n\n(De mail zelf blijft gewoon in Outlook staan.)',okLabel:'Ontkoppelen',danger:true});
   if(!ok) return;
-  const n=MTKoppel.ontkoppelMail(code,m.internetMessageId||m.id,{id:m.id});
+  const n=MTKoppel.ontkoppelMail(code,m.internetMessageId||m.id,{id:m.id,mbx:m.mbx||_inbox.mbx});
   inboxToast(n?'Koppeling met '+code+' verbroken':'Deze mail was niet (meer) gekoppeld aan '+code);
   inboxRefreshKoppelKnop();
   if(typeof huidigProject!=='undefined'&&huidigProject&&huidigProject.code===code&&typeof renderProjectDetail==='function')renderProjectDetail(huidigProject);
@@ -1079,7 +1079,7 @@ function inboxKoppelProjectDo(code){
   }
   const m=_inbox.cur;if(!m)return;
   const r=MTKoppel.koppelMail(code,m,{bron:'hand',mbx:_inbox.mbx,idType:'immutable'});   // eerder ontkoppeld → zelfde record weer actief
-  if(r.status==='nieuw'||r.status==='herkoppeld') _inbox.undo={soort:'koppel',links:[{code,sleutel:m.internetMessageId||m.id,id:m.id}]};
+  if(r.status==='nieuw'||r.status==='herkoppeld') _inbox.undo={soort:'koppel',links:[{code,sleutel:m.internetMessageId||m.id,id:m.id,mbx:_inbox.mbx}]};
   if(r.status==='al'){inboxToast('Deze mail was al gekoppeld aan '+code);}
   else if(r.status==='fout'){inboxToast('Koppelen mislukt: deze mail heeft geen id');}
   else{

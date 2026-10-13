@@ -26,12 +26,12 @@
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-toggl.js?v=2026-10-12n"></script>
-<script src="mt-koppel.js?v=2026-10-12n"></script>
+<script src="mt-koppel.js?v=2026-10-13o"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
 <script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2026-10-12n"></script>
+<script src="mt-inbox.js?v=2026-10-13o"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -6231,13 +6231,15 @@ function dossierItems({codes}={}){
     // ── mail (actief + ontkoppeld; ontkoppeld standaard verborgen) ──
     // Actieve lijst uit dezelfde lezing (zelfde volgorde als mailLinksVoor → index klopt voor
     // openGekoppeldeMail/ontkoppelMail, die op die index werken).
-    const links=Array.isArray(alleLinks[code])?alleLinks[code]:[], actief=links.filter(y=>y&&!y.ontkoppeld);
+    const links=Array.isArray(alleLinks[code])?alleLinks[code]:[], actief=MTKoppel.uniek(links.filter(y=>y&&!y.ontkoppeld));
     links.forEach(x=>{
       const i=actief.indexOf(x), imid=x.internetMessageId||x.id;
+      // dezelfde mail in een andere postbus: één regel (de kopie die mailLinksVoor kiest); een ontkoppelde kopie van een mail die nog gekoppeld is: niet tonen
+      if(x&&(x.ontkoppeld?actief.some(y=>MTKoppel.zelfdeMail(y,x)):i<0)) return;
       const opgeslagen=idx.filter(r=>r.code===code&&r.status==='opgeslagen'&&r.imid===imid);
       const acties=[];
       if(x.webLink) acties.push({l:'↗',t:'Open in Outlook',snel:true,f:()=>window.open(x.webLink,'_blank','noopener')});
-      if(x.ontkoppeld) acties.push({l:'↺ Opnieuw koppelen',t:'Deze mail weer aan het project koppelen',f:()=>{ MTKoppel.herkoppel(code,x.internetMessageId||x.id); dossierVernieuw(); }});
+      if(x.ontkoppeld) acties.push({l:'↺ Opnieuw koppelen',t:'Deze mail weer aan het project koppelen',f:()=>{ MTKoppel.herkoppel(code,x.internetMessageId||x.id,{mbx:MTKoppel.mbx(x)}); dossierVernieuw(); }});
       if(i>=0&&x.hasAttachments!==false) acties.push({l:'📎',t:'Bijlagen van deze mail naar de projectmap',f:()=>dossierBijlagenNaarMap(code,i)});
       if(i>=0) acties.push({l:'×',t:'Ontkoppelen (mail blijft in Outlook)',gevaar:true,f:()=>ontkoppelMail(code,i)});
       rij({soort:'mail',titel:x.subject||'(geen onderwerp)',van:x.from||'',datum:x.date||x.ts,status:x.ontkoppeld?'ontkoppeld':'gekoppeld',
@@ -14079,15 +14081,15 @@ async function ctlKoppelUitvoeren(van,naar,verwacht,opts){
   const wie=_spWie();
   try{
     for(const m of plan.mail||[]){
-      const {_alBijDoel,...rec}=m, sl=MTKoppel.sleutel(rec);
-      if(voortgang.mail.some(x=>x.sleutel===sl)) continue;
+      const {_alBijDoel,...rec}=m, sl=MTKoppel.sleutel(rec), ik=MTKoppel.ident(rec);   // ik = postbus + mail: twee postbus-kopieën zijn twee stappen
+      if(voortgang.mail.some(x=>x.ident?x.ident===ik:x.sleutel===sl)) continue;
       if(!(MTKoppel.alle()[van]||[]).some(y=>MTKoppel.actief(y)&&MTKoppel.zelfde(y,rec))) continue;   // niet meer actief op de bron
       voortgang.mailBezig=sl; bewaar();                                   // checkpoint vóór de mail
       const r=MTKoppel.koppelMail(naar,rec,{door:wie,bron:'controlelijst'});
       if(!r||r.status==='fout') throw new Error('mail koppelen mislukt — verplaatsen onderbroken (hervatten of terugdraaien kan)');
-      MTKoppel.ontkoppelMail(van,sl,{id:rec.id,door:wie,bron:'controlelijst'});
+      MTKoppel.ontkoppelMail(van,sl,{id:rec.id,mbx:MTKoppel.mbx(rec),door:wie,bron:'controlelijst'});
       const bronRec=(MTKoppel.alle()[van]||[]).find(y=>MTKoppel.zelfde(y,rec)), doelRec=(MTKoppel.alle()[naar]||[]).find(y=>MTKoppel.actief(y)&&MTKoppel.zelfde(y,rec));
-      voortgang.mail.push({sleutel:sl,rec,alBijDoel:!!_alBijDoel||r.status==='al',bronOntkoppeld:bronRec&&bronRec.ontkoppeld||null,doelGewijzigd:doelRec&&doelRec.gewijzigd||null});
+      voortgang.mail.push({sleutel:sl,ident:ik,rec,alBijDoel:!!_alBijDoel||r.status==='al',bronOntkoppeld:bronRec&&bronRec.ontkoppeld||null,doelGewijzigd:doelRec&&doelRec.gewijzigd||null});
       delete voortgang.mailBezig; bewaar();                               // en erna
     }
     const ck=(plan.calc||[]).filter(k=>CALC.offertes[k]&&(CALC.offertes[k].project_code===van||(k===van&&!CALC.offertes[k].project_code)));
@@ -14147,7 +14149,7 @@ async function ctlKoppelTerug(van){
     else if(bron&&MTKoppel.actief(bron)){ /* al terug op de bron */ }
     else { overgeslagen.push('mail „'+(m.rec.subject||m.sleutel)+'” is sindsdien op de oude code gewijzigd'); continue; }
     if(m.alBijDoel) overgeslagen.push('mail „'+(m.rec.subject||m.sleutel)+'” stond al bij het doel — daar blijft hij ook');
-    else if(doelRec&&MTKoppel.actief(doelRec)&&doelRec.gewijzigd===m.doelGewijzigd) MTKoppel.ontkoppelMail(naar,m.sleutel,{id:m.rec.id,door:wie,bron:'controlelijst-terug'});
+    else if(doelRec&&MTKoppel.actief(doelRec)&&doelRec.gewijzigd===m.doelGewijzigd) MTKoppel.ontkoppelMail(naar,m.sleutel,{id:m.rec.id,mbx:MTKoppel.mbx(m.rec),door:wie,bron:'controlelijst-terug'});
     else if(doelRec&&MTKoppel.actief(doelRec)) overgeslagen.push('mail „'+(m.rec.subject||m.sleutel)+'” is sindsdien bij het doel gewijzigd — daar blijft hij');
     terug.mail++;
   }
