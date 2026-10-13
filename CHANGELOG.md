@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — Release v2.14.1: projectnummers voorbereid (resolver, teller, schema), Geld heet Dashboard, aanwezigheid in de Agenda, project overnemen uit Toggl; backup = v2.13.3
+- Commit: `1c78870` | Auteur: Bart Witte
+
 ## 2026-10-13 — Toggl-overname (Codex): cockpit gebruikt de claim van de teller; klant alleen bij precies één registry-match
 - Commit: `9a1acc8` | Auteur: Bart Witte
 
