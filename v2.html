@@ -1529,6 +1529,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <div class="grid2" id="uurtarief-velden"></div>
           <button class="btn btn-secondary btn-sm" onclick="saveUurtarieven()">Opslaan</button>
           <span id="uurtarief-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
+          <div id="uurtarief-calcmelding" style="font-size:12.5px;margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
         </div>
         <div class="card">
           <div class="card-title">Gearchiveerde schermen</div>
@@ -6957,7 +6958,7 @@ function projectTakenHtml(proj){
       <td><span class="badge" style="background:${esc(stt.c)}22;color:${esc(stt.c)}">${esc(stt.l)}</span></td>
       <td style="font-size:13px">${esc(t.naam)}${planLink}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
       <td style="white-space:nowrap">
-        <select class="pt-sel" aria-label="Activiteit" title="Activiteit (tekenwerk telt als tekenuren, werkplaats als WP-uren)" onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'activiteit',this.value)">${[['','— activiteit —']].concat(MTPlanning.ACTIVITEITEN.map(a=>[a.k,a.l])).map(([k,l])=>`<option value="${esc(k)}"${(t.activiteit||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
+        <select class="pt-sel" aria-label="Activiteit" title="Activiteit. Kantooruren: tekenwerk, werkvoorbereiding, kantoor. WP-uren: werkplaats, spuiten, montage en (aanname, voorlopig) reizen." onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'activiteit',this.value)">${[['','— activiteit —']].concat(MTPlanning.ACTIVITEITEN.map(a=>[a.k,a.l])).map(([k,l])=>`<option value="${esc(k)}"${(t.activiteit||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
         <select class="pt-sel" aria-label="Toegewezen aan" title="Toegewezen aan (optioneel)" onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'toegewezen',this.value)">${[['','— wie —']].concat(MT_TEAM.map(m=>[m.slug,m.naam])).map(([k,l])=>`<option value="${esc(k)}"${(t.toegewezen||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
         ${t._veldconflict&&Object.keys(t._veldconflict).length?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="Twee gelijktijdige wijzigingen — klik om te kiezen" onclick="projTaakConflict(${jsArg(proj.code)},${jsArg(t.id)})">⚠ conflict</button>`:''}
       </td>
@@ -7053,7 +7054,7 @@ function projMeterTeken(code){
   const kolommen=['Activiteit','Budget','Gepland','Geklokt (aan taak)','Geklokt (zonder taak)','Resterend'];
   const celNum=(v,extra)=>_pmEl('td',{class:'pm-num'+(extra?' '+extra:'')},_pmU(v));
   const rijen=m.rijen.map(r=>_pmEl('tr',null,
-    _pmEl('td',{tekst:r.l,title:r.taken?(r.taken+' taak/taken'):'Geen taken met deze activiteit'}),
+    _pmEl('td',{tekst:r.l,title:(r.k?(MTPlanning.SOORTEN[r.soort]+(r.k==='reizen'?' (aanname: reizen telt voorlopig bij de WP-uren)':'')+' · '):'')+(r.taken?(r.taken+' taak/taken'):'Geen taken met deze activiteit')}),
     _pmEl('td',{class:'pm-num',title:m.budgetBron==='calculatie'?('Calculatie. Taken: '+_pmU(r.taakBudget)):('Optelling van de taakramingen ('+r.taken+' taken)')},_pmU(r.budget)),
     celNum(r.gepland),celNum(r.gekoppeld),_pmEl('td',{class:'pm-num pm-dim'},'—'),
     celNum(r.resterend,r.resterend<0?'pm-over':'')));
@@ -7075,7 +7076,7 @@ function projMeterTeken(code){
       _pmEl('button',{type:'button',class:'btn btn-xs btn-secondary',title:'Haal de geklokte uren opnieuw op uit Toggl',klik:()=>projMeterLaad(code,true),disabled:st.bezig?'disabled':null},st.bezig?'laden…':'↻ Toggl')),
     sig?_pmEl('div',{class:'pm-w pm-'+sig.niveau,role:'status'},(sig.niveau==='fout'?'⛔ ':'⚠ ')+sig.tekst):null,
     waarsch,tabel,
-    soorten.length?_pmEl('div',{class:'pm-soort',tekst:soorten.join(' · ')}):null,
+    soorten.length?_pmEl('div',{class:'pm-soort',title:MTPlanning.SOORT_TOELICHTING,tekst:soorten.join(' · ')}):null,
     _pmEl('div',{class:'pm-sync',tekst:syncTekst})));
   // badge bij de sectienaam "Planning"
   try{ const knop=document.querySelector('#project-detail .proj-secknop[data-sectie="planning"]');
@@ -7867,6 +7868,28 @@ function renderUurtarieven(){
   const t=uurtarieven();
   el.innerHTML=agTeam().map(m=>`<div class="field"><label>${esc(m.label||m.naam)} (€/u)</label><input type="number" id="s-tarief-${esc(m.naam)}" value="${esc(t[m.naam]!=null?t[m.naam]:MTPlanning.uurtariefStd(t))}" step="2.5"></div>`).join('')
     +`<div class="field"><label>Standaard / overig (€/u)</label><input type="number" id="s-tarief-std" value="${esc(MTPlanning.uurtariefStd(t))}" step="2.5"></div>`;
+  uurtariefCalcMelding();
+}
+// Staat het standaardtarief in de calculatie (mt_calc_defaults) anders dan het standaardtarief hier? Dan een melding met een
+// knop; er wordt nooit stil iets in de calculatie gewijzigd (alleen na bevestiging, en alleen de standaardregels).
+function uurtariefCalcMelding(){
+  const el=document.getElementById('uurtarief-calcmelding'); if(!el) return;
+  let d=null; try{ d=(window.CALC&&CALC.loaded)?CALC.defaults:JSON.parse(localStorage.getItem('mt_calc_defaults')||'null'); }catch(e){}
+  const std=MTPlanning.uurtariefStd(uurtarieven()), af=MTPlanning.defaultsAfwijking(d,std);
+  el.replaceChildren(); if(!af) return;
+  const tekst=document.createElement('span');
+  tekst.textContent='Het standaardtarief in de calculatie ('+[...new Set(af.rijen.map(r=>'€ '+r.uurtarief))].join(' en ')+') wijkt af van € '+std+': bijwerken?';
+  const knop=document.createElement('button'); knop.type='button'; knop.className='btn btn-secondary btn-sm'; knop.textContent='Calculatie bijwerken';
+  knop.addEventListener('click',uurtariefCalcBijwerken);
+  el.append(tekst,knop);
+}
+async function uurtariefCalcBijwerken(){
+  const std=MTPlanning.uurtariefStd(uurtarieven());
+  if(typeof window.calcStdTarievenGelijk!=='function'){ await mtDialog.alert({title:'Calculatie',message:'De calculatiemodule is nog niet geladen — probeer het zo opnieuw.'}); return; }
+  if(!await mtDialog.confirm({title:'Standaardtarief in de calculatie',message:'De standaard uurregels van de calculatie (alle uursoorten behalve Transport) gaan naar € '+std+' per uur.\n\nBestaande offertes en nacalculaties veranderen niet; alleen nieuwe uurregels starten op dit tarief.',okLabel:'Bijwerken'})) return;
+  let n=0; try{ n=await window.calcStdTarievenGelijk(std); }catch(e){ await mtDialog.alert({title:'Calculatie',message:'Bijwerken lukte niet: '+(e.message||e)}); return; }
+  const st=document.getElementById('uurtarief-status'); if(st){ st.textContent='✓ '+n+' standaardregel(s) op € '+std; setTimeout(()=>st.textContent='',3000); }
+  uurtariefCalcMelding();
 }
 function saveUurtarieven(){
   const t=uurtarieven();
@@ -7875,6 +7898,7 @@ function saveUurtarieven(){
   localStorage.setItem('mt_uurtarieven',JSON.stringify(t));
   const st=document.getElementById('uurtarief-status');
   if(st){st.textContent='✓ Opgeslagen';setTimeout(()=>st.textContent='',2000);}
+  uurtariefCalcMelding();
   if(huidigProject)renderProjectDetail(huidigProject);
 }
 function nacalcData(proj){
@@ -16361,6 +16385,8 @@ function activiteitOpen(force){
   // standaardwaarden (leeg rekenblad)
   window.calcSetDefMarge=function(val){CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));};
   window.calcSetDefMargeOndergrens=function(val){const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));};
+  // Instellingen ▸ Uurtarieven: standaardregels op het standaardtarief zetten (alleen na bevestiging daar).
+  window.calcStdTarievenGelijk=async function(std){ await hydrateCalc(); const n=MTPlanning.defaultsGelijkTrekken(CALC.defaults,std); if(n) saveCalc('def',{direct:true}); return n; };
   window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));};
   window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:stdTarief(),marge:2});renderOfferteCalc(key);};
   window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);renderOfferteCalc(key);};

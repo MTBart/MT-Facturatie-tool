@@ -99,7 +99,7 @@
   // ── Uurtarief: één bron ──────────────────────────────────────────────────────────────────────────
   // Instellingen ▸ Uurtarieven (`mt_uurtarieven`: {bart: 55, …, _std: 55}). Ontbreekt de standaard daar,
   // dan geldt deze waarde. Ook de calculatie (nieuwe uurregels) en de nacalculatie gebruiken deze bron.
-  P.UURTARIEF_STD = 55;
+  P.UURTARIEF_STD = 90;   // besluit Bart 13-10: standaard €90 per uur
   P.uurtariefStd = cfg => {
     const v = cfg && cfg._std;
     return (v != null && v !== '' && isFinite(Number(v))) ? Number(v) : P.UURTARIEF_STD;
@@ -112,17 +112,19 @@
 
   // ══ P1: taken per project, activiteiten, meter ═══════════════════════════════════════════════════════
   // ── Activiteitencatalogus (stabiele sleutels; dezelfde lijst geldt later voor uursoorten en tarieven) ──
-  // `soort` is de rollup voor de meter: tekenwerk telt als tekenuren, werkplaatstaken als WP-uren.
-  // Aanname (Bart bevestigt): werkvoorbereiding = tekenuren; spuiten en montage = WP-uren; reizen en kantoor = overig.
+  // `soort` is de rollup voor de meter (besluit Bart 13-10): tekenwerk, werkvoorbereiding en kantoor zijn KANTOORUREN;
+  // werkplaats, spuiten en montage zijn WP-uren. Reizen blijft een eigen activiteit en telt voorlopig bij de WP-uren (aanname).
   P.ACTIVITEITEN = [
-    { k: 'tekenwerk', l: 'Tekenwerk', soort: 'teken' },
-    { k: 'werkvoorbereiding', l: 'Werkvoorbereiding', soort: 'teken' },
+    { k: 'tekenwerk', l: 'Tekenwerk', soort: 'kantoor' },
+    { k: 'werkvoorbereiding', l: 'Werkvoorbereiding', soort: 'kantoor' },
     { k: 'werkplaats', l: 'Werkplaats', soort: 'wp' },
     { k: 'spuiten', l: 'Spuiten', soort: 'wp' },
     { k: 'montage', l: 'Montage', soort: 'wp' },
-    { k: 'reizen', l: 'Reizen', soort: 'overig' },
-    { k: 'kantoor', l: 'Kantoor', soort: 'overig' }];
-  P.SOORTEN = { teken: 'Tekenuren', wp: 'WP-uren', overig: 'Overig' };
+    { k: 'reizen', l: 'Reizen', soort: 'wp' },
+    { k: 'kantoor', l: 'Kantoor', soort: 'kantoor' }];
+  // 'overig' = nog niet ingedeeld (taken zonder activiteit); wordt in het scherm niet als soort getoond.
+  P.SOORTEN = { kantoor: 'Kantooruren', wp: 'WP-uren', overig: 'Niet ingedeeld' };
+  P.SOORT_TOELICHTING = 'Kantooruren: tekenwerk, werkvoorbereiding, kantoor. WP-uren: werkplaats, spuiten, montage en (aanname, voorlopig) reizen.';
   P.activiteit = k => P.ACTIVITEITEN.find(a => a.k === k) || null;
   // De uursoorten van de calculatie (Instellingen/Calculatie) → activiteit.
   const UURSOORT_ACT = { calculatie: 'kantoor', ontwerpen: 'tekenwerk', werkvoorbereiding: 'werkvoorbereiding', productie: 'werkplaats', afwerking: 'spuiten', transport: 'reizen', montage: 'montage' };
@@ -308,7 +310,7 @@
     const budget = cb ? cb.totaal : rijen.reduce((s, r) => s + r.taakBudget, 0);
     const geklokt_ = gekoppeld + ongekoppeld;
     const totaal = { budget, gepland: geplandTotaal, gekoppeld, ongekoppeld, geklokt: geklokt_, resterend: budget - geklokt_, pct: budget > 0 ? geklokt_ / budget : null };
-    // rollup tekenuren / WP-uren
+    // rollup kantooruren / WP-uren
     const perSoort = {}; Object.keys(P.SOORTEN).forEach(s => { perSoort[s] = { budget: 0, gepland: 0, gekoppeld: 0 }; });
     rijen.forEach(r => { const p = perSoort[r.soort]; p.budget += r.budget; p.gepland += r.gepland; p.gekoppeld += r.gekoppeld; });
     // waarschuwingen
@@ -333,6 +335,21 @@
     if (p >= 1) return { soort: 'budget-100', niveau: 'fout', tekst: `Budget overschreden: ${P.fmtUur(tt.geklokt)} geklokt van ${P.fmtUur(tt.budget)} (${Math.round(p * 100)}%).` };
     if (p >= 0.9) return { soort: 'budget-90', niveau: 'let-op', tekst: `${Math.round(p * 100)}% van het budget is geklokt (${P.fmtUur(tt.geklokt)} van ${P.fmtUur(tt.budget)}).` };
     return null;
+  };
+
+  // De standaardregels van de calculatie (mt_calc_defaults.uren) volgen het standaardtarief niet vanzelf. Geeft de regels die
+  // afwijken van `std` (Transport heeft een eigen tarief en telt niet mee); null = alles gelijk of niets om te vergelijken.
+  P.defaultsAfwijking = function (defaults, std) {
+    const rijen = (defaults && Array.isArray(defaults.uren)) ? defaults.uren : [];
+    const af = rijen.filter(u => u && String(u.omschrijving || '').trim().toLowerCase() !== 'transport' && u.uurtarief !== '' && u.uurtarief != null && isFinite(Number(u.uurtarief)) && Number(u.uurtarief) !== Number(std))
+      .map(u => ({ omschrijving: u.omschrijving, uurtarief: Number(u.uurtarief) }));
+    return af.length ? { std: Number(std), rijen: af } : null;
+  };
+  // Zet het tarief van die standaardregels op `std` (wijzigt `defaults` ter plekke); geeft het aantal aangepaste regels terug.
+  P.defaultsGelijkTrekken = function (defaults, std) {
+    let n = 0;
+    ((defaults && defaults.uren) || []).forEach(u => { if (u && String(u.omschrijving || '').trim().toLowerCase() !== 'transport' && u.uurtarief !== '' && u.uurtarief != null && isFinite(Number(u.uurtarief)) && Number(u.uurtarief) !== Number(std)) { u.uurtarief = Number(std); n++; } });
+    return n;
   };
 
   root.MTPlanning = P;
