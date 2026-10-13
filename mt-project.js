@@ -91,5 +91,17 @@
     if (nr && NR_RE.test(String(nr))) return (String(nr) + ' ' + naam).trim();
     return p && p.offertenr ? (p.offertenr + ' ' + naam).trim() : naam;
   }
-  root.MTProject = { NR_RE, W_RE, SOORTEN, norm, index, vind, uitPrefix, uitToggl, togglNaam };
+  // De leesbare naam uit een Toggl-projectnaam zonder herkende code (project overnemen uit Toggl): "[CODE]" achteraan eraf,
+  // en vooraan een projectnummer (6 cijfers), werkcode (W26-003) of offertenummer (2026-054). Alleen op vorm (een nog niet
+  // gekoppeld project staat niet in de index); wat eraf ging komt mee terug. Blijft er niets over, dan de oorspronkelijke naam.
+  function naamZonderCode(naam) {
+    const orig = String(naam == null ? '' : naam).trim();
+    let s = orig, code = '', nummer = '', werkcode = '', offerte = '';
+    const b = s.match(/\s*\[([A-Za-z0-9][A-Za-z0-9-]*)\]\s*$/);
+    if (b) { code = b[1].toUpperCase(); s = s.slice(0, b.index).trim(); }
+    const v = s.match(/^(\d{6}|W\d{2}-\d{3,}|\d{4}-\d{2,4})(?=[\s:·|–—]|$)[\s\-–—:·|]*/i);
+    if (v) { const t = v[1].toUpperCase(); if (NR_RE.test(t)) nummer = t; else if (W_RE.test(t)) werkcode = t; else offerte = t; s = s.slice(v[0].length).trim(); }
+    return { naam: s || orig, code, nummer, werkcode, offerte };
+  }
+  root.MTProject = { NR_RE, W_RE, SOORTEN, norm, index, vind, uitPrefix, uitToggl, togglNaam, naamZonderCode };
 })(typeof window !== 'undefined' ? window : globalThis);
