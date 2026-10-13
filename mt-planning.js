@@ -220,61 +220,101 @@
   // de nieuwe app nooit meer geschreven. De overstap gebeurt één keer, door de eerste nieuwe client die v2 niet vindt (het bestand wordt
   // alleen aangemaakt als het nog niet bestaat; wie een 412/409 krijgt leest dat bestand en migreert NIET opnieuw), zodat de id's maar één
   // keer ontstaan. Bestaande id's blijven; een taak zonder (of met een dubbel) id krijgt een willekeurig id (uuid). Elk ingevuld veld
-  // krijgt een stempel met het tijdstip van de overstap. In de sleutel "__migratie" staat wat nodig is om later te zien of een oude
-  // app-versie het oude bestand nog wijzigde (hash van het oude bestand, hash per taak, wat de mens al afhandelde).
+  // krijgt een stempel met het tijdstip van de overstap.
+  // In de sleutel "__migratie" staat wat nodig is om later te zien of een oude app-versie het oude bestand nog wijzigde:
+  //   oud_hash  = hash van PRECIES het gelezen SharePoint-bestand;  basis = {id: inhoudshash}, codes = {id: projectcode} van wat daarin stond;
+  //   bron      = {bronsleutel: nieuw id} per legacy-record (bronsleutel = projectcode | inhoudsfingerprint | volgnummer);
+  //   zonder_id / dubbel = records die bij de overstap een nieuw id kregen; lokaal = {id: hash} lokale aanvullingen (niet uit SharePoint);
+  //   migratie_afwijkingen = lokale versies van een bestaand id die van SharePoint afweken (SharePoint won; de mens kan alsnog kiezen);
+  //   afgehandeld = {sleutel: [hash…]} wat de mens al afhandelde (een verzameling: alleen toevoegen).
   const hash36 = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
   const stabiel = v => Array.isArray(v) ? '[' + v.map(stabiel).join(',') + ']' : (v && typeof v === 'object') ? '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stabiel(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v);
   P.taakInhoudHash = t => hash36(stabiel(P.TAAK_VELDEN.filter(f => f !== 'tg_sync').map(f => norm(t && t[f]))));
   P.takenBestandHash = obj => hash36(stabiel(obj || {}));
-  P.takenV2Opbouw = function (oud, { nu = Date.now(), dev = '', door = '', uuid = null } = {}) {
+  const fingerprint = t => hash36(stabiel([t && t.naam, t && t.omschrijving, t && t.bron, t && t.duur_uur].map(norm)));
+  // Per legacy-record een bronsleutel; het volgnummer telt gelijke fingerprints binnen een project.
+  P.legacyBronSleutels = function (obj) {
+    const uit = [];
+    for (const code of Object.keys(obj || {})) {
+      if (code.startsWith('__') || !Array.isArray(obj[code])) continue;
+      const teller = {};
+      obj[code].forEach(t => { if (!t || typeof t !== 'object' || t._vervallen) return; const fp = fingerprint(t); teller[fp] = (teller[fp] || 0) + 1; uit.push({ code, taak: t, sleutel: code + '|' + fp + '|' + teller[fp] }); });
+    }
+    return uit;
+  };
+  const heeftKlaar = (meta, sleutel, hash) => { const k = meta && meta.afgehandeld && meta.afgehandeld[sleutel]; return Array.isArray(k) ? k.includes(hash) : k === hash; };
+  P.takenKlaarVoegToe = function (meta, sleutel, hash) { meta.afgehandeld = meta.afgehandeld || {}; const k = meta.afgehandeld[sleutel]; const lijst = Array.isArray(k) ? k : (k ? [k] : []); if (!lijst.includes(hash)) lijst.push(hash); meta.afgehandeld[sleutel] = lijst; return meta; };
+  P.takenV2Opbouw = function (sp, { lokaal = null, nu = Date.now(), dev = '', door = '', uuid = null } = {}) {
     const maakId = uuid || (() => 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
-    const bron = oud && typeof oud === 'object' && !Array.isArray(oud) ? oud : {};
-    const data = {}, basis = {}, gebruikt = new Set();
-    for (const code of Object.keys(bron)) {
-      if (code.startsWith('__') || !Array.isArray(bron[code])) continue;
+    const spObj = sp && typeof sp === 'object' && !Array.isArray(sp) ? sp : {};
+    const spRecs = P.legacyBronSleutels(spObj), spBron = new Set(spRecs.map(x => x.sleutel)), spId = new Map();
+    spRecs.forEach(x => { if (x.taak.id && !spId.has(x.taak.id)) spId.set(x.taak.id, x); });
+    // samenvoegen: SharePoint is leidend; lokale aanvullingen (nieuwe taken, id-loze die er niet in staan) blijven; een afwijkende lokale versie wordt gemeld
+    const samen = {}; const migratieAfwijkingen = [], lokaalSleutel = new Set();
+    for (const x of spRecs) (samen[x.code] = samen[x.code] || []).push({ t: x.taak, sleutel: x.sleutel, uitSP: true });
+    for (const x of P.legacyBronSleutels(lokaal || {})) {
+      if (x.taak.id && spId.has(x.taak.id)) {
+        const s = spId.get(x.taak.id).taak;
+        const velden = P.TAAK_VELDEN.filter(f => f !== 'tg_sync' && !gelijk(x.taak[f], s[f])).map(f => ({ veld: f, oud: norm(x.taak[f]), nu: norm(s[f]) }));
+        if (velden.length) migratieAfwijkingen.push({ code: x.code, id: x.taak.id, naam: x.taak.naam || s.naam || '', velden, hash: P.taakInhoudHash(x.taak) });
+        continue;
+      }
+      if (!x.taak.id && spBron.has(x.sleutel)) continue;   // hetzelfde id-loze record staat al in het SharePoint-bestand
+      (samen[x.code] = samen[x.code] || []).push({ t: x.taak, sleutel: x.sleutel, uitSP: false }); lokaalSleutel.add(x.sleutel);
+    }
+    const data = {}, basis = {}, codes = {}, bron = {}, zonderId = [], dubbel = [], lokaalMeta = {}, gebruikt = new Set();
+    for (const code of Object.keys(samen)) {
       data[code] = [];
-      for (const t0 of bron[code]) {
-        if (!t0 || typeof t0 !== 'object' || t0._vervallen) continue;
-        const t = kopie(t0); delete t._vs; delete t._veldconflict;
-        const orgId = t.id;
-        if (!t.id || gebruikt.has(t.id)) t.id = maakId();
-        gebruikt.add(t.id);
-        if (orgId && orgId === t.id) basis[t.id] = P.taakInhoudHash(t0);
+      for (const e of samen[code]) {
+        const t = kopie(e.t); delete t._vs; delete t._veldconflict;
+        const orgId = t.id; let nieuw = false;
+        if (!orgId) { t.id = maakId(); zonderId.push({ code, naam: t.naam || '', id: t.id, sleutel: e.sleutel }); nieuw = true; }
+        else if (gebruikt.has(orgId)) { t.id = maakId(); dubbel.push({ code, naam: t.naam || '', oud_id: orgId, id: t.id, sleutel: e.sleutel }); nieuw = true; }
+        gebruikt.add(t.id); bron[e.sleutel] = t.id;
+        if (!nieuw) { if (e.uitSP) { basis[t.id] = P.taakInhoudHash(e.t); codes[t.id] = code; } else lokaalMeta[t.id] = P.taakInhoudHash(e.t); }
         const vs = {};
         P.TAAK_VELDEN.forEach(f => { if (t[f] !== undefined) vs[f] = { t: nu, dev, rev: 1, door, basis: 0 }; });
         if (Object.keys(vs).length) { t._vs = vs; t._gewijzigd = nu; }
         data[code].push(t);
       }
     }
-    data.__migratie = { tijd: nu, dev, door, oud_hash: P.takenBestandHash(bron), basis, afgehandeld: {} };
+    data.__migratie = { tijd: nu, dev, door, oud_hash: P.takenBestandHash(spObj), basis, codes, bron, zonder_id: zonderId, dubbel, lokaal: lokaalMeta, migratie_afwijkingen: migratieAfwijkingen, afgehandeld: {} };
     return data;
   };
-  // Wat is er in het OUDE bestand veranderd sinds de overstap? Per taak: 'nieuw' (er is er een bij gekomen), 'gewijzigd' (andere inhoud dan
-  // bij de overstap én anders dan nu in v2) of 'verwijderd'. Wat de mens al afhandelde (meta.afgehandeld[id] = inhoudshash, of 'weg') telt niet mee.
-  // Nooit automatisch overnemen: de aanroeper laat de mens kiezen. → { gewijzigd, afwijkingen:[{code,id,naam,soort,hash,velden:[{veld,oud,nu}],taak}] }
+  // Wat is er te bekijken voor beheer? (a) wat bij de overstap een nieuw id kreeg of van SharePoint afweek, (b) wat een oude app-versie sindsdien
+  // in het OUDE bestand veranderde: 'nieuw', 'gewijzigd', 'verwijderd', 'verhuisd', en 'herstel' (gewijzigd terwijl de taak in v2 verwijderd is).
+  // Nooit automatisch overnemen: de aanroeper laat de mens kiezen. Een afgehandelde afwijking (sleutel + inhoudshash) komt niet terug.
+  // → { gewijzigd, afwijkingen:[{soort, sleutel, code, id, naam, hash, velden:[{veld,oud,nu}], taak}] }
   P.takenOudAfwijkingen = function (meta, oudNu, v2) {
-    if (!meta || !oudNu || typeof oudNu !== 'object') return { gewijzigd: false, afwijkingen: [] };
-    const gewijzigd = P.takenBestandHash(oudNu) !== meta.oud_hash;
-    if (!gewijzigd) return { gewijzigd: false, afwijkingen: [] };
-    const klaar = meta.afgehandeld || {}, basis = meta.basis || {}, nu = new Map(), uit = [];
+    if (!meta || typeof meta !== 'object') return { gewijzigd: false, afwijkingen: [], info: [] };
+    const uit = []; const voeg = a => { if (!heeftKlaar(meta, a.sleutel, a.hash)) uit.push(Object.assign({ velden: [], taak: null }, a)); };
+    (meta.zonder_id || []).forEach(z => voeg({ soort: 'info-zonder-id', sleutel: 'zid:' + z.id, code: z.code, id: z.id, naam: z.naam, hash: 'i' }));
+    (meta.dubbel || []).forEach(z => voeg({ soort: 'info-dubbel-id', sleutel: 'dub:' + z.id, code: z.code, id: z.id, naam: z.naam, hash: 'i' }));
+    (meta.migratie_afwijkingen || []).forEach(z => voeg({ soort: 'migratie', sleutel: 'mig:' + z.id, code: z.code, id: z.id, naam: z.naam, hash: z.hash, velden: z.velden }));
+    const gewijzigd = !!oudNu && typeof oudNu === 'object' && P.takenBestandHash(oudNu) !== meta.oud_hash;
+    const INFO = ['info-zonder-id', 'info-dubbel-id', 'migratie'];
+    const klaarMelden = () => ({ gewijzigd, afwijkingen: uit.filter(a => !INFO.includes(a.soort)), info: uit.filter(a => INFO.includes(a.soort)) });
+    if (!gewijzigd) return klaarMelden();
+    const basis = meta.basis || {}, lok = meta.lokaal || {}, codes = meta.codes || {}, bron = meta.bron || {}, nu = new Map();
     Object.keys(v2 || {}).forEach(c => { if (!c.startsWith('__') && Array.isArray(v2[c])) v2[c].forEach(t => { if (t && t.id) nu.set(t.id, { code: c, taak: t }); }); });
-    const inOud = new Set(), dubbel = new Set();
-    Object.keys(oudNu).forEach(code => {
-      if (code.startsWith('__') || !Array.isArray(oudNu[code])) return;
-      oudNu[code].forEach(t => {
-        if (!t || typeof t !== 'object' || !t.id) return;
-        if (inOud.has(t.id)) { dubbel.add(t.id); return; }   // een dubbel id in het oude bestand is niet te volgen: alleen de eerste telt
-        inOud.add(t.id);
-        const h = P.taakInhoudHash(t), eerder = basis[t.id];
-        if (eerder === h || klaar[t.id] === h) return;
-        const huidig = nu.get(t.id);
-        if (eerder === undefined) { if (!huidig || huidig.taak._vervallen) uit.push({ code, id: t.id, naam: t.naam || '', soort: 'nieuw', hash: h, velden: [], taak: kopie(t) }); return; }
-        const velden = P.TAAK_VELDEN.filter(f => f !== 'tg_sync' && !gelijk(t[f], huidig && !huidig.taak._vervallen ? huidig.taak[f] : undefined)).map(f => ({ veld: f, oud: norm(t[f]), nu: huidig ? norm(huidig.taak[f]) : null }));
-        if (velden.length) uit.push({ code, id: t.id, naam: t.naam || '', soort: 'gewijzigd', hash: h, velden, taak: kopie(t) });
-      });
+    const inOud = new Set();
+    P.legacyBronSleutels(oudNu).forEach(({ code, taak: t, sleutel }) => {
+      const id = t.id, h = P.taakInhoudHash(t);
+      if (!id) { if (!bron[sleutel]) voeg({ soort: 'nieuw', sleutel: 'bron:' + sleutel, code, id: null, naam: t.naam || '', hash: h, taak: kopie(t) }); return; }
+      if (inOud.has(id)) { if (!bron[sleutel]) voeg({ soort: 'dubbel-nieuw', sleutel: 'dubnu:' + sleutel, code, id, naam: t.naam || '', hash: h }); return; }   // dubbel id in het oude bestand: alleen de eerste is te volgen
+      inOud.add(id);
+      const eerder = basis[id] !== undefined ? basis[id] : lok[id], huidig = nu.get(id);
+      const verwijderdInV2 = !huidig || !!huidig.taak._vervallen;
+      if (eerder === undefined) { if (verwijderdInV2) voeg({ soort: 'nieuw', sleutel: id, code, id, naam: t.naam || '', hash: h, taak: kopie(t) }); return; }
+      const verhuisd = codes[id] !== undefined && codes[id] !== code;
+      if (eerder === h && !verhuisd) return;
+      if (verwijderdInV2) { if (eerder !== h) voeg({ soort: 'herstel', sleutel: id, code, id, naam: t.naam || '', hash: h, taak: kopie(t) }); return; }   // alleen als de oude app het ná de overstap wijzigde
+      const velden = P.TAAK_VELDEN.filter(f => f !== 'tg_sync' && !gelijk(t[f], huidig.taak[f])).map(f => ({ veld: f, oud: norm(t[f]), nu: norm(huidig.taak[f]) }));
+      if (verhuisd) voeg({ soort: 'verhuisd', sleutel: id, code, id, naam: t.naam || '', hash: h + '@' + code, velden: [{ veld: 'project', oud: code, nu: huidig.code }].concat(velden), taak: kopie(t) });
+      else if (velden.length) voeg({ soort: 'gewijzigd', sleutel: id, code, id, naam: t.naam || '', hash: h, velden, taak: kopie(t) });
     });
-    Object.keys(basis).forEach(id => { if (!inOud.has(id) && klaar[id] !== 'weg') { const huidig = nu.get(id); if (huidig && !huidig.taak._vervallen) uit.push({ code: huidig.code, id, naam: huidig.taak.naam || '', soort: 'verwijderd', hash: 'weg', velden: [], taak: null }); } });
-    return { gewijzigd: true, afwijkingen: uit };
+    Object.keys(basis).forEach(id => { if (!inOud.has(id)) { const huidig = nu.get(id); if (huidig && !huidig.taak._vervallen) voeg({ soort: 'verwijderd', sleutel: id, code: huidig.code, id, naam: huidig.taak.naam || '', hash: 'weg' }); } });
+    return klaarMelden();
   };
 
   // Eén record samenvoegen: per veld wint de hoogste stempel (t, dev, rev). Een wijziging die de winnaar niet kende (haar stempel
@@ -283,16 +323,18 @@
   // in een conflict; verder wint de nieuwste. opt.verwijderWint (taken, afhankelijkheden): een verwijdering wint altijd (L1a).
   // Zonder: het nieuwste record beslist ook over de tombstone (bestelregels: terugzetten kan). opt.legacy (bestelregels): zonder stempels
   // aan beide kanten wint het nieuwste record, en een veld zonder stempel telt voor de volgorde met de tijd van zijn record.
+  const nieuwste = (l, r) => recTijd(l) !== recTijd(r) ? (recTijd(l) > recTijd(r) ? l : r) : (stabiel(l) >= stabiel(r) ? l : r);   // gelijke tijd: de inhoud beslist
   function recSamen(velden, opt, l, r) {
     if (l._vervallen || r._vervallen) {
       if (opt.verwijderWint) {   // verwijderen wint; twee verwijderingen: dezelfde totale volgorde (tijd, apparaat, teller)
         if (!(l._vervallen && r._vervallen)) return kopie(l._vervallen ? l : r);
-        const sl = l._ts || { t: recTijd(l) }, sr = r._ts || { t: recTijd(r) };
-        return kopie(volgorde(sl, sr) > 0 ? l : r);
+        const sl = l._ts || { t: recTijd(l) }, sr = r._ts || { t: recTijd(r) }, o = volgorde(sl, sr);
+        if (o !== 0) return kopie(o > 0 ? l : r);
+        return kopie(stabiel(l) >= stabiel(r) ? l : r);   // exact gelijke stempels: de inhoud beslist (deterministisch, ongeacht de volgorde)
       }
-      return kopie(recTijd(l) >= recTijd(r) ? l : r);
+      return kopie(nieuwste(l, r));
     }
-    if (opt.legacy && !Object.keys(l._vs || {}).length && !Object.keys(r._vs || {}).length) return kopie(recTijd(l) >= recTijd(r) ? l : r);
+    if (opt.legacy && !Object.keys(l._vs || {}).length && !Object.keys(r._vs || {}).length) return kopie(nieuwste(l, r));
     const nl = maxStempel(l), nr = maxStempel(r);
     const basis = kopie(nl > nr ? l : r);   // niet-getrackte velden (bron, project_id…) van de nieuwste kant
     const andere = nl > nr ? r : l;
@@ -303,7 +345,8 @@
     velden.forEach(f => {
       const sl = (l._vs || {})[f], sr = (r._vs || {})[f], c0 = volgorde(sl, sr), ord = opt.legacy ? volgorde(eff(l, f), eff(r, f)) : c0;
       let win, ander, sw, so;
-      if (ord > 0) { win = l; ander = r; sw = sl; so = sr; } else { win = r; ander = l; sw = sr; so = sl; }   // gelijk → de andere kant (SharePoint)
+      const linksWint = ord > 0 || (ord === 0 && stabiel(norm(l[f])) > stabiel(norm(r[f])));   // identieke stempel: de waarde beslist (deterministisch)
+      if (linksWint) { win = l; ander = r; sw = sl; so = sr; } else { win = r; ander = l; sw = sr; so = sl; }
       if (win[f] === undefined) delete w[f]; else w[f] = kopie(win[f]);
       if (sw) w._vs[f] = kopie(sw);
       const bt = tijdVan(sw), bb = Number(sw && sw.basis) || 0, ot = tijdVan(so), verschil = !gelijk(ander[f], win[f]);
@@ -334,7 +377,9 @@
     if (!a || typeof a !== 'object') return b && typeof b === 'object' ? kopie(b) : null;
     if (!b || typeof b !== 'object') return kopie(a);
     const basis = (Number(a.tijd) || 0) <= (Number(b.tijd) || 0) ? a : b;
-    const m = kopie(basis); m.afgehandeld = Object.assign({}, kopie(b.afgehandeld) || {}, kopie(a.afgehandeld) || {});
+    const m = kopie(basis), ver = {};   // afgehandeld = verzameling per sleutel (vereniging): alleen toevoegen, nooit "lokaal wint"
+    [a.afgehandeld, b.afgehandeld].forEach(o => Object.keys(o || {}).forEach(k => { const w = Array.isArray(o[k]) ? o[k] : [o[k]]; ver[k] = [...new Set([...(ver[k] || []), ...w])].sort(); }));
+    m.afgehandeld = {}; Object.keys(ver).sort().forEach(k => { m.afgehandeld[k] = ver[k]; });   // vaste volgorde: hetzelfde resultaat ongeacht de argumentvolgorde
     return m;
   }
   // Samenvoeger voor het hele bestand { code: [record…] }: per code, per id. migreer: eerst oude records migreren (alleen taken).
@@ -950,48 +995,83 @@
   // Elk ingevuld veld zonder stempel krijgt er een met het tijdstip van de overstap. In de regel met id "__migratie" staat wat nodig is om later
   // te zien of een oude app-versie het oude bestand nog wijzigde. lijst = de regels van de overstap; oud (optioneel) = de lijst waarvan de hash komt.
   P.bestelInhoudHash = b => hash36(stabiel(P.BESTEL_VELDEN.map(f => norm(b && b[f])).concat([!!(b && b._vervallen)])));
-  P.bestelV2Opbouw = function (lijst, { nu = Date.now(), dev = '', door = '', uuid = null, oud = null } = {}) {
+  const bestelProjectCode = b => String((b && (b.project || b.project_id)) || '');
+  const bestelFingerprint = b => hash36(stabiel([b && b.materiaal, b && b.omschrijving, b && b.artikel, bestelProjectCode(b), b && b.datum, b && b.categorie, b && b.leverancier].map(norm)));
+  // Per legacy-regel een bronsleutel (fingerprint + volgnummer voor gelijke regels); ook de van de lijst gehaalde regels tellen mee.
+  P.bestelBronSleutels = function (lijst) {
+    const uit = [], teller = {};
+    (Array.isArray(lijst) ? lijst : []).forEach(b => { if (!b || typeof b !== 'object' || isMeta(b)) return; const fp = bestelFingerprint(b); teller[fp] = (teller[fp] || 0) + 1; uit.push({ regel: b, sleutel: fp + '|' + teller[fp] }); });
+    return uit;
+  };
+  // sp = het oude bestand PRECIES zoals gelezen (leidend); lokaal = de lokale kopie van het oude bestand (aanvullingen, ook zonder id, blijven;
+  // een afwijkende lokale versie van een regel die SharePoint al kent wordt een zichtbare afwijking, SharePoint wint).
+  P.bestelV2Opbouw = function (sp, { lokaal = null, nu = Date.now(), dev = '', door = '', uuid = null } = {}) {
     const maakId = uuid || (() => 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
-    const bron = (Array.isArray(lijst) ? lijst : []).filter(x => x && typeof x === 'object' && !isMeta(x));
-    const hashBron = (Array.isArray(oud) ? oud : bron).filter(x => x && typeof x === 'object' && !isMeta(x));
-    const uit = [], basis = {}, gebruikt = new Set();
-    bron.forEach(b0 => {
-      const b = kopie(b0), orgId = b.id;
-      if (b.id === undefined || b.id === null || b.id === '' || gebruikt.has(String(b.id))) b.id = maakId();
-      gebruikt.add(String(b.id));
+    const spLijst = Array.isArray(sp) ? sp : [], spRecs = P.bestelBronSleutels(spLijst), spBron = new Set(spRecs.map(x => x.sleutel)), spId = new Map();
+    spRecs.forEach(x => { if (x.regel.id !== undefined && x.regel.id !== null && x.regel.id !== '' && !spId.has(String(x.regel.id))) spId.set(String(x.regel.id), x.regel); });
+    const samen = spRecs.map(x => ({ r: x.regel, sleutel: x.sleutel, uitSP: true })), migratieAfwijkingen = [];
+    P.bestelBronSleutels(lokaal).forEach(x => {
+      const id = x.regel.id !== undefined && x.regel.id !== null && x.regel.id !== '' ? String(x.regel.id) : '';
+      if (id && spId.has(id)) {
+        const s = spId.get(id), velden = P.BESTEL_VELDEN.filter(f => !gelijk(x.regel[f], s[f])).map(f => ({ veld: f, oud: norm(x.regel[f]), nu: norm(s[f]) }));
+        if (!!x.regel._vervallen !== !!s._vervallen) velden.push({ veld: '_vervallen', oud: x.regel._vervallen ? 'van de lijst gehaald' : null, nu: s._vervallen ? 'van de lijst gehaald' : null });
+        if (velden.length) migratieAfwijkingen.push({ id, naam: P.bestelOms(x.regel), velden, hash: P.bestelInhoudHash(x.regel) });
+        return;
+      }
+      if (!id && spBron.has(x.sleutel)) return;   // hetzelfde id-loze record staat al in het SharePoint-bestand
+      samen.push({ r: x.regel, sleutel: x.sleutel, uitSP: false });
+    });
+    const uit = [], basis = {}, codes = {}, bron = {}, zonderId = [], dubbel = [], lokaalMeta = {}, gebruikt = new Set();
+    samen.forEach(e => {
+      const b = kopie(e.r), orgId = b.id; let nieuw = false;
+      if (orgId === undefined || orgId === null || orgId === '') { b.id = maakId(); zonderId.push({ naam: P.bestelOms(b), id: b.id, sleutel: e.sleutel }); nieuw = true; }
+      else if (gebruikt.has(String(orgId))) { b.id = maakId(); dubbel.push({ naam: P.bestelOms(b), oud_id: String(orgId), id: b.id, sleutel: e.sleutel }); nieuw = true; }
+      gebruikt.add(String(b.id)); bron[e.sleutel] = b.id;
+      if (!nieuw) { if (e.uitSP) { basis[b.id] = P.bestelInhoudHash(e.r); codes[b.id] = bestelProjectCode(e.r); } else lokaalMeta[b.id] = P.bestelInhoudHash(e.r); }
       const vs = Object.assign({}, b._vs || {});
       P.BESTEL_VELDEN.forEach(f => { if (b[f] !== undefined && !vs[f]) vs[f] = { t: nu, dev, rev: 1, door, basis: 0 }; });
       if (Object.keys(vs).length) b._vs = vs;
       if (!b._gewijzigd) b._gewijzigd = new Date(nu).toISOString();
       uit.push(b);
     });
-    hashBron.forEach(b => { if (b.id !== undefined && b.id !== null && b.id !== '' && gebruikt.has(String(b.id)) && basis[b.id] === undefined) basis[b.id] = P.bestelInhoudHash(b); });
-    uit.push({ id: '__migratie', _meta: true, tijd: nu, dev, door, oud_hash: hash36(stabiel(hashBron)), basis, afgehandeld: {} });
+    uit.push({ id: '__migratie', _meta: true, tijd: nu, dev, door, oud_hash: hash36(stabiel(spLijst)), basis, codes, bron, zonder_id: zonderId, dubbel, lokaal: lokaalMeta, migratie_afwijkingen: migratieAfwijkingen, afgehandeld: {} });
     return uit;
   };
-  // Wat is er in het OUDE bestand veranderd sinds de overstap? Per regel: 'nieuw', 'gewijzigd' (andere inhoud dan bij de overstap én anders dan nu
-  // in v2) of 'verwijderd'. Wat de mens al afhandelde telt niet mee. Nooit automatisch overnemen: de aanroeper laat de mens kiezen.
+  // Wat is er te bekijken voor beheer? (a) wat bij de overstap een nieuw id kreeg of van SharePoint afweek (info), (b) wat een oude app-versie sindsdien
+  // in het OUDE bestand veranderde: 'nieuw', 'dubbel-nieuw', 'gewijzigd', 'verwijderd', 'verhuisd' (ander project) en 'herstel' (gewijzigd terwijl de regel
+  // in v2 van de lijst gehaald is). Nooit automatisch overnemen. Een afgehandelde afwijking (sleutel + inhoudshash) komt niet terug.
+  // → { gewijzigd, afwijkingen, info }, elk { soort, sleutel, id, naam, hash, velden:[{veld,oud,nu}], regel }
   P.bestelOudAfwijkingen = function (meta, oudNu, v2) {
-    const oud = (Array.isArray(oudNu) ? oudNu : []).filter(x => x && typeof x === 'object' && !isMeta(x));
-    if (!meta || !Array.isArray(oudNu)) return { gewijzigd: false, afwijkingen: [] };
-    if (hash36(stabiel(oud)) === meta.oud_hash) return { gewijzigd: false, afwijkingen: [] };
-    const klaar = meta.afgehandeld || {}, basis = meta.basis || {}, nu = new Map(), uit = [], inOud = new Set();
+    if (!meta || typeof meta !== 'object') return { gewijzigd: false, afwijkingen: [], info: [] };
+    const uit = [], voeg = a => { if (!heeftKlaar(meta, a.sleutel, a.hash)) uit.push(Object.assign({ velden: [], regel: null }, a)); };
+    (meta.zonder_id || []).forEach(z => voeg({ soort: 'info-zonder-id', sleutel: 'zid:' + z.id, id: z.id, naam: z.naam, hash: 'i' }));
+    (meta.dubbel || []).forEach(z => voeg({ soort: 'info-dubbel-id', sleutel: 'dub:' + z.id, id: z.id, naam: z.naam, hash: 'i' }));
+    (meta.migratie_afwijkingen || []).forEach(z => voeg({ soort: 'migratie', sleutel: 'mig:' + z.id, id: z.id, naam: z.naam, hash: z.hash, velden: z.velden }));
+    const INFO = ['info-zonder-id', 'info-dubbel-id', 'migratie'];
+    const gewijzigd = Array.isArray(oudNu) && hash36(stabiel(oudNu)) !== meta.oud_hash;
+    const klaarMelden = () => ({ gewijzigd, afwijkingen: uit.filter(a => !INFO.includes(a.soort)), info: uit.filter(a => INFO.includes(a.soort)) });
+    if (!gewijzigd) return klaarMelden();
+    const basis = meta.basis || {}, lok = meta.lokaal || {}, codes = meta.codes || {}, bron = meta.bron || {}, nu = new Map(), inOud = new Set();
     (Array.isArray(v2) ? v2 : []).forEach(b => { if (b && typeof b === 'object' && !isMeta(b) && b.id !== undefined) nu.set(String(b.id), b); });
-    oud.forEach(b => {
-      if (b.id === undefined || b.id === null || b.id === '' || inOud.has(String(b.id))) return;
-      const id = String(b.id); inOud.add(id);
-      const h = P.bestelInhoudHash(b), eerder = basis[id];
-      if (eerder === h || klaar[id] === h) return;
-      const huidig = nu.get(id);
-      if (eerder === undefined) { if (!huidig) uit.push({ id, naam: P.bestelOms(b), soort: 'nieuw', hash: h, velden: [], regel: kopie(b) }); return; }
-      const velden = P.BESTEL_VELDEN.filter(f => !gelijk(b[f], huidig ? huidig[f] : undefined)).map(f => ({ veld: f, oud: norm(b[f]), nu: huidig ? norm(huidig[f]) : null }));
-      if (!!b._vervallen !== !!(huidig && huidig._vervallen)) velden.push({ veld: '_vervallen', oud: b._vervallen ? 'van de lijst gehaald' : null, nu: huidig && huidig._vervallen ? 'van de lijst gehaald' : null });
-      if (velden.length) uit.push({ id, naam: P.bestelOms(b), soort: 'gewijzigd', hash: h, velden, regel: kopie(b) });
+    P.bestelBronSleutels(oudNu).forEach(({ regel: b, sleutel }) => {
+      const hasId = b.id !== undefined && b.id !== null && b.id !== '', h = P.bestelInhoudHash(b);
+      if (!hasId) { if (!bron[sleutel]) voeg({ soort: 'nieuw', sleutel: 'bron:' + sleutel, id: null, naam: P.bestelOms(b), hash: h, regel: kopie(b) }); return; }
+      const id = String(b.id);
+      if (inOud.has(id)) { if (!bron[sleutel]) voeg({ soort: 'dubbel-nieuw', sleutel: 'dubnu:' + sleutel, id, naam: P.bestelOms(b), hash: h }); return; }   // dubbel id: alleen de eerste is te volgen
+      inOud.add(id);
+      const eerder = basis[id] !== undefined ? basis[id] : lok[id], huidig = nu.get(id), verwijderdInV2 = !huidig || !!huidig._vervallen;
+      if (eerder === undefined) { if (verwijderdInV2) voeg({ soort: 'nieuw', sleutel: id, id, naam: P.bestelOms(b), hash: h, regel: kopie(b) }); return; }
+      const verhuisd = codes[id] !== undefined && codes[id] !== bestelProjectCode(b);
+      if (eerder === h && !verhuisd) return;
+      if (verwijderdInV2) { if (eerder !== h) voeg({ soort: 'herstel', sleutel: id, id, naam: P.bestelOms(b), hash: h, regel: kopie(b) }); return; }   // alleen als de oude app het ná de overstap wijzigde
+      const velden = P.BESTEL_VELDEN.filter(f => !gelijk(b[f], huidig[f])).map(f => ({ veld: f, oud: norm(b[f]), nu: norm(huidig[f]) }));
+      if (!!b._vervallen !== !!huidig._vervallen) velden.push({ veld: '_vervallen', oud: b._vervallen ? 'van de lijst gehaald' : null, nu: huidig._vervallen ? 'van de lijst gehaald' : null });
+      if (verhuisd) voeg({ soort: 'verhuisd', sleutel: id, id, naam: P.bestelOms(b), hash: h + '@' + bestelProjectCode(b), velden: [{ veld: 'project', oud: bestelProjectCode(b), nu: bestelProjectCode(huidig) }].concat(velden.filter(v => v.veld !== 'project' && v.veld !== 'project_id')), regel: kopie(b) });
+      else if (velden.length) voeg({ soort: 'gewijzigd', sleutel: id, id, naam: P.bestelOms(b), hash: h, velden, regel: kopie(b) });
     });
-    Object.keys(basis).forEach(id => { if (!inOud.has(id) && klaar[id] !== 'weg') { const huidig = nu.get(id); if (huidig && !huidig._vervallen) uit.push({ id, naam: P.bestelOms(huidig), soort: 'verwijderd', hash: 'weg', velden: [], regel: null }); } });
-    return { gewijzigd: true, afwijkingen: uit };
+    Object.keys(basis).forEach(id => { if (!inOud.has(id)) { const huidig = nu.get(id); if (huidig && !huidig._vervallen) voeg({ soort: 'verwijderd', sleutel: id, id, naam: P.bestelOms(huidig), hash: 'weg' }); } });
+    return klaarMelden();
   };
-  P.bestelConflictOplos = P.conflictOplos;
 
   // ── Gebundelde weergave over alle projecten ────────────────────────────────────────────────────────
   // Dezelfde artikelsleutel en eenheid worden opgeteld, ook regels zonder project (met de hand toegevoegd). Per groep de verdeling per project.
