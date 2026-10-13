@@ -163,15 +163,14 @@ async function _tgMet429(fn){
   }
 }
 // Contract van de Focus Reports-query (groepering project_id + task_id + user, som van de duur): { data_json_row: [ {project_id, task_id|null,
-// user_account_id, sum_duration (seconden)} ] }. Zijn er regels maar mist `task_id` (de sleutel zelf, niet de waarde) of `sum_duration`, dan
-// is het contract gewijzigd en kunnen we uren niet aan taken toerekenen: een zichtbare fout in plaats van stil "alles zonder taak".
+// user_account_id, sum_duration (seconden)} ] }. Een ontbrekende of lege task_id betekent taakloze uren (ongekoppeld). Een contractfout is er alleen
+// als de vorm van het antwoord niet klopt of op een rij het duurveld (sum_duration) ontbreekt: dan zijn de uren niet te lezen.
 function tgReportsRijen(r){
   const lijst=r&&r.data_json_row;
   if(!Array.isArray(lijst)) return {rijen:[],contractFout:'Toggl gaf een onverwacht antwoord (geen data_json_row)'};
   const echt=lijst.filter(x=>x&&typeof x==='object');
   if(echt.length<lijst.length) return {rijen:[],contractFout:'Toggl gaf een onverwachte regel in de urenrapportage'};
-  // per rij: de sleutels moeten er zijn (task_id mag null zijn); één rij zonder sleutel is al een gewijzigd contract
-  if(!echt.every(x=>'task_id' in x)) return {rijen:[],contractFout:'Toggl geeft geen task_id mee in (alle regels van) de urenrapportage: uren per taak zijn niet te bepalen'};
+  // een ontbrekende of lege task_id = taakloze uren (null), geen fout; alleen het duurveld is verplicht, op elke rij
   if(!echt.every(x=>'sum_duration' in x)) return {rijen:[],contractFout:'Toggl geeft geen duur (sum_duration) mee in (alle regels van) de urenrapportage'};
   return {rijen:echt.map(x=>({taak_id:x.task_id||null,project:x.project_id,sec:Number(x.sum_duration)||0})),contractFout:''};
 }
