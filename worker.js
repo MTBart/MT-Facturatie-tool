@@ -1486,7 +1486,7 @@ async function nrHash(o) {
   return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 export class MtTeller {
-  constructor(state) { this.state = state; }
+  constructor(state, env) { this.state = state; this.env = env; }
   async fetch(request) {
     const op = new URL(request.url).pathname.slice(1);
     let b = {}; try { b = await request.json(); } catch {}
@@ -1494,6 +1494,7 @@ export class MtTeller {
     if (op.startsWith('ai-')) return await this.ai(op, b);
     if (op.startsWith('csp-')) return await this.csp(op, b);
     if (op.startsWith('nr-')) return await this.nummers(op, b);
+    if (op.startsWith('sig-')) return await SigDO.ops(this, op, b);   // signalen (L3), instantie 'signalen'
     if (op === 'alle') {
       const m = await st.list({ prefix: 'pid:' }), werkcodes = {}, nummers = {}, aliassen = {};
       for (const [k, w] of m) {
@@ -5005,6 +5006,219 @@ export class MtZoekIndex {
   }
 }
 
+// ══ SIGNALEN (L3): gedeelde actiewachtrij ═════════════════════════════════════
+// Eén wachtrij voor het hele team ("iedereen ziet alles, één persoon pakt het op"). Opslag: de bestaande DO-klasse MtTeller,
+// eigen instantie 'signalen' (zoals 'ai' en 'csp'): geserialiseerd, dus "per oorzaak maximaal één item open" is atomair (KV kan dat niet).
+//   Item-sleutel  project_id:soort:bronversie:datum   (bronversie = <bron>.<versie>, bv. e123456789.1760000000)
+//   Oorzaak       project_id:soort:bron              (zolang er een niet-afgehandeld item is, komt er geen tweede)
+//   Statussen     open → opgepakt (wie, wanneer) → afgehandeld;  open/opgepakt → gesnoozed (tot een datum) → open
+//                 Een gesnoozed item waarvan de datum bereikt is, telt vanzelf weer als open. Afgehandeld is eindstation: een
+//                 nieuwe oorzaak geeft een nieuw item. Dezelfde sleutel komt nooit twee keer (ook niet na afhandelen).
+// Rechten (in élke ROLLEN_MODUS, nieuwe routes): zien = recht `offertes` of `projecten`; wijzigen = `offertes: 'wijzigen'` (verkooprecht).
+// Audit (DO-logboek `log:`) zonder klantinhoud: alleen tijd, actie, sleutel/soort/project_id, mb_id en een oid-hash.
+// Offertekoppelingen (`off:<mb_id>` → project_id) komen alleen via POST /signalen/offertes, dus van een koppeling die een mens in de
+// cockpit bevestigde. Een offerte zonder koppeling geeft nooit een signaal (en de worker koppelt nooit zelf).
+const SIG_INSTANTIE = 'signalen';
+const SIG_SOORTEN = {
+  offerte_geaccepteerd: 'Offerte geaccepteerd: markeer gewonnen?',
+  offerte_afgewezen: 'Offerte afgewezen: markeer verloren?',
+};
+const SIG_PID_RE = /^p_[0-9a-z]{4,40}$/;
+const SIG_MBID_RE = /^\d{6,25}$/;
+const SIG_BRON_RE = /^[0-9A-Za-z_-]{1,40}$/;
+const SIG_VERSIE_RE = /^[0-9A-Za-z_-]{1,30}$/;
+const SIG_DATUM_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SIG_ACTIES = ['oppakken', 'loslaten', 'afhandelen', 'snoozen', 'heropenen'];
+const SIG_LOG_MAX = 500, SIG_AFGEHANDELD_DAGEN = 30, SIG_SLEUTEL_DAGEN = 400, SIG_SNOOZE_MAX_DAGEN = 365, SIG_OFF_PER_KEER = 200;
+const SIG_OFF_EIND = ['accepted', 'rejected', 'billed', 'archived'];   // daarna hoeft de dagelijkse controle niet meer te kijken
+const sigAntw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+// Status zoals de gebruiker hem ziet: een verlopen snooze is weer open.
+function sigEffectief(it, vandaag) { return it.status === 'gesnoozed' && !(it.snooze_tot > vandaag) ? 'open' : it.status; }
+function sigTelling(items, vandaag) {
+  const t = { open: 0, opgepakt: 0, gesnoozed: 0 };
+  for (const it of items) { const s = sigEffectief(it, vandaag); if (s in t) t[s]++; }
+  return t;
+}
+// Stub naar de signalen-instantie; null zonder binding.
+function sigStub(env, budget) {
+  const ns = env.MT_TELLER; if (!ns || !ns.idFromName) return null;
+  const stub = ns.get(ns.idFromName(SIG_INSTANTIE));
+  return async (op, b) => {
+    if (budget && !budget.neem(true, 'do')) throw new Error('subrequest-budget-op');
+    const r = await stub.fetch('https://mt-teller/' + op, { method: 'POST', body: JSON.stringify(b || {}) });
+    return { status: r.status, j: await r.json().catch(() => null) };
+  };
+}
+
+// De DO-kant (aangeroepen vanuit MtTeller.fetch voor ops 'sig-*'). Alles binnen blockConcurrencyWhile.
+const SigDO = {
+  async ops(self, op, b) {
+    const st = self.state.storage, nu = Number(b.nu) || Date.now(), vandaag = SIG_DATUM_RE.test(String(b.vandaag || '')) ? b.vandaag : geldVandaag();
+    const logZet = (e, w = st) => w.put('log:' + String(9e15 - nu).padStart(16, '0') + ':' + randHex(3), { ts: nu, ...e });
+    return await self.state.blockConcurrencyWhile(async () => {
+      try {
+        if (!(await st.get('sig:instantie'))) await st.put('sig:instantie', 1);   // merkteken: het alarm van deze instantie hoort bij de signalen
+        if (op === 'sig-maak') { const r = await SigDO.maak(self, b, nu, logZet); return sigAntw(r.body, r.status); }
+        if (op === 'sig-lijst') {
+          const items = [...(await st.list({ prefix: 'i:' })).values()];
+          const zichtbaar = items.filter(it => it.status !== 'afgehandeld' || (b.met_afgehandeld && nu - ((it.afgehandeld && it.afgehandeld.ts) || 0) < 7 * DAG_S * 1000))
+            .map(it => ({ ...it, status_effectief: sigEffectief(it, vandaag) }))
+            .sort((x, y) => y.aangemaakt - x.aangemaakt);
+          return sigAntw({ items: zichtbaar, telling: sigTelling(items, vandaag), vandaag });
+        }
+        if (op === 'sig-zet') return await SigDO.zet(self, b, nu, vandaag, logZet);
+        if (op === 'sig-off-zet') {
+          const zet = (Array.isArray(b.koppelingen) ? b.koppelingen : []).slice(0, SIG_OFF_PER_KEER), weg = (Array.isArray(b.weg) ? b.weg : []).slice(0, SIG_OFF_PER_KEER);
+          const schrijf = {}; let gezet = 0, verwijderd = 0;
+          for (const k of zet) {
+            const mb = String(k.mb_id), oud = (await st.get('off:' + mb)) || null;
+            if (oud && oud.project_id === k.project_id) continue;
+            schrijf['off:' + mb] = { project_id: k.project_id, staat: oud ? oud.staat : null, gemeld: oud && oud.project_id === k.project_id ? oud.gemeld : null, gecontroleerd: oud ? oud.gecontroleerd : 0, ts: nu, door: b.door };
+            gezet++;
+          }
+          const sl = Object.keys(schrijf);
+          for (let i = 0; i < sl.length; i += 100) await st.put(Object.fromEntries(sl.slice(i, i + 100).map(x => [x, schrijf[x]])));
+          for (const mb of weg) { if (await st.get('off:' + mb)) { await st.delete('off:' + mb); verwijderd++; } }
+          if (gezet || verwijderd) await logZet({ actie: 'offertes-gekoppeld', gezet, verwijderd, door: b.door });
+          return sigAntw({ ok: true, gezet, verwijderd });
+        }
+        if (op === 'sig-off-get') { const k = await st.get('off:' + String(b.mb_id || '')); return sigAntw({ koppeling: k || null }); }
+        if (op === 'sig-off-lijst') {   // voor de dagelijkse controle: nog niet in een eindstaat, langst niet gecontroleerd eerst
+          const max = Math.max(1, Math.min(100, Number(b.max) || 10));
+          const lijst = [...(await st.list({ prefix: 'off:' }))].map(([k, v]) => ({ mb_id: k.slice(4), ...v }))
+            .filter(x => !SIG_OFF_EIND.includes(x.staat)).sort((x, y) => (x.gecontroleerd || 0) - (y.gecontroleerd || 0));
+          return sigAntw({ items: lijst.slice(0, max), totaal: lijst.length });
+        }
+        if (op === 'sig-offerte') return await SigDO.offerte(self, b, nu, logZet);
+        if (op === 'sig-log') { const n = Math.max(1, Math.min(200, Number(b.limiet) || 50)); return sigAntw({ log: [...(await st.list({ prefix: 'log:', limit: n })).values()] }); }
+        if (op === 'sig-opruim') {
+          const weg = [];
+          for (const [k, it] of await st.list({ prefix: 'i:' })) if (it.status === 'afgehandeld' && nu - ((it.afgehandeld && it.afgehandeld.ts) || nu) > SIG_AFGEHANDELD_DAGEN * DAG_S * 1000) weg.push(k);
+          for (const [k, ts] of await st.list({ prefix: 'k:' })) if (nu - Number(ts) > SIG_SLEUTEL_DAGEN * DAG_S * 1000) weg.push(k);
+          for (const [k, w] of await st.list({ prefix: 'wh:' })) if (nu - (w.ts || 0) > 30 * DAG_S * 1000) weg.push(k);
+          const logs = [...(await st.list({ prefix: 'log:' })).keys()]; if (logs.length > SIG_LOG_MAX) weg.push(...logs.slice(SIG_LOG_MAX));
+          for (let i = 0; i < weg.length; i += 100) await st.delete(weg.slice(i, i + 100));
+          return sigAntw({ ok: true, opgeruimd: weg.length });
+        }
+        if (SigDO.extra && SigDO.extra[op]) return await SigDO.extra[op](self, b, nu, vandaag, logZet);
+        return sigAntw({ error: 'onbekend' }, 404);
+      } catch (e) { return sigAntw({ error: 'opslag', detail: String((e && e.message) || e).slice(0, 120) }, 503); }
+    });
+  },
+  // Nieuw signaal (binnen het slot). → { status, body:{ ok, nieuw, sleutel, reden } }
+  async maak(self, b, nu, logZet) {
+    const st = self.state.storage;
+    if (!SIG_PID_RE.test(String(b.project_id || '')) || !SIG_SOORTEN[b.soort] || !SIG_BRON_RE.test(String(b.bron || '')) || !SIG_VERSIE_RE.test(String(b.versie || '')) || !SIG_DATUM_RE.test(String(b.datum || '')))
+      return { status: 400, body: { error: 'ongeldig-signaal' } };
+    const sleutel = `${b.project_id}:${b.soort}:${b.bron}.${b.versie}:${b.datum}`, oorzaak = `${b.project_id}:${b.soort}:${b.bron}`;
+    if (await st.get('k:' + sleutel)) return { status: 200, body: { ok: true, nieuw: false, sleutel, reden: 'bestaat' } };
+    const open = await st.get('o:' + oorzaak), oudItem = open ? await st.get('i:' + open) : null;
+    if (oudItem && oudItem.status !== 'afgehandeld') {
+      oudItem.laatste_versie = `${b.bron}.${b.versie}`; oudItem.herhaald = (oudItem.herhaald || 0) + 1;
+      await st.put({ ['i:' + open]: oudItem, ['k:' + sleutel]: nu });
+      await logZet({ actie: 'signaal-samengevoegd', sleutel: open, soort: b.soort, project_id: b.project_id, via: b.via });
+      return { status: 200, body: { ok: true, nieuw: false, sleutel: open, reden: 'oorzaak-open' } };
+    }
+    const item = { sleutel, oorzaak, project_id: b.project_id, soort: b.soort, titel: SIG_SOORTEN[b.soort], bron: b.bron, versie: String(b.versie), datum: b.datum,
+      mb_id: SIG_MBID_RE.test(String(b.mb_id || '')) ? String(b.mb_id) : undefined, status: 'open', aangemaakt: nu, gewijzigd: nu, via: b.via || 'systeem' };
+    await st.put({ ['i:' + sleutel]: item, ['o:' + oorzaak]: sleutel, ['k:' + sleutel]: nu });
+    await logZet({ actie: 'signaal-nieuw', sleutel, soort: b.soort, project_id: b.project_id, mb_id: item.mb_id, via: item.via });
+    if (SigDO.naNieuw) await SigDO.naNieuw(self, nu);
+    return { status: 200, body: { ok: true, nieuw: true, sleutel } };
+  },
+  // Statusovergang door een gebruiker (binnen het slot).
+  async zet(self, b, nu, vandaag, logZet) {
+    const st = self.state.storage, sleutel = String(b.sleutel || ''), it = await st.get('i:' + sleutel);
+    if (!it) return sigAntw({ error: 'onbekend-signaal' }, 404);
+    const eff = sigEffectief(it, vandaag), ik = { oid: String(b.oid || ''), naam: String(b.naam || '').slice(0, 80), ts: nu };
+    const vanMij = it.opgepakt && it.opgepakt.oid === ik.oid, vanAnder = eff === 'opgepakt' && !vanMij;
+    const weiger = (error, extra) => sigAntw({ error, status: eff, ...(extra || {}) }, 409);
+    if (eff === 'afgehandeld') return b.actie === 'afhandelen' ? sigAntw({ ok: true, gewijzigd: false, item: it }) : weiger('afgehandeld');
+    if (vanAnder && b.actie !== 'oppakken') return weiger('opgepakt-door-ander', { door: it.opgepakt.naam });
+    const nieuw = { ...it, gewijzigd: nu };
+    if (b.actie === 'oppakken') {
+      if (eff === 'opgepakt') return vanMij ? sigAntw({ ok: true, gewijzigd: false, item: it }) : weiger('al-opgepakt', { door: it.opgepakt.naam });
+      Object.assign(nieuw, { status: 'opgepakt', opgepakt: ik }); delete nieuw.snooze_tot;
+    } else if (b.actie === 'loslaten') {
+      if (eff !== 'opgepakt') return weiger('ongeldige-overgang');
+      nieuw.status = 'open'; delete nieuw.opgepakt;
+    } else if (b.actie === 'afhandelen') {
+      Object.assign(nieuw, { status: 'afgehandeld', afgehandeld: ik }); delete nieuw.snooze_tot;
+    } else if (b.actie === 'snoozen') {
+      const tot = String(b.tot || '');
+      if (!SIG_DATUM_RE.test(tot) || !(tot > vandaag) || tot > geldDag(vandaag, SIG_SNOOZE_MAX_DAGEN)) return sigAntw({ error: 'ongeldige-datum', uitleg: 'tot: een datum na vandaag, hooguit een jaar vooruit' }, 400);
+      Object.assign(nieuw, { status: 'gesnoozed', snooze_tot: tot, gesnoozed: ik }); delete nieuw.opgepakt;
+    } else if (b.actie === 'heropenen') {
+      if (eff !== 'gesnoozed' && !(it.status === 'gesnoozed')) return weiger('ongeldige-overgang');
+      nieuw.status = 'open'; delete nieuw.snooze_tot;
+    } else return sigAntw({ error: 'ongeldige-actie' }, 400);
+    const schrijf = { ['i:' + sleutel]: nieuw };
+    await st.put(schrijf);
+    if (nieuw.status === 'afgehandeld' && (await st.get('o:' + it.oorzaak)) === sleutel) await st.delete('o:' + it.oorzaak);
+    await logZet({ actie: 'signaal-' + b.actie, sleutel, soort: it.soort, project_id: it.project_id, door: b.door, tot: nieuw.snooze_tot });
+    return sigAntw({ ok: true, gewijzigd: true, item: { ...nieuw, status_effectief: sigEffectief(nieuw, vandaag) } });
+  },
+  // Geverifieerde Moneybird-offertestaat verwerken (webhook of dagelijkse controle): staat bijwerken en, alleen bij accepted/rejected
+  // én een bevestigde koppeling, één signaal. `gemeld` onthoudt de laatst gemelde staat per offerte: dezelfde overgang twee keer
+  // (webhook + controle, of een latere wijziging aan een al geaccepteerde offerte) geeft geen tweede signaal.
+  async offerte(self, b, nu, logZet) {
+    const st = self.state.storage, mb = String(b.mb_id || '');
+    if (!SIG_MBID_RE.test(mb)) return sigAntw({ error: 'ongeldig' }, 400);
+    const off = await st.get('off:' + mb);
+    if (!off) { await logZet({ actie: 'offerte-onbekend', mb_id: mb, via: b.via }); return sigAntw({ ok: true, nieuw: false, reden: 'onbekend' }); }
+    const staat = String(b.staat || '').slice(0, 20);
+    off.staat = staat; off.gecontroleerd = nu;
+    if (off.gemeld && off.gemeld.staat !== staat) off.gemeld = null;   // terug naar open e.d.: een volgende acceptatie mag weer gemeld worden
+    let uit = { ok: true, nieuw: false, reden: 'geen-signaal', staat };
+    const soort = staat === 'accepted' ? 'offerte_geaccepteerd' : staat === 'rejected' ? 'offerte_afgewezen' : null;
+    if (soort && off.gemeld && off.gemeld.staat === staat) uit.reden = 'al-gemeld';
+    else if (soort) {
+      const r = await SigDO.maak(self, { project_id: off.project_id, soort, bron: 'e' + mb, versie: b.versie, datum: b.datum, mb_id: mb, via: b.via }, nu, logZet);
+      if (r.status !== 200) return sigAntw(r.body, r.status);
+      off.gemeld = { staat, ts: nu, sleutel: r.body.sleutel };
+      uit = { ...r.body, staat };
+    }
+    await st.put('off:' + mb, off);
+    return sigAntw(uit);
+  },
+};
+
+// Routes /signalen/* (en straks /push/*). Achter de MS-auth; rechten in élke modus.
+async function handleSignalen(p, request, env, ik, json) {
+  const R = ik.rol ? RECHTEN[ik.rol] : null, m = request.method;
+  const zien = !!(R && (R.offertes || R.projecten)), wijzigen = !!(R && R.offertes === 'wijzigen');
+  if (!zien) return json({ error: 'geen-toegang', reden: R ? 'offertes' : (ik.reden || 'geen-rol') }, 403);
+  if (typeof handlePush === 'function' && p.startsWith('/push/')) return await handlePush(p, request, env, ik, json, R);
+  const doe = sigStub(env);
+  if (!doe) return json({ error: 'geen-signalen-opslag', uitleg: 'Durable Object-binding MT_TELLER ontbreekt (zie wrangler.toml)' }, 503);
+  const leesBody = async () => { const t = await geldLeesMax(request, 64 * KB); if (t == null) return { fout: 413 }; try { const j = JSON.parse(t || '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? { j } : { fout: 400 }; } catch { return { fout: 400 }; } };
+  if (p === '/signalen' && m === 'GET') {
+    const r = await doe('sig-lijst', { met_afgehandeld: new URL(request.url).searchParams.get('afgehandeld') === '1' });
+    return json(r.j, r.status);
+  }
+  if (p === '/signalen/log' && m === 'GET') {
+    if (!R.beheer) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
+    const r = await doe('sig-log', { limiet: Number(new URL(request.url).searchParams.get('limiet')) || 50 }); return json(r.j, r.status);
+  }
+  if (m !== 'POST' || !['/signalen/actie', '/signalen/offertes'].includes(p)) return json({ error: 'onbekende-route' }, 404);
+  if (!wijzigen) return json({ error: 'geen-toegang', reden: 'offertes-wijzigen' }, 403);
+  const { j: b, fout } = await leesBody(); if (fout) return json({ error: fout === 413 ? 'te-groot' : 'ongeldige-json' }, fout);
+  const door = await oidHash(ik.oid);
+  if (p === '/signalen/actie') {
+    if (!SIG_ACTIES.includes(b.actie) || typeof b.sleutel !== 'string' || b.sleutel.length > 200) return json({ error: 'ongeldig', uitleg: 'sleutel en actie (' + SIG_ACTIES.join(', ') + ') verplicht' }, 400);
+    const r = await doe('sig-zet', { sleutel: b.sleutel, actie: b.actie, tot: b.tot, oid: ik.oid, naam: clip((ik.rec && ik.rec.naam) || ik.email || '', 80), door });
+    return json(r.j, r.status);
+  }
+  // /signalen/offertes: door een mens bevestigde koppelingen offerte (mb_id) → project_id doorgeven (of weghalen).
+  const zet = Array.isArray(b.koppelingen) ? b.koppelingen : [], weg = Array.isArray(b.weg) ? b.weg : [];
+  if (!zet.length && !weg.length) return json({ error: 'ongeldig', uitleg: 'koppelingen [{project_id, mb_id}] en/of weg [mb_id]' }, 400);
+  if (zet.length > SIG_OFF_PER_KEER || weg.length > SIG_OFF_PER_KEER) return json({ error: 'te-veel', max: SIG_OFF_PER_KEER }, 400);
+  if (!zet.every(k => k && SIG_PID_RE.test(String(k.project_id || '')) && SIG_MBID_RE.test(String(k.mb_id || ''))) || !weg.every(x => SIG_MBID_RE.test(String(x))))
+    return json({ error: 'ongeldig', uitleg: 'project_id p_… en mb_id (cijfers)' }, 400);
+  const r = await doe('sig-off-zet', { koppelingen: zet.map(k => ({ project_id: String(k.project_id), mb_id: String(k.mb_id) })), weg: weg.map(String), door });
+  return json(r.j, r.status);
+}
+
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
 export default {
@@ -5061,6 +5275,8 @@ export default {
       if (url.pathname === '/instellingen' || url.pathname.startsWith('/teller/')) return await handleTeller(url.pathname, request, env, ik, json);
       // Zoekbalk: Moneybird-facturen en -offertes uit de zoekindex (alleen lezen; recht `moneybird`).
       if (url.pathname === '/zoek/moneybird') return await handleZoekMb(request, env, ik, json, ctx, modus);
+      // Signalen (L3): de gedeelde actiewachtrij. Zien = recht offertes of projecten, wijzigen = offertes 'wijzigen' (in élke modus).
+      if (url.pathname === '/signalen' || url.pathname.startsWith('/signalen/') || url.pathname.startsWith('/push/')) return await handleSignalen(url.pathname, request, env, ik, json);
       // Geldtijdlijn en het financiële dashboard: recht `geld`, in élke ROLLEN_MODUS (zie handleGeld).
       if (url.pathname.startsWith('/geld/')) return await handleGeld(url.pathname, request, env, ik, json);
       if (url.pathname.startsWith('/dashboard/')) {
