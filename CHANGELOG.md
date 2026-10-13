@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — Backup roteren: backup/ = v2.14.2 (live voor v2.15.0)
+- Commit: `9efd828` | Auteur: Bart Witte
+
 ## 2026-10-13 — Release v2.15.0: leads (fase, volgende actie, Vandaag, Gewonnen -> project, Direct project), projectgegevens voor Vectorworks en navigatie naar het adres; versielabel, Wat is er verbeterd; backup = v2.14.2
 - Commit: `f64738b` | Auteur: Bart Witte
 

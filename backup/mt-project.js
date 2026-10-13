@@ -103,5 +103,12 @@
     if (v) { const t = v[1].toUpperCase(); if (NR_RE.test(t)) nummer = t; else if (W_RE.test(t)) werkcode = t; else offerte = t; s = s.slice(v[0].length).trim(); }
     return { naam: s || orig, code, nummer, werkcode, offerte };
   }
-  root.MTProject = { NR_RE, W_RE, SOORTEN, norm, index, vind, uitPrefix, uitToggl, togglNaam, naamZonderCode };
+  // Navigatie naar een adres (L1c): op iOS Apple Maps (daddr), elders Google Maps met dir_action=navigate. ua = navigator.userAgent.
+  function navUrl(adres, ua) {
+    const a = String(adres == null ? '' : adres).replace(/\s+/g, ' ').trim();
+    if (!a) return '';
+    if (/iPad|iPhone|iPod/.test(String(ua || ''))) return 'https://maps.apple.com/?daddr=' + encodeURIComponent(a);
+    return 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(a) + '&dir_action=navigate';
+  }
+  root.MTProject = { NR_RE, W_RE, SOORTEN, norm, index, vind, uitPrefix, uitToggl, togglNaam, naamZonderCode, navUrl };
 })(typeof window !== 'undefined' ? window : globalThis);
