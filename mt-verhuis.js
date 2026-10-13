@@ -28,7 +28,7 @@
   V.SLEUTELS = new Set([
     // synct naar SharePoint (komt na inloggen terug; staat het lokaal al, dan blijft dat staan — en lokaal nog niet gesynct gaat mee)
     'mt_voorraad', 'mt_bestellijst', 'mt_history', 'mt_history_archive', 'mt_projecten', 'mt_leveranciers', 'mt_toeslag_lak', 'mt_toeslag_spuit',
-    'mt_mail_links', 'mt_mail_oppak', 'mt_planning', 'mt_klant_codes', 'mt_offerte_keuze', 'mt_project_taken', 'mt_supplier_map', 'mt_calc_offertes', 'mt_calc_defaults',
+    'mt_mail_links', 'mt_mail_oppak', 'mt_planning', 'mt_klant_codes', 'mt_offerte_keuze', 'mt_project_taken', 'mt_project_taken_v2', 'mt_supplier_map', 'mt_calc_offertes', 'mt_calc_defaults',
     'mt_taken_journaal', 'mt_bijlage_index', 'mt_todo_sync', 'mt_bestellijst_journaal', 'mt_koppel_journaal', 'mt_contacten', 'mt_contacten_journaal', 'mt_project_controle',
     // alleen lokaal, niet te herbouwen
     'mt_retry_queue', 'mt_agenda_blocks', 'mt_planblokken', 'mt_notes', 'mt_tasks', 'mt_werkcodes', 'mt_projectnummers', 'mt_werkcode_wacht', 'mt_timer_stop_pending', 'mt_calc_offertes_backup',
