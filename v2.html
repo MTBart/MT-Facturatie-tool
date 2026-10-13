@@ -19,8 +19,8 @@
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-11c"></script>
 <script src="mt-project.js?v=2026-10-13b"></script>
-<script src="mt-lead.js?v=2026-10-13a"></script>
-<script src="mt-vw.js?v=2026-10-13a"></script>
+<script src="mt-lead.js?v=2026-10-13b"></script>
+<script src="mt-vw.js?v=2026-10-13b"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
@@ -814,7 +814,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.14.1</span>
+    <span class="header-version">v2.15.0</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -2751,6 +2751,7 @@ function projAanvullen(p){
     const kaart=_projectnummerKaart(), n=kaart[p.project_id];
     if(n&&PROJNR_RE.test(String(n))) p.projectnummer=String(n);
     else if(p.projectnummer&&kaart._volledig&&_werkcodeKaart()[p.project_id]) p.projectnummer=null; }
+  _projStatusUitFase(p);   // status volgt de fase (ook als een oude app alleen het statusveld wijzigde)
   if(!Array.isArray(p.legacy_codes)) p.legacy_codes=p.code?[p.code]:[];
   if(!p.soort) p.soort='klant';
   if(!Array.isArray(p.offertes)||(!p.offertes.length&&p.offertenr))
@@ -2847,22 +2848,51 @@ function _projMetId(x,idx){
 // Hetzelfde veld vanaf dezelfde stand op twee plekken gewijzigd → de nieuwste wint en de andere waarde blijft zichtbaar in
 // `_veldconflict[veld]` ({waarde, door, t}) tot iemand het veld opnieuw zet (projVeldZet ruimt het op).
 const PROJ_VELDEN=['fase','volgende_actie','kans_pct','waarde_excl','verwachte_beslisdatum','verlies','geparkeerd_tot','gewonnen_op','bron'];
+// Projectgegevens (L1c) per sleutel met een eigen stempel: veldnaam "gegevens.<sleutel>" (zelfde merge en conflicten).
+const PROJ_GEGEVENS_VELDEN=['projectleider','projectonderdeel','leverdatum','aanhef','voornaam','achternaam','straat','postcode','plaats'];
+// Generiek: de vaste sleutels plus elke sleutel die in `gegevens` of in `_vs` van een van de kopieën voorkomt (een onbekende sleutel
+// zonder stempel valt terug op de nieuwste record-stempel en gaat nooit verloren als hij aan één kant bestaat).
+const _projVeldPaden=(alle)=>{
+  const set=new Set(PROJ_GEGEVENS_VELDEN);
+  (alle||[]).forEach(x=>{ if(!x||typeof x!=='object') return;
+    if(x.gegevens&&typeof x.gegevens==='object'&&!Array.isArray(x.gegevens)) Object.keys(x.gegevens).forEach(k=>set.add(k));
+    if(x._vs&&typeof x._vs==='object') Object.keys(x._vs).forEach(v=>{ if(v.startsWith('gegevens.')&&v.length>9) set.add(v.slice(9)); }); });
+  return PROJ_VELDEN.concat([...set].map(k=>'gegevens.'+k));
+};
+function _vDeel(veld){ const i=veld.indexOf('.'); return i<0?[veld,null]:[veld.slice(0,i),veld.slice(i+1)]; }
+function _vHeeft(x,veld){ const [h,k]=_vDeel(veld); if(k===null) return veld in x; const o=x[h]; return !!o&&typeof o==='object'&&(k in o); }
+function _vGet(x,veld){ const [h,k]=_vDeel(veld); if(k===null) return x[veld]; const o=x[h]; return o&&typeof o==='object'?o[k]:undefined; }
+function _vZet(x,veld,v){
+  const [h,k]=_vDeel(veld);
+  if(k===null){ if(v===undefined) delete x[veld]; else x[veld]=v; return; }
+  if(v===undefined){ if(x[h]&&typeof x[h]==='object'){ delete x[h][k]; if(!Object.keys(x[h]).length) delete x[h]; } return; }
+  if(!x[h]||typeof x[h]!=='object'||Array.isArray(x[h])) x[h]={};
+  x[h][k]=v;
+}
+// Status (compatibiliteitslaag) volgt altijd de fase (mapping in mt-lead.js); na elke merge en bij elke lezing opnieuw.
+function _projStatusUitFase(p){ if(p&&p.fase&&typeof MTLead!=='undefined'&&MTLead.statusVoor){ const st=MTLead.statusVoor(p.fase); if(st) p.status=st; } return p; }
+// Een record uit de merge: status afgeleid van fase, ook zonder concurrent (kopie als er iets verandert; de invoer blijft heel).
+function _projNormaal(x){
+  if(x&&x.fase&&typeof MTLead!=='undefined'&&MTLead.statusVoor){ const st=MTLead.statusVoor(x.fase); if(st&&x.status!==st) return Object.assign({},x,{status:st}); }
+  return x;
+}
 function projVeldZet(p,veld,waarde){
   const vs=(p._vs&&typeof p._vs==='object')?p._vs:(p._vs={}), oud=vs[veld];
   vs[veld]={t:Math.max(Date.now(),((oud&&Number(oud.t))||0)+1),door:typeof _spWie==='function'?_spWie():'',basis:(oud&&Number(oud.t))||0};
-  if(waarde===undefined||waarde===null||waarde==='') delete p[veld]; else p[veld]=JSON.parse(JSON.stringify(waarde));
+  _vZet(p,veld,(waarde===undefined||waarde===null||waarde==='')?undefined:JSON.parse(JSON.stringify(waarde)));
   if(p._veldconflict){ delete p._veldconflict[veld]; if(!Object.keys(p._veldconflict).length) delete p._veldconflict; }
+  if(veld==='fase') _projStatusUitFase(p);
   return p;
 }
 function _projVeldSamen(w,andere){
   const kopie=v=>v===undefined?undefined:JSON.parse(JSON.stringify(v));
-  for(const veld of PROJ_VELDEN){
-    const alle=[w,...andere].filter(Boolean), st=x=>(x._vs&&x._vs[veld])||null, tv=x=>Number((st(x)||{}).t)||0;
-    const orig=alle.map(x=>({v:kopie(x[veld]),s:kopie(st(x)),c:kopie(x._veldconflict&&x._veldconflict[veld]),heeft:veld in x}));
+  for(const veld of _projVeldPaden([w,...andere])){
+    const alle=[w,...andere].filter(Boolean), st=x=>(x._vs&&x._vs[veld])||null;
+    const orig=alle.map(x=>({v:kopie(_vGet(x,veld)),s:kopie(st(x)),c:kopie(x._veldconflict&&x._veldconflict[veld]),heeft:_vHeeft(x,veld)}));
     let bi=0; orig.forEach((o,i)=>{ if((Number((o.s||{}).t)||0)>(Number((orig[bi].s||{}).t)||0)) bi=i; });
     const best=orig[bi], bt=Number((best.s||{}).t)||0;
-    if(!bt){ if(!(veld in w)){ const o=orig.find(x=>x.heeft); if(o) w[veld]=o.v; } continue; }   // geen stempels (oude data): zoals _projErf
-    if(best.heeft) w[veld]=best.v; else delete w[veld];
+    if(!bt){ if(!_vHeeft(w,veld)){ const o=orig.find(x=>x.heeft); if(o) _vZet(w,veld,o.v); } continue; }   // geen stempels (oude data): zoals _projErf
+    _vZet(w,veld,best.heeft?best.v:undefined);
     (w._vs&&typeof w._vs==='object'?w._vs:(w._vs={}))[veld]=best.s;
     const bw=JSON.stringify(best.v), basis=Number(best.s.basis)||0;
     let conflict=null;
@@ -2875,7 +2905,7 @@ function _projVeldSamen(w,andere){
     if(conflict) (w._veldconflict||(w._veldconflict={}))[veld]=conflict;
     else if(w._veldconflict){ delete w._veldconflict[veld]; if(!Object.keys(w._veldconflict).length) delete w._veldconflict; }
   }
-  return w;
+  return _projStatusUitFase(w);
 }
 // Velden die de winnaar mist overnemen van een andere kopie van hetzelfde project (bv. geschreven door een app
 // zonder die velden); oude codes worden verenigd, en de code van de andere kopie wordt een oude code.
@@ -2924,7 +2954,7 @@ function _projSamen(lokaal,spData){
   const uit=[];
   for(const [k,w0] of per){
     const andere=groep.get(k).filter(o=>o!==w0);
-    if(!andere.length){ uit.push(w0); continue; }
+    if(!andere.length){ uit.push(_projNormaal(w0)); continue; }   // ook een enkelvoudig record: status volgt de fase
     const w=JSON.parse(JSON.stringify(w0));
     andere.forEach(o=>_projErf(w,o));
     _projVeldSamen(w,andere);
@@ -6631,6 +6661,7 @@ function projStatus(p){
 }
 function projStatusZet(code,waarde){
   const p=projVind(code); if(!p) return;
+  if(p.fase){ if(typeof planToast==='function') planToast('De status volgt de fase ('+(window.MTLead?MTLead.label(p.fase):p.fase)+'); wijzig de fase in het project'); if(_klantHuidig) _klantSectieRender(); return; }
   if(waarde&&PROJ_STATUSSEN.includes(waarde)) p.status=waarde; else delete p.status;
   slaProjectenOp();                                   // B2: stempel _gewijzigd + _door
   if(_klantHuidig) _klantSectieRender();
@@ -6751,7 +6782,7 @@ function klantSecOverzicht(info,projen){
     return `<div class="klant-proj">
       <div class="klant-proj-hoofd"><span class="st-pill st-${esc(st.status)}${st.afgeleid?' afgeleid':''}" title="${st.afgeleid?'Afgeleid: '+esc(st.reden||'planning/taken'):'Zelf gekozen'}">${esc(st.status)}</span> <a href="${esc(mtRoute.format({code:p.code}))}" onclick="event.preventDefault();openProject(${jsArg(_jsCode(p.code))})">${esc(projNaamVol(p))} ${projTag(p)}</a>${viaMb?` <span class="dos-tag let" title="Andere klantcode (${esc(p.klant||'—')}), zelfde Moneybird-contact — mogelijk een codefout">via contact</span>`:''}
         <div class="dos-meta">${projLocLabel(p)?esc(projLocLabel(p))+' · ':''}${lt?'laatst: '+fmtDatum(lt.datum.slice(0,10)):'nog geen activiteit'}${nt?` · ${nt} open ta${nt===1?'ak':'ken'}`:''}</div></div>
-      <label class="klant-status"><span class="sr">Status</span><select aria-label="Status van ${esc(projNaamVol(p))}" onchange="projStatusZet(${jsArg(_jsCode(p.code))},this.value)">
+      <label class="klant-status"><span class="sr">Status</span><select aria-label="Status van ${esc(projNaamVol(p))}"${p.fase?` disabled title="${esc('Volgt de fase: '+(window.MTLead?MTLead.label(p.fase):p.fase))}"`:''} onchange="projStatusZet(${jsArg(_jsCode(p.code))},this.value)">
         <option value=""${st.afgeleid?' selected':''}>${st.afgeleid?esc(st.status)+' (afgeleid)':'automatisch'}</option>
         ${PROJ_STATUSSEN.map(s=>`<option value="${esc(s)}"${!st.afgeleid&&st.status===s?' selected':''}>${esc(s)}</option>`).join('')}</select></label></div>`;
   };
@@ -9069,6 +9100,7 @@ function afkortProduct(naam,max=40){
 let _leadModus=false;
 function _vandaagYmd(){ return typeof _planYmd==='function'?_planYmd(new Date()):new Date().toISOString().slice(0,10); }
 function openLeadModal(){
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return mtDialog.alert({title:'Nieuwe lead',message:'Je mag geen projecten of leads aanmaken.'});
   openModal(); _leadModus=true;
   const lv=document.getElementById('modal-lead-velden'); if(lv) lv.hidden=false;
   const ti=document.getElementById('modal-titel'); if(ti) ti.textContent='Nieuwe lead';
@@ -9185,7 +9217,7 @@ function leadVeldZet(code,veld,waarde){
 // Conflict oplossen: de getoonde (winnende) waarde houden of de andere overnemen — beide zetten het veld opnieuw.
 function leadConflictKies(code,veld,neemAndere){
   const p=projVind(code); if(!p||!p._veldconflict||!p._veldconflict[veld]) return;
-  projVeldZet(p,veld,neemAndere?p._veldconflict[veld].waarde:p[veld]);
+  projVeldZet(p,veld,neemAndere?p._veldconflict[veld].waarde:_vGet(p,veld));
   slaProjectenOp(); _leadNaWijziging(p.code);
 }
 function _leadNaWijziging(code){ try{ vandaagTeken(); }catch(e){} try{ _projHerteken(code); }catch(e){} try{ if(typeof renderProjectLijst==='function'&&!window._calcMailPaneelActief) renderProjectLijst((document.getElementById('project-zoek')||{}).value||''); }catch(e){} }
@@ -9201,7 +9233,7 @@ function _leadMag(){ return !(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wij
 function leadOptiesHtml(fase){ return MTLead.opties(fase).map(k=>`<option value="${esc(k)}">${esc(k==='gewonnen'?'Gewonnen → project':MTLead.label(k))}</option>`).join(''); }
 function leadConflictHtml(proj){
   const pc=_jsCode(proj.code);
-  return Object.entries(proj._veldconflict||{}).map(([veld,c])=>`<div class="lead-conflict" role="alert">⚠ <b>${esc(veld.replace(/_/g,' '))}</b> is tegelijk gewijzigd${c.door?' door '+esc(c.door):''}: nu „${esc(_leadVeldWaarde(veld,proj[veld]))}”, de andere waarde was „${esc(_leadVeldWaarde(veld,c.waarde))}”.
+  return Object.entries(proj._veldconflict||{}).filter(([veld])=>!veld.startsWith('gegevens.')).map(([veld,c])=>`<div class="lead-conflict" role="alert">⚠ <b>${esc(veld.replace(/_/g,' '))}</b> is tegelijk gewijzigd${c.door?' door '+esc(c.door):''}: nu „${esc(_leadVeldWaarde(veld,proj[veld]))}”, de andere waarde was „${esc(_leadVeldWaarde(veld,c.waarde))}”.
       <button class="btn btn-xs btn-secondary"${_leadMag()?'':' disabled'} onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},false)">Houden</button> <button class="btn btn-xs btn-secondary"${_leadMag()?'':' disabled'} onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},true)">Andere waarde nemen</button></div>`).join('');
 }
 function leadKaartHtml(proj){
@@ -9310,16 +9342,16 @@ function projGegevensZet(code,veld,waarde){
   if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return;
   let w=String(waarde==null?'':waarde).trim().slice(0,120);
   if(veld==='leverdatum'&&w&&!MTVW.isoWeek(w)) w='';
-  const g=Object.assign({},p.gegevens||{}); if(w) g[veld]=w; else delete g[veld];
-  p.gegevens=g; slaProjectenOp(); try{ _projHerteken(p.code); }catch(e){}
+  projVeldZet(p,'gegevens.'+veld,w);   // per sleutel met een eigen stempel (merge per veld, zichtbaar conflict)
+  slaProjectenOp(); try{ _projHerteken(p.code); }catch(e){}
 }
 function projGegevensVoorstelIn(code){
   const p=projVind(code); if(!p) return;
   if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return;
-  const v=projGegevensVoorstel(p), g=Object.assign({},p.gegevens||{}); let n=0;
-  Object.entries(v).forEach(([k,w])=>{ if(!g[k]){ g[k]=w; n++; } });   // alleen lege velden; wat er staat blijft staan
+  const v=projGegevensVoorstel(p), g=p.gegevens||{}; let n=0;
+  Object.entries(v).forEach(([k,w])=>{ if(!g[k]){ projVeldZet(p,'gegevens.'+k,w); n++; } });   // alleen lege velden; wat er staat blijft staan
   if(!n) return;
-  p.gegevens=g; slaProjectenOp(); try{ _projHerteken(p.code); }catch(e){}
+  slaProjectenOp(); try{ _projHerteken(p.code); }catch(e){}
 }
 function projAdresTekst(proj){ const g=proj.gegevens||{}; return [g.straat,[g.postcode,g.plaats].filter(Boolean).join(' ')].filter(Boolean).join(', '); }
 function projNavUrl(adres){ return veiligeUrl(MTProject.navUrl(adres,(typeof navigator!=='undefined'&&navigator.userAgent)||''),{hosts:['google.com','apple.com']}); }
@@ -9334,7 +9366,9 @@ function projGegevensHtml(proj){
     ${w?`<div class="dos-meta">Levering in week ${esc(w.week)} van ${esc(w.jaar)}</div>`:''}
     <div class="lead-rij">${mag&&nieuw.length?`<button class="btn btn-xs btn-secondary" onclick="projGegevensVoorstelIn(${jsArg(pc)})" title="${esc('Alleen lege velden: '+nieuw.map(k=>(PROJ_GEGEVENS.find(x=>x[0]===k)||[])[1]).join(', '))}">Voorstellen invullen (${esc(nieuw.length)})</button>`:''}
       ${adres&&projNavUrl(adres)?`<a class="btn btn-xs btn-secondary" target="_blank" rel="noopener" href="${esc(veiligeUrl(MTProject.navUrl(adres,(typeof navigator!=='undefined'&&navigator.userAgent)||''),{hosts:['google.com','apple.com']}))}" title="${esc('Navigeer naar '+adres)}">🧭 ${esc(adres)}</a>`:''}
-      <button class="btn btn-xs btn-gold" onclick="projVwExport(${jsArg(pc)})" title="Maakt ${esc(MTVW.bestandsnaam(projNummer(proj)||proj.code))} in 03_Vectorworks (of als download)">Projectgegevens voor Vectorworks</button></div></section>`;
+      ${mag?`<button class="btn btn-xs btn-gold" onclick="projVwExport(${jsArg(pc)})" title="Maakt ${esc(MTVW.bestandsnaam(projNummer(proj)||proj.code))} in 03_Vectorworks (of als download)">Projectgegevens voor Vectorworks</button>`:''}</div>
+    ${Object.entries(proj._veldconflict||{}).filter(([veld])=>veld.startsWith('gegevens.')).map(([veld,c])=>`<div class="lead-conflict" role="alert">⚠ <b>${esc((PROJ_GEGEVENS.find(x=>'gegevens.'+x[0]===veld)||[0,veld])[1])}</b> is tegelijk gewijzigd${c.door?' door '+esc(c.door):''}: nu „${esc(_vGet(proj,veld)||'—')}”, de andere waarde was „${esc(c.waarde||'—')}”.
+      ${mag?`<button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},false)">Houden</button> <button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},true)">Andere waarde nemen</button>`:''}</div>`).join('')}</section>`;
 }
 // De XML voor interiorcad: PROJECT_ID = projectnummer (of code), COMMISSION = projectnaam, … (zie mt-vw.js).
 function projVwGegevens(proj){
@@ -9350,18 +9384,27 @@ function _projDownload(naam,tekst){
 // Upload naar <projectmap>/03_Vectorworks (Graph). Bestaat het bestand al, dan eerst vragen; zonder map of bij een fout: download.
 async function projVwExport(code){
   const p=projVind(code); if(!p) return;
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return mtDialog.alert({title:'Projectgegevens',message:'Je mag geen bestanden in de projectmap zetten.'});
   const xml=MTVW.projectgegevensXml(projVwGegevens(p)), naam=MTVW.bestandsnaam(projNummer(p)||p.code);
   let pad=null;
   try{ const z=(p.map&&p.map.pad)?{pad:p.map.pad}:await _projMapZoek(p); pad=z&&z.pad; }catch(e){ pad=null; }
   if(!pad){ _projDownload(naam,xml); return mtDialog.alert({title:'Projectgegevens',message:'Er is (nog) geen projectmap gevonden; '+naam+' is gedownload. Zet hem in 03_Vectorworks of importeer hem in interiorcad ▸ Projectgegevens.'}); }
   try{
     const sub=await _SP.ensureFolder(pad,'03_Vectorworks',false), doel=pad+'/'+sub+'/'+naam;
-    const zet=async gedrag=>{ const token=await window.getGraphToken(); if(!token) throw new Error('niet ingelogd bij Microsoft');
-      return fetch(`https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(doel)}:/content?@microsoft.graph.conflictBehavior=${gedrag}`,{method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/xml'},body:xml}); };
-    let r=await zet('fail');
-    if(r.status===409){
-      if(!await mtDialog.confirm({title:'Projectgegevens',message:naam+' staat al in 03_Vectorworks. Overschrijven met de huidige gegevens?',okLabel:'Overschrijven'})) return;
-      r=await zet('replace');
+    const basis=`https://graph.microsoft.com/v1.0/drives/${_SP.PROJ_DRIVE}/root:/${_encPath(doel)}`;
+    const token=await window.getGraphToken(); if(!token) throw new Error('niet ingelogd bij Microsoft');
+    const kop=extra=>Object.assign({'Authorization':'Bearer '+token},extra||{});
+    let r=await fetch(basis+':/content?@microsoft.graph.conflictBehavior=fail',{method:'PUT',headers:kop({'Content-Type':'application/xml'}),body:xml});
+    // Bestaat al: eerst de huidige versie (eTag) lezen, dan vragen, en alleen díe versie vervangen (If-Match). Is hij intussen
+    // gewijzigd (412), dan opnieuw lezen en opnieuw vragen — nooit stil over een nieuwere versie heen.
+    for(let poging=0;r.status===409||(r.status===412&&poging>0);poging++){
+      if(poging>=3) throw new Error('het bestand blijft veranderen');
+      const m=await fetch(basis+'?$select=eTag,lastModifiedDateTime,lastModifiedBy',{headers:kop()});
+      if(!m.ok) throw new Error('bestaand bestand lezen: HTTP '+m.status);
+      const it=await m.json(), wie=it.lastModifiedBy&&it.lastModifiedBy.user&&it.lastModifiedBy.user.displayName;
+      const vraag=(poging?'Het bestand is intussen gewijzigd. ':'')+naam+' staat al in 03_Vectorworks (laatst gewijzigd '+String(it.lastModifiedDateTime||'').slice(0,16).replace('T',' ')+(wie?' door '+wie:'')+'). Overschrijven met de huidige gegevens?';
+      if(!await mtDialog.confirm({title:'Projectgegevens',message:vraag,okLabel:'Overschrijven'})) return;
+      r=await fetch(basis+':/content',{method:'PUT',headers:kop({'Content-Type':'application/xml','If-Match':it.eTag}),body:xml});
     }
     if(!r.ok) throw new Error('HTTP '+r.status);
     mtDialog.alert({title:'Projectgegevens',message:naam+' staat in 03_Vectorworks. Importeer hem in interiorcad ▸ Projectgegevens ▸ Importeer.'});
@@ -9547,6 +9590,7 @@ async function maakProjectAan(){
   if(!k||!p){status.style.color='var(--red)';status.textContent='Vul minimaal klant en product in';return;}
   // Lead (L1a): de volgende actie met datum is verplicht; pas daarna wordt er een nummer uitgegeven.
   const lead=(typeof _leadModus!=='undefined'&&_leadModus)?leadModalWaarden():null;
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')){status.style.color='var(--red)';status.textContent='Je mag geen leads of projecten aanmaken.';return;}   // elke aanmaak: lead, direct project, overname uit Toggl
   if(lead&&lead.fout){status.style.color='var(--red)';status.textContent=lead.fout;return;}
   // Overname uit Toggl: hetzelfde Toggl-project nooit twee keer (ook niet vanuit een tweede venster); geen nummer verbruiken.
   const tgBron=typeof _tgProjBron!=='undefined'?_tgProjBron:null;
@@ -13972,7 +14016,18 @@ function _bhProjectcode(ikEig){
     <div class="dos-meta" style="margin-bottom:6px">Welke code bij een project staat (lijst, contextbalk, koppelingen, mobiel). Geen nummer bekend → alleen de naam. De technische sleutel en links veranderen niet.</div>
     <div class="bh-form" role="radiogroup" aria-label="Projectcode tonen als">${_PC_KEUZES.map(k=>`<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="bh-projectcode" value="${esc(k[0])}"${k[0]===huidig?' checked':''}${ikEig?'':' disabled'} onchange="beheerProjectcode(this.value)"> ${esc(k[1])} <span class="code">${esc(voorbeeld(k))}</span></label>`).join('')}</div>
     ${ikEig?'':'<div class="dos-meta">Alleen de eigenaar kan dit wijzigen.</div>'}
+    ${ikEig?`<div class="dos-meta" style="margin-top:8px">App-versie (projectgegevens): deze cockpit is versie <b>${esc(PROJ_SCHEMA)}</b>. <button class="btn btn-xs btn-secondary" onclick="beheerSchemaVastleggen()" title="Na een release: oudere geopende tabbladen stoppen dan met wegschrijven van projecten">App-versie vastleggen…</button></div>`:''}
     <div class="dos-meta" style="margin-top:8px">Werkcodes: ${zonder?`<b>${esc(zonder)}</b> project${zonder===1?'':'en'} nog zonder werkcode. <button class="btn btn-xs btn-secondary" onclick="beheerWerkcodes()">Werkcodes toekennen…</button>`:'alle projecten hebben een werkcode.'}</div></div>`;
+}
+// Na een release (Bart, eigenaar): vastleggen dat deze app-versie live staat én dat oudere versies niet meer mogen schrijven
+// (POST /teller/schema {uitgerold, min}). Oudere geopende tabbladen zien dan "herlaad de pagina" en schrijven niets meer.
+async function beheerSchemaVastleggen(){
+  if(!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()&&MTRol.me&&MTRol.me.rol==='eigenaar')) return mtDialog.alert({title:'App-versie',message:'Alleen de eigenaar kan dit.'});
+  const v=PROJ_SCHEMA;
+  if(!await mtDialog.confirm({title:'App-versie vastleggen',message:`Dit legt vast dat app-versie ${v} live staat en dat oudere versies geen projecten meer mogen wegschrijven.\n\nWie nog een ouder tabblad open heeft, ziet dan "herlaad de pagina" en schrijft niets meer tot hij herlaadt (er gaat niets verloren: zijn wijzigingen blijven lokaal staan).\n\nDoe dit pas als de nieuwe versie live staat.`,okLabel:'Vastleggen'})) return;
+  try{ const j=await beheerApi('/teller/schema',{uitgerold:v,min:v,bevestig:'schema'});
+    await mtDialog.alert({title:'App-versie vastgelegd',message:`Uitgerold: ${j.schema_uitgerold}, minimum: ${j.schema_min}${j.gewijzigd===false?' (stond al zo)':''}.`}); }
+  catch(e){ await mtDialog.alert({title:'App-versie',message:'Vastleggen mislukt: '+(e.message||e)}); }
 }
 async function beheerProjectcode(waarde){
   const k=_PC_KEUZES.find(x=>x[0]===waarde); if(!k) return;

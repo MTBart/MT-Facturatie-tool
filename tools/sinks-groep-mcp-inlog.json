@@ -1,0 +1,25 @@
+{
+ "omschrijving": "mcp/src/inlog.js: login- en toestemmingspagina's van de MCP-proefserver (server-side HTML, geen DOM)",
+ "heleBestand": true,
+ "fragmentFns": [],
+ "houd": [
+  {
+   "fn": "pagina",
+   "expr": "inhoud",
+   "fp": "e288b3cc9a",
+   "reden": "HTML-fragment van melding() (alleen esc(tekst)) of toestemmingsPagina() (elke variabele door esc()); geen ruwe invoer"
+  },
+  {
+   "fn": "toestemmingsPagina",
+   "expr": "lokaal",
+   "fp": "085709f652",
+   "reden": "vaste waarschuwingstekst of lege string, afhankelijk van een boolean (redirectIsLoopback)"
+  },
+  {
+   "fn": "toestemmingsPagina",
+   "expr": "scopes",
+   "fp": "bfc25e81df",
+   "reden": "lijst van <li>${esc(SCOPE_TEKST[s])}</li> uit vaste teksten; alleen bekende scopes komen erin"
+  }
+ ]
+}

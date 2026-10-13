@@ -11,9 +11,10 @@
 (function (root) {
   'use strict';
   if (!root) return;
-  // XML-tekst: & < > " ' ge-escaped; tekens die in XML 1.0 niet mogen (stuurtekens) weg.
+  // XML-tekst: & < > " ' ge-escaped; tekens die in XML 1.0 niet mogen (stuurtekens, losse surrogates) weg.
   const xmlEsc = s => String(s == null ? '' : s)
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')   // losse (ongepaarde) surrogates; geldige paren blijven
     .replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
   // ISO-week en ISO-jaar van een datum JJJJ-MM-DD (bv. 2026-12-31 → week 53 van 2026; 2027-01-01 → week 53 van 2026).
   function isoWeek(ymd) {

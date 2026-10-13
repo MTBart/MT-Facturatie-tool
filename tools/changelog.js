@@ -1,3 +1,4 @@
+// Naast klantnamen worden ook rekeningnummers (IBAN, spaarrekening letter+cijfers) vervangen door [rekening]: tools/rekening-neutraal.js
 // Neutraliseert de CHANGELOG-tekst (stdin -> stdout) voor de publieke repo: klantnamen, aliassen, locatienamen en
 // Moneybird-contact-id's worden "[klant]". Woordenlijst, alles LOKAAL en genegeerd door git:
 //   data/klanten.json          de huidige klantenlijst
@@ -8,6 +9,7 @@
 // (githooks/pre-commit) laat de bestaande CHANGELOG.md dan staan in plaats van ongefilterd te herschrijven.
 // (2 = geen woordenlijst, 3 = fout in een bestand of tijdens het werk)
 const fs = require('fs'), path = require('path');
+const { neutraal: neutraalRekening } = require('./rekening-neutraal.js');   // IBAN's en spaarrekeningnummers -> [rekening]
 const dir = path.join(__dirname, '..', 'data');
 function stop(code, melding) { process.stderr.write('changelog.js: ' + melding + '\n'); process.exit(code); }
 try {
@@ -60,7 +62,7 @@ try {
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp([...termen].sort((a, b) => b.length - a.length).map(esc).join('|'), 'gi');
   const invoer = fs.readFileSync(0, 'utf8');
-  const uit = invoer.replace(re, '[klant]');
+  const uit = neutraalRekening(invoer.replace(re, '[klant]'));
   if (!uit.length) stop(3, 'lege invoer');
   process.stdout.write(uit);
 } catch (e) { stop(3, (e && e.message) || String(e)); }

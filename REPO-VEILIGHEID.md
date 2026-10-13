@@ -50,14 +50,14 @@ Vanuit de repo-map:
 
 ```bash
 git ls-files | grep -iE '\.env|secret|token|credential|moneybird-contacten|\.key$|\.pem$|(^|/)(CRM|Toggl|Vergaderingen|Moneybird)/' ; \
-git grep -lE 'eyJ0eXAiOiJKV1Q|ghp_[A-Za-z0-9]{20}|sk-ant-|-----BEGIN [A-Z ]*PRIVATE KEY-----|"refresh_token"' -- '*.html' '*.js' '*.json' '*.md' '*.py'
+git grep -lE 'eyJ0eXAiOiJKV1Q|ghp_[A-Za-z0-9]{20}|sk-ant-|-----BEGIN [A-Z ]*PRIVATE KEY-----|"refresh_token"' -- '*.html' '*.js' '*.json' '*.md' '*.py'  # privacy-ok: detectiepatronen als documentatie van de hook
 ```
 
 **Geen output = schoon.** (Enige verwachte uitzondering: niets — `agent_config.json` matcht niet meer want we filteren op echte secret-namen.)
 
 De guard test je met:
 ```bash
-echo '{"refresh_token":"1.fake"}' > _t.json && git add -f _t.json && git commit -m x ; git restore --staged _t.json && rm _t.json
+echo '{"refresh_token":"1.fake"}' > _t.json && git add -f _t.json && git commit -m x ; git restore --staged _t.json && rm _t.json  # privacy-ok: nep-voorbeeld in documentatie van de hook
 ```
 → moet `🛑 COMMIT GEBLOKKEERD` tonen.
 

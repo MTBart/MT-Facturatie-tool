@@ -61,3 +61,6 @@ module.exports['dialog'] = { bestand: 'mt-dialog.js', omschrijving: _g_dialog.om
 // Groep koers: mt-koers.js (houd-lijst met redenen in sinks-groep-koers.json).
 const _g_koers = require('./sinks-groep-koers.json');
 module.exports['koers'] = { bestand: 'mt-koers.js', omschrijving: _g_koers.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_koers.fragmentFns, houd: _g_koers.houd, overslaan: [] };
+// Groep mcp-inlog: mcp/src/inlog.js, server-side HTML van de MCP-proef (houd-lijst met redenen in sinks-groep-mcp-inlog.json).
+const _g_mcpinlog = require('./sinks-groep-mcp-inlog.json');
+module.exports['mcp-inlog'] = { bestand: 'mcp/src/inlog.js', omschrijving: _g_mcpinlog.omschrijving, heleBestand: true, veiligeFns: [], fragmentFns: _g_mcpinlog.fragmentFns, houd: _g_mcpinlog.houd, overslaan: [] };

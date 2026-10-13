@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.13.3 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.14.2 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -19,17 +19,18 @@
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-11c"></script>
+<script src="mt-project.js?v=2026-10-13a"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2026-10-12c"></script>
-<script src="mt-koppel.js?v=2026-10-11b"></script>
+<script src="mt-toggl.js?v=2026-10-12n"></script>
+<script src="mt-koppel.js?v=2026-10-12n"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
-<script src="mt-zoek.js?v=2026-10-11d"></script>
+<script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2026-10-11c"></script>
+<script src="mt-inbox.js?v=2026-10-12n"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -772,7 +773,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.13.3, 2026-10-12). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.14.2, 2026-10-13). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -793,7 +794,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.13.3</span>
+    <span class="header-version">v2.14.2</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -818,8 +819,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </header>
 
 <div class="tabs-wrap">
-  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Geld</button>
-  <button class="tab-btn active" data-recht="moneybird" onclick="showTab('dashboard',this)">Dashboard</button>
+  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Dashboard</button>
+  <button class="tab-btn active" id="tab-btn-dashboard-oud" style="display:none" data-recht="moneybird" onclick="showTab('dashboard',this)">Oud dashboard</button>
   <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
   <button class="tab-btn" onclick="showTab('attentie',this)">⚠ Vereist aandacht<span id="attentie-badge" class="tab-badge" style="display:none"></span></button>
@@ -847,11 +848,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
   <!-- ═══ TAB: DASHBOARD ═══ -->
   <div id="tab-dashboard" class="tab-content active">
-    <div class="card" id="aw-kaart" style="display:none;margin-bottom:1rem">
-      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">Vandaag aanwezig
-        <button class="btn btn-xs btn-secondary" onclick="aanwezigLaad(true)" title="Verversen" aria-label="Aanwezigheid verversen">↻</button></div>
-      <div id="aw-inhoud" style="font-size:13px"></div>
-    </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem" id="dash-kpi-row">
       <div class="kpi-card green" style="cursor:default">
         <div class="kpi-label">Omzet dit jaar</div>
@@ -1153,6 +1149,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <div class="card-title">Projecten</div>
           <div class="flex" style="margin-bottom:0.75rem;gap:6px">
             <button class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1">+ Nieuw project</button>
+            <button class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" onclick="tgOvernemenOpen()" style="flex:1" title="Een Toggl-project dat nog bij geen project hoort in de tool zetten">Uit Toggl overnemen</button>
             <button class="btn btn-secondary btn-sm" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" style="flex:1" title="Losse offerte-calculatie (voorcalculatie)">+ Nieuwe offerte</button>
           </div>
           <input class="zoek-input" id="project-zoek" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
@@ -1637,6 +1634,12 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       #tab-agenda .ag-ltijd{flex:0 0 auto;font-size:11.5px;color:var(--text-faint,#999);font-variant-numeric:tabular-nums}
       #tab-agenda .ag-ldur{flex:0 0 auto;font-weight:600;font-variant-numeric:tabular-nums;min-width:48px;text-align:right}
     </style>
+    <!-- Vandaag aanwezig (Bart 12-10): van het oude dashboard naar de Agenda, zichtbaar voor iedereen; zelfde feature-flag (MTAanwezig.kaartAan) -->
+    <div class="card" id="aw-kaart" style="display:none;margin-bottom:1rem">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">Vandaag aanwezig
+        <button class="btn btn-xs btn-secondary" onclick="aanwezigLaad(true)" title="Verversen" aria-label="Aanwezigheid verversen">↻</button></div>
+      <div id="aw-inhoud" style="font-size:13px"></div>
+    </div>
     <div class="card" style="padding:1rem;margin-bottom:1rem">
       <div class="flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div class="flex" style="gap:6px;align-items:center">
@@ -2697,45 +2700,197 @@ function _werkcodeKaart(){
   try{ const m=JSON.parse(localStorage.getItem('mt_werkcodes')||'{}'); _wcMem=m&&typeof m==='object'&&!Array.isArray(m)?m:{}; }catch(e){ _wcMem={}; }
   return _wcMem;
 }
+// Projectnummer (brok A): het zichtbare hoofdnummer, zes cijfers, doorlopend vanaf 260801 (ook na de jaarwisseling).
+// `code` blijft de onveranderlijke technische sleutel: bestaande projecten houden W<jj>-<nnn>, nieuwe projecten krijgen
+// code = projectnummer. De teller is de bron; mt_projectnummers (project_id → nummer) is een lokale kopie die bij het lezen
+// wordt aangevuld, zonder stempel. Een app die het veld nog niet kent en het wegschrijft, kan het dus niet echt wissen.
+const PROJNR_RE=/^\d{6}$/;
+let _pnMem=null;
+function _projectnummerKaart(){
+  if(_pnMem) return _pnMem;
+  try{ const m=JSON.parse(localStorage.getItem('mt_projectnummers')||'{}'); _pnMem=m&&typeof m==='object'&&!Array.isArray(m)?m:{}; }catch(e){ _pnMem={}; }
+  return _pnMem;
+}
 function projAanvullen(p){
-  if(!p||typeof p!=='object'||(!p.code&&!p.project_id)) return p;
+  if(!p||typeof p!=='object'||p._mt_meta||(!p.code&&!p.project_id)) return p;
   if(!p.project_id) p.project_id=projIdVoor(p);
   if(!p.werkcode){ const w=_werkcodeKaart()[p.project_id]; if(w) p.werkcode=w; }
+  { // de teller is de bron: zijn nummer wint; kent hij het project (werkcode) zonder nummer, dan bewust leeg (null, bv. na een terugrol)
+    const kaart=_projectnummerKaart(), n=kaart[p.project_id];
+    if(n&&PROJNR_RE.test(String(n))) p.projectnummer=String(n);
+    else if(p.projectnummer&&kaart._volledig&&_werkcodeKaart()[p.project_id]) p.projectnummer=null; }
   if(!Array.isArray(p.legacy_codes)) p.legacy_codes=p.code?[p.code]:[];
   if(!p.soort) p.soort='klant';
   if(!Array.isArray(p.offertes)||(!p.offertes.length&&p.offertenr))
     p.offertes=p.offertenr?[{nummer:String(p.offertenr),mb_id:p.offertenr_mb_id!=null?String(p.offertenr_mb_id):null,rol:'hoofd',status:''}]:[];
   return p;
 }
-// Eén ingang om een (actief) project te vinden: project_id, huidige code of een oude code.
+// Het projectnummer om te TONEN (brok C gebruikt alleen deze): eerst de teller-kaart, dan het veld. Zo blijft het juiste
+// nummer zichtbaar, ook als een oude app het uit mt_projecten.json haalde; de volgende opslag zet het daar terug.
+function projNummer(p){
+  if(!p) return null;
+  const k=_projectnummerKaart(), n=p.project_id?k[p.project_id]:null;
+  if(n&&PROJNR_RE.test(String(n))) return String(n);
+  if(p.project_id&&k._volledig&&_werkcodeKaart()[p.project_id]) return null;   // de teller kent het project zonder nummer
+  return p.projectnummer&&PROJNR_RE.test(String(p.projectnummer))?String(p.projectnummer):null;
+}
+// Eén ingang om een (actief) project te vinden: project_id, huidige code, projectnummer of een oude code.
+// Via de gedeelde resolver (mt-project.js, brok C): ook op werkcode, aliassen van de teller en offertenummer. De index
+// wordt hergebruikt zolang de sleutels niet veranderen: een goedkope vingerafdruk van alle sleutelvelden (ook een record
+// dat net in het geheugen is gewijzigd) plus een versie die bij opslaan/laden/een nieuwe teller-kaart omhoog gaat.
+let _projIx=null, _projIxVersie=0, _projIxSig='';
+function projIndexVerouderd(){ _projIxVersie++; }
+function _projIxVinger(){
+  let s=_projIxVersie+'|'+PROJECT_CODES.length;
+  for(const p of PROJECT_CODES) if(p) s+='|'+p.project_id+':'+p.code+':'+(p.projectnummer||'')+':'+(p.werkcode||'')+':'+(p.offertenr||'')+':'
+    +(Array.isArray(p.legacy_codes)?p.legacy_codes.join(','):'')+':'+(Array.isArray(p.offertes)?p.offertes.map(o=>o&&o.nummer+'/'+o.rol).join(','):'')+(p._vervallen?':x':'');
+  return s;
+}
+function projIndex(vers){
+  const sig=_projIxVinger();
+  if(!vers&&_projIx&&sig===_projIxSig&&_projIx.bron===PROJECT_CODES) return _projIx;
+  _projIx=MTProject.index(PROJECT_CODES,{nummer:projNummer,aliassen:_projectnummerKaart()._aliassen||{}});
+  _projIx.bron=PROJECT_CODES; _projIxSig=sig;
+  return _projIx;
+}
 function projVind(x){
   if(x==null||x==='') return null;
-  const s=String(x), l=s.toLowerCase();
-  return PROJECT_CODES.find(p=>p&&p.project_id&&String(p.project_id).toLowerCase()===l)
-    ||PROJECT_CODES.find(p=>p&&p.code===s)
-    ||PROJECT_CODES.find(p=>p&&Array.isArray(p.legacy_codes)&&p.legacy_codes.includes(s))||null;
+  let r=MTProject.vind(projIndex(),x);
+  // de lijst kreeg verse objecten met dezelfde inhoud (bv. na herladen zonder projLaad): opnieuw opbouwen
+  if(r.project&&!PROJECT_CODES.includes(r.project)) r=MTProject.vind(projIndex(true),x);
+  if(r.soort==='een') return r.project;
+  // Dubbel id of dubbele code is een conflict in de gegevens (projConflicten meldt het): dan zoals altijd de eerste.
+  // Verder nooit gokken: een nummer, alias of offertenummer bij twee projecten vindt niets.
+  if(r.soort==='ambigu'&&(r.via==='id'||r.via==='code')) return r.kandidaten[0];
+  return null;
 }
-// P2-velden behouden als de winnende kant ze mist (geschreven door een app-versie van vóór P2):
-// project_id/soort van de andere kant, legacy_codes samengevoegd, offertes als de winnaar er geen heeft.
-function _projP2Behoud(uit, lokaal, spData){
-  if(!Array.isArray(uit)) return uit;
-  const per=new Map();
-  [lokaal,spData].forEach(l=>{ if(typeof l==='string'){ try{ l=JSON.parse(l); }catch(e){ l=null; } } (Array.isArray(l)?l:[]).forEach(x=>{ if(x&&x.code){ if(!per.has(x.code)) per.set(x.code,[]); per.get(x.code).push(x); } }); });
-  return uit.map(u=>{
-    if(!u||!u.code) return u;
-    let k=null; const z=()=>k||(k=JSON.parse(JSON.stringify(u)));
-    for(const o of per.get(u.code)||[]){
-      if(o===u) continue;
-      if(o.project_id&&!u.project_id&&!(k&&k.project_id)) z().project_id=o.project_id;
-      if(o.soort&&!(k||u).soort) z().soort=o.soort;
-      if(o.werkcode&&!(k||u).werkcode) z().werkcode=o.werkcode;
-      if(o.map_stijl&&!(k||u).map_stijl) z().map_stijl=o.map_stijl;
-      if(Array.isArray(o.legacy_codes)){ const mis=o.legacy_codes.filter(c=>!((k||u).legacy_codes||[]).includes(c)); if(mis.length){ const w=z(); w.legacy_codes=(Array.isArray(w.legacy_codes)?w.legacy_codes:[]).concat(mis); } }
-      if(Array.isArray(o.offertes)&&o.offertes.length&&!(Array.isArray((k||u).offertes)&&(k||u).offertes.length)) z().offertes=JSON.parse(JSON.stringify(o.offertes));
-    }
-    return k||u;
-  });
+// Project uit een referentie (inkoopfactuur, MB): alleen een bekende sleutel vooraan telt → {soort:'geen'|'een'|'ambigu',…}.
+function projUitReferentie(ref){ return MTProject.uitPrefix(projIndex(),ref); }
+// ── Samenvoegen op project_id (brok A) ──
+// Eén project = één project_id, ook als twee kopieën een andere code dragen (een oude cache, een hernoeming van vóór
+// P2). Sleutel per record: 'pid:'+project_id; een hernoem-tombstone (`_vervallen` + `_hernoemd_naar`) houdt zijn eigen
+// sleutel 'graf:'+code, zodat een oude kopie met die code niet terugkomt en het actieve record niet verdwijnt.
+// Overgangsindex: een record zonder project_id (oude app) krijgt het id van het project dat zijn code als huidige
+// code, projectnummer, werkcode of oude code kent; anders het deterministische projIdVoor(code + created).
+function _projSleutel(p){
+  if(!p||typeof p!=='object'||p._mt_meta) return null;
+  if(p._vervallen&&p._hernoemd_naar&&p.code) return 'graf:'+p.code;
+  return p.project_id?'pid:'+p.project_id:null;
 }
+// Een "zacht" id is afgeleid van code + created (projIdVoor, bestaande projecten van vóór P2) en dus niet uitgegeven: twee
+// kopieën met een andere created krijgen een ander zacht id. Een uitgegeven ("hard") id gaat daarom voor.
+function _projIdZacht(x){ return !!(x&&x.project_id&&x.code&&x.project_id===projIdVoor(x)); }
+function _projIndex(lijst){
+  const huidig=new Map(), graf=new Map(), oud=new Map(), teller=new Map();
+  const zet=(m,c,pid)=>{ if(c!=null&&c!==''&&!m.has(String(c))) m.set(String(c),pid); };
+  // de lokale kopie van de teller (werkcode/projectnummer → project_id) is de bron voor uitgegeven codes
+  try{ Object.entries(_werkcodeKaart()).forEach(([pid,c])=>zet(teller,c,pid)); Object.entries(_projectnummerKaart()).forEach(([pid,c])=>{ if(/^p_/.test(pid)) zet(teller,c,pid); }); }catch(e){}
+  const met=lijst.filter(x=>x&&typeof x==='object'&&x.project_id&&!x._mt_meta);
+  met.filter(x=>x._vervallen&&x._hernoemd_naar).forEach(x=>zet(graf,x.code,x.project_id));
+  const rest=met.filter(x=>!(x._vervallen&&x._hernoemd_naar)), r=x=>(x._vervallen?2:0)+(_projIdZacht(x)?1:0);
+  rest.sort((a,b)=>r(a)-r(b));                                   // hard en actief eerst (stabiel)
+  rest.forEach(x=>{ if(_projIdZacht(x)) return; zet(huidig,x.code,x.project_id); zet(huidig,x.projectnummer,x.project_id); zet(huidig,x.werkcode,x.project_id); });
+  rest.forEach(x=>(Array.isArray(x.legacy_codes)?x.legacy_codes:[]).forEach(c=>zet(oud,c,x.project_id)));
+  return {huidig,graf,oud,teller};
+}
+// Overgangsindex: zonder id (oude app) → het project dat de code uitgaf (teller), als huidige code/nummer/werkcode heeft,
+// hernoemde (tombstone), of als oude code kent; anders projIdVoor. Een zacht id wordt alleen vervangen door een
+// uitgegeven id van hetzelfde project (teller, huidige code van een hard record, hernoem-tombstone) — nooit via een
+// oude code, want die kan na een hernoeming opnieuw zijn gebruikt.
+function _projMetId(x,idx){
+  if(!x||typeof x!=='object'||x._mt_meta||!x.code) return x;
+  const c0=String(x.code), w0=x.werkcode?String(x.werkcode):'';
+  let pid=null;
+  if(!x.project_id) pid=idx.teller.get(c0)||(w0&&idx.teller.get(w0))||idx.huidig.get(c0)||(w0&&idx.huidig.get(w0))||idx.graf.get(c0)||idx.oud.get(c0)||projIdVoor(x);
+  else if(_projIdZacht(x)) pid=idx.teller.get(c0)||(w0&&idx.teller.get(w0))||idx.huidig.get(c0)||(w0&&idx.huidig.get(w0))||idx.graf.get(c0)||x.project_id;
+  else return x;
+  if(pid===x.project_id) return x;
+  const c=JSON.parse(JSON.stringify(x));   // invoer nooit wijzigen
+  c.project_id=pid;
+  return c;
+}
+// Velden die de winnaar mist overnemen van een andere kopie van hetzelfde project (bv. geschreven door een app
+// zonder die velden); oude codes worden verenigd, en de code van de andere kopie wordt een oude code.
+function _projErf(w,o){
+  if(!w||!o||w===o) return w;
+  ['project_id','soort','werkcode','map_stijl'].forEach(v=>{ if(o[v]&&!w[v]) w[v]=o[v]; });
+  if(o.projectnummer&&!('projectnummer' in w)) w.projectnummer=o.projectnummer;   // null = bewust leeg (teller), niet terugzetten
+  const leg=Array.isArray(w.legacy_codes)?w.legacy_codes:(w.legacy_codes=w.code?[w.code]:[]);
+  [...(Array.isArray(o.legacy_codes)?o.legacy_codes:[]),o.code].forEach(c=>{ if(c&&!leg.includes(c)) leg.push(c); });
+  if(Array.isArray(o.offertes)&&o.offertes.length&&!(Array.isArray(w.offertes)&&w.offertes.length)) w.offertes=JSON.parse(JSON.stringify(o.offertes));
+  return w;
+}
+// Samenvoeger voor mt_projecten (lokaal, SharePoint). Per sleutel wint de nieuwste stempel (gelijk → lokaal; beide
+// zonder stempel → SharePoint), zoals _spSamenPerSleutel. Uitzondering binnen één project: een actief record met een
+// code die hernoemd is (er bestaat een hernoem-tombstone voor die code) verliest van een actief record met de
+// huidige code (of een record waarvan de code bij de ander als oude code staat) — een oude cache zet een hernoeming
+// dus niet terug. Records zonder sleutel blijven staan.
+function _projSamen(lokaal,spData){
+  const lees=v=>{ try{ return typeof v==='string'?JSON.parse(v):v; }catch(e){ return null; } };
+  const L0=Array.isArray(lees(lokaal))?lees(lokaal):[], R0=Array.isArray(lees(spData))?lees(spData):[];
+  const idx=_projIndex([...R0,...L0]);
+  const R=R0.map(x=>_projMetId(x,idx)), L=L0.map(x=>_projMetId(x,idx));
+  const hernoemd=new Set([...R,...L].filter(x=>x&&x._vervallen&&x._hernoemd_naar&&x.code).map(x=>String(x.code)));
+  // >0: x is de actuelere identiteit van het project, <0: o, 0: onbeslist (dan de stempel)
+  const rang=(x,o)=>{
+    if(x._vervallen||o._vervallen||x.code===o.code) return 0;
+    const hx=hernoemd.has(String(x.code)), ho=hernoemd.has(String(o.code));
+    if(hx!==ho) return hx?-1:1;
+    const xl=Array.isArray(x.legacy_codes)&&x.legacy_codes.includes(o.code), ol=Array.isArray(o.legacy_codes)&&o.legacy_codes.includes(x.code);
+    return xl===ol?0:(xl?1:-1);
+  };
+  const per=new Map(), groep=new Map(), los=new Map();
+  for(const x of [...R,...L]){
+    const k=_projSleutel(x);
+    if(!k){ if(x&&typeof x==='object'&&x._mt_meta) continue; los.set(JSON.stringify(x),x); continue; }   // een meta-record (proefversie) valt weg
+    if(!groep.has(k)) groep.set(k,[]); groep.get(k).push(x);
+    const o=per.get(k);
+    if(!o){ per.set(k,x); continue; }
+    const r=rang(x,o);
+    if(r>0||(r===0&&_spLokaalWint(_spTijd(x),_spTijd(o)))) per.set(k,x);
+  }
+  const uit=[];
+  for(const [k,w0] of per){
+    const andere=groep.get(k).filter(o=>o!==w0);
+    if(!andere.length){ uit.push(w0); continue; }
+    const w=JSON.parse(JSON.stringify(w0));
+    andere.forEach(o=>_projErf(w,o));
+    uit.push(w);
+  }
+  return [...uit,...los.values()];
+}
+// ── Schemaversie (brok A) ──
+// De laagste app-versie die mt_projecten nog mag schrijven staat in de teller (GET /teller/status → schema_min), NIET in
+// mt_projecten.json zelf: oudere apps (uren) gooien records zonder code daar weg, en een meta-record zou in oude code als
+// project kunnen opduiken. Bij het laden/hydrateren en hooguit eens per 5 minuten vóór het wegschrijven leest de cockpit
+// het (alleen lezen; "versie N is uitgerold" legt de eigenaar vast via POST /teller/schema); vóór elke write van
+// mt_projecten opnieuw, zonder cache (schedule). Is zijn PROJ_SCHEMA te laag,
+// dan schrijft hij mt_projecten niet meer (geen samenvoegen, geen terugschrijven, de lokale stand blijft ongemoeid) en
+// vraagt hij om te herladen. Bewuste keuze bij een onbereikbare teller (of niet ingelogd):
+//   - nog niets bekend (eerste vraag mislukt) → geen blokkade (fail-open: anders legt een storing het werk stil);
+//   - eerder al "te oud" gebleken → blijft blokkeren tot herladen (fail-closed: een storing heft de blokkade niet op).
+// Een geslaagd antwoord vervangt de kennis; een blokkade die al getoond is (blockedKeys) geldt tot herladen.
+const PROJ_SCHEMA=3;   // 3 (brok C): resolver, mappen, Toggl, mobiel en uren lezen projectnummers → de teller geeft deze app nummers
+let _projSchemaMin=null, _projSchemaTijd=0;
+function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
+async function projSchemaCheck(forceer){
+  if(!forceer&&Date.now()-_projSchemaTijd<5*60*1000) return projSchemaGeblokkeerd();
+  _projSchemaTijd=Date.now();
+  try{ const j=typeof _tellerApi==='function'?await _tellerApi('/teller/status'):null; if(j&&Number.isFinite(Number(j.schema_min))) _projSchemaMin=Number(j.schema_min); }catch(e){}   // mislukt → vorige kennis blijft gelden
+  if(projSchemaGeblokkeerd()) projSchemaBlok();
+  return projSchemaGeblokkeerd();
+}
+// Eén keer melden (sync-status + toast) en mt_projecten niet meer naar SharePoint schrijven tot herladen.
+let _projSchemaGemeld=false;
+function projSchemaBlok(){
+  try{ if(typeof _SP!=='undefined'&&_SP&&_SP.blockedKeys) _SP.blockedKeys.add('mt_projecten'); }catch(e){}
+  const melding='Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Projectwijzigingen worden tot dan niet opgeslagen in SharePoint.';
+  try{ if(typeof _SP!=='undefined'&&_SP) _SP.lastSync={ts:Date.now(),ok:false,key:'mt_projecten',error:melding}; }catch(e){}
+  try{ if(typeof window!=='undefined'&&typeof window.updateSyncStatus==='function') window.updateSyncStatus(); }catch(e){}
+  if(!_projSchemaGemeld){ _projSchemaGemeld=true; try{ if(typeof planToast==='function') planToast('⚠ '+melding); }catch(e){} }
+}
+// Basis = hoe elk record eruitzag bij laden/opslaan (per sleutel), zodat slaProjectenOp ziet wat déze pc wijzigde.
+function _projBasisZet(lijst){ _projBasis=new Map(); (lijst||[]).forEach(p=>{ const k=_projSleutel(p); if(k) _projBasis.set(k,_projJson(p)); }); }
 // Hernoemd vóór P2: tombstone OUD (`_hernoemd_naar` NIEUW, zelfde `created`) + actief record NIEUW.
 // Beide krijgen het id van het oudste record in de keten en NIEUW krijgt de oude codes als legacy,
 // zodat oude links blijven werken. Deterministisch: tombstone en nieuw record staan samen in de store.
@@ -2777,47 +2932,57 @@ function projConflicten(lijst){
   const ids=new Map(), wcs=new Map();
   huidig.forEach(p=>{ if(!p.project_id) return; if(ids.has(p.project_id)) uit.push({code:p.project_id,soort:'dubbel project_id',projecten:[ids.get(p.project_id),p.code]}); else ids.set(p.project_id,p.code); });
   huidig.forEach(p=>{ if(!p.werkcode) return; if(wcs.has(p.werkcode)) uit.push({code:p.werkcode,soort:'dubbele werkcode',projecten:[wcs.get(p.werkcode),p.code]}); else wcs.set(p.werkcode,p.code); });
+  const nrs=new Map();
+  huidig.forEach(p=>{ const n=projNummer(p); if(!n) return;
+    if(nrs.has(n)) uit.push({code:n,soort:'dubbel projectnummer',projecten:[nrs.get(n),p.code]}); else nrs.set(n,p.code);
+    if(n!==p.code&&huidig.has(n)) uit.push({code:n,soort:'projectnummer is huidige code van ander project',projecten:[p.code,n]});
+    if(oud.has(n)&&oud.get(n)!==p) uit.push({code:n,soort:'projectnummer is oude code van ander project',projecten:[oud.get(n).code,p.code]}); });
   return uit;
 }
 function _projLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_projecten')||'[]'); return Array.isArray(a)?_projHernoemKetens(a).map(projAanvullen):[]; }catch(e){ return []; } }
 function projLaad(){
-  const alle=_projLees();
-  _projBasis=new Map(alle.filter(p=>p&&p.code).map(p=>[p.code,_projJson(p)]));
+  const alle=_projSamen(_projLees(),[]).map(projAanvullen);   // oude kopieën van hetzelfde project worden één record
+  _projBasisZet(alle);
+  if(typeof projIndexVerouderd==='function') projIndexVerouderd();
   const actief=alle.filter(p=>p&&typeof p==='object'&&!p._vervallen);
   projConflicten(actief).forEach(c=>console.warn('projectsleutel-conflict ('+c.soort+'):',c.code,c.projecten.join(' / ')));
   return actief;
 }
 function slaProjectenOp(){
-  const opslag=_projLees(), perCode=new Map(), losOpslag=[];
-  opslag.forEach(p=>{ if(p&&p.code) perCode.set(p.code,p); else losOpslag.push(p); });
+  // De opslag eerst op project_id samenvoegen (oude kopieën van hetzelfde project worden één record).
+  const opslag=_projSamen(_projLees(),[]).map(projAanvullen), perSl=new Map(), losOpslag=[];
+  opslag.forEach(p=>{ const k=_projSleutel(p); if(k) perSl.set(k,p); else losOpslag.push(p); });
   const uit=[], gezien=new Set(), weg=new Set();
   for(const p of PROJECT_CODES){
     if(!p||p.bron==='app') continue;
     projAanvullen(p);                                   // zelfde afgeleide velden als bij het lezen → geen schijnwijziging
-    if(!p.code){ uit.push(p); continue; }
-    if(gezien.has(p.code)){ console.warn('dubbele projectcode in PROJECT_CODES — tweede record niet opgeslagen:',p.code,p); continue; }
-    gezien.add(p.code);
-    const s=perCode.get(p.code), j=_projJson(p);
-    if(s && j===_projBasis.get(p.code)){
+    const k=_projSleutel(p);
+    if(!k){ uit.push(p); continue; }
+    if(gezien.has(k)){ console.warn('dubbel project_id in PROJECT_CODES — tweede record niet opgeslagen:',p.code,p.project_id); continue; }
+    gezien.add(k);
+    const s=perSl.get(k), j=_projJson(p);
+    if(s && j===_projBasis.get(k)){
       // Hier niets gewijzigd → de opgeslagen stand overnemen (in place, zodat huidigProject klopt).
       if(s._vervallen){ weg.add(p); uit.push(s); continue; }
-      if(_projJson(s)!==j||s._gewijzigd!==p._gewijzigd){ Object.keys(p).forEach(k=>delete p[k]); Object.assign(p,JSON.parse(JSON.stringify(s))); }
+      if(_projJson(s)!==j||s._gewijzigd!==p._gewijzigd){ Object.keys(p).forEach(k2=>delete p[k2]); Object.assign(p,JSON.parse(JSON.stringify(s))); }
       uit.push(p); continue;
     }
-    if(!s||_projJson(s)!==j) _spStempel(p,s);
+    if(s) _projErf(p,s);                                // hier gewijzigd: oude codes/velden van de opgeslagen kopie behouden
+    if(!s||_projJson(s)!==_projJson(p)) _spStempel(p,s);
     uit.push(p);
   }
   // Alleen in de opslag (andere pc, tombstones): bewaren; actieve ook tonen.
-  for(const [code,s] of perCode){
-    if(gezien.has(code)) continue;
+  for(const [k,s] of perSl){
+    if(gezien.has(k)) continue;
     uit.push(s);
     if(!s._vervallen && s.bron!=='app') PROJECT_CODES.push(JSON.parse(JSON.stringify(s)));
   }
-  uit.push(...losOpslag.filter(x=>!uit.includes(x)));
+  uit.push(...losOpslag.filter(x=>!uit.includes(x)&&!(x&&x._mt_meta)));
   if(weg.size) PROJECT_CODES=PROJECT_CODES.filter(p=>!weg.has(p));
   const tekst=JSON.stringify(uit);
   if(tekst!==localStorage.getItem('mt_projecten')) localStorage.setItem('mt_projecten',tekst);
-  _projBasis=new Map(uit.filter(p=>p&&p.code).map(p=>[p.code,_projJson(p)]));
+  _projBasisZet(uit);
+  projIndexVerouderd();
 }
 // Project verwijderen/hernoemen zonder te wissen: de opgeslagen stand wordt een tombstone
 // (`_vervallen` met tijd+door, evt. `_hernoemd_naar`), zodat een oude kopie elders hem
@@ -2830,7 +2995,7 @@ function projTombstone(code,extra){
   _spStempel(t,i>=0&&_spTijd(opslag[i])>_spTijd(bron)?opslag[i]:bron);
   if(i>=0) opslag[i]=t; else opslag.push(t);
   localStorage.setItem('mt_projecten',JSON.stringify(opslag));
-  _projBasis.set(code,_projJson(t));
+  { const k=_projSleutel(t); if(k) _projBasis.set(k,_projJson(t)); }
   PROJECT_CODES=PROJECT_CODES.filter(p=>!(p&&p.code===code));
   return t;
 }
@@ -3023,7 +3188,7 @@ function showTab(name,btn){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   if(btn && btn.classList.contains('tab-btn')) btn.classList.add('active');
-  if(name==='dashboard'){ laadDashboard(); if(typeof aanwezigLaad==='function') aanwezigLaad(); }
+  if(name==='dashboard'){ if(_oudDashboardAan()) laadDashboard(); }   // oud dashboard: alleen via de achterdeur, met rol en recht
   if(name==='voorraad') renderVoorraadActief();
   if(name==='historie') renderHistory();
   if(name==='bestelling') renderBestellijst();
@@ -3037,7 +3202,7 @@ function showTab(name,btn){
   if(name==='instellingen') beheerLaad();
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
-  if(name==='agenda') renderAgenda();
+  if(name==='agenda'){ renderAgenda(); if(typeof aanwezigLaad==='function') aanwezigLaad(); }
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
   if(name==='attentie') renderAttentie();
@@ -3137,9 +3302,16 @@ const mtRoute={
     this._stil=true;
     try{
       if(!document.getElementById('tab-'+r.tab)) return;
+      if(r.tab==='dashboard'&&!_oudDashboardAan()) return;   // oud dashboard is gearchiveerd: een oude link/bladwijzer laat de startpagina haar werk doen
       const tabEl=document.getElementById('tab-'+r.tab);
       if(!tabEl.classList.contains('active')){
         const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+r.tab+"'"));
+        // alleen een zichtbare, toegestane knop (een deeplink zet niemand op een verborgen tab, bv. #tab=geld zonder recht)
+        if(btn&&((btn.style&&btn.style.display==='none')||(btn.classList&&btn.classList.contains('mt-rol-verborgen')))) return;
+        // een tab met data-recht pas als de rol bekend is (tot dan wachten), en alleen met dat recht (zie _routeMag)
+        const mag=typeof _routeMag==='function'?_routeMag(btn):'ja';
+        if(mag==='wacht'){ this._wacht=r; return; }
+        if(mag==='nee') return;
         if(btn) btn.click(); else showTab(r.tab);
       }
       if(r.tab!=='projecten') return;
@@ -5371,7 +5543,10 @@ function projKlantNaam(proj){
 // nog een technische sleutel (URL, opslag, koppelingen) en wordt nergens meer getoond. Zichtbaar is het
 // offertenummer — of, volgens de centrale instelling "Projectcode tonen als", de werkcode of beide.
 // Onbekend → leeg: dan is de volledige projectnaam de identificatie (niets verzinnen).
+// Waarde 'werkcode' heet in de app "Projectnummer" (brok C): het projectnummer (teller), en zolang een project dat nog niet
+// heeft de werkcode W<jj>-<nnn>.
 function projCodeModus(){ const m=window.MT_INSTELLINGEN&&MT_INSTELLINGEN.projectcode; return m==='werkcode'||m==='beide'?m:'offerte'; }
+function projHoofdNr(p){ return p?(projNummer(p)||String(p.werkcode||'').trim()):''; }
 function projOfferteNr(p){
   if(!p) return '';
   const h=Array.isArray(p.offertes)?p.offertes.find(o=>o&&o.rol==='hoofd'&&o.nummer):null;
@@ -5379,7 +5554,7 @@ function projOfferteNr(p){
 }
 function projLabelCode(p){
   if(!p) return '';
-  const o=projOfferteNr(p), w=String(p.werkcode||'').trim(), m=projCodeModus();
+  const o=projOfferteNr(p), w=projHoofdNr(p), m=projCodeModus();
   return m==='werkcode'?w:m==='beide'?[w,o].filter(Boolean).join(' · '):o;
 }
 // Volledige projectnaam, zonder de generator-code (ook niet als voorvoegsel); geen naam → klant/locatie/product.
@@ -5400,7 +5575,8 @@ function projKeuzeLabel(c,reserve){ const p=_projVoorCode(c); return p?[projNaam
 // Zoeken vindt ook op wat niet getoond wordt (generator-/oude code, werkcode, offertenummers).
 function projZoekTekst(p){
   if(!p) return '';
-  return [p.code,p.naam,projNaamVol(p),p.offertenr,p.werkcode,...(Array.isArray(p.legacy_codes)?p.legacy_codes:[]),
+  const al=Object.entries(_projectnummerKaart()._aliassen||{}).filter(([,pid])=>pid===p.project_id).map(([a])=>a);
+  return [p.code,p.naam,projNaamVol(p),p.offertenr,p.werkcode,projNummer(p),...al,...(Array.isArray(p.legacy_codes)?p.legacy_codes:[]),
     ...(Array.isArray(p.offertes)?p.offertes.map(o=>o&&o.nummer):[]),p.klant_naam,projKlantNaam(p),p.loc_naam,projLocLabel(p)].filter(Boolean).join(' ').toLowerCase();
 }
 // "+ invullen"-knopje in open-gele koppelbadge-stijl (alleen voor wie projecten mag wijzigen).
@@ -6874,17 +7050,24 @@ async function _tgProjectIdVoorMt(mt){
       mt.legacy_track_id=mt.tg_project_id; delete mt.tg_project_id; slaProjectenOp();
     }
   }
+  // Nooit stil koppelen (Codex, brok C): ook bij één passend project alleen een VOORSTEL; de mens bevestigt via "Toggl-project
+  // kiezen". Alleen een al opgeslagen tg_project_id (hierboven) wordt zonder bevestiging gebruikt.
   const kand=_t2Kandidaten(mt,ps).filter(k=>k.score>=10);
-  if(kand.length===1){ mt.tg_project_id=kand[0].p.id; slaProjectenOp(); return kand[0].p.id; }
-  if(kand.length>1) throw new Error(`Meerdere Toggl-projecten passen bij ${mt.code} — kies er één via "Toggl-project kiezen"`);
+  if(kand.length){
+    const e=new Error(kand.length===1?`Toggl-project „${kand[0].p.name}” lijkt bij ${typeof projKort==="function"?projKort(mt):mt.code} te horen — bevestig via "Toggl-project kiezen"`:`Meerdere Toggl-projecten passen bij ${typeof projKort==="function"?projKort(mt):mt.code} — kies er één via "Toggl-project kiezen"`);
+    e.voorstel=kand.map(k=>({id:k.p.id,naam:k.p.name,score:k.score})); throw e;
+  }
   return null;
 }
 // Score per Toggl-project: exacte naam/code/[CODE]/offertenummer = zeker (≥10), woorden = voorstel.
 function _t2Kandidaten(mt,ps){
   const naam=t2ProjectNaam(mt).toLowerCase(), code=String(mt.code||'').toLowerCase(), nr=String(mt.offertenr||'').toLowerCase();
   const woorden=[...new Set([...code.split(/[-_\s]+/),...String(mt.naam||'').toLowerCase().split(/\W+/)])].filter(w=>w.length>=4);
+  const ix=typeof projIndex==='function'?projIndex():null;
   return ps.map(p=>{ const n=String(p.name||'').trim().toLowerCase(); let score=0;
     if(n===naam||n===code||n.includes('['+code+']')) score+=20;
+    // brok C: de naam wijst via de gedeelde resolver eenduidig naar dit project ("260812 Naam", "W26-003 Naam", …)
+    else if(ix){ const r=MTProject.uitToggl(ix,p.name); if(r.soort==='een'&&r.project===mt) score+=20; }
     if(nr&&(n===nr||n.startsWith(nr+' '))) score+=15;
     woorden.forEach(w=>{ if(n.includes(w)) score+=2; });
     return {p,score}; }).filter(k=>k.score>0).sort((a,b)=>b.score-a.score);
@@ -7039,8 +7222,10 @@ async function t2OffertenummerToekennen(code){
     if(i==null) return;
     const nr=est[i].estimate_id, oudNr=mt.offertenr||'', oudNaam=t2ProjectNaam(mt);
     const nieuwNaam=t2ProjectNaam(Object.assign({},mt,{offertenr:nr}));
-    const pid=await _tgProjectIdVoorMt(mt);   // meerdere kandidaten → fout, niets gewijzigd
-    const msg='Offertenummer: '+(oudNr||'(geen)')+' → '+nr+'\n'+(pid?('Toggl-projectnaam: "'+((_tgCache.projecten||[]).find(p=>p.id===pid)||{}).name+'" → "'+nieuwNaam+'"'):'Er is nog geen Toggl-project gekoppeld; alleen het nummer wordt opgeslagen.')+'\n\nDe projectmap wordt niet hernoemd.';
+    // meerdere kandidaten → fout, niets gewijzigd; één kandidaat → alleen een voorstel (geen stille koppeling), het offertenummer kan wel
+    let pid=null, tgVoorstel='';
+    try{ pid=await _tgProjectIdVoorMt(mt); }catch(eV){ if(!(eV.voorstel&&eV.voorstel.length===1)) throw eV; tgVoorstel=eV.message; }
+    const msg='Offertenummer: '+(oudNr||'(geen)')+' → '+nr+'\n'+(pid?('Toggl-projectnaam: "'+((_tgCache.projecten||[]).find(p=>p.id===pid)||{}).name+'" → "'+nieuwNaam+'"'):'Er is nog geen Toggl-project gekoppeld; alleen het nummer wordt opgeslagen.'+(tgVoorstel?'\n('+tgVoorstel+')':''))+'\n\nDe projectmap wordt niet hernoemd.';
     if(!await mtDialog.confirm({title:'Offertenummer toekennen',message:msg,okLabel:'Toekennen'})) return;
     if(typeof _ptJournaal==='function') _ptJournaal('offertenummer',code,{offertenr_oud:oudNr,offertenr_nieuw:nr,toggl_naam_oud:oudNaam,toggl_naam_nieuw:nieuwNaam,tg_project_id:pid,mb_estimate:est[i].id});
     let hernoemd=false;
@@ -8772,9 +8957,103 @@ function afkortLoc(naam,max=8){
 function afkortProduct(naam,max=40){
   return _clean(naam).replace(/\s+/g,'-').replace(/[^A-Z0-9-]/g,'').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,max);
 }
+// ── Project overnemen uit Toggl (v2.14.1, Bart: "andersom werken") ──
+// Een actief Toggl-project dat nog bij geen project hoort (geen tg_project_id; de naam wijst via de resolver ook niet naar
+// één project — ambigu telt als ongekoppeld, met waarschuwing) in de tool zetten. Kiezen = bevestigen; daarna het gewone
+// formulier (één aanmaakpad: maakProjectAan), voorgevuld: naam zonder code/nummer, klant alleen als de Toggl-klant exact in de
+// registry staat (anders leeg, nooit gokken). Het projectnummer komt uit de teller (op volgorde; een nummer in de Toggl-naam
+// wordt niet "teruggegeven", alleen gemeld). Bij aanmaken: tg_project_id vast, Toggl-naam ongewijzigd (hernoemen alleen via
+// "Toggl-naam bijwerken"), geen nieuw Toggl-project, map: bestaande voorstellen of na bevestiging een nieuwe.
+let _tgProjBron=null, _tgOverLijst=null;
+function tgOverAlGekoppeld(id){ return PROJECT_CODES.some(p=>p&&!p._vervallen&&p.tg_project_id!=null&&String(p.tg_project_id)===String(id)); }
+function tgOverKandidaten(ps){
+  const ix=projIndex(), uit=[]; let viaNaam=0;
+  for(const p of ps||[]){
+    if(!p||p.id==null||p.archived_at||p.active===false||tgOverAlGekoppeld(p.id)) continue;
+    const r=MTProject.uitToggl(ix,p.name);
+    if(r.soort==='een'){ viaNaam++; continue; }   // de naam wijst al naar een project: koppelen via "Toggl-project kiezen"
+    uit.push({p,ambigu:r.soort==='ambigu',bij:r.soort==='ambigu'?r.kandidaten.map(x=>projKort(x)):[]});
+  }
+  uit.sort((a,b)=>String(a.p.name||'').localeCompare(String(b.p.name||''),'nl'));
+  return {lijst:uit,viaNaam};
+}
+function tgOverKlantNaam(p){ return String((p&&((p.client&&p.client.name)||p.client_name))||'').trim(); }
+// Klantvoorstel: ALLE registry-namen die genormaliseerd gelijk zijn; alleen bij precies één, en geen leverancier (klantVolByNaam
+// pakt de eerste match en blijft voor de andere aanroepers zoals hij is). {kv, reden: ''|'geen'|'meerdere'|'leverancier'}.
+function tgOverKlantMatch(p){
+  const n=_normNaam(tgOverKlantNaam(p)); if(!n) return {kv:null,reden:'geen'};
+  const m=(KLANTEN_VOL||[]).filter(k=>k&&_normNaam(k.naam)===n);
+  if(!m.length) return {kv:null,reden:'geen'};
+  if(m.length>1) return {kv:null,reden:'meerdere'};
+  return m[0].soort==='leverancier'?{kv:null,reden:'leverancier'}:{kv:m[0],reden:''};
+}
+function tgOverKlant(p){ return tgOverKlantMatch(p).kv; }
+function _tgOverUren(sec){ const u=Math.round((Number(sec)||0)/360)/10; return u?String(u).replace('.',',')+' u':''; }
+async function tgOvernemenOpen(){
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return mtDialog.alert({title:'Uit Toggl overnemen',message:'Je mag geen projecten aanmaken.'});
+  let ps; try{ ps=await t2Projecten(true); }catch(e){ return mtDialog.alert({title:'Uit Toggl overnemen',message:'Toggl-projecten ophalen mislukt: '+(e.message||e)}); }
+  _tgOverLijst=tgOverKandidaten(ps);
+  let ov=document.getElementById('tg-over-modal');
+  if(!ov){ ov=document.createElement('div'); ov.id='tg-over-modal'; ov.className='modal-overlay'; document.body.appendChild(ov); }
+  const {lijst,viaNaam}=_tgOverLijst;
+  ov.innerHTML=`<div class="modal" style="width:560px;max-height:80vh;display:flex;flex-direction:column">
+    <h2>Uit Toggl overnemen</h2>
+    <div class="dos-meta" style="margin-bottom:8px">Toggl-projecten die nog bij geen project horen. Kies er één; daarna vul je het projectformulier aan en bevestig je.${viaNaam?` ${esc(viaNaam)} Toggl-project${viaNaam===1?'':'en'} met een naam die al naar een project wijst staan er niet tussen (koppelen via "Toggl-project kiezen").`:''}</div>
+    <input class="zoek-input" id="tg-over-zoek" type="text" placeholder="🔍 Zoek in Toggl-projecten…" oninput="tgOverFilter(this.value)" style="margin-bottom:8px">
+    <div id="tg-over-lijst" style="overflow:auto;flex:1">${lijst.length?lijst.map(x=>`<div class="factuur-item tg-over-rij" data-zoek="${esc([x.p.name,tgOverKlantNaam(x.p)].join(' ').toLowerCase())}" onclick="tgOvernemenKies(${jsArg(String(x.p.id))})" style="cursor:pointer">
+        <div style="font-weight:600;font-size:13px">${esc(x.p.name||'(zonder naam)')}</div>
+        <div style="font-size:11px;color:var(--text-dim)">${esc([tgOverKlantNaam(x.p),_tgOverUren(x.p.total_tracked_secs)].filter(Boolean).join(' · ')||'—')}</div>
+        ${x.ambigu?`<div style="font-size:11px;color:var(--orange)">⚠ De naam past bij meer dan één project (${esc(x.bij.join(', '))}) — controleer of het niet al bestaat.</div>`:''}
+      </div>`).join(''):'<div class="dos-meta" style="padding:1rem">Alle actieve Toggl-projecten horen al bij een project.</div>'}</div>
+    <div class="flex" style="margin-top:8px"><button class="btn btn-secondary" onclick="tgOvernemenSluit()">Sluiten</button></div></div>`;
+  ov.classList.remove('hidden');
+}
+function tgOverFilter(q){ const z=String(q||'').toLowerCase().trim(); document.querySelectorAll('#tg-over-lijst .tg-over-rij').forEach(r=>{ r.style.display=!z||(r.dataset.zoek||'').includes(z)?'':'none'; }); }
+function tgOvernemenSluit(){ const ov=document.getElementById('tg-over-modal'); if(ov) ov.classList.add('hidden'); }
+function tgOvernemenKies(id){
+  const x=_tgOverLijst&&_tgOverLijst.lijst.find(y=>String(y.p.id)===String(id)); if(!x) return;
+  if(tgOverAlGekoppeld(id)) return mtDialog.alert({title:'Uit Toggl overnemen',message:'Dit Toggl-project is al aan een project gekoppeld.'});
+  tgOvernemenSluit();
+  if(typeof tbDoTab==='function') tbDoTab('projecten');
+  openModal();   // wist de velden en de bronnen
+  const n=MTProject.naamZonderCode(x.p.name), km=tgOverKlantMatch(x.p), kv=km.kv, kn=tgOverKlantNaam(x.p);
+  _tgProjBron={id:x.p.id,naam:String(x.p.name||''),nummer:n.nummer};
+  const nk=document.getElementById('modal-naam-klant'); if(nk) nk.value=kv?kv.naam:'';
+  const np=document.getElementById('modal-naam-product'); if(np) np.value=n.naam.slice(0,60);
+  autoCode(true);
+  const al=n.nummer?projVind(n.nummer):null;
+  const st=document.getElementById('modal-status');
+  if(st){ st.style.color='var(--text-dim)';
+    st.textContent='Overname uit Toggl: „'+x.p.name+'” wordt aan dit project gekoppeld; de naam in Toggl blijft zoals hij is.'
+      +(kv?' Klant herkend: '+kv.naam+'.':!kn?' Geen Toggl-klant — vul de klant zelf in.'
+        :km.reden==='meerdere'?' Toggl-klant „'+kn+'” past bij meerdere registry-contacten — vul de klant zelf in.'
+        :km.reden==='leverancier'?' Toggl-klant „'+kn+'” staat in de registry als leverancier — vul de klant zelf in.'
+        :' Toggl-klant „'+kn+'” staat niet in de registry — vul de klant zelf in.')
+      +(al?' Let op: '+n.nummer+' hoort al bij '+projKort(al)+' — controleer of dit niet hetzelfde project is.'
+        :n.nummer?' In de Toggl-naam staat '+n.nummer+'; de teller geeft nummers op volgorde uit, dit project krijgt het volgende vrije nummer.':'')
+      +(x.ambigu?' ⚠ De naam past bij meer dan één project.':''); }
+}
+// Map bij een overname: bestaat er onder de klantmap al een map met de projectnaam erin, dan geen nieuwe map maar dat als
+// voorstel tonen (koppelen via "Mappen herstellen"); anders alleen na bevestiging een nieuwe map "Naam [code]".
+async function _tgOverMapKandidaten(proj){
+  const kn=_projVeilig(_projKlantNaam(proj)), sleutel=_SP._norm(proj.product_naam||proj.naam||'');
+  if(!kn||sleutel.length<4) return [];
+  const kids=await _SP.listChildren(PROJ_ROOT);
+  const kl=kids.find(c=>c.folder&&c.name===kn)||kids.find(c=>c.folder&&_SP._norm(c.name)===_SP._norm(kn)); if(!kl) return [];
+  const sub=await _SP.listChildren(PROJ_ROOT+'/'+kl.name);
+  return sub.filter(c=>c.folder&&_SP._norm(c.name).includes(sleutel)).map(c=>({naam:c.name,pad:PROJ_ROOT+'/'+kl.name+'/'+c.name,webUrl:c.webUrl||''}));
+}
+async function _tgOverMap(proj){
+  let kand=[]; try{ kand=await _tgOverMapKandidaten(proj); }catch(e){ console.warn('mappen zoeken faalde:',e); }
+  if(kand.length) return {voorstel:kand};
+  if(!await mtDialog.confirm({title:'Projectmap',message:'Er is nog geen map voor dit project gevonden. Nieuwe projectmap „'+_projMapNaam(proj)+'” aanmaken?',okLabel:'Aanmaken'})) return {overgeslagen:true};
+  await genereerProjectMappen(proj);
+  return {aangemaakt:true};
+}
 function openModal(){
   _projAanmaakVrij();
   _ibProjBron=null;   // schone start; inboxMaakProject() zet 'm daarna evt. opnieuw
+  _tgProjBron=null;   // idem voor "Uit Toggl overnemen" (tgOvernemenKies)
   ['modal-naam-klant','modal-naam-locatie','modal-naam-product','modal-klant','modal-locatie','modal-product'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
   // datalist met klantnamen: ECHTE registry-namen eerst (single source = klanten.json),
@@ -8853,18 +9132,35 @@ async function maakProjectAan(){
   const np=document.getElementById('modal-naam-product').value.trim();
   const status=document.getElementById('modal-status');
   if(!k||!p){status.style.color='var(--red)';status.textContent='Vul minimaal klant en product in';return;}
-  // P3b: de generator-code (KLANT-LOC-PROD) is uit. De technische sleutel `code` is de werkcode (W<jj>-<nnn>) uit de
-  // centrale teller, idempotent per project_id. Lukt dat niet, dan wordt er NIETS aangemaakt (geen gok, geen halve start).
+  // Overname uit Toggl: hetzelfde Toggl-project nooit twee keer (ook niet vanuit een tweede venster); geen nummer verbruiken.
+  const tgBron=typeof _tgProjBron!=='undefined'?_tgProjBron:null;
+  if(tgBron&&tgOverAlGekoppeld(tgBron.id)){status.style.color='var(--red)';status.textContent='Dit Toggl-project is al aan een project gekoppeld — er is niets aangemaakt.';return;}
+  // P3b: de generator-code (KLANT-LOC-PROD) is uit. De technische sleutel `code` komt uit de centrale teller, idempotent per
+  // project_id: een werkcode (W<jj>-<nnn>) of — als de nieuwe reeks aan staat (brok C) — het projectnummer, dan is
+  // {code, projectnummer, werkcode:null} en code = projectnummer. Lukt dat niet, dan wordt er NIETS aangemaakt.
   const projectId=projNieuwId();
-  status.style.color='var(--text-dim)'; status.textContent='Werkcode ophalen…';
-  let code=null, wcFout='';
-  try{ const j=await _tellerApi('/teller/werkcode',{project_id:projectId}); code=(j&&j.werkcode)?String(j.werkcode):null; if(!code) wcFout=j===null?'niet ingelogd':'geen werkcode ontvangen'; }
-  catch(e){ wcFout=String(e.message||e); }
-  if(!code){status.style.color='var(--red)';status.textContent='Werkcode niet beschikbaar ('+wcFout+') — er is niets aangemaakt. Probeer het zo opnieuw.';return;}
-  if(projVind(code)){status.style.color='var(--red)';status.textContent='Werkcode '+code+' is al in gebruik — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
+  status.style.color='var(--text-dim)'; status.textContent='Projectnummer ophalen…';
+  let code=null, wcFout='', nummer=null, werkcode=null;
+  try{
+    const j=await _tellerApi('/teller/werkcode',Object.assign({project_id:projectId,schema:PROJ_SCHEMA},tgBron?{tg_project_id:String(tgBron.id)}:{}));
+    nummer=j&&j.projectnummer&&PROJNR_RE.test(String(j.projectnummer))?String(j.projectnummer):null;
+    werkcode=j&&j.werkcode?String(j.werkcode):null;
+    code=j&&(j.code||j.werkcode)?String(j.code||j.werkcode):null;
+    if(code&&nummer&&code!==nummer) code=null;   // nieuw project met een nummer: de code ís het nummer
+    if(!code) wcFout=j===null?'niet ingelogd':'geen projectnummer ontvangen';
+  }catch(e){
+    // Overname uit Toggl: de teller claimt het Toggl-project atomisch; een tweede overname (ander venster, andere pc) krijgt het project terug.
+    if(e&&e.data&&e.data.error==='toggl-al-overgenomen'){ const al=projVind(e.data.project_id)||projVind(e.data.code); status.style.color='var(--red)';
+      status.textContent='Dit Toggl-project is al overgenomen als '+(al?projKort(al):(e.data.projectnummer||e.data.code||'een ander project'))+' — er is niets aangemaakt.'; return; }
+    wcFout=String(e.message||e);
+  }
+  if(!code){status.style.color='var(--red)';status.textContent='Projectnummer niet beschikbaar ('+wcFout+') — er is niets aangemaakt. Probeer het zo opnieuw.';return;}
+  if(projVind(code)){status.style.color='var(--red)';status.textContent='Projectnummer '+code+' is al in gebruik — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
+  if(tgBron&&tgOverAlGekoppeld(tgBron.id)){status.style.color='var(--red)';status.textContent='Dit Toggl-project is intussen al gekoppeld — er is niets aangemaakt.';return;}
   const wcOngeldig=projWerkcodeFout(code);
-  if(wcOngeldig){status.style.color='var(--red)';status.textContent='Werkcode ongeldig ('+wcOngeldig+') — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
-  _werkcodesZet({[projectId]:code});
+  if(wcOngeldig){status.style.color='var(--red)';status.textContent='Projectnummer ongeldig ('+wcOngeldig+') — er is niets aangemaakt. Meld dit bij de beheerder.';return;}
+  if(werkcode) _werkcodesZet({[projectId]:werkcode});
+  if(nummer) _projectnummerLokaal(projectId,nummer);
   const naam=([nk,nl].filter(Boolean).join(' ')+(np?` — ${np}`:'')).trim()||code;
   // Auto-koppeling Moneybird-contact: getypte klantnaam tegen verrijkte registry.
   const kv=klantVolByNaam(nk);
@@ -8880,7 +9176,11 @@ async function maakProjectAan(){
     klant_telefoon:(kv&&kv.telefoon)||'',klant_kvk:(kv&&kv.kvk)||'',
     klant_btw:(kv&&kv.btw)||'',klant_customer_id:(kv&&kv.customer_id)||null,
     created:new Date().toISOString().slice(0,10),
-    project_id:projectId,werkcode:code,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:_MAP_NAAM_CODE};
+    project_id:projectId,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:_MAP_NAAM_CODE};
+  if(werkcode) nieuwProj.werkcode=werkcode;
+  if(nummer) nieuwProj.projectnummer=nummer;
+  // Gekozen in "Uit Toggl overnemen": de koppeling ligt vast (de gebruiker koos dit Toggl-project); de Toggl-naam blijft zoals hij is.
+  if(tgBron){ nieuwProj.tg_project_id=tgBron.id; nieuwProj.bron_toggl={id:tgBron.id,naam:tgBron.naam,tijd:new Date().toISOString()}; _tgProjBron=null; }
   // Kwam dit project uit een mail (inbox → "Maak project")? Leg de bron vast.
   if(_ibProjBron) nieuwProj.bron_mail={internetMessageId:_ibProjBron.internetMessageId,
     subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,mbx:_ibProjBron.mbx};
@@ -8911,10 +9211,18 @@ async function maakProjectAan(){
   let mapFout='';
   // Mappenstructuur op SharePoint aanmaken (mkdir-p, idempotent)
   try{
+    if(tgBron){
+      // Overname: een bestaand Toggl-project heeft vaak al een map → eerst zoeken en koppelen voorstellen; een nieuwe map alleen na bevestiging.
+      projCtxStatus(code,'map zoeken…');
+      const m=await _tgOverMap(nieuwProj);
+      status.textContent=m.voorstel?`✓ ${naam} aangemaakt — er is al een map die lijkt te passen: „${m.voorstel.map(x=>x.naam).join('”, „')}”. Geen nieuwe map gemaakt; koppel hem via 🗂 Mappen herstellen.`
+        :m.aangemaakt?`✓ ${naam} aangemaakt + mappen op SharePoint`:`✓ ${naam} aangemaakt (zonder projectmap)`;
+    } else {
     status.textContent=`✓ ${naam} aangemaakt — mappen aanmaken…`;
     projCtxStatus(code,'mappen aanmaken…');
     await genereerProjectMappen(nieuwProj);
     status.textContent=`✓ ${naam} aangemaakt + mappen op SharePoint`;
+    }
   }catch(e){
     console.warn('mappen aanmaken faalde:',e);
     mapFout=String(e.message||e);
@@ -8924,7 +9232,7 @@ async function maakProjectAan(){
   // M&T-verweving: meteen het Toggl-project aanmaken met de code als naam, zodat de
   // projectcode één-op-één in Toggl terugkomt. Best-effort — faalt het, dan blijft
   // het M&T-project gewoon bestaan en kan Toggl later handmatig.
-  if(typeof tgMaakProjectVoorCode==='function'){
+  if(typeof tgMaakProjectVoorCode==='function'&&!nieuwProj.tg_project_id){   // overgenomen uit Toggl: er is al een Toggl-project
     try{
       projCtxStatus(code,'Toggl-project aanmaken…');
       const tgId=await tgMaakProjectVoorCode(code, true);
@@ -9104,7 +9412,7 @@ async function laadCashflowDashboard(){
     if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none';
     const dash=document.getElementById('tab-dashboard');
     if(dash&&!document.getElementById('cf-naar-geld')){ const d=document.createElement('div'); d.id='cf-naar-geld'; d.className='card'; d.style.cssText='margin-bottom:1rem;font-size:13px';
-      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Geld</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Geld →</button>';
+      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Dashboard</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Dashboard →</button>';
       dash.insertBefore(d,dash.firstElementChild); }
     return;
   }
@@ -9737,7 +10045,7 @@ function detecteerDuplicaten(facturen){
   return dup;
 }
 function isVolledigVerwerkt(f,dup){
-  const heeftProj=f.reference&&PROJECT_CODES.some(p=>f.reference.startsWith(p.code));
+  const heeftProj=!!f.reference&&projUitReferentie(f.reference).soort==='een';
   return heeftProj&&(!dup.has(f.id)||geenDuplicaat.has(f.id));
 }
 async function verwijderControleFactuurUitgevoerd(id) {
@@ -9767,11 +10075,11 @@ function renderControleLijst(facturen){
   document.getElementById('voortgang-inner').style.width=(facturen.length?Math.round(klaar/facturen.length*100):0)+'%';
   const lijst=document.getElementById('factuur-lijst');
   lijst.innerHTML=facturen.map((f,i)=>{
-    const heeftProj=f.reference&&PROJECT_CODES.some(p=>f.reference.startsWith(p.code));
+    const rp=f.reference?projUitReferentie(f.reference):{soort:'geen'}, heeftProj=rp.soort==='een';
     const isDup=dup.has(f.id);const volledig=isVolledigVerwerkt(f,dup);
     const datum=new Date(f.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
     const bedrag=parseFloat(f.total_price_incl_tax).toLocaleString('nl-NL',{style:'currency',currency:'EUR'});
-    const badge=isDup?`<span class="badge badge-danger">Dup</span>`:heeftProj?`<span class="badge badge-ok">✓</span>`:`<span class="badge badge-warn">Project</span>`;
+    const badge=isDup?`<span class="badge badge-danger">Dup</span>`:heeftProj?`<span class="badge badge-ok">✓</span>`:rp.soort==='ambigu'?`<span class="badge badge-warn" title="De referentie past bij meer dan één project">Project?</span>`:`<span class="badge badge-warn">Project</span>`;
     const betaalStatus=f.state==='paid'?`<span class="badge" style="background:var(--green-light);color:var(--green)">✓ Betaald</span>`:
       f.state==='pending_payment'?`<span class="badge" style="background:var(--blue-light);color:var(--blue)">⏳ In betaling</span>`:
       f.due_date&&new Date(f.due_date)<new Date()?`<span class="badge" style="background:var(--red-light);color:var(--red)">⚠ Te laat</span>`:
@@ -9846,7 +10154,7 @@ function renderControleDetail(f){
   const verval=f.due_date?new Date(f.due_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'}):'—';
   const bedragIncl=parseFloat(f.total_price_incl_tax).toLocaleString('nl-NL',{style:'currency',currency:'EUR'});
   const isDup=dup?.has(f.id);
-  const hProj=PROJECT_CODES.find(p=>f.reference?.startsWith(p.code))?.code||'';
+  const rp=f.reference?projUitReferentie(f.reference):{soort:'geen'}, hProj=rp.soort==='een'?rp.project.code:'';
   const isVL=isVoorraadLeverancier(f.contact?.company_name||'');
   document.getElementById('factuur-detail').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1rem">
@@ -9990,7 +10298,7 @@ async function slaControleOp(gaNaarVolgende=false){
   const status=document.getElementById('ctrl-status');const f=huidigeFactuur;
   const project=document.getElementById('ctrl-project').value;
   const bestaand=f.reference||'';
-  const heeftAlProj=PROJECT_CODES.some(p=>bestaand.startsWith(p.code));
+  const heeftAlProj=!!bestaand&&projUitReferentie(bestaand).soort!=='geen';   // ook ambigu: dat voorvoegsel wordt vervangen
   let nieuweRef=bestaand;
   if(project&&!heeftAlProj) nieuweRef=`${project}${bestaand?' - '+bestaand:''}`;
   else if(project&&heeftAlProj) nieuweRef=`${project}${bestaand.includes(' - ')?' - '+bestaand.split(' - ').slice(1).join(' - '):''}`;
@@ -10143,9 +10451,9 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
   // Een samenvoeger krijgt (lokale tekst, SP-data) en geeft het samengevoegde object terug.
   mergers: {
-    // Projecten (brok B2): per code wint de nieuwste `_gewijzigd`; verwijderen/hernoemen is
-    // een tombstone (`_vervallen`, evt. `_hernoemd_naar`). Eén-zijdig blijft; zie _spSamenPerSleutel.
-    mt_projecten(lokaal, spData) { return _projP2Behoud(_spSamenPerSleutel(lokaal, spData, x => x.code, _spTijd), lokaal, spData); },
+    // Projecten (brok B2, brok A): per project_id wint de nieuwste `_gewijzigd`; verwijderen/hernoemen is
+    // een tombstone (`_vervallen`, evt. `_hernoemd_naar`). Eén-zijdig blijft; zie _projSamen.
+    mt_projecten(lokaal, spData) { return _projSamen(lokaal, spData); },
     // Planning { code: plan }: zelfde regels per code (ook: beide ongestempeld → SharePoint);
     // planVerwijder zet een tombstone.
     mt_planning(lokaal, spData) {
@@ -10296,6 +10604,9 @@ const _SP = Object.assign(window.MTCore.makeSP({
     if (this.blockedKeys.has(key)) { console.warn('SP auto-sync geblokkeerd voor', key, '(hydrate faalde — herlaad de pagina)'); return; }
     clearTimeout(this._q[key]);
     this._q[key] = setTimeout(async () => {
+      // Projecten: mag deze app-versie nog schrijven? Vóór ELKE write een verse vraag aan de teller (zie projSchemaCheck:
+      // mislukt hij, dan fail-open zonder kennis en fail-closed als de app al eerder te oud bleek).
+      if (key === 'mt_projecten' && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) return;
       const tekst=rawValue===null?'':String(rawValue).trim();
       let data;
       try{ data=JSON.parse(tekst); }catch(e){ data=undefined; }
@@ -10314,6 +10625,9 @@ const _SP = Object.assign(window.MTCore.makeSP({
       // lokale stand alsnog over andermans werk heen (de ETag klopt dan weer).
       const mg = this.mergers && this.mergers[key];
       const conflictMerge = mg ? ((remote, local) => {
+        // SharePoint is intussen door een nieuwere app-versie geschreven: niet samenvoegen en niet schrijven (null →
+        // mt-core slaat de write over); de lokale stand blijft staan en gaat na herladen gewoon mee.
+        if (key === 'mt_projecten' && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
         const samen = mg(typeof local === 'string' ? local : JSON.stringify(local), remote);
         try { if (typeof _lsSet === 'function') _lsSet(key, JSON.stringify(samen)); } catch(e) {}
         // Live calculatie bijwerken zonder typwerk van ná de start van deze resolve
@@ -10440,12 +10754,13 @@ function _projLocNaam(proj){
 // "code - naam" en worden NOOIT hernoemd. De code in de tag is de technische sleutel (werkcode) en verandert niet,
 // ook niet als het offertenummer later volgt of de projectnaam wijzigt (gevonden wordt de map via itemId of via de tag).
 const _MAP_NAAM_CODE='naam-code';
-// Eén centrale validatie van een werkcode vóór hij ergens als sleutel of in een mapnaam komt: W<jj>-<nnn>, NFC, kort genoeg en geen gereserveerde SharePoint-naam. '' = goed.
-const _WERKCODE_RE=/^W\d{2}-\d{3,}$/, _SP_GERESERVEERD=/^(con|prn|aux|nul|com\d|lpt\d)$/i;
+// Eén centrale validatie van een code uit de teller vóór hij ergens als sleutel of in een mapnaam komt: een werkcode
+// W<jj>-<nnn> of (brok C) een projectnummer van 6 cijfers vanaf 260801; NFC, kort genoeg en geen gereserveerde SharePoint-naam. '' = goed.
+const _WERKCODE_RE=/^(W\d{2}-\d{3,}|\d{6})$/, _SP_GERESERVEERD=/^(con|prn|aux|nul|com\d|lpt\d)$/i;
 function projWerkcodeFout(code){
   if(typeof code!=='string') return 'geen tekst';
   if(code!==code.normalize('NFC')) return 'niet genormaliseerd (NFC)';
-  if(!_WERKCODE_RE.test(code)) return 'verwacht W<jj>-<nnn>';
+  if(!_WERKCODE_RE.test(code)||(/^\d{6}$/.test(code)&&Number(code)<260801)) return 'verwacht W<jj>-<nnn> of een projectnummer (6 cijfers, vanaf 260801)';
   if(code.length>20) return 'te lang';
   if(_SP_GERESERVEERD.test(code)||/^[.~]|_vti_|\.lock$/i.test(code)) return 'gereserveerde naam';
   return '';
@@ -10467,7 +10782,8 @@ async function _projMapZoek(proj, lijst){
   const kl = kids.find(c=>c.folder&&c.name===kn) || kids.find(c=>c.folder&&_SP._norm(c.name)===_SP._norm(kn));
   if(!kl) return { pad:null, kandidaten:[], reden:'geen klantmap "'+kn+'"' };
   const klPad = `${PROJ_ROOT}/${kl.name}`;
-  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']');
+  const nr = typeof projNummer==='function' ? projNummer(proj) : null;   // na de omnummering mag de tag ook het projectnummer zijn
+  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']') || (!!nr && n.endsWith(' ['+nr+']'));
   const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n) || / \[[A-Z0-9][A-Z0-9-]*\]$/.test(n);   // ziet eruit als een (andere) projectmap → niet induiken
   const kandidaten = [];
   const klKids = await lees(klPad);
@@ -11600,6 +11916,9 @@ window.initStorage = async function() {
       console.warn('SP hydrate faalde voor', key, '— migratie en auto-sync geblokkeerd');
       return;
     }
+    if (key === 'mt_projecten' && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) {
+      return;                              // te oude app-versie (teller): lokaal niets overschrijven, niets terugschrijven
+    }
     if (spData !== null) {
       const merger = _SP.mergers && _SP.mergers[key];
       if (merger) {
@@ -11612,7 +11931,10 @@ window.initStorage = async function() {
         _lsSet(key, JSON.stringify(samen));
         // Ook hier bij een 412 de samenvoeger gebruiken (de generieke merge kan geen
         // projecten/planning aan en zou de write overslaan).
-        const opnieuw = (remote, local) => { const s2 = merger(JSON.stringify(local), remote); _lsSet(key, JSON.stringify(s2)); return s2; };
+        const opnieuw = (remote, local) => {
+          if (key === 'mt_projecten' && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
+          const s2 = merger(JSON.stringify(local), remote); _lsSet(key, JSON.stringify(s2)); return s2;
+        };
         try { await _SP.write(key + '.json', samen, opnieuw); }
         catch(e) { console.warn('terugschrijven na samenvoegen faalde voor', key, ':', e.message); }
       } else {
@@ -11807,7 +12129,8 @@ function zbIndex(){
   const nu=Date.now(); if(_zbIdx&&nu-_zbIdxT<60000) return _zbIdx;
   let contacten=[]; try{ contacten=window.MTContacten?MTContacten.actieven():[]; }catch(e){}
   _zbIdx=MTZoek.index(MTZoek.bronVan({projecten:PROJECT_CODES,klanten:KLANTEN,taken:projTakenAll(),contacten},
-    {projectNaam:projNaamVol,klantNaam:projKlantNaam,locNaam:projLocLabel,projectLabel:projLabelCode,contactNaam:MTContacten.weergave}));
+    {projectNaam:projNaamVol,klantNaam:projKlantNaam,locNaam:projLocLabel,projectLabel:projLabelCode,contactNaam:MTContacten.weergave,
+     projectNummer:projNummer,projectAliassen:p=>Object.entries(_projectnummerKaart()._aliassen||{}).filter(([,pid])=>pid===p.project_id).map(([a])=>a)}));
   _zbIdxT=nu; return _zbIdx;
 }
 function zbZoek(q){ return MTZoek.zoek(zbIndex(),q,{mag:MTZoek.magUitRollen()}); }
@@ -12727,7 +13050,8 @@ async function toonApp(account) {
   if (window.initStorage) await window.initStorage();
   updateApiStatus();
   loadLedgers();
-  laadDashboard();
+  // Het oude dashboard (achterdeur ?oud-dashboard=1) wordt pas na het laden van de rol getoond en geladen (oudDashboardZet in
+  // rolToepassen): zonder rol of zonder geld-/moneybird-recht geen knop en geen Moneybird-rapporten.
   if(typeof admInitKnop==='function') admInitKnop();
   rolLaad().then(()=>{ instellingenLaad(); werkcodesLaad(); updStipZet(); klantRegistryNaLogin(); });
   mtKopHoogte(); setTimeout(()=>{ if(typeof oplCodesVerversen==='function') oplCodesVerversen(); },4000);
@@ -12742,6 +13066,18 @@ async function toonApp(account) {
 // focus/zichtbaar worden en na een geslaagde token-acquire — tot /me binnen is. Nooit twee aanvragen tegelijk;
 // een oude worker (geen /me) wordt niet blijvend opnieuw gevraagd. Een /me die wél faalt (401/5xx/netwerk) telt
 // mee in een budget van ROL_MAX_FOUT per paginalaad; "nog geen token" kost geen aanvraag en telt niet.
+// ── Deeplink en rechten (Codex v2.14.0): een route naar een tab met data-recht (bv. #tab=klanten → Moneybird-contacten)
+// wordt niet uitgevoerd zolang de rol nog laadt; daarna alleen als het recht er echt is (rechten uit /me, in élke
+// ROLLEN_MODUS — ook in 'log', waar de knop zelf zichtbaar blijft). Komt er definitief geen rol (oude worker, vaste fout,
+// pogingen op), dan "alles als vroeger": de route gaat alsnog door. Tabs zonder data-recht gaan meteen.
+let _rolKlaar=false;
+function _rechtRuw(spec){ const [k,niv]=String(spec||'').split(':'); const v=window.MTRol&&MTRol.recht?MTRol.recht(k):null; return !!v&&(!niv||niv.split('|').includes(v)); }
+function _routeMag(btn){
+  const spec=btn&&btn.dataset&&btn.dataset.recht; if(!spec) return 'ja';
+  if(!window.MTRol||!MTRol.me) return _rolKlaar?'ja':'wacht';
+  return MTRol.me.rechten?(_rechtRuw(spec)?'ja':'nee'):'ja';   // /me zonder rechtenkolommen (heel oude worker): als vroeger
+}
+function _routeNaRol(){ if(typeof mtRoute==='undefined') return; const r=mtRoute._wacht; mtRoute._wacht=null; if(r&&!_tabWissels) mtRoute.toepassen(r); }
 const ROL_PAUZES=[1500,3000,6000,12000,24000],ROL_MAX_FOUT=8;
 let _rolBezig=null,_rolTimer=null,_rolPoging=0,_rolFout=0;
 const _rolStoppen=()=>!window.MTRol||!!MTRol.me||MTRol.laadReden==='oude-worker'||_rolFout>=ROL_MAX_FOUT;
@@ -12760,7 +13096,13 @@ async function rolLaad(){
   _rolBezig=(async()=>{
     try{
       const me=await MTRol.laad(WORKER);
-      if(!me){ if(MTRol.laadReden!=='geen-token') _rolFout++; rolOpnieuwPlannen(); return null; }
+      if(!me){
+        if(MTRol.laadReden!=='geen-token') _rolFout++;
+        rolOpnieuwPlannen();
+        // Geen rol meer te verwachten (oude worker, vaste fout, pogingen op): niet op het verborgen oude dashboard blijven staan.
+        if(_rolStoppen()||(_rolPoging>=ROL_PAUZES.length&&!_rolTimer)){ _rolKlaar=true; _routeNaRol(); _verborgenTabTerugval(); }
+        return null;
+      }
       if(_rolTimer){ clearTimeout(_rolTimer); _rolTimer=null; }
       const r=rolToepassen(me);
       if(!eerder&&_rolPoging&&typeof updStipZet==='function') updStipZet();   // pas later gelukt: ook het "nieuw"-stipje (beheer-items) bijwerken
@@ -12787,9 +13129,35 @@ function rolToepassen(me){
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   if(typeof geldTabZet==='function') geldTabZet();
+  oudDashboardZet();
+  _rolKlaar=true; _routeNaRol();   // een deeplink die op de rol wachtte (alleen met recht)
+  // Een deeplink naar een tab waarvan de knop pas nu zichtbaar werd (bv. #tab=rapporten): alsnog openen, zolang er nog niet
+  // zelf gekozen is. De router opent alleen zichtbare, toegestane knoppen.
+  try{ const st=mtRoute.parse(mtRoute._start||location.hash||''); const te=st.tab&&document.getElementById('tab-'+st.tab);
+    if(!_tabWissels&&te&&!te.classList.contains('active')) mtRoute.toepassen(st); }catch(e){}
   startTabZet();
+  _verborgenTabTerugval();   // ook na een deeplink of een late rol: nooit blijven staan op een verborgen of niet-toegestane tab
   return me;
 }
+// Het oude dashboard (tab 'dashboard') is voorlopig gearchiveerd: de knop is verborgen, alleen ?oud-dashboard=1 in de URL
+// brengt hem terug (achterdeur). Het tabblad 'geld' heet in de kop nu "Dashboard"; id, route (#tab=geld) en recht blijven 'geld'.
+// De achterdeur werkt pas als de rol geladen is en alleen voor wie Geld of Moneybird mag (rechten uit /me, in élke ROLLEN_MODUS):
+// anders blijft de knop verborgen en worden er geen Moneybird-rapporten opgehaald.
+function _oudDashboardGevraagd(){ try{ return new URLSearchParams(location.search).get('oud-dashboard')==='1'; }catch(e){ return false; } }
+function _oudDashboardAan(){
+  if(!_oudDashboardGevraagd()||!window.MTRol||!MTRol.me) return false;
+  return !!(MTRol.magGeld()||(typeof MTRol.recht==='function'&&MTRol.recht('moneybird')));
+}
+let _oudDashGeladen=false;
+function oudDashboardZet(){
+  const b=document.getElementById('tab-btn-dashboard-oud'); if(!b) return;
+  const aan=_oudDashboardAan(); b.style.display=aan?'':'none';
+  const t=document.getElementById('tab-dashboard');
+  if(aan&&t&&t.classList.contains('active')&&!_oudDashGeladen){ _oudDashGeladen=true; laadDashboard(); }
+}
+const _tabVerborgen=b=>!!b&&(b.style.display==='none'||b.classList.contains('mt-rol-verborgen'));
+// Staat de actieve knop op een verborgen tab (oud dashboard zonder achterdeur, of Dashboard zonder recht), ga dan naar de eerste vrije tab.
+function _verborgenTabTerugval(){ const act=document.querySelector('.tabs-wrap .tab-btn.active'); if(_tabVerborgen(act)) _eersteVrijeTab(); }
 function _eersteVrijeTab(){ const vrij=[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>!b.classList.contains('mt-rol-verborgen')&&b.style.display!=='none'); if(vrij) vrij.click(); }
 // ── Startpagina per rol (Bart 9-10): wie Geld mag, begint op Geld; alle anderen (kantoor, werkplaats, …) op
 // Agenda → Planning, gefilterd op hun eigen planblokken (wie niet in MT_TEAM staat: de hele teamplanning).
@@ -12821,8 +13189,7 @@ function startTabZet(){
     if(lid) _agenda.fPers=new Set([lid.slug,lid.email]);   // planblokken staan op slug of e-mail
     showTab('agenda',a);
   }
-  const act=document.querySelector('.tabs-wrap .tab-btn.active');
-  if(act&&act.classList.contains('mt-rol-verborgen')) _eersteVrijeTab();   // niets te kiezen en Dashboard verborgen
+  _verborgenTabTerugval();   // niets te kiezen (geen rol, oude worker, geen Agenda) en het oude dashboard is verborgen
 }
 // ── Geld (geldtijdlijn) ──
 // Alleen als de worker de geldtijdlijn kent (kolom `geld` in /me) én je dat recht hebt; dan vervangt het
@@ -12834,6 +13201,10 @@ function geldTabZet(){
   b.style.display=ja?'':'none';
   const t=document.getElementById('tab-geld'); if(t&&t.classList.contains('active')&&ja) geldOpen();
   rapportTabZet(ja);
+  // Geld/Rapporten net verborgen terwijl je erop stond (bv. recht ingetrokken): naar de eerste vrije tab. Andere verborgen tabs
+  // (het oude dashboard bij het opstarten) laat geldTabZet aan de startpagina en de terugval in rolToepassen.
+  const act=document.querySelector('.tabs-wrap .tab-btn.active');
+  if(window.MTRol&&MTRol.me&&act&&(act.id==='tab-btn-geld'||act.id==='tab-btn-rapporten')&&act.style.display==='none'&&typeof _eersteVrijeTab==='function') _eersteVrijeTab();
 }
 // ── Rapporten (CEO-avond): zelfde recht als Geld; de eigenaar vinkt acties af, de administratie leest en stelt vragen ──
 function rapportBadge(n){
@@ -12956,7 +13327,7 @@ async function _tellerApi(pad,body){
   const h=await authHeader(); if(!h['X-Auth-Token']) return null;
   const r=await fetch(WORKER+pad,body===undefined?{headers:h}:{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>null);
-  if(!r.ok){ const e=new Error((j&&(j.uitleg||j.error))||('HTTP '+r.status)); e.status=r.status; throw e; }
+  if(!r.ok){ const e=new Error((j&&(j.uitleg||j.error))||('HTTP '+r.status)); e.status=r.status; e.data=j; throw e; }
   return j;
 }
 async function instellingenLaad(){
@@ -12978,9 +13349,9 @@ function _werkcodesZet(kaart){
   for(const p of PROJECT_CODES){
     if(!p||!p.project_id||!k[p.project_id]||p.werkcode===k[p.project_id]) continue;
     if(p.werkcode){ console.warn('werkcode gecorrigeerd volgens de teller:',p.code,p.werkcode,'→',k[p.project_id]); p.werkcode=k[p.project_id]; continue; }
-    const was=p.code&&_projBasis.get(p.code)===_projJson(p);
+    const sl=_projSleutel(p), was=sl&&_projBasis.get(sl)===_projJson(p);
     p.werkcode=k[p.project_id];
-    if(was) _projBasis.set(p.code,_projJson(p));
+    if(was) _projBasis.set(sl,_projJson(p));
   }
   slaProjectenOp(); _namenVernieuwd();
   return n;
@@ -12993,17 +13364,48 @@ function _werkcodeWacht(pid,erbij){
   return l;
 }
 async function projWerkcodeVraag(p){
-  if(!p||!p.project_id||p.werkcode) return p&&p.werkcode||null;
+  if(!p||!p.project_id||p.werkcode||projNummer(p)) return p&&(p.werkcode||projNummer(p))||null;
   try{
-    const j=await _tellerApi('/teller/werkcode',{project_id:p.project_id});
+    const j=await _tellerApi('/teller/werkcode',{project_id:p.project_id,schema:PROJ_SCHEMA});
     if(j&&j.werkcode){ _werkcodeWacht(p.project_id,false); _werkcodesZet({[p.project_id]:j.werkcode}); return j.werkcode; }
+    // reeks aan (brok C): een bestaand project zonder werkcode krijgt een projectnummer; zijn code blijft de sleutel
+    if(j&&j.projectnummer&&PROJNR_RE.test(String(j.projectnummer))){ _werkcodeWacht(p.project_id,false); _projectnummerLokaal(p.project_id,String(j.projectnummer)); return String(j.projectnummer); }
   }catch(e){ console.warn('werkcode nog niet toegekend (volgt later):',e.message); }
   _werkcodeWacht(p.project_id,true);
   return null;
 }
+// Projectnummers (brok B) uit de teller: de volledige kaart project_id → nummer vervangt de lokale kopie (`_volledig`: vanaf
+// dan geldt "de teller kent dit project zonder nummer" als bewust leeg, zie projAanvullen). Zonder stempel, zoals de werkcodes.
+function _projectnummersZet(kaart,aliassen){
+  const k={_volledig:true}, al={};
+  for(const [pid,nr] of Object.entries(kaart||{})) if(/^p_/.test(pid)&&PROJNR_RE.test(String(nr))) k[pid]=String(nr);
+  for(const [a,pid] of Object.entries(aliassen||{})) if(/^p_/.test(String(pid))&&/^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/.test(a)) al[a]=String(pid);
+  if(Object.keys(al).length) k._aliassen=al;   // aliasregister van de teller (oude codes → project_id), voor de resolver
+  if(JSON.stringify(k)===JSON.stringify(_projectnummerKaart())) return 0;
+  _pnMem=k; try{ localStorage.setItem('mt_projectnummers',JSON.stringify(k)); }catch(e){}
+  let n=0;
+  for(const p of PROJECT_CODES){
+    if(!p||!p.project_id) continue;
+    const sl=_projSleutel(p), voor=_projJson(p), was=sl&&_projBasis.get(sl)===voor;
+    projAanvullen(p);
+    if(_projJson(p)===voor) continue;
+    n++; if(was) _projBasis.set(sl,_projJson(p));
+  }
+  slaProjectenOp(); _namenVernieuwd();
+  return n;
+}
+// Eén net uitgegeven nummer in de lokale kaart en op het project zetten (zonder stempel); de volledige kaart volgt bij werkcodesLaad.
+function _projectnummerLokaal(pid,nr){
+  if(!pid||!PROJNR_RE.test(String(nr))) return;
+  const k=_projectnummerKaart(); if(k[pid]===String(nr)) return;
+  k[pid]=String(nr); _pnMem=k; try{ localStorage.setItem('mt_projectnummers',JSON.stringify(k)); }catch(e){}
+  const p=PROJECT_CODES.find(x=>x&&x.project_id===pid);
+  if(p&&p.projectnummer!==String(nr)){ const sl=_projSleutel(p), was=sl&&_projBasis.get(sl)===_projJson(p); p.projectnummer=String(nr); if(was) _projBasis.set(sl,_projJson(p)); slaProjectenOp(); }
+  if(typeof _namenVernieuwd==='function') _namenVernieuwd();
+}
 async function werkcodesLaad(){
-  try{ const j=await _tellerApi('/teller/werkcodes'); if(j&&j.werkcodes) _werkcodesZet(j.werkcodes); }catch(e){ return; }
-  for(const pid of _werkcodeWacht(null,false)){ const p=projVind(pid); if(p&&!p.werkcode) await projWerkcodeVraag(p); else _werkcodeWacht(pid,false); }
+  try{ const j=await _tellerApi('/teller/werkcodes'); if(j&&j.werkcodes) _werkcodesZet(j.werkcodes); if(j&&j.nummers) _projectnummersZet(j.nummers,j.aliassen); }catch(e){ return; }
+  for(const pid of _werkcodeWacht(null,false)){ const p=projVind(pid); if(p&&!p.werkcode&&!projNummer(p)) await projWerkcodeVraag(p); else _werkcodeWacht(pid,false); }
 }
 // ── Vandaag aanwezig (F1e-C): worker (/aanwezig) + lokaal: planblokken van vandaag en verlof ──
 function _awSlug(persoon){ const p=String(persoon||'').toLowerCase(); return p.includes('@')?p.split('@')[0]:p; }
@@ -13120,12 +13522,12 @@ function _bhRolUitleg(g){
 }
 // Beheer → Projectcode: wat staat zichtbaar bij een project (alleen de eigenaar wijzigt), en werkcodes
 // voor bestaande projecten (eenmalig, in volgorde van aanmaakdatum; eerst een proef).
-const _PC_KEUZES=[['offerte','Offertenummer','2026-071'],['werkcode','Werkcode','W26-014'],['beide','Beide','W26-014 · 2026-071']];
+const _PC_KEUZES=[['offerte','Offertenummer','2026-071'],['werkcode','Projectnummer','260812'],['beide','Beide','260812 · 2026-071']];
 function _bhZonderWerkcode(){ return PROJECT_CODES.filter(p=>p&&p.project_id&&!p.werkcode&&!p._vervallen); }
 function _bhProjectcode(ikEig){
   const huidig=projCodeModus(), zonder=_bhZonderWerkcode().length;
-  const vb=PROJECT_CODES.find(p=>p&&projOfferteNr(p)&&p.werkcode)||null;
-  const voorbeeld=k=>vb?[k[0]==='offerte'?'':vb.werkcode,k[0]==='werkcode'?'':projOfferteNr(vb)].filter(Boolean).join(' · '):k[2];
+  const vb=PROJECT_CODES.find(p=>p&&projOfferteNr(p)&&projHoofdNr(p))||null;
+  const voorbeeld=k=>vb?[k[0]==='offerte'?'':projHoofdNr(vb),k[0]==='werkcode'?'':projOfferteNr(vb)].filter(Boolean).join(' · '):k[2];
   return `<div class="bh-blok"><h4>Projectcode</h4>
     <div class="dos-meta" style="margin-bottom:6px">Welke code bij een project staat (lijst, contextbalk, koppelingen, mobiel). Geen nummer bekend → alleen de naam. De technische sleutel en links veranderen niet.</div>
     <div class="bh-form" role="radiogroup" aria-label="Projectcode tonen als">${_PC_KEUZES.map(k=>`<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="bh-projectcode" value="${esc(k[0])}"${k[0]===huidig?' checked':''}${ikEig?'':' disabled'} onchange="beheerProjectcode(this.value)"> ${esc(k[1])} <span class="code">${esc(voorbeeld(k))}</span></label>`).join('')}</div>

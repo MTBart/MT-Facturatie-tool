@@ -5,8 +5,38 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — Release v2.15.0: leads (fase, volgende actie, Vandaag, Gewonnen -> project, Direct project), projectgegevens voor Vectorworks en navigatie naar het adres; versielabel, Wat is er verbeterd; backup = v2.14.2
+- Commit: `f64738b` | Auteur: Bart Witte
+
+## 2026-10-13 — Merge origin/main (v2.14.2) in l1-leads
+- Commit: `cc2b3fe` | Auteur: Bart Witte
+
+## 2026-10-13 — L1 reparaties 2: merge normaliseert ook enkelvoudige records, gegevens generiek per sleutel, rechtencontrole bij elke aanmaak
+- Commit: `01ce9df` | Auteur: Bart Witte
+
+## 2026-10-13 — L1 reparaties: status volgt fase na elke merge, gegevens per sleutel gemerged, rechtencontroles (+ Lead, VW-export), Graph-vervangen met If-Match, eigenaarsknop "App-versie vastleggen"
+- Commit: `5a516e5` | Auteur: Bart Witte
+
+## 2026-10-13 — L1c: xmlEsc verwijdert ook ongepaarde surrogates (geldige paren blijven)
+- Commit: `2c6b4b8` | Auteur: Bart Witte
+
+## 2026-10-13 — L1c: projectgegevens en "Projectgegevens voor Vectorworks"; navigatie naar het adres
+- Commit: `3cf5423` | Auteur: Bart Witte
+
 ## 2026-10-13 — L1b: "Gewonnen → project" in één klik met voorstellen, en "Direct project"
 - Commit: `cbfa8ac` | Auteur: Bart Witte
+
+## 2026-10-13 — Release v2.14.2 (integratie): privacy-hooks, mcp-proef en signalen samengevoegd op v2.14.1; versielabel, Wat is er verbeterd (beheer) en sw.js-cache mt-app-v2
+- Commit: `173e4d9` | Auteur: Bart Witte
+
+## 2026-10-13 — Merge signalen: actiewachtrij, POST /mb/webhook, reconciliatie-cron 45 4 * * *, web-push (VAPID) en meldingenknop in mobiel
+- Commit: `4f8d623` | Auteur: Bart Witte
+
+## 2026-10-13 — MCP-proefserver mt-mcp (OAuth, whoami), Codex-goedgekeurd
+- Commit: `a438ec3` | Auteur: Bart Witte
+
+## 2026-10-13 — Merge privacy-hooks: privacy-scan (pre-commit, commit-msg, pre-push), namenlijst-script, tests; rekeningnummer-placeholder
+- Commit: `f07e895` | Auteur: Bart Witte
 
 ## 2026-10-13 — L1a: velden met een eigen stempel, delete-wins, "+ Lead", fase en "Vandaag" in de cockpit
 - Commit: `52acb85` | Auteur: Bart Witte
@@ -23,14 +53,32 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-10-13 — Toggl-overname (Codex): atomische claim op het Toggl-project in de teller
 - Commit: `84cd423` | Auteur: Bart Witte
 
+## 2026-10-13 — Signalen (Codex): webhook-idempotentie altijd op de SHA-256 van de gesigneerde body (header alleen in de log); header-, lengte- (64 KiB) en rate-limitcontrole per IP vóór het lezen van de body; optionele MB_WEBHOOK_LIMIET-binding en WAF-tip in wrangler.toml
+- Commit: `475b1e8` | Auteur: Bart Witte
+
 ## 2026-10-13 — v2.14.1 voorbereid: versielabel, "wat is er verbeterd" (Uit Toggl overnemen), mt-project.js-versie omhoog
 - Commit: `02920bf` | Auteur: Bart Witte
 
 ## 2026-10-13 — Project overnemen uit Toggl (v2.14.1): een Toggl-project dat nog bij geen project hoort in de tool zetten
 - Commit: `efe0314` | Auteur: Bart Witte
 
+## 2026-10-13 — Push L3b stap 5: sw.js push + notificationclick (vaste algemene tekst), mobiel: kleine knop Meldingen aanzetten (toestemming pas na de klik, alleen met recht offertes) en status
+- Commit: `09fe470` | Auteur: Bart Witte
+
+## 2026-10-13 — Push L3b stap 4: web-push in de worker (VAPID ES256 + aes128gcm via WebCrypto, subscriptions per gebruiker en apparaat, /push/sleutel|aanmelden|afmelden|status, opruimen bij 404/410, algemene tekst, bundeling en stille uren via DO-alarm, secret-instructie in wrangler.toml)
+- Commit: `d037bfc` | Auteur: Bart Witte
+
 ## 2026-10-13 — v2.14.0 (Codex): een deeplink naar een tab met data-recht pas na de rol, en alleen met dat recht
 - Commit: `aa0455c` | Auteur: Bart Witte
+
+## 2026-10-13 — Signalen L3 stap 3: dagelijkse controle op gemiste webhooks via eigen cron-expressie 45 4 * * * (eigen budget 30 subrequests, splitsing op event.cron, koersmeter ongewijzigd)
+- Commit: `17a4a75` | Auteur: Bart Witte
+
+## 2026-10-13 — Signalen L3 stap 2: POST /mb/webhook (Moneybird-Signature HMAC-SHA256 t.body met 5 min tolerantie, Idempotency-Key in de DO, read-only verificatie-GET, alleen bevestigde mb_id, geen MB-write)
+- Commit: `907191c` | Auteur: Bart Witte
+
+## 2026-10-13 — Signalen L3 stap 1: gedeelde actiewachtrij in MtTeller-instantie 'signalen' (sleutel project_id:soort:bronversie:datum, per oorzaak een open item, open/opgepakt/afgehandeld/gesnoozed, routes /signalen achter RECHTEN, audit zonder klantinhoud)
+- Commit: `e16e2f9` | Auteur: Bart Witte
 
 ## 2026-10-13 — uren: neutraal codevoorbeeld (KLANT-LOCATIE-PRODUCT) in plaats van een klant- en locatienaam
 - Commit: `c3e0faa` | Auteur: Bart Witte
@@ -44,8 +92,23 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-10-12 — Tabblad Geld heet nu Dashboard; het oude dashboard is (voorlopig) verborgen (achterdeur ?oud-dashboard=1)
 - Commit: `60bd0b2` | Auteur: Bart Witte
 
+## 2026-10-12 — CHANGELOG: rekeningnummers (IBAN, spaarrekening) worden [rekening]; tests
+- Commit: `d7baba0` | Auteur: Bart Witte
+
 ## 2026-10-12 — Projectnummers (Codex C-review): verse schema-check per write, Toggl nooit stil koppelen, nummer alleen expliciet in mail, uren zonder beheerknoppen
 - Commit: `75f4fa6` | Auteur: Bart Witte
+
+## 2026-10-12 — Gedeeltelijk rekeningnummer in commentaar en ROUTES vervangen door placeholder
+- Commit: `a3c2158` | Auteur: Bart Witte
+
+## 2026-10-12 — Privacy-scan: script voor de lokale namenlijst, tests en README
+- Commit: `2fcbded` | Auteur: Bart Witte
+
+## 2026-10-12 — Privacy-scan: commit-msg en pre-push (vangnet voor --no-verify)
+- Commit: `452b44c` | Auteur: Bart Witte
+
+## 2026-10-12 — Privacy-scan: gedeeld scanscript en pre-commit-stap (IBAN, tokens, e-mail, telefoon, BSN, namenlijst)
+- Commit: `42320ab` | Auteur: Bart Witte
 
 ## 2026-10-12 — Projectnummers (Codex): mobiel en uren tonen het nummer via de teller-kaart
 - Commit: `1b6f457` | Auteur: Bart Witte
@@ -239,7 +302,7 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-10-11 — F7 3b groep 3: tekstsinks in de rest van v2.html (voorraad, planning, projecten, nacalculatie, attentie, agenda, admin)
 - Commit: `a7fcc3f` | Auteur: Bart Witte
 
-## 2026-10-11 — Geld: pot herkennen ook als de naam letter + rekeningnummer heeft ("spaarrekening Z96824563")
+## 2026-10-11 — Geld: pot herkennen ook als de naam letter + rekeningnummer heeft ("spaarrekening [rekening]")
 - Commit: `0d52c40` | Auteur: Bart Witte
 
 ## 2026-10-11 — Release v2.12.2: spaarpotjes volgen de echte overboekingen, melding vóór 07:00, veiliger; backup = v2.12.1

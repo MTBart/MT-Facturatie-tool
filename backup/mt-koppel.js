@@ -210,9 +210,26 @@
       const projecten = (opts.projecten || root.PROJECT_CODES || (typeof PROJECT_CODES !== 'undefined' ? PROJECT_CODES : [])).filter(p => p && p.code && p.status !== 'archief');
       const all = K.alle();
       const perCode = new Map(projecten.map(p => [p.code, p]));
-      const codes = projecten.map(p => ({ code: p.code, re: new RegExp('(^|[^A-Za-z0-9-])' + p.code.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&') + '($|[^A-Za-z0-9-])', 'i') }));
-      const offertes = projecten.filter(p => p.offertenr).map(p => ({ code: p.code, nr: String(p.offertenr),
-        re: new RegExp('(^|[^0-9])' + String(p.offertenr).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^0-9])') }));
+      // Brok C: per project alle eigen sleutels — code, projectnummer (6 cijfers, alleen een UITGEGEVEN nummer: een los getal
+      // als een postcode of leveranciersnummer telt dus nooit), werkcode en oude codes; offertenummers (hoofd + meerwerk).
+      // Een sleutel die bij twee projecten hoort, telt niet (nooit gokken).
+      const esc = x => String(x).replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+      const nummer = typeof opts.nummer === 'function' ? opts.nummer : (typeof root.projNummer === 'function' ? root.projNummer : (typeof projNummer === 'function' ? projNummer : (p => p.projectnummer)));
+      const telSl = new Map(), sl = [];
+      projecten.forEach(p => {
+        const nr = nummer(p), eigen = new Set([p.code, nr && /^\d{6}$/.test(String(nr)) ? String(nr) : '', p.werkcode, ...(Array.isArray(p.legacy_codes) ? p.legacy_codes : [])].filter(Boolean).map(String));
+        eigen.forEach(k => { sl.push({ code: p.code, k, nr: /^\d{6}$/.test(k) }); telSl.set(k.toUpperCase(), (telSl.get(k.toUpperCase()) || 0) + 1); });
+      });
+      // Een projectnummer telt alleen in expliciete vorm — "[260812]", "project 260812", "projectnr. 260812", "projectnummer 260812"
+      // (ook met een dubbele punt; hoofdletters maken niet uit) — want een los getal kan een leveranciersnummer of bedrag zijn.
+      // "Projectnr. 260812" is ook de vorm voor de referentie in Moneybird.
+      const nrRe = k => new RegExp('(\\[\\s*' + esc(k) + '\\s*\\]|(^|[^A-Za-z0-9])project(nr\\.?|nummer)?\\s*:?\\s*' + esc(k) + ')($|[^0-9])', 'i');
+      const codes = sl.filter(x => telSl.get(x.k.toUpperCase()) === 1).map(x => ({ code: x.code, sleutel: x.k, nummer: x.nr, re: x.nr ? nrRe(x.k) : new RegExp('(^|[^A-Za-z0-9-])' + esc(x.k) + '($|[^A-Za-z0-9-])', 'i') }));
+      const offSl = [];
+      projecten.forEach(p => new Set([p.offertenr, ...(Array.isArray(p.offertes) ? p.offertes.filter(o => o && o.rol !== 'genegeerd').map(o => o.nummer) : [])].filter(Boolean).map(String)).forEach(nr => offSl.push({ code: p.code, nr })));
+      const telOff = new Map(); offSl.forEach(o => telOff.set(o.nr, (telOff.get(o.nr) || 0) + 1));
+      const offertes = offSl.filter(o => telOff.get(o.nr) === 1).map(o => ({ code: o.code, nr: o.nr,
+        re: new RegExp('(^|[^0-9])' + o.nr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^0-9])') }));
       const gesprek = new Map(), afzender = new Map();
       for (const code in all) for (const x of (Array.isArray(all[code]) ? all[code] : [])) {
         if (!K.actief(x) || !perCode.has(code)) continue;
@@ -248,7 +265,8 @@
       const sc = new Map();
       const plus = (code, n, reden) => { if (!ix.perCode.has(code) || al.has(code)) return; const o = sc.get(code) || { code, score: 0, redenen: [] }; if (!o.redenen.includes(reden)) { o.score += n; o.redenen.push(reden); } sc.set(code, o); };
       const onderw = String(msg.subject || ''), tekst = String(msg.bodyPreview || '');
-      ix.codes.forEach(c => { if (c.re.test(onderw)) plus(c.code, 60, 'projectcode in onderwerp'); else if (c.re.test(tekst)) plus(c.code, 45, 'projectcode in tekst'); });
+      ix.codes.forEach(c => { const w = c.nummer ? 'projectnummer ' + c.sleutel : 'projectcode';
+        if (c.re.test(onderw)) plus(c.code, 60, w + ' in onderwerp'); else if (c.re.test(tekst)) plus(c.code, 45, w + ' in tekst'); });
       ix.offertes.forEach(o => { if (o.re.test(onderw)) plus(o.code, 60, 'offertenummer ' + o.nr + ' in onderwerp'); else if (o.re.test(tekst)) plus(o.code, 45, 'offertenummer ' + o.nr + ' in tekst'); });
       const cid = msg.conversationId;
       const gesprekCodes = new Set(cid && ix.gesprek.get(cid) || []);

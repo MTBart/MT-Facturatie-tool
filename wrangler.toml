@@ -127,9 +127,37 @@ new_sqlite_classes = ["MtZoekIndex"]
 # Het werk begint om 07:00: de melding moet dan klaar zijn. Elke 30 minuten van 03:00 tot 05:30 UTC. De code kijkt naar de lokale tijd in
 # Europe/Amsterdam: 04:00-05:30 vult alleen de caches (tijdlijn + maandcijfers), 05:30-07:00 is de eigenlijke run (poging 1 om 05:30, 2 om 06:00,
 # 3 om 06:30; zomer 03:30/04:00/04:30 UTC, winter 04:30/05:00/05:30 UTC), de dag nog niet klaar en minder dan 3 pogingen. Daarna doet niets meer mee.
+# Signalen (L3): de dagelijkse controle op gemiste Moneybird-webhooks heeft een EIGEN expressie (45 4 * * * = 05:45/06:45 Amsterdam);
+# worker.js stuurt alleen die expressie naar sigReconciliatie (eigen budget van 30 subrequests), de rest blijft bij de Koersmeter.
+# Wijzig je hem hier, wijzig dan ook SIG_REC_CRON in worker.js.
 [triggers]
-crons = ["*/30 3-5 * * *"]
+crons = ["*/30 3-5 * * *", "45 4 * * *"]
 
+# ─── Signalen (L3) en web-push (L3b): secrets (NIET door Claude gezet; Bart/regie, eenmalig) ───────────────
+# Opslag: de bestaande DO MT_TELLER (instantie 'signalen') → geen nieuwe binding of migratie nodig.
+# Zet secrets ALTIJD via Git Bash met printf (een PowerShell-pipe zet er een BOM voor):
+#
+# 1) Moneybird-webhook: het geheim krijg je alleen bij het aanmaken van de webhook (veld "secret" in het antwoord van
+#    POST /api/v2/<administratie>/webhooks.json, of in Moneybird na MFA). Webhook: url https://mt-claude-proxy.bart-a12.workers.dev/mb/webhook,
+#    enabled_events ["estimate_mark_accepted", "estimate_mark_rejected", "estimate_accepted_contact", "estimate_signed_sender",
+#    "estimate_state_changed_to_late"]. Pas aanmaken NA de deploy van deze worker (anders weigert hij alles met 503).
+#      printf %s '<secret>' | npx wrangler secret put MB_WEBHOOK_SECRET
+#    Roteren: het nieuwe geheim als MB_WEBHOOK_SECRET, het oude tijdelijk als MB_WEBHOOK_SECRET_VORIG (daarna weghalen).
+#    Afscherming /mb/webhook: de worker weigert vóór het lezen van de body (header-check, max. 64 KiB, 60 verzoeken/min per IP per isolate).
+#    Optioneel, sterker (over alle datacenters): een rate-limit-binding MB_WEBHOOK_LIMIET, bv.
+#      [[unsafe.bindings]]
+#      name = "MB_WEBHOOK_LIMIET"
+#      type = "ratelimit"
+#      namespace_id = "1001"
+#      simple = { limit = 60, period = 60 }
+#    en/of een WAF-regel in het Cloudflare-dashboard (pad /mb/webhook alleen POST, rate-limit per IP). Beide optioneel (Bart/regie).
+#
+# 2) VAPID-sleutels voor push (één keer; de publieke sleutel is niet geheim, de private wel):
+#      node -e "const c=require('crypto');const j=c.generateKeyPairSync('ec',{namedCurve:'prime256v1'}).privateKey.export({format:'jwk'});console.log(Buffer.concat([Buffer.from([4]),Buffer.from(j.x,'base64url'),Buffer.from(j.y,'base64url')]).toString('base64url'));console.log(j.d)"
+#    Regel 1 = publiek, regel 2 = privé (niet bewaren in de repo of een chat):
+#      printf %s '<regel 1>' | npx wrangler secret put VAPID_PUBLIC
+#      printf %s '<regel 2>' | npx wrangler secret put VAPID_PRIVATE
+#    Optioneel: VAPID_SUBJECT = https://… of mailto:… (standaard https://mortiseandtenon.nl). Sleutels vervangen = iedereen meldt opnieuw aan.
 [vars]
 ROLLEN_MODUS = "log"
 # F2–F4: proxy-contract + bevestiging bij Moneybird-writes. Eerst "log", later "afdwingen".
