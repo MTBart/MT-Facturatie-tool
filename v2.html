@@ -38,12 +38,12 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-14a"></script>
+<script src="mt-planning.js?v=2026-10-14b"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-13d"></script>
+<script src="mt-verhuis.js?v=2026-10-14a"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -6943,11 +6943,20 @@ async function ontkoppelMail(code,idx){
 // De nieuwe app leest en schrijft ALLEEN mt_project_taken_v2. Het oude mt_project_taken is van oudere app-versies: de nieuwe app gebruikt het
 // alleen voor de eenmalige overstap en om, zolang v2 er nog niet is, de oude lijst te tonen. Oude clients kunnen v2 daardoor niet beschadigen.
 function _ptLees(k){ try{ const o=JSON.parse(localStorage.getItem(k)||'null'); return (o&&typeof o==='object'&&!Array.isArray(o))?o:null; }catch(e){ return null; } }
-// Gewone UI-paden lezen en schrijven UITSLUITEND v2; het oude bestand komt alleen voor in projTakenV2Start (overstap) en het vangnet.
-function projTakenRuw(){ return _ptLees('mt_project_taken_v2')||{}; }
+// Gewone UI-paden lezen en schrijven UITSLUITEND v2; het oude bestand komt alleen voor in de overstap door beheer (beheerTakenOverzetten), de alleen-lezen weergave en het vangnet en het vangnet.
+// Bestaat v2 nog niet, dan zien clients de taken ALLEEN-LEZEN uit het oude bestand (_ptOud, door de hydrate gelezen; anders de lokale oude kopie); bewerken kan pas
+// nadat beheer de taken heeft overgezet (Beheer ▸ Taken overzetten naar het nieuwe bestand). Er is geen automatische overstap door gewone clients.
+let _ptOud=null, _ptTimeout=false;
+function projTakenRuw(){ return _ptLees('mt_project_taken_v2')||_ptOud||_ptLees('mt_project_taken')||{}; }
 function projTakenGeblokkeerd(){ try{ return !!(_SP&&_SP.blockedKeys&&_SP.blockedKeys.has('mt_project_taken_v2')); }catch(e){ return false; } }
-function projTakenKlaar(){ return !!_ptLees('mt_project_taken_v2')&&!projTakenGeblokkeerd(); }
-function projTakenStatusTekst(){ return projTakenGeblokkeerd()?'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.':'Taken laden…'; }
+function projTakenGereed(){ try{ return (typeof _SP==='undefined')?true:!!_SP.ready; }catch(e){ return false; } }
+function projTakenStaat(){ if(projTakenGeblokkeerd()) return 'geblokkeerd'; if(!projTakenGereed()) return _ptTimeout?'time-out':'laden'; return _ptLees('mt_project_taken_v2')?'klaar':'overzetten'; }
+function projTakenKlaar(){ return projTakenStaat()==='klaar'; }
+function projTakenStatusTekst(){ const s=projTakenStaat(); return s==='geblokkeerd'?'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.':s==='time-out'?'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.':s==='overzetten'?'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.':s==='laden'?'Taken laden…':''; }
+// Vóór elke actie met een extern effect (Toggl) of een planningsmutatie: alleen als de takenlijst klaar is; anders een melding en niets doen.
+function _ptBlok(code){ if(projTakenKlaar()) return false; try{ _ptStatus(code,projTakenStatusTekst(),'#c0392b'); }catch(e){} return true; }
+function _ptHertekenen(){ try{ if(typeof huidigProject!=='undefined'&&huidigProject) renderProjectDetail(huidigProject); }catch(e){} }
+try{ setTimeout(()=>{ try{ if(!projTakenGereed()){ _ptTimeout=true; _ptHertekenen(); } }catch(e){} },20000); }catch(e){}
 function projTakenAll(){const r=projTakenRuw(), o={}; Object.keys(r).forEach(c=>{ if(!c.startsWith('__')) o[c]=MTPlanning.takenActief(r[c]); }); return o;}
 function projTakenSave(o){localStorage.setItem('mt_project_taken_v2',JSON.stringify(o));}
 function projTaken(code){return MTPlanning.takenActief(projTakenRuw()[code]);}
@@ -6962,23 +6971,56 @@ function projTakenZet(code,arr){
   projTakenSave(ruw);
   return true;
 }
-// ── Eenmalige overstap naar mt_project_taken_v2 (aangeroepen door de hydrate als v2 op SharePoint ontbreekt) ──
-// De eerste nieuwe client maakt v2 aan met If-None-Match: * (alleen als het nog niet bestaat); willekeurige id's alleen voor taken zonder id.
-// Krijgt een andere client een 412/409, dan leest hij de bestaande v2 en migreert NIET opnieuw: de id's ontstaan één keer.
-// → {spData} (verder met de gewone samenvoeging) of {stop:true} (niets meer doen; v2 is dan lokaal gezet of de poging mislukte)
-async function projTakenV2Start(){
-  const sleutel='mt_project_taken_v2', bestand=sleutel+'.json';
-  let bron=_ptLees(sleutel);
-  if(!bron){
-    let oud=null; try{ oud=await _SP.read('mt_project_taken.json'); }catch(e){ _SP.blockedKeys.add(sleutel); console.warn('oude takenlijst lezen faalde — overstap niet gestart:',e.message); return {stop:true}; }
-    // SharePoint is leidend; lokale taken die daar niet staan (ook zonder id) blijven als aanvulling; een afwijkende lokale versie wordt gemeld (vangnet)
-    bron=MTPlanning.takenV2Opbouw(oud||{},{lokaal:_ptLees('mt_project_taken')||{},nu:Date.now(),dev:_spDev(),door:_spWie(),uuid:_ptUuid});
-  }
-  const r=await _SP.maakAan(bestand,bron);
-  if(r==='aangemaakt'){ _lsSet(sleutel,JSON.stringify(bron)); return {stop:true}; }
-  if(r==='bestaat'){ try{ const spData=await _SP.read(bestand); return {spData}; }catch(e){ _SP.blockedKeys.add(sleutel); return {stop:true}; } }
-  _SP.blockedKeys.add(sleutel); console.warn('mt_project_taken_v2 aanmaken mislukt — auto-sync uit tot herladen'); return {stop:true};
+// ── Eenmalige, gecontroleerde overstap door beheer: Beheer ▸ "Taken overzetten naar het nieuwe bestand" ──
+// Leest het oude SharePoint-bestand en de lokale oude lijst van deze browser, toont een voorbeeld (aantallen per project, id-loze en dubbele records,
+// afwijkingen tussen lokaal en SharePoint op volledige inhoud) en maakt na bevestiging mt_project_taken_v2 aan met If-None-Match: * (_SP.maakAan).
+// Bij 412/409 staat het er al. Geldige JSON met een verkeerde vorm blokkeert met een foutmelding en wordt nooit als leeg behandeld.
+function _ptLeesStrikt(k){ const raw=localStorage.getItem(k); if(raw===null) return {obj:null}; let o; try{ o=JSON.parse(raw); }catch(e){ return {fout:'geen geldige JSON'}; } const f=MTPlanning.takenBestandVorm(o); return f?{fout:f}:{obj:o}; }
+async function beheerTakenOverzetten(){
+  const melding=(m,titel)=>mtDialog.alert({title:titel||'Taken overzetten',message:m});
+  if(!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())) return melding('Alleen de eigenaar of beheer kan de taken overzetten.');
+  if(_ptLees('mt_project_taken_v2')) return melding('De taken zijn al overgezet.');
+  if(!projTakenGereed()||projTakenGeblokkeerd()) return melding('De synchronisatie is nog niet klaar of geblokkeerd: herlaad de pagina en probeer het opnieuw.');
+  let oud=null; try{ oud=await _SP.read('mt_project_taken.json'); }catch(e){ return melding('Het oude takenbestand lezen mislukte: '+(e.message||e)+'. Er is niets overgezet.'); }
+  const f1=MTPlanning.takenBestandVorm(oud); if(f1) return melding('Het oude takenbestand op SharePoint heeft een onverwachte vorm: '+f1+'. Er is niets overgezet.');
+  const lok=_ptLeesStrikt('mt_project_taken'); if(lok.fout) return melding('De lokale oude takenlijst van deze browser is onbruikbaar: '+lok.fout+'. Er is niets overgezet.');
+  const vb=MTPlanning.takenOverstapVoorbeeld(oud,lok.obj); if(vb.fout) return melding(vb.fout+'. Er is niets overgezet.');
+  const regels=Object.keys(vb.projecten).sort().map(c=>c+': '+vb.projecten[c].totaal+' taken ('+vb.projecten[c].sharepoint+' uit SharePoint'+(vb.projecten[c].lokaal_erbij?', '+vb.projecten[c].lokaal_erbij+' alleen lokaal':'')+')');
+  const afw=vb.afwijkingen.slice(0,8).map(a=>'• '+(a.naam||a.id)+' ('+a.code+'): '+a.velden.map(x=>(_PT_VELDLABEL[x.veld]||x.veld)+' lokaal '+_ptWaardeTekst(x.veld,x.oud)+' ≠ SharePoint '+_ptWaardeTekst(x.veld,x.nu)).join(', '));
+  const bericht='Voorbeeld van de overstap\n\n'+(regels.join('\n')||'Geen taken.')+'\n\nTotaal '+vb.totaal.totaal+' taken ('+vb.totaal.sharepoint+' uit SharePoint, '+vb.totaal.lokaal_erbij+' alleen lokaal).\nZonder id (krijgen een nieuw id): '+vb.zonderId+'. Dubbel id: '+vb.dubbel+'.\nAfwijkingen tussen lokaal en SharePoint (SharePoint wint, jij kunt ze daarna alsnog overnemen): '+vb.afwijkingen.length+(afw.length?'\n'+afw.join('\n'):'')+'\n\nHet oude bestand blijft ongewijzigd staan voor oude app-versies.';
+  if(!await mtDialog.confirm({title:'Taken overzetten naar het nieuwe bestand',message:bericht,okLabel:'Overzetten'})) return;
+  const bron=MTPlanning.takenV2Opbouw(oud||{},{lokaal:lok.obj,nu:Date.now(),dev:_spDev(),door:_spWie(),uuid:_ptUuid});
+  const r=await _SP.maakAan('mt_project_taken_v2.json',bron);
+  if(r==='aangemaakt'){ _lsSet('mt_project_taken_v2',JSON.stringify(bron)); _ptOud=null; await melding('De taken zijn overgezet naar het nieuwe bestand.'); _ptHertekenen(); takenOverzetBlok(); return; }
+  if(r==='bestaat') return melding('De taken zijn al overgezet (door iemand anders). Herlaad de pagina.');
+  return melding('Aanmaken mislukte; er is niets overgezet. Probeer het later opnieuw.');
 }
+function takenOverzetBlok(){
+  const host=document.getElementById('bh-taken-overzet'); if(!host) return;
+  host.replaceChildren();
+  const blok=document.createElement('div'); blok.className='bh-blok'; const kop=document.createElement('h4'); kop.textContent='Taken overzetten naar het nieuwe bestand'; const p=document.createElement('div'); p.className='dos-meta'; p.style.marginBottom='6px';
+  if(_ptLees('mt_project_taken_v2')){ p.textContent='De takenlijst is overgezet (mt_project_taken_v2).'; blok.append(kop,p); }
+  else { p.textContent='Eenmalig: de takenlijst gaat naar een nieuw bestand (voor stempels per veld en conflictbewaking). Tot die tijd zien alle gebruikers de taken alleen-lezen. Je ziet eerst een voorbeeld en bevestigt zelf.'; const k=document.createElement('button'); k.type='button'; k.className='btn btn-secondary btn-sm'; k.textContent='Taken overzetten naar het nieuwe bestand'; k.addEventListener('click',beheerTakenOverzetten); blok.append(kop,p,k); }
+  host.appendChild(blok);
+}
+// ── Na de overstap: lokale oude taken van déze browser die niet (met dezelfde inhoud) in v2 staan; de gebruiker kiest per taak, nooit stil ──
+function _ptNegeer(){ try{ return new Set(JSON.parse(localStorage.getItem('mt_taken_lokaal_negeer')||'[]')); }catch(e){ return new Set(); } }
+function _ptLokaalNiet(){ try{ if(!projTakenKlaar()) return []; return MTPlanning.takenLokaalNietInV2(_ptLees('mt_project_taken'),projTakenRuw(),_ptNegeer()); }catch(e){ return []; } }
+async function takenLokaalBekijk(){
+  if(!projTakenKlaar()) return mtDialog.alert({title:'Lokale taken',message:projTakenStatusTekst()});
+  const lijst=_ptLokaalNiet(); let n=0;
+  for(const a of lijst){
+    n++;
+    const k=await mtDialog.choose({title:'Lokale taak '+n+' van '+lijst.length+': '+(a.taak.naam||'(zonder naam)'),message:'Deze taak staat in de oude lijst van deze browser, maar niet (met dezelfde inhoud) in de nieuwe lijst. Project: '+a.code+'; status '+(a.taak.status||'todo')+'; raming '+(a.taak.duur_uur||0)+' u.',
+      choices:[{label:'Toevoegen aan de nieuwe lijst',sublabel:'met een nieuw id'},{label:'Negeren',sublabel:'niet meer tonen'},{label:'Later'}]});
+    if(k===null||k===undefined) break;
+    if(k===0){ const x=JSON.parse(JSON.stringify(a.taak)); delete x._vs; delete x._veldconflict; delete x._gewijzigd; delete x._vervallen; x.id=_ptUuid(); const arr=projTaken(a.code); arr.push(x);
+      if(projTakenZet(a.code,arr)===false) break; }
+    else if(k===1){ const s=_ptNegeer(); s.add(a.hash); try{ localStorage.setItem('mt_taken_lokaal_negeer',JSON.stringify([...s])); }catch(e){} }
+  }
+  _ptHertekenen();
+}
+function takenLokaalMelding(){ try{ const n=_ptLokaalNiet().length; if(n) planToast('⚠ '+n+' lokale taak/taken uit de oude lijst staan niet in de nieuwe lijst: bekijk ze bij Taken in een project.'); }catch(e){} }
 // ── Vangnet: wat bij de overstap een nieuw id kreeg of afweek, en wat een oude app-versie sindsdien in het oude bestand wijzigde ──
 // Alleen melden en de mens laten kiezen; nooit automatisch overnemen. Het oude bestand wordt hier alleen gelezen.
 async function takenOudAfwijkingen(){
@@ -7012,18 +7054,19 @@ function _takenOudAfgehandeld(a){
 function _takenOudToepassen(a){
   const zet=(c,fn)=>{ const arr=projTaken(c); fn(arr); return projTakenZet(c,arr)!==false; };
   const kopieTaak=()=>{ const x=JSON.parse(JSON.stringify(a.taak)); delete x._vs; delete x._veldconflict; delete x._gewijzigd; delete x._vervallen; if(!x.id) x.id=_ptUuid(); return x; };
-  if(a.soort==='nieuw'||a.soort==='herstel') return zet(a.code,arr=>{ const x=kopieTaak(); const i=arr.findIndex(z=>z.id===x.id); if(i>=0) arr[i]=x; else arr.push(x); });
+  if(a.soort==='herstel'||a.soort==='dubbel-nieuw'){ const x=kopieTaak(); x.id=_ptUuid(); a.nieuwId=x.id; return zet(a.code,arr=>{ arr.push(x); }); }   // altijd een NIEUW record met een nieuwe uuid; delete-wins op het oude id blijft gelden
+  if(a.soort==='nieuw') return zet(a.code,arr=>{ const x=kopieTaak(); const i=arr.findIndex(z=>z.id===x.id); if(i>=0) arr[i]=x; else arr.push(x); });
   if(a.soort==='gewijzigd'||a.soort==='migratie') return zet(a.code,arr=>{ const t=arr.find(z=>z.id===a.id); if(t) a.velden.forEach(v=>{ if(v.oud===null) delete t[v.veld]; else t[v.veld]=JSON.parse(JSON.stringify(v.oud)); }); });
   if(a.soort==='verwijderd') return zet(a.code,arr=>{ const i=arr.findIndex(z=>z.id===a.id); if(i>=0) arr.splice(i,1); });
   if(a.soort==='verhuisd'){ const van=(a.velden.find(v=>v.veld==='project')||{}).nu; const ok1=!van||zet(van,arr=>{ const i=arr.findIndex(z=>z.id===a.id); if(i>=0) arr.splice(i,1); }); return ok1&&zet(a.code,arr=>{ const x=kopieTaak(); const i=arr.findIndex(z=>z.id===x.id); if(i>=0) arr[i]=x; else arr.push(x); }); }
-  return true;   // info-regels: er is niets toe te passen
+  return _TAKEN_OUD_INFO.includes(a.soort);   // info-regels: er is niets toe te passen; een onbekend type is nooit "gelukt"
 }
 function _takenOudControle(a){
-  const t=projTaken(a.code).find(z=>z.id===a.id);
-  if(a.soort==='nieuw'||a.soort==='herstel'||a.soort==='verhuisd') return !!t&&(!a.taak||t.naam===a.taak.naam);
+  const t=projTaken(a.code).find(z=>z.id===(a.soort==='herstel'||a.soort==='dubbel-nieuw'?a.nieuwId:a.id));
+  if(a.soort==='nieuw'||a.soort==='herstel'||a.soort==='dubbel-nieuw'||a.soort==='verhuisd') return !!t&&!!a.taak&&t.naam===a.taak.naam;
   if(a.soort==='gewijzigd'||a.soort==='migratie') return !!t&&a.velden.every(v=>JSON.stringify(t[v.veld]===undefined?null:t[v.veld])===JSON.stringify(v.oud));
   if(a.soort==='verwijderd') return !t;
-  return true;
+  return _TAKEN_OUD_INFO.includes(a.soort);
 }
 const _TAKEN_OUD_INFO=['info-zonder-id','info-dubbel-id'];
 async function takenOudBekijk(){
@@ -7034,9 +7077,9 @@ async function takenOudBekijk(){
     n++;
     const tekst=a.soort==='nieuw'?'Er is een taak bijgekomen in het oude bestand: „'+a.naam+'” ('+a.code+').'
       :a.soort==='verwijderd'?'In het oude bestand is de taak „'+a.naam+'” verwijderd; in de nieuwe lijst staat hij nog.'
-      :a.soort==='herstel'?'De taak „'+a.naam+'” is in de nieuwe lijst verwijderd, maar een oude app-versie heeft hem daarna gewijzigd. Overnemen zet hem terug als nieuwe taak.'
+      :a.soort==='herstel'?'De taak „'+a.naam+'” is in de nieuwe lijst verwijderd, maar een oude app-versie heeft hem daarna gewijzigd of verplaatst. Overnemen maakt er een NIEUWE taak van (nieuw id); de verwijdering van het oude id blijft gelden.'
       :a.soort==='verhuisd'?'De taak „'+a.naam+'” staat in het oude bestand bij een ander project ('+a.code+').'
-      :a.soort==='dubbel-nieuw'?'In het oude bestand staat een tweede taak met hetzelfde id: „'+a.naam+'”.'
+      :a.soort==='dubbel-nieuw'?'In het oude bestand staat een tweede taak met hetzelfde id: „'+a.naam+'”. Overnemen voegt hem toe als nieuwe taak (nieuw id).'
       :a.soort==='info-zonder-id'?'Bij de overstap had de taak „'+a.naam+'” ('+a.code+') geen id en kreeg een nieuw id.'
       :a.soort==='info-dubbel-id'?'Bij de overstap had „'+a.naam+'” ('+a.code+') hetzelfde id als een andere taak en kreeg een nieuw id.'
       :a.soort==='migratie'?'Je lokale versie van „'+a.naam+'” week bij de overstap af van SharePoint (SharePoint won). Overnemen zet jouw versie terug:\n'+a.velden.map(v=>(_PT_VELDLABEL[v.veld]||v.veld)+': lokaal '+_ptWaardeTekst(v.veld,v.oud)+' · nu '+_ptWaardeTekst(v.veld,v.nu)).join('\n')
@@ -7073,6 +7116,7 @@ function _ptJournaal(actie,code,taak,extra){
 }
 // Taken waarvan de Toggl-wijziging nog niet gelukt is, opnieuw proberen.
 async function projTakenHerkans(code){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code), weg=new Set(); let ok=0,fout=0;
   for(const t of arr){
     if(!t.tg_pending||!t.tg_task_id) continue;
@@ -7088,7 +7132,11 @@ async function projTakenHerkans(code){
 }
 
 function projectTakenHtml(proj){
-  if(!projTakenKlaar()) return `<hr class="divider"><div class="card-title" style="margin:0 0 .5rem">Taken</div><p style="font-size:13px;color:var(--text-dim)" role="status">${esc(projTakenStatusTekst())}</p>`;
+  { const st=projTakenStaat();
+    if(st==='overzetten') return `<hr class="divider"><div class="card-title" style="margin:0 0 .5rem">Taken <span class="badge">alleen-lezen</span></div><p style="font-size:13px;color:var(--text-dim)" role="status">${esc(projTakenStatusTekst())}</p><table class="materiaal-lijst"><tbody>${projTaken(proj.code).map(t=>`<tr><td style="font-size:13px">${esc(t.naam)}</td><td>${esc((_PT_STAT[t.status]||_PT_STAT.todo).l)}</td><td style="text-align:right;font-family:var(--mono)">${esc(t.duur_uur||0)} u</td></tr>`).join('')||'<tr><td style="color:var(--text-faint);font-size:13px">Nog geen taken.</td></tr>'}</tbody></table>`;
+    if(st!=='klaar') return `<hr class="divider"><div class="card-title" style="margin:0 0 .5rem">Taken</div><p style="font-size:13px;color:var(--text-dim)" role="status">${esc(projTakenStatusTekst())}</p>${st==='time-out'?'<button class="btn btn-xs btn-secondary" onclick="location.reload()">opnieuw proberen</button>':''}`;
+  }
+  const lokN=_ptLokaalNiet().length;
   const arr=projTaken(proj.code), sid=proj.code.replace(/-/g,'');
   const naamById={}; arr.forEach(t=>naamById[t.id]=t.naam);
   // Welke taken staan al in de uit-taken-planning (Gantt)? → kruisverwijzing.
@@ -7127,6 +7175,7 @@ function projectTakenHtml(proj){
   const onbesp=arr.filter(t=>!t.tg_task_id).length;
   return `
     <hr class="divider">
+    ${lokN?`<div class="dos-meta" style="margin-bottom:6px" role="status">${esc(lokN)} lokale taak/taken uit de oude lijst van deze browser staan niet in de nieuwe lijst. <a href="#" onclick="event.preventDefault();takenLokaalBekijk()">Bekijken</a></div>`:''}
     <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
       <div class="card-title" style="margin:0">Taken <span class="badge" style="background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid)">M&amp;T</span></div>
       <button class="btn btn-gold btn-sm" onclick="aiTakenVoorstel(${jsArg(proj.code)})">✨ AI-taken voorstellen</button>
@@ -7231,6 +7280,7 @@ function projMeterTeken(code){
 }
 // Activiteit of toegewezen op een taak zetten (keuzelijsten in de takenlijst).
 function projTaakVeldZet(code,id,veld,waarde){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   if(veld==='activiteit'&&waarde&&!MTPlanning.activiteit(waarde)) return;
   if(veld==='toegewezen'&&waarde&&!MT_TEAM.some(m=>m.slug===waarde)) return;
@@ -7272,6 +7322,7 @@ function _ptSyncMerk(t,status,fout){
 // het mt:-kenmerk in de notitie (t2VindOfMaakTaak), nooit op naam. Is de Toggl-taak verwijderd, dan blijft de MT-taak staan
 // en beslis jij wat er gebeurt.
 async function projTaakTogglSync(code,id){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const mt=projVind(code); const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!mt||!t) return;
   let actie=MTPlanning.tgActie(t);
   const stOk=(msg)=>_ptStatus(code,msg,'var(--green)'), stFout=(msg)=>_ptStatus(code,msg,'#c0392b');
@@ -7333,6 +7384,7 @@ function nieuweProjectTaak(code){
   try{ if(window.track) track('taken','taak_handmatig',{detail:code,ok:true}); }catch(e){}
 }
 async function projTaakStatus(code,id){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   _ptJournaal('status',code,t);
   const order=['todo','bezig','klaar']; t.status=order[(order.indexOf(t.status||'todo')+1)%3];
@@ -7361,6 +7413,7 @@ function _planSyncTaakUur(code,id,uren){
   planBerekenDatums(plan); planSave(code,plan);
 }
 function projTaakUurZet(code,id,val){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   let n=parseFloat(String(val==null?'':val).replace(',','.')); if(!isFinite(n)||n<0) n=0;
   n=Math.round(n*100)/100;
@@ -7382,6 +7435,7 @@ async function _tgVerwijderTaak(tg_task_id){
   catch(e){ console.warn('Toggl-taak',tg_task_id,'verwijderen faalde:',e); return false; }
 }
 async function projTaakVerwijder(code,id){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const t=projTaken(code).find(x=>x.id===id);
   if(!await mtDialog.confirm({title:'Taak verwijderen',message:'Taak verwijderen?'+(t&&t.tg_task_id?'\nWordt óók in Toggl verwijderd.':''),okLabel:'Verwijderen',danger:true})) return;
   try{ if(window.track) track('taken','verwijder',{detail:code}); }catch(e){}
@@ -7401,6 +7455,7 @@ async function projTaakVerwijder(code,id){
 }
 // Meerdere aangevinkte taken in één keer verwijderen (lokaal + Toggl).
 async function projTakenVerwijderSelectie(code){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const sid=code.replace(/-/g,'');
   const ids=Array.from(document.querySelectorAll('#pt-tbl-'+sid+' .pt-check:checked')).map(b=>b.value);
   if(!ids.length){ _ptStatus(code,'Geen taken aangevinkt.','#c0392b'); return; }
@@ -7487,6 +7542,7 @@ function projTaakTemplateKies(code){
   document.body.appendChild(ov);
 }
 function projTaakTemplateInvoeg(code,key){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const ov=document.getElementById('tpl-overlay');if(ov)ov.remove();
   const tpl=_PT_TEMPLATES[key];if(!tpl)return;
   const nieuwe=tpl.taken.map(v=>({id:_ptId(),naam:v.naam,omschrijving:v.omschrijving||'',duur_uur:v.uur||0,
@@ -7880,6 +7936,7 @@ async function t2TogglNaamBijwerken(code){
   catch (e) { _t2St(code, '⚠ ' + (e.message || e) + ' — de naam in Toggl is niet gewijzigd', '#c0392b'); }
 }
 async function projTaakNaarToggl(code,id,vers=true){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const mt=projVind(code); if(!mt) return false;
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||t.tg_task_id) return false;
   _ptStatus(code,'Naar Toggl…');
@@ -7905,6 +7962,7 @@ async function projTaakNaarToggl(code,id,vers=true){
     return false; }
 }
 async function projTakenSpiegelAlles(code){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code).filter(t=>!t.tg_task_id);
   if(!arr.length) return;
   if(!await mtDialog.confirm({title:'Taken naar Toggl',message:arr.length+' taak/taken in het Toggl-project aanmaken (of koppelen via het MT-kenmerk, nooit op naam)?'+((projVind(code)||{}).tg_project_id?'':'\n\nDit project heeft nog geen Toggl-project; dat wordt dan ook aangemaakt.'),okLabel:'Aanmaken'})) return;
@@ -8532,6 +8590,7 @@ function _takenTopoSort(arr){
   return uit;
 }
 function takenNaarPlanning(code,opts){
+  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
   opts=opts||{};
   const stil=!!opts.stil;
   const herbouw=!!opts.herbouw; // expliciete "↻ tijdlijn bijwerken"-knop
@@ -12827,10 +12886,9 @@ window.initStorage = async function() {
     if (projSchemaSleutel(key) && typeof projSchemaCheck === 'function' && await projSchemaCheck(true)) {
       return;                              // te oude app-versie (teller): lokaal niets overschrijven, niets terugschrijven
     }
-    if (key === 'mt_project_taken_v2' && spData === null) {   // eenmalige overstap (zie projTakenV2Start)
-      const st = await projTakenV2Start();
-      if (st.stop) return;
-      spData = st.spData;
+    if (key === 'mt_project_taken_v2' && spData === null) {   // v2 bestaat nog niet: GEEN automatische overstap; beheer zet de taken over, tot die tijd tonen we de oude lijst alleen-lezen
+      try { const o = await _SP.read('mt_project_taken.json'); _ptOud = (o && !MTPlanning.takenBestandVorm(o)) ? o : null; } catch(e) { _ptOud = null; }
+      return;
     }
     if (spData !== null) {
       const merger = _SP.mergers && _SP.mergers[key];
@@ -12868,6 +12926,8 @@ window.initStorage = async function() {
   await Promise.all(taken);
   try{ setTimeout(takenOudVangnetMelding,1500); }catch(e){}
   _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan (behalve blockedKeys)
+  _ptTimeout = false; _ptHertekenen();   // een openstaand projectdetail toonde "Taken laden…": nu opnieuw tekenen
+  try{ setTimeout(takenLokaalMelding,2500); }catch(e){}
   if (_SP.blockedKeys.size) {
     _SP.lastSync = { ts: Date.now(), ok: false, key: [..._SP.blockedKeys].join(', '),
       error: 'hydrate faalde — auto-sync uit voor deze key(s), herlaad de pagina' };
@@ -14385,7 +14445,7 @@ async function beheerLaad(){
 }
 function beheerTeken(){
   const el=document.getElementById('beheer-inhoud'); if(!el||!_bh) return;
-  setTimeout(()=>{ try{ takenOudVangnet(); }catch(e){} },0);
+  setTimeout(()=>{ try{ takenOverzetBlok(); takenOudVangnet(); }catch(e){} },0);
   const {g,log,au}=_bh, ikEig=g.ikRol==='eigenaar';
   const rolOpt=(huidig,uit)=>g.rollen.filter(r=>ikEig||r.id!=='eigenaar'||r.id===huidig).map(r=>`<option value="${esc(r.id)}"${r.id===huidig?' selected':''}${uit&&r.id!==huidig?' disabled':''}>${esc(r.naam)}</option>`).join('');
   const modusTekst=g.modus==='afdwingen'?'<b>Modus: afdwingen</b> — de worker weigert wat een rol niet mag.'
@@ -14424,6 +14484,7 @@ function beheerTeken(){
     ${_bhRolUitleg(g)}
     ${_bhProjectcode(ikEig)}
     ${_bhControlelijst()}
+    <div id="bh-taken-overzet"></div>
     <div id="bh-taken-oud"></div>
     <details class="bh-blok"><summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Auditlog (laatste ${(au.audit||[]).length})</summary>
       <table class="bh-tabel"><thead><tr><th class="bh-opt">Wanneer</th><th>Door</th><th>Actie</th><th>Wie</th><th>Rol</th></tr></thead><tbody>${auditR||'<tr><td colspan="5">Nog niets.</td></tr>'}</tbody></table></details>`;

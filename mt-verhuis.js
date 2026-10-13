@@ -42,7 +42,7 @@
   V.UITGESLOTEN = new Set(['mt_toggl_token', 'mt_toggl_last_sync', 'mt_toggl_user_names', 'mt_toggl_user_map', 'mt_toggl_project_map', 'mt_toggl_proj_names', 'mt_toggl_names_ver',
     'mt_toggl_users_raw', 'mt_toggl_projecten_raw', 'mt_cache_facturen', 'mt_cache_klanten', 'mt_klanten_cache', 'mt_notificaties', 'mt_auditlog', 'mt_chatlog_buffer', 'mt_calc_map_state',
     'mt_timer', 'mt_uren_lopend',
-    'mt_meter_stand', 'mt_device_id']);   // mt_meter_stand: afgeleide stand van de projectmeter (badge bij ≥ 90%), wordt bij het openen van een project opnieuw berekend
+    'mt_meter_stand', 'mt_device_id', 'mt_taken_lokaal_negeer']);   // mt_meter_stand: afgeleide stand van de projectmeter (badge bij ≥ 90%), wordt bij het openen van een project opnieuw berekend
   V.UITGESLOTEN_PREFIXEN = ['mt_csv_', 'mtg:advies:', 'mt_offcheck:'];   // mtg:advies:<datum>: het dagelijkse advies van Geld, afgeleid (wordt zo opnieuw berekend)   // mt_csv_<project>: sessionStorage (mt_csv_prijzen_<project> in localStorage staat wél bij PREFIXEN)
   V.sleutelMee = k => typeof k === 'string' && (V.SLEUTELS.has(k) || V.PREFIXEN.some(p => k.startsWith(p) && k.length > p.length));
   // Bijna-zeker-een-geheim in de waarde (ook bij een toegestane sleutel): JWT overal erin, of een kale base64-achtige reeks.
