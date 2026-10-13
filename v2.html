@@ -36,6 +36,7 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
+<script src="mt-planning.js?v=2026-10-13a"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
@@ -12960,7 +12961,8 @@ async function agPlanRender(){
   const vrijdagen=admVrijdagen();
   const verlof=admVerlof();
   const showActuals=document.getElementById('agenda-plan-actuals')?.checked;
-  const actuals=showActuals?agEntries():[];
+  // Geklokte uren: dezelfde project- en persoonfilters als de planblokken (P0), via de gedeelde kern (minuten, team-slug).
+  const actuals=showActuals?MTPlanning.entriesFilter(agEntries(),{codes:_agenda.fProj,pers:_agenda.fPers,van:_planYmd(dagen[0]),tot:_planYmd(dagen[6]),team:MT_TEAM}):[];
   const agUurPx=AG_UURPX;
   const agStart=AG_START, agEind=AG_EIND;
   const totalH=(agEind-agStart)*agUurPx;
@@ -13032,13 +13034,13 @@ async function agPlanRender(){
     dagActuals.forEach(e=>{
       const s=new Date(e.start);
       const startMin=s.getHours()*60+s.getMinutes();
-      const duurMin=e.duration>0?(e.duration/60):0;
+      const duurMin=MTPlanning.entryMin(e);   // `duur` in seconden → minuten (was: e.duration, bestaat niet)
       if(!duurMin) return;
       const topPx=((startMin/60)-agStart)*agUurPx;
       const hPx=(duurMin/60)*agUurPx;
       const kleur=agKleur(e);
       html+=`<div style="position:absolute;top:${esc(topPx)}px;height:${Math.max(hPx,10)}px;left:52%;right:2px;background:${esc(kleur)};opacity:0.38;border-radius:4px;z-index:4;overflow:hidden;font-size:9px;color:#fff;padding:2px 3px;border:1px solid rgba(0,0,0,.12)"
-        title="${esc(e.description||'')}">${esc(e.description||'')}</div>`;
+        title="${esc(e.omschrijving||'')}">${esc(e.omschrijving||'')}</div>`;
     });
 
     // Drop-zone receptors
