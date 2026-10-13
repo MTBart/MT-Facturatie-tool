@@ -994,6 +994,7 @@
   // blijven; een regel zonder (of met een dubbel) id krijgt een willekeurig id. Alle regels blijven, ook de van de lijst gehaalde (tombstones).
   // Elk ingevuld veld zonder stempel krijgt er een met het tijdstip van de overstap. In de regel met id "__migratie" staat wat nodig is om later
   // te zien of een oude app-versie het oude bestand nog wijzigde. lijst = de regels van de overstap; oud (optioneel) = de lijst waarvan de hash komt.
+  P.bestelConflictOplos = P.conflictOplos;
   P.bestelInhoudHash = b => hash36(stabiel(P.BESTEL_VELDEN.map(f => norm(b && b[f])).concat([!!(b && b._vervallen)])));
   const bestelProjectCode = b => String((b && (b.project || b.project_id)) || '');
   const bestelFingerprint = b => hash36(stabiel([b && b.materiaal, b && b.omschrijving, b && b.artikel, bestelProjectCode(b), b && b.datum, b && b.categorie, b && b.leverancier].map(norm)));
