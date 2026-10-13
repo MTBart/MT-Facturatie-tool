@@ -1,5 +1,15 @@
 [
   {
+    "versie": "2.14.1",
+    "datum": "2026-10-13",
+    "titel": "Project overnemen uit Toggl",
+    "voor": "iedereen",
+    "punten": [
+      "Nieuw in Projecten: 'Uit Toggl overnemen'. Je ziet de Toggl-projecten die nog bij geen project horen, kiest er één en vult het projectformulier aan. Het project wordt aan dat Toggl-project gekoppeld; de naam in Toggl blijft hetzelfde.",
+      "De naam en (als die bekend is) de klant worden voorgesteld. Een projectmap die al lijkt te passen wordt voorgesteld in plaats van een nieuwe; een nieuwe map komt er alleen als je dat bevestigt."
+    ]
+  },
+  {
     "versie": "2.14.0",
     "datum": "2026-10-12",
     "titel": "Projectnummers voorbereid, Geld heet nu Dashboard, aanwezigheid in de Agenda",

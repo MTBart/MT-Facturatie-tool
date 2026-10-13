@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — Project overnemen uit Toggl (v2.14.1): een Toggl-project dat nog bij geen project hoort in de tool zetten
+- Commit: `efe0314` | Auteur: Bart Witte
+
 ## 2026-10-13 — v2.14.0 (Codex): een deeplink naar een tab met data-recht pas na de rol, en alleen met dat recht
 - Commit: `aa0455c` | Auteur: Bart Witte
 
