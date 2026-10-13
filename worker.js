@@ -1561,8 +1561,21 @@ export class MtTeller {
       const log = e => { logn++; schrijf['log:' + String(logn).padStart(12, '0')] = Object.assign({ ts }, door, e); schrijf.logn = logn; };
       if (op === 'nr-nieuw') {
         const pid = String(b.project_id);
+        // "Uit Toggl overnemen" (v2.14.1): claim op het Toggl-project, in hetzelfde geserialiseerde blok als de uitgifte.
+        // `tg:<id>` → project_id. Hoort het al bij een ander project, dan niets uitgeven en dat project teruggeven.
+        const tg = b.tg_project_id != null ? String(b.tg_project_id) : null;
+        if (tg) {
+          const van = await st.get('tg:' + tg);
+          if (van && van !== pid) {
+            const bi = await this._nrBinding(van);
+            log({ actie: 'toggl-overname', project_id: pid, oud: van, nieuw: null, mig: null, resultaat: 'geweigerd: al overgenomen' });
+            await st.put(schrijf);
+            return { s: 409, j: { error: 'toggl-al-overgenomen', project_id: van, code: bi ? bi.code : null, projectnummer: bi ? bi.projectnummer : null, uitleg: 'Dit Toggl-project is al overgenomen' + (bi ? ' als ' + (bi.projectnummer || bi.code) : '') } };
+          }
+          if (!van) { schrijf['tg:' + tg] = pid; log({ actie: 'toggl-overname', project_id: pid, oud: null, nieuw: tg, mig: null, resultaat: 'geclaimd' }); }
+        }
         const al = await this._nrBinding(pid);
-        if (al) return { j: Object.assign(al, { nieuw: false }) };
+        if (al) { if (Object.keys(schrijf).length) await st.put(schrijf); return { j: Object.assign(al, { nieuw: false }) }; }
         const cfg = (await st.get('cfg:reeks')) || {};
         if (!cfg.aan) {                                  // W-reeks (zoals voorheen): per jaar doorlopend
           const jaar = String(b.jaar), jj = jaar.slice(-2);
@@ -2100,7 +2113,9 @@ async function handleTeller(p, request, env, ik, json) {
     const pid = String((body && body.project_id) || '');
     if (!WERKCODE_PID_RE.test(pid)) return json({ error: 'ongeldig-project_id' }, 400);
     // nieuw project: W-code met het jaar van nu (server), of — als de nieuwe reeks aan staat — een projectnummer
-    const r = await doe('nr-nieuw', { project_id: pid, jaar: jaarNu(), schema: Number(body.schema) || 1, ...door });
+    const tg = body && body.tg_project_id != null ? String(body.tg_project_id) : null;   // overname uit Toggl: atomische claim (zie nr-nieuw)
+    if (tg !== null && !/^\d{1,20}$/.test(tg)) return json({ error: 'ongeldig-tg_project_id' }, 400);
+    const r = await doe('nr-nieuw', { project_id: pid, jaar: jaarNu(), schema: Number(body.schema) || 1, tg_project_id: tg, ...door });
     if (r.status !== 200) return json(r.j, r.status);
     const u = r.j;
     if (u.nieuw) await audit(env, { ...door, actie: u.projectnummer ? 'projectnummer-toegekend' : 'werkcode-toegekend', doel: pid, doelNaam: u.code, nieuw: u.code });

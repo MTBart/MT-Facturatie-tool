@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — v2.14.1 voorbereid: versielabel, "wat is er verbeterd" (Uit Toggl overnemen), mt-project.js-versie omhoog
+- Commit: `02920bf` | Auteur: Bart Witte
+
 ## 2026-10-13 — Project overnemen uit Toggl (v2.14.1): een Toggl-project dat nog bij geen project hoort in de tool zetten
 - Commit: `efe0314` | Auteur: Bart Witte
 
