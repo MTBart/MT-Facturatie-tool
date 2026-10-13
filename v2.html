@@ -532,6 +532,13 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .pm-tabel .pm-totaal td{border-top:2px solid var(--border);font-weight:600}
 .pm-tabel .pm-zonder td{font-style:italic}
 .pm-soort,.pm-sync{font-size:11.5px;color:var(--text-dim);margin-top:6px}
+.afh-modus{font-size:11.5px;color:var(--text-dim);display:inline-flex;align-items:center;gap:4px}
+.afh-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:20px;padding:1px 4px 1px 9px;font-size:11.5px;margin:2px 4px 2px 0;background:var(--surface-sunken)}
+.afh-chip.afh-uit{opacity:.55;text-decoration:line-through}
+.afh-lag{width:46px;font:11px var(--mono);padding:1px 3px;text-align:right}
+.afh-weg{border:0;background:transparent;cursor:pointer;color:var(--text-faint);font-size:14px;line-height:1;padding:0 3px}
+.afh-datum{font-size:12px;padding:2px 4px;width:132px}
+.afh-tabel td{vertical-align:top}
 .pt-sel{font-size:11px;height:26px;min-height:0;padding:0 4px;max-width:104px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)}
 .tabel-scroll{overflow-x:auto;max-width:100%}
 .kpi-grid.ov-kpi{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -1362,7 +1369,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <!-- Handmatig toevoegen formulier -->
       <div id="handmatig-form" class="hidden" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1rem">
         <div class="card-title" style="margin-bottom:0.75rem">Handmatig toevoegen</div>
-        <div style="display:grid;grid-template-columns:2fr 1fr 80px 1fr 100px;gap:0.5rem;align-items:end">
+        <div style="display:grid;grid-template-columns:2fr 1fr 80px 90px 1fr 1.3fr 100px;gap:0.5rem;align-items:end">
           <div class="field" style="margin:0"><label>Omschrijving</label><input type="text" id="hm-naam" placeholder="Materiaalnaam"></div>
           <div class="field" style="margin:0"><label>Categorie</label>
             <select id="hm-cat">
@@ -1371,12 +1378,15 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
               <option value="overig">🔩 Overig</option>
             </select>
           </div>
-          <div class="field" style="margin:0"><label>Aantal</label><input type="number" id="hm-aantal" min="1" value="1" style="font-family:var(--mono)"></div>
+          <div class="field" style="margin:0"><label>Aantal</label><input type="number" id="hm-aantal" min="0" step="any" value="1" style="font-family:var(--mono)"></div>
+          <div class="field" style="margin:0"><label>Eenheid</label><input type="text" id="hm-eenheid" placeholder="plaat, stuk, m²"></div>
           <div class="field" style="margin:0"><label>Leverancier</label><input type="text" id="hm-leverancier" placeholder="Optioneel"></div>
+          <div class="field" style="margin:0"><label>Project</label><select id="hm-project"><option value="">Geen project</option></select></div>
           <button class="btn btn-primary btn-sm" style="align-self:end" onclick="voegHandmatigToe()">Toevoegen</button>
         </div>
       </div>
-      <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Items die gemarkeerd zijn om te bestellen. Vink af zodra besteld.</p>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Items die gemarkeerd zijn om te bestellen. Zet de status op besteld of geleverd zodra dat zo is; de regels staan ook in het project zelf (sectie Productie ▸ Te bestellen).</p>
+      <div id="bestellijst-kop"></div>
       <div id="bestellijst-inhoud"></div>
     </div>
   </div>
@@ -1537,6 +1547,11 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <button class="btn btn-secondary btn-sm" onclick="saveUurtarieven()">Opslaan</button>
           <span id="uurtarief-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
           <div id="uurtarief-calcmelding" style="font-size:12.5px;margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
+        </div>
+        <div class="card" id="sjabloon-kaart" style="display:none">
+          <div class="card-title">Projectsjabloon</div>
+          <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">De standaardketen voor een nieuw project: fases, taken (met activiteit en een aandeel van het budget in %) en afhankelijkheden met wachttijd, bv. de levertijd van materiaal. Bij "Gewonnen → project" en "Direct project" wordt dit sjabloon voorgesteld; je kunt het dan nog aanpassen of overslaan. Het budget komt uit de calculatie en de datums rekenen terug vanaf de leverdatum. Alleen eigenaar en beheer kunnen het sjabloon wijzigen.</p>
+          <div id="sjabloon-inhoud"></div>
         </div>
         <div class="card">
           <div class="card-title">Gearchiveerde schermen</div>
@@ -3274,6 +3289,7 @@ function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReade
 window.onload=async()=>{
   loadSavedSettings();
   renderUurtarieven();
+  try{ sjabloonKaartTeken(); }catch(e){ console.warn('sjabloonkaart:',e); }
   renderFactuurFormulier();
   renderHistory();
   migreerVoorraadCategorieen();
@@ -5454,6 +5470,7 @@ function _blWijzig(id,actie,fn){
   if(_blKapot){ _blBewaar(l); return null; }        // meldt en weigert
   const voor=JSON.parse(JSON.stringify(b));
   const na=JSON.parse(JSON.stringify(b)); fn(na); _blStempel(na,voor._gewijzigd);
+  MTPlanning.bestelVeldStempel(voor,na,{t:Date.parse(na._gewijzigd)||Date.now(),door:_blWie()});   // P2: per veld een stempel
   if(!_blJournaal(actie,voor,na)) return null;          // geen herstelkopie = geen wijziging
   Object.keys(b).forEach(k=>delete b[k]); Object.assign(b,na);
   return _blBewaar(l)?b:null;
@@ -5463,6 +5480,7 @@ function _blNieuw(item,actie){
   if(item.id===undefined||item.id===null||item.id==='') item.id='bl_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   if(_blKapot){ _blBewaar(l); return null; }        // meldt en weigert
   _blStempel(item);
+  MTPlanning.bestelVeldStempel(null,item,{t:Date.parse(item._gewijzigd)||Date.now(),door:_blWie()});
   if(!_blJournaal(actie||'nieuw',null,item)) return null;
   l.push(item);
   return _blBewaar(l)?item:null;
@@ -5485,10 +5503,13 @@ function _blQ(v){
 function toggleBestellijst(mat,cat,lev,prijs,btn){
   const open=_blActief().find(b=>b.materiaal===mat&&!b.besteld);
   if(open){ _blVervallen(open.id,'van de lijst gehaald via Voorraad'); btn.textContent='+ Bestellen'; btn.classList.remove('besteld'); }
-  else{ _blNieuw({materiaal:mat,categorie:cat,leverancier:lev,prijsLaatst:prijs,datum:new Date().toISOString().split('T')[0],besteld:false},'nieuw (voorraad)'); btn.textContent='✓ Op lijst'; btn.classList.add('besteld'); }
+  else{ _blNieuw(MTPlanning.bestelRegelNieuw({omschrijving:mat,categorie:cat,leverancier:lev,prijsLaatst:prijs,datum:new Date().toISOString().split('T')[0],bron:'hand'}),'nieuw (voorraad)'); btn.textContent='✓ Op lijst'; btn.classList.add('besteld'); }
   renderVoorraadKPI(JSON.parse(localStorage.getItem('mt_voorraad')||'[]'));
 }
 function renderBestellijst(sortK='materiaal',sortA=true){
+  try{ blKopTeken(); }catch(e){ console.warn('bestellijst-kop:',e); }
+  { const el0=document.getElementById('bestellijst-inhoud');
+    if(el0&&_blWeergave()==='bundel'){ try{ blBundelTeken(el0); return; }catch(e){ console.warn('bestellijst gebundeld:',e); } } }
   const actief=_blActief(), vervallen=_blVervallenLijst();
   const lijst=_blToonVervallen?actief.concat(vervallen):actief;
   const el=document.getElementById('bestellijst-inhoud');if(!el) return;
@@ -5512,10 +5533,11 @@ function renderBestellijst(sortK='materiaal',sortA=true){
     return`<div style="margin-bottom:1.5rem">
       <div class="card-title" style="margin-bottom:0.5rem">${esc(VOORRAAD_CAT_LABEL[cat]||('🔩 '+cat))}</div>
       <table class="v-table">
-        <thead><tr><th>✓</th>${th('materiaal','Materiaal')}${th('leverancier','Leverancier')}<th style="text-align:right">Aantal</th>${th('prijsLaatst','Laatste prijs','right')}${th('datum','Datum','left')}<th></th></tr></thead>
+        <thead><tr><th>✓</th>${th('materiaal','Materiaal')}<th>Project</th>${th('leverancier','Leverancier')}<th style="text-align:right">Aantal</th>${th('prijsLaatst','Laatste prijs','right')}${th('datum','Datum','left')}<th></th></tr></thead>
         <tbody>${gesorteerd.map(b=>b._vervallen?`<tr style="opacity:0.45">
           <td></td>
           <td><strong style="font-size:12px">${esc(b.materiaal)}</strong><div style="font-size:10px;color:var(--text-faint)">van de lijst gehaald ${fmtDatum(String(b._vervallen.tijd||'').slice(0,10))}${b._vervallen.door?' door '+esc(b._vervallen.door):''}${b._vervallen.reden?' — '+esc(b._vervallen.reden):''}</div></td>
+          <td style="font-size:11px;color:var(--text-dim)">${esc(_blRegelNoot(b))}</td>
           <td style="font-size:12px">${esc(b.leverancier||'—')}</td>
           <td style="text-align:right;font-family:var(--mono)">${esc(b.aantal||1)}</td>
           <td style="text-align:right;font-family:var(--mono)">€ ${esc((Number(b.prijsLaatst)||0).toFixed(2))}</td>
@@ -5524,6 +5546,7 @@ function renderBestellijst(sortK='materiaal',sortA=true){
         </tr>`:`<tr style="${b.besteld?'opacity:0.5;text-decoration:line-through':''}">
           <td><input type="checkbox" ${b.besteld?'checked':''} onchange="markeerBesteld(${jsArg(b.id)},this.checked)" style="width:auto;cursor:pointer"></td>
           <td><strong style="font-size:12px">${esc(b.materiaal)}</strong>${b.platenmaat?`<div style="font-size:10px;color:var(--text-faint)">${esc(b.platenmaat)}</div>`:''}</td>
+          <td style="font-size:11px;color:var(--text-dim)">${esc(_blRegelNoot(b))}</td>
           <td style="font-size:12px">${b.leverancier?`<a href="#" onclick="toonLeverancierInfo(${jsArg(b.leverancier)});return false" style="color:var(--green);text-decoration:none">${esc(b.leverancier)}</a>`:'—'}</td>
           <td style="text-align:right"><input type="number" min="1" value="${esc(b.aantal||1)}" style="width:60px;font-family:var(--mono);text-align:right;padding:3px 6px;font-size:12px" onchange="updateBestellijstAantal(${jsArg(b.id)},this.value)"></td>
           <td style="text-align:right;font-family:var(--mono)">€ ${esc((Number(b.prijsLaatst)||0).toFixed(2))}</td>
@@ -5537,27 +5560,37 @@ function renderBestellijst(sortK='materiaal',sortA=true){
 function toggleHandmatigToevoegen(){
   const el=document.getElementById('handmatig-form');
   el.classList.toggle('hidden');
-  if(!el.classList.contains('hidden')) document.getElementById('hm-naam').focus();
+  if(!el.classList.contains('hidden')){
+    const sel=document.getElementById('hm-project');   // P2: de regel mag bij een project horen (of zonder project blijven)
+    if(sel){ const huidig=sel.value; sel.replaceChildren(_p2El('option',{value:'',tekst:'Geen project'}));
+      (PROJECT_CODES||[]).filter(p=>p&&!p._vervallen).slice().sort((a,b)=>String(projHoofdNr(b)).localeCompare(String(projHoofdNr(a)))).forEach(p=>{ sel.appendChild(_p2El('option',{value:p.code,tekst:(projHoofdNr(p)+' '+projNaamVol(p)).trim()||p.code})); });
+      if(huidig) sel.value=huidig; else if(typeof huidigProject!=='undefined'&&huidigProject) sel.value=huidigProject.code; }
+    document.getElementById('hm-naam').focus();
+  }
 }
 function voegHandmatigToe(){
   const naam=document.getElementById('hm-naam').value.trim();
   if(!naam){document.getElementById('hm-naam').focus();return;}
   const cat=document.getElementById('hm-cat').value;
-  const aantal=parseInt(document.getElementById('hm-aantal').value)||1;
+  const aantal=parseFloat(String(document.getElementById('hm-aantal').value).replace(',','.'))||1;
   const lev=document.getElementById('hm-leverancier').value.trim();
-  if(!_blNieuw({materiaal:naam,categorie:cat,leverancier:lev,prijsLaatst:0,datum:new Date().toISOString().split('T')[0],besteld:false,aantal},'nieuw (handmatig)')) return;
+  const eenheid=(document.getElementById('hm-eenheid')||{}).value||'', projCode=(document.getElementById('hm-project')||{}).value||'', pr=projCode?projVind(projCode):null;
+  if(!_blNieuw(MTPlanning.bestelRegelNieuw({omschrijving:naam,categorie:cat,leverancier:lev,prijsLaatst:0,datum:new Date().toISOString().split('T')[0],aantal,eenheid,bron:'hand',project:projCode,project_id:(pr&&pr.project_id)||''}),'nieuw (handmatig)')) return;
   // Reset form
   document.getElementById('hm-naam').value='';
   document.getElementById('hm-aantal').value='1';
+  if(document.getElementById('hm-eenheid')) document.getElementById('hm-eenheid').value='';
   document.getElementById('hm-leverancier').value='';
-  renderBestellijst();
+  _blNaWijziging();
 }
 function updateBestellijstAantal(id,aantal){
-  _blWijzig(id,'aantal',b=>{ b.aantal=parseInt(aantal)||1; });
+  _blWijzig(id,'aantal',b=>{ const n=parseFloat(String(aantal).replace(',','.')); b.aantal=n>0?n:1; });
 }
 function markeerBesteld(id,besteld){
-  _blWijzig(id,besteld?'besteld':'niet besteld',b=>{ b.besteld=!!besteld; });
-  renderBestellijst();
+  // De vinkjes van de per-regel-weergave: aan = besteld (een geleverde regel blijft geleverd), uit = weer nodig.
+  const b=_blZoek(_blAlle(),id), nu=b?MTPlanning.bestelStatus(b):'nodig';
+  _blWijzig(id,besteld?'besteld':'niet besteld',x=>{ MTPlanning.bestelStatusZet(x,besteld?(nu==='geleverd'?'geleverd':'besteld'):'nodig'); });
+  _blNaWijziging();
 }
 async function verwijderUitBestellijst(id){
   const b=_blZoek(_blAlle(),id); if(!b) return;
@@ -5569,8 +5602,15 @@ async function verwijderUitBestellijst(id){
   renderBestellijst();
 }
 function exportBestellijst(){
-  const lijst=_blActief().filter(b=>!b.besteld);
+  const lijst=_blActief().filter(b=>MTPlanning.bestelStatus(b)==='nodig');
   if(!lijst.length){alert('Geen openstaande items.');return;}
+  if(_blWeergave()==='bundel'){   // P2: gebundeld, met de projectnummers erachter
+    const groepen=MTPlanning.bestelBundel(lijst,{nummerVan:_blNummerVan()});
+    const t=`BESTELLIJST M&T — ${new Date().toLocaleDateString('nl-NL')}\n\n`+groepen.map(g=>`□ ${g.tekst}\n  Leverancier: ${g.leveranciers.join(', ')||'—'}\n`).join('\n');
+    const a=document.createElement('a');a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(t);
+    a.download=`bestellijst-${new Date().toISOString().split('T')[0]}.txt`;a.click();
+    return;
+  }
   const tekst=`BESTELLIJST M&T — ${new Date().toLocaleDateString('nl-NL')}\n\n`+
     lijst.map(b=>`□ ${b.materiaal}\n  Leverancier: ${b.leverancier||'—'}\n  Laatste prijs: € ${(Number(b.prijsLaatst)||0).toFixed(2)}\n`).join('\n');
   const a=document.createElement('a');a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(tekst);
@@ -5932,7 +5972,7 @@ function _projSectieRender(proj){
   let pan=[...el.querySelectorAll('.proj-paneel')].find(x=>x.dataset.sectie===_projSectie);
   if(!pan){ pan=document.createElement('div'); pan.className='proj-paneel'; pan.dataset.sectie=_projSectie; el.appendChild(pan); }
   [...el.querySelectorAll('.proj-paneel')].forEach(x=>{ if(x===pan) x.hidden=false; else if(_PROJ_BLIJVEND.has(x.dataset.sectie)) x.hidden=true; else x.remove(); });
-  if(_PROJ_BLIJVEND.has(_projSectie)&&pan.dataset.klaar) return;   // al opgebouwd: alleen tonen
+  if(_PROJ_BLIJVEND.has(_projSectie)&&pan.dataset.klaar){ if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } } return; }   // al opgebouwd: alleen tonen (de bestelregels wel vernieuwen)
   const c=_projCtx(proj);
   const bouw={overzicht:projSecOverzicht,dossier:projSecDossier,planning:projSecPlanning,calculatie:projSecCalculatie,productie:projSecProductie}[_projSectie]||projSecOverzicht;
   pan.innerHTML=bouw(proj,c); pan.dataset.klaar='1';
@@ -5941,9 +5981,11 @@ function _projSectieRender(proj){
     // Een fout in de tijdlijn mag de rest van de sectie (Gantt, taken) nooit blokkeren.
     const tl=document.getElementById('proj-tijdlijn-'+c.cid);
     try{ projMeterLaad(proj.code); }catch(e){ console.warn('meter:',e); }
+    try{ projAfhTeken(proj.code); }catch(e){ console.warn('afhankelijkheden:',e); }
     try{ projPlanTijdlijn(tl,[proj.code],{key:'proj:'+proj.code}); }
     catch(e){ console.warn('tijdlijn:',e); if(tl) tl.innerHTML='<p class="dos-leeg">Tijdlijn kon niet laden: '+esc(e.message||String(e))+'</p>'; }
   }
+  if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -6048,6 +6090,7 @@ function projSecDossier(proj,c){
 // ── Planning: Gantt + taken (taken voeden de planning; "📅 → Planning" zet ze om) ──
 function projSecPlanning(proj,c){
   return `<div id="proj-meter-${esc(c.cid)}" class="pm-host"></div>
+      <div id="proj-afh-${esc(c.cid)}" class="pm-host"></div>
       <div class="card-title" style="margin:0 0 .4rem">📊 Tijdlijn — wie, wanneer, past het?</div>
       <div id="proj-tijdlijn-${esc(c.cid)}" class="proj-b10-plek"></div>
       ${projectPlanning(proj)}
@@ -6085,7 +6128,6 @@ function projSecCalculatie(proj,c){
 }
 // ── Productie: Vectorworks-CSV, NCR-import, bestellijst van dit project ──
 function projSecProductie(proj,c){
-  const bestel=(typeof _blActief==='function')?_blActief().filter(b=>b.project===proj.code):[];
   return `
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
         <div class="card-title" style="margin:0">Kostenberekening — Vectorworks CSV / Excel</div>
@@ -6104,17 +6146,7 @@ function projSecProductie(proj,c){
       </div>
       <div id="ncr-resultaat-${esc(c.sid)}" class="hidden"></div>
       <hr class="divider">
-      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;flex-wrap:wrap">
-        <div class="card-title" style="margin:0">Bestellijst van dit project</div>
-        <button class="btn btn-secondary btn-sm" onclick="tbDoTab('bestelling')">🛒 Naar bestellijst</button>
-      </div>
-      ${bestel.length?`<div class="tabel-scroll"><table class="materiaal-lijst"><tbody>${bestel.map(b=>`<tr>
-        <td style="font-size:12px">${esc(b.materiaal||b.artikel||'')}</td>
-        <td style="font-size:11px;color:var(--text-dim)">${esc(b.leverancier||'')}</td>
-        <td style="font-size:11px;text-align:right;font-family:var(--mono)">${b.aantal?esc(b.aantal):''}</td>
-        <td>${b.besteld?'<span class="badge badge-ok">besteld</span>':'<span class="badge">open</span>'}</td>
-        <td style="font-size:11px;color:var(--text-faint)">${b.datum?fmtDatum(b.datum):''}</td></tr>`).join('')}</tbody></table></div>`
-        :'<p style="color:var(--text-faint);font-size:13px">Nog niets op de bestellijst voor dit project (NCR-import en de voorraad zetten hier regels op).</p>'}`;
+      <div id="proj-bestel-${esc(c.cid)}" class="pm-host"></div>`;
 }
 
 // ═══ PROJECTTIJDLIJN + KLANT-ROLL-UP (brok B10) ═══
@@ -6982,12 +7014,13 @@ async function projTakenHerkans(code){
 function projectTakenHtml(proj){
   const arr=projTaken(proj.code), sid=proj.code.replace(/-/g,'');
   const naamById={}; arr.forEach(t=>naamById[t.id]=t.naam);
+  const ruwA=projAfhRuw()[proj.code]||[];
   // Welke taken staan al in de uit-taken-planning (Gantt)? → kruisverwijzing.
   const _pl=(typeof planVoor==='function')?planVoor(proj.code):null;
   const inPlan=new Set((_pl&&_pl.vanTaken&&_pl.fases?_pl.fases:[]).map(fa=>fa.bronTaakId).filter(Boolean));
   const rows=arr.length?arr.map(t=>{
-    const pr=_PT_PRIO[t.prioriteit], stt=_PT_STAT[t.status]||_PT_STAT.todo;
-    const deps=(t.afhankelijk_van||[]).map(id=>naamById[id]).filter(Boolean);
+    const pr=_PT_PRIO[t.prioriteit], stt=MTPlanning.taakStatusEff(t,arr,ruwA)==='wachten'?{l:'Wacht',c:'#B8962E'}:(_PT_STAT[t.status]||_PT_STAT.todo);   // "Wacht" = een voorganger is nog niet klaar
+    const deps=MTPlanning.depsEffectief(arr,ruwA).filter(e=>e.naar===t.id&&!e.inactief).map(e=>naamById[e.van]).filter(Boolean);
     const planLink=inPlan.has(t.id)?` <a href="#" onclick="event.preventDefault();taakNaarPlan(${jsArg(proj.code)},${jsArg(t.id)})" title="Toon in de planning hierboven" style="text-decoration:none">📅</a>`:'';
     return `<tr id="pt-row-${esc(sid)}-${esc(t.id)}">
       <td style="width:24px;text-align:center"><input type="checkbox" class="pt-check" value="${esc(t.id)}" title="Selecteer om in één keer te verwijderen"></td>
@@ -7032,6 +7065,550 @@ function projectTakenHtml(proj){
 }
 function _ptStatus(code,msg,kleur){const el=document.getElementById('pt-status-'+code.replace(/-/g,''));if(el){el.textContent=msg;el.style.color=kleur||'var(--text-dim)';}}
 
+// ═══ PLANNING P2: afhankelijkheden tussen taken, wachten, kritiek pad ═══
+// Rekenregels: MTPlanning (mt-planning.js): afhankelijkheid FS met lag, kringcontrole, wachten, rooster/kritiek pad, verschuifvoorstel.
+// Hier alleen de gegevens verzamelen, tekenen (DOM-calls, geen innerHTML) en bevestigen. Niets verschuift vanzelf: een voorstel
+// wordt pas toegepast na een keuze (Flexibel: je mag ook alleen de taak zelf verzetten; Strikt: alleen samen met de opvolgers).
+// Opslag per project in mt_project_afhank { projectcode: [afhankelijkheid…] } (zelfde merge-model als de taken).
+function _p2El(tag,props,...kids){
+  const e=document.createElement(tag);
+  Object.entries(props||{}).forEach(([k,v])=>{
+    if(v==null||v===false) return;
+    if(k==='tekst') e.textContent=v;
+    else if(k==='klik') e.addEventListener('click',v);
+    else if(k==='wijzig') e.addEventListener('change',v);
+    else if(k==='invoer') e.addEventListener('input',v);
+    else if(k==='waarde') e.value=v;
+    else if(k==='aan') e.checked=!!v;
+    else e.setAttribute(k,v===true?'':v);
+  });
+  kids.flat(2).forEach(x=>{ if(x==null||x===false) return; e.appendChild(typeof x==='string'||typeof x==='number'?document.createTextNode(String(x)):x); });
+  return e;
+}
+// Keuzelijst uit [[waarde,label,uitgeschakeld?]…]
+function _p2Sel(opties,huidig,wijzig,props){
+  const s=_p2El('select',Object.assign({wijzig:ev=>wijzig(ev.target.value)},props||{}));
+  opties.forEach(([w,l,uit])=>{ const o=document.createElement('option'); o.value=w; o.textContent=l; if(uit) o.disabled=true; if(String(w)===String(huidig)) o.selected=true; s.appendChild(o); });
+  return s;
+}
+function projAfhRuw(){try{const o=JSON.parse(localStorage.getItem('mt_project_afhank')||'{}');return (o&&typeof o==='object'&&!Array.isArray(o))?o:{};}catch(e){return{};}}
+function projAfhActief(code){return MTPlanning.afhActief(projAfhRuw()[code]);}
+function projAfhZet(code,arr){
+  const ruw=projAfhRuw(), pr=(typeof projVind==='function')?projVind(code):null;
+  ruw[code]=MTPlanning.afhStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),projectId:(pr&&pr.project_id)||''});
+  localStorage.setItem('mt_project_afhank',JSON.stringify(ruw));
+}
+function _p2Vrij(){ try{ return (admVrijdagen()||[]).map(v=>v&&v.datum).filter(Boolean); }catch(e){ return []; } }   // vrije dagen uit Beheer (mt_vrijedagen)
+function _p2Mag(){ return !(window.MTRol&&MTRol.mag)||MTRol.mag('taken:alles'); }
+function _p2Lever(proj){ const d=proj&&proj.gegevens&&proj.gegevens.leverdatum; return MTPlanning.isYmd(d)?d:''; }
+function _p2D(d){ return MTPlanning.isYmd(d)?new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}):'—'; }
+function _p2Na(code){ try{ _rerenderDetailKeepScroll(); }catch(e){ projAfhTeken(code); } }
+
+// Het blok "Planning en afhankelijkheden" in de sectie Planning & taken.
+function projAfhTeken(code){
+  const host=document.getElementById('proj-afh-'+code.replace(/[^A-Za-z0-9]/g,'')); if(!host) return;
+  try{ host.replaceChildren(_p2AfhBouw(code)); }
+  catch(e){ console.warn('afhankelijkheden:',e); host.replaceChildren(_p2El('p',{class:'dos-leeg',tekst:'De afhankelijkheden konden niet getoond worden: '+(e.message||e)})); }
+}
+function _p2AfhBouw(code){
+  const proj=projVind(code), taken=projTaken(code), ruw=projAfhRuw()[code]||[], mag=_p2Mag();
+  const vrij=_p2Vrij(), lever=_p2Lever(proj), modus=MTPlanning.depModus(proj), pid=(proj&&proj.project_id)||'';
+  const kop=_p2El('div',{class:'pm-kop'},_p2El('div',{class:'card-title',style:'margin:0',tekst:'🔗 Planning en afhankelijkheden'}));
+  if(mag) kop.appendChild(_p2El('button',{type:'button',class:'btn btn-xs btn-gold',title:'Zet een standaardketen van taken met afhankelijkheden en datums klaar (eerst een voorstel; niets gebeurt zonder bevestiging)',klik:()=>projSjabloonDialoog(code)},'📐 Sjabloon toepassen'));
+  if(!taken.length) return _p2El('section',{class:'pm','aria-label':'Planning en afhankelijkheden'},kop,_p2El('p',{class:'dos-leeg',tekst:'Nog geen taken. Pas een sjabloon toe of voeg taken toe; daarna zeg je hier welke taak van welke afhangt.'}));
+  const r=MTPlanning.rooster(taken,ruw,{start:MTPlanning.vandaagYmd(),leverdatum:lever,vrij});
+  const wacht=MTPlanning.wachtOverzicht(taken,ruw), eff=MTPlanning.depsEffectief(taken,ruw), conf=MTPlanning.planConflicten(taken,ruw,{vrij}), kringen=MTPlanning.depKringen(taken,ruw);
+  const naam=id=>(taken.find(t=>t.id===id)||{}).naam||'?';
+  if(mag&&(!(window.MTRol&&MTRol.mag)||MTRol.mag('projecten:wijzigen'))) kop.appendChild(_p2El('label',{class:'afh-modus',title:'Flexibel: een verschoven taak geeft alleen een voorstel voor de opvolgers, je mag ook alleen de taak verzetten. Strikt: de taak kan alleen samen met zijn opvolgers verschoven worden. In beide gevallen gebeurt niets zonder jouw bevestiging.'},'Verschuiven ',
+    _p2Sel([['flexible','Flexibel (voorstel)'],['strict','Strikt (opvolgers mee)']],modus,w=>projAfhModusZet(code,w))));
+  const meldingen=[];
+  if(kringen.length) meldingen.push(_p2El('div',{class:'pm-w pm-fout',role:'alert'},'⛔ Er zit een kring in de afhankelijkheden ('+kringen.map(naam).join(', ')+'): haal een koppeling weg, anders klopt de planning niet.'));
+  conf.slice(0,6).forEach(c=>meldingen.push(_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ "'+c.naarNaam+'" staat '+Math.max(1,c.dagen)+' werkdag(en) te vroeg: het kan op zijn vroegst op '+_p2D(c.vroegst)+' (na "'+c.vanNaam+'"). ',
+    mag?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',title:'Berekent waar de opvolgers heen moeten; je bevestigt eerst',klik:()=>projAfhHerplan(code,c.van)},'Opvolgers herplannen…'):null)));
+  if(conf.length>6) meldingen.push(_p2El('div',{class:'pm-w pm-let-op'},'… en nog '+(conf.length-6)+' conflict(en).'));
+  const mig=MTPlanning.depMigratie(taken,ruw,{project_id:pid});
+  if(mig.nieuw.length&&mag) meldingen.push(_p2El('div',{class:'pm-w pm-info',role:'status'},'🔄 '+mig.nieuw.length+' koppeling(en) uit de oude taaklijst staan nog niet als afhankelijkheid vast. ',
+    _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projAfhMigreer(code)},'Bekijken en omzetten…')));
+  if(mag){ MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:pid,codes:[code]}).forEach(v=>meldingen.push(_p2El('div',{class:'pm-w pm-info',role:'status'},'💡 '+v.reden.charAt(0).toUpperCase()+v.reden.slice(1)+': "'+v.naam+'" op klaar zetten? ',
+    _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projTaakStatusNaar(code,v.taak_id,'klaar')},'Op klaar zetten')))); }
+  const padTekst=r.padTaken.length?r.padTaken.map(x=>x.naam).join(' → '):'';
+  let samen;
+  if(!lever) samen=_p2El('div',{class:'pm-sync'},'Geen leverdatum bij de projectgegevens (Overzicht): het kritieke pad rekent tot de vroegst mogelijke einddatum ('+_p2D(r.eindVroegst)+').');
+  else if(r.tekort>0) samen=_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ Bij deze keten is het op zijn vroegst klaar op '+_p2D(r.eindVroegst)+': '+r.tekort+' werkdag(en) na de leverdatum ('+_p2D(r.leverdatum)+').');
+  else samen=_p2El('div',{class:'pm-sync'},'Leverdatum '+_p2D(r.leverdatum)+': er is nog '+r.minSlack+' werkdag(en) speling in de keten.');
+  const geplandEind=taken.map(t=>t.eind).filter(MTPlanning.isYmd).sort().pop();
+  if(lever&&geplandEind&&geplandEind>lever) meldingen.push(_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ De laatste geplande taak eindigt op '+_p2D(geplandEind)+', na de leverdatum ('+_p2D(lever)+').'));
+  const rijen=taken.map(t=>{
+    const info=r.taken[t.id]||{}, w=wacht[t.id]||{wacht:false,op:[]}, mijl=t.soort==='mijlpaal';
+    const st=MTPlanning.taakStatusEff(t,taken,ruw), stl=st==='wachten'?{l:'Wacht',c:'#B8962E'}:(_PT_STAT[st]||_PT_STAT.todo);
+    const voor=eff.filter(e=>e.naar===t.id);
+    const chips=voor.map(e=>_p2El('span',{class:'afh-chip'+(e.inactief?' afh-uit':''),title:e.bron==='oud'?'Uit de oude taaklijst: zet eerst de oude koppelingen om om dit aan te passen':'Opvolger start pas na afloop van de voorganger plus de wachttijd'},
+      naam(e.van),
+      e.bron==='dep'&&mag?_p2El('input',{type:'number',min:'0',max:'365',step:'1',class:'afh-lag',waarde:e.lag,title:'Wachttijd na afloop van de voorganger, in werkdagen (bv. de levertijd)','aria-label':'Wachttijd in werkdagen',wijzig:ev=>projAfhLag(code,e.id,ev.target.value)}):(e.lag?(' +'+e.lag+' d'):null),
+      e.bron==='dep'&&mag?_p2El('button',{type:'button',class:'afh-weg',title:'Afhankelijkheid weghalen','aria-label':'Afhankelijkheid weghalen',klik:()=>projAfhWeg(code,e.id)},'×'):null));
+    const opties=[['','+ afhankelijk van…']].concat(taken.filter(o=>o.id!==t.id&&!voor.some(e=>e.van===o.id)).map(o=>{ const c=MTPlanning.depControle(taken,ruw,{van:o.id,naar:t.id}); return [o.id,o.naam+(c.ok?'':' (maakt een kring)'),!c.ok]; }));
+    const datum=(veld,waarde)=>_p2El('input',{type:'date',class:'afh-datum',waarde:waarde||'',disabled:mag?null:'disabled','aria-label':(veld==='start'?'Start':'Eind')+' van '+t.naam,wijzig:ev=>projAfhDatum(code,t.id,veld,ev.target.value)});
+    return _p2El('tr',{id:'afh-row-'+code.replace(/[^A-Za-z0-9]/g,'')+'-'+t.id},
+      _p2El('td',null,_p2El('span',{class:'badge',style:'background:'+stl.c+'22;color:'+stl.c,title:w.wacht?('Wacht op: '+w.op.map(o=>o.naam).join(', ')):''},stl.l)),
+      _p2El('td',{style:'white-space:normal;min-width:160px'},(mijl?'◆ ':'')+t.naam,t.fase?_p2El('div',{class:'pm-dim',style:'font-size:11px'},t.fase):null),
+      _p2El('td',null,datum('start',t.start)),
+      _p2El('td',null,mijl?_p2El('span',{class:'pm-dim',tekst:'mijlpaal'}):datum('eind',t.eind)),
+      _p2El('td',{style:'white-space:normal'},chips,mag&&opties.length>1?_p2Sel(opties,'',v=>{ if(v) projAfhVoeg(code,t.id,v); },{class:'pt-sel','aria-label':'Afhankelijk van'}):null),
+      _p2El('td',null,info.kritiek&&!info.kring&&(voor.length||eff.some(e=>e.van===t.id))?_p2El('span',{class:'pm-badge pm-let-op',title:'Op het kritieke pad: uitloop raakt de leverdatum direct'},'kritiek'):(info.kring?_p2El('span',{class:'pm-badge pm-fout',title:'Maakt deel uit van een kring'},'kring'):_p2El('span',{class:'pm-dim',tekst:'speling '+info.slack+' d'}))));
+  });
+  const tabel=_p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'pm-tabel afh-tabel'},
+    _p2El('thead',null,_p2El('tr',null,['Status','Taak','Start','Eind','Afhankelijk van (wachttijd in werkdagen)','Pad'].map(k=>_p2El('th',{tekst:k})))),
+    _p2El('tbody',null,rijen)));
+  return _p2El('section',{class:'pm','aria-label':'Planning en afhankelijkheden'},kop,meldingen,tabel,samen,
+    padTekst?_p2El('div',{class:'pm-soort',title:'Gerekend vanaf de leverdatum terug: de ketting zonder speling',tekst:'Kritiek pad: '+padTekst}):null);
+}
+
+function projAfhVoeg(code,naarId,vanId){
+  if(!_p2Mag()||!vanId) return;
+  const taken=projTaken(code), ruw=projAfhRuw()[code]||[], proj=projVind(code);
+  const r=MTPlanning.depNieuw(taken,ruw,{van:vanId,naar:naarId,project_id:(proj&&proj.project_id)||''});
+  if(!r.ok){ mtDialog.alert({title:'Afhankelijkheid',message:r.fout}); projAfhTeken(code); return; }
+  projAfhZet(code,MTPlanning.afhActief(ruw).concat([r.dep]));
+  try{ if(window.track) track('taken','afhankelijkheid_nieuw',{detail:code,ok:true}); }catch(e){}
+  _p2Na(code);
+}
+function projAfhLag(code,depId,waarde){
+  if(!_p2Mag()) return;
+  const arr=projAfhActief(code).map(d=>Object.assign({},d)), d=arr.find(x=>x.id===depId); if(!d) return;
+  d.lag_dagen=Math.max(0,Math.min(365,Math.round(parseFloat(String(waarde).replace(',','.'))||0)));
+  projAfhZet(code,arr); _p2Na(code);
+}
+async function projAfhWeg(code,depId){
+  if(!_p2Mag()) return;
+  const arr=projAfhActief(code), d=arr.find(x=>x.id===depId); if(!d) return;
+  const taken=projTaken(code), naam=id=>(taken.find(t=>t.id===id)||{}).naam||'?';
+  if(!await mtDialog.confirm({title:'Afhankelijkheid weghalen',message:'"'+naam(d.naar_taak)+'" hangt dan niet meer af van "'+naam(d.van_taak)+'". De datums blijven zoals ze zijn.',okLabel:'Weghalen'})) return;
+  projAfhZet(code,arr.filter(x=>x.id!==depId)); _p2Na(code);
+}
+function projAfhModusZet(code,waarde){
+  const p=projVind(code); if(!p) return;
+  if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return;
+  projVeldZet(p,'gegevens.afhankelijkheid_modus',waarde==='strict'?'strict':'flexible');
+  slaProjectenOp(); try{ _projHerteken(p.code); }catch(e){}
+}
+// Oude `afhankelijk_van`-koppelingen op taken omzetten naar afhankelijkheden: eerst een droogloop (wat wordt omgezet, wat niet), dan bevestigen.
+async function projAfhMigreer(code){
+  if(!_p2Mag()) return;
+  const taken=projTaken(code), ruw=projAfhRuw()[code]||[], proj=projVind(code), naam=id=>(taken.find(t=>t.id===id)||{}).naam||'?';
+  const m=MTPlanning.depMigratie(taken,ruw,{project_id:(proj&&proj.project_id)||''});
+  if(!m.nieuw.length){ await mtDialog.alert({title:'Oude koppelingen',message:'Er is niets om om te zetten.'}); return; }
+  const tekst='Droogloop: er is nog niets gewijzigd.\n\nOmzetten naar afhankelijkheid ('+m.nieuw.length+'):\n'+m.nieuw.slice(0,10).map(d=>'• '+naam(d.van_taak)+' → '+naam(d.naar_taak)).join('\n')+(m.nieuw.length>10?'\n… en '+(m.nieuw.length-10)+' meer':'')
+    +(m.overgeslagen.length?'\n\nOvergeslagen ('+m.overgeslagen.length+'):\n'+m.overgeslagen.slice(0,6).map(o=>'• '+naam(o.van)+' → '+naam(o.naar)+': '+o.reden).join('\n'):'')
+    +'\n\nDe oude lijst op de taken blijft staan; de wachttijd (lag) wordt 0 werkdagen.';
+  if(!await mtDialog.confirm({title:'Oude koppelingen omzetten',message:tekst,okLabel:'Omzetten'})) return;
+  projAfhZet(code,MTPlanning.afhActief(ruw).concat(m.nieuw)); _p2Na(code);
+}
+// Een datum van een taak wijzigen: de taak zelf verzetten, en als de opvolgers daardoor te vroeg komen, eerst een voorstel.
+async function projAfhDatum(code,id,veld,waarde){
+  if(!_p2Mag()) return;
+  if(!MTPlanning.isYmd(waarde)){ projAfhTeken(code); return; }
+  await _p2VerschuifFlow(code,id,veld==='eind'?{eind:waarde}:{start:waarde});
+  _p2Na(code);
+}
+// De opvolgers van een taak herplannen zonder de taak zelf te verzetten (na een conflict).
+async function projAfhHerplan(code,vanId){
+  const t=projTaken(code).find(x=>x.id===vanId); if(!t||!MTPlanning.isYmd(t.start)) return;
+  await _p2VerschuifFlow(code,vanId,{start:t.start}); _p2Na(code);
+}
+async function _p2VerschuifFlow(code,id,wijziging){
+  const proj=projVind(code), taken=projTaken(code), ruw=projAfhRuw()[code]||[], vrij=_p2Vrij(), modus=MTPlanning.depModus(proj);
+  const v=MTPlanning.verschuifVoorstel(taken,ruw,Object.assign({id},wijziging),{modus,vrij});
+  if(!v.ok){ await mtDialog.alert({title:'Planning',message:v.fout}); return false; }
+  let mee=true;
+  if(v.wijzigingen.length){
+    const regels=v.wijzigingen.slice(0,12).map(w=>'• '+w.naam+': '+_p2D(w.van.start)+' → '+_p2D(w.naar.start)+(w.reden?' ('+w.reden+')':'')).join('\n')+(v.wijzigingen.length>12?'\n… en '+(v.wijzigingen.length-12)+' meer':'');
+    const choices=[{label:'Opvolgers mee verschuiven ('+v.wijzigingen.length+')',sublabel:'zelfde duur; geen weekend of vrije dag'}];
+    if(!v.blokkerend) choices.push({label:'Alleen deze taak verzetten',sublabel:'de opvolgers blijven staan; het conflict blijft zichtbaar'});
+    const k=await mtDialog.choose({title:'Opvolgers verschuiven?',message:'"'+v.taak.naam+'" komt op '+_p2D(v.taak.naar.start)+(v.taak.naar.eind!==v.taak.naar.start?' t/m '+_p2D(v.taak.naar.eind):'')+'. Daardoor komen deze taken te vroeg te staan:\n'+regels+(v.blokkerend?'\n\nStrikte planning: een taak kan alleen samen met zijn opvolgers verschoven worden.':''),choices});
+    if(k==null) return false;
+    mee=(k===0);
+  }
+  projTakenZet(code,MTPlanning.voorstelToepassen(taken,v,{metOpvolgers:mee}));
+  try{ if(window.track) track('taken','planning_verschoven',{detail:code+' · '+(mee?v.wijzigingen.length+' opvolgers':'alleen taak'),ok:true}); }catch(e){}
+  const lever=_p2Lever(proj);
+  if(lever&&mee&&v.laatsteEind&&v.laatsteEind>lever&&typeof planToast==='function') planToast('⚠ De laatste taak eindigt nu op '+_p2D(v.laatsteEind)+', na de leverdatum ('+_p2D(lever)+').');
+  return true;
+}
+// ═══ PLANNING P2: projectsjabloon toepassen (voorstel) en bewerken (Instellingen) ═══
+// Rekenregels: MTPlanning.sjabloon* (mt-planning.js). Opslag: mt_project_sjablonen [sjabloon…] (nieuwste stand per id, tombstone bij verwijderen).
+// Het sjabloon is een startpunt: bij "Gewonnen → project" en "Direct project" wordt het voorgesteld; toepassen gebeurt pas na een bevestiging,
+// en je kunt eerst alles aanpassen (taken overslaan, duur en wachttijd wijzigen, leverdatum kiezen). Alleen eigenaar en beheer bewerken het sjabloon zelf.
+function sjablonenRuw(){ try{ const a=JSON.parse(localStorage.getItem('mt_project_sjablonen')||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function sjablonenLijst(){ return MTPlanning.sjablonenEffectief(sjablonenRuw()); }
+function sjabloonMag(){ return !(window.MTRol&&MTRol.isBeheer)||MTRol.isBeheer(); }
+function sjabloonBewaar(s){
+  const ruw=sjablonenRuw(), k=JSON.parse(JSON.stringify(s)); k._gewijzigd=Date.now(); delete k._vervallen; delete k._aangepast;
+  const i=ruw.findIndex(x=>x&&x.id===k.id); if(i>=0) ruw[i]=k; else ruw.push(k);
+  localStorage.setItem('mt_project_sjablonen',JSON.stringify(ruw));
+}
+function sjabloonVerwijder(id){
+  const ruw=sjablonenRuw(), i=ruw.findIndex(x=>x&&x.id===id);
+  if(i>=0) ruw[i]=Object.assign({},ruw[i],{_vervallen:true,_gewijzigd:Date.now()}); else ruw.push({id,_vervallen:true,_gewijzigd:Date.now()});
+  localStorage.setItem('mt_project_sjablonen',JSON.stringify(ruw));
+}
+// De calculatie van een project (voor het budget): de live stand als de calculatiemodule geladen is, anders de lokale kopie.
+function _p2CalcVoor(code){
+  const offs=(typeof _ctlOffertes==='function')?_ctlOffertes():((window.CALC&&CALC.offertes)||{});
+  return offs[code]||Object.values(offs).find(o=>o&&o.project_code===code)||null;
+}
+
+// Na "Gewonnen" of een direct project: het sjabloon voorstellen (alleen als er nog geen taken zijn en je taken mag plannen).
+function projSjabloonVoorstel(code){
+  if(!_p2Mag()||!projVind(code)||projTaken(code).length) return;
+  projSjabloonDialoog(code,{voorstel:true});
+}
+function projSjabloonDialoog(code,{voorstel=false}={}){
+  if(!_p2Mag()) return;
+  const proj=projVind(code); if(!proj) return;
+  const oud=document.getElementById('sjabloon-overlay'); if(oud) oud.remove();
+  const lijst=sjablonenLijst(), budget=MTPlanning.calcBudgetSoorten(_p2CalcVoor(code)), vrij=_p2Vrij();
+  const st={sid:lijst[0].id,lever:_p2Lever(proj),start:MTPlanning.vandaagYmd(),modus:'',uit:new Set(),dagen:{},lag:{}};
+  const ov=_p2El('div',{id:'sjabloon-overlay',style:'position:fixed;inset:0;background:rgba(28,26,22,.45);z-index:10000;display:flex;align-items:center;justify-content:center',role:'dialog','aria-modal':'true','aria-label':'Sjabloon toepassen'});
+  const kaart=_p2El('div',{style:'background:var(--surface-overlay,#fff);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);width:820px;max-width:calc(100vw - 24px);max-height:90vh;display:flex;flex-direction:column;overflow:hidden'});
+  ov.appendChild(kaart); ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  const sluit=()=>ov.remove();
+  const bereken=()=>{
+    const basis=lijst.find(x=>x.id===st.sid)||lijst[0], s=MTPlanning.sjabloonZonder(basis,[...st.uit]);
+    s.taken.forEach(t=>{ if(st.dagen[t.k]) t.vast_dagen=st.dagen[t.k]; });
+    s.deps.forEach(d=>{ const k=d.van+'>'+d.naar; if(st.lag[k]!==undefined) d.lag_dagen=st.lag[k]; });
+    const res=MTPlanning.sjabloonToepassen(s,{budget,leverdatum:st.lever,start:st.start,vrij,projectId:proj.project_id||'',bestaand:projTaken(code),modus:st.modus});
+    return {basis,s,res};
+  };
+  const toepassen=async()=>{
+    const {res}=bereken();
+    if(!res.ok){ await mtDialog.alert({title:'Sjabloon',message:(res.fouten||[]).join('\n')}); return; }
+    projTakenZet(code,projTaken(code).concat(res.taken));
+    projAfhZet(code,projAfhActief(code).concat(res.deps));
+    let extra='';
+    if(st.lever&&MTPlanning.isYmd(st.lever)&&!_p2Lever(proj)&&(!(window.MTRol&&MTRol.mag)||MTRol.mag('projecten:wijzigen'))){ try{ projGegevensZet(code,'leverdatum',st.lever); extra=' · leverdatum bij de projectgegevens gezet'; }catch(e){} }
+    sluit();
+    try{ if(window.track) track('taken','sjabloon_toegepast',{detail:code+' · '+res.taken.length+' taken · '+res.modus,ok:true}); }catch(e){}
+    if(typeof planToast==='function') planToast('📐 '+res.taken.length+' taken en '+res.deps.length+' afhankelijkheden toegevoegd'+extra+' · "→ Alles naar Toggl" om te spiegelen');
+    try{ renderProjectDetail(huidigProject); }catch(e){}
+  };
+  const teken=()=>{
+    const {basis,s,res}=bereken();
+    const naamVan=k=>(basis.taken.find(t=>t.k===k)||{}).naam||k;
+    const uurtekst=m=>m?MTPlanning.fmtUur(m):'—';
+    const koptekst=_p2El('div',{style:'padding:14px 16px;border-bottom:1px solid var(--border)'},
+      _p2El('div',{style:'font-weight:700;font-size:15px',tekst:'📐 Sjabloon toepassen'+(voorstel?' — voorstel':'')}),
+      _p2El('div',{style:'font-size:11.5px;color:var(--text-dim)',tekst:voorstel?'Dit project heeft nog geen taken. Start met de standaardketen en pas aan wat anders loopt; er verandert niets zolang je niet op "Toepassen" drukt.':'De taken en afhankelijkheden worden bij de bestaande taken gezet. Er verandert niets zolang je niet op "Toepassen" drukt.'}));
+    const instel=_p2El('div',{style:'display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px'},
+      lijst.length>1?_p2El('label',{class:'afh-modus'},'Sjabloon ',_p2Sel(lijst.map(x=>[x.id,x.naam]),st.sid,v=>{ st.sid=v; st.uit.clear(); st.dagen={}; st.lag={}; teken(); })):_p2El('div',{style:'font-weight:600',tekst:basis.naam}),
+      _p2El('label',{class:'afh-modus',title:'De keten rekent terug vanaf deze datum. Leeg: vooruit vanaf de startdatum.'},'Leverdatum ',_p2El('input',{type:'date',class:'afh-datum',waarde:st.lever,wijzig:ev=>{ st.lever=ev.target.value; teken(); }})),
+      _p2El('label',{class:'afh-modus'},'Start (vooruit) ',_p2El('input',{type:'date',class:'afh-datum',waarde:st.start,wijzig:ev=>{ st.start=MTPlanning.isYmd(ev.target.value)?ev.target.value:MTPlanning.vandaagYmd(); teken(); }})),
+      _p2El('label',{class:'afh-modus'},'Rekenen ',_p2Sel([['','Automatisch'],['terug','Terug vanaf de leverdatum'],['vooruit','Vooruit vanaf de start']],st.modus,v=>{ st.modus=v; teken(); })));
+    const budgetTekst=budget?('Budget uit de calculatie: '+['kantoor','wp'].map(k=>MTPlanning.SOORTEN[k]+' '+uurtekst(budget[k])).join(' · ')+' — verdeeld volgens de percentages in het sjabloon.'):'Geen ingevulde calculatie: de taken krijgen geen budget (je kunt de raming per taak daarna invullen).';
+    const waarsch=res.ok?res.waarschuwingen.map(w=>_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ '+w)):(res.fouten||[]).map(w=>_p2El('div',{class:'pm-w pm-fout',role:'alert'},'⛔ '+w));
+    const rijen=basis.taken.map(bt=>{
+      const weg=st.uit.has(bt.k), x=res.ok?res.taken.find(t=>t.sleutel===bt.k):null, mijl=bt.soort==='mijlpaal';
+      const inn=s.deps.filter(d=>d.naar===bt.k);
+      return _p2El('tr',{style:weg?'opacity:.45':''},
+        _p2El('td',null,_p2El('input',{type:'checkbox',aan:!weg,title:'Deze taak meenemen','aria-label':'Meenemen: '+bt.naam,wijzig:ev=>{ if(ev.target.checked) st.uit.delete(bt.k); else st.uit.add(bt.k); teken(); }})),
+        _p2El('td',{style:'white-space:normal'},(mijl?'◆ ':'')+bt.naam,_p2El('div',{class:'pm-dim',style:'font-size:11px',tekst:(basis.fases.find(f=>f.k===bt.fase)||{}).naam||''})),
+        _p2El('td',{class:'pm-num'},weg||mijl?'—':uurtekst(res.ok?res.verdeling[bt.k]:0)),
+        _p2El('td',null,weg||mijl||!x?'—':_p2El('input',{type:'number',min:'1',max:'200',class:'afh-lag',waarde:x.duur_dagen,title:'Duur in werkdagen','aria-label':'Duur in werkdagen van '+bt.naam,wijzig:ev=>{ const n=Math.round(parseFloat(ev.target.value)||0); if(n>=1) st.dagen[bt.k]=n; else delete st.dagen[bt.k]; teken(); }})),
+        _p2El('td',null,weg||!x?'—':(x.start===x.eind?_p2D(x.start):_p2D(x.start)+' – '+_p2D(x.eind))),
+        _p2El('td',{style:'white-space:normal'},weg?null:inn.map(d=>_p2El('span',{class:'afh-chip'},'na '+naamVan(d.van),
+          _p2El('input',{type:'number',min:'0',max:'365',class:'afh-lag',waarde:d.lag_dagen,title:'Wachttijd in werkdagen na afloop van de voorganger (bij materiaal: de levertijd)','aria-label':'Wachttijd na '+naamVan(d.van),wijzig:ev=>{ st.lag[d.van+'>'+d.naar]=Math.max(0,Math.round(parseFloat(ev.target.value)||0)); teken(); }}),' d'))));
+    });
+    const tabel=_p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'pm-tabel afh-tabel'},
+      _p2El('thead',null,_p2El('tr',null,['','Taak','Budget','Dagen','Datums','Volgt op (wachttijd)'].map(k=>_p2El('th',{tekst:k})))),_p2El('tbody',null,rijen)));
+    const n=res.ok?res.taken.length:0;
+    const voet=_p2El('div',{style:'padding:10px 16px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap'},
+      _p2El('span',{class:'pm-dim',style:'margin-right:auto;font-size:11.5px',tekst:res.ok?(res.modus==='terug'?'Teruggerekend vanaf de leverdatum':'Vooruit gerekend vanaf de start')+(res.begin?' · '+_p2D(res.begin)+' t/m '+_p2D(res.eind):''):''}),
+      sjabloonMag()?_p2El('a',{href:'#',class:'pm-link',title:'Het sjabloon zelf aanpassen (Instellingen)',klik:e=>{ e.preventDefault(); sluit(); sjabloonInstellingenOpen(); }},'Sjabloon bewerken'):null,
+      _p2El('button',{type:'button',class:'btn btn-secondary btn-sm',klik:sluit},'Overslaan'),
+      _p2El('button',{type:'button',class:'btn btn-gold btn-sm',disabled:n?null:'disabled',klik:toepassen},'Toepassen ('+n+' taken)'));
+    kaart.replaceChildren(koptekst,_p2El('div',{style:'overflow:auto;padding:12px 16px'},instel,_p2El('div',{class:'pm-sync',style:'margin:0 0 6px',tekst:budgetTekst}),waarsch,tabel),voet);
+  };
+  teken();
+  document.body.appendChild(ov);
+}
+
+// ── Instellingen ▸ Projectsjabloon (alleen eigenaar en beheer) ──
+let _sjEd=null;   // {id, s (werkkopie), nieuw}
+function sjabloonInstellingenOpen(){
+  if(!sjabloonMag()) return;
+  tbDoTab('instellingen');
+  setTimeout(()=>{ const k=document.getElementById('sjabloon-kaart'); if(k&&k.scrollIntoView) k.scrollIntoView({behavior:'smooth',block:'start'}); },120);
+}
+function sjabloonKaartTeken(){
+  const kaart=document.getElementById('sjabloon-kaart'), el=document.getElementById('sjabloon-inhoud'); if(!kaart||!el) return;
+  const mag=sjabloonMag(); kaart.style.display=mag?'':'none';
+  if(!mag){ el.replaceChildren(); return; }
+  try{ el.replaceChildren(_sjBouw()); }
+  catch(e){ console.warn('sjabloon:',e); el.replaceChildren(_p2El('p',{class:'dos-leeg',tekst:'Het sjabloon kon niet getoond worden: '+(e.message||e)})); }
+}
+if(typeof window!=='undefined'&&window.addEventListener) window.addEventListener('mt-rol',()=>{ try{ sjabloonKaartTeken(); }catch(e){} });
+function _sjBouw(){
+  const lijst=sjablonenLijst();
+  if(!_sjEd||(!_sjEd.nieuw&&!lijst.some(x=>x.id===_sjEd.id))) _sjEd={id:lijst[0].id,s:JSON.parse(JSON.stringify(lijst[0])),nieuw:false};
+  const ed=_sjEd, s=ed.s, ctl=MTPlanning.sjabloonControle(s);
+  const opnieuw=()=>sjabloonKaartTeken();
+  const kies=id=>{ const x=sjablonenLijst().find(y=>y.id===id); if(x){ _sjEd={id:x.id,s:JSON.parse(JSON.stringify(x)),nieuw:false}; opnieuw(); } };
+  const status=_p2El('span',{id:'sjabloon-status',style:'font-size:12px;color:var(--text-dim);margin-left:8px'});
+  const opslaan=()=>{
+    const c=MTPlanning.sjabloonControle(s); if(c.fouten.length) return;
+    sjabloonBewaar(s); _sjEd.nieuw=false; opnieuw();
+    const st=document.getElementById('sjabloon-status'); if(st){ st.textContent='✓ Opgeslagen'; setTimeout(()=>{ st.textContent=''; },2500); }
+  };
+  const nummer=(w,min,max)=>Math.max(min,Math.min(max,Math.round(parseFloat(String(w).replace(',','.'))||0)));
+  const sleutelNieuw=()=>{ let n=s.taken.length+1; while(s.taken.some(t=>t.k==='taak'+n)) n++; return 'taak'+n; };
+  const ACT=[['','— activiteit —']].concat(MTPlanning.ACTIVITEITEN.map(a=>[a.k,a.l+' ('+(a.soort==='kantoor'?'kantoor':'werkplaats')+')']));
+  const fasen=(s.fases||[]).map(f=>[f.k,f.naam]);
+  const taakRij=(t,i)=>{
+    const mijl=t.soort==='mijlpaal';
+    return _p2El('tr',null,
+      _p2El('td',null,_p2El('button',{type:'button',class:'afh-weg',title:'Omhoog','aria-label':'Omhoog',disabled:i?null:'disabled',klik:()=>{ s.taken.splice(i-1,0,s.taken.splice(i,1)[0]); opnieuw(); }},'▲'),_p2El('button',{type:'button',class:'afh-weg',title:'Omlaag','aria-label':'Omlaag',disabled:i<s.taken.length-1?null:'disabled',klik:()=>{ s.taken.splice(i+1,0,s.taken.splice(i,1)[0]); opnieuw(); }},'▼')),
+      _p2El('td',null,_p2El('input',{type:'text',maxlength:'60',waarde:t.naam,class:'sj-naam','aria-label':'Taaknaam',wijzig:ev=>{ t.naam=ev.target.value.trim(); opnieuw(); }})),
+      _p2El('td',null,_p2Sel(fasen,t.fase||'',v=>{ t.fase=v; opnieuw(); },{class:'pt-sel','aria-label':'Fase van '+t.naam})),
+      _p2El('td',null,_p2Sel([['taak','Taak'],['mijlpaal','Mijlpaal']],mijl?'mijlpaal':'taak',v=>{ if(v==='mijlpaal'){ t.soort='mijlpaal'; delete t.activiteit; delete t.aandeel_pct; } else { delete t.soort; } opnieuw(); },{class:'pt-sel','aria-label':'Soort van '+t.naam})),
+      _p2El('td',null,mijl?'—':_p2Sel(ACT,t.activiteit||'',v=>{ if(v) t.activiteit=v; else delete t.activiteit; opnieuw(); },{class:'pt-sel','aria-label':'Activiteit van '+t.naam})),
+      _p2El('td',null,mijl?'—':_p2El('input',{type:'number',min:'0',max:'100',step:'1',class:'afh-lag',waarde:t.aandeel_pct||0,title:'Aandeel van het budget van deze soort uren (kantoor of werkplaats), in procenten','aria-label':'Aandeel in procenten van '+t.naam,wijzig:ev=>{ t.aandeel_pct=nummer(ev.target.value,0,100); opnieuw(); }}),mijl?null:' %'),
+      _p2El('td',null,mijl?'—':_p2El('input',{type:'number',min:'1',max:'20',class:'afh-lag',waarde:t.mensen||1,title:'Aantal mensen tegelijk: bepaalt de duur uit het budget','aria-label':'Aantal mensen voor '+t.naam,wijzig:ev=>{ t.mensen=nummer(ev.target.value,1,20); opnieuw(); }})),
+      _p2El('td',null,mijl?'—':_p2El('input',{type:'number',min:'1',max:'200',class:'afh-lag',waarde:t.duur_dagen||'',placeholder:'1',title:'Duur in werkdagen als er geen budget is','aria-label':'Duur in werkdagen voor '+t.naam,wijzig:ev=>{ const n=nummer(ev.target.value,0,200); if(n) t.duur_dagen=n; else delete t.duur_dagen; opnieuw(); }})),
+      _p2El('td',null,_p2El('button',{type:'button',class:'afh-weg',title:'Taak weghalen','aria-label':'Taak weghalen: '+t.naam,klik:()=>{ s.deps=s.deps.filter(d=>d.van!==t.k&&d.naar!==t.k); s.taken.splice(i,1); opnieuw(); }},'×')));
+  };
+  const taken=s.taken.map(taakRij);
+  const TK=s.taken.map(t=>[t.k,t.naam||t.k]);
+  const depRij=(d,i)=>_p2El('tr',null,
+    _p2El('td',null,_p2Sel(TK,d.van,v=>{ d.van=v; opnieuw(); },{class:'pt-sel','aria-label':'Voorganger'})),
+    _p2El('td',null,'→'),
+    _p2El('td',null,_p2Sel(TK,d.naar,v=>{ d.naar=v; opnieuw(); },{class:'pt-sel','aria-label':'Opvolger'})),
+    _p2El('td',null,_p2El('input',{type:'number',min:'0',max:'365',class:'afh-lag',waarde:d.lag_dagen||0,title:'Wachttijd in werkdagen na afloop van de voorganger (bij materiaal: de levertijd, standaard 10)','aria-label':'Wachttijd in werkdagen',wijzig:ev=>{ d.lag_dagen=nummer(ev.target.value,0,365); opnieuw(); }}),' dagen'),
+    _p2El('td',null,_p2El('button',{type:'button',class:'afh-weg',title:'Afhankelijkheid weghalen','aria-label':'Afhankelijkheid weghalen',klik:()=>{ s.deps.splice(i,1); opnieuw(); }},'×')));
+  const wijzigd=JSON.stringify(s)!==JSON.stringify(sjablonenLijst().find(x=>x.id===ed.id)||null);
+  return _p2El('div',null,
+    _p2El('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px'},
+      _p2Sel(lijst.map(x=>[x.id,x.naam]),ed.id,kies,{class:'pt-sel','aria-label':'Sjabloon kiezen'}),
+      _p2El('button',{type:'button',class:'btn btn-secondary btn-sm',title:'Maakt een kopie van dit sjabloon onder een nieuwe naam (bv. keuken, kast, balie)',klik:()=>{ const k=JSON.parse(JSON.stringify(s)); k.id='sj_'+Date.now().toString(36); k.naam=(s.naam||'Sjabloon')+' (kopie)'; _sjEd={id:k.id,s:k,nieuw:true}; opnieuw(); }},'+ Kopie maken'),
+      ed.id===MTPlanning.SJABLOON_STD_ID?_p2El('button',{type:'button',class:'btn btn-secondary btn-sm',title:'Zet het standaardsjabloon terug naar de ingebouwde keten',klik:async()=>{ if(!await mtDialog.confirm({title:'Terug naar standaard',message:'Het standaardsjabloon wordt teruggezet naar de ingebouwde keten. Projecten die er al mee gemaakt zijn, veranderen niet.',okLabel:'Terugzetten'})) return; const n=MTPlanning.sjabloonStd(); sjabloonBewaar(n); _sjEd={id:n.id,s:n,nieuw:false}; opnieuw(); }},'Terug naar standaard'):
+        _p2El('button',{type:'button',class:'btn btn-danger btn-sm',klik:async()=>{ if(!await mtDialog.confirm({title:'Sjabloon verwijderen',message:'"'+s.naam+'" verwijderen? Projecten die er al mee gemaakt zijn, veranderen niet.',okLabel:'Verwijderen',danger:true})) return; sjabloonVerwijder(ed.id); _sjEd=null; opnieuw(); }},'Verwijderen')),
+    _p2El('div',{class:'grid2'},
+      _p2El('div',{class:'field'},_p2El('label',{tekst:'Naam'}),_p2El('input',{type:'text',maxlength:'80',waarde:s.naam||'','aria-label':'Naam van het sjabloon',wijzig:ev=>{ s.naam=ev.target.value; opnieuw(); }})),
+      _p2El('div',{class:'field'},_p2El('label',{tekst:'Omschrijving'}),_p2El('input',{type:'text',maxlength:'240',waarde:s.omschrijving||'','aria-label':'Omschrijving',wijzig:ev=>{ s.omschrijving=ev.target.value; }}))),
+    _p2El('div',{class:'card-title',style:'margin:10px 0 4px',tekst:'Fases'}),
+    _p2El('div',{style:'display:flex;gap:6px;flex-wrap:wrap;align-items:center'},(s.fases||[]).map((f,i)=>_p2El('span',{class:'afh-chip'},_p2El('input',{type:'text',maxlength:'40',waarde:f.naam,'aria-label':'Naam van fase '+(i+1),style:'width:150px',wijzig:ev=>{ f.naam=ev.target.value.trim()||f.naam; opnieuw(); }}),
+        _p2El('button',{type:'button',class:'afh-weg',title:'Fase weghalen','aria-label':'Fase weghalen: '+f.naam,klik:()=>{ s.fases.splice(i,1); s.taken.forEach(t=>{ if(t.fase===f.k) t.fase=''; }); opnieuw(); }},'×'))),
+      _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>{ let n=(s.fases||[]).length+1; while((s.fases||[]).some(f=>f.k==='fase'+n)) n++; (s.fases=s.fases||[]).push({k:'fase'+n,naam:'Nieuwe fase'}); opnieuw(); }},'+ Fase')),
+    _p2El('div',{class:'card-title',style:'margin:10px 0 4px',tekst:'Taken'}),
+    _p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'pm-tabel afh-tabel'},_p2El('thead',null,_p2El('tr',null,['','Taak','Fase','Soort','Activiteit','Aandeel','Mensen','Dagen','']
+      .map(k=>_p2El('th',{tekst:k})))),_p2El('tbody',null,taken))),
+    _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',style:'margin-top:6px',klik:()=>{ s.taken.push({k:sleutelNieuw(),naam:'Nieuwe taak',fase:(s.fases[0]||{}).k||'',activiteit:'werkplaats',aandeel_pct:0,mensen:1}); opnieuw(); }},'+ Taak'),
+    _p2El('div',{class:'card-title',style:'margin:10px 0 4px',tekst:'Afhankelijkheden (finish-to-start, met wachttijd)'}),
+    _p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'pm-tabel afh-tabel'},_p2El('thead',null,_p2El('tr',null,['Voorganger','','Opvolger','Wachttijd',''].map(k=>_p2El('th',{tekst:k})))),_p2El('tbody',null,s.deps.map(depRij)))),
+    _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',style:'margin-top:6px',disabled:s.taken.length>1?null:'disabled',klik:()=>{ s.deps.push({van:s.taken[0].k,naar:s.taken[1].k,lag_dagen:0}); opnieuw(); }},'+ Afhankelijkheid'),
+    ctl.fouten.map(f=>_p2El('div',{class:'pm-w pm-fout',role:'alert'},'⛔ '+f)),ctl.waarschuwingen.map(f=>_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ '+f)),
+    _p2El('div',{style:'margin-top:10px'},_p2El('button',{type:'button',class:'btn btn-secondary btn-sm',id:'sjabloon-opslaan',disabled:ctl.fouten.length||(!wijzigd&&!ed.nieuw)?'disabled':null,klik:opslaan},'Opslaan'),status));
+}
+// ═══ PLANNING P2: bestelregels per project en gebundeld ═══
+// Bouwt voort op de bestaande Bestellijst (mt_bestellijst): een bestelregel is een bestaande regel met extra velden (project_id,
+// artikelsleutel, eenheid, bron vw|hhos|hand, status nodig|besteld|geleverd). Rekenregels: MTPlanning.bestel* (mt-planning.js).
+// Het project toont zijn eigen regels ("Te bestellen"), het tabblad Bestellijst bundelt alle projecten; het zijn DEZELFDE regels,
+// dus afvinken werkt in beide richtingen. Bestellen zelf blijft een handeling van een mens.
+let _blWeergaveKeuze=null, _blToonGeleverd=false, _blUitgeklapt=new Set();
+function _blWeergave(){
+  if(_blWeergaveKeuze) return _blWeergaveKeuze;
+  try{ const w=localStorage.getItem('mt_bl_weergave'); _blWeergaveKeuze=(w==='regel'||w==='bundel')?w:'bundel'; }catch(e){ _blWeergaveKeuze='bundel'; }
+  return _blWeergaveKeuze;
+}
+function blWeergaveZet(w){ _blWeergaveKeuze=(w==='regel')?'regel':'bundel'; try{ localStorage.setItem('mt_bl_weergave',_blWeergaveKeuze); }catch(e){} renderBestellijst(); }
+function _blVandaagYmd(){ return new Date().toISOString().split('T')[0]; }
+// Het projectnummer om te tonen bij een regel (projectnummer of werkcode, anders de projectcode); één opzoeking per teken-ronde.
+function _blNummerVan(){
+  const cache=new Map();
+  return b=>{
+    const k=b.project_id||b.project||''; if(!k) return '';
+    if(!cache.has(k)){ let p=null; try{ p=projVind(b.project_id)||projVind(b.project); }catch(e){} cache.set(k,(p&&projHoofdNr(p))||b.project||k); }
+    return cache.get(k);
+  };
+}
+function _blVanProject(proj){ return _blActief().filter(b=>(proj.project_id&&b.project_id===proj.project_id)||(b.project&&b.project===proj.code)); }
+// Gaat de wijziging van een bestelregel door? Dan overal bijwerken wat getoond wordt.
+function _blNaWijziging(){
+  try{ renderBestellijst(); }catch(e){ console.warn('bestellijst:',e); }
+  try{ if(typeof huidigProject!=='undefined'&&huidigProject){ projBestelTeken(huidigProject.code); projAfhTeken(huidigProject.code); } }catch(e){}
+}
+function bestelStatusZetId(id,status,bron){
+  return _blWijzig(id,'status → '+status+(bron?' ('+bron+')':''),b=>{ MTPlanning.bestelStatusZet(b,status); });
+}
+
+// ── Het tabblad: gebundeld of per regel ──
+function blKopTeken(){
+  const kop=document.getElementById('bestellijst-kop'); if(!kop) return;
+  const w=_blWeergave(), regels=_blAlle().filter(b=>b&&typeof b==='object'), mig=MTPlanning.bestelMigratie(regels,{projectVoor:c=>{ try{ const p=projVind(c); return (p&&p.project_id)||''; }catch(e){ return ''; } }});
+  const knop=(v,l,t)=>_p2El('button',{type:'button',class:'btn btn-xs '+(w===v?'btn-primary':'btn-secondary'),title:t,'aria-pressed':w===v?'true':'false',klik:()=>blWeergaveZet(v)},l);
+  kop.replaceChildren(
+    _p2El('div',{style:'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:.6rem'},
+      knop('bundel','Gebundeld (alle projecten)','Dezelfde artikelen worden opgeteld; achter elke regel staan de projectnummers'),
+      knop('regel','Per regel','Elke bestelregel apart, per categorie'),
+      _p2El('label',{style:'font-size:12px;color:var(--text-dim);display:inline-flex;gap:4px;align-items:center;cursor:pointer;margin-left:8px'},
+        _p2El('input',{type:'checkbox',aan:_blToonGeleverd,style:'width:auto',wijzig:ev=>{ _blToonGeleverd=ev.target.checked; renderBestellijst(); }}),'Toon ook geleverd')),
+    mig.aantal?_p2El('div',{class:'pm-w pm-info',role:'status'},'🔄 '+mig.aantal+' oude regel(s) missen nog hun artikelsleutel, bron, status of project. Ze werken gewoon door; aanvullen legt het vast. ',
+      _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>blMigreer()},'Bekijken en aanvullen…')):null);
+}
+// Droogloop: wat zou er aangevuld worden? Pas na bevestiging wordt het (met journaal per regel) vastgelegd; bestaande waarden blijven staan.
+async function blMigreer(){
+  const regels=_blAlle().filter(b=>b&&typeof b==='object');
+  const m=MTPlanning.bestelMigratie(regels,{projectVoor:c=>{ try{ const p=projVind(c); return (p&&p.project_id)||''; }catch(e){ return ''; } }});
+  if(!m.aantal){ await mtDialog.alert({title:'Bestellijst',message:'Alles is al aangevuld.'}); return; }
+  const velden={}; m.patches.forEach(p=>Object.keys(p.patch).forEach(k=>{ velden[k]=(velden[k]||0)+1; }));
+  const tekst='Droogloop: er is nog niets gewijzigd.\n\n'+m.aantal+' regel(s) worden aangevuld:\n'+Object.entries(velden).map(([k,n])=>'• '+k+': '+n).join('\n')
+    +'\n\nVoorbeelden:\n'+m.patches.slice(0,6).map(p=>'• '+p.omschrijving+' ← '+Object.entries(p.patch).map(([k,v])=>k+': '+(k==='artikelsleutel'?String(v).slice(0,18):v)).join(', ')).join('\n')
+    +(m.onbekend.length?'\n\nProject niet te vinden ('+m.onbekend.length+'): die regels krijgen geen project_id en blijven aan hun projectcode gekoppeld.':'')
+    +'\n\nBestaande waarden worden nooit overschreven; elke wijziging komt in het journaal.';
+  if(!await mtDialog.confirm({title:'Bestellijst aanvullen',message:tekst,okLabel:'Aanvullen'})) return;
+  let n=0; m.patches.forEach(p=>{ if(_blWijzig(p.id,'aanvullen (P2)',b=>{ Object.keys(p.patch).forEach(k=>{ if(b[k]===undefined||b[k]===null||b[k]===''||k==='status'||k==='eenheid') b[k]=p.patch[k]; }); if(b.status) b.besteld=b.status!=='nodig'; })) n++; });
+  if(typeof planToast==='function') planToast('🛒 '+n+' bestelregel(s) aangevuld');
+  _blNaWijziging();
+}
+const _blStatusOpties=[['nodig','Nodig'],['besteld','Besteld'],['geleverd','Geleverd']];
+const _blBronLabel={vw:'VW',hhos:'HHOS',hand:'hand'};
+// De gebundelde lijst (DOM, geen innerHTML).
+function blBundelTeken(el){
+  const bundel=MTPlanning.bestelBundel(_blActief(),{nummerVan:_blNummerVan(),toonGeleverd:_blToonGeleverd});
+  if(!bundel.length){ el.replaceChildren(_p2El('p',{style:'color:var(--text-faint);font-size:13px',tekst:'Niets te bestellen. Regels komen uit de VW-kostenberekening en de HHOS-upload van een project (tab Productie), of je voegt ze met de hand toe.'})); return; }
+  const kop=_p2El('thead',null,_p2El('tr',null,['','Wat','Leverancier','Bron',''].map(k=>_p2El('th',{tekst:k}))));
+  const rijen=[];
+  bundel.forEach(g=>{
+    const sl=g.sleutel+'|'+g.eenheid, open=_blUitgeklapt.has(sl), meer=g.perProject.length>1||g.regels.length>1;
+    const bronnen=[...new Set(g.regels.map(r=>_blBronLabel[r.bron]||r.bron))];
+    const statusOpties=_blStatusOpties.concat(g.status==='gemengd'?[['gemengd','Gemengd',true]]:[]);
+    rijen.push(_p2El('tr',{class:'bl-groep'},
+      _p2El('td',null,_p2Sel(statusOpties,g.status,v=>{ if(v!=='gemengd') blBundelStatus(g.sleutel,g.eenheid,v); },{class:'pt-sel','aria-label':'Status van '+g.omschrijving,title:'Zet alle regels van deze bundel op een status (bij meer projecten vraag ik voor welke)'})),
+      _p2El('td',{style:'white-space:normal'},_p2El('strong',{style:'font-size:12.5px',tekst:g.tekst})),
+      _p2El('td',{style:'font-size:12px;white-space:normal',tekst:g.leveranciers.join(', ')||'—'}),
+      _p2El('td',{style:'font-size:11px;color:var(--text-dim)',tekst:bronnen.join(' · ')}),
+      _p2El('td',null,meer?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary','aria-expanded':open?'true':'false',title:'Verdeling per project',klik:()=>{ if(_blUitgeklapt.has(sl)) _blUitgeklapt.delete(sl); else _blUitgeklapt.add(sl); renderBestellijst(); }},open?'▾ Verdeling':'▸ Verdeling'):null)));
+    if(open) g.perProject.forEach(p=>{
+      const st=p.statussen, n=st.nodig+st.besteld+st.geleverd, huidig=st.nodig===n?'nodig':st.besteld===n?'besteld':st.geleverd===n?'geleverd':'gemengd';
+      rijen.push(_p2El('tr',{class:'bl-deel'},
+        _p2El('td',null,_p2Sel(_blStatusOpties.concat(huidig==='gemengd'?[['gemengd','Gemengd',true]]:[]),huidig,v=>{ if(v!=='gemengd') blBundelStatus(g.sleutel,g.eenheid,v,[p.project]); },{class:'pt-sel','aria-label':'Status voor '+(p.nummer||'zonder project')})),
+        _p2El('td',{style:'padding-left:24px;font-size:12px;white-space:normal'},(p.nummer?p.nummer:'Zonder project')+' — '+fmtAantalBl(p.aantal)+' '+MTPlanning.eenheidTekst(g.eenheid,p.aantal)),
+        _p2El('td',null),_p2El('td',null),
+        _p2El('td',null,p.project?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',title:'Open het project',klik:()=>{ try{ openProject(projVind(p.project).code,{sectie:'productie'}); }catch(e){} }},'Project'):null)));
+    });
+  });
+  el.replaceChildren(_p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'v-table bl-bundel'},kop,_p2El('tbody',null,rijen))),
+    _p2El('div',{class:'pm-sync',tekst:'Dezelfde artikelen en eenheden zijn opgeteld; tussen haakjes staan de projectnummers. Een status zetten geldt voor de regels in het project zelf: wat je hier afvinkt, ziet het project, en andersom.'}));
+}
+// Projectnummer (en "geleverd") van een regel, als platte tekst voor de per-regel-weergave.
+function _blRegelNoot(b){ const nr=b.project?_blNummerVan()(b):'', st=MTPlanning.bestelStatus(b)==='geleverd'?'geleverd':''; return [nr,st].filter(Boolean).join(' · '); }
+function fmtAantalBl(n){ return (Math.round(n*100)/100).toString().replace('.',','); }
+// Status van een bundel zetten: voor alle regels, of voor een of meer projecten. Bij meer projecten eerst vragen welke.
+async function blBundelStatus(sleutel,eenheid,status,projecten){
+  const g=MTPlanning.bestelBundel(_blActief(),{nummerVan:_blNummerVan(),toonGeleverd:true}).find(x=>x.sleutel===sleutel&&x.eenheid===eenheid);
+  if(!g){ renderBestellijst(); return; }
+  let sel=projecten||null;
+  if(!projecten&&MTPlanning.bestelMeerdereProjecten(g)){
+    const label=MTPlanning.BESTEL_STATUS_LABEL[status].toLowerCase(), pp=g.perProject.filter(p=>p.project);
+    const k=await mtDialog.choose({title:'Voor welke projecten?',message:'"'+g.omschrijving+'" staat in meerdere projecten. Voor welke zet je dit op '+label+'?',
+      choices:[{label:'Alle projecten ('+pp.length+')',sublabel:pp.map(p=>p.nummer).join(', ')+(g.perProject.some(p=>!p.project)?' en de regels zonder project':'')}].concat(pp.map(p=>({label:'Alleen '+p.nummer,sublabel:fmtAantalBl(p.aantal)+' '+MTPlanning.eenheidTekst(g.eenheid,p.aantal)})))});
+    if(k==null){ renderBestellijst(); return; }
+    sel=k===0?null:[pp[k-1].project];
+  }
+  const plan=MTPlanning.bestelAfvinkPlan(g,status,{projecten:sel});
+  let n=0; plan.forEach(p=>{ if(bestelStatusZetId(p.id,p.naar,'bundel')) n++; });
+  if(typeof planToast==='function'&&n) planToast('🛒 '+n+' regel(s) op '+MTPlanning.BESTEL_STATUS_LABEL[status].toLowerCase());
+  _blNaWijziging();
+}
+
+// ── In het project: de sectie "Te bestellen" ──
+let _blProjToonGeleverd=false;
+function projBestelTeken(code){
+  const host=document.getElementById('proj-bestel-'+code.replace(/[^A-Za-z0-9]/g,'')); if(!host) return;
+  try{ host.replaceChildren(_blProjBouw(code)); }
+  catch(e){ console.warn('te bestellen:',e); host.replaceChildren(_p2El('p',{class:'dos-leeg',tekst:'De bestellijst van dit project kon niet getoond worden: '+(e.message||e)})); }
+}
+function _blProjBouw(code){
+  const proj=projVind(code), regels=_blVanProject(proj), taken=projTaken(code);
+  const tel={nodig:0,besteld:0,geleverd:0}; regels.forEach(b=>{ tel[MTPlanning.bestelStatus(b)]++; });
+  const zicht=regels.filter(b=>_blProjToonGeleverd||MTPlanning.bestelStatus(b)!=='geleverd');
+  const magWijzig=!(window.MTRol&&MTRol.mag)||MTRol.mag('bestellijst:toevoegen|alles');
+  const voorstellen=MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:proj.project_id||'',codes:[code]});
+  const rijen=zicht.map(b=>{
+    const st=MTPlanning.bestelStatus(b), aantal=Number(b.aantal)>0?Number(b.aantal):1;
+    return _p2El('tr',{style:st==='geleverd'?'opacity:.6':''},
+      _p2El('td',{style:'white-space:normal;font-size:12.5px'},MTPlanning.bestelOms(b),b.platenmaat?_p2El('div',{class:'pm-dim',style:'font-size:11px',tekst:b.platenmaat}):null),
+      _p2El('td',{class:'pm-num',tekst:fmtAantalBl(aantal)+' '+MTPlanning.eenheidTekst(b.eenheid,aantal)}),
+      _p2El('td',{style:'font-size:12px',tekst:b.leverancier||'—'}),
+      _p2El('td',{style:'font-size:11px;color:var(--text-dim)',tekst:_blBronLabel[MTPlanning.bestelBron(b)]||''}),
+      _p2El('td',null,_p2Sel(_blStatusOpties,st,v=>{ bestelStatusZetId(b.id,v,'project'); _blNaWijziging(); },{class:'pt-sel','aria-label':'Status van '+MTPlanning.bestelOms(b)})),
+      _p2El('td',null,_p2El('button',{type:'button',class:'btn btn-xs btn-danger','data-recht':'bestellijst:alles',title:'Van de lijst halen (blijft bewaard en is terug te zetten in het tabblad Bestellijst)','aria-label':'Van de lijst halen',klik:()=>blProjWeg(code,b.id)},'×')));
+  });
+  const nieuwOms=_p2El('input',{type:'text',placeholder:'Wat moet er besteld worden?','aria-label':'Omschrijving',style:'min-width:200px;flex:1'}), nieuwAantal=_p2El('input',{type:'number',min:'0',step:'any',waarde:'1','aria-label':'Aantal',style:'width:70px;font-family:var(--mono)'}), nieuwEenheid=_p2El('input',{type:'text',placeholder:'plaat, stuk, m²…','aria-label':'Eenheid',style:'width:110px'});
+  const voegToe=()=>{
+    const oms=nieuwOms.value.trim(); if(!oms){ nieuwOms.focus(); return; }
+    const r=MTPlanning.bestelRegelNieuw({omschrijving:oms,aantal:parseFloat(String(nieuwAantal.value).replace(',','.'))||1,eenheid:nieuwEenheid.value,bron:'hand',project:code,project_id:proj.project_id||'',datum:_blVandaagYmd()});
+    if(_blNieuw(r,'nieuw (handmatig, project '+code+')')) _blNaWijziging();
+  };
+  return _p2El('section',{class:'pm','aria-label':'Te bestellen'},
+    _p2El('div',{class:'pm-kop'},_p2El('div',{class:'card-title',style:'margin:0',tekst:'🛒 Te bestellen'}),
+      _p2El('span',{class:'pm-bron',tekst:regels.length?(tel.nodig+' nodig · '+tel.besteld+' besteld · '+tel.geleverd+' geleverd'):'nog niets'}),
+      tel.geleverd?_p2El('label',{style:'font-size:12px;color:var(--text-dim);display:inline-flex;gap:4px;align-items:center;cursor:pointer'},_p2El('input',{type:'checkbox',aan:_blProjToonGeleverd,style:'width:auto',wijzig:ev=>{ _blProjToonGeleverd=ev.target.checked; projBestelTeken(code); }}),'Toon geleverd'):null,
+      _p2El('button',{type:'button',class:'btn btn-secondary btn-sm',title:'De gebundelde lijst over alle projecten',klik:()=>tbDoTab('bestelling')},'🛒 Naar de gebundelde bestellijst')),
+    voorstellen.map(v=>_p2El('div',{class:'pm-w pm-info',role:'status'},'💡 '+v.reden.charAt(0).toUpperCase()+v.reden.slice(1)+': "'+v.naam+'" op klaar zetten? ',
+      _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projTaakStatusNaar(code,v.taak_id,'klaar')},'Op klaar zetten'))),
+    rijen.length?_p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'pm-tabel'},_p2El('thead',null,_p2El('tr',null,['Wat','Aantal','Leverancier','Bron','Status',''].map(k=>_p2El('th',{tekst:k})))),_p2El('tbody',null,rijen)))
+      :_p2El('p',{style:'color:var(--text-faint);font-size:13px',tekst:regels.length?'Alles is geleverd.':'Nog niets te bestellen voor dit project. De VW-kostenberekening en de HHOS-NCR hierboven zetten regels op de lijst; je kunt ze ook met de hand toevoegen.'}),
+    magWijzig?_p2El('div',{style:'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px'},nieuwOms,nieuwAantal,nieuwEenheid,_p2El('button',{type:'button',class:'btn btn-secondary btn-sm',klik:voegToe},'+ Toevoegen')):null);
+}
+async function blProjWeg(code,id){
+  const b=_blZoek(_blAlle(),id); if(!b) return;
+  if(!await mtDialog.confirm({title:'Van de bestellijst halen',message:'"'+(b.materiaal||'regel')+'" van de bestellijst halen?\nDe regel blijft bewaard en is terug te zetten via het tabblad Bestellijst ("Toon van de lijst gehaalde regels", in de weergave Per regel).',okLabel:'Van de lijst halen'})) return;
+  _blVervallen(id,'van de lijst gehaald in project '+code);
+  _blNaWijziging();
+}
+
+// ── Uploads: bij welk project hoort dit bestand? ──
+// De bestandsnaam (of de Commission in de VW-CSV) wordt vergeleken met de projectnummers. Klopt het met het project waarin je uploadt, dan
+// gebeurt er niets extra's; wijkt het af, dan kies jij: toch hier, of naar het andere project om het daar te uploaden.
+const _p2Gecontroleerd=new WeakSet();
+function _p2Kandidaten(){ return (PROJECT_CODES||[]).filter(p=>p&&typeof p==='object'&&!p._vervallen).map(p=>({key:p.code,nummers:[projNummer(p),p.werkcode,p.offertenr].filter(Boolean)})); }
+async function _p2UploadControle(namen,projectCode){
+  const kand=_p2Kandidaten(), treffers=[];
+  (namen||[]).forEach(n=>MTPlanning.projectUitTekst(n,kand).forEach(h=>{ if(!treffers.some(x=>x.key===h.key)) treffers.push(h); }));
+  if(!treffers.length) return true;
+  if(treffers.length===1&&treffers[0].key===projectCode) return true;
+  const naam=key=>{ const p=projVind(key); return p?(projHoofdNr(p)+' '+projNaamVol(p)).trim():key; };
+  const k=await mtDialog.choose({title:'Bij welk project hoort dit bestand?',
+    message:'De bestandsnaam noemt '+treffers.map(h=>h.nummer+' ('+naam(h.key)+')').join(' en ')+', maar je uploadt in '+naam(projectCode)+'.',
+    choices:[{label:'Toch voor '+naam(projectCode),sublabel:'de regels komen bij dit project'}].concat(treffers.filter(h=>h.key!==projectCode).map(h=>({label:'Naar '+naam(h.key)+' gaan',sublabel:'open dat project; upload het bestand daar opnieuw'})))});
+  if(k==null) return false;
+  if(k===0) return true;
+  const doel=treffers.filter(h=>h.key!==projectCode)[k-1];
+  try{ if(doel) openProject(doel.key,{sectie:'productie'}); }catch(e){}
+  return false;
+}
+// De Commission uit een VW-kostenberekening (kolom 2 van de regel "Commission"), vergeleken met het project: een waarschuwing, geen blokkade.
+function _p2CommissionTekst(regels,projectCode){
+  try{
+    const rij=regels.map(l=>l.split(';').map(c=>c.replace(/^"|"$/g,'').trim())).find(c=>/^commission$/i.test(c[0])); const comm=rij&&rij[1]; if(!comm) return '';
+    const h=MTPlanning.projectUitTekst(comm,_p2Kandidaten());
+    if(!h.length||h.some(x=>x.key===projectCode)) return '';
+    const p=projVind(h[0].key); return ' · ⚠ Commission "'+comm+'" hoort bij '+(p?(projHoofdNr(p)+' '+projNaamVol(p)).trim():h[0].key)+', niet bij dit project';
+  }catch(e){ return ''; }
+}
+// Alles uit de VW-kostenberekening (kanten en beslag) in één keer als voorstel op de bestellijst, met bevestiging; wat al open op de lijst staat blijft staan.
+async function csvAllesNaarBestellijst(projectCode){
+  const safeId=projectCode.replace(/[^A-Za-z0-9_]/g,''), sec=window['_csvSecties_'+safeId]; if(!sec) return;
+  const catMap={kanten:'kantenband',beslag:'overig'}, open=_blActief().filter(b=>b.project===projectCode&&!b.besteld);
+  const nieuw=[], bestaand=[];
+  ['kanten','beslag'].forEach(naam=>(sec[naam]||[]).forEach(i=>{ (open.some(b=>b.artikel===i.artikel)?bestaand:nieuw).push({naam,i}); }));
+  if(!nieuw.length){ await mtDialog.alert({title:'Bestellijst',message:bestaand.length?'Alles staat al op de bestellijst ('+bestaand.length+' regels).':'Er zijn geen kanten of beslag in deze kostenberekening. De platen staan in de NCR-import.'}); return; }
+  const p=projVind(projectCode);
+  if(!await mtDialog.confirm({title:'Op de bestellijst zetten',message:nieuw.length+' regel(s) uit de kostenberekening voor '+(p?(projHoofdNr(p)+' '+projNaamVol(p)).trim():projectCode)+' op de bestellijst zetten (kanten en beslag)?'+(bestaand.length?'\n'+bestaand.length+' staan er al op en blijven ongemoeid.':'')+'\nDe platen staan in de NCR-import.',okLabel:'Op de lijst zetten'})) return;
+  let n=0; nieuw.forEach(({naam,i})=>{ if(_blNieuw(MTPlanning.bestelRegelNieuw({omschrijving:i.omschrijving,artikel:i.artikel,aantal:i.hoeveelheid,eenheid:i.eenheid,bron:'vw',project:projectCode,project_id:(p&&p.project_id)||'',categorie:catMap[naam]||'overig',datum:_blVandaagYmd()}),'nieuw (VW-CSV '+projectCode+')')) n++; });
+  try{ document.querySelectorAll('#csv-resultaat-'+safeId+' input[type=checkbox]').forEach(c=>{ c.checked=true; }); }catch(e){}
+  if(typeof planToast==='function') planToast('🛒 '+n+' regel(s) op de bestellijst gezet');
+  _blNaWijziging();
+}
 // ═══ PROJECTMETER (P1): budget / gepland / geklokt / resterend, per activiteit ═══
 // Rekenregels: MTPlanning.meter (mt-planning.js). Hier alleen de gegevens verzamelen en tekenen (met DOM-calls, geen
 // innerHTML). Geklokt komt per Toggl-taak uit de Reports-query (tgReportsTaken); lukt dat niet, dan uit de lokaal gesyncte
@@ -7221,9 +7798,18 @@ function nieuweProjectTaak(code){
   try{ if(window.track) track('taken','taak_handmatig',{detail:code,ok:true}); }catch(e){}
 }
 async function projTaakStatus(code,id){
+  const t0=projTaken(code).find(x=>x.id===id); if(!t0) return;
+  const order=['todo','bezig','klaar'];
+  return projTaakStatusNaar(code,id,order[(order.indexOf(t0.status||'todo')+1)%3]);
+}
+// Zet een taak op een status. Een taak die wacht (een voorganger is niet klaar) start pas na een bevestiging.
+async function projTaakStatusNaar(code,id,nieuwStatus){
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
+  if(!['todo','bezig','klaar'].includes(nieuwStatus)) return;
+  const w=MTPlanning.taakWacht(t,arr,projAfhRuw()[code]||[]);
+  if(w.wacht&&(t.status||'todo')==='todo'&&nieuwStatus!=='todo'&&!await mtDialog.confirm({title:'Deze taak wacht',message:'"'+t.naam+'" wacht op: '+w.op.map(o=>o.naam).join(', ')+'.\nToch '+(nieuwStatus==='klaar'?'op klaar zetten':'starten')+'?',okLabel:'Toch doorgaan'})) return;
   _ptJournaal('status',code,t);
-  const order=['todo','bezig','klaar']; t.status=order[(order.indexOf(t.status||'todo')+1)%3];
+  t.status=nieuwStatus;
   // Niet meer "fire and forget": lukt Toggl niet, dan blijft dat zichtbaar (⏳) met herkansing.
   if(t.tg_task_id){
     try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await _ptStatusId(t.status)}); delete t.tg_pending; _ptSyncMerk(t,'ok'); }
@@ -8374,11 +8960,12 @@ function planSchuifFase(code, faseId, nieuweStart){
 // Zet de AI/handmatige taken (met afhankelijkheden) om naar de fasen-planning
 // (Gantt) hierboven. Topologisch geordend zodat een taak nooit vóór z'n
 // voorganger komt. duur_uur → werkdagen (~8u/dag); effort = uren; status blijft.
-function _takenTopoSort(arr){
+function _takenTopoSort(arr,code){
   const byId={}; arr.forEach(t=>byId[t.id]=t);
   const klaar=new Set(), uit=[];
-  // alleen deps die echt in de lijst staan tellen mee
-  const deps=t=>(t.afhankelijk_van||[]).filter(id=>byId[id]);
+  // alleen deps die echt in de lijst staan tellen mee (P2: de afhankelijkheden plus de oude lijst op de taak)
+  const eff=code?MTPlanning.depsEffectief(arr,projAfhRuw()[code]||[]).filter(e=>!e.inactief):null;
+  const deps=t=>eff?eff.filter(e=>e.naar===t.id).map(e=>e.van).filter(id=>byId[id]):(t.afhankelijk_van||[]).filter(id=>byId[id]);
   let veilig=arr.length*arr.length+5;
   while(uit.length<arr.length && veilig-->0){
     let progressie=false;
@@ -8413,7 +9000,7 @@ function takenNaarPlanning(code,opts){
       if(!confirm('Er is al een planning voor '+code+'.\nDie wordt vervangen door deze '+arr.length+' taken. Doorgaan?')) return;
     }
   }
-  const geordend=_takenTopoSort(arr);
+  const geordend=_takenTopoSort(arr,code);
   const fases=geordend.map((t,i)=>{
     const uren=parseFloat(t.duur_uur)||0;
     const duur=uren>0?Math.max(1,Math.ceil(uren/8)):0;
@@ -8811,6 +9398,7 @@ async function dossierLaadMap(code){
 // ═══ NCR IMPORT ═══
 function verwerNCR(files, projectCode){
   if(!files||!files.length) return;
+  if(!_p2Gecontroleerd.has(files)){ _p2UploadControle(Array.from(files).map(f=>f.name),projectCode).then(ok=>{ if(ok){ _p2Gecontroleerd.add(files); verwerNCR(files,projectCode); } }); return; }
   const safeId=projectCode.replace(/[^A-Za-z0-9_]/g,'');
   const status=document.getElementById(`ncr-status-${safeId}`);
   const resultaat=document.getElementById(`ncr-resultaat-${safeId}`);
@@ -8994,17 +9582,20 @@ async function _ncrNaarBestellijst(resultaten, projectCode){
     const totaal=r.aantalPlaten+breuk;
     const vInfo=getVoorraadStatusVoorNcr(r.materiaal);
     const lev=getLeverancierVoorNcr(r.materiaal)||'';
-    const item={
-      materiaal:r.materiaal,
+    const pr0=projVind(projectCode);
+    const item=MTPlanning.bestelRegelNieuw({
+      omschrijving:r.materiaal,
       categorie:'platen',
       leverancier:lev,
       prijsLaatst:vInfo.prijs||0,
       datum:new Date().toISOString().split('T')[0],
-      besteld:false,
       aantal:totaal,
+      eenheid:'plaat',
+      bron:'hhos',
       project:projectCode,
+      project_id:(pr0&&pr0.project_id)||'',
       platenmaat:`${r.breedte}×${r.hoogte}mm`
-    };
+    });
     const bestaand=actief.find(b=>b.materiaal===r.materiaal&&b.project===projectCode&&!b.besteld);
     if(bestaand) conflict.push({bestaand,item}); else nieuw.push(item);
   });
@@ -9092,6 +9683,7 @@ function getVoorraadStatusVoorNcr(ncrNaam){
 // ═══ VECTORWORKS CSV IMPORT ═══
 function verwerKostenCSV(file, projectCode){
   if(!file) return;
+  if(!_p2Gecontroleerd.has(file)){ _p2UploadControle([file.name],projectCode).then(ok=>{ if(ok){ _p2Gecontroleerd.add(file); verwerKostenCSV(file,projectCode); } }); return; }
   const safeId=projectCode.replace(/[^A-Za-z0-9_]/g,'');
   const status=document.getElementById(`csv-status-${safeId}`);
   const resultaat=document.getElementById(`csv-resultaat-${safeId}`);
@@ -9145,6 +9737,7 @@ function verwerKostenCSV(file, projectCode){
 
     const totaalSecties=secties.platen.length+secties.kanten.length+secties.beslag.length;
     if(!totaalSecties){status.textContent='⚠ Geen data gevonden';return;}
+    window['_csvSecties_'+safeId]=secties;   // P2: voor "Alles op de bestellijst"
 
     // Sla platen m² op in sessionStorage zodat NCR tabel ze kan tonen
     const csvSleutel=`mt_csv_${projectCode}`;
@@ -9233,6 +9826,7 @@ function verwerKostenCSV(file, projectCode){
     resultaat.innerHTML=`
       <div style="margin-bottom:0.75rem;display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:11px;color:var(--text-faint)">Vink aan wat besteld moet worden → gaat naar de bestellijst. Werkelijke prijzen worden opgeslagen voor terugkoppeling.</div>
+        <button class="btn btn-secondary btn-sm" onclick="csvAllesNaarBestellijst(${jsArg(projectCode)})" title="Zet alle kanten en beslag van deze kostenberekening op de bestellijst (met bevestiging)">🛒 Alles op de bestellijst</button>
         <button class="btn btn-secondary btn-sm" onclick="exporteerPrijsvergelijking(${jsArg(projectCode)})">📋 Export prijsvergelijking</button>
       </div>
       ${renderSectie(secties.platen,'platen','🪵','m²')}
@@ -9241,6 +9835,7 @@ function verwerKostenCSV(file, projectCode){
       <hr class="divider">
       ${renderSectie(secties.beslag,'beslag','🔩','stuks')}`;
     status.textContent=`✓ ${secties.platen.length} platen · ${secties.kanten.length} kanten · ${secties.beslag.length} beslag`;
+    { const ct=_p2CommissionTekst(lines,projectCode); if(ct) status.textContent+=ct; }
   };
   if(isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file,'utf-8');
 }
@@ -9261,18 +9856,21 @@ function slaWerkelijkePrijsOp(projectCode,artikel,prijs){
 function csvRegelNaarBestellijst(checkbox,artikel,omschrijving,categorie,hoeveelheid,eenheid,projectCode){
   const catMap={'platen':'platen','kanten':'kantenband','beslag':'overig'};
   if(checkbox.checked){
-    _blNieuw({
-      materiaal:omschrijving,
+    if(_blActief().some(b=>b.artikel===artikel&&b.project===projectCode&&!b.besteld)) return;   // staat al open op de lijst (bv. via "Alles op de bestellijst")
+    const pr0=projVind(projectCode);
+    _blNieuw(MTPlanning.bestelRegelNieuw({
+      omschrijving:omschrijving,
       artikel,
       categorie:catMap[categorie]||'overig',
       leverancier:'',
       prijsLaatst:0,
       datum:new Date().toISOString().split('T')[0],
-      besteld:false,
       aantal:parseFloat(hoeveelheid)||1,
       eenheid,
-      project:projectCode
-    },'nieuw (VW-CSV '+projectCode+')');
+      bron:'vw',
+      project:projectCode,
+      project_id:(pr0&&pr0.project_id)||''
+    }),'nieuw (VW-CSV '+projectCode+')');
   } else {
     // Brok L2: niet meer wissen, maar van de lijst halen (blijft bewaard, terug te zetten)
     const open=_blActief().find(b=>b.artikel===artikel&&b.project===projectCode&&!b.besteld);
@@ -9554,6 +10152,7 @@ function leadDoorzetHtml(proj){
   const st=leadDoorzetStappen(proj), pc=_jsCode(proj.code), mag=_leadMag();
   return `<div class="lead-doorzet"><div class="kpi-label">Doorzetten naar project</div>
     <div class="lead-rij">${st.taken?'✓':'○'} Taken ${st.taken||!mag?'':`<button class="btn btn-xs btn-gold" onclick="aiTakenVoorstel(${jsArg(pc)})">✨ AI-taken voorstellen</button> <button class="btn btn-xs btn-secondary" onclick="projTaakTemplateKies(${jsArg(pc)})">📋 Template</button>`}</div>
+    <div class="lead-rij">${st.taken?'✓':'○'} Planning-sjabloon ${st.taken||!mag?'':`<button class="btn btn-xs btn-gold" onclick="projSjabloonDialoog(${jsArg(pc)})" title="Standaardketen met afhankelijkheden en datums voorstellen">📐 Sjabloon toepassen</button>`}</div>
     <div class="lead-rij">${st.map?'✓':'○'} Projectmap ${st.map||!mag?'':`<button class="btn btn-xs btn-secondary" onclick="leadMapMaken(${jsArg(pc)})">Map aanmaken…</button>`}</div>
     <div class="lead-rij">${st.toggl?'✓':'○'} Toggl-project ${st.toggl||!mag?'':`<button class="btn btn-xs btn-secondary" onclick="leadTogglMaken(${jsArg(pc)})">Toggl-project aanmaken…</button>`}</div>
     ${mag?`<button class="btn btn-xs btn-secondary" onclick="leadDoorzetKlaar(${jsArg(pc)})" title="Dit blok verbergen; alles blijft via het project te doen">Klaar</button>`:''}</div>`;
@@ -9564,6 +10163,7 @@ async function leadGewonnen(code){
   const r=projFaseZet(code,'gewonnen',{});
   if(!r.ok) return mtDialog.alert({title:'Gewonnen',message:r.fout});
   if(typeof projSectieKies==='function') projSectieKies('overzicht');
+  setTimeout(()=>{ try{ projSjabloonVoorstel(code); }catch(e){ console.warn('sjabloonvoorstel:',e); } },400);   // P2: de standaardketen voorstellen (bevestigen, aanpassen of overslaan)
 }
 async function leadMapMaken(code){
   const p=projVind(code); if(!p) return;
@@ -10010,6 +10610,7 @@ async function maakProjectAan(){
   }
   if(mapFout) projCtxStatus(code,'⚠ mappen niet aangemaakt');
   else { projCtxStatus(code,'✓ klaar'); setTimeout(()=>{ if(_projStatus[code]==='✓ klaar') projCtxStatus(code,''); },4000); }
+  if(!lead&&!tgBron) setTimeout(()=>{ try{ projSjabloonVoorstel(code); }catch(e){ console.warn('sjabloonvoorstel:',e); } },2000);   // P2: direct project → de standaardketen voorstellen
   setTimeout(()=>{ sluitModal(); _projAanmaakVrij();
     if(bijlagenNa&&typeof inboxBijlagenVraag==='function'){
       if(typeof _inbox!=='undefined'&&_inbox.mbx&&bijlagenNa.mbx&&_inbox.mbx!==bijlagenNa.mbx){
@@ -11202,7 +11803,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_project_afhank','mt_project_sjablonen']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -11235,6 +11836,11 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // Projecttaken (P1): per projectcode, per taak-id; per veld wint de nieuwste stempel, een wijziging die de winnaar niet
     // kende wordt als _veldconflict bewaard; verwijderen = tombstone (wint). Zie MTPlanning.takenSamen.
     mt_project_taken(lokaal, spData) { return MTPlanning.takenSamen(lokaal, spData); },
+    // Afhankelijkheden tussen taken (P2): { projectcode: [afhankelijkheid…] }, zelfde model als de taken (stempel per veld, conflict,
+    // verwijderen = tombstone die wint). Zie MTPlanning.afhSamen.
+    mt_project_afhank(lokaal, spData) { return MTPlanning.afhSamen(lokaal, spData); },
+    // Projectsjablonen (P2): per sjabloon-id de nieuwste stand; verwijderen = tombstone. Alleen eigenaar/beheer wijzigen ze.
+    mt_project_sjablonen(lokaal, spData) { return _spSamenPerSleutel(lokaal, spData, x => x && x.id, _spTijd); },
     // Bestellijst (brok L2): per regel (id; oude regels zonder id → inhoud-id) wint de
     // stand met de nieuwste `_gewijzigd`. Van de lijst halen is een tombstone
     // (`_vervallen` + nieuwe stempel), dus een oude kopie zet niets terug en wist niets.
@@ -11243,14 +11849,9 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
       const kopie = v => Array.isArray(v) ? JSON.parse(JSON.stringify(v)) : [];
       const L = _blIdsToekennen(kopie(lees(lokaal))), R = _blIdsToekennen(kopie(lees(spData)));
-      const per = new Map(), los = new Map();
-      for (const x of [...R, ...L]) {
-        if (!x || typeof x !== 'object') { los.set(JSON.stringify(x), x); continue; }
-        const k = String(x.id);
-        const oud = per.get(k);
-        if (!oud || String(x._gewijzigd || '') >= String(oud._gewijzigd || '')) per.set(k, x);
-      }
-      return [...per.values(), ...los.values()];
+      // P2: regels met veldstempels (status, aantal, project, …) worden per veld samengevoegd, zodat "geleverd" van de werkplaats en een
+      // nieuw aantal van kantoor allebei blijven; regels zonder stempels gedragen zich als vroeger (het nieuwste record wint).
+      return MTPlanning.bestelSamen(L, R);
     },
     // Bestellijst-journaal: alleen toevoegen; vereniging op id, op tijd, laatste 1000.
     mt_bestellijst_journaal(lokaal, spData) {
