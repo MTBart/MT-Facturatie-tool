@@ -30,6 +30,7 @@
     'mt_voorraad', 'mt_bestellijst', 'mt_history', 'mt_history_archive', 'mt_projecten', 'mt_leveranciers', 'mt_toeslag_lak', 'mt_toeslag_spuit',
     'mt_mail_links', 'mt_mail_oppak', 'mt_planning', 'mt_klant_codes', 'mt_offerte_keuze', 'mt_project_taken', 'mt_supplier_map', 'mt_calc_offertes', 'mt_calc_defaults',
     'mt_taken_journaal', 'mt_bijlage_index', 'mt_todo_sync', 'mt_bestellijst_journaal', 'mt_koppel_journaal', 'mt_contacten', 'mt_contacten_journaal', 'mt_project_controle',
+    'mt_project_afhank', 'mt_project_sjablonen',
     // alleen lokaal, niet te herbouwen
     'mt_retry_queue', 'mt_agenda_blocks', 'mt_planblokken', 'mt_notes', 'mt_tasks', 'mt_werkcodes', 'mt_projectnummers', 'mt_werkcode_wacht', 'mt_timer_stop_pending', 'mt_calc_offertes_backup',
     'mt_uren_entries', 'mt_uren_ik', 'mt_uren_planning', 'mt_uren_taken', 'mt_uren_capaciteit', 'mt_uren_projecten', 'mt_uren_teamleden', 'mt_user_projects', 'mt_uurtarieven',

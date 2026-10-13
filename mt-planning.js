@@ -136,21 +136,33 @@
   P.activiteitUitNaam = naam => { const s = String(naam || ''); for (const [k, re] of SLEUTELWOORDEN) if (re.test(s)) return k; return ''; };
   P.activiteitUitUursoort = oms => { const s = String(oms || '').toLowerCase().trim(); return UURSOORT_ACT[s] || P.activiteitUitNaam(s); };
 
-  // ── Taken: velden met een eigen stempel (zoals de projectvelden van L1) ───────────────────────────────
-  // Opslag = het bestaande mt_project_taken { projectcode: [taak…] }; elke taak: id, project_id, naam, omschrijving,
+  // ── Stempelmodel: velden met een eigen stempel (zoals de projectvelden van L1) ───────────────────────────
+  // Eén motor voor drie soorten records: taken, afhankelijkheden en bestelregels. Per record `_vs[veld] = {t, door, basis}`,
+  // `_gewijzigd` (laatste wijziging), `_veldconflict[veld]` en een tombstone `_vervallen`.
+  // Opslag taken = het bestaande mt_project_taken { projectcode: [taak…] }; elke taak: id, project_id, naam, omschrijving,
   // duur_uur (de raming; budget in minuten = duur_uur × 60), activiteit, status, toegewezen (team-slug, optioneel),
-  // prioriteit, afhankelijk_van, tg_task_id (optionele Toggl-koppeling), tg_sync (koppeltabel), _vs, _veldconflict, _vervallen.
-  P.TAAK_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'status', 'toegewezen', 'prioriteit', 'afhankelijk_van', 'tg_task_id'];
+  // prioriteit, afhankelijk_van (oud, zie de afhankelijkheden hieronder), tg_task_id (optionele Toggl-koppeling), tg_sync
+  // (koppeltabel), planvelden (start, eind, duur_dagen, soort 'taak'|'mijlpaal', fase, sleutel), _vs, _veldconflict, _vervallen.
+  P.TAAK_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'status', 'toegewezen', 'prioriteit', 'afhankelijk_van', 'tg_task_id',
+    'start', 'eind', 'duur_dagen', 'soort', 'fase', 'sleutel'];
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
   const tijdVan = s => Number(s && s.t) || 0;
   P.taakBudgetMin = t => (t && t.budget_min != null && isFinite(Number(t.budget_min)) && Number(t.budget_min) > 0) ? Math.round(Number(t.budget_min)) : P.urenNaarMin(t && t.duur_uur);
-  const maxStempel = t => Math.max(Number(t && t._gewijzigd) || 0, ...Object.values((t && t._vs) || {}).map(tijdVan));
+  // `_gewijzigd` is bij taken en afhankelijkheden een getal (ms) en bij bestelregels een ISO-tekst (oude opslag): één lezer.
+  const recTijd = x => {
+    const v = x && x._gewijzigd;
+    if (typeof v === 'number') return isFinite(v) ? v : 0;
+    if (typeof v === 'string' && v) { if (/^\d+$/.test(v)) return Number(v); const t = Date.parse(v); return isNaN(t) ? 0 : t; }
+    return 0;
+  };
+  const maxStempel = t => Math.max(recTijd(t), ...Object.values((t && t._vs) || {}).map(tijdVan));
+  const zetTijd = (iso, ms) => iso ? new Date(ms).toISOString() : ms;
 
-  // Nieuwe stand van één project wegschrijven: oud = ruwe opslag (met tombstones), nieuw = de actieve taken zoals de
-  // bewerkers ze nu hebben. Gewijzigde velden krijgen een stempel {t, door, basis}; verdwenen taken een tombstone.
-  P.takenStempel = function (oud, nieuw, { nu = Date.now(), door = '', projectId = '' } = {}) {
+  // Nieuwe stand van één project wegschrijven: oud = ruwe opslag (met tombstones), nieuw = de actieve records zoals de
+  // bewerkers ze nu hebben. Gewijzigde velden krijgen een stempel {t, door, basis}; verdwenen records een tombstone.
+  function stempelMet(velden, oud, nieuw, { nu = Date.now(), door = '', projectId = '' } = {}) {
     const per = new Map(); (oud || []).forEach(o => { if (o && o.id) per.set(o.id, o); });
     const gezien = new Set(), uit = [];
     (nieuw || []).forEach(t => {
@@ -161,7 +173,7 @@
       if (o && o.project_id && !x.project_id) x.project_id = o.project_id;
       const vs = Object.assign({}, kopie(o && o._vs) || {}, kopie(x._vs) || {});
       const ovs = (o && o._vs) || {};
-      P.TAAK_VELDEN.forEach(f => {
+      velden.forEach(f => {
         const veranderd = !o || !gelijk(x[f], o[f]);
         const bewust = x._vs && x._vs[f] && JSON.stringify(x._vs[f]) !== JSON.stringify(ovs[f]);   // stempel zelf gezet (conflictkeuze)
         if (!veranderd || bewust) return;
@@ -172,35 +184,49 @@
       if (Object.keys(vs).length) x._vs = vs;
       delete x._vervallen;
       const m = maxStempel(x); if (m) x._gewijzigd = m; else if (o && o._gewijzigd) x._gewijzigd = o._gewijzigd;
-      if (o && o._vervallen) x._gewijzigd = Math.max(nu, (Number(o._gewijzigd) || 0) + 1);   // teruggezet na verwijderen
+      if (o && o._vervallen) x._gewijzigd = Math.max(nu, recTijd(o) + 1);   // teruggezet na verwijderen
       uit.push(x);
     });
-    per.forEach(o => {   // verdwenen = tombstone (niet fysiek wissen: een oude kopie zet de taak anders terug)
+    per.forEach(o => {   // verdwenen = tombstone (niet fysiek wissen: een oude kopie zet het record anders terug)
       if (gezien.has(o.id)) return;
       if (o._vervallen) { uit.push(o); return; }
-      const g = Object.assign({}, kopie(o), { _vervallen: true, _gewijzigd: Math.max(nu, (Number(o._gewijzigd) || 0) + 1) });
+      const g = Object.assign({}, kopie(o), { _vervallen: true, _gewijzigd: Math.max(nu, recTijd(o) + 1) });
       if (door) g._door = door;
       uit.push(g);
     });
     return uit;
-  };
+  }
+  P.takenStempel = (oud, nieuw, opts) => stempelMet(P.TAAK_VELDEN, oud, nieuw, opts);
   P.takenActief = lijst => (Array.isArray(lijst) ? lijst : []).filter(t => t && typeof t === 'object' && !t._vervallen);
 
-  // Eén taak samenvoegen: per veld wint de nieuwste stempel (gelijk → lokaal; beide zonder stempel → de andere kant,
-  // zoals SharePoint bij de projecten). Een verwijdering wint altijd (L1a). Een wijziging die de winnaar niet kende
-  // (stempel nieuwer dan zijn basis) en een andere waarde heeft, wordt bewaard als _veldconflict[veld].
-  function taakSamen(l, r) {
+  // Eén record samenvoegen: per veld wint de nieuwste stempel (gelijk → lokaal; beide zonder stempel → de andere kant,
+  // zoals SharePoint bij de projecten). Wat de winnaar niet kende (stempel nieuwer dan zijn basis) en een andere waarde heeft,
+  // wordt bewaard als _veldconflict[veld]. opt.verwijderWint (taken, afhankelijkheden): een verwijdering wint altijd (L1a).
+  // Zonder: het nieuwste record beslist ook over de tombstone (bestelregels: terugzetten kan). opt.legacy (bestelregels):
+  // zonder stempels aan beide kanten wint het nieuwste record, en een veld zonder stempel telt met de tijd van zijn record.
+  function recSamen(velden, opt, l, r) {
     if (l._vervallen || r._vervallen) {
-      const d = [l, r].filter(x => x._vervallen).sort((a, b) => (Number(b._gewijzigd) || 0) - (Number(a._gewijzigd) || 0))[0];
-      return kopie(d);
+      if (opt.verwijderWint) {
+        const d = [l, r].filter(x => x._vervallen).sort((a, b) => recTijd(b) - recTijd(a))[0];
+        return kopie(d);
+      }
+      return kopie(recTijd(l) >= recTijd(r) ? l : r);
     }
+    if (opt.legacy && !Object.keys(l._vs || {}).length && !Object.keys(r._vs || {}).length) return kopie(recTijd(l) >= recTijd(r) ? l : r);
     const nl = maxStempel(l), nr = maxStempel(r);
     const basis = kopie(nl > nr ? l : r);   // niet-getrackte velden (tg_sync, bron, project_id…) van de nieuwste kant
     const andere = nl > nr ? r : l;
     Object.keys(andere).forEach(k => { if (!(k in basis) && !k.startsWith('_')) basis[k] = kopie(andere[k]); });
     const w = basis; w._vs = {}; const conflicten = {};
-    P.TAAK_VELDEN.forEach(f => {
-      const sl = (l._vs || {})[f], sr = (r._vs || {})[f], tl = tijdVan(sl), tr = tijdVan(sr);
+    // tijd van een veld: de stempel; zonder stempel (alleen legacy) de tijd van het record als dat nieuwer is dan al zijn stempels
+    const eff = (x, f) => {
+      const s = (x._vs || {})[f]; if (s) return tijdVan(s);
+      if (!opt.legacy) return 0;
+      const hoogste = Math.max(0, ...Object.values(x._vs || {}).map(tijdVan)), t = recTijd(x);
+      return t > hoogste ? t : 0;
+    };
+    velden.forEach(f => {
+      const sl = (l._vs || {})[f], sr = (r._vs || {})[f], tl = eff(l, f), tr = eff(r, f);
       let win, ander, sw, so;
       if (!tl && !tr) { const heeft = f in r; win = heeft ? r : l; ander = heeft ? l : r; sw = sr; so = sl; }
       else if (tl > tr || (tl === tr && tl > 0)) { win = l; ander = r; sw = sl; so = sr; }
@@ -215,23 +241,27 @@
     });
     if (Object.keys(conflicten).length) w._veldconflict = conflicten; else delete w._veldconflict;
     if (!Object.keys(w._vs).length) delete w._vs;
-    const m = Math.max(maxStempel(w), Number(l._gewijzigd) || 0, Number(r._gewijzigd) || 0); if (m) w._gewijzigd = m;
+    const m = Math.max(maxStempel(w), recTijd(l), recTijd(r)); if (m) w._gewijzigd = zetTijd(opt.iso, m);
     return w;
   }
-  // Samenvoeger voor het hele bestand { code: [taak…] }: per code, per taak-id. Wat aan één kant staat, blijft staan.
-  P.takenSamen = function (lokaal, remote) {
-    const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
+  const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
+  // Lijst van records met een id samenvoegen; wat aan één kant staat, blijft staan. Records zonder id blijven staan (ontdubbeld).
+  function lijstSamenMet(velden, opt, a, b) {
+    const per = new Map(), los = new Map();
+    (b || []).forEach(x => { if (x && x.id) per.set(x.id, { r: x, l: null }); else if (x != null) los.set(JSON.stringify(x), x); });
+    (a || []).forEach(x => { if (x && x.id) { const e = per.get(x.id); if (e) e.l = x; else per.set(x.id, { r: null, l: x }); } else if (x != null) los.set(JSON.stringify(x), x); });
+    return [...[...per.values()].map(e => e.l && e.r ? recSamen(velden, opt, e.l, e.r) : kopie(e.l || e.r)), ...los.values()];
+  }
+  // Samenvoeger voor het hele bestand { code: [record…] }: per code, per id.
+  function storeSamenMet(velden, opt, lokaal, remote) {
     const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
     const L = obj(lees(lokaal)), R = obj(lees(remote)), uit = {};
-    for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
-      const a = Array.isArray(L[code]) ? L[code] : [], b = Array.isArray(R[code]) ? R[code] : [];
-      const per = new Map(), los = new Map();
-      b.forEach(x => { if (x && x.id) per.set(x.id, { r: x, l: null }); else if (x != null) los.set(JSON.stringify(x), x); });
-      a.forEach(x => { if (x && x.id) { const e = per.get(x.id); if (e) e.l = x; else per.set(x.id, { r: null, l: x }); } else if (x != null) los.set(JSON.stringify(x), x); });
-      uit[code] = [...[...per.values()].map(e => e.l && e.r ? taakSamen(e.l, e.r) : kopie(e.l || e.r)), ...los.values()];
-    }
+    for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) uit[code] = lijstSamenMet(velden, opt, Array.isArray(L[code]) ? L[code] : [], Array.isArray(R[code]) ? R[code] : []);
     return uit;
-  };
+  }
+  const OPT_VW = { verwijderWint: true };
+  const taakSamen = (l, r) => recSamen(P.TAAK_VELDEN, OPT_VW, l, r);
+  P.takenSamen = (lokaal, remote) => storeSamenMet(P.TAAK_VELDEN, OPT_VW, lokaal, remote);
   // Een conflict oplossen: 'andere' neemt de bewaarde waarde over, 'eigen' houdt de huidige. Beide krijgen een nieuwe stempel
   // die boven het conflict ligt, zodat de keuze ook op de andere pc het conflict wegneemt. Wijzigt `taak` ter plekke.
   P.conflictOplos = function (taak, veld, kies, { nu = Date.now(), door = '' } = {}) {
@@ -241,7 +271,7 @@
     taak._vs = taak._vs || {};
     taak._vs[veld] = { t: Math.max(nu, vorig + 1, Number(c.t) + 1), door, basis: Math.max(vorig, Number(c.t)) };
     delete taak._veldconflict[veld]; if (!Object.keys(taak._veldconflict).length) delete taak._veldconflict;
-    taak._gewijzigd = maxStempel(taak);
+    taak._gewijzigd = zetTijd(typeof taak._gewijzigd === 'string', maxStempel(taak));
     return true;
   };
 
@@ -350,6 +380,550 @@
     let n = 0;
     ((defaults && defaults.uren) || []).forEach(u => { if (u && String(u.omschrijving || '').trim().toLowerCase() !== 'transport' && u.uurtarief !== '' && u.uurtarief != null && isFinite(Number(u.uurtarief)) && Number(u.uurtarief) !== Number(std)) { u.uurtarief = Number(std); n++; } });
     return n;
+  };
+
+  // ══ P2: afhankelijkheden, wachten, kritiek pad, verschuiven ════════════════════════════════════════════════
+  // Datums zijn ymd-teksten; alle rekenwerk gaat over dagnummers (UTC) zodat zomertijd niets uitmaakt. Een werkdag is geen
+  // weekend en geen vrije dag (`vrij`: lijst of Set met ymd of {datum}, bv. mt_vrijedagen van Beheer).
+  const MAXD = 4000;
+  const dnr = ymd => { const [y, m, d] = String(ymd).split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 864e5); };
+  const dymd = n => { const d = new Date(n * 864e5); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); };
+  P.isYmd = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && dymd(dnr(s)) === s;
+  P.vrijSet = lijst => lijst instanceof Set ? lijst : new Set((Array.isArray(lijst) ? lijst : []).map(x => typeof x === 'string' ? x : x && x.datum).filter(P.isYmd));
+  const isWerk = (n, V) => { const w = ((n + 4) % 7 + 7) % 7; return w !== 0 && w !== 6 && !V.has(dymd(n)); };
+  const naarW = (n, vooruit, V) => { let i = 0; while (!isWerk(n, V) && i++ < MAXD) n += vooruit ? 1 : -1; return n; };
+  const plusW = (n, k, V) => { n = naarW(n, k >= 0, V); let te = Math.abs(k), i = 0; const st = k >= 0 ? 1 : -1; while (te > 0 && i++ < MAXD) { n += st; if (isWerk(n, V)) te--; } return n; };
+  const tussenW = (a, b, V) => { let n = 0, i = 0; const st = b >= a ? 1 : -1; while (a !== b && i++ < MAXD) { a += st; if (isWerk(a, V)) n += st; } return n; };
+  P.isWerkdag = (ymd, vrij) => isWerk(dnr(ymd), P.vrijSet(vrij));
+  P.naarWerkdag = (ymd, vooruit, vrij) => dymd(naarW(dnr(ymd), vooruit !== false, P.vrijSet(vrij)));
+  P.addWerkdagen = (ymd, n, vrij) => dymd(plusW(dnr(ymd), Math.round(getal(n)), P.vrijSet(vrij)));
+  P.werkdagenTussen = (a, b, vrij) => tussenW(dnr(a), dnr(b), P.vrijSet(vrij));
+  P.vandaagYmd = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+  // Duur van een taak in werkdagen. Een mijlpaal duurt 0 dagen. Expliciet `duur_dagen` wint; anders volgt de duur uit het budget
+  // (één persoon, een werkdag van 8 uur = 480 min); zonder budget 1 dag.
+  P.DAG_MIN = 480;
+  P.taakDagen = (t, dagMin) => {
+    if (t && t.soort === 'mijlpaal') return 0;
+    const d = t && t.duur_dagen;
+    if (d !== undefined && d !== null && d !== '' && isFinite(Number(d)) && Number(d) >= 0) return Math.round(Number(d));
+    const b = P.taakBudgetMin(t); return b > 0 ? Math.max(1, Math.ceil(b / (dagMin || P.DAG_MIN))) : 1;
+  };
+  // Duur zoals de datums nu staan (een met de hand verzette taak houdt zijn lengte); anders de berekende duur.
+  const datumDagen = (t, dagMin, V) => {
+    if (t && t.soort === 'mijlpaal') return 0;
+    if (t && P.isYmd(t.start) && P.isYmd(t.eind) && t.eind >= t.start) return tussenW(naarW(dnr(t.start), true, V), dnr(t.eind), V) + 1;
+    return P.taakDagen(t, dagMin);
+  };
+
+  // ── De afhankelijkheid als eigen entiteit ──────────────────────────────────────────────────────────
+  // { id, project_id, van_taak, naar_taak, type:'FS', lag_dagen, status:'actief'|'uit', _vs, _gewijzigd, _vervallen }
+  // FS = finish-to-start: de opvolger start pas nadat de voorganger klaar is plus `lag_dagen` werkdagen (bv. de levertijd).
+  // Uitbreidbaar met SS/FF: het type staat al in het record, de berekening kent nu alleen FS.
+  // Opslag per project (mt_project_afhank: { projectcode: [dep…] }) met hetzelfde merge-model als de taken: stempel per veld,
+  // tombstone, conflict.
+  P.DEP_VELDEN = ['van_taak', 'naar_taak', 'type', 'lag_dagen', 'status'];
+  P.afhStempel = (oud, nieuw, opts) => stempelMet(P.DEP_VELDEN, oud, nieuw, opts);
+  P.afhSamen = (lokaal, remote) => storeSamenMet(P.DEP_VELDEN, OPT_VW, lokaal, remote);
+  P.afhActief = P.takenActief;
+  const lagDagen = d => Math.max(0, Math.round(getal(d && d.lag_dagen)));
+  // De koppelingen waarmee gerekend wordt: de afhankelijkheden plus de oude `afhankelijk_van`-lijsten op taken die er (nog)
+  // geen afhankelijkheid voor hebben. Een bewust verwijderde afhankelijkheid (tombstone) laat de oude koppeling niet terugkomen.
+  P.depsEffectief = function (taken, depsRuw) {
+    const T = P.takenActief(taken), ids = new Set(T.map(t => t.id)), uit = [], paren = new Set();
+    (Array.isArray(depsRuw) ? depsRuw : []).forEach(d => {
+      if (!d || typeof d !== 'object') return;
+      paren.add(d.van_taak + '>' + d.naar_taak);
+      if (d._vervallen) return;
+      if (!ids.has(d.van_taak) || !ids.has(d.naar_taak) || d.van_taak === d.naar_taak) return;
+      uit.push({ id: d.id, van: d.van_taak, naar: d.naar_taak, lag: lagDagen(d), type: d.type || 'FS', inactief: d.status === 'uit', bron: 'dep' });
+    });
+    T.forEach(t => (Array.isArray(t.afhankelijk_van) ? t.afhankelijk_van : []).forEach(v => {
+      const sl = v + '>' + t.id;
+      if (!ids.has(v) || v === t.id || paren.has(sl)) return;
+      paren.add(sl); uit.push({ id: 'oud:' + sl, van: v, naar: t.id, lag: 0, type: 'FS', inactief: false, bron: 'oud' });
+    }));
+    return uit;
+  };
+  const actieveKant = edges => edges.filter(e => !e.inactief);
+  function kortstePad(edges, a, b) {   // pad van a naar b langs de koppelingen (lijst taak-id's) of null
+    const buur = new Map(); edges.forEach(e => { if (!buur.has(e.van)) buur.set(e.van, []); buur.get(e.van).push(e.naar); });
+    const vorige = new Map([[a, null]]), rij = [a];
+    while (rij.length) {
+      const x = rij.shift();
+      if (x === b) { const p = []; for (let y = b; y !== null; y = vorige.get(y)) p.unshift(y); return p; }
+      (buur.get(x) || []).forEach(y => { if (!vorige.has(y)) { vorige.set(y, x); rij.push(y); } });
+    }
+    return null;
+  }
+  // Zou een nieuwe afhankelijkheid van → naar een kring maken? Geeft de kring ([van, naar, …, van]) of null.
+  P.depKring = function (taken, depsRuw, van, naar) {
+    if (van === naar) return [van, van];
+    const p = kortstePad(actieveKant(P.depsEffectief(taken, depsRuw)), naar, van);
+    return p ? [van].concat(p) : null;
+  };
+  // Staat er al een kring in de opslag (bv. na het samenvoegen van twee pc's)? Geeft de taak-id's die erin zitten.
+  P.depKringen = function (taken, depsRuw) {
+    const T = P.takenActief(taken); return topo(T.map(t => t.id), actieveKant(P.depsEffectief(T, depsRuw))).kring;
+  };
+  function topo(ids, edges) {   // Kahn, stabiel in de volgorde van ids; kring = wat overblijft
+    const inn = new Map(ids.map(i => [i, 0])), buur = new Map(ids.map(i => [i, []]));
+    edges.forEach(e => { if (inn.has(e.van) && inn.has(e.naar)) { inn.set(e.naar, inn.get(e.naar) + 1); buur.get(e.van).push(e.naar); } });
+    const rij = ids.filter(i => inn.get(i) === 0), volgorde = [];
+    while (rij.length) { const x = rij.shift(); volgorde.push(x); buur.get(x).forEach(y => { inn.set(y, inn.get(y) - 1); if (inn.get(y) === 0) rij.push(y); }); }
+    return { volgorde, kring: ids.filter(i => !volgorde.includes(i)) };
+  }
+  const naamVan = (taken, id) => { const t = P.takenActief(taken).find(x => x.id === id); return t ? t.naam : id; };
+  // Mag deze afhankelijkheid? { ok, fout, kring }. Weigert zichzelf, een bestaande en een kring.
+  P.depControle = function (taken, depsRuw, { van, naar }) {
+    const T = P.takenActief(taken);
+    if (!T.some(t => t.id === van) || !T.some(t => t.id === naar)) return { ok: false, fout: 'Een van de taken bestaat niet (meer).' };
+    if (van === naar) return { ok: false, fout: 'Een taak kan niet van zichzelf afhangen.' };
+    if (P.depsEffectief(T, depsRuw).some(e => e.van === van && e.naar === naar)) return { ok: false, fout: 'Deze afhankelijkheid bestaat al.' };
+    const k = P.depKring(T, depsRuw, van, naar);
+    if (k) return { ok: false, kring: k, fout: 'Dit maakt een kring: ' + k.map(i => naamVan(T, i)).join(' → ') + '.' };
+    return { ok: true };
+  };
+  // Een nieuwe afhankelijkheid maken (valt hij af, dan staat de reden in `fout`). Slaat niets op.
+  P.depNieuw = function (taken, depsRuw, { van, naar, lag_dagen = 0, type = 'FS', id = '', project_id = '' } = {}) {
+    const c = P.depControle(taken, depsRuw, { van, naar }); if (!c.ok) return c;
+    const d = { id: id || ('d' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)), van_taak: van, naar_taak: naar, type: type || 'FS', lag_dagen: Math.max(0, Math.round(getal(lag_dagen))), status: 'actief' };
+    if (project_id) d.project_id = project_id;
+    return { ok: true, dep: d };
+  };
+  // Oude `afhankelijk_van`-lijsten omzetten naar afhankelijkheden (droogloop: er wordt niets geschreven). Een koppeling die een
+  // kring zou maken of naar een verdwenen taak wijst, wordt overgeslagen met de reden.
+  P.depMigratie = function (taken, depsRuw, { project_id = '', nieuwId = null } = {}) {
+    const T = P.takenActief(taken), ids = new Set(T.map(t => t.id)), nieuw = [], overgeslagen = [];
+    let werk = Array.isArray(depsRuw) ? depsRuw.slice() : [], n = 0;
+    const paren = new Set(werk.map(d => d && (d.van_taak + '>' + d.naar_taak)));
+    T.forEach(t => (Array.isArray(t.afhankelijk_van) ? t.afhankelijk_van : []).forEach(v => {
+      if (!ids.has(v)) { overgeslagen.push({ van: v, naar: t.id, reden: 'voorganger bestaat niet meer' }); return; }
+      if (paren.has(v + '>' + t.id)) return;   // al omgezet (of bewust verwijderd)
+      const r = P.depNieuw(T, werk, { van: v, naar: t.id, project_id, id: nieuwId ? nieuwId(n++) : '' });
+      if (!r.ok) { overgeslagen.push({ van: v, naar: t.id, reden: r.fout }); return; }
+      nieuw.push(r.dep); werk = werk.concat([r.dep]); paren.add(v + '>' + t.id);
+    }));
+    return { nieuw, overgeslagen };
+  };
+
+  // ── Wachten: een afhankelijke taak staat op "wachten" zolang een voorganger niet klaar is (zoals Odoo) ──
+  // Afgeleid, niet opgeslagen: zodra de voorganger klaar is, is de wachttoestand er vanzelf niet meer.
+  P.wachtOverzicht = function (taken, depsRuw) {
+    const T = P.takenActief(taken), by = new Map(T.map(t => [t.id, t])), uit = {};
+    T.forEach(t => { uit[t.id] = { wacht: false, op: [] }; });
+    actieveKant(P.depsEffectief(T, depsRuw)).forEach(e => {
+      const v = by.get(e.van), n = by.get(e.naar);
+      if (v && n && n.status !== 'klaar' && v.status !== 'klaar') { uit[n.id].wacht = true; uit[n.id].op.push({ id: v.id, naam: v.naam, lag: e.lag }); }
+    });
+    return uit;
+  };
+  P.taakWacht = (taak, taken, depsRuw) => (taak && P.wachtOverzicht(taken, depsRuw)[taak.id]) || { wacht: false, op: [] };
+  // De status zoals getoond: een taak die nog niet gestart is en wacht, heet 'wachten'.
+  P.taakStatusEff = (taak, taken, depsRuw) => {
+    const st = (taak && taak.status) || 'todo';
+    return st === 'todo' && P.taakWacht(taak, taken, depsRuw).wacht ? 'wachten' : st;
+  };
+
+  // ── Rooster: vroegste en laatste datums en het kritieke pad ──────────────────────────────────────────
+  // Voorwaarts vanaf `start` (vroegste datums) en achterwaarts vanaf de leverdatum (laatste datums). Per koppeling
+  // voorganger → opvolger met lag L: de opvolger start op zijn vroegst L werkdagen + 1 na het einde van de voorganger; een
+  // mijlpaal (duur 0) valt L werkdagen na dat einde (lag 0: dezelfde dag). Speling = werkdagen tussen vroegste en laatste start.
+  // Kritiek = de taken met de kleinste speling (negatief: de leverdatum wordt niet gehaald). Het kritieke pad is dus de ketting
+  // die, gerekend vanaf de leverdatum terug, geen ruimte heeft.
+  const eerstMogelijk = (efNr, opvolgerIs0, lag, V) => plusW(efNr, (opvolgerIs0 ? 0 : 1) + lag, V);
+  P.rooster = function (taken, depsRuw, { start = '', leverdatum = '', vrij = null, dagMin = 0 } = {}) {
+    const V = P.vrijSet(vrij), T = P.takenActief(taken), by = new Map(T.map(t => [t.id, t]));
+    const edges = actieveKant(P.depsEffectief(T, depsRuw)).filter(e => by.has(e.van) && by.has(e.naar));
+    const s0 = naarW(dnr(P.isYmd(start) ? start : P.vandaagYmd()), true, V);
+    const ids = T.map(t => t.id), { volgorde, kring } = topo(ids, edges);
+    const dag = {}; T.forEach(t => { dag[t.id] = datumDagen(t, dagMin, V); });
+    const inn = new Map(), uitg = new Map(); ids.forEach(i => { inn.set(i, []); uitg.set(i, []); });
+    edges.forEach(e => { inn.get(e.naar).push(e); uitg.get(e.van).push(e); });
+    const es = {}, ef = {};
+    const eindVan = (s, d) => d >= 1 ? plusW(s, d - 1, V) : s;
+    volgorde.forEach(i => {
+      let s = s0; inn.get(i).forEach(e => { if (ef[e.van] !== undefined) s = Math.max(s, eerstMogelijk(ef[e.van], dag[i] === 0, e.lag, V)); });
+      es[i] = naarW(s, true, V); ef[i] = eindVan(es[i], dag[i]);
+    });
+    kring.forEach(i => { es[i] = s0; ef[i] = eindVan(s0, dag[i]); });
+    const eindVroegst = ids.length ? Math.max(...ids.map(i => ef[i])) : s0;
+    const D = P.isYmd(leverdatum) ? naarW(dnr(leverdatum), false, V) : eindVroegst;
+    const lf = {}, ls = {};
+    const begin = (e, d) => d >= 1 ? plusW(e, -(d - 1), V) : e;
+    volgorde.slice().reverse().forEach(i => {
+      let l = D; uitg.get(i).forEach(e => { if (ls[e.naar] !== undefined) l = Math.min(l, plusW(ls[e.naar], -((dag[e.naar] === 0 ? 0 : 1) + e.lag), V)); });
+      lf[i] = l; ls[i] = begin(l, dag[i]);
+    });
+    kring.forEach(i => { lf[i] = D; ls[i] = begin(D, dag[i]); });
+    const uit = {}; let min = Infinity;
+    ids.forEach(i => { const sp = tussenW(es[i], ls[i], V); if (sp < min) min = sp; uit[i] = { es: dymd(es[i]), ef: dymd(ef[i]), ls: dymd(ls[i]), lf: dymd(lf[i]), slack: sp, dagen: dag[i], kring: kring.includes(i), kritiek: false }; });
+    const metKoppeling = new Set(); edges.forEach(e => { metKoppeling.add(e.van); metKoppeling.add(e.naar); });
+    ids.forEach(i => { if (uit[i].slack === min && !uit[i].kring) uit[i].kritiek = true; });
+    const pad = volgorde.filter(i => uit[i].kritiek && metKoppeling.has(i));
+    return { taken: uit, volgorde, kring, start: dymd(s0), eindVroegst: dymd(eindVroegst), leverdatum: dymd(D), tekort: Math.max(0, tussenW(D, eindVroegst, V)),
+      minSlack: ids.length ? min : 0, pad, padTaken: pad.map(i => ({ id: i, naam: by.get(i).naam })) };
+  };
+  // Het kritieke pad alleen: de ketting taken (in volgorde) die de leverdatum bepaalt.
+  P.kritiekPad = (taken, depsRuw, opts) => { const r = P.rooster(taken, depsRuw, opts); return { pad: r.padTaken, tekort: r.tekort, eindVroegst: r.eindVroegst, leverdatum: r.leverdatum, kring: r.kring }; };
+  // Terugrekenen vanaf de leverdatum: elke taak zo laat mogelijk, zodat het geheel op de leverdatum klaar is.
+  // eerste = de vroegste start; tekort = hoeveel werkdagen die voor `start` (vandaag) ligt (0 = haalbaar).
+  P.plantTerug = function (taken, depsRuw, opts) {
+    const r = P.rooster(taken, depsRuw, opts), V = P.vrijSet(opts && opts.vrij), datums = {};
+    let eerste = null;
+    Object.keys(r.taken).forEach(i => { const x = r.taken[i]; if (x.kring) return; datums[i] = { start: x.ls, eind: x.lf }; if (eerste === null || x.ls < eerste) eerste = x.ls; });
+    const tekort = eerste && eerste < r.start ? Math.max(0, tussenW(dnr(eerste), dnr(r.start), V)) : 0;
+    return { datums, eerste, tekort, start: r.start, leverdatum: r.leverdatum, eindVroegst: r.eindVroegst, kring: r.kring };
+  };
+  // Vooruitrekenen vanaf `start`: elke taak zo vroeg mogelijk.
+  P.plantVooruit = function (taken, depsRuw, opts) {
+    const r = P.rooster(taken, depsRuw, opts), datums = {};
+    Object.keys(r.taken).forEach(i => { const x = r.taken[i]; if (!x.kring) datums[i] = { start: x.es, eind: x.ef }; });
+    return { datums, eind: r.eindVroegst, start: r.start, kring: r.kring };
+  };
+  // Staat een opvolger vóór zijn vroegste mogelijke start (voorganger + lag)? Alleen taken met datums.
+  P.planConflicten = function (taken, depsRuw, { vrij = null, dagMin = 0 } = {}) {
+    const V = P.vrijSet(vrij), T = P.takenActief(taken), by = new Map(T.map(t => [t.id, t])), uit = [];
+    actieveKant(P.depsEffectief(T, depsRuw)).forEach(e => {
+      const v = by.get(e.van), n = by.get(e.naar);
+      if (!v || !n || !P.isYmd(v.eind) || !P.isYmd(n.start)) return;
+      const eerst = eerstMogelijk(dnr(v.eind), datumDagen(n, dagMin, V) === 0, e.lag, V);
+      if (dnr(n.start) < eerst) uit.push({ van: v.id, naar: n.id, vanNaam: v.naam, naarNaam: n.naam, vroegst: dymd(eerst), start: n.start, dagen: tussenW(dnr(n.start), eerst, V) });
+    });
+    return uit;
+  };
+
+  // ── Verschuiven: een VOORSTEL voor de opvolgers, nooit automatisch ──────────────────────────────────
+  // Verzet je een taak, dan rekent dit uit welke opvolgers daardoor te vroeg komen te staan en waar ze heen moeten (zelfde duur).
+  // Flexible (standaard): alleen een voorstel, je mag ook de taak alleen verzetten. Strict: de taak mag alleen mee met zijn
+  // opvolgers (`blokkerend`), nog steeds pas na bevestiging. `gelijk`: opvolgers schuiven ook mee als ze er niet voor in de weg
+  // staan (dezelfde verschuiving in werkdagen). Taken zonder datums blijven buiten beeld.
+  P.depModus = proj => (proj && proj.gegevens && proj.gegevens.afhankelijkheid_modus === 'strict') ? 'strict' : 'flexible';
+  P.verschuifVoorstel = function (taken, depsRuw, { id, start = '', eind = '' } = {}, { modus = 'flexible', vrij = null, gelijk = false, dagMin = 0 } = {}) {
+    const V = P.vrijSet(vrij), T = P.takenActief(taken).map(kopie), by = new Map(T.map(t => [t.id, t]));
+    const m = by.get(id); if (!m) return { ok: false, fout: 'Taak niet gevonden.' };
+    const dur = {}; T.forEach(t => { dur[t.id] = datumDagen(t, dagMin, V); });
+    const eindVan = (s, d) => d >= 1 ? plusW(s, d - 1, V) : s;
+    let ns = P.isYmd(start) ? dnr(start) : null, ne = P.isYmd(eind) ? dnr(eind) : null;
+    if (ns !== null) ns = naarW(ns, true, V);
+    if (ns !== null && ne === null) ne = eindVan(ns, dur[id]);
+    else if (ns === null && ne !== null) { ne = naarW(ne, false, V); ns = dur[id] >= 1 ? plusW(ne, -(dur[id] - 1), V) : ne; }
+    if (ns === null || ne === null) return { ok: false, fout: 'Geen nieuwe datum opgegeven.' };
+    const oud = { start: m.start || '', eind: m.eind || '' };
+    const nieuw = new Map([[id, { start: dymd(ns), eind: dymd(ne) }]]);
+    const edges = actieveKant(P.depsEffectief(T, depsRuw)), inn = new Map(), uitg = new Map();
+    T.forEach(t => { inn.set(t.id, []); uitg.set(t.id, []); });
+    edges.forEach(e => { inn.get(e.naar).push(e); uitg.get(e.van).push(e); });
+    const afstammelingen = new Set(), rij = [id];
+    while (rij.length) { const x = rij.shift(); uitg.get(x).forEach(e => { if (!afstammelingen.has(e.naar)) { afstammelingen.add(e.naar); rij.push(e.naar); } }); }
+    const delta = P.isYmd(oud.eind) ? tussenW(dnr(oud.eind), ne, V) : 0;
+    const wijz = [];
+    topo(T.map(t => t.id), edges).volgorde.forEach(i => {
+      if (i === id || !afstammelingen.has(i)) return;
+      const t = by.get(i); if (!P.isYmd(t.start) || !P.isYmd(t.eind)) return;
+      let eis = null, door = '';
+      inn.get(i).forEach(e => {
+        const pv = nieuw.get(e.van) || by.get(e.van); if (!pv || !P.isYmd(pv.eind)) return;
+        const c = eerstMogelijk(dnr(pv.eind), dur[i] === 0, e.lag, V);
+        if (eis === null || c > eis) { eis = c; door = naamVan(T, e.van); }
+      });
+      const huidig = dnr(t.start); let nieuwS = huidig, reden = '';
+      if (eis !== null && huidig < eis) { nieuwS = eis; reden = 'komt na ' + door; }
+      else if (gelijk && delta !== 0) { nieuwS = Math.max(eis === null ? -Infinity : eis, plusW(huidig, delta, V)); reden = 'schuift mee'; }
+      if (nieuwS !== huidig) { const s = naarW(nieuwS, true, V); nieuw.set(i, { start: dymd(s), eind: dymd(eindVan(s, dur[i])) }); wijz.push({ id: i, naam: t.naam, van: { start: t.start, eind: t.eind }, naar: nieuw.get(i), reden }); }
+    });
+    const alleEinden = T.map(t => (nieuw.get(t.id) || t).eind).filter(P.isYmd).sort();
+    return { ok: true, modus: modus === 'strict' ? 'strict' : 'flexible', taak: { id, naam: m.naam, van: oud, naar: nieuw.get(id) }, wijzigingen: wijz,
+      blokkerend: modus === 'strict' && wijz.length > 0, laatsteEind: alleEinden[alleEinden.length - 1] || '' };
+  };
+  // Een voorstel toepassen op een lijst taken (kopie). metOpvolgers=false: alleen de verzette taak zelf.
+  P.voorstelToepassen = function (taken, voorstel, { metOpvolgers = true } = {}) {
+    if (!voorstel || !voorstel.ok) return P.takenActief(taken).map(kopie);
+    const nw = new Map([[voorstel.taak.id, voorstel.taak.naar]]);
+    if (metOpvolgers) voorstel.wijzigingen.forEach(w => nw.set(w.id, w.naar));
+    return P.takenActief(taken).map(t => { const x = kopie(t), n = nw.get(t.id); if (n) { x.start = n.start; x.eind = n.eind; } return x; });
+  };
+
+  // ══ P2: projectsjabloon ("Standaard interieurproject") ═════════════════════════════════════════════════
+  // Een sjabloon is een startpunt, geen wet: fases, taken (activiteit, aandeel van het budget in %, duur) en afhankelijkheden met
+  // lag. Bij "Gewonnen → project" en "Direct project" wordt het VOORGESTELD; toepassen gebeurt pas na bevestiging.
+  //   { id, naam, omschrijving, fases:[{k, naam}], taken:[{k, naam, fase, activiteit, soort?:'mijlpaal', aandeel_pct, mensen?, duur_dagen?}],
+  //     deps:[{van, naar, lag_dagen}], _gewijzigd, _vervallen }
+  // Het aandeel is een percentage van de uren van de SOORT van de activiteit: de kantooruren (werkvoorbereiding, tekenwerk, kantoor)
+  // en de werkplaatsuren (werkplaats, spuiten, montage, reizen) uit de calculatie worden elk apart over hun taken verdeeld.
+  P.SJABLOON_STD_ID = 'std-interieur';
+  P.sjabloonStd = () => kopie({
+    id: P.SJABLOON_STD_ID, naam: 'Standaard interieurproject',
+    omschrijving: 'Werkvoorbereiding, materiaal bestellen en leveren, zagen, CNC, afmonteren, spuiten, montage en oplevering. Start hiermee en pas aan wat in de praktijk anders loopt.',
+    fases: [{ k: 'voorbereiding', naam: 'Voorbereiding' }, { k: 'productie', naam: 'Productie' }, { k: 'montage', naam: 'Montage en oplevering' }],
+    taken: [
+      { k: 'wvb', naam: 'Werkvoorbereiding', fase: 'voorbereiding', activiteit: 'werkvoorbereiding', aandeel_pct: 80, mensen: 1 },
+      { k: 'bestellen', naam: 'Materiaal bestellen', fase: 'voorbereiding', activiteit: 'kantoor', aandeel_pct: 20, mensen: 1 },
+      { k: 'materiaal_geleverd', naam: 'Materiaal geleverd', fase: 'voorbereiding', soort: 'mijlpaal' },
+      { k: 'zagen', naam: 'Zagen', fase: 'productie', activiteit: 'werkplaats', aandeel_pct: 15, mensen: 1 },
+      { k: 'cnc', naam: 'CNC', fase: 'productie', activiteit: 'werkplaats', aandeel_pct: 15, mensen: 1 },
+      { k: 'afmonteren', naam: 'Afmonteren', fase: 'productie', activiteit: 'werkplaats', aandeel_pct: 25, mensen: 1 },
+      { k: 'spuiten', naam: 'Spuiten', fase: 'productie', activiteit: 'spuiten', aandeel_pct: 15, mensen: 1 },
+      { k: 'montage', naam: 'Montage', fase: 'montage', activiteit: 'montage', aandeel_pct: 30, mensen: 1 },
+      { k: 'oplevering', naam: 'Oplevering', fase: 'montage', soort: 'mijlpaal' }],
+    deps: [
+      { van: 'wvb', naar: 'bestellen', lag_dagen: 0 }, { van: 'bestellen', naar: 'materiaal_geleverd', lag_dagen: 10 },   // 10 = levertijd in werkdagen (standaard)
+      { van: 'materiaal_geleverd', naar: 'zagen', lag_dagen: 0 }, { van: 'zagen', naar: 'cnc', lag_dagen: 0 }, { van: 'cnc', naar: 'afmonteren', lag_dagen: 0 },
+      { van: 'afmonteren', naar: 'spuiten', lag_dagen: 0 }, { van: 'spuiten', naar: 'montage', lag_dagen: 0 }, { van: 'montage', naar: 'oplevering', lag_dagen: 0 }],
+  });
+  // De sjablonen zoals de gebruiker ze ziet: de opgeslagen (zonder tombstones) plus de standaard als die er niet in staat.
+  P.sjablonenEffectief = opgeslagen => {
+    const l = (Array.isArray(opgeslagen) ? opgeslagen : []).filter(s => s && typeof s === 'object' && s.id && !s._vervallen);
+    return l.some(s => s.id === P.SJABLOON_STD_ID) ? l : [P.sjabloonStd()].concat(l);
+  };
+  const soortVanActiviteit = k => { const a = P.activiteit(k); return a ? a.soort : 'overig'; };
+  P.sjabloonSoort = t => t && t.soort === 'mijlpaal' ? 'mijlpaal' : soortVanActiviteit(t && t.activiteit);
+  // Kloppen de gegevens? fouten (niet op te slaan) en waarschuwingen (mag wel).
+  P.sjabloonControle = function (s) {
+    const fouten = [], waarsch = [];
+    if (!s || typeof s !== 'object') return { fouten: ['Geen sjabloon.'], waarschuwingen: [] };
+    if (!String(s.naam || '').trim()) fouten.push('Geef het sjabloon een naam.');
+    const taken = Array.isArray(s.taken) ? s.taken : [], keys = new Set();
+    taken.forEach((t, i) => {
+      const k = String(t && t.k || '').trim();
+      if (!k) fouten.push('Taak ' + (i + 1) + ' mist een sleutel.'); else if (keys.has(k)) fouten.push('De sleutel "' + k + '" komt twee keer voor.'); else keys.add(k);
+      if (!String(t && t.naam || '').trim()) fouten.push('Taak ' + (i + 1) + ' mist een naam.');
+      if (t && t.soort !== 'mijlpaal' && t.activiteit && !P.activiteit(t.activiteit)) fouten.push('De activiteit van "' + (t.naam || k) + '" is onbekend.');
+      if (t && t.soort !== 'mijlpaal' && !t.activiteit) waarsch.push('"' + (t.naam || k) + '" heeft geen activiteit: er komt geen budget.');
+      if (t && Number(t.aandeel_pct) < 0) fouten.push('Het aandeel van "' + (t.naam || k) + '" is negatief.');
+    });
+    if (!taken.length) fouten.push('Een sjabloon heeft minstens één taak.');
+    const deps = Array.isArray(s.deps) ? s.deps : [], paren = new Set();
+    deps.forEach(d => {
+      if (!keys.has(d.van) || !keys.has(d.naar)) { fouten.push('Een afhankelijkheid wijst naar een taak die niet bestaat.'); return; }
+      if (d.van === d.naar) fouten.push('Een taak kan niet van zichzelf afhangen.');
+      if (paren.has(d.van + '>' + d.naar)) fouten.push('Dubbele afhankelijkheid ' + d.van + ' → ' + d.naar + '.'); paren.add(d.van + '>' + d.naar);
+      if (!(getal(d.lag_dagen) >= 0)) fouten.push('Een lag kan niet negatief zijn.');
+    });
+    if (!fouten.length && topo([...keys], deps.map(d => ({ van: d.van, naar: d.naar }))).kring.length) fouten.push('De afhankelijkheden vormen een kring.');
+    ['kantoor', 'wp'].forEach(so => {
+      const som = taken.filter(t => P.sjabloonSoort(t) === so).reduce((a, t) => a + (getal(t.aandeel_pct) || 0), 0), n = taken.filter(t => P.sjabloonSoort(t) === so).length;
+      if (n && Math.round(som * 100) !== 10000) waarsch.push('De aandelen van de ' + P.SOORTEN[so].toLowerCase() + ' tellen op tot ' + (Math.round(som * 10) / 10) + '% in plaats van 100%.');
+    });
+    return { fouten, waarschuwingen: waarsch };
+  };
+  // Uren (minuten) uit de calculatie per soort: { kantoor, wp, overig }. null = geen ingevulde calculatie.
+  P.calcBudgetSoorten = function (offerte) {
+    const cb = P.calcBudget(offerte); if (!cb) return null;
+    const uit = { kantoor: 0, wp: 0, overig: 0 };
+    Object.entries(cb.per).forEach(([k, min]) => { uit[P.activiteit(k) ? P.activiteit(k).soort : 'overig'] += min; });
+    return uit;
+  };
+  // Het budget over de taken verdelen volgens de percentages. Per soort sluit het op het hele budget (de laatste taak krijgt de rest).
+  // Aandelen die niet op 100 uitkomen, worden naar verhouding omgerekend. { sleutel: minuten }
+  P.sjabloonVerdeling = function (s, budget) {
+    const uit = {};
+    ['kantoor', 'wp'].forEach(so => {
+      const ts = (s.taken || []).filter(t => P.sjabloonSoort(t) === so && getal(t.aandeel_pct) > 0), tot = Math.round(getal(budget && budget[so]));
+      const som = ts.reduce((a, t) => a + getal(t.aandeel_pct), 0); if (!ts.length || !(tot > 0) || !(som > 0)) return;
+      let rest = tot; ts.forEach((t, i) => { const m = i === ts.length - 1 ? rest : Math.min(rest, Math.round(tot * getal(t.aandeel_pct) / som)); uit[t.k] = m; rest -= m; });
+    });
+    return uit;
+  };
+  // Het sjabloon omzetten in taken en afhankelijkheden voor een project (alleen berekenen; opslaan doet de aanroeper).
+  // budget: { kantoor, wp } in minuten of null; leverdatum: ymd of ''; modus: 'terug' | 'vooruit' | '' (automatisch: terug met leverdatum).
+  P.sjabloonToepassen = function (s, { budget = null, leverdatum = '', start = '', vrij = null, projectId = '', nieuwId = null, dagMin = 0, bestaand = [], modus = '' } = {}) {
+    const ctl = P.sjabloonControle(s), waarsch = ctl.waarschuwingen.slice();
+    if (ctl.fouten.length) return { ok: false, fouten: ctl.fouten, waarschuwingen: waarsch };
+    const mk = nieuwId || ((soort, k) => (soort === 'dep' ? 'd' : 't') + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + k);
+    const fase = {}; (s.fases || []).forEach(f => { fase[f.k] = f.naam; });
+    const verd = P.sjabloonVerdeling(s, budget), idVan = {}, taken = [];
+    s.taken.forEach(t => {
+      const mijl = t.soort === 'mijlpaal', min = verd[t.k] || 0, mensen = Math.max(1, Math.round(getal(t.mensen)) || 1);
+      const dagen = mijl ? 0 : (min > 0 ? Math.max(1, Math.ceil(min / ((dagMin || P.DAG_MIN) * mensen))) : Math.max(1, Math.round(getal(t.duur_dagen)) || 1));
+      const x = { id: mk('taak', t.k), naam: t.naam, omschrijving: '', duur_uur: mijl ? 0 : P.minNaarUren(min), status: 'todo', tg_task_id: null, bron: 'sjabloon',
+        soort: mijl ? 'mijlpaal' : 'taak', duur_dagen: dagen, sleutel: t.k, sjabloon_id: s.id };
+      if (!mijl && t.activiteit) x.activiteit = t.activiteit;
+      if (t.fase && fase[t.fase]) x.fase = fase[t.fase];
+      if (projectId) x.project_id = projectId;
+      idVan[t.k] = x.id; taken.push(x);
+    });
+    const deps = (s.deps || []).map((d, i) => { const x = { id: mk('dep', d.van + '_' + d.naar), van_taak: idVan[d.van], naar_taak: idVan[d.naar], type: 'FS', lag_dagen: Math.max(0, Math.round(getal(d.lag_dagen))), status: 'actief' }; if (projectId) x.project_id = projectId; return x; });
+    const bestaandeSleutels = new Set(P.takenActief(bestaand).filter(t => t.sjabloon_id === s.id).map(t => t.sleutel));
+    if (bestaandeSleutels.size) waarsch.push('Dit project heeft al ' + bestaandeSleutels.size + ' taak/taken uit dit sjabloon: toepassen voegt ze er nog een keer bij.');
+    if (!budget) waarsch.push('Er is geen ingevulde calculatie: de taken krijgen geen budget (vul de raming per taak zelf in).');
+    else ['kantoor', 'wp'].forEach(so => {
+      if (getal(budget[so]) > 0 && !s.taken.some(t => P.sjabloonSoort(t) === so && getal(t.aandeel_pct) > 0)) waarsch.push('De ' + P.SOORTEN[so].toLowerCase() + ' uit de calculatie hebben in dit sjabloon geen taak met een aandeel: ze worden niet verdeeld.');
+    });
+    if (budget && budget.overig > 0) waarsch.push('Een deel van de calculatie (' + P.fmtUur(budget.overig) + ') is aan geen activiteit te koppelen en wordt niet verdeeld.');
+    const wil = modus || (P.isYmd(leverdatum) ? 'terug' : 'vooruit'), opts = { start, leverdatum, vrij, dagMin };
+    const terug = P.isYmd(leverdatum) ? P.plantTerug(taken, deps, opts) : null, vooruit = P.plantVooruit(taken, deps, opts);
+    let gebruikt = wil === 'terug' && terug ? 'terug' : 'vooruit';
+    const dat = gebruikt === 'terug' ? terug.datums : vooruit.datums;
+    taken.forEach(t => { const d = dat[t.id]; if (d) { t.start = d.start; t.eind = d.eind; } });
+    let tekort = 0, alternatief = null;
+    if (gebruikt === 'terug' && terug.tekort > 0) {
+      tekort = terug.tekort;
+      waarsch.push('Terugrekenen vanaf ' + terug.leverdatum + ': de eerste taak had ' + tekort + ' werkdag' + (tekort === 1 ? '' : 'en') + ' voor ' + terug.start + ' moeten beginnen. Vooruit vanaf ' + terug.start + ' is het op zijn vroegst klaar op ' + vooruit.eind + '.');
+      alternatief = { modus: 'vooruit', eind: vooruit.eind, datums: vooruit.datums };
+    }
+    const eersten = taken.map(t => t.start).filter(Boolean).sort(), einden = taken.map(t => t.eind).filter(Boolean).sort();
+    return { ok: true, taken, deps, modus: gebruikt, waarschuwingen: waarsch, begin: eersten[0] || '', eind: einden[einden.length - 1] || '', tekort, alternatief, leverdatum: P.isYmd(leverdatum) ? leverdatum : '', verdeling: verd };
+  };
+
+  // ══ P2: bestelregels per project, gebundeld in de Bestellijst ═══════════════════════════════════════════
+  // Dit bouwt voort op de bestaande Bestellijst (mt_bestellijst, v2.html): geen nieuw opslagmodel, geen gebroken data. Een bestelregel
+  // is een bestaande regel met extra velden:
+  //   { id, project_id, project (code), artikelsleutel, omschrijving (= materiaal), aantal, eenheid, bron:'vw'|'hhos'|'hand',
+  //     status:'nodig'|'besteld'|'geleverd', besteld (afgeleid: status ≠ nodig, voor de oude schermen), _vs, _gewijzigd, _vervallen }
+  // Oude regels zonder deze velden werken gewoon door: sleutel, status en bron worden dan afgeleid (de migratie legt ze vast).
+  P.BESTEL_STATUS = ['nodig', 'besteld', 'geleverd'];
+  P.BESTEL_STATUS_LABEL = { nodig: 'Nodig', besteld: 'Besteld', geleverd: 'Geleverd' };
+  P.BESTEL_VELDEN = ['materiaal', 'omschrijving', 'artikel', 'artikelsleutel', 'aantal', 'eenheid', 'leverancier', 'status', 'besteld', 'project', 'project_id', 'bron'];
+  const kleinNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/(\d)\s*(mm|cm|m|x)\b/g, '$1 $2').replace(/[^a-z0-9.,\u00d7]+/g, ' ').trim().replace(/\s+/g, ' ');
+  const EENHEDEN = { plaat: 'plaat', platen: 'plaat', pl: 'plaat', stuk: 'stuk', stuks: 'stuk', st: 'stuk', stk: 'stuk', pcs: 'stuk', 'm2': 'm²', 'm²': 'm²', 'vierkante meter': 'm²', m: 'm', mtr: 'm', meter: 'm', strekkende: 'm', lm: 'm', set: 'set', sets: 'set', paar: 'paar', liter: 'liter', l: 'liter', kg: 'kg', doos: 'doos', dozen: 'doos', rol: 'rol', rollen: 'rol' };
+  P.eenheidNorm = e => { const s = String(e == null ? '' : e).trim().toLowerCase().replace(/\.$/, ''); return s === '' ? '' : (EENHEDEN[s] || s); };
+  P.eenheidTekst = (eenheid, aantal) => {
+    const e = P.eenheidNorm(eenheid), een = Math.abs(getal(aantal) - 1) < 1e-9;
+    if (e === '') return een ? 'stuk' : 'stuks';
+    if (e === 'plaat') return een ? 'plaat' : 'platen';
+    if (e === 'stuk') return een ? 'stuk' : 'stuks';
+    if (e === 'doos') return een ? 'doos' : 'dozen';
+    if (e === 'rol') return een ? 'rol' : 'rollen';
+    return e;
+  };
+  // Dezelfde artikelen krijgen dezelfde sleutel: de artikelcode als die er is (VW), anders de genormaliseerde omschrijving, plus de
+  // platenmaat (HHOS) want twee maten van dezelfde plaat zijn twee artikelen. Hoofdletters, spaties en leestekens tellen niet.
+  P.artikelSleutel = b => {
+    const art = kleinNorm(b && b.artikel), oms = kleinNorm((b && (b.omschrijving || b.materiaal)) || ''), maat = kleinNorm(b && b.platenmaat);
+    return (art ? 'a:' + art : 'm:' + oms) + (maat ? '|' + maat : '');
+  };
+  P.bestelSleutelVan = b => (b && b.artikelsleutel) || P.artikelSleutel(b);
+  P.bestelOms = b => String((b && (b.omschrijving || b.materiaal || b.artikel)) || '');
+  P.bestelStatus = b => {
+    const s = b && b.status;
+    if (P.BESTEL_STATUS.includes(s)) return s === 'nodig' && b.besteld ? 'besteld' : s;
+    return b && b.besteld ? 'besteld' : 'nodig';
+  };
+  P.bestelBron = b => (b && ['vw', 'hhos', 'hand'].includes(b.bron)) ? b.bron : (b && b.platenmaat ? 'hhos' : (b && b.artikel ? 'vw' : 'hand'));
+  P.bestelProject = b => String((b && (b.project_id || b.project)) || '');
+  // Een nieuwe regel (alle velden gevuld). datum: ymd van vandaag (de aanroeper geeft die mee: geen klok in deze module).
+  P.bestelRegelNieuw = function ({ omschrijving = '', artikel = '', aantal = 1, eenheid = '', bron = 'hand', project = '', project_id = '', leverancier = '', categorie = 'overig', platenmaat = '', prijsLaatst = 0, datum = '', id = '' } = {}) {
+    const r = { id: id || ('bl_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)), materiaal: String(omschrijving), omschrijving: String(omschrijving),
+      categorie, leverancier, prijsLaatst, datum, besteld: false, status: 'nodig', aantal: getal(aantal) > 0 ? getal(aantal) : 1, eenheid: P.eenheidNorm(eenheid), bron: ['vw', 'hhos', 'hand'].includes(bron) ? bron : 'hand' };
+    if (artikel) r.artikel = String(artikel);
+    if (platenmaat) r.platenmaat = platenmaat;
+    if (project) r.project = project;
+    if (project_id) r.project_id = project_id;
+    r.artikelsleutel = P.artikelSleutel(r);
+    return r;
+  };
+  // Status zetten: houdt het oude `besteld` gelijk. Wijzigt de regel ter plekke.
+  P.bestelStatusZet = (b, status) => { if (!P.BESTEL_STATUS.includes(status)) return false; b.status = status; b.besteld = status !== 'nodig'; return true; };
+  // Na een wijziging: de velden die anders zijn dan voor de wijziging krijgen een stempel (voor het samenvoegen per veld).
+  P.bestelVeldStempel = function (voor, na, { t = Date.now(), door = '' } = {}) {
+    const vs = Object.assign({}, kopie((voor && voor._vs) || {}), kopie(na._vs) || {}), ovs = (voor && voor._vs) || {};
+    P.BESTEL_VELDEN.forEach(f => {
+      if (gelijk(na[f], voor && voor[f])) return;
+      const vorig = tijdVan(ovs[f]); vs[f] = { t: Math.max(t, vorig + 1), door, basis: vorig };
+    });
+    if (Object.keys(vs).length) na._vs = vs;
+    return na;
+  };
+  // Samenvoegen van de hele bestellijst (twee arrays): per regel (id) per veld de nieuwste stempel; zonder stempels het nieuwste
+  // record (zoals het oude gedrag); een tombstone volgt het nieuwste record, dus terugzetten blijft kunnen.
+  P.bestelSamen = (lokaal, spData) => {
+    const a = lees(lokaal), b = lees(spData);
+    return lijstSamenMet(P.BESTEL_VELDEN, { iso: true, legacy: true }, Array.isArray(a) ? a : [], Array.isArray(b) ? b : []);
+  };
+  P.bestelConflictOplos = P.conflictOplos;
+
+  // ── Gebundelde weergave over alle projecten ────────────────────────────────────────────────────────
+  // Dezelfde artikelsleutel en eenheid worden opgeteld, ook regels zonder project (met de hand toegevoegd). Per groep de verdeling per project.
+  // opts.nummerVan(regel) → het projectnummer om te tonen (bv. 260803); zonder: de projectcode.
+  const fmtAantal = n => (Math.round(n * 100) / 100).toString().replace('.', ',');
+  P.bestelBundel = function (regels, { nummerVan = null, toonGeleverd = false } = {}) {
+    const groepen = new Map();
+    (Array.isArray(regels) ? regels : []).forEach(b => {
+      if (!b || typeof b !== 'object' || b._vervallen) return;
+      const st = P.bestelStatus(b); if (st === 'geleverd' && !toonGeleverd) return;
+      const sleutel = P.bestelSleutelVan(b), eenheid = P.eenheidNorm(b.eenheid), gk = sleutel + '|' + eenheid;
+      let g = groepen.get(gk);
+      if (!g) { g = { sleutel, eenheid, omschrijving: P.bestelOms(b), aantal: 0, regels: [], perProject: [], statussen: { nodig: 0, besteld: 0, geleverd: 0 }, leveranciers: [] }; groepen.set(gk, g); }
+      const aantal = getal(b.aantal) > 0 ? getal(b.aantal) : 1, pk = P.bestelProject(b);
+      const nr = pk ? String((nummerVan && nummerVan(b)) || b.project || pk) : '';
+      g.aantal += aantal; g.regels.push({ id: b.id, project: pk, nummer: nr, aantal, status: st, bron: P.bestelBron(b) }); g.statussen[st]++;
+      let p = g.perProject.find(x => x.project === pk);
+      if (!p) { p = { project: pk, nummer: nr, aantal: 0, ids: [], statussen: { nodig: 0, besteld: 0, geleverd: 0 } }; g.perProject.push(p); }
+      p.aantal += aantal; p.ids.push(b.id); p.statussen[st]++;
+      if (b.leverancier && !g.leveranciers.includes(b.leverancier)) g.leveranciers.push(b.leverancier);
+    });
+    const alle = [...groepen.values()];
+    alle.forEach(g => {
+      g.projectNrs = [...new Set(g.perProject.map(p => p.nummer).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'nl', { numeric: true }));
+      g.perProject.sort((x, y) => x.nummer.localeCompare(y.nummer, 'nl', { numeric: true }));
+      const s = g.statussen, n = s.nodig + s.besteld + s.geleverd;
+      g.status = s.nodig === n ? 'nodig' : s.besteld === n ? 'besteld' : s.geleverd === n ? 'geleverd' : 'gemengd';
+      g.tekst = P.bestelBundelTekst(g);
+    });
+    return alle.sort((x, y) => x.omschrijving.localeCompare(y.omschrijving, 'nl', { sensitivity: 'base' }));
+  };
+  // "Egger W980 18 mm — 7 platen (260803, 260807)"
+  P.bestelBundelTekst = g => g.omschrijving + ' — ' + fmtAantal(g.aantal) + ' ' + P.eenheidTekst(g.eenheid, g.aantal) + (g.projectNrs && g.projectNrs.length ? ' (' + g.projectNrs.join(', ') + ')' : '');
+  // Afvinken in de bundel: welke regels veranderen? projecten = null (alle) of een lijst projectsleutels (bv. [één project]).
+  // Dezelfde regels als in het project: wat hier verandert, ziet het project, en andersom.
+  P.bestelAfvinkPlan = function (groep, status, { projecten = null } = {}) {
+    if (!groep || !P.BESTEL_STATUS.includes(status)) return [];
+    const sel = projecten ? new Set(projecten) : null;
+    return groep.regels.filter(r => (!sel || sel.has(r.project)) && r.status !== status).map(r => ({ id: r.id, van: r.status, naar: status }));
+  };
+  // Moet de vraag "alle projecten of één?" gesteld worden? Alleen bij een groep met regels voor meer dan één project.
+  P.bestelMeerdereProjecten = g => !!g && new Set(g.regels.filter(r => r.project).map(r => r.project)).size > 1;
+  // Het plan toepassen op een lijst regels (kopie, voor de tests en voor het scherm als je het pure resultaat wilt).
+  P.bestelPlanToepassen = (regels, plan) => { const per = new Map(plan.map(p => [String(p.id), p.naar])); return regels.map(b => { const n = per.get(String(b.id)); if (!n) return b; const x = kopie(b); P.bestelStatusZet(x, n); return x; }); };
+
+  // ── Migratie van oude regels (droogloop: er wordt niets geschreven) ───────────────────────────────────
+  // Per actieve regel zonder de nieuwe velden: wat er bij komt. projectVoor(code) → project_id of ''; een regel waarvan het project niet
+  // te vinden is, krijgt geen project_id en staat in `onbekend`. Bestaande waarden worden nooit overschreven.
+  P.bestelMigratie = function (regels, { projectVoor = null } = {}) {
+    const patches = [], onbekend = [];
+    (Array.isArray(regels) ? regels : []).forEach(b => {
+      if (!b || typeof b !== 'object' || b._vervallen) return;
+      const p = {};
+      if (!b.artikelsleutel) p.artikelsleutel = P.artikelSleutel(b);
+      if (!P.BESTEL_STATUS.includes(b.status)) p.status = P.bestelStatus(b);
+      if (!['vw', 'hhos', 'hand'].includes(b.bron)) p.bron = P.bestelBron(b);
+      if (!b.omschrijving && (b.materiaal || b.artikel)) p.omschrijving = P.bestelOms(b);
+      if (b.eenheid !== undefined && b.eenheid !== P.eenheidNorm(b.eenheid) && P.eenheidNorm(b.eenheid)) p.eenheid = P.eenheidNorm(b.eenheid);
+      if (b.project && !b.project_id) { const pid = projectVoor ? projectVoor(b.project) : ''; if (pid) p.project_id = pid; else onbekend.push({ id: b.id, project: b.project }); }
+      if (Object.keys(p).length) patches.push({ id: b.id, omschrijving: P.bestelOms(b), patch: p });
+    });
+    return { patches, onbekend, aantal: patches.length };
+  };
+
+  // ── Taken die op klaar kunnen: voorstellen, nooit automatisch ────────────────────────────────────────
+  // "Materiaal geleverd" (sleutel materiaal_geleverd) mag op klaar als ALLE bestelregels van het project geleverd zijn;
+  // "Materiaal bestellen" (sleutel bestellen) als alles minstens besteld is. Zonder bestelregels geen voorstel.
+  P.bestelTaakVoorstellen = function (taken, regels, { project_id = '', codes = [] } = {}) {
+    const mijn = (Array.isArray(regels) ? regels : []).filter(b => b && typeof b === 'object' && !b._vervallen && ((project_id && b.project_id === project_id) || (b.project && codes.includes(b.project))));
+    if (!mijn.length) return [];
+    const st = mijn.map(P.bestelStatus), alleGeleverd = st.every(s => s === 'geleverd'), alleBesteld = st.every(s => s !== 'nodig');
+    const uit = [];
+    P.takenActief(taken).forEach(t => {
+      if (t.status === 'klaar') return;
+      if (t.sleutel === 'materiaal_geleverd' && alleGeleverd) uit.push({ taak_id: t.id, naam: t.naam, reden: 'alle ' + mijn.length + ' bestelregels zijn geleverd' });
+      else if (t.sleutel === 'bestellen' && alleBesteld) uit.push({ taak_id: t.id, naam: t.naam, reden: 'alle ' + mijn.length + ' bestelregels zijn besteld of geleverd' });
+    });
+    return uit;
+  };
+
+  // ── Uploads herkennen aan het projectnummer ──────────────────────────────────────────────────────────
+  // tekst = bestandsnaam, mapnaam of de Commission uit het bestand; kandidaten = [{key, nummers:[projectnummer, werkcode, …]}].
+  // Een nummer moet als los woord voorkomen (260803 in "260803 keuken.csv", niet in 12608034). 0 treffers = onbekend, >1 = kiezen.
+  P.projectUitTekst = function (tekst, kandidaten) {
+    const t = String(tekst == null ? '' : tekst).toLowerCase(), uit = [];
+    (kandidaten || []).forEach(k => {
+      const hit = (k.nummers || []).map(n => String(n || '').trim().toLowerCase()).filter(n => n.length >= 4).find(n => {
+        const re = new RegExp('(^|[^a-z0-9])' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)'); return re.test(t);
+      });
+      if (hit) uit.push({ key: k.key, nummer: hit });
+    });
+    return uit;
   };
 
   root.MTPlanning = P;
