@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.15.1",
+    "datum": "2026-10-13",
+    "titel": "Outlook-paneel en Binnenkomend",
+    "voor": "iedereen",
+    "punten": [
+      "Outlook-paneel: koppelen aan project, Maak lead, Pak op, Antwoord als info@; overzicht Binnenkomend in Projecten."
+    ]
+  },
+  {
     "versie": "2.15.0",
     "datum": "2026-10-13",
     "titel": "Leads, projectgegevens en navigatie",

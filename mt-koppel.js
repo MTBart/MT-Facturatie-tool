@@ -40,11 +40,40 @@
     sleutel(x) { return x && (x.internetMessageId || x.id) || ''; },
     mbx(x) { return String((x && x.mbx) || STANDAARD_MBX).toLowerCase(); },
     actief(x) { return !!x && !x.ontkoppeld; },
-    // Zelfde mail? Op sleutel, of op Graph-id (ook het bijgeschreven immutable id `iid`).
-    zelfde(x, msg) {
+    // De stabiele sleutel van een koppeling: postbus + internetMessageId (zonder Message-ID: het Graph-id, bij nieuwe koppelingen het
+    // ImmutableId). Het Graph-id verschilt per postbus en iid komt later pas binnen, dus die tellen hier niet: de sleutel van een record
+    // verandert nooit. Dezelfde sleutel = hetzelfde record (koppelen, ontkoppelen, samenvoegen tussen browsers, het paneel).
+    ident(x, mbx) { const m = K.sleutel(x); return m ? K.mbx(mbx ? { mbx } : x) + '|' + m : ''; },
+    // Zelfde mail? Op sleutel, of op Graph-id (ook het bijgeschreven immutable id `iid`) — én in dezelfde postbus: de identiteit is
+    // mailbox + mail (zoals in linksSamen), dus dezelfde mail in je eigen postbus en in info@ is twee koppelingen. `mbx` (optioneel)
+    // is de postbus van `msg` als die het zelf niet draagt; zonder postbus (record of bericht) geldt de standaardpostbus (K.mbx).
+    zelfde(x, msg, mbx) {
       if (!x || !msg) return false;
+      const pb = mbx || msg.mbx;          // weet de aanroeper de postbus niet (oude aanroepen), dan telt de postbus niet mee
+      if (pb && K.mbx(x) !== K.mbx({ mbx: pb })) return false;
       const s = K.sleutel(msg);
       return (!!s && K.sleutel(x) === s) || (!!msg.id && (x.id === msg.id || x.iid === msg.id));
+    },
+    // Dezelfde mail in welke postbus dan ook (zelfde internetMessageId), of hetzelfde record. Alleen voor de weergave en voor
+    // "al gekoppeld via een andere postbus"; koppelen en ontkoppelen gaan op K.zelfde (per postbus).
+    zelfdeMail(x, msg) {
+      if (!x || !msg) return false;
+      return (!!x.internetMessageId && x.internetMessageId === msg.internetMessageId) || K.zelfde(x, msg);
+    },
+    // Eén regel per mail voor de weergave (dossier, tellers): dezelfde mail in je eigen postbus en in info@ zijn twee records, maar je ziet
+    // hem één keer. Voorkeur: de kopie in de standaardpostbus (info@, die kan iedereen met toegang openen), dan de nieuwste stand.
+    // De volgorde van de eerste plek blijft; records zonder Message-ID blijven los (op hun eigen sleutel).
+    uniek(lijst) {
+      const uit = [], plek = new Map();
+      const info = x => K.mbx(x) === STANDAARD_MBX, tijd = x => Number(x.gewijzigd) || Number(x.ts) || 0;
+      const beter = (a, b) => info(a) !== info(b) ? info(a) : tijd(a) > tijd(b);
+      (Array.isArray(lijst) ? lijst : []).forEach(x => {
+        if (!x) return;
+        const k = x.internetMessageId ? 'm|' + x.internetMessageId : 'i|' + K.ident(x);
+        if (!plek.has(k)) { plek.set(k, uit.length); uit.push(x); return; }
+        const i = plek.get(k); if (beter(x, uit[i])) uit[i] = x;
+      });
+      return uit;
     },
     alle() {
       try { const v = JSON.parse(K.opslag.lees(LINKS) || '{}'); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; }
@@ -95,8 +124,7 @@
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
       const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
       const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {};
-      const mail = x => x && (x.internetMessageId || x.id);
-      const ident = x => { const m = mail(x); return m ? K.mbx(x) + '|' + m : ''; };
+      const ident = x => K.ident(x);
       const tijd = x => Math.max(Number(x && x.gewijzigd) || 0, Number(x && x.ontkoppeld) || 0, Number(x && x.ts) || 0);
       const uit = {};
       for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
@@ -121,9 +149,10 @@
       if (!code || !msg || !K.sleutel(msg)) return { status: 'fout', record: null };
       const all = K.alle(), arr = Array.isArray(all[code]) ? all[code] : [];
       const door = opts.door || K.wie(), bron = opts.bron || 'hand';
-      const act = arr.find(x => K.actief(x) && K.zelfde(x, msg));
+      const mb = opts.mbx || msg.mbx || '';      // de postbus waarin deze mail staat (opts wint, net als bij het nieuwe record)
+      const act = arr.find(x => K.actief(x) && K.zelfde(x, msg, mb));
       if (act) return { status: 'al', record: act };
-      const oud = arr.find(x => K.zelfde(x, msg));
+      const oud = arr.find(x => K.zelfde(x, msg, mb));
       let rec, status;
       if (oud) {                                   // eerder ontkoppeld → hetzelfde record weer actief
         const nu = K.nu();
@@ -142,14 +171,16 @@
       K.journaal(status === 'nieuw' ? 'koppel' : 'herkoppel', code, rec, { door, bron });
       return { status, record: rec };
     },
-    // Tombstone op alle actieve koppelingen van deze mail onder `code`. Geeft het aantal terug.
+    // Tombstone op alle actieve koppelingen van deze mail onder `code`. Geeft het aantal terug. Met opts.mbx alleen die van déze postbus
+    // (dezelfde mail in je eigen postbus en in info@ zijn twee koppelingen); zonder opts.mbx alle postbussen (oude aanroepen).
+    // Een record zonder mbx telt als de standaardpostbus (K.mbx).
     ontkoppelMail(code, sleutel, opts) {
       opts = opts || {};
       const all = K.alle(), arr = Array.isArray(all[code]) ? all[code] : [];
       const door = opts.door || K.wie(), nu = K.nu();
       let n = 0, laatste = null;
       arr.forEach(x => {
-        if (K.actief(x) && (K.sleutel(x) === sleutel || (opts.id && (x.id === opts.id || x.iid === opts.id)))) {
+        if (K.actief(x) && (!opts.mbx || K.mbx(x) === K.mbx({ mbx: opts.mbx })) && (K.sleutel(x) === sleutel || (opts.id && (x.id === opts.id || x.iid === opts.id)))) {
           const t = Math.max(nu, (Number(x.gewijzigd) || 0) + 1);
           x.ontkoppeld = t; x.gewijzigd = t; x.ontkoppeld_door = door; n++; laatste = x;
         }
@@ -176,12 +207,14 @@
       return n;
     },
     // Een eerder ontkoppelde koppeling weer actief maken (zonder het bericht zelf).
+    // Met opts.mbx alleen het record van die postbus (dezelfde mail kan in twee postbussen gekoppeld zijn); anders het eerste.
     herkoppel(code, sleutel, opts) {
+      opts = opts || {};
       const all = K.alle(), arr = Array.isArray(all[code]) ? all[code] : [];
-      const x = arr.find(r => K.sleutel(r) === sleutel);
+      const x = arr.find(r => K.sleutel(r) === sleutel && (!opts.mbx || K.mbx(r) === K.mbx({ mbx: opts.mbx })));
       if (!x) return false;
       if (K.actief(x)) return true;
-      return K.koppelMail(code, x, opts).status === 'herkoppeld';
+      return K.koppelMail(code, x, Object.assign({}, opts, { mbx: K.mbx(x) })).status === 'herkoppeld';
     },
     // Actieve koppelingen over meerdere projecten (klant-scope later): [{code, …record}].
     linksVoor(codes) {
@@ -291,7 +324,19 @@
         if ((Array.isArray(all[code]) ? all[code] : []).some(x => K.actief(x) && K.zelfde(x, msg))) uit.push(code);
       }
       return uit;
-    }
+    },
+    // Projecten waar dezelfde mail (zelfde Message-ID) via een ANDERE postbus aan hangt, en niet via deze. Voor de melding
+    // "al gekoppeld via een andere postbus" (geen tweede koppeling nodig; deze kopie mag erbij, zodat iedereen hem kan openen).
+    mailProjectenElders(msg) {
+      if (!msg || !msg.internetMessageId) return [];
+      const hier = new Set(K.mailProjecten(msg)), all = K.alle(), uit = [];
+      for (const code in all) {
+        if (hier.has(code)) continue;
+        if ((Array.isArray(all[code]) ? all[code] : []).some(x => K.actief(x) && x.internetMessageId === msg.internetMessageId)) uit.push(code);
+      }
+      return uit;
+    },
+    STANDAARD_MBX
   };
   root.MTKoppel = K;
 
@@ -383,11 +428,12 @@
   root.mailLinksSave = o => K.bewaar(o);
   root.mailLinkActief = x => K.actief(x);
   root.mailLinkIdent = x => K.sleutel(x) || undefined;
-  root.mailLinksVoor = code => (K.alle()[code] || []).filter(K.actief);
+  // Eén regel per mail (K.uniek): dezelfde mail in twee postbussen telt en toont één keer. Het dossier gebruikt dezelfde lijst (index).
+  root.mailLinksVoor = code => K.uniek((K.alle()[code] || []).filter(K.actief));
   // Alleen bij het ruwe object (zonder opslaan/journaal) — voor oude aanroepers.
-  root.mailLinkOntkoppel = (all, code, imid, mid) => {
+  root.mailLinkOntkoppel = (all, code, imid, mid, mbx) => {
     const nu = K.nu(); let n = 0;
-    (all[code] || []).forEach(x => { if (K.actief(x) && (K.sleutel(x) === imid || (mid && (x.id === mid || x.iid === mid)))) { x.ontkoppeld = nu; x.gewijzigd = nu; n++; } });
+    (all[code] || []).forEach(x => { if (K.actief(x) && (!mbx || K.mbx(x) === K.mbx({ mbx })) && (K.sleutel(x) === imid || (mid && (x.id === mid || x.iid === mid)))) { x.ontkoppeld = nu; x.gewijzigd = nu; n++; } });
     return n;
   };
   // Eerste project (oude API). Nieuwe code: MTKoppel.mailProjecten(msg).

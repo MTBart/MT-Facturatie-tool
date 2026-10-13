@@ -49,8 +49,12 @@ for (const b of bronnen) {
 }
 let bestaand = 0;
 if (toevoegen && fs.existsSync(uit)) for (const r of fs.readFileSync(uit, 'utf8').split(/\r?\n/)) { const t = r.trim(); if (t && !t.startsWith('#')) { termen.add(t); bestaand++; } }
-const lijst = [...termen].filter(t => t.length >= min).sort((x, y) => x.toLowerCase().localeCompare(y.toLowerCase()));
-const overgeslagen = termen.size - lijst.length;
+// De eigen organisatie staat als interne "klant" in de bronnen, maar is geen klantnaam: die mag overal in de code staan.
+// Ook gewone woorden die als locatie van de eigen organisatie in de lijst staan (werkplaats, administratie, …) zijn geen klantnaam.
+const EIGEN = /mortise|tenon|bedrijf ?vijf|^(werkplaats|administratie|kantoor|magazijn|showroom|algemeen|intern|hoofdkantoor|opslag|loods)$/i;
+const eigen = [...termen].filter(t => EIGEN.test(t)).length;
+const lijst = [...termen].filter(t => t.length >= min && !EIGEN.test(t)).sort((x, y) => x.toLowerCase().localeCompare(y.toLowerCase()));
+const overgeslagen = termen.size - lijst.length - eigen;
 fs.mkdirSync(path.dirname(uit), { recursive: true });
 fs.writeFileSync(uit, '# Lokale lijst verboden namen. NIET committen. Gemaakt door githooks/vul-verboden-namen.js; een term per regel.\n' + lijst.join('\n') + '\n');
 if (zetConfig) git(['config', 'mt.verbodenNamenPad', uit]);
