@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MT-paneel (Outlook) — TESTMANIFEST met gebeurtenissen (event-based activation). PROEF, standaard uit.
+  Hetzelfde paneel als manifest.xml, plus:
+    - een knop in het opstelvenster (het paneel toont daar of info@ in de cc staat, met een knop en het vinkje "automatisch");
+    - de gebeurtenis OnNewMessageCompose (Mailbox 1.10) die launchevent.js aanroept. Die doet NIETS zolang het vinkje uit staat.
+  Een ander Id dan manifest.xml, zodat je dit naast het gewone manifest kunt laden; gebruik voor jezelf liever maar één van de twee (anders zie je twee knoppen).
+  Basisadres: https://mtbart.github.io/MT-Facturatie-tool/  (later https://tool.mortiseandtenon.nl/ — zie outlook/maak-manifest.js).
+  NIET gevalideerd in een echte Outlook (zie outlook/README.md, "Automatisch info@ in de cc"). Verhoog <Version> bij elke wijziging.
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+  xsi:type="MailApp">
+
+  <Id>043d3db1-a2d0-480f-9e8c-f12227df7273</Id>
+  <Version>0.1.0.0</Version>
+  <ProviderName>Mortise &amp; Tenon</ProviderName>
+  <DefaultLocale>nl-NL</DefaultLocale>
+  <DisplayName DefaultValue="MT-paneel (proef cc)"/>
+  <Description DefaultValue="Proef: het MT-paneel met automatisch info@ in de cc bij antwoorden op gekoppelde gesprekken (standaard uit)."/>
+  <IconUrl DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-128.png"/>
+  <SupportUrl DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/"/>
+  <AppDomains>
+    <AppDomain>https://mtbart.github.io</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.5"/>
+    </Sets>
+  </Requirements>
+
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/pane.html"/>
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+    <Form xsi:type="ItemEdit">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/pane.html"/>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+
+  <Permissions>ReadWriteMailbox</Permissions>
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit"/>
+  </Rule>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+      <Requirements>
+        <bt:Sets DefaultMinVersion="1.10">
+          <bt:Set Name="Mailbox"/>
+        </bt:Sets>
+      </Requirements>
+      <Hosts>
+        <Host xsi:type="MailHost">
+          <!-- Runtime voor de gebeurtenis: web, nieuwe Outlook en Mac laden de HTML-pagina; klassiek Outlook voor Windows het losse JavaScript-bestand. -->
+          <Runtimes>
+            <Runtime resid="Gebeurtenis.Url">
+              <Override type="javascript" resid="Gebeurtenis.Js"/>
+            </Runtime>
+          </Runtimes>
+          <DesktopFormFactor>
+            <SupportsSharedFolders>true</SupportsSharedFolders>
+            <FunctionFile resid="Gebeurtenis.Url"/>
+            <ExtensionPoint xsi:type="MessageReadCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="mtGroep">
+                  <Label resid="Groep.Label"/>
+                  <Control xsi:type="Button" id="mtPaneelKnop">
+                    <Label resid="Knop.Label"/>
+                    <Supertip>
+                      <Title resid="Knop.Label"/>
+                      <Description resid="Knop.Tip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icoon.16"/>
+                      <bt:Image size="32" resid="Icoon.32"/>
+                      <bt:Image size="80" resid="Icoon.80"/>
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="Paneel.Url"/>
+                      <SupportsPinning>true</SupportsPinning>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+            <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="mtOpstelGroep">
+                  <Label resid="Groep.Label"/>
+                  <Control xsi:type="Button" id="mtOpstelKnop">
+                    <Label resid="Knop.Label"/>
+                    <Supertip>
+                      <Title resid="Knop.Label"/>
+                      <Description resid="Opstel.Tip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icoon.16"/>
+                      <bt:Image size="32" resid="Icoon.32"/>
+                      <bt:Image size="80" resid="Icoon.80"/>
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="Paneel.Url"/>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+            <ExtensionPoint xsi:type="LaunchEvent">
+              <LaunchEvents>
+                <LaunchEvent Type="OnNewMessageCompose" FunctionName="onNewMessageComposeHandler"/>
+              </LaunchEvents>
+              <SourceLocation resid="Gebeurtenis.Url"/>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
+      <Resources>
+        <bt:Images>
+          <bt:Image id="Icoon.16" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-16.png"/>
+          <bt:Image id="Icoon.32" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-32.png"/>
+          <bt:Image id="Icoon.80" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-80.png"/>
+        </bt:Images>
+        <bt:Urls>
+          <bt:Url id="Paneel.Url" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/pane.html"/>
+          <bt:Url id="Gebeurtenis.Url" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/launchevent.html"/>
+          <bt:Url id="Gebeurtenis.Js" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/launchevent.js"/>
+        </bt:Urls>
+        <bt:ShortStrings>
+          <bt:String id="Groep.Label" DefaultValue="M&amp;T (proef)"/>
+          <bt:String id="Knop.Label" DefaultValue="MT-paneel"/>
+        </bt:ShortStrings>
+        <bt:LongStrings>
+          <bt:String id="Knop.Tip" DefaultValue="Koppel deze mail (het hele gesprek) aan een project en open het dossier."/>
+          <bt:String id="Opstel.Tip" DefaultValue="Toont of info@ in de cc staat en laat je de automatische cc (proef) aan- of uitzetten."/>
+        </bt:LongStrings>
+      </Resources>
+    </VersionOverrides>
+  </VersionOverrides>
+</OfficeApp>

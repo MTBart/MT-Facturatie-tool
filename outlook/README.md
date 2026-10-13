@@ -1,7 +1,13 @@
 # MT-paneel voor Outlook (spike)
 
 Een taakvenster rechts naast een geopende mail: **de mail (het hele gesprek) aan een project koppelen** en **het projectdossier openen**.
-Dit is de spike (brok 5): hij bewijst aanmelden, id-omzetting, voorstel en koppelen. Bijlagen naar de projectmap, offerte en taak komen in de MVP.
+Dit is de spike (brok 5) met de eerste MVP-onderdelen erbovenop. Het paneel kan nu:
+- **koppelen:** het hele gesprek aan een project (voorstel of zoeken); projectgegevens (nummer, fase, contact, adres met navigatielink) en "Open dossier";
+- **bijlagen** per bijlage naar de projectmap, met een submapvoorstel dat je kunt wijzigen;
+- **"Maak lead van deze mail"**: opent de tool op `#lead/nieuw?mbx=…&mail=…`; het formulier "+ Lead" (nummer uit de teller, verplichte volgende actie) staat dan voorgevuld met de afzender en het onderwerp, en het hele gesprek wordt na het aanmaken gekoppeld;
+- **"Pak op"** / afhandelen (met reden) voor gesprekken in info@: staat in het gedeelde register `mt_mail_oppak.json`, zichtbaar in het overzicht **Binnenkomend** in de tool (Projecten) en als Outlook-categorie "Opgepakt: naam";
+- **"Antwoord als info@"**: een antwoordconcept met Van = info@ en de projecttag `[26xxxx]` in het onderwerp (zie "Antwoorden vanuit info@" hieronder);
+- in een **opstelvenster**: laat zien of info@ in de cc staat (knop om hem erbij te zetten); automatisch kan alleen met het testmanifest (zie "Automatisch info@ in de cc").
 
 **Ondersteund in deze spike:** Outlook op het web, nieuwe Outlook voor Windows, klassiek Outlook voor Windows en Outlook voor Mac (leesmodus, bureaubladweergave).
 **Niet ondersteund: Outlook voor iOS en Android.** Het manifest heeft geen `MobileFormFactor`; de knop verschijnt op de telefoon dus niet. Mobiel komt (misschien) later.
@@ -31,6 +37,9 @@ SharePoint-bestanden als die van de cockpit (`mt_mail_links.json`, `mt_koppel_jo
 5. **Alleen voor de gedeelde postbus info@:** **API-machtigingen** (API permissions) → **Een machtiging toevoegen** → **Microsoft Graph** → **Gedelegeerde machtigingen** →
    **`Mail.Read.Shared`** toevoegen. Vraagt Azure om **beheerderstoestemming** (admin consent), geef die dan namens de organisatie.
    Zonder deze machtiging werkt het paneel voor je eigen postbus gewoon; alleen een mail in info@ geeft dan een toestemmingsfout.
+6. **Alleen voor "Pak op" (categorie) en "Antwoord als info@" (concept):** voeg ook **`Mail.ReadWrite`** en **`Mail.ReadWrite.Shared`** toe (gedelegeerd, met beheerderstoestemming).
+   De cockpit heeft `Mail.ReadWrite` al; het paneel vraagt ze pas op het moment van de klik. Zonder deze machtigingen blijft koppelen, bijlagen en "Pak op" in de tool werken;
+   alleen de Outlook-categorie en het concept falen met een duidelijke melding.
 
 > Waarom: NAA (nested app authentication) geeft het paneel een Graph-token op naam van onze eigen app, zonder tweede inlogscherm. Daarvoor moet Azure
 > dit `brk-multihub://…`-adres kennen. De scopes die het paneel voor je eigen postbus vraagt (`Files.ReadWrite`, `Sites.ReadWrite.All`, `Mail.Read`) zijn al
@@ -76,6 +85,38 @@ Klap onderaan **Diagnose (spike)** open en zet de uitkomst in je terugmelding.
 
 Ontkoppelen kan in de cockpit (dossier van het project).
 
+### 5. Antwoorden vanuit info@ ("Verzenden als"-rechten)
+Bart wil antwoorden het liefst vanuit info@. De knop **Antwoord als info@** maakt een antwoordconcept met Van = info@. Outlook laat dat alleen verzenden als de afzender
+het recht **Verzenden als** (Send As) op info@ heeft. Zonder dat recht weigert Outlook het verzenden (het concept zelf wordt wel gemaakt).
+1. Exchange-beheercentrum (admin.exchange.microsoft.com) → **Ontvangers** → **Gedeelde postvakken** → **info@** → **Delegeren** (Delegation) → **Verzenden als** (Send as) →
+   **Bewerken** → voeg **Mathijs** en **Ilona** toe (en jezelf, als je dat nog niet hebt). Opslaan. Het kan tot een uur duren voor Outlook het merkt.
+2. Of met PowerShell (Exchange Online): `Add-RecipientPermission -Identity <info-adres> -Trustee <naam@mortiseandtenon.nl> -AccessRights SendAs -Confirm:$false`
+   (eenmaal per persoon; controleren met `Get-RecipientPermission -Identity <info-adres>`).
+3. Het paneel zelf heeft daarnaast **Volledige toegang** (Full Access) op info@ nodig om het concept in de gedeelde postbus te maken en de categorie "Opgepakt: naam" te zetten.
+   Mathijs en Ilona hebben die al als ze info@ in hun Outlook hebben staan. Staat info@ ook als "Verzonden items"-kopie ingesteld? Zet in het beheercentrum
+   **Verzonden items kopiëren naar het gedeelde postvak** (`MessageCopyForSentAsEnabled`) aan, anders landt een antwoord "als info@" alleen in de Verzonden items van de afzender
+   en ziet het overzicht Binnenkomend het antwoord niet (de aanduiding "beantwoord" ontbreekt dan).
+
+### 6. Optioneel: een mailstroomregel als vangnet (projecttag → info@ in bcc)
+Vergeet iemand info@ in de cc te zetten, dan vangt deze regel het op: elk uitgaand bericht met een projecttag `[26xxxx]` in het onderwerp krijgt info@ in de bcc.
+Dat is het vangnet; het paneel (knop of proef-vlag) is de nette weg. Alleen instellen na overleg (de regel geldt voor het hele bedrijf).
+1. Exchange-beheercentrum → **Mailstroom** → **Regels** → **Een regel toevoegen** → **Nieuwe regel maken**.
+2. **Naam:** `Projecttag naar info@ (bcc)`. **Regel toepassen als:** *Het onderwerp of de hoofdtekst* → *onderwerp komt overeen met deze tekstpatronen* → `\[\s*26\d{4}\s*\]`.
+3. **Voeg een voorwaarde toe:** *De afzender* → *bevindt zich* → *binnen de organisatie* (anders bcc't de regel ook inkomende mail van klanten).
+4. **Doe het volgende:** *Ontvangers toevoegen aan het vak Bcc* → het adres van info@.
+5. **Behalve als:** *De afzender is* info@ **en** *Een ontvanger is* info@ (voorkomt een lus en een dubbele kopie als info@ al in Aan, Cc of Bcc staat).
+6. **Modus:** eerst *Testen zonder beleidstips afdwingen*, na een week *Afdwingen*. Prioriteit laag laten staan. Opslaan en **inschakelen**.
+Gevolg: de kopie in de inbox van info@ heeft dezelfde `conversationId`; het overzicht Binnenkomend behandelt hem als onderdeel van het gesprek (geen extra rij).
+Een regel `[26…]` kent alleen nummers van het jaar 2026; pas het patroon aan in januari (`27\d{4}`) of gebruik `\[\d{6}\]`.
+
+### 7. Het testmanifest met gebeurtenissen laden (proef: automatisch info@ in de cc)
+`manifest-gebeurtenissen.xml` is een **apart** testmanifest (eigen Id) met de knop in het opstelvenster en de gebeurtenis `OnNewMessageCompose` (zie "Automatisch info@ in de cc").
+1. Laad het **in plaats van** het gewone manifest, niet ernaast, anders staan er twee MT-knoppen: Outlook op het web → Apps → **Mijn invoegtoepassingen** → **Aangepaste invoegtoepassingen** →
+   **Uit bestand toevoegen** → `outlook/manifest-gebeurtenissen.xml`. (Via het beheercentrum kan ook; zelfde stappen als stap 3, eerst **Alleen ik**.)
+2. Open een antwoord op een gekoppeld gesprek (onderwerp met `[26xxxx]`) → klik **MT-paneel** in het opstelvenster → vink **Automatisch info@ in de cc** aan. Dat zet de instelling `mt_auto_cc`
+   in je Outlook-instellingen (roamingSettings); zonder vinkje doet de gebeurtenis niets.
+3. Maak een nieuw antwoord op zo'n gesprek: info@ moet zelf in de cc verschijnen. Lukt dat niet, dan werkt alleen de knop "Zet info@ in de cc" in het paneel; meld het terug met de client erbij.
+
 ### Foutmeldingen en wat ze betekenen
 | Melding in het paneel | Oorzaak | Oplossing |
 |---|---|---|
@@ -111,11 +152,49 @@ ontvangers (Aan/Cc) en geen bijlagen** op. Er is geen worker- of AI-aanroep; nie
 - Schrijven gebeurt alleen na een expliciete bevestiging ("Ja, koppel") en met ETag/samenvoegen (`If-Match`; bestaat het bestand nog niet, dan `If-None-Match: *` en bij een
   gelijktijdige aanmaak worden beide kanten samengevoegd). Alleen bekijken schrijft niets.
 - De manifest-machtiging is `ReadWriteMailbox` (zie stap 3); de Graph-scopes zijn `Files.ReadWrite`, `Sites.ReadWrite.All` (bekende brede scope, zie stap 1), `Mail.Read` en, alleen voor
-  een gedeelde postbus, `Mail.Read.Shared`. `Mail.ReadWrite`, `Mail.Send` en agenda worden niet gevraagd.
+  een gedeelde postbus, `Mail.Read.Shared`. Pas op het moment van de klik (categorie "Opgepakt: naam", antwoordconcept) komen `Mail.ReadWrite` (en `.Shared`) erbij. `Mail.Send` en agenda worden niet gevraagd:
+  het paneel verstuurt zelf nooit iets.
+- `mt_mail_oppak.json` (het register "Pak op") bewaart per gesprek alleen: postbus, gespreks-id, status, wie (e-mail en naam), wanneer, reden en de gekoppelde projectcodes. **Geen onderwerp, afzender of mailtekst.**
+  Het overzicht Binnenkomend in de tool leest onderwerp en afzender wel (via Graph, alleen in het geheugen van de pagina) en toont ze; er wordt niets van bewaard.
+
+## Binnenkomend: wie pakt wat op uit info@
+In de tool: **Projecten** → links, onder "Vandaag", staat de kaart **Binnenkomend** (alleen zichtbaar met het recht `inbox`). Ze toont de gesprekken in de inbox van info@ van de laatste 30 dagen met de status
+**Nieuw → Opgepakt door X → Lead/project gekoppeld → Afgehandeld (met reden)**. "Open" (standaard) toont alleen Nieuw en Opgepakt; "Alles" ook de rest.
+- *Nieuw* = nog niet gekoppeld en niemand pakte het op. Staat een gesprek langer dan 24 uur op Nieuw (en is het niet beantwoord), dan krijgt het het label "te lang open" en komt er een waarschuwing boven de lijst.
+- *Opgepakt* komt uit het register `mt_mail_oppak.json` (knop **Pak op** in het paneel of in de kaart) of uit een met de hand gezette Outlook-categorie "Opgepakt: …".
+- *Lead/project gekoppeld* zodra een mail uit het gesprek aan een project hangt (`mt_mail_links.json`); wie het eerst oppakte blijft zichtbaar.
+- *Afgehandeld* vraagt een reden (beantwoord, geen actie nodig, doorgestuurd, leverancier of administratie, reclame of spam, anders). Komt er daarna een nieuwe mail van buiten het bedrijf in hetzelfde gesprek, dan staat het weer op Nieuw.
+- *Beantwoord* wordt afgeleid uit de verzonden items van info@ (zelfde gesprek, later dan de laatste inkomende mail).
+- **Maak lead** opent het lead-formulier voor de nieuwste mail van het gesprek (dezelfde route als de paneelknop); **Open dossier** gaat naar het gekoppelde project.
+Het register wordt per gesprek samengevoegd (nooit het hele bestand overschreven): pakken twee mensen verschillende gesprekken op, dan blijven beide staan; pakken ze hetzelfde gesprek tegelijk op, dan wint de laatste.
+
+## Lead maken uit een mail
+De knop **Maak lead van deze mail** opent `…/v2.html#lead/nieuw?mbx=<postbus>&mail=<mail-id>` in een nieuw tabblad. De tool leest die mail en het gesprek via Graph, vult het formulier "+ Lead" voor (afzender als klant, het onderwerp
+zonder "RE:" en tags als titel, bron Mail), en vraagt zoals altijd de volgende actie met datum. Pas bij "Aanmaken" ontstaat de lead (nummer uit de teller); dan wordt het hele gesprek aan de lead gekoppeld.
+- Er gebeurt niets automatisch: zonder klik op "Aanmaken" wordt niets bewaard. Is het gesprek al aan een project gekoppeld, dan stelt de tool voor dat dossier te openen in plaats van een tweede lead te maken.
+- Het recht `projecten:wijzigen` is nodig (zoals voor de knop "+ Lead"); zonder dat recht of zonder rol blijft de route stil of toont ze een melding. De URL wordt direct een gewone Projecten-URL, dus vernieuwen opent het formulier niet opnieuw.
+- Het kost een regel Graph-lezing; de URL bevat alleen de postbus en het mail-id (geen onderwerp of namen).
+
+## Automatisch info@ in de cc (proef, standaard uit)
+**Doel:** bij een antwoord op een gekoppeld gesprek (onderwerp met `[26xxxx]`) zet het paneel info@ vanzelf in de cc, zodat de tool het gesprek ziet.
+**Gekozen aanpak:** event-based activation. `manifest-gebeurtenissen.xml` registreert `OnNewMessageCompose` (Mailbox 1.10) en wijst naar `launchevent.html` (web, nieuwe Outlook, Mac) en `launchevent.js`
+(klassiek Windows laadt alleen dat JavaScript-bestand). De handler doet niets tenzij `mt_auto_cc` aan staat; dan voegt hij info@ toe aan de cc als: het een antwoord is (er is een gespreks-id), het onderwerp een projecttag heeft,
+info@ nog niet in Aan, Cc of Bcc staat en je niet zelf als info@ schrijft. Dezelfde regel als `MTMail.ccInfoNodig` (de tests vergelijken ze).
+**Terugval zonder gebeurtenissen:** met het gewone manifest (of als de gebeurtenis niet afgaat) toont het paneel in het opstelvenster de melding "info@ staat nog niet in de cc" met de knop **Zet info@ in de cc**.
+
+**Beperkingen (niet getest in een echte Outlook; alleen met nagebootste Office.js):**
+- Het manifest is niet gevalideerd door Microsoft. Valideer het eerst (`npx office-addin-manifest validate outlook/manifest-gebeurtenissen.xml`) of laat het beheercentrum het controleren.
+- Gebeurtenissen werken niet in Outlook voor iOS en Android en niet in klassiek Outlook voor Windows zonder de juiste update; in een gedeelde postbus (info@ zelf, delegate) is de ondersteuning wisselend. Wordt de handler niet aangeroepen, dan blijft alleen de knop over.
+- `OnNewMessageCompose` gaat af bij het openen van het opstelvenster. Heb je daarna het onderwerp of de ontvangers aangepast, dan wordt dat niet opnieuw bekeken (er is geen `OnMessageRecipientsChanged` ingebouwd).
+- De handler heeft **geen netwerk of aanmelding** (de runtime is kortlevend) en kan dus niet in SharePoint zien of het gesprek echt gekoppeld is: hij gaat uit van de tag in het onderwerp. Antwoorden via "Antwoord als info@" en de mailstroomregel zetten die tag.
+- Outlook mag de handler afbreken (limiet van een paar minuten, en bij het sluiten van het venster); mislukt het toevoegen, dan merk je dat niet. De handler roept altijd `event.completed()` aan en blokkeert het opstellen nooit.
+- In een nieuw bericht (geen antwoord) of een doorgestuurd bericht zonder gespreks-id gebeurt niets.
+- `roamingSettings` (het vinkje) staat per gebruiker in Exchange; de handler leest de waarde bij elk opstelvenster.
+- Een reservekopie (bcc) via de mailstroomregel (stap 6) blijft nodig als vangnet.
 - `clientId` en tenant-id staan al publiek in de cockpit; er zijn geen geheimen in deze map.
 
 ## Bekende grenzen van de spike
-- Bijlagen naar de projectmap, offerte starten en taak maken ontbreken (MVP).
+- Offerte starten en taak maken ontbreken (MVP-vervolg); bijlagen, lead, "Pak op" en "Antwoord als info@" zijn er wel (nog niet live getest).
 - Geen automatisch voorstel zonder vastgepind paneel (Outlook heeft geen "mail geopend"-event).
 - **Outlook voor iOS/Android wordt in deze spike niet ondersteund** (geen `MobileFormFactor` in het manifest).
 - Een gedeelde postbus (info@) vraagt Mailbox 1.13 en `Mail.Read.Shared`; het gedrag verschilt per client (web, nieuw, klassiek, Mac).

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Maakt een manifest voor een ander basisadres (bv. na de verhuizing naar tool.mortiseandtenon.nl).
-//   node outlook/maak-manifest.js https://tool.mortiseandtenon.nl/ [uitvoerbestand]
+//   node outlook/maak-manifest.js https://tool.mortiseandtenon.nl/ [uitvoerbestand] [--proef]
+// Met --proef wordt het testmanifest met gebeurtenissen (manifest-gebeurtenissen.xml) omgezet in plaats van manifest.xml.
 // Zonder uitvoerbestand komt het manifest op stdout. Het huidige basisadres wordt uit <SupportUrl> gelezen; elke URL, het AppDomain
 // volgen het nieuwe adres. Verhoog daarna <Version> zelf (en upload als "Update"); voeg ook de nieuwe redirect-URI toe in Azure (zie README.md).
 const fs = require('fs'), path = require('path');
@@ -18,10 +19,10 @@ function maak(manifestTekst, nieuwBasis) {
 }
 module.exports = { maak };
 if (require.main === module) {
-  const [, , basis, uitvoer] = process.argv;
-  if (!basis) { console.error('Gebruik: node outlook/maak-manifest.js <https-basisadres> [uitvoerbestand]'); process.exit(2); }
+  const args = process.argv.slice(2), proef = args.includes('--proef'), [basis, uitvoer] = args.filter(a => a !== '--proef');
+  if (!basis) { console.error('Gebruik: node outlook/maak-manifest.js <https-basisadres> [uitvoerbestand] [--proef]'); process.exit(2); }
   try {
-    const uit = maak(fs.readFileSync(path.join(__dirname, 'manifest.xml'), 'utf8'), basis);
+    const uit = maak(fs.readFileSync(path.join(__dirname, proef ? 'manifest-gebeurtenissen.xml' : 'manifest.xml'), 'utf8'), basis);
     if (uitvoer) { fs.writeFileSync(uitvoer, uit); console.error('geschreven: ' + uitvoer); } else process.stdout.write(uit);
   } catch (e) { console.error(e.message); process.exit(1); }
 }
