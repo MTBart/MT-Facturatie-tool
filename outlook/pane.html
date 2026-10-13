@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>MT-paneel</title>
+<!-- Het MT-paneel (Outlook-taakvenster). Ziet er zonder Microsoft-aanmelding niets in; er staat geen data in de repo.
+     office.js moet van Microsofts eigen CDN komen (voorwaarde voor Outlook-add-ins). msal-browser 3.30.0 (NAA) staat lokaal in vendor/
+     (bron: npm @azure/msal-browser@3.30.0, lib/msal-browser.min.js, sha256 273d446b381814e563442267a072904fb3b7fd0164f4a688ede80f0d74565b3e).
+     De cockpit blijft op msal-browser 2.39.0 (vendor/msal-browser.min.js); die wordt hier bewust NIET geladen. -->
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<script src="../vendor/msal-browser-3.30.0.min.js"></script>
+<script src="../mt-core.js?v=2026-10-11c"></script>
+<script src="../mt-koppel.js?v=2026-10-11b"></script>
+<script src="../mt-zoek.js?v=2026-10-11d"></script>
+<script src="pane.js?v=2026-10-11b"></script>
+<style>
+  :root{--groen:#2A4A38;--goud:#B8962E;--tekst:#172521;--dim:#5A6862;--rand:#D6DEDB;--vlak:#F4F7F6;--fout:#8B1A1A;--ok:#2F6B45}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 "Segoe UI",system-ui,sans-serif;color:var(--tekst);background:#fff}
+  main{padding:10px 12px 24px}
+  h1{font-size:15px;margin:0 0 8px;color:var(--groen)}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:14px 0 4px}
+  p{margin:2px 0}
+  ul{list-style:none;margin:0;padding:0}
+  li{padding:8px 0;border-bottom:1px solid var(--rand)}
+  .sub,.waarom,.leeg{color:var(--dim);font-size:12.5px}
+  .waarom{margin:2px 0 6px}
+  #mail-onderwerp{font-weight:600;overflow-wrap:anywhere}
+  #mail-van{color:var(--dim);font-size:12.5px}
+  button{font:inherit;min-height:32px;padding:4px 10px;border:1px solid var(--groen);background:var(--groen);color:#fff;border-radius:6px;cursor:pointer}
+  button[disabled]{opacity:.5;cursor:default}
+  #bevestig-nee{background:#fff;color:var(--groen)}
+  input[type=search]{width:100%;min-height:34px;padding:5px 10px;border:1px solid var(--rand);border-radius:6px;font:inherit}
+  a{color:var(--groen)}
+  .kb-gekoppeld{font-weight:600;color:var(--ok)}
+  #bevestig{margin:12px 0;padding:10px;background:#FBF5E0;border:1px solid #E8D48A;border-radius:8px}
+  #bevestig[hidden],#gekoppeld[hidden]{display:none}
+  #melding{margin:8px 0;min-height:1.2em;font-size:13px}
+  #melding[data-soort=fout]{color:var(--fout)}
+  #melding[data-soort=ok]{color:var(--ok)}
+  details{margin-top:18px;font-size:12px;color:var(--dim)}
+  pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--vlak);padding:8px;border-radius:6px}
+  :focus-visible{outline:2px solid var(--goud);outline-offset:2px}
+</style>
+</head>
+<body>
+<main>
+  <h1>MT-paneel</h1>
+  <p id="melding" role="status" aria-live="polite" data-soort="info">Laden…</p>
+
+  <section aria-labelledby="h-mail">
+    <h2 id="h-mail">Deze mail</h2>
+    <p id="mail-onderwerp"></p>
+    <p id="mail-van"></p>
+  </section>
+
+  <section id="gekoppeld" aria-labelledby="h-gekoppeld" hidden>
+    <h2 id="h-gekoppeld">Gekoppeld aan</h2>
+    <ul id="gekoppeld-lijst"></ul>
+  </section>
+
+  <section id="bevestig" role="group" aria-labelledby="bevestig-tekst" hidden>
+    <p id="bevestig-tekst"></p>
+    <button type="button" id="bevestig-ja">Ja, koppel</button>
+    <button type="button" id="bevestig-nee">Annuleren</button>
+  </section>
+
+  <section aria-labelledby="h-voorstel">
+    <h2 id="h-voorstel">Voorstel</h2>
+    <ul id="voorstel-lijst"></ul>
+  </section>
+
+  <section aria-labelledby="h-zoek">
+    <h2 id="h-zoek">Ander project zoeken</h2>
+    <label for="zoek-veld" class="sub">Naam, code of klant</label>
+    <input id="zoek-veld" type="search" autocomplete="off">
+    <ul id="zoek-lijst"></ul>
+  </section>
+
+  <details id="diagnose">
+    <summary>Diagnose (spike)</summary>
+    <pre id="diagnose-tekst"></pre>
+  </details>
+</main>
+</body>
+</html>

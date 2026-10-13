@@ -28,6 +28,7 @@ mee-gecachet voor offline):
 | `vendor/msal-browser.min.js` | 2.39.0 (sha256 in comment bij de script-tag) | cockpit + app (login) |
 | `vendor/xlsx.full.min.js` | SheetJS (bestond al) | cockpit (import, `defer`) |
 | `vendor/jspdf.umd.min.js` | 4.2.1 (Vex-akkoord 1-7) | cockpit (PDF-export, `defer`) |
+| `vendor/msal-browser-3.30.0.min.js` | 3.30.0 (npm `@azure/msal-browser`, sha256 `273d446b…565b3e`) | alleen het Outlook-paneel (`outlook/pane.html`, NAA); de cockpit blijft op 2.39.0 |
 
 Nieuwe versie = bestand vervangen + `?v=`-cachebuster in de script-tag bumpen.
 
@@ -134,6 +135,23 @@ Getoond wordt alleen titel, klant, datum en soort; openen gebeurt in Moneybird/S
 - **SharePoint:** Graph drive-search (`/drives/<PROJ_DRIVE>/root:/Nieuwe mappenstructuur:/search(q='…')`) met het Graph-token van de gebruiker;
   alleen treffers waarvan de webUrl in `Nieuwe mappenstructuur` ligt; de klant komt uit de webUrl (de drive-search geeft geen parentReference.path).
 Volgorde in de lijst: lokale groepen, E-mail, Moneybird, SharePoint.
+
+### Outlook-paneel (`outlook/`, spike sinds 11-10)
+
+Een taakvenster naast een geopende mail (Office.js, add-in-only XML-manifest, Mailbox ≥ 1.5, `ReadWriteMailbox` i.v.m. Graph met een gedeelde postbus; info@ vraagt Mailbox 1.13 en de Graph-scope `Mail.Read.Shared`; geen mobiel): de mail (het hele gesprek) aan een project koppelen en het
+dossier openen. Alles wat Bart moet doen (Azure-redirect `brk-multihub://<host>`, Conditional Access, manifest uploaden) staat in `outlook/README.md`.
+
+| Bestand | Wat |
+|---|---|
+| `outlook/manifest.xml` | Het manifest (basisadres https://mtbart.github.io/MT-Facturatie-tool/); `node outlook/maak-manifest.js <https-basis> [uit]` maakt hem voor een ander adres |
+| `outlook/pane.html`, `outlook/pane.js` | Het paneel: NAA-aanmelding (`createNestablePublicClientApplication`, msal-browser 3.30 uit `vendor/`), rechtstreeks Graph (**niet** de worker: een ID-token onder NAA is onbetrouwbaar) |
+| `mt-koppel.js` (`MTKoppel.linksSamen`) | Gedeelde samenvoeger van `mt_mail_links` (zelfde gedrag als `_SP.mergers.mt_mail_links` in v2.html); het paneel vervangt `MTKoppel.opslag` door een geheugen-adapter die naar SharePoint schrijft |
+| `mt-core.js` (`makeSP`), `mt-zoek.js` | SharePoint-synclaag (ETag/412-merge) en dezelfde projectzoeker als de zoekbalk |
+
+Flow: `convertToRestId` (desktop; mobiel is itemId al een REST-id) → Graph `/me/messages/<id>` met `Prefer: IdType="ImmutableId"` (gedeelde postbus: `/users/<postbus>`
+via `getSharedPropertiesAsync`) → gespreks-mails via `$filter=conversationId eq …` → voorstel (`MTKoppel.koppelVoorstel`) en zoeken (`MTZoek`) → na bevestiging
+`MTKoppel.koppelMail(… {bron:'paneel', mbx, idType:'immutable'})` en schrijven van `mt_mail_links.json` + `mt_koppel_journaal.json` met `If-Match`. Alleen bekijken schrijft niets;
+een leesfout van SharePoint geldt nooit als "leeg". Het dossier opent als `<tool>/v2.html#projecten/<CODE>/dossier` (zelfde host als het paneel). `ItemChanged` ververst een vastgepind paneel.
 
 ### Event-delegatie voor NIEUWE code (S7-conventie, sinds 3-7)
 

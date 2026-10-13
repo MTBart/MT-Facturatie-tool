@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MT-paneel (Outlook) — add-in-only XML-manifest, Mailbox-vereiste 1.5 (de code controleert 1.8/1.13 zelf).
+  Basisadres: https://mtbart.github.io/MT-Facturatie-tool/  (later https://tool.mortiseandtenon.nl/ — zie outlook/maak-manifest.js en README.md).
+  Verhoog <Version> bij elke manifestwijziging (een nieuwe versie uploaden = "Update" in het beheercentrum).
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+  xsi:type="MailApp">
+
+  <Id>7f95d4d4-cab9-4389-b015-903dd27be6d2</Id>
+  <Version>0.1.1.0</Version>
+  <ProviderName>Mortise &amp; Tenon</ProviderName>
+  <DefaultLocale>nl-NL</DefaultLocale>
+  <DisplayName DefaultValue="MT-paneel"/>
+  <Description DefaultValue="Koppel Outlook-mail aan M&amp;T-projecten en open het projectdossier."/>
+  <IconUrl DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-128.png"/>
+  <SupportUrl DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/"/>
+  <AppDomains>
+    <AppDomain>https://mtbart.github.io</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.5"/>
+    </Sets>
+  </Requirements>
+
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/pane.html"/>
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+
+  <!-- ReadWriteMailbox: voor Graph-toegang tot een gedeelde postbus (info@) schrijft Microsoft dit voor. Het paneel zelf schrijft niets in de mail. -->
+  <Permissions>ReadWriteMailbox</Permissions>
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+  </Rule>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+      <Requirements>
+        <bt:Sets DefaultMinVersion="1.5">
+          <bt:Set Name="Mailbox"/>
+        </bt:Sets>
+      </Requirements>
+      <Hosts>
+        <Host xsi:type="MailHost">
+          <DesktopFormFactor>
+            <!-- Gedeelde postbus (info@): de add-in staat op je eigen postbus en mag ook in een gedeelde postbus draaien. De code eist daarvoor Mailbox 1.13
+                 (en de Graph-scope Mail.Read.Shared) en geeft op een oudere client een nette melding; het manifest zelf blijft op 1.5 zodat het paneel voor de eigen postbus overal laadt. -->
+            <SupportsSharedFolders>true</SupportsSharedFolders>
+            <ExtensionPoint xsi:type="MessageReadCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="mtGroep">
+                  <Label resid="Groep.Label"/>
+                  <Control xsi:type="Button" id="mtPaneelKnop">
+                    <Label resid="Knop.Label"/>
+                    <Supertip>
+                      <Title resid="Knop.Label"/>
+                      <Description resid="Knop.Tip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icoon.16"/>
+                      <bt:Image size="32" resid="Icoon.32"/>
+                      <bt:Image size="80" resid="Icoon.80"/>
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="Paneel.Url"/>
+                      <SupportsPinning>true</SupportsPinning>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
+      <Resources>
+        <bt:Images>
+          <bt:Image id="Icoon.16" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-16.png"/>
+          <bt:Image id="Icoon.32" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-32.png"/>
+          <bt:Image id="Icoon.80" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/icons/icon-80.png"/>
+        </bt:Images>
+        <bt:Urls>
+          <bt:Url id="Paneel.Url" DefaultValue="https://mtbart.github.io/MT-Facturatie-tool/outlook/pane.html"/>
+        </bt:Urls>
+        <bt:ShortStrings>
+          <bt:String id="Groep.Label" DefaultValue="M&amp;T"/>
+          <bt:String id="Knop.Label" DefaultValue="MT-paneel"/>
+        </bt:ShortStrings>
+        <bt:LongStrings>
+          <bt:String id="Knop.Tip" DefaultValue="Koppel deze mail (het hele gesprek) aan een project en open het dossier."/>
+        </bt:LongStrings>
+      </Resources>
+    </VersionOverrides>
+  </VersionOverrides>
+</OfficeApp>
