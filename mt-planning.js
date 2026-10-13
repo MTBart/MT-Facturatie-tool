@@ -218,12 +218,10 @@
     const andere = nl > nr ? r : l;
     Object.keys(andere).forEach(k => { if (!(k in basis) && !k.startsWith('_')) basis[k] = kopie(andere[k]); });
     const w = basis; w._vs = {}; const conflicten = {};
-    // tijd van een veld: de stempel; zonder stempel (alleen legacy) de tijd van het record als dat nieuwer is dan al zijn stempels
+    // tijd van een veld: de stempel; zonder stempel (alleen legacy: een veld dat nooit is gestempeld) de tijd van het record
     const eff = (x, f) => {
       const s = (x._vs || {})[f]; if (s) return tijdVan(s);
-      if (!opt.legacy) return 0;
-      const hoogste = Math.max(0, ...Object.values(x._vs || {}).map(tijdVan)), t = recTijd(x);
-      return t > hoogste ? t : 0;
+      return opt.legacy && x[f] !== undefined ? recTijd(x) : 0;   // een veld dat er niet is, beslist niets
     };
     velden.forEach(f => {
       const sl = (l._vs || {})[f], sr = (r._vs || {})[f], tl = eff(l, f), tr = eff(r, f);
@@ -837,6 +835,7 @@
     const vs = Object.assign({}, kopie((voor && voor._vs) || {}), kopie(na._vs) || {}), ovs = (voor && voor._vs) || {};
     P.BESTEL_VELDEN.forEach(f => {
       if (gelijk(na[f], voor && voor[f])) return;
+      if (na._vs && na._vs[f] && JSON.stringify(na._vs[f]) !== JSON.stringify(ovs[f])) return;   // stempel bewust gezet (conflictkeuze): niet overschrijven
       const vorig = tijdVan(ovs[f]); vs[f] = { t: Math.max(t, vorig + 1), door, basis: vorig };
     });
     if (Object.keys(vs).length) na._vs = vs;

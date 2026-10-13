@@ -7098,7 +7098,7 @@ function projAfhZet(code,arr){
   ruw[code]=MTPlanning.afhStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),projectId:(pr&&pr.project_id)||''});
   localStorage.setItem('mt_project_afhank',JSON.stringify(ruw));
 }
-function _p2Vrij(){ try{ return (admVrijdagen()||[]).map(v=>v&&v.datum).filter(Boolean); }catch(e){ return []; } }   // vrije dagen uit Beheer (mt_vrijedagen)
+function _p2Vrij(){ try{ return (admVrijdagen()||[]).filter(v=>v&&v.datum&&v.type!=='optioneel').map(v=>v.datum); }catch(e){ return []; } }   // vrije dagen uit Beheer (mt_vrijedagen); "optioneel" (bv. een brugdag) telt als gewone werkdag
 function _p2Mag(){ return !(window.MTRol&&MTRol.mag)||MTRol.mag('taken:alles'); }
 function _p2Lever(proj){ const d=proj&&proj.gegevens&&proj.gegevens.leverdatum; return MTPlanning.isYmd(d)?d:''; }
 function _p2D(d){ return MTPlanning.isYmd(d)?new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}):'—'; }
@@ -7146,7 +7146,7 @@ function _p2AfhBouw(code){
       naam(e.van),
       e.bron==='dep'&&mag?_p2El('input',{type:'number',min:'0',max:'365',step:'1',class:'afh-lag',waarde:e.lag,title:'Wachttijd na afloop van de voorganger, in werkdagen (bv. de levertijd)','aria-label':'Wachttijd in werkdagen',wijzig:ev=>projAfhLag(code,e.id,ev.target.value)}):(e.lag?(' +'+e.lag+' d'):null),
       e.bron==='dep'&&mag?_p2El('button',{type:'button',class:'afh-weg',title:'Afhankelijkheid weghalen','aria-label':'Afhankelijkheid weghalen',klik:()=>projAfhWeg(code,e.id)},'×'):null));
-    const opties=[['','+ afhankelijk van…']].concat(taken.filter(o=>o.id!==t.id&&!voor.some(e=>e.van===o.id)).map(o=>{ const c=MTPlanning.depControle(taken,ruw,{van:o.id,naar:t.id}); return [o.id,o.naam+(c.ok?'':' (maakt een kring)'),!c.ok]; }));
+    const opties=[['','+ afhankelijk van…']].concat(taken.filter(o=>o.id!==t.id&&!voor.some(e=>e.van===o.id)).map(o=>{ const c=taken.length>80?{ok:true}:MTPlanning.depControle(taken,ruw,{van:o.id,naar:t.id}); return [o.id,o.naam+(c.ok?'':' (maakt een kring)'),!c.ok]; }));   // bij heel veel taken wordt de kring pas bij het kiezen gecontroleerd
     const datum=(veld,waarde)=>_p2El('input',{type:'date',class:'afh-datum',waarde:waarde||'',disabled:mag?null:'disabled','aria-label':(veld==='start'?'Start':'Eind')+' van '+t.naam,wijzig:ev=>projAfhDatum(code,t.id,veld,ev.target.value)});
     return _p2El('tr',{id:'afh-row-'+code.replace(/[^A-Za-z0-9]/g,'')+'-'+t.id},
       _p2El('td',null,_p2El('span',{class:'badge',style:'background:'+stl.c+'22;color:'+stl.c,title:w.wacht?('Wacht op: '+w.op.map(o=>o.naam).join(', ')):''},stl.l)),
@@ -7482,7 +7482,7 @@ function blBundelTeken(el){
     const statusOpties=_blStatusOpties.concat(g.status==='gemengd'?[['gemengd','Gemengd',true]]:[]);
     rijen.push(_p2El('tr',{class:'bl-groep'},
       _p2El('td',null,_p2Sel(statusOpties,g.status,v=>{ if(v!=='gemengd') blBundelStatus(g.sleutel,g.eenheid,v); },{class:'pt-sel','aria-label':'Status van '+g.omschrijving,title:'Zet alle regels van deze bundel op een status (bij meer projecten vraag ik voor welke)'})),
-      _p2El('td',{style:'white-space:normal'},_p2El('strong',{style:'font-size:12.5px',tekst:g.tekst})),
+      _p2El('td',{style:'white-space:normal'},_p2El('strong',{style:'font-size:12.5px',tekst:g.tekst}),(()=>{ const cid=g.regels.map(r=>_blZoek(_blAlle(),r.id)).find(x=>x&&x._veldconflict&&Object.keys(x._veldconflict).length); return cid?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',style:'color:#c0392b;margin-left:6px',title:'Twee gelijktijdige wijzigingen in een van deze regels — klik om te kiezen',klik:()=>blConflictKies(cid.id)},'⚠ conflict'):null; })()),
       _p2El('td',{style:'font-size:12px;white-space:normal',tekst:g.leveranciers.join(', ')||'—'}),
       _p2El('td',{style:'font-size:11px;color:var(--text-dim)',tekst:bronnen.join(' · ')}),
       _p2El('td',null,meer?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary','aria-expanded':open?'true':'false',title:'Verdeling per project',klik:()=>{ if(_blUitgeklapt.has(sl)) _blUitgeklapt.delete(sl); else _blUitgeklapt.add(sl); renderBestellijst(); }},open?'▾ Verdeling':'▸ Verdeling'):null)));
@@ -7540,7 +7540,8 @@ function _blProjBouw(code){
       _p2El('td',{style:'font-size:12px',tekst:b.leverancier||'—'}),
       _p2El('td',{style:'font-size:11px;color:var(--text-dim)',tekst:_blBronLabel[MTPlanning.bestelBron(b)]||''}),
       _p2El('td',null,_p2Sel(_blStatusOpties,st,v=>{ bestelStatusZetId(b.id,v,'project'); _blNaWijziging(); },{class:'pt-sel','aria-label':'Status van '+MTPlanning.bestelOms(b)})),
-      _p2El('td',null,_p2El('button',{type:'button',class:'btn btn-xs btn-danger','data-recht':'bestellijst:alles',title:'Van de lijst halen (blijft bewaard en is terug te zetten in het tabblad Bestellijst)','aria-label':'Van de lijst halen',klik:()=>blProjWeg(code,b.id)},'×')));
+      _p2El('td',null,b._veldconflict&&Object.keys(b._veldconflict).length?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',style:'color:#c0392b',title:'Twee gelijktijdige wijzigingen — klik om te kiezen',klik:()=>blConflictKies(b.id)},'⚠ conflict'):null,
+        _p2El('button',{type:'button',class:'btn btn-xs btn-danger','data-recht':'bestellijst:alles',title:'Van de lijst halen (blijft bewaard en is terug te zetten in het tabblad Bestellijst)','aria-label':'Van de lijst halen',klik:()=>blProjWeg(code,b.id)},'×')));
   });
   const nieuwOms=_p2El('input',{type:'text',placeholder:'Wat moet er besteld worden?','aria-label':'Omschrijving',style:'min-width:200px;flex:1'}), nieuwAantal=_p2El('input',{type:'number',min:'0',step:'any',waarde:'1','aria-label':'Aantal',style:'width:70px;font-family:var(--mono)'}), nieuwEenheid=_p2El('input',{type:'text',placeholder:'plaat, stuk, m²…','aria-label':'Eenheid',style:'width:110px'});
   const voegToe=()=>{
@@ -7558,6 +7559,26 @@ function _blProjBouw(code){
     rijen.length?_p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'pm-tabel'},_p2El('thead',null,_p2El('tr',null,['Wat','Aantal','Leverancier','Bron','Status',''].map(k=>_p2El('th',{tekst:k})))),_p2El('tbody',null,rijen)))
       :_p2El('p',{style:'color:var(--text-faint);font-size:13px',tekst:regels.length?'Alles is geleverd.':'Nog niets te bestellen voor dit project. De VW-kostenberekening en de HHOS-NCR hierboven zetten regels op de lijst; je kunt ze ook met de hand toevoegen.'}),
     magWijzig?_p2El('div',{style:'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px'},nieuwOms,nieuwAantal,nieuwEenheid,_p2El('button',{type:'button',class:'btn btn-secondary btn-sm',klik:voegToe},'+ Toevoegen')):null);
+}
+// Twee gelijktijdige wijzigingen van hetzelfde veld (twee pc's): kiezen welke waarde blijft. De keuze krijgt een stempel boven het conflict,
+// zodat het ook op de andere pc verdwijnt. Status en het oude besteld-vinkje horen bij elkaar en worden samen opgelost.
+async function blConflictKies(id){
+  const b0=_blZoek(_blAlle(),id); if(!b0||!b0._veldconflict) return;
+  const velden=Object.keys(b0._veldconflict), tekst=v=>v===undefined||v===null||v===''?'(leeg)':String(v);
+  let kStatus=null;
+  for(const veld of velden){
+    const b=_blZoek(_blAlle(),id); if(!b||!b._veldconflict||!b._veldconflict[veld]) continue;
+    const c=b._veldconflict[veld]; let k;
+    if(veld==='besteld'&&kStatus!==null) k=kStatus;
+    else{
+      k=await mtDialog.choose({title:'Twee gelijktijdige wijzigingen',message:'"'+MTPlanning.bestelOms(b)+'": '+veld+' is op twee plekken tegelijk gewijzigd'+(c.door?' (de andere wijziging door '+c.door+')':'')+'.\nNu: '+tekst(b[veld])+'\nAndere: '+tekst(c.waarde),
+        choices:[{label:'Houden: '+tekst(b[veld])},{label:'Andere waarde nemen: '+tekst(c.waarde)}]});
+      if(k==null) break;
+      if(veld==='status') kStatus=k;
+    }
+    _blWijzig(id,'conflict opgelost ('+veld+')',x=>{ MTPlanning.conflictOplos(x,veld,k===1?'andere':'eigen',{door:_blWie()}); if(x.status) x.besteld=x.status!=='nodig'; });
+  }
+  _blNaWijziging();
 }
 async function blProjWeg(code,id){
   const b=_blZoek(_blAlle(),id); if(!b) return;
