@@ -5,11 +5,41 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — Release v2.15.1: Outlook-paneel (koppelen, Maak lead, Pak op, Antwoord als info@), Binnenkomend; backup = v2.15.0
+- Commit: `4caadd3` | Auteur: Bart Witte
+
+## 2026-10-13 — Backup roteren: backup/ = v2.15.0 (live voor v2.15.1)
+- Commit: `b109a9d` | Auteur: Bart Witte
+
+## 2026-10-13 — Outlook: manifest ReadItem (testmanifest ReadWriteItem), automatische cc alleen bij echt gekoppeld gesprek, README met rechten per actie
+- Commit: `0865ec9` | Auteur: Bart Witte
+
+## 2026-10-13 — Codex-review: Pak op alleen in info@ (allowlist en recht inbox alles/verwerken), leesscopes bij openen en schrijfscopes per actie, vinkje en opnieuw proberen bij gesprek koppelen, race register/categorie
+- Commit: `50e43d1` | Auteur: Bart Witte
+
+## 2026-10-13 — Release v2.15.1: Outlook-paneel (koppelen, Maak lead, Pak op, Antwoord als info@) en Binnenkomend; versielabel, updates.json, cachebusters
+- Commit: `72cae87` | Auteur: Bart Witte
+
+## 2026-10-13 — Merge remote-tracking branch 'origin/main' into outlook-v3
+- Commit: `2f2a11d` | Auteur: Bart Witte
+
+## 2026-10-13 — Binnenkomend/lead-route: harnas-bevindingen verwerkt (typeof-guards in maakProjectAan, mt_mail_oppak in de verhuislijst en op de KEYS-plek na mt_mail_links), ROUTES.md
+- Commit: `ebd196e` | Auteur: Bart Witte
+
+## 2026-10-13 — Outlook: testmanifest met gebeurtenissen (launchevent.js, automatisch info@ in de cc, standaard uit) en README (manifest laden, Send As, mailstroomregel, Binnenkomend)
+- Commit: `8ef769b` | Auteur: Bart Witte
+
+## 2026-10-13 — Lead uit een mail (#lead/nieuw) en overzicht Binnenkomend (info@: nieuw, opgepakt, gekoppeld, afgehandeld)
+- Commit: `74427af` | Auteur: Bart Witte
+
 ## 2026-10-13 — Backup roteren: backup/ = v2.14.2 (live voor v2.15.0)
 - Commit: `9efd828` | Auteur: Bart Witte
 
 ## 2026-10-13 — Release v2.15.0: leads (fase, volgende actie, Vandaag, Gewonnen -> project, Direct project), projectgegevens voor Vectorworks en navigatie naar het adres; versielabel, Wat is er verbeterd; backup = v2.14.2
 - Commit: `f64738b` | Auteur: Bart Witte
+
+## 2026-10-13 — Outlook-paneel: mailactie-module, paneel-uitbreiding, plakwerk-baseline
+- Commit: `de12f70` | Auteur: Bart Witte
 
 ## 2026-10-13 — Merge origin/main (v2.14.2) in l1-leads
 - Commit: `cc2b3fe` | Auteur: Bart Witte
@@ -22,6 +52,12 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ## 2026-10-13 — L1c: xmlEsc verwijdert ook ongepaarde surrogates (geldige paren blijven)
 - Commit: `2c6b4b8` | Auteur: Bart Witte
+
+## 2026-10-13 — Koppelingen: stabiele sleutel postbus + mail (identiteitsfix), één regel per mail in dossier en tellers
+- Commit: `29c3287` | Auteur: Bart Witte
+
+## 2026-10-13 — Outlook-paneel naar outlook-v3: map outlook/ (manifest, taakvenster, pane.js, README) en MSAL 3.30 uit de tak outlook-paneel
+- Commit: `6217d0d` | Auteur: Bart Witte
 
 ## 2026-10-13 — L1c: projectgegevens en "Projectgegevens voor Vectorworks"; navigatie naar het adres
 - Commit: `3cf5423` | Auteur: Bart Witte
