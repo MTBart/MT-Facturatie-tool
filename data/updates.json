@@ -1,5 +1,14 @@
 [
   {
+    "versie": "2.15.2",
+    "datum": "2026-10-13",
+    "titel": "Planning: budget en uren per project",
+    "voor": "iedereen",
+    "punten": [
+      "Planning: in elk project een meter budget/gepland/geklokt/resterend per activiteit; geklokte uren werken weer in de agenda; mobiele agenda toont de planning; één uurtarief."
+    ]
+  },
+  {
     "versie": "2.15.1",
     "datum": "2026-10-13",
     "titel": "Outlook-paneel en Binnenkomend",
