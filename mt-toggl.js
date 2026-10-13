@@ -143,6 +143,41 @@ async function tgReportsUren(codes,van,tot){
   }
   return {per,geenKoppeling:false,zonderKoppeling};
 }
+// Geklokte MINUTEN per Toggl-taak voor de projecten van `codes` (P1: de projectmeter). Zelfde Reports-query als hierboven
+// (project_id + task_id + user, datums via filters), maar over een langere periode in blokken van 4 weken en samengeteld per
+// project en taak; een entry zonder taak komt terug met taak_id null. `ververs` slaat de sessie-cache over.
+// → {per:[{taak_id, project, min}], geenKoppeling, zonderKoppeling, tijd, afgekapt}
+async function tgReportsTaken(codes,van,tot,ververs){
+  const PC=(typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]);
+  const zonderKoppeling=(codes||[]).filter(c=>!((PC.find(p=>p.code===c)||{}).tg_project_id));
+  const ids=[...new Set((codes||[]).map(c=>(PC.find(p=>p.code===c)||{}).tg_project_id).filter(Boolean).map(Number))].sort((a,b)=>a-b);
+  if(!ids.length) return {per:[],geenKoppeling:true,zonderKoppeling,tijd:Date.now(),afgekapt:false};
+  const vandaag=_tgVandaag(), blokken=[];
+  const [y,m,d]=String(van).split('-').map(Number); const w=new Date(y,m-1,d);
+  for(;blokken.length<14;w.setDate(w.getDate()+28)){
+    const a=w.getFullYear()+'-'+String(w.getMonth()+1).padStart(2,'0')+'-'+String(w.getDate()).padStart(2,'0');
+    if(a>tot||a>vandaag) break; blokken.push(a);
+  }
+  const afgekapt=blokken.length===14&&(()=>{ const n=new Date(w); const a=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); return a<=tot&&a<=vandaag; })();
+  const som={};
+  for(const ws of blokken){
+    const k='mt_tgtk|'+ids.join(',')+'|'+ws+'|'+vandaag;
+    let rijen=ververs?null:_tgCacheLees(k);
+    if(!rijen){
+      const [wy,wm,wd]=ws.split('-').map(Number), a=new Date(wy,wm-1,wd), e=new Date(wy,wm-1,wd+28);
+      const body={groupings:[{property:'project_id'},{property:'task_id'},{property:'user'}],
+        aggregations:[{property:'duration',function:'sum'}],
+        filters:[{property:'start',operator:'between',value:[a.toISOString(),e.toISOString()]},
+          {property:'project_id',operator:'in',value:ids}]};
+      const r=await _tgEenmalig(k,()=>focusFetchPad(`reports/workspaces/${FOCUS_WS}/query`,'POST',body));
+      rijen=((r&&r.data_json_row)||[]).map(x=>({taak_id:x.task_id||null,project:x.project_id,sec:Number(x.sum_duration)||0}));
+      _tgCacheZet(k,rijen);
+    }
+    rijen.forEach(x=>{ const sl=(x.taak_id==null?'':x.taak_id)+'|'+x.project; (som[sl]=som[sl]||{taak_id:x.taak_id,project:x.project,sec:0}).sec+=x.sec; });
+  }
+  const per=Object.values(som).map(x=>({taak_id:x.taak_id,project:x.project,min:Math.round(x.sec/60)})).filter(x=>x.min>0);
+  return {per,geenKoppeling:false,zonderKoppeling,tijd:Date.now(),afgekapt};
+}
 // Capaciteit uit Toggl (vrij = working − estimated, per gebruiker per dag), alleen lezen:
 // GET O/capacities/users?user_id=<één id>&unit=day&start_date&end_date. Antwoord (bewezen op 3-4 okt, zie
 // Deliverables/2026-10-03-toggl-planner-capaciteit-api.md): [{id, type:'user', computations:[{date, working_minutes,
