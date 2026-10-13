@@ -1486,7 +1486,7 @@ async function nrHash(o) {
   return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 export class MtTeller {
-  constructor(state) { this.state = state; }
+  constructor(state, env) { this.state = state; this.env = env; }
   async fetch(request) {
     const op = new URL(request.url).pathname.slice(1);
     let b = {}; try { b = await request.json(); } catch {}
@@ -1494,6 +1494,7 @@ export class MtTeller {
     if (op.startsWith('ai-')) return await this.ai(op, b);
     if (op.startsWith('csp-')) return await this.csp(op, b);
     if (op.startsWith('nr-')) return await this.nummers(op, b);
+    if (op.startsWith('sig-')) return await SigDO.ops(this, op, b);   // signalen (L3), instantie 'signalen'
     if (op === 'alle') {
       const m = await st.list({ prefix: 'pid:' }), werkcodes = {}, nummers = {}, aliassen = {};
       for (const [k, w] of m) {
@@ -1883,7 +1884,9 @@ export class MtTeller {
   async aiOudeGraven(nu) { return [...(await this.state.storage.list({ prefix: 'x:' }))].filter(([, x]) => nu - x.ts > 24 * 3600 * 1000).map(([k]) => k); }
   async aiRuimGraven(nu) { const oud = await this.aiOudeGraven(nu); if (oud.length) await this.aiAtomair(async w => { for (let i = 0; i < oud.length; i += 100) await w.delete(oud.slice(i, i + 100)); }); return oud.length; }
   // DO-alarm: rekent verlopen claims (> 5 minuten) af, onafhankelijk van een volgend verzoek, en plant zichzelf op de eerstvolgende verloopdatum.
+  // De signalen-instantie (merkteken sig:instantie) gebruikt het alarm voor de gebundelde pushmelding (PushDO.alarm).
   async alarm() {
+    if (await this.state.storage.get('sig:instantie')) { await PushDO.alarm(this); return; }
     await this.state.blockConcurrencyWhile(async () => {
       const st = this.state.storage, nu = Date.now();
       await this.aiRuimVerlopen(nu, 'f:', geldVandaag());
@@ -5020,17 +5023,598 @@ export class MtZoekIndex {
   }
 }
 
+// ══ SIGNALEN (L3): gedeelde actiewachtrij ═════════════════════════════════════
+// Eén wachtrij voor het hele team ("iedereen ziet alles, één persoon pakt het op"). Opslag: de bestaande DO-klasse MtTeller,
+// eigen instantie 'signalen' (zoals 'ai' en 'csp'): geserialiseerd, dus "per oorzaak maximaal één item open" is atomair (KV kan dat niet).
+//   Item-sleutel  project_id:soort:bronversie:datum   (bronversie = <bron>.<versie>, bv. e123456789.1760000000)
+//   Oorzaak       project_id:soort:bron              (zolang er een niet-afgehandeld item is, komt er geen tweede)
+//   Statussen     open → opgepakt (wie, wanneer) → afgehandeld;  open/opgepakt → gesnoozed (tot een datum) → open
+//                 Een gesnoozed item waarvan de datum bereikt is, telt vanzelf weer als open. Afgehandeld is eindstation: een
+//                 nieuwe oorzaak geeft een nieuw item. Dezelfde sleutel komt nooit twee keer (ook niet na afhandelen).
+// Rechten (in élke ROLLEN_MODUS, nieuwe routes): zien = recht `offertes` of `projecten`; wijzigen = `offertes: 'wijzigen'` (verkooprecht).
+// Audit (DO-logboek `log:`) zonder klantinhoud: alleen tijd, actie, sleutel/soort/project_id, mb_id en een oid-hash.
+// Offertekoppelingen (`off:<mb_id>` → project_id) komen alleen via POST /signalen/offertes, dus van een koppeling die een mens in de
+// cockpit bevestigde. Een offerte zonder koppeling geeft nooit een signaal (en de worker koppelt nooit zelf).
+const SIG_INSTANTIE = 'signalen';
+const SIG_SOORTEN = {
+  offerte_geaccepteerd: 'Offerte geaccepteerd: markeer gewonnen?',
+  offerte_afgewezen: 'Offerte afgewezen: markeer verloren?',
+};
+const SIG_PID_RE = /^p_[0-9a-z]{4,40}$/;
+const SIG_MBID_RE = /^\d{6,25}$/;
+const SIG_BRON_RE = /^[0-9A-Za-z_-]{1,40}$/;
+const SIG_VERSIE_RE = /^[0-9A-Za-z_-]{1,30}$/;
+const SIG_DATUM_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SIG_ACTIES = ['oppakken', 'loslaten', 'afhandelen', 'snoozen', 'heropenen'];
+const SIG_LOG_MAX = 500, SIG_AFGEHANDELD_DAGEN = 30, SIG_SLEUTEL_DAGEN = 400, SIG_SNOOZE_MAX_DAGEN = 365, SIG_OFF_PER_KEER = 200;
+const SIG_OFF_EIND = ['accepted', 'rejected', 'billed', 'archived', 'weg'];   // daarna hoeft de dagelijkse controle niet meer te kijken
+const sigAntw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
+// Status zoals de gebruiker hem ziet: een verlopen snooze is weer open.
+function sigEffectief(it, vandaag) { return it.status === 'gesnoozed' && !(it.snooze_tot > vandaag) ? 'open' : it.status; }
+function sigTelling(items, vandaag) {
+  const t = { open: 0, opgepakt: 0, gesnoozed: 0 };
+  for (const it of items) { const s = sigEffectief(it, vandaag); if (s in t) t[s]++; }
+  return t;
+}
+// Stub naar de signalen-instantie; null zonder binding.
+function sigStub(env, budget) {
+  const ns = env.MT_TELLER; if (!ns || !ns.idFromName) return null;
+  const stub = ns.get(ns.idFromName(SIG_INSTANTIE));
+  return async (op, b) => {
+    if (budget && !budget.neem(true, 'do')) throw new Error('subrequest-budget-op');
+    const r = await stub.fetch('https://mt-teller/' + op, { method: 'POST', body: JSON.stringify(b || {}) });
+    return { status: r.status, j: await r.json().catch(() => null) };
+  };
+}
+
+// De DO-kant (aangeroepen vanuit MtTeller.fetch voor ops 'sig-*'). Alles binnen blockConcurrencyWhile.
+const SigDO = {
+  async ops(self, op, b) {
+    const st = self.state.storage, nu = Number(b.nu) || Date.now(), vandaag = SIG_DATUM_RE.test(String(b.vandaag || '')) ? b.vandaag : geldVandaag();
+    const logZet = (e, w = st) => w.put('log:' + String(9e15 - nu).padStart(16, '0') + ':' + randHex(3), { ts: nu, ...e });
+    return await self.state.blockConcurrencyWhile(async () => {
+      try {
+        if (!(await st.get('sig:instantie'))) await st.put('sig:instantie', 1);   // merkteken: het alarm van deze instantie hoort bij de signalen
+        if (op === 'sig-maak') { const r = await SigDO.maak(self, b, nu, logZet); return sigAntw(r.body, r.status); }
+        if (op === 'sig-lijst') {
+          const items = [...(await st.list({ prefix: 'i:' })).values()];
+          const zichtbaar = items.filter(it => it.status !== 'afgehandeld' || (b.met_afgehandeld && nu - ((it.afgehandeld && it.afgehandeld.ts) || 0) < 7 * DAG_S * 1000))
+            .map(it => ({ ...it, status_effectief: sigEffectief(it, vandaag) }))
+            .sort((x, y) => y.aangemaakt - x.aangemaakt);
+          return sigAntw({ items: zichtbaar, telling: sigTelling(items, vandaag), vandaag });
+        }
+        if (op === 'sig-zet') return await SigDO.zet(self, b, nu, vandaag, logZet);
+        if (op === 'sig-off-zet') {
+          const zet = (Array.isArray(b.koppelingen) ? b.koppelingen : []).slice(0, SIG_OFF_PER_KEER), weg = (Array.isArray(b.weg) ? b.weg : []).slice(0, SIG_OFF_PER_KEER);
+          const schrijf = {}; let gezet = 0, verwijderd = 0;
+          for (const k of zet) {
+            const mb = String(k.mb_id), oud = (await st.get('off:' + mb)) || null;
+            if (oud && oud.project_id === k.project_id) continue;
+            schrijf['off:' + mb] = { project_id: k.project_id, staat: oud ? oud.staat : null, gemeld: oud && oud.project_id === k.project_id ? oud.gemeld : null, gecontroleerd: oud ? oud.gecontroleerd : 0, ts: nu, door: b.door };
+            gezet++;
+          }
+          const sl = Object.keys(schrijf);
+          for (let i = 0; i < sl.length; i += 100) await st.put(Object.fromEntries(sl.slice(i, i + 100).map(x => [x, schrijf[x]])));
+          for (const mb of weg) { if (await st.get('off:' + mb)) { await st.delete('off:' + mb); verwijderd++; } }
+          if (gezet || verwijderd) await logZet({ actie: 'offertes-gekoppeld', gezet, verwijderd, door: b.door });
+          return sigAntw({ ok: true, gezet, verwijderd });
+        }
+        if (op === 'sig-off-get') { const k = await st.get('off:' + String(b.mb_id || '')); return sigAntw({ koppeling: k || null }); }
+        if (op === 'sig-off-lijst') {   // voor de dagelijkse controle: nog niet in een eindstaat, langst niet gecontroleerd eerst
+          const max = Math.max(1, Math.min(100, Number(b.max) || 10));
+          const lijst = [...(await st.list({ prefix: 'off:' }))].map(([k, v]) => ({ mb_id: k.slice(4), ...v }))
+            .filter(x => !SIG_OFF_EIND.includes(x.staat)).sort((x, y) => (x.gecontroleerd || 0) - (y.gecontroleerd || 0));
+          return sigAntw({ items: lijst.slice(0, max), totaal: lijst.length });
+        }
+        if (op === 'sig-offerte') return await SigDO.offerte(self, b, nu, logZet);
+        if (op === 'sig-log') { const n = Math.max(1, Math.min(200, Number(b.limiet) || 50)); return sigAntw({ log: [...(await st.list({ prefix: 'log:', limit: n })).values()] }); }
+        if (op === 'sig-opruim') {
+          const weg = [];
+          for (const [k, it] of await st.list({ prefix: 'i:' })) if (it.status === 'afgehandeld' && nu - ((it.afgehandeld && it.afgehandeld.ts) || nu) > SIG_AFGEHANDELD_DAGEN * DAG_S * 1000) weg.push(k);
+          for (const [k, ts] of await st.list({ prefix: 'k:' })) if (nu - Number(ts) > SIG_SLEUTEL_DAGEN * DAG_S * 1000) weg.push(k);
+          for (const [k, w] of await st.list({ prefix: 'wh:' })) if (nu - (w.ts || 0) > 30 * DAG_S * 1000) weg.push(k);
+          const logs = [...(await st.list({ prefix: 'log:' })).keys()]; if (logs.length > SIG_LOG_MAX) weg.push(...logs.slice(SIG_LOG_MAX));
+          for (let i = 0; i < weg.length; i += 100) await st.delete(weg.slice(i, i + 100));
+          return sigAntw({ ok: true, opgeruimd: weg.length });
+        }
+        if (op.startsWith('sig-sub-')) return await PushDO.ops(self, op, b, nu, logZet);   // push-subscriptions (L3b)
+        if (op === 'sig-wh-claim' || op === 'sig-wh-klaar' || op === 'sig-wh-wis') {   // idempotentie van de Moneybird-webhook
+          const sl = String(b.sleutel || ''); if (!MB_WH_SLEUTEL_RE.test(sl)) return sigAntw({ error: 'ongeldig' }, 400);
+          const k = 'wh:' + sl, w = await st.get(k);
+          if (op === 'sig-wh-claim') {
+            if (w && w.status === 'klaar') return sigAntw({ dubbel: true });
+            if (w && w.status === 'bezig' && nu - w.ts < MB_WH_BEZIG_MS) return sigAntw({ bezig: true });
+            await st.put(k, { status: 'bezig', ts: nu }); return sigAntw({ nieuw: true });
+          }
+          if (op === 'sig-wh-klaar') {
+            await st.put(k, { status: 'klaar', ts: nu });
+            await logZet({ actie: 'webhook', resultaat: String(b.resultaat || '').slice(0, 30), mb_id: SIG_MBID_RE.test(String(b.mb_id || '')) ? String(b.mb_id) : undefined });
+            return sigAntw({ ok: true });
+          }
+          await st.delete(k); return sigAntw({ ok: true });
+        }
+        return sigAntw({ error: 'onbekend' }, 404);
+      } catch (e) { return sigAntw({ error: 'opslag', detail: String((e && e.message) || e).slice(0, 120) }, 503); }
+    });
+  },
+  // Nieuw signaal (binnen het slot). → { status, body:{ ok, nieuw, sleutel, reden } }
+  async maak(self, b, nu, logZet) {
+    const st = self.state.storage;
+    if (!SIG_PID_RE.test(String(b.project_id || '')) || !SIG_SOORTEN[b.soort] || !SIG_BRON_RE.test(String(b.bron || '')) || !SIG_VERSIE_RE.test(String(b.versie || '')) || !SIG_DATUM_RE.test(String(b.datum || '')))
+      return { status: 400, body: { error: 'ongeldig-signaal' } };
+    const sleutel = `${b.project_id}:${b.soort}:${b.bron}.${b.versie}:${b.datum}`, oorzaak = `${b.project_id}:${b.soort}:${b.bron}`;
+    if (await st.get('k:' + sleutel)) return { status: 200, body: { ok: true, nieuw: false, sleutel, reden: 'bestaat' } };
+    const open = await st.get('o:' + oorzaak), oudItem = open ? await st.get('i:' + open) : null;
+    if (oudItem && oudItem.status !== 'afgehandeld') {
+      oudItem.laatste_versie = `${b.bron}.${b.versie}`; oudItem.herhaald = (oudItem.herhaald || 0) + 1;
+      await st.put({ ['i:' + open]: oudItem, ['k:' + sleutel]: nu });
+      await logZet({ actie: 'signaal-samengevoegd', sleutel: open, soort: b.soort, project_id: b.project_id, via: b.via });
+      return { status: 200, body: { ok: true, nieuw: false, sleutel: open, reden: 'oorzaak-open' } };
+    }
+    const item = { sleutel, oorzaak, project_id: b.project_id, soort: b.soort, titel: SIG_SOORTEN[b.soort], bron: b.bron, versie: String(b.versie), datum: b.datum,
+      mb_id: SIG_MBID_RE.test(String(b.mb_id || '')) ? String(b.mb_id) : undefined, status: 'open', aangemaakt: nu, gewijzigd: nu, via: b.via || 'systeem' };
+    await st.put({ ['i:' + sleutel]: item, ['o:' + oorzaak]: sleutel, ['k:' + sleutel]: nu });
+    await logZet({ actie: 'signaal-nieuw', sleutel, soort: b.soort, project_id: b.project_id, mb_id: item.mb_id, via: item.via });
+    await PushDO.plan(self, nu);   // push (L3b): gebundeld, buiten de stille uren
+    return { status: 200, body: { ok: true, nieuw: true, sleutel } };
+  },
+  // Statusovergang door een gebruiker (binnen het slot).
+  async zet(self, b, nu, vandaag, logZet) {
+    const st = self.state.storage, sleutel = String(b.sleutel || ''), it = await st.get('i:' + sleutel);
+    if (!it) return sigAntw({ error: 'onbekend-signaal' }, 404);
+    const eff = sigEffectief(it, vandaag), ik = { oid: String(b.oid || ''), naam: String(b.naam || '').slice(0, 80), ts: nu };
+    const vanMij = it.opgepakt && it.opgepakt.oid === ik.oid, vanAnder = eff === 'opgepakt' && !vanMij;
+    const weiger = (error, extra) => sigAntw({ error, status: eff, ...(extra || {}) }, 409);
+    if (eff === 'afgehandeld') return b.actie === 'afhandelen' ? sigAntw({ ok: true, gewijzigd: false, item: it }) : weiger('afgehandeld');
+    if (vanAnder && b.actie !== 'oppakken') return weiger('opgepakt-door-ander', { door: it.opgepakt.naam });
+    const nieuw = { ...it, gewijzigd: nu };
+    if (b.actie === 'oppakken') {
+      if (eff === 'opgepakt') return vanMij ? sigAntw({ ok: true, gewijzigd: false, item: it }) : weiger('al-opgepakt', { door: it.opgepakt.naam });
+      Object.assign(nieuw, { status: 'opgepakt', opgepakt: ik }); delete nieuw.snooze_tot;
+    } else if (b.actie === 'loslaten') {
+      if (eff !== 'opgepakt') return weiger('ongeldige-overgang');
+      nieuw.status = 'open'; delete nieuw.opgepakt;
+    } else if (b.actie === 'afhandelen') {
+      Object.assign(nieuw, { status: 'afgehandeld', afgehandeld: ik }); delete nieuw.snooze_tot;
+    } else if (b.actie === 'snoozen') {
+      const tot = String(b.tot || '');
+      if (!SIG_DATUM_RE.test(tot) || !(tot > vandaag) || tot > geldDag(vandaag, SIG_SNOOZE_MAX_DAGEN)) return sigAntw({ error: 'ongeldige-datum', uitleg: 'tot: een datum na vandaag, hooguit een jaar vooruit' }, 400);
+      Object.assign(nieuw, { status: 'gesnoozed', snooze_tot: tot, gesnoozed: ik }); delete nieuw.opgepakt;
+    } else if (b.actie === 'heropenen') {
+      if (eff !== 'gesnoozed' && !(it.status === 'gesnoozed')) return weiger('ongeldige-overgang');
+      nieuw.status = 'open'; delete nieuw.snooze_tot;
+    } else return sigAntw({ error: 'ongeldige-actie' }, 400);
+    const schrijf = { ['i:' + sleutel]: nieuw };
+    await st.put(schrijf);
+    if (nieuw.status === 'afgehandeld' && (await st.get('o:' + it.oorzaak)) === sleutel) await st.delete('o:' + it.oorzaak);
+    await logZet({ actie: 'signaal-' + b.actie, sleutel, soort: it.soort, project_id: it.project_id, door: b.door, tot: nieuw.snooze_tot });
+    return sigAntw({ ok: true, gewijzigd: true, item: { ...nieuw, status_effectief: sigEffectief(nieuw, vandaag) } });
+  },
+  // Geverifieerde Moneybird-offertestaat verwerken (webhook of dagelijkse controle): staat bijwerken en, alleen bij accepted/rejected
+  // én een bevestigde koppeling, één signaal. `gemeld` onthoudt de laatst gemelde staat per offerte: dezelfde overgang twee keer
+  // (webhook + controle, of een latere wijziging aan een al geaccepteerde offerte) geeft geen tweede signaal.
+  async offerte(self, b, nu, logZet) {
+    const st = self.state.storage, mb = String(b.mb_id || '');
+    if (!SIG_MBID_RE.test(mb)) return sigAntw({ error: 'ongeldig' }, 400);
+    const off = await st.get('off:' + mb);
+    if (!off) { await logZet({ actie: 'offerte-onbekend', mb_id: mb, via: b.via }); return sigAntw({ ok: true, nieuw: false, reden: 'onbekend' }); }
+    const staat = String(b.staat || '').slice(0, 20);
+    off.staat = staat; off.gecontroleerd = nu;
+    if (off.gemeld && off.gemeld.staat !== staat) off.gemeld = null;   // terug naar open e.d.: een volgende acceptatie mag weer gemeld worden
+    let uit = { ok: true, nieuw: false, reden: 'geen-signaal', staat };
+    const soort = staat === 'accepted' ? 'offerte_geaccepteerd' : staat === 'rejected' ? 'offerte_afgewezen' : null;
+    if (soort && off.gemeld && off.gemeld.staat === staat) uit.reden = 'al-gemeld';
+    else if (soort) {
+      const r = await SigDO.maak(self, { project_id: off.project_id, soort, bron: 'e' + mb, versie: b.versie, datum: b.datum, mb_id: mb, via: b.via }, nu, logZet);
+      if (r.status !== 200) return sigAntw(r.body, r.status);
+      off.gemeld = { staat, ts: nu, sleutel: r.body.sleutel };
+      uit = { ...r.body, staat };
+    }
+    await st.put('off:' + mb, off);
+    return sigAntw(uit);
+  },
+};
+
+// Routes /signalen/* (en straks /push/*). Achter de MS-auth; rechten in élke modus.
+async function handleSignalen(p, request, env, ik, json) {
+  const R = ik.rol ? RECHTEN[ik.rol] : null, m = request.method;
+  const zien = !!(R && (R.offertes || R.projecten)), wijzigen = !!(R && R.offertes === 'wijzigen');
+  if (!zien) return json({ error: 'geen-toegang', reden: R ? 'offertes' : (ik.reden || 'geen-rol') }, 403);
+  if (p.startsWith('/push/')) return await handlePush(p, request, env, ik, json, R);
+  const doe = sigStub(env);
+  if (!doe) return json({ error: 'geen-signalen-opslag', uitleg: 'Durable Object-binding MT_TELLER ontbreekt (zie wrangler.toml)' }, 503);
+  const leesBody = async () => { const t = await geldLeesMax(request, 64 * KB); if (t == null) return { fout: 413 }; try { const j = JSON.parse(t || '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? { j } : { fout: 400 }; } catch { return { fout: 400 }; } };
+  if (p === '/signalen' && m === 'GET') {
+    const r = await doe('sig-lijst', { met_afgehandeld: new URL(request.url).searchParams.get('afgehandeld') === '1' });
+    return json(r.j, r.status);
+  }
+  if (p === '/signalen/log' && m === 'GET') {
+    if (!R.beheer) return json({ error: 'geen-toegang', reden: 'beheer' }, 403);
+    const r = await doe('sig-log', { limiet: Number(new URL(request.url).searchParams.get('limiet')) || 50 }); return json(r.j, r.status);
+  }
+  if (m !== 'POST' || !['/signalen/actie', '/signalen/offertes'].includes(p)) return json({ error: 'onbekende-route' }, 404);
+  if (!wijzigen) return json({ error: 'geen-toegang', reden: 'offertes-wijzigen' }, 403);
+  const { j: b, fout } = await leesBody(); if (fout) return json({ error: fout === 413 ? 'te-groot' : 'ongeldige-json' }, fout);
+  const door = await oidHash(ik.oid);
+  if (p === '/signalen/actie') {
+    if (!SIG_ACTIES.includes(b.actie) || typeof b.sleutel !== 'string' || b.sleutel.length > 200) return json({ error: 'ongeldig', uitleg: 'sleutel en actie (' + SIG_ACTIES.join(', ') + ') verplicht' }, 400);
+    const r = await doe('sig-zet', { sleutel: b.sleutel, actie: b.actie, tot: b.tot, oid: ik.oid, naam: clip((ik.rec && ik.rec.naam) || ik.email || '', 80), door });
+    return json(r.j, r.status);
+  }
+  // /signalen/offertes: door een mens bevestigde koppelingen offerte (mb_id) → project_id doorgeven (of weghalen).
+  const zet = Array.isArray(b.koppelingen) ? b.koppelingen : [], weg = Array.isArray(b.weg) ? b.weg : [];
+  if (!zet.length && !weg.length) return json({ error: 'ongeldig', uitleg: 'koppelingen [{project_id, mb_id}] en/of weg [mb_id]' }, 400);
+  if (zet.length > SIG_OFF_PER_KEER || weg.length > SIG_OFF_PER_KEER) return json({ error: 'te-veel', max: SIG_OFF_PER_KEER }, 400);
+  if (!zet.every(k => k && SIG_PID_RE.test(String(k.project_id || '')) && SIG_MBID_RE.test(String(k.mb_id || ''))) || !weg.every(x => SIG_MBID_RE.test(String(x))))
+    return json({ error: 'ongeldig', uitleg: 'project_id p_… en mb_id (cijfers)' }, 400);
+  const r = await doe('sig-off-zet', { koppelingen: zet.map(k => ({ project_id: String(k.project_id), mb_id: String(k.mb_id) })), weg: weg.map(String), door });
+  return json(r.j, r.status);
+}
+
+// ── Moneybird-webhook (L3): POST /mb/webhook ─────────────────────────────────────
+// Server-naar-server, vóór de MS-auth en zonder CORS. Volgorde:
+//  1. Handtekening (developer.moneybird.com/webhooks/verifying-signatures): header `Moneybird-Signature: t=<epoch s>,v1=<hex>`,
+//     v1 = HMAC-SHA256(geheim, "<t>.<ruwe body>") over de exacte bytes; één van de v1-waarden moet kloppen (constant-time) en t mag
+//     hooguit 5 minuten afwijken. Geheim = worker-secret MB_WEBHOOK_SECRET (bij rotatie tijdelijk ook MB_WEBHOOK_SECRET_VORIG).
+//     Zonder geheim: 503 (nooit open). Fout → 401.
+//     Vóór het lezen van de body: een ontbrekende, te lange, slecht gevormde of verlopen header → 401, Content-Length boven MB_WH_MAX → 413,
+//     en een rate-limit per IP (429; de binding MB_WEBHOOK_LIMIET als die er is, anders een teller per isolate). Zo kost rommel geen body-lezen.
+//  2. Idempotentie: ALTIJD de SHA-256 van de ruwe body (die door de HMAC gedekt is) in de signalen-DO; de niet-gesigneerde header
+//     `Idempotency-Key` telt niet mee (een replay met een andere header is dus ook dubbel). Een herhaalde levering = 200, niets gedaan.
+//  3. Alleen offertes (entity_type Estimate) van onze administratie, en alleen als de offerte een bevestigde koppeling heeft (POST
+//     /signalen/offertes). Dan een read-only GET estimates/{id}: de staat uit de payload wordt nooit vertrouwd.
+//  4. accepted/rejected → één signaal "markeer gewonnen/verloren?". Nooit een MB-write, nooit zelf koppelen, nooit een fase wijzigen.
+// 200 bij alles wat verwerkt of bewust genegeerd is (anders herhaalt Moneybird tot 10 keer); 503 bij een tijdelijke fout (Moneybird of
+// opslag): de claim wordt dan vrijgegeven, zodat de herhaling van Moneybird het opnieuw doet.
+const MB_WH_MAX = 64 * KB, MB_WH_TOLERANTIE_S = 300, MB_WH_BEZIG_MS = 2 * 60 * 1000, MB_WH_KOP_MAX = 600, MB_WH_PER_MIN = 60;
+const MB_WH_SLEUTEL_RE = /^h[0-9a-f]{64}$/;
+const sigLog = o => { try { console.log(JSON.stringify(Object.assign({ sig: true }, o))); } catch {} };
+const hexVan = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+async function leesRuw(request, max) {   // de exacte bytes (nodig voor de handtekening); null als het te groot is
+  const cl = Number(request.headers.get('Content-Length'));
+  if (isFinite(cl) && cl > max) return null;
+  if (!request.body) return new Uint8Array(0);
+  const r = request.body.getReader(), delen = []; let n = 0;
+  for (;;) {
+    const { done, value } = await r.read(); if (done) break;
+    n += value.byteLength; if (n > max) { try { await r.cancel(); } catch {} return null; }
+    delen.push(value);
+  }
+  const buf = new Uint8Array(n); let o = 0; for (const d of delen) { buf.set(d, o); o += d.byteLength; }
+  return buf;
+}
+function gelijkTijd(a, b) { if (a.length !== b.length) return false; let x = 0; for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i); return x === 0; }
+// De header ontleden en de tijd toetsen (zonder de body) → { ts, v1: [...] } of null.
+function mbHandtekeningKop(kop, nu) {
+  if (!kop || kop.length > MB_WH_KOP_MAX) return null;
+  let ts = null; const v1 = [];
+  for (const deel of String(kop).split(',')) {
+    const i = deel.indexOf('='); if (i < 0) return null;
+    const k = deel.slice(0, i).trim(), v = deel.slice(i + 1).trim();
+    if (k === 't') { if (ts != null) return null; ts = v; }
+    else if (k === 'v1') { if (!/^[0-9a-fA-F]{64}$/.test(v) || v1.length >= 4) return null; v1.push(v.toLowerCase()); }
+  }
+  if (!/^\d{1,12}$/.test(ts || '') || !v1.length) return null;
+  if (Math.abs(nu / 1000 - Number(ts)) > MB_WH_TOLERANTIE_S) return null;
+  return { ts, v1 };
+}
+// Rate-limit per IP vóór het lezen van de body. Met de (optionele) Cloudflare-binding MB_WEBHOOK_LIMIET (zie wrangler.toml) over alle
+// datacenters; zonder binding een eenvoudige teller per isolate (MB_WH_PER_MIN per minuut). Moneybird zelf komt hier nooit in de buurt.
+const _whIp = new Map();
+async function mbWebhookTeVaak(request, env) {
+  const ip = String(request.headers.get('CF-Connecting-IP') || 'onbekend').slice(0, 64);
+  const b = env.MB_WEBHOOK_LIMIET;
+  if (b && typeof b.limit === 'function') { try { const r = await b.limit({ key: 'mbwh:' + ip }); return !(r && r.success); } catch { /* terugval hieronder */ } }
+  const nu = Date.now(), w = (_whIp.get(ip) || []).filter(x => nu - x < 60000);
+  if (w.length >= MB_WH_PER_MIN) { _whIp.set(ip, w); return true; }
+  w.push(nu); if (_whIp.size > 5000) _whIp.clear(); _whIp.set(ip, w);
+  return false;
+}
+async function mbHandtekeningOk(kopInfo, ruw, geheimen) {
+  if (!kopInfo) return false;
+  const { ts, v1 } = kopInfo;
+  const voor = new TextEncoder().encode(ts + '.'), data = new Uint8Array(voor.length + ruw.length); data.set(voor, 0); data.set(ruw, voor.length);
+  for (const g of geheimen) {
+    const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(g), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const h = hexVan(await crypto.subtle.sign('HMAC', k, data));
+    if (v1.some(v => gelijkTijd(v, h))) return true;
+  }
+  return false;
+}
+// Read-only: één offerte ophalen. → { e } of { weg: true }; gooit bij een tijdelijke fout.
+async function sigMbOfferte(env, mbId, budget) {
+  if (budget && !budget.neem(false, 'mb')) throw new Error('subrequest-budget-op');
+  const r = await fetch(`https://moneybird.com/api/v2/${MB_ADMIN}/estimates/${mbId}.json`, { method: 'GET', headers: { 'Authorization': `Bearer ${env.MONEYBIRD_KEY}`, 'Accept': 'application/json' } });
+  if (r.status === 404) return { weg: true };
+  if (!r.ok) throw new Error('moneybird-' + r.status);
+  const e = await r.json().catch(() => null);
+  if (!e || String(e.id) !== String(mbId)) throw new Error('moneybird-antwoord');
+  return { e };
+}
+// Staat + een vaste versie/datum van de overgang (het moment van accepteren/afwijzen), zodat webhook en dagelijkse controle dezelfde sleutel maken.
+function sigOfferteStaat(e) {
+  const staat = String(e.state || '').slice(0, 20);
+  const moment = (staat === 'accepted' ? e.accepted_at : staat === 'rejected' ? e.rejected_at : null) || e.updated_at || null;
+  const ms = Date.parse(moment || '');
+  const versie = isFinite(ms) ? String(Math.floor(ms / 1000)) : /^\d{1,20}$/.test(String(e.version || '')) ? String(e.version) : '0';
+  const datum = isFinite(ms) ? new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms)) : geldVandaag();
+  return { staat, versie, datum };
+}
+async function mbWebhook(request, env) {
+  const antw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  if (request.method !== 'POST') return antw({ error: 'methode' }, 405);
+  const geheimen = [env.MB_WEBHOOK_SECRET, env.MB_WEBHOOK_SECRET_VORIG].map(x => String(x || '').trim()).filter(Boolean);
+  if (!geheimen.length) return antw({ error: 'niet-ingericht' }, 503);
+  if (await mbWebhookTeVaak(request, env)) { sigLog({ webhook: 'te-vaak' }); return antw({ error: 'te-vaak' }, 429); }
+  // Alles wat zonder de body te toetsen is, eerst (de body wordt pas gelezen als de header klopt en de lengte past).
+  const kopInfo = mbHandtekeningKop(request.headers.get('Moneybird-Signature'), Date.now());
+  if (!kopInfo) { sigLog({ webhook: 'handtekening', stap: 'kop' }); return antw({ error: 'handtekening' }, 401); }
+  const cl = request.headers.get('Content-Length');
+  if (cl != null && cl !== '' && !(Number(cl) <= MB_WH_MAX)) return antw({ error: 'te-groot' }, 413);
+  const ruw = await leesRuw(request, MB_WH_MAX);
+  if (!ruw) return antw({ error: 'te-groot' }, 413);
+  if (!(await mbHandtekeningOk(kopInfo, ruw, geheimen))) { sigLog({ webhook: 'handtekening' }); return antw({ error: 'handtekening' }, 401); }
+  let p = null; try { p = JSON.parse(new TextDecoder().decode(ruw)); } catch {}
+  const negeer = reden => { sigLog({ webhook: 'genegeerd', reden }); return antw({ ok: true, genegeerd: reden }); };
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return negeer('json');
+  if (String(p.administration_id || '') !== MB_ADMIN) return negeer('administratie');
+  if (String(p.entity_type || '') !== 'Estimate') return negeer('geen-offerte');
+  const mbId = String(p.entity_id || '');
+  if (!SIG_MBID_RE.test(mbId)) return negeer('id');
+  const doe = sigStub(env);
+  if (!doe) return antw({ error: 'geen-opslag' }, 503);
+  // Idempotentie altijd op de gesigneerde body; de header Idempotency-Key alleen in de log (ingekort, nooit als sleutel).
+  const idem = 'h' + hexVan(await crypto.subtle.digest('SHA-256', ruw));
+  const kopIdem = String(request.headers.get('Idempotency-Key') || '').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 40);
+  const c = await doe('sig-wh-claim', { sleutel: idem });
+  if (c.status !== 200 || !c.j) return antw({ error: 'opslag' }, 503);
+  if (c.j.dubbel) { sigLog({ webhook: 'dubbel', kop: kopIdem || undefined }); return antw({ ok: true, dubbel: true }); }
+  if (c.j.bezig) return antw({ error: 'bezig' }, 503);
+  try {
+    const k = await doe('sig-off-get', { mb_id: mbId });
+    if (k.status !== 200 || !k.j) throw new Error('opslag');
+    let uit;
+    if (!k.j.koppeling) uit = { resultaat: 'onbekend' };          // geen bevestigde koppeling: geen GET, geen signaal
+    else {
+      const g = await sigMbOfferte(env, mbId);
+      if (g.weg) uit = { resultaat: 'niet-gevonden' };
+      else {
+        const s = sigOfferteStaat(g.e), r = await doe('sig-offerte', { mb_id: mbId, ...s, via: 'webhook' });
+        if (r.status !== 200 || !r.j) throw new Error('opslag');
+        uit = { resultaat: r.j.nieuw ? 'signaal' : r.j.reden, staat: s.staat };
+      }
+    }
+    await doe('sig-wh-klaar', { sleutel: idem, resultaat: uit.resultaat, mb_id: mbId });
+    return antw({ ok: true, ...uit });
+  } catch (e) {
+    sigLog({ webhook: 'tijdelijk', fout: String((e && e.message) || e).slice(0, 80) });
+    try { await doe('sig-wh-wis', { sleutel: idem }); } catch {}
+    return antw({ error: 'tijdelijk' }, 503);
+  }
+}
+
+// ── Dagelijkse controle (L3): gemiste webhooks opvangen ─────────────────────────────
+// Eigen cron-expressie (SIG_REC_CRON, ook in wrangler.toml [triggers]); NIET in koersCron (die heeft een vol subrequest-budget). De
+// scheduled-handler splitst op event.cron: alleen deze expressie komt hier, alle andere triggers gaan zoals altijd naar de Koersmeter.
+// Eigen budget: SIG_REC_BUDGET subrequests per run (DO-aanroepen + Moneybird-GET's). Per run de offertes met een bevestigde koppeling die
+// nog niet in een eindstaat zijn, langst niet gecontroleerd eerst; per offerte één read-only GET en één DO-aanroep. Wat niet past, komt
+// de volgende dag aan de beurt. Signalen ontstaan precies zoals bij de webhook (zelfde sleutel, dus nooit dubbel). Daarna opruimen.
+const SIG_REC_CRON = '45 4 * * *', SIG_REC_BUDGET = 30;
+async function sigReconciliatie(env) {
+  const budget = koersBudget(SIG_REC_BUDGET, 0), doe = sigStub(env, budget);
+  if (!doe) { sigLog({ controle: 'geen-opslag' }); return { status: 'geen-opslag' }; }
+  if (!env.MONEYBIRD_KEY) { sigLog({ controle: 'geen-mb-sleutel' }); return { status: 'geen-mb-sleutel' }; }
+  const n = Math.floor((SIG_REC_BUDGET - 2) / 2);                      // 1 voor de lijst, 1 voor het opruimen, 2 per offerte
+  const l = await doe('sig-off-lijst', { max: n });
+  if (l.status !== 200 || !l.j) { sigLog({ controle: 'fout', stap: 'lijst' }); return { status: 'fout' }; }
+  const uit = { status: 'klaar', gecontroleerd: 0, signalen: 0, fouten: 0, rest: Math.max(0, (l.j.totaal || 0) - l.j.items.length) };
+  for (const x of l.j.items) {
+    if (budget.rest() < 3) { uit.status = 'budget'; break; }            // GET + DO + het opruimen moeten nog passen
+    try {
+      const g = await sigMbOfferte(env, x.mb_id, budget);
+      const s = g.weg ? { staat: 'weg', versie: '0', datum: geldVandaag() } : sigOfferteStaat(g.e);
+      const r = await doe('sig-offerte', { mb_id: x.mb_id, ...s, via: 'controle' });
+      if (r.status !== 200) throw new Error('opslag');
+      uit.gecontroleerd++; if (r.j && r.j.nieuw) uit.signalen++;
+    } catch (e) {
+      uit.fouten++;
+      if (/budget|moneybird-429/.test(String(e && e.message))) { uit.status = 'gestopt'; break; }   // rate-limit of budget op: morgen verder
+    }
+  }
+  try { await doe('sig-opruim', {}); } catch {}
+  sigLog({ controle: uit.status, ...uit, subrequests: budget.n });
+  return uit;
+}
+
+// ══ WEB-PUSH (L3b) ═════════════════════════════════════════════════════════════
+// Een algemene pushmelding op de telefoon als er nieuwe signalen zijn. NOOIT klantnaam, bedrag, nummer of project in de melding: de tekst
+// is altijd "M&T: N acties vragen aandacht"; de details staan pas na inloggen in de app.
+//   Sleutels: VAPID_PUBLIC (base64url, 65 bytes ongecomprimeerd P-256) en VAPID_PRIVATE (base64url, 32 bytes `d`), allebei als worker-secret
+//   (de publieke mag ook een var zijn); optioneel VAPID_SUBJECT (https:// of mailto:). Zonder sleutels: /push/sleutel en /push/aanmelden
+//   geven 503 en er wordt niets verstuurd. Aanmaken: zie wrangler.toml (instructie; niet door Claude uitgevoerd).
+//   Subscriptions per gebruiker en per apparaat: DO-sleutel `s:<oid>:<sha256(endpoint)[:32]>` in de signalen-instantie; hooguit
+//   PUSH_SUBS_PER_GEBRUIKER per gebruiker (de oudste valt af). Alleen endpoints van de bekende pushdiensten (geen willekeurige URL's).
+//   Aanmelden alleen met verkooprecht (`offertes`); bij het versturen wordt de rol opnieuw gecontroleerd (geen recht meer = subscription weg).
+//   De pushdienst zegt 404/410 → subscription opgeruimd.
+//   Encryptie: RFC 8291 (aes128gcm, ECDH P-256 + HKDF + AES-128-GCM) en VAPID (RFC 8292, ES256-JWT), alles via WebCrypto.
+//   Bundeling en stille uren (alleen voor push; de lijst in de app toont alles meteen): een nieuw signaal zet een DO-alarm op
+//   max(nu + 1 min, vorige push + 15 min), en nooit tussen PUSH_STIL_VAN en PUSH_STIL_TOT (Europe/Amsterdam): dan op het eind van de stille uren.
+const PUSH_BUNDEL_MS = 15 * 60 * 1000, PUSH_VERZAMEL_MS = 60 * 1000, PUSH_STIL_VAN = 21, PUSH_STIL_TOT = 7;
+const PUSH_SUBS_PER_GEBRUIKER = 10, PUSH_MAX_SUBS = 200, PUSH_TTL_S = 24 * 3600, PUSH_URL = 'mobiel.html';
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^([a-z0-9-]+\.)*push\.apple\.com$/, /^([a-z0-9-]+\.)*notify\.windows\.com$/];
+const PUSH_HASH_RE = /^[0-9a-f]{32}$/;
+const PUSH_OID_RE = /^[0-9a-fA-F-]{36}$/;
+function pushTekst(n) { return `M&T: ${n} ${n === 1 ? 'actie vraagt' : 'acties vragen'} aandacht`; }
+function pushStil(ms) { const u = amsterdamTijd(ms).uur; return PUSH_STIL_VAN > PUSH_STIL_TOT ? (u >= PUSH_STIL_VAN || u < PUSH_STIL_TOT) : (u >= PUSH_STIL_VAN && u < PUSH_STIL_TOT); }
+function pushNaStil(ms) { let x = ms; for (let i = 0; i < 96 && pushStil(x); i++) x += 15 * 60 * 1000; return x; }
+function pushEndpointOk(e) {
+  try { const s = String(e || ''), u = new URL(s); return s.length <= 1024 && u.protocol === 'https:' && !u.port && !u.username && PUSH_HOSTS.some(r => r.test(u.hostname)); } catch { return false; }
+}
+const b64uVan = bytes => { const b = new Uint8Array(bytes); let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const b64uNaar = s => { try { return /^[A-Za-z0-9_-]+={0,2}$/.test(String(s || '')) ? b64urlDecode(String(s).replace(/=+$/, '')) : null; } catch { return null; } };
+const bytesSamen = (...delen) => { const n = delen.reduce((a, d) => a + d.length, 0), uit = new Uint8Array(n); let o = 0; for (const d of delen) { uit.set(d, o); o += d.length; } return uit; };
+function pushPubliek(env) {
+  const k = String((env && env.VAPID_PUBLIC) || '').trim(), b = b64uNaar(k);
+  return b && b.length === 65 && b[0] === 4 && String(env.VAPID_PRIVATE || '').trim() ? k : null;
+}
+let _vapid = null;
+async function pushVapid(env) {
+  const pub = pushPubliek(env); if (!pub) return null;
+  const d = String(env.VAPID_PRIVATE).trim();
+  if (_vapid && _vapid.pub === pub && _vapid.d === d) return _vapid;
+  const b = b64uNaar(pub);
+  const key = await crypto.subtle.importKey('jwk', { kty: 'EC', crv: 'P-256', x: b64uVan(b.slice(1, 33)), y: b64uVan(b.slice(33, 65)), d, ext: true }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  _vapid = { pub, d, key };
+  return _vapid;
+}
+async function pushVapidKop(v, endpoint, env, nu) {
+  const enc = x => b64uVan(new TextEncoder().encode(JSON.stringify(x)));
+  const onder = enc({ typ: 'JWT', alg: 'ES256' }) + '.' + enc({ aud: new URL(endpoint).origin, exp: Math.floor(nu / 1000) + 12 * 3600, sub: String(env.VAPID_SUBJECT || 'https://mortiseandtenon.nl') });
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, v.key, new TextEncoder().encode(onder));   // WebCrypto geeft r||s (64 bytes), precies wat ES256 vraagt
+  return `vapid t=${onder}.${b64uVan(sig)}, k=${v.pub}`;
+}
+// RFC 8291: één record, aes128gcm. → body (salt | rs | idlen | keyid | ciphertext).
+async function pushVersleutel(tekst, p256dh, auth) {
+  const S = crypto.subtle, uaPub = b64uNaar(p256dh), geheim = b64uNaar(auth);
+  if (!uaPub || uaPub.length !== 65 || uaPub[0] !== 4 || !geheim || geheim.length !== 16) throw new Error('ongeldige-sleutels');
+  const eph = await S.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const asPub = new Uint8Array(await S.exportKey('raw', eph.publicKey));
+  const uaKey = await S.importKey('raw', uaPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const ecdh = new Uint8Array(await S.deriveBits({ name: 'ECDH', public: uaKey }, eph.privateKey, 256));
+  const hkdf = async (salt, ikm, info, len) => new Uint8Array(await S.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, await S.importKey('raw', ikm, 'HKDF', false, ['deriveBits']), len * 8));
+  const te = x => new TextEncoder().encode(x);
+  const ikm = await hkdf(geheim, ecdh, bytesSamen(te('WebPush: info\0'), uaPub, asPub), 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, te('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, te('Content-Encoding: nonce\0'), 12);
+  const ct = new Uint8Array(await S.encrypt({ name: 'AES-GCM', iv: nonce }, await S.importKey('raw', cek, 'AES-GCM', false, ['encrypt']), bytesSamen(te(tekst), new Uint8Array([2]))));
+  const kop = new Uint8Array(21); kop.set(salt, 0); new DataView(kop.buffer).setUint32(16, 4096); kop[20] = 65;
+  return bytesSamen(kop, asPub, ct);
+}
+async function pushStuur(env, v, sub, tekst, nu) {
+  const body = await pushVersleutel(tekst, sub.p256dh, sub.auth);
+  const r = await fetch(sub.endpoint, { method: 'POST', body, headers: { 'Authorization': await pushVapidKop(v, sub.endpoint, env, nu), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', 'TTL': String(PUSH_TTL_S), 'Urgency': 'normal' } });
+  return r.status;
+}
+// Mag deze gebruiker (nog) meldingen krijgen? true / false / null (onbekend: KV-fout → deze keer overslaan, niet weggooien).
+async function pushMag(env, oid) {
+  if (vasteEigenaar(env, oid, null)) return true;
+  if (!env.MT_ROLLEN) return false;
+  let rec; try { const v = await env.MT_ROLLEN.get('user:' + oid); rec = v ? JSON.parse(v) : null; } catch { return null; }
+  return !!(rec && rec.active !== false && ROLLEN.includes(rec.role) && RECHTEN[rec.role].offertes);
+}
+// DO-kant van push (signalen-instantie).
+const PushDO = {
+  async ops(self, op, b, nu, logZet) {
+    const st = self.state.storage, oid = String(b.oid || ''), hash = String(b.hash || '');
+    if (!PUSH_OID_RE.test(oid)) return sigAntw({ error: 'ongeldig' }, 400);
+    if (op === 'sig-sub-status') return sigAntw({ apparaten: (await st.list({ prefix: 's:' + oid + ':' })).size });
+    if (!PUSH_HASH_RE.test(hash)) return sigAntw({ error: 'ongeldig' }, 400);
+    const k = 's:' + oid + ':' + hash;
+    if (op === 'sig-sub-zet') {
+      if (!pushEndpointOk(b.endpoint) || !b64uNaar(b.p256dh) || !b64uNaar(b.auth)) return sigAntw({ error: 'ongeldig' }, 400);
+      const bestaand = await st.get(k), eigen = [...(await st.list({ prefix: 's:' + oid + ':' }))].filter(([x]) => x !== k).sort(([, x], [, y]) => (x.ts || 0) - (y.ts || 0));
+      const teVeel = eigen.length - (PUSH_SUBS_PER_GEBRUIKER - 1);
+      if (teVeel > 0) await st.delete(eigen.slice(0, teVeel).map(([x]) => x));
+      await st.put(k, { endpoint: String(b.endpoint), p256dh: String(b.p256dh), auth: String(b.auth), ts: nu });
+      if (!bestaand) await logZet({ actie: 'push-aangemeld', door: b.door });
+      return sigAntw({ ok: true, nieuw: !bestaand, apparaten: Math.min(eigen.length, PUSH_SUBS_PER_GEBRUIKER - 1) + 1 });
+    }
+    if (op === 'sig-sub-weg') {
+      const was = !!(await st.get(k)); if (was) { await st.delete(k); await logZet({ actie: 'push-afgemeld', door: b.door }); }
+      return sigAntw({ ok: true, verwijderd: was });
+    }
+    return sigAntw({ error: 'onbekend' }, 404);
+  },
+  // Na een nieuw signaal (binnen het slot): bundelen en stille uren respecteren via het DO-alarm.
+  async plan(self, nu) {
+    const st = self.state.storage;
+    if (!(await st.list({ prefix: 's:', limit: 1 })).size) return;            // niemand aangemeld: niets te plannen
+    const p = (await st.get('p:stand')) || { laatst: 0 };
+    if (!p.wachtend) { p.wachtend = true; await st.put('p:stand', p); }
+    const tijd = pushNaStil(Math.max(nu + PUSH_VERZAMEL_MS, (p.laatst || 0) + PUSH_BUNDEL_MS));
+    const huidig = await st.getAlarm();
+    if (huidig == null || huidig > tijd) await st.setAlarm(tijd);
+  },
+  // Het alarm: één algemene melding met het aantal open acties naar alle aangemelde apparaten (buiten het slot versturen).
+  async alarm(self, nu = Date.now()) {
+    const st = self.state.storage;
+    const plan = await self.state.blockConcurrencyWhile(async () => {
+      const p = (await st.get('p:stand')) || {};
+      if (!p.wachtend) return null;
+      if (pushStil(nu)) { await st.setAlarm(pushNaStil(nu)); return null; }
+      if (p.laatst && nu - p.laatst < PUSH_BUNDEL_MS) { await st.setAlarm(p.laatst + PUSH_BUNDEL_MS); return null; }
+      const n = sigTelling([...(await st.list({ prefix: 'i:' })).values()], geldVandaag()).open;
+      const subs = n ? [...(await st.list({ prefix: 's:' }))].slice(0, PUSH_MAX_SUBS) : [];
+      await st.put('p:stand', { laatst: subs.length ? nu : (p.laatst || 0), wachtend: false });
+      return subs.length ? { n, subs } : null;
+    });
+    if (!plan) return { verstuurd: 0 };
+    const env = self.env || {}, v = await pushVapid(env).catch(() => null);
+    const log = e => self.state.blockConcurrencyWhile(() => st.put('log:' + String(9e15 - nu).padStart(16, '0') + ':' + randHex(3), { ts: nu, ...e }));
+    if (!v) { await log({ actie: 'push', resultaat: 'niet-ingericht', n: plan.n }); return { verstuurd: 0 }; }
+    const tekst = JSON.stringify({ titel: 'M&T', tekst: pushTekst(plan.n), n: plan.n, url: PUSH_URL });
+    const weg = [], mag = new Map(); let verstuurd = 0, fouten = 0;
+    for (const [k, s] of plan.subs) {
+      const oid = k.split(':')[1];
+      if (!mag.has(oid)) mag.set(oid, await pushMag(env, oid));
+      if (mag.get(oid) === false) { weg.push(k); continue; }
+      if (mag.get(oid) == null) continue;
+      try { const status = await pushStuur(env, v, s, tekst, nu); if (status === 404 || status === 410) weg.push(k); else if (status >= 200 && status < 300) verstuurd++; else fouten++; }
+      catch { fouten++; }
+    }
+    if (weg.length) await self.state.blockConcurrencyWhile(() => st.delete(weg));
+    await log({ actie: 'push', n: plan.n, verstuurd, opgeruimd: weg.length, fouten });
+    return { verstuurd, opgeruimd: weg.length, fouten };
+  },
+};
+// Routes /push/* (via handleSignalen: wie de signalen mag zien). Aanmelden alleen met verkooprecht.
+async function handlePush(p, request, env, ik, json, R) {
+  const m = request.method;
+  if (p === '/push/sleutel' && m === 'GET') {
+    const k = pushPubliek(env);
+    return k ? json({ publicKey: k }) : json({ error: 'push-niet-ingericht', uitleg: 'VAPID_PUBLIC en VAPID_PRIVATE ontbreken (zie wrangler.toml)' }, 503);
+  }
+  const doe = sigStub(env);
+  if (!doe) return json({ error: 'geen-signalen-opslag', uitleg: 'Durable Object-binding MT_TELLER ontbreekt (zie wrangler.toml)' }, 503);
+  const door = await oidHash(ik.oid);
+  if (p === '/push/status' && m === 'GET') { const r = await doe('sig-sub-status', { oid: ik.oid }); return json({ ingericht: !!pushPubliek(env), mag: !!R.offertes, ...(r.j || {}) }, r.status); }
+  if (m !== 'POST' || !['/push/aanmelden', '/push/afmelden'].includes(p)) return json({ error: 'onbekende-route' }, 404);
+  const t = await geldLeesMax(request, 8 * KB); if (t == null) return json({ error: 'te-groot' }, 413);
+  let b; try { b = JSON.parse(t || '{}'); } catch { return json({ error: 'ongeldige-json' }, 400); }
+  const sub = b && typeof b === 'object' ? (b.subscription && typeof b.subscription === 'object' ? b.subscription : b) : {};
+  const endpoint = String(sub.endpoint || '');
+  if (!pushEndpointOk(endpoint)) return json({ error: 'ongeldig', uitleg: 'endpoint van een bekende pushdienst (https) verplicht' }, 400);
+  const hash = (await sha256Hex(endpoint)).slice(0, 32);
+  if (p === '/push/afmelden') { const r = await doe('sig-sub-weg', { oid: ik.oid, hash, door }); return json(r.j, r.status); }
+  if (!R.offertes) return json({ error: 'geen-toegang', reden: 'offertes' }, 403);
+  if (!pushPubliek(env)) return json({ error: 'push-niet-ingericht', uitleg: 'VAPID_PUBLIC en VAPID_PRIVATE ontbreken (zie wrangler.toml)' }, 503);
+  const keys = sub.keys || {}, p256 = b64uNaar(keys.p256dh), au = b64uNaar(keys.auth);
+  if (!p256 || p256.length !== 65 || p256[0] !== 4 || !au || au.length !== 16) return json({ error: 'ongeldig', uitleg: 'keys.p256dh (65 bytes) en keys.auth (16 bytes), base64url' }, 400);
+  const r = await doe('sig-sub-zet', { oid: ik.oid, hash, endpoint, p256dh: String(keys.p256dh), auth: String(keys.auth), door });
+  return json(r.j, r.status);
+}
+
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
 export default {
   // Cron Triggers (wrangler.toml [triggers]): zie koersCron. Fouten worden gelogd, nooit gegooid (de volgende ochtend probeert opnieuw).
+  // Splitsing op cron-expressie: alleen SIG_REC_CRON gaat naar de dagelijkse signalen-controle; elke andere trigger (ook zonder
+  // event.cron) gaat ongewijzigd naar de Koersmeter.
   async scheduled(event, env, ctx) {
+    if (event && event.cron === SIG_REC_CRON) {
+      const ctl = sigReconciliatie(env).catch(e => { sigLog({ controle: 'fout', fout: String((e && e.message) || e).slice(0, 200) }); return { status: 'fout' }; });
+      waitUntil(ctx, ctl);
+      return await ctl;
+    }
     const taak = koersCron(env, event && event.scheduledTime != null ? event.scheduledTime : Date.now()).catch(e => { try { console.log(JSON.stringify({ koerscron: 'fout', fout: String((e && e.message) || e).slice(0, 200) })); } catch {} return { status: 'fout' }; });
     waitUntil(ctx, taak);
     return await taak;
   },
   async fetch(request, env, ctx) {
     if (new URL(request.url).pathname === '/csp-rapport') return await cspRapport(request, env, ctx);
+    // Moneybird-webhook (L3): server-naar-server, eigen handtekening (geen MS-token, geen CORS); zie mbWebhook.
+    if (new URL(request.url).pathname === '/mb/webhook') return await mbWebhook(request, env);
     const herkomst = request.headers.get('Origin') || '';
     // Onbekende herkomst: géén CORS-headers (dan blokkeert de browser het antwoord); alleen Vary.
     const corsHeaders = CORS_HERKOMST.includes(herkomst) ? {
@@ -5076,6 +5660,8 @@ export default {
       if (url.pathname === '/instellingen' || url.pathname.startsWith('/teller/')) return await handleTeller(url.pathname, request, env, ik, json);
       // Zoekbalk: Moneybird-facturen en -offertes uit de zoekindex (alleen lezen; recht `moneybird`).
       if (url.pathname === '/zoek/moneybird') return await handleZoekMb(request, env, ik, json, ctx, modus);
+      // Signalen (L3): de gedeelde actiewachtrij. Zien = recht offertes of projecten, wijzigen = offertes 'wijzigen' (in élke modus).
+      if (url.pathname === '/signalen' || url.pathname.startsWith('/signalen/') || url.pathname.startsWith('/push/')) return await handleSignalen(url.pathname, request, env, ik, json);
       // Geldtijdlijn en het financiële dashboard: recht `geld`, in élke ROLLEN_MODUS (zie handleGeld).
       if (url.pathname.startsWith('/geld/')) return await handleGeld(url.pathname, request, env, ik, json);
       if (url.pathname.startsWith('/dashboard/')) {

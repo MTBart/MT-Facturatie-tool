@@ -45,3 +45,35 @@ self.addEventListener("fetch", e => {
     }
   })());
 });
+
+/* =====================================================================
+   Pushmeldingen (L3b). De server stuurt alleen een aantal; de tekst is
+   hier vast en algemeen ("M&T: N acties vragen aandacht"), dus ook een
+   afwijkend bericht kan nooit klantnaam, bedrag of nummer tonen. De
+   details staan pas na inloggen in de app.
+   ===================================================================== */
+self.addEventListener("push", e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = {}; }
+  const n = Number(d && d.n) > 0 ? Math.min(999, Math.floor(Number(d.n))) : 0;
+  const tekst = n ? "M&T: " + n + (n === 1 ? " actie vraagt" : " acties vragen") + " aandacht" : "M&T: er zijn acties die aandacht vragen";
+  e.waitUntil(self.registration.showNotification("M&T", {
+    body: tekst,
+    icon: "icons/icon-192.png",
+    badge: "icons/icon-192.png",
+    tag: "mt-acties",                // een nieuwe melding vervangt de vorige (geen stapel)
+    renotify: true,
+    data: { url: "./mobiel.html" }
+  }));
+});
+
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const doel = new URL("./mobiel.html", self.location.href).href;
+  e.waitUntil((async () => {
+    const tabs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const open = tabs.find(c => c.url.split("#")[0].split("?")[0] === doel);
+    if (open && "focus" in open) return open.focus();
+    if (self.clients.openWindow) return self.clients.openWindow(doel);
+  })());
+});
