@@ -73,6 +73,29 @@
     });
   };
 
+  // ── Planblokken als agenda-blokken voor één persoon en één week (mobiel) ───────────────────────────
+  // blokken: planblokken {id, persoon, project_code, taak, datum, start, duurMin, status, _vervallen}.
+  // van: ymd van de maandag. Geeft {id, datum, dagIdx (0 = ma … 6 = zo), start, end, name, proj, voorstel}.
+  // Een open voorstel telt mee als `voorstel:true` (de aanroeper bepaalt of hij het toont); een afgewezen of
+  // verwijderd blok nooit. Blokken zonder duur worden overgeslagen; zonder starttijd begint het blok om 08:00.
+  const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  const dagNr = ymd => { const [y, m, d] = String(ymd).split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 864e5); };
+  P.agendaBlokken = function (blokken, { van, mijn, team = null } = {}) {
+    const uit = [], v0 = van ? dagNr(van) : null;
+    (blokken || []).forEach(b => {
+      if (!b || b._vervallen || !b.datum || !P.zelfdePersoon(b.persoon, mijn, team)) return;
+      if (b.voorstel && b.voorstel.afgewezen) return;
+      const idx = v0 == null ? 0 : dagNr(b.datum) - v0;
+      if (idx < 0 || idx > 6) return;
+      const dur = Math.round(getal(b.duurMin)); if (dur <= 0) return;
+      const m = /^(\d{1,2}):(\d{2})/.exec(String(b.start || ''));
+      const s = m ? Math.min(23 * 60 + 59, parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : 8 * 60;
+      uit.push({ id: String(b.id), datum: b.datum, dagIdx: idx, start: hhmm(s), end: hhmm(Math.min(24 * 60 - 1, s + dur)),
+        name: b.taak || b.project_code || 'Planblok', proj: b.project_code || '', voorstel: b.status === 'voorstel' });
+    });
+    return uit;
+  };
+
   // ── Uurtarief: één bron ──────────────────────────────────────────────────────────────────────────
   // Instellingen ▸ Uurtarieven (`mt_uurtarieven`: {bart: 55, …, _std: 55}). Ontbreekt de standaard daar,
   // dan geldt deze waarde. Ook de calculatie (nieuwe uurregels) en de nacalculatie gebruiken deze bron.

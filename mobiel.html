@@ -2271,6 +2271,7 @@ async function _pvSchrijf(wijzig) {
   const remote = await _SP.read('mt_planblokken.json').catch(() => null);
   if (!Array.isArray(remote)) { showToast('SharePoint niet bereikbaar — probeer het zo opnieuw'); return false; }
   _pvBlokken = wijzig(MTPlanVoorstel.samen(_pvBlokken, remote));
+  if (typeof AGENDA_CACHE !== "undefined") for (const k of Object.keys(AGENDA_CACHE)) delete AGENDA_CACHE[k];   // de agenda toont planblokken: opnieuw opbouwen
   return await _SP.write('mt_planblokken.json', _pvBlokken, (r2, lokaal) => { _pvBlokken = MTPlanVoorstel.samen(lokaal, r2); return _pvBlokken; });
 }
 async function aanwezigLaadMobiel() {
@@ -2786,9 +2787,11 @@ async function loadAgendaWeek(week) {
     const monday = mondayOfWeek(week);
     const zondag = new Date(monday); zondag.setDate(zondag.getDate() + 6);
     const range = `date_from=${_isoDate(monday)}T00:00:00Z&date_to=${_isoDate(zondag)}T23:59:59Z`;
-    const [logged, planned] = await Promise.all([
+    // Gepland = de planblokken uit de cockpit (SharePoint mt_planblokken) voor de ingelogde medewerker. Toggl
+    // `time-blocks` bestaat niet meer (404) en wordt niet meer gelezen; geklokt komt nog uit Toggl.
+    const [logged] = await Promise.all([
       focusFetch(`time-entries/stream?${range}&order_by=start&include_taskless=true`).catch(e => { console.warn("time-entries:", e.message); return []; }),
-      focusFetch(`time-blocks/stream?${range}&order_by=start`).catch(e => { console.warn("time-blocks:", e.message); return []; })
+      _pvLees().catch(() => [])
     ]);
     const days = {0:[],1:[],2:[],3:[],4:[]};
     const verwerk = (raw, kind) => {
@@ -2799,7 +2802,10 @@ async function loadAgendaWeek(week) {
       });
     };
     verwerk(logged, "logged");
-    verwerk(planned, "planned");
+    MTPlanning.agendaBlokken(_pvBlokken, {van: _isoDate(monday), mijn: _mijnEmail()}).forEach(b => {
+      if (b.dagIdx > 4) return;   // weekend: de mobiele agenda toont ma-vr
+      days[b.dagIdx].push({id: `pl-${b.id}`, real: true, kind: "planned", mock: false, who: "planned", name: (b.voorstel ? "Voorstel: " : "") + b.name, proj: b.proj, start: b.start, end: b.end, dayIdx: b.dagIdx});
+    });
     AGENDA_CACHE[week] = {ts: Date.now(), days};
   })().finally(() => { delete _agendaLoading[week]; });
   return _agendaLoading[week];
