@@ -6874,10 +6874,18 @@ async function ontkoppelMail(code,idx){
 // Lokale store per projectcode (mt_project_taken). Taken kunnen onderling afhankelijk
 // zijn (M&T-extra; Toggl Focus kent geen deps) en worden als Focus-taak met project_id
 // naar het Toggl-project gespiegeld zodat ze daar voor het team zichtbaar zijn.
-function projTakenAll(){try{return JSON.parse(localStorage.getItem('mt_project_taken')||'{}');}catch(e){return{};}}
+// Opslag { projectcode: [taak…] } mét tombstones (mt-planning.js: per veld een stempel, samenvoegen, verwijderen = tombstone).
+// projTakenAll()/projTaken() tonen alleen de actieve taken; projTakenZet() stempelt wat er veranderd is en bewaart een
+// verwijderde taak als tombstone, zodat een oude kopie van een andere pc hem niet terugzet.
+function projTakenRuw(){try{const o=JSON.parse(localStorage.getItem('mt_project_taken')||'{}');return (o&&typeof o==='object'&&!Array.isArray(o))?o:{};}catch(e){return{};}}
+function projTakenAll(){const r=projTakenRuw(), o={}; Object.keys(r).forEach(c=>{ o[c]=MTPlanning.takenActief(r[c]); }); return o;}
 function projTakenSave(o){localStorage.setItem('mt_project_taken',JSON.stringify(o));}
-function projTaken(code){return projTakenAll()[code]||[];}
-function projTakenZet(code,arr){const all=projTakenAll();all[code]=arr;projTakenSave(all);}
+function projTaken(code){return MTPlanning.takenActief(projTakenRuw()[code]);}
+function projTakenZet(code,arr){
+  const ruw=projTakenRuw(), pr=(typeof projVind==='function')?projVind(code):null;
+  ruw[code]=MTPlanning.takenStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),projectId:(pr&&pr.project_id)||''});
+  projTakenSave(ruw);
+}
 function _ptId(){return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 const _PT_PRIO={low:{l:'P3',c:'#6b7280'},medium:{l:'P2',c:'#B8962E'},high:{l:'P1',c:'#c0392b'}};
 const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},klaar:{l:'Klaar',c:'#2A4A38'}};
@@ -10852,6 +10860,9 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const besloten = x => !!(x && x.voorstel && (x.voorstel.goedgekeurd || x.voorstel.afgewezen));
       return _spSamenPerSleutel(lokaal, spData, x => x.id, x => (_spTijd(x) || (Date.parse(x && x.ts || '') || 0)) + (besloten(x) ? 1e15 : 0));
     },
+    // Projecttaken (P1): per projectcode, per taak-id; per veld wint de nieuwste stempel, een wijziging die de winnaar niet
+    // kende wordt als _veldconflict bewaard; verwijderen = tombstone (wint). Zie MTPlanning.takenSamen.
+    mt_project_taken(lokaal, spData) { return MTPlanning.takenSamen(lokaal, spData); },
     // Bestellijst (brok L2): per regel (id; oude regels zonder id → inhoud-id) wint de
     // stand met de nieuwste `_gewijzigd`. Van de lijst halen is een tombstone
     // (`_vervallen` + nieuwe stempel), dus een oude kopie zet niets terug en wist niets.
@@ -14051,7 +14062,7 @@ function ctlWeesData(){
   (_ctlJson('mt_history',[])||[]).forEach(x=>x&&tel(x.project,'facturen',{titel:x.contact,datum:x.date}));
   // alleen tellen (niet automatisch te verplaatsen; handmatig in het project)
   const plan=_ctlJson('mt_planning',{}); Object.entries(plan&&typeof plan==='object'?plan:{}).forEach(([c,x])=>{ if(x&&!x._vervallen) tel(c,'planning'); });
-  const taken=_ctlJson('mt_project_taken',{}); Object.entries(taken&&typeof taken==='object'?taken:{}).forEach(([c,l])=>(Array.isArray(l)?l:[]).forEach(()=>tel(c,'taken')));
+  const taken=_ctlJson('mt_project_taken',{}); Object.entries(taken&&typeof taken==='object'?taken:{}).forEach(([c,l])=>(Array.isArray(l)?l:[]).filter(x=>x&&!x._vervallen).forEach(()=>tel(c,'taken')));
   (_ctlJson('mt_planblokken',[])||[]).forEach(b=>b&&!b._vervallen&&tel(b.project_code,'planblokken'));
   const besl=ctlBesluitActueel(), opslag=_projLees()||[];
   const wees=[...per.values()].map(r=>{
