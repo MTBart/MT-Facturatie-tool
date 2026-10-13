@@ -143,6 +143,14 @@ crons = ["*/30 3-5 * * *", "45 4 * * *"]
 #    "estimate_state_changed_to_late"]. Pas aanmaken NA de deploy van deze worker (anders weigert hij alles met 503).
 #      printf %s '<secret>' | npx wrangler secret put MB_WEBHOOK_SECRET
 #    Roteren: het nieuwe geheim als MB_WEBHOOK_SECRET, het oude tijdelijk als MB_WEBHOOK_SECRET_VORIG (daarna weghalen).
+#    Afscherming /mb/webhook: de worker weigert vóór het lezen van de body (header-check, max. 64 KiB, 60 verzoeken/min per IP per isolate).
+#    Optioneel, sterker (over alle datacenters): een rate-limit-binding MB_WEBHOOK_LIMIET, bv.
+#      [[unsafe.bindings]]
+#      name = "MB_WEBHOOK_LIMIET"
+#      type = "ratelimit"
+#      namespace_id = "1001"
+#      simple = { limit = 60, period = 60 }
+#    en/of een WAF-regel in het Cloudflare-dashboard (pad /mb/webhook alleen POST, rate-limit per IP). Beide optioneel (Bart/regie).
 #
 # 2) VAPID-sleutels voor push (één keer; de publieke sleutel is niet geheim, de private wel):
 #      node -e "const c=require('crypto');const j=c.generateKeyPairSync('ec',{namedCurve:'prime256v1'}).privateKey.export({format:'jwk'});console.log(Buffer.concat([Buffer.from([4]),Buffer.from(j.x,'base64url'),Buffer.from(j.y,'base64url')]).toString('base64url'));console.log(j.d)"

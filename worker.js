@@ -5242,14 +5242,17 @@ async function handleSignalen(p, request, env, ik, json) {
 //     v1 = HMAC-SHA256(geheim, "<t>.<ruwe body>") over de exacte bytes; één van de v1-waarden moet kloppen (constant-time) en t mag
 //     hooguit 5 minuten afwijken. Geheim = worker-secret MB_WEBHOOK_SECRET (bij rotatie tijdelijk ook MB_WEBHOOK_SECRET_VORIG).
 //     Zonder geheim: 503 (nooit open). Fout → 401.
-//  2. Idempotentie: header `Idempotency-Key` (anders de SHA-256 van de body) in de signalen-DO. Een herhaalde levering = 200, niets gedaan.
+//     Vóór het lezen van de body: een ontbrekende, te lange, slecht gevormde of verlopen header → 401, Content-Length boven MB_WH_MAX → 413,
+//     en een rate-limit per IP (429; de binding MB_WEBHOOK_LIMIET als die er is, anders een teller per isolate). Zo kost rommel geen body-lezen.
+//  2. Idempotentie: ALTIJD de SHA-256 van de ruwe body (die door de HMAC gedekt is) in de signalen-DO; de niet-gesigneerde header
+//     `Idempotency-Key` telt niet mee (een replay met een andere header is dus ook dubbel). Een herhaalde levering = 200, niets gedaan.
 //  3. Alleen offertes (entity_type Estimate) van onze administratie, en alleen als de offerte een bevestigde koppeling heeft (POST
 //     /signalen/offertes). Dan een read-only GET estimates/{id}: de staat uit de payload wordt nooit vertrouwd.
 //  4. accepted/rejected → één signaal "markeer gewonnen/verloren?". Nooit een MB-write, nooit zelf koppelen, nooit een fase wijzigen.
 // 200 bij alles wat verwerkt of bewust genegeerd is (anders herhaalt Moneybird tot 10 keer); 503 bij een tijdelijke fout (Moneybird of
 // opslag): de claim wordt dan vrijgegeven, zodat de herhaling van Moneybird het opnieuw doet.
-const MB_WH_MAX = 256 * KB, MB_WH_TOLERANTIE_S = 300, MB_WH_BEZIG_MS = 2 * 60 * 1000;
-const MB_WH_SLEUTEL_RE = /^[kh][A-Za-z0-9._:-]{8,130}$/;
+const MB_WH_MAX = 64 * KB, MB_WH_TOLERANTIE_S = 300, MB_WH_BEZIG_MS = 2 * 60 * 1000, MB_WH_KOP_MAX = 600, MB_WH_PER_MIN = 60;
+const MB_WH_SLEUTEL_RE = /^h[0-9a-f]{64}$/;
 const sigLog = o => { try { console.log(JSON.stringify(Object.assign({ sig: true }, o))); } catch {} };
 const hexVan = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 async function leesRuw(request, max) {   // de exacte bytes (nodig voor de handtekening); null als het te groot is
@@ -5266,16 +5269,35 @@ async function leesRuw(request, max) {   // de exacte bytes (nodig voor de handt
   return buf;
 }
 function gelijkTijd(a, b) { if (a.length !== b.length) return false; let x = 0; for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i); return x === 0; }
-async function mbHandtekeningOk(kop, ruw, geheimen, nu) {
-  if (!kop || kop.length > 2000) return false;
+// De header ontleden en de tijd toetsen (zonder de body) → { ts, v1: [...] } of null.
+function mbHandtekeningKop(kop, nu) {
+  if (!kop || kop.length > MB_WH_KOP_MAX) return null;
   let ts = null; const v1 = [];
   for (const deel of String(kop).split(',')) {
-    const i = deel.indexOf('='); if (i < 0) continue;
+    const i = deel.indexOf('='); if (i < 0) return null;
     const k = deel.slice(0, i).trim(), v = deel.slice(i + 1).trim();
-    if (k === 't') ts = v; else if (k === 'v1' && /^[0-9a-fA-F]{64}$/.test(v)) v1.push(v.toLowerCase());
+    if (k === 't') { if (ts != null) return null; ts = v; }
+    else if (k === 'v1') { if (!/^[0-9a-fA-F]{64}$/.test(v) || v1.length >= 4) return null; v1.push(v.toLowerCase()); }
   }
-  if (!/^\d{1,12}$/.test(ts || '') || !v1.length) return false;
-  if (Math.abs(nu / 1000 - Number(ts)) > MB_WH_TOLERANTIE_S) return false;
+  if (!/^\d{1,12}$/.test(ts || '') || !v1.length) return null;
+  if (Math.abs(nu / 1000 - Number(ts)) > MB_WH_TOLERANTIE_S) return null;
+  return { ts, v1 };
+}
+// Rate-limit per IP vóór het lezen van de body. Met de (optionele) Cloudflare-binding MB_WEBHOOK_LIMIET (zie wrangler.toml) over alle
+// datacenters; zonder binding een eenvoudige teller per isolate (MB_WH_PER_MIN per minuut). Moneybird zelf komt hier nooit in de buurt.
+const _whIp = new Map();
+async function mbWebhookTeVaak(request, env) {
+  const ip = String(request.headers.get('CF-Connecting-IP') || 'onbekend').slice(0, 64);
+  const b = env.MB_WEBHOOK_LIMIET;
+  if (b && typeof b.limit === 'function') { try { const r = await b.limit({ key: 'mbwh:' + ip }); return !(r && r.success); } catch { /* terugval hieronder */ } }
+  const nu = Date.now(), w = (_whIp.get(ip) || []).filter(x => nu - x < 60000);
+  if (w.length >= MB_WH_PER_MIN) { _whIp.set(ip, w); return true; }
+  w.push(nu); if (_whIp.size > 5000) _whIp.clear(); _whIp.set(ip, w);
+  return false;
+}
+async function mbHandtekeningOk(kopInfo, ruw, geheimen) {
+  if (!kopInfo) return false;
+  const { ts, v1 } = kopInfo;
   const voor = new TextEncoder().encode(ts + '.'), data = new Uint8Array(voor.length + ruw.length); data.set(voor, 0); data.set(ruw, voor.length);
   for (const g of geheimen) {
     const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(g), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -5308,9 +5330,15 @@ async function mbWebhook(request, env) {
   if (request.method !== 'POST') return antw({ error: 'methode' }, 405);
   const geheimen = [env.MB_WEBHOOK_SECRET, env.MB_WEBHOOK_SECRET_VORIG].map(x => String(x || '').trim()).filter(Boolean);
   if (!geheimen.length) return antw({ error: 'niet-ingericht' }, 503);
+  if (await mbWebhookTeVaak(request, env)) { sigLog({ webhook: 'te-vaak' }); return antw({ error: 'te-vaak' }, 429); }
+  // Alles wat zonder de body te toetsen is, eerst (de body wordt pas gelezen als de header klopt en de lengte past).
+  const kopInfo = mbHandtekeningKop(request.headers.get('Moneybird-Signature'), Date.now());
+  if (!kopInfo) { sigLog({ webhook: 'handtekening', stap: 'kop' }); return antw({ error: 'handtekening' }, 401); }
+  const cl = request.headers.get('Content-Length');
+  if (cl != null && cl !== '' && !(Number(cl) <= MB_WH_MAX)) return antw({ error: 'te-groot' }, 413);
   const ruw = await leesRuw(request, MB_WH_MAX);
   if (!ruw) return antw({ error: 'te-groot' }, 413);
-  if (!(await mbHandtekeningOk(request.headers.get('Moneybird-Signature'), ruw, geheimen, Date.now()))) { sigLog({ webhook: 'handtekening' }); return antw({ error: 'handtekening' }, 401); }
+  if (!(await mbHandtekeningOk(kopInfo, ruw, geheimen))) { sigLog({ webhook: 'handtekening' }); return antw({ error: 'handtekening' }, 401); }
   let p = null; try { p = JSON.parse(new TextDecoder().decode(ruw)); } catch {}
   const negeer = reden => { sigLog({ webhook: 'genegeerd', reden }); return antw({ ok: true, genegeerd: reden }); };
   if (!p || typeof p !== 'object' || Array.isArray(p)) return negeer('json');
@@ -5320,11 +5348,12 @@ async function mbWebhook(request, env) {
   if (!SIG_MBID_RE.test(mbId)) return negeer('id');
   const doe = sigStub(env);
   if (!doe) return antw({ error: 'geen-opslag' }, 503);
-  const kop = String(request.headers.get('Idempotency-Key') || '');
-  const idem = /^[A-Za-z0-9._:-]{8,120}$/.test(kop) ? 'k' + kop : 'h' + hexVan(await crypto.subtle.digest('SHA-256', ruw));
+  // Idempotentie altijd op de gesigneerde body; de header Idempotency-Key alleen in de log (ingekort, nooit als sleutel).
+  const idem = 'h' + hexVan(await crypto.subtle.digest('SHA-256', ruw));
+  const kopIdem = String(request.headers.get('Idempotency-Key') || '').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 40);
   const c = await doe('sig-wh-claim', { sleutel: idem });
   if (c.status !== 200 || !c.j) return antw({ error: 'opslag' }, 503);
-  if (c.j.dubbel) return antw({ ok: true, dubbel: true });
+  if (c.j.dubbel) { sigLog({ webhook: 'dubbel', kop: kopIdem || undefined }); return antw({ ok: true, dubbel: true }); }
   if (c.j.bezig) return antw({ error: 'bezig' }, 503);
   try {
     const k = await doe('sig-off-get', { mb_id: mbId });
