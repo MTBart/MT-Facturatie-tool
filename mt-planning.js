@@ -113,7 +113,7 @@
   // ══ P1: taken per project, activiteiten, meter ═══════════════════════════════════════════════════════
   // ── Activiteitencatalogus (stabiele sleutels; dezelfde lijst geldt later voor uursoorten en tarieven) ──
   // `soort` is de rollup voor de meter (besluit Bart 13-10): tekenwerk, werkvoorbereiding en kantoor zijn KANTOORUREN;
-  // werkplaats, spuiten en montage zijn WP-uren. Reizen blijft een eigen activiteit en telt voorlopig bij de WP-uren (aanname).
+  // werkplaats, spuiten en montage zijn werkplaatsuren. Reizen blijft een eigen activiteit en telt voorlopig bij de Werkplaatsuren (aanname).
   P.ACTIVITEITEN = [
     { k: 'tekenwerk', l: 'Tekenwerk', soort: 'kantoor' },
     { k: 'werkvoorbereiding', l: 'Werkvoorbereiding', soort: 'kantoor' },
@@ -123,8 +123,8 @@
     { k: 'reizen', l: 'Reizen', soort: 'wp' },
     { k: 'kantoor', l: 'Kantoor', soort: 'kantoor' }];
   // 'overig' = nog niet ingedeeld (taken zonder activiteit); wordt in het scherm niet als soort getoond.
-  P.SOORTEN = { kantoor: 'Kantooruren', wp: 'WP-uren', overig: 'Niet ingedeeld' };
-  P.SOORT_TOELICHTING = 'Kantooruren: tekenwerk, werkvoorbereiding, kantoor. WP-uren: werkplaats, spuiten, montage en (aanname, voorlopig) reizen.';
+  P.SOORTEN = { kantoor: 'Kantooruren', wp: 'Werkplaatsuren', overig: 'Niet ingedeeld' };
+  P.SOORT_TOELICHTING = 'Kantooruren: tekenwerk, werkvoorbereiding, kantoor. Werkplaatsuren: werkplaats, spuiten, montage en (aanname, voorlopig) reizen.';
   P.activiteit = k => P.ACTIVITEITEN.find(a => a.k === k) || null;
   // De uursoorten van de calculatie (Instellingen/Calculatie) → activiteit.
   const UURSOORT_ACT = { calculatie: 'kantoor', ontwerpen: 'tekenwerk', werkvoorbereiding: 'werkvoorbereiding', productie: 'werkplaats', afwerking: 'spuiten', transport: 'reizen', montage: 'montage' };
@@ -310,7 +310,7 @@
     const budget = cb ? cb.totaal : rijen.reduce((s, r) => s + r.taakBudget, 0);
     const geklokt_ = gekoppeld + ongekoppeld;
     const totaal = { budget, gepland: geplandTotaal, gekoppeld, ongekoppeld, geklokt: geklokt_, resterend: budget - geklokt_, pct: budget > 0 ? geklokt_ / budget : null };
-    // rollup kantooruren / WP-uren
+    // rollup kantooruren / Werkplaatsuren
     const perSoort = {}; Object.keys(P.SOORTEN).forEach(s => { perSoort[s] = { budget: 0, gepland: 0, gekoppeld: 0 }; });
     rijen.forEach(r => { const p = perSoort[r.soort]; p.budget += r.budget; p.gepland += r.gepland; p.gekoppeld += r.gekoppeld; });
     // waarschuwingen

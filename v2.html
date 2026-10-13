@@ -38,7 +38,7 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-13b"></script>
+<script src="mt-planning.js?v=2026-10-13c"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
@@ -1530,9 +1530,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <button class="btn btn-secondary btn-sm" onclick="saveToeslagen()">Opslaan</button>
           <span id="toeslag-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
         </div>
-        <div class="card">
-          <div class="card-title">Uurtarieven (nacalculatie)</div>
-          <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">€ per uur excl. btw, per teamlid. Gebruikt in de nacalculatie-tabel in het projectvenster.</p>
+        <div class="card" id="uurtarief-kaart">
+          <div class="card-title">Uurtarieven</div>
+          <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">€ per uur excl. btw, per teamlid; het standaardtarief geldt voor iedereen zonder eigen tarief. Gebruikt in de nacalculatie (projectvenster) en als startwaarde van nieuwe uurregels in de calculatie. Hier pas je ze altijd aan.</p>
           <div class="grid2" id="uurtarief-velden"></div>
           <button class="btn btn-secondary btn-sm" onclick="saveUurtarieven()">Opslaan</button>
           <span id="uurtarief-status" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
@@ -6994,7 +6994,7 @@ function projectTakenHtml(proj){
       <td><span class="badge" style="background:${esc(stt.c)}22;color:${esc(stt.c)}">${esc(stt.l)}</span></td>
       <td style="font-size:13px">${esc(t.naam)}${planLink}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
       <td style="white-space:nowrap">
-        <select class="pt-sel" aria-label="Activiteit" title="Activiteit. Kantooruren: tekenwerk, werkvoorbereiding, kantoor. WP-uren: werkplaats, spuiten, montage en (aanname, voorlopig) reizen." onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'activiteit',this.value)">${[['','— activiteit —']].concat(MTPlanning.ACTIVITEITEN.map(a=>[a.k,a.l])).map(([k,l])=>`<option value="${esc(k)}"${(t.activiteit||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
+        <select class="pt-sel" aria-label="Activiteit" title="Activiteit. Kantooruren: tekenwerk, werkvoorbereiding, kantoor. Werkplaatsuren: werkplaats, spuiten, montage en (aanname, voorlopig) reizen." onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'activiteit',this.value)">${[['','— activiteit —']].concat(MTPlanning.ACTIVITEITEN.map(a=>[a.k,a.l])).map(([k,l])=>`<option value="${esc(k)}"${(t.activiteit||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
         <select class="pt-sel" aria-label="Toegewezen aan" title="Toegewezen aan (optioneel)" onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'toegewezen',this.value)">${[['','— wie —']].concat(MT_TEAM.map(m=>[m.slug,m.naam])).map(([k,l])=>`<option value="${esc(k)}"${(t.toegewezen||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
         ${t._veldconflict&&Object.keys(t._veldconflict).length?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="Twee gelijktijdige wijzigingen — klik om te kiezen" onclick="projTaakConflict(${jsArg(proj.code)},${jsArg(t.id)})">⚠ conflict</button>`:''}
       </td>
@@ -7090,7 +7090,7 @@ function projMeterTeken(code){
   const kolommen=['Activiteit','Budget','Gepland','Geklokt (aan taak)','Geklokt (zonder taak)','Resterend'];
   const celNum=(v,extra)=>_pmEl('td',{class:'pm-num'+(extra?' '+extra:'')},_pmU(v));
   const rijen=m.rijen.map(r=>_pmEl('tr',null,
-    _pmEl('td',{tekst:r.l,title:(r.k?(MTPlanning.SOORTEN[r.soort]+(r.k==='reizen'?' (aanname: reizen telt voorlopig bij de WP-uren)':'')+' · '):'')+(r.taken?(r.taken+' taak/taken'):'Geen taken met deze activiteit')}),
+    _pmEl('td',{tekst:r.l,title:(r.k?(MTPlanning.SOORTEN[r.soort]+(r.k==='reizen'?' (aanname: reizen telt voorlopig bij de Werkplaatsuren)':'')+' · '):'')+(r.taken?(r.taken+' taak/taken'):'Geen taken met deze activiteit')}),
     _pmEl('td',{class:'pm-num',title:m.budgetBron==='calculatie'?('Calculatie. Taken: '+_pmU(r.taakBudget)):('Optelling van de taakramingen ('+r.taken+' taken)')},_pmU(r.budget)),
     celNum(r.gepland),celNum(r.gekoppeld),_pmEl('td',{class:'pm-num pm-dim'},'—'),
     celNum(r.resterend,r.resterend<0?'pm-over':'')));
@@ -7113,7 +7113,7 @@ function projMeterTeken(code){
     sig?_pmEl('div',{class:'pm-w pm-'+sig.niveau,role:'status'},(sig.niveau==='fout'?'⛔ ':'⚠ ')+sig.tekst):null,
     waarsch,tabel,
     soorten.length?_pmEl('div',{class:'pm-soort',title:MTPlanning.SOORT_TOELICHTING,tekst:soorten.join(' · ')}):null,
-    _pmEl('div',{class:'pm-sync',tekst:syncTekst})));
+    _pmEl('div',{class:'pm-sync'},syncTekst+' · Standaardtarief € '+MTPlanning.uurtariefStd(uurtarieven())+'/u · ',_pmEl('a',{href:'#',class:'pm-link',klik:e=>{ e.preventDefault(); uurtarievenOpen(); }},'tarieven aanpassen'))));
   // badge bij de sectienaam "Planning"
   try{ const knop=document.querySelector('#project-detail .proj-secknop[data-sectie="planning"]');
     if(knop){ const oud=knop.querySelector('.pm-nav'); if(oud) oud.remove();
@@ -7908,6 +7908,11 @@ function renderUurtarieven(){
 }
 // Staat het standaardtarief in de calculatie (mt_calc_defaults) anders dan het standaardtarief hier? Dan een melding met een
 // knop; er wordt nooit stil iets in de calculatie gewijzigd (alleen na bevestiging, en alleen de standaardregels).
+// Naar Instellingen ▸ Uurtarieven springen (vanuit de projectmeter en de nacalculatie).
+function uurtarievenOpen(){
+  tbDoTab('instellingen');
+  setTimeout(()=>{ const k=document.getElementById('uurtarief-kaart'); if(k) k.scrollIntoView({behavior:'smooth',block:'center'}); const i=document.getElementById('s-tarief-std'); if(i){ try{ i.focus({preventScroll:true}); }catch(e){ i.focus(); } } },120);
+}
 function uurtariefCalcMelding(){
   const el=document.getElementById('uurtarief-calcmelding'); if(!el) return;
   let d=null; try{ d=(window.CALC&&CALC.loaded)?CALC.defaults:JSON.parse(localStorage.getItem('mt_calc_defaults')||'null'); }catch(e){}
@@ -7965,6 +7970,7 @@ function nacalcHtml(proj,totaalInkoop,effectiveMb){
         <button class="btn btn-sm btn-secondary" onclick="nacalcExportCsv(${jsArg(proj.code)})">⬇ CSV</button>
         <button class="btn btn-sm btn-secondary" onclick="nacalcExportPdf(${jsArg(proj.code)})">🖨 PDF</button>
         <span style="font-size:11px;color:var(--text-faint)">Altijd als concept in Moneybird — versturen doe je zelf</span>
+        <span style="font-size:11px;color:var(--text-dim)">Standaardtarief € ${esc(MTPlanning.uurtariefStd(uurtarieven()))}/u · <a href="#" onclick="event.preventDefault();uurtarievenOpen()">tarieven aanpassen</a></span>
         <span id="nacalc-status-${esc(sid)}" style="font-size:12px;color:var(--text-dim)"></span>
       </div>
       <table class="materiaal-lijst">
