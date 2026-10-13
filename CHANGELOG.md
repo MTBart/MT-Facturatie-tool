@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — L1c: xmlEsc verwijdert ook ongepaarde surrogates (geldige paren blijven)
+- Commit: `2c6b4b8` | Auteur: Bart Witte
+
 ## 2026-10-13 — L1c: projectgegevens en "Projectgegevens voor Vectorworks"; navigatie naar het adres
 - Commit: `3cf5423` | Auteur: Bart Witte
 
