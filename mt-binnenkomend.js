@@ -15,6 +15,8 @@
   const STATUS_LABEL = { nieuw: 'Nieuw', opgepakt: 'Opgepakt', gekoppeld: 'Lead/project gekoppeld', afgehandeld: 'Afgehandeld' };
 
   function maak(d) {
+    // magSchrijven() = het recht om te wijzigen (in de cockpit: inbox alles of verwerken); zonder dat zijn "Pak op" en "Afhandelen" er niet en weigert schrijf() ook.
+    const magSchrijven = typeof d.magSchrijven === 'function' ? d.magSchrijven : () => true;
     const M = d.M, K = d.K || null, doc = d.doc || (root.document), nu = d.nu || (() => Date.now());
     let items = [], verzondenKaart = {}, laatsteLaad = 0, bezig = false, fout = '', filter = 'open', verzondenOk = true;
 
@@ -72,6 +74,8 @@
     }
 
     function schrijf(item, status, reden) {
+      if (!magSchrijven()) throw new Error('je hebt geen recht om gesprekken op te pakken of af te handelen');
+      if (!M.oppakToegestaan(item.g.mbx)) throw new Error('"Pak op" werkt alleen in de gedeelde postbus info@');
       const sleutel = M.oppakSleutel(item.g.mbx, item.g.conversationId);
       if (!sleutel) throw new Error('dit bericht heeft geen gespreks-id');
       const register = lees(REGISTER), mij = d.wie() || {};
@@ -80,6 +84,11 @@
     }
     async function actie(item, status) {
       let reden = '';
+      const mijnMail = String((d.wie() || {}).email || '').toLowerCase();
+      if (status === 'opgepakt' && item.s.status === 'opgepakt' && item.s.door && item.s.door !== mijnMail && d.dialoog.confirm) {
+        const ok = await d.dialoog.confirm({ title: 'Overnemen?', message: 'Dit gesprek is al opgepakt door ' + (item.s.naam || item.s.door) + '. Overnemen?', okLabel: 'Overnemen' });
+        if (!ok) return;
+      }
       if (status === 'afgehandeld') {
         const i = await d.dialoog.choose({ title: 'Afhandelen: waarom?', message: 'Kies de reden; ze staat in het overzicht.', choices: M.AFHANDEL_REDENEN.map(r => ({ label: r[1] })) });
         if (i == null) return;
@@ -96,13 +105,13 @@
       return '';
     }
     function rij(i) {
-      const s = i.s, kan = !!i.g.conversationId, knoppen = [];
-      if (s.status === 'nieuw' || s.status === 'opgepakt') {
+      const s = i.s, kan = !!i.g.conversationId, knoppen = [], schrijfOk = magSchrijven() && M.oppakToegestaan(i.g.mbx);
+      if (schrijfOk && (s.status === 'nieuw' || s.status === 'opgepakt')) {
         knoppen.push(h('button', { type: 'button', class: 'btn btn-xs btn-secondary', disabled: kan ? null : 'disabled', klik: () => actie(i, 'opgepakt'), tekst: s.status === 'opgepakt' ? 'Overnemen' : 'Pak op' }));
         knoppen.push(h('button', { type: 'button', class: 'btn btn-xs btn-secondary', disabled: kan ? null : 'disabled', klik: () => actie(i, 'afgehandeld'), tekst: 'Afhandelen…' }));
       }
-      if (s.status === 'opgepakt' && s.door) knoppen.push(h('button', { type: 'button', class: 'btn btn-xs btn-secondary', klik: () => actie(i, 'vrij'), tekst: 'Vrijgeven' }));
-      if (s.status === 'afgehandeld') knoppen.push(h('button', { type: 'button', class: 'btn btn-xs btn-secondary', klik: () => actie(i, 'opgepakt'), tekst: 'Weer oppakken' }));
+      if (schrijfOk && s.status === 'opgepakt' && s.door) knoppen.push(h('button', { type: 'button', class: 'btn btn-xs btn-secondary', klik: () => actie(i, 'vrij'), tekst: 'Vrijgeven' }));
+      if (schrijfOk && s.status === 'afgehandeld') knoppen.push(h('button', { type: 'button', class: 'btn btn-xs btn-secondary', klik: () => actie(i, 'opgepakt'), tekst: 'Weer oppakken' }));
       if ((s.status === 'nieuw' || s.status === 'opgepakt') && d.maakLead) knoppen.push(h('button', { type: 'button', class: 'btn btn-xs btn-gold', klik: () => d.maakLead({ mbx: i.g.mbx, mail: i.laatste.id }), tekst: 'Maak lead' }));
       if (s.status === 'gekoppeld' && s.codes[0] && d.openProject) knoppen.push(h('button', { type: 'button', class: 'btn btn-xs btn-secondary', klik: () => d.openProject(s.codes[0]), tekst: 'Open dossier' }));
       const link = d.veiligeUrl ? d.veiligeUrl(i.laatste.webLink) : '';
@@ -146,6 +155,7 @@
       M: root.MTMail, K: root.MTKoppel, doc: root.document, mbx: typeof root.INBOX_DEFAULT === 'string' ? root.INBOX_DEFAULT : 'info@mortiseandtenon.nl',
       fetch: url => root.ibFetch(url), opslag: { lees: k => root.localStorage.getItem(k), schrijf: (k, t) => root.localStorage.setItem(k, t) },
       wie: () => ({ email: (typeof root.mtMijEmail === 'function' && root.mtMijEmail()) || '', naam: (root.MTRol && root.MTRol.me && root.MTRol.me.naam) || '' }),
+      magSchrijven: () => (typeof root.binnenkomendMagSchrijven === 'function' ? root.binnenkomendMagSchrijven() : true),
       dialoog: root.mtDialog, maakLead: o => (typeof root.leadVanMailOpen === 'function' ? root.leadVanMailOpen(o) : null),
       openProject: c => root.openProject(c, { sectie: 'dossier' }), projNaam: c => (typeof root.projKort === 'function' ? root.projKort(c) : c), veiligeUrl: u => (root.veiligeUrl ? root.veiligeUrl(u, { hosts: ['office.com', 'office365.com', 'outlook.com', 'microsoft.com'] }) : '')
     });

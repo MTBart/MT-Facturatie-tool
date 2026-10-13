@@ -21,12 +21,15 @@
   const CONFIG = {
     clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
     authority: 'https://login.microsoftonline.com/15b652c3-ff53-433f-a29d-e9626cbafb41',
-    scopes: [G + 'Files.ReadWrite', G + 'Sites.ReadWrite.All', G + 'Mail.Read'],
+    // Bij het openen alleen LEZEN (de SharePoint-site met de koppelbestanden en je mail). Schrijfrechten worden pas gevraagd op het moment van de actie.
+    scopes: [G + 'Sites.Read.All', G + 'Mail.Read'],
     // Alleen voor een gedeelde postbus (info@) erbij gevraagd, zodat wie dat niet gebruikt er ook niet om hoeft toe te stemmen.
-    scopesGedeeld: [G + 'Files.ReadWrite', G + 'Sites.ReadWrite.All', G + 'Mail.Read', G + 'Mail.Read.Shared'],
+    scopesGedeeld: [G + 'Sites.Read.All', G + 'Mail.Read', G + 'Mail.Read.Shared'],
+    // Alleen bij het opslaan van koppelingen, het register "Pak op", de bijlage-index of een bijlage in de projectmap (Graph-bestanden op de SharePoint-site).
+    scopesSPSchrijf: [G + 'Sites.ReadWrite.All'],
     // Alleen bij een schrijfactie op de mail zelf (de categorie "Opgepakt: …", een antwoordconcept), pas op het moment van de klik.
-    scopesSchrijf: [G + 'Files.ReadWrite', G + 'Sites.ReadWrite.All', G + 'Mail.ReadWrite'],
-    scopesSchrijfGedeeld: [G + 'Files.ReadWrite', G + 'Sites.ReadWrite.All', G + 'Mail.ReadWrite', G + 'Mail.ReadWrite.Shared'],
+    scopesSchrijf: [G + 'Mail.ReadWrite'],
+    scopesSchrijfGedeeld: [G + 'Mail.ReadWrite', G + 'Mail.ReadWrite.Shared'],
     graph: 'https://graph.microsoft.com/v1.0',
     select: 'id,internetMessageId,conversationId,subject,from,receivedDateTime,webLink,hasAttachments',   // bewust zonder mailtekst of preview
     projDrive: 'b!lTex941J7USVCgvB3IzGjgLtfqmMmeJBvKGym8WK_yoejLeBeRL4SJ3YbCz59r4c',                       // de projectmappen (On-Prem-Data), zoals in de cockpit
@@ -96,9 +99,12 @@
     async function aanmelden() {
       if (!d.msal || typeof d.msal.createNestablePublicClientApplication !== 'function') throw new Error('msal-browser 3.x met NAA ontbreekt');
       pca = await d.msal.createNestablePublicClientApplication({ auth: { clientId: cfg.clientId, authority: cfg.authority } });
-      win.getGraphToken = () => token();               // mt-core's SharePoint-laag (makeSP) vraagt zijn Graph-token hier
+      win.getGraphToken = () => token(spSchrijf ? cfg.scopesSPSchrijf : cfg.scopes);   // mt-core's SharePoint-laag (makeSP) vraagt zijn Graph-token hier: lezen, tenzij we schrijven
       await token();                                   // meteen vragen: bij ontbrekende toestemming komt de popup nu, niet midden in een actie
     }
+    // Schrijven naar SharePoint: eerst het schrijf-token vragen (de popup komt dan bij de klik), daarna mag de synclaag lezen én schrijven met dat token.
+    let spSchrijf = false;
+    async function metSchrijfToken(f) { await token(cfg.scopesSPSchrijf); spSchrijf = true; try { return await f(); } finally { spSchrijf = false; } }
     async function token(scopes) {
       const req = { scopes: scopes || cfg.scopes };
       try { const r = await pca.acquireTokenSilent(req); return r.accessToken; }
@@ -180,7 +186,7 @@
     const verversGegevens = () => (zoekIndex && (gewijzigd.size || Date.now() - gegevensTs < 60000)) ? Promise.resolve() : laadGegevens();
     async function schrijfBestand(k) {
       const samen = k === BESTANDEN.links ? K.linksSamen : K.journaalSamen;
-      return SP.write(k + '.json', cache[k], (remote, local) => { const m = samen(JSON.stringify(local), remote); cache[k] = JSON.stringify(m); return m; });
+      return metSchrijfToken(() => SP.write(k + '.json', cache[k], (remote, local) => { const m = samen(JSON.stringify(local), remote); cache[k] = JSON.stringify(m); return m; }));
     }
     // Eerst de koppelingen, dan het journaal. Mislukt het journaal, dan staat de koppeling er wél: een deelresultaat, geen fout.
     // nieuweJ = de journaalregels van déze actie: pas NADAT de koppelingen zijn opgeslagen worden ze als "wachtend" bewaard (anders zou een herstart een
@@ -203,7 +209,7 @@
     // Eén los bestand (Pak op, bijlage-index) met zijn eigen samenvoeger; geeft de samengevoegde stand terug of gooit.
     async function schrijfLos(naam, data, samen) {
       let stand = data;
-      const ok = await SP.write(naam + '.json', JSON.stringify(data), (remote, local) => { stand = samen(JSON.stringify(local), remote); return stand; });
+      const ok = await metSchrijfToken(() => SP.write(naam + '.json', JSON.stringify(data), (remote, local) => { stand = samen(JSON.stringify(local), remote); return stand; }));
       if (!ok) throw new Error('Opslaan van ' + naam + ' mislukt');
       return stand;
     }
@@ -240,11 +246,21 @@
       if (info.volgendeActie && (info.volgendeActie.tekst || info.volgendeActie.datum)) regels.push(h('div', { class: 'sub', tekst: 'Volgende actie: ' + [info.volgendeActie.tekst, nlDatum(info.volgendeActie.datum)].filter(Boolean).join(' — ') }));
       return h('div', { class: 'projectgegevens' }, regels);
     }
+    // De gebeurtenis-runtime (launchevent.js) kan het koppelregister niet lezen: het paneel onthoudt van gekoppelde gesprekken een korte hash in de Outlook-instellingen.
+    function onthoudGekoppeld() {
+      if (!M || !huidig) return;
+      try {
+        const rs = Office.context.roamingSettings, ids = [huidig.msg.conversationId, itemNu() && itemNu().conversationId].filter(Boolean);
+        const oud = rs.get('mt_gekoppeld') || [], nieuw = M.onthoudGesprek(oud, ...ids);
+        if (JSON.stringify(nieuw) !== JSON.stringify(oud)) { rs.set('mt_gekoppeld', nieuw); rs.saveAsync(() => {}); }
+      } catch (e) { diag.onthoudFout = foutTekst(e); }
+    }
     function tekenGekoppeld() {
       const lijst = el('gekoppeld-lijst'), sec = el('gekoppeld'); leeg(lijst);
       const codes = huidig.codes = K.mailProjecten(huidig.msg);
       const elders = K.mailProjectenElders ? K.mailProjectenElders(huidig.msg) : [];
       sec.hidden = !codes.length && !elders.length;
+      if (codes.length) onthoudGekoppeld();
       codes.forEach(code => {
         const rest = (huidig.gesprek || []).filter(x => !K.mailProjecten(x).includes(code)).length;
         const acties = [];
@@ -381,7 +397,7 @@
     const bytesGelijk = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
     // Nooit overschrijven: zelfde naam + zelfde inhoud → overslaan; zelfde naam + andere inhoud → SharePoint geeft een nieuwe naam (rename).
     async function uploadBijlage(map, sub, naam, bytes, type) {
-      const veiligNaam = M.veiligeNaam(naam), tok = await token(), auth = { Authorization: 'Bearer ' + tok };
+      const veiligNaam = M.veiligeNaam(naam), tok = await token(cfg.scopesSPSchrijf), auth = { Authorization: 'Bearer ' + tok };
       const pad = cfg.graph + '/drives/' + encodeURIComponent(cfg.projDrive) + '/items/' + encodeURIComponent(map.itemId) + ':/' + [sub, veiligNaam].map(encodeURIComponent).join('/');
       const er = await d.fetch(pad + '?$select=id,name,size,webUrl', { headers: auth });
       if (er.ok) {
@@ -444,7 +460,7 @@
     const oppakSleutel = () => (M && huidig ? M.oppakSleutel(huidig.mbx, huidig.msg.conversationId) : '');
     function tekenOppak() {
       const sec = el('oppak'); if (!sec) return;
-      const kan = !!(M && huidig && huidig.mbx !== 'me' && huidig.msg.conversationId);
+      const kan = !!(M && huidig && M.oppakToegestaan(huidig.mbx) && huidig.msg.conversationId);   // alleen info@ (allowlist), nooit een eigen of andere gedeelde postbus
       sec.hidden = !kan; if (!kan) return;
       const inh = el('oppak-inhoud'); leeg(inh);
       if (!oppak) { inh.appendChild(h('p', { class: 'sub', tekst: 'Wie wat oppakt kon niet worden gelezen; deze functie staat even uit.' })); return; }
@@ -453,7 +469,7 @@
       else if (rec && rec.status === 'afgehandeld') inh.appendChild(h('p', { tekst: 'Afgehandeld door ' + (rec.naam || rec.door) + ': ' + redenLabel(rec.reden) + (rec.toelichting ? ' — ' + rec.toelichting : '') + (rec.tijd ? ' (' + nlTijd(rec.tijd) + ')' : '') }));
       else inh.appendChild(h('p', { class: 'sub', tekst: 'Nog door niemand opgepakt.' }));
       const knoppen = [];
-      if (!rec || rec.status !== 'opgepakt' || rec.door !== mij.email) knoppen.push(h('button', { type: 'button', klik: () => pakOp('opgepakt'), tekst: rec && rec.status === 'opgepakt' ? 'Zelf oppakken' : 'Pak op' }));
+      if (!rec || rec.status !== 'opgepakt' || rec.door !== mij.email) knoppen.push(h('button', { type: 'button', klik: () => pakOp('opgepakt', '', !!(rec && rec.status === 'opgepakt')), tekst: rec && rec.status === 'opgepakt' ? 'Overnemen van ' + (rec.naam || rec.door) : 'Pak op' }));
       if (rec && rec.status === 'opgepakt' && rec.door === mij.email) knoppen.push(h('button', { type: 'button', class: 'secundair', klik: () => pakOp('vrij'), tekst: 'Terugzetten' }));
       if (!rec || rec.status !== 'afgehandeld') {
         const kies = h('select', { id: 'oppak-reden', 'aria-label': 'Reden van afhandelen' }, [h('option', { value: '', tekst: 'Afhandelen: kies een reden…' })].concat(M.AFHANDEL_REDENEN.map(r => h('option', { value: r[0], tekst: r[1] }))));
@@ -464,19 +480,35 @@
       inh.appendChild(h('div', { class: 'acties' }, knoppen));
     }
     const redenLabel = r => { const x = M && M.AFHANDEL_REDENEN.find(y => y[0] === r); return x ? x[1] : (r || ''); };
-    function pakOp(status, reden) {
-      if (status === 'afgehandeld') bevestigVraag({ soort: 'oppak', status, reden, ok: 'Ja, afhandelen', tekst: 'Dit gesprek afhandelen met reden "' + redenLabel(reden) + '"? In "Binnenkomend" staat het dan als afgehandeld.' });
+    function pakOp(status, reden, overnemen) {
+      if (status === 'opgepakt' && overnemen) bevestigVraag({ soort: 'oppak', status, reden: '', overnemen: true, ok: 'Ja, overnemen', tekst: 'Dit gesprek is al opgepakt. Overnemen?' });
+      else if (status === 'afgehandeld') bevestigVraag({ soort: 'oppak', status, reden, ok: 'Ja, afhandelen', tekst: 'Dit gesprek afhandelen met reden "' + redenLabel(reden) + '"? In "Binnenkomend" staat het dan als afgehandeld.' });
       else { huidig.bevestig = { soort: 'oppak', status, reden: '' }; return voerUit(); }   // oppakken en terugzetten: één klik, altijd terug te draaien
     }
     async function oppakUit(b) {
-      const sleutel = oppakSleutel(); if (!sleutel || !oppak) return;
-      const mij = ik(), oud = oppak[sleutel] || null, snap = oppak;
+      const sleutel = oppakSleutel(); if (!sleutel || !oppak) return;   // sleutel is leeg buiten info@
+      const mij = ik();
+      // Eerst de actuele stand van het register lezen en erin samenvoegen: pakte iemand het net op, dan niet blind overschrijven.
+      const vers = await leesZacht(BESTANDEN.oppak);
+      if (vers.ok && vers.v && typeof vers.v === 'object' && !Array.isArray(vers.v)) oppak = M.oppakSamen(JSON.stringify(oppak), vers.v);
+      const oud = oppak[sleutel] || null, snap = oppak;
+      if (b.status === 'opgepakt' && !b.overnemen && oud && oud.status === 'opgepakt' && oud.door && oud.door !== mij.email) {
+        tekenOppak(); melding('Al opgepakt door ' + (oud.naam || oud.door) + '. Kies "Overnemen" als je het van hem of haar wilt overnemen.', 'waarschuwing'); return;
+      }
       let rec;
       try { rec = M.oppakRecord(oud, { status: b.status, reden: b.reden, mbx: huidig.mbx, conversationId: huidig.msg.conversationId, door: mij.email, naam: mij.naam, codes: huidig.codes || [] }, Date.now()); }
       catch (e) { melding(foutTekst(e), 'fout'); return; }
       try { oppak = await schrijfLos(BESTANDEN.oppak, Object.assign({}, oppak, { [sleutel]: rec }), M.oppakSamen); }
       catch (e) { oppak = snap; tekenOppak(); melding('Vastleggen lukte niet: ' + foutTekst(e) + '. Er is niets gewijzigd; probeer het opnieuw.', 'fout'); return; }
+      // Terugleggen: de gewonnen stand lezen. Alleen als mijn eigen record heeft gewonnen, mag de Outlook-categorie worden gezet (anders zouden twee mensen elk hun naam op de mail zetten).
+      const terug = await leesZacht(BESTANDEN.oppak);
+      if (terug.ok && terug.v && typeof terug.v === 'object' && !Array.isArray(terug.v)) oppak = M.oppakSamen(JSON.stringify(oppak), terug.v);
       tekenOppak();
+      if (!M.oppakIsMijn(oppak[sleutel], rec)) {
+        const w = oppak[sleutel] || {};
+        melding(w.status === 'opgepakt' ? 'Al opgepakt door ' + (w.naam || w.door) + ' (iemand was net eerder). Jouw keuze is niet doorgevoerd; in Outlook is niets gewijzigd.' : 'Dit gesprek is intussen gewijzigd door ' + (w.naam || w.door || 'iemand anders') + '. Jouw keuze is niet doorgevoerd; in Outlook is niets gewijzigd.', 'waarschuwing');
+        return;
+      }
       const wat = b.status === 'opgepakt' ? 'Opgepakt door jou' : b.status === 'vrij' ? 'Teruggezet: niemand pakt het nu op' : 'Afgehandeld (' + redenLabel(b.reden) + ')';
       if (b.status === 'afgehandeld') { melding('✓ ' + wat + '.', 'ok'); return; }
       // De Outlook-categorie "Opgepakt: <naam>" op de mails van dit gesprek in de gedeelde postbus (een andere "Opgepakt: …" gaat eraf).
@@ -598,10 +630,12 @@
         it.from && typeof it.from.getAsync === 'function' ? asyncWaarde(it.from.getAsync.bind(it.from)) : null]);
       tekstIn('mail-onderwerp', onderwerp || '(nog geen onderwerp)'); tekstIn('mail-van', '');
       const nr = M ? M.tagUitOnderwerp(onderwerp) : '';
-      const nodig = M && M.ccInfoNodig({ info: INFO, conversationId: it.conversationId, onderwerp, aan: aan || [], cc: cc || [], bcc: bcc || [], van: van && van.emailAddress });
+      let lijstOnthouden = []; try { lijstOnthouden = Office.context.roamingSettings.get('mt_gekoppeld') || []; } catch (e) { lijstOnthouden = []; }
+      const gekoppeld = !!M && M.gespreksBekend(lijstOnthouden, it.conversationId);
+      const nodig = M && M.ccInfoNodig({ info: INFO, gekoppeld: true, conversationId: it.conversationId, onderwerp, aan: aan || [], cc: cc || [], bcc: bcc || [], van: van && van.emailAddress });
       if (!it.conversationId || !nr) inh.appendChild(h('p', { class: 'sub', tekst: nr ? 'Nieuw bericht (geen antwoord): info@ hoeft niet in de cc.' : 'Geen projecttag ([26…]) in het onderwerp: dit is (nog) geen antwoord op een gekoppeld gesprek.' }));
       else if (nodig) {
-        inh.appendChild(h('p', { class: 'let', tekst: 'Antwoord op een gekoppeld gesprek (' + M.tag(nr) + '): info@ staat nog niet in de cc.' }));
+        inh.appendChild(h('p', { class: 'let', tekst: 'Antwoord op een gesprek met projecttag ' + M.tag(nr) + ': info@ staat nog niet in de cc.' + (gekoppeld ? '' : ' Dit gesprek is op dit apparaat niet als gekoppeld bekend: de automatische cc doet hier niets; koppel het gesprek eerst in het paneel bij de originele mail.') }));
         inh.appendChild(h('button', { type: 'button', klik: async () => {
           const r = await new Promise(res => { try { it.cc.addAsync([INFO], x => res(x)); } catch (e) { res({ status: 'failed', error: e }); } });
           if (r && r.status === ((Office.AsyncResultStatus && Office.AsyncResultStatus.Succeeded) || 'succeeded')) { melding('✓ info@ staat in de cc.', 'ok'); laadOpstel(); }

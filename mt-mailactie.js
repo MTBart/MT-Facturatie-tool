@@ -48,7 +48,11 @@
   const AFHANDEL_REDENEN = [['beantwoord', 'Beantwoord'], ['geen_actie', 'Geen actie nodig'], ['doorgestuurd', 'Doorgestuurd'],
     ['leverancier', 'Leverancier of administratie'], ['spam', 'Reclame of spam'], ['anders', 'Anders']];
   const CATEGORIE_PREFIX = 'Opgepakt: ';
-  const oppakSleutel = (mbx, conversationId) => (conversationId ? String(mbx || '').toLowerCase() + '|' + conversationId : '');
+  // "Pak op" werkt ALLEEN in de gedeelde postbus(sen) op deze lijst (nu alleen info@): in een eigen of andere gedeelde postbus bestaat het niet.
+  // Zonder toegestane postbus is de sleutel leeg, dus er kan niets worden gelezen of weggeschreven (paneel, Binnenkomend en samenvoegen).
+  const OPPAK_POSTBUSSEN = ['info@mortiseandtenon.nl'];
+  const oppakToegestaan = mbx => OPPAK_POSTBUSSEN.indexOf(String(mbx || '').trim().toLowerCase()) >= 0;
+  const oppakSleutel = (mbx, conversationId) => (conversationId && oppakToegestaan(mbx) ? String(mbx).trim().toLowerCase() + '|' + conversationId : '');
   // Weergavenaam: de naam uit het profiel, anders het deel vóór de @ met een hoofdletter.
   function naamVan(email, weergave) {
     const w = String(weergave || '').trim();
@@ -66,6 +70,7 @@
   // Eén record per gesprek. status: opgepakt | afgehandeld (met reden) | vrij (teruggezet).
   function oppakRecord(oud, o, nu) {
     if (!OPPAK_STATUS.includes(o.status)) throw new Error('onbekende status');
+    if (!oppakToegestaan(o.mbx || (oud && oud.mbx))) throw new Error('"Pak op" werkt alleen in de gedeelde postbus info@');
     if (o.status === 'afgehandeld' && !AFHANDEL_REDENEN.some(r => r[0] === o.reden)) throw new Error('kies een reden');
     const t = Math.max(Number(nu) || Date.now(), (Number(oud && oud.gewijzigd) || 0) + 1);
     return {
@@ -80,7 +85,18 @@
       opgepakt_tijd: o.status === 'opgepakt' ? new Date(t).toISOString() : ((oud && oud.opgepakt_tijd) || '')
     };
   }
-  // Samenvoeger voor mt_mail_oppak.json ({sleutel: record}): per gesprek wint de nieuwste `gewijzigd`; gelijk → lokaal. Niets valt weg.
+  // Wie wint er bij twee records van hetzelfde gesprek? De nieuwste `gewijzigd`; bij gelijke tijd een vaste volgorde op actor-id (`door`) en daarna op de
+  // inhoud, zodat elke browser en elke samenvoeging dezelfde winnaar kiest (niet "lokaal wint": twee mensen zouden elkaar dan beiden als winnaar zien).
+  function oppakWint(a, b) {
+    const ta = Number(a && a.gewijzigd) || 0, tb = Number(b && b.gewijzigd) || 0;
+    if (ta !== tb) return ta > tb;
+    const da = String((a && a.door) || ''), db = String((b && b.door) || '');
+    if (da !== db) return da > db;
+    return JSON.stringify(a) >= JSON.stringify(b);
+  }
+  // Is het record van deze sleutel (na het wegschrijven en terugleggen) nog dat van mij? Dan alleen mag de Outlook-categorie worden gezet.
+  const oppakIsMijn = (rec, mijn) => !!rec && !!mijn && rec.door === mijn.door && Number(rec.gewijzigd) === Number(mijn.gewijzigd) && rec.status === mijn.status;
+  // Samenvoeger voor mt_mail_oppak.json ({sleutel: record}): per gesprek wint oppakWint (nieuwste `gewijzigd`, dan actor-id). Niets valt weg.
   function oppakSamen(lokaal, spData) {
     const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
     const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
@@ -90,7 +106,7 @@
       const l = L[k], r = R[k];
       if (!isObj(l)) { uit[k] = r; continue; }
       if (!isObj(r)) { uit[k] = l; continue; }
-      uit[k] = (Number(l.gewijzigd) || 0) >= (Number(r.gewijzigd) || 0) ? l : r;
+      uit[k] = oppakWint(l, r) ? l : r;
     }
     return uit;
   }
@@ -109,12 +125,30 @@
   // Het projectnummer van een project (alleen 6 cijfers; een oude code is geen tag).
   const nummerVan = (p, nummerFn) => { const n = p && (typeof nummerFn === 'function' ? nummerFn(p) : (p.projectnummer || p.code)); return NR_RE.test(String(n || '')) ? String(n) : ''; };
 
+  // ── gekoppelde gesprekken onthouden voor de automatische cc (Outlook-instellingen, korte hashes) ──
+  // De gebeurtenis-runtime (launchevent.js) heeft geen netwerk of aanmelding en kan het koppelregister niet lezen. Het paneel onthoudt daarom van elk gekoppeld
+  // gesprek een korte hash van het gespreks-id (genormaliseerd: base64url = base64, zonder "=", kleine letters) in roamingSettings (max 300, nieuwste achteraan).
+  function gespreksHash(id) {
+    const s = String(id || '').replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '').toLowerCase();
+    if (!s) return '';
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(16).padStart(8, '0');
+  }
+  function onthoudGesprek(lijst, ...ids) {
+    const uit = (Array.isArray(lijst) ? lijst.filter(x => typeof x === 'string') : []).slice();
+    ids.map(gespreksHash).filter(Boolean).forEach(h => { const i = uit.indexOf(h); if (i >= 0) uit.splice(i, 1); uit.push(h); });
+    return uit.slice(-300);
+  }
+  const gespreksBekend = (lijst, id) => { const h = gespreksHash(id); return !!h && Array.isArray(lijst) && lijst.indexOf(h) >= 0; };
+
   // ── cc-regel (antwoord op een gekoppeld gesprek → info@ in cc) ──
-  // nodig = het is een antwoord (gesprek-id), het onderwerp draagt een projecttag, info@ staat nog niet in aan/cc/bcc, en je schrijft niet zelf als info@.
+  // nodig = het is een antwoord (gesprek-id), het gesprek is ECHT gekoppeld (o.gekoppeld === true), het onderwerp draagt een projecttag, info@ staat nog niet in aan/cc/bcc,
+  // en je schrijft niet zelf als info@. Een tag alleen is dus niet genoeg.
   function ccInfoNodig(o) {
     o = o || {};
     const info = String(o.info || '').toLowerCase();
-    if (!info || !o.conversationId || !tagUitOnderwerp(o.onderwerp)) return false;
+    if (!info || !o.conversationId || o.gekoppeld !== true || !tagUitOnderwerp(o.onderwerp)) return false;
     const adressen = [].concat(o.aan || [], o.cc || [], o.bcc || []).map(x => String((x && (x.emailAddress || x.address)) || x || '').toLowerCase());
     if (adressen.includes(info)) return false;
     if (String(o.van || '').toLowerCase() === info) return false;
@@ -215,7 +249,7 @@
 
   root.MTMail = {
     SUBMAPPEN, submapVoorstel, isBestand, bijlageIndexSamen, veiligeNaam,
-    OPPAK_STATUS, AFHANDEL_REDENEN, CATEGORIE_PREFIX, oppakSleutel, naamVan, categorie, isOppakCategorie, categorieenNa, oppakRecord, oppakSamen,
+    OPPAK_STATUS, AFHANDEL_REDENEN, CATEGORIE_PREFIX, oppakSleutel, naamVan, categorie, isOppakCategorie, categorieenNa, oppakRecord, oppakSamen, OPPAK_POSTBUSSEN, oppakToegestaan, oppakWint, oppakIsMijn, gespreksHash, onthoudGesprek, gespreksBekend,
     tag, tagUitOnderwerp, onderwerpMetTag, nummerVan, ccInfoNodig,
     schoonOnderwerp, leadVoorstel,
     binnenStatus, groepeerGesprekken, tel,

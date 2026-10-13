@@ -27,8 +27,8 @@
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-toggl.js?v=2026-10-12n"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
-<script src="mt-mailactie.js?v=2026-10-13b"></script>
-<script src="mt-binnenkomend.js?v=2026-10-13b"></script>
+<script src="mt-mailactie.js?v=2026-10-13c"></script>
+<script src="mt-binnenkomend.js?v=2026-10-13c"></script>
 <script src="mt-contacten.js?v=2026-10-11b"></script>
 <script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
@@ -2431,6 +2431,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="field" style="margin-bottom:0"><label for="modal-lead-datum">Volgende actie op</label><input type="date" id="modal-lead-datum"></div>
       </div>
       <div class="field" style="margin-bottom:0"><label for="modal-lead-actie">Volgende actie (verplicht)</label><input type="text" id="modal-lead-actie" maxlength="140" placeholder="bv. terugbellen, opname plannen"></div>
+      <div id="modal-lead-gesprek-rij" hidden style="margin-top:.5rem"><label style="font-size:12px;display:flex;gap:6px;align-items:flex-start"><input type="checkbox" id="modal-lead-gesprek" checked style="margin-top:2px"><span id="modal-lead-gesprek-tekst">Koppel de mails van dit gesprek aan de lead</span></label></div>
     </div>
     <div class="card-title" style="margin-bottom:0.5rem">2 — Projectcode</div>
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:0.5rem" id="modal-code-uitleg">Wordt automatisch toegekend: een eigen <b>werkcode</b> (W<i>jj</i>-<i>nnn</i>) uit de centrale teller. Het offertenummer komt erbij zodra de offerte in Moneybird is verstuurd. De SharePoint-map van dit nieuwe project heet <b>Volledige naam [werkcode]</b>; bestaande mappen worden nooit hernoemd.</div>
@@ -9149,15 +9150,40 @@ async function leadVanMailOpen(o){
   const zet=(id,w)=>{ const e=document.getElementById(id); if(e) e.value=w; };
   zet('modal-naam-klant',kv?kv.naam:v.klant_naam); zet('modal-naam-product',v.titel.slice(0,60)); zet('modal-lead-bron','mail');
   autoCode(true);
+  // Zichtbare keuze (standaard aan): alle mails van het gesprek koppelen, of alleen de mail waarvan je kwam.
+  { const rij=document.getElementById('modal-lead-gesprek-rij'), vink=document.getElementById('modal-lead-gesprek'), tk=document.getElementById('modal-lead-gesprek-tekst');
+    if(rij&&vink&&tk){ rij.hidden=false; vink.checked=true;
+      tk.textContent=gesprek.length>1?('Koppel alle '+gesprek.length+' mails van dit gesprek aan de lead (uitgevinkt: alleen de mail waarvan je kwam)'):'Koppel deze mail aan de lead'; } }
   const st=document.getElementById('modal-status');
   if(st){ st.style.color='var(--text-dim)'; st.textContent=(kv?'Klant herkend uit '+v.klant_email+': '+kv.naam+'. ':'Afzender '+v.klant_email+' staat niet in de klantenlijst; controleer de naam. ')+'Het hele gesprek ('+gesprek.length+(gesprek.length===1?' mail':' mails')+') wordt aan de lead gekoppeld. Vul de locatie en de volgende actie aan.'; }
 }
 // "Binnenkomend" (Projecten): wie pakt wat op uit info@. Alleen voor wie de inbox mag zien; de module laadt zelf (hooguit eens per 2 minuten).
+// Wijzigen in Binnenkomend ("Pak op", afhandelen) vraagt het recht inbox = alles of verwerken (RECHTEN in worker.js); alleen kijken kan met elk inbox-recht.
+// Tot de rol bekend is (of zonder rol/rechten) geldt: nog niet bekend = uit; oude worker zonder rechten = als vroeger.
+function binnenkomendMagSchrijven(){
+  if(!window.MTRol) return true;
+  if(!MTRol.me) return !!_rolKlaar;
+  if(!MTRol.me.rechten) return true;
+  return _rechtRuw('inbox:alles|verwerken');
+}
 function binnenkomendOpen(){
   const k=document.getElementById('binnenkomend-kaart'); if(!k) return;
   const mag=!window.MTRol||!MTRol.me||!MTRol.me.rechten||_rechtRuw('inbox');
   if(!mag||!window.MTBinnenkomend){ k.hidden=true; return; }
   const b=MTBinnenkomend.start(); if(b) b.laad(false);
+}
+// Koppelt de mails van het gesprek (behalve de bronmail, die al gekoppeld is) en meldt mislukte koppelingen met de keuze om het opnieuw te proberen.
+async function leadGesprekKoppel(code,gesprek,bronId){
+  let rest=(gesprek.berichten||[]).filter(x=>x&&x.id!==bronId), n=0;
+  while(rest.length){
+    const mis=[];
+    rest.forEach(x=>{ try{ const r=MTKoppel.koppelMail(code,x,{bron:'lead-mail',mbx:gesprek.mbx,idType:'immutable'}); if(r.status==='fout') mis.push(x); else n++; }catch(e){ console.warn('mail koppelen faalde:',e); mis.push(x); } });
+    if(!mis.length) break;
+    const opnieuw=await mtDialog.confirm({title:'Gesprek koppelen',message:mis.length+' van de '+rest.length+' mails konden niet aan de lead worden gekoppeld. Opnieuw proberen? (Anders kun je ze later koppelen via het dossier of het Outlook-paneel.)',okLabel:'Opnieuw proberen',cancelLabel:'Later'});
+    if(!opnieuw) return {n,mis:mis.length};
+    rest=mis;
+  }
+  return {n,mis:0};
 }
 function leadModalWaarden(){
   const v=id=>{ const e=document.getElementById(id); return e?String(e.value||'').trim():''; };
@@ -9656,16 +9682,16 @@ async function maakProjectAan(){
   slaProjectenOp();
   // Bron-mail automatisch aan het verse project koppelen (zoals de inbox-knop "koppel project").
   // Had de mail bijlagen, dan na het sluiten van de modal het bijlagen-venster aanbieden.
-  let bijlagenNa=null;
+  let bijlagenNa=null, koppelTekst='';
   if(_ibProjBron){
     try{
       const r=MTKoppel.koppelMail(code,_ibProjBron,{bron:'nieuw-project',mbx:_ibProjBron.mbx});
       if(r.status!=='fout'&&_ibProjBron.hasAttachments) bijlagenNa={id:_ibProjBron.id,mbx:_ibProjBron.mbx};
     }catch(e){console.warn('bron-mail koppelen faalde:',e);}
-    // Lead uit een mail: de rest van het gesprek erbij (dezelfde koppelroute als het Outlook-paneel).
+    // Lead uit een mail: de rest van het gesprek erbij (dezelfde koppelroute als het Outlook-paneel), alleen als het vinkje aan staat; fouten zijn zichtbaar met opnieuw proberen.
     if(typeof _leadGesprek!=='undefined'&&_leadGesprek){
-      try{ _leadGesprek.berichten.forEach(x=>{ if(x&&x.id!==_ibProjBron.id) MTKoppel.koppelMail(code,x,{bron:'lead-mail',mbx:_leadGesprek.mbx,idType:'immutable'}); }); }
-      catch(e){ console.warn('gesprek koppelen faalde:',e); }
+      const vink=document.getElementById('modal-lead-gesprek');
+      if(!vink||vink.checked){ const kr=await leadGesprekKoppel(code,_leadGesprek,_ibProjBron.id); if(kr.n) koppelTekst=' · '+kr.n+(kr.n===1?' extra mail':' extra mails')+' van het gesprek gekoppeld'; }
       _leadGesprek=null; _leadVoorstel=null;
     }
     _ibProjBron=null;
@@ -9684,7 +9710,7 @@ async function maakProjectAan(){
   let mapFout='';
   // Mappenstructuur op SharePoint aanmaken (mkdir-p, idempotent)
   try{
-    if(lead){ status.textContent=`✓ Lead ${naam} aangemaakt (map en Toggl volgen bij "Gewonnen → project")`; }
+    if(lead){ status.textContent=`✓ Lead ${naam} aangemaakt${koppelTekst} (map en Toggl volgen bij "Gewonnen → project")`; }
     else if(tgBron){
       // Overname: een bestaand Toggl-project heeft vaak al een map → eerst zoeken en koppelen voorstellen; een nieuwe map alleen na bevestiging.
       projCtxStatus(code,'map zoeken…');
@@ -11040,7 +11066,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
       const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
       const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {}, uit = {};
-      for (const k of new Set([...Object.keys(R), ...Object.keys(L)])) { const l = L[k], r = R[k]; uit[k] = !isObj(l) ? r : !isObj(r) ? l : ((Number(l.gewijzigd) || 0) >= (Number(r.gewijzigd) || 0) ? l : r); }
+      for (const k of new Set([...Object.keys(R), ...Object.keys(L)])) { const l = L[k], r = R[k]; uit[k] = !isObj(l) ? r : !isObj(r) ? l : (((Number(l.gewijzigd) || 0) !== (Number(r.gewijzigd) || 0) ? (Number(l.gewijzigd) || 0) > (Number(r.gewijzigd) || 0) : String(l.door || '') !== String(r.door || '') ? String(l.door || '') > String(r.door || '') : JSON.stringify(l) >= JSON.stringify(r)) ? l : r); }
       return uit;
     },
     mt_calc_offertes(lokaal, spData) {
