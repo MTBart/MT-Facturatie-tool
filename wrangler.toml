@@ -127,8 +127,11 @@ new_sqlite_classes = ["MtZoekIndex"]
 # Het werk begint om 07:00: de melding moet dan klaar zijn. Elke 30 minuten van 03:00 tot 05:30 UTC. De code kijkt naar de lokale tijd in
 # Europe/Amsterdam: 04:00-05:30 vult alleen de caches (tijdlijn + maandcijfers), 05:30-07:00 is de eigenlijke run (poging 1 om 05:30, 2 om 06:00,
 # 3 om 06:30; zomer 03:30/04:00/04:30 UTC, winter 04:30/05:00/05:30 UTC), de dag nog niet klaar en minder dan 3 pogingen. Daarna doet niets meer mee.
+# Signalen (L3): de dagelijkse controle op gemiste Moneybird-webhooks heeft een EIGEN expressie (45 4 * * * = 05:45/06:45 Amsterdam);
+# worker.js stuurt alleen die expressie naar sigReconciliatie (eigen budget van 30 subrequests), de rest blijft bij de Koersmeter.
+# Wijzig je hem hier, wijzig dan ook SIG_REC_CRON in worker.js.
 [triggers]
-crons = ["*/30 3-5 * * *"]
+crons = ["*/30 3-5 * * *", "45 4 * * *"]
 
 [vars]
 ROLLEN_MODUS = "log"

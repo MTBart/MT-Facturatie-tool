@@ -5030,7 +5030,7 @@ const SIG_VERSIE_RE = /^[0-9A-Za-z_-]{1,30}$/;
 const SIG_DATUM_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SIG_ACTIES = ['oppakken', 'loslaten', 'afhandelen', 'snoozen', 'heropenen'];
 const SIG_LOG_MAX = 500, SIG_AFGEHANDELD_DAGEN = 30, SIG_SLEUTEL_DAGEN = 400, SIG_SNOOZE_MAX_DAGEN = 365, SIG_OFF_PER_KEER = 200;
-const SIG_OFF_EIND = ['accepted', 'rejected', 'billed', 'archived'];   // daarna hoeft de dagelijkse controle niet meer te kijken
+const SIG_OFF_EIND = ['accepted', 'rejected', 'billed', 'archived', 'weg'];   // daarna hoeft de dagelijkse controle niet meer te kijken
 const sigAntw = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 // Status zoals de gebruiker hem ziet: een verlopen snooze is weer open.
 function sigEffectief(it, vandaag) { return it.status === 'gesnoozed' && !(it.snooze_tot > vandaag) ? 'open' : it.status; }
@@ -5346,11 +5346,51 @@ async function mbWebhook(request, env) {
   }
 }
 
+// ── Dagelijkse controle (L3): gemiste webhooks opvangen ─────────────────────────────
+// Eigen cron-expressie (SIG_REC_CRON, ook in wrangler.toml [triggers]); NIET in koersCron (die heeft een vol subrequest-budget). De
+// scheduled-handler splitst op event.cron: alleen deze expressie komt hier, alle andere triggers gaan zoals altijd naar de Koersmeter.
+// Eigen budget: SIG_REC_BUDGET subrequests per run (DO-aanroepen + Moneybird-GET's). Per run de offertes met een bevestigde koppeling die
+// nog niet in een eindstaat zijn, langst niet gecontroleerd eerst; per offerte één read-only GET en één DO-aanroep. Wat niet past, komt
+// de volgende dag aan de beurt. Signalen ontstaan precies zoals bij de webhook (zelfde sleutel, dus nooit dubbel). Daarna opruimen.
+const SIG_REC_CRON = '45 4 * * *', SIG_REC_BUDGET = 30;
+async function sigReconciliatie(env) {
+  const budget = koersBudget(SIG_REC_BUDGET, 0), doe = sigStub(env, budget);
+  if (!doe) { sigLog({ controle: 'geen-opslag' }); return { status: 'geen-opslag' }; }
+  if (!env.MONEYBIRD_KEY) { sigLog({ controle: 'geen-mb-sleutel' }); return { status: 'geen-mb-sleutel' }; }
+  const n = Math.floor((SIG_REC_BUDGET - 2) / 2);                      // 1 voor de lijst, 1 voor het opruimen, 2 per offerte
+  const l = await doe('sig-off-lijst', { max: n });
+  if (l.status !== 200 || !l.j) { sigLog({ controle: 'fout', stap: 'lijst' }); return { status: 'fout' }; }
+  const uit = { status: 'klaar', gecontroleerd: 0, signalen: 0, fouten: 0, rest: Math.max(0, (l.j.totaal || 0) - l.j.items.length) };
+  for (const x of l.j.items) {
+    if (budget.rest() < 3) { uit.status = 'budget'; break; }            // GET + DO + het opruimen moeten nog passen
+    try {
+      const g = await sigMbOfferte(env, x.mb_id, budget);
+      const s = g.weg ? { staat: 'weg', versie: '0', datum: geldVandaag() } : sigOfferteStaat(g.e);
+      const r = await doe('sig-offerte', { mb_id: x.mb_id, ...s, via: 'controle' });
+      if (r.status !== 200) throw new Error('opslag');
+      uit.gecontroleerd++; if (r.j && r.j.nieuw) uit.signalen++;
+    } catch (e) {
+      uit.fouten++;
+      if (/budget|moneybird-429/.test(String(e && e.message))) { uit.status = 'gestopt'; break; }   // rate-limit of budget op: morgen verder
+    }
+  }
+  try { await doe('sig-opruim', {}); } catch {}
+  sigLog({ controle: uit.status, ...uit, subrequests: budget.n });
+  return uit;
+}
+
 // CORS: het oude adres (GitHub Pages) én het nieuwe (Cloudflare Pages + eigen domein), exact — geen '*', en niets voor een onbekende herkomst.
 const CORS_HERKOMST = ['https://mtbart.github.io', 'https://tool.mortiseandtenon.nl', 'https://mt-tool.pages.dev'];
 export default {
   // Cron Triggers (wrangler.toml [triggers]): zie koersCron. Fouten worden gelogd, nooit gegooid (de volgende ochtend probeert opnieuw).
+  // Splitsing op cron-expressie: alleen SIG_REC_CRON gaat naar de dagelijkse signalen-controle; elke andere trigger (ook zonder
+  // event.cron) gaat ongewijzigd naar de Koersmeter.
   async scheduled(event, env, ctx) {
+    if (event && event.cron === SIG_REC_CRON) {
+      const ctl = sigReconciliatie(env).catch(e => { sigLog({ controle: 'fout', fout: String((e && e.message) || e).slice(0, 200) }); return { status: 'fout' }; });
+      waitUntil(ctx, ctl);
+      return await ctl;
+    }
     const taak = koersCron(env, event && event.scheduledTime != null ? event.scheduledTime : Date.now()).catch(e => { try { console.log(JSON.stringify({ koerscron: 'fout', fout: String((e && e.message) || e).slice(0, 200) })); } catch {} return { status: 'fout' }; });
     waitUntil(ctx, taak);
     return await taak;
