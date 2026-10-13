@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — L1a: velden met een eigen stempel, delete-wins, "+ Lead", fase en "Vandaag" in de cockpit
+- Commit: `52acb85` | Auteur: Bart Witte
+
 ## 2026-10-13 — L1a: mt-lead.js — fases van lead tot afgerond, overgangen, status-mapping en de lijst "Vandaag"
 - Commit: `5ffcc1a` | Auteur: Bart Witte
 

@@ -781,6 +781,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .lead-kaart input[type=text]{flex:1;min-width:160px}.lead-kaart input[type=number]{width:90px}
 .lead-conflict{background:var(--orange-light,#fdf0e0);border-radius:6px;padding:6px 8px;margin:4px 0;font-size:12px}
 .lead-let{color:var(--orange);font-size:12px;margin-top:4px}
+.lead-doorzet{border-top:1px dashed var(--border);margin-top:6px;padding-top:6px}
 </style>
 </head>
 <body>
@@ -1158,7 +1159,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="card proj-lijst-kaart" style="padding:1rem">
           <div class="card-title">Projecten</div>
           <div class="flex" style="margin-bottom:0.75rem;gap:6px">
-            <button class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1">+ Nieuw project</button>
+            <button class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1" title="Project zonder lead of offerte (bv. vaste klant of regiewerk); begint in Werkvoorbereiding">+ Direct project</button>
             <button class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" onclick="openLeadModal()" style="flex:1" title="Een nieuwe aanvraag: lead met een volgende actie">+ Lead</button>
             <button class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" onclick="tgOvernemenOpen()" style="flex:1" title="Een Toggl-project dat nog bij geen project hoort in de tool zetten">Uit Toggl overnemen</button>
             <button class="btn btn-secondary btn-sm" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" style="flex:1" title="Losse offerte-calculatie (voorcalculatie)">+ Nieuwe offerte</button>
@@ -2838,7 +2839,7 @@ function _projMetId(x,idx){
 const PROJ_VELDEN=['fase','volgende_actie','kans_pct','waarde_excl','verwachte_beslisdatum','verlies','geparkeerd_tot','gewonnen_op','bron'];
 function projVeldZet(p,veld,waarde){
   const vs=(p._vs&&typeof p._vs==='object')?p._vs:(p._vs={}), oud=vs[veld];
-  vs[veld]={t:Math.max(Date.now(),((oud&&Number(oud.t))||0)+1),door:_spWie(),basis:(oud&&Number(oud.t))||0};
+  vs[veld]={t:Math.max(Date.now(),((oud&&Number(oud.t))||0)+1),door:typeof _spWie==='function'?_spWie():'',basis:(oud&&Number(oud.t))||0};
   if(waarde===undefined||waarde===null||waarde==='') delete p[veld]; else p[veld]=JSON.parse(JSON.stringify(waarde));
   if(p._veldconflict){ delete p._veldconflict[veld]; if(!Object.keys(p._veldconflict).length) delete p._veldconflict; }
   return p;
@@ -9071,7 +9072,7 @@ async function leadFaseKies(code,naar,sel){
     if(d==null){ if(sel) sel.value=''; return; }
     extra.geparkeerd_tot=String(d).trim();
   }
-  if(naar==='gewonnen'&&!await mtDialog.confirm({title:'Gewonnen → project',message:'Deze lead is gewonnen: hij gaat door als project in de fase Werkvoorbereiding (zelfde dossier en nummer).',okLabel:'Gewonnen'})){ if(sel) sel.value=''; return; }
+  if(naar==='gewonnen'){ if(sel) sel.value=''; return leadGewonnen(code); }
   const r=projFaseZet(code,naar,extra);
   if(!r.ok){ await mtDialog.alert({title:'Fase',message:r.fout}); if(sel) sel.value=''; }
 }
@@ -9127,8 +9128,54 @@ function leadKaartHtml(proj){
       <label class="kpi-label">Kans %</label> <input type="number" min="0" max="100" step="5" value="${esc(proj.kans_pct!=null?proj.kans_pct:'')}"${_leadMag()?'':' disabled'} onchange="leadVeldZet(${jsArg(pc)},'kans_pct',this.value)">
       <label class="kpi-label">Beslissing verwacht</label> <input type="date" value="${esc(proj.verwachte_beslisdatum||'')}"${_leadMag()?'':' disabled'} onchange="leadVeldZet(${jsArg(pc)},'verwachte_beslisdatum',this.value)">
       ${proj.bron?` <span class="dos-meta">Bron: ${esc((MTLead.BRONNEN.find(x=>x[0]===proj.bron)||[])[1]||proj.bron)}</span>`:''}</div>`:''}
-    ${isLead&&MTLead.isOpenLead(proj)&&!(a.tekst&&a.datum)?'<div class="lead-let">⚠ Deze lead heeft geen volgende actie met een datum.</div>':''}</section>`;
+    ${isLead&&MTLead.isOpenLead(proj)&&!(a.tekst&&a.datum)?'<div class="lead-let">⚠ Deze lead heeft geen volgende actie met een datum.</div>':''}
+    ${MTLead.isOpenLead(proj)&&_leadMag()?`<div class="lead-rij"><button class="btn btn-gold btn-sm" onclick="leadGewonnen(${jsArg(pc)})">🏆 Gewonnen → project</button></div>`:''}
+    ${leadDoorzetHtml(proj)}</section>`;
 }
+// ── Doorzetten naar project (L1b) ──
+// Na "Gewonnen" (of bij een direct project) staat het project in werkvoorbereiding. Daarna VOORSTELLEN, niets automatisch:
+// taken (het bestaande taken-voorstel: ✨ AI of 📋 template), de projectmap (normale map met de submapstandaard) en het
+// Toggl-project "260812 Naam" (de bestaande route, na bevestiging; een passend bestaand Toggl-project wordt alleen voorgesteld).
+function leadDoorzetStappen(proj){
+  const taken=(typeof projTaken==='function')?projTaken(proj.code):[];
+  return {taken:taken.length>0,map:!!(proj.map&&proj.map.itemId),toggl:!!proj.tg_project_id};
+}
+function leadDoorzetZichtbaar(proj){
+  if(!proj||proj.fase!=='werkvoorbereiding'||proj.doorzet_klaar||!(proj.gewonnen_op||proj.direct_project)) return false;
+  const st=leadDoorzetStappen(proj); return !(st.taken&&st.map&&st.toggl);
+}
+function leadDoorzetHtml(proj){
+  if(!leadDoorzetZichtbaar(proj)) return '';
+  const st=leadDoorzetStappen(proj), pc=_jsCode(proj.code), mag=_leadMag();
+  return `<div class="lead-doorzet"><div class="kpi-label">Doorzetten naar project</div>
+    <div class="lead-rij">${st.taken?'✓':'○'} Taken ${st.taken||!mag?'':`<button class="btn btn-xs btn-gold" onclick="aiTakenVoorstel(${jsArg(pc)})">✨ AI-taken voorstellen</button> <button class="btn btn-xs btn-secondary" onclick="projTaakTemplateKies(${jsArg(pc)})">📋 Template</button>`}</div>
+    <div class="lead-rij">${st.map?'✓':'○'} Projectmap ${st.map||!mag?'':`<button class="btn btn-xs btn-secondary" onclick="leadMapMaken(${jsArg(pc)})">Map aanmaken…</button>`}</div>
+    <div class="lead-rij">${st.toggl?'✓':'○'} Toggl-project ${st.toggl||!mag?'':`<button class="btn btn-xs btn-secondary" onclick="leadTogglMaken(${jsArg(pc)})">Toggl-project aanmaken…</button>`}</div>
+    ${mag?`<button class="btn btn-xs btn-secondary" onclick="leadDoorzetKlaar(${jsArg(pc)})" title="Dit blok verbergen; alles blijft via het project te doen">Klaar</button>`:''}</div>`;
+}
+async function leadGewonnen(code){
+  const p=projVind(code); if(!p) return;
+  if(!await mtDialog.confirm({title:'Gewonnen → project',message:'Deze lead is gewonnen. Hij gaat door als project in de fase Werkvoorbereiding (zelfde dossier en nummer). Daarna stelt de tool taken, de projectmap en het Toggl-project voor; niets gebeurt vanzelf.',okLabel:'Gewonnen'})) return;
+  const r=projFaseZet(code,'gewonnen',{});
+  if(!r.ok) return mtDialog.alert({title:'Gewonnen',message:r.fout});
+  if(typeof projSectieKies==='function') projSectieKies('overzicht');
+}
+async function leadMapMaken(code){
+  const p=projVind(code); if(!p) return;
+  let naam=''; try{ naam=_projMapNaam(p); }catch(e){ return mtDialog.alert({title:'Projectmap',message:e.message}); }
+  if(!await mtDialog.confirm({title:'Projectmap',message:'Projectmap „'+naam+'” met de standaard submappen aanmaken (of de bestaande map aanvullen)?',okLabel:'Aanmaken'})) return;
+  try{ await genereerProjectMappen(p); slaProjectenOp(); _leadNaWijziging(p.code); }
+  catch(e){ mtDialog.alert({title:'Projectmap',message:'Map aanmaken mislukt: '+(e.message||e)}); }
+}
+async function leadTogglMaken(code){
+  const p=projVind(code); if(!p) return;
+  const naam=typeof t2ProjectNaam==='function'?t2ProjectNaam(p):projNaamVol(p);
+  if(!await mtDialog.confirm({title:'Toggl-project',message:'Toggl-project „'+naam+'” aanmaken en aan dit project koppelen? Bestaat er al een passend Toggl-project, dan wordt dat eerst voorgesteld.',okLabel:'Aanmaken'})) return;
+  const id=await _tgZorgProjectVoorCode(p.code);
+  if(!id) return mtDialog.alert({title:'Toggl-project',message:(window._t2LaatsteFout||'Er is niets aangemaakt.')+' Kies eventueel zelf via "Toggl-project kiezen".'});
+  _leadNaWijziging(p.code);
+}
+function leadDoorzetKlaar(code){ const p=projVind(code); if(!p) return; p.doorzet_klaar=true; slaProjectenOp(); _leadNaWijziging(p.code); }
 // "Vandaag" (Projecten, met badge op de tab): acties van vandaag of te laat, open leads zonder volgende actie, geparkeerde
 // leads waarvan de datum bereikt is. Iedereen met het projecten-recht ziet alles.
 const _VANDAAG_SOORT={te_laat:'Te laat',vandaag:'Vandaag',geparkeerd_terug:'Weer bekijken',geen_actie:'Geen volgende actie'};
@@ -9244,7 +9291,7 @@ function openModal(){
   _projAanmaakVrij();
   _ibProjBron=null;   // schone start; inboxMaakProject() zet 'm daarna evt. opnieuw
   _tgProjBron=null;   // idem voor "Uit Toggl overnemen" (tgOvernemenKies)
-  _leadModus=false; { const lv=document.getElementById('modal-lead-velden'); if(lv) lv.hidden=true; const ti=document.getElementById('modal-titel'); if(ti) ti.textContent='Nieuw project aanmaken'; }
+  _leadModus=false; { const lv=document.getElementById('modal-lead-velden'); if(lv) lv.hidden=true; const ti=document.getElementById('modal-titel'); if(ti) ti.textContent='Nieuw project (direct, zonder lead)'; }
   ['modal-naam-klant','modal-naam-locatie','modal-naam-product','modal-klant','modal-locatie','modal-product'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   const st=document.getElementById('modal-status');if(st){st.textContent='';st.style.color='var(--text-dim)';}
   // datalist met klantnamen: ECHTE registry-namen eerst (single source = klanten.json),
@@ -9379,6 +9426,8 @@ async function maakProjectAan(){
   // Lead: fase nieuw, bron, waarde en volgende actie, elk met een eigen stempel; status offerte (compatibiliteit).
   if(lead){ projVeldZet(nieuwProj,'fase','nieuw'); projVeldZet(nieuwProj,'bron',lead.bron); if(lead.waarde!=null) projVeldZet(nieuwProj,'waarde_excl',lead.waarde);
     projVeldZet(nieuwProj,'volgende_actie',{tekst:lead.actie,datum:lead.datum}); nieuwProj.status='offerte'; _leadModus=false; }
+  // Direct project (L1b): geen lead of offerte → meteen in werkvoorbereiding. Een overname uit Toggl krijgt (nog) geen fase.
+  else if(!tgBron){ projVeldZet(nieuwProj,'fase','werkvoorbereiding'); nieuwProj.direct_project=true; nieuwProj.status='lopend'; }
   // Kwam dit project uit een mail (inbox → "Maak project")? Leg de bron vast.
   if(_ibProjBron) nieuwProj.bron_mail={internetMessageId:_ibProjBron.internetMessageId,
     subject:_ibProjBron.subject,from:_ibProjBron.from,date:_ibProjBron.date,mbx:_ibProjBron.mbx};
