@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — Toggl-overname (Codex): cockpit gebruikt de claim van de teller; klant alleen bij precies één registry-match
+- Commit: `9a1acc8` | Auteur: Bart Witte
+
 ## 2026-10-13 — Toggl-overname (Codex): atomische claim op het Toggl-project in de teller
 - Commit: `84cd423` | Auteur: Bart Witte
 
