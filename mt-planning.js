@@ -436,7 +436,9 @@
   function metaSamen(a, b) {
     if (!a || typeof a !== 'object') return b && typeof b === 'object' ? kopie(b) : null;
     if (!b || typeof b !== 'object') return kopie(a);
-    const basis = (Number(a.tijd) || 0) <= (Number(b.tijd) || 0) ? a : b;
+    const zonderKlaar = m => { const c = Object.assign({}, m); delete c.afgehandeld; return stabiel(c); };
+    const ta = Number(a.tijd) || 0, tb = Number(b.tijd) || 0;
+    const basis = ta !== tb ? (ta < tb ? a : b) : (zonderKlaar(a) <= zonderKlaar(b) ? a : b);   // gelijke tijd: de laagste JSON-tekst, onafhankelijk van de argumentvolgorde
     const m = kopie(basis), ver = {};   // afgehandeld = verzameling per sleutel (vereniging): alleen toevoegen, nooit "lokaal wint"
     [a.afgehandeld, b.afgehandeld].forEach(o => Object.keys(o || {}).forEach(k => { const w = Array.isArray(o[k]) ? o[k] : [o[k]]; ver[k] = [...new Set([...(ver[k] || []), ...w])].sort(); }));
     m.afgehandeld = {}; Object.keys(ver).sort().forEach(k => { m.afgehandeld[k] = ver[k]; });   // vaste volgorde: hetzelfde resultaat ongeacht de argumentvolgorde
