@@ -83,12 +83,15 @@
     if (u.soort === 'geen') return GEEN;
     return Object.assign({}, u, { vorm: NR_RE.test(u.sleutel) ? 'nummer-prefix' : W_RE.test(u.sleutel) ? 'werkcode-prefix' : u.via === 'offerte' ? 'offerte-prefix' : 'code' });
   }
-  // Toggl-naam voor een project: projectnummer voorop ("260812 Naam"); zonder nummer de oude vorm (offertenummer of naam).
+  // Toggl-naam voor een project: "<projectnummer> <projectnaam>" ("260801 Werkblad ref 186986"). De projectnaam is het product;
+  // klant en locatie staan er niet in, want de klant is in Toggl een apart veld (Bart, 14-10). Zonder product de volledige naam.
+  // Zonder projectnummer de oude vorm (offertenummer of naam), zodat lopende projecten niet ineens een andere naam voorgesteld krijgen.
   function togglNaam(p, opts) {
     opts = opts || {};
     const naam = String((p && (p.naam || p.product_naam)) || '').trim();
+    const product = String((p && (p.product_naam || p.product)) || '').trim();
     const nr = p && (typeof opts.nummer === 'function' ? opts.nummer(p) : p.projectnummer);
-    if (nr && NR_RE.test(String(nr))) return (String(nr) + ' ' + naam).trim();
+    if (nr && NR_RE.test(String(nr))) return (String(nr) + ' ' + (product || naam)).trim();
     return p && p.offertenr ? (p.offertenr + ' ' + naam).trim() : naam;
   }
   // De leesbare naam uit een Toggl-projectnaam zonder herkende code (project overnemen uit Toggl): "[CODE]" achteraan eraf,
