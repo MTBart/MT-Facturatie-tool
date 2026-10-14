@@ -110,6 +110,37 @@
     return v != null && v !== '' && isFinite(Number(v)) ? Number(v) : P.uurtariefStd(t);
   };
 
+  // ── Uurtarieven synchroniseren (ronde 8) ──
+  // mt_uurtarieven = { <naam>: tarief, _std: tarief, _vs: stempel per tarief, _veldconflict, _gewijzigd }. De lezers (uurtarief, uurtariefStd) zien alleen de tarieven;
+  // de stempels maken de samenvoeging per tarief mogelijk: de hoogste stempel (tijd, apparaat, teller) wint, deterministisch. Een ongestempelde waarde (zoals de
+  // lokale waarde van vóór de synchronisatie) of een gelijktijdige afwijkende wijziging wordt nooit stil overschreven maar blijft zichtbaar als _veldconflict.
+  const tariefMeta = k => k === '_vs' || k === '_veldconflict' || k === '_gewijzigd' || k === '_door' || k === 'id';
+  const tarievenLees = (v, naam) => {
+    if (v === null || v === undefined || v === '') return {};
+    let o = v; if (typeof v === 'string') { try { o = JSON.parse(v); } catch (e) { throw new Error(naam + ': ongeldige JSON'); } }
+    if (o === null) return {};
+    if (typeof o !== 'object' || Array.isArray(o)) throw new Error(naam + ': geen object');
+    const uit = {};
+    Object.keys(o).forEach(k => { if (tariefMeta(k)) { if (o[k] !== undefined) uit[k] = kopie(o[k]); return; } const n = typeof o[k] === 'string' && o[k].trim() !== '' ? Number(o[k]) : o[k]; if (typeof n === 'number' && isFinite(n)) uit[k] = n; });
+    return uit;
+  };
+  P.tariefVelden = (...recs) => [...new Set(recs.flatMap(r => Object.keys(r || {}).filter(k => !tariefMeta(k))))].sort();
+  P.tarievenSamen = function (lokaal, remote) {
+    const L = tarievenLees(lokaal, 'tarieven'), R = tarievenLees(remote, 'tarieven'), velden = P.tariefVelden(L, R);
+    if (!velden.length) return canon(Object.keys(L).length >= Object.keys(R).length ? L : R);
+    if (!P.tariefVelden(L).length) return canon(R);
+    if (!P.tariefVelden(R).length) return canon(L);
+    return canon(recSamen(velden, {}, L, R));
+  };
+  // Een nieuwe stand wegschrijven: alleen de gewijzigde tarieven krijgen een stempel; een tarief dat bewust wordt aangepast lost zijn conflict op.
+  P.tarievenStempel = function (oud, nieuw, { nu = Date.now(), door = '', dev = '' } = {}) {
+    const O = tarievenLees(oud, 'tarieven'), N = tarievenLees(nieuw, 'tarieven'), velden = P.tariefVelden(O, N), x = {};
+    velden.forEach(f => { if (N[f] !== undefined) x[f] = N[f]; });
+    if (O._veldconflict) { const c = {}; Object.keys(O._veldconflict).forEach(f => { if (gelijk(x[f], O[f])) c[f] = O._veldconflict[f]; }); if (Object.keys(c).length) x._veldconflict = c; }
+    const r = stempelMet(velden, [Object.assign({ id: 'uurtarieven' }, kopie(O))], [Object.assign({ id: 'uurtarieven' }, x)], { nu, door, dev })[0];
+    delete r.id; return canon(r);
+  };
+
   // ══ P1: taken per project, activiteiten, meter ═══════════════════════════════════════════════════════
   // ── Activiteitencatalogus (stabiele sleutels; dezelfde lijst geldt later voor uursoorten en tarieven) ──
   // `soort` is de rollup voor de meter (besluit Bart 13-10): tekenwerk, werkvoorbereiding en kantoor zijn KANTOORUREN;

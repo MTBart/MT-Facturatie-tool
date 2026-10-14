@@ -9189,6 +9189,7 @@ function uurtariefRechten(){
   kaart.style.display=zien?'':'none';
   kaart.querySelectorAll('input').forEach(i=>{ i.disabled=!wijzig; });
   const knop=kaart.querySelector('button[onclick="saveUurtarieven()"]'); if(knop) knop.style.display=wijzig?'':'none';
+  try{ uurtariefConflictTeken(); }catch(e){}
 }
 if(typeof window!=='undefined'&&window.addEventListener) window.addEventListener('mt-rol',()=>{ try{ renderUurtarieven(); }catch(e){} });
 // Staat het standaardtarief in de calculatie (mt_calc_defaults) anders dan het standaardtarief hier? Dan een melding met een
@@ -9220,16 +9221,64 @@ async function uurtariefCalcBijwerken(){
   const st=document.getElementById('uurtarief-status'); if(st){ st.textContent='✓ '+n+' standaardregel(s) op € '+std; setTimeout(()=>st.textContent='',3000); }
   uurtariefCalcMelding();
 }
-function saveUurtarieven(){
-  if(!uurtarievenMag('wijzigen')){ const st0=document.getElementById('uurtarief-status'); if(st0) st0.textContent='Je mag de uurtarieven niet wijzigen.'; return; }
-  const t=uurtarieven();
-  agTeam().forEach(m=>{const v=document.getElementById('s-tarief-'+m.naam);if(v)t[m.naam]=Number(v.value)||0;});
-  const s=document.getElementById('s-tarief-std');if(s)t._std=Number(s.value)||0;
-  localStorage.setItem('mt_uurtarieven',JSON.stringify(t));
+// Uurtarieven worden tussen apparaten gesynchroniseerd (SharePoint-sleutel mt_uurtarieven, een stempel per tarief). Opslaan mag alleen met geld:wijzigen en "opgeslagen"
+// verschijnt pas als SharePoint de schrijfactie bevestigt; lukt dat niet, dan staat er wat er mis is en blijft de waarde lokaal staan voor een nieuwe poging.
+async function uurtarievenOpslaanSync(rec){
+  if(!uurtarievenMag('wijzigen')) return {ok:false,reden:'Je mag de uurtarieven niet wijzigen.'};
+  if(typeof _SP==='undefined'||!_SP.ready||_SP.blockedKeys.has('mt_uurtarieven')) return {ok:false,reden:'De synchronisatie is nog niet klaar of geblokkeerd: er is niets opgeslagen. Probeer het zo opnieuw (of herlaad de pagina).'};
+  const tekst=JSON.stringify(rec);
+  try{ (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))('mt_uurtarieven',tekst); }catch(e){ return {ok:false,reden:'Lokaal opslaan lukte niet: '+(e.message||e)}; }
+  let ok=false;
+  try{ ok=(await _SP.write('mt_uurtarieven.json',rec,(remote,local)=>{ const s=MTPlanning.tarievenSamen(typeof local==='string'?local:JSON.stringify(local),remote); (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))('mt_uurtarieven',JSON.stringify(s)); return s; }))===true; }catch(e){ ok=false; }
+  if(!ok){ try{ localStorage.setItem('mt_uurtarieven',tekst); }catch(e){}   // via de gewone route: de automatische sync probeert het opnieuw
+    return {ok:false,lokaal:true,reden:'SharePoint bevestigde het opslaan niet; de waarde staat lokaal en de synchronisatie probeert het opnieuw.'}; }
+  return {ok:true};
+}
+async function saveUurtarieven(){
   const st=document.getElementById('uurtarief-status');
-  if(st){st.textContent='✓ Opgeslagen';setTimeout(()=>st.textContent='',2000);}
-  uurtariefCalcMelding();
+  const zeg=(tekst,kleur)=>{ if(st){ st.textContent=tekst; st.style.color=kleur||''; } };
+  if(!uurtarievenMag('wijzigen')) return zeg('Je mag de uurtarieven niet wijzigen.','#c0392b');
+  const nieuw={};
+  agTeam().forEach(m=>{const v=document.getElementById('s-tarief-'+m.naam);if(v)nieuw[m.naam]=Number(v.value)||0;});
+  const s=document.getElementById('s-tarief-std');if(s)nieuw._std=Number(s.value)||0;
+  let rec; try{ rec=MTPlanning.tarievenStempel(uurtarieven(),Object.assign({},uurtarieven(),nieuw),{door:_spWie(),dev:_spDev()}); }catch(e){ return zeg('⚠ Niet opgeslagen: '+(e.message||e),'#c0392b'); }
+  zeg('Opslaan en synchroniseren…','var(--text-dim)');
+  const r=await uurtarievenOpslaanSync(rec);
+  if(!r.ok){ zeg('⚠ '+r.reden,'#c0392b'); uurtariefCalcMelding(); uurtariefConflictTeken(); return; }
+  zeg('✓ Opgeslagen en gesynchroniseerd','var(--green)'); setTimeout(()=>{ if(st&&/gesynchroniseerd/.test(st.textContent)) st.textContent=''; },3000);
+  uurtariefCalcMelding(); uurtariefConflictTeken();
   if(huidigProject)renderProjectDetail(huidigProject);
+}
+// Twee browsers met verschillende tarieven (of een gelijktijdige wijziging): nooit stil overschrijven; eigenaar/beheer kiest per tarief.
+function uurtariefConflictTeken(){
+  const kaart=document.getElementById('uurtarief-kaart'); if(!kaart) return;
+  let host=document.getElementById('uurtarief-conflicten');
+  if(!host){ host=document.createElement('div'); host.id='uurtarief-conflicten'; host.style.cssText='font-size:12.5px;margin-top:8px'; const m=document.getElementById('uurtarief-calcmelding'); if(m&&m.parentNode) m.parentNode.insertBefore(host,m); else kaart.appendChild(host); }
+  host.replaceChildren();
+  const t=uurtarieven(), c=(t&&t._veldconflict)||{}, velden=Object.keys(c).sort(); if(!velden.length||!uurtarievenMag('lezen')) return;
+  const naam=f=>f==='_std'?'Standaard / overig':f, bedrag=v=>(v===null||v===undefined||v==='')?'(leeg)':'€ '+v;
+  if(!uurtarievenMag('wijzigen')){ const d=document.createElement('div'); d.setAttribute('role','status'); d.textContent='⚠ De uurtarieven verschillen tussen browsers ('+velden.map(naam).join(', ')+'). Eigenaar of beheer kiest welke blijft.'; host.appendChild(d); return; }
+  velden.forEach(f=>{
+    const d=document.createElement('div'); d.setAttribute('role','status'); d.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px';
+    const tx=document.createElement('span'); tx.textContent='⚠ '+naam(f)+': hier '+bedrag(t[f])+', de andere versie '+bedrag(c[f].waarde)+(c[f].door?' (door '+c[f].door+')':'')+'.'; d.appendChild(tx);
+    [['eigen','Houd '+bedrag(t[f])],['andere','Neem '+bedrag(c[f].waarde)]].forEach(([kies,label])=>{ const b=document.createElement('button'); b.type='button'; b.className='btn btn-secondary btn-sm'; b.textContent=label; b.addEventListener('click',()=>uurtariefConflictKies(f,kies)); d.appendChild(b); });
+    host.appendChild(d);
+  });
+}
+async function uurtariefConflictKies(veld,kies){
+  if(!uurtarievenMag('wijzigen')) return;
+  const t=uurtarieven(); if(!MTPlanning.conflictOplos(t,veld,kies,{door:_spWie(),dev:_spDev()})) return;
+  const st=document.getElementById('uurtarief-status');
+  const r=await uurtarievenOpslaanSync(t);
+  if(st){ st.textContent=r.ok?'✓ Opgeslagen en gesynchroniseerd':'⚠ '+r.reden; st.style.color=r.ok?'var(--green)':'#c0392b'; }
+  try{ renderUurtarieven(); }catch(e){}
+}
+// Na het laden (hydrate): een verschil tussen browsers meteen laten zien aan wie het mag oplossen.
+function uurtariefConflictMelding(){
+  try{
+    const t=uurtarieven(), c=(t&&t._veldconflict)||{}; if(!Object.keys(c).length||!uurtarievenMag('wijzigen')) return;
+    planToast('⚠ De uurtarieven verschillen tussen browsers ('+Object.keys(c).sort().map(f=>f==='_std'?'standaard':f).join(', ')+'): kies in Instellingen ▸ Uurtarieven welke blijft.');
+  }catch(e){}
 }
 function nacalcData(proj){
   const per={};
@@ -12542,7 +12591,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst_v2','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken_v2','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_project_afhank','mt_project_sjablonen']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst_v2','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken_v2','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_project_afhank','mt_project_sjablonen','mt_uurtarieven']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -12579,6 +12628,8 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // verwijderen = tombstone die wint). Zie MTPlanning.afhSamen.
     mt_project_afhank(lokaal, spData) { return MTPlanning.afhSamen(lokaal, spData); },
     // Projectsjablonen (P2): per sjabloon-id de nieuwste stand; verwijderen = tombstone. Alleen eigenaar/beheer wijzigen ze.
+    // Uurtarieven: per tarief de hoogste stempel; een ongestempelde of gelijktijdige afwijking blijft zichtbaar als conflict (zie uurtariefConflictTeken). Strikt: een verkeerde vorm blokkeert de sleutel.
+    mt_uurtarieven(lokaal, spData) { return MTPlanning.tarievenSamen(lokaal, spData); },
     mt_project_sjablonen(lokaal, spData) { return _spSamenPerSleutel(lokaal, spData, x => x && x.id, _spTijd); },
     // Bestellijst (brok L2): per regel (id; oude regels zonder id → inhoud-id) wint de
     // stand met de nieuwste `_gewijzigd`. Van de lijst halen is een tombstone
@@ -14086,7 +14137,8 @@ window.initStorage = async function() {
   _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan (behalve blockedKeys)
   _ptTimeout = false; _ptHertekenen();   // een openstaand projectdetail toonde "Taken laden…": nu opnieuw tekenen
   _blTimeout = false; try{ _blNaWijziging(); }catch(e){ }
-  try{ setTimeout(takenLokaalControle,2500); setTimeout(blLokaalControle,3000); setTimeout(tgOnafgerondMelding,3500); }catch(e){}
+  try{ setTimeout(takenLokaalControle,2500); setTimeout(blLokaalControle,3000); setTimeout(tgOnafgerondMelding,3500); setTimeout(uurtariefConflictMelding,4000); }catch(e){}
+  try{ renderUurtarieven(); }catch(e){}   // de gesynchroniseerde tarieven (en een eventueel verschil tussen browsers) meteen tonen
   if (_SP.blockedKeys.size) {
     _SP.lastSync = { ts: Date.now(), ok: false, key: [..._SP.blockedKeys].join(', '),
       error: 'hydrate faalde — auto-sync uit voor deze key(s), herlaad de pagina' };
