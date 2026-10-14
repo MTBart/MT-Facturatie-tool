@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-14 — v2.16.3: Binnenkomend (info@) uit Projecten, naar Inbox ▸ Binnenkomend info@
+- Commit: `e8ef5b4` | Auteur: Bart Witte
+
 ## 2026-10-14 — Hotfix v2.16.2: lopende Toggl-projecten niet meer weggefilterd als "niet actief"
 - Commit: `fe49483` | Auteur: Bart Witte
 
