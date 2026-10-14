@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-14 — v2.16.5: projectleider en aanhef als keuzelijst; projectleider = wie het project aanmaakt
+- Commit: `602caa6` | Auteur: Bart Witte
+
 ## 2026-10-14 — v2.16.4: Toggl-naam = "<projectnummer> <projectnaam>" (klant is een apart veld)
 - Commit: `a188686` | Auteur: Bart Witte
 

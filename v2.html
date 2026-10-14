@@ -842,7 +842,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.16.5</span>
+    <span class="header-version">v2.16.6</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -6093,7 +6093,7 @@ function renderProjectDetail(proj){
   if(!proj){const h=document.getElementById('project-detail');h.innerHTML='';delete h.dataset.code;return;}
   const host=document.getElementById('project-detail');
   host.dataset.code=proj.code; delete host.dataset.offerte; delete host.dataset.klant;
-  const nav=PROJ_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_projSectie?' actief':''}" data-sectie="${esc(s.k)}" aria-selected="${esc(s.k===_projSectie)}" aria-controls="proj-sectie-inhoud" onclick="projSectieKies(${jsArg(s.k)})">${esc(s.l)}${esc(_projSecTeller(proj,s.k))}</button>`).join('');
+  const nav=PROJ_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_projSectie?' actief':''}" data-sectie="${esc(s.k)}" aria-selected="${esc(s.k===_projSectie)}" aria-controls="proj-sectie-inhoud" onclick="projSectieKies(${jsArg(s.k)})">${esc(s.l)}${_projSecTeller(proj,s.k)?` <span class="proj-secn">${esc(_projSecTeller(proj,s.k))}</span>`:''}</button>`).join('');
   host.innerHTML=projContextBalk(proj)
     +`<nav class="proj-secnav" role="tablist" aria-label="Projectonderdelen">${nav}</nav>`
     +`<div class="card proj-sectie" id="proj-sectie-inhoud" role="tabpanel" data-sectie="${esc(_projSectie)}"></div>`;
@@ -6101,11 +6101,11 @@ function renderProjectDetail(proj){
   try{ if(window.ResizeObserver){ if(window._projRO) window._projRO.disconnect(); window._projRO=new ResizeObserver(()=>_projSecNavTop()); const cb=host.querySelector('.proj-ctx'); if(cb) window._projRO.observe(cb); } }catch(e){}
   _projSectieRender(proj);
 }
-// Kleine telling achter een sectienaam (alleen waar het iets zegt).
+// Kleine telling achter een sectienaam (alleen waar het iets zegt). Alleen de tekst; de opmaak (span.proj-secn) zet de aanroeper eromheen.
 function _projSecTeller(proj,k){
   try{
-    if(k==='dossier'){ const n=(typeof mailLinksVoor==='function'?mailLinksVoor(proj.code).length:0); return n?` <span class="proj-secn">${n}✉</span>`:''; }
-    if(k==='planning'){ const n=(typeof projTaken==='function'?projTaken(proj.code).filter(t=>t.status!=='klaar').length:0); return n?` <span class="proj-secn">${n}</span>`:''; }
+    if(k==='dossier'){ const n=(typeof mailLinksVoor==='function'?mailLinksVoor(proj.code).length:0); return n?`${n}✉`:''; }
+    if(k==='planning'){ const n=(typeof projTaken==='function'?projTaken(proj.code).filter(t=>t.status!=='klaar').length:0); return n?String(n):''; }
   }catch(e){}
   return '';
 }
