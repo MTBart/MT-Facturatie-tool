@@ -226,7 +226,10 @@ body{
 .nav-btn:active{transform:scale(.92)}
 .nav-icon{font-size:22px;line-height:1;color:var(--text-faint)}
 .nav-btn.active .nav-icon{filter:drop-shadow(0 1px 3px rgba(42,74,56,.3))}
-/* acht knoppen nu Vandaag erbij is: op smalle schermen iets compacter, zodat de labels niet in elkaar lopen (de onderbalk wordt later opgeruimd, stap 2e) */
+/* vijf knoppen (Vandaag, Agenda, Projecten, Uren, Meer); Capture, Rapportage, Voorraad en Feedback staan in het Meer-menu */
+.sheet-action-btn.meer-item{width:100%;text-align:left;font-family:var(--sans);min-height:56px}
+.meer-item .sheet-action-title,.meer-item .sheet-action-sub{display:block}
+.sheet-action-btn.meer-item.active{background:var(--green-50);border-color:var(--green-100)}
 .nav-btn{min-width:0}
 .nav-btn span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:420px){.nav-btn{padding:8px 1px;font-size:9px}.nav-icon{font-size:19px}.nav-btn::before{left:6px;right:6px}}
@@ -1296,35 +1299,48 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
     <div class="nav-icon">☀</div>
     <span>Vandaag</span>
   </button>
-  <button class="nav-btn" onclick="switchTab('timer',this)" id="nav-timer" data-recht="uren">
-    <div class="nav-icon">⏱</div>
-    <span>Timer</span>
+  <button class="nav-btn" onclick="switchTab('agenda',this)" id="nav-agenda" data-recht="projecten">
+    <div class="nav-icon">📅</div>
+    <span>Agenda</span>
   </button>
   <button class="nav-btn" onclick="switchTab('projecten',this)" id="nav-projecten" data-recht="projecten">
     <div class="nav-icon">📁</div>
     <span>Projecten</span>
   </button>
-  <button class="nav-btn" onclick="switchTab('agenda',this)" id="nav-agenda" data-recht="projecten">
-    <div class="nav-icon">📅</div>
-    <span>Agenda</span>
+  <button class="nav-btn" onclick="switchTab('timer',this)" id="nav-timer" data-recht="uren">
+    <div class="nav-icon">⏱</div>
+    <span>Uren</span>
   </button>
-  <button class="nav-btn" onclick="switchTab('capture',this)" id="nav-capture">
-    <div class="nav-icon">📷</div>
-    <span>Capture</span>
-  </button>
-  <button class="nav-btn" onclick="switchTab('oplevering',this)" id="nav-oplevering" data-recht="projecten">
-    <div class="nav-icon">📋</div>
-    <span>Rapportage</span>
-  </button>
-  <button class="nav-btn" onclick="switchTab('voorraad',this)" id="nav-voorraad" data-recht="projecten">
-    <div class="nav-icon">📦</div>
-    <span>Voorraad</span>
-  </button>
-  <button class="nav-btn" onclick="switchTab('feedback',this)" id="nav-feedback" data-recht="verbeterpunten">
-    <div class="nav-icon">💬</div>
-    <span>Feedback</span>
+  <button class="nav-btn" onclick="openMeer()" id="nav-meer" aria-haspopup="dialog">
+    <div class="nav-icon">⋯</div>
+    <span>Meer</span>
   </button>
 </nav>
+
+<!-- ── MEER (Capture, Rapportage, Voorraad, Feedback: dezelfde tabs, via het menu) ── -->
+<div class="sheet-overlay" id="meerSheet" onclick="if(event.target===this)sluitMeer()">
+  <div class="sheet" role="dialog" aria-label="Meer">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head" style="position:relative">
+      <button class="sheet-close" onclick="sluitMeer()" aria-label="Sluiten">×</button>
+      <div class="sheet-title">Meer</div>
+    </div>
+    <div class="sheet-actions" style="padding-top:12px">
+      <button class="sheet-action-btn meer-item" onclick="switchTab('capture',this)" id="nav-capture">
+        <span class="sheet-action-icon">📷</span><span class="sheet-action-label"><span class="sheet-action-title">Capture</span></span><span class="sheet-action-arrow">›</span>
+      </button>
+      <button class="sheet-action-btn meer-item" onclick="switchTab('oplevering',this)" id="nav-oplevering" data-recht="projecten">
+        <span class="sheet-action-icon">📋</span><span class="sheet-action-label"><span class="sheet-action-title">Rapportage</span><span class="sheet-action-sub">oplevering</span></span><span class="sheet-action-arrow">›</span>
+      </button>
+      <button class="sheet-action-btn meer-item" onclick="switchTab('voorraad',this)" id="nav-voorraad" data-recht="projecten">
+        <span class="sheet-action-icon">📦</span><span class="sheet-action-label"><span class="sheet-action-title">Voorraad</span></span><span class="sheet-action-arrow">›</span>
+      </button>
+      <button class="sheet-action-btn meer-item" onclick="switchTab('feedback',this)" id="nav-feedback" data-recht="verbeterpunten">
+        <span class="sheet-action-icon">💬</span><span class="sheet-action-label"><span class="sheet-action-title">Feedback</span></span><span class="sheet-action-arrow">›</span>
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- ── PROJECT DETAIL SHEET ── -->
 <div class="sheet-overlay" id="projectSheet" onclick="closeSheet(event)">
@@ -2312,7 +2328,8 @@ async function rolLaadMobiel() {
   const gk = document.getElementById('geldKnop'); if (gk) gk.style.display = me.rechten && ('geld' in me.rechten) && MTRol.magGeld() ? '' : 'none';
   if (gk && gk.style.display === '') geldBadgeLaad();   // ongelezen ochtendmeldingen van de Koersmeter
   const act = document.querySelector('.bottom-nav .nav-btn.active');
-  if (act && act.classList.contains('mt-rol-verborgen')) { const vrij = [...document.querySelectorAll('.bottom-nav .nav-btn')].find(b => !b.classList.contains('mt-rol-verborgen')); if (vrij) vrij.click(); }
+  const meerAct = document.querySelector('.meer-item.active');   // een Meer-tab open waar het recht van weg is: ook doorschakelen
+  if ((act && act.classList.contains('mt-rol-verborgen')) || (meerAct && meerAct.classList.contains('mt-rol-verborgen'))) { const vrij = [...document.querySelectorAll('.bottom-nav .nav-btn')].find(b => !b.classList.contains('mt-rol-verborgen')); if (vrij) vrij.click(); }
 }
 
 // ── Vandaag aanwezig + planvoorstellen (F1e) ──
@@ -3321,11 +3338,20 @@ document.addEventListener("DOMContentLoaded", () => {
 /* =====================================================================
    TAB NAVIGATION
    ===================================================================== */
+// Stap 2e: Capture, Rapportage, Voorraad en Feedback staan in het Meer-menu; dezelfde tabs en functies, alleen via een sheet.
+// Is een van die tabs open, dan is "Meer" de actieve knop in de onderbalk (en het item in het menu).
+const MEER_TABS = ["capture", "oplevering", "voorraad", "feedback"];
+function openMeer() { const s = document.getElementById("meerSheet"); if (s) s.classList.add("visible"); }
+function sluitMeer() { const s = document.getElementById("meerSheet"); if (s) s.classList.remove("visible"); }
 function switchTab(name, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".nav-btn, .meer-item").forEach(b => b.classList.remove("active"));
   document.getElementById("tab-"+name).classList.add("active");
-  btn.classList.add("active");
+  if (MEER_TABS.includes(name)) {
+    const mb = document.getElementById("nav-meer"); if (mb) mb.classList.add("active");
+    const it = document.getElementById("nav-"+name); if (it) it.classList.add("active");
+  } else if (btn) btn.classList.add("active");
+  sluitMeer();
   if (name === "vandaag" && window.MTVandaag) MTVandaag.toon();
   if (name === "capture") renderCaptureProject();
   if (name === "feedback") renderFbList();
