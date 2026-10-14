@@ -9117,7 +9117,7 @@ async function _projTaakNaarToggl(code,id,vers=true){
   const mt=projVind(code); if(!mt) return false;
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||t.tg_task_id) return false;
   _ptStatus(code,'Naar Toggl…');
-  const pid=await _tgZorgProjectVoorCode(code);
+  const pid=await _tgZorgProjectVoorCode(code,()=>!_ptBlok(code,ROL_TAAK_ALLES,'Een taak naar Toggl zetten'));   // het recht wordt ook binnen het project-pad gevraagd (klant-POST, project-POST, opslaan van tg_project_id)
   if(!pid){ _ptStatus(code,'❌ Geen Toggl-project — taak niet aangemaakt'+(window._t2LaatsteFout?(': '+window._t2LaatsteFout):''),'#c0392b');
     try{ if(window.track) track('taken','naar_toggl',{detail:'geen project_id',ok:false}); }catch(e){}
     return false; }
@@ -9147,10 +9147,11 @@ async function projTakenSpiegelAlles(code){
   const arr=projTaken(code).filter(t=>!t.tg_task_id);
   if(!arr.length) return;
   if(!await mtDialog.confirm({title:'Taken naar Toggl',message:arr.length+' taak/taken in het Toggl-project aanmaken (of koppelen via het MT-kenmerk, nooit op naam)?'+((projVind(code)||{}).tg_project_id?'':'\n\nDit project heeft nog geen Toggl-project; dat wordt dan ook aangemaakt.'),okLabel:'Aanmaken'})) return;
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Taken naar Toggl zetten')) return false;   // ronde 10: direct na de bevestiging, vóór het project-pad (dat al een Toggl-klant of -project kan aanmaken)
   try{ if(window.track) track('taken','spiegel_alles',{detail:arr.length+' taken'}); }catch(e){}
   _ptStatus(code,'Toggl: project klaarzetten…','var(--gold-text)');
   // Project éénmalig aanmaken (stil), daarna alle taken er stil aan hangen.
-  const pid0=await _tgZorgProjectVoorCode(code);
+  const pid0=await _tgZorgProjectVoorCode(code,()=>!_ptBlok(code,ROL_TAAK_ALLES,'Taken naar Toggl zetten'));
   if(!pid0){ _ptStatus(code,'❌ Geen Toggl-project'+(window._t2LaatsteFout?(': '+window._t2LaatsteFout):'')+' — niets gespiegeld','#c0392b'); return; }
   if(_ptBlok(code,ROL_TAAK_ALLES,'Taken naar Toggl zetten')) return false;   // na het klaarzetten van het Toggl-project opnieuw
   let ok=0,fout=0;
@@ -9914,9 +9915,9 @@ async function planNaarToggl(code){
   if(!mt){ planToast('❌ Project '+code+' niet gevonden'); return; }
   const open=plan.fases.filter(fa=>!fa.togglTaskId);
   if(!await mtDialog.confirm({title:'Planning naar Toggl',message:`${open.length} fase(n) als taak in het Toggl-project van ${projNaamVol(_projVoorCode(code))||'dit project'} zetten?`+(plan.fases.length-open.length?`\n${plan.fases.length-open.length} fase(n) staan er al in en worden overgeslagen.`:''),okLabel:'Naar Toggl'})) return;
-  if(_ptBlok(code)) return;   // opnieuw na de bevestigingsdialoog: de blokkade kan tijdens het wachten ontstaan zijn
+  if(_ptBlok(code,ROL_TAAK_ALLES,'De planning naar Toggl zetten')) return;   // opnieuw na de bevestigingsdialoog: de blokkade of het recht kan tijdens het wachten veranderd zijn
   planToast('Toggl: project zoeken…');
-  const pid=await _tgZorgProjectVoorCode(code);
+  const pid=await _tgZorgProjectVoorCode(code,()=>!_ptBlok(code,ROL_TAAK_ALLES,'De planning naar Toggl zetten'));
   if(!pid){ planToast('❌ Geen Toggl-project: '+(window._t2LaatsteFout||'onbekende fout')+' — er is niets aangemaakt'); return; }
   if(_ptBlok(code)) return;   // en na het zoeken/aanmaken van het Toggl-project
   if(plan.togglProjectId&&plan.togglProjectId!==pid) plan.legacy_toggl_project_id=plan.togglProjectId;
@@ -11066,9 +11067,11 @@ async function leadMapMaken(code){
 }
 async function leadTogglMaken(code){
   const p=projVind(code); if(!p) return;
+  if(rolGeweigerd('projecten:wijzigen','Een Toggl-project aanmaken')) return;
   const naam=typeof t2ProjectNaam==='function'?t2ProjectNaam(p):projNaamVol(p);
   if(!await mtDialog.confirm({title:'Toggl-project',message:'Toggl-project „'+naam+'” aanmaken en aan dit project koppelen? Bestaat er al een passend Toggl-project, dan wordt dat eerst voorgesteld.',okLabel:'Aanmaken'})) return;
-  const id=await _tgZorgProjectVoorCode(p.code);
+  if(rolGeweigerd('projecten:wijzigen','Een Toggl-project aanmaken')) return;   // ronde 10: direct na de bevestiging, vóór het project-pad
+  const id=await _tgZorgProjectVoorCode(p.code,()=>!rolGeweigerd('projecten:wijzigen','Een Toggl-project aanmaken'));
   if(!id) return mtDialog.alert({title:'Toggl-project',message:(window._t2LaatsteFout||'Er is niets aangemaakt.')+' Kies eventueel zelf via "Toggl-project kiezen".'});
   _leadNaWijziging(p.code);
 }

@@ -879,7 +879,8 @@ function tgNieuwProject(){
 // Genoemd vanuit maakProjectAan(); geeft het Toggl-project-id terug of null.
 // Zoekt een bestaande Toggl-client op naam (case-insensitief) of maakt 'm aan.
 // Geeft het client-id terug of null. Best-effort.
-async function tgVindOfMaakClient(naam){
+// voorPost (optioneel): een functie die vlak vóór een POST nog eens vraagt of de actie mag (bv. het recht na de awaits en dialogen); false = afbreken zonder POST.
+async function tgVindOfMaakClient(naam,voorPost){
   // Geeft het klant-id, null als er geen klantnaam is, en GOOIT bij een fout: dan wordt
   // er ook geen project zonder klant gemaakt (de mens beslist).
   naam=String(naam||'').trim(); if(!naam||naam==='—') return null;
@@ -890,6 +891,7 @@ async function tgVindOfMaakClient(naam){
   const best=alle.filter(c=>(c.name||'').trim().toLowerCase()===naam.toLowerCase());
   if(best.length>1) throw new Error(`Er bestaan ${best.length} Toggl-klanten "${naam}" — voeg ze eerst samen in Toggl`);
   if(best.length===1) return best[0].id;
+  if(typeof voorPost==='function'&&voorPost()===false) throw new Error('Toggl-actie afgebroken: geen recht meer of de takenlijst is niet klaar');   // vóór de klant-POST
   const made=await focusFetchW('clients','POST',{name:naam});
   const id=made&&(made.id||(made.data&&made.data.id));
   if(!id) throw new Error('Toggl gaf geen klant-id terug');
@@ -898,7 +900,7 @@ async function tgVindOfMaakClient(naam){
 // Maakt het Toggl-project bij een M&T-projectcode (best-effort, niet-blokkerend).
 // Projectnaam = leesbare naam + code; klant wordt als Toggl-CLIENT gekoppeld
 // (apart veld in Toggl). Geeft het Toggl-project-id terug of null.
-async function tgMaakProjectVoorCode(code, billable){
+async function tgMaakProjectVoorCode(code, billable, voorPost){
   // Toggl 2.0 (Track is uit). Naam = "<offertenummer> <naam>" of zolang er geen nummer is
   // de naam; later bijwerken via "Offertenummer toekennen". Bestaat er al precies één
   // project met die naam, dan wordt dat gebruikt (geen dubbel). Geeft id of null.
@@ -909,7 +911,8 @@ async function tgMaakProjectVoorCode(code, billable){
     if(zelfde.length===1) return zelfde[0].id;
     if(zelfde.length>1){ window._t2LaatsteFout=`Er bestaan al ${zelfde.length} Toggl-projecten met de naam "${naam}" — kies er één via "Toggl-project kiezen"`; return null; }
     const klantNaam=(mt.klant_naam||(typeof resolveKlantNaam==='function'&&mt.klant?resolveKlantNaam(mt):mt.klant))||'';
-    const clientId=await tgVindOfMaakClient(klantNaam);
+    const clientId=await tgVindOfMaakClient(klantNaam,voorPost);
+    if(typeof voorPost==='function'&&voorPost()===false) throw new Error('Toggl-actie afgebroken: geen recht meer of de takenlijst is niet klaar');   // vóór de project-POST
     const id=await t2MaakProject(naam,clientId);
     if(typeof tgVulProjectSelect==='function') tgVulProjectSelect();
     return id;
@@ -917,15 +920,20 @@ async function tgMaakProjectVoorCode(code, billable){
 }
 // Zorgt dat er één Toggl-project bestaat voor deze code — STIL (geen dialogen).
 // Geeft het project-id terug (of null). Schrijft tg_project_id op het M&T-record.
-async function _tgZorgProjectVoorCode(code){
+// voorPost (optioneel, ronde 10): wordt gevraagd vóór elke Toggl-schrijfactie in dit pad (klant-POST, project-POST) en vóór het opslaan van tg_project_id; false = afbreken (null terug).
+async function _tgZorgProjectVoorCode(code,voorPost){
   const mt=PROJECT_CODES.find(x=>(x.code||'').toUpperCase()===String(code).toUpperCase())||(typeof projVind==='function'&&projVind(code));
   if(!mt) return null;
   window._t2LaatsteFout='';
+  const af=()=>typeof voorPost==='function'&&voorPost()===false;
+  if(af()){ window._t2LaatsteFout='Toggl-actie afgebroken: geen recht meer of de takenlijst is niet klaar'; return null; }
   let pid=null;
   try{ pid=await _tgProjectIdVoorMt(mt); }
   catch(e){ window._t2LaatsteFout=e.message; return null; }   // bv. meerdere kandidaten → mens kiest
   if(pid) return pid;
-  const made=await tgMaakProjectVoorCode(code,true);
+  if(af()){ window._t2LaatsteFout='Toggl-actie afgebroken: geen recht meer of de takenlijst is niet klaar'; return null; }
+  const made=await tgMaakProjectVoorCode(code,true,voorPost);
+  if(made&&af()){ window._t2LaatsteFout='Toggl-actie afgebroken: geen recht meer; het Toggl-project is niet aan dit project gekoppeld'; return null; }   // niet opslaan; een volgende poging vindt het project op naam
   if(made){ mt.tg_project_id=made; if(typeof slaProjectenOp==='function') slaProjectenOp(); return made; }
   return null;
 }
