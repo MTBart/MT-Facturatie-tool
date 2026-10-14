@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-14 — v2.16.6: tellers in de projecttabs tonen geen HTML-code meer
+- Commit: `0f44374` | Auteur: Bart Witte
+
 ## 2026-10-14 — v2.16.5: projectleider en aanhef als keuzelijst; projectleider = wie het project aanmaakt
 - Commit: `602caa6` | Auteur: Bart Witte
 

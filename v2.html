@@ -842,7 +842,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.16.6</span>
+    <span class="header-version">v2.16.7</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -8878,7 +8878,8 @@ async function t2Ontkoppel(code){
   if(typeof _rerenderDetailKeepScroll==='function') _rerenderDetailKeepScroll();
 }
 function _jsCode(c){ return String(c||'').replace(/[^A-Za-z0-9_.\-]/g,''); }   // veilig in onclick='…'
-function _t2St(code,msg,kleur){ const el=document.getElementById('t2-st-'+code.replace(/[^A-Za-z0-9]/g,'')); if(el){ el.textContent=msg; el.style.color=kleur||'var(--text-dim)'; } }
+function _t2St(code,msg,kleur){ const el=document.getElementById('t2-st-'+code.replace(/[^A-Za-z0-9]/g,'')); if(el){ el.textContent=msg; el.style.color=kleur||'var(--text-dim)'; }
+  else if(msg&&/^[⚠✓]/.test(msg)){ try{ planToast(msg); }catch(e){} } }   // geen statusvak in beeld: uitkomst en fouten toch tonen (14-10: een fout bleef onzichtbaar)
 async function t2KiesProject(code){
   const mt=projVind(code); if(!mt) return;
   try{
@@ -8926,17 +8927,21 @@ async function t2OffertenummerToekennen(code){
     const msg='Offertenummer: '+(oudNr||'(geen)')+' → '+nr+'\n'+(pid?('Toggl-projectnaam: "'+((_tgCache.projecten||[]).find(p=>p.id===pid)||{}).name+'" → "'+nieuwNaam+'"'):'Er is nog geen Toggl-project gekoppeld; alleen het nummer wordt opgeslagen.'+(tgVoorstel?'\n('+tgVoorstel+')':''))+'\n\nDe projectmap wordt niet hernoemd.';
     if(!await mtDialog.confirm({title:'Offertenummer toekennen',message:msg,okLabel:'Toekennen'})) return;
     if(typeof _ptJournaal==='function') _ptJournaal('offertenummer',code,{offertenr_oud:oudNr,offertenr_nieuw:nr,toggl_naam_oud:oudNaam,toggl_naam_nieuw:nieuwNaam,tg_project_id:pid,mb_estimate:est[i].id});
-    let hernoemd=false;
+    // Eerst het nummer duurzaam bewaren, dán pas Toggl hernoemen (14-10: andersom ging het nummer verloren terwijl Toggl al hernoemd
+    // was). Op het actuele record: na de wachttijd van de dialogen kan de lijst nieuwe objecten hebben.
+    const doel=(mt.project_id&&PROJECT_CODES.find(p=>p&&p.project_id===mt.project_id))||projVind(code)||mt;
+    doel.offertenr=nr; doel.offertenr_mb_id=est[i].id; slaProjectenOp();
     try{
       if(pid){
-        const nuPid=await _tgProjectIdVoorMt(mt);   // koppeling kan intussen gewijzigd zijn
-        if(String(nuPid)!==String(pid)) throw new Error('de Toggl-koppeling is intussen gewijzigd — probeer opnieuw');
-        _t2St(code,'Toggl-projectnaam bijwerken…'); await t2HernoemProject(pid,nieuwNaam); hernoemd=true;
+        const nuPid=await _tgProjectIdVoorMt(doel);   // koppeling kan intussen gewijzigd zijn
+        if(String(nuPid)!==String(pid)) throw new Error('de Toggl-koppeling is intussen gewijzigd');
+        _t2St(code,'Toggl-projectnaam bijwerken…'); await t2HernoemProject(pid,nieuwNaam);
       }
-      mt.offertenr=nr; mt.offertenr_mb_id=est[i].id; slaProjectenOp();
       renderProjectDetail(huidigProject);
+      _t2St(code,'✓ Offertenummer '+nr+' bewaard'+(pid?' en de Toggl-naam bijgewerkt':''));
     }catch(e2){
-      _t2St(code,'⚠ '+(e2.message||e2)+(hernoemd?' — LET OP: de naam in Toggl is wél al gewijzigd naar "'+nieuwNaam+'" (oude naam staat in het journaal)':' — er is niets gewijzigd in Toggl'),'#c0392b');
+      try{ renderProjectDetail(huidigProject); }catch(_){}
+      _t2St(code,'⚠ Offertenummer '+nr+' is bewaard, maar de Toggl-naam is niet bijgewerkt: '+(e2.message||e2)+'. Probeer "Toggl-naam bijwerken" opnieuw.','#c0392b');
     }
   }catch(e){ _t2St(code,'⚠ '+e.message+' — er is niets gewijzigd in Toggl','#c0392b'); }
 }
