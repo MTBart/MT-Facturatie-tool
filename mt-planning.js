@@ -146,8 +146,12 @@
   // prioriteit, afhankelijk_van (oud, zie de afhankelijkheden hieronder), tg_task_id (optionele Toggl-koppeling), tg_sync
   // (koppeltabel; een eigen veld met een eigen stempel dat bij precies één tg_task_id hoort, external_id; wijzigt tg_task_id, dan vervalt
   // tg_sync), planvelden (start, eind, duur_dagen, soort 'taak'|'mijlpaal', fase, sleutel), _vs, _veldconflict, _vervallen.
-  P.TAAK_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'status', 'toegewezen', 'prioriteit', 'afhankelijk_van', 'tg_task_id', 'tg_sync',
-    'start', 'eind', 'duur_dagen', 'soort', 'fase', 'sleutel'];
+  P.TAAK_BASIS_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'status', 'toegewezen', 'prioriteit', 'afhankelijk_van', 'tg_task_id', 'tg_sync',
+    'start', 'eind', 'duur_dagen', 'soort', 'fase', 'sleutel'];   // de velden van de eerste versie: de hashes voor de overstap (oud_hash, basis) blijven hierop rekenen
+  // klaar_op = de dag waarop de taak klaar is gemeld (ymd); tg_pending = de duurzame Toggl-intentie {op, ts, ...} die vóór een Toggl-actie wordt opgeslagen.
+  // Beide zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
+  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending']);
+  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending']);
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
@@ -274,7 +278,7 @@
   };
   const hash36 = s => P.sha256(s);   // naam uit een eerdere versie; het is nu SHA-256 (hex)
   const stabiel = v => Array.isArray(v) ? '[' + v.map(stabiel).join(',') + ']' : (v && typeof v === 'object') ? '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stabiel(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v);
-  P.taakInhoudHash = t => hash36(stabiel(P.TAAK_VELDEN.filter(f => f !== 'tg_sync').map(f => norm(t && t[f]))));
+  P.taakInhoudHash = t => hash36(stabiel(P.TAAK_BASIS_VELDEN.filter(f => f !== 'tg_sync').map(f => norm(t && t[f]))));
   P.takenBestandHash = obj => hash36(stabiel(obj || {}));
   const fingerprint = t => hash36(stabiel([t && t.naam, t && t.omschrijving, t && t.bron, t && t.duur_uur].map(norm)));
   // Per legacy-record een bronsleutel; het volgnummer telt gelijke fingerprints binnen een project.
@@ -335,7 +339,7 @@
     for (const x of P.legacyBronSleutels(lokaal || {})) {
       if (x.taak.id && spId.has(x.taak.id)) {
         const s = spId.get(x.taak.id).taak;
-        const velden = P.TAAK_VELDEN.filter(f => f !== 'tg_sync' && !gelijk(x.taak[f], s[f])).map(f => ({ veld: f, oud: norm(x.taak[f]), nu: norm(s[f]) }));
+        const velden = P.TAAK_BASIS_VELDEN.filter(f => f !== 'tg_sync' && !gelijk(x.taak[f], s[f])).map(f => ({ veld: f, oud: norm(x.taak[f]), nu: norm(s[f]) }));
         if (velden.length) migratieAfwijkingen.push({ code: x.code, id: x.taak.id, naam: x.taak.naam || s.naam || '', velden, hash: P.taakInhoudHash(x.taak) });
         continue;
       }
@@ -392,7 +396,7 @@
         if (eerder !== h || verhuisd) voeg({ soort: 'herstel', sleutel: id, code, id, naam: t.naam || '', hash: h + (verhuisd ? '@' + code : ''), velden: verhuisd ? [{ veld: 'project', oud: code, nu: codes[id] }] : [], taak: kopie(t) });
         return;
       }
-      const velden = P.TAAK_VELDEN.filter(f => f !== 'tg_sync' && !gelijk(t[f], huidig.taak[f])).map(f => ({ veld: f, oud: norm(t[f]), nu: norm(huidig.taak[f]) }));
+      const velden = P.TAAK_BASIS_VELDEN.filter(f => f !== 'tg_sync' && !gelijk(t[f], huidig.taak[f])).map(f => ({ veld: f, oud: norm(t[f]), nu: norm(huidig.taak[f]) }));
       if (verhuisd) voeg({ soort: 'verhuisd', sleutel: id, code, id, naam: t.naam || '', hash: h + '@' + code, velden: [{ veld: 'project', oud: code, nu: huidig.code }].concat(velden), taak: kopie(t) });
       else if (velden.length) voeg({ soort: 'gewijzigd', sleutel: id, code, id, naam: t.naam || '', hash: h, velden, taak: kopie(t) });
     });
@@ -435,7 +439,7 @@
       if (sw) w._vs[f] = kopie(sw);
       const bt = tijdVan(sw), bb = Number(sw && sw.basis) || 0, ot = tijdVan(so), verschil = !gelijk(ander[f], win[f]);
       let c = null;
-      if (verschil && !(f === 'tg_sync' && c0 !== 0 && !(ander[f] && (ander[f].status === 'fout' || ander[f].status === 'extern-verwijderd')))) {
+      if (verschil && !ZONDER_CONFLICT.has(f) && !(f === 'tg_sync' && c0 !== 0 && !(ander[f] && (ander[f].status === 'fout' || ander[f].status === 'extern-verwijderd')))) {
         const identiek = c0 === 0 && (!opt.legacy || !!(sl || sr)), ongestempeld = !ot && !!bt && !opt.legacy;
         if (identiek || (ot && ot > bb) || (ongestempeld && (f in ander))) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot || bt };
       }

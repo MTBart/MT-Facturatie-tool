@@ -6075,6 +6075,7 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
+  if(_projSectie==='planning') _ptOnafgerondTeken(proj.code);   // ronde 8: een Toggl-actie die niet is afgerond
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -7165,7 +7166,8 @@ function projTakenZet(code,arr){
   if(!projTakenKlaar()){ try{ planToast('Taken zijn nog niet geladen of geblokkeerd — er is niets gewijzigd. '+projTakenStatusTekst()); }catch(e){} return false; }
   const ruw=projTakenRuw(), pr=(typeof projVind==='function')?projVind(code):null;
   ruw[code]=MTPlanning.takenStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),dev:_spDev(),projectId:(pr&&pr.project_id)||''});
-  projTakenSave(ruw);
+  // Een uitzondering van de opslag (vol, geblokkeerd) is een geweigerde wijziging: false, nooit een gegooide fout die half werk achterlaat.
+  try{ projTakenSave(ruw); }catch(e){ console.error('taken opslaan mislukt:',e); try{ planToast('⚠ De taken konden niet worden opgeslagen ('+(e.message||e)+'). Er is niets gewijzigd.'); }catch(_){} return false; }
   return true;
 }
 // ── Eenmalige, gecontroleerde overstap door beheer: Beheer ▸ "Taken overzetten naar het nieuwe bestand" ──
@@ -7331,16 +7333,21 @@ function _ptJournaal(actie,code,taak,extra){
 // Taken waarvan de Toggl-wijziging nog niet gelukt is, opnieuw proberen.
 async function projTakenHerkans(code){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Toggl opnieuw proberen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
-  const arr=projTaken(code), weg=new Set(); let ok=0,fout=0;
-  for(const t of arr){
-    if(!t.tg_pending||!t.tg_task_id) continue;
-    if(t.tg_pending.verwijderen){ if(await _tgVerwijderTaak(t.tg_task_id)){ weg.add(t.id); ok++; } else fout++; continue; }
-    if(t.tg_pending.status){
-      try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await _ptStatusId(t.status)}); delete t.tg_pending; ok++; }
-      catch(e){ fout++; }
-    }
+  const lijst=projTaken(code).filter(t=>_tgOp(t.tg_pending)), weg=new Set(); let ok=0,fout=0;
+  for(const t0 of lijst){
+    const id=t0.id, op=_tgOp(t0.tg_pending); _tgBezig.add(code+'|'+id);
+    try{
+      if(op==='verwijderen'){ if(t0.tg_task_id&&!await _tgVerwijderTaak(t0.tg_task_id)) throw new Error('verwijderen mislukt'); weg.add(id); }   // zonder Toggl-taak of bij 404: al weg
+      else if(op==='status'){ if(!t0.tg_task_id) throw new Error('geen Toggl-taak'); await focusFetch(`tasks/${t0.tg_task_id}`,'PATCH',{status_id:await _ptStatusId(t0.status)}); _tgAfronden(code,id,x=>{ _ptSyncMerk(x,'ok'); }); }
+      else if(op==='koppelen'||op==='bijwerken'){
+        const mt=projVind(code), pid=mt?await _tgProjectIdVoorMt(mt):null; if(!pid) throw new Error('geen Toggl-project');
+        const tid=await _tgUitvoerKoppel(code,id,op,pid,projTaken(code).find(x=>x.id===id)||t0);
+        _tgAfronden(code,id,x=>{ if(op==='koppelen') x.tg_task_id=tid; _ptSyncMerk(x,'ok'); });
+      } else { _tgAfronden(code,id,null); }
+      ok++;
+    }catch(e){ fout++; _tgAfgebroken(code,id); }
   }
-  projTakenZet(code,arr.filter(t=>!weg.has(t.id)));
+  if(weg.size){ weg.forEach(id=>_tgBezig.delete(code+'|'+id)); if(projTakenZet(code,projTaken(code).filter(t=>!weg.has(t.id)))!==true) fout++; }
   _ptStatus(code,fout?`⚠ ${fout} taak/taken nog niet bijgewerkt in Toggl — probeer later opnieuw`:`✓ ${ok} bijgewerkt in Toggl`,fout?'#c0392b':'var(--green)');
   renderProjectDetail(huidigProject);
 }
@@ -8248,7 +8255,7 @@ function projTaakVeldZet(code,id,veld,waarde){
   try{ if(window.track) track('taken','veld_'+veld,{detail:code}); }catch(e){}
   _rerenderDetailKeepScroll();
 }
-const _PT_VELDLABEL={naam:'Naam',omschrijving:'Omschrijving',duur_uur:'Raming (uren)',activiteit:'Activiteit',status:'Status',toegewezen:'Toegewezen',prioriteit:'Prioriteit',afhankelijk_van:'Afhankelijk van',tg_task_id:'Toggl-taak',tg_sync:'Toggl-koppeling'};
+const _PT_VELDLABEL={klaar_op:'Klaar op',tg_pending:'Toggl-actie',naam:'Naam',omschrijving:'Omschrijving',duur_uur:'Raming (uren)',activiteit:'Activiteit',status:'Status',toegewezen:'Toegewezen',prioriteit:'Prioriteit',afhankelijk_van:'Afhankelijk van',tg_task_id:'Toggl-taak',tg_sync:'Toggl-koppeling'};
 function _ptWaardeTekst(veld,w){
   if(w===null||w===undefined||w==='') return '(leeg)';
   if(veld==='activiteit'){ const a=MTPlanning.activiteit(w); return a?a.l:String(w); }
@@ -8271,6 +8278,61 @@ async function projTaakConflict(code,id){
   projTakenZet(code,arr);
   _rerenderDetailKeepScroll();
 }
+// ═══ Toggl-intentie (ronde 8): lokaal opslaan vóór Toggl, afronden erna ═══
+// Vóór elke Toggl-actie (status, aanmaken/koppelen, bijwerken, verwijderen) wordt de bedoeling duurzaam in de taak opgeslagen (tg_pending {op, ts, ...}) en wordt
+// gecontroleerd dat dat lukte (projTakenZet === true, ook bij een uitzondering van de opslag). Pas daarna gaat de aanroep naar Toggl, en daarna wordt de intentie
+// afgerond (opnieuw lezen, uitkomst vastleggen, intentie wissen). Sluit het tabblad of valt de verbinding weg tussen die stappen, dan staat de intentie er nog:
+// bij het opstarten en in het projectscherm staat dan "Toggl-actie onafgerond: controleren"; controleren herhaalt de (idempotente) actie. Een DELETE met 404 is "al verwijderd".
+const _tgBezig=new Set();   // "code|id" van de Toggl-acties die in dit tabblad nu lopen (alles wat niet in deze verzameling staat maar wel een intentie heeft, is onafgerond)
+function _tgOp(p){ return !p||typeof p!=='object'?'':(p.op||(p.verwijderen?'verwijderen':(p.status?'status':''))); }
+function _tgIntentieZet(code,arr,taken,op){
+  const lijst=Array.isArray(taken)?taken:[taken], ts=Date.now();
+  lijst.forEach(t=>{ t.tg_pending=Object.assign({op,ts},op==='status'?{status:true}:(op==='verwijderen'?{verwijderen:true}:{})); });
+  let ok=false; try{ ok=projTakenZet(code,arr)===true; }catch(e){ ok=false; }
+  if(!ok){ lijst.forEach(t=>{ delete t.tg_pending; }); try{ _ptStatus(code,'⚠ De Toggl-actie is niet gestart: de taak kon niet lokaal worden opgeslagen. Er is niets naar Toggl gestuurd.','#c0392b'); }catch(e){} return false; }
+  lijst.forEach(t=>_tgBezig.add(code+'|'+t.id)); return true;
+}
+function _tgAfronden(code,id,mut){   // na de Toggl-aanroep: de actuele stand opnieuw lezen, de uitkomst vastleggen en de intentie wissen
+  _tgBezig.delete(code+'|'+id);
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return false;
+  try{ if(mut) mut(t); }catch(e){ console.warn('Toggl-afronding:',e); }
+  delete t.tg_pending;
+  let ok=false; try{ ok=projTakenZet(code,arr)===true; }catch(e){ ok=false; }
+  if(!ok){ try{ _ptStatus(code,'⚠ Toggl is bijgewerkt, maar de afronding kon niet lokaal worden opgeslagen: de taak blijft op "Toggl-actie onafgerond: controleren".','#c0392b'); }catch(e){} }
+  return ok;
+}
+function _tgAfgebroken(code,id){ _tgBezig.delete(code+'|'+id); }   // mislukt of onderbroken: de intentie blijft staan (controleren)
+function _tgOnafgerond(code){ return projTaken(code).filter(t=>_tgOp(t.tg_pending)&&!_tgBezig.has(code+'|'+t.id)); }
+// Het projectscherm: de ⏳-knop en de statusregel zeggen het eerlijk. (De sjabloonregel van de knop zelf blijft ongewijzigd; de tekst wordt hier vervangen.)
+function _ptOnafgerondTeken(code){
+  try{
+    const lijst=_tgOnafgerond(code); if(!lijst.length) return;
+    _ptStatus(code,'⚠ Toggl-actie onafgerond: controleren ('+lijst.length+' taak/taken) — klik ⏳ om te controleren','#c0392b');
+    const tbl=document.getElementById('pt-tbl-'+code.replace(/-/g,'')); if(!tbl) return;
+    tbl.querySelectorAll('button[onclick*="projTakenHerkans"]').forEach(b=>{ b.textContent='⏳ Toggl-actie onafgerond: controleren'; b.title='Een Toggl-actie is gestart maar niet afgerond. Klik om te controleren: de actie wordt veilig herhaald (aanmaken zoekt eerst op het MT-kenmerk, verwijderen geldt ook als de taak al weg is).'; });
+  }catch(e){}
+}
+function tgOnafgerondMelding(){
+  try{
+    if(!projTakenKlaar()) return;
+    const per=Object.entries(projTakenAll()).map(([c,l])=>[c,l.filter(t=>_tgOp(t.tg_pending)&&!_tgBezig.has(c+'|'+t.id))]).filter(([c,l])=>l.length);
+    if(per.length) planToast('⚠ Toggl-actie onafgerond: controleren — '+per.reduce((n,[c,l])=>n+l.length,0)+' taak/taken in '+per.length+' project(en) ('+per.slice(0,3).map(([c])=>c).join(', ')+(per.length>3?'…':'')+'). Open het project en klik ⏳.');
+  }catch(e){}
+}
+// Bij een gelukte aanmaak/bijwerk-actie: koppelen (zoeken op het MT-kenmerk, anders aanmaken) of bijwerken; geeft het Toggl-taak-id terug.
+async function _tgUitvoerKoppel(code,id,actie,pid,t){
+  let tid=t.tg_task_id;
+  if(actie==='koppelen'){
+    const r=await t2VindOfMaakTaak(code+'/'+id,{name:t.naam,project_id:pid},true);
+    tid=r.id;
+    if(t.status&&t.status!=='todo') await focusFetch('tasks/'+tid,'PATCH',{status_id:await _ptStatusId(t.status)});
+  } else {
+    await focusFetch('tasks/'+tid,'PATCH',{name:t.naam,status_id:await _ptStatusId(t.status)});
+  }
+  return tid;
+}
+// De dag waarop een taak klaar is gemeld (lokale datum); weg zodra de taak weer open staat.
+function _ptKlaarOp(t,status){ if(status==='klaar'){ if(!MTPlanning.isYmd(t.klaar_op)) t.klaar_op=MTPlanning.vandaagYmd(); } else delete t.klaar_op; }
 // Koppeltabel bijhouden na een geslaagde of mislukte Toggl-actie.
 function _ptSyncMerk(t,status,fout){
   const oud=t.tg_sync||{};
@@ -8304,24 +8366,20 @@ async function projTaakTogglSync(code,id){
     :'De Toggl-taak wordt gelijkgezet met MT:\n\nnaam „'+t.naam+'”, status '+stat+'\n\nMT is de bron: wijzigingen die je in Toggl aan naam of status deed, worden overschreven.';
   if(!await mtDialog.confirm({title:actie==='koppelen'?'Toggl-taak aanmaken':'Toggl-taak bijwerken',message:vraag,okLabel:actie==='koppelen'?'Aanmaken':'Bijwerken'})) return;
   if(_ptBlok(code,ROL_TAAK_ALLES,'Toggl synchroniseren')) return false;   // na de bevestiging opnieuw
+  // De intentie eerst duurzaam opslaan (opnieuw gelezen: de bevestiging kan lang geduurd hebben); lukt dat niet, dan gaat er niets naar Toggl.
+  { const a1=projTaken(code), t1=a1.find(x=>x.id===id); if(!t1) return;
+    if(actie==='koppelen'){ delete t1.tg_task_id; delete t1.tg_sync; }
+    if(!_tgIntentieZet(code,a1,t1,actie==='koppelen'?'koppelen':'bijwerken')) return false; }
   _ptStatus(code,actie==='koppelen'?'Toggl: taak aanmaken…':'Toggl: taak bijwerken…','var(--gold-text)');
   try{
-    if(actie==='koppelen'){
-      const r=await t2VindOfMaakTaak(code+'/'+t.id,{name:t.naam,project_id:pid},true);
-      t.tg_task_id=r.id;
-      if(t.status&&t.status!=='todo') await focusFetch('tasks/'+r.id,'PATCH',{status_id:await _ptStatusId(t.status)});
-    } else {
-      await focusFetch('tasks/'+t.tg_task_id,'PATCH',{name:t.naam,status_id:await _ptStatusId(t.status)});
-    }
-    delete t.tg_pending; _ptSyncMerk(t,'ok');
+    const tid=await _tgUitvoerKoppel(code,id,actie,pid,projTaken(code).find(x=>x.id===id)||t);
     if(typeof _tgCache!=='undefined') _tgCache.taken=null;
-    projTakenZet(code,arr);
+    _tgAfronden(code,id,x=>{ if(actie==='koppelen') x.tg_task_id=tid; _ptSyncMerk(x,'ok'); });
     stOk(actie==='koppelen'?'✓ Taak staat in Toggl.':'✓ Toggl-taak bijgewerkt.');
     try{ if(window.track) track('taken','toggl_sync_'+actie,{detail:t.bron||'handmatig',ok:true}); }catch(e){}
   }catch(e){
     const weg=/HTTP 404/.test(String(e.message||'')), bestaand=actie==='bijwerken'||actie==='herkoppelen';
-    _ptSyncMerk(t,weg&&bestaand?'extern-verwijderd':'fout',e.message||e);
-    projTakenZet(code,arr);
+    _tgAfronden(code,id,x=>{ _ptSyncMerk(x,weg&&bestaand?'extern-verwijderd':'fout',e.message||e); });   // een foutmelding is een afronding: de koppeltabel zegt wat er mis ging en de knop biedt een nieuwe poging
     stFout(weg&&bestaand?'⚠ De taak bestaat niet meer in Toggl. De MT-taak blijft staan; klik opnieuw om te kiezen.':'❌ '+(e.message||e));
     try{ if(window.track) track('taken','toggl_sync_'+actie,{detail:e.message,ok:false}); }catch(_){}
   }
@@ -8341,7 +8399,8 @@ function nieuweProjectTaak(code){
     if(dep){ const idx=parseInt(dep)-1; if(arr[idx]) afhankelijk_van=[arr[idx].id]; }
   }
   const t={id:_ptId(),naam,omschrijving:'',duur_uur:duur,prioriteit,afhankelijk_van,status:'todo',tg_task_id:null,bron:'handmatig',activiteit:MTPlanning.activiteitUitNaam(naam)||undefined};
-  arr.push(t); projTakenZet(code,arr); renderProjectDetail(huidigProject);
+  arr.push(t); if(projTakenZet(code,arr)!==true) return;   // niet opgeslagen: de melding staat er al
+  renderProjectDetail(huidigProject);
   try{ if(window.track) track('taken','taak_handmatig',{detail:code,ok:true}); }catch(e){}
 }
 async function projTaakStatus(code,id){
@@ -8359,13 +8418,14 @@ async function projTaakStatusNaar(code,id,nieuwStatus){
   if(w.wacht&&(t.status||'todo')==='todo'&&nieuwStatus!=='todo'&&!await mtDialog.confirm({title:'Deze taak wacht',message:'"'+t.naam+'" wacht op: '+w.op.map(o=>o.naam).join(', ')+'.\nToch '+(nieuwStatus==='klaar'?'op klaar zetten':'starten')+'?',okLabel:'Toch doorgaan'})) return;
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // de blokkade of het recht kan tijdens de bevestiging veranderd zijn
   _ptJournaal('status',code,t);
-  t.status=nieuwStatus;
-  // Niet meer "fire and forget": lukt Toggl niet, dan blijft dat zichtbaar (⏳) met herkansing.
+  t.status=nieuwStatus; _ptKlaarOp(t,nieuwStatus);
+  // Ronde 8: eerst de nieuwe status en de Toggl-intentie duurzaam lokaal opslaan en controleren; pas daarna Toggl, en daarna afronden.
+  // Lukt het opslaan niet, dan verandert er niets en gaat er niets naar Toggl. Niet meer "fire and forget": lukt Toggl niet, dan blijft de intentie zichtbaar (⏳).
   if(t.tg_task_id){
-    try{ await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:await _ptStatusId(t.status)}); delete t.tg_pending; _ptSyncMerk(t,'ok'); }
-    catch(e){ t.tg_pending={status:true}; _ptStatus(code,'⚠ Status lokaal gewijzigd, maar nog niet in Toggl: '+(e.message||e)+' — klik ⏳ om opnieuw te proberen','#c0392b'); }
-  }
-  projTakenZet(code,arr);
+    if(!_tgIntentieZet(code,arr,t,'status')) return false;
+    try{ const sid=await _ptStatusId(nieuwStatus); await focusFetch(`tasks/${t.tg_task_id}`,'PATCH',{status_id:sid}); _tgAfronden(code,id,x=>{ _ptSyncMerk(x,'ok'); }); }
+    catch(e){ _tgAfgebroken(code,id); _ptStatus(code,'⚠ Status lokaal gewijzigd, maar nog niet in Toggl: '+(e.message||e)+' — klik ⏳ om opnieuw te proberen','#c0392b'); }
+  } else if(projTakenZet(code,arr)!==true){ _ptStatus(code,'⚠ De status kon niet worden opgeslagen; er is niets gewijzigd.','#c0392b'); return false; }
   try{ if(window.track) track('taken','status',{detail:t.status}); }catch(e){}
   // Twee-weg-sync: spiegel de status naar de bijbehorende planning-fase.
   try{ const plan=planVoor(code); if(plan&&plan.vanTaken&&plan.fases){ const fa=plan.fases.find(f=>f.bronTaakId===id); if(fa){ fa.status=t.status; planSave(code,plan); } } }catch(e){}
@@ -8404,7 +8464,9 @@ async function _tgVerwijderTaak(tg_task_id){
   if(!tg_task_id) return true;
   try{ await focusFetch(`tasks/${tg_task_id}`,'DELETE');
     if(typeof _tgCache!=='undefined') _tgCache.taken=null; return true; }
-  catch(e){ console.warn('Toggl-taak',tg_task_id,'verwijderen faalde:',e); return false; }
+  catch(e){
+    if(/HTTP 404/.test(String((e&&e.message)||e))){ if(typeof _tgCache!=='undefined') _tgCache.taken=null; return true; }   // 404 = al verwijderd: dat is wat we wilden
+    console.warn('Toggl-taak',tg_task_id,'verwijderen faalde:',e); return false; }
 }
 async function projTaakVerwijder(code,id){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Een taak verwijderen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
@@ -8414,16 +8476,19 @@ async function projTaakVerwijder(code,id){
   try{ if(window.track) track('taken','verwijder',{detail:code}); }catch(e){}
   if(!t) return;
   _ptJournaal('verwijderen',code,t);
-  // Pas lokaal weg als Toggl het bevestigt; anders blijft de taak staan met ⏳.
+  // Pas lokaal weg als Toggl het bevestigt (of de taak daar al weg is); anders blijft de taak staan met ⏳. De intentie staat vóór de Toggl-aanroep duurzaam in de taak.
   if(t.tg_task_id){
+    const a0=projTaken(code), x0=a0.find(y=>y.id===id); if(!x0) return;
+    if(!_tgIntentieZet(code,a0,x0,'verwijderen')) return false;
     _ptStatus(code,'Toggl: taak verwijderen…');
     if(!await _tgVerwijderTaak(t.tg_task_id)){
-      const arr=projTaken(code), x=arr.find(y=>y.id===id); if(x){ x.tg_pending={verwijderen:true}; projTakenZet(code,arr); }
+      _tgAfgebroken(code,id);
       _ptStatus(code,'⚠ Verwijderen in Toggl mislukt — de taak blijft staan tot het lukt (klik ⏳ om opnieuw te proberen)','#c0392b');
       renderProjectDetail(huidigProject); return;
     }
+    _tgBezig.delete(code+'|'+id);
   }
-  projTakenZet(code,projTaken(code).filter(x=>x.id!==id));
+  if(projTakenZet(code,projTaken(code).filter(x=>x.id!==id))!==true){ _ptStatus(code,'⚠ De taak kon niet lokaal worden verwijderd.','#c0392b'); renderProjectDetail(huidigProject); return; }
   renderProjectDetail(huidigProject);
 }
 // Meerdere aangevinkte taken in één keer verwijderen (lokaal + Toggl).
@@ -8438,14 +8503,16 @@ async function projTakenVerwijderSelectie(code){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Taken verwijderen')) return false;   // na de bevestiging opnieuw
   try{ if(window.track) track('taken','verwijder_selectie',{detail:code+' · '+ids.length}); }catch(e){}
   let i=0; const mislukt=new Set();
+  // Alle intenties eerst, in één keer, duurzaam opslaan; lukt dat niet, dan gaat er niets naar Toggl.
+  { const a0=projTaken(code), metToggl=a0.filter(x=>ids.includes(x.id)&&x.tg_task_id);
+    if(metToggl.length&&!_tgIntentieZet(code,a0,metToggl,'verwijderen')) return false; }
   for(const t of teVerw){ i++;
     _ptJournaal('verwijderen',code,t);
     if(t.tg_task_id){ _ptStatus(code,`Toggl: verwijderen ${i}/${teVerw.length}…`,'var(--gold-text)');
-      if(!await _tgVerwijderTaak(t.tg_task_id)) mislukt.add(t.id); }
+      if(!await _tgVerwijderTaak(t.tg_task_id)) { mislukt.add(t.id); _tgAfgebroken(code,t.id); } else _tgBezig.delete(code+'|'+t.id); }
   }
   const rest=projTaken(code).filter(t=>!ids.includes(t.id)||mislukt.has(t.id));
-  rest.forEach(t=>{ if(mislukt.has(t.id)) t.tg_pending={verwijderen:true}; });
-  projTakenZet(code,rest);
+  if(projTakenZet(code,rest)!==true){ _ptStatus(code,'⚠ De taken konden niet lokaal worden verwijderd.','#c0392b'); renderProjectDetail(huidigProject); return; }
   _ptStatus(code,mislukt.size?`⚠ ${ids.length-mislukt.size} verwijderd; ${mislukt.size} blijven staan omdat Toggl niet lukte (⏳ = opnieuw)`:`✓ ${ids.length} taken verwijderd`,mislukt.size?'#c0392b':'var(--green)');
   renderProjectDetail(huidigProject);
 }
@@ -8919,6 +8986,8 @@ async function projTaakNaarToggl(code,id,vers=true){
   if(!pid){ _ptStatus(code,'❌ Geen Toggl-project — taak niet aangemaakt'+(window._t2LaatsteFout?(': '+window._t2LaatsteFout):''),'#c0392b');
     try{ if(window.track) track('taken','naar_toggl',{detail:'geen project_id',ok:false}); }catch(e){}
     return false; }
+  { const a1=projTaken(code), t1=a1.find(x=>x.id===id); if(!t1||t1.tg_task_id) return false;   // de stand na het zoeken van het Toggl-project
+    if(!_tgIntentieZet(code,a1,t1,'koppelen')) return false; }   // ronde 8: eerst de intentie opslaan en controleren
   try{
     // Minimale body: project heeft eigen bord-status-id's; generieke id's geven
     // validatie-fout. Focus default'et de status. (status/prioriteit-sync = follow-up.)
@@ -8927,12 +8996,12 @@ async function projTaakNaarToggl(code,id,vers=true){
     // antwoord koppelt de bestaande Toggl-taak in plaats van een tweede te maken.
     const r=await t2VindOfMaakTaak(code+'/'+t.id,body,vers);
     const tid=r&&r.id;
-    if(tid){ t.tg_task_id=tid; _ptSyncMerk(t,'ok'); projTakenZet(code,arr); }
+    if(tid){ _tgAfronden(code,id,x=>{ x.tg_task_id=tid; _ptSyncMerk(x,'ok'); }); } else _tgAfgebroken(code,id);
     if(typeof _tgCache!=='undefined') _tgCache.taken=null;
     _ptStatus(code,'✓ In Toggl-project','var(--green)');
     try{ if(window.track) track('taken','naar_toggl',{detail:t.bron||'handmatig',ok:true}); }catch(e){}
     return true;
-  }catch(e){ _ptStatus(code,'❌ '+e.message,'#c0392b');
+  }catch(e){ _tgAfgebroken(code,id); _ptStatus(code,'❌ '+e.message,'#c0392b');
     try{ if(window.track) track('taken','naar_toggl',{detail:e.message,ok:false}); }catch(_){}
     return false; }
 }
@@ -9859,13 +9928,14 @@ async function planEditorOpslaan(code,faseId){
   // terug naar die taak, zodat planning en takenlijst dezelfde bron delen.
   if(fa.bronTaakId){
     const tarr=projTaken(code), bt=tarr.find(x=>x.id===fa.bronTaakId);
-    if(bt){ bt.naam=fa.naam; bt.status=fa.status; bt.duur_uur=fa.effort; if(projTakenZet(code,tarr)===false) return;   // geweigerd: geen Toggl-PATCH en geen planning-save
+    if(bt){ bt.naam=fa.naam; bt.status=fa.status; bt.duur_uur=fa.effort; _ptKlaarOp(bt,fa.status);
+      // eerst de Toggl-intentie (met de nieuwe waarden) duurzaam opslaan; lukt dat niet, dan geen Toggl-PATCH en geen planning-save
+      if(bt.tg_task_id){ if(!_tgIntentieZet(code,tarr,bt,'status')) return; } else if(projTakenZet(code,tarr)!==true) return;
       // Niet meer stil: lukt Toggl niet, dan staat de taak op ⏳ (herkansing in Taken).
       if(bt.tg_task_id){
-        try{ const sid=await _ptStatusId(fa.status); if(_ptBlok(code)) return;   // de blokkade kan tijdens de await ontstaan zijn: dan geen Toggl-PATCH en geen planning-save
-          await focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:sid}); delete bt.tg_pending; }
-        catch(e){ bt.tg_pending={status:true}; planToast('⚠ Fase opgeslagen, maar Toggl-taak nog niet bijgewerkt: '+(e.message||e)); }
-        if(projTakenZet(code,tarr)===false) return;   // geweigerd: geen vervolgeffecten
+        try{ const sid=await _ptStatusId(fa.status); if(_ptBlok(code)){ _tgAfgebroken(code,bt.id); return; }   // de blokkade kan tijdens de await ontstaan zijn: dan geen Toggl-PATCH en geen planning-save (de intentie blijft staan)
+          await focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:sid}); _tgAfronden(code,bt.id,x=>{ _ptSyncMerk(x,'ok'); }); }
+        catch(e){ _tgAfgebroken(code,bt.id); planToast('⚠ Fase opgeslagen, maar Toggl-taak nog niet bijgewerkt: '+(e.message||e)); }
       }
     }
   }
@@ -13943,7 +14013,7 @@ window.initStorage = async function() {
   _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan (behalve blockedKeys)
   _ptTimeout = false; _ptHertekenen();   // een openstaand projectdetail toonde "Taken laden…": nu opnieuw tekenen
   _blTimeout = false; try{ _blNaWijziging(); }catch(e){ }
-  try{ setTimeout(takenLokaalControle,2500); setTimeout(blLokaalControle,3000); }catch(e){}
+  try{ setTimeout(takenLokaalControle,2500); setTimeout(blLokaalControle,3000); setTimeout(tgOnafgerondMelding,3500); }catch(e){}
   if (_SP.blockedKeys.size) {
     _SP.lastSync = { ts: Date.now(), ok: false, key: [..._SP.blockedKeys].join(', '),
       error: 'hydrate faalde — auto-sync uit voor deze key(s), herlaad de pagina' };
