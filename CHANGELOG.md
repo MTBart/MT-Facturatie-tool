@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-14 — v2.16.7: offertenummer eerst bewaren, dan pas Toggl hernoemen; uitkomst altijd zichtbaar
+- Commit: `2a82c02` | Auteur: Bart Witte
+
 ## 2026-10-14 — v2.16.6: tellers in de projecttabs tonen geen HTML-code meer
 - Commit: `0f44374` | Auteur: Bart Witte
 
