@@ -883,9 +883,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <button class="tab-btn" data-recht="moneybird" onclick="showTab('klanten',this)">Klanten</button>
   <button class="tab-btn" data-recht="moneybird" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" data-recht="verbeterpunten" onclick="showTab('verbeterpunten',this)">&#128161; Verbeterpunten</button>
-  <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
+  <button class="tab-btn" id="tab-btn-instellingen" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" id="tab-btn-admin" style="display:none" onclick="showTab('admin',this)">⚙ Admin</button>
-  <button class="tab-btn" id="tab-btn-activiteit" style="display:none" onclick="showTab('activiteit',this)">📊 Activiteit</button>
   <button class="tab-help-btn" onclick="helpOpen()" title="Korte uitleg van dit tabblad + feedback geven aan Larry">ⓘ wat is dit?</button>
   <button class="tab-help-btn" onclick="tbOpenInNieuwVenster()" title="Open dit tabblad in een apart venster — sleep het naar je tweede scherm">↗ apart venster</button>
 </div>
@@ -1481,10 +1480,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <div id="tab-instellingen" class="tab-content">
     <!-- F5: verhuisknop (alleen zichtbaar met de proefvlag mt_verhuis_proef tot het nieuwe domein gekoppeld is) -->
     <div class="card" id="verhuis-kaart" style="display:none"><div class="card-title">Verhuizen naar het nieuwe adres</div><div id="verhuis-plek"></div></div>
-    <div class="card" id="beheer-kaart" style="display:none">
-      <div class="card-title">Beheer — gebruikers &amp; rollen</div>
-      <div id="beheer-inhoud" style="font-size:13px">Laden…</div>
-    </div>
     <div class="card" id="upd-kaart" style="display:none">
       <div class="card-title">Wat is er verbeterd</div>
       <div id="upd-inhoud" style="font-size:13px">Laden…</div>
@@ -1783,15 +1778,81 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       #tab-admin .adm-log-row:nth-child(even){background:var(--surface-sunken)}
     </style>
     <div class="adm-subtabs">
-      <button class="adm-subtab active" onclick="admSub('logboek',this)">📒 Logboek</button>
-      <button class="adm-subtab" onclick="admSub('team',this)">⚙️ Team &amp; lock</button>
-      <button class="adm-subtab" onclick="admSub('verlof',this)">🏖 Verlof &amp; saldo</button>
-      <button class="adm-subtab" onclick="admSub('vrijdagen',this)">📅 Vrije dagen</button>
-      <button class="adm-subtab" onclick="admSub('notificaties',this)">🔔 Notificaties</button>
+      <button class="adm-subtab" data-sub="beheer" style="display:none" onclick="admSub('beheer',this)">👥 Beheer</button>
+      <button class="adm-subtab" data-sub="instellingen" style="display:none" onclick="admSub('instellingen',this)">🛠 Instellingen</button>
+      <button class="adm-subtab" data-sub="activiteit" style="display:none" onclick="admSub('activiteit',this)">📊 Activiteit</button>
+      <button class="adm-subtab" data-sub="logboek" style="display:none" onclick="admSub('logboek',this)">📒 Logboek</button>
+      <button class="adm-subtab" data-sub="team" style="display:none" onclick="admSub('team',this)">⚙️ Team &amp; lock</button>
+      <button class="adm-subtab" data-sub="verlof" style="display:none" onclick="admSub('verlof',this)">🏖 Verlof &amp; saldo</button>
+      <button class="adm-subtab" data-sub="vrijdagen" style="display:none" onclick="admSub('vrijdagen',this)">📅 Vrije dagen</button>
+      <button class="adm-subtab" data-sub="notificaties" style="display:none" onclick="admSub('notificaties',this)">🔔 Notificaties</button>
+    </div>
+
+    <!-- Beheer (verhuisd uit Instellingen): gebruikers & rollen, app-versie, overstap, controlelijst, auditlog -->
+    <div id="adm-sub-beheer" class="adm-subcontent">
+      <div class="card" id="beheer-kaart" style="display:none">
+        <div class="card-title">Beheer — gebruikers &amp; rollen</div>
+        <div id="beheer-inhoud" style="font-size:13px">Laden…</div>
+      </div>
+    </div>
+
+    <!-- Instellingen: de bestaande kaarten uit #tab-instellingen worden hier ingehangen zodra Admin voor jou geldt (admSamenvoegen) -->
+    <div id="adm-sub-instellingen" class="adm-subcontent"></div>
+
+    <!-- Activiteit (verhuisd uit een eigen tabblad; usage-/presence-tracking, alleen Bart en beheer) -->
+    <div id="adm-sub-activiteit" class="adm-subcontent">
+  <div id="tab-activiteit">
+    <style>
+      #tab-activiteit .act-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+      #tab-activiteit .act-range{display:flex;gap:2px}
+      #tab-activiteit .act-range button{padding:6px 13px;border:1px solid var(--border,#ddd);background:#fff;cursor:pointer;font-size:12.5px;color:var(--text-dim,#666)}
+      #tab-activiteit .act-range button:first-child{border-radius:6px 0 0 6px}
+      #tab-activiteit .act-range button:last-child{border-radius:0 6px 6px 0}
+      #tab-activiteit .act-range button.active{background:var(--green,#2A4A38);color:#fff;border-color:var(--green,#2A4A38)}
+      #tab-activiteit .act-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+      #tab-activiteit .act-stat{background:var(--surface,#fff);border:1px solid var(--border,#eee);border-radius:10px;padding:13px 15px}
+      #tab-activiteit .act-stat .v{font-size:24px;font-weight:700;color:var(--green,#2A4A38);font-variant-numeric:tabular-nums}
+      #tab-activiteit .act-stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint,#999);margin-top:3px}
+      #tab-activiteit .act-online{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
+      #tab-activiteit .act-chip{display:flex;align-items:center;gap:7px;background:var(--surface-sunken,#f6f6f4);border:1px solid var(--border,#eee);border-radius:20px;padding:5px 13px 5px 10px;font-size:13px}
+      #tab-activiteit .act-dot{width:9px;height:9px;border-radius:50%;background:#2ecc71;box-shadow:0 0 0 3px rgba(46,204,113,.18)}
+      #tab-activiteit .act-chip .sub{font-size:11px;color:var(--text-faint,#999)}
+      #tab-activiteit h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#666);margin:20px 0 8px}
+      #tab-activiteit table.act-tbl{width:100%;border-collapse:collapse;font-size:13px}
+      #tab-activiteit table.act-tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint,#999);padding:6px 8px;border-bottom:1px solid var(--border,#e6e6e6)}
+      #tab-activiteit table.act-tbl td{padding:6px 8px;border-bottom:1px solid var(--border,#f2f2f2)}
+      #tab-activiteit table.act-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+      #tab-activiteit .act-bad{color:#c0392b;font-weight:600}
+      #tab-activiteit .act-empty{color:var(--text-faint,#999);font-size:13px;padding:10px 0}
+    </style>
+    <div class="act-head">
+      <strong style="font-size:16px;color:var(--green,#2A4A38)">📊 Activiteit &amp; gebruik</strong>
+      <div class="act-range" id="act-range">
+        <button data-r="today" onclick="actSetRange('today',this)">Vandaag</button>
+        <button data-r="7d" class="active" onclick="actSetRange('7d',this)">7 dagen</button>
+        <button data-r="30d" onclick="actSetRange('30d',this)">30 dagen</button>
+      </div>
+      <button onclick="activiteitOpen(true)" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border,#ddd);background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px">↻ Verversen</button>
+    </div>
+
+    <h3 style="margin-top:0">Nu online</h3>
+    <div class="act-online" id="act-online"><span class="act-empty">laden…</span></div>
+
+    <div class="act-cards" id="act-stats"></div>
+
+    <h3>Gebruik per functie</h3>
+    <div id="act-functies"><div class="act-empty">laden…</div></div>
+
+    <h3>Per gebruiker</h3>
+    <div id="act-users"><div class="act-empty">laden…</div></div>
+
+    <h3>Usability-hotspots — mislukte / afgebroken acties</h3>
+    <div id="act-hotspots"><div class="act-empty">laden…</div></div>
+  </div>
     </div>
 
     <!-- A1: Logboek -->
-    <div id="adm-sub-logboek" class="adm-subcontent active">
+    <div id="adm-sub-logboek" class="adm-subcontent">
       <div class="adm-search">
         <select id="adm-log-pers" class="adm-sel" style="width:auto" onchange="admRenderLog()">
           <option value="">Alle personen</option>
@@ -2310,56 +2371,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     </div>
   </div>
   <div id="inbox-toast"><span id="inbox-toast-msg"></span><button onclick="inboxUndo()">Ongedaan maken</button></div>
-
-  <!-- ═══ TAB: ACTIVITEIT (usage-/presence-tracking, alleen Bart) ═══ -->
-  <div id="tab-activiteit" class="tab-content">
-    <style>
-      #tab-activiteit .act-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
-      #tab-activiteit .act-range{display:flex;gap:2px}
-      #tab-activiteit .act-range button{padding:6px 13px;border:1px solid var(--border,#ddd);background:#fff;cursor:pointer;font-size:12.5px;color:var(--text-dim,#666)}
-      #tab-activiteit .act-range button:first-child{border-radius:6px 0 0 6px}
-      #tab-activiteit .act-range button:last-child{border-radius:0 6px 6px 0}
-      #tab-activiteit .act-range button.active{background:var(--green,#2A4A38);color:#fff;border-color:var(--green,#2A4A38)}
-      #tab-activiteit .act-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
-      #tab-activiteit .act-stat{background:var(--surface,#fff);border:1px solid var(--border,#eee);border-radius:10px;padding:13px 15px}
-      #tab-activiteit .act-stat .v{font-size:24px;font-weight:700;color:var(--green,#2A4A38);font-variant-numeric:tabular-nums}
-      #tab-activiteit .act-stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint,#999);margin-top:3px}
-      #tab-activiteit .act-online{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
-      #tab-activiteit .act-chip{display:flex;align-items:center;gap:7px;background:var(--surface-sunken,#f6f6f4);border:1px solid var(--border,#eee);border-radius:20px;padding:5px 13px 5px 10px;font-size:13px}
-      #tab-activiteit .act-dot{width:9px;height:9px;border-radius:50%;background:#2ecc71;box-shadow:0 0 0 3px rgba(46,204,113,.18)}
-      #tab-activiteit .act-chip .sub{font-size:11px;color:var(--text-faint,#999)}
-      #tab-activiteit h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#666);margin:20px 0 8px}
-      #tab-activiteit table.act-tbl{width:100%;border-collapse:collapse;font-size:13px}
-      #tab-activiteit table.act-tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint,#999);padding:6px 8px;border-bottom:1px solid var(--border,#e6e6e6)}
-      #tab-activiteit table.act-tbl td{padding:6px 8px;border-bottom:1px solid var(--border,#f2f2f2)}
-      #tab-activiteit table.act-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
-      #tab-activiteit .act-bad{color:#c0392b;font-weight:600}
-      #tab-activiteit .act-empty{color:var(--text-faint,#999);font-size:13px;padding:10px 0}
-    </style>
-    <div class="act-head">
-      <strong style="font-size:16px;color:var(--green,#2A4A38)">📊 Activiteit &amp; gebruik</strong>
-      <div class="act-range" id="act-range">
-        <button data-r="today" onclick="actSetRange('today',this)">Vandaag</button>
-        <button data-r="7d" class="active" onclick="actSetRange('7d',this)">7 dagen</button>
-        <button data-r="30d" onclick="actSetRange('30d',this)">30 dagen</button>
-      </div>
-      <button onclick="activiteitOpen(true)" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border,#ddd);background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px">↻ Verversen</button>
-    </div>
-
-    <h3 style="margin-top:0">Nu online</h3>
-    <div class="act-online" id="act-online"><span class="act-empty">laden…</span></div>
-
-    <div class="act-cards" id="act-stats"></div>
-
-    <h3>Gebruik per functie</h3>
-    <div id="act-functies"><div class="act-empty">laden…</div></div>
-
-    <h3>Per gebruiker</h3>
-    <div id="act-users"><div class="act-empty">laden…</div></div>
-
-    <h3>Usability-hotspots — mislukte / afgebroken acties</h3>
-    <div id="act-hotspots"><div class="act-empty">laden…</div></div>
-  </div>
 
   <!-- ═══ TAB: MIGRATIE ═══ -->
   <!-- Buiten gebruik: het oude migration-tool.js (gitignored _archief) + config.json-token
@@ -3328,15 +3339,35 @@ window.onload=async()=>{
 // Dwell-tracking: hoe lang bleef een tab open vóór de gebruiker wegklikte.
 let _tabHuidig='dashboard', _tabSinds=Date.now();
 let _tabWissels=0;   // elke tabwissel (klik, deeplink, router) — Geld als startpagina springt alleen als dit nog 0 is
+// Instellingen en Activiteit horen voor beheer/eigenaar onder Admin (subtabs); voor wie Admin niet heeft blijft Instellingen een eigen tab.
+// Wie Admin ziet: de teamadmins (MT_TEAM), beheer/eigenaar (rol) en Bart. Activiteit blijft voor Bart en beheer (zoals voorheen).
+function admSamen(){
+  try{ return !!((typeof mtIsAdmin==='function'&&mtIsAdmin())||(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())||(typeof mtMijEmail==='function'&&mtMijEmail()==='bart@mortiseandtenon.nl')); }catch(e){ return false; }
+}
+function admMagActiviteit(){
+  try{ return !!((typeof mtMijEmail==='function'&&mtMijEmail()==='bart@mortiseandtenon.nl')||(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())); }catch(e){ return false; }
+}
+// Waar hoort een oude tabnaam nu? {tab:'admin',sub} (samengevoegd), {tab:naam} (ongewijzigd) of null (niet voor jou: niets openen).
+function admRoute(naam){
+  if(naam==='instellingen') return admSamen()?{tab:'admin',sub:'instellingen'}:{tab:naam};
+  if(naam==='activiteit') return admMagActiviteit()?{tab:'admin',sub:'activiteit'}:null;
+  return {tab:naam};
+}
 function showTab(name,btn){
+  const logNaam=name;   // gebruiksstatistiek blijft de oude tabnaam zien
+  let sub=null;
+  if(name==='instellingen'||name==='activiteit'){
+    const t=admRoute(name); if(!t) return;
+    if(t.tab==='admin'){ name='admin'; sub=t.sub; btn=document.getElementById('tab-btn-admin'); }
+  }
   _tabWissels++;
   // Vorige tab afsluiten met dwell-tijd, nieuwe tab loggen + presence verversen.
   try{
-    if(window.track && name!==_tabHuidig){
+    if(window.track && logNaam!==_tabHuidig){
       track('tab','tab_dwell',{detail:_tabHuidig,ms:Date.now()-_tabSinds});
-      track('tab','tab_open',{detail:name});
-      _tabHuidig=name; _tabSinds=Date.now();
-      if(window.trackHeartbeat) trackHeartbeat(name);
+      track('tab','tab_open',{detail:logNaam});
+      _tabHuidig=logNaam; _tabSinds=Date.now();
+      if(window.trackHeartbeat) trackHeartbeat(logNaam);
     }
   }catch(e){}
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
@@ -3363,8 +3394,7 @@ function showTab(name,btn){
   if(name==='inbox') inboxOpen();
   if(name==='attentie') renderAttentie();
   if(name==='materialen') renderMaterialen();
-  if(name==='admin') adminOpen();
-  if(name==='activiteit') activiteitOpen();
+  if(name==='admin'){ adminOpen(); admSub(sub); }
   if(name==='verbeterpunten') verbLaadTab();
   if(name==='geld') geldOpen();
   if(name==='rapporten') rapportOpen();
@@ -3375,7 +3405,7 @@ function showTab(name,btn){
     const code=(name==='projecten'&&huidigProject&&pd&&pd.dataset.code===huidigProject.code)?huidigProject.code:null;
     const sec=(code&&typeof projSectieHuidig==='function')?projSectieHuidig():'overzicht';
     if(name==='projecten'&&pd&&pd.dataset.klant&&typeof _klantRoute==='function'&&_klantHuidig) mtRoute.zet(_klantRoute(),false);
-    else mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined}:{tab:name},false);
+    else mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined}:{tab:name==='admin'?admRouteNaam():name},false);
   }
 }
 // Multi-monitor: open de (huidige) tab in een nieuw browservenster met dezelfde deeplink.
@@ -3471,6 +3501,15 @@ const mtRoute={
         const lm=typeof _routeMag==='function'?_routeMag({dataset:{recht:'projecten:wijzigen'}}):'ja';
         if(lm==='wacht'){ this._wacht=r; return; }
         if(lm==='nee'){ this._leadRouteUit(); try{ mtDialog.alert({title:'Lead maken',message:'Je hebt geen recht om projecten of leads te maken.'}); }catch(e){} return; }
+      }
+      // #tab=instellingen / #tab=activiteit: voor wie Admin heeft een subtab van Admin (activiteit zonder recht: niets openen; de rol-retry na /me probeert opnieuw)
+      if(r.tab==='instellingen'||r.tab==='activiteit'){
+        const t=admRoute(r.tab); if(!t) return;
+        if(t.tab==='admin'){
+          const at=document.getElementById('tab-admin');
+          if(!(at&&at.classList.contains('active')&&admSubHuidig()===t.sub)) showTab(r.tab);
+          return;
+        }
       }
       if(!document.getElementById('tab-'+r.tab)) return;
       if(r.tab==='dashboard'&&!_oudDashboardAan()) return;   // oud dashboard is gearchiveerd: een oude link/bladwijzer laat de startpagina haar werk doen
@@ -14680,6 +14719,8 @@ window.auditLog=auditLog;
 
 // ── Tab open ──
 async function adminOpen(){
+  // Beheer/Instellingen/Activiteit laden zichzelf (admSub); de teamgegevens hieronder zijn alleen voor de teamadmins, zoals vóór de samenvoeging.
+  if(!mtIsAdmin()) return;
   // Laad alle data in parallel
   admLoadConfig().then(()=>{admRenderTeam();admRenderBudgetten();});
   admLoadVerlof().then(()=>{admRenderVerlofLijst();admRenderSaldo();});
@@ -14688,11 +14729,35 @@ async function adminOpen(){
   admLoadNotifs().then(()=>admRenderNotifLijst());
 }
 
+// Subtabs in vaste volgorde. Beheer, Instellingen en Activiteit zijn hier ingehangen (voorheen eigen plek); de rest is van de teamadmins.
+const ADM_SUBS=['beheer','instellingen','activiteit','logboek','team','verlof','vrijdagen','notificaties'];
+function admSubMag(n){   // mag deze subtab voor mij? (zelfde voorwaarden als de losse plekken vroeger)
+  if(n==='beheer') return !!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer());
+  if(n==='instellingen') return admSamen();
+  if(n==='activiteit') return admMagActiviteit();
+  return mtIsAdmin();
+}
+function admSubHuidig(){ const c=document.querySelector('#tab-admin .adm-subcontent.active'); return c?c.id.replace('adm-sub-',''):''; }
+// Hash-naam van wat er open staat: Instellingen en Activiteit houden hun oude deeplink (#tab=instellingen / #tab=activiteit).
+function admRouteNaam(){ const s=admSubHuidig(); return (s==='instellingen'||s==='activiteit')?s:'admin'; }
 function admSub(name,btn){
+  if(!name) name=admSubHuidig();   // zonder naam: de laatst open subtab blijft staan
+  if(!name||!admSubMag(name)) name=ADM_SUBS.find(admSubMag)||'';
   document.querySelectorAll('#tab-admin .adm-subcontent').forEach(c=>c.classList.remove('active'));
   document.querySelectorAll('#tab-admin .adm-subtab').forEach(b=>b.classList.remove('active'));
   const c=document.getElementById('adm-sub-'+name); if(c) c.classList.add('active');
-  if(btn) btn.classList.add('active');
+  const b=btn||document.querySelector('#tab-admin .adm-subtab[data-sub="'+name+'"]'); if(b) b.classList.add('active');
+  if(name==='beheer') beheerLaad();
+  if(name==='activiteit') activiteitOpen();
+  const at=document.getElementById('tab-admin');
+  if(at&&at.classList.contains('active')&&typeof mtRoute!=='undefined') mtRoute.zet({tab:admRouteNaam()},false);
+}
+// Instellingen: voor wie Admin heeft hangen de bestaande kaarten van #tab-instellingen onder Admin → Instellingen (zelfde DOM, geen kopie);
+// wie Admin niet heeft houdt ze in de eigen tab. Idempotent; kan ook weer terug.
+function admSamenvoegen(aan){
+  const van=document.getElementById(aan?'tab-instellingen':'adm-sub-instellingen'), naar=document.getElementById(aan?'adm-sub-instellingen':'tab-instellingen');
+  if(!van||!naar||van===naar) return;
+  while(van.firstChild) naar.appendChild(van.firstChild);
 }
 
 // ── A1: Logboek ──
@@ -14895,11 +14960,20 @@ function admRenderNotifLijst(){
 // ── Zichtbaarheid Admin-knop (na login) ──
 // Wordt aangeroepen vanuit toonApp (bestaande login-flow) — zie onderaan dit blok.
 function admInitKnop(){
+  // Admin (met Beheer, Instellingen en Activiteit als subtabs) voor teamadmins, beheer/eigenaar en Bart; die zien dan geen losse Instellingen-knop meer.
+  // Wie Admin niet heeft houdt de losse Instellingen-tab. Per subtab gelden dezelfde voorwaarden als vroeger (admSubMag);
+  // Activiteit blijft alléén voor Bart en beheer (de worker dwingt dit ook af op de leesroutes).
+  const samen=admSamen();
   const btn=document.getElementById('tab-btn-admin');
-  if(btn) btn.style.display=mtIsAdmin()?'':'none';
-  // Activiteit-tab: alléén voor Bart (worker dwingt dit ook af op de leesroutes).
-  const actBtn=document.getElementById('tab-btn-activiteit');
-  if(actBtn) actBtn.style.display=(mtMijEmail()==='bart@mortiseandtenon.nl'||(window.MTRol&&MTRol.isBeheer()))?'':'none';
+  if(btn) btn.style.display=samen?'':'none';
+  const insBtn=document.getElementById('tab-btn-instellingen');
+  if(insBtn) insBtn.style.display=samen?'none':'';
+  const ti=document.getElementById('tab-instellingen'), insAct=!!(ti&&ti.classList.contains('active'));
+  admSamenvoegen(samen);
+  document.querySelectorAll('#tab-admin .adm-subtab').forEach(b=>{ b.style.display=admSubMag(b.dataset.sub)?'':'none'; });
+  const at=document.getElementById('tab-admin');
+  if(at&&at.classList.contains('active')){ const h=admSubHuidig(); if(!h||!admSubMag(h)) admSub(null); }
+  else if(samen&&insAct) showTab('instellingen');   // Instellingen stond open voordat bleek dat Admin voor jou geldt → naar Admin → Instellingen
   // Laad ook budgetten-form zodra tab wordt geopend
   const verlofSub=document.getElementById('adm-sub-verlof');
   if(verlofSub) admRenderBudgetten();
@@ -15273,7 +15347,9 @@ const TAB_HELP={
   inbox:{naam:'Inbox',uitleg:'De smart-inbox van info@. Mappenboom, zoeken over de hele postbus en — met de schakelaar "💬 Gesprekken" — mailwisselingen gebundeld als één thread (zoals Outlook). Mails lezen, aan een project of klant koppelen, factuur-bijlagen direct laten analyseren (✨) en per mail met Larry chatten. Verplaatsingen die je hier doet leren het sorteersysteem bij.'},
   projecten:{naam:'Projecten',uitleg:'Alle lopende projecten met hun projectcode (KLANT-LOCATIE-PRODUCT). Via "+ Nieuw project" opent de projectaanmaker: die stelt de code voor en maakt de SharePoint-mappenstructuur aan. De code is de sleutel die overal terugkomt: stickers, uren, mail, Moneybird.'},
   agenda:{naam:'Agenda',uitleg:'De gezamenlijke agenda: week-rooster, lijstweergave én planning-view (📋). In de planning-view maak je planblokken per persoon/project aan, zie je verlof en vrije dagen en vergelijk je plan vs geklokt. Capaciteitsbalk toont direct of iemand overboekt is.'},
-  admin:{naam:'Admin',uitleg:'Beheerpaneel voor admins (Bart en Mathijs). Bevat: 📒 Logboek (alle wijzigingen), ⚙️ Team & lock (werkuren, uren-lock-drempel), 🏖 Verlof & saldo (jaarbudgetten, boeken, saldo-check), 📅 Vrije dagen (verplicht/optioneel) en 🔔 Notificaties (push naar mobiele app). Alle acties worden geauditeerd.'},
+  beheer:{naam:'Admin → Beheer',uitleg:'Gebruikers en rollen, uitnodigingen, projectcode, app-versie vastleggen, taken en bestellijst overzetten, controlelijst en het auditlog. Alleen voor eigenaar en beheer.'},
+  activiteit:{naam:'Admin → Activiteit',uitleg:'Wie er nu online is en hoe de tool gebruikt wordt: gebruik per functie, per gebruiker en de acties die mislukken. Alleen voor Bart en beheer.'},
+  admin:{naam:'Admin',uitleg:'Beheerpaneel voor eigenaar, beheer en admins. Subtabs: 👥 Beheer, 🛠 Instellingen en 📊 Activiteit (voorheen eigen plekken), en voor de teamadmins (Bart en Mathijs) 📒 Logboek (alle wijzigingen), ⚙️ Team & lock (werkuren, uren-lock-drempel), 🏖 Verlof & saldo (jaarbudgetten, boeken, saldo-check), 📅 Vrije dagen (verplicht/optioneel) en 🔔 Notificaties (push naar mobiele app). Alle acties worden geauditeerd.'},
   toggl:{naam:'Uren',uitleg:'Geklokte uren uit Toggl, per persoon en per project, met weektotalen en rapporten. Dit groeit uit tot onze eigen urenregistratie met planning én capaciteit (hoeveel uur per persoon nog vrij is).'},
   voorraad:{naam:'Voorraad',uitleg:'De voorraad plaatmateriaal en hardware, gevoed vanuit ingelezen facturen. FIFO-herkomst per artikel zodat nacalculatie klopt.'},
   materialen:{naam:'Materialen',uitleg:'De materialen die we écht inkopen (gematcht op facturen en voorraad), met de factuurnaam als canonieke naam. Niet de hele interiorcad-catalogus.'},
@@ -15286,7 +15362,9 @@ const TAB_HELP={
   cn:{naam:'Klantlocatie-analyse (gearchiveerd)',uitleg:'Aparte analyse voor één grote klant: omzet en facturen per locatie (53 locatie-contacten in Moneybird). Geen menu-ingang meer, code blijft staan.'},
   migratie:{naam:'Data-migratie (gearchiveerd)',uitleg:'Eenmalige hulpmiddelen om oude data naar de nieuwe structuur te verhuizen. Buiten gebruik, geen menu-ingang meer.'}
 };
-function helpActieveTab(){const el=document.querySelector('.tab-content.active');return el?el.id.replace('tab-',''):'?';}
+function helpActieveTab(){const el=document.querySelector('.tab-content.active');const n=el?el.id.replace('tab-',''):'?';
+  if(n==='admin'&&typeof admSubHuidig==='function'){ const s=admSubHuidig(); if(s==='beheer'||s==='instellingen'||s==='activiteit') return s; }   // hulp per subtab van Admin
+  return n;}
 
 // ── Gebruiks-log: buffer lokaal, flush met merge naar SharePoint ──
 const _LOG={
@@ -15507,8 +15585,9 @@ function rolToepassen(me){
   // Deeplink-race: een tab die al open stond vóór /me terug was (bv. #tab=instellingen of
   // #tab=activiteit) laadde zonder rol → nu alsnog vullen.
   const open=n=>{ const t=document.getElementById('tab-'+n); return !!(t&&t.classList.contains('active')); };
-  if(MTRol.isBeheer()&&open('instellingen')) beheerLaad();
-  if(MTRol.isBeheer()&&open('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
+  const sub=n=>open('admin')&&admSubHuidig()===n;   // Beheer en Activiteit zijn subtabs van Admin
+  if(MTRol.isBeheer()&&(open('instellingen')||sub('beheer'))) beheerLaad();
+  if(MTRol.isBeheer()&&sub('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   if(typeof geldTabZet==='function') geldTabZet();
@@ -16923,8 +17002,8 @@ function activiteitOpen(force){
   // Online-lijst elke 30s verversen zolang de tab open is.
   if(_actOnlineTimer) clearInterval(_actOnlineTimer);
   _actOnlineTimer=setInterval(()=>{
-    const tab=document.getElementById('tab-activiteit');
-    if(tab && tab.classList.contains('active')){
+    const tab=document.getElementById('adm-sub-activiteit'), adm=document.getElementById('tab-admin');   // Activiteit is een subtab van Admin
+    if(tab && tab.classList.contains('active') && adm && adm.classList.contains('active')){
       if(document.visibilityState==='visible') actLoadOnline();
     }
     else { clearInterval(_actOnlineTimer); _actOnlineTimer=null; }
