@@ -38,12 +38,12 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-14d"></script>
+<script src="mt-planning.js?v=2.16.0"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-14a"></script>
+<script src="mt-verhuis.js?v=2.16.0"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -842,7 +842,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.15.2</span>
+    <span class="header-version">v2.16.0</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -10864,13 +10864,29 @@ function leadKaartHtml(proj){
 // Toggl-project "260812 Naam" (de bestaande route, na bevestiging; een passend bestaand Toggl-project wordt alleen voorgesteld).
 function leadDoorzetStappen(proj){
   const taken=(typeof projTaken==='function')?projTaken(proj.code):[];
-  return {taken:taken.length>0,map:!!(proj.map&&proj.map.itemId),toggl:!!proj.tg_project_id};
+  const afh=(typeof projAfhActief==='function')?projAfhActief(proj.code):[];
+  const sjabloon=afh.length>0||taken.some(t=>t&&t.sjabloon_id)||!!(proj.gegevens&&proj.gegevens.sjabloon_toegepast);   // een eigen voorwaarde: los van "er zijn taken"
+  return {taken:taken.length>0,sjabloon,map:!!(proj.map&&proj.map.itemId),toggl:!!proj.tg_project_id};
 }
 function leadDoorzetZichtbaar(proj){
   if(!proj||proj.fase!=='werkvoorbereiding'||proj.doorzet_klaar||!(proj.gewonnen_op||proj.direct_project)) return false;
   const st=leadDoorzetStappen(proj); return !(st.taken&&st.map&&st.toggl);
 }
+// De rij "Planning-sjabloon" krijgt een eigen vinkje en knop (st.sjabloon). De sjabloonregel van _leadDoorzetHtml0 blijft ongewijzigd; hier wordt de rij vervangen (DOM, geen tekstplakwerk).
 function leadDoorzetHtml(proj){
+  const h=_leadDoorzetHtml0(proj); if(!h) return h;
+  try{
+    const st=leadDoorzetStappen(proj), mag=_leadMag(), tpl=document.createElement('template'); tpl.innerHTML=h;
+    const rij=[...tpl.content.querySelectorAll('.lead-rij')].find(r=>/Planning-sjabloon/.test(r.textContent)); if(!rij) return h;
+    rij.replaceChildren(document.createTextNode((st.sjabloon?'✓':'○')+' Planning-sjabloon '));
+    if(!st.sjabloon&&mag){
+      const b=document.createElement('button'); b.type='button'; b.className='btn btn-xs btn-gold'; b.title='Standaardketen met afhankelijkheden en datums voorstellen'; b.textContent='📐 Sjabloon toepassen';
+      b.setAttribute('onclick','projSjabloonDialoog('+JSON.stringify(String(proj.code))+')'); rij.appendChild(b);
+    }
+    return tpl.innerHTML;
+  }catch(e){ return h; }
+}
+function _leadDoorzetHtml0(proj){
   if(!leadDoorzetZichtbaar(proj)) return '';
   const st=leadDoorzetStappen(proj), pc=_jsCode(proj.code), mag=_leadMag();
   return `<div class="lead-doorzet"><div class="kpi-label">Doorzetten naar project</div>
@@ -15660,11 +15676,12 @@ function _bhProjectcode(ikEig){
     <div class="dos-meta" style="margin-top:8px">Werkcodes: ${zonder?`<b>${esc(zonder)}</b> project${zonder===1?'':'en'} nog zonder werkcode. <button class="btn btn-xs btn-secondary" onclick="beheerWerkcodes()">Werkcodes toekennen…</button>`:'alle projecten hebben een werkcode.'}</div></div>`;
 }
 // Na een release (Bart, eigenaar): vastleggen dat deze app-versie live staat én dat oudere versies niet meer mogen schrijven
-// (POST /teller/schema {uitgerold, min}). Oudere geopende tabbladen zien dan "herlaad de pagina" en schrijven niets meer.
+// (POST /teller/schema {uitgerold, min}). Oudere geopende tabbladen zien dan "herlaad de pagina" en schrijven geen projecten meer. Dit stopt ALLEEN de projectwrites: oude tabbladen
+// kunnen taken en bestelregels (de oude bestanden) nog wel wegschrijven. Procedure: bewerkingsstop, alle oude tabbladen sluiten of hard herladen, dan de klikken, dan de vangnetten controleren.
 async function beheerSchemaVastleggen(){
   if(!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer()&&MTRol.me&&MTRol.me.rol==='eigenaar')) return mtDialog.alert({title:'App-versie',message:'Alleen de eigenaar kan dit.'});
   const v=PROJ_SCHEMA;
-  if(!await mtDialog.confirm({title:'App-versie vastleggen',message:`Dit legt vast dat app-versie ${v} live staat en dat oudere versies geen projecten meer mogen wegschrijven.\n\nWie nog een ouder tabblad open heeft, ziet dan "herlaad de pagina" en schrijft niets meer tot hij herlaadt (er gaat niets verloren: zijn wijzigingen blijven lokaal staan).\n\nDoe dit pas als de nieuwe versie live staat.`,okLabel:'Vastleggen'})) return;
+  if(!await mtDialog.confirm({title:'App-versie vastleggen',message:`Dit legt vast dat app-versie ${v} live staat en dat oudere versies geen projecten meer mogen wegschrijven.\n\nLet op: dit stopt ALLEEN het wegschrijven van projecten. Een oud tabblad kan nog wel taken en bestelregels in de oude bestanden wegschrijven. Doe dit dus pas na de bewerkingsstop, als alle oude tabbladen gesloten of hard herladen zijn (Ctrl+Shift+R); daarna de klikken Taken overzetten en Bestellijst overzetten, en tot slot de vangnetten controleren.\n\nWie nog een ouder tabblad open heeft, ziet dan "herlaad de pagina" en schrijft geen projecten meer tot hij herlaadt (er gaat niets verloren: zijn wijzigingen blijven lokaal staan).\n\nDoe dit pas als de nieuwe versie live staat.`,okLabel:'Vastleggen'})) return;
   try{ const j=await beheerApi('/teller/schema',{uitgerold:v,min:v,bevestig:'schema'});
     await mtDialog.alert({title:'App-versie vastgelegd',message:`Uitgerold: ${j.schema_uitgerold}, minimum: ${j.schema_min}${j.gewijzigd===false?' (stond al zo)':''}.`}); }
   catch(e){ await mtDialog.alert({title:'App-versie',message:'Vastleggen mislukt: '+(e.message||e)}); }
