@@ -46,9 +46,10 @@
 
   // ── wat mag er? ──
   // '' = mag; anders de reden in gewone taal (de knoppen gaan dan uit en de reden staat erbij).
-  function schrijfBlok(spec) {
+  // soort 'bestel': een bestelvoorstel hangt niet aan de takenlijst (en niet aan het projectschema) maar aan de bestellijst; die controleert de schrijfkern zelf.
+  function schrijfBlok(spec, soort) {
     if (D.demo()) return 'Demomodus: wijzigen kan alleen in de echte app.';
-    if (S.staat !== 'klaar') return P.lijstStatusTekst('taken', S.staat, S.vormFout) + ' Je kijkt alleen mee.';
+    if (soort !== 'bestel' && S.staat !== 'klaar') return P.lijstStatusTekst('taken', S.staat, S.vormFout) + ' Je kijkt alleen mee.';
     if (spec && !D.rol.mag(spec)) return 'Dit mag je niet met jouw rol.';
     return '';
   }
@@ -194,7 +195,7 @@
     S.sheet = { overlay, titel, sub, body, acties };
     return S.sheet;
   }
-  function sluitKaart() { S.open = null; if (S.sheet) S.sheet.overlay.classList.remove('visible'); }
+  function sluitKaart() { S.open = null; S.form = null; if (S.sheet) S.sheet.overlay.classList.remove('visible'); }
   V.sluitKaart = sluitKaart;
   function toonKaart(id) {
     const item = zoekItem(id); if (!item) return;
@@ -351,6 +352,106 @@
     teken();
   }
   V.zetStatus = zetStatus;
+
+  // ── de grote +: Taak melden · Probleem melden · Bestelvoorstel ──
+  // Komt meteen in het project, gemarkeerd als voorstel (met wie en welke rol); kantoor ziet het en beslist. Een taak of probleem gaat in de takenlijst (dezelfde schrijfkern als
+  // de status), een bestelvoorstel op de bestellijst (mt_bestellijst_v2: eerst het herstelspoor in het journaal, dan de regel; dezelfde samenvoeging als de cockpit).
+  // Lukt het opslaan niet, dan blijft het formulier open met wat je typte; opnieuw versturen maakt nooit een tweede taak (het formulier houdt zijn id).
+  const LS_BESTEL = 'mt_bestellijst_v2', LS_LAATSTE = 'mt_vandaag_laatste_project';
+  const EENHEDEN = ['stuks', 'platen', 'm', 'm²', 'set', 'paar', 'doos', 'rol', 'liter', 'kg'];
+  function menuKnop(icoon, titel, sub, uitleg, klik) {
+    return el('button', { klass: 'sheet-action-btn', type: 'button', disabled: uitleg ? true : null, klik },
+      el('span', { klass: 'sheet-action-icon', tekst: icoon }),
+      el('span', { klass: 'sheet-action-label' }, el('div', { klass: 'sheet-action-title', tekst: titel }), el('div', { klass: 'sheet-action-sub', tekst: uitleg || sub })),
+      el('span', { klass: 'sheet-action-arrow', tekst: '›' }));
+  }
+  V.menu = function () {
+    const sh = sheet(); S.open = null; S.form = null;
+    sh.titel.textContent = 'Melden'; sh.sub.textContent = 'Komt meteen in het project, als voorstel';
+    sh.body.textContent = ''; sh.acties.textContent = '';
+    const bT = schrijfBlok(P.ROL.TAAK_STATUS), bB = schrijfBlok(P.ROL.BESTEL_TOEV, 'bestel');
+    sh.acties.appendChild(menuKnop('✚', 'Taak melden', 'Iets dat gedaan moet worden', bT, () => toonForm('taak')));
+    sh.acties.appendChild(menuKnop('⚠', 'Probleem melden', 'Er klopt iets niet; kantoor ziet het meteen', bT, () => toonForm('probleem')));
+    sh.acties.appendChild(menuKnop('🛒', 'Bestelvoorstel', 'Materiaal dat besteld moet worden', bB, () => toonForm('bestel')));
+    sh.overlay.classList.add('visible');
+  };
+  const veld = (label, control, id) => el('div', { klass: 'vd-veld' }, el('label', { for: id, tekst: label }), control);
+  const waarde = id => { const e = D.doc.getElementById(id); return e ? String(e.value == null ? '' : e.value) : ''; };
+  function projectKeuze() {
+    let l = []; try { l = (D.projectLijst && D.projectLijst()) || []; } catch (e) { l = []; }
+    let laatste = ''; try { laatste = D.storage.getItem(LS_LAATSTE) || ''; } catch (e) {}
+    return el('select', { id: 'vd-f-project' }, el('option', { value: '', tekst: 'Kies een project…' }),
+      l.filter(Boolean).map(p => el('option', { value: p.code, selected: p.code === laatste ? true : null, tekst: [p.nr, p.naam].filter(Boolean).join(' ') || p.code })));
+  }
+  function formUit(uit) { if (S.sheet) S.sheet.acties.querySelectorAll('button').forEach(b => { b.disabled = !!uit; }); }
+  function toonForm(soort) {
+    const sh = sheet(), bestel = soort === 'bestel'; S.open = null;
+    const f = S.form = { soort, id: bestel ? 'bl_' + D.nu().toString(36) + Math.random().toString(36).slice(2, 6) : P.taakId(), bezig: false };
+    sh.titel.textContent = bestel ? 'Bestelvoorstel' : soort === 'probleem' ? 'Probleem melden' : 'Taak melden';
+    sh.sub.textContent = 'Komt meteen in het project, als voorstel';
+    const b = sh.body; b.textContent = ''; sh.acties.textContent = '';
+    b.appendChild(veld('Project', projectKeuze(), 'vd-f-project'));
+    b.appendChild(veld(bestel ? 'Materiaal' : soort === 'probleem' ? 'Wat is het probleem?' : 'Wat moet er gebeuren?', el('input', { id: 'vd-f-tekst', type: 'text', autocomplete: 'off', maxlength: '160' }), 'vd-f-tekst'));
+    if (bestel) {
+      b.appendChild(el('div', { klass: 'vd-status-rij' },
+        veld('Aantal', el('input', { id: 'vd-f-aantal', type: 'number', inputmode: 'decimal', min: '0', step: 'any', value: '1' }), 'vd-f-aantal'),
+        veld('Eenheid', el('select', { id: 'vd-f-eenheid' }, EENHEDEN.map(e => el('option', { value: e, tekst: e }))), 'vd-f-eenheid')));
+      b.appendChild(veld('Opmerking (niet verplicht)', el('input', { id: 'vd-f-opm', type: 'text', autocomplete: 'off', maxlength: '300' }), 'vd-f-opm'));
+    } else b.appendChild(veld('Toelichting (niet verplicht)', el('textarea', { id: 'vd-f-toelichting', maxlength: '1000' }), 'vd-f-toelichting'));
+    sh.acties.appendChild(knop('Melden', () => verstuurForm(), { klass: 'btn-primary' }));
+    sh.acties.appendChild(knop('Annuleren', () => sluitKaart(), { klass: 'btn-ghost' }));
+    sh.overlay.classList.add('visible');
+  }
+  async function verstuurForm() {
+    const f = S.form; if (!f || f.bezig) return;
+    const v = { project: waarde('vd-f-project'), tekst: waarde('vd-f-tekst'), toelichting: waarde('vd-f-toelichting'), aantal: waarde('vd-f-aantal'), eenheid: waarde('vd-f-eenheid'), opmerking: waarde('vd-f-opm'), id: f.id };
+    f.bezig = true; formUit(true);
+    let ok = false;
+    try { ok = await V.melden(f.soort, v); } finally { f.bezig = false; if (S.form === f) formUit(false); }
+    if (ok && S.form === f) sluitKaart();
+  }
+  // Uitkomst van het toevoegen van een bestelregel in gewone taal. → true als de regel er staat.
+  function afhandelenBestel(res) {
+    if (res.ok || res.reden === 'bestaat') { D.toast('Bestelvoorstel staat op de bestellijst, als voorstel.'); return true; }
+    if (res.reden === 'recht') D.toast('⛔ Een bestelregel toevoegen mag je niet met jouw rol. Er is niets toegevoegd.');
+    else if (res.reden === 'ontbreekt') {
+      const vw = P.verweesdOpruimen(D.storage, LS_BESTEL, D.nu());   // een lokale kopie zonder bestand op SharePoint wordt een back-up (zoals in de cockpit)
+      D.toast(P.lijstStatusTekst('bestel', vw.actie === 'verweesd' ? 'verweesd' : vw.actie === 'backup-mislukt' ? 'backup-mislukt' : 'overzetten'));
+    } else if (res.reden === 'vorm') D.toast(P.lijstStatusTekst('bestel', 'geblokkeerd', res.fout || ''));
+    else if (res.reden === 'journaal') D.toast('Het herstelspoor (journaal) kon niet worden bewaard — er is niets toegevoegd. Probeer het zo opnieuw.');
+    else if (res.reden === 'lezen') D.toast('Geen verbinding met SharePoint — er is niets toegevoegd. Probeer het zo opnieuw.');
+    else if (res.reden === 'geblokkeerd') D.toast(schrijfBlok(P.ROL.BESTEL_TOEV, 'bestel') || 'Toevoegen kan nu niet.');
+    else D.toast('Opslaan is niet gelukt — er is niets toegevoegd. Probeer het zo opnieuw.');
+    return false;
+  }
+  // soort: 'taak' | 'probleem' | 'bestel'; v: { project (code), tekst, toelichting, aantal, eenheid, opmerking, id }. → true als het is opgeslagen.
+  V.melden = async function (soort, v) {
+    v = v || {}; const bestel = soort === 'bestel';
+    const blok = schrijfBlok(bestel ? P.ROL.BESTEL_TOEV : P.ROL.TAAK_STATUS, bestel ? 'bestel' : '');
+    if (blok) { D.toast(blok); return false; }
+    const p = projInfo(v.project); if (!p) { D.toast('Kies eerst een project.'); return false; }
+    const tekst = String(v.tekst == null ? '' : v.tekst).replace(/\s+/g, ' ').trim();
+    if (!tekst) { D.toast(bestel ? 'Vul in welk materiaal je nodig hebt.' : 'Vul in wat er moet gebeuren.'); return false; }
+    try { D.storage.setItem(LS_LAATSTE, p.code); } catch (e) {}
+    const w = D.wie(), rol = D.rol.naam ? D.rol.naam() : '', nu = D.nu();
+    if (bestel) {
+      const regel = P.meldingBestel({ omschrijving: tekst, aantal: String(v.aantal == null ? '1' : v.aantal).replace(',', '.'), eenheid: v.eenheid, project: p.code, project_id: p.projectId || '', opmerking: v.opmerking, door: w.email, doorNaam: w.naam, rol, nu, id: v.id || '' });
+      const res = await P.bestelNieuwSchrijf(D.sp, {
+        regel, lokaal: D.storage.getItem(LS_BESTEL), mag: s => D.rol.mag(s), door: w.email, dev: D.dev(), nu,
+        journaal: r => P.journaalSchrijf(D.sp, 'mt_bestellijst_journaal.json', { id: 'j' + nu.toString(36) + Math.random().toString(36).slice(2, 6), tijd: new Date(nu).toISOString(), actie: 'nieuw (bestelvoorstel telefoon)', door: w.email, voor: null, na: JSON.parse(JSON.stringify(r)), via: 'mobiel' }, 1000)
+      });
+      return afhandelenBestel(res);
+    }
+    const nieuw = P.meldingTaak({ naam: tekst, omschrijving: v.toelichting, soort: soort === 'probleem' ? 'probleem' : 'taak', door: w.email, doorNaam: w.naam, rol, nu, id: v.id || '' });
+    const res = await P.takenSchrijf(D.sp, {
+      code: p.code, projectId: p.projectId || '', lokaal: D.storage.getItem(LS_TAKEN), door: w.email, dev: D.dev(), nu,
+      muteer: lijst => lijst.some(x => x.id === nieuw.id) ? lijst : lijst.concat([nieuw]),   // dezelfde id staat er al (een eerdere poging kwam wel aan): niets dubbel
+      mag: s => D.rol.mag(s), voorWrite
+    });
+    const ok = await afhandelen(res, 'Een taak toevoegen');
+    if (ok) { D.toast((soort === 'probleem' ? 'Probleem gemeld' : 'Taak gemeld') + ': kantoor ziet het nu als voorstel in het project.'); teken(); }
+    return ok;
+  };
 
   V.init = function (deps) { D = deps; P = deps.planning || root.MTPlanning; S.staat = 'laden'; return V; };
   V._S = S;

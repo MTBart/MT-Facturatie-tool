@@ -1615,6 +1615,44 @@
     return { ok: !!ok, gewijzigd: true, data: basis, reden: ok ? '' : 'schrijven' };
   };
 
+  // ── Een nieuwe taak als melding (Taak melden / Probleem melden) ──
+  // Komt meteen in het project, gemarkeerd als voorstel (`voorstel`: wie, welke rol, wanneer); kantoor ziet het en beslist. Een probleem krijgt prioriteit high.
+  P.meldingTaak = function ({ naam = '', omschrijving = '', soort = 'taak', door = '', doorNaam = '', rol = '', nu = Date.now(), id = '' } = {}) {
+    const n = String(naam).replace(/\s+/g, ' ').trim(); if (!n) return null;
+    const probleem = soort === 'probleem';
+    return { id: id || P.taakId(), naam: n.slice(0, 160), omschrijving: String(omschrijving || '').trim().slice(0, 1000), duur_uur: 0, prioriteit: probleem ? 'high' : '', afhankelijk_van: [], status: 'todo', tg_task_id: null,
+      bron: 'melding', activiteit: P.activiteitUitNaam(n) || undefined, voorstel: { soort: probleem ? 'probleem' : 'taak', door, doorNaam, rol, ts: new Date(nu).toISOString() } };
+  };
+  // Een bestelvoorstel: een gewone bestelregel (status nodig) met de markering `voorstel`. project_id/project: zoals de cockpit (code en technische sleutel).
+  P.meldingBestel = function ({ omschrijving = '', aantal = 1, eenheid = '', project = '', project_id = '', opmerking = '', door = '', doorNaam = '', rol = '', nu = Date.now(), datum = '', id = '' } = {}) {
+    const oms = String(omschrijving).replace(/\s+/g, ' ').trim(); if (!oms) return null;
+    const r = P.bestelRegelNieuw({ omschrijving: oms.slice(0, 200), aantal, eenheid, bron: 'hand', project, project_id, datum: P.isYmd(datum) ? datum : P.vandaagYmd(), id });
+    if (opmerking && String(opmerking).trim()) r.opmerking = String(opmerking).trim().slice(0, 300);
+    r.voorstel = { soort: 'bestel', door, doorNaam, rol, ts: new Date(nu).toISOString() };
+    return r;
+  };
+  // Een nieuwe bestelregel toevoegen aan mt_bestellijst_v2 (lezen, samenvoegen met de lokale kopie, stempelen, schrijven met ETag/412-merge). Maakt het bestand nooit aan.
+  // o.journaal(regel) → belofte van true: eerst het herstelspoor (zoals de cockpit); lukt dat niet, dan gebeurt er niets. → { ok, reden, data?, regel? }
+  P.bestelNieuwSchrijf = async function (sp, o) {
+    o = o || {}; const bestand = o.bestand || 'mt_bestellijst_v2.json', nu = Number(o.nu) || Date.now(), regel = o.regel;
+    if (!sp || !regel || !regel.id) return { ok: false, reden: 'aanroep', fout: 'Onvolledige aanroep.' };
+    let raw; try { raw = await sp.read(bestand); } catch (e) { return { ok: false, reden: 'lezen', fout: String((e && e.message) || e) }; }
+    if (raw === null || raw === undefined) return { ok: false, reden: 'ontbreekt' };
+    const vorm = P.bestelBestandVorm(raw); if (vorm) return { ok: false, reden: 'vorm', fout: vorm };
+    let samen; try { samen = P.bestelSamen(o.lokaal === undefined ? null : o.lokaal, raw); } catch (e) { return { ok: false, reden: 'vorm', fout: String((e && e.message) || e) }; }
+    if (samen.some(b => b && String(b.id) === String(regel.id))) return { ok: false, reden: 'bestaat' };
+    const toegestaan = () => typeof o.mag !== 'function' || !!o.mag(P.ROL.BESTEL_TOEV);
+    if (!toegestaan()) return { ok: false, reden: 'recht', recht: P.ROL.BESTEL_TOEV };
+    regel._gewijzigd = new Date(nu).toISOString(); if (o.door) regel._door = o.door;
+    P.bestelVeldStempel(null, regel, { t: nu, door: o.door || '', dev: o.dev || '' });
+    if (typeof o.journaal === 'function') { let j; try { j = await o.journaal(regel); } catch (e) { j = false; } if (!j) return { ok: false, reden: 'journaal' }; }
+    if (typeof o.voorWrite === 'function') { let toe; try { toe = await o.voorWrite(); } catch (e) { toe = false; } if (toe === false) return { ok: false, reden: 'geblokkeerd' }; }
+    if (!toegestaan()) return { ok: false, reden: 'recht', recht: P.ROL.BESTEL_TOEV };
+    const data = P.bestelSamen(JSON.stringify(samen.concat([regel])), null);
+    const ok = await sp.write(bestand, data, (remote, lokaal) => { try { return P.bestelSamen(lokaal, remote); } catch (e) { return null; } });
+    return { ok: !!ok, reden: ok ? '' : 'schrijven', data, regel };
+  };
+
   root.MTPlanning = P;
   if (typeof module !== 'undefined' && module.exports) module.exports = P;
 })(typeof window !== 'undefined' ? window : globalThis);
