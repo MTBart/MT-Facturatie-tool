@@ -2410,6 +2410,20 @@ if (window.MTVandaag) MTVandaag.init({
   toggl: { geklokt: _vdGeklokt, boek: async x => { const r = await _vdBoek(x); _vdNaBoeken(); return r; } }
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && window.MTVandaag) { const t = document.getElementById('tab-vandaag'); if (t && t.classList.contains('active')) MTVandaag.toon(); } });
+// Deep links van de werkplaats-tv: mobiel.html#taak/<projectcode>/<taak-id> opent de taakkaart, #project/<projectcode> het project. De link wordt eerst bewaard (sessionStorage), zodat hij
+// een login overleeft, en pas geopend als Vandaag geladen is. Alleen de vorm van de link wordt gecontroleerd; wat erin staat is een zoeksleutel (niets uit de URL komt als HTML op het scherm).
+function _deeplinkBewaar() {
+  try { const h = location.hash; if (window.MTPlanning && MTPlanning.deepLinkLees(h)) { sessionStorage.setItem('mt_deeplink', h); history.replaceState(null, '', location.pathname + location.search); } } catch (e) {}
+}
+async function _deeplinkOpen() {
+  let h = ''; try { h = sessionStorage.getItem('mt_deeplink') || ''; sessionStorage.removeItem('mt_deeplink'); } catch (e) {}
+  if (!h || !window.MTVandaag) return;
+  const nav = document.getElementById('nav-vandaag'); if (nav) switchTab('vandaag', nav);
+  await MTVandaag.openDeeplink(h);
+}
+// Meteen bij het laden bewaren, en ook bij een hashchange tijdens de sessie (de PWA staat al open):
+_deeplinkBewaar();
+window.addEventListener('hashchange', () => { _deeplinkBewaar(); if (_msAccount) _deeplinkOpen(); });
 
 async function aanwezigLaadMobiel() {
   const kaart = document.getElementById('aw-kaart-m'), el = document.getElementById('aw-inhoud-m');
@@ -2498,7 +2512,7 @@ async function toonApp(account) {
   rolLaadMobiel().then(() => { if (window.MTToggl) MTToggl.laad(WORKER); aanwezigLaadMobiel(); });
   // Laad echte data na login
   await loadRealProjects();
-  if (window.MTVandaag) MTVandaag.laad();   // Vandaag (mijn werk): de takenlijst en de planblokken ophalen nu de projecten er zijn
+  if (window.MTVandaag) MTVandaag.laad().then(() => _deeplinkOpen()).catch(() => {});   // Vandaag (mijn werk): de takenlijst en de planblokken ophalen nu de projecten er zijn; daarna een eventuele deep link van de tv
   // Timer herstellen nu de echte projecten er zijn (PWA-herstart-fix)
   restoreTimer();
   syncTimerWithToggl();

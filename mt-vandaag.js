@@ -115,7 +115,12 @@
     return S.mw;
   }
   const alleItems = mw => Object.keys(mw.groepen).reduce((a, k) => a.concat(mw.groepen[k]), []);
-  const zoekItem = id => (S.mw ? alleItems(S.mw).find(i => i.id === id) || null : null);
+  // Een taak van iemand anders (of van niemand), geopend via een deep link van de tv: dezelfde berekening als Mijn werk, maar voor iedereen.
+  function losItem(code, id) {
+    const mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), { iedereen: true, nieuw: false, project: code, vandaag: P.vandaagYmd(), nu: D.nu() });
+    return alleItems(mw).find(i => i.soort === 'taak' && i.id === id) || null;
+  }
+  const zoekItem = id => (S.mw ? alleItems(S.mw).find(i => i.id === id) || null : null) || (S.open && S.open.id === id && S.open.code ? losItem(S.open.code, id) : null);
   const uren = min => P.fmtUurMin(min);
   const wachtTekst = item => P.wachtOpTekst(item.wacht, fmtDatum);   // "Zagen (wachttijd 2 werkdagen, tot do 22 okt)"
   const DAGNAAM = ['Ma', 'Di', 'Wo', 'Do', 'Vr'];
@@ -195,12 +200,25 @@
   }
   function sluitKaart() { S.open = null; S.form = null; if (S.sheet) S.sheet.overlay.classList.remove('visible'); }
   V.sluitKaart = sluitKaart;
-  function toonKaart(id) {
-    const item = zoekItem(id); if (!item) return;
-    S.open = { id }; markeerGezien(item);
-    vulKaart(item); sheet().overlay.classList.add('visible');
+  function toonKaart(id, code) {
+    let item = zoekItem(id); if (!item && code) item = losItem(code, id);
+    if (!item) return false;
+    S.open = { id, code: item.code }; markeerGezien(item);
+    vulKaart(item); sheet().overlay.classList.add('visible'); return true;
   }
   V.toonKaart = toonKaart;
+  // Een deep link van de tv: mobiel.html#taak/<projectcode>/<taak-id> opent de taakkaart, #project/<projectcode> het project. De taak mag ook van een ander zijn.
+  V.openDeeplink = async function (hash) {
+    const l = P.deepLinkLees(hash); if (!l) return false;
+    if (!S.laadtijd) await V.laad();
+    if (l.soort === 'project') {
+      const p = projInfo(l.code);
+      if (p && p.mobielId) { D.openProject(p.mobielId); return true; }
+      D.toast('Dit project staat niet in je projectenlijst.'); return false;
+    }
+    if (!toonKaart(l.id, l.code)) { D.toast('Deze taak is niet meer te vinden (misschien klaar of verwijderd).'); return false; }
+    return true;
+  };
   const rij = (...k) => el('div', { klass: 'vd-rij' }, k);
   function vulKaart(item) {
     const sh = sheet(), taak = item.soort === 'taak', t = item.taak, vandaag = S.mw.vandaag;

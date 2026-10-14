@@ -86,13 +86,25 @@
     tekenKaart();
   };
   T.sluitKaart = function () { S.kaart = null; tekenKaart(); };
+  // De link naar de telefoon: een taak opent de taakkaart op mobiel.html (#taak/<code>/<id>), al het andere het project (#project/<code>). De pagina geeft de basis-URL van
+  // mobiel.html mee (linkBasis); een QR-tekenaar (D.qr(element, tekst)) is optioneel: zonder staat de link als tekst op de kaart.
+  T.linkVoor = function (item) {
+    if (!D.linkBasis || !item || !item.code) return '';
+    return item.soort === 'taak' && item.id ? P.deepLinkTaak(D.linkBasis, item.code, item.id) : P.deepLinkProject(D.linkBasis, item.code);
+  };
+  function kaartLink(item) {
+    const link = T.linkVoor(item); if (!link) return null;
+    const qr = el('div', { klass: 'tv-qr', 'aria-label': 'QR-code voor de telefoon' });
+    if (typeof D.qr === 'function') { try { D.qr(qr, link); } catch (e) { qr.textContent = ''; } }
+    return el('div', { klass: 'tv-kaartrij tv-telefoon' }, el('span', { klass: 'tv-kaartlabel', tekst: 'Op je telefoon' }), el('span', { klass: 'tv-kaartwaarde' }, qr.childNodes.length ? qr : null, el('span', { klass: 'tv-link', tekst: link })));
+  }
   function tekenKaart() {
     const host = D.doc.getElementById('tv-kaart'); if (!host) return;
     host.textContent = '';
     if (!S.kaart) { host.className = 'tv-kaart-uit'; return; }
     host.className = 'tv-kaart-aan';
     const it = S.kaart.item, rijen = T.kaartTekst(it);
-    const extra = T.kaartExtra ? T.kaartExtra(it) : null;
+    const extra = kaartLink(it);
     host.appendChild(el('div', { klass: 'tv-kaartdoos', role: 'dialog', 'aria-modal': 'true' },
       el('div', { klass: 'tv-kaartkop' }, el('span', { klass: 'tv-punt', style: 'background:' + P.projectKleur(it.code) }), el('h2', { tekst: S.kaart.titel }),
         el('button', { klass: 'tv-sluit', type: 'button', klik: () => T.sluitKaart(), tekst: 'Sluiten' })),

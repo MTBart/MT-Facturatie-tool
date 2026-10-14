@@ -1724,6 +1724,17 @@
     return uit;
   };
 
+  // ── Deep links naar de telefoon (vanaf de tv): mobiel.html#taak/<projectcode>/<taak-id> en mobiel.html#project/<projectcode> ──
+  P.deepLinkTaak = (basis, code, id) => String(basis || '') + '#taak/' + encodeURIComponent(String(code)) + '/' + encodeURIComponent(String(id));
+  P.deepLinkProject = (basis, code) => String(basis || '') + '#project/' + encodeURIComponent(String(code));
+  // → { soort: 'taak'|'project', code, id } of null (geen geldige link). Alleen de vorm wordt gecontroleerd; wat erin staat is alleen een zoeksleutel.
+  P.deepLinkLees = function (hash) {
+    const m = /^#?(taak|project)\/([^/#?]+)(?:\/([^/#?]+))?$/.exec(String(hash == null ? '' : hash).trim()); if (!m) return null;
+    const dec = x => { try { return decodeURIComponent(x); } catch (e) { return x; } };
+    if (m[1] === 'taak' && !m[3]) return null; if (m[1] === 'project' && m[3]) return null;
+    return { soort: m[1], code: dec(m[2]), id: m[3] ? dec(m[3]) : '' };
+  };
+
   // ── Journaal (alleen toevoegen): vereniging op id, gesorteerd op tijd, de laatste `max` ──
   P.journaalSamen = function (lokaal, remote, max) {
     const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(remote)) ? lees(remote) : [], per = new Map();
