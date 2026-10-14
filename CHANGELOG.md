@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-14 — v2.16.4: Toggl-naam = "<projectnummer> <projectnaam>" (klant is een apart veld)
+- Commit: `a188686` | Auteur: Bart Witte
+
 ## 2026-10-14 — v2.16.3: Binnenkomend (info@) uit Projecten, naar Inbox ▸ Binnenkomend info@
 - Commit: `e8ef5b4` | Auteur: Bart Witte
 
