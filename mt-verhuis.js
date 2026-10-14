@@ -35,7 +35,7 @@
     'mt_retry_queue', 'mt_agenda_blocks', 'mt_planblokken', 'mt_notes', 'mt_tasks', 'mt_werkcodes', 'mt_projectnummers', 'mt_werkcode_wacht', 'mt_timer_stop_pending', 'mt_calc_offertes_backup',
     'mt_uren_entries', 'mt_uren_ik', 'mt_uren_planning', 'mt_uren_taken', 'mt_uren_capaciteit', 'mt_uren_projecten', 'mt_uren_teamleden', 'mt_user_projects',
     'mt_instellingen', 'mt_adminconfig', 'mt_opl_codes', 'mt_mb_admin', 'mt_vrijedagen', 'mt_verlof', 'mt_proj_adressen', 'mt_contacten_mobiel', 'mt_email_verwerkt',
-    'mt_cf_vasten_uit', 'mt_fb_sent', 'mt_notif_read', 'mt_pv_gezien', 'mt_klant_sectie', 'mt_proj_sectie', 'mt_proj_sectie_per', 'mt_bl_weergave', 'mt_aanwezig_kaart', 'ncr_lev_overrides',
+    'mt_cf_vasten_uit', 'mt_fb_sent', 'mt_notif_read', 'mt_pv_gezien', 'mt_vandaag_gezien', 'mt_klant_sectie', 'mt_proj_sectie', 'mt_proj_sectie_per', 'mt_bl_weergave', 'mt_aanwezig_kaart', 'ncr_lev_overrides',
   ]);
   V.PREFIXEN = ['mt_rapdraft_', 'mt_csv_prijzen_', 'mt_bestellijst_onleesbaar_', 'mt_updates_gezien:', 'mtg:zoom:', 'mtg:alleen:', 'mtg:nood:', 'mtg:intro:', 'mtg:mp-init:', 'mtg:mp:', 'mtg:prognose:', 'mt_project_taken_v2_verweesd_', 'mt_bestellijst_v2_verweesd_'];
   // Bewust NIET mee (token, cache, afgeleid, lopende timer, sessie). Alles wat noch hier noch in SLEUTELS/PREFIXEN staat is "onbekend":
@@ -43,7 +43,8 @@
   V.UITGESLOTEN = new Set(['mt_toggl_token', 'mt_toggl_last_sync', 'mt_toggl_user_names', 'mt_toggl_user_map', 'mt_toggl_project_map', 'mt_toggl_proj_names', 'mt_toggl_names_ver',
     'mt_toggl_users_raw', 'mt_toggl_projecten_raw', 'mt_cache_facturen', 'mt_cache_klanten', 'mt_klanten_cache', 'mt_notificaties', 'mt_auditlog', 'mt_chatlog_buffer', 'mt_calc_map_state',
     'mt_timer', 'mt_uren_lopend',
-    'mt_meter_stand', 'mt_device_id', 'mt_taken_lokaal_negeer', 'mt_bestel_lokaal_negeer']);   // mt_meter_stand: afgeleide stand van de projectmeter (badge bij ≥ 90%), wordt bij het openen van een project opnieuw berekend
+    'mt_meter_stand', 'mt_device_id', 'mt_taken_lokaal_negeer', 'mt_bestel_lokaal_negeer',
+    'mt_mobiel_afhank']);   // mt_mobiel_afhank: kopie van mt_project_afhank voor Vandaag op de telefoon, wordt bij het laden opnieuw van SharePoint gehaald; mt_meter_stand: afgeleide stand van de projectmeter (badge bij ≥ 90%), wordt bij het openen van een project opnieuw berekend
   V.UITGESLOTEN_PREFIXEN = ['mt_csv_', 'mtg:advies:', 'mt_offcheck:'];   // mtg:advies:<datum>: het dagelijkse advies van Geld, afgeleid (wordt zo opnieuw berekend)   // mt_csv_<project>: sessionStorage (mt_csv_prijzen_<project> in localStorage staat wél bij PREFIXEN)
   V.sleutelMee = k => typeof k === 'string' && (V.SLEUTELS.has(k) || V.PREFIXEN.some(p => k.startsWith(p) && k.length > p.length));
   // Bijna-zeker-een-geheim in de waarde (ook bij een toegestane sleutel): JWT overal erin, of een kale base64-achtige reeks.

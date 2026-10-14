@@ -33,6 +33,7 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planning.js?v=2.16.0"></script>
+<script src="mt-vandaag.js?v=2026-10-14a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
 <script src="mt-verhuis.js?v=2.16.0"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
@@ -229,6 +230,48 @@ body{
 /* ── TABS ── */
 .tab{display:none;padding:16px;min-height:100%}
 .tab.active{display:block}
+
+/* ── VANDAAG (mijn werk, planning stap 2) ── */
+.vd-week{padding:14px 16px}
+.vd-week-tekst{font-size:16px;font-weight:700;color:var(--green)}
+.vd-week-sub{font-size:12px;color:var(--text-faint);margin-top:2px}
+.vd-dagen{display:flex;gap:6px;margin-top:10px}
+.vd-dag{flex:1;text-align:center;border-radius:var(--radius);background:var(--n-100);padding:6px 0 7px}
+.vd-dag.nu{outline:2px solid var(--green-mid)}
+.vd-dag.vrij{opacity:.45}
+.vd-dag-naam{font-family:var(--mono);font-size:10px;color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase}
+.vd-dagdelen{display:flex;flex-direction:column;gap:3px;align-items:center;margin-top:4px}
+.vd-deel{display:block;width:26px;height:8px;border-radius:4px;background:var(--n-300)}
+.vd-deel.vol{background:var(--green-mid)}
+.vd-melding{background:var(--warning-50);border:1px solid var(--gold-mid);color:var(--gold-text);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:13px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.vd-kop{margin-top:14px}
+.vd-kop.alarm{color:var(--error)}
+.vd-kaart{display:flex;align-items:stretch;gap:10px;width:100%;text-align:left;font:inherit;color:inherit;background:var(--n-0);border:1px solid var(--n-200);border-radius:var(--radius-lg);padding:0 12px 0 0;margin-bottom:8px;min-height:56px;box-shadow:var(--shadow-sm);overflow:hidden;cursor:pointer}
+.vd-kaart:active{background:var(--green-50)}
+.vd-strook{flex:0 0 6px}
+.vd-kaart-tekst{flex:1;min-width:0;padding:9px 0}
+.vd-naam{font-weight:600;font-size:15px;color:var(--n-900);overflow-wrap:anywhere}
+.vd-sub{font-size:12px;color:var(--text-dim);margin-top:1px}
+.vd-wacht{font-size:12px;color:var(--gold-text);margin-top:2px}
+.vd-chips{display:flex;flex-direction:column;gap:4px;justify-content:center;align-items:flex-end}
+.vd-chip{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 9px;border-radius:20px;background:var(--n-150);color:var(--text-dim);white-space:nowrap}
+.vd-st-bezig{background:var(--info-50);color:var(--info)}
+.vd-st-wacht{background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid)}
+.vd-st-klaar{background:var(--success-50);color:var(--success)}
+.vd-niet-vrij{margin-top:16px}
+.vd-niet-vrij summary{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;cursor:pointer;min-height:44px;display:flex;align-items:center}
+.vd-rij{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px;flex-wrap:wrap}
+.vd-punt{display:inline-block;width:12px;height:12px;border-radius:50%;flex:0 0 12px}
+.vd-omschrijving{font-size:13px;color:var(--text-dim);white-space:pre-wrap;margin:4px 0 8px;overflow-wrap:anywhere}
+.vd-status-rij{display:flex;gap:8px;margin-bottom:8px}
+.vd-status-rij .btn{flex:1;min-height:48px}
+.vd-plus{position:fixed;right:16px;bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));width:60px;height:60px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--green) 0%,var(--green-700) 100%);color:#fff;font-size:34px;line-height:1;box-shadow:var(--shadow-pop);z-index:150;display:none;cursor:pointer}
+.vd-plus:active{transform:scale(.94)}
+#tab-vandaag.active .vd-plus{display:block}
+.vd-veld{margin-bottom:12px}
+.vd-veld label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px}
+.vd-veld input,.vd-veld select,.vd-veld textarea{width:100%;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--n-0);color:var(--text)}
+.vd-veld textarea{min-height:76px}
 
 /* ── CARDS ── */
 .card{
@@ -847,8 +890,13 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 <!-- ── SCROLLABLE CONTENT ── -->
 <div class="app-content">
 
+  <!-- TAB: VANDAAG (mijn werk; de app start hier) -->
+  <div class="tab active" id="tab-vandaag">
+    <div id="vandaag-inhoud"><div class="vd-melding" role="status">Taken laden…</div></div>
+  </div>
+
   <!-- TAB: TIMER -->
-  <div class="tab active" id="tab-timer">
+  <div class="tab" id="tab-timer">
     <div class="card" id="tgk-kaart-m" data-tgk-alleen-open style="display:none;margin-bottom:12px">
       <div class="mt-kaartkop"><div class="card-label" style="margin:0">Koppel je Toggl</div><span data-tgk-badge></span></div>
       <div style="font-size:13px;color:var(--text-dim);margin-top:6px">Eén keer instellen, dan lopen je timer en uren via je eigen Toggl-account.</div>
@@ -1237,7 +1285,11 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 
 <!-- ── BOTTOM NAV ── -->
 <nav class="bottom-nav">
-  <button class="nav-btn active" onclick="switchTab('timer',this)" id="nav-timer" data-recht="uren">
+  <button class="nav-btn active" onclick="switchTab('vandaag',this)" id="nav-vandaag">
+    <div class="nav-icon">☀</div>
+    <span>Vandaag</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('timer',this)" id="nav-timer" data-recht="uren">
     <div class="nav-icon">⏱</div>
     <span>Timer</span>
   </button>
@@ -2247,6 +2299,7 @@ async function rolLaadMobiel() {
   const me = await MTRol.laad(WORKER); if (!me) return;
   if (MTRol.geenToegangNodig()) { MTRol.toonGeenToegang(WORKER); return; }
   MTRol.pasToe();
+  try { if (window.MTVandaag) MTVandaag.teken(); } catch (e) {}   // Vandaag: de knoppen volgens de rol
   try { if (typeof currentSheetProject !== 'undefined' && currentSheetProject) renderSheetTasks(); } catch (e) {}   // ronde 9: de takenknoppen volgens de rol
   // Geld (geldtijdlijn) staat in de cockpit (responsive): alleen een knop voor wie het recht heeft, op een worker die het kent.
   const gk = document.getElementById('geldKnop'); if (gk) gk.style.display = me.rechten && ('geld' in me.rechten) && MTRol.magGeld() ? '' : 'none';
@@ -2275,6 +2328,60 @@ async function _pvSchrijf(wijzig) {
   if (typeof AGENDA_CACHE !== "undefined") for (const k of Object.keys(AGENDA_CACHE)) delete AGENDA_CACHE[k];   // de agenda toont planblokken: opnieuw opbouwen
   return await _SP.write('mt_planblokken.json', _pvBlokken, (r2, lokaal) => { _pvBlokken = MTPlanVoorstel.samen(lokaal, r2); return _pvBlokken; });
 }
+
+// ═══ VANDAAG (planning stap 2): de aansluiting tussen mt-vandaag.js en deze app ═══
+// mt-vandaag.js tekent het scherm en regelt de volgorde van de acties; de rekenregels staan in mt-planning.js (gedeeld met de cockpit).
+// Hier alleen wat de app zelf weet: wie ik ben, de rol, de projecten, de timer, Toggl en de SharePoint-laag (_SP, met ETag/412-merge).
+function _devIdM() {   // hetzelfde apparaat-id als de cockpit (volgorde van stempels bij gelijke tijd)
+  try { let d = localStorage.getItem('mt_device_id'); if (!d) { d = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('mt_device_id', d); } return d; } catch (e) { return 'd-onbekend'; }
+}
+function _vdProject(code) {   // de taken staan onder de cockpit-projectcode; de app kent het project via Toggl (zelfde code, hoofdletterongevoelig)
+  const c = String(code || '').trim().toLowerCase(); if (!c) return null;
+  const p = allProjects().find(x => String(x.code || '').toLowerCase() === c) || null;
+  const info = MT_PROJ_INFO[code] || Object.values(MT_PROJ_INFO).find(i => i && String(i.code || '').toLowerCase() === c) || null;
+  if (!p && !info) return null;
+  return { code: (info && info.code) || code, naam: p ? mProjNaam(p) : String((info && info.naam) || ''), nr: p ? mProjNr(p) : '', mobielId: p ? p.id : '', togglProjectId: p ? (p.togglProjectId || null) : null, projectId: (info && info.project_id) || '' };
+}
+let _vdUren = { ts: 0, lijst: null };
+async function _vdGeklokt() {   // mijn eigen geklokte minuten per Toggl-taak (laatste 90 dagen), 60 s gecachet; zelfde stream als de agenda
+  if (_demoMode || !_msAccount) return null;
+  if (_vdUren.lijst && Date.now() - _vdUren.ts < 60000) return _vdUren.lijst;
+  const nu = new Date(), van = new Date(nu.getTime() - 90 * 86400000);
+  const q = new URLSearchParams({ date_from: _isoDate(van) + 'T00:00:00Z', date_to: _isoDate(nu) + 'T23:59:59Z', order_by: 'start', include_taskless: 'true' });
+  const raw = await focusFetch('time-entries/stream?' + q.toString());
+  const l = Array.isArray(raw) ? raw : (raw && (raw.data || raw.items)) || [], uit = [];
+  l.forEach(it => {
+    if (!it || it.task_id === null || it.task_id === undefined || it.task_id === '') return;
+    const a = Date.parse(it.start || it.start_time || ''), b = Date.parse(it.stop || it.end || it.end_time || '');
+    const min = !isNaN(a) && !isNaN(b) ? (b - a) / 60000 : (Number(it.duration) > 0 ? Number(it.duration) / 60 : 0);
+    if (min > 0) uit.push({ taak: it.task_id, min });
+  });
+  _vdUren = { ts: Date.now(), lijst: uit };
+  return uit;
+}
+if (window.MTVandaag) MTVandaag.init({
+  planning: MTPlanning, sp: _SP, storage: localStorage, doc: document,
+  rol: { mag: spec => rolMagM(spec), naam: () => String((window.MTRol && MTRol.me && MTRol.me.rol) || '') },
+  wie: () => ({ slug: _mijnSlug(), email: _mijnEmail(), naam: String((_msAccount && _msAccount.name) || '') }),
+  account: () => _msAccount, demo: () => _demoMode, nu: () => Date.now(), dev: _devIdM,
+  toast: m => showToast(m), dialog: () => window.mtDialog,
+  schemaMin: async () => {   // GET /teller/status → schema_min (de app-versie die projecttaken nog mag schrijven)
+    const h = await authHeader(); if (!h['X-Auth-Token']) return null;
+    const r = await fetch(WORKER + '/teller/status', { headers: h }); if (!r.ok) return null;
+    const j = await r.json().catch(() => null); return j && Number.isFinite(Number(j.schema_min)) ? Number(j.schema_min) : null;
+  },
+  pvLees: () => _pvLees(), pvBlokken: () => _pvBlokken,
+  project: _vdProject, projectLijst: () => allProjects().filter(p => MT_PROJ_INFO[p.code]).map(p => _vdProject(p.code)),
+  openProject: id => openProjectSheet(id),
+  timer: {
+    lopend: () => (timerRunning && activeProject) ? { mobielId: activeProject.id, naam: mProjNaam(activeProject) } : null,
+    start: (mobielId, oms) => { selectProject(mobielId); startTimer(oms); },
+    stop: () => stopTimer()
+  },
+  toggl: { geklokt: _vdGeklokt }
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden && window.MTVandaag) { const t = document.getElementById('tab-vandaag'); if (t && t.classList.contains('active')) MTVandaag.toon(); } });
+
 async function aanwezigLaadMobiel() {
   const kaart = document.getElementById('aw-kaart-m'), el = document.getElementById('aw-inhoud-m');
   if (!kaart || !window.MTAanwezig || _demoMode) return;
@@ -2362,6 +2469,7 @@ async function toonApp(account) {
   rolLaadMobiel().then(() => { if (window.MTToggl) MTToggl.laad(WORKER); aanwezigLaadMobiel(); });
   // Laad echte data na login
   await loadRealProjects();
+  if (window.MTVandaag) MTVandaag.laad();   // Vandaag (mijn werk): de takenlijst en de planblokken ophalen nu de projecten er zijn
   // Timer herstellen nu de echte projecten er zijn (PWA-herstart-fix)
   restoreTimer();
   syncTimerWithToggl();
@@ -2382,6 +2490,7 @@ function startDemoMode() {
   notifs = NOTIF_SEED.slice();
   renderNotifBadge();
   showToast('Demo-modus: projecten en taken worden alleen lokaal opgeslagen');
+  if (window.MTVandaag) MTVandaag.laad();   // Vandaag toont in de demo alleen een uitleg
 }
 
 /* =====================================================================
@@ -3174,6 +3283,7 @@ function switchTab(name, btn) {
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("tab-"+name).classList.add("active");
   btn.classList.add("active");
+  if (name === "vandaag" && window.MTVandaag) MTVandaag.toon();
   if (name === "capture") renderCaptureProject();
   if (name === "feedback") renderFbList();
   if (name === "voorraad") initVoorraadApp();
@@ -3269,7 +3379,7 @@ function toggleTimer() {
   }
 }
 
-function startTimer() {
+function startTimer(oms) {   // oms: omschrijving van de Toggl-entry (Vandaag geeft de taaknaam mee); zonder: de projectnaam
   if (!activeProject) {
     alert("Selecteer eerst een project.");
     return;
@@ -3284,7 +3394,8 @@ function startTimer() {
   updateSpMockPath();
   // Geserialiseerd: start echt klokkende entry op Track (alleen bij ingelogd + echt project)
   const proj = activeProject;
-  _tglEnqueue(() => startTimerOnToggl(proj, proj.name)).catch(() => {});
+  const entryOms = (typeof oms === 'string' && oms.trim()) ? oms.trim() : proj.name;
+  _tglEnqueue(() => startTimerOnToggl(proj, entryOms)).catch(() => {});
 }
 
 function stopTimer() {

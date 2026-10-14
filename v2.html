@@ -3029,7 +3029,7 @@ async function projSchemaCheck(forceer){
 let _projSchemaGemeld=false;
 function projSchemaBlok(){
   try{ if(typeof _SP!=='undefined'&&_SP&&_SP.blockedKeys) _PROJ_SCHEMA_SLEUTELS.forEach(k=>_SP.blockedKeys.add(k)); }catch(e){}
-  const melding='Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
+  const melding=MTPlanning.SCHEMA_TEKST;   // dezelfde tekst als op de telefoon (mt-planning.js)
   try{ if(typeof _SP!=='undefined'&&_SP) _SP.lastSync={ts:Date.now(),ok:false,key:'mt_projecten',error:melding}; }catch(e){}
   try{ if(typeof window!=='undefined'&&typeof window.updateSyncStatus==='function') window.updateSyncStatus(); }catch(e){}
   if(!_projSchemaGemeld){ _projSchemaGemeld=true; try{ if(typeof planToast==='function') planToast('⚠ '+melding); }catch(e){} }
@@ -5426,9 +5426,9 @@ let _blOud=null, _blTimeout=false, _blVerweesd=false, _blVormFout='', _blBackupF
 function _blSleutel(){ return (!_blVerweesd&&!_blBackupFout&&localStorage.getItem('mt_bestellijst_v2')!==null)?'mt_bestellijst_v2':'mt_bestellijst'; }
 function _blGeblokkeerd(){ try{ return !!(_SP&&_SP.blockedKeys&&_SP.blockedKeys.has('mt_bestellijst_v2')); }catch(e){ return false; } }
 function _blGereed(){ try{ return (typeof _SP==='undefined')?true:!!_SP.ready; }catch(e){ return false; } }
-function _blStaat(){ if(_blBackupFout) return 'backup-mislukt'; if(_blVerweesd) return 'verweesd'; if(_blGeblokkeerd()) return 'geblokkeerd'; if(!_blGereed()) return _blTimeout?'time-out':'laden'; return _blLees2()!==null?'klaar':'overzetten'; }
+function _blStaat(){ return MTPlanning.lijstStaat({backupFout:_blBackupFout,verweesd:_blVerweesd,geblokkeerd:_blGeblokkeerd(),gereed:_blGereed(),timeout:_blTimeout,heeftV2:_blLees2()!==null}); }   // gedeeld met de telefoon (mt-planning.js)
 function _blKlaar(){ return _blStaat()==='klaar'; }
-function _blStatusTekst(){ const s=_blStaat(); return s==='backup-mislukt'?'De nieuwe bestellijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale bestellijst; er is niets gewijzigd of overgezet.':s==='verweesd'?'De nieuwe bestellijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de bestellijst opnieuw overzetten.':s==='geblokkeerd'?(_blVormFout?'De nieuwe bestellijst op SharePoint heeft een verkeerde vorm ('+_blVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De bestellijst is geblokkeerd: de laadstap voor de nieuwe bestellijst is mislukt. Er is niets gewijzigd.'):s==='time-out'?'De bestellijst laden duurt te lang of is mislukt.':s==='overzetten'?'De bestellijst wordt overgezet door beheer. Tot die tijd is hij alleen-lezen.':s==='laden'?'De bestellijst wordt geladen…':''; }
+function _blStatusTekst(){ return MTPlanning.lijstStatusTekst('bestel',_blStaat(),_blVormFout); }   // de teksten staan in mt-planning.js (gedeeld met de telefoon)
 try{ setTimeout(()=>{ try{ if(!_blGereed()){ _blTimeout=true; _blNaWijziging(); } }catch(e){} },20000); }catch(e){}
 // Melding in plaats van de lijst, met een knop "opnieuw proberen" zodra de laadstap mislukt is (de melding blijft dus niet eeuwig hangen).
 function _blStatusEl(){
@@ -5463,14 +5463,13 @@ async function blOntgrendelPoging(){
 try{ setInterval(()=>{ blOntgrendelPoging(); },60000); }catch(e){}
 // Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt: naar een back-upsleutel, status geblokkeerd, en nooit door autosync te laten aanmaken.
 function blVerweesdOpruimen(){
-  const raw=localStorage.getItem('mt_bestellijst_v2'); if(raw===null) return false;
   // Fail-closed: de back-up telt pas als hij is teruggelezen. Mislukt het, dan blijft de lokale v2 staan (niet verwijderd), _blVerweesd blijft onwaar, de sleutel
   // blijft geblokkeerd (geen autosync) en de Beheer-overstap in deze browser is geblokkeerd tot er ruimte is of de gebruiker exporteert.
-  const sleutel='mt_bestellijst_v2_verweesd_'+Date.now(); let bewaard=false;
-  try{ localStorage.setItem(sleutel,raw); bewaard=localStorage.getItem(sleutel)===raw; }catch(e){ bewaard=false; }
+  // De back-upregels staan in mt-planning.js (MTPlanning.verweesdOpruimen), gedeeld met de telefoon.
+  const vw=MTPlanning.verweesdOpruimen(localStorage,'mt_bestellijst_v2'); if(vw.actie==='geen') return false;
   try{ _SP.blockedKeys.add('mt_bestellijst_v2'); }catch(e){}
-  if(!bewaard){ try{ localStorage.removeItem(sleutel); }catch(e){} _blBackupFout=true; try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale bestellijst (tabblad Bestellijst).'); }catch(e){} return true; }
-  localStorage.removeItem('mt_bestellijst_v2'); _blVerweesd=true; _blBackupSleutel=sleutel;
+  if(vw.actie==='backup-mislukt'){ _blBackupFout=true; try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale bestellijst (tabblad Bestellijst).'); }catch(e){} return true; }
+  _blVerweesd=true; _blBackupSleutel=vw.backupSleutel;
   try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint; de lokale kopie is als back-up bewaard. Beheer moet de bestellijst opnieuw overzetten.'); }catch(e){}
   return true;
 }
@@ -7131,9 +7130,9 @@ let _ptOud=null, _ptTimeout=false, _ptVerweesd=false, _ptVormFout='', _ptBackupF
 function projTakenRuw(){ return ((_ptVerweesd||_ptBackupFout)?null:_ptLees('mt_project_taken_v2'))||_ptOud||_ptLees('mt_project_taken')||{}; }
 function projTakenGeblokkeerd(){ try{ return !!(_SP&&_SP.blockedKeys&&_SP.blockedKeys.has('mt_project_taken_v2')); }catch(e){ return false; } }
 function projTakenGereed(){ try{ return (typeof _SP==='undefined')?true:!!_SP.ready; }catch(e){ return false; } }
-function projTakenStaat(){ if(_ptBackupFout) return 'backup-mislukt'; if(_ptVerweesd) return 'verweesd'; if(projTakenGeblokkeerd()) return 'geblokkeerd'; if(!projTakenGereed()) return _ptTimeout?'time-out':'laden'; return _ptLees('mt_project_taken_v2')?'klaar':'overzetten'; }
+function projTakenStaat(){ return MTPlanning.lijstStaat({backupFout:_ptBackupFout,verweesd:_ptVerweesd,geblokkeerd:projTakenGeblokkeerd(),gereed:projTakenGereed(),timeout:_ptTimeout,heeftV2:!!_ptLees('mt_project_taken_v2')}); }   // de volgorde van de controles staat in mt-planning.js (lijstStaat), gedeeld met de telefoon
 function projTakenKlaar(){ return projTakenStaat()==='klaar'; }
-function projTakenStatusTekst(){ const s=projTakenStaat(); return s==='backup-mislukt'?'De nieuwe takenlijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale takenlijst; er is niets gewijzigd of overgezet.':s==='verweesd'?'De nieuwe takenlijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de taken opnieuw overzetten.':s==='geblokkeerd'?(_ptVormFout?'De nieuwe takenlijst op SharePoint heeft een verkeerde vorm ('+_ptVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.'):s==='time-out'?'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.':s==='overzetten'?'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.':s==='laden'?'Taken laden…':''; }
+function projTakenStatusTekst(){ return MTPlanning.lijstStatusTekst('taken',projTakenStaat(),_ptVormFout); }   // de teksten staan in mt-planning.js (gedeeld met de telefoon)
 // Vóór elke actie met een extern effect (Toggl) of een planningsmutatie: alleen als de takenlijst klaar is; anders een melding en niets doen.
 // ═══ Rollenmatrix (planning P2, ronde 8): één centrale controle ═══
 // Dezelfde matrix als de worker (RECHTEN): taken "status-nieuw|alles" = taakstatus en een nieuwe taak; taken "alles" = velden, uren, afhankelijkheden,
@@ -7206,14 +7205,13 @@ async function projTakenOntgrendelPoging(){
 try{ setInterval(()=>{ projTakenOntgrendelPoging(); },60000); }catch(e){}
 // Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt: naar een back-upsleutel, status geblokkeerd, en nooit door autosync te laten aanmaken.
 function projTakenVerweesdOpruimen(){
-  const raw=localStorage.getItem('mt_project_taken_v2'); if(raw===null) return false;
   // Fail-closed: de back-up telt pas als hij is teruggelezen. Mislukt het, dan blijft de lokale v2 staan (niet verwijderd), _ptVerweesd blijft onwaar,
   // de sleutel blijft geblokkeerd (geen autosync) en de Beheer-overstap in deze browser is geblokkeerd tot er ruimte is of de gebruiker exporteert.
-  const sleutel='mt_project_taken_v2_verweesd_'+Date.now(); let bewaard=false;
-  try{ localStorage.setItem(sleutel,raw); bewaard=localStorage.getItem(sleutel)===raw; }catch(e){ bewaard=false; }
+  // De back-upregels staan in mt-planning.js (MTPlanning.verweesdOpruimen), gedeeld met de telefoon.
+  const vw=MTPlanning.verweesdOpruimen(localStorage,'mt_project_taken_v2'); if(vw.actie==='geen') return false;
   try{ _SP.blockedKeys.add('mt_project_taken_v2'); }catch(e){}
-  if(!bewaard){ try{ localStorage.removeItem(sleutel); }catch(e){} _ptBackupFout=true; try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale takenlijst (bij Taken in een project).'); }catch(e){} return true; }
-  localStorage.removeItem('mt_project_taken_v2'); _ptVerweesd=true; _ptBackupSleutel=sleutel;
+  if(vw.actie==='backup-mislukt'){ _ptBackupFout=true; try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale takenlijst (bij Taken in een project).'); }catch(e){} return true; }
+  _ptVerweesd=true; _ptBackupSleutel=vw.backupSleutel;
   try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint; de lokale kopie is als back-up bewaard. Beheer moet de taken opnieuw overzetten.'); }catch(e){}
   return true;
 }

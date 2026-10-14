@@ -1368,6 +1368,194 @@
     return uit;
   };
 
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // Stap 2 — Mijn werk / Vandaag (telefoon) en de gedeelde schrijfkern
+  // ----------------------------------------------------------------------------------------------
+  // Wat v2.html en mobiel.html samen gebruiken: de rechtnamen, de laadstanden van de takenlijst en de bestellijst (met hun
+  // meldingen), de back-up van een verweesde lokale kopie, de schemaversie, de status van een taak (Open · Bezig · Wacht · Klaar)
+  // en het lezen-samenvoegen-schrijven naar SharePoint (ETag/412-merge) met dezelfde stempels en tombstones als de cockpit.
+  // Alle opslag komt van buiten (sp = de _SP uit mt-core.js, storage = localStorage), zodat dit zonder browser te testen is.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+
+  // ── Schemaversie van de projecttaken ──
+  // De laagste app-versie die mt_project_taken_v2 mag schrijven staat in de teller (GET /teller/status → schema_min). Is die hoger dan
+  // de versie van déze app (v2.html: PROJ_SCHEMA), dan schrijft de app niet meer. Onbekend (nog niet gelezen) = geen blokkade.
+  P.SCHEMA = 5;
+  P.SCHEMA_TEKST = 'Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
+  P.schemaGeblokkeerd = (schemaMin, eigen) => schemaMin !== null && schemaMin !== undefined && schemaMin !== '' && Number.isFinite(Number(schemaMin)) && Number(schemaMin) > (eigen == null ? P.SCHEMA : Number(eigen));
+
+  // ── De rechtnamen (zelfde matrix als de worker en de cockpit) ──
+  // taken "status-nieuw|alles" = de status wijzigen en een nieuwe taak toevoegen; taken "alles" = velden, uren, afhankelijkheden, verwijderen;
+  // bestellijst "toevoegen|alles" = een nieuwe regel; bestellijst "alles" = status, aantal, verwijderen. UREN_BOEKEN: tijd boeken en de timer.
+  P.ROL = { TAAK_STATUS: 'taken:status-nieuw|alles', TAAK_ALLES: 'taken:alles', BESTEL_TOEV: 'bestellijst:toevoegen|alles', BESTEL_ALLES: 'bestellijst:alles', UREN_BOEKEN: 'uren:eigen|team|alles' };
+
+  // ── De laadstand van een gedeelde lijst (takenlijst of bestellijst) ──
+  // 'klaar' = geladen en bewerkbaar; alles anders is alleen-lezen met een melding. De volgorde van de controles is die van de cockpit:
+  // backup-mislukt > verweesd > geblokkeerd > (time-out | laden) > (klaar | overzetten).
+  P.lijstStaat = function ({ backupFout = false, verweesd = false, geblokkeerd = false, gereed = true, timeout = false, heeftV2 = false } = {}) {
+    if (backupFout) return 'backup-mislukt';
+    if (verweesd) return 'verweesd';
+    if (geblokkeerd) return 'geblokkeerd';
+    if (!gereed) return timeout ? 'time-out' : 'laden';
+    return heeftV2 ? 'klaar' : 'overzetten';
+  };
+  P.lijstStatusTekst = function (soort, staat, vormFout) {
+    const t = soort === 'bestel';
+    switch (staat) {
+      case 'backup-mislukt': return t
+        ? 'De nieuwe bestellijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale bestellijst; er is niets gewijzigd of overgezet.'
+        : 'De nieuwe takenlijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale takenlijst; er is niets gewijzigd of overgezet.';
+      case 'verweesd': return t
+        ? 'De nieuwe bestellijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de bestellijst opnieuw overzetten.'
+        : 'De nieuwe takenlijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de taken opnieuw overzetten.';
+      case 'geblokkeerd': return vormFout
+        ? (t ? 'De nieuwe bestellijst op SharePoint heeft een verkeerde vorm (' : 'De nieuwe takenlijst op SharePoint heeft een verkeerde vorm (') + vormFout + '). Er is niets gewijzigd; laat beheer dit controleren.'
+        : (t ? 'De bestellijst is geblokkeerd: de laadstap voor de nieuwe bestellijst is mislukt. Er is niets gewijzigd.'
+          : 'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.');
+      case 'time-out': return t ? 'De bestellijst laden duurt te lang of is mislukt.' : 'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.';
+      case 'overzetten': return t ? 'De bestellijst wordt overgezet door beheer. Tot die tijd is hij alleen-lezen.' : 'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.';
+      case 'laden': return t ? 'De bestellijst wordt geladen…' : 'Taken laden…';
+      case 'schema': return P.SCHEMA_TEKST;
+      default: return '';
+    }
+  };
+
+  // ── Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt (verweesd) ──
+  // De lokale kopie gaat naar een back-upsleutel (<sleutel>_verweesd_<tijd>) en de sleutel zelf wordt leeggemaakt. Fail-closed: de back-up telt pas
+  // als hij is teruggelezen; mislukt dat, dan blijft de lokale kopie staan en is de uitkomst 'backup-mislukt'.
+  // → { actie: 'geen' | 'verweesd' | 'backup-mislukt', backupSleutel? }
+  P.verweesdOpruimen = function (storage, sleutel, nu) {
+    let raw = null; try { raw = storage.getItem(sleutel); } catch (e) { raw = null; }
+    if (raw === null || raw === undefined) return { actie: 'geen' };
+    const bk = sleutel + '_verweesd_' + (nu == null ? Date.now() : nu); let bewaard = false;
+    try { storage.setItem(bk, raw); bewaard = storage.getItem(bk) === raw; } catch (e) { bewaard = false; }
+    if (!bewaard) { try { storage.removeItem(bk); } catch (e) {} return { actie: 'backup-mislukt' }; }
+    try { storage.removeItem(sleutel); } catch (e) {}
+    return { actie: 'verweesd', backupSleutel: bk };
+  };
+
+  // ── De status van een taak: Open (todo) · Bezig · Wacht (altijd met een reden) · Klaar ──
+  P.TAAK_STATUSSEN = ['todo', 'bezig', 'wacht', 'klaar'];
+  P.TAAK_STATUS_LABEL = { todo: 'Open', bezig: 'Bezig', wacht: 'Wacht', klaar: 'Klaar' };
+  // ── Uren in gewone taal: 150 → "2u30", 120 → "2u", 45 → "0u45" ──
+  P.fmtUurMin = m => { const n = Math.max(0, Math.round(getal(m))), h = Math.floor(n / 60), r = n % 60; return r ? h + 'u' + String(r).padStart(2, '0') : h + 'u'; };
+
+  // ── Projectkleur: een vaste kleur per projectcode (geen rood, oranje of groen: die zijn voor alarm) ──
+  const KLEUR_TINTEN = [195, 210, 225, 240, 255, 270, 285, 300];
+  P.projectKleur = function (code) {
+    const s = String(code == null ? '' : code).trim().toLowerCase(); let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return 'hsl(' + KLEUR_TINTEN[h % KLEUR_TINTEN.length] + ', 42%, ' + ((h >>> 3) % 2 ? 46 : 36) + '%)';
+  };
+
+  // ── Mijn werk: de taken van één persoon in groepen, plus de planblokken ──
+  // takenObj = { projectcode: [taak…] } (mt_project_taken_v2), depsObj = { projectcode: [afhankelijkheid…] } (mt_project_afhank), blokken = mt_planblokken.
+  // opties: mijn (team-slug of e-mailadres), team, vandaag (ymd), nu (ms), vrij (vrije dagen), gezien ({taak-id: stempel van de toewijzing die je al zag}),
+  //         nieuwDagen (een toewijzing die je nog nooit zag telt 7 dagen als nieuw).
+  // Groepen: nieuw · teLaat · vandaag · week · later · zonderDatum, plus nietVrij (een open afhankelijkheid: de taak is nog niet gestart en wacht op een voorganger).
+  // Een taak met een planblok krijgt de datum van dat blok als dat eerder is dan zijn eigen datum; een blok zonder taak staat er zelf (soort 'blok').
+  const MIJN_RANG = { nieuw: 0, teLaat: 1, vandaag: 2, week: 3, later: 4, zonderDatum: 5 };
+  const maandagVan = ymd => { const n = dnr(ymd), w = ((n + 4) % 7 + 7) % 7, ma = n - ((w + 6) % 7); return { ma: dymd(ma), zo: dymd(ma + 6), maNr: ma }; };
+  const zelfdeCode = (a, b) => String(a == null ? '' : a).trim().toLowerCase() === String(b == null ? '' : b).trim().toLowerCase();
+  const blokGeldig = (b, mijn, team) => !!b && typeof b === 'object' && !b._vervallen && P.isYmd(b.datum) && !(b.voorstel && b.voorstel.afgewezen) && P.zelfdePersoon(b.persoon, mijn, team);
+  const blokStartTekst = b => { const m = /^(\d{1,2}):(\d{2})/.exec(String(b && b.start || '')); return m ? String(m[1]).padStart(2, '0') + ':' + m[2] : ''; };
+  P.mijnWerk = function (takenObj, depsObj, blokken, opt) {
+    const o = opt || {}, mijn = o.mijn || '', team = o.team || null;
+    const vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd(), nu = Number(o.nu) || Date.now();
+    const nieuwMs = (o.nieuwDagen == null ? 7 : Number(o.nieuwDagen)) * 864e5, gezien = o.gezien && typeof o.gezien === 'object' ? o.gezien : {};
+    const wk = maandagVan(vandaag), zo = wk.zo;
+    const groepVan = (s, e) => { s = s || e; e = e || s; if (!s) return 'zonderDatum'; if (e < vandaag) return 'teLaat'; if (s <= vandaag) return 'vandaag'; if (s <= zo) return 'week'; return 'later'; };
+    const groepen = { nieuw: [], teLaat: [], vandaag: [], week: [], later: [], zonderDatum: [], nietVrij: [] };
+    const alleBlokken = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, mijn, team));
+    const gekoppeld = new Set(), mijnTaken = [], dekt = new Set(), PRIO = { high: 0, medium: 1, low: 2 };
+    const takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {};
+    Object.keys(takenPer).sort().forEach(code => {
+      if (code.startsWith('__') || !Array.isArray(takenPer[code])) return;
+      const lijst = P.takenActief(takenPer[code]);
+      const mijnL = lijst.filter(t => t.toegewezen && P.zelfdePersoon(t.toegewezen, mijn, team) && (t.status || 'todo') !== 'klaar');
+      if (!mijnL.length) return;
+      const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag });
+      const naamAantal = new Map(); lijst.forEach(t => { const n = nrm(t.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
+      mijnL.forEach(t => {
+        const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] }, n = nrm(t.naam);
+        const bl = alleBlokken.filter(b => (b.taak_id != null && b.taak_id !== '')
+          ? String(b.taak_id) === String(t.id)
+          : (zelfdeCode(b.project_code, code) && !!n && nrm(b.taak) === n && naamAantal.get(n) === 1));
+        bl.forEach(b => gekoppeld.add(String(b.id)));
+        if (bl.length) dekt.add(t.id);
+        const komend = bl.filter(b => b.datum >= vandaag).sort((a, b) => (a.datum + blokStartTekst(a)) < (b.datum + blokStartTekst(b)) ? -1 : 1);
+        const eerste = komend[0] || null;
+        const gD = groepVan(P.isYmd(t.start) ? t.start : '', P.isYmd(t.eind) ? t.eind : ''), gB = eerste ? groepVan(eerste.datum, eerste.datum) : '';
+        let groep = gD;
+        if (gB && (gD === 'zonderDatum' || (gD !== 'teLaat' && MIJN_RANG[gB] < MIJN_RANG[gD]))) groep = gB;
+        const ts = t.toegewezen && t._vs && t._vs.toegewezen ? t._vs.toegewezen : null, stempelT = ts ? Number(ts.t) || 0 : 0;
+        const doorMij = !!(ts && ts.door && P.zelfdePersoon(ts.door, mijn, team)), g = gezien[t.id];
+        const isNieuw = st === 'todo' && stempelT > 0 && !doorMij && (g === undefined || g === null ? (nu - stempelT) <= nieuwMs : stempelT > Number(g));
+        const nietVrij = st === 'todo' && w.wacht;
+        const eindGroep = nietVrij ? 'nietVrij' : (isNieuw ? 'nieuw' : groep);
+        mijnTaken.push(Object.assign({ _code: code }, t));
+        groepen[eindGroep].push({
+          soort: 'taak', id: t.id, code, taak: t, status: st, wacht: w, wachtTekst: P.wachtOpTekst(w), nieuw: isNieuw, groep: eindGroep, stempelToegewezen: stempelT,
+          gepland_min: P.taakBudgetMin(t), start: P.isYmd(t.start) ? t.start : '', eind: P.isYmd(t.eind) ? t.eind : '',
+          blokken: bl.map(b => ({ id: b.id, datum: b.datum, start: blokStartTekst(b), duurMin: Math.max(0, Math.round(getal(b.duurMin))), voorstel: b.status === 'voorstel' })),
+          sleutel: (eerste ? eerste.datum + ' ' + (blokStartTekst(eerste) || '99:99') : (P.isYmd(t.start) ? t.start : (P.isYmd(t.eind) ? t.eind : '9999-99-99')) + ' ~') + '|' + (PRIO[t.prioriteit] !== undefined ? PRIO[t.prioriteit] : 3) + '|' + String(t.naam || '').toLowerCase()
+        });
+      });
+    });
+    alleBlokken.forEach(b => {
+      if (gekoppeld.has(String(b.id)) || b.datum < vandaag) return;
+      const groep = groepVan(b.datum, b.datum), s = blokStartTekst(b);
+      groepen[groep].push({ soort: 'blok', id: 'blok:' + b.id, code: b.project_code || '', blok: b, naam: b.taak || b.project_code || 'Planblok', datum: b.datum, start: s, duurMin: Math.max(0, Math.round(getal(b.duurMin))),
+        voorstel: b.status === 'voorstel', groep, sleutel: b.datum + ' ' + (s || '99:99') + '|0|' + String(b.taak || '').toLowerCase() });
+    });
+    Object.keys(groepen).forEach(k => groepen[k].sort((a, b) => a.sleutel < b.sleutel ? -1 : a.sleutel > b.sleutel ? 1 : 0));
+    const week = P.weekBezetting(mijnTaken, alleBlokken, { vandaag, vrij: o.vrij, dagMin: o.dagMin, gedekt: dekt });
+    return { vandaag, weekgrens: { van: wk.ma, tot: zo }, groepen, week, aantal: Object.keys(groepen).reduce((s, k) => s + groepen[k].length, 0) };
+  };
+
+  // ── Capaciteit van de week: 8 uur per werkdag, geplande uren in dagdelen ──
+  // Gepland = de planblokken van de persoon (geen open voorstellen) plus de taken met een start/eind in die week die geen planblok hebben (de uren
+  // verdeeld over hun werkdagen). Per dag telt een begonnen dagdeel (4 uur) voor een heel dagdeel: de werkplaats plant in dagdelen.
+  // → { van, tot, dagen: [{datum, werkdag, cap_min, gepland_min, dagdelen}], cap_min, gepland_min (in dagdelen), vrij_min, over_min, dagdelen, dagdelenTotaal }
+  P.weekBezetting = function (taken, blokken, { vandaag = '', vrij = null, dagMin = 0, gedekt = null } = {}) {
+    const dm = dagMin > 0 ? dagMin : P.DAG_MIN, V = P.vrijSet(vrij), wk = maandagVan(P.isYmd(vandaag) ? vandaag : P.vandaagYmd());
+    const dagen = []; for (let i = 0; i < 5; i++) { const nr = wk.maNr + i, w = isWerk(nr, V); dagen.push({ datum: dymd(nr), nr, werkdag: w, cap_min: w ? dm : 0, gepland_min: 0 }); }
+    const per = new Map(dagen.map(d => [d.datum, d])), dekt = gedekt instanceof Set ? gedekt : new Set();
+    (blokken || []).forEach(b => {
+      if (!b || b._vervallen || b.status === 'voorstel' || (b.voorstel && b.voorstel.afgewezen)) return;
+      const d = per.get(b.datum); if (d) d.gepland_min += Math.max(0, Math.round(getal(b.duurMin)));
+    });
+    (taken || []).forEach(t => {
+      if (!t || dekt.has(t.id) || (t.status || 'todo') === 'klaar') return;
+      const min = P.taakBudgetMin(t); if (min <= 0) return;
+      const s = P.isYmd(t.start) ? t.start : (P.isYmd(t.eind) ? t.eind : ''); if (!s) return;
+      const e = P.isYmd(t.eind) ? t.eind : s, a = dnr(s), z = Math.max(a, dnr(e)); let n = 0;
+      for (let i = a; i <= z && i - a < 400; i++) if (isWerk(i, V)) n++;
+      if (!n) return;
+      for (let i = a; i <= z && i - a < 400; i++) { if (!isWerk(i, V)) continue; const d = per.get(dymd(i)); if (d) d.gepland_min += min / n; }
+    });
+    const half = dm / 2; let cap = 0, gepl = 0, over = 0, dd = 0, ddTot = 0;
+    dagen.forEach(d => {
+      d.gepland_min = Math.round(d.gepland_min); delete d.nr;
+      d.dagdelen = d.werkdag ? Math.min(2, Math.ceil(d.gepland_min / half - 1e-9)) : 0;
+      cap += d.cap_min; gepl += d.dagdelen * half; dd += d.dagdelen; ddTot += d.werkdag ? 2 : 0; over += Math.max(0, d.gepland_min - d.cap_min);
+    });
+    return { van: dagen[0].datum, tot: dagen[4].datum, dagen, cap_min: cap, gepland_min: gepl, vrij_min: Math.max(0, cap - gepl), over_min: Math.round(over), dagdelen: dd, dagdelenTotaal: ddTot };
+  };
+
+  // Wijzigingen die lokaal bleven staan (schrijven mislukte eerder) alsnog delen: voeg lokaal en SharePoint samen en schrijf alleen als dat iets toevoegt.
+  // o.remote = het al gelezen bestand (anders wordt het hier gelezen). → { ok, gewijzigd, data, reden? }
+  P.takenPush = async function (sp, o) {
+    o = o || {}; const bestand = o.bestand || 'mt_project_taken_v2.json';
+    let raw = o.remote; if (raw === undefined) { try { raw = await sp.read(bestand); } catch (e) { return { ok: false, gewijzigd: false, reden: 'lezen' }; } }
+    if (raw === null || raw === undefined) return { ok: false, gewijzigd: false, reden: 'ontbreekt' };
+    let basis, alleen; try { basis = P.takenSamen(o.lokaal === undefined ? null : o.lokaal, raw); alleen = P.takenSamen(null, raw); } catch (e) { return { ok: false, gewijzigd: false, reden: 'vorm', fout: String((e && e.message) || e) }; }
+    if (JSON.stringify(basis) === JSON.stringify(alleen)) return { ok: true, gewijzigd: false, data: basis };
+    if (typeof o.voorWrite === 'function') { let toe; try { toe = await o.voorWrite(); } catch (e) { toe = false; } if (toe === false) return { ok: false, gewijzigd: true, data: basis, reden: 'geblokkeerd' }; }
+    const ok = await sp.write(bestand, basis, (remote, lokaal) => { try { return P.takenSamen(lokaal, remote); } catch (e) { return null; } });
+    return { ok: !!ok, gewijzigd: true, data: basis, reden: ok ? '' : 'schrijven' };
+  };
+
   root.MTPlanning = P;
   if (typeof module !== 'undefined' && module.exports) module.exports = P;
 })(typeof window !== 'undefined' ? window : globalThis);
