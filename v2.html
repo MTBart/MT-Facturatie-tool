@@ -842,7 +842,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.16.0</span>
+    <span class="header-version">v2.16.1</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -2598,6 +2598,7 @@ const VOORRAAD_HANDMATIG_LEVERANCIERS = ['Glas Klooster','Veldman Slijptechniek'
 // alleen de actieve; _projBasis onthoudt per code hoe het record eruitzag bij laden/opslaan,
 // zodat slaProjectenOp ziet wat déze pc wijzigde en wat een andere pc intussen bijwerkte.
 let _projBasis = new Map();
+let _projIx=null, _projIxVersie=0, _projIxSig='';  // vóór projLaad(): die roept projIndexVerouderd aan
 let PROJECT_CODES = projLaad();
 
 // ═══ STATE ═══
@@ -2809,7 +2810,7 @@ function projNummer(p){
 // Via de gedeelde resolver (mt-project.js, brok C): ook op werkcode, aliassen van de teller en offertenummer. De index
 // wordt hergebruikt zolang de sleutels niet veranderen: een goedkope vingerafdruk van alle sleutelvelden (ook een record
 // dat net in het geheugen is gewijzigd) plus een versie die bij opslaan/laden/een nieuwe teller-kaart omhoog gaat.
-let _projIx=null, _projIxVersie=0, _projIxSig='';
+// (De variabelen staan bovenaan bij _projBasis: projLaad() roept projIndexVerouderd al aan tijdens het laden.)
 function projIndexVerouderd(){ _projIxVersie++; }
 function _projIxVinger(){
   let s=_projIxVersie+'|'+PROJECT_CODES.length;
