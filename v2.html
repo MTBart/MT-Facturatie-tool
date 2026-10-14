@@ -8531,9 +8531,8 @@ async function projTaakStatus(code,id){
 }
 // Zet een taak op een status. Een taak die wacht (een voorganger is niet klaar) start pas na een bevestiging.
 async function projTaakStatusNaar(code,id,nieuwStatus){
-  const t0=projTaken(code).find(x=>x.id===id);
-  if(t0&&t0.tg_task_id) return _tgMetSlot(code,id,()=>_projTaakStatusNaar(code,id,nieuwStatus));   // met een Toggl-taak: één actie tegelijk per taak
-  return _projTaakStatusNaar(code,id,nieuwStatus);
+  // Het slot staat op het LOKALE taak-id, ook zolang er nog geen tg_task_id is (een aanmaak in Toggl loopt): een statuswijziging wacht niet, maar doet niets en meldt het.
+  return _tgMetSlot(code,id,()=>_projTaakStatusNaar(code,id,nieuwStatus));
 }
 async function _projTaakStatusNaar(code,id,nieuwStatus){
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
@@ -8630,9 +8629,11 @@ async function projTakenVerwijderSelectie(code){
   try{ if(window.track) track('taken','verwijder_selectie',{detail:code+' · '+ids.length}); }catch(e){}
   let i=0; const mislukt=new Set();
   // Het slot per taak met een Toggl-taak: een taak waar al een Toggl-actie op loopt wordt overgeslagen (blijft staan); de rest wordt vastgehouden tot het einde.
-  const bezigIds=teVerw.filter(t=>t.tg_task_id&&_tgBezig.has(code+'|'+t.id)).map(t=>t.id);
+  // Het slot staat op het LOKALE taak-id, ook als er nog geen tg_task_id is: een taak waarvoor een Toggl-aanmaak loopt mag niet lokaal verdwijnen (dan blijft er een verweesde Toggl-taak achter).
+  const bezigIds=teVerw.filter(t=>_tgBezig.has(code+'|'+t.id)).map(t=>t.id);
   bezigIds.forEach(bid=>{ let k=teVerw.findIndex(t=>t.id===bid); if(k>=0) teVerw.splice(k,1); k=ids.indexOf(bid); if(k>=0) ids.splice(k,1); });
-  const geslot=teVerw.filter(t=>t.tg_task_id).map(t=>t.id); geslot.forEach(gid=>_tgSlot(code,gid));
+  if(bezigIds.length){ try{ planToast('⚠ '+bezigIds.length+' taak/taken overgeslagen: er loopt een Toggl-actie op. Probeer het zo opnieuw.'); }catch(e){} }
+  const geslot=teVerw.map(t=>t.id); geslot.forEach(gid=>_tgSlot(code,gid));
   try{
   if(!teVerw.length){ _ptStatus(code,'Er loopt al een Toggl-actie voor deze taak/taken — even geduld.','var(--gold-text)'); return; }
   // Alle intenties eerst, in één keer, duurzaam opslaan; lukt dat niet, dan gaat er niets naar Toggl.
