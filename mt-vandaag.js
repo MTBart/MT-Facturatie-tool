@@ -122,6 +122,7 @@
   const alleItems = mw => Object.keys(mw.groepen).reduce((a, k) => a.concat(mw.groepen[k]), []);
   const zoekItem = id => (S.mw ? alleItems(S.mw).find(i => i.id === id) || null : null);
   const uren = min => P.fmtUurMin(min);
+  const wachtTekst = item => P.wachtOpTekst(item.wacht, fmtDatum);   // "Zagen (wachttijd 2 werkdagen, tot do 22 okt)"
   const DAGNAAM = ['Ma', 'Di', 'Wo', 'Do', 'Vr'];
 
   function weekKaart(mw) {
@@ -154,7 +155,7 @@
     } else datum = dagWoord(item.datum, vandaag) + (item.start ? ' ' + item.start + '–' + eindTijd(item.start, item.duurMin) : '');
     const regels = [el('div', { klass: 'vd-naam', tekst: naam }), el('div', { klass: 'vd-sub', tekst: [projLabel(item.code), datum, taak && item.gepland_min ? uren(item.gepland_min) + ' gepland' : ''].filter(Boolean).join(' · ') })];
     if (taak && item.status === 'wacht') regels.push(el('div', { klass: 'vd-wacht', tekst: 'Wacht: ' + (t.wacht_reden || 'geen reden opgegeven') }));
-    else if (taak && item.wacht && item.wacht.wacht) regels.push(el('div', { klass: 'vd-wacht', tekst: 'Wacht op: ' + item.wachtTekst }));
+    else if (taak && item.wacht && item.wacht.wacht) regels.push(el('div', { klass: 'vd-wacht', tekst: 'Wacht op: ' + wachtTekst(item) }));
     const chips = [];
     if (taak && item.status !== 'todo') chips.push(el('span', { klass: 'vd-chip vd-st-' + item.status, tekst: P.TAAK_STATUS_LABEL[item.status] || item.status }));
     if (!taak) chips.push(el('span', { klass: 'vd-chip', tekst: item.voorstel ? 'Planblok (voorstel)' : 'Planblok' }));
@@ -166,6 +167,8 @@
   function teken() {
     const wortel = D && D.doc.getElementById('vandaag-inhoud'); if (!wortel) return;
     const mw = bereken(); wortel.textContent = '';
+    const plus = D.doc.getElementById('vandaagPlus');   // de grote +: weg voor wie niets mag melden (een rol zonder taak- en bestelrecht)
+    if (plus) plus.classList.toggle('mt-rol-verborgen', !(D.rol.mag(P.ROL.TAAK_STATUS) || D.rol.mag(P.ROL.BESTEL_TOEV)));
     wortel.appendChild(weekKaart(mw));
     const mb = meldingBalk(); if (mb) wortel.appendChild(mb);
     if (S.nogNietGedeeld && S.staat === 'klaar') wortel.appendChild(el('div', { klass: 'vd-melding', role: 'status', tekst: 'Een eerdere wijziging is nog niet gedeeld; die wordt opnieuw geprobeerd zodra je weer verbinding hebt.' }));
@@ -212,8 +215,8 @@
     b.appendChild(rij(el('span', { klass: 'vd-punt', style: 'background:' + kleur(item.code) }), el('span', { tekst: projLabel(item.code) })));
     if (taak) {
       b.appendChild(rij(el('span', { klass: 'vd-chip vd-st-' + item.status, tekst: P.TAAK_STATUS_LABEL[item.status] || item.status }), item.status === 'wacht' ? el('span', { tekst: ' ' + (t.wacht_reden || 'geen reden opgegeven') }) : null));
-      if (item.wacht && item.wacht.wacht) b.appendChild(rij(el('span', { klass: 'vd-wacht', tekst: 'Wacht op: ' + item.wachtTekst + (item.groep === 'nietVrij' ? ' — nog niet vrijgegeven' : '') })));
-      if (item.start || item.eind) b.appendChild(rij(el('span', { tekst: 'Gepland: ' + (item.start && item.eind && item.start !== item.eind ? fmtDatum(item.start) + ' – ' + fmtDatum(item.eind) : dagWoord(item.start || item.eind, vandaag)) })));
+      if (item.wacht && item.wacht.wacht) b.appendChild(rij(el('span', { klass: 'vd-wacht', tekst: 'Wacht op: ' + wachtTekst(item) + (item.groep === 'nietVrij' ? ' — nog niet vrijgegeven' : '') })));
+      if (item.start || item.eind) b.appendChild(rij(el('span', { tekst: 'Wanneer: ' + (item.start && item.eind && item.start !== item.eind ? fmtDatum(item.start) + ' – ' + fmtDatum(item.eind) : dagWoord(item.start || item.eind, vandaag)) })));
       item.blokken.forEach(x => b.appendChild(rij(el('span', { tekst: 'Planblok ' + dagWoord(x.datum, vandaag) + (x.start ? ' ' + x.start + '–' + eindTijd(x.start, x.duurMin) : '') + (x.voorstel ? ' (voorstel)' : '') }))));
       const geklokt = el('span', { klass: 'vd-geklokt', tekst: '' });
       b.appendChild(rij(el('span', { tekst: item.gepland_min ? 'Gepland ' + uren(item.gepland_min) + ' · ' : 'Geen uren gepland · ' }), geklokt));
@@ -303,7 +306,7 @@
     else if (reden === 'lezen') D.toast('Geen verbinding met SharePoint — er is niets gewijzigd. Probeer het zo opnieuw.');
     else if (reden === 'weigering') D.toast(res.fout || 'Dit kon niet.');
     else if (reden === 'geblokkeerd') { D.toast(S.staat === 'schema' ? P.SCHEMA_TEKST : (schrijfBlok() || 'Wijzigen kan nu niet.')); teken(); }
-    else D.toast('Opslaan is niet gelukt — er is niets gewijzigd. Probeer het zo opnieuw.');
+    else D.toast('Opslaan is niet gelukt of niet bevestigd — kijk na of de wijziging er staat en probeer het anders opnieuw.');
     return false;
   }
   // Een herstelkopie van de taak vóór de wijziging (zoals het taken-journaal van de cockpit); mislukt dat, dan blijft de wijziging gewoon staan.
@@ -329,7 +332,7 @@
     let reden = '';
     if (nieuw === 'wacht') { reden = await vraagReden(item); if (reden === null) return; }
     if (item.wacht && item.wacht.wacht && huidig === 'todo' && nieuw !== 'todo' && nieuw !== 'wacht') {   // een taak die op een voorganger wacht start pas na een bevestiging
-      const ja = await D.dialog().confirm({ title: 'Deze taak wacht', message: '"' + t.naam + '" wacht op: ' + item.wachtTekst + '.\nToch ' + (nieuw === 'klaar' ? 'op klaar zetten' : 'starten') + '?', okLabel: 'Toch doorgaan' });
+      const ja = await D.dialog().confirm({ title: 'Deze taak wacht', message: '"' + t.naam + '" wacht op: ' + wachtTekst(item) + '.\nToch ' + (nieuw === 'klaar' ? 'op klaar zetten' : 'starten') + '?', okLabel: 'Toch doorgaan' });
       if (!ja) return;
     }
     blok = schrijfBlok(P.ROL.TAAK_STATUS); if (blok) { D.toast(blok); return; }   // opnieuw na de dialogen: de lijst, het schema of het recht kan intussen veranderd zijn
@@ -461,7 +464,7 @@
     else if (res.reden === 'journaal') D.toast('Het herstelspoor (journaal) kon niet worden bewaard — er is niets toegevoegd. Probeer het zo opnieuw.');
     else if (res.reden === 'lezen') D.toast('Geen verbinding met SharePoint — er is niets toegevoegd. Probeer het zo opnieuw.');
     else if (res.reden === 'geblokkeerd') D.toast(schrijfBlok(P.ROL.BESTEL_TOEV, 'bestel') || 'Toevoegen kan nu niet.');
-    else D.toast('Opslaan is niet gelukt — er is niets toegevoegd. Probeer het zo opnieuw.');
+    else D.toast('Opslaan is niet gelukt of niet bevestigd — kijk na of het op de bestellijst staat en probeer het anders opnieuw (dezelfde melding krijgt dezelfde id, dus nooit dubbel).');
     return false;
   }
   // soort: 'taak' | 'probleem' | 'bestel'; v: { project (code), tekst, toelichting, aantal, eenheid, opmerking, id }. → true als het is opgeslagen.

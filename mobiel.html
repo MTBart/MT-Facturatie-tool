@@ -226,12 +226,17 @@ body{
 .nav-btn:active{transform:scale(.92)}
 .nav-icon{font-size:22px;line-height:1;color:var(--text-faint)}
 .nav-btn.active .nav-icon{filter:drop-shadow(0 1px 3px rgba(42,74,56,.3))}
+/* acht knoppen nu Vandaag erbij is: op smalle schermen iets compacter, zodat de labels niet in elkaar lopen (de onderbalk wordt later opgeruimd, stap 2e) */
+.nav-btn{min-width:0}
+.nav-btn span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:420px){.nav-btn{padding:8px 1px;font-size:9px}.nav-icon{font-size:19px}.nav-btn::before{left:6px;right:6px}}
 
 /* ── TABS ── */
 .tab{display:none;padding:16px;min-height:100%}
 .tab.active{display:block}
 
 /* ── VANDAAG (mijn werk, planning stap 2) ── */
+#tab-vandaag{padding-bottom:96px}   /* ruimte onder de lijst voor de grote + */
 .vd-week{padding:14px 16px}
 .vd-week-tekst{font-size:16px;font-weight:700;color:var(--green)}
 .vd-week-sub{font-size:12px;color:var(--text-faint);margin-top:2px}
@@ -2362,6 +2367,10 @@ async function _vdBoek({ mobielId, minuten, omschrijving, taskId }) {
     delete body.task_id; await tgTrack(pad, 'POST', body); return { gekoppeld: false };
   }
 }
+function _vdNaBoeken() {   // een nieuwe entry: de agenda en de geklokte uren per taak opnieuw ophalen
+  try { if (typeof AGENDA_CACHE !== 'undefined') Object.keys(AGENDA_CACHE).forEach(k => { delete AGENDA_CACHE[k]; }); } catch (e) {}
+  _vdUren = { ts: 0, lijst: null };
+}
 let _vdUren = { ts: 0, lijst: null };
 async function _vdGeklokt() {   // mijn eigen geklokte minuten per Toggl-taak (laatste 90 dagen), 60 s gecachet; zelfde stream als de agenda
   if (_demoMode || !_msAccount) return null;
@@ -2398,7 +2407,7 @@ if (window.MTVandaag) MTVandaag.init({
     start: (mobielId, oms) => { selectProject(mobielId); startTimer(oms); },
     stop: () => stopTimer()
   },
-  toggl: { geklokt: _vdGeklokt, boek: _vdBoek }
+  toggl: { geklokt: _vdGeklokt, boek: async x => { const r = await _vdBoek(x); _vdNaBoeken(); return r; } }
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && window.MTVandaag) { const t = document.getElementById('tab-vandaag'); if (t && t.classList.contains('active')) MTVandaag.toon(); } });
 
