@@ -881,7 +881,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <button class="tab-btn" data-recht="projecten" onclick="showTab('voorraad',this)">Voorraad</button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('bestelling',this)">Bestellijst</button>
   <button class="tab-btn" data-recht="moneybird" onclick="showTab('klanten',this)">Klanten</button>
-  <button class="tab-btn" data-recht="moneybird" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" data-recht="verbeterpunten" onclick="showTab('verbeterpunten',this)">&#128161; Verbeterpunten</button>
   <button class="tab-btn" id="tab-btn-instellingen" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" id="tab-btn-admin" style="display:none" onclick="showTab('admin',this)">⚙ Admin</button>
@@ -1443,7 +1442,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
             <option value="Voorraad">Voorraad</option>
             <option value="Bestellijst">Bestellijst</option>
             <option value="Klanten">Klanten</option>
-            <option value="Geschiedenis">Geschiedenis</option>
             <option value="App/mobiel">App/mobiel</option>
             <option value="Anders">Anders</option>
           </select>
@@ -3432,13 +3430,15 @@ function tbApplyHashTab(){
 // Project openen = pushState, tab/sectie wisselen = replaceState, terug/vooruit (popstate) past de
 // route toe zonder nieuwe history-entry. Alleen project- en klantcodes in de URL, geen persoonsgegevens.
 const mtRoute={
-  klaar:false, _stil:false, _start:(typeof location!=='undefined'?location.hash:''),
+  GEARCHIVEERD:['historie'], klaar:false, _stil:false, _start:(typeof location!=='undefined'?location.hash:''),
   parse(hash){
     const heel=String(hash||'').replace(/^#/,'');
     const qi=heel.indexOf('?'), h=qi>=0?heel.slice(0,qi):heel, query=qi>=0?heel.slice(qi+1):'';
     const dec=x=>{ try{ return decodeURIComponent(x); }catch(e){ return x; } };
+    // Gearchiveerde tabs (Geschiedenis): geen knop meer; een oude link/bladwijzer telt als "geen route" → de standaard-starttab.
+    const weg=t=>mtRoute.GEARCHIVEERD.includes(t)?null:t;
     const m=h.match(/(?:^|&)tab=([a-z]+)/i);
-    if(m) return {tab:m[1].toLowerCase()};
+    if(m) return {tab:weg(m[1].toLowerCase())};
     const delen=h.split('/').filter(x=>x!=='').map(dec);
     if(!delen.length) return {tab:null};
     const eerste=delen[0].toLowerCase();
@@ -3459,7 +3459,7 @@ const mtRoute={
         if(f.sectie){ r.sectie=f.sectie; delete f.sectie; } if(Object.keys(f).length) r.filter=f; }
       return r;
     }
-    if(/^[a-z]+$/.test(eerste)&&delen.length===1) return {tab:eerste};
+    if(/^[a-z]+$/.test(eerste)&&delen.length===1) return {tab:weg(eerste)};
     return {tab:null};
   },
   format(r){
@@ -14496,7 +14496,7 @@ function tbChatOpen(){
   if(!_tbBound){_tbBound=true;document.addEventListener('click',e=>{const pn=document.getElementById('tbchat-panel');if(pn.style.display!=='none'&&!pn.contains(e.target))pn.style.display='none';});}
 }
 function tbChatClose(){document.getElementById('tbchat-panel').style.display='none';}
-const TB_TABS=['dashboard','inbox','verwerk','controle','projecten','klanten','voorraad','bestelling','historie','agenda','instellingen','cn','migratie'];
+const TB_TABS=['dashboard','inbox','verwerk','controle','projecten','klanten','voorraad','bestelling','agenda','instellingen','cn','migratie'];
 function tbDoTab(v){const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+v+"'"));if(btn){btn.click();return 'tabblad "'+v+'" geopend';}return 'tab "'+v+'" niet gevonden';}
 function tbExec(key,val){
   switch(key){
