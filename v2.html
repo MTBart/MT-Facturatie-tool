@@ -25,7 +25,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2.16.0"></script>
+<script src="mt-toggl.js?v=2.16.2"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -842,7 +842,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.16.1</span>
+    <span class="header-version">v2.16.2</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -11202,7 +11202,8 @@ function tgOverAlGekoppeld(id){ return PROJECT_CODES.some(p=>p&&!p._vervallen&&p
 function tgOverKandidaten(ps){
   const ix=projIndex(), uit=[]; let viaNaam=0;
   for(const p of ps||[]){
-    if(!p||p.id==null||p.archived_at||p.active===false||tgOverAlGekoppeld(p.id)) continue;
+    // Toggl 2.0: `active` betekent níét "niet gearchiveerd" (lopende projecten hebben vaak active:false); gearchiveerd = archived_at.
+    if(!p||p.id==null||p.archived_at||p.is_template||tgOverAlGekoppeld(p.id)) continue;
     const r=MTProject.uitToggl(ix,p.name);
     if(r.soort==='een'){ viaNaam++; continue; }   // de naam wijst al naar een project: koppelen via "Toggl-project kiezen"
     uit.push({p,ambigu:r.soort==='ambigu',bij:r.soort==='ambigu'?r.kandidaten.map(x=>projKort(x)):[]});

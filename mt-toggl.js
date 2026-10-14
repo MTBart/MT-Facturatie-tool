@@ -578,7 +578,7 @@ async function tgVulProjectSelect(){
     const ps=await tgStore.projecten();
     const sel=document.getElementById('tg-proj-select'); if(!sel)return;
     const huidig=sel.value;
-    sel.innerHTML='<option value="">— project —</option>'+ps.filter(p=>p.active!==false&&!p.archived_at)
+    sel.innerHTML='<option value="">— project —</option>'+ps.filter(p=>!p.archived_at&&!p.is_template)   // Toggl 2.0: `active` ≠ niet gearchiveerd (lopende projecten hebben vaak active:false)
       .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
       .map(p=>`<option value="${esc(p.id)}">${tgEsc(p.name||('project '+p.id))}</option>`).join('');
     if(huidig) sel.value=huidig;
