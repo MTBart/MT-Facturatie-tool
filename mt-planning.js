@@ -1166,6 +1166,19 @@
     lokaal.forEach(b => { if (!b || isMeta(b)) return; const h = P.bestelInhoudHash(b), k = bestelProjectCode(b) + '|' + h; if (tel[k] > 0) { tel[k]--; return; } if (!nee.has(k)) uit.push({ regel: kopie(b), hash: h, sleutel: k }); });
     return uit;
   };
+  // Verweesde back-up (ronde 8): wat staat in de back-up van een verweesde lokale v2 dat niet (met dezelfde inhoud) in de lijst staat die de overstap gaat aanmaken?
+  // Alleen weergave en export: overnemen gaat met de hand. MULTISET per (project, inhoudshash), alleen actieve regels. → { backup, nieuw, gelijk, alleenBackup:[…] }
+  P.bestelBackupVergelijk = function (backup, nieuw) {
+    const act = l => (Array.isArray(l) ? l : []).filter(b => b && typeof b === 'object' && !isMeta(b) && !b._vervallen);
+    const bk = act(backup), nw = act(nieuw), alleen = P.bestelLokaalAfwijking(bk, nw, null);
+    return { backup: bk.length, nieuw: nw.length, gelijk: bk.length - alleen.length,
+      alleenBackup: alleen.map(a => ({ id: a.regel.id, naam: a.regel.materiaal || a.regel.omschrijving || '', aantal: a.regel.aantal, eenheid: a.regel.eenheid || '', project: bestelProjectCode(a.regel) })) };
+  };
+  P.takenBackupVergelijk = function (backup, nieuw) {
+    const act = o => { const u = {}; Object.keys(o && typeof o === 'object' && !Array.isArray(o) ? o : {}).forEach(c => { if (c.startsWith('__') || !Array.isArray(o[c])) return; u[c] = P.takenActief(o[c]); }); return u; };
+    const tel = o => Object.keys(o).reduce((n, c) => n + o[c].length, 0), bk = act(backup), nw = act(nieuw), alleen = P.takenLokaalAfwijking(bk, nw, null);
+    return { backup: tel(bk), nieuw: tel(nw), gelijk: tel(bk) - alleen.length, alleenBackup: alleen.map(a => ({ code: a.code, id: a.taak.id, naam: a.taak.naam || '', status: a.taak.status || 'todo' })) };
+  };
   // Wat is er te bekijken voor beheer? (a) wat bij de overstap een nieuw id kreeg of van SharePoint afweek (info), (b) wat een oude app-versie sindsdien
   // in het OUDE bestand veranderde: 'nieuw', 'dubbel-nieuw', 'gewijzigd', 'verwijderd', 'verhuisd' (ander project) en 'herstel' (gewijzigd terwijl de regel
   // in v2 van de lijst gehaald is). Nooit automatisch overnemen. Een afgehandelde afwijking (sleutel + inhoudshash) komt niet terug.
