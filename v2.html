@@ -3716,6 +3716,7 @@ function renderAgenda(){
 function agendaZetView(v){_agenda.view=v;renderAgenda();}
 // Mijn werk (stap 2c): de aansluiting tussen mt-mijnwerk.js en de cockpit (taken, afhankelijkheden, planblokken, team, projecten). De rekenregels staan in mt-planning.js.
 try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
+  voorstellen:true, magBeslissen:()=>rolMag(ROL_TAAK_ALLES), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
   vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null),
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
@@ -5662,7 +5663,46 @@ function toggleBestellijst(mat,cat,lev,prijs,btn){
   else{ _blNieuw(MTPlanning.bestelRegelNieuw({omschrijving:mat,categorie:cat,leverancier:lev,prijsLaatst:prijs,datum:new Date().toISOString().split('T')[0],bron:'hand'}),'nieuw (voorraad)'); btn.textContent='✓ Op lijst'; btn.classList.add('besteld'); }
   renderVoorraadKPI(JSON.parse(localStorage.getItem('mt_voorraad')||'[]'));
 }
-function renderBestellijst(sortK,sortA){ _renderBestellijst0(sortK,sortA); _p2RolPas(document.getElementById('bestellijst-inhoud')); _p2RolPas(document.getElementById('bestellijst-kop')); }
+function renderBestellijst(sortK,sortA){ _renderBestellijst0(sortK,sortA); _voorstelBestelTeken(); _p2RolPas(document.getElementById('bestellijst-inhoud')); _p2RolPas(document.getElementById('bestellijst-kop')); }
+// Voorstellen van de werkplaats (stap 2c): de markering, Overnemen en Afwijzen voor de bestellijst (de taken-kant staat bij de projecttaken).
+function voorstelBestelOvernemen(id){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelvoorstel overnemen')) return false;
+  const b=_blWijzig(id,'voorstel overgenomen',x=>{ delete x.voorstel; });
+  if(b) planToast('Bestelvoorstel overgenomen: "'+(b.materiaal||'regel')+'" is nu een gewone regel.');
+  return !!b;
+}
+async function voorstelBestelAfwijzen(id){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelvoorstel afwijzen')) return false;
+  if(!_blKlaar()){ planToast('⚠ Bestellijst niet gewijzigd: '+_blStatusTekst()); return false; }
+  const b0=_blAlle().find(x=>x&&String(x.id)===String(id)); if(!b0||!b0.voorstel||b0._vervallen) return false;
+  const reden=await mtDialog.prompt({title:'Bestelvoorstel afwijzen',message:'"'+(b0.materiaal||'regel')+'" gaat van de bestellijst. De regel en de reden blijven bewaard.',placeholder:'Reden (niet verplicht)',okLabel:'Afwijzen'});
+  if(reden===null||reden===undefined) return false;
+  const b=_blWijzig(id,'voorstel afgewezen',x=>{ if(!x.voorstel||x._vervallen) return; x._vervallen={tijd:new Date().toISOString(),door:_blWie(),reden:'voorstel afgewezen'+(String(reden||'').trim()?': '+String(reden).trim().slice(0,300):'')}; });   // _blWijzig vraagt het recht opnieuw, schrijft de journaalregel en laat een tombstone achter
+  if(b) planToast('Bestelvoorstel afgewezen: "'+(b.materiaal||'regel')+'".');
+  return !!b;
+}
+function _voorstelKnoppen(mag,overnemen,afwijzen){
+  return mag?[_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',title:'De markering eraf: het is dan een gewone regel',klik:overnemen},'Overnemen'),' ',_p2El('button',{type:'button',class:'btn btn-xs btn-danger',title:'Van de lijst halen (blijft in het journaal)',klik:afwijzen},'Afwijzen')]:_p2El('span',{style:'color:var(--text-faint)'},'(kantoor beslist)');
+}
+function _voorstelBestelTeken(){
+  try{
+    const host=document.getElementById('bestellijst-inhoud'); if(!host||_blStaat()!=='klaar') return;
+    const oud=document.getElementById('bl-voorstellen'); if(oud) oud.remove();
+    const lijst=_blActief().filter(b=>b&&b.voorstel);
+    host.querySelectorAll('tr').forEach(tr=>{   // platte weergave: de regel krijgt de markering (de regel wordt herkend aan zijn vinkje)
+      const c=tr.querySelector('input[type=checkbox][onchange]'), m=c&&/markeerBesteld\(\s*"([^"]+)"/.exec(c.getAttribute('onchange')||''), b=m&&lijst.find(x=>String(x.id)===m[1]), td=tr.children[1];
+      if(b&&td&&!td.querySelector('[data-voorstel]')) td.appendChild(_p2El('div',{style:'font-size:10px;color:var(--gold-text)','data-voorstel':'1'},'🏷 '+MTPlanning.voorstelTekst(b.voorstel)));
+    });
+    if(!lijst.length) return;
+    const mag=rolMag(ROL_BESTEL_ALLES), klaar=()=>{ try{ renderBestellijst(); }catch(e){} };
+    host.insertBefore(_p2El('div',{id:'bl-voorstellen',class:'card',style:'padding:.75rem;margin-bottom:1rem;border:1px solid var(--gold-mid)'},
+      _p2El('div',{class:'card-title',style:'margin-bottom:.5rem'},'Voorstellen van de werkplaats ('+lijst.length+')'),
+      lijst.map(b=>_p2El('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--border,#ddd)'},
+        _p2El('div',{style:'flex:1;min-width:200px'},_p2El('strong',{style:'font-size:13px'},b.materiaal||b.omschrijving||'regel'),' — '+(b.aantal||1)+' '+MTPlanning.eenheidTekst(b.eenheid,b.aantal),
+          _p2El('div',{style:'font-size:11px;color:var(--text-dim)'},[_blRegelNoot(b),MTPlanning.voorstelTekst(b.voorstel),b.opmerking||''].filter(Boolean).join(' · '))),
+        _voorstelKnoppen(mag,()=>{ voorstelBestelOvernemen(b.id); klaar(); },async()=>{ await voorstelBestelAfwijzen(b.id); klaar(); })))),host.firstChild);
+  }catch(e){ console.warn('voorstel-markering (bestellijst):',e); }
+}
 function _renderBestellijst0(sortK='materiaal',sortA=true){
   { const st=_blStaat();
     if(st!=='klaar'&&st!=='overzetten'){ const k=document.getElementById('bestellijst-kop'), i=document.getElementById('bestellijst-inhoud'); if(k) k.replaceChildren(); if(i) i.replaceChildren(_blStatusEl()); return; } }
@@ -6152,7 +6192,7 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
-  if(_projSectie==='planning'){ _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='planning'){ _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -8519,6 +8559,40 @@ async function _projTaakTogglSync(code,id){
   renderProjectDetail(huidigProject);
 }
 
+// ═══ Voorstellen van de werkplaats (planning stap 2c) ═══
+// Een taak of bestelregel die de werkplaats vanaf de telefoon meldt, heeft de markering `voorstel` ({soort, door, doorNaam, rol, ts}). Kantoor ziet haar in Mijn werk, bij de projecttaken en op de bestellijst
+// en beslist: Overnemen (de markering eraf, recht taken:alles / bestellijst:alles) of Afwijzen (van de lijst als tombstone, met een journaalregel en de reden). Het recht en de lijststand worden na de dialoog opnieuw gevraagd.
+async function voorstelTaakOvernemen(code,id){
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een voorstel overnemen')) return false;
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||!t.voorstel) return false;
+  _ptJournaal('voorstel overgenomen',code,t);
+  delete t.voorstel;
+  if(projTakenZet(code,arr)!==true) return false;
+  planToast('Voorstel overgenomen: "'+t.naam+'" is nu een gewone taak.'); return true;
+}
+async function voorstelTaakAfwijzen(code,id){
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een voorstel afwijzen')) return false;
+  const t0=projTaken(code).find(x=>x.id===id); if(!t0||!t0.voorstel) return false;
+  const reden=await mtDialog.prompt({title:'Voorstel afwijzen',message:'"'+t0.naam+'" gaat van de takenlijst. Het blijft bewaard in het journaal.',placeholder:'Reden (niet verplicht)',okLabel:'Afwijzen'});
+  if(reden===null||reden===undefined) return false;
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een voorstel afwijzen')) return false;   // na de dialoog opnieuw
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||!t.voorstel) return false;   // intussen overgenomen of weg
+  _ptJournaal('voorstel afgewezen',code,t,{reden:String(reden||'').trim().slice(0,300)});
+  if(projTakenZet(code,arr.filter(x=>x.id!==id))!==true) return false;
+  planToast('Voorstel afgewezen: "'+t.naam+'".'); return true;
+}
+// De markering in de bestaande schermen (DOM achteraf, zodat de sjablonen van de takenlijst en de bestellijst ongewijzigd blijven).
+function _voorstelTekenTaken(code){
+  try{
+    const sid=code.replace(/-/g,''), mag=rolMag(ROL_TAAK_ALLES);
+    projTaken(code).filter(t=>t.voorstel||(t.status==='wacht'&&t.wacht_reden)).forEach(t=>{
+      const tr=document.getElementById('pt-row-'+sid+'-'+t.id), td=tr&&tr.children[2]; if(!td||td.querySelector('[data-voorstel]')) return;
+      if(t.status==='wacht'&&t.wacht_reden) td.appendChild(_p2El('div',{style:'font-size:11px;color:var(--gold-text)','data-voorstel':'wacht'},'Wacht: '+t.wacht_reden));
+      if(t.voorstel) td.appendChild(_p2El('div',{style:'font-size:11px;color:var(--gold-text)','data-voorstel':'1'},'🏷 '+MTPlanning.voorstelTekst(t.voorstel)+' ',
+        _voorstelKnoppen(mag,async()=>{ await voorstelTaakOvernemen(code,t.id); _ptHertekenen(); },async()=>{ await voorstelTaakAfwijzen(code,t.id); _ptHertekenen(); })));
+    });
+  }catch(e){ console.warn('voorstel-markering (taken):',e); }
+}
 function nieuweProjectTaak(code){
   if(_ptBlok(code,ROL_TAAK_STATUS,'Een taak toevoegen')) return;
   const naam=prompt('Taaknaam:'); if(!naam) return;

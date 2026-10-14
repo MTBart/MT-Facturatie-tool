@@ -182,8 +182,9 @@
   // klaar_op = de dag waarop de taak klaar is gemeld (ymd); tg_pending = de duurzame Toggl-intentie {op, ts, ...} die vóór een Toggl-actie wordt opgeslagen.
   // wacht_reden = waarom een taak op status 'wacht' staat (stap 2, mobiel: Bezig · Klaar · Wacht met een verplichte reden).
   // Alle drie zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
-  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden']);
-  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden']);
+  // voorstel = de markering "door werkplaats" van een gemelde taak of bestelregel (wie, rol, wanneer); kantoor haalt hem er met Overnemen af.
+  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel']);
+  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel']);
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
@@ -1080,7 +1081,10 @@
   // Oude regels zonder deze velden werken gewoon door: sleutel, status en bron worden dan afgeleid (de migratie legt ze vast).
   P.BESTEL_STATUS = ['nodig', 'besteld', 'geleverd'];
   P.BESTEL_STATUS_LABEL = { nodig: 'Nodig', besteld: 'Besteld', geleverd: 'Geleverd' };
-  P.BESTEL_VELDEN = ['materiaal', 'omschrijving', 'artikel', 'artikelsleutel', 'aantal', 'eenheid', 'leverancier', 'status', 'besteld', 'project', 'project_id', 'bron'];
+  // BASIS = de velden van de overstap (de hashes en de vergelijking met het oude bestand blijven hierop rekenen); voorstel = de markering "door werkplaats" (stap 2):
+  // een gestempeld veld, zodat "Overnemen" (de markering eraf) ook na samenvoegen blijft staan.
+  P.BESTEL_BASIS_VELDEN = ['materiaal', 'omschrijving', 'artikel', 'artikelsleutel', 'aantal', 'eenheid', 'leverancier', 'status', 'besteld', 'project', 'project_id', 'bron'];
+  P.BESTEL_VELDEN = P.BESTEL_BASIS_VELDEN.concat(['voorstel']);
   const kleinNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/(\d)\s*(mm|cm|m|x)\b/g, '$1 $2').replace(/[^a-z0-9.,\u00d7]+/g, ' ').trim().replace(/\s+/g, ' ');
   const EENHEDEN = { plaat: 'plaat', platen: 'plaat', pl: 'plaat', stuk: 'stuk', stuks: 'stuk', st: 'stuk', stk: 'stuk', pcs: 'stuk', 'm2': 'm²', 'm²': 'm²', 'vierkante meter': 'm²', m: 'm', mtr: 'm', meter: 'm', strekkende: 'm', lm: 'm', set: 'set', sets: 'set', paar: 'paar', liter: 'liter', l: 'liter', kg: 'kg', doos: 'doos', dozen: 'doos', rol: 'rol', rollen: 'rol' };
   P.eenheidNorm = e => { const s = String(e == null ? '' : e).trim().toLowerCase().replace(/\.$/, ''); return s === '' ? '' : (EENHEDEN[s] || s); };
@@ -1154,7 +1158,7 @@
   // Elk ingevuld veld zonder stempel krijgt er een met het tijdstip van de overstap. In de regel met id "__migratie" staat wat nodig is om later
   // te zien of een oude app-versie het oude bestand nog wijzigde. lijst = de regels van de overstap; oud (optioneel) = de lijst waarvan de hash komt.
   P.bestelConflictOplos = P.conflictOplos;
-  P.bestelInhoudHash = b => hash36(stabiel(P.BESTEL_VELDEN.map(f => norm(b && b[f])).concat([!!(b && b._vervallen)])));
+  P.bestelInhoudHash = b => hash36(stabiel(P.BESTEL_BASIS_VELDEN.map(f => norm(b && b[f])).concat([!!(b && b._vervallen)])));
   const bestelProjectCode = b => String((b && (b.project || b.project_id)) || '');
   const bestelFingerprint = b => hash36(stabiel([b && b.materiaal, b && b.omschrijving, b && b.artikel, bestelProjectCode(b), b && b.datum, b && b.categorie, b && b.leverancier].map(norm)));
   // Per legacy-regel een bronsleutel (fingerprint + volgnummer voor gelijke regels); ook de van de lijst gehaalde regels tellen mee.
@@ -1173,7 +1177,7 @@
     P.bestelBronSleutels(lokaal).forEach(x => {
       const id = x.regel.id !== undefined && x.regel.id !== null && x.regel.id !== '' ? String(x.regel.id) : '';
       if (id && spId.has(id)) {
-        const s = spId.get(id), velden = P.BESTEL_VELDEN.filter(f => !gelijk(x.regel[f], s[f])).map(f => ({ veld: f, oud: norm(x.regel[f]), nu: norm(s[f]) }));
+        const s = spId.get(id), velden = P.BESTEL_BASIS_VELDEN.filter(f => !gelijk(x.regel[f], s[f])).map(f => ({ veld: f, oud: norm(x.regel[f]), nu: norm(s[f]) }));
         if (!!x.regel._vervallen !== !!s._vervallen) velden.push({ veld: '_vervallen', oud: x.regel._vervallen ? 'van de lijst gehaald' : null, nu: s._vervallen ? 'van de lijst gehaald' : null });
         if (velden.length) migratieAfwijkingen.push({ id, naam: P.bestelOms(x.regel), velden, hash: P.bestelInhoudHash(x.regel) });
         return;
@@ -1265,7 +1269,7 @@
         if (eerder !== h || verhuisd) voeg({ soort: 'herstel', sleutel: id, id, naam: P.bestelOms(b), hash: h + (verhuisd ? '@' + bestelProjectCode(b) : ''), velden: verhuisd ? [{ veld: 'project', oud: bestelProjectCode(b), nu: codes[id] }] : [], regel: kopie(b) });
         return;
       }
-      const velden = P.BESTEL_VELDEN.filter(f => !gelijk(b[f], huidig[f])).map(f => ({ veld: f, oud: norm(b[f]), nu: norm(huidig[f]) }));
+      const velden = P.BESTEL_BASIS_VELDEN.filter(f => !gelijk(b[f], huidig[f])).map(f => ({ veld: f, oud: norm(b[f]), nu: norm(huidig[f]) }));
       if (!!b._vervallen !== !!huidig._vervallen) velden.push({ veld: '_vervallen', oud: b._vervallen ? 'van de lijst gehaald' : null, nu: huidig._vervallen ? 'van de lijst gehaald' : null });
       if (verhuisd) voeg({ soort: 'verhuisd', sleutel: id, id, naam: P.bestelOms(b), hash: h + '@' + bestelProjectCode(b), velden: [{ veld: 'project', oud: bestelProjectCode(b), nu: bestelProjectCode(huidig) }].concat(velden.filter(v => v.veld !== 'project' && v.veld !== 'project_id')), regel: kopie(b) });
       else if (velden.length) voeg({ soort: 'gewijzigd', sleutel: id, id, naam: P.bestelOms(b), hash: h, velden, regel: kopie(b) });
@@ -1457,6 +1461,12 @@
   // Een datum in gewone taal: "vr 16 okt" (voor Vandaag, Mijn werk en de tv).
   const DAG_KORT = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'], MND_KORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
   P.datumKort = ymd => { if (!P.isYmd(ymd)) return ''; const n = dnr(ymd), d = Number(ymd.slice(8, 10)), m = Number(ymd.slice(5, 7)); return DAG_KORT[((n + 4) % 7 + 7) % 7] + ' ' + d + ' ' + MND_KORT[m - 1]; };
+  // De markering van een gemelde taak of bestelregel in gewone taal: "Probleem gemeld door werkplaats — Wim, di 14 okt".
+  P.voorstelTekst = function (v) {
+    if (!v || typeof v !== 'object') return '';
+    const wie = String(v.doorNaam || v.door || '').trim(), dag = /^\d{4}-\d{2}-\d{2}/.test(String(v.ts || '')) ? P.datumKort(String(v.ts).slice(0, 10)) : '';
+    return (v.soort === 'probleem' ? 'Probleem gemeld' : v.soort === 'bestel' ? 'Bestelvoorstel' : 'Voorstel') + (v.rol === 'werkplaats' ? ' door werkplaats' : '') + (wie ? ' — ' + wie : '') + (dag ? ', ' + dag : '');
+  };
   // ... en terug: "2,5", "2.5", "2u30", "2:15", "1 uur", "45m" → minuten. Leeg, onleesbaar, 0 of meer dan 16 uur → null (er wordt dan niets geboekt).
   P.duurNaarMin = function (tekst) {
     const x = String(tekst == null ? '' : tekst).trim().toLowerCase().replace(',', '.'); let m, min = null;

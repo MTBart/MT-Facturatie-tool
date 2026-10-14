@@ -119,6 +119,20 @@
     + '.mw-st-bezig{background:#E8EDFB;color:#1A3A8B}.mw-st-wacht{background:#FBF5E0;color:#7A6010}.mw-acties{display:flex;gap:6px;align-items:center;padding-right:8px}'
     + '.mw-melding{background:#FBF0E0;border:1px solid #E8D48A;color:#7A6010;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px}.mw-leeg{color:var(--text-faint,#888);padding:16px 4px}.mw-niet-vrij{margin-top:14px}.mw-niet-vrij summary{cursor:pointer;font:500 11px var(--mono,monospace);text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint,#888);margin-bottom:6px}';
 
+  // Voorstellen van de werkplaats (stap 2c): de markering staat bij de taak; kantoor neemt over (de markering eraf) of wijst af (tombstone + journaalregel).
+  // De schrijfacties zelf (rechten taken:alles, hercontrole na de dialoog, journaal) doet de cockpit via D.neemOver en D.wijsAf; hier alleen de knoppen.
+  M.extraRegels = function (item, extra) {
+    if (item.soort === 'taak' && item.taak.voorstel) extra.push(el('div', { klass: 'mw-voorstel', tekst: P.voorstelTekst(item.taak.voorstel) }));
+  };
+  M.actieKnoppen = function (item) {
+    if (!D.voorstellen || item.soort !== 'taak' || !item.taak.voorstel) return null;
+    if (!(D.magBeslissen && D.magBeslissen())) return el('div', { klass: 'mw-acties' }, el('span', { klass: 'mw-sub', tekst: 'Kantoor beslist' }));
+    const doe = async fn => { try { await fn(item.code, item.id); } finally { M.teken(); } };
+    return el('div', { klass: 'mw-acties' },
+      el('button', { type: 'button', klass: 'btn btn-xs btn-secondary', title: 'De markering eraf: het is dan een gewone taak', tekst: 'Overnemen', klik: () => doe(D.neemOver) }),
+      el('button', { type: 'button', klass: 'btn btn-xs btn-danger', title: 'Van de takenlijst halen (blijft in het journaal)', tekst: 'Afwijzen', klik: () => doe(D.wijsAf) }));
+  };
+
   M.init = function (deps) { D = deps; P = deps.planning || root.MTPlanning; return M; };
   M.F = F;
   root.MTMijnWerk = M;
