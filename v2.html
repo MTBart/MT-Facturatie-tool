@@ -39,6 +39,7 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planning.js?v=2.16.0"></script>
+<script src="mt-mijnwerk.js?v=2026-10-14a"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
@@ -1710,6 +1711,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         </div>
         <div class="flex" style="gap:6px;align-items:center">
           <div class="ag-viewtog" style="display:inline-flex;border:1px solid var(--border,#ddd);border-radius:7px;overflow:hidden">
+            <button class="btn btn-sm" id="agenda-view-mijnwerk" onclick="agendaZetView('mijnwerk')" title="Mijn werk: taken en planblokken per persoon in groepen (Nieuw, Te laat, Vandaag, …)" style="border:0;border-radius:0;padding:5px 10px">✅ Mijn werk</button>
             <button class="btn btn-sm" id="agenda-view-grid" onclick="agendaZetView('grid')" title="Week-rooster" style="border:0;border-radius:0;padding:5px 10px">▦ Rooster</button>
             <button class="btn btn-sm" id="agenda-view-lijst" onclick="agendaZetView('lijst')" title="Timer-lijst (zoals Toggl)" style="border:0;border-radius:0;padding:5px 10px">≣ Lijst</button>
             <button class="btn btn-sm" id="agenda-view-plan" onclick="agendaZetView('plan')" title="Planning-blokken" style="border:0;border-radius:0;padding:5px 10px">📋 Planning</button>
@@ -1741,7 +1743,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="pv-meldingen" style="margin-bottom:8px"></div>
     <div id="agenda-cap-balk" style="display:none;margin-bottom:8px"></div>
     <div id="agenda-totalen" style="margin-bottom:1rem"></div>
-    <div class="card" style="padding:0;overflow:auto;max-height:74vh">
+    <div id="agenda-mijnwerk" style="display:none"></div>
+    <div class="card" id="agenda-gridkaart" style="padding:0;overflow:auto;max-height:74vh">
       <div id="agenda-grid"></div>
     </div>
     <div id="agenda-status" style="font-size:11px;color:var(--text-faint);margin-top:6px"></div>
@@ -3702,10 +3705,22 @@ function renderAgenda(){
   const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
   if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
   if(capBalk) capBalk.style.display=_agenda.view==='plan'?'block':'none';
+  { const mb=document.getElementById('agenda-view-mijnwerk'), mw=_agenda.view==='mijnwerk';   // Mijn werk (stap 2c): eigen vlak in plaats van het rooster
+    if(mb) mb.classList.toggle('btn-gold',mw), mb.classList.toggle('btn-secondary',!mw);
+    const m=document.getElementById('agenda-mijnwerk'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
+    if(m) m.style.display=mw?'block':'none'; if(gk) gk.style.display=mw?'none':''; if(tot&&mw) tot.style.display='none'; else if(tot) tot.style.display='';
+    if(mw){ agRenderFilters(); try{ MTMijnWerk.teken(); }catch(e){ console.warn('Mijn werk:',e); } return; } }
   agRenderFilters();
   if(_agenda.view==='lijst') agRenderLijst(); else if(_agenda.view==='plan') agPlanRender(); else agRenderGrid();
 }
 function agendaZetView(v){_agenda.view=v;renderAgenda();}
+// Mijn werk (stap 2c): de aansluiting tussen mt-mijnwerk.js en de cockpit (taken, afhankelijkheden, planblokken, team, projecten). De rekenregels staan in mt-planning.js.
+try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
+  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null),
+  project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Mijn werk init:',e); }
 // Haalt project-/persoon-namen één keer op als de cache leeg is (bv. eerste
 // render vóór een sync). Daarna her-rendert het zodat ID-stubs namen worden.
 function agEnsureNames(){

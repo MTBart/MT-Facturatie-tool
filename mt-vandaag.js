@@ -31,12 +31,7 @@
     kids.flat(2).forEach(x => { if (x === null || x === undefined || x === false) return; e.appendChild(typeof x === 'string' ? D.doc.createTextNode(x) : x); });
     return e;
   }
-  const DAG = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'], MND = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
-  function fmtDatum(ymd) {
-    if (!P.isYmd(ymd)) return '';
-    const [y, m, d] = ymd.split('-').map(Number), w = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-    return DAG[w] + ' ' + d + ' ' + MND[m - 1];
-  }
+  const fmtDatum = ymd => P.datumKort(ymd);   // "vr 16 okt" (gedeeld in mt-planning.js)
   function plusDag(ymd, n) { const [y, m, d] = ymd.split('-').map(Number), t = new Date(Date.UTC(y, m - 1, d + n)); return t.getUTCFullYear() + '-' + String(t.getUTCMonth() + 1).padStart(2, '0') + '-' + String(t.getUTCDate()).padStart(2, '0'); }
   function dagWoord(ymd, vandaag) { return ymd === vandaag ? 'vandaag' : ymd === plusDag(vandaag, 1) ? 'morgen' : fmtDatum(ymd); }
   const eindTijd = (start, min) => { const m = /^(\d{2}):(\d{2})$/.exec(start || ''); if (!m) return ''; const t = Math.min(23 * 60 + 59, Number(m[1]) * 60 + Number(m[2]) + Math.max(0, Math.round(Number(min) || 0))); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
