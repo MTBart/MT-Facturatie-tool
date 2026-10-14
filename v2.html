@@ -844,7 +844,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.16.4</span>
+    <span class="header-version">v2.16.5</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -11239,6 +11239,11 @@ function vandaagTeken(){
 // Moneybird-contact van het project (adres, voor- en achternaam, klantnummer), het product (onderdeel) en de planning
 // (leverdatum); ze worden pas ingevuld als iemand op "Voorstellen invullen" drukt. Leeg als het niet zeker is.
 const PROJ_GEGEVENS=[['projectleider','Projectleider'],['projectonderdeel','Projectonderdeel'],['leverdatum','Leverdatum'],['aanhef','Aanhef'],['voornaam','Voornaam'],['achternaam','Achternaam'],['straat','Straat + huisnummer'],['postcode','Postcode'],['plaats','Plaats']];
+// Keuzelijsten (Bart, 14-10): projectleider uit het kantoorteam, aanhef Dhr./Mevr. Een andere, al opgeslagen waarde blijft als extra optie staan.
+const PROJ_LEIDERS=[{naam:'Bart Witte',email:'bart@mortiseandtenon.nl'},{naam:'Mathijs Zwiers',email:'mathijs@mortiseandtenon.nl'},{naam:'Ilona',email:'ilona@mortiseandtenon.nl'}];
+const PROJ_AANHEF=['Dhr.','Mevr.'];
+function projLeiderVoorEmail(email){ const e=String(email||'').toLowerCase(); const l=PROJ_LEIDERS.find(x=>x.email===e); return l?l.naam:''; }
+function _projGegevensKeuzes(k){ return k==='projectleider'?PROJ_LEIDERS.map(x=>x.naam):k==='aanhef'?PROJ_AANHEF:null; }
 function _projMbContact(proj){
   const id=proj.mb_contact_id||proj.mb_nr||(typeof resolveMbContact==='function'?resolveMbContact(proj):null); if(!id) return null;
   try{ const c=JSON.parse(localStorage.getItem('mt_cache_klanten')||'null'); const l=(c&&Array.isArray(c.data))?c.data:[]; return l.find(x=>x&&String(x.id)===String(id))||null; }catch(e){ return null; }
@@ -11246,7 +11251,9 @@ function _projMbContact(proj){
 function projGegevensVoorstel(proj){
   const mb=_projMbContact(proj), uit={};
   if(mb){ if(mb.address1) uit.straat=String(mb.address1).trim(); if(mb.zipcode) uit.postcode=String(mb.zipcode).trim(); if(mb.city) uit.plaats=String(mb.city).trim();
-    if(mb.firstname) uit.voornaam=String(mb.firstname).trim(); if(mb.lastname) uit.achternaam=String(mb.lastname).trim(); }
+    // Contactpersoon: de naam op de kaart, anders de eerste contactpersoon van het bedrijf in Moneybird (contact_people).
+    const cp=(!mb.firstname&&!mb.lastname&&Array.isArray(mb.contact_people))?mb.contact_people.find(x=>x&&(x.firstname||x.lastname)):null, bron=cp||mb;
+    if(bron.firstname) uit.voornaam=String(bron.firstname).trim(); if(bron.lastname) uit.achternaam=String(bron.lastname).trim(); }
   if(proj.product_naam) uit.projectonderdeel=String(proj.product_naam).trim();
   const plan=(typeof planVoor==='function')?planVoor(proj.code):null;
   const lev=plan&&Array.isArray(plan.fases)?plan.fases.find(f=>f&&['levering','montage','oplevering'].includes(f.key)&&/^\d{4}-\d{2}-\d{2}$/.test(String(f.eind||''))):null;
@@ -11278,8 +11285,9 @@ function projGegevensHtml(proj){
   const v=projGegevensVoorstel(proj), nieuw=Object.keys(v).filter(k=>!g[k]), w=MTVW.isoWeek(g.leverdatum), adres=projAdresTekst(proj), mb=_projMbContact(proj);
   return `<section class="ov-blok proj-gegevens"><div class="card-title">Projectgegevens</div>
     <div class="dos-meta">Projectnummer <b>${esc(projNummer(proj)||proj.code)}</b> · ${esc(projNaamVol(proj))}${mb&&mb.customer_id?` · klantnummer ${esc(mb.customer_id)}`:''}${projKlantNaam(proj)?' · '+esc(projKlantNaam(proj)):''}</div>
-    <div class="gegevens-grid">${PROJ_GEGEVENS.map(([k,l])=>`<label><span class="kpi-label">${esc(l)}</span>
-      <input type="${k==='leverdatum'?'date':'text'}" maxlength="120" value="${esc(g[k]||'')}" placeholder="${esc(v[k]?'voorstel: '+v[k]:'')}"${mag?'':' disabled'} onchange="projGegevensZet(${jsArg(pc)},${jsArg(k)},this.value)"></label>`).join('')}</div>
+    <div class="gegevens-grid">${PROJ_GEGEVENS.map(([k,l])=>`<label><span class="kpi-label">${esc(l)}</span>${_projGegevensKeuzes(k)
+      ?`<select${mag?'':' disabled'} onchange="projGegevensZet(${jsArg(pc)},${jsArg(k)},this.value)"><option value="">${esc(v[k]?'voorstel: '+v[k]:'—')}</option>${(g[k]&&!_projGegevensKeuzes(k).includes(String(g[k]))?[String(g[k])]:[]).concat(_projGegevensKeuzes(k)).map(o=>`<option value="${esc(o)}"${o===String(g[k]||'')?' selected':''}>${esc(o)}</option>`).join('')}</select>`
+      :`<input type="${k==='leverdatum'?'date':'text'}" maxlength="120" value="${esc(g[k]||'')}" placeholder="${esc(v[k]?'voorstel: '+v[k]:'')}"${mag?'':' disabled'} onchange="projGegevensZet(${jsArg(pc)},${jsArg(k)},this.value)">`}</label>`).join('')}</div>
     ${w?`<div class="dos-meta">Levering in week ${esc(w.week)} van ${esc(w.jaar)}</div>`:''}
     <div class="lead-rij">${mag&&nieuw.length?`<button class="btn btn-xs btn-secondary" onclick="projGegevensVoorstelIn(${jsArg(pc)})" title="${esc('Alleen lege velden: '+nieuw.map(k=>(PROJ_GEGEVENS.find(x=>x[0]===k)||[])[1]).join(', '))}">Voorstellen invullen (${esc(nieuw.length)})</button>`:''}
       ${adres&&projNavUrl(adres)?`<a class="btn btn-xs btn-secondary" target="_blank" rel="noopener" href="${esc(veiligeUrl(MTProject.navUrl(adres,(typeof navigator!=='undefined'&&navigator.userAgent)||''),{hosts:['google.com','apple.com']}))}" title="${esc('Navigeer naar '+adres)}">🧭 ${esc(adres)}</a>`:''}
@@ -11557,6 +11565,8 @@ async function maakProjectAan(){
     project_id:projectId,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:_MAP_NAAM_CODE};
   if(werkcode) nieuwProj.werkcode=werkcode;
   if(nummer) nieuwProj.projectnummer=nummer;
+  // Projectleider = wie het project aanmaakt (Bart, 14-10), als die in de keuzelijst staat; daarna te wijzigen in Projectgegevens.
+  { const leider=projLeiderVoorEmail(typeof mtMijEmail==='function'?mtMijEmail():''); if(leider) projVeldZet(nieuwProj,'gegevens.projectleider',leider); }
   // Gekozen in "Uit Toggl overnemen": de koppeling ligt vast (de gebruiker koos dit Toggl-project); de Toggl-naam blijft zoals hij is.
   if(tgBron){ nieuwProj.tg_project_id=tgBron.id; nieuwProj.bron_toggl={id:tgBron.id,naam:tgBron.naam,tijd:new Date().toISOString()}; _tgProjBron=null; }
   // Lead: fase nieuw, bron, waarde en volgende actie, elk met een eigen stempel; status offerte (compatibiliteit).
