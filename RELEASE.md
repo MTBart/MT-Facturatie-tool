@@ -5,6 +5,10 @@ worker-code meenemen die nog niet gedeployd is, mits de front-end ook met de oud
 
 1. **Werk parkeren** — alles gecommit of `git stash` met een duidelijke naam; niets half meesturen.
 2. **Controleren** — alle harnesses groen; de push-diff bevat geen secrets, persoonsgegevens, bedragen of klantnamen.
+   **Verplicht: laadtest van de hele pagina.** Lokaal serveren (`python -m http.server 8765` in de repo) en per pagina
+   `node tools/laadtest.mjs http://localhost:8765/v2.html` (ook mobiel.html, uren.html, tv.html). Elke regel `EXC` is een
+   blokkade. De harnesses laden losse functies en zien een fout in de laadvolgorde niet (v2.16.0: een `let` die pas na
+   `projLaad()` stond, gaf een ReferenceError en geen enkel tabblad werkte; hotfix v2.16.1).
    **Verplicht:** `node tools/check-sinks.js` moet met exit 0 eindigen (HTML/JS-injectie: groepen, plakwerk, links uit data, handler-interpolaties en verboden patronen; draait ook in de pre-commit-hook). Een afwijking is een blokkade voor de release; los haar op (esc()/jsArg()/veiligeLink()) of beoordeel en documenteer haar met reden in `tools/sinks-groep-*.json` of de baselines. Bestanden die nog in geen groep zitten staan in `tools/sinks-nog-open.json`.
 3. **Back-up roteren** — `backup/` vullen met de huidige live-versie via `git archive origin/main`
    (v2.html, mobiel.html, uren.html, index.html, calc-engine.js, mt-*.js, track.js, sw.js,

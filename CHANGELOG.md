@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-14 — Hotfix v2.16.1: projectindex-variabelen vóór projLaad() declareren
+- Commit: `8b95ebd` | Auteur: Bart Witte
+
 ## 2026-10-14 — Outlook-README stap 6: mailstroomregel op zes cijfers; nummers tellen door vanaf 260801, dus geen jaarpatroon
 - Commit: `a893b67` | Auteur: Bart Witte
 
