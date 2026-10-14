@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-14 — Outlook-README stap 6: mailstroomregel op zes cijfers; nummers tellen door vanaf 260801, dus geen jaarpatroon
+- Commit: `a893b67` | Auteur: Bart Witte
+
 ## 2026-10-14 — Release v2.16.0: planning deel 1 (projectmeter, afhankelijkheden, sjabloon, gebundelde bestellijst, rollenmatrix, Toggl-intenties, gecontroleerde overstap via Beheer); backup = v2.15.1
 - Commit: `8484d90` | Auteur: Bart Witte
 
