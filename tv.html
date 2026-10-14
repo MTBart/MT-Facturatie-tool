@@ -46,6 +46,32 @@ button{font:inherit;color:inherit;cursor:pointer}
 .tv-blok-naam{font-weight:700;font-size:16px;overflow-wrap:break-word;min-width:0}
 .tv-blok.wacht{outline:3px dashed var(--goud);outline-offset:-3px}
 .tv-blok.bezig{box-shadow:inset 0 -5px 0 #fff}
+.tv-stroom{display:flex;flex-direction:column;gap:8px}
+.tv-sr{background:var(--vlak);border:2px solid var(--rand);border-radius:12px;padding:10px 14px;min-height:96px;cursor:pointer}
+.tv-sr.vlag{border-color:var(--rood);background:#2a1a19}
+.tv-sr-kop{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.tv-sr-naam{flex:1;font-size:26px;min-width:0;overflow-wrap:anywhere}
+.tv-sr-sub{font-size:16px;color:var(--dim)}
+.tv-sr-lever{font-size:24px;font-weight:700;white-space:nowrap}
+.tv-sr-lever.vlag,.tv-vlag{color:var(--rood)}
+.tv-stations{display:flex;align-items:stretch;gap:6px}
+.tv-pijl{align-self:center;color:var(--dim);font-size:28px}
+.tv-station{flex:1;min-height:64px;border-radius:10px;padding:6px 10px;display:flex;flex-direction:column;justify-content:center;background:var(--vlak2);border:2px solid var(--rand);min-width:0}
+.tv-station.klaar{background:#1d4a34;border-color:#4A7A5C}
+.tv-station.bezig{background:#1f3b63;border-color:#4a76b8}
+.tv-station.wacht{background:#3a3217;border:2px dashed var(--goud)}
+.tv-station.leeg{opacity:.45}
+.tv-st-naam{font-size:18px;font-weight:700}.tv-st-tel{font-size:16px;color:var(--dim)}
+.tv-reden{margin-top:8px;color:#ff9c97;font-size:18px}
+.tv-letop{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px}
+.tv-lo{background:var(--vlak);border:2px solid var(--rand);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.tv-lo h3{font-size:24px}
+.tv-lo.alarm{border-color:var(--rood)}.tv-lo.alarm h3{color:#ff9c97}
+.tv-lo.leeg{opacity:.7}.tv-lo-niets{color:var(--dim);font-size:20px;padding:8px 2px}
+.tv-lo-item{display:flex;align-items:stretch;gap:10px;min-height:64px;border:0;border-radius:8px;background:var(--vlak2);text-align:left;padding:0 10px 0 0;overflow:hidden}
+.tv-strook{flex:0 0 8px}
+.tv-lo-tekst{display:flex;flex-direction:column;justify-content:center;padding:6px 0;min-width:0}
+.tv-lo-naam{font-size:20px;font-weight:700;overflow-wrap:anywhere}.tv-lo-sub{font-size:16px;color:var(--dim)}
 #tv-kaart.tv-kaart-uit{display:none}
 #tv-kaart.tv-kaart-aan{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;z-index:50}
 .tv-kaartdoos{background:var(--vlak);border:2px solid var(--rand);border-radius:18px;padding:24px 28px;width:min(1000px,92vw);max-height:92vh;overflow:auto}

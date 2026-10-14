@@ -127,14 +127,70 @@
     if (!r.rijen.length) w.appendChild(el('div', { klass: 'tv-leeg', tekst: 'Geen teamleden of niets gepland.' }));
   }
 
+  // ── tab 2: Projecten (de stroom: een rij per actief project door de keten) ──
+  const FASE = { werkvoorbereiding: 'Werkvoorbereiding', inkoop: 'Inkoop', productie: 'Productie', klaar_levering: 'Klaar voor levering' };
+  const vrijDagen = () => (D.vrij ? D.vrij() : null);
+  T.projectRijen = () => P.projectStroom(S.data.taken, S.data.afh, S.data.projecten, { vandaag: P.vandaagYmd(), bestel: S.data.bestel, vrij: vrijDagen() });
+  function projectKaartItem(r) {
+    return { soort: 'project', id: 'project:' + r.code, code: r.code, naam: projLabel(r.code), vlag: r.vlag, regels: [['Project', projLabel(r.code)], ['Fase', FASE[r.fase] || r.fase || ''], ['Leverdatum', r.lever ? P.datumKort(r.lever) : 'niet ingevuld'],
+      ['Voortgang', r.klaar + ' van ' + r.totaal + ' taken klaar'], ['Te laat', r.teLaat ? r.teLaat + (r.teLaat === 1 ? ' taak' : ' taken') : ''], ['Let op', r.reden]].concat(r.stations.filter(s => s.n || s.staat !== 'leeg').map(s => [s.l, s.staat + (s.n ? ' (' + s.klaar + ' van ' + s.n + ' klaar)' : '')])) };
+  }
+  function tekenProjecten(w) {
+    const rijen = T.projectRijen();
+    if (!rijen.length) { w.appendChild(el('div', { klass: 'tv-leeg', tekst: 'Geen actieve projecten.' })); return; }
+    const lijst = el('div', { klass: 'tv-stroom' });
+    rijen.forEach(r => {
+      const open = () => T.toonKaart(projectKaartItem(r));
+      const rij = el('div', { klass: 'tv-sr' + (r.vlag ? ' vlag' : ''), role: 'button', tabindex: '0' },
+        el('div', { klass: 'tv-sr-kop' }, el('span', { klass: 'tv-punt', style: 'background:' + P.projectKleur(r.code) }),
+          el('div', { klass: 'tv-sr-naam' }, el('b', { tekst: projLabel(r.code) }), el('div', { klass: 'tv-sr-sub', tekst: [FASE[r.fase] || r.fase, r.totaal ? r.klaar + ' van ' + r.totaal + ' taken klaar' : 'nog geen taken', r.teLaat ? r.teLaat + ' te laat' : ''].filter(Boolean).join(' · ') })),
+          el('div', { klass: 'tv-sr-lever' + (r.vlag ? ' vlag' : '') }, r.vlag ? el('span', { klass: 'tv-vlag', title: r.reden, tekst: '⚑ ' }) : null, el('span', { tekst: r.lever ? 'lever ' + P.datumKort(r.lever) : 'geen leverdatum' }))),
+        el('div', { klass: 'tv-stations' }, r.stations.map((s, i) => [i ? el('span', { klass: 'tv-pijl', tekst: '›' }) : null, el('div', { klass: 'tv-station ' + s.staat, title: s.l + ': ' + s.staat }, el('span', { klass: 'tv-st-naam', tekst: s.l }), el('span', { klass: 'tv-st-tel', tekst: s.n ? s.klaar + '/' + s.n : (s.staat === 'leeg' ? '—' : s.staat) }))])),
+        r.vlag ? el('div', { klass: 'tv-reden', tekst: r.reden }) : null);
+      rij.addEventListener('click', open); rij.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
+      lijst.appendChild(rij);
+    });
+    w.appendChild(lijst);
+  }
+
+  // ── tab 3: Let op ──
+  const LETOP = [['wachtMateriaal', 'Wacht op materiaal'], ['wachtVoorganger', 'Wacht op een voorganger'], ['wachtAnders', 'Wacht (andere reden)'], ['teLaat', 'Te laat'], ['nieuwGemeld', 'Nieuw gemeld'], ['teLeveren', 'Deze week te leveren']];
+  T.letOpData = () => P.letOp(S.data.taken, S.data.afh, S.data.projecten, S.data.bestel, { vandaag: P.vandaagYmd(), team: D.team(), vrij: vrijDagen() });
+  const letOpAantal = () => { if (!S.data) return 0; const l = T.letOpData(); return l.wachtMateriaal.length + l.wachtVoorganger.length + l.wachtAnders.length + l.teLaat.length + l.nieuwGemeld.length; };
+  function letOpTekst(k, i) {
+    if (k === 'wachtMateriaal') return i.soort === 'bestel' ? '' : (i.reden || '');
+    if (k === 'wachtVoorganger') return 'Wacht op: ' + i.wachtTekst;
+    if (k === 'wachtAnders') return i.reden || 'geen reden opgegeven';
+    if (k === 'teLaat') return 'had klaar moeten zijn op ' + P.datumKort(i.eind) + (i.dagen > 0 ? ' (' + i.dagen + ' werkdag' + (i.dagen === 1 ? '' : 'en') + ' geleden)' : '') + (i.persoon ? ' · ' + persoonNaam(i.persoon) : '');
+    if (k === 'nieuwGemeld') return i.voorstel ? P.voorstelTekst(i.voorstel) : '';
+    if (k === 'teLeveren') return 'lever ' + P.datumKort(i.lever) + ' · ' + i.open + (i.open === 1 ? ' taak' : ' taken') + ' open';
+    return '';
+  }
+  function tekenLetOp(w) {
+    const l = T.letOpData(), raster = el('div', { klass: 'tv-letop' });
+    LETOP.forEach(([k, titel]) => {
+      const items = l[k];
+      raster.appendChild(el('section', { klass: 'tv-lo' + (k === 'teLaat' && items.length ? ' alarm' : '') + (items.length ? '' : ' leeg') },
+        el('h3', { tekst: titel + (items.length ? ' (' + items.length + ')' : '') }),
+        items.length ? items.map(i => el('button', { klass: 'tv-lo-item', type: 'button', klik: () => T.toonKaart(i, i.naam) },
+          el('span', { klass: 'tv-strook', style: 'background:' + P.projectKleur(i.code) }),
+          el('span', { klass: 'tv-lo-tekst' }, el('span', { klass: 'tv-lo-naam', tekst: projKort(i.code) + (i.code ? ' · ' : '') + i.naam }), el('span', { klass: 'tv-lo-sub', tekst: letOpTekst(k, i) })))) : el('div', { klass: 'tv-lo-niets', tekst: 'Niets' })));
+    });
+    w.appendChild(raster);
+  }
+
   // ── het scherm: tabs, melding, inhoud ──
-  const TABS = [['kalender', 'Kalender', tekenKalender]];
+  const TABS = [['kalender', 'Kalender', tekenKalender], ['projecten', 'Projecten', tekenProjecten], ['letop', 'Let op', tekenLetOp, letOpAantal]];
   T.tabs = TABS;
   T.zetTab = function (k) { if (TABS.some(t => t[0] === k)) { S.tab = k; T.teken(); } };
   T.teken = function () {
     const wortel = D && D.doc.getElementById('tv-inhoud'); if (!wortel) return;
     const balk = D.doc.getElementById('tv-tabs');
-    if (balk) { balk.textContent = ''; TABS.forEach(([k, l]) => balk.appendChild(el('button', { klass: 'tv-tab' + (S.tab === k ? ' actief' : ''), type: 'button', 'aria-pressed': S.tab === k ? 'true' : 'false', klik: () => T.zetTab(k), tekst: l }))); }
+    if (balk) {
+      balk.textContent = '';
+      TABS.forEach(([k, l, , badge]) => { let n = 0; try { n = badge && S.data ? badge() : 0; } catch (e) { n = 0; }
+        balk.appendChild(el('button', { klass: 'tv-tab' + (S.tab === k ? ' actief' : ''), type: 'button', 'aria-pressed': S.tab === k ? 'true' : 'false', klik: () => T.zetTab(k), tekst: l + (n ? ' (' + n + ')' : '') })); });
+    }
     const st = D.doc.getElementById('tv-status');
     if (st) st.textContent = [S.laatsteOk ? 'bijgewerkt ' + hhmm(S.laatsteOk) : '', S.laadFout].filter(Boolean).join(' · ');
     wortel.textContent = '';

@@ -1640,6 +1640,90 @@
     return { van: dagen[0].datum, tot: dagen[dagen.length - 1].datum, dagen, rijen: alle };
   };
 
+  // ── Werkplaats-tv: de stroom van de actieve projecten door de keten, en "Let op" ──
+  // Stations (van werkvoorbereiding tot montage): voorbereiding, materiaal, productie, spuiten, montage. Een taak hoort bij een station via zijn sleutel (de standaardketen:
+  // wvb, bestellen, materiaal_geleverd, zagen, cnc, afmonteren, spuiten, montage, oplevering) of anders zijn activiteit. Een station is: klaar (alles klaar), bezig (iets bezig),
+  // wacht (iets wacht op een voorganger of staat op Wacht), open, of leeg (geen taken); materiaal zonder taken volgt de bestelregels van het project.
+  P.STROOM_STATIONS = [['voorbereiding', 'Voorbereiding'], ['materiaal', 'Materiaal'], ['productie', 'Productie'], ['spuiten', 'Spuiten'], ['montage', 'Montage']];
+  const stationVan = t => {
+    const k = String((t && t.sleutel) || ''), a = String((t && t.activiteit) || '');
+    if (k === 'wvb') return 'voorbereiding'; if (k === 'bestellen' || k === 'materiaal_geleverd') return 'materiaal';
+    if (k === 'zagen' || k === 'cnc' || k === 'afmonteren') return 'productie'; if (k === 'spuiten') return 'spuiten'; if (k === 'montage' || k === 'oplevering') return 'montage';
+    return (a === 'tekenwerk' || a === 'werkvoorbereiding') ? 'voorbereiding' : a === 'werkplaats' ? 'productie' : a === 'spuiten' ? 'spuiten' : a === 'montage' ? 'montage' : '';
+  };
+  const PROJECT_ACTIEF = ['werkvoorbereiding', 'inkoop', 'productie', 'klaar_levering'];
+  const sleutelVan = (obj, code) => Object.keys(obj && typeof obj === 'object' ? obj : {}).find(k => !k.startsWith('__') && zelfdeCode(k, code));
+  const takenVan = (obj, code) => { const k = sleutelVan(obj, code); return k && Array.isArray(obj[k]) ? P.takenActief(obj[k]) : []; };
+  const bestelVan = (bestel, p) => (Array.isArray(bestel) ? bestel : []).filter(b => b && typeof b === 'object' && !b._vervallen && b.id !== '__migratie' && ((b.project_id && p.project_id && b.project_id === p.project_id) || zelfdeCode(b.project, p.code)));
+  const isKlaar = t => (t.status || 'todo') === 'klaar';
+  P.projectStroom = function (takenObj, depsObj, projecten, o) {
+    o = o || {}; const vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd(), rijen = [];
+    (Array.isArray(projecten) ? projecten : []).forEach(p => {
+      if (!p || typeof p !== 'object' || p._vervallen || !p.code) return;
+      const lijst = takenVan(takenObj, p.code), open = lijst.filter(t => !isKlaar(t));
+      if (!(PROJECT_ACTIEF.includes(p.fase) || (!p.fase && open.length))) return;
+      const dk = sleutelVan(depsObj, p.code), deps = dk ? depsObj[dk] : [], wacht = P.wachtOverzicht(lijst, deps, { vrij: o.vrij, vandaag }), regels = bestelVan(o.bestel, p);
+      const stations = P.STROOM_STATIONS.map(([k, l]) => {
+        const ts = lijst.filter(t => stationVan(t) === k); let staat = 'leeg';
+        if (ts.length) staat = ts.every(isKlaar) ? 'klaar' : ts.some(t => t.status === 'bezig') ? 'bezig' : ts.some(t => t.status === 'wacht' || ((t.status || 'todo') === 'todo' && wacht[t.id] && wacht[t.id].wacht)) ? 'wacht' : 'open';
+        else if (k === 'materiaal' && regels.length) { const st = regels.map(P.bestelStatus); staat = st.every(s => s === 'geleverd') ? 'klaar' : st.some(s => s !== 'nodig') ? 'bezig' : 'open'; }
+        return { k, l, staat, n: ts.length, klaar: ts.filter(isKlaar).length };
+      });
+      const lever = P.isYmd(p.gegevens && p.gegevens.leverdatum) ? p.gegevens.leverdatum : '';
+      let tekort = 0, eindVroegst = '';
+      if (lever && lijst.length) { try { const r = P.rooster(lijst, deps, { start: vandaag, leverdatum: lever, vrij: o.vrij }); tekort = r.tekort; eindVroegst = r.eindVroegst; } catch (e) { tekort = 0; } }
+      const teLaat = open.filter(t => P.isYmd(t.eind) && t.eind < vandaag).length;
+      let reden = '';
+      if (lever && tekort > 0) reden = 'Op zijn vroegst klaar op ' + P.datumKort(eindVroegst) + ': ' + tekort + ' werkdag' + (tekort === 1 ? '' : 'en') + ' na de leverdatum';
+      else if (lever && lever < vandaag && open.length) reden = 'De leverdatum is voorbij en er staan nog ' + open.length + ' taken open';
+      rijen.push({ code: p.code, project_id: p.project_id || '', naam: p.naam || p.code, fase: p.fase || '', lever, stations, klaar: lijst.length - open.length, totaal: lijst.length, open: open.length, teLaat, vlag: !!reden, reden, tekort, eindVroegst });
+    });
+    rijen.sort((a, b) => (b.vlag - a.vlag) || (a.lever && b.lever ? (a.lever < b.lever ? -1 : a.lever > b.lever ? 1 : 0) : (a.lever ? -1 : b.lever ? 1 : 0)) || (String(a.code).toLowerCase() < String(b.code).toLowerCase() ? -1 : 1));
+    return rijen;
+  };
+  // Let op: wat aandacht vraagt. → { wachtMateriaal, wachtVoorganger, wachtAnders, teLaat, nieuwGemeld, teLeveren } (lijsten van items; zie hieronder).
+  // Wacht op materiaal = een taak op Wacht waarvan de reden over materiaal gaat, plus per project de bestelregels die besteld maar nog niet geleverd zijn. Wacht op een voorganger =
+  // een nog niet gestarte taak met een open afhankelijkheid. Te laat = een taak die niet klaar is en waarvan het einde voorbij is. Nieuw gemeld = taken en bestelregels met een
+  // voorstel-markering. Te leveren = actieve projecten met de leverdatum in de rest van deze week.
+  const MATERIAAL_RE = /\b(materiaal|plaat|platen|beslag|bestel|besteld|bestelling|levering|leverancier|geleverd|order)/i;
+  P.letOp = function (takenObj, depsObj, projecten, bestel, o) {
+    o = o || {}; const vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd(), zo = maandagVan(vandaag).zo, team = o.team || null;
+    const uit = { wachtMateriaal: [], wachtVoorganger: [], wachtAnders: [], teLaat: [], nieuwGemeld: [], teLeveren: [] };
+    const projVan = (code, pid) => (Array.isArray(projecten) ? projecten : []).find(p => p && !p._vervallen && ((code && zelfdeCode(p.code, code)) || (pid && p.project_id && p.project_id === pid))) || null;
+    Object.keys(takenObj && typeof takenObj === 'object' ? takenObj : {}).sort().forEach(code => {
+      const lijst = takenVan(takenObj, code); if (!lijst.length) return;
+      const dk = sleutelVan(depsObj, code), wacht = P.wachtOverzicht(lijst, dk ? depsObj[dk] : [], { vrij: o.vrij, vandaag });
+      lijst.forEach(t => {
+        if (isKlaar(t)) return;
+        const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] };
+        const item = { soort: 'taak', id: t.id, code, naam: t.naam, status: st, wacht: st === 'wacht' || (st === 'todo' && !!w.wacht), wachtTekst: P.wachtOpTekst(w, P.datumKort), taak: t, voorstel: t.voorstel || null, persoon: P.persoonSlug(t.toegewezen, team) || '' };
+        if (t.voorstel) uit.nieuwGemeld.push(item);
+        if (st === 'wacht') (MATERIAAL_RE.test(String(t.wacht_reden || '')) ? uit.wachtMateriaal : uit.wachtAnders).push(Object.assign({ reden: String(t.wacht_reden || '') }, item));
+        else if (st === 'todo' && w.wacht) uit.wachtVoorganger.push(item);
+        if (P.isYmd(t.eind) && t.eind < vandaag) uit.teLaat.push(Object.assign({ eind: t.eind, dagen: P.werkdagenTussen(t.eind, vandaag, o.vrij) }, item));
+      });
+    });
+    const perProject = new Map();
+    (Array.isArray(bestel) ? bestel : []).forEach(b => {
+      if (!b || typeof b !== 'object' || b._vervallen || b.id === '__migratie') return;
+      const p = projVan(b.project, b.project_id), code = p ? p.code : String(b.project || ''), st = P.bestelStatus(b), oms = P.bestelOms(b) || 'regel';
+      const regel = [['Materiaal', oms], ['Aantal', (b.aantal || 1) + ' ' + P.eenheidTekst(b.eenheid, b.aantal)], ['Status', P.BESTEL_STATUS_LABEL[st] || st], ['Project', code]];
+      if (b.voorstel) uit.nieuwGemeld.push({ soort: 'bestel', id: b.id, code, naam: oms, regels: regel.concat([['Gemeld', P.voorstelTekst(b.voorstel)]]), voorstel: b.voorstel });
+      if (st === 'besteld') { const e = perProject.get(code) || { soort: 'bestel', id: 'bestel:' + code, code, naam: '', regels: [], aantal: 0, lijst: [] }; e.aantal++; e.lijst.push(oms); perProject.set(code, e); }
+    });
+    perProject.forEach(e => { e.naam = e.aantal + ' bestelregel' + (e.aantal === 1 ? '' : 's') + ' onderweg: ' + e.lijst.slice(0, 3).join(', ') + (e.lijst.length > 3 ? ' …' : ''); e.regels = [['Project', e.code], ['Besteld, nog niet geleverd', e.lijst.join(', ')]]; uit.wachtMateriaal.push(e); });
+    (Array.isArray(projecten) ? projecten : []).forEach(p => {
+      if (!p || p._vervallen || !p.code || !PROJECT_ACTIEF.includes(p.fase)) return;
+      const lever = P.isYmd(p.gegevens && p.gegevens.leverdatum) ? p.gegevens.leverdatum : ''; if (!lever || lever < vandaag || lever > zo) return;
+      const open = takenVan(takenObj, p.code).filter(t => !isKlaar(t)).length;
+      uit.teLeveren.push({ soort: 'project', id: 'project:' + p.code, code: p.code, naam: p.naam || p.code, lever, open, regels: [['Project', p.naam || p.code], ['Leverdatum', P.datumKort(lever)], ['Nog open', open + ' taken']] });
+    });
+    const op = k => (a, b) => (String(a[k] || '') < String(b[k] || '') ? -1 : String(a[k] || '') > String(b[k] || '') ? 1 : 0);
+    uit.teLaat.sort(op('eind')); uit.teLeveren.sort(op('lever'));
+    ['wachtMateriaal', 'wachtVoorganger', 'wachtAnders', 'nieuwGemeld'].forEach(k => uit[k].sort((a, b) => (String(a.code).toLowerCase() + '|' + String(a.naam).toLowerCase()) < (String(b.code).toLowerCase() + '|' + String(b.naam).toLowerCase()) ? -1 : 1));
+    return uit;
+  };
+
   // ── Journaal (alleen toevoegen): vereniging op id, gesorteerd op tijd, de laatste `max` ──
   P.journaalSamen = function (lokaal, remote, max) {
     const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(remote)) ? lees(remote) : [], per = new Map();
