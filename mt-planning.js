@@ -781,21 +781,34 @@
 
   // ── Wachten: een afhankelijke taak staat op "wachten" zolang een voorganger niet klaar is (zoals Odoo) ──
   // Afgeleid, niet opgeslagen: zodra de voorganger klaar is, is de wachttoestand er vanzelf niet meer.
-  P.wachtOverzicht = function (taken, depsRuw) {
-    const T = P.takenActief(taken), by = new Map(T.map(t => [t.id, t])), uit = {};
+  // Een opvolger wacht (ronde 8) tot de voorganger klaar is PLUS de wachttijd (lag) in werkdagen: voorganger klaar op dag D met lag L → de opvolger kan starten op de
+  // L-de werkdag na D (lag 0: direct). D is de dag waarop de taak klaar is gemeld (klaar_op); zonder die datum (een oude taak) geldt de berekende datum: het geplande
+  // einde van de voorganger. Zonder beide gebeurt er niets extra. Vrije dagen: opts.vrij, anders P.vrijeDagenBron() (v2 zet die op de vrije dagen uit Beheer).
+  // → per taak { wacht, op: [{id, naam, lag, tot?, bron?}], tot? }: een voorganger die nog niet klaar is heeft geen "tot"; een lopende wachttijd wel (ymd, bron 'klaar_op' | 'berekend').
+  P.vrijeDagenBron = null;
+  P.wachtOverzicht = function (taken, depsRuw, opts) {
+    const o = opts || {}, T = P.takenActief(taken), by = new Map(T.map(t => [t.id, t])), uit = {};
+    const V = P.vrijSet(o.vrij !== undefined && o.vrij !== null ? o.vrij : (typeof P.vrijeDagenBron === 'function' ? P.vrijeDagenBron() : null)), vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd();
     T.forEach(t => { uit[t.id] = { wacht: false, op: [] }; });
     actieveKant(P.depsEffectief(T, depsRuw)).forEach(e => {
       const v = by.get(e.van), n = by.get(e.naar);
-      if (v && n && n.status !== 'klaar' && v.status !== 'klaar') { uit[n.id].wacht = true; uit[n.id].op.push({ id: v.id, naam: v.naam, lag: e.lag }); }
+      if (!v || !n || n.status === 'klaar') return;
+      if (v.status !== 'klaar') { uit[n.id].wacht = true; uit[n.id].op.push({ id: v.id, naam: v.naam, lag: e.lag }); return; }
+      const lag = Math.max(0, Math.round(getal(e.lag))); if (!lag) return;   // geen wachttijd: een klare voorganger geeft direct vrij
+      const gemeld = P.isYmd(v.klaar_op), basis = gemeld ? v.klaar_op : (P.isYmd(v.eind) ? v.eind : ''); if (!basis) return;
+      const tot = P.addWerkdagen(basis, lag, V);
+      if (vandaag < tot) { const w = uit[n.id]; w.wacht = true; w.op.push({ id: v.id, naam: v.naam, lag, tot, bron: gemeld ? 'klaar_op' : 'berekend' }); if (!w.tot || tot > w.tot) w.tot = tot; }
     });
     return uit;
   };
-  P.taakWacht = (taak, taken, depsRuw) => (taak && P.wachtOverzicht(taken, depsRuw)[taak.id]) || { wacht: false, op: [] };
+  P.taakWacht = (taak, taken, depsRuw, opts) => (taak && P.wachtOverzicht(taken, depsRuw, opts)[taak.id]) || { wacht: false, op: [] };
   // De status zoals getoond: een taak die nog niet gestart is en wacht, heet 'wachten'.
-  P.taakStatusEff = (taak, taken, depsRuw) => {
+  P.taakStatusEff = (taak, taken, depsRuw, opts) => {
     const st = (taak && taak.status) || 'todo';
-    return st === 'todo' && P.taakWacht(taak, taken, depsRuw).wacht ? 'wachten' : st;
+    return st === 'todo' && P.taakWacht(taak, taken, depsRuw, opts).wacht ? 'wachten' : st;
   };
+  // Tekst voor "wacht op": de naam, bij een lopende wachttijd ook tot wanneer (de aanroeper geeft de datumopmaak mee).
+  P.wachtOpTekst = (w, datumTekst) => ((w && w.op) || []).map(x => x.naam + (x.tot ? ' (wachttijd ' + x.lag + ' werkdag' + (x.lag === 1 ? '' : 'en') + ', tot ' + (datumTekst ? datumTekst(x.tot) : x.tot) + ')' : '')).join(', ');
 
   // ── Rooster: vroegste en laatste datums en het kritieke pad ──────────────────────────────────────────
   // Voorwaarts vanaf `start` (vroegste datums) en achterwaarts vanaf de leverdatum (laatste datums). Per koppeling

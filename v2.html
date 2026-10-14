@@ -7517,7 +7517,8 @@ function projAfhZet(code,arr){
   localStorage.setItem('mt_project_afhank',JSON.stringify(ruw));
   return true;
 }
-function _p2Vrij(){ try{ return (admVrijdagen()||[]).filter(v=>v&&v.datum&&v.type!=='optioneel').map(v=>v.datum); }catch(e){ return []; } }   // vrije dagen uit Beheer (mt_vrijedagen); "optioneel" (bv. een brugdag) telt als gewone werkdag
+function _p2Vrij(){ try{ return (admVrijdagen()||[]).filter(v=>v&&v.datum&&v.type!=='optioneel').map(v=>v.datum); }catch(e){ return []; } }
+try{ MTPlanning.vrijeDagenBron=_p2Vrij; }catch(e){}   // "wacht" rekent overal met de vrije dagen uit Beheer   // vrije dagen uit Beheer (mt_vrijedagen); "optioneel" (bv. een brugdag) telt als gewone werkdag
 function _p2Mag(){ return rolMag(ROL_TAAK_ALLES); }
 function _p2Lever(proj){ const d=proj&&proj.gegevens&&proj.gegevens.leverdatum; return MTPlanning.isYmd(d)?d:''; }
 function _p2D(d){ return MTPlanning.isYmd(d)?new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}):'—'; }
@@ -7568,7 +7569,7 @@ function _p2AfhBouw(code){
     const opties=[['','+ afhankelijk van…']].concat(taken.filter(o=>o.id!==t.id&&!voor.some(e=>e.van===o.id)).map(o=>{ const c=taken.length>80?{ok:true}:MTPlanning.depControle(taken,ruw,{van:o.id,naar:t.id}); return [o.id,o.naam+(c.ok?'':' (maakt een kring)'),!c.ok]; }));   // bij heel veel taken wordt de kring pas bij het kiezen gecontroleerd
     const datum=(veld,waarde)=>_p2El('input',{type:'date',class:'afh-datum',waarde:waarde||'',disabled:mag?null:'disabled','aria-label':(veld==='start'?'Start':'Eind')+' van '+t.naam,wijzig:ev=>projAfhDatum(code,t.id,veld,ev.target.value)});
     return _p2El('tr',{id:'afh-row-'+code.replace(/[^A-Za-z0-9]/g,'')+'-'+t.id},
-      _p2El('td',null,_p2El('span',{class:'badge',style:'background:'+stl.c+'22;color:'+stl.c,title:w.wacht?('Wacht op: '+w.op.map(o=>o.naam).join(', ')):''},stl.l)),
+      _p2El('td',null,_p2El('span',{class:'badge',style:'background:'+stl.c+'22;color:'+stl.c,title:w.wacht?('Wacht op: '+MTPlanning.wachtOpTekst(w,_p2D)):''},stl.l)),
       _p2El('td',{style:'white-space:normal;min-width:160px'},(mijl?'◆ ':'')+t.naam,t.fase?_p2El('div',{class:'pm-dim',style:'font-size:11px'},t.fase):null),
       _p2El('td',null,datum('start',t.start)),
       _p2El('td',null,mijl?_p2El('span',{class:'pm-dim',tekst:'mijlpaal'}):datum('eind',t.eind)),
@@ -8504,7 +8505,7 @@ async function projTaakStatusNaar(code,id,nieuwStatus){
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   if(!['todo','bezig','klaar'].includes(nieuwStatus)) return;
   const w=MTPlanning.taakWacht(t,arr,projAfhRuw()[code]||[]);
-  if(w.wacht&&(t.status||'todo')==='todo'&&nieuwStatus!=='todo'&&!await mtDialog.confirm({title:'Deze taak wacht',message:'"'+t.naam+'" wacht op: '+w.op.map(o=>o.naam).join(', ')+'.\nToch '+(nieuwStatus==='klaar'?'op klaar zetten':'starten')+'?',okLabel:'Toch doorgaan'})) return;
+  if(w.wacht&&(t.status||'todo')==='todo'&&nieuwStatus!=='todo'&&!await mtDialog.confirm({title:'Deze taak wacht',message:'"'+t.naam+'" wacht op: '+MTPlanning.wachtOpTekst(w,_p2D)+'.\nToch '+(nieuwStatus==='klaar'?'op klaar zetten':'starten')+'?',okLabel:'Toch doorgaan'})) return;
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // de blokkade of het recht kan tijdens de bevestiging veranderd zijn
   _ptJournaal('status',code,t);
   t.status=nieuwStatus; _ptKlaarOp(t,nieuwStatus);
