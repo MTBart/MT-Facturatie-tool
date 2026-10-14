@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f1715">
+<title>M&T werkplaats-tv</title>
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<!-- Dezelfde lokale msal-browser als mobiel.html (geen CDN). -->
+<script src="vendor/msal-browser.min.js?v=2.39.0"></script>
+<script src="mt-core.js?v=2026-10-13a"></script>
+<script src="mt-rollen.js?v=2026-10-09a"></script>
+<script src="mt-planning.js?v=2.16.0"></script>
+<script src="mt-tv.js?v=2026-10-14a"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f1715;--vlak:#17211e;--vlak2:#1f2c28;--rand:#2c3d37;--tekst:#e8efec;--dim:#9fb1aa;--goud:#E8D48A;--groen:#4A7A5C;--rood:#d9534f}
+html,body{height:100%}
+body{background:var(--bg);color:var(--tekst);font-family:'Manrope','Segoe UI',system-ui,sans-serif;font-size:18px;display:flex;flex-direction:column;overflow:hidden;-webkit-tap-highlight-color:transparent;user-select:none}
+button{font:inherit;color:inherit;cursor:pointer}
+#tv-login{margin:auto;text-align:center;padding:40px}
+#tv-login h1{font-size:40px;margin-bottom:12px}
+#tv-login p{color:var(--dim);margin-bottom:24px;font-size:22px}
+#tv-login button,.tv-knop{min-height:72px;padding:0 36px;font-size:28px;border-radius:14px;border:2px solid var(--groen);background:var(--vlak2)}
+#tv-app[hidden]{display:none}
+#tv-app{flex:1;display:flex;flex-direction:column;min-height:0}
+#tv-kop{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--vlak);border-bottom:2px solid var(--rand)}
+#tv-tabs{display:flex;gap:10px;flex:1}
+.tv-tab{min-height:72px;min-width:200px;padding:0 28px;font-size:30px;font-weight:700;border-radius:14px;border:2px solid var(--rand);background:var(--vlak2)}
+.tv-tab.actief{background:var(--groen);border-color:var(--goud)}
+#tv-status{color:var(--dim);font-size:18px;text-align:right}
+#tv-vol{min-width:64px;min-height:64px;border-radius:14px;border:2px solid var(--rand);background:var(--vlak2);font-size:28px}
+#tv-inhoud{flex:1;overflow:auto;padding:10px 12px;min-height:0}
+.tv-leeg{color:var(--dim);font-size:30px;padding:60px 20px;text-align:center}
+.tv-raster{display:grid;gap:2px;align-items:stretch}
+.tv-hoek{background:transparent}
+.tv-dagkop{background:var(--vlak2);padding:8px 4px;text-align:center;font-size:20px;font-weight:700;border-radius:6px 6px 0 0}
+.tv-dagkop.nu{background:var(--groen)}.tv-dagkop.vrij{opacity:.5}
+.tv-deellabel{background:var(--vlak);color:var(--dim);font-size:15px;display:flex;align-items:center;justify-content:center;border-radius:4px}
+.tv-persoon{background:var(--vlak2);font-size:24px;font-weight:700;padding:10px;display:flex;align-items:center;border-radius:6px}
+.tv-cel{background:var(--vlak);min-height:72px;padding:2px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tv-cel.nu{background:#1d3a2e}.tv-cel.vrij{opacity:.45}.tv-cel.w2{background:#141d1a}
+.tv-blok{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-height:64px;width:100%;border:0;border-radius:6px;color:#fff;font-size:14px;line-height:1.2;padding:4px 8px;text-align:left;overflow:hidden}
+.tv-blok-proj{font-size:13px;opacity:.85}
+.tv-blok-naam{font-weight:700;font-size:16px;overflow-wrap:break-word;min-width:0}
+.tv-blok.wacht{outline:3px dashed var(--goud);outline-offset:-3px}
+.tv-blok.bezig{box-shadow:inset 0 -5px 0 #fff}
+#tv-kaart.tv-kaart-uit{display:none}
+#tv-kaart.tv-kaart-aan{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;z-index:50}
+.tv-kaartdoos{background:var(--vlak);border:2px solid var(--rand);border-radius:18px;padding:24px 28px;width:min(1000px,92vw);max-height:92vh;overflow:auto}
+.tv-kaartkop{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+.tv-kaartkop h2{flex:1;font-size:38px}
+.tv-punt{display:inline-block;width:28px;height:28px;border-radius:50%;flex:0 0 28px}
+.tv-sluit{min-height:72px;min-width:160px;font-size:28px;border-radius:14px;border:2px solid var(--goud);background:var(--vlak2)}
+.tv-kaartrij{display:flex;gap:20px;padding:10px 0;border-top:1px solid var(--rand);font-size:30px}
+.tv-kaartlabel{flex:0 0 240px;color:var(--dim);font-size:24px}
+.tv-kaartwaarde{flex:1;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<div id="tv-login">
+  <h1>M&amp;T werkplaats-tv</h1>
+  <p id="tv-login-tekst">Log in met het werkplaatsaccount. Dit scherm toont alleen; wijzigen doe je op je eigen telefoon.</p>
+  <button type="button" id="tv-login-knop" class="tv-knop">Inloggen</button>
+</div>
+<div id="tv-app" hidden>
+  <div id="tv-kop">
+    <div id="tv-tabs"></div>
+    <div id="tv-status"></div>
+    <button type="button" id="tv-vol" aria-label="Volledig scherm" title="Volledig scherm">⛶</button>
+  </div>
+  <div id="tv-inhoud"></div>
+</div>
+<div id="tv-kaart" class="tv-kaart-uit"></div>
+<script>
+/* ── Inloggen (zoals mobiel.html: dezelfde MSAL-app, popup-login), de rol, en dan alleen LEZEN van SharePoint ── */
+const WORKER = 'https://mt-claude-proxy.bart-a12.workers.dev';
+const GRAPH_SCOPES = [
+  'https://graph.microsoft.com/Files.ReadWrite',
+  'https://graph.microsoft.com/Sites.ReadWrite.All'
+];
+window.MTCore.installAuth({ graphScopes: GRAPH_SCOPES });
+const _SP = window.MTCore.makeSP({});
+// De tv-code krijgt ALLEEN deze lezer: geen write, geen maakAan. Zo kan dit scherm niets wijzigen, ook niet per ongeluk.
+const LEZER = Object.freeze({ read: naam => _SP.read(naam) });
+// Het team (korte naam = het deel vóór de @ van het account); het e-mailadres wordt hier opgebouwd zodat planblokken op e-mail ook aan een rij gekoppeld worden.
+const TEAM = [['bart', 'Bart'], ['mathijs', 'Mathijs'], ['arjan', 'Arjan'], ['maarten', 'Maarten']].map(([slug, naam]) => ({ slug, naam, email: slug + '@' + 'mortiseandtenon.nl' }));
+
+async function tvNummers() {   // projectnummers (alleen lezen): project_id → nummer, zoals de telefoon
+  try { const h = await authHeader(); if (!h['X-Auth-Token']) return {}; const r = await fetch(WORKER + '/teller/werkcodes', { headers: h }); if (!r.ok) return {}; const j = await r.json(); return (j && j.nummers) || {}; } catch (e) { return {}; }
+}
+function tvMelding(tekst) { document.getElementById('tv-login-tekst').textContent = tekst; }
+async function tvToon(account) {
+  const email = (account && account.username) || '';
+  if (!email.toLowerCase().endsWith('@mortiseandtenon.nl')) { tvMelding('Account ' + email + ' is niet toegestaan. Gebruik een @mortiseandtenon.nl-account.'); try { await _msal.logoutPopup(); } catch (e) {} return; }
+  try { const me = await MTRol.laad(WORKER); if (me && MTRol.geenToegangNodig()) { MTRol.toonGeenToegang(WORKER); return; } } catch (e) { /* zonder rol toont de tv nog steeds alleen-lezen gegevens */ }
+  document.getElementById('tv-login').hidden = true;
+  document.getElementById('tv-app').hidden = false;
+  document.getElementById('tv-vol').addEventListener('click', () => { try { document.documentElement.requestFullscreen(); } catch (e) {} });
+  MTTv.init({ doc: document, planning: MTPlanning, sp: LEZER, team: () => TEAM, nu: () => Date.now(), nummers: tvNummers });
+  MTTv.start();
+}
+async function tvStart() {
+  try {
+    window._msal = new msal.PublicClientApplication({
+      auth: {
+        clientId: 'a091db96-24ed-4b64-8b9d-7c55bc86cfdb',
+        authority: 'https://login.microsoftonline.com/15b652c3-ff53-433f-a29d-e9626cbafb41',
+        redirectUri: window.location.origin + window.location.pathname.replace(/tv\.html$/, ''),
+        postLogoutRedirectUri: window.location.origin + window.location.pathname.replace(/tv\.html$/, '')
+      },
+      cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
+    });
+    await _msal.initialize();
+    const accounts = _msal.getAllAccounts();
+    if (accounts.length) await tvToon(accounts[0]);
+  } catch (e) { tvMelding('Microsoft-login niet beschikbaar: ' + e.message); }
+}
+document.getElementById('tv-login-knop').addEventListener('click', async () => {
+  try { const r = await _msal.loginPopup({ scopes: ['openid', 'profile', 'email'] }); const acc = (r && r.account) || _msal.getAllAccounts()[0]; if (acc) await tvToon(acc); }
+  catch (e) { if (e.errorCode !== 'user_cancelled') tvMelding('Inloggen mislukt: ' + e.message); }
+});
+tvStart();
+</script>
+</body>
+</html>
