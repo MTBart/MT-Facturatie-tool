@@ -5,6 +5,144 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-14 — Release v2.16.0: planning deel 1 (projectmeter, afhankelijkheden, sjabloon, gebundelde bestellijst, rollenmatrix, Toggl-intenties, gecontroleerde overstap via Beheer); backup = v2.15.1
+- Commit: `8484d90` | Auteur: Bart Witte
+
+## 2026-10-14 — Backup roteren: backup/ = v2.15.1 (live voor v2.16.0)
+- Commit: `4a6ba8c` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 10 (C): het slot staat op het lokale taak-id, ook zonder tg_task_id
+- Commit: `2b116cf` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 10 (B): het recht direct na de dialoog en binnen het Toggl-projectpad
+- Commit: `87e73fd` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 9 (D): de mobiele takenlijst onder dezelfde rollenmatrix
+- Commit: `ef9e6c2` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 9 (C): een echt in-tab slot voor herhalen, aanmaken, bijwerken en verwijderen
+- Commit: `b9aec8e` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 9 (B): Toggl aanmaken en synchroniseren controleren het recht na elke await
+- Commit: `3349655` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 9 (A): de AI-takenlijst vraagt altijd taken:alles
+- Commit: `05e3831` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 8 (7): de wachttijd telt mee voor "Wacht"
+- Commit: `a7e62bf` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 8 (6): stabiele id's voor geïmporteerde bestelregels en sjabloontaken
+- Commit: `e22ec67` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 8 (5): de uurtarieven worden gesynchroniseerd
+- Commit: `4dca290` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 8 (4, 8, 9): releasetekst stap voor stap, versie 2.16.0, eigen voorwaarde voor Planning-sjabloon
+- Commit: `8d4a1c4` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 8 (3): de verweesde back-up terughalen (taken en bestellijst)
+- Commit: `fe5d25b` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 8 (2): Toggl-acties slaan eerst een duurzame intentie op
+- Commit: `60491b3` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2 ronde 8 (1): de rollenmatrix voor taken en bestellijst, centraal in handlers en schermen
+- Commit: `a616d68` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2: ronde 7 voor de bestellijst: ontgrendel-poll merget lokaal en remote, blokkade opnieuw gecontroleerd na elke await, fail-closed back-up met export, Beheer-overstap geblokkeerd bij mislukte back-up
+- Commit: `1d6ef63` | Auteur: Bart Witte
+
+## 2026-10-14 — Merge planning-p0p1 (ronde 7) in planning-p2
+- Commit: `ca6919d` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 7 (scherm): ontgrendel-poll merget, blokkade na elke await, fail-closed back-up
+- Commit: `b606cb6` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 7 (kern): metaSamen kiest bij gelijke tijd deterministisch
+- Commit: `f396589` | Auteur: Bart Witte
+
+## 2026-10-14 — Merge planning-p0p1 (ronde 6) in planning-p2; zelfde regels voor de bestellijst: verweesde lokale v2 naar een back-up, geen herstelroute (alleen melden, downloaden, naar beheer, negeren), multiset t.o.v. het oude remote bestand, controle elke 60 seconden met herlaadknop, strikte vorm en canonieke uitvoer
+- Commit: `fb5d621` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 6 (scherm): verweesde lokale v2, geen herstelroute voor lokale oude taken, planning-guards, ontgrendel-poll
+- Commit: `436106e` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 6 (kern): strikte vorm, canonieke uitvoer, multiset voor lokale oude taken, tgHash-compatibiliteit
+- Commit: `21eb4ac` | Auteur: Bart Witte
+
+## 2026-10-14 — Merge planning-p0p1 (gecontroleerde overstap) in planning-p2; bestellijst: overzetten door beheer (Beheer ▸ Bestellijst overzetten, maakAan), alleen-lezen tot die tijd, melding voor lokale legacy-regels, herstel en dubbel-nieuw met nieuwe uuid; automatische migratie verwijderd
+- Commit: `080caad` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 5 (scherm): overstap alleen door beheer, alleen-lezen tot die tijd, blokkades, laadstatus
+- Commit: `bac4159` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 5 (kern): SHA-256, volledig deterministische samenvoeging, overstap-overzicht, herstel en verhuisde tombstone
+- Commit: `68766af` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning P2: bestelConflictOplos weer beschikbaar
+- Commit: `5890ada` | Auteur: Bart Witte
+
+## 2026-10-14 — Merge planning-p0p1 (Codex-ronde 4) in planning-p2; zelfde verbeteringen voor de overstap van de bestellijst (mt_bestellijst_v2): lokale id-loze regels, exacte hash, bronsleutels, vangnet met verhuisd/herstel/dubbel, afgehandeld als vereniging, blokkade met opnieuw proberen
+- Commit: `63fca31` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 4 (scherm): taken alleen via v2, exports zonder geld-recht, vangnet in Beheer
+- Commit: `d0e6cd0` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 4 (kern): bronidentiteit in de overstap, vangnet met id-loze/dubbele/verhuisde records en herstel, deterministische tie-breakers
+- Commit: `58fb90f` | Auteur: Bart Witte
+
+## 2026-10-14 — Merge planning-p0p1 (v2-patroon) in planning-p2; bestellijst in mt_bestellijst_v2 (eenmalige overstap met maakAan, vangnet voor het oude bestand) en mt_project_afhank als eigen sleutel met maakAan
+- Commit: `74b64e4` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning: een rij zonder task_id in de Reports-uitkomst is taakloze uren, geen contractfout
+- Commit: `7a456d4` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 3: projecttaken in een nieuw bestand mt_project_taken_v2, vangnet voor oude clients, conflictregels, tarieven alleen met geld-recht
+- Commit: `11bd194` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning review 3: Retry-After via de worker, maakAan (alleen aanmaken), Reports-contract per rij in alle paden
+- Commit: `b50e05f` | Auteur: Bart Witte
+
+## 2026-10-13 — Merge planning-p0p1 in planning-p2: stempels met apparaat en teller (t, dev, rev) ook voor afhankelijkheden en bestelregels; taken-migratie en tg_sync-regels behouden
+- Commit: `10863d6` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P2: gebundelde bestellijst telt een oude regel (projectcode) en een nieuwe (project_id) van hetzelfde project als één project
+- Commit: `d6cd891` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P2: conflict bij bestelregels oplosbaar in het scherm, oude en aangevulde regels veilig samenvoegen, optionele vrije dagen tellen als werkdag, kringcontrole beperkt bij heel veel taken
+- Commit: `a4fe69b` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning review: schema 5 voor projecttaken, tg_sync met eigen stempel, migratie, totale volgorde, fail-closed rechten
+- Commit: `48bb36b` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning review: Reports-wachtrij met 429/Retry-After, contractcontrole en zichtbare periode
+- Commit: `144ff23` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P2: afhankelijkheden in het projectscherm (kiezen, kring weigeren, wachten, kritiek pad, verschuifvoorstel), projectsjabloon (voorstel en Instellingen) en bestelregels per project en gebundeld (afvinken in beide richtingen, migratie met droogloop, uploads herkennen)
+- Commit: `bfaee61` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P2: sjabloon taken overslaan zonder de keten te breken, oude koppelingen omzetten (droogloop) en een vaste duur per taak; lokale voorkeur bestelweergave in de verhuislijst
+- Commit: `5c8b92d` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P2: kern (afhankelijkheden FS met lag, kringcontrole, wachten, kritiek pad, terugrekenen, verschuifvoorstel, projectsjabloon, bestelregels en bundel); stempelmotor gedeeld door taken, afhankelijkheden en bestelregels
+- Commit: `9c78da4` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning: uurtarieven alleen bewerkbaar met het geld-recht wijzigen; zonder geld-recht verborgen
+- Commit: `fff3be0` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning: uurtarieven altijd bewerkbaar en vindbaar; labels werkplaatsuren en kantooruren
+- Commit: `9ec2a05` | Auteur: Bart Witte
+
+## 2026-10-13 — Release v2.15.2 (voorbereid): Planning P0 en P1; versielabel, updates.json, cachebusters
+- Commit: `00e5018` | Auteur: Bart Witte
+
+## 2026-10-13 — Merge origin/main (v2.15.1) in planning-p0p1
+- Commit: `03eed0d` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning: kantooruren en WP-uren, standaarduurtarief 90 met melding bij afwijkende calculatiestandaard
+- Commit: `979a3d1` | Auteur: Bart Witte
+
 ## 2026-10-13 — Privacy-hooks: eigen organisatienaam en gewone woorden (werkplaats, administratie) tellen niet als klantnaam
 - Commit: `19cc8bb` | Auteur: Bart Witte
 
@@ -19,6 +157,33 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ## 2026-10-13 — Codex-review: Pak op alleen in info@ (allowlist en recht inbox alles/verwerken), leesscopes bij openen en schrijfscopes per actie, vinkje en opnieuw proberen bij gesprek koppelen, race register/categorie
 - Commit: `50e43d1` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P1: meter leest de calculatie ook als de calculatiemodule nog niet geladen is
+- Commit: `de31a18` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P1: projectmeter (budget/gepland/geklokt/resterend), activiteit per taak, bevestigde Toggl-actie
+- Commit: `4d9d4ca` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P1: tgReportsTaken, geklokte minuten per Toggl-taak (alleen lezen)
+- Commit: `decc52f` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P1: projecttaken met stempel per veld, tombstone en samenvoeger in de sync
+- Commit: `59d742d` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P1: kern voor taken (stempel per veld, tombstone, samenvoegen, conflict) en de meter
+- Commit: `9b551a4` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P0: een bron voor het uurtarief (Instellingen), ook in de calculatie
+- Commit: `6b2de25` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P0: mobiele agenda toont de planblokken uit de cockpit
+- Commit: `10f71c4` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P0: Inbox > Agenda vult zijn eigen ib-agenda-elementen
+- Commit: `6e68490` | Auteur: Bart Witte
+
+## 2026-10-13 — Planning P0: Toon geklokt leest duur/omschrijving en volgt de filters; planning-kern (minuten, persoonsleutel, tarief)
+- Commit: `5ac33bc` | Auteur: Bart Witte
 
 ## 2026-10-13 — Release v2.15.1: Outlook-paneel (koppelen, Maak lead, Pak op, Antwoord als info@) en Binnenkomend; versielabel, updates.json, cachebusters
 - Commit: `72cae87` | Auteur: Bart Witte

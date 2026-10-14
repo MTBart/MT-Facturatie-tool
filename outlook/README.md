@@ -114,13 +114,13 @@ het recht **Verzenden als** (Send As) op info@ heeft. Zonder dat recht weigert O
 Vergeet iemand info@ in de cc te zetten, dan vangt deze regel het op: elk uitgaand bericht met een projecttag `[26xxxx]` in het onderwerp krijgt info@ in de bcc.
 Dat is het vangnet; het paneel (knop of proef-vlag) is de nette weg. Alleen instellen na overleg (de regel geldt voor het hele bedrijf).
 1. Exchange-beheercentrum → **Mailstroom** → **Regels** → **Een regel toevoegen** → **Nieuwe regel maken**.
-2. **Naam:** `Projecttag naar info@ (bcc)`. **Regel toepassen als:** *Het onderwerp of de hoofdtekst* → *onderwerp komt overeen met deze tekstpatronen* → `\[\s*26\d{4}\s*\]`.
+2. **Naam:** `Projecttag naar info@ (bcc)`. **Regel toepassen als:** *Het onderwerp of de hoofdtekst* → *onderwerp komt overeen met deze tekstpatronen* → `\[\s*\d{6}\s*\]`.
 3. **Voeg een voorwaarde toe:** *De afzender* → *bevindt zich* → *binnen de organisatie* (anders bcc't de regel ook inkomende mail van klanten).
 4. **Doe het volgende:** *Ontvangers toevoegen aan het vak Bcc* → het adres van info@.
 5. **Behalve als:** *De afzender is* info@ **en** *Een ontvanger is* info@ (voorkomt een lus en een dubbele kopie als info@ al in Aan, Cc of Bcc staat).
 6. **Modus:** eerst *Testen zonder beleidstips afdwingen*, na een week *Afdwingen*. Prioriteit laag laten staan. Opslaan en **inschakelen**.
 Gevolg: de kopie in de inbox van info@ heeft dezelfde `conversationId`; het overzicht Binnenkomend behandelt hem als onderdeel van het gesprek (geen extra rij).
-Een regel `[26…]` kent alleen nummers van het jaar 2026; pas het patroon aan in januari (`27\d{4}`) of gebruik `\[\d{6}\]`.
+De projectnummers tellen door vanaf 260801 en beginnen niet elk jaar opnieuw. Het patroon met zes cijfers (`\d{6}`) blijft daardoor geldig, ook na de jaarwisseling. Pas het niet aan naar een jaartal.
 
 ### 7. Het testmanifest met gebeurtenissen laden (proef: automatisch info@ in de cc)
 `manifest-gebeurtenissen.xml` is een **apart** testmanifest (eigen Id) met de knop in het opstelvenster en de gebeurtenis `OnNewMessageCompose` (zie "Automatisch info@ in de cc").
