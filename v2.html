@@ -7223,8 +7223,10 @@ function projTaken(code){return MTPlanning.takenActief(projTakenRuw()[code]);}
 // Apparaat-id voor de stempels (volgorde bij gelijke tijd); per browser, blijft staan, gaat niet mee in de verhuizing.
 function _spDev(){ try{ let d=localStorage.getItem('mt_device_id'); if(!d){ d='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem('mt_device_id',d); } return d; }catch(e){ return 'd-onbekend'; } }
 function _ptUuid(){ return (typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,12)); }
-function projTakenZet(code,arr){
-  { const nodig=MTPlanning.takenRechtNodig(projTaken(code),arr); if(nodig&&rolGeweigerd(nodig,'Deze wijziging van de taken')) return false; }   // ronde 8: de rollenmatrix, ook voor wie deze functie direct aanroept
+// opts.batch: een bulk-actie vraagt altijd "alles"; opts.recht: het recht dat de aanroeper zelf extra eist (bv. een Toggl-actie), bovenop wat de wijziging vraagt.
+function projTakenZet(code,arr,opts){
+  { const nodig=MTPlanning.takenRechtNodig(projTaken(code),arr,{batch:!!(opts&&opts.batch)}), eisen=[nodig,opts&&opts.recht].filter(Boolean);
+    for(const s of eisen){ if(rolGeweigerd(s,'Deze wijziging van de taken')) return false; } }   // ronde 8: de rollenmatrix, ook voor wie deze functie direct aanroept
   // Niet voordat v2 geladen is (of als het geblokkeerd is): nooit uit het oude bestand opbouwen of ernaast schrijven.
   if(!projTakenKlaar()){ try{ planToast('Taken zijn nog niet geladen of geblokkeerd — er is niets gewijzigd. '+projTakenStatusTekst()); }catch(e){} return false; }
   const ruw=projTakenRuw(), pr=(typeof projVind==='function')?projVind(code):null;
@@ -7711,7 +7713,7 @@ function projSjabloonDialoog(code,{voorstel=false}={}){
     const bestaandIds=new Set(projTaken(code).map(x=>x.id)), afhIds=new Set(projAfhActief(code).map(x=>x.id));
     const teTaken=res.taken.filter(x=>!bestaandIds.has(x.id)), teDeps=res.deps.filter(x=>!afhIds.has(x.id));
     if(!teTaken.length&&!teDeps.length){ sluit(); await mtDialog.alert({title:'Sjabloon',message:'Alle taken en afhankelijkheden van dit sjabloon staan er al. Er is niets toegevoegd.'}); return; }
-    if(projTakenZet(code,projTaken(code).concat(teTaken))!==true) return;   // taken nog niet geladen of geblokkeerd: niets toegepast
+    if(projTakenZet(code,projTaken(code).concat(teTaken),{batch:true,recht:ROL_TAAK_ALLES})!==true) return;   // taken nog niet geladen of geblokkeerd: niets toegepast
     if(teDeps.length&&projAfhZet(code,projAfhActief(code).concat(teDeps))===false) return;
     let extra='';
     if(st.lever&&MTPlanning.isYmd(st.lever)&&!_p2Lever(proj)&&(!(window.MTRol&&MTRol.mag)||MTRol.mag('projecten:wijzigen'))){ try{ projGegevensZet(code,'leverdatum',st.lever); extra=' · leverdatum bij de projectgegevens gezet'; }catch(e){} }
@@ -8680,7 +8682,7 @@ function projTaakTemplateInvoeg(code,key){
   const nieuwe=tpl.taken.map(v=>({id:_ptId(),naam:v.naam,omschrijving:v.omschrijving||'',duur_uur:v.uur||0,
     prioriteit:['low','medium','high'].includes(v.prio)?v.prio:'',afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'template',activiteit:MTPlanning.activiteitUitNaam(v.naam)||undefined}));
   tpl.taken.forEach((v,i)=>{ if(Array.isArray(v.na)) nieuwe[i].afhankelijk_van=v.na.map(j=>nieuwe[j]&&nieuwe[j].id).filter(Boolean); });
-  projTakenZet(code,projTaken(code).concat(nieuwe));
+  if(projTakenZet(code,projTaken(code).concat(nieuwe),{batch:true,recht:ROL_TAAK_ALLES})!==true) return false;
   renderProjectDetail(huidigProject);
   _ptStatus(code,`✓ ${nieuwe.length} taken uit "${tpl.label}" toegevoegd · "→ Alles naar Toggl" om te spiegelen`,'var(--green)');
   try{ if(window.track) track('taken','template',{detail:key+' · '+nieuwe.length,ok:true}); }catch(e){}
@@ -9157,6 +9159,7 @@ async function aiTakenVoorstel(code){
   _ptStatus(code,'✨ AI leest de gekoppelde mails…','var(--gold-text)');
   let ctx={tekst:'',n:0};
   try{ ctx=await aiMailContext(code); }catch(e){ ctx={tekst:'',n:0}; }
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een AI-takenlijst toevoegen')) return;   // na het ophalen van de mails opnieuw
   _ptStatus(code,ctx.n?`✨ AI denkt na (${ctx.n} mail${ctx.n>1?'s':''} gelezen)…`:'✨ AI denkt na…','var(--gold-text)');
   const mailBlok=ctx.tekst?`\n\nCORRESPONDENTIE met de klant over dit project — baseer de taken hierop.
 Gebruik concrete details (afmetingen, aantallen, materiaal/kleur, lever- of montagedatum,
@@ -9172,6 +9175,7 @@ Geef 6 tot 10 taken. Geen tekst buiten de JSON.
 Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.product||''}", klant "${klant||mt.klant_naam||''}".${mailBlok}`;
   try{
     const r=await claudeCall([{role:'user',content:vraag}],1500);
+    if(_ptBlok(code,ROL_TAAK_ALLES,'Een AI-takenlijst toevoegen')) return;   // na de AI-aanroep opnieuw
     let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'';
     const m=txt.match(/\[[\s\S]*\]/);
     if(!m) throw new Error('geen bruikbaar AI-antwoord');
@@ -9182,7 +9186,9 @@ Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.
       prioriteit:['low','medium','high'].includes(v.prioriteit)?v.prioriteit:'',
       afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'ai',activiteit:MTPlanning.activiteitUitNaam(String(v.naam||''))||undefined}));
     voorstel.forEach((v,i)=>{ if(Array.isArray(v.na)) nieuwe[i].afhankelijk_van=v.na.map(j=>nieuwe[j]&&nieuwe[j].id).filter(Boolean); });
-    projTakenZet(code,projTaken(code).concat(nieuwe));
+    // vlak vóór het schrijven nog eens: een AI-batch vraagt altijd "alles" (ook al zijn de regels nieuw) en moet echt lukken
+    if(_ptBlok(code,ROL_TAAK_ALLES,'Een AI-takenlijst toevoegen')) return;
+    if(projTakenZet(code,projTaken(code).concat(nieuwe),{batch:true,recht:ROL_TAAK_ALLES})!==true) throw new Error('de taken konden niet worden opgeslagen');
     try{ if(window.track) track('taken','ai_voorstel',{detail:nieuwe.length+' taken · '+ctx.n+' mails',ok:true,ms:(typeof performance!=='undefined'?performance.now():Date.now())-_t0}); }catch(e){}
     // Planning automatisch genereren uit de nieuwe takenketen (geen extra klik).
     // NIET automatisch naar Toggl — dat doet Bart bewust via "→ Alles naar Toggl".

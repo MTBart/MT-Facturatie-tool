@@ -255,7 +255,10 @@
   //   null                         = niets inhoudelijks gewijzigd.
   // Velden die met een status meebewegen: status, klaar_op, tg_pending, tg_sync. Meta-velden (met _ ervoor) tellen niet mee.
   P.TAAK_STATUS_VELDEN = ['status', 'klaar_op', 'tg_pending', 'tg_sync'];
-  P.takenRechtNodig = function (oud, nieuw) {
+  // batch: een bulk-actie (AI-takenlijst, takenketen, sjabloon) vraagt altijd "alles", ook als de regels alleen maar nieuw zijn. Een Toggl-intentie met een andere actie dan
+  // "status" (koppelen, bijwerken, verwijderen) is nooit een gewone statuswijziging: ook dat vraagt "alles", zodat het opslaan van de intentie de Toggl-actie niet legitimeert.
+  P.tgPendingOp = p => (!p || typeof p !== 'object') ? '' : (p.op || (p.verwijderen ? 'verwijderen' : (p.status ? 'status' : '')));
+  P.takenRechtNodig = function (oud, nieuw, { batch = false } = {}) {
     const o = P.takenActief(oud), n = P.takenActief(nieuw), oudBy = new Map(o.map(t => [t.id, t]));
     const nieuwIds = new Set(n.map(t => t.id));
     if (o.some(t => !nieuwIds.has(t.id))) return 'taken:alles';          // verwijderd
@@ -268,10 +271,11 @@
         if (k.charAt(0) === '_') continue;
         if (stabiel(norm(t[k])) === stabiel(norm(v[k]))) continue;
         if (P.TAAK_STATUS_VELDEN.indexOf(k) < 0) return 'taken:alles';
+        if (k === 'tg_pending' && [P.tgPendingOp(t[k]), P.tgPendingOp(v[k])].some(o => o && o !== 'status')) return 'taken:alles';
         statusOfNieuw = true;
       }
     }
-    return statusOfNieuw ? 'taken:status-nieuw|alles' : null;
+    return statusOfNieuw ? (batch ? 'taken:alles' : 'taken:status-nieuw|alles') : null;
   };
 
   // ── Overstap naar mt_project_taken_v2 ─────────────────────────────────────────────────────────────────
