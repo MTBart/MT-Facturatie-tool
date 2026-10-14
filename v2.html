@@ -18,7 +18,7 @@
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
-<script src="mt-project.js?v=2.16.4"></script>
+<script src="mt-project.js?v=2026-10-14a"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
 <script src="mt-vw.js?v=2026-10-13b"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
@@ -33,7 +33,7 @@
 <script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2.16.3"></script>
+<script src="mt-inbox.js?v=2026-10-14a"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -2615,7 +2615,6 @@ const VOORRAAD_HANDMATIG_LEVERANCIERS = ['Glas Klooster','Veldman Slijptechniek'
 // alleen de actieve; _projBasis onthoudt per code hoe het record eruitzag bij laden/opslaan,
 // zodat slaProjectenOp ziet wat déze pc wijzigde en wat een andere pc intussen bijwerkte.
 let _projBasis = new Map();
-let _projIx=null, _projIxVersie=0, _projIxSig='';  // vóór projLaad(): die roept projIndexVerouderd aan
 let PROJECT_CODES = projLaad();
 
 // ═══ STATE ═══
@@ -2827,7 +2826,9 @@ function projNummer(p){
 // Via de gedeelde resolver (mt-project.js, brok C): ook op werkcode, aliassen van de teller en offertenummer. De index
 // wordt hergebruikt zolang de sleutels niet veranderen: een goedkope vingerafdruk van alle sleutelvelden (ook een record
 // dat net in het geheugen is gewijzigd) plus een versie die bij opslaan/laden/een nieuwe teller-kaart omhoog gaat.
-// (De variabelen staan bovenaan bij _projBasis: projLaad() roept projIndexVerouderd al aan tijdens het laden.)
+// var (niet let): projLaad() roept projIndexVerouderd al aan vóórdat deze regel draait; een let gaf daar een ReferenceError
+// (v2.16.0: de hele pagina stopte). Met var bestaat de naam vanaf het begin; deze regel zet daarna netjes 0.
+var _projIx=null, _projIxVersie=0, _projIxSig='';
 function projIndexVerouderd(){ _projIxVersie++; }
 function _projIxVinger(){
   let s=_projIxVersie+'|'+PROJECT_CODES.length;
@@ -11571,7 +11572,7 @@ async function maakProjectAan(){
   if(werkcode) nieuwProj.werkcode=werkcode;
   if(nummer) nieuwProj.projectnummer=nummer;
   // Projectleider = wie het project aanmaakt (Bart, 14-10), als die in de keuzelijst staat; daarna te wijzigen in Projectgegevens.
-  { const leider=projLeiderVoorEmail(typeof mtMijEmail==='function'?mtMijEmail():''); if(leider) projVeldZet(nieuwProj,'gegevens.projectleider',leider); }
+  { const leider=(typeof projLeiderVoorEmail==='function')?projLeiderVoorEmail(typeof mtMijEmail==='function'?mtMijEmail():''):''; if(leider) projVeldZet(nieuwProj,'gegevens.projectleider',leider); }
   // Gekozen in "Uit Toggl overnemen": de koppeling ligt vast (de gebruiker koos dit Toggl-project); de Toggl-naam blijft zoals hij is.
   if(tgBron){ nieuwProj.tg_project_id=tgBron.id; nieuwProj.bron_toggl={id:tgBron.id,naam:tgBron.naam,tijd:new Date().toISOString()}; _tgProjBron=null; }
   // Lead: fase nieuw, bron, waarde en volgende actie, elk met een eigen stempel; status offerte (compatibiliteit).
@@ -15591,7 +15592,7 @@ async function rolLaad(){
 function rolToepassen(me){
   if(MTRol.geenToegangNodig()){ MTRol.toonGeenToegang(WORKER); return me; }
   MTRol.pasToe();
-  try{ _p2RolHerteken(); }catch(e){ console.warn('rollenmatrix:',e); }
+  try{ if(typeof _p2RolHerteken==='function') _p2RolHerteken(); }catch(e){ console.warn('rollenmatrix:',e); }
   // Actieve tab verborgen (bv. Dashboard voor Werkplaats) → eerste zichtbare tab; behalve als de startpagina
   // straks kiest (startTabZet, onderaan): dan niet eerst naar een willekeurige tab springen.
   const act=document.querySelector('.tabs-wrap .tab-btn.active');
