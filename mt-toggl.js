@@ -307,7 +307,8 @@ async function t2HernoemProject(id,naam){
 // Rest-risico (gedocumenteerd): twee pc's die op exact hetzelfde moment dezelfde taak
 // maken; echte atomaire find-or-create kan pas in de worker.
 let _t2TakenStream=null;
-async function t2VindOfMaakTaak(marker,body,vers){
+// voorPost (optioneel): een functie die vlak vóór de POST nog eens vraagt of de actie mag (bv. het recht na de awaits); false = afbreken zonder POST.
+async function t2VindOfMaakTaak(marker,body,vers,voorPost){
   if(vers||!_t2TakenStream) _t2TakenStream=await focusFetch('tasks/stream');
   const lijst=Array.isArray(_t2TakenStream)?_t2TakenStream:((_t2TakenStream&&_t2TakenStream.data)||[]);
   if(!Array.isArray(_t2TakenStream)) _t2TakenStream=lijst;
@@ -317,6 +318,7 @@ async function t2VindOfMaakTaak(marker,body,vers){
   if(zelfdeProj.length>1) throw new Error(`Er staan al ${zelfdeProj.length} Toggl-taken met kenmerk ${tag} — los dat eerst op in Toggl`);
   if(zelfdeProj.length===1) return {id:zelfdeProj[0].id,bestond:true};
   if(hits.length) throw new Error(`Taak met kenmerk ${tag} staat in een ánder Toggl-project — controleer de koppeling`);
+  if(typeof voorPost==='function'&&voorPost()===false) throw new Error('Toggl-actie afgebroken: geen recht meer of de takenlijst is niet klaar');
   const r=await focusFetch('tasks','POST',Object.assign({},body,{notes:((body&&body.notes)?body.notes+'\n':'')+tag}));
   const id=r&&(r.id||(r.data&&r.data.id));
   if(!id) throw new Error('Toggl gaf geen taak-id terug');
