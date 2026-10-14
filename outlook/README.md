@@ -171,7 +171,7 @@ ontvangers (Aan/Cc) en geen bijlagen** op. Er is geen worker- of AI-aanroep; nie
   Het overzicht Binnenkomend in de tool leest onderwerp en afzender wel (via Graph, alleen in het geheugen van de pagina) en toont ze; er wordt niets van bewaard.
 
 ## Binnenkomend: wie pakt wat op uit info@
-In de tool: **Projecten** → links, onder "Vandaag", staat de kaart **Binnenkomend** (alleen zichtbaar met het recht `inbox`). Ze toont de gesprekken in de inbox van info@ van de laatste 30 dagen met de status
+In de tool: **Inbox** → het subtabblad **📨 Binnenkomend info@** (niet meer in Projecten: daar staan alleen echte projecten en leads) (alleen zichtbaar met het recht `inbox`). Ze toont de gesprekken in de inbox van info@ van de laatste 30 dagen met de status
 **Nieuw → Opgepakt door X → Lead/project gekoppeld → Afgehandeld (met reden)**. "Open" (standaard) toont alleen Nieuw en Opgepakt; "Alles" ook de rest.
 - *Nieuw* = nog niet gekoppeld en niemand pakte het op. Staat een gesprek langer dan 24 uur op Nieuw (en is het niet beantwoord), dan krijgt het het label "te lang open" en komt er een waarschuwing boven de lijst.
 - *Opgepakt* komt uit het register `mt_mail_oppak.json` (knop **Pak op** in het paneel of in de kaart) of uit een met de hand gezette Outlook-categorie "Opgepakt: …".

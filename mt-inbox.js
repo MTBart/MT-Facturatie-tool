@@ -103,6 +103,7 @@ function inboxSub(name){
   if(name==='mail'&&!_inbox.loaded)inboxReload();
   if(name==='agenda')inboxLoadAgenda();
   if(name==='taken')inboxLoadTaken();
+  if(name==='binnenkomend'&&typeof binnenkomendOpen==='function')binnenkomendOpen();
 }
 
 // ── Agenda — spiegel van de Outlook-kalender (Graph /calendarView, week-overzicht) ──
