@@ -5422,17 +5422,17 @@ let _blKapot=false;
 function _blIsMeta(x){ return !!x&&typeof x==='object'&&x.id==='__migratie'; }
 // Gewone UI-paden schrijven UITSLUITEND naar v2. Bestaat v2 nog niet, dan zien clients de bestellijst ALLEEN-LEZEN uit het oude bestand (_blOud, door de hydrate
 // gelezen; anders de lokale oude kopie); bewerken kan pas nadat beheer de bestellijst heeft overgezet (Beheer ▸ Bestellijst overzetten). Geen automatische overstap.
-let _blOud=null, _blTimeout=false, _blVerweesd=false, _blVormFout='';
-function _blSleutel(){ return (!_blVerweesd&&localStorage.getItem('mt_bestellijst_v2')!==null)?'mt_bestellijst_v2':'mt_bestellijst'; }
+let _blOud=null, _blTimeout=false, _blVerweesd=false, _blVormFout='', _blBackupFout=false;
+function _blSleutel(){ return (!_blVerweesd&&!_blBackupFout&&localStorage.getItem('mt_bestellijst_v2')!==null)?'mt_bestellijst_v2':'mt_bestellijst'; }
 function _blGeblokkeerd(){ try{ return !!(_SP&&_SP.blockedKeys&&_SP.blockedKeys.has('mt_bestellijst_v2')); }catch(e){ return false; } }
 function _blGereed(){ try{ return (typeof _SP==='undefined')?true:!!_SP.ready; }catch(e){ return false; } }
-function _blStaat(){ if(_blVerweesd) return 'verweesd'; if(_blGeblokkeerd()) return 'geblokkeerd'; if(!_blGereed()) return _blTimeout?'time-out':'laden'; return _blLees2()!==null?'klaar':'overzetten'; }
+function _blStaat(){ if(_blBackupFout) return 'backup-mislukt'; if(_blVerweesd) return 'verweesd'; if(_blGeblokkeerd()) return 'geblokkeerd'; if(!_blGereed()) return _blTimeout?'time-out':'laden'; return _blLees2()!==null?'klaar':'overzetten'; }
 function _blKlaar(){ return _blStaat()==='klaar'; }
-function _blStatusTekst(){ const s=_blStaat(); return s==='verweesd'?'De nieuwe bestellijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de bestellijst opnieuw overzetten.':s==='geblokkeerd'?(_blVormFout?'De nieuwe bestellijst op SharePoint heeft een verkeerde vorm ('+_blVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De bestellijst is geblokkeerd: de laadstap voor de nieuwe bestellijst is mislukt. Er is niets gewijzigd.'):s==='time-out'?'De bestellijst laden duurt te lang of is mislukt.':s==='overzetten'?'De bestellijst wordt overgezet door beheer. Tot die tijd is hij alleen-lezen.':s==='laden'?'De bestellijst wordt geladen…':''; }
+function _blStatusTekst(){ const s=_blStaat(); return s==='backup-mislukt'?'De nieuwe bestellijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale bestellijst; er is niets gewijzigd of overgezet.':s==='verweesd'?'De nieuwe bestellijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de bestellijst opnieuw overzetten.':s==='geblokkeerd'?(_blVormFout?'De nieuwe bestellijst op SharePoint heeft een verkeerde vorm ('+_blVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De bestellijst is geblokkeerd: de laadstap voor de nieuwe bestellijst is mislukt. Er is niets gewijzigd.'):s==='time-out'?'De bestellijst laden duurt te lang of is mislukt.':s==='overzetten'?'De bestellijst wordt overgezet door beheer. Tot die tijd is hij alleen-lezen.':s==='laden'?'De bestellijst wordt geladen…':''; }
 try{ setTimeout(()=>{ try{ if(!_blGereed()){ _blTimeout=true; _blNaWijziging(); } }catch(e){} },20000); }catch(e){}
 // Melding in plaats van de lijst, met een knop "opnieuw proberen" zodra de laadstap mislukt is (de melding blijft dus niet eeuwig hangen).
 function _blStatusEl(){
-  const s=_blStaat(), knop=(s==='geblokkeerd'||s==='time-out'||s==='verweesd'||s==='overzetten')?[_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>blOpnieuwProberen()},'Opnieuw proberen'),' ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>location.reload()},'Pagina herladen')]:null;
+  const s=_blStaat(), knop=(s==='geblokkeerd'||s==='time-out'||s==='verweesd'||s==='overzetten'||s==='backup-mislukt')?[_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>blOpnieuwProberen()},'Opnieuw proberen'),' ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>location.reload()},'Pagina herladen'),s==='backup-mislukt'?[' ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:blVerweesdExport},'Exporteer de lokale bestellijst')]:null]:null;
   return _p2El('div',{class:'pm-w '+(s==='overzetten'||s==='laden'?'pm-info':'pm-let-op'),role:'status'},'⚠ '+_blStatusTekst()+' ',knop);
 }
 // Opnieuw proberen: de blokkade opheffen en v2 (of, als het er nog niet is, het oude bestand voor de alleen-lezen weergave) opnieuw lezen. Nooit migreren.
@@ -5447,11 +5447,16 @@ async function blOpnieuwProberen(){
 // Nooit bij een schema-blokkade (te oude app) of een v2 met een verkeerde vorm.
 async function blOntgrendelPoging(){
   try{ if(typeof projSchemaGeblokkeerd==='function'&&projSchemaGeblokkeerd()) return false;
-    const st=_blStaat(); if(st!=='geblokkeerd'&&st!=='verweesd'&&st!=='overzetten') return false;
+    const st=_blStaat(); if(st!=='geblokkeerd'&&st!=='verweesd'&&st!=='overzetten'&&st!=='backup-mislukt') return false;
     const r=await _SP.read('mt_bestellijst_v2.json'); if(r===null||r===undefined) return false;
     if(MTPlanning.bestelBestandVorm(r)){ _blVormFout=MTPlanning.bestelBestandVorm(r); return false; }
-    (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))('mt_bestellijst_v2',JSON.stringify(MTPlanning.bestelSamen(null,r)));
-    _blVerweesd=false; _blVormFout=''; _blOud=null; try{ _SP.blockedKeys.delete('mt_bestellijst_v2'); }catch(e){}
+    // Nooit de lokale v2 vervangen door alleen de remote versie: een niet-gesynchroniseerde lokale wijziging blijft behouden (gewone merge) en wordt daarna
+    // gesynchroniseerd. De verweesde lokale kopie (al als back-up bewaard) telt niet mee.
+    const lokaalRaw=_blVerweesd?null:localStorage.getItem('mt_bestellijst_v2');
+    const samen=JSON.stringify(MTPlanning.bestelSamen(lokaalRaw,r)), remoteAlleen=JSON.stringify(MTPlanning.bestelSamen(null,r));   // een lokale v2 met een verkeerde vorm gooit hier: blijft geblokkeerd
+    _blVerweesd=false; _blBackupFout=false; _blVormFout=''; _blOud=null; try{ _SP.blockedKeys.delete('mt_bestellijst_v2'); }catch(e){}
+    if(samen!==remoteAlleen) localStorage.setItem('mt_bestellijst_v2',samen);   // lokaal had iets dat remote niet heeft: via de gewone route (plant een write)
+    else (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))('mt_bestellijst_v2',samen);
     try{ _blNaWijziging(); }catch(e){} return true;
   }catch(e){ return false; }
 }
@@ -5459,11 +5464,21 @@ try{ setInterval(()=>{ blOntgrendelPoging(); },60000); }catch(e){}
 // Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt: naar een back-upsleutel, status geblokkeerd, en nooit door autosync te laten aanmaken.
 function blVerweesdOpruimen(){
   const raw=localStorage.getItem('mt_bestellijst_v2'); if(raw===null) return false;
-  let bewaard=false; try{ localStorage.setItem('mt_bestellijst_v2_verweesd_'+Date.now(),raw); bewaard=true; }catch(e){}
-  if(bewaard) localStorage.removeItem('mt_bestellijst_v2');
-  _blVerweesd=true; try{ _SP.blockedKeys.add('mt_bestellijst_v2'); }catch(e){}
-  try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint; de lokale kopie is'+(bewaard?' als back-up bewaard':' niet gebruikt')+'. Beheer moet de bestellijst opnieuw overzetten.'); }catch(e){}
+  // Fail-closed: de back-up telt pas als hij is teruggelezen. Mislukt het, dan blijft de lokale v2 staan (niet verwijderd), _blVerweesd blijft onwaar, de sleutel
+  // blijft geblokkeerd (geen autosync) en de Beheer-overstap in deze browser is geblokkeerd tot er ruimte is of de gebruiker exporteert.
+  const sleutel='mt_bestellijst_v2_verweesd_'+Date.now(); let bewaard=false;
+  try{ localStorage.setItem(sleutel,raw); bewaard=localStorage.getItem(sleutel)===raw; }catch(e){ bewaard=false; }
+  try{ _SP.blockedKeys.add('mt_bestellijst_v2'); }catch(e){}
+  if(!bewaard){ try{ localStorage.removeItem(sleutel); }catch(e){} _blBackupFout=true; try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale bestellijst (tabblad Bestellijst).'); }catch(e){} return true; }
+  localStorage.removeItem('mt_bestellijst_v2'); _blVerweesd=true;
+  try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint; de lokale kopie is als back-up bewaard. Beheer moet de bestellijst opnieuw overzetten.'); }catch(e){}
   return true;
+}
+function blVerweesdExport(){
+  const raw=localStorage.getItem('mt_bestellijst_v2'); if(raw===null) return;
+  const blob=new Blob([raw],{type:'application/json'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='lokale-bestellijst-export.json'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
 }
 function _blMeta(){ try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst_v2')||'null'); return Array.isArray(a)?(a.find(_blIsMeta)||null):null; }catch(e){ return null; } }
 function _blUuid(){ return (typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,12)); }
@@ -5486,7 +5501,7 @@ function _blAlle(){
   _blIdsToekennen(l);   // alleen in het geheugen (het oude bestand wordt niet meer geschreven; v2 heeft altijd id's)
   return l;                                   // ook onleesbare items in de lijst blijven staan
 }
-function _blLees2(){ if(_blVerweesd) return null; try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst_v2')||'null'); return Array.isArray(a)?a:null; }catch(e){ return null; } }
+function _blLees2(){ if(_blVerweesd||_blBackupFout) return null; try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst_v2')||'null'); return Array.isArray(a)?a:null; }catch(e){ return null; } }
 function _blLeesOudLokaal(){ try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst')||'null'); return Array.isArray(a)?a:null; }catch(e){ return null; } }
 function _blActief(){ return _blAlle().filter(b=>b&&typeof b==='object'&&!b._vervallen); }
 function _blVervallenLijst(){ return _blAlle().filter(b=>b&&typeof b==='object'&&b._vervallen); }
@@ -7721,6 +7736,7 @@ function _blLeesStrikt(k){ const raw=localStorage.getItem(k); if(raw===null) ret
 async function beheerBestelOverzetten(){
   const melding=(m,titel)=>mtDialog.alert({title:titel||'Bestellijst overzetten',message:m});
   if(!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())) return melding('Alleen de eigenaar of beheer kan de bestellijst overzetten.');
+  if(_blBackupFout) return melding('Maak eerst ruimte vrij of exporteer de lokale bestellijst van deze browser (tabblad Bestellijst: "Exporteer de lokale bestellijst"); daarna kun je de bestellijst overzetten. Er is niets overgezet.','Bestellijst overzetten geblokkeerd');
   if(!_blVerweesd&&_blLees2()!==null) return melding('De bestellijst is al overgezet.');
   if(!_blGereed()||(_blGeblokkeerd()&&!_blVerweesd)) return melding('De synchronisatie is nog niet klaar of geblokkeerd: herlaad de pagina en probeer het opnieuw.');
   let oud=null; try{ oud=await _SP.read('mt_bestellijst.json'); }catch(e){ return melding('Het oude bestellijstbestand lezen mislukte: '+(e.message||e)+'. Er is niets overgezet.'); }
@@ -7730,6 +7746,7 @@ async function beheerBestelOverzetten(){
   const afw=vb.afwijkingen.slice(0,8).map(a=>'• '+(a.naam||a.id)+': '+a.velden.map(x=>x.veld+' lokaal '+(x.oud===null?'(leeg)':x.oud)+' ≠ SharePoint '+(x.nu===null?'(leeg)':x.nu)).join(', '));
   const bericht='Voorbeeld van de overstap\n\nTotaal '+vb.totaal+' regels ('+vb.sharepoint+' uit SharePoint, '+vb.lokaal_erbij+' alleen lokaal; '+vb.vervallen+' van de lijst gehaald, blijven bewaard).\nZonder id (krijgen een nieuw id): '+vb.zonderId+'. Dubbel id: '+vb.dubbel+'.\nAfwijkingen tussen lokaal en SharePoint (SharePoint wint, jij kunt ze daarna alsnog overnemen): '+vb.afwijkingen.length+(afw.length?'\n'+afw.join('\n'):'')+'\n\nBestaande id\'s blijven; alleen regels zonder (of met een dubbel) id krijgen een willekeurig id.';
   if(!await mtDialog.confirm({title:'Bestellijst overzetten naar het nieuwe bestand',message:bericht,okLabel:'Overzetten'})) return;
+  if(!_blGereed()||(_blGeblokkeerd()&&!_blVerweesd)||_blBackupFout) return melding('De synchronisatie is intussen geblokkeerd; er is niets overgezet. Herlaad de pagina en probeer het opnieuw.');   // opnieuw na de bevestigingsdialoog
   const bron=MTPlanning.bestelV2Opbouw(oud||[],{lokaal:lok.obj,nu:Date.now(),dev:_spDev(),door:_blWie(),uuid:_blUuid});
   const r=await _SP.maakAan('mt_bestellijst_v2.json',bron);
   if(r==='aangemaakt'){ (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))('mt_bestellijst_v2',JSON.stringify(bron)); _blOud=null; _blVerweesd=false; _blVormFout=''; try{ _SP.blockedKeys.delete('mt_bestellijst_v2'); }catch(e){} await melding('De bestellijst is overgezet naar het nieuwe bestand.'); _blNaWijziging(); blOverzetBlok(); return; }
@@ -7936,8 +7953,9 @@ async function blBundelStatus(sleutel,eenheid,status,projecten){
     if(k==null){ renderBestellijst(); return; }
     sel=k===0?null:[pp[k-1].project];
   }
+  if(!_blKlaar()){ renderBestellijst(); return; }   // de blokkade kan tijdens het wachten ontstaan zijn: dan niets wijzigen
   const plan=MTPlanning.bestelAfvinkPlan(g,status,{projecten:sel});
-  let n=0; plan.forEach(p=>{ if(bestelStatusZetId(p.id,p.naar,'bundel')) n++; });
+  let n=0; for(const p of plan){ if(!_blKlaar()) break; if(bestelStatusZetId(p.id,p.naar,'bundel')) n++; }   // bij een blokkade midden in de reeks stoppen
   if(typeof planToast==='function'&&n) planToast('🛒 '+n+' regel(s) op '+MTPlanning.BESTEL_STATUS_LABEL[status].toLowerCase());
   _blNaWijziging();
 }
@@ -8009,6 +8027,7 @@ async function blConflictKies(id){
 async function blProjWeg(code,id){
   const b=_blZoek(_blAlle(),id); if(!b) return;
   if(!await mtDialog.confirm({title:'Van de bestellijst halen',message:'"'+(b.materiaal||'regel')+'" van de bestellijst halen?\nDe regel blijft bewaard en is terug te zetten via het tabblad Bestellijst ("Toon van de lijst gehaalde regels", in de weergave Per regel).',okLabel:'Van de lijst halen'})) return;
+  if(!_blKlaar()){ renderBestellijst(); return; }   // de blokkade kan tijdens het wachten ontstaan zijn: dan niets wijzigen
   _blVervallen(id,'van de lijst gehaald in project '+code);
   _blNaWijziging();
 }
@@ -8051,7 +8070,8 @@ async function csvAllesNaarBestellijst(projectCode){
   if(!nieuw.length){ await mtDialog.alert({title:'Bestellijst',message:bestaand.length?'Alles staat al op de bestellijst ('+bestaand.length+' regels).':'Er zijn geen kanten of beslag in deze kostenberekening. De platen staan in de NCR-import.'}); return; }
   const p=projVind(projectCode);
   if(!await mtDialog.confirm({title:'Op de bestellijst zetten',message:nieuw.length+' regel(s) uit de kostenberekening voor '+(p?(projHoofdNr(p)+' '+projNaamVol(p)).trim():projectCode)+' op de bestellijst zetten (kanten en beslag)?'+(bestaand.length?'\n'+bestaand.length+' staan er al op en blijven ongemoeid.':'')+'\nDe platen staan in de NCR-import.',okLabel:'Op de lijst zetten'})) return;
-  let n=0; nieuw.forEach(({naam,i})=>{ if(_blNieuw(MTPlanning.bestelRegelNieuw({omschrijving:i.omschrijving,artikel:i.artikel,aantal:i.hoeveelheid,eenheid:i.eenheid,bron:'vw',project:projectCode,project_id:(p&&p.project_id)||'',categorie:catMap[naam]||'overig',datum:_blVandaagYmd()}),'nieuw (VW-CSV '+projectCode+')')) n++; });
+  if(!_blKlaar()) { await mtDialog.alert({title:'Bestellijst',message:_blStatusTekst()+' Er is niets op de lijst gezet.'}); return; }   // na de bevestiging opnieuw controleren
+  let n=0; nieuw.forEach(({naam,i})=>{ if(_blKlaar()&&_blNieuw(MTPlanning.bestelRegelNieuw({omschrijving:i.omschrijving,artikel:i.artikel,aantal:i.hoeveelheid,eenheid:i.eenheid,bron:'vw',project:projectCode,project_id:(p&&p.project_id)||'',categorie:catMap[naam]||'overig',datum:_blVandaagYmd()}),'nieuw (VW-CSV '+projectCode+')')) n++; });
   try{ document.querySelectorAll('#csv-resultaat-'+safeId+' input[type=checkbox]').forEach(c=>{ c.checked=true; }); }catch(e){}
   if(typeof planToast==='function') planToast('🛒 '+n+' regel(s) op de bestellijst gezet');
   _blNaWijziging();
@@ -8261,6 +8281,7 @@ async function projTaakStatusNaar(code,id,nieuwStatus){
   if(!['todo','bezig','klaar'].includes(nieuwStatus)) return;
   const w=MTPlanning.taakWacht(t,arr,projAfhRuw()[code]||[]);
   if(w.wacht&&(t.status||'todo')==='todo'&&nieuwStatus!=='todo'&&!await mtDialog.confirm({title:'Deze taak wacht',message:'"'+t.naam+'" wacht op: '+w.op.map(o=>o.naam).join(', ')+'.\nToch '+(nieuwStatus==='klaar'?'op klaar zetten':'starten')+'?',okLabel:'Toch doorgaan'})) return;
+  if(_ptBlok(code)) return false;   // de blokkade kan tijdens de bevestiging ontstaan zijn
   _ptJournaal('status',code,t);
   t.status=nieuwStatus;
   // Niet meer "fire and forget": lukt Toggl niet, dan blijft dat zichtbaar (⏳) met herkansing.
@@ -10105,6 +10126,7 @@ async function _ncrNaarBestellijst(resultaten, projectCode){
     }
     if(keuze==null) keuze=2;        // venster gesloten = niets aan bestaande regels doen
   }
+  if(!_blKlaar()){ if(typeof planToast==='function') planToast('⚠ Bestellijst niet gewijzigd: '+_blStatusTekst()); return; }   // de blokkade kan tijdens de keuze ontstaan zijn
   let toegevoegd=0, bijgewerkt=0, overgeslagen=0;
   // Opnieuw kijken ná de dialoog: intussen kan een andere pc/klik hetzelfde materiaal
   // hebben toegevoegd. Dan niet dubbel toevoegen maar als "overgeslagen" melden.
