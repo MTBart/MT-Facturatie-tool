@@ -1362,7 +1362,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="card-subtitle">Bestellijst</div>
         <div class="flex">
           <button class="btn btn-secondary btn-sm" onclick="renderBestellijst()">↻ Vernieuwen</button>
-          <button class="btn btn-gold btn-sm" onclick="toggleHandmatigToevoegen()">+ Handmatig toevoegen</button>
+          <button class="btn btn-gold btn-sm" data-recht="bestellijst:toevoegen|alles" onclick="toggleHandmatigToevoegen()">+ Handmatig toevoegen</button>
           <button class="btn btn-sm btn-secondary" onclick="exportBestellijst()">📋 Exporteren</button>
         </div>
       </div>
@@ -5539,6 +5539,7 @@ function _blStempel(b,vorig){
 }
 function _blZoek(l,id){ return l.find(x=>x&&typeof x==='object'&&String(x.id)===String(id)); }
 function _blWijzig(id,actie,fn){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelregel wijzigen')) return null;
   if(!_blKlaar()){ if(typeof planToast==='function') planToast('⚠ Bestellijst niet gewijzigd: '+_blStatusTekst()); return null; }
   const l=_blAlle(), b=_blZoek(l,id); if(!b) return null;
   if(_blKapot){ _blBewaar(l); return null; }        // meldt en weigert
@@ -5550,6 +5551,7 @@ function _blWijzig(id,actie,fn){
   return _blBewaar(l)?b:null;
 }
 function _blNieuw(item,actie){
+  if(rolGeweigerd(ROL_BESTEL_TOEV,'Een bestelregel toevoegen')) return null;
   if(!_blKlaar()){ if(typeof planToast==='function') planToast('⚠ Bestellijst niet gewijzigd: '+_blStatusTekst()); return null; }
   const l=_blAlle();
   if(item.id===undefined||item.id===null||item.id==='') item.id='bl_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -5564,6 +5566,7 @@ function _blVervallen(id,reden){ return _blWijzig(id,'vervallen',b=>{ b._vervall
 let _blToonVervallen=false;
 function bestellijstToonVervallen(aan){ _blToonVervallen=!!aan; renderBestellijst(); }
 function bestellijstTerugzetten(id){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelregel terugzetten')) return;
   const b=_blWijzig(id,'terugzetten',x=>{ delete x._vervallen; });
   if(b&&typeof planToast==='function') planToast('↩ "'+(b.materiaal||'regel')+'" staat weer op de bestellijst');
   renderBestellijst();
@@ -5576,12 +5579,14 @@ function _blQ(v){
 }
 
 function toggleBestellijst(mat,cat,lev,prijs,btn){
+  if(rolGeweigerd(ROL_BESTEL_TOEV,'Een bestelregel toevoegen')) return;
   const open=_blActief().find(b=>b.materiaal===mat&&!b.besteld);
   if(open){ _blVervallen(open.id,'van de lijst gehaald via Voorraad'); btn.textContent='+ Bestellen'; btn.classList.remove('besteld'); }
   else{ _blNieuw(MTPlanning.bestelRegelNieuw({omschrijving:mat,categorie:cat,leverancier:lev,prijsLaatst:prijs,datum:new Date().toISOString().split('T')[0],bron:'hand'}),'nieuw (voorraad)'); btn.textContent='✓ Op lijst'; btn.classList.add('besteld'); }
   renderVoorraadKPI(JSON.parse(localStorage.getItem('mt_voorraad')||'[]'));
 }
-function renderBestellijst(sortK='materiaal',sortA=true){
+function renderBestellijst(sortK,sortA){ _renderBestellijst0(sortK,sortA); _p2RolPas(document.getElementById('bestellijst-inhoud')); _p2RolPas(document.getElementById('bestellijst-kop')); }
+function _renderBestellijst0(sortK='materiaal',sortA=true){
   { const st=_blStaat();
     if(st!=='klaar'&&st!=='overzetten'){ const k=document.getElementById('bestellijst-kop'), i=document.getElementById('bestellijst-inhoud'); if(k) k.replaceChildren(); if(i) i.replaceChildren(_blStatusEl()); return; } }
   try{ blKopTeken(); }catch(e){ console.warn('bestellijst-kop:',e); }
@@ -5635,6 +5640,7 @@ function renderBestellijst(sortK='materiaal',sortA=true){
   }).join('');
 }
 function toggleHandmatigToevoegen(){
+  if(rolGeweigerd(ROL_BESTEL_TOEV,'Een bestelregel toevoegen')) return;
   const el=document.getElementById('handmatig-form');
   el.classList.toggle('hidden');
   if(!el.classList.contains('hidden')){
@@ -5646,6 +5652,7 @@ function toggleHandmatigToevoegen(){
   }
 }
 function voegHandmatigToe(){
+  if(rolGeweigerd(ROL_BESTEL_TOEV,'Een bestelregel toevoegen')) return;
   const naam=document.getElementById('hm-naam').value.trim();
   if(!naam){document.getElementById('hm-naam').focus();return;}
   const cat=document.getElementById('hm-cat').value;
@@ -5661,20 +5668,24 @@ function voegHandmatigToe(){
   _blNaWijziging();
 }
 function updateBestellijstAantal(id,aantal){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Het aantal van een bestelregel wijzigen')){ renderBestellijst(); return; }
   _blWijzig(id,'aantal',b=>{ const n=parseFloat(String(aantal).replace(',','.')); b.aantal=n>0?n:1; });
 }
 function markeerBesteld(id,besteld){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'De status van een bestelregel wijzigen')){ renderBestellijst(); return; }
   // De vinkjes van de per-regel-weergave: aan = besteld (een geleverde regel blijft geleverd), uit = weer nodig.
   const b=_blZoek(_blAlle(),id), nu=b?MTPlanning.bestelStatus(b):'nodig';
   _blWijzig(id,besteld?'besteld':'niet besteld',x=>{ MTPlanning.bestelStatusZet(x,besteld?(nu==='geleverd'?'geleverd':'besteld'):'nodig'); });
   _blNaWijziging();
 }
 async function verwijderUitBestellijst(id){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelregel verwijderen')) return;
   const b=_blZoek(_blAlle(),id); if(!b) return;
   const ok=(typeof mtDialog!=='undefined')
     ? await mtDialog.confirm({title:'Van de bestellijst halen',message:'"'+(b.materiaal||'regel')+'" van de bestellijst halen?\nDe regel blijft bewaard en is terug te zetten via "Toon van de lijst gehaalde regels".',okLabel:'Van de lijst halen'})
     : confirm('"'+(b.materiaal||'regel')+'" van de bestellijst halen? (terug te zetten)');
   if(!ok) return;
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelregel verwijderen')) return;   // na de bevestiging opnieuw
   _blVervallen(id,'handmatig van de lijst gehaald');
   renderBestellijst();
 }
@@ -6049,7 +6060,7 @@ function _projSectieRender(proj){
   let pan=[...el.querySelectorAll('.proj-paneel')].find(x=>x.dataset.sectie===_projSectie);
   if(!pan){ pan=document.createElement('div'); pan.className='proj-paneel'; pan.dataset.sectie=_projSectie; el.appendChild(pan); }
   [...el.querySelectorAll('.proj-paneel')].forEach(x=>{ if(x===pan) x.hidden=false; else if(_PROJ_BLIJVEND.has(x.dataset.sectie)) x.hidden=true; else x.remove(); });
-  if(_PROJ_BLIJVEND.has(_projSectie)&&pan.dataset.klaar){ if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } } return; }   // al opgebouwd: alleen tonen (de bestelregels wel vernieuwen)
+  if(_PROJ_BLIJVEND.has(_projSectie)&&pan.dataset.klaar){ if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } } _p2RolPas(pan); return; }   // al opgebouwd: alleen tonen (de bestelregels wel vernieuwen)
   const c=_projCtx(proj);
   const bouw={overzicht:projSecOverzicht,dossier:projSecDossier,planning:projSecPlanning,calculatie:projSecCalculatie,productie:projSecProductie}[_projSectie]||projSecOverzicht;
   pan.innerHTML=bouw(proj,c); pan.dataset.klaar='1';
@@ -6063,6 +6074,7 @@ function _projSectieRender(proj){
     catch(e){ console.warn('tijdlijn:',e); if(tl) tl.innerHTML='<p class="dos-leeg">Tijdlijn kon niet laden: '+esc(e.message||String(e))+'</p>'; }
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
+  _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -7059,7 +7071,55 @@ function projTakenStaat(){ if(_ptBackupFout) return 'backup-mislukt'; if(_ptVerw
 function projTakenKlaar(){ return projTakenStaat()==='klaar'; }
 function projTakenStatusTekst(){ const s=projTakenStaat(); return s==='backup-mislukt'?'De nieuwe takenlijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale takenlijst; er is niets gewijzigd of overgezet.':s==='verweesd'?'De nieuwe takenlijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de taken opnieuw overzetten.':s==='geblokkeerd'?(_ptVormFout?'De nieuwe takenlijst op SharePoint heeft een verkeerde vorm ('+_ptVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.'):s==='time-out'?'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.':s==='overzetten'?'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.':s==='laden'?'Taken laden…':''; }
 // Vóór elke actie met een extern effect (Toggl) of een planningsmutatie: alleen als de takenlijst klaar is; anders een melding en niets doen.
-function _ptBlok(code){ if(projTakenKlaar()) return false; try{ _ptStatus(code,projTakenStatusTekst(),'#c0392b'); }catch(e){} return true; }
+// ═══ Rollenmatrix (planning P2, ronde 8): één centrale controle ═══
+// Dezelfde matrix als de worker (RECHTEN): taken "status-nieuw|alles" = taakstatus en een nieuwe taak; taken "alles" = velden, uren, afhankelijkheden,
+// sjabloon, Toggl en (bulk)verwijderen; bestellijst "toevoegen|alles" = een nieuwe regel; bestellijst "alles" = status, aantal, verwijderen, herstellen en
+// migratie-aanvullingen; "lezen" mag niets. Elke muterende handler vraagt dit vóór het eerste effect (en opnieuw na een dialoog), de lage opslagfuncties
+// (projTakenZet, projAfhZet, _blNieuw, _blWijzig) controleren het nog eens, en de schermen verbergen of zetten knoppen en velden uit (_p2RolPas).
+// Buiten de modus "afdwingen" is alles toegestaan (MTRol.mag); voor Toggl en geld blijft de worker de echte poortwachter.
+const ROL_TAAK_STATUS='taken:status-nieuw|alles', ROL_TAAK_ALLES='taken:alles', ROL_BESTEL_TOEV='bestellijst:toevoegen|alles', ROL_BESTEL_ALLES='bestellijst:alles';
+function rolMag(spec){ return !(window.MTRol&&MTRol.mag)||MTRol.mag(spec); }
+function rolGeweigerd(spec,wat){
+  if(rolMag(spec)) return false;
+  try{ if(typeof planToast==='function') planToast('⛔ '+(wat||'Dit')+' mag je niet met jouw rol. Er is niets gewijzigd.'); }catch(e){}
+  return true;
+}
+// De schermen: welke handler hoort bij welk recht. De takenlijst en de oude bestellijst staan in sjablonen met ruwe interpolaties (sink-baseline); die regels
+// blijven ongewijzigd en deze doorloop zet de knoppen en velden achteraf uit. DOM-gebouwde onderdelen (P2) beslissen zelf bij het bouwen.
+const ROL_HANDLERS=[
+  [/\b(projTaakStatus|nieuweProjectTaak)\(/, ROL_TAAK_STATUS],
+  [/\b(projTaakVeldZet|projTaakUurZet|projTaakUur|projTaakVerwijder|projTakenVerwijderSelectie|projTakenSelectAll|projTaakConflict|projTaakTogglSync|projTakenHerkans|projTakenSpiegelAlles|projTaakTemplateKies|projTaakTemplateInvoeg|projTaakNaarToggl|aiTakenVoorstel)\(/, ROL_TAAK_ALLES],
+  [/\b(markeerBesteld|updateBestellijstAantal|verwijderUitBestellijst|bestellijstTerugzetten)\(/, ROL_BESTEL_ALLES],
+  [/\b(csvRegelNaarBestellijst|csvAllesNaarBestellijst|voegHandmatigToe|toggleHandmatigToevoegen|toggleBestellijst)\(/, ROL_BESTEL_TOEV]
+];
+function _p2RolUit(el){
+  if(el.tagName==='BUTTON'||el.tagName==='A'){ el.classList.add('mt-rol-verborgen'); el.setAttribute('aria-hidden','true'); el.tabIndex=-1; }
+  else { el.disabled=true; el.setAttribute('aria-disabled','true'); }
+  el.setAttribute('data-rol-uit','1');
+}
+function _p2RolPas(wortel){
+  if(!(window.MTRol&&MTRol.afdwingen&&MTRol.afdwingen())) return;
+  wortel=wortel||document; if(!wortel.querySelectorAll) return;
+  const lijst=[...wortel.querySelectorAll('[onclick],[onchange]')];
+  if(wortel.hasAttribute&&(wortel.hasAttribute('onclick')||wortel.hasAttribute('onchange'))) lijst.push(wortel);
+  lijst.forEach(el=>{
+    const tekst=(el.getAttribute('onclick')||'')+' '+(el.getAttribute('onchange')||'');
+    for(const [re,spec] of ROL_HANDLERS){ if(re.test(tekst)){ if(!rolMag(spec)) _p2RolUit(el); break; } }
+  });
+  if(!rolMag(ROL_TAAK_ALLES)) wortel.querySelectorAll('.pt-check').forEach(_p2RolUit);   // de selectievakjes horen bij (bulk)verwijderen
+}
+let _p2RolWaker=null;
+function _p2RolWakkerStart(){
+  if(_p2RolWaker||!window.MutationObserver||!document.body) return;
+  _p2RolWaker=new MutationObserver(l=>l.forEach(mu=>mu.addedNodes.forEach(n=>{ if(n.nodeType===1) _p2RolPas(n); })));
+  _p2RolWaker.observe(document.body,{childList:true,subtree:true});
+}
+function _p2RolHerteken(){
+  _p2RolWakkerStart(); _p2RolPas(document);
+  try{ if(typeof huidigProject!=='undefined'&&huidigProject&&document.getElementById('proj-sectie-inhoud')) renderProjectDetail(huidigProject); }catch(e){}
+  try{ if(document.getElementById('bestellijst-inhoud')&&_blGereed()) renderBestellijst(); }catch(e){}
+}
+function _ptBlok(code,spec,wat){ if(spec&&rolGeweigerd(spec,wat)) return true; if(projTakenKlaar()) return false; try{ _ptStatus(code,projTakenStatusTekst(),'#c0392b'); }catch(e){} return true; }
 function _ptHertekenen(){ try{ if(typeof huidigProject!=='undefined'&&huidigProject) renderProjectDetail(huidigProject); }catch(e){} }
 try{ setTimeout(()=>{ try{ if(!projTakenGereed()){ _ptTimeout=true; _ptHertekenen(); } }catch(e){} },20000); }catch(e){}
 // Een geblokkeerde of wachtende tab (v2 bestaat niet of is verweesd) kijkt elke 60 seconden of v2 op SharePoint er inmiddels is; zo ja, dan laadt hij het en heft de blokkade op.
@@ -7100,6 +7160,7 @@ function projTaken(code){return MTPlanning.takenActief(projTakenRuw()[code]);}
 function _spDev(){ try{ let d=localStorage.getItem('mt_device_id'); if(!d){ d='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem('mt_device_id',d); } return d; }catch(e){ return 'd-onbekend'; } }
 function _ptUuid(){ return (typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,12)); }
 function projTakenZet(code,arr){
+  { const nodig=MTPlanning.takenRechtNodig(projTaken(code),arr); if(nodig&&rolGeweigerd(nodig,'Deze wijziging van de taken')) return false; }   // ronde 8: de rollenmatrix, ook voor wie deze functie direct aanroept
   // Niet voordat v2 geladen is (of als het geblokkeerd is): nooit uit het oude bestand opbouwen of ernaast schrijven.
   if(!projTakenKlaar()){ try{ planToast('Taken zijn nog niet geladen of geblokkeerd — er is niets gewijzigd. '+projTakenStatusTekst()); }catch(e){} return false; }
   const ruw=projTakenRuw(), pr=(typeof projVind==='function')?projVind(code):null;
@@ -7269,7 +7330,7 @@ function _ptJournaal(actie,code,taak,extra){
 }
 // Taken waarvan de Toggl-wijziging nog niet gelukt is, opnieuw proberen.
 async function projTakenHerkans(code){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Toggl opnieuw proberen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code), weg=new Set(); let ok=0,fout=0;
   for(const t of arr){
     if(!t.tg_pending||!t.tg_task_id) continue;
@@ -7374,12 +7435,14 @@ function _p2Sel(opties,huidig,wijzig,props){
 function projAfhRuw(){try{const o=JSON.parse(localStorage.getItem('mt_project_afhank')||'{}');return (o&&typeof o==='object'&&!Array.isArray(o))?o:{};}catch(e){return{};}}
 function projAfhActief(code){return MTPlanning.afhActief(projAfhRuw()[code]);}
 function projAfhZet(code,arr){
+  if(rolGeweigerd(ROL_TAAK_ALLES,'Afhankelijkheden wijzigen')) return false;
   const ruw=projAfhRuw(), pr=(typeof projVind==='function')?projVind(code):null;
   ruw[code]=MTPlanning.afhStempel(Array.isArray(ruw[code])?ruw[code]:[],arr,{door:_spWie(),dev:_spDev(),projectId:(pr&&pr.project_id)||''});
   localStorage.setItem('mt_project_afhank',JSON.stringify(ruw));
+  return true;
 }
 function _p2Vrij(){ try{ return (admVrijdagen()||[]).filter(v=>v&&v.datum&&v.type!=='optioneel').map(v=>v.datum); }catch(e){ return []; } }   // vrije dagen uit Beheer (mt_vrijedagen); "optioneel" (bv. een brugdag) telt als gewone werkdag
-function _p2Mag(){ return !(window.MTRol&&MTRol.mag)||MTRol.mag('taken:alles'); }
+function _p2Mag(){ return rolMag(ROL_TAAK_ALLES); }
 function _p2Lever(proj){ const d=proj&&proj.gegevens&&proj.gegevens.leverdatum; return MTPlanning.isYmd(d)?d:''; }
 function _p2D(d){ return MTPlanning.isYmd(d)?new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}):'—'; }
 function _p2Na(code){ try{ _rerenderDetailKeepScroll(); }catch(e){ projAfhTeken(code); } }
@@ -7409,7 +7472,7 @@ function _p2AfhBouw(code){
   const mig=MTPlanning.depMigratie(taken,ruw,{project_id:pid});
   if(mig.nieuw.length&&mag) meldingen.push(_p2El('div',{class:'pm-w pm-info',role:'status'},'🔄 '+mig.nieuw.length+' koppeling(en) uit de oude taaklijst staan nog niet als afhankelijkheid vast. ',
     _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projAfhMigreer(code)},'Bekijken en omzetten…')));
-  if(mag){ MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:pid,codes:[code]}).forEach(v=>meldingen.push(_p2El('div',{class:'pm-w pm-info',role:'status'},'💡 '+v.reden.charAt(0).toUpperCase()+v.reden.slice(1)+': "'+v.naam+'" op klaar zetten? ',
+  if(rolMag(ROL_TAAK_STATUS)){ MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:pid,codes:[code]}).forEach(v=>meldingen.push(_p2El('div',{class:'pm-w pm-info',role:'status'},'💡 '+v.reden.charAt(0).toUpperCase()+v.reden.slice(1)+': "'+v.naam+'" op klaar zetten? ',
     _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projTaakStatusNaar(code,v.taak_id,'klaar')},'Op klaar zetten')))); }
   const padTekst=r.padTaken.length?r.padTaken.map(x=>x.naam).join(' → '):'';
   let samen;
@@ -7492,10 +7555,12 @@ async function projAfhDatum(code,id,veld,waarde){
 }
 // De opvolgers van een taak herplannen zonder de taak zelf te verzetten (na een conflict).
 async function projAfhHerplan(code,vanId){
+  if(!_p2Mag()) return;
   const t=projTaken(code).find(x=>x.id===vanId); if(!t||!MTPlanning.isYmd(t.start)) return;
   await _p2VerschuifFlow(code,vanId,{start:t.start}); _p2Na(code);
 }
 async function _p2VerschuifFlow(code,id,wijziging){
+  if(rolGeweigerd(ROL_TAAK_ALLES,'De planning verschuiven')) return false;
   const proj=projVind(code), taken=projTaken(code), ruw=projAfhRuw()[code]||[], vrij=_p2Vrij(), modus=MTPlanning.depModus(proj);
   const v=MTPlanning.verschuifVoorstel(taken,ruw,Object.assign({id},wijziging),{modus,vrij});
   if(!v.ok){ await mtDialog.alert({title:'Planning',message:v.fout}); return false; }
@@ -7520,13 +7585,15 @@ async function _p2VerschuifFlow(code,id,wijziging){
 // en je kunt eerst alles aanpassen (taken overslaan, duur en wachttijd wijzigen, leverdatum kiezen). Alleen eigenaar en beheer bewerken het sjabloon zelf.
 function sjablonenRuw(){ try{ const a=JSON.parse(localStorage.getItem('mt_project_sjablonen')||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
 function sjablonenLijst(){ return MTPlanning.sjablonenEffectief(sjablonenRuw()); }
-function sjabloonMag(){ return !(window.MTRol&&MTRol.isBeheer)||MTRol.isBeheer(); }
+function sjabloonMag(){ return (!(window.MTRol&&MTRol.isBeheer)||MTRol.isBeheer())&&rolMag(ROL_TAAK_ALLES); }
 function sjabloonBewaar(s){
+  if(!sjabloonMag()){ rolGeweigerd(ROL_TAAK_ALLES,'Het sjabloon bewerken'); return false; }
   const ruw=sjablonenRuw(), k=JSON.parse(JSON.stringify(s)); k._gewijzigd=Date.now(); delete k._vervallen; delete k._aangepast;
   const i=ruw.findIndex(x=>x&&x.id===k.id); if(i>=0) ruw[i]=k; else ruw.push(k);
   localStorage.setItem('mt_project_sjablonen',JSON.stringify(ruw));
 }
 function sjabloonVerwijder(id){
+  if(!sjabloonMag()){ rolGeweigerd(ROL_TAAK_ALLES,'Het sjabloon bewerken'); return false; }
   const ruw=sjablonenRuw(), i=ruw.findIndex(x=>x&&x.id===id);
   if(i>=0) ruw[i]=Object.assign({},ruw[i],{_vervallen:true,_gewijzigd:Date.now()}); else ruw.push({id,_vervallen:true,_gewijzigd:Date.now()});
   localStorage.setItem('mt_project_sjablonen',JSON.stringify(ruw));
@@ -7560,6 +7627,7 @@ function projSjabloonDialoog(code,{voorstel=false}={}){
     return {basis,s,res};
   };
   const toepassen=async()=>{
+    if(rolGeweigerd(ROL_TAAK_ALLES,'Een sjabloon toepassen')) return;
     const {res}=bereken();
     if(!res.ok){ await mtDialog.alert({title:'Sjabloon',message:(res.fouten||[]).join('\n')}); return; }
     if(projTakenZet(code,projTaken(code).concat(res.taken))===false) return;   // taken nog niet geladen of geblokkeerd: niets toegepast
@@ -7889,11 +7957,12 @@ function blKopTeken(){
       _p2El('label',{style:'font-size:12px;color:var(--text-dim);display:inline-flex;gap:4px;align-items:center;cursor:pointer;margin-left:8px'},
         _p2El('input',{type:'checkbox',aan:_blToonGeleverd,style:'width:auto',wijzig:ev=>{ _blToonGeleverd=ev.target.checked; renderBestellijst(); }}),'Toon ook geleverd')),
     _blLokaalNiet().length?_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ Deze browser had niet-gesynchroniseerde oude bestelregels ('+_blLokaalNiet().length+'). ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:blLokaalDownload},'Download als bestand'),' ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:blLokaalNaarBeheer},'Stuur naar beheer'),' ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:blLokaalNegeer},'Negeren')):null,
-    mig.aantal&&_blKlaar()?_p2El('div',{class:'pm-w pm-info',role:'status'},'🔄 '+mig.aantal+' oude regel(s) missen nog hun artikelsleutel, bron, status of project. Ze werken gewoon door; aanvullen legt het vast. ',
+    mig.aantal&&_blKlaar()&&rolMag(ROL_BESTEL_ALLES)?_p2El('div',{class:'pm-w pm-info',role:'status'},'🔄 '+mig.aantal+' oude regel(s) missen nog hun artikelsleutel, bron, status of project. Ze werken gewoon door; aanvullen legt het vast. ',
       _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>blMigreer()},'Bekijken en aanvullen…')):null);
 }
 // Droogloop: wat zou er aangevuld worden? Pas na bevestiging wordt het (met journaal per regel) vastgelegd; bestaande waarden blijven staan.
 async function blMigreer(){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'De bestellijst aanvullen')) return;
   const regels=_blAlle().filter(b=>b&&typeof b==='object');
   const m=MTPlanning.bestelMigratie(regels,{projectVoor:c=>{ try{ const p=projVind(c); return (p&&p.project_id)||''; }catch(e){ return ''; } }});
   if(!m.aantal){ await mtDialog.alert({title:'Bestellijst',message:'Alles is al aangevuld.'}); return; }
@@ -7903,6 +7972,7 @@ async function blMigreer(){
     +(m.onbekend.length?'\n\nProject niet te vinden ('+m.onbekend.length+'): die regels krijgen geen project_id en blijven aan hun projectcode gekoppeld.':'')
     +'\n\nBestaande waarden worden nooit overschreven; elke wijziging komt in het journaal.';
   if(!await mtDialog.confirm({title:'Bestellijst aanvullen',message:tekst,okLabel:'Aanvullen'})) return;
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'De bestellijst aanvullen')) return;   // na de bevestiging opnieuw
   let n=0; m.patches.forEach(p=>{ if(_blWijzig(p.id,'aanvullen (P2)',b=>{ Object.keys(p.patch).forEach(k=>{ if(b[k]===undefined||b[k]===null||b[k]===''||k==='status'||k==='eenheid') b[k]=p.patch[k]; }); if(b.status) b.besteld=b.status!=='nodig'; })) n++; });
   if(typeof planToast==='function') planToast('🛒 '+n+' bestelregel(s) aangevuld');
   _blNaWijziging();
@@ -7911,7 +7981,7 @@ const _blStatusOpties=[['nodig','Nodig'],['besteld','Besteld'],['geleverd','Gele
 const _blBronLabel={vw:'VW',hhos:'HHOS',hand:'hand'};
 // De gebundelde lijst (DOM, geen innerHTML).
 function blBundelTeken(el){
-  const lezen=!_blKlaar(), uitProp=lezen?'disabled':null;
+  const lezen=!_blKlaar()||!rolMag(ROL_BESTEL_ALLES), uitProp=lezen?'disabled':null;
   const bundel=MTPlanning.bestelBundel(_blActief(),{nummerVan:_blNummerVan(),projectSleutel:_blProjectSleutel(),toonGeleverd:_blToonGeleverd});
   if(!bundel.length){ el.replaceChildren(_p2El('p',{style:'color:var(--text-faint);font-size:13px',tekst:'Niets te bestellen. Regels komen uit de VW-kostenberekening en de HHOS-upload van een project (tab Productie), of je voegt ze met de hand toe.'})); return; }
   const kop=_p2El('thead',null,_p2El('tr',null,['','Wat','Leverancier','Bron',''].map(k=>_p2El('th',{tekst:k}))));
@@ -7922,7 +7992,7 @@ function blBundelTeken(el){
     const statusOpties=_blStatusOpties.concat(g.status==='gemengd'?[['gemengd','Gemengd',true]]:[]);
     rijen.push(_p2El('tr',{class:'bl-groep'},
       _p2El('td',null,_p2Sel(statusOpties,g.status,v=>{ if(v!=='gemengd') blBundelStatus(g.sleutel,g.eenheid,v); },{class:'pt-sel','aria-label':'Status van '+g.omschrijving,title:'Zet alle regels van deze bundel op een status (bij meer projecten vraag ik voor welke)',disabled:uitProp})),
-      _p2El('td',{style:'white-space:normal'},_p2El('strong',{style:'font-size:12.5px',tekst:g.tekst}),(()=>{ const cid=g.regels.map(r=>_blZoek(_blAlle(),r.id)).find(x=>x&&x._veldconflict&&Object.keys(x._veldconflict).length); return cid?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',style:'color:#c0392b;margin-left:6px',title:'Twee gelijktijdige wijzigingen in een van deze regels — klik om te kiezen',klik:()=>blConflictKies(cid.id)},'⚠ conflict'):null; })()),
+      _p2El('td',{style:'white-space:normal'},_p2El('strong',{style:'font-size:12.5px',tekst:g.tekst}),(()=>{ const cid=!lezen&&g.regels.map(r=>_blZoek(_blAlle(),r.id)).find(x=>x&&x._veldconflict&&Object.keys(x._veldconflict).length); return cid?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',style:'color:#c0392b;margin-left:6px',title:'Twee gelijktijdige wijzigingen in een van deze regels — klik om te kiezen',klik:()=>blConflictKies(cid.id)},'⚠ conflict'):null; })()),
       _p2El('td',{style:'font-size:12px;white-space:normal',tekst:g.leveranciers.join(', ')||'—'}),
       _p2El('td',{style:'font-size:11px;color:var(--text-dim)',tekst:bronnen.join(' · ')}),
       _p2El('td',null,meer?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary','aria-expanded':open?'true':'false',title:'Verdeling per project',klik:()=>{ if(_blUitgeklapt.has(sl)) _blUitgeklapt.delete(sl); else _blUitgeklapt.add(sl); renderBestellijst(); }},open?'▾ Verdeling':'▸ Verdeling'):null)));
@@ -7943,6 +8013,7 @@ function _blRegelNoot(b){ const nr=b.project?_blNummerVan()(b):'', st=MTPlanning
 function fmtAantalBl(n){ return (Math.round(n*100)/100).toString().replace('.',','); }
 // Status van een bundel zetten: voor alle regels, of voor een of meer projecten. Bij meer projecten eerst vragen welke.
 async function blBundelStatus(sleutel,eenheid,status,projecten){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'De status van bestelregels wijzigen')){ renderBestellijst(); return; }
   const g=MTPlanning.bestelBundel(_blActief(),{nummerVan:_blNummerVan(),projectSleutel:_blProjectSleutel(),toonGeleverd:true}).find(x=>x.sleutel===sleutel&&x.eenheid===eenheid);
   if(!g){ renderBestellijst(); return; }
   let sel=projecten||null;
@@ -7973,8 +8044,8 @@ function _blProjBouw(code){
   const proj=projVind(code), regels=_blVanProject(proj), taken=projTaken(code);
   const tel={nodig:0,besteld:0,geleverd:0}; regels.forEach(b=>{ tel[MTPlanning.bestelStatus(b)]++; });
   const zicht=regels.filter(b=>_blProjToonGeleverd||MTPlanning.bestelStatus(b)!=='geleverd');
-  const magWijzig=!(window.MTRol&&MTRol.mag)||MTRol.mag('bestellijst:toevoegen|alles');
-  const voorstellen=MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:proj.project_id||'',codes:[code]});
+  const magWijzig=rolMag(ROL_BESTEL_TOEV);
+  const magAlles=rolMag(ROL_BESTEL_ALLES), voorstellen=rolMag(ROL_TAAK_STATUS)?MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:proj.project_id||'',codes:[code]}):[];
   const rijen=zicht.map(b=>{
     const st=MTPlanning.bestelStatus(b), aantal=Number(b.aantal)>0?Number(b.aantal):1;
     return _p2El('tr',{style:st==='geleverd'?'opacity:.6':''},
@@ -7982,9 +8053,9 @@ function _blProjBouw(code){
       _p2El('td',{class:'pm-num',tekst:fmtAantalBl(aantal)+' '+MTPlanning.eenheidTekst(b.eenheid,aantal)}),
       _p2El('td',{style:'font-size:12px',tekst:b.leverancier||'—'}),
       _p2El('td',{style:'font-size:11px;color:var(--text-dim)',tekst:_blBronLabel[MTPlanning.bestelBron(b)]||''}),
-      _p2El('td',null,_p2Sel(_blStatusOpties,st,v=>{ bestelStatusZetId(b.id,v,'project'); _blNaWijziging(); },{class:'pt-sel','aria-label':'Status van '+MTPlanning.bestelOms(b),disabled:lezen?'disabled':null})),
-      _p2El('td',null,b._veldconflict&&Object.keys(b._veldconflict).length?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',style:'color:#c0392b',title:'Twee gelijktijdige wijzigingen — klik om te kiezen',klik:()=>blConflictKies(b.id)},'⚠ conflict'):null,
-        _p2El('button',{type:'button',class:'btn btn-xs btn-danger','data-recht':'bestellijst:alles',title:'Van de lijst halen (blijft bewaard en is terug te zetten in het tabblad Bestellijst)','aria-label':'Van de lijst halen',klik:()=>blProjWeg(code,b.id)},'×')));
+      _p2El('td',null,_p2Sel(_blStatusOpties,st,v=>{ bestelStatusZetId(b.id,v,'project'); _blNaWijziging(); },{class:'pt-sel','aria-label':'Status van '+MTPlanning.bestelOms(b),disabled:(lezen||!magAlles)?'disabled':null})),
+      _p2El('td',null,magAlles&&b._veldconflict&&Object.keys(b._veldconflict).length?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',style:'color:#c0392b',title:'Twee gelijktijdige wijzigingen — klik om te kiezen',klik:()=>blConflictKies(b.id)},'⚠ conflict'):null,
+        magAlles?_p2El('button',{type:'button',class:'btn btn-xs btn-danger','data-recht':'bestellijst:alles',title:'Van de lijst halen (blijft bewaard en is terug te zetten in het tabblad Bestellijst)','aria-label':'Van de lijst halen',klik:()=>blProjWeg(code,b.id)},'×'):null));
   });
   const nieuwOms=_p2El('input',{type:'text',placeholder:'Wat moet er besteld worden?','aria-label':'Omschrijving',style:'min-width:200px;flex:1'}), nieuwAantal=_p2El('input',{type:'number',min:'0',step:'any',waarde:'1','aria-label':'Aantal',style:'width:70px;font-family:var(--mono)'}), nieuwEenheid=_p2El('input',{type:'text',placeholder:'plaat, stuk, m²…','aria-label':'Eenheid',style:'width:110px'});
   const voegToe=()=>{
@@ -8007,6 +8078,7 @@ function _blProjBouw(code){
 // Twee gelijktijdige wijzigingen van hetzelfde veld (twee pc's): kiezen welke waarde blijft. De keuze krijgt een stempel boven het conflict,
 // zodat het ook op de andere pc verdwijnt. Status en het oude besteld-vinkje horen bij elkaar en worden samen opgelost.
 async function blConflictKies(id){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een conflict in de bestellijst oplossen')) return;
   const b0=_blZoek(_blAlle(),id); if(!b0||!b0._veldconflict) return;
   const velden=Object.keys(b0._veldconflict), tekst=v=>v===undefined||v===null||v===''?'(leeg)':String(v);
   let kStatus=null;
@@ -8025,9 +8097,10 @@ async function blConflictKies(id){
   _blNaWijziging();
 }
 async function blProjWeg(code,id){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelregel verwijderen')) return;
   const b=_blZoek(_blAlle(),id); if(!b) return;
   if(!await mtDialog.confirm({title:'Van de bestellijst halen',message:'"'+(b.materiaal||'regel')+'" van de bestellijst halen?\nDe regel blijft bewaard en is terug te zetten via het tabblad Bestellijst ("Toon van de lijst gehaalde regels", in de weergave Per regel).',okLabel:'Van de lijst halen'})) return;
-  if(!_blKlaar()){ renderBestellijst(); return; }   // de blokkade kan tijdens het wachten ontstaan zijn: dan niets wijzigen
+  if(!_blKlaar()||rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelregel verwijderen')){ renderBestellijst(); return; }   // de blokkade kan tijdens het wachten ontstaan zijn: dan niets wijzigen
   _blVervallen(id,'van de lijst gehaald in project '+code);
   _blNaWijziging();
 }
@@ -8063,6 +8136,7 @@ function _p2CommissionTekst(regels,projectCode){
 }
 // Alles uit de VW-kostenberekening (kanten en beslag) in één keer als voorstel op de bestellijst, met bevestiging; wat al open op de lijst staat blijft staan.
 async function csvAllesNaarBestellijst(projectCode){
+  if(rolGeweigerd(ROL_BESTEL_TOEV,'Regels op de bestellijst zetten')) return;
   const safeId=projectCode.replace(/[^A-Za-z0-9_]/g,''), sec=window['_csvSecties_'+safeId]; if(!sec) return;
   const catMap={kanten:'kantenband',beslag:'overig'}, open=_blActief().filter(b=>b.project===projectCode&&!b.besteld);
   const nieuw=[], bestaand=[];
@@ -8165,7 +8239,7 @@ function projMeterTeken(code){
 }
 // Activiteit of toegewezen op een taak zetten (keuzelijsten in de takenlijst).
 function projTaakVeldZet(code,id,veld,waarde){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een taakveld wijzigen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   if(veld==='activiteit'&&waarde&&!MTPlanning.activiteit(waarde)) return;
   if(veld==='toegewezen'&&waarde&&!MT_TEAM.some(m=>m.slug===waarde)) return;
@@ -8184,6 +8258,7 @@ function _ptWaardeTekst(veld,w){
 }
 // Twee gelijktijdige wijzigingen van hetzelfde veld: de mens kiest.
 async function projTaakConflict(code,id){
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een conflict oplossen')) return false;
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||!t._veldconflict) return;
   for(const veld of Object.keys(t._veldconflict)){
     const c=t._veldconflict[veld];
@@ -8207,7 +8282,7 @@ function _ptSyncMerk(t,status,fout){
 // het mt:-kenmerk in de notitie (t2VindOfMaakTaak), nooit op naam. Is de Toggl-taak verwijderd, dan blijft de MT-taak staan
 // en beslis jij wat er gebeurt.
 async function projTaakTogglSync(code,id){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Toggl synchroniseren')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const mt=projVind(code); const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!mt||!t) return;
   let actie=MTPlanning.tgActie(t);
   const stOk=(msg)=>_ptStatus(code,msg,'var(--green)'), stFout=(msg)=>_ptStatus(code,msg,'#c0392b');
@@ -8228,6 +8303,7 @@ async function projTaakTogglSync(code,id){
     ?'In het Toggl-project „'+projNaam+'” wordt een taak aangemaakt:\n\n„'+t.naam+'” (status '+stat+')\n\nBestaat er al een Toggl-taak met het MT-kenmerk van deze taak, dan wordt die gekoppeld; er wordt nooit op naam gekoppeld.'
     :'De Toggl-taak wordt gelijkgezet met MT:\n\nnaam „'+t.naam+'”, status '+stat+'\n\nMT is de bron: wijzigingen die je in Toggl aan naam of status deed, worden overschreven.';
   if(!await mtDialog.confirm({title:actie==='koppelen'?'Toggl-taak aanmaken':'Toggl-taak bijwerken',message:vraag,okLabel:actie==='koppelen'?'Aanmaken':'Bijwerken'})) return;
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Toggl synchroniseren')) return false;   // na de bevestiging opnieuw
   _ptStatus(code,actie==='koppelen'?'Toggl: taak aanmaken…':'Toggl: taak bijwerken…','var(--gold-text)');
   try{
     if(actie==='koppelen'){
@@ -8253,7 +8329,7 @@ async function projTaakTogglSync(code,id){
 }
 
 function nieuweProjectTaak(code){
-  if(!projTakenKlaar()){ _ptStatus(code,projTakenStatusTekst(),'#c0392b'); return; }
+  if(_ptBlok(code,ROL_TAAK_STATUS,'Een taak toevoegen')) return;
   const naam=prompt('Taaknaam:'); if(!naam) return;
   const duur=parseFloat((prompt('Geschatte duur in uren (leeg = geen):')||'').replace(',','.'))||0;
   const prioIn=(prompt('Prioriteit: low / medium / high (leeg = geen):')||'').trim().toLowerCase();
@@ -8269,19 +8345,19 @@ function nieuweProjectTaak(code){
   try{ if(window.track) track('taken','taak_handmatig',{detail:code,ok:true}); }catch(e){}
 }
 async function projTaakStatus(code,id){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const t0=projTaken(code).find(x=>x.id===id); if(!t0) return;
   const order=['todo','bezig','klaar'];
   return projTaakStatusNaar(code,id,order[(order.indexOf(t0.status||'todo')+1)%3]);
 }
 // Zet een taak op een status. Een taak die wacht (een voorganger is niet klaar) start pas na een bevestiging.
 async function projTaakStatusNaar(code,id,nieuwStatus){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   if(!['todo','bezig','klaar'].includes(nieuwStatus)) return;
   const w=MTPlanning.taakWacht(t,arr,projAfhRuw()[code]||[]);
   if(w.wacht&&(t.status||'todo')==='todo'&&nieuwStatus!=='todo'&&!await mtDialog.confirm({title:'Deze taak wacht',message:'"'+t.naam+'" wacht op: '+w.op.map(o=>o.naam).join(', ')+'.\nToch '+(nieuwStatus==='klaar'?'op klaar zetten':'starten')+'?',okLabel:'Toch doorgaan'})) return;
-  if(_ptBlok(code)) return false;   // de blokkade kan tijdens de bevestiging ontstaan zijn
+  if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // de blokkade of het recht kan tijdens de bevestiging veranderd zijn
   _ptJournaal('status',code,t);
   t.status=nieuwStatus;
   // Niet meer "fire and forget": lukt Toggl niet, dan blijft dat zichtbaar (⏳) met herkansing.
@@ -8309,7 +8385,7 @@ function _planSyncTaakUur(code,id,uren){
   planBerekenDatums(plan); planSave(code,plan);
 }
 function projTaakUurZet(code,id,val){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_ALLES,'De uren van een taak wijzigen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   let n=parseFloat(String(val==null?'':val).replace(',','.')); if(!isFinite(n)||n<0) n=0;
   n=Math.round(n*100)/100;
@@ -8331,9 +8407,10 @@ async function _tgVerwijderTaak(tg_task_id){
   catch(e){ console.warn('Toggl-taak',tg_task_id,'verwijderen faalde:',e); return false; }
 }
 async function projTaakVerwijder(code,id){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een taak verwijderen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const t=projTaken(code).find(x=>x.id===id);
   if(!await mtDialog.confirm({title:'Taak verwijderen',message:'Taak verwijderen?'+(t&&t.tg_task_id?'\nWordt óók in Toggl verwijderd.':''),okLabel:'Verwijderen',danger:true})) return;
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een taak verwijderen')) return false;   // na de bevestiging opnieuw
   try{ if(window.track) track('taken','verwijder',{detail:code}); }catch(e){}
   if(!t) return;
   _ptJournaal('verwijderen',code,t);
@@ -8351,13 +8428,14 @@ async function projTaakVerwijder(code,id){
 }
 // Meerdere aangevinkte taken in één keer verwijderen (lokaal + Toggl).
 async function projTakenVerwijderSelectie(code){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Taken verwijderen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const sid=code.replace(/-/g,'');
   const ids=Array.from(document.querySelectorAll('#pt-tbl-'+sid+' .pt-check:checked')).map(b=>b.value);
   if(!ids.length){ _ptStatus(code,'Geen taken aangevinkt.','#c0392b'); return; }
   const teVerw=projTaken(code).filter(t=>ids.includes(t.id));
   const inToggl=teVerw.filter(t=>t.tg_task_id).length;
   if(!await mtDialog.confirm({title:'Taken verwijderen',message:`${ids.length} ta(a)k(en) verwijderen?`+(inToggl?`\n${inToggl} óók in Toggl.`:''),okLabel:'Verwijderen',danger:true})) return;
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Taken verwijderen')) return false;   // na de bevestiging opnieuw
   try{ if(window.track) track('taken','verwijder_selectie',{detail:code+' · '+ids.length}); }catch(e){}
   let i=0; const mislukt=new Set();
   for(const t of teVerw){ i++;
@@ -8421,6 +8499,7 @@ const _PT_TEMPLATES={
     {naam:'Oplevering',uur:1,na:[7]}]}
 };
 function projTaakTemplateKies(code){
+  if(rolGeweigerd(ROL_TAAK_ALLES,'Een takenketen invoegen')) return;
   const oud=document.getElementById('tpl-overlay');if(oud)oud.remove();
   const ov=document.createElement('div');ov.id='tpl-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(28,26,22,.45);z-index:10000;display:flex;align-items:center;justify-content:center';
@@ -8438,7 +8517,7 @@ function projTaakTemplateKies(code){
   document.body.appendChild(ov);
 }
 function projTaakTemplateInvoeg(code,key){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een takenketen invoegen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const ov=document.getElementById('tpl-overlay');if(ov)ov.remove();
   const tpl=_PT_TEMPLATES[key];if(!tpl)return;
   const nieuwe=tpl.taken.map(v=>({id:_ptId(),naam:v.naam,omschrijving:v.omschrijving||'',duur_uur:v.uur||0,
@@ -8832,7 +8911,7 @@ async function t2TogglNaamBijwerken(code){
   catch (e) { _t2St(code, '⚠ ' + (e.message || e) + ' — de naam in Toggl is niet gewijzigd', '#c0392b'); }
 }
 async function projTaakNaarToggl(code,id,vers=true){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een taak naar Toggl zetten')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const mt=projVind(code); if(!mt) return false;
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||t.tg_task_id) return false;
   _ptStatus(code,'Naar Toggl…');
@@ -8858,7 +8937,7 @@ async function projTaakNaarToggl(code,id,vers=true){
     return false; }
 }
 async function projTakenSpiegelAlles(code){
-  if(_ptBlok(code)) return false;   // takenlijst niet klaar: geen Toggl-actie en geen planningsmutatie
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Taken naar Toggl zetten')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code).filter(t=>!t.tg_task_id);
   if(!arr.length) return;
   if(!await mtDialog.confirm({title:'Taken naar Toggl',message:arr.length+' taak/taken in het Toggl-project aanmaken (of koppelen via het MT-kenmerk, nooit op naam)?'+((projVind(code)||{}).tg_project_id?'':'\n\nDit project heeft nog geen Toggl-project; dat wordt dan ook aangemaakt.'),okLabel:'Aanmaken'})) return;
@@ -8911,7 +8990,7 @@ async function aiMailContext(code){
 // afhankelijkheden voor; baseert zich op de gekoppelde mails als die er zijn;
 // wordt lokaal toegevoegd en optioneel naar Toggl gespiegeld.
 async function aiTakenVoorstel(code){
-  if(!projTakenKlaar()){ _ptStatus(code,projTakenStatusTekst(),'#c0392b'); return; }
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een AI-takenlijst toevoegen')) return;
   const mt=projVind(code); if(!mt) return;
   const _t0=(typeof performance!=='undefined'?performance.now():Date.now());
   const klant=(typeof resolveKlantNaam==='function')?resolveKlantNaam(mt):'';
@@ -10083,6 +10162,7 @@ async function ncrNaarBestellijst(resultaten, projectCode){
   finally{ _ncrBezig.delete(projectCode); }
 }
 async function _ncrNaarBestellijst(resultaten, projectCode){
+  if(rolGeweigerd(ROL_BESTEL_TOEV,'Platen op de bestellijst zetten')) return;
   // Brok L2: een open regel voor hetzelfde materiaal in dit project werd stil vervangen
   // (handmatige wijzigingen weg). Nu: nieuwe materialen komen erbij; bij bestaande open
   // regels kies je zelf (bijwerken naar het nieuwe aantal / extra regel / overslaan).
@@ -10125,6 +10205,7 @@ async function _ncrNaarBestellijst(resultaten, projectCode){
       keuze=confirm(conflict.length+' materialen staan al open:\n'+lijstTekst+'\n\nOK = aantallen bijwerken, Annuleren = overslaan')?0:2;
     }
     if(keuze==null) keuze=2;        // venster gesloten = niets aan bestaande regels doen
+    if(keuze===0&&rolGeweigerd(ROL_BESTEL_ALLES,'De aantallen van bestaande bestelregels wijzigen')) keuze=2;   // wel nieuwe materialen toevoegen
   }
   if(!_blKlaar()){ if(typeof planToast==='function') planToast('⚠ Bestellijst niet gewijzigd: '+_blStatusTekst()); return; }   // de blokkade kan tijdens de keuze ontstaan zijn
   let toegevoegd=0, bijgewerkt=0, overgeslagen=0;
@@ -10368,6 +10449,7 @@ function slaWerkelijkePrijsOp(projectCode,artikel,prijs){
 }
 
 function csvRegelNaarBestellijst(checkbox,artikel,omschrijving,categorie,hoeveelheid,eenheid,projectCode){
+  if(rolGeweigerd(checkbox.checked?ROL_BESTEL_TOEV:ROL_BESTEL_ALLES,checkbox.checked?'Een bestelregel toevoegen':'Een bestelregel van de lijst halen')){ checkbox.checked=!checkbox.checked; return; }
   const catMap={'platen':'platen','kanten':'kantenband','beslag':'overig'};
   if(checkbox.checked){
     if(_blActief().some(b=>b.artikel===artikel&&b.project===projectCode&&!b.besteld)) return;   // staat al open op de lijst (bv. via "Alles op de bestellijst")
@@ -15023,6 +15105,7 @@ async function rolLaad(){
 function rolToepassen(me){
   if(MTRol.geenToegangNodig()){ MTRol.toonGeenToegang(WORKER); return me; }
   MTRol.pasToe();
+  try{ _p2RolHerteken(); }catch(e){ console.warn('rollenmatrix:',e); }
   // Actieve tab verborgen (bv. Dashboard voor Werkplaats) → eerste zichtbare tab; behalve als de startpagina
   // straks kiest (startTabZet, onderaan): dan niet eerst naar een willekeurige tab springen.
   const act=document.querySelector('.tabs-wrap .tab-btn.active');

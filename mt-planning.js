@@ -214,6 +214,30 @@
   }
   P.takenStempel = (oud, nieuw, opts) => stempelMet(P.TAAK_VELDEN, oud, nieuw, opts, true);
   P.takenActief = lijst => (Array.isArray(lijst) ? lijst : []).filter(t => t && typeof t === 'object' && !t._vervallen);
+  // Rollenmatrix (ronde 8): welk recht heeft een wijziging van de takenlijst van een project nodig? Eén plek, ook voor de pure tests.
+  //   'taken:alles'                = elk ander veld wijzigen, een taak verwijderen of de Toggl-koppeling (tg_task_id) wijzigen;
+  //   'taken:status-nieuw|alles'   = alleen de status wijzigen (met de bijbehorende Toggl-markeringen en de afrondingsdatum) en/of nieuwe taken toevoegen;
+  //   null                         = niets inhoudelijks gewijzigd.
+  // Velden die met een status meebewegen: status, klaar_op, tg_pending, tg_sync. Meta-velden (met _ ervoor) tellen niet mee.
+  P.TAAK_STATUS_VELDEN = ['status', 'klaar_op', 'tg_pending', 'tg_sync'];
+  P.takenRechtNodig = function (oud, nieuw) {
+    const o = P.takenActief(oud), n = P.takenActief(nieuw), oudBy = new Map(o.map(t => [t.id, t]));
+    const nieuwIds = new Set(n.map(t => t.id));
+    if (o.some(t => !nieuwIds.has(t.id))) return 'taken:alles';          // verwijderd
+    let statusOfNieuw = false;
+    for (const t of n) {
+      const v = oudBy.get(t.id);
+      if (!v) { statusOfNieuw = true; continue; }                          // nieuwe taak
+      const sleutels = new Set(Object.keys(t).concat(Object.keys(v)));
+      for (const k of sleutels) {
+        if (k.charAt(0) === '_') continue;
+        if (stabiel(norm(t[k])) === stabiel(norm(v[k]))) continue;
+        if (P.TAAK_STATUS_VELDEN.indexOf(k) < 0) return 'taken:alles';
+        statusOfNieuw = true;
+      }
+    }
+    return statusOfNieuw ? 'taken:status-nieuw|alles' : null;
+  };
 
   // ── Overstap naar mt_project_taken_v2 ─────────────────────────────────────────────────────────────────
   // De nieuwe app leest en schrijft alleen mt_project_taken_v2; het oude bestand mt_project_taken blijft van oude app-versies en wordt door
