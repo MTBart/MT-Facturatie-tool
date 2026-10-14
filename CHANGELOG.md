@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-13 — Privacy-hooks: eigen organisatienaam en gewone woorden (werkplaats, administratie) tellen niet als klantnaam
+- Commit: `19cc8bb` | Auteur: Bart Witte
+
 ## 2026-10-13 — Release v2.15.1: Outlook-paneel (koppelen, Maak lead, Pak op, Antwoord als info@), Binnenkomend; backup = v2.15.0
 - Commit: `4caadd3` | Auteur: Bart Witte
 
