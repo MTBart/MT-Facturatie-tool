@@ -38,7 +38,7 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-14c"></script>
+<script src="mt-planning.js?v=2026-10-14d"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
@@ -6946,13 +6946,13 @@ function _ptLees(k){ try{ const o=JSON.parse(localStorage.getItem(k)||'null'); r
 // Gewone UI-paden lezen en schrijven UITSLUITEND v2; het oude bestand komt alleen voor in de overstap door beheer (beheerTakenOverzetten), de alleen-lezen weergave en het vangnet en het vangnet.
 // Bestaat v2 nog niet, dan zien clients de taken ALLEEN-LEZEN uit het oude bestand (_ptOud, door de hydrate gelezen; anders de lokale oude kopie); bewerken kan pas
 // nadat beheer de taken heeft overgezet (Beheer ▸ Taken overzetten naar het nieuwe bestand). Er is geen automatische overstap door gewone clients.
-let _ptOud=null, _ptTimeout=false, _ptVerweesd=false, _ptVormFout='';
-function projTakenRuw(){ return (_ptVerweesd?null:_ptLees('mt_project_taken_v2'))||_ptOud||_ptLees('mt_project_taken')||{}; }
+let _ptOud=null, _ptTimeout=false, _ptVerweesd=false, _ptVormFout='', _ptBackupFout=false;
+function projTakenRuw(){ return ((_ptVerweesd||_ptBackupFout)?null:_ptLees('mt_project_taken_v2'))||_ptOud||_ptLees('mt_project_taken')||{}; }
 function projTakenGeblokkeerd(){ try{ return !!(_SP&&_SP.blockedKeys&&_SP.blockedKeys.has('mt_project_taken_v2')); }catch(e){ return false; } }
 function projTakenGereed(){ try{ return (typeof _SP==='undefined')?true:!!_SP.ready; }catch(e){ return false; } }
-function projTakenStaat(){ if(_ptVerweesd) return 'verweesd'; if(projTakenGeblokkeerd()) return 'geblokkeerd'; if(!projTakenGereed()) return _ptTimeout?'time-out':'laden'; return _ptLees('mt_project_taken_v2')?'klaar':'overzetten'; }
+function projTakenStaat(){ if(_ptBackupFout) return 'backup-mislukt'; if(_ptVerweesd) return 'verweesd'; if(projTakenGeblokkeerd()) return 'geblokkeerd'; if(!projTakenGereed()) return _ptTimeout?'time-out':'laden'; return _ptLees('mt_project_taken_v2')?'klaar':'overzetten'; }
 function projTakenKlaar(){ return projTakenStaat()==='klaar'; }
-function projTakenStatusTekst(){ const s=projTakenStaat(); return s==='verweesd'?'De nieuwe takenlijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de taken opnieuw overzetten.':s==='geblokkeerd'?(_ptVormFout?'De nieuwe takenlijst op SharePoint heeft een verkeerde vorm ('+_ptVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.'):s==='time-out'?'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.':s==='overzetten'?'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.':s==='laden'?'Taken laden…':''; }
+function projTakenStatusTekst(){ const s=projTakenStaat(); return s==='backup-mislukt'?'De nieuwe takenlijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale takenlijst; er is niets gewijzigd of overgezet.':s==='verweesd'?'De nieuwe takenlijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de taken opnieuw overzetten.':s==='geblokkeerd'?(_ptVormFout?'De nieuwe takenlijst op SharePoint heeft een verkeerde vorm ('+_ptVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.'):s==='time-out'?'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.':s==='overzetten'?'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.':s==='laden'?'Taken laden…':''; }
 // Vóór elke actie met een extern effect (Toggl) of een planningsmutatie: alleen als de takenlijst klaar is; anders een melding en niets doen.
 function _ptBlok(code){ if(projTakenKlaar()) return false; try{ _ptStatus(code,projTakenStatusTekst(),'#c0392b'); }catch(e){} return true; }
 function _ptHertekenen(){ try{ if(typeof huidigProject!=='undefined'&&huidigProject) renderProjectDetail(huidigProject); }catch(e){} }
@@ -6961,20 +6961,31 @@ try{ setTimeout(()=>{ try{ if(!projTakenGereed()){ _ptTimeout=true; _ptHertekene
 // Nooit bij een schema-blokkade (te oude app) of een v2 met een verkeerde vorm.
 async function projTakenOntgrendelPoging(){
   try{ if(typeof projSchemaGeblokkeerd==='function'&&projSchemaGeblokkeerd()) return false;
-    const st=projTakenStaat(); if(st!=='geblokkeerd'&&st!=='verweesd'&&st!=='overzetten') return false;
+    const st=projTakenStaat(); if(st!=='geblokkeerd'&&st!=='verweesd'&&st!=='overzetten'&&st!=='backup-mislukt') return false;
     const r=await _SP.read('mt_project_taken_v2.json'); if(r===null||r===undefined) return false;
     if(MTPlanning.takenBestandVorm(r)){ _ptVormFout=MTPlanning.takenBestandVorm(r); return false; }
-    _lsSet('mt_project_taken_v2',JSON.stringify(MTPlanning.takenSamen(null,r))); _ptVerweesd=false; _ptVormFout=''; _ptOud=null; _SP.blockedKeys.delete('mt_project_taken_v2'); _ptHertekenen(); return true;
+    // Nooit de lokale v2 vervangen door alleen de remote versie: een niet-gesynchroniseerde lokale wijziging blijft behouden (gewone merge) en wordt daarna gesynchroniseerd.
+    // De verweesde lokale kopie (al als back-up bewaard) telt niet mee.
+    const lokaalRaw=_ptVerweesd?null:localStorage.getItem('mt_project_taken_v2');
+    const samen=JSON.stringify(MTPlanning.takenSamen(lokaalRaw,r)), remoteAlleen=JSON.stringify(MTPlanning.takenSamen(null,r));   // een lokale v2 met een verkeerde vorm gooit hier: blijft geblokkeerd
+    _ptVerweesd=false; _ptBackupFout=false; _ptVormFout=''; _ptOud=null; _SP.blockedKeys.delete('mt_project_taken_v2');
+    if(samen!==remoteAlleen) localStorage.setItem('mt_project_taken_v2',samen);   // lokaal had iets dat remote niet heeft: via de gewone route (plant een write)
+    else _lsSet('mt_project_taken_v2',samen);
+    _ptHertekenen(); return true;
   }catch(e){ return false; }
 }
 try{ setInterval(()=>{ projTakenOntgrendelPoging(); },60000); }catch(e){}
 // Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt: naar een back-upsleutel, status geblokkeerd, en nooit door autosync te laten aanmaken.
 function projTakenVerweesdOpruimen(){
   const raw=localStorage.getItem('mt_project_taken_v2'); if(raw===null) return false;
-  let bewaard=false; try{ localStorage.setItem('mt_project_taken_v2_verweesd_'+Date.now(),raw); bewaard=true; }catch(e){}
-  if(bewaard) localStorage.removeItem('mt_project_taken_v2');
-  _ptVerweesd=true; try{ _SP.blockedKeys.add('mt_project_taken_v2'); }catch(e){}
-  try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint; de lokale kopie is'+(bewaard?' als back-up bewaard':' niet gebruikt')+'. Beheer moet de taken opnieuw overzetten.'); }catch(e){}
+  // Fail-closed: de back-up telt pas als hij is teruggelezen. Mislukt het, dan blijft de lokale v2 staan (niet verwijderd), _ptVerweesd blijft onwaar,
+  // de sleutel blijft geblokkeerd (geen autosync) en de Beheer-overstap in deze browser is geblokkeerd tot er ruimte is of de gebruiker exporteert.
+  const sleutel='mt_project_taken_v2_verweesd_'+Date.now(); let bewaard=false;
+  try{ localStorage.setItem(sleutel,raw); bewaard=localStorage.getItem(sleutel)===raw; }catch(e){ bewaard=false; }
+  try{ _SP.blockedKeys.add('mt_project_taken_v2'); }catch(e){}
+  if(!bewaard){ try{ localStorage.removeItem(sleutel); }catch(e){} _ptBackupFout=true; try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale takenlijst (bij Taken in een project).'); }catch(e){} return true; }
+  localStorage.removeItem('mt_project_taken_v2'); _ptVerweesd=true;
+  try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint; de lokale kopie is als back-up bewaard. Beheer moet de taken opnieuw overzetten.'); }catch(e){}
   return true;
 }
 function projTakenAll(){const r=projTakenRuw(), o={}; Object.keys(r).forEach(c=>{ if(!c.startsWith('__')) o[c]=MTPlanning.takenActief(r[c]); }); return o;}
@@ -6999,6 +7010,7 @@ function _ptLeesStrikt(k){ const raw=localStorage.getItem(k); if(raw===null) ret
 async function beheerTakenOverzetten(){
   const melding=(m,titel)=>mtDialog.alert({title:titel||'Taken overzetten',message:m});
   if(!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())) return melding('Alleen de eigenaar of beheer kan de taken overzetten.');
+  if(_ptBackupFout) return melding('Maak eerst ruimte vrij of exporteer de lokale takenlijst van deze browser (bij Taken in een project: "exporteer de lokale takenlijst"); daarna kun je de taken overzetten. Er is niets overgezet.','Taken overzetten geblokkeerd');
   if(!_ptVerweesd&&_ptLees('mt_project_taken_v2')) return melding('De taken zijn al overgezet.');
   if(!projTakenGereed()||(projTakenGeblokkeerd()&&!_ptVerweesd)) return melding('De synchronisatie is nog niet klaar of geblokkeerd: herlaad de pagina en probeer het opnieuw.');
   let oud=null; try{ oud=await _SP.read('mt_project_taken.json'); }catch(e){ return melding('Het oude takenbestand lezen mislukte: '+(e.message||e)+'. Er is niets overgezet.'); }
@@ -7049,6 +7061,12 @@ async function takenLokaalNaarBeheer(){
   try{ await navigator.clipboard.writeText(json); gekopieerd=true; }catch(e){}
   await mtDialog.alert({title:'Naar beheer sturen',message:gekopieerd?'De oude taken van deze browser staan op het klembord. Er opent zo een lege e-mail aan beheer: plak de tekst erin en verstuur hem.':'Kopiëren naar het klembord lukte niet. Download het bestand en stuur het als bijlage naar beheer.'});
   try{ const onderwerp=`Niet-gesynchroniseerde oude taken (${_ptLokaalAfw.length})`; location.href=['mailto:?subject=',encodeURIComponent(onderwerp),'&body=',encodeURIComponent('Plak hier de gekopieerde tekst (of voeg het gedownloade bestand toe).')].join(''); }catch(e){}
+}
+function takenVerweesdExport(){
+  const raw=localStorage.getItem('mt_project_taken_v2'); if(raw===null) return;
+  const blob=new Blob([raw],{type:'application/json'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='lokale-takenlijst-export.json'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
 }
 function takenLokaalNegeer(){ const s=_ptNegeer(); _ptLokaalAfw.forEach(a=>s.add(a.sleutel)); try{ localStorage.setItem('mt_taken_lokaal_negeer',JSON.stringify([...s])); }catch(e){} _ptLokaalAfw=[]; _ptHertekenen(); }
 // ── Vangnet: wat bij de overstap een nieuw id kreeg of afweek, en wat een oude app-versie sindsdien in het oude bestand wijzigde ──
@@ -7164,7 +7182,7 @@ async function projTakenHerkans(code){
 function projectTakenHtml(proj){
   { const st=projTakenStaat();
     if(st==='overzetten') return `<hr class="divider"><div class="card-title" style="margin:0 0 .5rem">Taken <span class="badge">alleen-lezen</span></div><p style="font-size:13px;color:var(--text-dim)" role="status">${esc(projTakenStatusTekst())}</p><table class="materiaal-lijst"><tbody>${projTaken(proj.code).map(t=>`<tr><td style="font-size:13px">${esc(t.naam)}</td><td>${esc((_PT_STAT[t.status]||_PT_STAT.todo).l)}</td><td style="text-align:right;font-family:var(--mono)">${esc(t.duur_uur||0)} u</td></tr>`).join('')||'<tr><td style="color:var(--text-faint);font-size:13px">Nog geen taken.</td></tr>'}</tbody></table>`;
-    if(st!=='klaar') return `<hr class="divider"><div class="card-title" style="margin:0 0 .5rem">Taken</div><p style="font-size:13px;color:var(--text-dim)" role="status">${esc(projTakenStatusTekst())}</p><button class="btn btn-xs btn-secondary" onclick="location.reload()">opnieuw proberen</button>`;
+    if(st!=='klaar') return `<hr class="divider"><div class="card-title" style="margin:0 0 .5rem">Taken</div><p style="font-size:13px;color:var(--text-dim)" role="status">${esc(projTakenStatusTekst())}</p><button class="btn btn-xs btn-secondary" onclick="location.reload()">opnieuw proberen</button>${st==='backup-mislukt'?' <button class="btn btn-xs btn-secondary" onclick="takenVerweesdExport()">exporteer de lokale takenlijst</button>':''}`;
   }
   const lokN=_ptLokaalNiet().length;
   const arr=projTaken(proj.code), sid=proj.code.replace(/-/g,'');
@@ -8708,14 +8726,17 @@ async function planNaarToggl(code){
   if(!mt){ planToast('❌ Project '+code+' niet gevonden'); return; }
   const open=plan.fases.filter(fa=>!fa.togglTaskId);
   if(!await mtDialog.confirm({title:'Planning naar Toggl',message:`${open.length} fase(n) als taak in het Toggl-project van ${projNaamVol(_projVoorCode(code))||'dit project'} zetten?`+(plan.fases.length-open.length?`\n${plan.fases.length-open.length} fase(n) staan er al in en worden overgeslagen.`:''),okLabel:'Naar Toggl'})) return;
+  if(_ptBlok(code)) return;   // opnieuw na de bevestigingsdialoog: de blokkade kan tijdens het wachten ontstaan zijn
   planToast('Toggl: project zoeken…');
   const pid=await _tgZorgProjectVoorCode(code);
   if(!pid){ planToast('❌ Geen Toggl-project: '+(window._t2LaatsteFout||'onbekende fout')+' — er is niets aangemaakt'); return; }
+  if(_ptBlok(code)) return;   // en na het zoeken/aanmaken van het Toggl-project
   if(plan.togglProjectId&&plan.togglProjectId!==pid) plan.legacy_toggl_project_id=plan.togglProjectId;
   plan.togglProjectId=pid;
   let ok=0, al=0, fout=0, eersteFout='', vers=true;
   for(const fa of plan.fases){
     if(fa.togglTaskId){ al++; continue; }
+    if(_ptBlok(code)) return;   // vóór elke Toggl-aanroep in de lus opnieuw controleren; bij een blokkade stoppen zonder planning-save (de marker voorkomt dubbelen bij een nieuwe poging)
     try{
       const r=await t2VindOfMaakTaak(code+'/fase/'+fa.id,{name:fa.naam,project_id:pid},vers); vers=false;
       fa.togglTaskId=r.id; if(r.bestond) al++; else ok++;
@@ -8913,9 +8934,10 @@ async function planEditorOpslaan(code,faseId){
     if(bt){ bt.naam=fa.naam; bt.status=fa.status; bt.duur_uur=fa.effort; if(projTakenZet(code,tarr)===false) return;   // geweigerd: geen Toggl-PATCH en geen planning-save
       // Niet meer stil: lukt Toggl niet, dan staat de taak op ⏳ (herkansing in Taken).
       if(bt.tg_task_id){
-        try{ await focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:await _ptStatusId(fa.status)}); delete bt.tg_pending; }
+        try{ const sid=await _ptStatusId(fa.status); if(_ptBlok(code)) return;   // de blokkade kan tijdens de await ontstaan zijn: dan geen Toggl-PATCH en geen planning-save
+          await focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:sid}); delete bt.tg_pending; }
         catch(e){ bt.tg_pending={status:true}; planToast('⚠ Fase opgeslagen, maar Toggl-taak nog niet bijgewerkt: '+(e.message||e)); }
-        projTakenZet(code,tarr);
+        if(projTakenZet(code,tarr)===false) return;   // geweigerd: geen vervolgeffecten
       }
     }
   }
