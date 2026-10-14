@@ -40,6 +40,7 @@
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planning.js?v=2.16.0"></script>
 <script src="mt-mijnwerk.js?v=2026-10-14a"></script>
+<script src="mt-capaciteit.js?v=2026-10-14a"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
@@ -1712,6 +1713,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="flex" style="gap:6px;align-items:center">
           <div class="ag-viewtog" style="display:inline-flex;border:1px solid var(--border,#ddd);border-radius:7px;overflow:hidden">
             <button class="btn btn-sm" id="agenda-view-mijnwerk" onclick="agendaZetView('mijnwerk')" title="Mijn werk: taken en planblokken per persoon in groepen (Nieuw, Te laat, Vandaag, …)" style="border:0;border-radius:0;padding:5px 10px">✅ Mijn werk</button>
+            <button class="btn btn-sm" id="agenda-view-capaciteit" onclick="agendaZetView('capaciteit')" title="Capaciteitsplanning voor het team: per persoon per dag gepland tegenover beschikbaar, met vrije dagen en verlof" style="border:0;border-radius:0;padding:5px 10px">👥 Capaciteit</button>
             <button class="btn btn-sm" id="agenda-view-grid" onclick="agendaZetView('grid')" title="Week-rooster" style="border:0;border-radius:0;padding:5px 10px">▦ Rooster</button>
             <button class="btn btn-sm" id="agenda-view-lijst" onclick="agendaZetView('lijst')" title="Timer-lijst (zoals Toggl)" style="border:0;border-radius:0;padding:5px 10px">≣ Lijst</button>
             <button class="btn btn-sm" id="agenda-view-plan" onclick="agendaZetView('plan')" title="Planning-blokken" style="border:0;border-radius:0;padding:5px 10px">📋 Planning</button>
@@ -1744,6 +1746,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="agenda-cap-balk" style="display:none;margin-bottom:8px"></div>
     <div id="agenda-totalen" style="margin-bottom:1rem"></div>
     <div id="agenda-mijnwerk" style="display:none"></div>
+    <div id="agenda-capaciteit" style="display:none"></div>
     <div class="card" id="agenda-gridkaart" style="padding:0;overflow:auto;max-height:74vh">
       <div id="agenda-grid"></div>
     </div>
@@ -3674,7 +3677,7 @@ function periodePresetGewijzigd(){
 // ═══ AGENDA (Toggl week-kalender, leest gedeelde mt_uren_entries) ═══
 const AG_STD_TEAM=[{naam:'bart',label:'Bart',kleur:'#2A4A38'},{naam:'mathijs',label:'Mathijs',kleur:'#B8962E'},{naam:'arjan',label:'Arjan',kleur:'#5a3a8b'},{naam:'maarten',label:'Maarten',kleur:'#1a3a8b'}];
 const AG_START=6, AG_EIND=22, AG_UURPX=46;
-let _agenda={weekStart:null,kleurOp:'project',fProj:new Set(),fPers:new Set(),view:'grid'};
+let _agenda={weekStart:null,kleurOp:'project',fProj:new Set(),fPers:new Set(),view:'capaciteit'};   // standaardweergave van de Agenda: de capaciteitsplanning voor het team (Mijn werk staat ernaast)
 const AG_NONE='__none__';            // sentinel: lege set = "alle"; AG_NONE = "niets"
 let _agNamesTried=false, _agOutsideBound=false;
 
@@ -3705,11 +3708,12 @@ function renderAgenda(){
   const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
   if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
   if(capBalk) capBalk.style.display=_agenda.view==='plan'?'block':'none';
-  { const mb=document.getElementById('agenda-view-mijnwerk'), mw=_agenda.view==='mijnwerk';   // Mijn werk (stap 2c): eigen vlak in plaats van het rooster
-    if(mb) mb.classList.toggle('btn-gold',mw), mb.classList.toggle('btn-secondary',!mw);
-    const m=document.getElementById('agenda-mijnwerk'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
-    if(m) m.style.display=mw?'block':'none'; if(gk) gk.style.display=mw?'none':''; if(tot&&mw) tot.style.display='none'; else if(tot) tot.style.display='';
-    if(mw){ agRenderFilters(); try{ MTMijnWerk.teken(); }catch(e){ console.warn('Mijn werk:',e); } return; } }
+  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', eigen=mw||cp;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
+    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('btn-secondary',!aan); });
+    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
+    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
+    if(mw){ agRenderFilters(); try{ MTMijnWerk.teken(); }catch(e){ console.warn('Mijn werk:',e); } return; }
+    if(cp){ agRenderFilters(); try{ MTCapaciteit.teken(); }catch(e){ console.warn('Capaciteit:',e); } return; } }
   agRenderFilters();
   if(_agenda.view==='lijst') agRenderLijst(); else if(_agenda.view==='plan') agPlanRender(); else agRenderGrid();
 }
@@ -3718,10 +3722,16 @@ function agendaZetView(v){_agenda.view=v;renderAgenda();}
 try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
   voorstellen:true, magBeslissen:()=>rolMag(ROL_TAAK_ALLES), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
-  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(),   // de vrije dagen en het verlof uit Beheer (mt_vrijedagen, mt_verlof) tellen mee in de weekbalk
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Mijn werk init:',e); }
+// Capaciteit (stap 2, standaardweergave van de Agenda): dezelfde bronnen, plus de werkuren per persoon uit Beheer (admCfg().werkuren).
+try{ MTCapaciteit.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu:()=>Date.now(),
+  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null,
+  project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
+  openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit init:',e); }
 // Haalt project-/persoon-namen één keer op als de cache leeg is (bv. eerste
 // render vóór een sync). Daarna her-rendert het zodat ID-stubs namen worden.
 function agEnsureNames(){
@@ -15557,8 +15567,8 @@ function startTabZet(){
   if(kies&&MTRol.magGeld()){ if(zichtbaar(g)) showTab('geld',g); }
   else if(kies&&zichtbaar(a)){
     const ik=(typeof mtMijEmail==='function'&&mtMijEmail())||'', lid=MT_TEAM.find(m=>m.email.toLowerCase()===ik);
-    _agenda.view='plan'; _agenda.weekStart=agMaandag(new Date());
-    if(lid) _agenda.fPers=new Set([lid.slug,lid.email]);   // planblokken staan op slug of e-mail
+    _agenda.view='capaciteit'; _agenda.weekStart=agMaandag(new Date());   // de capaciteitsplanning voor het team (stap 2); Planning blijft één klik verder
+    if(lid) _agenda.fPers=new Set([lid.slug,lid.email]);   // planblokken staan op slug of e-mail (voor de weergave Planning; de capaciteit toont altijd het hele team)
     showTab('agenda',a);
   }
   _verborgenTabTerugval();   // niets te kiezen (geen rol, oude worker, geen Agenda) en het oude dashboard is verborgen

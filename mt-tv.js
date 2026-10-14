@@ -34,7 +34,7 @@
     if (S.bezig) return;
     S.bezig = true;
     try {
-      const [tk, af, bl, pr, be] = await Promise.all(['mt_project_taken_v2.json', 'mt_project_afhank.json', 'mt_planblokken.json', 'mt_projecten.json', 'mt_bestellijst_v2.json'].map(leesOpt));
+      const [tk, af, bl, pr, be, vd, vl] = await Promise.all(['mt_project_taken_v2.json', 'mt_project_afhank.json', 'mt_planblokken.json', 'mt_projecten.json', 'mt_bestellijst_v2.json', 'mt_vrijedagen.json', 'mt_verlof.json'].map(leesOpt));
       let nrs = {}; try { nrs = (D.nummers ? await D.nummers() : null) || {}; } catch (e) { nrs = {}; }
       if (!tk.ok) { S.laadFout = 'Verversen mislukt (' + tk.fout + ')'; if (!S.data) S.staat = 'fout'; return; }
       if (tk.data === null || tk.data === undefined) { S.staat = 'overzetten'; S.data = null; return; }
@@ -42,7 +42,8 @@
       let taken; try { taken = P.takenSamen(null, tk.data); } catch (e) { S.staat = 'fout'; S.fout = 'De takenlijst is niet te lezen.'; return; }
       const projecten = lijstVan(pr.ok ? pr.data : null).filter(p => p.code && !p._vervallen);
       const bestel = be.ok && Array.isArray(be.data) && !P.bestelBestandVorm(be.data) ? lijstVan(be.data).filter(b => b.id !== '__migratie' && !b._vervallen) : [];
-      S.data = { taken, afh: af.ok && af.data && typeof af.data === 'object' && !Array.isArray(af.data) ? af.data : {}, blokken: lijstVan(bl.ok ? bl.data : null), projecten, bestel, nrs: nrs && typeof nrs === 'object' ? nrs : {} };
+      S.data = { taken, afh: af.ok && af.data && typeof af.data === 'object' && !Array.isArray(af.data) ? af.data : {}, blokken: lijstVan(bl.ok ? bl.data : null), projecten, bestel, nrs: nrs && typeof nrs === 'object' ? nrs : {},
+        vrij: vd.ok && Array.isArray(vd.data) ? P.vrijeDagenLijst(vd.data) : null, verlof: vl.ok && Array.isArray(vl.data) ? lijstVan(vl.data) : null };   // de vrije dagen en het verlof uit Beheer (alleen lezen); niet te lezen = alleen weekenden
       S.staat = 'klaar'; S.fout = ''; S.laadFout = ''; S.laatsteOk = D.nu();
     } finally { S.bezig = false; }
   };
@@ -123,7 +124,7 @@
       el('span', { klass: 'tv-blok-proj', tekst: projKort(item.code) }), el('span', { klass: 'tv-blok-naam', tekst: (vlag.length ? vlag.join('') + ' ' : '') + item.naam }));
   }
   function tekenKalender(w) {
-    const r = P.weekRooster(S.data.taken, S.data.afh, S.data.blokken, { team: D.team(), vandaag: P.vandaagYmd(), weken: 2, vrij: D.vrij ? D.vrij() : null });
+    const r = P.weekRooster(S.data.taken, S.data.afh, S.data.blokken, { team: D.team(), vandaag: P.vandaagYmd(), weken: 2, vrij: vrijDagen(), verlof: S.data.verlof });
     // kolommen: persoon | dagdeel | een kolom per werkdag; per persoon twee rijen (ochtend en middag), zodat een blok breed genoeg blijft om te lezen
     const raster = el('div', { klass: 'tv-raster', style: 'grid-template-columns:140px 74px repeat(' + r.dagen.length + ',minmax(0,1fr))' });
     const hoek = el('div', { klass: 'tv-hoek' }); hoek.style.gridColumn = 'span 2'; raster.appendChild(hoek);
@@ -132,7 +133,8 @@
       const p = el('div', { klass: 'tv-persoon', tekst: rij.naam }); p.style.gridRow = 'span 2'; raster.appendChild(p);
       [0, 1].forEach(dl => {
         raster.appendChild(el('div', { klass: 'tv-deellabel', tekst: dl ? 'middag' : 'ochtend' }));
-        r.dagen.forEach((d, i) => raster.appendChild(el('div', { klass: 'tv-cel' + (d.nu ? ' nu' : '') + (d.werkdag ? '' : ' vrij') + (d.week ? ' w2' : '') }, rij.cellen[i][dl].map(blokKnop))));
+        r.dagen.forEach((d, i) => { const verlof = !!(rij.verlofDag && rij.verlofDag[i]);   // verlof uit Beheer: de dag is voor deze persoon dicht
+          raster.appendChild(el('div', { klass: 'tv-cel' + (d.nu ? ' nu' : '') + (d.werkdag && !verlof ? '' : ' vrij') + (verlof ? ' verlof' : '') + (d.week ? ' w2' : '') }, verlof && !dl ? el('span', { klass: 'tv-verlof', tekst: 'verlof' }) : null, rij.cellen[i][dl].map(blokKnop))); });
       });
     });
     w.appendChild(raster);
@@ -141,7 +143,7 @@
 
   // ── tab 2: Projecten (de stroom: een rij per actief project door de keten) ──
   const FASE = { werkvoorbereiding: 'Werkvoorbereiding', inkoop: 'Inkoop', productie: 'Productie', klaar_levering: 'Klaar voor levering' };
-  const vrijDagen = () => (D.vrij ? D.vrij() : null);
+  function vrijDagen() { return S.data && S.data.vrij ? S.data.vrij : (D.vrij ? D.vrij() : null); }
   T.projectRijen = () => P.projectStroom(S.data.taken, S.data.afh, S.data.projecten, { vandaag: P.vandaagYmd(), bestel: S.data.bestel, vrij: vrijDagen() });
   function projectKaartItem(r) {
     return { soort: 'project', id: 'project:' + r.code, code: r.code, naam: projLabel(r.code), vlag: r.vlag, regels: [['Project', projLabel(r.code)], ['Fase', FASE[r.fase] || r.fase || ''], ['Leverdatum', r.lever ? P.datumKort(r.lever) : 'niet ingevuld'],

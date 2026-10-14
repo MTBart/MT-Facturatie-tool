@@ -18,7 +18,7 @@
   const BESTAND = 'mt_project_taken_v2.json', LS_TAKEN = 'mt_project_taken_v2', LS_AFH = 'mt_mobiel_afhank', LS_GEZIEN = 'mt_vandaag_gezien';
   const V = {};
   let D = null, P = null;
-  const S = { staat: 'laden', vormFout: '', schemaMin: null, taken: {}, afhank: {}, mw: null, laadtijd: 0, bezigLaden: null, open: null, bezig: false };
+  const S = { staat: 'laden', vormFout: '', schemaMin: null, taken: {}, afhank: {}, mw: null, vrij: null, verlof: null, laadtijd: 0, bezigLaden: null, open: null, bezig: false };
 
   // ── kleine bouwstenen ──
   function el(tag, props, ...kids) {
@@ -88,6 +88,9 @@
       if (r && typeof r === 'object' && !Array.isArray(r)) { S.afhank = r; try { D.storage.setItem(LS_AFH, JSON.stringify(r)); } catch (e) {} } else if (r === null) S.afhank = {};
     } catch (e) { S.afhank = leesJson(LS_AFH) || S.afhank || {}; }
     try { await D.pvLees(); } catch (e) {}
+    // De vrije dagen en het verlof uit Beheer (dezelfde bestanden als de cockpit): ze tellen mee in de weekbalk en in "wacht op een wachttijd". Niet te lezen = zoals voorheen (alleen weekenden).
+    try { const r = await D.sp.read('mt_vrijedagen.json'); if (Array.isArray(r)) S.vrij = P.vrijeDagenLijst(r); } catch (e) {}
+    try { const r = await D.sp.read('mt_verlof.json'); if (Array.isArray(r)) S.verlof = r; } catch (e) {}
     S.laadtijd = D.nu(); teken();
   }
   // Laden (of opnieuw laden) — één tegelijk.
@@ -111,7 +114,7 @@
   // ── berekenen en tekenen ──
   function bereken() {
     const w = D.wie();
-    S.mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), { mijn: w.slug, vandaag: P.vandaagYmd(), nu: D.nu(), gezien: leesGezien() });
+    S.mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), { mijn: w.slug, vandaag: P.vandaagYmd(), nu: D.nu(), gezien: leesGezien(), vrij: S.vrij, verlof: S.verlof });
     return S.mw;
   }
   const alleItems = mw => Object.keys(mw.groepen).reduce((a, k) => a.concat(mw.groepen[k]), []);

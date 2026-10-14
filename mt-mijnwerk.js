@@ -35,7 +35,7 @@
 
   const GROEPEN = [['voorstel', 'Voorstellen van de werkplaats'], ['nieuw', 'Nieuw voor mij'], ['teLaat', 'Te laat'], ['vandaag', 'Vandaag'], ['week', 'Deze week'], ['later', 'Later'], ['zonderDatum', 'Zonder datum']];
   M.bereken = function () {
-    const opt = { team: D.team(), vandaag: P.vandaagYmd(), nu: D.nu(), project: F.project || '', gezien: leesGezien(), vrij: D.vrij ? D.vrij() : null };
+    const opt = { team: D.team(), vandaag: P.vandaagYmd(), nu: D.nu(), project: F.project || '', gezien: leesGezien(), vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null };
     if (F.persoon === 'iedereen') Object.assign(opt, { iedereen: true });
     else if (F.persoon === 'ik') Object.assign(opt, { mijn: mijnSlug() });
     else Object.assign(opt, { mijn: F.persoon, nieuw: false });
