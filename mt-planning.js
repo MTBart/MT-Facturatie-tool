@@ -1454,6 +1454,14 @@
 
   // ── Uren in gewone taal: 150 → "2u30", 120 → "2u", 45 → "0u45" ──
   P.fmtUurMin = m => { const n = Math.max(0, Math.round(getal(m))), h = Math.floor(n / 60), r = n % 60; return r ? h + 'u' + String(r).padStart(2, '0') : h + 'u'; };
+  // ... en terug: "2,5", "2.5", "2u30", "2:15", "1 uur", "45m" → minuten. Leeg, onleesbaar, 0 of meer dan 16 uur → null (er wordt dan niets geboekt).
+  P.duurNaarMin = function (tekst) {
+    const x = String(tekst == null ? '' : tekst).trim().toLowerCase().replace(',', '.'); let m, min = null;
+    if ((m = /^(\d{1,2})\s*(?:u|uur|h|:)\s*(\d{1,2})?\s*(?:m|min)?$/.exec(x))) min = Number(m[1]) * 60 + Number(m[2] || 0);
+    else if ((m = /^(\d+(?:\.\d+)?)\s*(?:m|min|minuten)$/.exec(x))) min = Math.round(Number(m[1]));
+    else if ((m = /^(\d+(?:\.\d+)?)\s*(?:u|uur|h)?$/.exec(x))) min = Math.round(Number(m[1]) * 60);
+    return min !== null && isFinite(min) && min > 0 && min <= 16 * 60 ? min : null;
+  };
 
   // ── Projectkleur: een vaste kleur per projectcode (geen rood, oranje of groen: die zijn voor alarm) ──
   const KLEUR_TINTEN = [195, 210, 225, 240, 255, 270, 285, 300];

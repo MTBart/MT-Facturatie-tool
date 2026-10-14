@@ -350,8 +350,48 @@
     D.toast('Taak op ' + P.TAAK_STATUS_LABEL[nieuw] + ' gezet.');
     if (nieuw === 'klaar') sluitKaart();
     teken();
+    if (nieuw === 'klaar') await naKlaar(item);
   }
   V.zetStatus = zetStatus;
+
+  // ── Klaar zonder lopende timer: "Tijd boeken: 2u30?" ──
+  // De taak staat dan al op Klaar. De vraag komt alleen als er geen timer op dit project loopt, het project een Toggl-project heeft, de rol uren mag boeken en er geplande uren
+  // over zijn (gepland min wat al geklokt is). Pas na een bevestiging gaat er één time-entry naar Toggl (de bestaande route van de telefoon): nooit stil boeken, en annuleren of
+  // "alleen klaar melden" boekt niets. Faalt het boeken, dan zegt de app dat en probeert hij niets opnieuw: de taak blijft Klaar.
+  const GEBOEKT = 'mt_vandaag_geboekt', GEBOEKT_UREN = 12;
+  const leesGeboekt = () => leesJson(GEBOEKT) || {};
+  async function naKlaar(item) {
+    const t = item.taak, p = projInfo(item.code);
+    if (D.demo() || !p) return;
+    const lopend = D.timer.lopend();
+    if (lopend && p.mobielId && lopend.mobielId === p.mobielId) { D.toast('Klaar gemeld. Je timer loopt nog: stop hem als je klaar bent.'); return; }
+    if (!p.mobielId || !p.togglProjectId || !D.rol.mag(P.ROL.UREN_BOEKEN) || !(item.gepland_min > 0)) return;
+    let geklokt = null; if (t.tg_task_id) { try { geklokt = await geklokteMin(t.tg_task_id); } catch (e) { geklokt = null; } }
+    const rest = Math.max(0, item.gepland_min - (geklokt || 0)); if (rest <= 0) return;
+    const eerder = leesGeboekt()[t.id], eerderNog = !!(eerder && D.nu() - Number(eerder.t) < GEBOEKT_UREN * 3600000);
+    const regels = ['"' + t.naam + '" is klaar gemeld.',
+      geklokt === null ? 'Gepland ' + uren(item.gepland_min) + '. De geklokte uren op deze taak zijn nog niet bekend, dus dit is het geplande totaal.' : 'Gepland ' + uren(item.gepland_min) + ', al geklokt ' + uren(geklokt) + ': nog ' + uren(rest) + ' over.',
+      eerderNog ? 'Let op: je boekte hier eerder vandaag al ' + uren(eerder.min) + ' op.' : '', 'Er wordt niets geboekt zonder jouw keuze.'].filter(Boolean);
+    const keuze = await D.dialog().choose({ title: 'Tijd boeken: ' + uren(rest) + '?', message: regels.join('\n'),
+      choices: [{ label: 'Boek ' + uren(rest), sublabel: 'Eén time-entry op ' + projLabel(item.code) }, { label: 'Ander aantal…', sublabel: 'Bijvoorbeeld 1,5 of 2u30' }, { label: 'Alleen klaar melden', sublabel: 'Er wordt niets geboekt' }] });
+    if (keuze !== 0 && keuze !== 1) return;   // annuleren of "alleen klaar melden"
+    let min = rest;
+    if (keuze === 1) {
+      const invoer = await D.dialog().prompt({ title: 'Hoeveel tijd boeken?', message: '"' + t.naam + '"', placeholder: 'Bijvoorbeeld 1,5 of 2u30', defaultValue: String(Math.round(rest / 60 * 100) / 100).replace('.', ','), okLabel: 'Boek' });
+      if (invoer === null || invoer === undefined) return;
+      min = P.duurNaarMin(invoer);
+      if (min === null) { D.toast('Geen geldig aantal uren — er is niets geboekt.'); return; }
+    }
+    if (D.demo() || !D.rol.mag(P.ROL.UREN_BOEKEN)) { D.toast('⛔ Tijd boeken mag je niet met jouw rol. Er is niets geboekt.'); return; }   // opnieuw na de dialogen
+    const nu = D.timer.lopend(); if (nu && nu.mobielId === p.mobielId) { D.toast('De timer loopt nu op dit project — er is niets geboekt.'); return; }
+    try {
+      const r = await D.toggl.boek({ mobielId: p.mobielId, minuten: min, omschrijving: t.naam, taskId: t.tg_task_id || null });
+      const g = leesGeboekt(), nu2 = D.nu(); g[t.id] = { t: nu2, min: (eerderNog ? Number(eerder.min) || 0 : 0) + min };
+      Object.keys(g).forEach(k => { if (nu2 - Number(g[k].t) > 48 * 3600000) delete g[k]; });
+      try { D.storage.setItem(GEBOEKT, JSON.stringify(g)); } catch (e) {}
+      D.toast('Geboekt: ' + uren(min) + ' op ' + projLabel(item.code) + '.' + (r && r.gekoppeld === false && t.tg_task_id ? ' Toggl nam de koppeling met de taak niet aan: de uren staan op het project.' : ''));
+    } catch (e) { D.toast('Boeken mislukt: ' + String((e && e.message) || e) + '. De taak staat wel op Klaar.'); }
+  }
 
   // ── de grote +: Taak melden · Probleem melden · Bestelvoorstel ──
   // Komt meteen in het project, gemarkeerd als voorstel (met wie en welke rol); kantoor ziet het en beslist. Een taak of probleem gaat in de takenlijst (dezelfde schrijfkern als

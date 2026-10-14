@@ -2344,6 +2344,24 @@ function _vdProject(code) {   // de taken staan onder de cockpit-projectcode; de
   if (!p && !info) return null;
   return { code: (info && info.code) || code, naam: p ? mProjNaam(p) : String((info && info.naam) || ''), nr: p ? mProjNr(p) : '', mobielId: p ? p.id : '', togglProjectId: p ? (p.togglProjectId || null) : null, projectId: (info && info.project_id) || '' };
 }
+// Eén time-entry boeken via de bestaande Track-route (tgTrack), ná een bevestiging in mt-vandaag.js: de aanroeper boekt nooit stil.
+// De entry loopt van (nu - duur) tot nu en krijgt, als de taak aan Toggl gekoppeld is, die taak mee. Weigert Toggl alleen die koppeling (een 4xx), dan één keer
+// zonder taak (de uren staan dan op het project); bij een server- of netwerkfout GEEN tweede poging, want de eerste kan wel zijn aangekomen en dan staan de uren dubbel.
+async function _vdBoek({ mobielId, minuten, omschrijving, taskId }) {
+  const proj = allProjects().find(p => p.id === mobielId);
+  if (!proj || !proj.togglProjectId) throw new Error('Dit project heeft geen Toggl-project.');
+  const min = Math.round(Number(minuten));
+  if (!(min > 0)) throw new Error('Het aantal minuten ontbreekt.');
+  const stop = new Date(), start = new Date(stop.getTime() - min * 60000), iso = d => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const body = { description: (omschrijving && String(omschrijving).trim()) || proj.name, project_id: proj.togglProjectId, start: iso(start), stop: iso(stop), duration: min * 60, created_with: 'mt-mobiel', workspace_id: TG_WS };
+  const pad = 'workspaces/' + TG_WS + '/time_entries';
+  if (taskId !== null && taskId !== undefined && taskId !== '') body.task_id = Number(taskId);
+  try { await tgTrack(pad, 'POST', body); return { gekoppeld: 'task_id' in body }; }
+  catch (e) {
+    if (!('task_id' in body) || !/Track HTTP 4\d\d/.test(String((e && e.message) || ''))) throw e;
+    delete body.task_id; await tgTrack(pad, 'POST', body); return { gekoppeld: false };
+  }
+}
 let _vdUren = { ts: 0, lijst: null };
 async function _vdGeklokt() {   // mijn eigen geklokte minuten per Toggl-taak (laatste 90 dagen), 60 s gecachet; zelfde stream als de agenda
   if (_demoMode || !_msAccount) return null;
@@ -2380,7 +2398,7 @@ if (window.MTVandaag) MTVandaag.init({
     start: (mobielId, oms) => { selectProject(mobielId); startTimer(oms); },
     stop: () => stopTimer()
   },
-  toggl: { geklokt: _vdGeklokt }
+  toggl: { geklokt: _vdGeklokt, boek: _vdBoek }
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && window.MTVandaag) { const t = document.getElementById('tab-vandaag'); if (t && t.classList.contains('active')) MTVandaag.toon(); } });
 
