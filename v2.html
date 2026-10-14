@@ -33,7 +33,7 @@
 <script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2026-10-13q"></script>
+<script src="mt-inbox.js?v=2.16.3"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -844,7 +844,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.16.2</span>
+    <span class="header-version">v2.16.3</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -1203,7 +1203,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           </div>
           <input class="zoek-input" id="project-zoek" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
           <div id="vandaag-kaart" class="vandaag-kaart" hidden></div>
-          <div id="binnenkomend-kaart" class="vandaag-kaart" hidden></div>
           <div id="mobiel-meldingen-container"></div>
           <div id="project-filterchip"></div>
           <div id="project-lijst"></div>
@@ -2313,7 +2312,10 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <button class="inbox-subtab actief" data-sub="mail" onclick="inboxSub('mail')">📥 Mail</button>
       <button class="inbox-subtab" data-sub="agenda" onclick="inboxSub('agenda')">📅 Agenda</button>
       <button class="inbox-subtab" data-sub="taken" onclick="inboxSub('taken')">✓ Taken</button>
+      <button class="inbox-subtab" data-sub="binnenkomend" onclick="inboxSub('binnenkomend')" title="Wie pakt welk gesprek uit info@ op">📨 Binnenkomend info@</button>
     </div>
+    <!-- Binnenkomend (info@) staat hier en niet in Projecten: de projectenlijst toont alleen projecten en leads die echt zijn aangemaakt. -->
+    <div id="inbox-pane-binnenkomend" class="inbox-pane" style="max-width:720px"><div id="binnenkomend-kaart" class="vandaag-kaart" hidden></div></div>
     <div id="inbox-pane-mail" class="inbox-pane actief">
     <div class="inbox-wrap">
       <div class="inbox-col inbox-folders">
@@ -3381,7 +3383,6 @@ function showTab(name,btn){
     const pd=document.getElementById('project-detail');
     const vers=huidigProject && pd && !pd.dataset.offerte && !pd.dataset.klant && pd.dataset.code!==huidigProject.code && openProject(huidigProject.code,{scroll:false,geschiedenis:'replace'});
     if(!vers) renderProjectLijst();
-    binnenkomendOpen();
   }
   if(name==='oplevering') oplViewerOpen();
   if(name==='instellingen') beheerLaad();
