@@ -2247,6 +2247,7 @@ async function rolLaadMobiel() {
   const me = await MTRol.laad(WORKER); if (!me) return;
   if (MTRol.geenToegangNodig()) { MTRol.toonGeenToegang(WORKER); return; }
   MTRol.pasToe();
+  try { if (typeof currentSheetProject !== 'undefined' && currentSheetProject) renderSheetTasks(); } catch (e) {}   // ronde 9: de takenknoppen volgens de rol
   // Geld (geldtijdlijn) staat in de cockpit (responsive): alleen een knop voor wie het recht heeft, op een worker die het kent.
   const gk = document.getElementById('geldKnop'); if (gk) gk.style.display = me.rechten && ('geld' in me.rechten) && MTRol.magGeld() ? '' : 'none';
   if (gk && gk.style.display === '') geldBadgeLaad();   // ongelezen ochtendmeldingen van de Koersmeter
@@ -2664,10 +2665,38 @@ if (!TASKS) {
 }
 function tasksFor(code) { return TASKS[code] || []; }
 function saveTasks() { localStorage.setItem("mt_tasks", JSON.stringify(TASKS)); }
+// ═══ Rollenmatrix op de mobiele takenlijst (ronde 9) ═══
+// Dezelfde rechtnamen als v2.html: taken "status-nieuw|alles" = de status wijzigen en een nieuwe taak toevoegen (ook de werkplaats); taken "alles" = een taak bewerken of verwijderen;
+// "lezen" mag niets. Elke muterende handler vraagt het recht vóór het eerste effect en (waar er een await tussen zit) vlak vóór het schrijven; de knoppen gaan uit (_mobRolPas).
+// Buiten de modus "afdwingen" is alles toegestaan (MTRol.mag); de worker blijft voor Toggl de echte poortwachter.
+// TODO (stap 3 van het eindontwerp: offline-outbox en operation-id's): de mobiele Toggl-aanroepen (status, naam, aanmaken) krijgen nog GEEN tg_pending-intentie zoals v2; dat is bestaand gedrag.
+const ROL_TAAK_STATUS = 'taken:status-nieuw|alles', ROL_TAAK_ALLES = 'taken:alles';
+function rolMagM(spec) { return !(window.MTRol && MTRol.mag) || MTRol.mag(spec); }
+function rolGeweigerdM(spec, wat) {
+  if (rolMagM(spec)) return false;
+  try { showToast('⛔ ' + (wat || 'Dit') + ' mag je niet met jouw rol. Er is niets gewijzigd.'); } catch (e) {}
+  return true;
+}
+// De knoppen en velden van de takenlijst die de rol niet toestaat uitzetten. De sjabloonregels van renderSheetTasks blijven ongewijzigd; deze doorloop past ze achteraf aan.
+function _mobRolPas(el) {
+  if (!el || !(window.MTRol && MTRol.afdwingen && MTRol.afdwingen())) return;
+  const status = rolMagM(ROL_TAAK_STATUS), alles = rolMagM(ROL_TAAK_ALLES);
+  if (!status) {
+    el.querySelectorAll('.task-toggle').forEach(b => { b.disabled = true; b.setAttribute('aria-disabled', 'true'); });
+    el.querySelectorAll('button[onclick*="startNewTask("]').forEach(b => b.classList.add('mt-rol-verborgen'));
+    el.querySelectorAll('.task-form').forEach(f => { if (f.querySelector('#tfNewName')) f.classList.add('mt-rol-verborgen'); });
+  }
+  if (!alles) {
+    el.querySelectorAll('.task-main').forEach(m => { m.removeAttribute('onclick'); m.style.cursor = 'default'; });
+    el.querySelectorAll('.task-form').forEach(f => { if (f.querySelector('#tfName')) f.classList.add('mt-rol-verborgen'); });
+  }
+}
 function addTaskToProject(code, task) {
+  if (rolGeweigerdM(ROL_TAAK_STATUS, 'Een taak toevoegen')) return false;   // ook na een await in de aanroeper: de controle zit hier, vlak vóór het schrijven
   if (!TASKS[code]) TASKS[code] = [];
   TASKS[code].push(task);
   saveTasks();
+  return true;
 }
 
 // SP-sync voor taken (mt_app_taken.json)
@@ -4086,7 +4115,7 @@ function saveBlok() {
   if (taskName === "__new") {
     const newName = document.getElementById("blokNewTaskName").value.trim();
     if (!newName) { alert("Geef de nieuwe taak een naam."); return; }
-    addTaskToProject(code, {id:"t"+Date.now(), name:newName, status:"todo", date:null, est:null, tag:null, note:""});
+    if (!addTaskToProject(code, {id:"t"+Date.now(), name:newName, status:"todo", date:null, est:null, tag:null, note:""})) return;   // geen recht om een taak toe te voegen: het blok wordt niet gemaakt
     taskName = newName;
   }
 
@@ -4231,7 +4260,7 @@ async function noteToTask(note, knownProjPath) {
       task.link = await _projFolderUrl(note.project, (note.fotos && note.fotos.length) ? "06_Fotos" : "", knownProjPath);
     } catch(e) {}
   }
-  addTaskToProject(proj.code, task);
+  if (!addTaskToProject(proj.code, task)) return;   // geen recht (ook na de await hierboven): geen taak, geen Toggl-aanroep
   if (currentSheetProject && currentSheetProject.code === proj.code) renderSheetTasks();
   // Toggl 2.0 Focus + SP (zelfde route als saveNewTask)
   if (!_demoMode && _msAccount && proj.togglProjectId) {
@@ -6057,7 +6086,7 @@ function herstelNaarTaak(idx) {
     status: "todo", date: null, est: null,
     tag: "herstelpunt", note: note, togglTaskId: null
   };
-  addTaskToProject(p.code, task);
+  if (!addTaskToProject(p.code, task)) return;   // geen recht om een taak toe te voegen
   showToast(`✓ Taak aangemaakt in ${p.code}`);
 
   // Sync naar Toggl 2.0 als project een echte Toggl-ID heeft
@@ -6545,9 +6574,11 @@ function renderSheetTasks() {
   }
 
   el.innerHTML = html;
+  _mobRolPas(el);
 }
 
 function toggleTaskStatus(id) {
+  if (rolGeweigerdM(ROL_TAAK_STATUS, 'De status van een taak wijzigen')) { renderSheetTasks(); return; }
   const t = tasksFor(currentSheetProject.code).find(x => x.id === id);
   if (!t) return;
   t.status = TASK_NEXT[t.status] || "todo";
@@ -6565,6 +6596,7 @@ function toggleTaskStatus(id) {
 }
 
 function editTask(id) {
+  if (rolGeweigerdM(ROL_TAAK_ALLES, 'Een taak bewerken')) return;
   editingTaskId = id;
   addingTask = false;
   renderSheetTasks();
@@ -6576,6 +6608,7 @@ function cancelTaskEdit() {
 }
 
 function saveTaskEdit(id) {
+  if (rolGeweigerdM(ROL_TAAK_ALLES, 'Een taak bewerken')) { editingTaskId = null; renderSheetTasks(); return; }
   const t = tasksFor(currentSheetProject.code).find(x => x.id === id);
   if (!t) return;
   const name = document.getElementById("tfName").value.trim();
@@ -6596,6 +6629,7 @@ function saveTaskEdit(id) {
 }
 
 function deleteTask(id) {
+  if (rolGeweigerdM(ROL_TAAK_ALLES, 'Een taak verwijderen')) { editingTaskId = null; renderSheetTasks(); return; }
   const code = currentSheetProject.code;
   TASKS[code] = tasksFor(code).filter(x => x.id !== id);
   saveTasks();
@@ -6605,6 +6639,7 @@ function deleteTask(id) {
 }
 
 function startNewTask() {
+  if (rolGeweigerdM(ROL_TAAK_STATUS, 'Een taak toevoegen')) return;
   addingTask = true;
   editingTaskId = null;
   renderSheetTasks();
@@ -6618,6 +6653,7 @@ function cancelNewTask() {
 }
 
 function saveNewTask() {
+  if (rolGeweigerdM(ROL_TAAK_STATUS, 'Een taak toevoegen')) { addingTask = false; renderSheetTasks(); return; }
   const name = document.getElementById("tfNewName").value.trim();
   if (!name) { alert("Geef de taak een naam."); return; }
   const task = {
@@ -6627,7 +6663,7 @@ function saveNewTask() {
     est: document.getElementById("tfNewEst").value.trim() || null,
     tag: null, note: "", togglTaskId: null
   };
-  addTaskToProject(currentSheetProject.code, task);
+  if (!addTaskToProject(currentSheetProject.code, task)) { addingTask = false; renderSheetTasks(); return; }   // geweigerd: ook geen Toggl-aanroep
   addingTask = false;
   renderSheetTasks();
 
