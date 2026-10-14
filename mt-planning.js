@@ -1016,7 +1016,8 @@
   P.sjabloonToepassen = function (s, { budget = null, leverdatum = '', start = '', vrij = null, projectId = '', nieuwId = null, dagMin = 0, bestaand = [], modus = '' } = {}) {
     const ctl = P.sjabloonControle(s), waarsch = ctl.waarschuwingen.filter(w => !(s && s._aangepast && /tellen op tot/.test(w)));   // na weglaten rekent de verdeling naar verhouding om
     if (ctl.fouten.length) return { ok: false, fouten: ctl.fouten, waarschuwingen: waarsch };
-    const mk = nieuwId || ((soort, k) => (soort === 'dep' ? 'd' : 't') + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + k);
+    // Stabiele id's per project en sjabloonstap (ronde 8): twee keer toepassen (ook op twee pc's tegelijk) geeft dezelfde taken en dus geen dubbelen; zonder project willekeurig.
+    const mk = nieuwId || ((soort, k) => projectId ? P.stabielId(soort === 'dep' ? 'd_' : 't_', 'sjabloon', projectId, s.id, k) : (soort === 'dep' ? 'd' : 't') + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + k);
     const fase = {}; (s.fases || []).forEach(f => { fase[f.k] = f.naam; });
     const verd = P.sjabloonVerdeling(s, budget), idVan = {}, taken = [];
     s.taken.forEach(t => {
@@ -1032,7 +1033,7 @@
     });
     const deps = (s.deps || []).map((d, i) => { const x = { id: mk('dep', d.van + '_' + d.naar), van_taak: idVan[d.van], naar_taak: idVan[d.naar], type: 'FS', lag_dagen: Math.max(0, Math.round(getal(d.lag_dagen))), status: 'actief' }; if (projectId) x.project_id = projectId; return x; });
     const bestaandeSleutels = new Set(P.takenActief(bestaand).filter(t => t.sjabloon_id === s.id).map(t => t.sleutel));
-    if (bestaandeSleutels.size) waarsch.push('Dit project heeft al ' + bestaandeSleutels.size + ' taak/taken uit dit sjabloon: toepassen voegt ze er nog een keer bij.');
+    if (bestaandeSleutels.size) waarsch.push('Dit project heeft al ' + bestaandeSleutels.size + ' taak/taken uit dit sjabloon: die worden niet nog een keer toegevoegd; alleen wat ontbreekt komt erbij.');
     if (!budget) waarsch.push('Er is geen ingevulde calculatie: de taken krijgen geen budget (vul de raming per taak zelf in).');
     else ['kantoor', 'wp'].forEach(so => {
       if (getal(budget[so]) > 0 && !s.taken.some(t => P.sjabloonSoort(t) === so && getal(t.aandeel_pct) > 0)) waarsch.push('De ' + P.SOORTEN[so].toLowerCase() + ' uit de calculatie hebben in dit sjabloon geen taak met een aandeel: ze worden niet verdeeld.');
@@ -1081,6 +1082,12 @@
     return (art ? 'a:' + art : 'm:' + oms) + (maat ? '|' + maat : '');
   };
   P.bestelSleutelVan = b => (b && b.artikelsleutel) || P.artikelSleutel(b);
+  // Stabiele id's (ronde 8): dezelfde invoer geeft op elke pc dezelfde id, zodat twee keer importeren of toepassen (ook gelijktijdig op twee pc's) na het samenvoegen
+  // geen dubbele regels geeft. SHA-256 van de canonieke delen; een voorvoegsel maakt de soort herkenbaar.
+  P.stabielId = (voorvoegsel, ...delen) => String(voorvoegsel) + P.sha256(stabiel(delen.map(d => String(d == null ? '' : d)))).slice(0, 24);
+  // Een geïmporteerde bestelregel (VW-kostenberekening of HHOS-NCR): project + bron + bronbestand + artikel + eenheid.
+  P.bestelImportId = ({ project_id = '', project = '', bron = '', bestand = '', artikel = '', eenheid = '' } = {}) =>
+    P.stabielId('imp_', 'bestel-import', project_id || project, bron, String(bestand || '').trim().toLowerCase(), kleinNorm(artikel), P.eenheidNorm(eenheid));
   P.bestelOms = b => String((b && (b.omschrijving || b.materiaal || b.artikel)) || '');
   P.bestelStatus = b => {
     const s = b && b.status;

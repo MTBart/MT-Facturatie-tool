@@ -5599,12 +5599,25 @@ function _blWijzig(id,actie,fn){
   Object.keys(b).forEach(k=>delete b[k]); Object.assign(b,na);
   return _blBewaar(l)?b:null;
 }
+// Vóór een import: de actuele v2 van SharePoint lezen en in de lokale lijst voegen, zodat "bestaat deze id al?" ook klopt voor wat een andere pc intussen toevoegde.
+// Lukt dat niet (offline, verkeerde vorm, geen v2), dan is false het antwoord en wordt er niets geïmporteerd.
+async function _blVerseLees(){
+  try{
+    if(typeof _SP==='undefined'||typeof _SP.read!=='function') return false;
+    const r=await _SP.read('mt_bestellijst_v2.json');
+    if(r===null||r===undefined||MTPlanning.bestelBestandVorm(r)) return false;
+    const lokaal=localStorage.getItem('mt_bestellijst_v2'), samen=JSON.stringify(MTPlanning.bestelSamen(lokaal,r));
+    if(lokaal===null||samen!==JSON.stringify(MTPlanning.bestelSamen(null,JSON.parse(lokaal)))) localStorage.setItem('mt_bestellijst_v2',samen);   // via de gewone route: de gezamenlijke stand gaat ook terug naar SharePoint
+    return true;
+  }catch(e){ return false; }
+}
 function _blNieuw(item,actie){
   if(rolGeweigerd(ROL_BESTEL_TOEV,'Een bestelregel toevoegen')) return null;
   if(!_blKlaar()){ if(typeof planToast==='function') planToast('⚠ Bestellijst niet gewijzigd: '+_blStatusTekst()); return null; }
   const l=_blAlle();
   if(item.id===undefined||item.id===null||item.id==='') item.id='bl_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   if(_blKapot){ _blBewaar(l); return null; }        // meldt en weigert
+  if(_blZoek(l,item.id)) return null;                // ronde 8: een id bestaat al (ook een van de lijst gehaalde regel): nooit twee regels met dezelfde id
   _blStempel(item);
   MTPlanning.bestelVeldStempel(null,item,{t:Date.parse(item._gewijzigd)||Date.now(),door:_blWie(),dev:_spDev()});
   if(!_blJournaal(actie||'nieuw',null,item)) return null;
@@ -5614,6 +5627,7 @@ function _blNieuw(item,actie){
 function _blVervallen(id,reden){ return _blWijzig(id,'vervallen',b=>{ b._vervallen={tijd:new Date().toISOString(),door:_blWie(),reden:reden||''}; }); }
 let _blToonVervallen=false;
 function bestellijstToonVervallen(aan){ _blToonVervallen=!!aan; renderBestellijst(); }
+function bestellijstTerugzettenStil(id){ return !!_blWijzig(id,'terugzetten (VW-CSV)',x=>{ delete x._vervallen; }); }
 function bestellijstTerugzetten(id){
   if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelregel terugzetten')) return;
   const b=_blWijzig(id,'terugzetten',x=>{ delete x._vervallen; });
@@ -7692,13 +7706,17 @@ function projSjabloonDialoog(code,{voorstel=false}={}){
     if(rolGeweigerd(ROL_TAAK_ALLES,'Een sjabloon toepassen')) return;
     const {res}=bereken();
     if(!res.ok){ await mtDialog.alert({title:'Sjabloon',message:(res.fouten||[]).join('\n')}); return; }
-    if(projTakenZet(code,projTaken(code).concat(res.taken))===false) return;   // taken nog niet geladen of geblokkeerd: niets toegepast
-    projAfhZet(code,projAfhActief(code).concat(res.deps));
+    // Stabiele id's per project en stap: wat er al staat komt er niet nog een keer bij; alleen wat ontbreekt wordt toegevoegd (ook als een andere pc hetzelfde net toepaste).
+    const bestaandIds=new Set(projTaken(code).map(x=>x.id)), afhIds=new Set(projAfhActief(code).map(x=>x.id));
+    const teTaken=res.taken.filter(x=>!bestaandIds.has(x.id)), teDeps=res.deps.filter(x=>!afhIds.has(x.id));
+    if(!teTaken.length&&!teDeps.length){ sluit(); await mtDialog.alert({title:'Sjabloon',message:'Alle taken en afhankelijkheden van dit sjabloon staan er al. Er is niets toegevoegd.'}); return; }
+    if(projTakenZet(code,projTaken(code).concat(teTaken))!==true) return;   // taken nog niet geladen of geblokkeerd: niets toegepast
+    if(teDeps.length&&projAfhZet(code,projAfhActief(code).concat(teDeps))===false) return;
     let extra='';
     if(st.lever&&MTPlanning.isYmd(st.lever)&&!_p2Lever(proj)&&(!(window.MTRol&&MTRol.mag)||MTRol.mag('projecten:wijzigen'))){ try{ projGegevensZet(code,'leverdatum',st.lever); extra=' · leverdatum bij de projectgegevens gezet'; }catch(e){} }
     sluit();
     try{ if(window.track) track('taken','sjabloon_toegepast',{detail:code+' · '+res.taken.length+' taken · '+res.modus,ok:true}); }catch(e){}
-    if(typeof planToast==='function') planToast('📐 '+res.taken.length+' taken en '+res.deps.length+' afhankelijkheden toegevoegd'+extra+' · "→ Alles naar Toggl" om te spiegelen');
+    if(typeof planToast==='function') planToast('📐 '+teTaken.length+' taken en '+teDeps.length+' afhankelijkheden toegevoegd'+((res.taken.length-teTaken.length)?' ('+(res.taken.length-teTaken.length)+' stonden er al)':'')+extra+' · "→ Alles naar Toggl" om te spiegelen');
     try{ renderProjectDetail(huidigProject); }catch(e){}
   };
   const teken=()=>{
@@ -8209,9 +8227,23 @@ async function csvAllesNaarBestellijst(projectCode){
   const p=projVind(projectCode);
   if(!await mtDialog.confirm({title:'Op de bestellijst zetten',message:nieuw.length+' regel(s) uit de kostenberekening voor '+(p?(projHoofdNr(p)+' '+projNaamVol(p)).trim():projectCode)+' op de bestellijst zetten (kanten en beslag)?'+(bestaand.length?'\n'+bestaand.length+' staan er al op en blijven ongemoeid.':'')+'\nDe platen staan in de NCR-import.',okLabel:'Op de lijst zetten'})) return;
   if(!_blKlaar()) { await mtDialog.alert({title:'Bestellijst',message:_blStatusTekst()+' Er is niets op de lijst gezet.'}); return; }   // na de bevestiging opnieuw controleren
-  let n=0; nieuw.forEach(({naam,i})=>{ if(_blKlaar()&&_blNieuw(MTPlanning.bestelRegelNieuw({omschrijving:i.omschrijving,artikel:i.artikel,aantal:i.hoeveelheid,eenheid:i.eenheid,bron:'vw',project:projectCode,project_id:(p&&p.project_id)||'',categorie:catMap[naam]||'overig',datum:_blVandaagYmd()}),'nieuw (VW-CSV '+projectCode+')')) n++; });
+  if(!await _blVerseLees()){ await mtDialog.alert({title:'Bestellijst',message:'De actuele bestellijst kon niet worden opgehaald, dus ik kan niet controleren wat er al op staat. Er is niets op de lijst gezet; probeer het zo opnieuw.'}); return; }
+  // Stabiele id per regel (project + bestand + artikel + eenheid): staat die id er al (ook van een andere pc, ook van de lijst gehaald), dan komt de regel er niet nog een keer bij.
+  const bekend=new Map(_blAlle().filter(b=>b&&b.id).map(b=>[b.id,b])), bestandsnaam=sec.bestand||'';
+  let n=0, al=0, weggehaald=0;
+  nieuw.forEach(({naam,i})=>{
+    const id=MTPlanning.bestelImportId({project_id:(p&&p.project_id)||'',project:projectCode,bron:'vw',bestand:bestandsnaam,artikel:i.artikel,eenheid:i.eenheid});
+    if(bekend.has(id)){
+      const b0=bekend.get(id);
+      if(!b0._vervallen){ al++; return; }
+      // eerder van de lijst gehaald: "alles op de bestellijst" zet hem terug (zelfde id, dus nooit dubbel); zonder recht om terug te zetten blijft hij weg
+      if(rolMag(ROL_BESTEL_ALLES)&&_blKlaar()&&bestellijstTerugzettenStil(id)){ n++; bekend.set(id,{}); } else weggehaald++;
+      return;
+    }
+    if(_blKlaar()&&_blNieuw(MTPlanning.bestelRegelNieuw({id,omschrijving:i.omschrijving,artikel:i.artikel,aantal:i.hoeveelheid,eenheid:i.eenheid,bron:'vw',project:projectCode,project_id:(p&&p.project_id)||'',categorie:catMap[naam]||'overig',datum:_blVandaagYmd()}),'nieuw (VW-CSV '+projectCode+')')){ n++; bekend.set(id,{}); }
+  });
   try{ document.querySelectorAll('#csv-resultaat-'+safeId+' input[type=checkbox]').forEach(c=>{ c.checked=true; }); }catch(e){}
-  if(typeof planToast==='function') planToast('🛒 '+n+' regel(s) op de bestellijst gezet');
+  if(typeof planToast==='function') planToast('🛒 '+n+' regel(s) op de bestellijst gezet'+(al?' · '+al+' stonden er al (eerder uit dit bestand geïmporteerd)':'')+(weggehaald?' · '+weggehaald+' eerder van de lijst gehaald (terug te zetten in het tabblad Bestellijst)':''));
   _blNaWijziging();
 }
 // ═══ PROJECTMETER (P1): budget / gepland / geklokt / resterend, per activiteit ═══
@@ -10343,8 +10375,10 @@ async function _ncrNaarBestellijst(resultaten, projectCode){
   // (handmatige wijzigingen weg). Nu: nieuwe materialen komen erbij; bij bestaande open
   // regels kies je zelf (bijwerken naar het nieuwe aantal / extra regel / overslaan).
   // Elke wijziging gaat via het journaal; niets wordt gewist.
-  const actief=_blActief();
-  const nieuw=[], conflict=[];
+  // Ronde 8: stabiele id per regel (project + bestand + materiaal + eenheid) en een verse lees van SharePoint: hetzelfde bestand twee keer importeren geeft geen dubbele regels.
+  if(!await _blVerseLees()){ if(typeof planToast==='function') planToast('⚠ De actuele bestellijst kon niet worden opgehaald; er is niets op de lijst gezet. Probeer het zo opnieuw.'); return; }
+  const actief=_blActief(), bekendeIds=new Set(_blAlle().filter(b=>b&&b.id).map(b=>b.id));
+  const nieuw=[], conflict=[]; let alGeimporteerd=0;
   resultaten.forEach(r=>{
     const safeMatId='ncr_'+r.materiaal.replace(/[^a-zA-Z0-9]/g,'_')+'_'+projectCode.replace(/-/g,'');
     const breuk=parseInt(document.getElementById(`${safeMatId}_breuk`)?.value)||0;
@@ -10365,6 +10399,8 @@ async function _ncrNaarBestellijst(resultaten, projectCode){
       project_id:(pr0&&pr0.project_id)||'',
       platenmaat:`${r.breedte}×${r.hoogte}mm`
     });
+    item.id=MTPlanning.bestelImportId({project_id:item.project_id,project:projectCode,bron:'hhos',bestand:r.bestand,artikel:r.materiaal,eenheid:'plaat'});
+    if(bekendeIds.has(item.id)){ alGeimporteerd++; return; }   // uit dit bestand al op de lijst gezet (of eerder van de lijst gehaald): niet nog een keer
     const bestaand=actief.find(b=>b.materiaal===r.materiaal&&b.project===projectCode&&!b.besteld);
     if(bestaand) conflict.push({bestaand,item}); else nieuw.push(item);
   });
@@ -10384,17 +10420,18 @@ async function _ncrNaarBestellijst(resultaten, projectCode){
     if(keuze===0&&rolGeweigerd(ROL_BESTEL_ALLES,'De aantallen van bestaande bestelregels wijzigen')) keuze=2;   // wel nieuwe materialen toevoegen
   }
   if(!_blKlaar()){ if(typeof planToast==='function') planToast('⚠ Bestellijst niet gewijzigd: '+_blStatusTekst()); return; }   // de blokkade kan tijdens de keuze ontstaan zijn
+  if(!await _blVerseLees()){ if(typeof planToast==='function') planToast('⚠ De actuele bestellijst kon niet worden opgehaald; er is niets op de lijst gezet.'); return; }   // en nog eens vers: een andere pc kan intussen hetzelfde hebben toegevoegd
   let toegevoegd=0, bijgewerkt=0, overgeslagen=0;
   // Opnieuw kijken ná de dialoog: intussen kan een andere pc/klik hetzelfde materiaal
   // hebben toegevoegd. Dan niet dubbel toevoegen maar als "overgeslagen" melden.
-  const nuActief=_blActief();
+  const nuActief=_blActief(), nuIds=new Set(_blAlle().filter(b=>b&&b.id).map(b=>b.id));
   nieuw.forEach(item=>{
-    if(nuActief.some(b=>b.materiaal===item.materiaal&&b.project===projectCode&&!b.besteld)){ overgeslagen++; return; }
+    if(nuIds.has(item.id)||nuActief.some(b=>b.materiaal===item.materiaal&&b.project===projectCode&&!b.besteld)){ overgeslagen++; return; }
     if(_blNieuw(item,'nieuw (NCR '+projectCode+')')) toegevoegd++;
   });
   conflict.forEach(c=>{
     if(keuze===0){ if(_blWijzig(c.bestaand.id,'aantal (NCR '+projectCode+')',b=>{ b.aantal=c.item.aantal; if(!b.platenmaat) b.platenmaat=c.item.platenmaat; })) bijgewerkt++; }
-    else if(keuze===1){ if(_blNieuw(c.item,'extra regel (NCR '+projectCode+')')) toegevoegd++; }
+    else if(keuze===1){ c.item.id='bl_'+_blUuid(); if(_blNieuw(c.item,'extra regel (NCR '+projectCode+')')) toegevoegd++; }   // bewust een extra regel: een eigen id
     else overgeslagen++;
   });
   renderBestellijst();
@@ -10402,6 +10439,7 @@ async function _ncrNaarBestellijst(resultaten, projectCode){
   if(toegevoegd) delen.push(toegevoegd+' toegevoegd');
   if(bijgewerkt) delen.push(bijgewerkt+' bijgewerkt');
   if(overgeslagen) delen.push(overgeslagen+' overgeslagen (stonden al open)');
+  if(alGeimporteerd) delen.push(alGeimporteerd+' stonden er al (eerder uit dit bestand geïmporteerd)');
   if(typeof planToast==='function') planToast('🛒 Bestellijst: '+(delen.join(', ')||'niets gewijzigd'));
   const btn=document.querySelector('[onclick*="bestelling"]');
   if(btn) btn.click();
@@ -10508,6 +10546,7 @@ function verwerKostenCSV(file, projectCode){
 
     const totaalSecties=secties.platen.length+secties.kanten.length+secties.beslag.length;
     if(!totaalSecties){status.textContent='⚠ Geen data gevonden';return;}
+    secties.bestand=file.name||'';   // de bronnaam hoort bij de stabiele id van de regels
     window['_csvSecties_'+safeId]=secties;   // P2: voor "Alles op de bestellijst"
 
     // Sla platen m² op in sessionStorage zodat NCR tabel ze kan tonen
@@ -10624,13 +10663,20 @@ function slaWerkelijkePrijsOp(projectCode,artikel,prijs){
   localStorage.setItem(sleutel,JSON.stringify(prijzen));
 }
 
-function csvRegelNaarBestellijst(checkbox,artikel,omschrijving,categorie,hoeveelheid,eenheid,projectCode){
+async function csvRegelNaarBestellijst(checkbox,artikel,omschrijving,categorie,hoeveelheid,eenheid,projectCode){
   if(rolGeweigerd(checkbox.checked?ROL_BESTEL_TOEV:ROL_BESTEL_ALLES,checkbox.checked?'Een bestelregel toevoegen':'Een bestelregel van de lijst halen')){ checkbox.checked=!checkbox.checked; return; }
   const catMap={'platen':'platen','kanten':'kantenband','beslag':'overig'};
   if(checkbox.checked){
     if(_blActief().some(b=>b.artikel===artikel&&b.project===projectCode&&!b.besteld)) return;   // staat al open op de lijst (bv. via "Alles op de bestellijst")
     const pr0=projVind(projectCode);
+    // Stabiele id (project + bestand + artikel + eenheid) en een verse lees: een regel die er al staat (ook van een andere pc) komt er niet nog een keer bij;
+    // een regel die eerder van de lijst is gehaald komt terug (het vinkje betekent: op de lijst).
+    if(!await _blVerseLees()){ checkbox.checked=false; try{ planToast('⚠ De actuele bestellijst kon niet worden opgehaald; er is niets op de lijst gezet.'); }catch(e){} return; }
+    const sec=window['_csvSecties_'+projectCode.replace(/[^A-Za-z0-9_]/g,'')], id=MTPlanning.bestelImportId({project_id:(pr0&&pr0.project_id)||'',project:projectCode,bron:'vw',bestand:(sec&&sec.bestand)||'',artikel,eenheid});
+    const bestaand=_blAlle().find(b=>b&&b.id===id);
+    if(bestaand){ if(bestaand._vervallen){ if(!bestellijstTerugzettenStil(id)) checkbox.checked=false; } return; }
     _blNieuw(MTPlanning.bestelRegelNieuw({
+      id,
       omschrijving:omschrijving,
       artikel,
       categorie:catMap[categorie]||'overig',
