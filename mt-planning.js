@@ -289,13 +289,15 @@
     const totaal = Object.values(per).reduce((a, x) => ({ totaal: a.totaal + x.totaal, sharepoint: a.sharepoint + x.sharepoint, lokaal_erbij: a.lokaal_erbij + x.lokaal_erbij }), { totaal: 0, sharepoint: 0, lokaal_erbij: 0 });
     return { projecten: per, totaal, zonderId: m.zonder_id.length, dubbel: m.dubbel.length, afwijkingen: m.migratie_afwijkingen, bestaatAl: false };
   };
-  // Lokale legacy-taken (de oude lijst in déze browser) die niet met dezelfde inhoud in v2 staan, behalve wat de gebruiker negeerde.
-  // → [{code, taak, hash}]; "dezelfde inhoud" = zelfde project en zelfde inhoudshash (alle taakvelden), onder welk id dan ook.
-  P.takenLokaalNietInV2 = function (lokaal, v2, negeer) {
-    if (P.takenBestandVorm(lokaal) || !lokaal) return [];
-    const nee = negeer instanceof Set ? negeer : new Set(negeer || []), inV2 = new Set(), uit = [];
-    Object.keys(v2 || {}).forEach(c => { if (!c.startsWith('__') && Array.isArray(v2[c])) v2[c].forEach(t => { if (t && !t._vervallen) inV2.add(c + '|' + P.taakInhoudHash(t)); }); });
-    Object.keys(lokaal).forEach(c => { if (c.startsWith('__')) return; lokaal[c].forEach(t => { const h = P.taakInhoudHash(t); if (!inV2.has(c + '|' + h) && !nee.has(h)) uit.push({ code: c, taak: kopie(t), hash: h }); }); });
+  // Wijkt de oude takenlijst van déze browser af van het oude remote bestand? Vergeleken als MULTISET: per (projectcode, inhoudshash) tellen we hoe vaak
+  // een taak er lokaal en remote in staat; wat er lokaal méér staat is een niet-gesynchroniseerde oude wijziging van deze browser (twee identieke taken tellen
+  // dus dubbel). Hier hoort GEEN schrijfroute bij: de gebruiker kan het alleen downloaden of naar beheer sturen.
+  // negeer = verzameling "projectcode|hash". → [{code, taak, hash, sleutel}]
+  P.takenLokaalAfwijking = function (lokaal, remote, negeer) {
+    if (!lokaal || P.takenBestandVorm(lokaal) || P.takenBestandVorm(remote)) return [];
+    const nee = negeer instanceof Set ? negeer : new Set(negeer || []), tel = {}, uit = [];
+    Object.keys(remote || {}).forEach(c => { if (c.startsWith('__')) return; remote[c].forEach(t => { const k = c + '|' + P.taakInhoudHash(t); tel[k] = (tel[k] || 0) + 1; }); });
+    Object.keys(lokaal).forEach(c => { if (c.startsWith('__')) return; lokaal[c].forEach(t => { const h = P.taakInhoudHash(t), k = c + '|' + h; if (tel[k] > 0) { tel[k]--; return; } if (!nee.has(k)) uit.push({ code: c, taak: kopie(t), hash: h, sleutel: k }); }); });
     return uit;
   };
   P.takenV2Opbouw = function (sp, { lokaal = null, nu = Date.now(), dev = '', door = '', uuid = null } = {}) {
@@ -441,15 +443,26 @@
     return m;
   }
   // Samenvoeger voor het hele bestand { code: [record…] }: per code, per id. migreer: eerst oude records migreren (alleen taken).
+  // Strikt: leeg (null, undefined, '') is een leeg bestand; ongeldige JSON of een andere vorm is een FOUT en wordt nooit stil tot leeg teruggebracht
+  // (dat zou bij het terugschrijven het hele bestand wissen). De aanroeper (hydrate/412-merge) blokkeert de sleutel dan.
+  const leesStrikt = (v, vormFn, leegWaarde, naam) => {
+    if (v === null || v === undefined || v === '') return leegWaarde;
+    let o = v; if (typeof v === 'string') { try { o = JSON.parse(v); } catch (e) { throw new Error(naam + ': ongeldige JSON'); } }
+    if (o === null) return leegWaarde;
+    const f = vormFn(o); if (f) throw new Error(naam + ': ' + f); return o;
+  };
+  // Canonieke uitvoer: records op id, sleutels in vaste volgorde: samenvoegen(A,B) en samenvoegen(B,A) geven dezelfde JSON-tekst.
+  const canon = v => Array.isArray(v) ? v.map(canon) : (v && typeof v === 'object') ? Object.keys(v).sort().reduce((o, k) => { o[k] = canon(v[k]); return o; }, {}) : v;
+  const sorteerOpId = lijst => lijst.map(canon).sort((x, y) => { const a = x && x.id != null ? String(x.id) : '\uffff' + stabiel(x), b = y && y.id != null ? String(y.id) : '\uffff' + stabiel(y); return a < b ? -1 : a > b ? 1 : 0; });
   function storeSamenMet(velden, opt, lokaal, remote) {
-    const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-    const L = obj(lees(lokaal)), R = obj(lees(remote)); const uit = {};
+    const L = leesStrikt(lokaal, o => P.takenBestandVorm(o), {}, 'samenvoegen'), R = leesStrikt(remote, o => P.takenBestandVorm(o), {}, 'samenvoegen'); const uit = {};
     for (const code of new Set([...Object.keys(R), ...Object.keys(L)])) {
       if (code.startsWith('__')) continue;   // metagegevens (zie metaSamen)
       uit[code] = lijstSamenMet(velden, opt, Array.isArray(L[code]) ? L[code] : [], Array.isArray(R[code]) ? R[code] : []);
     }
-    if (opt.taak) { const meta = metaSamen(L.__migratie, R.__migratie); if (meta) uit.__migratie = meta; }
-    return uit;
+    const klaar = {}; Object.keys(uit).sort().forEach(code => { klaar[code] = sorteerOpId(uit[code]); });
+    if (opt.taak) { const meta = metaSamen(L.__migratie, R.__migratie); if (meta) klaar.__migratie = canon(meta); }
+    return klaar;
   }
   const OPT_VW = { verwijderWint: true };
   P.takenSamen = (lokaal, remote) => storeSamenMet(P.TAAK_VELDEN, Object.assign({ taak: true }, OPT_VW), lokaal, remote);
@@ -469,6 +482,8 @@
   // ── Toggl-koppeltabel per taak ─────────────────────────────────────────────────────────────────────
   // tg_sync = {provider:'toggl', external_id (= tg_task_id), laatst_gezien (ms), hash (van de gespiegelde velden), status:'ok'|'fout'|'extern-verwijderd', fout}
   // Eenrichting MT → Toggl: gespiegeld worden alleen naam en status. De taak in MT blijft altijd de bron.
+  // De oude (base36, 32-bits) hash uit eerdere versies: bestaande koppelingen blijven "actueel" in plaats van allemaal op "bijwerken" te springen.
+  P.tgHashOud = t => { const s = JSON.stringify([String((t && t.naam) || ''), String((t && t.status) || 'todo')]); let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
   P.tgHash = t => P.sha256(JSON.stringify([String((t && t.naam) || ''), String((t && t.status) || 'todo')]));
   // 'koppelen' (nog geen Toggl-taak), 'herkoppelen' (koppeltabel ontbreekt of hoort bij een andere Toggl-taak), 'bijwerken' (MT wijkt af
   // van wat we laatst naar Toggl stuurden), 'actueel', 'extern-verwijderd'
@@ -478,7 +493,7 @@
     const s = t.tg_sync;
     if (!s || String(s.external_id) !== String(t.tg_task_id)) return 'herkoppelen';
     if (s.status === 'extern-verwijderd') return 'extern-verwijderd';
-    return s.hash === P.tgHash(t) ? 'actueel' : 'bijwerken';
+    return (s.hash === P.tgHash(t) || s.hash === P.tgHashOud(t)) ? 'actueel' : 'bijwerken';
   };
 
   // ── De meter: budget / gepland / geklokt (gekoppeld, ongekoppeld) / resterend ────────────────────────
@@ -1041,9 +1056,9 @@
   // record (zoals het oude gedrag); een tombstone volgt het nieuwste record, dus terugzetten blijft kunnen.
   const isMeta = x => !!x && typeof x === 'object' && x.id === '__migratie';
   P.bestelSamen = (lokaal, spData) => {
-    const a = lees(lokaal), b = lees(spData), L = Array.isArray(a) ? a : [], R = Array.isArray(b) ? b : [];
-    const uit = lijstSamenMet(P.BESTEL_VELDEN, { iso: true, legacy: true }, L.filter(x => !isMeta(x)), R.filter(x => !isMeta(x)));
-    const meta = metaSamen(L.find(isMeta), R.find(isMeta)); if (meta) { meta.id = '__migratie'; uit.push(meta); }
+    const L = leesStrikt(lokaal, o => P.bestelBestandVorm(o), [], 'samenvoegen'), R = leesStrikt(spData, o => P.bestelBestandVorm(o), [], 'samenvoegen');
+    const uit = sorteerOpId(lijstSamenMet(P.BESTEL_VELDEN, { iso: true, legacy: true }, L.filter(x => !isMeta(x)), R.filter(x => !isMeta(x))));
+    const meta = metaSamen(L.find(isMeta), R.find(isMeta)); if (meta) { meta.id = '__migratie'; uit.push(canon(meta)); }
     return uit;
   };
   // ── Overstap naar mt_bestellijst_v2 (zelfde patroon als mt_project_taken_v2) ──────────────────────────
@@ -1112,12 +1127,13 @@
     const sharepoint = (sp || []).length;
     return { totaal: regels.length, sharepoint, lokaal_erbij: regels.length - sharepoint, vervallen: regels.filter(x => x._vervallen).length, zonderId: m.zonder_id.length, dubbel: m.dubbel.length, afwijkingen: m.migratie_afwijkingen };
   };
-  // Lokale legacy-regels van déze browser die niet in v2 staan (id onbekend in v2 én inhoud nergens gelijk), behalve wat de gebruiker negeerde. → [{regel, hash}]
-  P.bestelLokaalNietInV2 = function (lokaal, v2, negeer) {
-    if (P.bestelBestandVorm(lokaal) || !lokaal) return [];
-    const nee = negeer instanceof Set ? negeer : new Set(negeer || []), ids = new Set(), inhoud = new Set(), uit = [];
-    (Array.isArray(v2) ? v2 : []).forEach(b => { if (b && typeof b === 'object' && !isMeta(b)) { if (b.id !== undefined) ids.add(String(b.id)); if (!b._vervallen) inhoud.add(P.bestelInhoudHash(b)); } });
-    lokaal.forEach(b => { if (!b || isMeta(b) || b._vervallen) return; const h = P.bestelInhoudHash(b); if ((b.id !== undefined && b.id !== null && b.id !== '' && ids.has(String(b.id))) || inhoud.has(h) || nee.has(h)) return; uit.push({ regel: kopie(b), hash: h }); });
+  // Wijkt de oude bestellijst van déze browser af van het oude remote bestand? MULTISET per (projectcode, inhoudshash); wat er lokaal méér staat is een niet-
+  // gesynchroniseerde oude wijziging van deze browser. Geen schrijfroute: alleen downloaden of naar beheer sturen. negeer = "project|hash". → [{regel, hash, sleutel}]
+  P.bestelLokaalAfwijking = function (lokaal, remote, negeer) {
+    if (!lokaal || P.bestelBestandVorm(lokaal) || P.bestelBestandVorm(remote)) return [];
+    const nee = negeer instanceof Set ? negeer : new Set(negeer || []), tel = {}, uit = [];
+    (remote || []).forEach(b => { if (!b || isMeta(b)) return; const k = bestelProjectCode(b) + '|' + P.bestelInhoudHash(b); tel[k] = (tel[k] || 0) + 1; });
+    lokaal.forEach(b => { if (!b || isMeta(b)) return; const h = P.bestelInhoudHash(b), k = bestelProjectCode(b) + '|' + h; if (tel[k] > 0) { tel[k]--; return; } if (!nee.has(k)) uit.push({ regel: kopie(b), hash: h, sleutel: k }); });
     return uit;
   };
   // Wat is er te bekijken voor beheer? (a) wat bij de overstap een nieuw id kreeg of van SharePoint afweek (info), (b) wat een oude app-versie sindsdien

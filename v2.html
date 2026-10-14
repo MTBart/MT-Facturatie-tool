@@ -38,7 +38,7 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-14b"></script>
+<script src="mt-planning.js?v=2026-10-14c"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
@@ -5422,29 +5422,48 @@ let _blKapot=false;
 function _blIsMeta(x){ return !!x&&typeof x==='object'&&x.id==='__migratie'; }
 // Gewone UI-paden schrijven UITSLUITEND naar v2. Bestaat v2 nog niet, dan zien clients de bestellijst ALLEEN-LEZEN uit het oude bestand (_blOud, door de hydrate
 // gelezen; anders de lokale oude kopie); bewerken kan pas nadat beheer de bestellijst heeft overgezet (Beheer ▸ Bestellijst overzetten). Geen automatische overstap.
-let _blOud=null, _blTimeout=false;
-function _blSleutel(){ return localStorage.getItem('mt_bestellijst_v2')!==null?'mt_bestellijst_v2':'mt_bestellijst'; }
+let _blOud=null, _blTimeout=false, _blVerweesd=false, _blVormFout='';
+function _blSleutel(){ return (!_blVerweesd&&localStorage.getItem('mt_bestellijst_v2')!==null)?'mt_bestellijst_v2':'mt_bestellijst'; }
 function _blGeblokkeerd(){ try{ return !!(_SP&&_SP.blockedKeys&&_SP.blockedKeys.has('mt_bestellijst_v2')); }catch(e){ return false; } }
 function _blGereed(){ try{ return (typeof _SP==='undefined')?true:!!_SP.ready; }catch(e){ return false; } }
-function _blStaat(){ if(_blGeblokkeerd()) return 'geblokkeerd'; if(!_blGereed()) return _blTimeout?'time-out':'laden'; return _blLees2()!==null?'klaar':'overzetten'; }
+function _blStaat(){ if(_blVerweesd) return 'verweesd'; if(_blGeblokkeerd()) return 'geblokkeerd'; if(!_blGereed()) return _blTimeout?'time-out':'laden'; return _blLees2()!==null?'klaar':'overzetten'; }
 function _blKlaar(){ return _blStaat()==='klaar'; }
-function _blStatusTekst(){ const s=_blStaat(); return s==='geblokkeerd'?'De bestellijst is geblokkeerd: de laadstap voor de nieuwe bestellijst is mislukt. Er is niets gewijzigd.':s==='time-out'?'De bestellijst laden duurt te lang of is mislukt.':s==='overzetten'?'De bestellijst wordt overgezet door beheer. Tot die tijd is hij alleen-lezen.':s==='laden'?'De bestellijst wordt geladen…':''; }
+function _blStatusTekst(){ const s=_blStaat(); return s==='verweesd'?'De nieuwe bestellijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de bestellijst opnieuw overzetten.':s==='geblokkeerd'?(_blVormFout?'De nieuwe bestellijst op SharePoint heeft een verkeerde vorm ('+_blVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De bestellijst is geblokkeerd: de laadstap voor de nieuwe bestellijst is mislukt. Er is niets gewijzigd.'):s==='time-out'?'De bestellijst laden duurt te lang of is mislukt.':s==='overzetten'?'De bestellijst wordt overgezet door beheer. Tot die tijd is hij alleen-lezen.':s==='laden'?'De bestellijst wordt geladen…':''; }
 try{ setTimeout(()=>{ try{ if(!_blGereed()){ _blTimeout=true; _blNaWijziging(); } }catch(e){} },20000); }catch(e){}
 // Melding in plaats van de lijst, met een knop "opnieuw proberen" zodra de laadstap mislukt is (de melding blijft dus niet eeuwig hangen).
 function _blStatusEl(){
-  const s=_blStaat(), knop=(s==='geblokkeerd'||s==='time-out')?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>blOpnieuwProberen()},'Opnieuw proberen'):null;
+  const s=_blStaat(), knop=(s==='geblokkeerd'||s==='time-out'||s==='verweesd'||s==='overzetten')?[_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>blOpnieuwProberen()},'Opnieuw proberen'),' ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>location.reload()},'Pagina herladen')]:null;
   return _p2El('div',{class:'pm-w '+(s==='overzetten'||s==='laden'?'pm-info':'pm-let-op'),role:'status'},'⚠ '+_blStatusTekst()+' ',knop);
 }
 // Opnieuw proberen: de blokkade opheffen en v2 (of, als het er nog niet is, het oude bestand voor de alleen-lezen weergave) opnieuw lezen. Nooit migreren.
 async function blOpnieuwProberen(){
-  const sleutel='mt_bestellijst_v2', bestand=sleutel+'.json';
-  try{
-    _SP.blockedKeys.delete(sleutel); _blTimeout=false;
-    const spData=await _SP.read(bestand);
-    if(spData===null){ const o=await _SP.read('mt_bestellijst.json'); _blOud=(o&&!MTPlanning.bestelBestandVorm(o))?o:null; }
-    else localStorage.setItem(sleutel,JSON.stringify(_SP.mergers[sleutel](localStorage.getItem(sleutel),spData)));
-  }catch(e){ try{ _SP.blockedKeys.add(sleutel); }catch(_){} console.warn('bestellijst opnieuw laden mislukt:',e&&e.message); }
+  _blTimeout=false;
+  if(!await blOntgrendelPoging()){
+    try{ const o=await _SP.read('mt_bestellijst.json'); if(_blLees2()===null&&!_blGeblokkeerd()) _blOud=(o&&!MTPlanning.bestelBestandVorm(o))?o:null; }catch(e){ try{ if(_blLees2()===null) _SP.blockedKeys.add('mt_bestellijst_v2'); }catch(_){} }
+  }
   try{ _blNaWijziging(); }catch(e){}
+}
+// Een geblokkeerde of wachtende tab (v2 bestaat niet of is verweesd) kijkt elke 60 seconden of v2 op SharePoint er inmiddels is; zo ja, dan laadt hij het en heft de blokkade op.
+// Nooit bij een schema-blokkade (te oude app) of een v2 met een verkeerde vorm.
+async function blOntgrendelPoging(){
+  try{ if(typeof projSchemaGeblokkeerd==='function'&&projSchemaGeblokkeerd()) return false;
+    const st=_blStaat(); if(st!=='geblokkeerd'&&st!=='verweesd'&&st!=='overzetten') return false;
+    const r=await _SP.read('mt_bestellijst_v2.json'); if(r===null||r===undefined) return false;
+    if(MTPlanning.bestelBestandVorm(r)){ _blVormFout=MTPlanning.bestelBestandVorm(r); return false; }
+    (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))('mt_bestellijst_v2',JSON.stringify(MTPlanning.bestelSamen(null,r)));
+    _blVerweesd=false; _blVormFout=''; _blOud=null; try{ _SP.blockedKeys.delete('mt_bestellijst_v2'); }catch(e){}
+    try{ _blNaWijziging(); }catch(e){} return true;
+  }catch(e){ return false; }
+}
+try{ setInterval(()=>{ blOntgrendelPoging(); },60000); }catch(e){}
+// Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt: naar een back-upsleutel, status geblokkeerd, en nooit door autosync te laten aanmaken.
+function blVerweesdOpruimen(){
+  const raw=localStorage.getItem('mt_bestellijst_v2'); if(raw===null) return false;
+  let bewaard=false; try{ localStorage.setItem('mt_bestellijst_v2_verweesd_'+Date.now(),raw); bewaard=true; }catch(e){}
+  if(bewaard) localStorage.removeItem('mt_bestellijst_v2');
+  _blVerweesd=true; try{ _SP.blockedKeys.add('mt_bestellijst_v2'); }catch(e){}
+  try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint; de lokale kopie is'+(bewaard?' als back-up bewaard':' niet gebruikt')+'. Beheer moet de bestellijst opnieuw overzetten.'); }catch(e){}
+  return true;
 }
 function _blMeta(){ try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst_v2')||'null'); return Array.isArray(a)?(a.find(_blIsMeta)||null):null; }catch(e){ return null; } }
 function _blUuid(){ return (typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,12)); }
@@ -5467,7 +5486,7 @@ function _blAlle(){
   _blIdsToekennen(l);   // alleen in het geheugen (het oude bestand wordt niet meer geschreven; v2 heeft altijd id's)
   return l;                                   // ook onleesbare items in de lijst blijven staan
 }
-function _blLees2(){ try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst_v2')||'null'); return Array.isArray(a)?a:null; }catch(e){ return null; } }
+function _blLees2(){ if(_blVerweesd) return null; try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst_v2')||'null'); return Array.isArray(a)?a:null; }catch(e){ return null; } }
 function _blLeesOudLokaal(){ try{ const a=JSON.parse(localStorage.getItem('mt_bestellijst')||'null'); return Array.isArray(a)?a:null; }catch(e){ return null; } }
 function _blActief(){ return _blAlle().filter(b=>b&&typeof b==='object'&&!b._vervallen); }
 function _blVervallenLijst(){ return _blAlle().filter(b=>b&&typeof b==='object'&&b._vervallen); }
@@ -7017,17 +7036,37 @@ function _ptLees(k){ try{ const o=JSON.parse(localStorage.getItem(k)||'null'); r
 // Gewone UI-paden lezen en schrijven UITSLUITEND v2; het oude bestand komt alleen voor in de overstap door beheer (beheerTakenOverzetten), de alleen-lezen weergave en het vangnet en het vangnet.
 // Bestaat v2 nog niet, dan zien clients de taken ALLEEN-LEZEN uit het oude bestand (_ptOud, door de hydrate gelezen; anders de lokale oude kopie); bewerken kan pas
 // nadat beheer de taken heeft overgezet (Beheer ▸ Taken overzetten naar het nieuwe bestand). Er is geen automatische overstap door gewone clients.
-let _ptOud=null, _ptTimeout=false;
-function projTakenRuw(){ return _ptLees('mt_project_taken_v2')||_ptOud||_ptLees('mt_project_taken')||{}; }
+let _ptOud=null, _ptTimeout=false, _ptVerweesd=false, _ptVormFout='';
+function projTakenRuw(){ return (_ptVerweesd?null:_ptLees('mt_project_taken_v2'))||_ptOud||_ptLees('mt_project_taken')||{}; }
 function projTakenGeblokkeerd(){ try{ return !!(_SP&&_SP.blockedKeys&&_SP.blockedKeys.has('mt_project_taken_v2')); }catch(e){ return false; } }
 function projTakenGereed(){ try{ return (typeof _SP==='undefined')?true:!!_SP.ready; }catch(e){ return false; } }
-function projTakenStaat(){ if(projTakenGeblokkeerd()) return 'geblokkeerd'; if(!projTakenGereed()) return _ptTimeout?'time-out':'laden'; return _ptLees('mt_project_taken_v2')?'klaar':'overzetten'; }
+function projTakenStaat(){ if(_ptVerweesd) return 'verweesd'; if(projTakenGeblokkeerd()) return 'geblokkeerd'; if(!projTakenGereed()) return _ptTimeout?'time-out':'laden'; return _ptLees('mt_project_taken_v2')?'klaar':'overzetten'; }
 function projTakenKlaar(){ return projTakenStaat()==='klaar'; }
-function projTakenStatusTekst(){ const s=projTakenStaat(); return s==='geblokkeerd'?'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.':s==='time-out'?'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.':s==='overzetten'?'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.':s==='laden'?'Taken laden…':''; }
+function projTakenStatusTekst(){ const s=projTakenStaat(); return s==='verweesd'?'De nieuwe takenlijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de taken opnieuw overzetten.':s==='geblokkeerd'?(_ptVormFout?'De nieuwe takenlijst op SharePoint heeft een verkeerde vorm ('+_ptVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.'):s==='time-out'?'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.':s==='overzetten'?'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.':s==='laden'?'Taken laden…':''; }
 // Vóór elke actie met een extern effect (Toggl) of een planningsmutatie: alleen als de takenlijst klaar is; anders een melding en niets doen.
 function _ptBlok(code){ if(projTakenKlaar()) return false; try{ _ptStatus(code,projTakenStatusTekst(),'#c0392b'); }catch(e){} return true; }
 function _ptHertekenen(){ try{ if(typeof huidigProject!=='undefined'&&huidigProject) renderProjectDetail(huidigProject); }catch(e){} }
 try{ setTimeout(()=>{ try{ if(!projTakenGereed()){ _ptTimeout=true; _ptHertekenen(); } }catch(e){} },20000); }catch(e){}
+// Een geblokkeerde of wachtende tab (v2 bestaat niet of is verweesd) kijkt elke 60 seconden of v2 op SharePoint er inmiddels is; zo ja, dan laadt hij het en heft de blokkade op.
+// Nooit bij een schema-blokkade (te oude app) of een v2 met een verkeerde vorm.
+async function projTakenOntgrendelPoging(){
+  try{ if(typeof projSchemaGeblokkeerd==='function'&&projSchemaGeblokkeerd()) return false;
+    const st=projTakenStaat(); if(st!=='geblokkeerd'&&st!=='verweesd'&&st!=='overzetten') return false;
+    const r=await _SP.read('mt_project_taken_v2.json'); if(r===null||r===undefined) return false;
+    if(MTPlanning.takenBestandVorm(r)){ _ptVormFout=MTPlanning.takenBestandVorm(r); return false; }
+    _lsSet('mt_project_taken_v2',JSON.stringify(MTPlanning.takenSamen(null,r))); _ptVerweesd=false; _ptVormFout=''; _ptOud=null; _SP.blockedKeys.delete('mt_project_taken_v2'); _ptHertekenen(); return true;
+  }catch(e){ return false; }
+}
+try{ setInterval(()=>{ projTakenOntgrendelPoging(); },60000); }catch(e){}
+// Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt: naar een back-upsleutel, status geblokkeerd, en nooit door autosync te laten aanmaken.
+function projTakenVerweesdOpruimen(){
+  const raw=localStorage.getItem('mt_project_taken_v2'); if(raw===null) return false;
+  let bewaard=false; try{ localStorage.setItem('mt_project_taken_v2_verweesd_'+Date.now(),raw); bewaard=true; }catch(e){}
+  if(bewaard) localStorage.removeItem('mt_project_taken_v2');
+  _ptVerweesd=true; try{ _SP.blockedKeys.add('mt_project_taken_v2'); }catch(e){}
+  try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint; de lokale kopie is'+(bewaard?' als back-up bewaard':' niet gebruikt')+'. Beheer moet de taken opnieuw overzetten.'); }catch(e){}
+  return true;
+}
 function projTakenAll(){const r=projTakenRuw(), o={}; Object.keys(r).forEach(c=>{ if(!c.startsWith('__')) o[c]=MTPlanning.takenActief(r[c]); }); return o;}
 function projTakenSave(o){localStorage.setItem('mt_project_taken_v2',JSON.stringify(o));}
 function projTaken(code){return MTPlanning.takenActief(projTakenRuw()[code]);}
@@ -7050,8 +7089,8 @@ function _ptLeesStrikt(k){ const raw=localStorage.getItem(k); if(raw===null) ret
 async function beheerTakenOverzetten(){
   const melding=(m,titel)=>mtDialog.alert({title:titel||'Taken overzetten',message:m});
   if(!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())) return melding('Alleen de eigenaar of beheer kan de taken overzetten.');
-  if(_ptLees('mt_project_taken_v2')) return melding('De taken zijn al overgezet.');
-  if(!projTakenGereed()||projTakenGeblokkeerd()) return melding('De synchronisatie is nog niet klaar of geblokkeerd: herlaad de pagina en probeer het opnieuw.');
+  if(!_ptVerweesd&&_ptLees('mt_project_taken_v2')) return melding('De taken zijn al overgezet.');
+  if(!projTakenGereed()||(projTakenGeblokkeerd()&&!_ptVerweesd)) return melding('De synchronisatie is nog niet klaar of geblokkeerd: herlaad de pagina en probeer het opnieuw.');
   let oud=null; try{ oud=await _SP.read('mt_project_taken.json'); }catch(e){ return melding('Het oude takenbestand lezen mislukte: '+(e.message||e)+'. Er is niets overgezet.'); }
   const f1=MTPlanning.takenBestandVorm(oud); if(f1) return melding('Het oude takenbestand op SharePoint heeft een onverwachte vorm: '+f1+'. Er is niets overgezet.');
   const lok=_ptLeesStrikt('mt_project_taken'); if(lok.fout) return melding('De lokale oude takenlijst van deze browser is onbruikbaar: '+lok.fout+'. Er is niets overgezet.');
@@ -7062,7 +7101,7 @@ async function beheerTakenOverzetten(){
   if(!await mtDialog.confirm({title:'Taken overzetten naar het nieuwe bestand',message:bericht,okLabel:'Overzetten'})) return;
   const bron=MTPlanning.takenV2Opbouw(oud||{},{lokaal:lok.obj,nu:Date.now(),dev:_spDev(),door:_spWie(),uuid:_ptUuid});
   const r=await _SP.maakAan('mt_project_taken_v2.json',bron);
-  if(r==='aangemaakt'){ _lsSet('mt_project_taken_v2',JSON.stringify(bron)); _ptOud=null; await melding('De taken zijn overgezet naar het nieuwe bestand.'); _ptHertekenen(); takenOverzetBlok(); return; }
+  if(r==='aangemaakt'){ _lsSet('mt_project_taken_v2',JSON.stringify(bron)); _ptOud=null; _ptVerweesd=false; _ptVormFout=''; try{ _SP.blockedKeys.delete('mt_project_taken_v2'); }catch(e){} await melding('De taken zijn overgezet naar het nieuwe bestand.'); _ptHertekenen(); takenOverzetBlok(); return; }
   if(r==='bestaat') return melding('De taken zijn al overgezet (door iemand anders). Herlaad de pagina.');
   return melding('Aanmaken mislukte; er is niets overgezet. Probeer het later opnieuw.');
 }
@@ -7070,28 +7109,38 @@ function takenOverzetBlok(){
   const host=document.getElementById('bh-taken-overzet'); if(!host) return;
   host.replaceChildren();
   const blok=document.createElement('div'); blok.className='bh-blok'; const kop=document.createElement('h4'); kop.textContent='Taken overzetten naar het nieuwe bestand'; const p=document.createElement('div'); p.className='dos-meta'; p.style.marginBottom='6px';
-  if(_ptLees('mt_project_taken_v2')){ p.textContent='De takenlijst is overgezet (mt_project_taken_v2).'; blok.append(kop,p); }
+  if(!_ptVerweesd&&_ptLees('mt_project_taken_v2')){ p.textContent='De takenlijst is overgezet (mt_project_taken_v2).'; blok.append(kop,p); }
   else { p.textContent='Eenmalig: de takenlijst gaat naar een nieuw bestand (voor stempels per veld en conflictbewaking). Tot die tijd zien alle gebruikers de taken alleen-lezen. Je ziet eerst een voorbeeld en bevestigt zelf.'; const k=document.createElement('button'); k.type='button'; k.className='btn btn-secondary btn-sm'; k.textContent='Taken overzetten naar het nieuwe bestand'; k.addEventListener('click',beheerTakenOverzetten); blok.append(kop,p,k); }
   host.appendChild(blok);
 }
-// ── Na de overstap: lokale oude taken van déze browser die niet (met dezelfde inhoud) in v2 staan; de gebruiker kiest per taak, nooit stil ──
+// ── Lokale oude taken van déze browser die niet met het oude remote bestand gesynchroniseerd waren ──
+// GEEN herstelroute via de app (een tweede schrijfpad zou taken kunnen verdubbelen): alleen downloaden of naar beheer sturen. Beheer ziet afwijkingen van
+// het oude remote bestand in het vangnet. "Negeren" bewaart projectcode|inhoudshash.
+let _ptLokaalAfw=[];
 function _ptNegeer(){ try{ return new Set(JSON.parse(localStorage.getItem('mt_taken_lokaal_negeer')||'[]')); }catch(e){ return new Set(); } }
-function _ptLokaalNiet(){ try{ if(!projTakenKlaar()) return []; return MTPlanning.takenLokaalNietInV2(_ptLees('mt_project_taken'),projTakenRuw(),_ptNegeer()); }catch(e){ return []; } }
-async function takenLokaalBekijk(){
-  if(!projTakenKlaar()) return mtDialog.alert({title:'Lokale taken',message:projTakenStatusTekst()});
-  const lijst=_ptLokaalNiet(); let n=0;
-  for(const a of lijst){
-    n++;
-    const k=await mtDialog.choose({title:'Lokale taak '+n+' van '+lijst.length+': '+(a.taak.naam||'(zonder naam)'),message:'Deze taak staat in de oude lijst van deze browser, maar niet (met dezelfde inhoud) in de nieuwe lijst. Project: '+a.code+'; status '+(a.taak.status||'todo')+'; raming '+(a.taak.duur_uur||0)+' u.',
-      choices:[{label:'Toevoegen aan de nieuwe lijst',sublabel:'met een nieuw id'},{label:'Negeren',sublabel:'niet meer tonen'},{label:'Later'}]});
-    if(k===null||k===undefined) break;
-    if(k===0){ const x=JSON.parse(JSON.stringify(a.taak)); delete x._vs; delete x._veldconflict; delete x._gewijzigd; delete x._vervallen; x.id=_ptUuid(); const arr=projTaken(a.code); arr.push(x);
-      if(projTakenZet(a.code,arr)===false) break; }
-    else if(k===1){ const s=_ptNegeer(); s.add(a.hash); try{ localStorage.setItem('mt_taken_lokaal_negeer',JSON.stringify([...s])); }catch(e){} }
-  }
-  _ptHertekenen();
+function _ptLokaalNiet(){ return _ptLokaalAfw; }
+async function takenLokaalControle(){
+  try{
+    _ptLokaalAfw=[]; const lok=_ptLees('mt_project_taken'); if(!lok||MTPlanning.takenBestandVorm(lok)) return;
+    let rem=null; try{ rem=await _SP.read('mt_project_taken.json'); }catch(e){ return; }
+    if(MTPlanning.takenBestandVorm(rem)) return;
+    _ptLokaalAfw=MTPlanning.takenLokaalAfwijking(lok,rem||{},_ptNegeer());
+    if(_ptLokaalAfw.length){ planToast('⚠ Deze browser had niet-gesynchroniseerde oude taakwijzigingen ('+_ptLokaalAfw.length+'): download ze of stuur ze naar beheer (bij Taken in een project).'); _ptHertekenen(); }
+  }catch(e){}
 }
-function takenLokaalMelding(){ try{ const n=_ptLokaalNiet().length; if(n) planToast('⚠ '+n+' lokale taak/taken uit de oude lijst staan niet in de nieuwe lijst: bekijk ze bij Taken in een project.'); }catch(e){} }
+function _ptLokaalJson(){ return JSON.stringify({bron:'mt_project_taken (lokale oude takenlijst van deze browser)',datum:new Date().toISOString(),aantal:_ptLokaalAfw.length,taken:_ptLokaalAfw.map(a=>({project:a.code,taak:a.taak}))},null,2); }
+function takenLokaalDownload(){
+  const blob=new Blob([_ptLokaalJson()],{type:'application/json'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='oude-taken-van-deze-browser.json'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
+}
+async function takenLokaalNaarBeheer(){
+  const json=_ptLokaalJson(); let gekopieerd=false;
+  try{ await navigator.clipboard.writeText(json); gekopieerd=true; }catch(e){}
+  await mtDialog.alert({title:'Naar beheer sturen',message:gekopieerd?'De oude taken van deze browser staan op het klembord. Er opent zo een lege e-mail aan beheer: plak de tekst erin en verstuur hem.':'Kopiëren naar het klembord lukte niet. Download het bestand en stuur het als bijlage naar beheer.'});
+  try{ const onderwerp=`Niet-gesynchroniseerde oude taken (${_ptLokaalAfw.length})`; location.href=['mailto:?subject=',encodeURIComponent(onderwerp),'&body=',encodeURIComponent('Plak hier de gekopieerde tekst (of voeg het gedownloade bestand toe).')].join(''); }catch(e){}
+}
+function takenLokaalNegeer(){ const s=_ptNegeer(); _ptLokaalAfw.forEach(a=>s.add(a.sleutel)); try{ localStorage.setItem('mt_taken_lokaal_negeer',JSON.stringify([...s])); }catch(e){} _ptLokaalAfw=[]; _ptHertekenen(); }
 // ── Vangnet: wat bij de overstap een nieuw id kreeg of afweek, en wat een oude app-versie sindsdien in het oude bestand wijzigde ──
 // Alleen melden en de mens laten kiezen; nooit automatisch overnemen. Het oude bestand wordt hier alleen gelezen.
 async function takenOudAfwijkingen(){
@@ -7205,7 +7254,7 @@ async function projTakenHerkans(code){
 function projectTakenHtml(proj){
   { const st=projTakenStaat();
     if(st==='overzetten') return `<hr class="divider"><div class="card-title" style="margin:0 0 .5rem">Taken <span class="badge">alleen-lezen</span></div><p style="font-size:13px;color:var(--text-dim)" role="status">${esc(projTakenStatusTekst())}</p><table class="materiaal-lijst"><tbody>${projTaken(proj.code).map(t=>`<tr><td style="font-size:13px">${esc(t.naam)}</td><td>${esc((_PT_STAT[t.status]||_PT_STAT.todo).l)}</td><td style="text-align:right;font-family:var(--mono)">${esc(t.duur_uur||0)} u</td></tr>`).join('')||'<tr><td style="color:var(--text-faint);font-size:13px">Nog geen taken.</td></tr>'}</tbody></table>`;
-    if(st!=='klaar') return `<hr class="divider"><div class="card-title" style="margin:0 0 .5rem">Taken</div><p style="font-size:13px;color:var(--text-dim)" role="status">${esc(projTakenStatusTekst())}</p>${st==='time-out'?'<button class="btn btn-xs btn-secondary" onclick="location.reload()">opnieuw proberen</button>':''}`;
+    if(st!=='klaar') return `<hr class="divider"><div class="card-title" style="margin:0 0 .5rem">Taken</div><p style="font-size:13px;color:var(--text-dim)" role="status">${esc(projTakenStatusTekst())}</p><button class="btn btn-xs btn-secondary" onclick="location.reload()">opnieuw proberen</button>`;
   }
   const lokN=_ptLokaalNiet().length;
   const arr=projTaken(proj.code), sid=proj.code.replace(/-/g,'');
@@ -7247,7 +7296,7 @@ function projectTakenHtml(proj){
   const onbesp=arr.filter(t=>!t.tg_task_id).length;
   return `
     <hr class="divider">
-    ${lokN?`<div class="dos-meta" style="margin-bottom:6px" role="status">${esc(lokN)} lokale taak/taken uit de oude lijst van deze browser staan niet in de nieuwe lijst. <a href="#" onclick="event.preventDefault();takenLokaalBekijk()">Bekijken</a></div>`:''}
+    ${lokN?`<div class="dos-meta" style="margin-bottom:6px" role="status">Deze browser had niet-gesynchroniseerde oude taakwijzigingen (${esc(lokN)}). <button type="button" class="btn btn-xs btn-secondary" onclick="takenLokaalDownload()">download als bestand</button> <button type="button" class="btn btn-xs btn-secondary" onclick="takenLokaalNaarBeheer()">stuur naar beheer</button> <button type="button" class="btn btn-xs btn-secondary" onclick="takenLokaalNegeer()">negeren</button></div>`:''}
     <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
       <div class="card-title" style="margin:0">Taken <span class="badge" style="background:var(--gold-50);color:var(--gold-text);border:1px solid var(--gold-mid)">M&amp;T</span></div>
       <button class="btn btn-gold btn-sm" onclick="aiTakenVoorstel(${jsArg(proj.code)})">✨ AI-taken voorstellen</button>
@@ -7654,8 +7703,8 @@ function _blLeesStrikt(k){ const raw=localStorage.getItem(k); if(raw===null) ret
 async function beheerBestelOverzetten(){
   const melding=(m,titel)=>mtDialog.alert({title:titel||'Bestellijst overzetten',message:m});
   if(!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())) return melding('Alleen de eigenaar of beheer kan de bestellijst overzetten.');
-  if(_blLees2()!==null) return melding('De bestellijst is al overgezet.');
-  if(!_blGereed()||_blGeblokkeerd()) return melding('De synchronisatie is nog niet klaar of geblokkeerd: herlaad de pagina en probeer het opnieuw.');
+  if(!_blVerweesd&&_blLees2()!==null) return melding('De bestellijst is al overgezet.');
+  if(!_blGereed()||(_blGeblokkeerd()&&!_blVerweesd)) return melding('De synchronisatie is nog niet klaar of geblokkeerd: herlaad de pagina en probeer het opnieuw.');
   let oud=null; try{ oud=await _SP.read('mt_bestellijst.json'); }catch(e){ return melding('Het oude bestellijstbestand lezen mislukte: '+(e.message||e)+'. Er is niets overgezet.'); }
   const f1=MTPlanning.bestelBestandVorm(oud); if(f1) return melding('Het oude bestellijstbestand op SharePoint heeft een onverwachte vorm: '+f1+'. Er is niets overgezet.');
   const lok=_blLeesStrikt('mt_bestellijst'); if(lok.fout) return melding('De lokale oude bestellijst van deze browser is onbruikbaar: '+lok.fout+'. Er is niets overgezet.');
@@ -7665,7 +7714,7 @@ async function beheerBestelOverzetten(){
   if(!await mtDialog.confirm({title:'Bestellijst overzetten naar het nieuwe bestand',message:bericht,okLabel:'Overzetten'})) return;
   const bron=MTPlanning.bestelV2Opbouw(oud||[],{lokaal:lok.obj,nu:Date.now(),dev:_spDev(),door:_blWie(),uuid:_blUuid});
   const r=await _SP.maakAan('mt_bestellijst_v2.json',bron);
-  if(r==='aangemaakt'){ (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))('mt_bestellijst_v2',JSON.stringify(bron)); _blOud=null; await melding('De bestellijst is overgezet naar het nieuwe bestand.'); _blNaWijziging(); blOverzetBlok(); return; }
+  if(r==='aangemaakt'){ (typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage))('mt_bestellijst_v2',JSON.stringify(bron)); _blOud=null; _blVerweesd=false; _blVormFout=''; try{ _SP.blockedKeys.delete('mt_bestellijst_v2'); }catch(e){} await melding('De bestellijst is overgezet naar het nieuwe bestand.'); _blNaWijziging(); blOverzetBlok(); return; }
   if(r==='bestaat') return melding('De bestellijst is al overgezet (door iemand anders). Herlaad de pagina.');
   return melding('Aanmaken mislukte; er is niets overgezet. Probeer het later opnieuw.');
 }
@@ -7674,27 +7723,38 @@ function blOverzetBlok(){
   host.replaceChildren();
   const p=_p2El('div',{class:'dos-meta',style:'margin-bottom:6px'});
   const kinderen=[_p2El('h4',{tekst:'Bestellijst overzetten naar het nieuwe bestand'}),p];
-  if(_blLees2()!==null) p.textContent='De bestellijst is overgezet (mt_bestellijst_v2).';
+  if(!_blVerweesd&&_blLees2()!==null) p.textContent='De bestellijst is overgezet (mt_bestellijst_v2).';
   else { p.textContent='Eenmalig: de bestellijst gaat naar een nieuw bestand (voor stempels per veld en conflictbewaking). Tot die tijd zien alle gebruikers de bestellijst alleen-lezen. Je ziet eerst een voorbeeld en bevestigt zelf.'; kinderen.push(_p2El('button',{type:'button',class:'btn btn-secondary btn-sm',klik:beheerBestelOverzetten},'Bestellijst overzetten naar het nieuwe bestand')); }
   host.appendChild(_p2El('div',{class:'bh-blok'},kinderen));
 }
-// ── Na de overstap: lokale oude regels van déze browser die niet in v2 staan; de gebruiker kiest per regel, nooit stil ──
+// ── Lokale oude regels van déze browser die niet met het oude remote bestand gesynchroniseerd waren ──
+// GEEN herstelroute via de app (een tweede schrijfpad zou regels kunnen verdubbelen): alleen downloaden of naar beheer sturen. "Negeren" bewaart project|inhoudshash.
+let _blLokaalAfw=[];
 function _blNegeer(){ try{ return new Set(JSON.parse(localStorage.getItem('mt_bestel_lokaal_negeer')||'[]')); }catch(e){ return new Set(); } }
-function _blLokaalNiet(){ try{ if(!_blKlaar()) return []; return MTPlanning.bestelLokaalNietInV2(_blLeesOudLokaal(),_blAlle(),_blNegeer()); }catch(e){ return []; } }
-async function blLokaalBekijk(){
-  if(!_blKlaar()) return mtDialog.alert({title:'Lokale regels',message:_blStatusTekst()});
-  const lijst=_blLokaalNiet(); let n=0;
-  for(const a of lijst){
-    n++;
-    const k=await mtDialog.choose({title:'Lokale regel '+n+' van '+lijst.length+': '+MTPlanning.bestelOms(a.regel),message:'Deze regel staat in de oude bestellijst van deze browser, maar niet in de nieuwe lijst. Aantal '+(a.regel.aantal||1)+(a.regel.project?', project '+a.regel.project:'')+'.',
-      choices:[{label:'Toevoegen aan de nieuwe lijst',sublabel:'met een nieuw id'},{label:'Negeren',sublabel:'niet meer tonen'},{label:'Later'}]});
-    if(k===null||k===undefined) break;
-    if(k===0){ const x=JSON.parse(JSON.stringify(a.regel)); delete x._vs; delete x._veldconflict; delete x._gewijzigd; delete x._vervallen; x.id=_blUuid(); if(_blNieuw(x,'overgenomen uit de oude lijst van deze browser')===null) break; }
-    else if(k===1){ const s=_blNegeer(); s.add(a.hash); try{ localStorage.setItem('mt_bestel_lokaal_negeer',JSON.stringify([...s])); }catch(e){} }
-  }
-  _blNaWijziging();
+function _blLokaalNiet(){ return _blLokaalAfw; }
+async function blLokaalControle(){
+  try{
+    _blLokaalAfw=[]; const lok=_blLeesOudLokaal(); if(!lok||MTPlanning.bestelBestandVorm(lok)) return;
+    let rem=null; try{ rem=await _SP.read('mt_bestellijst.json'); }catch(e){ return; }
+    if(MTPlanning.bestelBestandVorm(rem)) return;
+    _blLokaalAfw=MTPlanning.bestelLokaalAfwijking(lok,rem||[],_blNegeer());
+    if(_blLokaalAfw.length){ planToast('⚠ Deze browser had niet-gesynchroniseerde oude bestelregels ('+_blLokaalAfw.length+'): download ze of stuur ze naar beheer (tabblad Bestellijst).'); _blNaWijziging(); }
+  }catch(e){}
 }
-function blLokaalMelding(){ try{ const n=_blLokaalNiet().length; if(n) planToast('⚠ '+n+' lokale regel(s) uit de oude bestellijst staan niet in de nieuwe lijst: bekijk ze in het tabblad Bestellijst.'); }catch(e){} }
+function _blLokaalJson(){ return JSON.stringify({bron:'mt_bestellijst (lokale oude bestellijst van deze browser)',datum:new Date().toISOString(),aantal:_blLokaalAfw.length,regels:_blLokaalAfw.map(a=>a.regel)},null,2); }
+function blLokaalDownload(){
+  const blob=new Blob([_blLokaalJson()],{type:'application/json'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='oude-bestelregels-van-deze-browser.json'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
+}
+async function blLokaalNaarBeheer(){
+  const json=_blLokaalJson(); let gekopieerd=false;
+  try{ await navigator.clipboard.writeText(json); gekopieerd=true; }catch(e){}
+  await mtDialog.alert({title:'Naar beheer sturen',message:gekopieerd?'De oude bestelregels van deze browser staan op het klembord. Er opent zo een lege e-mail aan beheer: plak de tekst erin en verstuur hem.':'Kopiëren naar het klembord lukte niet. Download het bestand en stuur het als bijlage naar beheer.'});
+  try{ const onderwerp='Niet-gesynchroniseerde oude bestelregels ('+_blLokaalAfw.length+')'; location.href=['mailto:?subject=',encodeURIComponent(onderwerp),'&body=',encodeURIComponent('Plak hier de gekopieerde tekst (of voeg het gedownloade bestand toe).')].join(''); }catch(e){}
+}
+function blLokaalNegeer(){ const s=_blNegeer(); _blLokaalAfw.forEach(a=>s.add(a.sleutel)); try{ localStorage.setItem('mt_bestel_lokaal_negeer',JSON.stringify([...s])); }catch(e){} _blLokaalAfw=[]; _blNaWijziging(); }
+
 // mt_project_afhank is nieuw (geen oud bestand): alleen aanmaken als het nog niet bestaat; anders lezen en gewoon samenvoegen.
 async function afhankStart(){
   const sleutel='mt_project_afhank', bestand=sleutel+'.json';
@@ -7793,7 +7853,7 @@ function blKopTeken(){
       knop('regel','Per regel','Elke bestelregel apart, per categorie'),
       _p2El('label',{style:'font-size:12px;color:var(--text-dim);display:inline-flex;gap:4px;align-items:center;cursor:pointer;margin-left:8px'},
         _p2El('input',{type:'checkbox',aan:_blToonGeleverd,style:'width:auto',wijzig:ev=>{ _blToonGeleverd=ev.target.checked; renderBestellijst(); }}),'Toon ook geleverd')),
-    _blLokaalNiet().length?_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ '+_blLokaalNiet().length+' lokale regel(s) uit de oude bestellijst van deze browser staan niet in de nieuwe lijst. ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>blLokaalBekijk()},'Bekijken…')):null,
+    _blLokaalNiet().length?_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ Deze browser had niet-gesynchroniseerde oude bestelregels ('+_blLokaalNiet().length+'). ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:blLokaalDownload},'Download als bestand'),' ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:blLokaalNaarBeheer},'Stuur naar beheer'),' ',_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:blLokaalNegeer},'Negeren')):null,
     mig.aantal&&_blKlaar()?_p2El('div',{class:'pm-w pm-info',role:'status'},'🔄 '+mig.aantal+' oude regel(s) missen nog hun artikelsleutel, bron, status of project. Ze werken gewoon door; aanvullen legt het vast. ',
       _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>blMigreer()},'Bekijken en aanvullen…')):null);
 }
@@ -9466,6 +9526,7 @@ function planCheckBesteldatum(code){
 // per fase; id's worden teruggeschreven in mt_planning zodat we later kunnen syncen.
 const _PLAN_TG_STATUS={todo:300785,bezig:300788,klaar:300786};
 async function planNaarToggl(code){
+  if(_ptBlok(code)) return;   // takenlijst niet klaar: geen Toggl-taken aanmaken
   // Toggl 2.0 (Track is uit). Project = het gekoppelde Toggl-project van dit M&T-project
   // (zelfde koppeling als overal, op id). Fasen worden idempotent taken: een fase die al
   // een bestaande Toggl-taak heeft wordt overgeslagen, en de marker "mt:<code>/fase/<id>"
@@ -9664,6 +9725,7 @@ function planOpenEditor(code,faseId){
   </div>`;
 }
 async function planEditorOpslaan(code,faseId){
+  if(_ptBlok(code)) return;   // takenlijst niet klaar: geen planning-save en geen Toggl-PATCH
   const plan=planVoor(code); if(!plan) return;
   const fa=plan.fases.find(x=>x.id===faseId); if(!fa) return;
   fa.naam=document.getElementById('pe-naam').value||fa.naam;
@@ -9676,7 +9738,7 @@ async function planEditorOpslaan(code,faseId){
   // terug naar die taak, zodat planning en takenlijst dezelfde bron delen.
   if(fa.bronTaakId){
     const tarr=projTaken(code), bt=tarr.find(x=>x.id===fa.bronTaakId);
-    if(bt){ bt.naam=fa.naam; bt.status=fa.status; bt.duur_uur=fa.effort; projTakenZet(code,tarr);
+    if(bt){ bt.naam=fa.naam; bt.status=fa.status; bt.duur_uur=fa.effort; if(projTakenZet(code,tarr)===false) return;   // geweigerd: geen Toggl-PATCH en geen planning-save
       // Niet meer stil: lukt Toggl niet, dan staat de taak op ⏳ (herkansing in Taken).
       if(bt.tg_task_id){
         try{ await focusFetch(`tasks/${bt.tg_task_id}`,'PATCH',{name:fa.naam,status_id:await _ptStatusId(fa.status)}); delete bt.tg_pending; }
@@ -12254,12 +12316,10 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // (`_vervallen` + nieuwe stempel), dus een oude kopie zet niets terug en wist niets.
     // Een regel die maar aan één kant bestaat, blijft staan. Gelijk → lokaal.
     mt_bestellijst_v2(lokaal, spData) {
-      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
-      const kopie = v => Array.isArray(v) ? JSON.parse(JSON.stringify(v)) : [];
-      const L = _blIdsToekennen(kopie(lees(lokaal))), R = _blIdsToekennen(kopie(lees(spData)));
       // P2: regels met veldstempels (status, aantal, project, …) worden per veld samengevoegd, zodat "geleverd" van de werkplaats en een
       // nieuw aantal van kantoor allebei blijven; regels zonder stempels gedragen zich als vroeger (het nieuwste record wint).
-      return MTPlanning.bestelSamen(L, R);
+      // Strikt: ongeldige JSON of een verkeerde vorm is een fout (de aanroeper blokkeert de sleutel), nooit stil een lege lijst; de uitvoer is canoniek.
+      return MTPlanning.bestelSamen(lokaal, spData);
     },
     // Bestellijst-journaal: alleen toevoegen; vereniging op id, op tijd, laatste 1000.
     mt_bestellijst_journaal(lokaal, spData) {
@@ -13699,14 +13759,22 @@ window.initStorage = async function() {
       return;                              // te oude app-versie (teller): lokaal niets overschrijven, niets terugschrijven
     }
     if (key === 'mt_project_taken_v2' && spData === null) {   // v2 bestaat nog niet: GEEN automatische overstap; beheer zet de taken over, tot die tijd tonen we de oude lijst alleen-lezen
+      projTakenVerweesdOpruimen();   // een lokale v2 zonder remote v2: niet gebruiken (back-up), geblokkeerd laten, nooit autosync v2 laten aanmaken
       try { const o = await _SP.read('mt_project_taken.json'); _ptOud = (o && !MTPlanning.takenBestandVorm(o)) ? o : null; } catch(e) { _ptOud = null; }
       return;
     }
+    if (key === 'mt_project_taken_v2' && spData !== null && MTPlanning.takenBestandVorm(spData)) {   // een bestaande v2 met een verkeerde vorm: blokkeren, nooit reduceren tot {} en terugschrijven
+      _ptVormFout = MTPlanning.takenBestandVorm(spData); _SP.blockedKeys.add(key); console.warn('mt_project_taken_v2 heeft een verkeerde vorm:', _ptVormFout); return;
+    }
     if (key === 'mt_bestellijst_v2' && spData === null) {     // v2 bestaat nog niet: GEEN automatische overstap; beheer zet de bestellijst over, tot die tijd tonen we de oude lijst alleen-lezen
+      blVerweesdOpruimen();   // een lokale v2 zonder remote v2: niet gebruiken (back-up), geblokkeerd laten, nooit autosync v2 laten aanmaken
       try { const o = await _SP.read('mt_bestellijst.json'); _blOud = (o && !MTPlanning.bestelBestandVorm(o)) ? o : null; } catch(e) { _blOud = null; }
       return;
     }
-    if (key === 'mt_project_afhank' && spData === null) {     // nieuw bestand, geen legacy: alleen aanmaken (zie afhankStart)
+    if (key === 'mt_bestellijst_v2' && spData !== null && MTPlanning.bestelBestandVorm(spData)) {   // een bestaande v2 met een verkeerde vorm: blokkeren, nooit reduceren tot [] en terugschrijven
+      _blVormFout = MTPlanning.bestelBestandVorm(spData); _SP.blockedKeys.add(key); console.warn('mt_bestellijst_v2 heeft een verkeerde vorm:', _blVormFout); return;
+    }
+    if (key === 'mt_project_afhank' && spData === null) {     // nieuw bestand, geen legacy: alleen aanmaken (zie afhankStart)     // nieuw bestand, geen legacy: alleen aanmaken (zie afhankStart)
       const st = await afhankStart();
       if (st.stop) return;
       spData = st.spData;
@@ -13747,10 +13815,9 @@ window.initStorage = async function() {
   await Promise.all(taken);
   try{ setTimeout(takenOudVangnetMelding,1500); setTimeout(blOudVangnetMelding,2500); }catch(e){}
   _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan (behalve blockedKeys)
-  _ptTimeout = false; _ptHertekenen();
+  _ptTimeout = false; _ptHertekenen();   // een openstaand projectdetail toonde "Taken laden…": nu opnieuw tekenen
   _blTimeout = false; try{ _blNaWijziging(); }catch(e){ }
-  try{ setTimeout(blLokaalMelding,3000); }catch(e){}   // een openstaand projectdetail toonde "Taken laden…": nu opnieuw tekenen
-  try{ setTimeout(takenLokaalMelding,2500); }catch(e){}
+  try{ setTimeout(takenLokaalControle,2500); setTimeout(blLokaalControle,3000); }catch(e){}
   if (_SP.blockedKeys.size) {
     _SP.lastSync = { ts: Date.now(), ok: false, key: [..._SP.blockedKeys].join(', '),
       error: 'hydrate faalde — auto-sync uit voor deze key(s), herlaad de pagina' };
