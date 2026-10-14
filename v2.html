@@ -7383,7 +7383,7 @@ async function takenOudBekijk(){
 }
 function _ptId(){return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 const _PT_PRIO={low:{l:'P3',c:'#6b7280'},medium:{l:'P2',c:'#B8962E'},high:{l:'P1',c:'#c0392b'}};
-const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},klaar:{l:'Klaar',c:'#2A4A38'}};
+const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},wacht:{l:'Wacht',c:'#7A6010'},klaar:{l:'Klaar',c:'#2A4A38'}};   // wacht: gezet vanaf de telefoon (met een reden in wacht_reden)
 const _PT_STAT_TG={todo:300785,bezig:300788,klaar:300786};
 // Status-id dynamisch uit Toggl 2.0 (mt-toggl.js); vaste id's alleen als terugval.
 async function _ptStatusId(st){ return (typeof t2StatusId==='function')?await t2StatusId(st):(_PT_STAT_TG[st]||_PT_STAT_TG.todo); }
@@ -8448,7 +8448,7 @@ async function _tgUitvoerKoppel(code,id,actie,pid,t,mag){
   return tid;
 }
 // De dag waarop een taak klaar is gemeld (lokale datum); weg zodra de taak weer open staat.
-function _ptKlaarOp(t,status){ if(status==='klaar'){ if(!MTPlanning.isYmd(t.klaar_op)) t.klaar_op=MTPlanning.vandaagYmd(); } else delete t.klaar_op; }
+function _ptKlaarOp(t,status){ MTPlanning.klaarOp(t,status); }   // gedeeld met de telefoon (mt-planning.js)
 // Koppeltabel bijhouden na een geslaagde of mislukte Toggl-actie.
 function _ptSyncMerk(t,status,fout){
   const oud=t.tg_sync||{};
@@ -8525,7 +8525,7 @@ async function projTaakStatus(code,id){
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const t0=projTaken(code).find(x=>x.id===id); if(!t0) return;
   const order=['todo','bezig','klaar'];
-  return projTaakStatusNaar(code,id,order[(order.indexOf(t0.status||'todo')+1)%3]);
+  return projTaakStatusNaar(code,id,order[(order.indexOf(t0.status==='wacht'?'todo':(t0.status||'todo'))+1)%3]);   // een wachtende taak (vanaf de telefoon) gaat bij de volgende klik naar Bezig
 }
 // Zet een taak op een status. Een taak die wacht (een voorganger is niet klaar) start pas na een bevestiging.
 async function projTaakStatusNaar(code,id,nieuwStatus){
@@ -8540,7 +8540,7 @@ async function _projTaakStatusNaar(code,id,nieuwStatus){
   if(w.wacht&&(t.status||'todo')==='todo'&&nieuwStatus!=='todo'&&!await mtDialog.confirm({title:'Deze taak wacht',message:'"'+t.naam+'" wacht op: '+MTPlanning.wachtOpTekst(w,_p2D)+'.\nToch '+(nieuwStatus==='klaar'?'op klaar zetten':'starten')+'?',okLabel:'Toch doorgaan'})) return;
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // de blokkade of het recht kan tijdens de bevestiging veranderd zijn
   _ptJournaal('status',code,t);
-  t.status=nieuwStatus; _ptKlaarOp(t,nieuwStatus);
+  t.status=nieuwStatus; _ptKlaarOp(t,nieuwStatus); delete t.wacht_reden;   // de reden hoort bij de status Wacht (die zet alleen de telefoon)
   // Ronde 8: eerst de nieuwe status en de Toggl-intentie duurzaam lokaal opslaan en controleren; pas daarna Toggl, en daarna afronden.
   // Lukt het opslaan niet, dan verandert er niets en gaat er niets naar Toggl. Niet meer "fire and forget": lukt Toggl niet, dan blijft de intentie zichtbaar (⏳).
   if(t.tg_task_id){
@@ -12748,12 +12748,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
       return MTPlanning.bestelSamen(lokaal, spData);
     },
     // Bestellijst-journaal: alleen toevoegen; vereniging op id, op tijd, laatste 1000.
-    mt_bestellijst_journaal(lokaal, spData) {
-      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
-      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
-      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
-      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-1000);
-    },
+    mt_bestellijst_journaal(lokaal, spData) { return MTPlanning.journaalSamen(lokaal, spData, 1000); },   // dezelfde samenvoeger als de telefoon (mt-planning.js)
     // To Do-koppeltabel: per (e-mail|Toggl-taak) wint de nieuwste stand; niets valt weg.
     mt_todo_sync(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
@@ -12799,12 +12794,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
       return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-2000);
     },
     // Taken-journaal: alleen toevoegen. Vereniging op id, gesorteerd op tijd, laatste 1000.
-    mt_taken_journaal(lokaal, spData) {
-      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
-      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
-      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
-      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-1000);
-    },
+    mt_taken_journaal(lokaal, spData) { return MTPlanning.journaalSamen(lokaal, spData, 1000); },   // dezelfde samenvoeger als de telefoon (mt-planning.js)
     // Mail↔project-koppelingen: { code: [koppeling…] }. Per code en per mail
     // (internetMessageId, anders id) wint de NIEUWSTE stand (gewijzigd/ontkoppeld/ts).
     // Ontkoppelen is een tombstone (`ontkoppeld`), dus een oude kopie kan een

@@ -239,11 +239,18 @@
   }
   V.geklokteMin = geklokteMin;
 
-  // ── knoppen onderaan de kaart: de timer en het project (de status komt in 2b erbij) ──
+  // ── knoppen onderaan de kaart: de status (Bezig · Wacht · Klaar), de timer en het project ──
   function knop(tekst, klik, opt) { const o = opt || {}; return el('button', { klass: 'btn ' + (o.klass || 'btn-secondary') + ' btn-full', type: 'button', disabled: o.uit ? true : null, title: o.titel || null, klik, tekst }); }
+  function statusKnop(tekst, status, item, uit) {
+    const actief = item.status === status;
+    return el('button', { klass: 'btn ' + (actief ? 'btn-primary' : 'btn-secondary'), type: 'button', disabled: uit ? true : null, 'aria-pressed': actief ? 'true' : 'false', klik: () => zetStatus(item.id, status), tekst });
+  }
   function kaartKnoppen(item) {
     const a = sheet().acties; a.textContent = '';
     if (item.soort === 'taak') {
+      const blok = schrijfBlok(P.ROL.TAAK_STATUS), uit = !!blok || S.bezig;
+      a.appendChild(el('div', { klass: 'vd-status-rij' }, [statusKnop('Bezig', 'bezig', item, uit), statusKnop('Wacht', 'wacht', item, uit), statusKnop('Klaar', 'klaar', item, uit)]));
+      if (blok) a.appendChild(el('div', { klass: 'vd-sub', tekst: blok }));
       const uitTimer = D.demo() ? 'Demomodus.' : (D.rol.mag(P.ROL.UREN_BOEKEN) ? '' : 'Dit mag je niet met jouw rol.');
       a.appendChild(knop('▶ Start timer', () => startTimer(item), { klass: 'btn-primary', uit: !!uitTimer, titel: uitTimer }));
     }
@@ -271,6 +278,79 @@
     D.timer.start(p.mobielId, taak.naam);
     sluitKaart(); D.toast('Timer gestart op ' + projLabel(item.code));
   }
+
+  // ── schrijven: de status van een taak (Bezig · Wacht · Klaar) ──
+  // Volgorde, zoals in de cockpit: eerst kijken of het mag (lijst klaar, schema, rol), dan de vragen (reden, "deze taak wacht"), daarna opnieuw kijken, en dan pas schrijven.
+  // Het schrijven zelf (P.takenSchrijf) leest vers van SharePoint, voegt samen, stempelt per veld en controleert vlak voor het PUT nog eens recht en schema.
+  // Is er niet opgeslagen, dan verandert er niets en blijft de kaart zoals hij was (probeer opnieuw).
+  async function voorWrite() {
+    if (D.demo()) return false;
+    if (!(await schemaCheck())) { S.staat = 'schema'; return false; }
+    return S.staat === 'klaar';
+  }
+  function bewaarLokaal(data) { S.taken = data; try { D.storage.setItem(LS_TAKEN, JSON.stringify(data)); } catch (e) { /* de stand staat op SharePoint; lokaal alleen een kopie */ } }
+  // Uitkomst van een schrijfpoging in gewone taal. → true als het is opgeslagen.
+  async function afhandelen(res, wat) {
+    if (res && res.ok) { bewaarLokaal(res.data); return true; }
+    const reden = res && res.reden;
+    if (reden === 'recht') D.toast('⛔ ' + wat + ' mag je niet met jouw rol. Er is niets gewijzigd.');
+    else if (reden === 'ontbreekt') {
+      const vw = P.verweesdOpruimen(D.storage, LS_TAKEN, D.nu());
+      S.staat = vw.actie === 'verweesd' ? 'verweesd' : vw.actie === 'backup-mislukt' ? 'backup-mislukt' : 'overzetten'; S.taken = {};
+      D.toast(P.lijstStatusTekst('taken', S.staat)); teken();
+    } else if (reden === 'vorm') { S.staat = 'geblokkeerd'; S.vormFout = res.fout || ''; D.toast(P.lijstStatusTekst('taken', S.staat, S.vormFout)); teken(); }
+    else if (reden === 'lezen') D.toast('Geen verbinding met SharePoint — er is niets gewijzigd. Probeer het zo opnieuw.');
+    else if (reden === 'weigering') D.toast(res.fout || 'Dit kon niet.');
+    else if (reden === 'geblokkeerd') { D.toast(S.staat === 'schema' ? P.SCHEMA_TEKST : (schrijfBlok() || 'Wijzigen kan nu niet.')); teken(); }
+    else D.toast('Opslaan is niet gelukt — er is niets gewijzigd. Probeer het zo opnieuw.');
+    return false;
+  }
+  // Een herstelkopie van de taak vóór de wijziging (zoals het taken-journaal van de cockpit); mislukt dat, dan blijft de wijziging gewoon staan.
+  function journaalTaak(actie, code, taak) {
+    const regel = { id: 'j' + D.nu().toString(36) + Math.random().toString(36).slice(2, 6), tijd: new Date(D.nu()).toISOString(), actie, code, taak: taak ? JSON.parse(JSON.stringify(taak)) : null, via: 'mobiel' };
+    return P.journaalSchrijf(D.sp, 'mt_taken_journaal.json', regel, 1000).catch(() => false);
+  }
+  async function vraagReden(item) {
+    for (let i = 0; i < 3; i++) {
+      const r = await D.dialog().prompt({ title: 'Waarom wacht deze taak?', message: '"' + item.taak.naam + '"', placeholder: 'Bijvoorbeeld: wacht op plaatmateriaal', defaultValue: i === 0 ? (item.taak.wacht_reden || '') : '', okLabel: 'Zet op Wacht' });
+      if (r === null || r === undefined) return null;
+      if (String(r).replace(/\s+/g, ' ').trim().length >= 2) return String(r).replace(/\s+/g, ' ').trim();
+      D.toast('Een reden is verplicht bij Wacht.');
+    }
+    return null;
+  }
+  async function zetStatus(id, nieuw) {
+    if (S.bezig) return;
+    let item = zoekItem(id); if (!item || item.soort !== 'taak') return;
+    const huidig = item.status, t = item.taak;
+    if (huidig === nieuw && nieuw !== 'wacht') return;
+    let blok = schrijfBlok(P.ROL.TAAK_STATUS); if (blok) { D.toast(blok); return; }
+    let reden = '';
+    if (nieuw === 'wacht') { reden = await vraagReden(item); if (reden === null) return; }
+    if (item.wacht && item.wacht.wacht && huidig === 'todo' && nieuw !== 'todo' && nieuw !== 'wacht') {   // een taak die op een voorganger wacht start pas na een bevestiging
+      const ja = await D.dialog().confirm({ title: 'Deze taak wacht', message: '"' + t.naam + '" wacht op: ' + item.wachtTekst + '.\nToch ' + (nieuw === 'klaar' ? 'op klaar zetten' : 'starten') + '?', okLabel: 'Toch doorgaan' });
+      if (!ja) return;
+    }
+    blok = schrijfBlok(P.ROL.TAAK_STATUS); if (blok) { D.toast(blok); return; }   // opnieuw na de dialogen: de lijst, het schema of het recht kan intussen veranderd zijn
+    item = zoekItem(id) || item;
+    S.bezig = true; vulKaart(item);
+    let res, gelukt = false;
+    try {
+      const w = D.wie(), p = projInfo(item.code);
+      res = await P.takenSchrijf(D.sp, {
+        code: item.code, projectId: (p && p.projectId) || '', lokaal: D.storage.getItem(LS_TAKEN), door: w.email, dev: D.dev(), nu: D.nu(),
+        muteer: lijst => { const x = lijst.find(y => y.id === id); if (!x) return { fout: 'Deze taak bestaat niet meer.' }; const r = P.statusZet(x, nieuw, { reden }); return r.ok ? lijst : { fout: r.fout }; },
+        mag: spec => D.rol.mag(spec), voorWrite
+      });
+      gelukt = await afhandelen(res, 'De status van een taak wijzigen');
+    } finally { S.bezig = false; }
+    if (!gelukt) { teken(); return; }
+    journaalTaak('status', item.code, (res.oud || []).find(x => x.id === id));
+    D.toast('Taak op ' + P.TAAK_STATUS_LABEL[nieuw] + ' gezet.');
+    if (nieuw === 'klaar') sluitKaart();
+    teken();
+  }
+  V.zetStatus = zetStatus;
 
   V.init = function (deps) { D = deps; P = deps.planning || root.MTPlanning; S.staat = 'laden'; return V; };
   V._S = S;

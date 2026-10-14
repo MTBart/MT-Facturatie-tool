@@ -180,9 +180,10 @@
   P.TAAK_BASIS_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'status', 'toegewezen', 'prioriteit', 'afhankelijk_van', 'tg_task_id', 'tg_sync',
     'start', 'eind', 'duur_dagen', 'soort', 'fase', 'sleutel'];   // de velden van de eerste versie: de hashes voor de overstap (oud_hash, basis) blijven hierop rekenen
   // klaar_op = de dag waarop de taak klaar is gemeld (ymd); tg_pending = de duurzame Toggl-intentie {op, ts, ...} die vóór een Toggl-actie wordt opgeslagen.
-  // Beide zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
-  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending']);
-  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending']);
+  // wacht_reden = waarom een taak op status 'wacht' staat (stap 2, mobiel: Bezig · Klaar · Wacht met een verplichte reden).
+  // Alle drie zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
+  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden']);
+  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden']);
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
@@ -253,8 +254,8 @@
   //   'taken:alles'                = elk ander veld wijzigen, een taak verwijderen of de Toggl-koppeling (tg_task_id) wijzigen;
   //   'taken:status-nieuw|alles'   = alleen de status wijzigen (met de bijbehorende Toggl-markeringen en de afrondingsdatum) en/of nieuwe taken toevoegen;
   //   null                         = niets inhoudelijks gewijzigd.
-  // Velden die met een status meebewegen: status, klaar_op, tg_pending, tg_sync. Meta-velden (met _ ervoor) tellen niet mee.
-  P.TAAK_STATUS_VELDEN = ['status', 'klaar_op', 'tg_pending', 'tg_sync'];
+  // Velden die met een status meebewegen: status, klaar_op, wacht_reden, tg_pending, tg_sync. Meta-velden (met _ ervoor) tellen niet mee.
+  P.TAAK_STATUS_VELDEN = ['status', 'klaar_op', 'tg_pending', 'tg_sync', 'wacht_reden'];
   // batch: een bulk-actie (AI-takenlijst, takenketen, sjabloon) vraagt altijd "alles", ook als de regels alleen maar nieuw zijn. Een Toggl-intentie met een andere actie dan
   // "status" (koppelen, bijwerken, verwijderen) is nooit een gewone statuswijziging: ook dat vraagt "alles", zodat het opslaan van de intentie de Toggl-actie niet legitimeert.
   P.tgPendingOp = p => (!p || typeof p !== 'object') ? '' : (p.op || (p.verwijderen ? 'verwijderen' : (p.status ? 'status' : '')));
@@ -1437,6 +1438,20 @@
   // ── De status van een taak: Open (todo) · Bezig · Wacht (altijd met een reden) · Klaar ──
   P.TAAK_STATUSSEN = ['todo', 'bezig', 'wacht', 'klaar'];
   P.TAAK_STATUS_LABEL = { todo: 'Open', bezig: 'Bezig', wacht: 'Wacht', klaar: 'Klaar' };
+  // De dag waarop een taak klaar is gemeld (lokale datum); weg zodra de taak weer open staat.
+  P.klaarOp = function (t, status) { if (status === 'klaar') { if (!P.isYmd(t.klaar_op)) t.klaar_op = P.vandaagYmd(); } else delete t.klaar_op; };
+  // Zet de status van `t` (wijzigt ter plekke). Wacht vraagt een reden; een andere status wist die. → { ok: true } | { ok: false, fout }
+  P.statusZet = function (t, status, { reden = '' } = {}) {
+    if (!t || typeof t !== 'object' || !P.TAAK_STATUSSEN.includes(status)) return { ok: false, fout: 'Onbekende status.' };
+    const r = String(reden == null ? '' : reden).replace(/\s+/g, ' ').trim();
+    if (status === 'wacht' && r.length < 2) return { ok: false, fout: 'Bij Wacht hoort een reden.' };
+    t.status = status;
+    if (status === 'wacht') t.wacht_reden = r.slice(0, 200); else delete t.wacht_reden;
+    P.klaarOp(t, status);
+    return { ok: true };
+  };
+  P.taakId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+
   // ── Uren in gewone taal: 150 → "2u30", 120 → "2u", 45 → "0u45" ──
   P.fmtUurMin = m => { const n = Math.max(0, Math.round(getal(m))), h = Math.floor(n / 60), r = n % 60; return r ? h + 'u' + String(r).padStart(2, '0') : h + 'u'; };
 
@@ -1543,6 +1558,50 @@
     return { van: dagen[0].datum, tot: dagen[4].datum, dagen, cap_min: cap, gepland_min: gepl, vrij_min: Math.max(0, cap - gepl), over_min: Math.round(over), dagdelen: dd, dagdelenTotaal: ddTot };
   };
 
+  // ── Journaal (alleen toevoegen): vereniging op id, gesorteerd op tijd, de laatste `max` ──
+  P.journaalSamen = function (lokaal, remote, max) {
+    const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(remote)) ? lees(remote) : [], per = new Map();
+    [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
+    return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-(max > 0 ? max : 1000));
+  };
+  // Eén regel aan een gedeeld journaalbestand toevoegen (lezen, samenvoegen, schrijven met ETag). → true | false (mislukt; er is niets overschreven)
+  P.journaalSchrijf = async function (sp, bestand, regel, max) {
+    try {
+      const r = await sp.read(bestand);
+      if (r !== null && r !== undefined && !Array.isArray(r)) return false;   // geen lijst: nooit overschrijven
+      return !!(await sp.write(bestand, P.journaalSamen([regel], r, max), (remote, lokaal) => P.journaalSamen(lokaal, remote, max)));
+    } catch (e) { return false; }
+  };
+
+  // ── De schrijfkern voor taken ──
+  // Leest mt_project_taken_v2 vers van SharePoint (met de ETag), voegt de lokale kopie (met nog niet gedeelde wijzigingen) erbij, laat `muteer` de actieve taken van
+  // één project wijzigen, stempelt wat veranderde (stempel per veld, tombstone voor wat verdween) en schrijft het geheel terug. Een 412 (iemand schreef tussendoor)
+  // wordt door de _SP opgelost met takenSamen. Het recht dat de wijziging vraagt wordt na het lezen en vlak vóór het schrijven gecontroleerd (mag(spec) → boolean),
+  // en `voorWrite()` mag nog een laatste controle doen (bijvoorbeeld de schemaversie). Maakt het bestand NOOIT aan.
+  //   muteer(actieveTaken) → de nieuwe lijst, undefined (de gewijzigde kopie telt) of false / { fout } (afwijzen).
+  // → { ok, reden, fout?, recht?, data?, taken?, oud?, nieuw? }; reden: lezen | ontbreekt | vorm | weigering | recht | geblokkeerd | schrijven | aanroep.
+  //   Bij reden 'schrijven' staat `data` (de samengevoegde stand mét de wijziging) er nog: de aanroeper bewaart die lokaal om later te delen.
+  P.takenSchrijf = async function (sp, o) {
+    o = o || {};
+    const bestand = o.bestand || 'mt_project_taken_v2.json', nu = Number(o.nu) || Date.now(), code = o.code;
+    if (!sp || typeof o.muteer !== 'function' || !code) return { ok: false, reden: 'aanroep', fout: 'Onvolledige aanroep.' };
+    let raw; try { raw = await sp.read(bestand); } catch (e) { return { ok: false, reden: 'lezen', fout: String((e && e.message) || e) }; }
+    if (raw === null || raw === undefined) return { ok: false, reden: 'ontbreekt' };
+    const vorm = P.takenBestandVorm(raw); if (vorm) return { ok: false, reden: 'vorm', fout: vorm };
+    let basis; try { basis = P.takenSamen(o.lokaal === undefined ? null : o.lokaal, raw); } catch (e) { return { ok: false, reden: 'vorm', fout: String((e && e.message) || e) }; }
+    const oud = Array.isArray(basis[code]) ? basis[code] : [], actiefOud = P.takenActief(oud), werk = kopie(actiefOud);
+    const r = o.muteer(werk);
+    if (r === false || r === null || (r && !Array.isArray(r) && r.fout)) return { ok: false, reden: 'weigering', fout: (r && r.fout) || '' };
+    const nieuw = Array.isArray(r) ? r : werk;
+    const recht = P.takenRechtNodig(actiefOud, nieuw, { batch: !!o.batch }), toegestaan = () => !recht || typeof o.mag !== 'function' || !!o.mag(recht);
+    if (!toegestaan()) return { ok: false, reden: 'recht', recht };
+    const gestempeld = P.takenStempel(oud, nieuw, { nu, door: o.door || '', dev: o.dev || '', projectId: o.projectId || '' });
+    const data = Object.assign({}, basis); data[code] = gestempeld;
+    if (typeof o.voorWrite === 'function') { let toe; try { toe = await o.voorWrite(); } catch (e) { toe = false; } if (toe === false) return { ok: false, reden: 'geblokkeerd' }; }
+    if (!toegestaan()) return { ok: false, reden: 'recht', recht };   // opnieuw na de await: het recht kan intussen veranderd zijn
+    const ok = await sp.write(bestand, data, (remote, lokaal) => { try { return P.takenSamen(lokaal, remote); } catch (e) { return null; } });
+    return { ok: !!ok, reden: ok ? '' : 'schrijven', data, taken: P.takenActief(gestempeld), oud: actiefOud, nieuw };
+  };
   // Wijzigingen die lokaal bleven staan (schrijven mislukte eerder) alsnog delen: voeg lokaal en SharePoint samen en schrijf alleen als dat iets toevoegt.
   // o.remote = het al gelezen bestand (anders wordt het hier gelezen). → { ok, gewijzigd, data, reden? }
   P.takenPush = async function (sp, o) {
