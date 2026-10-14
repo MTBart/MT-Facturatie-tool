@@ -1,5 +1,33 @@
 [
   {
+    "versie": "2.16.0",
+    "datum": "2026-10-13",
+    "titel": "Planning: de uitrol, stap voor stap (eigenaar en beheer)",
+    "voor": "beheer",
+    "punten": [
+      "Wat er verandert: de projecttaken en de bestellijst gaan naar nieuwe bestanden (mt_project_taken_v2 en mt_bestellijst_v2). Een nieuw tabblad schrijft alleen daar; een oud tabblad schrijft er niet in.",
+      "Stap 1, bewerkingsstop: zeg het team dat niemand taken, bestellijst of projecten bewerkt tot je klaar bent. Een oud tabblad blijft namelijk taken en bestelregels in de oude bestanden wegschrijven: app-versie 5 stopt alleen het wegschrijven van projecten door oude tabbladen, niet dat van taken en bestellijst.",
+      "Stap 2, oude tabbladen: laat iedereen (ook op de telefoon en op de werkplaats-pc) alle oude tabbladen sluiten, of ze hard herladen met Ctrl+Shift+R. Pas daarna weet je zeker dat er geen oude versie meer schrijft.",
+      "Stap 3, de klikken in Beheer, in deze volgorde: 'App-versie vastleggen' (alleen de eigenaar), daarna 'Taken overzetten naar het nieuwe bestand' en 'Bestellijst overzetten naar het nieuwe bestand'. Je ziet bij elke overstap eerst een voorbeeld en bevestigt zelf. Tot het overzetten zien alle gebruikers de taken en de bestellijst alleen-lezen. Staat er in deze browser een back-up van een verweesde lokale lijst, dan toont Beheer eerst een vergelijking met die back-up (alleen weergave en export).",
+      "Stap 4, de vangnetten controleren: kijk in Beheer onder de overstapknoppen naar wat een oud tabblad nog wijzigde of wat een nieuw id kreeg, en kies zelf wat er wordt overgenomen (de app voegt nooit zelf iets toe). Een browser met niet-gesynchroniseerde oude wijzigingen kan die downloaden of naar beheer sturen. Pas daarna geef je het bewerken weer vrij."
+    ]
+  },
+  {
+    "versie": "2.16.0",
+    "datum": "2026-10-13",
+    "titel": "Planning: afhankelijkheden, sjabloon, bestellijst en budget",
+    "voor": "iedereen",
+    "punten": [
+      "Planning: in elk project een meter budget/gepland/geklokt/resterend per activiteit; geklokte uren werken weer in de agenda; mobiele agenda toont de planning; één uurtarief.",
+      "Taken kunnen van elkaar afhangen, met een wachttijd in werkdagen: een taak wacht tot de voorganger klaar is plus die wachttijd. De planning laat het kritieke pad zien en bij een verschuiving krijg je eerst een voorstel voor de opvolgers.",
+      "Een aanpasbaar projectsjabloon ('Standaard interieurproject') stelt bij Gewonnen en Direct project een takenketen voor met budget uit de calculatie en datums, teruggerekend vanaf de leverdatum.",
+      "De bestellijst telt dezelfde artikelen over projecten bij elkaar op, met de projectnummers erachter; afvinken werkt in de bundel en in het project. Dubbel importeren van dezelfde VW- of HHOS-lijst geeft geen dubbele regels meer.",
+      "Rollen: de werkplaats kan de status van taken wijzigen en taken en bestelregels toevoegen; al het andere wijzigen is voor kantoor en beheer. Alleen lezen mag niets wijzigen.",
+      "Een actie naar Toggl wordt eerst lokaal vastgelegd. Blijft er een actie onafgerond, dan staat er 'Toggl-actie onafgerond: controleren' met een ⏳-knop; de actie wordt dan veilig herhaald.",
+      "Uurtarieven worden nu tussen apparaten gesynchroniseerd (alleen de eigenaar wijzigt ze); verschillen tussen browsers worden getoond in plaats van stil overschreven."
+    ]
+  },
+  {
     "versie": "2.15.1",
     "datum": "2026-10-13",
     "titel": "Outlook-paneel en Binnenkomend",
