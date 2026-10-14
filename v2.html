@@ -7404,11 +7404,16 @@ function _ptJournaal(actie,code,taak,extra){
 // Taken waarvan de Toggl-wijziging nog niet gelukt is, opnieuw proberen.
 async function projTakenHerkans(code){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Toggl opnieuw proberen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
-  const lijst=projTaken(code).filter(t=>_tgOp(t.tg_pending)), weg=new Set(); let ok=0,fout=0;
-  for(const t0 of lijst){
-    const id=t0.id, op=_tgOp(t0.tg_pending); _tgBezig.add(code+'|'+id);
-    const magNog=()=>!_ptBlok(code,_tgRecht(op),'Toggl opnieuw proberen');
+  const lijst=projTaken(code).filter(t=>_tgOp(t.tg_pending)), weg=new Set(); let ok=0,fout=0,bezig=0;
+  for(const t00 of lijst){
+    const id=t00.id;
+    if(!_tgSlot(code,id)){ bezig++; continue; }   // er loopt al een Toggl-actie voor deze taak (ook deze knop, een tweede keer): niets doen
     try{
+      // De verse stand vóór het herhalen: is de intentie intussen weg (afgerond of gewist), dan stoppen; is de Toggl-taak intussen gekoppeld, dan alleen de intentie sluiten.
+      const t0=projTaken(code).find(x=>x.id===id), op=_tgOp(t0&&t0.tg_pending);
+      if(!t0||!op) continue;
+      const magNog=()=>!_ptBlok(code,_tgRecht(op),'Toggl opnieuw proberen');
+      if(op==='koppelen'&&t0.tg_task_id){ _tgAfronden(code,id,x=>{ _ptSyncMerk(x,'ok'); }); ok++; continue; }
       if(!magNog()) throw new Error('geen recht');
       if(op==='verwijderen'){ if(t0.tg_task_id&&!await _tgVerwijderTaak(t0.tg_task_id)) throw new Error('verwijderen mislukt'); weg.add(id); }   // zonder Toggl-taak of bij 404: al weg
       else if(op==='status'){ if(!t0.tg_task_id) throw new Error('geen Toggl-taak'); const sid0=await _ptStatusId(t0.status); if(!magNog()) throw new Error('geen recht'); await focusFetch(`tasks/${t0.tg_task_id}`,'PATCH',{status_id:sid0}); _tgAfronden(code,id,x=>{ _ptSyncMerk(x,'ok'); }); }
@@ -7420,9 +7425,10 @@ async function projTakenHerkans(code){
       } else { _tgAfronden(code,id,null); }
       ok++;
     }catch(e){ fout++; _tgAfgebroken(code,id); }
+    finally{ _tgSlotVrij(code,id); }
   }
-  if(weg.size){ weg.forEach(id=>_tgBezig.delete(code+'|'+id)); if(projTakenZet(code,projTaken(code).filter(t=>!weg.has(t.id)))!==true) fout++; }
-  _ptStatus(code,fout?`⚠ ${fout} taak/taken nog niet bijgewerkt in Toggl — probeer later opnieuw`:`✓ ${ok} bijgewerkt in Toggl`,fout?'#c0392b':'var(--green)');
+  if(weg.size){ if(projTakenZet(code,projTaken(code).filter(t=>!weg.has(t.id)))!==true) fout++; }
+  _ptStatus(code,fout?`⚠ ${fout} taak/taken nog niet bijgewerkt in Toggl — probeer later opnieuw`:(bezig&&!ok?`Er loopt al een Toggl-actie — even geduld (${bezig})`:`✓ ${ok} bijgewerkt in Toggl`+(bezig?` · ${bezig} bezig`:'')),fout?'#c0392b':(bezig&&!ok?'var(--gold-text)':'var(--green)'));
   renderProjectDetail(huidigProject);
 }
 
@@ -8378,7 +8384,18 @@ async function projTaakConflict(code,id){
 // gecontroleerd dat dat lukte (projTakenZet === true, ook bij een uitzondering van de opslag). Pas daarna gaat de aanroep naar Toggl, en daarna wordt de intentie
 // afgerond (opnieuw lezen, uitkomst vastleggen, intentie wissen). Sluit het tabblad of valt de verbinding weg tussen die stappen, dan staat de intentie er nog:
 // bij het opstarten en in het projectscherm staat dan "Toggl-actie onafgerond: controleren"; controleren herhaalt de (idempotente) actie. Een DELETE met 404 is "al verwijderd".
-const _tgBezig=new Set();   // "code|id" van de Toggl-acties die in dit tabblad nu lopen (alles wat niet in deze verzameling staat maar wel een intentie heeft, is onafgerond)
+// _tgBezig = "code|id" van de taken met een Toggl-actie die in dit tabblad NU loopt. Het is ook het in-tab slot (ronde 9): herhalen, aanmaken, bijwerken, status en verwijderen nemen
+// eerst het slot van de taak (_tgSlot) en geven het altijd vrij (_tgMetSlot, try/finally). Een tweede klik terwijl de taak bezig is doet niets. Wat niet in deze verzameling staat maar wel een
+// intentie heeft, is onafgerond.
+// Cross-tab (twee tabbladen of twee pc's tegelijk) is dit GEEN slot: daar voorkomt alleen de bestaande zoek-dan-POST op het MT-kenmerk (t2VindOfMaakTaak, "mt:<code>/<taak-id>") een dubbele
+// Toggl-taak en zijn PATCH en DELETE idempotent. Een volledige oplossing (operation-id's, een outbox die de intentie claimt) hoort bij stap 3 van het eindontwerp.
+const _tgBezig=new Set();
+function _tgSlot(code,id){ const k=code+'|'+id; if(_tgBezig.has(k)) return false; _tgBezig.add(k); return true; }
+function _tgSlotVrij(code,id){ _tgBezig.delete(code+'|'+id); }
+async function _tgMetSlot(code,id,fn){
+  if(!_tgSlot(code,id)){ try{ _ptStatus(code,'Er loopt al een Toggl-actie voor deze taak — even geduld.','var(--gold-text)'); }catch(e){} return false; }
+  try{ return await fn(); } finally{ _tgSlotVrij(code,id); }
+}
 function _tgOp(p){ return !p||typeof p!=='object'?'':(p.op||(p.verwijderen?'verwijderen':(p.status?'status':''))); }
 // Het recht dat de Toggl-actie zelf vraagt: een statusupdate = status-nieuw|alles; aanmaken, koppelen, bijwerken en verwijderen = alles. Het opslaan van de intentie legitimeert de actie niet.
 function _tgRecht(op){ return op==='status'?ROL_TAAK_STATUS:ROL_TAAK_ALLES; }
@@ -8388,10 +8405,9 @@ function _tgIntentieZet(code,arr,taken,op){
   lijst.forEach(t=>{ t.tg_pending=Object.assign({op,ts},op==='status'?{status:true}:(op==='verwijderen'?{verwijderen:true}:{})); });
   let ok=false; try{ ok=projTakenZet(code,arr,{recht:_tgRecht(op)})===true; }catch(e){ ok=false; }
   if(!ok){ lijst.forEach(t=>{ delete t.tg_pending; }); try{ _ptStatus(code,'⚠ De Toggl-actie is niet gestart: de taak kon niet lokaal worden opgeslagen. Er is niets naar Toggl gestuurd.','#c0392b'); }catch(e){} return false; }
-  lijst.forEach(t=>_tgBezig.add(code+'|'+t.id)); return true;
+  return true;
 }
 function _tgAfronden(code,id,mut){   // na de Toggl-aanroep: de actuele stand opnieuw lezen, de uitkomst vastleggen en de intentie wissen
-  _tgBezig.delete(code+'|'+id);
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return false;
   try{ if(mut) mut(t); }catch(e){ console.warn('Toggl-afronding:',e); }
   delete t.tg_pending;
@@ -8399,7 +8415,7 @@ function _tgAfronden(code,id,mut){   // na de Toggl-aanroep: de actuele stand op
   if(!ok){ try{ _ptStatus(code,'⚠ Toggl is bijgewerkt, maar de afronding kon niet lokaal worden opgeslagen: de taak blijft op "Toggl-actie onafgerond: controleren".','#c0392b'); }catch(e){} }
   return ok;
 }
-function _tgAfgebroken(code,id){ _tgBezig.delete(code+'|'+id); }   // mislukt of onderbroken: de intentie blijft staan (controleren)
+function _tgAfgebroken(code,id){}   // mislukt of onderbroken: de intentie blijft staan (controleren); het slot geeft de omhullende _tgMetSlot vrij
 function _tgOnafgerond(code){ return projTaken(code).filter(t=>_tgOp(t.tg_pending)&&!_tgBezig.has(code+'|'+t.id)); }
 // Het projectscherm: de ⏳-knop en de statusregel zeggen het eerlijk. (De sjabloonregel van de knop zelf blijft ongewijzigd; de tekst wordt hier vervangen.)
 function _ptOnafgerondTeken(code){
@@ -8445,7 +8461,8 @@ function _ptSyncMerk(t,status,fout){
 // opgeslagen koppeling (nooit stil op naam gekoppeld, nooit stil een project aangemaakt). Een taak wordt alleen gekoppeld via
 // het mt:-kenmerk in de notitie (t2VindOfMaakTaak), nooit op naam. Is de Toggl-taak verwijderd, dan blijft de MT-taak staan
 // en beslis jij wat er gebeurt.
-async function projTaakTogglSync(code,id){
+function projTaakTogglSync(code,id){ return _tgMetSlot(code,id,()=>_projTaakTogglSync(code,id)); }
+async function _projTaakTogglSync(code,id){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Toggl synchroniseren')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const mt=projVind(code); const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!mt||!t) return;
   let actie=MTPlanning.tgActie(t);
@@ -8514,6 +8531,11 @@ async function projTaakStatus(code,id){
 }
 // Zet een taak op een status. Een taak die wacht (een voorganger is niet klaar) start pas na een bevestiging.
 async function projTaakStatusNaar(code,id,nieuwStatus){
+  const t0=projTaken(code).find(x=>x.id===id);
+  if(t0&&t0.tg_task_id) return _tgMetSlot(code,id,()=>_projTaakStatusNaar(code,id,nieuwStatus));   // met een Toggl-taak: één actie tegelijk per taak
+  return _projTaakStatusNaar(code,id,nieuwStatus);
+}
+async function _projTaakStatusNaar(code,id,nieuwStatus){
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   if(!['todo','bezig','klaar'].includes(nieuwStatus)) return;
@@ -8571,7 +8593,8 @@ async function _tgVerwijderTaak(tg_task_id){
     if(/HTTP 404/.test(String((e&&e.message)||e))){ if(typeof _tgCache!=='undefined') _tgCache.taken=null; return true; }   // 404 = al verwijderd: dat is wat we wilden
     console.warn('Toggl-taak',tg_task_id,'verwijderen faalde:',e); return false; }
 }
-async function projTaakVerwijder(code,id){
+function projTaakVerwijder(code,id){ return _tgMetSlot(code,id,()=>_projTaakVerwijder(code,id)); }
+async function _projTaakVerwijder(code,id){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Een taak verwijderen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const t=projTaken(code).find(x=>x.id===id);
   if(!await mtDialog.confirm({title:'Taak verwijderen',message:'Taak verwijderen?'+(t&&t.tg_task_id?'\nWordt óók in Toggl verwijderd.':''),okLabel:'Verwijderen',danger:true})) return;
@@ -8590,7 +8613,6 @@ async function projTaakVerwijder(code,id){
       _ptStatus(code,'⚠ Verwijderen in Toggl mislukt — de taak blijft staan tot het lukt (klik ⏳ om opnieuw te proberen)','#c0392b');
       renderProjectDetail(huidigProject); return;
     }
-    _tgBezig.delete(code+'|'+id);
   }
   if(projTakenZet(code,projTaken(code).filter(x=>x.id!==id))!==true){ _ptStatus(code,'⚠ De taak kon niet lokaal worden verwijderd.','#c0392b'); renderProjectDetail(huidigProject); return; }
   renderProjectDetail(huidigProject);
@@ -8607,6 +8629,12 @@ async function projTakenVerwijderSelectie(code){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Taken verwijderen')) return false;   // na de bevestiging opnieuw
   try{ if(window.track) track('taken','verwijder_selectie',{detail:code+' · '+ids.length}); }catch(e){}
   let i=0; const mislukt=new Set();
+  // Het slot per taak met een Toggl-taak: een taak waar al een Toggl-actie op loopt wordt overgeslagen (blijft staan); de rest wordt vastgehouden tot het einde.
+  const bezigIds=teVerw.filter(t=>t.tg_task_id&&_tgBezig.has(code+'|'+t.id)).map(t=>t.id);
+  bezigIds.forEach(bid=>{ let k=teVerw.findIndex(t=>t.id===bid); if(k>=0) teVerw.splice(k,1); k=ids.indexOf(bid); if(k>=0) ids.splice(k,1); });
+  const geslot=teVerw.filter(t=>t.tg_task_id).map(t=>t.id); geslot.forEach(gid=>_tgSlot(code,gid));
+  try{
+  if(!teVerw.length){ _ptStatus(code,'Er loopt al een Toggl-actie voor deze taak/taken — even geduld.','var(--gold-text)'); return; }
   // Alle intenties eerst, in één keer, duurzaam opslaan; lukt dat niet, dan gaat er niets naar Toggl.
   { const a0=projTaken(code), metToggl=a0.filter(x=>ids.includes(x.id)&&x.tg_task_id);
     if(metToggl.length&&!_tgIntentieZet(code,a0,metToggl,'verwijderen')) return false; }
@@ -8614,12 +8642,13 @@ async function projTakenVerwijderSelectie(code){
     _ptJournaal('verwijderen',code,t);
     if(t.tg_task_id){ _ptStatus(code,`Toggl: verwijderen ${i}/${teVerw.length}…`,'var(--gold-text)');
       if(_ptBlok(code,ROL_TAAK_ALLES,'Taken verwijderen')){ mislukt.add(t.id); _tgAfgebroken(code,t.id); continue; }   // vóór elke DELETE opnieuw (de intentie blijft staan)
-      if(!await _tgVerwijderTaak(t.tg_task_id)) { mislukt.add(t.id); _tgAfgebroken(code,t.id); } else _tgBezig.delete(code+'|'+t.id); }
+      if(!await _tgVerwijderTaak(t.tg_task_id)) { mislukt.add(t.id); _tgAfgebroken(code,t.id); } }
   }
   const rest=projTaken(code).filter(t=>!ids.includes(t.id)||mislukt.has(t.id));
   if(projTakenZet(code,rest)!==true){ _ptStatus(code,'⚠ De taken konden niet lokaal worden verwijderd.','#c0392b'); renderProjectDetail(huidigProject); return; }
   _ptStatus(code,mislukt.size?`⚠ ${ids.length-mislukt.size} verwijderd; ${mislukt.size} blijven staan omdat Toggl niet lukte (⏳ = opnieuw)`:`✓ ${ids.length} taken verwijderd`,mislukt.size?'#c0392b':'var(--green)');
   renderProjectDetail(huidigProject);
+  }finally{ geslot.forEach(gid=>_tgSlotVrij(code,gid)); }
 }
 function projTakenSelectAll(code,on){
   const sid=code.replace(/-/g,'');
@@ -9082,7 +9111,8 @@ async function t2TogglNaamBijwerken(code){
   try { _t2St(code, 'Toggl-projectnaam bijwerken…'); await t2HernoemProject(pid, nieuwNaam); _tgCache.projecten = null; try { await t2Projecten(true); } catch (e) {} if (typeof _rerenderDetailKeepScroll === 'function') _rerenderDetailKeepScroll(); }
   catch (e) { _t2St(code, '⚠ ' + (e.message || e) + ' — de naam in Toggl is niet gewijzigd', '#c0392b'); }
 }
-async function projTaakNaarToggl(code,id,vers=true){
+function projTaakNaarToggl(code,id,vers=true){ return _tgMetSlot(code,id,()=>_projTaakNaarToggl(code,id,vers)); }
+async function _projTaakNaarToggl(code,id,vers=true){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Een taak naar Toggl zetten')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const mt=projVind(code); if(!mt) return false;
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||t.tg_task_id) return false;
@@ -10076,6 +10106,11 @@ function planOpenEditor(code,faseId){
   </div>`;
 }
 async function planEditorOpslaan(code,faseId){
+  const pl0=planVoor(code), fa0=pl0&&pl0.fases&&pl0.fases.find(x=>x.id===faseId), tid0=fa0&&fa0.bronTaakId;
+  if(tid0) return _tgMetSlot(code,tid0,()=>_planEditorOpslaan(code,faseId));   // schrijft de status ook naar de taak (en Toggl): één actie tegelijk per taak
+  return _planEditorOpslaan(code,faseId);
+}
+async function _planEditorOpslaan(code,faseId){
   if(_ptBlok(code)) return;   // takenlijst niet klaar: geen planning-save en geen Toggl-PATCH
   const plan=planVoor(code); if(!plan) return;
   const fa=plan.fases.find(x=>x.id===faseId); if(!fa) return;
