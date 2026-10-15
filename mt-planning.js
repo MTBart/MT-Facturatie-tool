@@ -1548,7 +1548,7 @@
         voorstel: b.status === 'voorstel', groep, sleutel: b.datum + ' ' + (s || '99:99') + '|0|' + String(b.taak || '').toLowerCase() });
     });
     Object.keys(groepen).forEach(k => groepen[k].sort((a, b) => a.sleutel < b.sleutel ? -1 : a.sleutel > b.sleutel ? 1 : 0));
-    const week = alle ? null : P.weekBezetting(mijnTaken, alleBlokken, { vandaag, vrij: o.vrij, dagMin: o.dagMin, gedekt: dekt, verlof: P.verlofDagen(o.verlof, mijn, team) });
+    const week = alle ? null : P.weekBezetting(mijnTaken, alleBlokken, { vandaag, vrij: o.vrij, dagMin: o.dagMin, gedekt: dekt, verlof: P.verlofDagen(o.verlof, mijn, team), capPerDag: typeof o.capPerDag === 'function' ? o.capPerDag : null });
     return { vandaag, weekgrens: { van: wk.ma, tot: zo }, groepen, week, aantal: Object.keys(groepen).reduce((s, k) => s + groepen[k].length, 0) };
   };
 
@@ -1564,13 +1564,79 @@
   // De vrije dagen uit Beheer (mt_vrijedagen: [{datum, type 'verplicht'|'optioneel'}]) als lijst van ymd: een optionele dag (bv. een brugdag) telt als gewone werkdag.
   P.vrijeDagenLijst = lijst => (Array.isArray(lijst) ? lijst : []).filter(v => v && v.datum && v.type !== 'optioneel').map(v => v.datum).filter(P.isYmd);
 
+  // ── Werktijden per medewerker (Admin ▸ Team en werktijden; gedeelde store mt_werktijden.json) ──
+  // Eén record per medewerker: { slug, dagen: { ma: { werk, start: '08:00', eind: '17:00' }, di, wo, do, vr }, pauze (minuten), _gewijzigd, _door }.
+  // Beschikbaar per dag = eind - begin - pauze (de pauze telt alleen op een dag langer dan 5 uur). Zonder record van die persoon rekent alles zoals voorheen:
+  // werkuren per week (Beheer) / 5 op ma-vr, standaard 40 uur (8 uur per dag). De werkuren per week blijven het terugvalgetal; er is geen tweede waarheid:
+  // met een record volgen het weektotaal en de capaciteit overal uit de werktijden (P.werkuurWeek, P.dagCapMin).
+  P.WERKTIJD_DAGEN = ['ma', 'di', 'wo', 'do', 'vr'];
+  const tMin = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t == null ? '' : t).trim()); if (!m) return null; const h = Number(m[1]), mi = Number(m[2]); return h < 24 && mi < 60 ? h * 60 + mi : null; };
+  const tTekst = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  // '' = geldig, anders de reden in gewone taal
+  P.werktijdenVorm = function (r) {
+    if (!r || typeof r !== 'object' || !r.slug) return 'Geen medewerker.';
+    if (!r.dagen || typeof r.dagen !== 'object') return 'De dagen ontbreken.';
+    if (r.pauze != null && !(getal(r.pauze) >= 0 && getal(r.pauze) <= 180)) return 'De pauze moet tussen 0 en 3 uur liggen.';
+    for (const k of P.WERKTIJD_DAGEN) {
+      const x = r.dagen[k]; if (!x || typeof x !== 'object') return 'De dag ' + k + ' ontbreekt.';
+      if (x.werk) { const a = tMin(x.start), e = tMin(x.eind); if (a === null || e === null) return 'Ongeldige tijd op ' + k + '.'; if (e <= a) return 'Op ' + k + ' moet het einde na het begin liggen.'; }
+    }
+    return '';
+  };
+  // lijst (of { slug: record }) -> { slug: record } met alleen geldige, niet-vervallen records
+  P.werktijdenMap = function (lijst) {
+    const uit = {}, arr = Array.isArray(lijst) ? lijst : (lijst && typeof lijst === 'object' ? Object.values(lijst) : []);
+    arr.forEach(r => { if (r && typeof r === 'object' && r.slug && !r._vervallen && !P.werktijdenVorm(r)) uit[String(r.slug).toLowerCase()] = r; });
+    return uit;
+  };
+  P.werktijdDagMin = function (r, i) {
+    const x = r && r.dagen && r.dagen[P.WERKTIJD_DAGEN[i]]; if (!x || !x.werk) return 0;
+    const a = tMin(x.start), e = tMin(x.eind); if (a === null || e === null || e <= a) return 0;
+    const span = e - a, pauze = Math.max(0, Math.round(getal(r.pauze)));
+    return Math.max(0, span - (span > 300 ? pauze : 0));
+  };
+  P.werkweekMin = r => [0, 1, 2, 3, 4].reduce((s, i) => s + P.werktijdDagMin(r, i), 0);
+  // Beschikbare minuten van deze medewerker op weekdag i (0 = ma ... 4 = vr). o = { werkuren: { slug: uren }, werktijden }.
+  P.dagCapMin = function (slug, i, o) {
+    o = o || {}; const rec = P.werktijdenMap(o.werktijden)[String(slug).toLowerCase()];
+    if (rec) return P.werktijdDagMin(rec, i);
+    const u = o.werkuren && Number(o.werkuren[slug]) > 0 ? Number(o.werkuren[slug]) : 40; return u / 5 * 60;
+  };
+  P.werkuurWeek = function (slug, o) {
+    o = o || {}; const rec = P.werktijdenMap(o.werktijden)[String(slug).toLowerCase()];
+    return rec ? P.werkweekMin(rec) / 60 : ((o.werkuren && o.werkuren[slug]) || 40);
+  };
+  // De beschikbare minuten per dag van deze persoon als functie ymd -> minuten (voor weekBezetting/mijnWerk), of null zonder werktijden-record (dan geldt 8 uur per werkdag, zoals altijd).
+  P.capPerDagVoor = function (slug, werktijden) {
+    const rec = P.werktijdenMap(werktijden)[String(slug == null ? '' : slug).toLowerCase()]; if (!rec) return null;
+    return ymd => { const w = ((dnr(ymd) + 4) % 7 + 7) % 7, i = (w + 6) % 7; return i > 4 ? 0 : P.werktijdDagMin(rec, i); };
+  };
+  // De tijd van de dagvraag "Klopt je dag?": 15 minuten voor de eindtijd (alleen berekend en getoond; de vraag zelf is een latere stap).
+  // -> { perDag: { ma: '16:45'|'' ... }, laatste: '16:45'|'' }
+  P.dagvraagTijd = function (r) {
+    const perDag = {}; let laatste = 0;
+    P.WERKTIJD_DAGEN.forEach(k => { const x = r && r.dagen && r.dagen[k], e = x && x.werk ? tMin(x.eind) : null; perDag[k] = e === null || e === undefined ? '' : tTekst(Math.max(0, e - 15)); if (e !== null && e !== undefined) laatste = Math.max(laatste, e - 15); });
+    return { perDag, laatste: laatste ? tTekst(laatste) : '' };
+  };
+  // Samenvoegen per medewerker: de nieuwste stempel (_gewijzigd) wint; gelijk -> lokaal; een record aan één kant blijft staan (dus twee beheerders die
+  // verschillende mensen wijzigen verliezen niets). Een tombstone (_vervallen) is een gewoon record met een stempel: "terug naar standaard".
+  P.werktijdenSamen = function (lokaal, remote) {
+    const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
+    const arr = v => { const x = lees(v); return Array.isArray(x) ? x : (x && typeof x === 'object' ? Object.values(x) : []); };
+    const tijd = x => { const v = x && x._gewijzigd; return typeof v === 'number' ? v : (Date.parse(v || '') || 0); };
+    const per = new Map();
+    [...arr(remote), ...arr(lokaal)].forEach(x => { if (!x || typeof x !== 'object' || !x.slug) return; const k = String(x.slug).toLowerCase(), o = per.get(k); if (!o || tijd(x) > tijd(o) || (tijd(x) === tijd(o) && tijd(x) > 0)) per.set(k, x); });
+    return [...per.values()].sort((a, b) => String(a.slug) < String(b.slug) ? -1 : 1);
+  };
+
   // ── Capaciteit van de week: 8 uur per werkdag, geplande uren in dagdelen ──
   // Gepland = de planblokken van de persoon (geen open voorstellen) plus de taken met een start/eind in die week die geen planblok hebben (de uren
   // verdeeld over hun werkdagen). Per dag telt een begonnen dagdeel (4 uur) voor een heel dagdeel: de werkplaats plant in dagdelen.
   // → { van, tot, dagen: [{datum, werkdag, cap_min, gepland_min, dagdelen}], cap_min, gepland_min (in dagdelen), vrij_min, over_min, dagdelen, dagdelenTotaal }
-  P.weekBezetting = function (taken, blokken, { vandaag = '', vrij = null, dagMin = 0, gedekt = null, verlof = null } = {}) {
+  // capPerDag (optioneel, ymd -> minuten): de beschikbare minuten per dag uit de werktijden van die persoon (P.dagCapMin); zonder is het 8 uur (dagMin) per werkdag, zoals altijd.
+  P.weekBezetting = function (taken, blokken, { vandaag = '', vrij = null, dagMin = 0, gedekt = null, verlof = null, capPerDag = null } = {}) {
     const dm = dagMin > 0 ? dagMin : P.DAG_MIN, V = P.vrijSet(vrij), wk = maandagVan(P.isYmd(vandaag) ? vandaag : P.vandaagYmd()), VL = verlof instanceof Set ? verlof : new Set(Array.isArray(verlof) ? verlof : []);   // verlof = de dagen waarop deze persoon vrij is (zie verlofDagen): geen capaciteit
-    const dagen = []; for (let i = 0; i < 5; i++) { const nr = wk.maNr + i, w = isWerk(nr, V) && !VL.has(dymd(nr)); dagen.push({ datum: dymd(nr), nr, werkdag: w, cap_min: w ? dm : 0, gepland_min: 0 }); }
+    const dagen = []; for (let i = 0; i < 5; i++) { const nr = wk.maNr + i, cd = capPerDag ? Math.max(0, Math.round(getal(capPerDag(dymd(nr))))) : dm, w = isWerk(nr, V) && !VL.has(dymd(nr)) && cd > 0; dagen.push({ datum: dymd(nr), nr, werkdag: w, cap_min: w ? cd : 0, gepland_min: 0 }); }
     const per = new Map(dagen.map(d => [d.datum, d])), dekt = gedekt instanceof Set ? gedekt : new Set();
     (blokken || []).forEach(b => {
       if (!b || b._vervallen || b.status === 'voorstel' || (b.voorstel && b.voorstel.afgewezen)) return;
@@ -1588,8 +1654,9 @@
     const half = dm / 2; let cap = 0, gepl = 0, over = 0, dd = 0, ddTot = 0;
     dagen.forEach(d => {
       d.gepland_min = Math.round(d.gepland_min); delete d.nr;
-      d.dagdelen = d.werkdag ? Math.min(2, Math.ceil(d.gepland_min / half - 1e-9)) : 0;
-      cap += d.cap_min; gepl += d.dagdelen * half; dd += d.dagdelen; ddTot += d.werkdag ? 2 : 0; over += Math.max(0, d.gepland_min - d.cap_min);
+      const hd = capPerDag ? d.cap_min / 2 : half;   // een halve dag van déze dag (met werktijden verschilt dat per dag)
+      d.dagdelen = d.werkdag && hd > 0 ? Math.min(2, Math.ceil(d.gepland_min / hd - 1e-9)) : 0;
+      cap += d.cap_min; gepl += d.dagdelen * hd; dd += d.dagdelen; ddTot += d.werkdag ? 2 : 0; over += Math.max(0, d.gepland_min - d.cap_min);
     });
     return { van: dagen[0].datum, tot: dagen[4].datum, dagen, cap_min: cap, gepland_min: gepl, vrij_min: Math.max(0, cap - gepl), over_min: Math.round(over), dagdelen: dd, dagdelenTotaal: ddTot };
   };
@@ -1658,19 +1725,21 @@
   // (zie weekRooster), per dag samengeteld; een begonnen dagdeel telt voor een heel dagdeel (de werkplaats plant in dagdelen). vrij = wat er van de dag overblijft, over = wat erboven zit.
   // → { van, tot, dagen, rijen: [{ slug, naam, heeftCap, dagen: [{datum, werkdag, verlof, cap_min, gepland_min, dagdelen, vrij_min, over_min, items}], weken: [{cap_min, gepland_min, vrij_min, over_min}] }] }
   P.teamCapaciteit = function (takenObj, depsObj, blokken, opt) {
-    const o = opt || {}, team = Array.isArray(o.team) ? o.team : [], r = P.weekRooster(takenObj, depsObj, blokken, o), wu = o.werkuren && typeof o.werkuren === 'object' ? o.werkuren : {};
+    const o = opt || {}, team = Array.isArray(o.team) ? o.team : [], r = P.weekRooster(takenObj, depsObj, blokken, o), wu = o.werkuren && typeof o.werkuren === 'object' ? o.werkuren : {}, wt = P.werktijdenMap(o.werktijden);   // wt: de werktijden per medewerker (leeg = alles als voorheen)
     const aantalWeken = r.dagen.length ? r.dagen[r.dagen.length - 1].week + 1 : 0;
     const rijen = r.rijen.map(rij => {
-      const lid = !!rij.slug && team.some(m => String(m.slug).toLowerCase() === rij.slug), uren = Number(wu[rij.slug]) > 0 ? Number(wu[rij.slug]) : 40, dagCap = lid ? Math.round(uren / 5 * 60) : 0;
+      const lid = !!rij.slug && team.some(m => String(m.slug).toLowerCase() === rij.slug), uren = Number(wu[rij.slug]) > 0 ? Number(wu[rij.slug]) : 40, dagCap = lid ? Math.round(uren / 5 * 60) : 0, rec = lid ? wt[rij.slug] || null : null;
       const weken = []; for (let w = 0; w < aantalWeken; w++) weken.push({ cap_min: 0, gepland_min: 0, vrij_min: 0, over_min: 0 });
       const dagen = r.dagen.map((d, i) => {
-        const verlof = !!(rij.verlofDag && rij.verlofDag[i]), cap = lid && d.werkdag && !verlof ? dagCap : 0, uniek = new Set();
+        const verlof = !!(rij.verlofDag && rij.verlofDag[i]), werktNiet = !!rec && P.werktijdDagMin(rec, i % 5) <= 0, cap = lid && d.werkdag && !verlof ? (rec ? Math.round(P.werktijdDagMin(rec, i % 5)) : dagCap) : 0, uniek = new Set();
         rij.cellen[i].forEach(c => c.forEach(it => uniek.add(it)));
         const items = [...uniek], gepland = Math.round(items.reduce((s, it) => s + (it.planvoorstel ? 0 : (it.min || 0)), 0));
         const dd = cap > 0 ? Math.min(2, Math.ceil(gepland / (cap / 2) - 1e-9)) : 0, telt = cap > 0 ? dd * (cap / 2) : 0;
         const vrij = Math.max(0, cap - telt), over = Math.max(0, gepland - cap), wk = weken[d.week];
         wk.cap_min += cap; wk.gepland_min += telt || (cap > 0 ? 0 : gepland); wk.vrij_min += vrij; wk.over_min += over;
-        return { datum: d.datum, werkdag: d.werkdag, verlof, cap_min: cap, gepland_min: gepland, dagdelen: dd, vrij_min: Math.round(vrij), over_min: Math.round(over), items };
+        const dag = { datum: d.datum, werkdag: d.werkdag, verlof, cap_min: cap, gepland_min: gepland, dagdelen: dd, vrij_min: Math.round(vrij), over_min: Math.round(over), items };
+        if (werktNiet && d.werkdag && !verlof) dag.werktNiet = true;   // alleen met een ingevuld rooster: deze persoon werkt op deze weekdag niet
+        return dag;
       });
       weken.forEach(w => { w.cap_min = Math.round(w.cap_min); w.gepland_min = Math.round(w.gepland_min); w.vrij_min = Math.round(w.vrij_min); w.over_min = Math.round(w.over_min); });
       return { slug: rij.slug, naam: rij.naam, heeftCap: lid, dagen, weken };

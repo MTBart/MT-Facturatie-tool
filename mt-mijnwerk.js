@@ -40,6 +40,7 @@
     else if (F.persoon === 'ik') Object.assign(opt, { mijn: mijnSlug() });
     else Object.assign(opt, { mijn: F.persoon, nieuw: false });
     if (D.voorstellen) opt.voorstellen = true;
+    if (D.werktijden && F.persoon !== 'iedereen') opt.capPerDag = P.capPerDagVoor(F.persoon === 'ik' ? mijnSlug() : F.persoon, D.werktijden());   // de beschikbare uren per dag volgen de werktijden (zonder ingevulde werktijden: 8 uur per dag)
     return P.mijnWerk(D.taken(), D.afhank(), D.blokken(), opt);
   };
 

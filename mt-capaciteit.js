@@ -25,7 +25,7 @@
   const projLabel = code => { const p = D.project ? D.project(code) : null; return p ? (p.label || p.naam || code) : String(code || ''); };
 
   C.bereken = function () {
-    return P.teamCapaciteit(D.taken(), D.afhank(), D.blokken(), { team: D.team(), vandaag: P.vandaagYmd(), weken: 2, vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, werkuren: D.werkuren ? D.werkuren() : null });
+    return P.teamCapaciteit(D.taken(), D.afhank(), D.blokken(), { team: D.team(), vandaag: P.vandaagYmd(), weken: 2, vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, werkuren: D.werkuren ? D.werkuren() : null, werktijden: D.werktijden ? D.werktijden() : null });
   };
   // Tekst en toestand van een cel: gewoon, bijna vol (90% of meer), vol of over (rood).
   C.celTekst = function (c) {

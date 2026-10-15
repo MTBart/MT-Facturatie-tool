@@ -76,7 +76,7 @@
   N.model = function (st) {
     st = Object.assign({}, S, st || {});
     const today = P.vandaagYmd(), zoom = st.zoom, anker = st.anker || today;
-    const team = D.team() || [], o = { team, vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, werkuren: D.werkuren ? D.werkuren() : null, project: st.project || '' };
+    const team = D.team() || [], o = { team, vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, werkuren: D.werkuren ? D.werkuren() : null, werktijden: D.werktijden ? D.werktijden() : null, project: st.project || '' };
     let van, weken, zichtbaar;   // zichtbaar = de datums die getekend worden
     if (zoom === 'week') { van = monday(anker); weken = 1; }
     else if (zoom === 'maand') { van = monday(anker); weken = 4; }
@@ -104,6 +104,8 @@
   N.celSom = function (c) {
     if (c.verlof) return { staat: 'vrij', sum: 'verlof', over: '' };
     if (!c.werkdag) return { staat: 'vrij', sum: 'vrije dag', over: '' };
+    if (c.werktNiet && !c.gepland_min) return { staat: 'vrij', sum: 'werkt niet', over: '' };   // alleen met ingevulde werktijden
+    if (c.werktNiet) return { staat: 'over', sum: uren(c.gepland_min) + ' / 0u', over: '+' + uren(c.gepland_min) };   // gepland op een dag dat deze persoon niet werkt
     if (c.cap_min <= 0) return { staat: '', sum: c.gepland_min ? uren(c.gepland_min) : '—', over: '' };
     const gedeeld = c.dagdelen * (c.cap_min / 2);
     return { staat: c.over_min > 0 ? 'over' : (c.gepland_min / c.cap_min >= 0.9 ? 'vol' : ''), sum: uren(gedeeld) + ' / ' + uren(c.cap_min), over: c.over_min > 0 ? '+' + uren(c.over_min) : '' };

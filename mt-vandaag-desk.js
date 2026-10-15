@@ -36,7 +36,7 @@
     const taken = D.taken(), afh = D.afhank(), blokken = D.blokken(), me = mijnSlug();
     const m = { vandaag, week: isoWeek(vandaag), takenKlaar: D.takenKlaar ? !!D.takenKlaar() : true, takenStatus: D.takenStatusTekst ? D.takenStatusTekst() : '' };
     // 1. Mijn werk vandaag: precies mijnWerk() zoals Vandaag op de telefoon en het startvenster (eigen werk, zonder "nieuw voor mij"), de groepen te laat en vandaag
-    const mw = P.mijnWerk(taken, afh, blokken, { team, vandaag, nu: D.nu(), mijn: me, nieuw: false, vrij, verlof });
+    const wtl = D.werktijden ? D.werktijden() : null, mw = P.mijnWerk(taken, afh, blokken, { team, vandaag, nu: D.nu(), mijn: me, nieuw: false, vrij, verlof, capPerDag: P.capPerDagVoor(me, wtl) });
     m.mijn = mw.groepen.teLaat.concat(mw.groepen.vandaag).map(it => {
       const taak = it.soort === 'taak';
       const status = taak ? (it.status === 'todo' ? (it.wacht && it.wacht.wacht ? 'wacht' : 'open') : it.status) : 'gepland';
@@ -51,7 +51,7 @@
     const wu = D.werkuren ? D.werkuren() : null;
     m.uren = { week_min: minVan(ma, zo), doel_min: Math.round((wu && Number(wu[me]) > 0 ? Number(wu[me]) : 40) * 60) };
     // 2. Team deze week: teamCapaciteit() met één week, zoals de Capaciteit-weergave
-    const k = P.teamCapaciteit(taken, afh, blokken, { team, vandaag, weken: 1, vrij, verlof, werkuren: wu });
+    const k = P.teamCapaciteit(taken, afh, blokken, { team, vandaag, weken: 1, vrij, verlof, werkuren: wu, werktijden: wtl });
     m.team = k.rijen.filter(r => r.heeftCap).map(r => {
       const w = r.weken[0] || { vrij_min: 0, over_min: 0, cap_min: 0 };
       return { slug: r.slug, naam: r.naam, dagen: r.dagen.map(c => ({ datum: c.datum, werkdag: c.werkdag, verlof: c.verlof, cap_min: c.cap_min, gepland_min: c.gepland_min, over_min: c.over_min, nu: c.datum === vandaag })),

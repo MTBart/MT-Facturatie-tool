@@ -56,8 +56,9 @@
 <script src="mt-planning.js?v=2026-10-15b"></script>
 <script src="mt-mijnwerk.js?v=2026-10-15b"></script>
 <script src="mt-capaciteit.js?v=2026-10-15j"></script>
-<script src="mt-planverplaats.js?v=2026-10-15m"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-15m"></script>
+<script src="mt-planverplaats.js?v=2026-10-15n"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-15n"></script>
+<script src="mt-werktijden.js?v=2026-10-15n"></script>
 <script src="mt-vandaag-desk.js?v=2026-10-15i"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
@@ -844,7 +845,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15m">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15n">
 </head>
 <body>
 
@@ -1901,8 +1902,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
     <!-- A2: Team & lock -->
     <div id="adm-sub-team" class="adm-subcontent">
+      <div id="werktijden-nieuw" class="wt-root" hidden></div>   <!-- Team en werktijden in de nieuwe stijl (mt-werktijden.js); leeg en verborgen in de oude stijl -->
       <div class="adm-grid2">
-        <div class="card">
+        <div class="card" id="adm-werkuren-kaart">
           <h4 style="margin-top:0">Werkuren per week</h4>
           <div id="adm-werkuren-form"></div>
           <button class="btn btn-sm btn-gold" style="margin-top:10px" onclick="admSlaWerkurenOp()">Opslaan</button>
@@ -3770,6 +3772,7 @@ function agKleur(e){return _agenda.kleurOp==='persoon'?agPersKleur(e.teamlid):ag
 function agUur(sec){return (sec/3600).toFixed(1).replace('.',',');}
 
 function renderAgenda(){
+  werktijdenZorg(werktijdenVerversWeergave);   // de werktijden van het team (capaciteit); eenmaal per sessie
   if(!_agenda.weekStart) _agenda.weekStart=agMaandag(new Date());
   agEnsureNames();
   agBindOutside();
@@ -3793,7 +3796,7 @@ function renderAgenda(){
 function agendaZetView(v){_agenda.view=v;renderAgenda();}
 // Mijn werk (stap 2c): de aansluiting tussen mt-mijnwerk.js en de cockpit (taken, afhankelijkheden, planblokken, team, projecten). De rekenregels staan in mt-planning.js.
 try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
-  voorstellen:true, magBeslissen:()=>rolMag(ROL_TAAK_ALLES), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
+  werktijden:()=>MTWerktijden.lijst(), voorstellen:true, magBeslissen:()=>rolMag(ROL_TAAK_ALLES), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
   vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(),   // de vrije dagen en het verlof uit Beheer (mt_vrijedagen, mt_verlof) tellen mee in de weekbalk
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
@@ -3809,13 +3812,13 @@ try{ MTStartvenster.init({ doc:document, storage:(function(){ try{ return sessio
 // Capaciteit (stap 2, standaardweergave van de Agenda): dezelfde bronnen, plus de werkuren per persoon uit Beheer (admCfg().werkuren).
 try{ MTCapaciteit.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu:()=>Date.now(),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
-  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null,
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null, werktijden:()=>MTWerktijden.lijst(),
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit init:',e); }
 // Capaciteit in de nieuwe stijl (restyling brok 6/7): dezelfde bronnen als de oude weergave, alleen lezen (zie mt-capaciteit-nieuw.js).
 try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, nu:()=>Date.now(),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
-  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null,
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null, werktijden:()=>MTWerktijden.lijst(),
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
@@ -3825,7 +3828,7 @@ window.addEventListener('mt-stijl',()=>{ const t=document.getElementById('tab-ag
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
 try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
-  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null,
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null, werktijden:()=>MTWerktijden.lijst(),
   uren:()=>agEntries(), bestel:()=>_blActief(), projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code),
   larry:()=>{ const b=document.getElementById('attentie-badge'); return b&&b.style.display!=='none'?(Number(b.textContent)||0):0; },
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); }, projectNaam:code=>{ const p=projVind(code); return p?projNaamVol(p):''; },
@@ -3835,7 +3838,25 @@ try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, i
     else if(a.k==='agenda'){ if(a.view) _agenda.view=a.view; showTab('agenda',knop('agenda')); }
     else if(a.k==='tab') showTab(a.tab,knop(a.tab));
     else if(a.k==='larry'){ const h=document.getElementById('vd-larry-kop'); if(h&&h.scrollIntoView) h.scrollIntoView({behavior:'smooth',block:'start'}); } } }); }catch(e){ console.warn('Vandaag (desktop) init:',e); }
+// Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
+// Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
+// Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.
+function capWerktijdenMag(){ try{ return mtIsAdmin()&&!!(window.MTRol&&MTRol.me)&&MTRol.mag('projecten:wijzigen'); }catch(e){ return false; } }
+try{ MTWerktijden.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, werkuren:()=>(admCfg()||{}).werkuren||null,
+  sp:{ read:n=>_SP.read(n), write:(n,d,r)=>_SP.write(n,d,r) }, nu:()=>Date.now(), wie:()=>mtMijEmail(), stempel:_spStempel, audit:(a,doel,oud,nieuw)=>auditLog(a,doel,oud,nieuw,''),
+  magWijzigen:()=>capWerktijdenMag(), opgeslagen:()=>werktijdenVerversWeergave() }); }catch(e){ console.warn('Werktijden init:',e); }
+// Eén keer per sessie laden (daarna houdt het bewaren de stand bij); de aanroeper tekent opnieuw als de werktijden binnen zijn.
+let _wtLaden=null;
+function werktijdenZorg(naLaden){
+  if(MTWerktijden.geladen()||_wtLaden) return;
+  _wtLaden=MTWerktijden.laad().then(ok=>{ _wtLaden=null; if(ok&&typeof naLaden==='function') naLaden(); }).catch(()=>{ _wtLaden=null; });
+}
+function werktijdenVerversWeergave(){
+  try{ const ag=document.getElementById('tab-agenda'); if(ag&&ag.classList.contains('active')) renderAgenda(); }catch(e){}
+  try{ const at=document.getElementById('tab-attentie'); if(at&&at.classList.contains('active')) vandaagDeskTeken(); }catch(e){}
+}
 function vandaagDeskTeken(){
+  werktijdenZorg(werktijdenVerversWeergave);
   try{ MTVandaagDesk.teken(); }catch(e){ console.warn('Vandaag (desktop):',e); }
   clearTimeout(vandaagDeskTeken._t); vandaagDeskTeken._t=setTimeout(()=>{ const t=document.getElementById('tab-attentie'); if(t&&t.classList.contains('active')){ try{ MTVandaagDesk.teken(); }catch(e){} } },4000);   // de takenlijst en rol komen soms net na het openen binnen
 }
@@ -14855,6 +14876,7 @@ async function adminOpen(){
   if(!mtIsAdmin()) return;
   // Laad alle data in parallel
   admLoadConfig().then(()=>{admRenderTeam();admRenderBudgetten();});
+  MTWerktijden.laad().then(()=>{ admRenderTeam(); MTWerktijden.teken(); });   // altijd vers bij het openen van Admin
   admLoadVerlof().then(()=>{admRenderVerlofLijst();admRenderSaldo();});
   admLoadVrijdagen().then(()=>admRenderVrijdagenLijst());
   admLoadAudit().then(()=>admRenderLog());
@@ -14881,6 +14903,7 @@ function admSub(name,btn){
   const b=btn||document.querySelector('#tab-admin .adm-subtab[data-sub="'+name+'"]'); if(b) b.classList.add('active');
   if(name==='beheer') beheerLaad();
   if(name==='activiteit') activiteitOpen();
+  if(name==='team'){ try{ MTWerktijden.teken(); }catch(e){} }
   const at=document.getElementById('tab-admin');
   if(at&&at.classList.contains('active')&&typeof mtRoute!=='undefined') mtRoute.zet({tab:admRouteNaam()},false);
 }
@@ -14919,9 +14942,11 @@ function admRenderTeam(){
   const form=document.getElementById('adm-werkuren-form'); if(!form) return;
   form.innerHTML=MT_TEAM.map(m=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
     <span style="min-width:80px;font-size:13px">${esc(m.naam)}${m.admin?' <span style="font-size:10px;color:var(--gold);font-weight:600">admin</span>':''}</span>
-    <input type="number" id="adm-wu-${esc(m.slug)}" class="adm-inp" style="width:70px" min="0" max="80" value="${esc(cfg.werkuren[m.slug]||40)}">
+    <input type="number" id="adm-wu-${esc(m.slug)}" class="adm-inp" style="width:70px" min="0" max="80" value="${esc(MTPlanning.werkuurWeek(m.slug,{werkuren:cfg.werkuren,werktijden:MTWerktijden.lijst()}))}">
     <span style="font-size:12px;color:var(--text-faint)">uur/week</span>
   </div>`).join('');
+  const wtMap=MTPlanning.werktijdenMap(MTWerktijden.lijst());   // wie werktijden heeft: de uren per week volgen daaruit (niet hier aan te passen)
+  MT_TEAM.forEach(m=>{ const inp=document.getElementById('adm-wu-'+m.slug); if(inp&&wtMap[m.slug]){ inp.disabled=true; inp.title='Volgt uit de werktijden (nieuwe stijl: Admin ▸ Team en werktijden)'; } });
   const ld=document.getElementById('adm-lock-dagen'); if(ld) ld.value=cfg.lockDagen??14;
 }
 async function admSlaWerkurenOp(){
@@ -15289,16 +15314,18 @@ function capaciteitPerDag({pers=null,van,tot,verlof=null,vrijdagen=null,cfg=null
   const uit={};
   wie.forEach(slug=>{
     const werk=(cfg.werkuren&&cfg.werkuren[slug])||40;
+    const wtRec=MTPlanning.werktijdenMap(MTWerktijden.lijst())[String(slug).toLowerCase()];   // met werktijden: de uren per dag volgen die (zonder: werkuren/5, zoals altijd)
     const werkdagen=dagen.filter(d=>{ const g=d.getDay(); return g>0&&g<6; });
     const verplicht=dagen.filter(d=>vrijdagen.find(v=>v.datum===_planYmd(d)&&v.type==='verplicht'));
     const verlofDagen=dagen.filter(d=>{ const g=d.getDay(); if(!(g>0&&g<6)) return false; const ymd=_planYmd(d); return verlof.some(v=>v.persoon===slug&&ymd>=v.van&&ymd<=v.tm); });
     // per verlofperiode telt elke werkdag 8u (zoals de Agenda: overlappende perioden tellen dubbel in
     // `totaal`). perDag telt een dag maar één keer — gebruik voor weektotalen altijd `totaal`.
     const verlofUren=verlof.filter(v=>v.persoon===slug).reduce((s,v)=>s+werkdagen.filter(d=>{ const ymd=_planYmd(d); return ymd>=v.van&&ymd<=v.tm; }).length*8,0);
-    const totaal=Math.max(0,werk*werkdagen.length/5-verplicht.length*8-verlofUren);
+    const dagBasis=(d,g)=>wtRec?((g>0&&g<6)?MTPlanning.werktijdDagMin(wtRec,g-1)/60:0):((g>0&&g<6)?werk/5:0);
+    const totaal=wtRec?Math.max(0,werkdagen.reduce((s,d)=>s+dagBasis(d,d.getDay()),0)-verplicht.length*8-verlofUren):Math.max(0,werk*werkdagen.length/5-verplicht.length*8-verlofUren);
     const perDag={};
     dagen.forEach(d=>{ const ymd=_planYmd(d), g=d.getDay();
-      const basis=(g>0&&g<6)?werk/5:0, vp=verplicht.includes(d)?8:0, vl=verlofDagen.includes(d)?8:0;
+      const basis=dagBasis(d,g), vp=verplicht.includes(d)?8:0, vl=verlofDagen.includes(d)?8:0;
       perDag[ymd]=Math.max(0,basis-vp-vl); });
     uit[slug]={totaal,perDag};
   });
