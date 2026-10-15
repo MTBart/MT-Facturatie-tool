@@ -306,7 +306,8 @@
   // Een taak in Ongepland: sleepbaar naar een dagdeel of een tijd (er ontstaat een planblok), of via "Inplannen…" met het toetsenbord
   function ongItem(u) {
     const sleep = N.mag() && !u.voorstel, taak = { code: u.code, id: u.id, naam: u.naam, min: u.min, voorstel: u.voorstel };
-    const knop = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok cn-ong' + (u.voorstel ? ' voorstel' : '') + (sleep ? ' sleepbaar' : ''), style: '--block-color:' + P.projectKleur(u.code), title: u.tekst || u.naam, klik: () => open(u.code) },
+    const gemarkeerd = !!S.markeer && String(S.markeer.id) === String(u.id) && D.nu() < S.markeer.tot;   // net vanuit Vandaag gekozen om in te plannen
+    const knop = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok cn-ong' + (u.voorstel ? ' voorstel' : '') + (sleep ? ' sleepbaar' : '') + (gemarkeerd ? ' gemarkeerd' : ''), style: '--block-color:' + P.projectKleur(u.code), title: u.tekst || u.naam, klik: () => open(u.code) },
       el('span', { klass: 'cn-ong-rij' }, el('span', { klass: 'cn-blok-titel', tekst: u.naam }), u.min ? el('span', { klass: 'cn-num cn-sub', tekst: uren(u.min) }) : null),
       el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(u.code) }), ' ' + projNaam(u.code), u.voorstel ? ' · voorstel werkplaats' : ''));
     knop.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === knop) { ev.preventDefault(); open(u.code); } });
@@ -344,6 +345,7 @@
     S.bezig = false;
     if (!r || !r.ok) { N.toast((r && r.reden) || 'Dat lukt niet.'); return; }
     if (r.noop) return;
+    S.markeer = null;
     N.teken();
     const w = r.wijziging, wat = (w.naam || 'Planblok') + ' → ' + persNaam(w.na.persoon) + ', ' + P.datumKort(w.na.datum) + ' ' + w.na.start;
     if (!r.behouden) { N.toast('Iemand anders was net sneller met ' + (w.naam || 'dit blok') + ': jouw wijziging is niet bewaard.'); return; }
@@ -414,6 +416,20 @@
     w.appendChild(el('div', { klass: 'cn-kader' }, el('div', { klass: 'cn-hoofd' }, vlak), zijkolom(m)));
   };
 
+  // Vanuit Vandaag ("Inplannen" bij een taak zonder datum): de taak in Ongepland markeren en het bestaande "Plan … in…"-keuzemenu (N.menu) openen. Er is geen eigen schrijfroute:
+  // plannen loopt via N.drop, dus via D.verplaats met dezelfde controles als slepen. De aanroeper heeft de Agenda al op Capaciteit gezet. Zonder recht (N.mag) blijft het bij markeren.
+  N.inplannen = function (taak) {
+    if (!taak || taak.id === undefined || taak.id === null) return false;
+    S.exactDag = false; S.persoon = ''; S.project = ''; S.anker = P.vandaagYmd(); S.ongDicht = false;
+    if (S.zoom === 'maand' || S.zoom === 'kwartaal') S.zoom = 'week';   // een keuzemenu voor dag en moment heeft een week of dagweergave nodig (de bewaarde zoomkeuze verandert niet)
+    S.markeer = { id: String(taak.id), tot: D.nu() + 60000 };
+    N.teken();
+    const m = N.laatste, staat = !!m && m.ongepland.items.some(x => String(x.id) === String(taak.id) && !x.voorstel);
+    if (!staat) { N.toast('Deze taak staat niet meer in Ongepland: iemand heeft hem net ingepland of gewijzigd.'); return false; }
+    const e = D.doc.querySelector('.cn-ong.gemarkeerd'); if (e && e.scrollIntoView) e.scrollIntoView({ block: 'nearest' });
+    if (N.mag()) N.menu({ soort: 'nieuw', taak: { code: taak.code, id: taak.id, naam: taak.naam, min: taak.min || 0, voorstel: false }, naam: taak.naam });
+    return true;
+  };
   // Vanuit Afwijkingen (Admin > Team en werktijden): de dagweergave van die dag voor die persoon openen (de aanroeper wisselt naar de Agenda).
   N.gaNaar = function (datum, slug) { if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = P.isYmd(datum) ? 'dag' : 'week'; S.exactDag = P.isYmd(datum); };   // precies die dag (ook een weekenddag), met die persoon in beeld; de bewaarde zoomkeuze verandert niet
   N.init = function (deps) {

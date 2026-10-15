@@ -58,11 +58,11 @@
 <script src="mt-mijnwerk.js?v=2026-10-15s"></script>
 <script src="mt-capaciteit.js?v=2026-10-15s"></script>
 <script src="mt-planverplaats.js?v=2026-10-15s"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-16a"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-16d"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
 <script src="mt-dagvraag.js?v=2026-10-15z"></script>
-<script src="mt-vandaag-desk.js?v=2026-10-15s"></script>
+<script src="mt-vandaag-desk.js?v=2026-10-16d"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
 <script src="mt-zijbalk.js?v=2026-10-16c" defer></script>
@@ -852,7 +852,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-16c">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-16d">
 </head>
 <body>
 
@@ -3843,7 +3843,7 @@ window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('t
 try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
   vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null, werktijden:()=>werktijdenVoorWeergave(),
-  uren:()=>agEntries(), bestel:()=>_blActief(), projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code),
+  uren:()=>agEntries(), bestel:()=>_blActief(), projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code), magInplannen:()=>capMagSlepen(),   // Inplannen: dezelfde recht-controle als slepen in de Capaciteit
   larry:()=>{ const b=document.getElementById('attentie-badge'); return b&&b.style.display!=='none'?(Number(b.textContent)||0):0; },
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); }, projectNaam:code=>{ const p=projVind(code); return p?projNaamVol(p):''; },
   href:o=>mtRoute.format(o.code?{tab:'projecten',code:o.code,sectie:'planning'}:{tab:o.tab}),
@@ -3851,6 +3851,7 @@ try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, i
     if(a.k==='project') openProject(a.code,{sectie:'planning'});
     else if(a.k==='agenda'){ if(a.view) _agenda.view=a.view; showTab('agenda',knop('agenda')); }
     else if(a.k==='tab') showTab(a.tab,knop(a.tab));
+    else if(a.k==='inplannen'){ _agenda.view='capaciteit'; showTab('agenda',knop('agenda')); try{ MTCapaciteitNieuw.inplannen(a.taak); }catch(e){ console.warn('Inplannen (Vandaag):',e); } }   // de bestaande route: Capaciteit, taak gemarkeerd in Ongepland, en het keuzemenu "Plan … in…"
     else if(a.k==='larry'){ const h=document.getElementById('vd-larry-kop'); if(h&&h.scrollIntoView) h.scrollIntoView({behavior:'smooth',block:'start'}); } } }); }catch(e){ console.warn('Vandaag (desktop) init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
@@ -3926,6 +3927,7 @@ function vandaagDeskTeken(){
   clearTimeout(vandaagDeskTeken._t); vandaagDeskTeken._t=setTimeout(()=>{ const t=document.getElementById('tab-attentie'); if(t&&t.classList.contains('active')){ try{ MTVandaagDesk.teken(); }catch(e){} } },4000);   // de takenlijst en rol komen soms net na het openen binnen
 }
 window.addEventListener('mt-stijl',()=>{ const t=document.getElementById('tab-attentie'); if(t&&t.classList.contains('active')) vandaagDeskTeken(); });
+window.addEventListener('mt-rol',()=>{ const t=document.getElementById('tab-attentie'); if(t&&t.classList.contains('active')) vandaagDeskTeken(); });   // de rol komt later binnen: de knop Inplannen (Nog in te plannen) volgt het recht
 // Haalt project-/persoon-namen één keer op als de cache leeg is (bv. eerste
 // render vóór een sync). Daarna her-rendert het zodat ID-stubs namen worden.
 function agEnsureNames(){
