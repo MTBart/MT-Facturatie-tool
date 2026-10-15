@@ -5,14 +5,89 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-15 — Release v2.17.2: nieuwe stijl om te proberen (wisselknop, standaard uit), voorstellen tellen pas na overnemen, waarschuwing bij plannen op verlof/vrije dag/niet-werkdag, rol lezen kan niet slepen; backup = v2.17.1
+- Commit: `512aa72` | Auteur: Bart Witte
+
+## 2026-10-15 — Werktijden bewaren: audit alleen als MIJN versie bleef staan (ook bij gelijke stempel)
+- Commit: `d8bc19a` | Auteur: Bart Witte
+
+## 2026-10-15 — Codex-bundel: werktijden alleen in de nieuwe stijl, weektotalen per datum, eerlijk bewaren, deterministische gelijke stempel
+- Commit: `d7b3721` | Auteur: Bart Witte
+
+## 2026-10-15 — Oude Agenda-slepen (agPlanDrop): verlof, verplichte vrije dag en niet-werkdag eerst bevestigen in plaats van weigeren
+- Commit: `fb5a642` | Auteur: Bart Witte
+
+## 2026-10-15 — Merge main (v2.17.1 live) in restyle-c1
+- Commit: `a31ebe9` | Auteur: Bart Witte
+
+## 2026-10-15 — Taken met een open voorstel-markering tellen niet mee in de bezetting (besluit Bart, algemeen)
+- Commit: `568ed1e` | Auteur: Bart Witte
+
+## 2026-10-15 — Admin Team en werktijden: sectie Afwijkingen per medewerker en maand
+- Commit: `d3ce745` | Auteur: Bart Witte
+
+## 2026-10-15 — Slepen/inplannen op verlof, een verplichte vrije dag of een niet-werkdag: eerst bevestigen in plaats van weigeren (besluit Bart)
+- Commit: `890d89d` | Auteur: Bart Witte
+
+## 2026-10-15 — Open voorstellen tellen nooit mee in de capaciteit (besluit Bart)
+- Commit: `008d483` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 8 rolcheck bijgestuurd: een oude worker (geen rollensysteem) blokkeert het slepen niet
+- Commit: `7529583` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 8/9 aanvulling: mt_werktijden in de verhuislijst, slepen weigert een niet-werkdag volgens de werktijden
+- Commit: `4056482` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 8 Codex-fixes: ongedaan maken op een verse stand, vast blok-id, rol modusonafhankelijk, agPlanSave-resultaat, dagdeelplaatsing
+- Commit: `ee765f3` | Auteur: Bart Witte
+
 ## 2026-10-15 — Release v2.17.1: Agenda-projectfilter per week met MT-namen, namen verversen, uitklapmenu bovenop, automatisch syncen bij openen; backup = v2.17.0
 - Commit: `7a1708a` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 10: Project ▸ Planning en taken in de nieuwe stijl (Gantt, Tijdlijn, vandaag-lijn, mijlpalen)
+- Commit: `3d5b8e3` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 9: werktijden per medewerker (Admin > Team en werktijden) voeden de capaciteit
+- Commit: `151e47f` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 8: slepen in de capaciteit (blok naar andere persoon/dag/dagdeel of uur, uit Ongepland erop)
+- Commit: `a8707e1` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 7 fixup: uurzooms vullen de breedte, Ongepland inklapbaar, werkbalk op een regel
+- Commit: `e978d6d` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 7: zoom in de Capaciteit (kwartaal, maand, week, 3 dagen, dag)
+- Commit: `157f862` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 6: Planning-capaciteit in de nieuwe stijl (week, Ongepland-kolom, volle breedte)
+- Commit: `4d96e28` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 5: Vandaag op de desktop (alleen in de nieuwe stijl)
+- Commit: `0833d21` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 4 fixup: tabellen met weinig kolommen rekken niet meer uit (nieuwe stijl)
+- Commit: `9b6fd94` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 4: volle breedte (nieuwe stijl)
+- Commit: `7c3cf1c` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 3: plakkende koppen op één kophoogte (met in- en uitgeklapte zijbalk)
+- Commit: `c35be05` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 2 fixup: geen regelbreuken in bedragen en chips (nieuwe stijl)
+- Commit: `b962079` | Auteur: Bart Witte
 
 ## 2026-10-15 — v2.17.1: showTab roept de auto-sync alleen aan als die bestaat; mt_ag_autosync als cache in de verhuisinventaris
 - Commit: `0919c33` | Auteur: Bart Witte
 
+## 2026-10-15 — Restyling brok 2: zijbalk uit de bestaande tabknoppen (alleen met "Nieuwe stijl proberen")
+- Commit: `a5a55b8` | Auteur: Bart Witte
+
 ## 2026-10-15 — v2.17.1: nieuwe Agenda-variabelen als var (geen TDZ bij vroege showTab)
 - Commit: `e15ef40` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 1: wisselknop "Nieuwe stijl proberen" + nieuwe kleuren/fonts (standaard uit)
+- Commit: `0dae1b4` | Auteur: Bart Witte
 
 ## 2026-10-15 — v2.17.1: Agenda synct de getoonde week automatisch bij openen en weeknavigatie
 - Commit: `e04635a` | Auteur: Bart Witte

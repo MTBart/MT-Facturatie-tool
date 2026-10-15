@@ -40,6 +40,8 @@
     else if (F.persoon === 'ik') Object.assign(opt, { mijn: mijnSlug() });
     else Object.assign(opt, { mijn: F.persoon, nieuw: false });
     if (D.voorstellen) opt.voorstellen = true;
+    const wtl = D.werktijden ? D.werktijden() : null;   // null zolang de nieuwe stijl uit staat: dan rekent alles als voorheen
+    if (wtl && F.persoon !== 'iedereen') opt.capPerDag = P.capPerDagVoor(F.persoon === 'ik' ? mijnSlug() : F.persoon, wtl);   // de beschikbare uren per dag volgen de werktijden (zonder ingevulde werktijden: 8 uur per dag)
     return P.mijnWerk(D.taken(), D.afhank(), D.blokken(), opt);
   };
 
