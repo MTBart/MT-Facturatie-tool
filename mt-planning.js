@@ -1625,7 +1625,11 @@
     const arr = v => { const x = lees(v); return Array.isArray(x) ? x : (x && typeof x === 'object' ? Object.values(x) : []); };
     const tijd = x => { const v = x && x._gewijzigd; return typeof v === 'number' ? v : (Date.parse(v || '') || 0); };
     const per = new Map();
-    [...arr(remote), ...arr(lokaal)].forEach(x => { if (!x || typeof x !== 'object' || !x.slug) return; const k = String(x.slug).toLowerCase(), o = per.get(k); if (!o || tijd(x) > tijd(o) || (tijd(x) === tijd(o) && tijd(x) > 0)) per.set(k, x); });
+    // Gelijke stempel (twee beheerders in dezelfde milliseconde): een vaste volgorde die niet van lokaal/remote afhangt, zodat alle apparaten dezelfde winnaar kiezen:
+    // eerst wie het schreef (_door, bij een tombstone _vervallen.door), dan de inhoud zelf.
+    const wie = x => String(x._door || (x._vervallen && x._vervallen.door) || '').toLowerCase();
+    const wint = (x, o) => { const a = tijd(x), b = tijd(o); if (a !== b) return a > b; const w1 = wie(x), w2 = wie(o); if (w1 !== w2) return w1 > w2; return JSON.stringify(x) > JSON.stringify(o); };
+    [...arr(remote), ...arr(lokaal)].forEach(x => { if (!x || typeof x !== 'object' || !x.slug) return; const k = String(x.slug).toLowerCase(), o = per.get(k); if (!o || wint(x, o)) per.set(k, x); });
     return [...per.values()].sort((a, b) => String(a.slug) < String(b.slug) ? -1 : 1);
   };
 

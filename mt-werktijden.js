@@ -56,7 +56,8 @@
     try { opgeslagen = !!(await D.sp.write(BESTAND, nieuw, (r, l) => { const s = P.werktijdenSamen(l, r); S.lijst = s; try { D.storage && D.storage.setItem(LS, JSON.stringify(s)); } catch (e) {} return s; })); } catch (e) { opgeslagen = false; }
     const nuRec = W.lijst().find(x => String(x.slug).toLowerCase() === String(slug).toLowerCase());
     const behouden = !!(nuRec && nuRec._gewijzigd === nu._gewijzigd);
-    try { D.audit && D.audit(opt.tombstone ? 'config-werktijden-standaard' : 'config-werktijden', slug, oud && !oud._vervallen ? JSON.stringify({ dagen: oud.dagen, pauze: oud.pauze }) : '', opt.tombstone ? '(standaard)' : JSON.stringify({ dagen: rec.dagen, pauze: rec.pauze })); } catch (e) {}
+    // Alleen in het auditlog als de wijziging echt gedeeld is en bewaard bleef: bij een mislukte write (alleen lokaal) of een verloren race staat er niets gewijzigd in SharePoint.
+    if (opgeslagen && behouden) try { D.audit && D.audit(opt.tombstone ? 'config-werktijden-standaard' : 'config-werktijden', slug, oud && !oud._vervallen ? JSON.stringify({ dagen: oud.dagen, pauze: oud.pauze }) : '', opt.tombstone ? '(standaard)' : JSON.stringify({ dagen: rec.dagen, pauze: rec.pauze })); } catch (e) {}
     return { ok: true, opgeslagen, behouden };
   };
 
@@ -68,6 +69,8 @@
     DAGEN.forEach(k => { dagen[k] = { werk: true, start: '08:00', eind: tTekst(Math.min(23 * 60 + 59, 8 * 60 + dagMin + pauze)) }; });
     return { dagen, pauze, uitRecord: false };
   };
+  // De melding na Opslaan of Terug naar standaard: eerlijk over wat er gelukt is (gedeeld, alleen lokaal of verloren van een andere beheerder).
+  W.bewaarMelding = (r, gelukt) => !r.ok ? r.reden : (r.behouden ? (r.opgeslagen ? gelukt : 'Alleen lokaal bewaard: SharePoint is niet bereikbaar.') : 'Iemand anders was net sneller met deze medewerker: jouw wijziging is niet bewaard.');
   W.weekMin = c => P.werkweekMin({ dagen: c.dagen, pauze: c.pauze });
   W.dagMin = (c, i) => P.werktijdDagMin({ dagen: c.dagen, pauze: c.pauze }, i);
 
@@ -188,12 +191,13 @@
       const opslaan = el('button', { type: 'button', klass: 'wt-knop primair', tekst: S.bezig ? 'Opslaan…' : 'Opslaan', klik: async () => {
         if (S.bezig) return; S.bezig = true; W.teken();
         const r = await W.bewaar(m.slug, c.dagen, c.pauze).catch(e => ({ ok: false, reden: 'Opslaan mislukt: ' + ((e && e.message) || e) }));
-        S.bezig = false; S.melding = r.ok ? (r.behouden ? (r.opgeslagen ? 'Opgeslagen.' : 'Alleen lokaal bewaard: SharePoint is niet bereikbaar.') : 'Iemand anders was net sneller met deze medewerker: jouw wijziging is niet bewaard.') : r.reden;
+        S.bezig = false; S.melding = W.bewaarMelding(r, 'Opgeslagen.');
         if (r.ok) S.concept = null;   // bij een fout (ongeldige tijd, geen recht, SharePoint weg) blijven de ingevulde waarden staan
         W.teken(); try { if (r.ok && D.opgeslagen) D.opgeslagen(); } catch (e) {} } });
       const annuleer = el('button', { type: 'button', klass: 'wt-knop', tekst: 'Annuleren', klik: () => { S.concept = null; S.melding = ''; W.teken(); } });
       const standaard = el('button', { type: 'button', klass: 'wt-knop gevaar', tekst: 'Terug naar standaard', title: 'Werktijden van ' + m.naam + ' weghalen: de planning rekent weer met de werkuren per week (8 uur per dag)', klik: async () => {
-        const r = await W.bewaar(m.slug, null, 0, { tombstone: true }).catch(e => ({ ok: false, reden: String((e && e.message) || e) })); S.melding = r.ok ? 'Teruggezet naar standaard.' : r.reden; S.concept = null; W.teken(); try { if (r.ok && D.opgeslagen) D.opgeslagen(); } catch (e) {} } });
+        const r = await W.bewaar(m.slug, null, 0, { tombstone: true }).catch(e => ({ ok: false, reden: String((e && e.message) || e) })); S.melding = W.bewaarMelding(r, 'Teruggezet naar standaard.'); if (r.ok && r.opgeslagen && r.behouden) S.concept = null; W.teken();   // niet gedeeld: het concept blijft staan, zodat het herstelbaar is
+        try { if (r.ok && D.opgeslagen) D.opgeslagen(); } catch (e) {} } });
       if (!mag) { opslaan.disabled = true; standaard.disabled = true; }
       acties.appendChild(opslaan); acties.appendChild(annuleer); if (rec) acties.appendChild(standaard);
       editor.appendChild(acties);
