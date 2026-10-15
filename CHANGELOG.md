@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-15 — Release v2.17.1: Agenda-projectfilter per week met MT-namen, namen verversen, uitklapmenu bovenop, automatisch syncen bij openen; backup = v2.17.0
+- Commit: `7a1708a` | Auteur: Bart Witte
+
 ## 2026-10-15 — v2.17.1: showTab roept de auto-sync alleen aan als die bestaat; mt_ag_autosync als cache in de verhuisinventaris
 - Commit: `0919c33` | Auteur: Bart Witte
 

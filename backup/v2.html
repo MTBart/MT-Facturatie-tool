@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.17.0 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.17.1 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -47,7 +47,7 @@
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15b"></script>
+<script src="mt-verhuis.js?v=2026-10-15c"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -826,7 +826,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.17.0, 2026-10-15). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.17.1, 2026-10-15). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -847,7 +847,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.17.0</span>
+    <span class="header-version">v2.17.1</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -1636,6 +1636,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         background:#fff;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:5px;transition:.12s}
       #tab-agenda .ag-chip.uit{opacity:.4}
       #tab-agenda .ag-chip .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+      /* Elk direct kind van de tab heeft de mtRise-animatie (eigen stapelcontext, volgorde = DOM-volgorde): zonder z-index viel het uitklappaneel achter de blokken eronder. */
+      #tab-agenda .ag-filterkaart{position:relative;z-index:20}
       #tab-agenda .ag-drop{position:relative;display:inline-block}
       #tab-agenda .ag-dropbtn{display:inline-flex;align-items:center;gap:6px}
       #tab-agenda .ag-droppanel{position:absolute;z-index:30;top:calc(100% + 4px);left:0;
@@ -1697,7 +1699,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <button class="btn btn-xs btn-secondary" onclick="aanwezigLaad(true)" title="Verversen" aria-label="Aanwezigheid verversen">↻</button></div>
       <div id="aw-inhoud" style="font-size:13px"></div>
     </div>
-    <div class="card" style="padding:1rem;margin-bottom:1rem">
+    <div class="card ag-filterkaart" style="padding:1rem;margin-bottom:1rem">
       <div class="flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div class="flex" style="gap:6px;align-items:center">
           <button class="btn btn-sm btn-secondary ag-nav" id="agenda-prev" onclick="agendaNav(-1)" title="Vorige week met uren">◀</button>
@@ -3392,7 +3394,7 @@ function showTab(name,btn){
   if(name==='instellingen') beheerLaad();
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
-  if(name==='agenda'){ renderAgenda(); if(typeof aanwezigLaad==='function') aanwezigLaad(); }
+  if(name==='agenda'){ renderAgenda(); if(typeof aanwezigLaad==='function') aanwezigLaad(); if(typeof agAutoSyncPlan==='function') agAutoSyncPlan(0); }
   if(name==='agenda'||name==='planning'){ try{ if(window.MTStartvenster) MTStartvenster.toon(); }catch(e){} }   // startvenster "X taken wachten op je": alleen zonder lopende timer, eenmaal per sessie
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
@@ -3792,6 +3794,7 @@ function agEnsureNames(){
   const {pn,un}=agNames();
   const verOk=localStorage.getItem('mt_toggl_names_ver')===AG_NAMES_V;
   if(verOk&&Object.keys(pn).length&&Object.keys(un).length) return;
+  _agNamenVers=true;
   if(typeof agNamen==='function') agNamen(true).then(r=>{if(r&&(Object.keys(r.pn||{}).length||Object.keys(r.un||{}).length))renderAgenda();}).catch(()=>{});
 }
 // Sluit de filter-dropdowns bij een klik buiten een .ag-drop.
@@ -3802,37 +3805,81 @@ function agBindOutside(){
     document.querySelectorAll('#tab-agenda .ag-droppanel').forEach(p=>p.classList.add('hidden'));
   });
 }
-function agendaNav(dw){_agenda.weekStart=new Date(_agenda.weekStart.getTime()+dw*7*864e5);renderAgenda();}
-function agendaVandaag(){_agenda.weekStart=agMaandag(new Date());renderAgenda();}
+function agendaNav(dw){_agenda.weekStart=new Date(_agenda.weekStart.getTime()+dw*7*864e5);renderAgenda();agAutoSyncPlan(700);}
+function agendaVandaag(){_agenda.weekStart=agMaandag(new Date());renderAgenda();agAutoSyncPlan(700);}
 function agendaZetKleur(v){_agenda.kleurOp=v;renderAgenda();}
 // ── Filter-dropdowns met checkboxen ────────────────────────────────────────
 // Conventie: lege set = "alle zichtbaar". AG_NONE in de set = "niets zichtbaar".
 // Project én persoon filteren onafhankelijk (beide worden ge-AND in agZichtbaar).
 function agSet(which){return which==='proj'?_agenda.fProj:_agenda.fPers;}
-function agOpts(which){
-  const all=agEntries();
-  const key=which==='proj'?'project_code':'teamlid';
-  const lbl=which==='proj'?agProjLabel:agPersLabel;
-  return [...new Set(all.map(e=>e[key]).filter(Boolean))].sort((a,b)=>lbl(a).localeCompare(lbl(b),'nl'));
+// Entries van de getoonde week (zelfde grenzen als het rooster).
+function agWeekEntries(){
+  if(!_agenda.weekStart) _agenda.weekStart=agMaandag(new Date());
+  const a=_agenda.weekStart.getTime(), b=a+7*864e5;
+  return agEntries().filter(e=>{ if(!e||!e.start) return false; const t=new Date(e.start).getTime(); return t>=a&&t<b; });
 }
-function agOptLabel(which,v){return which==='proj'?agProjLabel(v):agPersLabel(v);}
+// Het MT-project bij een project_code van een entry: via het Toggl-id (stub "Toggl 123", een Toggl-naam of een kaal id → tg_project_id), anders via de projectzoeker (de code zelf).
+function agProjMT(c){
+  try{
+    const PC=(typeof PROJECT_CODES!=='undefined'&&PROJECT_CODES)||[];
+    const {pn}=agNames(); let id=null;
+    const m=/^Toggl (\d+)$/.exec(c);
+    if(m) id=m[1]; else if(pn[c]!==undefined) id=c; else { for(const k in pn) if(pn[k]===c){id=k;break;} }
+    if(id!=null){ const p=PC.find(x=>x&&x.tg_project_id!=null&&String(x.tg_project_id)===String(id)); if(p) return p; }
+    return (typeof projVind==='function'&&projVind(c))||null;
+  }catch(e){ return null; }
+}
+// Label in het filter: zoals in de projectenlijst (code + naam), anders de Toggl-naam.
+function agProjFilterLabel(c){
+  const p=agProjMT(c);
+  if(p){ const l=((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code; if(l) return l; }
+  return agProjLabel(c);
+}
+// Projectopties van de getoonde week; raw codes met hetzelfde label (bv. stub én naam van één project) vormen één optie.
+function agProjGroepen(){
+  const per={}, groep={};
+  agWeekEntries().forEach(e=>{ const c=e.project_code; if(!c) return; const l=agProjFilterLabel(c); const k=l.toLowerCase();
+    if(!per[k]){ per[k]={rep:c,label:l}; groep[c]=[c]; } else if(!groep[per[k].rep].includes(c)) groep[per[k].rep].push(c); });
+  const opts=Object.values(per).sort((a,b)=>a.label.localeCompare(b.label,'nl',{numeric:true})).map(x=>x.rep);
+  return {opts,groep};
+}
+function agOpts(which){
+  if(which==='proj') return agProjGroepen().opts;
+  const all=agEntries();
+  return [...new Set(all.map(e=>e.teamlid).filter(Boolean))].sort((a,b)=>agPersLabel(a).localeCompare(agPersLabel(b),'nl'));
+}
+// Namen één keer per sessie verversen als er in de getoonde week een id-stub zonder naam staat ("Toggl 123" / "User 456").
+var _agNamenVers=false;
+function agNamenControle(){
+  if(_agNamenVers||typeof agNamen!=='function') return;
+  const {pn,un}=agNames();
+  const onbekend=agWeekEntries().some(e=>{ const p=/^Toggl (\d+)$/.exec(e.project_code||''), u=/^User (\d+)$/.exec(e.teamlid||''); return (p&&!pn[p[1]])||(u&&!un[u[1]]); });
+  if(!onbekend) return;
+  _agNamenVers=true;
+  agNamen(true).then(r=>{ if(r&&(Object.keys(r.pn||{}).length||Object.keys(r.un||{}).length)) renderAgenda(); }).catch(()=>{});
+}
+function agOptLabel(which,v){return which==='proj'?agProjFilterLabel(v):agPersLabel(v);}
 function agOptKleur(which,v){return which==='proj'?agProjKleur(v):agPersKleur(v);}
 
 function agRenderFilters(){
+  agNamenControle();
+  const pg=agProjGroepen();
   ['proj','pers'].forEach(which=>{
-    const set=agSet(which), opts=agOpts(which);
+    const set=agSet(which), opts=which==='proj'?pg.opts:agOpts(which);
+    // Projecten: alleen opties uit de getoonde week; een optie staat aan als al zijn codes in het filter zitten (of er geen filter is).
+    const aanProj=v=>set.size===0||(!set.has(AG_NONE)&&(pg.groep[v]||[v]).every(c=>set.has(c)));
     const naam=which==='proj'?'Projecten':'Personen';
     const lblEl=document.getElementById('ag-drop-'+which+'-lbl');
     // Personen: een teamlid kan als slug én e-mail in het filter staan (startpagina) → unieke teamleden tellen.
-    const n=which==='pers'?new Set([...set].map(v=>{ const m=typeof MT_TEAM!=='undefined'&&MT_TEAM.find(x=>x.email===v); return m?m.slug:v; })).size:set.size;
-    if(lblEl){const cnt=set.has(AG_NONE)?'0':(n?String(n):'alle');lblEl.textContent=`${naam} (${cnt})`;}
+    const n=which==='pers'?new Set([...set].map(v=>{ const m=typeof MT_TEAM!=='undefined'&&MT_TEAM.find(x=>x.email===v); return m?m.slug:v; })).size:opts.filter(aanProj).length;
+    if(lblEl){const cnt=set.has(AG_NONE)?'0':(which==='proj'?(set.size===0||n===opts.length?'alle':String(n)):(n?String(n):'alle'));lblEl.textContent=`${naam} (${cnt})`;}
     const panel=document.getElementById('ag-drop-'+which+'-panel');
     if(!panel) return;
-    if(!opts.length){panel.innerHTML='<div style="font-size:11px;color:#aaa;padding:10px">geen data</div>';return;}
+    if(!opts.length){panel.innerHTML=`<div style="font-size:11px;color:#aaa;padding:10px">${which==='proj'?'geen projecten in deze week':'geen data'}</div>`;return;}
     let h=`<div class="ag-optbar"><a onclick="agFilterAll(${jsArg(which)},true)">alles</a><a onclick="agFilterAll(${jsArg(which)},false)">niets</a></div>`;
     h+=`<div class="ag-search"><input type="text" placeholder="🔍 zoeken…" oninput="agSearchOpts(${jsArg(which)},this.value)" onclick="event.stopPropagation()"></div>`;
     h+=`<div class="ag-optlist">`+opts.map(v=>{
-      const aan=set.size===0||(!set.has(AG_NONE)&&set.has(v));
+      const aan=which==='proj'?aanProj(v):(set.size===0||(!set.has(AG_NONE)&&set.has(v)));
       const vv=String(v);
       return `<label class="ag-opt"><input type="checkbox" ${aan?'checked':''} data-v="${esc(vv)}" onchange="agFilterSet(${jsArg(which)},this.dataset.v,this.checked)">`
         +`<span class="dot" style="background:${esc(agOptKleur(which,v))}"></span><span class="lbl">${esc(agOptLabel(which,v))}</span></label>`;
@@ -3850,9 +3897,26 @@ function agDrop(which){
   const p=document.getElementById('ag-drop-'+which+'-panel');
   const o=document.getElementById('ag-drop-'+(which==='proj'?'pers':'proj')+'-panel');
   if(o) o.classList.add('hidden');
-  if(p) p.classList.toggle('hidden');
+  if(p){
+    p.classList.toggle('hidden');
+    p.style.left='';
+    if(!p.classList.contains('hidden')){           // binnen het scherm houden (smal scherm / tweede filter)
+      const r=p.getBoundingClientRect(), vw=document.documentElement.clientWidth;
+      let dx=0; if(r.right>vw-8) dx=(vw-8)-r.right; if(r.left+dx<8) dx=8-r.left;
+      if(dx) p.style.left=dx+'px';
+    }
+  }
 }
 function agFilterSet(which,val,checked){
+  if(which==='proj'){   // projecten: een optie kan meerdere codes bundelen; codes van andere weken in het filter blijven staan
+    const set=agSet(which), pg=agProjGroepen();
+    const grp=pg.groep[val]||[val], alle=[].concat(...pg.opts.map(o=>pg.groep[o]||[o]));
+    if(set.has(AG_NONE)) set.delete(AG_NONE);
+    if(set.size===0&&!checked){alle.forEach(c=>set.add(c));grp.forEach(c=>set.delete(c));}
+    else if(checked){grp.forEach(c=>set.add(c));if(alle.every(c=>set.has(c)))set.clear();}
+    else {grp.forEach(c=>set.delete(c));if(!alle.some(c=>set.has(c))){set.clear();set.add(AG_NONE);}}
+    renderAgenda();return;
+  }
   const set=agSet(which), opts=agOpts(which);
   if(set.has(AG_NONE)) set.delete(AG_NONE);              // vanuit "niets" opbouwen
   if(set.size===0&&!checked){opts.forEach(o=>set.add(o));set.delete(val);} // vanuit "alle": eentje uit
@@ -4043,6 +4107,7 @@ function agMergeEntry(entries,o){const idx=entries.findIndex(e=>String(e.toggl_i
 // Cache-versie: bump dit als de naam-mapping-logica wijzigt, dan negeert agNamen
 // de oude (verkeerd gemapte) localStorage-cache en haalt opnieuw op.
 const AG_NAMES_V='2';
+var _agNamenPoging=new Set();   // ids waarvoor deze sessie al een verversing is gedaan (archief-/verwijderde projecten blijven anders elke sync verversen)
 async function agNamen(force){
   let pn={},un={};
   try{pn=JSON.parse(localStorage.getItem('mt_toggl_proj_names')||'{}');}catch(e){}
@@ -4076,9 +4141,9 @@ async function agNamen(force){
 
 // Fase 2 — álle medewerkers via Track Reports v3 (admin-token server-side), via de Worker-proxy.
 // Reports-API stuurt geen CORS-headers → kan niet direct uit de browser, daarom via WORKER.
-async function agSyncAlleMedewerkers(since,tot){
+async function agSyncAlleMedewerkers(since,tot,opruimTot){   // opruimTot (optioneel): laatste dag waarbinnen lokaal opgeruimd mag worden (standaard tot)
   const {pmap,umap}=agMaps();
-  const {pn,un}=await agNamen();
+  let {pn,un}=await agNamen();
   const h=await authHeader();
   if(!h['X-Auth-Token']) throw new Error('geen MS-login (Worker vereist Microsoft-token)');
   // Pagineer: Reports v3 geeft max page_size regels per call. Loop met
@@ -4095,6 +4160,11 @@ async function agSyncAlleMedewerkers(since,tot){
     if(chunk.length<PAGE) break;
     firstRow+=PAGE;
   }
+  // Nieuw Toggl-project of nieuwe medewerker zonder naam in de cache: namen één keer verversen (per id één poging per sessie), anders blijft het "Toggl 123".
+  const onbekend=[];
+  rows.forEach(r=>{ if(r.project_id&&!pmap[r.project_id]&&!pn[r.project_id]) onbekend.push('p'+r.project_id); if(r.user_id&&!umap[r.user_id]&&!un[r.user_id]) onbekend.push('u'+r.user_id); });
+  const nieuweOnbekend=[...new Set(onbekend)].filter(k=>!_agNamenPoging.has(k));
+  if(nieuweOnbekend.length){ nieuweOnbekend.forEach(k=>_agNamenPoging.add(k)); ({pn,un}=await agNamen(true)); }
   const entries=agEntries(); let nieuw=0,n=0,fallback=0;
   const remoteIds=new Set();
   for(const row of rows){
@@ -4114,7 +4184,7 @@ async function agSyncAlleMedewerkers(since,tot){
   // Extern verwijderde entries ook lokaal opruimen: alleen binnen het gesyncte
   // since/tot-venster, en alleen entries die al een toggl_id hadden (echte sync-hits).
   const vanaf=new Date(since+'T00:00:00').getTime();
-  const totEnMet=new Date(tot+'T00:00:00').getTime()+864e5;
+  const totEnMet=new Date((opruimTot||tot)+'T00:00:00').getTime()+864e5;
   const bewaard=entries.filter(e=>{
     const datum=e.datum||(e.start||'').slice(0,10);
     const tijd=new Date(datum+'T00:00:00').getTime();
@@ -4159,7 +4229,43 @@ async function agSyncEigen(since,tot){
   return {nieuw,verwerkt:n,verwijderd,bron:'eigen'};
 }
 
+// Automatisch bijwerken bij het openen van de Agenda en bij weeknavigatie: alleen de getoonde week (met een dag marge),
+// alleen met MS-login, per week hooguit 1× per 5 minuten (per browser), nooit twee syncs tegelijk, fouten stil (korte statusregel).
+var AG_AUTO_MS=5*60*1000, AG_AUTO_KEY='mt_ag_autosync';
+var _agSyncBezig=false, _agAutoTimer=null;
+function agYmd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function agAutoPlan(){   // nodig-check los van de netwerkcall (testbaar)
+  const ws=_agenda.weekStart||agMaandag(new Date());
+  const plus=n=>{const d=new Date(ws);d.setDate(d.getDate()+n);return agYmd(d);};   // kalenderdagen (zomer-/wintertijd veilig)
+  const wk=agYmd(ws); let reg={}; try{reg=JSON.parse(localStorage.getItem(AG_AUTO_KEY)||'{}')||{};}catch(e){}
+  return {wk,reg,since:plus(-1),tot:plus(8),opruimTot:plus(7)};
+}
+async function agAutoSync(){
+  if(_agSyncBezig) return;
+  const t=document.getElementById('tab-agenda'); if(t&&t.classList&&!t.classList.contains('active')) return;
+  const p=agAutoPlan();
+  if(Date.now()-(Number(p.reg[p.wk])||0)<AG_AUTO_MS) return;
+  _agSyncBezig=true;
+  const st=document.getElementById('agenda-status');
+  try{
+    const h=await authHeader();
+    if(!h||!h['X-Auth-Token']) return;                       // geen (geldige) MS-login: niets ophalen, niet markeren
+    p.reg[p.wk]=Date.now();                                  // ook bij een fout markeren: geen hamerende pogingen
+    const nu=Date.now(); Object.keys(p.reg).forEach(k=>{if(nu-p.reg[k]>864e5)delete p.reg[k];});
+    try{localStorage.setItem(AG_AUTO_KEY,JSON.stringify(p.reg));}catch(e){}
+    if(st) st.textContent='Bijwerken uit Toggl…';
+    await agSyncAlleMedewerkers(p.since,p.tot,p.opruimTot);   // zet mt_toggl_last_sync
+    renderAgenda();
+  }catch(err){
+    if(st) st.textContent='⚠ Automatisch bijwerken uit Toggl mislukt; laatste stand blijft staan (Sync nu om opnieuw te proberen).';
+  }finally{ _agSyncBezig=false; }
+}
+function agAutoSyncPlan(ms){   // na weeknavigatie even wachten, zodat snel bladeren niet elke week ophaalt
+  clearTimeout(_agAutoTimer); _agAutoTimer=setTimeout(()=>{agAutoSync().catch(()=>{});},ms);
+}
 async function agendaSyncNu(){
+  if(_agSyncBezig){ const s=document.getElementById('agenda-status'); if(s) s.textContent='Er loopt al een sync…'; return; }
+  _agSyncBezig=true;
   const st=document.getElementById('agenda-status');
   const btn=document.getElementById('agenda-syncbtn');
   if(btn)btn.disabled=true; if(st)st.textContent='Syncing… (alle medewerkers, 12 mnd)';
@@ -4179,7 +4285,7 @@ async function agendaSyncNu(){
     renderAgenda();
   }catch(err){
     if(st)st.textContent=`❌ Sync mislukt (${err.message}). Tip: log eerst in via Microsoft (knop rechtsboven).`;
-  }finally{if(btn)btn.disabled=false;}
+  }finally{_agSyncBezig=false; if(btn)btn.disabled=false;}
 }
 
 // ═══ TOGGL FOCUS + Uren-tab → verplaatst naar mt-toggl.js (S3, 2026-07-03) ═══
