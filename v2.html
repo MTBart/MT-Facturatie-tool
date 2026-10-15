@@ -2,6 +2,21 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
+<!-- Wisselknop "Nieuwe stijl proberen" (restyling fase 1): zet html[data-stijl="nieuw"] VOOR het eerste tekenen uit localStorage
+     "mt-stijl" (per computer), of via ?stijl=nieuw / ?stijl=oud (wordt onthouden). Standaard UIT. De stijlregels staan in
+     mt-stijl-nieuw.css onder dat attribuut; zonder attribuut is de tool ongewijzigd. Lettertypen laden alleen in de nieuwe stijl. -->
+<script>
+(function(){
+  var K='mt-stijl', FONTS='https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap';
+  function lees(){ try{ return localStorage.getItem(K)==='nieuw'; }catch(e){ return false; } }
+  function fonts(){ try{ if(document.getElementById('mt-stijl-fonts')) return; var l=document.createElement('link'); l.id='mt-stijl-fonts'; l.rel='stylesheet'; l.href=FONTS; document.head.appendChild(l); }catch(e){} }
+  function toepassen(aan){ var h=document.documentElement; if(aan){ h.setAttribute('data-stijl','nieuw'); fonts(); } else h.removeAttribute('data-stijl'); }
+  try{ var q=new URLSearchParams(location.search).get('stijl'); if(q==='nieuw'||q==='oud'){ try{ if(q==='nieuw') localStorage.setItem(K,'nieuw'); else localStorage.removeItem(K); }catch(e){} } }catch(e){}
+  toepassen(lees());
+  window.mtStijl={ aan:lees, zet:function(aan){ try{ if(aan) localStorage.setItem(K,'nieuw'); else localStorage.removeItem(K); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
+  window.addEventListener('storage',function(e){ if(e.key===K||e.key===null){ toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(x){} } });   // twee open tabbladen blijven gelijk
+})();
+</script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>M&T Bedrijfstool v2 bèta</title>
@@ -823,6 +838,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 10px;margin:6px 0}
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
+<!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15c">
 </head>
 <body>
 
@@ -1478,6 +1495,12 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <div id="tab-instellingen" class="tab-content">
     <!-- F5: verhuisknop (alleen zichtbaar met de proefvlag mt_verhuis_proef tot het nieuwe domein gekoppeld is) -->
     <div class="card" id="verhuis-kaart" style="display:none"><div class="card-title">Verhuizen naar het nieuwe adres</div><div id="verhuis-plek"></div></div>
+    <div class="card" id="stijl-kaart">
+      <div class="card-title">Weergave</div>
+      <label style="display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--text);cursor:pointer"><input type="checkbox" id="stijl-schakel" onchange="mtStijl.zet(this.checked)"> Nieuwe stijl proberen</label>
+      <p style="font-size:12px;color:var(--text-dim);margin:6px 0 0">Nieuwe kleuren, lettertypen en indeling. Geldt alleen op deze computer; je collega's zien niets. Uitzetten kan hier altijd weer.</p>
+    </div>
+    <script>(function(){ var c=document.getElementById('stijl-schakel'); if(!c||!window.mtStijl) return; var s=function(){ c.checked=mtStijl.aan(); }; s(); window.addEventListener('mt-stijl',s); })();</script>
     <div class="card" id="upd-kaart" style="display:none">
       <div class="card-title">Wat is er verbeterd</div>
       <div id="upd-inhoud" style="font-size:13px">Laden…</div>

@@ -1,0 +1,101 @@
+/* =====================================================================
+   M&T "Nieuwe stijl" (restyling fase 1, route C): alles hier staat onder html[data-stijl="nieuw"].
+   Zonder dat attribuut doet dit bestand niets: de tool is dan pixel-gelijk aan de oude stijl.
+   Het attribuut wordt door het kleine script bovenin v2.html gezet (voor het eerste tekenen) uit
+   localStorage "mt-stijl" of ?stijl=nieuw|oud; aan/uit via Instellingen > Weergave.
+   Bron: design system B3 (M&T-accent, hoekig 4/8px, canvas #f6f3ed, primair #17643f, goud #d19a1f).
+   K1-A: de bestaande variabelen van v2.html krijgen nieuwe waarden; losse kleurcodes volgen per scherm.
+   Goud is gesplitst: --gold (heldere vlakken/iconen) en --gold-text #6b4c05 (tekst, AA).
+   ===================================================================== */
+
+/* ── 1. Variabelen (K1-A) ─────────────────────────────────────────── */
+html[data-stijl="nieuw"]{
+  /* merk */
+  --green:#17643f; --green-700:#0f4d2f; --green-900:#0a3a23; --green-mid:#2f7d55;
+  --green-50:#ddefe3; --green-100:#c3e0cd;
+  --gold:#d19a1f; --gold-700:#b07f12; --gold-mid:#ecc766; --gold-50:#fbefd2; --gold-text:#6b4c05;
+  /* neutralen: warm papier i.p.v. koel groen-grijs */
+  --n-0:#ffffff; --n-50:#faf8f4; --n-100:#f6f3ed; --n-150:#f1ede5; --n-200:#ece7de; --n-300:#dfd8cb;
+  --n-400:#bdb4a2; --n-500:#646a64; --n-600:#596059; --n-800:#2f3632; --n-900:#1b211e;
+  /* status (tekstkleuren AA op hun -50 vlak) */
+  --success:#1a6e3b; --success-50:#e3f3e8;
+  --warning:#8f5508; --warning-50:#fcefd9;
+  --error:#c4322a;   --error-50:#fce6e4;
+  --info:#3e5c76;    --info-50:#e6edf3;
+  --purple:#6a3a8b;  --purple-light:#f0e9f6;
+  /* vlakken en randen */
+  --surface:#ffffff; --surface-sunken:var(--n-150); --surface-overlay:#ffffff;
+  --border-hair:var(--n-200); --border:var(--n-300); --border-strong:#9a917f;
+  --focus-ring:0 0 0 3px rgba(23,100,63,.20); --focus-ring-gold:0 0 0 3px rgba(209,154,31,.30);
+  --shadow-sm:0 1px 2px rgba(40,34,20,.05); --shadow-card:0 1px 3px rgba(40,34,20,.07);
+  --shadow-pop:0 24px 60px rgba(40,34,20,.20);
+  /* maten: hoekig */
+  --radius-sm:4px; --radius:8px; --radius-lg:8px;
+  --control-h:36px;
+  /* lettertypen (Google Fonts, geladen door het script bovenin; val terug op systeemfonts) */
+  --sans:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --serif:'Bricolage Grotesque','Geist',system-ui,sans-serif;
+  --mono:'Geist Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  /* nieuwe ontwerp-tokens (voor de brokken die volgen) */
+  --canvas:#f6f3ed; --ink:#1b211e; --ink-2:#596059; --ink-3:#646a64;
+  --sidebar:#ede8de; --sidebar-hover:#e4ded2; --sidebar-active:#ffffff;
+  --line:#dfd8cb; --line-strong:#9a917f;
+  --primary:#17643f; --primary-soft:#ddefe3; --primary-text:#17643f;
+  --brass:#d19a1f; --brass-soft:#fbefd2; --brass-ink:#6b4c05;
+  --sidebar-w:240px; --rail-w:68px;
+}
+
+/* ── 2. Basis ─────────────────────────────────────────────────────── */
+html[data-stijl="nieuw"] body{background-image:none;background:var(--canvas);font-feature-settings:"tnum" 0}
+html[data-stijl="nieuw"] .mono,html[data-stijl="nieuw"] .num{font-variant-numeric:tabular-nums}
+
+/* kop: geen groen-goud verloop meer, wel een dunne messing lijn */
+html[data-stijl="nieuw"] header{background:var(--surface);box-shadow:none}
+html[data-stijl="nieuw"] header::after{background:linear-gradient(90deg,var(--green) 0,var(--green) 72px,var(--gold) 72px,var(--gold) 100%);opacity:1;height:2px}
+html[data-stijl="nieuw"] header h1{font-family:var(--serif);font-size:19px;font-weight:600;letter-spacing:-0.01em;color:var(--n-900)}
+html[data-stijl="nieuw"] header h1 span{color:var(--gold-text);font-style:normal}
+html[data-stijl="nieuw"] .header-version{color:var(--n-500)}
+html[data-stijl="nieuw"] .header-badge{border-radius:4px}
+
+/* tabbalk (blijft een balk tot brok 2 hem tot zijbalk maakt): actieve tab in primair groen + messing streep */
+html[data-stijl="nieuw"] .tab-btn{color:var(--n-600)}
+html[data-stijl="nieuw"] .tab-btn:hover{color:var(--n-900)}
+html[data-stijl="nieuw"] .tab-btn.active{color:var(--primary-text)}
+html[data-stijl="nieuw"] .tab-badge{background:var(--warning);border-radius:4px}
+html[data-stijl="nieuw"] .tab-help-btn{border-radius:4px;color:var(--n-600)}
+html[data-stijl="nieuw"] .tab-help-btn:hover{color:var(--gold-text);border-color:var(--gold-text)}
+
+/* kaarten, formulieren, knoppen: vlak en hoekig */
+html[data-stijl="nieuw"] .card{box-shadow:none;transition:border-color .15s}
+html[data-stijl="nieuw"] .card:hover{box-shadow:none;border-color:var(--n-400)}
+html[data-stijl="nieuw"] .card-title{letter-spacing:0.06em}
+html[data-stijl="nieuw"] .card-subtitle{font-style:normal;font-weight:500}
+html[data-stijl="nieuw"] input,html[data-stijl="nieuw"] select,html[data-stijl="nieuw"] textarea{border-color:var(--border-strong)}
+html[data-stijl="nieuw"] .btn-primary{background:var(--green);box-shadow:none}
+html[data-stijl="nieuw"] .btn-primary:hover{background:var(--green-700);box-shadow:none;transform:none}
+html[data-stijl="nieuw"] .btn-gold{background:var(--gold);color:var(--n-900);box-shadow:none}
+html[data-stijl="nieuw"] .btn-gold:hover{background:var(--gold-700);color:var(--n-900);box-shadow:none;transform:none}
+html[data-stijl="nieuw"] .btn-secondary{border-color:var(--border-strong)}
+html[data-stijl="nieuw"] .btn-danger{border-color:#e9b3af}
+html[data-stijl="nieuw"] .btn-danger:hover{background:#f8d6d3}
+html[data-stijl="nieuw"] .btn-info,html[data-stijl="nieuw"] .btn-purple{border-color:#b6c6d6}
+html[data-stijl="nieuw"] .badge{border-radius:4px}
+html[data-stijl="nieuw"] .status-bar{border-radius:4px}
+html[data-stijl="nieuw"] .status-bar.err{border-color:#e9b3af}
+html[data-stijl="nieuw"] .modal{box-shadow:var(--shadow-pop)}
+
+/* inlogpagina */
+html[data-stijl="nieuw"] .login-box{border-radius:8px;box-shadow:var(--shadow-pop)}
+html[data-stijl="nieuw"] .login-logo{font-weight:600;letter-spacing:-0.015em}
+html[data-stijl="nieuw"] .login-logo span{color:var(--gold-text);font-style:normal}
+
+/* ── 3. Goud als tekst (Codex-punt: #d19a1f is als tekst maar 2,5:1) ──────────
+   Inline style="color:var(--gold)" en de paar CSS-regels die goud als tekstkleur gebruiken:
+   tekst wordt donker goud; vlakken, randen en iconen houden het heldere goud. */
+html[data-stijl="nieuw"] [style^="color:var(--gold)"],html[data-stijl="nieuw"] [style*=";color:var(--gold)"],html[data-stijl="nieuw"] [style*=" color:var(--gold)"],
+html[data-stijl="nieuw"] [style^="color:var(--gold,"],html[data-stijl="nieuw"] [style*=";color:var(--gold,"],html[data-stijl="nieuw"] [style*=" color:var(--gold,"],
+html[data-stijl="nieuw"] .upd-stip,html[data-stijl="nieuw"] .mobiel-melding-rij .mm-pijl,html[data-stijl="nieuw"] .proj-ctx-sep,
+html[data-stijl="nieuw"] #tab-agenda .ag-optbar a,html[data-stijl="nieuw"] #tab-toggl .tg-bill,html[data-stijl="nieuw"] #tab-inbox .agenda-day.vandaag .dhdr,
+html[data-stijl="nieuw"] .calc-dd-tag.ic,html[data-stijl="nieuw"] .calc-vg-h{color:var(--gold-text)!important}
+html[data-stijl="nieuw"] .upd-stip::before{background:var(--gold)}
+html[data-stijl="nieuw"] #tab-inbox .agenda-day.vandaag .dhdr{background:var(--gold-50)}
