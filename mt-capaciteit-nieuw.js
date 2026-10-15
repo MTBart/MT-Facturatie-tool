@@ -77,12 +77,13 @@
     st = Object.assign({}, S, st || {});
     const today = P.vandaagYmd(), zoom = st.zoom, anker = st.anker || today;
     const team = D.team() || [], o = { team, vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, werkuren: D.werkuren ? D.werkuren() : null, werktijden: D.werktijden ? D.werktijden() : null, project: st.project || '' };
-    let van, weken, zichtbaar;   // zichtbaar = de datums die getekend worden
+    let van, weken, zichtbaar;
+    const weekendDag = zoom === 'dag' && st.exactDag && P.isYmd(anker) && ((wd(nr(anker)) + 6) % 7) > 4;   // alleen na "Naar de dag" (exactDag) op een zaterdag of zondag (Afwijkingen: iemand werkte toch): precies die dag, als extra kolom. Gewoon bladeren of Vandaag op een weekend springt nog naar de maandag.   // zichtbaar = de datums die getekend worden
     if (zoom === 'week') { van = monday(anker); weken = 1; }
     else if (zoom === 'maand') { van = monday(anker); weken = 4; }
     else if (zoom === 'kwartaal') { van = monday(anker); weken = 13; }
     else {
-      const s0 = volgendeWerkdag(anker, 1); van = monday(s0); zichtbaar = [s0]; weken = 1;
+      const s0 = weekendDag ? anker : volgendeWerkdag(anker, 1); van = monday(s0); zichtbaar = [s0]; weken = 1; if (weekendDag) o.extra = [anker];
       if (zoom === '3d') { let d = s0; for (let i = 0; i < 2; i++) { d = plusWerkdagen(d, 1); zichtbaar.push(d); } weken = Math.ceil((nr(zichtbaar[2]) - nr(van) + 1) / 7); }
     }
     const r = rooster(van, weken, o);
@@ -375,13 +376,13 @@
     return [wie, proj];
   }
   N.stap = function (richting) {
-    const a = S.anker || P.vandaagYmd();
+    S.exactDag = false; const a = S.anker || P.vandaagYmd();
     S.anker = S.zoom === 'week' ? plusDagen(a, 7 * richting) : S.zoom === 'maand' ? plusDagen(a, 28 * richting) : S.zoom === 'kwartaal' ? plusDagen(a, 91 * richting) : S.zoom === '3d' ? plusWerkdagen(volgendeWerkdag(a, 1), 3 * richting) : plusWerkdagen(volgendeWerkdag(a, 1), richting);
     N.teken();
   };
   N.zoom = function (z) {
     if (!ZOOM_UI || !ZOOMS.some(x => x[0] === z)) return;
-    S.zoom = z; try { D.storage && D.storage.setItem(LS_ZOOM, z); } catch (e) {}
+    S.exactDag = false; S.zoom = z; try { D.storage && D.storage.setItem(LS_ZOOM, z); } catch (e) {}
     N.teken();
   };
 
@@ -395,7 +396,7 @@
     const knop = (label, klik, kl) => el('button', { type: 'button', klass: 'cn-knop' + (kl ? ' ' + kl : ''), 'aria-label': label, klik });
     const vorige = knop('Vorige periode', () => N.stap(-1), 'icoon'), volgende = knop('Volgende periode', () => N.stap(1), 'icoon');
     vorige.appendChild(icoon('M15 6l-6 6l6 6')); volgende.appendChild(icoon('M9 6l6 6l-6 6'));
-    const vandaag = knop('Naar vandaag', () => { S.anker = P.vandaagYmd(); N.teken(); }); vandaag.textContent = 'Vandaag';
+    const vandaag = knop('Naar vandaag', () => { S.exactDag = false; S.anker = P.vandaagYmd(); N.teken(); }); vandaag.textContent = 'Vandaag';
     const zoomGroep = el('div', { klass: 'cn-zoom', role: 'group', 'aria-label': 'Inzoomen' },
       (() => { const b = knop('Uitzoomen', () => N.zoom(ZOOMS[Math.max(0, zi - 1)][0]), 'zm'); b.appendChild(icoon('M5 12h14')); return b; })(),
       ZOOMS.map(z => { const b = el('button', { type: 'button', klass: 'cn-zk' + (z[0] === S.zoom ? ' aan' : ''), 'aria-pressed': z[0] === S.zoom ? 'true' : 'false', klik: () => N.zoom(z[0]), tekst: z[1] }); return b; }),
@@ -413,8 +414,8 @@
     w.appendChild(el('div', { klass: 'cn-kader' }, el('div', { klass: 'cn-hoofd' }, vlak), zijkolom(m)));
   };
 
-  // Vanuit Afwijkingen (Admin > Team en werktijden): de week van die dag voor die persoon openen (de aanroeper wisselt naar de Agenda; weekenden vallen buiten de weekweergave).
-  N.gaNaar = function (datum, slug) { if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = 'week'; };
+  // Vanuit Afwijkingen (Admin > Team en werktijden): de dagweergave van die dag voor die persoon openen (de aanroeper wisselt naar de Agenda).
+  N.gaNaar = function (datum, slug) { if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = P.isYmd(datum) ? 'dag' : 'week'; S.exactDag = P.isYmd(datum); };   // precies die dag (ook een weekenddag), met die persoon in beeld; de bewaarde zoomkeuze verandert niet
   N.init = function (deps) {
     D = deps; P = deps.planning || root.MTPlanning;
     try { const z = D.storage && D.storage.getItem(LS_ZOOM); if (ZOOM_UI && z && ZOOMS.some(x => x[0] === z)) S.zoom = z; S.ongDicht = !!(D.storage && D.storage.getItem(LS_ONG) === 'dicht'); } catch (e) {}
