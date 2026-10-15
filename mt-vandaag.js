@@ -97,7 +97,7 @@
   // De werktijden (mt_werktijden.json, alleen lezen; de telefoon schrijft ze nooit) tellen alleen mee onder de nieuwe stijl (D.werktijdenAan). Niet te lezen of een onverwachte vorm = zoals voorheen (8 uur per werkdag).
   async function werktijdenLaad() {
     if (!(D.werktijdenAan && D.werktijdenAan())) { S.werktijden = null; return; }
-    try { const r = await D.sp.read('mt_werktijden.json'); if (Array.isArray(r)) S.werktijden = P.werktijdenSamen(null, r); } catch (e) { /* de laatst bekende stand (of geen) blijft */ }
+    try { const r = await D.sp.read('mt_werktijden.json'); S.werktijden = Array.isArray(r) ? P.werktijdenSamen(null, r) : null; } catch (e) { /* niet te lezen: de laatst bekende stand (of geen) blijft */ }   // een onverwachte vorm (of geen bestand) = geen werktijden = 8 uur per dag; de vorige stand wordt niet vastgehouden
   }
   // De stijl is gewisseld: werktijden erbij (nieuw) of weg (oud) en opnieuw tekenen.
   V.stijlGewijzigd = async function () { await werktijdenLaad(); teken(); };

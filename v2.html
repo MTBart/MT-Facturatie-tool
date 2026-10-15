@@ -847,7 +847,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-16a">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-16b">
 </head>
 <body>
 
@@ -15651,11 +15651,18 @@ function capWaarschuwing(blok,datum){
 // Eerst de actuele stand van SharePoint (_capVers: samengevoegd met de lokale lijst), dan pas de controles en het opslaan: de verlof-, vrije-dag- en werktijdencheck draait zo niet op een
 // verouderde lijst (een blok dat een ander net verplaatste, verwijderde of als voorstel indiende). Na het wachten op de bevestiging nog een keer vers lezen en controleren; is de vraag intussen anders
 // (ander persoon, andere situatie) dan wordt opnieuw gevraagd. Opslaan blijft via agPlanSave (leest vers, voegt per id samen met de merger mt_planblokken, ETag/412). Zonder verbinding: zoals voorheen op de lokale stand.
+// Een drop tegelijk: tijdens het controleren (vers lezen, eventueel een vraag) wordt een tweede drop geweigerd. Het vers lezen krijgt een begrensde wachttijd (AG_VERS_MAX); daarna wordt er niets opgeslagen.
+var AG_VERS_MAX=15000, _agDropBezig=false;
+function capVersMetTijd(){
+  let t; const tijd=new Promise(res=>{ t=setTimeout(()=>res({ok:false,reden:'Controleren duurde te lang (SharePoint reageert niet); er is niets verplaatst. Probeer het zo opnieuw.'}),AG_VERS_MAX); });
+  return Promise.race([_capVers(),tijd]).finally(()=>clearTimeout(t));
+}
 async function agPlanDrop(evt,datum){
   evt.preventDefault();
   if(!capMagSlepen()){ _planDragId=null; planToast('Dit mag je niet met jouw rol: verplaatsen is voor kantoor.'); return; }   // ook bij het loslaten (niet alleen bij het oppakken)
   const id=_planDragId; if(!id) return;
   const el=document.getElementById('agplan-drop-'+datum); if(el) el.style.background='';
+  if(_agDropBezig){ _planDragId=null; planToast('Even wachten: de vorige verplaatsing wordt nog gecontroleerd.'); return; }
   const blok=agPlanActief().find(b=>b.id===id);
   if(!blok||blok.status==='voorstel') return;   // een open voorstel beslist kantoor, dat verplaats je niet (ook niet als de drag toch gestart is)
   // Bereken nieuwe starttijd uit drop-positie (vóór het wachten: daarna bestaat de gebeurtenis niet meer)
@@ -15666,9 +15673,11 @@ async function agPlanDrop(evt,datum){
   const minRaw=Math.round(((relY%AG_UURPX)/AG_UURPX)*4)*15;
   const startStr=`${String(Math.min(uur,AG_EIND-1)).padStart(2,'0')}:${String(minRaw).padStart(2,'0')}`;
   _planDragId=null;
+  _agDropBezig=true; planToast('Controleren…');
+  try{
   let bevestigd=null;   // de vraag die de gebruiker al bevestigde
   for(let ronde=0;ronde<3;ronde++){
-    const vers=await _capVers(); if(!vers.ok){ planToast(vers.reden); agPlanRender(); return; }
+    const vers=await capVersMetTijd(); if(!vers.ok){ planToast(vers.reden); agPlanRender(); return; }
     const nu=agPlanActief().find(b=>b.id===id);
     if(!nu||nu.status==='voorstel'){ planToast('Dit planblok is intussen verplaatst of verwijderd; er is niets gewijzigd.'); agPlanRender(); return; }
     const vraag=capWaarschuwing(nu,datum);
@@ -15678,14 +15687,18 @@ async function agPlanDrop(evt,datum){
       if(!ja){ agPlanRender(); return; }
       bevestigd=vraag; continue;   // nog een keer vers lezen: er kan intussen iets veranderd zijn
     }
+    let stempel=null;
     _planblokken=agPlanBlokken().map(b=>{
       if(b.id!==id) return b;
-      return _spStempel({...b,datum,start:startStr,ts:new Date().toISOString(),door:mtMijEmail()},b);
+      const n=_spStempel({...b,datum,start:startStr,ts:new Date().toISOString(),door:mtMijEmail()},b); stempel=n._gewijzigd; return n;
     });
-    const ok=await agPlanSave(); agPlanRender(); if(ok!==false) planToast('✓ Planblok verplaatst');
+    const ok=await agPlanSave(); agPlanRender();
+    const nu2=agPlanBlokken().find(b=>b&&b.id===id), behouden=!!(nu2&&nu2._gewijzigd===stempel);   // staat mijn versie er nog? (een ander kan tegelijk hetzelfde blok verplaatst hebben)
+    if(ok!==false) planToast(behouden?'✓ Planblok verplaatst':'Iemand anders verplaatste dit blok net; de planning is ververst.');
     return;
   }
   planToast('De planning veranderde terwijl je bevestigde; er is niets gewijzigd. Probeer het opnieuw.'); agPlanRender();
+  }finally{ _agDropBezig=false; }
 }
 
 // ── Slepen in de capaciteit (restyling brok 8, mt-capaciteit-nieuw.js + mt-planverplaats.js) ──
