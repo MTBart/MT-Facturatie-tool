@@ -25,7 +25,7 @@
   const projLabel = code => { const p = D.project ? D.project(code) : null; return p ? (p.label || p.naam || code) : String(code || ''); };
 
   C.bereken = function () {
-    return P.teamCapaciteit(D.taken(), D.afhank(), D.blokken(), { team: D.team(), vandaag: P.vandaagYmd(), weken: 2, vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, werkuren: D.werkuren ? D.werkuren() : null });
+    return P.teamCapaciteit(D.taken(), D.afhank(), D.blokken(), { team: D.team(), vandaag: P.vandaagYmd(), weken: 2, vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null, werkuren: D.werkuren ? D.werkuren() : null, werktijden: D.werktijden ? D.werktijden() : null });
   };
   // Tekst en toestand van een cel: gewoon, bijna vol (90% of meer), vol of over (rood).
   C.celTekst = function (c) {
@@ -46,6 +46,8 @@
   }
 
   C.teken = function () {
+    // Nieuwe stijl (restyling brok 6/7): de weergave staat in mt-capaciteit-nieuw.js; de oude tekening hieronder blijft ongewijzigd.
+    if (D && D.doc.documentElement.getAttribute('data-stijl') === 'nieuw' && root.MTCapaciteitNieuw) { try { root.MTCapaciteitNieuw.teken(); return; } catch (e) { console.warn('Capaciteit (nieuw):', e); } }
     const w = D && D.doc.getElementById('agenda-capaciteit'); if (!w) return;
     w.textContent = '';
     if (!D.doc.getElementById('cp-stijl')) { const s = el('style', { id: 'cp-stijl' }); s.textContent = STIJL; D.doc.head.appendChild(s); }

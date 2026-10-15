@@ -1,5 +1,18 @@
 [
   {
+    "versie": "2.17.3",
+    "datum": "2026-10-15",
+    "titel": "Nieuwe stijl: Uren, de dagvraag en de telefoon",
+    "voor": "iedereen",
+    "punten": [
+      "Alleen als je Nieuwe stijl proberen aan hebt: de Uren-tab heeft een nieuwe weergave. Bovenaan de timerbalk, daaronder de dagen van de week, een tijdlijn van je dag met de stukken die nog niet geboekt zijn, je week per project en taken die klaar zijn maar nog geen uren hebben.",
+      "Een leeg stuk of een gepland blok boek je met één klik. De tool vraagt eerst of het klopt en kijkt vlak voor het boeken of die tijd al in Toggl staat; staat er al iets, dan boekt hij niets.",
+      "Afspraken uit je eigen Outlook-agenda kun je als voorstel tonen met de knop Agenda tonen.",
+      "Klopt je dag? Een kwartier voor je eindtijd vraagt de tool of je uren kloppen, met een knop om het lege stuk te boeken. Zag je de vraag niet, dan komt hij de volgende ochtend nog één keer. Op een vrije dag of verlofdag komt de vraag niet.",
+      "Ook de telefoon kan de nieuwe kleuren en lettertypen krijgen: Meer, Nieuwe stijl proberen."
+    ]
+  },
+  {
     "versie": "2.17.2",
     "datum": "2026-10-15",
     "titel": "Nieuwe stijl om te proberen, slimmere planning",
