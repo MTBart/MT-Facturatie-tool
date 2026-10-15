@@ -46,7 +46,7 @@
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15b"></script>
+<script src="mt-verhuis.js?v=2026-10-15c"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -3392,7 +3392,7 @@ function showTab(name,btn){
   if(name==='instellingen') beheerLaad();
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
-  if(name==='agenda'){ renderAgenda(); if(typeof aanwezigLaad==='function') aanwezigLaad(); agAutoSyncPlan(0); }
+  if(name==='agenda'){ renderAgenda(); if(typeof aanwezigLaad==='function') aanwezigLaad(); if(typeof agAutoSyncPlan==='function') agAutoSyncPlan(0); }
   if(name==='agenda'||name==='planning'){ try{ if(window.MTStartvenster) MTStartvenster.toon(); }catch(e){} }   // startvenster "X taken wachten op je": alleen zonder lopende timer, eenmaal per sessie
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
