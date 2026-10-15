@@ -18,14 +18,14 @@
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
-<script src="mt-project.js?v=2026-10-14a"></script>
+<script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
 <script src="mt-vw.js?v=2026-10-13b"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2026-10-15a"></script>
+<script src="mt-toggl.js?v=2026-10-15b"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -33,20 +33,20 @@
 <script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2026-10-14a"></script>
+<script src="mt-inbox.js?v=2026-10-15b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2.16.0"></script>
-<script src="mt-mijnwerk.js?v=2026-10-15a"></script>
-<script src="mt-capaciteit.js?v=2026-10-14a"></script>
-<script src="mt-startvenster.js?v=2026-10-15a"></script>
+<script src="mt-planning.js?v=2026-10-15b"></script>
+<script src="mt-mijnwerk.js?v=2026-10-15b"></script>
+<script src="mt-capaciteit.js?v=2026-10-15b"></script>
+<script src="mt-startvenster.js?v=2026-10-15b"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15a"></script>
+<script src="mt-verhuis.js?v=2026-10-15b"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -3772,7 +3772,7 @@ try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, 
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Mijn werk init:',e); }
 // Startvenster (stap 3): "X taken wachten op je" bij het openen van Agenda/Planning, alleen zonder lopende Toggl-timer en niet voor de rol "lezen" (zie mt-startvenster.js).
 try{ MTStartvenster.init({ doc:document, storage:(function(){ try{ return sessionStorage; }catch(e){ return null; } })(), dialog:()=>window.mtDialog, toast:m=>{ if(typeof planToast==='function') planToast(m); },
-  demo:()=>false, lezen:()=>!!(window.MTRol&&MTRol.me&&String(MTRol.me.rol||'').toLowerCase()==='lezen'), magTimer:()=>!window.MTRol||MTRol.mag(MTPlanning.ROL.UREN_BOEKEN),
+  demo:()=>false, rolKlaar:()=>!!(window.MTRol&&MTRol.me), lezen:()=>!!(window.MTRol&&MTRol.me&&String(MTRol.me.rol||'').toLowerCase()==='lezen'), magTimer:()=>!!(window.MTRol&&MTRol.me)&&MTRol.mag(MTPlanning.ROL.UREN_BOEKEN),
   klaar:()=>MTMijnWerk.takenKlaar(), mijnWerk:()=>MTMijnWerk.mijnOpen(), timerLoopt:()=>tgTimerLoopt(),
   project:code=>{ const p=projVind(code); return p?{label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   start:item=>{ const p=projVind(item.code); return tgTimerStartDirect({projectId:p&&p.tg_project_id,omschrijving:item.taak.naam}); },
@@ -6027,19 +6027,26 @@ function projNaamVol(p){
   return _echteNaam(n,c)||[projKlantNaam(p),projLocLabel(p),_echteNaam(p.product_naam,p.product)].filter(Boolean).join(' — ')||'Project zonder naam';
 }
 // Korte projectnaam (zelfde als de Toggl-naam zonder nummer): eigen naam (zonder code-prefix) || productnaam || volledige naam.
-// Een naam die met de klantnaam begint is de automatische "klant locatie — product" uit het aanmaakvenster en geldt niet als eigen
-// naam: dan wint de productnaam. Nooit de klantnaam erin (die staat al in de klantmap en in het eigen veld).
+// Alleen een naam die EXACT is wat het aanmaakvenster zelf maakt ("<klant> <locatie> — <product>", zie maakProjectAan; ook met - of – als streepje, met of
+// zonder locatie, en de volledige vorm "<klant> — <locatie> — <product>" van projNaamVol) geldt als automatisch: dan wint de productnaam. Elke andere naam,
+// ook "De Vries showroomrenovatie" bij klant "De Vries", is een eigen naam en blijft staan. Nooit de klantnaam erin als die alleen automatisch is.
+function _projNaamIsAuto(p,n,prod){
+  if(!n||!prod) return false;
+  const norm=s=>String(s==null?'':s).replace(/\s+/g,' ').trim().toLowerCase();
+  const uniek=a=>a.map(x=>String(x==null?'':x).trim()).filter((x,i,l)=>x&&l.indexOf(x)===i);
+  const ks=uniek([p.klant_naam,projKlantNaam(p)]), ls=['',...uniek([p.loc_naam,projLocLabel(p)])], ps=uniek([prod,p.product_naam]), doel=norm(n);
+  for(const k of ks) for(const l of ls) for(const pr of ps) for(const s of ['—','–','-'])
+    if([`${k} ${l}`.trim()+` ${s} ${pr}`, `${k} ${s} ${l} ${s} ${pr}`, `${k} ${s} ${pr}`].some(x=>norm(x)===doel)) return true;
+  return false;
+}
 function projNaamKort(p){
   if(!p) return '';
   const c=String(p.code||'').trim(), prod=_echteNaam(p.product_naam,p.product);
   let n=String(p.naam||'').trim();
   if(c&&n.toUpperCase().startsWith(c.toUpperCase())) n=n.slice(c.length).replace(/^[\s\-–—·:|]+/,'').trim();
   n=_echteNaam(n,c);
-  const kl=[projKlantNaam(p),p.klant_naam].map(x=>String(x||'').trim().toLowerCase()).filter(x=>x.length>1);
-  const auto=!!n&&!!prod&&kl.some(k=>n.toLowerCase().startsWith(k));
-  return (auto?'':n)||prod||projNaamVol(p);
-}
-function _projVoorCode(c){ return (c&&typeof c==='object')?c:((typeof PROJECT_CODES!=='undefined'&&c)?projVind(c):null); }
+  return (_projNaamIsAuto(p,n,prod)?'':n)||prod||projNaamVol(p);
+}function _projVoorCode(c){ return (c&&typeof c==='object')?c:((typeof PROJECT_CODES!=='undefined'&&c)?projVind(c):null); }
 // Voor een code uit een koppeling/dossier/planning: het zichtbare nummer, anders de naam.
 function projKort(c){ const p=_projVoorCode(c); return p?(projLabelCode(p)||projNaamVol(p)):(c?'onbekend project':''); }
 function projTag(c,cls){ const l=projLabelCode(_projVoorCode(c)); return l?`<span class="${esc(cls||'code')}">${esc(l)}</span>`:''; }
@@ -13236,18 +13243,27 @@ async function _projMapZoek(proj, lijst){
   if(!kl) return { pad:null, kandidaten:[], reden:'geen klantmap "'+kn+'"' };
   const klPad = `${PROJ_ROOT}/${kl.name}`;
   const nr = typeof projNummer==='function' ? projNummer(proj) : null;   // na de omnummering mag de tag ook het projectnummer zijn
-  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']') || (!!nr && (n.endsWith(' ['+nr+']') || n.startsWith(nr+' ')));
-  const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n) || / \[[A-Z0-9][A-Z0-9-]*\]$/.test(n) || /^\d{6} /.test(n);   // ziet eruit als een (andere) projectmap → niet induiken
+  const sterk = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']') || (!!nr && n.endsWith(' ['+nr+']'));
+  const isProj = n => sterk(n) || (!!nr && n.startsWith(nr+' '));   // alleen "<nr> " vooraan is zwak: het kan ook een locatiemap zijn ("260801 Archief")
+  // Een map die met een 6-cijferig nummer begint geldt alleen als de projectmap van een ANDER project als dat nummer een bekend projectnummer van een ander bestaand project is.
+  const anderNr = new Set();
+  (typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]).forEach(q=>{ if(!q||q._vervallen||q===proj||q.code===code) return; [typeof projNummer==='function'?projNummer(q):null, /^\d{6}$/.test(String(q.code||''))?q.code:null].forEach(x=>{ if(x&&x!==nr) anderNr.add(x); }); });
+  const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n) || / \[[A-Z0-9][A-Z0-9-]*\]$/.test(n) || (/^\d{6} /.test(n) && anderNr.has(n.slice(0,6)));   // ziet eruit als een (andere) projectmap → niet induiken
   const kandidaten = [];
   const klKids = await lees(klPad);
   for(const c of klKids.filter(c=>c.folder)){
-    if(isProj(c.name)) kandidaten.push({ itemId:c.id, pad:`${klPad}/${c.name}`, webUrl:c.webUrl||'', naam:c.name });
-    else if(!lijkt(c.name)){
-      for(const d of (await lees(`${klPad}/${c.name}`)).filter(d=>d.folder&&isProj(d.name)))
-        kandidaten.push({ itemId:d.id, pad:`${klPad}/${c.name}/${d.name}`, webUrl:d.webUrl||'', naam:d.name });
+    const pad = `${klPad}/${c.name}`;
+    if(isProj(c.name)){
+      // zwak (alleen het nummer vooraan): eerst kijken of de echte projectmap erbinnen zit; zo niet, dan is deze map het zelf
+      const binnen = sterk(c.name) ? [] : (await lees(pad)).filter(d=>d.folder&&isProj(d.name));
+      if(binnen.length) binnen.forEach(d=>kandidaten.push({ itemId:d.id, pad:`${pad}/${d.name}`, webUrl:d.webUrl||'', naam:d.name }));
+      else kandidaten.push({ itemId:c.id, pad, webUrl:c.webUrl||'', naam:c.name });
     }
-  }
-  const exact = kandidaten.filter(x=>x.naam===exactNaam);
+    else if(!lijkt(c.name)){
+      for(const d of (await lees(pad)).filter(d=>d.folder&&isProj(d.name)))
+        kandidaten.push({ itemId:d.id, pad:`${pad}/${d.name}`, webUrl:d.webUrl||'', naam:d.name });
+    }
+  }  const exact = kandidaten.filter(x=>x.naam===exactNaam);
   const keuze = exact.length===1 ? exact[0] : (exact.length===0 && kandidaten.length===1 ? kandidaten[0] : null);
   return { pad:keuze?keuze.pad:null, itemId:keuze?keuze.itemId:null, webUrl:keuze?keuze.webUrl:'',
     kandidaten, dubbel:kandidaten.length>1, klPad, reden:keuze?'':(kandidaten.length>1?'meerdere projectmappen':'geen projectmap') };

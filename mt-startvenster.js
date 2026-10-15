@@ -10,7 +10,7 @@
  * Nooit een fout naar buiten: is er geen rol, geen login, geen taken of is de timerstand onbekend, dan blijft het venster weg.
  * Alles komt van buiten via init(deps), zodat het zonder de hele app te testen is.
  *
- * deps: { doc, storage (sessionStorage), dialog():mtDialog, toast(tekst), demo():bool, lezen():bool (rol "lezen"), magTimer():bool,
+ * deps: { doc, storage (sessionStorage), dialog():mtDialog, toast(tekst), demo():bool, rolKlaar():bool (/me geladen; tot dan geen venster), lezen():bool (rol "lezen"), magTimer():bool,
  *         klaar():bool (takenlijst geladen), mijnWerk():{groepen}, timerLoopt():Promise<true|false|null>, project(code):{label}|null,
  *         start(item):Promise<{ok,reden}|any>, nogActief():bool (optioneel: is de tab nog in beeld), slaap(ms):Promise (optioneel) }
  * ========================================================================== */
@@ -34,11 +34,20 @@
   };
   S.titel = n => n === 1 ? '1 taak wacht op je' : n + ' taken wachten op je';
 
+  // Fail-closed op de rol: zolang de rolgegevens (/me) niet binnen zijn is het 'wacht'; zonder rolKlaar-dep ook (nooit "mag vanzelf").
+  const rolStand = () => {
+    try {
+      if (!D.rolKlaar || !D.rolKlaar()) return 'wacht';
+      return (D.lezen && D.lezen()) || !D.magTimer || !D.magTimer() ? 'nee' : 'ja';
+    } catch (e) { return 'wacht'; }
+  };
   async function wachtOpGegevens() {
     for (let i = 0; i < POGINGEN; i++) {
       if (D.nogActief && !D.nogActief()) return null;
+      const rol = rolStand();
+      if (rol === 'nee') return null;
       let loopt = null;
-      if (D.klaar()) { try { loopt = await D.timerLoopt(); } catch (e) { loopt = null; } }
+      if (rol === 'ja' && D.klaar()) { try { loopt = await D.timerLoopt(); } catch (e) { loopt = null; } }
       if (loopt === true) return null;             // er loopt al een timer: geen venster
       if (loopt === false) return { loopt };       // takenlijst klaar en geen timer
       if (i < POGINGEN - 1) await slaap(WACHT_MS); // nog niet te weten (laden, niet ingelogd): even later nog eens
@@ -51,7 +60,7 @@
     if (!D || S.bezig || gezien()) return false;
     S.bezig = true;
     try {
-      if ((D.demo && D.demo()) || (D.lezen && D.lezen()) || (D.magTimer && !D.magTimer())) return false;
+      if (D.demo && D.demo()) return false;
       if (!(await wachtOpGegevens())) return false;
       if (D.nogActief && !D.nogActief()) return false;
       const k = S.kies(D.mijnWerk(), MAX);
@@ -66,6 +75,7 @@
       const i = await belofte;
       markeerGezien();                              // Overslaan, Esc of een gestarte timer: niet nog eens in deze sessie
       if (typeof i !== 'number' || !k.items[i]) return true;
+      if (rolStand() !== 'ja') { if (D.toast) D.toast('Dit mag je niet met jouw rol.'); return true; }   // opnieuw vlak voor de start
       try {
         const r = await D.start(k.items[i].item);
         if (r && r.ok === false && D.toast) D.toast(r.reden || 'De timer kon niet starten.');

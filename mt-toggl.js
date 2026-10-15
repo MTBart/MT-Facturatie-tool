@@ -599,9 +599,14 @@ async function tgTimerStartDirect({projectId,omschrijving}){
   if(!projectId) return {ok:false,reden:'Dit project heeft nog geen Toggl-project: de timer kan hier niet starten.'};
   if(_tgTimerBusy||_tgMutatieBusy) return {ok:false,reden:'Er loopt nog een Toggl-wijziging; probeer het zo opnieuw.'};
   if(_tgTimer.entry) return {ok:false,reden:'Er loopt al een timer.'};
-  const body={created_with:'MT-cockpit',description:String(omschrijving||''),workspace_id:TG_WS,start:new Date().toISOString().replace(/\.\d{3}Z$/,'Z'),duration:-1,project_id:parseInt(projectId)};
   _tgTimerBusy=true; tgTimerPaint();
   try{
+    // Vlak voor de POST de lopende timer opnieuw lezen (een ander toestel kan intussen gestart zijn): nooit stil vervangen of dubbel starten.
+    let cur=null;
+    try{ cur=await tgStore.lopendeTimer(); }
+    catch(e){ return {ok:false,reden:'Kon niet controleren of er al een timer loopt; niet gestart. '+String((e&&e.message)||e)}; }
+    if(cur&&cur.id){ _tgTimer.entry=cur; return {ok:false,reden:'Er loopt al een timer op '+(cur.description?'„'+cur.description+'”':'een ander project')+'.'}; }
+    const body={created_with:'MT-cockpit',description:String(omschrijving||''),workspace_id:TG_WS,start:new Date().toISOString().replace(/\.\d{3}Z$/,'Z'),duration:-1,project_id:parseInt(projectId)};
     const made=await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body);
     _tgTimer.entry=(made&&made.id)?made:null;
     return _tgTimer.entry?{ok:true}:{ok:false,reden:'Toggl gaf geen timer terug; kijk in de Toggl-tab of hij loopt.'};

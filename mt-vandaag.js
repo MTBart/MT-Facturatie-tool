@@ -301,8 +301,6 @@
     D.timer.start(p.mobielId, taak.naam);
     sluitKaart(); D.toast('Timer gestart op ' + projLabel(item.code));
   }
-  V.startTimer = startTimer;   // ook voor het startvenster
-
   // ── schrijven: de status van een taak (Bezig · Wacht · Klaar) ──
   // Volgorde, zoals in de cockpit: eerst kijken of het mag (lijst klaar, schema, rol), dan de vragen (reden, "deze taak wacht"), daarna opnieuw kijken, en dan pas schrijven.
   // Het schrijven zelf (P.takenSchrijf) leest vers van SharePoint, voegt samen, stempelt per veld en controleert vlak voor het PUT nog eens recht en schema.

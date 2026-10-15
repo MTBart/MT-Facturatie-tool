@@ -21,7 +21,7 @@
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
-<script src="mt-project.js?v=2026-10-14a"></script>
+<script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
@@ -32,11 +32,11 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2.16.0"></script>
-<script src="mt-vandaag.js?v=2026-10-15a"></script>
-<script src="mt-startvenster.js?v=2026-10-15a"></script>
+<script src="mt-planning.js?v=2026-10-15b"></script>
+<script src="mt-vandaag.js?v=2026-10-15b"></script>
+<script src="mt-startvenster.js?v=2026-10-15b"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15a"></script>
+<script src="mt-verhuis.js?v=2026-10-15b"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2430,16 +2430,29 @@ if (window.MTVandaag) MTVandaag.init({
 // Startvenster (stap 3): "X taken wachten op je" bij het openen van de app, alleen zonder lopende timer en niet voor de rol "lezen" (zie mt-startvenster.js).
 if (window.MTStartvenster && window.MTVandaag) MTStartvenster.init({
   doc: document, storage: (() => { try { return sessionStorage; } catch (e) { return null; } })(), dialog: () => window.mtDialog, toast: m => showToast(m),
-  demo: () => _demoMode || !_msAccount, lezen: () => !!(window.MTRol && MTRol.me && String(MTRol.me.rol || '').toLowerCase() === 'lezen'), magTimer: () => rolMagM(MTPlanning.ROL.UREN_BOEKEN),
+  demo: () => _demoMode || !_msAccount, rolKlaar: () => !!(window.MTRol && MTRol.me), lezen: () => !!(window.MTRol && MTRol.me && String(MTRol.me.rol || '').toLowerCase() === 'lezen'),
+  magTimer: () => !!(window.MTRol && MTRol.me) && rolMagM(MTPlanning.ROL.UREN_BOEKEN),
   klaar: () => MTVandaag.takenKlaar(), mijnWerk: () => MTVandaag.mijnOpen(),
-  timerLoopt: async () => {   // eerst wat hier al bekend is, anders de lopende entry bij Track; onbekend (geen verbinding) = null
-    if (timerRunning) return true;
-    try { const cur = await tgTrack('me/time_entries/current'); const e = (cur && cur.id) ? cur : (cur && cur.data); return !!(e && e.id && e.duration < 0); }
-    catch (e) { return null; }
-  },
+  timerLoopt: _startvensterTimerLoopt,
   project: code => { const i = _vdProject(code); return i ? { label: [i.nr, i.naam].filter(Boolean).join(' ') || code } : null; },
-  start: item => MTVandaag.startTimer(item)
+  start: async item => {   // wacht op de uitkomst van Toggl: "gestart" alleen als Toggl de timer aannam
+    const i = _vdProject(item.code);
+    if (!i || !i.mobielId || !i.togglProjectId) return { ok: false, reden: 'Dit project heeft nog geen Toggl-project: de timer kan hier niet starten.' };
+    const loopt = await _startvensterTimerLoopt();   // vlak voor de start opnieuw lezen: nooit een lopende timer stil vervangen
+    if (loopt === true) return { ok: false, reden: 'Er loopt al een timer' + (activeProject ? ' op ' + mProjNaam(activeProject) : '') + '.' };
+    if (loopt === null) return { ok: false, reden: 'Kon niet controleren of er al een timer loopt; niet gestart.' };
+    selectProject(i.mobielId);
+    const ok = await startTimer(item.taak.naam);
+    if (ok) return { ok: true };
+    stopTimer();   // Toggl nam de start niet aan: de lokale timer weer uit, geen schijn-timer
+    return { ok: false, reden: 'Toggl nam de timer niet aan; er loopt geen timer. Probeer het zo opnieuw.' };
+  }
 });
+async function _startvensterTimerLoopt() {   // eerst wat hier al bekend is, anders de lopende entry bij Track; onbekend (geen verbinding) = null
+  if (timerRunning) return true;
+  try { const cur = await tgTrack('me/time_entries/current'); const e = (cur && cur.id) ? cur : (cur && cur.data); return !!(e && e.id && e.duration < 0); }
+  catch (e) { return null; }
+}
 function _startvensterMobiel() { try { if (window.MTStartvenster) MTStartvenster.toon(); } catch (e) {} }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && window.MTVandaag) { const t = document.getElementById('tab-vandaag'); if (t && t.classList.contains('active')) MTVandaag.toon(); } });
 // Deep links van de werkplaats-tv: mobiel.html#taak/<projectcode>/<taak-id> opent de taakkaart, #project/<projectcode> het project. De link wordt eerst bewaard (sessionStorage), zodat hij
@@ -3468,7 +3481,7 @@ function toggleTimer() {
 function startTimer(oms) {   // oms: omschrijving van de Toggl-entry (Vandaag geeft de taaknaam mee); zonder: de projectnaam
   if (!activeProject) {
     alert("Selecteer eerst een project.");
-    return;
+    return Promise.resolve(false);
   }
   timerRunning = true;
   timerStart = timerStart || Date.now();
@@ -3481,7 +3494,7 @@ function startTimer(oms) {   // oms: omschrijving van de Toggl-entry (Vandaag ge
   // Geserialiseerd: start echt klokkende entry op Track (alleen bij ingelogd + echt project)
   const proj = activeProject;
   const entryOms = (typeof oms === 'string' && oms.trim()) ? oms.trim() : proj.name;
-  _tglEnqueue(() => startTimerOnToggl(proj, entryOms)).catch(() => {});
+  return _tglEnqueue(() => startTimerOnToggl(proj, entryOms)).catch(() => false);   // de uitkomst van de Toggl-start (true/false); de meeste aanroepers negeren die
 }
 
 function stopTimer() {
