@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-14 — v2.16.8: projectindex als var op de oorspronkelijke plek; robuustere aanroepen; cacheversies in het datumschema
+- Commit: `bd0ff82` | Auteur: Bart Witte
+
 ## 2026-10-14 — v2.16.7: offertenummer eerst bewaren, dan pas Toggl hernoemen; uitkomst altijd zichtbaar
 - Commit: `2a82c02` | Auteur: Bart Witte
 

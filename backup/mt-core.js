@@ -283,6 +283,21 @@
         }
       },
 
+      // Alleen AANMAKEN: het bestand wordt geschreven als het nog niet bestaat (If-None-Match: * én conflictBehavior=fail). Bestaat het al
+      // (412 of 409), dan gebeurt er niets en wordt er NIET samengevoegd: de aanroeper leest het bestaande bestand.
+      // → 'aangemaakt' | 'bestaat' | false (mislukt). Voor eenmalige overstappen waarbij de id's maar één keer mogen ontstaan.
+      async maakAan(filename, data) {
+        try {
+          const { base, token } = await this._driveBase();
+          const r = await fetch(`${base}/root:/${this.FOLDER}/${filename}:/content?@microsoft.graph.conflictBehavior=fail`,
+            { method: 'PUT', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'If-None-Match': '*' }, body: typeof data === 'string' ? data : JSON.stringify(data) });
+          if (r.status === 412 || r.status === 409) return 'bestaat';
+          if (r.ok) { const et = r.headers.get('ETag'); if (et) this._etags[filename] = et; delete this._ontbreekt[filename]; if (trackLastSync) this.lastSync = { ts: Date.now(), ok: true, key: filename, error: null }; syncStatus(); return 'aangemaakt'; }
+          console.warn('SP aanmaken faalde:', filename, 'HTTP', r.status);
+          return false;
+        } catch (e) { console.warn('SP aanmaken fout:', filename, e.message); return false; }
+      },
+
       // S1 — conflictafhandeling na HTTP 412 (opt-in keys). Re-read (ververst
       // _etags), merge lokale wijzigingen erin (bij zelfde id/sleutel wint LOKAAL),
       // herschrijf met verse ETag. Niet-mergebare vorm → NIET blind overschrijven:

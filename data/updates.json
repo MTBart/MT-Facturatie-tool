@@ -1,5 +1,19 @@
 [
   {
+    "versie": "2.17.0",
+    "datum": "2026-10-15",
+    "titel": "Mijn werk, Vandaag op de telefoon en het startvenster",
+    "voor": "iedereen",
+    "punten": [
+      "Telefoon: Vandaag laat je taken van vandaag zien. Zet een taak op Bezig, Wacht of Klaar, en meld met de grote + een taak, een probleem of een bestelvoorstel.",
+      "Desktop: in de Agenda staat Mijn werk als eerste weergave. Voorstellen van de werkplaats neem je daar over of wijs je af.",
+      "Planning: de teamcapaciteit is de standaardweergave, met vrije dagen en verlof.",
+      "Open je de Agenda of de telefoon zonder lopende timer, dan vraagt de tool welke taak je oppakt. Kies er een of klik op Overslaan.",
+      "Nieuwe projecten krijgen een kortere naam zonder klantnaam, ook voor de projectmap en in interiorcad (bijvoorbeeld '260801 Werkblad ref 186986'). Bestaande mappen blijven zoals ze zijn.",
+      "De werkplaats-tv heeft een eigen scherm (alleen kijken). Instellingen en Activiteit staan nu onder Admin; Geschiedenis is uit de menubalk."
+    ]
+  },
+  {
     "versie": "2.16.0",
     "datum": "2026-10-13",
     "titel": "Planning: de uitrol, stap voor stap (eigenaar en beheer)",

@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.15.1 — M&T Mobiel</title>
+<title>BACKUP v2.16.8 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -21,8 +21,8 @@
 <!-- Gedeelde kernlaag (esc, _encPath, authHeader, MSAL-tokenhelpers, _SP-synclaag) —
      één bron voor cockpit én app (audit-actie S2). Moet vóór de code laden die het
      gebruikt; ?v= = cachebuster, zelfde patroon als in v2.html. -->
-<script src="mt-core.js?v=2026-10-11c"></script>
-<script src="mt-project.js?v=2026-10-13b"></script>
+<script src="mt-core.js?v=2026-10-13a"></script>
+<script src="mt-project.js?v=2026-10-14a"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-dialog.js?v=2026-10-11b"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
@@ -33,8 +33,9 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
+<script src="mt-planning.js?v=2.16.0"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-13a"></script>
+<script src="mt-verhuis.js?v=2.16.0"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -786,7 +787,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 </style>
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.15.1, 2026-10-14). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.16.8, 2026-10-15). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -2248,6 +2249,7 @@ async function rolLaadMobiel() {
   const me = await MTRol.laad(WORKER); if (!me) return;
   if (MTRol.geenToegangNodig()) { MTRol.toonGeenToegang(WORKER); return; }
   MTRol.pasToe();
+  try { if (typeof currentSheetProject !== 'undefined' && currentSheetProject) renderSheetTasks(); } catch (e) {}   // ronde 9: de takenknoppen volgens de rol
   // Geld (geldtijdlijn) staat in de cockpit (responsive): alleen een knop voor wie het recht heeft, op een worker die het kent.
   const gk = document.getElementById('geldKnop'); if (gk) gk.style.display = me.rechten && ('geld' in me.rechten) && MTRol.magGeld() ? '' : 'none';
   if (gk && gk.style.display === '') geldBadgeLaad();   // ongelezen ochtendmeldingen van de Koersmeter
@@ -2272,6 +2274,7 @@ async function _pvSchrijf(wijzig) {
   const remote = await _SP.read('mt_planblokken.json').catch(() => null);
   if (!Array.isArray(remote)) { showToast('SharePoint niet bereikbaar — probeer het zo opnieuw'); return false; }
   _pvBlokken = wijzig(MTPlanVoorstel.samen(_pvBlokken, remote));
+  if (typeof AGENDA_CACHE !== "undefined") for (const k of Object.keys(AGENDA_CACHE)) delete AGENDA_CACHE[k];   // de agenda toont planblokken: opnieuw opbouwen
   return await _SP.write('mt_planblokken.json', _pvBlokken, (r2, lokaal) => { _pvBlokken = MTPlanVoorstel.samen(lokaal, r2); return _pvBlokken; });
 }
 async function aanwezigLaadMobiel() {
@@ -2664,10 +2667,38 @@ if (!TASKS) {
 }
 function tasksFor(code) { return TASKS[code] || []; }
 function saveTasks() { localStorage.setItem("mt_tasks", JSON.stringify(TASKS)); }
+// ═══ Rollenmatrix op de mobiele takenlijst (ronde 9) ═══
+// Dezelfde rechtnamen als v2.html: taken "status-nieuw|alles" = de status wijzigen en een nieuwe taak toevoegen (ook de werkplaats); taken "alles" = een taak bewerken of verwijderen;
+// "lezen" mag niets. Elke muterende handler vraagt het recht vóór het eerste effect en (waar er een await tussen zit) vlak vóór het schrijven; de knoppen gaan uit (_mobRolPas).
+// Buiten de modus "afdwingen" is alles toegestaan (MTRol.mag); de worker blijft voor Toggl de echte poortwachter.
+// TODO (stap 3 van het eindontwerp: offline-outbox en operation-id's): de mobiele Toggl-aanroepen (status, naam, aanmaken) krijgen nog GEEN tg_pending-intentie zoals v2; dat is bestaand gedrag.
+const ROL_TAAK_STATUS = 'taken:status-nieuw|alles', ROL_TAAK_ALLES = 'taken:alles';
+function rolMagM(spec) { return !(window.MTRol && MTRol.mag) || MTRol.mag(spec); }
+function rolGeweigerdM(spec, wat) {
+  if (rolMagM(spec)) return false;
+  try { showToast('⛔ ' + (wat || 'Dit') + ' mag je niet met jouw rol. Er is niets gewijzigd.'); } catch (e) {}
+  return true;
+}
+// De knoppen en velden van de takenlijst die de rol niet toestaat uitzetten. De sjabloonregels van renderSheetTasks blijven ongewijzigd; deze doorloop past ze achteraf aan.
+function _mobRolPas(el) {
+  if (!el || !(window.MTRol && MTRol.afdwingen && MTRol.afdwingen())) return;
+  const status = rolMagM(ROL_TAAK_STATUS), alles = rolMagM(ROL_TAAK_ALLES);
+  if (!status) {
+    el.querySelectorAll('.task-toggle').forEach(b => { b.disabled = true; b.setAttribute('aria-disabled', 'true'); });
+    el.querySelectorAll('button[onclick*="startNewTask("]').forEach(b => b.classList.add('mt-rol-verborgen'));
+    el.querySelectorAll('.task-form').forEach(f => { if (f.querySelector('#tfNewName')) f.classList.add('mt-rol-verborgen'); });
+  }
+  if (!alles) {
+    el.querySelectorAll('.task-main').forEach(m => { m.removeAttribute('onclick'); m.style.cursor = 'default'; });
+    el.querySelectorAll('.task-form').forEach(f => { if (f.querySelector('#tfName')) f.classList.add('mt-rol-verborgen'); });
+  }
+}
 function addTaskToProject(code, task) {
+  if (rolGeweigerdM(ROL_TAAK_STATUS, 'Een taak toevoegen')) return false;   // ook na een await in de aanroeper: de controle zit hier, vlak vóór het schrijven
   if (!TASKS[code]) TASKS[code] = [];
   TASKS[code].push(task);
   saveTasks();
+  return true;
 }
 
 // SP-sync voor taken (mt_app_taken.json)
@@ -2787,9 +2818,11 @@ async function loadAgendaWeek(week) {
     const monday = mondayOfWeek(week);
     const zondag = new Date(monday); zondag.setDate(zondag.getDate() + 6);
     const range = `date_from=${_isoDate(monday)}T00:00:00Z&date_to=${_isoDate(zondag)}T23:59:59Z`;
-    const [logged, planned] = await Promise.all([
+    // Gepland = de planblokken uit de cockpit (SharePoint mt_planblokken) voor de ingelogde medewerker. Toggl
+    // `time-blocks` bestaat niet meer (404) en wordt niet meer gelezen; geklokt komt nog uit Toggl.
+    const [logged] = await Promise.all([
       focusFetch(`time-entries/stream?${range}&order_by=start&include_taskless=true`).catch(e => { console.warn("time-entries:", e.message); return []; }),
-      focusFetch(`time-blocks/stream?${range}&order_by=start`).catch(e => { console.warn("time-blocks:", e.message); return []; })
+      _pvLees().catch(() => [])
     ]);
     const days = {0:[],1:[],2:[],3:[],4:[]};
     const verwerk = (raw, kind) => {
@@ -2800,7 +2833,10 @@ async function loadAgendaWeek(week) {
       });
     };
     verwerk(logged, "logged");
-    verwerk(planned, "planned");
+    MTPlanning.agendaBlokken(_pvBlokken, {van: _isoDate(monday), mijn: _mijnEmail()}).forEach(b => {
+      if (b.dagIdx > 4) return;   // weekend: de mobiele agenda toont ma-vr
+      days[b.dagIdx].push({id: `pl-${b.id}`, real: true, kind: "planned", mock: false, who: "planned", name: (b.voorstel ? "Voorstel: " : "") + b.name, proj: b.proj, start: b.start, end: b.end, dayIdx: b.dagIdx});
+    });
     AGENDA_CACHE[week] = {ts: Date.now(), days};
   })().finally(() => { delete _agendaLoading[week]; });
   return _agendaLoading[week];
@@ -4081,7 +4117,7 @@ function saveBlok() {
   if (taskName === "__new") {
     const newName = document.getElementById("blokNewTaskName").value.trim();
     if (!newName) { alert("Geef de nieuwe taak een naam."); return; }
-    addTaskToProject(code, {id:"t"+Date.now(), name:newName, status:"todo", date:null, est:null, tag:null, note:""});
+    if (!addTaskToProject(code, {id:"t"+Date.now(), name:newName, status:"todo", date:null, est:null, tag:null, note:""})) return;   // geen recht om een taak toe te voegen: het blok wordt niet gemaakt
     taskName = newName;
   }
 
@@ -4226,7 +4262,7 @@ async function noteToTask(note, knownProjPath) {
       task.link = await _projFolderUrl(note.project, (note.fotos && note.fotos.length) ? "06_Fotos" : "", knownProjPath);
     } catch(e) {}
   }
-  addTaskToProject(proj.code, task);
+  if (!addTaskToProject(proj.code, task)) return;   // geen recht (ook na de await hierboven): geen taak, geen Toggl-aanroep
   if (currentSheetProject && currentSheetProject.code === proj.code) renderSheetTasks();
   // Toggl 2.0 Focus + SP (zelfde route als saveNewTask)
   if (!_demoMode && _msAccount && proj.togglProjectId) {
@@ -6052,7 +6088,7 @@ function herstelNaarTaak(idx) {
     status: "todo", date: null, est: null,
     tag: "herstelpunt", note: note, togglTaskId: null
   };
-  addTaskToProject(p.code, task);
+  if (!addTaskToProject(p.code, task)) return;   // geen recht om een taak toe te voegen
   showToast(`✓ Taak aangemaakt in ${p.code}`);
 
   // Sync naar Toggl 2.0 als project een echte Toggl-ID heeft
@@ -6540,9 +6576,11 @@ function renderSheetTasks() {
   }
 
   el.innerHTML = html;
+  _mobRolPas(el);
 }
 
 function toggleTaskStatus(id) {
+  if (rolGeweigerdM(ROL_TAAK_STATUS, 'De status van een taak wijzigen')) { renderSheetTasks(); return; }
   const t = tasksFor(currentSheetProject.code).find(x => x.id === id);
   if (!t) return;
   t.status = TASK_NEXT[t.status] || "todo";
@@ -6560,6 +6598,7 @@ function toggleTaskStatus(id) {
 }
 
 function editTask(id) {
+  if (rolGeweigerdM(ROL_TAAK_ALLES, 'Een taak bewerken')) return;
   editingTaskId = id;
   addingTask = false;
   renderSheetTasks();
@@ -6571,6 +6610,7 @@ function cancelTaskEdit() {
 }
 
 function saveTaskEdit(id) {
+  if (rolGeweigerdM(ROL_TAAK_ALLES, 'Een taak bewerken')) { editingTaskId = null; renderSheetTasks(); return; }
   const t = tasksFor(currentSheetProject.code).find(x => x.id === id);
   if (!t) return;
   const name = document.getElementById("tfName").value.trim();
@@ -6591,6 +6631,7 @@ function saveTaskEdit(id) {
 }
 
 function deleteTask(id) {
+  if (rolGeweigerdM(ROL_TAAK_ALLES, 'Een taak verwijderen')) { editingTaskId = null; renderSheetTasks(); return; }
   const code = currentSheetProject.code;
   TASKS[code] = tasksFor(code).filter(x => x.id !== id);
   saveTasks();
@@ -6600,6 +6641,7 @@ function deleteTask(id) {
 }
 
 function startNewTask() {
+  if (rolGeweigerdM(ROL_TAAK_STATUS, 'Een taak toevoegen')) return;
   addingTask = true;
   editingTaskId = null;
   renderSheetTasks();
@@ -6613,6 +6655,7 @@ function cancelNewTask() {
 }
 
 function saveNewTask() {
+  if (rolGeweigerdM(ROL_TAAK_STATUS, 'Een taak toevoegen')) { addingTask = false; renderSheetTasks(); return; }
   const name = document.getElementById("tfNewName").value.trim();
   if (!name) { alert("Geef de taak een naam."); return; }
   const task = {
@@ -6622,7 +6665,7 @@ function saveNewTask() {
     est: document.getElementById("tfNewEst").value.trim() || null,
     tag: null, note: "", togglTaskId: null
   };
-  addTaskToProject(currentSheetProject.code, task);
+  if (!addTaskToProject(currentSheetProject.code, task)) { addingTask = false; renderSheetTasks(); return; }   // geweigerd: ook geen Toggl-aanroep
   addingTask = false;
   renderSheetTasks();
 

@@ -18,14 +18,14 @@
      voor cockpit én app (audit-actie S2). Moet vóór de code laden die het gebruikt;
      ?v= = cachebuster (bump bij elke wijziging), zelfde patroon als calc-engine.js. -->
 <script src="mt-core.js?v=2026-10-13a"></script>
-<script src="mt-project.js?v=2026-10-14a"></script>
+<script src="mt-project.js?v=2026-10-15b"></script>
 <script src="mt-lead.js?v=2026-10-13b"></script>
 <script src="mt-vw.js?v=2026-10-13b"></script>
 <!-- Herbruikbare <dialog>-flows (Promise-gebaseerd) als vervanger voor de
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2.16.2"></script>
+<script src="mt-toggl.js?v=2026-10-15b"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -33,17 +33,20 @@
 <script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2026-10-14a"></script>
+<script src="mt-inbox.js?v=2026-10-15b"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2.16.0"></script>
+<script src="mt-planning.js?v=2026-10-15b"></script>
+<script src="mt-mijnwerk.js?v=2026-10-15b"></script>
+<script src="mt-capaciteit.js?v=2026-10-15b"></script>
+<script src="mt-startvenster.js?v=2026-10-15b"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2.16.0"></script>
+<script src="mt-verhuis.js?v=2026-10-15b"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -842,7 +845,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.16.8</span>
+    <span class="header-version">v2.17.0</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -879,11 +882,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <button class="tab-btn" data-recht="projecten" onclick="showTab('voorraad',this)">Voorraad</button>
   <button class="tab-btn" data-recht="projecten" onclick="showTab('bestelling',this)">Bestellijst</button>
   <button class="tab-btn" data-recht="moneybird" onclick="showTab('klanten',this)">Klanten</button>
-  <button class="tab-btn" data-recht="moneybird" onclick="showTab('historie',this)">Geschiedenis</button>
   <button class="tab-btn" data-recht="verbeterpunten" onclick="showTab('verbeterpunten',this)">&#128161; Verbeterpunten</button>
-  <button class="tab-btn" onclick="showTab('instellingen',this)">Instellingen</button>
+  <button class="tab-btn" id="tab-btn-instellingen" onclick="showTab('instellingen',this)">Instellingen</button>
   <button class="tab-btn" id="tab-btn-admin" style="display:none" onclick="showTab('admin',this)">⚙ Admin</button>
-  <button class="tab-btn" id="tab-btn-activiteit" style="display:none" onclick="showTab('activiteit',this)">📊 Activiteit</button>
   <button class="tab-help-btn" onclick="helpOpen()" title="Korte uitleg van dit tabblad + feedback geven aan Larry">ⓘ wat is dit?</button>
   <button class="tab-help-btn" onclick="tbOpenInNieuwVenster()" title="Open dit tabblad in een apart venster — sleep het naar je tweede scherm">↗ apart venster</button>
 </div>
@@ -1441,7 +1442,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
             <option value="Voorraad">Voorraad</option>
             <option value="Bestellijst">Bestellijst</option>
             <option value="Klanten">Klanten</option>
-            <option value="Geschiedenis">Geschiedenis</option>
             <option value="App/mobiel">App/mobiel</option>
             <option value="Anders">Anders</option>
           </select>
@@ -1478,10 +1478,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <div id="tab-instellingen" class="tab-content">
     <!-- F5: verhuisknop (alleen zichtbaar met de proefvlag mt_verhuis_proef tot het nieuwe domein gekoppeld is) -->
     <div class="card" id="verhuis-kaart" style="display:none"><div class="card-title">Verhuizen naar het nieuwe adres</div><div id="verhuis-plek"></div></div>
-    <div class="card" id="beheer-kaart" style="display:none">
-      <div class="card-title">Beheer — gebruikers &amp; rollen</div>
-      <div id="beheer-inhoud" style="font-size:13px">Laden…</div>
-    </div>
     <div class="card" id="upd-kaart" style="display:none">
       <div class="card-title">Wat is er verbeterd</div>
       <div id="upd-inhoud" style="font-size:13px">Laden…</div>
@@ -1709,6 +1705,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         </div>
         <div class="flex" style="gap:6px;align-items:center">
           <div class="ag-viewtog" style="display:inline-flex;border:1px solid var(--border,#ddd);border-radius:7px;overflow:hidden">
+            <button class="btn btn-sm" id="agenda-view-mijnwerk" onclick="agendaZetView('mijnwerk')" title="Mijn werk: taken en planblokken per persoon in groepen (Nieuw, Te laat, Vandaag, …)" style="border:0;border-radius:0;padding:5px 10px">✅ Mijn werk</button>
+            <button class="btn btn-sm" id="agenda-view-capaciteit" onclick="agendaZetView('capaciteit')" title="Capaciteitsplanning voor het team: per persoon per dag gepland tegenover beschikbaar, met vrije dagen en verlof" style="border:0;border-radius:0;padding:5px 10px">👥 Capaciteit</button>
             <button class="btn btn-sm" id="agenda-view-grid" onclick="agendaZetView('grid')" title="Week-rooster" style="border:0;border-radius:0;padding:5px 10px">▦ Rooster</button>
             <button class="btn btn-sm" id="agenda-view-lijst" onclick="agendaZetView('lijst')" title="Timer-lijst (zoals Toggl)" style="border:0;border-radius:0;padding:5px 10px">≣ Lijst</button>
             <button class="btn btn-sm" id="agenda-view-plan" onclick="agendaZetView('plan')" title="Planning-blokken" style="border:0;border-radius:0;padding:5px 10px">📋 Planning</button>
@@ -1740,7 +1738,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="pv-meldingen" style="margin-bottom:8px"></div>
     <div id="agenda-cap-balk" style="display:none;margin-bottom:8px"></div>
     <div id="agenda-totalen" style="margin-bottom:1rem"></div>
-    <div class="card" style="padding:0;overflow:auto;max-height:74vh">
+    <div id="agenda-mijnwerk" style="display:none"></div>
+    <div id="agenda-capaciteit" style="display:none"></div>
+    <div class="card" id="agenda-gridkaart" style="padding:0;overflow:auto;max-height:74vh">
       <div id="agenda-grid"></div>
     </div>
     <div id="agenda-status" style="font-size:11px;color:var(--text-faint);margin-top:6px"></div>
@@ -1776,15 +1776,81 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       #tab-admin .adm-log-row:nth-child(even){background:var(--surface-sunken)}
     </style>
     <div class="adm-subtabs">
-      <button class="adm-subtab active" onclick="admSub('logboek',this)">📒 Logboek</button>
-      <button class="adm-subtab" onclick="admSub('team',this)">⚙️ Team &amp; lock</button>
-      <button class="adm-subtab" onclick="admSub('verlof',this)">🏖 Verlof &amp; saldo</button>
-      <button class="adm-subtab" onclick="admSub('vrijdagen',this)">📅 Vrije dagen</button>
-      <button class="adm-subtab" onclick="admSub('notificaties',this)">🔔 Notificaties</button>
+      <button class="adm-subtab" data-sub="beheer" style="display:none" onclick="admSub('beheer',this)">👥 Beheer</button>
+      <button class="adm-subtab" data-sub="instellingen" style="display:none" onclick="admSub('instellingen',this)">🛠 Instellingen</button>
+      <button class="adm-subtab" data-sub="activiteit" style="display:none" onclick="admSub('activiteit',this)">📊 Activiteit</button>
+      <button class="adm-subtab" data-sub="logboek" style="display:none" onclick="admSub('logboek',this)">📒 Logboek</button>
+      <button class="adm-subtab" data-sub="team" style="display:none" onclick="admSub('team',this)">⚙️ Team &amp; lock</button>
+      <button class="adm-subtab" data-sub="verlof" style="display:none" onclick="admSub('verlof',this)">🏖 Verlof &amp; saldo</button>
+      <button class="adm-subtab" data-sub="vrijdagen" style="display:none" onclick="admSub('vrijdagen',this)">📅 Vrije dagen</button>
+      <button class="adm-subtab" data-sub="notificaties" style="display:none" onclick="admSub('notificaties',this)">🔔 Notificaties</button>
+    </div>
+
+    <!-- Beheer (verhuisd uit Instellingen): gebruikers & rollen, app-versie, overstap, controlelijst, auditlog -->
+    <div id="adm-sub-beheer" class="adm-subcontent">
+      <div class="card" id="beheer-kaart" style="display:none">
+        <div class="card-title">Beheer — gebruikers &amp; rollen</div>
+        <div id="beheer-inhoud" style="font-size:13px">Laden…</div>
+      </div>
+    </div>
+
+    <!-- Instellingen: de bestaande kaarten uit #tab-instellingen worden hier ingehangen zodra Admin voor jou geldt (admSamenvoegen) -->
+    <div id="adm-sub-instellingen" class="adm-subcontent"></div>
+
+    <!-- Activiteit (verhuisd uit een eigen tabblad; usage-/presence-tracking, alleen Bart en beheer) -->
+    <div id="adm-sub-activiteit" class="adm-subcontent">
+  <div id="tab-activiteit">
+    <style>
+      #tab-activiteit .act-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+      #tab-activiteit .act-range{display:flex;gap:2px}
+      #tab-activiteit .act-range button{padding:6px 13px;border:1px solid var(--border,#ddd);background:#fff;cursor:pointer;font-size:12.5px;color:var(--text-dim,#666)}
+      #tab-activiteit .act-range button:first-child{border-radius:6px 0 0 6px}
+      #tab-activiteit .act-range button:last-child{border-radius:0 6px 6px 0}
+      #tab-activiteit .act-range button.active{background:var(--green,#2A4A38);color:#fff;border-color:var(--green,#2A4A38)}
+      #tab-activiteit .act-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+      #tab-activiteit .act-stat{background:var(--surface,#fff);border:1px solid var(--border,#eee);border-radius:10px;padding:13px 15px}
+      #tab-activiteit .act-stat .v{font-size:24px;font-weight:700;color:var(--green,#2A4A38);font-variant-numeric:tabular-nums}
+      #tab-activiteit .act-stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint,#999);margin-top:3px}
+      #tab-activiteit .act-online{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
+      #tab-activiteit .act-chip{display:flex;align-items:center;gap:7px;background:var(--surface-sunken,#f6f6f4);border:1px solid var(--border,#eee);border-radius:20px;padding:5px 13px 5px 10px;font-size:13px}
+      #tab-activiteit .act-dot{width:9px;height:9px;border-radius:50%;background:#2ecc71;box-shadow:0 0 0 3px rgba(46,204,113,.18)}
+      #tab-activiteit .act-chip .sub{font-size:11px;color:var(--text-faint,#999)}
+      #tab-activiteit h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#666);margin:20px 0 8px}
+      #tab-activiteit table.act-tbl{width:100%;border-collapse:collapse;font-size:13px}
+      #tab-activiteit table.act-tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint,#999);padding:6px 8px;border-bottom:1px solid var(--border,#e6e6e6)}
+      #tab-activiteit table.act-tbl td{padding:6px 8px;border-bottom:1px solid var(--border,#f2f2f2)}
+      #tab-activiteit table.act-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+      #tab-activiteit .act-bad{color:#c0392b;font-weight:600}
+      #tab-activiteit .act-empty{color:var(--text-faint,#999);font-size:13px;padding:10px 0}
+    </style>
+    <div class="act-head">
+      <strong style="font-size:16px;color:var(--green,#2A4A38)">📊 Activiteit &amp; gebruik</strong>
+      <div class="act-range" id="act-range">
+        <button data-r="today" onclick="actSetRange('today',this)">Vandaag</button>
+        <button data-r="7d" class="active" onclick="actSetRange('7d',this)">7 dagen</button>
+        <button data-r="30d" onclick="actSetRange('30d',this)">30 dagen</button>
+      </div>
+      <button onclick="activiteitOpen(true)" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border,#ddd);background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px">↻ Verversen</button>
+    </div>
+
+    <h3 style="margin-top:0">Nu online</h3>
+    <div class="act-online" id="act-online"><span class="act-empty">laden…</span></div>
+
+    <div class="act-cards" id="act-stats"></div>
+
+    <h3>Gebruik per functie</h3>
+    <div id="act-functies"><div class="act-empty">laden…</div></div>
+
+    <h3>Per gebruiker</h3>
+    <div id="act-users"><div class="act-empty">laden…</div></div>
+
+    <h3>Usability-hotspots — mislukte / afgebroken acties</h3>
+    <div id="act-hotspots"><div class="act-empty">laden…</div></div>
+  </div>
     </div>
 
     <!-- A1: Logboek -->
-    <div id="adm-sub-logboek" class="adm-subcontent active">
+    <div id="adm-sub-logboek" class="adm-subcontent">
       <div class="adm-search">
         <select id="adm-log-pers" class="adm-sel" style="width:auto" onchange="admRenderLog()">
           <option value="">Alle personen</option>
@@ -2306,56 +2372,6 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     </div>
   </div>
   <div id="inbox-toast"><span id="inbox-toast-msg"></span><button onclick="inboxUndo()">Ongedaan maken</button></div>
-
-  <!-- ═══ TAB: ACTIVITEIT (usage-/presence-tracking, alleen Bart) ═══ -->
-  <div id="tab-activiteit" class="tab-content">
-    <style>
-      #tab-activiteit .act-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
-      #tab-activiteit .act-range{display:flex;gap:2px}
-      #tab-activiteit .act-range button{padding:6px 13px;border:1px solid var(--border,#ddd);background:#fff;cursor:pointer;font-size:12.5px;color:var(--text-dim,#666)}
-      #tab-activiteit .act-range button:first-child{border-radius:6px 0 0 6px}
-      #tab-activiteit .act-range button:last-child{border-radius:0 6px 6px 0}
-      #tab-activiteit .act-range button.active{background:var(--green,#2A4A38);color:#fff;border-color:var(--green,#2A4A38)}
-      #tab-activiteit .act-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
-      #tab-activiteit .act-stat{background:var(--surface,#fff);border:1px solid var(--border,#eee);border-radius:10px;padding:13px 15px}
-      #tab-activiteit .act-stat .v{font-size:24px;font-weight:700;color:var(--green,#2A4A38);font-variant-numeric:tabular-nums}
-      #tab-activiteit .act-stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint,#999);margin-top:3px}
-      #tab-activiteit .act-online{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
-      #tab-activiteit .act-chip{display:flex;align-items:center;gap:7px;background:var(--surface-sunken,#f6f6f4);border:1px solid var(--border,#eee);border-radius:20px;padding:5px 13px 5px 10px;font-size:13px}
-      #tab-activiteit .act-dot{width:9px;height:9px;border-radius:50%;background:#2ecc71;box-shadow:0 0 0 3px rgba(46,204,113,.18)}
-      #tab-activiteit .act-chip .sub{font-size:11px;color:var(--text-faint,#999)}
-      #tab-activiteit h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim,#666);margin:20px 0 8px}
-      #tab-activiteit table.act-tbl{width:100%;border-collapse:collapse;font-size:13px}
-      #tab-activiteit table.act-tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-faint,#999);padding:6px 8px;border-bottom:1px solid var(--border,#e6e6e6)}
-      #tab-activiteit table.act-tbl td{padding:6px 8px;border-bottom:1px solid var(--border,#f2f2f2)}
-      #tab-activiteit table.act-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
-      #tab-activiteit .act-bad{color:#c0392b;font-weight:600}
-      #tab-activiteit .act-empty{color:var(--text-faint,#999);font-size:13px;padding:10px 0}
-    </style>
-    <div class="act-head">
-      <strong style="font-size:16px;color:var(--green,#2A4A38)">📊 Activiteit &amp; gebruik</strong>
-      <div class="act-range" id="act-range">
-        <button data-r="today" onclick="actSetRange('today',this)">Vandaag</button>
-        <button data-r="7d" class="active" onclick="actSetRange('7d',this)">7 dagen</button>
-        <button data-r="30d" onclick="actSetRange('30d',this)">30 dagen</button>
-      </div>
-      <button onclick="activiteitOpen(true)" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border,#ddd);background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px">↻ Verversen</button>
-    </div>
-
-    <h3 style="margin-top:0">Nu online</h3>
-    <div class="act-online" id="act-online"><span class="act-empty">laden…</span></div>
-
-    <div class="act-cards" id="act-stats"></div>
-
-    <h3>Gebruik per functie</h3>
-    <div id="act-functies"><div class="act-empty">laden…</div></div>
-
-    <h3>Per gebruiker</h3>
-    <div id="act-users"><div class="act-empty">laden…</div></div>
-
-    <h3>Usability-hotspots — mislukte / afgebroken acties</h3>
-    <div id="act-hotspots"><div class="act-empty">laden…</div></div>
-  </div>
 
   <!-- ═══ TAB: MIGRATIE ═══ -->
   <!-- Buiten gebruik: het oude migration-tool.js (gitignored _archief) + config.json-token
@@ -3033,7 +3049,7 @@ async function projSchemaCheck(forceer){
 let _projSchemaGemeld=false;
 function projSchemaBlok(){
   try{ if(typeof _SP!=='undefined'&&_SP&&_SP.blockedKeys) _PROJ_SCHEMA_SLEUTELS.forEach(k=>_SP.blockedKeys.add(k)); }catch(e){}
-  const melding='Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
+  const melding=MTPlanning.SCHEMA_TEKST;   // dezelfde tekst als op de telefoon (mt-planning.js)
   try{ if(typeof _SP!=='undefined'&&_SP) _SP.lastSync={ts:Date.now(),ok:false,key:'mt_projecten',error:melding}; }catch(e){}
   try{ if(typeof window!=='undefined'&&typeof window.updateSyncStatus==='function') window.updateSyncStatus(); }catch(e){}
   if(!_projSchemaGemeld){ _projSchemaGemeld=true; try{ if(typeof planToast==='function') planToast('⚠ '+melding); }catch(e){} }
@@ -3325,15 +3341,35 @@ window.onload=async()=>{
 // Dwell-tracking: hoe lang bleef een tab open vóór de gebruiker wegklikte.
 let _tabHuidig='dashboard', _tabSinds=Date.now();
 let _tabWissels=0;   // elke tabwissel (klik, deeplink, router) — Geld als startpagina springt alleen als dit nog 0 is
+// Instellingen en Activiteit horen voor beheer/eigenaar onder Admin (subtabs); voor wie Admin niet heeft blijft Instellingen een eigen tab.
+// Wie Admin ziet: de teamadmins (MT_TEAM), beheer/eigenaar (rol) en Bart. Activiteit blijft voor Bart en beheer (zoals voorheen).
+function admSamen(){
+  try{ return !!((typeof mtIsAdmin==='function'&&mtIsAdmin())||(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())||(typeof mtMijEmail==='function'&&mtMijEmail()==='bart@mortiseandtenon.nl')); }catch(e){ return false; }
+}
+function admMagActiviteit(){
+  try{ return !!((typeof mtMijEmail==='function'&&mtMijEmail()==='bart@mortiseandtenon.nl')||(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer())); }catch(e){ return false; }
+}
+// Waar hoort een oude tabnaam nu? {tab:'admin',sub} (samengevoegd), {tab:naam} (ongewijzigd) of null (niet voor jou: niets openen).
+function admRoute(naam){
+  if(naam==='instellingen') return admSamen()?{tab:'admin',sub:'instellingen'}:{tab:naam};
+  if(naam==='activiteit') return admMagActiviteit()?{tab:'admin',sub:'activiteit'}:null;
+  return {tab:naam};
+}
 function showTab(name,btn){
+  const logNaam=name;   // gebruiksstatistiek blijft de oude tabnaam zien
+  let sub=null;
+  if(name==='instellingen'||name==='activiteit'){
+    const t=admRoute(name); if(!t) return;
+    if(t.tab==='admin'){ name='admin'; sub=t.sub; btn=document.getElementById('tab-btn-admin'); }
+  }
   _tabWissels++;
   // Vorige tab afsluiten met dwell-tijd, nieuwe tab loggen + presence verversen.
   try{
-    if(window.track && name!==_tabHuidig){
+    if(window.track && logNaam!==_tabHuidig){
       track('tab','tab_dwell',{detail:_tabHuidig,ms:Date.now()-_tabSinds});
-      track('tab','tab_open',{detail:name});
-      _tabHuidig=name; _tabSinds=Date.now();
-      if(window.trackHeartbeat) trackHeartbeat(name);
+      track('tab','tab_open',{detail:logNaam});
+      _tabHuidig=logNaam; _tabSinds=Date.now();
+      if(window.trackHeartbeat) trackHeartbeat(logNaam);
     }
   }catch(e){}
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
@@ -3355,12 +3391,12 @@ function showTab(name,btn){
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
   if(name==='agenda'){ renderAgenda(); if(typeof aanwezigLaad==='function') aanwezigLaad(); }
+  if(name==='agenda'||name==='planning'){ try{ if(window.MTStartvenster) MTStartvenster.toon(); }catch(e){} }   // startvenster "X taken wachten op je": alleen zonder lopende timer, eenmaal per sessie
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
   if(name==='attentie') renderAttentie();
   if(name==='materialen') renderMaterialen();
-  if(name==='admin') adminOpen();
-  if(name==='activiteit') activiteitOpen();
+  if(name==='admin'){ adminOpen(); admSub(sub); }
   if(name==='verbeterpunten') verbLaadTab();
   if(name==='geld') geldOpen();
   if(name==='rapporten') rapportOpen();
@@ -3371,7 +3407,7 @@ function showTab(name,btn){
     const code=(name==='projecten'&&huidigProject&&pd&&pd.dataset.code===huidigProject.code)?huidigProject.code:null;
     const sec=(code&&typeof projSectieHuidig==='function')?projSectieHuidig():'overzicht';
     if(name==='projecten'&&pd&&pd.dataset.klant&&typeof _klantRoute==='function'&&_klantHuidig) mtRoute.zet(_klantRoute(),false);
-    else mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined}:{tab:name},false);
+    else mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined}:{tab:name==='admin'?admRouteNaam():name},false);
   }
 }
 // Multi-monitor: open de (huidige) tab in een nieuw browservenster met dezelfde deeplink.
@@ -3398,13 +3434,15 @@ function tbApplyHashTab(){
 // Project openen = pushState, tab/sectie wisselen = replaceState, terug/vooruit (popstate) past de
 // route toe zonder nieuwe history-entry. Alleen project- en klantcodes in de URL, geen persoonsgegevens.
 const mtRoute={
-  klaar:false, _stil:false, _start:(typeof location!=='undefined'?location.hash:''),
+  GEARCHIVEERD:['historie'], klaar:false, _stil:false, _start:(typeof location!=='undefined'?location.hash:''),
   parse(hash){
     const heel=String(hash||'').replace(/^#/,'');
     const qi=heel.indexOf('?'), h=qi>=0?heel.slice(0,qi):heel, query=qi>=0?heel.slice(qi+1):'';
     const dec=x=>{ try{ return decodeURIComponent(x); }catch(e){ return x; } };
+    // Gearchiveerde tabs (Geschiedenis): geen knop meer; een oude link/bladwijzer telt als "geen route" → de standaard-starttab.
+    const weg=t=>mtRoute.GEARCHIVEERD.includes(t)?null:t;
     const m=h.match(/(?:^|&)tab=([a-z]+)/i);
-    if(m) return {tab:m[1].toLowerCase()};
+    if(m) return {tab:weg(m[1].toLowerCase())};
     const delen=h.split('/').filter(x=>x!=='').map(dec);
     if(!delen.length) return {tab:null};
     const eerste=delen[0].toLowerCase();
@@ -3425,7 +3463,7 @@ const mtRoute={
         if(f.sectie){ r.sectie=f.sectie; delete f.sectie; } if(Object.keys(f).length) r.filter=f; }
       return r;
     }
-    if(/^[a-z]+$/.test(eerste)&&delen.length===1) return {tab:eerste};
+    if(/^[a-z]+$/.test(eerste)&&delen.length===1) return {tab:weg(eerste)};
     return {tab:null};
   },
   format(r){
@@ -3467,6 +3505,15 @@ const mtRoute={
         const lm=typeof _routeMag==='function'?_routeMag({dataset:{recht:'projecten:wijzigen'}}):'ja';
         if(lm==='wacht'){ this._wacht=r; return; }
         if(lm==='nee'){ this._leadRouteUit(); try{ mtDialog.alert({title:'Lead maken',message:'Je hebt geen recht om projecten of leads te maken.'}); }catch(e){} return; }
+      }
+      // #tab=instellingen / #tab=activiteit: voor wie Admin heeft een subtab van Admin (activiteit zonder recht: niets openen; de rol-retry na /me probeert opnieuw)
+      if(r.tab==='instellingen'||r.tab==='activiteit'){
+        const t=admRoute(r.tab); if(!t) return;
+        if(t.tab==='admin'){
+          const at=document.getElementById('tab-admin');
+          if(!(at&&at.classList.contains('active')&&admSubHuidig()===t.sub)) showTab(r.tab);
+          return;
+        }
       }
       if(!document.getElementById('tab-'+r.tab)) return;
       if(r.tab==='dashboard'&&!_oudDashboardAan()) return;   // oud dashboard is gearchiveerd: een oude link/bladwijzer laat de startpagina haar werk doen
@@ -3674,7 +3721,7 @@ function periodePresetGewijzigd(){
 // ═══ AGENDA (Toggl week-kalender, leest gedeelde mt_uren_entries) ═══
 const AG_STD_TEAM=[{naam:'bart',label:'Bart',kleur:'#2A4A38'},{naam:'mathijs',label:'Mathijs',kleur:'#B8962E'},{naam:'arjan',label:'Arjan',kleur:'#5a3a8b'},{naam:'maarten',label:'Maarten',kleur:'#1a3a8b'}];
 const AG_START=6, AG_EIND=22, AG_UURPX=46;
-let _agenda={weekStart:null,kleurOp:'project',fProj:new Set(),fPers:new Set(),view:'grid'};
+let _agenda={weekStart:null,kleurOp:'project',fProj:new Set(),fPers:new Set(),view:'capaciteit'};   // standaardweergave van de Agenda: de capaciteitsplanning voor het team (Mijn werk staat ernaast)
 const AG_NONE='__none__';            // sentinel: lege set = "alle"; AG_NONE = "niets"
 let _agNamesTried=false, _agOutsideBound=false;
 
@@ -3705,10 +3752,37 @@ function renderAgenda(){
   const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
   if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
   if(capBalk) capBalk.style.display=_agenda.view==='plan'?'block':'none';
+  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', eigen=mw||cp;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
+    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('btn-secondary',!aan); });
+    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
+    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
+    if(mw){ agRenderFilters(); try{ MTMijnWerk.teken(); }catch(e){ console.warn('Mijn werk:',e); } return; }
+    if(cp){ agRenderFilters(); try{ MTCapaciteit.teken(); }catch(e){ console.warn('Capaciteit:',e); } return; } }
   agRenderFilters();
   if(_agenda.view==='lijst') agRenderLijst(); else if(_agenda.view==='plan') agPlanRender(); else agRenderGrid();
 }
 function agendaZetView(v){_agenda.view=v;renderAgenda();}
+// Mijn werk (stap 2c): de aansluiting tussen mt-mijnwerk.js en de cockpit (taken, afhankelijkheden, planblokken, team, projecten). De rekenregels staan in mt-planning.js.
+try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
+  voorstellen:true, magBeslissen:()=>rolMag(ROL_TAAK_ALLES), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
+  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(),   // de vrije dagen en het verlof uit Beheer (mt_vrijedagen, mt_verlof) tellen mee in de weekbalk
+  project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Mijn werk init:',e); }
+// Startvenster (stap 3): "X taken wachten op je" bij het openen van Agenda/Planning, alleen zonder lopende Toggl-timer en niet voor de rol "lezen" (zie mt-startvenster.js).
+try{ MTStartvenster.init({ doc:document, storage:(function(){ try{ return sessionStorage; }catch(e){ return null; } })(), dialog:()=>window.mtDialog, toast:m=>{ if(typeof planToast==='function') planToast(m); },
+  demo:()=>false, rolKlaar:()=>!!(window.MTRol&&MTRol.me), lezen:()=>!!(window.MTRol&&MTRol.me&&String(MTRol.me.rol||'').toLowerCase()==='lezen'), magTimer:()=>!!(window.MTRol&&MTRol.me)&&MTRol.mag(MTPlanning.ROL.UREN_BOEKEN),
+  klaar:()=>MTMijnWerk.takenKlaar(), mijnWerk:()=>MTMijnWerk.mijnOpen(), timerLoopt:()=>tgTimerLoopt(),
+  project:code=>{ const p=projVind(code); return p?{label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
+  start:item=>{ const p=projVind(item.code); return tgTimerStartDirect({projectId:p&&p.tg_project_id,omschrijving:item.taak.naam}); },
+  nogActief:()=>{ const t=document.getElementById('tab-agenda'); return !!(t&&t.classList.contains('active')); } }); }catch(e){ console.warn('Startvenster init:',e); }
+// Capaciteit (stap 2, standaardweergave van de Agenda): dezelfde bronnen, plus de werkuren per persoon uit Beheer (admCfg().werkuren).
+try{ MTCapaciteit.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu:()=>Date.now(),
+  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null,
+  project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
+  openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit init:',e); }
 // Haalt project-/persoon-namen één keer op als de cache leeg is (bv. eerste
 // render vóór een sync). Daarna her-rendert het zodat ID-stubs namen worden.
 function agEnsureNames(){
@@ -5429,9 +5503,9 @@ let _blOud=null, _blTimeout=false, _blVerweesd=false, _blVormFout='', _blBackupF
 function _blSleutel(){ return (!_blVerweesd&&!_blBackupFout&&localStorage.getItem('mt_bestellijst_v2')!==null)?'mt_bestellijst_v2':'mt_bestellijst'; }
 function _blGeblokkeerd(){ try{ return !!(_SP&&_SP.blockedKeys&&_SP.blockedKeys.has('mt_bestellijst_v2')); }catch(e){ return false; } }
 function _blGereed(){ try{ return (typeof _SP==='undefined')?true:!!_SP.ready; }catch(e){ return false; } }
-function _blStaat(){ if(_blBackupFout) return 'backup-mislukt'; if(_blVerweesd) return 'verweesd'; if(_blGeblokkeerd()) return 'geblokkeerd'; if(!_blGereed()) return _blTimeout?'time-out':'laden'; return _blLees2()!==null?'klaar':'overzetten'; }
+function _blStaat(){ return MTPlanning.lijstStaat({backupFout:_blBackupFout,verweesd:_blVerweesd,geblokkeerd:_blGeblokkeerd(),gereed:_blGereed(),timeout:_blTimeout,heeftV2:_blLees2()!==null}); }   // gedeeld met de telefoon (mt-planning.js)
 function _blKlaar(){ return _blStaat()==='klaar'; }
-function _blStatusTekst(){ const s=_blStaat(); return s==='backup-mislukt'?'De nieuwe bestellijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale bestellijst; er is niets gewijzigd of overgezet.':s==='verweesd'?'De nieuwe bestellijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de bestellijst opnieuw overzetten.':s==='geblokkeerd'?(_blVormFout?'De nieuwe bestellijst op SharePoint heeft een verkeerde vorm ('+_blVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De bestellijst is geblokkeerd: de laadstap voor de nieuwe bestellijst is mislukt. Er is niets gewijzigd.'):s==='time-out'?'De bestellijst laden duurt te lang of is mislukt.':s==='overzetten'?'De bestellijst wordt overgezet door beheer. Tot die tijd is hij alleen-lezen.':s==='laden'?'De bestellijst wordt geladen…':''; }
+function _blStatusTekst(){ return MTPlanning.lijstStatusTekst('bestel',_blStaat(),_blVormFout); }   // de teksten staan in mt-planning.js (gedeeld met de telefoon)
 try{ setTimeout(()=>{ try{ if(!_blGereed()){ _blTimeout=true; _blNaWijziging(); } }catch(e){} },20000); }catch(e){}
 // Melding in plaats van de lijst, met een knop "opnieuw proberen" zodra de laadstap mislukt is (de melding blijft dus niet eeuwig hangen).
 function _blStatusEl(){
@@ -5466,14 +5540,13 @@ async function blOntgrendelPoging(){
 try{ setInterval(()=>{ blOntgrendelPoging(); },60000); }catch(e){}
 // Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt: naar een back-upsleutel, status geblokkeerd, en nooit door autosync te laten aanmaken.
 function blVerweesdOpruimen(){
-  const raw=localStorage.getItem('mt_bestellijst_v2'); if(raw===null) return false;
   // Fail-closed: de back-up telt pas als hij is teruggelezen. Mislukt het, dan blijft de lokale v2 staan (niet verwijderd), _blVerweesd blijft onwaar, de sleutel
   // blijft geblokkeerd (geen autosync) en de Beheer-overstap in deze browser is geblokkeerd tot er ruimte is of de gebruiker exporteert.
-  const sleutel='mt_bestellijst_v2_verweesd_'+Date.now(); let bewaard=false;
-  try{ localStorage.setItem(sleutel,raw); bewaard=localStorage.getItem(sleutel)===raw; }catch(e){ bewaard=false; }
+  // De back-upregels staan in mt-planning.js (MTPlanning.verweesdOpruimen), gedeeld met de telefoon.
+  const vw=MTPlanning.verweesdOpruimen(localStorage,'mt_bestellijst_v2'); if(vw.actie==='geen') return false;
   try{ _SP.blockedKeys.add('mt_bestellijst_v2'); }catch(e){}
-  if(!bewaard){ try{ localStorage.removeItem(sleutel); }catch(e){} _blBackupFout=true; try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale bestellijst (tabblad Bestellijst).'); }catch(e){} return true; }
-  localStorage.removeItem('mt_bestellijst_v2'); _blVerweesd=true; _blBackupSleutel=sleutel;
+  if(vw.actie==='backup-mislukt'){ _blBackupFout=true; try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale bestellijst (tabblad Bestellijst).'); }catch(e){} return true; }
+  _blVerweesd=true; _blBackupSleutel=vw.backupSleutel;
   try{ planToast('⚠ De nieuwe bestellijst ontbreekt op SharePoint; de lokale kopie is als back-up bewaard. Beheer moet de bestellijst opnieuw overzetten.'); }catch(e){}
   return true;
 }
@@ -5651,7 +5724,46 @@ function toggleBestellijst(mat,cat,lev,prijs,btn){
   else{ _blNieuw(MTPlanning.bestelRegelNieuw({omschrijving:mat,categorie:cat,leverancier:lev,prijsLaatst:prijs,datum:new Date().toISOString().split('T')[0],bron:'hand'}),'nieuw (voorraad)'); btn.textContent='✓ Op lijst'; btn.classList.add('besteld'); }
   renderVoorraadKPI(JSON.parse(localStorage.getItem('mt_voorraad')||'[]'));
 }
-function renderBestellijst(sortK,sortA){ _renderBestellijst0(sortK,sortA); _p2RolPas(document.getElementById('bestellijst-inhoud')); _p2RolPas(document.getElementById('bestellijst-kop')); }
+function renderBestellijst(sortK,sortA){ _renderBestellijst0(sortK,sortA); _voorstelBestelTeken(); _p2RolPas(document.getElementById('bestellijst-inhoud')); _p2RolPas(document.getElementById('bestellijst-kop')); }
+// Voorstellen van de werkplaats (stap 2c): de markering, Overnemen en Afwijzen voor de bestellijst (de taken-kant staat bij de projecttaken).
+function voorstelBestelOvernemen(id){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelvoorstel overnemen')) return false;
+  const b=_blWijzig(id,'voorstel overgenomen',x=>{ delete x.voorstel; });
+  if(b) planToast('Bestelvoorstel overgenomen: "'+(b.materiaal||'regel')+'" is nu een gewone regel.');
+  return !!b;
+}
+async function voorstelBestelAfwijzen(id){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'Een bestelvoorstel afwijzen')) return false;
+  if(!_blKlaar()){ planToast('⚠ Bestellijst niet gewijzigd: '+_blStatusTekst()); return false; }
+  const b0=_blAlle().find(x=>x&&String(x.id)===String(id)); if(!b0||!b0.voorstel||b0._vervallen) return false;
+  const reden=await mtDialog.prompt({title:'Bestelvoorstel afwijzen',message:'"'+(b0.materiaal||'regel')+'" gaat van de bestellijst. De regel en de reden blijven bewaard.',placeholder:'Reden (niet verplicht)',okLabel:'Afwijzen'});
+  if(reden===null||reden===undefined) return false;
+  const b=_blWijzig(id,'voorstel afgewezen',x=>{ if(!x.voorstel||x._vervallen) return; x._vervallen={tijd:new Date().toISOString(),door:_blWie(),reden:'voorstel afgewezen'+(String(reden||'').trim()?': '+String(reden).trim().slice(0,300):'')}; });   // _blWijzig vraagt het recht opnieuw, schrijft de journaalregel en laat een tombstone achter
+  if(b) planToast('Bestelvoorstel afgewezen: "'+(b.materiaal||'regel')+'".');
+  return !!b;
+}
+function _voorstelKnoppen(mag,overnemen,afwijzen){
+  return mag?[_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',title:'De markering eraf: het is dan een gewone regel',klik:overnemen},'Overnemen'),' ',_p2El('button',{type:'button',class:'btn btn-xs btn-danger',title:'Van de lijst halen (blijft in het journaal)',klik:afwijzen},'Afwijzen')]:_p2El('span',{style:'color:var(--text-faint)'},'(kantoor beslist)');
+}
+function _voorstelBestelTeken(){
+  try{
+    const host=document.getElementById('bestellijst-inhoud'); if(!host||_blStaat()!=='klaar') return;
+    const oud=document.getElementById('bl-voorstellen'); if(oud) oud.remove();
+    const lijst=_blActief().filter(b=>b&&b.voorstel);
+    host.querySelectorAll('tr').forEach(tr=>{   // platte weergave: de regel krijgt de markering (de regel wordt herkend aan zijn vinkje)
+      const c=tr.querySelector('input[type=checkbox][onchange]'), m=c&&/markeerBesteld\(\s*"([^"]+)"/.exec(c.getAttribute('onchange')||''), b=m&&lijst.find(x=>String(x.id)===m[1]), td=tr.children[1];
+      if(b&&td&&!td.querySelector('[data-voorstel]')) td.appendChild(_p2El('div',{style:'font-size:10px;color:var(--gold-text)','data-voorstel':'1'},'🏷 '+MTPlanning.voorstelTekst(b.voorstel)));
+    });
+    if(!lijst.length) return;
+    const mag=rolMag(ROL_BESTEL_ALLES), klaar=()=>{ try{ renderBestellijst(); }catch(e){} };
+    host.insertBefore(_p2El('div',{id:'bl-voorstellen',class:'card',style:'padding:.75rem;margin-bottom:1rem;border:1px solid var(--gold-mid)'},
+      _p2El('div',{class:'card-title',style:'margin-bottom:.5rem'},'Voorstellen van de werkplaats ('+lijst.length+')'),
+      lijst.map(b=>_p2El('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--border,#ddd)'},
+        _p2El('div',{style:'flex:1;min-width:200px'},_p2El('strong',{style:'font-size:13px'},b.materiaal||b.omschrijving||'regel'),' — '+(b.aantal||1)+' '+MTPlanning.eenheidTekst(b.eenheid,b.aantal),
+          _p2El('div',{style:'font-size:11px;color:var(--text-dim)'},[_blRegelNoot(b),MTPlanning.voorstelTekst(b.voorstel),b.opmerking||''].filter(Boolean).join(' · '))),
+        _voorstelKnoppen(mag,()=>{ voorstelBestelOvernemen(b.id); klaar(); },async()=>{ await voorstelBestelAfwijzen(b.id); klaar(); })))),host.firstChild);
+  }catch(e){ console.warn('voorstel-markering (bestellijst):',e); }
+}
 function _renderBestellijst0(sortK='materiaal',sortA=true){
   { const st=_blStaat();
     if(st!=='klaar'&&st!=='overzetten'){ const k=document.getElementById('bestellijst-kop'), i=document.getElementById('bestellijst-inhoud'); if(k) k.replaceChildren(); if(i) i.replaceChildren(_blStatusEl()); return; } }
@@ -5914,7 +6026,27 @@ function projNaamVol(p){
   if(c&&n.toUpperCase().startsWith(c.toUpperCase())) n=n.slice(c.length).replace(/^[\s\-–—·:|]+/,'').trim();
   return _echteNaam(n,c)||[projKlantNaam(p),projLocLabel(p),_echteNaam(p.product_naam,p.product)].filter(Boolean).join(' — ')||'Project zonder naam';
 }
-function _projVoorCode(c){ return (c&&typeof c==='object')?c:((typeof PROJECT_CODES!=='undefined'&&c)?projVind(c):null); }
+// Korte projectnaam (zelfde als de Toggl-naam zonder nummer): eigen naam (zonder code-prefix) || productnaam || volledige naam.
+// Alleen een naam die EXACT is wat het aanmaakvenster zelf maakt ("<klant> <locatie> — <product>", zie maakProjectAan; ook met - of – als streepje, met of
+// zonder locatie, en de volledige vorm "<klant> — <locatie> — <product>" van projNaamVol) geldt als automatisch: dan wint de productnaam. Elke andere naam,
+// ook "De Vries showroomrenovatie" bij klant "De Vries", is een eigen naam en blijft staan. Nooit de klantnaam erin als die alleen automatisch is.
+function _projNaamIsAuto(p,n,prod){
+  if(!n||!prod) return false;
+  const norm=s=>String(s==null?'':s).replace(/\s+/g,' ').trim().toLowerCase();
+  const uniek=a=>a.map(x=>String(x==null?'':x).trim()).filter((x,i,l)=>x&&l.indexOf(x)===i);
+  const ks=uniek([p.klant_naam,projKlantNaam(p)]), ls=['',...uniek([p.loc_naam,projLocLabel(p)])], ps=uniek([prod,p.product_naam]), doel=norm(n);
+  for(const k of ks) for(const l of ls) for(const pr of ps) for(const s of ['—','–','-'])
+    if([`${k} ${l}`.trim()+` ${s} ${pr}`, `${k} ${s} ${l} ${s} ${pr}`, `${k} ${s} ${pr}`].some(x=>norm(x)===doel)) return true;
+  return false;
+}
+function projNaamKort(p){
+  if(!p) return '';
+  const c=String(p.code||'').trim(), prod=_echteNaam(p.product_naam,p.product);
+  let n=String(p.naam||'').trim();
+  if(c&&n.toUpperCase().startsWith(c.toUpperCase())) n=n.slice(c.length).replace(/^[\s\-–—·:|]+/,'').trim();
+  n=_echteNaam(n,c);
+  return (_projNaamIsAuto(p,n,prod)?'':n)||prod||projNaamVol(p);
+}function _projVoorCode(c){ return (c&&typeof c==='object')?c:((typeof PROJECT_CODES!=='undefined'&&c)?projVind(c):null); }
 // Voor een code uit een koppeling/dossier/planning: het zichtbare nummer, anders de naam.
 function projKort(c){ const p=_projVoorCode(c); return p?(projLabelCode(p)||projNaamVol(p)):(c?'onbekend project':''); }
 function projTag(c,cls){ const l=projLabelCode(_projVoorCode(c)); return l?`<span class="${esc(cls||'code')}">${esc(l)}</span>`:''; }
@@ -6141,7 +6273,7 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
-  if(_projSectie==='planning'){ _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='planning'){ _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -7134,9 +7266,9 @@ let _ptOud=null, _ptTimeout=false, _ptVerweesd=false, _ptVormFout='', _ptBackupF
 function projTakenRuw(){ return ((_ptVerweesd||_ptBackupFout)?null:_ptLees('mt_project_taken_v2'))||_ptOud||_ptLees('mt_project_taken')||{}; }
 function projTakenGeblokkeerd(){ try{ return !!(_SP&&_SP.blockedKeys&&_SP.blockedKeys.has('mt_project_taken_v2')); }catch(e){ return false; } }
 function projTakenGereed(){ try{ return (typeof _SP==='undefined')?true:!!_SP.ready; }catch(e){ return false; } }
-function projTakenStaat(){ if(_ptBackupFout) return 'backup-mislukt'; if(_ptVerweesd) return 'verweesd'; if(projTakenGeblokkeerd()) return 'geblokkeerd'; if(!projTakenGereed()) return _ptTimeout?'time-out':'laden'; return _ptLees('mt_project_taken_v2')?'klaar':'overzetten'; }
+function projTakenStaat(){ return MTPlanning.lijstStaat({backupFout:_ptBackupFout,verweesd:_ptVerweesd,geblokkeerd:projTakenGeblokkeerd(),gereed:projTakenGereed(),timeout:_ptTimeout,heeftV2:!!_ptLees('mt_project_taken_v2')}); }   // de volgorde van de controles staat in mt-planning.js (lijstStaat), gedeeld met de telefoon
 function projTakenKlaar(){ return projTakenStaat()==='klaar'; }
-function projTakenStatusTekst(){ const s=projTakenStaat(); return s==='backup-mislukt'?'De nieuwe takenlijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale takenlijst; er is niets gewijzigd of overgezet.':s==='verweesd'?'De nieuwe takenlijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de taken opnieuw overzetten.':s==='geblokkeerd'?(_ptVormFout?'De nieuwe takenlijst op SharePoint heeft een verkeerde vorm ('+_ptVormFout+'). Er is niets gewijzigd; laat beheer dit controleren.':'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.'):s==='time-out'?'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.':s==='overzetten'?'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.':s==='laden'?'Taken laden…':''; }
+function projTakenStatusTekst(){ return MTPlanning.lijstStatusTekst('taken',projTakenStaat(),_ptVormFout); }   // de teksten staan in mt-planning.js (gedeeld met de telefoon)
 // Vóór elke actie met een extern effect (Toggl) of een planningsmutatie: alleen als de takenlijst klaar is; anders een melding en niets doen.
 // ═══ Rollenmatrix (planning P2, ronde 8): één centrale controle ═══
 // Dezelfde matrix als de worker (RECHTEN): taken "status-nieuw|alles" = taakstatus en een nieuwe taak; taken "alles" = velden, uren, afhankelijkheden,
@@ -7209,14 +7341,13 @@ async function projTakenOntgrendelPoging(){
 try{ setInterval(()=>{ projTakenOntgrendelPoging(); },60000); }catch(e){}
 // Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt: naar een back-upsleutel, status geblokkeerd, en nooit door autosync te laten aanmaken.
 function projTakenVerweesdOpruimen(){
-  const raw=localStorage.getItem('mt_project_taken_v2'); if(raw===null) return false;
   // Fail-closed: de back-up telt pas als hij is teruggelezen. Mislukt het, dan blijft de lokale v2 staan (niet verwijderd), _ptVerweesd blijft onwaar,
   // de sleutel blijft geblokkeerd (geen autosync) en de Beheer-overstap in deze browser is geblokkeerd tot er ruimte is of de gebruiker exporteert.
-  const sleutel='mt_project_taken_v2_verweesd_'+Date.now(); let bewaard=false;
-  try{ localStorage.setItem(sleutel,raw); bewaard=localStorage.getItem(sleutel)===raw; }catch(e){ bewaard=false; }
+  // De back-upregels staan in mt-planning.js (MTPlanning.verweesdOpruimen), gedeeld met de telefoon.
+  const vw=MTPlanning.verweesdOpruimen(localStorage,'mt_project_taken_v2'); if(vw.actie==='geen') return false;
   try{ _SP.blockedKeys.add('mt_project_taken_v2'); }catch(e){}
-  if(!bewaard){ try{ localStorage.removeItem(sleutel); }catch(e){} _ptBackupFout=true; try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale takenlijst (bij Taken in een project).'); }catch(e){} return true; }
-  localStorage.removeItem('mt_project_taken_v2'); _ptVerweesd=true; _ptBackupSleutel=sleutel;
+  if(vw.actie==='backup-mislukt'){ _ptBackupFout=true; try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint en de lokale kopie kon niet als back-up worden bewaard: maak eerst ruimte vrij of exporteer de lokale takenlijst (bij Taken in een project).'); }catch(e){} return true; }
+  _ptVerweesd=true; _ptBackupSleutel=vw.backupSleutel;
   try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint; de lokale kopie is als back-up bewaard. Beheer moet de taken opnieuw overzetten.'); }catch(e){}
   return true;
 }
@@ -7388,7 +7519,7 @@ async function takenOudBekijk(){
 }
 function _ptId(){return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 const _PT_PRIO={low:{l:'P3',c:'#6b7280'},medium:{l:'P2',c:'#B8962E'},high:{l:'P1',c:'#c0392b'}};
-const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},klaar:{l:'Klaar',c:'#2A4A38'}};
+const _PT_STAT={todo:{l:'Todo',c:'#6b7280'},bezig:{l:'Bezig',c:'#2563eb'},wacht:{l:'Wacht',c:'#7A6010'},klaar:{l:'Klaar',c:'#2A4A38'}};   // wacht: gezet vanaf de telefoon (met een reden in wacht_reden)
 const _PT_STAT_TG={todo:300785,bezig:300788,klaar:300786};
 // Status-id dynamisch uit Toggl 2.0 (mt-toggl.js); vaste id's alleen als terugval.
 async function _ptStatusId(st){ return (typeof t2StatusId==='function')?await t2StatusId(st):(_PT_STAT_TG[st]||_PT_STAT_TG.todo); }
@@ -8453,7 +8584,7 @@ async function _tgUitvoerKoppel(code,id,actie,pid,t,mag){
   return tid;
 }
 // De dag waarop een taak klaar is gemeld (lokale datum); weg zodra de taak weer open staat.
-function _ptKlaarOp(t,status){ if(status==='klaar'){ if(!MTPlanning.isYmd(t.klaar_op)) t.klaar_op=MTPlanning.vandaagYmd(); } else delete t.klaar_op; }
+function _ptKlaarOp(t,status){ MTPlanning.klaarOp(t,status); }   // gedeeld met de telefoon (mt-planning.js)
 // Koppeltabel bijhouden na een geslaagde of mislukte Toggl-actie.
 function _ptSyncMerk(t,status,fout){
   const oud=t.tg_sync||{};
@@ -8509,6 +8640,40 @@ async function _projTaakTogglSync(code,id){
   renderProjectDetail(huidigProject);
 }
 
+// ═══ Voorstellen van de werkplaats (planning stap 2c) ═══
+// Een taak of bestelregel die de werkplaats vanaf de telefoon meldt, heeft de markering `voorstel` ({soort, door, doorNaam, rol, ts}). Kantoor ziet haar in Mijn werk, bij de projecttaken en op de bestellijst
+// en beslist: Overnemen (de markering eraf, recht taken:alles / bestellijst:alles) of Afwijzen (van de lijst als tombstone, met een journaalregel en de reden). Het recht en de lijststand worden na de dialoog opnieuw gevraagd.
+async function voorstelTaakOvernemen(code,id){
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een voorstel overnemen')) return false;
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||!t.voorstel) return false;
+  _ptJournaal('voorstel overgenomen',code,t);
+  delete t.voorstel;
+  if(projTakenZet(code,arr)!==true) return false;
+  planToast('Voorstel overgenomen: "'+t.naam+'" is nu een gewone taak.'); return true;
+}
+async function voorstelTaakAfwijzen(code,id){
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een voorstel afwijzen')) return false;
+  const t0=projTaken(code).find(x=>x.id===id); if(!t0||!t0.voorstel) return false;
+  const reden=await mtDialog.prompt({title:'Voorstel afwijzen',message:'"'+t0.naam+'" gaat van de takenlijst. Het blijft bewaard in het journaal.',placeholder:'Reden (niet verplicht)',okLabel:'Afwijzen'});
+  if(reden===null||reden===undefined) return false;
+  if(_ptBlok(code,ROL_TAAK_ALLES,'Een voorstel afwijzen')) return false;   // na de dialoog opnieuw
+  const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t||!t.voorstel) return false;   // intussen overgenomen of weg
+  _ptJournaal('voorstel afgewezen',code,t,{reden:String(reden||'').trim().slice(0,300)});
+  if(projTakenZet(code,arr.filter(x=>x.id!==id))!==true) return false;
+  planToast('Voorstel afgewezen: "'+t.naam+'".'); return true;
+}
+// De markering in de bestaande schermen (DOM achteraf, zodat de sjablonen van de takenlijst en de bestellijst ongewijzigd blijven).
+function _voorstelTekenTaken(code){
+  try{
+    const sid=code.replace(/-/g,''), mag=rolMag(ROL_TAAK_ALLES);
+    projTaken(code).filter(t=>t.voorstel||(t.status==='wacht'&&t.wacht_reden)).forEach(t=>{
+      const tr=document.getElementById('pt-row-'+sid+'-'+t.id), td=tr&&tr.children[2]; if(!td||td.querySelector('[data-voorstel]')) return;
+      if(t.status==='wacht'&&t.wacht_reden) td.appendChild(_p2El('div',{style:'font-size:11px;color:var(--gold-text)','data-voorstel':'wacht'},'Wacht: '+t.wacht_reden));
+      if(t.voorstel) td.appendChild(_p2El('div',{style:'font-size:11px;color:var(--gold-text)','data-voorstel':'1'},'🏷 '+MTPlanning.voorstelTekst(t.voorstel)+' ',
+        _voorstelKnoppen(mag,async()=>{ await voorstelTaakOvernemen(code,t.id); _ptHertekenen(); },async()=>{ await voorstelTaakAfwijzen(code,t.id); _ptHertekenen(); })));
+    });
+  }catch(e){ console.warn('voorstel-markering (taken):',e); }
+}
 function nieuweProjectTaak(code){
   if(_ptBlok(code,ROL_TAAK_STATUS,'Een taak toevoegen')) return;
   const naam=prompt('Taaknaam:'); if(!naam) return;
@@ -8530,7 +8695,7 @@ async function projTaakStatus(code,id){
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const t0=projTaken(code).find(x=>x.id===id); if(!t0) return;
   const order=['todo','bezig','klaar'];
-  return projTaakStatusNaar(code,id,order[(order.indexOf(t0.status||'todo')+1)%3]);
+  return projTaakStatusNaar(code,id,order[(order.indexOf(t0.status==='wacht'?'todo':(t0.status||'todo'))+1)%3]);   // een wachtende taak (vanaf de telefoon) gaat bij de volgende klik naar Bezig
 }
 // Zet een taak op een status. Een taak die wacht (een voorganger is niet klaar) start pas na een bevestiging.
 async function projTaakStatusNaar(code,id,nieuwStatus){
@@ -8545,7 +8710,7 @@ async function _projTaakStatusNaar(code,id,nieuwStatus){
   if(w.wacht&&(t.status||'todo')==='todo'&&nieuwStatus!=='todo'&&!await mtDialog.confirm({title:'Deze taak wacht',message:'"'+t.naam+'" wacht op: '+MTPlanning.wachtOpTekst(w,_p2D)+'.\nToch '+(nieuwStatus==='klaar'?'op klaar zetten':'starten')+'?',okLabel:'Toch doorgaan'})) return;
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // de blokkade of het recht kan tijdens de bevestiging veranderd zijn
   _ptJournaal('status',code,t);
-  t.status=nieuwStatus; _ptKlaarOp(t,nieuwStatus);
+  t.status=nieuwStatus; _ptKlaarOp(t,nieuwStatus); delete t.wacht_reden;   // de reden hoort bij de status Wacht (die zet alleen de telefoon)
   // Ronde 8: eerst de nieuwe status en de Toggl-intentie duurzaam lokaal opslaan en controleren; pas daarna Toggl, en daarna afronden.
   // Lukt het opslaan niet, dan verandert er niets en gaat er niets naar Toggl. Niet meer "fire and forget": lukt Toggl niet, dan blijft de intentie zichtbaar (⏳).
   if(t.tg_task_id){
@@ -11165,10 +11330,11 @@ function projGegevensHtml(proj){
     ${Object.entries(proj._veldconflict||{}).filter(([veld])=>veld.startsWith('gegevens.')).map(([veld,c])=>`<div class="lead-conflict" role="alert">⚠ <b>${esc((PROJ_GEGEVENS.find(x=>'gegevens.'+x[0]===veld)||[0,veld])[1])}</b> is tegelijk gewijzigd${c.door?' door '+esc(c.door):''}: nu „${esc(_vGet(proj,veld)||'—')}”, de andere waarde was „${esc(c.waarde||'—')}”.
       ${mag?`<button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},false)">Houden</button> <button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},true)">Andere waarde nemen</button>`:''}</div>`).join('')}</section>`;
 }
-// De XML voor interiorcad: PROJECT_ID = projectnummer (of code), COMMISSION = projectnaam, … (zie mt-vw.js).
+// De XML voor interiorcad: PROJECT_ID = projectnummer (of code), COMMISSION = korte projectnaam (= "Projectnaam" in interiorcad en in HHOS;
+// zonder klantnaam, zie projNaamKort), … (zie mt-vw.js).
 function projVwGegevens(proj){
   const g=proj.gegevens||{}, mb=_projMbContact(proj);
-  return {projectnummer:projNummer(proj)||proj.code,naam:projNaamVol(proj),onderdeel:g.projectonderdeel||'',leider:g.projectleider||'',leverdatum:g.leverdatum||'',
+  return {projectnummer:projNummer(proj)||proj.code,naam:projNaamKort(proj),onderdeel:g.projectonderdeel||'',leider:g.projectleider||'',leverdatum:g.leverdatum||'',
     klantnummer:(mb&&mb.customer_id)||'',bedrijf:projKlantNaam(proj)||(mb&&mb.company_name)||'',aanhef:g.aanhef||'',voornaam:g.voornaam||'',achternaam:g.achternaam||'',
     straat:g.straat||'',postcode:g.postcode||'',plaats:g.plaats||'',items:[]};
 }
@@ -11432,7 +11598,7 @@ async function maakProjectAan(){
     klant_telefoon:(kv&&kv.telefoon)||'',klant_kvk:(kv&&kv.kvk)||'',
     klant_btw:(kv&&kv.btw)||'',klant_customer_id:(kv&&kv.customer_id)||null,
     created:new Date().toISOString().slice(0,10),
-    project_id:projectId,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:_MAP_NAAM_CODE};
+    project_id:projectId,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:nummer?_MAP_NR_NAAM:_MAP_NAAM_CODE};   // met projectnummer: "<nr> <korte naam>"; anders (werkcode) de bestaande naam-code-stijl
   if(werkcode) nieuwProj.werkcode=werkcode;
   if(nummer) nieuwProj.projectnummer=nummer;
   // Projectleider = wie het project aanmaakt (Bart, 14-10), als die in de keuzelijst staat; daarna te wijzigen in Projectgegevens.
@@ -12769,12 +12935,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
       return MTPlanning.bestelSamen(lokaal, spData);
     },
     // Bestellijst-journaal: alleen toevoegen; vereniging op id, op tijd, laatste 1000.
-    mt_bestellijst_journaal(lokaal, spData) {
-      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
-      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
-      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
-      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-1000);
-    },
+    mt_bestellijst_journaal(lokaal, spData) { return MTPlanning.journaalSamen(lokaal, spData, 1000); },   // dezelfde samenvoeger als de telefoon (mt-planning.js)
     // To Do-koppeltabel: per (e-mail|Toggl-taak) wint de nieuwste stand; niets valt weg.
     mt_todo_sync(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
@@ -12820,12 +12981,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
       return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-2000);
     },
     // Taken-journaal: alleen toevoegen. Vereniging op id, gesorteerd op tijd, laatste 1000.
-    mt_taken_journaal(lokaal, spData) {
-      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
-      const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(spData)) ? lees(spData) : [];
-      const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
-      return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-1000);
-    },
+    mt_taken_journaal(lokaal, spData) { return MTPlanning.journaalSamen(lokaal, spData, 1000); },   // dezelfde samenvoeger als de telefoon (mt-planning.js)
     // Mail↔project-koppelingen: { code: [koppeling…] }. Per code en per mail
     // (internetMessageId, anders id) wint de NIEUWSTE stand (gewijzigd/ontkoppeld/ts).
     // Ontkoppelen is een tombstone (`ontkoppeld`), dus een oude kopie kan een
@@ -13036,10 +13192,12 @@ function _projLocNaam(proj){
   const lc=k&&Array.isArray(k.locaties)?k.locaties.find(x=>x.code===(proj.loc||'').toUpperCase()):null;
   return (lc&&lc.naam)||proj.loc_naam||proj.loc;
 }
-// Mapnaam (P3b): NIEUWE projecten (map_stijl 'naam-code') heten "Volledige naam [code]"; bestaande projecten houden
+// Mapnaam (P3b): projecten met map_stijl 'naam-code' heten "Volledige naam [code]"; bestaande projecten houden
 // "code - naam" en worden NOOIT hernoemd. De code in de tag is de technische sleutel (werkcode) en verandert niet,
 // ook niet als het offertenummer later volgt of de projectnaam wijzigt (gevonden wordt de map via itemId of via de tag).
-const _MAP_NAAM_CODE='naam-code';
+// Nieuwste stijl ('nr-naam', v2.17): "<projectnummer> <korte naam>" (bv. "260801 Werkblad ref 186986"), zoals de Toggl-naam. Alleen met een
+// geldig projectnummer; anders valt _projMapNaam terug op naam-code. Bestaande projecten houden hun stijl (nooit automatisch hernoemd).
+const _MAP_NAAM_CODE='naam-code', _MAP_NR_NAAM='nr-naam';
 // Eén centrale validatie van een code uit de teller vóór hij ergens als sleutel of in een mapnaam komt: een werkcode
 // W<jj>-<nnn> of (brok C) een projectnummer van 6 cijfers vanaf 260801; NFC, kort genoeg en geen gereserveerde SharePoint-naam. '' = goed.
 const _WERKCODE_RE=/^(W\d{2}-\d{3,}|\d{6})$/, _SP_GERESERVEERD=/^(con|prn|aux|nul|com\d|lpt\d)$/i;
@@ -13051,8 +13209,24 @@ function projWerkcodeFout(code){
   if(_SP_GERESERVEERD.test(code)||/^[.~]|_vti_|\.lock$/i.test(code)) return 'gereserveerde naam';
   return '';
 }
+// "<projectnummer> <korte naam>", of '' als het project geen geldig projectnummer (6 cijfers, vanaf 260801) heeft.
+function _projMapNaamNrNaam(proj){
+  const nr=(typeof projNummer==='function'?projNummer(proj):null)||(/^\d{6}$/.test(String(proj.code||''))?proj.code:'');
+  if(!nr||projWerkcodeFout(nr)||!/^\d{6}$/.test(nr)) return '';
+  const pre=nr+' ', naam=_projVeilig(projNaamKort(proj)).slice(0,200-pre.length).trim();   // zelfde lengtegrens als naam-code
+  return _projVeilig(pre+naam);
+}
+// Read-only: {huidig, voorstel, nodig} voor een handmatige hernoem-actie van de bestaande map. `huidig` = laatste padsegment van de
+// opgeslagen map (null als die nog niet bekend is), `voorstel` = de nr-naam-mapnaam ('' zonder geldig projectnummer). Hernoemt niets.
+function projMapHernoemVoorstel(code){
+  const proj=_projVoorCode(code); if(!proj) return {huidig:null,voorstel:'',nodig:false};
+  const pad=(proj.map&&proj.map.pad)||(_projMapCache[proj.code]&&_projMapCache[proj.code].pad)||'';
+  const huidig=pad?pad.split('/').pop():null, voorstel=_projMapNaamNrNaam(proj);
+  return {huidig, voorstel, pad:pad||null, nodig:!!voorstel&&!!huidig&&huidig!==voorstel};
+}
 function _projMapNaam(proj){
-  if(proj.map_stijl===_MAP_NAAM_CODE){
+  if(proj.map_stijl===_MAP_NR_NAAM){ const m=_projMapNaamNrNaam(proj); if(m) return m; }   // geen geldig nummer → terugval op naam-code
+  if(proj.map_stijl===_MAP_NAAM_CODE||proj.map_stijl===_MAP_NR_NAAM){
     const f=projWerkcodeFout(proj.code); if(f) throw new Error('Ongeldige werkcode '+JSON.stringify(proj.code)+' ('+f+') — geen projectmap aangemaakt of gezocht');
     const tag=` [${proj.code}]`, naam=_projVeilig(projNaamVol(proj)).slice(0,200-tag.length).trim();   // een SharePoint-segment mag 255 tekens zijn: ruim eronder blijven
     return _projVeilig(naam+tag);
@@ -13069,18 +13243,27 @@ async function _projMapZoek(proj, lijst){
   if(!kl) return { pad:null, kandidaten:[], reden:'geen klantmap "'+kn+'"' };
   const klPad = `${PROJ_ROOT}/${kl.name}`;
   const nr = typeof projNummer==='function' ? projNummer(proj) : null;   // na de omnummering mag de tag ook het projectnummer zijn
-  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']') || (!!nr && n.endsWith(' ['+nr+']'));
-  const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n) || / \[[A-Z0-9][A-Z0-9-]*\]$/.test(n);   // ziet eruit als een (andere) projectmap → niet induiken
+  const sterk = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']') || (!!nr && n.endsWith(' ['+nr+']'));
+  const isProj = n => sterk(n) || (!!nr && n.startsWith(nr+' '));   // alleen "<nr> " vooraan is zwak: het kan ook een locatiemap zijn ("260801 Archief")
+  // Een map die met een 6-cijferig nummer begint geldt alleen als de projectmap van een ANDER project als dat nummer een bekend projectnummer van een ander bestaand project is.
+  const anderNr = new Set();
+  (typeof PROJECT_CODES!=='undefined'?PROJECT_CODES:[]).forEach(q=>{ if(!q||q._vervallen||q===proj||q.code===code) return; [typeof projNummer==='function'?projNummer(q):null, /^\d{6}$/.test(String(q.code||''))?q.code:null].forEach(x=>{ if(x&&x!==nr) anderNr.add(x); }); });
+  const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n) || / \[[A-Z0-9][A-Z0-9-]*\]$/.test(n) || (/^\d{6} /.test(n) && anderNr.has(n.slice(0,6)));   // ziet eruit als een (andere) projectmap → niet induiken
   const kandidaten = [];
   const klKids = await lees(klPad);
   for(const c of klKids.filter(c=>c.folder)){
-    if(isProj(c.name)) kandidaten.push({ itemId:c.id, pad:`${klPad}/${c.name}`, webUrl:c.webUrl||'', naam:c.name });
-    else if(!lijkt(c.name)){
-      for(const d of (await lees(`${klPad}/${c.name}`)).filter(d=>d.folder&&isProj(d.name)))
-        kandidaten.push({ itemId:d.id, pad:`${klPad}/${c.name}/${d.name}`, webUrl:d.webUrl||'', naam:d.name });
+    const pad = `${klPad}/${c.name}`;
+    if(isProj(c.name)){
+      // zwak (alleen het nummer vooraan): eerst kijken of de echte projectmap erbinnen zit; zo niet, dan is deze map het zelf
+      const binnen = sterk(c.name) ? [] : (await lees(pad)).filter(d=>d.folder&&isProj(d.name));
+      if(binnen.length) binnen.forEach(d=>kandidaten.push({ itemId:d.id, pad:`${pad}/${d.name}`, webUrl:d.webUrl||'', naam:d.name }));
+      else kandidaten.push({ itemId:c.id, pad, webUrl:c.webUrl||'', naam:c.name });
     }
-  }
-  const exact = kandidaten.filter(x=>x.naam===exactNaam);
+    else if(!lijkt(c.name)){
+      for(const d of (await lees(pad)).filter(d=>d.folder&&isProj(d.name)))
+        kandidaten.push({ itemId:d.id, pad:`${pad}/${d.name}`, webUrl:d.webUrl||'', naam:d.name });
+    }
+  }  const exact = kandidaten.filter(x=>x.naam===exactNaam);
   const keuze = exact.length===1 ? exact[0] : (exact.length===0 && kandidaten.length===1 ? kandidaten[0] : null);
   return { pad:keuze?keuze.pad:null, itemId:keuze?keuze.itemId:null, webUrl:keuze?keuze.webUrl:'',
     kandidaten, dubbel:kandidaten.length>1, klPad, reden:keuze?'':(kandidaten.length>1?'meerdere projectmappen':'geen projectmap') };
@@ -13173,7 +13356,7 @@ window.genereerProjectMappen = async function(proj) {
     parent = `${parent}/${locFolder}`;
   }
   const projNaam = (proj.product_naam || proj.naam || proj.code);
-  const projFolder = await _SP.ensureFolder(parent, proj.map_stijl===_MAP_NAAM_CODE ? _projMapNaam(proj) : `${proj.code} - ${projNaam}`, false);
+  const projFolder = await _SP.ensureFolder(parent, (proj.map_stijl===_MAP_NAAM_CODE||proj.map_stijl===_MAP_NR_NAAM) ? _projMapNaam(proj) : `${proj.code} - ${projNaam}`, false);
   const projPath = `${parent}/${projFolder}`;
   for (const sub of SUBS) await _SP.ensureFolder(projPath, sub, false);
   // itemId vastleggen (1 call), zodat volgende keren projMap met één controle-call klaar is.
@@ -14388,7 +14571,7 @@ function tbChatOpen(){
   if(!_tbBound){_tbBound=true;document.addEventListener('click',e=>{const pn=document.getElementById('tbchat-panel');if(pn.style.display!=='none'&&!pn.contains(e.target))pn.style.display='none';});}
 }
 function tbChatClose(){document.getElementById('tbchat-panel').style.display='none';}
-const TB_TABS=['dashboard','inbox','verwerk','controle','projecten','klanten','voorraad','bestelling','historie','agenda','instellingen','cn','migratie'];
+const TB_TABS=['dashboard','inbox','verwerk','controle','projecten','klanten','voorraad','bestelling','agenda','instellingen','cn','migratie'];
 function tbDoTab(v){const btn=[...document.querySelectorAll('.tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'"+v+"'"));if(btn){btn.click();return 'tabblad "'+v+'" geopend';}return 'tab "'+v+'" niet gevonden';}
 function tbExec(key,val){
   switch(key){
@@ -14611,6 +14794,8 @@ window.auditLog=auditLog;
 
 // ── Tab open ──
 async function adminOpen(){
+  // Beheer/Instellingen/Activiteit laden zichzelf (admSub); de teamgegevens hieronder zijn alleen voor de teamadmins, zoals vóór de samenvoeging.
+  if(!mtIsAdmin()) return;
   // Laad alle data in parallel
   admLoadConfig().then(()=>{admRenderTeam();admRenderBudgetten();});
   admLoadVerlof().then(()=>{admRenderVerlofLijst();admRenderSaldo();});
@@ -14619,11 +14804,35 @@ async function adminOpen(){
   admLoadNotifs().then(()=>admRenderNotifLijst());
 }
 
+// Subtabs in vaste volgorde. Beheer, Instellingen en Activiteit zijn hier ingehangen (voorheen eigen plek); de rest is van de teamadmins.
+const ADM_SUBS=['beheer','instellingen','activiteit','logboek','team','verlof','vrijdagen','notificaties'];
+function admSubMag(n){   // mag deze subtab voor mij? (zelfde voorwaarden als de losse plekken vroeger)
+  if(n==='beheer') return !!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer());
+  if(n==='instellingen') return admSamen();
+  if(n==='activiteit') return admMagActiviteit();
+  return mtIsAdmin();
+}
+function admSubHuidig(){ const c=document.querySelector('#tab-admin .adm-subcontent.active'); return c?c.id.replace('adm-sub-',''):''; }
+// Hash-naam van wat er open staat: Instellingen en Activiteit houden hun oude deeplink (#tab=instellingen / #tab=activiteit).
+function admRouteNaam(){ const s=admSubHuidig(); return (s==='instellingen'||s==='activiteit')?s:'admin'; }
 function admSub(name,btn){
+  if(!name) name=admSubHuidig();   // zonder naam: de laatst open subtab blijft staan
+  if(!name||!admSubMag(name)) name=ADM_SUBS.find(admSubMag)||'';
   document.querySelectorAll('#tab-admin .adm-subcontent').forEach(c=>c.classList.remove('active'));
   document.querySelectorAll('#tab-admin .adm-subtab').forEach(b=>b.classList.remove('active'));
   const c=document.getElementById('adm-sub-'+name); if(c) c.classList.add('active');
-  if(btn) btn.classList.add('active');
+  const b=btn||document.querySelector('#tab-admin .adm-subtab[data-sub="'+name+'"]'); if(b) b.classList.add('active');
+  if(name==='beheer') beheerLaad();
+  if(name==='activiteit') activiteitOpen();
+  const at=document.getElementById('tab-admin');
+  if(at&&at.classList.contains('active')&&typeof mtRoute!=='undefined') mtRoute.zet({tab:admRouteNaam()},false);
+}
+// Instellingen: voor wie Admin heeft hangen de bestaande kaarten van #tab-instellingen onder Admin → Instellingen (zelfde DOM, geen kopie);
+// wie Admin niet heeft houdt ze in de eigen tab. Idempotent; kan ook weer terug.
+function admSamenvoegen(aan){
+  const van=document.getElementById(aan?'tab-instellingen':'adm-sub-instellingen'), naar=document.getElementById(aan?'adm-sub-instellingen':'tab-instellingen');
+  if(!van||!naar||van===naar) return;
+  while(van.firstChild) naar.appendChild(van.firstChild);
 }
 
 // ── A1: Logboek ──
@@ -14826,11 +15035,20 @@ function admRenderNotifLijst(){
 // ── Zichtbaarheid Admin-knop (na login) ──
 // Wordt aangeroepen vanuit toonApp (bestaande login-flow) — zie onderaan dit blok.
 function admInitKnop(){
+  // Admin (met Beheer, Instellingen en Activiteit als subtabs) voor teamadmins, beheer/eigenaar en Bart; die zien dan geen losse Instellingen-knop meer.
+  // Wie Admin niet heeft houdt de losse Instellingen-tab. Per subtab gelden dezelfde voorwaarden als vroeger (admSubMag);
+  // Activiteit blijft alléén voor Bart en beheer (de worker dwingt dit ook af op de leesroutes).
+  const samen=admSamen();
   const btn=document.getElementById('tab-btn-admin');
-  if(btn) btn.style.display=mtIsAdmin()?'':'none';
-  // Activiteit-tab: alléén voor Bart (worker dwingt dit ook af op de leesroutes).
-  const actBtn=document.getElementById('tab-btn-activiteit');
-  if(actBtn) actBtn.style.display=(mtMijEmail()==='bart@mortiseandtenon.nl'||(window.MTRol&&MTRol.isBeheer()))?'':'none';
+  if(btn) btn.style.display=samen?'':'none';
+  const insBtn=document.getElementById('tab-btn-instellingen');
+  if(insBtn) insBtn.style.display=samen?'none':'';
+  const ti=document.getElementById('tab-instellingen'), insAct=!!(ti&&ti.classList.contains('active'));
+  admSamenvoegen(samen);
+  document.querySelectorAll('#tab-admin .adm-subtab').forEach(b=>{ b.style.display=admSubMag(b.dataset.sub)?'':'none'; });
+  const at=document.getElementById('tab-admin');
+  if(at&&at.classList.contains('active')){ const h=admSubHuidig(); if(!h||!admSubMag(h)) admSub(null); }
+  else if(samen&&insAct) showTab('instellingen');   // Instellingen stond open voordat bleek dat Admin voor jou geldt → naar Admin → Instellingen
   // Laad ook budgetten-form zodra tab wordt geopend
   const verlofSub=document.getElementById('adm-sub-verlof');
   if(verlofSub) admRenderBudgetten();
@@ -15204,7 +15422,9 @@ const TAB_HELP={
   inbox:{naam:'Inbox',uitleg:'De smart-inbox van info@. Mappenboom, zoeken over de hele postbus en — met de schakelaar "💬 Gesprekken" — mailwisselingen gebundeld als één thread (zoals Outlook). Mails lezen, aan een project of klant koppelen, factuur-bijlagen direct laten analyseren (✨) en per mail met Larry chatten. Verplaatsingen die je hier doet leren het sorteersysteem bij.'},
   projecten:{naam:'Projecten',uitleg:'Alle lopende projecten met hun projectcode (KLANT-LOCATIE-PRODUCT). Via "+ Nieuw project" opent de projectaanmaker: die stelt de code voor en maakt de SharePoint-mappenstructuur aan. De code is de sleutel die overal terugkomt: stickers, uren, mail, Moneybird.'},
   agenda:{naam:'Agenda',uitleg:'De gezamenlijke agenda: week-rooster, lijstweergave én planning-view (📋). In de planning-view maak je planblokken per persoon/project aan, zie je verlof en vrije dagen en vergelijk je plan vs geklokt. Capaciteitsbalk toont direct of iemand overboekt is.'},
-  admin:{naam:'Admin',uitleg:'Beheerpaneel voor admins (Bart en Mathijs). Bevat: 📒 Logboek (alle wijzigingen), ⚙️ Team & lock (werkuren, uren-lock-drempel), 🏖 Verlof & saldo (jaarbudgetten, boeken, saldo-check), 📅 Vrije dagen (verplicht/optioneel) en 🔔 Notificaties (push naar mobiele app). Alle acties worden geauditeerd.'},
+  beheer:{naam:'Admin → Beheer',uitleg:'Gebruikers en rollen, uitnodigingen, projectcode, app-versie vastleggen, taken en bestellijst overzetten, controlelijst en het auditlog. Alleen voor eigenaar en beheer.'},
+  activiteit:{naam:'Admin → Activiteit',uitleg:'Wie er nu online is en hoe de tool gebruikt wordt: gebruik per functie, per gebruiker en de acties die mislukken. Alleen voor Bart en beheer.'},
+  admin:{naam:'Admin',uitleg:'Beheerpaneel voor eigenaar, beheer en admins. Subtabs: 👥 Beheer, 🛠 Instellingen en 📊 Activiteit (voorheen eigen plekken), en voor de teamadmins (Bart en Mathijs) 📒 Logboek (alle wijzigingen), ⚙️ Team & lock (werkuren, uren-lock-drempel), 🏖 Verlof & saldo (jaarbudgetten, boeken, saldo-check), 📅 Vrije dagen (verplicht/optioneel) en 🔔 Notificaties (push naar mobiele app). Alle acties worden geauditeerd.'},
   toggl:{naam:'Uren',uitleg:'Geklokte uren uit Toggl, per persoon en per project, met weektotalen en rapporten. Dit groeit uit tot onze eigen urenregistratie met planning én capaciteit (hoeveel uur per persoon nog vrij is).'},
   voorraad:{naam:'Voorraad',uitleg:'De voorraad plaatmateriaal en hardware, gevoed vanuit ingelezen facturen. FIFO-herkomst per artikel zodat nacalculatie klopt.'},
   materialen:{naam:'Materialen',uitleg:'De materialen die we écht inkopen (gematcht op facturen en voorraad), met de factuurnaam als canonieke naam. Niet de hele interiorcad-catalogus.'},
@@ -15217,7 +15437,9 @@ const TAB_HELP={
   cn:{naam:'Klantlocatie-analyse (gearchiveerd)',uitleg:'Aparte analyse voor één grote klant: omzet en facturen per locatie (53 locatie-contacten in Moneybird). Geen menu-ingang meer, code blijft staan.'},
   migratie:{naam:'Data-migratie (gearchiveerd)',uitleg:'Eenmalige hulpmiddelen om oude data naar de nieuwe structuur te verhuizen. Buiten gebruik, geen menu-ingang meer.'}
 };
-function helpActieveTab(){const el=document.querySelector('.tab-content.active');return el?el.id.replace('tab-',''):'?';}
+function helpActieveTab(){const el=document.querySelector('.tab-content.active');const n=el?el.id.replace('tab-',''):'?';
+  if(n==='admin'&&typeof admSubHuidig==='function'){ const s=admSubHuidig(); if(s==='beheer'||s==='instellingen'||s==='activiteit') return s; }   // hulp per subtab van Admin
+  return n;}
 
 // ── Gebruiks-log: buffer lokaal, flush met merge naar SharePoint ──
 const _LOG={
@@ -15427,7 +15649,7 @@ async function rolLaad(){
 function rolToepassen(me){
   if(MTRol.geenToegangNodig()){ MTRol.toonGeenToegang(WORKER); return me; }
   MTRol.pasToe();
-  try{ _p2RolHerteken(); }catch(e){ console.warn('rollenmatrix:',e); }
+  try{ if(typeof _p2RolHerteken==='function') _p2RolHerteken(); }catch(e){ console.warn('rollenmatrix:',e); }
   // Actieve tab verborgen (bv. Dashboard voor Werkplaats) → eerste zichtbare tab; behalve als de startpagina
   // straks kiest (startTabZet, onderaan): dan niet eerst naar een willekeurige tab springen.
   const act=document.querySelector('.tabs-wrap .tab-btn.active');
@@ -15438,8 +15660,9 @@ function rolToepassen(me){
   // Deeplink-race: een tab die al open stond vóór /me terug was (bv. #tab=instellingen of
   // #tab=activiteit) laadde zonder rol → nu alsnog vullen.
   const open=n=>{ const t=document.getElementById('tab-'+n); return !!(t&&t.classList.contains('active')); };
-  if(MTRol.isBeheer()&&open('instellingen')) beheerLaad();
-  if(MTRol.isBeheer()&&open('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
+  const sub=n=>open('admin')&&admSubHuidig()===n;   // Beheer en Activiteit zijn subtabs van Admin
+  if(MTRol.isBeheer()&&(open('instellingen')||sub('beheer'))) beheerLaad();
+  if(MTRol.isBeheer()&&sub('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
   if(window.MTToggl) MTToggl.laad(WORKER);
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   if(typeof geldTabZet==='function') geldTabZet();
@@ -15499,8 +15722,8 @@ function startTabZet(){
   if(kies&&MTRol.magGeld()){ if(zichtbaar(g)) showTab('geld',g); }
   else if(kies&&zichtbaar(a)){
     const ik=(typeof mtMijEmail==='function'&&mtMijEmail())||'', lid=MT_TEAM.find(m=>m.email.toLowerCase()===ik);
-    _agenda.view='plan'; _agenda.weekStart=agMaandag(new Date());
-    if(lid) _agenda.fPers=new Set([lid.slug,lid.email]);   // planblokken staan op slug of e-mail
+    _agenda.view='capaciteit'; _agenda.weekStart=agMaandag(new Date());   // de capaciteitsplanning voor het team (stap 2); Planning blijft één klik verder
+    if(lid) _agenda.fPers=new Set([lid.slug,lid.email]);   // planblokken staan op slug of e-mail (voor de weergave Planning; de capaciteit toont altijd het hele team)
     showTab('agenda',a);
   }
   _verborgenTabTerugval();   // niets te kiezen (geen rol, oude worker, geen Agenda) en het oude dashboard is verborgen
@@ -16854,8 +17077,8 @@ function activiteitOpen(force){
   // Online-lijst elke 30s verversen zolang de tab open is.
   if(_actOnlineTimer) clearInterval(_actOnlineTimer);
   _actOnlineTimer=setInterval(()=>{
-    const tab=document.getElementById('tab-activiteit');
-    if(tab && tab.classList.contains('active')){
+    const tab=document.getElementById('adm-sub-activiteit'), adm=document.getElementById('tab-admin');   // Activiteit is een subtab van Admin
+    if(tab && tab.classList.contains('active') && adm && adm.classList.contains('active')){
       if(document.visibilityState==='visible') actLoadOnline();
     }
     else { clearInterval(_actOnlineTimer); _actOnlineTimer=null; }

@@ -103,6 +103,7 @@ function inboxSub(name){
   if(name==='mail'&&!_inbox.loaded)inboxReload();
   if(name==='agenda')inboxLoadAgenda();
   if(name==='taken')inboxLoadTaken();
+  if(name==='binnenkomend'&&typeof binnenkomendOpen==='function')binnenkomendOpen();
 }
 
 // ── Agenda — spiegel van de Outlook-kalender (Graph /calendarView, week-overzicht) ──
@@ -110,10 +111,10 @@ let _ibAg={weekOffset:0};
 function _agMaandag(offset){const d=new Date();const wd=(d.getDay()+6)%7;d.setHours(0,0,0,0);d.setDate(d.getDate()-wd+offset*7);return d;}
 function inboxAgendaWeek(delta){_ibAg.weekOffset+=delta;inboxLoadAgenda();}
 async function inboxLoadAgenda(){
-  const grid=document.getElementById('agenda-grid');if(!grid)return;
+  const grid=document.getElementById('ib-agenda-grid');if(!grid)return;
   const ma=_agMaandag(_ibAg.weekOffset);
   const zo=new Date(ma);zo.setDate(zo.getDate()+7);
-  const lbl=document.getElementById('agenda-weeklabel');
+  const lbl=document.getElementById('ib-agenda-weeklabel');
   if(lbl)lbl.textContent=ma.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})+' – '+new Date(zo.getTime()-1).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
   grid.innerHTML='<div class="inbox-empty" style="grid-column:1/-1">laden…</div>';
   try{
@@ -124,7 +125,7 @@ async function inboxLoadAgenda(){
   }catch(e){grid.innerHTML=`<div class="inbox-empty" style="grid-column:1/-1">agenda laden mislukt: ${ibEsc(e.message)}</div>`;}
 }
 function inboxRenderAgenda(maandag,evs){
-  const grid=document.getElementById('agenda-grid');
+  const grid=document.getElementById('ib-agenda-grid');
   const dagen=['ma','di','wo','do','vr','za','zo'];
   const vandaag=new Date();vandaag.setHours(0,0,0,0);
   const perDag={};
