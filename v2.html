@@ -67,7 +67,7 @@
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15q"></script>
+<script src="mt-verhuis.js?v=2026-10-15r"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -845,7 +845,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15q">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15r">
 </head>
 <body>
 
@@ -3844,7 +3844,9 @@ try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, i
 function capWerktijdenMag(){ try{ return mtIsAdmin()&&capRolStreng(); }catch(e){ return false; } }   // werktijden zijn nieuw: bij een oude worker (isBeheer niet te bepalen) niet wijzigen
 try{ MTWerktijden.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, werkuren:()=>(admCfg()||{}).werkuren||null,
   sp:{ read:n=>_SP.read(n), write:(n,d,r)=>_SP.write(n,d,r) }, nu:()=>Date.now(), wie:()=>mtMijEmail(), stempel:_spStempel, audit:(a,doel,oud,nieuw)=>auditLog(a,doel,oud,nieuw,''),
-  magWijzigen:()=>capWerktijdenMag(), opgeslagen:()=>werktijdenVerversWeergave() }); }catch(e){ console.warn('Werktijden init:',e); }
+  magWijzigen:()=>capWerktijdenMag(), opgeslagen:()=>werktijdenVerversWeergave(),
+  blokken:()=>agPlanActief(), entries:()=>agEntries(), verlof:()=>admVerlof(), vrijedagen:()=>admVrijdagen(),   // voor Afwijkingen (afgeleid, geen eigen opslag; geklokte uren = wat lokaal uit Toggl is binnengekomen)
+  naarDag:(slug,datum)=>{ try{ MTCapaciteitNieuw.gaNaar(datum,slug); _agenda.view='capaciteit'; _agenda.weekStart=agMaandag(new Date(datum+'T00:00:00')); showTab('agenda',[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('agenda'"))); }catch(e){ console.warn('Afwijkingen: naar de dag:',e); } } }); }catch(e){ console.warn('Werktijden init:',e); }
 // Eén keer per sessie laden (daarna houdt het bewaren de stand bij); de aanroeper tekent opnieuw als de werktijden binnen zijn.
 let _wtLaden=null;
 function werktijdenZorg(naLaden){

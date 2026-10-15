@@ -16,7 +16,7 @@
   const W = {};
   let D = null, P = null;
   const BESTAND = 'mt_werktijden.json', LS = 'mt_werktijden';
-  const S = { lijst: null, geladen: false, gekozen: null, concept: null, bezig: false, melding: '' };
+  const S = { lijst: null, geladen: false, gekozen: null, concept: null, bezig: false, melding: '', afwMaand: null };
   const DAGEN = ['ma', 'di', 'wo', 'do', 'vr'], LANG = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag'];
   const tMin = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim()); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
   const tTekst = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
@@ -84,6 +84,52 @@
   const ini = n => String(n || '').slice(0, 2).toUpperCase();
   function kies(slug) { S.gekozen = slug; S.concept = W.beginConcept(slug); S.melding = ''; W.teken(); }
 
+  // ── Afwijkingen (afgeleid uit mt_verlof, de vrije dagen, de planblokken en de geklokte uren; geen eigen opslag) ──
+  const MND = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'], DAGK = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
+  const maandNu = () => { const t = new Date(D.nu()); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); };
+  const dagTekst = d => { const x = new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10))); return DAGK[x.getUTCDay()] + ' ' + Number(d.slice(8)) + ' ' + MND[Number(d.slice(5, 7)) - 1].slice(0, 3); };
+  const getalNl = n => String(Math.round(n * 100) / 100).replace('.', ',');
+  W.afwData = function (slug) {
+    if (!S.afwMaand) S.afwMaand = maandNu();
+    try { return P.afwijkingen({ slug, maand: S.afwMaand, team: D.team(), werkuren: D.werkuren ? D.werkuren() : null, werktijden: W.lijst(), verlof: D.verlof ? D.verlof() : [], vrijedagen: D.vrijedagen ? D.vrijedagen() : [], blokken: D.blokken ? D.blokken() : [], entries: D.entries ? D.entries() : [] }); } catch (e) { return null; }
+  };
+  function afwCel(m) {
+    const a = W.afwData(m.slug); if (!a) return el('span', { klass: 'wt-afw-cel rechts', role: 'cell', tekst: '–' });
+    const plus = a.extra.aantal, min = a.vrij.verlofDagen + a.vrij.verplichtDagen;
+    return el('span', { klass: 'wt-afw-cel rechts', role: 'cell', title: plus + ' extra gewerkte dag(en); ' + getalNl(a.vrij.verlofDagen) + ' dag(en) verlof en ' + a.vrij.verplichtDagen + ' verplichte vrije dag(en) in ' + MND[Number(a.maand.slice(5)) - 1] + ' ' + a.maand.slice(0, 4) },
+      el('span', { klass: plus ? 'afw-plus' : 'afw-nul', tekst: '+' + plus }), ' / ', el('span', { klass: min ? 'afw-min' : 'afw-nul', tekst: '−' + getalNl(min) }));
+  }
+  function afwSectie(m) {
+    const a = W.afwData(m.slug); if (!a) return null;
+    const jaar = Number(S.afwMaand.slice(0, 4)), maand = Number(S.afwMaand.slice(5)), nuJaar = new Date(D.nu()).getFullYear();
+    const kies = (j, mn) => { S.afwMaand = j + '-' + String(mn).padStart(2, '0'); W.teken(); };
+    const selM = el('select', { id: 'wt-afw-maand', klass: 'wt-afw-sel', 'aria-label': 'Maand', wijzig: ev => kies(jaar, Number(ev.target.value)) }, MND.map((n, i) => el('option', { value: String(i + 1), tekst: n })));
+    selM.value = String(maand);
+    const jaren = []; for (let j = nuJaar - 3; j <= nuJaar + 1; j++) jaren.push(j); if (!jaren.includes(jaar)) jaren.push(jaar);
+    const selJ = el('select', { id: 'wt-afw-jaar', klass: 'wt-afw-sel', 'aria-label': 'Jaar', wijzig: ev => kies(Number(ev.target.value), maand) }, jaren.sort().map(j => el('option', { value: String(j), tekst: String(j) })));
+    selJ.value = String(jaar);
+    const stap = n => { const x = new Date(Date.UTC(jaar, maand - 1 + n, 1)); kies(x.getUTCFullYear(), x.getUTCMonth() + 1); };
+    const dagKnop = dg => el('button', { type: 'button', klass: 'wt-afw-dag', title: 'Open deze dag in de capaciteit', klik: () => { if (D.naarDag) D.naarDag(m.slug, dg.datum); } },
+      el('span', { klass: 'wt-afw-datum', tekst: dagTekst(dg.datum) }), el('span', { klass: 'wt-afw-reden', tekst: dg.reden }),
+      el('span', { klass: 'wt-mono', tekst: [dg.gepland_min ? klok(dg.gepland_min) + ' gepland' : '', dg.geklokt_min ? klok(dg.geklokt_min) + ' geklokt' : ''].filter(Boolean).join(' · ') }));
+    const extra = el('div', { klass: 'wt-afw-kaart' },
+      el('div', { klass: 'wt-afw-kop' }, el('b', { tekst: 'Extra gewerkt' }), el('span', { klass: 'wt-afw-groot', tekst: a.extra.aantal + (a.extra.aantal === 1 ? ' dag' : ' dagen') })),
+      el('div', { klass: 'wt-sub', tekst: klok(a.extra.gepland_min) + ' gepland (planblokken) · ' + klok(a.extra.geklokt_min) + ' geklokt' }),
+      a.extra.dagen.length ? el('div', { klass: 'wt-afw-lijst' }, a.extra.dagen.map(dagKnop)) : el('div', { klass: 'wt-sub', tekst: 'Geen extra gewerkte dagen in deze maand.' }),
+      el('div', { klass: 'wt-sub wt-afw-let', tekst: 'Een dag telt als een weekend, een dag dat deze persoon volgens de werktijden niet werkt, een verlofdag of een verplichte vrije dag, met planblokken (geen open voorstellen) of geklokte uren. Geklokte uren zijn alleen wat op deze computer uit Toggl is binnengekomen: er kan dus meer geklokt zijn dan hier staat.' }));
+    const vrij = el('div', { klass: 'wt-afw-kaart' },
+      el('div', { klass: 'wt-afw-kop' }, el('b', { tekst: 'Vrij genomen' }), el('span', { klass: 'wt-afw-groot', tekst: getalNl(a.vrij.verlofDagen) + (a.vrij.verlofDagen === 1 ? ' dag' : ' dagen') })),
+      el('div', { klass: 'wt-sub', tekst: 'verlof: ' + klok(a.vrij.verlofMin) + ' uur (uit Verlof & saldo)' }),
+      a.vrij.perioden.length ? el('div', { klass: 'wt-afw-lijst' }, a.vrij.perioden.map(pr => el('div', { klass: 'wt-afw-periode' }, el('span', { klass: 'wt-afw-datum', tekst: dagTekst(pr.van) + (pr.tm !== pr.van ? ' – ' + dagTekst(pr.tm) : '') }), el('span', { klass: 'wt-afw-reden', tekst: pr.opm }), el('span', { klass: 'wt-mono', tekst: getalNl(pr.dagen) + ' d · ' + klok(pr.min) })))) : el('div', { klass: 'wt-sub', tekst: 'Geen verlof in deze maand.' }),
+      el('div', { klass: 'wt-afw-kop wt-afw-tweede' }, el('b', { tekst: 'Verplichte vrije dagen' }), el('span', { klass: 'wt-afw-groot klein', tekst: a.vrij.verplichtDagen + ' · ' + klok(a.vrij.verplichtMin) })),
+      a.vrij.verplichtLijst.length ? el('div', { klass: 'wt-afw-lijst' }, a.vrij.verplichtLijst.map(x => el('div', { klass: 'wt-afw-periode' }, el('span', { klass: 'wt-afw-datum', tekst: dagTekst(x.datum) }), el('span', { klass: 'wt-mono', tekst: klok(x.min) })))) : el('div', { klass: 'wt-sub', tekst: 'Geen verplichte vrije dagen op werkdagen van ' + m.naam + '.' }),
+      el('div', { klass: 'wt-sub wt-afw-let', tekst: 'Een halve dag of een eigen aantal dagen in de verlofboeking telt naar verhouding mee; overlappende boekingen tellen een dag één keer.' }));
+    return el('section', { klass: 'wt-afw', 'aria-labelledby': 'wt-h-afw' },
+      el('div', { klass: 'wt-afw-balk' }, el('h4', { id: 'wt-h-afw', klass: 'wt-afw-titel', tekst: 'Afwijkingen · ' + m.naam }),
+        el('button', { type: 'button', klass: 'wt-knop icoon', 'aria-label': 'Vorige maand', tekst: '‹', klik: () => stap(-1) }), selM, selJ, el('button', { type: 'button', klass: 'wt-knop icoon', 'aria-label': 'Volgende maand', tekst: '›', klik: () => stap(1) }),
+        el('span', { klass: 'wt-sub', tekst: 'Basis: ' + (a.basis === 'werktijden' ? 'de werktijden van ' + m.naam : 'een gewone werkweek ma–vr (nog geen werktijden ingevuld)') })),
+      el('div', { klass: 'wt-afw-kaarten' }, extra, vrij));
+  }
   W.teken = function () {
     const w = D && D.doc.getElementById('werktijden-nieuw'); if (!w) return;
     if (D.doc.documentElement.getAttribute('data-stijl') !== 'nieuw') { w.textContent = ''; w.hidden = true; return; }
@@ -96,7 +142,7 @@
     if (!mag) w.appendChild(el('div', { klass: 'wt-melding', role: 'status', tekst: 'Alleen eigenaar en beheer kunnen werktijden wijzigen. Je ziet de ingevulde werktijden.' }));
     // tabel
     const tabel = el('div', { klass: 'wt-tabel', role: 'table', 'aria-label': 'Werktijden per medewerker' });
-    tabel.appendChild(el('div', { klass: 'wt-rij wt-hoofd', role: 'row' }, el('span', { role: 'columnheader', tekst: 'Medewerker' }), DAGEN.map(d => el('span', { role: 'columnheader', tekst: d })), el('span', { role: 'columnheader', klass: 'rechts', tekst: 'Week' }), el('span', { role: 'columnheader', klass: 'rechts', tekst: 'Vraag' })));
+    tabel.appendChild(el('div', { klass: 'wt-rij wt-hoofd', role: 'row' }, el('span', { role: 'columnheader', tekst: 'Medewerker' }), DAGEN.map(d => el('span', { role: 'columnheader', tekst: d })), el('span', { role: 'columnheader', klass: 'rechts', tekst: 'Week' }), el('span', { role: 'columnheader', klass: 'rechts', tekst: 'Vraag' }), el('span', { role: 'columnheader', klass: 'rechts', tekst: 'Afw.', title: 'Afwijkingen in de gekozen maand: extra gewerkte dagen (+) en vrij genomen dagen (−); de uitleg staat onder de tabel' })));
     team.forEach(m => {
       const rec = map[String(m.slug).toLowerCase()], c = rec ? { dagen: rec.dagen, pauze: rec.pauze } : W.beginConcept(m.slug), on = m.slug === S.gekozen;
       const vraag = rec ? P.dagvraagTijd(rec).laatste : '';
@@ -104,7 +150,7 @@
         el('button', { type: 'button', klass: 'wt-pers', 'aria-pressed': on ? 'true' : 'false', klik: () => kies(m.slug), role: 'rowheader' }, el('span', { klass: 'wt-avatar', tekst: ini(m.naam) }), el('span', { klass: 'wt-naam' }, el('b', { tekst: m.naam }), el('span', { klass: 'wt-sub', tekst: rec ? (m.admin ? 'Eigenaar/beheer' : 'Werktijden ingevuld') : 'Standaard: ' + klok((D.werkuren && Number((D.werkuren() || {})[m.slug]) > 0 ? Number(D.werkuren()[m.slug]) : 40) * 60) + ' per week' }))),
         DAGEN.map((k, i) => { const d = c.dagen[k]; return el('span', { klass: 'wt-dag' + (d && d.werk ? '' : ' vrij') + (rec ? '' : ' leeg'), role: 'cell', tekst: rec ? (d && d.werk ? d.start + '–' + d.eind : 'vrij') : (i < 5 ? '8u' : '') }); }),
         el('span', { klass: 'wt-week rechts', role: 'cell', tekst: klok(rec ? P.werkweekMin(rec) : W.weekMin(c)) }),
-        el('span', { klass: 'wt-vraag rechts', role: 'cell', tekst: vraag || '–', title: vraag ? 'De dagvraag komt 15 minuten voor de eindtijd (laatste werkdag van de week)' : 'Pas zichtbaar zodra de werktijden zijn ingevuld' })));
+        el('span', { klass: 'wt-vraag rechts', role: 'cell', tekst: vraag || '–', title: vraag ? 'De dagvraag komt 15 minuten voor de eindtijd (laatste werkdag van de week)' : 'Pas zichtbaar zodra de werktijden zijn ingevuld' }), afwCel(m)));
     });
     // editor
     const m = team.find(x => x.slug === S.gekozen), c = S.concept;
@@ -153,6 +199,7 @@
       editor.appendChild(acties);
     }
     w.appendChild(el('div', { klass: 'wt-kader' }, el('div', { klass: 'wt-tabelvak' }, tabel), editor));
+    if (m) { const afwS = afwSectie(m); if (afwS) w.appendChild(afwS); }
   };
 
   W.init = function (deps) { D = deps; P = deps.planning || root.MTPlanning; return W; };

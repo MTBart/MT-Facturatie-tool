@@ -413,6 +413,8 @@
     w.appendChild(el('div', { klass: 'cn-kader' }, el('div', { klass: 'cn-hoofd' }, vlak), zijkolom(m)));
   };
 
+  // Vanuit Afwijkingen (Admin > Team en werktijden): de week van die dag voor die persoon openen (de aanroeper wisselt naar de Agenda; weekenden vallen buiten de weekweergave).
+  N.gaNaar = function (datum, slug) { if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = 'week'; };
   N.init = function (deps) {
     D = deps; P = deps.planning || root.MTPlanning;
     try { const z = D.storage && D.storage.getItem(LS_ZOOM); if (ZOOM_UI && z && ZOOMS.some(x => x[0] === z)) S.zoom = z; S.ongDicht = !!(D.storage && D.storage.getItem(LS_ONG) === 'dicht'); } catch (e) {}

@@ -414,8 +414,8 @@ html[data-stijl="nieuw"] .wt-sub{font:400 12px/16px var(--sans);color:var(--ink-
 html[data-stijl="nieuw"] .wt-melding{background:var(--warning-50);color:var(--warning);border:1px solid #e9cf9f;border-radius:4px;padding:8px 12px;margin-bottom:12px;font-size:13px}
 html[data-stijl="nieuw"] .wt-kader{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
 html[data-stijl="nieuw"] .wt-tabelvak{flex:999 1 560px;min-width:0;overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
-html[data-stijl="nieuw"] .wt-tabel{min-width:760px}
-html[data-stijl="nieuw"] .wt-rij{display:grid;grid-template-columns:minmax(180px,1.4fr) repeat(5,minmax(84px,1fr)) 64px 72px;align-items:stretch;border-top:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .wt-tabel{min-width:780px}
+html[data-stijl="nieuw"] .wt-rij{display:grid;grid-template-columns:minmax(160px,1.2fr) repeat(5,minmax(80px,1fr)) 56px 56px 84px;align-items:stretch;border-top:1px solid var(--line-soft)}
 html[data-stijl="nieuw"] .wt-rij.wt-hoofd{border-top:0;font:500 12px/16px var(--sans);color:var(--ink-2)}
 html[data-stijl="nieuw"] .wt-rij.wt-hoofd>span{padding:10px 8px}
 html[data-stijl="nieuw"] .wt-rij.aan{background:var(--primary-soft);box-shadow:inset 3px 0 0 var(--primary)}
@@ -425,7 +425,7 @@ html[data-stijl="nieuw"] .wt-pers:focus-visible{outline:2px solid var(--focus,va
 html[data-stijl="nieuw"] .wt-avatar{flex:0 0 28px;width:28px;height:28px;border-radius:999px;border:1px solid var(--line);background:var(--surface-sunken);display:grid;place-items:center;font:600 11px/1 var(--sans);color:var(--ink-2)}
 html[data-stijl="nieuw"] .wt-naam{display:flex;flex-direction:column}
 html[data-stijl="nieuw"] .wt-naam b{font:600 14px/20px var(--sans)}
-html[data-stijl="nieuw"] .wt-dag{padding:10px 8px;display:flex;align-items:center;font:400 12px/16px var(--mono);color:var(--ink);white-space:nowrap}
+html[data-stijl="nieuw"] .wt-dag{padding:10px 6px;display:flex;align-items:center;font:400 11px/16px var(--mono);color:var(--ink);white-space:nowrap}
 html[data-stijl="nieuw"] .wt-dag.vrij{color:var(--ink-3);background:repeating-linear-gradient(135deg,var(--surface-sunken) 0 4px,transparent 4px 8px)}
 html[data-stijl="nieuw"] .wt-dag.leeg{color:var(--ink-3)}
 html[data-stijl="nieuw"] .wt-week,html[data-stijl="nieuw"] .wt-vraag{padding:10px 8px;display:flex;align-items:center;font:500 13px/18px var(--mono)}
@@ -506,3 +506,27 @@ html[data-stijl="nieuw"] .pm-tabel td{border-bottom-color:var(--line-soft)}
 html[data-stijl="nieuw"] .pm-tabel .pm-totaal td{border-top-color:var(--ink)}
 html[data-stijl="nieuw"] .pt-sel{border-color:var(--border-strong);border-radius:4px;background-color:var(--surface)}
 html[data-stijl="nieuw"] #proj-sectie-inhoud tr:hover>td{background:var(--surface-sunken)}
+/* brok 9b: Afwijkingen per medewerker en maand (extra gewerkt / vrij genomen), afgeleid uit bestaande data */
+html[data-stijl="nieuw"] .wt-afw-cel{padding:10px 12px 10px 8px;display:flex;align-items:center;font:500 12px/16px var(--mono);white-space:nowrap}
+html[data-stijl="nieuw"] .afw-plus{color:var(--primary-text)}html[data-stijl="nieuw"] .afw-min{color:var(--brass-ink)}html[data-stijl="nieuw"] .afw-nul{color:var(--ink-3)}
+html[data-stijl="nieuw"] .wt-afw{margin-top:20px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+html[data-stijl="nieuw"] .wt-afw-balk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .wt-afw-titel{margin:0 8px 0 0;font:600 16px/22px var(--sans);color:var(--ink)}
+html[data-stijl="nieuw"] .wt-afw-sel{width:auto;height:30px;font:500 13px/18px var(--sans)}
+html[data-stijl="nieuw"] .wt-knop.icoon{width:30px;height:30px;padding:0;font-size:16px;line-height:1}
+html[data-stijl="nieuw"] .wt-afw-kaarten{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:0}
+html[data-stijl="nieuw"] .wt-afw-kaart{padding:16px 20px;display:flex;flex-direction:column;gap:8px;min-width:0}
+html[data-stijl="nieuw"] .wt-afw-kaart+.wt-afw-kaart{border-left:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .wt-afw-kop{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font:600 14px/20px var(--sans)}
+html[data-stijl="nieuw"] .wt-afw-tweede{margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .wt-afw-groot{font:500 22px/26px var(--mono);letter-spacing:-0.02em;color:var(--ink)}
+html[data-stijl="nieuw"] .wt-afw-groot.klein{font-size:15px;line-height:20px}
+html[data-stijl="nieuw"] .wt-afw-lijst{display:flex;flex-direction:column;border:1px solid var(--line-soft);border-radius:4px;overflow:hidden}
+html[data-stijl="nieuw"] .wt-afw-dag,html[data-stijl="nieuw"] .wt-afw-periode{display:grid;grid-template-columns:minmax(76px,auto) minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border:0;border-top:1px solid var(--line-soft);background:transparent;font:400 13px/18px var(--sans);color:var(--ink);text-align:left}
+html[data-stijl="nieuw"] .wt-afw-lijst>:first-child{border-top:0}
+html[data-stijl="nieuw"] .wt-afw-dag{cursor:pointer}
+html[data-stijl="nieuw"] .wt-afw-dag:hover{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .wt-afw-dag:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:-2px}
+html[data-stijl="nieuw"] .wt-afw-datum{font:500 13px/18px var(--mono);white-space:nowrap}
+html[data-stijl="nieuw"] .wt-afw-reden{color:var(--ink-2);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-stijl="nieuw"] .wt-afw-let{font-size:11.5px}
