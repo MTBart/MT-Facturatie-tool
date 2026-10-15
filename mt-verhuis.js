@@ -40,7 +40,7 @@
   V.PREFIXEN = ['mt_rapdraft_', 'mt_csv_prijzen_', 'mt_bestellijst_onleesbaar_', 'mt_updates_gezien:', 'mtg:zoom:', 'mtg:alleen:', 'mtg:nood:', 'mtg:intro:', 'mtg:mp-init:', 'mtg:mp:', 'mtg:prognose:', 'mt_project_taken_v2_verweesd_', 'mt_bestellijst_v2_verweesd_'];
   // Bewust NIET mee (token, cache, afgeleid, lopende timer, sessie). Alles wat noch hier noch in SLEUTELS/PREFIXEN staat is "onbekend":
   // dat gaat niet mee maar wordt in het paneel genoemd, zodat iemand beoordeelt of er een nieuwe sleutel bij moet.
-  V.UITGESLOTEN = new Set(['mt_toggl_token', 'mt_toggl_last_sync', 'mt_toggl_user_names', 'mt_toggl_user_map', 'mt_toggl_project_map', 'mt_toggl_proj_names', 'mt_toggl_names_ver',
+  V.UITGESLOTEN = new Set(['mt_toggl_token', 'mt_toggl_last_sync', 'mt_ag_autosync', 'mt_toggl_user_names', 'mt_toggl_user_map', 'mt_toggl_project_map', 'mt_toggl_proj_names', 'mt_toggl_names_ver',
     'mt_toggl_users_raw', 'mt_toggl_projecten_raw', 'mt_cache_facturen', 'mt_cache_klanten', 'mt_klanten_cache', 'mt_notificaties', 'mt_auditlog', 'mt_chatlog_buffer', 'mt_calc_map_state',
     'mt_timer', 'mt_uren_lopend',
     'mt_meter_stand', 'mt_device_id', 'mt_taken_lokaal_negeer', 'mt_bestel_lokaal_negeer',

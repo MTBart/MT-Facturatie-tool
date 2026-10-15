@@ -1,15 +1,29 @@
 [
   {
-    "versie": "2.17.1",
+    "versie": "2.17.2",
     "datum": "2026-10-15",
-    "titel": "Open voorstellen tellen niet mee in de bezetting",
+    "titel": "Nieuwe stijl om te proberen, slimmere planning",
     "voor": "iedereen",
     "punten": [
-      "Een voorstel van de werkplaats (gestippeld, met de aanduiding voorstel) telt niet meer mee in de uren van de planning, ook niet als het bij een taak hoort. Pas als je het overneemt, telt het mee.",
+      "Nieuwe stijl om te proberen: een zijbalk links, nieuwe kleuren en lettertypen en volle breedte op een groot scherm. Onder Instellingen, Weergave zet je Nieuwe stijl proberen aan of uit; het geldt alleen op jouw computer en de oude stijl blijft gewoon beschikbaar.",
+      "Een voorstel van de werkplaats (gestippeld, met de aanduiding voorstel) telt niet meer mee in de uren van de planning, ook niet als het bij een taak hoort. Hetzelfde geldt voor een taak die de werkplaats heeft gemeld en die nog niet is overgenomen. Pas als je het overneemt, telt het mee.",
       "Het voorstel blijft gewoon zichtbaar in de planning, zodat je ziet wat er nog op een besluit wacht.",
       "Dit geldt overal waar de bezetting wordt getoond: Planning, Vandaag, Mijn werk, de telefoon en de werkplaats-tv.",
       "Plan je (met slepen of Verplaats naar) iets op een dag met verlof, een verplichte vrije dag of een dag waarop iemand volgens de werktijden niet werkt, dan vraagt de tool eerst of je dat echt wilt. Kies Annuleren en er verandert niets.",
       "Eigenaar en beheer: bij Admin, Team en werktijden staan nu per medewerker en per maand de afwijkingen: hoeveel dagen er extra gewerkt zijn (weekend, vrije of verlofdag) en hoeveel vrij is genomen. Een klik op een dag opent die dag in de planning. Geklokte uren zijn alleen wat op deze computer uit Toggl is binnengekomen."
+    ]
+  },
+  {
+    "versie": "2.17.1",
+    "datum": "2026-10-15",
+    "titel": "Agenda: projectfilter opgeschoond",
+    "voor": "iedereen",
+    "punten": [
+      "Het projectfilter in de Agenda toont alleen de projecten uit de week die je bekijkt. Oude en gearchiveerde projecten staan er niet meer tussen.",
+      "Projecten staan met hun projectnummer en naam in de lijst, net als in Mijn werk. Projecten die alleen in Toggl bestaan houden hun Toggl-naam.",
+      "Nieuwe Toggl-projecten krijgen in de Agenda nu hun naam, in plaats van 'Toggl' met een nummer.",
+      "Het uitklapmenu van het filter ligt nu altijd bovenop de rest van het scherm.",
+      "De Agenda haalt de uren van de getoonde week zelf op uit Toggl zodra je het tabblad opent of een andere week kiest (hooguit eens per 5 minuten). De knop Sync nu blijft voor een handmatige ronde."
     ]
   },
   {

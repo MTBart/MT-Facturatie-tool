@@ -180,9 +180,11 @@
   P.TAAK_BASIS_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'status', 'toegewezen', 'prioriteit', 'afhankelijk_van', 'tg_task_id', 'tg_sync',
     'start', 'eind', 'duur_dagen', 'soort', 'fase', 'sleutel'];   // de velden van de eerste versie: de hashes voor de overstap (oud_hash, basis) blijven hierop rekenen
   // klaar_op = de dag waarop de taak klaar is gemeld (ymd); tg_pending = de duurzame Toggl-intentie {op, ts, ...} die vóór een Toggl-actie wordt opgeslagen.
-  // Beide zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
-  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending']);
-  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending']);
+  // wacht_reden = waarom een taak op status 'wacht' staat (stap 2, mobiel: Bezig · Klaar · Wacht met een verplichte reden).
+  // Alle drie zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
+  // voorstel = de markering "door werkplaats" van een gemelde taak of bestelregel (wie, rol, wanneer); kantoor haalt hem er met Overnemen af.
+  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel']);
+  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel']);
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
@@ -253,8 +255,8 @@
   //   'taken:alles'                = elk ander veld wijzigen, een taak verwijderen of de Toggl-koppeling (tg_task_id) wijzigen;
   //   'taken:status-nieuw|alles'   = alleen de status wijzigen (met de bijbehorende Toggl-markeringen en de afrondingsdatum) en/of nieuwe taken toevoegen;
   //   null                         = niets inhoudelijks gewijzigd.
-  // Velden die met een status meebewegen: status, klaar_op, tg_pending, tg_sync. Meta-velden (met _ ervoor) tellen niet mee.
-  P.TAAK_STATUS_VELDEN = ['status', 'klaar_op', 'tg_pending', 'tg_sync'];
+  // Velden die met een status meebewegen: status, klaar_op, wacht_reden, tg_pending, tg_sync. Meta-velden (met _ ervoor) tellen niet mee.
+  P.TAAK_STATUS_VELDEN = ['status', 'klaar_op', 'tg_pending', 'tg_sync', 'wacht_reden'];
   // batch: een bulk-actie (AI-takenlijst, takenketen, sjabloon) vraagt altijd "alles", ook als de regels alleen maar nieuw zijn. Een Toggl-intentie met een andere actie dan
   // "status" (koppelen, bijwerken, verwijderen) is nooit een gewone statuswijziging: ook dat vraagt "alles", zodat het opslaan van de intentie de Toggl-actie niet legitimeert.
   P.tgPendingOp = p => (!p || typeof p !== 'object') ? '' : (p.op || (p.verwijderen ? 'verwijderen' : (p.status ? 'status' : '')));
@@ -1079,7 +1081,10 @@
   // Oude regels zonder deze velden werken gewoon door: sleutel, status en bron worden dan afgeleid (de migratie legt ze vast).
   P.BESTEL_STATUS = ['nodig', 'besteld', 'geleverd'];
   P.BESTEL_STATUS_LABEL = { nodig: 'Nodig', besteld: 'Besteld', geleverd: 'Geleverd' };
-  P.BESTEL_VELDEN = ['materiaal', 'omschrijving', 'artikel', 'artikelsleutel', 'aantal', 'eenheid', 'leverancier', 'status', 'besteld', 'project', 'project_id', 'bron'];
+  // BASIS = de velden van de overstap (de hashes en de vergelijking met het oude bestand blijven hierop rekenen); voorstel = de markering "door werkplaats" (stap 2):
+  // een gestempeld veld, zodat "Overnemen" (de markering eraf) ook na samenvoegen blijft staan.
+  P.BESTEL_BASIS_VELDEN = ['materiaal', 'omschrijving', 'artikel', 'artikelsleutel', 'aantal', 'eenheid', 'leverancier', 'status', 'besteld', 'project', 'project_id', 'bron'];
+  P.BESTEL_VELDEN = P.BESTEL_BASIS_VELDEN.concat(['voorstel']);
   const kleinNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/(\d)\s*(mm|cm|m|x)\b/g, '$1 $2').replace(/[^a-z0-9.,\u00d7]+/g, ' ').trim().replace(/\s+/g, ' ');
   const EENHEDEN = { plaat: 'plaat', platen: 'plaat', pl: 'plaat', stuk: 'stuk', stuks: 'stuk', st: 'stuk', stk: 'stuk', pcs: 'stuk', 'm2': 'm²', 'm²': 'm²', 'vierkante meter': 'm²', m: 'm', mtr: 'm', meter: 'm', strekkende: 'm', lm: 'm', set: 'set', sets: 'set', paar: 'paar', liter: 'liter', l: 'liter', kg: 'kg', doos: 'doos', dozen: 'doos', rol: 'rol', rollen: 'rol' };
   P.eenheidNorm = e => { const s = String(e == null ? '' : e).trim().toLowerCase().replace(/\.$/, ''); return s === '' ? '' : (EENHEDEN[s] || s); };
@@ -1153,7 +1158,7 @@
   // Elk ingevuld veld zonder stempel krijgt er een met het tijdstip van de overstap. In de regel met id "__migratie" staat wat nodig is om later
   // te zien of een oude app-versie het oude bestand nog wijzigde. lijst = de regels van de overstap; oud (optioneel) = de lijst waarvan de hash komt.
   P.bestelConflictOplos = P.conflictOplos;
-  P.bestelInhoudHash = b => hash36(stabiel(P.BESTEL_VELDEN.map(f => norm(b && b[f])).concat([!!(b && b._vervallen)])));
+  P.bestelInhoudHash = b => hash36(stabiel(P.BESTEL_BASIS_VELDEN.map(f => norm(b && b[f])).concat([!!(b && b._vervallen)])));
   const bestelProjectCode = b => String((b && (b.project || b.project_id)) || '');
   const bestelFingerprint = b => hash36(stabiel([b && b.materiaal, b && b.omschrijving, b && b.artikel, bestelProjectCode(b), b && b.datum, b && b.categorie, b && b.leverancier].map(norm)));
   // Per legacy-regel een bronsleutel (fingerprint + volgnummer voor gelijke regels); ook de van de lijst gehaalde regels tellen mee.
@@ -1172,7 +1177,7 @@
     P.bestelBronSleutels(lokaal).forEach(x => {
       const id = x.regel.id !== undefined && x.regel.id !== null && x.regel.id !== '' ? String(x.regel.id) : '';
       if (id && spId.has(id)) {
-        const s = spId.get(id), velden = P.BESTEL_VELDEN.filter(f => !gelijk(x.regel[f], s[f])).map(f => ({ veld: f, oud: norm(x.regel[f]), nu: norm(s[f]) }));
+        const s = spId.get(id), velden = P.BESTEL_BASIS_VELDEN.filter(f => !gelijk(x.regel[f], s[f])).map(f => ({ veld: f, oud: norm(x.regel[f]), nu: norm(s[f]) }));
         if (!!x.regel._vervallen !== !!s._vervallen) velden.push({ veld: '_vervallen', oud: x.regel._vervallen ? 'van de lijst gehaald' : null, nu: s._vervallen ? 'van de lijst gehaald' : null });
         if (velden.length) migratieAfwijkingen.push({ id, naam: P.bestelOms(x.regel), velden, hash: P.bestelInhoudHash(x.regel) });
         return;
@@ -1264,7 +1269,7 @@
         if (eerder !== h || verhuisd) voeg({ soort: 'herstel', sleutel: id, id, naam: P.bestelOms(b), hash: h + (verhuisd ? '@' + bestelProjectCode(b) : ''), velden: verhuisd ? [{ veld: 'project', oud: bestelProjectCode(b), nu: codes[id] }] : [], regel: kopie(b) });
         return;
       }
-      const velden = P.BESTEL_VELDEN.filter(f => !gelijk(b[f], huidig[f])).map(f => ({ veld: f, oud: norm(b[f]), nu: norm(huidig[f]) }));
+      const velden = P.BESTEL_BASIS_VELDEN.filter(f => !gelijk(b[f], huidig[f])).map(f => ({ veld: f, oud: norm(b[f]), nu: norm(huidig[f]) }));
       if (!!b._vervallen !== !!huidig._vervallen) velden.push({ veld: '_vervallen', oud: b._vervallen ? 'van de lijst gehaald' : null, nu: huidig._vervallen ? 'van de lijst gehaald' : null });
       if (verhuisd) voeg({ soort: 'verhuisd', sleutel: id, id, naam: P.bestelOms(b), hash: h + '@' + bestelProjectCode(b), velden: [{ veld: 'project', oud: bestelProjectCode(b), nu: bestelProjectCode(huidig) }].concat(velden.filter(v => v.veld !== 'project' && v.veld !== 'project_id')), regel: kopie(b) });
       else if (velden.length) voeg({ soort: 'gewijzigd', sleutel: id, id, naam: P.bestelOms(b), hash: h, velden, regel: kopie(b) });
@@ -1366,6 +1371,501 @@
       if (hit) uit.push({ key: k.key, nummer: hit });
     });
     return uit;
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // Stap 2 — Mijn werk / Vandaag (telefoon) en de gedeelde schrijfkern
+  // ----------------------------------------------------------------------------------------------
+  // Wat v2.html en mobiel.html samen gebruiken: de rechtnamen, de laadstanden van de takenlijst en de bestellijst (met hun
+  // meldingen), de back-up van een verweesde lokale kopie, de schemaversie, de status van een taak (Open · Bezig · Wacht · Klaar)
+  // en het lezen-samenvoegen-schrijven naar SharePoint (ETag/412-merge) met dezelfde stempels en tombstones als de cockpit.
+  // Alle opslag komt van buiten (sp = de _SP uit mt-core.js, storage = localStorage), zodat dit zonder browser te testen is.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+
+  // ── Schemaversie van de projecttaken ──
+  // De laagste app-versie die mt_project_taken_v2 mag schrijven staat in de teller (GET /teller/status → schema_min). Is die hoger dan
+  // de versie van déze app (v2.html: PROJ_SCHEMA), dan schrijft de app niet meer. Onbekend (nog niet gelezen) = geen blokkade.
+  P.SCHEMA = 5;
+  P.SCHEMA_TEKST = 'Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
+  P.schemaGeblokkeerd = (schemaMin, eigen) => schemaMin !== null && schemaMin !== undefined && schemaMin !== '' && Number.isFinite(Number(schemaMin)) && Number(schemaMin) > (eigen == null ? P.SCHEMA : Number(eigen));
+
+  // ── De rechtnamen (zelfde matrix als de worker en de cockpit) ──
+  // taken "status-nieuw|alles" = de status wijzigen en een nieuwe taak toevoegen; taken "alles" = velden, uren, afhankelijkheden, verwijderen;
+  // bestellijst "toevoegen|alles" = een nieuwe regel; bestellijst "alles" = status, aantal, verwijderen. UREN_BOEKEN: tijd boeken en de timer.
+  P.ROL = { TAAK_STATUS: 'taken:status-nieuw|alles', TAAK_ALLES: 'taken:alles', BESTEL_TOEV: 'bestellijst:toevoegen|alles', BESTEL_ALLES: 'bestellijst:alles', UREN_BOEKEN: 'uren:eigen|team|alles' };
+
+  // ── De laadstand van een gedeelde lijst (takenlijst of bestellijst) ──
+  // 'klaar' = geladen en bewerkbaar; alles anders is alleen-lezen met een melding. De volgorde van de controles is die van de cockpit:
+  // backup-mislukt > verweesd > geblokkeerd > (time-out | laden) > (klaar | overzetten).
+  P.lijstStaat = function ({ backupFout = false, verweesd = false, geblokkeerd = false, gereed = true, timeout = false, heeftV2 = false } = {}) {
+    if (backupFout) return 'backup-mislukt';
+    if (verweesd) return 'verweesd';
+    if (geblokkeerd) return 'geblokkeerd';
+    if (!gereed) return timeout ? 'time-out' : 'laden';
+    return heeftV2 ? 'klaar' : 'overzetten';
+  };
+  P.lijstStatusTekst = function (soort, staat, vormFout) {
+    const t = soort === 'bestel';
+    switch (staat) {
+      case 'backup-mislukt': return t
+        ? 'De nieuwe bestellijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale bestellijst; er is niets gewijzigd of overgezet.'
+        : 'De nieuwe takenlijst ontbreekt op SharePoint en er kon geen back-up van de lokale kopie worden gemaakt (opslag vol?). Maak eerst ruimte vrij of exporteer de lokale takenlijst; er is niets gewijzigd of overgezet.';
+      case 'verweesd': return t
+        ? 'De nieuwe bestellijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de bestellijst opnieuw overzetten.'
+        : 'De nieuwe takenlijst bestaat niet (meer) op SharePoint terwijl deze browser een lokale kopie had; die is als back-up bewaard en wordt niet gebruikt. Beheer moet de taken opnieuw overzetten.';
+      case 'geblokkeerd': return vormFout
+        ? (t ? 'De nieuwe bestellijst op SharePoint heeft een verkeerde vorm (' : 'De nieuwe takenlijst op SharePoint heeft een verkeerde vorm (') + vormFout + '). Er is niets gewijzigd; laat beheer dit controleren.'
+        : (t ? 'De bestellijst is geblokkeerd: de laadstap voor de nieuwe bestellijst is mislukt. Er is niets gewijzigd.'
+          : 'De taken zijn geblokkeerd (de laadstap voor de nieuwe takenlijst is mislukt): herlaad de pagina. Taken bewerken kan pas daarna.');
+      case 'time-out': return t ? 'De bestellijst laden duurt te lang of is mislukt.' : 'Taken laden duurt te lang of is mislukt. Probeer het opnieuw.';
+      case 'overzetten': return t ? 'De bestellijst wordt overgezet door beheer. Tot die tijd is hij alleen-lezen.' : 'De taken worden overgezet door beheer. Tot die tijd zijn ze alleen-lezen.';
+      case 'laden': return t ? 'De bestellijst wordt geladen…' : 'Taken laden…';
+      case 'schema': return P.SCHEMA_TEKST;
+      default: return '';
+    }
+  };
+
+  // ── Een lokale v2 zonder v2 op SharePoint wordt NIET gebruikt (verweesd) ──
+  // De lokale kopie gaat naar een back-upsleutel (<sleutel>_verweesd_<tijd>) en de sleutel zelf wordt leeggemaakt. Fail-closed: de back-up telt pas
+  // als hij is teruggelezen; mislukt dat, dan blijft de lokale kopie staan en is de uitkomst 'backup-mislukt'.
+  // → { actie: 'geen' | 'verweesd' | 'backup-mislukt', backupSleutel? }
+  P.verweesdOpruimen = function (storage, sleutel, nu) {
+    let raw = null; try { raw = storage.getItem(sleutel); } catch (e) { raw = null; }
+    if (raw === null || raw === undefined) return { actie: 'geen' };
+    const bk = sleutel + '_verweesd_' + (nu == null ? Date.now() : nu); let bewaard = false;
+    try { storage.setItem(bk, raw); bewaard = storage.getItem(bk) === raw; } catch (e) { bewaard = false; }
+    if (!bewaard) { try { storage.removeItem(bk); } catch (e) {} return { actie: 'backup-mislukt' }; }
+    try { storage.removeItem(sleutel); } catch (e) {}
+    return { actie: 'verweesd', backupSleutel: bk };
+  };
+
+  // ── De status van een taak: Open (todo) · Bezig · Wacht (altijd met een reden) · Klaar ──
+  P.TAAK_STATUSSEN = ['todo', 'bezig', 'wacht', 'klaar'];
+  P.TAAK_STATUS_LABEL = { todo: 'Open', bezig: 'Bezig', wacht: 'Wacht', klaar: 'Klaar' };
+  // De dag waarop een taak klaar is gemeld (lokale datum); weg zodra de taak weer open staat.
+  P.klaarOp = function (t, status) { if (status === 'klaar') { if (!P.isYmd(t.klaar_op)) t.klaar_op = P.vandaagYmd(); } else delete t.klaar_op; };
+  // Zet de status van `t` (wijzigt ter plekke). Wacht vraagt een reden; een andere status wist die. → { ok: true } | { ok: false, fout }
+  P.statusZet = function (t, status, { reden = '' } = {}) {
+    if (!t || typeof t !== 'object' || !P.TAAK_STATUSSEN.includes(status)) return { ok: false, fout: 'Onbekende status.' };
+    const r = String(reden == null ? '' : reden).replace(/\s+/g, ' ').trim();
+    if (status === 'wacht' && r.length < 2) return { ok: false, fout: 'Bij Wacht hoort een reden.' };
+    t.status = status;
+    if (status === 'wacht') t.wacht_reden = r.slice(0, 200); else delete t.wacht_reden;
+    P.klaarOp(t, status);
+    return { ok: true };
+  };
+  P.taakId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+
+  // ── Uren in gewone taal: 150 → "2u30", 120 → "2u", 45 → "0u45" ──
+  P.fmtUurMin = m => { const n = Math.max(0, Math.round(getal(m))), h = Math.floor(n / 60), r = n % 60; return r ? h + 'u' + String(r).padStart(2, '0') : h + 'u'; };
+  // Een datum in gewone taal: "vr 16 okt" (voor Vandaag, Mijn werk en de tv).
+  const DAG_KORT = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'], MND_KORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+  P.datumKort = ymd => { if (!P.isYmd(ymd)) return ''; const n = dnr(ymd), d = Number(ymd.slice(8, 10)), m = Number(ymd.slice(5, 7)); return DAG_KORT[((n + 4) % 7 + 7) % 7] + ' ' + d + ' ' + MND_KORT[m - 1]; };
+  // De markering van een gemelde taak of bestelregel in gewone taal: "Probleem gemeld door werkplaats — Wim, di 14 okt".
+  P.voorstelTekst = function (v) {
+    if (!v || typeof v !== 'object') return '';
+    const wie = String(v.doorNaam || v.door || '').trim(), dag = /^\d{4}-\d{2}-\d{2}/.test(String(v.ts || '')) ? P.datumKort(String(v.ts).slice(0, 10)) : '';
+    return (v.soort === 'probleem' ? 'Probleem gemeld' : v.soort === 'bestel' ? 'Bestelvoorstel' : 'Voorstel') + (v.rol === 'werkplaats' ? ' door werkplaats' : '') + (wie ? ' — ' + wie : '') + (dag ? ', ' + dag : '');
+  };
+  // ... en terug: "2,5", "2.5", "2u30", "2:15", "1 uur", "45m" → minuten. Leeg, onleesbaar, 0 of meer dan 16 uur → null (er wordt dan niets geboekt).
+  P.duurNaarMin = function (tekst) {
+    const x = String(tekst == null ? '' : tekst).trim().toLowerCase().replace(',', '.'); let m, min = null;
+    if ((m = /^(\d{1,2})\s*(?:u|uur|h|:)\s*(\d{1,2})?\s*(?:m|min)?$/.exec(x))) min = Number(m[1]) * 60 + Number(m[2] || 0);
+    else if ((m = /^(\d+(?:\.\d+)?)\s*(?:m|min|minuten)$/.exec(x))) min = Math.round(Number(m[1]));
+    else if ((m = /^(\d+(?:\.\d+)?)\s*(?:u|uur|h)?$/.exec(x))) min = Math.round(Number(m[1]) * 60);
+    return min !== null && isFinite(min) && min > 0 && min <= 16 * 60 ? min : null;
+  };
+
+  // ── Projectkleur: een vaste kleur per projectcode (geen rood, oranje of groen: die zijn voor alarm) ──
+  const KLEUR_TINTEN = [195, 210, 225, 240, 255, 270, 285, 300];
+  P.projectKleur = function (code) {
+    const s = String(code == null ? '' : code).trim().toLowerCase(); let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return 'hsl(' + KLEUR_TINTEN[h % KLEUR_TINTEN.length] + ', 42%, ' + ((h >>> 3) % 2 ? 46 : 36) + '%)';
+  };
+
+  // ── Mijn werk: de taken van één persoon in groepen, plus de planblokken ──
+  // takenObj = { projectcode: [taak…] } (mt_project_taken_v2), depsObj = { projectcode: [afhankelijkheid…] } (mt_project_afhank), blokken = mt_planblokken.
+  // opties: mijn (team-slug of e-mailadres), team, vandaag (ymd), nu (ms), vrij (vrije dagen), gezien ({taak-id: stempel van de toewijzing die je al zag}),
+  //         nieuwDagen (een toewijzing die je nog nooit zag telt 7 dagen als nieuw).
+  //         Voor kantoor (desktop): iedereen (alle taken en blokken, ook van niemand), project (alleen die projectcode), nieuw:false (geen "nieuw voor mij"),
+  //         voorstellen (taken met een voorstel-markering komen apart in groepen.voorstel, ook als ze al van iemand zijn). Bij iedereen geldt de weekbalk niet (null).
+  // Groepen: nieuw · teLaat · vandaag · week · later · zonderDatum, plus nietVrij (een open afhankelijkheid: de taak is nog niet gestart en wacht op een voorganger).
+  // Een taak met een planblok krijgt de datum van dat blok als dat eerder is dan zijn eigen datum; een blok zonder taak staat er zelf (soort 'blok').
+  const MIJN_RANG = { nieuw: 0, teLaat: 1, vandaag: 2, week: 3, later: 4, zonderDatum: 5 };
+  const maandagVan = ymd => { const n = dnr(ymd), w = ((n + 4) % 7 + 7) % 7, ma = n - ((w + 6) % 7); return { ma: dymd(ma), zo: dymd(ma + 6), maNr: ma }; };
+  const zelfdeCode = (a, b) => String(a == null ? '' : a).trim().toLowerCase() === String(b == null ? '' : b).trim().toLowerCase();
+  const blokGeldig = (b, mijn, team, alle) => !!b && typeof b === 'object' && !b._vervallen && P.isYmd(b.datum) && !(b.voorstel && b.voorstel.afgewezen) && (alle || P.zelfdePersoon(b.persoon, mijn, team));
+  const blokStartTekst = b => { const m = /^(\d{1,2}):(\d{2})/.exec(String(b && b.start || '')); return m ? String(m[1]).padStart(2, '0') + ':' + m[2] : ''; };
+  // De planblokken van een taak: op taak-id, of (zonder id) op exact dezelfde, unieke naam binnen hetzelfde project.
+  const taakBlokken = (t, code, naamAantal, blokken) => { const n = nrm(t.naam); return blokken.filter(b => (b.taak_id != null && b.taak_id !== '') ? String(b.taak_id) === String(t.id) : (zelfdeCode(b.project_code, code) && !!n && nrm(b.taak) === n && naamAantal.get(n) === 1)); };
+  P.mijnWerk = function (takenObj, depsObj, blokken, opt) {
+    const o = opt || {}, mijn = o.mijn || '', team = o.team || null, alle = !!o.iedereen, metNieuw = o.nieuw !== false && !alle;
+    const projF = o.project ? String(o.project).trim().toLowerCase() : '';
+    const vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd(), nu = Number(o.nu) || Date.now();
+    const nieuwMs = (o.nieuwDagen == null ? 7 : Number(o.nieuwDagen)) * 864e5, gezien = o.gezien && typeof o.gezien === 'object' ? o.gezien : {};
+    const wk = maandagVan(vandaag), zo = wk.zo;
+    const groepVan = (s, e) => { s = s || e; e = e || s; if (!s) return 'zonderDatum'; if (e < vandaag) return 'teLaat'; if (s <= vandaag) return 'vandaag'; if (s <= zo) return 'week'; return 'later'; };
+    const groepen = { voorstel: [], nieuw: [], teLaat: [], vandaag: [], week: [], later: [], zonderDatum: [], nietVrij: [] };
+    const alleBlokken = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, mijn, team, alle) && (!projF || zelfdeCode(b.project_code, projF)));
+    const gekoppeld = new Set(), mijnTaken = [], dekt = new Set(), PRIO = { high: 0, medium: 1, low: 2 };
+    const takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {};
+    Object.keys(takenPer).sort().forEach(code => {
+      if (code.startsWith('__') || !Array.isArray(takenPer[code]) || (projF && !zelfdeCode(code, projF))) return;
+      const lijst = P.takenActief(takenPer[code]);
+      const mijnL = lijst.filter(t => (alle || (t.toegewezen && P.zelfdePersoon(t.toegewezen, mijn, team))) && (t.status || 'todo') !== 'klaar');
+      if (!mijnL.length) return;
+      const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag });
+      const naamAantal = new Map(); lijst.forEach(t => { const n = nrm(t.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
+      mijnL.forEach(t => {
+        const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] }, n = nrm(t.naam);
+        const bl = taakBlokken(t, code, naamAantal, alleBlokken);
+        bl.forEach(b => gekoppeld.add(String(b.id)));
+        if (bl.length) dekt.add(t.id);
+        const komend = bl.filter(b => b.datum >= vandaag).sort((a, b) => (a.datum + blokStartTekst(a)) < (b.datum + blokStartTekst(b)) ? -1 : 1);
+        const eerste = komend[0] || null;
+        const gD = groepVan(P.isYmd(t.start) ? t.start : '', P.isYmd(t.eind) ? t.eind : ''), gB = eerste ? groepVan(eerste.datum, eerste.datum) : '';
+        let groep = gD;
+        if (gB && (gD === 'zonderDatum' || (gD !== 'teLaat' && MIJN_RANG[gB] < MIJN_RANG[gD]))) groep = gB;
+        const ts = t.toegewezen && t._vs && t._vs.toegewezen ? t._vs.toegewezen : null, stempelT = ts ? Number(ts.t) || 0 : 0;
+        const doorMij = !!(ts && ts.door && P.zelfdePersoon(ts.door, mijn, team)), g = gezien[t.id];
+        const isNieuw = metNieuw && st === 'todo' && stempelT > 0 && !doorMij && (g === undefined || g === null ? (nu - stempelT) <= nieuwMs : stempelT > Number(g));
+        const nietVrij = st === 'todo' && w.wacht;
+        const eindGroep = (o.voorstellen && t.voorstel) ? 'voorstel' : nietVrij ? 'nietVrij' : (isNieuw ? 'nieuw' : groep);
+        mijnTaken.push(Object.assign({ _code: code }, t));
+        groepen[eindGroep].push({
+          soort: 'taak', id: t.id, code, taak: t, persoon: P.persoonSlug(t.toegewezen, team) || String(t.toegewezen || ''), status: st, wacht: w, wachtTekst: P.wachtOpTekst(w), nieuw: isNieuw, groep: eindGroep, stempelToegewezen: stempelT,
+          gepland_min: P.taakBudgetMin(t), start: P.isYmd(t.start) ? t.start : '', eind: P.isYmd(t.eind) ? t.eind : '',
+          blokken: bl.map(b => ({ id: b.id, datum: b.datum, start: blokStartTekst(b), duurMin: Math.max(0, Math.round(getal(b.duurMin))), voorstel: b.status === 'voorstel' })),
+          sleutel: (eerste ? eerste.datum + ' ' + (blokStartTekst(eerste) || '99:99') : (P.isYmd(t.start) ? t.start : (P.isYmd(t.eind) ? t.eind : '9999-99-99')) + ' ~') + '|' + (PRIO[t.prioriteit] !== undefined ? PRIO[t.prioriteit] : 3) + '|' + String(t.naam || '').toLowerCase()
+        });
+      });
+    });
+    alleBlokken.forEach(b => {
+      if (gekoppeld.has(String(b.id)) || b.datum < vandaag) return;
+      const groep = groepVan(b.datum, b.datum), s = blokStartTekst(b);
+      groepen[groep].push({ soort: 'blok', id: 'blok:' + b.id, code: b.project_code || '', blok: b, persoon: P.persoonSlug(b.persoon, team) || String(b.persoon || ''), naam: b.taak || b.project_code || 'Planblok', datum: b.datum, start: s, duurMin: Math.max(0, Math.round(getal(b.duurMin))),
+        voorstel: b.status === 'voorstel', groep, sleutel: b.datum + ' ' + (s || '99:99') + '|0|' + String(b.taak || '').toLowerCase() });
+    });
+    Object.keys(groepen).forEach(k => groepen[k].sort((a, b) => a.sleutel < b.sleutel ? -1 : a.sleutel > b.sleutel ? 1 : 0));
+    const week = alle ? null : P.weekBezetting(mijnTaken, alleBlokken, { vandaag, vrij: o.vrij, dagMin: o.dagMin, gedekt: dekt, verlof: P.verlofDagen(o.verlof, mijn, team) });
+    return { vandaag, weekgrens: { van: wk.ma, tot: zo }, groepen, week, aantal: Object.keys(groepen).reduce((s, k) => s + groepen[k].length, 0) };
+  };
+
+  // ── Verlof (Beheer ▸ mt_verlof): [{persoon (slug), van, tm}] → de dagen waarop die persoon vrij is (als Set van ymd) ──
+  P.verlofDagen = function (verlof, persoon, team) {
+    const uit = new Set();
+    (Array.isArray(verlof) ? verlof : []).forEach(v => {
+      if (!v || typeof v !== 'object' || !P.isYmd(v.van) || !P.isYmd(v.tm) || !P.zelfdePersoon(v.persoon, persoon, team)) return;
+      for (let n = dnr(v.van), e = Math.min(dnr(v.tm), dnr(v.van) + 400); n <= e; n++) uit.add(dymd(n));
+    });
+    return uit;
+  };
+  // De vrije dagen uit Beheer (mt_vrijedagen: [{datum, type 'verplicht'|'optioneel'}]) als lijst van ymd: een optionele dag (bv. een brugdag) telt als gewone werkdag.
+  P.vrijeDagenLijst = lijst => (Array.isArray(lijst) ? lijst : []).filter(v => v && v.datum && v.type !== 'optioneel').map(v => v.datum).filter(P.isYmd);
+
+  // ── Capaciteit van de week: 8 uur per werkdag, geplande uren in dagdelen ──
+  // Gepland = de planblokken van de persoon (geen open voorstellen) plus de taken met een start/eind in die week die geen planblok hebben (de uren
+  // verdeeld over hun werkdagen). Per dag telt een begonnen dagdeel (4 uur) voor een heel dagdeel: de werkplaats plant in dagdelen.
+  // → { van, tot, dagen: [{datum, werkdag, cap_min, gepland_min, dagdelen}], cap_min, gepland_min (in dagdelen), vrij_min, over_min, dagdelen, dagdelenTotaal }
+  P.weekBezetting = function (taken, blokken, { vandaag = '', vrij = null, dagMin = 0, gedekt = null, verlof = null } = {}) {
+    const dm = dagMin > 0 ? dagMin : P.DAG_MIN, V = P.vrijSet(vrij), wk = maandagVan(P.isYmd(vandaag) ? vandaag : P.vandaagYmd()), VL = verlof instanceof Set ? verlof : new Set(Array.isArray(verlof) ? verlof : []);   // verlof = de dagen waarop deze persoon vrij is (zie verlofDagen): geen capaciteit
+    const dagen = []; for (let i = 0; i < 5; i++) { const nr = wk.maNr + i, w = isWerk(nr, V) && !VL.has(dymd(nr)); dagen.push({ datum: dymd(nr), nr, werkdag: w, cap_min: w ? dm : 0, gepland_min: 0 }); }
+    const per = new Map(dagen.map(d => [d.datum, d])), dekt = gedekt instanceof Set ? gedekt : new Set();
+    (blokken || []).forEach(b => {
+      if (!b || b._vervallen || b.status === 'voorstel' || (b.voorstel && b.voorstel.afgewezen)) return;
+      const d = per.get(b.datum); if (d) d.gepland_min += Math.max(0, Math.round(getal(b.duurMin)));
+    });
+    (taken || []).forEach(t => {
+      if (!t || dekt.has(t.id) || (t.status || 'todo') === 'klaar') return;
+      const min = P.taakBudgetMin(t); if (min <= 0) return;
+      const s = P.isYmd(t.start) ? t.start : (P.isYmd(t.eind) ? t.eind : ''); if (!s) return;
+      const e = P.isYmd(t.eind) ? t.eind : s, a = dnr(s), z = Math.max(a, dnr(e)); let n = 0;
+      for (let i = a; i <= z && i - a < 400; i++) if (isWerk(i, V)) n++;
+      if (!n) return;
+      for (let i = a; i <= z && i - a < 400; i++) { if (!isWerk(i, V)) continue; const d = per.get(dymd(i)); if (d) d.gepland_min += min / n; }
+    });
+    const half = dm / 2; let cap = 0, gepl = 0, over = 0, dd = 0, ddTot = 0;
+    dagen.forEach(d => {
+      d.gepland_min = Math.round(d.gepland_min); delete d.nr;
+      d.dagdelen = d.werkdag ? Math.min(2, Math.ceil(d.gepland_min / half - 1e-9)) : 0;
+      cap += d.cap_min; gepl += d.dagdelen * half; dd += d.dagdelen; ddTot += d.werkdag ? 2 : 0; over += Math.max(0, d.gepland_min - d.cap_min);
+    });
+    return { van: dagen[0].datum, tot: dagen[4].datum, dagen, cap_min: cap, gepland_min: gepl, vrij_min: Math.max(0, cap - gepl), over_min: Math.round(over), dagdelen: dd, dagdelenTotaal: ddTot };
+  };
+
+  // ── Werkplaats-tv: de kalender (een rij per persoon, werkdagen van deze en volgende week, per dagdeel) ──
+  // → { van, tot, dagen: [{datum, werkdag, nu, week}], rijen: [{slug, naam, cellen}] }; cellen[dag] = [ochtend-items, middag-items].
+  // Een rij per teamlid, plus "Niet toegewezen" (taken van niemand, blokken van een onbekende) zodra daar iets staat. Items zijn de planblokken (op hun starttijd: voor 12:00 de
+  // ochtend, erna de middag, eroverheen beide) en de taken met een start of eind zonder eigen planblok (de uren verdeeld over hun werkdagen; één dagdeel, of beide bij meer dan 4 uur
+  // per dag). Een planblok van een taak toont die taak. item: {soort 'taak'|'blok', id, code, naam, status, wacht, wachtTekst, voorstel, taak?, start?, min, persoon}.
+  const dagdeelVanBlok = b => {
+    const s = blokStartTekst(b); if (!s) return [0];
+    const m = Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)), e = m + Math.max(0, Math.round(getal(b.duurMin)));
+    return m < 720 ? (e > 720 ? [0, 1] : [0]) : [1];
+  };
+  P.weekRooster = function (takenObj, depsObj, blokken, opt) {
+    const o = opt || {}, team = Array.isArray(o.team) ? o.team : [], vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd();
+    const weken = o.weken > 0 ? Math.min(6, Math.round(o.weken)) : 2, V = P.vrijSet(o.vrij), wk = maandagVan(vandaag), half = P.DAG_MIN / 2;
+    const dagen = [];
+    for (let w = 0; w < weken; w++) for (let d = 0; d < 5; d++) { const nr = wk.maNr + w * 7 + d; dagen.push({ datum: dymd(nr), werkdag: isWerk(nr, V), nu: dymd(nr) === vandaag, week: w }); }
+    const idx = new Map(dagen.map((d, i) => [d.datum, i]));
+    const nieuwRij = (slug, naam) => { const vl = slug ? P.verlofDagen(o.verlof, slug, team) : new Set(); return { slug, naam, verlofDag: dagen.map(d => vl.has(d.datum)), cellen: dagen.map(() => [[], []]) }; };   // verlofDag: de persoon is die dag vrij (Beheer ▸ verlof)
+    const rijen = team.map(m => nieuwRij(String(m.slug || '').toLowerCase(), m.naam || m.slug)), rest = nieuwRij('', 'Niet toegewezen');
+    const rijVan = x => { const s = P.persoonSlug(x, team); return (s && rijen.find(r => r.slug === s)) || rest; };
+    const kies = (r, i) => r.cellen[i][0].length <= r.cellen[i][1].length ? 0 : 1;
+    const geldig = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, '', null, true) && idx.has(b.datum) && (!o.project || zelfdeCode(b.project_code, o.project)));
+    const koppel = new Map(), takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {};
+    Object.keys(takenPer).sort().forEach(code => {
+      if (code.startsWith('__') || !Array.isArray(takenPer[code]) || (o.project && !zelfdeCode(code, o.project))) return;
+      const lijst = P.takenActief(takenPer[code]); if (!lijst.length) return;
+      const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag });
+      const naamAantal = new Map(); lijst.forEach(t => { const n = nrm(t.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
+      lijst.forEach(t => {
+        const st = t.status || 'todo'; if (st === 'klaar') return;
+        const w = wacht[t.id] || { wacht: false, op: [] };
+        const basis = { soort: 'taak', id: t.id, code, naam: t.naam, status: st, wacht: st === 'wacht' || (st === 'todo' && !!w.wacht), wachtTekst: P.wachtOpTekst(w), voorstel: !!t.voorstel, taak: t, persoon: P.persoonSlug(t.toegewezen, team) || '' };
+        const bl = taakBlokken(t, code, naamAantal, geldig);
+        if (bl.length) { bl.forEach(b => koppel.set(String(b.id), basis)); return; }
+        const s = P.isYmd(t.start) ? t.start : (P.isYmd(t.eind) ? t.eind : ''); if (!s) return;
+        const e = P.isYmd(t.eind) ? t.eind : s, a = dnr(s), z = Math.max(a, dnr(e)); let n = 0;
+        for (let i = a; i <= z && i - a < 400; i++) if (isWerk(i, V)) n++;
+        if (!n) return;
+        const bud = P.taakBudgetMin(t), per = bud > 0 ? bud / n : half, r = t.toegewezen ? rijVan(t.toegewezen) : rest;
+        for (let i = a; i <= z && i - a < 400; i++) {
+          if (!isWerk(i, V)) continue;
+          const di = idx.get(dymd(i)); if (di === undefined) continue;
+          const item = Object.assign({}, basis, { min: Math.round(per), datum: dymd(i) });
+          (per > half ? [0, 1] : [kies(r, di)]).forEach(dl => r.cellen[di][dl].push(item));
+        }
+      });
+    });
+    geldig.forEach(b => {
+      const k = koppel.get(String(b.id)), s = blokStartTekst(b);
+      const item = k ? Object.assign({}, k, { start: s, blokId: b.id, datum: b.datum, min: Math.max(0, Math.round(getal(b.duurMin))) })
+        : { soort: 'blok', id: 'blok:' + b.id, datum: b.datum, code: b.project_code || '', naam: b.taak || b.project_code || 'Planblok', status: '', wacht: false, voorstel: false, planvoorstel: b.status === 'voorstel', start: s, min: Math.max(0, Math.round(getal(b.duurMin))), persoon: P.persoonSlug(b.persoon, team) || '' };
+      const r = rijVan(b.persoon), di = idx.get(b.datum);
+      dagdeelVanBlok(b).forEach(dl => r.cellen[di][dl].push(item));
+    });
+    const alle = rest.cellen.some(c => c[0].length || c[1].length) ? rijen.concat([rest]) : rijen;
+    alle.forEach(r => r.cellen.forEach(c => c.forEach(l => l.sort((x, y) => (String(x.code).toLowerCase() + '|' + String(x.naam).toLowerCase()) < (String(y.code).toLowerCase() + '|' + String(y.naam).toLowerCase()) ? -1 : 1))));
+    return { van: dagen[0].datum, tot: dagen[dagen.length - 1].datum, dagen, rijen: alle };
+  };
+
+  // ── Teamcapaciteit: per persoon per dag gepland tegenover beschikbaar (alleen lezen) ──
+  // Rijen = het team (en "Niet toegewezen" zonder capaciteit), kolommen = de werkdagen van deze en volgende week. Beschikbaar = werkuren per week / 5 (standaard 40 uur,
+  // opt.werkuren = { slug: uren }) op een werkdag die geen vrije dag (opt.vrij) en geen verlof (opt.verlof) is. Gepland = de planblokken (geen open voorstel) en de taken met een datum
+  // (zie weekRooster), per dag samengeteld; een begonnen dagdeel telt voor een heel dagdeel (de werkplaats plant in dagdelen). vrij = wat er van de dag overblijft, over = wat erboven zit.
+  // → { van, tot, dagen, rijen: [{ slug, naam, heeftCap, dagen: [{datum, werkdag, verlof, cap_min, gepland_min, dagdelen, vrij_min, over_min, items}], weken: [{cap_min, gepland_min, vrij_min, over_min}] }] }
+  P.teamCapaciteit = function (takenObj, depsObj, blokken, opt) {
+    const o = opt || {}, team = Array.isArray(o.team) ? o.team : [], r = P.weekRooster(takenObj, depsObj, blokken, o), wu = o.werkuren && typeof o.werkuren === 'object' ? o.werkuren : {};
+    const aantalWeken = r.dagen.length ? r.dagen[r.dagen.length - 1].week + 1 : 0;
+    const rijen = r.rijen.map(rij => {
+      const lid = !!rij.slug && team.some(m => String(m.slug).toLowerCase() === rij.slug), uren = Number(wu[rij.slug]) > 0 ? Number(wu[rij.slug]) : 40, dagCap = lid ? Math.round(uren / 5 * 60) : 0;
+      const weken = []; for (let w = 0; w < aantalWeken; w++) weken.push({ cap_min: 0, gepland_min: 0, vrij_min: 0, over_min: 0 });
+      const dagen = r.dagen.map((d, i) => {
+        const verlof = !!(rij.verlofDag && rij.verlofDag[i]), cap = lid && d.werkdag && !verlof ? dagCap : 0, uniek = new Set();
+        rij.cellen[i].forEach(c => c.forEach(it => uniek.add(it)));
+        const items = [...uniek], gepland = Math.round(items.reduce((s, it) => s + (it.planvoorstel ? 0 : (it.min || 0)), 0));
+        const dd = cap > 0 ? Math.min(2, Math.ceil(gepland / (cap / 2) - 1e-9)) : 0, telt = cap > 0 ? dd * (cap / 2) : 0;
+        const vrij = Math.max(0, cap - telt), over = Math.max(0, gepland - cap), wk = weken[d.week];
+        wk.cap_min += cap; wk.gepland_min += telt || (cap > 0 ? 0 : gepland); wk.vrij_min += vrij; wk.over_min += over;
+        return { datum: d.datum, werkdag: d.werkdag, verlof, cap_min: cap, gepland_min: gepland, dagdelen: dd, vrij_min: Math.round(vrij), over_min: Math.round(over), items };
+      });
+      weken.forEach(w => { w.cap_min = Math.round(w.cap_min); w.gepland_min = Math.round(w.gepland_min); w.vrij_min = Math.round(w.vrij_min); w.over_min = Math.round(w.over_min); });
+      return { slug: rij.slug, naam: rij.naam, heeftCap: lid, dagen, weken };
+    });
+    return { van: r.van, tot: r.tot, dagen: r.dagen, rijen };
+  };
+
+  // ── Werkplaats-tv: de stroom van de actieve projecten door de keten, en "Let op" ──
+  // Stations (van werkvoorbereiding tot montage): voorbereiding, materiaal, productie, spuiten, montage. Een taak hoort bij een station via zijn sleutel (de standaardketen:
+  // wvb, bestellen, materiaal_geleverd, zagen, cnc, afmonteren, spuiten, montage, oplevering) of anders zijn activiteit. Een station is: klaar (alles klaar), bezig (iets bezig),
+  // wacht (iets wacht op een voorganger of staat op Wacht), open, of leeg (geen taken); materiaal zonder taken volgt de bestelregels van het project.
+  P.STROOM_STATIONS = [['voorbereiding', 'Voorbereiding'], ['materiaal', 'Materiaal'], ['productie', 'Productie'], ['spuiten', 'Spuiten'], ['montage', 'Montage']];
+  const stationVan = t => {
+    const k = String((t && t.sleutel) || ''), a = String((t && t.activiteit) || '');
+    if (k === 'wvb') return 'voorbereiding'; if (k === 'bestellen' || k === 'materiaal_geleverd') return 'materiaal';
+    if (k === 'zagen' || k === 'cnc' || k === 'afmonteren') return 'productie'; if (k === 'spuiten') return 'spuiten'; if (k === 'montage' || k === 'oplevering') return 'montage';
+    return (a === 'tekenwerk' || a === 'werkvoorbereiding') ? 'voorbereiding' : a === 'werkplaats' ? 'productie' : a === 'spuiten' ? 'spuiten' : a === 'montage' ? 'montage' : '';
+  };
+  const PROJECT_ACTIEF = ['werkvoorbereiding', 'inkoop', 'productie', 'klaar_levering'];
+  const sleutelVan = (obj, code) => Object.keys(obj && typeof obj === 'object' ? obj : {}).find(k => !k.startsWith('__') && zelfdeCode(k, code));
+  const takenVan = (obj, code) => { const k = sleutelVan(obj, code); return k && Array.isArray(obj[k]) ? P.takenActief(obj[k]) : []; };
+  const bestelVan = (bestel, p) => (Array.isArray(bestel) ? bestel : []).filter(b => b && typeof b === 'object' && !b._vervallen && b.id !== '__migratie' && ((b.project_id && p.project_id && b.project_id === p.project_id) || zelfdeCode(b.project, p.code)));
+  const isKlaar = t => (t.status || 'todo') === 'klaar';
+  P.projectStroom = function (takenObj, depsObj, projecten, o) {
+    o = o || {}; const vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd(), rijen = [];
+    (Array.isArray(projecten) ? projecten : []).forEach(p => {
+      if (!p || typeof p !== 'object' || p._vervallen || !p.code) return;
+      const lijst = takenVan(takenObj, p.code), open = lijst.filter(t => !isKlaar(t));
+      if (!(PROJECT_ACTIEF.includes(p.fase) || (!p.fase && open.length))) return;
+      const dk = sleutelVan(depsObj, p.code), deps = dk ? depsObj[dk] : [], wacht = P.wachtOverzicht(lijst, deps, { vrij: o.vrij, vandaag }), regels = bestelVan(o.bestel, p);
+      const stations = P.STROOM_STATIONS.map(([k, l]) => {
+        const ts = lijst.filter(t => stationVan(t) === k); let staat = 'leeg';
+        if (ts.length) staat = ts.every(isKlaar) ? 'klaar' : ts.some(t => t.status === 'bezig') ? 'bezig' : ts.some(t => t.status === 'wacht' || ((t.status || 'todo') === 'todo' && wacht[t.id] && wacht[t.id].wacht)) ? 'wacht' : 'open';
+        else if (k === 'materiaal' && regels.length) { const st = regels.map(P.bestelStatus); staat = st.every(s => s === 'geleverd') ? 'klaar' : st.some(s => s !== 'nodig') ? 'bezig' : 'open'; }
+        return { k, l, staat, n: ts.length, klaar: ts.filter(isKlaar).length };
+      });
+      const lever = P.isYmd(p.gegevens && p.gegevens.leverdatum) ? p.gegevens.leverdatum : '';
+      let tekort = 0, eindVroegst = '';
+      if (lever && lijst.length) { try { const r = P.rooster(lijst, deps, { start: vandaag, leverdatum: lever, vrij: o.vrij }); tekort = r.tekort; eindVroegst = r.eindVroegst; } catch (e) { tekort = 0; } }
+      const teLaat = open.filter(t => P.isYmd(t.eind) && t.eind < vandaag).length;
+      let reden = '';
+      if (lever && tekort > 0) reden = 'Op zijn vroegst klaar op ' + P.datumKort(eindVroegst) + ': ' + tekort + ' werkdag' + (tekort === 1 ? '' : 'en') + ' na de leverdatum';
+      else if (lever && lever < vandaag && open.length) reden = 'De leverdatum is voorbij en er staan nog ' + open.length + ' taken open';
+      rijen.push({ code: p.code, project_id: p.project_id || '', naam: p.naam || p.code, fase: p.fase || '', lever, stations, klaar: lijst.length - open.length, totaal: lijst.length, open: open.length, teLaat, vlag: !!reden, reden, tekort, eindVroegst });
+    });
+    rijen.sort((a, b) => (b.vlag - a.vlag) || (a.lever && b.lever ? (a.lever < b.lever ? -1 : a.lever > b.lever ? 1 : 0) : (a.lever ? -1 : b.lever ? 1 : 0)) || (String(a.code).toLowerCase() < String(b.code).toLowerCase() ? -1 : 1));
+    return rijen;
+  };
+  // Let op: wat aandacht vraagt. → { wachtMateriaal, wachtVoorganger, wachtAnders, teLaat, nieuwGemeld, teLeveren } (lijsten van items; zie hieronder).
+  // Wacht op materiaal = een taak op Wacht waarvan de reden over materiaal gaat, plus per project de bestelregels die besteld maar nog niet geleverd zijn. Wacht op een voorganger =
+  // een nog niet gestarte taak met een open afhankelijkheid. Te laat = een taak die niet klaar is en waarvan het einde voorbij is. Nieuw gemeld = taken en bestelregels met een
+  // voorstel-markering. Te leveren = actieve projecten met de leverdatum in de rest van deze week.
+  const MATERIAAL_RE = /\b(materiaal|plaat|platen|beslag|bestel|besteld|bestelling|levering|leverancier|geleverd|order)/i;
+  P.letOp = function (takenObj, depsObj, projecten, bestel, o) {
+    o = o || {}; const vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd(), zo = maandagVan(vandaag).zo, team = o.team || null;
+    const uit = { wachtMateriaal: [], wachtVoorganger: [], wachtAnders: [], teLaat: [], nieuwGemeld: [], teLeveren: [] };
+    const projVan = (code, pid) => (Array.isArray(projecten) ? projecten : []).find(p => p && !p._vervallen && ((code && zelfdeCode(p.code, code)) || (pid && p.project_id && p.project_id === pid))) || null;
+    Object.keys(takenObj && typeof takenObj === 'object' ? takenObj : {}).sort().forEach(code => {
+      const lijst = takenVan(takenObj, code); if (!lijst.length) return;
+      const dk = sleutelVan(depsObj, code), wacht = P.wachtOverzicht(lijst, dk ? depsObj[dk] : [], { vrij: o.vrij, vandaag });
+      lijst.forEach(t => {
+        if (isKlaar(t)) return;
+        const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] };
+        const item = { soort: 'taak', id: t.id, code, naam: t.naam, status: st, wacht: st === 'wacht' || (st === 'todo' && !!w.wacht), wachtTekst: P.wachtOpTekst(w, P.datumKort), taak: t, voorstel: t.voorstel || null, persoon: P.persoonSlug(t.toegewezen, team) || '' };
+        if (t.voorstel) uit.nieuwGemeld.push(item);
+        if (st === 'wacht') (MATERIAAL_RE.test(String(t.wacht_reden || '')) ? uit.wachtMateriaal : uit.wachtAnders).push(Object.assign({ reden: String(t.wacht_reden || '') }, item));
+        else if (st === 'todo' && w.wacht) uit.wachtVoorganger.push(item);
+        if (P.isYmd(t.eind) && t.eind < vandaag) uit.teLaat.push(Object.assign({ eind: t.eind, dagen: P.werkdagenTussen(t.eind, vandaag, o.vrij) }, item));
+      });
+    });
+    const perProject = new Map();
+    (Array.isArray(bestel) ? bestel : []).forEach(b => {
+      if (!b || typeof b !== 'object' || b._vervallen || b.id === '__migratie') return;
+      const p = projVan(b.project, b.project_id), code = p ? p.code : String(b.project || ''), st = P.bestelStatus(b), oms = P.bestelOms(b) || 'regel';
+      const regel = [['Materiaal', oms], ['Aantal', (b.aantal || 1) + ' ' + P.eenheidTekst(b.eenheid, b.aantal)], ['Status', P.BESTEL_STATUS_LABEL[st] || st], ['Project', code]];
+      if (b.voorstel) uit.nieuwGemeld.push({ soort: 'bestel', id: b.id, code, naam: oms, regels: regel.concat([['Gemeld', P.voorstelTekst(b.voorstel)]]), voorstel: b.voorstel });
+      if (st === 'besteld') { const e = perProject.get(code) || { soort: 'bestel', id: 'bestel:' + code, code, naam: '', regels: [], aantal: 0, lijst: [] }; e.aantal++; e.lijst.push(oms); perProject.set(code, e); }
+    });
+    perProject.forEach(e => { e.naam = e.aantal + ' bestelregel' + (e.aantal === 1 ? '' : 's') + ' onderweg: ' + e.lijst.slice(0, 3).join(', ') + (e.lijst.length > 3 ? ' …' : ''); e.regels = [['Project', e.code], ['Besteld, nog niet geleverd', e.lijst.join(', ')]]; uit.wachtMateriaal.push(e); });
+    (Array.isArray(projecten) ? projecten : []).forEach(p => {
+      if (!p || p._vervallen || !p.code || !PROJECT_ACTIEF.includes(p.fase)) return;
+      const lever = P.isYmd(p.gegevens && p.gegevens.leverdatum) ? p.gegevens.leverdatum : ''; if (!lever || lever < vandaag || lever > zo) return;
+      const open = takenVan(takenObj, p.code).filter(t => !isKlaar(t)).length;
+      uit.teLeveren.push({ soort: 'project', id: 'project:' + p.code, code: p.code, naam: p.naam || p.code, lever, open, regels: [['Project', p.naam || p.code], ['Leverdatum', P.datumKort(lever)], ['Nog open', open + ' taken']] });
+    });
+    const op = k => (a, b) => (String(a[k] || '') < String(b[k] || '') ? -1 : String(a[k] || '') > String(b[k] || '') ? 1 : 0);
+    uit.teLaat.sort(op('eind')); uit.teLeveren.sort(op('lever'));
+    ['wachtMateriaal', 'wachtVoorganger', 'wachtAnders', 'nieuwGemeld'].forEach(k => uit[k].sort((a, b) => (String(a.code).toLowerCase() + '|' + String(a.naam).toLowerCase()) < (String(b.code).toLowerCase() + '|' + String(b.naam).toLowerCase()) ? -1 : 1));
+    return uit;
+  };
+
+  // ── Deep links naar de telefoon (vanaf de tv): mobiel.html#taak/<projectcode>/<taak-id> en mobiel.html#project/<projectcode> ──
+  P.deepLinkTaak = (basis, code, id) => String(basis || '') + '#taak/' + encodeURIComponent(String(code)) + '/' + encodeURIComponent(String(id));
+  P.deepLinkProject = (basis, code) => String(basis || '') + '#project/' + encodeURIComponent(String(code));
+  // → { soort: 'taak'|'project', code, id } of null (geen geldige link). Alleen de vorm wordt gecontroleerd; wat erin staat is alleen een zoeksleutel.
+  P.deepLinkLees = function (hash) {
+    const m = /^#?(taak|project)\/([^/#?]+)(?:\/([^/#?]+))?$/.exec(String(hash == null ? '' : hash).trim()); if (!m) return null;
+    const dec = x => { try { return decodeURIComponent(x); } catch (e) { return x; } };
+    if (m[1] === 'taak' && !m[3]) return null; if (m[1] === 'project' && m[3]) return null;
+    return { soort: m[1], code: dec(m[2]), id: m[3] ? dec(m[3]) : '' };
+  };
+
+  // ── Journaal (alleen toevoegen): vereniging op id, gesorteerd op tijd, de laatste `max` ──
+  P.journaalSamen = function (lokaal, remote, max) {
+    const L = Array.isArray(lees(lokaal)) ? lees(lokaal) : [], R = Array.isArray(lees(remote)) ? lees(remote) : [], per = new Map();
+    [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
+    return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-(max > 0 ? max : 1000));
+  };
+  // Eén regel aan een gedeeld journaalbestand toevoegen (lezen, samenvoegen, schrijven met ETag). → true | false (mislukt; er is niets overschreven)
+  P.journaalSchrijf = async function (sp, bestand, regel, max) {
+    try {
+      const r = await sp.read(bestand);
+      if (r !== null && r !== undefined && !Array.isArray(r)) return false;   // geen lijst: nooit overschrijven
+      return !!(await sp.write(bestand, P.journaalSamen([regel], r, max), (remote, lokaal) => P.journaalSamen(lokaal, remote, max)));
+    } catch (e) { return false; }
+  };
+
+  // ── De schrijfkern voor taken ──
+  // Leest mt_project_taken_v2 vers van SharePoint (met de ETag), voegt de lokale kopie (met nog niet gedeelde wijzigingen) erbij, laat `muteer` de actieve taken van
+  // één project wijzigen, stempelt wat veranderde (stempel per veld, tombstone voor wat verdween) en schrijft het geheel terug. Een 412 (iemand schreef tussendoor)
+  // wordt door de _SP opgelost met takenSamen. Het recht dat de wijziging vraagt wordt na het lezen en vlak vóór het schrijven gecontroleerd (mag(spec) → boolean),
+  // en `voorWrite()` mag nog een laatste controle doen (bijvoorbeeld de schemaversie). Maakt het bestand NOOIT aan.
+  //   muteer(actieveTaken) → de nieuwe lijst, undefined (de gewijzigde kopie telt) of false / { fout } (afwijzen).
+  // → { ok, reden, fout?, recht?, data?, taken?, oud?, nieuw? }; reden: lezen | ontbreekt | vorm | weigering | recht | geblokkeerd | schrijven | aanroep.
+  //   Bij reden 'schrijven' staat `data` (de samengevoegde stand mét de wijziging) er nog: de aanroeper bewaart die lokaal om later te delen.
+  P.takenSchrijf = async function (sp, o) {
+    o = o || {};
+    const bestand = o.bestand || 'mt_project_taken_v2.json', nu = Number(o.nu) || Date.now(), code = o.code;
+    if (!sp || typeof o.muteer !== 'function' || !code) return { ok: false, reden: 'aanroep', fout: 'Onvolledige aanroep.' };
+    let raw; try { raw = await sp.read(bestand); } catch (e) { return { ok: false, reden: 'lezen', fout: String((e && e.message) || e) }; }
+    if (raw === null || raw === undefined) return { ok: false, reden: 'ontbreekt' };
+    const vorm = P.takenBestandVorm(raw); if (vorm) return { ok: false, reden: 'vorm', fout: vorm };
+    let basis; try { basis = P.takenSamen(o.lokaal === undefined ? null : o.lokaal, raw); } catch (e) { return { ok: false, reden: 'vorm', fout: String((e && e.message) || e) }; }
+    const oud = Array.isArray(basis[code]) ? basis[code] : [], actiefOud = P.takenActief(oud), werk = kopie(actiefOud);
+    const r = o.muteer(werk);
+    if (r === false || r === null || (r && !Array.isArray(r) && r.fout)) return { ok: false, reden: 'weigering', fout: (r && r.fout) || '' };
+    const nieuw = Array.isArray(r) ? r : werk;
+    const recht = P.takenRechtNodig(actiefOud, nieuw, { batch: !!o.batch }), toegestaan = () => !recht || typeof o.mag !== 'function' || !!o.mag(recht);
+    if (!toegestaan()) return { ok: false, reden: 'recht', recht };
+    const gestempeld = P.takenStempel(oud, nieuw, { nu, door: o.door || '', dev: o.dev || '', projectId: o.projectId || '' });
+    const data = Object.assign({}, basis); data[code] = gestempeld;
+    if (typeof o.voorWrite === 'function') { let toe; try { toe = await o.voorWrite(); } catch (e) { toe = false; } if (toe === false) return { ok: false, reden: 'geblokkeerd' }; }
+    if (!toegestaan()) return { ok: false, reden: 'recht', recht };   // opnieuw na de await: het recht kan intussen veranderd zijn
+    const ok = await sp.write(bestand, data, (remote, lokaal) => { try { return P.takenSamen(lokaal, remote); } catch (e) { return null; } });
+    return { ok: !!ok, reden: ok ? '' : 'schrijven', data, taken: P.takenActief(gestempeld), oud: actiefOud, nieuw };
+  };
+  // Wijzigingen die lokaal bleven staan (schrijven mislukte eerder) alsnog delen: voeg lokaal en SharePoint samen en schrijf alleen als dat iets toevoegt.
+  // o.remote = het al gelezen bestand (anders wordt het hier gelezen). → { ok, gewijzigd, data, reden? }
+  P.takenPush = async function (sp, o) {
+    o = o || {}; const bestand = o.bestand || 'mt_project_taken_v2.json';
+    let raw = o.remote; if (raw === undefined) { try { raw = await sp.read(bestand); } catch (e) { return { ok: false, gewijzigd: false, reden: 'lezen' }; } }
+    if (raw === null || raw === undefined) return { ok: false, gewijzigd: false, reden: 'ontbreekt' };
+    let basis, alleen; try { basis = P.takenSamen(o.lokaal === undefined ? null : o.lokaal, raw); alleen = P.takenSamen(null, raw); } catch (e) { return { ok: false, gewijzigd: false, reden: 'vorm', fout: String((e && e.message) || e) }; }
+    if (JSON.stringify(basis) === JSON.stringify(alleen)) return { ok: true, gewijzigd: false, data: basis };
+    if (typeof o.voorWrite === 'function') { let toe; try { toe = await o.voorWrite(); } catch (e) { toe = false; } if (toe === false) return { ok: false, gewijzigd: true, data: basis, reden: 'geblokkeerd' }; }
+    const ok = await sp.write(bestand, basis, (remote, lokaal) => { try { return P.takenSamen(lokaal, remote); } catch (e) { return null; } });
+    return { ok: !!ok, gewijzigd: true, data: basis, reden: ok ? '' : 'schrijven' };
+  };
+
+  // ── Een nieuwe taak als melding (Taak melden / Probleem melden) ──
+  // Komt meteen in het project, gemarkeerd als voorstel (`voorstel`: wie, welke rol, wanneer); kantoor ziet het en beslist. Een probleem krijgt prioriteit high.
+  P.meldingTaak = function ({ naam = '', omschrijving = '', soort = 'taak', door = '', doorNaam = '', rol = '', nu = Date.now(), id = '' } = {}) {
+    const n = String(naam).replace(/\s+/g, ' ').trim(); if (!n) return null;
+    const probleem = soort === 'probleem';
+    return { id: id || P.taakId(), naam: n.slice(0, 160), omschrijving: String(omschrijving || '').trim().slice(0, 1000), duur_uur: 0, prioriteit: probleem ? 'high' : '', afhankelijk_van: [], status: 'todo', tg_task_id: null,
+      bron: 'melding', activiteit: P.activiteitUitNaam(n) || undefined, voorstel: { soort: probleem ? 'probleem' : 'taak', door, doorNaam, rol, ts: new Date(nu).toISOString() } };
+  };
+  // Een bestelvoorstel: een gewone bestelregel (status nodig) met de markering `voorstel`. project_id/project: zoals de cockpit (code en technische sleutel).
+  P.meldingBestel = function ({ omschrijving = '', aantal = 1, eenheid = '', project = '', project_id = '', opmerking = '', door = '', doorNaam = '', rol = '', nu = Date.now(), datum = '', id = '' } = {}) {
+    const oms = String(omschrijving).replace(/\s+/g, ' ').trim(); if (!oms) return null;
+    const r = P.bestelRegelNieuw({ omschrijving: oms.slice(0, 200), aantal, eenheid, bron: 'hand', project, project_id, datum: P.isYmd(datum) ? datum : P.vandaagYmd(), id });
+    if (opmerking && String(opmerking).trim()) r.opmerking = String(opmerking).trim().slice(0, 300);
+    r.voorstel = { soort: 'bestel', door, doorNaam, rol, ts: new Date(nu).toISOString() };
+    return r;
+  };
+  // Een nieuwe bestelregel toevoegen aan mt_bestellijst_v2 (lezen, samenvoegen met de lokale kopie, stempelen, schrijven met ETag/412-merge). Maakt het bestand nooit aan.
+  // o.journaal(regel) → belofte van true: eerst het herstelspoor (zoals de cockpit); lukt dat niet, dan gebeurt er niets. → { ok, reden, data?, regel? }
+  P.bestelNieuwSchrijf = async function (sp, o) {
+    o = o || {}; const bestand = o.bestand || 'mt_bestellijst_v2.json', nu = Number(o.nu) || Date.now(), regel = o.regel;
+    if (!sp || !regel || !regel.id) return { ok: false, reden: 'aanroep', fout: 'Onvolledige aanroep.' };
+    let raw; try { raw = await sp.read(bestand); } catch (e) { return { ok: false, reden: 'lezen', fout: String((e && e.message) || e) }; }
+    if (raw === null || raw === undefined) return { ok: false, reden: 'ontbreekt' };
+    const vorm = P.bestelBestandVorm(raw); if (vorm) return { ok: false, reden: 'vorm', fout: vorm };
+    let samen; try { samen = P.bestelSamen(o.lokaal === undefined ? null : o.lokaal, raw); } catch (e) { return { ok: false, reden: 'vorm', fout: String((e && e.message) || e) }; }
+    if (samen.some(b => b && String(b.id) === String(regel.id))) return { ok: false, reden: 'bestaat' };
+    const toegestaan = () => typeof o.mag !== 'function' || !!o.mag(P.ROL.BESTEL_TOEV);
+    if (!toegestaan()) return { ok: false, reden: 'recht', recht: P.ROL.BESTEL_TOEV };
+    regel._gewijzigd = new Date(nu).toISOString(); if (o.door) regel._door = o.door;
+    P.bestelVeldStempel(null, regel, { t: nu, door: o.door || '', dev: o.dev || '' });
+    if (typeof o.journaal === 'function') { let j; try { j = await o.journaal(regel); } catch (e) { j = false; } if (!j) return { ok: false, reden: 'journaal' }; }
+    if (typeof o.voorWrite === 'function') { let toe; try { toe = await o.voorWrite(); } catch (e) { toe = false; } if (toe === false) return { ok: false, reden: 'geblokkeerd' }; }
+    if (!toegestaan()) return { ok: false, reden: 'recht', recht: P.ROL.BESTEL_TOEV };
+    const data = P.bestelSamen(JSON.stringify(samen.concat([regel])), null);
+    const ok = await sp.write(bestand, data, (remote, lokaal) => { try { return P.bestelSamen(lokaal, remote); } catch (e) { return null; } });
+    return { ok: !!ok, reden: ok ? '' : 'schrijven', data, regel };
   };
 
   root.MTPlanning = P;
