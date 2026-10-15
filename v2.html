@@ -3847,7 +3847,7 @@ function agOpts(which){
   return [...new Set(all.map(e=>e.teamlid).filter(Boolean))].sort((a,b)=>agPersLabel(a).localeCompare(agPersLabel(b),'nl'));
 }
 // Namen één keer per sessie verversen als er in de getoonde week een id-stub zonder naam staat ("Toggl 123" / "User 456").
-let _agNamenVers=false;
+var _agNamenVers=false;
 function agNamenControle(){
   if(_agNamenVers||typeof agNamen!=='function') return;
   const {pn,un}=agNames();
@@ -4105,7 +4105,7 @@ function agMergeEntry(entries,o){const idx=entries.findIndex(e=>String(e.toggl_i
 // Cache-versie: bump dit als de naam-mapping-logica wijzigt, dan negeert agNamen
 // de oude (verkeerd gemapte) localStorage-cache en haalt opnieuw op.
 const AG_NAMES_V='2';
-const _agNamenPoging=new Set();   // ids waarvoor deze sessie al een verversing is gedaan (archief-/verwijderde projecten blijven anders elke sync verversen)
+var _agNamenPoging=new Set();   // ids waarvoor deze sessie al een verversing is gedaan (archief-/verwijderde projecten blijven anders elke sync verversen)
 async function agNamen(force){
   let pn={},un={};
   try{pn=JSON.parse(localStorage.getItem('mt_toggl_proj_names')||'{}');}catch(e){}
@@ -4229,8 +4229,8 @@ async function agSyncEigen(since,tot){
 
 // Automatisch bijwerken bij het openen van de Agenda en bij weeknavigatie: alleen de getoonde week (met een dag marge),
 // alleen met MS-login, per week hooguit 1× per 5 minuten (per browser), nooit twee syncs tegelijk, fouten stil (korte statusregel).
-const AG_AUTO_MS=5*60*1000, AG_AUTO_KEY='mt_ag_autosync';
-let _agSyncBezig=false, _agAutoTimer=null;
+var AG_AUTO_MS=5*60*1000, AG_AUTO_KEY='mt_ag_autosync';
+var _agSyncBezig=false, _agAutoTimer=null;
 function agYmd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function agAutoPlan(){   // nodig-check los van de netwerkcall (testbaar)
   const ws=_agenda.weekStart||agMaandag(new Date());
