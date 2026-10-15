@@ -40,7 +40,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2026-10-15u"></script>
+<script src="mt-toggl.js?v=2026-10-15y"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -59,8 +59,8 @@
 <script src="mt-planverplaats.js?v=2026-10-15s"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-15s"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
-<script src="mt-uren-nieuw.js?v=2026-10-15x"></script>
-<script src="mt-dagvraag.js?v=2026-10-15v"></script>
+<script src="mt-uren-nieuw.js?v=2026-10-15y"></script>
+<script src="mt-dagvraag.js?v=2026-10-15y"></script>
 <script src="mt-vandaag-desk.js?v=2026-10-15s"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
@@ -3891,12 +3891,12 @@ try{ MTUrenNieuw.init({ doc:document, planning:MTPlanning, storage:localStorage,
   eigenEntries:(s,t)=>tgStore.eigenEntries(s,t), projecten:()=>tgStore.projecten(), lopend:()=>(_tgTimer&&_tgTimer.entry)||null, zetRecent:l=>{ _tgRecent=l; },
   projInfo:urenProjInfo, gepland:urenGepland, klaarTaken:urenKlaarTaken, agenda:urenAgendaDag,
   hervat:i=>tgHervat(i), bewerk:i=>tgEditEntry(i), verwijder:i=>tgDelEntry(i), handmatig:()=>tgHandmatig(), boek:spec=>tgBoekEntry(spec),
-  dagvraagKaart:(d,m)=>MTDagvraag.kaart(d,m),
+  dagvraagKaart:(d,m)=>MTDagvraag.kaart(d,m), naTeken:m=>MTDagvraag.beoordeel(m), magBoeken:()=>tgMagBoeken(),
   get dialoog(){ return window.mtDialog; } }); }catch(e){ console.warn('Uren (nieuw) init:',e); }
 // De dagvraag "Klopt je dag?" (restyling brok 11, mt-dagvraag.js): alleen in de nieuwe stijl, nooit blokkerend, een keer per dag; boeken via de Uren-weergave.
 try{ MTDagvraag.init({ doc:document, planning:MTPlanning, storage:localStorage, nu:()=>Date.now(), ik:()=>mtMijEmail(), team:()=>MT_TEAM,
   werktijden:()=>werktijdenVoorWeergave(), verlof:()=>admVerlof(), vrijedagen:()=>admVrijdagen(),
-  modelVoor:d=>MTUrenNieuw.modelVoor(d), boekGat:(m,gat,vi)=>vi?MTUrenNieuw.boekGatMet(m,gat,vi):MTUrenNieuw.boekGat(m,gat),
+  magBoeken:()=>tgMagBoeken(), modelVoor:d=>MTUrenNieuw.modelVoor(d), boekGat:(m,gat,vi)=>vi?MTUrenNieuw.boekGatMet(m,gat,vi):MTUrenNieuw.boekGat(m,gat),
   urenZichtbaar:()=>{ const t=document.getElementById('tab-toggl'); return !!(t&&t.classList.contains('active')); },
   herteken:()=>{ try{ MTUrenNieuw.teken(); }catch(e){} },
   naarUren:d=>{ try{ MTUrenNieuw.naarDag(d); showTab('toggl',[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('toggl'"))); }catch(e){ console.warn('Dagvraag: naar Uren:',e); } } });

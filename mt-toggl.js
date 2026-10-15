@@ -613,26 +613,53 @@ async function tgTimerStartDirect({projectId,omschrijving}){
   }catch(e){ return {ok:false,reden:'Timer starten mislukt: '+String((e&&e.message)||e)}; }
   finally{ _tgTimerBusy=false; tgTimerPaint(); }
 }
+// Mag deze gebruiker uren boeken? Dezelfde regel als magTimer in v2.html (het startvenster): met een geladen rol en het recht Uren boeken; zonder rol (ook een oude worker) niet.
+function tgMagBoeken(){ try{ return !!(window.MTRol&&MTRol.me)&&!!MTRol.mag(MTPlanning.ROL.UREN_BOEKEN); }catch(e){ return false; } }
 // Een afgesloten entry boeken (start + duur) voor de Uren-weergave in de nieuwe stijl. Zoals tgTimerStartDirect: geen alert() en geen herhaling (een tweede POST zou dubbel boeken),
 // en vlak voor de POST de entries van die dag opnieuw lezen: staat er op dat moment al iets in Toggl, dan wordt er niets geboekt. → {ok:true} of {ok:false,reden} in gewone taal.
+//  - alleen met het recht Uren boeken (tgMagBoeken);
+//  - controle en POST lopen binnen één Web Lock ('mt-tg-boek'): twee tabbladen kunnen niet tegelijk dezelfde tijd boeken (zonder navigator.locks werkt het zoals voorheen);
+//  - een fout NA de POST (timeout, netwerk) is niet meteen "mislukt": de entries van die dag worden één keer opnieuw gelezen; staat er een entry met dezelfde start (±1 min) en duur,
+//    dan is het gelukt ({ok:true,stondErAl:true}); anders de melding met "kijk in Uren voordat je opnieuw boekt". Nooit een tweede POST.
+let _tgBoekBezig=false;   // een boeking in dit tabblad is bezig (ook tijdens het wachten op de lock): een dubbelklik wordt geweigerd
 async function tgBoekEntry({startIso,duurMin,omschrijving,projectId}){
+  if(!tgMagBoeken()) return {ok:false,reden:'Je hebt geen recht om uren te boeken.'};
   const min=Math.round(Number(duurMin)); if(!(min>=1&&min<=24*60)) return {ok:false,reden:'Ongeldige duur.'};
   const t0=new Date(startIso); if(isNaN(t0.getTime())) return {ok:false,reden:'Ongeldige starttijd.'};
-  if(_tgTimerBusy||_tgMutatieBusy) return {ok:false,reden:'Er loopt nog een Toggl-wijziging; probeer het zo opnieuw.'};
-  _tgMutatieBusy=true;
+  if(_tgBoekBezig||_tgTimerBusy||_tgMutatieBusy) return {ok:false,reden:'Er loopt nog een Toggl-wijziging; probeer het zo opnieuw.'};   // snel nee in dit tabblad (dubbelklik), nog voor het wachten op de lock
+  _tgBoekBezig=true;
+  const binnenSlot=async()=>{
+    if(_tgTimerBusy||_tgMutatieBusy) return {ok:false,reden:'Er loopt nog een Toggl-wijziging; probeer het zo opnieuw.'};
+    _tgMutatieBusy=true;
+    try{
+      const einde=t0.getTime()+min*60000, dag=d=>d.toISOString().slice(0,10), lees=()=>tgStore.eigenEntries(dag(new Date(t0.getTime()-864e5)),dag(new Date(einde+2*864e5)));
+      let bestaand; try{ bestaand=await lees(); }
+      catch(e){ return {ok:false,reden:'Kon niet controleren of die tijd al in Toggl staat; niets geboekt. '+String((e&&e.message)||e)}; }
+      const nu=Date.now();
+      const botst=(Array.isArray(bestaand)?bestaand:[]).find(e=>{ if(!e||!e.start) return false; const a=new Date(e.start).getTime(); const b=e.stop?new Date(e.stop).getTime():(e.duration<0?nu:a+Math.max(0,e.duration)*1000); return a<einde&&t0.getTime()<b; });
+      if(botst) return {ok:false,reden:'Op die tijd staat al een entry in Toggl'+(botst.description?' („'+botst.description+'”)':'')+'; er is niets geboekt.'};
+      const body={created_with:'MT-cockpit',description:String(omschrijving||''),workspace_id:TG_WS,start:t0.toISOString().replace(/\.\d{3}Z$/,'Z'),duration:min*60};
+      if(projectId!=null&&projectId!=='') body.project_id=parseInt(projectId);
+      // na een onduidelijke POST: staat de entry er toch?
+      const controleerNa=async(fout)=>{
+        try{
+          const nu2=await lees(), hit=(Array.isArray(nu2)?nu2:[]).find(e=>{ if(!e||!e.start||!e.stop&&!(e.duration>0)) return false; const a=new Date(e.start).getTime(), sec=e.duration>0?e.duration:(new Date(e.stop).getTime()-a)/1000; return Math.abs(a-t0.getTime())<=60000&&Math.abs(sec-min*60)<=60; });
+          if(hit) return {ok:true,stondErAl:true};
+        }catch(e2){ /* ook de controle mislukt: we weten het niet, dus niet claimen */ }
+        return {ok:false,reden:fout+' Kijk in Uren of de tijd er staat voordat je opnieuw boekt.'};
+      };
+      let made;
+      try{ made=await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body); }
+      catch(e){ return controleerNa('Boeken mislukt: '+String((e&&e.message)||e)+'.'); }
+      return (made&&made.id)?{ok:true}:controleerNa('Toggl gaf geen entry terug.');
+    }catch(e){ return {ok:false,reden:'Boeken mislukt: '+String((e&&e.message)||e)}; }
+    finally{ _tgMutatieBusy=false; }
+  };
   try{
-    const einde=t0.getTime()+min*60000, dag=d=>d.toISOString().slice(0,10);
-    let bestaand; try{ bestaand=await tgStore.eigenEntries(dag(new Date(t0.getTime()-864e5)),dag(new Date(einde+2*864e5))); }
-    catch(e){ return {ok:false,reden:'Kon niet controleren of die tijd al in Toggl staat; niets geboekt. '+String((e&&e.message)||e)}; }
-    const nu=Date.now();
-    const botst=(Array.isArray(bestaand)?bestaand:[]).find(e=>{ if(!e||!e.start) return false; const a=new Date(e.start).getTime(); const b=e.stop?new Date(e.stop).getTime():(e.duration<0?nu:a+Math.max(0,e.duration)*1000); return a<einde&&t0.getTime()<b; });
-    if(botst) return {ok:false,reden:'Op die tijd staat al een entry in Toggl'+(botst.description?' („'+botst.description+'”)':'')+'; er is niets geboekt.'};
-    const body={created_with:'MT-cockpit',description:String(omschrijving||''),workspace_id:TG_WS,start:t0.toISOString().replace(/\.\d{3}Z$/,'Z'),duration:min*60};
-    if(projectId!=null&&projectId!=='') body.project_id=parseInt(projectId);
-    const made=await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body);
-    return (made&&made.id)?{ok:true}:{ok:false,reden:'Toggl gaf geen entry terug; kijk in de Uren-tab of de tijd er staat.'};
-  }catch(e){ return {ok:false,reden:'Boeken mislukt: '+String((e&&e.message)||e)}; }
-  finally{ _tgMutatieBusy=false; }
+    try{ if(typeof navigator!=='undefined'&&navigator.locks&&typeof navigator.locks.request==='function') return await navigator.locks.request('mt-tg-boek',binnenSlot); }
+    catch(e){ return {ok:false,reden:'Boeken mislukt: '+String((e&&e.message)||e)+' Kijk in Uren of de tijd er staat voordat je opnieuw boekt.'}; }
+    return await binnenSlot();
+  }finally{ _tgBoekBezig=false; }
 }
 function tgTimerPaint(){
   const btn=document.getElementById('tg-startstop'), clk=document.getElementById('tg-clock');

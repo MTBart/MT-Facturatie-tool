@@ -176,6 +176,9 @@
   U.timerGewijzigd = function () { if (!D || !actief() || !S.geladen) return; clearTimeout(U._t); U._t = setTimeout(() => U.teken(), 30); };
 
   // ── boeken ──
+  // Boeken mag alleen met het recht Uren boeken (v2.html: urenMagBoeken, dezelfde regel als de timer in het startvenster); zonder dat recht zijn alle boekknoppen weg en weigert boek() ook zelf.
+  const magBoeken = () => { try { return typeof D.magBoeken === 'function' && !!D.magBoeken(); } catch (e) { return false; } };
+  U.magBoeken = magBoeken;
   const dialoog = () => (typeof D.dialoog === 'function' ? D.dialoog() : D.dialoog) || null;
   async function kiesProject(titel, voorstelId) {
     const dl = dialoog(); if (!dl || !dl.choose) return undefined;
@@ -187,38 +190,45 @@
     return k === 0 ? null : ps[k - 1].id;
   }
   async function boek(spec) {   // spec = { datum, van (min), min, omschrijving, projectId, label }
-    if (S.boekt) return; const dl = dialoog(); if (!dl || !dl.confirm) return;
+    if (!magBoeken()) { S.melding = 'Je hebt geen recht om uren te boeken.'; U.teken(); return { ok: false, reden: 'geen recht' }; }
+    if (S.boekt) return null; const dl = dialoog(); if (!dl || !dl.confirm) return null;
     const ok = await dl.confirm({ title: 'Tijd boeken', message: spec.label + '\n\n' + kort(spec.datum) + ', ' + hm(spec.van) + '–' + hm(spec.van + spec.min) + ' (' + klok(spec.min) + ')\n' + (spec.omschrijving || '(geen omschrijving)'), okLabel: 'Boeken', cancelLabel: 'Annuleren' });
-    if (!ok) return;
+    if (!ok) return null;
     S.boekt = true; S.melding = 'Boeken…'; U.teken();
     let r; try { r = await D.boek({ startIso: U.isoStart(spec.datum, spec.van), duurMin: spec.min, omschrijving: spec.omschrijving, projectId: spec.projectId }); } catch (e) { r = { ok: false, reden: String((e && e.message) || e) }; }
-    S.boekt = false; S.melding = r && r.ok ? '✓ Geboekt in Toggl.' : 'Niet geboekt: ' + ((r && r.reden) || 'onbekende fout');
+    S.boekt = false; S.melding = r && r.ok ? (r.stondErAl ? '✓ De tijd staat in Toggl (de bevestiging kwam niet binnen, maar de entry staat er).' : '✓ Geboekt in Toggl.') : 'Niet geboekt: ' + ((r && r.reden) || 'onbekende fout');
     if (r && r.ok) U.laad(); else U.teken();
+    return r;
   }
   U.boekGat = async function (m, gat) {
-    const pid = await kiesProject('Gat boeken', null); if (pid === undefined) return;
-    boek({ datum: m.dagInfo.datum, van: gat.van, min: gat.tot - gat.van, omschrijving: '', projectId: pid, label: 'Het gat zonder uren.' });
+    if (!magBoeken()) return null;
+    const pid = await kiesProject('Gat boeken', null); if (pid === undefined) return null;
+    return boek({ datum: m.dagInfo.datum, van: gat.van, min: gat.tot - gat.van, omschrijving: '', projectId: pid, label: 'Het gat zonder uren.' });
   };
   // Het gat boeken op hetzelfde project en met dezelfde omschrijving als de entry ervoor (de dagvraag: "Was dat Platen bestellen?"); eerst de bevestiging.
-  U.boekGatMet = function (m, gat, entry) { return boek({ datum: m.dagInfo.datum, van: gat.van, min: gat.tot - gat.van, omschrijving: entry && entry.titel !== '(geen omschrijving)' ? entry.titel : '', projectId: entry ? entry.projectId : null, label: 'Het gat zonder uren.' }); };
+  U.boekGatMet = function (m, gat, entry) { if (!magBoeken()) return Promise.resolve(null); return boek({ datum: m.dagInfo.datum, van: gat.van, min: gat.tot - gat.van, omschrijving: entry && entry.titel !== '(geen omschrijving)' ? entry.titel : '', projectId: entry ? entry.projectId : null, label: 'Het gat zonder uren.' }); };
   // Een gepland blok (planning) als uren boeken: op het project van de taak (of een keuze), met de taaknaam als omschrijving; eerst een bevestiging.
   U.boekGepland = async function (m, it) {
-    let pid = it.tgProjectId; if (pid == null) { pid = await kiesProject('Gepland blok boeken', null); if (pid === undefined) return; }
-    boek({ datum: m.dagInfo.datum, van: it.van, min: it.tot - it.van, omschrijving: it.titel, projectId: pid, label: 'Gepland blok uit de planning.' });
+    if (!magBoeken()) return null;
+    let pid = it.tgProjectId; if (pid == null) { pid = await kiesProject('Gepland blok boeken', null); if (pid === undefined) return null; }
+    return boek({ datum: m.dagInfo.datum, van: it.van, min: it.tot - it.van, omschrijving: it.titel, projectId: pid, label: 'Gepland blok uit de planning.' });
   };
   U.boekAgenda = async function (m, it) {
-    const pid = await kiesProject('Afspraak boeken', null); if (pid === undefined) return;
-    boek({ datum: m.dagInfo.datum, van: it.van, min: it.tot - it.van, omschrijving: it.titel, projectId: pid, label: 'Afspraak uit je Outlook-agenda.' });
+    if (!magBoeken()) return null;
+    const pid = await kiesProject('Afspraak boeken', null); if (pid === undefined) return null;
+    return boek({ datum: m.dagInfo.datum, van: it.van, min: it.tot - it.van, omschrijving: it.titel, projectId: pid, label: 'Afspraak uit je Outlook-agenda.' });
   };
   U.boekKlaar = async function (m, t, minuten) {
-    const dl = dialoog(); if (!dl) return;
+    if (!magBoeken()) return null;
+    const dl = dialoog(); if (!dl) return null;
     let min = minuten != null ? minuten : t.budgetMin;
     if (!(min > 0)) { const a = await dl.prompt({ title: 'Tijd boeken', message: 'Hoeveel tijd (minuten) voor “' + t.naam + '”?', defaultValue: '60' }); if (a === null || a === undefined) return; min = parseInt(a, 10); }
     if (!(min > 0 && min <= 24 * 60)) { S.melding = 'Niet geboekt: vul een aantal minuten tussen 1 en 1440 in.'; U.teken(); return; }
     let pid = t.tgProjectId; if (pid == null) { pid = await kiesProject('Taak boeken', null); if (pid === undefined) return; }
-    boek({ datum: m.dagInfo.datum, van: U.plek(m, min), min, omschrijving: t.naam, projectId: pid, label: 'Taak “' + t.naam + '” (klaar zonder uren).' });
+    return boek({ datum: m.dagInfo.datum, van: U.plek(m, min), min, omschrijving: t.naam, projectId: pid, label: 'Taak “' + t.naam + '” (klaar zonder uren).' });
   };
   U.andereTijd = async function (m, t) {
+    if (!magBoeken()) return;
     const dl = dialoog(); if (!dl || !dl.prompt) return;
     const a = await dl.prompt({ title: 'Andere tijd', message: 'Hoeveel minuten voor “' + t.naam + '”?', defaultValue: String(t.budgetMin || 60) });
     if (a === null || a === undefined) return; const min = parseInt(a, 10);
@@ -239,9 +249,10 @@
       knop('▶', 'un-ik', () => { try { D.hervat(it.i); } catch (e) {} }, { 'aria-label': 'Opnieuw starten: ' + it.titel, title: 'Opnieuw starten' }),
       knop('✎', 'un-ik', () => { try { D.bewerk(it.i); } catch (e) {} }, { 'aria-label': 'Bewerken: ' + it.titel, title: 'Bewerken' }),
       knop('✕', 'un-ik', () => { try { D.verwijder(it.i); } catch (e) {} }, { 'aria-label': 'Verwijderen: ' + it.titel, title: 'Verwijderen' }));
-    if (it.soort === 'gat') return el('span', { klass: 'un-acties vast' }, knop('Boek ' + klok(it.min), '', () => U.boekGat(m, it), { 'aria-label': 'Boek het gat van ' + it.tijd }));
-    if (it.soort === 'agenda') return el('span', { klass: 'un-acties vast' }, knop('Boek ' + klok(it.min), '', () => U.boekAgenda(m, it)), knop('Negeren', 'ghost', () => { const s = leesNegeer(slAg(m.dagInfo.datum)); s.add(String(it.id)); zetNegeer(slAg(m.dagInfo.datum), s); U.teken(); }));
-    if (it.soort === 'gepland') return el('span', { klass: 'un-acties vast' }, knop('Boek dit', '', () => U.boekGepland(m, it), { 'aria-label': 'Boek het geplande blok ' + it.titel + ' (' + it.tijd + ')', title: 'Dit geplande blok als uren in Toggl boeken' }));
+    const mag = magBoeken();
+    if (it.soort === 'gat') return !mag ? null : el('span', { klass: 'un-acties vast' }, knop('Boek ' + klok(it.min), '', () => U.boekGat(m, it), { 'aria-label': 'Boek het gat van ' + it.tijd }));
+    if (it.soort === 'agenda') return el('span', { klass: 'un-acties vast' }, mag ? knop('Boek ' + klok(it.min), '', () => U.boekAgenda(m, it)) : null, knop('Negeren', 'ghost', () => { const s = leesNegeer(slAg(m.dagInfo.datum)); s.add(String(it.id)); zetNegeer(slAg(m.dagInfo.datum), s); U.teken(); }));
+    if (it.soort === 'gepland') return !mag ? null : el('span', { klass: 'un-acties vast' }, knop('Boek dit', '', () => U.boekGepland(m, it), { 'aria-label': 'Boek het geplande blok ' + it.titel + ' (' + it.tijd + ')', title: 'Dit geplande blok als uren in Toggl boeken' }));
     return null;
   }
   function tijdlijn(m) {
@@ -254,7 +265,7 @@
       const knopjes = itemKnop(it, m), inKop = !!knopjes && knopjes.classList.contains('vast') && h < 80;   // een kort blok: de knop staat in de titelrij, anders valt hij buiten het blok
       const c = el('div', { klass: 'un-item ' + it.soort + (h < 46 ? ' kort' : '') + (inKop ? ' knop-in-kop' : ''), 'aria-label': lbl, title: lbl + (it.proj && it.proj.label ? ' · ' + it.proj.label : ''), stijl: { top: (y(it.van) + 2) + 'px', height: h + 'px', left: (it.lane || 0) * breed + '%', width: 'calc(' + breed + '% - 4px)' } },
         el('span', { klass: 'un-item-kop' }, el('span', { klass: 'un-item-titel', tekst: it.titel }), it.soort === 'gepland' ? el('span', { klass: 'un-chip', tekst: 'gepland' }) : null, inKop ? knopjes : null, el('span', { klass: 'un-item-dur', tekst: secKlok(it.sec) })),
-        el('span', { klass: 'un-item-sub' }, el('span', { klass: 'un-mono', tekst: it.tijd }), it.soort === 'gepland' ? (it.proj && it.proj.label ? ' · ' + it.proj.label : '') + ' · nog niet geboekt' : it.proj && it.proj.label ? ' · ' + it.proj.label : (it.soort === 'agenda' ? ' · uit je Outlook-agenda' : (it.soort === 'gat' ? ' · klik op Boek of start een timer' : (it.soort === 'lopend' ? ' · loopt' : (it.soort === 'gepland' ? ' · nog niet geboekt' : ''))))),
+        el('span', { klass: 'un-item-sub' }, el('span', { klass: 'un-mono', tekst: it.tijd }), it.soort === 'gepland' ? (it.proj && it.proj.label ? ' · ' + it.proj.label : '') + ' · nog niet geboekt' : it.proj && it.proj.label ? ' · ' + it.proj.label : (it.soort === 'agenda' ? ' · uit je Outlook-agenda' : (it.soort === 'gat' ? (magBoeken() ? ' · klik op Boek of start een timer' : ' · nog niet geboekt') : (it.soort === 'lopend' ? ' · loopt' : (it.soort === 'gepland' ? ' · nog niet geboekt' : ''))))),
         inKop ? null : knopjes);
       if (it.proj && it.proj.kleur && (it.soort === 'entry' || it.soort === 'lopend' || it.soort === 'gepland')) c.style.setProperty('--pk', it.proj.kleur);
       kolom.appendChild(c);
@@ -285,8 +296,8 @@
         el('span', { klass: 'un-klaar-naam', tekst: t.naam }),
         el('span', { klass: 'un-dim un-klein', tekst: [t.projLabel, t.wie, t.klaarTekst].filter(Boolean).join(' · ') }),
         el('span', { klass: 'un-klaar-acties' },
-          knop(t.budgetMin > 0 ? 'Tijd boeken: ' + klok(t.budgetMin) : 'Tijd boeken', 'primair', () => U.boekKlaar(m, t)),
-          knop('Andere tijd', '', () => U.andereTijd(m, t)),
+          magBoeken() ? knop(t.budgetMin > 0 ? 'Tijd boeken: ' + klok(t.budgetMin) : 'Tijd boeken', 'primair', () => U.boekKlaar(m, t)) : null,
+          magBoeken() ? knop('Andere tijd', '', () => U.andereTijd(m, t)) : null,
           knop('Niet nodig', 'ghost', () => { const s = leesNegeer(SL_KLAAR); s.add(String(t.id)); zetNegeer(SL_KLAAR, s); U.teken(); })))) : el('span', { klass: 'un-leeg', tekst: 'Alles wat klaar is heeft uren.' })));
     const dv = D.dagvraagKaart ? D.dagvraagKaart(m.dagInfo.datum, m) : null;
     return el('aside', { klass: 'un-zij' }, perProj, klaar, dv);
@@ -307,7 +318,7 @@
       el('div', { klass: 'un-weeknav' },
         knop('‹', '', () => U.weekVerder(-1), { 'aria-label': 'Vorige week' }), el('span', { klass: 'un-weeklabel', tekst: 'Week ' + m.weekNr + ' · ' + kort(m.weekStart) + ' – ' + kort(plus(m.weekStart, 4)) }), knop('›', '', () => U.weekVerder(1), { 'aria-label': 'Volgende week' }),
         knop('Vandaag', 'ghost', () => U.kiesDag(standaardDag()))),
-      el('div', { klass: 'un-kopacties' }, S.weergave === 'dag' && D.agenda && !agendaAan() ? knop('Agenda tonen', '', () => U.agendaAanzetten(), { title: 'Je Outlook-afspraken van deze dag als suggestie tonen' }) : null, knop('Ververs', '', () => U.laad()), knop('Tijd boeken', 'primair', () => { try { D.handmatig(); } catch (e) {} }, { title: 'Een handmatige entry maken' })));
+      el('div', { klass: 'un-kopacties' }, S.weergave === 'dag' && D.agenda && !agendaAan() && magBoeken() ? knop('Agenda tonen', '', () => U.agendaAanzetten(), { title: 'Je Outlook-afspraken van deze dag als suggestie tonen' }) : null, knop('Ververs', '', () => U.laad()), magBoeken() ? knop('Tijd boeken', 'primair', () => { try { D.handmatig(); } catch (e) {} }, { title: 'Een handmatige entry maken' }) : null));
     const links = el('section', { klass: 'un-sectie un-hoofd', 'aria-labelledby': 'un-h-dag' },
       el('div', { klass: 'un-sectie-kop' }, el('span', { id: 'un-h-dag', tekst: S.weergave === 'dag' ? m.dagInfo.titel : 'Week ' + m.weekNr }),
         el('span', { klass: 'un-num un-dim', tekst: S.weergave === 'dag' ? (secKlok(m.dagInfo.geboektSec) + ' geboekt' + (m.dagInfo.doelMin > 0 ? ' · ' + klok(m.dagInfo.openMin) + ' open' : '')) : (secKlok(m.week.totSec) + ' geboekt') })),
@@ -315,6 +326,7 @@
     const melding = S.melding ? el('div', { klass: 'un-melding', role: 'status', tekst: S.melding }) : null;
     root0.appendChild(kop); root0.appendChild(dagTabs(m)); if (melding) root0.appendChild(melding);
     root0.appendChild(el('div', { klass: 'un-onder' }, links, zijkant(m)));
+    try { if (D.naTeken) D.naTeken(m); } catch (e) {}   // de dagvraag ziet of een boeking de gaten dichtte
   };
 
   U.init = function (deps) {

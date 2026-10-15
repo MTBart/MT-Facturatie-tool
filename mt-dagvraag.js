@@ -22,7 +22,7 @@
   const hm = min => pad(Math.floor(min / 60)) + ':' + pad(Math.round(min) % 60);
   const MND = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'], DAG = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
   const kort = s => Number(s.slice(8)) + ' ' + MND[Number(s.slice(5, 7)) - 1];
-  M.leegStaat = () => ({ gevraagd: {}, klaar: {} });
+  M.leegStaat = () => ({ gevraagd: {}, klaar: {}, gesloten: {} });   // gesloten: de melding is weggeklikt (Later); klaar: beantwoord
 
   // Wat moet er nu gevraagd worden? o = { nu (ms), slug, werktijden, verlof, vrijedagen, team, staat } -> { tonen:false } | { tonen:true, voorDatum, soort:'avond'|'ochtend', moment }
   M.beslis = function (o) {
@@ -62,18 +62,24 @@
   // ── bewaren ──
   const sleutel = () => 'mt_dagvraag:' + String(D.ik() || '').toLowerCase();
   M.lees = function () {
-    try { const o = JSON.parse(D.storage.getItem(sleutel()) || 'null'); if (o && typeof o === 'object' && !Array.isArray(o)) return { gevraagd: o.gevraagd && typeof o.gevraagd === 'object' ? o.gevraagd : {}, klaar: o.klaar && typeof o.klaar === 'object' ? o.klaar : {} }; } catch (e) {}
+    try { const o = JSON.parse(D.storage.getItem(sleutel()) || 'null'); if (o && typeof o === 'object' && !Array.isArray(o)) return { gevraagd: o.gevraagd && typeof o.gevraagd === 'object' ? o.gevraagd : {}, klaar: o.klaar && typeof o.klaar === 'object' ? o.klaar : {}, gesloten: o.gesloten && typeof o.gesloten === 'object' ? o.gesloten : {} }; } catch (e) {}
     return M.leegStaat();
   };
   M.bewaar = function (staat) {
     const grens = plus(lokaalYmd(new Date(D.nu())), -30);   // oude dagen opruimen
-    Object.keys(staat.gevraagd).forEach(k => { if (k < grens) delete staat.gevraagd[k]; }); Object.keys(staat.klaar).forEach(k => { if (k < grens) delete staat.klaar[k]; });
+    Object.keys(staat.gevraagd).forEach(k => { if (k < grens) delete staat.gevraagd[k]; }); Object.keys(staat.klaar).forEach(k => { if (k < grens) delete staat.klaar[k]; }); Object.keys(staat.gesloten || {}).forEach(k => { if (k < grens) delete staat.gesloten[k]; });
     try { D.storage.setItem(sleutel(), JSON.stringify(staat)); } catch (e) {}
   };
   const mijnSlug = () => { const ik = String(D.ik() || '').toLowerCase(), l = (D.team() || []).find(x => String(x.email || '').toLowerCase() === ik); return l ? l.slug : ik.split('@')[0]; };
   const nieuweStijl = () => { try { return D.doc.documentElement.getAttribute('data-stijl') === 'nieuw'; } catch (e) { return false; } };
 
   M.open = () => S.open;
+  // Is de open vraag beantwoord of gesloten (ook in een ander tabblad)? Dan hoort de melding overal weg.
+  M.moetVerbergen = (open, st) => !!open && !!st && (!!(st.klaar && st.klaar[open.datum]) || !!(st.gesloten && st.gesloten[open.datum]));
+  // Er waren gaten toen de vraag voor het eerst getoond werd en nu niet meer (gedekt door een boeking): de vraag is daarmee beantwoord.
+  M.gatenDichtGegaan = (st, m) => { const d = m && m.dagInfo && m.dagInfo.datum, g = d && st && st.gevraagd && st.gevraagd[d]; return !!g && !(st.klaar && st.klaar[d]) && g.gaten > 0 && m.dagInfo.gaten.length === 0; };
+  M.beoordeel = function (m) { if (!D || !nieuweStijl() || !m || !m.dagInfo) return; if (M.gatenDichtGegaan(M.lees(), m)) root.setTimeout(() => M.beantwoord(m.dagInfo.datum), 0); };
+  const momentVoor = datum => P.dagvraagMoment(mijnSlug(), D.werktijden ? D.werktijden() : null, datum, { verlof: D.verlof ? D.verlof() : [], vrijedagen: D.vrijedagen ? D.vrijedagen() : [], team: D.team() || [] });   // '' = geen vraag (weekend, vrij, verlof)
   M.beantwoord = function (datum) {
     const st = M.lees(); st.klaar[datum] = new Date(D.nu()).toISOString(); M.bewaar(st);
     if (S.open && S.open.datum === datum) S.open = null; verberg();
@@ -93,15 +99,18 @@
   M.kaart = function (datum, m) {
     if (!D || !nieuweStijl() || !m) return null;
     const st = M.lees(), g = st.gevraagd[datum]; if (!g || st.klaar[datum]) return null;
-    const soort = g.ochtend ? 'ochtend' : 'avond', moment = P.dagvraagMoment(mijnSlug(), D.werktijden ? D.werktijden() : null, datum, { verlof: D.verlof ? D.verlof() : [], vrijedagen: D.vrijedagen ? D.vrijedagen() : [], team: D.team() });
+    const moment = momentVoor(datum); if (!moment) return null;   // intussen verlof of een vrije dag geworden: niet tonen
+    const soort = g.ochtend ? 'ochtend' : 'avond', mag = !!(D.magBoeken && D.magBoeken());
+    if (g.gaten === undefined) { g.gaten = m.dagInfo.gaten.length; M.bewaar(st); }   // onthoud of er gaten waren, om te zien of een boeking ze dichtte
     const inh = M.inhoud(m);
+    const boekEn = async (gat, vi) => { const r = await D.boekGat(m, gat, vi); if (r && r.ok) M.beantwoord(datum); };   // een geslaagde boeking beantwoordt de vraag
     return el('section', { klass: 'dv-kaart', 'aria-labelledby': 'dv-titel' },
       el('span', { klass: 'dv-eyebrow', tekst: moment ? moment + ' · 15 min voor je eindtijd' : '15 min voor je eindtijd' }),
       el('span', { id: 'dv-titel', klass: 'dv-titel', tekst: titelVoor({ soort, datum }) }),
       el('span', { klass: 'dv-tekst', tekst: inh.tekst + (inh.loopt ? ' Je timer loopt nog.' : '') }),
       el('div', { klass: 'dv-acties' },
-        inh.gat && inh.voorstel ? knop('Ja, boek ' + klok(inh.gat.tot - inh.gat.van), 'primair', () => D.boekGat(m, inh.gat, inh.voorstel)) : (inh.gat || inh.leeg ? knop('Tijd boeken', 'primair', () => D.boekGat(m, inh.gat || { van: m.dagInfo.venster.van, tot: m.dagInfo.venster.tot }, null)) : null),
-        inh.gat && inh.voorstel ? knop('Iets anders', '', () => D.boekGat(m, inh.gat, null)) : null,
+        !mag ? null : (inh.gat && inh.voorstel ? knop('Ja, boek ' + klok(inh.gat.tot - inh.gat.van), 'primair', () => boekEn(inh.gat, inh.voorstel)) : (inh.gat || inh.leeg ? knop('Tijd boeken', 'primair', () => boekEn(inh.gat || { van: m.dagInfo.venster.van, tot: m.dagInfo.venster.tot }, null)) : null)),
+        !mag ? null : (inh.gat && inh.voorstel ? knop('Iets anders', '', () => boekEn(inh.gat, null)) : null),
         knop(inh.gat || inh.leeg ? 'Klopt zo' : 'Klopt', inh.gat || inh.leeg ? '' : 'primair', () => M.beantwoord(datum))),
       soort === 'avond' ? el('span', { klass: 'dv-noot', tekst: 'Niet beantwoord? Morgen bij het openen vraagt de tool het nog een keer.' }) : null);
   };
@@ -111,11 +120,12 @@
     let tekst = 'Kijk even of je uren kloppen.', m = null;
     try { if (D.modelVoor) { m = await D.modelVoor(o.datum); if (m) tekst = M.inhoud(m).tekst; } } catch (e) {}
     if (!S.open || S.open.datum !== o.datum) return;   // intussen beantwoord of vervangen
+    if (!momentVoor(o.datum)) { S.open = null; return; }   // intussen verlof of een vrije dag geworden: niet tonen
     const b = el('div', { klass: 'dv-banner', role: 'status', 'aria-live': 'polite' },
       el('span', { klass: 'dv-eyebrow', tekst: (o.moment ? o.moment + ' · ' : '') + (o.soort === 'ochtend' ? 'van gisteren' : '15 min voor je eindtijd') }),
       el('span', { klass: 'dv-titel', tekst: titelVoor(o) }),
       el('span', { klass: 'dv-tekst', tekst }),
-      el('div', { klass: 'dv-acties' }, knop('Bekijk', 'primair', () => { verberg(); try { D.naarUren(o.datum); } catch (e) {} }), knop('Klopt zo', '', () => M.beantwoord(o.datum)), knop('Later', 'ghost', () => verberg())));
+      el('div', { klass: 'dv-acties' }, knop('Bekijk', 'primair', () => { verberg(); try { D.naarUren(o.datum); } catch (e) {} }), knop('Klopt zo', '', () => M.beantwoord(o.datum)), knop('Later', 'ghost', () => { const st = M.lees(); st.gesloten[o.datum] = new Date(D.nu()).toISOString(); M.bewaar(st); verberg(); })));
     D.doc.body.appendChild(b); S.banner = b;
   }
   // Eén controle: moet er nu een vraag komen? Aangeroepen bij het opstarten, elke minuut, bij het terugkomen op het tabblad en na het openen van Uren.
@@ -132,10 +142,17 @@
     else toonBanner({ datum: b.voorDatum, soort: b.soort, moment: b.moment });
     return b;
   };
+  // Een ander tabblad beantwoordde of sloot de vraag: ook hier weg (het storage-event komt alleen bij de andere tabbladen).
+  M.luister = function () {
+    if (M._luistert) return; M._luistert = true;
+    try { root.addEventListener('storage', e => { try { if (!D || (e.key !== null && e.key !== sleutel())) return; const st = M.lees(); if (M.moetVerbergen(S.open, st)) { verberg(); if (st.klaar[S.open.datum]) S.open = null; if (D.herteken) D.herteken(); } } catch (x) {} }); } catch (e) {}
+  };
+  M.toonBanner = toonBanner;
   M.start = function () {
     if (!D || M._iv) return;
     try { root.setTimeout(() => M.controleer(), 6000); M._iv = root.setInterval(() => M.controleer(), 60000); } catch (e) {}
     try { D.doc.addEventListener('visibilitychange', () => { if (D.doc.visibilityState === 'visible') M.controleer(); }); } catch (e) {}
+    M.luister();
     try { root.addEventListener('mt-stijl', () => { if (!nieuweStijl()) verberg(); else M.controleer(); }); } catch (e) {}
   };
   M.init = function (deps) { D = deps; P = deps.planning || root.MTPlanning; return M; };
