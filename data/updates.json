@@ -1,5 +1,19 @@
 [
   {
+    "versie": "2.17.2",
+    "datum": "2026-10-15",
+    "titel": "Nieuwe stijl om te proberen, slimmere planning",
+    "voor": "iedereen",
+    "punten": [
+      "Nieuwe stijl om te proberen: een zijbalk links, nieuwe kleuren en lettertypen en volle breedte op een groot scherm. Onder Instellingen, Weergave zet je Nieuwe stijl proberen aan of uit; het geldt alleen op jouw computer en de oude stijl blijft gewoon beschikbaar.",
+      "Een voorstel van de werkplaats (gestippeld, met de aanduiding voorstel) telt niet meer mee in de uren van de planning, ook niet als het bij een taak hoort. Hetzelfde geldt voor een taak die de werkplaats heeft gemeld en die nog niet is overgenomen. Pas als je het overneemt, telt het mee.",
+      "Het voorstel blijft gewoon zichtbaar in de planning, zodat je ziet wat er nog op een besluit wacht.",
+      "Dit geldt overal waar de bezetting wordt getoond: Planning, Vandaag, Mijn werk, de telefoon en de werkplaats-tv.",
+      "Plan je (met slepen of Verplaats naar) iets op een dag met verlof, een verplichte vrije dag of een dag waarop iemand volgens de werktijden niet werkt, dan vraagt de tool eerst of je dat echt wilt. Kies Annuleren en er verandert niets.",
+      "Eigenaar en beheer: bij Admin, Team en werktijden staan nu per medewerker en per maand de afwijkingen: hoeveel dagen er extra gewerkt zijn (weekend, vrije of verlofdag) en hoeveel vrij is genomen. Een klik op een dag opent die dag in de planning. Geklokte uren zijn alleen wat op deze computer uit Toggl is binnengekomen."
+    ]
+  },
+  {
     "versie": "2.17.1",
     "datum": "2026-10-15",
     "titel": "Agenda: projectfilter opgeschoond",

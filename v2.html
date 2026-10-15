@@ -2,6 +2,21 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
+<!-- Wisselknop "Nieuwe stijl proberen" (restyling fase 1): zet html[data-stijl="nieuw"] VOOR het eerste tekenen uit localStorage
+     "mt-stijl" (per computer), of via ?stijl=nieuw / ?stijl=oud (wordt onthouden). Standaard UIT. De stijlregels staan in
+     mt-stijl-nieuw.css onder dat attribuut; zonder attribuut is de tool ongewijzigd. Lettertypen laden alleen in de nieuwe stijl. -->
+<script>
+(function(){
+  var K='mt-stijl', FONTS='https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap';
+  function lees(){ try{ return localStorage.getItem(K)==='nieuw'; }catch(e){ return false; } }
+  function fonts(){ try{ if(document.getElementById('mt-stijl-fonts')) return; var l=document.createElement('link'); l.id='mt-stijl-fonts'; l.rel='stylesheet'; l.href=FONTS; document.head.appendChild(l); }catch(e){} }
+  function toepassen(aan){ var h=document.documentElement; if(aan){ h.setAttribute('data-stijl','nieuw'); fonts(); } else h.removeAttribute('data-stijl'); }
+  try{ var q=new URLSearchParams(location.search).get('stijl'); if(q==='nieuw'||q==='oud'){ try{ if(q==='nieuw') localStorage.setItem(K,'nieuw'); else localStorage.removeItem(K); }catch(e){} } }catch(e){}
+  toepassen(lees());
+  window.mtStijl={ aan:lees, zet:function(aan){ try{ if(aan) localStorage.setItem(K,'nieuw'); else localStorage.removeItem(K); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
+  window.addEventListener('storage',function(e){ if(e.key===K||e.key===null){ toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(x){} } });   // twee open tabbladen blijven gelijk
+})();
+</script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>M&T Bedrijfstool v2 bèta</title>
@@ -38,15 +53,21 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-15b"></script>
-<script src="mt-mijnwerk.js?v=2026-10-15b"></script>
-<script src="mt-capaciteit.js?v=2026-10-15b"></script>
+<script src="mt-planning.js?v=2026-10-15t"></script>
+<script src="mt-mijnwerk.js?v=2026-10-15s"></script>
+<script src="mt-capaciteit.js?v=2026-10-15s"></script>
+<script src="mt-planverplaats.js?v=2026-10-15s"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-15s"></script>
+<script src="mt-werktijden.js?v=2026-10-15t"></script>
+<script src="mt-vandaag-desk.js?v=2026-10-15s"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
+<!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
+<script src="mt-zijbalk.js?v=2026-10-15s" defer></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15c"></script>
+<script src="mt-verhuis.js?v=2026-10-15r"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -823,6 +844,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 10px;margin:6px 0}
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
+<!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15s">
 </head>
 <body>
 
@@ -845,7 +868,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.17.1</span>
+    <span class="header-version">v2.17.2</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -1404,6 +1427,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
   <!-- ═══ TAB: VEREIST AANDACHT ═══ -->
   <div id="tab-attentie" class="tab-content">
+    <div id="vandaag-desk" class="vd-root" hidden></div>   <!-- Vandaag in de nieuwe stijl (mt-vandaag-desk.js); leeg en verborgen in de oude stijl -->
     <div class="card" style="margin-bottom:1rem">
       <div class="flex" style="justify-content:space-between;align-items:center">
         <div>
@@ -1478,6 +1502,12 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
   <div id="tab-instellingen" class="tab-content">
     <!-- F5: verhuisknop (alleen zichtbaar met de proefvlag mt_verhuis_proef tot het nieuwe domein gekoppeld is) -->
     <div class="card" id="verhuis-kaart" style="display:none"><div class="card-title">Verhuizen naar het nieuwe adres</div><div id="verhuis-plek"></div></div>
+    <div class="card" id="stijl-kaart">
+      <div class="card-title">Weergave</div>
+      <label style="display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--text);cursor:pointer"><input type="checkbox" id="stijl-schakel" onchange="mtStijl.zet(this.checked)"> Nieuwe stijl proberen</label>
+      <p style="font-size:12px;color:var(--text-dim);margin:6px 0 0">Nieuwe kleuren, lettertypen en indeling. Geldt alleen op deze computer; je collega's zien niets. Uitzetten kan hier altijd weer.</p>
+    </div>
+    <script>(function(){ var c=document.getElementById('stijl-schakel'); if(!c||!window.mtStijl) return; var s=function(){ c.checked=mtStijl.aan(); }; s(); window.addEventListener('mt-stijl',s); })();</script>
     <div class="card" id="upd-kaart" style="display:none">
       <div class="card-title">Wat is er verbeterd</div>
       <div id="upd-inhoud" style="font-size:13px">Laden…</div>
@@ -1874,8 +1904,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
     <!-- A2: Team & lock -->
     <div id="adm-sub-team" class="adm-subcontent">
+      <div id="werktijden-nieuw" class="wt-root" hidden></div>   <!-- Team en werktijden in de nieuwe stijl (mt-werktijden.js); leeg en verborgen in de oude stijl -->
       <div class="adm-grid2">
-        <div class="card">
+        <div class="card" id="adm-werkuren-kaart">
           <h4 style="margin-top:0">Werkuren per week</h4>
           <div id="adm-werkuren-form"></div>
           <button class="btn btn-sm btn-gold" style="margin-top:10px" onclick="admSlaWerkurenOp()">Opslaan</button>
@@ -3396,7 +3427,7 @@ function showTab(name,btn){
   if(name==='agenda'||name==='planning'){ try{ if(window.MTStartvenster) MTStartvenster.toon(); }catch(e){} }   // startvenster "X taken wachten op je": alleen zonder lopende timer, eenmaal per sessie
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
-  if(name==='attentie') renderAttentie();
+  if(name==='attentie'){ renderAttentie(); vandaagDeskTeken(); }
   if(name==='materialen') renderMaterialen();
   if(name==='admin'){ adminOpen(); admSub(sub); }
   if(name==='verbeterpunten') verbLaadTab();
@@ -3743,6 +3774,7 @@ function agKleur(e){return _agenda.kleurOp==='persoon'?agPersKleur(e.teamlid):ag
 function agUur(sec){return (sec/3600).toFixed(1).replace('.',',');}
 
 function renderAgenda(){
+  werktijdenZorg(werktijdenVerversWeergave);   // de werktijden van het team (capaciteit); eenmaal per sessie
   if(!_agenda.weekStart) _agenda.weekStart=agMaandag(new Date());
   agEnsureNames();
   agBindOutside();
@@ -3766,7 +3798,7 @@ function renderAgenda(){
 function agendaZetView(v){_agenda.view=v;renderAgenda();}
 // Mijn werk (stap 2c): de aansluiting tussen mt-mijnwerk.js en de cockpit (taken, afhankelijkheden, planblokken, team, projecten). De rekenregels staan in mt-planning.js.
 try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
-  voorstellen:true, magBeslissen:()=>rolMag(ROL_TAAK_ALLES), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
+  werktijden:()=>werktijdenVoorWeergave(), voorstellen:true, magBeslissen:()=>rolMag(ROL_TAAK_ALLES), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
   vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(),   // de vrije dagen en het verlof uit Beheer (mt_vrijedagen, mt_verlof) tellen mee in de weekbalk
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
@@ -3782,9 +3814,60 @@ try{ MTStartvenster.init({ doc:document, storage:(function(){ try{ return sessio
 // Capaciteit (stap 2, standaardweergave van de Agenda): dezelfde bronnen, plus de werkuren per persoon uit Beheer (admCfg().werkuren).
 try{ MTCapaciteit.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu:()=>Date.now(),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
-  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null,
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null, werktijden:()=>werktijdenVoorWeergave(),
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit init:',e); }
+// Capaciteit in de nieuwe stijl (restyling brok 6/7): dezelfde bronnen als de oude weergave, alleen lezen (zie mt-capaciteit-nieuw.js).
+try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, nu:()=>Date.now(),
+  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null, werktijden:()=>werktijdenVoorWeergave(),
+  project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
+  nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  magSlepen:()=>capMagSlepen(), verplaats:spec=>capVerplaats(spec), herstel:w=>capHerstel(w), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
+  openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
+window.addEventListener('mt-stijl',()=>{ const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
+// Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
+try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
+  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null, werktijden:()=>werktijdenVoorWeergave(),
+  uren:()=>agEntries(), bestel:()=>_blActief(), projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code),
+  larry:()=>{ const b=document.getElementById('attentie-badge'); return b&&b.style.display!=='none'?(Number(b.textContent)||0):0; },
+  nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); }, projectNaam:code=>{ const p=projVind(code); return p?projNaamVol(p):''; },
+  href:o=>mtRoute.format(o.code?{tab:'projecten',code:o.code,sectie:'planning'}:{tab:o.tab}),
+  ga:a=>{ const knop=t=>document.querySelector('.tabs-wrap .tab-btn[onclick*="\''+t+'\'"]');
+    if(a.k==='project') openProject(a.code,{sectie:'planning'});
+    else if(a.k==='agenda'){ if(a.view) _agenda.view=a.view; showTab('agenda',knop('agenda')); }
+    else if(a.k==='tab') showTab(a.tab,knop(a.tab));
+    else if(a.k==='larry'){ const h=document.getElementById('vd-larry-kop'); if(h&&h.scrollIntoView) h.scrollIntoView({behavior:'smooth',block:'start'}); } } }); }catch(e){ console.warn('Vandaag (desktop) init:',e); }
+// Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
+// Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
+// Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.
+// De werktijden werken alleen mee zolang de nieuwe stijl aan staat (html[data-stijl="nieuw"]); zonder die schakelaar rekent en toont de tool exact als voorheen.
+function werktijdenNieuweStijl(){ try{ return document.documentElement.getAttribute('data-stijl')==='nieuw'; }catch(e){ return false; } }
+function werktijdenVoorWeergave(){ try{ return werktijdenNieuweStijl()&&window.MTWerktijden?MTWerktijden.lijst():null; }catch(e){ return null; } }
+function capWerktijdenMag(){ try{ return mtIsAdmin()&&capRolStreng(); }catch(e){ return false; } }   // werktijden zijn nieuw: bij een oude worker (isBeheer niet te bepalen) niet wijzigen
+try{ MTWerktijden.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, werkuren:()=>(admCfg()||{}).werkuren||null,
+  sp:{ read:n=>_SP.read(n), write:(n,d,r)=>_SP.write(n,d,r) }, nu:()=>Date.now(), wie:()=>mtMijEmail(), stempel:_spStempel, audit:(a,doel,oud,nieuw)=>auditLog(a,doel,oud,nieuw,''),
+  magWijzigen:()=>capWerktijdenMag(), opgeslagen:()=>werktijdenVerversWeergave(),
+  blokken:()=>agPlanActief(), entries:()=>agEntries(), verlof:()=>admVerlof(), vrijedagen:()=>admVrijdagen(),   // voor Afwijkingen (afgeleid, geen eigen opslag; geklokte uren = wat lokaal uit Toggl is binnengekomen)
+  naarDag:(slug,datum)=>{ try{ MTCapaciteitNieuw.gaNaar(datum,slug); _agenda.view='capaciteit'; _agenda.weekStart=agMaandag(new Date(datum+'T00:00:00')); showTab('agenda',[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('agenda'"))); }catch(e){ console.warn('Afwijkingen: naar de dag:',e); } } }); }catch(e){ console.warn('Werktijden init:',e); }
+// Eén keer per sessie laden (daarna houdt het bewaren de stand bij); de aanroeper tekent opnieuw als de werktijden binnen zijn.
+let _wtLaden=null;
+function werktijdenZorg(naLaden){
+  if(!werktijdenNieuweStijl()||MTWerktijden.geladen()||_wtLaden) return;   // oude stijl: de werktijden worden niet eens opgehaald
+  _wtLaden=MTWerktijden.laad().then(ok=>{ _wtLaden=null; if(ok&&typeof naLaden==='function') naLaden(); }).catch(()=>{ _wtLaden=null; });
+}
+function werktijdenVerversWeergave(){
+  try{ const ag=document.getElementById('tab-agenda'); if(ag&&ag.classList.contains('active')) renderAgenda(); }catch(e){}
+  try{ const at=document.getElementById('tab-attentie'); if(at&&at.classList.contains('active')) vandaagDeskTeken(); }catch(e){}
+}
+function vandaagDeskTeken(){
+  werktijdenZorg(werktijdenVerversWeergave);
+  try{ MTVandaagDesk.teken(); }catch(e){ console.warn('Vandaag (desktop):',e); }
+  clearTimeout(vandaagDeskTeken._t); vandaagDeskTeken._t=setTimeout(()=>{ const t=document.getElementById('tab-attentie'); if(t&&t.classList.contains('active')){ try{ MTVandaagDesk.teken(); }catch(e){} } },4000);   // de takenlijst en rol komen soms net na het openen binnen
+}
+window.addEventListener('mt-stijl',()=>{ const t=document.getElementById('tab-attentie'); if(t&&t.classList.contains('active')) vandaagDeskTeken(); });
 // Haalt project-/persoon-namen één keer op als de cache leeg is (bv. eerste
 // render vóór een sync). Daarna her-rendert het zodat ID-stubs namen worden.
 function agEnsureNames(){
@@ -6379,7 +6462,7 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
-  if(_projSectie==='planning'){ _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='planning'){ planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -6646,7 +6729,7 @@ function _tlTeken(key){
     html+=`<div class="tl-rij" style="${esc(kol)}"><div class="tl-naam" title="${esc(c||'Fasen')}">${meer?`<span class="tl-dot" style="background:${esc(agProjKleur(c))}"></span>${esc(c)}`:'Fasen'}</div>
       <div class="tl-fasen" style="grid-column:2 / span ${D.weken.length};height:${Math.max(1,lanes.length)*20+6}px">${f.map(x=>{
         const a=Math.max(0,_tlDagen(D.van,x.start)), b=Math.min(totDagen,_tlDagen(D.van,x.eind)+1);
-        return `<button type="button" class="tl-fase st-${esc(x.status)}" style="left:${esc(a/totDagen*100)}%;width:${Math.max(1.2,(b-a)/totDagen*100)}%;top:${esc(3+x.lane*20)}px;background:${esc(agProjKleur(x.code))}" title="${esc(x.naam)} · ${esc(x.start)} – ${esc(x.eind)} · ${esc(x.status)}" onclick="tlDetail(${jsArg(k)},'fase',${jsArg(x.code)},${jsArg(x.id)})">${esc(x.naam)}</button>`; }).join('')}
+        return `<button type="button" class="tl-fase st-${esc(x.status)}${esc(x.mijlpaal?' mijlpaal':'')}" style="left:${esc(a/totDagen*100)}%;width:${Math.max(1.2,(b-a)/totDagen*100)}%;top:${esc(3+x.lane*20)}px;background:${esc(agProjKleur(x.code))};--fk:${esc(agProjKleur(x.code))}" title="${esc(x.naam)} · ${esc(x.start)} – ${esc(x.eind)} · ${esc(x.status)}" onclick="tlDetail(${jsArg(k)},'fase',${jsArg(x.code)},${jsArg(x.id)})">${esc(x.naam)}</button>`; }).join('')}
       ${!f.length?'<span class="tl-leeg">nog geen fasen</span>':''}</div></div>`;
   });
 
@@ -10272,10 +10355,10 @@ function projectPlanning(proj){
     const naarTaak=bron?` onclick="planNaarTaak(${jsArg(proj.code)},${jsArg(bron)})" title="${esc(fa.naam)} — klik: spring naar de taak"`:` title="${fa.naam}"`;
     rows+=`<div class="plan-row"${esc(rowId)}>
       <div class="plan-rowlabel${esc(koppel)}"${esc(naarTaak)}>${bron?(window.MTKoppelUI?'<span class="kb-mini" title="Gekoppeld aan een taak" aria-label="Gekoppeld aan een taak">'+MTKoppelUI.SVG_DICHT+'</span> ':'🔗 '):''}${fa.gepind?'📌 ':''}${esc(fa.naam)}<br><span class="u">${esc(fa.effort?fa.effort+'u · ':'')}${esc(dt)}</span></div>
-      <div class="plan-track" data-code="${esc(proj.code)}" data-span="${esc(totDagen)}">
+      <div class="plan-track" data-code="${esc(proj.code)}" data-span="${esc(totDagen)}" data-van="${esc(_planYmd(minD))}">
         ${fa.mijlpaal
-          ? `<span class="plan-bar mijlpaal" style="left:${esc(l)}%;background:#d4a017" title="${esc(fa.naam)} — ${esc(fa.start)}" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})"></span>`
-          : `<span class="plan-bar" style="left:${esc(l)}%;width:${esc(w)}%;background:${esc(kleur)}" title="${esc(fa.naam)}: ${esc(fa.start)} → ${esc(fa.eind)} (${esc(fa.duur)} wd, ${esc(fa.effort)}u)" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})">${esc(fa.naam)}</span>`}
+          ? `<span class="plan-bar mijlpaal" style="left:${esc(l)}%;background:#d4a017;--fk:#d4a017" title="${esc(fa.naam)} — ${esc(fa.start)}" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})"></span>`
+          : `<span class="plan-bar" style="left:${esc(l)}%;width:${esc(w)}%;background:${esc(kleur)};--fk:${esc(kleur)}" title="${esc(fa.naam)}: ${esc(fa.start)} → ${esc(fa.eind)} (${esc(fa.duur)} wd, ${esc(fa.effort)}u)" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})">${esc(fa.naam)}</span>`}
       </div>
     </div>`;
   });
@@ -10300,6 +10383,22 @@ function projectPlanning(proj){
   <div id="plan-editor-${esc(cid)}"></div>`;
 }
 
+// Vandaag-lijn in de projectplanning (alleen in de nieuwe stijl; de oude Gantt heeft er geen): een dunne messing streep per spoor, op de plek van vandaag.
+// De sleeplogica (planDragStart) blijft ongemoeid: de lijn is pointer-events:none en staat buiten de balken.
+function planVandaagLijnen(basis){
+  try{
+    const wasNieuw=document.documentElement.getAttribute('data-stijl')==='nieuw';
+    (basis||document).querySelectorAll('.plan-track[data-van]').forEach(t=>{
+      const oud=t.querySelector(':scope>.plan-vandaag');
+      if(!wasNieuw){ if(oud) oud.remove(); return; }
+      if(oud) return;
+      const span=Number(t.dataset.span)||0, dagen=Math.round((_planD(_planYmd(new Date()))-_planD(t.dataset.van))/86400000);
+      if(!(span>0)||dagen<0||dagen>span) return;
+      const l=document.createElement('span'); l.className='plan-vandaag'; l.style.left=(dagen/span*100)+'%'; l.setAttribute('aria-hidden','true'); t.appendChild(l);
+    });
+  }catch(e){}
+}
+window.addEventListener('mt-stijl',()=>planVandaagLijnen());
 // ── UI-acties ──
 function planGenereerUI(code){
   const cid=_planCid(code);
@@ -14904,6 +15003,7 @@ async function adminOpen(){
   if(!mtIsAdmin()) return;
   // Laad alle data in parallel
   admLoadConfig().then(()=>{admRenderTeam();admRenderBudgetten();});
+  if(werktijdenNieuweStijl()) MTWerktijden.laad().then(()=>{ admRenderTeam(); MTWerktijden.teken(); });   // altijd vers bij het openen van Admin (alleen in de nieuwe stijl)
   admLoadVerlof().then(()=>{admRenderVerlofLijst();admRenderSaldo();});
   admLoadVrijdagen().then(()=>admRenderVrijdagenLijst());
   admLoadAudit().then(()=>admRenderLog());
@@ -14930,6 +15030,7 @@ function admSub(name,btn){
   const b=btn||document.querySelector('#tab-admin .adm-subtab[data-sub="'+name+'"]'); if(b) b.classList.add('active');
   if(name==='beheer') beheerLaad();
   if(name==='activiteit') activiteitOpen();
+  if(name==='team'){ try{ MTWerktijden.teken(); }catch(e){} }
   const at=document.getElementById('tab-admin');
   if(at&&at.classList.contains('active')&&typeof mtRoute!=='undefined') mtRoute.zet({tab:admRouteNaam()},false);
 }
@@ -14968,9 +15069,11 @@ function admRenderTeam(){
   const form=document.getElementById('adm-werkuren-form'); if(!form) return;
   form.innerHTML=MT_TEAM.map(m=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
     <span style="min-width:80px;font-size:13px">${esc(m.naam)}${m.admin?' <span style="font-size:10px;color:var(--gold);font-weight:600">admin</span>':''}</span>
-    <input type="number" id="adm-wu-${esc(m.slug)}" class="adm-inp" style="width:70px" min="0" max="80" value="${esc(cfg.werkuren[m.slug]||40)}">
+    <input type="number" id="adm-wu-${esc(m.slug)}" class="adm-inp" style="width:70px" min="0" max="80" value="${esc(MTPlanning.werkuurWeek(m.slug,{werkuren:cfg.werkuren,werktijden:werktijdenVoorWeergave()}))}">
     <span style="font-size:12px;color:var(--text-faint)">uur/week</span>
   </div>`).join('');
+  const wtMap=MTPlanning.werktijdenMap(werktijdenVoorWeergave());   // wie werktijden heeft: de uren per week volgen daaruit (niet hier aan te passen)
+  MT_TEAM.forEach(m=>{ const inp=document.getElementById('adm-wu-'+m.slug); if(inp&&wtMap[m.slug]){ inp.disabled=true; inp.title='Volgt uit de werktijden (nieuwe stijl: Admin ▸ Team en werktijden)'; } });
   const ld=document.getElementById('adm-lock-dagen'); if(ld) ld.value=cfg.lockDagen??14;
 }
 async function admSlaWerkurenOp(){
@@ -15198,7 +15301,8 @@ async function agPlanSave(){
   catch(e){ if(typeof planToast==='function')planToast('⚠ SharePoint niet bereikbaar — wijziging alleen lokaal bewaard'); return false; }
   _planblokken=_agPlanSamen(_planblokken||[],remote);
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
-  await agPlanSchrijf();
+  const geschreven=await agPlanSchrijf();   // false = de PUT mislukte (ook na een 412-samenvoeging): de wijziging staat dan alleen lokaal
+  if(geschreven===false){ if(typeof planToast==='function') planToast('⚠ Planning niet gedeeld met SharePoint — alleen lokaal bewaard'); return false; }
   return true;
 }
 
@@ -15338,17 +15442,20 @@ function capaciteitPerDag({pers=null,van,tot,verlof=null,vrijdagen=null,cfg=null
   const uit={};
   wie.forEach(slug=>{
     const werk=(cfg.werkuren&&cfg.werkuren[slug])||40;
+    const wtRec=MTPlanning.werktijdenMap(werktijdenVoorWeergave())[String(slug).toLowerCase()];   // met werktijden: de uren per dag volgen die (zonder: werkuren/5, zoals altijd)
     const werkdagen=dagen.filter(d=>{ const g=d.getDay(); return g>0&&g<6; });
     const verplicht=dagen.filter(d=>vrijdagen.find(v=>v.datum===_planYmd(d)&&v.type==='verplicht'));
     const verlofDagen=dagen.filter(d=>{ const g=d.getDay(); if(!(g>0&&g<6)) return false; const ymd=_planYmd(d); return verlof.some(v=>v.persoon===slug&&ymd>=v.van&&ymd<=v.tm); });
     // per verlofperiode telt elke werkdag 8u (zoals de Agenda: overlappende perioden tellen dubbel in
     // `totaal`). perDag telt een dag maar één keer — gebruik voor weektotalen altijd `totaal`.
     const verlofUren=verlof.filter(v=>v.persoon===slug).reduce((s,v)=>s+werkdagen.filter(d=>{ const ymd=_planYmd(d); return ymd>=v.van&&ymd<=v.tm; }).length*8,0);
-    const totaal=Math.max(0,werk*werkdagen.length/5-verplicht.length*8-verlofUren);
+    const dagBasis=(d,g)=>wtRec?((g>0&&g<6)?MTPlanning.werktijdDagMin(wtRec,g-1)/60:0):((g>0&&g<6)?werk/5:0);
+    // Zonder werktijden: exact als voorheen (8u per verlof-/vrije dag van het weektotaal af). Met werktijden telt de aftrek per datum en alleen op een echte werkdag van die persoon:
+    // een verlof- of verplichte vrije dag valt weg met de uren van DIE dag (4u, 6u, 8u30), een vrije zaterdag of een dag waarop ze niet werkt kost niets, en een dag telt één keer.
     const perDag={};
-    dagen.forEach(d=>{ const ymd=_planYmd(d), g=d.getDay();
-      const basis=(g>0&&g<6)?werk/5:0, vp=verplicht.includes(d)?8:0, vl=verlofDagen.includes(d)?8:0;
-      perDag[ymd]=Math.max(0,basis-vp-vl); });
+    dagen.forEach(d=>{ const ymd=_planYmd(d), g=d.getDay(), basis=dagBasis(d,g);
+      perDag[ymd]=wtRec?((verplicht.includes(d)||verlofDagen.includes(d))?0:basis):Math.max(0,basis-(verplicht.includes(d)?8:0)-(verlofDagen.includes(d)?8:0)); });
+    const totaal=wtRec?Object.keys(perDag).reduce((s,k)=>s+perDag[k],0):Math.max(0,werk*werkdagen.length/5-verplicht.length*8-verlofUren);
     uit[slug]={totaal,perDag};
   });
   return uit;
@@ -15479,36 +15586,86 @@ function agPlanBlokMenu(evt,id){
 let _planDragId=null;
 function agPlanDragStart(evt,id){
   const b=agPlanActief().find(x=>x.id===id);
-  if(pvMoetVoorstel()||(b&&b.status==='voorstel')){ evt.preventDefault(); return; }   // Werkplaats en open voorstellen niet verslepen
+  if(!capMagSlepen()||(b&&b.status==='voorstel')){ evt.preventDefault(); return; }   // alleen met een geladen rol die projecten mag wijzigen (zelfde regel als het slepen in de capaciteit)   // Werkplaats en open voorstellen niet verslepen
   _planDragId=id;evt.dataTransfer.effectAllowed='move';}
 function agPlanDragEnd(evt){_planDragId=null;document.querySelectorAll('[id^=agplan-drop-]').forEach(el=>{el.style.background='';});}
+// Dezelfde waarschuwing als bij het slepen in de capaciteit (MTPlanVerplaats.waarschuwing = één bron): verlof, verplichte vrije dag of een dag waarop iemand volgens de werktijden niet werkt.
+// '' = geen bezwaar. Een blok van iemand die niet in het team staat geeft geen vraag (zoals voorheen).
+function capWaarschuwing(blok,datum){
+  try{
+    const slug=MTPlanning.persoonSlug(blok.persoon,MT_TEAM);
+    return slug?MTPlanVerplaats.waarschuwing({soort:'verplaats',blokId:blok.id,persoon:slug,datum},_capCtx()):'';
+  }catch(e){ return ''; }
+}
 function agPlanDrop(evt,datum){
   evt.preventDefault();
+  if(!capMagSlepen()){ _planDragId=null; planToast('Dit mag je niet met jouw rol: verplaatsen is voor kantoor.'); return; }   // ook bij het loslaten (niet alleen bij het oppakken)
   const id=_planDragId; if(!id) return;
   const el=document.getElementById('agplan-drop-'+datum); if(el) el.style.background='';
-  // Verlof check
-  const verlof=admVerlof();
   const blok=agPlanActief().find(b=>b.id===id);
-  if(!blok) return;
-  const heeftVerlof=verlof.find(v=>v.persoon===blok.persoon&&datum>=v.van&&datum<=v.tm);
-  if(heeftVerlof){planToast(`${blok.persoon} heeft verlof op ${datum}`);return;}
-  const vd=admVrijdagen().find(v=>v.datum===datum);
-  if(vd&&vd.type==='verplicht'){planToast('🔒 Verplichte vrije dag — plannen geblokkeerd');return;}
-
-  // Bereken nieuwe starttijd uit drop-positie
+  if(!blok||blok.status==='voorstel') return;   // een open voorstel beslist kantoor, dat verplaats je niet (ook niet als de drag toch gestart is)
+  // Bereken nieuwe starttijd uit drop-positie (vóór het wachten op de bevestiging: daarna bestaat de gebeurtenis niet meer)
   const dropEl=evt.currentTarget;
   const rect=dropEl.getBoundingClientRect();
   const relY=evt.clientY-rect.top;
   const uur=AG_START+Math.floor(relY/AG_UURPX);
   const minRaw=Math.round(((relY%AG_UURPX)/AG_UURPX)*4)*15;
   const startStr=`${String(Math.min(uur,AG_EIND-1)).padStart(2,'0')}:${String(minRaw).padStart(2,'0')}`;
+  _planDragId=null;
+  const doe=()=>{
+    const arr=agPlanBlokken().map(b=>{
+      if(b.id!==id) return b;
+      return _spStempel({...b,datum,start:startStr,ts:new Date().toISOString(),door:mtMijEmail()},b);
+    });
+    _planblokken=arr;
+    agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok verplaatst');});
+  };
+  const vraag=capWaarschuwing(blok,datum);
+  if(!vraag){ doe(); return; }
+  // Verlof, verplichte vrije dag of niet-werkdag is geen weigering meer maar een vraag; Annuleren schrijft niets en het blok blijft staan
+  mtDialog.confirm({title:'Controleer de planning',message:vraag,okLabel:'Toch inplannen',cancelLabel:'Annuleren'}).then(ja=>{ if(ja) doe(); else agPlanRender(); });
+}
 
-  const arr=agPlanBlokken().map(b=>{
-    if(b.id!==id) return b;
-    return _spStempel({...b,datum,start:startStr,ts:new Date().toISOString(),door:mtMijEmail()},b);
-  });
-  _planblokken=arr;
-  agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok verplaatst');});
+// ── Slepen in de capaciteit (restyling brok 8, mt-capaciteit-nieuw.js + mt-planverplaats.js) ──
+// Zelfde opslag als agPlanDrop: de blokken blijven records in mt_planblokken met een stempel; agPlanSave leest vers, voegt per id samen
+// (_SP.mergers.mt_planblokken) en schrijft met de ETag terug (een 412 wordt met dezelfde samenvoeger opgelost). Open voorstellen worden niet versleept.
+// Recht: alleen met het recht om projecten te wijzigen (niet "lezen", niet de werkplaats) en alleen als de rol geladen is (fail-closed).
+// De rol uit de rollenmatrix, ongeacht de modus (MTRol.mag geeft buiten 'afdwingen' altijd true).
+//  - rol geladen: expliciet rechten.projecten === 'wijzigen' (eigenaar, beheer, kantoor); lezen, werkplaats of geen rechten in het antwoord = nee;
+//  - rol nog aan het laden, geen token of een laadfout: nee (fail-closed);
+//  - 'oude-worker' (de worker kent /me met rol en modus niet: definitief geen rollensysteem): alles als vroeger, dus wel (zoals de rest van de tool).
+function capRolStreng(){ try{ const r=window.MTRol&&MTRol.me&&MTRol.me.rechten; return !!r&&r.projecten==='wijzigen'; }catch(e){ return false; } }
+function capRolWijzigen(){ try{ if(window.MTRol&&MTRol.me) return capRolStreng(); return !!(window.MTRol&&MTRol.laadReden==='oude-worker'); }catch(e){ return false; } }
+function capMagSlepen(){ try{ return capRolWijzigen()&&!pvMoetVoorstel(); }catch(e){ return false; } }
+function _capCtx(){ return { blokken:agPlanBlokken(), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), werktijden:werktijdenVoorWeergave(), mag:capMagSlepen(), nu:Date.now(), wie:mtMijEmail(), stempel:_spStempel,
+  nieuwId:()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7) }; }
+// Eerst de actuele stand van SharePoint erbij (samengevoegd met de lokale): zo ziet de controle een blok dat een ander net verplaatste of inplande.
+// -> { ok:true, online } of { ok:false, reden } (een bestand met een onverwachte vorm wordt nooit overschreven).
+async function _capVers(){
+  if(!_planblokken) await agPlanLoad();
+  let remote; try{ remote=await _SP.read('mt_planblokken.json'); }catch(e){ return { ok:true, online:false }; }
+  if(remote!==null&&remote!==undefined&&!Array.isArray(remote)) return { ok:false, reden:'Het bestand met planblokken heeft een onverwachte vorm; er is niets gewijzigd.' };
+  _planblokken=_agPlanSamen(agPlanBlokken(),remote||[]);
+  try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
+  return { ok:true, online:true };
+}
+async function capVerplaats(spec){
+  if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  const vers=await _capVers(); if(!vers.ok) return vers;
+  const r=MTPlanVerplaats.pas(spec,_capCtx()); if(!r.ok||r.noop) return r;
+  _planblokken=r.blokken;
+  const opgeslagen=await agPlanSave();   // false = SharePoint niet bereikbaar: de wijziging staat dan alleen lokaal (agPlanSave meldt dat zelf)
+  const nu=agPlanBlokken().find(b=>b&&String(b.id)===String(r.wijziging.id));
+  return { ok:true, wijziging:r.wijziging, opgeslagen:opgeslagen!==false, behouden:!!(nu&&nu._gewijzigd===r.wijziging.stempel) };   // behouden=false: iemand anders was net sneller met dit blok
+}
+async function capHerstel(w){
+  if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  const vers=await _capVers(); if(!vers.ok) return vers;
+  if(!vers.online) return { ok:false, reden:'SharePoint is niet bereikbaar: niets teruggezet, want het blok kan intussen door iemand anders zijn gewijzigd.' };   // ongedaan maken alleen op een verse stand
+  const r=MTPlanVerplaats.ongedaan(w,_capCtx()); if(!r.ok) return r;
+  _planblokken=r.blokken;
+  const opgeslagen=await agPlanSave();
+  return { ok:true, opgeslagen:opgeslagen!==false };
 }
 </script>
 
