@@ -178,3 +178,15 @@ html[data-stijl="nieuw"] #tab-toggl .tg-timerbar{top:var(--mt-kop,60px)}
 html[data-stijl="nieuw"] .proj-ctx-naam{font-style:normal;font-weight:600}
 html[data-stijl="nieuw"] .proj-ctx-code{border-radius:4px}
 html[data-stijl="nieuw"] .proj-ctx-status{border-radius:4px}
+/* ── 7. Brok 4: volle breedte ───────────────────────────────────────────────────────────────────────────────
+   .main heeft al geen maximale breedte; de vaste 800/900px-kaarten (inline style in v2.html) en de gecentreerde blokken van
+   Dashboard/Geld (1100px) en Rapporten (900/1400px) vullen nu het scherm. Leestekst en invoervelden blijven smal:
+   alinea's in kaarten max 80 tekens, tekstvelden in een formulierregel max 720px, rapporttekst 900px. */
+html[data-stijl="nieuw"] .tab-content [style*="max-width:900px"],html[data-stijl="nieuw"] .tab-content [style*="max-width:800px"]{max-width:none!important}
+html[data-stijl="nieuw"] #tab-verbeterpunten>[style*="max-width:800px"]{max-width:1100px!important}   /* een formulier: niet over de hele breedte */
+html[data-stijl="nieuw"] #inbox-pane-binnenkomend{max-width:1100px!important}
+html[data-stijl="nieuw"] .mtg{max-width:none}
+html[data-stijl="nieuw"] .mtr.mtr-met{max-width:min(100%,1800px)}
+html[data-stijl="nieuw"] .card>p,html[data-stijl="nieuw"] .card>.field>p{max-width:80ch}
+html[data-stijl="nieuw"] .card .field>input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),
+html[data-stijl="nieuw"] .card .field>select,html[data-stijl="nieuw"] .card .field>textarea{max-width:720px}
