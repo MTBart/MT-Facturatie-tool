@@ -46,6 +46,8 @@
   }
 
   C.teken = function () {
+    // Nieuwe stijl (restyling brok 6/7): de weergave staat in mt-capaciteit-nieuw.js; de oude tekening hieronder blijft ongewijzigd.
+    if (D && D.doc.documentElement.getAttribute('data-stijl') === 'nieuw' && root.MTCapaciteitNieuw) { try { root.MTCapaciteitNieuw.teken(); return; } catch (e) { console.warn('Capaciteit (nieuw):', e); } }
     const w = D && D.doc.getElementById('agenda-capaciteit'); if (!w) return;
     w.textContent = '';
     if (!D.doc.getElementById('cp-stijl')) { const s = el('style', { id: 'cp-stijl' }); s.textContent = STIJL; D.doc.head.appendChild(s); }

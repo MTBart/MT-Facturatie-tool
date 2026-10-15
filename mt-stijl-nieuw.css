@@ -265,3 +265,110 @@ html[data-stijl="nieuw"] .vd-balk{height:6px;border-radius:2px;background:var(--
 html[data-stijl="nieuw"] .vd-balk span{background:var(--primary)}
 html[data-stijl="nieuw"] .vd-larry-kop{margin:32px 0 12px;font:600 16px/22px var(--sans);color:var(--ink)}
 @media (max-width:900px){html[data-stijl="nieuw"] .vd-raster{grid-template-columns:minmax(0,1fr)}html[data-stijl="nieuw"] .vd-taak{grid-template-columns:24px minmax(0,1fr) auto}html[data-stijl="nieuw"] .vd-taak .vd-uren{display:none}}
+/* ── 9. Brok 6/7: Planning ▸ Capaciteit (mt-capaciteit-nieuw.js; staat in #agenda-capaciteit) ─────────────────────────── */
+html[data-stijl="nieuw"] #agenda-capaciteit{padding:0}
+html[data-stijl="nieuw"] .cn-balk-boven{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+html[data-stijl="nieuw"] .cn-knop,html[data-stijl="nieuw"] .cn-filter{height:34px;padding:0 12px;border:1px solid var(--line-strong);border-radius:4px;background:var(--surface);color:var(--ink);font:500 13px/18px var(--sans);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;width:auto}
+html[data-stijl="nieuw"] .cn-knop:hover{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .cn-knop.icoon,html[data-stijl="nieuw"] .cn-knop.zm{width:34px;padding:0}
+html[data-stijl="nieuw"] .cn-knop:focus-visible,html[data-stijl="nieuw"] .cn-zk:focus-visible,html[data-stijl="nieuw"] .cn-blok:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}
+html[data-stijl="nieuw"] .cn-filter{border-style:dashed;color:var(--ink-2);padding-right:28px;max-width:220px;font-weight:600}
+html[data-stijl="nieuw"] .cn-ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+html[data-stijl="nieuw"] .cn-titel{font:600 16px/22px var(--sans);margin-left:8px;color:var(--ink)}
+html[data-stijl="nieuw"] .cn-sub{font:400 13px/18px var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+html[data-stijl="nieuw"] .cn-rek{flex:1 1 auto}
+html[data-stijl="nieuw"] .cn-zoom{display:inline-flex;align-items:center;border:1px solid var(--line-strong);border-radius:4px;overflow:hidden;background:var(--surface)}
+html[data-stijl="nieuw"] .cn-zoom .cn-knop{height:34px;border:0;border-radius:0;color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-zoom .cn-knop.zm:first-child{border-right:1px solid var(--line)}
+html[data-stijl="nieuw"] .cn-zk{height:34px;padding:0 12px;border:0;border-right:1px solid var(--line);background:transparent;color:var(--ink-2);font:500 13px/18px var(--sans);cursor:pointer}
+html[data-stijl="nieuw"] .cn-zk.aan{background:var(--ink);color:var(--surface);font-weight:600}
+html[data-stijl="nieuw"] .cn-melding{background:var(--warning-50);color:var(--warning);border:1px solid #e9cf9f;border-radius:4px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+html[data-stijl="nieuw"] .cn-kader{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+html[data-stijl="nieuw"] .cn-hoofd{flex:999 1 720px;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow-x:auto}
+html[data-stijl="nieuw"] .cn-hoek{padding:10px 16px;display:flex;flex-direction:column;font:400 12px/16px var(--sans);color:var(--ink-2);justify-content:flex-end}
+/* week */
+html[data-stijl="nieuw"] .cn-week{display:grid}
+html[data-stijl="nieuw"] .cn-dagkop,html[data-stijl="nieuw"] .cn-dagkop2{padding:10px 12px;border-left:1px solid var(--line-soft);font:400 13px/18px var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-dagkop.nu,html[data-stijl="nieuw"] .cn-dagkop2.nu{background:var(--brass-soft);color:var(--brass-ink);box-shadow:inset 0 3px 0 var(--brass)}
+html[data-stijl="nieuw"] .cn-persoon{padding:12px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;min-width:0}
+html[data-stijl="nieuw"] .cn-persoon.enkel{border-top:0;justify-content:center}
+html[data-stijl="nieuw"] .cn-pkop{display:flex;align-items:center;gap:10px;min-width:0}
+html[data-stijl="nieuw"] .cn-avatar{flex:0 0 28px;width:28px;height:28px;border-radius:999px;border:1px solid var(--line);background:var(--surface-sunken);display:grid;place-items:center;font:600 11px/1 var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-pnaam{display:flex;flex-direction:column;min-width:0}
+html[data-stijl="nieuw"] .cn-pnaam b{font:600 14px/20px var(--sans);color:var(--ink)}
+html[data-stijl="nieuw"] .cn-vrij{font:500 12px/16px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-vrij.over{color:var(--error)}
+html[data-stijl="nieuw"] .cn-laad{display:flex;height:4px;border-radius:2px;background:var(--surface-sunken);overflow:hidden}
+html[data-stijl="nieuw"] .cn-laad span{background:var(--primary)}html[data-stijl="nieuw"] .cn-laad span.over{background:var(--error)}
+html[data-stijl="nieuw"] .cn-cel{padding:8px;display:flex;flex-direction:column;gap:4px;border-left:1px solid var(--line-soft);border-top:1px solid var(--line);min-width:0}
+html[data-stijl="nieuw"] .cn-cel.nu{background:color-mix(in srgb,var(--brass-soft) 40%,var(--surface))}
+html[data-stijl="nieuw"] .cn-cel.vrij{background:repeating-linear-gradient(135deg,var(--surface-sunken) 0 6px,var(--surface) 6px 12px)}
+html[data-stijl="nieuw"] .cn-cel.over{box-shadow:inset 0 0 0 2px var(--error)}
+html[data-stijl="nieuw"] .cn-som{display:flex;justify-content:space-between;font:500 11px/16px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-som.over{color:var(--error)}
+html[data-stijl="nieuw"] .cn-slot{display:flex;flex-direction:column;gap:4px}
+html[data-stijl="nieuw"] .cn-leeg{display:flex;align-items:center;justify-content:center;min-height:42px;border:1px dashed var(--line);border-radius:4px;color:var(--ink-3);font:400 12px/16px var(--sans)}
+html[data-stijl="nieuw"] .cn-vrijtekst{flex-grow:1;min-height:88px;display:grid;place-items:center;font:500 12px/16px var(--sans);color:var(--ink-2)}
+/* blokken: getint per project, gestippeld bij een open voorstel */
+html[data-stijl="nieuw"] .cn-blok{position:relative;display:flex;flex-direction:column;justify-content:center;min-height:42px;padding:4px 8px 4px 11px;border:0;border-radius:4px;background:color-mix(in srgb,var(--block-color,var(--ink-2)) 13%,var(--surface));box-shadow:inset 3px 0 0 var(--block-color,var(--ink-2));color:var(--ink);text-align:left;cursor:pointer;font:inherit;min-width:0;margin:0}
+html[data-stijl="nieuw"] .cn-blok:hover{background:color-mix(in srgb,var(--block-color,var(--ink-2)) 22%,var(--surface))}
+html[data-stijl="nieuw"] .cn-blok.voorstel{outline:1px dashed var(--brass);outline-offset:-1px;background:color-mix(in srgb,var(--brass-soft) 55%,var(--surface))}
+html[data-stijl="nieuw"] .cn-blok.wacht{background-image:repeating-linear-gradient(135deg,transparent 0 6px,rgba(143,85,8,.08) 6px 8px)}
+html[data-stijl="nieuw"] .cn-blok-titel{font:500 13px/18px var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-stijl="nieuw"] .cn-blok-sub{font:400 12px/16px var(--sans);color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-stijl="nieuw"] .cn-code,html[data-stijl="nieuw"] .cn-tijd{font-family:var(--mono);font-size:11px}
+html[data-stijl="nieuw"] .cn-blok-kop{display:flex;align-items:center;gap:6px;min-width:0}
+html[data-stijl="nieuw"] .cn-chipje{flex:0 0 auto;height:16px;padding:0 5px;border-radius:3px;background:var(--brass-soft);color:var(--brass-ink);font:500 10px/16px var(--sans)}
+html[data-stijl="nieuw"] .cn-chipje.wacht{background:var(--warning-50);color:var(--warning)}
+/* ongepland */
+html[data-stijl="nieuw"] .cn-ongepland{flex:1 1 280px;max-width:360px;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+html[data-stijl="nieuw"] .cn-ong-kop{display:flex;align-items:baseline;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line-soft);font:600 16px/22px var(--sans)}
+html[data-stijl="nieuw"] .cn-ong-lijst{padding:12px;display:flex;flex-direction:column;gap:8px}
+html[data-stijl="nieuw"] .cn-ong{min-height:54px;width:100%}
+html[data-stijl="nieuw"] .cn-ong-rij{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+html[data-stijl="nieuw"] .cn-ong-leeg{padding:8px 4px}
+/* legenda */
+html[data-stijl="nieuw"] .cn-legenda{display:flex;gap:20px;flex-wrap:wrap;align-items:center;padding:10px 16px;border-top:1px solid var(--line);font:400 12px/16px var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-legenda span{display:flex;align-items:center;gap:6px}
+html[data-stijl="nieuw"] .cn-legenda .over{color:var(--error)}
+html[data-stijl="nieuw"] .cn-legenda .cn-hint{margin-left:auto}
+html[data-stijl="nieuw"] .cn-lg-balk{display:block;width:14px;height:4px;border-radius:2px;background:var(--primary)}
+html[data-stijl="nieuw"] .cn-lg-over{display:block;width:12px;height:12px;border-radius:2px;box-shadow:inset 0 0 0 2px var(--error)}
+html[data-stijl="nieuw"] .cn-lg-vrij{display:block;width:12px;height:12px;background:repeating-linear-gradient(135deg,var(--line-strong) 0 2px,transparent 2px 4px)}
+html[data-stijl="nieuw"] .cn-lg-voorstel{display:block;width:14px;height:10px;border:1px dashed var(--brass);background:var(--brass-soft)}
+/* uren (3 dagen en dag) */
+html[data-stijl="nieuw"] .cn-uren-kop{display:grid}
+html[data-stijl="nieuw"] .cn-uren-schaal{display:grid}
+html[data-stijl="nieuw"] .cn-dagkop2{grid-row:1;padding:8px 10px 2px}
+html[data-stijl="nieuw"] .cn-tik{padding:2px 6px 8px;font:400 11px/14px var(--mono);color:var(--ink-2);border-left:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-tik.eerste{border-left-color:var(--line)}
+html[data-stijl="nieuw"] .cn-tik.nu{background:var(--brass-soft)}
+html[data-stijl="nieuw"] .cn-uren-rij{display:grid;border-top:1px solid var(--line)}
+html[data-stijl="nieuw"] .cn-uren-raster{display:grid;row-gap:4px;padding:6px 0;position:relative;background-image:repeating-linear-gradient(to right,var(--line-soft) 0 1px,transparent 1px calc(100% / 10))}
+html[data-stijl="nieuw"] .cn-uren-raster .cn-blok{margin:0 2px;min-height:0}
+html[data-stijl="nieuw"] .cn-uren-vrij{display:grid;place-items:center;font:500 12px/16px var(--sans);color:var(--ink-2);background:repeating-linear-gradient(135deg,var(--surface-sunken) 0 6px,var(--surface) 6px 12px)}
+html[data-stijl="nieuw"] .cn-nu{position:absolute;top:0;bottom:0;width:2px;background:var(--brass);pointer-events:none}
+/* maand */
+html[data-stijl="nieuw"] .cn-maand-kop,html[data-stijl="nieuw"] .cn-maand-rij{display:grid}
+html[data-stijl="nieuw"] .cn-maand-rij{border-top:1px solid var(--line)}
+html[data-stijl="nieuw"] .cn-weekkop{padding:8px 10px 2px;border-left:1px solid var(--line);font:600 13px/18px var(--sans);color:var(--ink)}
+html[data-stijl="nieuw"] .cn-dagnum{padding:2px 4px 8px;text-align:center;font:400 11px/14px var(--mono);color:var(--ink-2);border-left:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-dagnum.eerste{border-left-color:var(--line)}
+html[data-stijl="nieuw"] .cn-dagnum.nu,html[data-stijl="nieuw"] .cn-mdag.nu{background:color-mix(in srgb,var(--brass-soft) 60%,var(--surface));color:var(--brass-ink)}
+html[data-stijl="nieuw"] .cn-mdag{height:52px;display:flex;align-items:flex-end;padding:6px 3px;border-left:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-mdag.eerste{border-left-color:var(--line)}
+html[data-stijl="nieuw"] .cn-mdag.vrij{background:repeating-linear-gradient(135deg,var(--surface-sunken) 0 4px,var(--surface) 4px 8px)}
+html[data-stijl="nieuw"] .cn-mbalk{display:block;width:100%;border-radius:2px;background:color-mix(in srgb,var(--primary) 45%,var(--surface))}
+html[data-stijl="nieuw"] .cn-mbalk.vol{background:var(--primary)}html[data-stijl="nieuw"] .cn-mbalk.over{background:var(--error)}
+/* kwartaal */
+html[data-stijl="nieuw"] .cn-kw-kop{display:grid}
+html[data-stijl="nieuw"] .cn-wk{padding:10px 6px;text-align:center;font:400 12px/16px var(--mono);color:var(--ink-2);border-left:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-wk.nu{background:var(--brass-soft);color:var(--brass-ink);font-weight:600;box-shadow:inset 0 3px 0 var(--brass)}
+html[data-stijl="nieuw"] .cn-kw-rij{display:grid;border-top:1px solid var(--line)}
+html[data-stijl="nieuw"] .cn-kw-raster{display:grid;grid-auto-rows:minmax(26px,auto);gap:4px 0;padding:8px 0 10px;align-content:start}
+html[data-stijl="nieuw"] .cn-kw-laad{display:flex;flex-direction:column;gap:2px;padding:0 6px}
+html[data-stijl="nieuw"] .cn-kw-tekst{font:400 11px/14px var(--mono);color:var(--ink-2);min-height:14px}
+html[data-stijl="nieuw"] .cn-kw-tekst.over{color:var(--error)}
+html[data-stijl="nieuw"] .cn-balk{min-height:30px;margin:0 2px;justify-content:center}
+@media (max-width:1100px){html[data-stijl="nieuw"] .cn-ongepland{max-width:none;flex-basis:100%}}
