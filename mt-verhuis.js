@@ -34,7 +34,7 @@
     // alleen lokaal, niet te herbouwen
     'mt_retry_queue', 'mt_agenda_blocks', 'mt_planblokken', 'mt_notes', 'mt_tasks', 'mt_werkcodes', 'mt_projectnummers', 'mt_werkcode_wacht', 'mt_timer_stop_pending', 'mt_calc_offertes_backup',
     'mt_uren_entries', 'mt_uren_ik', 'mt_uren_planning', 'mt_uren_taken', 'mt_uren_capaciteit', 'mt_uren_projecten', 'mt_uren_teamleden', 'mt_user_projects',
-    'mt_instellingen', 'mt_adminconfig', 'mt_opl_codes', 'mt_mb_admin', 'mt_vrijedagen', 'mt_verlof', 'mt_proj_adressen', 'mt_contacten_mobiel', 'mt_email_verwerkt',
+    'mt_instellingen', 'mt_adminconfig', 'mt_opl_codes', 'mt_mb_admin', 'mt_vrijedagen', 'mt_verlof', 'mt_werktijden', 'mt_proj_adressen', 'mt_contacten_mobiel', 'mt_email_verwerkt',
     'mt_cf_vasten_uit', 'mt_fb_sent', 'mt_notif_read', 'mt_pv_gezien', 'mt_vandaag_gezien', 'mt_klant_sectie', 'mt_proj_sectie', 'mt_proj_sectie_per', 'mt_bl_weergave', 'mt_aanwezig_kaart', 'ncr_lev_overrides',
   ]);
   V.PREFIXEN = ['mt_rapdraft_', 'mt_csv_prijzen_', 'mt_bestellijst_onleesbaar_', 'mt_updates_gezien:', 'mtg:zoom:', 'mtg:alleen:', 'mtg:nood:', 'mtg:intro:', 'mtg:mp-init:', 'mtg:mp:', 'mtg:prognose:', 'mt_project_taken_v2_verweesd_', 'mt_bestellijst_v2_verweesd_'];

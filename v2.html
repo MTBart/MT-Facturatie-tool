@@ -67,7 +67,7 @@
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15b"></script>
+<script src="mt-verhuis.js?v=2026-10-15q"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -845,7 +845,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15p">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15q">
 </head>
 <body>
 
@@ -15515,7 +15515,7 @@ function agPlanDrop(evt,datum){
 // Onbekend, nog niet geladen, lezen of werkplaats = nee (fail-closed).
 function capRolWijzigen(){ try{ const r=window.MTRol&&MTRol.me&&MTRol.me.rechten; return !!r&&r.projecten==='wijzigen'; }catch(e){ return false; } }
 function capMagSlepen(){ try{ return capRolWijzigen()&&!pvMoetVoorstel(); }catch(e){ return false; } }
-function _capCtx(){ return { blokken:agPlanBlokken(), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), mag:capMagSlepen(), nu:Date.now(), wie:mtMijEmail(), stempel:_spStempel,
+function _capCtx(){ return { blokken:agPlanBlokken(), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), werktijden:(window.MTWerktijden?MTWerktijden.lijst():null), mag:capMagSlepen(), nu:Date.now(), wie:mtMijEmail(), stempel:_spStempel,
   nieuwId:()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7) }; }
 // Eerst de actuele stand van SharePoint erbij (samengevoegd met de lokale): zo ziet de controle een blok dat een ander net verplaatste of inplande.
 // -> { ok:true, online } of { ok:false, reden } (een bestand met een onverwachte vorm wordt nooit overschreven).

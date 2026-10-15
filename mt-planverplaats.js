@@ -8,7 +8,7 @@
  *
  * Regels (dezelfde als agPlanDrop / agPlanNieuwFormulier in v2.html):
  *  - alleen met het recht om te plannen (de aanroeper bepaalt `mag`: rol "lezen" en werkplaats, de tv en een niet geladen rol mogen niet);
- *  - een open voorstel wordt door kantoor beslist en wordt niet versleept; niet naar een dag waarop de persoon verlof heeft; niet naar een
+ *  - een open voorstel wordt door kantoor beslist en wordt niet versleept; niet naar een dag waarop de persoon verlof heeft of volgens zijn werktijden niet werkt; niet naar een
  *    verplichte vrije dag; niet naar een weekend;
  *  - een blok verplaatsen verandert persoon, datum en start (de duur blijft); uit Ongepland ontstaat een nieuw planblok (taak_id, duur = het
  *    budget van de taak). Een taak met een datum maar zonder planblok wordt niet versleept (zijn uren zijn over meer dagen verdeeld).
@@ -50,6 +50,9 @@
     const w = dow(spec.datum); if (w === 0 || w === 6) return 'Dit is een weekend: plannen op die dag kan niet.';
     const v = (ctx.verlof || []).find(x => x && gelijkAan(x.persoon, lid.slug, team) && spec.datum >= x.van && spec.datum <= x.tm);
     if (v) return lid.naam + ' heeft verlof op ' + spec.datum + '.';
+    // Werktijden (Admin > Team en werktijden): werkt deze persoon op die weekdag volgens zijn rooster niet, dan geldt het als verlof. Zonder record van die persoon: niets (zoals voorheen).
+    const P = root.MTPlanning, rec = P && P.werktijdenMap && ctx.werktijden ? P.werktijdenMap(ctx.werktijden)[String(lid.slug).toLowerCase()] : null;
+    if (rec && P.werktijdDagMin(rec, (w + 6) % 7) <= 0) return lid.naam + ' werkt volgens de werktijden niet op ' + spec.datum + '.';
     const vd = (ctx.vrijedagen || []).find(x => x && x.datum === spec.datum);
     if (vd && vd.type === 'verplicht') return 'Verplichte vrije dag: plannen geblokkeerd.';
     if (spec.start != null && tijdMin(spec.start) === null) return 'Ongeldige begintijd.';
