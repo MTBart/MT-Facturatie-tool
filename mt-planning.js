@@ -1740,6 +1740,8 @@
     const weken = o.weken > 0 ? Math.min(6, Math.round(o.weken)) : 2, V = P.vrijSet(o.vrij), wk = maandagVan(vandaag), half = P.DAG_MIN / 2;
     const dagen = [];
     for (let w = 0; w < weken; w++) for (let d = 0; d < 5; d++) { const nr = wk.maNr + w * 7 + d; dagen.push({ datum: dymd(nr), werkdag: isWerk(nr, V), nu: dymd(nr) === vandaag, week: w }); }
+    // opt.extra = extra datums (bv. een weekenddag waar iemand toch werkte) die als losse kolommen achter de werkdagen komen, in de laatste week; alleen voor de dagweergave van één dag
+    (Array.isArray(o.extra) ? o.extra : []).forEach(ymd => { if (P.isYmd(ymd) && !dagen.some(d => d.datum === ymd)) dagen.push({ datum: ymd, werkdag: isWerk(dnr(ymd), V), nu: ymd === vandaag, week: weken - 1, extra: true }); });
     const idx = new Map(dagen.map((d, i) => [d.datum, i]));
     const nieuwRij = (slug, naam) => { const vl = slug ? P.verlofDagen(o.verlof, slug, team) : new Set(); return { slug, naam, verlofDag: dagen.map(d => vl.has(d.datum)), cellen: dagen.map(() => [[], []]) }; };   // verlofDag: de persoon is die dag vrij (Beheer ▸ verlof)
     const rijen = team.map(m => nieuwRij(String(m.slug || '').toLowerCase(), m.naam || m.slug)), rest = nieuwRij('', 'Niet toegewezen');
@@ -1797,7 +1799,7 @@
       const lid = !!rij.slug && team.some(m => String(m.slug).toLowerCase() === rij.slug), uren = Number(wu[rij.slug]) > 0 ? Number(wu[rij.slug]) : 40, dagCap = lid ? Math.round(uren / 5 * 60) : 0, rec = lid ? wt[rij.slug] || null : null;
       const weken = []; for (let w = 0; w < aantalWeken; w++) weken.push({ cap_min: 0, gepland_min: 0, vrij_min: 0, over_min: 0 });
       const dagen = r.dagen.map((d, i) => {
-        const verlof = !!(rij.verlofDag && rij.verlofDag[i]), werktNiet = !!rec && P.werktijdDagMin(rec, i % 5) <= 0, cap = lid && d.werkdag && !verlof ? (rec ? Math.round(P.werktijdDagMin(rec, i % 5)) : dagCap) : 0, uniek = new Set();
+        const wdIdx = Math.min(4, (((dnr(d.datum) + 4) % 7 + 7) % 7 + 6) % 7), verlof = !!(rij.verlofDag && rij.verlofDag[i]), werktNiet = !!rec && P.werktijdDagMin(rec, wdIdx) <= 0, cap = lid && d.werkdag && !verlof ? (rec ? Math.round(P.werktijdDagMin(rec, wdIdx)) : dagCap) : 0, uniek = new Set();   // wdIdx = de weekdag van DEZE datum (0 = ma), ook voor een extra weekenddag
         rij.cellen[i].forEach(c => c.forEach(it => uniek.add(it)));
         const items = [...uniek], gepland = Math.round(items.reduce((s, it) => s + (it.planvoorstel ? 0 : (it.min || 0)), 0));
         const dd = cap > 0 ? Math.min(2, Math.ceil(gepland / (cap / 2) - 1e-9)) : 0, telt = cap > 0 ? dd * (cap / 2) : 0;

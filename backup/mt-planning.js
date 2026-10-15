@@ -1618,6 +1618,19 @@
     P.WERKTIJD_DAGEN.forEach(k => { const x = r && r.dagen && r.dagen[k], e = x && x.werk ? tMin(x.eind) : null; perDag[k] = e === null || e === undefined ? '' : tTekst(Math.max(0, e - 15)); if (e !== null && e !== undefined) laatste = Math.max(laatste, e - 15); });
     return { perDag, laatste: laatste ? tTekst(laatste) : '' };
   };
+  // Het moment van de dagvraag voor één persoon op één datum: 15 min voor de eindtijd van die dag uit zijn werktijden (zonder record: 16:45 op ma-vr), '' op een weekend of
+  // een dag waarop deze persoon volgens zijn werktijden niet werkt. Verlof en een verplichte vrije dag gelden ook als "geen vraag" (opt.verlof, opt.vrijedagen, opt.team).
+  // -> 'HH:MM' | ''
+  P.dagvraagMoment = function (slug, werktijden, datum, opt) {
+    const o = opt || {}; if (!P.isYmd(datum)) return '';
+    const w = ((dnr(datum) + 4) % 7 + 7) % 7, i = (w + 6) % 7; if (i > 4) return '';   // i: 0 = ma ... 6 = zo
+    if ((Array.isArray(o.vrijedagen) ? o.vrijedagen : []).some(v => v && v.datum === datum && v.type === 'verplicht')) return '';
+    if ((Array.isArray(o.verlof) ? o.verlof : []).some(v => v && P.isYmd(v.van) && P.isYmd(v.tm) && datum >= v.van && datum <= v.tm && P.zelfdePersoon(v.persoon, slug, Array.isArray(o.team) ? o.team : []))) return '';
+    const rec = P.werktijdenMap(werktijden)[String(slug || '').toLowerCase()] || null;
+    if (!rec) return '16:45';
+    if (P.werktijdDagMin(rec, i) <= 0) return '';
+    return P.dagvraagTijd(rec).perDag[P.WERKTIJD_DAGEN[i]] || '';
+  };
   // Samenvoegen per medewerker: de nieuwste stempel (_gewijzigd) wint; bij een gelijke stempel beslist een vaste volgorde (wie schreef het, dan de inhoud), niet lokaal/remote; een record aan één kant blijft staan (dus twee beheerders die
   // verschillende mensen wijzigen verliezen niets). Een tombstone (_vervallen) is een gewoon record met een stempel: "terug naar standaard".
   P.werktijdenSamen = function (lokaal, remote) {

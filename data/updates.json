@@ -1,5 +1,21 @@
 [
   {
+    "versie": "2.18.0",
+    "datum": "2026-10-16",
+    "titel": "De nieuwe stijl voor iedereen",
+    "voor": "iedereen",
+    "punten": [
+      "De tool heeft een nieuwe stijl: een zijbalk links, nieuwe kleuren en lettertypen, en op een groot scherm de volle breedte. Op de telefoon gelden dezelfde kleuren.",
+      "Liever de oude stijl? Klik onderaan in de zijbalk op Oude stijl (of Instellingen, Weergave; op de telefoon Meer). Terug kan altijd met de knop Nieuwe stijl. De keuze geldt alleen op dat apparaat.",
+      "In de nieuwe stijl rekent de planning met de werktijden per medewerker (Admin, Team en werktijden). Wie geen werktijden heeft ingevuld, houdt 8 uur per werkdag.",
+      "Klopt je dag? Een kwartier voor je eindtijd vraagt de tool of je uren kloppen. Niets gebeurt zonder jouw bevestiging.",
+      "Vandaag laat nu ook zien welke taken aan jou zijn toegewezen maar nog niet ingepland zijn (Nog in te plannen). Met Inplannen kies je direct een dag en persoon.",
+      "Slepen in de Agenda: de tool kijkt eerst naar de nieuwste planning voordat hij waarschuwt of opslaat, en zegt het eerlijk als iemand anders hetzelfde blok net verplaatste.",
+      "Afwijkingen: Naar de dag opent precies die dag in de planning, ook op een zaterdag of zondag.",
+      "Inbox, Cijfers, Geld, Rapporten, Klanten, Bestellijst en Voorraad hebben in de nieuwe stijl beter leesbare kleuren."
+    ]
+  },
+  {
     "versie": "2.17.3",
     "datum": "2026-10-15",
     "titel": "Nieuwe stijl: Uren, de dagvraag en de telefoon",

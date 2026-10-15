@@ -5,8 +5,32 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-15 — Release v2.17.3: nieuwe stijl (achter wisselknop) met Uren-weergave, dagvraag "Klopt je dag?" en telefoon; veilig boeken (rol, lock tussen tabbladen, controle vooraf, herstel na time-out); backup = v2.17.2
+- Commit: `9241f16` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 11e: de vier restpunten uit de Codex-hercontrole van 17dc055
+- Commit: `22f66de` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 11d: Codex-fixes voor boeken en de dagvraag
+- Commit: `17dc055` | Auteur: Bart Witte
+
+## 2026-10-15 — Merge branch 'main' into restyle-c1
+- Commit: `6edfa73` | Auteur: Bart Witte
+
 ## 2026-10-15 — Release v2.17.2: nieuwe stijl om te proberen (wisselknop, standaard uit), voorstellen tellen pas na overnemen, waarschuwing bij plannen op verlof/vrije dag/niet-werkdag, rol lezen kan niet slepen; backup = v2.17.1
 - Commit: `512aa72` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 11c: een gepland blok in de Uren-tijdlijn ziet er niet meer uit als geboekte tijd
+- Commit: `8eaa9d0` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 12: telefoon (mobiel.html) in de nieuwe stijl, achter dezelfde mt-stijl-keuze
+- Commit: `d35a0e1` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 11b: de dagvraag "Klopt je dag?" (alleen nieuwe stijl, nooit blokkerend)
+- Commit: `addc3f1` | Auteur: Bart Witte
+
+## 2026-10-15 — Restyling brok 11: Uren-tab in de nieuwe stijl (Toggl-achtige invoerbalk, dagtabs, dagtijdlijn met gaten, week per project, klaar zonder uren)
+- Commit: `7ec1f53` | Auteur: Bart Witte
 
 ## 2026-10-15 — Werktijden bewaren: audit alleen als MIJN versie bleef staan (ook bij gelijke stempel)
 - Commit: `d8bc19a` | Auteur: Bart Witte

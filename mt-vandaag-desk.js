@@ -11,7 +11,7 @@
 (function (root) {
   'use strict';
   const V = {};
-  let D = null, P = null;
+  let D = null, P = null, alleInplannen = false;   // alleInplannen: "Alle N tonen" bij Nog in te plannen
   const PROJECT_ACTIEF = ['werkvoorbereiding', 'inkoop', 'productie', 'klaar_levering'];   // zelfde lijst als P.letOp / de tv
 
   const MND = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
@@ -43,6 +43,14 @@
       const wanneer = taak ? (it.groep === 'teLaat' ? 'te laat sinds ' + P.datumKort(it.eind || it.start) : (it.blokken && it.blokken.length && it.blokken[0].start ? it.blokken[0].start : 'vandaag')) : (it.groep === 'teLaat' ? 'te laat' : (it.start || 'vandaag'));
       return { id: it.id, code: it.code, naam: taak ? it.taak.naam : it.naam, status, teLaat: it.groep === 'teLaat', wanneer, min: taak ? it.gepland_min : it.duurMin, wachtTekst: taak && status === 'wacht' ? (it.taak.wacht_reden || it.wachtTekst || '') : '' };
     });
+    // 1b. Nog in te plannen: dezelfde mijnWerk()-uitkomst, de taken van mij (niet klaar) zonder start, einddatum en planblok. Een open voorstel (taak met voorstel-markering) telt pas na akkoord
+    // en blijft er dus buiten; een taak die alleen een voorstel-planblok heeft wacht op akkoord en staat al in een datumgroep. Een taak die op een voorganger wacht en geen datum heeft hoort er ook bij
+    // (precies de indeling van de Ongepland-kolom in de Capaciteit, waar "Inplannen" naartoe gaat).
+    const RANG = { high: 0, medium: 1, low: 2 }, nrm = c => (D.nummer ? D.nummer(c) : c) || '';
+    const zonder = mw.groepen.zonderDatum.concat(mw.groepen.nietVrij.filter(it => !it.start && !it.eind && !(it.blokken && it.blokken.length))).filter(it => it.soort === 'taak' && !it.taak.voorstel);
+    m.inplannen = zonder.map(it => ({ id: it.id, code: it.code, naam: it.taak.naam, min: it.gepland_min || 0, rang: RANG[it.taak.prioriteit] !== undefined ? RANG[it.taak.prioriteit] : 3, stempel: it.stempelToegewezen || 0, wacht: it.status === 'todo' && !!(it.wacht && it.wacht.wacht), wachtTekst: it.wachtTekst || '' }))
+      .sort((a, b) => String(nrm(a.code)).localeCompare(String(nrm(b.code)), 'nl', { numeric: true }) || (a.rang - b.rang) || ((a.stempel || Infinity) - (b.stempel || Infinity) || 0) || String(a.naam).localeCompare(String(b.naam), 'nl'));
+    m.magInplannen = D.magInplannen ? !!D.magInplannen() : false;
     const dag = mw.week && mw.week.dagen.find(d => d.datum === vandaag);
     const entries = D.uren ? D.uren() : [];
     const ma = ymd(nr(vandaag) - ((wd(nr(vandaag)) + 6) % 7)), zo = ymd(nr(ma) + 6);
@@ -140,8 +148,19 @@
       el('span', { klass: 'vd-chip vd-chip-' + (t.teLaat ? 'telaat' : t.status), tekst: t.teLaat ? 'Te laat' : STATUS[t.status] || t.status }),
       el('span', { klass: 'vd-uren', tekst: t.min ? klok(t.min) : '' })], 'vd-taak')) : [leeg('Niets voor jou vandaag.')];
     raster.appendChild(sectie('vd-h-mijn', 'Mijn werk vandaag', el('a', { klass: 'vd-meer', href: D.href({ tab: 'agenda' }), klik: ev => { ev.preventDefault(); D.ga({ k: 'agenda', view: 'mijnwerk' }); }, tekst: 'Alles in Mijn werk' }), mijnLijst, 'vd-breed'));
+    // Nog in te plannen: mijn taken zonder datum en zonder planblok, max 8 zichtbaar; de knop gebruikt de bestaande Capaciteit-route (alleen met het recht om te plannen)
+    {
+      const lijst = m.inplannen, MAXI = 8, zichtbaar = alleInplannen ? lijst : lijst.slice(0, MAXI);
+      const rij = t => el('div', { klass: 'vd-inplrij' },
+        koppeling({ k: 'project', code: t.code }, [el('span', { klass: 'vd-tekst' }, el('span', { klass: 'vd-naam', tekst: t.naam }), el('span', { klass: 'vd-regel' }, el('i', { klass: 'vd-blokje', style: 'background:' + P.projectKleur(t.code) }), el('span', { klass: 'vd-code', tekst: D.nummer ? D.nummer(t.code) : t.code }), el('span', { tekst: (D.projectNaam ? D.projectNaam(t.code) : '') + (t.wacht ? ' · wacht op ' + (t.wachtTekst || 'een voorganger') : '') })))], 'vd-inplink'),
+        el('span', { klass: 'vd-uren', tekst: t.min ? klok(t.min) : '' }),
+        m.magInplannen ? el('button', { type: 'button', klass: 'vd-inplknop', 'aria-label': 'Plan ' + t.naam + ' in', klik: () => D.ga({ k: 'inplannen', taak: { id: t.id, code: t.code, naam: t.naam, min: t.min } }) }, 'Inplannen') : null);
+      const inhoud = lijst.length ? zichtbaar.map(rij) : [leeg(m.takenKlaar ? 'Alles is ingepland' : 'De takenlijst is nog niet geladen.')];
+      if (lijst.length > MAXI) inhoud.push(el('div', { klass: 'vd-inplmeer' }, el('button', { type: 'button', id: 'vd-inpl-meer', klass: 'vd-meer', 'aria-expanded': alleInplannen ? 'true' : 'false', klik: () => { alleInplannen = !alleInplannen; V.teken(); const b = D.doc.getElementById('vd-inpl-meer'); if (b && b.focus) b.focus(); }, tekst: alleInplannen ? 'Minder tonen' : 'Alle ' + lijst.length + ' tonen' })));
+      raster.appendChild(sectie('vd-h-inplannen', 'Nog in te plannen', el('span', { klass: 'vd-teller', tekst: String(lijst.length) }), inhoud, 'vd-breed'));
+    }
     // Vraagt aandacht
-    const aand = m.aandacht.length ? m.aandacht.map(x => koppeling(x.actie, [el('span', { klass: 'vd-blok vd-blok-' + x.soort }, svg(IC[x.soort] || IC.voorstel)), el('span', { klass: 'vd-tekst' }, el('span', { klass: 'vd-naam', tekst: x.titel }), el('span', { klass: 'vd-regel', tekst: x.sub })), svg(IC.pijl, 'vd-ic vd-pijl')], 'vd-rij')) : [leeg('Niets dat aandacht vraagt.')];
+    const aand =m.aandacht.length ? m.aandacht.map(x => koppeling(x.actie, [el('span', { klass: 'vd-blok vd-blok-' + x.soort }, svg(IC[x.soort] || IC.voorstel)), el('span', { klass: 'vd-tekst' }, el('span', { klass: 'vd-naam', tekst: x.titel }), el('span', { klass: 'vd-regel', tekst: x.sub })), svg(IC.pijl, 'vd-ic vd-pijl')], 'vd-rij')) : [leeg('Niets dat aandacht vraagt.')];
     raster.appendChild(sectie('vd-h-aandacht', 'Vraagt aandacht', el('span', { klass: 'vd-teller', tekst: String(m.aandacht.length) }), aand));
     // Team deze week
     const team = m.team.length ? m.team.map(t => koppeling({ k: 'agenda', view: 'capaciteit' }, [

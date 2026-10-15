@@ -30,6 +30,7 @@
     instellingen: 'M12 15a3 3 0 1 0 0-6a3 3 0 0 0 0 6M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3a1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8a1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1',
     admin: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
     paneel: 'M4 5h16v14H4zM9 5v14',
+    stijl: 'M12 3a9 9 0 1 0 0 18c1.5 0 2-1 1.5-2.2c-.5-1.3.3-2.8 1.8-2.8H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3M7.5 11.5h.01M10 7.5h.01M14.5 7.5h.01',
     chevron: 'M6 9l6 6 6-6'
   };
   // tabnaam (uit onclick="showTab('naam')") -> label, icoon, volgorde (CSS order) en of hij onder "Meer" valt
@@ -96,6 +97,9 @@
     meer.appendChild(svg('meer')); meer.appendChild(span('zb-t', 'Meer')); meer.appendChild(svg('chevron'));
     meer.addEventListener('click', function () { schrijf(KM, nav.classList.contains('zb-meer-dicht') ? 'open' : 'dicht'); sync(); });
     nav.appendChild(meer);
+    var stijl = document.createElement('button'); stijl.type = 'button'; stijl.className = 'zb-stijl'; stijl.setAttribute('data-zb-o', '125'); stijl.setAttribute('title', 'Terug naar de oude stijl'); stijl.setAttribute('aria-label', 'Oude stijl: terug naar de oude weergave');
+    stijl.appendChild(svg('stijl')); stijl.appendChild(span('zb-t', 'Oude stijl'));
+    stijl.addEventListener('click', function () { if (window.mtStijl) window.mtStijl.zet(false); }); nav.appendChild(stijl);   // v2.18: de nieuwe stijl is standaard; dit is de weg terug (en in de oude stijl staat "Nieuwe stijl" in de bovenbalk)
     var sp = document.createElement('div'); sp.className = 'zb-spacer'; sp.setAttribute('data-zb-o', '100'); sp.setAttribute('aria-hidden', 'true'); nav.appendChild(sp);
     st.orig.forEach(function (el) {
       if (el.classList.contains('tab-btn')) verrijk(el);
@@ -183,5 +187,21 @@
     [mqBreed, mqZijbalk].forEach(function (q) { if (q.addEventListener) q.addEventListener('change', herijk); else if (q.addListener) q.addListener(herijk); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+  
+  // Eenmalige melding bij de eerste keer in de nieuwe stijl (per toestel; alleen als er geen eigen keuze is): rechtsonder, role=status, nooit een dialoog.
+  (function(){
+    try{ if(!window.mtStijl||mtStijl.expliciet()||localStorage.getItem('mt-stijl-gezien')) return; }catch(e){ return; }
+    var tel=0, iv=setInterval(function(){
+      tel++; if(tel>400||!mtStijl.aan()){ clearInterval(iv); return; }
+      if(!((function(){ var a=document.getElementById('app-wrap'); return !!a&&a.style.display!=='none'; })())) return;
+      clearInterval(iv); try{ localStorage.setItem('mt-stijl-gezien','1'); }catch(e){}
+      var m=document.createElement('div'); m.className='stijl-melding'; m.setAttribute('role','status'); m.setAttribute('aria-live','polite');
+      var t=document.createElement('span'); t.textContent='Nieuwe stijl. Liever de oude?';
+      var b=document.createElement('button'); b.type='button'; b.className='stijl-melding-knop'; b.textContent='Oude stijl'; b.addEventListener('click',function(){ m.remove(); mtStijl.zet(false); });
+      var x=document.createElement('button'); x.type='button'; x.className='stijl-melding-x'; x.setAttribute('aria-label','Sluiten'); x.textContent='×'; x.addEventListener('click',function(){ m.remove(); });
+      m.appendChild(t); m.appendChild(b); m.appendChild(x); document.body.appendChild(m);
+      window.addEventListener('mt-stijl',function(){ if(!mtStijl.aan()&&m.parentNode) m.remove(); });
+    },1500);
+  })();
   window.mtZijbalk = { wissel: wissel, herijk: herijk };
 })();
