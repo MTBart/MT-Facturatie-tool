@@ -15,7 +15,8 @@
   const LS_ZOOM = 'mt-cap-zoom';
   const ZOOM_UI = true;    // de zoomknoppen: kwartaal, maand, week, 3 dagen, dag (brok 7)
   const ZOOMS = [['kwartaal', 'Kwartaal'], ['maand', 'Maand'], ['week', 'Week'], ['3d', '3 dagen'], ['dag', 'Dag']];
-  const S = { zoom: 'week', anker: null, persoon: '', project: '' };
+  const S = { zoom: 'week', anker: null, persoon: '', project: '', ongDicht: false };
+  const LS_ONG = 'mt-cap-ong';   // 'dicht' = de Ongepland-kolom is ingeklapt (per computer onthouden)
   const U0 = 420, U1 = 1020, KOL = 20;   // 07:00 tot 17:00 in halve uren (20 kolommen per dag)
 
   // ── datums ──
@@ -181,11 +182,11 @@
 
   function tekenUren(m, rijen, wrap) {
     const idx = m.dagIdx, kolTot = idx.length * KOL, nu = D.nu();
-    const hoofd = el('div', { klass: 'cn-uren-kop', style: 'grid-template-columns:200px minmax(0,1fr)' }, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Team · uren' })),
+    const hoofd = el('div', { klass: 'cn-uren-kop', style: 'grid-template-columns:180px minmax(0,1fr)' }, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Team · uren' })),
       el('div', { klass: 'cn-uren-schaal', style: 'grid-template-columns:repeat(' + kolTot + ',minmax(0,1fr))' },
         idx.map(i => el('div', { klass: 'cn-dagkop2' + (m.dagen[i].nu ? ' nu' : ''), style: 'grid-column:span ' + KOL }, el('b', { tekst: DAGKORT[wd(nr(m.dagen[i].datum))] }), ' ', el('span', { klass: 'cn-num', tekst: dagMnd(m.dagen[i].datum) }))),
-        idx.map(i => { const t = []; for (let h = 7; h < 17; h++) t.push(el('div', { klass: 'cn-tik' + (m.dagen[i].nu ? ' nu' : '') + (h === 7 ? ' eerste' : ''), style: 'grid-column:span 2', tekst: String(h).padStart(2, '0') + ':00' })); return t; })));
-    const bin = el('div', { klass: 'cn-uren', style: 'min-width:' + (idx.length === 1 ? 900 : 1500) + 'px' });
+        idx.map(i => { const t = []; for (let h = 7; h < 17; h++) t.push(el('div', { klass: 'cn-tik' + (m.dagen[i].nu ? ' nu' : '') + (h === 7 ? ' eerste' : ''), style: 'grid-column:span 2', title: String(h).padStart(2, '0') + ':00', tekst: String(h).padStart(2, '0') + (idx.length === 1 ? ':00' : '') })); return t; })));
+    const bin = el('div', { klass: 'cn-uren' });   // de uurkolommen schalen mee met de breedte (fr-eenheden): 07:00-17:00 past altijd, zonder horizontaal scrollen
     bin.appendChild(hoofd);
     rijen.forEach(r => {
       const per = idx.map(i => ({ i, ...N.urenBlokken((r.dagen[i] || {}).items) }));
@@ -203,7 +204,7 @@
       // nu-lijn (alleen als vandaag in beeld is en de tijd tussen 07:00 en 17:00 valt)
       const t = new Date(nu), tm = t.getHours() * 60 + t.getMinutes(), k = idx.findIndex(i => m.dagen[i].datum === m.today);
       if (k >= 0 && tm >= U0 && tm <= U1) raster.appendChild(el('span', { klass: 'cn-nu', 'aria-hidden': 'true', style: 'left:' + ((k * KOL + (tm - U0) / 30) / kolTot * 100).toFixed(2) + '%' }));
-      bin.appendChild(el('div', { klass: 'cn-uren-rij', style: 'grid-template-columns:200px minmax(0,1fr)' },
+      bin.appendChild(el('div', { klass: 'cn-uren-rij', style: 'grid-template-columns:180px minmax(0,1fr)' },
         el('div', { klass: 'cn-persoon enkel' }, el('div', { klass: 'cn-pkop' }, el('span', { klass: 'cn-avatar', tekst: ini(r.naam) }), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), el('span', { klass: 'cn-vrij' + (dubbel ? ' over' : ''), tekst: dubbel ? 'dubbel geboekt' : uren(gepl) + ' gepland' })))), raster));
     });
     wrap.appendChild(bin);
@@ -249,10 +250,12 @@
     wrap.appendChild(bin);
   }
 
+  N.ongKlap = function (dicht) { S.ongDicht = !!dicht; try { D.storage && (dicht ? D.storage.setItem(LS_ONG, 'dicht') : D.storage.removeItem(LS_ONG)); } catch (e) {} N.teken(); };
   function zijkolom(m) {
     const up = m.ongepland;
+    if (S.ongDicht) { const b = el('button', { type: 'button', klass: 'cn-ong-dicht', 'aria-expanded': 'false', 'aria-label': 'Ongepland tonen: ' + up.items.length + ' taken, ' + uren(up.min), title: 'Ongepland tonen', klik: () => N.ongKlap(false) }, icoon('M15 6l-6 6l6 6'), el('span', { klass: 'cn-num', tekst: String(up.items.length) }), el('span', { klass: 'cn-ong-tekst', tekst: 'Ongepland' })); return el('aside', { klass: 'cn-ongepland dicht', 'aria-label': 'Ongepland (ingeklapt)' }, b); }
     return el('aside', { klass: 'cn-ongepland', 'aria-labelledby': 'cn-h-ongepland' },
-      el('div', { klass: 'cn-ong-kop' }, el('span', { id: 'cn-h-ongepland', tekst: 'Ongepland' }), el('span', { klass: 'cn-num cn-sub', tekst: up.items.length + ' · ' + uren(up.min) })),
+      el('div', { klass: 'cn-ong-kop' }, el('span', { id: 'cn-h-ongepland', tekst: 'Ongepland' }), el('span', { klass: 'cn-num cn-sub', tekst: up.items.length + ' · ' + uren(up.min) }), el('button', { type: 'button', klass: 'cn-knop icoon cn-ong-klap', 'aria-expanded': 'true', 'aria-label': 'Ongepland inklappen', title: 'Inklappen', klik: () => N.ongKlap(true) }, icoon('M9 6l6 6l-6 6'))),
       el('div', { klass: 'cn-ong-lijst' }, up.items.length ? up.items.map(u => el('button', { type: 'button', klass: 'cn-blok cn-ong' + (u.voorstel ? ' voorstel' : ''), style: '--block-color:' + P.projectKleur(u.code), title: u.tekst || u.naam, klik: () => open(u.code) },
         el('span', { klass: 'cn-ong-rij' }, el('span', { klass: 'cn-blok-titel', tekst: u.naam }), u.min ? el('span', { klass: 'cn-num cn-sub', tekst: uren(u.min) }) : null),
         el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(u.code) }), ' ' + projNaam(u.code), u.voorstel ? ' · voorstel werkplaats' : ''))) : el('div', { klass: 'cn-sub cn-ong-leeg', tekst: 'Alles heeft een plek.' })));
@@ -294,7 +297,7 @@
       (() => { const b = knop('Uitzoomen', () => N.zoom(ZOOMS[Math.max(0, zi - 1)][0]), 'zm'); b.appendChild(icoon('M5 12h14')); return b; })(),
       ZOOMS.map(z => { const b = el('button', { type: 'button', klass: 'cn-zk' + (z[0] === S.zoom ? ' aan' : ''), 'aria-pressed': z[0] === S.zoom ? 'true' : 'false', klik: () => N.zoom(z[0]), tekst: z[1] }); return b; }),
       (() => { const b = knop('Inzoomen', () => N.zoom(ZOOMS[Math.min(ZOOMS.length - 1, zi + 1)][0]), 'zm'); b.appendChild(icoon('M12 5v14M5 12h14')); return b; })());
-    w.appendChild(el('div', { klass: 'cn-balk-boven' }, vorige, vandaag, volgende, el('span', { klass: 'cn-titel', tekst: m.titel }), el('span', { klass: 'cn-sub cn-num', tekst: m.sub }), el('span', { klass: 'cn-rek' }), filterKnoppen(), ZOOM_UI ? zoomGroep : null));
+    w.appendChild(el('div', { klass: 'cn-balk-boven' }, vorige, vandaag, volgende, el('span', { klass: 'cn-titel', title: m.titel + ' · ' + m.sub, tekst: m.titel }), el('span', { klass: 'cn-sub cn-num', tekst: m.sub }), el('span', { klass: 'cn-rek' }), filterKnoppen(), ZOOM_UI ? zoomGroep : null));
     if (D.takenKlaar && !D.takenKlaar()) w.appendChild(el('div', { klass: 'cn-melding', role: 'status', tekst: D.takenStatusTekst() + ' Je ziet alleen wat er al staat.' }));
     const vlak = el('div', { klass: 'cn-vlak' });
     const rijen = m.rijen;
@@ -309,7 +312,7 @@
 
   N.init = function (deps) {
     D = deps; P = deps.planning || root.MTPlanning;
-    try { const z = D.storage && D.storage.getItem(LS_ZOOM); if (ZOOM_UI && z && ZOOMS.some(x => x[0] === z)) S.zoom = z; } catch (e) {}
+    try { const z = D.storage && D.storage.getItem(LS_ZOOM); if (ZOOM_UI && z && ZOOMS.some(x => x[0] === z)) S.zoom = z; S.ongDicht = !!(D.storage && D.storage.getItem(LS_ONG) === 'dicht'); } catch (e) {}
     return N;
   };
   N.S = S;
