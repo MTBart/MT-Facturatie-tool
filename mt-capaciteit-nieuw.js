@@ -210,6 +210,7 @@
         cel.appendChild(el('div', { klass: 'cn-som' + (som.staat === 'over' ? ' over' : '') }, el('span', { tekst: som.sum }), som.over ? el('span', { tekst: som.over }) : null));
         if (c.verlof) cel.appendChild(el('div', { klass: 'cn-vrijtekst', tekst: 'Vrij (verlof)' }));
         else if (!c.werkdag) cel.appendChild(el('div', { klass: 'cn-vrijtekst', tekst: 'Vrije dag' }));
+        if ((c.verlof || !c.werkdag) && r.slug) doelZone(cel, () => ({ persoon: r.slug, datum: c.datum, dagdeel: 0 }));   // loslaten mag, maar eerst een bevestiging (V.waarschuwing)
         else (r.slots[i] || [[], []]).forEach((lijst, dl) => { const slot = el('div', { klass: 'cn-slot' }, lijst.map(it => blok(it)), lijst.length ? null : el('div', { klass: 'cn-leeg', tekst: dl ? 'middag' : 'ochtend' })); if (r.slug) doelZone(slot, () => ({ persoon: r.slug, datum: c.datum, dagdeel: dl })); cel.appendChild(slot); });
         if (c.verlof || !c.werkdag) (c.items || []).forEach(it => cel.appendChild(blok(it)));   // iets op een vrije dag niet laten verdwijnen
         raster.appendChild(cel);
@@ -330,7 +331,15 @@
     if (S.bezig) return;
     const schoon = {}; Object.keys(spec).forEach(k => { if (k[0] !== '_') schoon[k] = spec[k]; });
     S.bezig = true; let r;
-    try { r = await D.verplaats(schoon); } catch (e) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((e && e.message) || e) }; }
+    try {
+      r = await D.verplaats(schoon);
+      // Verlof, een verplichte vrije dag of een dag waarop iemand volgens de werktijden niet werkt: eerst bevestigen (mtDialog). Annuleren = niets schrijven; het blok blijft waar het was.
+      if (r && !r.ok && r.vraag) {
+        const ja = D.dialoog && D.dialoog.confirm ? await D.dialoog.confirm({ title: 'Controleer de planning', message: r.vraag, okLabel: 'Toch inplannen', cancelLabel: 'Annuleren' }) : false;
+        if (!ja) { S.bezig = false; N.teken(); return; }
+        r = await D.verplaats(Object.assign({}, schoon, { bevestigd: true }));
+      }
+    } catch (e) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((e && e.message) || e) }; }
     S.bezig = false;
     if (!r || !r.ok) { N.toast((r && r.reden) || 'Dat lukt niet.'); return; }
     if (r.noop) return;

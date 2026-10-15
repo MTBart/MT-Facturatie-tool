@@ -8,8 +8,8 @@
  *
  * Regels (dezelfde als agPlanDrop / agPlanNieuwFormulier in v2.html):
  *  - alleen met het recht om te plannen (de aanroeper bepaalt `mag`: rol "lezen" en werkplaats, de tv en een niet geladen rol mogen niet);
- *  - een open voorstel wordt door kantoor beslist en wordt niet versleept; niet naar een dag waarop de persoon verlof heeft of volgens zijn werktijden niet werkt; niet naar een
- *    verplichte vrije dag; niet naar een weekend;
+ *  - een open voorstel wordt door kantoor beslist en wordt niet versleept; niet naar een
+ *    weekend. Verlof, een verplichte vrije dag en een dag waarop iemand volgens de werktijden niet werkt: eerst een vraag (V.waarschuwing), pas na bevestiging (spec.bevestigd) opgeslagen;
  *  - een blok verplaatsen verandert persoon, datum en start (de duur blijft); uit Ongepland ontstaat een nieuw planblok (taak_id, duur = het
  *    budget van de taak). Een taak met een datum maar zonder planblok wordt niet versleept (zijn uren zijn over meer dagen verdeeld).
  *  - op een dagdeel (ochtend/middag) komt het blok op de eerste tijd waarop het volledig in dat dagdeel past; past het nergens, direct na het laatste blok van die dag (nooit terug naar het begin met overlap); op een uur precies op die tijd.
@@ -48,13 +48,7 @@
     if (!lid) return 'Onbekende persoon.';
     if (!isYmd(spec.datum)) return 'Ongeldige dag.';
     const w = dow(spec.datum); if (w === 0 || w === 6) return 'Dit is een weekend: plannen op die dag kan niet.';
-    const v = (ctx.verlof || []).find(x => x && gelijkAan(x.persoon, lid.slug, team) && spec.datum >= x.van && spec.datum <= x.tm);
-    if (v) return lid.naam + ' heeft verlof op ' + spec.datum + '.';
-    // Werktijden (Admin > Team en werktijden): werkt deze persoon op die weekdag volgens zijn rooster niet, dan geldt het als verlof. Zonder record van die persoon: niets (zoals voorheen).
-    const P = root.MTPlanning, rec = P && P.werktijdenMap && ctx.werktijden ? P.werktijdenMap(ctx.werktijden)[String(lid.slug).toLowerCase()] : null;
-    if (rec && P.werktijdDagMin(rec, (w + 6) % 7) <= 0) return lid.naam + ' werkt volgens de werktijden niet op ' + spec.datum + '.';
-    const vd = (ctx.vrijedagen || []).find(x => x && x.datum === spec.datum);
-    if (vd && vd.type === 'verplicht') return 'Verplichte vrije dag: plannen geblokkeerd.';
+    // Verlof, een verplichte vrije dag en een dag waarop iemand volgens zijn werktijden niet werkt zijn geen harde weigering meer: V.waarschuwing vraagt dan om bevestiging.
     if (spec.start != null && tijdMin(spec.start) === null) return 'Ongeldige begintijd.';
     if (spec.soort === 'verplaats') {
       const b = V.blokVanId(ctx.blokken, spec.blokId);
@@ -70,6 +64,22 @@
   };
 
   // → { ok, reden } | { ok:true, noop:true } | { ok:true, blokken, wijziging }
+  const DAGLANG = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'], MND = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+  const dagMnd = s => Number(s.slice(8)) + ' ' + MND[Number(s.slice(5, 7)) - 1];
+  // → '' (geen bezwaar) of de vraag die de gebruiker moet bevestigen ("Toch inplannen?"): verlof, een verplichte vrije dag of een dag waarop deze persoon volgens
+  // mt_werktijden niet werkt. Zonder werktijden-record van die persoon: geen vraag voor een gewone weekdag (zoals voorheen). Harde weigeringen (rol, weekend, open voorstel,
+  // onbekende persoon) staan in V.controle en komen eerst.
+  V.waarschuwing = function (spec, ctx) {
+    if (!spec || !ctx || V.controle(spec, ctx)) return '';
+    const team = ctx.team || [], lid = team.find(m => m && String(m.slug).toLowerCase() === String(spec.persoon || '').toLowerCase()); if (!lid) return '';
+    const w = dow(spec.datum);
+    if ((ctx.verlof || []).some(x => x && gelijkAan(x.persoon, lid.slug, team) && spec.datum >= x.van && spec.datum <= x.tm)) return lid.naam + ' heeft verlof op ' + dagMnd(spec.datum) + '. Toch inplannen?';
+    const vd = (ctx.vrijedagen || []).find(x => x && x.datum === spec.datum);
+    if (vd && vd.type === 'verplicht') return dagMnd(spec.datum) + ' is een verplichte vrije dag. Toch inplannen?';
+    const P = root.MTPlanning, rec = P && P.werktijdenMap && ctx.werktijden ? P.werktijdenMap(ctx.werktijden)[String(lid.slug).toLowerCase()] : null;
+    if (rec && P.werktijdDagMin(rec, (w + 6) % 7) <= 0) return lid.naam + ' werkt volgens de werktijden niet op ' + DAGLANG[w] + ' ' + dagMnd(spec.datum) + '. Toch inplannen?';
+    return '';
+  };
   // Het gevraagde dagdeel: ochtend 08:00-12:00, middag 13:00-17:00 (zie V.eerstePlek voor wat er gebeurt als het blok er niet in past)
   const dagdeelStart = (lijst, spec, duur, negeerId, team) => spec.dagdeel === 1 ? V.eerstePlek(lijst, spec.persoon, spec.datum, 13 * 60, 17 * 60, duur, negeerId, team) : V.eerstePlek(lijst, spec.persoon, spec.datum, 8 * 60, 12 * 60, duur, negeerId, team);
   // Een planblok uit Ongepland heeft een vast id uit project en taak: twee apparaten die dezelfde taak tegelijk inplannen maken dus hetzelfde record, en de samenvoeger
@@ -77,6 +87,7 @@
   V.blokIdVoorTaak = (code, taakId) => 'tb:' + String(code == null ? '' : code).trim().toLowerCase() + ':' + String(taakId == null ? '' : taakId);
   V.pas = function (spec, ctx) {
     const reden = V.controle(spec, ctx); if (reden) return { ok: false, reden };
+    if (!spec.bevestigd) { const vraag = V.waarschuwing(spec, ctx); if (vraag) return { ok: false, vraag }; }   // de aanroeper vraagt het de gebruiker en roept opnieuw aan met bevestigd: true
     const lijst = Array.isArray(ctx.blokken) ? ctx.blokken : [], team = ctx.team || [], stempel = ctx.stempel || ((x, vorig) => { x._gewijzigd = Date.now(); return x; });
     const ts = new Date(ctx.nu || Date.now()).toISOString(), wie = ctx.wie || '';
     if (spec.soort === 'verplaats') {
