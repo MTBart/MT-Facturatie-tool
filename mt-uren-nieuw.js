@@ -173,6 +173,7 @@
   U.kiesDag = function (d) { if (d === S.dag) return; const nieuweWeek = maandag(d) !== S.weekStart; S.dag = d; S.melding = ''; if (nieuweWeek) U.laad(); else { U.teken(); U.laadAgenda(); } };
   U.weekVerder = function (n) { U.kiesDag(plus(S.weekStart || maandag(S.dag || vandaagYmd()), n * 7)); };
   U.naarDag = function (d) { S.weergave = 'dag'; S.dag = d; S.weekStart = maandag(d); S.melding = ''; if (S.geladen) U.teken(); };   // de aanroeper opent de tab; die laadt de week
+  U.opnieuwTekenen = function () { U.timerGewijzigd(); };   // bv. als de rol net geladen is (de boekknoppen hangen aan het recht)
   U.timerGewijzigd = function () { if (!D || !actief() || !S.geladen) return; clearTimeout(U._t); U._t = setTimeout(() => U.teken(), 30); };
 
   // ── boeken ──

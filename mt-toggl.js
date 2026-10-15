@@ -416,10 +416,11 @@ let _tgRecent=[];                          // laatst geladen eigen entries (voor
 let _tgDrag=null;                          // board drag-state
 
 // — laag-niveau transports (alle via Worker) —
-async function tgTrack(path,method='GET',body=null){
+async function tgTrack(path,method='GET',body=null,extra=null){   // extra.signal (optioneel): een AbortSignal voor een time-out; andere aanroepers merken er niets van
   const h=await authHeader();
   if(!h['X-Auth-Token']) throw new Error('Microsoft-login vereist (log in via de tool)');
   const opts={method,headers:{...h}};
+  if(extra&&extra.signal) opts.signal=extra.signal;
   if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
   const res=await fetch(`${WORKER}?target=toggl&path=${encodeURIComponent(path)}`,opts);
   if(res.status===204) return true;
@@ -455,7 +456,7 @@ const tgStore={
   async clients(){ return this.backend==='lokaal'?tgLokaal.clients():((await tgTrack(`workspaces/${TG_WS}/clients`))||[]); },
   async tags(){ return this.backend==='lokaal'?tgLokaal.tags():((await tgTrack(`workspaces/${TG_WS}/tags`))||[]); },
   async lopendeTimer(){ return this.backend==='lokaal'?tgLokaal.lopendeTimer():tgTrack('me/time_entries/current'); },
-  async eigenEntries(since,tot){ return this.backend==='lokaal'?tgLokaal.eigenEntries(since,tot):((await tgTrack(`me/time_entries?start_date=${since}&end_date=${tot}`))||[]); }
+  async eigenEntries(since,tot,signal){ return this.backend==='lokaal'?tgLokaal.eigenEntries(since,tot):((await tgTrack(`me/time_entries?start_date=${since}&end_date=${tot}`,'GET',null,signal?{signal}:null))||[]); }
 };
 // stub voor latere standalone-modus (Toggl wordt dan optionele sync i.p.v. bron)
 const tgLokaal={
@@ -622,7 +623,7 @@ function tgMagBoeken(){ try{ return !!(window.MTRol&&MTRol.me)&&!!MTRol.mag(MTPl
 //  - een fout NA de POST (timeout, netwerk) is niet meteen "mislukt": de entries van die dag worden één keer opnieuw gelezen; staat er een entry met dezelfde start (±1 min) en duur,
 //    dan is het gelukt ({ok:true,stondErAl:true}); anders de melding met "kijk in Uren voordat je opnieuw boekt". Nooit een tweede POST.
 let _tgBoekBezig=false;   // een boeking in dit tabblad is bezig (ook tijdens het wachten op de lock): een dubbelklik wordt geweigerd
-async function tgBoekEntry({startIso,duurMin,omschrijving,projectId}){
+async function tgBoekEntry({startIso,duurMin,omschrijving,projectId,timeoutMs}){
   if(!tgMagBoeken()) return {ok:false,reden:'Je hebt geen recht om uren te boeken.'};
   const min=Math.round(Number(duurMin)); if(!(min>=1&&min<=24*60)) return {ok:false,reden:'Ongeldige duur.'};
   const t0=new Date(startIso); if(isNaN(t0.getTime())) return {ok:false,reden:'Ongeldige starttijd.'};
@@ -632,7 +633,10 @@ async function tgBoekEntry({startIso,duurMin,omschrijving,projectId}){
     if(_tgTimerBusy||_tgMutatieBusy) return {ok:false,reden:'Er loopt nog een Toggl-wijziging; probeer het zo opnieuw.'};
     _tgMutatieBusy=true;
     try{
-      const einde=t0.getTime()+min*60000, dag=d=>d.toISOString().slice(0,10), lees=()=>tgStore.eigenEntries(dag(new Date(t0.getTime()-864e5)),dag(new Date(einde+2*864e5)));
+      const einde=t0.getTime()+min*60000, dag=d=>d.toISOString().slice(0,10), maxMs=timeoutMs>0?timeoutMs:20000;
+      // elke verbinding met Toggl (controle-GET, POST, de controle erna) krijgt een time-out: een hangende fetch laat de lock en de vlaggen nooit vastzitten
+      const metTimeout=async fn=>{ const ac=new AbortController(), tm=setTimeout(()=>ac.abort(),maxMs); try{ return await fn(ac.signal); }catch(e){ if(ac.signal.aborted) throw new Error('Toggl reageerde niet binnen '+Math.max(1,Math.round(maxMs/1000))+' seconden'); throw e; }finally{ clearTimeout(tm); } };
+      const lees=()=>metTimeout(sig=>tgStore.eigenEntries(dag(new Date(t0.getTime()-864e5)),dag(new Date(einde+2*864e5)),sig));
       let bestaand; try{ bestaand=await lees(); }
       catch(e){ return {ok:false,reden:'Kon niet controleren of die tijd al in Toggl staat; niets geboekt. '+String((e&&e.message)||e)}; }
       const nu=Date.now();
@@ -640,16 +644,17 @@ async function tgBoekEntry({startIso,duurMin,omschrijving,projectId}){
       if(botst) return {ok:false,reden:'Op die tijd staat al een entry in Toggl'+(botst.description?' („'+botst.description+'”)':'')+'; er is niets geboekt.'};
       const body={created_with:'MT-cockpit',description:String(omschrijving||''),workspace_id:TG_WS,start:t0.toISOString().replace(/\.\d{3}Z$/,'Z'),duration:min*60};
       if(projectId!=null&&projectId!=='') body.project_id=parseInt(projectId);
-      // na een onduidelijke POST: staat de entry er toch?
+      // na een onduidelijke POST: staat de entry er toch? Alleen als start (±1 min), duur (±1 min), omschrijving en project alle vier gelijk zijn aan wat we wilden boeken.
       const controleerNa=async(fout)=>{
         try{
-          const nu2=await lees(), hit=(Array.isArray(nu2)?nu2:[]).find(e=>{ if(!e||!e.start||!e.stop&&!(e.duration>0)) return false; const a=new Date(e.start).getTime(), sec=e.duration>0?e.duration:(new Date(e.stop).getTime()-a)/1000; return Math.abs(a-t0.getTime())<=60000&&Math.abs(sec-min*60)<=60; });
+          const nu2=await lees(), hit=(Array.isArray(nu2)?nu2:[]).find(e=>{ if(!e||!e.start||!e.stop&&!(e.duration>0)) return false; const a=new Date(e.start).getTime(), sec=e.duration>0?e.duration:(new Date(e.stop).getTime()-a)/1000;
+            return Math.abs(a-t0.getTime())<=60000&&Math.abs(sec-min*60)<=60&&String(e.description||'').trim()===String(body.description||'').trim()&&String(e.project_id==null?'':e.project_id)===String(body.project_id==null?'':body.project_id); });
           if(hit) return {ok:true,stondErAl:true};
         }catch(e2){ /* ook de controle mislukt: we weten het niet, dus niet claimen */ }
         return {ok:false,reden:fout+' Kijk in Uren of de tijd er staat voordat je opnieuw boekt.'};
       };
       let made;
-      try{ made=await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body); }
+      try{ made=await metTimeout(sig=>tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body,{signal:sig})); }
       catch(e){ return controleerNa('Boeken mislukt: '+String((e&&e.message)||e)+'.'); }
       return (made&&made.id)?{ok:true}:controleerNa('Toggl gaf geen entry terug.');
     }catch(e){ return {ok:false,reden:'Boeken mislukt: '+String((e&&e.message)||e)}; }

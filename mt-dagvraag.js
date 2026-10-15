@@ -75,10 +75,17 @@
 
   M.open = () => S.open;
   // Is de open vraag beantwoord of gesloten (ook in een ander tabblad)? Dan hoort de melding overal weg.
-  M.moetVerbergen = (open, st) => !!open && !!st && (!!(st.klaar && st.klaar[open.datum]) || !!(st.gesloten && st.gesloten[open.datum]));
+  // Gesloten (Later) geldt voor het MOMENT dat je sloot: de avondvraag en de ochtendvraag over dezelfde dag zijn twee momenten. Alleen klaar (beantwoord) voorkomt de ochtendvraag.
+  M.isGesloten = (st, datum, soort) => { const v = st && st.gesloten && st.gesloten[datum]; return !!v && (typeof v === 'object' ? !!v[soort] : soort === 'avond'); };   // een oude stand met een kale tijd gold voor de avondvraag
+  M.moetVerbergen = (open, st) => !!open && !!st && (!!(st.klaar && st.klaar[open.datum]) || M.isGesloten(st, open.datum, open.soort || 'avond'));
   // Er waren gaten toen de vraag voor het eerst getoond werd en nu niet meer (gedekt door een boeking): de vraag is daarmee beantwoord.
   M.gatenDichtGegaan = (st, m) => { const d = m && m.dagInfo && m.dagInfo.datum, g = d && st && st.gevraagd && st.gevraagd[d]; return !!g && !(st.klaar && st.klaar[d]) && g.gaten > 0 && m.dagInfo.gaten.length === 0; };
-  M.beoordeel = function (m) { if (!D || !nieuweStijl() || !m || !m.dagInfo) return; if (M.gatenDichtGegaan(M.lees(), m)) root.setTimeout(() => M.beantwoord(m.dagInfo.datum), 0); };
+  M.beoordeel = function (m) {
+    if (!D || !nieuweStijl() || !m || !m.dagInfo) return;
+    const st = M.lees(), d = m.dagInfo.datum, g = st.gevraagd[d];
+    if (g && !st.klaar[d] && g.gaten === undefined) { g.gaten = m.dagInfo.gaten.length; M.bewaar(st); return; }   // onthoud hoeveel gaten er waren toen de vraag openstond, om te zien of een boeking ze dichtte
+    if (M.gatenDichtGegaan(st, m)) root.setTimeout(() => M.beantwoord(d), 0);
+  };
   const momentVoor = datum => P.dagvraagMoment(mijnSlug(), D.werktijden ? D.werktijden() : null, datum, { verlof: D.verlof ? D.verlof() : [], vrijedagen: D.vrijedagen ? D.vrijedagen() : [], team: D.team() || [] });   // '' = geen vraag (weekend, vrij, verlof)
   M.beantwoord = function (datum) {
     const st = M.lees(); st.klaar[datum] = new Date(D.nu()).toISOString(); M.bewaar(st);
@@ -96,12 +103,22 @@
   const knop = (tekst, klass, klik) => el('button', { type: 'button', klass: 'dv-knop' + (klass ? ' ' + klass : ''), tekst, klik });
   function titelVoor(o) { return o.soort === 'ochtend' ? DAG[new Date(+o.datum.slice(0, 4), +o.datum.slice(5, 7) - 1, +o.datum.slice(8, 10)).getDay()] + ' ' + kort(o.datum) + ': klopt je dag?' : 'Klopt je dag?'; }
   // De kaart in de Uren-tab (aside) voor een dag met een open vraag; m = het dagmodel van die dag. null als er niets te vragen is.
+  // De openstaande vraag (gesteld, niet beantwoord, niet gesloten voor dat moment, dag nog een vraagdag) van de laatste vier dagen, de nieuwste eerst; of null.
+  M.openVraag = function () {
+    if (!D) return null; const st = M.lees(), grens = plus(lokaalYmd(new Date(D.nu())), -4);
+    for (const d of Object.keys(st.gevraagd).sort().reverse()) { if (d < grens) break; const g = st.gevraagd[d], soort = g && g.ochtend ? 'ochtend' : 'avond'; if (g && !st.klaar[d] && !M.isGesloten(st, d, soort) && momentVoor(d)) return { datum: d, soort }; }
+    return null;
+  };
   M.kaart = function (datum, m) {
     if (!D || !nieuweStijl() || !m) return null;
-    const st = M.lees(), g = st.gevraagd[datum]; if (!g || st.klaar[datum]) return null;
+    const st = M.lees(), g = st.gevraagd[datum];
+    if (!g || st.klaar[datum]) {   // geen vraag over deze dag: staat er een open vraag over een andere dag, dan een kleine kaart die daarheen wijst
+      const ov = (!g && M.openVraag()) || null; if (!ov || ov.datum === datum) return null;
+      return el('section', { klass: 'dv-kaart', 'aria-labelledby': 'dv-titel' }, el('span', { klass: 'dv-eyebrow', tekst: 'nog open' }), el('span', { id: 'dv-titel', klass: 'dv-titel', tekst: titelVoor(ov) }), el('span', { klass: 'dv-tekst', tekst: 'Over deze dag staat nog een vraag open. Bekijk de dag om te zien wat er nog niet geboekt is.' }), el('div', { klass: 'dv-acties' }, knop('Bekijk die dag', 'primair', () => { try { D.naarUren(ov.datum); } catch (e) {} })));
+    }
     const moment = momentVoor(datum); if (!moment) return null;   // intussen verlof of een vrije dag geworden: niet tonen
     const soort = g.ochtend ? 'ochtend' : 'avond', mag = !!(D.magBoeken && D.magBoeken());
-    if (g.gaten === undefined) { g.gaten = m.dagInfo.gaten.length; M.bewaar(st); }   // onthoud of er gaten waren, om te zien of een boeking ze dichtte
+    if (M.isGesloten(st, datum, soort)) return null;   // dit moment is gesloten (Later): niet opnieuw tonen
     const inh = M.inhoud(m);
     const boekEn = async (gat, vi) => { const r = await D.boekGat(m, gat, vi); if (r && r.ok) M.beantwoord(datum); };   // een geslaagde boeking beantwoordt de vraag
     return el('section', { klass: 'dv-kaart', 'aria-labelledby': 'dv-titel' },
@@ -121,11 +138,12 @@
     try { if (D.modelVoor) { m = await D.modelVoor(o.datum); if (m) tekst = M.inhoud(m).tekst; } } catch (e) {}
     if (!S.open || S.open.datum !== o.datum) return;   // intussen beantwoord of vervangen
     if (!momentVoor(o.datum)) { S.open = null; return; }   // intussen verlof of een vrije dag geworden: niet tonen
+    if (M.isGesloten(M.lees(), o.datum, o.soort)) return;   // intussen gesloten (ook in een ander tabblad)
     const b = el('div', { klass: 'dv-banner', role: 'status', 'aria-live': 'polite' },
       el('span', { klass: 'dv-eyebrow', tekst: (o.moment ? o.moment + ' · ' : '') + (o.soort === 'ochtend' ? 'van gisteren' : '15 min voor je eindtijd') }),
       el('span', { klass: 'dv-titel', tekst: titelVoor(o) }),
       el('span', { klass: 'dv-tekst', tekst }),
-      el('div', { klass: 'dv-acties' }, knop('Bekijk', 'primair', () => { verberg(); try { D.naarUren(o.datum); } catch (e) {} }), knop('Klopt zo', '', () => M.beantwoord(o.datum)), knop('Later', 'ghost', () => { const st = M.lees(); st.gesloten[o.datum] = new Date(D.nu()).toISOString(); M.bewaar(st); verberg(); })));
+      el('div', { klass: 'dv-acties' }, knop('Bekijk', 'primair', () => { verberg(); try { D.naarUren(o.datum); } catch (e) {} }), knop('Klopt zo', '', () => M.beantwoord(o.datum)), knop('Later', 'ghost', () => { const st = M.lees(), v = st.gesloten[o.datum]; const g = v && typeof v === 'object' ? v : (v ? { avond: v } : {}); g[o.soort] = new Date(D.nu()).toISOString(); st.gesloten[o.datum] = g; M.bewaar(st); verberg(); })));
     D.doc.body.appendChild(b); S.banner = b;
   }
   // Eén controle: moet er nu een vraag komen? Aangeroepen bij het opstarten, elke minuut, bij het terugkomen op het tabblad en na het openen van Uren.

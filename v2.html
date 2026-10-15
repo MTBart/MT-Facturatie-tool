@@ -40,7 +40,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2026-10-15y"></script>
+<script src="mt-toggl.js?v=2026-10-15z"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -59,8 +59,8 @@
 <script src="mt-planverplaats.js?v=2026-10-15s"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-15s"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
-<script src="mt-uren-nieuw.js?v=2026-10-15y"></script>
-<script src="mt-dagvraag.js?v=2026-10-15y"></script>
+<script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
+<script src="mt-dagvraag.js?v=2026-10-15z"></script>
 <script src="mt-vandaag-desk.js?v=2026-10-15s"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
@@ -15976,6 +15976,7 @@ function rolToepassen(me){
   if(MTRol.isBeheer()&&(open('instellingen')||sub('beheer'))) beheerLaad();
   if(MTRol.isBeheer()&&sub('activiteit')&&typeof activiteitOpen==='function') activiteitOpen();
   if(window.MTToggl) MTToggl.laad(WORKER);
+  try{ if(window.MTUrenNieuw) MTUrenNieuw.opnieuwTekenen(); if(window.MTDagvraag) MTDagvraag.controleer(); }catch(e){ console.warn('Uren/dagvraag na de rol:',e); }   // de boekknoppen en de dagvraag hangen aan het recht Uren boeken: nu de rol er is, zonder te verversen
   if(typeof aanwezigLaad==='function') aanwezigLaad();
   if(typeof geldTabZet==='function') geldTabZet();
   oudDashboardZet();
