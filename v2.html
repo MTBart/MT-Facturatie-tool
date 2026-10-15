@@ -3841,7 +3841,7 @@ try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, i
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
 // Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.
-function capWerktijdenMag(){ try{ return mtIsAdmin()&&capRolWijzigen(); }catch(e){ return false; } }
+function capWerktijdenMag(){ try{ return mtIsAdmin()&&capRolStreng(); }catch(e){ return false; } }   // werktijden zijn nieuw: bij een oude worker (isBeheer niet te bepalen) niet wijzigen
 try{ MTWerktijden.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, werkuren:()=>(admCfg()||{}).werkuren||null,
   sp:{ read:n=>_SP.read(n), write:(n,d,r)=>_SP.write(n,d,r) }, nu:()=>Date.now(), wie:()=>mtMijEmail(), stempel:_spStempel, audit:(a,doel,oud,nieuw)=>auditLog(a,doel,oud,nieuw,''),
   magWijzigen:()=>capWerktijdenMag(), opgeslagen:()=>werktijdenVerversWeergave() }); }catch(e){ console.warn('Werktijden init:',e); }
@@ -15511,9 +15511,12 @@ function agPlanDrop(evt,datum){
 // Zelfde opslag als agPlanDrop: de blokken blijven records in mt_planblokken met een stempel; agPlanSave leest vers, voegt per id samen
 // (_SP.mergers.mt_planblokken) en schrijft met de ETag terug (een 412 wordt met dezelfde samenvoeger opgelost). Open voorstellen worden niet versleept.
 // Recht: alleen met het recht om projecten te wijzigen (niet "lezen", niet de werkplaats) en alleen als de rol geladen is (fail-closed).
-// De rol uit de rollenmatrix, ongeacht de modus (MTRol.mag geeft buiten 'afdwingen' altijd true): alleen met een geladen rol die expliciet projecten mag wijzigen (eigenaar, beheer, kantoor).
-// Onbekend, nog niet geladen, lezen of werkplaats = nee (fail-closed).
-function capRolWijzigen(){ try{ const r=window.MTRol&&MTRol.me&&MTRol.me.rechten; return !!r&&r.projecten==='wijzigen'; }catch(e){ return false; } }
+// De rol uit de rollenmatrix, ongeacht de modus (MTRol.mag geeft buiten 'afdwingen' altijd true).
+//  - rol geladen: expliciet rechten.projecten === 'wijzigen' (eigenaar, beheer, kantoor); lezen, werkplaats of geen rechten in het antwoord = nee;
+//  - rol nog aan het laden, geen token of een laadfout: nee (fail-closed);
+//  - 'oude-worker' (de worker kent /me met rol en modus niet: definitief geen rollensysteem): alles als vroeger, dus wel (zoals de rest van de tool).
+function capRolStreng(){ try{ const r=window.MTRol&&MTRol.me&&MTRol.me.rechten; return !!r&&r.projecten==='wijzigen'; }catch(e){ return false; } }
+function capRolWijzigen(){ try{ if(window.MTRol&&MTRol.me) return capRolStreng(); return !!(window.MTRol&&MTRol.laadReden==='oude-worker'); }catch(e){ return false; } }
 function capMagSlepen(){ try{ return capRolWijzigen()&&!pvMoetVoorstel(); }catch(e){ return false; } }
 function _capCtx(){ return { blokken:agPlanBlokken(), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), werktijden:(window.MTWerktijden?MTWerktijden.lijst():null), mag:capMagSlepen(), nu:Date.now(), wie:mtMijEmail(), stempel:_spStempel,
   nieuwId:()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7) }; }
