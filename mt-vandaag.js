@@ -117,7 +117,10 @@
     S.mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), { mijn: w.slug, vandaag: P.vandaagYmd(), nu: D.nu(), gezien: leesGezien(), vrij: S.vrij, verlof: S.verlof });
     return S.mw;
   }
-  const alleItems = mw => Object.keys(mw.groepen).reduce((a, k) => a.concat(mw.groepen[k]), []);
+  // Voor het startvenster (mt-startvenster.js): mijn werk zonder "nieuw voor mij" (alles staat dan in zijn datumgroep); alleen als de takenlijst goed geladen is.
+  V.mijnOpen = function () { const w = D.wie(); return P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), { mijn: w.slug, vandaag: P.vandaagYmd(), nu: D.nu(), nieuw: false, vrij: S.vrij, verlof: S.verlof }); };
+  V.takenKlaar = () => S.staat === 'klaar';
+  const alleItems = mw =>Object.keys(mw.groepen).reduce((a, k) => a.concat(mw.groepen[k]), []);
   // Een taak van iemand anders (of van niemand), geopend via een deep link van de tv: dezelfde berekening als Mijn werk, maar voor iedereen.
   function losItem(code, id) {
     const mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), { iedereen: true, nieuw: false, project: code, vandaag: P.vandaagYmd(), nu: D.nu() });
@@ -298,6 +301,7 @@
     D.timer.start(p.mobielId, taak.naam);
     sluitKaart(); D.toast('Timer gestart op ' + projLabel(item.code));
   }
+  V.startTimer = startTimer;   // ook voor het startvenster
 
   // ── schrijven: de status van een taak (Bezig · Wacht · Klaar) ──
   // Volgorde, zoals in de cockpit: eerst kijken of het mag (lijst klaar, schema, rol), dan de vragen (reden, "deze taak wacht"), daarna opnieuw kijken, en dan pas schrijven.

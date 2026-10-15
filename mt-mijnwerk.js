@@ -43,6 +43,12 @@
     return P.mijnWerk(D.taken(), D.afhank(), D.blokken(), opt);
   };
 
+  // Voor het startvenster (mt-startvenster.js): mijn eigen werk, los van de filters en zonder "nieuw voor mij" (alles staat dan in zijn datumgroep).
+  M.mijnOpen = function () {
+    return P.mijnWerk(D.taken(), D.afhank(), D.blokken(), { team: D.team(), vandaag: P.vandaagYmd(), nu: D.nu(), mijn: mijnSlug(), nieuw: false, vrij: D.vrij ? D.vrij() : null, verlof: D.verlof ? D.verlof() : null });
+  };
+  M.takenKlaar = () => !!(D && D.takenKlaar());
+
   function filterBalk() {
     const lijst = D.team() || [];
     const persoon = el('select', { id: 'mw-persoon', 'aria-label': 'Persoon', wijzig: ev => { F.persoon = ev.target.value; M.teken(); } },

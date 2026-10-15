@@ -25,7 +25,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2.16.2"></script>
+<script src="mt-toggl.js?v=2026-10-15a"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -39,13 +39,14 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planning.js?v=2.16.0"></script>
-<script src="mt-mijnwerk.js?v=2026-10-14a"></script>
+<script src="mt-mijnwerk.js?v=2026-10-15a"></script>
 <script src="mt-capaciteit.js?v=2026-10-14a"></script>
+<script src="mt-startvenster.js?v=2026-10-15a"></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2.16.0"></script>
+<script src="mt-verhuis.js?v=2026-10-15a"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -3390,6 +3391,7 @@ function showTab(name,btn){
   if(name==='klanten') laadKlanten();
   if(name==='verwerk') scanEmailFacturen();
   if(name==='agenda'){ renderAgenda(); if(typeof aanwezigLaad==='function') aanwezigLaad(); }
+  if(name==='agenda'||name==='planning'){ try{ if(window.MTStartvenster) MTStartvenster.toon(); }catch(e){} }   // startvenster "X taken wachten op je": alleen zonder lopende timer, eenmaal per sessie
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
   if(name==='attentie') renderAttentie();
@@ -3768,6 +3770,13 @@ try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, 
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Mijn werk init:',e); }
+// Startvenster (stap 3): "X taken wachten op je" bij het openen van Agenda/Planning, alleen zonder lopende Toggl-timer en niet voor de rol "lezen" (zie mt-startvenster.js).
+try{ MTStartvenster.init({ doc:document, storage:(function(){ try{ return sessionStorage; }catch(e){ return null; } })(), dialog:()=>window.mtDialog, toast:m=>{ if(typeof planToast==='function') planToast(m); },
+  demo:()=>false, lezen:()=>!!(window.MTRol&&MTRol.me&&String(MTRol.me.rol||'').toLowerCase()==='lezen'), magTimer:()=>!window.MTRol||MTRol.mag(MTPlanning.ROL.UREN_BOEKEN),
+  klaar:()=>MTMijnWerk.takenKlaar(), mijnWerk:()=>MTMijnWerk.mijnOpen(), timerLoopt:()=>tgTimerLoopt(),
+  project:code=>{ const p=projVind(code); return p?{label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
+  start:item=>{ const p=projVind(item.code); return tgTimerStartDirect({projectId:p&&p.tg_project_id,omschrijving:item.taak.naam}); },
+  nogActief:()=>{ const t=document.getElementById('tab-agenda'); return !!(t&&t.classList.contains('active')); } }); }catch(e){ console.warn('Startvenster init:',e); }
 // Capaciteit (stap 2, standaardweergave van de Agenda): dezelfde bronnen, plus de werkuren per persoon uit Beheer (admCfg().werkuren).
 try{ MTCapaciteit.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu:()=>Date.now(),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
@@ -6016,6 +6025,19 @@ function projNaamVol(p){
   let n=String(p.naam||'').trim();
   if(c&&n.toUpperCase().startsWith(c.toUpperCase())) n=n.slice(c.length).replace(/^[\s\-–—·:|]+/,'').trim();
   return _echteNaam(n,c)||[projKlantNaam(p),projLocLabel(p),_echteNaam(p.product_naam,p.product)].filter(Boolean).join(' — ')||'Project zonder naam';
+}
+// Korte projectnaam (zelfde als de Toggl-naam zonder nummer): eigen naam (zonder code-prefix) || productnaam || volledige naam.
+// Een naam die met de klantnaam begint is de automatische "klant locatie — product" uit het aanmaakvenster en geldt niet als eigen
+// naam: dan wint de productnaam. Nooit de klantnaam erin (die staat al in de klantmap en in het eigen veld).
+function projNaamKort(p){
+  if(!p) return '';
+  const c=String(p.code||'').trim(), prod=_echteNaam(p.product_naam,p.product);
+  let n=String(p.naam||'').trim();
+  if(c&&n.toUpperCase().startsWith(c.toUpperCase())) n=n.slice(c.length).replace(/^[\s\-–—·:|]+/,'').trim();
+  n=_echteNaam(n,c);
+  const kl=[projKlantNaam(p),p.klant_naam].map(x=>String(x||'').trim().toLowerCase()).filter(x=>x.length>1);
+  const auto=!!n&&!!prod&&kl.some(k=>n.toLowerCase().startsWith(k));
+  return (auto?'':n)||prod||projNaamVol(p);
 }
 function _projVoorCode(c){ return (c&&typeof c==='object')?c:((typeof PROJECT_CODES!=='undefined'&&c)?projVind(c):null); }
 // Voor een code uit een koppeling/dossier/planning: het zichtbare nummer, anders de naam.
@@ -11301,10 +11323,11 @@ function projGegevensHtml(proj){
     ${Object.entries(proj._veldconflict||{}).filter(([veld])=>veld.startsWith('gegevens.')).map(([veld,c])=>`<div class="lead-conflict" role="alert">⚠ <b>${esc((PROJ_GEGEVENS.find(x=>'gegevens.'+x[0]===veld)||[0,veld])[1])}</b> is tegelijk gewijzigd${c.door?' door '+esc(c.door):''}: nu „${esc(_vGet(proj,veld)||'—')}”, de andere waarde was „${esc(c.waarde||'—')}”.
       ${mag?`<button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},false)">Houden</button> <button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},true)">Andere waarde nemen</button>`:''}</div>`).join('')}</section>`;
 }
-// De XML voor interiorcad: PROJECT_ID = projectnummer (of code), COMMISSION = projectnaam, … (zie mt-vw.js).
+// De XML voor interiorcad: PROJECT_ID = projectnummer (of code), COMMISSION = korte projectnaam (= "Projectnaam" in interiorcad en in HHOS;
+// zonder klantnaam, zie projNaamKort), … (zie mt-vw.js).
 function projVwGegevens(proj){
   const g=proj.gegevens||{}, mb=_projMbContact(proj);
-  return {projectnummer:projNummer(proj)||proj.code,naam:projNaamVol(proj),onderdeel:g.projectonderdeel||'',leider:g.projectleider||'',leverdatum:g.leverdatum||'',
+  return {projectnummer:projNummer(proj)||proj.code,naam:projNaamKort(proj),onderdeel:g.projectonderdeel||'',leider:g.projectleider||'',leverdatum:g.leverdatum||'',
     klantnummer:(mb&&mb.customer_id)||'',bedrijf:projKlantNaam(proj)||(mb&&mb.company_name)||'',aanhef:g.aanhef||'',voornaam:g.voornaam||'',achternaam:g.achternaam||'',
     straat:g.straat||'',postcode:g.postcode||'',plaats:g.plaats||'',items:[]};
 }
@@ -11568,7 +11591,7 @@ async function maakProjectAan(){
     klant_telefoon:(kv&&kv.telefoon)||'',klant_kvk:(kv&&kv.kvk)||'',
     klant_btw:(kv&&kv.btw)||'',klant_customer_id:(kv&&kv.customer_id)||null,
     created:new Date().toISOString().slice(0,10),
-    project_id:projectId,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:_MAP_NAAM_CODE};
+    project_id:projectId,legacy_codes:[code],soort:'klant',offertes:[],map_stijl:nummer?_MAP_NR_NAAM:_MAP_NAAM_CODE};   // met projectnummer: "<nr> <korte naam>"; anders (werkcode) de bestaande naam-code-stijl
   if(werkcode) nieuwProj.werkcode=werkcode;
   if(nummer) nieuwProj.projectnummer=nummer;
   // Projectleider = wie het project aanmaakt (Bart, 14-10), als die in de keuzelijst staat; daarna te wijzigen in Projectgegevens.
@@ -13162,10 +13185,12 @@ function _projLocNaam(proj){
   const lc=k&&Array.isArray(k.locaties)?k.locaties.find(x=>x.code===(proj.loc||'').toUpperCase()):null;
   return (lc&&lc.naam)||proj.loc_naam||proj.loc;
 }
-// Mapnaam (P3b): NIEUWE projecten (map_stijl 'naam-code') heten "Volledige naam [code]"; bestaande projecten houden
+// Mapnaam (P3b): projecten met map_stijl 'naam-code' heten "Volledige naam [code]"; bestaande projecten houden
 // "code - naam" en worden NOOIT hernoemd. De code in de tag is de technische sleutel (werkcode) en verandert niet,
 // ook niet als het offertenummer later volgt of de projectnaam wijzigt (gevonden wordt de map via itemId of via de tag).
-const _MAP_NAAM_CODE='naam-code';
+// Nieuwste stijl ('nr-naam', v2.17): "<projectnummer> <korte naam>" (bv. "260801 Werkblad ref 186986"), zoals de Toggl-naam. Alleen met een
+// geldig projectnummer; anders valt _projMapNaam terug op naam-code. Bestaande projecten houden hun stijl (nooit automatisch hernoemd).
+const _MAP_NAAM_CODE='naam-code', _MAP_NR_NAAM='nr-naam';
 // Eén centrale validatie van een code uit de teller vóór hij ergens als sleutel of in een mapnaam komt: een werkcode
 // W<jj>-<nnn> of (brok C) een projectnummer van 6 cijfers vanaf 260801; NFC, kort genoeg en geen gereserveerde SharePoint-naam. '' = goed.
 const _WERKCODE_RE=/^(W\d{2}-\d{3,}|\d{6})$/, _SP_GERESERVEERD=/^(con|prn|aux|nul|com\d|lpt\d)$/i;
@@ -13177,8 +13202,24 @@ function projWerkcodeFout(code){
   if(_SP_GERESERVEERD.test(code)||/^[.~]|_vti_|\.lock$/i.test(code)) return 'gereserveerde naam';
   return '';
 }
+// "<projectnummer> <korte naam>", of '' als het project geen geldig projectnummer (6 cijfers, vanaf 260801) heeft.
+function _projMapNaamNrNaam(proj){
+  const nr=(typeof projNummer==='function'?projNummer(proj):null)||(/^\d{6}$/.test(String(proj.code||''))?proj.code:'');
+  if(!nr||projWerkcodeFout(nr)||!/^\d{6}$/.test(nr)) return '';
+  const pre=nr+' ', naam=_projVeilig(projNaamKort(proj)).slice(0,200-pre.length).trim();   // zelfde lengtegrens als naam-code
+  return _projVeilig(pre+naam);
+}
+// Read-only: {huidig, voorstel, nodig} voor een handmatige hernoem-actie van de bestaande map. `huidig` = laatste padsegment van de
+// opgeslagen map (null als die nog niet bekend is), `voorstel` = de nr-naam-mapnaam ('' zonder geldig projectnummer). Hernoemt niets.
+function projMapHernoemVoorstel(code){
+  const proj=_projVoorCode(code); if(!proj) return {huidig:null,voorstel:'',nodig:false};
+  const pad=(proj.map&&proj.map.pad)||(_projMapCache[proj.code]&&_projMapCache[proj.code].pad)||'';
+  const huidig=pad?pad.split('/').pop():null, voorstel=_projMapNaamNrNaam(proj);
+  return {huidig, voorstel, pad:pad||null, nodig:!!voorstel&&!!huidig&&huidig!==voorstel};
+}
 function _projMapNaam(proj){
-  if(proj.map_stijl===_MAP_NAAM_CODE){
+  if(proj.map_stijl===_MAP_NR_NAAM){ const m=_projMapNaamNrNaam(proj); if(m) return m; }   // geen geldig nummer → terugval op naam-code
+  if(proj.map_stijl===_MAP_NAAM_CODE||proj.map_stijl===_MAP_NR_NAAM){
     const f=projWerkcodeFout(proj.code); if(f) throw new Error('Ongeldige werkcode '+JSON.stringify(proj.code)+' ('+f+') — geen projectmap aangemaakt of gezocht');
     const tag=` [${proj.code}]`, naam=_projVeilig(projNaamVol(proj)).slice(0,200-tag.length).trim();   // een SharePoint-segment mag 255 tekens zijn: ruim eronder blijven
     return _projVeilig(naam+tag);
@@ -13195,8 +13236,8 @@ async function _projMapZoek(proj, lijst){
   if(!kl) return { pad:null, kandidaten:[], reden:'geen klantmap "'+kn+'"' };
   const klPad = `${PROJ_ROOT}/${kl.name}`;
   const nr = typeof projNummer==='function' ? projNummer(proj) : null;   // na de omnummering mag de tag ook het projectnummer zijn
-  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']') || (!!nr && n.endsWith(' ['+nr+']'));
-  const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n) || / \[[A-Z0-9][A-Z0-9-]*\]$/.test(n);   // ziet eruit als een (andere) projectmap → niet induiken
+  const isProj = n => n===exactNaam || n.startsWith(code+' - ') || n===code || n.endsWith(' ['+code+']') || (!!nr && (n.endsWith(' ['+nr+']') || n.startsWith(nr+' ')));
+  const lijkt = n => /^[A-Z0-9][A-Z0-9-]* - /.test(n) || / \[[A-Z0-9][A-Z0-9-]*\]$/.test(n) || /^\d{6} /.test(n);   // ziet eruit als een (andere) projectmap → niet induiken
   const kandidaten = [];
   const klKids = await lees(klPad);
   for(const c of klKids.filter(c=>c.folder)){
@@ -13299,7 +13340,7 @@ window.genereerProjectMappen = async function(proj) {
     parent = `${parent}/${locFolder}`;
   }
   const projNaam = (proj.product_naam || proj.naam || proj.code);
-  const projFolder = await _SP.ensureFolder(parent, proj.map_stijl===_MAP_NAAM_CODE ? _projMapNaam(proj) : `${proj.code} - ${projNaam}`, false);
+  const projFolder = await _SP.ensureFolder(parent, (proj.map_stijl===_MAP_NAAM_CODE||proj.map_stijl===_MAP_NR_NAAM) ? _projMapNaam(proj) : `${proj.code} - ${projNaam}`, false);
   const projPath = `${parent}/${projFolder}`;
   for (const sub of SUBS) await _SP.ensureFolder(projPath, sub, false);
   // itemId vastleggen (1 call), zodat volgende keren projMap met één controle-call klaar is.
