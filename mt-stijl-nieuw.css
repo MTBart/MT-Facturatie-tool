@@ -456,3 +456,53 @@ html[data-stijl="nieuw"] .wt-knop.primair{background:var(--primary);border-color
 html[data-stijl="nieuw"] .wt-knop.gevaar{margin-left:auto;color:var(--error)}
 html[data-stijl="nieuw"] .wt-knop:disabled{opacity:.5;cursor:not-allowed}
 html[data-stijl="nieuw"] .wt-knop:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}
+/* ── brok 10: Project ▸ Planning en taken (alleen kleuren, vormen en een vandaag-lijn; geen DOM-wijziging die het slepen raakt) ──────────
+   De Gantt ("Projectplanning", .plan-*) behoudt zijn sleep per balk (planDragStart: pointerdown op .plan-bar, links/breedte inline). De balken krijgen
+   hun statuskleur als --fk (inline, door v2.html) en worden hier een getinte balk met een gekleurde rand; mijlpalen zijn een messing ruit. */
+html[data-stijl="nieuw"] .plan-gantt{border-color:var(--line);border-radius:8px;background:var(--surface)}
+html[data-stijl="nieuw"] .plan-axis{border-bottom-color:var(--line)}
+html[data-stijl="nieuw"] .plan-tick{font:400 10.5px/14px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .plan-tick:before{border-left-color:var(--line)}
+html[data-stijl="nieuw"] .plan-rowlabel{font:500 12px/1.25 var(--sans);color:var(--ink)}
+html[data-stijl="nieuw"] .plan-rowlabel .u{font:400 11px/14px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .plan-rowlabel.koppelbaar:hover{color:var(--primary-text)}
+html[data-stijl="nieuw"] .plan-track{background:repeating-linear-gradient(90deg,transparent 0 13px,var(--line-soft) 13px 14px);border-radius:2px}
+html[data-stijl="nieuw"] .plan-bar{border-radius:4px;color:var(--ink);font:500 11px/20px var(--sans);padding:0 8px 0 10px;background:color-mix(in srgb,var(--fk,var(--ink-2)) 16%,var(--surface))!important;box-shadow:inset 3px 0 0 var(--fk,var(--ink-2))}
+html[data-stijl="nieuw"] .plan-bar:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:1px}
+html[data-stijl="nieuw"] .plan-bar.sleep{box-shadow:inset 3px 0 0 var(--fk,var(--ink-2)),var(--shadow-pop);opacity:1}
+html[data-stijl="nieuw"] .plan-bar.mijlpaal{background:transparent!important;box-shadow:none;border-radius:0;overflow:visible}
+html[data-stijl="nieuw"] .plan-bar.mijlpaal::before{content:"";position:absolute;left:4px;top:5px;width:10px;height:10px;background:var(--brass);transform:rotate(45deg)}
+html[data-stijl="nieuw"] .plan-vandaag{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--brass);pointer-events:none;z-index:3}
+html[data-stijl="nieuw"] .plan-banner{background:var(--error-50);border-color:#e9b3af;color:var(--error);border-radius:4px}
+html[data-stijl="nieuw"] .plan-editor{border-color:var(--line);border-radius:8px;background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .plan-editor input,html[data-stijl="nieuw"] .plan-editor select{border-color:var(--border-strong);border-radius:4px;background:var(--surface)}
+/* Tijdlijn (wie, wanneer, past het): getinte fasebalken, capaciteit in de nieuwe palet, messing vandaag-lijn, mijlpaal als ruit */
+html[data-stijl="nieuw"] .tl-scroll{border-color:var(--line);border-radius:8px}
+html[data-stijl="nieuw"] .tl-week{background:var(--surface-sunken);font:500 10px/14px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .tl-week.nu{background:var(--brass-soft);color:var(--brass-ink);box-shadow:inset 0 3px 0 var(--brass)}
+html[data-stijl="nieuw"] .tl-cel.cap-ruim{background:color-mix(in srgb,var(--primary) 7%,var(--surface))}
+html[data-stijl="nieuw"] .tl-cel.cap-krap{background:var(--warning-50)}
+html[data-stijl="nieuw"] .tl-cel.cap-vol{background:var(--error-50)}
+html[data-stijl="nieuw"] .tl-cel.cap-geen{background:repeating-linear-gradient(135deg,var(--surface-sunken) 0 4px,transparent 4px 8px)}
+html[data-stijl="nieuw"] .tl-cel.nu{box-shadow:inset 0 0 0 1px var(--brass)}
+html[data-stijl="nieuw"] .tl-balk.w{background:var(--pk,var(--primary))}
+html[data-stijl="nieuw"] .tl-getal i{color:var(--primary-text)}
+html[data-stijl="nieuw"] .tl-fase{border-radius:4px;color:var(--ink);font:500 10.5px/17px var(--sans);padding:0 6px 0 9px;background:color-mix(in srgb,var(--fk,var(--ink-2)) 16%,var(--surface))!important;box-shadow:inset 3px 0 0 var(--fk,var(--ink-2))}
+html[data-stijl="nieuw"] .tl-fase.st-klaar{opacity:.6}
+html[data-stijl="nieuw"] .tl-fase.mijlpaal{background:transparent!important;box-shadow:none;overflow:visible;text-overflow:clip;color:var(--brass-ink)}
+html[data-stijl="nieuw"] .tl-fase.mijlpaal::before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;background:var(--brass);transform:rotate(45deg);vertical-align:-1px}
+html[data-stijl="nieuw"] .tl-vandaag{background:var(--brass);opacity:1;width:2px}
+html[data-stijl="nieuw"] .tl-detail{border-left-color:var(--brass);border-radius:0 4px 4px 0}
+html[data-stijl="nieuw"] .tl-lg.cap-ruim{background:color-mix(in srgb,var(--primary) 14%,var(--surface))}
+html[data-stijl="nieuw"] .tl-lg.cap-krap{background:var(--warning-50)}
+html[data-stijl="nieuw"] .tl-lg.cap-vol{background:var(--error-50)}
+html[data-stijl="nieuw"] .tl-lg.w{background:var(--primary)}
+html[data-stijl="nieuw"] .tl-let{color:var(--warning)}
+/* Taken, budget en afhankelijkheden: strakker, in de nieuwe tokens */
+html[data-stijl="nieuw"] .pm-badge{border-radius:4px}
+html[data-stijl="nieuw"] .pm-let-op,html[data-stijl="nieuw"] .pm-badge.pm-let-op{background:var(--warning-50);color:var(--warning)}
+html[data-stijl="nieuw"] .pm-tabel th{font:500 11px/16px var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .pm-tabel td{border-bottom-color:var(--line-soft)}
+html[data-stijl="nieuw"] .pm-tabel .pm-totaal td{border-top-color:var(--ink)}
+html[data-stijl="nieuw"] .pt-sel{border-color:var(--border-strong);border-radius:4px;background-color:var(--surface)}
+html[data-stijl="nieuw"] #proj-sectie-inhoud tr:hover>td{background:var(--surface-sunken)}

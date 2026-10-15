@@ -845,7 +845,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15n">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15o">
 </head>
 <body>
 
@@ -6351,7 +6351,7 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
-  if(_projSectie==='planning'){ _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='planning'){ planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -6618,7 +6618,7 @@ function _tlTeken(key){
     html+=`<div class="tl-rij" style="${esc(kol)}"><div class="tl-naam" title="${esc(c||'Fasen')}">${meer?`<span class="tl-dot" style="background:${esc(agProjKleur(c))}"></span>${esc(c)}`:'Fasen'}</div>
       <div class="tl-fasen" style="grid-column:2 / span ${D.weken.length};height:${Math.max(1,lanes.length)*20+6}px">${f.map(x=>{
         const a=Math.max(0,_tlDagen(D.van,x.start)), b=Math.min(totDagen,_tlDagen(D.van,x.eind)+1);
-        return `<button type="button" class="tl-fase st-${esc(x.status)}" style="left:${esc(a/totDagen*100)}%;width:${Math.max(1.2,(b-a)/totDagen*100)}%;top:${esc(3+x.lane*20)}px;background:${esc(agProjKleur(x.code))}" title="${esc(x.naam)} · ${esc(x.start)} – ${esc(x.eind)} · ${esc(x.status)}" onclick="tlDetail(${jsArg(k)},'fase',${jsArg(x.code)},${jsArg(x.id)})">${esc(x.naam)}</button>`; }).join('')}
+        return `<button type="button" class="tl-fase st-${esc(x.status)}${esc(x.mijlpaal?' mijlpaal':'')}" style="left:${esc(a/totDagen*100)}%;width:${Math.max(1.2,(b-a)/totDagen*100)}%;top:${esc(3+x.lane*20)}px;background:${esc(agProjKleur(x.code))};--fk:${esc(agProjKleur(x.code))}" title="${esc(x.naam)} · ${esc(x.start)} – ${esc(x.eind)} · ${esc(x.status)}" onclick="tlDetail(${jsArg(k)},'fase',${jsArg(x.code)},${jsArg(x.id)})">${esc(x.naam)}</button>`; }).join('')}
       ${!f.length?'<span class="tl-leeg">nog geen fasen</span>':''}</div></div>`;
   });
 
@@ -10244,10 +10244,10 @@ function projectPlanning(proj){
     const naarTaak=bron?` onclick="planNaarTaak(${jsArg(proj.code)},${jsArg(bron)})" title="${esc(fa.naam)} — klik: spring naar de taak"`:` title="${fa.naam}"`;
     rows+=`<div class="plan-row"${esc(rowId)}>
       <div class="plan-rowlabel${esc(koppel)}"${esc(naarTaak)}>${bron?(window.MTKoppelUI?'<span class="kb-mini" title="Gekoppeld aan een taak" aria-label="Gekoppeld aan een taak">'+MTKoppelUI.SVG_DICHT+'</span> ':'🔗 '):''}${fa.gepind?'📌 ':''}${esc(fa.naam)}<br><span class="u">${esc(fa.effort?fa.effort+'u · ':'')}${esc(dt)}</span></div>
-      <div class="plan-track" data-code="${esc(proj.code)}" data-span="${esc(totDagen)}">
+      <div class="plan-track" data-code="${esc(proj.code)}" data-span="${esc(totDagen)}" data-van="${esc(_planYmd(minD))}">
         ${fa.mijlpaal
-          ? `<span class="plan-bar mijlpaal" style="left:${esc(l)}%;background:#d4a017" title="${esc(fa.naam)} — ${esc(fa.start)}" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})"></span>`
-          : `<span class="plan-bar" style="left:${esc(l)}%;width:${esc(w)}%;background:${esc(kleur)}" title="${esc(fa.naam)}: ${esc(fa.start)} → ${esc(fa.eind)} (${esc(fa.duur)} wd, ${esc(fa.effort)}u)" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})">${esc(fa.naam)}</span>`}
+          ? `<span class="plan-bar mijlpaal" style="left:${esc(l)}%;background:#d4a017;--fk:#d4a017" title="${esc(fa.naam)} — ${esc(fa.start)}" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})"></span>`
+          : `<span class="plan-bar" style="left:${esc(l)}%;width:${esc(w)}%;background:${esc(kleur)};--fk:${esc(kleur)}" title="${esc(fa.naam)}: ${esc(fa.start)} → ${esc(fa.eind)} (${esc(fa.duur)} wd, ${esc(fa.effort)}u)" onpointerdown="planDragStart(event,${jsArg(proj.code)},${jsArg(fa.id)})">${esc(fa.naam)}</span>`}
       </div>
     </div>`;
   });
@@ -10272,6 +10272,22 @@ function projectPlanning(proj){
   <div id="plan-editor-${esc(cid)}"></div>`;
 }
 
+// Vandaag-lijn in de projectplanning (alleen in de nieuwe stijl; de oude Gantt heeft er geen): een dunne messing streep per spoor, op de plek van vandaag.
+// De sleeplogica (planDragStart) blijft ongemoeid: de lijn is pointer-events:none en staat buiten de balken.
+function planVandaagLijnen(basis){
+  try{
+    const wasNieuw=document.documentElement.getAttribute('data-stijl')==='nieuw';
+    (basis||document).querySelectorAll('.plan-track[data-van]').forEach(t=>{
+      const oud=t.querySelector(':scope>.plan-vandaag');
+      if(!wasNieuw){ if(oud) oud.remove(); return; }
+      if(oud) return;
+      const span=Number(t.dataset.span)||0, dagen=Math.round((_planD(_planYmd(new Date()))-_planD(t.dataset.van))/86400000);
+      if(!(span>0)||dagen<0||dagen>span) return;
+      const l=document.createElement('span'); l.className='plan-vandaag'; l.style.left=(dagen/span*100)+'%'; l.setAttribute('aria-hidden','true'); t.appendChild(l);
+    });
+  }catch(e){}
+}
+window.addEventListener('mt-stijl',()=>planVandaagLijnen());
 // ── UI-acties ──
 function planGenereerUI(code){
   const cid=_planCid(code);
