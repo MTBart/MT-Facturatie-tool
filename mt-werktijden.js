@@ -55,7 +55,9 @@
     let opgeslagen = true;
     try { opgeslagen = !!(await D.sp.write(BESTAND, nieuw, (r, l) => { const s = P.werktijdenSamen(l, r); S.lijst = s; try { D.storage && D.storage.setItem(LS, JSON.stringify(s)); } catch (e) {} return s; })); } catch (e) { opgeslagen = false; }
     const nuRec = W.lijst().find(x => String(x.slug).toLowerCase() === String(slug).toLowerCase());
-    const behouden = !!(nuRec && nuRec._gewijzigd === nu._gewijzigd);
+    // Bleef MIJN versie staan? Niet alleen de stempel: bij een gelijke stempel kan de tie-breaker de andere schrijver laten winnen, dus ook wie en inhoud vergelijken.
+    const inhoud = x => JSON.stringify([x.dagen || null, x.pauze === undefined ? null : x.pauze, x._vervallen ? 1 : 0]);
+    const behouden = !!(nuRec && nuRec._gewijzigd === nu._gewijzigd && String(nuRec._door || '') === String(nu._door || '') && inhoud(nuRec) === inhoud(nu));
     // Alleen in het auditlog als de wijziging echt gedeeld is en bewaard bleef: bij een mislukte write (alleen lokaal) of een verloren race staat er niets gewijzigd in SharePoint.
     if (opgeslagen && behouden) try { D.audit && D.audit(opt.tombstone ? 'config-werktijden-standaard' : 'config-werktijden', slug, oud && !oud._vervallen ? JSON.stringify({ dagen: oud.dagen, pauze: oud.pauze }) : '', opt.tombstone ? '(standaard)' : JSON.stringify({ dagen: rec.dagen, pauze: rec.pauze })); } catch (e) {}
     return { ok: true, opgeslagen, behouden };

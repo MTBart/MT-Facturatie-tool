@@ -1618,7 +1618,7 @@
     P.WERKTIJD_DAGEN.forEach(k => { const x = r && r.dagen && r.dagen[k], e = x && x.werk ? tMin(x.eind) : null; perDag[k] = e === null || e === undefined ? '' : tTekst(Math.max(0, e - 15)); if (e !== null && e !== undefined) laatste = Math.max(laatste, e - 15); });
     return { perDag, laatste: laatste ? tTekst(laatste) : '' };
   };
-  // Samenvoegen per medewerker: de nieuwste stempel (_gewijzigd) wint; gelijk -> lokaal; een record aan één kant blijft staan (dus twee beheerders die
+  // Samenvoegen per medewerker: de nieuwste stempel (_gewijzigd) wint; bij een gelijke stempel beslist een vaste volgorde (wie schreef het, dan de inhoud), niet lokaal/remote; een record aan één kant blijft staan (dus twee beheerders die
   // verschillende mensen wijzigen verliezen niets). Een tombstone (_vervallen) is een gewoon record met een stempel: "terug naar standaard".
   P.werktijdenSamen = function (lokaal, remote) {
     const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
