@@ -1690,7 +1690,7 @@
       const d = per.get(b.datum); if (d) d.gepland_min += Math.max(0, Math.round(getal(b.duurMin)));
     });
     (taken || []).forEach(t => {
-      if (!t || dekt.has(t.id) || (t.status || 'todo') === 'klaar') return;
+      if (!t || dekt.has(t.id) || t.voorstel || (t.status || 'todo') === 'klaar') return;   // een taak met een open voorstel-markering telt niet mee (zie weekRooster)
       const min = P.taakBudgetMin(t); if (min <= 0) return;
       const s = P.isYmd(t.start) ? t.start : (P.isYmd(t.eind) ? t.eind : ''); if (!s) return;
       const e = P.isYmd(t.eind) ? t.eind : s, a = dnr(s), z = Math.max(a, dnr(e)); let n = 0;
@@ -1749,7 +1749,8 @@
         for (let i = a; i <= z && i - a < 400; i++) {
           if (!isWerk(i, V)) continue;
           const di = idx.get(dymd(i)); if (di === undefined) continue;
-          const item = Object.assign({}, basis, { min: Math.round(per), datum: dymd(i) });
+          // Een taak met een open voorstel-markering (door de werkplaats gemeld, nog niet overgenomen) blijft zichtbaar maar telt niet mee, net als een voorstel-planblok.
+          const item = Object.assign({}, basis, { min: Math.round(per), datum: dymd(i) }, t.voorstel ? { planvoorstel: true } : {});
           (per > half ? [0, 1] : [kies(r, di)]).forEach(dl => r.cellen[di][dl].push(item));
         }
       });
@@ -1770,7 +1771,7 @@
   // ── Teamcapaciteit: per persoon per dag gepland tegenover beschikbaar (alleen lezen) ──
   // Rijen = het team (en "Niet toegewezen" zonder capaciteit), kolommen = de werkdagen van deze en volgende week. Beschikbaar = werkuren per week / 5 (standaard 40 uur,
   // opt.werkuren = { slug: uren }) op een werkdag die geen vrije dag (opt.vrij) en geen verlof (opt.verlof) is. Gepland = de planblokken (geen open voorstel) en de taken met een datum
-  // (zie weekRooster), per dag samengeteld; een begonnen dagdeel telt voor een heel dagdeel (de werkplaats plant in dagdelen). vrij = wat er van de dag overblijft, over = wat erboven zit.
+  // (geen taken met een open voorstel-markering; zie weekRooster), per dag samengeteld; een begonnen dagdeel telt voor een heel dagdeel (de werkplaats plant in dagdelen). vrij = wat er van de dag overblijft, over = wat erboven zit.
   // → { van, tot, dagen, rijen: [{ slug, naam, heeftCap, dagen: [{datum, werkdag, verlof, cap_min, gepland_min, dagdelen, vrij_min, over_min, items}], weken: [{cap_min, gepland_min, vrij_min, over_min}] }] }
   P.teamCapaciteit = function (takenObj, depsObj, blokken, opt) {
     const o = opt || {}, team = Array.isArray(o.team) ? o.team : [], r = P.weekRooster(takenObj, depsObj, blokken, o), wu = o.werkuren && typeof o.werkuren === 'object' ? o.werkuren : {}, wt = P.werktijdenMap(o.werktijden);   // wt: de werktijden per medewerker (leeg = alles als voorheen)
