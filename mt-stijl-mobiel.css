@@ -1,0 +1,96 @@
+/* =====================================================================
+   M&T "Nieuwe stijl" voor de telefoon (restyling brok 12, mobiel.html): alles staat onder html[data-stijl="nieuw"].
+   Zonder dat attribuut doet dit bestand niets: de app is dan pixel-gelijk aan de oude stijl. Dezelfde schakelaar als de desktop
+   (localStorage "mt-stijl" of ?stijl=nieuw|oud, per toestel); aan/uit via Meer > Nieuwe stijl proberen.
+   Dezelfde tokens als mt-stijl-nieuw.css: de variabelen van mobiel.html krijgen nieuwe waarden, dus kaarten, chips en lijsten volgen vanzelf.
+   De indeling blijft: dezelfde tabs, dezelfde onderbalk. Doelen: 320-390 breed, knoppen minstens 44 px, de onderbalk vrij van de thuisbalk (safe-area).
+   De kop blijft donker groen: de iOS-statusbalk (black-translucent) toont witte tekst en die moet leesbaar blijven.
+   ===================================================================== */
+
+/* ── 1. Variabelen ─────────────────────────────────────────────────── */
+html[data-stijl="nieuw"]{
+  --green:#17643f; --green-700:#0f4d2f; --green-900:#0a3a23; --green-mid:#2f7d55;
+  --green-50:#ddefe3; --green-100:#c3e0cd;
+  --gold:#d19a1f; --gold-700:#b07f12; --gold-mid:#ecc766; --gold-50:#fbefd2; --gold-text:#6b4c05;
+  --n-0:#ffffff; --n-50:#faf8f4; --n-100:#f6f3ed; --n-150:#f1ede5; --n-200:#ece7de; --n-300:#dfd8cb;
+  --n-400:#bdb4a2; --n-500:#646a64; --n-600:#596059; --n-800:#2f3632; --n-900:#1b211e;
+  --success:#1a6e3b; --success-50:#e3f3e8;
+  --warning:#8f5508; --warning-50:#fcefd9;
+  --error:#c4322a;   --error-50:#fce6e4;
+  --info:#3e5c76;    --info-50:#e6edf3;
+  --surface:#ffffff; --surface-sunken:var(--n-150); --surface-overlay:#ffffff;
+  --border:var(--n-300); --border-strong:#9a917f; --border-hair:var(--n-200);
+  --shadow-sm:0 1px 2px rgba(40,34,20,.05); --shadow-card:0 1px 3px rgba(40,34,20,.07); --shadow-pop:0 12px 32px rgba(40,34,20,.20);
+  --radius-sm:4px; --radius:8px; --radius-lg:8px;
+  --sans:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --serif:'Bricolage Grotesque','Geist',system-ui,sans-serif;
+  --mono:'Geist Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  --canvas:#f6f3ed; --ink:#1b211e; --ink-2:#596059; --line:#dfd8cb; --line-strong:#9a917f;
+  --primary:#17643f; --primary-soft:#ddefe3; --primary-text:#17643f; --brass:#d19a1f; --brass-soft:#fbefd2; --brass-ink:#6b4c05;
+  --kb-open-bg:#fbefd2; --kb-open-fg:#6b4c05; --kb-open-rand:#ecc766; --kb-ok-bg:#e3f3e8; --kb-ok-fg:#1a6e3b; --kb-ok-rand:#9ccbaa;
+  --bar-h:52px;
+}
+
+/* ── 2. Basis, kop en onderbalk ───────────────────────────────────── */
+html[data-stijl="nieuw"] body{background:var(--canvas)}
+html[data-stijl="nieuw"] .app-header{background:var(--green-700);box-shadow:none}
+html[data-stijl="nieuw"] .app-header::after{background:linear-gradient(90deg,var(--gold) 0,var(--gold) 72px,rgba(255,255,255,.18) 72px,rgba(255,255,255,.18) 100%)}
+html[data-stijl="nieuw"] .app-title{font-family:var(--serif);font-weight:600;font-size:19px;letter-spacing:-0.01em}
+html[data-stijl="nieuw"] .app-title span{font-style:normal;color:var(--gold-mid)}
+html[data-stijl="nieuw"] .header-btns{gap:4px}
+html[data-stijl="nieuw"] .header-info-btn,html[data-stijl="nieuw"] .user-avatar-btn{width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28)}
+html[data-stijl="nieuw"] .header-info-btn:active,html[data-stijl="nieuw"] .user-avatar-btn:active{background:rgba(255,255,255,.28)}
+html[data-stijl="nieuw"] .notif-badge{border-radius:4px;border-color:var(--green-700)}
+html[data-stijl="nieuw"] .demo-badge{border-radius:4px;color:var(--ink)}
+@media (max-width:339px){html[data-stijl="nieuw"] .app-header{padding-left:10px;padding-right:10px}html[data-stijl="nieuw"] .header-btns{gap:2px}}
+html[data-stijl="nieuw"] .timer-bar{background:var(--green-900);border-bottom:0}
+html[data-stijl="nieuw"] .timer-bar-time{font-family:var(--mono)}
+html[data-stijl="nieuw"] .timer-bar-stop{min-height:44px;min-width:44px;border-radius:8px;padding:0 14px}
+/* onderbalk: de safe-area komt BOVEN op de knoppenhoogte, zodat de knoppen boven de thuisbalk blijven (in de oude stijl zat die ruimte er binnen) */
+html[data-stijl="nieuw"] .bottom-nav{flex:0 0 auto;height:calc(var(--nav-h) + env(safe-area-inset-bottom,0px));background:var(--surface);border-top:1px solid var(--line);box-shadow:none}
+html[data-stijl="nieuw"] .nav-btn{color:var(--ink-2);font-size:11px;min-height:48px}
+html[data-stijl="nieuw"] .nav-btn.active,html[data-stijl="nieuw"] .nav-btn.active .nav-icon{color:var(--primary-text)}
+html[data-stijl="nieuw"] .nav-btn.active .nav-icon{filter:none}
+html[data-stijl="nieuw"] .nav-btn::before{background:var(--gold);border-radius:0 0 2px 2px}
+@media (max-width:420px){html[data-stijl="nieuw"] .nav-btn{font-size:10px}}
+html[data-stijl="nieuw"] .vd-plus{background:var(--primary);border-radius:12px;box-shadow:var(--shadow-pop)}
+html[data-stijl="nieuw"] .toast{bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));border-radius:8px}
+html[data-stijl="nieuw"] .kb-pop-onder{bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+
+/* ── 3. Kaarten, knoppen, formulieren: vlak en hoekig ─────────────── */
+html[data-stijl="nieuw"] .card{border-color:var(--line);box-shadow:none}
+html[data-stijl="nieuw"] .card-label,html[data-stijl="nieuw"] .section-head{letter-spacing:0.06em}
+html[data-stijl="nieuw"] .btn{border-radius:var(--radius-sm);font-weight:600}
+html[data-stijl="nieuw"] .btn-primary{background:var(--primary);color:#fff}
+html[data-stijl="nieuw"] .btn-primary:active{background:var(--green-700)}
+html[data-stijl="nieuw"] .btn-gold{background:var(--gold);color:var(--ink)}
+html[data-stijl="nieuw"] .btn-secondary{border-color:var(--line-strong)}
+html[data-stijl="nieuw"] .btn-sm{min-height:44px}
+html[data-stijl="nieuw"] .btn-icon{border-radius:8px}
+html[data-stijl="nieuw"] input,html[data-stijl="nieuw"] select,html[data-stijl="nieuw"] textarea{font-size:16px;border-color:var(--line-strong)}   /* 16 px: iOS zoomt anders in bij het typen */
+html[data-stijl="nieuw"] input:focus,html[data-stijl="nieuw"] select:focus,html[data-stijl="nieuw"] textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(23,100,63,.20)}
+html[data-stijl="nieuw"] .badge,html[data-stijl="nieuw"] .vd-chip{border-radius:4px}
+html[data-stijl="nieuw"] .sheet{border-radius:12px 12px 0 0}
+html[data-stijl="nieuw"] .sheet-close{width:44px;height:44px;border-radius:8px;top:8px;right:8px}
+html[data-stijl="nieuw"] .sheet-action-btn{border-color:var(--line);min-height:56px}
+html[data-stijl="nieuw"] .sheet-action-btn:active{background:var(--primary-soft);border-color:var(--green-100)}
+html[data-stijl="nieuw"] .sheet-action-title{font-family:var(--sans)}
+html[data-stijl="nieuw"] .kb-pop-x{min-width:44px;min-height:44px}
+
+/* ── 4. Aanmelden en meldingen ────────────────────────────────────── */
+html[data-stijl="nieuw"] #login-screen{background:var(--green-900)}
+html[data-stijl="nieuw"] .login-logo{font-weight:600;letter-spacing:-0.01em}
+html[data-stijl="nieuw"] .login-logo span{font-style:normal}
+html[data-stijl="nieuw"] .login-card{border-radius:8px}
+html[data-stijl="nieuw"] .btn-ms{border-radius:4px;min-height:52px}
+html[data-stijl="nieuw"] .login-demo{min-height:44px;display:flex;align-items:center;justify-content:center}
+html[data-stijl="nieuw"] .notif-banner{background:var(--green-700);border-radius:8px}
+/* ── 5. Agenda en Uren: klikdoelen van minstens 44 px (de indeling blijft; smalle schermen scrollen de dagenstrook) ─────────────── */
+html[data-stijl="nieuw"] .view-switch button{min-height:44px;padding:8px 12px}
+html[data-stijl="nieuw"] .week-label{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:0 6px}
+html[data-stijl="nieuw"] .week-search input[type="search"]{min-height:44px;font-size:16px;width:60px}
+html[data-stijl="nieuw"] .agenda-cal-btn{width:44px;min-height:44px}
+html[data-stijl="nieuw"] .agenda-arrow{width:44px}
+html[data-stijl="nieuw"] .day-pill{min-width:44px;min-height:44px}
+html[data-stijl="nieuw"] .timer-mini-btn{min-height:44px}html[data-stijl="nieuw"] .larry-head-close{min-width:44px;min-height:44px}
+html[data-stijl="nieuw"] .sheet-head{padding-right:64px}   /* de titel loopt niet onder de sluitknop van 44 px */
