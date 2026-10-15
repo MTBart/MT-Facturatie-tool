@@ -59,7 +59,7 @@
 <script src="mt-planverplaats.js?v=2026-10-15s"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-15s"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
-<script src="mt-uren-nieuw.js?v=2026-10-15v"></script>
+<script src="mt-uren-nieuw.js?v=2026-10-15x"></script>
 <script src="mt-dagvraag.js?v=2026-10-15v"></script>
 <script src="mt-vandaag-desk.js?v=2026-10-15s"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
@@ -847,7 +847,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15v">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15x">
 </head>
 <body>
 
@@ -3865,7 +3865,7 @@ function urenProjInfo(pid,ps){
 function urenGepland(dag,slug){
   const uit=[]; agPlanActief().forEach(b=>{ if(!b||b.datum!==dag||b.status==='voorstel'||!MTPlanning.zelfdePersoon(b.persoon,slug,MT_TEAM)) return;
     const m=/^(\d{1,2}):(\d{2})/.exec(b.start||''), dur=Math.round(Number(b.duurMin)||0); if(!m||!(dur>0)) return;
-    const van=+m[1]*60+ +m[2]; uit.push({id:b.id,titel:b.taak||projKort(b.project_code)||'Planblok',van,tot:van+dur,proj:b.project_code?{label:projKort(b.project_code),kleur:agProjKleur(b.project_code)}:null}); });
+    const van=+m[1]*60+ +m[2]; uit.push({id:b.id,titel:b.taak||projKort(b.project_code)||'Planblok',van,tot:van+dur,proj:b.project_code?{label:projKort(b.project_code),kleur:agProjKleur(b.project_code)}:null,tgProjectId:(()=>{ const p=b.project_code?projVind(b.project_code):null; return p&&p.tg_project_id!=null?p.tg_project_id:null; })()}); });
   return uit;
 }
 function urenKlaarTaken(){
