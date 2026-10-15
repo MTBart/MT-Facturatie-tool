@@ -5,8 +5,53 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-15 — v2.17.1: showTab roept de auto-sync alleen aan als die bestaat; mt_ag_autosync als cache in de verhuisinventaris
+- Commit: `0919c33` | Auteur: Bart Witte
+
+## 2026-10-15 — v2.17.1: nieuwe Agenda-variabelen als var (geen TDZ bij vroege showTab)
+- Commit: `e15ef40` | Auteur: Bart Witte
+
+## 2026-10-15 — v2.17.1: Agenda synct de getoonde week automatisch bij openen en weeknavigatie
+- Commit: `e04635a` | Auteur: Bart Witte
+
+## 2026-10-15 — v2.17.1: Agenda-projectfilter alleen uit de getoonde week, namen ververst, uitklapmenu bovenop
+- Commit: `49a1ae0` | Auteur: Bart Witte
+
+## 2026-10-15 — Release v2.17.0: planning stap 2 (Vandaag mobiel, Mijn werk, voorstellen, werkplaats-tv, teamcapaciteit), Admin-tab, korte projectnaam en startvenster; backup = v2.16.8
+- Commit: `ecb819c` | Auteur: Bart Witte
+
+## 2026-10-15 — v2.17 Codex-fixes: cachebusters, rol fail-closed, geen dubbele timerstart, strengere mapzoeker, exacte automatische naam
+- Commit: `47a0a2f` | Auteur: Bart Witte
+
+## 2026-10-15 — v2.17: korte projectnaam (nr-naam mapstijl, XML) + startvenster "X taken wachten op je"
+- Commit: `2c7c4a1` | Auteur: Bart Witte
+
+## 2026-10-14 — v2.16.8: projectindex als var op de oorspronkelijke plek; robuustere aanroepen; cacheversies in het datumschema
+- Commit: `01ac764` | Auteur: Bart Witte
+
 ## 2026-10-14 — v2.16.8: projectindex als var op de oorspronkelijke plek; robuustere aanroepen; cacheversies in het datumschema
 - Commit: `bd0ff82` | Auteur: Bart Witte
+
+## 2026-10-14 — v2.16.7: offertenummer eerst bewaren, dan pas Toggl hernoemen; uitkomst altijd zichtbaar
+- Commit: `b4a50e0` | Auteur: Bart Witte
+
+## 2026-10-14 — v2.16.6: tellers in de projecttabs tonen geen HTML-code meer
+- Commit: `5d96c45` | Auteur: Bart Witte
+
+## 2026-10-14 — v2.16.5: projectleider en aanhef als keuzelijst; projectleider = wie het project aanmaakt
+- Commit: `7a6aa21` | Auteur: Bart Witte
+
+## 2026-10-14 — v2.16.4: Toggl-naam = "<projectnummer> <projectnaam>" (klant is een apart veld)
+- Commit: `cc1070b` | Auteur: Bart Witte
+
+## 2026-10-14 — v2.16.3: Binnenkomend (info@) uit Projecten, naar Inbox ▸ Binnenkomend info@
+- Commit: `cd1c050` | Auteur: Bart Witte
+
+## 2026-10-14 — Releaseprocedure: verplichte laadtest van de hele pagina (tools/laadtest.mjs)
+- Commit: `0de8d5a` | Auteur: Bart Witte
+
+## 2026-10-14 — Hotfix v2.16.2: lopende Toggl-projecten niet meer weggefilterd als "niet actief"
+- Commit: `030da34` | Auteur: Bart Witte
 
 ## 2026-10-14 — v2.16.7: offertenummer eerst bewaren, dan pas Toggl hernoemen; uitkomst altijd zichtbaar
 - Commit: `2a82c02` | Auteur: Bart Witte
@@ -20,8 +65,14 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 ## 2026-10-14 — v2.16.4: Toggl-naam = "<projectnummer> <projectnaam>" (klant is een apart veld)
 - Commit: `a188686` | Auteur: Bart Witte
 
+## 2026-10-14 — Geschiedenis-tab gearchiveerd: knop uit de menubalk, code blijft staan
+- Commit: `a8cd88d` | Auteur: Bart Witte
+
 ## 2026-10-14 — v2.16.3: Binnenkomend (info@) uit Projecten, naar Inbox ▸ Binnenkomend info@
 - Commit: `e8ef5b4` | Auteur: Bart Witte
+
+## 2026-10-14 — Admin: Instellingen en Activiteit samengevoegd als subtabs onder Admin
+- Commit: `6c7e474` | Auteur: Bart Witte
 
 ## 2026-10-14 — Hotfix v2.16.2: lopende Toggl-projecten niet meer weggefilterd als "niet actief"
 - Commit: `fe49483` | Auteur: Bart Witte
@@ -30,7 +81,46 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 - Commit: `75d930c` | Auteur: Bart Witte
 
 ## 2026-10-14 — Hotfix v2.16.1: projectindex-variabelen vóór projLaad() declareren
+- Commit: `246aa42` | Auteur: Bart Witte
+
+## 2026-10-14 — Hotfix v2.16.1: projectindex-variabelen vóór projLaad() declareren
 - Commit: `8b95ebd` | Auteur: Bart Witte
+
+## 2026-10-14 — Mobiel: onderbalk opgeruimd (Vandaag, Agenda, Projecten, Uren, Meer)
+- Commit: `026dc94` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning: capaciteitsplanning voor het team als standaardweergave, met vrije dagen en verlof
+- Commit: `e0b74d1` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2d: deep link van de tv naar de telefoon (de QR-tekening wacht op een bibliotheek)
+- Commit: `8af6056` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2d: tv-tabs Projecten (stroom) en Let op
+- Commit: `dd44b0b` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2d: werkplaats-tv met de Kalender (alleen lezen)
+- Commit: `96d3bb3` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2c: voorstellen van de werkplaats overnemen of afwijzen
+- Commit: `dbb0c66` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2c: Mijn werk op de desktop (Agenda, eerste weergave)
+- Commit: `7f08d63` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2: Vandaag afgewerkt (onderbalk met acht knoppen, de +, uitleg en verversen)
+- Commit: `1e911e4` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2b: Klaar zonder timer vraagt "Tijd boeken: ...?"
+- Commit: `ea7b93d` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2b: de grote + met Taak melden, Probleem melden en Bestelvoorstel
+- Commit: `670946c` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2b: Bezig, Wacht en Klaar vanaf de telefoon
+- Commit: `d1fcc29` | Auteur: Bart Witte
+
+## 2026-10-14 — Planning stap 2a: Vandaag op de telefoon (alleen lezen)
+- Commit: `ccd4b27` | Auteur: Bart Witte
 
 ## 2026-10-14 — Outlook-README stap 6: mailstroomregel op zes cijfers; nummers tellen door vanaf 260801, dus geen jaarpatroon
 - Commit: `a893b67` | Auteur: Bart Witte

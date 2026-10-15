@@ -588,6 +588,31 @@ async function tgTimerSync(){
   try{ const cur=await tgStore.lopendeTimer(); _tgTimer.entry=(cur&&cur.id)?cur:null; tgTimerPaint(); }
   catch(e){ tgStatus('Timer-status: '+e.message,'#c0392b'); }
 }
+// Startvenster (mt-startvenster.js): loopt er nu een timer? true/false, of null als dat niet te weten is (niet ingelogd, geen verbinding): nooit een fout.
+async function tgTimerLoopt(){
+  try{ const cur=await tgStore.lopendeTimer(); _tgTimer.entry=(cur&&cur.id)?cur:null; tgTimerPaint(); return !!_tgTimer.entry; }
+  catch(e){ return null; }
+}
+// Timer starten zonder bevestigingsvraag (de gebruiker koos zelf "Start timer" in het startvenster) op een Toggl-project met de taaknaam als omschrijving.
+// → {ok:true} of {ok:false,reden} in gewone taal; geen alert(), geen retry (een tweede POST zou een tweede timer kunnen starten).
+async function tgTimerStartDirect({projectId,omschrijving}){
+  if(!projectId) return {ok:false,reden:'Dit project heeft nog geen Toggl-project: de timer kan hier niet starten.'};
+  if(_tgTimerBusy||_tgMutatieBusy) return {ok:false,reden:'Er loopt nog een Toggl-wijziging; probeer het zo opnieuw.'};
+  if(_tgTimer.entry) return {ok:false,reden:'Er loopt al een timer.'};
+  _tgTimerBusy=true; tgTimerPaint();
+  try{
+    // Vlak voor de POST de lopende timer opnieuw lezen (een ander toestel kan intussen gestart zijn): nooit stil vervangen of dubbel starten.
+    let cur=null;
+    try{ cur=await tgStore.lopendeTimer(); }
+    catch(e){ return {ok:false,reden:'Kon niet controleren of er al een timer loopt; niet gestart. '+String((e&&e.message)||e)}; }
+    if(cur&&cur.id){ _tgTimer.entry=cur; return {ok:false,reden:'Er loopt al een timer op '+(cur.description?'„'+cur.description+'”':'een ander project')+'.'}; }
+    const body={created_with:'MT-cockpit',description:String(omschrijving||''),workspace_id:TG_WS,start:new Date().toISOString().replace(/\.\d{3}Z$/,'Z'),duration:-1,project_id:parseInt(projectId)};
+    const made=await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body);
+    _tgTimer.entry=(made&&made.id)?made:null;
+    return _tgTimer.entry?{ok:true}:{ok:false,reden:'Toggl gaf geen timer terug; kijk in de Toggl-tab of hij loopt.'};
+  }catch(e){ return {ok:false,reden:'Timer starten mislukt: '+String((e&&e.message)||e)}; }
+  finally{ _tgTimerBusy=false; tgTimerPaint(); }
+}
 function tgTimerPaint(){
   const btn=document.getElementById('tg-startstop'), clk=document.getElementById('tg-clock');
   if(!btn||!clk) return;
