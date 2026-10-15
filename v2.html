@@ -15646,14 +15646,17 @@ function capWaarschuwing(blok,datum){
     return slug?MTPlanVerplaats.waarschuwing({soort:'verplaats',blokId:blok.id,persoon:slug,datum},_capCtx()):'';
   }catch(e){ return ''; }
 }
-function agPlanDrop(evt,datum){
+// Eerst de actuele stand van SharePoint (_capVers: samengevoegd met de lokale lijst), dan pas de controles en het opslaan: de verlof-, vrije-dag- en werktijdencheck draait zo niet op een
+// verouderde lijst (een blok dat een ander net verplaatste, verwijderde of als voorstel indiende). Na het wachten op de bevestiging nog een keer vers lezen en controleren; is de vraag intussen anders
+// (ander persoon, andere situatie) dan wordt opnieuw gevraagd. Opslaan blijft via agPlanSave (leest vers, voegt per id samen met de merger mt_planblokken, ETag/412). Zonder verbinding: zoals voorheen op de lokale stand.
+async function agPlanDrop(evt,datum){
   evt.preventDefault();
   if(!capMagSlepen()){ _planDragId=null; planToast('Dit mag je niet met jouw rol: verplaatsen is voor kantoor.'); return; }   // ook bij het loslaten (niet alleen bij het oppakken)
   const id=_planDragId; if(!id) return;
   const el=document.getElementById('agplan-drop-'+datum); if(el) el.style.background='';
   const blok=agPlanActief().find(b=>b.id===id);
   if(!blok||blok.status==='voorstel') return;   // een open voorstel beslist kantoor, dat verplaats je niet (ook niet als de drag toch gestart is)
-  // Bereken nieuwe starttijd uit drop-positie (vóór het wachten op de bevestiging: daarna bestaat de gebeurtenis niet meer)
+  // Bereken nieuwe starttijd uit drop-positie (vóór het wachten: daarna bestaat de gebeurtenis niet meer)
   const dropEl=evt.currentTarget;
   const rect=dropEl.getBoundingClientRect();
   const relY=evt.clientY-rect.top;
@@ -15661,18 +15664,26 @@ function agPlanDrop(evt,datum){
   const minRaw=Math.round(((relY%AG_UURPX)/AG_UURPX)*4)*15;
   const startStr=`${String(Math.min(uur,AG_EIND-1)).padStart(2,'0')}:${String(minRaw).padStart(2,'0')}`;
   _planDragId=null;
-  const doe=()=>{
-    const arr=agPlanBlokken().map(b=>{
+  let bevestigd=null;   // de vraag die de gebruiker al bevestigde
+  for(let ronde=0;ronde<3;ronde++){
+    const vers=await _capVers(); if(!vers.ok){ planToast(vers.reden); agPlanRender(); return; }
+    const nu=agPlanActief().find(b=>b.id===id);
+    if(!nu||nu.status==='voorstel'){ planToast('Dit planblok is intussen verplaatst of verwijderd; er is niets gewijzigd.'); agPlanRender(); return; }
+    const vraag=capWaarschuwing(nu,datum);
+    if(vraag&&vraag!==bevestigd){
+      // Verlof, verplichte vrije dag of niet-werkdag is geen weigering meer maar een vraag; Annuleren schrijft niets en het blok blijft staan
+      const ja=await mtDialog.confirm({title:'Controleer de planning',message:vraag,okLabel:'Toch inplannen',cancelLabel:'Annuleren'});
+      if(!ja){ agPlanRender(); return; }
+      bevestigd=vraag; continue;   // nog een keer vers lezen: er kan intussen iets veranderd zijn
+    }
+    _planblokken=agPlanBlokken().map(b=>{
       if(b.id!==id) return b;
       return _spStempel({...b,datum,start:startStr,ts:new Date().toISOString(),door:mtMijEmail()},b);
     });
-    _planblokken=arr;
-    agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok verplaatst');});
-  };
-  const vraag=capWaarschuwing(blok,datum);
-  if(!vraag){ doe(); return; }
-  // Verlof, verplichte vrije dag of niet-werkdag is geen weigering meer maar een vraag; Annuleren schrijft niets en het blok blijft staan
-  mtDialog.confirm({title:'Controleer de planning',message:vraag,okLabel:'Toch inplannen',cancelLabel:'Annuleren'}).then(ja=>{ if(ja) doe(); else agPlanRender(); });
+    const ok=await agPlanSave(); agPlanRender(); if(ok!==false) planToast('✓ Planblok verplaatst');
+    return;
+  }
+  planToast('De planning veranderde terwijl je bevestigde; er is niets gewijzigd. Probeer het opnieuw.'); agPlanRender();
 }
 
 // ── Slepen in de capaciteit (restyling brok 8, mt-capaciteit-nieuw.js + mt-planverplaats.js) ──
