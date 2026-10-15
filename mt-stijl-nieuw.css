@@ -190,3 +190,5 @@ html[data-stijl="nieuw"] .mtr.mtr-met{max-width:min(100%,1800px)}
 html[data-stijl="nieuw"] .card>p,html[data-stijl="nieuw"] .card>.field>p{max-width:80ch}
 html[data-stijl="nieuw"] .card .field>input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),
 html[data-stijl="nieuw"] .card .field>select,html[data-stijl="nieuw"] .card .field>textarea{max-width:720px}
+/* tabellen met weinig kolommen rekken niet uit op brede schermen (bv. "Per vestiging"); brede overzichten kiezen zelf: class data-table--breed */
+html[data-stijl="nieuw"] .data-table:not(.data-table--breed),html[data-stijl="nieuw"] .card>table[style*="width:100%"]{max-width:1400px}
