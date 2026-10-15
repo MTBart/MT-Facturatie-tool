@@ -159,3 +159,10 @@ html[data-zb-auto] .zb-nav .zb-toggle{display:none}
 /* lage vensters: rijen iets compacter zodat alles zonder scrollen past */
 @media (max-height:760px){html[data-zijbalk] .zb-nav .tab-btn,html[data-zijbalk] .zb-nav .zb-meer,html[data-zijbalk] .zb-nav .zb-toggle{height:32px}html[data-zijbalk] .zb-nav{padding:8px 0}}
 @media (prefers-reduced-motion:reduce){html[data-zijbalk] .main,html[data-zijbalk] .zb-nav{transition:none}}
+/* ── 5. Opgeknapt na review brok 2: geen regelbreuken in bedragen en chips (Geist Mono is breder) ────────── */
+html[data-stijl="nieuw"] .badge,html[data-stijl="nieuw"] .opl-pill,html[data-stijl="nieuw"] .tab-badge,html[data-stijl="nieuw"] .kb-chip,
+html[data-stijl="nieuw"] .data-table .num,html[data-stijl="nieuw"] .num,html[data-stijl="nieuw"] .kpi-waarde{white-space:nowrap}
+html[data-stijl="nieuw"] .badge{letter-spacing:0;padding:2px 7px}
+/* tabellen die breder worden dan hun kaart scrollen horizontaal in de kaart (alleen kaarten waar de tabel direct in staat) */
+html[data-stijl="nieuw"] .card:has(>.data-table){overflow-x:auto}
+html[data-stijl="nieuw"] .data-table{min-width:max-content}
