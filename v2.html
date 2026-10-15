@@ -56,7 +56,8 @@
 <script src="mt-planning.js?v=2026-10-15b"></script>
 <script src="mt-mijnwerk.js?v=2026-10-15b"></script>
 <script src="mt-capaciteit.js?v=2026-10-15j"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-15l"></script>
+<script src="mt-planverplaats.js?v=2026-10-15m"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-15m"></script>
 <script src="mt-vandaag-desk.js?v=2026-10-15i"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
@@ -843,7 +844,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15l">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15m">
 </head>
 <body>
 
@@ -3818,6 +3819,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  magSlepen:()=>capMagSlepen(), verplaats:spec=>capVerplaats(spec), herstel:w=>capHerstel(w), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
 window.addEventListener('mt-stijl',()=>{ const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
@@ -15458,6 +15460,31 @@ function agPlanDrop(evt,datum){
   });
   _planblokken=arr;
   agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok verplaatst');});
+}
+
+// ── Slepen in de capaciteit (restyling brok 8, mt-capaciteit-nieuw.js + mt-planverplaats.js) ──
+// Zelfde opslag als agPlanDrop: de blokken blijven records in mt_planblokken met een stempel; agPlanSave leest vers, voegt per id samen
+// (_SP.mergers.mt_planblokken) en schrijft met de ETag terug (een 412 wordt met dezelfde samenvoeger opgelost). Open voorstellen worden niet versleept.
+// Recht: alleen met het recht om projecten te wijzigen (niet "lezen", niet de werkplaats) en alleen als de rol geladen is (fail-closed).
+function capMagSlepen(){ try{ return !!(window.MTRol&&MTRol.me)&&MTRol.mag('projecten:wijzigen')&&!pvMoetVoorstel(); }catch(e){ return false; } }
+function _capCtx(){ return { blokken:agPlanBlokken(), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), mag:capMagSlepen(), nu:Date.now(), wie:mtMijEmail(), stempel:_spStempel,
+  nieuwId:()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7) }; }
+async function capVerplaats(spec){
+  if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  if(!_planblokken) await agPlanLoad();
+  const r=MTPlanVerplaats.pas(spec,_capCtx()); if(!r.ok||r.noop) return r;
+  _planblokken=r.blokken;
+  const opgeslagen=await agPlanSave();   // false = SharePoint niet bereikbaar: de wijziging staat dan alleen lokaal (agPlanSave meldt dat zelf)
+  const nu=agPlanBlokken().find(b=>b&&String(b.id)===String(r.wijziging.id));
+  return { ok:true, wijziging:r.wijziging, opgeslagen:opgeslagen!==false, behouden:!!(nu&&nu._gewijzigd===r.wijziging.stempel) };   // behouden=false: iemand anders was net sneller met dit blok
+}
+async function capHerstel(w){
+  if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  if(!_planblokken) await agPlanLoad();
+  const r=MTPlanVerplaats.ongedaan(w,_capCtx()); if(!r.ok) return r;
+  _planblokken=r.blokken;
+  const opgeslagen=await agPlanSave();
+  return { ok:true, opgeslagen:opgeslagen!==false };
 }
 </script>
 
