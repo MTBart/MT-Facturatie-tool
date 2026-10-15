@@ -1,5 +1,17 @@
 [
   {
+    "versie": "2.17.1",
+    "datum": "2026-10-15",
+    "titel": "Agenda: projectfilter opgeschoond",
+    "voor": "iedereen",
+    "punten": [
+      "Het projectfilter in de Agenda toont alleen de projecten uit de week die je bekijkt. Oude en gearchiveerde projecten staan er niet meer tussen.",
+      "Projecten staan met hun projectnummer en naam in de lijst, net als in Mijn werk. Projecten die alleen in Toggl bestaan houden hun Toggl-naam.",
+      "Nieuwe Toggl-projecten krijgen in de Agenda nu hun naam, in plaats van 'Toggl' met een nummer.",
+      "Het uitklapmenu van het filter ligt nu altijd bovenop de rest van het scherm."
+    ]
+  },
+  {
     "versie": "2.17.0",
     "datum": "2026-10-15",
     "titel": "Mijn werk, Vandaag op de telefoon en het startvenster",

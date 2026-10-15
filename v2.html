@@ -845,7 +845,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.17.0</span>
+    <span class="header-version">v2.17.1</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -1634,6 +1634,8 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         background:#fff;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:5px;transition:.12s}
       #tab-agenda .ag-chip.uit{opacity:.4}
       #tab-agenda .ag-chip .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+      /* Elk direct kind van de tab heeft de mtRise-animatie (eigen stapelcontext, volgorde = DOM-volgorde): zonder z-index viel het uitklappaneel achter de blokken eronder. */
+      #tab-agenda .ag-filterkaart{position:relative;z-index:20}
       #tab-agenda .ag-drop{position:relative;display:inline-block}
       #tab-agenda .ag-dropbtn{display:inline-flex;align-items:center;gap:6px}
       #tab-agenda .ag-droppanel{position:absolute;z-index:30;top:calc(100% + 4px);left:0;
@@ -1695,7 +1697,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <button class="btn btn-xs btn-secondary" onclick="aanwezigLaad(true)" title="Verversen" aria-label="Aanwezigheid verversen">↻</button></div>
       <div id="aw-inhoud" style="font-size:13px"></div>
     </div>
-    <div class="card" style="padding:1rem;margin-bottom:1rem">
+    <div class="card ag-filterkaart" style="padding:1rem;margin-bottom:1rem">
       <div class="flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div class="flex" style="gap:6px;align-items:center">
           <button class="btn btn-sm btn-secondary ag-nav" id="agenda-prev" onclick="agendaNav(-1)" title="Vorige week met uren">◀</button>
@@ -3790,6 +3792,7 @@ function agEnsureNames(){
   const {pn,un}=agNames();
   const verOk=localStorage.getItem('mt_toggl_names_ver')===AG_NAMES_V;
   if(verOk&&Object.keys(pn).length&&Object.keys(un).length) return;
+  _agNamenVers=true;
   if(typeof agNamen==='function') agNamen(true).then(r=>{if(r&&(Object.keys(r.pn||{}).length||Object.keys(r.un||{}).length))renderAgenda();}).catch(()=>{});
 }
 // Sluit de filter-dropdowns bij een klik buiten een .ag-drop.
@@ -3807,30 +3810,74 @@ function agendaZetKleur(v){_agenda.kleurOp=v;renderAgenda();}
 // Conventie: lege set = "alle zichtbaar". AG_NONE in de set = "niets zichtbaar".
 // Project én persoon filteren onafhankelijk (beide worden ge-AND in agZichtbaar).
 function agSet(which){return which==='proj'?_agenda.fProj:_agenda.fPers;}
-function agOpts(which){
-  const all=agEntries();
-  const key=which==='proj'?'project_code':'teamlid';
-  const lbl=which==='proj'?agProjLabel:agPersLabel;
-  return [...new Set(all.map(e=>e[key]).filter(Boolean))].sort((a,b)=>lbl(a).localeCompare(lbl(b),'nl'));
+// Entries van de getoonde week (zelfde grenzen als het rooster).
+function agWeekEntries(){
+  if(!_agenda.weekStart) _agenda.weekStart=agMaandag(new Date());
+  const a=_agenda.weekStart.getTime(), b=a+7*864e5;
+  return agEntries().filter(e=>{ if(!e||!e.start) return false; const t=new Date(e.start).getTime(); return t>=a&&t<b; });
 }
-function agOptLabel(which,v){return which==='proj'?agProjLabel(v):agPersLabel(v);}
+// Het MT-project bij een project_code van een entry: via het Toggl-id (stub "Toggl 123", een Toggl-naam of een kaal id → tg_project_id), anders via de projectzoeker (de code zelf).
+function agProjMT(c){
+  try{
+    const PC=(typeof PROJECT_CODES!=='undefined'&&PROJECT_CODES)||[];
+    const {pn}=agNames(); let id=null;
+    const m=/^Toggl (\d+)$/.exec(c);
+    if(m) id=m[1]; else if(pn[c]!==undefined) id=c; else { for(const k in pn) if(pn[k]===c){id=k;break;} }
+    if(id!=null){ const p=PC.find(x=>x&&x.tg_project_id!=null&&String(x.tg_project_id)===String(id)); if(p) return p; }
+    return (typeof projVind==='function'&&projVind(c))||null;
+  }catch(e){ return null; }
+}
+// Label in het filter: zoals in de projectenlijst (code + naam), anders de Toggl-naam.
+function agProjFilterLabel(c){
+  const p=agProjMT(c);
+  if(p){ const l=((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code; if(l) return l; }
+  return agProjLabel(c);
+}
+// Projectopties van de getoonde week; raw codes met hetzelfde label (bv. stub én naam van één project) vormen één optie.
+function agProjGroepen(){
+  const per={}, groep={};
+  agWeekEntries().forEach(e=>{ const c=e.project_code; if(!c) return; const l=agProjFilterLabel(c); const k=l.toLowerCase();
+    if(!per[k]){ per[k]={rep:c,label:l}; groep[c]=[c]; } else if(!groep[per[k].rep].includes(c)) groep[per[k].rep].push(c); });
+  const opts=Object.values(per).sort((a,b)=>a.label.localeCompare(b.label,'nl',{numeric:true})).map(x=>x.rep);
+  return {opts,groep};
+}
+function agOpts(which){
+  if(which==='proj') return agProjGroepen().opts;
+  const all=agEntries();
+  return [...new Set(all.map(e=>e.teamlid).filter(Boolean))].sort((a,b)=>agPersLabel(a).localeCompare(agPersLabel(b),'nl'));
+}
+// Namen één keer per sessie verversen als er in de getoonde week een id-stub zonder naam staat ("Toggl 123" / "User 456").
+let _agNamenVers=false;
+function agNamenControle(){
+  if(_agNamenVers||typeof agNamen!=='function') return;
+  const {pn,un}=agNames();
+  const onbekend=agWeekEntries().some(e=>{ const p=/^Toggl (\d+)$/.exec(e.project_code||''), u=/^User (\d+)$/.exec(e.teamlid||''); return (p&&!pn[p[1]])||(u&&!un[u[1]]); });
+  if(!onbekend) return;
+  _agNamenVers=true;
+  agNamen(true).then(r=>{ if(r&&(Object.keys(r.pn||{}).length||Object.keys(r.un||{}).length)) renderAgenda(); }).catch(()=>{});
+}
+function agOptLabel(which,v){return which==='proj'?agProjFilterLabel(v):agPersLabel(v);}
 function agOptKleur(which,v){return which==='proj'?agProjKleur(v):agPersKleur(v);}
 
 function agRenderFilters(){
+  agNamenControle();
+  const pg=agProjGroepen();
   ['proj','pers'].forEach(which=>{
-    const set=agSet(which), opts=agOpts(which);
+    const set=agSet(which), opts=which==='proj'?pg.opts:agOpts(which);
+    // Projecten: alleen opties uit de getoonde week; een optie staat aan als al zijn codes in het filter zitten (of er geen filter is).
+    const aanProj=v=>set.size===0||(!set.has(AG_NONE)&&(pg.groep[v]||[v]).every(c=>set.has(c)));
     const naam=which==='proj'?'Projecten':'Personen';
     const lblEl=document.getElementById('ag-drop-'+which+'-lbl');
     // Personen: een teamlid kan als slug én e-mail in het filter staan (startpagina) → unieke teamleden tellen.
-    const n=which==='pers'?new Set([...set].map(v=>{ const m=typeof MT_TEAM!=='undefined'&&MT_TEAM.find(x=>x.email===v); return m?m.slug:v; })).size:set.size;
-    if(lblEl){const cnt=set.has(AG_NONE)?'0':(n?String(n):'alle');lblEl.textContent=`${naam} (${cnt})`;}
+    const n=which==='pers'?new Set([...set].map(v=>{ const m=typeof MT_TEAM!=='undefined'&&MT_TEAM.find(x=>x.email===v); return m?m.slug:v; })).size:opts.filter(aanProj).length;
+    if(lblEl){const cnt=set.has(AG_NONE)?'0':(which==='proj'?(set.size===0||n===opts.length?'alle':String(n)):(n?String(n):'alle'));lblEl.textContent=`${naam} (${cnt})`;}
     const panel=document.getElementById('ag-drop-'+which+'-panel');
     if(!panel) return;
-    if(!opts.length){panel.innerHTML='<div style="font-size:11px;color:#aaa;padding:10px">geen data</div>';return;}
+    if(!opts.length){panel.innerHTML=`<div style="font-size:11px;color:#aaa;padding:10px">${which==='proj'?'geen projecten in deze week':'geen data'}</div>`;return;}
     let h=`<div class="ag-optbar"><a onclick="agFilterAll(${jsArg(which)},true)">alles</a><a onclick="agFilterAll(${jsArg(which)},false)">niets</a></div>`;
     h+=`<div class="ag-search"><input type="text" placeholder="🔍 zoeken…" oninput="agSearchOpts(${jsArg(which)},this.value)" onclick="event.stopPropagation()"></div>`;
     h+=`<div class="ag-optlist">`+opts.map(v=>{
-      const aan=set.size===0||(!set.has(AG_NONE)&&set.has(v));
+      const aan=which==='proj'?aanProj(v):(set.size===0||(!set.has(AG_NONE)&&set.has(v)));
       const vv=String(v);
       return `<label class="ag-opt"><input type="checkbox" ${aan?'checked':''} data-v="${esc(vv)}" onchange="agFilterSet(${jsArg(which)},this.dataset.v,this.checked)">`
         +`<span class="dot" style="background:${esc(agOptKleur(which,v))}"></span><span class="lbl">${esc(agOptLabel(which,v))}</span></label>`;
@@ -3848,9 +3895,26 @@ function agDrop(which){
   const p=document.getElementById('ag-drop-'+which+'-panel');
   const o=document.getElementById('ag-drop-'+(which==='proj'?'pers':'proj')+'-panel');
   if(o) o.classList.add('hidden');
-  if(p) p.classList.toggle('hidden');
+  if(p){
+    p.classList.toggle('hidden');
+    p.style.left='';
+    if(!p.classList.contains('hidden')){           // binnen het scherm houden (smal scherm / tweede filter)
+      const r=p.getBoundingClientRect(), vw=document.documentElement.clientWidth;
+      let dx=0; if(r.right>vw-8) dx=(vw-8)-r.right; if(r.left+dx<8) dx=8-r.left;
+      if(dx) p.style.left=dx+'px';
+    }
+  }
 }
 function agFilterSet(which,val,checked){
+  if(which==='proj'){   // projecten: een optie kan meerdere codes bundelen; codes van andere weken in het filter blijven staan
+    const set=agSet(which), pg=agProjGroepen();
+    const grp=pg.groep[val]||[val], alle=[].concat(...pg.opts.map(o=>pg.groep[o]||[o]));
+    if(set.has(AG_NONE)) set.delete(AG_NONE);
+    if(set.size===0&&!checked){alle.forEach(c=>set.add(c));grp.forEach(c=>set.delete(c));}
+    else if(checked){grp.forEach(c=>set.add(c));if(alle.every(c=>set.has(c)))set.clear();}
+    else {grp.forEach(c=>set.delete(c));if(!alle.some(c=>set.has(c))){set.clear();set.add(AG_NONE);}}
+    renderAgenda();return;
+  }
   const set=agSet(which), opts=agOpts(which);
   if(set.has(AG_NONE)) set.delete(AG_NONE);              // vanuit "niets" opbouwen
   if(set.size===0&&!checked){opts.forEach(o=>set.add(o));set.delete(val);} // vanuit "alle": eentje uit
@@ -4041,6 +4105,7 @@ function agMergeEntry(entries,o){const idx=entries.findIndex(e=>String(e.toggl_i
 // Cache-versie: bump dit als de naam-mapping-logica wijzigt, dan negeert agNamen
 // de oude (verkeerd gemapte) localStorage-cache en haalt opnieuw op.
 const AG_NAMES_V='2';
+const _agNamenPoging=new Set();   // ids waarvoor deze sessie al een verversing is gedaan (archief-/verwijderde projecten blijven anders elke sync verversen)
 async function agNamen(force){
   let pn={},un={};
   try{pn=JSON.parse(localStorage.getItem('mt_toggl_proj_names')||'{}');}catch(e){}
@@ -4076,7 +4141,7 @@ async function agNamen(force){
 // Reports-API stuurt geen CORS-headers → kan niet direct uit de browser, daarom via WORKER.
 async function agSyncAlleMedewerkers(since,tot){
   const {pmap,umap}=agMaps();
-  const {pn,un}=await agNamen();
+  let {pn,un}=await agNamen();
   const h=await authHeader();
   if(!h['X-Auth-Token']) throw new Error('geen MS-login (Worker vereist Microsoft-token)');
   // Pagineer: Reports v3 geeft max page_size regels per call. Loop met
@@ -4093,6 +4158,11 @@ async function agSyncAlleMedewerkers(since,tot){
     if(chunk.length<PAGE) break;
     firstRow+=PAGE;
   }
+  // Nieuw Toggl-project of nieuwe medewerker zonder naam in de cache: namen één keer verversen (per id één poging per sessie), anders blijft het "Toggl 123".
+  const onbekend=[];
+  rows.forEach(r=>{ if(r.project_id&&!pmap[r.project_id]&&!pn[r.project_id]) onbekend.push('p'+r.project_id); if(r.user_id&&!umap[r.user_id]&&!un[r.user_id]) onbekend.push('u'+r.user_id); });
+  const nieuweOnbekend=[...new Set(onbekend)].filter(k=>!_agNamenPoging.has(k));
+  if(nieuweOnbekend.length){ nieuweOnbekend.forEach(k=>_agNamenPoging.add(k)); ({pn,un}=await agNamen(true)); }
   const entries=agEntries(); let nieuw=0,n=0,fallback=0;
   const remoteIds=new Set();
   for(const row of rows){
