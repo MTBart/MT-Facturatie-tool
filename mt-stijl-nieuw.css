@@ -658,3 +658,70 @@ html[data-stijl="nieuw"] .dv-knop:hover{background:var(--surface-sunken)}
 html[data-stijl="nieuw"] .dv-knop.primair{background:var(--primary);border-color:transparent;color:#fff}
 html[data-stijl="nieuw"] .dv-knop.ghost{border-color:transparent;background:transparent;color:var(--brass-ink)}
 html[data-stijl="nieuw"] .dv-knop:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}
+/* ── brok 13d: losse kleuren onder de nieuwe stijl (oude stijl blijft ongemoeid; alles via de tokens) ────────────────────────────────────────────
+   Bron: een audit van alle CSS-regels (v2.html en de stijlen die modules zelf in de pagina zetten) op tekstcontrast (AA 4,5:1, groot/vet 3:1) en op kleuren uit het
+   oude palet. Het goud (--gold) is voor vlakken en iconen; tekst in goud is --gold-text. Modules die hun eigen kleur-variabelen hebben krijgen hier de tokens. */
+html[data-stijl="nieuw"] .mtg{--mtg-in:var(--success);--mtg-uit:var(--error);--mtg-zacht:var(--ink-2)}
+html[data-stijl="nieuw"] .mtr{--mtr-g:var(--success);--mtr-o:var(--warning);--mtr-r:var(--error);--mtr-zacht:var(--ink-2)}
+html[data-stijl="nieuw"] .mtc{--mtc-zacht:var(--ink-2)}
+html[data-stijl="nieuw"] .mtk,html[data-stijl="nieuw"] .mtk-week,html[data-stijl="nieuw"] .mts-cijfers{--mtg-zacht:var(--ink-2)}
+html[data-stijl="nieuw"] .mtk{--mtk-kleur:var(--ink-2)}
+html[data-stijl="nieuw"] .mtk.groen{--mtk-kleur:var(--success)}
+html[data-stijl="nieuw"] .mtk.oranje{--mtk-kleur:var(--warning)}
+html[data-stijl="nieuw"] .mtk.rood{--mtk-kleur:var(--error)}
+html[data-stijl="nieuw"] .mtk.onbetrouwbaar{--mtk-kleur:var(--ink-2)}
+html[data-stijl="nieuw"] .mtk-jaar,html[data-stijl="nieuw"] .mtk-noot,html[data-stijl="nieuw"] .mtk-m .l,html[data-stijl="nieuw"] .mtk-m .s,html[data-stijl="nieuw"] .mts-cijfers span{color:var(--ink-2)}
+html[data-stijl="nieuw"] .mtk-m.oranje .k,html[data-stijl="nieuw"] .mtg-k.amber .w{color:var(--warning)}
+html[data-stijl="nieuw"] .mtk-m.onbekend .k,html[data-stijl="nieuw"] .mtk-m.neutraal .k{color:var(--ink-2)}
+html[data-stijl="nieuw"] .mtk-melding,html[data-stijl="nieuw"] .mtk-och{background:var(--error-50);border-left-color:var(--error)}
+html[data-stijl="nieuw"] .mtk-och{border-color:var(--error-50)}
+html[data-stijl="nieuw"] .mtk-och-rij+.mtk-och-rij{border-top-color:var(--border)}
+html[data-stijl="nieuw"] .mtk-gelezen{border-color:var(--error);color:var(--error)}
+html[data-stijl="nieuw"] .mtk-week{border-left-color:var(--info)}
+html[data-stijl="nieuw"] .mtk-week .mtk-gelezen{border-color:var(--info);color:var(--info)}
+html[data-stijl="nieuw"] .mtg-chip.achter{background:var(--error-50)}
+html[data-stijl="nieuw"] .mtg-chip.prog,html[data-stijl="nieuw"] .mtc-badge{background:var(--info-50);color:var(--info)}
+html[data-stijl="nieuw"] .mtg-advlink{color:var(--info)}
+html[data-stijl="nieuw"] .mtc-knop.aan{background:var(--info-50);border-color:var(--info)}
+html[data-stijl="nieuw"] .mtc-waarsch{background:var(--warning-50)}
+html[data-stijl="nieuw"] .mtg-kan.let-op{border-color:var(--gold)}
+html[data-stijl="nieuw"] .mtr-chip.g{background:var(--success-50)}
+html[data-stijl="nieuw"] .mtr-chip.o{background:var(--warning-50);color:var(--warning)}
+html[data-stijl="nieuw"] .mtr-chip.r{background:var(--error-50)}
+html[data-stijl="nieuw"] .mtr-bericht.claude{background:var(--info-50)}
+html[data-stijl="nieuw"] .mtr-advies{background:var(--surface-sunken)}
+/* planvoorstellen, melding en koppelstatus (v2.html) */
+html[data-stijl="nieuw"] .pv-melding.goed{background:var(--success-50);color:var(--success)}
+html[data-stijl="nieuw"] .pv-melding.af{background:var(--error-50);color:var(--error)}
+html[data-stijl="nieuw"] .pv-melding.open,html[data-stijl="nieuw"] .pv-label{background:var(--gold-50);color:var(--gold-text)}
+html[data-stijl="nieuw"] .ag-blok.pv-voorstel{border-color:var(--gold)!important}
+html[data-stijl="nieuw"] .tgk-st.fout{color:var(--error);border-color:var(--error)}
+html[data-stijl="nieuw"] .mtc-voorstel{color:var(--gold-text);background:var(--gold-50)}
+html[data-stijl="nieuw"] .mtc-dubbel{background:var(--gold-50)}
+html[data-stijl="nieuw"] .bh-modus{background:var(--gold-50);border-left-color:var(--gold)}
+html[data-stijl="nieuw"] .bh-modus.afdwingen{background:var(--success-50);border-left-color:var(--success)}
+html[data-stijl="nieuw"]{--kb-open-bg:var(--gold-50);--kb-open-fg:var(--gold-text);--kb-open-rand:var(--gold-mid);--kb-ok-bg:var(--success-50);--kb-ok-fg:var(--success);--kb-ok-rand:var(--green-100)}
+/* vandaag-markering in de agenda en de inbox: de nieuwe goud-tint */
+html[data-stijl="nieuw"] #tab-agenda .ag-hcell.vandaag,html[data-stijl="nieuw"] #tg-sub-timeline .ag-hcell.vandaag,html[data-stijl="nieuw"] #tab-inbox .inbox-fold.actief,html[data-stijl="nieuw"] #tab-inbox .inbox-msg.actief,html[data-stijl="nieuw"] #tab-inbox .agenda-day.vandaag .dhdr{background:var(--gold-50)}
+html[data-stijl="nieuw"] #tab-inbox .agenda-day.vandaag .dhdr{color:var(--gold-text)}
+html[data-stijl="nieuw"] #tab-inbox .agenda-ev.allday{background:var(--gold-50)}
+/* tekst op goud: donkere tekst (wit op #d19a1f haalt maar 2,5:1) */
+html[data-stijl="nieuw"] #tab-inbox .inbox-fold .badge,html[data-stijl="nieuw"] #inbox-toast button{color:var(--ink)}
+html[data-stijl="nieuw"] .calc-rand-t{color:var(--gold-text);background:var(--gold-50)}
+html[data-stijl="nieuw"] .mobiel-bell-badge{background:var(--error)}
+html[data-stijl="nieuw"] .tbchat-log .act,html[data-stijl="nieuw"] .aw-onb{color:var(--ink-2)}
+html[data-stijl="nieuw"] #tab-toggl .tg-stat.hero .lbl{color:rgba(255,255,255,.88)}
+html[data-stijl="nieuw"] #tab-toggl .tg-stat.hero .sub2{color:rgba(255,255,255,.82)}
+/* Cashflow-legenda (Geld): de vaste kleuren in de HTML-attributen krijgen de tokens */
+html[data-stijl="nieuw"] .cf-legend-dot[style*="background:#2A4A38" i]{background:var(--green)!important}
+html[data-stijl="nieuw"] .cf-legend-dot[style*="background:#4A7A5C" i]{background:var(--green-mid)!important;border-color:var(--green)!important}
+html[data-stijl="nieuw"] .cf-legend-dot[style*="background:#8B1A1A" i]{background:var(--error)!important}
+html[data-stijl="nieuw"] .cf-legend-dot[style*="background:#B8962E" i]{background:var(--gold)!important}
+html[data-stijl="nieuw"] .cf-legend-dot[style*="solid #2A4A38" i]{border-color:var(--green)!important}
+html[data-stijl="nieuw"] .cf-legend-dot[style*="dashed #B8962E" i]{border-color:var(--gold)!important}
+/* Taakstatus en prioriteit (Projecten, Planning): de badges rekenen hun kleur als hex + 22 (tint); hier de tokens, met leesbare tekst */
+html[data-stijl="nieuw"] .badge[style*="#2A4A38" i]{background:var(--green-50)!important;color:var(--green)!important}
+html[data-stijl="nieuw"] .badge[style*="#B8962E22" i],html[data-stijl="nieuw"] .badge[style*="#7A6010" i]{background:var(--gold-50)!important;color:var(--gold-text)!important}
+html[data-stijl="nieuw"] .badge[style*="#2563eb" i]{background:var(--info-50)!important;color:var(--info)!important}
+html[data-stijl="nieuw"] .badge[style*="#6b7280" i]{background:var(--surface-sunken)!important;color:var(--ink-2)!important}
+html[data-stijl="nieuw"] .badge[style*="#c0392b" i]{background:var(--error-50)!important;color:var(--error)!important}

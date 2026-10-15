@@ -847,7 +847,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15x">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-16a">
 </head>
 <body>
 
@@ -3766,6 +3766,8 @@ function agTeam(){try{return JSON.parse(localStorage.getItem('mt_uren_teamleden'
 function agMaandag(d){const x=new Date(d);const dag=(x.getDay()+6)%7;x.setDate(x.getDate()-dag);x.setHours(0,0,0,0);return x;}
 function agFmt(d){return d.toLocaleDateString('nl-NL',{day:'numeric',month:'short'});}
 function agHash(s){let h=0;s=String(s||'');for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
+// Een kleur uit de tokens (de stijl bepaalt de waarde); voor canvas en andere plekken waar var() niet werkt. Zonder token: de terugval (de oude waarde).
+function mtTok(naam,terug){ try{ const v=getComputedStyle(document.documentElement).getPropertyValue(naam).trim(); return v||terug; }catch(e){ return terug; } }
 function agProjKleur(c){if(!c)return '#9a9a9a';return `hsl(${agHash(c)%360},52%,42%)`;}
 function agPersKleur(n){const t=agTeam().find(x=>x.naam===n);return t?t.kleur:`hsl(${agHash(n)%360},45%,45%)`;}
 // id→naam-cache (sync uit localStorage; gevuld door agNamen()). Resolvet ook
@@ -12293,28 +12295,28 @@ function _cfTekenGrafiek(data){
   }
 
   // IN hard
-  inH.forEach((v,i)=>drawBar(i,v,0,'#2A4A38'));
+  inH.forEach((v,i)=>drawBar(i,v,0,mtTok('--green','#2A4A38')));
   // IN verwacht (gestippeld = lagere alpha)
-  inV.forEach((v,i)=>drawBar(i,v,0,'#4A7A5C',0.42));
+  inV.forEach((v,i)=>drawBar(i,v,0,mtTok('--green-mid','#4A7A5C'),0.42));
   // UIT vast (negatief)
-  uitVast.forEach((v,i)=>drawBar(i,-v,0,'#8B1A1A'));
+  uitVast.forEach((v,i)=>drawBar(i,-v,0,mtTok('--error','#8B1A1A')));
   // UIT inkoop
   uitInk.forEach((v,i)=>drawBar(i,-(v+uitVast[i]),0-uitVast[i],'#c0392b',0.6));
   // BTW-pot (band)
-  btwPot.forEach((v,i)=>{if(v>0) drawBar(i,v,0,'#B8962E',0.3);});
+  btwPot.forEach((v,i)=>{if(v>0) drawBar(i,v,0,mtTok('--gold','#B8962E'),0.3);});
 
   // Doellijn
   if(data.doel_lijn>0){
     const yDoel=yPx(data.doel_lijn);
-    ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle='#B8962E';ctx.lineWidth=1.5;
+    ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle=mtTok('--gold','#B8962E');ctx.lineWidth=1.5;
     ctx.beginPath();ctx.moveTo(mx,yDoel);ctx.lineTo(mx+gW,yDoel);ctx.stroke();
     ctx.restore();
-    ctx.fillStyle='#B8962E';ctx.font='10px monospace';
+    ctx.fillStyle=mtTok('--gold','#B8962E');ctx.font='10px monospace';
     ctx.fillText('doel',mx+4,yDoel-3);
   }
 
   // Saldo lijn
-  ctx.beginPath();ctx.strokeStyle='#2A4A38';ctx.lineWidth=2;ctx.setLineDash([]);
+  ctx.beginPath();ctx.strokeStyle=mtTok('--green','#2A4A38');ctx.lineWidth=2;ctx.setLineDash([]);
   saldo.forEach((v,i)=>{
     const x=mx+i*slotW+slotW*0.5;
     const y=yPx(v);
@@ -12336,7 +12338,7 @@ function _cfTekenGrafiek(data){
   saldo.forEach((v,i)=>{
     const x=mx+i*slotW+slotW*0.5;
     ctx.beginPath();ctx.arc(x,yPx(v),3,0,Math.PI*2);
-    ctx.fillStyle=v<(data.doel_lijn||0)?'#8B1A1A':'#2A4A38';ctx.fill();
+    ctx.fillStyle=v<(data.doel_lijn||0)?mtTok('--error','#8B1A1A'):mtTok('--green','#2A4A38');ctx.fill();
   });
 
   // Y-as labels
@@ -15524,7 +15526,7 @@ function agPlanCapBalk(dagen,blokken,verlof,vrijdagen){
     const capaciteit=capaciteitPerDag({pers:[m.slug],van:weekStart,tot:weekEind,verlof,vrijdagen,cfg})[m.slug].totaal;
     const gepland=blokken.filter(b=>b.persoon===m.slug||b.persoon===m.email).reduce((s,b)=>s+(b.duurMin/60),0);
     const pct=capaciteit>0?gepland/capaciteit:gepland>0?2:0;
-    const kleur=pct<0.9?'#2A4A38':pct<=1?'#B8962E':'#c0392b';
+    const kleur=pct<0.9?'var(--green,#2A4A38)':pct<=1?'var(--gold,#B8962E)':'#c0392b';
     const breedte=Math.min(pct*100,100).toFixed(0);
     html+=`<div style="cursor:pointer;min-width:120px;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;padding:6px 10px"
       onclick="agTogglPersFilter(${jsArg(m.slug)},${jsArg(m.email)})">
@@ -19400,7 +19402,7 @@ async function _vbVerstuur() {
   const token = await getGraphToken();
   if (!token) { planToast('⚠ Niet ingelogd — kan mail niet versturen'); return; }
   const mailBody = '<div style="font-family:Segoe UI,sans-serif;font-size:14px;color:#222">' +
-    '<h2 style="color:#2A4A38;margin-bottom:16px">&#128161; Verbeterpunt: ' + esc(titel) + '</h2>' +
+    '<h2 style="color:var(--green,#2A4A38);margin-bottom:16px">&#128161; Verbeterpunt: ' + esc(titel) + '</h2>' +
     '<table style="border-collapse:collapse;width:100%;max-width:560px">' +
     '<tr><td style="padding:6px 12px 6px 0;color:#666;white-space:nowrap"><strong>Betreft</strong></td><td>' + esc(betreft) + '</td></tr>' +
     '<tr><td style="padding:6px 12px 6px 0;color:#666;white-space:nowrap"><strong>Indiener</strong></td><td>' + esc(indiener.naam) + ' (' + esc(indiener.email) + ')</td></tr>' +
