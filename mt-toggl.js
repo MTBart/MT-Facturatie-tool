@@ -613,6 +613,27 @@ async function tgTimerStartDirect({projectId,omschrijving}){
   }catch(e){ return {ok:false,reden:'Timer starten mislukt: '+String((e&&e.message)||e)}; }
   finally{ _tgTimerBusy=false; tgTimerPaint(); }
 }
+// Een afgesloten entry boeken (start + duur) voor de Uren-weergave in de nieuwe stijl. Zoals tgTimerStartDirect: geen alert() en geen herhaling (een tweede POST zou dubbel boeken),
+// en vlak voor de POST de entries van die dag opnieuw lezen: staat er op dat moment al iets in Toggl, dan wordt er niets geboekt. → {ok:true} of {ok:false,reden} in gewone taal.
+async function tgBoekEntry({startIso,duurMin,omschrijving,projectId}){
+  const min=Math.round(Number(duurMin)); if(!(min>=1&&min<=24*60)) return {ok:false,reden:'Ongeldige duur.'};
+  const t0=new Date(startIso); if(isNaN(t0.getTime())) return {ok:false,reden:'Ongeldige starttijd.'};
+  if(_tgTimerBusy||_tgMutatieBusy) return {ok:false,reden:'Er loopt nog een Toggl-wijziging; probeer het zo opnieuw.'};
+  _tgMutatieBusy=true;
+  try{
+    const einde=t0.getTime()+min*60000, dag=d=>d.toISOString().slice(0,10);
+    let bestaand; try{ bestaand=await tgStore.eigenEntries(dag(new Date(t0.getTime()-864e5)),dag(new Date(einde+2*864e5))); }
+    catch(e){ return {ok:false,reden:'Kon niet controleren of die tijd al in Toggl staat; niets geboekt. '+String((e&&e.message)||e)}; }
+    const nu=Date.now();
+    const botst=(Array.isArray(bestaand)?bestaand:[]).find(e=>{ if(!e||!e.start) return false; const a=new Date(e.start).getTime(); const b=e.stop?new Date(e.stop).getTime():(e.duration<0?nu:a+Math.max(0,e.duration)*1000); return a<einde&&t0.getTime()<b; });
+    if(botst) return {ok:false,reden:'Op die tijd staat al een entry in Toggl'+(botst.description?' („'+botst.description+'”)':'')+'; er is niets geboekt.'};
+    const body={created_with:'MT-cockpit',description:String(omschrijving||''),workspace_id:TG_WS,start:t0.toISOString().replace(/\.\d{3}Z$/,'Z'),duration:min*60};
+    if(projectId!=null&&projectId!=='') body.project_id=parseInt(projectId);
+    const made=await tgTrack(`workspaces/${TG_WS}/time_entries`,'POST',body);
+    return (made&&made.id)?{ok:true}:{ok:false,reden:'Toggl gaf geen entry terug; kijk in de Uren-tab of de tijd er staat.'};
+  }catch(e){ return {ok:false,reden:'Boeken mislukt: '+String((e&&e.message)||e)}; }
+  finally{ _tgMutatieBusy=false; }
+}
 function tgTimerPaint(){
   const btn=document.getElementById('tg-startstop'), clk=document.getElementById('tg-clock');
   if(!btn||!clk) return;
@@ -629,6 +650,7 @@ function tgTimerPaint(){
   }else{
     btn.classList.remove('tg-stop'); btn.classList.add('tg-start'); btn.textContent='▶'; clk.textContent='0:00:00';
   }
+  try{ if(window.MTUrenNieuw) MTUrenNieuw.timerGewijzigd(); }catch(e){}   // de Uren-weergave (nieuwe stijl) laat de lopende timer meetekenen
 }
 async function tgTimerToggle(){
   if(_tgTimerBusy){
@@ -671,6 +693,7 @@ async function tgTimerToggle(){
   }
 }
 async function tgLaadRecent(){
+  if(window.MTUrenNieuw&&MTUrenNieuw.actief()){ MTUrenNieuw.laad(); return; }   // nieuwe stijl: de Uren-weergave uit mt-uren-nieuw.js (zelfde bron, zelfde acties); de oude stijl hieronder is ongewijzigd
   const box=document.getElementById('tg-timer-recent'); if(box) box.innerHTML='<div class="tg-leeg">Laden…</div>';
   const sumClr=document.getElementById('tg-timer-summary'); if(sumClr) sumClr.innerHTML='';
   try{

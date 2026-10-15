@@ -40,7 +40,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-toggl.js?v=2026-10-15b"></script>
+<script src="mt-toggl.js?v=2026-10-15u"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
 <script src="mt-binnenkomend.js?v=2026-10-13c"></script>
@@ -53,12 +53,13 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-15t"></script>
+<script src="mt-planning.js?v=2026-10-15u"></script>
 <script src="mt-mijnwerk.js?v=2026-10-15s"></script>
 <script src="mt-capaciteit.js?v=2026-10-15s"></script>
 <script src="mt-planverplaats.js?v=2026-10-15s"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-15s"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
+<script src="mt-uren-nieuw.js?v=2026-10-15u"></script>
 <script src="mt-vandaag-desk.js?v=2026-10-15s"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
@@ -67,7 +68,7 @@
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15r"></script>
+<script src="mt-verhuis.js?v=2026-10-15u"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -845,7 +846,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15s">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15u">
 </head>
 <body>
 
@@ -2133,6 +2134,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     </aside>
     <div class="tg-main">
     <div id="tg-sub-timer" class="tg-subcontent active">
+      <div id="uren-nieuw" class="un-root" hidden></div>   <!-- Uren in de nieuwe stijl (mt-uren-nieuw.js); leeg en verborgen in de oude stijl -->
       <div class="tg-toolbar">
         <button class="btn btn-sm btn-secondary" onclick="tgLaadRecent()">↻ Ververs</button>
         <button class="btn btn-sm btn-gold" onclick="tgHandmatig()">+ Handmatige entry</button>
@@ -3826,7 +3828,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   magSlepen:()=>capMagSlepen(), verplaats:spec=>capVerplaats(spec), herstel:w=>capHerstel(w), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
-window.addEventListener('mt-stijl',()=>{ const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
+window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
 try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
   taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
@@ -3852,6 +3854,43 @@ try{ MTWerktijden.init({ doc:document, planning:MTPlanning, storage:localStorage
   magWijzigen:()=>capWerktijdenMag(), opgeslagen:()=>werktijdenVerversWeergave(),
   blokken:()=>agPlanActief(), entries:()=>agEntries(), verlof:()=>admVerlof(), vrijedagen:()=>admVrijdagen(),   // voor Afwijkingen (afgeleid, geen eigen opslag; geklokte uren = wat lokaal uit Toggl is binnengekomen)
   naarDag:(slug,datum)=>{ try{ MTCapaciteitNieuw.gaNaar(datum,slug); _agenda.view='capaciteit'; _agenda.weekStart=agMaandag(new Date(datum+'T00:00:00')); showTab('agenda',[...document.querySelectorAll('.tabs-wrap .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("showTab('agenda'"))); }catch(e){ console.warn('Afwijkingen: naar de dag:',e); } } }); }catch(e){ console.warn('Werktijden init:',e); }
+// Uren in de nieuwe stijl (restyling brok 11, mt-uren-nieuw.js): dezelfde bronnen en dezelfde acties als de oude Timer-weergave (tgStore, tgHervat, tgEditEntry, tgDelEntry, tgHandmatig); boeken via tgBoekEntry.
+function urenProjInfo(pid,ps){
+  if(pid==null||pid==='') return {sleutel:'geen',label:'Geen project',nummer:'',naam:'Geen project',kleur:'var(--line-strong)'};
+  const p=(ps||[]).find(x=>String(x.id)===String(pid)), mt=p?_mtProjVoorToggl(p):null;
+  if(mt){ const nr=projLabelCode(mt), nm=projNaamKort(mt); return {sleutel:String(pid),label:[nr,nm].filter(Boolean).join(' ')||p.name,nummer:nr,naam:nm,kleur:agProjKleur(mt.code)}; }
+  return {sleutel:String(pid),label:(p&&p.name)||('project '+pid),nummer:'',naam:(p&&p.name)||'',kleur:(p&&p.color)||agProjKleur(String(pid))};
+}
+function urenGepland(dag,slug){
+  const uit=[]; agPlanActief().forEach(b=>{ if(!b||b.datum!==dag||b.status==='voorstel'||!MTPlanning.zelfdePersoon(b.persoon,slug,MT_TEAM)) return;
+    const m=/^(\d{1,2}):(\d{2})/.exec(b.start||''), dur=Math.round(Number(b.duurMin)||0); if(!m||!(dur>0)) return;
+    const van=+m[1]*60+ +m[2]; uit.push({id:b.id,titel:b.taak||projKort(b.project_code)||'Planblok',van,tot:van+dur,proj:b.project_code?{label:projKort(b.project_code),kleur:agProjKleur(b.project_code)}:null}); });
+  return uit;
+}
+function urenKlaarTaken(){
+  const slug=(MT_TEAM.find(m=>String(m.email||'').toLowerCase()===String(mtMijEmail()||'').toLowerCase())||{}).slug||'', nu=MTPlanning.vandaagYmd(), tot=projTakenAll(), uit=[], weekGeleden=_planYmd(new Date(new Date(nu+'T00:00:00').getTime()-7*864e5));
+  if(!slug) return uit;
+  Object.keys(tot).forEach(code=>{ (tot[code]||[]).forEach(t=>{
+    if(!t||(t.status||'')!=='klaar'||MTPlanning.persoonSlug(t.toegewezen,MT_TEAM)!==slug||!MTPlanning.isYmd(t.klaar_op)) return;
+    if(t.klaar_op<weekGeleden) return;   // alleen de laatste week
+    const p=projVind(code); uit.push({id:t.id,naam:t.naam,code,projLabel:p?[projLabelCode(p),projNaamKort(p)].filter(Boolean).join(' '):code,wie:(MT_TEAM.find(m=>m.slug===slug)||{}).naam||'',klaarOp:t.klaar_op,budgetMin:MTPlanning.taakBudgetMin(t),tgProjectId:p&&p.tg_project_id!=null?p.tg_project_id:null}); }); });
+  return uit;
+}
+async function urenAgendaDag(dag){   // je eigen Outlook-agenda (/me, niet de gekozen mailbox) van die dag; alleen op verzoek van de gebruiker aangeroepen
+  if(typeof ibFetch!=='function') return null;
+  const [y,m,d]=dag.split('-').map(Number), van=new Date(y,m-1,d), tot=new Date(y,m-1,d+1);
+  const u=new URL('https://graph.microsoft.com/v1.0/me/calendarView');
+  Object.entries({startDateTime:van.toISOString(),endDateTime:tot.toISOString(),$select:'id,subject,start,end,location,isAllDay,isCancelled',$orderby:'start/dateTime',$top:'50'}).forEach(([k,v])=>u.searchParams.set(k,v));
+  const r=await ibFetch(u.toString(),{headers:{Prefer:'outlook.timezone="W. Europe Standard Time"'}});
+  return ((r&&r.value)||[]).filter(e=>e&&!e.isCancelled&&e.start&&e.end).map(e=>{ const a=new Date(e.start.dateTime), b=new Date(e.end.dateTime);
+    return {id:e.id,titel:e.subject||'',van:a.getHours()*60+a.getMinutes(),tot:(b.getFullYear()+'-'+b.getMonth()+'-'+b.getDate())===(a.getFullYear()+'-'+a.getMonth()+'-'+a.getDate())?b.getHours()*60+b.getMinutes():24*60,heleDag:!!e.isAllDay,plaats:(e.location&&e.location.displayName)||''}; });
+}
+try{ MTUrenNieuw.init({ doc:document, planning:MTPlanning, storage:localStorage, sessie:(function(){ try{ return sessionStorage; }catch(e){ return null; } })(), nu:()=>Date.now(), ik:()=>mtMijEmail(), team:()=>MT_TEAM,
+  werktijden:()=>werktijdenVoorWeergave(), werkuren:()=>(admCfg()||{}).werkuren||null, verlof:()=>admVerlof(), vrijedagen:()=>admVrijdagen(),
+  eigenEntries:(s,t)=>tgStore.eigenEntries(s,t), projecten:()=>tgStore.projecten(), lopend:()=>(_tgTimer&&_tgTimer.entry)||null, zetRecent:l=>{ _tgRecent=l; },
+  projInfo:urenProjInfo, gepland:urenGepland, klaarTaken:urenKlaarTaken, agenda:urenAgendaDag,
+  hervat:i=>tgHervat(i), bewerk:i=>tgEditEntry(i), verwijder:i=>tgDelEntry(i), handmatig:()=>tgHandmatig(), boek:spec=>tgBoekEntry(spec),
+  get dialoog(){ return window.mtDialog; } }); }catch(e){ console.warn('Uren (nieuw) init:',e); }
 // Eén keer per sessie laden (daarna houdt het bewaren de stand bij); de aanroeper tekent opnieuw als de werktijden binnen zijn.
 let _wtLaden=null;
 function werktijdenZorg(naLaden){
