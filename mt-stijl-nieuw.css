@@ -166,3 +166,15 @@ html[data-stijl="nieuw"] .badge{letter-spacing:0;padding:2px 7px}
 /* tabellen die breder worden dan hun kaart scrollen horizontaal in de kaart (alleen kaarten waar de tabel direct in staat) */
 html[data-stijl="nieuw"] .card:has(>.data-table){overflow-x:auto}
 html[data-stijl="nieuw"] .data-table{min-width:max-content}
+/* ── 6. Brok 3: plakkende koppen op één kophoogte ──────────────────────────────────────────────────────────
+   De app zet de top van projectkop/klantkop (inline) en de sectiebalk (JS) uit header + .tabs-wrap.offsetHeight, en --mt-kop
+   idem. In de zijbalkstand is .tabs-wrap 0 hoog, in de bovenbalkstand (<700px) de oude 52px: de app rekent dus vanzelf goed.
+   Hieronder alleen de vaste terugvalwaarden (v2.html: 112px/160px/74px) die vóór de eerste meting gelden of in een
+   scrollcontainer; ze volgen --mt-kop (gezet door mtKopHoogte(), ververst door mt-zijbalk.js bij elke stijl-/breedtewissel). */
+html[data-stijl="nieuw"] .proj-ctx{top:var(--mt-kop,60px)}
+html[data-stijl="nieuw"] .proj-secnav{top:calc(var(--mt-kop,60px) + 48px)}
+html[data-stijl="nieuw"] #tab-toggl .tg-side{top:calc(var(--mt-kop,60px) + 14px)}
+html[data-stijl="nieuw"] #tab-toggl .tg-timerbar{top:var(--mt-kop,60px)}
+html[data-stijl="nieuw"] .proj-ctx-naam{font-style:normal;font-weight:600}
+html[data-stijl="nieuw"] .proj-ctx-code{border-radius:4px}
+html[data-stijl="nieuw"] .proj-ctx-status{border-radius:4px}

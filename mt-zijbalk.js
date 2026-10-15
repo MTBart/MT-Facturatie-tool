@@ -160,13 +160,22 @@
 
   function kop() {   // projectkop/klantkop/lijstkaart rekenen met de hoogte van header + .tabs-wrap (die is in de zijbalk 0)
     try { if (typeof mtKopHoogte === 'function') mtKopHoogte(); } catch (e) { }
+    // Een al getekende projectkop/klantkop heeft zijn top inline gekregen met de kophoogte van toen (112 met bovenbalk, 60
+    // met zijbalk): opnieuw zetten, daarna de sectiebalk eronder. Zonder open project is dit een no-op.
+    try {
+      var wrap = document.querySelector('.tabs-wrap'), hdr = document.querySelector('header');
+      var top = ((hdr && hdr.offsetHeight) || 60) + ((wrap && wrap.offsetHeight) || 0);
+      var ctx = document.querySelectorAll('.proj-ctx'); for (var i = 0; i < ctx.length; i++) ctx[i].style.top = top + 'px';
+      if (typeof _projSecNavTop === 'function') _projSecNavTop();
+    } catch (e) { }
     try { window.dispatchEvent(new Event('resize')); } catch (e) { }
   }
   function herijk() {
     var w = wil();
-    if (w && !st.gebouwd) { bouw(); kop(); }
+    // kop() pas na pas(): pas() zet data-zijbalk, en pas dan is .tabs-wrap 0 hoog (de kophoogte die kop() leest)
+    if (w && !st.gebouwd) { bouw(); pas(); kop(); }
     else if (!w && st.gebouwd) { afbreek(); kop(); }
-    if (st.gebouwd) pas();
+    else if (st.gebouwd) pas();
   }
   function start() {
     herijk();
