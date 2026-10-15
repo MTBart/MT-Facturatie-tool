@@ -1,5 +1,16 @@
 [
   {
+    "versie": "2.17.1",
+    "datum": "2026-10-15",
+    "titel": "Open voorstellen tellen niet mee in de bezetting",
+    "voor": "iedereen",
+    "punten": [
+      "Een voorstel van de werkplaats (gestippeld, met de aanduiding voorstel) telt niet meer mee in de uren van de planning, ook niet als het bij een taak hoort. Pas als je het overneemt, telt het mee.",
+      "Het voorstel blijft gewoon zichtbaar in de planning, zodat je ziet wat er nog op een besluit wacht.",
+      "Dit geldt overal waar de bezetting wordt getoond: Planning, Vandaag, Mijn werk, de telefoon en de werkplaats-tv."
+    ]
+  },
+  {
     "versie": "2.17.0",
     "datum": "2026-10-15",
     "titel": "Mijn werk, Vandaag op de telefoon en het startvenster",

@@ -1709,7 +1709,8 @@
     });
     geldig.forEach(b => {
       const k = koppel.get(String(b.id)), s = blokStartTekst(b);
-      const item = k ? Object.assign({}, k, { start: s, blokId: b.id, datum: b.datum, min: Math.max(0, Math.round(getal(b.duurMin))) })
+      // Een open voorstel (status voorstel) telt nooit mee in de capaciteit, ook niet als het aan een taak hangt: pas na Overnemen (status niet meer voorstel). Het blijft wel zichtbaar.
+      const item = k ? Object.assign({}, k, { start: s, blokId: b.id, datum: b.datum, min: Math.max(0, Math.round(getal(b.duurMin))) }, b.status === 'voorstel' ? { planvoorstel: true } : {})
         : { soort: 'blok', id: 'blok:' + b.id, datum: b.datum, code: b.project_code || '', naam: b.taak || b.project_code || 'Planblok', status: '', wacht: false, voorstel: false, planvoorstel: b.status === 'voorstel', start: s, min: Math.max(0, Math.round(getal(b.duurMin))), persoon: P.persoonSlug(b.persoon, team) || '' };
       const r = rijVan(b.persoon), di = idx.get(b.datum);
       dagdeelVanBlok(b).forEach(dl => r.cellen[di][dl].push(item));
