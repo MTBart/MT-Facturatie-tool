@@ -99,3 +99,63 @@ html[data-stijl="nieuw"] #tab-agenda .ag-optbar a,html[data-stijl="nieuw"] #tab-
 html[data-stijl="nieuw"] .calc-dd-tag.ic,html[data-stijl="nieuw"] .calc-vg-h{color:var(--gold-text)!important}
 html[data-stijl="nieuw"] .upd-stip::before{background:var(--gold)}
 html[data-stijl="nieuw"] #tab-inbox .agenda-day.vandaag .dhdr{background:var(--gold-50)}
+
+/* ── 4. Zijbalk (brok 2) ──────────────────────────────────────────────────────────
+   mt-zijbalk.js zet de tabknoppen in <nav class="zb-nav"> binnen .tabs-wrap en zet html[data-zijbalk="breed|smal"].
+   .tabs-wrap zelf wordt een vaste, lege plek van 0x0: de plakkende koppen rekenen met header + .tabs-wrap.offsetHeight
+   (v2.html: projectkop, klantkop, --mt-kop) en krijgen zo vanzelf alleen de kophoogte. Zonder data-zijbalk geldt niets hiervan. */
+html[data-zijbalk]{--zb-w:240px}
+html[data-zijbalk="smal"]{--zb-w:68px}
+html[data-zijbalk] .tabs-wrap{position:fixed;top:60px;left:0;width:0;height:0;padding:0;border:0;overflow:visible;background:none;display:block;z-index:90}
+html[data-zijbalk] .main{margin-left:var(--zb-w);margin-right:0;max-width:none;transition:margin-left .15s}
+html[data-zijbalk] .zb-nav{position:fixed;top:60px;left:0;bottom:0;width:var(--zb-w);box-sizing:border-box;display:flex;flex-direction:column;padding:12px 0;overflow-x:hidden;overflow-y:auto;background:var(--sidebar);border-right:1px solid var(--line);transition:width .15s;scrollbar-width:thin}
+/* volgorde en groepen (visueel; de DOM-volgorde blijft die van de tabbalk) */
+html[data-zijbalk] .zb-nav [data-zb-o="10"]{order:10}html[data-zijbalk] .zb-nav [data-zb-o="20"]{order:20}html[data-zijbalk] .zb-nav [data-zb-o="30"]{order:30}
+html[data-zijbalk] .zb-nav [data-zb-o="40"]{order:40}html[data-zijbalk] .zb-nav [data-zb-o="50"]{order:50}html[data-zijbalk] .zb-nav [data-zb-o="60"]{order:60}
+html[data-zijbalk] .zb-nav [data-zb-o="70"]{order:70}html[data-zijbalk] .zb-nav [data-zb-o="80"]{order:80}html[data-zijbalk] .zb-nav [data-zb-o="90"]{order:90}
+html[data-zijbalk] .zb-nav [data-zb-o="91"]{order:91}html[data-zijbalk] .zb-nav [data-zb-o="92"]{order:92}html[data-zijbalk] .zb-nav [data-zb-o="93"]{order:93}
+html[data-zijbalk] .zb-nav [data-zb-o="94"]{order:94}html[data-zijbalk] .zb-nav [data-zb-o="95"]{order:95}html[data-zijbalk] .zb-nav [data-zb-o="96"]{order:96}
+html[data-zijbalk] .zb-nav [data-zb-o="100"]{order:100}html[data-zijbalk] .zb-nav [data-zb-o="110"]{order:110}html[data-zijbalk] .zb-nav [data-zb-o="120"]{order:120}
+html[data-zijbalk] .zb-nav [data-zb-o="130"]{order:130}html[data-zijbalk] .zb-nav [data-zb-o="131"]{order:131}
+html[data-zijbalk] .zb-spacer{flex:1 1 auto;min-height:8px}
+/* rij: tabknop, Meer-kop en inklapknop delen de stijl van .mt-nav uit het design system */
+html[data-zijbalk] .zb-nav .tab-btn,html[data-zijbalk] .zb-nav .zb-meer,html[data-zijbalk] .zb-nav .zb-toggle{
+  position:relative;display:flex;align-items:center;gap:12px;flex:0 0 auto;height:36px;margin:1px 8px;padding:0 12px;border:0;border-radius:4px;
+  background:none;color:var(--ink);font:500 13px/18px var(--sans);letter-spacing:0;text-align:left;white-space:nowrap;cursor:pointer;transition:background .12s}
+html[data-zijbalk] .zb-nav .tab-btn{font-size:0}   /* de oorspronkelijke tekst blijft staan voor de code, het label is .zb-t */
+html[data-zijbalk] .zb-nav .tab-btn:hover,html[data-zijbalk] .zb-nav .zb-meer:hover,html[data-zijbalk] .zb-nav .zb-toggle:hover{background:var(--sidebar-hover);color:var(--ink)}
+html[data-zijbalk] .zb-nav .tab-btn:focus-visible,html[data-zijbalk] .zb-nav .zb-meer:focus-visible,html[data-zijbalk] .zb-nav .zb-toggle:focus-visible,html[data-zijbalk] .zb-nav .tab-help-btn:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:-2px}
+html[data-zijbalk] .zb-nav .tab-btn.active{background:var(--sidebar-active);color:var(--ink);font-weight:600;border:0}
+html[data-zijbalk] .zb-nav .tab-btn.active .zb-t{font-weight:600}
+html[data-zijbalk] .zb-nav .tab-btn.active::before{content:"";position:absolute;left:-8px;top:8px;bottom:8px;width:3px;border-radius:0 2px 2px 0;background:var(--brass)}
+html[data-zijbalk] .zb-ic{display:block;flex:0 0 auto;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--ink-2)}
+html[data-zijbalk] .zb-nav .tab-btn.active .zb-ic{color:var(--primary-text)}
+html[data-zijbalk] .zb-t{font:500 13px/18px var(--sans);overflow:hidden;text-overflow:ellipsis}
+html[data-zijbalk] .zb-nav .zb-toggle{color:var(--ink-2);margin-bottom:8px}
+html[data-zijbalk] .zb-nav .zb-toggle .zb-t{font-weight:400}
+/* Meer: kop met chevron, items iets ingesprongen, in te klappen */
+html[data-zijbalk] .zb-nav .zb-meer[hidden]{display:none}
+html[data-zijbalk] .zb-nav .zb-meer .zb-ic:last-child{width:16px;height:16px;margin-left:auto;transition:transform .15s}
+html[data-zijbalk] .zb-nav .zb-meer[aria-expanded="true"] .zb-ic:last-child{transform:rotate(180deg)}
+html[data-zijbalk] .zb-nav .tab-btn[data-zb-meer]{margin-left:20px}
+html[data-zijbalk] .zb-nav.zb-meer-dicht .tab-btn[data-zb-meer]{display:none}
+/* tellers (rood/oranje bolletjes uit de tabs) */
+html[data-zijbalk] .zb-nav .tab-btn .tab-badge,html[data-zijbalk] .zb-nav .tab-btn #rapport-badge{margin:0 0 0 auto!important;border-radius:999px;font:500 11px/18px var(--mono);min-width:20px;height:18px;padding:0 6px}
+html[data-zijbalk] .zb-nav .tab-btn #rapport-badge[hidden]{display:none}
+/* hulpknoppen onderaan */
+html[data-zijbalk] .zb-nav .tab-help-btn{display:flex;align-items:center;align-self:stretch;justify-content:flex-start;gap:8px;flex:0 0 auto;height:28px;margin:1px 8px;padding:0 12px;border:0;border-radius:4px;background:none;color:var(--ink-2);font-size:12px;text-align:left}
+html[data-zijbalk] .zb-nav .tab-help-btn:hover{background:var(--sidebar-hover);color:var(--ink);border:0}
+/* ingeklapt: alleen iconen, teller als bolletje, tooltips via title */
+html[data-zijbalk="smal"] .zb-nav .tab-btn,html[data-zijbalk="smal"] .zb-nav .zb-meer,html[data-zijbalk="smal"] .zb-nav .zb-toggle{justify-content:center;margin:1px 12px;padding:0}
+html[data-zijbalk="smal"] .zb-nav .tab-btn[data-zb-meer]{margin-left:12px}
+html[data-zijbalk="smal"] .zb-t,html[data-zijbalk="smal"] .zb-nav .zb-meer .zb-ic:last-child{display:none}
+html[data-zijbalk="smal"] .zb-nav .tab-btn.active::before{left:-12px}
+html[data-zijbalk="smal"] .zb-nav .tab-btn .tab-badge,html[data-zijbalk="smal"] .zb-nav .tab-btn #rapport-badge{position:absolute;top:4px;right:2px;min-width:8px;width:8px;height:8px;padding:0;font-size:0;margin:0!important}
+html[data-zijbalk="smal"] .zb-nav .tab-help-btn{justify-content:center!important;margin:1px 12px;padding:0;font-size:0}
+html[data-zijbalk="smal"] .zb-nav .tab-help-btn::before{font-size:15px;line-height:1}
+html[data-zijbalk="smal"] .zb-nav .tab-help-btn[onclick^="helpOpen"]::before{content:"\24D8"}
+html[data-zijbalk="smal"] .zb-nav .tab-help-btn[onclick^="tbOpenInNieuwVenster"]::before{content:"\2197"}
+html[data-zb-auto] .zb-nav .zb-toggle{display:none}
+/* lage vensters: rijen iets compacter zodat alles zonder scrollen past */
+@media (max-height:760px){html[data-zijbalk] .zb-nav .tab-btn,html[data-zijbalk] .zb-nav .zb-meer,html[data-zijbalk] .zb-nav .zb-toggle{height:32px}html[data-zijbalk] .zb-nav{padding:8px 0}}
+@media (prefers-reduced-motion:reduce){html[data-zijbalk] .main,html[data-zijbalk] .zb-nav{transition:none}}
