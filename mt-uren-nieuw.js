@@ -82,7 +82,7 @@
     (o.gepland || []).forEach(g => { if (g && g.van != null && g.tot > g.van && !bezet.some(b => b[0] < g.tot && g.van < b[1])) items.push({ soort: 'gepland', id: g.id, titel: g.titel, van: g.van, tot: g.tot, tijd: hm(g.van) + '–' + hm(g.tot), sec: (g.tot - g.van) * 60, proj: g.proj || null }); });
     const gaten = eindeGaten > vanW ? U.vrijeStukken(vanW, eindeGaten, bezet.concat(kandAg.map(a => [a.van, a.tot])), 15) : [];
     gaten.forEach(g => items.push({ soort: 'gat', van: g[0], tot: g[1], tijd: hm(g[0]) + '–' + hm(g[1]), min: g[1] - g[0], sec: (g[1] - g[0]) * 60, titel: 'Nog niet geboekt' }));
-    U.banen(items);
+    U.banen(items.filter(x => x.soort !== 'gat')); items.forEach(x => { if (x.soort === 'gat') { x.lane = 0; x.lanes = 1; } });   // een gat loopt over de volle breedte; een gepland blok of afspraak ligt erover
     const geboektSec = ev.reduce((s, e) => s + e.sec, 0), dm = Math.max(0, Math.round(doel(dag) || 0));
     const axisVan = Math.min(7, Math.floor(Math.min(vanW, ...items.map(x => x.van)) / 60)), axisTot = Math.max(17, Math.ceil(Math.max(totW, ...items.map(x => x.tot)) / 60));
     m.dagInfo = { datum: dag, titel: cap(DAG[wdag(nr(dag))]) + ' ' + Number(dag.slice(8)) + ' ' + MND[Number(dag.slice(5, 7)) - 1], geboektSec, openMin: Math.max(0, dm - Math.round(geboektSec / 60)), doelMin: dm, items, gaten: gaten.map(g => ({ van: g[0], tot: g[1], min: g[1] - g[0] })), axis: { van: axisVan, tot: axisTot }, nuMin: dag === vandaag ? nuMin : null, venster: ven };
@@ -129,15 +129,15 @@
   const zetNegeer = (sleutel, set) => { try { D.storage.setItem(sleutel, JSON.stringify([...set].slice(-200))); } catch (e) {} };
   const SL_KLAAR = 'mt_uren_klaar_negeer', slAg = d => 'mt_uren_agenda_negeer:' + d;
 
-  function model() {
-    const dag = S.dag, slug = mijnSlug(), wt = D.werktijden ? D.werktijden() : null, wu = D.werkuren ? D.werkuren() : null, verlof = D.verlof ? D.verlof() : [], vrij = D.vrijedagen ? D.vrijedagen() : [];
+  function model(dagIn, entriesIn, agendaIn) {
+    const dag = dagIn || S.dag, slug = mijnSlug(), wt = D.werktijden ? D.werktijden() : null, wu = D.werkuren ? D.werkuren() : null, verlof = D.verlof ? D.verlof() : [], vrij = D.vrijedagen ? D.vrijedagen() : [];
     const rec = P.werktijdenMap(wt)[slug] || null;
     const idx = d => ((wdag(nr(d)) + 6) % 7);
     const afwezig = d => idx(d) > 4 || (vrij || []).some(v => v && v.datum === d && v.type === 'verplicht') || (verlof || []).some(v => v && v.van <= d && d <= v.tm && P.zelfdePersoon(v.persoon, slug, D.team() || []));
     const doel = d => afwezig(d) ? 0 : P.dagCapMin(slug, idx(d), { werkuren: wu, werktijden: wt });
     const venster = d => { const x = rec && rec.dagen && rec.dagen[['ma', 'di', 'wo', 'do', 'vr'][idx(d)]]; if (x && x.werk) { const a = /^(\d{1,2}):(\d{2})/.exec(x.start || ''), b = /^(\d{1,2}):(\d{2})/.exec(x.eind || ''); if (a && b) return { van: +a[1] * 60 + +a[2], tot: +b[1] * 60 + +b[2] }; } return { van: 480, tot: 1020 }; };
     const gepland = (D.gepland ? D.gepland(dag, slug) : []) || [];
-    return U.bouw({ dag, nu: D.nu(), entries: S.entries, lopend: D.lopend ? D.lopend() : null, doel, venster, projInfo: pid => D.projInfo(pid, S.projecten), agenda: S.agendaDag === dag ? S.agenda : null,
+    return U.bouw({ dag, nu: D.nu(), entries: entriesIn || S.entries, lopend: D.lopend ? D.lopend() : null, doel, venster, projInfo: pid => D.projInfo(pid, S.projecten), agenda: agendaIn !== undefined ? agendaIn : (S.agendaDag === dag ? S.agenda : null),
       negeerAgenda: leesNegeer(slAg(dag)), gepland, klaar: D.klaarTaken ? D.klaarTaken() : [], negeerKlaar: leesNegeer(SL_KLAAR) });
   }
 
@@ -164,9 +164,15 @@
   // De agenda-suggesties halen je Outlook-afspraken op: pas nadat je daar zelf voor kiest (een klik), zodat er nooit onverwacht een Microsoft-venster opent. Daarna blijft het aan zolang dit tabblad open is.
   const agendaAan = () => { try { return !!D.sessie && D.sessie.getItem('mt_uren_agenda_aan') === '1'; } catch (e) { return false; } };
   U.agendaAanzetten = function () { try { D.sessie && D.sessie.setItem('mt_uren_agenda_aan', '1'); } catch (e) {} S.agendaDag = ''; S.melding = 'Agenda ophalen…'; U.teken(); U.laadAgenda().then(() => { if (S.melding === 'Agenda ophalen…') { S.melding = S.agenda ? '' : 'De agenda kon niet worden opgehaald; log zo nodig opnieuw in bij Microsoft.'; U.teken(); } }); };
+  // Het dagmodel voor een willekeurige dag (de dagvraag): de entries van die week uit Toggl (of de al geladen week), zonder agenda. null als het laden mislukt.
+  U.modelVoor = async function (datum) {
+    if (!D) return null; const ma = maandag(datum);
+    if (S.geladen && S.weekStart === ma) return model(datum, S.entries, null);
+    try { const es = await D.eigenEntries(plus(ma, -1), plus(ma, 8)); return model(datum, (Array.isArray(es) ? es : []).filter(e => e && e.stop).sort((a, b) => new Date(b.start) - new Date(a.start)), null); } catch (e) { return null; }
+  };
   U.kiesDag = function (d) { if (d === S.dag) return; const nieuweWeek = maandag(d) !== S.weekStart; S.dag = d; S.melding = ''; if (nieuweWeek) U.laad(); else { U.teken(); U.laadAgenda(); } };
   U.weekVerder = function (n) { U.kiesDag(plus(S.weekStart || maandag(S.dag || vandaagYmd()), n * 7)); };
-  U.naarDag = function (d) { S.weergave = 'dag'; if (!S.dag) S.dag = d; U.kiesDag(d); U.teken(); };
+  U.naarDag = function (d) { S.weergave = 'dag'; S.dag = d; S.weekStart = maandag(d); S.melding = ''; if (S.geladen) U.teken(); };   // de aanroeper opent de tab; die laadt de week
   U.timerGewijzigd = function () { if (!D || !actief() || !S.geladen) return; clearTimeout(U._t); U._t = setTimeout(() => U.teken(), 30); };
 
   // ── boeken ──
@@ -193,6 +199,8 @@
     const pid = await kiesProject('Gat boeken', null); if (pid === undefined) return;
     boek({ datum: m.dagInfo.datum, van: gat.van, min: gat.tot - gat.van, omschrijving: '', projectId: pid, label: 'Het gat zonder uren.' });
   };
+  // Het gat boeken op hetzelfde project en met dezelfde omschrijving als de entry ervoor (de dagvraag: "Was dat Platen bestellen?"); eerst de bevestiging.
+  U.boekGatMet = function (m, gat, entry) { return boek({ datum: m.dagInfo.datum, van: gat.van, min: gat.tot - gat.van, omschrijving: entry && entry.titel !== '(geen omschrijving)' ? entry.titel : '', projectId: entry ? entry.projectId : null, label: 'Het gat zonder uren.' }); };
   U.boekAgenda = async function (m, it) {
     const pid = await kiesProject('Afspraak boeken', null); if (pid === undefined) return;
     boek({ datum: m.dagInfo.datum, van: it.van, min: it.tot - it.van, omschrijving: it.titel, projectId: pid, label: 'Afspraak uit je Outlook-agenda.' });
@@ -273,7 +281,7 @@
           knop(t.budgetMin > 0 ? 'Tijd boeken: ' + klok(t.budgetMin) : 'Tijd boeken', 'primair', () => U.boekKlaar(m, t)),
           knop('Andere tijd', '', () => U.andereTijd(m, t)),
           knop('Niet nodig', 'ghost', () => { const s = leesNegeer(SL_KLAAR); s.add(String(t.id)); zetNegeer(SL_KLAAR, s); U.teken(); })))) : el('span', { klass: 'un-leeg', tekst: 'Alles wat klaar is heeft uren.' })));
-    const dv = D.dagvraagKaart ? D.dagvraagKaart(m.dagInfo.datum) : null;
+    const dv = D.dagvraagKaart ? D.dagvraagKaart(m.dagInfo.datum, m) : null;
     return el('aside', { klass: 'un-zij' }, perProj, klaar, dv);
   }
   U.teken = function () {
