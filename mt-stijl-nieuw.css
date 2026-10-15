@@ -725,3 +725,16 @@ html[data-stijl="nieuw"] .badge[style*="#B8962E22" i],html[data-stijl="nieuw"] .
 html[data-stijl="nieuw"] .badge[style*="#2563eb" i]{background:var(--info-50)!important;color:var(--info)!important}
 html[data-stijl="nieuw"] .badge[style*="#6b7280" i]{background:var(--surface-sunken)!important;color:var(--ink-2)!important}
 html[data-stijl="nieuw"] .badge[style*="#c0392b" i]{background:var(--error-50)!important;color:var(--error)!important}
+/* ── v2.18: de nieuwe stijl is standaard; de weg terug en de eenmalige melding ─────────────────────────────────────────────────────────────────── */
+html[data-zijbalk] .zb-nav [data-zb-o="125"]{order:125}
+html[data-zijbalk] .zb-nav .zb-stijl{position:relative;display:flex;align-items:center;gap:12px;flex:0 0 auto;height:36px;margin:1px 8px;padding:0 12px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);font:500 13px/18px var(--sans);letter-spacing:0;text-align:left;white-space:nowrap;cursor:pointer;transition:background .12s}
+html[data-zijbalk] .zb-nav .zb-stijl:hover{background:var(--sidebar-hover)}
+html[data-zijbalk] .zb-nav .zb-stijl:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:-2px}
+html[data-zijbalk="smal"] .zb-nav .zb-stijl{justify-content:center;margin:1px 12px;padding:0}
+@media (max-height:760px){html[data-zijbalk] .zb-nav .zb-stijl{height:32px}}
+html[data-stijl="nieuw"] .stijl-melding{position:fixed;right:24px;bottom:24px;z-index:70;display:flex;align-items:center;gap:12px;max-width:min(420px,calc(100vw - 32px));padding:12px 8px 12px 16px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-pop);font:500 13px/18px var(--sans)}
+html[data-stijl="nieuw"] .stijl-melding-knop{height:34px;padding:0 14px;border:1px solid var(--line-strong);border-radius:4px;background:var(--surface);color:var(--ink);font:500 13px/18px var(--sans);cursor:pointer;white-space:nowrap}
+html[data-stijl="nieuw"] .stijl-melding-knop:hover{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .stijl-melding-x{width:34px;height:34px;border:0;border-radius:4px;background:none;color:var(--ink-2);font:400 20px/1 var(--sans);cursor:pointer}
+html[data-stijl="nieuw"] .stijl-melding-x:hover{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .stijl-melding-knop:focus-visible,html[data-stijl="nieuw"] .stijl-melding-x:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}

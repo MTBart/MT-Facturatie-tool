@@ -2,18 +2,19 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<!-- Wisselknop "Nieuwe stijl proberen" (restyling fase 1): zet html[data-stijl="nieuw"] VOOR het eerste tekenen uit localStorage
-     "mt-stijl" (per computer), of via ?stijl=nieuw / ?stijl=oud (wordt onthouden). Standaard UIT. De stijlregels staan in
-     mt-stijl-nieuw.css onder dat attribuut; zonder attribuut is de tool ongewijzigd. Lettertypen laden alleen in de nieuwe stijl. -->
+<!-- Stijlkeuze (restyling fase 1, v2.18): de NIEUWE stijl is de standaard. Zet html[data-stijl="nieuw"] VOOR het eerste tekenen, tenzij dit toestel zelf voor de oude stijl koos:
+     localStorage "mt-stijl-keuze" ('oud' of 'nieuw'; per toestel; een nieuwe sleutel, de proefwaarde "mt-stijl" uit de testperiode telt niet mee), of via ?stijl=oud / ?stijl=nieuw
+     (wordt onthouden). De stijlregels staan in mt-stijl-nieuw.css onder dat attribuut; met de oude stijl blijft de tool zoals voorheen. Lettertypen laden alleen in de nieuwe stijl. -->
 <script>
 (function(){
-  var K='mt-stijl', FONTS='https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap';
-  function lees(){ try{ return localStorage.getItem(K)==='nieuw'; }catch(e){ return false; } }
+  var K='mt-stijl-keuze', FONTS='https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap';
+  function keuze(){ try{ return localStorage.getItem(K); }catch(e){ return null; } }
+  function lees(){ return keuze()!=='oud'; }   // standaard (geen keuze, of geen toegang tot localStorage): nieuw
   function fonts(){ try{ if(document.getElementById('mt-stijl-fonts')) return; var l=document.createElement('link'); l.id='mt-stijl-fonts'; l.rel='stylesheet'; l.href=FONTS; document.head.appendChild(l); }catch(e){} }
   function toepassen(aan){ var h=document.documentElement; if(aan){ h.setAttribute('data-stijl','nieuw'); fonts(); } else h.removeAttribute('data-stijl'); }
-  try{ var q=new URLSearchParams(location.search).get('stijl'); if(q==='nieuw'||q==='oud'){ try{ if(q==='nieuw') localStorage.setItem(K,'nieuw'); else localStorage.removeItem(K); }catch(e){} } }catch(e){}
+  try{ var q=new URLSearchParams(location.search).get('stijl'); if(q==='nieuw'||q==='oud'){ try{ localStorage.setItem(K,q); }catch(e){} } }catch(e){}
   toepassen(lees());
-  window.mtStijl={ aan:lees, zet:function(aan){ try{ if(aan) localStorage.setItem(K,'nieuw'); else localStorage.removeItem(K); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
+  window.mtStijl={ aan:lees, expliciet:function(){ return keuze()!==null; }, zet:function(aan){ try{ localStorage.setItem(K,aan?'nieuw':'oud'); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
   window.addEventListener('storage',function(e){ if(e.key===K||e.key===null){ toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(x){} } });   // twee open tabbladen blijven gelijk
 })();
 </script>
@@ -64,12 +65,12 @@
 <script src="mt-vandaag-desk.js?v=2026-10-15s"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
-<script src="mt-zijbalk.js?v=2026-10-15s" defer></script>
+<script src="mt-zijbalk.js?v=2026-10-16c" defer></script>
 <script src="mt-geld.js?v=2026-10-12c"></script>
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15v"></script>
+<script src="mt-verhuis.js?v=2026-10-16c"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="calc-engine.js"></script>
@@ -203,6 +204,10 @@ header h1 span{color:var(--gold);font-style:italic}
   padding:5px 10px;border-radius:var(--radius-sm);transition:background .15s,color .15s;white-space:nowrap}
 .header-v1link:hover{background:var(--surface-sunken);color:var(--green)}
 .header-right{display:flex;align-items:center;gap:1rem}
+.stijl-terug{display:none}   /* alleen in de oude stijl: de weg terug naar de nieuwe stijl (v2.18) */
+html:not([data-stijl="nieuw"]) .stijl-terug{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--gold,#B8962E);border-radius:6px;background:var(--gold-50,#FBF5E0);color:var(--gold-text,#7A6010);font:600 12px/1 var(--sans,inherit);cursor:pointer;white-space:nowrap}
+html:not([data-stijl="nieuw"]) .stijl-terug:hover{background:var(--gold-mid,#E8D48A)}
+html:not([data-stijl="nieuw"]) .stijl-terug:focus-visible{outline:2px solid var(--green,#2A4A38);outline-offset:2px}
 .api-dot{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px var(--success-50)}
 .api-dot.warn{background:var(--gold);box-shadow:0 0 0 3px var(--gold-50)}
 .api-dot.err{background:var(--error);box-shadow:0 0 0 3px var(--error-50)}
@@ -847,7 +852,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-16b">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-16c">
 </head>
 <body>
 
@@ -883,6 +888,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     </div>
   </div>
   <div class="header-right">
+    <button id="stijl-terug" class="stijl-terug" type="button" title="Naar de nieuwe stijl" aria-label="Naar de nieuwe stijl"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v14H4zM9 5v14"/></svg><span>Nieuwe stijl</span></button>
     <span id="api-dot" class="api-dot warn"></span>
     <span id="api-label" class="api-label">verbinden...</span>
     <button class="mtc-hdrknop" data-mtc="zoek" title="Contact zoeken" aria-label="Contact zoeken">📇</button>
@@ -893,6 +899,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     </div>
   </div>
 </header>
+<script>(function(){ var b=document.getElementById('stijl-terug'); if(b) b.addEventListener('click',function(){ if(window.mtStijl) mtStijl.zet(true); }); })();</script>
 
 <div class="tabs-wrap">
   <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Dashboard</button>
@@ -1506,10 +1513,10 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div class="card" id="verhuis-kaart" style="display:none"><div class="card-title">Verhuizen naar het nieuwe adres</div><div id="verhuis-plek"></div></div>
     <div class="card" id="stijl-kaart">
       <div class="card-title">Weergave</div>
-      <label style="display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--text);cursor:pointer"><input type="checkbox" id="stijl-schakel" onchange="mtStijl.zet(this.checked)"> Nieuwe stijl proberen</label>
-      <p style="font-size:12px;color:var(--text-dim);margin:6px 0 0">Nieuwe kleuren, lettertypen en indeling. Geldt alleen op deze computer; je collega's zien niets. Uitzetten kan hier altijd weer.</p>
+      <label style="display:flex;align-items:center;gap:8px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--text);cursor:pointer"><input type="checkbox" id="stijl-schakel" onchange="mtStijl.zet(!this.checked)"> Oude stijl gebruiken</label>
+      <p style="font-size:12px;color:var(--text-dim);margin:6px 0 0">De nieuwe stijl is de standaard. Hier ga je terug naar de oude weergave (en weer naar de nieuwe). Geldt alleen op deze computer; je collega's zien niets.</p>
     </div>
-    <script>(function(){ var c=document.getElementById('stijl-schakel'); if(!c||!window.mtStijl) return; var s=function(){ c.checked=mtStijl.aan(); }; s(); window.addEventListener('mt-stijl',s); })();</script>
+    <script>(function(){ var c=document.getElementById('stijl-schakel'); if(!c||!window.mtStijl) return; var s=function(){ c.checked=!mtStijl.aan(); }; s(); window.addEventListener('mt-stijl',s); })();</script>
     <div class="card" id="upd-kaart" style="display:none">
       <div class="card-title">Wat is er verbeterd</div>
       <div id="upd-inhoud" style="font-size:13px">Laden…</div>
