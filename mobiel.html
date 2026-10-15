@@ -48,7 +48,7 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planning.js?v=2026-10-16a"></script>
-<script src="mt-vandaag.js?v=2026-10-15b"></script>
+<script src="mt-vandaag.js?v=2026-10-16a"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
 <script src="mt-verhuis.js?v=2026-10-15v"></script>
@@ -1363,6 +1363,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 </div>
 
 <script>
+window.addEventListener('mt-stijl', () => { try { if (window.MTVandaag) MTVandaag.stijlGewijzigd(); } catch (e) {} });   // werktijden erbij of weg bij een stijlwissel
 // Nieuwe stijl proberen (Meer): dezelfde schakelaar als op de desktop (mtStijl, zie de kop van dit bestand); geldt alleen op dit toestel.
 (function(){ var k=document.getElementById('stijlKnop'); if(!k||!window.mtStijl) return;
   function zet(){ var aan=mtStijl.aan(); k.setAttribute('aria-pressed',aan?'true':'false'); var s=document.getElementById('stijlSub'); if(s) s.textContent=aan?'Aan · nieuwe kleuren en lettertypen, alleen op dit toestel':'Uit · tik om de nieuwe kleuren en lettertypen te proberen'; }
@@ -2437,6 +2438,7 @@ if (window.MTVandaag) MTVandaag.init({
   rol: { mag: spec => rolMagM(spec), naam: () => String((window.MTRol && MTRol.me && MTRol.me.rol) || '') },
   wie: () => ({ slug: _mijnSlug(), email: _mijnEmail(), naam: String((_msAccount && _msAccount.name) || '') }),
   account: () => _msAccount, demo: () => _demoMode, nu: () => Date.now(), dev: _devIdM,
+  werktijdenAan: () => { try { return document.documentElement.getAttribute('data-stijl') === 'nieuw'; } catch (e) { return false; } },   // de werktijden tellen alleen mee in de nieuwe stijl (zoals op de desktop)
   toast: m => showToast(m), dialog: () => window.mtDialog,
   schemaMin: async () => {   // GET /teller/status → schema_min (de app-versie die projecttaken nog mag schrijven)
     const h = await authHeader(); if (!h['X-Auth-Token']) return null;
