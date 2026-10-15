@@ -845,7 +845,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15o">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15p">
 </head>
 <body>
 
@@ -3841,7 +3841,7 @@ try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, i
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
 // Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.
-function capWerktijdenMag(){ try{ return mtIsAdmin()&&!!(window.MTRol&&MTRol.me)&&MTRol.mag('projecten:wijzigen'); }catch(e){ return false; } }
+function capWerktijdenMag(){ try{ return mtIsAdmin()&&capRolWijzigen(); }catch(e){ return false; } }
 try{ MTWerktijden.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, werkuren:()=>(admCfg()||{}).werkuren||null,
   sp:{ read:n=>_SP.read(n), write:(n,d,r)=>_SP.write(n,d,r) }, nu:()=>Date.now(), wie:()=>mtMijEmail(), stempel:_spStempel, audit:(a,doel,oud,nieuw)=>auditLog(a,doel,oud,nieuw,''),
   magWijzigen:()=>capWerktijdenMag(), opgeslagen:()=>werktijdenVerversWeergave() }); }catch(e){ console.warn('Werktijden init:',e); }
@@ -15190,7 +15190,8 @@ async function agPlanSave(){
   catch(e){ if(typeof planToast==='function')planToast('⚠ SharePoint niet bereikbaar — wijziging alleen lokaal bewaard'); return false; }
   _planblokken=_agPlanSamen(_planblokken||[],remote);
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
-  await agPlanSchrijf();
+  const geschreven=await agPlanSchrijf();   // false = de PUT mislukte (ook na een 412-samenvoeging): de wijziging staat dan alleen lokaal
+  if(geschreven===false){ if(typeof planToast==='function') planToast('⚠ Planning niet gedeeld met SharePoint — alleen lokaal bewaard'); return false; }
   return true;
 }
 
@@ -15473,11 +15474,12 @@ function agPlanBlokMenu(evt,id){
 let _planDragId=null;
 function agPlanDragStart(evt,id){
   const b=agPlanActief().find(x=>x.id===id);
-  if(pvMoetVoorstel()||(b&&b.status==='voorstel')){ evt.preventDefault(); return; }   // Werkplaats en open voorstellen niet verslepen
+  if(!capMagSlepen()||(b&&b.status==='voorstel')){ evt.preventDefault(); return; }   // alleen met een geladen rol die projecten mag wijzigen (zelfde regel als het slepen in de capaciteit)   // Werkplaats en open voorstellen niet verslepen
   _planDragId=id;evt.dataTransfer.effectAllowed='move';}
 function agPlanDragEnd(evt){_planDragId=null;document.querySelectorAll('[id^=agplan-drop-]').forEach(el=>{el.style.background='';});}
 function agPlanDrop(evt,datum){
   evt.preventDefault();
+  if(!capMagSlepen()){ _planDragId=null; planToast('Dit mag je niet met jouw rol: verplaatsen is voor kantoor.'); return; }   // ook bij het loslaten (niet alleen bij het oppakken)
   const id=_planDragId; if(!id) return;
   const el=document.getElementById('agplan-drop-'+datum); if(el) el.style.background='';
   // Verlof check
@@ -15509,12 +15511,25 @@ function agPlanDrop(evt,datum){
 // Zelfde opslag als agPlanDrop: de blokken blijven records in mt_planblokken met een stempel; agPlanSave leest vers, voegt per id samen
 // (_SP.mergers.mt_planblokken) en schrijft met de ETag terug (een 412 wordt met dezelfde samenvoeger opgelost). Open voorstellen worden niet versleept.
 // Recht: alleen met het recht om projecten te wijzigen (niet "lezen", niet de werkplaats) en alleen als de rol geladen is (fail-closed).
-function capMagSlepen(){ try{ return !!(window.MTRol&&MTRol.me)&&MTRol.mag('projecten:wijzigen')&&!pvMoetVoorstel(); }catch(e){ return false; } }
+// De rol uit de rollenmatrix, ongeacht de modus (MTRol.mag geeft buiten 'afdwingen' altijd true): alleen met een geladen rol die expliciet projecten mag wijzigen (eigenaar, beheer, kantoor).
+// Onbekend, nog niet geladen, lezen of werkplaats = nee (fail-closed).
+function capRolWijzigen(){ try{ const r=window.MTRol&&MTRol.me&&MTRol.me.rechten; return !!r&&r.projecten==='wijzigen'; }catch(e){ return false; } }
+function capMagSlepen(){ try{ return capRolWijzigen()&&!pvMoetVoorstel(); }catch(e){ return false; } }
 function _capCtx(){ return { blokken:agPlanBlokken(), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), mag:capMagSlepen(), nu:Date.now(), wie:mtMijEmail(), stempel:_spStempel,
   nieuwId:()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7) }; }
+// Eerst de actuele stand van SharePoint erbij (samengevoegd met de lokale): zo ziet de controle een blok dat een ander net verplaatste of inplande.
+// -> { ok:true, online } of { ok:false, reden } (een bestand met een onverwachte vorm wordt nooit overschreven).
+async function _capVers(){
+  if(!_planblokken) await agPlanLoad();
+  let remote; try{ remote=await _SP.read('mt_planblokken.json'); }catch(e){ return { ok:true, online:false }; }
+  if(remote!==null&&remote!==undefined&&!Array.isArray(remote)) return { ok:false, reden:'Het bestand met planblokken heeft een onverwachte vorm; er is niets gewijzigd.' };
+  _planblokken=_agPlanSamen(agPlanBlokken(),remote||[]);
+  try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
+  return { ok:true, online:true };
+}
 async function capVerplaats(spec){
   if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
-  if(!_planblokken) await agPlanLoad();
+  const vers=await _capVers(); if(!vers.ok) return vers;
   const r=MTPlanVerplaats.pas(spec,_capCtx()); if(!r.ok||r.noop) return r;
   _planblokken=r.blokken;
   const opgeslagen=await agPlanSave();   // false = SharePoint niet bereikbaar: de wijziging staat dan alleen lokaal (agPlanSave meldt dat zelf)
@@ -15523,7 +15538,8 @@ async function capVerplaats(spec){
 }
 async function capHerstel(w){
   if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
-  if(!_planblokken) await agPlanLoad();
+  const vers=await _capVers(); if(!vers.ok) return vers;
+  if(!vers.online) return { ok:false, reden:'SharePoint is niet bereikbaar: niets teruggezet, want het blok kan intussen door iemand anders zijn gewijzigd.' };   // ongedaan maken alleen op een verse stand
   const r=MTPlanVerplaats.ongedaan(w,_capCtx()); if(!r.ok) return r;
   _planblokken=r.blokken;
   const opgeslagen=await agPlanSave();

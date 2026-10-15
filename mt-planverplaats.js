@@ -12,7 +12,8 @@
  *    verplichte vrije dag; niet naar een weekend;
  *  - een blok verplaatsen verandert persoon, datum en start (de duur blijft); uit Ongepland ontstaat een nieuw planblok (taak_id, duur = het
  *    budget van de taak). Een taak met een datum maar zonder planblok wordt niet versleept (zijn uren zijn over meer dagen verdeeld).
- *  - op een dagdeel (ochtend/middag) komt het blok op de eerste vrije tijd van dat dagdeel; op een uur precies op die tijd.
+ *  - op een dagdeel (ochtend/middag) komt het blok op de eerste tijd waarop het volledig in dat dagdeel past; past het nergens, direct na het laatste blok van die dag (nooit terug naar het begin met overlap); op een uur precies op die tijd.
+ *  - een blok uit Ongepland krijgt een vast id uit project en taak (twee apparaten maken dan één blok).
  *  - Ongedaan maken zet persoon/datum/start terug (verplaatsen) of voegt een tombstone toe (nieuw blok), mits het blok sindsdien niet door
  *    iemand anders is gewijzigd (dezelfde stempel).
  * ========================================================================== */
@@ -27,15 +28,18 @@
   const actief = b => !!b && typeof b === 'object' && !b._vervallen;
   V.blokVanId = (lijst, id) => (Array.isArray(lijst) ? lijst : []).find(b => actief(b) && String(b.id) === String(id)) || null;
 
-  // De eerste vrije begintijd (minuten) voor een blok van `duur` minuten vanaf `basis`, na de blokken met een tijd die die persoon die dag al heeft.
-  V.vrijeStart = function (blokken, slug, datum, basis, duur, negeerId, team) {
+  // De eerste begintijd (minuten) voor een blok van `duur` minuten die volledig binnen het dagdeel [basis, grens] past en geen blok met een tijd raakt dat die persoon die
+  // dag al heeft. Past het nergens, dan komt het direct na het laatste blok van die dag (de overboeking is dan zichtbaar als dubbel/over), nooit terug naar het begin
+  // van het dagdeel met overlap. Zonder blokken die dag: op het begin van het dagdeel.
+  V.eerstePlek = function (blokken, slug, datum, basis, grens, duur, negeerId, team) {
     const bezet = (Array.isArray(blokken) ? blokken : []).filter(b => actief(b) && b.status !== 'voorstel' && String(b.id) !== String(negeerId) && b.datum === datum && gelijkAan(b.persoon, slug, team) && tijdMin(b.start) !== null)
       .map(b => [tijdMin(b.start), tijdMin(b.start) + Math.max(0, Math.round(Number(b.duurMin) || 0))]).sort((x, y) => x[0] - y[0]);
-    let s = basis;
-    bezet.forEach(([a, e]) => { if (a < s + duur && s < e) s = e; });
-    return s > 18 * 60 ? basis : s;
+    const raakt = s => bezet.some(([a, e]) => a < s + duur && s < e);
+    const kandidaten = [basis].concat(bezet.map(x => x[1]).filter(e => e > basis)).sort((x, y) => x - y);
+    for (const s of kandidaten) if (s + duur <= grens && !raakt(s)) return s;
+    const laatste = bezet.reduce((m, x) => Math.max(m, x[1]), 0);
+    return Math.min(21 * 60, Math.max(basis, laatste));
   };
-
   // → '' (mag) of de reden in gewone taal
   V.controle = function (spec, ctx) {
     if (!ctx || !ctx.mag) return 'Dit mag je niet met jouw rol: verplaatsen is voor kantoor (de werkplaats dient een voorstel in).';
@@ -63,8 +67,11 @@
   };
 
   // → { ok, reden } | { ok:true, noop:true } | { ok:true, blokken, wijziging }
-  // De eerste vrije tijd binnen het gevraagde dagdeel; is dat dagdeel vol, dan op het begin ervan (dubbel geboekt, zichtbaar in de uren-zoom)
-  const dagdeelStart = (lijst, spec, duur, negeerId, team) => { const basis = spec.dagdeel === 1 ? 13 * 60 : 8 * 60, s = V.vrijeStart(lijst, spec.persoon, spec.datum, basis, duur, negeerId, team); return spec.dagdeel === 1 ? (s >= 17 * 60 ? basis : s) : (s >= 12 * 60 ? basis : s); };
+  // Het gevraagde dagdeel: ochtend 08:00-12:00, middag 13:00-17:00 (zie V.eerstePlek voor wat er gebeurt als het blok er niet in past)
+  const dagdeelStart = (lijst, spec, duur, negeerId, team) => spec.dagdeel === 1 ? V.eerstePlek(lijst, spec.persoon, spec.datum, 13 * 60, 17 * 60, duur, negeerId, team) : V.eerstePlek(lijst, spec.persoon, spec.datum, 8 * 60, 12 * 60, duur, negeerId, team);
+  // Een planblok uit Ongepland heeft een vast id uit project en taak: twee apparaten die dezelfde taak tegelijk inplannen maken dus hetzelfde record, en de samenvoeger
+  // (per id, nieuwste stempel wint) maakt er één blok van in plaats van twee.
+  V.blokIdVoorTaak = (code, taakId) => 'tb:' + String(code == null ? '' : code).trim().toLowerCase() + ':' + String(taakId == null ? '' : taakId);
   V.pas = function (spec, ctx) {
     const reden = V.controle(spec, ctx); if (reden) return { ok: false, reden };
     const lijst = Array.isArray(ctx.blokken) ? ctx.blokken : [], team = ctx.team || [], stempel = ctx.stempel || ((x, vorig) => { x._gewijzigd = Date.now(); return x; });
@@ -79,9 +86,9 @@
     }
     const t = spec.taak, duur = Math.max(15, Math.round(Number(t.min) || 0)) || 60;
     const start = spec.start != null ? hhmm(tijdMin(spec.start)) : hhmm(dagdeelStart(lijst, spec, duur, null, team));
-    const id = ctx.nieuwId ? ctx.nieuwId() : (Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
-    const nieuw = stempel({ id, persoon: spec.persoon, project_code: t.code, taak: t.naam || '', taak_id: t.id, datum: spec.datum, start, duurMin: duur, notitie: '', ts, door: wie }, null);
-    return { ok: true, blokken: lijst.concat([nieuw]), wijziging: { soort: 'nieuw', id, stempel: nieuw._gewijzigd, naam: t.naam || t.code, na: { persoon: spec.persoon, datum: spec.datum, start } } };
+    const id = V.blokIdVoorTaak(t.code, t.id), vorig = lijst.find(x => x && String(x.id) === id) || null;   // een eerdere tombstone met dit id (ongedaan gemaakt) krijgt een nieuwere stempel
+    const nieuw = stempel({ id, persoon: spec.persoon, project_code: t.code, taak: t.naam || '', taak_id: t.id, datum: spec.datum, start, duurMin: duur, notitie: '', ts, door: wie }, vorig);
+    return { ok: true, blokken: lijst.filter(x => x !== vorig).concat([nieuw]), wijziging: { soort: 'nieuw', id, stempel: nieuw._gewijzigd, naam: t.naam || t.code, na: { persoon: spec.persoon, datum: spec.datum, start } } };
   };
 
   // Ongedaan maken: alleen als het blok sindsdien niet door iemand anders is gewijzigd (zelfde stempel).
