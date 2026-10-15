@@ -192,3 +192,76 @@ html[data-stijl="nieuw"] .card .field>input:not([type=checkbox]):not([type=radio
 html[data-stijl="nieuw"] .card .field>select,html[data-stijl="nieuw"] .card .field>textarea{max-width:720px}
 /* tabellen met weinig kolommen rekken niet uit op brede schermen (bv. "Per vestiging"); brede overzichten kiezen zelf: class data-table--breed */
 html[data-stijl="nieuw"] .data-table:not(.data-table--breed),html[data-stijl="nieuw"] .card>table[style*="width:100%"]{max-width:1400px}
+/* ── 8. Brok 5: Vandaag op de desktop (mt-vandaag-desk.js; staat boven de review-wachtrij van Larry in #tab-attentie) ───── */
+html[data-stijl="nieuw"] #vandaag-desk:not([hidden]){display:block;margin-bottom:8px}
+html[data-stijl="nieuw"] .vd-kop{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:24px}
+html[data-stijl="nieuw"] .vd-datum{display:flex;flex-direction:column;gap:4px}
+html[data-stijl="nieuw"] .vd-sub{font:400 12px/16px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .vd-titel{margin:0;font:600 28px/32px var(--serif);letter-spacing:-0.015em;color:var(--ink)}
+html[data-stijl="nieuw"] .vd-getallen{display:flex;gap:24px;margin-left:auto;flex-wrap:wrap}
+html[data-stijl="nieuw"] .vd-getal{display:flex;flex-direction:column}
+html[data-stijl="nieuw"] .vd-label{font:500 12px/16px var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .vd-num,html[data-stijl="nieuw"] .vd-num-l{font:500 26px/28px var(--mono);letter-spacing:-0.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+html[data-stijl="nieuw"] .vd-num.vd-groen{color:var(--primary-text)}
+html[data-stijl="nieuw"] .vd-melding{background:var(--warning-50);color:var(--warning);border:1px solid #e9cf9f;border-radius:4px;padding:8px 12px;margin-bottom:16px;font-size:13px}
+html[data-stijl="nieuw"] .vd-raster{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:24px;align-items:start}
+html[data-stijl="nieuw"] .vd-sec{background:var(--surface);border:1px solid var(--line);border-radius:8px;min-width:0;overflow:hidden}
+html[data-stijl="nieuw"] .vd-breed{grid-column:1/-1}
+html[data-stijl="nieuw"] .vd-sec-kop{display:flex;align-items:center;gap:12px;padding:14px 24px;font:600 16px/22px var(--sans);color:var(--ink)}
+html[data-stijl="nieuw"] .vd-sec-kop .vd-meer,html[data-stijl="nieuw"] .vd-sec-kop .vd-sub,html[data-stijl="nieuw"] .vd-sec-kop .vd-teller{margin-left:auto}
+html[data-stijl="nieuw"] .vd-sec-kop .vd-sub{font:400 13px/18px var(--sans)}
+html[data-stijl="nieuw"] .vd-teller{font:500 13px/18px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .vd-meer{font:500 13px/18px var(--sans);color:var(--primary-text);text-decoration:none}
+html[data-stijl="nieuw"] .vd-meer:hover{color:var(--ink);text-decoration:underline}
+html[data-stijl="nieuw"] .vd-sec a{color:var(--ink);text-decoration:none}
+html[data-stijl="nieuw"] .vd-sec a.vd-meer{color:var(--primary-text)}
+html[data-stijl="nieuw"] .vd-sec a:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:-2px}
+html[data-stijl="nieuw"] .vd-leeg{padding:16px 24px 20px;color:var(--ink-2);font-size:13px;border-top:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .vd-tekst{display:flex;flex-direction:column;min-width:0}
+html[data-stijl="nieuw"] .vd-naam{font:500 14px/20px var(--sans);overflow:hidden;text-overflow:ellipsis}
+html[data-stijl="nieuw"] .vd-regel{display:flex;align-items:center;gap:8px;font:400 12px/16px var(--sans);color:var(--ink-2);min-width:0}
+html[data-stijl="nieuw"] .vd-regel.vd-warn{color:var(--warning)}
+html[data-stijl="nieuw"] .vd-blokje{flex:0 0 8px;width:8px;height:8px;border-radius:2px;display:inline-block}
+html[data-stijl="nieuw"] .vd-code{font:500 12px/16px var(--mono)}
+html[data-stijl="nieuw"] .vd-ic{display:block;flex:0 0 auto;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* taakregel */
+html[data-stijl="nieuw"] .vd-taak{display:grid;grid-template-columns:24px minmax(0,1fr) auto 56px;gap:12px;align-items:center;padding:10px 24px;border-top:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .vd-taak:hover,html[data-stijl="nieuw"] .vd-rij:hover{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .vd-uren{font:500 12px/16px var(--mono);color:var(--ink-2);text-align:right;white-space:nowrap}
+html[data-stijl="nieuw"] .vd-st{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--ink-2)}
+html[data-stijl="nieuw"] .vd-st-bezig{color:var(--primary-text)}html[data-stijl="nieuw"] .vd-st-bezig .vd-vul{fill:currentColor;stroke:none}
+html[data-stijl="nieuw"] .vd-st-wacht{color:var(--warning)}html[data-stijl="nieuw"] .vd-st-wacht path:first-child{stroke-dasharray:3 2.6}
+html[data-stijl="nieuw"] .vd-st-gepland{color:var(--info)}
+/* chips */
+html[data-stijl="nieuw"] .vd-chip{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:4px;font:500 12px/16px var(--sans);white-space:nowrap;background:var(--surface-sunken);color:var(--ink-2)}
+html[data-stijl="nieuw"] .vd-chip-bezig{background:var(--primary-soft);color:var(--primary-text)}
+html[data-stijl="nieuw"] .vd-chip-wacht{background:var(--warning-50);color:var(--warning)}
+html[data-stijl="nieuw"] .vd-chip-gepland{background:var(--info-50);color:var(--info)}
+html[data-stijl="nieuw"] .vd-chip-klaar{background:var(--success-50);color:var(--success)}
+html[data-stijl="nieuw"] .vd-chip-telaat{background:var(--error-50);color:var(--error)}
+/* aandacht, team, leveringen */
+html[data-stijl="nieuw"] .vd-rij{display:grid;grid-template-columns:32px minmax(0,1fr) 16px;gap:12px;align-items:center;padding:10px 24px;border-top:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .vd-pijl{color:var(--ink-3)}
+html[data-stijl="nieuw"] .vd-blok{width:32px;height:32px;border-radius:4px;display:grid;place-items:center;background:var(--info-50);color:var(--info)}
+html[data-stijl="nieuw"] .vd-blok-over,html[data-stijl="nieuw"] .vd-blok-telaat{background:var(--error-50);color:var(--error)}
+html[data-stijl="nieuw"] .vd-blok-voorstel,html[data-stijl="nieuw"] .vd-blok-larry{background:var(--brass-soft);color:var(--brass-ink)}
+html[data-stijl="nieuw"] .vd-blok-materiaal{background:var(--warning-50);color:var(--warning)}
+html[data-stijl="nieuw"] .vd-teamrij{grid-template-columns:28px minmax(0,1fr) auto 84px}
+html[data-stijl="nieuw"] .vd-avatar{width:28px;height:28px;border-radius:999px;border:1px solid var(--line);background:var(--surface-sunken);display:grid;place-items:center;font:600 11px/1 var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .vd-dagen{display:flex;gap:3px;align-items:flex-end;height:24px}
+html[data-stijl="nieuw"] .vd-dag{width:8px;height:24px;border-radius:2px;background:var(--surface-sunken);display:flex;align-items:flex-end;overflow:hidden}
+html[data-stijl="nieuw"] .vd-dag.nu{box-shadow:0 0 0 1px var(--ink-2)}
+html[data-stijl="nieuw"] .vd-dag.vrij{background:repeating-linear-gradient(135deg,var(--line) 0 2px,transparent 2px 4px)}
+html[data-stijl="nieuw"] .vd-dag .vd-vul{width:100%;background:var(--primary)}
+html[data-stijl="nieuw"] .vd-dag .vd-vul.over{background:var(--error)}
+html[data-stijl="nieuw"] .vd-vrij{font:500 12px/16px var(--mono);text-align:right;color:var(--ink-2);white-space:nowrap}
+html[data-stijl="nieuw"] .vd-vrij.over{color:var(--error)}
+html[data-stijl="nieuw"] .vd-lever{grid-template-columns:64px 12px minmax(0,1fr) auto}
+html[data-stijl="nieuw"] .vd-wk{font:500 12px/16px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .vd-ruit{width:9px;height:9px;background:var(--brass);transform:rotate(45deg);display:block}
+html[data-stijl="nieuw"] .vd-uren-blok{padding:16px 24px 20px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .vd-uren-rij{display:flex;align-items:baseline;gap:8px}
+html[data-stijl="nieuw"] .vd-balk{height:6px;border-radius:2px;background:var(--surface-sunken);overflow:hidden;display:flex}
+html[data-stijl="nieuw"] .vd-balk span{background:var(--primary)}
+html[data-stijl="nieuw"] .vd-larry-kop{margin:32px 0 12px;font:600 16px/22px var(--sans);color:var(--ink)}
+@media (max-width:900px){html[data-stijl="nieuw"] .vd-raster{grid-template-columns:minmax(0,1fr)}html[data-stijl="nieuw"] .vd-taak{grid-template-columns:24px minmax(0,1fr) auto}html[data-stijl="nieuw"] .vd-taak .vd-uren{display:none}}

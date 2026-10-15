@@ -56,6 +56,7 @@
 <script src="mt-planning.js?v=2026-10-15b"></script>
 <script src="mt-mijnwerk.js?v=2026-10-15b"></script>
 <script src="mt-capaciteit.js?v=2026-10-15b"></script>
+<script src="mt-vandaag-desk.js?v=2026-10-15i"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
 <script src="mt-zijbalk.js?v=2026-10-15f" defer></script>
@@ -841,7 +842,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15h">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-15i">
 </head>
 <body>
 
@@ -1423,6 +1424,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
   <!-- ═══ TAB: VEREIST AANDACHT ═══ -->
   <div id="tab-attentie" class="tab-content">
+    <div id="vandaag-desk" class="vd-root" hidden></div>   <!-- Vandaag in de nieuwe stijl (mt-vandaag-desk.js); leeg en verborgen in de oude stijl -->
     <div class="card" style="margin-bottom:1rem">
       <div class="flex" style="justify-content:space-between;align-items:center">
         <div>
@@ -3419,7 +3421,7 @@ function showTab(name,btn){
   if(name==='agenda'||name==='planning'){ try{ if(window.MTStartvenster) MTStartvenster.toon(); }catch(e){} }   // startvenster "X taken wachten op je": alleen zonder lopende timer, eenmaal per sessie
   if(name==='toggl') tgOpen();
   if(name==='inbox') inboxOpen();
-  if(name==='attentie') renderAttentie();
+  if(name==='attentie'){ renderAttentie(); vandaagDeskTeken(); }
   if(name==='materialen') renderMaterialen();
   if(name==='admin'){ adminOpen(); admSub(sub); }
   if(name==='verbeterpunten') verbLaadTab();
@@ -3808,6 +3810,24 @@ try{ MTCapaciteit.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu
   vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null,
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit init:',e); }
+// Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
+try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
+  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), blokken:()=>agPlanActief(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(), werkuren:()=>(admCfg()||{}).werkuren||null,
+  uren:()=>agEntries(), bestel:()=>_blActief(), projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code),
+  larry:()=>{ const b=document.getElementById('attentie-badge'); return b&&b.style.display!=='none'?(Number(b.textContent)||0):0; },
+  nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); }, projectNaam:code=>{ const p=projVind(code); return p?projNaamVol(p):''; },
+  href:o=>mtRoute.format(o.code?{tab:'projecten',code:o.code,sectie:'planning'}:{tab:o.tab}),
+  ga:a=>{ const knop=t=>document.querySelector('.tabs-wrap .tab-btn[onclick*="\''+t+'\'"]');
+    if(a.k==='project') openProject(a.code,{sectie:'planning'});
+    else if(a.k==='agenda'){ if(a.view) _agenda.view=a.view; showTab('agenda',knop('agenda')); }
+    else if(a.k==='tab') showTab(a.tab,knop(a.tab));
+    else if(a.k==='larry'){ const h=document.getElementById('vd-larry-kop'); if(h&&h.scrollIntoView) h.scrollIntoView({behavior:'smooth',block:'start'}); } } }); }catch(e){ console.warn('Vandaag (desktop) init:',e); }
+function vandaagDeskTeken(){
+  try{ MTVandaagDesk.teken(); }catch(e){ console.warn('Vandaag (desktop):',e); }
+  clearTimeout(vandaagDeskTeken._t); vandaagDeskTeken._t=setTimeout(()=>{ const t=document.getElementById('tab-attentie'); if(t&&t.classList.contains('active')){ try{ MTVandaagDesk.teken(); }catch(e){} } },4000);   // de takenlijst en rol komen soms net na het openen binnen
+}
+window.addEventListener('mt-stijl',()=>{ const t=document.getElementById('tab-attentie'); if(t&&t.classList.contains('active')) vandaagDeskTeken(); });
 // Haalt project-/persoon-namen één keer op als de cache leeg is (bv. eerste
 // render vóór een sync). Daarna her-rendert het zodat ID-stubs namen worden.
 function agEnsureNames(){
