@@ -54,11 +54,11 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-16a"></script>
+<script src="mt-planning.js?v=2026-10-17a"></script>
 <script src="mt-mijnwerk.js?v=2026-10-15s"></script>
 <script src="mt-capaciteit.js?v=2026-10-15s"></script>
 <script src="mt-planverplaats.js?v=2026-10-15s"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-16d"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-17a"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
 <script src="mt-dagvraag.js?v=2026-10-15z"></script>
@@ -3882,7 +3882,7 @@ function urenKlaarTaken(){
   const slug=(MT_TEAM.find(m=>String(m.email||'').toLowerCase()===String(mtMijEmail()||'').toLowerCase())||{}).slug||'', nu=MTPlanning.vandaagYmd(), tot=projTakenAll(), uit=[], weekGeleden=_planYmd(new Date(new Date(nu+'T00:00:00').getTime()-7*864e5));
   if(!slug) return uit;
   Object.keys(tot).forEach(code=>{ (tot[code]||[]).forEach(t=>{
-    if(!t||(t.status||'')!=='klaar'||MTPlanning.persoonSlug(t.toegewezen,MT_TEAM)!==slug||!MTPlanning.isYmd(t.klaar_op)) return;
+    if(!t||(t.status||'')!=='klaar'||!MTPlanning.taakMensen(t).some(p=>MTPlanning.persoonSlug(p,MT_TEAM)===slug)||!MTPlanning.isYmd(t.klaar_op)) return;
     if(t.klaar_op<weekGeleden) return;   // alleen de laatste week
     const p=projVind(code); uit.push({id:t.id,naam:t.naam,code,projLabel:p?[projLabelCode(p),projNaamKort(p)].filter(Boolean).join(' '):code,wie:(MT_TEAM.find(m=>m.slug===slug)||{}).naam||'',klaarOp:t.klaar_op,budgetMin:MTPlanning.taakBudgetMin(t),tgProjectId:p&&p.tg_project_id!=null?p.tg_project_id:null}); }); });
   return uit;

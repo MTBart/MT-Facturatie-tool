@@ -91,7 +91,7 @@
     let rijen = r.rijen; if (st.persoon) rijen = rijen.filter(x => x.slug === st.persoon);
     const m = { zoom, today, anker, van, weken, dagen: r.dagen.map(d => Object.assign({}, d, { nu: d.datum === today })), dagIdx, rijen, project: st.project, persoon: st.persoon };
     m.ongepland = ongepland({ team, vrij: o.vrij, verlof: o.verlof, project: st.project || '' });
-    if (st.persoon) { m.ongepland.items = m.ongepland.items.filter(x => { const sl = Object.keys(D.taken() || {}).find(c => String(c).toLowerCase() === String(x.code).toLowerCase()); const t = sl ? (D.taken()[sl] || []).find(y => y && y.id === x.id) : null; return t && P.zelfdePersoon(t.toegewezen, st.persoon, team); }); m.ongepland.min = m.ongepland.items.reduce((s, x) => s + x.min, 0); }
+    if (st.persoon) { m.ongepland.items = m.ongepland.items.filter(x => { const sl = Object.keys(D.taken() || {}).find(c => String(c).toLowerCase() === String(x.code).toLowerCase()); const t = sl ? (D.taken()[sl] || []).find(y => y && y.id === x.id) : null; return t && P.taakMensen(t).some(p => P.zelfdePersoon(p, st.persoon, team)); }); m.ongepland.min = m.ongepland.items.reduce((s, x) => s + x.min, 0); }
     // periodetitel
     const eerste = m.dagen[0].datum, laatste = m.dagen[m.dagen.length - 1].datum;
     if (zoom === 'week') { m.titel = 'Week ' + isoWeek(van); m.sub = dagMnd(van) + ' – ' + dagMnd(plusDagen(van, 4)); }
