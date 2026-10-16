@@ -1561,6 +1561,12 @@
     return { vandaag, weekgrens: { van: wk.ma, tot: zo }, groepen, week, aantal: Object.keys(groepen).reduce((s, k) => s + groepen[k].length, 0) };
   };
 
+  // Een item uit mijnWerk() dat nog geen plek heeft: een taak zonder start, eind en planblok (groep zonderDatum), of een wachtende of nieuwe taak zonder enige datum of blok.
+  // P.nogInTePlannen is daarvan wat echt nog ingepland moet worden: een open voorstel (taak met voorstel-markering) telt pas na akkoord. Dit is de ene bron voor "Nog in te plannen"
+  // op de desktop-Vandaag en voor "Zonder datum" op de telefoon, zodat beide dezelfde taken tonen.
+  P.zonderPlek = it => !!it && it.soort === 'taak' && !!it.taak && (it.groep === 'zonderDatum' || ((it.groep === 'nietVrij' || it.groep === 'nieuw') && !it.start && !it.eind && !(it.blokken && it.blokken.length)));
+  P.nogInTePlannen = it => P.zonderPlek(it) && !it.taak.voorstel;
+
   // ── Verlof (Beheer ▸ mt_verlof): [{persoon (slug), van, tm}] → de dagen waarop die persoon vrij is (als Set van ymd) ──
   P.verlofDagen = function (verlof, persoon, team) {
     const uit = new Set();

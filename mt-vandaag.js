@@ -124,7 +124,11 @@
     const w = D.wie();
     const opt = { mijn: w.slug, vandaag: P.vandaagYmd(), nu: D.nu(), gezien: leesGezien(), vrij: S.vrij, verlof: S.verlof };
     if (D.werktijdenAan && D.werktijdenAan() && S.werktijden) opt.capPerDag = P.capPerDagVoor(w.slug, S.werktijden);   // de beschikbare uren per dag volgen jouw werktijden (zonder record: 8 uur per dag, zoals altijd)
-    S.mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), opt);
+    const mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), opt);
+    // Zonder datum, Nieuw voor mij en Nog niet vrijgegeven tonen dezelfde taken als "Nog in te plannen" op de desktop: een taak met een open voorstel (zonder plek) telt pas na akkoord en blijft er dus uit
+    ['nieuw', 'nietVrij', 'zonderDatum'].forEach(k => { mw.groepen[k] = mw.groepen[k].filter(it => !P.zonderPlek(it) || P.nogInTePlannen(it)); });
+    mw.aantal = Object.keys(mw.groepen).reduce((s, k) => s + mw.groepen[k].length, 0);
+    S.mw = mw;
     return S.mw;
   }
   // Voor het startvenster (mt-startvenster.js): mijn werk zonder "nieuw voor mij" (alles staat dan in zijn datumgroep); alleen als de takenlijst goed geladen is.
