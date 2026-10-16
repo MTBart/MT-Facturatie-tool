@@ -36,7 +36,7 @@
     const taken = D.taken(), afh = D.afhank(), blokken = D.blokken(), me = mijnSlug();
     const m = { vandaag, week: isoWeek(vandaag), takenKlaar: D.takenKlaar ? !!D.takenKlaar() : true, takenStatus: D.takenStatusTekst ? D.takenStatusTekst() : '' };
     // 1. Mijn werk vandaag: precies mijnWerk() zoals Vandaag op de telefoon en het startvenster (eigen werk, zonder "nieuw voor mij"), de groepen te laat en vandaag
-    const wtl = D.werktijden ? D.werktijden() : null, mw = P.mijnWerk(taken, afh, blokken, { team, vandaag, nu: D.nu(), mijn: me, nieuw: false, vrij, verlof, capPerDag: P.capPerDagVoor(me, wtl) });
+    const wtl = D.werktijden ? D.werktijden() : null, mw = P.mijnWerk(taken, afh, blokken, { team, vandaag, nu: D.nu(), mijn: me, nieuw: false, vrij, verlof, werktijden: wtl, capPerDag: P.capPerDagVoor(me, wtl) });
     m.mijn = mw.groepen.teLaat.concat(mw.groepen.vandaag).map(it => {
       const taak = it.soort === 'taak';
       const status = taak ? (it.status === 'todo' ? (it.wacht && it.wacht.wacht ? 'wacht' : 'open') : it.status) : 'gepland';
