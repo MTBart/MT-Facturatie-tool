@@ -476,6 +476,41 @@
       return { soort: 'niet', tekst: 'Het planblok is niet verwijderd. De taak staat goed en het blok telt gewoon mee; zet opnieuw om om het blok te verwijderen.' };
     } finally { slotMin(sleutel, -1); }
   };
+  // De blokken één voor één weghalen, elk met zijn eigen snapshot (de controle vlak voor de tombstone staat in o.blokWeg). -> { klaar, gewijzigd, mislukt: [id], alWegN, hangt?: { i, p } }
+  const blokStap = async (o, sleutel, snaps, opnieuw, hard) => {
+    const klaar = [], gewijzigd = [], mislukt = []; let alWegN = 0;
+    for (let i = 0; i < snaps.length; i++) {
+      const w = await wegEen(o, sleutel, snaps[i].id, snaps[i], opnieuw, hard);
+      if (w.uitslag === 'hangt') return { klaar, gewijzigd, mislukt, alWegN, hangt: { i, p: w.p } };
+      if (w.uitslag === 'alWeg') alWegN++;
+      (w.uitslag === 'ok' || w.uitslag === 'alWeg' ? klaar : w.uitslag === 'gewijzigd' ? gewijzigd : mislukt).push(snaps[i].id);
+    }
+    return { klaar, gewijzigd, mislukt, alWegN };
+  };
+  // Het resultaat voor wat er van de blokken overbleef (gedeeld): hangt (de uitkomst komt later), een rest (gewijzigd of mislukt) of klaar (null).
+  const blokRest = (o, sleutel, snaps, st, hard) => {
+    const restSnaps = ids => snaps.filter(x => ids.indexOf(x.id) >= 0);
+    if (st.hangt) { const rest = snaps.slice(st.hangt.i).map(x => x.id); slotMin(sleutel, 1); return { omgezet: true, blokWeg: false, reden: TIJD_BLOK, melding: TIJD_BLOK, rest, restSnaps: restSnaps(rest), onzeker: blokUitkomst(o, sleutel, st.hangt.p, snaps.slice(st.hangt.i), hard) }; }
+    const rest = st.gewijzigd.concat(st.mislukt);
+    if (rest.length) return { omgezet: true, blokWeg: false, opnieuw: true, gewijzigd: st.gewijzigd.length > 0, rest, restSnaps: restSnaps(rest), melding: st.gewijzigd.length ? BLOK_GEWIJZIGD : BLOK_WEG_MISLUKT };
+    return null;
+  };
+  // Opruimen (de retry na een gedeeltelijk mislukt omzetten): ALLEEN de resterende blokken met hun oorspronkelijke snapshots. Geen takenSchrijf en geen herberekening van persoon of datums: een intussen
+  // handmatig gewijzigde taak blijft onaangeroerd, een nieuw blok blijft staan, en elk blok krijgt dezelfde stempelcontrole voor de tombstone en dezelfde bevestigingsread erna (in o.blokWeg).
+  // spec = { taak: {code, id, naam}, resten: [snapshot] }
+  V.opruimen = async function (spec, o) {
+    const s = spec || {}, tk = s.taak || {}, snaps = (Array.isArray(s.resten) ? s.resten : []).filter(x => x && x.id !== undefined && x.id !== null);
+    if (!tk.code || !tk.id || !snaps.length) return { ok: false, reden: 'Onvolledige aanroep.' };
+    const ctx0 = o.ctx(); if (!ctx0 || !ctx0.mag) return { ok: false, reden: 'Dit mag je niet met jouw rol.' };
+    if (V.taakBezig(tk.code, tk.id)) return { ok: false, bezet: true, reden: BEZET };
+    const sleutel = sleutelVan(tk.code, tk.id); slotMin(sleutel, 1);
+    try {
+      const hard = o.hard || HARD, st = await blokStap(o, sleutel, snaps, true, hard), rest = blokRest(o, sleutel, snaps, st, hard);
+      if (rest) return Object.assign({ ok: true }, rest);
+      if (st.alWegN === snaps.length) return { ok: true, alOmgezet: true, melding: 'De planblokken waren al verwijderd; er is niets gewijzigd.' };
+      return { ok: true, omgezet: true, blokWeg: true, melding: snaps.length > 1 ? 'De planblokken zijn verwijderd.' : 'Het planblok is verwijderd.' };
+    } finally { slotMin(sleutel, -1); }
+  };
   // spec = { blokId, taak: {code, id, naam}, opnieuw? (alleen of de bevestiging is overgeslagen: de route is dezelfde) }
   // o = { sp, lokaal(), ctx(), nu(), door, dev, projectId, mag(spec), zacht?, hard?, traag?(), naamVan?(door), blokken() -> Promise<{ok, online, blokken, reden?}> (vers),
   //       blokWeg(blokId, { snap, opnieuw }) -> Promise<{ok, alWeg?, gewijzigd?, reden?}> (vers lezen, vergelijken met snap, tombstone, delen en controleren dat die won) }
@@ -501,7 +536,7 @@
       res = await P.takenSchrijf(sp, { code, lokaal: o.lokaal(), nu: o.nu(), door: o.door, dev: o.dev, projectId: o.projectId, mag: o.mag, muteer: werk => {
         const t = werk.find(x => x && x.id === id); if (!t) return { fout: 'Deze taak bestaat niet meer; er is niets omgezet.' };
         if ((t.status || 'todo') === 'klaar') return { fout: 'Een klare taak zet je niet om; er is niets omgezet.' };
-        const gekoppeld = P.taakBlokkenVan(t, werk, code, vers.blokken);   // alle actieve blokken van deze taak (zelfde project)
+        const gekoppeld = P.taakBlokkenVan(t, werk, code, vers.blokken, (o.ctx() || {}).alleTaken);   // alle actieve blokken van deze taak (zelfde project)
         if (!gekoppeld.some(b => String(b.id) === String(s.blokId))) return { fout: 'Dit planblok hoort niet meer ondubbelzinnig bij deze taak (de naam of de koppeling is veranderd); er is niets omgezet.' };
         if (gekoppeld.some(b => b.status === 'voorstel')) return { fout: 'Een open voorstel van de werkplaats zet je niet om; kantoor beslist daar eerst over.' };
         plan = V.omzetPlan(gekoppeld, t, Object.assign({}, o.ctx(), { taken: werk })); if (!plan.ok) return { fout: plan.reden };
@@ -523,19 +558,10 @@
       if (!komtOvereen(taken, id, bedoeld)) return { ok: true, opgeslagen: true, tegelijk: tegelijkTekst(taken, id, bedoeld, o), data, taken };   // iemand wijzigde tegelijk en won: de blokken blijven staan
       uit = { data, taken };
     }
-    // de taak staat goed: nu de blokken, één voor één, elk met zijn eigen controle
-    const klaar = [], gewijzigd = [], mislukt = []; let alWegN = 0;
-    for (let i = 0; i < snaps.length; i++) {
-      const w = await wegEen(o, sleutel, snaps[i].id, snaps[i], s.opnieuw, hard);
-      if (w.uitslag === 'hangt') {   // de echte belofte loopt door en houdt het slot vast; de uitkomst komt later
-        slotMin(sleutel, 1);
-        return Object.assign({ ok: true, omgezet: true, blokWeg: false, reden: TIJD_BLOK, melding: TIJD_BLOK, rest: snaps.slice(i).map(x => x.id), onzeker: blokUitkomst(o, sleutel, w.p, snaps.slice(i), hard) }, uit);
-      }
-      if (w.uitslag === 'alWeg') alWegN++;
-      (w.uitslag === 'ok' || w.uitslag === 'alWeg' ? klaar : w.uitslag === 'gewijzigd' ? gewijzigd : mislukt).push(snaps[i].id);
-    }
-    const rest = gewijzigd.concat(mislukt);
-    if (rest.length) return Object.assign({ ok: true, omgezet: true, blokWeg: false, opnieuw: true, gewijzigd: gewijzigd.length > 0, rest, melding: gewijzigd.length ? BLOK_GEWIJZIGD : BLOK_WEG_MISLUKT }, uit);
+    // de taak staat goed: nu de blokken, één voor één, elk met zijn eigen controle (dezelfde functie als de retry)
+    const bst = await blokStap(o, sleutel, snaps, s.opnieuw, hard), rest = blokRest(o, sleutel, snaps, bst, hard);
+    if (rest) return Object.assign({ ok: true }, rest, uit);
+    const alWegN = bst.alWegN;
     const lid = (ctx0.team || []).find(m => m && String(m.slug).toLowerCase() === (plan.lijst[0] || '')), wie = lid ? lid.naam : (plan.lijst[0] || '');
     if (noop && alWegN === snaps.length) return Object.assign({ ok: true, alOmgezet: true, melding: 'Dit planblok was al omgezet; er is niets gewijzigd.' }, uit);
     return Object.assign({ ok: true, omgezet: true, blokWeg: true, opgeslagen: true, aantal: snaps.length,

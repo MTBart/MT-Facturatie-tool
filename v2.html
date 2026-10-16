@@ -54,11 +54,11 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-17l"></script>
+<script src="mt-planning.js?v=2026-10-17m"></script>
 <script src="mt-mijnwerk.js?v=2026-10-17c"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-17l"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-17l"></script>
+<script src="mt-planverplaats.js?v=2026-10-17m"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-17m"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -3837,7 +3837,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
-  magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), taakBezig:(code,id)=>MTPlanVerplaats.taakBezig(code,id), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
+  magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), opruimen:(spec,opt)=>capOpruimen(spec,opt), taakBezig:(code,id)=>MTPlanVerplaats.taakBezig(code,id), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
@@ -15753,7 +15753,7 @@ async function _capVers(){
 // vers lezen van SharePoint (ETag), de lokale kopie erbij, het plan opnieuw op de verse stand rekenen, stempelen en schrijven; een 412 wordt door _SP.write samengevoegd en opnieuw geprobeerd (drie keer).
 // Lukt dat niet, dan een eerlijke melding en niets gewijzigd (ook lokaal niet). Hangen er opvolgers aan en veranderen de datums, dan eerst de bestaande vraag "Opvolgers verschuiven?" (verschuifVoorstel).
 // Recht: hetzelfde als slepen (capMagSlepen: kantoor, rol geladen; de werkplaats en "lezen" kunnen niet slepen) plus het recht om taken te wijzigen. Oude tb:-planblokken blijven werken en worden niet aangeraakt.
-function _capTaakCtx(code){ return { taken:projTaken(code), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), werktijden:werktijdenVoorWeergave(), werkuren:(admCfg()||{}).werkuren||null, mag:capMagSlepen() }; }
+function _capTaakCtx(code){ return { alleTaken:projTakenAll(), taken:projTaken(code), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), werktijden:werktijdenVoorWeergave(), werkuren:(admCfg()||{}).werkuren||null, mag:capMagSlepen() }; }
 async function _capOpvolgersVraag(v){
   const regels=v.wijzigingen.slice(0,12).map(w=>'• '+w.naam+': '+_p2D(w.van.start)+' → '+_p2D(w.naar.start)+(w.reden?' ('+w.reden+')':'')).join('\n')+(v.wijzigingen.length>12?'\n… en '+(v.wijzigingen.length-12)+' meer':'');
   const choices=[{label:'Opvolgers mee verschuiven ('+v.wijzigingen.length+')',sublabel:'zelfde duur; geen weekend of vrije dag'}];
@@ -15811,6 +15811,14 @@ async function capOmzetten(spec,opt){
   o.blokken=async()=>{ const v=await _capVers(); return v.ok?{ ok:true, online:v.online, blokken:agPlanBlokken() }:v; };
   o.blokWeg=(id,o2)=>capBlokWeg(id,o2);
   return _capTaakKlaar(await MTPlanVerplaats.omzetten(spec,o));
+}
+async function capOpruimen(spec,opt){   // de retry na een gedeeltelijk mislukt omzetten: alleen de resterende blokken (met hun snapshots), geen takenSchrijf
+  if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'Een planblok omzetten naar een taakbalk')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  const code=spec&&spec.taak&&spec.taak.code; if(!code) return { ok:false, reden:'Onbekende taak.' };
+  const o=_capTaakOpties(code,opt);
+  o.blokken=async()=>{ const v=await _capVers(); return v.ok?{ ok:true, online:v.online, blokken:agPlanBlokken() }:v; };
+  o.blokWeg=(id,o2)=>capBlokWeg(id,o2);
+  return await MTPlanVerplaats.opruimen(spec,o);
 }
 async function capVerplaats(spec,opt){
   if(spec&&((spec.soort==='nieuw'&&!spec.alsBlok)||spec.soort==='taakbalk'||spec.soort==='taakrand'||spec.soort==='taakdatums')) return capTaakPlan(spec,opt);   // uit Ongepland en een taakbalk naar een andere persoon: de taak zelf (T4); alsBlok (alleen tests) maakt nog een tb:-planblok

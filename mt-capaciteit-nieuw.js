@@ -187,7 +187,7 @@
   function blok(it, uur, stijl) {
     const voorstel = N.isVoorstel(it), wacht = !!(it.wacht && it.status !== 'klaar'), sleep = N.sleepbaar(it), bid = blokIdVan(it), taakSleep = !sleep && N.taakSleepbaar(it), taakBron = { soort: 'taakbalk', taak: { code: it.code, id: it.id, naam: it.naam, voorstel: false }, van: it.persoon || '', vanDatum: it.datum || '' }, mijlpaal = !!(it.taak && it.taak.soort === 'mijlpaal');
     const sub = el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code), it.min && !uur ? ' · ' + uren(it.min) : '');
-    const b = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok' + (voorstel ? ' voorstel' : '') + (wacht ? ' wacht' : '') + (sleep || taakSleep ? ' sleepbaar' : ''), 'data-taak': taakSleep ? String(it.id) : null, 'aria-keyshortcuts': taakSleep ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : null, style: '--block-color:' + P.projectKleur(it.code), title: [it.naam, projNr(it.code) + ' ' + projNaam(it.code), it.min ? uren(it.min) : '', voorstel ? 'voorstel' : '', wacht ? ('wacht' + (it.wachtTekst ? ': ' + it.wachtTekst : '')) : '', it.waarschuwing || ''].filter(Boolean).join(' · '), klik: () => open(it.code) },
+    const b = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok' + (voorstel ? ' voorstel' : '') + (wacht ? ' wacht' : '') + (sleep || taakSleep ? ' sleepbaar' : ''), 'data-taak': taakSleep ? String(it.id) : null, 'aria-keyshortcuts': taakSleep ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : null, style: '--block-color:' + P.projectKleur(it.code), title: [it.naam, projNr(it.code) + ' ' + projNaam(it.code), it.min ? uren(it.min) : '', voorstel ? 'voorstel' : '', wacht ? ('wacht' + (it.wachtTekst ? ': ' + it.wachtTekst : '')) : '', it.waarschuwing || '', it.nietEenduidig ? 'niet eenduidig aan een taak gekoppeld (hetzelfde taak-id staat in meer dan één project)' : ''].filter(Boolean).join(' · '), klik: () => open(it.code) },
       el('span', { klass: 'cn-blok-kop' }, el('span', { klass: 'cn-blok-titel', tekst: it.naam }), voorstel ? el('span', { klass: 'cn-chipje', tekst: 'voorstel' }) : null, wacht && !voorstel ? el('span', { klass: 'cn-chipje wacht', tekst: 'wacht' }) : null, D.taakBezig && it.soort === 'taak' && D.taakBezig(it.code, it.id) ? el('span', { klass: 'cn-chipje wacht', tekst: 'opslaan hangt', title: 'Opslaan hangt: wacht even of herlaad de pagina om opnieuw te proberen' }) : null, it.waarschuwing ? el('span', { klass: 'cn-chipje wacht', tekst: 'let op', title: it.waarschuwing }) : null), uur ? el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-tijd', tekst: uur }), ' · ', el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code)) : sub);
     b.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === b) { ev.preventDefault(); open(it.code); } });
     if (sleep) sleepBron({ soort: 'verplaats', blokId: bid }, b, it.naam); else if (taakSleep) sleepBron(taakBron, b, it.naam);
@@ -401,7 +401,7 @@
   N.omzetten = async function (it, opnieuw) {
     if (!N.omzetbaar(it) || S.bezig || S.menuBezig) return;
     const blokPersoon = x => { const b = (D.blokken() || []).find(y => y && String(y.id) === String(x.blokId)); return b ? (P.persoonSlug(b.persoon, D.team()) || b.persoon) : x.persoon; };
-    const aantal = (() => { try { return P.taakBlokkenVan(it.taak, (D.taken() || {})[it.code], it.code, D.blokken()).length; } catch (e) { return 1; } })();
+    const aantal = (() => { try { return P.taakBlokkenVan(it.taak, (D.taken() || {})[it.code], it.code, D.blokken(), D.taken()).length; } catch (e) { return 1; } })();
     const spec = { blokId: String(it.blokId), taak: { code: it.code, id: it.id, naam: it.naam }, opnieuw: !!opnieuw };
     if (!opnieuw) {
       S.menuBezig = true; let ja = false;
@@ -411,16 +411,25 @@
     if (S.bezig) return;
     S.bezig = true; let r;
     try { r = await D.omzetten(spec, { traag: () => N.toast('Opslaan duurt lang, even geduld…', null, true) }); } catch (e) { r = { ok: false, reden: 'Omzetten mislukt: ' + ((e && e.message) || e) }; } finally { S.bezig = false; }
-    N.teken();
+    N.teken(); omzetUitkomst(r, it);
+  };
+  // De uitkomst van omzetten of opruimen tonen. Een blok dat er nog staat: opnieuw proberen = ALLEEN die blokken opruimen (met hun oorspronkelijke snapshots), nooit de omzetting opnieuw draaien.
+  const omzetUitkomst = (r, it) => {
     if (r && r.onzeker) { N.toast(r.reden, null, true); N.naOnzeker(r.onzeker); return; }
     if (!r || !r.ok) { N.toast((r && r.reden) || 'Dat lukt niet.', null, true); return; }
     if (r.tegelijk) { N.toast(r.tegelijk, null, true); return; }
     if (r.alOmgezet) { N.toast(r.melding || 'Dit planblok is al omgezet.', null, true); return; }
     if (r.omgezet && !r.blokWeg) {   // de taak staat goed, een of meer blokken staan er nog (en tellen gewoon mee)
       if (r.gewijzigd) { N.toast(r.melding, null, true); return; }   // een blok is intussen gewijzigd: eerst controleren, dan opnieuw omzetten
-      const rest = r.rest && r.rest.length ? r.rest[0] : it.blokId; N.toast(r.melding, () => N.omzetten(Object.assign({}, it, { blokId: rest }), true), true, 'Opnieuw proberen'); return;
-    }   // de taak staat goed, het blok moet nog weg: opnieuw proberen (alleen het blok)
+      N.toast(r.melding, () => N.opruimen(it, r.restSnaps), true, 'Opnieuw proberen'); return;
+    }
     N.toast(r.melding || 'Omgezet naar een taakbalk.', null, true);
+  };
+  N.opruimen = async function (it, restSnaps) {
+    if (!D.opruimen || N.mag() !== true || (D.magTaken && !D.magTaken()) || !Array.isArray(restSnaps) || !restSnaps.length || S.bezig || S.menuBezig) return;
+    S.bezig = true; let r;
+    try { r = await D.opruimen({ taak: { code: it.code, id: it.id, naam: it.naam }, resten: restSnaps }, { traag: () => N.toast('Opslaan duurt lang, even geduld…', null, true) }); } catch (e) { r = { ok: false, reden: 'Opruimen mislukt: ' + ((e && e.message) || e) }; } finally { S.bezig = false; }
+    N.teken(); omzetUitkomst(r, it);
   };
   // Datums wijzigen (de toegankelijke vervanger van de randen slepen, zonder Alt of Shift): een dialoog met twee datumvelden (start en eind; een mijlpaal heeft er een). -> Promise<{start, eind} | null>
   N.datumsDialoog = function (it) {

@@ -1574,15 +1574,20 @@
   const blokStartTekst = b => { const m = /^(\d{1,2}):(\d{2})/.exec(String(b && b.start || '')); return m ? String(m[1]).padStart(2, '0') + ':' + m[2] : ''; };
   // De planblokken van een taak: op taak-id, of (zonder id) op exact dezelfde, unieke naam binnen hetzelfde project.
   // De projectcode van een blok: het veld, of (zonder) die uit het id tb:<code>:<taakId>. Een taak_id telt alleen binnen hetzelfde project (twee projecten kunnen dezelfde taak_id hebben).
-  const blokCode = b => { if (b.project_code) return b.project_code; const m = /^tb:([^:]+):/.exec(String(b.id == null ? '' : b.id)); return m ? m[1] : ''; };
-  const taakBlokken = (t, code, naamAantal, blokken) => { const n = nrm(t.naam); return blokken.filter(b => (b.taak_id != null && b.taak_id !== '') ? (String(b.taak_id) === String(t.id) && (!blokCode(b) || zelfdeCode(blokCode(b), code))) : (zelfdeCode(b.project_code, code) && !!n && nrm(b.taak) === n && naamAantal.get(n) === 1)); };
+  // Een blok MET een projectcode koppelt alleen aan de taak met die code én dat id. Een blok zonder code (oude blokken): alleen als dat taak_id in precies één project voorkomt (idMap: taak_id -> de projectcodes
+  // waarin het staat); in nul of meer projecten koppelt het niet: dan geen aftrek van de raming (regel a) en geen omzetknop, en het blok telt in de Capaciteit gewoon als los blok.
+  const blokCode = b => { const pc = String(b.project_code == null ? '' : b.project_code).trim(); if (pc) return pc; const m = /^tb:([^:]+):/.exec(String(b.id == null ? '' : b.id)); return m ? m[1].trim() : ''; };
+  const idProjecten = takenPer => { const m = new Map(); Object.keys(takenPer || {}).forEach(c => { if (c.startsWith('__') || !Array.isArray(takenPer[c])) return; P.takenActief(takenPer[c]).forEach(x => { const k = String(x.id); if (!m.has(k)) m.set(k, new Set()); m.get(k).add(String(c).trim().toLowerCase()); }); }); return m; };
+  const taakBlokken = (t, code, naamAantal, blokken, idMap) => { const n = nrm(t.naam); return blokken.filter(b => (b.taak_id != null && b.taak_id !== '') ? (String(b.taak_id) === String(t.id) && (blokCode(b) ? zelfdeCode(blokCode(b), code) : (() => { const s = idMap && idMap.get(String(t.id)); return !!s && s.size === 1 && s.has(String(code).trim().toLowerCase()); })())) : (zelfdeCode(b.project_code, code) && !!n && nrm(b.taak) === n && naamAantal.get(n) === 1)); };
   // Wat van de raming nog over is voor de verdeling over de datums van een taak (contract T0, punt a): alle planblokken die aan de taak hangen tellen mee met hun eigen minuten, ongeacht het getoonde
   // venster en de persoon. De rest is max(0, raming - geplande minuten); die gaat over de werkdagen van start tot eind waarop geen blok van die taak staat. Een open voorstel telt niet mee (zoals overal).
   const planVan = (bl, raming) => { const tel = bl.filter(b => b.status !== 'voorstel'), gepland = tel.reduce((s, b) => s + Math.max(0, Math.round(getal(b.duurMin))), 0); return { gepland, rest: Math.max(0, raming - gepland), dagen: new Set(tel.map(b => b.datum)), geteld: tel.length, voorstel: bl.some(b => b.status === 'voorstel') }; };   // voorstel: er hangt een open planvoorstel aan (besluit Bart: dat telt niet mee en de taak dus ook niet via zijn datums, tot het is overgenomen)
   // De actieve planblokken die bij taak t horen (taak_id, of zonder taak_id een unieke naam in het project): dezelfde koppeling als overal. takenLijst = de taken van dat project (voor de eenduidigheid van de naam).
-  P.taakBlokkenVan = function (t, takenLijst, code, blokken) {
+  // alleTaken (optioneel) = { projectcode: [taken] } van alle projecten: nodig om een blok zonder projectcode eenduidig te koppelen; zonder koppelt zo'n blok niet.
+  P.taakBlokkenVan = function (t, takenLijst, code, blokken, alleTaken) {
     const naamAantal = new Map(); P.takenActief(Array.isArray(takenLijst) ? takenLijst : []).forEach(x => { const n = nrm(x.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
-    return taakBlokken(t, code, naamAantal, (Array.isArray(blokken) ? blokken : []).filter(b => b && typeof b === 'object' && !b._vervallen));
+    const idMap = alleTaken && typeof alleTaken === 'object' ? idProjecten(Object.assign({}, alleTaken, { [code]: takenLijst })) : null;
+    return taakBlokken(t, code, naamAantal, (Array.isArray(blokken) ? blokken : []).filter(b => b && typeof b === 'object' && !b._vervallen), idMap);
   };
   P.mijnWerk = function (takenObj, depsObj, blokken, opt) {
     const o = opt || {}, mijn = o.mijn || '', team = o.team || null, alle = !!o.iedereen, metNieuw = o.nieuw !== false && !alle;
@@ -1595,7 +1600,7 @@
     const alleBlokken = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, mijn, team, alle) && (!projF || zelfdeCode(b.project_code, projF)));
     const gekoppeld = new Set(), mijnTaken = [], plan = new Map(), PRIO = { high: 0, medium: 1, low: 2 };
     const alleGeldig = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, mijn, team, true) && (!projF || zelfdeCode(b.project_code, projF)));   // alle blokken van iedereen: voor wat er van de raming nog te verdelen is
-    const takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {};
+    const takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {}, idMap = idProjecten(takenPer);
     Object.keys(takenPer).sort().forEach(code => {
       if (code.startsWith('__') || !Array.isArray(takenPer[code]) || (projF && !zelfdeCode(code, projF))) return;
       const lijst = P.takenActief(takenPer[code]);
@@ -1605,9 +1610,9 @@
       const naamAantal = new Map(); lijst.forEach(t => { const n = nrm(t.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
       mijnL.forEach(t => {
         const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] }, n = nrm(t.naam);
-        const bl = taakBlokken(t, code, naamAantal, alleBlokken);
+        const bl = taakBlokken(t, code, naamAantal, alleBlokken, idMap);
         bl.forEach(b => gekoppeld.add(String(b.id)));
-        if (!alle) { const pl = planVan(taakBlokken(t, code, naamAantal, alleGeldig), P.taakRamingMin(t)), vd = P.taakVerdeling(t, o.werktijden, o.verlof, o.vrij, team, { rest: pl.rest, sla: pl.dagen }); plan.set(t.id, Object.assign(pl, { verdeel: vd.perPersoon[slugMij] || {}, waarschuwingen: vd.waarschuwingen })); }   // wat deze persoon van de rest per dag krijgt (dezelfde verdeling als in de Capaciteit)
+        if (!alle) { const pl = planVan(taakBlokken(t, code, naamAantal, alleGeldig, idMap), P.taakRamingMin(t)), vd = P.taakVerdeling(t, o.werktijden, o.verlof, o.vrij, team, { rest: pl.rest, sla: pl.dagen }); plan.set(t.id, Object.assign(pl, { verdeel: vd.perPersoon[slugMij] || {}, waarschuwingen: vd.waarschuwingen })); }   // wat deze persoon van de rest per dag krijgt (dezelfde verdeling als in de Capaciteit)
         const komend = bl.filter(b => b.datum >= vandaag).sort((a, b) => (a.datum + blokStartTekst(a)) < (b.datum + blokStartTekst(b)) ? -1 : 1);
         const eerste = komend[0] || null;
         const gD = groepVan(P.isYmd(t.start) ? t.start : '', P.isYmd(t.eind) ? t.eind : ''), gB = eerste ? groepVan(eerste.datum, eerste.datum) : '';
@@ -1899,7 +1904,7 @@
     const kies = (r, i) => r.cellen[i][0].length <= r.cellen[i][1].length ? 0 : 1;
     const geldig = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, '', null, true) && idx.has(b.datum) && (!o.project || zelfdeCode(b.project_code, o.project)));
     const alleGeldig = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, '', null, true) && (!o.project || zelfdeCode(b.project_code, o.project)));   // alle blokken, ook buiten het venster: wat ervan de raming afgaat
-    const koppel = new Map(), takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {};
+    const koppel = new Map(), takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {}, idMap = idProjecten(takenPer);
     Object.keys(takenPer).sort().forEach(code => {
       if (code.startsWith('__') || !Array.isArray(takenPer[code]) || (o.project && !zelfdeCode(code, o.project))) return;
       const lijst = P.takenActief(takenPer[code]); if (!lijst.length) return;
@@ -1910,7 +1915,7 @@
         const w = wacht[t.id] || { wacht: false, op: [] }, mensen = P.taakMensen(t);
         const basis = { soort: 'taak', id: t.id, code, naam: t.naam, status: st, wacht: st === 'wacht' || (st === 'todo' && !!w.wacht), wachtTekst: P.wachtOpTekst(w), voorstel: !!t.voorstel, taak: t, persoon: P.persoonSlug(mensen[0], team) || '' };
         // Alle blokken van de taak, ook buiten het getoonde venster en van andere personen, tellen mee met hun eigen minuten; de rest van de raming gaat over de dagen zonder blok (contract T0, punt a)
-        const blAlle = taakBlokken(t, code, naamAantal, alleGeldig); blAlle.forEach(b => koppel.set(String(b.id), basis));
+        const blAlle = taakBlokken(t, code, naamAantal, alleGeldig, idMap); blAlle.forEach(b => koppel.set(String(b.id), basis));
         const pl = planVan(blAlle, P.taakRamingMin(t)); if (pl.voorstel || (pl.geteld > 0 && pl.rest <= 0)) return;   // een open planvoorstel erbij (telt nog niet mee) of helemaal ingepland met blokken
         // De verdeling van wat er van de raming nog over is (P.taakVerdeling, de ene rekenbasis): verlof, werktijden en vrije dagen van die persoon worden overgeslagen; een taak van niemand komt in "Niet toegewezen".
         const vd = P.taakVerdeling(t, o.werktijden, o.verlof, o.vrij, team, { rest: pl.rest, sla: pl.dagen, anoniem: true });   // een taak zonder raming of een mijlpaal blijft zichtbaar, met 0 minuten
@@ -1930,7 +1935,7 @@
       const k = koppel.get(String(b.id)), s = blokStartTekst(b);
       // Een open voorstel (status voorstel) telt nooit mee in de capaciteit, ook niet als het aan een taak hangt: pas na Overnemen (status niet meer voorstel). Het blijft wel zichtbaar.
       const item = k ? Object.assign({}, k, { start: s, blokId: b.id, datum: b.datum, min: Math.max(0, Math.round(getal(b.duurMin))) }, b.status === 'voorstel' ? { planvoorstel: true } : {})
-        : { soort: 'blok', id: 'blok:' + b.id, datum: b.datum, code: b.project_code || '', naam: b.taak || b.project_code || 'Planblok', status: '', wacht: false, voorstel: false, planvoorstel: b.status === 'voorstel', start: s, min: Math.max(0, Math.round(getal(b.duurMin))), persoon: P.persoonSlug(b.persoon, team) || '' };
+        : { soort: 'blok', id: 'blok:' + b.id, datum: b.datum, code: b.project_code || '', naam: b.taak || b.project_code || 'Planblok', status: '', wacht: false, voorstel: false, planvoorstel: b.status === 'voorstel', start: s, min: Math.max(0, Math.round(getal(b.duurMin))), persoon: P.persoonSlug(b.persoon, team) || '', ...(b.taak_id != null && b.taak_id !== '' && !blokCode(b) && (idMap.get(String(b.taak_id)) || { size: 0 }).size > 1 ? { nietEenduidig: true } : {}) };
       const r = rijVan(b.persoon), di = idx.get(b.datum);
       dagdeelVanBlok(b).forEach(dl => r.cellen[di][dl].push(item));
     });
