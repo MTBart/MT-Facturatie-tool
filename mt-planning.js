@@ -237,8 +237,10 @@
     return Object.keys(uit).length ? uit : undefined;
   }
   // De personen van een taak zetten (ter plekke op t; alleen met P.MEERDERE_PERSONEN, voor het venster en P.toegewezenZet): lijst = slugs, de eerste is toegewezen. opt: { nu, door, team, mins: { slug: minuten } }
-  // (mins: de eigen raming per persoon; zonder mins blijven de bestaande mins staan). De eerste persoon wordt het veld toegewezen (stempelt de takenmotor); de anderen zijn entries in personen. Alleen wat
-  // verandert krijgt een nieuwe _ts; wie eruit gaat (ook de min-entry van een vorige eerste persoon) krijgt een tombstone. -> true als er iets veranderde.
+  // (mins: de eigen raming per persoon; zonder mins blijven de bestaande mins staan). De eerste persoon wordt het veld toegewezen (stempelt de takenmotor); iedereen in lijst[1..] heeft een actieve entry in
+  // personen (volg 1, 2, ...), als die er nog niet is of anders was. Een tombstone betekent alleen "van de taak verwijderd", nooit "gepromoveerd": een extra persoon die de eerste wordt houdt zijn actieve entry
+  // (taakMensen ontdubbelt) en een oude eerste die in de lijst blijft krijgt een actieve extra entry. Wie niet meer in de lijst staat en een entry had, krijgt een tombstone (had hij er geen, dan is het overschrijven
+  // van toegewezen genoeg). Alleen wat verandert wordt geschreven en krijgt een nieuwe _ts. -> true als er iets veranderde.
   P.personenZet = function (t, lijst, opt) {
     const o = opt || {}, nu = Number(o.nu) || Date.now(), team = o.team || null, norm1 = s => String(P.persoonSlug(s, team) || s || '').trim().toLowerCase();
     const door = norm1(o.door) || String(o.door || '');
@@ -249,16 +251,19 @@
     if (JSON.stringify(gewenst) === JSON.stringify(P.taakMensen(t)) && gewenst.every(s => wensMin(s) === minVan(s))) return false;
     const iso = new Date(Math.max(nu, persMaxTs(t) + 1)).toISOString(), nieuw = kopie(oud) || {}, eerste = gewenst[0] || '';
     if (eerste !== tgTrim(t)) { if (eerste) t.toegewezen = eerste; else delete t.toegewezen; }
-    const doel = {};   // wat er in personen actief moet staan: de min van de eerste persoon (volg 0) en de extra personen (volg 1, 2, ...)
-    if (eerste && wensMin(eerste) > 0) doel[eerste] = { volg: 0, min: wensMin(eerste) };
-    gewenst.slice(1).forEach((s, i) => { doel[s] = { volg: i + 1, min: wensMin(s) }; });
-    Object.keys(doel).forEach(s => { const e = nieuw[s], d = doel[s]; if (e && !e.weg && (Number(e.volg) || 0) === d.volg && minVan(s) === d.min) return; nieuw[s] = Object.assign({ volg: d.volg }, d.min > 0 ? { min: d.min } : {}, { _ts: iso, door }); });
-    Object.keys(nieuw).forEach(s => { if (!doel[s] && !nieuw[s].weg) nieuw[s] = { volg: Number(nieuw[s].volg) || 0, weg: true, _ts: iso, door }; });
+    // de eerste persoon: een bestaande actieve entry blijft staan (ook na een promotie; alleen zijn min wordt bijgewerkt); alleen een gewenste min maakt een nieuwe entry (volg 0)
+    if (eerste) {
+      const e = nieuw[eerste], w = wensMin(eerste);
+      if (e && !e.weg) { if (minVan(eerste) !== w) { const n = Object.assign({}, e, { _ts: iso, door }); if (w > 0) n.min = w; else delete n.min; nieuw[eerste] = n; } }
+      else if (w > 0) nieuw[eerste] = { volg: 0, min: w, _ts: iso, door };
+    }
+    gewenst.slice(1).forEach((s, i) => { const e = nieuw[s], volg = i + 1, w = wensMin(s); if (e && !e.weg && (Number(e.volg) || 0) === volg && minVan(s) === w) return; nieuw[s] = Object.assign({ volg }, w > 0 ? { min: w } : {}, { _ts: iso, door }); });
+    Object.keys(nieuw).forEach(s => { if (!gewenst.includes(s) && !nieuw[s].weg) nieuw[s] = { volg: Number(nieuw[s].volg) || 0, weg: true, _ts: iso, door }; });   // alleen wie van de taak af is
     if (Object.keys(nieuw).length) t.personen = nieuw; else delete t.personen;
     return true;
   };
   // De oude bediening ("Toegewezen aan" kiezen): zet de eerste persoon. Zonder P.MEERDERE_PERSONEN schrijft dit alleen toegewezen (precies als vóór T3; personen wordt nooit geschreven). Met de vlag: de eerste
-  // persoon wordt vervangen en de anderen blijven; haal je de eerste weg, dan schuift de volgende op (zijn entry in personen krijgt een tombstone, want hij is nu toegewezen).
+  // persoon wordt vervangen (de oude eerste is weg) en de anderen blijven; haal je de eerste weg, dan schuift de volgende op (zijn entry blijft actief en taakMensen ontdubbelt).
   P.toegewezenZet = function (t, slug, opt) {
     const s = String(slug == null ? '' : slug).trim();
     if (!P.MEERDERE_PERSONEN) { if (s) t.toegewezen = s; else delete t.toegewezen; return true; }
