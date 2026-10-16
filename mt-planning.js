@@ -1823,7 +1823,7 @@
     } else delen = eigen.map(x => { if (x) return x; const basis = Math.floor(pool / nVrij), r = pool - basis * nVrij; return basis + (k++ < r ? 1 : 0); });
     mensen.forEach((m, i) => {
       const vl = m.slug ? P.verlofDagen(verlof, m.p, team) : new Set(), rec = m.slug ? wt[m.slug] || null : null, dagen = [];
-      for (let n = a; n <= z && n - a < 400; n++) {
+      for (let n = a; n <= z && n - a < 1100; n++) {   // maximaal drie jaar (een langer traject wordt bij het slepen geweigerd, zie MTPlanVerplaats)
         const idx = ((((n + 4) % 7 + 7) % 7) + 6) % 7, ymd = dymd(n);   // idx: 0 = ma ... 6 = zo
         if (idx > 4 || VV.has(ymd) || vl.has(ymd) || (rec && P.werktijdDagMin(rec, idx) <= 0)) continue;
         dagen.push(ymd);
@@ -1909,10 +1909,11 @@
         const vd = P.taakVerdeling(t, o.werktijden, o.verlof, o.vrij, team, { rest: pl.rest, sla: pl.dagen, anoniem: true });   // een taak zonder raming of een mijlpaal blijft zichtbaar, met 0 minuten
         Object.keys(vd.perPersoon).forEach(slug => {
           const r = slug ? rijVan(slug) : rest, waarsch = vd.waarschuwingen.filter(x => x.persoon === slug).map(P.verdelingTekst).join(' ');
-          Object.keys(vd.perPersoon[slug]).forEach(ymd => {
+          const dagenP = Object.keys(vd.perPersoon[slug]).sort(), eersteDag = dagenP[0], laatsteDag = dagenP[dagenP.length - 1];   // de eerste en laatste dag van de balk van deze persoon: daar zitten de grepen om uit te trekken
+          dagenP.forEach(ymd => {
             const di = idx.get(ymd), min = vd.perPersoon[slug][ymd]; if (di === undefined) return;
             // Een taak met een open voorstel-markering (door de werkplaats gemeld, nog niet overgenomen) blijft zichtbaar maar telt niet mee, net als een voorstel-planblok.
-            const item = Object.assign({}, basis, { min, datum: ymd, persoon: P.persoonSlug(slug, team) || '' }, waarsch ? { waarschuwing: waarsch } : {}, t.voorstel ? { planvoorstel: true } : {});
+            const item = Object.assign({}, basis, { min, datum: ymd, persoon: P.persoonSlug(slug, team) || '', eerste: ymd === eersteDag, laatste: ymd === laatsteDag }, waarsch ? { waarschuwing: waarsch } : {}, t.voorstel ? { planvoorstel: true } : {});
             (min > half ? [0, 1] : [kies(r, di)]).forEach(dl => r.cellen[di][dl].push(item));
           });
         });

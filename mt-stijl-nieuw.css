@@ -406,6 +406,11 @@ html[data-stijl="nieuw"] .cn-bw:hover .cn-vpl,html[data-stijl="nieuw"] .cn-bw:fo
 html[data-stijl="nieuw"] .cn-vpl:hover{background:var(--primary-soft);color:var(--primary-text)}
 html[data-stijl="nieuw"] .cn-vpl:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:1px}
 html[data-stijl="nieuw"] .cn-vpl .cn-ic{width:14px;height:14px}
+html[data-stijl="nieuw"] .cn-greep{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:2;background:transparent;border-radius:4px}
+html[data-stijl="nieuw"] .cn-greep.l{left:0}
+html[data-stijl="nieuw"] .cn-greep.r{right:0}
+html[data-stijl="nieuw"] .cn-blok:hover .cn-greep,html[data-stijl="nieuw"] .cn-blok:focus-within .cn-greep{background:color-mix(in srgb,var(--block-color,var(--ink-2)) 38%,transparent)}
+html[data-stijl="nieuw"] .cn-greep:hover{background:color-mix(in srgb,var(--block-color,var(--ink-2)) 65%,transparent)}
 html[data-stijl="nieuw"] .cn-slot.drop{outline:2px dashed var(--primary-text);outline-offset:-2px;background:var(--primary-soft);border-radius:4px}
 html[data-stijl="nieuw"] .cn-uren-raster.drop{outline:2px dashed var(--primary-text);outline-offset:-2px}
 html[data-stijl="nieuw"] .cn-dropmarker{position:absolute;top:0;bottom:0;width:2px;background:var(--primary-text);pointer-events:none;z-index:2}

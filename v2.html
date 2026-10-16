@@ -54,11 +54,11 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-17h"></script>
+<script src="mt-planning.js?v=2026-10-17i"></script>
 <script src="mt-mijnwerk.js?v=2026-10-17c"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-17h"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-17h"></script>
+<script src="mt-planverplaats.js?v=2026-10-17i"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-17i"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -853,7 +853,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-16d">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-17i">
 </head>
 <body>
 
@@ -3837,7 +3837,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
-  magSlepen:()=>capMagSlepen(), verplaats:spec=>capVerplaats(spec), herstel:w=>capHerstel(w), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
+  magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:spec=>capVerplaats(spec), herstel:w=>capHerstel(w), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
@@ -15778,7 +15778,7 @@ async function capTaakHerstel(w){
   return _capTaakKlaar(await MTPlanVerplaats.taakHerstel(w,_capTaakOpties(w.code)));
 }
 async function capVerplaats(spec){
-  if(spec&&((spec.soort==='nieuw'&&!spec.alsBlok)||spec.soort==='taakbalk')) return capTaakPlan(spec);   // uit Ongepland en een taakbalk naar een andere persoon: de taak zelf (T4); alsBlok (alleen tests) maakt nog een tb:-planblok
+  if(spec&&((spec.soort==='nieuw'&&!spec.alsBlok)||spec.soort==='taakbalk'||spec.soort==='taakrand')) return capTaakPlan(spec);   // uit Ongepland en een taakbalk naar een andere persoon: de taak zelf (T4); alsBlok (alleen tests) maakt nog een tb:-planblok
   if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
   const vers=await _capVers(); if(!vers.ok) return vers;
   const r=MTPlanVerplaats.pas(spec,_capCtx()); if(!r.ok||r.noop) return r;
