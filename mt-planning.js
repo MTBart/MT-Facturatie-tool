@@ -1791,6 +1791,16 @@
   P.VERDELING_TEKST = { 'geen-werkbare-dag': 'Geen werkbare dag tussen start en eind (verlof, vrije dag of werktijden): de uren staan op de startdag.', 'personen-meer-dan-raming': 'De vaste uren van de personen zijn samen meer dan de raming: ze zijn naar verhouding verkleind.' };
   P.verdelingTekst = w => (w && P.VERDELING_TEKST[w.reden]) || '';
   const vrijVerplicht = x => new Set((x instanceof Set ? [...x] : Array.isArray(x) ? x : []).map(v => typeof v === 'string' ? v : (v && v.type !== 'optioneel' ? v.datum : null)).filter(P.isYmd));
+  // Is deze dag een werkbare dag voor deze persoon (contract T0 punt d)? ma-vr volgens zijn werktijden (zonder record: ma-vr), niet op zijn verlof, niet op een verplichte vrije dag.
+  // o = { werktijden, verlof, vrijedagen, team }. Dezelfde regel als in taakVerdeling; het slepen van een taak (MTPlanVerplaats.taakPlan) gebruikt hem om de eerstvolgende werkbare dag te vinden.
+  P.werkbaarVoor = function (slug, ymd, o) {
+    o = o || {}; if (!P.isYmd(ymd)) return false;
+    const n = dnr(ymd), idx = ((((n + 4) % 7 + 7) % 7) + 6) % 7; if (idx > 4) return false;   // idx: 0 = ma ... 6 = zo
+    if (vrijVerplicht(o.vrijedagen).has(ymd)) return false;
+    if (P.verlofDagen(o.verlof, slug, o.team).has(ymd)) return false;
+    const rec = P.werktijdenMap(o.werktijden)[String(slug || '').toLowerCase()]; if (rec && P.werktijdDagMin(rec, idx) <= 0) return false;
+    return true;
+  };
   P.taakVerdeling = function (t, werktijden, verlof, vrijedagen, team, opt) {
     const o = opt || {}, uit = { perPersoon: {}, waarschuwingen: [] };
     const s = P.isYmd(t && t.start) ? t.start : (P.isYmd(t && t.eind) ? t.eind : ''); if (!s) return uit;

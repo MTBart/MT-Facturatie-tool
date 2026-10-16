@@ -54,11 +54,11 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-17g"></script>
+<script src="mt-planning.js?v=2026-10-17h"></script>
 <script src="mt-mijnwerk.js?v=2026-10-17c"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-15s"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-17c"></script>
+<script src="mt-planverplaats.js?v=2026-10-17h"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-17h"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -15748,7 +15748,37 @@ async function _capVers(){
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
   return { ok:true, online:true };
 }
+// ── Een taak slepen: de taakbalk (T4, keuzeplan 16-10; mt-planverplaats.js: plaatsTaak en taakHerstel) ──
+// Slepen uit Ongepland, en een taakbalk naar een andere persoon, maakt geen planblok meer: de taak zelf wordt aangepast (toegewezen en start/eind) via MTPlanning.takenSchrijf, de schrijfkern van de takenlijst:
+// vers lezen van SharePoint (ETag), de lokale kopie erbij, het plan opnieuw op de verse stand rekenen, stempelen en schrijven; een 412 wordt door _SP.write samengevoegd en opnieuw geprobeerd (drie keer).
+// Lukt dat niet, dan een eerlijke melding en niets gewijzigd (ook lokaal niet). Hangen er opvolgers aan en veranderen de datums, dan eerst de bestaande vraag "Opvolgers verschuiven?" (verschuifVoorstel).
+// Recht: hetzelfde als slepen (capMagSlepen: kantoor, rol geladen; de werkplaats en "lezen" kunnen niet slepen) plus het recht om taken te wijzigen. Oude tb:-planblokken blijven werken en worden niet aangeraakt.
+function _capTaakCtx(code){ return { taken:projTaken(code), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), werktijden:werktijdenVoorWeergave(), werkuren:(admCfg()||{}).werkuren||null, mag:capMagSlepen() }; }
+async function _capOpvolgersVraag(v){
+  const regels=v.wijzigingen.slice(0,12).map(w=>'• '+w.naam+': '+_p2D(w.van.start)+' → '+_p2D(w.naar.start)+(w.reden?' ('+w.reden+')':'')).join('\n')+(v.wijzigingen.length>12?'\n… en '+(v.wijzigingen.length-12)+' meer':'');
+  const choices=[{label:'Opvolgers mee verschuiven ('+v.wijzigingen.length+')',sublabel:'zelfde duur; geen weekend of vrije dag'}];
+  if(!v.blokkerend) choices.push({label:'Alleen deze taak verzetten',sublabel:'de opvolgers blijven staan; het conflict blijft zichtbaar'});
+  return mtDialog.choose({title:'Opvolgers verschuiven?',message:'"'+v.taak.naam+'" komt op '+_p2D(v.taak.naar.start)+(v.taak.naar.eind!==v.taak.naar.start?' t/m '+_p2D(v.taak.naar.eind):'')+'. Daardoor komen deze taken te vroeg te staan:\n'+regels+(v.blokkerend?'\n\nStrikte planning: een taak kan alleen samen met zijn opvolgers verschoven worden.':''),choices});
+}
+function _capTaakOpties(code){
+  const pr=projVind(code);
+  return { sp:{read:n=>_SP.read(n),write:(n,d,m)=>_SP.write(n,d,m)}, lokaal:()=>localStorage.getItem('mt_project_taken_v2'), ctx:()=>_capTaakCtx(code), nu:()=>Date.now(), door:_spWie(), dev:_spDev(), projectId:(pr&&pr.project_id)||'', mag:s=>rolMag(s),
+    verschuif:(taken,w)=>MTPlanning.verschuifVoorstel(taken,projAfhRuw()[code]||[],w,{modus:MTPlanning.depModus(pr),vrij:_p2Vrij()}), vraagOpvolgers:v=>_capOpvolgersVraag(v) };
+}
+function _capTaakKlaar(r){ if(r&&r.ok&&!r.noop&&r.data){ try{ _lsSet('mt_project_taken_v2',JSON.stringify(r.data)); }catch(e){} } return r; }   // de stand staat al op SharePoint: alleen de lokale kopie bijwerken
+async function capTaakPlan(spec){
+  if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'De planning van een taak wijzigen')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  const code=spec&&spec.taak&&spec.taak.code; if(!code) return { ok:false, reden:'Onbekende taak.' };
+  if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
+  const reden=MTPlanVerplaats.controle(spec,_capCtx()); if(reden) return { ok:false, reden };   // o.a. een taak met een tb:-planblok versleep je als blok
+  return _capTaakKlaar(await MTPlanVerplaats.plaatsTaak(spec,_capTaakOpties(code)));
+}
+async function capTaakHerstel(w){
+  if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'De planning van een taak wijzigen')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  return _capTaakKlaar(await MTPlanVerplaats.taakHerstel(w,_capTaakOpties(w.code)));
+}
 async function capVerplaats(spec){
+  if(spec&&((spec.soort==='nieuw'&&!spec.alsBlok)||spec.soort==='taakbalk')) return capTaakPlan(spec);   // uit Ongepland en een taakbalk naar een andere persoon: de taak zelf (T4); alsBlok (alleen tests) maakt nog een tb:-planblok
   if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
   const vers=await _capVers(); if(!vers.ok) return vers;
   const r=MTPlanVerplaats.pas(spec,_capCtx()); if(!r.ok||r.noop) return r;
@@ -15758,6 +15788,7 @@ async function capVerplaats(spec){
   return { ok:true, wijziging:r.wijziging, opgeslagen:opgeslagen!==false, behouden:!!(nu&&nu._gewijzigd===r.wijziging.stempel) };   // behouden=false: iemand anders was net sneller met dit blok
 }
 async function capHerstel(w){
+  if(w&&w.soort==='taak') return capTaakHerstel(w);
   if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
   const vers=await _capVers(); if(!vers.ok) return vers;
   if(!vers.online) return { ok:false, reden:'SharePoint is niet bereikbaar: niets teruggezet, want het blok kan intussen door iemand anders zijn gewijzigd.' };   // ongedaan maken alleen op een verse stand

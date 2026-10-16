@@ -59,6 +59,10 @@
       if (!t || !t.code || !t.id) return 'Onbekende taak.';
       if ((ctx.blokken || []).some(b => actief(b) && b.taak_id != null && String(b.taak_id) === String(t.id) && String(b.project_code || '').toLowerCase() === String(t.code).toLowerCase())) return 'Deze taak heeft al een planblok: versleep dat blok.';
       if (t.voorstel) return 'Een voorstel van de werkplaats neem je eerst over (Mijn werk) voordat je het inplant.';
+    } else if (spec.soort === 'taakbalk') {
+      const t = spec.taak;
+      if (!t || !t.code || !t.id) return 'Onbekende taak.';
+      if (t.voorstel) return 'Een voorstel van de werkplaats neem je eerst over (Mijn werk) voordat je het verplaatst.';
     } else return 'Onbekende actie.';
     return '';
   };
@@ -117,6 +121,113 @@
       ? stempel(Object.assign({}, b, { persoon: w.voor.persoon, datum: w.voor.datum, start: w.voor.start, ts, door: wie }), b)
       : stempel(Object.assign({}, b, { _vervallen: { tijd: ts, door: wie } }), b);
     return { ok: true, blokken: lijst.map(x => x === b ? nieuw : x) };
+  };
+
+  // ═══ Een taak slepen: de taakbalk (T4, keuzeplan 16-10) ═══════════════════════════════════════════════════════════════
+  // Slepen uit Ongepland (en een taakbalk naar een andere persoon) maakt geen planblok meer: de taak zelf wordt aangepast (toegewezen, start, eind), via de schrijfkern van de takenlijst
+  // (MTPlanning.takenSchrijf: vers lezen, de lokale kopie erbij, stempelen, schrijven met de ETag; een 412 wordt samengevoegd en opnieuw geprobeerd, maximaal drie keer). Oude tb:-planblokken blijven werken
+  // en worden niet aangeraakt (het omzetten is T6). Spec:
+  //   { soort: 'nieuw',    taak: {code, id, naam, min}, persoon, datum }       uit Ongepland: toegewezen = persoon, start = de eerstvolgende werkbare dag vanaf datum, eind volgt
+  //   { soort: 'taakbalk', taak: {code, id, naam}, van, persoon, datum }       een bestaande taakbalk naar een andere persoon: alleen de persoon verandert, de datums blijven
+  // Met P.MEERDERE_PERSONEN: uit Ongepland wordt de persoon de eerste en blijven de anderen staan; bij een taakbalk wisselt alleen de persoon van die balk (van) in de lijst.
+  const pad2 = n => String(n).padStart(2, '0');
+  const plusDag = (ymd, k) => { const [y, m, d] = ymd.split('-').map(Number), x = new Date(Date.UTC(y, m - 1, d + k)); return x.getUTCFullYear() + '-' + pad2(x.getUTCMonth() + 1) + '-' + pad2(x.getUTCDate()); };
+  const wdIdx = ymd => (dow(ymd) + 6) % 7;   // 0 = maandag ... 6 = zondag
+  // De datums van een taak die op persoon slug op dag datum wordt gezet. -> { ok, start, eind, verschoven } | { ok:false, reden }
+  //  - start: datum zelf als die werkbaar is (werktijden, verlof, verplichte vrije dag), anders de eerstvolgende werkbare dag (verschoven: true)
+  //  - eind: heeft de taak al een start en een eind, dan houdt hij zijn aantal werkbare dagen (ma-vr zonder verplichte vrije dagen) en schuift mee; anders zoveel werkbare dagen van deze persoon als
+  //    nodig zijn voor de raming bij zijn dagcapaciteit (naar boven afgerond, minimaal één dag); een mijlpaal of een taak zonder raming krijgt één dag
+  V.taakDatums = function (t, slug, datum, ctx) {
+    const P = root.MTPlanning, o = { werktijden: ctx.werktijden, verlof: ctx.verlof, vrijedagen: ctx.vrijedagen, team: ctx.team }, werkbaar = d => P.werkbaarVoor(slug, d, o);
+    let start = datum, verschoven = false;
+    for (let i = 0; i < 120 && !werkbaar(start); i++) { start = plusDag(start, 1); verschoven = true; }
+    if (!werkbaar(start)) return { ok: false, reden: 'Er is geen werkbare dag gevonden voor deze persoon.' };
+    let eind = start;
+    if (isYmd(t.start) && isYmd(t.eind) && t.eind >= t.start) {
+      let n = 0; const verplicht = new Set((ctx.vrijedagen || []).filter(v => v && v.type === 'verplicht').map(v => v.datum));
+      for (let d = t.start, i = 0; d <= t.eind && i < 400; d = plusDag(d, 1), i++) if (wdIdx(d) < 5 && !verplicht.has(d)) n++;
+      n = Math.max(1, n);
+      for (let d = start, i = 0, k = 0; i < 800; d = plusDag(d, 1), i++) if (werkbaar(d)) { k++; eind = d; if (k >= n) break; }
+    } else {
+      const rest = P.taakRamingMin(t);
+      if (rest > 0) for (let d = start, i = 0, som = 0; i < 800; d = plusDag(d, 1), i++) if (werkbaar(d)) { eind = d; som += P.dagCapMin(slug, wdIdx(d), { werkuren: ctx.werkuren, werktijden: ctx.werktijden }); if (som >= rest) break; }
+    }
+    return { ok: true, start, eind, verschoven };
+  };
+  // Het plan voor een sleepactie op een taak (zuiver rekenwerk). ctx = { taken (de actieve taken van dat project), team, verlof, vrijedagen, werktijden, werkuren, mag }
+  // -> { ok:false, reden } | { ok:true, noop:true } | { ok:true, taak:{id, code, naam}, lijst (de personen na afloop), start?, eind?, melding, voor }
+  V.taakPlan = function (spec, ctx) {
+    const reden = V.controle(Object.assign({}, spec, { soort: spec.soort }), Object.assign({}, ctx, { blokken: [] })); if (reden) return { ok: false, reden };
+    const P = root.MTPlanning, team = ctx.team || [], lid = team.find(m => m && String(m.slug).toLowerCase() === String(spec.persoon).toLowerCase()), slug = String(lid.slug).toLowerCase();
+    const t = (ctx.taken || []).find(x => x && !x._vervallen && String(x.id) === String(spec.taak.id)); if (!t) return { ok: false, reden: 'Deze taak bestaat niet meer.' };
+    if ((t.status || 'todo') === 'klaar') return { ok: false, reden: 'Een klare taak plan je niet meer in.' };
+    if (t.voorstel) return { ok: false, reden: 'Een voorstel van de werkplaats neem je eerst over (Mijn werk) voordat je het inplant.' };
+    const nu = P.taakMensen(t), van = String(spec.van == null ? '' : spec.van).toLowerCase();
+    let lijst;
+    if (spec.soort === 'taakbalk') lijst = P.MEERDERE_PERSONEN ? (nu.includes(van) ? nu.map(p => p === van ? slug : p) : [slug].concat(nu)) : [slug];
+    else lijst = P.MEERDERE_PERSONEN ? [slug].concat(nu.filter(p => p !== slug)) : [slug];
+    lijst = lijst.filter((p, i) => p && lijst.indexOf(p) === i);
+    const zelfde = JSON.stringify(lijst) === JSON.stringify(P.MEERDERE_PERSONEN ? nu : nu.slice(0, 1));
+    const voor = { toegewezen: t.toegewezen || '', start: t.start || '', eind: t.eind || '', lijst: nu, personen: t.personen ? JSON.parse(JSON.stringify(t.personen)) : null };
+    let datums = null, melding = '';
+    if (spec.soort === 'nieuw') {
+      datums = V.taakDatums(t, slug, spec.datum, ctx); if (!datums.ok) return datums;
+      if (datums.verschoven) melding = lid.naam + ' werkt niet op ' + dagMnd(spec.datum) + ': de taak begint op ' + dagMnd(datums.start) + '.';
+      if (zelfde && datums.start === (t.start || '') && datums.eind === (t.eind || '')) return { ok: true, noop: true };
+    } else if (zelfde) return { ok: true, noop: true };
+    return Object.assign({ ok: true, taak: { id: t.id, code: spec.taak.code, naam: t.naam || spec.taak.naam || '' }, lijst, melding, voor }, datums ? { start: datums.start, eind: datums.eind } : {});
+  };
+  // Het plan op een taak toepassen (ter plekke): de persoon (de takenmotor stempelt toegewezen; met de vlag ook personen) en de datums.
+  V.pasTaakToe = function (t, plan, opt) {
+    const P = root.MTPlanning; if (P.MEERDERE_PERSONEN) P.personenZet(t, plan.lijst, opt); else P.toegewezenZet(t, plan.lijst[0], opt);
+    if (plan.start !== undefined) { t.start = plan.start; t.eind = plan.eind; }
+  };
+  const SCHRIJF_REDEN = { lezen: 'SharePoint is niet bereikbaar; er is niets gewijzigd.', ontbreekt: 'De takenlijst bestaat nog niet op SharePoint; er is niets gewijzigd.', vorm: 'De takenlijst heeft een onverwachte vorm; er is niets gewijzigd.', recht: 'Dit mag je niet met jouw rol.', geblokkeerd: 'De takenlijst is geblokkeerd; er is niets gewijzigd.',
+    schrijven: 'Opslaan is niet gelukt, ook niet na een paar pogingen (iemand anders wijzigt tegelijk, of SharePoint is niet bereikbaar). Er is niets gewijzigd.', aanroep: 'Onvolledige aanroep.' };
+  const stempelsVan = (x, velden) => { const uit = {}; velden.forEach(k => { uit[k] = Number(x && x._vs && x._vs[k] && x._vs[k].t) || 0; }); return uit; };
+  // De hele sleepactie: plan op de lokale stand (voor de vraag over opvolgers), dan takenSchrijf die vers leest, het plan opnieuw op de verse stand rekent, de taak aanpast en schrijft.
+  // o = { sp, lokaal(), ctx(), nu(), door, dev, projectId, mag(spec), verschuif(taken, {id,start,eind}) -> verschuifVoorstel, vraagOpvolgers(v) -> Promise<0 (mee) | 1 (alleen deze taak) | null> }
+  // -> { ok:false, reden } | { ok:false, geannuleerd:true } | { ok:true, noop:true } | { ok:true, wijziging, melding, opgeslagen:true, behouden:true, data, taken }
+  V.plaatsTaak = async function (spec, o) {
+    const P = root.MTPlanning, ctx0 = o.ctx(), plan0 = V.taakPlan(spec, ctx0); if (!plan0.ok || plan0.noop) return plan0;
+    const code = plan0.taak.code, id = plan0.taak.id; let mee = true;
+    if (plan0.start !== undefined && o.verschuif) {
+      const v = o.verschuif(ctx0.taken, { id, start: plan0.start, eind: plan0.eind });
+      if (v && v.ok && v.wijzigingen.length) { const k = await o.vraagOpvolgers(v); if (k === null || k === undefined) return { ok: false, geannuleerd: true, reden: '' }; mee = (k === 0); }
+    }
+    let plan = null, verschoven = [], noop = false;
+    const res = await P.takenSchrijf(o.sp, { code, lokaal: o.lokaal(), nu: o.nu(), door: o.door, dev: o.dev, projectId: o.projectId, mag: o.mag, muteer: werk => {
+      plan = V.taakPlan(spec, Object.assign({}, o.ctx(), { taken: werk })); if (!plan.ok) return { fout: plan.reden };   // opnieuw op de verse stand: iemand kan intussen iets gewijzigd hebben
+      if (plan.noop) { noop = true; return false; }
+      const t = werk.find(x => x.id === id), oud = {}; werk.forEach(x => { oud[x.id] = { start: x.start || '', eind: x.eind || '' }; });
+      V.pasTaakToe(t, plan, { nu: o.nu(), door: o.door, team: ctx0.team });
+      if (plan.start !== undefined && o.verschuif) {   // de opvolgers die door de nieuwe datums te vroeg komen: alleen als de gebruiker dat koos
+        const v2 = o.verschuif(werk.map(x => x === t ? Object.assign({}, x, { start: oud[id].start, eind: oud[id].eind }) : x), { id, start: plan.start, eind: plan.eind });
+        if (v2 && v2.ok && mee) P.voorstelToepassen(werk, v2, { metOpvolgers: true }).forEach(x => { const y = werk.find(w => w.id === x.id); if (y && y.id !== id && (y.start !== x.start || y.eind !== x.eind)) { verschoven.push({ id: y.id, voor: oud[y.id] }); y.start = x.start; y.eind = x.eind; } });
+      }
+      return werk;
+    } });
+    if (noop) return { ok: true, noop: true };
+    if (!res.ok) return { ok: false, reden: res.reden === 'weigering' ? (res.fout || 'Niet gewijzigd.') : (SCHRIJF_REDEN[res.reden] || 'Niet gewijzigd.') };
+    const na = res.taken.find(x => x.id === id) || {}, velden = ['toegewezen', 'start', 'eind'];
+    return { ok: true, opgeslagen: true, behouden: true, melding: plan.melding || '', data: res.data, taken: res.taken,
+      wijziging: { soort: 'taak', id, code, naam: plan.taak.naam, voor: plan.voor, na: { persoon: plan.lijst[0] || '', datum: plan.start || na.start || '', eind: plan.eind || na.eind || '', start: '' }, stempels: stempelsVan(na, velden), opvolgers: verschoven.map(x => Object.assign({ stempels: stempelsVan(res.taken.find(y => y.id === x.id), ['start', 'eind']) }, x)) } };
+  };
+  // Ongedaan maken: alleen als niemand de taak (of een verschoven opvolger) sindsdien wijzigde (dezelfde stempels); zet toegewezen, personen en de datums terug.
+  V.taakHerstel = async function (w, o) {
+    const P = root.MTPlanning; if (!w || w.soort !== 'taak') return { ok: false, reden: 'Er is niets om ongedaan te maken.' };
+    const velden = ['toegewezen', 'start', 'eind'];
+    const res = await P.takenSchrijf(o.sp, { code: w.code, lokaal: o.lokaal(), nu: o.nu(), door: o.door, dev: o.dev, projectId: o.projectId, mag: o.mag, muteer: werk => {
+      const t = werk.find(x => x.id === w.id); if (!t) return { fout: 'Deze taak bestaat niet meer; niets teruggezet.' };
+      const zelfde = (x, st) => Object.keys(st).every(k => (Number(x && x._vs && x._vs[k] && x._vs[k].t) || 0) === st[k]);
+      if (!zelfde(t, w.stempels) || (w.opvolgers || []).some(v => !zelfde(werk.find(x => x.id === v.id), v.stempels))) return { fout: 'Deze taak is intussen door iemand anders gewijzigd; niet teruggezet.' };
+      if (P.MEERDERE_PERSONEN) P.personenZet(t, w.voor.lijst, { nu: o.nu(), door: o.door, team: (o.ctx() || {}).team }); else P.toegewezenZet(t, w.voor.toegewezen, { nu: o.nu(), door: o.door });
+      if (w.voor.start) t.start = w.voor.start; else delete t.start; if (w.voor.eind) t.eind = w.voor.eind; else delete t.eind;
+      (w.opvolgers || []).forEach(v => { const y = werk.find(x => x.id === v.id); if (y) { y.start = v.voor.start; y.eind = v.voor.eind; } });
+      return werk;
+    } });
+    if (!res.ok) return { ok: false, reden: res.reden === 'weigering' ? (res.fout || 'Niet teruggezet.') : (SCHRIJF_REDEN[res.reden] || 'Niet teruggezet.') };
+    return { ok: true, opgeslagen: true, data: res.data };
   };
 
   root.MTPlanVerplaats = V;
