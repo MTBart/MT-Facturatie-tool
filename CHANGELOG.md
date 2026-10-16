@@ -5,8 +5,35 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-15 — Release v2.18.0: de nieuwe stijl voor iedereen (met knop terug naar de oude stijl), Nog in te plannen op Vandaag, Agenda-slepen leest vers, Naar de dag, telefoon met werktijden, leesbare kleuren in de overige schermen; backup = v2.17.3
+- Commit: `7f2174d` | Auteur: Bart Witte
+
+## 2026-10-15 — Brok 15: Nog in te plannen op de desktop-Vandaag
+- Commit: `c309d6d` | Auteur: Bart Witte
+
+## 2026-10-15 — Merge branch 'main' into restyle-c1
+- Commit: `42f3728` | Auteur: Bart Witte
+
+## 2026-10-15 — Brok 14 (v2.18): de nieuwe stijl is standaard, met een weg terug naar de oude stijl
+- Commit: `334a683` | Auteur: Bart Witte
+
+## 2026-10-15 — Brok 13e: de drie kleine punten uit de Codex-review van 13a-13c
+- Commit: `b20a8d6` | Auteur: Bart Witte
+
+## 2026-10-15 — Brok 13d: losse kleuren onder de nieuwe stijl nagelopen (Inbox, Cijfers, Dashboard/Geld, Klanten, Leveranciers, Rapporten, Bestellijst, Voorraad, Admin, Instellingen)
+- Commit: `f7638da` | Auteur: Bart Witte
+
 ## 2026-10-15 — Release v2.17.3: nieuwe stijl (achter wisselknop) met Uren-weergave, dagvraag "Klopt je dag?" en telefoon; veilig boeken (rol, lock tussen tabbladen, controle vooraf, herstel na time-out); backup = v2.17.2
 - Commit: `9241f16` | Auteur: Bart Witte
+
+## 2026-10-15 — Brok 13c: de telefoon rekent met de werktijden, alleen onder de nieuwe stijl; de tv niet
+- Commit: `49d470e` | Auteur: Bart Witte
+
+## 2026-10-15 — Brok 13b: Afwijkingen > "Naar de dag" opent precies die dag in de planning
+- Commit: `184d4fc` | Auteur: Bart Witte
+
+## 2026-10-15 — Brok 13a: oude Agenda-slepen (agPlanDrop) leest vóór de controle en vóór het opslaan vers
+- Commit: `15eb3c3` | Auteur: Bart Witte
 
 ## 2026-10-15 — Restyling brok 11e: de vier restpunten uit de Codex-hercontrole van 17dc055
 - Commit: `22f66de` | Auteur: Bart Witte

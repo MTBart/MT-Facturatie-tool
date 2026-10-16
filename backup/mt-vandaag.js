@@ -18,7 +18,7 @@
   const BESTAND = 'mt_project_taken_v2.json', LS_TAKEN = 'mt_project_taken_v2', LS_AFH = 'mt_mobiel_afhank', LS_GEZIEN = 'mt_vandaag_gezien';
   const V = {};
   let D = null, P = null;
-  const S = { staat: 'laden', vormFout: '', schemaMin: null, taken: {}, afhank: {}, mw: null, vrij: null, verlof: null, laadtijd: 0, bezigLaden: null, open: null, bezig: false };
+  const S = { staat: 'laden', vormFout: '', schemaMin: null, taken: {}, afhank: {}, mw: null, vrij: null, verlof: null, werktijden: null, laadtijd: 0, bezigLaden: null, open: null, bezig: false };
 
   // ── kleine bouwstenen ──
   function el(tag, props, ...kids) {
@@ -91,8 +91,16 @@
     // De vrije dagen en het verlof uit Beheer (dezelfde bestanden als de cockpit): ze tellen mee in de weekbalk en in "wacht op een wachttijd". Niet te lezen = zoals voorheen (alleen weekenden).
     try { const r = await D.sp.read('mt_vrijedagen.json'); if (Array.isArray(r)) S.vrij = P.vrijeDagenLijst(r); } catch (e) {}
     try { const r = await D.sp.read('mt_verlof.json'); if (Array.isArray(r)) S.verlof = r; } catch (e) {}
+    await werktijdenLaad();
     S.laadtijd = D.nu(); teken();
   }
+  // De werktijden (mt_werktijden.json, alleen lezen; de telefoon schrijft ze nooit) tellen alleen mee onder de nieuwe stijl (D.werktijdenAan). Niet te lezen of een onverwachte vorm = zoals voorheen (8 uur per werkdag).
+  async function werktijdenLaad() {
+    if (!(D.werktijdenAan && D.werktijdenAan())) { S.werktijden = null; return; }
+    try { const r = await D.sp.read('mt_werktijden.json'); S.werktijden = Array.isArray(r) ? P.werktijdenSamen(null, r) : null; } catch (e) { /* niet te lezen: de laatst bekende stand (of geen) blijft */ }   // een onverwachte vorm (of geen bestand) = geen werktijden = 8 uur per dag; de vorige stand wordt niet vastgehouden
+  }
+  // De stijl is gewisseld: werktijden erbij (nieuw) of weg (oud) en opnieuw tekenen.
+  V.stijlGewijzigd = async function () { await werktijdenLaad(); teken(); };
   // Laden (of opnieuw laden) — één tegelijk.
   V.laad = function () {
     if (S.bezigLaden) return S.bezigLaden;
@@ -114,7 +122,9 @@
   // ── berekenen en tekenen ──
   function bereken() {
     const w = D.wie();
-    S.mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), { mijn: w.slug, vandaag: P.vandaagYmd(), nu: D.nu(), gezien: leesGezien(), vrij: S.vrij, verlof: S.verlof });
+    const opt = { mijn: w.slug, vandaag: P.vandaagYmd(), nu: D.nu(), gezien: leesGezien(), vrij: S.vrij, verlof: S.verlof };
+    if (D.werktijdenAan && D.werktijdenAan() && S.werktijden) opt.capPerDag = P.capPerDagVoor(w.slug, S.werktijden);   // de beschikbare uren per dag volgen jouw werktijden (zonder record: 8 uur per dag, zoals altijd)
+    S.mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), opt);
     return S.mw;
   }
   // Voor het startvenster (mt-startvenster.js): mijn werk zonder "nieuw voor mij" (alles staat dan in zijn datumgroep); alleen als de takenlijst goed geladen is.
@@ -138,7 +148,7 @@
       el('div', { klass: 'vd-dagdelen' }, [0, 1].map(n => el('span', { klass: 'vd-deel' + (n < d.dagdelen ? ' vol' : '') })))));
     return el('div', { klass: 'card vd-week' },
       el('div', { klass: 'vd-week-tekst', tekst: 'Deze week ' + uren(w.gepland_min) + ' gepland / ' + uren(w.vrij_min) + ' vrij' + (w.over_min > 0 ? ' · ' + uren(w.over_min) + ' te veel' : '') }),
-      el('div', { klass: 'vd-week-sub', tekst: w.dagdelen + ' van ' + w.dagdelenTotaal + ' dagdelen gepland (8 uur per werkdag, in dagdelen)' }),
+      el('div', { klass: 'vd-week-sub', tekst: w.dagdelen + ' van ' + w.dagdelenTotaal + (D.werktijdenAan && D.werktijdenAan() && S.werktijden && P.werktijdenMap(S.werktijden)[String((D.wie() || {}).slug || '').toLowerCase()] ? ' dagdelen gepland (volgens jouw werktijden, in dagdelen)' : ' dagdelen gepland (8 uur per werkdag, in dagdelen)') }),
       el('div', { klass: 'vd-dagen' }, dagen));
   }
   function meldingBalk() {
@@ -515,7 +525,7 @@
   };
 
   V.init = function (deps) { D = deps; P = deps.planning || root.MTPlanning; S.staat = 'laden'; return V; };
-  V._S = S;
+  V._S = S; V._bereken = bereken;
   root.MTVandaag = V;
   if (typeof module !== 'undefined' && module.exports) module.exports = V;
 })(typeof window !== 'undefined' ? window : globalThis);

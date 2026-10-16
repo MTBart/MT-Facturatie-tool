@@ -3,18 +3,20 @@
 <head>
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
-<!-- Wisselknop "Nieuwe stijl proberen" (restyling fase 1): zet html[data-stijl="nieuw"] VOOR het eerste tekenen uit localStorage
-     "mt-stijl" (per toestel), of via ?stijl=nieuw / ?stijl=oud (wordt onthouden). Standaard UIT. De stijlregels staan in
-     mt-stijl-mobiel.css onder dat attribuut; zonder attribuut is de tool ongewijzigd. Lettertypen laden alleen in de nieuwe stijl. -->
+<!-- Stijlkeuze (restyling fase 1, v2.18): de NIEUWE stijl is de standaard. Zet html[data-stijl="nieuw"] VOOR het eerste tekenen, tenzij dit toestel zelf voor de oude stijl koos:
+     localStorage "mt-stijl-keuze" ('oud' of 'nieuw'; per toestel; een nieuwe sleutel, de proefwaarde "mt-stijl" uit de testperiode telt niet mee), of via ?stijl=oud / ?stijl=nieuw
+     (wordt onthouden). De stijlregels staan in mt-stijl-mobiel.css onder dat attribuut; met de oude stijl blijft de tool zoals voorheen. Lettertypen laden alleen in de nieuwe stijl. -->
 <script>
 (function(){
-  var K='mt-stijl', FONTS='https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap';
-  function lees(){ try{ return localStorage.getItem(K)==='nieuw'; }catch(e){ return false; } }
+  var K='mt-stijl-keuze', FONTS='https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap';
+  function keuze(){ try{ return localStorage.getItem(K); }catch(e){ return null; } }
+  function lees(){ return keuze()!=='oud'; }   // standaard (geen keuze, of geen toegang tot localStorage): nieuw
   function fonts(){ try{ if(document.getElementById('mt-stijl-fonts')) return; var l=document.createElement('link'); l.id='mt-stijl-fonts'; l.rel='stylesheet'; l.href=FONTS; document.head.appendChild(l); }catch(e){} }
-  function toepassen(aan){ var h=document.documentElement; if(aan){ h.setAttribute('data-stijl','nieuw'); fonts(); } else h.removeAttribute('data-stijl'); try{ var m=document.querySelector('meta[name=theme-color]'); if(m) m.setAttribute('content',aan?'#0f4d2f':'#2A4A38'); }catch(e){} }
-  try{ var q=new URLSearchParams(location.search).get('stijl'); if(q==='nieuw'||q==='oud'){ try{ if(q==='nieuw') localStorage.setItem(K,'nieuw'); else localStorage.removeItem(K); }catch(e){} } }catch(e){}
-  toepassen(lees());
-  window.mtStijl={ aan:lees, zet:function(aan){ try{ if(aan) localStorage.setItem(K,'nieuw'); else localStorage.removeItem(K); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
+  function toepassen(aan){ var h=document.documentElement; if(aan){ h.setAttribute('data-stijl','nieuw'); fonts(); } else h.removeAttribute('data-stijl'); thema(aan); }
+  function thema(aan){ try{ var m=document.querySelector('meta[name=theme-color]'); if(m) m.setAttribute('content',aan?'#0f4d2f':'#2A4A38'); }catch(e){} }   // de themakleur (statusbalk); de meta staat pas na dit script in de pagina, dus ook na het laden
+  try{ var q=new URLSearchParams(location.search).get('stijl'); if(q==='nieuw'||q==='oud'){ try{ localStorage.setItem(K,q); }catch(e){} } }catch(e){}
+  toepassen(lees()); document.addEventListener('DOMContentLoaded',function(){ thema(lees()); });
+  window.mtStijl={ aan:lees, expliciet:function(){ return keuze()!==null; }, zet:function(aan){ try{ localStorage.setItem(K,aan?'nieuw':'oud'); }catch(e){} toepassen(!!aan); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(e){} } };
   window.addEventListener('storage',function(e){ if(e.key===K||e.key===null){ toepassen(lees()); try{ window.dispatchEvent(new Event('mt-stijl')); }catch(x){} } });   // twee open tabbladen blijven gelijk
 })();
 </script>
@@ -24,7 +26,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BACKUP v2.17.3 — M&T Mobiel</title>
+<title>BACKUP v2.18.0 — M&T Mobiel</title>
 <link rel="manifest" href="manifest-mobiel.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -48,11 +50,11 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-15u"></script>
-<script src="mt-vandaag.js?v=2026-10-15b"></script>
+<script src="mt-planning.js?v=2026-10-16a"></script>
+<script src="mt-vandaag.js?v=2026-10-16b"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-15v"></script>
+<script src="mt-verhuis.js?v=2026-10-16c"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -853,10 +855,10 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .pv-melding{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:6px;margin:6px 0;font-size:12.5px}.pv-melding.goed{background:#E3F1E7;color:#1F5C36}.pv-melding.af{background:#FDE8E8;color:#8B1A1A}.pv-melding.open{background:#FFF4D6;color:#7A5300}
 .pv-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.pv-form input{min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:8px;font:inherit}.pv-form .vol{grid-column:1/-1}
 </style>
-<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-10-15w">
+<link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-10-16c">
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.17.3, 2026-10-16). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.18.0, 2026-10-16). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ── LOGIN SCREEN ── -->
 <div id="login-screen">
@@ -1357,19 +1359,35 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
       <button class="sheet-action-btn meer-item" onclick="switchTab('feedback',this)" id="nav-feedback" data-recht="verbeterpunten">
         <span class="sheet-action-icon">💬</span><span class="sheet-action-label"><span class="sheet-action-title">Feedback</span></span><span class="sheet-action-arrow">›</span>
       </button>
-      <button class="sheet-action-btn" id="stijlKnop" type="button" aria-pressed="false">
-        <span class="sheet-action-icon">🎨</span><span class="sheet-action-label"><span class="sheet-action-title">Nieuwe stijl proberen</span><span class="sheet-action-sub" id="stijlSub">Uit</span></span><span class="sheet-action-arrow" id="stijlPijl">›</span>
+      <button class="sheet-action-btn meer-item" id="stijlKnop" type="button" aria-pressed="false">
+        <span class="sheet-action-icon">🎨</span><span class="sheet-action-label"><span class="sheet-action-title" id="stijlTitel">Oude stijl</span><span class="sheet-action-sub" id="stijlSub">Uit</span></span><span class="sheet-action-arrow" id="stijlPijl">›</span>
       </button>
     </div>
   </div>
 </div>
 
 <script>
-// Nieuwe stijl proberen (Meer): dezelfde schakelaar als op de desktop (mtStijl, zie de kop van dit bestand); geldt alleen op dit toestel.
+window.addEventListener('mt-stijl', () => { try { if (window.MTVandaag) MTVandaag.stijlGewijzigd(); } catch (e) {} });   // werktijden erbij of weg bij een stijlwissel
+// Stijl wisselen (Meer: Oude stijl / Nieuwe stijl): dezelfde schakelaar als op de desktop (mtStijl, zie de kop van dit bestand); geldt alleen op dit toestel.
 (function(){ var k=document.getElementById('stijlKnop'); if(!k||!window.mtStijl) return;
-  function zet(){ var aan=mtStijl.aan(); k.setAttribute('aria-pressed',aan?'true':'false'); var s=document.getElementById('stijlSub'); if(s) s.textContent=aan?'Aan · nieuwe kleuren en lettertypen, alleen op dit toestel':'Uit · tik om de nieuwe kleuren en lettertypen te proberen'; }
+  function zet(){ var aan=mtStijl.aan(); k.setAttribute('aria-pressed',aan?'false':'true'); var ti=document.getElementById('stijlTitel'); if(ti) ti.textContent=aan?'Oude stijl':'Nieuwe stijl'; var s=document.getElementById('stijlSub'); if(s) s.textContent=aan?'Terug naar de vertrouwde weergave, alleen op dit toestel':'Naar de nieuwe weergave, alleen op dit toestel'; }
   k.addEventListener('click',function(){ mtStijl.zet(!mtStijl.aan()); zet(); });
   window.addEventListener('mt-stijl',zet); zet(); })();
+// Eenmalige melding bij de eerste keer in de nieuwe stijl (per toestel; alleen als er geen eigen keuze is): rechtsonder, role=status, nooit een dialoog.
+(function(){
+  try{ if(!window.mtStijl||mtStijl.expliciet()||localStorage.getItem('mt-stijl-gezien')) return; }catch(e){ return; }
+  var tel=0, iv=setInterval(function(){
+    tel++; if(tel>400||!mtStijl.aan()){ clearInterval(iv); return; }
+    if(!((function(){ var l=document.getElementById('login-screen'); return !l||getComputedStyle(l).display==='none'; })())) return;
+    clearInterval(iv); try{ localStorage.setItem('mt-stijl-gezien','1'); }catch(e){}
+    var m=document.createElement('div'); m.className='stijl-melding'; m.setAttribute('role','status'); m.setAttribute('aria-live','polite');
+    var t=document.createElement('span'); t.textContent='Nieuwe stijl. Liever de oude?';
+    var b=document.createElement('button'); b.type='button'; b.className='stijl-melding-knop'; b.textContent='Oude stijl'; b.addEventListener('click',function(){ m.remove(); mtStijl.zet(false); });
+    var x=document.createElement('button'); x.type='button'; x.className='stijl-melding-x'; x.setAttribute('aria-label','Sluiten'); x.textContent='×'; x.addEventListener('click',function(){ m.remove(); });
+    m.appendChild(t); m.appendChild(b); m.appendChild(x); document.body.appendChild(m);
+    window.addEventListener('mt-stijl',function(){ if(!mtStijl.aan()&&m.parentNode) m.remove(); });
+  },1500);
+})();
 </script>
 <!-- ── PROJECT DETAIL SHEET ── -->
 <div class="sheet-overlay" id="projectSheet" onclick="closeSheet(event)">
@@ -2439,6 +2457,7 @@ if (window.MTVandaag) MTVandaag.init({
   rol: { mag: spec => rolMagM(spec), naam: () => String((window.MTRol && MTRol.me && MTRol.me.rol) || '') },
   wie: () => ({ slug: _mijnSlug(), email: _mijnEmail(), naam: String((_msAccount && _msAccount.name) || '') }),
   account: () => _msAccount, demo: () => _demoMode, nu: () => Date.now(), dev: _devIdM,
+  werktijdenAan: () => { try { return document.documentElement.getAttribute('data-stijl') === 'nieuw'; } catch (e) { return false; } },   // de werktijden tellen alleen mee in de nieuwe stijl (zoals op de desktop)
   toast: m => showToast(m), dialog: () => window.mtDialog,
   schemaMin: async () => {   // GET /teller/status → schema_min (de app-versie die projecttaken nog mag schrijven)
     const h = await authHeader(); if (!h['X-Auth-Token']) return null;

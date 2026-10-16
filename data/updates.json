@@ -1,5 +1,20 @@
 [
   {
+    "versie": "2.19.0",
+    "datum": "2026-10-16",
+    "titel": "Taken op de tijdlijn",
+    "voor": "iedereen",
+    "punten": [
+      "Sleep een taak uit Ongepland op een persoon en een dag: de taak wordt aan die persoon toegewezen en krijgt een start- en einddatum. De einddatum volgt uit de geschatte tijd en de werkdagen van die persoon.",
+      "Een taakbalk kun je uittrekken aan de randen of in zijn geheel verschuiven; de start- en einddatum van de taak veranderen mee. Hangen er opvolgers aan, dan vraagt de tool eerst of die mee moeten. Liever typen? Gebruik Datums wijzigen op de balk.",
+      "Wat telt op de capaciteit is de geschatte tijd, verdeeld over de echte werkdagen: verlof, verplichte vrije dagen en (in de nieuwe stijl) de werktijden worden overgeslagen. Een taak van 2 dagen over een week geeft dus minder uren per dag.",
+      "Een taak zonder geschatte tijd of een mijlpaal telt niet meer als 4 uur per dag. En een taak telt nooit meer dubbel als hij ook als blok in de planning staat.",
+      "Capaciteit, Mijn werk, Vandaag, telefoon en tv rekenen nu op dezelfde manier, dus je ziet overal hetzelfde getal.",
+      "Oude sleepblokken hebben een knop Omzetten naar taakbalk.",
+      "Opslaan duurt lang of iemand anders wijzigde de taak tegelijk? Dan zegt de tool dat eerlijk in plaats van 'opgeslagen'."
+    ]
+  },
+  {
     "versie": "2.18.0",
     "datum": "2026-10-16",
     "titel": "De nieuwe stijl voor iedereen",
