@@ -54,7 +54,7 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-17e"></script>
+<script src="mt-planning.js?v=2026-10-17f"></script>
 <script src="mt-mijnwerk.js?v=2026-10-17c"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-15s"></script>
@@ -7838,7 +7838,7 @@ function projectTakenHtml(proj){
       <td style="font-size:13px">${esc(t.naam)}${planLink}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
       <td style="white-space:nowrap">
         <select class="pt-sel" aria-label="Activiteit" title="Activiteit. Kantooruren: tekenwerk, werkvoorbereiding, kantoor. Werkplaatsuren: werkplaats, spuiten, montage en (aanname, voorlopig) reizen." onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'activiteit',this.value)">${[['','— activiteit —']].concat(MTPlanning.ACTIVITEITEN.map(a=>[a.k,a.l])).map(([k,l])=>`<option value="${esc(k)}"${(t.activiteit||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
-        <select class="pt-sel" aria-label="Toegewezen aan" title="Toegewezen aan (optioneel)" onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'toegewezen',this.value)">${[['','— wie —']].concat(MT_TEAM.map(m=>[m.slug,m.naam])).map(([k,l])=>`<option value="${esc(k)}"${(MTPlanning.taakMensen(t)[0]||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
+        <select class="pt-sel" aria-label="Toegewezen aan" title="Toegewezen aan (optioneel)" onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'toegewezen',this.value)">${[['','— wie —']].concat(MT_TEAM.map(m=>[m.slug,m.naam])).map(([k,l])=>`<option value="${esc(k)}"${(t.toegewezen||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
         ${MTPlanning.MEERDERE_PERSONEN?`<button class="btn btn-xs btn-secondary" title="Personen van deze taak, met een eigen aantal uren per persoon" onclick="projPersonenOpen(${jsArg(proj.code)},${jsArg(t.id)})">${esc(MTPlanning.taakMensen(t).length>1?MTPlanning.taakMensen(t).length+' personen':'Personen')}</button>`:''}
         ${t._veldconflict&&Object.keys(t._veldconflict).length?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="Twee gelijktijdige wijzigingen — klik om te kiezen" onclick="projTaakConflict(${jsArg(proj.code)},${jsArg(t.id)})">⚠ conflict</button>`:''}
       </td>
@@ -8736,7 +8736,7 @@ function projTaakVeldZet(code,id,veld,waarde){
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   if(veld==='activiteit'&&waarde&&!MTPlanning.activiteit(waarde)) return;
   if(veld==='toegewezen'&&waarde&&!MT_TEAM.some(m=>m.slug===waarde)) return;
-  if(veld==='toegewezen') MTPlanning.toegewezenZet(t,waarde,{door:_spWie(),dev:_spDev(),team:MT_TEAM});   // schrijft personen en toegewezen samen (T3); zonder MTPlanning.MEERDERE_PERSONEN is het één persoon
+  if(veld==='toegewezen') MTPlanning.toegewezenZet(t,waarde,{door:_spWie(),dev:_spDev(),team:MT_TEAM});   // zonder MTPlanning.MEERDERE_PERSONEN alleen het veld toegewezen (zoals vóór T3); met de vlag ook personen (T3c)
   else if(!waarde) delete t[veld]; else t[veld]=waarde;
   projTakenZet(code,arr);
   try{ if(window.track) track('taken','veld_'+veld,{detail:code}); }catch(e){}
@@ -8750,7 +8750,7 @@ function projPersonenOpen(code,id){
   MTPersonen.open({doc:document,naam:t.naam,raming:MTPlanning.taakRamingMin(t),team:MT_TEAM,mensen:MTPlanning.taakMensen(t),mins,opslaan:(lijst,uit)=>{
     if(_ptBlok(code,ROL_TAAK_ALLES,'De personen van een taak wijzigen')) return;
     const arr=projTaken(code), x=arr.find(y=>y.id===id); if(!x) return;
-    if(MTPlanning.personenZet(x,lijst,{door:_spWie(),dev:_spDev(),team:MT_TEAM,mins:uit})) projTakenZet(code,arr);
+    if(MTPlanning.personenZet(x,lijst,{door:_spWie(),team:MT_TEAM,mins:uit})) projTakenZet(code,arr);
     try{ if(window.track) track('taken','personen',{detail:code}); }catch(e){}
     _rerenderDetailKeepScroll(); }});
 }
@@ -8769,7 +8769,7 @@ async function projTaakConflict(code,id){
   for(const veld of Object.keys(t._veldconflict)){
     const c=t._veldconflict[veld];
     const k=await mtDialog.choose({title:'Conflict: '+(_PT_VELDLABEL[veld]||veld)+' — '+t.naam,
-      message:(c.bron==='oud-apparaat'?'Een ouder apparaat (zonder meerdere personen per taak) wijzigde Toegewezen aan, terwijl er personen op de taak staan.':'Twee mensen of apparaten hebben dit tegelijk gewijzigd.')+'\nNu staat: '+_ptWaardeTekst(veld,t[veld])+'\nDe andere wijziging'+(c.door?' (door '+c.door+')':'')+': '+_ptWaardeTekst(veld,c.waarde),
+      message:'Twee mensen of apparaten hebben dit tegelijk gewijzigd.\nNu staat: '+_ptWaardeTekst(veld,t[veld])+'\nDe andere wijziging'+(c.door?' (door '+c.door+')':'')+': '+_ptWaardeTekst(veld,c.waarde),
       choices:[{label:'Houd wat er nu staat',sublabel:_ptWaardeTekst(veld,t[veld])},{label:'Neem de andere wijziging over',sublabel:_ptWaardeTekst(veld,c.waarde)}]});
     if(k===null||k===undefined) return;   // geannuleerd: niets wijzigen
     MTPlanning.conflictOplos(t,veld,k===1?'andere':'eigen',{door:_spWie(),dev:_spDev()});

@@ -197,40 +197,32 @@
   P.taakBudgetMin = t => (t && t.budget_min != null && isFinite(Number(t.budget_min)) && Number(t.budget_min) > 0) ? Math.round(Number(t.budget_min)) : P.urenNaarMin(t && t.duur_uur);
   // De raming die in de capaciteit telt (contract T0, punt b): een mijlpaal telt 0 minuten, ook met een raming erop; een taak zonder raming (duur_uur en budget_min leeg of 0) ook. Geen terugval naar 4 uur meer.
   P.taakRamingMin = t => (t && t.soort === 'mijlpaal') ? 0 : P.taakBudgetMin(t);
-  // ── Meerdere personen op één taak (T3, keuzeplan 16-10) ──────────────────────────────────────────────────────────────
-  // t.personen = { <slug>: { min?: minuten, volg: getal, _ts: ISO, door: slug, weg?: true } }: een object per persoon, zodat twee apparaten die tegelijk iemand toevoegen elkaar niet overschrijven.
-  //  - volg bepaalt de volgorde (bij gelijke volg: de nieuwste _ts eerst, dan de slug); de eerste actieve persoon is ook `toegewezen`, ook na het samenvoegen; min = de eigen raming van die persoon (anders een gelijk deel van de rest, zie taakVerdeling)
-  //  - een persoon weghalen = een tombstone (weg: true met een nieuwe _ts), de sleutel verdwijnt nooit: een oude kopie zet hem anders terug
-  //  - samenvoegen gaat per slug (personenSamen, in recSamen): de nieuwste _ts wint, een slug die aan één kant staat blijft staan, een tombstone met een nieuwere _ts wint van een actieve entry
-  //  - `toegewezen` blijft bestaan en is altijd de eerste actieve persoon: elke schrijver van `personen` zet het mee, met dezelfde stempel (P.personenZet); zo zien oude apparaten (cache, telefoon, tv) de taak nog bij die persoon
-  // Oude apparaten kennen `personen` niet en wijzigen alleen `toegewezen`. Is de stempel van `toegewezen` nieuwer dan de nieuwste _ts in `personen`, en staat die persoon niet actief in `personen`
-  // (of is hij leeg), dan heeft een oud apparaat gewisseld: voor de lezers wordt dat een wissel van de eerste persoon (de nieuwe persoon voorop, de vorige eerste valt weg, de anderen blijven). Dat wordt
-  // nooit stil in `personen` teruggeschreven; de samenvoeger meldt het als conflict op het veld toegewezen (P.conflictOplos lost het op).
-  P.MEERDERE_PERSONEN = false;   // de bediening voor meer dan één persoon staat pas een week na de release aan; wie toegewezen wijzigt schrijft personen al wel mee
+  // ── Meerdere personen op één taak (T3c, keuzeplan 16-10) ─────────────────────────────────────────────────────────────
+  // De eerste persoon is `toegewezen`: een gewoon taakveld met zijn eigen stempel en het bestaande veldconflict, precies zoals vóór meerdere personen. Er is geen tweede plek voor de eerste persoon en
+  // dus ook geen afleiding, normalisatie of wissel-detectie bij het samenvoegen.
+  // t.personen = { <slug>: { min?: minuten, volg: getal, _ts: ISO, door: slug, weg?: true } } is alleen voor wat erbij komt: de extra personen (volg 1, 2, ...) en de eigen uren per persoon
+  // (een entry voor de eerste persoon, volg 0, bestaat alleen om zijn min vast te leggen). Een persoon weghalen = een tombstone (weg: true met een nieuwe _ts), de sleutel verdwijnt nooit: een oude kopie
+  // zet hem anders terug. Samenvoegen gaat per slug (personenSamen, in recSamen): de nieuwste _ts wint, een slug aan één kant blijft staan, een nieuwere tombstone wint van een actieve entry.
+  // Zonder P.MEERDERE_PERSONEN wordt `personen` nooit geschreven (P.toegewezenZet schrijft dan alleen toegewezen): het opslaggedrag is dan identiek aan vroeger. Een oud apparaat dat toegewezen wijzigt, wijzigt
+  // gewoon dat veld (met het bestaande conflict); `personen` blijft bij hem staan (een oude samenvoeger neemt `personen` wel als geheel van het nieuwste record: alleen een risico met de vlag aan).
+  P.MEERDERE_PERSONEN = false;   // de bediening voor meer dan één persoon staat pas een week na de release aan
   const tsMs = e => { const v = e && e._ts; if (typeof v === 'number') return isFinite(v) ? v : 0; const m = Date.parse(v); return isNaN(m) ? 0 : m; };
   const persSleutels = t => { const p = t && t.personen; return p && typeof p === 'object' && !Array.isArray(p) ? Object.keys(p).filter(k => p[k] && typeof p[k] === 'object') : []; };
-  const persActief = t => persSleutels(t).filter(k => !t.personen[k].weg).sort((a, b) => (Number(t.personen[a].volg) || 0) - (Number(t.personen[b].volg) || 0) || (tsMs(t.personen[b]) - tsMs(t.personen[a])) || (a < b ? -1 : a > b ? 1 : 0));   // volg, dan de nieuwste _ts eerst (twee apparaten die tegelijk een andere eerste persoon zetten: de laatste wint, net als bij toegewezen), dan slug
+  const persActief = t => persSleutels(t).filter(k => !t.personen[k].weg).sort((a, b) => (Number(t.personen[a].volg) || 0) - (Number(t.personen[b].volg) || 0) || (a < b ? -1 : a > b ? 1 : 0));
   const persMaxTs = t => persSleutels(t).reduce((m, k) => Math.max(m, tsMs(t.personen[k])), 0);
   const tgTrim = t => t && typeof t.toegewezen === 'string' ? t.toegewezen.trim() : '';
-  const tgStempel = t => Number(t && t._vs && t._vs.toegewezen && t._vs.toegewezen.t) || 0;
-  // -> { eerste (de eerste actieve persoon in personen, of ''), nieuw (wat het oude apparaat in toegewezen zette, of '') } als een oud apparaat toegewezen wijzigde, anders null
-  P.personenWissel = function (t) {
-    if (!persSleutels(t).length) return null;
-    const actief = persActief(t), tg = tgTrim(t);
-    if (!(tgStempel(t) > persMaxTs(t)) || tg === (actief[0] || '') || (tg && actief.includes(tg))) return null;
-    return { eerste: actief[0] || '', nieuw: tg };
-  };
-  // De personen van een taak (contract T0, punt f): alle lezers van "wie heeft deze taak" gaan hierlangs. Zonder personen: [toegewezen] of [] als niemand. Met personen: de actieve personen op volgorde,
-  // met een wissel door een oud apparaat verwerkt (zie boven).
+  // De personen van een taak (contract T0, punt f): alle lezers van "wie heeft deze taak" gaan hierlangs. De eerste persoon is altijd toegewezen, daarna de actieve extra personen op volgorde
+  // (volg, dan slug), zonder dubbelen en zonder lege waarden. Bestaat toegewezen niet, dan alleen de actieve personen.
   P.taakMensen = t => {
-    if (!persSleutels(t).length) { const w = tgTrim(t); return w ? [w] : []; }
-    const actief = persActief(t), w = P.personenWissel(t);
-    return w ? (w.nieuw ? [w.nieuw] : []).concat(actief.slice(1)) : actief;
+    const lijst = []; const voeg = s => { if (s && !lijst.includes(s)) lijst.push(s); };
+    voeg(tgTrim(t)); persActief(t).forEach(voeg);
+    return lijst;
   };
-  // De toewijzing van één persoon: wanneer hij erbij kwam en door wie (voor "Nieuw voor mij": elke persoon ziet zijn eigen toewijzing als nieuw). -> { t (ms), door } of null
+  // De toewijzing van één persoon: wanneer hij erbij kwam en door wie (voor "Nieuw voor mij"). De eerste persoon: de stempel van toegewezen; een extra persoon: zijn eigen _ts. -> { t (ms), door } of null
   P.toewijzing = function (t, slug, team) {
-    const s = String(P.persoonSlug(slug, team) || slug || '').toLowerCase(), e = s && t && t.personen && t.personen[s];
-    if (e && typeof e === 'object' && !e.weg) return { t: tsMs(e), door: e.door || '' };
+    const s = String(P.persoonSlug(slug, team) || slug || '').toLowerCase(), eerste = String(P.persoonSlug(tgTrim(t), team) || tgTrim(t)).toLowerCase();
+    const e = s && t && t.personen && t.personen[s];
+    if (s !== eerste && e && typeof e === 'object' && !e.weg) return { t: tsMs(e), door: e.door || '' };
     const tg = t && t._vs && t._vs.toegewezen; return tg ? { t: Number(tg.t) || 0, door: tg.door || '' } : null;
   };
   // Per slug samenvoegen: de nieuwste _ts wint; gelijke _ts: een tombstone wint, daarna de inhoud (deterministisch, ongeacht de volgorde). Wat aan één kant staat blijft staan.
@@ -244,36 +236,33 @@
     });
     return Object.keys(uit).length ? uit : undefined;
   }
-  // De personen van een taak zetten (de ene schrijver, ter plekke op t): lijst = slugs, de eerste is toegewezen. opt: { nu, door, dev, team, mins: { slug: minuten } } (mins: de eigen raming per persoon;
-  // zonder mins blijven de bestaande mins staan). Alleen wat verandert krijgt een nieuwe _ts; wie eruit gaat krijgt een tombstone; toegewezen en de stempel van toegewezen worden mee gezet (dezelfde T).
-  // -> true als er iets veranderde.
+  // De personen van een taak zetten (ter plekke op t; alleen met P.MEERDERE_PERSONEN, voor het venster en P.toegewezenZet): lijst = slugs, de eerste is toegewezen. opt: { nu, door, team, mins: { slug: minuten } }
+  // (mins: de eigen raming per persoon; zonder mins blijven de bestaande mins staan). De eerste persoon wordt het veld toegewezen (stempelt de takenmotor); de anderen zijn entries in personen. Alleen wat
+  // verandert krijgt een nieuwe _ts; wie eruit gaat (ook de min-entry van een vorige eerste persoon) krijgt een tombstone. -> true als er iets veranderde.
   P.personenZet = function (t, lijst, opt) {
     const o = opt || {}, nu = Number(o.nu) || Date.now(), team = o.team || null, norm1 = s => String(P.persoonSlug(s, team) || s || '').trim().toLowerCase();
     const door = norm1(o.door) || String(o.door || '');
     const gewenst = []; (Array.isArray(lijst) ? lijst : []).forEach(s => { const x = norm1(s); if (x && !gewenst.includes(x)) gewenst.push(x); });
-    const oud = t.personen && typeof t.personen === 'object' && !Array.isArray(t.personen) ? t.personen : {}, opgeslagen = persSleutels(t).length ? persActief(t) : (tgTrim(t) ? [tgTrim(t)] : []), mins = o.mins && typeof o.mins === 'object' ? o.mins : null;
+    const oud = t.personen && typeof t.personen === 'object' && !Array.isArray(t.personen) ? t.personen : {}, mins = o.mins && typeof o.mins === 'object' ? o.mins : null;
     const minVan = s => { const e = oud[s]; return e && !e.weg && Number(e.min) > 0 ? Math.round(Number(e.min)) : 0; };
     const wensMin = s => mins ? (Number(mins[s]) > 0 ? Math.round(Number(mins[s])) : 0) : minVan(s);
-    if (JSON.stringify(gewenst) === JSON.stringify(opgeslagen) && gewenst.every(s => wensMin(s) === minVan(s))) return false;   // vergeleken met wat er opgeslagen staat (niet met de weergave: een wissel door een oud apparaat staat nog niet in personen)
-    const T = Math.max(nu, persMaxTs(t) + 1, tgStempel(t) + 1), iso = new Date(T).toISOString(), nieuw = kopie(oud) || {}, tg = t._vs && t._vs.toegewezen;
-    let laatste = 0;
-    gewenst.forEach(s => {
-      const e = nieuw[s], actief = !!e && !e.weg, w = wensMin(s);
-      if (actief && (Number(e.volg) || 0) > laatste && w === minVan(s)) { laatste = Number(e.volg); return; }   // ongewijzigd: houdt zijn eigen _ts
-      laatste += 1;
-      const legacy = !actief && tgTrim(t) === s && !(w > 0), ts = legacy && tgStempel(t) > 0 ? new Date(tgStempel(t)).toISOString() : iso;   // een persoon die alleen via toegewezen bestond houdt de oude toewijzingstijd
-      nieuw[s] = Object.assign({ volg: laatste }, w > 0 ? { min: w } : {}, { _ts: ts, door: legacy && tg && tg.door ? norm1(tg.door) || String(tg.door) : door });
-    });
-    new Set(opgeslagen.concat(Object.keys(nieuw).filter(s => nieuw[s] && !nieuw[s].weg))).forEach(s => { if (!gewenst.includes(s)) nieuw[s] = { volg: Number(nieuw[s] && nieuw[s].volg) || 0, weg: true, _ts: iso, door }; });   // wie eruit gaat (ook de eerste die een oud apparaat verving) krijgt een tombstone
-    t.personen = nieuw;
-    if (gewenst[0]) t.toegewezen = gewenst[0]; else delete t.toegewezen;
-    t._vs = t._vs || {}; t._vs.toegewezen = { t: T, dev: o.dev || '', rev: (Number(tg && tg.rev) || 0) + 1, door: o.door || '', basis: tgStempel(t) && tg ? Number(tg.t) || 0 : 0 };
+    if (JSON.stringify(gewenst) === JSON.stringify(P.taakMensen(t)) && gewenst.every(s => wensMin(s) === minVan(s))) return false;
+    const iso = new Date(Math.max(nu, persMaxTs(t) + 1)).toISOString(), nieuw = kopie(oud) || {}, eerste = gewenst[0] || '';
+    if (eerste !== tgTrim(t)) { if (eerste) t.toegewezen = eerste; else delete t.toegewezen; }
+    const doel = {};   // wat er in personen actief moet staan: de min van de eerste persoon (volg 0) en de extra personen (volg 1, 2, ...)
+    if (eerste && wensMin(eerste) > 0) doel[eerste] = { volg: 0, min: wensMin(eerste) };
+    gewenst.slice(1).forEach((s, i) => { doel[s] = { volg: i + 1, min: wensMin(s) }; });
+    Object.keys(doel).forEach(s => { const e = nieuw[s], d = doel[s]; if (e && !e.weg && (Number(e.volg) || 0) === d.volg && minVan(s) === d.min) return; nieuw[s] = Object.assign({ volg: d.volg }, d.min > 0 ? { min: d.min } : {}, { _ts: iso, door }); });
+    Object.keys(nieuw).forEach(s => { if (!doel[s] && !nieuw[s].weg) nieuw[s] = { volg: Number(nieuw[s].volg) || 0, weg: true, _ts: iso, door }; });
+    if (Object.keys(nieuw).length) t.personen = nieuw; else delete t.personen;
     return true;
   };
-  // De oude bediening ("Toegewezen aan" kiezen): zet de eerste persoon. Zonder P.MEERDERE_PERSONEN is dat de enige persoon; met de vlag blijven de andere personen staan.
+  // De oude bediening ("Toegewezen aan" kiezen): zet de eerste persoon. Zonder P.MEERDERE_PERSONEN schrijft dit alleen toegewezen (precies als vóór T3; personen wordt nooit geschreven). Met de vlag: de eerste
+  // persoon wordt vervangen en de anderen blijven; haal je de eerste weg, dan schuift de volgende op (zijn entry in personen krijgt een tombstone, want hij is nu toegewezen).
   P.toegewezenZet = function (t, slug, opt) {
-    const s = String(slug == null ? '' : slug).trim(), rest = P.MEERDERE_PERSONEN ? P.taakMensen(t).slice(1).filter(p => p !== s) : [];
-    return P.personenZet(t, (s ? [s] : []).concat(rest), opt);
+    const s = String(slug == null ? '' : slug).trim();
+    if (!P.MEERDERE_PERSONEN) { if (s) t.toegewezen = s; else delete t.toegewezen; return true; }
+    return P.personenZet(t, (s ? [s] : []).concat(P.taakMensen(t).slice(1).filter(p => p !== s)), opt);
   };
   // `_gewijzigd` is bij taken en afhankelijkheden een getal (ms) en bij bestelregels een ISO-tekst (oude opslag): één lezer.
   const recTijd = x => {
@@ -558,28 +547,12 @@
       let c = null;
       if (verschil && !ZONDER_CONFLICT.has(f) && !(f === 'tg_sync' && c0 !== 0 && !(ander[f] && (ander[f].status === 'fout' || ander[f].status === 'extern-verwijderd')))) {
         const identiek = c0 === 0 && (!opt.legacy || !!(sl || sr)), ongestempeld = !ot && !!bt && !opt.legacy;
-        // toegewezen van een kant die personen kent en er zelf mee klopt (hij schreef personen en toegewezen samen): zijn keuze zit in personen en wordt daar samengevoegd, dus geen conflict op het veld
-        const metPersonen = opt.taak && f === 'toegewezen' && persSleutels(ander).length > 0 && (persActief(ander)[0] || '') === tgTrim(ander);
-        if (!metPersonen && (identiek || (ot && ot > bb) || (ongestempeld && (f in ander)))) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot || bt };
+        if (identiek || (ot && ot > bb) || (ongestempeld && (f in ander))) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot || bt };
       }
       [l, r].forEach(z => { const oc = z._veldconflict && z._veldconflict[f]; if (oc && Number(oc.t) > bb && !gelijk(oc.waarde, win[f]) && (!c || Number(oc.t) > c.t || (Number(oc.t) === c.t && stabiel(oc.waarde) > stabiel(c.waarde)))) c = kopie(oc); });   // gelijke tijd: deterministisch op de waarde
       if (c) conflicten[f] = c;
     });
-    if (opt.taak) {   // personen: per slug samenvoegen (nooit als geheel "nieuwste wint")
-      const ps = personenSamen(l.personen, r.personen); if (ps) w.personen = ps; else delete w.personen;
-      const wis = P.personenWissel(w);
-      if (wis) {
-        // een oud apparaat wijzigde alleen toegewezen: de lezers zien een wissel van de eerste persoon; het wordt hier als conflict gemeld (met bron) en niet stil teruggeschreven
-        conflicten.toegewezen = Object.assign(conflicten.toegewezen || { waarde: wis.eerste || null, door: (w.personen[wis.eerste] && w.personen[wis.eerste].door) || '', t: persMaxTs(w) }, { bron: 'oud-apparaat' });
-      } else if (persSleutels(w).length) {
-        // geen wissel: toegewezen is canoniek de eerste actieve persoon (ook als twee apparaten tegelijk een andere eerste persoon zetten); de stempel is de grootste van de betrokken stempels
-        const eerste = persActief(w)[0] || '';
-        if (eerste !== tgTrim(w)) {
-          if (eerste) w.toegewezen = eerste; else delete w.toegewezen;
-          w._vs.toegewezen = Object.assign({}, w._vs.toegewezen || {}, { t: Math.max(tgStempel(l), tgStempel(r), persMaxTs(w)) });
-        }
-      }
-    }
+    if (opt.taak) { const ps = personenSamen(l.personen, r.personen); if (ps) w.personen = ps; else delete w.personen; }   // personen: per slug samenvoegen (nooit als geheel "nieuwste wint"); toegewezen is een gewoon veld
     if (opt.taak && !syncGeldig(w)) { delete w.tg_sync; delete w._vs.tg_sync; delete conflicten.tg_sync; }   // koppeltabel van een andere Toggl-taak vervalt
     if (Object.keys(conflicten).length) w._veldconflict = conflicten; else delete w._veldconflict;
     if (!Object.keys(w._vs).length) delete w._vs;
@@ -634,8 +607,6 @@
   // die boven het conflict ligt, zodat de keuze ook op de andere pc het conflict wegneemt. Wijzigt `taak` ter plekke.
   P.conflictOplos = function (taak, veld, kies, { nu = Date.now(), door = '', dev = '' } = {}) {
     const c = taak && taak._veldconflict && taak._veldconflict[veld]; if (!c) return false;
-    // 'eigen' bij een wissel van een oud apparaat (toegewezen): de wissel wordt nu ook in personen vastgelegd (nieuwe stempels); 'andere' zet toegewezen terug op de eerste persoon uit personen
-    if (veld === 'toegewezen' && persSleutels(taak).length && kies !== 'andere') P.personenZet(taak, P.taakMensen(taak), { nu, door, dev });
     const vs0 = (taak._vs || {})[veld], vorig = tijdVan(vs0);
     if (kies === 'andere') { if (c.waarde === null || c.waarde === undefined) delete taak[veld]; else taak[veld] = kopie(c.waarde); }
     taak._vs = taak._vs || {};
