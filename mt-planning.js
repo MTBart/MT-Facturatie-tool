@@ -1577,6 +1577,11 @@
   // Wat van de raming nog over is voor de verdeling over de datums van een taak (contract T0, punt a): alle planblokken die aan de taak hangen tellen mee met hun eigen minuten, ongeacht het getoonde
   // venster en de persoon. De rest is max(0, raming - geplande minuten); die gaat over de werkdagen van start tot eind waarop geen blok van die taak staat. Een open voorstel telt niet mee (zoals overal).
   const planVan = (bl, raming) => { const tel = bl.filter(b => b.status !== 'voorstel'), gepland = tel.reduce((s, b) => s + Math.max(0, Math.round(getal(b.duurMin))), 0); return { gepland, rest: Math.max(0, raming - gepland), dagen: new Set(tel.map(b => b.datum)), geteld: tel.length, voorstel: bl.some(b => b.status === 'voorstel') }; };   // voorstel: er hangt een open planvoorstel aan (besluit Bart: dat telt niet mee en de taak dus ook niet via zijn datums, tot het is overgenomen)
+  // De actieve planblokken die bij taak t horen (taak_id, of zonder taak_id een unieke naam in het project): dezelfde koppeling als overal. takenLijst = de taken van dat project (voor de eenduidigheid van de naam).
+  P.taakBlokkenVan = function (t, takenLijst, code, blokken) {
+    const naamAantal = new Map(); P.takenActief(Array.isArray(takenLijst) ? takenLijst : []).forEach(x => { const n = nrm(x.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
+    return taakBlokken(t, code, naamAantal, (Array.isArray(blokken) ? blokken : []).filter(b => b && typeof b === 'object' && !b._vervallen));
+  };
   P.mijnWerk = function (takenObj, depsObj, blokken, opt) {
     const o = opt || {}, mijn = o.mijn || '', team = o.team || null, alle = !!o.iedereen, metNieuw = o.nieuw !== false && !alle;
     const projF = o.project ? String(o.project).trim().toLowerCase() : '', slugMij = String(P.persoonSlug(mijn, team) || mijn || '').toLowerCase();

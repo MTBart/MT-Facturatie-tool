@@ -411,7 +411,7 @@ html[data-stijl="nieuw"] .cn-greep.l{left:0}
 html[data-stijl="nieuw"] .cn-greep.r{right:0}
 html[data-stijl="nieuw"] .cn-blok:hover .cn-greep,html[data-stijl="nieuw"] .cn-blok:focus-within .cn-greep{background:color-mix(in srgb,var(--block-color,var(--ink-2)) 38%,transparent)}
 html[data-stijl="nieuw"] .cn-greep:hover{background:color-mix(in srgb,var(--block-color,var(--ink-2)) 65%,transparent)}
-html[data-stijl="nieuw"] .cn-vpl.dat{right:29px}
+html[data-stijl="nieuw"] .cn-vpl.dat,html[data-stijl="nieuw"] .cn-vpl.omz{right:29px}
 html[data-stijl="nieuw"] dialog.cn-datums{border:1px solid var(--line-strong);border-radius:8px;padding:0;background:var(--surface);color:var(--ink);max-width:340px;width:calc(100vw - 32px)}
 html[data-stijl="nieuw"] dialog.cn-datums::backdrop{background:rgba(0,0,0,.35)}
 html[data-stijl="nieuw"] .cn-dat-form{display:grid;gap:12px;padding:18px}

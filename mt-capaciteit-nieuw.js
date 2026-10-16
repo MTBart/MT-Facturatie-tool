@@ -217,6 +217,7 @@
       S.menuBezig = true; let d; try { d = await N.datumsDialoog(it); } finally { S.menuBezig = false; }
       if (d) { S.focusTaak = String(it.id); N.drop({ soort: 'taakdatums', taak: taakBron.taak, startDatum: d.start, eindDatum: d.eind }); }
     } }, icoon('M7 4v3M17 4v3M5 9h14M6 6h12a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z')));
+    if (N.omzetbaar(it) && (S.zoom === 'week' || S.zoom === '3d' || S.zoom === 'dag')) w.appendChild(el('button', { type: 'button', klass: 'cn-vpl omz', 'aria-label': 'Zet ' + it.naam + ' om naar een taakbalk', title: 'Omzetten naar taakbalk…', klik: ev => { ev.stopPropagation(); N.omzetten(it); } }, icoon('M4 8h16M4 16h16M13 4l4 4-4 4M11 12l-4 4 4 4')));
     if (sleep && D.dialoog && (S.zoom === 'week' || S.zoom === '3d' || S.zoom === 'dag')) w.appendChild(el('button', { type: 'button', klass: 'cn-vpl', 'aria-label': 'Verplaats ' + it.naam + ' naar…', title: 'Verplaats naar…', klik: ev => { ev.stopPropagation(); N.menu({ soort: 'verplaats', blokId: bid, naam: it.naam }); } }, icoon('M7 7h11l-3-3M17 17H6l3 3')));
     return w;
   }  const persoonKop = (r, tekst, over, balk) => el('div', { klass: 'cn-persoon' },
@@ -346,11 +347,11 @@
 
   // ── uitvoeren, ongedaan maken en het toetsenbord-alternatief ──
   const persNaam = slug => { const t = (D.team() || []).find(x => String(x.slug).toLowerCase() === String(slug).toLowerCase()); return t ? t.naam : slug; };
-  N.toast = function (tekst, ongedaan, lang) {
+  N.toast = function (tekst, ongedaan, lang, label) {
     const oud = D.doc.getElementById('cn-toast'); if (oud && oud.parentNode) oud.parentNode.removeChild(oud);
     clearTimeout(N.toast._t);
     const t = el('div', { id: 'cn-toast', klass: 'cn-toast', role: 'status' }, el('span', { tekst: tekst }));
-    if (ongedaan) t.appendChild(el('button', { type: 'button', klass: 'cn-toast-knop', tekst: 'Ongedaan maken', klik: async () => { if (t.parentNode) t.parentNode.removeChild(t); await ongedaan(); } }));
+    if (ongedaan) t.appendChild(el('button', { type: 'button', klass: 'cn-toast-knop', tekst: label || 'Ongedaan maken', klik: async () => { if (t.parentNode) t.parentNode.removeChild(t); await ongedaan(); } }));
     t.appendChild(el('button', { type: 'button', klass: 'cn-toast-sluit', 'aria-label': 'Melding sluiten', tekst: '×', klik: () => { if (t.parentNode) t.parentNode.removeChild(t); } }));
     D.doc.body.appendChild(t);
     N.toast._t = setTimeout(() => { if (t.parentNode) t.parentNode.removeChild(t); }, lang ? 20000 : ongedaan ? 12000 : 6000);   // lang: een melding die je niet mag missen (traag opslaan, tegelijk gewijzigd)
@@ -394,6 +395,28 @@
       if (h && h.onzeker) { N.toast(h.reden, null, true); N.naOnzeker(h.onzeker); return; }
       N.toast(h && h.ok ? (h.tegelijk || 'Teruggezet') : ((h && h.reden) || 'Terugzetten lukt niet.'), null, !!(h && h.tegelijk));
     });
+  };
+  // T6: een oud tb:-planblok dat bij een taak hoort (het item heeft de taak en een blokId) kan een taakbalk worden. Alleen met het recht om te slepen en om taken te wijzigen; niet voor een open voorstel.
+  N.omzetbaar = it => !!D.omzetten && !!D.dialoog && N.mag() === true && (!D.magTaken || !!D.magTaken()) && !!it && it.soort === 'taak' && it.blokId != null && !N.isVoorstel(it) && it.status !== 'klaar';
+  N.omzetten = async function (it, opnieuw) {
+    if (!N.omzetbaar(it) || S.bezig || S.menuBezig) return;
+    const blokPersoon = x => { const b = (D.blokken() || []).find(y => y && String(y.id) === String(x.blokId)); return b ? (P.persoonSlug(b.persoon, D.team()) || b.persoon) : x.persoon; };
+    const spec = { blokId: String(it.blokId), taak: { code: it.code, id: it.id, naam: it.naam }, opnieuw: !!opnieuw };
+    if (!opnieuw) {
+      S.menuBezig = true; let ja = false;
+      try { ja = D.dialoog.confirm ? await D.dialoog.confirm({ title: 'Omzetten naar taakbalk', message: '"' + it.naam + '" is nu een planblok. Het wordt een taakbalk: de taak krijgt ' + persNaam(blokPersoon(it)) + ' en de dag van het blok, en het planblok verdwijnt. Een taak die al eigen datums heeft, houdt die.', okLabel: 'Omzetten', cancelLabel: 'Annuleren' }) : false; } finally { S.menuBezig = false; }
+      if (!ja) return;
+    }
+    if (S.bezig) return;
+    S.bezig = true; let r;
+    try { r = await D.omzetten(spec, { traag: () => N.toast('Opslaan duurt lang, even geduld…', null, true) }); } catch (e) { r = { ok: false, reden: 'Omzetten mislukt: ' + ((e && e.message) || e) }; } finally { S.bezig = false; }
+    N.teken();
+    if (r && r.onzeker) { N.toast(r.reden, null, true); N.naOnzeker(r.onzeker); return; }
+    if (!r || !r.ok) { N.toast((r && r.reden) || 'Dat lukt niet.', null, true); return; }
+    if (r.tegelijk) { N.toast(r.tegelijk, null, true); return; }
+    if (r.alOmgezet) { N.toast(r.melding || 'Dit planblok is al omgezet.', null, true); return; }
+    if (r.omgezet && !r.blokWeg) { N.toast(r.melding, () => N.omzetten(it, true), true, 'Opnieuw proberen'); return; }   // de taak staat goed, het blok moet nog weg: opnieuw proberen (alleen het blok)
+    N.toast(r.melding || 'Omgezet naar een taakbalk.', null, true);
   };
   // Datums wijzigen (de toegankelijke vervanger van de randen slepen, zonder Alt of Shift): een dialoog met twee datumvelden (start en eind; een mijlpaal heeft er een). -> Promise<{start, eind} | null>
   N.datumsDialoog = function (it) {

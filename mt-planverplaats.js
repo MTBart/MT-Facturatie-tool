@@ -407,6 +407,94 @@
     return { ok: true, opgeslagen: true, data };
   };
 
+  // ═══ T6: een oud tb:-planblok omzetten naar een taakbalk ═════════════════════════════════════════════════════════════════
+  // Een planblok dat bij een taak hoort (taak_id, of zonder taak_id een unieke naam in het project: MTPlanning.taakBlokkenVan) kan een taakbalk worden: de taak krijgt de persoon van het blok als eerste persoon en, als hij
+  // nog geen eigen datums heeft, de dag van het blok als start en eind (een taak met eigen datums houdt die; dan wordt alleen de persoon gezet). Pas daarna krijgt het blok een tombstone. De volgorde is bewust: lukt het
+  // verwijderen van het blok niet, dan staat de taak goed en telt het blok nog gewoon mee (de planblokken van een taak gaan van de raming af), dus niets dubbel; opnieuw proberen kan. Is het blok al weg: "al omgezet".
+  // Het plan voor één blok en één taak (zuiver). -> { ok:false, reden } | { ok:true, noop:true, melding } | { ok:true, lijst, zelfde, start?, eind?, eigenDatums, melding }
+  V.omzetPlan = function (blok, t, ctx) {
+    const P = root.MTPlanning, team = ctx.team || [], slug = String(P.persoonSlug(blok && blok.persoon, team) || '').toLowerCase();
+    if (!slug) return { ok: false, reden: 'De persoon van dit planblok' + (blok && blok.persoon ? ' (' + blok.persoon + ')' : '') + ' staat niet in het team; er is niets omgezet.' };
+    const nu = P.taakMensen(t), lijst = P.MEERDERE_PERSONEN ? [slug].concat(nu.filter(p => p !== slug)) : [slug];
+    const zelfde = JSON.stringify(lijst) === JSON.stringify(P.MEERDERE_PERSONEN ? nu : nu.slice(0, 1));
+    const eigen = isYmd(t.start) && isYmd(t.eind) && t.eind >= t.start, vs = verplichtSet(ctx);
+    let start, eind, melding = '';
+    if (eigen) melding = 'De taak had al eigen datums (' + dagMnd(t.start) + (t.eind !== t.start ? ' t/m ' + dagMnd(t.eind) : '') + '); die zijn behouden. Alleen de persoon is gezet.';
+    else {
+      if (!isYmd(blok.datum)) return { ok: false, reden: 'Dit planblok heeft geen geldige dag; er is niets omgezet.' };
+      const d = naarBedrijfsdag(blok.datum, true, vs); if (!d) return { ok: false, reden: 'Er is geen werkdag gevonden voor dit planblok; er is niets omgezet.' };
+      start = eind = d; if (d !== blok.datum) melding = 'Het planblok stond op ' + dagMnd(blok.datum) + ' (geen werkdag); de balk staat op ' + dagMnd(d) + '.';
+    }
+    if (zelfde && (eigen || (t.start === start && t.eind === eind))) return { ok: true, noop: true, melding, lijst };
+    return Object.assign({ ok: true, lijst, zelfde, eigenDatums: eigen, melding }, eigen ? {} : { start, eind });
+  };
+  // Het blok een tombstone geven (zoals ongedaan maken van een uit Ongepland gesleept blok): zelfde stempel als elke planblok-wijziging. -> { ok:true, alWeg:true } | { ok:true, blokken, wijziging } | { ok:false, reden }
+  V.blokWeg = function (blokId, ctx) {
+    if (!ctx || !ctx.mag) return { ok: false, reden: 'Dit mag je niet met jouw rol.' };
+    const lijst = Array.isArray(ctx.blokken) ? ctx.blokken : [], b = lijst.find(x => x && String(x.id) === String(blokId));
+    if (!b || b._vervallen) return { ok: true, alWeg: true };
+    const stempel = ctx.stempel || ((x) => { x._gewijzigd = Date.now(); return x; }), ts = new Date(ctx.nu || Date.now()).toISOString(), wie = ctx.wie || '';
+    const nieuw = stempel(Object.assign({}, b, { _vervallen: { tijd: ts, door: wie } }), b);
+    return { ok: true, blokken: lijst.map(x => x === b ? nieuw : x), wijziging: { soort: 'weg', id: b.id, stempel: nieuw._gewijzigd } };
+  };
+  const BLOK_WEG_MISLUKT = 'De taak is omgezet, maar het planblok is nog niet verwijderd (SharePoint nam de wijziging niet aan). Het blok telt nog gewoon mee, dus er is niets dubbel. Probeer het opnieuw.';
+  const kort = (belofte, ms) => new Promise((ok, nee) => { const h = setTimeout(() => nee(Object.assign(new Error('time-out'), { timeout: 'lezen' })), ms); Promise.resolve(belofte).then(v => { clearTimeout(h); ok(v); }, e => { clearTimeout(h); nee(e); }); });
+  // spec = { blokId, taak: {code, id, naam}, opnieuw? (alleen het blok nog verwijderen) }
+  // o = { sp, lokaal(), ctx(), nu(), door, dev, projectId, mag(spec), zacht?, hard?, traag?(), naamVan?(door), blokken() -> Promise<{ok, online, blokken, reden?}> (vers), blokWeg(blokId, {opnieuw}) -> Promise<{ok, alWeg?}> }
+  // -> { ok:false, reden } | { ok:false, bezet } | { ok:false, onzeker, reden } | { ok:true, alOmgezet, melding } | { ok:true, omgezet:true, blokWeg:true|false, melding, data?, taken? } | { ok:true, tegelijk, data, taken }
+  V.omzetten = async function (spec, o) {
+    const s = spec || {}, tk = s.taak || {};
+    if (!s.blokId || !tk.code || !tk.id) return { ok: false, reden: 'Onvolledige aanroep.' };
+    const ctx0 = o.ctx(); if (!ctx0 || !ctx0.mag) return { ok: false, reden: 'Dit mag je niet met jouw rol.' };
+    if (V.taakBezig(tk.code, tk.id)) return { ok: false, bezet: true, reden: BEZET };
+    const sleutel = sleutelVan(tk.code, tk.id); slotMin(sleutel, 1);   // de hele omzetting is één bewerking op deze taak: geen tweede (slepen, uittrekken, omzetten) ertussen
+    try { return await omzetKern(s, o, ctx0, sleutel); } finally { slotMin(sleutel, -1); }
+  };
+  async function omzetKern(s, o, ctx0, sleutel) {
+    const P = root.MTPlanning, code = s.taak.code, id = s.taak.id, naam = s.taak.naam || 'de taak', hard = o.hard || HARD;
+    const weg = async () => { try { return (await kort(o.blokWeg(s.blokId, { opnieuw: !!s.opnieuw }), hard)) || { ok: false }; } catch (e) { return { ok: false }; } };
+    if (s.opnieuw) {   // alleen het blok nog (de taak stond al goed)
+      const w = await weg();
+      return w.ok ? { ok: true, omgezet: true, blokWeg: true, melding: 'Het planblok is verwijderd.' } : { ok: true, omgezet: true, blokWeg: false, opnieuw: true, melding: BLOK_WEG_MISLUKT };
+    }
+    let vers; try { vers = await kort(o.blokken(), hard); } catch (e) { vers = { ok: false, reden: 'SharePoint reageert niet; er is niets omgezet.' }; }
+    if (!vers || !vers.ok) return { ok: false, reden: (vers && vers.reden) || 'Er is niets omgezet.' };
+    if (vers.online === false) return { ok: false, reden: 'SharePoint is niet bereikbaar; er is niets omgezet.' };
+    const blok = (vers.blokken || []).find(b => b && String(b.id) === String(s.blokId) && !b._vervallen);
+    if (!blok) { await weg(); return { ok: true, alOmgezet: true, melding: 'Dit planblok is al omgezet of verwijderd; er is niets gewijzigd.' }; }   // (weg() duwt een nog niet gedeelde tombstone alsnog naar SharePoint)
+    if (blok.status === 'voorstel') return { ok: false, reden: 'Een open voorstel van de werkplaats zet je niet om; kantoor beslist daar eerst over.' };
+    const st = maakSt(o, sleutel), sp = tijdSp(o.sp, st); let plan = null, noop = false, bedoeld = null, voor = null, res;
+    try {
+      res = await P.takenSchrijf(sp, { code, lokaal: o.lokaal(), nu: o.nu(), door: o.door, dev: o.dev, projectId: o.projectId, mag: o.mag, muteer: werk => {
+        const t = werk.find(x => x && x.id === id); if (!t) return { fout: 'Deze taak bestaat niet meer; er is niets omgezet.' };
+        if ((t.status || 'todo') === 'klaar') return { fout: 'Een klare taak zet je niet om; er is niets omgezet.' };
+        if (P.taakBlokkenVan(t, werk, code, [blok]).length !== 1) return { fout: 'Dit planblok hoort niet meer ondubbelzinnig bij deze taak (de naam of de koppeling is veranderd); er is niets omgezet.' };
+        plan = V.omzetPlan(blok, t, Object.assign({}, o.ctx(), { taken: werk })); if (!plan.ok) return { fout: plan.reden };
+        voor = { toegewezen: t.toegewezen || '', lijst: P.taakMensen(t), start: t.start || '', eind: t.eind || '' };
+        if (plan.noop) { noop = true; return false; }
+        V.pasTaakToe(t, plan, { nu: o.nu(), door: o.door, team: ctx0.team });
+        bedoeld = { toegewezen: t.toegewezen || '', lijst: P.taakMensen(t), start: t.start || '', eind: t.eind || '' };
+        return werk;
+      } });
+    } catch (e) {
+      if (e && e.timeout === 'schrijven') return { ok: false, reden: TIJD_SCHRIJVEN, onzeker: controleer(o, st, code, id, bedoeld, voor, naam) };
+      return { ok: false, reden: e && e.timeout === 'lezen' ? TIJD_LEZEN : SCHRIJF_REDEN.schrijven };
+    }
+    let uit = {};
+    if (!noop) {
+      if (!res.ok) return { ok: false, reden: schrijfFout(res) };
+      const data = st.samen && typeof st.samen === 'object' ? st.samen : res.data, taken = data && Array.isArray(data[code]) ? P.takenActief(data[code]) : res.taken;
+      if (!komtOvereen(taken, id, bedoeld)) return { ok: true, opgeslagen: true, tegelijk: tegelijkTekst(taken, id, bedoeld, o), data, taken };   // iemand wijzigde tegelijk en won: het blok blijft staan
+      uit = { data, taken };
+    }
+    const w = await weg();   // de taak staat goed: nu pas het blok
+    const lid = (ctx0.team || []).find(m => m && String(m.slug).toLowerCase() === (plan.lijst[0] || '')), wie = lid ? lid.naam : (plan.lijst[0] || '');
+    if (!w.ok) return Object.assign({ ok: true, omgezet: true, blokWeg: false, opnieuw: true, melding: BLOK_WEG_MISLUKT }, uit);
+    if (noop && w.alWeg) return Object.assign({ ok: true, alOmgezet: true, melding: 'Dit planblok was al omgezet (iemand anders was net eerder); er is niets gewijzigd.' }, uit);
+    return Object.assign({ ok: true, omgezet: true, blokWeg: true, opgeslagen: true,
+      melding: noop ? 'Het planblok is verwijderd; de taak stond al goed (' + wie + ').' : 'Omgezet naar een taakbalk: ' + naam + ' → ' + wie + (plan.start ? ', ' + dagMnd(plan.start) : '') + '.' + (plan.melding ? ' ' + plan.melding : '') }, uit);
+  }
+
   root.MTPlanVerplaats = V;
   if (typeof module !== 'undefined' && module.exports) module.exports = V;
 })(typeof window !== 'undefined' ? window : globalThis);
