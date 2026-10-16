@@ -135,6 +135,14 @@ done
 # De repo is PUBLIC en commitonderwerpen kunnen klantnamen bevatten: de CHANGELOG gaat door tools/changelog.js, dat de
 # namen uit de LOKALE data/klanten.json, de geseede data/klanten-historie.txt en data/privacy-termen.txt vervangt.
 # Lukt dat niet (geen woordenlijst, verse clone, fout) dan stopt de commit (fail closed, zie hieronder).
+# Alleen op main: daar gaat de CHANGELOG de publieke site op, en elke commit op main bouwt hem opnieuw uit de VOLLEDIGE
+# git log (dus ook de commits van andere takken na de merge). Op andere takken (worktrees zonder lokale woordenlijsten)
+# blijft CHANGELOG.md ongemoeid; de secret-, privacy- en sink-guard hierboven draaien daar wel gewoon.
+CL_TAK="$(git symbolic-ref --short -q HEAD)"
+if [ "$CL_TAK" != "main" ]; then
+  echo "• CHANGELOG.md niet bijgewerkt: tak '${CL_TAK:-losse HEAD}' (alleen op main)"
+  exit 0
+fi
 CL_RAW="$(mktemp)"; CL_TMP="$(mktemp)"
 {
   echo "# CHANGELOG — Mortise & Tenon Claude Tools"
