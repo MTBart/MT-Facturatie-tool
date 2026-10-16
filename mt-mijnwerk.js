@@ -26,7 +26,7 @@
   const leesGezien = () => { try { const o = JSON.parse(D.storage.getItem(LS_GEZIEN) || 'null'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } };
   function markeerGezien(item) {
     if (!item || !item.nieuw) return;
-    const g = leesGezien(); g[item.id] = item.stempelToegewezen;
+    const g = leesGezien(); g[item.code + ':' + item.id] = item.stempelToegewezen;
     try { D.storage.setItem(LS_GEZIEN, JSON.stringify(g)); } catch (e) {}
   }
   const teamLid = () => { const ik = String(D.ik() || '').toLowerCase(); return (D.team() || []).find(m => String(m.email || '').toLowerCase() === ik) || null; };

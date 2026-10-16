@@ -114,7 +114,7 @@
   function leesGezien() { return leesJson(LS_GEZIEN) || {}; }
   function markeerGezien(item) {
     if (!item || !item.nieuw) return;
-    const g = leesGezien(); g[item.id] = item.stempelToegewezen;
+    const g = leesGezien(); g[item.code + ':' + item.id] = item.stempelToegewezen;
     const sl = Object.keys(g); if (sl.length > 500) sl.sort((a, b) => g[a] - g[b]).slice(0, sl.length - 500).forEach(k => { delete g[k]; });
     try { D.storage.setItem(LS_GEZIEN, JSON.stringify(g)); } catch (e) {}
   }
@@ -140,7 +140,12 @@
     const mw = P.mijnWerk(S.taken, S.afhank, D.pvBlokken(), { iedereen: true, nieuw: false, project: code, vandaag: P.vandaagYmd(), nu: D.nu() });
     return alleItems(mw).find(i => i.soort === 'taak' && i.id === id) || null;
   }
-  const zoekItem = id => (S.mw ? alleItems(S.mw).find(i => i.id === id) || null : null) || (S.open && S.open.id === id && S.open.code ? losItem(S.open.code, id) : null);
+  // Een taak zoeken op projectcode + taak_id. Zonder code (een oude deeplink) alleen als het taak_id uniek is; bij twee projecten met hetzelfde taak_id geen gok.
+  const zCode = (a, b) => String(a == null ? '' : a).trim().toLowerCase() === String(b == null ? '' : b).trim().toLowerCase();
+  const zoekItem = (id, code) => {
+    if (S.mw) { const c = alleItems(S.mw).filter(i => i.id === id && (!code || zCode(i.code, code))); if (c.length === 1) return c[0]; if (c.length > 1) return null; }
+    return S.open && S.open.id === id && S.open.code && (!code || zCode(S.open.code, code)) ? losItem(S.open.code, id) : null;
+  };
   const uren = min => P.fmtUurMin(min);
   const wachtTekst = item => P.wachtOpTekst(item.wacht, fmtDatum);   // "Zagen (wachttijd 2 werkdagen, tot do 22 okt)"
   const DAGNAAM = ['Ma', 'Di', 'Wo', 'Do', 'Vr'];
@@ -180,7 +185,7 @@
     if (taak && item.status !== 'todo') chips.push(el('span', { klass: 'vd-chip vd-st-' + item.status, tekst: P.TAAK_STATUS_LABEL[item.status] || item.status }));
     if (!taak) chips.push(el('span', { klass: 'vd-chip', tekst: item.voorstel ? 'Planblok (voorstel)' : 'Planblok' }));
     if (taak && t.voorstel) chips.push(el('span', { klass: 'vd-chip', tekst: 'Voorstel' }));
-    return el('button', { klass: 'vd-kaart', type: 'button', klik: () => toonKaart(item.id) },
+    return el('button', { klass: 'vd-kaart', type: 'button', klik: () => toonKaart(item.id, item.code) },
       el('span', { klass: 'vd-strook', style: 'background:' + kleur(item.code) }), el('span', { klass: 'vd-kaart-tekst' }, regels), chips.length ? el('span', { klass: 'vd-chips' }, chips) : null);
   }
   const GROEPEN = [['nieuw', 'Nieuw voor mij'], ['teLaat', 'Te laat'], ['vandaag', 'Vandaag'], ['week', 'Deze week'], ['later', 'Later'], ['zonderDatum', 'Zonder datum']];
@@ -203,7 +208,7 @@
       wortel.appendChild(el('details', { klass: 'vd-niet-vrij' }, el('summary', { tekst: 'Nog niet vrijgegeven (' + mw.groepen.nietVrij.length + ')' }), mw.groepen.nietVrij.map(itemKaart)));
     }
     if (leeg && S.staat === 'klaar') wortel.appendChild(el('div', { klass: 'empty-state' }, el('div', { klass: 'empty-text', tekst: 'Niets voor jou op dit moment.' })));
-    if (S.open) { const it = zoekItem(S.open.id); if (it) vulKaart(it); else sluitKaart(); }   // de taak is er niet meer (klaar, anders toegewezen): de kaart sluit
+    if (S.open) { const it = zoekItem(S.open.id, S.open.code); if (it) vulKaart(it); else sluitKaart(); }   // de taak is er niet meer (klaar, anders toegewezen): de kaart sluit
   }
   V.teken = teken;
 
@@ -221,7 +226,7 @@
   function sluitKaart() { S.open = null; S.form = null; if (S.sheet) S.sheet.overlay.classList.remove('visible'); }
   V.sluitKaart = sluitKaart;
   function toonKaart(id, code) {
-    let item = zoekItem(id); if (!item && code) item = losItem(code, id);
+    let item = zoekItem(id, code); if (!item && code) item = losItem(code, id);
     if (!item) return false;
     S.open = { id, code: item.code }; markeerGezien(item);
     vulKaart(item); sheet().overlay.classList.add('visible'); return true;
@@ -267,7 +272,7 @@
     if (!t.tg_task_id) { doel.textContent = 'geklokt: niet aan een Toggl-taak gekoppeld'; return; }
     doel.textContent = 'geklokt: laden…';
     let min = null; try { min = await geklokteMin(t.tg_task_id); } catch (e) { min = null; }
-    if (S.open && S.open.id === item.id && doel.isConnected !== false) doel.textContent = min === null ? 'geklokt: nu niet op te halen' : 'door jou geklokt ' + uren(min);
+    if (S.open && S.open.id === item.id && zCode(S.open.code, item.code) && doel.isConnected !== false) doel.textContent = min === null ? 'geklokt: nu niet op te halen' : 'door jou geklokt ' + uren(min);
   }
   async function geklokteMin(tgId) {
     if (!D.toggl || typeof D.toggl.geklokt !== 'function') return null;
@@ -280,7 +285,7 @@
   function knop(tekst, klik, opt) { const o = opt || {}; return el('button', { klass: 'btn ' + (o.klass || 'btn-secondary') + ' btn-full', type: 'button', disabled: o.uit ? true : null, title: o.titel || null, klik, tekst }); }
   function statusKnop(tekst, status, item, uit) {
     const actief = item.status === status;
-    return el('button', { klass: 'btn ' + (actief ? 'btn-primary' : 'btn-secondary'), type: 'button', disabled: uit ? true : null, 'aria-pressed': actief ? 'true' : 'false', klik: () => zetStatus(item.id, status), tekst });
+    return el('button', { klass: 'btn ' + (actief ? 'btn-primary' : 'btn-secondary'), type: 'button', disabled: uit ? true : null, 'aria-pressed': actief ? 'true' : 'false', klik: () => zetStatus(item.id, status, item.code), tekst });
   }
   function kaartKnoppen(item) {
     const a = sheet().acties; a.textContent = '';
@@ -355,9 +360,9 @@
     }
     return null;
   }
-  async function zetStatus(id, nieuw) {
+  async function zetStatus(id, nieuw, code) {
     if (S.bezig) return;
-    let item = zoekItem(id); if (!item || item.soort !== 'taak') return;
+    let item = zoekItem(id, code); if (!item || item.soort !== 'taak') return;
     const huidig = item.status, t = item.taak;
     if (huidig === nieuw && nieuw !== 'wacht') return;
     let blok = schrijfBlok(P.ROL.TAAK_STATUS); if (blok) { D.toast(blok); return; }
@@ -368,7 +373,7 @@
       if (!ja) return;
     }
     blok = schrijfBlok(P.ROL.TAAK_STATUS); if (blok) { D.toast(blok); return; }   // opnieuw na de dialogen: de lijst, het schema of het recht kan intussen veranderd zijn
-    item = zoekItem(id) || item;
+    item = zoekItem(id, code) || item;
     S.bezig = true; vulKaart(item);
     let res, gelukt = false;
     try {

@@ -1561,7 +1561,7 @@
 
   // ── Mijn werk: de taken van één persoon in groepen, plus de planblokken ──
   // takenObj = { projectcode: [taak…] } (mt_project_taken_v2), depsObj = { projectcode: [afhankelijkheid…] } (mt_project_afhank), blokken = mt_planblokken.
-  // opties: mijn (team-slug of e-mailadres), team, vandaag (ymd), nu (ms), vrij (vrije dagen), gezien ({taak-id: stempel van de toewijzing die je al zag}),
+  // opties: mijn (team-slug of e-mailadres), team, vandaag (ymd), nu (ms), vrij (vrije dagen), gezien ({'projectcode:taak-id': stempel van de toewijzing die je al zag}; een oude sleutel met alleen het taak-id geldt nog),
   //         nieuwDagen (een toewijzing die je nog nooit zag telt 7 dagen als nieuw).
   //         Voor kantoor (desktop): iedereen (alle taken en blokken, ook van niemand), project (alleen die projectcode), nieuw:false (geen "nieuw voor mij"),
   //         voorstellen (taken met een voorstel-markering komen apart in groepen.voorstel, ook als ze al van iemand zijn). Bij iedereen geldt de weekbalk niet (null).
@@ -1581,6 +1581,8 @@
   const taakBlokken = (t, code, naamAantal, blokken, idMap) => { const n = nrm(t.naam); return blokken.filter(b => (b.taak_id != null && b.taak_id !== '') ? (String(b.taak_id) === String(t.id) && (blokCode(b) ? zelfdeCode(blokCode(b), code) : (() => { const s = idMap && idMap.get(String(t.id)); return !!s && s.size === 1 && s.has(String(code).trim().toLowerCase()); })())) : (zelfdeCode(b.project_code, code) && !!n && nrm(b.taak) === n && naamAantal.get(n) === 1)); };
   // Wat van de raming nog over is voor de verdeling over de datums van een taak (contract T0, punt a): alle planblokken die aan de taak hangen tellen mee met hun eigen minuten, ongeacht het getoonde
   // venster en de persoon. De rest is max(0, raming - geplande minuten); die gaat over de werkdagen van start tot eind waarop geen blok van die taak staat. Een open voorstel telt niet mee (zoals overal).
+  // De sleutel van een taak over projecten heen: projectcode + taak_id (twee projecten kunnen hetzelfde taak_id hebben).
+  const planSleutel = (code, id) => String(code == null ? '' : code).trim().toLowerCase() + '\u0001' + String(id);
   const planVan = (bl, raming) => { const tel = bl.filter(b => b.status !== 'voorstel'), gepland = tel.reduce((s, b) => s + Math.max(0, Math.round(getal(b.duurMin))), 0); return { gepland, rest: Math.max(0, raming - gepland), dagen: new Set(tel.map(b => b.datum)), geteld: tel.length, voorstel: bl.some(b => b.status === 'voorstel') }; };   // voorstel: er hangt een open planvoorstel aan (besluit Bart: dat telt niet mee en de taak dus ook niet via zijn datums, tot het is overgenomen)
   // De actieve planblokken die bij taak t horen (taak_id, of zonder taak_id een unieke naam in het project): dezelfde koppeling als overal. takenLijst = de taken van dat project (voor de eenduidigheid van de naam).
   // alleTaken (optioneel) = { projectcode: [taken] } van alle projecten: nodig om een blok zonder projectcode eenduidig te koppelen; zonder koppelt zo'n blok niet.
@@ -1612,14 +1614,14 @@
         const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] }, n = nrm(t.naam);
         const bl = taakBlokken(t, code, naamAantal, alleBlokken, idMap);
         bl.forEach(b => gekoppeld.add(String(b.id)));
-        if (!alle) { const pl = planVan(taakBlokken(t, code, naamAantal, alleGeldig, idMap), P.taakRamingMin(t)), vd = P.taakVerdeling(t, o.werktijden, o.verlof, o.vrij, team, { rest: pl.rest, sla: pl.dagen }); plan.set(t.id, Object.assign(pl, { verdeel: vd.perPersoon[slugMij] || {}, waarschuwingen: vd.waarschuwingen })); }   // wat deze persoon van de rest per dag krijgt (dezelfde verdeling als in de Capaciteit)
+        if (!alle) { const pl = planVan(taakBlokken(t, code, naamAantal, alleGeldig, idMap), P.taakRamingMin(t)), vd = P.taakVerdeling(t, o.werktijden, o.verlof, o.vrij, team, { rest: pl.rest, sla: pl.dagen }); plan.set(planSleutel(code, t.id), Object.assign(pl, { verdeel: vd.perPersoon[slugMij] || {}, waarschuwingen: vd.waarschuwingen })); }   // wat deze persoon van de rest per dag krijgt (dezelfde verdeling als in de Capaciteit)
         const komend = bl.filter(b => b.datum >= vandaag).sort((a, b) => (a.datum + blokStartTekst(a)) < (b.datum + blokStartTekst(b)) ? -1 : 1);
         const eerste = komend[0] || null;
         const gD = groepVan(P.isYmd(t.start) ? t.start : '', P.isYmd(t.eind) ? t.eind : ''), gB = eerste ? groepVan(eerste.datum, eerste.datum) : '';
         let groep = gD;
         if (gB && (gD === 'zonderDatum' || (gD !== 'teLaat' && MIJN_RANG[gB] < MIJN_RANG[gD]))) groep = gB;
         const eerste1 = P.taakMensen(t)[0] || '', ts = eerste1 ? (alle ? (t._vs && t._vs.toegewezen) : P.toewijzing(t, slugMij, team)) || null : null, stempelT = ts ? Number(ts.t) || 0 : 0;   // elke persoon ziet zijn eigen toewijzing (zijn eigen _ts) als nieuw
-        const doorMij = !!(ts && ts.door && P.zelfdePersoon(ts.door, mijn, team)), g = gezien[t.id];
+        const doorMij = !!(ts && ts.door && P.zelfdePersoon(ts.door, mijn, team)), g = gezien[code + ':' + t.id] !== undefined ? gezien[code + ':' + t.id] : gezien[t.id];   // de sleutel is projectcode:taak_id; een oude bewaarde sleutel (alleen het taak_id) geldt nog
         const isNieuw = metNieuw && st === 'todo' && stempelT > 0 && !doorMij && (g === undefined || g === null ? (nu - stempelT) <= nieuwMs : stempelT > Number(g));
         const nietVrij = st === 'todo' && w.wacht;
         const eindGroep = (o.voorstellen && t.voorstel) ? 'voorstel' : nietVrij ? 'nietVrij' : (isNieuw ? 'nieuw' : groep);
@@ -1867,7 +1869,7 @@
     });
     (taken || []).forEach(t => {
       if (!t || t.voorstel || (t.status || 'todo') === 'klaar') return;   // een taak met een open voorstel-markering telt niet mee (zie weekRooster)
-      const pl = plan && plan.get(t.id); if (!pl || pl.voorstel) return;   // een open planvoorstel erbij telt niet mee (besluit Bart)
+      const pl = plan && plan.get(planSleutel(t._code, t.id)); if (!pl || pl.voorstel) return;   // een open planvoorstel erbij telt niet mee (besluit Bart)
       Object.keys(pl.verdeel || {}).forEach(ymd => { const d = per.get(ymd); if (d) d.gepland_min += pl.verdeel[ymd]; });
     });
     const half = dm / 2; let cap = 0, gepl = 0, over = 0, dd = 0, ddTot = 0;
