@@ -54,12 +54,12 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-17d"></script>
+<script src="mt-planning.js?v=2026-10-17e"></script>
 <script src="mt-mijnwerk.js?v=2026-10-17c"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-15s"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-17c"></script>
-<script src="mt-personen.js?v=2026-10-17d"></script>
+<script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
 <script src="mt-dagvraag.js?v=2026-10-15z"></script>
@@ -8747,7 +8747,7 @@ function projPersonenOpen(code,id){
   if(_ptBlok(code,ROL_TAAK_ALLES,'De personen van een taak wijzigen')) return false;   // geen recht (lezen) of de takenlijst is niet klaar: niets wijzigen
   const t=projTaken(code).find(x=>x.id===id); if(!t||!window.MTPersonen) return;
   const mins={}; Object.keys(t.personen||{}).forEach(s=>{ const e=t.personen[s]; if(e&&!e.weg&&Number(e.min)>0) mins[s]=Number(e.min); });
-  MTPersonen.open({doc:document,naam:t.naam,team:MT_TEAM,mensen:MTPlanning.taakMensen(t),mins,opslaan:(lijst,uit)=>{
+  MTPersonen.open({doc:document,naam:t.naam,raming:MTPlanning.taakRamingMin(t),team:MT_TEAM,mensen:MTPlanning.taakMensen(t),mins,opslaan:(lijst,uit)=>{
     if(_ptBlok(code,ROL_TAAK_ALLES,'De personen van een taak wijzigen')) return;
     const arr=projTaken(code), x=arr.find(y=>y.id===id); if(!x) return;
     if(MTPlanning.personenZet(x,lijst,{door:_spWie(),dev:_spDev(),team:MT_TEAM,mins:uit})) projTakenZet(code,arr);
@@ -8769,7 +8769,7 @@ async function projTaakConflict(code,id){
   for(const veld of Object.keys(t._veldconflict)){
     const c=t._veldconflict[veld];
     const k=await mtDialog.choose({title:'Conflict: '+(_PT_VELDLABEL[veld]||veld)+' — '+t.naam,
-      message:'Twee mensen of apparaten hebben dit tegelijk gewijzigd.\nNu staat: '+_ptWaardeTekst(veld,t[veld])+'\nDe andere wijziging'+(c.door?' (door '+c.door+')':'')+': '+_ptWaardeTekst(veld,c.waarde),
+      message:(c.bron==='oud-apparaat'?'Een ouder apparaat (zonder meerdere personen per taak) wijzigde Toegewezen aan, terwijl er personen op de taak staan.':'Twee mensen of apparaten hebben dit tegelijk gewijzigd.')+'\nNu staat: '+_ptWaardeTekst(veld,t[veld])+'\nDe andere wijziging'+(c.door?' (door '+c.door+')':'')+': '+_ptWaardeTekst(veld,c.waarde),
       choices:[{label:'Houd wat er nu staat',sublabel:_ptWaardeTekst(veld,t[veld])},{label:'Neem de andere wijziging over',sublabel:_ptWaardeTekst(veld,c.waarde)}]});
     if(k===null||k===undefined) return;   // geannuleerd: niets wijzigen
     MTPlanning.conflictOplos(t,veld,k===1?'andere':'eigen',{door:_spWie(),dev:_spDev()});

@@ -199,7 +199,7 @@
   P.taakRamingMin = t => (t && t.soort === 'mijlpaal') ? 0 : P.taakBudgetMin(t);
   // ── Meerdere personen op één taak (T3, keuzeplan 16-10) ──────────────────────────────────────────────────────────────
   // t.personen = { <slug>: { min?: minuten, volg: getal, _ts: ISO, door: slug, weg?: true } }: een object per persoon, zodat twee apparaten die tegelijk iemand toevoegen elkaar niet overschrijven.
-  //  - volg bepaalt de volgorde (de eerste actieve persoon is ook `toegewezen`); min = de eigen raming van die persoon (anders een gelijk deel van de rest, zie taakVerdeling)
+  //  - volg bepaalt de volgorde (bij gelijke volg: de nieuwste _ts eerst, dan de slug); de eerste actieve persoon is ook `toegewezen`, ook na het samenvoegen; min = de eigen raming van die persoon (anders een gelijk deel van de rest, zie taakVerdeling)
   //  - een persoon weghalen = een tombstone (weg: true met een nieuwe _ts), de sleutel verdwijnt nooit: een oude kopie zet hem anders terug
   //  - samenvoegen gaat per slug (personenSamen, in recSamen): de nieuwste _ts wint, een slug die aan één kant staat blijft staan, een tombstone met een nieuwere _ts wint van een actieve entry
   //  - `toegewezen` blijft bestaan en is altijd de eerste actieve persoon: elke schrijver van `personen` zet het mee, met dezelfde stempel (P.personenZet); zo zien oude apparaten (cache, telefoon, tv) de taak nog bij die persoon
@@ -209,7 +209,7 @@
   P.MEERDERE_PERSONEN = false;   // de bediening voor meer dan één persoon staat pas een week na de release aan; wie toegewezen wijzigt schrijft personen al wel mee
   const tsMs = e => { const v = e && e._ts; if (typeof v === 'number') return isFinite(v) ? v : 0; const m = Date.parse(v); return isNaN(m) ? 0 : m; };
   const persSleutels = t => { const p = t && t.personen; return p && typeof p === 'object' && !Array.isArray(p) ? Object.keys(p).filter(k => p[k] && typeof p[k] === 'object') : []; };
-  const persActief = t => persSleutels(t).filter(k => !t.personen[k].weg).sort((a, b) => (Number(t.personen[a].volg) || 0) - (Number(t.personen[b].volg) || 0) || (a < b ? -1 : a > b ? 1 : 0));
+  const persActief = t => persSleutels(t).filter(k => !t.personen[k].weg).sort((a, b) => (Number(t.personen[a].volg) || 0) - (Number(t.personen[b].volg) || 0) || (tsMs(t.personen[b]) - tsMs(t.personen[a])) || (a < b ? -1 : a > b ? 1 : 0));   // volg, dan de nieuwste _ts eerst (twee apparaten die tegelijk een andere eerste persoon zetten: de laatste wint, net als bij toegewezen), dan slug
   const persMaxTs = t => persSleutels(t).reduce((m, k) => Math.max(m, tsMs(t.personen[k])), 0);
   const tgTrim = t => t && typeof t.toegewezen === 'string' ? t.toegewezen.trim() : '';
   const tgStempel = t => Number(t && t._vs && t._vs.toegewezen && t._vs.toegewezen.t) || 0;
@@ -558,15 +558,27 @@
       let c = null;
       if (verschil && !ZONDER_CONFLICT.has(f) && !(f === 'tg_sync' && c0 !== 0 && !(ander[f] && (ander[f].status === 'fout' || ander[f].status === 'extern-verwijderd')))) {
         const identiek = c0 === 0 && (!opt.legacy || !!(sl || sr)), ongestempeld = !ot && !!bt && !opt.legacy;
-        if (identiek || (ot && ot > bb) || (ongestempeld && (f in ander))) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot || bt };
+        // toegewezen van een kant die personen kent en er zelf mee klopt (hij schreef personen en toegewezen samen): zijn keuze zit in personen en wordt daar samengevoegd, dus geen conflict op het veld
+        const metPersonen = opt.taak && f === 'toegewezen' && persSleutels(ander).length > 0 && (persActief(ander)[0] || '') === tgTrim(ander);
+        if (!metPersonen && (identiek || (ot && ot > bb) || (ongestempeld && (f in ander)))) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot || bt };
       }
       [l, r].forEach(z => { const oc = z._veldconflict && z._veldconflict[f]; if (oc && Number(oc.t) > bb && !gelijk(oc.waarde, win[f]) && (!c || Number(oc.t) > c.t || (Number(oc.t) === c.t && stabiel(oc.waarde) > stabiel(c.waarde)))) c = kopie(oc); });   // gelijke tijd: deterministisch op de waarde
       if (c) conflicten[f] = c;
     });
     if (opt.taak) {   // personen: per slug samenvoegen (nooit als geheel "nieuwste wint")
       const ps = personenSamen(l.personen, r.personen); if (ps) w.personen = ps; else delete w.personen;
-      // een oud apparaat wijzigde alleen toegewezen: de lezers zien een wissel van de eerste persoon; het wordt hier als conflict op toegewezen gemeld en niet stil teruggeschreven
-      const wis = P.personenWissel(w); if (wis && !conflicten.toegewezen) conflicten.toegewezen = { waarde: wis.eerste || null, door: (w.personen[wis.eerste] && w.personen[wis.eerste].door) || '', t: persMaxTs(w) };
+      const wis = P.personenWissel(w);
+      if (wis) {
+        // een oud apparaat wijzigde alleen toegewezen: de lezers zien een wissel van de eerste persoon; het wordt hier als conflict gemeld (met bron) en niet stil teruggeschreven
+        conflicten.toegewezen = Object.assign(conflicten.toegewezen || { waarde: wis.eerste || null, door: (w.personen[wis.eerste] && w.personen[wis.eerste].door) || '', t: persMaxTs(w) }, { bron: 'oud-apparaat' });
+      } else if (persSleutels(w).length) {
+        // geen wissel: toegewezen is canoniek de eerste actieve persoon (ook als twee apparaten tegelijk een andere eerste persoon zetten); de stempel is de grootste van de betrokken stempels
+        const eerste = persActief(w)[0] || '';
+        if (eerste !== tgTrim(w)) {
+          if (eerste) w.toegewezen = eerste; else delete w.toegewezen;
+          w._vs.toegewezen = Object.assign({}, w._vs.toegewezen || {}, { t: Math.max(tgStempel(l), tgStempel(r), persMaxTs(w)) });
+        }
+      }
     }
     if (opt.taak && !syncGeldig(w)) { delete w.tg_sync; delete w._vs.tg_sync; delete conflicten.tg_sync; }   // koppeltabel van een andere Toggl-taak vervalt
     if (Object.keys(conflicten).length) w._veldconflict = conflicten; else delete w._veldconflict;
@@ -1796,10 +1808,11 @@
   //  - werktijden: de records uit mt_werktijden (of null: ma-vr); verlof: [{persoon, van, tm}]; vrijedagen: lijst ymd of { datum, type } (een optionele vrije dag telt als werkdag)
   //  - de personen komen uit P.taakMensen(t); zonder datums (start en eind leeg) is de verdeling leeg; met alleen een start of alleen een eind is het die ene dag
   //  - werkbare dag van een persoon = ma-vr volgens zijn werktijden, niet op zijn verlof, niet op een verplichte vrije dag
-  //  - de raming wordt in hele minuten verdeeld (restverdeling: de rest naar de eerste dagen); een eigen min van een persoon (t.personen[slug].min) gaat eerst, de rest gelijk over de anderen
+  //  - de raming wordt in hele minuten verdeeld (restverdeling: de rest naar de eerste dagen); een eigen min van een persoon (t.personen[slug].min) gaat eerst, de rest gelijk over de anderen;
+  //    zijn de eigen minuten samen meer dan wat er te verdelen is (de raming min de blokken), dan worden ze naar verhouding verkleind tot precies dat (restverdeling) en komt er de waarschuwing 'personen-meer-dan-raming'
   //  - heeft een persoon geen enkele werkbare dag tussen start en eind, dan staan zijn minuten op de startdag en komt er een waarschuwing (reden 'geen-werkbare-dag')
   //  - opt.rest: wat van de raming nog te verdelen is (anders de hele raming; zie planVan); opt.sla: dagen waarop al een blok van de taak staat (die krijgen niets); opt.anoniem: een taak van niemand toch verdelen (sleutel '')
-  P.VERDELING_TEKST = { 'geen-werkbare-dag': 'Geen werkbare dag tussen start en eind (verlof, vrije dag of werktijden): de uren staan op de startdag.' };
+  P.VERDELING_TEKST = { 'geen-werkbare-dag': 'Geen werkbare dag tussen start en eind (verlof, vrije dag of werktijden): de uren staan op de startdag.', 'personen-meer-dan-raming': 'De vaste uren van de personen zijn samen meer dan de raming: ze zijn naar verhouding verkleind.' };
   P.verdelingTekst = w => (w && P.VERDELING_TEKST[w.reden]) || '';
   const vrijVerplicht = x => new Set((x instanceof Set ? [...x] : Array.isArray(x) ? x : []).map(v => typeof v === 'string' ? v : (v && v.type !== 'optioneel' ? v.datum : null)).filter(P.isYmd));
   P.taakVerdeling = function (t, werktijden, verlof, vrijedagen, team, opt) {
@@ -1814,8 +1827,14 @@
     const sla = o.sla instanceof Set ? o.sla : new Set(Array.isArray(o.sla) ? o.sla : []);
     // het deel per persoon (contract e): eerst de eigen min, dan de rest gelijk met restverdeling
     const eigen = mensen.map(m => { const x = t && t.personen && t.personen[m.slug]; return x && !x.weg && !x._vervallen && getal(x.min) > 0 ? Math.round(getal(x.min)) : 0; });
-    const pool = Math.max(0, raming - eigen.reduce((s0, x) => s0 + x, 0)), nVrij = eigen.filter(x => !x).length;
-    let k = 0; const delen = eigen.map(x => { if (x) return x; const basis = Math.floor(pool / nVrij), r = pool - basis * nVrij; return basis + (k++ < r ? 1 : 0); });
+    const vast = eigen.reduce((s0, x) => s0 + x, 0), pool = Math.max(0, raming - vast), nVrij = eigen.filter(x => !x).length;
+    let k = 0, delen;
+    if (vast > raming) {   // samen meer dan er te verdelen is: naar verhouding verkleinen tot precies de raming (largest remainder: de grootste breukrest krijgt de rest, bij gelijke rest de eerste)
+      delen = eigen.map(x => Math.floor(x * raming / vast));
+      let over = raming - delen.reduce((s0, x) => s0 + x, 0);
+      eigen.map((x, i) => ({ i, f: x * raming / vast - delen[i] })).filter(e => eigen[e.i]).sort((p, q) => (q.f - p.f) || (p.i - q.i)).forEach(e => { if (over > 0) { delen[e.i] += 1; over -= 1; } });
+      mensen.forEach((m, i) => { if (eigen[i]) uit.waarschuwingen.push({ persoon: m.slug, reden: 'personen-meer-dan-raming' }); });
+    } else delen = eigen.map(x => { if (x) return x; const basis = Math.floor(pool / nVrij), r = pool - basis * nVrij; return basis + (k++ < r ? 1 : 0); });
     mensen.forEach((m, i) => {
       const vl = m.slug ? P.verlofDagen(verlof, m.p, team) : new Set(), rec = m.slug ? wt[m.slug] || null : null, dagen = [];
       for (let n = a; n <= z && n - a < 400; n++) {
