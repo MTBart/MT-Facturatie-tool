@@ -54,11 +54,11 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-17k"></script>
+<script src="mt-planning.js?v=2026-10-17l"></script>
 <script src="mt-mijnwerk.js?v=2026-10-17c"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-17k"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-17k"></script>
+<script src="mt-planverplaats.js?v=2026-10-17l"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-17l"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -3837,7 +3837,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
-  magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
+  magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), taakBezig:(code,id)=>MTPlanVerplaats.taakBezig(code,id), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
@@ -15785,15 +15785,23 @@ async function capTaakHerstel(w,opt){
 // ── Een oud tb:-planblok omzetten naar een taakbalk (T6; mt-planverplaats.js: omzetten) ──
 // Eerst de taak (toegewezen = de persoon van het blok, start/eind = de dag van het blok; een taak met eigen datums houdt die) via takenSchrijf, daarna pas het blok weg (tombstone via de planblok-route: vers lezen,
 // samenvoegen, agPlanSave). Lukt het verwijderen niet, dan staat de taak goed en telt het blok nog mee: niets dubbel, opnieuw proberen kan. Is het blok al weg, dan "al omgezet".
-async function capBlokWeg(blokId){
+async function _capWegBevestig(blokId,alWeg){   // na het delen vers lezen: staat de tombstone er echt? (na een 412 kan een nieuwere actieve versie gewonnen hebben, terwijl agPlanSave true geeft)
+  let na; try{ na=await _SP.read('mt_planblokken.json'); }catch(e){ return { ok:false, reden:'Ik kon niet bevestigen dat het planblok is verwijderd: SharePoint antwoordt niet. Zet opnieuw om om het te controleren.' }; }
+  const rb=(Array.isArray(na)?na:[]).find(b=>b&&String(b.id)===String(blokId));
+  if(rb&&!rb._vervallen) return { ok:false, gewijzigd:true, reden:'Niet omgezet: iemand wijzigde het blok tegelijk; het staat er nog.' };
+  return { ok:true, alWeg:!!alWeg };
+}
+async function capBlokWeg(blokId,o2){
+  const snap=o2&&o2.snap;   // wat we eerder lazen: is het blok sindsdien veranderd (bv. door een oud apparaat verplaatst), dan geen tombstone
   const vers=await _capVers(); if(!vers.ok) return { ok:false, reden:vers.reden };
   if(!vers.online) return { ok:false, reden:'SharePoint is niet bereikbaar; het planblok is niet verwijderd.' };
-  const r=MTPlanVerplaats.blokWeg(blokId,_capCtx()); if(!r.ok) return { ok:false, reden:r.reden };
+  const r=MTPlanVerplaats.blokWeg(blokId,_capCtx(),snap); if(!r.ok) return { ok:false, gewijzigd:!!r.gewijzigd, reden:r.reden };
   const rb=(vers.remote||[]).find(b=>b&&String(b.id)===String(blokId)), opSpWeg=!rb||!!rb._vervallen;
-  if(r.alWeg){ if(opSpWeg) return { ok:true, alWeg:true }; const gedeeld=await agPlanSave(); return gedeeld===false?{ ok:false, reden:'Het planblok kon niet worden verwijderd.' }:{ ok:true, alWeg:true }; }   // lokaal al weg maar nog niet gedeeld: alsnog delen
+  if(r.alWeg){ if(opSpWeg) return { ok:true, alWeg:true }; const gedeeld=await agPlanSave(); if(gedeeld===false) return { ok:false, reden:'Het planblok kon niet worden verwijderd.' }; return _capWegBevestig(blokId,true); }   // lokaal al weg maar nog niet gedeeld: alsnog delen
   _planblokken=r.blokken;
   const opgeslagen=await agPlanSave();   // false = SharePoint nam het niet aan (agPlanSave meldt dat zelf): de tombstone staat dan alleen lokaal
-  return opgeslagen===false?{ ok:false, reden:'Het planblok kon niet worden verwijderd.' }:{ ok:true, alWeg:false };
+  if(opgeslagen===false) return { ok:false, reden:'Het planblok kon niet worden verwijderd.' };
+  return _capWegBevestig(blokId,false);
 }
 async function capOmzetten(spec,opt){
   if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'Een planblok omzetten naar een taakbalk')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
@@ -15801,7 +15809,7 @@ async function capOmzetten(spec,opt){
   if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
   const o=_capTaakOpties(code,opt);
   o.blokken=async()=>{ const v=await _capVers(); return v.ok?{ ok:true, online:v.online, blokken:agPlanBlokken() }:v; };
-  o.blokWeg=id=>capBlokWeg(id);
+  o.blokWeg=(id,o2)=>capBlokWeg(id,o2);
   return _capTaakKlaar(await MTPlanVerplaats.omzetten(spec,o));
 }
 async function capVerplaats(spec,opt){
