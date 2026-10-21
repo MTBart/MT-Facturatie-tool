@@ -572,14 +572,14 @@
   }
 
   // ═══ Het taakpaneel: de velden van één taak wijzigen (mt-taakpaneel.js) ═══════════════════════════════════════════════════
-  // Naam, notities (omschrijving), raming (duur_uur), activiteit, prioriteit, persoon (toegewezen) en status, via dezelfde schrijfkern (takenSchrijf: vers lezen, ETag, 412 samenvoegen, max 3), hetzelfde
+  // Naam, notities (omschrijving), raming (duur_uur), activiteit, prioriteit, persoon (toegewezen), status en fase (de bucket), via dezelfde schrijfkern (takenSchrijf: vers lezen, ETag, 412 samenvoegen, max 3), hetzelfde
   // slot per taak, dezelfde tijdgrenzen en dezelfde controle achteraf als slepen. Datums gaan hier NIET langs: dat blijft de sleep-spec taakdatums (plaatsTaak, met de vraag over de opvolgers).
   // Geen stil overschrijven: staat er op de verse stand iets anders dan wat de gebruiker zag toen hij begon (`gezien`), dan wordt er niets geschreven en zegt de uitkomst wie het wijzigde.
   // spec = { code, id, naam, velden: { veld: nieuw }, gezien?: { veld: oud zoals getoond }, reden? (verplicht bij status 'wacht') }
   // -> { ok:false, reden } | { ok:false, bezet } | { ok:false, tegelijk:true, reden } | { ok:false, onzeker, reden } | { ok:true, noop:true }
   //    | { ok:true, opgeslagen:true, tegelijk:tekst, data, taken } | { ok:true, opgeslagen:true, behouden:true, data, taken, oudTaak, wijziging }
-  V.PANEEL_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'prioriteit', 'toegewezen', 'status'];
-  const VELD_LABEL = { naam: 'de naam', omschrijving: 'de notities', duur_uur: 'de raming', activiteit: 'de activiteit', prioriteit: 'de prioriteit', toegewezen: 'de persoon', status: 'de status', wacht_reden: 'de wachtreden', klaar_op: 'de klaardatum' };
+  V.PANEEL_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'prioriteit', 'toegewezen', 'status', 'fase'];
+  const VELD_LABEL = { naam: 'de naam', omschrijving: 'de notities', duur_uur: 'de raming', activiteit: 'de activiteit', prioriteit: 'de prioriteit', toegewezen: 'de persoon', status: 'de status', fase: 'de fase', wacht_reden: 'de wachtreden', klaar_op: 'de klaardatum' };
   const PRIO_OK = ['high', 'medium', 'low'];
   const veldNorm = (k, v) => k === 'duur_uur' ? String(Math.round((Number(String(v == null ? '' : v).replace(',', '.')) || 0) * 100) / 100) : String(v == null ? '' : v).trim();
   const veldVan = (t, k) => veldNorm(k, k === 'status' ? (t.status || 'todo') : t[k]);
@@ -591,6 +591,7 @@
     if (k === 'omschrijving') { if (w) t.omschrijving = String(v).replace(/\s+$/, '').slice(0, 4000); else delete t.omschrijving; return ''; }
     if (k === 'duur_uur') { const n = Number(w); if (!isFinite(n) || n < 0 || n > 10000) return 'Geen geldige raming.'; t.duur_uur = n; return ''; }
     if (k === 'activiteit') { if (w && !P.activiteit(w)) return 'Onbekende activiteit.'; if (w) t.activiteit = w; else delete t.activiteit; return ''; }
+    if (k === 'fase') { if (w) t.fase = w.slice(0, 80); else delete t.fase; return ''; }   // de bucket: de naam van de fase, zoals het sjabloon hem zet
     if (k === 'prioriteit') { if (w && !PRIO_OK.includes(w)) return 'Onbekende prioriteit.'; if (w) t.prioriteit = w; else delete t.prioriteit; return ''; }
     if (k === 'toegewezen') { if (w && !(team || []).some(m => m && String(m.slug).toLowerCase() === w.toLowerCase())) return 'Onbekende persoon.'; if (w !== String(t.toegewezen || '')) P.toegewezenZet(t, w, opt); return ''; }
     if (k === 'status') { const r = P.statusZet(t, w, { reden: spec.reden || '' }); return r.ok ? '' : r.fout; }

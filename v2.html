@@ -57,9 +57,10 @@
 <script src="mt-planning.js?v=2026-10-17n"></script>
 <script src="mt-mijnwerk.js?v=2026-10-21u"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-21u"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-21u"></script>
-<script src="mt-taakpaneel.js?v=2026-10-21u"></script>
+<script src="mt-planverplaats.js?v=2026-10-21v"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-21v"></script>
+<script src="mt-objectpaneel.js?v=2026-10-21v"></script>
+<script src="mt-taakpaneel.js?v=2026-10-21v"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -3861,8 +3862,8 @@ try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, i
 // Het taakpaneel (mt-taakpaneel.js): één paneel per taak, met de herkomst (klant › locatie › project) als gewone links, de afhankelijkheden en de bestellingen van het project.
 // Dezelfde bronnen als Mijn werk en de Capaciteit; de links gaan via de bestaande router (mtRoute), dus Terug en Ctrl-klik werken.
 try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu:()=>Date.now(),
-  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), bestel:()=>_blActief(), vrij:()=>_p2Vrij(),
-  ruw:()=>['mt_project_taken_v2','mt_project_afhank','mt_bestellijst_v2'].map(k=>localStorage.getItem(k)||'').join('\u0001'),   // verandert er iets (ook via de sync), dan tekent het paneel opnieuw
+  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), bestel:()=>_blActief(), vrij:()=>_p2Vrij(), blokken:()=>agPlanActief(),
+  ruw:()=>['mt_project_taken_v2','mt_project_afhank','mt_bestellijst_v2','mt_planblokken'].map(k=>localStorage.getItem(k)||'').join('\u0001'),   // verandert er iets (ook via de sync), dan tekent het paneel opnieuw
   project:code=>{ const p=projVind(code); return p?{code:p.code,project_id:p.project_id||'',naam:projNaamVol(p),nummer:projLabelCode(p)||'',klant:String(p.klant||'').toUpperCase(),klantNaam:projKlantNaam(p),loc:String(p.loc||'').toUpperCase(),locNaam:projLocLabel(p)}:null; },
   href:{ project:(code,sectie)=>mtRoute.format({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.format({tab:'projecten',klant:kl,loc:loc||undefined}), bestellijst:()=>mtRoute.format({tab:'bestelling'}) },
   ga:{ project:(code,sectie)=>mtRoute.go({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.go({tab:'projecten',klant:kl,loc:loc||undefined}), bestellijst:()=>mtRoute.go({tab:'bestelling'}) },
@@ -3870,7 +3871,10 @@ try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu
   // Schrijven: alleen via de bestaande taakroutes (zie tpWijzig; de datums via de sleeproute van de Capaciteit; verwijderen, Toggl, conflict en voorstel via de functies van de projecttabel)
   mag:{ alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar(), status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), plannen:()=>capMagSlepen()&&rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
   wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec),
+  toonInTijdlijn:(code,id,datum)=>{ const k=document.querySelector('.tabs-wrap .tab-btn[onclick*="\'agenda\'"]'); _agenda.view='capaciteit'; showTab('agenda',k); try{ MTCapaciteitNieuw.toonTaak({code,id},datum); }catch(e){ console.warn('Toon in tijdlijn:',e); } },
+  inplannen:t=>{ const k=document.querySelector('.tabs-wrap .tab-btn[onclick*="\'agenda\'"]'); _agenda.view='capaciteit'; showTab('agenda',k); try{ MTCapaciteitNieuw.inplannen(t); }catch(e){ console.warn('Inplannen (taakpaneel):',e); } },   // de bestaande route van Vandaag: Ongepland gemarkeerd + het keuzemenu
   verwijder:(c,i)=>projTaakVerwijder(c,i), togglSync:(c,i)=>projTaakTogglSync(c,i), conflict:(c,i)=>projTaakConflict(c,i), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
+  bordKlik:true,
   naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _ptHertekenen(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Taakpaneel init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.

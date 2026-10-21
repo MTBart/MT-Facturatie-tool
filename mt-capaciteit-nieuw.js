@@ -201,6 +201,7 @@
     const sub = el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code), it.min && !uur ? ' · ' + uren(it.min) : '');
     const b = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok' + (voorstel ? ' voorstel' : '') + (wacht ? ' wacht' : '') + (sleep || taakSleep ? ' sleepbaar' : ''), 'data-taak': taakSleep ? String(it.id) : null, 'data-code': taakSleep ? String(it.code) : null, 'aria-keyshortcuts': taakSleep ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : null, style: '--block-color:' + P.projectKleur(it.code), title: [it.naam, projNr(it.code) + ' ' + projNaam(it.code), it.min ? uren(it.min) : '', voorstel ? 'voorstel' : '', wacht ? ('wacht' + (it.wachtTekst ? ': ' + it.wachtTekst : '')) : '', it.waarschuwing || '', it.nietEenduidig ? 'niet eenduidig aan een taak gekoppeld (hetzelfde taak-id staat in meer dan één project)' : ''].filter(Boolean).join(' · ') },
       el('span', { klass: 'cn-blok-kop' }, el('span', { klass: 'cn-blok-titel', tekst: it.naam }), voorstel ? el('span', { klass: 'cn-chipje', tekst: 'voorstel' }) : null, wacht && !voorstel ? el('span', { klass: 'cn-chipje wacht', tekst: 'wacht' }) : null, D.taakBezig && it.soort === 'taak' && D.taakBezig(it.code, it.id) ? el('span', { klass: 'cn-chipje wacht', tekst: 'opslaan hangt', title: 'Opslaan hangt: wacht even of herlaad de pagina om opnieuw te proberen' }) : null, it.waarschuwing ? el('span', { klass: 'cn-chipje wacht', tekst: 'let op', title: it.waarschuwing }) : null), uur ? el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-tijd', tekst: uur }), ' · ', el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code)) : sub);
+    if (S.toon && it.soort === 'taak' && String(it.id) === S.toon.id && String(it.code).toLowerCase() === S.toon.code && D.nu() < S.toon.tot) b.classList.add('tp-gemarkeerd');   // "Toon in tijdlijn" vanuit het taakpaneel
     klikOpen(b, it);
     b.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === b) { ev.preventDefault(); openItem(it, b); } });
     if (sleep) sleepBron({ soort: 'verplaats', blokId: bid }, b, it.naam); else if (taakSleep) sleepBron(taakBron, b, it.naam);
@@ -565,6 +566,16 @@
     return true;
   };
   // Vanuit Afwijkingen (Admin > Team en werktijden): de dagweergave van die dag voor die persoon openen (de aanroeper wisselt naar de Agenda).
+  // Vanuit het taakpaneel ("Toon in tijdlijn"): de week van de taak, zonder filters, en de balk(en) van die taak een minuut gemarkeerd (de aanroeper wisselt naar de Agenda ▸ Capaciteit).
+  N.toonTaak = function (taak, datum) {
+    if (!taak || taak.id == null) return false;
+    S.exactDag = false; S.persoon = ''; S.project = ''; S.anker = P.isYmd(datum) ? datum : P.vandaagYmd();
+    if (S.zoom === 'maand' || S.zoom === 'kwartaal') S.zoom = 'week';   // de balken zijn pas in een week- of dagweergave te zien (de bewaarde zoomkeuze verandert niet)
+    S.toon = { id: String(taak.id), code: String(taak.code == null ? '' : taak.code).toLowerCase(), tot: D.nu() + 60000 };
+    N.teken();
+    const e = D.doc.querySelector('#agenda-capaciteit .cn-blok.tp-gemarkeerd'); if (e && e.scrollIntoView) e.scrollIntoView({ block: 'center', inline: 'center' });
+    return !!e;
+  };
   N.gaNaar = function (datum, slug) { if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = P.isYmd(datum) ? 'dag' : 'week'; S.exactDag = P.isYmd(datum); };   // precies die dag (ook een weekenddag), met die persoon in beeld; de bewaarde zoomkeuze verandert niet
   N.init = function (deps) {
     D = deps; P = deps.planning || root.MTPlanning;
