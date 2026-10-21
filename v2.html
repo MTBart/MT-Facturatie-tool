@@ -17610,7 +17610,7 @@ function activiteitOpen(force){
     let t=document.getElementById('calc-toast');
     if(!t){
       t=document.createElement('div'); t.id='calc-toast';
-      t.style.cssText='position:fixed;right:14px;bottom:14px;z-index:9999;max-width:420px;padding:.5rem .75rem;'
+      t.style.cssText='position:fixed;right:14px;bottom:44px;z-index:9999;max-width:420px;padding:.5rem .75rem;'   // boven het SharePoint-badge, niet eroverheen
         +'border-radius:6px;font-size:12px;background:var(--card,#fff);border:1px solid rgba(0,0,0,.15);'
         +'box-shadow:0 2px 10px rgba(0,0,0,.18);white-space:pre-wrap';
       document.body.appendChild(t);
@@ -17738,6 +17738,8 @@ function activiteitOpen(force){
   if(_calcSync){
     window._calcAutoSync=function(){ if(!CALC.loaded) return; clearTimeout(_calcAutoT); _calcAutoT=setTimeout(()=>{ _calcSync.schrijf(); },2000); };
     window._calcNaHydrate=function(){ if(!CALC.loaded){ hydrateCalc(); return; } _calcSync.schrijf(); };
+    // Mislukt, dicht of nog niet gedeeld: elke minuut opnieuw (ook zonder nieuwe wijziging).
+    setInterval(()=>{ if(CALC.loaded&&_calcSync.heeftOpenstaand()) _calcSync.schrijf(); },60000);
   }
 
   // Nu synchroniseren in plaats van de debounce afwachten, mét dezelfde beveiligingen
@@ -17796,7 +17798,7 @@ function activiteitOpen(force){
       calcStatus('Opslaan…','bezig',opts.key);
       syncNu(which).then(r=>{
         if(r.ok) calcStatus('✓ Opgeslagen op SharePoint '+new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}),'ok',opts.key);
-        else calcStatus('⚠ Staat veilig op deze pc, maar niet op SharePoint: '+r.reden+'. Druk later nog eens op Opslaan.','fout',opts.key);
+        else calcStatus('⚠ Staat veilig op deze pc, maar niet op SharePoint: '+r.reden+'. De tool probeert het elke minuut opnieuw.','fout',opts.key);
       });
     }
     // Ook de leesbare bestanden in de map bijwerken — met pauze en rusttijd, zie planMapOpslag.
@@ -17860,9 +17862,9 @@ function activiteitOpen(force){
       b.textContent=label; b.addEventListener('click',fn); d.appendChild(b); };
     let d;
     if(_calcBijwerken) regel('Bijwerken met SharePoint…','bezig');
-    else if(s.staat==='dicht'){ d=regel('⚠ Alleen op deze pc — SharePoint is nu niet bereikbaar'+(s.reden?' ('+s.reden+')':'')+'. Je werk staat veilig in deze browser; probeer het straks opnieuw.','dicht'); knop(d,'Opnieuw proberen',calcOpslagOpnieuw); }
+    else if(s.staat==='dicht'){ d=regel('⚠ Alleen op deze pc — SharePoint is nu niet bereikbaar'+(s.reden?' ('+s.reden+')':'')+'. Je werk staat veilig in deze browser; de tool probeert het elke minuut opnieuw.','dicht'); knop(d,'Opnieuw proberen',calcOpslagOpnieuw); }
     else if(s.staat==='bezig') regel('Opslaan op SharePoint…','bezig');
-    else if(s.staat==='mislukt'){ d=regel('⚠ Opslaan mislukt: '+(s.reden||'onbekende fout')+'. Staat veilig op deze pc.','mislukt'); knop(d,'Opnieuw proberen',calcOpslagOpnieuw); }
+    else if(s.staat==='mislukt'){ d=regel('⚠ Opslaan mislukt: '+(s.reden||'onbekende fout')+'. Staat veilig op deze pc; de tool probeert het elke minuut opnieuw.','mislukt'); knop(d,'Opnieuw proberen',calcOpslagOpnieuw); }
     else if(s.staat==='lokaal') regel('Nog niet gedeeld — alleen op deze pc','lokaal');
     else regel('✓ Opgeslagen op SharePoint'+(s.tijd?' '+tijd(s.tijd):''),'ok');
     if(_calcLaterTekenen.has(basis)) regel('Er is een nieuwere versie van SharePoint binnen — die verschijnt zodra je het veld verlaat.','info');
@@ -17892,6 +17894,41 @@ function activiteitOpen(force){
   }
   window.calcConflictBekijk=calcConflictBekijk;
 
+  // ---- bewaren tijdens het typen: alleen geheugen + localStorage (geen SharePoint, geen hertekening) ----
+  const _typT={};
+  function _typBewaar(el){
+    const k=el.dataset.ck, s=el.dataset.cs, f=el.dataset.cf, rid=el.dataset.cr, v=el.value;
+    if(!k||!s||!f||!CALC.loaded) return;
+    const o=getOfferte(k);
+    if(s==='m'||s==='u'){ let rij=(s==='m'?o.materiaal:o.uren).find(x=>x.id===rid);
+      if(!rij){ rij=_calcRijTerug(k,s,rid); if(!rij){ calcStatus('⚠ Deze regel bestaat niet meer (intussen elders verwijderd) — wat je typt wordt niet bewaard. Gebruik een nieuwe regel.','fout',basisKey(k)); return; } }
+      else if(rij[f]===v) return;
+      rij[f]=v; }
+    else if(s==='meta'){ if(!o.meta) o.meta={}; if(o.meta[f]===v) return; o.meta[f]=v; }
+    else if(s==='titel'){ if(o.titel===v) return; o.titel=v; }
+    else return;
+    const bk=basisKey(k); if(CALC.offertes[bk]) CALC.offertes[bk]._gewijzigd=new Date().toISOString();
+    if(_calcSync) _calcSync.markeer(bk);
+    if(!_lsRuw(LS.off,JSON.stringify(_calcSync?_calcSync.cachePayload():payloadFor('off')))) calcStatus('⚠ Bewaren in deze browser mislukt — browseropslag vol of geblokkeerd.','fout',bk);
+    if(s==='m'||s==='u') recalcView(k);
+  }
+  document.addEventListener('input',e=>{
+    const el=e.target; if(!el||!el.dataset||!el.dataset.cs) return;
+    const id=[el.dataset.ck,el.dataset.cs,el.dataset.cr||'',el.dataset.cf].join('|');
+    clearTimeout(_typT[id]);
+    _typT[id]=setTimeout(()=>{ delete _typT[id]; try{ _typBewaar(el); }catch(err){ console.warn('bewaren tijdens typen mislukt:',err); } },800);
+  });
+  window._calcTypFlush=function(){
+    Object.keys(_typT).forEach(id=>{ clearTimeout(_typT[id]); delete _typT[id]; });
+    const a=document.activeElement; if(a&&a.dataset&&a.dataset.cs){ try{ _typBewaar(a); }catch(e){} }
+  };
+  // Niet-gedeeld werk: waarschuwen bij sluiten of herladen.
+  window.addEventListener('beforeunload',e=>{
+    try{ window._calcTypFlush(); }catch(err){}
+    if(!_calcSync||!CALC.loaded||!_calcSync.heeftOngedeeld()) return;
+    e.preventDefault(); e.returnValue='Er zijn calculatiewijzigingen die nog niet op SharePoint staan.'; return e.returnValue;
+  });
+  window.addEventListener('pagehide',()=>{ try{ window._calcTypFlush(); }catch(err){} });
   // Terug na een tijdje weg: eerst bijwerken (de calculatie kort alleen-lezen), dan pas verder typen.
   let _calcWegSinds=null;
   document.addEventListener('visibilitychange',()=>{
@@ -18099,7 +18136,7 @@ function activiteitOpen(force){
   };
   window.calcSetTitel=function(key,val){const o=getOfferte(key);o.titel=val;saveCalc('off',{key:key});};
 
-  window.calcSetMat=function(key,rid,field,val){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m)return;m[field]=val;saveCalc('off',{key:key});recalcView(key);};
+  window.calcSetMat=function(key,rid,field,val){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m){_calcRijWeg(key,'m',rid);return;}m[field]=val;saveCalc('off',{key:key});recalcView(key);};
   window.calcAddMat=function(key){const o=getOfferte(key);o.materiaal.push({id:uid('m'),omschrijving:'',artikel:'',aantal:'',inkoop_stuk:'',marge:CALC.defaults.materiaal_marge});saveCalc('off',{key:key});renderOfferteCalc(key);};
   window.calcDelMat=function(key,rid){const o=getOfferte(key);o.materiaal=o.materiaal.filter(m=>m.id!==rid);saveCalc('off',{key:key});renderOfferteCalc(key);};
   // Vectorworks/interiorcad materiaallijst → tabelregels voor-invullen + echte inkoop opzoeken.
@@ -18934,7 +18971,7 @@ function activiteitOpen(force){
     if(np && o.titel && !np.value){ np.value=o.titel; if(typeof autoCode==='function') autoCode(); }
   };
 
-  window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u)return;u[field]=val;saveCalc('off',{key:key});recalcView(key);};
+  window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u){_calcRijWeg(key,'u',rid);return;}u[field]=val;saveCalc('off',{key:key});recalcView(key);};
   window.calcAddUur=function(key){const o=getOfferte(key);o.uren.push({id:uid('u'),omschrijving:'',uren:'',uurtarief:CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:stdTarief(),marge:2});saveCalc('off',{key:key});renderOfferteCalc(key);};
   window.calcDelUur=function(key,rid){const o=getOfferte(key);o.uren=o.uren.filter(u=>u.id!==rid);saveCalc('off',{key:key});renderOfferteCalc(key);};
 
@@ -19043,13 +19080,13 @@ function activiteitOpen(force){
     const r=mRow(m);
     return `<tr>
       <td><div style="display:flex;gap:4px;align-items:center">
-        <input id="calc-mo-${esc(m.id)}" class="calc-inp" autocomplete="off" style="flex:1;min-width:150px" value="${esc(m.omschrijving)}" placeholder="materiaal (typ voor suggesties)…" oninput="calcMatSuggest(this,${jsArg(key)},${jsArg(m.id)})" onfocus="calcMatSuggest(this,${jsArg(key)},${jsArg(m.id)})" onblur="calcMatBlur()" onkeydown="calcMatKey(event)" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'omschrijving',this.value)">
+        <input id="calc-mo-${esc(m.id)}" class="calc-inp" autocomplete="off" style="flex:1;min-width:150px" value="${esc(m.omschrijving)}" placeholder="materiaal (typ voor suggesties)…" data-ck="${esc(key)}" data-cs="m" data-cr="${esc(m.id)}" data-cf="omschrijving" oninput="calcMatSuggest(this,${jsArg(key)},${jsArg(m.id)})" onfocus="calcMatSuggest(this,${jsArg(key)},${jsArg(m.id)})" onblur="calcMatBlur()" onkeydown="calcMatKey(event)" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'omschrijving',this.value)">
         <button class="btn btn-xs btn-secondary" title="Zoek inkoopprijs in materialen-DB" onclick="calcZoekPrijs(${jsArg(key)},${jsArg(m.id)})">🔍 prijs</button>
       </div><div id="rand-${esc(m.id)}">${randChipHtml(key,m)}</div><div id="lev-${esc(m.id)}">${levChipHtml(key,m)}</div></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${esc(inval(m.aantal))}" placeholder="0" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'aantal',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:84px" value="${esc(inval(m.inkoop_stuk))}" placeholder="0,00" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'inkoop_stuk',this.value)">${(m.ic_indicatief!=null&&(m.inkoop_stuk===''||m.inkoop_stuk==null))?`<div style="font-size:9px;color:var(--gold)" title="Indicatieve Vectorworks-richtprijs — geen echte inkoop. Vul de werkelijke prijs uit de factuur in.">⚠ VW ${esc(eur(m.ic_indicatief))}</div>`:''}</td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${esc(inval(m.aantal))}" placeholder="0" data-ck="${esc(key)}" data-cs="m" data-cr="${esc(m.id)}" data-cf="aantal" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'aantal',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:84px" value="${esc(inval(m.inkoop_stuk))}" placeholder="0,00" data-ck="${esc(key)}" data-cs="m" data-cr="${esc(m.id)}" data-cf="inkoop_stuk" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'inkoop_stuk',this.value)">${(m.ic_indicatief!=null&&(m.inkoop_stuk===''||m.inkoop_stuk==null))?`<div style="font-size:9px;color:var(--gold)" title="Indicatieve Vectorworks-richtprijs — geen echte inkoop. Vul de werkelijke prijs uit de factuur in.">⚠ VW ${esc(eur(m.ic_indicatief))}</div>`:''}</td>
       <td class="calc-num" id="mi-${esc(m.id)}">${esc(eur(r.inkoop))}</td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${esc(inval(m.marge))}" placeholder="1,5" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'marge',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${esc(inval(m.marge))}" placeholder="1,5" data-ck="${esc(key)}" data-cs="m" data-cr="${esc(m.id)}" data-cf="marge" onchange="calcSetMat(${jsArg(key)},${jsArg(m.id)},'marge',this.value)"></td>
       <td class="calc-num" style="font-weight:600" id="mv-${esc(m.id)}">${esc(eur(r.verkoop))}</td>
       <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelMat(${jsArg(key)},${jsArg(m.id)})">×</button></td>
     </tr>`;
@@ -19057,11 +19094,11 @@ function activiteitOpen(force){
   function uurRij(key,u){
     const r=uRow(u);
     return `<tr>
-      <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'omschrijving',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${esc(inval(u.uren))}" placeholder="0" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'uren',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${esc(inval(u.uurtarief))}" placeholder="${esc(stdTarief())}" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'uurtarief',this.value)"></td>
+      <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" data-ck="${esc(key)}" data-cs="u" data-cr="${esc(u.id)}" data-cf="omschrijving" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'omschrijving',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${esc(inval(u.uren))}" placeholder="0" data-ck="${esc(key)}" data-cs="u" data-cr="${esc(u.id)}" data-cf="uren" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'uren',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${esc(inval(u.uurtarief))}" placeholder="${esc(stdTarief())}" data-ck="${esc(key)}" data-cs="u" data-cr="${esc(u.id)}" data-cf="uurtarief" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'uurtarief',this.value)"></td>
       <td class="calc-num" id="uk-${esc(u.id)}">${esc(eur(r.kost))}</td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${esc(inval(u.marge))}" placeholder="2" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'marge',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:56px" value="${esc(inval(u.marge))}" placeholder="2" data-ck="${esc(key)}" data-cs="u" data-cr="${esc(u.id)}" data-cf="marge" onchange="calcSetUur(${jsArg(key)},${jsArg(u.id)},'marge',this.value)"></td>
       <td class="calc-num" style="font-weight:600" id="uv-${esc(u.id)}">${esc(eur(r.verkoop))}</td>
       <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur(${jsArg(key)},${jsArg(u.id)})">×</button></td>
     </tr>`;
@@ -19314,10 +19351,10 @@ function activiteitOpen(force){
   function ncUurRij(nk,u,begroot){
     const r=uRow(u);
     return `<tr>
-      <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'omschrijving',this.value)"></td>
+      <td><input class="calc-inp" style="width:100%;min-width:150px" value="${esc(u.omschrijving)}" placeholder="omschrijving" data-ck="${esc(nk)}" data-cs="u" data-cr="${esc(u.id)}" data-cf="omschrijving" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'omschrijving',this.value)"></td>
       <td class="calc-num" style="color:var(--text-dim)">${esc(begroot==null||begroot===''?'—':inval(begroot))}</td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${esc(inval(u.uren))}" placeholder="0" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'uren',this.value)"></td>
-      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${esc(inval(u.uurtarief))}" placeholder="${esc(stdTarief())}" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'uurtarief',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:64px" value="${esc(inval(u.uren))}" placeholder="0" data-ck="${esc(nk)}" data-cs="u" data-cr="${esc(u.id)}" data-cf="uren" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'uren',this.value)"></td>
+      <td class="calc-num"><input class="calc-inp calc-num" style="width:72px" value="${esc(inval(u.uurtarief))}" placeholder="${esc(stdTarief())}" data-ck="${esc(nk)}" data-cs="u" data-cr="${esc(u.id)}" data-cf="uurtarief" onchange="calcSetUur(${jsArg(nk)},${jsArg(u.id)},'uurtarief',this.value)"></td>
       <td class="calc-num" id="uk-${esc(u.id)}">${esc(eur(r.kost))}</td>
       <td><button class="btn btn-xs btn-danger" title="Regel verwijderen" onclick="calcDelUur(${jsArg(nk)},${jsArg(u.id)})">×</button></td>
     </tr>`;
@@ -19371,6 +19408,7 @@ function activiteitOpen(force){
       return;
     }
     const nk=NC+basis, nc=o.nacalc, t=totalen(nc), c=cid(nk);
+    _rijGeheugen[nk]=JSON.parse(JSON.stringify({m:nc.materiaal,u:nc.uren}));
     // auto-match één keer voorstellen als er nog niets gekozen is
     if(!nc.toggl && !ncTmp(nk).gezocht){ ncTmp(nk).gezocht=true; setTimeout(()=>calcNcZoekToggl(nk),50); }
     const begrootVan=u=>{ if(u.begroot!==undefined) return u.begroot;
@@ -19399,7 +19437,7 @@ function activiteitOpen(force){
       ${ncTogglHtml(nk)}
       <div class="calc-btnrow" style="margin-top:0.8rem">
         <label style="font-size:11px;color:var(--text-dim)">Factuurbedrag (def.)
-          <input class="calc-inp calc-num" style="width:110px" value="${esc(inval(o.meta.factuurbedrag))}" placeholder="0,00" onchange="calcSetMeta(${jsArg(basis)},'factuurbedrag',this.value);renderOfferteCalc(${jsArg(nk)})"></label>
+          <input class="calc-inp calc-num" style="width:110px" value="${esc(inval(o.meta.factuurbedrag))}" placeholder="0,00" data-ck="${esc(basis)}" data-cs="meta" data-cf="factuurbedrag" onchange="calcSetMeta(${jsArg(basis)},'factuurbedrag',this.value);renderOfferteCalc(${jsArg(nk)})"></label>
         <span style="flex:1"></span>
         <button class="btn btn-sm btn-secondary" onclick="saveCalcNu(${jsArg(basis)})">💾 Opslaan</button>
       </div>
@@ -19409,6 +19447,7 @@ function activiteitOpen(force){
     _opslagTeken(basis);
   }
 
+  const _rijGeheugen={};   // per (na)calculatie de regels zoals laatst getekend: om een elders verwijderde regel volledig terug te kunnen zetten
   window.renderOfferteCalc=async function(key){
     const basis=basisKey(key);
     _calcOpen.add(basis);
@@ -19420,6 +19459,7 @@ function activiteitOpen(force){
     if(!host) return;
     if(!CALC.loaded){ await hydrateCalc(); host=document.getElementById('offerte-calc-'+cid(key)); if(!host) return; }
     const o=getOfferte(key);
+    _rijGeheugen[key]=JSON.parse(JSON.stringify({m:o.materiaal,u:o.uren}));
     const t=totalen(o);
     const proj=(typeof PROJECT_CODES!=='undefined')?projVind(key):null;
     const standalone=!proj;
@@ -19427,7 +19467,7 @@ function activiteitOpen(force){
 
     const kopHtml = standalone
       ? `<div style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">
-           <input class="calc-inp" style="font-weight:700;font-size:15px;min-width:220px;flex:1" value="${esc(o.titel||'')}" placeholder="Offertetitel…" onchange="calcSetTitel(${jsArg(key)},this.value)">
+           <input class="calc-inp" style="font-weight:700;font-size:15px;min-width:220px;flex:1" value="${esc(o.titel||'')}" placeholder="Offertetitel…" data-ck="${esc(key)}" data-cs="titel" data-cf="titel" onchange="calcSetTitel(${jsArg(key)},this.value)">
            <label style="font-size:11px;color:var(--text-dim)">Koppel aan project
              <select class="calc-inp" id="calc-projsel-${esc(key)}" onchange="calcKoppelProject(${jsArg(key)},this.value)">${projectKoppelOpties(o.project_code)}</select></label>
            ${window.MTKoppelUI?MTKoppelUI.badge(o.project_code?{status:'gekoppeld',label:projKort(o.project_code),titel:'Offerte gekoppeld aan project '+projKeuzeLabel(o.project_code)+' — klik voor details',onclick:`calcProjPop(this,${jsLit(key)})`}:{status:'open',label:'project',titel:'Nog niet aan een project gekoppeld — klik om er een te kiezen',onclick:`calcProjPop(this,${jsLit(key)})`}):''}
@@ -19438,10 +19478,10 @@ function activiteitOpen(force){
 
     const summary = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.6rem;background:var(--surface-sunken);border:1px solid var(--border);border-radius:8px;padding:0.8rem;margin-bottom:0.5rem">
       <label style="font-size:11px;color:var(--text-dim)">Status<br><select class="calc-inp" style="width:100%" onchange="calcSetMeta(${jsArg(key)},'status',this.value)">${selOpts(STATUS_OPTIES,o.meta.status)}</select></label>
-      <label style="font-size:11px;color:var(--text-dim)">Bron<br><input class="calc-inp" style="width:100%" value="${esc(o.meta.bron)}" placeholder="bv. website / referentie" onchange="calcSetMeta(${jsArg(key)},'bron',this.value)"></label>
+      <label style="font-size:11px;color:var(--text-dim)">Bron<br><input class="calc-inp" style="width:100%" value="${esc(o.meta.bron)}" placeholder="bv. website / referentie" data-ck="${esc(key)}" data-cs="meta" data-cf="bron" onchange="calcSetMeta(${jsArg(key)},'bron',this.value)"></label>
       <label style="font-size:11px;color:var(--text-dim)">Offertedatum<br><input type="date" class="calc-inp" style="width:100%" value="${esc(o.meta.offertedatum)}" onchange="calcSetMeta(${jsArg(key)},'offertedatum',this.value)"></label>
       <label style="font-size:11px;color:var(--text-dim)">Leverdatum<br><input type="date" class="calc-inp" style="width:100%" value="${esc(o.meta.leverdatum)}" onchange="calcSetMeta(${jsArg(key)},'leverdatum',this.value)"></label>
-      <label style="font-size:11px;color:var(--text-dim)">Factuurbedrag (def.)<br><input class="calc-inp calc-num" style="width:100%" value="${esc(inval(o.meta.factuurbedrag))}" placeholder="nacalc." onchange="calcSetMeta(${jsArg(key)},'factuurbedrag',this.value)"></label>
+      <label style="font-size:11px;color:var(--text-dim)">Factuurbedrag (def.)<br><input class="calc-inp calc-num" style="width:100%" value="${esc(inval(o.meta.factuurbedrag))}" placeholder="nacalc." data-ck="${esc(key)}" data-cs="meta" data-cf="factuurbedrag" onchange="calcSetMeta(${jsArg(key)},'factuurbedrag',this.value)"></label>
     </div>`;
 
     const margeKleur = t.marge==null?'var(--text-faint)':(t.marge<0.15?'#c0392b':(t.marge<0.30?'var(--gold)':'var(--green)'));
@@ -19493,7 +19533,7 @@ function activiteitOpen(force){
           Wat wordt het? <span style="color:var(--text-faint)">— beschrijving voor de offerteregels</span>
           ${o.mail_context?`<span class="calc-mailchip" title="${esc((o.mail_context.from||'')+' — '+(o.mail_context.subject||''))}">📧 ${esc((o.mail_context.subject||'mail').slice(0,42))}<button class="btn btn-xs btn-secondary" style="margin-left:5px" onclick="calcOntkoppelMail(${jsArg(key)})">×</button></span>`:''}
         </label>
-        <textarea id="calc-otekst-${esc(c)}" class="calc-inp" style="width:100%;min-height:46px;resize:vertical;font-family:inherit" placeholder="bv. 'Maatwerk eikenhouten dressoir met 3 lades en push-to-open, in olie afgewerkt'" onchange="calcSetMeta(${jsArg(key)},'offerte_tekst',this.value)">${esc((o.meta&&o.meta.offerte_tekst)||'')}</textarea>
+        <textarea id="calc-otekst-${esc(c)}" class="calc-inp" style="width:100%;min-height:46px;resize:vertical;font-family:inherit" placeholder="bv. 'Maatwerk eikenhouten dressoir met 3 lades en push-to-open, in olie afgewerkt'" data-ck="${esc(key)}" data-cs="meta" data-cf="offerte_tekst" onchange="calcSetMeta(${jsArg(key)},'offerte_tekst',this.value)">${esc((o.meta&&o.meta.offerte_tekst)||'')}</textarea>
         <div class="calc-btnrow">
           ${window.MTKoppelUI?MTKoppelUI.badge(o.mail_context?{status:'gekoppeld',label:'mail',titel:'Mail gekoppeld: '+(o.mail_context.subject||'')+' — klik om een andere te kiezen',onclick:`calcKoppelMail(${jsLit(key)})`}:{status:'open',label:'mail',titel:'Koppel een mail zodat de offertetekst context uit die mail meekrijgt',onclick:`calcKoppelMail(${jsLit(key)})`}):`<button class="btn btn-sm btn-secondary" onclick="calcKoppelMail(${jsArg(key)})">📧 Mail koppelen</button>`}
           <button class="btn btn-sm btn-secondary" onclick="saveCalcNu(${jsArg(key)})" title="Nu opslaan en meteen naar SharePoint synchroniseren. Je krijgt hieronder te zien of dat gelukt is.">💾 Opslaan</button>
@@ -19509,6 +19549,27 @@ function activiteitOpen(force){
     </div>`;
     _opslagTeken(key);
   };
+  // Een regel die intussen elders is verwijderd terwijl jij erin werkte: terugzetten uit wat er op je scherm staat
+  // (je invoer gaat dus niet verloren) en dat duidelijk melden. Lukt dat niet, dan in elk geval eerlijk melden.
+  function _calcRijTerug(key,soort,rid){
+    const o=getOfferte(key), lijst=soort==='m'?o.materiaal:o.uren;
+    const velden=[...document.querySelectorAll('[data-cs="'+soort+'"][data-cr]')].filter(x=>x.dataset.cr===rid&&x.dataset.ck===key);
+    if(!velden.length) return null;
+    // uitgangspunt: de hele regel zoals hij laatst getekend werd (ook velden zonder invoerveld, zoals begroot), dan je invoer erover
+    const g=_rijGeheugen[key], oud=g&&(g[soort]||[]).find(r=>r&&r.id===rid);
+    const rij=oud?JSON.parse(JSON.stringify(oud)):{id:rid}; velden.forEach(x=>{ rij[x.dataset.cf]=x.value; });
+    if(soort==='m'&&rij.marge===undefined) rij.marge=CALC.defaults.materiaal_marge;
+    if(soort==='u'&&rij.marge===undefined) rij.marge=2;
+    lijst.push(rij);
+    calcStatus('⚠ Deze regel was intussen elders verwijderd. Omdat je erin werkte, is hij teruggezet — controleer of dat klopt.','fout',basisKey(key));
+    return rij;
+  }
+  function _calcRijWeg(key,soort,rid){
+    if(soort&&rid&&_calcRijTerug(key,soort,rid)){ saveCalc('off',{key:key}); recalcView(key); return true; }
+    calcStatus('⚠ Deze regel bestaat niet meer (intussen elders verwijderd) — je invoer is niet toegepast. Vul hem opnieuw in, in een nieuwe regel.','fout',basisKey(key));
+    if(!calcFocusBinnen(null)) window.renderOfferteCalc(key); else _calcLaterTekenen.add(basisKey(key));
+    return false;
+  }
 })();
 </script>
 <style>
