@@ -236,11 +236,11 @@
       if (!ymdOk(s) || !ymdOk(e)) { opslagStatus('fout', 'Vul een geldige ' + (b ? 'start en eind' : 'datum') + ' in.'); return; }
       if (e < s) { opslagStatus('fout', 'Het eind ligt voor de start; er is niets gewijzigd.'); return; }
       bezig = true; opslagStatus('bezig', 'Opslaan…');
-      let r; try { r = await D.datums({ soort: 'taakdatums', taak: { code: m.code, id: t.id, naam: t.naam }, startDatum: s, eindDatum: e }); } catch (x) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((x && x.message) || x) }; } finally { bezig = false; }
+      let r; try { r = await D.datums({ soort: 'taakdatums', taak: { code: m.code, id: t.id, naam: t.naam }, startDatum: s, eindDatum: e, gezien: { start: t.start || '', eind: t.eind || '' } }); } catch (x) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((x && x.message) || x) }; } finally { bezig = false; }
       tekenVeilig(); naWijziging();
       if (r && r.onzeker) { opslagStatus('fout', r.reden); return; }
       if (r && r.geannuleerd) { opslagStatus('', ''); return; }
-      if (!r || !r.ok) { opslagStatus('fout', (r && r.reden) || 'Niet opgeslagen.', r && !r.bezet ? null : () => opslaan()); return; }
+      if (!r || !r.ok) { opslagStatus(r && r.tegelijk ? 'let' : 'fout', (r && r.reden) || 'Niet opgeslagen.', r && r.tegelijk ? null : () => { a.value = s; if (b) b.value = e; opslaan(); }); return; }
       if (r.noop) return;
       opslagStatus(r.tegelijk ? 'let' : 'ok', r.tegelijk || 'Opgeslagen');
     };
@@ -316,7 +316,7 @@
       const ja = await D.dialoog.confirm({ title: 'Deze taak wacht', message: '"' + t.naam + '" wacht op: ' + P.wachtOpTekst(m.wacht, P.datumKort) + '.\nToch ' + (nieuw === 'klaar' ? 'op klaar zetten' : 'starten') + '?', okLabel: 'Toch doorgaan' });
       if (!ja) return;
     }
-    await bewaar({ velden: { status: nieuw }, gezien: { status: huidig }, reden }, 'status ' + (P.TAAK_STATUS_LABEL[nieuw] || nieuw).toLowerCase());
+    await bewaar({ velden: { status: nieuw }, gezien: { status: huidig, wacht_reden: t.wacht_reden || '', klaar_op: t.klaar_op || '' }, reden }, 'status ' + (P.TAAK_STATUS_LABEL[nieuw] || nieuw).toLowerCase());
   }
   function statusRij(m) {
     const st = m.taak.status || 'todo', kan = mag('status') && !!D.wijzig;
@@ -412,7 +412,7 @@
   };
   // Verbergen zonder de geschiedenis aan te raken (terug/vooruit of een navigatie naar elders)
   // Iemand typt in een veld van het paneel: dan niet opnieuw tekenen (dat zou zijn invoer weggooien); dat gebeurt na het opslaan of annuleren
-  T.bezigMetBewerken = () => { const a = D.doc.activeElement, p = D.doc.getElementById('tp-paneel'); return !!(p && a && p.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)); };
+  T.bezigMetBewerken = () => { const a = D.doc.activeElement, p = D.doc.getElementById('tp-paneel'); return !!(p && a && p.contains(a) && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type === 'text'))); };   // een keuzelijst of datumveld heeft geen half getypte tekst: dat mag gewoon hertekend worden
   function verberg() {
     if (S.kijk) { clearInterval(S.kijk); S.kijk = null; }
     const p = D.doc.getElementById('tp-paneel'); if (p) { p.hidden = true; p.textContent = ''; }

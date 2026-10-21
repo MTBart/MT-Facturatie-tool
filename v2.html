@@ -15792,7 +15792,9 @@ async function capTaakPlan(spec,opt){
   const code=spec&&spec.taak&&spec.taak.code; if(!code) return { ok:false, reden:'Onbekende taak.' };
   if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
   const reden=MTPlanVerplaats.controle(spec,_capCtx()); if(reden) return { ok:false, reden };   // o.a. een taak met een tb:-planblok versleep je als blok
-  return _capTaakKlaar(await MTPlanVerplaats.plaatsTaak(spec,_capTaakOpties(code,opt)));
+  const r=_capTaakKlaar(await MTPlanVerplaats.plaatsTaak(spec,_capTaakOpties(code,opt)));
+  if(r&&!r.ok&&r.tegelijk) await _tpVersLokaal();   // alleen met spec.gezien (het taakpaneel): de datums waren intussen gewijzigd
+  return r;
 }
 async function capTaakHerstel(w,opt){
   if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'De planning van een taak wijzigen')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
@@ -15804,8 +15806,11 @@ async function tpWijzig(spec,opt){
   if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
   const r=_capTaakKlaar(await MTPlanVerplaats.taakWijzig(spec,_capTaakOpties(spec&&spec.code,opt)));
   if(r&&r.ok&&r.oudTaak) _ptJournaal('paneel: '+Object.keys(spec.velden||{}).join(', '),spec.code,r.oudTaak);
-  if(r&&!r.ok&&r.tegelijk){ try{ const raw=await _SP.read('mt_project_taken_v2.json'); if(raw&&!MTPlanning.takenBestandVorm(raw)) _lsSet('mt_project_taken_v2',JSON.stringify(MTPlanning.takenSamen(localStorage.getItem('mt_project_taken_v2'),raw))); }catch(e){} }   // niets geschreven: wel de nieuwe stand van de ander laten zien
+  if(r&&!r.ok&&r.tegelijk) await _tpVersLokaal();
   return r;
+}
+async function _tpVersLokaal(){   // er is niets geschreven omdat iemand anders eerder was: wel de nieuwe stand van de ander lokaal laten zien
+  try{ const raw=await _SP.read('mt_project_taken_v2.json'); if(raw&&!MTPlanning.takenBestandVorm(raw)) _lsSet('mt_project_taken_v2',JSON.stringify(MTPlanning.takenSamen(localStorage.getItem('mt_project_taken_v2'),raw))); }catch(e){}
 }
 async function tpWijzigHerstel(w,opt){
   if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
