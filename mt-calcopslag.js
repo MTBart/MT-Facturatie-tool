@@ -488,7 +488,56 @@
     };
   }
 
-  const API = { samen, maak, hash, canon, gevuld, instorting, lijstenSamen, kopie, MAX_KOPIEEN, MAX_BYTES };
+  /* ── Getallen zoals mensen ze in Nederland typen ─────────────────────────────
+   * "1234,56", "1.234,56", "1234.56", "1 234,56", "€ 1.234,56", "-3", "1,5", "1.5" → een getal.
+   * Dubbelzinnig ("1.250": 1250 of 1,25?) of onleesbaar → géén stille 0, maar een status die de calculatie toont.
+   * → { status: 'leeg'|'ok'|'onduidelijk'|'fout', waarde, oud }   (oud = hoe de vorige parser het las, voor bestaande waarden) */
+  function getal(v) {
+    if (v === null || v === undefined) return { status: 'leeg', waarde: null };
+    if (typeof v === 'number') return isFinite(v) ? { status: 'ok', waarde: v } : { status: 'fout', waarde: null };
+    const ruw = String(v);
+    const oudX = Number(ruw.replace(/\s/g, '').replace(',', '.')), oud = isNaN(oudX) ? null : oudX;
+    let s = ruw.replace(/[    ]/g, ' ').trim();
+    if (!s) return { status: 'leeg', waarde: null };
+    const fout = { status: 'fout', waarde: null, oud };
+    let neg = false;
+    const teken = () => { if (/^[-−]/.test(s)) { neg = !neg; s = s.slice(1).trim(); } };
+    teken(); s = s.replace(/^(€|eur\b\.?)\s*/i, ''); teken(); s = s.replace(/\s*(€|eur\.?)$/i, '').trim();
+    if (!s) return fout;
+    if (/\s/.test(s)) {                                   // spaties alleen als duizendtalscheiding: 1 234,56
+      if (!/^\d{1,3}( \d{3})+([.,]\d*)?$/.test(s)) return fout;
+      s = s.replace(/ /g, '');
+    }
+    if (!/^[\d.,]+$/.test(s) || !/\d/.test(s)) return fout;
+    const punten = (s.match(/\./g) || []).length, kommas = (s.match(/,/g) || []).length;
+    let heel, dec = '';
+    const groepen = (deel, sep) => new RegExp('^\\d{1,3}(\\' + sep + '\\d{3})+$').test(deel);
+    if (punten && kommas) {                               // beide: de laatste is het decimaalteken
+      const decSep = s.lastIndexOf(',') > s.lastIndexOf('.') ? ',' : '.', dznd = decSep === ',' ? '.' : ',';
+      const i = s.lastIndexOf(decSep); heel = s.slice(0, i); dec = s.slice(i + 1);
+      if (heel.includes(decSep) || !groepen(heel, dznd) || !/^\d*$/.test(dec)) return fout;
+      heel = heel.split(dznd).join('');
+    } else if (kommas) {
+      if (kommas === 1) { [heel, dec] = s.split(','); }
+      else if (groepen(s, ',')) heel = s.replace(/,/g, '');
+      else return fout;
+    } else if (punten) {
+      if (punten > 1) { if (!groepen(s, '.')) return fout; heel = s.replace(/\./g, ''); }
+      else {
+        [heel, dec] = s.split('.');
+        // precies drie cijfers na één punt (1.250): duizendtal of decimaal? Niet raden.
+        if (dec.length === 3 && /^[1-9]\d{0,2}$/.test(heel)) return { status: 'onduidelijk', waarde: null, oud, opties: [Number(heel + dec), Number(heel + '.' + dec)] };
+      }
+    } else heel = s;
+    if (!heel && !dec) return fout;
+    const x = Number((heel || '0') + (dec ? '.' + dec : ''));
+    if (!isFinite(x)) return fout;
+    return { status: 'ok', waarde: neg ? -x : x };
+  }
+  // Zoals de calculatie een getal bewaart: Nederlandse schrijfwijze zonder duizendtallen ("1234,56"); ook oudere versies lezen dat goed.
+  const getalTekst = x => String(x).replace('.', ',');
+
+  const API = { samen, maak, hash, canon, gevuld, instorting, lijstenSamen, kopie, getal, getalTekst, MAX_KOPIEEN, MAX_BYTES };
   root.MTCalcOpslag = API;
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof window !== 'undefined' ? window : globalThis);

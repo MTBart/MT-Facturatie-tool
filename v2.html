@@ -74,7 +74,7 @@
 <script src="mt-verhuis.js?v=2026-10-21a"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
-<script src="mt-calcopslag.js?v=2026-10-21a"></script>
+<script src="mt-calcopslag.js?v=2026-10-22a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -17590,10 +17590,52 @@ function activiteitOpen(force){
 
   // ---- util (esc = de canonieke globale bovenin het eerste scriptblok) -------
   function uid(p){return (p||'r')+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36);}
-  function n(v){if(v===''||v==null)return null;const x=typeof v==='string'?Number(v.replace(/\s/g,'').replace(',','.')):Number(v);return isNaN(x)?null:x;}
+  // Getallen: één Nederlandse parser (MTCalcOpslag.getal): "1.234,56", "1234.56", "1 234,56", "€ 1.234,56" … Hiervoor las
+  // "1.234,56" als 0. Bestaande waarden blijven zoals ze zijn; een dubbelzinnige oude waarde ("1.250") rekent zoals vroeger
+  // en wordt gemarkeerd. Nieuwe invoer die niet eenduidig of onleesbaar is, wordt niet bewaard (de vorige waarde blijft).
+  function getalVan(v){ return window.MTCalcOpslag?MTCalcOpslag.getal(v):null; }
+  function n(v){
+    const r=getalVan(v);
+    if(!r){ if(v===''||v==null)return null; const x=typeof v==='string'?Number(v.replace(/\s/g,'').replace(',','.')):Number(v); return isNaN(x)?null:x; }
+    return r.status==='ok'?r.waarde:(r.status==='onduidelijk'?r.oud:null);
+  }
   function eur(v){return (v==null||isNaN(v))?'—':('€ '+Number(v).toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2}));}
   function pct(v){return (v==null||isNaN(v))?'—':((v*100).toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1}))+'%';}
-  function inval(v){return (v===''||v==null)?'':String(v).replace('.',',');}   // toon met komma
+  // toon met komma; een niet-herkende oude waarde precies zoals hij bewaard is (geen punt→komma, dat zou hem anders laten lijken)
+  function inval(v){ if(v===''||v==null) return ''; const r=getalVan(v); return (!r||r.status==='ok')?String(r?r.waarde:v).replace('.',','):String(v); }
+  const GETALVELD={m:{aantal:1,inkoop_stuk:1,marge:1},u:{uren:1,uurtarief:1,marge:1},meta:{factuurbedrag:1}};
+  // Nieuwe invoer → {ok, tekst} (bewaard als "1234,56", dat ook oudere versies goed lezen) of {ok:false, melding}.
+  function getalInvoer(val){
+    const r=getalVan(val);
+    if(!r) return {ok:true,tekst:val};
+    if(r.status==='leeg') return {ok:true,tekst:''};
+    if(r.status==='ok') return {ok:true,tekst:MTCalcOpslag.getalTekst(r.waarde)};
+    const t=MTCalcOpslag.getalTekst;
+    return {ok:false,melding:r.status==='onduidelijk'
+      ?'"'+val+'" is niet eenduidig: bedoel je '+t(r.opties[0])+' of '+t(r.opties[1])+'? Typ '+t(r.opties[0])+' of '+t(r.opties[1])+'. De vorige waarde blijft staan.'
+      :'"'+val+'" is niet herkend als getal (bijvoorbeeld 1234,56 of 1.234,56). De vorige waarde blijft staan.'};
+  }
+  function veldMarkeer(el,tekst){ if(!el) return; if(tekst){ el.dataset.ongeldig='1'; el.title=tekst; } else if(el.dataset.ongeldig){ delete el.dataset.ongeldig; el.removeAttribute('title'); } }
+  function veldVan(key,s,rid,f){ return [...document.querySelectorAll('[data-cs][data-cf]')].find(x=>x.dataset.ck===key&&x.dataset.cs===s&&(x.dataset.cr||'')===(rid||'')&&x.dataset.cf===f)||null; }
+  // Voor een setter: niet-eenduidige invoer markeren en melden in plaats van bewaren. Geeft de te bewaren tekst, of null.
+  function getalVoorVeld(key,s,rid,f,val){
+    if(!(GETALVELD[s]&&GETALVELD[s][f])) return val;
+    const g=getalInvoer(val), el=veldVan(key,s,rid,f);
+    if(!g.ok){ veldMarkeer(el,g.melding); calcStatus('⚠ '+g.melding,'fout',basisKey(key)); return null; }
+    veldMarkeer(el,''); return g.tekst;
+  }
+  // Na tekenen: bewaarde waarden die niet (eenduidig) als getal te lezen zijn, zichtbaar maken.
+  function _markeerGetallen(host){
+    if(!host) return;
+    host.querySelectorAll('[data-cs][data-cf]').forEach(el=>{
+      const s=el.dataset.cs, f=el.dataset.cf; if(!(GETALVELD[s]&&GETALVELD[s][f])) return;
+      const r=getalVan(el.value); if(!r||r.status==='ok'||r.status==='leeg') return;
+      const t=MTCalcOpslag.getalTekst;
+      veldMarkeer(el,r.status==='onduidelijk'
+        ?'Bewaarde waarde "'+el.value+'" is niet eenduidig ('+t(r.opties[0])+' of '+t(r.opties[1])+'?) en telt nu als '+t(r.oud)+'. Typ hem opnieuw.'
+        :'Bewaarde waarde "'+el.value+'" is niet herkend als getal en telt nu als 0. Typ hem opnieuw.');
+    });
+  }
   function cid(code){return String(code).replace(/[^A-Za-z0-9]/g,'');}
 
   // ---- persistentie ---------------------------------------------------------
@@ -17897,8 +17939,11 @@ function activiteitOpen(force){
   // ---- bewaren tijdens het typen: alleen geheugen + localStorage (geen SharePoint, geen hertekening) ----
   const _typT={};
   function _typBewaar(el){
-    const k=el.dataset.ck, s=el.dataset.cs, f=el.dataset.cf, rid=el.dataset.cr, v=el.value;
+    const k=el.dataset.ck, s=el.dataset.cs, f=el.dataset.cf, rid=el.dataset.cr;
+    let v=el.value;
     if(!k||!s||!f||!CALC.loaded) return;
+    // getalvelden: alleen eenduidige invoer bewaren (als "1234,56"); anders het veld markeren en de vorige waarde laten staan
+    if(GETALVELD[s]&&GETALVELD[s][f]){ const g=getalInvoer(v); if(!g.ok){ veldMarkeer(el,g.melding); return; } veldMarkeer(el,''); v=g.tekst; }
     const o=getOfferte(k);
     if(s==='m'||s==='u'){ let rij=(s==='m'?o.materiaal:o.uren).find(x=>x.id===rid);
       if(!rij){ rij=_calcRijTerug(k,s,rid); if(!rij){ calcStatus('⚠ Deze regel bestaat niet meer (intussen elders verwijderd) — wat je typt wordt niet bewaard. Gebruik een nieuwe regel.','fout',basisKey(k)); return; } }
@@ -18076,7 +18121,7 @@ function activiteitOpen(force){
     el.textContent=msg; el.style.color=ok?'var(--green)':'var(--text-dim)'; clearTimeout(el._t); el._t=setTimeout(()=>{el.textContent='';},4000);}
 
   // ---- mutaties -------------------------------------------------------------
-  window.calcSetMeta=function(key,field,val){const o=getOfferte(key);o.meta[field]=val;saveCalc('off',{key:key});};
+  window.calcSetMeta=function(key,field,val){val=getalVoorVeld(key,'meta','',field,val);if(val===null)return;const o=getOfferte(key);o.meta[field]=val;saveCalc('off',{key:key});};
   // herbereken alleen de afgeleide getalcellen (totalen/KPI's/footers) zonder de
   // inputs of knoppen opnieuw te tekenen — anders sloopt een onchange-render de
   // +knop mid-klik (klik wordt "opgegeten") en raakt focus tijdens typen kwijt.
@@ -18136,7 +18181,7 @@ function activiteitOpen(force){
   };
   window.calcSetTitel=function(key,val){const o=getOfferte(key);o.titel=val;saveCalc('off',{key:key});};
 
-  window.calcSetMat=function(key,rid,field,val){const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m){_calcRijWeg(key,'m',rid);return;}m[field]=val;saveCalc('off',{key:key});recalcView(key);};
+  window.calcSetMat=function(key,rid,field,val){val=getalVoorVeld(key,'m',rid,field,val);if(val===null)return;const o=getOfferte(key);const m=o.materiaal.find(x=>x.id===rid);if(!m){_calcRijWeg(key,'m',rid);return;}m[field]=val;saveCalc('off',{key:key});recalcView(key);};
   window.calcAddMat=function(key){const o=getOfferte(key);o.materiaal.push({id:uid('m'),omschrijving:'',artikel:'',aantal:'',inkoop_stuk:'',marge:CALC.defaults.materiaal_marge});saveCalc('off',{key:key});renderOfferteCalc(key);};
   window.calcDelMat=function(key,rid){const o=getOfferte(key);o.materiaal=o.materiaal.filter(m=>m.id!==rid);saveCalc('off',{key:key});renderOfferteCalc(key);};
   // Vectorworks/interiorcad materiaallijst → tabelregels voor-invullen + echte inkoop opzoeken.
@@ -18612,7 +18657,7 @@ function activiteitOpen(force){
   window.calcPrevSetTekst=function(key,val){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.tekst=val; saveCalc('off',{key:key}); } };
   window.calcPrevSetRegel=function(key,idx,field,val){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels||!p.regels[idx]) return;
-    if(field==='price'){ const x=n(val); p.regels[idx].price=(x==null?0:Math.max(0,x)); } else { p.regels[idx].description=val; }
+    if(field==='price'){ const g=getalInvoer(val); if(!g.ok){ calcStatus('⚠ '+g.melding,'fout',key); _renderMbPrev(key); return; } const x=n(val); p.regels[idx].price=(x==null?0:Math.max(0,x)); } else { p.regels[idx].description=val; }
     saveCalc('off',{key:key}); _prevSumUpdate(key);
   };
   window.calcPrevDelRegel=function(key,idx){
@@ -18971,16 +19016,16 @@ function activiteitOpen(force){
     if(np && o.titel && !np.value){ np.value=o.titel; if(typeof autoCode==='function') autoCode(); }
   };
 
-  window.calcSetUur=function(key,rid,field,val){const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u){_calcRijWeg(key,'u',rid);return;}u[field]=val;saveCalc('off',{key:key});recalcView(key);};
+  window.calcSetUur=function(key,rid,field,val){val=getalVoorVeld(key,'u',rid,field,val);if(val===null)return;const o=getOfferte(key);const u=o.uren.find(x=>x.id===rid);if(!u){_calcRijWeg(key,'u',rid);return;}u[field]=val;saveCalc('off',{key:key});recalcView(key);};
   window.calcAddUur=function(key){const o=getOfferte(key);o.uren.push({id:uid('u'),omschrijving:'',uren:'',uurtarief:CALC.defaults.uren[0]?CALC.defaults.uren[0].uurtarief:stdTarief(),marge:2});saveCalc('off',{key:key});renderOfferteCalc(key);};
   window.calcDelUur=function(key,rid){const o=getOfferte(key);o.uren=o.uren.filter(u=>u.id!==rid);saveCalc('off',{key:key});renderOfferteCalc(key);};
 
   // standaardwaarden (leeg rekenblad)
-  window.calcSetDefMarge=function(val){CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));};
-  window.calcSetDefMargeOndergrens=function(val){const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));};
+  window.calcSetDefMarge=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));};
+  window.calcSetDefMargeOndergrens=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));};
   // Instellingen ▸ Uurtarieven: standaardregels op het standaardtarief zetten (alleen na bevestiging daar).
   window.calcStdTarievenGelijk=async function(std){ if(!(window.MTRol&&MTRol.magGeld&&MTRol.me&&MTRol.magGeld('wijzigen'))) throw new Error('Je mag de uurtarieven niet wijzigen'); await hydrateCalc(); const n=MTPlanning.defaultsGelijkTrekken(CALC.defaults,std); if(n) saveCalc('def',{direct:true}); return n; };
-  window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));};
+  window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;if(field!=='omschrijving'){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}}u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));};
   window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:stdTarief(),marge:2});renderOfferteCalc(key);};
   window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);renderOfferteCalc(key);};
   window.calcSaveDefaults=function(key){saveCalc('def');flash(key,'✓ opgeslagen als standaard — nieuwe offertes starten hiermee',true);};
@@ -19311,8 +19356,8 @@ function activiteitOpen(force){
     };
     inp.click();
   };
-  window.calcNcVoorstel=function(nk,i,val){ const nc=getOfferte(nk); const v=nc.toggl&&nc.toggl.voorstel&&nc.toggl.voorstel[i]; if(!v)return; v.uren=n(val)||0; saveCalc('off',{key:nk}); renderOfferteCalc(nk); };
-  window.calcNcRest=function(nk,veld,val){ const nc=getOfferte(nk); if(!nc.toggl)return; nc.toggl[veld]=veld==='rest_u'?(n(val)||0):val; saveCalc('off',{key:nk}); renderOfferteCalc(nk); };
+  window.calcNcVoorstel=function(nk,i,val){ const nc=getOfferte(nk); const v=nc.toggl&&nc.toggl.voorstel&&nc.toggl.voorstel[i]; if(!v)return; const g=getalInvoer(val); if(!g.ok){ calcStatus('⚠ '+g.melding,'fout',basisKey(nk)); renderOfferteCalc(nk); return; } v.uren=n(val)||0; saveCalc('off',{key:nk}); renderOfferteCalc(nk); };
+  window.calcNcRest=function(nk,veld,val){ const nc=getOfferte(nk); if(!nc.toggl)return; if(veld==='rest_u'){ const g=getalInvoer(val); if(!g.ok){ calcStatus('⚠ '+g.melding,'fout',basisKey(nk)); renderOfferteCalc(nk); return; } } nc.toggl[veld]=veld==='rest_u'?(n(val)||0):val; saveCalc('off',{key:nk}); renderOfferteCalc(nk); };
   window.calcNcOvernemen=function(nk){
     const nc=getOfferte(nk), tg=nc.toggl; if(!tg||!tg.voorstel) return;
     const som={}; tg.voorstel.forEach(v=>{ if(v.uren) som[v.regel]=(som[v.regel]||0)+v.uren; });
@@ -19444,7 +19489,7 @@ function activiteitOpen(force){
       <div id="calc-status-${esc(c)}" style="font-size:11px;min-height:16px;margin-top:0.3rem"></div>
       <div id="calc-status-${esc(cid(basis))}" style="font-size:11px;min-height:16px"></div>
     </div>`;
-    _opslagTeken(basis);
+    _opslagTeken(basis); _markeerGetallen(host);
   }
 
   const _rijGeheugen={};   // per (na)calculatie de regels zoals laatst getekend: om een elders verwijderde regel volledig terug te kunnen zetten
@@ -19547,7 +19592,7 @@ function activiteitOpen(force){
       ${defaultsPaneel(key)}
       <p style="font-size:10px;color:var(--text-faint);margin:0.5rem 0 0">Inkoopprijzen/marges staan privé op SharePoint — nooit in de publieke repo. "🔍 prijs" zoekt eerst je <b>echte inkoop</b> in voorraad/facturen (Drimensa, Ostermann, …) en zet die als inkoopprijs. Lukt dat niet, dan toont het hooguit een <span style="color:var(--gold)">indicatieve VW-richtprijs</span> (⚠ géén echte inkoop) of meldt het dat je handmatig moet zoeken. Leveranciers hebben geen open prijs-API (onderzoek 28-6) — de factuur-historie is de bron.</p>
     </div>`;
-    _opslagTeken(key);
+    _opslagTeken(key); _markeerGetallen(host);
   };
   // Een regel die intussen elders is verwijderd terwijl jij erin werkte: terugzetten uit wat er op je scherm staat
   // (je invoer gaat dus niet verloren) en dat duidelijk melden. Lukt dat niet, dan in elk geval eerlijk melden.
@@ -19581,6 +19626,7 @@ function activiteitOpen(force){
   .calc-opslag-lokaal{color:var(--gold);background:rgba(160,130,60,.08)}
   .calc-opslag-dicht,.calc-opslag-mislukt,.calc-opslag-conflict{color:#c0392b;background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.35);font-weight:600}
   .calc-wrap.calc-ververs{opacity:.6}
+  .calc-inp[data-ongeldig]{border-color:#c0392b !important;background:rgba(192,57,43,.08)}
   .calc-inp{background:var(--n-0,#fff);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 6px;font-size:12px;font-family:inherit;}
   .calc-inp:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 2px rgba(42,74,56,.12);}
   .calc-matdd{position:fixed;z-index:9999;max-height:320px;overflow-y:auto;background:var(--n-0,#fff);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.16);font-size:12px;}
