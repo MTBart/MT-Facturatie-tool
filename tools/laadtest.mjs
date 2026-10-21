@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 const URL_ = process.argv[2] || 'https://mtbart.github.io/MT-Facturatie-tool/v2.html';
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const port = 9333;
+const port = 9800 + Math.floor(Math.random() * 150);   // eigen poort per run: nooit de Chrome van een andere (achtergebleven) laadtest hergebruiken
 const ch = spawn(CHROME, ['--headless=new', '--disable-gpu', `--remote-debugging-port=${port}`, `--user-data-dir=${process.env.TEMP}/mt-cdp-prof-${Date.now()}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let tgt;
@@ -20,7 +20,7 @@ await send('Runtime.enable'); await send('Log.enable'); await send('Page.enable'
 await send('Page.navigate', { url: URL_ });
 await sleep(10000);
 const t0 = Date.now();
-const r = await Promise.race([send('Runtime.evaluate', { expression: `JSON.stringify({ver:(document.body.innerText.match(/v2\\.1\\d\\.\\d/)||[])[0], tabs:[...document.querySelectorAll('[data-tab],.tab,.nav-btn')].length, txt:document.body.innerText.slice(0,300)})`, returnByValue: true }), sleep(15000).then(() => 'TIMEOUT')]);
+const r = await Promise.race([send('Runtime.evaluate', { expression: `JSON.stringify({ver:(document.body.innerText.match(/v2\\.\\d+\\.\\d+/)||[])[0], tabs:[...document.querySelectorAll('[data-tab],.tab,.nav-btn')].length, txt:document.body.innerText.slice(0,300)})`, returnByValue: true }), sleep(15000).then(() => 'TIMEOUT')]);
 console.log('EVAL', Date.now() - t0, 'ms', r === 'TIMEOUT' ? 'PAGINA REAGEERT NIET' : r.result?.result?.value);
 // Op Windows laat ch.kill() de kindprocessen van Chrome staan: de hele boom stoppen.
 try { (await import('node:child_process')).execSync(`taskkill /PID ${ch.pid} /T /F`, { stdio: 'ignore' }); } catch { ch.kill(); }
