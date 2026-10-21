@@ -1,5 +1,21 @@
 [
   {
+    "versie": "2.20.0",
+    "datum": "2026-10-23",
+    "titel": "Offertes veiliger opgeslagen en een paneel per taak",
+    "voor": "iedereen",
+    "punten": [
+      "Offertes worden veiliger opgeslagen. Bovenaan elke calculatie staat of hij op SharePoint staat, nog alleen op deze pc, of dat opslaan mislukte. Mislukt het, dan probeert de tool het elke minuut opnieuw.",
+      "Wat je in een calculatie typt, wordt meteen in deze browser bewaard, ook voordat je het veld verlaat. Sluit je het venster terwijl iets nog niet gedeeld is, dan waarschuwt de tool.",
+      "Werkte iemand anders tegelijk aan dezelfde offerte? Dan krijg je een melding. De andere versie wordt bewaard; met Bekijk zie je de versies en kies je welke je terugzet.",
+      "Getallen als 1.234,56, 1234,56 of € 1.234,56 worden goed gelezen. Is een getal niet duidelijk (zoals 1.250: duizend tweehonderdvijftig of één komma vijfentwintig?), dan wordt het veld rood en blijft de vorige waarde staan.",
+      "Een offerte is altijd te vinden bij het project, ook als hij als losse offerte begon (bijvoorbeeld uit de Inbox). Horen er meer offertes bij, dan kies je welke. Alleen kijken maakt geen lege calculatie meer aan.",
+      "Klik op een taak (in Capaciteit, Mijn werk, Vandaag, de takenlijst van een project of via zoeken) en er opent een paneel met alles over die taak: bij welke klant, locatie en project hij hoort, alle gegevens, de fase, een kleine tijdlijn, wat ervoor en erna moet, en de bestellingen van het project.",
+      "In dat paneel pas je alles meteen aan: naam, status, persoon, fase, datums, geschatte tijd, activiteit, prioriteit en notities. Met Datums wissen gaat de taak terug naar Ongepland. Ongedaan maken kan in de melding.",
+      "Na de update: herlaad de tool één keer op elk apparaat (ook als hij al openstaat), zodat overal het veilige opslaan van offertes werkt."
+    ]
+  },
+  {
     "versie": "2.19.0",
     "datum": "2026-10-16",
     "titel": "Taken op de tijdlijn",
