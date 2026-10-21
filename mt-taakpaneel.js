@@ -115,9 +115,10 @@
   function bestelSectie(m) {
     const b = m.bestel, g = D.ga || {}, h = D.href || {};
     const tel = ['nodig', 'besteld', 'geleverd'].filter(s => b.tel[s]).map(s => b.tel[s] + ' ' + P.BESTEL_STATUS_LABEL[s].toLowerCase()).join(' · ');
-    const lijst = b.regels.length ? el('ul', { klass: 'tp-lijst tp-bestel' }, b.regels.slice(0, 12).map(r => el('li', { klass: 'tp-bestelrij' },
+    // elke regel is een link naar de bestellijst van het project (daar zet je de status; hier alleen inzien)
+    const lijst = b.regels.length ? el('ul', { klass: 'tp-lijst tp-bestel' }, b.regels.slice(0, 12).map(r => el('li', null, link(h.project ? h.project(m.code, 'productie') : '#', () => { T.sluit({ stil: true }); g.project(m.code, 'productie'); }, [
       el('span', { klass: 'tp-tekst' }, el('span', { klass: 'tp-naam', tekst: r.oms }), el('span', { klass: 'tp-sub', tekst: [String(r.aantal).replace('.', ',') + ' ' + r.eenheid, r.leverancier, r.voorstel].filter(Boolean).join(' · ') })),
-      chip(r.label, 'tp-bst-' + r.status)))) : el('p', { klass: 'tp-leeg', tekst: 'Dit project heeft geen bestelregels.' });
+      chip(r.label, 'tp-bst-' + r.status), icoon(IC.pijl)], 'tp-link tp-taakrij', { title: 'Naar de bestellijst van dit project' })))) : el('p', { klass: 'tp-leeg', tekst: 'Dit project heeft geen bestelregels.' });
     const meer = b.regels.length > 12 ? el('p', { klass: 'tp-sub', tekst: '… en nog ' + (b.regels.length - 12) + ' regels' }) : null;
     const naar = el('div', { klass: 'tp-acties' },
       link(h.project ? h.project(m.code, 'productie') : '#', () => { T.sluit({ stil: true }); g.project(m.code, 'productie'); }, 'Bestellijst van dit project', 'tp-link tp-knoplink'),
