@@ -64,7 +64,8 @@
   const opslagZone = () => el('div', { id: 'tp-opslag', klass: 'tp-opslag', role: 'status', 'aria-live': 'polite' });
   const naWijziging = () => { const d = S.open && DEF[S.open.soort]; if (d && d.naWijziging) { try { d.naWijziging(); } catch (e) {} } };
   // Opnieuw tekenen, maar niet midden in het typen van een tekstveld (dat gebeurt dan zodra de focus het veld verlaat)
-  O.bezigMetBewerken = () => { const a = D.doc.activeElement, p = D.doc.getElementById('tp-paneel'); return !!(p && a && p.contains(a) && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type === 'text'))); };
+  // Elk invoerveld telt (ook een datumveld: een half getypte datum mag niet onder je vingers verdwijnen); knoppen, vinkjes en keuzelijsten niet (die slaan meteen op)
+  O.bezigMetBewerken = () => { const a = D.doc.activeElement, p = D.doc.getElementById('tp-paneel'); return !!(p && a && p.contains(a) && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !/^(button|submit|reset|checkbox|radio|range|color|file|image)$/i.test(a.type || '')))); };
   const tekenVeilig = () => { if (O.bezigMetBewerken()) S.achter = true; else O.teken(); };
   // Eén wijziging opslaan via de objectdefinitie. spec = { velden, gezien, … }; wat = korte omschrijving voor de melding ("naam", "status klaar").
   async function bewaar(spec, wat) {

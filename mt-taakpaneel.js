@@ -168,7 +168,7 @@
     };
     // Een datumveld wijzigt al tijdens het typen van het jaar: opslaan bij Enter of wegklikken, niet bij elke wijziging
     [a, b].filter(Boolean).forEach(i => {
-      i.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); opslaan(); } else if (ev.key === 'Escape' && (a.value !== s0 || (b && b.value !== e0))) { ev.preventDefault(); ev.stopPropagation(); a.value = s0; if (b) b.value = e0; } });
+      i.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); opslaan(); i.blur(); } else if (ev.key === 'Escape' && (a.value !== s0 || (b && b.value !== e0))) { ev.preventDefault(); ev.stopPropagation(); a.value = s0; if (b) b.value = e0; } });
       i.addEventListener('blur', () => setTimeout(() => { const f = D.doc.activeElement; if (f !== a && f !== b) opslaan(); }, 0));
     });
     // Datums wissen (terug naar Ongepland): dezelfde sleeproute (taakwis), met de getoonde datums mee en ongedaan maken in de melding
