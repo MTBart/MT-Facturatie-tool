@@ -6527,7 +6527,7 @@ function _projSectieRender(proj){
   if(_projSectie==='planning'){ planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
-    if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
+    if(typeof window.calcProjectTonen==='function') window.calcProjectTonen(proj); else if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
   }
 }
 // Sectie kiezen (klik of route). Tab/sectie wisselen = replaceState.
@@ -6561,13 +6561,16 @@ function projSecOverzicht(proj,c){
   const open=taken.find(t=>t.status==='bezig')||taken.find(t=>t.status!=='klaar');
   const plan=(typeof planVoor==='function')?planVoor(proj.code):null;
   const fase=plan&&plan.fases&&(plan.fases.find(f=>f.start&&f.eind&&f.start<=vandaag&&vandaag<=f.eind&&f.status!=='klaar')||plan.fases.find(f=>f.status!=='klaar'&&f.start&&f.start>=vandaag));
-  const off=(window.CALC&&CALC.offertes)?(CALC.offertes[proj.code]||Object.values(CALC.offertes).find(o=>o&&o.project_code===proj.code)):null;
+  // calculatie via dezelfde opzoekfunctie als Project ▸ Calculatie (ook losse offertes en oude codes); meerdere = aantal tonen
+  const offAlle=(typeof window.calcVanProject==='function')?window.calcVanProject(proj):[];
+  const off=(typeof window.calcVoorProjectGekozen==='function')?window.calcVoorProjectGekozen(proj):null;
   const stappen=[];
   const nOpen=taken.filter(t=>t.status!=='klaar').length;
   if(nOpen>1) stappen.push(`<div class="ov-stap">☑ <a href="#" onclick="event.preventDefault();projSectieKies('planning')">${esc(nOpen)} open taken</a></div>`);
   if(open) stappen.push(`<div class="ov-stap">☑ <b>${esc(open.naam)}</b> <span class="dos-st">${esc(open.status||'todo')}</span> <a href="#" onclick="event.preventDefault();projSectieKies('planning')">→ taken</a></div>`);
   if(fase) stappen.push(`<div class="ov-stap">📅 Fase <b>${esc(fase.naam||fase.key)}</b> ${fase.start?fmtDatum(fase.start):''}${fase.eind?' – '+fmtDatum(fase.eind):''} <a href="#" onclick="event.preventDefault();projSectieKies('planning')">→ planning</a></div>`);
   if(off) stappen.push(`<div class="ov-stap">📄 Offerte: <b>${esc((off.meta&&off.meta.status)||'in bewerking')}</b> <a href="#" onclick="event.preventDefault();projSectieKies('calculatie')">→ calculatie</a></div>`);
+  else if(offAlle.length>1) stappen.push(`<div class="ov-stap">📄 ${esc(offAlle.length)} calculaties bij dit project <a href="#" onclick="event.preventDefault();projSectieKies('calculatie')">→ kies er een</a></div>`);
   if(!stappen.length) stappen.push(`<div class="ov-stap" style="color:var(--text-faint)">Nog geen taken, planning of offerte. <a href="#" onclick="event.preventDefault();projSectieKies('planning')">Taken toevoegen</a> · <a href="#" onclick="event.preventDefault();nieuweOfferte(${jsArg(_jsCode(proj.code))})">Offerte starten</a></div>`);
   // Aandachtspunten: alleen wat ontbreekt of nog moet; elk punt met de knop om het op te lossen.
   const let_=[];
@@ -6751,7 +6754,7 @@ function tijdlijnData(codes,st){
   // Samenvatting
   const gepland=blokCodes.reduce((s,b)=>s+(Number(b.duurMin)||0)/60,0);
   const gewerkt=werk.reduce((s,r)=>s+r.uren,0);
-  let begroot=0; codes.forEach(c=>{ const o=window.CALC&&CALC.offertes&&(CALC.offertes[c]||Object.values(CALC.offertes).find(x=>x&&x.project_code===c));
+  let begroot=0; codes.forEach(c=>{ const o=(typeof window.calcVoorProjectGekozen==='function')?window.calcVoorProjectGekozen(c):(window.CALC&&CALC.offertes&&(CALC.offertes[c]||Object.values(CALC.offertes).find(x=>x&&x.project_code===c)));
     if(o&&Array.isArray(o.uren)) begroot+=o.uren.reduce((s,u)=>s+(parseFloat(String(u.uren||'').replace(',','.'))||0),0); });
   const komend=weken.filter(w=>w.ws>=_tlYmd(agMaandag(new Date()))).slice(0,4);
   const vrijTeam=MT_TEAM.reduce((s,m)=>s+komend.reduce((t,w)=>t+Math.max(0,(cel[m.slug]&&cel[m.slug][w.ws]&&cel[m.slug][w.ws].vrij)||0),0),0);
@@ -6927,7 +6930,7 @@ function dossierItems({codes}={}){
       rij({soort:'bestand',titel:f.naam,datum:f.datum,status:f.sub,bron:'projectmap',ref:{webUrl:f.url||'',sub:f.sub},open:f.url?()=>window.open(f.url,'_blank','noopener'):null});
     });
     // ── offerte / calculatie / nacalculatie ──
-    const off=(window.CALC&&CALC.offertes)?Object.entries(CALC.offertes).filter(([k,o])=>k===code||(o&&o.project_code===code)):[];
+    const off=(typeof window.calcVanProject==='function')?window.calcVanProject(code):((window.CALC&&CALC.offertes)?Object.entries(CALC.offertes).filter(([k,o])=>k===code||(o&&o.project_code===code)):[]);
     off.forEach(([k,o])=>{
       const st=(o.meta&&o.meta.status)||'', naar=()=>projSectieKies('calculatie');
       if(o._gewijzigd) rij({soort:'offerte',titel:'Calculatie bijgewerkt — '+(o.titel||k),datum:o._gewijzigd,status:st,ref:{key:k},open:naar});
@@ -7448,7 +7451,7 @@ function klantSecGeld(info,projen){
   const g=info.mbId?_klantGeld[info.mbId]:null;
   const state=f=>f.state==='paid'?'<span class="badge badge-ok">Betaald</span>':f.state==='pending_payment'?'<span class="badge badge-info">In betaling</span>':f.state==='draft'?'<span class="badge">Concept</span>':'<span class="badge badge-warn">Open</span>';
   const tabel=(lijst,leeg)=>lijst.length?`<div class="tabel-scroll"><table class="v-table"><thead><tr><th>Datum</th><th>Referentie</th><th style="text-align:right">Bedrag</th><th>Status</th></tr></thead><tbody>${lijst.slice(0,25).map(f=>`<tr><td style="font-size:12px">${fmtDatum(f.date||f.estimate_date||f.invoice_date)}</td><td style="font-size:12px">${esc(f.reference||f.estimate_id||f.invoice_id||'—')}</td><td style="text-align:right;font-family:var(--mono);font-size:12px">${fmt(parseFloat(f.total_price_incl_tax||0))}</td><td>${state(f)}</td></tr>`).join('')}</tbody></table></div>`:`<p class="dos-leeg">${leeg}</p>`;
-  const calc=projen.map(p=>{ const o=(window.CALC&&CALC.offertes)?(CALC.offertes[p.code]||Object.values(CALC.offertes).find(x=>x&&x.project_code===p.code)):null; return o?{p,o}:null; }).filter(Boolean);
+  const calc=[].concat(...projen.map(p=>(typeof window.calcVanProject==='function')?window.calcVanProject(p).filter(([,o])=>o).map(([,o])=>({p,o})):[]));   // alle calculaties per project, via dezelfde opzoekfunctie als Project ▸ Calculatie
   return `<div class="card-title">Calculaties per project</div>
     ${calc.length?calc.map(({p,o})=>`<div class="ov-act"><a href="#" onclick="event.preventDefault();openProject(${jsArg(_jsCode(p.code))},{sectie:'calculatie'})">${esc(projNaamVol(p))}${o.titel&&o.titel!==p.naam?' — '+esc(o.titel):''} ${projTag(p)}</a> <span class="dos-st">${esc((o.meta&&o.meta.status)||'in bewerking')}</span>${o._gewijzigd?` <span class="dos-meta">${fmtDatum(String(o._gewijzigd).slice(0,10))}</span>`:''}</div>`).join(''):'<p class="dos-leeg">Nog geen calculaties.</p>'}
     <hr class="divider">
@@ -10635,7 +10638,7 @@ function projectTijdlijn(proj){
   const dos=dossierKoppelingen(proj.code);
   dos.actief.forEach(k=>events.push({datum:(k.datum||'').slice(0,10),icon:'✉',kleur:'var(--green)',label:'Mail gekoppeld',
     detail:`${esc(k.titel||'(geen onderwerp)')}${k.van?` · ${esc(k.van)}`:''}`}));
-  const off=(window.CALC&&CALC.offertes)?Object.entries(CALC.offertes).filter(([k,o])=>k===proj.code||(o&&o.project_code===proj.code)):[];
+  const off=(typeof window.calcVanProject==='function')?window.calcVanProject(proj):((window.CALC&&CALC.offertes)?Object.entries(CALC.offertes).filter(([k,o])=>k===proj.code||(o&&o.project_code===proj.code)):[]);
   off.forEach(([k,o])=>{
     if(o.meta&&o.meta.offertedatum) events.push({datum:o.meta.offertedatum,icon:'📄',kleur:'var(--gold)',label:'Offertedatum',detail:esc(o.titel||k)});
     if(o._gewijzigd) events.push({datum:o._gewijzigd.slice(0,10),icon:'🧮',kleur:'var(--gold)',label:'Calculatie bijgewerkt',detail:esc(o.titel||k)+(o.meta&&o.meta.status?` · ${esc(o.meta.status)}`:'')});
@@ -19030,16 +19033,110 @@ function activiteitOpen(force){
   window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);renderOfferteCalc(key);};
   window.calcSaveDefaults=function(key){saveCalc('def');flash(key,'✓ opgeslagen als standaard — nieuwe offertes starten hiermee',true);};
 
+  // ---- van project naar calculatie (K-2): zoeken zonder iets aan te maken -----------------------------
+  // Een calculatie kan onder de projectcode staan, maar ook onder een losse sleutel (OFF-…, uit de Inbox of via "Koppel aan
+  // project") of onder een oude code. Voorrang: project-id → project_code → sleutel = code (zonder ander project) → oude codes
+  // en aliassen van het project. Meerdere in dezelfde trede: de gebruiker kiest (nooit automatisch, niet "meeste regels").
+  const _calcProjKeuze={};   // per projectcode de in deze sessie gekozen sleutel
+  function _calcBron(){ return CALC.loaded?CALC.offertes:(((lsLoad(LS.off,null)||{}).offertes)||{}); }
+  function _calcProjRec(p){ return (p&&typeof p==='object')?p:((typeof projVind==='function'&&p)?projVind(p):null); }
+  // → [[sleutels trede 1], [trede 2], [trede 3], [trede 4]]
+  function _calcTredes(p){
+    const proj=_calcProjRec(p), code=proj?proj.code:String(p||'');
+    if(!code) return [[],[],[],[]];
+    const oud=new Set(proj&&Array.isArray(proj.legacy_codes)?proj.legacy_codes.filter(c=>c&&c!==code):[]);
+    const vanDit=c=>!!c&&(c===code||oud.has(c)||(!!proj&&typeof projVind==='function'&&projVind(c)===proj));
+    const ent=Object.entries(_calcBron()).filter(([,o])=>o&&typeof o==='object');
+    const t=[[],[],[],[]], gehad=new Set();
+    const zet=(i,k)=>{ if(!gehad.has(k)){ gehad.add(k); t[i].push(k); } };
+    ent.forEach(([k,o])=>{ if(proj&&proj.project_id&&o.project_id&&o.project_id===proj.project_id) zet(0,k); });
+    ent.forEach(([k,o])=>{ if(o.project_code===code) zet(1,k); });
+    ent.forEach(([k,o])=>{ if(k===code&&!o.project_code) zet(2,k); });
+    ent.forEach(([k,o])=>{ if(o.project_code?(o.project_code!==code&&vanDit(o.project_code)):(k!==code&&vanDit(k))) zet(3,k); });
+    return t;
+  }
+  // → {trede (1..4, 0 = geen), keys (die trede), alle (alle tredes)}
+  function calcVoorProject(p){
+    const t=_calcTredes(p), i=t.findIndex(x=>x.length);
+    return {trede:i+1, keys:i>=0?t[i]:[], alle:[].concat(...t)};
+  }
+  window.calcVoorProject=calcVoorProject;
+  // De calculatie die bij dit project getoond wordt: de gekozen, of de enige in de hoogste trede; anders null (dan moet er gekozen worden).
+  function calcGekozen(p){
+    const proj=_calcProjRec(p), code=proj?proj.code:String(p||''), r=calcVoorProject(p);
+    const k=_calcProjKeuze[code]; if(k&&r.alle.includes(k)) return k;
+    return r.keys.length===1?r.keys[0]:null;
+  }
+  window.calcVoorProjectGekozen=function(p){ const k=calcGekozen(p); return k?_calcBron()[k]:null; };
+  // Alle calculaties van een project (overzicht, klantpagina, tijdlijn): [[sleutel, offerte], …]
+  window.calcVanProject=function(p){ const b=_calcBron(); return calcVoorProject(p).alle.map(k=>[k,b[k]]); };
+  function _calcLabel(k){
+    const o=_calcBron()[k]||{}, st=(o.meta&&o.meta.status)||'in bewerking';
+    const d=(o.meta&&o.meta.offertedatum)||String(o._gewijzigd||'').slice(0,10);
+    return {label:(o.titel||k), sublabel:[st, d?('datum '+d):'', _gevuldeRegels(o)+' gevulde regels', 'sleutel '+k].filter(Boolean).join(' · ')};
+  }
+  async function _calcKiesUit(keys,code){
+    if(typeof mtDialog==='undefined') return null;
+    const i=await mtDialog.choose({title:'Welke calculatie hoort bij '+code+'?',
+      message:'Er staan '+keys.length+' calculaties bij dit project. Kies welke je wilt openen; er wordt niets samengevoegd of verwijderd.',
+      choices:keys.map(_calcLabel)});
+    return (i===null||i===undefined)?null:keys[i];
+  }
+  // Project ▸ Calculatie: de juiste calculatie tonen zonder er een aan te maken.
+  window.calcProjectTonen=async function(proj,opts){
+    if(!proj) return;
+    if(!CALC.loaded) await hydrateCalc();
+    const code=proj.code;
+    let host=document.getElementById('offerte-calc-'+cid(code))||document.querySelector('[data-calc-project="'+cid(code)+'"]');
+    if(!host) return;
+    host.dataset.calcProject=cid(code);
+    const r=calcVoorProject(proj);
+    let key=calcGekozen(proj);
+    if(!key&&r.keys.length>1&&!(opts&&opts.geenDialoog)){ key=await _calcKiesUit(r.keys,code); if(key) _calcProjKeuze[code]=key; }
+    const vorige=host.previousElementSibling; if(vorige&&vorige.classList.contains('calc-andere')) vorige.remove();
+    if(!key){
+      host.id='offerte-calc-'+cid(code);
+      host.textContent='';
+      const box=document.createElement('div'); box.className='calc-actions';
+      const p=document.createElement('p'); p.style.cssText='margin:0 0 .5rem;font-size:13px';
+      p.textContent=r.keys.length?('Er staan '+r.keys.length+' calculaties bij dit project. Kies welke je wilt openen:'):'Nog geen calculatie voor dit project. Staat de offerte als losse offerte (bijvoorbeeld uit de Inbox)? Koppel hem daar via "Koppel aan project", dan verschijnt hij hier.';
+      box.appendChild(p);
+      (r.keys.length?r.keys:[]).forEach(k=>{ const lb=_calcLabel(k), b=document.createElement('button'); b.type='button'; b.className='btn btn-sm btn-secondary'; b.style.margin='0 6px 6px 0';
+        b.textContent=lb.label+' — '+lb.sublabel; b.addEventListener('click',()=>{ _calcProjKeuze[code]=k; window.calcProjectTonen(proj); }); box.appendChild(b); });
+      if(!r.keys.length){ const b=document.createElement('button'); b.type='button'; b.className='btn btn-sm btn-primary'; b.textContent='+ Nieuwe calculatie';
+        b.addEventListener('click',()=>window.nieuweOfferte(code)); box.appendChild(b); }
+      host.appendChild(box);
+      return;
+    }
+    host.id='offerte-calc-'+cid(key);   // de calculatie kan onder een andere sleutel staan (losse offerte, oude code)
+    await window.renderOfferteCalc(key);
+    // Niets verstoppen: andere calculaties bij dit project noemen, met een knop om te wisselen.
+    const andere=r.alle.filter(k=>k!==key);
+    if(andere.length&&host.isConnected){
+      const info=document.createElement('div'); info.className='calc-andere calc-opslag-r calc-opslag-info';
+      const sp=document.createElement('span'); sp.textContent=andere.length===1?'Er hoort nog een calculatie bij dit project:':'Er horen nog '+andere.length+' calculaties bij dit project:'; info.appendChild(sp);
+      andere.forEach(k=>{ const lb=_calcLabel(k), b=document.createElement('button'); b.type='button'; b.className='btn btn-xs btn-secondary'; b.textContent=lb.label+' ('+lb.sublabel+')';
+        b.addEventListener('click',()=>{ _calcProjKeuze[code]=k; host.id='offerte-calc-'+cid(code); window.calcProjectTonen(proj); }); info.appendChild(b); });
+      host.insertAdjacentElement('beforebegin',info);
+    }
+  };
+
   // ---- nieuwe-offerte entrypoints ------------------------------------------
   window.nieuweOfferte=async function(projectCode){
     await hydrateCalc();
     if(projectCode===undefined && typeof huidigProject!=='undefined' && huidigProject) projectCode=huidigProject.code;
     if(projectCode){
-      getOfferte(projectCode); saveCalc('off',{key:projectCode});
+      // Bewust een (nieuwe) calculatie voor dit project. Hoort de sleutel = code al bij een ánder project (verplaatst via de
+      // Controlelijst), dan een eigen losse sleutel. De project_code gaat mee, zodat het project hem altijd terugvindt.
+      const bestaand=CALC.offertes[projectCode];
+      const key=(bestaand&&bestaand.project_code&&bestaand.project_code!==projectCode)?('OFF-'+Date.now().toString(36).toUpperCase()):projectCode;
+      const nieuw=getOfferte(key); if(!nieuw.project_code) nieuw.project_code=projectCode;
+      _calcProjKeuze[projectCode]=key;
+      saveCalc('off',{key:key});
       if(typeof renderProjectDetail==='function' && typeof huidigProject!=='undefined' && huidigProject && huidigProject.code===projectCode){
         if(typeof projSectieKies==='function') projSectieKies('calculatie'); else renderProjectDetail(huidigProject);
-        setTimeout(()=>{const el=document.getElementById('offerte-calc-'+cid(projectCode)); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});},200);
-      } else { openStandalone(projectCode); }
+        setTimeout(()=>{const el=document.getElementById('offerte-calc-'+cid(key))||document.getElementById('offerte-calc-'+cid(projectCode)); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});},200);
+      } else { openStandalone(key); }
       return;
     }
     const key='OFF-'+Date.now().toString(36).toUpperCase();
@@ -19443,6 +19540,7 @@ function activiteitOpen(force){
 
   async function renderNacalc(basis){
     const host=document.getElementById('offerte-calc-'+cid(basis)); if(!host) return;
+    if(!CALC.offertes[basis]) return;   // alleen kijken maakt niets aan
     const o=getOfferte(basis);
     if(!o.nacalc){
       host.innerHTML=`<div class="calc-wrap">${modusBalk(basis)}<div class="calc-opslag" data-k="${esc(basis)}"></div>
@@ -19503,6 +19601,8 @@ function activiteitOpen(force){
     let host=document.getElementById('offerte-calc-'+cid(key));
     if(!host) return;
     if(!CALC.loaded){ await hydrateCalc(); host=document.getElementById('offerte-calc-'+cid(key)); if(!host) return; }
+    // Alleen kijken maakt nooit een (lege) calculatie aan: pas bij een knop of echte invoer.
+    if(!CALC.offertes[key]){ host.textContent=''; const p=document.createElement('p'); p.style.cssText='color:var(--text-faint);font-size:13px'; p.textContent='Deze calculatie bestaat (nog) niet.'; host.appendChild(p); return; }
     const o=getOfferte(key);
     _rijGeheugen[key]=JSON.parse(JSON.stringify({m:o.materiaal,u:o.uren}));
     const t=totalen(o);
