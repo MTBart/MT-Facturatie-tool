@@ -128,25 +128,159 @@
     return d;
   }
 
+  // ── bewerken (brok 2): alles via de bestaande taakroutes ──
+  // Velden: D.wijzig (MTPlanVerplaats.taakWijzig: takenSchrijf met het slot, de tijdgrenzen, de controle achteraf en ongedaan maken met stempelbewaking).
+  // Datums: D.datums (de sleep-spec taakdatums via MTCapaciteitNieuw.drop: dezelfde route, dezelfde vraag over opvolgers, dezelfde melding met ongedaan maken als slepen).
+  const mag = wat => { try { return !!(D.mag && D.mag[wat] && D.mag[wat]()); } catch (e) { return false; } };
+  const GEEN_RECHT = 'Dit mag je niet met jouw rol (kantoor beslist).';
+  function opslagStatus(soort, tekst, opnieuw) {
+    S.status = soort ? { soort, tekst, opnieuw, t: Date.now(), taak: S.open ? S.open.code + '/' + S.open.id : '' } : null;   // blijft staan als het paneel opnieuw tekent
+    const z = D.doc.getElementById('tp-opslag'); if (!z) return;
+    clearTimeout(opslagStatus._t); z.textContent = ''; z.className = 'tp-opslag' + (soort ? ' ' + soort : '');
+    if (!soort) return;
+    z.appendChild(el('span', { tekst }));
+    if (opnieuw) z.appendChild(el('button', { type: 'button', klass: 'tp-knop tp-klein', klik: opnieuw, tekst: 'Opnieuw' }));
+    if (soort === 'ok') opslagStatus._t = setTimeout(() => { if (z.isConnected && z.classList.contains('ok')) { z.textContent = ''; z.className = 'tp-opslag'; } }, 5000);
+  }
+  // Eén veldwijziging opslaan. spec = { velden, gezien, reden? }. Meldt eerlijk: Opslaan… · Opgeslagen (met ongedaan maken) · Niet opgeslagen + Opnieuw · tegelijk gewijzigd.
+  async function bewaar(spec, wat) {
+    if (!S.open || !D.wijzig) return false;
+    const code = S.open.code, id = S.open.id, m = T.model(code, id); if (!m.ok) return false;
+    const volledig = Object.assign({ code, id, naam: m.taak.naam }, spec);
+    opslagStatus('bezig', 'Opslaan…');
+    let r; try { r = await D.wijzig(volledig, { traag: () => opslagStatus('bezig', 'Opslaan duurt lang, even geduld…') }); } catch (e) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((e && e.message) || e) }; }
+    const zelfde = S.open && S.open.code === code && S.open.id === id;
+    if (r && r.onzeker) {
+      if (zelfde) opslagStatus('fout', r.reden);
+      Promise.resolve(r.onzeker).then(u => { T.ververs(); naWijziging(); toast((u && u.tekst) || 'Open de taak opnieuw om te zien of het opslaan gelukt is.', null, true); }, () => toast('Ik kon niet vaststellen of het opslaan gelukt is.', null, true));
+      return false;
+    }
+    if (!r || !r.ok) {
+      tekenVeilig();   // de velden tonen weer wat er echt staat (bij "tegelijk" de nieuwe stand)
+      const invoer = ['naam', 'omschrijving'].map(k => spec.velden[k]).find(v => typeof v === 'string' && v.trim());   // getypte tekst gaat nooit stil verloren: hij staat in de melding (en Opnieuw stuurt hem nog eens)
+      if (zelfde) opslagStatus(r && r.tegelijk ? 'let' : 'fout', ((r && r.reden) || 'Niet opgeslagen.') + (invoer ? ' Jouw invoer: "' + (invoer.length > 120 ? invoer.slice(0, 120) + '…' : invoer) + '"' : ''), r && r.tegelijk ? null : () => bewaar(spec, wat));
+      return false;
+    }
+    if (r.noop) { tekenVeilig(); return true; }
+    tekenVeilig(); naWijziging();
+    if (r.tegelijk) { opslagStatus('let', r.tegelijk); toast(r.tegelijk, null, true); return false; }
+    opslagStatus('ok', 'Opgeslagen');
+    const w = r.wijziging;
+    toast((w.naam || 'Taak') + ': ' + wat + ' opgeslagen.', async () => {
+      let h; try { h = await D.wijzigHerstel(w, {}); } catch (e) { h = { ok: false, reden: 'Terugzetten mislukt: ' + ((e && e.message) || e) }; }
+      T.ververs(); naWijziging();
+      if (h && h.onzeker) { toast(h.reden, null, true); Promise.resolve(h.onzeker).then(u => { T.ververs(); toast((u && u.tekst) || 'Open de taak opnieuw om te zien of het terugzetten gelukt is.', null, true); }); return; }
+      toast(h && h.ok ? (h.tegelijk || 'Teruggezet.') : ((h && h.reden) || 'Terugzetten lukt niet.'), null, !!(h && (h.tegelijk || !h.ok)));
+    });
+    return true;
+  }
+  // Opnieuw tekenen, maar niet midden in het typen van een ander veld (dat gebeurt dan zodra de focus het veld verlaat)
+  const tekenVeilig = () => { if (T.bezigMetBewerken()) S.achter = true; else T.teken(); };
+  const naWijziging = () => { if (D.naWijziging) { try { D.naWijziging(); } catch (e) {} } };
+  // Een tekstveld dat bewerkt zoals Toggl: Enter (of Ctrl+Enter in de notities) of wegklikken = opslaan, Esc = terug naar wat er stond (een tweede Esc sluit het paneel)
+  function tekstVeld(veld, waarde, o) {
+    o = o || {};
+    const kan = mag('alles'), opties = { id: 'tp-v-' + veld, klass: 'tp-invoer' + (o.klass ? ' ' + o.klass : ''), 'aria-label': o.label, disabled: kan ? null : true, title: kan ? (o.titel || null) : GEEN_RECHT, autocomplete: 'off', spellcheck: o.multi ? 'true' : 'false', placeholder: o.placeholder || null };
+    const e = o.multi ? el('textarea', Object.assign({ rows: '3' }, opties)) : el('input', Object.assign({ type: 'text', inputmode: o.inputmode || null }, opties));
+    e.value = waarde; let begin = waarde, klaar = false;
+    e.addEventListener('focus', () => { begin = e.value; klaar = false; });
+    const opslaan = () => {
+      if (klaar) return; klaar = true;
+      const nieuw = o.multi ? e.value : e.value.trim();
+      if (nieuw === begin) return;
+      const w = o.lees ? o.lees(nieuw) : nieuw;
+      if (w === null) { opslagStatus('fout', o.fout || 'Ongeldige invoer; er is niets gewijzigd.'); e.value = begin; return; }
+      const velden = {}; velden[veld] = w; const gezien = {}; gezien[veld] = o.gezien !== undefined ? o.gezien : begin;
+      bewaar({ velden, gezien }, o.wat || veld);
+    };
+    e.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape') { if (e.value !== begin) { ev.preventDefault(); ev.stopPropagation(); e.value = begin; klaar = true; e.blur(); klaar = false; } return; }
+      if (ev.key === 'Enter' && (!o.multi || ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); opslaan(); e.blur(); }
+    });
+    e.addEventListener('blur', () => { opslaan(); klaar = false; });
+    return e;
+  }
+  // Een keuzelijst: kiezen = meteen opslaan
+  function keuzeVeld(veld, waarde, opties, o) {
+    o = o || {};
+    const kan = o.mag !== undefined ? o.mag : mag('alles');
+    const s = el('select', { id: 'tp-v-' + veld, klass: 'tp-invoer tp-keuze', 'aria-label': o.label, disabled: kan ? null : true, title: kan ? null : (o.waarom || GEEN_RECHT) },
+      opties.map(([w, l]) => el('option', { value: w, tekst: l })));
+    s.value = waarde;
+    s.addEventListener('change', () => { const velden = {}; velden[veld] = s.value; const gezien = {}; gezien[veld] = waarde; bewaar({ velden, gezien }, o.wat || veld); });
+    return s;
+  }
+  // "6", "6,5", "2u30", "1:30", "90m" → uren (2 decimalen); leeg = 0; anders null
+  T.leesUren = function (x) {
+    const s = String(x == null ? '' : x).trim().toLowerCase().replace(',', '.'); let m;
+    if (s === '') return 0;
+    if ((m = /^(\d+(?:\.\d+)?)\s*(?:u|uur|h)?$/.exec(s))) return Math.round(Number(m[1]) * 100) / 100;
+    if ((m = /^(\d+)\s*(?:u|uur|h|:)\s*(\d{1,2})\s*(?:m|min)?$/.exec(s))) return Math.round((Number(m[1]) + Number(m[2]) / 60) * 100) / 100;
+    if ((m = /^(\d+)\s*(?:m|min|minuten)$/.exec(s))) return Math.round(Number(m[1]) / 60 * 100) / 100;
+    return null;
+  };
+  const urenTekst = u => { const n = Number(u) || 0; return n ? String(n).replace('.', ',') : ''; };
+  function datumVelden(m) {
+    const t = m.taak, mijlpaal = t.soort === 'mijlpaal', klaar = (t.status || 'todo') === 'klaar';
+    const waarom = !mag('plannen') ? 'Datums plannen is voor kantoor.' : klaar ? 'Een klare taak plan je niet meer in.' : t.voorstel ? 'Neem het voorstel eerst over; daarna kun je het inplannen.' : '';
+    const tekst = ymdOk(t.start) ? (t.eind && t.eind !== t.start ? datum(t.start) + ' t/m ' + datum(t.eind) : datum(t.start)) : 'Nog niet ingepland';
+    if (waarom || !D.datums) return el('div', null, el('span', { klass: 'tp-tekstwaarde', tekst }), waarom ? el('span', { klass: 'tp-sub', tekst: waarom }) : null);
+    const s0 = ymdOk(t.start) ? t.start : '', e0 = ymdOk(t.eind) ? t.eind : s0;
+    const a = el('input', { type: 'date', id: 'tp-v-start', klass: 'tp-invoer tp-datum', 'aria-label': mijlpaal ? 'Datum' : 'Start', value: s0 });
+    const b = mijlpaal ? null : el('input', { type: 'date', id: 'tp-v-eind', klass: 'tp-invoer tp-datum', 'aria-label': 'Eind', value: e0 });
+    let bezig = false;
+    const opslaan = async () => {
+      if (bezig) return;
+      const s = a.value, e = b ? b.value : s;
+      if (s === s0 && e === e0) return;
+      if (!ymdOk(s) || !ymdOk(e)) { opslagStatus('fout', 'Vul een geldige ' + (b ? 'start en eind' : 'datum') + ' in.'); return; }
+      if (e < s) { opslagStatus('fout', 'Het eind ligt voor de start; er is niets gewijzigd.'); return; }
+      bezig = true; opslagStatus('bezig', 'Opslaan…');
+      let r; try { r = await D.datums({ soort: 'taakdatums', taak: { code: m.code, id: t.id, naam: t.naam }, startDatum: s, eindDatum: e }); } catch (x) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((x && x.message) || x) }; } finally { bezig = false; }
+      tekenVeilig(); naWijziging();
+      if (r && r.onzeker) { opslagStatus('fout', r.reden); return; }
+      if (r && r.geannuleerd) { opslagStatus('', ''); return; }
+      if (!r || !r.ok) { opslagStatus('fout', (r && r.reden) || 'Niet opgeslagen.', r && !r.bezet ? null : () => opslaan()); return; }
+      if (r.noop) return;
+      opslagStatus(r.tegelijk ? 'let' : 'ok', r.tegelijk || 'Opgeslagen');
+    };
+    // Een datumveld wijzigt al tijdens het typen van het jaar: opslaan bij Enter of wegklikken, niet bij elke wijziging
+    [a, b].filter(Boolean).forEach(i => {
+      i.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); opslaan(); } else if (ev.key === 'Escape' && (a.value !== s0 || (b && b.value !== e0))) { ev.preventDefault(); ev.stopPropagation(); a.value = s0; if (b) b.value = e0; } });
+      i.addEventListener('blur', () => setTimeout(() => { const f = D.doc.activeElement; if (f !== a && f !== b) opslaan(); }, 0));
+    });
+    return el('div', { klass: 'tp-datums' }, a, b ? el('span', { klass: 'tp-sub', tekst: 't/m' }) : null, b, el('span', { klass: 'tp-sub tp-uitleg', tekst: 'Hangen er opvolgers aan, dan vraag ik eerst of die mee schuiven.' }));
+  }
   function velden(m) {
-    const t = m.taak, act = t.activiteit ? P.activiteit(t.activiteit) : null;
-    const wie = m.mensen.length ? m.mensen.map(persNaam).join(', ') : 'Niemand';
-    const dat = ymdOk(t.start) ? (t.eind && t.eind !== t.start ? datum(t.start) + ' t/m ' + datum(t.eind) : datum(t.start)) : (ymdOk(t.eind) ? 'tot ' + datum(t.eind) : 'Nog niet ingepland');
+    const t = m.taak, team = (D.team && D.team()) || [];
+    const wieOpties = [['', 'Niemand']].concat(team.filter(x => x && x.slug).map(x => [x.slug, x.naam]));
+    if (t.toegewezen && !team.some(x => zelfde(x.slug, t.toegewezen))) wieOpties.push([t.toegewezen, t.toegewezen + ' (niet in het team)']);
+    const extra = m.mensen.slice(1).map(persNaam);
+    const actOpties = [['', 'Niet ingedeeld']].concat(P.ACTIVITEITEN.map(a => [a.k, a.l]));
+    const prioOpties = [['', 'Geen'], ['high', PRIO.high], ['medium', PRIO.medium], ['low', PRIO.low]];
     return el('div', { klass: 'tp-velden' },
-      rij('Wie', el('span', { klass: 'tp-tekstwaarde', tekst: wie })),
-      rij(t.soort === 'mijlpaal' ? 'Datum' : 'Datums', el('span', { klass: 'tp-tekstwaarde', tekst: dat })),
-      rij('Raming', el('span', { klass: 'tp-tekstwaarde', tekst: t.soort === 'mijlpaal' ? 'mijlpaal (telt niet mee)' : (m.raming ? P.fmtUurMin(m.raming) : 'geen raming') })),
-      rij('Activiteit', el('span', { klass: 'tp-tekstwaarde', tekst: act ? act.l : 'Niet ingedeeld' })),
-      rij('Prioriteit', el('span', { klass: 'tp-tekstwaarde', tekst: PRIO[t.prioriteit] || 'Geen' })),
-      rij('Notities', el('span', { klass: 'tp-tekstwaarde tp-notitie', tekst: t.omschrijving || '—' })));
+      rij('Wie', keuzeVeld('toegewezen', t.toegewezen || '', wieOpties, { label: 'Wie', wat: 'persoon' }), extra.length ? el('span', { klass: 'tp-sub', tekst: 'ook: ' + extra.join(', ') }) : null),
+      rij(t.soort === 'mijlpaal' ? 'Datum' : 'Datums', datumVelden(m)),
+      rij('Raming', t.soort === 'mijlpaal' ? el('span', { klass: 'tp-tekstwaarde', tekst: 'mijlpaal (telt niet mee)' })
+        : el('div', { klass: 'tp-inline' }, tekstVeld('duur_uur', urenTekst(t.duur_uur), { label: 'Raming in uren', klass: 'tp-kort', inputmode: 'decimal', placeholder: '0', lees: T.leesUren, fout: 'Geen geldige raming: typ bijvoorbeeld 6, 6,5 of 2u30. Er is niets gewijzigd.', gezien: String(t.duur_uur == null ? '' : t.duur_uur), wat: 'raming', titel: 'Uren: 6, 6,5, 2u30 of 90m' }), el('span', { klass: 'tp-sub', tekst: 'uur' + (m.raming ? ' · ' + P.fmtUurMin(m.raming) : '') }))),
+      rij('Activiteit', keuzeVeld('activiteit', t.activiteit || '', actOpties, { label: 'Activiteit', wat: 'activiteit' })),
+      rij('Prioriteit', keuzeVeld('prioriteit', t.prioriteit || '', prioOpties, { label: 'Prioriteit', wat: 'prioriteit' })),
+      rij('Notities', tekstVeld('omschrijving', t.omschrijving || '', { label: 'Notities', multi: true, placeholder: 'Notitie toevoegen…', wat: 'notities', titel: 'Ctrl+Enter of wegklikken = opslaan, Esc = annuleren' })));
   }
 
   function meta(m) {
     const t = m.taak, delen = [];
     if (t.klaar_op) delen.push('Klaar gemeld ' + datum(t.klaar_op));
     if (t.bron) delen.push('Bron: ' + ({ ai: 'AI-voorstel', handmatig: 'met de hand', sjabloon: 'sjabloon', werkplaats: 'werkplaats' }[t.bron] || t.bron));
-    if (t.tg_task_id) delen.push('Gekoppeld aan Toggl'); else delen.push('Niet in Toggl');
-    return el('div', { klass: 'tp-meta' }, delen.map(x => el('span', { tekst: x })));
+    // Toggl: eerlijk wat de stand is, met de bestaande knop (projTaakTogglSync: altijd met bevestiging; MT is de bron)
+    let tg = null; try { tg = P.tgActie ? P.tgActie(t) : null; } catch (e) { tg = null; }
+    const tgTekst = { actueel: 'Toggl: gelijk', koppelen: 'Niet in Toggl', bijwerken: 'Toggl loopt achter', herkoppelen: 'Toggl-koppeling niet bevestigd', 'extern-verwijderd': 'Weg in Toggl' }[tg] || (t.tg_task_id ? 'Gekoppeld aan Toggl' : 'Niet in Toggl');
+    const tgKnop = D.togglSync && mag('alles') && tg && tg !== 'actueel' ? el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: tg === 'koppelen' ? 'Naar Toggl…' : 'Toggl bijwerken…', title: 'Zet naam en status in Toggl gelijk met MT (met bevestiging)', klik: async () => { await D.togglSync(m.code, t.id); T.ververs(); } }) : null;
+    const weg = D.verwijder && mag('alles') ? el('button', { type: 'button', klass: 'tp-knop tp-klein tp-gevaar', tekst: 'Verwijderen…', title: 'Taak verwijderen (met bevestiging; een gekoppelde Toggl-taak gaat ook weg)', klik: async () => {
+      const code = m.code, id = t.id; await D.verwijder(code, id);
+      const nog = T.model(code, id); if (!nog.ok) { T.sluit(); naWijziging(); toast('Taak verwijderd. Hij staat in het takenjournaal.'); } else T.ververs();
+    } }) : null;
+    return el('div', { klass: 'tp-meta' }, el('div', { klass: 'tp-meta-regel' }, delen.map(x => el('span', { tekst: x })), el('span', { tekst: tgTekst }), tgKnop), weg ? el('div', { klass: 'tp-acties tp-onder' }, weg) : null);
   }
 
   function kop(m) {
@@ -164,11 +298,46 @@
   }
   const toast = (tekst, ongedaan, lang, label) => { try { if (D.toast) D.toast(tekst, ongedaan, lang, label); } catch (e) {} };
 
+  // De status als vier zichtbare knoppen (geen rondgaande knop): Open · Bezig · Wacht (met een reden) · Klaar
+  async function zetStatus(m, nieuw) {
+    const t = m.taak, huidig = t.status || 'todo';
+    if (huidig === nieuw && nieuw !== 'wacht') return;
+    let reden = '';
+    if (nieuw === 'wacht') {
+      const dlg = D.dialoog; if (!dlg || !dlg.prompt) return;
+      for (let i = 0; i < 3; i++) {
+        const r = await dlg.prompt({ title: 'Waarom wacht deze taak?', message: '"' + t.naam + '"', placeholder: 'Bijvoorbeeld: wacht op plaatmateriaal', defaultValue: i === 0 ? (t.wacht_reden || '') : '', okLabel: 'Zet op Wacht' });
+        if (r === null || r === undefined) return;
+        reden = String(r).replace(/\s+/g, ' ').trim(); if (reden.length >= 2) break;
+        reden = ''; toast('Een reden is verplicht bij Wacht.');
+      }
+      if (!reden) return;
+    } else if (huidig === 'todo' && m.wacht && m.wacht.wacht && D.dialoog && D.dialoog.confirm) {   // een taak die op een voorganger wacht start pas na een bevestiging (zoals in de projecttabel en op de telefoon)
+      const ja = await D.dialoog.confirm({ title: 'Deze taak wacht', message: '"' + t.naam + '" wacht op: ' + P.wachtOpTekst(m.wacht, P.datumKort) + '.\nToch ' + (nieuw === 'klaar' ? 'op klaar zetten' : 'starten') + '?', okLabel: 'Toch doorgaan' });
+      if (!ja) return;
+    }
+    await bewaar({ velden: { status: nieuw }, gezien: { status: huidig }, reden }, 'status ' + (P.TAAK_STATUS_LABEL[nieuw] || nieuw).toLowerCase());
+  }
   function statusRij(m) {
-    const st = m.taak.status || 'todo';
-    return el('div', { klass: 'tp-statusrij' }, chip(P.TAAK_STATUS_LABEL[st] || st, 'tp-st tp-st-' + (STATUS_KL[st] || 'open')),
-      st === 'wacht' && m.taak.wacht_reden ? el('span', { klass: 'tp-sub', tekst: 'Wacht: ' + m.taak.wacht_reden }) : null,
-      m.taak.voorstel ? chip(P.voorstelTekst(m.taak.voorstel), 'tp-chip-voorstel') : null);
+    const st = m.taak.status || 'todo', kan = mag('status') && !!D.wijzig;
+    const groep = el('div', { klass: 'tp-statusknoppen', role: 'group', 'aria-label': 'Status' }, P.TAAK_STATUSSEN.map(s => el('button', { type: 'button', klass: 'tp-stknop tp-st-' + STATUS_KL[s] + (s === st ? ' aan' : ''), 'aria-pressed': s === st ? 'true' : 'false', disabled: kan ? null : true, title: kan ? (s === 'wacht' ? 'Op Wacht zetten (met een reden)' : 'Zet op ' + P.TAAK_STATUS_LABEL[s]) : GEEN_RECHT, klik: () => zetStatus(m, s), tekst: P.TAAK_STATUS_LABEL[s] })));
+    return el('div', null, el('div', { klass: 'tp-statusrij' }, groep),
+      st === 'wacht' && m.taak.wacht_reden ? el('div', { klass: 'tp-sub tp-wachtreden', tekst: 'Wacht: ' + m.taak.wacht_reden }) : null,
+      el('div', { id: 'tp-opslag', klass: 'tp-opslag', role: 'status', 'aria-live': 'polite' }));
+  }
+  // Voorstel van de werkplaats en een veldconflict: de bestaande functies van de projecttabel (met hun eigen meldingen)
+  function meldingen(m) {
+    const t = m.taak, kids = [];
+    if (t.voorstel) {
+      const kan = mag('alles') && D.neemOver;
+      kids.push(el('div', { klass: 'tp-melding tp-voorstel' }, el('span', { tekst: P.voorstelTekst(t.voorstel) }),
+        kan ? el('span', { klass: 'tp-acties' }, el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Overnemen', title: 'De markering eraf: het is dan een gewone taak', klik: async () => { await D.neemOver(m.code, t.id); T.ververs(); naWijziging(); } }),
+          el('button', { type: 'button', klass: 'tp-knop tp-klein tp-gevaar', tekst: 'Afwijzen…', title: 'Van de takenlijst halen (blijft in het journaal)', klik: async () => { await D.wijsAf(m.code, t.id); T.ververs(); naWijziging(); } }))
+          : el('span', { klass: 'tp-sub', tekst: 'Kantoor beslist' })));
+    }
+    if (t._veldconflict && Object.keys(t._veldconflict).length && D.conflict) kids.push(el('div', { klass: 'tp-melding tp-conflict' }, el('span', { tekst: 'Twee mensen wijzigden tegelijk ' + Object.keys(t._veldconflict).length + ' veld(en) van deze taak.' }),
+      mag('alles') ? el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Kiezen…', klik: async () => { await D.conflict(m.code, t.id); T.ververs(); naWijziging(); } }) : null));
+    return kids.length ? el('div', { klass: 'tp-meldingen' }, kids) : null;
   }
 
   function paneelEl() {
@@ -177,6 +346,7 @@
       if (!D.doc.getElementById('tp-stijl')) { const s = el('style', { id: 'tp-stijl' }); s.textContent = STIJL; D.doc.head.appendChild(s); }
       p = el('aside', { id: 'tp-paneel', klass: 'tp-paneel', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'tp-titel', tabindex: '-1', hidden: true });
       p.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !ev.defaultPrevented) { ev.preventDefault(); T.sluit(); } });
+      p.addEventListener('focusout', () => setTimeout(() => { if (S.open && S.achter && !T.bezigMetBewerken()) T.teken(); }, 300));   // een uitgestelde hertekening (er werd getypt) nu alsnog
       D.doc.body.appendChild(p);
     }
     return p;
@@ -200,16 +370,22 @@
       return;
     }
     S.open.code = m.code;
+    p.setAttribute('aria-label', 'Taak: ' + (m.taak.naam || ''));
+    // De naam ziet eruit als een kop, maar is een veld: klikken = bewerken (bewerkbaar oogt = bewerkbaar)
+    const titel = D.wijzig ? el('h2', { id: 'tp-titel', klass: 'tp-titel' }, tekstVeld('naam', m.taak.naam || '', { label: 'Taaknaam', klass: 'tp-titelinvoer', wat: 'naam', fout: 'Een taak heeft een naam nodig; er is niets gewijzigd.', lees: v => v ? v : null, titel: 'Klik om de naam te wijzigen · Enter = opslaan, Esc = annuleren' }))
+      : el('h2', { id: 'tp-titel', klass: 'tp-titel', tekst: m.taak.naam || '(zonder naam)' });
     const body = el('div', { klass: 'tp-body' },
       herkomst(m),
-      el('h2', { id: 'tp-titel', klass: 'tp-titel', tekst: m.taak.naam || '(zonder naam)' }),
+      titel,
       statusRij(m),
+      meldingen(m),
       velden(m),
       afhSectie(m),
       bestelSectie(m),
       meta(m));
     p.appendChild(kop(m)); p.appendChild(body);
     T._naTeken();
+    const s = S.status; if (s && s.taak === S.open.code + '/' + S.open.id && (s.soort !== 'ok' || Date.now() - s.t < 5000)) opslagStatus(s.soort, s.tekst, s.opnieuw);
   };
 
   // ── openen en sluiten ──
@@ -337,7 +513,23 @@
     '.tp-acties{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}',
     '.tp-knoplink{display:inline-flex;align-items:center;height:30px;padding:0 10px;border:1px solid var(--line,#dfd8cb);border-radius:4px;font-size:13px}',
     'html:not([data-stijl="nieuw"]) .cn-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:4px;background:#1b211e;color:#fff;font:500 13px/18px system-ui,sans-serif;z-index:200;max-width:min(720px,calc(100vw - 32px))}html:not([data-stijl="nieuw"]) .cn-toast button{background:transparent;color:inherit;border:1px solid currentColor;border-radius:4px;cursor:pointer}',
-    '.tp-meta{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:18px;padding-top:10px;border-top:1px solid var(--line,#dfd8cb);font-size:12px;color:var(--ink-3,#646a64)}'
+    '.tp-meta{margin-top:18px;padding-top:10px;border-top:1px solid var(--line,#dfd8cb);font-size:12px;color:var(--ink-3,#646a64)}.tp-meta-regel{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}.tp-onder{margin-top:14px}',
+    '.tp-invoer{width:100%;box-sizing:border-box;min-height:34px;padding:6px 8px;border:1px solid transparent;border-radius:4px;background:transparent;color:inherit;font:inherit;transition:border-color .12s,background .12s}',
+    '.tp-invoer:hover:not(:disabled){border-color:var(--line,#dfd8cb);background:var(--surface,#fff)}.tp-invoer:focus{outline:none;border-color:var(--primary,#17643f);background:var(--surface,#fff);box-shadow:var(--focus-ring,0 0 0 3px rgba(23,100,63,.2))}',
+    '.tp-invoer:disabled{color:inherit;opacity:1;cursor:default}select.tp-invoer{border-color:var(--line,#dfd8cb);cursor:pointer;background:var(--surface,#fff)}select.tp-invoer:disabled{border-color:transparent;appearance:none;-webkit-appearance:none;background:transparent}',
+    'textarea.tp-invoer{resize:vertical;min-height:64px;line-height:20px}textarea.tp-invoer:placeholder-shown,input.tp-invoer:placeholder-shown{border-color:var(--border-hair,#ece7de)}',
+    '.tp-titel .tp-titelinvoer{font:600 20px/26px var(--serif,var(--sans,system-ui));padding:4px 6px;margin-left:-7px;width:calc(100% + 7px)}',
+    '.tp-inline{display:flex;align-items:center;gap:8px}.tp-kort{width:90px;flex:0 0 auto;border-color:var(--line,#dfd8cb)}',
+    '.tp-datums{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.tp-datum{width:auto;flex:0 1 150px;border-color:var(--line,#dfd8cb)}.tp-uitleg{flex-basis:100%}',
+    '.tp-statusknoppen{display:inline-flex;border:1px solid var(--line-strong,#9a917f);border-radius:4px;overflow:hidden}',
+    '.tp-stknop{height:32px;padding:0 12px;border:0;border-left:1px solid var(--line,#dfd8cb);background:var(--surface,#fff);color:var(--ink-2,#596059);font:500 13px/18px var(--sans,system-ui);cursor:pointer}.tp-stknop:first-child{border-left:0}',
+    '.tp-stknop:hover:not(:disabled){background:var(--surface-sunken,#f1ede5)}.tp-stknop:focus-visible{outline:2px solid var(--primary,#17643f);outline-offset:-2px}.tp-stknop:disabled{cursor:default}',
+    '.tp-stknop.aan.tp-st-open{background:var(--n-200,#ece7de);color:var(--ink,#1b211e)}.tp-stknop.aan.tp-st-bezig{background:var(--info-50,#e6edf3);color:var(--info,#3e5c76)}.tp-stknop.aan.tp-st-wacht{background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508)}.tp-stknop.aan.tp-st-klaar{background:var(--success-50,#e3f3e8);color:var(--success,#1a6e3b)}.tp-stknop.aan{font-weight:600}',
+    '.tp-wachtreden{margin:-6px 0 8px}',
+    '.tp-opslag{min-height:20px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;margin:-4px 0 6px;color:var(--ink-3,#646a64)}.tp-opslag.ok{color:var(--success,#1a6e3b)}.tp-opslag.ok span::before{content:"✓ "}.tp-opslag.fout{color:var(--error,#c4322a)}.tp-opslag.let{color:var(--warning,#8f5508)}',
+    '.tp-klein{height:28px;padding:0 10px;font-size:12px}.tp-gevaar{color:var(--error,#c4322a);border-color:var(--error,#c4322a)}',
+    '.tp-meldingen{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.tp-melding{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border-radius:4px;font-size:13px}.tp-voorstel{background:var(--brass-soft,#fbefd2);color:var(--brass-ink,#6b4c05)}.tp-conflict{background:var(--error-50,#fce6e4);color:var(--error,#c4322a)}',
+    '.tp-teller{white-space:nowrap}.tp-details>summary h3{flex:1}'
   ].join('\n');
 
   root.MTTaakPaneel = T;

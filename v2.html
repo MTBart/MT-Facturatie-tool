@@ -57,7 +57,7 @@
 <script src="mt-planning.js?v=2026-10-17n"></script>
 <script src="mt-mijnwerk.js?v=2026-10-17n"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-17n"></script>
+<script src="mt-planverplaats.js?v=2026-10-21t"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-21t"></script>
 <script src="mt-taakpaneel.js?v=2026-10-21t"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
@@ -3839,7 +3839,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), opruimen:(spec,opt)=>capOpruimen(spec,opt), taakBezig:(code,id)=>MTPlanVerplaats.taakBezig(code,id), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
-  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),   // klik op een taak = het taakpaneel (mt-taakpaneel.js)
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), naHerstel:()=>MTTaakPaneel.ververs(),   // klik op een taak = het taakpaneel (mt-taakpaneel.js)
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
@@ -3864,7 +3864,12 @@ try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu
   project:code=>{ const p=projVind(code); return p?{code:p.code,project_id:p.project_id||'',naam:projNaamVol(p),nummer:projLabelCode(p)||'',klant:String(p.klant||'').toUpperCase(),klantNaam:projKlantNaam(p),loc:String(p.loc||'').toUpperCase(),locNaam:projLocLabel(p)}:null; },
   href:{ project:(code,sectie)=>mtRoute.format({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.format({tab:'projecten',klant:kl,loc:loc||undefined}), bestellijst:()=>mtRoute.format({tab:'bestelling'}) },
   ga:{ project:(code,sectie)=>mtRoute.go({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.go({tab:'projecten',klant:kl,loc:loc||undefined}), bestellijst:()=>mtRoute.go({tab:'bestelling'}) },
-  toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb) }); }catch(e){ console.warn('Taakpaneel init:',e); }
+  toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; },
+  // Schrijven: alleen via de bestaande taakroutes (zie tpWijzig; de datums via de sleeproute van de Capaciteit; verwijderen, Toggl, conflict en voorstel via de functies van de projecttabel)
+  mag:{ alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar(), status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), plannen:()=>capMagSlepen()&&rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
+  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec),
+  verwijder:(c,i)=>projTaakVerwijder(c,i), togglSync:(c,i)=>projTaakTogglSync(c,i), conflict:(c,i)=>projTaakConflict(c,i), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
+  naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _ptHertekenen(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Taakpaneel init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
 // Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.
@@ -15792,6 +15797,19 @@ async function capTaakPlan(spec,opt){
 async function capTaakHerstel(w,opt){
   if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'De planning van een taak wijzigen')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
   return _capTaakKlaar(await MTPlanVerplaats.taakHerstel(w,_capTaakOpties(w.code,opt)));
+}
+// Het taakpaneel (mt-taakpaneel.js): de velden van één taak via dezelfde schrijfkern, hetzelfde slot en dezelfde controle als slepen (MTPlanVerplaats.taakWijzig). Het recht volgt uit wat er
+// verandert (takenRechtNodig: alleen de status = taken:status-nieuw|alles, al het andere = taken:alles) en wordt vlak voor het schrijven nog eens gevraagd. Vooraf een herstelkopie in het takenjournaal.
+async function tpWijzig(spec,opt){
+  if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
+  const r=_capTaakKlaar(await MTPlanVerplaats.taakWijzig(spec,_capTaakOpties(spec&&spec.code,opt)));
+  if(r&&r.ok&&r.oudTaak) _ptJournaal('paneel: '+Object.keys(spec.velden||{}).join(', '),spec.code,r.oudTaak);
+  if(r&&!r.ok&&r.tegelijk){ try{ const raw=await _SP.read('mt_project_taken_v2.json'); if(raw&&!MTPlanning.takenBestandVorm(raw)) _lsSet('mt_project_taken_v2',JSON.stringify(MTPlanning.takenSamen(localStorage.getItem('mt_project_taken_v2'),raw))); }catch(e){} }   // niets geschreven: wel de nieuwe stand van de ander laten zien
+  return r;
+}
+async function tpWijzigHerstel(w,opt){
+  if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
+  return _capTaakKlaar(await MTPlanVerplaats.taakWijzigHerstel(w,_capTaakOpties(w&&w.code,opt)));
 }
 // ── Een oud tb:-planblok omzetten naar een taakbalk (T6; mt-planverplaats.js: omzetten) ──
 // Eerst de taak (toegewezen = de persoon van het blok, start/eind = de dag van het blok; een taak met eigen datums houdt die) via takenSchrijf, daarna pas het blok weg (tombstone via de planblok-route: vers lezen,

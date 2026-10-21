@@ -373,11 +373,11 @@
   };
   // spec = { soort:'verplaats', blokId } of { soort:'nieuw', taak } plus { persoon, datum, dagdeel | start }
   N.drop = async function (spec) {
-    if (S.bezig) return;
+    if (S.bezig) return { ok: false, bezet: true, reden: 'Er loopt nog een opslag in de planning; probeer het zo opnieuw.' };
     const schoon = {}; Object.keys(spec).forEach(k => { if (k[0] !== '_') schoon[k] = spec[k]; });
     S.bezig = true;   // de lock gaat er meteen op en komt altijd vrij (finally), ook bij een uitzondering of een time-out in de opslag
-    try { await N._drop(schoon); } finally { S.bezig = false; S.focusTaak = null; }
-  };
+    try { return await N._drop(schoon); } finally { S.bezig = false; S.focusTaak = null; }
+  };   // -> de uitkomst (voor het taakpaneel, dat de datums via deze zelfde route wijzigt); de meldingen en het ongedaan maken doet N._drop zelf
   // Een opslag die na 90 s nog hing: de echte actie loopt door en houdt het slot van die taak vast; zodra SharePoint antwoordt komt hier de uitkomst (opgeslagen, niet opgeslagen of tegelijk gewijzigd)
   N.naOnzeker = function (belofte) {
     Promise.resolve(belofte).then(u => { N.teken(); N.toast((u && u.tekst) || 'Ververs de planning om te zien of het opslaan gelukt is.', null, true); }, () => { N.toast('Ik kon niet vaststellen of het opslaan gelukt is. Ververs de planning.', null, true); });
@@ -389,27 +389,29 @@
       // Verlof, een verplichte vrije dag of een dag waarop iemand volgens de werktijden niet werkt: eerst bevestigen (mtDialog). Annuleren = niets schrijven; het blok blijft waar het was.
       if (r && !r.ok && r.vraag) {
         const ja = D.dialoog && D.dialoog.confirm ? await D.dialoog.confirm({ title: 'Controleer de planning', message: r.vraag, okLabel: 'Toch inplannen', cancelLabel: 'Annuleren' }) : false;
-        if (!ja) { S.bezig = false; N.teken(); return; }
+        if (!ja) { S.bezig = false; N.teken(); return { ok: false, geannuleerd: true }; }
         r = await D.verplaats(Object.assign({}, schoon, { bevestigd: true }), opt);
       }
     } catch (e) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((e && e.message) || e) }; }
     S.bezig = false;
-    if (r && r.onzeker) { N.teken(); N.toast(r.reden, null, true); N.naOnzeker(r.onzeker); return; }
-    if (r && r.geannuleerd) { N.teken(); return; }   // de vraag over de opvolgers is geannuleerd: niets gewijzigd
-    if (!r || !r.ok) { N.toast((r && r.reden) || 'Dat lukt niet.'); return; }
-    if (r.noop) return;
+    if (r && r.onzeker) { N.teken(); N.toast(r.reden, null, true); N.naOnzeker(r.onzeker); return r; }
+    if (r && r.geannuleerd) { N.teken(); return r; }   // de vraag over de opvolgers is geannuleerd: niets gewijzigd
+    if (!r || !r.ok) { N.toast((r && r.reden) || 'Dat lukt niet.'); return r || { ok: false, reden: 'Dat lukt niet.' }; }
+    if (r.noop) return r;
     S.markeer = null;
     N.teken();
-    if (r.tegelijk) { N.toast(r.tegelijk, null, true); return; }   // iemand wijzigde tegelijk en won: de planning toont nu de samengevoegde stand; geen ongedaan maken
+    if (r.tegelijk) { N.toast(r.tegelijk, null, true); return r; }   // iemand wijzigde tegelijk en won: de planning toont nu de samengevoegde stand; geen ongedaan maken
     const w = r.wijziging, wat = w.soort === 'taak' ? (w.naam || 'Taak') + ' → ' + persNaam(w.na.persoon) + (w.na.datum && w.voor && (w.voor.start !== w.na.datum || w.voor.eind !== w.na.eind) ? ', ' + P.datumKort(w.na.datum) + (w.na.eind && w.na.eind !== w.na.datum ? ' t/m ' + P.datumKort(w.na.eind) : '') : '') + (r.melding ? ' · ' + r.melding : '')
       : (w.naam || 'Planblok') + ' → ' + persNaam(w.na.persoon) + ', ' + P.datumKort(w.na.datum) + ' ' + w.na.start;
-    if (!r.behouden) { N.toast('Iemand anders was net sneller met ' + (w.naam || 'dit blok') + ': jouw wijziging is niet bewaard.'); return; }
+    if (!r.behouden) { N.toast('Iemand anders was net sneller met ' + (w.naam || 'dit blok') + ': jouw wijziging is niet bewaard.'); return r; }
     N.toast(wat + (r.opgeslagen ? '' : ' (alleen lokaal bewaard: SharePoint is niet bereikbaar)'), async () => {
       let h; try { h = await D.herstel(w, opt); } catch (e) { h = { ok: false, reden: 'Terugzetten mislukt: ' + ((e && e.message) || e) }; }
       N.teken();
       if (h && h.onzeker) { N.toast(h.reden, null, true); N.naOnzeker(h.onzeker); return; }
       N.toast(h && h.ok ? (h.tegelijk || 'Teruggezet') : ((h && h.reden) || 'Terugzetten lukt niet.'), null, !!(h && h.tegelijk));
+      if (D.naHerstel) { try { D.naHerstel(); } catch (e) {} }
     });
+    return r;
   };
   // T6: een oud tb:-planblok dat bij een taak hoort (het item heeft de taak en een blokId) kan een taakbalk worden. Alleen met het recht om te slepen en om taken te wijzigen; niet voor een open voorstel.
   N.omzetbaar = it => !!D.omzetten && !!D.dialoog && N.mag() === true && (!D.magTaken || !!D.magTaken()) && !!it && it.soort === 'taak' && it.blokId != null && !N.isVoorstel(it) && it.status !== 'klaar';
