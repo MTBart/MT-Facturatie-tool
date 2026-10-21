@@ -15861,7 +15861,7 @@ async function capOpruimen(spec,opt){   // de retry na een gedeeltelijk mislukt 
   return await MTPlanVerplaats.opruimen(spec,o);
 }
 async function capVerplaats(spec,opt){
-  if(spec&&((spec.soort==='nieuw'&&!spec.alsBlok)||spec.soort==='taakbalk'||spec.soort==='taakrand'||spec.soort==='taakdatums')) return capTaakPlan(spec,opt);   // uit Ongepland en een taakbalk naar een andere persoon: de taak zelf (T4); alsBlok (alleen tests) maakt nog een tb:-planblok
+  if(spec&&((spec.soort==='nieuw'&&!spec.alsBlok)||spec.soort==='taakbalk'||spec.soort==='taakrand'||spec.soort==='taakdatums'||spec.soort==='taakwis')) return capTaakPlan(spec,opt);   // uit Ongepland en een taakbalk naar een andere persoon: de taak zelf (T4); alsBlok (alleen tests) maakt nog een tb:-planblok
   if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
   const vers=await _capVers(); if(!vers.ok) return vers;
   const r=MTPlanVerplaats.pas(spec,_capCtx()); if(!r.ok||r.noop) return r;

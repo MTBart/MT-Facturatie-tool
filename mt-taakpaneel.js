@@ -171,7 +171,16 @@
       i.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); opslaan(); } else if (ev.key === 'Escape' && (a.value !== s0 || (b && b.value !== e0))) { ev.preventDefault(); ev.stopPropagation(); a.value = s0; if (b) b.value = e0; } });
       i.addEventListener('blur', () => setTimeout(() => { const f = D.doc.activeElement; if (f !== a && f !== b) opslaan(); }, 0));
     });
-    return h.el('div', { klass: 'tp-datums' }, a, b ? h.el('span', { klass: 'tp-sub', tekst: 't/m' }) : null, b, h.el('span', { klass: 'tp-sub tp-uitleg', tekst: 'Hangen er opvolgers aan, dan vraag ik eerst of die mee schuiven.' }));
+    // Datums wissen (terug naar Ongepland): dezelfde sleeproute (taakwis), met de getoonde datums mee en ongedaan maken in de melding
+    const wis = (ymdOk(t.start) || ymdOk(t.eind)) ? h.el('button', { type: 'button', klass: 'tp-knop tp-klein', id: 'tp-wis-datums', title: 'De taak gaat terug naar Ongepland (de persoon blijft); ongedaan maken kan in de melding', klik: async () => {
+      if (bezig) return; bezig = true; h.opslagStatus('bezig', 'Opslaan…');
+      let r; try { r = await D.datums({ soort: 'taakwis', taak: { code: m.code, id: t.id, naam: t.naam }, gezien: { start: t.start || '', eind: t.eind || '' } }); } catch (x) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((x && x.message) || x) }; } finally { bezig = false; }
+      h.tekenVeilig(); naWijziging();
+      if (r && r.onzeker) { h.opslagStatus('fout', r.reden); return; }
+      if (!r || !r.ok) { h.opslagStatus(r && r.tegelijk ? 'let' : 'fout', (r && r.reden) || 'Niet opgeslagen.'); return; }
+      if (!r.noop) h.opslagStatus(r.tegelijk ? 'let' : 'ok', r.tegelijk || 'Datums gewist: de taak staat weer in Ongepland');
+    } }, 'Datums wissen') : null;
+    return h.el('div', { klass: 'tp-datums' }, a, b ? h.el('span', { klass: 'tp-sub', tekst: 't/m' }) : null, b, wis, h.el('span', { klass: 'tp-sub tp-uitleg', tekst: 'Hangen er opvolgers aan, dan vraag ik eerst of die mee schuiven.' }));
   }
   // De mini-tijdlijn: wanneer staat de taak gepland (balk op een weken-as, met de persoon, de planblokken en vandaag) en "Toon in tijdlijn"
   function tijdlijn(m, h) {

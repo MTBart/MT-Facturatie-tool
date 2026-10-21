@@ -46,7 +46,7 @@
     if (!spec || typeof spec !== 'object') return 'Onbekende actie.';
     const team = ctx.team || [], lid = team.find(m => m && String(m.slug).toLowerCase() === String(spec.persoon || '').toLowerCase());
     // taakrand (een rand van een taakbalk): geen persoon; taakbalk (een taak naar een andere persoon of schuiven): de dag is optioneel en een weekend wordt genegeerd (zaterdag en zondag bestaan niet in het model)
-    if (spec.soort !== 'taakrand' && spec.soort !== 'taakdatums' && !lid && !(spec.soort === 'taakbalk' && !spec.persoon)) return 'Onbekende persoon.';   // een taakbalk zonder persoon (rij Niet toegewezen) kan alleen schuiven
+    if (spec.soort !== 'taakrand' && spec.soort !== 'taakdatums' && spec.soort !== 'taakwis' && !lid && !(spec.soort === 'taakbalk' && !spec.persoon)) return 'Onbekende persoon.';   // een taakbalk zonder persoon (rij Niet toegewezen) kan alleen schuiven
     if (spec.soort === 'verplaats' || spec.soort === 'nieuw') {
       if (!isYmd(spec.datum)) return 'Ongeldige dag.';
       const w = dow(spec.datum); if (w === 0 || w === 6) return 'Dit is een weekend: plannen op die dag kan niet.';
@@ -62,7 +62,7 @@
       if (!t || !t.code || !t.id) return 'Onbekende taak.';
       if ((ctx.blokken || []).some(b => actief(b) && b.taak_id != null && String(b.taak_id) === String(t.id) && String(b.project_code || '').toLowerCase() === String(t.code).toLowerCase())) return 'Deze taak heeft al een planblok: versleep dat blok.';
       if (t.voorstel) return 'Een voorstel van de werkplaats neem je eerst over (Mijn werk) voordat je het inplant.';
-    } else if (spec.soort === 'taakbalk' || spec.soort === 'taakrand' || spec.soort === 'taakdatums') {
+    } else if (spec.soort === 'taakbalk' || spec.soort === 'taakrand' || spec.soort === 'taakdatums' || spec.soort === 'taakwis') {
       const t = spec.taak;
       if (!t || !t.code || !t.id) return 'Onbekende taak.';
       if (t.voorstel) return 'Een voorstel van de werkplaats neem je eerst over (Mijn werk) voordat je het verplaatst.';
@@ -71,6 +71,8 @@
         if (!isYmd(spec.datum) && !(Number.isInteger(spec.delta) && spec.delta !== 0)) return 'Ongeldige dag.';
       } else if (spec.soort === 'taakdatums') {
         if (!isYmd(spec.startDatum) || !isYmd(spec.eindDatum)) return 'Ongeldige dag.';
+      } else if (spec.soort === 'taakwis') {   // de datums wissen (terug naar Ongepland): niet zolang er nog een planblok aan de taak hangt (dan bleef hij toch gepland)
+        if ((ctx.blokken || []).some(b => actief(b) && b.taak_id != null && String(b.taak_id) === String(t.id) && String(b.project_code || '').toLowerCase() === String(t.code).toLowerCase())) return 'Aan deze taak hangt nog een planblok: verplaats, verwijder of zet dat eerst om.';
       } else if (spec.datum != null && spec.datum !== '' && !isYmd(spec.datum)) return 'Ongeldige dag.';
     } else return 'Onbekende actie.';
     return '';
@@ -143,6 +145,7 @@
   //   { soort: 'taakrand', taak, kant: 'start'|'eind', datum | delta }                             een rand uittrekken: start of eind verandert; los op een weekend of verplichte vrije dag: start springt naar de
   //                                                                                                eerstvolgende werkdag, eind naar de vorige; een rand komt nooit voorbij de andere; een mijlpaal kan alleen schuiven
   //   { soort: 'taakdatums', taak, startDatum, eindDatum }                                                  beide datums rechtstreeks (de dialoog Datums wijzigen); zelfde regels als taakrand: start naar de eerstvolgende werkdag, eind naar de vorige
+  //   { soort: 'taakwis', taak, gezien? }                                                                        de datums wissen (het taakpaneel): terug naar Ongepland; geen opvolgers, niet met een planblok eraan
   // Met P.MEERDERE_PERSONEN: uit Ongepland wordt de persoon de eerste en blijven de anderen staan; bij een taakbalk wisselt alleen de persoon van die balk (van) in de lijst.
   // De duur is het aantal bedrijfswerkdagen (ma-vr min verplichte vrije dagen), niet per persoon: de balk houdt zijn zichtbare lengte en verlof van de nieuwe persoon vangt taakVerdeling op.
   const MAX_DAGEN = 1100;   // drie jaar: langer wordt niet stil afgekapt maar geweigerd
@@ -219,7 +222,7 @@
   V.taakPlan = function (spec, ctx) {
     const reden = V.controle(spec, Object.assign({}, ctx, { blokken: [] })); if (reden) return { ok: false, reden };
     const P = root.MTPlanning, team = ctx.team || [];
-    const zonderP = spec.soort === 'taakrand' || spec.soort === 'taakdatums', lid = zonderP ? null : team.find(m => m && String(m.slug).toLowerCase() === String(spec.persoon).toLowerCase()), slug = lid ? String(lid.slug).toLowerCase() : '';
+    const zonderP = spec.soort === 'taakrand' || spec.soort === 'taakdatums' || spec.soort === 'taakwis', lid = zonderP ? null : team.find(m => m && String(m.slug).toLowerCase() === String(spec.persoon).toLowerCase()), slug = lid ? String(lid.slug).toLowerCase() : '';
     const t = (ctx.taken || []).find(x => x && !x._vervallen && String(x.id) === String(spec.taak.id)); if (!t) return { ok: false, reden: 'Deze taak bestaat niet meer.' };
     if ((t.status || 'todo') === 'klaar') return { ok: false, reden: 'Een klare taak plan je niet meer in.' };
     if (t.voorstel) return { ok: false, reden: 'Een voorstel van de werkplaats neem je eerst over (Mijn werk) voordat je het inplant.' };
@@ -238,6 +241,8 @@
       datums = V.taakRand(t, spec.kant, spec.datum, spec.delta, ctx); if (!datums.ok) return datums;
     } else if (spec.soort === 'taakdatums') {
       datums = V.taakZet(t, spec.startDatum, spec.eindDatum, ctx); if (!datums.ok) return datums;
+    } else if (spec.soort === 'taakwis') {
+      datums = { ok: true, start: '', eind: '' }; melding = 'De taak staat weer in Ongepland.';   // start en eind weg; de persoon blijft
     } else if (spec.soort === 'taakbalk') {
       const dag = isYmd(spec.datum) && dow(spec.datum) !== 0 && dow(spec.datum) !== 6, schuif = Number.isInteger(spec.delta) ? spec.delta !== 0 : (dag && isYmd(spec.vanDatum) && spec.datum !== spec.vanDatum);
       if (schuif) { datums = V.taakVerschuif(t, spec.vanDatum, spec.datum, spec.delta, ctx); if (!datums.ok) return datums; }   // een weekend wordt genegeerd: dan verandert alleen de persoon
@@ -248,7 +253,8 @@
   // Het plan op een taak toepassen (ter plekke): de persoon (de takenmotor stempelt toegewezen; met de vlag ook personen) en de datums.
   V.pasTaakToe = function (t, plan, opt) {
     const P = root.MTPlanning; if (!plan.zelfde) { if (P.MEERDERE_PERSONEN) P.personenZet(t, plan.lijst, opt); else if ((plan.lijst[0] || '') !== (t.toegewezen || '')) P.toegewezenZet(t, plan.lijst[0], opt); }   // alleen de datums veranderen: de personen niet aanraken
-    if (plan.start !== undefined) { t.start = plan.start; t.eind = plan.eind; }
+    if (plan.start === '') { delete t.start; delete t.eind; }   // taakwis: terug naar Ongepland
+    else if (plan.start !== undefined) { t.start = plan.start; t.eind = plan.eind; }
   };
   const SCHRIJF_REDEN = { lezen: 'SharePoint is niet bereikbaar; er is niets gewijzigd.', ontbreekt: 'De takenlijst bestaat nog niet op SharePoint; er is niets gewijzigd.', vorm: 'De takenlijst heeft een onverwachte vorm; er is niets gewijzigd.', recht: 'Dit mag je niet met jouw rol.', geblokkeerd: 'De takenlijst is geblokkeerd; er is niets gewijzigd.',
     schrijven: 'Opslaan is niet gelukt, ook niet na een paar pogingen (iemand anders wijzigt tegelijk, of SharePoint is niet bereikbaar). Er is niets gewijzigd.', aanroep: 'Onvolledige aanroep.' };
@@ -336,7 +342,7 @@
     const P = root.MTPlanning, ctx0 = o.ctx(), plan0 = V.taakPlan(spec, ctx0); if (!plan0.ok || plan0.noop) return plan0;
     const code = plan0.taak.code, id = plan0.taak.id; if (V.taakBezig(code, id)) return { ok: false, bezet: true, reden: BEZET };
     const st = maakSt(o, sleutelVan(code, id)), sp = tijdSp(o.sp, st); let mee = true, getoond = '';
-    if (plan0.start !== undefined && o.verschuif) {
+    if (plan0.start !== undefined && plan0.start !== '' && o.verschuif) {   // datums wissen schuift geen opvolgers
       const v = o.verschuif(ctx0.taken, { id, start: plan0.start, eind: plan0.eind }); getoond = opvolgerSleutel(v);
       if (getoond) { const k = await o.vraagOpvolgers(v); if (k === null || k === undefined) return { ok: false, geannuleerd: true, reden: '' }; mee = (k === 0); }
     }
@@ -350,7 +356,7 @@
           if (plan.noop) { noop = true; return false; }
           const t = werk.find(x => x.id === id), oud = {}; werk.forEach(x => { oud[x.id] = { start: x.start || '', eind: x.eind || '' }; });
           let v2 = null;
-          if (plan.start !== undefined && o.verschuif) {   // de opvolgers opnieuw op de verse stand: wijkt de set af van wat de gebruiker bevestigde, dan eerst opnieuw vragen
+          if (plan.start !== undefined && plan.start !== '' && o.verschuif) {   // de opvolgers opnieuw op de verse stand: wijkt de set af van wat de gebruiker bevestigde, dan eerst opnieuw vragen
             v2 = o.verschuif(werk.map(x => x === t ? Object.assign({}, x, { start: oud[id].start, eind: oud[id].eind }) : x), { id, start: plan.start, eind: plan.eind });
             if (mee && opvolgerSleutel(v2) !== getoond) { afwijking = v2; return false; }
           }
