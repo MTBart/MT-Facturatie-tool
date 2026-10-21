@@ -86,11 +86,12 @@
     const chips = [];
     if (taak && item.status !== 'todo') chips.push(el('span', { klass: 'mw-chip mw-st-' + item.status, tekst: P.TAAK_STATUS_LABEL[item.status] || item.status }));
     if (!taak) chips.push(el('span', { klass: 'mw-chip', tekst: item.voorstel ? 'Planblok (voorstel)' : 'Planblok' }));
-    const rij = el('div', { klass: 'mw-rij', role: 'button', tabindex: '0', title: 'Open het project (taken)' },
+    const paneel = taak && !!D.openTaak;   // een taak opent het taakpaneel (mt-taakpaneel.js); een planblok het project
+    const rij = el('div', { klass: 'mw-rij', role: 'button', tabindex: '0', title: paneel ? 'Open de taak (alle details)' : 'Open het project (taken)' },
       el('span', { klass: 'mw-strook', style: 'background:' + P.projectKleur(item.code) }),
       el('div', { klass: 'mw-tekst' }, naam, el('div', { klass: 'mw-sub', tekst: [projLabel(item.code), wanneer(item, mw.vandaag), taak && item.gepland_min ? uren(item.gepland_min) + ' gepland' : '', (F.persoon === 'iedereen' && item.persoon) ? 'bij ' + persoonNaam(item.persoon) : (F.persoon === 'iedereen' && taak ? 'van niemand' : '')].filter(Boolean).join(' · ') }), extra),
       el('div', { klass: 'mw-chips' }, chips), acties || null);
-    const open = () => { markeerGezien(item); D.openProject(item.code); };
+    const open = () => { markeerGezien(item); if (paneel) D.openTaak(item.code, item.id, rij); else D.openProject(item.code); };
     rij.addEventListener('click', ev => { if (ev.target.closest && ev.target.closest('button')) return; open(); });
     rij.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === rij) { ev.preventDefault(); open(); } });
     return rij;

@@ -55,16 +55,16 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planning.js?v=2026-10-17n"></script>
-<script src="mt-mijnwerk.js?v=2026-10-17n"></script>
+<script src="mt-mijnwerk.js?v=2026-10-21u"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-21t"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-21t"></script>
-<script src="mt-taakpaneel.js?v=2026-10-21t"></script>
+<script src="mt-planverplaats.js?v=2026-10-21u"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-21u"></script>
+<script src="mt-taakpaneel.js?v=2026-10-21u"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
 <script src="mt-dagvraag.js?v=2026-10-15z"></script>
-<script src="mt-vandaag-desk.js?v=2026-10-17c"></script>
+<script src="mt-vandaag-desk.js?v=2026-10-21u"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
 <script src="mt-zijbalk.js?v=2026-10-16c" defer></script>
@@ -3817,6 +3817,7 @@ try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, 
   vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), verlof:()=>admVerlof(),   // de vrije dagen en het verlof uit Beheer (mt_vrijedagen, mt_verlof) tellen mee in de weekbalk
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),   // een taak = het taakpaneel (mt-taakpaneel.js)
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Mijn werk init:',e); }
 // Startvenster (stap 3): "X taken wachten op je" bij het openen van Agenda/Planning, alleen zonder lopende Toggl-timer en niet voor de rol "lezen" (zie mt-startvenster.js).
 try{ MTStartvenster.init({ doc:document, storage:(function(){ try{ return sessionStorage; }catch(e){ return null; } })(), dialog:()=>window.mtDialog, toast:m=>{ if(typeof planToast==='function') planToast(m); },
@@ -3849,9 +3850,10 @@ try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, i
   uren:()=>agEntries(), bestel:()=>_blActief(), projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code), magInplannen:()=>capMagSlepen(),   // Inplannen: dezelfde recht-controle als slepen in de Capaciteit
   larry:()=>{ const b=document.getElementById('attentie-badge'); return b&&b.style.display!=='none'?(Number(b.textContent)||0):0; },
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); }, projectNaam:code=>{ const p=projVind(code); return p?projNaamVol(p):''; },
-  href:o=>mtRoute.format(o.code?{tab:'projecten',code:o.code,sectie:'planning'}:{tab:o.tab}),
+  href:o=>mtRoute.format(o.code?{tab:'projecten',code:o.code,sectie:'planning'}:{tab:o.tab}), taakHref:(code,id)=>MTTaakPaneel.href(code,id),
   ga:a=>{ const knop=t=>document.querySelector('.tabs-wrap .tab-btn[onclick*="\''+t+'\'"]');
-    if(a.k==='project') openProject(a.code,{sectie:'planning'});
+    if(a.k==='taak') MTTaakPaneel.open(a.code,a.id);   // een taak: het taakpaneel (met de herkomst als link naar het project)
+    else if(a.k==='project') openProject(a.code,{sectie:'planning'});
     else if(a.k==='agenda'){ if(a.view) _agenda.view=a.view; showTab('agenda',knop('agenda')); }
     else if(a.k==='tab') showTab(a.tab,knop(a.tab));
     else if(a.k==='inplannen'){ _agenda.view='capaciteit'; showTab('agenda',knop('agenda')); try{ MTCapaciteitNieuw.inplannen(a.taak); }catch(e){ console.warn('Inplannen (Vandaag):',e); } }   // de bestaande route: Capaciteit, taak gemarkeerd in Ongepland, en het keuzemenu "Plan … in…"
@@ -6539,7 +6541,7 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
-  if(_projSectie==='planning'){ planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); }   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='planning'){ planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -14933,7 +14935,7 @@ function zoekbalkOpen(it){
   if(it.soort==='project') mtRoute.go({tab:'projecten',code:d.code});
   else if(it.soort==='klant') mtRoute.go({tab:'projecten',klant:d.klant});
   else if(it.soort==='locatie') mtRoute.go({tab:'projecten',klant:d.klant,loc:d.loc});
-  else if(it.soort==='taak') mtRoute.go({tab:'projecten',code:d.code,sectie:'planning'});
+  else if(it.soort==='taak'){ if(!(window.MTTaakPaneel&&MTTaakPaneel.open(d.code,d.id))) mtRoute.go({tab:'projecten',code:d.code,sectie:'planning'}); }   // een taak opent het taakpaneel (met de herkomst als link naar het project)
   else if(it.soort==='contact'&&window.MTContactenUI) MTContactenUI.detail(d.id);
 }
 function zoekbalkInit(){

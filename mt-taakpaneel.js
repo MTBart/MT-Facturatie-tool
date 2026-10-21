@@ -431,6 +431,23 @@
     if (o.stil || !eigen) return;
     try { if (gepusht) history.back(); else history.replaceState(null, '', S.vorig || (location.pathname + location.search)); } catch (e) {}
   };
+  // De takentabel van een project (v2.html, projectTakenHtml): de taaknaam wordt achteraf een link naar het paneel (DOM achteraf, zodat het sjabloon van de tabel ongewijzigd blijft)
+  T.verrijkTaken = function (code, wortel) {
+    if (!wortel || !code) return 0;
+    const alle = D.taken() || {}, k = sleutelVan(alle, code); if (!k) return 0;
+    const sid = String(k).replace(/-/g, ''); let n = 0;
+    (alle[k] || []).forEach(t => {
+      if (!t || t._vervallen || t.id == null) return;
+      const tr = wortel.querySelector('#' + (root.CSS && root.CSS.escape ? root.CSS.escape('pt-row-' + sid + '-' + t.id) : ('pt-row-' + sid + '-' + t.id))), td = tr && tr.children[2];
+      if (!td || td.querySelector('.tp-naamlink')) return;
+      const tekst = [...td.childNodes].find(x => x.nodeType === 3 && x.textContent.trim());
+      if (!tekst) return;
+      const a = link(T.href(k, t.id), () => T.open(k, t.id, { terug: a }), tekst.textContent, 'tp-link tp-naamlink', { title: 'Open de taak (alle details)' });
+      td.replaceChild(a, tekst); n++;
+    });
+    if (n && !D.doc.getElementById('tp-stijl')) paneelEl();
+    return n;
+  };
   T.isOpen = () => !!S.open;
   T.huidig = () => S.open ? { code: S.open.code, id: S.open.id } : null;
   // Na een wijziging van taken, afhankelijkheden of bestellingen (ook door een ander apparaat): opnieuw tekenen als het paneel open staat
@@ -477,60 +494,61 @@
     '.tp-paneel[hidden]{display:none}',
     '@media (prefers-reduced-motion:no-preference){.tp-paneel:not([hidden]){animation:tp-in .16s ease-out}@keyframes tp-in{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}}',
     '@media (max-width:760px){.tp-paneel{width:100vw;border-left:0}}',
-    '.tp-kop{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line,#dfd8cb);flex:0 0 auto}',
-    '.tp-kop-titel{flex:1;font:600 12px/16px var(--mono,monospace);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3,#646a64);text-align:center}',
-    '.tp-knop{height:32px;min-width:32px;padding:0 10px;border:1px solid var(--line-strong,#9a917f);border-radius:4px;background:var(--surface,#fff);color:var(--ink,#1b211e);font:500 13px/18px var(--sans,system-ui);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}',
-    '.tp-knop.icoon{padding:0;width:32px;border-color:transparent}.tp-knop:hover{background:var(--surface-sunken,#f1ede5)}',
-    '.tp-knop:focus-visible,.tp-link:focus-visible,.tp-paneel [tabindex]:focus-visible{outline:2px solid var(--primary,#17643f);outline-offset:2px}',
-    '.tp-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}',
-    '.tp-body{flex:1;overflow:auto;padding:14px 18px 28px}',
-    '.tp-herkomst{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:13px;margin-bottom:8px}',
-    '.tp-sep{color:var(--ink-3,#646a64)}',
-    '.tp-link{color:var(--primary,#17643f);text-decoration:none;border-radius:3px}.tp-link:hover{text-decoration:underline}',
-    '.tp-kruim{color:var(--ink-2,#596059)}.tp-kruim-project{color:var(--primary,#17643f);font-weight:600}',
-    '.tp-code{font:500 12px var(--mono,monospace);color:var(--ink-3,#646a64)}',
-    '.tp-titel{font:600 20px/26px var(--serif,var(--sans,system-ui));margin:4px 0 8px;outline:none}',
-    '.tp-statusrij{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}',
-    '.tp-chip{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:4px;background:var(--surface-sunken,#f1ede5);color:var(--ink-2,#596059);font:500 12px/22px var(--sans,system-ui);white-space:nowrap}',
-    '.tp-st-open{background:var(--surface-sunken,#f1ede5);color:var(--ink-2,#596059)}.tp-st-bezig{background:var(--info-50,#e6edf3);color:var(--info,#3e5c76)}.tp-st-wacht{background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508)}.tp-st-klaar{background:var(--success-50,#e3f3e8);color:var(--success,#1a6e3b)}',
-    '.tp-chip-voorstel{background:var(--brass-soft,#fbefd2);color:var(--brass-ink,#6b4c05)}.tp-chip-let{background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508)}',
-    '.tp-bst-nodig{background:var(--error-50,#fce6e4);color:var(--error,#c4322a)}.tp-bst-besteld{background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508)}.tp-bst-geleverd{background:var(--success-50,#e3f3e8);color:var(--success,#1a6e3b)}',
-    '.tp-velden{border-top:1px solid var(--line,#dfd8cb);padding-top:6px}',
-    '.tp-rij{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:start;padding:6px 0;border-bottom:1px solid var(--border-hair,#ece7de)}',
-    '.tp-label{font-size:12px;color:var(--ink-3,#646a64);padding-top:6px}',
-    '.tp-waarde{min-width:0}.tp-tekstwaarde{display:block;padding:6px 0}.tp-notitie{white-space:pre-wrap}',
-    '.tp-sec{margin-top:18px}.tp-sec-kop,.tp-details>summary{display:flex;align-items:center;gap:8px;margin-bottom:6px}',
-    '.tp-sec h3{font:600 12px/16px var(--mono,monospace);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3,#646a64);margin:0}',
-    '.tp-details>summary{cursor:pointer;list-style:none}.tp-details>summary::-webkit-details-marker{display:none}.tp-details>summary::before{content:"▸";color:var(--ink-3,#646a64);font-size:12px}.tp-details[open]>summary::before{content:"▾"}',
-    '.tp-teller{font:500 12px var(--mono,monospace);color:var(--ink-3,#646a64)}',
-    '.tp-subkop{font-size:12px;color:var(--ink-3,#646a64);margin:8px 0 4px}',
-    '.tp-lijst{list-style:none;margin:0;padding:0}.tp-lijst li{border-top:1px solid var(--border-hair,#ece7de)}.tp-lijst li:first-child{border-top:0}',
-    '.tp-taakrij{display:flex;align-items:center;gap:10px;padding:7px 4px;color:inherit}.tp-taakrij:hover{background:var(--surface-sunken,#f1ede5);text-decoration:none}',
-    '.tp-bestelrij{display:flex;align-items:center;gap:10px;padding:7px 4px}',
-    '.tp-tekst{flex:1;min-width:0;display:flex;flex-direction:column}.tp-naam{font-weight:500;overflow-wrap:anywhere}.tp-sub{font-size:12px;color:var(--ink-3,#646a64)}',
-    '.tp-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;border:2px solid var(--line-strong,#9a917f)}.tp-dot.tp-st-bezig{border-color:var(--info,#3e5c76);background:var(--info-50,#e6edf3)}.tp-dot.tp-st-wacht{border-color:var(--warning,#8f5508)}.tp-dot.tp-st-klaar{border-color:var(--success,#1a6e3b);background:var(--success,#1a6e3b)}',
-    '.tp-waarsch{display:flex;gap:8px;margin-top:8px;padding:8px 10px;border-radius:4px;background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508);font-size:13px}',
-    '.tp-leeg{color:var(--ink-3,#646a64);font-size:13px;margin:4px 0}',
-    '.tp-acties{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}',
-    '.tp-knoplink{display:inline-flex;align-items:center;height:30px;padding:0 10px;border:1px solid var(--line,#dfd8cb);border-radius:4px;font-size:13px}',
+    '#tp-paneel .tp-kop{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line,#dfd8cb);flex:0 0 auto}',
+    '#tp-paneel .tp-kop-titel{flex:1;font:600 12px/16px var(--mono,monospace);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3,#646a64);text-align:center}',
+    '#tp-paneel .tp-knop{height:32px;min-width:32px;padding:0 10px;border:1px solid var(--line-strong,#9a917f);border-radius:4px;background:var(--surface,#fff);color:var(--ink,#1b211e);font:500 13px/18px var(--sans,system-ui);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}',
+    '#tp-paneel .tp-knop.icoon{padding:0;width:32px;border-color:transparent}#tp-paneel .tp-knop:hover{background:var(--surface-sunken,#f1ede5)}',
+    '#tp-paneel .tp-knop:focus-visible,#tp-paneel .tp-link:focus-visible,.tp-paneel [tabindex]:focus-visible{outline:2px solid var(--primary,#17643f);outline-offset:2px}',
+    '#tp-paneel .tp-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}',
+    '#tp-paneel .tp-body{flex:1;overflow:auto;padding:14px 18px 28px}',
+    '#tp-paneel .tp-herkomst{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:13px;margin-bottom:8px}',
+    '#tp-paneel .tp-sep{color:var(--ink-3,#646a64)}',
+    '#tp-paneel .tp-link{color:var(--primary,#17643f);text-decoration:none;border-radius:3px}#tp-paneel .tp-link:hover{text-decoration:underline}',
+    '#tp-paneel .tp-kruim{color:var(--ink-2,#596059)}#tp-paneel .tp-kruim-project{color:var(--primary,#17643f);font-weight:600}',
+    '#tp-paneel .tp-code{font:500 12px var(--mono,monospace);color:var(--ink-3,#646a64)}',
+    '#tp-paneel .tp-titel{font:600 20px/26px var(--serif,var(--sans,system-ui));margin:4px 0 8px;outline:none}',
+    '#tp-paneel .tp-statusrij{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}',
+    '#tp-paneel .tp-chip{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:4px;background:var(--surface-sunken,#f1ede5);color:var(--ink-2,#596059);font:500 12px/22px var(--sans,system-ui);white-space:nowrap}',
+    '#tp-paneel .tp-st-open{background:var(--surface-sunken,#f1ede5);color:var(--ink-2,#596059)}#tp-paneel .tp-st-bezig{background:var(--info-50,#e6edf3);color:var(--info,#3e5c76)}#tp-paneel .tp-st-wacht{background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508)}#tp-paneel .tp-st-klaar{background:var(--success-50,#e3f3e8);color:var(--success,#1a6e3b)}',
+    '#tp-paneel .tp-chip-voorstel{background:var(--brass-soft,#fbefd2);color:var(--brass-ink,#6b4c05)}#tp-paneel .tp-chip-let{background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508)}',
+    '#tp-paneel .tp-bst-nodig{background:var(--error-50,#fce6e4);color:var(--error,#c4322a)}#tp-paneel .tp-bst-besteld{background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508)}#tp-paneel .tp-bst-geleverd{background:var(--success-50,#e3f3e8);color:var(--success,#1a6e3b)}',
+    '#tp-paneel .tp-velden{border-top:1px solid var(--line,#dfd8cb);padding-top:6px}',
+    '#tp-paneel .tp-rij{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:start;padding:6px 0;border-bottom:1px solid var(--border-hair,#ece7de)}',
+    '#tp-paneel .tp-label{font-size:12px;color:var(--ink-3,#646a64);padding-top:6px}',
+    '#tp-paneel .tp-waarde{min-width:0}#tp-paneel .tp-tekstwaarde{display:block;padding:6px 0}#tp-paneel .tp-notitie{white-space:pre-wrap}',
+    '#tp-paneel .tp-sec{margin-top:18px}#tp-paneel .tp-sec-kop,#tp-paneel .tp-details>summary{display:flex;align-items:center;gap:8px;margin-bottom:6px}',
+    '#tp-paneel .tp-sec h3{font:600 12px/16px var(--mono,monospace);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3,#646a64);margin:0}',
+    '#tp-paneel .tp-details>summary{cursor:pointer;list-style:none}#tp-paneel .tp-details>summary::-webkit-details-marker{display:none}#tp-paneel .tp-details>summary::before{content:"▸";color:var(--ink-3,#646a64);font-size:12px}#tp-paneel .tp-details[open]>summary::before{content:"▾"}',
+    '#tp-paneel .tp-teller{font:500 12px var(--mono,monospace);color:var(--ink-3,#646a64)}',
+    '#tp-paneel .tp-subkop{font-size:12px;color:var(--ink-3,#646a64);margin:8px 0 4px}',
+    '#tp-paneel .tp-lijst{list-style:none;margin:0;padding:0}#tp-paneel .tp-lijst li{border-top:1px solid var(--border-hair,#ece7de)}#tp-paneel .tp-lijst li:first-child{border-top:0}',
+    '#tp-paneel .tp-taakrij{display:flex;align-items:center;gap:10px;padding:7px 4px;color:inherit}#tp-paneel .tp-taakrij:hover{background:var(--surface-sunken,#f1ede5);text-decoration:none}',
+    '#tp-paneel .tp-bestelrij{display:flex;align-items:center;gap:10px;padding:7px 4px}',
+    '#tp-paneel .tp-tekst{flex:1;min-width:0;display:flex;flex-direction:column}#tp-paneel .tp-naam{font-weight:500;overflow-wrap:anywhere}#tp-paneel .tp-sub{font-size:12px;color:var(--ink-3,#646a64)}',
+    '#tp-paneel .tp-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;border:2px solid var(--line-strong,#9a917f)}#tp-paneel .tp-dot.tp-st-bezig{border-color:var(--info,#3e5c76);background:var(--info-50,#e6edf3)}#tp-paneel .tp-dot.tp-st-wacht{border-color:var(--warning,#8f5508)}#tp-paneel .tp-dot.tp-st-klaar{border-color:var(--success,#1a6e3b);background:var(--success,#1a6e3b)}',
+    '#tp-paneel .tp-waarsch{display:flex;gap:8px;margin-top:8px;padding:8px 10px;border-radius:4px;background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508);font-size:13px}',
+    '#tp-paneel .tp-leeg{color:var(--ink-3,#646a64);font-size:13px;margin:4px 0}',
+    '#tp-paneel .tp-acties{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}',
+    '#tp-paneel .tp-knoplink{display:inline-flex;align-items:center;height:30px;padding:0 10px;border:1px solid var(--line,#dfd8cb);border-radius:4px;font-size:13px}',
     'html:not([data-stijl="nieuw"]) .cn-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:4px;background:#1b211e;color:#fff;font:500 13px/18px system-ui,sans-serif;z-index:200;max-width:min(720px,calc(100vw - 32px))}html:not([data-stijl="nieuw"]) .cn-toast button{background:transparent;color:inherit;border:1px solid currentColor;border-radius:4px;cursor:pointer}',
-    '.tp-meta{margin-top:18px;padding-top:10px;border-top:1px solid var(--line,#dfd8cb);font-size:12px;color:var(--ink-3,#646a64)}.tp-meta-regel{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}.tp-onder{margin-top:14px}',
-    '.tp-invoer{width:100%;box-sizing:border-box;min-height:34px;padding:6px 8px;border:1px solid transparent;border-radius:4px;background:transparent;color:inherit;font:inherit;transition:border-color .12s,background .12s}',
-    '.tp-invoer:hover:not(:disabled){border-color:var(--line,#dfd8cb);background:var(--surface,#fff)}.tp-invoer:focus{outline:none;border-color:var(--primary,#17643f);background:var(--surface,#fff);box-shadow:var(--focus-ring,0 0 0 3px rgba(23,100,63,.2))}',
-    '.tp-invoer:disabled{color:inherit;opacity:1;cursor:default}select.tp-invoer{border-color:var(--line,#dfd8cb);cursor:pointer;background:var(--surface,#fff)}select.tp-invoer:disabled{border-color:transparent;appearance:none;-webkit-appearance:none;background:transparent}',
-    'textarea.tp-invoer{resize:vertical;min-height:64px;line-height:20px}textarea.tp-invoer:placeholder-shown,input.tp-invoer:placeholder-shown{border-color:var(--border-hair,#ece7de)}',
-    '.tp-titel .tp-titelinvoer{font:600 20px/26px var(--serif,var(--sans,system-ui));padding:4px 6px;margin-left:-7px;width:calc(100% + 7px)}',
-    '.tp-inline{display:flex;align-items:center;gap:8px}.tp-kort{width:90px;flex:0 0 auto;border-color:var(--line,#dfd8cb)}',
-    '.tp-datums{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.tp-datum{width:auto;flex:0 1 150px;border-color:var(--line,#dfd8cb)}.tp-uitleg{flex-basis:100%}',
-    '.tp-statusknoppen{display:inline-flex;border:1px solid var(--line-strong,#9a917f);border-radius:4px;overflow:hidden}',
-    '.tp-stknop{height:32px;padding:0 12px;border:0;border-left:1px solid var(--line,#dfd8cb);background:var(--surface,#fff);color:var(--ink-2,#596059);font:500 13px/18px var(--sans,system-ui);cursor:pointer}.tp-stknop:first-child{border-left:0}',
-    '.tp-stknop:hover:not(:disabled){background:var(--surface-sunken,#f1ede5)}.tp-stknop:focus-visible{outline:2px solid var(--primary,#17643f);outline-offset:-2px}.tp-stknop:disabled{cursor:default}',
-    '.tp-stknop.aan.tp-st-open{background:var(--n-200,#ece7de);color:var(--ink,#1b211e)}.tp-stknop.aan.tp-st-bezig{background:var(--info-50,#e6edf3);color:var(--info,#3e5c76)}.tp-stknop.aan.tp-st-wacht{background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508)}.tp-stknop.aan.tp-st-klaar{background:var(--success-50,#e3f3e8);color:var(--success,#1a6e3b)}.tp-stknop.aan{font-weight:600}',
-    '.tp-wachtreden{margin:-6px 0 8px}',
-    '.tp-opslag{min-height:20px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;margin:-4px 0 6px;color:var(--ink-3,#646a64)}.tp-opslag.ok{color:var(--success,#1a6e3b)}.tp-opslag.ok span::before{content:"✓ "}.tp-opslag.fout{color:var(--error,#c4322a)}.tp-opslag.let{color:var(--warning,#8f5508)}',
-    '.tp-klein{height:28px;padding:0 10px;font-size:12px}.tp-gevaar{color:var(--error,#c4322a);border-color:var(--error,#c4322a)}',
-    '.tp-meldingen{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.tp-melding{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border-radius:4px;font-size:13px}.tp-voorstel{background:var(--brass-soft,#fbefd2);color:var(--brass-ink,#6b4c05)}.tp-conflict{background:var(--error-50,#fce6e4);color:var(--error,#c4322a)}',
-    '.tp-teller{white-space:nowrap}.tp-details>summary h3{flex:1}'
+    '#tp-paneel .tp-meta{margin-top:18px;padding-top:10px;border-top:1px solid var(--line,#dfd8cb);font-size:12px;color:var(--ink-3,#646a64)}#tp-paneel .tp-meta-regel{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}#tp-paneel .tp-onder{margin-top:14px}',
+    '#tp-paneel .tp-invoer{width:100%;box-sizing:border-box;min-height:34px;padding:6px 8px;border:1px solid transparent;border-radius:4px;background-color:transparent;color:inherit;font:inherit;transition:border-color .12s,background .12s}',
+    '#tp-paneel .tp-invoer:hover:not(:disabled){border-color:var(--line,#dfd8cb);background-color:var(--surface,#fff)}#tp-paneel .tp-invoer:focus{outline:none;border-color:var(--primary,#17643f);background-color:var(--surface,#fff);box-shadow:var(--focus-ring,0 0 0 3px rgba(23,100,63,.2))}',
+    '#tp-paneel .tp-invoer:disabled{color:inherit;opacity:1;cursor:default}#tp-paneel select.tp-invoer{border-color:var(--line,#dfd8cb);cursor:pointer;background-color:var(--surface,#fff)}#tp-paneel select.tp-invoer:disabled{border-color:transparent;appearance:none;-webkit-appearance:none;background:transparent}',
+    '#tp-paneel textarea.tp-invoer{resize:vertical;min-height:64px;line-height:20px}#tp-paneel textarea.tp-invoer:placeholder-shown,#tp-paneel input.tp-invoer:placeholder-shown{border-color:var(--border-hair,#ece7de)}',
+    '#tp-paneel .tp-titel .tp-titelinvoer{font:600 20px/26px var(--serif,var(--sans,system-ui));padding:4px 6px;margin-left:-7px;width:calc(100% + 7px)}',
+    '#tp-paneel .tp-inline{display:flex;align-items:center;gap:8px}#tp-paneel .tp-kort{width:90px;flex:0 0 auto;border-color:var(--line,#dfd8cb)}',
+    '#tp-paneel .tp-datums{display:flex;flex-wrap:wrap;align-items:center;gap:6px}#tp-paneel .tp-datum{width:auto;flex:0 1 150px;border-color:var(--line,#dfd8cb)}#tp-paneel .tp-uitleg{flex-basis:100%}',
+    '#tp-paneel .tp-statusknoppen{display:inline-flex;border:1px solid var(--line-strong,#9a917f);border-radius:4px;overflow:hidden}',
+    '#tp-paneel .tp-stknop{height:32px;padding:0 12px;border:0;border-left:1px solid var(--line,#dfd8cb);background:var(--surface,#fff);color:var(--ink-2,#596059);font:500 13px/18px var(--sans,system-ui);cursor:pointer}#tp-paneel .tp-stknop:first-child{border-left:0}',
+    '#tp-paneel .tp-stknop:hover:not(:disabled){background:var(--surface-sunken,#f1ede5)}#tp-paneel .tp-stknop:focus-visible{outline:2px solid var(--primary,#17643f);outline-offset:-2px}#tp-paneel .tp-stknop:disabled{cursor:default}',
+    '#tp-paneel .tp-stknop.aan.tp-st-open{background:var(--n-200,#ece7de);color:var(--ink,#1b211e)}#tp-paneel .tp-stknop.aan.tp-st-bezig{background:var(--info-50,#e6edf3);color:var(--info,#3e5c76)}#tp-paneel .tp-stknop.aan.tp-st-wacht{background:var(--warning-50,#fcefd9);color:var(--warning,#8f5508)}#tp-paneel .tp-stknop.aan.tp-st-klaar{background:var(--success-50,#e3f3e8);color:var(--success,#1a6e3b)}#tp-paneel .tp-stknop.aan{font-weight:600}',
+    '#tp-paneel .tp-wachtreden{margin:-6px 0 8px}',
+    '#tp-paneel .tp-opslag{min-height:20px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;margin:-4px 0 6px;color:var(--ink-3,#646a64)}#tp-paneel .tp-opslag.ok{color:var(--success,#1a6e3b)}#tp-paneel .tp-opslag.ok span::before{content:"✓ "}#tp-paneel .tp-opslag.fout{color:var(--error,#c4322a)}#tp-paneel .tp-opslag.let{color:var(--warning,#8f5508)}',
+    '#tp-paneel .tp-klein{height:28px;padding:0 10px;font-size:12px}#tp-paneel .tp-gevaar{color:var(--error,#c4322a);border-color:var(--error,#c4322a)}',
+    '#tp-paneel .tp-meldingen{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}#tp-paneel .tp-melding{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border-radius:4px;font-size:13px}#tp-paneel .tp-voorstel{background:var(--brass-soft,#fbefd2);color:var(--brass-ink,#6b4c05)}#tp-paneel .tp-conflict{background:var(--error-50,#fce6e4);color:var(--error,#c4322a)}',
+    '.tp-naamlink{color:inherit;text-decoration:underline;text-decoration-color:var(--line,#dfd8cb);text-underline-offset:3px}.tp-naamlink:hover{color:var(--primary,#17643f);text-decoration-color:currentColor}',
+    '#tp-paneel .tp-teller{white-space:nowrap}#tp-paneel .tp-details>summary h3{flex:1}'
   ].join('\n');
 
   root.MTTaakPaneel = T;
