@@ -572,6 +572,8 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .nieuw-lijst button{font:inherit;font-size:13px;text-align:left;min-height:36px;padding:4px 10px;border:0;border-radius:6px;background:transparent;color:var(--ink,#1f2a24);cursor:pointer}
 .nieuw-lijst button:hover{background:var(--surface-sunken)}
 .proj-terug{display:none}
+.po-rij{cursor:pointer}.po-rij:hover,.po-rij:focus-visible{background:var(--surface-sunken)}.po-naam{font-weight:600;font-size:13px}
+.po-tabel td,.po-tabel th{padding:6px 8px;vertical-align:top}
 .pl-schakel{display:inline-flex;gap:0;margin:0 0 var(--space-3);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
 .pl-sch{font:inherit;font-size:13px;font-weight:600;min-height:36px;padding:4px 14px;border:0;background:var(--surface);color:var(--ink,#1f2a24);cursor:pointer}
 .pl-sch+.pl-sch{border-left:1px solid var(--border)}
@@ -6562,7 +6564,38 @@ function renderProjectLijst(filter=''){
   else if(r.groepen){ const gk=PF.stand().groep;
     el.innerHTML=r.groepen.map(g=>`<div class="pf-kop${PF.dicht(gk+':'+g.key)?' dicht':''}"><button type="button" aria-expanded="${esc(!PF.dicht(gk+':'+g.key))}" onclick="MTProjFilter.kopWissel(${jsArg(gk+':'+g.key)})">${esc(g.label)} <span class="n">(${esc(g.aantal)})</span></button></div>${PF.dicht(gk+':'+g.key)?'':g.items.map(x=>rij(perCode.get(x.code))).join('')}`).join(''); }
   else el.innerHTML=r.lijst.map(x=>rij(perCode.get(x.code))).join('');
+  window._pfZichtbaar=r.lijst.map(x=>x.code);
+  try{ projOverzichtTeken(); }catch(e){ console.warn('Projectenoverzicht:',e); }
   if(typeof vandaagTeken==='function') vandaagTeken();
+}
+// Zonder gekozen project toont de rechterkant het overzicht van de projecten die links in de lijst staan (dezelfde filters): fase, lever en de urenmeter. Een rij openen = het project. Alleen lezen; marge staat er niet in (die is er nog niet).
+function projOverzichtTeken(){
+  const h=document.getElementById('project-detail'); if(!h||huidigProject||h.dataset.code||h.dataset.klant||h.dataset.offerte) return;
+  if(!h.querySelector('.po-kaart')&&!/Selecteer een project/.test(h.textContent)) return;   // er staat iets anders (bv. "niet gevonden")
+  const codes=(window._pfZichtbaar||[]).slice(0,100), el=_p2El;
+  if(!codes.length){ h.replaceChildren(el('div',{class:'card po-kaart'},el('div',{class:'dos-leeg',tekst:'Geen projecten met deze filters.'}))); return; }
+  const rijen=codes.map(code=>{
+    const p=projVind(code); if(!p) return null;
+    let m=null; try{ m=projMeterBereken(code).m.totaal; }catch(e){}
+    const u=x=>(m&&x!=null)?_pmU(x):'—', geklokt=m?(m.gekoppeld||0)+(m.ongekoppeld||0):null;
+    const lever=(p.gegevens&&p.gegevens.leverdatum)||'';
+    const rest=m&&m.budget?_pmU(m.resterend):'—';
+    const tr=el('tr',{class:'po-rij',tabindex:'0',role:'link','aria-label':'Open '+projNaamVol(p),klik:()=>selecteerProject(code)},
+      el('td',null,el('div',{class:'po-naam',tekst:projNaamVol(p)}),el('div',{class:'pm-dim',style:'font-size:11px',tekst:projKlantNaam(p)})),
+      el('td',null,p.fase&&window.MTLead?el('span',{class:'fase-chip fase-'+p.fase,tekst:MTLead.label(p.fase)}):null),
+      el('td',{tekst:lever&&MTPlanning.isYmd(lever)?_p2D(lever):'—'}),
+      el('td',{class:'pm-num',tekst:u(m&&m.budget)}),el('td',{class:'pm-num',tekst:u(m&&m.gepland)}),el('td',{class:'pm-num',tekst:geklokt==null?'—':_pmU(geklokt)}),
+      el('td',{class:'pm-num'+(m&&m.budget&&m.resterend<0?' ov-over':''),tekst:rest}));
+    tr.addEventListener('keydown',ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); selecteerProject(code); } });
+    return tr;
+  }).filter(Boolean);
+  const totaal=(window._pfZichtbaar||[]).length;
+  h.replaceChildren(el('div',{class:'card po-kaart'},
+    el('div',{class:'card-title',tekst:'Projecten ('+totaal+')'}),
+    el('div',{class:'tabel-scroll'},el('table',{class:'pm-tabel po-tabel'},
+      el('thead',null,el('tr',null,['Project','Fase','Lever','Budget','Gepland','Geklokt','Rest'].map((k,i)=>el('th',{class:i>2?'pm-num':null,tekst:k,title:k==='Geklokt'?'Uren uit de lokaal gesynchroniseerde Toggl-gegevens; open het project voor de volledige stand':null})))),
+      el('tbody',null,rijen))),
+    totaal>codes.length?el('div',{class:'pm-dim',style:'margin-top:6px',tekst:'De eerste '+codes.length+' van '+totaal+' projecten; verfijn het filter voor de rest.'}):null));
 }
 // ── Projectlijst filteren/sorteren/groeperen: koppeling met mt-projfilter.js ──
 var _pfGestart=false;
@@ -6982,7 +7015,7 @@ function projCtxStatus(code,tekst){
 // sectie wordt pas opgebouwd als hij open gaat. Laatst gekozen sectie wordt onthouden.
 const PROJ_SECTIES=[
   {k:'overzicht',l:'Overzicht'},{k:'dossier',l:'Dossier'},{k:'planning',l:'Planning'},
-  {k:'calculatie',l:'Calculatie'},{k:'productie',l:'Productie'}];
+  {k:'calculatie',l:'Calculatie'},{k:'productie',l:'Productie'},{k:'uren-budget',l:'Uren & budget'}];
 PROJ_SECTIES[2].l='Planning & taken';
 let _projSectie=(()=>{ try{ const s=localStorage.getItem('mt_proj_sectie'); return PROJ_SECTIES.some(x=>x.k===s)?s:'overzicht'; }catch(e){ return 'overzicht'; } })();
 function projSectieHuidig(){ return _projSectie; }
@@ -7065,21 +7098,24 @@ function _projSectieRender(proj){
   [...el.querySelectorAll('.proj-paneel')].forEach(x=>{ if(x===pan) x.hidden=false; else if(_PROJ_BLIJVEND.has(x.dataset.sectie)) x.hidden=true; else x.remove(); });
   if(_PROJ_BLIJVEND.has(_projSectie)&&pan.dataset.klaar){ if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } } _p2RolPas(pan); return; }   // al opgebouwd: alleen tonen (de bestelregels wel vernieuwen)
   const c=_projCtx(proj);
-  const bouw={overzicht:projSecOverzicht,dossier:projSecDossier,planning:projSecPlanning,calculatie:projSecCalculatie,productie:projSecProductie}[_projSectie]||projSecOverzicht;
+  const bouw={overzicht:projSecOverzicht,dossier:projSecDossier,planning:projSecPlanning,calculatie:projSecCalculatie,productie:projSecProductie,'uren-budget':projSecUrenBudget}[_projSectie]||projSecOverzicht;
   pan.innerHTML=bouw(proj,c); pan.dataset.klaar='1';
   if(_projSectie==='dossier') renderDossier(document.getElementById('proj-dossier-'+c.cid),{codes:[proj.code],key:'proj:'+proj.code});
   if(_projSectie==='planning'){
-    // Een fout in de tijdlijn mag de rest van de sectie (Gantt, taken) nooit blokkeren.
-    try{ projMeterLaad(proj.code); }catch(e){ console.warn('meter:',e); }
+    // Een fout in de afhankelijkheden mag de rest van de sectie (Gantt, taken) nooit blokkeren.
     try{ projAfhTeken(proj.code); }catch(e){ console.warn('afhankelijkheden:',e); }
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } try{ _prBestandenOpenBijGebruik(c); }catch(e){ console.warn('bestanden:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
   if(_projSectie==='planning'){ try{ MTPlanFilter.monteerProject(document.getElementById('pf-proj-'+String(proj.code).replace(/-/g,'')),'pt-tbl-'+String(proj.code).replace(/-/g,'')); }catch(e){ console.warn('Planningsfilter:',e); } planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} try{ MTTaakTabel.verrijk(proj.code,pan); }catch(e){ console.warn('Takentabel:',e); } }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='overzicht'){ try{ MTVoortgang.monteer(proj.code,pan); }catch(e){ console.warn('Voortgang:',e); } try{ ovKernTeken(proj.code); projMeterLaad(proj.code).then(()=>ovKernTeken(proj.code),()=>ovKernTeken(proj.code)); }catch(e){ console.warn('Kerncijfers:',e); } }   // het blok Voortgang: eerste onder de contextbalk
-  if(_projSectie==='calculatie'){
-    nacalcLaadOfferte(proj.code,c.effectiveMb);
+  if(_projSectie==='uren-budget'){
+    try{ projMeterLaad(proj.code); }catch(e){ console.warn('meter:',e); }
+    try{ if(typeof geldFactuurBlokVul==='function') geldFactuurBlokVul(proj,'ub-fact-'+c.cid); }catch(e){ console.warn('facturatie verwacht:',e); }   // alleen met recht geld (het blok controleert dat zelf)
+    try{ nacalcLaadOfferte(proj.code,c.effectiveMb); }catch(e){ console.warn('nacalculatie:',e); }
     try{ voorraadWegTeken(proj.code,c.cid); }catch(e){ console.warn('verwijderde inkoopregels:',e); }
+  }
+  if(_projSectie==='calculatie'){
     if(typeof window.calcProjectTonen==='function') window.calcProjectTonen(proj); else if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
   }
 }
@@ -7138,7 +7174,6 @@ function projSecOverzicht(proj,c){
         <div class="ov-kern-rij" id="ov-kern-${esc(c.cid)}"></div>
         <div class="ov-kern-onder">Materiaalinkoop <b>${fmt(c.totaalInkoop)}</b> · ${esc(c.projItems.length)} regel${c.projItems.length===1?'':'s'}</div>
         <div class="ov-kern-onder">${offerte}</div>
-        ${typeof geldProjectRijHtml==='function'?geldProjectRijHtml(proj):''}
       </section>
       <div class="ov-grid">
         <section class="ov-blok"><div class="card-title">Laatste activiteit</div>
@@ -7201,14 +7236,21 @@ function projSecPlanning(proj,c){
         <button type="button" class="pl-link" onclick="plNaarAgenda(${jsArg(proj.code)},'capaciteit')" title="Wie heeft wanneer ruimte: de capaciteit van het team, gefilterd op dit project">Bekijk in Capaciteit</button>
         <button type="button" class="pl-link" onclick="plNaarAgenda(${jsArg(proj.code)},'tijdlijn')" title="De tijdlijn met afhankelijkheden en het kritieke pad, gefilterd op dit project">Bekijk in Tijdlijn</button>
       </div>
-      <details class="pl-meer"><summary>Fasenplan</summary>${projectPlanning(proj)}</details>
-      <details class="pl-meer"><summary>Budget en uren</summary><div id="proj-meter-${esc(c.cid)}" class="pm-host"></div></details>`;
+      <details class="pl-meer"><summary>Fasenplan</summary>${projectPlanning(proj)}</details>`;
+
 }
-// ── Calculatie: offerte-calculator, nacalculatie, materiaalinkoop uit facturen ──
+// ── Calculatie: de offerte-calculator (nacalculatie, facturatie en inkoop staan in Uren & budget) ──
 function projSecCalculatie(proj,c){
+  return `<div id="offerte-calc-${esc(c.cid)}"><p style="color:var(--text-faint);font-size:13px">Offerte-calculator laden…</p></div>
+      <p class="pm-dim" style="font-size:12px;margin-top:var(--space-3)">Nacalculatie, facturatie verwacht en materiaalinkoop staan onder <a href="#" onclick="event.preventDefault();projSectieKies('uren-budget')">Uren &amp; budget</a>.</p>`;
+}
+// ── Uren & budget: de projectmeter, facturatie verwacht, prognose, nacalculatie en materiaalinkoop uit facturen bij elkaar ──
+// Elk vak houdt zijn eigen controle op het geld-recht (meter, geldFactuurBlokVul, geldProjectRijHtml, nacalcHtml, uurtarievenMag); het tabblad is niet de beveiliging.
+function projSecUrenBudget(proj,c){
   const projItems=c.projItems;
-  return `
-      <div id="offerte-calc-${esc(c.cid)}"><p style="color:var(--text-faint);font-size:13px">Offerte-calculator laden…</p></div>
+  return `<div id="proj-meter-${esc(c.cid)}" class="pm-host"></div>
+      <div id="ub-fact-${esc(c.cid)}" class="pm-host"></div>
+      ${typeof geldProjectRijHtml==='function'?geldProjectRijHtml(proj):''}
       ${nacalcHtml(proj,c.totaalInkoop,c.effectiveMb)}
       ${projItems.length?`
       <hr class="divider">
@@ -7512,7 +7554,7 @@ function dossierItems({codes}={}){
       const st=(o.meta&&o.meta.status)||'', naar=()=>projSectieKies('calculatie');
       if(o._gewijzigd) rij({soort:'offerte',titel:'Calculatie bijgewerkt — '+(o.titel||k),datum:o._gewijzigd,status:st,ref:{key:k},open:naar});
       if(o.meta&&o.meta.offertedatum) rij({soort:'offerte',titel:'Offertedatum — '+(o.titel||k),datum:o.meta.offertedatum,status:st,ref:{key:k},open:naar});
-      if(o.nacalc&&o.nacalc.gestart) rij({soort:'offerte',titel:'Nacalculatie gestart — '+(o.titel||k),datum:o.nacalc.gestart,status:'nacalculatie',ref:{key:'NC~'+k},open:naar});
+      if(o.nacalc&&o.nacalc.gestart) rij({soort:'offerte',titel:'Nacalculatie gestart — '+(o.titel||k),datum:o.nacalc.gestart,status:'nacalculatie',ref:{key:'NC~'+k},open:()=>projSectieKies('uren-budget')});
       if(!o._gewijzigd&&!(o.meta&&o.meta.offertedatum)) rij({soort:'offerte',titel:'Calculatie — '+(o.titel||k),datum:'',status:st,ref:{key:k},open:naar});
     });
     // ── taken (+ journaal) ──
@@ -20862,7 +20904,6 @@ function activiteitOpen(force){
       ${kopHtml}
       ${summary}
       ${kpis}
-      <div id="calc-fact-${esc(c)}"></div>
       <div id="calc-vergeten-${esc(c)}">${vergetenPaneelHtml(key)}</div>
       ${matTabel}
       ${uurTabel}
@@ -20890,7 +20931,6 @@ function activiteitOpen(force){
       <p style="font-size:10px;color:var(--text-faint);margin:0.5rem 0 0">Inkoopprijzen/marges staan privé op SharePoint — nooit in de publieke repo. "🔍 prijs" zoekt eerst je <b>echte inkoop</b> in voorraad/facturen (Drimensa, Ostermann, …) en zet die als inkoopprijs. Lukt dat niet, dan toont het hooguit een <span style="color:var(--gold)">indicatieve VW-richtprijs</span> (⚠ géén echte inkoop) of meldt het dat je handmatig moet zoeken. Leveranciers hebben geen open prijs-API (onderzoek 28-6) — de factuur-historie is de bron.</p>
     </div>`;
     _opslagTeken(key); _markeerGetallen(host); _defConflictTeken(host,key);
-    if(typeof geldFactuurBlokVul==='function') geldFactuurBlokVul(proj,'calc-fact-'+c);   // "Facturatie verwacht" (alleen met recht geld)
   };
   // Een regel die intussen elders is verwijderd terwijl jij erin werkte: terugzetten uit wat er op je scherm staat
   // (je invoer gaat dus niet verloren) en dat duidelijk melden. Lukt dat niet, dan in elk geval eerlijk melden.
