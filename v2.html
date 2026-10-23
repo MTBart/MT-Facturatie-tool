@@ -68,9 +68,9 @@
 <script src="mt-vandaag-desk.js?v=2026-10-21u"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
-<script src="mt-zijbalk.js?v=2026-10-16c" defer></script>
-<script src="mt-geld.js?v=2026-10-12c"></script>
-<script src="mt-koers.js?v=2026-10-12c"></script>
+<script src="mt-zijbalk.js?v=2026-10-23a" defer></script>
+<script src="mt-geld.js?v=2026-10-23a"></script>
+<script src="mt-koers.js?v=2026-10-23a"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
 <script src="mt-verhuis.js?v=2026-10-21a"></script>
@@ -906,7 +906,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <script>(function(){ var b=document.getElementById('stijl-terug'); if(b) b.addEventListener('click',function(){ if(window.mtStijl) mtStijl.zet(true); }); })();</script>
 
 <div class="tabs-wrap">
-  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Dashboard</button>
+  <button class="tab-btn" id="tab-btn-geld" style="display:none" onclick="showTab('geld',this)">Financiën</button>
   <button class="tab-btn active" id="tab-btn-dashboard-oud" style="display:none" data-recht="moneybird" onclick="showTab('dashboard',this)">Oud dashboard</button>
   <button class="tab-btn" id="tab-btn-rapporten" style="display:none" onclick="showTab('rapporten',this)">Rapporten<span id="rapport-badge" hidden style="margin-left:6px;background:#B4412F;color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-weight:600"></span></button>
   <button class="tab-btn" data-recht="inbox" onclick="showTab('inbox',this)">Inbox</button>
@@ -12160,7 +12160,7 @@ async function laadCashflowDashboard(){
     if(cfRoot) cfRoot.style.display='none'; const cs=document.querySelector('#tab-dashboard > .cf-section'); if(cs) cs.style.display='none';
     const dash=document.getElementById('tab-dashboard');
     if(dash&&!document.getElementById('cf-naar-geld')){ const d=document.createElement('div'); d.id='cf-naar-geld'; d.className='card'; d.style.cssText='margin-bottom:1rem;font-size:13px';
-      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Dashboard</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Dashboard →</button>';
+      d.innerHTML='Cashflow en saldo staan nu op het tabblad <b>Financiën</b>: lopende rekening, potjes, wat er de komende tijd binnenkomt en uitgaat. <button class="btn btn-sm" onclick="const b=document.getElementById(\'tab-btn-geld\'); if(b) b.click();">Naar Dashboard →</button>';
       dash.insertBefore(d,dash.firstElementChild); }
     return;
   }
@@ -16265,7 +16265,7 @@ async function geldHaal(pad,opt){
 function geldOpen(){
   const el=document.getElementById('geld-root'); if(!el||!window.MTGeld) return;
   if(!window.MTRol||!MTRol.me){ if(!geldOpen._wacht){ geldOpen._wacht=true; window.addEventListener('mt-rol',()=>{ geldOpen._wacht=false; geldTabZet(); },{once:true}); } el.innerHTML='<div class="dos-meta">Laden…</div>'; return; }
-  if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Het geldscherm is alleen voor eigenaren en de administratie.</div>'; return; }
+  if(!geldNieuw()||!MTRol.magGeld()){ el.innerHTML='<div class="card">Financiën is alleen voor eigenaren en de administratie.</div>'; return; }
   if(el.dataset.gestart){ MTGeld.laad(); return; }
   el.dataset.gestart='1';
   Promise.resolve(MTGeld.start(el,{bron:{haal:geldHaal},magWijzigen:MTRol.magGeld('wijzigen'),wie:(typeof mtMijEmail==='function'&&mtMijEmail())||'',
@@ -16292,6 +16292,22 @@ function geldPrognoseOpen(code){
   const p=projVind(code); if(!p) return;
   const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
   const open=()=>{ const x=geldProjecten().find(q=>q.project_id===p.project_id); MTGeld.prognoseBewerk('p:'+p.project_id,x||null); };
+  const el=document.getElementById('geld-root');
+  if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ b.click(); setTimeout(open,50); } else { geldOpen._na=open; b.click(); }
+}
+// Offerte-weergave van een project: compact blokje "Facturatie verwacht" (termijnen + verwachte factuurmaand, wijzigbaar met het recht
+// geld/wijzigen). Dezelfde component en dezelfde opslag als de Factuurplanning in Financiën; een klik op het blokje opent Financiën op dit project.
+function geldFactuurBlokVul(proj,id){
+  const el=document.getElementById(id); if(!el) return;
+  if(!proj||!proj.project_id||proj.soort==='intern'||typeof geldNieuw!=='function'||!geldNieuw()||!window.MTRol||!MTRol.magGeld()||!window.MTGeld||!MTGeld.projectBlok) return;
+  MTGeld.projectBlok(el,{bron:{haal:geldHaal},sleutel:'p:'+proj.project_id,mag:!!MTRol.magGeld('wijzigen'),
+    naar:()=>geldFactuurplanningOpen(proj.code),instellen:()=>geldPrognoseOpen(proj.code)});
+}
+// Naar Financiën, de Factuurplanning gefilterd op dit project en in beeld.
+function geldFactuurplanningOpen(code){
+  const p=projVind(code); if(!p) return;
+  const b=document.getElementById('tab-btn-geld'); if(!b||b.style.display==='none') return;
+  const open=()=>MTGeld.planFocus('p:'+p.project_id);
   const el=document.getElementById('geld-root');
   if(el&&el.dataset.gestart&&MTGeld._st&&MTGeld._st.data){ b.click(); setTimeout(open,50); } else { geldOpen._na=open; b.click(); }
 }
@@ -16344,7 +16360,7 @@ async function updKaartTeken(){
   kaart.style.display='';
   if(!l.length){ el.innerHTML='<div class="dos-meta">Nog geen overzicht beschikbaar.</div>'; return; }
   el.innerHTML=l.map((u,i)=>`<details class="upd-versie"${i===0?' open':''}><summary><b>v${esc(u.versie)}</b> — ${esc(u.titel)}
-      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${esc(u.voor==='beheer'?' · voor beheer':u.voor==='geld'?' · voor Geld':u.voor==='zonder-geld'?' · zonder Geld-recht':'')}</span></summary>
+      <span class="dos-meta">${i===0?'live sinds ':''}${esc(_updDatum(u.datum))}${esc(u.voor==='beheer'?' · voor beheer':u.voor==='geld'?' · voor Financiën':u.voor==='zonder-geld'?' · zonder Financiën-recht':'')}</span></summary>
     <ul>${u.punten.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></details>`).join('');
 }
 // ── Werkcodes en centrale instellingen (projectnummering) ──
@@ -19706,6 +19722,7 @@ function activiteitOpen(force){
       ${kopHtml}
       ${summary}
       ${kpis}
+      <div id="calc-fact-${esc(c)}"></div>
       <div id="calc-vergeten-${esc(c)}">${vergetenPaneelHtml(key)}</div>
       ${matTabel}
       ${uurTabel}
@@ -19733,6 +19750,7 @@ function activiteitOpen(force){
       <p style="font-size:10px;color:var(--text-faint);margin:0.5rem 0 0">Inkoopprijzen/marges staan privé op SharePoint — nooit in de publieke repo. "🔍 prijs" zoekt eerst je <b>echte inkoop</b> in voorraad/facturen (Drimensa, Ostermann, …) en zet die als inkoopprijs. Lukt dat niet, dan toont het hooguit een <span style="color:var(--gold)">indicatieve VW-richtprijs</span> (⚠ géén echte inkoop) of meldt het dat je handmatig moet zoeken. Leveranciers hebben geen open prijs-API (onderzoek 28-6) — de factuur-historie is de bron.</p>
     </div>`;
     _opslagTeken(key); _markeerGetallen(host);
+    if(typeof geldFactuurBlokVul==='function') geldFactuurBlokVul(proj,'calc-fact-'+c);   // "Facturatie verwacht" (alleen met recht geld)
   };
   // Een regel die intussen elders is verwijderd terwijl jij erin werkte: terugzetten uit wat er op je scherm staat
   // (je invoer gaat dus niet verloren) en dat duidelijk melden. Lukt dat niet, dan in elk geval eerlijk melden.

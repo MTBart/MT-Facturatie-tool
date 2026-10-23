@@ -119,7 +119,7 @@
   }
   function omzetMeter(x, jaar, tm) {
     const m = { id: 'omzet', titel: 'Omzet op 31-12', kleur: 'onbekend', waarde: '—', sub: [], waarom: [], getal: null, schatting: true,
-      bron: 'Gefactureerd: Moneybird via /geld/cijfers. Prognose: de aangevinkte termijnen in Geld → Prognose die nog niet gefactureerd zijn.' };
+      bron: 'Gefactureerd: Moneybird via /geld/cijfers. Prognose: de aangevinkte termijnen in Financiën → Prognose die nog niet gefactureerd zijn.' };
     m.uitleg = `Schatting: de gefactureerde omzet van ${jaar} (t/m vandaag) plus de aangevinkte prognosetermijnen met een factuurdatum vóór 31-12 (bedragen ÷ 1,21, dus excl. btw). Vergeleken met de omzet van heel ${jaar - 1}. Groen: minstens zoveel als vorig jaar. Oranje: ${Math.round(OMZET_ORANJE * 100)}–99%. Rood: minder dan ${Math.round(OMZET_ORANJE * 100)}%. Alleen wat zeker doorgaat telt mee; offertes niet.`;
     if (x.laden) { m.waarde = '…'; m.waarom.push('cijfers worden nog geladen'); return m; }
     if (x.onvolledig.length) { m.waarom.push(...x.onvolledig); return m; }
