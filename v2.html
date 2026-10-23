@@ -54,13 +54,13 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planfilter.js?v=2026-10-23c1"></script>
+<script src="mt-planfilter.js?v=2026-10-23g1"></script>
 <script src="mt-planning.js?v=2026-10-23c2"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-23p1b"></script>
 <script src="mt-takenbak.js?v=2026-10-23c3"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-23p1b"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-23g1"></script>
 <script src="mt-objectpaneel.js?v=2026-10-23p1b"></script>
 <script src="mt-taakpaneel.js?v=2026-10-21v"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23p1b"></script>
@@ -861,7 +861,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-23p1b">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-23g1">
 </head>
 <body>
 
@@ -1768,6 +1768,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
             <option value="project">Project</option>
             <option value="persoon">Persoon</option>
           </select>
+          <span id="agenda-laag-host" style="display:none"></span>   <!-- G1: de knop "Geklokt" van de Capaciteit (mt-capaciteit-nieuw.js), vlak bij Sync nu -->
           <button class="btn btn-sm btn-gold" onclick="agendaSyncNu()" id="agenda-syncbtn">⬇ Sync nu</button>
           <button class="btn btn-sm btn-secondary" onclick="focusOpen()" title="Toggl Focus aansturen">🎯 Focus</button>
         </div>
@@ -3472,7 +3473,7 @@ function agendaRoute(){
   let view; try{ view=_agenda.view; }catch(e){ return r; }   // _agenda staat verderop (let): vóór die regel geen weergave in de link
   if(typeof MTPlanFilter==='undefined'||!view) return r;
   r.weergave=view;
-  if(view==='mijnwerk'||view==='capaciteit'||view==='bord'||view==='tijdlijn'){ const g=MTPlanFilter.get(); r.planfilter={project:g.project,persoon:g.persoon,status:g.status,van:g.van,zoom:g.zoom,bord:view==='bord'?g.bord:'',schaal:view==='capaciteit'?g.schaal:'',tijd:view==='capaciteit'?g.tijd:'',bak:view==='capaciteit'?g.bak:'',bf:view==='capaciteit'?g.bf:''}; }
+  if(view==='mijnwerk'||view==='capaciteit'||view==='bord'||view==='tijdlijn'){ const g=MTPlanFilter.get(); r.planfilter={project:g.project,persoon:g.persoon,status:g.status,van:g.van,zoom:g.zoom,bord:view==='bord'?g.bord:'',schaal:view==='capaciteit'?g.schaal:'',tijd:view==='capaciteit'?g.tijd:'',bak:view==='capaciteit'?g.bak:'',bf:view==='capaciteit'?g.bf:'',gk:view==='capaciteit'?g.gk:''}; }
   return r;
 }
 // De sleutels wie en status van de planningsfilters in een projectlink (#projecten/<code>/planning?status=…&wie=…)
@@ -3839,16 +3840,21 @@ function agUur(sec){return (sec/3600).toFixed(1).replace('.',',');}
 // P1b: de oude weergave "📋 Planning" (de weekweergave van de planblokken) is vervangen door de Capaciteit (klik op een lege plek = nieuw blok, bewerkbaar planblokpaneel) en blijft nog één release bereikbaar
 // achter een verborgen link (?oud-planning=1) als vangnet; zonder die link is de knop weg en gaat een oude link naar de Capaciteit.
 const OUD_PLANNING=/[?&]oud-planning=1(&|#|$)/.test((typeof location!=='undefined'&&location.search)||'');
+// G1: de geklokte uren (▦ Rooster en ≣ Lijst) zitten nu als laag "Geklokt" in de Capaciteit. Beide knoppen blijven één release bereikbaar achter een verborgen link (?oud-rooster=1) als vangnet;
+// zonder die link zijn ze weg en gaat een oude link naar de Capaciteit met de laag aan. Alleen in de nieuwe stijl: de oude stijl heeft de laag niet.
+const OUD_ROOSTER=/[?&]oud-rooster=1(&|#|$)/.test((typeof location!=='undefined'&&location.search)||'');
+const roosterWeg=()=>!OUD_ROOSTER&&document.documentElement.getAttribute('data-stijl')==='nieuw'&&typeof MTCapaciteitNieuw!=='undefined'&&!!MTCapaciteitNieuw.gkAan;
 function renderAgenda(){
   if(_agenda.view==='plan'&&!OUD_PLANNING) _agenda.view='capaciteit';
+  if((_agenda.view==='grid'||_agenda.view==='lijst')&&roosterWeg()){ _agenda.view='capaciteit'; try{ MTCapaciteitNieuw.gkAan(true); }catch(e){ console.warn('Rooster naar Capaciteit:',e); } }
   werktijdenZorg(werktijdenVerversWeergave);   // de werktijden van het team (capaciteit); eenmaal per sessie
   if(!_agenda.weekStart) _agenda.weekStart=agMaandag(new Date());
   agEnsureNames();
   agBindOutside();
   const ko=document.getElementById('agenda-kleurop'); if(ko) ko.value=_agenda.kleurOp;
   const gb=document.getElementById('agenda-view-grid'), lb=document.getElementById('agenda-view-lijst'), pb=document.getElementById('agenda-view-plan');
-  if(gb) gb.classList.toggle('btn-gold',_agenda.view==='grid'), gb.classList.toggle('btn-secondary',_agenda.view!=='grid');
-  if(lb) lb.classList.toggle('btn-gold',_agenda.view==='lijst'), lb.classList.toggle('btn-secondary',_agenda.view!=='lijst');
+  if(gb) gb.style.display=roosterWeg()?'none':'', gb.classList.toggle('btn-gold',_agenda.view==='grid'), gb.classList.toggle('btn-secondary',_agenda.view!=='grid');
+  if(lb) lb.style.display=roosterWeg()?'none':'', lb.classList.toggle('btn-gold',_agenda.view==='lijst'), lb.classList.toggle('btn-secondary',_agenda.view!=='lijst');
   if(pb) pb.style.display=OUD_PLANNING?'':'none', pb.classList.toggle('btn-gold',_agenda.view==='plan'), pb.classList.toggle('btn-secondary',_agenda.view!=='plan');
   const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
   if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
@@ -3857,6 +3863,7 @@ function renderAgenda(){
     [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp],['agenda-view-bord',bd],['agenda-view-tijdlijn',tj]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('btn-secondary',!aan); });
     const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), bdEl=document.getElementById('agenda-bord'), tjEl=document.getElementById('agenda-tijdlijn'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
     { const of=document.getElementById('ag-oudfilter'); if(of&&typeof MTPlanFilter!=='undefined') of.style.display=eigen?'none':''; }   // Mijn werk en Capaciteit hebben de gedeelde filterbalk in beeld; de oude Projecten/Personen-keuze hoort alleen bij Rooster, Lijst en Planning
+    { const lh=document.getElementById('agenda-laag-host'); if(lh) lh.style.display=cp?'inline-block':'none'; }   // de knop Geklokt hoort alleen bij de Capaciteit
     if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(bdEl) bdEl.style.display=bd?'block':'none'; if(tjEl) tjEl.style.display=tj?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
     if(mw){ agRenderFilters(); try{ MTMijnWerk.teken(); }catch(e){ console.warn('Mijn werk:',e); } return; }
     if(cp){ agRenderFilters(); try{ MTCapaciteit.teken(); }catch(e){ console.warn('Capaciteit:',e); } return; }
@@ -3907,7 +3914,8 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   magSlepen:()=>capMagSlepen(), magBlok:()=>capMagSlepen()||pvMoetVoorstel(), nieuwBlok:c=>MTPlanblokPaneel.nieuw(c), vrijedagen:()=>admVrijdagen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), opruimen:(spec,opt)=>capOpruimen(spec,opt), taakBezig:(code,id)=>MTPlanVerplaats.taakBezig(code,id), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openBlok:(id,el)=>MTPlanblokPaneel.open(id,{terug:el}), naHerstel:()=>MTTaakPaneel.ververs(), naWijziging:()=>{ try{ MTTaakPaneel.ververs(); }catch(e){} try{ _ptHertekenen(); }catch(e){} },   // klik op een taak = het taakpaneel (mt-taakpaneel.js); na een sleep of Ongedaan maken: paneel en projecttabel meteen bij
-  openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
+  openProject:code=>openProject(code,{sectie:'planning'}),
+  laagHost:()=>document.getElementById('agenda-laag-host'), geklokt:()=>agEntries(), gkProject:c=>agProjLabel(c), gkSync:()=>{ try{ return localStorage.getItem('mt_toggl_last_sync')||''; }catch(e){ return ''; } } }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }   // G1: de laag Geklokt leest dezelfde uren als het oude Rooster (mt_uren_entries); er wordt niets opgehaald of geschreven
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
 try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),

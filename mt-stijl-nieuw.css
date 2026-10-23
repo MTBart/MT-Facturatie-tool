@@ -886,3 +886,28 @@ html[data-stijl="nieuw"] .stijl-melding-knop:hover{background:var(--surface-sunk
 html[data-stijl="nieuw"] .stijl-melding-x{width:34px;height:34px;border:0;border-radius:4px;background:none;color:var(--ink-2);font:400 20px/1 var(--sans);cursor:pointer}
 html[data-stijl="nieuw"] .stijl-melding-x:hover{background:var(--surface-sunken)}
 html[data-stijl="nieuw"] .stijl-melding-knop:focus-visible,html[data-stijl="nieuw"] .stijl-melding-x:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}
+
+/* ── G1: de laag Geklokt in de Capaciteit (uren uit Toggl naast het geplande; alleen kijken) ── */
+html[data-stijl="nieuw"] .cn-gk-knop{display:inline-flex;align-items:center;gap:6px}
+html[data-stijl="nieuw"] .cn-gk-knop .cn-ic{width:16px;height:16px}
+html[data-stijl="nieuw"] .cn-gk-knop.aan{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+html[data-stijl="nieuw"] .cn-gk-baan{position:absolute;left:0;right:0;border-top:1px dashed var(--line);background:color-mix(in srgb,var(--surface-sunken) 70%,transparent);pointer-events:none}
+html[data-stijl="nieuw"] .cn-gk-seg{position:absolute;z-index:1;min-width:3px;padding:0;border:1px solid color-mix(in srgb,var(--block-color,var(--ink-2)) 65%,var(--surface));border-radius:3px;background:color-mix(in srgb,var(--block-color,var(--ink-2)) 26%,var(--surface));cursor:pointer}
+html[data-stijl="nieuw"] .cn-gk-seg:hover{background:color-mix(in srgb,var(--block-color,var(--ink-2)) 45%,var(--surface))}
+html[data-stijl="nieuw"] .cn-gk-seg.buiten{border-style:dashed}
+html[data-stijl="nieuw"] .cn-gk-seg:focus-visible,html[data-stijl="nieuw"] .cn-gk-cel:focus-visible,html[data-stijl="nieuw"] .cn-gk-mtekst:focus-visible,html[data-stijl="nieuw"] .cn-gkpop-proj:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:1px}
+html[data-stijl="nieuw"] .cn-gk-cel{align-self:flex-start;max-width:100%;padding:0 5px;border:0;border-radius:3px;background:var(--surface-sunken);color:var(--ink-2);font:400 10px/16px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+html[data-stijl="nieuw"] .cn-gk-cel:hover{background:var(--line-soft)}
+html[data-stijl="nieuw"] .cn-gk-som{font-style:normal;color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-gk-lijn{position:absolute;left:3px;bottom:2px;height:3px;max-width:calc(100% - 6px);border-radius:2px;background:var(--ink-2);opacity:.7}
+html[data-stijl="nieuw"] .cn-gk-mtekst{position:absolute;top:15px;left:0;right:0;padding:0;border:0;background:none;text-align:center;font:400 10px/12px var(--mono);color:var(--ink-2);text-decoration:underline dotted;cursor:pointer}
+html[data-stijl="nieuw"] .cn-kw-gk{font:400 10px/12px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-kw-gk.klein{display:block;height:3px;border-radius:2px;background:var(--ink-2);opacity:.6}
+html[data-stijl="nieuw"] .cn-lg-gk{display:block;width:14px;height:8px;border:1px solid var(--ink-2);border-radius:2px;background:color-mix(in srgb,var(--ink-2) 25%,var(--surface))}
+html[data-stijl="nieuw"] .cn-legenda .cn-gk-sync{color:var(--ink-2);font-size:11px}
+html[data-stijl="nieuw"] .cn-gkpop-item{display:flex;flex-direction:column;gap:2px;padding:6px 0;border-top:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-gkpop-item:first-child{border-top:0;padding-top:0}
+html[data-stijl="nieuw"] .cn-gkpop-proj{display:flex;align-items:center;gap:6px;padding:0;border:0;background:none;text-align:left;font:600 12px/16px var(--sans);color:var(--ink);cursor:pointer}
+html[data-stijl="nieuw"] .cn-gkpop-proj.plat{cursor:default}
+html[data-stijl="nieuw"] .cn-gkpop-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--block-color,var(--ink-2))}
+@media (max-width:640px){html[data-stijl="nieuw"] .cn-gk-knop{min-height:44px}html[data-stijl="nieuw"] .cn-gk-seg{min-width:8px}}
