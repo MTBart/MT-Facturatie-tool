@@ -108,7 +108,7 @@
 
   // ── Selectie (voor een latere bulkactie: aanvinken in de lijst). Nu alleen de stand; de lijst toont de vinkjes zodra modus aan staat. ──
   F.selectie = new Set(); F.selectieModus = false;
-  F.selecteer = (code, aan) => { if (aan) F.selectie.add(code); else F.selectie.delete(code); };
+  F.selecteer = (code, aan) => { if (aan) F.selectie.add(code); else F.selectie.delete(code); if (typeof F.teken === 'function') F.teken(); };
   F.zetSelectieModus = v => { F.selectieModus = !!v; if (!v) F.selectie.clear(); };
 
   // ── Paneel ───────────────────────────────────────────────────────────────────
@@ -131,6 +131,9 @@
 .pf-knop svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .pf-knop.aan{background:var(--green,#2A4A38);border-color:var(--green,#2A4A38);color:#fff}
 .pf-sel{border:1px solid var(--border,#ddd);background:var(--card,#fff);border-radius:16px;padding:4px 8px;font-size:13px;min-height:32px;max-width:100%;color:inherit}
+.pf-selbalk{width:100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--border,#e4e2da);border-radius:10px;background:var(--bg,#f6f5f0)}
+.pf-selbalk .t{font-size:12px;flex:1 1 100%}
+.pf-knop[disabled]{opacity:.45;cursor:default}
 .pf-teller{width:100%;font-size:12px;color:var(--text-faint,#8a8a80);margin:2px 0 0}
 .pf-paneel{margin-top:8px;border:1px solid var(--border,#e4e2da);border-radius:10px;background:var(--card,#fff);padding:6px 10px;max-height:60vh;overflow:auto}
 .pf-paneel[hidden],.pf-sluier[hidden]{display:none}
@@ -193,6 +196,11 @@
     return `<div class="pf-balk"><button type="button" class="pf-knop${S.open || n ? ' aan' : ''}" data-pf="open" aria-expanded="${S.open ? 'true' : 'false'}" aria-controls="pf-paneel">${ICOON}Filter${n ? ' (' + esc(n) + ')' : ''}</button>
       <select class="pf-sel" data-pf-sort aria-label="Sorteren">${SORTEER.map(x => `<option value="${esc(x[0])}"${s.sort === x[0] ? ' selected' : ''}>${esc(x[1])}</option>`).join('')}</select>
       <select class="pf-sel" data-pf-groep aria-label="Groeperen">${GROEPEER.map(x => `<option value="${esc(x[0])}"${s.groep === x[0] ? ' selected' : ''}>${esc(x[1])}</option>`).join('')}</select>
+      ${D.magSelecteren && D.magSelecteren() ? `<button type="button" class="pf-knop${F.selectieModus ? ' aan' : ''}" data-pf="sel" aria-pressed="${F.selectieModus ? 'true' : 'false'}">Selecteren</button>` : ''}
+      ${F.selectieModus ? `<div class="pf-selbalk"><span class="t">${esc(F.selectie.size)} geselecteerd</span>
+        <button type="button" class="pf-knop" data-pf-selalles="1">Alles in dit filter (${esc(res.getoond)})</button><button type="button" class="pf-knop" data-pf-selniets="1">Niets</button>
+        <button type="button" class="pf-knop" data-pf-actie="afronden"${F.selectie.size ? '' : ' disabled'}>Afronden</button><button type="button" class="pf-knop" data-pf-actie="verloren"${F.selectie.size ? '' : ' disabled'}>Verloren</button>
+        <button type="button" class="pf-knop" data-pf-actie="voorstel">Voorstel archiveren</button></div>` : ''}
       <div class="pf-teller" role="status">${esc(res.getoond)} van ${esc(res.totaal)} project${res.totaal === 1 ? '' : 'en'}</div></div>
     <div class="pf-sluier" data-pf="sluit"${S.open ? '' : ' hidden'}></div>
     <div class="pf-paneel" id="pf-paneel" role="group" aria-label="Projecten filteren"${S.open ? '' : ' hidden'}>
@@ -206,14 +214,19 @@
   // De cockpit geeft de records (na zoeken en klantfilter); terug komt wat er getoond wordt. Tekent ook het paneel (teller en aantallen).
   F.verwerk = function (items, houd) {
     S.items = items; S.res = F.bereken(items, S.stand, houd, D.label);
+    if (F.selectieModus && F.selectie.size) { const zichtbaar = new Set(S.res.lijst.map(r => r.code)); [...F.selectie].forEach(c => { if (!zichtbaar.has(c)) F.selectie.delete(c); }); }   // alleen wat je ziet kan geselecteerd zijn
     if (!S.el_bezig) F.teken();
     return S.res;
   };
   function wijzig(fn) { fn(S.stand); bewaar(); if (D.opStand) D.opStand(S.stand); else F.teken(); }
   F.zetStand = (s, stil) => { S.stand = F.schoon(s); if (!stil) wijzig(() => { }); };
   function klik(e) {
-    const t = e.target.closest ? e.target.closest('[data-pf],[data-pf-alles],[data-pf-niets],[data-pf-reset]') : null; if (!t) return;
+    const t = e.target.closest ? e.target.closest('[data-pf],[data-pf-alles],[data-pf-niets],[data-pf-reset],[data-pf-selalles],[data-pf-selniets],[data-pf-actie]') : null; if (!t) return;
     const d = t.dataset;
+    if (d.pf === 'sel') { F.zetSelectieModus(!F.selectieModus); return D.opStand ? D.opStand(S.stand, true) : F.teken(); }
+    if (d.pfSelalles) { ((S.res && S.res.lijst) || []).forEach(r => F.selectie.add(r.code)); return D.opStand ? D.opStand(S.stand, true) : F.teken(); }
+    if (d.pfSelniets) { F.selectie.clear(); return D.opStand ? D.opStand(S.stand, true) : F.teken(); }
+    if (d.pfActie) { if (t.disabled) return; if (d.pfActie === 'voorstel') { if (D.opVoorstel) D.opVoorstel(); return; } if (D.opActie && F.selectie.size) D.opActie(d.pfActie, [...F.selectie]); return; }
     if (d.pf === 'open') { S.open = !S.open; return F.teken(); }
     if (d.pf === 'sluit') { S.open = false; return F.teken(); }
     if (d.pfReset) return wijzig(s => Object.assign(s, nieuweStand()));

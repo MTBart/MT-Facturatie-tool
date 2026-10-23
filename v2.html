@@ -56,7 +56,8 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planfilter.js?v=2026-10-23b"></script>
-<script src="mt-projfilter.js?v=2026-10-23a"></script>
+<script src="mt-projfilter.js?v=2026-10-23b"></script>
+<script src="mt-projopruim.js?v=2026-10-23a"></script>
 <script src="mt-planning.js?v=2026-10-17n"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
@@ -6321,7 +6322,136 @@ function _pfStart(){
   const PF=window.MTProjFilter; if(!PF||_pfGestart) return; _pfGestart=true;
   let opslag=null; try{ opslag=localStorage; }catch(e){}
   PF.init({doc:document,storage:opslag,wie:()=>mtMijEmail(),el:document.getElementById('project-filter'),
-    label:k=>(window.MTLead&&MTLead.label(k))||'',persNaam:s=>{ const m=MT_TEAM.find(x=>x.slug===s); return m?m.naam:s; },opStand:_pfOpStand});
+    label:k=>(window.MTLead&&MTLead.label(k))||'',persNaam:s=>{ const m=MT_TEAM.find(x=>x.slug===s); return m?m.naam:s; },opStand:_pfOpStand,
+    magSelecteren:()=>!!window.MTProjOpruim&&_opruimMag(),opActie:_opruimActie,opVoorstel:()=>{ if(_opruimKlaar()) MTProjOpruim.openVoorstel(); }});
+  _opruimStart();
+}
+// ── Projecten opruimen in bulk (PL2, mt-projopruim.js): Afronden/Verloren met voorbeeld, eindstand, resultaat per project en Ongedaan maken ──
+const _OP_PROJ='mt_projecten.json', _OP_JRN='mt_opruim_journaal.json', _OP_EIND='mt_project_eindstand.json';
+var _opGestart=false;
+// Alleen wie projecten mag wijzigen (rol "lezen" niets). Fail-closed: zonder rollenlaag of zonder bekende rol niets (anders dan projFaseZet; dit is een bulkactie).
+function _opruimMag(){
+  try{ return !!(window.MTRol&&MTRol.mag&&MTRol.me&&MTRol.mag('projecten:wijzigen')); }catch(e){ return false; }
+}
+// Schrijven mag alleen als de SharePoint-sync klaar is en de projecten niet geblokkeerd zijn (schemaversie, hydrate).
+function _opruimReden(){
+  if(!_opruimMag()) return 'Je mag projecten niet wijzigen.';
+  if(typeof _SP==='undefined'||!_SP.ready) return 'De synchronisatie met SharePoint is nog niet klaar. Probeer het zo opnieuw.';
+  if(_SP.blockedKeys&&_SP.blockedKeys.has('mt_projecten')) return 'Opslaan van projecten staat geblokkeerd. Herlaad de pagina.';
+  if(typeof projSchemaGeblokkeerd==='function'&&projSchemaGeblokkeerd()) return 'Deze versie van de tool is te oud om projecten te schrijven. Herlaad de pagina.';
+  return '';
+}
+function _opruimKlaar(){
+  const reden=_opruimReden();
+  if(reden){ try{ mtDialog.alert({title:'Projecten opruimen',message:reden}); }catch(e){} return false; }
+  return true;
+}
+function _opruimActie(k,codes){ if(window.MTProjOpruim&&_opruimKlaar()) MTProjOpruim.openActie(k,codes); }
+async function _opFetch(url,init){
+  const ac=typeof AbortController!=='undefined'?new AbortController():null, t=setTimeout(()=>{ try{ if(ac) ac.abort(); }catch(e){} },25000);
+  try{ return await fetch(url,Object.assign({},init,ac?{signal:ac.signal}:{})); }
+  catch(e){ if(e&&e.name==='AbortError') throw new Error('SharePoint reageert niet (langer dan 25 s)'); throw e; }
+  finally{ clearTimeout(t); }
+}
+async function _opLees(){
+  const {base,token}=await _SP._driveBase();
+  const r=await _opFetch(`${base}/root:/${_SP.FOLDER}/${_OP_PROJ}:/content`,{headers:{'Authorization':`Bearer ${token}`},cache:'no-store'});
+  if(r.status===404) return {status:404,data:null,etag:null};
+  if(!r.ok) throw new Error('lezen van SharePoint mislukt (HTTP '+r.status+')');
+  return {status:200,etag:r.headers.get('ETag'),data:await r.json()};
+}
+// Altijd met If-Match (nooit blind). De ETag van _SP zelf blijft bewust ongemoeid: de gewone sync loopt dan op een 412 en voegt samen.
+async function _opSchrijf(body,etag){
+  if(!etag) return {status:0,ok:false};
+  const {base,token}=await _SP._driveBase();
+  const r=await _opFetch(`${base}/root:/${_SP.FOLDER}/${_OP_PROJ}:/content`,{method:'PUT',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json','If-Match':etag},body});
+  return {status:r.status,ok:r.ok,etag:r.headers.get('ETag')};
+}
+const _opKloon=o=>JSON.parse(JSON.stringify(o));
+// Dezelfde veldstempels als projFaseZet, maar op een kopie van het vers gelezen record.
+function _opPasToe(rec,e){
+  const neu=_opKloon(rec), o=MTLead.overgang(neu.fase,e.naar,e.extra,_vandaagYmd());
+  Object.entries(o).forEach(([veld,w])=>projVeldZet(neu,veld,w));
+  const st=MTLead.statusVoor(o.fase); if(st) neu.status=st;
+  _spStempel(neu,rec);
+  Object.keys(o).forEach(v=>{ if(neu._vs&&neu._vs[v]) neu._vs[v].actie=String(e.batch||''); });   // actie-id in het veldstempel: bewijst dat dit onze schrijfactie is
+  return {rec:neu,velden:Object.keys(o)};
+}
+// Alle door de overgang gewijzigde velden (fase, verlies, geparkeerd_tot, …) gaan terug naar de waarde van vóór de actie.
+function _opTerugzet(rec,regel){
+  const neu=_opKloon(rec), velden=(regel.velden&&regel.velden.length?regel.velden:['fase']).slice();
+  velden.forEach(v=>{ const w=regel.voor&&Object.prototype.hasOwnProperty.call(regel.voor,v)?regel.voor[v]:(v==='fase'?regel.van:undefined); projVeldZet(neu,v,(w===null||w===undefined||w==='')?undefined:w); });
+  if(regel.status_voor===null||regel.status_voor===undefined) delete neu.status; else neu.status=regel.status_voor;
+  _spStempel(neu,rec);
+  velden.forEach(v=>{ if(neu._vs&&neu._vs[v]) neu._vs[v].actie='terug:'+String(regel.batch||''); });
+  return {rec:neu,velden};
+}
+// Alleen de gewijzigde velden (met hun stempel) naar de lokale kopie; zo blijft het fasestempel gelijk aan dat op SharePoint (nodig voor Ongedaan maken).
+function _opNaLokaal(neu,velden){
+  // Met een project_id alleen daarop zoeken (nooit terugvallen op de code: die kan na hernoemen bij een ander project horen); zonder id op code.
+  const p=neu.project_id?PROJECT_CODES.find(x=>x&&x.project_id===neu.project_id):PROJECT_CODES.find(x=>x&&x.code===neu.code); if(!p) return;
+  const vs=(p._vs&&typeof p._vs==='object')?p._vs:(p._vs={});
+  velden.forEach(v=>{ const w=_vGet(neu,v); _vZet(p,v,w===undefined?undefined:_opKloon(w)); if(neu._vs&&neu._vs[v]) vs[v]=_opKloon(neu._vs[v]); });
+  if(neu.status===undefined) delete p.status; else p.status=neu.status;
+  p._gewijzigd=neu._gewijzigd; if(neu._door) p._door=neu._door;
+  slaProjectenOp();
+}
+function _opRond(n){ return Math.round(n*100)/100; }
+// De eindstand vóór afronden: budget, gepland, geklokt (lokaal gesyncte Toggl-uren), rest en, met het geld-recht, marge (indicatie).
+async function _opEindstand(e){
+  const p=projVind(e.code)||PROJECT_CODES.find(x=>x&&e.project_id&&x.project_id===e.project_id); if(!p) throw new Error('project niet in de lokale lijst');
+  if(typeof projTakenKlaar==='function'&&!projTakenKlaar()) throw new Error('de projecttaken zijn nog niet geladen');
+  const b=projMeterBereken(p.code), t=b.m.totaal;
+  const snap={versie:1,budget_min:t.budget,gepland_min:t.gepland,geklokt_min:t.geklokt,geklokt_gekoppeld_min:t.gekoppeld,geklokt_ongekoppeld_min:t.ongekoppeld,rest_min:t.resterend,
+    budget_bron:b.m.budgetBron,uren_bron:b.bron==='toggl'?'toggl-reports':'lokale Toggl-sync',uren_sync:localStorage.getItem('mt_toggl_last_sync')||null,uren_venster_dagen:365,
+    // Eerlijk over de dekking: het geklokte totaal is wat lokaal gesynct is (een sync dekt de laatste 365 dagen), dus niet gegarandeerd alles.
+    uren_volledig:false,uren_venster_van:new Date(Date.now()-365*864e5).toISOString().slice(0,10),uren_venster_tot:new Date().toISOString().slice(0,10),
+    onvolledig_reden:'geklokt = lokaal gesynct uit Toggl (laatste 365 dagen); oudere uren kunnen ontbreken',
+    rijen:b.m.rijen.map(r=>({k:r.k,budget:r.budget,gepland:r.gepland,gekoppeld:r.gekoppeld})),waarschuwingen:b.m.waarschuwingen.map(w=>w.soort),geld:null,
+    geld_status:uurtarievenMag('lezen')?'vastgelegd':'niet_vastgelegd_geen_geldrecht'};
+  if(uurtarievenMag('lezen')){
+    const nc=nacalcData(p), offs=(typeof _ctlOffertes==='function')?_ctlOffertes():{}, calc=offs[p.code]||Object.values(offs).find(o=>o&&o.project_code===p.code)||null;
+    const tot=(calc&&typeof calcTotalenVoor==='function')?calcTotalenVoor(calc):null, inkoop=nacalcMatTotaal(p.code), kost=nc.arbeid+inkoop;
+    snap.geld={arbeid_kosten:_opRond(nc.arbeid),inkoop:_opRond(inkoop),offertebedrag:tot?_opRond(tot.offertebedrag):null,
+      marge:tot&&tot.offertebedrag>0?_opRond(tot.offertebedrag-kost):null,marge_pct:tot&&tot.offertebedrag>0?_opRond((tot.offertebedrag-kost)/tot.offertebedrag):null,
+      bron:'indicatie: offerte min geklokt maal tarief min inkoop'};
+  }
+  return snap;
+}
+// De gegevens per project voor het voorbeeld en het voorstel (één keer indexeren, niet per project zoeken).
+function _opItems(codes,alles){
+  const nu=Date.now(), vandaag=new Date(nu).toISOString().slice(0,10), grens=new Date(nu-90*864e5).toISOString().slice(0,10);
+  const taken=_pfTaken(), uren=new Map(), blokT=new Map(), blok90=new Map(), bestel=new Map();
+  try{ agEntries().forEach(e=>{ const d=e.datum||(e.start||'').slice(0,10); if(d>=grens&&e.project_code) uren.set(e.project_code,(uren.get(e.project_code)||0)+MTPlanning.entryMin(e)); }); }catch(e){}
+  try{ agPlanActief().forEach(b=>{ if(!b.project_code||!b.datum) return; if(b.datum>=vandaag) blokT.set(b.project_code,(blokT.get(b.project_code)||0)+1); if(b.datum>=grens) blok90.set(b.project_code,(blok90.get(b.project_code)||0)+1); }); }catch(e){}
+  try{ _blActief().forEach(b=>{ if(MTPlanning.bestelStatus(b)==='geleverd') return; const c=MTPlanning.bestelProject(b); if(c) bestel.set(c,(bestel.get(c)||0)+1); }); }catch(e){}
+  const lijst=alles?PROJECT_CODES.filter(p=>p&&!p._vervallen):(codes||[]).map(c=>projVind(c)).filter(Boolean);
+  let offs={}; try{ offs=(typeof _ctlOffertes==='function')?_ctlOffertes():{}; }catch(e){}
+  return lijst.map(p=>{
+    const open=(taken[p.code]||[]).filter(t=>t&&t.status!=='klaar');
+    // Laatste activiteit: het project zelf én al zijn taken (ook afgeronde), en de offerte (datum of laatste wijziging).
+    const tm=(taken[p.code]||[]).reduce((m,t)=>Math.max(m,_spTijd(t),Date.parse(t&&t.klaar_op||'')||0),0);
+    const o=offs[p.code]||Object.values(offs).find(x=>x&&x.project_code===p.code)||null;
+    const om=o?Math.max(Date.parse((o.meta&&o.meta.offertedatum)||'')||0,_spTijd(o)):0;
+    return {code:p.code,project_id:p.project_id||'',naam:projNaamVol(p),fase:p.fase==='gewonnen'?'werkvoorbereiding':(p.fase||''),
+      faseStempel:Number(p._vs&&p._vs.fase&&p._vs.fase.t)||0,gewijzigd:Math.max(_spTijd(p),tm),offerteMs:om,openTaken:open.length,
+      openTakenToekomst:open.filter(t=>(t.eind||t.start||'')>=vandaag).length,uren90:uren.get(p.code)||0,
+      planblokToekomst:blokT.get(p.code)||0,planblok90:blok90.get(p.code)||0,
+      openBestel:(bestel.get(p.code)||0)+((p.project_id&&bestel.get(p.project_id))||0),geparkeerdTot:p.geparkeerd_tot||''};
+  });
+}
+function _opruimStart(){
+  if(_opGestart||!window.MTProjOpruim) return; _opGestart=true;
+  const PF=window.MTProjFilter, zoek=()=>(document.getElementById('project-zoek')||{}).value||'';
+  MTProjOpruim.init({doc:document,mag:_opruimMag,items:_opItems,
+    urenSync:()=>{ const t=Date.parse(localStorage.getItem('mt_toggl_last_sync')||''); return isNaN(t)?null:t; },
+    opKlaar:()=>{ if(PF) PF.zetSelectieModus(false); renderProjectLijst(zoek()); },
+    opSelecteer:codes=>{ if(!PF) return; PF.zetSelectieModus(true); codes.forEach(c=>PF.selectie.add(c)); renderProjectLijst(zoek()); }},
+   {lees:_opLees,schrijf:_opSchrijf,pasToe:_opPasToe,terugzet:_opTerugzet,naLokaal:_opNaLokaal,eindstand:_opEindstand,nu:()=>Date.now(),wie:()=>_spWie(),
+    toegestaan:()=>!_opruimReden(),   // vlak vóór elke mutatie opnieuw: recht, sync klaar, geen blokkade, schemaversie
+    // Alleen toevoegen, nooit afkappen: max = grootste veilige getal, dus journaalSamen laat alle regels staan.
+    eindstandSchrijf:r=>MTPlanning.journaalSchrijf(_SP,_OP_EIND,r,Number.MAX_SAFE_INTEGER),journaalSchrijf:r=>MTPlanning.journaalSchrijf(_SP,_OP_JRN,r,Number.MAX_SAFE_INTEGER),
+    journaalLees:async()=>{ const r=await _SP.read(_OP_JRN); return r===null?[]:r; }});
 }
 // Open taken per project (alleen om te weten wie ermee bezig is); één keer per tekening van de lijst.
 function _pfTaken(){ try{ return typeof projTakenAll==='function'?projTakenAll():{}; }catch(e){ return {}; } }
@@ -18570,6 +18700,8 @@ function activiteitOpen(force){
     const offertebedrag=mVerk+uVerk, kostprijs=mInk+uKost, brutowinst=offertebedrag-kostprijs;
     return {mInk,mVerk,uKost,uVerk,offertebedrag,kostprijs,brutowinst,marge:offertebedrag>0?brutowinst/offertebedrag:null};
   }
+  // Voor de eindstand bij Afronden (alleen lezen): de totalen van een offerte, ook als die nog niet door getOfferte is aangevuld.
+  window.calcTotalenVoor=function(o){ try{ return totalen(Object.assign({materiaal:[],uren:[]},o,{materiaal:Array.isArray(o&&o.materiaal)?o.materiaal:[],uren:Array.isArray(o&&o.uren)?o.uren:[]})); }catch(e){ return null; } };
 
   // ---- materiaal-DB fuzzy match (interiorcad MATERIALEN_IC) ------------------
   function allMat(){const M=(typeof MATERIALEN_IC!=='undefined')?MATERIALEN_IC:{};return [].concat(M.boards||[],M.edgebandings||[]);}
