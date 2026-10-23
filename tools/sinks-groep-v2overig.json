@@ -241,14 +241,13 @@
    "fn": "kb",
    "expr": "x",
    "fp": "28cabfd4f0",
-   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)",
-   "aantal": 2
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
   },
   {
    "fn": "kb",
-   "expr": "c.klantChip",
-   "fp": "fd0d675436",
-   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+   "expr": "x",
+   "fp": "02362a7653",
+   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd); de aandachtspuntenlijst van het Overzicht"
   },
   {
    "fn": "kb",
@@ -258,9 +257,9 @@
   },
   {
    "fn": "kb",
-   "expr": "stappen.join('')",
-   "fp": "7cb74b2624",
-   "reden": "fragment: de aanroeper geeft HTML mee (met esc() opgebouwd)"
+   "expr": "offerte",
+   "fp": "53dd95a643",
+   "reden": "fragment: HTML met esc() opgebouwd (offerteregel van het Overzicht)"
   },
   {
    "fn": "mapInfo",

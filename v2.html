@@ -67,6 +67,8 @@
 <script src="mt-taakpaneel.js?v=2026-10-23p"></script>
 <script src="mt-taaktabel.js?v=2026-10-23g"></script>
 <script src="mt-voortgang.js?v=2026-10-23h"></script>
+<script src="mt-projectkop.js?v=2026-10-23i"></script>
+<script src="mt-projectpaneel.js?v=2026-10-23j"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23p1b"></script>
 <script src="mt-planinrichting.js?v=2026-10-23g"></script>
 <script src="mt-bord.js?v=2026-10-23l"></script>
@@ -556,10 +558,26 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .proj-secknop:hover{background:var(--surface-sunken);color:var(--text)}
 .proj-secknop:focus-visible{outline:none;box-shadow:var(--focus-ring)}
 .proj-secknop.actief{background:var(--green);color:var(--n-0)}
+.ov-kern-rij{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:flex-end;margin-bottom:6px}.ov-fig{min-width:70px}.ov-fig-w{font:600 18px var(--mono);color:var(--text)}.ov-over .ov-fig-w{color:#8B1A1A}.ov-kern-onder{font-size:13px;color:var(--text-dim);margin-top:4px}
+.pr-bestanden{margin-top:14px;border-top:1px solid var(--border)}.pr-bestanden>summary{cursor:pointer;padding:10px 0;font-size:13px;font-weight:600;color:var(--text-dim);list-style:none;display:flex;align-items:center;gap:8px;min-height:36px}.pr-bestanden>summary::-webkit-details-marker{display:none}.pr-bestanden>summary::before{content:'';width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s}.pr-bestanden[open]>summary::before{transform:rotate(45deg)}.pr-bestanden>summary:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .proj-secn{font:600 10px var(--mono);opacity:.75;margin-left:2px}
 .proj-sectie{min-width:0;overflow-wrap:anywhere}
 /* Projectmeter (P1) */
 .pm-host{margin-bottom:var(--space-3)}
+.nieuw-menu{position:relative;margin:0 0 .75rem}.nieuw-menu>summary{list-style:none;display:inline-flex;align-items:center;cursor:pointer;min-height:36px}.nieuw-menu>summary::-webkit-details-marker{display:none}
+.nieuw-menu>summary::after{content:" ▾"}
+.nieuw-lijst{position:absolute;z-index:60;left:0;top:calc(100% + 4px);min-width:200px;display:flex;flex-direction:column;padding:4px;background:var(--surface-overlay,var(--surface));border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm)}
+.nieuw-lijst button{font:inherit;font-size:13px;text-align:left;min-height:36px;padding:4px 10px;border:0;border-radius:6px;background:transparent;color:var(--ink,#1f2a24);cursor:pointer}
+.nieuw-lijst button:hover{background:var(--surface-sunken)}
+.proj-terug{display:none}
+.pl-schakel{display:inline-flex;gap:0;margin:0 0 var(--space-3);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.pl-sch{font:inherit;font-size:13px;font-weight:600;min-height:36px;padding:4px 14px;border:0;background:var(--surface);color:var(--ink,#1f2a24);cursor:pointer}
+.pl-sch+.pl-sch{border-left:1px solid var(--border)}
+.pl-sch[aria-pressed="true"]{background:var(--green);color:#fff}
+.pl-links{display:flex;gap:8px;flex-wrap:wrap;margin:var(--space-3) 0}
+.pl-link{font:inherit;font-size:13px;font-weight:600;min-height:36px;padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink,#1f2a24);cursor:pointer}
+.pl-meer{margin:var(--space-3) 0}.pl-meer>summary{cursor:pointer;font-weight:600;font-size:14px;min-height:36px;display:flex;align-items:center}
+@media (max-width:760px){.pl-sch,.pl-link,.pl-meer>summary{min-height:44px}.pl-schakel{display:flex}.pl-sch{flex:1 1 0}}
 .pm{border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;background:var(--surface);min-width:0}
 .pm-kop{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .pm-bron{font-size:11.5px;color:var(--text-faint);margin-right:auto}
@@ -1244,12 +1262,15 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <div>
         <div class="card proj-lijst-kaart" style="padding:1rem">
           <div class="card-title">Projecten</div>
-          <div class="flex" style="margin-bottom:0.75rem;gap:6px">
-            <button class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1" title="Project zonder lead of offerte (bv. vaste klant of regiewerk); begint in Werkvoorbereiding">+ Direct project</button>
-            <button class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" onclick="openLeadModal()" style="flex:1" title="Een nieuwe aanvraag: lead met een volgende actie">+ Lead</button>
-            <button class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" onclick="tgOvernemenOpen()" style="flex:1" title="Een Toggl-project dat nog bij geen project hoort in de tool zetten">Uit Toggl overnemen</button>
-            <button class="btn btn-secondary btn-sm" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" style="flex:1" title="Losse offerte-calculatie (voorcalculatie)">+ Nieuwe offerte</button>
-          </div>
+          <details class="nieuw-menu" id="proj-nieuw-menu">
+            <summary class="btn btn-primary btn-sm">+ Nieuw</summary>
+            <div class="nieuw-lijst" role="menu" onclick="document.getElementById('proj-nieuw-menu').open=false">
+              <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="openModal()" title="Project zonder lead of offerte (bv. vaste klant of regiewerk); begint in Werkvoorbereiding">Direct project</button>
+              <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="openLeadModal()" title="Een nieuwe aanvraag: lead met een volgende actie">Lead</button>
+              <button type="button" role="menuitem" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" title="Losse offerte-calculatie (voorcalculatie)">Offerte</button>
+              <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="tgOvernemenOpen()" title="Een Toggl-project dat nog bij geen project hoort in de tool zetten">Uit Toggl overnemen</button>
+            </div>
+          </details>
           <input class="zoek-input" id="project-zoek" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
           <div id="vandaag-kaart" class="vandaag-kaart" hidden></div>
           <div id="mobiel-meldingen-container"></div>
@@ -1258,6 +1279,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         </div>
       </div>
       <!-- Project detail -->
+      <button type="button" class="proj-terug" onclick="projTerugNaarLijst()">‹ Projecten</button>
       <div id="project-detail">
         <div class="card" style="text-align:center;padding:3rem;color:var(--text-faint)">
           <div style="font-size:40px;margin-bottom:1rem">📁</div>
@@ -3980,7 +4002,8 @@ try{ MTTaakTabel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM,
   journaal:()=>{ try{ const j=JSON.parse(localStorage.getItem('mt_taken_journaal')||'[]'); return Array.isArray(j)?j:[]; }catch(e){ return []; } },
   naamVan:d=>_capNaamVan(d),   // de naam uit de personenlijst (MT_TEAM) bij een e-mailadres of slug
   leesUren:x=>MTTaakPaneel.leesUren(x),
-  naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _vgHerteken(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Takentabel init:',e); }// Het blok Voortgang bovenaan Project ▸ Overzicht (mt-voortgang.js): de roll-up komt van MTTijdlijn.model (geen tweede formule); het afvinkvakje is dat van de takentabel (MTTaakTabel.afvinkVak: zelfde route);
+  naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _vgHerteken(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Takentabel init:',e); }
+// Het blok Voortgang bovenaan Project ▸ Overzicht (mt-voortgang.js): de roll-up komt van MTTijdlijn.model (geen tweede formule); het afvinkvakje is dat van de takentabel (MTTaakTabel.afvinkVak: zelfde route);
 // de projectfase gaat via leadFaseKies/projFaseZet (de bestaande overgangen, "Gewonnen → project" met zijn bevestiging) en de levertijd via bestelVerwachtZet (P5), voor alle open regels via bestelVerwachtBulk met Ongedaan maken.
 function _vgHerteken(){ const y=window.scrollY; _ptHertekenen(); try{ window.scrollTo(0,y); }catch(e){} }   // het blok tekent mee met het project; de scrollpositie blijft staan
 function vgModel(code){
@@ -3990,7 +4013,7 @@ function vgModel(code){
 }
 function vgFaseOpties(code){
   const p=projVind(code); if(!p||!window.MTLead) return null;
-  return { huidig:{k:p.fase||'',l:MTLead.label(p.fase)||''}, kan:_leadMag(), opties:MTLead.opties(p.fase||'').map(k=>({k,l:k==='gewonnen'?'Offerte geaccepteerd → project':MTLead.label(k)})) };
+  return { huidig:{k:p.fase||'',l:MTLead.label(p.fase)||'',soort:((MTLead.FASES||[]).find(f=>f.k===p.fase)||{}).soort||''}, kan:_leadMag(), opties:MTLead.opties(p.fase||'').map(k=>({k,l:k==='gewonnen'?'Offerte geaccepteerd → project':MTLead.label(k)})) };
 }
 // Fase kiezen via de bestaande route (leadFaseKies: reden bij Verloren, datum bij Geparkeerd, bevestiging bij Gewonnen). Ongedaan maken alleen waar de overgang gewoon terug mag (geen Gewonnen, Verloren of Geparkeerd).
 async function vgFaseKies(code,naar,sel){
@@ -4026,8 +4049,26 @@ function bestelVerwachtHerstel(vorige){
   return {ok:n>0||!overgeslagen,n,overgeslagen};
 }
 try{ MTVoortgang.init({ doc:document, planning:MTPlanning, model:vgModel, openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),
-  faseOpties:vgFaseOpties, faseKies:vgFaseKies, regels:vgRegels, bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd), bestelBulk:bestelVerwachtBulk, bestelHerstel:bestelVerwachtHerstel, bestelVers:()=>_blVerseLees(),
-  mag:{ bestel:()=>rolMag(ROL_BESTEL_ALLES)&&_blKlaar(), fase:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; }, naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Voortgang init:',e); }// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
+  regels:vgRegels, bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd), bestelBulk:bestelVerwachtBulk, bestelHerstel:bestelVerwachtHerstel, bestelVers:()=>_blVerseLees(),
+  mag:{ bestel:()=>rolMag(ROL_BESTEL_ALLES)&&_blKlaar(), fase:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; }, naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Voortgang init:',e); }
+// De vaste projectkop (samenhang S1, mt-projectkop.js): fase (dezelfde route als de leads: leadFaseKies/projFaseZet), leverdatum, een compacte urenmeter die alleen leest en zelf laadt, volgende actie en het ⋯-menu (Kopieer link, Vectorworks, Verwijderen).
+function pkMeter(code){
+  const d=projMeterBereken(code), tt=d.m.totaal, sig=MTPlanning.signaal(d.m), st=_pmState[code]||{};
+  return { budget:tt.budget||0, geklokt:(tt.gekoppeld||0)+(tt.ongekoppeld||0), sig:sig?{niveau:sig.niveau,tekst:sig.tekst}:null, laden:!!st.bezig, fout:st.fout||'' };
+}
+try{ MTProjectKop.init({ doc:document, planning:MTPlanning,
+  faseOpties:vgFaseOpties, faseKies:vgFaseKies, lever:code=>{ const p=projVind(code)||{}; return { ymd:(p.gegevens||{}).leverdatum||'', fase:p.fase||'' }; },
+  week:ymd=>(window.MTVW&&MTVW.isoWeek?MTVW.isoWeek(ymd):null), vandaag:()=>MTPlanning.vandaagYmd(),
+  meter:pkMeter, meterLaad:code=>projMeterLaad(code), naarMeter:code=>projSectieKies('planning'),
+  volgende:code=>MTProjectKop.volgende(projTaken(code)), naamVan:d=>_capNaamVan(d), openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),
+  kopieerLink:code=>projKopieerLink(code), vwExport:code=>projVwExport(code), verwijder:code=>verwijderProject(code),
+  openGegevens:code=>projGegevensOpen(code), mag:{ fase:()=>_leadMag(), wijzig:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Projectkop init:',e); }
+// Het paneel Gegevens (samenhang S2, mt-projectpaneel.js): de projectgegevens en, voor een lead, de leadgegevens, bewerkbaar op de plek zelf. Schrijven via projGegevensZet en leadVeldZet (per veld een stempel, zichtbaar conflict).
+try{ MTProjectPaneel.init({ doc:document, model:pgModel, klaar:()=>!!PROJECT_CODES, ruw:()=>(localStorage.getItem('mt_projecten')||''), mag:()=>_leadMag(),
+  gegevensZet:(code,veld,w)=>projGegevensZet(code,veld,w), leadVeldZet:(code,veld,w)=>leadVeldZet(code,veld,w), voorstelIn:code=>projGegevensVoorstelIn(code), conflictKies:(code,veld,andere)=>leadConflictKies(code,veld,andere), gewonnen:code=>leadGewonnen(code),
+  href:{ project:(code,sectie)=>mtRoute.format({tab:'projecten',code,sectie:sectie||'overzicht'}), klant:(kl,loc)=>mtRoute.format({tab:'projecten',klant:kl,loc:loc||undefined}) },
+  ga:{ project:(code,sectie)=>mtRoute.go({tab:'projecten',code,sectie:sectie||'overzicht'}), klant:(kl,loc)=>mtRoute.go({tab:'projecten',klant:kl,loc:loc||undefined}) },
+  toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), naWijziging:()=>{ try{ _projHerteken(MTProjectPaneel.huidigeCode?MTProjectPaneel.huidigeCode():(huidigProject&&huidigProject.code)); }catch(e){} } }); }catch(e){ console.warn('Projectpaneel init:',e); }// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
 try{ const _pbDag=(slug,datum)=>({tab:'agenda',weergave:'capaciteit',planfilter:Object.assign({van:datum,zoom:'dag'},slug?{persoon:slug}:{})});
   MTPlanblokPaneel.init({ planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), blokken:()=>agPlanActief(),
   blokkenKlaar:()=>{ if(_planblokken===null&&!window._pbLaadt){ window._pbLaadt=true; try{ agPlanLoad().catch(()=>{}); }catch(e){} } return _planblokken!==null; },
@@ -6546,6 +6587,15 @@ function openProject(code,{scroll=true,geschiedenis='push',sectie=null,filter=nu
   return proj;
 }
 function selecteerProject(code,el){ openProject(code,{scroll:!el}); }
+// Telefoon: lijst óf project. "‹ Projecten" sluit het project en toont de lijst weer (op de computer blijft de lijst altijd naast het project staan).
+function projTerugNaarLijst(){
+  huidigProject=null; window._calcMailPaneelActief=false;
+  const h=document.getElementById('project-detail');
+  if(h){ delete h.dataset.code; delete h.dataset.offerte; delete h.dataset.klant; h.innerHTML='<div class="card" style="text-align:center;padding:3rem;color:var(--text-faint)"><div style="font-family:var(--serif);font-size:18px;font-style:italic;font-weight:300">Selecteer een project</div><div style="font-size:12px;margin-top:0.5rem">of maak een nieuw project aan</div></div>'; }
+  try{ renderProjectLijst((document.getElementById('project-zoek')||{}).value||''); }catch(e){}
+  try{ mtRoute.zet({tab:'projecten'},true); }catch(e){}
+  window.scrollTo(0,0);
+}
 // ── Contextbalk: "waar ben ik?" — Klant › Locatie › CODE — naam, sticky onder de tabbalk ──
 // Klant/locatie zijn nog spans met data-attributen; de router (B3) maakt ze klikbaar.
 const _projStatus={};   // code → lopende aanmaakstatus (mappen/Toggl), getoond in de balk
@@ -6694,7 +6744,6 @@ function projContextBalk(proj){
         +` role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="proj-wissel-lijst" aria-label="Wissel van project (zoek op code, naam, klant of locatie)"`
         +` oninput="projWisselZoek(this)" onkeydown="projWisselToets(event,this)" onfocus="projWisselZoek(this)" onblur="setTimeout(()=>projWisselSluit(this),150)">`
         +`<div class="proj-ctx-opties" id="proj-wissel-lijst" role="listbox" hidden></div></span>`
-      +`<button type="button" class="btn btn-xs btn-secondary" onclick="projKopieerLink(${jsArg(proj.code)})" title="Kopieer de link naar dit project">🔗 Kopieer link</button>`
     +`</span></div>`;
 }
 // ── Link kopiëren ──
@@ -6811,6 +6860,7 @@ function renderProjectDetail(proj){
   host.innerHTML=projContextBalk(proj)
     +`<nav class="proj-secnav" role="tablist" aria-label="Projectonderdelen">${nav}</nav>`
     +`<div class="card proj-sectie" id="proj-sectie-inhoud" role="tabpanel" data-sectie="${esc(_projSectie)}"></div>`;
+  try{ MTProjectKop.monteer(proj.code,host); }catch(e){ console.warn('Projectkop:',e); }   // de vaste kop: fase, lever, uren, volgende actie en het ⋯-menu
   _projSecNavTop();
   try{ if(window.ResizeObserver){ if(window._projRO) window._projRO.disconnect(); window._projRO=new ResizeObserver(()=>_projSecNavTop()); const cb=host.querySelector('.proj-ctx'); if(cb) window._projRO.observe(cb); } }catch(e){}
   _projSectieRender(proj);
@@ -6820,6 +6870,7 @@ function _projSecTeller(proj,k){
   try{
     if(k==='dossier'){ const n=(typeof mailLinksVoor==='function'?mailLinksVoor(proj.code).length:0); return n?`${n}✉`:''; }
     if(k==='planning'){ const n=(typeof projTaken==='function'?projTaken(proj.code).filter(t=>t.status!=='klaar').length:0); return n?String(n):''; }
+    if(k==='productie'){ const n=(typeof vgRegels==='function'?vgRegels(proj.code).filter(b=>MTPlanning.bestelStatus(b)!=='geleverd').length:0); return n?String(n):''; }   // regels die nog besteld of geleverd moeten worden
   }catch(e){}
   return '';
 }
@@ -6846,16 +6897,13 @@ function _projSectieRender(proj){
   if(_projSectie==='dossier') renderDossier(document.getElementById('proj-dossier-'+c.cid),{codes:[proj.code],key:'proj:'+proj.code});
   if(_projSectie==='planning'){
     // Een fout in de tijdlijn mag de rest van de sectie (Gantt, taken) nooit blokkeren.
-    const tl=document.getElementById('proj-tijdlijn-'+c.cid);
     try{ projMeterLaad(proj.code); }catch(e){ console.warn('meter:',e); }
     try{ projAfhTeken(proj.code); }catch(e){ console.warn('afhankelijkheden:',e); }
-    try{ projPlanTijdlijn(tl,[proj.code],{key:'proj:'+proj.code}); }
-    catch(e){ console.warn('tijdlijn:',e); if(tl) tl.innerHTML='<p class="dos-leeg">Tijdlijn kon niet laden: '+esc(e.message||String(e))+'</p>'; }
   }
-  if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
+  if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } try{ _prBestandenOpenBijGebruik(c); }catch(e){ console.warn('bestanden:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
   if(_projSectie==='planning'){ try{ MTPlanFilter.monteerProject(document.getElementById('pf-proj-'+String(proj.code).replace(/-/g,'')),'pt-tbl-'+String(proj.code).replace(/-/g,'')); }catch(e){ console.warn('Planningsfilter:',e); } planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} try{ MTTaakTabel.verrijk(proj.code,pan); }catch(e){ console.warn('Takentabel:',e); } }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
-  if(_projSectie==='overzicht'){ try{ MTVoortgang.monteer(proj.code,pan); }catch(e){ console.warn('Voortgang:',e); } }   // het blok Voortgang: eerste onder de contextbalk
+  if(_projSectie==='overzicht'){ try{ MTVoortgang.monteer(proj.code,pan); }catch(e){ console.warn('Voortgang:',e); } try{ ovKernTeken(proj.code); projMeterLaad(proj.code).then(()=>ovKernTeken(proj.code),()=>ovKernTeken(proj.code)); }catch(e){ console.warn('Kerncijfers:',e); } }   // het blok Voortgang: eerste onder de contextbalk
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     try{ voorraadWegTeken(proj.code,c.cid); }catch(e){ console.warn('verwijderde inkoopregels:',e); }
@@ -6889,59 +6937,52 @@ function projSecOverzicht(proj,c){
   const laatste=rijen.filter(r=>r.datum&&r.datum.slice(0,10)<=vandaag&&r.status!=='ontkoppeld'&&r.soort!=='project')
     .sort((a,b)=>b.datum.localeCompare(a.datum)).slice(0,5);
   const icoon=s=>(DOS_SOORTEN.find(x=>x.k===s)||{}).i||'•';
-  // Volgende stap: eerste open taak → lopende planningsfase → offerte-status.
-  const taken=(typeof projTaken==='function')?projTaken(proj.code):[];
-  const open=taken.find(t=>t.status==='bezig')||taken.find(t=>t.status!=='klaar');
-  const plan=(typeof planVoor==='function')?planVoor(proj.code):null;
-  const fase=plan&&plan.fases&&(plan.fases.find(f=>f.start&&f.eind&&f.start<=vandaag&&vandaag<=f.eind&&f.status!=='klaar')||plan.fases.find(f=>f.status!=='klaar'&&f.start&&f.start>=vandaag));
-  // calculatie via dezelfde opzoekfunctie als Project ▸ Calculatie (ook losse offertes en oude codes); meerdere = aantal tonen
+  // Offerte: via dezelfde opzoekfunctie als Project ▸ Calculatie (ook losse offertes en oude codes); meerdere = aantal tonen
   const offAlle=(typeof window.calcVanProject==='function')?window.calcVanProject(proj):[];
   const off=(typeof window.calcVoorProjectGekozen==='function')?window.calcVoorProjectGekozen(proj):null;
-  const stappen=[];
-  const nOpen=taken.filter(t=>t.status!=='klaar').length;
-  if(nOpen>1) stappen.push(`<div class="ov-stap">☑ <a href="#" onclick="event.preventDefault();projSectieKies('planning')">${esc(nOpen)} open taken</a></div>`);
-  if(open) stappen.push(`<div class="ov-stap">☑ <b>${esc(open.naam)}</b> <span class="dos-st">${esc(open.status||'todo')}</span> <a href="#" onclick="event.preventDefault();projSectieKies('planning')">→ taken</a></div>`);
-  if(fase) stappen.push(`<div class="ov-stap">📅 Fase <b>${esc(fase.naam||fase.key)}</b> ${fase.start?fmtDatum(fase.start):''}${fase.eind?' – '+fmtDatum(fase.eind):''} <a href="#" onclick="event.preventDefault();projSectieKies('planning')">→ planning</a></div>`);
-  if(off) stappen.push(`<div class="ov-stap">📄 Offerte: <b>${esc((off.meta&&off.meta.status)||'in bewerking')}</b> <a href="#" onclick="event.preventDefault();projSectieKies('calculatie')">→ calculatie</a></div>`);
-  else if(offAlle.length>1) stappen.push(`<div class="ov-stap">📄 ${esc(offAlle.length)} calculaties bij dit project <a href="#" onclick="event.preventDefault();projSectieKies('calculatie')">→ kies er een</a></div>`);
-  if(!stappen.length) stappen.push(`<div class="ov-stap" style="color:var(--text-faint)">Nog geen taken, planning of offerte. <a href="#" onclick="event.preventDefault();projSectieKies('planning')">Taken toevoegen</a> · <a href="#" onclick="event.preventDefault();nieuweOfferte(${jsArg(_jsCode(proj.code))})">Offerte starten</a></div>`);
-  // Aandachtspunten: alleen wat ontbreekt of nog moet; elk punt met de knop om het op te lossen.
+  const offerte=off?`Offerte: <b>${esc((off.meta&&off.meta.status)||'in bewerking')}</b> <a href="#" onclick="event.preventDefault();projSectieKies('calculatie')">→ calculatie</a>`
+    :(offAlle.length>1?`${esc(offAlle.length)} calculaties bij dit project <a href="#" onclick="event.preventDefault();projSectieKies('calculatie')">→ kies er een</a>`
+      :`Nog geen offerte. <a href="#" onclick="event.preventDefault();nieuweOfferte(${jsArg(_jsCode(proj.code))})">Offerte starten</a>`);
+  // Aandachtspunten: alleen wat aandacht vraagt. De koppelingen (Moneybird, projectmap, Toggl, offertenummer) staan één keer, in de rij eronder, met dezelfde knoppen.
   const let_=[];
   const nietOpgeslagen=rijen.filter(r=>r.soort==='mail'&&r.ref.nogNietOpgeslagen).length;
-  const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' ), pc=_jsCode(proj.code);
+  const kb=(window.MTKoppelUI?MTKoppelUI.badge:()=>'' );
   if(nietOpgeslagen) let_.push(`${kb({status:'open',klein:true,label:'Bijlagen',titel:'Bijlagen nog niet in de projectmap — klik om ze te bekijken',onclick:`projSectieKies('dossier',{filter:{soort:'mail',bijlage:'1'}})`})} ${nietOpgeslagen} gekoppelde mail${nietOpgeslagen>1?'s':''} met bijlagen die nog niet in de projectmap staan`);
-  if(!proj.map||!proj.map.itemId) let_.push(`${projMapBadge(proj,{klein:true})} Projectmap nog niet gecontroleerd`);
-  if(!proj.tg_project_id) let_.push(`${kb({status:'open',klein:true,label:'Toggl',titel:'Nog geen Toggl-project — klik om te koppelen',onclick:`t2KiesProject(${jsLit(pc)})`})} Nog geen Toggl-project gekoppeld`);
-  if(!proj.offertenr) let_.push(`${kb({status:'open',klein:true,label:'Offertenummer',titel:'Nog geen offertenummer — klik om toe te kennen',onclick:`t2OffertenummerToekennen(${jsLit(pc)})`})} Nog geen offertenummer`);
-  if(!c.effectiveMb&&proj.klant) let_.push(`${kb({status:'open',klein:true,label:'Moneybird',titel:'Geen Moneybird-contact — klik om te koppelen',onclick:`bewerkProjectMbNr(${jsLit(pc)})`})} Geen Moneybird-contact`);
+  const nConfl=Object.keys(proj._veldconflict||{}).length;
+  if(nConfl) let_.push(`⚠ ${esc(nConfl)} ${esc(nConfl>1?'velden zijn':'veld is')} tegelijk gewijzigd. <a href="#" onclick="event.preventDefault();projGegevensOpen(${jsArg(_jsCode(proj.code))})">Bekijk in Gegevens</a>`);
+  if(window.MTLead&&MTLead.isOpenLead(proj)){ const a=proj.volgende_actie||{}; let_.push(a.tekst&&a.datum?`Volgende actie: <b>${esc(a.tekst)}</b> · ${esc(fmtDatum(a.datum))} <a href="#" onclick="event.preventDefault();projGegevensOpen(${jsArg(_jsCode(proj.code))})">Wijzigen</a>`:`⚠ Deze lead heeft geen volgende actie met een datum. <a href="#" onclick="event.preventDefault();projGegevensOpen(${jsArg(_jsCode(proj.code))})">Invullen in Gegevens</a>`); }
   return `
-      <div style="display:flex;justify-content:flex-end;align-items:start;margin-bottom:.75rem;gap:.5rem;flex-wrap:wrap">
-        <div class="flex">
-          <button class="btn btn-secondary btn-sm" onclick="verwijderProject(${jsArg(_jsCode(proj.code))})">Verwijderen</button>
+      ${typeof leadDoorzetHtml==='function'?leadDoorzetHtml(proj):''}
+      <section class="ov-blok ov-let" aria-label="Aandachtspunten en koppelingen"><div class="card-title">Aandachtspunten en koppelingen</div>
+        ${let_.length?let_.map(x=>`<div class="ov-letrij">${x}</div>`).join(''):'<div class="ov-letrij" style="color:var(--text-faint)">Geen aandachtspunten.</div>'}
+        <div class="koppel-rij">
+          <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${c.mbNrBlok}
+          <span class="kpi-label" style="margin:0 0 0 .5rem">Projectmap:</span> ${projMapBadge(proj)}
         </div>
-      </div>
-      <div class="kpi-grid ov-kpi" style="margin-bottom:1rem">
-        <div class="kpi-card green"><div class="kpi-label">Materiaalinkoop</div><div class="kpi-waarde" style="font-size:20px">${fmt(c.totaalInkoop)}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Materiaalregels</div><div class="kpi-waarde" style="font-size:20px">${c.projItems.length}</div></div>
-        <div class="kpi-card gold"><div class="kpi-label">Klant</div><div class="kpi-waarde" style="font-size:15px;line-height:1.3">${c.klantChip}</div></div>
-      </div>
-      <div class="koppel-rij">
-        <span class="kpi-label" style="margin:0">Moneybird-contact:</span> ${c.mbNrBlok}
-        <span class="kpi-label" style="margin:0 0 0 .5rem">Projectmap:</span> ${projMapBadge(proj)}
-      </div>
-      ${t2ProjectRijHtml(proj)}
-      ${typeof geldProjectRijHtml==='function'?geldProjectRijHtml(proj):''}
-      ${typeof leadKaartHtml==='function'?leadKaartHtml(proj):''}
-      ${typeof projGegevensHtml==='function'?projGegevensHtml(proj):''}
+        ${t2ProjectRijHtml(proj)}
+      </section>
+      <section class="ov-blok ov-kern" aria-label="Kerncijfers"><div class="card-title">Kerncijfers</div>
+        <div class="ov-kern-rij" id="ov-kern-${esc(c.cid)}"></div>
+        <div class="ov-kern-onder">Materiaalinkoop <b>${fmt(c.totaalInkoop)}</b> · ${esc(c.projItems.length)} regel${c.projItems.length===1?'':'s'}</div>
+        <div class="ov-kern-onder">${offerte}</div>
+        ${typeof geldProjectRijHtml==='function'?geldProjectRijHtml(proj):''}
+      </section>
       <div class="ov-grid">
-        <section class="ov-blok"><div class="card-title">Volgende stap</div>${stappen.join('')}</section>
         <section class="ov-blok"><div class="card-title">Laatste activiteit</div>
           <div class="ov-dossier"><a href="#" onclick="event.preventDefault();projSectieKies('dossier',{filter:{soort:'mail'}})">✉ ${rijen.filter(r=>r.soort==='mail'&&r.status!=='ontkoppeld').length} mails</a> · <a href="#" onclick="event.preventDefault();projSectieKies('dossier',{filter:{soort:'bestand'}})">🗂 ${rijen.filter(r=>r.soort==='bestand').length} bestanden</a></div>
           ${laatste.length?laatste.map(r=>`<div class="ov-act">${icoon(r.soort)} ${esc(r.titel)} <span class="dos-meta">${fmtDatum(r.datum.slice(0,10))}</span></div>`).join(''):'<div class="ov-act" style="color:var(--text-faint)">Nog niets gebeurd.</div>'}
           <a href="#" class="ov-meer" onclick="event.preventDefault();projSectieKies('dossier')">Alles in het dossier →</a></section>
       </div>
-      ${window.MTContactenUI?MTContactenUI.projectKaart(proj):''}
-      ${let_.length?`<section class="ov-blok ov-let"><div class="card-title">Aandachtspunten</div>${let_.map(x=>`<div class="ov-letrij">${x}</div>`).join('')}</section>`:''}`;
+      ${window.MTContactenUI?MTContactenUI.projectKaart(proj):''}`;
+}
+// Kerncijfers: budget, gepland, geklokt en rest uit de bestaande projectmeter (dezelfde rekenregel, alleen lezen); de uren uit Toggl worden zelf geladen.
+function ovKernTeken(code){
+  const host=document.querySelector('.ov-kern-rij[id^="ov-kern-"]'); if(!host) return;
+  let d; try{ d=projMeterBereken(code); }catch(e){ host.replaceChildren(_pmEl('span',{class:'dos-leeg',tekst:'De kerncijfers konden niet berekend worden.'})); return; }
+  const tt=d.m.totaal, st=_pmState[code]||{}, geklokt=(tt.gekoppeld||0)+(tt.ongekoppeld||0);
+  const fig=(l,w,extra)=>_pmEl('div',{class:'ov-fig'+(extra?' '+extra:'')},_pmEl('div',{class:'kpi-label',tekst:l}),_pmEl('div',{class:'ov-fig-w',tekst:w}));
+  const status=st.bezig?_pmEl('div',{class:'dos-meta',tekst:'uren laden…'}):(st.fout?_pmEl('div',{class:'dos-meta',title:st.fout,tekst:'uren: lokaal'}):null);
+  host.replaceChildren(...[fig('Budget',_pmU(tt.budget)),fig('Gepland',_pmU(tt.gepland)),fig('Geklokt',_pmU(geklokt)),fig('Rest',tt.budget?_pmU(tt.resterend):'—',tt.budget&&tt.resterend<0?'ov-over':''),status].filter(Boolean));   // replaceChildren(null) zou het woord "null" tonen
 }
 // ── Dossier: bijlagen toevoegen, projectmap, en de tijdlijn met filters ──
 function projSecDossier(proj,c){
@@ -6963,13 +7004,32 @@ function projSecDossier(proj,c){
       <div id="proj-dossier-${esc(c.cid)}"></div>`;
 }
 // ── Planning: Gantt + taken (taken voeden de planning; "📅 → Planning" zet ze om) ──
+// Planning (S4): eerst de meldingen en de samenvatting van de keten, dan één takentabel met een schakelaar tussen de takenlijst en "Datums en afhankelijkheden" (beide weergaven schrijven via de bestaande routes), daarna de links naar Capaciteit en Tijdlijn en, ingeklapt, het fasenplan en het budget.
+const _plWeerg={};
+function plTakenWeergave(cid,w){
+  _plWeerg[cid]=(w==='datums')?'datums':'lijst';
+  const host=document.getElementById('pl-taken-'+cid); if(!host) return;
+  host.querySelectorAll('.pl-weerg').forEach(e=>e.classList.toggle('hidden',e.dataset.pl!==_plWeerg[cid]));
+  host.querySelectorAll('.pl-sch').forEach(b=>b.setAttribute('aria-pressed',b.dataset.pl===_plWeerg[cid]?'true':'false'));
+}
+function plNaarAgenda(code,weergave){ mtRoute.go({tab:'agenda',weergave,planfilter:{project:code}}); }
 function projSecPlanning(proj,c){
-  return `<div id="proj-meter-${esc(c.cid)}" class="pm-host"></div>
-      <div id="proj-afh-${esc(c.cid)}" class="pm-host"></div>
-      <div class="card-title" style="margin:0 0 .4rem">📊 Tijdlijn — wie, wanneer, past het?</div>
-      <div id="proj-tijdlijn-${esc(c.cid)}" class="proj-b10-plek"></div>
-      ${projectPlanning(proj)}
-      ${projectTakenHtml(proj)}`;
+  const w=_plWeerg[c.cid]==='datums'?'datums':'lijst';
+  return `<div id="proj-afh-${esc(c.cid)}" class="pm-host"></div>
+      <div class="pl-taken" id="pl-taken-${esc(c.cid)}">
+        <div class="pl-schakel" role="group" aria-label="Weergave van de taken">
+          <button type="button" class="pl-sch" data-pl="lijst" aria-pressed="${esc(w==='lijst'?'true':'false')}" onclick="plTakenWeergave(${jsArg(c.cid)},'lijst')">Takenlijst</button>
+          <button type="button" class="pl-sch" data-pl="datums" aria-pressed="${esc(w==='datums'?'true':'false')}" onclick="plTakenWeergave(${jsArg(c.cid)},'datums')">Datums en afhankelijkheden</button>
+        </div>
+        <div class="pl-weerg${w==='lijst'?'':' hidden'}" data-pl="lijst">${projectTakenHtml(proj)}</div>
+        <div class="pl-weerg${w==='datums'?'':' hidden'}" data-pl="datums"><div id="proj-afhtab-${esc(c.cid)}" class="pm-host"></div></div>
+      </div>
+      <div class="pl-links">
+        <button type="button" class="pl-link" onclick="plNaarAgenda(${jsArg(proj.code)},'capaciteit')" title="Wie heeft wanneer ruimte: de capaciteit van het team, gefilterd op dit project">Bekijk in Capaciteit</button>
+        <button type="button" class="pl-link" onclick="plNaarAgenda(${jsArg(proj.code)},'tijdlijn')" title="De tijdlijn met afhankelijkheden en het kritieke pad, gefilterd op dit project">Bekijk in Tijdlijn</button>
+      </div>
+      <details class="pl-meer"><summary>Fasenplan</summary>${projectPlanning(proj)}</details>
+      <details class="pl-meer"><summary>Budget en uren</summary><div id="proj-meter-${esc(c.cid)}" class="pm-host"></div></details>`;
 }
 // ── Calculatie: offerte-calculator, nacalculatie, materiaalinkoop uit facturen ──
 function projSecCalculatie(proj,c){
@@ -7003,8 +7063,18 @@ function projSecCalculatie(proj,c){
       <div id="vrd-weg-${esc(c.cid)}"></div>`;
 }
 // ── Productie: Vectorworks-CSV, NCR-import, bestellijst van dit project ──
-function projSecProductie(proj,c){
+// Productie: de importvakken (Vectorworks-kostenberekening, NCR) staan ingeklapt onder "Bestanden". Zodra je een bestand kiest of er een resultaat of status verschijnt, klapt het vak open.
+function _prBestandenOpenBijGebruik(c){
+  const det=document.getElementById('pr-bestanden-'+c.cid); if(!det) return;
+  det.addEventListener('change',()=>{ det.open=true; });
+  if(!window.MutationObserver) return;
+  const mo=new MutationObserver(()=>{ det.open=true; });
+  ['csv-resultaat-','ncr-resultaat-','csv-status-','ncr-status-'].forEach(p=>{ const e=document.getElementById(p+c.sid); if(e) mo.observe(e,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['class']}); });
+}function projSecProductie(proj,c){
   return `
+      <div id="proj-bestel-${esc(c.cid)}" class="pm-host"></div>
+      <details class="pr-bestanden" id="pr-bestanden-${esc(c.cid)}">
+      <summary>Bestanden: Vectorworks-kostenberekening en NCR-import</summary>
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
         <div class="card-title" style="margin:0">Kostenberekening — Vectorworks CSV / Excel</div>
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('csv-input-${esc(c.sid)}').click()">📊 CSV / Excel uploaden</button>
@@ -7021,8 +7091,7 @@ function projSecProductie(proj,c){
         <span id="ncr-status-${esc(c.sid)}" style="font-size:12px;color:var(--text-dim)"></span>
       </div>
       <div id="ncr-resultaat-${esc(c.sid)}" class="hidden"></div>
-      <hr class="divider">
-      <div id="proj-bestel-${esc(c.cid)}" class="pm-host"></div>`;
+      </details>`;
 }
 
 // ═══ PROJECTTIJDLIJN + KLANT-ROLL-UP (brok B10) ═══
@@ -8266,14 +8335,14 @@ function _p2Na(code){ try{ _rerenderDetailKeepScroll(); }catch(e){ projAfhTeken(
 
 // Het blok "Planning en afhankelijkheden" in de sectie Planning & taken.
 function projAfhTeken(code){
-  const host=document.getElementById('proj-afh-'+code.replace(/[^A-Za-z0-9]/g,'')); if(!host) return;
-  try{ host.replaceChildren(_p2AfhBouw(code)); }
+  const sid=code.replace(/[^A-Za-z0-9]/g,''), host=document.getElementById('proj-afh-'+sid), tabHost=document.getElementById('proj-afhtab-'+sid); if(!host) return;
+  try{ const uit={}; host.replaceChildren(_p2AfhBouw(code,uit)); if(tabHost) tabHost.replaceChildren(uit.tabel||_p2El('p',{class:'dos-leeg',tekst:'Nog geen taken.'})); }
   catch(e){ console.warn('afhankelijkheden:',e); host.replaceChildren(_p2El('p',{class:'dos-leeg',tekst:'De afhankelijkheden konden niet getoond worden: '+(e.message||e)})); }
 }
-function _p2AfhBouw(code){
+function _p2AfhBouw(code,uit){
   const proj=projVind(code), taken=projTaken(code), ruw=projAfhRuw()[code]||[], mag=_p2Mag();
   const vrij=_p2Vrij(), lever=_p2Lever(proj), modus=MTPlanning.depModus(proj), pid=(proj&&proj.project_id)||'';
-  const kop=_p2El('div',{class:'pm-kop'},_p2El('div',{class:'card-title',style:'margin:0',tekst:'🔗 Planning en afhankelijkheden'}));
+  const kop=_p2El('div',{class:'pm-kop'},_p2El('div',{class:'card-title',style:'margin:0',tekst:'Planning en afhankelijkheden'}));
   if(mag) kop.appendChild(_p2El('button',{type:'button',class:'btn btn-xs btn-gold',title:'Zet een standaardketen van taken met afhankelijkheden en datums klaar (eerst een voorstel; niets gebeurt zonder bevestiging)',klik:()=>projSjabloonDialoog(code)},'📐 Sjabloon toepassen'));
   if(!taken.length) return _p2El('section',{class:'pm','aria-label':'Planning en afhankelijkheden'},kop,_p2El('p',{class:'dos-leeg',tekst:'Nog geen taken. Pas een sjabloon toe of voeg taken toe; daarna zeg je hier welke taak van welke afhangt.'}));
   const ALLE=projTakenAll(), kruisOpts={alle:ALLE,code};   // F2b: voorgangers uit andere projecten tellen mee in rooster, wachten en conflicten
@@ -8329,7 +8398,8 @@ function _p2AfhBouw(code){
   const tabel=_p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'pm-tabel afh-tabel'},
     _p2El('thead',null,_p2El('tr',null,['Status','Taak','Start','Eind','Afhankelijk van (wachttijd in werkdagen)','Pad'].map(k=>_p2El('th',{tekst:k})))),
     _p2El('tbody',null,rijen)));
-  return _p2El('section',{class:'pm','aria-label':'Planning en afhankelijkheden'},kop,meldingen,tabel,samen,
+  if(uit) uit.tabel=tabel;
+  return _p2El('section',{class:'pm','aria-label':'Planning en afhankelijkheden'},kop,meldingen,uit?null:tabel,samen,
     padTekst?_p2El('div',{class:'pm-soort',title:'Gerekend vanaf de leverdatum terug: de ketting zonder speling',tekst:'Kritiek pad: '+padTekst}):null);
 }
 
@@ -11967,30 +12037,6 @@ function _leadVeldWaarde(veld,w){
   return String(w);
 }
 function _leadMag(){ return !(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')); }
-function leadOptiesHtml(fase){ return MTLead.opties(fase).map(k=>`<option value="${esc(k)}">${esc(k==='gewonnen'?'Gewonnen → project':MTLead.label(k))}</option>`).join(''); }
-function leadConflictHtml(proj){
-  const pc=_jsCode(proj.code);
-  return Object.entries(proj._veldconflict||{}).filter(([veld])=>!veld.startsWith('gegevens.')).map(([veld,c])=>`<div class="lead-conflict" role="alert">⚠ <b>${esc(veld.replace(/_/g,' '))}</b> is tegelijk gewijzigd${c.door?' door '+esc(c.door):''}: nu „${esc(_leadVeldWaarde(veld,proj[veld]))}”, de andere waarde was „${esc(_leadVeldWaarde(veld,c.waarde))}”.
-      <button class="btn btn-xs btn-secondary"${_leadMag()?'':' disabled'} onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},false)">Houden</button> <button class="btn btn-xs btn-secondary"${_leadMag()?'':' disabled'} onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},true)">Andere waarde nemen</button></div>`).join('');
-}
-function leadKaartHtml(proj){
-  if(!window.MTLead) return '';
-  const pc=_jsCode(proj.code), fase=proj.fase||'', isLead=MTLead.isLead(proj), a=proj.volgende_actie||{};
-  return `<section class="ov-blok lead-kaart"><div class="card-title">Fase &amp; volgende actie</div>${leadConflictHtml(proj)}
-    <div class="lead-rij"><span class="kpi-label">Fase</span> <b class="fase-chip fase-${esc(fase||'geen')}">${esc(fase?MTLead.label(fase):'nog niet ingedeeld')}</b>
-      ${_leadMag()&&MTLead.opties(fase).length?`<select aria-label="Fase wijzigen" onchange="leadFaseKies(${jsArg(pc)},this.value,this)"><option value="">Naar fase…</option>${leadOptiesHtml(fase)}</select>`:''}
-      ${proj.verlies?` <span class="dos-meta">Reden: ${esc(_leadVeldWaarde('verlies',proj.verlies))}</span>`:''}${proj.geparkeerd_tot?` <span class="dos-meta">Opnieuw bekijken: ${esc(fmtDatum(proj.geparkeerd_tot))}</span>`:''}${proj.gewonnen_op?` <span class="dos-meta">Gewonnen op ${esc(fmtDatum(proj.gewonnen_op))}</span>`:''}</div>
-    <div class="lead-rij"><label class="kpi-label" for="la-${esc(proj.project_id)}">Volgende actie</label>
-      <input id="la-${esc(proj.project_id)}" type="text" maxlength="140" value="${esc(a.tekst||'')}" placeholder="${esc(isLead?'verplicht bij een lead':'optioneel')}"${_leadMag()?'':' disabled'} onchange="leadVeldZet(${jsArg(pc)},'actie_tekst',this.value)">
-      <input type="date" aria-label="Datum volgende actie" value="${esc(a.datum||'')}"${_leadMag()?'':' disabled'} onchange="leadVeldZet(${jsArg(pc)},'actie_datum',this.value)"></div>
-    ${isLead?`<div class="lead-rij"><label class="kpi-label">Waarde excl.</label> <input type="number" min="0" step="100" value="${esc(proj.waarde_excl!=null?proj.waarde_excl:'')}"${_leadMag()?'':' disabled'} onchange="leadVeldZet(${jsArg(pc)},'waarde_excl',this.value)">
-      <label class="kpi-label">Kans %</label> <input type="number" min="0" max="100" step="5" value="${esc(proj.kans_pct!=null?proj.kans_pct:'')}"${_leadMag()?'':' disabled'} onchange="leadVeldZet(${jsArg(pc)},'kans_pct',this.value)">
-      <label class="kpi-label">Beslissing verwacht</label> <input type="date" value="${esc(proj.verwachte_beslisdatum||'')}"${_leadMag()?'':' disabled'} onchange="leadVeldZet(${jsArg(pc)},'verwachte_beslisdatum',this.value)">
-      ${proj.bron?` <span class="dos-meta">Bron: ${esc((MTLead.BRONNEN.find(x=>x[0]===proj.bron)||[])[1]||proj.bron)}</span>`:''}</div>`:''}
-    ${isLead&&MTLead.isOpenLead(proj)&&!(a.tekst&&a.datum)?'<div class="lead-let">⚠ Deze lead heeft geen volgende actie met een datum.</div>':''}
-    ${MTLead.isOpenLead(proj)&&_leadMag()?`<div class="lead-rij"><button class="btn btn-gold btn-sm" onclick="leadGewonnen(${jsArg(pc)})">🏆 Gewonnen → project</button></div>`:''}
-    ${leadDoorzetHtml(proj)}</section>`;
-}
 // ── Doorzetten naar project (L1b) ──
 // Na "Gewonnen" (of bij een direct project) staat het project in werkvoorbereiding. Daarna VOORSTELLEN, niets automatisch:
 // taken (het bestaande taken-voorstel: ✨ AI of 📋 template), de projectmap (normale map met de submapstandaard) en het
@@ -12118,23 +12164,21 @@ function projGegevensVoorstelIn(code){
   slaProjectenOp(); try{ _projHerteken(p.code); }catch(e){}
 }
 function projAdresTekst(proj){ const g=proj.gegevens||{}; return [g.straat,[g.postcode,g.plaats].filter(Boolean).join(' ')].filter(Boolean).join(', '); }
-function projNavUrl(adres){ return veiligeUrl(MTProject.navUrl(adres,(typeof navigator!=='undefined'&&navigator.userAgent)||''),{hosts:['google.com','apple.com']}); }
-function projGegevensHtml(proj){
-  if(!window.MTVW) return '';
-  const g=proj.gegevens||{}, pc=_jsCode(proj.code), mag=!(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen'));
-  const v=projGegevensVoorstel(proj), nieuw=Object.keys(v).filter(k=>!g[k]), w=MTVW.isoWeek(g.leverdatum), adres=projAdresTekst(proj), mb=_projMbContact(proj);
-  return `<section class="ov-blok proj-gegevens"><div class="card-title">Projectgegevens</div>
-    <div class="dos-meta">Projectnummer <b>${esc(projNummer(proj)||proj.code)}</b> · ${esc(projNaamVol(proj))}${mb&&mb.customer_id?` · klantnummer ${esc(mb.customer_id)}`:''}${projKlantNaam(proj)?' · '+esc(projKlantNaam(proj)):''}</div>
-    <div class="gegevens-grid">${PROJ_GEGEVENS.map(([k,l])=>`<label><span class="kpi-label">${esc(l)}</span>${_projGegevensKeuzes(k)
-      ?`<select${mag?'':' disabled'} onchange="projGegevensZet(${jsArg(pc)},${jsArg(k)},this.value)"><option value="">${esc(v[k]?'voorstel: '+v[k]:'—')}</option>${(g[k]&&!_projGegevensKeuzes(k).includes(String(g[k]))?[String(g[k])]:[]).concat(_projGegevensKeuzes(k)).map(o=>`<option value="${esc(o)}"${o===String(g[k]||'')?' selected':''}>${esc(o)}</option>`).join('')}</select>`
-      :`<input type="${k==='leverdatum'?'date':'text'}" maxlength="120" value="${esc(g[k]||'')}" placeholder="${esc(v[k]?'voorstel: '+v[k]:'')}"${mag?'':' disabled'} onchange="projGegevensZet(${jsArg(pc)},${jsArg(k)},this.value)">`}</label>`).join('')}</div>
-    ${w?`<div class="dos-meta">Levering in week ${esc(w.week)} van ${esc(w.jaar)}</div>`:''}
-    <div class="lead-rij">${mag&&nieuw.length?`<button class="btn btn-xs btn-secondary" onclick="projGegevensVoorstelIn(${jsArg(pc)})" title="${esc('Alleen lege velden: '+nieuw.map(k=>(PROJ_GEGEVENS.find(x=>x[0]===k)||[])[1]).join(', '))}">Voorstellen invullen (${esc(nieuw.length)})</button>`:''}
-      ${adres&&projNavUrl(adres)?`<a class="btn btn-xs btn-secondary" target="_blank" rel="noopener" href="${esc(veiligeUrl(MTProject.navUrl(adres,(typeof navigator!=='undefined'&&navigator.userAgent)||''),{hosts:['google.com','apple.com']}))}" title="${esc('Navigeer naar '+adres)}">🧭 ${esc(adres)}</a>`:''}
-      ${mag?`<button class="btn btn-xs btn-gold" onclick="projVwExport(${jsArg(pc)})" title="Maakt ${esc(MTVW.bestandsnaam(projNummer(proj)||proj.code))} in 03_Vectorworks (of als download)">Projectgegevens voor Vectorworks</button>`:''}</div>
-    ${Object.entries(proj._veldconflict||{}).filter(([veld])=>veld.startsWith('gegevens.')).map(([veld,c])=>`<div class="lead-conflict" role="alert">⚠ <b>${esc((PROJ_GEGEVENS.find(x=>'gegevens.'+x[0]===veld)||[0,veld])[1])}</b> is tegelijk gewijzigd${c.door?' door '+esc(c.door):''}: nu „${esc(_vGet(proj,veld)||'—')}”, de andere waarde was „${esc(c.waarde||'—')}”.
-      ${mag?`<button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},false)">Houden</button> <button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},true)">Andere waarde nemen</button>`:''}</div>`).join('')}</section>`;
-}
+// ── De projectgegevens in het objectpaneel (samenhang S2, mt-projectpaneel.js): het model komt hier vandaan, het paneel schrijft via projGegevensZet en leadVeldZet ──
+function projGegevensOpen(code){ try{ return MTProjectPaneel.open(code); }catch(e){ console.warn('Gegevens:',e); return false; } }
+function pgModel(code){
+  const p=projVind(code); if(!p) return {ok:false,code};
+  const g=p.gegevens||{}, v=projGegevensVoorstel(p), w=(window.MTVW&&MTVW.isoWeek)?MTVW.isoWeek(g.leverdatum):null, adres=projAdresTekst(p), mb=_projMbContact(p), nieuw=Object.keys(v).filter(k=>!g[k]);
+  const velden=PROJ_GEGEVENS.map(([k,l])=>({k,l,waarde:g[k]||'',voorstel:v[k]||'',type:k==='leverdatum'?'datum':'tekst',keuzes:(()=>{ const kz=_projGegevensKeuzes(k); if(!kz) return null; const x=g[k]; return (x&&!kz.includes(String(x))?[String(x)]:[]).concat(kz); })()}));
+  const conflicten=Object.entries(p._veldconflict||{}).map(([veld,c])=>{ const gg=veld.startsWith('gegevens.'); return {veld,gegevens:gg,label:gg?((PROJ_GEGEVENS.find(x=>'gegevens.'+x[0]===veld)||[0,veld])[1]):veld.replace(/_/g,' '),nu:gg?(_vGet(p,veld)||'—'):_leadVeldWaarde(veld,p[veld]),andere:gg?(c.waarde||'—'):_leadVeldWaarde(veld,c.waarde),door:c.door||''}; });
+  const a=p.volgende_actie||{}, isLead=!!(window.MTLead&&MTLead.isLead(p)), open=!!(window.MTLead&&MTLead.isOpenLead(p));
+  return {ok:true,sleutel:p.code,code:p.code,kan:_leadMag(),
+    project:{code:p.code,project_id:p.project_id||'',naam:projNaamVol(p),nummer:projLabelCode(p)||'',klant:String(p.klant||'').toUpperCase(),klantNaam:projKlantNaam(p),loc:String(p.loc||'').toUpperCase(),locNaam:projLocLabel(p)},
+    velden,voorstelN:nieuw.length,voorstelTitel:'Alleen lege velden: '+nieuw.map(k=>(PROJ_GEGEVENS.find(x=>x[0]===k)||[])[1]).join(', '),week:w?{week:w.week,jaar:w.jaar}:null,adres,navUrl:adres?projNavUrl(adres):'',conflicten,
+    metaTekst:['Projectnummer '+(projNummer(p)||p.code),projNaamVol(p),mb&&mb.customer_id?'klantnummer '+mb.customer_id:'',projKlantNaam(p)].filter(Boolean).join(' · '),
+    lead:window.MTLead?{isLead,open,faseLabel:MTLead.label(p.fase)||'',verlies:p.verlies?_leadVeldWaarde('verlies',p.verlies):'',geparkeerd:p.geparkeerd_tot?fmtDatum(p.geparkeerd_tot):'',gewonnenOp:p.gewonnen_op?fmtDatum(p.gewonnen_op):'',
+      bron:p.bron?((MTLead.BRONNEN.find(x=>x[0]===p.bron)||[])[1]||p.bron):'',actie:{tekst:a.tekst||'',datum:a.datum||''},waarde:p.waarde_excl,kans:p.kans_pct,beslis:p.verwachte_beslisdatum||'',ontbreekt:open&&!(a.tekst&&a.datum)}:null};
+}function projNavUrl(adres){ return veiligeUrl(MTProject.navUrl(adres,(typeof navigator!=='undefined'&&navigator.userAgent)||''),{hosts:['google.com','apple.com']}); }
 // De XML voor interiorcad: PROJECT_ID = projectnummer (of code), COMMISSION = korte projectnaam (= "Projectnaam" in interiorcad en in HHOS;
 // zonder klantnaam, zie projNaamKort), … (zie mt-vw.js).
 function projVwGegevens(proj){

@@ -43,7 +43,25 @@
   .kb.kb-open,.kb,.afh-weg,.tl-week,.cn-zk,.mtg-knop.klein{min-height:44px}
   .afh-weg{min-width:44px}
   .tl-cel,button.mtg-knop.klein{min-height:44px}
+  /* het objectpaneel (taak, planblok, gegevens): velden en knoppen met een tikvlak van 44 px */
+  html #tp-paneel .tp-invoer,html #tp-paneel .tp-knop,html #tp-paneel .tp-stknop{min-height:44px;height:auto}
 }
 
 /* De takentabel van het project is breder dan de kaart op een gewone laptop: hij schuift binnen zijn eigen vlak in plaats van de pagina te verbreden (alle breedtes) */
 .pt-tabel{display:block;width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* Op de telefoon blijft de projectkop niet plakken (die is ruim 290 px hoog en nam de halve pagina in); alleen de tabbalk plakt, direct onder de balk bovenin */
+@media (max-width:760px){
+  html .proj-ctx{position:static}
+  html .proj-secnav{top:var(--mt-kop,60px)!important}
+}
+
+/* Projecten op de telefoon (S7): de lijst óf het project, met "‹ Projecten" om terug te gaan (de takentabel is op de telefoon al een lijst kaartjes: mt-taaktabel.js) */
+@media (max-width:760px){
+  html #proj-grid{display:block!important;min-height:0!important}
+  html #proj-grid:has(#project-detail[data-code],#project-detail[data-klant],#project-detail[data-offerte]) > div:first-child{display:none}
+  html #proj-grid:not(:has(#project-detail[data-code],#project-detail[data-klant],#project-detail[data-offerte])) > #project-detail{display:none}
+  html #proj-grid:has(#project-detail[data-code],#project-detail[data-klant],#project-detail[data-offerte]) > .proj-terug{display:inline-flex;align-items:center;min-height:44px;padding:4px 12px 4px 4px;margin:0 0 6px;border:0;background:transparent;font:inherit;font-size:15px;font-weight:600;color:var(--green);cursor:pointer}
+  html .nieuw-menu>summary,html .nieuw-lijst button{min-height:44px}
+  html .nieuw-lijst{left:0;right:0;min-width:0}
+}
