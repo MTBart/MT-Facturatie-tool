@@ -190,8 +190,8 @@
   // wacht_reden = waarom een taak op status 'wacht' staat (stap 2, mobiel: Bezig · Klaar · Wacht met een verplichte reden).
   // Alle drie zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
   // voorstel = de markering "door werkplaats" van een gemelde taak of bestelregel (wie, rol, wanneer); kantoor haalt hem er met Overnemen af.
-  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bron', 'beperking', 'beperking_datum']);   // F2b: een beperking op de planning van een taak (niet v\u00f3\u00f3r, uiterlijk op, vast op)   // P6: checklist (samenvoegen per punt) en poort (een mijlpaal van een eigen soort, met eigenaar, bewijs-link en bron)   // fase_id (P3b): het id van de fase in de planning-inrichting; 'fase' blijft de naam, voor oude apps
-  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bron', 'beperking', 'beperking_datum']);
+  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bewijs_tekst', 'poort_bron', 'beperking', 'beperking_datum']);   // F2b: een beperking op de planning van een taak (niet v\u00f3\u00f3r, uiterlijk op, vast op)   // P6: checklist (samenvoegen per punt) en poort (een mijlpaal van een eigen soort, met eigenaar, bewijs-link en bron)   // fase_id (P3b): het id van de fase in de planning-inrichting; 'fase' blijft de naam, voor oude apps
+  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bewijs_tekst', 'poort_bron', 'beperking', 'beperking_datum']);
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
@@ -1653,11 +1653,13 @@
   // ── Taken die op klaar kunnen: voorstellen, nooit automatisch ────────────────────────────────────────
   // "Materiaal geleverd" (sleutel materiaal_geleverd) mag op klaar als ALLE bestelregels van het project geleverd zijn;
   // "Materiaal bestellen" (sleutel bestellen) als alles minstens besteld is. Zonder bestelregels geen voorstel.
-  P.bestelTaakVoorstellen = function (taken, regels, { project_id = '', codes = [] } = {}) {
+  P.bestelTaakVoorstellen = function (taken, regels, { project_id = '', codes = [], aanbetaling = null, geld = false } = {}) {
     const mijn = (Array.isArray(regels) ? regels : []).filter(b => b && typeof b === 'object' && !b._vervallen && ((project_id && b.project_id === project_id) || (b.project && codes.includes(b.project))));
-    if (!mijn.length) return [];
-    const st = mijn.map(P.bestelStatus), alleGeleverd = st.every(s => s === 'geleverd'), alleBesteld = st.every(s => s !== 'nodig');
     const uit = [];
+    // Poort Aanbetaling binnen: het voorstel uit Moneybird hoort ook bij de voorstellen van het project (één klik, bron Moneybird); onafhankelijk van de bestelregels
+    if (aanbetaling) P.takenActief(taken).forEach(t => { const v = P.aanbetalingVoorstel(t, aanbetaling, { geld }); if (v) uit.push({ taak_id: t.id, naam: t.naam, reden: v.tekst.charAt(0).toLowerCase() + v.tekst.slice(1) + ' (Moneybird)', poort: true, bron: 'moneybird' }); });
+    if (!mijn.length) return uit;
+    const st = mijn.map(P.bestelStatus), alleGeleverd = st.every(s => s === 'geleverd'), alleBesteld = st.every(s => s !== 'nodig');
     P.takenActief(taken).forEach(t => {
       if (t.status === 'klaar') return;
       if (t.sleutel === 'materiaal_geleverd' && alleGeleverd) uit.push({ taak_id: t.id, naam: t.naam, reden: 'alle ' + mijn.length + ' bestelregels zijn geleverd' });
@@ -2309,6 +2311,65 @@
     if (!lijst.length) return '';
     const st = b => (['nodig', 'besteld', 'geleverd'].includes(b.status) ? b.status : P.bestelStatus(b));
     return lijst.every(b => st(b) === 'geleverd') ? 'alle ' + lijst.length + ' ' + (gekoppeld.length ? 'gekoppelde ' : '') + 'bestelregel' + (lijst.length === 1 ? ' is' : 's zijn') + ' geleverd' : '';
+  };
+
+  // ── Poort Aanbetaling binnen: een voorstel uit Moneybird (idee #72). Alleen lezen en nooit stil: het paneel zet de poort pas op groen na één klik, met bron
+  // 'moneybird' en het factuurnummer en de betaaldatum als bewijs. Bedragen komen alleen in de tekst voor wie het geld-recht heeft (opt.geld), nooit in wat wordt bewaard.
+  const MB_AANBETALING = /aanbetaling|voorschot|vooruitbetaling|bevestiging opdracht|1e termijn|eerste termijn|termijn 1\b/i;
+  const mbGetal = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+  const mbDatum = v => /^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0, 10) : '';
+  const ymdNl = d => d ? d.slice(8, 10) + '-' + d.slice(5, 7) + '-' + d.slice(0, 4) : '';
+  const eurTekst = n => '€ ' + (Math.round(n * 100) / 100).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d),)/g, '.');
+  // facturen = de Moneybird-verkoopfacturen van het contact (volledige objecten); ctx = { estimateId, offertenr, admin, offerteTotaal }.
+  // De aanbetalingsfactuur is de factuur van het project die zelf naar een aanbetaling/voorschot/eerste termijn verwijst (referentie of regels). Is er geen gemarkeerde factuur, dan telt de eerste factuur
+  // alleen als die duidelijk een deel van het offertebedrag is (minder dan 95%); een eerste factuur voor (bijna) het hele bedrag is een eindfactuur en geen aanbetaling. Een creditnota op de factuur,
+  // of niet zeker weten welke factuur het is, geeft 'onduidelijk': geen voorstel.
+  // → { status: 'geen' | 'onduidelijk' | 'open' | 'deels' | 'betaald', factuur: { id, nummer, datum, url, gemarkeerd }, betaaldOp, bedrag, betaald, onbetaald, reden }
+  P.aanbetalingBewijs = function (facturen, ctx) {
+    ctx = ctx || {};
+    const alle = (Array.isArray(facturen) ? facturen : []).filter(f => f && typeof f === 'object');
+    const nr = String(ctx.offertenr || '').trim().toLowerCase(), est = ctx.estimateId ? String(ctx.estimateId) : '';
+    const refRe = nr.length >= 4 ? new RegExp('(^|[^a-z0-9])' + nr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)') : null;   // het offertenummer als los woord, niet als stuk van een ander nummer
+    const hoort = f => (est && String(f.original_estimate_id || '') === est) || (refRe && refRe.test(String(f.reference || '').toLowerCase()));
+    const tot = f => mbGetal(f.total_price_incl_tax_base != null ? f.total_price_incl_tax_base : f.total_price_incl_tax);
+    const van = alle.filter(f => f.invoice_id && f.state !== 'draft' && mbDatum(f.invoice_date) && tot(f) > 0 && hoort(f));
+    if (!van.length) return { status: 'geen' };
+    van.sort((a, b) => String(a.invoice_date).localeCompare(String(b.invoice_date)) || String(a.invoice_id).localeCompare(String(b.invoice_id)));
+    const gemerkt = van.find(f => MB_AANBETALING.test([f.reference].concat((Array.isArray(f.details) ? f.details : []).map(d => d && d.description)).filter(Boolean).join(' ')));
+    const url = f => /^https:\/\/moneybird\.com\//.test(String(f.url || '')) ? String(f.url) : (ctx.admin && f.id && /^[\w-]+$/.test(String(ctx.admin)) ? 'https://moneybird.com/' + ctx.admin + '/sales_invoices/' + encodeURIComponent(String(f.id)) : '');
+    const kaal = f => ({ id: String(f.id || ''), nummer: String(f.invoice_id), datum: mbDatum(f.invoice_date), url: url(f), gemarkeerd: f === gemerkt });
+    let f = gemerkt;
+    if (!f) {
+        const eerste = van[0], ot = mbGetal(ctx.offerteTotaal);
+        if (!(ot > 0)) return { status: 'onduidelijk', factuur: kaal(eerste), reden: 'er is geen factuur als aanbetaling gemarkeerd en het offertebedrag is onbekend' };
+        if (tot(eerste) >= ot * 0.95) return { status: 'onduidelijk', factuur: kaal(eerste), reden: 'de eerste factuur is voor (bijna) het hele bedrag en geen aanbetaling' };
+        f = eerste;
+    }
+    if (f.id && alle.some(x => x !== f && String(x.original_sales_invoice_id || '') === String(f.id))) return { status: 'onduidelijk', factuur: kaal(f), reden: 'er hangt een creditnota aan deze factuur' };
+    const totaal = tot(f), onbetaald = mbGetal(f.total_unpaid_base != null ? f.total_unpaid_base : f.total_unpaid);
+    const pays = (Array.isArray(f.payments) ? f.payments : []).filter(p => p && mbDatum(p.payment_date));
+    const betaald = Math.round(pays.reduce((s, p) => s + mbGetal(p.price_base != null ? p.price_base : p.price), 0) * 100) / 100;
+    const datum = pays.map(p => mbDatum(p.payment_date)).sort().pop() || mbDatum(f.paid_at);
+    const volledig = onbetaald <= 0.005 && (f.state === 'paid' || betaald > 0.005);
+    return { status: volledig ? 'betaald' : (betaald > 0.005 ? 'deels' : 'open'), factuur: kaal(f), betaaldOp: volledig ? datum : '', bedrag: Math.round(totaal * 100) / 100, betaald, onbetaald: Math.round(onbetaald * 100) / 100 };
+  };  // Het voorstel voor de poort (nooit stil): alleen bij een nog niet groene poort Aanbetaling binnen en een betaalde factuur.
+  // → null of { tekst, bewijsTekst, url, nummer, datum }; bewijsTekst bevat nooit een bedrag (dat wordt op de taak bewaard)
+  P.aanbetalingVoorstel = function (taak, bewijs, opt) {
+    if (!taak || taak.poort !== 'aanbetaling_binnen' || (taak.status || 'todo') === 'klaar' || !bewijs || bewijs.status !== 'betaald' || !bewijs.factuur || !bewijs.betaaldOp) return null;   // zonder betaaldatum is er geen bewijs: geen voorstel
+    const geld = !!(opt && opt.geld), f = bewijs.factuur, dat = ymdNl(bewijs.betaaldOp);
+    return { tekst: 'Aanbetaling ontvangen' + (dat ? ' op ' + dat : '') + (geld && bewijs.bedrag != null ? ' (' + eurTekst(bewijs.bedrag) + ', factuur ' + f.nummer + ')' : ''),
+      bewijsTekst: ('Moneybird: factuur ' + f.nummer + (dat ? ', betaald op ' + dat : '')).slice(0, 160), url: f.url && P.poortBewijsOk(f.url) ? f.url : '', nummer: f.nummer, datum: bewijs.betaaldOp || '' };
+  };
+  // Een korte regel over de stand van de aanbetaling als er (nog) geen voorstel is.
+  P.aanbetalingInfo = function (bewijs, opt) {
+    if (!bewijs) return '';
+    const geld = !!(opt && opt.geld), f = bewijs.factuur;
+    if (bewijs.status === 'geen') return 'Geen aanbetalingsfactuur gevonden in Moneybird.';
+    if (bewijs.status === 'onduidelijk') return 'Niet zeker welke factuur de aanbetaling is (' + (bewijs.reden || 'onduidelijk') + '). Controleer het in Moneybird.';
+    if (bewijs.status === 'open') return 'De aanbetalingsfactuur ' + f.nummer + ' is nog niet betaald.';
+    if (bewijs.status === 'deels') return 'De aanbetalingsfactuur ' + f.nummer + ' is deels betaald' + (geld && bewijs.bedrag != null ? ' (' + eurTekst(bewijs.betaald) + ' van ' + eurTekst(bewijs.bedrag) + ')' : '') + '.';
+    if (bewijs.status === 'betaald' && !bewijs.betaaldOp) return 'De aanbetalingsfactuur ' + f.nummer + ' staat als betaald, maar de betaaldatum ontbreekt in Moneybird: controleer het zelf.';
+    return '';
   };
 
   // ══ P3b: planning inrichten (stations, fases en activiteiten zijn zelf aan te maken, te hernoemen en te ordenen) ═══════════════
