@@ -5,8 +5,59 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-23 — Release v2.20.0: veilig opslaan van offertes (vers lezen, per offerte samenvoegen, ETag, status en conflictmelding), getallen als 1.234,56, offerte altijd vindbaar bij het project, taakpaneel; backup = v2.19.0
+- Commit: `fb5fdfd` | Auteur: Bart Witte
+
 ## 2026-10-23 — Backup = v2.19.0
 - Commit: `5abccb7` | Auteur: Bart Witte
+
+## 2026-10-22 — Release-voorbereiding v2.20.0: versielabel en updates-item
+- Commit: `b500c4b` | Auteur: Bart Witte
+
+## 2026-10-22 — Laadtest: eigen poort per run en een versiepatroon dat ook v2.20 herkent
+- Commit: `0121e61` | Auteur: Bart Witte
+
+## 2026-10-22 — Taakpaneel: een half getypte datum verdwijnt niet meer bij een hertekening
+- Commit: `e03f8b2` | Auteur: Bart Witte
+
+## 2026-10-22 — Integratie v2.20.0: merge taakpaneel (TP1-TP6)
+- Commit: `982e47f` | Auteur: Bart Witte
+
+## 2026-10-22 — Integratie v2.20.0: merge calc-vertrouwen (K-1+, K-3, NL-getalparser, K-2)
+- Commit: `1387884` | Auteur: Bart Witte
+
+## 2026-10-22 — K-2: een offerte is altijd terug te vinden bij zijn project, en kijken maakt nooit een lege calculatie aan
+- Commit: `0ec98aa` | Auteur: Bart Witte
+
+## 2026-10-22 — Calculatie: één Nederlandse getalparser — "1.234,56" werd stil 0, nu herkend; dubbelzinnig wordt gemarkeerd
+- Commit: `87835c3` | Auteur: Bart Witte
+
+## 2026-10-22 — K-3-minimaal: eerlijke opslagstatus en niets kwijt tijdens het typen
+- Commit: `adf0d01` | Auteur: Bart Witte
+
+## 2026-10-21 — K-1+: calculatie schrijft nooit meer blind de hele lijst (vers lezen, per offerte samenvoegen, schrijven met ETag)
+- Commit: `3304db7` | Auteur: Bart Witte
+
+## 2026-10-21 — TP6: datums wissen in het taakpaneel (terug naar Ongepland) via de sleeproute: nieuwe spec taakwis in plaatsTaak, met de getoonde datums, ongedaan maken in de melding, zonder opvolgers te schuiven en niet zolang er een planblok aan de taak hangt
+- Commit: `8cbe557` | Auteur: Bart Witte
+
+## 2026-10-21 — TP5: objectpaneel als basis (mt-objectpaneel.js) met de taak als eerste objectdefinitie; fase (bucket) kiezen, mini-tijdlijn met Toon in tijdlijn en Inplannen, Toggl-bordtegel opent de gekoppelde taak
+- Commit: `a3fa1ad` | Auteur: Bart Witte
+
+## 2026-10-21 — TP4: het taakpaneel overal bereikbaar: Mijn werk, Vandaag (Mijn werk vandaag en Nog in te plannen, als gewone links #taak/...), de takenlijst van een project (taaknaam = link, DOM achteraf) en de zoekbalk; panel-stijl onder #tp-paneel zodat de nieuwe stijl de velden niet overschrijft
+- Commit: `1053620` | Auteur: Bart Witte
+
+## 2026-10-21 — TP3: afhankelijkheden en bestellingen in het taakpaneel: elke bestelregel is een link naar de bestellijst van het project; rekenwerk (voorgangers, opvolgers, waarschuwing bij te vroeg starten met wachttijd, bestellingen per project, materiaaltaak) met eigen unit-test
+- Commit: `33ef3a1` | Auteur: Bart Witte
+
+## 2026-10-21 — TP2b: Codex-review verwerkt: geen stil overschrijven van de wachtreden en de datums, nacontrole en ongedaan maken over alle meebewegende velden, getoonde waarde verplicht
+- Commit: `d8f82ef` | Auteur: Bart Witte
+
+## 2026-10-21 — TP2: taakpaneel bewerken: naam, status (vier knoppen, Wacht met reden), persoon, datums, raming, activiteit, prioriteit en notities inline; Enter/wegklikken = opslaan, Esc = annuleren
+- Commit: `69470c7` | Auteur: Bart Witte
+
+## 2026-10-21 — TP1: taakpaneel (mt-taakpaneel.js): klik op een taak in de Capaciteit opent een paneel rechts met eigen link #taak/<code>/<id>, herkomst klant > locatie > project als links, velden, afhankelijkheden en project-bestellingen (alleen lezen)
+- Commit: `1db8e6f` | Auteur: Bart Witte
 
 ## 2026-10-16 — Release v2.19.0: taken op de tijdlijn (slepen uit Ongepland, uittrekken en verschuiven met opvolgers, Datums wijzigen), raming verdeeld over echte werkdagen zonder dubbeltelling en overal hetzelfde getal, Omzetten naar taakbalk, eerlijke meldingen bij traag of gelijktijdig opslaan; CHANGELOG-hook alleen op main; backup = v2.18.0
 - Commit: `648f52e` | Auteur: Bart Witte
