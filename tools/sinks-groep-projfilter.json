@@ -1,0 +1,12 @@
+{
+ "omschrijving": "mt-projfilter.js: filter-, sorteer- en groepeerpaneel van de projectlijst",
+ "heleBestand": true,
+ "fragmentFns": ["optie", "acties"],
+ "houd": [
+  { "fn": "acties", "expr": "ICOON", "fp": "42098ad4c1", "reden": "vaste SVG-tekst in de module zelf (geen data)" },
+  { "fn": "acties", "expr": "open('fase')", "fp": "142645a9e3", "reden": "geeft ' open' of '' (vaste tekst)" },
+  { "fn": "acties", "expr": "fase", "fp": "142645a9e3", "reden": "fragment: opgebouwd uit optie() en acties(), elk met esc() op de data" },
+  { "fn": "acties", "expr": "open('klant')", "fp": "b917a933e1", "reden": "geeft ' open' of '' (vaste tekst)" },
+  { "fn": "acties", "expr": "open('pers')", "fp": "61529f4d3e", "reden": "geeft ' open' of '' (vaste tekst)" }
+ ]
+}
