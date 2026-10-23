@@ -53,6 +53,7 @@
     }
     // Verlof, een verplichte vrije dag en een dag waarop iemand volgens zijn werktijden niet werkt zijn geen harde weigering meer: V.waarschuwing vraagt dan om bevestiging.
     if (spec.start != null && tijdMin(spec.start) === null) return 'Ongeldige begintijd.';
+    if (spec.duurMin != null && (spec.soort !== 'verplaats' || !Number.isFinite(Number(spec.duurMin)) || Number(spec.duurMin) < 15 || Number(spec.duurMin) > 12 * 60)) return 'Ongeldige duur.';   // alleen een bestaand planblok kan uitgetrokken worden (C1: de rand slepen in de uurweergave)
     if (spec.soort === 'verplaats') {
       const b = V.blokVanId(ctx.blokken, spec.blokId);
       if (!b) return 'Dit planblok bestaat niet meer.';
@@ -109,10 +110,12 @@
     if (spec.soort === 'verplaats') {
       const b = V.blokVanId(lijst, spec.blokId), duur = Math.max(0, Math.round(Number(b.duurMin) || 0));
       const start = spec.start != null ? hhmm(tijdMin(spec.start)) : hhmm(dagdeelStart(lijst, spec, duur || 60, b.id, team));
-      if (gelijkAan(b.persoon, spec.persoon, team) && b.datum === spec.datum && (spec.start != null ? tijdMin(b.start) === tijdMin(start) : (tijdMin(b.start) !== null && (tijdMin(b.start) < 12 * 60) === (spec.dagdeel !== 1)))) return { ok: true, noop: true };
+      const nieuweDuur = spec.duurMin != null ? Math.round(Number(spec.duurMin)) : null, duurAnders = nieuweDuur !== null && nieuweDuur !== duur;   // C1: de duur van een planblok wijzigen (de rand uittrekken) gaat via deze zelfde route; zonder spec.duurMin blijft de duur zoals voorheen
+      if (!duurAnders && gelijkAan(b.persoon, spec.persoon, team) && b.datum === spec.datum && (spec.start != null ? tijdMin(b.start) === tijdMin(start) : (tijdMin(b.start) !== null && (tijdMin(b.start) < 12 * 60) === (spec.dagdeel !== 1)))) return { ok: true, noop: true };
       const voor = { persoon: b.persoon, datum: b.datum, start: b.start };
-      const nieuw = stempel(Object.assign({}, b, { persoon: spec.persoon, datum: spec.datum, start, ts, door: wie }), b);
-      return { ok: true, blokken: lijst.map(x => x === b ? nieuw : x), wijziging: { soort: 'verplaats', id: b.id, voor, na: { persoon: spec.persoon, datum: spec.datum, start }, stempel: nieuw._gewijzigd, naam: b.taak || b.project_code || 'Planblok' } };
+      if (duurAnders) voor.duurMin = b.duurMin;
+      const nieuw = stempel(Object.assign({}, b, { persoon: spec.persoon, datum: spec.datum, start, ts, door: wie }, duurAnders ? { duurMin: nieuweDuur } : {}), b);
+      return { ok: true, blokken: lijst.map(x => x === b ? nieuw : x), wijziging: { soort: 'verplaats', id: b.id, voor, na: Object.assign({ persoon: spec.persoon, datum: spec.datum, start }, duurAnders ? { duurMin: nieuweDuur } : {}), stempel: nieuw._gewijzigd, naam: b.taak || b.project_code || 'Planblok' } };
     }
     const t = spec.taak, duur = Math.max(15, Math.round(Number(t.min) || 0)) || 60;
     const start = spec.start != null ? hhmm(tijdMin(spec.start)) : hhmm(dagdeelStart(lijst, spec, duur, null, team));
@@ -130,7 +133,7 @@
     if (b._gewijzigd !== w.stempel) return { ok: false, reden: 'Dit blok is intussen door iemand anders gewijzigd; niet teruggezet.' };
     const stempel = ctx.stempel || ((x) => { x._gewijzigd = Date.now(); return x; }), ts = new Date(ctx.nu || Date.now()).toISOString(), wie = ctx.wie || '';
     const nieuw = w.soort === 'verplaats'
-      ? stempel(Object.assign({}, b, { persoon: w.voor.persoon, datum: w.voor.datum, start: w.voor.start, ts, door: wie }), b)
+      ? stempel(Object.assign({}, b, { persoon: w.voor.persoon, datum: w.voor.datum, start: w.voor.start, ts, door: wie }, w.voor.duurMin !== undefined ? { duurMin: w.voor.duurMin } : {}), b)
       : stempel(Object.assign({}, b, { _vervallen: { tijd: ts, door: wie } }), b);
     return { ok: true, blokken: lijst.map(x => x === b ? nieuw : x) };
   };
