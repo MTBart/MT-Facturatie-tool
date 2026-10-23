@@ -547,6 +547,7 @@
       const s = (x._vs || {})[f], gest = opt.staleBoven && Object.keys(x._vs || {}).length > 0;
       if (gest && rt(x) > Math.max(...Object.values(x._vs).map(tijdVan))) return x[f] !== undefined ? { t: rt(x), dev: 'oud', rev: revVan(s) + 1, door: x._door || '', basis: tijdVan(s) } : s;
       if (gest && !s) return x[f] !== undefined ? { t: 1 } : undefined;
+      if (opt.ongemoeid && opt.ongemoeid.has(f) && !s && Object.keys(x._vs || {}).length) return x[f] !== undefined ? { t: 1 } : undefined;
       return s || (opt.legacy && x[f] !== undefined ? { t: rt(x) } : undefined);
     };
     velden.forEach(f => {
@@ -1167,7 +1168,10 @@
   // BASIS = de velden van de overstap (de hashes en de vergelijking met het oude bestand blijven hierop rekenen); voorstel = de markering "door werkplaats" (stap 2):
   // een gestempeld veld, zodat "Overnemen" (de markering eraf) ook na samenvoegen blijft staan.
   P.BESTEL_BASIS_VELDEN = ['materiaal', 'omschrijving', 'artikel', 'artikelsleutel', 'aantal', 'eenheid', 'leverancier', 'status', 'besteld', 'project', 'project_id', 'bron'];
-  P.BESTEL_VELDEN = P.BESTEL_BASIS_VELDEN.concat(['voorstel']);
+  // P5 (materiaal als voorwaarde): taak_id = de taak waar de regel bij hoort (binnen hetzelfde project), verwacht_op = de verwachte leverdatum (ymd), verwacht_bron = waar die datum vandaan komt (nu: 'hand';
+  // later 'orderbevestiging': dan komt de datum als voorstel uit de bevestiging van de leverancier, die een mens overneemt; dat is nog niet gebouwd). Alle drie zijn gestempelde velden.
+  P.BESTEL_NIEUW_VELDEN = ['taak_id', 'verwacht_op', 'verwacht_bron'];
+  P.BESTEL_VELDEN = P.BESTEL_BASIS_VELDEN.concat(['voorstel'], P.BESTEL_NIEUW_VELDEN);
   const kleinNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/(\d)\s*(mm|cm|m|x)\b/g, '$1 $2').replace(/[^a-z0-9.,\u00d7]+/g, ' ').trim().replace(/\s+/g, ' ');
   const EENHEDEN = { plaat: 'plaat', platen: 'plaat', pl: 'plaat', stuk: 'stuk', stuks: 'stuk', st: 'stuk', stk: 'stuk', pcs: 'stuk', 'm2': 'm²', 'm²': 'm²', 'vierkante meter': 'm²', m: 'm', mtr: 'm', meter: 'm', strekkende: 'm', lm: 'm', set: 'set', sets: 'set', paar: 'paar', liter: 'liter', l: 'liter', kg: 'kg', doos: 'doos', dozen: 'doos', rol: 'rol', rollen: 'rol' };
   P.eenheidNorm = e => { const s = String(e == null ? '' : e).trim().toLowerCase().replace(/\.$/, ''); return s === '' ? '' : (EENHEDEN[s] || s); };
@@ -1230,10 +1234,42 @@
   const isMeta = x => !!x && typeof x === 'object' && x.id === '__migratie';
   P.bestelSamen = (lokaal, spData) => {
     const L = leesStrikt(lokaal, o => P.bestelBestandVorm(o), [], 'samenvoegen'), R = leesStrikt(spData, o => P.bestelBestandVorm(o), [], 'samenvoegen');
-    const uit = sorteerOpId(lijstSamenMet(P.BESTEL_VELDEN, { iso: true, legacy: true }, L.filter(x => !isMeta(x)), R.filter(x => !isMeta(x))));
+    // ongemoeid: de nieuwe velden (P5) kent een oude versie van de tool niet. In een record dat WEL gestempeld is, telt zo'n veld zonder stempel als ongemoeid (wint van niets, nooit van een stempel):
+    // een oude app die een bestelregel wijzigt zonder die velden te kennen, zet een nieuwere koppeling of leverdatum niet terug
+    const uit = sorteerOpId(lijstSamenMet(P.BESTEL_VELDEN, { iso: true, legacy: true, ongemoeid: new Set(P.BESTEL_NIEUW_VELDEN) }, L.filter(x => !isMeta(x)), R.filter(x => !isMeta(x))));
     const meta = metaSamen(L.find(isMeta), R.find(isMeta)); if (meta) { meta.id = '__migratie'; uit.push(canon(meta)); }
     return uit;
   };
+  // ── P5: materiaal als voorwaarde ──────────────────────────────────────────────────────────────────────
+  // Een bestelregel kan aan een taak hangen (taak_id, binnen hetzelfde project) en een verwachte leverdatum hebben (verwacht_op). Een taak met regels die nog niet geleverd zijn "wacht op N regels";
+  // valt de verwachte leverdatum na de geplande start van de taak, dan is dat rood. Alles hieronder is rekenwerk zonder opslag; het schrijven loopt via de bestaande bestelroutes (gestempelde velden).
+  P.bestelHoortBij = (b, project) => { const pid = String((b && b.project_id) || ''); return !!project && !!b && ((pid && project.project_id && pid === String(project.project_id)) || (!!b.project && zelfdeCode(b.project, project.code))); };
+  P.bestelVanTaak = (bestel, taakId, project) => (Array.isArray(bestel) ? bestel : []).filter(b => b && typeof b === 'object' && !b._vervallen && b.id !== '__migratie' && b.taak_id !== undefined && b.taak_id !== null && b.taak_id !== '' && String(b.taak_id) === String(taakId) && P.bestelHoortBij(b, project));
+  P.bestelVerwacht = b => P.isYmd(b && b.verwacht_op) ? b.verwacht_op : '';
+  // Voor lijsten met veel taken (bord, tijdlijn): de gekoppelde regels één keer per taak-id indexeren in plaats van per taak de hele lijst te doorlopen
+  P.bestelIndexTaak = bestel => { const m = new Map(); (Array.isArray(bestel) ? bestel : []).forEach(b => { if (!b || typeof b !== 'object' || b._vervallen || b.id === '__migratie' || b.taak_id === undefined || b.taak_id === null || b.taak_id === '') return; const k = String(b.taak_id); if (!m.has(k)) m.set(k, []); m.get(k).push(b); }); return m; };
+  P.bestelVanTaakIdx = (idx, taakId, project) => ((idx && idx.get(String(taakId))) || []).filter(b => P.bestelHoortBij(b, project));
+  // → { items: [{ id, oms, aantal, eenheid, status, verwacht, bron, open, laat, verlopen, zonderDatum }], n, open, nodig, besteld, geleverd, laat, verlopen, zonderDatum, laatste (de laatste verwachte datum van de open regels), wacht, tekst }
+  //   laat = de verwachte datum valt NA de geplande start van de taak (rood); verlopen = de verwachte datum is voorbij en de regel is nog niet geleverd; wacht = er is open materiaal en de taak is niet klaar.
+  P.taakMateriaal = function (taak, regels, { vandaag = '' } = {}) {
+    const nu = P.isYmd(vandaag) ? vandaag : P.vandaagYmd(), start = P.isYmd(taak && taak.start) ? taak.start : '';
+    const items = (Array.isArray(regels) ? regels : []).map(b => {
+      const status = P.bestelStatus(b), v = P.bestelVerwacht(b), open = status !== 'geleverd';
+      return { id: b.id, oms: P.bestelOms(b), aantal: b.aantal, eenheid: b.eenheid, status, verwacht: v, bron: String(b.verwacht_bron || ''), open, laat: open && !!v && !!start && v > start, verlopen: open && !!v && v < nu, zonderDatum: open && !v };
+    });
+    const open = items.filter(x => x.open), klaar = ((taak && taak.status) || 'todo') === 'klaar';
+    const tel = s => items.filter(x => x.status === s).length;
+    return { items, n: items.length, open: open.length, nodig: tel('nodig'), besteld: tel('besteld'), geleverd: tel('geleverd'), laat: open.filter(x => x.laat).length, verlopen: open.filter(x => x.verlopen).length, zonderDatum: open.filter(x => x.zonderDatum).length,
+      laatste: open.map(x => x.verwacht).filter(Boolean).sort().pop() || '', wacht: !klaar && open.length > 0, tekst: !klaar && open.length > 0 ? 'wacht op ' + open.length + ' regel' + (open.length === 1 ? '' : 's') : '' };
+  };
+  // De bevestiging voordat een taak met open materiaal op Bezig of Klaar gaat (nooit stil). datumTekst = de datumopmaak van de aanroeper.
+  P.materiaalBevestigTekst = function (naam, m, nieuweStatus, datumTekst) {
+    const d = datumTekst || (x => x), uit = nieuweStatus === 'klaar' ? 'op klaar zetten' : 'starten';
+    return '"' + naam + '" wacht op materiaal: ' + m.open + ' bestelregel' + (m.open === 1 ? '' : 's') + ' nog niet geleverd' + (m.laatste ? ' (verwacht uiterlijk ' + d(m.laatste) + (m.laat ? ', dat is na de geplande start' : '') + ')' : '') + '.\nToch ' + uit + '?';
+  };
+  // Mag deze taak stil naar die status? Alleen een wijziging naar Bezig of Klaar vanuit Open/Wacht met open materiaal vraagt eerst een bevestiging.
+  P.materiaalVraagBevestiging = (taak, m, nieuweStatus) => !!m && m.open > 0 && (nieuweStatus === 'bezig' || nieuweStatus === 'klaar') && ((taak && taak.status) || 'todo') !== 'bezig' && ((taak && taak.status) || 'todo') !== 'klaar';
+
   // ── Overstap naar mt_bestellijst_v2 (zelfde patroon als mt_project_taken_v2) ──────────────────────────
   // De nieuwe app leest en schrijft alleen mt_bestellijst_v2; het oude mt_bestellijst blijft van oude app-versies. De overstap gebeurt één keer
   // (de eerste nieuwe client die v2 niet vindt, aanmaken met If-None-Match: *; wie 412/409 krijgt leest dat bestand). Bestaande regel-id's
@@ -1468,7 +1504,7 @@
   // ── Schemaversie van de projecttaken ──
   // De laagste app-versie die mt_project_taken_v2 mag schrijven staat in de teller (GET /teller/status → schema_min). Is die hoger dan
   // de versie van déze app (v2.html: PROJ_SCHEMA), dan schrijft de app niet meer. Onbekend (nog niet gelezen) = geen blokkade.
-  P.SCHEMA = 6;
+  P.SCHEMA = 7;
   P.SCHEMA_TEKST = 'Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
   P.schemaGeblokkeerd = (schemaMin, eigen) => schemaMin !== null && schemaMin !== undefined && schemaMin !== '' && Number.isFinite(Number(schemaMin)) && Number(schemaMin) > (eigen == null ? P.SCHEMA : Number(eigen));
 
@@ -2343,10 +2379,11 @@
       bron: 'melding', activiteit: P.activiteitUitNaam(n) || undefined, voorstel: { soort: probleem ? 'probleem' : 'taak', door, doorNaam, rol, ts: new Date(nu).toISOString() } };
   };
   // Een bestelvoorstel: een gewone bestelregel (status nodig) met de markering `voorstel`. project_id/project: zoals de cockpit (code en technische sleutel).
-  P.meldingBestel = function ({ omschrijving = '', aantal = 1, eenheid = '', project = '', project_id = '', opmerking = '', door = '', doorNaam = '', rol = '', nu = Date.now(), datum = '', id = '' } = {}) {
+  P.meldingBestel = function ({ omschrijving = '', aantal = 1, eenheid = '', project = '', project_id = '', taak_id = '', opmerking = '', door = '', doorNaam = '', rol = '', nu = Date.now(), datum = '', id = '' } = {}) {
     const oms = String(omschrijving).replace(/\s+/g, ' ').trim(); if (!oms) return null;
     const r = P.bestelRegelNieuw({ omschrijving: oms.slice(0, 200), aantal, eenheid, bron: 'hand', project, project_id, datum: P.isYmd(datum) ? datum : P.vandaagYmd(), id });
     if (opmerking && String(opmerking).trim()) r.opmerking = String(opmerking).trim().slice(0, 300);
+    if (taak_id !== undefined && taak_id !== null && String(taak_id) !== '') r.taak_id = String(taak_id);   // P5: een bestelvoorstel kan meteen aan een taak hangen
     r.voorstel = { soort: 'bestel', door, doorNaam, rol, ts: new Date(nu).toISOString() };
     return r;
   };

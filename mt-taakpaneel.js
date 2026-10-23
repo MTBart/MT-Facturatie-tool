@@ -63,16 +63,19 @@
       return r;
     }).filter(Boolean);
     let wacht = { wacht: false, op: [] }; try { wacht = P.taakWacht(t, lijst, depsRuw, { vrij, vandaag }); } catch (e) {}
-    // Bestellingen: er is (nog) geen koppeling per taak; dit zijn de regels van het project (zelfde regel als MTPlanning.projectStroom).
+    // Materiaal (P5): de regels die aan DEZE taak hangen (taak_id) met hun verwachte leverdatum, en de andere regels van het project (zelfde regel als MTPlanning.projectStroom).
     const VOLG = { nodig: 0, besteld: 1, geleverd: 2 };
     const regels = (D.bestel ? D.bestel() || [] : []).filter(b => b && typeof b === 'object' && !b._vervallen && b.id !== '__migratie' && ((b.project_id && pr.project_id && b.project_id === pr.project_id) || zelfde(b.project, pr.code)))
-      .map(b => { const st = P.bestelStatus(b); return { id: b.id, oms: P.bestelOms(b) || 'regel', aantal: b.aantal || 1, eenheid: P.eenheidTekst(b.eenheid, b.aantal || 1), leverancier: b.leverancier || '', status: st, label: P.BESTEL_STATUS_LABEL[st] || st, voorstel: b.voorstel ? P.voorstelTekst(b.voorstel) : '' }; })
+      .map(b => { const st = P.bestelStatus(b); return { id: b.id, taak_id: b.taak_id === undefined || b.taak_id === null ? '' : String(b.taak_id), oms: P.bestelOms(b) || 'regel', aantal: b.aantal || 1, eenheid: P.eenheidTekst(b.eenheid, b.aantal || 1), leverancier: b.leverancier || '', status: st, label: P.BESTEL_STATUS_LABEL[st] || st, voorstel: b.voorstel ? P.voorstelTekst(b.voorstel) : '' }; })
       .sort((a, b) => (VOLG[a.status] - VOLG[b.status]) || String(a.oms).localeCompare(String(b.oms), 'nl'));
     const tel = { nodig: 0, besteld: 0, geleverd: 0 }; regels.forEach(r => { tel[r.status] = (tel[r.status] || 0) + 1; });
+    const koppel = P.bestelVanTaak(D.bestel ? D.bestel() || [] : [], t.id, { code: k || code, project_id: pr.project_id }), materiaalTaak = P.taakMateriaal(t, koppel, { vandaag });
+    const taakNaam = id => { const x = lijst.find(y => String(y.id) === String(id)); return x ? x.naam : ''; };
+    const anderen = regels.filter(r => !koppel.some(x => String(x.id) === String(r.id))).map(r => Object.assign({}, r, { bijTaak: r.taak_id ? taakNaam(r.taak_id) : '' }));
     const materiaal = t.sleutel === 'bestellen' || t.sleutel === 'materiaal_geleverd' || (t.status === 'wacht' && /\b(materiaal|plaat|platen|beslag|bestel|besteld|bestelling|levering|leverancier|geleverd|order)/i.test(String(t.wacht_reden || '')));
     // Planblokken die (nog) aan deze taak hangen (oude tb:-blokken), voor de mini-tijdlijn
     let blokken = []; try { if (D.blokken && P.taakBlokkenVan) blokken = P.taakBlokkenVan(t, lijst, k, D.blokken() || [], alle).filter(b => b && ymdOk(b.datum)).map(b => ({ datum: b.datum, persoon: b.persoon || '', min: Number(b.duurMin) || 0, voorstel: b.status === 'voorstel' })); } catch (e) { blokken = []; }
-    return { ok: true, sleutel: { code: k || code, id: t.id }, code: k || code, taak: t, project: pr, voorgangers, opvolgers, wacht, bestel: { regels, tel, materiaal }, mensen: P.taakMensen(t), raming: P.taakRamingMin(t), fasen: faseOpties(lijst, t.fase), blokken };
+    return { ok: true, sleutel: { code: k || code, id: t.id }, code: k || code, taak: t, project: pr, voorgangers, opvolgers, wacht, bestel: { regels, tel, materiaal, anderen }, materiaalTaak, mensen: P.taakMensen(t), raming: P.taakRamingMin(t), fasen: faseOpties(lijst, t.fase), blokken };
   };
 
   // De mini-tijdlijn (rekenwerk): een venster van hele weken rond de taak (minstens 4, hoogstens 12), met de balk en de planblokken als percentages
@@ -127,19 +130,40 @@
     if ((t.status || 'todo') === 'todo' && m.wacht && m.wacht.wacht) kids.push(h.el('p', { klass: 'tp-sub', tekst: 'Wacht op: ' + P.wachtOpTekst(m.wacht, P.datumKort) }));
     return h.sectie('tp-h-afh', 'Afhankelijkheden', h.el('span', { klass: 'tp-teller', tekst: String(m.voorgangers.length + m.opvolgers.length) }), kids);
   }
-  function bestelSectie(m, h) {
-    const b = m.bestel, g = D.ga || {}, hr = D.href || {}, naarProject = () => { h.sluit({ stil: true }); g.project(m.code, 'productie'); };
-    const tel = ['nodig', 'besteld', 'geleverd'].filter(s => b.tel[s]).map(s => b.tel[s] + ' ' + P.BESTEL_STATUS_LABEL[s].toLowerCase()).join(' · ');
-    // elke regel is een link naar de bestellijst van het project (daar zet je de status; hier alleen inzien)
-    const lijst = b.regels.length ? h.relatieLijst(b.regels.slice(0, 12).map(r => ({ href: hr.project ? hr.project(m.code, 'productie') : '#', ga: naarProject, naam: r.oms, titel: 'Naar de bestellijst van dit project',
-      sub: [String(r.aantal).replace('.', ',') + ' ' + r.eenheid, r.leverancier, r.voorstel].filter(Boolean).join(' · '), chips: [h.chip(r.label, 'tp-bst-' + r.status)] }))) : h.el('p', { klass: 'tp-leeg', tekst: 'Dit project heeft geen bestelregels.' });
-    const meer = b.regels.length > 12 ? h.el('p', { klass: 'tp-sub', tekst: '… en nog ' + (b.regels.length - 12) + ' regels' }) : null;
-    const naar = h.el('div', { klass: 'tp-acties' },
+  // Materiaal (P5): de bestelregels van deze taak met hun verwachte leverdatum (rood als die na de geplande start valt), koppelen en loskoppelen, en de andere regels van het project.
+  // Schrijven via de bestaande bestelroute van de cockpit (gestempelde velden taak_id, verwacht_op; recht bestellijst:alles), nooit rechtstreeks.
+  function materiaalSectie(m, h) {
+    const b = m.bestel, mt = m.materiaalTaak, g = D.ga || {}, hr = D.href || {}, naarProject = () => { h.sluit({ stil: true }); g.project(m.code, 'productie'); }, t = m.taak;
+    const kan = !!D.bestelKoppel && mag('bestel'), geen = h.GEEN_RECHT;
+    const doe = async (belofte, wat) => { let ok = false; try { ok = await belofte; } catch (e) { ok = false; } if (!ok) toast('Niet opgeslagen: ' + wat + '.'); T.ververs(); naWijziging(); };
+    const kop = mt.n ? (mt.open ? 'wacht op ' + mt.open + ' regel' + (mt.open === 1 ? '' : 's') : 'alles geleverd') : 'geen regels gekoppeld';
+    const kids = [];
+    if (mt.open && mt.laat) kids.push(h.el('div', { klass: 'tp-waarsch', role: 'note' }, h.icoon(h.IC.let), h.el('div', null, h.el('div', { tekst: 'Het materiaal komt na de geplande start: ' + mt.items.filter(x => x.laat).map(x => x.oms + ' (' + datum(x.verwacht) + ')').join(', ') + '; de taak start ' + datum(t.start) + '.' }))));
+    if (mt.n) {
+      kids.push(h.el('ul', { klass: 'tp-lijst tp-mat' }, mt.items.map(x => h.el('li', { klass: 'tp-matrij' },
+        h.el('span', { klass: 'tp-tekst' }, h.el('span', { klass: 'tp-naam', tekst: x.oms }), h.el('span', { klass: 'tp-sub', tekst: [String(x.aantal || 1).replace('.', ',') + ' ' + P.eenheidTekst(x.eenheid, x.aantal || 1), x.verlopen ? 'verwacht op ' + datum(x.verwacht) + ' is voorbij' : ''].filter(Boolean).join(' · ') })),
+        h.chip(P.BESTEL_STATUS_LABEL[x.status] || x.status, 'tp-bst-' + x.status),
+        x.open ? h.el('label', { klass: 'tp-matdatum' }, h.el('span', { klass: 'tp-sub', tekst: 'verwacht' }),
+          h.el('input', { type: 'date', klass: 'tp-invoer tp-kort' + (x.laat ? ' tp-rood' : ''), value: x.verwacht, 'aria-label': 'Verwachte leverdatum van ' + x.oms, title: x.laat ? 'Na de geplande start van de taak' : (kan ? 'Verwachte leverdatum' : geen), disabled: kan ? null : true,
+            wijzig: ev => { const v = ev.target.value; try { ev.target.blur(); } catch (e) { } doe(D.bestelVerwacht(x.id, v), 'de leverdatum'); } })) : null,
+        h.el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Los', title: kan ? 'Haal deze regel van de taak (hij blijft op de bestellijst)' : geen, disabled: kan ? null : true, klik: () => doe(D.bestelKoppel(x.id, ''), 'het loskoppelen') })))));
+    } else kids.push(h.el('p', { klass: 'tp-leeg', tekst: 'Aan deze taak hangt nog geen bestelregel.' }));
+    const vrij = b.anderen.filter(r => !r.taak_id), elders = b.anderen.filter(r => r.taak_id);
+    if (vrij.length) kids.push(h.el('div', { klass: 'tp-subkop', tekst: 'Koppel een regel van dit project' }), h.el('ul', { klass: 'tp-lijst tp-mat' }, vrij.slice(0, 12).map(r => h.el('li', { klass: 'tp-matrij' },
+      h.el('span', { klass: 'tp-tekst' }, h.el('span', { klass: 'tp-naam', tekst: r.oms }), h.el('span', { klass: 'tp-sub', tekst: [String(r.aantal).replace('.', ',') + ' ' + r.eenheid, r.leverancier, r.label].filter(Boolean).join(' · ') })),
+      h.el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Koppel', title: kan ? 'Hang deze regel aan deze taak' : geen, disabled: kan ? null : true, klik: () => doe(D.bestelKoppel(r.id, String(t.id)), 'het koppelen') })))));
+    if (vrij.length > 12) kids.push(h.el('p', { klass: 'tp-sub', tekst: '… en nog ' + (vrij.length - 12) + ' regels zonder taak' }));
+    if (elders.length) kids.push(h.el('p', { klass: 'tp-sub', tekst: elders.length + ' andere regel' + (elders.length === 1 ? '' : 's') + ' van dit project hangt' + (elders.length === 1 ? '' : 'en') + ' aan een andere taak.' }));
+    if (b.regels.length) kids.push(h.el('p', { klass: 'tp-sub tp-projtel', tekst: 'Hele project: ' + b.tel.nodig + ' nodig ' + String.fromCharCode(183) + ' ' + b.tel.besteld + ' besteld ' + String.fromCharCode(183) + ' ' + b.tel.geleverd + ' geleverd' }));
+    kids.push(h.el('div', { klass: 'tp-acties' },
       h.link(hr.project ? hr.project(m.code, 'productie') : '#', naarProject, 'Bestellijst van dit project', 'tp-link tp-knoplink'),
-      h.link(hr.bestellijst ? hr.bestellijst() : '#', () => { h.sluit({ stil: true }); g.bestellijst(); }, 'Bestellijst (alle projecten)', 'tp-link tp-knoplink'));
-    return h.el('details', { klass: 'tp-sec tp-details', open: b.materiaal || null },
-      h.el('summary', null, h.el('h3', { id: 'tp-h-bestel', tekst: 'Bestellingen van dit project' }), h.el('span', { klass: 'tp-teller', tekst: tel || '0' })), lijst, meer,
-      h.el('p', { klass: 'tp-sub', tekst: 'Bestelregels hangen aan het project, niet aan een losse taak.' }), naar);
+      h.link(hr.bestellijst ? hr.bestellijst() : '#', () => { h.sluit({ stil: true }); g.bestellijst(); }, 'Bestellijst (alle projecten)', 'tp-link tp-knoplink')));
+    // open als er materiaal aan de taak hangt; een keuze van de gebruiker (open- of dichtklikken) blijft staan bij het hertekenen
+    const open = T._matOpen !== undefined ? T._matOpen : !!(mt.n || b.materiaal);
+    const det = h.el('details', { klass: 'tp-sec tp-details', open: open ? true : null },
+      h.el('summary', null, h.el('h3', { id: 'tp-h-bestel', tekst: 'Materiaal' }), h.el('span', { klass: 'tp-teller' + (mt.laat ? ' tp-rood-tekst' : ''), tekst: kop })), kids);
+    det.addEventListener('toggle', () => { T._matOpen = det.open; });
+    return det;
   }
   // Datums: de bestaande sleeproute (taakdatums), met de getoonde datums mee zodat er niets stil overschreven wordt
   function datumVelden(m, h) {
@@ -247,6 +271,10 @@
       const ja = await dlg.confirm({ title: 'Deze taak wacht', message: '"' + t.naam + '" wacht op: ' + P.wachtOpTekst(m.wacht, P.datumKort) + '.\nToch ' + (nieuw === 'klaar' ? 'op klaar zetten' : 'starten') + '?', okLabel: 'Toch doorgaan' });
       if (!ja) return;
     }
+    if (nieuw !== 'wacht' && m.materiaalTaak && P.materiaalVraagBevestiging(t, m.materiaalTaak, nieuw) && dlg && dlg.confirm) {   // een taak met open materiaal gaat niet stil naar Bezig of Klaar (P5)
+      const ja = await dlg.confirm({ title: 'Het materiaal is nog niet binnen', message: P.materiaalBevestigTekst(t.naam, m.materiaalTaak, nieuw, P.datumKort), okLabel: 'Toch doorgaan' });
+      if (!ja) return;
+    }
     await h.bewaar({ velden: { status: nieuw }, gezien: { status: huidig, wacht_reden: t.wacht_reden || '', klaar_op: t.klaar_op || '' }, reden }, 'status ' + (P.TAAK_STATUS_LABEL[nieuw] || nieuw).toLowerCase());
   }
   function statusRij(m, h) {
@@ -292,12 +320,12 @@
       // De naam ziet eruit als een kop, maar is een veld: klikken = bewerken (bewerkbaar oogt = bewerkbaar)
       const titel = D.wijzig ? h.el('h2', { id: 'tp-titel', klass: 'tp-titel' }, h.tekstVeld('naam', m.taak.naam || '', { kan: mag('alles'), label: 'Taaknaam', klass: 'tp-titelinvoer', wat: 'naam', fout: 'Een taak heeft een naam nodig; er is niets gewijzigd.', lees: v => v ? v : null, titel: 'Klik om de naam te wijzigen · Enter = opslaan, Esc = annuleren' }))
         : h.el('h2', { id: 'tp-titel', klass: 'tp-titel', tekst: m.taak.naam || '(zonder naam)' });
-      return { aria: 'Taak: ' + (m.taak.naam || ''), boven: herkomst(m, h), titel, body: [statusRij(m, h), meldingen(m, h), velden(m, h), afhSectie(m, h), bestelSectie(m, h), meta(m, h)] };
+      return { aria: 'Taak: ' + (m.taak.naam || ''), boven: herkomst(m, h), titel, body: [statusRij(m, h), meldingen(m, h), velden(m, h), afhSectie(m, h), materiaalSectie(m, h), meta(m, h)] };
     }
   };
   // De stijl van wat alleen de taak heeft (de mini-tijdlijn)
   const STIJL_TAAK = [
-    '#tp-paneel .tp-tl{margin-top:8px}#tp-paneel .tp-tl-leeg{display:flex;flex-wrap:wrap;align-items:center;gap:8px}',
+    '#tp-paneel .tp-matrij{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line,#dfd8cb)}#tp-paneel .tp-matrij .tp-tekst{flex:1 1 160px}#tp-paneel .tp-matdatum{display:inline-flex;align-items:center;gap:6px}#tp-paneel .tp-rood{border-color:#b3261e !important;color:#b3261e}#tp-paneel .tp-rood-tekst{color:#b3261e;font-weight:600}#tp-paneel .tp-tl{margin-top:8px}#tp-paneel .tp-tl-leeg{display:flex;flex-wrap:wrap;align-items:center;gap:8px}',
     '#tp-paneel .tp-tl-as{position:relative;height:46px;border:1px solid var(--line,#dfd8cb);border-radius:4px;background:var(--surface-sunken,#f1ede5);overflow:hidden}',
     '#tp-paneel .tp-tl-wk{position:absolute;top:0;bottom:0;padding:2px 0 0 3px;border-left:1px solid var(--line,#dfd8cb);font:500 10px/12px var(--mono,monospace);color:var(--ink-3,#646a64);white-space:nowrap}',
     '#tp-paneel .tp-tl-balk{position:absolute;top:18px;height:14px;border-radius:3px;background:var(--block-color,#3e5c76);opacity:.85}#tp-paneel .tp-tl-balk.tp-st-klaar{opacity:.45}',

@@ -36,8 +36,9 @@
   // → status/fase: { indeling, kolommen: [{ k, label, kaarten, verborgen }], filtert } ; stroom: zie MTPlanning.projectStroom
   Bd.kaarten = function (o) {
     const taken = o.taken || {}, vandaag = o.vandaag || P.vandaagYmd(), f = o.filter || {}, team = o.team || [];
+    const matKaart = (t, code, pr) => { const m = P.taakMateriaal(t, P.bestelVanTaakIdx(matIdx, t.id, { code, project_id: pr.project_id }), { vandaag }); return m.wacht ? m : null; };
     const bekend = new Map(); (o.projecten || []).forEach(p => { if (p && p.code) bekend.set(String(p.code).toLowerCase(), p); });
-    const uit = [];
+    const uit = [], matIdx = P.bestelIndexTaak(o.bestel);   // P5: de bestelregels die aan een taak hangen, één keer geïndexeerd
     Object.keys(taken).forEach(code => {
       if (code.startsWith('__')) return;
       const pr = bekend.get(String(code).toLowerCase()); if (!pr) return;   // alleen taken van projecten die in de lijst staan (niet van verwijderde of onbekende)
@@ -51,7 +52,7 @@
         const w = wacht[t.id] || { wacht: false, op: [] }, eerste = P.taakMensen(t)[0], lid = eerste ? team.find(m => m && P.zelfdePersoon(m.slug, eerste, team)) : null;
         uit.push({ code, id: t.id, naam: t.naam || '(zonder naam)', projectLabel: pr.label || pr.code, status: st, fase: t.fase || '', persoon: lid ? lid.slug : (eerste || ''), persoonNaam: lid ? lid.naam : (eerste || ''),
           eind: P.isYmd(t.eind) ? t.eind : '', teLaat: st !== 'klaar' && P.isYmd(t.eind) && t.eind < vandaag, wachtReden: st === 'wacht' ? String(t.wacht_reden || '') : '',
-          wachtOp: st === 'todo' && w.wacht ? P.wachtOpTekst(w, P.datumKort) : '', klaarOp: P.isYmd(t.klaar_op) ? t.klaar_op : '', prio: t.prioriteit || '', taak: t });
+          wachtOp: st === 'todo' && w.wacht ? P.wachtOpTekst(w, P.datumKort) : '', project_id: pr.project_id || '', mat: matKaart(t, code, pr), klaarOp: P.isYmd(t.klaar_op) ? t.klaar_op : '', prio: t.prioriteit || '', taak: t });
       });
     });
     const volg = (a, b) => ((PRIO_VOLGORDE[a.prio] === undefined ? 3 : PRIO_VOLGORDE[a.prio]) - (PRIO_VOLGORDE[b.prio] === undefined ? 3 : PRIO_VOLGORDE[b.prio])) || (a.eind && b.eind ? (a.eind < b.eind ? -1 : a.eind > b.eind ? 1 : 0) : (a.eind ? -1 : b.eind ? 1 : 0)) || (a.naam.toLowerCase() < b.naam.toLowerCase() ? -1 : 1);
@@ -111,6 +112,7 @@
     + '#agenda-bord .bd-naam{font:600 13px/18px var(--sans,inherit);color:var(--ink,#1f2a24);padding-right:34px}'
     + '#agenda-bord .bd-sub{font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#666)}'
     + '#agenda-bord .bd-voet{display:flex;align-items:center;gap:8px;font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#666)}'
+    + '#agenda-bord .bd-mat{display:inline-flex;align-items:center;gap:3px;color:var(--ink-2,#666)}#agenda-bord .bd-mat.laat{color:#b3261e;font-weight:600}'
     + '#agenda-bord .bd-laat{color:#8B1A1A;font-weight:600}#agenda-bord .bd-wacht{font:400 12px/16px var(--sans,inherit);color:var(--ink,#1f2a24);border-left:2px solid var(--brass,#d19a1f);padding-left:6px}'
     + '#agenda-bord .bd-dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink-3,#8a8f89);margin-right:6px;vertical-align:middle}'
     + '#agenda-bord .bd-dot.bezig{background:var(--primary,#2A4A38);border-color:var(--primary,#2A4A38)}#agenda-bord .bd-dot.wacht{background:var(--brass,#d19a1f);border-color:var(--brass,#d19a1f)}#agenda-bord .bd-dot.klaar{background:var(--ink-3,#8a8f89)}'
@@ -166,6 +168,10 @@
       const ja = await dlg.confirm({ title: 'Deze taak wacht', message: '"' + t.naam + '" wacht op: ' + kaart.wachtOp + '.\nToch ' + (nieuw === 'klaar' ? 'op klaar zetten' : 'starten') + '?', okLabel: 'Toch doorgaan' });
       if (!ja) return false;
     }
+    if (nieuw !== 'wacht' && D.bestel && dlg && dlg.confirm) {   // een taak met open materiaal gaat niet stil naar Bezig of Klaar (P5): vers uit de bestellijst, niet uit de getekende kaart
+      const mat = P.taakMateriaal(t, P.bestelVanTaak(D.bestel() || [], t.id, { code: kaart.code, project_id: kaart.project_id }), { vandaag: P.vandaagYmd() });
+      if (P.materiaalVraagBevestiging(t, mat, nieuw)) { const ja = await dlg.confirm({ title: 'Het materiaal is nog niet binnen', message: P.materiaalBevestigTekst(t.naam, mat, nieuw, P.datumKort), okLabel: 'Toch doorgaan' }); if (!ja) return false; }
+    }
     return schrijf(Bd.specStatus(kaart.code, vindTaak(kaart.code, kaart.id) || t, nieuw, reden), 'status ' + statusLabel(nieuw).toLowerCase());
   };
   Bd.naarFase = async function (kaart, fase) {
@@ -207,11 +213,19 @@
     if (model.indeling === 'status' && kolom.k !== 'todo') { const k = Bd.kaarten({ taken: D.taken(), afhank: D.afhank(), projecten: D.projecten(), team: D.team(), filter: { project: code } }).find(x => String(x.id) === String(nieuw.id)); if (k) await verplaats(k, kolom, 'status'); }
   }
 
+  // Het icoontje 'wacht op materiaal' (een doos) met het aantal open regels; rood als de verwachte levering na de geplande start valt. Nooit alleen kleur: het aantal en de tekst staan erbij.
+  function matIcoon(m) {
+    const NS = 'http://www.w3.org/2000/svg', s = D.doc.createElementNS(NS, 'svg'), p = D.doc.createElementNS(NS, 'path');
+    s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('width', '14'); s.setAttribute('height', '14'); s.setAttribute('aria-hidden', 'true'); p.setAttribute('d', 'M3 8l9-5l9 5v8l-9 5l-9-5zM3 8l9 5l9-5M12 13v8'); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'currentColor'); p.setAttribute('stroke-width', '1.8'); p.setAttribute('stroke-linejoin', 'round'); s.appendChild(p);
+    const tekst = m.tekst + (m.laatste ? ' (verwacht ' + P.datumKort(m.laatste) + (m.laat ? ', na de geplande start' : '') + ')' : '');
+    return el('span', { klass: 'bd-mat' + (m.laat ? ' laat' : ''), title: tekst, 'aria-label': 'Wacht op materiaal: ' + tekst, role: 'img' }, s, el('span', { tekst: String(m.open) }));
+  }
   function kaartEl(k, model) {
     const kan = model.indeling === 'fase' ? mag('alles') : mag('status');
     const meta = [];
     if (k.persoonNaam) meta.push(el('span', { tekst: k.persoonNaam }));
     if (k.eind) meta.push(el('span', { klass: k.teLaat ? 'bd-laat' : '', tekst: (k.teLaat ? 'te laat · ' : 'tot ') + P.datumKort(k.eind) }));
+    if (k.mat && k.status !== 'klaar') meta.push(matIcoon(k.mat));
     const n = el('div', { klass: 'bd-kaart', role: 'button', tabindex: '0', title: 'Open de taak', 'data-pf-code': k.code, 'data-pf-taak': k.id, draggable: kan ? 'true' : null },
       el('div', { klass: 'bd-naam' }, model.indeling === 'fase' ? el('span', { klass: 'bd-dot ' + (k.status === 'todo' ? '' : k.status), title: statusLabel(k.status) }) : null, k.naam),
       el('div', { klass: 'bd-sub', tekst: k.projectLabel }),
@@ -266,7 +280,7 @@
     w.appendChild(kop);
     if (D.takenKlaar && !D.takenKlaar()) w.appendChild(el('div', { klass: 'mw-melding', role: 'status', tekst: D.takenStatusTekst() + ' Je ziet alleen wat er al staat.' }));
     const filter = { project: g.project || '', persoon: pf ? pf.persoonSlug('iedereen') : '', status: pf && g.status ? pf.statusTaak(g.status) : '' };
-    const basis = { taken: D.taken(), afhank: D.afhank(), projecten: D.projecten(), team: D.team(), vrij: D.vrij ? D.vrij() : null, vandaag: P.vandaagYmd() };
+    const basis = { taken: D.taken(), afhank: D.afhank(), bestel: D.bestel ? D.bestel() : [], projecten: D.projecten(), team: D.team(), vrij: D.vrij ? D.vrij() : null, vandaag: P.vandaagYmd() };
     let m;
     try {
       if (indeling === 'stroom') { m = Bd.stroom(Object.assign({}, basis, { projectenVol: D.projectenVol ? D.projectenVol() : [], bestel: D.bestel ? D.bestel() : [], filter })); w.appendChild(stroomEl(m)); }
