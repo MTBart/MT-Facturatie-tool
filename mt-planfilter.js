@@ -18,9 +18,9 @@
   const ZOOMS = ['kwartaal', 'maand', 'week', '3d', 'dag'];
   const STATUSSEN = [['open', 'Open', 'todo'], ['bezig', 'Bezig', 'bezig'], ['wacht', 'Wacht', 'wacht'], ['klaar', 'Klaar', 'klaar']];   // [linkwaarde, label, taakstatus]
   const BORDEN = ['status', 'stroom', 'fase'];   // de indeling van het Bord (P3)
-  const SLEUTELS = ['project', 'persoon', 'status', 'van', 'zoom', 'bord', 'schaal', 'tijd'];
-  const LINK = { project: 'project', persoon: 'wie', status: 'status', van: 'van', zoom: 'zoom', bord: 'bord', schaal: 'schaal', tijd: 'tijd' };
-  const S = { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', schaal: '', tijd: '', selectie: null, rev: 0, hashAchter: false };
+  const SLEUTELS = ['project', 'persoon', 'status', 'van', 'zoom', 'bord', 'schaal', 'tijd', 'bak', 'bf'];
+  const LINK = { project: 'project', persoon: 'wie', status: 'status', van: 'van', zoom: 'zoom', bord: 'bord', schaal: 'schaal', tijd: 'tijd', bak: 'bak', bf: 'bf' };
+  const S = { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', schaal: '', tijd: '', bak: '', bf: '', selectie: null, rev: 0, hashAchter: false };
   let geladen = false;
   const luisteraars = [];
 
@@ -35,7 +35,9 @@
     zoom: v => ZOOMS.includes(v) ? v : '',
     bord: v => BORDEN.includes(v) ? v : '',
     schaal: v => { const s = String(v == null ? '' : v).trim(), n = Number(s); return /^\d{1,3}(\.\d)?$/.test(s) && n >= 0.5 && n <= 400 ? String(n) : ''; },   // de vrije zoom van de Capaciteit: pixels per uur (leeg = een snelkeuze)
-    tijd: v => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v == null ? '' : v)) ? String(v) : ''   // de tijd van de dag aan de linkerrand bij een vrije zoom
+    tijd: v => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v == null ? '' : v)) ? String(v) : '',   // de tijd van de dag aan de linkerrand bij een vrije zoom
+    bak: v => ['alles', 'telaat', 'wacht', 'week'].includes(v) ? v : '',   // de lijst van de takenbak (leeg = Ongepland)
+    bf: v => { const s = String(v == null ? '' : v); return s.length <= 700 && /^[\w~;%.\-*()!'+]*$/.test(s) ? s : ''; }   // de filters en de groepering van de takenbak (zie mt-takenbak.js: codeer)
   };
   F.WEERGAVEN = WEERGAVEN; F.ZOOMS = ZOOMS; F.STATUSSEN = STATUSSEN;
   F.isYmd = isYmd;
@@ -243,7 +245,7 @@
     } catch (e) {}
     return F;
   };
-  F._reset = function () { Object.assign(S, { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', schaal: '', tijd: '', selectie: null, rev: 0, hashAchter: false }); geladen = false; luisteraars.length = 0; };
+  F._reset = function () { Object.assign(S, { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', schaal: '', tijd: '', bak: '', bf: '', selectie: null, rev: 0, hashAchter: false }); geladen = false; luisteraars.length = 0; };
   F.S = S;
   root.MTPlanFilter = F;
   if (typeof module !== 'undefined' && module.exports) module.exports = F;
