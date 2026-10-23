@@ -9,7 +9,9 @@
   'use strict';
   const M = {};
   let D = null, P = null;
-  const F = { persoon: 'ik', project: '' };
+  const EIGEN = { persoon: 'ik', project: '', status: '' };   // zonder de gedeelde filterbalk (mt-planfilter.js) houdt Mijn werk zijn eigen keuze bij
+  const PF = () => root.MTPlanFilter || null;
+  const F = { get persoon() { const p = PF(); return p ? p.persoonWaarde('ik') : EIGEN.persoon; }, set persoon(v) { EIGEN.persoon = v; const p = PF(); if (p) p.zet({ persoon: v === 'ik' ? '' : v }); }, get project() { const p = PF(); return p ? p.get().project : EIGEN.project; }, set project(v) { EIGEN.project = v; const p = PF(); if (p) p.zet({ project: v }); }, get status() { const p = PF(), s = p ? p.get().status : EIGEN.status; return s === 'klaar' ? '' : s; } };   // Klaar bestaat hier niet (geen afgeronde taken): dan telt de status niet
   const LS_GEZIEN = 'mt_vandaag_gezien';   // dezelfde "gezien"-lijst als op de telefoon (per apparaat)
 
   function el(tag, props, ...kids) {
@@ -52,6 +54,8 @@
   M.takenKlaar = () => !!(D && D.takenKlaar());
 
   function filterBalk() {
+    // De gedeelde balk (project, persoon, status; dezelfde stand als in de Capaciteit en de Planning van een project). Mijn werk toont geen afgeronde taken, dus geen status Klaar.
+    if (PF()) return PF().balk({ pre: 'mw', std: 'ik', statussen: ['open', 'bezig', 'wacht'], klaar: () => M.teken() });
     const lijst = D.team() || [];
     const persoon = el('select', { id: 'mw-persoon', 'aria-label': 'Persoon', wijzig: ev => { F.persoon = ev.target.value; M.teken(); } },
       el('option', { value: 'ik', tekst: 'Ik' }), el('option', { value: 'iedereen', tekst: 'Iedereen' }), lijst.map(m => el('option', { value: m.slug, tekst: m.naam })));
@@ -87,7 +91,7 @@
     if (taak && item.status !== 'todo') chips.push(el('span', { klass: 'mw-chip mw-st-' + item.status, tekst: P.TAAK_STATUS_LABEL[item.status] || item.status }));
     if (!taak) chips.push(el('span', { klass: 'mw-chip', tekst: item.voorstel ? 'Planblok (voorstel)' : 'Planblok' }));
     const paneel = taak && !!D.openTaak;   // een taak opent het taakpaneel (mt-taakpaneel.js); een planblok het project
-    const rij = el('div', { klass: 'mw-rij', role: 'button', tabindex: '0', title: paneel ? 'Open de taak (alle details)' : 'Open het project (taken)' },
+    const rij = el('div', { klass: 'mw-rij', role: 'button', tabindex: '0', title: paneel ? 'Open de taak (alle details)' : 'Open het project (taken)', 'data-pf-code': taak ? item.code : null, 'data-pf-taak': taak ? item.id : null },
       el('span', { klass: 'mw-strook', style: 'background:' + P.projectKleur(item.code) }),
       el('div', { klass: 'mw-tekst' }, naam, el('div', { klass: 'mw-sub', tekst: [projLabel(item.code), wanneer(item, mw.vandaag), taak && item.gepland_min ? uren(item.gepland_min) + ' gepland' : '', (F.persoon === 'iedereen' && item.persoon) ? 'bij ' + persoonNaam(item.persoon) : (F.persoon === 'iedereen' && taak ? 'van niemand' : '')].filter(Boolean).join(' · ') }), extra),
       el('div', { klass: 'mw-chips' }, chips), acties || null);
@@ -107,18 +111,23 @@
     const mw = M.bereken(); M.laatste = mw;
     const balk = weekBalk(mw.week); if (balk) w.appendChild(balk);
     let leeg = true;
+    // Statusfilter: alleen taken met die status; een planblok heeft geen taakstatus en valt dan af (zie de regel onder de balk)
+    const st = F.status, bijStatus = lijst => st ? lijst.filter(i => i.soort === 'taak' && PF().statusPast(i.status, st)) : lijst;
+    if (st) w.insertBefore(el('div', { klass: 'mw-melding', role: 'status', tekst: 'Alleen taken met status ' + ((PF().STATUSSEN.find(x => x[0] === st) || [])[1] || st).toLowerCase() + '; planblokken zonder taak staan hier niet bij.' }), w.children[1] || null);
     GROEPEN.forEach(([k, titel]) => {
-      const items = (mw.groepen[k] || []); if (!items.length) return; leeg = false;
+      const items = bijStatus(mw.groepen[k] || []); if (!items.length) return; leeg = false;
       w.appendChild(el('div', { klass: 'mw-kop' + (k === 'teLaat' ? ' alarm' : ''), tekst: titel + ' (' + items.length + ')' }));
       items.forEach(i => w.appendChild(M.rijen(i, mw, M.actieKnoppen ? M.actieKnoppen(i, k) : null)));
     });
-    if (mw.groepen.nietVrij.length) {
+    const nv = bijStatus(mw.groepen.nietVrij);
+    if (nv.length) {
       leeg = false;
-      w.appendChild(el('details', { klass: 'mw-niet-vrij' }, el('summary', { tekst: 'Nog niet vrijgegeven (' + mw.groepen.nietVrij.length + ')' }), mw.groepen.nietVrij.map(i => M.rijen(i, mw))));
+      w.appendChild(el('details', { klass: 'mw-niet-vrij' }, el('summary', { tekst: 'Nog niet vrijgegeven (' + nv.length + ')' }), nv.map(i => M.rijen(i, mw))));
     }
-    if (leeg) w.appendChild(el('div', { klass: 'mw-leeg', tekst: F.persoon === 'ik' ? 'Niets voor jou op dit moment.' : 'Niets gevonden voor deze keuze.' }));
+    if (leeg) w.appendChild(el('div', { klass: 'mw-leeg', tekst: st ? 'Niets gevonden voor dit filter.' : (F.persoon === 'ik' ? 'Niets voor jou op dit moment.' : 'Niets gevonden voor deze keuze.') }));
+    if (PF()) PF().markeer(w);
   };
-  const STIJL = '#agenda-mijnwerk{padding:4px 2px}.mw-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.mw-filters select{width:auto;min-width:160px}'
+  const STIJL = '#agenda-mijnwerk{padding:4px 2px}#agenda-mijnwerk>.pf-balk{margin-bottom:10px}.mw-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.mw-filters select{width:auto;min-width:160px}'
     + '.mw-week{background:var(--surface,#fff);border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:10px}.mw-dagen{display:inline-flex;gap:6px;margin-left:12px}.mw-dag{display:inline-flex;flex-direction:column;align-items:center;font-size:10px;text-transform:uppercase;color:var(--text-faint,#888);opacity:1}.mw-dag.vrij{opacity:.4}'
     + '.mw-dag i{display:block;width:22px;height:6px;border-radius:3px;background:#d6dedb;margin-top:2px}.mw-dag i.vol{background:#4A7A5C}'
     + '.mw-kop{font:500 11px var(--mono,monospace);letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint,#888);margin:14px 0 6px}.mw-kop.alarm{color:#8B1A1A}'

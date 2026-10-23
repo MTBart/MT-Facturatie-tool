@@ -215,6 +215,8 @@
       try { if (location.hash !== h) { if (wasOpen || o.push === false) history.replaceState(null, '', h); else { history.pushState(null, '', h); S.gepusht = true; } } } catch (e) {}
     }
     try { const t = p.querySelector('#tp-titel'); if (t) { t.setAttribute('tabindex', '-1'); t.focus({ preventScroll: true }); } } catch (e) {}
+    // Een melding voor wie meekijkt (de planningsfilterbalk markeert de geopende taak in elke weergave); zonder luisteraar gebeurt er niets
+    try { if (typeof root.CustomEvent === 'function' && D.doc.dispatchEvent) D.doc.dispatchEvent(new root.CustomEvent('mt-paneel-open', { detail: { soort, sleutel } })); } catch (e) {}
     return true;
   };
   const ruwNu = () => { const d = S.open && DEF[S.open.soort]; try { return d && d.ruw ? d.ruw() : ''; } catch (e) { return ''; } };
