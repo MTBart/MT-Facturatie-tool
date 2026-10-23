@@ -580,6 +580,44 @@
   };
   N.gkZet = function (aan) { N.gkAan(aan); N.teken(); };
 
+  // ── D1: de agenda-strook onder een persoon: zijn Outlook-afspraken als "bezet" op dezelfde tijdas als de blokken erboven ──
+  // Alleen kijken (mt-capagenda.js leest, schrijft nooit, en trekt niets af van de beschikbare uren). Zonder die module of zonder gegevens zegt de strook eerlijk wat er is.
+  const AG_BAAN = 22, AG_MAX = 3;
+  const CA = () => root.MTCapAgenda || null;
+  const AG_NAAM = { busy: 'bezet', oof: 'afwezig', tentative: 'voorlopig' };
+  const agTitel = b => (b.heleDag ? 'hele dag' : hhmm(b.start) + '–' + hhmm(b.eind % 1440)) + ' · ' + (AG_NAAM[b.status] || 'bezet') + (b.onderwerp ? ' · ' + b.onderwerp : b.prive ? ' · privé' : '') + (b.plaats ? ' · ' + b.plaats : '') + (b.herhaald ? ' · herhalend' : '');
+  function agendaRij(V, r) {
+    const A = CA(), m = V.m, idx = V.venster, st = A && r.slug ? A.stand(r.slug) : { status: 'geen' };
+    const dagen = idx.map(i => m.dagen[i].datum), banen = st.status === 'klaar' ? dagen.map(d => A.banen(A.afspraken(r.slug, d))) : [], aantal = banen.reduce((s, b) => s + b.blokken.length, 0);
+    const bijgewerkt = st.ts ? (() => { const d = new Date(st.ts); return 'bijgewerkt ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); })() : '';
+    const dekt = !A || !r.slug || A.dekt(r.slug, dagen[0], dagen[dagen.length - 1]);   // staan alle dagen in beeld in wat gelezen is? Zo niet, dan is het nog onderweg (een lege strook is dan geen "geen afspraken")
+    const sub = st.status === 'klaar' ? (!dekt ? 'laden…' : (aantal ? '' : 'geen afspraken in beeld · ') + (st.deels ? 'LET OP: niet alle afspraken getoond (meer dan 500 in dit venster) · ' : '') + (st.over ? st.over + ' overgeslagen (onbekende tijdzone) · ' : '') + (st.verversen ? 'bijwerken…' : bijgewerkt)) : st.status === 'laden' || st.status === 'leeg' ? 'laden…' : '';
+    const label = el('div', { klass: 'cn-agenda-label' }, el('b', { tekst: 'Agenda · ' + r.naam }), el('span', { klass: 'cn-agenda-sub', tekst: 'Outlook · alleen kijken' + (sub ? ' · ' + sub : '') }));
+    const bericht = (tekst, probleem) => rijEl('cn-agenda-rij', label, el('div', { klass: 'cn-agenda-strook' }, el('div', { klass: 'cn-agenda-tekst' + (probleem ? ' probleem' : ''), role: 'status', tekst })));
+    if (!A || !r.slug) return bericht('Voor deze regel is geen agenda bekend.', true);
+    if (st.status === 'laden' || st.status === 'leeg') return bericht('Afspraken uit Outlook laden…');
+    if (st.status !== 'klaar') return bericht(st.melding || 'agenda van ' + r.naam + ' niet zichtbaar', true);
+    const zicht = Math.min(AG_MAX, Math.max(1, ...banen.map(b => b.banen))), meer = banen.some(b => b.banen > AG_MAX), H = zicht * AG_BAAN + 10 + (meer ? 14 : 0), bereik = U1 - U0, ppd = V.ppd;
+    const strip = stripEl('cn-agenda-strip', V.breedte, 'height:' + H + 'px');
+    dagen.forEach((d, k) => {
+      strip.appendChild(el('span', { klass: 'cn-dagstreep', 'aria-hidden': 'true', style: 'left:' + k * ppd + 'px' }));
+      let verborgen = 0;
+      banen[k].blokken.forEach(b => {
+        if (b.lane >= AG_MAX) { verborgen++; return; }
+        const a = Math.max(U0, Math.min(U1, b.start)), e = Math.max(U0, Math.min(U1, b.eind)), buiten = !b.heleDag && (b.eind <= U0 || b.start >= U1);
+        const links = b.heleDag ? k * ppd + 1 : k * ppd + (a - U0) / bereik * ppd + 1, breed = b.heleDag ? ppd - 2 : Math.max(3, (e - a) / bereik * ppd - 2);
+        strip.appendChild(el('div', { klass: 'cn-ag-blok ' + b.status + (buiten ? ' buiten' : '') + (b.heleDag ? ' hele' : ''), tabindex: '0', title: agTitel(b), 'aria-label': r.naam + ', ' + agTitel(b), style: 'left:' + links.toFixed(1) + 'px;width:' + breed.toFixed(1) + 'px;top:' + (5 + b.lane * AG_BAAN) + 'px;height:' + (AG_BAAN - 4) + 'px' }, el('span', { tekst: b.onderwerp || (b.prive ? 'privé' : AG_NAAM[b.status] || 'bezet') })));
+      });
+      if (verborgen) strip.appendChild(el('span', { klass: 'cn-ag-meer', title: verborgen + ' afspraken meer op ' + P.datumKort(d), style: 'left:' + (k * ppd + 4) + 'px;top:' + (5 + AG_MAX * AG_BAAN) + 'px', tekst: '+' + verborgen }));
+    });
+    return rijEl('cn-agenda-rij', label, strip);
+  }
+  function agendaVraag(m) {   // de afspraken voor de dagen in beeld ophalen (gedempt en alleen wat nog niet in het geheugen staat)
+    const A = CA(); if (!A || !D || !m || m.weekend || !m.venster.length) return;
+    if (!Object.keys(S.agenda).some(k => S.agenda[k])) return;
+    try { A.vraag(m.dagen[m.venster[0]].datum, m.dagen[m.venster[m.venster.length - 1]].datum); } catch (e) { console.warn('Agenda (Outlook):', e); }
+  }
+
   // "+N meer" / "minder": de rij uitklappen of weer terug naar MAX_STAPEL banen
   const meerKnop = (tekst, open, sleutel, stijl) => el('button', { type: 'button', klass: 'cn-meer' + (stijl ? ' chip' : ''), style: stijl || null, 'aria-expanded': open ? 'true' : 'false', tekst, klik: ev => { ev.stopPropagation(); S.meer[sleutel] = !open; N.vlakTeken(true); } });
   const stapelEl = (items, sleutel, maak) => {   // items onder elkaar, maximaal MAX_STAPEL, dan een knop
@@ -692,7 +730,8 @@
     // de as: dagnamen en de uren (fijner naarmate er meer ruimte is)
     const stapLabel = ppu >= 140 ? 15 : ppu >= 55 ? 30 : ppu >= 20 ? 60 : ppu >= 10 ? 120 : 240, tikken = [];
     idx.forEach((i, k) => { for (let t = Math.ceil(U0 / stapLabel) * stapLabel; t < U1; t += stapLabel) tikken.push(el('div', { klass: 'cn-tik' + (m.dagen[i].nu ? ' nu' : '') + (t === U0 ? ' eerste' : '') + (t % 60 ? ' deel' : ''), style: 'left:' + (k * ppd + (t - U0) / 60 * ppu).toFixed(1) + 'px', title: hhmm(t), tekst: t % 60 ? ':' + String(t % 60).padStart(2, '0') : (stapLabel >= 60 && ppu < 44 ? String(t / 60).padStart(2, '0') : hhmm(t)) })); });
-    wrap.appendChild(asRij(V, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Team · uren' })), 'cn-as-uren', 54,
+    const agAlle = rijen.map(x => x.slug || '_'), agAlleOpen = !!agAlle.length && agAlle.every(k => S.agenda[k]);
+    wrap.appendChild(asRij(V, el('div', { klass: 'cn-hoek' }, el('span', { tekst: 'Team · uren' }), CA() ? el('button', { type: 'button', klass: 'cn-agenda-knop alle', 'aria-pressed': agAlleOpen ? 'true' : 'false', title: 'De Outlook-agenda van iedereen als bezet onder de blokken tonen of verbergen (alleen kijken)', klik: () => { agAlle.forEach(k => { S.agenda[k] = !agAlleOpen; }); bewaarAgenda(); N.vlakTeken(true); } }, agAlleOpen ? 'Agenda\'s uit' : 'Agenda\'s aan') : null), 'cn-as-uren', 54,
       idx.map((i, k) => el('div', { klass: 'cn-dagkop2' + (m.dagen[i].nu ? ' nu' : ''), style: 'left:' + k * ppd + 'px;width:' + ppd + 'px' }, el('b', { tekst: DAGKORT[wd(nr(m.dagen[i].datum))] }), ' ', el('span', { klass: 'cn-num', tekst: dagMnd(m.dagen[i].datum) }))), tikken));
     const lijnen = 'repeating-linear-gradient(to right,var(--line-soft) 0 1px,transparent 1px ' + ppu.toFixed(2) + 'px)'
       + (ppu >= 50 ? ',repeating-linear-gradient(to right,color-mix(in srgb,var(--line-soft) 55%,transparent) 0 1px,transparent 1px ' + (ppu / 2).toFixed(2) + 'px)' : '')
@@ -771,9 +810,9 @@
       const label = el('div', { klass: 'cn-persoon enkel' }, belastingEl(V, r), el('div', { klass: 'cn-pkop' }, el('span', { klass: 'cn-avatar', tekst: ini(r.naam) }), el('span', { klass: 'cn-pnaam' }, el('b', { tekst: r.naam }), (r.heeftCap && !dubbel) ? null : el('span', { klass: 'cn-vrij' + (dubbel ? ' over' : ''), tekst: dubbel ? 'dubbel geboekt' : uren(gepl) + ' gepland' }))),
         gkSomEl(V, r),
         uitg && kanMeer ? meerKnop('minder', true, rijSl) : null,
-        el('button', { type: 'button', klass: 'cn-agenda-knop', 'aria-expanded': open ? 'true' : 'false', title: 'Afspraken uit de agenda van ' + r.naam + ' (in aanbouw)', klik: () => { S.agenda[r.slug || '_'] = !open; bewaarAgenda(); N.vlakTeken(true); } }, 'Agenda', icoon(open ? 'M6 15l6-6l6 6' : 'M6 9l6 6l6-6')));
+        el('button', { type: 'button', klass: 'cn-agenda-knop', 'aria-expanded': open ? 'true' : 'false', title: 'De Outlook-afspraken van ' + r.naam + ' als bezet onder de blokken (alleen kijken)', klik: () => { S.agenda[r.slug || '_'] = !open; bewaarAgenda(); N.vlakTeken(true); } }, 'Agenda', icoon(open ? 'M6 15l6-6l6 6' : 'M6 9l6 6l6-6')));
       wrap.appendChild(rijEl('cn-rij-uren', label, raster));
-      if (open) wrap.appendChild(rijEl('cn-agenda-rij', el('div', { klass: 'cn-agenda-label', tekst: 'Agenda · ' + r.naam }), el('div', { klass: 'cn-agenda-strook' }, el('div', { klass: 'cn-agenda-tekst', tekst: 'Outlook-afspraken komen hier (in aanbouw)' }))));
+      if (open) wrap.appendChild(agendaRij(V, r));
     });
   }
 
@@ -1206,7 +1245,7 @@
     const kind = weekendPad ? 'dag' : N.modus(S.ppd, Wv);
     if (S.vrij) { S.zoom = kind; S.anker = datumVanWi(Math.floor(S.pos)); }
     const n = Wv / S.ppd, d0 = Math.floor(S.pos + 1e-9), d1 = Math.max(d0 + 1, Math.ceil(S.pos + n - 1e-6)), snap = N.snapMin(S.ppd);
-    const sleutel = [weekendPad ? 'w' + S.anker : d0 + ':' + d1, S.ppd.toFixed(3), Wv, S.project, S.persoon, S.zoom, JSON.stringify(S.agenda), U0, U1, today, S.gk ? 'g' : ''].join('|');
+    const sleutel = [weekendPad ? 'w' + S.anker : d0 + ':' + d1, S.ppd.toFixed(3), Wv, S.project, S.persoon, S.zoom, JSON.stringify(S.agenda), U0, U1, today, S.gk ? 'g' : '', CA() ? CA().rev() : 0].join('|');
     if (!forceer && S.sleutel === sleutel && vlak.firstChild) { N.plaats(); return; }
     if (S.popOpruim) { try { S.popOpruim(); } catch (e) {} S.popOpruim = null; }   // een open opbouw hoort bij de oude weergave
     let m;
@@ -1231,6 +1270,7 @@
     vlak.appendChild(el('div', { klass: 'cn-legenda' }, el('span', null, el('i', { klass: 'cn-lg-balk' }), 'gepland t.o.v. beschikbaar'), el('span', { klass: 'over' }, el('i', { klass: 'cn-lg-over' }), 'meer gepland dan beschikbaar'), el('span', null, el('i', { klass: 'cn-lg-vrij' }), 'vrij of verlof'), el('span', null, el('i', { klass: 'cn-lg-voorstel' }), 'open voorstel'), V.gk ? el('span', null, el('i', { klass: 'cn-lg-gk' }), 'geklokt (Toggl)') : null, V.gk ? el('span', { klass: 'cn-gk-sync', tekst: gkSyncTekst(V) }) : null, el('span', { klass: 'cn-hint', tekst: hint + ' · ' + GEBAAR })));
     S.sleutel = sleutel;
     N.balkBijwerken(m); N.plaats(); if (!m.weekend) voorLaad(m);
+    if (teken === 'uren') agendaVraag(m);   // D1: de Outlook-afspraken van wie een open agenda-strook heeft
     const w = D.doc.getElementById('agenda-capaciteit');
     if (w && S.focusTaak) { const f = [...w.querySelectorAll('.cn-blok[data-taak]')].find(x => x.getAttribute('data-taak') === S.focusTaak && (!S.focusCode || x.getAttribute('data-code') === S.focusCode)); S.focusTaak = null; S.focusCode = null; if (f && f.focus) f.focus(); }   // de balk waarop met het toetsenbord gewerkt werd houdt de focus
     if (w && S.focusBlok) { const f = [...w.querySelectorAll('.cn-blok[data-blok]')].find(x => x.getAttribute('data-blok') === S.focusBlok); S.focusBlok = null; if (f && f.focus) f.focus(); }
@@ -1314,6 +1354,7 @@
   N.gaNaar = function (datum, slug) { S.vrij = false; if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = P.isYmd(datum) ? 'dag' : 'week'; S.exactDag = P.isYmd(datum); duwFilter({ persoon: slug || '', project: '' }); duwPeriode(); };   // precies die dag (ook een weekenddag), met die persoon in beeld; de bewaarde zoomkeuze verandert niet
   N.init = function (deps) {
     D = deps; P = deps.planning || root.MTPlanning;
+    if (CA() && !S.agLuister) { S.agLuister = true; CA().opLuister(() => { if (S.vlak && D && D.doc.contains(S.vlak)) N.vraag(); }); }   // D1: nieuwe afspraken binnen = opnieuw tekenen (hoogstens één keer per beeld)
     try { const z = D.storage && D.storage.getItem(LS_ZOOM); if (ZOOM_UI && z && ZOOMS.some(x => x[0] === z)) S.zoom = z; S.ongDicht = !!(D.storage && D.storage.getItem(LS_ONG) === 'dicht');
       const sc = Number(D.storage && D.storage.getItem(LS_SCHAAL)); if (sc >= 0.5 && sc <= 400) { S.vrij = true; S.ppd = sc * UH(); S.centreer = true; }   // de laatst gebruikte vrije schaal (niet de plek: die is vandaag)
       { const tb = TB(), b = D.storage && D.storage.getItem(LS_BAK); if (tb && b) { const c = tb.codeer(JSON.parse(b)); S.bak = tb.decodeer(c.bak || 'ongepland', c.bf); } }

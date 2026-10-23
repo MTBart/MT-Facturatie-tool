@@ -49,7 +49,7 @@
 <script src="mt-zoek.js?v=2026-10-12n"></script>
 <script src="mt-zoek-extern.js?v=2026-10-11d"></script>
 <script src="mt-zoekbalk.js?v=2026-10-11h"></script>
-<script src="mt-inbox.js?v=2026-10-15b"></script>
+<script src="mt-inbox.js?v=2026-10-23d1"></script>
 <script src="mt-rollen.js?v=2026-10-09a"></script>
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
@@ -60,7 +60,8 @@
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-23p1b"></script>
 <script src="mt-takenbak.js?v=2026-10-23c3"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-23g1"></script>
+<script src="mt-capagenda.js?v=2026-10-23d1"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-23d1"></script>
 <script src="mt-objectpaneel.js?v=2026-10-23p1b"></script>
 <script src="mt-taakpaneel.js?v=2026-10-21v"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23p1b"></script>
@@ -861,7 +862,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-23g1">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-23d1">
 </head>
 <body>
 
@@ -3916,6 +3917,8 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openBlok:(id,el)=>MTPlanblokPaneel.open(id,{terug:el}), naHerstel:()=>MTTaakPaneel.ververs(), naWijziging:()=>{ try{ MTTaakPaneel.ververs(); }catch(e){} try{ _ptHertekenen(); }catch(e){} },   // klik op een taak = het taakpaneel (mt-taakpaneel.js); na een sleep of Ongedaan maken: paneel en projecttabel meteen bij
   openProject:code=>openProject(code,{sectie:'planning'}),
   laagHost:()=>document.getElementById('agenda-laag-host'), geklokt:()=>agEntries(), gkProject:c=>agProjLabel(c), gkSync:()=>{ try{ return localStorage.getItem('mt_toggl_last_sync')||''; }catch(e){ return ''; } } }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }   // G1: de laag Geklokt leest dezelfde uren als het oude Rooster (mt_uren_entries); er wordt niets opgehaald of geschreven
+// D1: de Outlook-afspraken van het team als "bezet" in de agenda-strook van de Capaciteit (mt-capagenda.js). Alleen lezen via de bestaande Graph-login (ibFetch) en de bestaande machtiging Calendars.ReadWrite; niets wordt bewaard of geschreven.
+try{ MTCapAgenda.init({ fetch:(u,o)=>ibFetch(u,o), nu:()=>Date.now(), team:()=>MT_TEAM, ik:()=>mtMijEmail() }); }catch(e){ console.warn('Agenda (Outlook) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
 try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),

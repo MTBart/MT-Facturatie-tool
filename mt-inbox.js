@@ -84,7 +84,7 @@ async function ibFetch(path,opts){
     }
     break;
   }
-  if(!r.ok){const t=await r.text().catch(()=>'');const e=new Error('HTTP '+r.status+(t?' '+t.slice(0,160):''));e.status=r.status;throw e;}
+  if(!r.ok){const t=await r.text().catch(()=>'');const e=new Error('HTTP '+r.status+(t?' '+t.slice(0,160):''));e.status=r.status;try{ const ra=parseInt((r.headers&&r.headers.get&&r.headers.get('Retry-After'))||'',10); if(ra>0) e.retryAfter=ra; }catch(x){} throw e;}   // Retry-After meegeven (de agenda in de Capaciteit wacht daarop)
   return r.status===204?null:r.json();
 }
 function ibStatus(m,kleur){const s=document.getElementById('inbox-status');if(s){s.textContent=m;s.style.color=kleur||'var(--text-faint)';}}
