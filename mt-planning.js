@@ -2321,23 +2321,21 @@
   const ACT_STD = P.ACTIVITEITEN.map(a => Object.assign({}, a));
   const STD_ACT_STATION = { tekenwerk: 'voorbereiding', werkvoorbereiding: 'voorbereiding', werkplaats: 'productie', spuiten: 'spuiten', montage: 'montage' };
   const STD_ACT_UURSOORT = {}; Object.keys(UURSOORT_ACT).forEach(u => { if (!(UURSOORT_ACT[u] in STD_ACT_UURSOORT)) STD_ACT_UURSOORT[UURSOORT_ACT[u]] = u; });
-  // P7b: banen (CNC, Afwerken, Montageploeg: capaciteit van een machine of ploeg) en rollen (een rol zonder naam, bv. "inhuur monteur") staan in dezelfde lijst.
-  //   baan: { uren (per dag), stations[], activiteiten[], sleutels[] (taak.sleutel van de standaardketen), woorden (komma's: stukjes van de taaknaam), vrij: [{ van, tot, reden }] (onderhoud of een vrije dag van de baan) }
-  //   rol:  { uren (per dag), vrij } en wordt in de Capaciteit een rij zonder echte persoon (slug 'rol-<k>'); taken toewijzen kan, later zet je hem om naar een echte persoon.
-  // Alle velden hebben een stempel zoals de rest van deze lijst; de schemadrempel (P.SCHEMA) beschermt het bestand tegen een app die ze niet kent.
-  P.INRICHT_TYPEN = ['station', 'fase', 'activiteit', 'baan', 'rol'];
-  P.INRICHT_VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen', 'woorden', 'uren', 'stations', 'activiteiten', 'sleutels', 'vrij'];
+  // P7b/P7c: inzetbaarheid per persoon en rollen zonder naam staan in dezelfde lijst (er zijn geen machine- of ploegbanen: de werkplaatsploeg doet alles).
+  //   inzet: { k: de teamslug, label: de naam, soorten[] ('kantoor' en/of 'wp': welke soort werk iemand doet), voorkeur ('kantoor'|'wp'|'': waar iemand vast voor is), activiteiten[] (de activiteiten die iemand doet; leeg = alle van zijn soorten) }
+  //   rol:   { uren (per dag), vrij, en dezelfde soorten, voorkeur en activiteiten }: een rol zonder naam, bv. "inhuur monteur", wordt in de Capaciteit een rij zonder echte persoon (slug 'rol-<k>').
+  // Alle velden hebben een stempel zoals de rest van deze lijst; de schemadrempel (P.SCHEMA) beschermt het bestand tegen een app die ze niet kent. Een oude soort 'baan' in het bestand blijft ongemoeid staan en wordt niet meer gelezen.
+  P.INRICHT_TYPEN = ['station', 'fase', 'activiteit', 'rol', 'inzet'];
+  P.INRICHT_VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen', 'woorden', 'uren', 'stations', 'activiteiten', 'sleutels', 'vrij', 'soorten', 'voorkeur'];
   P.inrichtStandaard = () => {
     const uit = [];
     [['voorbereiding', 'Voorbereiding'], ['materiaal', 'Materiaal'], ['productie', 'Productie'], ['spuiten', 'Afwerken'], ['montage', 'Montage']].forEach(([k, l], i) => uit.push({ id: 'station:' + k, type: 'station', k, label: l, volgorde: i + 1 }));
     [['voorbereiding', 'Voorbereiding'], ['productie', 'Productie'], ['montage', 'Montage en oplevering']].forEach(([k, l], i) => uit.push({ id: 'fase:' + k, type: 'fase', k, label: l, volgorde: i + 1, namen: [] }));
     ACT_STD.forEach((a, i) => uit.push({ id: 'activiteit:' + a.k, type: 'activiteit', k: a.k, label: a.l, volgorde: i + 1, soort: a.soort, station: STD_ACT_STATION[a.k] || '', uursoort: STD_ACT_UURSOORT[a.k] || '' }));
-    // P7b: de drie banen. De capaciteit (uren per dag) is een eerste aanname van 8 uur; de beheerder stelt hem in bij Planning inrichten.
-    uit.push({ id: 'baan:cnc', type: 'baan', k: 'cnc', label: 'CNC', volgorde: 1, uren: 8, stations: [], activiteiten: [], sleutels: ['cnc'], woorden: 'cnc,frezen', vrij: [] });
-    uit.push({ id: 'baan:afwerken', type: 'baan', k: 'afwerken', label: 'Afwerken', volgorde: 2, uren: 8, stations: ['spuiten'], activiteiten: [], sleutels: [], woorden: '', vrij: [] });   // K4: Afwerken is het label van spuiten
-    uit.push({ id: 'baan:montageploeg', type: 'baan', k: 'montageploeg', label: 'Montageploeg', volgorde: 3, uren: 8, stations: ['montage'], activiteiten: [], sleutels: [], woorden: '', vrij: [] });
     return uit;
   };
+  const SOORTEN_WERK = ['kantoor', 'wp'];
+  const inzetNorm = r => { let s = [...new Set((Array.isArray(r.soorten) ? r.soorten : []).map(x => String(x == null ? '' : x).trim()).filter(x => SOORTEN_WERK.includes(x)))]; if (!s.length) s = SOORTEN_WERK.slice(); return { soorten: s, voorkeur: s.includes(r.voorkeur) ? r.voorkeur : '', activiteiten: [...new Set((Array.isArray(r.activiteiten) ? r.activiteiten : []).map(x => String(x == null ? '' : x).trim()).filter(Boolean))] }; };   // zonder keuze doet iemand beide soorten
   const lijstTekst = v => (Array.isArray(v) ? v : []).map(x => String(x == null ? '' : x).trim()).filter(Boolean);
   const urenGeldig = (v, std) => { const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= 24 ? Math.round(n * 4) / 4 : std; };   // uren per dag, op een kwartier
   const vrijLijst = v => (Array.isArray(v) ? v : []).filter(x => x && P.isYmd(x.van) && P.isYmd(x.tot || x.van) && (x.tot || x.van) >= x.van).map(x => ({ van: x.van, tot: x.tot || x.van, reden: String(x.reden || '').slice(0, 80) }));
@@ -2356,8 +2354,8 @@
     const heeftStation = k => stations.some(s => s.k === k);
     return {
       stations,
-      banen: actief('baan').map(r => ({ k: String(r.k), label: String(r.label), uren: urenGeldig(r.uren, 8), stations: lijstTekst(r.stations), activiteiten: lijstTekst(r.activiteiten), sleutels: lijstTekst(r.sleutels), woorden: String(r.woorden || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean), vrij: vrijLijst(r.vrij) })),
-      rollen: recs.filter(r => r.type === 'rol' && !r._vervallen && String(r.label || '').trim()).sort(volgordeSort).map(r => ({ k: String(r.k), label: String(r.label), slug: 'rol-' + String(r.k), uren: urenGeldig(r.uren, 8), vrij: vrijLijst(r.vrij) })),
+      rollen: recs.filter(r => r.type === 'rol' && !r._vervallen && String(r.label || '').trim()).sort(volgordeSort).map(r => Object.assign({ k: String(r.k), label: String(r.label), slug: 'rol-' + String(r.k), uren: urenGeldig(r.uren, 8), vrij: vrijLijst(r.vrij) }, inzetNorm(r))),
+      inzet: recs.filter(r => r.type === 'inzet' && !r._vervallen).map(r => Object.assign({ slug: String(r.k).toLowerCase(), label: String(r.label || r.k) }, inzetNorm(r))),
       fases: actief('fase').map(r => ({ k: String(r.k), label: String(r.label), namen: [String(r.label)].concat(Array.isArray(r.namen) ? r.namen.map(String) : []) })),
       activiteiten: actief('activiteit').map(r => ({ k: String(r.k), l: String(r.label), soort: r.soort === 'kantoor' ? 'kantoor' : 'wp', station: heeftStation(r.station) ? String(r.station) : '', uursoort: String(r.uursoort || ''), woorden: String(r.woorden || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean) })),
       standaard: !recs.length };
@@ -2372,44 +2370,53 @@
     return m;
   };
   P.inrichting = () => INR;
-  // ── P7b: banen en rollen ──
-  // Bij welke baan hoort een taak? De eerste baan (op volgorde) waarvan de sleutel (standaardketen), de activiteit, het station of een woord in de naam past. Zonder match: geen baan.
-  P.baanVan = function (t, model) {
-    const m = model || INR; if (!t || !m || !m.banen) return null;
-    const sleutel = String(t.sleutel || ''), act = String(t.activiteit || ''), st = (function () { try { return stationVan(t); } catch (e) { return ''; } })(), naam = String(t.naam || '').toLowerCase();
-    // Vaste volgorde van de criteria (de eerste baan die past, binnen een criterium op de volgorde van de inrichting): eerst de sleutel van de standaardketen, dan de activiteit, dan het station (dit is vast, door de beheerder ingericht),
-    // en pas als laatste een woord in de naam (een gok): een taak "CNC-kast monteren" hoort dus bij de Montageploeg (station) en niet bij CNC (woord). Een woord telt als heel woord, niet als stuk van een woord.
-    const heelWoord = w => new RegExp('(^|[^a-z0-9])' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)').test(naam);
-    return (sleutel && m.banen.find(b => b.sleutels.includes(sleutel))) || (act && m.banen.find(b => b.activiteiten.includes(act))) || (st && m.banen.find(b => b.stations.includes(st))) || m.banen.find(b => b.woorden.some(w => w && heelWoord(w))) || null;
+  // ── P7c: inzetbaarheid per persoon, de totaalrijen Werkplaats en Kantoor ──
+  const actSoort = k => { const a = P.ACTIVITEITEN.find(x => x.k === String(k)); return a ? (a.soort === 'kantoor' ? 'kantoor' : 'wp') : ''; };
+  P.actSoort = actSoort;
+  // De inzetbaarheid van een persoon (of rol): zonder gegevens doet iemand beide soorten werk, zonder voorkeur en zonder beperking tot activiteiten.
+  P.inzetVan = function (slug, model) {
+    const m = model || INR, s = String(slug || '').toLowerCase(), r = m && ((m.inzet || []).find(x => x.slug === s) || (m.rollen || []).find(x => x.slug === s));
+    return r ? { soorten: r.soorten.slice(), voorkeur: r.voorkeur, activiteiten: r.activiteiten.filter(a => actSoort(a)) } : { soorten: SOORTEN_WERK.slice(), voorkeur: '', activiteiten: [] };   // een activiteit die niet meer bestaat telt niet mee (anders zou iemand op slot staan)
   };
-  // De capaciteit van een baan op een dag: uren per dag op een werkdag, 0 op een verplichte vrije dag of tijdens onderhoud (baan.vrij). → { cap_min, onderhoud: reden }
-  P.baanDagCap = function (baan, datum, werkdag) {
-    const v = (baan.vrij || []).find(x => datum >= x.van && datum <= x.tot);
-    if (v) return { cap_min: 0, onderhoud: v.reden || 'onderhoud' };
-    return { cap_min: werkdag ? Math.round(baan.uren * 60) : 0, onderhoud: '' };
+  // Kan deze persoon werk van deze soort doen? (de soort moet erbij horen, en als er activiteiten gekozen zijn moet er één van die soort bij zitten)
+  P.kanSoort = function (slug, soort, model) { const iz = P.inzetVan(slug, model); return iz.soorten.includes(soort) && (!iz.activiteiten.length || iz.activiteiten.some(a => actSoort(a) === soort)); };
+  // Waar is deze persoon vast voor? Eén soort mogelijk = die; anders de voorkeur; zonder voorkeur is iemand voor geen van beide "vast" (hij kan inspringen).
+  P.vastSoort = function (slug, model) { const e = SOORTEN_WERK.filter(s => P.kanSoort(slug, s, model)); if (e.length === 1) return e[0]; const iz = P.inzetVan(slug, model); return iz.voorkeur && e.includes(iz.voorkeur) ? iz.voorkeur : ''; };
+  // Doet deze persoon dit werk? Zonder activiteit (een blok zonder taak): ja. Met gekozen activiteiten: alleen die; anders alles van zijn soorten.
+  P.kanDoen = function (slug, activiteit, model) {
+    if (!activiteit) return true; const iz = P.inzetVan(slug, model), k = String(activiteit);
+    if (iz.activiteiten.length) return iz.activiteiten.includes(k);
+    const s = actSoort(k); return !s || iz.soorten.includes(s);
   };
-  // De rijen van de banen, afgeleid uit de rijen van de personen (zelfde items, zelfde minuten, niets dubbel): per dag de taken die op die baan lopen met hun uren tegenover de capaciteit van de baan.
-  // rijen = { dagen:[{datum, werkdag, week}], rijen:[{ slug, dagen:[cel], slots:[[lijst, lijst]], … }] } zoals de Capaciteit het samenstelt. Een open voorstel (planvoorstel) telt niet mee, net als bij personen.
-  P.baanRijen = function (rooster, model) {
-    const m = model || INR, banen = (m && m.banen) || [], dagen = rooster.dagen || [], uit = [];
-    banen.forEach(b => {
-      const weken = []; dagen.forEach(d => { const w = d.week || 0; while (weken.length <= w) weken.push({ cap_min: 0, gepland_min: 0, vrij_min: 0, over_min: 0 }); });
+  // De twee totaalrijen "Werkplaats" en "Kantoor": per dag de vraag (de uren van taken met een activiteit van die soort, uit dezelfde items als de personen) tegenover het aanbod.
+  // Aanbod = van iedereen die deze soort kan doen de capaciteit van die dag min het werk van de andere soort dat hij al heeft; "vast" voor wie hiervoor vast is, "inspringers" voor wie hier niet vast voor is
+  // (bijvoorbeeld kantoor-mensen die soms in de werkplaats staan). Een persoon telt in beide totalen met wat hij er nog voor over heeft, nooit meer dan zijn capaciteit.
+  P.soortRijen = function (rooster, model) {
+    const m = model || INR, dagen = rooster.dagen || [], alle = rooster.rijen || [], personen = alle.filter(r => r.slug && r.heeftCap && !r.totaal), uit = [];
+    [['wp', 'Werkplaats'], ['kantoor', 'Kantoor']].forEach(([soort, naam]) => {
+      const weken = []; dagen.forEach(d => { const w = d.week || 0; while (weken.length <= w) weken.push({ cap_min: 0, gepland_min: 0, vrij_min: 0, over_min: 0, vast_min: 0, inspring_min: 0 }); });
       const cellen = dagen.map((d, i) => {
-        // dezelfde taak op dezelfde dag voor dezelfde persoon is één item, ook als de dagcel en de dagdelen uit twee aparte berekeningen komen (andere objecten): dedupliceren op de inhoud, nooit dubbel tellen
         const sleutel = it => [it.soort, it.code, it.id, it.blokId || '', it.persoon || '', it.datum || '', it.min || 0].join('|'), kop = new Map(), sl = [new Set(), new Set()];
-        const kopieer = it => { const k = sleutel(it); if (!kop.has(k)) kop.set(k, Object.assign({}, it, { baanKopie: true })); return kop.get(k); };
-        (rooster.rijen || []).forEach(r => {
-          const c = r.dagen && r.dagen[i]; (c && c.items || []).forEach(it => { if (it.taak && P.baanVan(it.taak, m) === b) kopieer(it); });
-          const s = r.slots && r.slots[i]; if (s) [0, 1].forEach(dl => (s[dl] || []).forEach(it => { if (it.taak && P.baanVan(it.taak, m) === b) sl[dl].add(kopieer(it)); }));
+        const kopieer = it => { const k = sleutel(it); if (!kop.has(k)) kop.set(k, Object.assign({}, it, { afgeleid: true })); return kop.get(k); };
+        const van = it => it.taak && actSoort(it.taak.activiteit) === soort;
+        alle.forEach(r => {
+          if (r.totaal) return; const c = r.dagen && r.dagen[i]; (c && c.items || []).forEach(it => { if (van(it)) kopieer(it); });
+          const s = r.slots && r.slots[i]; if (s) [0, 1].forEach(dl => (s[dl] || []).forEach(it => { if (van(it)) sl[dl].add(kopieer(it)); }));
         });
-        const items = [...kop.values()], gepland = Math.round(items.reduce((s, it) => s + (it.planvoorstel ? 0 : (it.min || 0)), 0)), cp = P.baanDagCap(b, d.datum, d.werkdag);
-        const over = Math.max(0, gepland - cp.cap_min), vrij = Math.max(0, cp.cap_min - gepland), w = weken[d.week || 0];
-        w.cap_min += cp.cap_min; w.gepland_min += gepland; w.vrij_min += vrij; w.over_min += over;
-        const dag = { datum: d.datum, werkdag: d.werkdag && !cp.onderhoud, verlof: false, cap_min: cp.cap_min, gepland_min: gepland, dagdelen: cp.cap_min > 0 ? Math.min(2, Math.ceil(gepland / (cp.cap_min / 2) - 1e-9)) : 0, vrij_min: Math.round(vrij), over_min: Math.round(over), items };
-        if (cp.onderhoud) dag.onderhoud = cp.onderhoud;
+        const items = [...kop.values()], vraag = Math.round(items.reduce((s, it) => s + (it.planvoorstel ? 0 : (it.min || 0)), 0));
+        let vast = 0, inspring = 0;
+        personen.forEach(r => {
+          if (!P.kanSoort(r.slug, soort, m)) return; const c = r.dagen && r.dagen[i]; if (!c) return;
+          const ander = (c.items || []).reduce((s, it) => s + (it.planvoorstel ? 0 : (van(it) ? 0 : (it.min || 0))), 0), beschik = Math.max(0, (c.cap_min || 0) - ander);
+          if (P.vastSoort(r.slug, m) === soort) vast += beschik; else inspring += beschik;
+        });
+        vast = Math.round(vast); inspring = Math.round(inspring);
+        const cap = vast + inspring, over = Math.max(0, vraag - cap), vrij = Math.max(0, cap - vraag), w = weken[d.week || 0];
+        w.cap_min += cap; w.gepland_min += vraag; w.vrij_min += vrij; w.over_min += over; w.vast_min += vast; w.inspring_min += inspring;
+        const dag = { datum: d.datum, werkdag: d.werkdag, verlof: false, cap_min: cap, gepland_min: vraag, vast_min: vast, inspring_min: inspring, dagdelen: cap > 0 ? Math.min(2, Math.ceil(vraag / (cap / 2) - 1e-9)) : 0, vrij_min: vrij, over_min: over, items };
         return { dag, slots: [0, 1].map(dl => [...sl[dl]]) };
       });
-      uit.push({ slug: 'baan:' + b.k, naam: b.label, heeftCap: true, baan: true, baanK: b.k, baanUren: b.uren, dagen: cellen.map(c => c.dag), slots: cellen.map(c => c.slots), weken: weken.map(w => ({ cap_min: Math.round(w.cap_min), gepland_min: Math.round(w.gepland_min), vrij_min: Math.round(w.vrij_min), over_min: Math.round(w.over_min) })) });
+      uit.push({ slug: 'soort:' + soort, naam, heeftCap: true, totaal: true, soortK: soort, dagen: cellen.map(c => c.dag), slots: cellen.map(c => c.slots), weken: weken.map(w => ({ cap_min: Math.round(w.cap_min), gepland_min: Math.round(w.gepland_min), vrij_min: Math.round(w.vrij_min), over_min: Math.round(w.over_min), vast_min: Math.round(w.vast_min), inspring_min: Math.round(w.inspring_min) })) });
     });
     return uit;
   };
@@ -2447,8 +2454,8 @@
   // Waar hangt dit aan? station: de activiteiten die er naartoe wijzen; fase/activiteit: de taken (over alle projecten) en, als meegegeven, de opgeslagen sjablonen.
   P.inrichtGebruik = function (type, k, takenObj, sjablonen) {
     k = String(k);
-    if (type === 'station') { const a = INR.activiteiten.filter(x => x.station === k); const b = INR.banen.filter(x => x.stations.includes(k)); return { n: a.length + b.length, activiteiten: a.map(x => x.l).concat(b.map(x => 'baan ' + x.label)), taken: [] }; }
-    if (type === 'baan') return { n: 0, taken: [], sjablonen: [], activiteiten: [] };   // een baan is afgeleid: er hangt niets aan (alleen de weergave verandert)
+    if (type === 'station') { const a = INR.activiteiten.filter(x => x.station === k); return { n: a.length, activiteiten: a.map(x => x.l), taken: [] }; }
+    if (type === 'inzet') return { n: 0, taken: [], sjablonen: [], activiteiten: [] };   // inzetbaarheid is een instelling per persoon: er hangt niets aan
     if (type === 'rol') {   // taken en planblokken van een rol zonder naam: eerst omzetten naar een echte persoon voordat je hem verwijdert
       const slug = 'rol-' + k, taken = [];
       Object.keys(takenObj && typeof takenObj === 'object' ? takenObj : {}).forEach(code => { if (code.startsWith('__') || !Array.isArray(takenObj[code])) return; P.takenActief(takenObj[code]).forEach(t => { if (P.taakMensen(t).includes(slug)) taken.push({ code, id: t.id, naam: t.naam || '' }); }); });
@@ -2465,7 +2472,7 @@
   // Een label controleren: niet leeg, en uniek binnen het soort (hoofdletters tellen niet).
   P.inrichtLabelFout = function (type, label, k, model) {
     const l = String(label == null ? '' : label).trim(); if (!l) return 'Geef een naam.'; if (l.length > 60) return 'Een naam is hoogstens 60 tekens.';
-    const m = model || INR, lijst = type === 'station' ? m.stations.map(x => [x.k, x.label]) : type === 'fase' ? m.fases.map(x => [x.k, x.label]) : type === 'baan' ? (m.banen || []).map(x => [x.k, x.label]) : type === 'rol' ? (m.rollen || []).map(x => [x.k, x.label]) : m.activiteiten.map(x => [x.k, x.l]);
+    const m = model || INR, lijst = type === 'station' ? m.stations.map(x => [x.k, x.label]) : type === 'fase' ? m.fases.map(x => [x.k, x.label]) : type === 'rol' ? (m.rollen || []).map(x => [x.k, x.label]) : m.activiteiten.map(x => [x.k, x.l]);
     if (lijst.some(([kk, ll]) => kk !== k && naamSleutel(ll) === naamSleutel(l))) return 'Deze naam bestaat al.';
     if (type === 'fase' && m.fases.some(f => f.k !== k && f.namen.some(x => naamSleutel(x) === naamSleutel(l)))) return 'Deze naam is eerder de naam van een andere fase geweest (taken van oude apps zouden er dan aan blijven hangen). Kies een andere naam.';
     return '';

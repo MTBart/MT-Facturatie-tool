@@ -1,5 +1,14 @@
 # VOORTGANG P7b: banen, rollen zonder naam, heatmap, botsing en beschikbaarheid
 
+## P7c (correctie, gaat voor op alles over banen hieronder)
+De werkplaatsploeg doet alles (CNC, montage, zagen, spuiten); Mathijs en Bart springen in; alleen Ilona tekent en doet werkvoorbereiding als vaste taak. Daarom:
+- **Geen banen meer** (CNC, Afwerken, Montageploeg en de sectie Banen in Admin zijn weg). Een bestaand `baan`-record in `mt_planinrichting` blijft onaangeroerd staan en wordt niet meer gelezen.
+- **Admin ▸ Planning inrichten ▸ Inzetbaarheid per persoon** (gestempeld, record `inzet:<slug>`, velden `soorten`, `voorkeur`, `activiteiten`): per persoon kantoor, werkplaats of beide (minstens een), optionele voorkeur, en welke activiteiten hij of zij doet (leeg = alle van zijn soorten). Zonder gegevens doet iemand alles. Rollen zonder naam hebben dezelfde keuzes.
+- **Twee totaalrijen, Werkplaats en Kantoor**, onder de personen: vraag (uren van taken waarvan de activiteit die soort heeft, via P3b) tegenover aanbod (wie dit kan doen: vast voor wie hiervoor vast is, inspringers voor de rest, minus hun werk van de andere soort). Zelfde heatmap en badge. Tooltip: "werkplaats 46 u gevraagd, 40 u vast + 12 u inspringers". Alleen kijken, niets te slepen of neer te zetten; weg als je op een persoon filtert.
+- **Botsing en Verplaats naar…** stellen alleen mensen voor die dit werk doen (nieuwe keuze "Naar <naam>" als iemand anders die dag ruimte heeft). Sleep je toch naar iemand die dit werk niet doet, dan komt eerst de vraag "Doet X dit werk?" (Toch inplannen / Annuleren). Geldt ook voor bestaande planblokken (activiteit via de taak van het blok).
+- Schemadrempel blijft 12 (geen nieuw bestandstype; `inzet` zit in dezelfde lijst, onbekende soorten blijven bewaard).
+- Codex (light): 4 punten, alle verwerkt: slepen naar iemand die het werk niet doet (waarschuwing), planblok-menu zonder taak (activiteit via taak_id), verdwenen activiteit zet niemand meer op slot, slug hoofdletterongevoelig bij opslaan. Dubbeltelling in de totaalrijen: niet gevonden.
+
 Tak `capaciteit-p7b`, vanaf `capaciteit-d0`. **Let op de basis:** `capaciteit-d0` bevatte P3b (`mt_planinrichting`) nog niet. P3b zit wel in `integratie-v2230`, die al mijn C1 t/m D1 bevat. Daarom is `integratie-v2230` eerst in deze tak gemerged (versieparameters uit de integratie overgenomen, conflicten alleen in `v2.html` en `mobiel.html`) en pas daarna is P7b gebouwd. D0 (agenda-fundament) zit er ook in.
 
 ## Wat Bart ziet

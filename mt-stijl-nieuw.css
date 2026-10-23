@@ -925,13 +925,13 @@ html[data-stijl="nieuw"] .cn-ag-blok:focus-visible{outline:2px solid var(--focus
 html[data-stijl="nieuw"] .cn-ag-meer{position:absolute;font:500 10px/12px var(--mono);color:var(--ink-2)}
 html[data-stijl="nieuw"] .cn-hoek .cn-agenda-knop.alle{margin-top:4px}
 html[data-stijl="nieuw"] .cn-hoek .cn-agenda-knop.alle[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
-/* ── P7b: banen, rollen zonder naam, de heatmap van de bezetting en de beschikbaarheidsbalk ── */
+/* ── P7b/P7c: totaalrijen, rollen zonder naam, de heatmap van de bezetting en de beschikbaarheidsbalk ── */
 html[data-stijl="nieuw"] .cn-rolchip{display:inline-block;align-self:flex-start;margin-top:2px;padding:0 6px;border:1px solid var(--line-strong);border-radius:10px;font:500 10px/16px var(--sans);color:var(--ink-2)}
 html[data-stijl="nieuw"] .cn-rolchip.rol{border-style:dashed}
 html[data-stijl="nieuw"] .cn-avatar.rol{border:1px dashed var(--ink-2);background:transparent}
-html[data-stijl="nieuw"] .cn-avatar.baan{border-radius:4px;background:var(--surface-sunken)}
-html[data-stijl="nieuw"] .cn-persoon[data-baan]{background:var(--surface-sunken)}
-html[data-stijl="nieuw"] .cn-rij.cn-eerste-baan{border-top:2px solid var(--line-strong)}
+html[data-stijl="nieuw"] .cn-avatar.totaal{border-radius:4px;background:var(--surface-sunken);font-size:10px}
+html[data-stijl="nieuw"] .cn-persoon[data-totaal]{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .cn-rij.cn-eerste-totaal{border-top:2px solid var(--line-strong)}
 html[data-stijl="nieuw"] .cn-rolknop{align-self:flex-start;margin-top:4px;height:22px;padding:0 6px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--ink-2);font:500 11px/16px var(--sans);cursor:pointer}
 html[data-stijl="nieuw"] .cn-rolknop:hover{background:var(--surface-sunken)}
 html[data-stijl="nieuw"] .cn-hm-knop{display:inline-flex;align-items:center;gap:6px}

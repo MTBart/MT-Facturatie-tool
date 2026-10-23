@@ -12,13 +12,12 @@
 (function (root) {
   'use strict';
   const PI = {}; let D = null;
-  const NAAM = { station: 'station', fase: 'fase', activiteit: 'activiteit', baan: 'baan', rol: 'rol' };
-  const MEERVOUD = { station: 'Stations', fase: 'Fases', activiteit: 'Activiteiten', baan: 'Banen', rol: 'Rollen zonder naam' };
+  const NAAM = { station: 'station', fase: 'fase', activiteit: 'activiteit', rol: 'rol' };
+  const MEERVOUD = { station: 'Stations', fase: 'Fases', activiteit: 'Activiteiten', rol: 'Rollen zonder naam' };
   const UITLEG = {
     station: 'De stappen van de stroom door het bedrijf (werkplaats-tv en Bord > Stroom). Eén lijst voor het hele bedrijf.',
     fase: 'De kolommen van Bord > Fase en de fases van het standaardsjabloon; een nieuw project krijgt deze lijst. Een project kan daarnaast eigen fases houden.',
     activiteit: 'Wat een taak is (tekenwerk, werkplaats, ...). Je kiest bij welk station een activiteit hoort en of het kantoor- of werkplaatsuren zijn.',
-    baan: 'Een machine of ploeg (CNC, Afwerken, Montageploeg) als eigen rij in de Capaciteit, onder de personen. De taken die erop lopen volgen uit hun station, activiteit of een woord in de naam; je stelt hier in hoeveel uur per dag de baan kan draaien en wanneer er onderhoud of een vrije dag is. Een baan is afgeleid: er wordt niets aan taken gewijzigd.',
     rol: 'Een rol zonder naam, bijvoorbeeld "inhuur monteur", als eigen rij in de Capaciteit. Je kunt er taken aan toewijzen (met een duidelijke markering) en hem later omzetten naar een echte persoon.' };
   const UURSOORTEN = [['', 'Geen koppeling'], ['calculatie', 'calculatie'], ['ontwerpen', 'ontwerpen'], ['werkvoorbereiding', 'werkvoorbereiding'], ['productie', 'productie'], ['afwerking', 'afwerking'], ['transport', 'transport'], ['montage', 'montage']];
   PI.init = function (deps) { D = deps; };
@@ -40,14 +39,14 @@
   }
   const naamVan = r => r.label || r.k;
   const lijstVan = (recs, type) => recs.filter(r => r.type === type && !r._vervallen).sort((a, b) => ((Number(a.volgorde) || 0) - (Number(b.volgorde) || 0)) || String(naamVan(a)).localeCompare(String(naamVan(b)), 'nl'));
-  const heer = type => D.planning.inrichting()[type === 'station' ? 'stations' : type === 'fase' ? 'fases' : type === 'baan' ? 'banen' : type === 'rol' ? 'rollen' : 'activiteiten'];
+  const heer = type => D.planning.inrichting()[type === 'station' ? 'stations' : type === 'fase' ? 'fases' : type === 'rol' ? 'rollen' : 'activiteiten'];
   const model = () => D.planning.inrichting();
-  const labelsVan = type => type === 'activiteit' ? model().activiteiten.map(a => [a.k, a.l]) : (type === 'station' ? model().stations : type === 'baan' ? model().banen : type === 'rol' ? model().rollen : model().fases).map(x => [x.k, x.label]);
+  const labelsVan = type => type === 'activiteit' ? model().activiteiten.map(a => [a.k, a.l]) : (type === 'station' ? model().stations : type === 'rol' ? model().rollen : model().fases).map(x => [x.k, x.label]);
 
   // ── bewerken: één kern voor het beheer en het bord ──
   // mut(records) wijzigt de kopie en geeft eventueel { fout } of { noop } terug. Wat er veranderde wordt per record en per veld bijgehouden: Ongedaan maken zet alleen die velden terug, en alleen
   // als ze nog zijn zoals deze actie ze achterliet; wat een ander intussen wijzigde (ook aan hetzelfde record) blijft staan.
-  const VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen', 'woorden', 'uren', 'stations', 'activiteiten', 'sleutels', 'vrij'];
+  const VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen', 'woorden', 'uren', 'stations', 'activiteiten', 'sleutels', 'vrij', 'soorten', 'voorkeur'];
   const gelijk = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
   function verschil(voor, na) {
     const vm = new Map(voor.map(r => [r.id, r])), nm = new Map(na.map(r => [r.id, r])), uit = [];
@@ -103,8 +102,7 @@
       const k = D.planning.inrichtNieuwK(type, l, recs), id = type + ':' + k, rec = { id, type, k, label: l, volgorde: lijstVan(recs, type).length + 1 };
       if (type === 'fase') rec.namen = [];
       if (type === 'activiteit') { const e = extra || {}; rec.soort = e.soort; rec.station = e.station || ''; rec.uursoort = e.uursoort || ''; if (e.woorden) rec.woorden = String(e.woorden); }
-      if (type === 'baan' || type === 'rol') { const e = extra || {}, u = Number(e.uren); rec.uren = Number.isFinite(u) && u >= 0 && u <= 24 ? u : 8; rec.vrij = []; }
-      if (type === 'baan') { const e = extra || {}; rec.stations = Array.isArray(e.stations) ? e.stations : []; rec.activiteiten = []; rec.sleutels = []; rec.woorden = String(e.woorden || ''); }
+      if (type === 'rol') { const e = extra || {}, u = Number(e.uren); rec.uren = Number.isFinite(u) && u >= 0 && u <= 24 ? u : 8; rec.vrij = []; }
       recs.push(rec); ger.add(id);
     }, '"' + l + '" is toegevoegd');
   };
@@ -210,16 +208,14 @@
   // ── de beheerlijst (Admin > Planning inrichten) ──
   function rij(type, r, recs, opties) {
     const k = String(r.k), n = D.gebruik(type, k), lijst = lijstVan(recs, type), i = lijst.findIndex(x => String(x.k) === k);
-    const gebruikt = type === 'baan' ? 'afgeleid van de taken' : type === 'station' ? n.n + ' activiteit' + (n.n === 1 ? '' : 'en') : n.n + (n.n === 1 ? ' taak' : ' taken');
+    const gebruikt = type === 'station' ? n.n + ' activiteit' + (n.n === 1 ? '' : 'en') : n.n + (n.n === 1 ? ' taak' : ' taken');
     const inv = el('input', { type: 'text', klass: 'pi-invoer', value: naamVan(r), 'aria-label': 'Naam van ' + naamVan(r), maxlength: '60' });
     inv.addEventListener('change', async () => { const w = inv.value.trim(); if (!w || w === naamVan(r)) { inv.value = naamVan(r); return; } const x = await PI.hernoem(type, k, w); if (!x.ok) inv.value = naamVan(r); });
     const knoppen = [
       el('button', { type: 'button', klass: 'pi-knop', 'aria-label': 'Naar boven: ' + naamVan(r), title: 'Naar boven', tekst: '↑', disabled: i <= 0 ? true : null, klik: () => PI.verplaatsStap(type, k, -1) }),
       el('button', { type: 'button', klass: 'pi-knop', 'aria-label': 'Naar beneden: ' + naamVan(r), title: 'Naar beneden', tekst: '↓', disabled: i >= lijst.length - 1 ? true : null, klik: () => PI.verplaatsStap(type, k, 1) })];
     const extra = [];
-    if (type === 'baan' || type === 'rol') extra.push(urenInvoer(type, r));
-    if (type === 'baan') extra.push(baanKeuzes(r), vrijEditor(type, r));
-    if (type === 'rol') extra.push(vrijEditor(type, r), el('button', { type: 'button', klass: 'pi-knop', title: 'Alle taken van deze rol naar een echte persoon', tekst: 'Zet om…', klik: () => { if (D.rolOmzetten) D.rolOmzetten(k); } }));
+    if (type === 'rol') extra.push(urenInvoer(type, r), inzetKeuzes(r, velden => PI.zet('rol', String(r.k), velden, 'Inzetbaarheid van "' + naamVan(r) + '" aangepast')), vrijEditor(type, r), el('button', { type: 'button', klass: 'pi-knop', title: 'Alle taken van deze rol naar een echte persoon', tekst: 'Zet om…', klik: () => { if (D.rolOmzetten) D.rolOmzetten(k); } }));
     if (type === 'activiteit') {
       const st = [['', 'Geen station']].concat(model().stations.map(s => [s.k, s.label]));
       extra.push(
@@ -232,7 +228,7 @@
       el('button', { type: 'button', klass: 'pi-knop pi-verwijder', 'aria-label': 'Verwijder ' + naamVan(r), title: 'Verwijderen', tekst: 'Verwijder', klik: () => PI.verwijder(type, k) }));
     return tr;
   }
-  // ── P7b: de uren per dag, de keuzes van een baan en de vrije dagen/onderhoud ──
+  // ── P7b/P7c: de uren per dag, de inzetbaarheid en de vrije dagen ──
   function urenInvoer(type, r) {
     const inv = el('input', { type: 'number', klass: 'pi-invoer pi-uren', min: '0', max: '24', step: '0.25', value: String(r.uren === undefined ? 8 : r.uren), 'aria-label': 'Uren per dag van ' + naamVan(r), title: 'Hoeveel uur per dag (op een werkdag) kan dit draaien? Op een vrije dag of tijdens onderhoud is het 0.' });
     inv.addEventListener('change', async () => { const n = Number(inv.value); if (!Number.isFinite(n) || n < 0 || n > 24) { toast('Uren per dag: een getal van 0 tot 24.', null, null, true); inv.value = String(r.uren === undefined ? 8 : r.uren); return; } await PI.zet(type, String(r.k), { uren: Math.round(n * 4) / 4 }, 'Uren per dag van "' + naamVan(r) + '" aangepast'); });
@@ -242,25 +238,26 @@
     const hier = new Set(gekozen || []);
     return el('details', { klass: 'pi-keuze' }, el('summary', { tekst: titel + (hier.size ? ' (' + hier.size + ')' : '') }), opties.map(([v, l]) => el('label', { klass: 'pi-vink' }, el('input', { type: 'checkbox', checked: hier.has(v), wijzig: ev => { if (ev.target.checked) hier.add(v); else hier.delete(v); opSlaan([...hier]); } }), ' ' + l)));
   }
-  function baanKeuzes(r) {
-    const k = String(r.k);
-    return el('div', { klass: 'pi-baankeuzes' },
-      vinkLijst('Stations', model().stations.map(s => [s.k, s.label]), r.stations, l => PI.zet('baan', k, { stations: l }, 'Stations van "' + naamVan(r) + '" aangepast')),
-      vinkLijst('Activiteiten', model().activiteiten.map(a => [a.k, a.l]), r.activiteiten, l => PI.zet('baan', k, { activiteiten: l }, 'Activiteiten van "' + naamVan(r) + '" aangepast')),
-      el('input', { type: 'text', klass: 'pi-invoer pi-woorden', value: (r.sleutels || []).join(', '), placeholder: 'sleutels van de standaardketen (komma)', 'aria-label': 'Sleutels van de standaardketen voor ' + naamVan(r), title: 'Taken met een van deze sleutels (bv. cnc, spuiten) horen bij deze baan', wijzig: ev => PI.zet('baan', k, { sleutels: ev.target.value.split(',').map(x => x.trim()).filter(Boolean) }, 'Sleutels van "' + naamVan(r) + '" aangepast') }),
-      el('input', { type: 'text', klass: 'pi-invoer pi-woorden', value: r.woorden || '', placeholder: 'woorden in de taaknaam (komma)', 'aria-label': 'Woorden in de taaknaam voor ' + naamVan(r), title: 'Een taak met een van deze woorden in de naam hoort ook bij deze baan', wijzig: ev => PI.zet('baan', k, { woorden: ev.target.value.trim() }, 'Woorden van "' + naamVan(r) + '" aangepast') }));
+  // De inzetbaarheid van een persoon of rol: welke soorten werk (kantoor, werkplaats of beide), de voorkeur en de activiteiten die hij of zij doet. opslaan(velden) schrijft via de gestempelde route.
+  function inzetKeuzes(r, opslaan) {
+    const soorten = new Set(r.soorten && r.soorten.length ? r.soorten : ['kantoor', 'wp']), acts = new Set(r.activiteiten || []);
+    const sla = () => opslaan({ soorten: [...soorten], voorkeur: soorten.has(r.voorkeur) ? r.voorkeur : '', activiteiten: [...acts] });
+    const vink = (v, l) => el('label', { klass: 'pi-vink' }, el('input', { type: 'checkbox', checked: soorten.has(v), 'aria-label': l + ' werk', wijzig: ev => { if (ev.target.checked) soorten.add(v); else if (soorten.size > 1) soorten.delete(v); else { ev.target.checked = true; toast('Kies minstens één soort werk.', null, null, true); return; } sla(); } }), ' ' + l);
+    const voorkeur = el('select', { klass: 'pi-sel', 'aria-label': 'Voorkeur van ' + naamVan(r), title: 'Waar is deze persoon vast voor? Zonder voorkeur kan hij of zij alleen inspringen', wijzig: ev => opslaan({ soorten: [...soorten], voorkeur: ev.target.value, activiteiten: [...acts] }) }, [['', 'Geen voorkeur'], ['kantoor', 'Voorkeur: kantoor'], ['wp', 'Voorkeur: werkplaats']].map(([v, l]) => el('option', { value: v, tekst: l, selected: (r.voorkeur || '') === v ? true : null })));
+    return el('div', { klass: 'pi-baankeuzes pi-inzet' }, el('span', { klass: 'pi-vrij-kop', tekst: 'Doet:' }), vink('kantoor', 'Kantoor'), vink('wp', 'Werkplaats'), voorkeur,
+      vinkLijst('Activiteiten', model().activiteiten.map(a => [a.k, a.l]), [...acts], l => { acts.clear(); l.forEach(x => acts.add(x)); sla(); }));
   }
   const vrijLijstVan = r => (Array.isArray(r.vrij) ? r.vrij : []).filter(x => x && x.van);
   function vrijEditor(type, r) {
     const k = String(r.k), lijst = vrijLijst(r);
-    const van = el('input', { type: 'date', klass: 'pi-invoer pi-datum', 'aria-label': 'Eerste dag vrij of onderhoud van ' + naamVan(r) }), tot = el('input', { type: 'date', klass: 'pi-invoer pi-datum', 'aria-label': 'Laatste dag (leeg = alleen die dag)' }), reden = el('input', { type: 'text', klass: 'pi-invoer pi-reden', placeholder: type === 'baan' ? 'onderhoud, storing…' : 'vrij, ziek…', maxlength: '80', 'aria-label': 'Reden' });
+    const van = el('input', { type: 'date', klass: 'pi-invoer pi-datum', 'aria-label': 'Eerste dag vrij of onderhoud van ' + naamVan(r) }), tot = el('input', { type: 'date', klass: 'pi-invoer pi-datum', 'aria-label': 'Laatste dag (leeg = alleen die dag)' }), reden = el('input', { type: 'text', klass: 'pi-invoer pi-reden', placeholder: 'vrij, ziek…', maxlength: '80', 'aria-label': 'Reden' });
     const bewaar = nieuw => PI.zet(type, k, { vrij: nieuw }, 'Vrije dagen van "' + naamVan(r) + '" aangepast');
-    const voeg = el('button', { type: 'button', klass: 'pi-knop', tekst: '+ ' + (type === 'baan' ? 'Onderhoud' : 'Vrije dag'), klik: () => {
+    const voeg = el('button', { type: 'button', klass: 'pi-knop', tekst: '+ ' + ('Vrije dag'), klik: () => {
       const a = van.value, b = tot.value || van.value; if (!a) { van.focus(); return; }
       if (b < a) { toast('De laatste dag ligt voor de eerste.', null, null, true); return; }
       bewaar(lijst.concat([{ van: a, tot: b, reden: reden.value.trim() }]));
     } });
-    return el('div', { klass: 'pi-vrij' }, el('span', { klass: 'pi-vrij-kop', tekst: type === 'baan' ? 'Onderhoud en vrije dagen:' : 'Vrije dagen:' }),
+    return el('div', { klass: 'pi-vrij' }, el('span', { klass: 'pi-vrij-kop', tekst: 'Vrije dagen:' }),
       lijst.map((x, i) => el('span', { klass: 'pi-vrij-item' }, x.van + (x.tot !== x.van ? ' t/m ' + x.tot : '') + (x.reden ? ' · ' + x.reden : ''), el('button', { type: 'button', klass: 'pi-weg', 'aria-label': 'Verwijder ' + x.van, tekst: '×', klik: () => bewaar(lijst.filter((_, j) => j !== i)) }))), van, tot, reden, voeg);
   }
   function vrijLijst(r) { return vrijLijstVan(r).map(x => ({ van: x.van, tot: x.tot || x.van, reden: x.reden || '' })); }
@@ -268,7 +265,7 @@
     const inv = el('input', { type: 'text', klass: 'pi-invoer', placeholder: 'Nieuwe ' + NAAM[type], 'aria-label': 'Naam van de nieuwe ' + NAAM[type], maxlength: '60' });
     const st = type === 'activiteit' ? el('select', { klass: 'pi-sel', 'aria-label': 'Station van de nieuwe activiteit' }, [['', 'Geen station']].concat(model().stations.map(s => [s.k, s.label])).map(([v, l]) => el('option', { value: v, tekst: l }))) : null;
     const so = type === 'activiteit' ? el('select', { klass: 'pi-sel', 'aria-label': 'Soort uren van de nieuwe activiteit', title: 'Verplicht: kantooruren of werkplaatsuren' }, [['', 'Kies de soort uren...'], ['wp', 'Werkplaatsuren'], ['kantoor', 'Kantooruren']].map(([v, l]) => el('option', { value: v, tekst: l }))) : null;
-    const ur = type === 'baan' || type === 'rol' ? el('input', { type: 'number', klass: 'pi-invoer pi-uren', min: '0', max: '24', step: '0.25', value: '8', 'aria-label': 'Uren per dag van de nieuwe ' + NAAM[type] }) : null;
+    const ur = type === 'rol' ? el('input', { type: 'number', klass: 'pi-invoer pi-uren', min: '0', max: '24', step: '0.25', value: '8', 'aria-label': 'Uren per dag van de nieuwe ' + NAAM[type] }) : null;
     const voeg = async () => { const w = inv.value.trim(); if (!w) { inv.focus(); return; } const r = await PI.voegToe(type, w, { station: st ? st.value : '', soort: so ? so.value : '', uren: ur ? ur.value : undefined }); if (r.ok) inv.value = ''; };
     inv.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); voeg(); } });
     return el('div', { klass: 'pi-rij pi-nieuw' }, inv, st, so, ur, el('button', { type: 'button', klass: 'pi-knop pi-plus', tekst: '+ Toevoegen', klik: voeg }));
@@ -281,13 +278,34 @@
     if (!mag()) { host.appendChild(el('p', { klass: 'pi-uitleg', tekst: 'Alleen de beheerder richt de planning in.' })); return; }
     host.appendChild(el('p', { klass: 'pi-uitleg', tekst: 'Hernoemen verandert alleen de naam: taken, de tv en de sjablonen blijven kloppen. Verwijderen kan pas als er niets meer aan hangt; anders kies je eerst waar het heen gaat. Elke wijziging is met Ongedaan maken terug te zetten.' }));
     const recs = D.records();
-    ['station', 'fase', 'activiteit', 'baan', 'rol'].forEach(type => {
+    ['station', 'fase', 'activiteit', 'rol'].forEach(type => {
       const sec = el('section', { klass: 'pi-sec', 'aria-label': MEERVOUD[type] }, el('h3', { tekst: MEERVOUD[type] }), el('p', { klass: 'pi-uitleg', tekst: UITLEG[type] }));
       const lijst = el('div', { role: 'list', klass: 'pi-lijst' }, lijstVan(recs, type).map(r => rij(type, r, recs)), nieuwRij(type, recs));
       sec.appendChild(lijst); host.appendChild(sec);
     });
+    host.appendChild(inzetSectie(recs));
     host.appendChild(migratieEl());
   };
+  // Inzetbaarheid per persoon (alleen de teamleden; rollen zonder naam stellen het in bij hun eigen rij)
+  PI.zetInzet = async function (slug, naam, velden, tekst) {
+    return bewerk((recs, ger) => {
+      let r = recs.find(x => x.type === 'inzet' && String(x.k).toLowerCase() === String(slug).toLowerCase() && !x._vervallen);
+      if (!r) { r = { id: 'inzet:' + slug, type: 'inzet', k: String(slug), label: String(naam || slug), volgorde: recs.filter(x => x.type === 'inzet').length + 1 }; recs.push(r); }
+      Object.keys(velden).forEach(f => { r[f] = velden[f]; }); ger.add(r.id);
+    }, tekst || 'Inzetbaarheid aangepast');
+  };
+  function inzetSectie(recs) {
+    const sec = el('section', { klass: 'pi-sec', 'aria-label': 'Inzetbaarheid' }, el('h3', { tekst: 'Inzetbaarheid per persoon' }),
+      el('p', { klass: 'pi-uitleg', tekst: 'Welke soorten werk iemand doet: kantoor, werkplaats of beide, met een voorkeur, en eventueel welke activiteiten (bijvoorbeeld alleen tekenwerk en werkvoorbereiding). De Capaciteit rekent hiermee het aanbod in de totaalrijen Werkplaats en Kantoor en stelt bij een overboeking alleen mensen voor die dit werk doen. Zonder instelling doet iemand beide soorten, zonder voorkeur.' }));
+    const team = (D.team ? D.team() : []).filter(t => t && t.slug), P = D.planning;
+    const lijst = el('div', { role: 'list', klass: 'pi-lijst pi-inzetlijst' });
+    team.forEach(t => {
+      const iz = P.inzetVan(String(t.slug).toLowerCase(), model());
+      lijst.appendChild(el('div', { klass: 'pi-rij', role: 'listitem' }, el('span', { klass: 'pi-inzetnaam', tekst: t.naam || t.slug }), inzetKeuzes({ k: t.slug, label: t.naam, soorten: iz.soorten, voorkeur: iz.voorkeur, activiteiten: iz.activiteiten }, velden => PI.zetInzet(String(t.slug).toLowerCase(), t.naam, velden, 'Inzetbaarheid van ' + (t.naam || t.slug) + ' aangepast'))));
+    });
+    if (!team.length) lijst.appendChild(el('p', { klass: 'pi-uitleg', tekst: 'Er zijn nog geen teamleden.' }));
+    sec.appendChild(lijst); return sec;
+  }
   function migratieEl() {
     const sec = el('section', { klass: 'pi-sec', 'aria-label': 'Fases aan taken koppelen' }, el('h3', { tekst: 'Fases aan taken koppelen' }),
       el('p', { klass: 'pi-uitleg', tekst: 'Taken bewaren hun fase op naam. Hiermee krijgen bestaande taken ook het vaste id van hun fase, zodat een hernoeming niets meer losmaakt. Eerst kijk je wat er zou gebeuren; pas na je akkoord wordt er geschreven, taak voor taak, met controle achteraf.' }));
@@ -316,7 +334,7 @@
       + '.pi-gebruik{font-size:12px;color:var(--text-faint,#888);min-width:90px}.pi-uit{margin-top:8px;font-size:13px}'
       + '.pi-naam{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:text;text-align:left;text-decoration:underline dotted;text-underline-offset:3px}.pi-weg{border:0;background:none;cursor:pointer;color:var(--text-faint,#888);font-size:16px;line-height:1;padding:0 4px}'
       + '.pi-doel{outline:2px dashed var(--green,#2A4A38);outline-offset:-2px}[data-pi-type][draggable=true]{cursor:grab}'
-      + '.pi-uren{min-width:70px;max-width:90px;flex:0 0 80px}.pi-uren-wrap{font-size:13px;white-space:nowrap}.pi-baankeuzes{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pi-keuze summary{cursor:pointer;font-size:13px}.pi-vink{display:block;font-size:13px;padding:2px 0}'
+      + '.pi-inzetnaam{min-width:110px;font-weight:600}.pi-uren{min-width:70px;max-width:90px;flex:0 0 80px}.pi-uren-wrap{font-size:13px;white-space:nowrap}.pi-baankeuzes{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pi-keuze summary{cursor:pointer;font-size:13px}.pi-vink{display:block;font-size:13px;padding:2px 0}'
       + '.pi-vrij{display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1 0 100%;font-size:13px}.pi-vrij-item{border:1px solid var(--border,#ccc);border-radius:12px;padding:1px 4px 1px 8px}.pi-datum{min-width:140px;flex:0 0 150px}.pi-reden{min-width:120px;flex:0 1 160px}';
     d.head.appendChild(s); gestijld = true;
   }
