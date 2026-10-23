@@ -39,7 +39,7 @@
 
   function detail(rij, cel) {
     const kop = rij.naam + ' — ' + P.datumKort(cel.datum) + (cel.verlof ? ' (verlof)' : !cel.werkdag ? ' (vrije dag)' : ': ' + uren(cel.gepland_min) + ' gepland van ' + uren(cel.cap_min));
-    const lijst = cel.items.length ? cel.items.map(it => el('button', { klass: 'cp-item', type: 'button', title: 'Open het project', klik: () => D.openProject(it.code) },
+    const lijst = cel.items.length ? cel.items.map(it => el('button', { klass: 'cp-item', type: 'button', title: 'Open het project' + (it.waarschuwing ? ' · ' + it.waarschuwing : ''), klik: () => D.openProject(it.code) },
       el('span', { klass: 'cp-strook', style: 'background:' + P.projectKleur(it.code) }),
       el('span', { klass: 'cp-itemtekst' }, el('b', { tekst: it.naam }), el('span', { klass: 'cp-sub', tekst: [projLabel(it.code), it.start ? it.start : '', it.min ? uren(it.min) : '', it.soort === 'blok' ? (it.planvoorstel ? 'planblok (voorstel)' : 'planblok') : (P.TAAK_STATUS_LABEL[it.status] || ''), it.wacht && it.status !== 'wacht' ? 'wacht op een voorganger' : '', it.taak && it.taak.wacht_reden && it.status === 'wacht' ? 'wacht: ' + it.taak.wacht_reden : ''].filter(Boolean).join(' · ') })))) : el('div', { klass: 'cp-sub', tekst: 'Niets gepland.' });
     return el('div', { klass: 'cp-detail', role: 'region', 'aria-label': 'Details' }, el('div', { klass: 'cp-detailkop' }, el('b', { tekst: kop }), el('button', { klass: 'btn btn-xs btn-secondary', type: 'button', klik: () => { S.gekozen = null; C.teken(); }, tekst: 'Sluiten' })), lijst);

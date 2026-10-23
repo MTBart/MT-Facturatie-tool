@@ -5,6 +5,57 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-23 — Backup = v2.19.0
+- Commit: `5abccb7` | Auteur: Bart Witte
+
+## 2026-10-16 — Release v2.19.0: taken op de tijdlijn (slepen uit Ongepland, uittrekken en verschuiven met opvolgers, Datums wijzigen), raming verdeeld over echte werkdagen zonder dubbeltelling en overal hetzelfde getal, Omzetten naar taakbalk, eerlijke meldingen bij traag of gelijktijdig opslaan; CHANGELOG-hook alleen op main; backup = v2.18.0
+- Commit: `648f52e` | Auteur: Bart Witte
+
+## 2026-10-16 — T6d: een taak is projectcode + taak_id, overal waar taken over projecten heen worden bijgehouden
+- Commit: `2f0fd41` | Auteur: Bart Witte
+
+## 2026-10-16 — T6c: opnieuw proberen ruimt alleen op, en de koppeling van blokken zonder projectcode is eenduidig per project
+- Commit: `6d77710` | Auteur: Bart Witte
+
+## 2026-10-16 — T6b: omzetten veiliger: gewijzigde blokken blijven staan, meerdere blokken per taak, tombstone controleren, slot bij een trage blok-write, projectcode bij de koppeling
+- Commit: `b8339e5` | Auteur: Bart Witte
+
+## 2026-10-16 — T6: oude tb:-planblokken omzetten naar een taakbalk
+- Commit: `f49f46c` | Auteur: Bart Witte
+
+## 2026-10-16 — T5b: tijdgrenzen die de actie echt vergrendelen, verificatie na het schrijven, drie-jaargrens bij schuiven, Datums wijzigen
+- Commit: `a142942` | Auteur: Bart Witte
+
+## 2026-10-16 — T4b + T5: Codex-punten bij het slepen van taken, en uittrekken en verschuiven van de taakbalk
+- Commit: `2537665` | Auteur: Bart Witte
+
+## 2026-10-16 — T4: de taakbalk bij slepen: een taak slepen past de taak zelf aan
+- Commit: `5bd8e32` | Auteur: Bart Witte
+
+## 2026-10-16 — T3d: een tombstone betekent alleen "van de taak verwijderd", nooit "gepromoveerd"
+- Commit: `ec62a7a` | Auteur: Bart Witte
+
+## 2026-10-16 — T3c: een eenvoudiger model: toegewezen is de eerste persoon, personen alleen voor extra personen en uren
+- Commit: `a53d2f0` | Auteur: Bart Witte
+
+## 2026-10-16 — T3b: toegewezen blijft canoniek na het samenvoegen, vaste uren worden verkleind, en bewijs met echte oude code
+- Commit: `cdb3452` | Auteur: Bart Witte
+
+## 2026-10-16 — T3: het datamodel personen (meerdere personen op een taak), met een samenvoeger per persoon
+- Commit: `91e6c91` | Auteur: Bart Witte
+
+## 2026-10-16 — T2: P.taakVerdeling is de enige rekenbasis voor het spreiden van taken
+- Commit: `3fdd106` | Auteur: Bart Witte
+
+## 2026-10-16 — Chip-stap: de telefoon en de desktop tonen dezelfde taken zonder plek
+- Commit: `b73e584` | Auteur: Bart Witte
+
+## 2026-10-16 — Hook: CHANGELOG alleen op main bijwerken
+- Commit: `98821f0` | Auteur: Bart Witte
+
+## 2026-10-16 — T1: taakMensen, nul voor mijlpaal en taak zonder raming, dubbeltelling opgelost
+- Commit: `af370e5` | Auteur: Bart Witte
+
 ## 2026-10-15 — Release v2.18.0: de nieuwe stijl voor iedereen (met knop terug naar de oude stijl), Nog in te plannen op Vandaag, Agenda-slepen leest vers, Naar de dag, telefoon met werktijden, leesbare kleuren in de overige schermen; backup = v2.17.3
 - Commit: `7f2174d` | Auteur: Bart Witte
 

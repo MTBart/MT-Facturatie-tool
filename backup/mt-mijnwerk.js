@@ -26,7 +26,7 @@
   const leesGezien = () => { try { const o = JSON.parse(D.storage.getItem(LS_GEZIEN) || 'null'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } };
   function markeerGezien(item) {
     if (!item || !item.nieuw) return;
-    const g = leesGezien(); g[item.id] = item.stempelToegewezen;
+    const g = leesGezien(); g[item.code + ':' + item.id] = item.stempelToegewezen;
     try { D.storage.setItem(LS_GEZIEN, JSON.stringify(g)); } catch (e) {}
   }
   const teamLid = () => { const ik = String(D.ik() || '').toLowerCase(); return (D.team() || []).find(m => String(m.email || '').toLowerCase() === ik) || null; };
@@ -41,7 +41,7 @@
     else Object.assign(opt, { mijn: F.persoon, nieuw: false });
     if (D.voorstellen) opt.voorstellen = true;
     const wtl = D.werktijden ? D.werktijden() : null;   // null zolang de nieuwe stijl uit staat: dan rekent alles als voorheen
-    if (wtl && F.persoon !== 'iedereen') opt.capPerDag = P.capPerDagVoor(F.persoon === 'ik' ? mijnSlug() : F.persoon, wtl);   // de beschikbare uren per dag volgen de werktijden (zonder ingevulde werktijden: 8 uur per dag)
+    if (wtl && F.persoon !== 'iedereen') { opt.capPerDag = P.capPerDagVoor(F.persoon === 'ik' ? mijnSlug() : F.persoon, wtl); opt.werktijden = wtl; }   // de beschikbare uren per dag volgen de werktijden (zonder ingevulde werktijden: 8 uur per dag)
     return P.mijnWerk(D.taken(), D.afhank(), D.blokken(), opt);
   };
 
