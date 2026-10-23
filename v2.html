@@ -6790,7 +6790,7 @@ function projSecCalculatie(proj,c){
           <td style="text-align:right;font-family:var(--mono)">€ ${esc((v.stukprijs||0).toFixed(2))}</td>
           <td style="text-align:right;font-family:var(--mono);font-weight:600">€ ${esc(((v.aantal||1)*(v.stukprijs||0)).toFixed(2))}</td>
           <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(v.datum)}</td>
-          <td><button class="btn btn-xs btn-danger" onclick="voorraadRegelVerwijder(${jsArg(proj.code)},${jsArg(v.omschrijving)},${Number(v.ts)||0})">×</button></td>
+          <td><button class="btn btn-xs btn-danger" onclick="voorraadRegelVerwijder(${jsArg(proj.code)},${jsArg(v.omschrijving)},${Number(v.ts)||0},${jsArg(_vrdSleutel(v))})">×</button></td>
         </tr>`).join('')}</tbody>
       </table></div>`:'<hr class="divider"><p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}
       <div id="vrd-weg-${esc(c.cid)}"></div>`;
@@ -10084,6 +10084,7 @@ function _okKaal(k){ if(!k||typeof k!=='object') return k; const r={}; Object.ke
 function _okGelijk(a,b){ return JSON.stringify(_okKaal(a))===JSON.stringify(_okKaal(b)); }
 function offerteKeuze(){const o=_okRuw(),uit={};Object.keys(o).forEach(c=>{ if(!(o[c]&&o[c]._weg)) uit[c]=o[c]; });return uit;}
 function offerteKeuzeSave(nieuw){
+  if(!_k7Mag()){ console.warn('offertekeuze niet opgeslagen: jouw rol mag dit niet'); return false; }   // functielaag; afdwingen gebeurt ook server-side
   const oud=_okRuw(), uit={}, nu=new Date().toISOString();
   nieuw=(nieuw&&typeof nieuw==='object')?nieuw:{};
   new Set([...Object.keys(oud),...Object.keys(nieuw)]).forEach(c=>{
@@ -10091,13 +10092,13 @@ function offerteKeuzeSave(nieuw){
     const eerder=(o&&Array.isArray(o._eerder))?o._eerder:[];
     const voor=levend?[Object.assign(_okKaal(o),{_tijd:nu})]:[{_leeg:true,_tijd:nu}];
     if(!(n&&typeof n==='object')){            // verwijderd: tombstone, de vorige stand blijft in _eerder
-      if(levend) uit[c]=_spStempel({_weg:true,_eerder:voor.concat(eerder).slice(0,5)},o); else if(o) uit[c]=o;
+      if(levend) uit[c]=_spStempel({_weg:true,_eerder:voor.concat(eerder).slice(0,8)},o); else if(o) uit[c]=o;
       return;
     }
     if(n._weg){ uit[c]=(o&&o._weg)?o:n; return; }       // een doorgegeven tombstone blijft een tombstone
     if(levend&&_okGelijk(o,n)){ uit[c]=o; return; }   // niets veranderd: stempel en historie blijven
     const rec=Object.assign({},_okKaal(n)); delete rec._weg;
-    rec._eerder=voor.concat(eerder).slice(0,5);
+    rec._eerder=voor.concat(eerder).slice(0,8);
     uit[c]=_spStempel(rec,o);
   });
   localStorage.setItem('mt_offerte_keuze',JSON.stringify(uit));
@@ -10108,22 +10109,27 @@ function _k7Alleenlezen(wat){ return mtDialog.alert({title:wat,message:'Met jouw
 // K-7: een inkoopregel verwijderen = tombstone in mt_voorraad_weg (synct mee, met de hele regel erin) + weghalen uit mt_voorraad.
 // Zo kan een andere pc hem niet terugzetten, en is hij overal terug te halen ("Terugzetten" onder de tabel).
 const VRD_WEG='mt_voorraad_weg';
-function _vrdSleutel(x){ return (x&&x.id!=null&&x.id!=='')?'id:'+x.id:'p:'+[x&&x.project,x&&x.omschrijving,Number(x&&x.ts)||0].join('|'); }
+// Identiteit van een regel: de id; oude regels zonder id op een reeks velden (niet alleen project|omschrijving|ts, die botsen
+// bij twee gelijke omschrijvingen zonder ts). Identieke dubbelen blijven onderscheiden via een '#'-suffix op de tombstone.
+function _vrdSleutel(x){ return (x&&x.id!=null&&x.id!=='')?'id:'+x.id:'p:'+[x&&x.project,x&&x.omschrijving,Number(x&&x.ts)||0,x&&x.datum,x&&x.aantal,x&&x.stukprijs,x&&x.leverancier].join('|'); }
 function _vrdWegLees(){ try{ const a=JSON.parse(localStorage.getItem(VRD_WEG)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
 function _vrdLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_voorraad')||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
-async function voorraadRegelVerwijder(code,omschrijving,ts){
+async function voorraadRegelVerwijder(code,omschrijving,ts,sleutel){
   if(!_k7Mag()){ await _k7Alleenlezen('Inkoopregel verwijderen'); return; }
-  const past=x=>x&&x.project===code&&x.omschrijving===omschrijving&&(Number(x.ts)||0)===(Number(ts)||0);
-  if(!_vrdLees().find(past)) return;
+  const pastS=x=>x&&x.project===code&&!!sleutel&&_vrdSleutel(x)===sleutel, pastO=x=>x&&x.project===code&&x.omschrijving===omschrijving&&(Number(x.ts)||0)===(Number(ts)||0);
+  const vind=l=>l.find(pastS)||l.find(pastO);   // eerst de exacte identiteit, anders de oude vergelijking
+  if(!vind(_vrdLees())) return;
   const ja=await mtDialog.confirm({title:'Inkoopregel verwijderen?',message:'De regel "'+omschrijving+'" verdwijnt uit de materiaalinkoop van dit project, ook op andere apparaten. Je kunt hem hieronder weer terugzetten.',okLabel:'Verwijderen',danger:true});
   if(!ja||!_k7Mag()) return;
-  const lijst=_vrdLees(), item=lijst.find(past);       // opnieuw lezen: er kan intussen iets gewijzigd zijn
+  const lijst=_vrdLees(), item=vind(lijst);       // opnieuw lezen: er kan intussen iets gewijzigd zijn
   if(!item) return;
-  const weg=_vrdWegLees(), s=_vrdSleutel(item), i=weg.findIndex(w=>w&&w.sleutel===s);
+  const weg=_vrdWegLees(), basis=_vrdSleutel(item), dubbel=lijst.filter(x=>x!==item&&_vrdSleutel(x)===basis).length>0;
+  // Identieke dubbelen: alleen DEZE regel gaat weg en krijgt een eigen tombstone (suffix), zodat Terugzetten precies hem terugbrengt.
+  const s=dubbel?basis+'#'+Date.now().toString(36)+Math.random().toString(36).slice(2,6):basis, i=weg.findIndex(w=>w&&w.sleutel===s);
   const rec=_spStempel({sleutel:s,project:code,weg:true,regel:item,_vervallen:{tijd:new Date().toISOString(),door:_spWie()}},i>=0?weg[i]:null);
   if(i>=0) weg[i]=rec; else weg.push(rec);
   localStorage.setItem(VRD_WEG,JSON.stringify(weg));    // eerst de tombstone, dan pas de regel weg
-  localStorage.setItem('mt_voorraad',JSON.stringify(lijst.filter(x=>x!==item&&_vrdSleutel(x)!==s)));
+  localStorage.setItem('mt_voorraad',JSON.stringify(lijst.filter(x=>dubbel?x!==item:(x!==item&&_vrdSleutel(x)!==s))));
   if(huidigProject) renderProjectDetail(huidigProject);
 }
 async function voorraadRegelTerug(code,sleutel){
@@ -10131,7 +10137,7 @@ async function voorraadRegelTerug(code,sleutel){
   const weg=_vrdWegLees(), i=weg.findIndex(w=>w&&w.sleutel===sleutel&&w.weg);
   if(i<0) return;
   const regel=weg[i].regel, lijst=_vrdLees();
-  if(regel&&!lijst.some(x=>_vrdSleutel(x)===sleutel)) lijst.push(regel);
+  if(regel&&(sleutel.includes('#')||!lijst.some(x=>_vrdSleutel(x)===sleutel))) lijst.push(regel);
   weg[i]=_spStempel(Object.assign({},weg[i],{weg:false,_hersteld:{tijd:new Date().toISOString(),door:_spWie()}}),weg[i]);
   localStorage.setItem('mt_voorraad',JSON.stringify(lijst));
   localStorage.setItem(VRD_WEG,JSON.stringify(weg));
@@ -13477,12 +13483,19 @@ const _SP = Object.assign(window.MTCore.makeSP({
         if (!isObj(l)) { if (isObj(r)) uit[c] = r; continue; }
         if (!isObj(r)) { uit[c] = l; continue; }
         const tl = _spTijd(l), tr = _spTijd(r), gelijk = JSON.stringify(kaal(l)) === JSON.stringify(kaal(r));
-        const lokaalWint = _spLokaalWint(tl, tr), win = lokaalWint ? l : r, verlies = lokaalWint ? r : l;
-        if (gelijk) { uit[c] = win; continue; }
-        const eerder = [...(Array.isArray(win._eerder) ? win._eerder : [])];
-        const vl = verlies._weg ? null : Object.assign(kaal(verlies), { _tijd: new Date().toISOString(), _bron: lokaalWint ? 'sharepoint' : 'deze pc' });
-        if (vl && !eerder.some(e => JSON.stringify(Object.assign({}, e, { _tijd: 0, _bron: 0 })) === JSON.stringify(Object.assign({}, vl, { _tijd: 0, _bron: 0 })))) eerder.unshift(vl);
-        uit[c] = Object.assign({}, win, { _eerder: eerder.slice(0, 5) });
+        // Gelijke stempel (> 0) maar andere inhoud: een vaste tiebreaker (inhoud), zodat elk apparaat dezelfde kant kiest en het convergeert.
+        const lokaalWint = (tl === tr && tl > 0 && !gelijk) ? JSON.stringify(kaal(l)) >= JSON.stringify(kaal(r)) : _spLokaalWint(tl, tr);
+        const win = lokaalWint ? l : r, verlies = lokaalWint ? r : l;
+        // Historie van BEIDE kanten samenvoegen (dedupe op inhoud, nieuwste eerst); de verliezer zelf komt erbij.
+        const sleutel = e => JSON.stringify(Object.assign({}, e, { _tijd: 0, _bron: 0 }));
+        const vl = (gelijk || verlies._weg) ? null : Object.assign(kaal(verlies), { _tijd: new Date().toISOString(), _bron: lokaalWint ? 'sharepoint' : 'deze pc' });
+        const eerder = [], gezien = new Set();
+        [...(vl ? [vl] : []), ...(Array.isArray(win._eerder) ? win._eerder : []), ...(Array.isArray(verlies._eerder) ? verlies._eerder : [])].forEach(e => {
+          if (!e || typeof e !== 'object') return; const s = sleutel(e); if (gezien.has(s)) return; gezien.add(s); eerder.push(e);
+        });
+        eerder.sort((a, b) => String(b._tijd || '').localeCompare(String(a._tijd || '')));
+        uit[c] = Object.assign({}, win, { _eerder: eerder.slice(0, 8) });
+        if (gelijk && !eerder.length) delete uit[c]._eerder;
         if (vl && !lokaalWint && tl === 0 && tr === 0) { try { if (typeof window._k7KeuzeVerlies === 'function') window._k7KeuzeVerlies(c); } catch(e) {} }
       }
       return uit;
@@ -15042,6 +15055,7 @@ window.initStorage = async function() {
   try{ setTimeout(takenOudVangnetMelding,1500); setTimeout(blOudVangnetMelding,2500); }catch(e){}
   _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan (behalve blockedKeys)
   _ptTimeout = false; _ptHertekenen();   // een openstaand projectdetail toonde "Taken laden…": nu opnieuw tekenen
+  try { _vrdWegToepassen(); } catch(e) {}   // K-7: een verwijderde inkoopregel die mt_voorraad (SharePoint wint) teruggaf, weer opschonen
   _blTimeout = false; try{ _blNaWijziging(); }catch(e){ }
   try{ setTimeout(takenLokaalControle,2500); setTimeout(blLokaalControle,3000); setTimeout(tgOnafgerondMelding,3500); setTimeout(uurtariefConflictMelding,4000); }catch(e){}
   try{ renderUurtarieven(); }catch(e){}   // de gesynchroniseerde tarieven (en een eventueel verschil tussen browsers) meteen tonen
@@ -17052,7 +17066,7 @@ function ctlKoppelPlan(van){
   const mail=(Array.isArray(links[van])?links[van]:[]).filter(x=>x&&!x.ontkoppeld).map(x=>JSON.parse(JSON.stringify(x)));
   const calc=Object.keys(off).filter(k=>{ const o=off[k]; return o&&(o.project_code===van||(k===van&&!o.project_code)); });
   const rij=key=>(_ctlJson(key,[])||[]).filter(x=>x&&x.project===van).map(x=>x.id);
-  const ok=!!(keuze[van]&&!keuze[van]._verplaatst_naar);
+  const ok=!!(keuze[van]&&!keuze[van]._verplaatst_naar&&!keuze[van]._weg);   // een verwijderde keuze (tombstone) telt niet mee
   const voorraad=rij('mt_voorraad'), facturen=rij('mt_history');
   return {mail,calc,voorraad,facturen,keuze:ok,tel:{mail:mail.length,calculatie:calc.length,offertekeuze:ok?1:0,voorraad:voorraad.length,facturen:facturen.length}};
 }
@@ -17111,10 +17125,10 @@ async function ctlKoppelUitvoeren(van,naar,verwacht,opts){
     const ck=(plan.calc||[]).filter(k=>CALC.offertes[k]&&(CALC.offertes[k].project_code===van||(k===van&&!CALC.offertes[k].project_code)));
     if(ck.length) calcProjectVerplaats(van,naar,{keys:ck,marker:vid});
     if(plan.keuze){
-      const all=_ctlJson('mt_offerte_keuze',{})||{}, k=all[van]||{}, d=all[naar]||{};
-      if(!k._verplaatst_naar){
+      const all=_ctlJson('mt_offerte_keuze',{})||{}, k=(all[van]&&!all[van]._weg)?all[van]:{}, d=(all[naar]&&!all[naar]._weg)?all[naar]:{};
+      if(!k._verplaatst_naar&&all[van]&&!all[van]._weg){
         const geschreven={gekozen:d.gekozen!=null?d.gekozen:(k.gekozen==null?null:k.gekozen),afgewezen:[...new Set([...(d.afgewezen||[]),...(k.afgewezen||[])].map(String))]};
-        all[van]=Object.assign({},k,{_verplaatst_naar:naar,_verhuis:{id:vid,voor:{van:JSON.parse(JSON.stringify(k)),naar:all[naar]?JSON.parse(JSON.stringify(all[naar])):null},geschreven}});
+        all[van]=Object.assign({},k,{_verplaatst_naar:naar,_verhuis:{id:vid,voor:{van:JSON.parse(JSON.stringify(k)),naar:(all[naar]&&!all[naar]._weg)?JSON.parse(JSON.stringify(all[naar])):null},geschreven}});
         all[naar]=geschreven;
         if(typeof offerteKeuzeSave==='function') offerteKeuzeSave(all); else localStorage.setItem('mt_offerte_keuze',JSON.stringify(all));
       }
