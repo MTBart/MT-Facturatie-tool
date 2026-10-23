@@ -1,5 +1,20 @@
 [
   {
+    "versie": "2.21.0",
+    "datum": "2026-10-23",
+    "titel": "Planning met bord en filters, Financiën, slimmere Larry en rustiger calculeren",
+    "voor": "iedereen",
+    "punten": [
+      "Planning: bovenin staat een filterbalk (persoon, klant, project, fase, status) die in Capaciteit, Mijn werk en het nieuwe Bord hetzelfde werkt. Klik op een blok op de planning en er opent een paneel met de taak erachter.",
+      "Nieuw: het Bord. Taken staan in kolommen per status; sleep een taak naar een andere kolom om de status te wijzigen, of voeg met + taak meteen een taak toe.",
+      "Calculatie: je ziet vooraf een voorbeeld van wat er verandert voordat je standaardwaarden (zoals uurtarief en marge) toepast. Standaardwaarden en dialogen zijn duidelijker, en wijzigt iemand anders tegelijk de standaardwaarden, dan gaat er niets verloren.",
+      "Calculatie: het paneel Versies toont eerdere opgeslagen versies van een offerte, met een knop om er een terug te zetten.",
+      "Het tabblad Geld heet nu Financiën. Het toont per project wat je nog kunt factureren (Facturatie verwacht) en heeft een Factuurplanning waarin je een maand kiest voor een termijn. Alleen zichtbaar met het recht voor geld.",
+      "Larry (de assistent) antwoordt eerlijker: hij zegt het als hij iets niet weet in plaats van iets te verzinnen. Verbeterpunten en feedback komen in een bouwwachtrij die voor iedereen hetzelfde is.",
+      "Na de update: herlaad de tool een keer op elk apparaat (ook als hij al openstaat)."
+    ]
+  },
+  {
     "versie": "2.20.0",
     "datum": "2026-10-23",
     "titel": "Offertes veiliger opgeslagen en een paneel per taak",
