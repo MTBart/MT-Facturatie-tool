@@ -353,7 +353,7 @@
       for (const k of sleutels) {
         if (k.charAt(0) === '_') continue;
         if (stabiel(norm(t[k])) === stabiel(norm(v[k]))) continue;
-        if (k === 'checklist') { statusOfNieuw = true; continue; }   // P6a: afvinken mag wie een status mag zetten (werkplaats); het toevoegen en hernoemen van punten beperkt het paneel tot kantoor
+        if (k === 'checklist') { if (!P.checklistAlleenVinken(v.checklist, t.checklist)) return 'taken:alles'; statusOfNieuw = true; continue; }   // P6a: alleen afvinken (de klaar-onderdelen van bestaande punten) mag wie een status mag zetten (werkplaats); toevoegen, hernoemen, verwijderen en terugzetten is voor kantoor
         if (P.TAAK_STATUS_VELDEN.indexOf(k) < 0) return 'taken:alles';
         if (k === 'tg_pending' && [P.tgPendingOp(t[k]), P.tgPendingOp(v[k])].some(o => o && o !== 'status')) return 'taken:alles';
         statusOfNieuw = true;
@@ -2060,13 +2060,20 @@
   P.checklistTel = t => { const l = P.checklistActief(t); return { n: l.length, klaar: l.filter(x => x.klaar).length }; };
   const ymdVanMs = ms => { const d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
   P.CHECKLIST_MAX = 100;
+  // Is het verschil tussen twee checklists alleen afvinken? (dezelfde punten, alleen klaar, klaar_t, door en op verschillen): dan mag de werkplaats het; alles anders is kantoor.
+  P.checklistAlleenVinken = (oud, nieuw) => {
+    const a = Array.isArray(oud) ? oud : [], b = Array.isArray(nieuw) ? nieuw : []; if (a.length !== b.length) return false;
+    const per = new Map(a.map(x => [String(x && x.id), x])); return b.every(y => { const x = per.get(String(y && y.id)); return !!x && ['tekst', 'tekst_t', 'vol', 'weg', 'weg_t'].every(f => stabiel(norm(x[f])) === stabiel(norm(y[f]))); });
+  };
   // Bewerkingen toepassen op een lijst: [{ op: 'nieuw', id, tekst } | { op: 'vink', id, klaar } | { op: 'hernoem', id, tekst } | { op: 'weg', id } | { op: 'herstel', id }].
   // → { lijst, tegen (de omgekeerde bewerkingen, voor Ongedaan maken), noop } of { fout }
-  P.checklistToepassen = function (lijst0, ops, { nu = Date.now(), door = '' } = {}) {
-    const lijst = (Array.isArray(lijst0) ? lijst0 : []).map(kopie), tegen = []; let veranderd = false;
+  // vers (voor Ongedaan maken): { id: { tekst_t, klaar_t, weg_t } } zoals het punt er na de oorspronkelijke bewerking uitzag; is een punt sindsdien door iemand anders gewijzigd (andere tijd in het onderdeel dat deze bewerking raakt), dan wordt die bewerking overgeslagen (overgeslagen) en niet stil teruggezet.
+  P.checklistToepassen = function (lijst0, ops, { nu = Date.now(), door = '', vers = null } = {}) {
+    const lijst = (Array.isArray(lijst0) ? lijst0 : []).map(kopie), tegen = [], overgeslagen = []; let veranderd = false;
     const vind = id => lijst.find(x => x && String(x.id) === String(id)), na = (x, f) => Math.max(nu, clTijd(x, f) + 1);
     for (const o of (Array.isArray(ops) ? ops : [])) {
       if (!o || typeof o !== 'object' || o.id === undefined || o.id === null || o.id === '') return { fout: 'Onvolledige bewerking.' };
+      if (vers && vers[String(o.id)]) { const v = vers[String(o.id)], y = vind(o.id), groepen = o.op === 'vink' ? ['klaar'] : o.op === 'hernoem' ? ['tekst'] : o.op === 'weg' ? ['tekst', 'klaar', 'weg'] : ['weg']; if (y && groepen.some(g => clTijd(y, g) !== (Number(v[g + '_t']) || 0))) { overgeslagen.push(String(o.id)); continue; } }
       const x = vind(o.id), tekst = typeof o.tekst === 'string' ? o.tekst.replace(/\s+/g, ' ').trim() : '';
       if (o.op === 'nieuw') {
         if (!tekst) return { fout: 'Een punt heeft een tekst nodig.' }; if (tekst.length > 200) return { fout: 'Een punt is hoogstens 200 tekens.' };
@@ -2083,7 +2090,7 @@
       else if (o.op === 'herstel') { if (!x.weg) continue; tegen.unshift({ op: 'weg', id: x.id }); x.weg = false; x.weg_t = na(x, 'weg'); veranderd = true; }
       else return { fout: 'Onbekende bewerking.' };
     }
-    return veranderd ? { lijst: lijst.sort(clVolgorde), tegen } : { noop: true };
+    return veranderd ? { lijst: lijst.sort(clVolgorde), tegen, overgeslagen } : { noop: true, overgeslagen };
   };
   // "✓ door Mathijs · 22-10" (dezelfde opmaak als bij een afgevinkte taak); naamVan(slug of e-mail) → naam
   P.checklistKlaarTekst = (x, naamVan) => {

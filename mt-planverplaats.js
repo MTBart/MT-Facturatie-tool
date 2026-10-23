@@ -682,14 +682,15 @@
     if (!code || id == null || !ops || !ops.length) return { ok: false, reden: 'Onvolledige aanroep.' };
     if (V.taakBezig(code, id)) return { ok: false, bezet: true, reden: BEZET };
     const st = maakSt(o, sleutelVan(code, id)), naam = s.naam || 'de taak';
-    let noop = false, fout = '', tegen = null, oudTaak = null, res;
+    let noop = false, fout = '', tegen = null, oudTaak = null, overgeslagen = [], na = null, res;
     try {
       res = await P.takenSchrijf(tijdSp(o.sp, st), { code, lokaal: o.lokaal(), nu: o.nu(), door: o.door, dev: o.dev, projectId: o.projectId, mag: o.mag, muteer: werk => {
         const t = werk.find(x => x && String(x.id) === String(id)); if (!t) return { fout: 'Deze taak bestaat niet meer; er is niets gewijzigd.' };
-        const r = P.checklistToepassen(t.checklist, ops, { nu: o.nu(), door: o.door });
+        const r = P.checklistToepassen(t.checklist, ops, { nu: o.nu(), door: o.door, vers: s.vers || null }); overgeslagen = r.overgeslagen || [];
         if (r.fout) { fout = r.fout; return false; }
         if (r.noop) { noop = true; return false; }
         oudTaak = JSON.parse(JSON.stringify(t)); tegen = r.tegen; t.checklist = r.lijst;
+        na = {}; ops.forEach(op => { const y = r.lijst.find(z => String(z.id) === String(op.id)); if (y) na[String(y.id)] = { tekst_t: y.tekst_t || 0, klaar_t: y.klaar_t || 0, weg_t: y.weg_t || 0 }; });   // de stand na deze bewerking, voor een veilig Ongedaan maken
         return werk;
       } });
     } catch (e) {
@@ -697,14 +698,15 @@
       return { ok: false, reden: e && e.timeout === 'lezen' ? TIJD_LEZEN : SCHRIJF_REDEN.schrijven };
     }
     if (fout) return { ok: false, reden: fout };
+    if (noop && overgeslagen.length) return { ok: false, tegelijk: true, reden: 'Dit is intussen door iemand anders gewijzigd; er is niets teruggezet.' };
     if (noop) return { ok: true, noop: true };
     if (!res.ok) return { ok: false, reden: schrijfFout(res) };
     const data = st.samen && typeof st.samen === 'object' ? st.samen : res.data, taken = data && Array.isArray(data[code]) ? P.takenActief(data[code]) : res.taken;
-    return { ok: true, opgeslagen: true, behouden: true, data, taken, oudTaak, wijziging: { soort: 'checklist', code, id, naam, tegen } };
+    return Object.assign({ ok: true, opgeslagen: true, behouden: true, data, taken, oudTaak, wijziging: { soort: 'checklist', code, id, naam, tegen, na } }, overgeslagen.length ? { tegelijk: overgeslagen.length + ' punt' + (overgeslagen.length === 1 ? '' : 'en') + ' is intussen door iemand anders gewijzigd en niet teruggezet; de rest is teruggezet.' } : {});
   };
   // Ongedaan maken van taakWijzig: alleen als niemand de geraakte velden sindsdien wijzigde (dezelfde stempels, dezelfde personen); zet de oude waarden precies terug.
   V.taakWijzigHerstel = async function (w, o) {
-    if (w && w.soort === 'checklist') return V.taakChecklist({ code: w.code, id: w.id, naam: w.naam, ops: w.tegen }, o);   // P6a: terugdraaien = de omgekeerde bewerkingen op de verse stand
+    if (w && w.soort === 'checklist') return V.taakChecklist({ code: w.code, id: w.id, naam: w.naam, ops: w.tegen, vers: w.na || null }, o);   // P6a: terugdraaien = de omgekeerde bewerkingen op de verse stand
     const P = root.MTPlanning; if (!w || w.soort !== 'velden' || !w.voor) return { ok: false, reden: 'Er is niets om ongedaan te maken.' };
     if (V.taakBezig(w.code, w.id)) return { ok: false, bezet: true, reden: BEZET };
     const st = maakSt(o, sleutelVan(w.code, w.id)), naam = w.naam || 'de taak', team = (o.ctx() || {}).team || []; let bedoeld = null, res;
