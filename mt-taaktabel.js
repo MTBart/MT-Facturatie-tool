@@ -33,7 +33,7 @@
     const lijst = Array.isArray(journaal) ? journaal : [];
     for (let i = lijst.length - 1; i >= 0; i--) {
       const j = lijst[i]; if (!j || !j.taak || String(j.code).toLowerCase() !== String(code).toLowerCase() || String(j.taak.id) !== String(id)) continue;
-      if (!/^paneel:.*\bstatus\b/.test(String(j.actie || ''))) continue;
+      if (!/^(paneel:.*\bstatus\b|status)$/.test(String(j.actie || ''))) continue;   // via het paneel/de tabel ('paneel: status') of de oude statusknop ('status'): beide bewaren de taak zoals hij was
       const s = j.taak.status || 'todo'; return s === 'klaar' ? 'todo' : s;
     }
     return 'todo';
@@ -79,7 +79,8 @@
 
   // Naar een andere status: Wacht vraagt een verplichte reden; een taak die op een voorganger wacht start na een bevestiging; open materiaal vraagt eerst een bevestiging
   TT.naarStatus = (code, id, nieuw) => enkel(async () => {
-    const t = vindTaak(code, id); if (!t) { toast('Deze taak bestaat niet meer.', null, true); klaarMelden(); return false; }
+    const t0 = vindTaak(code, id); if (!t0) { toast('Deze taak bestaat niet meer.', null, true); klaarMelden(); return false; }
+    const t = Object.assign({}, t0);   // een momentopname van wat de gebruiker zag: de lijst kan tijdens de vragen in het geheugen worden bijgewerkt (sync)
     const huidig = t.status || 'todo', dlg = D.dialoog, Pl = P();
     if (huidig === nieuw && nieuw !== 'wacht') { klaarMelden(); return false; }
     if (!mag('status')) { toast(GEEN_RECHT, null, true); klaarMelden(); return false; }
@@ -102,8 +103,8 @@
       const mat = Pl.taakMateriaal(t, Pl.bestelVanTaak(bl, t.id, { code, project_id: D.projectId ? D.projectId(code) : '' }), { vandaag: Pl.vandaagYmd() });
       if (Pl.materiaalVraagBevestiging(t, mat, nieuw)) { const ja = await dlg.confirm({ title: 'Het materiaal is nog niet binnen', message: Pl.materiaalBevestigTekst(t.naam, mat, nieuw, Pl.datumKort), okLabel: 'Toch doorgaan' }); if (!ja) { klaarMelden(); return false; } }
     }
-    const vers = vindTaak(code, id) || t;   // na de vragen opnieuw: de spec gebruikt de stand van nu
-    const ok = await schrijf(TT.specStatus(code, vers, nieuw, reden), 'status ' + statusLabel(nieuw).toLowerCase());
+    // De spec gebruikt wat de gebruiker zag toen hij klikte (t), niet de stand na de vragen: heeft een collega de status intussen gewijzigd, dan meldt taakWijzig dat en wordt er niets overschreven.
+    const ok = await schrijf(TT.specStatus(code, t, nieuw, reden),'status ' + statusLabel(nieuw).toLowerCase());
     if (ok && nieuw === 'klaar' && huidig !== 'klaar') S.vorige.set(TT.sleutel(code, id), huidig);
     return ok;
   });
