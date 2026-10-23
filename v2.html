@@ -61,8 +61,10 @@
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-23g"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
-<script src="mt-objectpaneel.js?v=2026-10-23g"></script>
-<script src="mt-taakpaneel.js?v=2026-10-23g"></script>
+<script src="mt-objectpaneel.js?v=2026-10-23h"></script>
+<script src="mt-taakpaneel.js?v=2026-10-23h"></script>
+<script src="mt-taaktabel.js?v=2026-10-23g"></script>
+<script src="mt-voortgang.js?v=2026-10-23h"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
 <script src="mt-planinrichting.js?v=2026-10-23g"></script>
 <script src="mt-bord.js?v=2026-10-23g"></script>
@@ -863,6 +865,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
 <link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-17k">
+<link rel="stylesheet" href="mt-telefoon.css?v=2026-10-23a">
 </head>
 <body>
 
@@ -3949,7 +3952,65 @@ try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu
   verwijder:(c,i)=>projTaakVerwijder(c,i), togglSync:(c,i)=>projTaakTogglSync(c,i), conflict:(c,i)=>projTaakConflict(c,i), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
   bordKlik:true,
   naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _ptHertekenen(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Taakpaneel init:',e); }
-// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
+// De takentabel van Project ▸ Planning bewerken (planning brok P2p, mt-taaktabel.js): afvinken, statuskiezer en inline velden via DEZELFDE route als het taakpaneel (tpWijzig/tpWijzigHerstel, datums via de sleeproute), met Ongedaan maken.
+// Toggl wordt hier nooit aangeraakt: de bestaande knoppen in de rij blijven de enige route.
+try{ MTTaakTabel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM,
+  taken:()=>projTakenAll(), toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; },
+  mag:{ alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar(), status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), plannen:()=>capMagSlepen()&&rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
+  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec),
+  bestel:()=>_blActief(), bestelVers:async()=>{ await _blVerseLees(); return _blActief(); }, projectId:code=>(projVind(code)||{}).project_id||'',
+  wachtInfo:(code,t)=>{ const w=MTPlanning.taakWacht(t,projTaken(code),projAfhRuw()[code]||[]); return { wacht:!!w.wacht, tekst:w.wacht?MTPlanning.wachtOpTekst(w,_p2D):'' }; },
+  journaal:()=>{ try{ const j=JSON.parse(localStorage.getItem('mt_taken_journaal')||'[]'); return Array.isArray(j)?j:[]; }catch(e){ return []; } },
+  naamVan:d=>_capNaamVan(d),   // de naam uit de personenlijst (MT_TEAM) bij een e-mailadres of slug
+  leesUren:x=>MTTaakPaneel.leesUren(x),
+  naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _vgHerteken(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Takentabel init:',e); }// Het blok Voortgang bovenaan Project ▸ Overzicht (mt-voortgang.js): de roll-up komt van MTTijdlijn.model (geen tweede formule); het afvinkvakje is dat van de takentabel (MTTaakTabel.afvinkVak: zelfde route);
+// de projectfase gaat via leadFaseKies/projFaseZet (de bestaande overgangen, "Gewonnen → project" met zijn bevestiging) en de levertijd via bestelVerwachtZet (P5), voor alle open regels via bestelVerwachtBulk met Ongedaan maken.
+function _vgHerteken(){ const y=window.scrollY; _ptHertekenen(); try{ window.scrollTo(0,y); }catch(e){} }   // het blok tekent mee met het project; de scrollpositie blijft staan
+function vgModel(code){
+  const p=projVind(code); if(!p) return [];
+  return MTTijdlijn.model({ taken:projTakenAll(), afhank:projAfhRuw(), team:MT_TEAM, vrij:(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null), bestel:_blActief(), alles:true, kritiek:false, filter:{project:code},
+    projecten:[{code:p.code,project_id:p.project_id||'',label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code,gegevens:p.gegevens}] }).rijen;
+}
+function vgFaseOpties(code){
+  const p=projVind(code); if(!p||!window.MTLead) return null;
+  return { huidig:{k:p.fase||'',l:MTLead.label(p.fase)||''}, kan:_leadMag(), opties:MTLead.opties(p.fase||'').map(k=>({k,l:k==='gewonnen'?'Offerte geaccepteerd → project':MTLead.label(k)})) };
+}
+// Fase kiezen via de bestaande route (leadFaseKies: reden bij Verloren, datum bij Geparkeerd, bevestiging bij Gewonnen). Ongedaan maken alleen waar de overgang gewoon terug mag (geen Gewonnen, Verloren of Geparkeerd).
+async function vgFaseKies(code,naar,sel){
+  const p=projVind(code); if(!p) return {ok:false,reden:'Onbekend project'};
+  const oud=p.fase||''; await leadFaseKies(code,naar,sel);
+  const nu=(projVind(code)||{}).fase||''; if(!nu||nu===oud) return {ok:false};   // geannuleerd of geweigerd (leadFaseKies meldt dat zelf)
+  // Ongedaan maken alleen als de fase nog precies is wat wij zetten: heeft een collega hem intussen verzet, dan blijft die stand staan.
+  const terug=(oud&&!['gewonnen','verloren','geparkeerd'].includes(nu)&&!['verloren','geparkeerd'].includes(oud)&&MTLead.magNaar(nu,oud))?async()=>{ if(((projVind(code)||{}).fase||'')!==nu) return {ok:false,reden:'De fase is intussen door iemand anders gewijzigd; er is niets teruggezet.'}; const r=projFaseZet(code,oud,{}); return {ok:r.ok,reden:r.fout}; }:null;
+  return {ok:true,label:MTLead.label(nu),terug};
+}
+function vgRegels(code){ return _blActief().filter(b=>b&&b.id!=='__migratie'&&String(_blProjectCodeVan(b)).toLowerCase()===String(code).toLowerCase()); }
+// De levertijd van meerdere regels tegelijk: elke regel via bestelVerwachtZet (gestempeld per veld, journaal, rolcontrole); vorige = wat er stond, voor Ongedaan maken.
+function bestelVerwachtBulk(ids,ymd){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'De verwachte leverdatum van bestelregels wijzigen')) return {n:0,mislukt:0,vorige:[],reden:'geen recht'};
+  const vorige=[]; let n=0,mislukt=0;
+  for(const id of ids){
+    const b=_blAlle().find(x=>x&&typeof x==='object'&&String(x.id)===String(id)); if(!b||b._vervallen){ mislukt++; continue; }
+    const voor={id:b.id,verwacht_op:b.verwacht_op||'',verwacht_bron:b.verwacht_bron||'',gezet:ymd,gezetBron:'hand'};   // bestelVerwachtZet zet de bron altijd op 'hand'
+    if(bestelVerwachtZet(id,ymd)){ n++; vorige.push(voor); } else mislukt++;
+  }
+  return {n,mislukt,vorige};
+}
+// Terugzetten: alleen regels die nog precies zo staan als wij ze zetten; een collega die intussen iets anders zette blijft ongemoeid (overgeslagen).
+function bestelVerwachtHerstel(vorige){
+  if(rolGeweigerd(ROL_BESTEL_ALLES,'De verwachte leverdatum van bestelregels terugzetten')) return {ok:false};
+  let n=0,overgeslagen=0;
+  for(const v of (vorige||[])){
+    const b=_blAlle().find(x=>x&&typeof x==='object'&&String(x.id)===String(v.id)); if(!b||b._vervallen){ overgeslagen++; continue; }
+    if(v.gezet!==undefined&&(String(b.verwacht_op||'')!==String(v.gezet)||(v.gezetBron!==undefined&&String(b.verwacht_bron||'')!==String(v.gezetBron)))){ overgeslagen++; continue; }
+    if(String(b.verwacht_op||'')===String(v.verwacht_op||'')){ n++; continue; }
+    if(_blWijzig(v.id,v.verwacht_op?'verwachte leverdatum teruggezet':'verwachte leverdatum gewist',x=>{ if(v.verwacht_op){ x.verwacht_op=v.verwacht_op; x.verwacht_bron=v.verwacht_bron||'hand'; } else { delete x.verwacht_op; delete x.verwacht_bron; } })) n++; else overgeslagen++;
+  }
+  return {ok:n>0||!overgeslagen,n,overgeslagen};
+}
+try{ MTVoortgang.init({ doc:document, planning:MTPlanning, model:vgModel, openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),
+  faseOpties:vgFaseOpties, faseKies:vgFaseKies, regels:vgRegels, bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd), bestelBulk:bestelVerwachtBulk, bestelHerstel:bestelVerwachtHerstel, bestelVers:()=>_blVerseLees(),
+  mag:{ bestel:()=>rolMag(ROL_BESTEL_ALLES)&&_blKlaar(), fase:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; }, naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Voortgang init:',e); }// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
 try{ const _pbDag=(slug,datum)=>({tab:'agenda',weergave:'capaciteit',planfilter:Object.assign({van:datum,zoom:'dag'},slug?{persoon:slug}:{})});
   MTPlanblokPaneel.init({ planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), blokken:()=>agPlanActief(),
   blokkenKlaar:()=>{ if(_planblokken===null&&!window._pbLaadt){ window._pbLaadt=true; try{ agPlanLoad().catch(()=>{}); }catch(e){} } return _planblokken!==null; },
@@ -6771,7 +6832,8 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
-  if(_projSectie==='planning'){ try{ MTPlanFilter.monteerProject(document.getElementById('pf-proj-'+String(proj.code).replace(/-/g,'')),'pt-tbl-'+String(proj.code).replace(/-/g,'')); }catch(e){ console.warn('Planningsfilter:',e); } planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='planning'){ try{ MTPlanFilter.monteerProject(document.getElementById('pf-proj-'+String(proj.code).replace(/-/g,'')),'pt-tbl-'+String(proj.code).replace(/-/g,'')); }catch(e){ console.warn('Planningsfilter:',e); } planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} try{ MTTaakTabel.verrijk(proj.code,pan); }catch(e){ console.warn('Takentabel:',e); } }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='overzicht'){ try{ MTVoortgang.monteer(proj.code,pan); }catch(e){ console.warn('Voortgang:',e); } }   // het blok Voortgang: eerste onder de contextbalk
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof window.calcProjectTonen==='function') window.calcProjectTonen(proj); else if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -9234,7 +9296,7 @@ async function _projTaakStatusNaar(code,id,nieuwStatus){
   { const mat=MTPlanning.taakMateriaal(t,MTPlanning.bestelVanTaak(_blActief(),t.id,{code,project_id:(projVind(code)||{}).project_id}));   // P5: een taak met open materiaal gaat niet stil naar Bezig of Klaar
     if(MTPlanning.materiaalVraagBevestiging(t,mat,nieuwStatus)&&!await mtDialog.confirm({title:'Het materiaal is nog niet binnen',message:MTPlanning.materiaalBevestigTekst(t.naam,mat,nieuwStatus,_p2D),okLabel:'Toch doorgaan'})) return; }
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // de blokkade of het recht kan tijdens de bevestiging veranderd zijn
-  _ptJournaal('status',code,t);
+  _ptJournaal('status',code,t,{door:_spWie()});
   t.status=nieuwStatus; _ptKlaarOp(t,nieuwStatus); delete t.wacht_reden;   // de reden hoort bij de status Wacht (die zet alleen de telefoon)
   // Ronde 8: eerst de nieuwe status en de Toggl-intentie duurzaam lokaal opslaan en controleren; pas daarna Toggl, en daarna afronden.
   // Lukt het opslaan niet, dan verandert er niets en gaat er niets naar Toggl. Niet meer "fire and forget": lukt Toggl niet, dan blijft de intentie zichtbaar (⏳).
@@ -16161,7 +16223,7 @@ async function capTaakHerstel(w,opt){
 async function tpWijzig(spec,opt){
   if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
   const r=_capTaakKlaar(await MTPlanVerplaats.taakWijzig(spec,_capTaakOpties(spec&&spec.code,opt)));
-  if(r&&r.ok&&r.oudTaak) _ptJournaal('paneel: '+Object.keys(spec.velden||{}).join(', '),spec.code,r.oudTaak);
+  if(r&&r.ok&&r.oudTaak) _ptJournaal('paneel: '+Object.keys(spec.velden||{}).join(', '),spec.code,r.oudTaak,{door:_spWie()});   // wie het deed, voor de geschiedenis bij een afgevinkte taak
   if(r&&!r.ok&&r.tegelijk) await _tpVersLokaal();
   return r;
 }
