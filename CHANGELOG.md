@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-23 — Backup = v2.20.0
+- Commit: `31c397f` | Auteur: Bart Witte
+
 ## 2026-10-23 — Release v2.20.0: veilig opslaan van offertes (vers lezen, per offerte samenvoegen, ETag, status en conflictmelding), getallen als 1.234,56, offerte altijd vindbaar bij het project, taakpaneel; backup = v2.19.0
 - Commit: `fb5fdfd` | Auteur: Bart Witte
 
