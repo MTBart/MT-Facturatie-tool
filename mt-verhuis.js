@@ -27,7 +27,7 @@
   // nieuwe adres vanzelf opnieuw op), lopende timers (Toggl is de bron) en de verhuis-administratie zelf.
   V.SLEUTELS = new Set([
     // synct naar SharePoint (komt na inloggen terug; staat het lokaal al, dan blijft dat staan — en lokaal nog niet gesynct gaat mee)
-    'mt_voorraad', 'mt_bestellijst', 'mt_bestellijst_v2', 'mt_history', 'mt_history_archive', 'mt_projecten', 'mt_leveranciers', 'mt_toeslag_lak', 'mt_toeslag_spuit',
+    'mt_voorraad', 'mt_voorraad_weg', 'mt_bestellijst', 'mt_bestellijst_v2', 'mt_history', 'mt_history_archive', 'mt_projecten', 'mt_leveranciers', 'mt_toeslag_lak', 'mt_toeslag_spuit',
     'mt_mail_links', 'mt_mail_oppak', 'mt_planning', 'mt_klant_codes', 'mt_offerte_keuze', 'mt_project_taken', 'mt_project_taken_v2', 'mt_supplier_map', 'mt_calc_offertes', 'mt_calc_defaults',
     'mt_taken_journaal', 'mt_bijlage_index', 'mt_todo_sync', 'mt_bestellijst_journaal', 'mt_koppel_journaal', 'mt_contacten', 'mt_contacten_journaal', 'mt_project_controle',
     'mt_project_afhank', 'mt_project_sjablonen', 'mt_uurtarieven',

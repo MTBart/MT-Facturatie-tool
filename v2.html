@@ -82,7 +82,7 @@
 <script src="mt-koers.js?v=2026-10-23a"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-23a"></script>
+<script src="mt-verhuis.js?v=2026-10-23k7"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
 <script src="mt-calcopslag.js?v=2026-10-23a"></script>
@@ -6837,6 +6837,7 @@ function _projSectieRender(proj){
   if(_projSectie==='overzicht'){ try{ MTVoortgang.monteer(proj.code,pan); }catch(e){ console.warn('Voortgang:',e); } }   // het blok Voortgang: eerste onder de contextbalk
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
+    try{ voorraadWegTeken(proj.code,c.cid); }catch(e){ console.warn('verwijderde inkoopregels:',e); }
     if(typeof window.calcProjectTonen==='function') window.calcProjectTonen(proj); else if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
   }
 }
@@ -6975,9 +6976,10 @@ function projSecCalculatie(proj,c){
           <td style="text-align:right;font-family:var(--mono)">€ ${esc((v.stukprijs||0).toFixed(2))}</td>
           <td style="text-align:right;font-family:var(--mono);font-weight:600">€ ${esc(((v.aantal||1)*(v.stukprijs||0)).toFixed(2))}</td>
           <td style="font-size:11px;color:var(--text-faint)">${fmtDatum(v.datum)}</td>
-          <td><button class="btn btn-xs btn-danger" onclick="if(confirm('Inkoopregel verwijderen?')){const vrd=JSON.parse(localStorage.getItem('mt_voorraad')||'[]').filter(x=>!(x.project===${jsArg(proj.code)}&&x.omschrijving===${jsArg(v.omschrijving)} &&x.ts===${Number(v.ts)||0}));localStorage.setItem('mt_voorraad',JSON.stringify(vrd));renderProjectDetail(huidigProject);}">×</button></td>
+          <td><button class="btn btn-xs btn-danger" onclick="voorraadRegelVerwijder(${jsArg(proj.code)},${jsArg(v.omschrijving)},${Number(v.ts)||0},${jsArg(_vrdSleutel(v))})">×</button></td>
         </tr>`).join('')}</tbody>
-      </table></div>`:'<hr class="divider"><p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}`;
+      </table></div>`:'<hr class="divider"><p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}
+      <div id="vrd-weg-${esc(c.cid)}"></div>`;
 }
 // ── Productie: Vectorworks-CSV, NCR-import, bestellijst van dit project ──
 function projSecProductie(proj,c){
@@ -10264,8 +10266,108 @@ function nacalcExportPdf(code){
 const _nacalcOfferte={};
 // Per project onthouden welke voorgestelde offerte klopt (gekozen) of niet
 // (afgewezen). Synct via mt_offerte_keuze mee naar de andere PC's.
-function offerteKeuze(){try{return JSON.parse(localStorage.getItem('mt_offerte_keuze')||'{}');}catch(e){return{};}}
-function offerteKeuzeSave(o){localStorage.setItem('mt_offerte_keuze',JSON.stringify(o));}
+// K-7: per project een record {gekozen, afgewezen[]} met stempel (_gewijzigd/_door) en de vorige standen (_eerder, max 5, voor
+// "Ongedaan maken"). Verwijderen (herstel) is een tombstone (_weg) en geen delete, zodat een oude kopie elders hem niet terugzet.
+// De samenvoeger (_SP.mergers.mt_offerte_keuze) kiest per project de nieuwste stempel en bewaart de verliezer in _eerder.
+const OK_META=new Set(['_gewijzigd','_door','_eerder']);
+function _okRuw(){try{const o=JSON.parse(localStorage.getItem('mt_offerte_keuze')||'{}');return (o&&typeof o==='object'&&!Array.isArray(o))?o:{};}catch(e){return{};}}
+function _okKaal(k){ if(!k||typeof k!=='object') return k; const r={}; Object.keys(k).sort().forEach(x=>{ if(!OK_META.has(x)) r[x]=k[x]; }); return r; }
+function _okGelijk(a,b){ return JSON.stringify(_okKaal(a))===JSON.stringify(_okKaal(b)); }
+function offerteKeuze(){const o=_okRuw(),uit={};Object.keys(o).forEach(c=>{ if(!(o[c]&&o[c]._weg)) uit[c]=o[c]; });return uit;}
+function offerteKeuzeSave(nieuw){
+  if(!_k7Mag()){ console.warn('offertekeuze niet opgeslagen: jouw rol mag dit niet'); return false; }   // functielaag; afdwingen gebeurt ook server-side
+  const oud=_okRuw(), uit={}, nu=new Date().toISOString();
+  nieuw=(nieuw&&typeof nieuw==='object')?nieuw:{};
+  new Set([...Object.keys(oud),...Object.keys(nieuw)]).forEach(c=>{
+    const o=oud[c], n=nieuw[c], levend=o&&typeof o==='object'&&!o._weg;
+    const eerder=(o&&Array.isArray(o._eerder))?o._eerder:[];
+    const voor=levend?[Object.assign(_okKaal(o),{_tijd:nu})]:[{_leeg:true,_tijd:nu}];
+    if(!(n&&typeof n==='object')){            // verwijderd: tombstone, de vorige stand blijft in _eerder
+      if(levend) uit[c]=_spStempel({_weg:true,_eerder:voor.concat(eerder).slice(0,8)},o); else if(o) uit[c]=o;
+      return;
+    }
+    if(n._weg){ uit[c]=(o&&o._weg)?o:n; return; }       // een doorgegeven tombstone blijft een tombstone
+    if(levend&&_okGelijk(o,n)){ uit[c]=o; return; }   // niets veranderd: stempel en historie blijven
+    const rec=Object.assign({},_okKaal(n)); delete rec._weg;
+    rec._eerder=voor.concat(eerder).slice(0,8);
+    uit[c]=_spStempel(rec,o);
+  });
+  localStorage.setItem('mt_offerte_keuze',JSON.stringify(uit));
+}
+function _k7Mag(){ try{ return !!(window.MTRol&&MTRol.me)&&String(MTRol.me.rol||'').toLowerCase()!=='lezen'; }catch(e){ return false; } }
+function _k7Alleenlezen(wat){ return mtDialog.alert({title:wat,message:'Met jouw rol kun je dit alleen bekijken. Vraag iemand met schrijfrechten om het aan te passen.'}); }
+
+// K-7: een inkoopregel verwijderen = tombstone in mt_voorraad_weg (synct mee, met de hele regel erin) + weghalen uit mt_voorraad.
+// Zo kan een andere pc hem niet terugzetten, en is hij overal terug te halen ("Terugzetten" onder de tabel).
+const VRD_WEG='mt_voorraad_weg';
+// Identiteit van een regel: de id; oude regels zonder id op een reeks velden (niet alleen project|omschrijving|ts, die botsen
+// bij twee gelijke omschrijvingen zonder ts). Identieke dubbelen blijven onderscheiden via een '#'-suffix op de tombstone.
+function _vrdSleutel(x){ return (x&&x.id!=null&&x.id!=='')?'id:'+x.id:'p:'+[x&&x.project,x&&x.omschrijving,Number(x&&x.ts)||0,x&&x.datum,x&&x.aantal,x&&x.stukprijs,x&&x.leverancier].join('|'); }
+function _vrdWegLees(){ try{ const a=JSON.parse(localStorage.getItem(VRD_WEG)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function _vrdLees(){ try{ const a=JSON.parse(localStorage.getItem('mt_voorraad')||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+async function voorraadRegelVerwijder(code,omschrijving,ts,sleutel){
+  if(!_k7Mag()){ await _k7Alleenlezen('Inkoopregel verwijderen'); return; }
+  const pastS=x=>x&&x.project===code&&!!sleutel&&_vrdSleutel(x)===sleutel, pastO=x=>x&&x.project===code&&x.omschrijving===omschrijving&&(Number(x.ts)||0)===(Number(ts)||0);
+  const vind=l=>l.find(pastS)||l.find(pastO);   // eerst de exacte identiteit, anders de oude vergelijking
+  if(!vind(_vrdLees())) return;
+  const ja=await mtDialog.confirm({title:'Inkoopregel verwijderen?',message:'De regel "'+omschrijving+'" verdwijnt uit de materiaalinkoop van dit project, ook op andere apparaten. Je kunt hem hieronder weer terugzetten.',okLabel:'Verwijderen',danger:true});
+  if(!ja||!_k7Mag()) return;
+  const lijst=_vrdLees(), item=vind(lijst);       // opnieuw lezen: er kan intussen iets gewijzigd zijn
+  if(!item) return;
+  const weg=_vrdWegLees(), basis=_vrdSleutel(item), dubbel=lijst.filter(x=>x!==item&&_vrdSleutel(x)===basis).length>0;
+  // Identieke dubbelen: alleen DEZE regel gaat weg en krijgt een eigen tombstone (suffix), zodat Terugzetten precies hem terugbrengt.
+  const s=dubbel?basis+'#'+Date.now().toString(36)+Math.random().toString(36).slice(2,6):basis, i=weg.findIndex(w=>w&&w.sleutel===s);
+  const rec=_spStempel({sleutel:s,project:code,weg:true,regel:item,_vervallen:{tijd:new Date().toISOString(),door:_spWie()}},i>=0?weg[i]:null);
+  if(i>=0) weg[i]=rec; else weg.push(rec);
+  localStorage.setItem(VRD_WEG,JSON.stringify(weg));    // eerst de tombstone, dan pas de regel weg
+  localStorage.setItem('mt_voorraad',JSON.stringify(lijst.filter(x=>dubbel?x!==item:(x!==item&&_vrdSleutel(x)!==s))));
+  if(huidigProject) renderProjectDetail(huidigProject);
+}
+async function voorraadRegelTerug(code,sleutel){
+  if(!_k7Mag()){ await _k7Alleenlezen('Inkoopregel terugzetten'); return; }
+  const weg=_vrdWegLees(), i=weg.findIndex(w=>w&&w.sleutel===sleutel&&w.weg);
+  if(i<0) return;
+  const regel=weg[i].regel, lijst=_vrdLees();
+  if(regel&&(sleutel.includes('#')||!lijst.some(x=>_vrdSleutel(x)===sleutel))) lijst.push(regel);
+  weg[i]=_spStempel(Object.assign({},weg[i],{weg:false,_hersteld:{tijd:new Date().toISOString(),door:_spWie()}}),weg[i]);
+  localStorage.setItem('mt_voorraad',JSON.stringify(lijst));
+  localStorage.setItem(VRD_WEG,JSON.stringify(weg));
+  if(huidigProject) renderProjectDetail(huidigProject);
+}
+// "Verwijderd (n)" onder de materiaalinkoop van een project, met Terugzetten per regel (DOM, geen HTML-tekst).
+function voorraadWegTeken(code,cid){
+  const el=document.getElementById('vrd-weg-'+cid); if(!el) return;
+  el.textContent='';
+  const rijen=_vrdWegLees().filter(w=>w&&w.weg&&w.project===code&&w.regel);
+  if(!rijen.length) return;
+  el.style.cssText='margin-top:6px;font-size:12px;color:var(--text-dim)';
+  el.appendChild(document.createTextNode('Verwijderd ('+rijen.length+'):'));
+  rijen.forEach(w=>{
+    const d=document.createElement('div'); d.style.cssText='display:flex;gap:8px;align-items:center;padding:2px 0';
+    const t=document.createElement('span'); t.textContent=(w.regel.omschrijving||'(zonder omschrijving)')+(w.regel.leverancier?' · '+w.regel.leverancier:'')+' · € '+((Number(w.regel.aantal)||1)*(Number(w.regel.stukprijs)||0)).toFixed(2)+(w._vervallen&&w._vervallen.door?' · verwijderd door '+w._vervallen.door:'');
+    const b=document.createElement('button'); b.type='button'; b.className='btn btn-xs btn-secondary'; b.textContent='Terugzetten';
+    b.addEventListener('click',()=>voorraadRegelTerug(code,w.sleutel));
+    d.append(t,b); el.appendChild(d);
+  });
+}
+// Na het samenvoegen van de tombstones: een regel die een oude kopie elders terugzette, weer weghalen.
+function _vrdWegToepassen(){
+  try{
+    const stoned=new Set(_vrdWegLees().filter(w=>w&&w.weg&&w.sleutel).map(w=>w.sleutel));
+    if(!stoned.size) return;
+    const lijst=_vrdLees(), over=lijst.filter(x=>!stoned.has(_vrdSleutel(x)));
+    if(over.length!==lijst.length){ localStorage.setItem('mt_voorraad',JSON.stringify(over)); if(huidigProject&&document.getElementById('vrd-weg-'+String(huidigProject.code).replace(/[^A-Za-z0-9]/g,''))) renderProjectDetail(huidigProject); }
+  }catch(e){ console.warn('verwijderde inkoopregels toepassen mislukt:',e); }
+}
+window._k7VoorraadWegNa=_vrdWegToepassen;
+// Eenmalige melding als bij het samenvoegen een lokale keuze naast een afwijkende SharePoint-keuze stond.
+const _k7Codes=new Set(); let _k7MeldT=null;
+window._k7KeuzeVerlies=function(code){
+  _k7Codes.add(code); clearTimeout(_k7MeldT);
+  _k7MeldT=setTimeout(()=>{ const n=_k7Codes.size; _k7Codes.clear();
+    const t='Op deze pc stond voor '+n+' project'+(n===1?'':'en')+' een andere offertekeuze dan op SharePoint. SharePoint is aangehouden; jouw eigen keuze is bewaard bij "Ongedaan maken" onder Nacalculatie.';
+    try{ if(typeof planToast==='function') planToast(t); else console.warn(t); }catch(e){ console.warn(t); } },1500);
+};
 async function nacalcLaadOfferte(code,mbId){
   const el=document.getElementById('nacalc-offerte-'+code.replace(/-/g,''));
   if(!el||!mbId) return;
@@ -10282,6 +10384,7 @@ async function nacalcLaadOfferte(code,mbId){
       _nacalcOfferte[code]=null;
       el.innerHTML=`Alle ${est.length} offerte(s) bij dit contact afgewezen — “Maak factuur” maakt een concept-factuur met de nacalculatieregels.
         <button class="btn btn-xs btn-secondary" style="margin-left:6px" onclick="nacalcOfferteHerstel(${jsArg(code)})">↩ herstel</button>`;
+      _okOngedaanKnop(el,code);
       return;
     }
     const o=over.find(e=>String(e.id)===String(keuze.gekozen))||over[0];
@@ -10302,6 +10405,7 @@ async function nacalcLaadOfferte(code,mbId){
         <button class="btn btn-xs btn-danger" title="Deze offerte hoort NIET bij dit project — overslaan" onclick="nacalcOfferteAfwijzen(${jsArg(code)},${jsArg(o.id)})">✗ Klopt niet${over.length>1?' (toon volgende)':''}</button>
         ${(afgewezen.size||keuze.gekozen)?`<button class="btn btn-xs btn-secondary" onclick="nacalcOfferteHerstel(${jsArg(code)})">↩ herstel</button>`:''}
       </div>`;
+    _okOngedaanKnop(el,code);
   }catch(e){el.textContent='Offerte-check mislukt: '+e.message;}
 }
 function _nacalcHerlaadOfferte(code){
@@ -10310,12 +10414,14 @@ function _nacalcHerlaadOfferte(code){
   if(mbId) nacalcLaadOfferte(code,mbId);
 }
 function nacalcOfferteGoedkeuren(code,estId){
+  if(!_k7Mag()){ _k7Alleenlezen('Offerte kiezen'); return; }
   const all=offerteKeuze();const k=all[code]||{};k.gekozen=estId;
   k.afgewezen=(k.afgewezen||[]).filter(id=>String(id)!==String(estId));all[code]=k;offerteKeuzeSave(all);
   try{ if(window.track) track('nacalc','offerte_goedgekeurd',{detail:code}); }catch(e){}
   _nacalcHerlaadOfferte(code);
 }
 function nacalcOfferteAfwijzen(code,estId){
+  if(!_k7Mag()){ _k7Alleenlezen('Offerte afwijzen'); return; }
   const all=offerteKeuze();const k=all[code]||{};k.afgewezen=(k.afgewezen||[]);
   if(!k.afgewezen.map(String).includes(String(estId)))k.afgewezen.push(estId);
   if(String(k.gekozen)===String(estId))k.gekozen=null;all[code]=k;offerteKeuzeSave(all);
@@ -10323,8 +10429,27 @@ function nacalcOfferteAfwijzen(code,estId){
   _nacalcHerlaadOfferte(code);
 }
 function nacalcOfferteHerstel(code){
+  if(!_k7Mag()){ _k7Alleenlezen('Offertekeuze herstellen'); return; }
   const all=offerteKeuze();delete all[code];offerteKeuzeSave(all);
   try{ if(window.track) track('nacalc','offerte_herstel',{detail:code}); }catch(e){}
+  _nacalcHerlaadOfferte(code);
+}
+// Ongedaan maken: terug naar de vorige stand van de keuze voor dit project (de huidige stand wordt zelf de nieuwe "vorige").
+function _okOngedaanKnop(el,code){
+  try{ const raw=_okRuw()[code]; if(!(raw&&Array.isArray(raw._eerder)&&raw._eerder.length)) return;
+    const b=document.createElement('button'); b.type='button'; b.className='btn btn-xs btn-secondary'; b.style.marginLeft='6px';
+    b.textContent='↶ Ongedaan maken'; b.title='Terug naar de vorige keuze voor dit project'; b.addEventListener('click',()=>nacalcOfferteOngedaan(code));
+    el.appendChild(b);
+  }catch(e){}
+}
+function nacalcOfferteOngedaan(code){
+  if(!_k7Mag()){ _k7Alleenlezen('Offertekeuze ongedaan maken'); return; }
+  const raw=_okRuw()[code], ee=raw&&Array.isArray(raw._eerder)?raw._eerder[0]:null;
+  if(!ee) return;
+  const all=offerteKeuze();
+  if(ee._leeg) delete all[code]; else { const r=Object.assign({},ee); delete r._tijd; all[code]=r; }
+  offerteKeuzeSave(all);
+  try{ if(window.track) track('nacalc','offerte_ongedaan',{detail:code}); }catch(e){}
   _nacalcHerlaadOfferte(code);
 }
 async function nacalcMaakFactuur(code,opts){
@@ -13494,7 +13619,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst_v2','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken_v2','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_project_afhank','mt_project_sjablonen','mt_uurtarieven','mt_planinrichting']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst_v2','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken_v2','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_project_afhank','mt_project_sjablonen','mt_uurtarieven','mt_planinrichting','mt_voorraad_weg']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -13534,6 +13659,45 @@ const _SP = Object.assign(window.MTCore.makeSP({
     mt_uurtarieven(lokaal, spData) { return MTPlanning.tarievenSamen(lokaal, spData); },
     // Planning-inrichting (P3b): per record (station, fase of activiteit) per veld de nieuwste stempel; verwijderen is een tombstone en terugzetten kan.
     mt_planinrichting(lokaal, spData) { return MTPlanning.inrichtSamen(lokaal, spData); },
+    // K-7: verwijderde inkoopregels (tombstones met de hele regel, per sleutel de nieuwste stempel; terugzetten = weg:false met
+    // nieuwere stempel). Daarna de lijst mt_voorraad opschonen: een oude kopie elders kan een verwijderde regel teruggezet hebben.
+    mt_voorraad_weg(lokaal, spData) {
+      const uit = _spSamenPerSleutel(lokaal, spData, x => x && x.sleutel, _spTijd);
+      setTimeout(() => { try { if (typeof window._k7VoorraadWegNa === 'function') window._k7VoorraadWegNa(); } catch(e) {} }, 0);
+      return uit;
+    },
+    // K-7: offertekeuze per project ({gekozen, afgewezen, _gewijzigd, _door, _eerder, _weg}). Nieuwste stempel wint per project;
+    // beide ongestempeld (data van voor K-7) = SharePoint, zoals voorheen. De verliezer gaat nooit weg: hij komt in _eerder
+    // (de "Ongedaan maken" onder Nacalculatie). Een lokale keuze die zo naast een afwijkende SharePoint-keuze viel, wordt gemeld.
+    mt_offerte_keuze(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+      const L = isObj(lees(lokaal)) ? lees(lokaal) : {}, R = isObj(lees(spData)) ? lees(spData) : {};
+      const META = new Set(['_gewijzigd', '_door', '_eerder']);
+      const kaal = k => { const r = {}; Object.keys(k).sort().forEach(x => { if (!META.has(x)) r[x] = k[x]; }); return r; };
+      const uit = {};
+      for (const c of new Set([...Object.keys(R), ...Object.keys(L)])) {
+        const l = L[c], r = R[c];
+        if (!isObj(l)) { if (isObj(r)) uit[c] = r; continue; }
+        if (!isObj(r)) { uit[c] = l; continue; }
+        const tl = _spTijd(l), tr = _spTijd(r), gelijk = JSON.stringify(kaal(l)) === JSON.stringify(kaal(r));
+        // Gelijke stempel (> 0) maar andere inhoud: een vaste tiebreaker (inhoud), zodat elk apparaat dezelfde kant kiest en het convergeert.
+        const lokaalWint = (tl === tr && tl > 0 && !gelijk) ? ((!!l._weg !== !!r._weg) ? !!l._weg : JSON.stringify(kaal(l)) >= JSON.stringify(kaal(r))) : _spLokaalWint(tl, tr);
+        const win = lokaalWint ? l : r, verlies = lokaalWint ? r : l;
+        // Historie van BEIDE kanten samenvoegen (dedupe op inhoud, nieuwste eerst); de verliezer zelf komt erbij.
+        const sleutel = e => JSON.stringify(Object.assign({}, e, { _tijd: 0, _bron: 0 }));
+        const vl = (gelijk || verlies._weg) ? null : Object.assign(kaal(verlies), { _tijd: new Date().toISOString(), _bron: lokaalWint ? 'sharepoint' : 'deze pc' });
+        const eerder = [], gezien = new Set();
+        [...(Array.isArray(win._eerder) ? win._eerder : []), ...(Array.isArray(verlies._eerder) ? verlies._eerder : []), ...(vl ? [vl] : [])].forEach(e => {   // bestaande vermeldingen eerst: een herhaalde merge ververst hun _tijd niet
+          if (!e || typeof e !== 'object') return; const s = sleutel(e); if (gezien.has(s)) return; gezien.add(s); eerder.push(e);
+        });
+        eerder.sort((a, b) => String(b._tijd || '').localeCompare(String(a._tijd || '')));
+        uit[c] = Object.assign({}, win, { _eerder: eerder.slice(0, 8) });
+        if (gelijk && !eerder.length) delete uit[c]._eerder;
+        if (vl && !lokaalWint && tl === 0 && tr === 0) { try { if (typeof window._k7KeuzeVerlies === 'function') window._k7KeuzeVerlies(c); } catch(e) {} }
+      }
+      return uit;
+    },
     mt_project_sjablonen(lokaal, spData) { return _spSamenPerSleutel(lokaal, spData, x => x && x.id, _spTijd); },
     // Bestellijst (brok L2): per regel (id; oude regels zonder id → inhoud-id) wint de
     // stand met de nieuwste `_gewijzigd`. Van de lijst halen is een tombstone
@@ -15089,6 +15253,7 @@ window.initStorage = async function() {
   try{ setTimeout(takenOudVangnetMelding,1500); setTimeout(blOudVangnetMelding,2500); }catch(e){}
   _SP.ready = true;   // hydrate klaar → auto-sync vanaf hier toegestaan (behalve blockedKeys)
   _ptTimeout = false; _ptHertekenen();   // een openstaand projectdetail toonde "Taken laden…": nu opnieuw tekenen
+  try { _vrdWegToepassen(); } catch(e) {}   // K-7: een verwijderde inkoopregel die mt_voorraad (SharePoint wint) teruggaf, weer opschonen
   _blTimeout = false; try{ _blNaWijziging(); }catch(e){ }
   try{ setTimeout(takenLokaalControle,2500); setTimeout(blLokaalControle,3000); setTimeout(tgOnafgerondMelding,3500); setTimeout(uurtariefConflictMelding,4000); }catch(e){}
   try{ renderUurtarieven(); }catch(e){}   // de gesynchroniseerde tarieven (en een eventueel verschil tussen browsers) meteen tonen
@@ -17127,7 +17292,7 @@ function ctlWeesData(){
     if(!c){ losse.push({key:k,titel:o.titel||'',datum:String(o._gewijzigd||'').slice(0,10),status:(o.meta&&o.meta.status)||''}); return; }
     tel(c,'calculatie',{titel:o.titel,datum:o._gewijzigd});
   });
-  Object.entries(_ctlJson('mt_offerte_keuze',{})||{}).forEach(([c,k])=>{ if(k&&!k._verplaatst_naar) tel(c,'offertekeuze'); });
+  Object.entries(_ctlJson('mt_offerte_keuze',{})||{}).forEach(([c,k])=>{ if(k&&!k._verplaatst_naar&&!k._weg) tel(c,'offertekeuze'); });
   (_ctlJson('mt_voorraad',[])||[]).forEach(x=>x&&tel(x.project,'voorraad',{titel:x.omschrijving,datum:x.datum}));
   (_ctlJson('mt_history',[])||[]).forEach(x=>x&&tel(x.project,'facturen',{titel:x.contact,datum:x.date}));
   // alleen tellen (niet automatisch te verplaatsen; handmatig in het project)
@@ -17169,7 +17334,7 @@ function ctlKoppelPlan(van){
   const mail=(Array.isArray(links[van])?links[van]:[]).filter(x=>x&&!x.ontkoppeld).map(x=>JSON.parse(JSON.stringify(x)));
   const calc=Object.keys(off).filter(k=>{ const o=off[k]; return o&&(o.project_code===van||(k===van&&!o.project_code)); });
   const rij=key=>(_ctlJson(key,[])||[]).filter(x=>x&&x.project===van).map(x=>x.id);
-  const ok=!!(keuze[van]&&!keuze[van]._verplaatst_naar);
+  const ok=!!(keuze[van]&&!keuze[van]._verplaatst_naar&&!keuze[van]._weg);   // een verwijderde keuze (tombstone) telt niet mee
   const voorraad=rij('mt_voorraad'), facturen=rij('mt_history');
   return {mail,calc,voorraad,facturen,keuze:ok,tel:{mail:mail.length,calculatie:calc.length,offertekeuze:ok?1:0,voorraad:voorraad.length,facturen:facturen.length}};
 }
@@ -17228,10 +17393,10 @@ async function ctlKoppelUitvoeren(van,naar,verwacht,opts){
     const ck=(plan.calc||[]).filter(k=>CALC.offertes[k]&&(CALC.offertes[k].project_code===van||(k===van&&!CALC.offertes[k].project_code)));
     if(ck.length) calcProjectVerplaats(van,naar,{keys:ck,marker:vid});
     if(plan.keuze){
-      const all=_ctlJson('mt_offerte_keuze',{})||{}, k=all[van]||{}, d=all[naar]||{};
-      if(!k._verplaatst_naar){
+      const all=_ctlJson('mt_offerte_keuze',{})||{}, k=(all[van]&&!all[van]._weg)?all[van]:{}, d=(all[naar]&&!all[naar]._weg)?all[naar]:{};
+      if(!k._verplaatst_naar&&all[van]&&!all[van]._weg){
         const geschreven={gekozen:d.gekozen!=null?d.gekozen:(k.gekozen==null?null:k.gekozen),afgewezen:[...new Set([...(d.afgewezen||[]),...(k.afgewezen||[])].map(String))]};
-        all[van]=Object.assign({},k,{_verplaatst_naar:naar,_verhuis:{id:vid,voor:{van:JSON.parse(JSON.stringify(k)),naar:all[naar]?JSON.parse(JSON.stringify(all[naar])):null},geschreven}});
+        all[van]=Object.assign({},k,{_verplaatst_naar:naar,_verhuis:{id:vid,voor:{van:JSON.parse(JSON.stringify(k)),naar:(all[naar]&&!all[naar]._weg)?JSON.parse(JSON.stringify(all[naar])):null},geschreven}});
         all[naar]=geschreven;
         if(typeof offerteKeuzeSave==='function') offerteKeuzeSave(all); else localStorage.setItem('mt_offerte_keuze',JSON.stringify(all));
       }
@@ -17289,7 +17454,7 @@ async function ctlKoppelTerug(van){
   if(window.calcProjectTerug&&window.CALC&&CALC.loaded) terug.calculatie=calcProjectTerug(vid,naar).length;
   const all=_ctlJson('mt_offerte_keuze',{})||{}, k=all[van];
   if(k&&k._verhuis&&k._verhuis.id===vid){
-    if(JSON.stringify(all[naar]||null)===JSON.stringify(k._verhuis.geschreven)){
+    if(JSON.stringify(_okKaal(all[naar]||null))===JSON.stringify(_okKaal(k._verhuis.geschreven))){   // zonder stempel/historie: offerteKeuzeSave voegt die toe
       if(k._verhuis.voor.naar) all[naar]=k._verhuis.voor.naar; else delete all[naar];   // door de verhuizing aangemaakt → weer zoals ervoor
       all[van]=k._verhuis.voor.van; terug.offertekeuze=1;
       if(typeof offerteKeuzeSave==='function') offerteKeuzeSave(all); else localStorage.setItem('mt_offerte_keuze',JSON.stringify(all));
