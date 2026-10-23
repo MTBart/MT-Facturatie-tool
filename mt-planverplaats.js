@@ -386,7 +386,9 @@
       const data = st.samen && typeof st.samen === 'object' ? st.samen : res.data, taken = data && Array.isArray(data[code]) ? P.takenActief(data[code]) : res.taken;
       if (!komtOvereen(taken, id, bedoeld)) return { ok: true, opgeslagen: true, tegelijk: tegelijkTekst(taken, id, bedoeld || {}, o), data, taken };   // iemand wijzigde tegelijk en won: eerlijk melden en de lokale kopie op de samengevoegde stand zetten
       const na = taken.find(x => x.id === id) || {}, velden = ['toegewezen', 'start', 'eind'];
-      return { ok: true, opgeslagen: true, behouden: true, melding: plan.melding || '', data, taken,
+      let melding = plan.melding || '';   // C2: een eerlijke melding als de taak nu eerder begint dan haar voorgangers toelaten (de datum is wel gewijzigd, zoals bij elke sleepactie)
+      try { const c = o.conflicten ? (o.conflicten(taken) || []).filter(x => String(x.naar) === String(id)) : []; if (c.length) melding = (melding ? melding + ' · ' : '') + c.map(x => '"' + (x.naarNaam || plan.taak.naam) + '" begint nu op ' + dagMnd(x.start) + ', maar kan pas vanaf ' + dagMnd(x.vroegst) + ' (na "' + x.vanNaam + '")').join('; '); } catch (e) {}
+      return { ok: true, opgeslagen: true, behouden: true, melding, data, taken,
         wijziging: { soort: 'taak', id, code, naam: plan.taak.naam, voor: plan.voor, na: { persoon: plan.lijst[0] || '', datum: plan.start || na.start || '', eind: plan.eind || na.eind || '', start: '' }, stempels: stempelsVan(na, velden), personenNa: personenStand(na),
           opvolgers: verschoven.map(x => Object.assign({ stempels: stempelsVan(taken.find(y => y.id === x.id), ['start', 'eind']) }, x)) } };
     }

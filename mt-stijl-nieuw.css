@@ -484,6 +484,34 @@ html[data-stijl="nieuw"] .cn-as-kw .cn-wk.mnd{border-left-color:var(--line)}
   html[data-stijl="nieuw"] .cn-zoom{flex-wrap:wrap}
   html[data-stijl="nieuw"] .cn-agenda-knop{height:32px}
 }
+/* ── C2: stapelen, belasting per persoon, randen slepen in de uurweergave ───── */
+html[data-stijl="nieuw"] .cn-heel{display:flex;flex-direction:column;gap:4px;padding:2px 0 4px;border-bottom:1px dashed var(--line)}
+html[data-stijl="nieuw"] .cn-heel-kop{font:500 10px/12px var(--sans);color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+html[data-stijl="nieuw"] .cn-slot{gap:4px}
+html[data-stijl="nieuw"] .cn-meer{align-self:flex-start;height:22px;padding:0 8px;border:1px solid var(--line-strong);border-radius:11px;background:var(--surface);color:var(--ink-2);font:500 11px/16px var(--sans);cursor:pointer}
+html[data-stijl="nieuw"] .cn-meer:hover{background:var(--surface-sunken);color:var(--ink)}
+html[data-stijl="nieuw"] .cn-meer.chip{position:absolute;z-index:2}
+html[data-stijl="nieuw"] .cn-meer:focus-visible,html[data-stijl="nieuw"] .cn-bbadge:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}
+html[data-stijl="nieuw"] .cn-alldag .cn-blok{flex-direction:row;align-items:center;gap:8px;min-height:0;height:100%;padding:0 8px 0 10px}
+html[data-stijl="nieuw"] .cn-alldag .cn-blok-kop{flex:1 1 auto;min-width:0}
+html[data-stijl="nieuw"] .cn-alldag .cn-blok-sub{flex:0 1 auto;max-width:45%}
+html[data-stijl="nieuw"] .cn-alldag .cn-blok-titel{font-size:12px}
+html[data-stijl="nieuw"] .cn-uren-raster>.cn-alldag{z-index:1}
+html[data-stijl="nieuw"] .cn-greep.d{width:9px;cursor:ew-resize;z-index:3}
+html[data-stijl="nieuw"] .cn-greep-tip{position:absolute;left:0;top:-22px;padding:0 6px;border-radius:3px;background:var(--primary-text);color:#fff;font:500 11px/18px var(--mono);white-space:nowrap;pointer-events:none;z-index:7}
+html[data-stijl="nieuw"] .cn-bbadge{align-self:flex-start;height:22px;padding:0 8px;border:1px solid var(--line);border-radius:11px;background:var(--surface-sunken);color:var(--ink-2);font:600 11px/16px var(--mono);cursor:pointer;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+html[data-stijl="nieuw"] .cn-bbadge.nul{color:var(--ink)}
+html[data-stijl="nieuw"] .cn-bbadge.teveel{border-color:var(--error);background:color-mix(in srgb,var(--error) 9%,var(--surface));color:var(--error)}
+html[data-stijl="nieuw"] .cn-bpop{position:fixed;z-index:300;width:min(340px,calc(100vw - 16px));padding:12px 14px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-pop);font:400 12px/16px var(--sans);display:flex;flex-direction:column;gap:6px}
+html[data-stijl="nieuw"] .cn-bpop[hidden]{display:none}
+html[data-stijl="nieuw"] .cn-bpop b{font:600 13px/18px var(--sans)}
+html[data-stijl="nieuw"] .cn-bpop-reg{display:flex;justify-content:space-between;gap:12px;font-weight:600}
+html[data-stijl="nieuw"] .cn-bpop-reg.tot{padding-top:6px;border-top:1px solid var(--line)}
+html[data-stijl="nieuw"] .cn-bpop-reg.tot.teveel{color:var(--error)}
+html[data-stijl="nieuw"] .cn-bpop-sub{color:var(--ink-2);font-size:11px}
+html[data-stijl="nieuw"] .cn-bpop-lijst{display:flex;flex-direction:column;gap:2px;max-height:200px;overflow:auto}
+html[data-stijl="nieuw"] .cn-bpop-rij{display:flex;justify-content:space-between;gap:12px}
+html[data-stijl="nieuw"] .cn-bpop-naam{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* ── brok 9: Admin ▸ Team en werktijden (mt-werktijden.js; vervangt in de nieuwe stijl de kaart "Werkuren per week") ───── */
 html[data-stijl="nieuw"] #adm-werkuren-kaart{display:none}
 html[data-stijl="nieuw"] .wt-root:not([hidden]){display:block;margin-bottom:20px}
