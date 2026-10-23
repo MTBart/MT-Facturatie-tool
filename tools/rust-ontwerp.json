@@ -1,0 +1,347 @@
+{
+ "bron": "design system B3 (tokens.json); alleen wat bouw-rust-css.js nodig heeft",
+ "color": {
+  "tokens": [
+   {
+    "name": "canvas",
+    "value": {
+     "light": "#f6f3ed",
+     "dark": "#121512"
+    }
+   },
+   {
+    "name": "surface",
+    "value": {
+     "light": "#ffffff",
+     "dark": "#191d1a"
+    }
+   },
+   {
+    "name": "surface-2",
+    "value": {
+     "light": "#f1ede5",
+     "dark": "#202521"
+    }
+   },
+   {
+    "name": "sidebar",
+    "value": {
+     "light": "#ede8de",
+     "dark": "#0e110f"
+    }
+   },
+   {
+    "name": "sidebar-hover",
+    "value": {
+     "light": "#e4ded2",
+     "dark": "#181c19"
+    }
+   },
+   {
+    "name": "sidebar-active",
+    "value": {
+     "light": "#ffffff",
+     "dark": "#1f2620"
+    }
+   },
+   {
+    "name": "line",
+    "value": {
+     "light": "#dfd8cb",
+     "dark": "#2c322d"
+    }
+   },
+   {
+    "name": "line-soft",
+    "value": {
+     "light": "#ece7de",
+     "dark": "#232824"
+    }
+   },
+   {
+    "name": "line-strong",
+    "value": {
+     "light": "#9a917f",
+     "dark": "#5a645b"
+    }
+   },
+   {
+    "name": "ink",
+    "value": {
+     "light": "#1b211e",
+     "dark": "#ecede6"
+    }
+   },
+   {
+    "name": "ink-2",
+    "value": {
+     "light": "#5e655f",
+     "dark": "#afb3aa"
+    }
+   },
+   {
+    "name": "ink-3",
+    "value": {
+     "light": "#8c918a",
+     "dark": "#7d8279"
+    }
+   },
+   {
+    "name": "primary",
+    "value": {
+     "light": "#17643f",
+     "dark": "#5fc08a"
+    }
+   },
+   {
+    "name": "on-primary",
+    "value": {
+     "light": "#ffffff",
+     "dark": "#0a1c12"
+    }
+   },
+   {
+    "name": "primary-soft",
+    "value": {
+     "light": "#ddefe3",
+     "dark": "#183223"
+    }
+   },
+   {
+    "name": "primary-text",
+    "value": {
+     "light": "#17643f",
+     "dark": "#7fd3a2"
+    }
+   },
+   {
+    "name": "brass",
+    "value": {
+     "light": "#d19a1f",
+     "dark": "#e6b547"
+    }
+   },
+   {
+    "name": "brass-soft",
+    "value": {
+     "light": "#fbefd2",
+     "dark": "#33290f"
+    }
+   },
+   {
+    "name": "brass-ink",
+    "value": {
+     "light": "#6b4c05",
+     "dark": "#f2d58c"
+    }
+   },
+   {
+    "name": "ok",
+    "value": {
+     "light": "#1a6e3b",
+     "dark": "#63c08a"
+    }
+   },
+   {
+    "name": "ok-bg",
+    "value": {
+     "light": "#e3f3e8",
+     "dark": "#16301f"
+    }
+   },
+   {
+    "name": "warn",
+    "value": {
+     "light": "#8f5508",
+     "dark": "#e8a84a"
+    }
+   },
+   {
+    "name": "warn-bg",
+    "value": {
+     "light": "#fcefd9",
+     "dark": "#3a2b12"
+    }
+   },
+   {
+    "name": "err",
+    "value": {
+     "light": "#c4322a",
+     "dark": "#f07a70"
+    }
+   },
+   {
+    "name": "err-bg",
+    "value": {
+     "light": "#fce6e4",
+     "dark": "#3e1c1a"
+    }
+   },
+   {
+    "name": "info",
+    "value": {
+     "light": "#3e5c76",
+     "dark": "#9db7cc"
+    }
+   },
+   {
+    "name": "info-bg",
+    "value": {
+     "light": "#e6edf3",
+     "dark": "#1c2630"
+    }
+   },
+   {
+    "name": "focus",
+    "value": {
+     "light": "#17643f",
+     "dark": "#7fd3a2"
+    }
+   },
+   {
+    "name": "project-1",
+    "value": {
+     "light": "#2f6fb0",
+     "dark": "#7faee0"
+    }
+   },
+   {
+    "name": "project-2",
+    "value": {
+     "light": "#7a3e8e",
+     "dark": "#c08dd2"
+    }
+   },
+   {
+    "name": "project-3",
+    "value": {
+     "light": "#0f7c80",
+     "dark": "#5cc2c5"
+    }
+   },
+   {
+    "name": "project-4",
+    "value": {
+     "light": "#b04a7a",
+     "dark": "#e08bb3"
+    }
+   },
+   {
+    "name": "project-5",
+    "value": {
+     "light": "#4b55a8",
+     "dark": "#99a1e6"
+    }
+   },
+   {
+    "name": "project-6",
+    "value": {
+     "light": "#8a5a3c",
+     "dark": "#cfa27f"
+    }
+   }
+  ]
+ },
+ "type": {
+  "families": {
+   "ui": "\"Geist\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+   "head": "\"Bricolage Grotesque\", \"Geist\", system-ui, sans-serif",
+   "mono": "\"Geist Mono\", ui-monospace, \"SF Mono\", Menlo, monospace"
+  }
+ },
+ "spacing": {
+  "tokens": [
+   {
+    "name": "space-1",
+    "value": "4px"
+   },
+   {
+    "name": "space-2",
+    "value": "8px"
+   },
+   {
+    "name": "space-3",
+    "value": "12px"
+   },
+   {
+    "name": "space-4",
+    "value": "16px"
+   },
+   {
+    "name": "space-6",
+    "value": "24px"
+   },
+   {
+    "name": "space-8",
+    "value": "32px"
+   },
+   {
+    "name": "space-12",
+    "value": "48px"
+   }
+  ]
+ },
+ "radius": {
+  "tokens": [
+   {
+    "name": "radius-cell",
+    "value": "2px"
+   },
+   {
+    "name": "radius-ctl",
+    "value": "4px"
+   },
+   {
+    "name": "radius-panel",
+    "value": "8px"
+   },
+   {
+    "name": "radius-round",
+    "value": "999px"
+   }
+  ]
+ },
+ "size": {
+  "tokens": [
+   {
+    "name": "control-h",
+    "value": "36px"
+   },
+   {
+    "name": "row-h",
+    "value": "42px"
+   },
+   {
+    "name": "touch",
+    "value": "44px"
+   },
+   {
+    "name": "sidebar-w",
+    "value": "240px"
+   },
+   {
+    "name": "rail-w",
+    "value": "68px"
+   },
+   {
+    "name": "icon-nav",
+    "value": "20px"
+   },
+   {
+    "name": "icon-act",
+    "value": "16px"
+   }
+  ]
+ },
+ "shadow": {
+  "tokens": [
+   {
+    "name": "shadow-pop",
+    "value": {
+     "light": "0 24px 60px rgba(40,34,20,0.20)",
+     "dark": "0 24px 60px rgba(0,0,0,0.60)"
+    }
+   }
+  ]
+ }
+}

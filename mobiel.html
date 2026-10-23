@@ -855,6 +855,7 @@ button.kb:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .pv-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.pv-form input{min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:8px;font:inherit}.pv-form .vol{grid-column:1/-1}
 </style>
 <link rel="stylesheet" href="mt-stijl-mobiel.css?v=2026-10-16c">
+<link rel="stylesheet" href="mt-rust.css?v=2026-10-23r1">
 </head>
 <body>
 
@@ -5038,10 +5039,10 @@ function _voRuimteRender() {
   const zonder = voorOpnamePhotos.filter(p => !(p.ruimte || '')).length;
   let h = _voRuimtes.map((r, ri) => {
     const act = (r === _voRuimteActief);
-    return `<button class="btn ${act ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px"
+    return `<button class="btn ${act ? 'btn-gold ui-gekozen' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px"
       data-ridx="${esc(ri)}" data-ract="${act ? 'rename' : 'kies'}">${escHtml(r)} (${esc(_voRuimteCount(r))})</button>`;
   }).join('');
-  if (zonder) h += `<button class="btn ${_voRuimteActief === '' ? 'btn-gold' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px" onclick="voRuimteKies('')">Zonder ruimte (${esc(zonder)})</button>`;
+  if (zonder) h += `<button class="btn ${_voRuimteActief === '' ? 'btn-gold ui-gekozen' : 'btn-secondary'}" style="min-height:38px;padding:6px 12px;font-size:13px" onclick="voRuimteKies('')">Zonder ruimte (${esc(zonder)})</button>`;
   tabs.innerHTML = h;
   if (sel) {
     sel.innerHTML = _voRuimtes.map(r => `<option value="${escHtml(r)}"${r === _voRuimteActief ? ' selected' : ''}>${escHtml(r)} (${esc(_voRuimteCount(r))} foto's)</option>`).join('')
@@ -5677,8 +5678,8 @@ function loadChecklist() {
 function setRapTypeButtons() {
   const bo = document.getElementById("rapTypeOpname");
   const bl = document.getElementById("rapTypeOplevering");
-  if (bo) bo.className = "btn " + (rapType === "opname" ? "btn-gold" : "btn-secondary");
-  if (bl) bl.className = "btn " + (rapType === "oplevering" ? "btn-gold" : "btn-secondary");
+  if (bo) bo.className = "btn " + (rapType === "opname" ? "btn-gold ui-gekozen" : "btn-secondary");
+  if (bl) bl.className = "btn " + (rapType === "oplevering" ? "btn-gold ui-gekozen" : "btn-secondary");
 }
 
 function kiesRapType(t) {
