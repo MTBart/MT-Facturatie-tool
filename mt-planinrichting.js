@@ -43,25 +43,44 @@
   const labelsVan = type => type === 'activiteit' ? model().activiteiten.map(a => [a.k, a.l]) : (type === 'station' ? model().stations : model().fases).map(x => [x.k, x.label]);
 
   // ── bewerken: één kern voor het beheer en het bord ──
-  // mut(records, aangeraakt) wijzigt de kopie en zet de id's van wat is geraakt in `aangeraakt`; geeft eventueel { fout } terug.
+  // mut(records) wijzigt de kopie en geeft eventueel { fout } of { noop } terug. Wat er veranderde wordt per record en per veld bijgehouden: Ongedaan maken zet alleen die velden terug, en alleen
+  // als ze nog zijn zoals deze actie ze achterliet; wat een ander intussen wijzigde (ook aan hetzelfde record) blijft staan.
+  const VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen', 'woorden'];
+  const gelijk = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
+  function verschil(voor, na) {
+    const vm = new Map(voor.map(r => [r.id, r])), nm = new Map(na.map(r => [r.id, r])), uit = [];
+    nm.forEach((r, id) => { const v = vm.get(id); if (!v) uit.push({ id, soort: 'nieuw', na: kopie(r) }); else { const velden = VELDEN.filter(f => !gelijk(v[f], r[f])); if (velden.length) uit.push({ id, soort: 'wijzig', velden: velden.map(f => ({ f, voor: kopie(v[f] === undefined ? null : v[f]), na: kopie(r[f] === undefined ? null : r[f]) })) }); } });
+    vm.forEach((v, id) => { if (!nm.has(id)) uit.push({ id, soort: 'weg', voor: kopie(v) }); });
+    return uit;
+  }
+  function ongedaanRecords(nu, diffs) {
+    const uit = kopie(nu), idx = id => uit.findIndex(r => r.id === id);
+    diffs.forEach(d => {
+      const i = idx(d.id);
+      if (d.soort === 'nieuw') { if (i >= 0 && VELDEN.every(f => gelijk(uit[i][f], d.na[f]))) uit.splice(i, 1); }   // alleen weg als niemand het sindsdien wijzigde
+      else if (d.soort === 'weg') { if (i < 0) uit.push(kopie(d.voor)); }
+      else if (i >= 0) d.velden.forEach(x => { if (gelijk(uit[i][x.f], x.na)) { if (x.voor === null) delete uit[i][x.f]; else uit[i][x.f] = kopie(x.voor); } });
+    });
+    return uit;
+  }
+  PI._verschil = verschil; PI._ongedaanRecords = ongedaanRecords;
   async function bewerk(mut, tekst, extraUndo) {
     if (!mag()) { toast('Alleen de beheerder richt de planning in.', null, null, true); return { ok: false }; }
-    const voor = D.records(), na = kopie(voor), aangeraakt = new Set(), r0 = mut(na, aangeraakt);
+    const voor = D.records(), na = kopie(voor), r0 = mut(na, new Set());   // de tweede parameter is een oude hulp: de wijzigingen worden uit het verschil bepaald
     if (r0 && r0.noop) return { ok: true, noop: true };
     if (r0 && r0.fout) { toast(r0.fout, null, null, true); return { ok: false, reden: r0.fout }; }
+    const diffs = verschil(voor, na);
+    if (!diffs.length) return { ok: true, noop: true };
     const res = await D.opslaan(na);
     if (!res.ok) { toast(res.reden || 'Niet opgeslagen.', null, null, true); return res; }
-    const ids = [...aangeraakt], vorige = new Map(voor.map(r => [r.id, r]));
-    const undo = async () => {   // alleen de records terugzetten die deze actie raakte; wat een ander intussen wijzigde blijft staan
-      const nu = D.records(), uit = nu.filter(r => !ids.includes(r.id)).concat(ids.map(id => vorige.get(id)).filter(Boolean).map(kopie));
-      const o = await D.opslaan(uit); toast(o.ok ? 'Teruggezet.' : (o.reden || 'Niet teruggezet.'), null, null, !o.ok);
+    const undo = async () => {
+      const o = await D.opslaan(ongedaanRecords(D.records(), diffs)); toast(o.ok ? 'Teruggezet.' : (o.reden || 'Niet teruggezet.'), null, null, !o.ok);
       if (o.ok && extraUndo) { try { await extraUndo(); } catch (e) { toast('Niet alles kon worden teruggezet.', null, null, true); } }   // bij verwijderen met verplaatsen: de taken gaan ook terug
       klaar();
     };
     toast(tekst + (res.lokaal ? ' (nog niet bevestigd door SharePoint)' : '') + '.', undo);
     klaar(); return { ok: true, ongedaan: undo };
-  }
-  function klaar() { try { if (D.naWijziging) D.naWijziging(); } catch (e) {} }
+  }  function klaar() { try { if (D.naWijziging) D.naWijziging(); } catch (e) {} }
   const hernummer = (recs, type) => lijstVan(recs, type).forEach((r, i) => { if (Number(r.volgorde) !== i + 1) r.volgorde = i + 1; });
   const zoek = (recs, type, k) => recs.find(r => r.type === type && String(r.k) === String(k) && !r._vervallen);
   PI.hernoem = async function (type, k, label) {
@@ -77,10 +96,11 @@
   PI.voegToe = async function (type, label, extra) {
     const fout = D.planning.inrichtLabelFout(type, label, '', model()); if (fout) { toast(fout, null, null, true); return { ok: false, reden: fout }; }
     const l = String(label).trim();
+    if (type === 'activiteit' && !(extra && (extra.soort === 'kantoor' || extra.soort === 'wp'))) { const f = 'Kies eerst of dit kantooruren of werkplaatsuren zijn.'; toast(f, null, null, true); return { ok: false, reden: f }; }   // een nieuwe activiteit krijgt verplicht een soort
     return bewerk((recs, ger) => {
       const k = D.planning.inrichtNieuwK(type, l, recs), id = type + ':' + k, rec = { id, type, k, label: l, volgorde: lijstVan(recs, type).length + 1 };
       if (type === 'fase') rec.namen = [];
-      if (type === 'activiteit') { const e = extra || {}; rec.soort = e.soort === 'kantoor' ? 'kantoor' : 'wp'; rec.station = e.station || ''; rec.uursoort = e.uursoort || ''; }
+      if (type === 'activiteit') { const e = extra || {}; rec.soort = e.soort; rec.station = e.station || ''; rec.uursoort = e.uursoort || ''; if (e.woorden) rec.woorden = String(e.woorden); }
       recs.push(rec); ger.add(id);
     }, '"' + l + '" is toegevoegd');
   };
@@ -101,34 +121,40 @@
     if (!mag()) { toast('Alleen de beheerder richt de planning in.', null, null, true); return { ok: false }; }
     const dlg = D.dialoog; if (!dlg) return { ok: false };
     const item = labelsVan(type).find(([kk]) => kk === k); if (!item) return { ok: false };
-    const gebruik = D.gebruik(type, k), andere = labelsVan(type).filter(([kk]) => kk !== k);
+    const vers = async () => { try { if (D.vers) await D.vers(); } catch (e) { /* offline: de lokale stand geldt */ } };   // eerst de gezamenlijke stand van de taken lezen
+    await vers();
+    let gebruik = D.gebruik(type, k); const andere = labelsVan(type).filter(([kk]) => kk !== k);
     const sj = (gebruik.sjablonen || []).length;
-    let doel = null;   // null = niets te verplaatsen; '' = zonder
+    let doel = null;   // null = niets te verplaatsen; { k: '' } = zonder
     if (gebruik.n > 0 || sj > 0) {
       const opties = andere.map(([kk, ll]) => ({ k: kk, label: ll })).concat(type === 'station' ? [{ k: '', label: 'Geen station' }] : type === 'fase' ? [{ k: '', label: 'Geen fase' }] : [{ k: '', label: 'Niet ingedeeld' }]);
-      const wat = type === 'station' ? gebruik.n + ' activiteit' + (gebruik.n === 1 ? '' : 'en') : gebruik.n + (gebruik.n === 1 ? ' taak' : ' taken');
+      const wat = type === 'station' ? gebruik.n + (gebruik.n === 1 ? ' activiteit' : ' activiteiten') : gebruik.n + (gebruik.n === 1 ? ' taak' : ' taken');
       if (sj) { await dlg.alert({ title: 'Nog in gebruik', message: '"' + item[1] + '" staat nog in ' + sj + ' projectsjabloon' + (sj === 1 ? '' : 'nen') + ' (' + gebruik.sjablonen.join(', ') + '). Pas eerst het sjabloon aan.' }); return { ok: false }; }
       const i = await dlg.choose({ title: 'Waar gaan ze heen?', message: '"' + item[1] + '" wordt nog gebruikt door ' + wat + (type === 'station' ? ' (' + gebruik.activiteiten.join(', ') + ')' : '') + '.\nKies waar ze heen gaan; daarna wordt "' + item[1] + '" verwijderd.', choices: opties.map(o => ({ label: o.label })) });
       if (i === null || i === undefined || !opties[i]) return { ok: false };
       doel = opties[i];
     } else if (!(await dlg.confirm({ title: '"' + item[1] + '" verwijderen?', message: 'Er hangt niets meer aan. Je kunt het met Ongedaan maken terugzetten.', okLabel: 'Verwijderen', danger: true }))) return { ok: false };
     if (doel !== null && !(await dlg.confirm({ title: 'Verplaatsen en verwijderen', message: gebruik.n + ' ' + (type === 'station' ? 'activiteit(en)' : 'taak/taken') + ' gaan naar "' + doel.label + '" en "' + item[1] + '" wordt verwijderd.', okLabel: 'Doorgaan' }))) return { ok: false };
-    let herstel = null;
-    if (doel !== null && type !== 'station') {   // eerst de taken (zij wijzen naar dit id), daarna pas het record
-      toast('Taken verplaatsen...');
-      const v = await D.verplaats(type, k, doel.k, (i, n) => { try { if (D.voortgang) D.voortgang(i, n); } catch (e) {} });
-      if (!v.ok) { toast(v.mislukt && v.mislukt.length ? v.mislukt.length + ' taak/taken konden niet verplaatst worden (' + v.mislukt[0].reden + '); er is niets verwijderd.' : (v.reden || 'Niet verplaatst.'), null, null, true); return { ok: false }; }
-      herstel = v.wijzigingen;
+    const herstel = [];   // wat is verplaatst, voor het terugdraaien
+    const terugdraaien = async () => { if (!herstel.length) return ''; const h = await D.verplaatsHerstel(herstel.splice(0)); return h.ok ? ' De al verplaatste taken zijn teruggezet.' : ' Let op: ' + h.mislukt.length + ' al verplaatste taak/taken konden niet terug (iemand wijzigde ze intussen).'; };
+    if (type !== 'station') {   // eerst de taken (zij wijzen naar dit id), daarna pas het record; na het verplaatsen opnieuw kijken of er intussen weer taken aan zijn gekomen (hooguit drie rondes)
+      for (let ronde = 0; ronde < 3 && (gebruik.n > 0); ronde++) {
+        toast('Taken verplaatsen...');
+        const v = await D.verplaats(type, k, doel ? doel.k : '', (i, n) => { try { if (D.voortgang) D.voortgang(i, n); } catch (e) { /* alleen de voortgang */ } });
+        (v.wijzigingen || []).forEach(w => herstel.push(w));
+        if (!v.ok) { const extra = await terugdraaien(); toast((v.mislukt && v.mislukt.length ? v.mislukt.length + ' taak/taken konden niet verplaatst worden (' + v.mislukt[0].reden + ')' : (v.reden || 'Niet verplaatst')) + '; er is niets verwijderd.' + extra, null, null, true); return { ok: false }; }
+        await vers(); gebruik = D.gebruik(type, k);
+      }
+      if (gebruik.n > 0) { const extra = await terugdraaien(); toast('Er hangen steeds weer nieuwe taken aan "' + item[1] + '"; er is niets verwijderd.' + extra, null, null, true); return { ok: false }; }
     }
-    const res = await bewerk((recs, ger) => {
+    const res = await bewerk((recs) => {
       const r = zoek(recs, type, k); if (!r) return { fout: 'Dit bestaat niet meer.' };
-      if (type === 'station') recs.forEach(a => { if (a.type === 'activiteit' && !a._vervallen && String(a.station) === String(k)) { a.station = doel ? doel.k : ''; ger.add(a.id); } });
-      recs.splice(recs.indexOf(r), 1); ger.add(r.id); hernummer(recs, type);
-      recs.forEach(x => { if (x.type === type && !x._vervallen) ger.add(x.id); });
-    }, '"' + item[1] + '" is verwijderd', herstel && herstel.length ? async () => { const h = await D.verplaatsHerstel(herstel); if (!h.ok) toast(h.mislukt.length + ' taak/taken konden niet terug (iemand wijzigde ze intussen).', null, null, true); } : null);
+      if (type === 'station') recs.forEach(a => { if (a.type === 'activiteit' && !a._vervallen && String(a.station) === String(k)) a.station = doel ? doel.k : ''; });
+      recs.splice(recs.indexOf(r), 1); hernummer(recs, type);
+    }, '"' + item[1] + '" is verwijderd', herstel.length ? async () => { const h = await D.verplaatsHerstel(herstel); if (!h.ok) toast(h.mislukt.length + ' taak/taken konden niet terug (iemand wijzigde ze intussen).', null, null, true); } : null);
+    if (!res.ok && herstel.length) { const extra = await terugdraaien(); if (extra) toast('Het verwijderen is niet gelukt.' + extra, null, null, true); }
     return res;
   };
-
   // ── het bord: koppen en knoppen die alleen de beheerder ziet ──
   // Een label: voor de beheerder een knop (klik = hernoemen), voor anderen gewone tekst.
   PI.labelEl = function (type, k, label, o) {
@@ -189,6 +215,7 @@
       extra.push(
         el('select', { klass: 'pi-sel', 'aria-label': 'Station van ' + naamVan(r), title: 'Bij welk station hoort deze activiteit?', wijzig: ev => PI.zet('activiteit', k, { station: ev.target.value }, 'Station van "' + naamVan(r) + '" aangepast') }, st.map(([v, l]) => el('option', { value: v, tekst: l, selected: String(r.station || '') === v ? true : null }))),
         el('select', { klass: 'pi-sel', 'aria-label': 'Soort uren van ' + naamVan(r), title: 'Kantooruren of werkplaatsuren (telt mee in de projectmeter)', wijzig: ev => PI.zet('activiteit', k, { soort: ev.target.value }, 'Soort uren van "' + naamVan(r) + '" aangepast') }, [['kantoor', 'Kantooruren'], ['wp', 'Werkplaatsuren']].map(([v, l]) => el('option', { value: v, tekst: l, selected: (r.soort === 'kantoor' ? 'kantoor' : 'wp') === v ? true : null }))),
+        el('input', { type: 'text', klass: 'pi-invoer pi-woorden', value: r.woorden || '', placeholder: 'herken aan woorden (komma)', 'aria-label': 'Herken ' + naamVan(r) + ' aan woorden in de taaknaam', title: 'Taken met een van deze woorden in de naam krijgen deze activiteit als voorstel; leeg = geen voorstel', wijzig: ev => PI.zet('activiteit', k, { woorden: ev.target.value.trim() }, 'Herkenningswoorden van "' + naamVan(r) + '" aangepast') }),
         el('select', { klass: 'pi-sel', 'aria-label': 'Uursoort van de calculatie bij ' + naamVan(r), title: 'Uren van deze uursoort in de calculatie worden aan deze activiteit gekoppeld', wijzig: ev => PI.zet('activiteit', k, { uursoort: ev.target.value }, 'Calculatiekoppeling van "' + naamVan(r) + '" aangepast') }, UURSOORTEN.map(([v, l]) => el('option', { value: v, tekst: v ? 'Calculatie: ' + l : l, selected: String(r.uursoort || '') === v ? true : null }))));
     }
     const tr = el('div', { klass: 'pi-rij', role: 'listitem' }, el('div', { klass: 'pi-pos' }, knoppen), inv, extra, el('span', { klass: 'pi-gebruik', tekst: gebruikt }),
@@ -198,8 +225,8 @@
   function nieuwRij(type, recs) {
     const inv = el('input', { type: 'text', klass: 'pi-invoer', placeholder: 'Nieuwe ' + NAAM[type], 'aria-label': 'Naam van de nieuwe ' + NAAM[type], maxlength: '60' });
     const st = type === 'activiteit' ? el('select', { klass: 'pi-sel', 'aria-label': 'Station van de nieuwe activiteit' }, [['', 'Geen station']].concat(model().stations.map(s => [s.k, s.label])).map(([v, l]) => el('option', { value: v, tekst: l }))) : null;
-    const so = type === 'activiteit' ? el('select', { klass: 'pi-sel', 'aria-label': 'Soort uren van de nieuwe activiteit' }, [['wp', 'Werkplaatsuren'], ['kantoor', 'Kantooruren']].map(([v, l]) => el('option', { value: v, tekst: l }))) : null;
-    const voeg = async () => { const w = inv.value.trim(); if (!w) { inv.focus(); return; } const r = await PI.voegToe(type, w, { station: st ? st.value : '', soort: so ? so.value : 'wp' }); if (r.ok) inv.value = ''; };
+    const so = type === 'activiteit' ? el('select', { klass: 'pi-sel', 'aria-label': 'Soort uren van de nieuwe activiteit', title: 'Verplicht: kantooruren of werkplaatsuren' }, [['', 'Kies de soort uren...'], ['wp', 'Werkplaatsuren'], ['kantoor', 'Kantooruren']].map(([v, l]) => el('option', { value: v, tekst: l }))) : null;
+    const voeg = async () => { const w = inv.value.trim(); if (!w) { inv.focus(); return; } const r = await PI.voegToe(type, w, { station: st ? st.value : '', soort: so ? so.value : '' }); if (r.ok) inv.value = ''; };
     inv.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); voeg(); } });
     return el('div', { klass: 'pi-rij pi-nieuw' }, inv, st, so, el('button', { type: 'button', klass: 'pi-knop pi-plus', tekst: '+ Toevoegen', klik: voeg }));
   }

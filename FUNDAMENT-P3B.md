@@ -30,7 +30,7 @@ Branch `planning-p3b` (op `planning-p5`). Dit document beschrijft het ontwerp, z
 - Nog niet gedekt: de naamherkenning (`SLEUTELWOORDEN`) stelt alleen de standaardactiviteiten voor; een nieuwe activiteit krijgt geen voorstel uit de taaknaam.
 
 ## Verwijderen
-- Alleen als er niets meer aan hangt. Hangt er wel iets aan: kiezen waar het heen gaat (ook "Geen fase" of "Niet ingedeeld"), bevestigen, dan eerst de taken verplaatsen (per taak via `tpWijzig`), daarna het record verwijderen. Mislukt een taak, dan wordt er niets verwijderd. Een station: de activiteiten krijgen het gekozen station in dezelfde schrijfactie.
+- Alleen als er niets meer aan hangt. Hangt er wel iets aan: kiezen waar het heen gaat (ook "Geen fase" of "Niet ingedeeld"), bevestigen, dan eerst de taken verplaatsen (per taak via `tpWijzig`), daarna het record verwijderen. Mislukt een taak, dan worden de al verplaatste taken teruggezet en wordt er niets verwijderd. Na het verplaatsen wordt de gezamenlijke stand opnieuw gelezen en gecontroleerd (hooguit drie rondes) voordat het record een tombstone krijgt. Een station: de activiteiten krijgen het gekozen station in dezelfde schrijfactie.
 - Een activiteit of fase die nog in een opgeslagen projectsjabloon staat kan niet verwijderd worden; de melding noemt het sjabloon.
 - Ongedaan maken zet het record terug en daarna de taken (`tpWijzigHerstel`, alleen als niemand ze intussen wijzigde).
 

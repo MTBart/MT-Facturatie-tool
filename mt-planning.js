@@ -164,7 +164,11 @@
     ['spuiten', /\b(spuit|spuiten|lakken|lak|verf|schilder|afwerk|olie|oliën|beits)/i], ['werkvoorbereiding', /\b(wvb|werkvoorbereiding|stuklijst|nesten|nesting|cnc-?programma|productietekening)/i],
     ['tekenwerk', /\b(teken|tekenen|tekening|tekeningen|ontwerp|ontwerpen|schets|3d|render|opname)\b/i], ['werkplaats', /\b(zagen|cnc|frezen|kantenband|assemblage|samenbouwen|bankwerk|productie|werkplaats|slijpen|monteren in de werkplaats)\b/i],
     ['kantoor', /\b(offerte|calculatie|bestel|bestellen|inkoop|administratie|factuur|overleg|mail|afspraak|plannen|planning)\b/i]];
-  P.activiteitUitNaam = naam => { const s = String(naam || ''); for (const [k, re] of SLEUTELWOORDEN) if (re.test(s)) return k; return ''; };
+  P.activiteitUitNaam = naam => {   // P3b: de ingebouwde woorden eerst (alleen voor een activiteit die bestaat), daarna de eigen "herken aan woorden" van activiteiten; leeg = geen voorstel
+    const s = String(naam || ''); for (const [k, re] of SLEUTELWOORDEN) if (re.test(s) && P.activiteit(k)) return k;
+    const l = s.toLowerCase(), a = P.ACTIVITEITEN.find(x => (x.woorden || []).some(w => l.includes(w)));
+    return a ? a.k : '';
+  };
   P.activiteitUitUursoort = oms => {   // P3b: eerst de uursoort die bij een (eigen) activiteit is ingesteld, dan de vaste koppeling; alleen een activiteit die bestaat
     const s = String(oms || '').toLowerCase().trim(), eigen = P.ACTIVITEITEN.find(a => a.uursoort && a.uursoort === s), vast = UURSOORT_ACT[s];
     return (eigen && eigen.k) || (vast && P.activiteit(vast) ? vast : '') || P.activiteitUitNaam(s);
@@ -2039,7 +2043,7 @@
   const STD_ACT_STATION = { tekenwerk: 'voorbereiding', werkvoorbereiding: 'voorbereiding', werkplaats: 'productie', spuiten: 'spuiten', montage: 'montage' };
   const STD_ACT_UURSOORT = {}; Object.keys(UURSOORT_ACT).forEach(u => { if (!(UURSOORT_ACT[u] in STD_ACT_UURSOORT)) STD_ACT_UURSOORT[UURSOORT_ACT[u]] = u; });
   P.INRICHT_TYPEN = ['station', 'fase', 'activiteit'];
-  P.INRICHT_VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen'];
+  P.INRICHT_VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen', 'woorden'];
   P.inrichtStandaard = () => {
     const uit = [];
     [['voorbereiding', 'Voorbereiding'], ['materiaal', 'Materiaal'], ['productie', 'Productie'], ['spuiten', 'Afwerken'], ['montage', 'Montage']].forEach(([k, l], i) => uit.push({ id: 'station:' + k, type: 'station', k, label: l, volgorde: i + 1 }));
@@ -2050,7 +2054,9 @@
   const naamSleutel = s => String(s == null ? '' : s).trim().toLowerCase();
   const volgordeSort = (a, b) => ((Number(a.volgorde) || 0) - (Number(b.volgorde) || 0)) || String(a.label || a.k).localeCompare(String(b.label || b.k), 'nl') || (String(a.k) < String(b.k) ? -1 : 1);
   // Strikt: leeg is een lege lijst; een andere vorm dan een lijst is een FOUT (nooit stil tot leeg terugbrengen).
-  P.inrichtLees = v => leesStrikt(v, o => Array.isArray(o) ? '' : 'geen lijst', [], 'planinrichting').filter(x => x && typeof x === 'object' && x.id && x.type && x.k !== undefined);
+  // Strikt ook per record: een element zonder id, soort of k is een fout (nooit stil weggelaten: een volgende wijziging zou het uit de opslag schrijven). Een onbekende soort blijft staan maar telt niet mee.
+  const inrichtVorm = o => { if (!Array.isArray(o)) return 'geen lijst'; const i = o.findIndex(x => !x || typeof x !== 'object' || Array.isArray(x) || !String(x.id || '').trim() || !String(x.type || '').trim() || x.k === undefined || x.k === null || !String(x.k).trim()); return i < 0 ? '' : 'record ' + (i + 1) + ' is ongeldig (id, type en k zijn verplicht)'; };
+  P.inrichtLees = v => leesStrikt(v, inrichtVorm, [], 'planinrichting');
   // → { stations: [{ k, label }], fases: [{ k, label, namen (label + eerdere namen) }], activiteiten: [{ k, l, soort, station, uursoort }], standaard: bool }
   P.inrichtModel = function (raw) {
     const recs = P.inrichtLees(raw), std = P.inrichtStandaard(), heeft = {};
@@ -2061,7 +2067,7 @@
     return {
       stations,
       fases: actief('fase').map(r => ({ k: String(r.k), label: String(r.label), namen: [String(r.label)].concat(Array.isArray(r.namen) ? r.namen.map(String) : []) })),
-      activiteiten: actief('activiteit').map(r => ({ k: String(r.k), l: String(r.label), soort: r.soort === 'kantoor' ? 'kantoor' : 'wp', station: heeftStation(r.station) ? String(r.station) : '', uursoort: String(r.uursoort || '') })),
+      activiteiten: actief('activiteit').map(r => ({ k: String(r.k), l: String(r.label), soort: r.soort === 'kantoor' ? 'kantoor' : 'wp', station: heeftStation(r.station) ? String(r.station) : '', uursoort: String(r.uursoort || ''), woorden: String(r.woorden || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean) })),
       standaard: !recs.length };
   };
   let INR = null;
@@ -2069,13 +2075,13 @@
   P.inrichtZet = function (raw) {
     const m = raw && Array.isArray(raw.stations) && Array.isArray(raw.fases) ? raw : P.inrichtModel(raw);
     INR = m;
-    P.ACTIVITEITEN.length = 0; m.activiteiten.forEach(a => P.ACTIVITEITEN.push({ k: a.k, l: a.l, soort: a.soort, station: a.station, uursoort: a.uursoort }));
+    P.ACTIVITEITEN.length = 0; m.activiteiten.forEach(a => P.ACTIVITEITEN.push({ k: a.k, l: a.l, soort: a.soort, station: a.station, uursoort: a.uursoort, woorden: a.woorden }));
     P.STROOM_STATIONS.length = 0; m.stations.forEach(s => P.STROOM_STATIONS.push([s.k, s.label]));
     return m;
   };
   P.inrichting = () => INR;
   P.fasenLijst = () => INR.fases.map(f => ({ k: f.k, label: f.label }));
-  P.faseVanNaam = naam => { const n = naamSleutel(naam); return n ? (INR.fases.find(f => f.namen.some(x => naamSleutel(x) === n)) || null) : null; };
+  P.faseVanNaam = naam => { const n = naamSleutel(naam); return n ? (INR.fases.find(f => naamSleutel(f.label) === n) || INR.fases.find(f => f.namen.some(x => naamSleutel(x) === n)) || null) : null; };   // eerst het huidige label, dan een eerdere naam
   // De fase van een taak: het id als dat nog bij de naam past (een oude app die alleen de naam wijzigt wint daarmee van een oud id), anders de naam via het label of een eerdere naam.
   P.faseVan = t => {
     if (!t) return null;
@@ -2111,13 +2117,16 @@
   P.inrichtLabelFout = function (type, label, k, model) {
     const l = String(label == null ? '' : label).trim(); if (!l) return 'Geef een naam.'; if (l.length > 60) return 'Een naam is hoogstens 60 tekens.';
     const m = model || INR, lijst = type === 'station' ? m.stations.map(x => [x.k, x.label]) : type === 'fase' ? m.fases.map(x => [x.k, x.label]) : m.activiteiten.map(x => [x.k, x.l]);
-    return lijst.some(([kk, ll]) => kk !== k && naamSleutel(ll) === naamSleutel(l)) ? 'Deze naam bestaat al.' : '';
+    if (lijst.some(([kk, ll]) => kk !== k && naamSleutel(ll) === naamSleutel(l))) return 'Deze naam bestaat al.';
+    if (type === 'fase' && m.fases.some(f => f.k !== k && f.namen.some(x => naamSleutel(x) === naamSleutel(l)))) return 'Deze naam is eerder de naam van een andere fase geweest (taken van oude apps zouden er dan aan blijven hangen). Kies een andere naam.';
+    return '';
   };
-  // Een nieuw vast id uit het label (zonder accenten, a-z0-9 en _), uniek over alle records van dat soort, ook de verwijderde.
-  P.inrichtNieuwK = function (type, label, records) {
+  // Een nieuw vast id uit het label (zonder accenten, a-z0-9 en _) met een korte willekeurige staart, uniek over alle records van dat soort, ook de verwijderde. De staart voorkomt dat twee apparaten
+  // tegelijk hetzelfde id maken (bijvoorbeeld bij "A-B" en "A B") en samenvoegen er stil een record van maakt. rnd is voor tests.
+  P.inrichtNieuwK = function (type, label, records, rnd) {
     const bezet = new Set((Array.isArray(records) ? records : []).filter(r => r && r.type === type).map(r => String(r.k)));
-    let b = String(label || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24) || type, k = b, n = 2;
-    while (bezet.has(k)) k = b + '_' + n++;
+    const b = String(label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24) || type, staart = () => (typeof rnd === 'function' ? rnd() : Math.random().toString(36).slice(2, 6));
+    let k = b + '_' + staart(); while (bezet.has(k)) k = b + '_' + staart();
     return k;
   };
   // De records zoals ze nu gelden, om te bewerken: wat in het bestand staat, aangevuld met de standaard voor soorten die er nog niet in staan. Verwijderde records blijven buiten beeld.
