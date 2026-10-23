@@ -5,6 +5,9 @@ Grote bestanden (index.html, uren.html) worden gebackupt in `_backups/` bij elke
 
 ---
 
+## 2026-10-23 — Backup = v2.19.0
+- Commit: `5abccb7` | Auteur: Bart Witte
+
 ## 2026-10-16 — Release v2.19.0: taken op de tijdlijn (slepen uit Ongepland, uittrekken en verschuiven met opvolgers, Datums wijzigen), raming verdeeld over echte werkdagen zonder dubbeltelling en overal hetzelfde getal, Omzetten naar taakbalk, eerlijke meldingen bij traag of gelijktijdig opslaan; CHANGELOG-hook alleen op main; backup = v2.18.0
 - Commit: `648f52e` | Auteur: Bart Witte
 
