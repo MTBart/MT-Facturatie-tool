@@ -546,6 +546,12 @@ html[data-stijl="nieuw"] .cn-lade-knop{display:none}
   html[data-stijl="nieuw"] .cn-bak-filters .cn-filter{height:44px;font-size:14px}
   html[data-stijl="nieuw"] .cn-bak-groep{min-height:44px}
 }
+/* ── P1b: optionele vrije dag (naam, gele laag) en een nieuw planblok ───── */
+html[data-stijl="nieuw"] .cn-cel.opt{background:color-mix(in srgb,var(--brass-soft) 45%,var(--surface))}
+html[data-stijl="nieuw"] .cn-optnaam{font:500 11px/14px var(--sans);color:var(--brass-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-stijl="nieuw"] .cn-opt{position:absolute;top:0;bottom:0;padding:2px 6px;background:color-mix(in srgb,var(--brass-soft) 55%,transparent);color:var(--brass-ink);font:500 11px/14px var(--sans);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;pointer-events:none}
+html[data-stijl="nieuw"] .cn-uren-raster{cursor:cell}
+html[data-stijl="nieuw"] .cn-uren-raster .cn-bw,html[data-stijl="nieuw"] .cn-uren-raster .cn-meer{cursor:pointer}
 /* ── brok 9: Admin ▸ Team en werktijden (mt-werktijden.js; vervangt in de nieuwe stijl de kaart "Werkuren per week") ───── */
 html[data-stijl="nieuw"] #adm-werkuren-kaart{display:none}
 html[data-stijl="nieuw"] .wt-root:not([hidden]){display:block;margin-bottom:20px}
@@ -880,3 +886,42 @@ html[data-stijl="nieuw"] .stijl-melding-knop:hover{background:var(--surface-sunk
 html[data-stijl="nieuw"] .stijl-melding-x{width:34px;height:34px;border:0;border-radius:4px;background:none;color:var(--ink-2);font:400 20px/1 var(--sans);cursor:pointer}
 html[data-stijl="nieuw"] .stijl-melding-x:hover{background:var(--surface-sunken)}
 html[data-stijl="nieuw"] .stijl-melding-knop:focus-visible,html[data-stijl="nieuw"] .stijl-melding-x:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:2px}
+
+/* ── G1: de laag Geklokt in de Capaciteit (uren uit Toggl naast het geplande; alleen kijken) ── */
+html[data-stijl="nieuw"] .cn-gk-knop{display:inline-flex;align-items:center;gap:6px}
+html[data-stijl="nieuw"] .cn-gk-knop .cn-ic{width:16px;height:16px}
+html[data-stijl="nieuw"] .cn-gk-knop.aan{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+html[data-stijl="nieuw"] .cn-gk-baan{position:absolute;left:0;right:0;border-top:1px dashed var(--line);background:color-mix(in srgb,var(--surface-sunken) 70%,transparent);pointer-events:none}
+html[data-stijl="nieuw"] .cn-gk-seg{position:absolute;z-index:1;min-width:3px;padding:0;border:1px solid color-mix(in srgb,var(--block-color,var(--ink-2)) 65%,var(--surface));border-radius:3px;background:color-mix(in srgb,var(--block-color,var(--ink-2)) 26%,var(--surface));cursor:pointer}
+html[data-stijl="nieuw"] .cn-gk-seg:hover{background:color-mix(in srgb,var(--block-color,var(--ink-2)) 45%,var(--surface))}
+html[data-stijl="nieuw"] .cn-gk-seg.buiten{border-style:dashed}
+html[data-stijl="nieuw"] .cn-gk-seg:focus-visible,html[data-stijl="nieuw"] .cn-gk-cel:focus-visible,html[data-stijl="nieuw"] .cn-gk-mtekst:focus-visible,html[data-stijl="nieuw"] .cn-gkpop-proj:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:1px}
+html[data-stijl="nieuw"] .cn-gk-cel{align-self:flex-start;max-width:100%;padding:0 5px;border:0;border-radius:3px;background:var(--surface-sunken);color:var(--ink-2);font:400 10px/16px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+html[data-stijl="nieuw"] .cn-gk-cel:hover{background:var(--line-soft)}
+html[data-stijl="nieuw"] .cn-gk-som{font-style:normal;color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-gk-lijn{position:absolute;left:3px;bottom:2px;height:3px;max-width:calc(100% - 6px);border-radius:2px;background:var(--ink-2);opacity:.7}
+html[data-stijl="nieuw"] .cn-gk-mtekst{position:absolute;top:15px;left:0;right:0;padding:0;border:0;background:none;text-align:center;font:400 10px/12px var(--mono);color:var(--ink-2);text-decoration:underline dotted;cursor:pointer}
+html[data-stijl="nieuw"] .cn-kw-gk{font:400 10px/12px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-kw-gk.klein{display:block;height:3px;border-radius:2px;background:var(--ink-2);opacity:.6}
+html[data-stijl="nieuw"] .cn-lg-gk{display:block;width:14px;height:8px;border:1px solid var(--ink-2);border-radius:2px;background:color-mix(in srgb,var(--ink-2) 25%,var(--surface))}
+html[data-stijl="nieuw"] .cn-legenda .cn-gk-sync{color:var(--ink-2);font-size:11px}
+html[data-stijl="nieuw"] .cn-gkpop-item{display:flex;flex-direction:column;gap:2px;padding:6px 0;border-top:1px solid var(--line-soft)}
+html[data-stijl="nieuw"] .cn-gkpop-item:first-child{border-top:0;padding-top:0}
+html[data-stijl="nieuw"] .cn-gkpop-proj{display:flex;align-items:center;gap:6px;padding:0;border:0;background:none;text-align:left;font:600 12px/16px var(--sans);color:var(--ink);cursor:pointer}
+html[data-stijl="nieuw"] .cn-gkpop-proj.plat{cursor:default}
+html[data-stijl="nieuw"] .cn-gkpop-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--block-color,var(--ink-2))}
+@media (max-width:640px){html[data-stijl="nieuw"] .cn-gk-knop{min-height:44px}html[data-stijl="nieuw"] .cn-gk-seg{min-width:8px}}
+/* ── D1: de agenda-strook met de Outlook-afspraken (alleen kijken) ── */
+html[data-stijl="nieuw"] .cn-agenda-label b{display:block;font:600 12px/16px var(--sans);color:var(--ink)}
+html[data-stijl="nieuw"] .cn-agenda-sub{display:block;font:400 11px/14px var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-agenda-tekst.probleem{max-width:min(640px,100%);text-align:left;border-color:var(--error);color:var(--ink)}
+html[data-stijl="nieuw"] .cn-agenda-strip{position:relative;background:var(--surface)}
+html[data-stijl="nieuw"] .cn-ag-blok{position:absolute;box-sizing:border-box;padding:0 6px;border:1px solid var(--line-strong);border-radius:3px;background:color-mix(in srgb,var(--ink-2) 16%,var(--surface));color:var(--ink);font:500 11px/16px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-stijl="nieuw"] .cn-ag-blok>span{display:block;overflow:hidden;text-overflow:ellipsis}
+html[data-stijl="nieuw"] .cn-ag-blok.oof{border-color:color-mix(in srgb,var(--error) 50%,var(--surface));background:color-mix(in srgb,var(--error) 12%,var(--surface))}
+html[data-stijl="nieuw"] .cn-ag-blok.tentative{border-style:dashed;background:repeating-linear-gradient(135deg,var(--surface-sunken) 0 5px,var(--surface) 5px 10px)}
+html[data-stijl="nieuw"] .cn-ag-blok.buiten{border-style:dotted}
+html[data-stijl="nieuw"] .cn-ag-blok:focus-visible{outline:2px solid var(--focus,var(--primary));outline-offset:1px}
+html[data-stijl="nieuw"] .cn-ag-meer{position:absolute;font:500 10px/12px var(--mono);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-hoek .cn-agenda-knop.alle{margin-top:4px}
+html[data-stijl="nieuw"] .cn-hoek .cn-agenda-knop.alle[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}

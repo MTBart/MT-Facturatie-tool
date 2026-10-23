@@ -88,7 +88,11 @@
   V.waarschuwing = function (spec, ctx) {
     if (!spec || !ctx || V.controle(spec, ctx)) return '';
     const team = ctx.team || [], lid = team.find(m => m && String(m.slug).toLowerCase() === String(spec.persoon || '').toLowerCase()); if (!lid) return '';
-    const w = dow(spec.datum);
+    return V.dagWaarschuwing(lid, spec.datum, ctx);
+  };
+  // De vraag voor één persoon op één dag (verlof, verplichte vrije dag, werkt niet volgens de werktijden); '' = geen bezwaar. Ook gebruikt door het planblokpaneel (P1b).
+  V.dagWaarschuwing = function (lid, datum, ctx) {
+    const team = ctx.team || [], w = dow(datum), spec = { datum };
     if ((ctx.verlof || []).some(x => x && gelijkAan(x.persoon, lid.slug, team) && spec.datum >= x.van && spec.datum <= x.tm)) return lid.naam + ' heeft verlof op ' + dagMnd(spec.datum) + '. Toch inplannen?';
     const vd = (ctx.vrijedagen || []).find(x => x && x.datum === spec.datum);
     if (vd && vd.type === 'verplicht') return dagMnd(spec.datum) + ' is een verplichte vrije dag. Toch inplannen?';
@@ -132,12 +136,111 @@
     if (!b) return { ok: false, reden: 'Dit planblok bestaat niet meer; niets teruggezet.' };
     if (b._gewijzigd !== w.stempel) return { ok: false, reden: 'Dit blok is intussen door iemand anders gewijzigd; niet teruggezet.' };
     const stempel = ctx.stempel || ((x) => { x._gewijzigd = Date.now(); return x; }), ts = new Date(ctx.nu || Date.now()).toISOString(), wie = ctx.wie || '';
+    if (w.soort === 'blokWijzig' || w.soort === 'blokNieuw') {   // P1b: een wijziging uit het paneel terugdraaien, of een nieuw blok weer laten vervallen (alleen als niemand het sindsdien wijzigde)
+      const n2 = w.soort === 'blokWijzig' ? stempel(Object.assign({}, b, w.voor, { ts, door: wie }), b) : stempel(Object.assign({}, b, { _vervallen: { tijd: ts, door: wie } }), b);
+      return { ok: true, blokken: lijst.map(x => x === b ? n2 : x) };
+    }
     const nieuw = w.soort === 'verplaats'
       ? stempel(Object.assign({}, b, { persoon: w.voor.persoon, datum: w.voor.datum, start: w.voor.start, ts, door: wie }, w.voor.duurMin !== undefined ? { duurMin: w.voor.duurMin } : {}), b)
       : stempel(Object.assign({}, b, { _vervallen: { tijd: ts, door: wie } }), b);
     return { ok: true, blokken: lijst.map(x => x === b ? nieuw : x) };
   };
 
+  // ═══ P1b: een planblok maken, wijzigen, verwijderen of beslissen (het planblokpaneel en "klik op een lege plek in de Capaciteit") ═══════════════════════════════════
+  // Alleen rekenwerk, geen DOM, geen opslag: de aanroeper (v2.html: capBlokDoe) geeft de actuele blokken en de regels mee en schrijft het resultaat via de F1-writer (agPlanSave: vers lezen, ETag,
+  // veldstempels per veld, een eerlijke melding bij een collega die tegelijk wijzigde). Spec:
+  //   { soort: 'blokNieuw',    velden, bevestigd? }                      kantoor: een gewoon blok; werkplaats: een VOORSTEL (status voorstel, wacht op goedkeuring)
+  //   { soort: 'blokWijzig',   blokId, velden (alleen wat verandert), gezien? (de waarden die je zag), bevestigd? }
+  //   { soort: 'blokWeg',      blokId }                                 een tombstone (niet weghalen: anders zet de volgende samenvoeging het terug); geen ongedaan maken
+  //   { soort: 'blokKeurGoed', blokId } · { soort: 'blokWijsAf', blokId, reden } · { soort: 'blokTrekIn', blokId }   voorstellen (kantoor beslist; de indiener trekt zijn eigen voorstel in)
+  // ctx = { blokken, team, verlof, vrijedagen, werktijden, mag (kantoor), voorstel (werkplaats: alleen voorstellen), wie, wieNaam, nu, stempel, nieuwId, projecten?: [codes], taken?: { code: [taken] }, PV? }
+  // -> { ok:false, reden } | { ok:false, tegelijk:true, reden } | { ok:true, vraag } | { ok:true, noop:true } | { ok:true, blokken, wijziging }
+  const BLOK_VELDEN = ['persoon', 'project_code', 'taak', 'taak_id', 'datum', 'start', 'duurMin', 'notitie'];
+  V.BLOK_VELDEN = BLOK_VELDEN;
+  const GEEN_ROL = 'Dit mag je niet met jouw rol.';
+  const sleutelLos = (obj, code) => Object.keys(obj && typeof obj === 'object' ? obj : {}).find(k => !k.startsWith('__') && String(k).trim().toLowerCase() === String(code).trim().toLowerCase());
+  // De velden controleren en netjes maken. v = wat er verandert (of alles bij een nieuw blok), huidig = het blok zoals het nu is. -> { ok, velden } | { ok:false, reden }
+  V.blokVelden = function (v, ctx, huidig) {
+    v = v || {}; const heel = Object.assign({}, huidig || {}, v), uit = {}, team = ctx.team || [];
+    const heeft = k => Object.prototype.hasOwnProperty.call(v, k);
+    if (heeft('persoon') || !huidig) { const lid = team.find(m => m && gelijkAan(m.slug, v.persoon, team)); if (!lid) return { ok: false, reden: 'Onbekende persoon.' }; uit.persoon = lid.slug; }
+    if (heeft('datum') || !huidig) { if (!isYmd(v.datum)) return { ok: false, reden: 'Ongeldige dag.' }; const w = dow(v.datum); if (w === 0 || w === 6) return { ok: false, reden: 'Dit is een weekend: plannen op die dag kan niet.' }; uit.datum = v.datum; }
+    if (heeft('start') || !huidig) { const m = tijdMin(v.start); if (m === null || m >= 24 * 60) return { ok: false, reden: 'Ongeldige begintijd.' }; uit.start = hhmm(m); }
+    if (heeft('duurMin') || !huidig) { const d = Math.round(Number(v.duurMin)); if (!(d >= 15 && d <= 12 * 60)) return { ok: false, reden: 'Ongeldige duur: een blok duurt minstens 15 minuten en hoogstens 12 uur.' }; uit.duurMin = d; }
+    if (heeft('start') || heeft('duurMin') || !huidig) { const m = tijdMin(uit.start !== undefined ? uit.start : heel.start), d = Math.round(Number(uit.duurMin !== undefined ? uit.duurMin : heel.duurMin)) || 0; if (m !== null && m + d > 24 * 60) return { ok: false, reden: 'Het blok loopt over middernacht heen.' }; }
+    if (heeft('project_code') || !huidig) {
+      const c = String(v.project_code == null ? '' : v.project_code).trim().slice(0, 60);
+      if (c && Array.isArray(ctx.projecten)) { const g = ctx.projecten.find(x => String(x).trim().toLowerCase() === c.toLowerCase()); if (!g) return { ok: false, reden: 'Onbekend project.' }; uit.project_code = g; } else uit.project_code = c;
+    }
+    if (heeft('taak') || !huidig) uit.taak = String(v.taak == null ? '' : v.taak).trim().slice(0, 120);
+    if (heeft('taak_id') || (heeft('project_code') && huidig && huidig.taak_id != null && huidig.taak_id !== '')) {
+      let id = heeft('taak_id') ? v.taak_id : '';   // een ander project: de koppeling met de taak vervalt (tenzij er een nieuwe taak bij gekozen is)
+      if (id !== null && id !== undefined && id !== '') {
+        const code = uit.project_code !== undefined ? uit.project_code : heel.project_code, k = ctx.taken && sleutelLos(ctx.taken, code);
+        if (ctx.taken && (!k || !(ctx.taken[k] || []).some(x => x && !x._vervallen && String(x.id) === String(id)))) return { ok: false, reden: 'Onbekende taak in dit project.' };
+        uit.taak_id = String(id);
+      } else uit.taak_id = '';
+    }
+    if (heeft('notitie') || !huidig) uit.notitie = String(v.notitie == null ? '' : v.notitie).slice(0, 500);
+    return { ok: true, velden: uit };
+  };
+  const blokTekst = b => (b.taak || b.project_code || 'Planblok');
+  V.blokBewerk = function (spec, ctx) {
+    if (!spec || typeof spec !== 'object' || !ctx) return { ok: false, reden: 'Onbekende actie.' };
+    const lijst = Array.isArray(ctx.blokken) ? ctx.blokken : [], team = ctx.team || [], PV = ctx.PV || root.MTPlanVoorstel;
+    const stempel = ctx.stempel || ((x, vorig) => { x._gewijzigd = Math.max(Date.now(), Number(vorig && vorig._gewijzigd) + 1 || 0); return x; });
+    const ts = new Date(ctx.nu || Date.now()).toISOString(), wie = ctx.wie || '', wieNaam = ctx.wieNaam || wie;
+    const eigenVoorstel = b => !!(b && b.status === 'voorstel' && b.voorstel && String(b.voorstel.door || '').toLowerCase() === String(wie).toLowerCase() && !(b.voorstel.goedgekeurd || b.voorstel.afgewezen));
+    const vraagVoor = (persoon, datum) => { const lid = team.find(m => m && gelijkAan(m.slug, persoon, team)); return lid ? V.dagWaarschuwing(lid, datum, ctx) : ''; };
+    if (spec.soort === 'blokNieuw') {
+      if (!ctx.mag && !ctx.voorstel) return { ok: false, reden: GEEN_ROL };
+      const c = V.blokVelden(spec.velden, ctx, null); if (!c.ok) return c;
+      const v = c.velden;
+      if (!spec.bevestigd) { const vraag = vraagVoor(v.persoon, v.datum); if (vraag) return { ok: true, vraag }; }
+      const id = spec.id || (ctx.nieuwId ? ctx.nieuwId() : Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+      const bestaand = lijst.find(b => b && String(b.id) === String(id));
+      if (bestaand) {   // dezelfde actie nog eens (de eerste kwam misschien wel aan): hetzelfde blok = al gedaan, geen tweede blok; iets anders onder dit nummer = een ander blok
+        const gelijk = !bestaand._vervallen && bestaand.persoon === v.persoon && bestaand.datum === v.datum && bestaand.start === v.start && Math.round(Number(bestaand.duurMin)) === v.duurMin && String(bestaand.taak || '') === String(v.taak || '') && String(bestaand.project_code || '') === String(v.project_code || '');
+        return gelijk ? { ok: true, noop: true, bestaand: true, id: String(id) } : { ok: false, reden: 'Er bestaat al een planblok met dit nummer; probeer het opnieuw.' };
+      }
+      const nieuw = ctx.mag ? stempel(Object.assign({ id }, v, { ts, door: wie }), null) : (PV ? PV.nieuw(Object.assign({}, v), wie, wieNaam) : null);
+      if (!nieuw) return { ok: false, reden: 'Voorstellen zijn hier niet beschikbaar.' };
+      if (!ctx.mag) nieuw.id = id;
+      return { ok: true, blokken: lijst.concat([nieuw]), wijziging: { soort: 'blokNieuw', id: nieuw.id, stempel: nieuw._gewijzigd, naam: blokTekst(nieuw), voorstel: !ctx.mag, na: { persoon: v.persoon, datum: v.datum, start: v.start } } };
+    }
+    const b = V.blokVanId(lijst, spec.blokId);
+    if (!b) return { ok: false, reden: 'Dit planblok bestaat niet meer; er is niets gewijzigd.' };
+    if (spec.soort === 'blokTrekIn') {
+      if (!ctx.voorstel || !eigenVoorstel(b)) return { ok: false, reden: 'Je kunt alleen als werkplaats je eigen open voorstel intrekken (kantoor keurt goed of wijst af).' };
+      if (!PV) return { ok: false, reden: 'Voorstellen zijn hier niet beschikbaar.' };
+      const n = PV.trekIn(b, wie);
+      return { ok: true, blokken: lijst.map(x => x === b ? n : x), wijziging: { soort: 'blokTrekIn', id: b.id, stempel: n._gewijzigd, naam: blokTekst(b) } };
+    }
+    if (!ctx.mag) return { ok: false, reden: 'Dit mag je niet met jouw rol: wijzigen en beslissen doet kantoor.' };
+    if (spec.soort === 'blokKeurGoed' || spec.soort === 'blokWijsAf') {
+      if (b.status !== 'voorstel' || (b.voorstel && (b.voorstel.goedgekeurd || b.voorstel.afgewezen))) return { ok: false, reden: 'Dit is geen open voorstel (meer).' };
+      if (!PV) return { ok: false, reden: 'Voorstellen zijn hier niet beschikbaar.' };
+      const goed = spec.soort === 'blokKeurGoed', n = goed ? PV.keurGoed(b, wie, wieNaam) : PV.wijsAf(b, wie, wieNaam, spec.reden);
+      return { ok: true, blokken: lijst.map(x => x === b ? n : x), wijziging: { soort: spec.soort, id: b.id, stempel: n._gewijzigd, naam: blokTekst(b) } };
+    }
+    if (b.status === 'voorstel') return { ok: false, reden: 'Een open voorstel beslis je eerst: goedkeuren of afwijzen.' };
+    if (spec.soort === 'blokWeg') {
+      const n = stempel(Object.assign({}, b, { _vervallen: { tijd: ts, door: wie } }), b);
+      return { ok: true, blokken: lijst.map(x => x === b ? n : x), wijziging: { soort: 'blokWeg', id: b.id, stempel: n._gewijzigd, naam: blokTekst(b) } };
+    }
+    if (spec.soort !== 'blokWijzig') return { ok: false, reden: 'Onbekende actie.' };
+    const patch = {}; BLOK_VELDEN.forEach(k => { if (spec.velden && Object.prototype.hasOwnProperty.call(spec.velden, k)) patch[k] = spec.velden[k]; });
+    if (!Object.keys(patch).length) return { ok: true, noop: true };
+    // Staat het blok nog zoals jij het zag? Anders niets overschrijven (een collega was eerder).
+    if (spec.gezien) { const afwijk = Object.keys(patch).filter(k => Object.prototype.hasOwnProperty.call(spec.gezien, k) && String(b[k] == null ? '' : b[k]) !== String(spec.gezien[k] == null ? '' : spec.gezien[k])); if (afwijk.length) return { ok: false, tegelijk: true, reden: 'Iemand anders wijzigde dit planblok intussen (' + afwijk.map(k => ({ persoon: 'de persoon', datum: 'de dag', start: 'de starttijd', duurMin: 'de duur', project_code: 'het project', taak: 'de titel', taak_id: 'de taak', notitie: 'de notitie' }[k] || k)).join(', ') + '); jouw wijziging is niet opgeslagen. Je ziet nu de nieuwe stand.' }; }
+    const c = V.blokVelden(patch, ctx, b); if (!c.ok) return c;
+    const v = c.velden, voor = {}; let anders = false;
+    Object.keys(v).forEach(k => { if (String(b[k] == null ? '' : b[k]) !== String(v[k] == null ? '' : v[k])) { anders = true; voor[k] = b[k] === undefined ? '' : b[k]; } else delete v[k]; });
+    if (!anders) return { ok: true, noop: true };
+    if (!spec.bevestigd && (v.persoon !== undefined || v.datum !== undefined)) { const vraag = vraagVoor(v.persoon !== undefined ? v.persoon : b.persoon, v.datum !== undefined ? v.datum : b.datum); if (vraag) return { ok: true, vraag }; }
+    const n = stempel(Object.assign({}, b, v, { ts, door: wie }), b);
+    return { ok: true, blokken: lijst.map(x => x === b ? n : x), wijziging: { soort: 'blokWijzig', id: b.id, voor, na: Object.assign({}, v), stempel: n._gewijzigd, naam: blokTekst(n) } };
+  };
   // ═══ Een taak slepen: de taakbalk (T4 en T5, keuzeplan 16-10) ═══════════════════════════════════════════════════════════
   // Slepen uit Ongepland, een taakbalk verplaatsen en een rand van een taakbalk uittrekken maakt geen planblok: de taak zelf wordt aangepast (toegewezen, start, eind), via de schrijfkern van de takenlijst
   // (MTPlanning.takenSchrijf: vers lezen, de lokale kopie erbij, stempelen, schrijven met de ETag; een 412 wordt samengevoegd en opnieuw geprobeerd, maximaal drie keer; lezen en schrijven krijgen een time-out van
