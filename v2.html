@@ -13484,13 +13484,13 @@ const _SP = Object.assign(window.MTCore.makeSP({
         if (!isObj(r)) { uit[c] = l; continue; }
         const tl = _spTijd(l), tr = _spTijd(r), gelijk = JSON.stringify(kaal(l)) === JSON.stringify(kaal(r));
         // Gelijke stempel (> 0) maar andere inhoud: een vaste tiebreaker (inhoud), zodat elk apparaat dezelfde kant kiest en het convergeert.
-        const lokaalWint = (tl === tr && tl > 0 && !gelijk) ? JSON.stringify(kaal(l)) >= JSON.stringify(kaal(r)) : _spLokaalWint(tl, tr);
+        const lokaalWint = (tl === tr && tl > 0 && !gelijk) ? ((!!l._weg !== !!r._weg) ? !!l._weg : JSON.stringify(kaal(l)) >= JSON.stringify(kaal(r))) : _spLokaalWint(tl, tr);
         const win = lokaalWint ? l : r, verlies = lokaalWint ? r : l;
         // Historie van BEIDE kanten samenvoegen (dedupe op inhoud, nieuwste eerst); de verliezer zelf komt erbij.
         const sleutel = e => JSON.stringify(Object.assign({}, e, { _tijd: 0, _bron: 0 }));
         const vl = (gelijk || verlies._weg) ? null : Object.assign(kaal(verlies), { _tijd: new Date().toISOString(), _bron: lokaalWint ? 'sharepoint' : 'deze pc' });
         const eerder = [], gezien = new Set();
-        [...(vl ? [vl] : []), ...(Array.isArray(win._eerder) ? win._eerder : []), ...(Array.isArray(verlies._eerder) ? verlies._eerder : [])].forEach(e => {
+        [...(Array.isArray(win._eerder) ? win._eerder : []), ...(Array.isArray(verlies._eerder) ? verlies._eerder : []), ...(vl ? [vl] : [])].forEach(e => {   // bestaande vermeldingen eerst: een herhaalde merge ververst hun _tijd niet
           if (!e || typeof e !== 'object') return; const s = sleutel(e); if (gezien.has(s)) return; gezien.add(s); eerder.push(e);
         });
         eerder.sort((a, b) => String(b._tijd || '').localeCompare(String(a._tijd || '')));
@@ -17186,7 +17186,7 @@ async function ctlKoppelTerug(van){
   if(window.calcProjectTerug&&window.CALC&&CALC.loaded) terug.calculatie=calcProjectTerug(vid,naar).length;
   const all=_ctlJson('mt_offerte_keuze',{})||{}, k=all[van];
   if(k&&k._verhuis&&k._verhuis.id===vid){
-    if(JSON.stringify(all[naar]||null)===JSON.stringify(k._verhuis.geschreven)){
+    if(JSON.stringify(_okKaal(all[naar]||null))===JSON.stringify(_okKaal(k._verhuis.geschreven))){   // zonder stempel/historie: offerteKeuzeSave voegt die toe
       if(k._verhuis.voor.naar) all[naar]=k._verhuis.voor.naar; else delete all[naar];   // door de verhuizing aangemaakt → weer zoals ervoor
       all[van]=k._verhuis.voor.van; terug.offertekeuze=1;
       if(typeof offerteKeuzeSave==='function') offerteKeuzeSave(all); else localStorage.setItem('mt_offerte_keuze',JSON.stringify(all));
