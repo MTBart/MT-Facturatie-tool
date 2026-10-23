@@ -55,13 +55,13 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planfilter.js?v=2026-10-23j"></script>
-<script src="mt-planning.js?v=2026-10-23l"></script>
+<script src="mt-planning.js?v=2026-10-23n"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-23l"></script>
+<script src="mt-planverplaats.js?v=2026-10-23n"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
 <script src="mt-objectpaneel.js?v=2026-10-23l"></script>
-<script src="mt-taakpaneel.js?v=2026-10-23m"></script>
+<script src="mt-taakpaneel.js?v=2026-10-23n"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
 <script src="mt-planinrichting.js?v=2026-10-23g"></script>
 <script src="mt-bord.js?v=2026-10-23k"></script>
@@ -8231,27 +8231,38 @@ function _p2AfhBouw(code){
     padTekst?_p2El('div',{class:'pm-soort',title:'Gerekend vanaf de leverdatum terug: de ketting zonder speling',tekst:'Kritiek pad: '+padTekst}):null);
 }
 
+// F2a: wijzigingen aan afhankelijkheden vanuit de projecttabel gaan via de veilige route (MTPlanVerplaats.afhWijzig: vers lezen, kring- en dubbelcontrole, "gezien", stempel per veld, ETag/412,
+// controle achteraf, Ongedaan maken) zodra de takenlijst klaar is; anders (nog niet geladen of offline) geldt de lokale route met een stempel per veld, zoals voor F2a.
+function _projAfhVeilig(){ return typeof tpWijzig==='function'&&typeof projTakenKlaar==='function'&&projTakenKlaar()&&typeof _SP!=='undefined'&&_SP&&_SP.ready; }
+function _projAfhStand(d){ return MTPlanning.depStandVan(d); }
+async function projAfhRoute(code,ops,wat){
+  let r; try{ r=await tpWijzig({code,naam:wat,afhOps:ops}); }catch(e){ r={ok:false,reden:'Opslaan mislukt: '+(e.message||e)}; }
+  if(!r||!r.ok){ try{ await mtDialog.alert({title:'Afhankelijkheid',message:(r&&r.reden)||'Niet opgeslagen.'}); }catch(e){} _p2Na(code); return r; }
+  if(r.noop) return r;
+  _p2Na(code);
+  if(r.tegelijk){ try{ MTCapaciteitNieuw.toast(r.tegelijk,null,true); }catch(e){} }
+  else if(r.wijziging){ try{ MTCapaciteitNieuw.toast('Afhankelijkheid '+wat+' opgeslagen.',async()=>{ let h; try{ h=await tpWijzigHerstel(r.wijziging); }catch(e){ h={ok:false,reden:String(e&&e.message||e)}; } _p2Na(code); MTCapaciteitNieuw.toast(h&&h.ok?(h.tegelijk||'Teruggezet.'):((h&&h.reden)||'Terugzetten lukt niet.'),null,!!(h&&(h.tegelijk||!h.ok))); },false,'Ongedaan maken'); }catch(e){} }
+  try{ if(window.track) track('taken','afhankelijkheid_'+wat.split(' ')[0],{detail:code,ok:true}); }catch(e){}
+  return r;
+}
 function projAfhVoeg(code,naarId,vanId){
   if(!_p2Mag()||!vanId) return;
   const taken=projTaken(code), ruw=projAfhRuw()[code]||[], proj=projVind(code);
   const r=MTPlanning.depNieuw(taken,ruw,{van:vanId,naar:naarId,project_id:(proj&&proj.project_id)||''});
   if(!r.ok){ mtDialog.alert({title:'Afhankelijkheid',message:r.fout}); projAfhTeken(code); return; }
+  if(_projAfhVeilig()){ projAfhRoute(code,[{op:'nieuw',id:r.dep.id,van:vanId,naar:naarId,type:r.dep.type,lag_dagen:r.dep.lag_dagen,lag_soort:r.dep.lag_soort}],'toegevoegd'); return; }
   projAfhZet(code,MTPlanning.afhActief(ruw).concat([r.dep]));
   try{ if(window.track) track('taken','afhankelijkheid_nieuw',{detail:code,ok:true}); }catch(e){}
   _p2Na(code);
 }
-function projAfhLag(code,depId,waarde){
-  if(!_p2Mag()) return;
-  const arr=projAfhActief(code).map(d=>Object.assign({},d)), d=arr.find(x=>x.id===depId); if(!d) return;
-  const r=MTPlanning.depWijzig(arr,depId,{lag_dagen:waarde});   // type en soort blijven; een voorsprong (negatief) mag bij procestijd
-  if(!r.ok){ mtDialog.alert({title:'Wachttijd',message:r.fout}); _p2Na(code); return; }
-  projAfhZet(code,arr.map(x=>x.id===depId?r.dep:x)); _p2Na(code);
-}
-// Type of soort van een afhankelijkheid in de projecttabel wijzigen (het paar blijft, dus nooit een nieuwe kring)
+function projAfhLag(code,depId,waarde){ projAfhVeld(code,depId,'lag_dagen',waarde); }
+// Type, wachttijd of soort van een afhankelijkheid in de projecttabel wijzigen (het paar blijft, dus nooit een nieuwe kring)
 function projAfhVeld(code,depId,veld,waarde){
   if(!_p2Mag()) return;
-  const arr=projAfhActief(code).map(d=>Object.assign({},d)), r=MTPlanning.depWijzig(arr,depId,{[veld]:waarde});
-  if(!r.ok){ mtDialog.alert({title:'Afhankelijkheid',message:r.fout}); _p2Na(code); return; }
+  const arr=projAfhActief(code).map(d=>Object.assign({},d)), d0=arr.find(x=>x.id===depId); if(!d0) return;
+  const r=MTPlanning.depWijzig(arr,depId,{[veld]:waarde});
+  if(!r.ok){ mtDialog.alert({title:veld==='lag_dagen'?'Wachttijd':'Afhankelijkheid',message:r.fout}); _p2Na(code); return; }
+  if(_projAfhVeilig()){ projAfhRoute(code,[{op:'wijzig',id:depId,velden:{[veld]:waarde},gezien:_projAfhStand(d0)}],veld==='type'?'type gewijzigd':veld==='lag_soort'?'soort wachttijd gewijzigd':'wachttijd gewijzigd'); return; }
   projAfhZet(code,arr.map(x=>x.id===depId?r.dep:x)); _p2Na(code);
 }
 async function projAfhWeg(code,depId){
@@ -8259,9 +8270,9 @@ async function projAfhWeg(code,depId){
   const arr=projAfhActief(code), d=arr.find(x=>x.id===depId); if(!d) return;
   const taken=projTaken(code), naam=id=>(taken.find(t=>t.id===id)||{}).naam||'?';
   if(!await mtDialog.confirm({title:'Afhankelijkheid weghalen',message:'"'+naam(d.naar_taak)+'" hangt dan niet meer af van "'+naam(d.van_taak)+'". De datums blijven zoals ze zijn.',okLabel:'Weghalen'})) return;
+  if(_projAfhVeilig()){ projAfhRoute(code,[{op:'weg',id:depId,gezien:_projAfhStand(d)}],'weggehaald'); return; }
   projAfhZet(code,arr.filter(x=>x.id!==depId)); _p2Na(code);
-}
-function projAfhModusZet(code,waarde){
+}function projAfhModusZet(code,waarde){
   const p=projVind(code); if(!p) return;
   if(window.MTRol&&MTRol.mag&&!MTRol.mag('projecten:wijzigen')) return;
   projVeldZet(p,'gegevens.afhankelijkheid_modus',waarde==='strict'?'strict':'flexible');

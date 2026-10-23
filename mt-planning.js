@@ -930,7 +930,12 @@
       const extra = Object.assign(v.poort && P.poort(v.poort) ? { poort: P.poort(v.poort).l } : {}, e.lagSoort === 'levertijd' ? { lagSoort: 'levertijd' } : {});   // P6: een poort heet "poort X"; F2a: levertijd in kalenderdagen
       const gestart = v.status === 'bezig' || v.status === 'klaar', klaarV = v.status === 'klaar';
       if (e.type === 'FF' || e.type === 'SF') {   // F2a: EE en BE begrenzen alleen het einde van de opvolger: hij mag beginnen, maar niet eerder klaar zijn
-        if (e.type === 'FF' ? !klaarV : !gestart) (uit[n.id].eindOp = uit[n.id].eindOp || []).push({ id: v.id, naam: v.naam, type: e.type });
+        const open = e.type === 'FF' ? !klaarV : !gestart;
+        if (open) { (uit[n.id].eindOp = uit[n.id].eindOp || []).push(Object.assign({ id: v.id, naam: v.naam, type: e.type }, e.lag ? { lag: e.lag } : {}, e.lagSoort === 'levertijd' ? { lagSoort: 'levertijd' } : {})); return; }
+        if (e.lag > 0) {   // de voorganger is klaar (EE) of begonnen (BE): de wachttijd loopt nog; zolang is het einde van de opvolger begrensd
+          const basisE = e.type === 'FF' ? (P.isYmd(v.klaar_op) ? v.klaar_op : (P.isYmd(v.eind) ? v.eind : '')) : (P.isYmd(v.start) ? v.start : '');
+          if (basisE) { const totE = e.lagSoort === 'levertijd' ? dymd(naarW(dnr(basisE) + e.lag, true, V)) : P.addWerkdagen(basisE, e.lag, V); if (vandaag < totE) (uit[n.id].eindOp = uit[n.id].eindOp || []).push(Object.assign({ id: v.id, naam: v.naam, type: e.type, lag: e.lag, tot: totE }, e.lagSoort === 'levertijd' ? { lagSoort: 'levertijd' } : {})); }
+        }
         return;
       }
       if (e.type === 'SS') {   // BB: wachten tot de voorganger is begonnen, daarna eventueel de wachttijd na zijn geplande begin
@@ -957,7 +962,7 @@
   // Tekst voor "wacht op": de naam, bij een lopende wachttijd ook tot wanneer (de aanroeper geeft de datumopmaak mee).
   P.wachtOpTekst = (w, datumTekst) => ((w && w.op) || []).map(x => (x.poort ? 'poort ' + x.poort : x.naam) + (x.type === 'SS' && !x.tot ? ' (moet eerst beginnen)' : '') + (x.tot ? (x.lagSoort === 'levertijd' ? ' (levertijd ' + x.lag + (x.lag === 1 ? ' dag' : ' dagen') : ' (wachttijd ' + x.lag + ' werkdag' + (x.lag === 1 ? '' : 'en')) + ', tot ' + (datumTekst ? datumTekst(x.tot) : x.tot) + ')' : '')).join(', ');
   // F2a: waar wacht het einde van een taak op (EE en BE)? Tekst voor het paneel; leeg als er niets is.
-  P.eindOpTekst = w => ((w && w.eindOp) || []).map(x => (x.type === 'FF' ? 'kan pas klaar na het einde van ' : 'kan pas klaar na het begin van ') + x.naam).join(', ');
+  P.eindOpTekst = (w, datumTekst) => ((w && w.eindOp) || []).map(x => (x.type === 'FF' ? 'kan pas klaar na het einde van ' : 'kan pas klaar na het begin van ') + x.naam + (x.tot ? ' (wachttijd tot ' + (datumTekst ? datumTekst(x.tot) : x.tot) + ')' : (x.lag > 0 ? ' en dan ' + (x.lagSoort === 'levertijd' ? x.lag + (x.lag === 1 ? ' dag' : ' dagen') : x.lag + (x.lag === 1 ? ' werkdag' : ' werkdagen')) + ' wachttijd' : ''))).join(', ');
 
   // ── Rooster: vroegste en laatste datums en het kritieke pad ──────────────────────────────────────────
   // Voorwaarts vanaf `start` (vroegste datums) en achterwaarts vanaf de leverdatum (laatste datums). Per koppeling
@@ -2528,7 +2533,7 @@
       if (!o || typeof o !== 'object') return { fout: 'Onvolledige bewerking.' };
       if (o.op === 'nieuw') {
         const r = P.depNieuw(taken, lijst, { van: o.van, naar: o.naar, type: o.type, lag_dagen: o.lag_dagen, lag_soort: o.lag_soort, id: o.id || '', project_id });
-        if (!r.ok) return { fout: r.fout }; lijst.push(r.dep); tegen.unshift({ op: 'weg', id: r.dep.id }); verwacht.push({ id: r.dep.id, bestaat: true, velden: depStand(r.dep) }); veranderd = true;
+        if (!r.ok) return { fout: r.fout }; lijst.push(r.dep); tegen.unshift({ op: 'weg', id: r.dep.id, gezien: depStand(r.dep) }); verwacht.push({ id: r.dep.id, bestaat: true, velden: depStand(r.dep) }); veranderd = true;   // de omgekeerde bewerking weet hoe de koppeling er na deze actie uitzag (niet verwijderen als een ander hem intussen wijzigde)
       } else if (o.op === 'wijzig') {
         const d = lijst.find(x => String(x.id) === String(o.id)); if (!d) return { fout: 'Deze afhankelijkheid bestaat niet meer; er is niets gewijzigd.' };
         const nu = depStand(d), zag = o.gezien && typeof o.gezien === 'object' ? o.gezien : null;
@@ -2539,13 +2544,15 @@
         lijst = lijst.map(x => String(x.id) === String(o.id) ? r.dep : x); tegen.unshift({ op: 'wijzig', id: o.id, velden: voor, gezien: naV }); verwacht.push({ id: o.id, bestaat: true, velden: naV }); veranderd = true;   // alleen de velden die deze bewerking zette: wat een ander tegelijk wijzigde mag anders zijn
       } else if (o.op === 'weg') {
         const d = lijst.find(x => String(x.id) === String(o.id)); if (!d) continue;
+        const zagW = o.gezien && typeof o.gezien === 'object' ? o.gezien : null, nuW = depStand(d);
+        if (zagW && DEP_ZICHT.some(k => zagW[k] !== undefined && String(zagW[k]) !== String(nuW[k]))) return { fout: 'Deze afhankelijkheid is intussen door iemand anders gewijzigd; er is niets verwijderd. Je ziet nu de nieuwe stand.', tegelijk: true };
         lijst = lijst.filter(x => x !== d); const schoon = kopie(d); ['_vs', '_gewijzigd', '_vervallen', '_veldconflict', '_ts', '_door'].forEach(k => delete schoon[k]);
         tegen.unshift({ op: 'herstel', dep: schoon }); verwacht.push({ id: d.id, bestaat: false }); veranderd = true;
       } else if (o.op === 'herstel') {
         const d = o.dep; if (!d || !d.id || !d.van_taak || !d.naar_taak) return { fout: 'Onvolledige bewerking.' };
         if (lijst.some(x => String(x.id) === String(d.id))) continue;
         const c = P.depControle(taken, lijst, { van: d.van_taak, naar: d.naar_taak }); if (!c.ok) return { fout: 'Terugzetten kan niet meer: ' + c.fout };
-        lijst.push(kopie(d)); tegen.unshift({ op: 'weg', id: d.id }); verwacht.push({ id: d.id, bestaat: true, velden: depStand(d) }); veranderd = true;
+        lijst.push(kopie(d)); tegen.unshift({ op: 'weg', id: d.id, gezien: depStand(d) }); verwacht.push({ id: d.id, bestaat: true, velden: depStand(d) }); veranderd = true;
       } else return { fout: 'Onbekende bewerking.' };
     }
     return veranderd ? { lijst, tegen, verwacht } : { noop: true };

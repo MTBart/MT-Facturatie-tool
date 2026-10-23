@@ -134,7 +134,7 @@
     lag.addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.stopPropagation(); lag.value = String(x.lag); lag.blur(); } });
     const soort = h.el('select', { klass: 'tp-invoer tp-keuze tp-afh-soort', 'aria-label': 'Soort wachttijd met ' + x.naam, title: 'Werkdagen (procestijd) of kalenderdagen (levertijd van materiaal)' }, SOORT_OPTIES.map(([w, l]) => h.el('option', { value: w, tekst: l })));
     soort.value = x.lagSoort; soort.addEventListener('change', () => wijzig({ lag_soort: soort.value }, 'soort wachttijd'));
-    return h.el('div', { klass: 'tp-afh-bed' }, type, lag, soort, h.el('button', { type: 'button', klass: 'tp-knop tp-klein tp-gevaar', 'aria-label': 'Haal de koppeling met ' + x.naam + ' weg', title: 'De koppeling weghalen (met Ongedaan maken)', tekst: '\u00d7', klik: () => h.bewaar({ afhOps: [{ op: 'weg', id: x.depId }] }, 'afhankelijkheid weggehaald') }));
+    return h.el('div', { klass: 'tp-afh-bed' }, type, lag, soort, h.el('button', { type: 'button', klass: 'tp-knop tp-klein tp-gevaar', 'aria-label': 'Haal de koppeling met ' + x.naam + ' weg', title: 'De koppeling weghalen (met Ongedaan maken)', tekst: '\u00d7', klik: () => h.bewaar({ afhOps: [{ op: 'weg', id: x.depId, gezien }] }, 'afhankelijkheid weggehaald') }));
   };
   const afhToevoegen = (m, richting, h) => {
     if (!kanAfh()) return null;
@@ -171,7 +171,7 @@
       .concat(m.opvolgers.filter(x => x.botst).map(x => x.naam + (x.type === 'FF' || x.type === 'SF' ? ' ' + P.DEP_TYPEN[x.type] + ': eindigt ' + datum(x.eind) + '; dat kan op zijn vroegst ' + datum(x.vroegstEind) + '.' : ' begint al ' + datum(x.start) + '; dat kan op zijn vroegst ' + datum(x.vroegst) + (x.type === 'SS' ? ' (na het begin van deze taak).' : ' (na het eind van deze taak).'))));
     if (waarsch.length) kids.push(h.el('div', { klass: 'tp-waarsch', role: 'note' }, h.icoon(h.IC.let), h.el('div', null, waarsch.map(w => h.el('div', { tekst: w })), h.el('div', { klass: 'tp-sub', tekst: 'Er wordt niets vanzelf verschoven.' }))));
     if ((t.status || 'todo') === 'todo' && m.wacht && m.wacht.wacht) kids.push(h.el('p', { klass: 'tp-sub', tekst: 'Wacht op: ' + P.wachtOpTekst(m.wacht, P.datumKort) }));
-    if ((t.status || 'todo') !== 'klaar' && m.wacht && m.wacht.eindOp && m.wacht.eindOp.length) kids.push(h.el('p', { klass: 'tp-sub', tekst: 'Deze taak ' + P.eindOpTekst(m.wacht) + '.' }));
+    if ((t.status || 'todo') !== 'klaar' && m.wacht && m.wacht.eindOp && m.wacht.eindOp.length) kids.push(h.el('p', { klass: 'tp-sub', tekst: 'Deze taak ' + P.eindOpTekst(m.wacht, P.datumKort) + '.' }));
     return h.sectie('tp-h-afh', 'Afhankelijkheden', h.el('span', { klass: 'tp-teller', tekst: String(m.voorgangers.length + m.opvolgers.length) }), kids);
   }  // Checklist (P6a): afvinkpunten in de taak, met per punt wie het afvinkte en wanneer ("✓ door Mathijs · 22-10", dezelfde opmaak als bij een afgevinkte taak).
   // Afvinken mag wie een status mag zetten; punten toevoegen, hernoemen en verwijderen is voor kantoor. Elke bewerking gaat als bewerking op de verse stand (D.wijzig met ops): twee mensen die tegelijk afvinken, bewaren allebei het hunne.

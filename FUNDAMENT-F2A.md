@@ -31,7 +31,9 @@ Alle rekenregels gebruiken twee hulpfuncties, `startEis` (de vroegste start van 
 - `MTPlanVerplaats.afhWijzig` (mt-planverplaats.js): slot per project, de tijdgrenzen van de taakroute, geen stil overschrijven (`gezien`: de waarden die de gebruiker zag; wijken ze af op de verse stand, dan wordt er niets geschreven en meldt de route dat een ander het wijzigde), een controle achteraf dat de wijziging er zo staat (anders de melding "iemand anders wijzigde dezelfde afhankelijkheid tegelijk"), en een kringcontrole op de samengevoegde stand: maakt een gelijktijdige wijziging van een ander (de tegengestelde koppeling) er samen met de mijne een kring van, dan wordt de mijne meteen teruggedraaid en dat gezegd.
 - Ongedaan maken = de omgekeerde bewerkingen (`wijziging.tegen`), met `gezien` op wat deze actie zette: is de koppeling sindsdien door een ander gewijzigd, dan gebeurt er niets en staat dat in de melding. Een verwijderde koppeling komt terug met hetzelfde id en dezelfde waarden.
 - Het taakpaneel stuurt `{ afhOps }` via `D.wijzig`; `taakWijzig` verwijst naar `afhWijzig`. Het resultaat bevat `afhData` (het hele afhankelijkhedenbestand), niet `data` (dat is van de taken).
-- De projecttabel behoudt zijn lokale route (`projAfhZet`), maar wijzigt type, wachttijd en soort nu via `P.depWijzig` (het paar blijft, geen kring) en laat een negatieve wachttijd toe.
+- De projecttabel (toevoegen, type, wachttijd, soort, weghalen) gaat zodra de takenlijst klaar is ook via deze route (`projAfhRoute`: dialoog bij een fout, melding met Ongedaan maken); alleen als de takenlijst nog niet geladen of SharePoint niet klaar is geldt de lokale route met een stempel per veld, zoals voor F2a.
+- Verwijderen en het terugdraaien van een toevoeging controleren ook `gezien`: heeft een ander de koppeling intussen gewijzigd, dan blijft hij staan (en zijn wijziging ook).
+- Bij EE en BE loopt de wachttijd ook door nadat de voorganger klaar is (EE) of begon (BE): `eindOp` noemt dan de datum (`tot`).
 
 ## Bekend en bewust
 - Sjablonen kennen alleen EB met wachttijd in werkdagen (zoals voorheen).
