@@ -46,6 +46,35 @@
   TT.urenTekst = u => { const n = Number(u) || 0; return n ? String(n).replace('.', ',') : ''; };
   TT.isYmd = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 
+  // ── wie vinkte wat wanneer af (alleen uit bestaande gegevens: de veldstempel `_vs.status` met `door` en `t`, `klaar_op`, en het takenjournaal) ──
+  const cap = s => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+  const dd = ymd => String(ymd).slice(8, 10) + '-' + String(ymd).slice(5, 7);
+  const p2 = n => String(n).padStart(2, '0');
+  const ddt = ms => { const d = new Date(ms); return ms ? p2(d.getDate()) + '-' + p2(d.getMonth() + 1) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) : ''; };
+  // Een stempel van een script of agent (claude-…) is geen persoon: "Claude (namens Bart)"; een e-mailadres of slug uit de personenlijst wordt de naam; onbekend blijft zoals het er staat.
+  TT.wieTekst = (door, naamVan) => {
+    const d = String(door == null ? '' : door).trim(); if (!d) return '';
+    const nv = typeof naamVan === 'function' ? naamVan : () => '';
+    const m = /^claude(?:[-_]([a-z0-9]+))?$/i.exec(d);
+    if (m) { const n = m[1] ? (nv(m[1]) || cap(m[1])) : ''; return n ? 'Claude (namens ' + n + ')' : 'Claude'; }
+    return nv(d) || d;
+  };
+  const STLAB = { todo: 'Open', bezig: 'Bezig', wacht: 'Wacht', klaar: 'Klaar' };
+  // → null (niet klaar of niets bekend) of { tekst: "✓ door Mathijs · 22-10", door, datum, geschiedenis: [{ wanneer, wie, van, naar }] }
+  TT.afgevinkt = (t, journaal, code, naamVan) => {
+    if (!t || (t.status || 'todo') !== 'klaar') return null;
+    const st = t._vs && (t._vs.status || t._vs.klaar_op) || null, door = st && st.door ? TT.wieTekst(st.door, naamVan) : '';
+    const ymd = TT.isYmd(t.klaar_op) ? t.klaar_op : (st && st.t ? new Date(Number(st.t)).toISOString().slice(0, 10) : '');
+    if (!ymd && !door) return null;
+    const ev = (Array.isArray(journaal) ? journaal : []).filter(j => j && j.taak && String(j.code).toLowerCase() === String(code).toLowerCase() && String(j.taak.id) === String(t.id) && /^(paneel:.*\bstatus\b|status)$/.test(String(j.actie || '')))
+      .sort((a, b) => String(a.tijd).localeCompare(String(b.tijd)));
+    let reg = ev.map((j, i) => ({ ms: Date.parse(j.tijd) || 0, door: j.door || '', van: j.taak.status || 'todo', naar: i + 1 < ev.length ? (ev[i + 1].taak.status || 'todo') : 'klaar' }));
+    if (reg.length) { const l = reg[reg.length - 1]; if (!l.door && st && st.door) l.door = st.door; }   // de laatste wijziging is die van de stempel
+    else reg = [{ ms: st && st.t ? Number(st.t) : (Date.parse(ymd + 'T12:00:00Z') || 0), door: st && st.door || '', van: '', naar: 'klaar' }];
+    return { tekst: door ? '✓ door ' + door + (ymd ? ' · ' + dd(ymd) : '') : '✓ ' + dd(ymd), door, datum: ymd ? dd(ymd) : '',
+      geschiedenis: reg.map(g => ({ wanneer: ddt(g.ms), wie: TT.wieTekst(g.door, naamVan) || 'onbekend', van: g.van ? (STLAB[g.van] || g.van) : '', naar: STLAB[g.naar] || g.naar })) };
+  };
+  TT.geschiedenisTekst = m => m.geschiedenis.map(g => (g.wanneer ? g.wanneer + ' · ' : '') + g.wie + ' · ' + (g.van ? g.van + ' → ' : '→ ') + g.naar).join('\n');
   const mag = w => { try { return !!(D.mag && D.mag[w] && D.mag[w]()); } catch (e) { return false; } };
   const toast = (t, o, l, lb) => { try { if (D.toast) D.toast(t, o, l, lb); } catch (e) {} };
   const sleutelVan = (obj, code) => Object.keys(obj || {}).find(k => String(k).toLowerCase() === String(code).toLowerCase());
@@ -183,7 +212,14 @@
     vak.addEventListener('change', async () => { vak.disabled = true; S.focus = TT.sleutel(code, id); const ok = await TT.afvinken(code, id); if (!ok) vak.checked = st === 'klaar'; vak.disabled = false; });
     return el('label', { klass: 'tt-klaar', title: st === 'klaar' ? 'Klaar. Uitvinken zet de taak terug naar de vorige status' : 'Afvinken = Klaar' }, vak);
   };
-  // Na het hertekenen staat de focus weer op het vakje waar het toetsenbord was
+  // Bij een afgevinkte taak: "✓ door Mathijs · 22-10"; klik, tik of Enter toont de korte geschiedenis (wie, wanneer, van → naar). Ook voor een rol zonder schrijfrecht.
+  TT.afgevinktNode = function (code, id) {
+    const t = vindTaak(code, id), m = t && TT.afgevinkt(t, D.journaal ? D.journaal() : [], code, D.naamVan);
+    if (!m) return null; stijl();
+    const lijst = el('ul', { klass: 'tt-hist', hidden: true }, m.geschiedenis.map(g => el('li', { tekst: (g.wanneer ? g.wanneer + ' · ' : '') + g.wie + ' · ' + (g.van ? g.van + ' → ' : '→ ') + g.naar })));
+    const knop = el('button', { type: 'button', klass: 'tt-door', 'aria-expanded': 'false', title: TT.geschiedenisTekst(m), klik: () => { const open = lijst.hidden; lijst.hidden = !open; knop.setAttribute('aria-expanded', String(open)); } }, m.tekst);
+    return el('span', { klass: 'tt-doorwrap' }, knop, lijst);
+  };  // Na het hertekenen staat de focus weer op het vakje waar het toetsenbord was
   TT.herstelFocus = function (wortel) {
     const k = S.focus; if (!k || !wortel || !wortel.querySelector) return false; S.focus = null;
     const v = [...wortel.querySelectorAll('input.tt-klaar-in')].find(x => x.getAttribute('data-tt-sleutel') === k);
@@ -214,6 +250,7 @@
         if (st === 'wacht' && t.wacht_reden) c[1].appendChild(el('span', { klass: 'tt-sub', tekst: 'Wacht: ' + t.wacht_reden, title: t.wacht_reden }));
         else if (st === 'todo' && w && w.wacht) c[1].appendChild(el('span', { klass: 'tt-sub', tekst: 'wacht op voorganger', title: w.tekst || 'Een voorganger is nog niet klaar' }));
       }
+      if (st === 'klaar') { const dn = TT.afgevinktNode(code, id); if (dn) c[1].appendChild(dn); }   // wie en wanneer afgevinkt
       // 3) wie en activiteit (de oude lijsten vervangen door lijsten die via het taakpaneel schrijven; zonder recht gewone tekst)
       const oud = [...c[3].querySelectorAll('select.pt-sel')], actOud = oud.find(x => x.getAttribute('aria-label') === 'Activiteit'), wieOud = oud.find(x => x.getAttribute('aria-label') === 'Toegewezen aan');
       const tekstWaarde = (lijst, v, leeg) => { const f = lijst.find(([k]) => k === v); return el('span', { klass: 'tt-tekst', tekst: f ? f[1] : (v || leeg) }); };
@@ -275,7 +312,11 @@
     '.pt-tabel tr.tt-rij>td:nth-child(3){order:-1}.pt-tabel .tt-klaar{min-width:44px;min-height:44px}.pt-tabel .tt-klaar-in{width:26px;height:26px}',
     '.pt-tabel .tt-sel,.pt-tabel .tt-in,.pt-tabel .tt-stap{min-height:44px;font-size:14px}.pt-tabel .tt-stap{min-width:44px}.pt-tabel .tt-datum{width:auto;flex:1}.pt-tabel td.tt-datums{min-width:0}.pt-tabel tr.tt-rij>td:nth-child(4) .tt-sel,.pt-tabel tr.tt-rij>td:nth-child(5) .tt-sel{width:100%}.pt-tabel .tt-pre{width:40px;font-size:12px}}'
   ].join('\n');
-  function stijl() { const d = dom(); if (!d || !d.head || d.getElementById('tt-stijl')) return; const s = d.createElement('style'); s.id = 'tt-stijl'; s.textContent = CSS; d.head.appendChild(s); }
+  const CSS_GEDEELD = [
+    '.tt-doorwrap{display:block}.tt-door{display:inline-block;background:none;border:0;padding:2px 0;min-height:28px;font:inherit;font-size:11px;color:var(--text-faint,#8a8f8a);cursor:pointer;text-align:left;overflow-wrap:break-word;word-break:normal}.tt-door:hover{text-decoration:underline}.tt-door:focus-visible{outline:2px solid var(--primary,#2A4A38);outline-offset:1px}',
+    '.tt-hist{margin:2px 0 4px;padding:0 0 0 14px;font-size:11px;color:var(--ink-3,#646a64);list-style:disc}.tt-hist li{overflow-wrap:break-word}@media (max-width:640px){.tt-door{min-height:44px;font-size:12px}.tt-hist{font-size:12px}}'
+  ].join('\n');
+  function stijl() { const d = dom(); if (!d || !d.head || d.getElementById('tt-stijl')) return; const s = d.createElement('style'); s.id = 'tt-stijl'; s.textContent = CSS + '\n' + CSS_GEDEELD; d.head.appendChild(s); }
 
   TT.init = cfg => { D = cfg || {}; S.bezig = false; S.vorige = new Map(); S.focus = null; return TT; };
   TT._stijl = CSS;

@@ -82,7 +82,8 @@
       const naam = el('button', { type: 'button', klass: 'vg-naam' + (t.status === 'klaar' ? ' klaar' : ''), title: 'Open de taak (alle details)', klik: () => { if (D.openTaak) D.openTaak(code, t.id, naam); } }, t.naam || '(zonder naam)');
       return el('div', { klass: 'vg-taak', 'data-vg-taak': String(t.id) }, vak, el('div', { klass: 'vg-tekst' }, naam,
         t.status === 'wacht' ? el('span', { klass: 'vg-tag vg-wacht', tekst: 'Wacht' + (t.wacht ? ': ' + t.wacht : '') }) : (t.status === 'bezig' ? el('span', { klass: 'vg-tag', tekst: 'Bezig' }) : null),
-        meta ? el('span', { klass: 'vg-meta', tekst: meta }) : null));
+        meta ? el('span', { klass: 'vg-meta', tekst: meta }) : null,
+        t.status === 'klaar' && root.MTTaakTabel && root.MTTaakTabel.afgevinktNode ? root.MTTaakTabel.afgevinktNode(code, t.id) : null));
     }));
   }
 

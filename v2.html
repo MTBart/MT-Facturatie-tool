@@ -3947,6 +3947,7 @@ try{ MTTaakTabel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM,
   bestel:()=>_blActief(), bestelVers:async()=>{ await _blVerseLees(); return _blActief(); }, projectId:code=>(projVind(code)||{}).project_id||'',
   wachtInfo:(code,t)=>{ const w=MTPlanning.taakWacht(t,projTaken(code),projAfhRuw()[code]||[]); return { wacht:!!w.wacht, tekst:w.wacht?MTPlanning.wachtOpTekst(w,_p2D):'' }; },
   journaal:()=>{ try{ const j=JSON.parse(localStorage.getItem('mt_taken_journaal')||'[]'); return Array.isArray(j)?j:[]; }catch(e){ return []; } },
+  naamVan:d=>_capNaamVan(d),   // de naam uit de personenlijst (MT_TEAM) bij een e-mailadres of slug
   leesUren:x=>MTTaakPaneel.leesUren(x),
   naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _vgHerteken(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Takentabel init:',e); }// Het blok Voortgang bovenaan Project ▸ Overzicht (mt-voortgang.js): de roll-up komt van MTTijdlijn.model (geen tweede formule); het afvinkvakje is dat van de takentabel (MTTaakTabel.afvinkVak: zelfde route);
 // de projectfase gaat via leadFaseKies/projFaseZet (de bestaande overgangen, "Gewonnen → project" met zijn bevestiging) en de levertijd via bestelVerwachtZet (P5), voor alle open regels via bestelVerwachtBulk met Ongedaan maken.
@@ -9212,7 +9213,7 @@ async function _projTaakStatusNaar(code,id,nieuwStatus){
   { const mat=MTPlanning.taakMateriaal(t,MTPlanning.bestelVanTaak(_blActief(),t.id,{code,project_id:(projVind(code)||{}).project_id}));   // P5: een taak met open materiaal gaat niet stil naar Bezig of Klaar
     if(MTPlanning.materiaalVraagBevestiging(t,mat,nieuwStatus)&&!await mtDialog.confirm({title:'Het materiaal is nog niet binnen',message:MTPlanning.materiaalBevestigTekst(t.naam,mat,nieuwStatus,_p2D),okLabel:'Toch doorgaan'})) return; }
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // de blokkade of het recht kan tijdens de bevestiging veranderd zijn
-  _ptJournaal('status',code,t);
+  _ptJournaal('status',code,t,{door:_spWie()});
   t.status=nieuwStatus; _ptKlaarOp(t,nieuwStatus); delete t.wacht_reden;   // de reden hoort bij de status Wacht (die zet alleen de telefoon)
   // Ronde 8: eerst de nieuwe status en de Toggl-intentie duurzaam lokaal opslaan en controleren; pas daarna Toggl, en daarna afronden.
   // Lukt het opslaan niet, dan verandert er niets en gaat er niets naar Toggl. Niet meer "fire and forget": lukt Toggl niet, dan blijft de intentie zichtbaar (⏳).
@@ -16111,7 +16112,7 @@ async function capTaakHerstel(w,opt){
 async function tpWijzig(spec,opt){
   if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
   const r=_capTaakKlaar(await MTPlanVerplaats.taakWijzig(spec,_capTaakOpties(spec&&spec.code,opt)));
-  if(r&&r.ok&&r.oudTaak) _ptJournaal('paneel: '+Object.keys(spec.velden||{}).join(', '),spec.code,r.oudTaak);
+  if(r&&r.ok&&r.oudTaak) _ptJournaal('paneel: '+Object.keys(spec.velden||{}).join(', '),spec.code,r.oudTaak,{door:_spWie()});   // wie het deed, voor de geschiedenis bij een afgevinkte taak
   if(r&&!r.ok&&r.tegelijk) await _tpVersLokaal();
   return r;
 }
