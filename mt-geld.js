@@ -627,6 +627,28 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
 .mtg-kan.ja{border-color:var(--mtg-in)}.mtg-kan.let-op{border-color:#d9a400}.mtg-kan.nee{border-color:var(--mtg-uit)}
 .mtg-kan b{display:block;font-size:15px}
 .mtg-veld input[type=number],.mtg-veld input[type=date]{min-height:40px}
+.mtg-fp-m{border-top:1px solid var(--border,#eee);padding:6px 0}
+.mtg-fp-mk{display:flex;align-items:baseline;gap:8px;min-height:28px}
+.mtg-fp-mk>b:first-child,.mtg-fp-mk>span:first-child{flex:1;min-width:0}
+.mtg-fp-mk .n{flex:none;font-size:12px;color:var(--mtg-zacht)}
+.mtg-fp-mk .t{font-variant-numeric:tabular-nums;white-space:nowrap}
+.mtg-fp-m.leeg{padding:3px 0;color:var(--mtg-zacht);font-size:13px}
+.mtg-fp-m.eerder .mtg-fp-mk>b:first-child{color:var(--mtg-uit)}
+.mtg-fp-r,.mtg-fb-r{display:flex;align-items:center;gap:8px;padding:5px 0 5px 10px;min-height:40px;flex-wrap:wrap}
+.mtg-fp-r .n,.mtg-fb-r .n{flex:1;min-width:140px;overflow:hidden;text-overflow:ellipsis}
+.mtg-fp-r .b,.mtg-fb-r .b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.mtg-fp-r .m,.mtg-fb-r .m{font-size:13px;color:var(--mtg-zacht);white-space:nowrap}
+.mtg-fp-r.klaar,.mtg-fb-r.klaar{color:var(--mtg-zacht)}
+.mtg-fp-r.klaar .b,.mtg-fb-r.klaar .b{text-decoration:line-through}
+.mtg-fm{padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:13px;background:var(--card,#fff);min-height:32px}
+.mtg-fp-tot,.mtg-fb-tot{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--border,#ddd);margin-top:6px;padding-top:6px}
+.mtg-fb{background:var(--card,#fff);border:1px solid var(--border,#e4e2da);border-radius:8px;padding:8px 12px;margin:0 0 .6rem;cursor:pointer}
+.mtg-fb:hover{background:var(--bg,#f6f5f0)}
+.mtg-fb-kop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mtg-fb-kop b{flex:none}
+.mtg-fb-naar{margin-left:auto;font-size:12px;color:var(--mtg-zacht)}
+.mtg-fb-r{padding-left:0}
+@media(max-width:700px){.mtg-fm{min-height:44px;font-size:16px}.mtg-fp-r,.mtg-fb-r{padding-left:0}.mtg-fp-r .n,.mtg-fb-r .n{flex-basis:100%}}
 .mtg-mob .mtg-veld input{min-height:44px;font-size:16px}
 .mtg-mob{max-width:none;margin:0;padding:12px 12px 28px;overflow-x:hidden}
 .mtg-mob .mtg-kaarten{grid-template-columns:1fr}
@@ -663,9 +685,10 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     if (ls.get('mtg:zoom:' + st.wie)) st.zoom = ls.get('mtg:zoom:' + st.wie);
     if (st.compact && st.zoom === 'jaar') st.zoom = 'kwartaal';
     if (ls.get('mtg:prognose:' + st.wie) === '0') st.prognose = false;
+    st.planMnd = ls.get('mtg:planmnd:' + st.wie) === '12' ? 12 : 6; st.planSl = null;
     st.noodMee = ls.get('mtg:nood:' + st.wie) === '1';   // G7: noodbuffer meenemen (per gebruiker onthouden)
     css();
-    el.innerHTML = '<div class="mtg"><div class="mtg-melding">Geld laden…</div></div>';
+    el.innerHTML = '<div class="mtg"><div class="mtg-melding">Financiën laden…</div></div>';
     await G.laad();
   };
   const cfgE = () => G.effCfg(st.dataS || st.data, st.cfg || {});   // streefbedragen: eigen bedrag of het advies
@@ -681,7 +704,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       st.data = d; st.cfg = c && c.config ? c.config : st.cfg;
     } catch (e) {
       const druk = /429|retry later|druk/i.test(String(e.message));
-      st.el.innerHTML = `<div class="mtg"><div class="mtg-kaart">${druk ? '<b>Moneybird is even druk.</b> Probeer het over een minuut opnieuw.' : `Het geldscherm kon niet laden (${esc(e.message)}). Probeer het later opnieuw.`} <button class="mtg-knop klein" data-herlaad-los="1">Opnieuw laden</button></div></div>`;
+      st.el.innerHTML = `<div class="mtg"><div class="mtg-kaart">${druk ? '<b>Moneybird is even druk.</b> Probeer het over een minuut opnieuw.' : `Financiën kon niet laden (${esc(e.message)}). Probeer het later opnieuw.`} <button class="mtg-knop klein" data-herlaad-los="1">Opnieuw laden</button></div></div>`;
       const k = st.el.querySelector('[data-herlaad-los]'); if (k) k.addEventListener('click', () => G.laad());
       return;
     }
@@ -775,7 +798,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const ruimte = low ? rond(low.saldo - onder) : null;
     const introWeg = ls.get('mtg:intro:' + st.wie) === 'weg', c = st.compact;
     st.el.innerHTML = `<div class="mtg${c ? ' mtg-mob' : ''}">
-  ${c ? '' : `<div class="mtg-kop"><h2>Geld</h2>
+  ${c ? '' : `<div class="mtg-kop"><h2>Financiën</h2>
     <div class="mtg-knoppen">
       <button class="mtg-knop ${st.modus === 'lopend' ? 'aan' : ''}" data-modus="lopend">Besteedbaar budget</button>
       <button class="mtg-knop ${st.modus === 'totaal' ? 'aan' : ''}" data-modus="totaal" title="De spaarpotjes zijn geen buffer: dat geld blijft eraf">Inclusief spaarpotjes (niet bedoeld als buffer)</button>
@@ -804,7 +827,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     <div class="mtg-legenda"><span><i></i>saldo</span><span><i style="border-top-style:dashed"></i>verwacht</span>${heeftProg && st.prognose ? '<span><i style="border-top:2px dotted #3a5a8a"></i>met prognose (waar het afwijkt)</span>' : ''}${st.modus === 'lopend' ? `${fict > 0 ? '<span><i style="border-top:2px solid #d9a400"></i>fictieve buffer (geel)</span>' : ''}${noodStand > 0 && !nood ? '<span><i style="border-top:2px solid #e07b1a"></i>noodbuffer is op (oranje)</span>' : ''}${limiet != null ? '<span><i style="border-color:var(--mtg-uit)"></i>kredietlimiet (rood)</span>' : ''}${nood ? '<span>incl. noodbuffer</span>' : ''}` : ''}<span><i style="border-top:8px solid rgba(138,138,128,.15);vertical-align:-2px"></i>alleen vaste lasten bekend</span>${st.modus === 'lopend' && cfgE().lopend_streef && cfgE().lopend_streef.datum ? '<span><i style="border-top:2px dashed var(--gold,#B8962E)"></i>doelpad</span>' : ''}<span class="mtg-in">▲ erbij</span><span class="mtg-uit">▼ eraf</span><span>⚑ mijlpaal</span></div>
   </div>
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Komende 14 dagen</b><button class="mtg-vraag" data-uitleg="lijst">?</button></div>${lijstHtml()}</div>
-  ${c ? `${letOpHtml()}${mobielStaart()}` : `${prognoseHtml()}
+  ${c ? `${letOpHtml()}${mobielStaart()}` : `${planningHtml()}${prognoseHtml()}
   <div class="mtg-kaart"><div class="mtg-kop" style="margin:0"><b style="flex:1">Potjes en doelen</b><button class="mtg-vraag" data-uitleg="potjes">?</button></div>${potjesHtml()}</div>
   ${schuldenHtml()}
   ${roodHtml()}
@@ -825,6 +848,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
       const u = st.el.querySelector('#mts-uit'); if (u) u.innerHTML = hulpUitkomst();
     });
     st.el.querySelector('.mtg').addEventListener('change', e => {        // termijndatum verschuiven = scenario, lijn rekent mee
+      const fm = e.target.closest('.mtg-fm');                                // verwachte factuurmaand (Factuurplanning): meteen opslaan
+      if (fm) { if (!st.mag) return; fm.disabled = true; return opslaan(() => G.factuurMaandZet(st.bron, fm.dataset.sl, fm.dataset.tm, fm.value, st.data.vandaag), 'Verwachte factuurmaand opgeslagen'); }
       const i = e.target.closest('.mtg-fd'); if (!i || !i.value) return;
       const sc = st.scenario = st.scenario || {}, x = (st.data.prognose && st.data.prognose.posten || []).find(p => p.sleutel === i.dataset.sl), t = x && x.termijnen.find(q => q.id === i.dataset.tm);
       (sc[i.dataset.sl] = sc[i.dataset.sl] || {})[i.dataset.tm] = i.value;
@@ -833,6 +858,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     });
     felicitatie();
     meegroeiUitvoeren();
+    if (st.planScroll) { st.planScroll = false; const k = st.el.querySelector('#mtg-plan'); if (k && k.scrollIntoView) { try { k.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { k.scrollIntoView(); } } }
   }
   // Werkelijk op de bank: de lopende rekening zelf (zonder potjes) en wat dat kost. De bank rekent over dat saldo,
   // ook als er in de potjes genoeg staat.
@@ -1456,6 +1482,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     middel: [{ pct: 50, dagen: 7, label: 'aanbetaling', anker: 'akkoord' }, { pct: 50, dagen: 60, label: 'oplevering', anker: 'oplevering' }],
     groot: [{ pct: 50, dagen: 7, label: 'bevestiging opdracht', anker: 'akkoord' }, { pct: 40, dagen: 50, label: 'voor oplevering', anker: 'start' }, { pct: 10, dagen: 100, label: 'oplevering', anker: 'oplevering' }] };
   UITLEG.prognose = 'Projecten die zeker doorgaan maar nog geen factuur hebben. Vink een project aan; het bedrag (incl. btw) wordt volgens het standaardschema in termijnen verdeeld, elk met een factuurdatum. Voorbeeld: een middelgroot project geeft 50% aanbetaling een week na akkoord en 50% bij oplevering; de tool rekent er de betaaltermijn en het gewone betaalgedrag van de klant bij. In de lijn is dat de stippellijn, en alleen als "prognose" aan staat. Komt de echte factuur in Moneybird (zelfde offerte, of het offertenummer in de referentie), dan vervangt die de termijn vanzelf; twijfelt de tool, dan vraagt hij het hier. Schuif een factuurdatum om te zien wat eerder factureren doet — pas bij "Opslaan" wordt het bewaard. Er gaat nooit iets naar Moneybird.';
+  UITLEG.planning = 'Per maand wat er naar verwachting gefactureerd wordt, uit de termijnen van de projecten die zeker doorgaan (Prognose). De maand is de maand van de factuurdatum van de termijn: kies een andere maand en de factuurdatum gaat naar die maand (zelfde dag, in de lopende maand niet vóór vandaag); de lijn en de prognose rekenen meteen mee. Bedragen zijn incl. btw. Een termijn die in Moneybird al gefactureerd is telt niet meer mee en staat als gefactureerd bij zijn maand. Termijnen waarvan de datum voorbij is en die nog niet gefactureerd zijn staan apart bovenaan. Er gaat nooit iets naar Moneybird.';
   UITLEG.reserve = UITLEG.nood;   // oude sleutel
   UITLEG.schulden = 'Per lening: de restschuld nu (een schatting als er sinds de ingevulde stand maanden zijn verstreken), de rente, de termijn, de einddatum en de rente die nog betaald wordt, volgens het aflosschema (annuïtair of lineair; aflossingsvrij lost niet af; zonder bekende rente geen prognose). De rekenhulp vergelijkt het schema met en zonder extra aflossing, met de aanname dat de termijn gelijk blijft en de looptijd korter wordt. Daaronder staat wat de aflossing doet met de kasruimte (laagste punt komende 8 weken, zoals in de Koersmeter): aflossen bekijk je nooit los van de kas. De rekening-courant is geen aflossende lening: daar zie je hoeveel je nu rood staat, de limiet en de kosten (uit je ING-afrekeningen), en wat terugboeken uit een potje of aanvullen per jaar aan rente scheelt. Terugboeken uit je eigen reserve laat de kasruimte gelijk zolang de Buffer daardoor onder het reserve-doel zakt (het geld was al van jou); staat er meer in dan het doel, dan stijgt de kasruimte eerst met dat deel. ' + ((root.MTSchulden && root.MTSchulden.INFO) || 'Algemene informatie, geen advies.');
   UITLEG.advies = 'Zakt het laagste punt onder de gele lijn (je fictieve buffer), dan zoekt de tool welke prognosetermijn je eerder kunt factureren om daarboven te blijven. Het is alleen een voorstel: je beslist zelf, en er gaat niets naar Moneybird.';
@@ -1507,6 +1534,160 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     delete n.ts; delete n.door;
     return opslaan(() => stuur('/geld/prognose', { sleutel: sl, item: n, vorige_ts: it.ts }), ja ? 'Factuur gekoppeld — de termijn is vervangen' : 'Genoteerd: hoort er niet bij');
   }
+  // ── Factuurplanning (verzoek Mathijs 22-10): wat er naar verwachting per maand gefactureerd wordt ─────────────────────────
+  // Geen eigen opslag: de verwachte factuurmaand is de maand van de factuurdatum van de prognosetermijn (hetzelfde veld als
+  // de factuurmoment-hulp en de lijn). Een maand kiezen zet die datum in de gekozen maand: dezelfde dag (hooguit de laatste
+  // dag van de maand), en in de lopende maand nooit vóór vandaag. Bedragen zijn incl. btw, zoals de prognose zelf.
+  const MND = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+  const MND_K = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+  const maandPlus = (ym, n) => { const t = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1 + n; return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, '0')}`; };
+  const maandTekst = (ym, k) => (k ? MND_K : MND)[Number(ym.slice(5, 7)) - 1] + ' ' + ym.slice(0, 4);
+  const centen = n => Math.round((Number(n) || 0) * 100);
+  const lokaalVandaag = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  G.maandPlus = maandPlus; G.maandTekst = maandTekst;
+  G.zetMaand = function (datum, ym, vandaag) {
+    const dim = new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
+    const d = `${ym}-${String(Math.min(Number(String(datum || '').slice(8, 10)) || 1, dim)).padStart(2, '0')}`;
+    return vandaag && ym === vandaag.slice(0, 7) && d < vandaag ? vandaag : d;
+  };
+  // Eén termijn als regel: bedrag en open deel in hele centen (geen optelfouten), status uit wat in Moneybird al gefactureerd is.
+  function termijnRegel(x, t) {
+    const b = centen(t.bedrag), g = Math.min(b, Math.max(0, centen(t.gefactureerd))), o = t.open != null ? Math.max(0, Math.min(b, centen(t.open))) : b - g;
+    return { sleutel: x.sleutel, naam: x.naam || x.code || '', code: x.code || '', id: t.id, label: t.label || '', factuurdatum: t.factuurdatum, maand: String(t.factuurdatum || '').slice(0, 7),
+      bedrag: b / 100, gefactureerd: g / 100, open: o / 100, status: o <= 0 ? 'gefactureerd' : g > 0 ? 'deels' : 'open' };
+  }
+  const regelVolgorde = (a, b) => String(a.factuurdatum).localeCompare(String(b.factuurdatum)) || a.naam.localeCompare(b.naam) || String(a.id).localeCompare(String(b.id));
+  // Termijnen van één project (ruw item uit /geld/prognose, optioneel met het berekende overzicht voor wat al gefactureerd is).
+  G.blokRegels = function (item, post) {
+    const x = { sleutel: item.sleutel, naam: item.naam, code: item.code };
+    return (item.termijnen || []).filter(t => t && t.aan !== false && t.factuurdatum).map(t => {
+      const c = post && (post.termijnen || []).find(q => q.id === t.id);
+      return termijnRegel(x, c ? Object.assign({}, t, { gefactureerd: c.gefactureerd, open: c.open }) : t);
+    }).sort(regelVolgorde);
+  };
+  // Maandtotalen uit prognose.posten van de tijdlijn: alleen projecten die doorgaan en termijnen die aan staan. Wat al gefactureerd
+  // is telt niet mee in het totaal (het staat wel bij zijn maand, als gefactureerd). Open termijnen van vóór deze maand staan
+  // apart (eerder), wat voorbij het venster ligt onder later.
+  G.factuurPlanning = function (posten, vandaag, opt) {
+    opt = opt || {};
+    const n = opt.maanden || 6, nu = vandaag.slice(0, 7), einde = maandPlus(nu, n - 1), maanden = [];
+    for (let i = 0; i < n; i++) maanden.push({ ym: maandPlus(nu, i), totaalC: 0, regels: [] });
+    const eerder = { totaalC: 0, regels: [] }, later = { totaalC: 0, regels: [] };
+    let gefC = 0;
+    for (const x of posten || []) {
+      if (!x || x.soort !== 'project' || !x.aan || (opt.sleutel && x.sleutel !== opt.sleutel)) continue;
+      for (const t of x.termijnen || []) {
+        if (!t || t.aan === false || !t.factuurdatum) continue;
+        const r = termijnRegel(x, t), vak = r.maand < nu ? eerder : r.maand > einde ? later : maanden[maanden.findIndex(m => m.ym === r.maand)];
+        if (r.status === 'gefactureerd') { if (vak !== eerder && vak !== later) { vak.regels.push(r); gefC += centen(r.bedrag); } continue; }
+        vak.regels.push(r); vak.totaalC += centen(r.open);
+      }
+    }
+    const fin = v => { v.regels.sort(regelVolgorde); v.totaal = v.totaalC / 100; return v; };
+    maanden.forEach(fin); fin(eerder); fin(later);
+    const totC = maanden.reduce((a, m) => a + m.totaalC, 0) + eerder.totaalC + later.totaalC;
+    return { maanden, eerder, later, totaal: totC / 100, gefactureerd: gefC / 100 };
+  };
+  // Verwachte factuurmaand van één termijn wijzigen: de bestaande prognose met de nieuwe termijndatum opslaan (zelfde route, dezelfde
+  // controle op tussentijdse wijzigingen en dezelfde gestempelde opslag als de editor). Niets gaat naar Moneybird.
+  G.factuurMaandZet = async function (bron, sleutel, termijnId, ym, vandaag) {
+    const r = await bron.haal('/geld/prognose'); if (!r || r.error) throw new Error(r && r.error || 'geen antwoord');
+    const it = (r.items || {})[sleutel]; if (!it || it.soort === 'post') throw new Error('deze prognose bestaat niet meer — herlaad');
+    const t = (it.termijnen || []).find(q => q.id === termijnId); if (!t) throw new Error('deze termijn bestaat niet meer — herlaad');
+    const nieuw = G.zetMaand(t.factuurdatum, ym, vandaag); if (nieuw === t.factuurdatum) return null;
+    const n = Object.assign({}, it, { termijnen: it.termijnen.map(q => q.id === termijnId ? Object.assign({}, q, { factuurdatum: nieuw }) : q) });
+    delete n.ts; delete n.door;
+    const res = await bron.haal('/geld/prognose', { method: 'POST', body: { sleutel, item: n, vorige_ts: it.ts } });
+    if (!res || res.error) throw new Error(res && res.error || 'opslaan mislukt');
+    return res;
+  };
+  // Maandkiezer: vanaf deze maand 18 maanden vooruit; staat de termijn daarbuiten, dan blijft die maand zichtbaar gekozen.
+  function maandSelect(r, vandaag) {
+    const nu = vandaag.slice(0, 7), lijst = [];
+    for (let i = 0; i < 18; i++) lijst.push(maandPlus(nu, i));
+    if (!lijst.includes(r.maand)) { lijst.push(r.maand); lijst.sort(); }
+    return `<select class="mtg-fm" data-sl="${esc(r.sleutel)}" data-tm="${esc(r.id)}" aria-label="Verwachte factuurmaand van ${esc(r.naam)}, ${esc(r.label)}">${lijst.map(m => `<option value="${esc(m)}"${m === r.maand ? ' selected' : ''}>${esc(maandTekst(m, true))}${m < nu ? ' (voorbij)' : ''}</option>`).join('')}</select>`;
+  }
+  function planningHtml() {
+    const p = st.data.prognose || { posten: [] }, vandaag = st.data.vandaag, n = st.planMnd === 12 ? 12 : 6, filter = st.planSl || null;
+    const fp = filter && (p.posten || []).find(x => x.sleutel === filter), pl = G.factuurPlanning(p.posten, vandaag, { maanden: n, sleutel: filter });
+    const aantal = v => v.regels.filter(r => r.status !== 'gefactureerd').length;
+    const regel = (r, toonMaand) => `<div class="mtg-fp-r${r.status === 'gefactureerd' ? ' klaar' : ''}">
+        <span class="n"${st.mag ? ` data-prog="${esc(r.sleutel)}" title="De prognose van dit project openen" style="cursor:pointer"` : ''}><b>${esc(r.naam || r.code)}</b> · ${esc(r.label)}</span>
+        <span class="b">${esc(eur(r.status === 'gefactureerd' ? r.bedrag : r.open, true))}</span>
+        ${r.status === 'gefactureerd' ? '<span class="mtg-chip">gefactureerd</span>' : `${r.status === 'deels' ? `<span class="mtg-chip">deels gefactureerd (${esc(kort(r.gefactureerd))})</span>` : ''}${st.mag ? maandSelect(r, vandaag) : toonMaand ? `<span class="m">${esc(maandTekst(r.maand, true))}</span>` : ''}`}</div>`;
+    const telTekst = v => aantal(v) ? aantal(v) + (aantal(v) === 1 ? ' termijn' : ' termijnen') : v.regels.length ? 'alles gefactureerd' : '';
+    const blok = (kop, v, klasse) => `<div class="mtg-fp-m ${esc(klasse)}"><div class="mtg-fp-mk"><b>${esc(kop)}</b><span class="n">${esc(telTekst(v))}</span><b class="t">${v.regels.length ? esc(eur(v.totaal, true)) : '—'}</b></div>${klasse === 'eerder' ? '<div class="mtg-melding" style="padding:2px 0">Deze factuurdatum is voorbij. Kies een nieuwe maand of factureer.</div>' : ''}${v.regels.map(r => regel(r, klasse === 'eerder' || klasse === 'later')).join('')}</div>`;
+    let h = `<div class="mtg-kaart" id="mtg-plan"><div class="mtg-kop" style="margin:0 0 6px"><b style="flex:1">Factuurplanning</b>
+      <div class="mtg-knoppen"><button class="mtg-knop klein ${n === 6 ? 'aan' : ''}" data-planmnd="6">6 maanden</button><button class="mtg-knop klein ${n === 12 ? 'aan' : ''}" data-planmnd="12">12 maanden</button></div><button class="mtg-vraag" data-uitleg="planning">?</button></div>`;
+    if (filter) h += `<div class="mtg-uitleg">Alleen ${esc(fp ? fp.naam || fp.code : 'dit project')} <button class="mtg-knop klein" data-planwis="1">Toon alle projecten</button>${fp ? '' : '<br>Dit project heeft (nog) geen prognose die doorgaat: vink hieronder bij Prognose aan dat het zeker doorgaat.'}</div>`;
+    if (!(p.posten || []).some(x => x.soort === 'project' && x.aan && (x.termijnen || []).length)) return h + `<div class="mtg-melding">Nog geen termijnen om te plannen. Vink bij Prognose in een project "gaat zeker door" aan.</div></div>`;
+    if (pl.eerder.regels.length) h += blok('Eerder gepland, nog niet gefactureerd', pl.eerder, 'eerder');
+    h += pl.maanden.map(m => m.regels.length ? blok(maandTekst(m.ym), m, 'maand') : `<div class="mtg-fp-m leeg"><div class="mtg-fp-mk"><span>${esc(maandTekst(m.ym))}</span><span class="t">—</span></div></div>`).join('');
+    if (pl.later.regels.length) h += blok('Later', pl.later, 'later');
+    return h + `<div class="mtg-fp-tot"><span>Nog te factureren${filter ? '' : ' (incl. btw)'}</span><b>${esc(eur(pl.totaal, true))}</b></div>${pl.gefactureerd > 0 ? `<div class="mtg-melding" style="padding:2px 0">Al gefactureerd in deze periode: ${esc(eur(pl.gefactureerd, true))}</div>` : ''}</div>`;
+  }
+  // Vanuit een ander scherm (bv. het blokje in de offerte): de planning op één project filteren en in beeld scrollen.
+  G.planFocus = function (sleutel) { st.planSl = sleutel || null; st.planScroll = !!sleutel; if (st.data) teken(); };
+
+  // Compact blokje "Facturatie verwacht" voor in de offerte-weergave van een project. Hetzelfde veld en dezelfde opslag als de
+  // Factuurplanning; een klik op het blokje (buiten de maandkiezer) brengt je naar Financiën, gefilterd op dit project.
+  // o = { bron, sleutel: 'p:<project_id>', mag, naar(), instellen() }
+  const blokCache = { items: null, t: 0, posten: null, vandaag: null, tp: 0 };
+  G.projectBlok = async function (host, o) {
+    css();
+    const tok = host._fbTok = (host._fbTok || 0) + 1, sl = o.sleutel;
+    host._fbO = o;
+    if (!host._fbKoppel) {
+      host._fbKoppel = true;
+      host.addEventListener('change', e => {
+        const s = e.target.closest('.mtg-fm'); if (!s) return;
+        s.disabled = true;
+        const opnieuw = () => { blokCache.items = null; return G.projectBlok(host, host._fbO); };
+        G.factuurMaandZet(host._fbO.bron, s.dataset.sl, s.dataset.tm, s.value, host._fbVandaag || lokaalVandaag())
+          .then(r => { if (r) toast('Verwachte factuurmaand opgeslagen'); return opnieuw(); })
+          .catch(err => { toast('Niet opgeslagen: ' + (err.message || err)); return opnieuw(); });
+      });
+      host.addEventListener('click', e => {
+        if (e.target.closest('[data-fb-instel]')) { e.preventDefault(); if (host._fbO.instellen) host._fbO.instellen(); return; }
+        if (e.target.closest('select')) return;
+        if (e.target.closest('[data-fb-naar]') && host._fbO.naar) host._fbO.naar();
+      });
+    }
+    let items = null, fout = null;
+    try {
+      if (blokCache.items && Date.now() - blokCache.t < 20000) items = blokCache.items;
+      else { const r = await o.bron.haal('/geld/prognose'); if (!r || r.error) throw new Error(r && r.error || 'geen antwoord'); items = r.items || {}; blokCache.items = items; blokCache.t = Date.now(); }
+    } catch (e) { fout = e.message || String(e); }
+    if (host._fbTok !== tok) return;
+    const it = items && items[sl];
+    if (fout) { host.innerHTML = `<div class="mtg"><div class="mtg-melding">Facturatie verwacht: kon niet laden (${esc(fout)}).</div></div>`; return; }
+    if (!it || it.soort === 'post' || !it.aan || !(it.termijnen || []).length) {
+      const leeg = !it || it.soort === 'post' ? 'Nog niet ingesteld.' : it.aan ? 'Nog geen termijnen.' : 'De prognose van dit project staat uit.';
+      host.innerHTML = `<div class="mtg"><div class="mtg-fb"><div class="mtg-fb-kop"><b>Facturatie verwacht</b></div><div class="mtg-melding" style="padding:2px 0">${esc(leeg)}${o.mag && o.instellen ? ' <button type="button" class="mtg-knop klein" data-fb-instel="1">Termijnen instellen…</button>' : ''}</div></div></div>`;
+      return;
+    }
+    const item = Object.assign({}, it, { sleutel: sl });
+    const toon = (post, vandaag, zonderStatus) => {
+      if (host._fbTok !== tok) return;
+      host._fbVandaag = vandaag;
+      const regels = G.blokRegels(item, post), open = regels.filter(r => r.status !== 'gefactureerd'), totC = open.reduce((a, r) => a + centen(r.open), 0), mag = !!o.mag;
+      host.innerHTML = `<div class="mtg"><div class="mtg-fb" data-fb-naar="1" role="link" tabindex="0" title="Naar Financiën, gefilterd op dit project"><div class="mtg-fb-kop"><b>Facturatie verwacht</b><span class="mtg-chip">incl. btw</span><span class="mtg-fb-naar">Financiën ›</span></div>
+        ${regels.map(r => `<div class="mtg-fb-r${r.status === 'gefactureerd' ? ' klaar' : ''}"><span class="n">${esc(r.label || 'termijn')}</span><span class="b">${esc(eur(r.status === 'gefactureerd' ? r.bedrag : r.open, true))}</span>${r.status === 'gefactureerd' ? `<span class="m">${esc(maandTekst(r.maand, true))}</span><span class="mtg-chip">gefactureerd</span>` : `${mag ? maandSelect(r, vandaag) : `<span class="m">${esc(maandTekst(r.maand, true))}</span>`}${r.status === 'deels' ? '<span class="mtg-chip">deels gefactureerd</span>' : ''}`}</div>`).join('')}
+        <div class="mtg-fb-tot"><span>${open.length ? 'Nog te factureren' : 'Alles gefactureerd'}</span><b>${esc(eur(totC / 100, true))}</b></div>${zonderStatus ? '<div class="mtg-melding" style="padding:2px 0">Wat al gefactureerd is, wordt nog opgehaald.</div>' : ''}</div></div>`;
+      const b = host.querySelector('.mtg-fb'); if (b) b.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === b && host._fbO.naar) { e.preventDefault(); host._fbO.naar(); } });
+    };
+    // Wat al gefactureerd is, staat in de tijdlijn (prognose.posten): uit het geopende Financiën-scherm, anders (kort onthouden) opgehaald.
+    const vind = posten => (posten || []).find(x => x.sleutel === sl) || null;
+    if (st.data && st.data.prognose && st.data.prognose.posten) return toon(vind(st.data.prognose.posten), st.data.vandaag, false);
+    if (blokCache.posten && Date.now() - blokCache.tp < 60000) return toon(vind(blokCache.posten), blokCache.vandaag, false);
+    toon(null, lokaalVandaag(), true);
+    try {
+      const v = lokaalVandaag(), d = await o.bron.haal(`/geld/tijdlijn?van=${dagPlus(v, -35)}&tot=${dagPlus(v, 364)}`);
+      if (d && !d.error && d.prognose) { blokCache.posten = d.prognose.posten || []; blokCache.vandaag = d.vandaag || v; blokCache.tp = Date.now(); toon(vind(blokCache.posten), blokCache.vandaag, false); }
+    } catch (e) { }
+  };
+
   // Editor: project (vinkje "gaat zeker door", totaal, termijnen) of handmatige post.
   G.prognoseBewerk = async function (sleutel, project) {
     if (!st.data) return;
@@ -1607,7 +1788,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
 
   // ── Interactie ───────────────────────────────────────────────────────────────
   function klik(e) {
-    if (e.target.closest('.mtg-fd')) return;
+    if (e.target.closest('.mtg-fd,.mtg-fm')) return;
     if (e.target.closest('[data-laag]')) { e.preventDefault(); return laagsteUitleg(); }
     const pm = e.target.closest('[data-potmuts]'); if (pm) { e.preventDefault(); return potMutaties(pm.dataset.potmuts); }
     const kg = e.target.closest('[data-koers-gelezen]');
@@ -1620,7 +1801,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     const au = e.target.closest('[data-adviesuitleg]');
     if (au) { e.stopPropagation(); return adviesUitleg(au.dataset.adviesuitleg); }
     if (e.target.closest('[data-nood]')) { st.noodMee = !!e.target.closest('[data-nood]').checked; ls.set('mtg:nood:' + st.wie, st.noodMee ? '1' : '0'); return teken(); }
-    const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst],[data-prog],[data-sc],[data-advies],[data-vraag],[data-herlaad]');
+    const t = e.target.closest('[data-modus],[data-zoom],[data-terug],[data-prognose],[data-uitleg],[data-intro],[data-ev],[data-dag],[data-pot],[data-patroon],[data-inst],[data-prog],[data-sc],[data-advies],[data-vraag],[data-herlaad],[data-planmnd],[data-planwis]');
     if (!t) return;
     if (t.dataset.modus) { st.modus = t.dataset.modus; st.offset = 0; teken(); }
     else if (t.dataset.zoom) { st.zoom = t.dataset.zoom; ls.set('mtg:zoom:' + st.wie, st.zoom); begrens(); teken(); }
@@ -1638,6 +1819,8 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
     else if (t.dataset.inst === 'groepen') groepenBlad();
     else if (t.dataset.inst === 'schema') schemaBlad();
     else if (t.dataset.inst === 'schulden') schuldenBlad();
+    else if (t.dataset.planmnd) { st.planMnd = Number(t.dataset.planmnd) === 12 ? 12 : 6; ls.set('mtg:planmnd:' + st.wie, String(st.planMnd)); teken(); }
+    else if (t.dataset.planwis) { st.planSl = null; teken(); }
     else if (t.dataset.prog) G.prognoseBewerk(t.dataset.prog);
     else if (t.dataset.sc === 'opslaan') scenarioOpslaan();
     else if (t.dataset.sc === 'terug') { st.scenario = {}; teken(); }
@@ -1799,7 +1982,7 @@ details.mtg-kaart>summary{cursor:pointer;font-weight:600}details.mtg-kaart p{mar
         const hintHtml = (eigen, a, tekst, naam) => `<div class="mtg-melding">${a ? `Advies: ${esc(eur(a.bedrag))} (${esc(a.reden)})` : `Nog geen advies: ${esc(tekst)}`} · <b>${eigen ? 'eigen bedrag' : a ? 'volgt advies' : 'geen bedrag'}</b>${eigen ? ` <a href="#" data-leeg="${esc(naam)}">leegmaken = weer het advies</a>` : ''}</div>`;
         const veldHtml = (naam, tekst, waarde, a, uit) => `<label class="mtg-veld"><span>${tekst}</span><input type="number" name="${esc(naam)}" value="${esc(waarde != null ? waarde : '')}" placeholder="${esc(a ? 'advies ' + eur(a.bedrag) : 'geen advies')}" ${uit ? 'disabled' : ''}></label>`;
         return `<div class="mtg-uitleg" style="font-size:12px">Besteedbaar budget en buffers. Standaard geldt het advies uit je eigen historie; vul je zelf een bedrag in, dan geldt dat. Leeg laten (of weer leegmaken) = weer het advies. Het advies wordt opnieuw berekend als de data verandert.</div>
-        ${veldHtml('fict', 'Fictieve buffer op de lopende rekening (€) — alleen een gele lijn in de grafiek en de onderkant van de kasruimte en de Koersmeter; dit bedrag staat nergens anders in Geld', c.fictieve_buffer, fa, false)}
+        ${veldHtml('fict', 'Fictieve buffer op de lopende rekening (€) — alleen een gele lijn in de grafiek en de onderkant van de kasruimte en de Koersmeter; dit bedrag staat nergens anders in Financiën', c.fictieve_buffer, fa, false)}
         ${hintHtml(typeof c.fictieve_buffer === 'number', fa, 'minstens 6 maanden bankhistorie nodig', 'fict')}
         ${veldHtml('noodstreef', `Streefomvang noodbuffer (€)${npot ? ` — ${esc(G.potNaam(npot))}${ns && ns.van != null && ns.tot != null ? `, nu een band van ${esc(eur(ns.van))} tot ${esc(eur(ns.tot))}` : ''}` : ' — er is nog geen potje met doel "buffer"'}`, nd, na, !npot)}
         ${npot ? hintHtml(eigenStreef(ns), na, 'de vaste lasten per maand zijn nog onbekend', 'noodstreef') : ''}

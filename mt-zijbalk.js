@@ -36,7 +36,7 @@
   // tabnaam (uit onclick="showTab('naam')") -> label, icoon, volgorde (CSS order) en of hij onder "Meer" valt
   var DEF = {
     attentie: { l: 'Vandaag', i: 'vandaag', o: 10 },
-    geld: { l: 'Dashboard', i: 'dash', o: 20 },
+    geld: { l: 'Financiën', i: 'dash', o: 20 },
     inbox: { l: 'Inbox', i: 'inbox', o: 30 },
     projecten: { l: 'Projecten', i: 'projecten', o: 40 },
     agenda: { l: 'Planning', i: 'planning', o: 50 },
