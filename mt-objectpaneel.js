@@ -333,6 +333,8 @@
     '#tp-paneel .tp-klein{height:28px;padding:0 10px;font-size:12px}#tp-paneel .tp-gevaar{color:var(--error,#c4322a);border-color:var(--error,#c4322a)}',
     '#tp-paneel .tp-meldingen{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}#tp-paneel .tp-melding{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border-radius:4px;font-size:13px}#tp-paneel .tp-voorstel{background:var(--brass-soft,#fbefd2);color:var(--brass-ink,#6b4c05)}#tp-paneel .tp-conflict{background:var(--error-50,#fce6e4);color:var(--error,#c4322a)}',
     '#tp-paneel .tp-tags{display:flex;flex-wrap:wrap;align-items:center;gap:6px}#tp-paneel .tp-tag{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 4px 0 8px;border-radius:4px;background:var(--surface-sunken,#f1ede5);font-size:12px}#tp-paneel .tp-tag-weg{border:0;background:transparent;cursor:pointer;color:var(--ink-3,#646a64);font-size:15px;line-height:1;padding:0 4px}#tp-paneel .tp-tag-invoer{flex:1 1 120px;min-width:120px}',
+    '#tp-paneel .tp-rand{border-color:var(--line,#dfd8cb)}',
+    '#tp-paneel .tp-prim{background:var(--primary,#17643f);border-color:var(--primary,#17643f);color:#fff}#tp-paneel .tp-prim:hover{background:var(--primary,#17643f);filter:brightness(1.08)}',
     '.tp-naamlink{color:inherit;text-decoration:underline;text-decoration-color:var(--line,#dfd8cb);text-underline-offset:3px}.tp-naamlink:hover{color:var(--primary,#17643f);text-decoration-color:currentColor}'
   ];
 
