@@ -14,7 +14,7 @@
   const F = {};
   let D = null;
   const LS = 'mt-planfilter';
-  const WEERGAVEN = ['mijnwerk', 'capaciteit', 'bord', 'grid', 'lijst', 'plan'];
+  const WEERGAVEN = ['mijnwerk', 'capaciteit', 'bord', 'tijdlijn', 'grid', 'lijst', 'plan'];
   const ZOOMS = ['kwartaal', 'maand', 'week', '3d', 'dag'];
   const STATUSSEN = [['open', 'Open', 'todo'], ['bezig', 'Bezig', 'bezig'], ['wacht', 'Wacht', 'wacht'], ['klaar', 'Klaar', 'klaar']];   // [linkwaarde, label, taakstatus]
   const BORDEN = ['status', 'stroom', 'fase'];   // de indeling van het Bord (P3)
