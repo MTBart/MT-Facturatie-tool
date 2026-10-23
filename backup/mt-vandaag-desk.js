@@ -41,7 +41,7 @@
       const taak = it.soort === 'taak';
       const status = taak ? (it.status === 'todo' ? (it.wacht && it.wacht.wacht ? 'wacht' : 'open') : it.status) : 'gepland';
       const wanneer = taak ? (it.groep === 'teLaat' ? 'te laat sinds ' + P.datumKort(it.eind || it.start) : (it.blokken && it.blokken.length && it.blokken[0].start ? it.blokken[0].start : 'vandaag')) : (it.groep === 'teLaat' ? 'te laat' : (it.start || 'vandaag'));
-      return { id: it.id, code: it.code, naam: taak ? it.taak.naam : it.naam, status, teLaat: it.groep === 'teLaat', wanneer, min: taak ? it.gepland_min : it.duurMin, wachtTekst: taak && status === 'wacht' ? (it.taak.wacht_reden || it.wachtTekst || '') : '' };
+      return { id: it.id, code: it.code, taak, naam: taak ? it.taak.naam : it.naam, status, teLaat: it.groep === 'teLaat', wanneer, min: taak ? it.gepland_min : it.duurMin, wachtTekst: taak && status === 'wacht' ? (it.taak.wacht_reden || it.wachtTekst || '') : '' };
     });
     // 1b. Nog in te plannen: dezelfde mijnWerk()-uitkomst, de taken van mij (niet klaar) zonder start, einddatum en planblok. Een open voorstel (taak met voorstel-markering) telt pas na akkoord
     // en blijft er dus buiten; een taak die alleen een voorstel-planblok heeft wacht op akkoord en staat al in een datumgroep. Een taak die op een voorganger wacht en geen datum heeft hoort er ook bij
@@ -119,7 +119,8 @@
     return e;
   }
   function koppeling(actie, kids, klass) {
-    const href = actie.k === 'project' ? D.href({ code: actie.code }) : actie.k === 'agenda' ? D.href({ tab: 'agenda' }) : actie.k === 'tab' ? D.href({ tab: actie.tab }) : '#';
+    if (actie.k === 'taak' && !D.taakHref) actie = { k: 'project', code: actie.code };   // zonder taakpaneel: het project, zoals vroeger
+    const href = actie.k === 'taak' ? D.taakHref(actie.code, actie.id) : actie.k === 'project' ? D.href({ code: actie.code }) : actie.k === 'agenda' ? D.href({ tab: 'agenda' }) : actie.k === 'tab' ? D.href({ tab: actie.tab }) : '#';
     return el('a', { klass, href, klik: ev => { if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button === 1) return; ev.preventDefault(); D.ga(actie); } }, kids);
   }
   function sectie(id, titel, rechts, kids, extra) {
@@ -142,7 +143,7 @@
     if (!m.takenKlaar) w.appendChild(el('div', { klass: 'vd-melding', role: 'status', tekst: (m.takenStatus || 'De takenlijst is nog niet geladen.') + ' Je ziet alleen wat er al staat.' }));
     const raster = el('div', { klass: 'vd-raster' });
     // Mijn werk vandaag
-    const mijnLijst = m.mijn.length ? m.mijn.map(t => koppeling({ k: 'project', code: t.code }, [
+    const mijnLijst = m.mijn.length ? m.mijn.map(t => koppeling(t.taak ? { k: 'taak', code: t.code, id: t.id } : { k: 'project', code: t.code }, [
       statusIcoon(t.status),
       el('span', { klass: 'vd-tekst' }, el('span', { klass: 'vd-naam', tekst: t.naam }), el('span', { klass: 'vd-regel' + (t.status === 'wacht' || t.teLaat ? ' vd-warn' : '') }, el('i', { klass: 'vd-blokje', style: 'background:' + P.projectKleur(t.code) }), el('span', { klass: 'vd-code', tekst: D.nummer ? D.nummer(t.code) : t.code }), el('span', { tekst: (D.projectNaam ? D.projectNaam(t.code) : '') + ' · ' + (t.status === 'wacht' && t.wachtTekst ? 'wacht: ' + t.wachtTekst : t.wanneer) }))),
       el('span', { klass: 'vd-chip vd-chip-' + (t.teLaat ? 'telaat' : t.status), tekst: t.teLaat ? 'Te laat' : STATUS[t.status] || t.status }),
@@ -152,7 +153,7 @@
     {
       const lijst = m.inplannen, MAXI = 8, zichtbaar = alleInplannen ? lijst : lijst.slice(0, MAXI);
       const rij = t => el('div', { klass: 'vd-inplrij' },
-        koppeling({ k: 'project', code: t.code }, [el('span', { klass: 'vd-tekst' }, el('span', { klass: 'vd-naam', tekst: t.naam }), el('span', { klass: 'vd-regel' }, el('i', { klass: 'vd-blokje', style: 'background:' + P.projectKleur(t.code) }), el('span', { klass: 'vd-code', tekst: D.nummer ? D.nummer(t.code) : t.code }), el('span', { tekst: (D.projectNaam ? D.projectNaam(t.code) : '') + (t.wacht ? ' · wacht op ' + (t.wachtTekst || 'een voorganger') : '') })))], 'vd-inplink'),
+        koppeling({ k: 'taak', code: t.code, id: t.id }, [el('span', { klass: 'vd-tekst' }, el('span', { klass: 'vd-naam', tekst: t.naam }), el('span', { klass: 'vd-regel' }, el('i', { klass: 'vd-blokje', style: 'background:' + P.projectKleur(t.code) }), el('span', { klass: 'vd-code', tekst: D.nummer ? D.nummer(t.code) : t.code }), el('span', { tekst: (D.projectNaam ? D.projectNaam(t.code) : '') + (t.wacht ? ' · wacht op ' + (t.wachtTekst || 'een voorganger') : '') })))], 'vd-inplink'),
         el('span', { klass: 'vd-uren', tekst: t.min ? klok(t.min) : '' }),
         m.magInplannen ? el('button', { type: 'button', klass: 'vd-inplknop', 'aria-label': 'Plan ' + t.naam + ' in', klik: () => D.ga({ k: 'inplannen', taak: { id: t.id, code: t.code, naam: t.naam, min: t.min } }) }, 'Inplannen') : null);
       const inhoud = lijst.length ? zichtbaar.map(rij) : [leeg(m.takenKlaar ? 'Alles is ingepland' : 'De takenlijst is nog niet geladen.')];

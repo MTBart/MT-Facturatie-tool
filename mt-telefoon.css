@@ -1,0 +1,67 @@
+/* ============================================================================
+ * mt-telefoon.css: de telefoonweergave van v2 (brok S0). Alleen opmaak, onder een breedtegrens: boven die breedte verandert er niets.
+ * Doel: geen horizontaal scrollen van de pagina (document.documentElement.scrollWidth <= innerWidth) op 390 en 430 px, taaktitels die op
+ * woorden afbreken, de tabbalk en de sectienavigatie die binnen hun eigen balk schuiven, tabellen met een eigen scrollvlak, een compacte kop
+ * en tikvlakken van 44 px. Er wordt niets aan gegevens of gedrag geraakt.
+ * ========================================================================== */
+@media (max-width:760px){
+  /* kop: kort en vast op 60 px (de plakkende balken eronder rekenen daarmee) */
+  header{padding:0 10px;gap:6px}
+  .header-left{min-width:0;gap:6px;flex:0 1 auto}
+  header h1{font-size:17px;white-space:nowrap}
+  .header-version,.header-badge,.api-label,#user-name,.mtc-hdrknop{display:none}
+  .header-right{flex:0 0 auto;gap:8px}
+  .header-center{margin:0 4px}
+  .zb-veld{min-width:0;width:100%}
+  /* tabbalk: schuift in zijn eigen balk, tikvlakken van 44 px */
+  .tabs-wrap{padding:0 6px;max-width:100vw;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .tabs-wrap::-webkit-scrollbar{display:none}
+  .tab-btn{min-height:44px;padding-left:12px;padding-right:12px;flex:0 0 auto}
+  /* inhoud: smalle marges, niets dwingt de pagina breder */
+  .main{padding:12px 10px}
+  .main,.main>*,.card,.tab-content{min-width:0;max-width:100%}
+  .card{padding-left:12px;padding-right:12px}
+  /* tabellen krijgen hun eigen scrollvlak (de takentabel van het project is al een kaartlijst) */
+  .card table:not(.pt-tabel),.tab-content table:not(.pt-tabel){display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  /* teksten breken op woorden; lange woorden (een code, een bestandsnaam) mogen als laatste redmiddel afbreken */
+  .card,.tab-content,.proj-ctx,.proj-ctx-naam{overflow-wrap:break-word;word-break:normal}
+  /* de plakkende projectnavigatie en de sectieknoppen: eigen scroll, 44 px */
+  .proj-secnav{max-width:100%}
+  .proj-secknop{min-height:44px;padding:6px 14px}
+  .proj-ctx{padding-left:10px;padding-right:10px}
+  /* Planning (Agenda): de rijen met knoppen lopen door naar de volgende regel; de weergavekeuze schuift binnen zijn eigen balk */
+  #tab-agenda .flex{flex-wrap:wrap;min-width:0;max-width:100%}
+  #tab-agenda .ag-filterkaart>.flex>.flex{flex:1 1 100%}
+  #tab-agenda .ag-viewtog{display:flex !important;flex:1 1 100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  #tab-agenda .ag-viewtog::-webkit-scrollbar{display:none}
+  #tab-agenda .ag-viewtog .btn{flex:0 0 auto;white-space:nowrap;min-height:44px}
+  /* knoppen en velden: tikvlak van 44 px */
+  .btn,.btn-sm,button.btn-xs,select,input[type=text],input[type=date],input[type=number],input[type=search]{min-height:44px}
+  /* losse knoppen en keuzelijsten die een eigen klasse hebben (zij vallen buiten .btn) */
+  .mobiel-bell-btn,.tab-help-btn,.stijl-melding-knop,.stijl-melding-x,.dos-chip,.cn-knop,.mtg-knop,.vg-naam,.pt-sel,select.pt-sel{min-height:44px}
+  .mobiel-bell-btn,.stijl-melding-x,.cn-knop.icoon{min-width:44px}
+  .kb.kb-open,.kb,.afh-weg,.tl-week,.cn-zk,.mtg-knop.klein{min-height:44px}
+  .afh-weg{min-width:44px}
+  .tl-cel,button.mtg-knop.klein{min-height:44px}
+  /* het objectpaneel (taak, planblok, gegevens): velden en knoppen met een tikvlak van 44 px */
+  html #tp-paneel .tp-invoer,html #tp-paneel .tp-knop,html #tp-paneel .tp-stknop{min-height:44px;height:auto}
+}
+
+/* De takentabel van het project is breder dan de kaart op een gewone laptop: hij schuift binnen zijn eigen vlak in plaats van de pagina te verbreden (alle breedtes) */
+.pt-tabel{display:block;width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* Op de telefoon blijft de projectkop niet plakken (die is ruim 290 px hoog en nam de halve pagina in); alleen de tabbalk plakt, direct onder de balk bovenin */
+@media (max-width:760px){
+  html .proj-ctx{position:static}
+  html .proj-secnav{top:var(--mt-kop,60px)!important}
+}
+
+/* Projecten op de telefoon (S7): de lijst óf het project, met "‹ Projecten" om terug te gaan (de takentabel is op de telefoon al een lijst kaartjes: mt-taaktabel.js) */
+@media (max-width:760px){
+  html #proj-grid{display:block!important;min-height:0!important}
+  html #proj-grid:has(#project-detail[data-code],#project-detail[data-klant],#project-detail[data-offerte]) > div:first-child{display:none}
+  html #proj-grid:not(:has(#project-detail[data-code],#project-detail[data-klant],#project-detail[data-offerte])) > #project-detail{display:none}
+  html #proj-grid:has(#project-detail[data-code],#project-detail[data-klant],#project-detail[data-offerte]) > .proj-terug{display:inline-flex;align-items:center;min-height:44px;padding:4px 12px 4px 4px;margin:0 0 6px;border:0;background:transparent;font:inherit;font-size:15px;font-weight:600;color:var(--green);cursor:pointer}
+  html .nieuw-menu>summary,html .nieuw-lijst button{min-height:44px}
+  html .nieuw-lijst{left:0;right:0;min-width:0}
+}

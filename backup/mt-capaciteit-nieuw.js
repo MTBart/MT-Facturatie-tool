@@ -143,6 +143,18 @@
   const projNaam = code => { const p = projInfo(code); return p ? (p.naam || '') : ''; };
   const projNr = code => { try { return (D.nummer && D.nummer(code)) || String(code || ''); } catch (e) { return String(code || ''); } };
   const open = code => { if (code) D.openProject(code); };
+  // Klikken op een taak opent het taakpaneel (mt-taakpaneel.js); zonder taak (een los planblok) of zonder paneel: het project. Een klik telt alleen als de muis minder dan 4 px bewoog
+  // (slepen en uittrekken blijven precies zoals ze waren: de browser stuurt na een echte sleep geen klik, en een greep of knop op de balk opent niets).
+  const openItem = (it, bron) => { if (D.openTaak && it && it.soort === 'taak' && it.id != null && it.code) D.openTaak(it.code, it.id, bron); else open(it && it.code); };
+  function klikOpen(node, it) {
+    let p0 = null;
+    node.addEventListener('pointerdown', ev => { p0 = [ev.clientX, ev.clientY]; });
+    node.addEventListener('click', ev => {
+      if (ev.target && ev.target.closest && ev.target.closest('.cn-greep,button')) return;
+      if (p0 && ev.detail && Math.hypot(ev.clientX - p0[0], ev.clientY - p0[1]) >= 4) return;
+      openItem(it, node);
+    });
+  }
 
   // Een open voorstel: een planblok met status voorstel (ook als het aan een taak hangt: dan heeft het item een blokId) of een taak met een voorstel-markering.
   N.isVoorstel = function (it) { if (!it) return false; if (it.planvoorstel || it.voorstel) return true; if (it.blokId == null) return false; return (D.blokken() || []).some(b => b && String(b.id) === String(it.blokId) && b.status === 'voorstel' && !b._vervallen); };
@@ -187,9 +199,11 @@
   function blok(it, uur, stijl) {
     const voorstel = N.isVoorstel(it), wacht = !!(it.wacht && it.status !== 'klaar'), sleep = N.sleepbaar(it), bid = blokIdVan(it), taakSleep = !sleep && N.taakSleepbaar(it), taakBron = { soort: 'taakbalk', taak: { code: it.code, id: it.id, naam: it.naam, voorstel: false }, van: it.persoon || '', vanDatum: it.datum || '' }, mijlpaal = !!(it.taak && it.taak.soort === 'mijlpaal');
     const sub = el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code), it.min && !uur ? ' · ' + uren(it.min) : '');
-    const b = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok' + (voorstel ? ' voorstel' : '') + (wacht ? ' wacht' : '') + (sleep || taakSleep ? ' sleepbaar' : ''), 'data-taak': taakSleep ? String(it.id) : null, 'data-code': taakSleep ? String(it.code) : null, 'aria-keyshortcuts': taakSleep ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : null, style: '--block-color:' + P.projectKleur(it.code), title: [it.naam, projNr(it.code) + ' ' + projNaam(it.code), it.min ? uren(it.min) : '', voorstel ? 'voorstel' : '', wacht ? ('wacht' + (it.wachtTekst ? ': ' + it.wachtTekst : '')) : '', it.waarschuwing || '', it.nietEenduidig ? 'niet eenduidig aan een taak gekoppeld (hetzelfde taak-id staat in meer dan één project)' : ''].filter(Boolean).join(' · '), klik: () => open(it.code) },
+    const b = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok' + (voorstel ? ' voorstel' : '') + (wacht ? ' wacht' : '') + (sleep || taakSleep ? ' sleepbaar' : ''), 'data-taak': taakSleep ? String(it.id) : null, 'data-code': taakSleep ? String(it.code) : null, 'aria-keyshortcuts': taakSleep ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : null, style: '--block-color:' + P.projectKleur(it.code), title: [it.naam, projNr(it.code) + ' ' + projNaam(it.code), it.min ? uren(it.min) : '', voorstel ? 'voorstel' : '', wacht ? ('wacht' + (it.wachtTekst ? ': ' + it.wachtTekst : '')) : '', it.waarschuwing || '', it.nietEenduidig ? 'niet eenduidig aan een taak gekoppeld (hetzelfde taak-id staat in meer dan één project)' : ''].filter(Boolean).join(' · ') },
       el('span', { klass: 'cn-blok-kop' }, el('span', { klass: 'cn-blok-titel', tekst: it.naam }), voorstel ? el('span', { klass: 'cn-chipje', tekst: 'voorstel' }) : null, wacht && !voorstel ? el('span', { klass: 'cn-chipje wacht', tekst: 'wacht' }) : null, D.taakBezig && it.soort === 'taak' && D.taakBezig(it.code, it.id) ? el('span', { klass: 'cn-chipje wacht', tekst: 'opslaan hangt', title: 'Opslaan hangt: wacht even of herlaad de pagina om opnieuw te proberen' }) : null, it.waarschuwing ? el('span', { klass: 'cn-chipje wacht', tekst: 'let op', title: it.waarschuwing }) : null), uur ? el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-tijd', tekst: uur }), ' · ', el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code)) : sub);
-    b.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === b) { ev.preventDefault(); open(it.code); } });
+    if (S.toon && it.soort === 'taak' && String(it.id) === S.toon.id && String(it.code).toLowerCase() === S.toon.code && D.nu() < S.toon.tot) b.classList.add('tp-gemarkeerd');   // "Toon in tijdlijn" vanuit het taakpaneel
+    klikOpen(b, it);
+    b.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === b) { ev.preventDefault(); openItem(it, b); } });
     if (sleep) sleepBron({ soort: 'verplaats', blokId: bid }, b, it.naam); else if (taakSleep) sleepBron(taakBron, b, it.naam);
     if (taakSleep) {
       // T5: de randen van een taakbalk (week): links de start, rechts het eind; de balk zelf horizontaal slepen schuift beide randen mee. Een mijlpaal kan alleen schuiven.
@@ -335,10 +349,12 @@
   function ongItem(u) {
     const sleep = N.mag() && (!D.magTaken || !!D.magTaken()) && !u.voorstel, taak = { code: u.code, id: u.id, naam: u.naam, min: u.min, voorstel: u.voorstel };   // een taak uit Ongepland slepen past de taak aan: dat vraagt ook het recht om taken te wijzigen
     const gemarkeerd = !!S.markeer && String(S.markeer.id) === String(u.id) && (!S.markeer.code || String(S.markeer.code).toLowerCase() === String(u.code).toLowerCase()) && D.nu() < S.markeer.tot;   // net vanuit Vandaag gekozen om in te plannen
-    const knop = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok cn-ong' + (u.voorstel ? ' voorstel' : '') + (sleep ? ' sleepbaar' : '') + (gemarkeerd ? ' gemarkeerd' : ''), style: '--block-color:' + P.projectKleur(u.code), title: u.tekst || u.naam, klik: () => open(u.code) },
+    const knop = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok cn-ong' + (u.voorstel ? ' voorstel' : '') + (sleep ? ' sleepbaar' : '') + (gemarkeerd ? ' gemarkeerd' : ''), style: '--block-color:' + P.projectKleur(u.code), title: u.tekst || u.naam },
       el('span', { klass: 'cn-ong-rij' }, el('span', { klass: 'cn-blok-titel', tekst: u.naam }), u.min ? el('span', { klass: 'cn-num cn-sub', tekst: uren(u.min) }) : null),
       el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(u.code) }), ' ' + projNaam(u.code), u.voorstel ? ' · voorstel werkplaats' : ''));
-    knop.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === knop) { ev.preventDefault(); open(u.code); } });
+    const item = { soort: 'taak', id: u.id, code: u.code };
+    klikOpen(knop, item);
+    knop.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === knop) { ev.preventDefault(); openItem(item, knop); } });
     if (sleep) sleepBron({ soort: 'nieuw', taak }, knop, u.naam);
     const w = el('div', { klass: 'cn-bw' }, knop);
     if (sleep && D.dialoog && (S.zoom === 'week' || S.zoom === '3d' || S.zoom === 'dag')) w.appendChild(el('button', { type: 'button', klass: 'cn-vpl', 'aria-label': 'Plan ' + u.naam + ' in…', title: 'Inplannen…', klik: ev => { ev.stopPropagation(); N.menu({ soort: 'nieuw', taak, naam: u.naam }); } }, icoon('M7 7h11l-3-3M17 17H6l3 3')));
@@ -358,11 +374,11 @@
   };
   // spec = { soort:'verplaats', blokId } of { soort:'nieuw', taak } plus { persoon, datum, dagdeel | start }
   N.drop = async function (spec) {
-    if (S.bezig) return;
+    if (S.bezig) return { ok: false, bezet: true, reden: 'Er loopt nog een opslag in de planning; probeer het zo opnieuw.' };
     const schoon = {}; Object.keys(spec).forEach(k => { if (k[0] !== '_') schoon[k] = spec[k]; });
     S.bezig = true;   // de lock gaat er meteen op en komt altijd vrij (finally), ook bij een uitzondering of een time-out in de opslag
-    try { await N._drop(schoon); } finally { S.bezig = false; S.focusTaak = null; }
-  };
+    try { return await N._drop(schoon); } finally { S.bezig = false; S.focusTaak = null; }
+  };   // -> de uitkomst (voor het taakpaneel, dat de datums via deze zelfde route wijzigt); de meldingen en het ongedaan maken doet N._drop zelf
   // Een opslag die na 90 s nog hing: de echte actie loopt door en houdt het slot van die taak vast; zodra SharePoint antwoordt komt hier de uitkomst (opgeslagen, niet opgeslagen of tegelijk gewijzigd)
   N.naOnzeker = function (belofte) {
     Promise.resolve(belofte).then(u => { N.teken(); N.toast((u && u.tekst) || 'Ververs de planning om te zien of het opslaan gelukt is.', null, true); }, () => { N.toast('Ik kon niet vaststellen of het opslaan gelukt is. Ververs de planning.', null, true); });
@@ -374,27 +390,29 @@
       // Verlof, een verplichte vrije dag of een dag waarop iemand volgens de werktijden niet werkt: eerst bevestigen (mtDialog). Annuleren = niets schrijven; het blok blijft waar het was.
       if (r && !r.ok && r.vraag) {
         const ja = D.dialoog && D.dialoog.confirm ? await D.dialoog.confirm({ title: 'Controleer de planning', message: r.vraag, okLabel: 'Toch inplannen', cancelLabel: 'Annuleren' }) : false;
-        if (!ja) { S.bezig = false; N.teken(); return; }
+        if (!ja) { S.bezig = false; N.teken(); return { ok: false, geannuleerd: true }; }
         r = await D.verplaats(Object.assign({}, schoon, { bevestigd: true }), opt);
       }
     } catch (e) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((e && e.message) || e) }; }
     S.bezig = false;
-    if (r && r.onzeker) { N.teken(); N.toast(r.reden, null, true); N.naOnzeker(r.onzeker); return; }
-    if (r && r.geannuleerd) { N.teken(); return; }   // de vraag over de opvolgers is geannuleerd: niets gewijzigd
-    if (!r || !r.ok) { N.toast((r && r.reden) || 'Dat lukt niet.'); return; }
-    if (r.noop) return;
+    if (r && r.onzeker) { N.teken(); N.toast(r.reden, null, true); N.naOnzeker(r.onzeker); return r; }
+    if (r && r.geannuleerd) { N.teken(); return r; }   // de vraag over de opvolgers is geannuleerd: niets gewijzigd
+    if (!r || !r.ok) { N.toast((r && r.reden) || 'Dat lukt niet.'); return r || { ok: false, reden: 'Dat lukt niet.' }; }
+    if (r.noop) return r;
     S.markeer = null;
     N.teken();
-    if (r.tegelijk) { N.toast(r.tegelijk, null, true); return; }   // iemand wijzigde tegelijk en won: de planning toont nu de samengevoegde stand; geen ongedaan maken
-    const w = r.wijziging, wat = w.soort === 'taak' ? (w.naam || 'Taak') + ' → ' + persNaam(w.na.persoon) + (w.na.datum && w.voor && (w.voor.start !== w.na.datum || w.voor.eind !== w.na.eind) ? ', ' + P.datumKort(w.na.datum) + (w.na.eind && w.na.eind !== w.na.datum ? ' t/m ' + P.datumKort(w.na.eind) : '') : '') + (r.melding ? ' · ' + r.melding : '')
+    if (r.tegelijk) { N.toast(r.tegelijk, null, true); return r; }   // iemand wijzigde tegelijk en won: de planning toont nu de samengevoegde stand; geen ongedaan maken
+    const w = r.wijziging, wat = w.soort === 'taak' && !w.na.datum && w.voor && w.voor.start ? (w.naam || 'Taak') + ': datums gewist, de taak staat weer in Ongepland' : w.soort === 'taak' ? (w.naam || 'Taak') + ' → ' + persNaam(w.na.persoon) + (w.na.datum && w.voor && (w.voor.start !== w.na.datum || w.voor.eind !== w.na.eind) ? ', ' + P.datumKort(w.na.datum) + (w.na.eind && w.na.eind !== w.na.datum ? ' t/m ' + P.datumKort(w.na.eind) : '') : '') + (r.melding ? ' · ' + r.melding : '')
       : (w.naam || 'Planblok') + ' → ' + persNaam(w.na.persoon) + ', ' + P.datumKort(w.na.datum) + ' ' + w.na.start;
-    if (!r.behouden) { N.toast('Iemand anders was net sneller met ' + (w.naam || 'dit blok') + ': jouw wijziging is niet bewaard.'); return; }
+    if (!r.behouden) { N.toast('Iemand anders was net sneller met ' + (w.naam || 'dit blok') + ': jouw wijziging is niet bewaard.'); return r; }
     N.toast(wat + (r.opgeslagen ? '' : ' (alleen lokaal bewaard: SharePoint is niet bereikbaar)'), async () => {
       let h; try { h = await D.herstel(w, opt); } catch (e) { h = { ok: false, reden: 'Terugzetten mislukt: ' + ((e && e.message) || e) }; }
       N.teken();
       if (h && h.onzeker) { N.toast(h.reden, null, true); N.naOnzeker(h.onzeker); return; }
       N.toast(h && h.ok ? (h.tegelijk || 'Teruggezet') : ((h && h.reden) || 'Terugzetten lukt niet.'), null, !!(h && h.tegelijk));
+      if (D.naHerstel) { try { D.naHerstel(); } catch (e) {} }
     });
+    return r;
   };
   // T6: een oud tb:-planblok dat bij een taak hoort (het item heeft de taak en een blokId) kan een taakbalk worden. Alleen met het recht om te slepen en om taken te wijzigen; niet voor een open voorstel.
   N.omzetbaar = it => !!D.omzetten && !!D.dialoog && N.mag() === true && (!D.magTaken || !!D.magTaken()) && !!it && it.soort === 'taak' && it.blokId != null && !N.isVoorstel(it) && it.status !== 'klaar';
@@ -548,6 +566,16 @@
     return true;
   };
   // Vanuit Afwijkingen (Admin > Team en werktijden): de dagweergave van die dag voor die persoon openen (de aanroeper wisselt naar de Agenda).
+  // Vanuit het taakpaneel ("Toon in tijdlijn"): de week van de taak, zonder filters, en de balk(en) van die taak een minuut gemarkeerd (de aanroeper wisselt naar de Agenda ▸ Capaciteit).
+  N.toonTaak = function (taak, datum) {
+    if (!taak || taak.id == null) return false;
+    S.exactDag = false; S.persoon = ''; S.project = ''; S.anker = P.isYmd(datum) ? datum : P.vandaagYmd();
+    if (S.zoom === 'maand' || S.zoom === 'kwartaal') S.zoom = 'week';   // de balken zijn pas in een week- of dagweergave te zien (de bewaarde zoomkeuze verandert niet)
+    S.toon = { id: String(taak.id), code: String(taak.code == null ? '' : taak.code).toLowerCase(), tot: D.nu() + 60000 };
+    N.teken();
+    const e = D.doc.querySelector('#agenda-capaciteit .cn-blok.tp-gemarkeerd'); if (e && e.scrollIntoView) e.scrollIntoView({ block: 'center', inline: 'center' });
+    return !!e;
+  };
   N.gaNaar = function (datum, slug) { if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = P.isYmd(datum) ? 'dag' : 'week'; S.exactDag = P.isYmd(datum); };   // precies die dag (ook een weekenddag), met die persoon in beeld; de bewaarde zoomkeuze verandert niet
   N.init = function (deps) {
     D = deps; P = deps.planning || root.MTPlanning;

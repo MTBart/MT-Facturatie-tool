@@ -1,5 +1,52 @@
 [
   {
+    "versie": "2.23.0",
+    "datum": "2026-10-23",
+    "titel": "Planning met afhankelijkheden en checklists, een rustiger projectscherm en een handigere projectenlijst",
+    "voor": "iedereen",
+    "punten": [
+      "Taken kunnen elkaar nu op vier manieren beperken (eerst klaar, samen beginnen, samen eindigen, pas klaar na het begin van een ander), met wachttijd of levertijd. Een taak kan ook een beperking krijgen: niet vóór, uiterlijk op of vast op een datum; klopt het niet met de planning dan krijg je een melding, er wordt niets vanzelf verschoven. Je kunt ook wachten op een taak uit een ander project.",
+      "In een taak kun je een checklist bijhouden (met wie en wanneer afgevinkt) en een project kan poorten krijgen, zoals tekening akkoord of aanbetaling binnen. Taken erachter wachten tot de poort groen is.",
+      "Het Bord heeft een weekweergave en elke kaart toont een mini-tijdlijn.",
+      "Capaciteit: klik op een lege plek om een planblok te maken en pas planblokken aan in het paneel. Je ziet naast het geplande ook wat er geklokt is, en de afspraken uit Outlook van het team staan als bezet in de agenda-strook. Rooster en Lijst zijn weggehaald.",
+      "Het projectscherm is rustiger: een vaste kop met fase, levering, uren en volgende actie, een opgeschoond Overzicht met de projectgegevens in een paneel, de planning samengevoegd tot meldingen en een takentabel, en Productie met Te bestellen bovenaan. Op de telefoon kies je de lijst of het project.",
+      "Projecten: filteren, sorteren en groeperen in de lijst, en meerdere projecten tegelijk afronden of op Verloren zetten (met voorbeeld vooraf en Ongedaan maken). Via + Nieuw kies je tussen Direct project, Lead, Offerte of Uit Toggl overnemen.",
+      "Rustiger uiterlijk in de nieuwe stijl: één groene hoofdknop per scherm en een duidelijk gekozen weergave.",
+      "Na de update: herlaad de tool een keer op elk apparaat (ook de telefoon en de tv), ook als hij al openstaat. Werk pas aan de planning als iedereen herladen heeft."
+    ]
+  },  {
+    "versie": "2.22.0",
+    "datum": "2026-10-23",
+    "titel": "Planning veiliger en flexibeler, materiaal bij taken en een tool die op de telefoon past",
+    "voor": "iedereen",
+    "punten": [
+      "Planblokken slepen of wijzigen gaat veiliger: wijzigen twee mensen tegelijk iets aan hetzelfde blok, dan blijven allebei de wijzigingen staan en krijg je een melding als jouw wijziging niet kon worden overgenomen.",
+      "Materiaal hoort nu bij een taak. Koppel een bestelregel aan een taak en geef een verwachte leverdatum; de taak toont dat hij wacht op materiaal, en je krijgt een vraag voordat je zo'n taak op Bezig of Klaar zet.",
+      "Admin > Planning inrichten: de beheerder past zelf de stations, fases en activiteiten van het Bord aan (hernoemen, ordenen, toevoegen, verwijderen). Een klik op een vakje in Bord > Stroom toont de taken van dat station.",
+      "Taken bewerk je nu ook in het project zelf (takenlijst), en een nieuw blok Voortgang laat zien hoe ver een project is. Bij afvinken staat wie en wanneer.",
+      "Capaciteit: soepel zoomen en schuiven, blokken stapelen onder elkaar als er meer is, een belastingoverzicht per persoon en een takenbak waarin je taken kiest, filtert en groepeert (op de telefoon als lade).",
+      "De tool past nu op een telefoon van 390 tot 430 pixels breed zonder zijwaarts scrollen.",
+      "Calculatie en inkoop: een verwijderde inkoopregel kun je terugzetten (Verwijderd, Terugzetten), en de keuze van de offerte bij de nacalculatie gaat niet meer verloren als twee mensen tegelijk kiezen; Ongedaan maken staat onder Nacalculatie.",
+      "Na de update: herlaad de tool een keer op elk apparaat (ook de telefoon en de tv), ook als hij al openstaat. Werk pas aan de planning als iedereen herladen heeft."
+    ]
+  },
+  {
+    "versie": "2.21.0",
+    "datum": "2026-10-23",
+    "titel": "Planning met bord, tijdlijn en filters, Financiën, slimmere Larry en rustiger calculeren",
+    "voor": "iedereen",
+    "punten": [
+      "Planning: bovenin staat een filterbalk (persoon, klant, project, fase, status) die in Capaciteit, Mijn werk en het nieuwe Bord hetzelfde werkt. Klik op een blok op de planning en er opent een paneel met de taak erachter.",
+      "Nieuw: het Bord. Taken staan in kolommen per status; sleep een taak naar een andere kolom om de status te wijzigen, of voeg met + taak meteen een taak toe.",
+      "Nieuw: de Tijdlijn (bij Agenda). Alle projecten op een tijdas, met fasen, afhankelijkheden en het kritieke pad. Alleen kijken: er wordt niets gewijzigd. Klik op een taakbalk voor het taakpaneel of op een projectbalk om het project te openen.",
+      "Calculatie: je ziet vooraf een voorbeeld van wat er verandert voordat je standaardwaarden (zoals uurtarief en marge) toepast. Standaardwaarden en dialogen zijn duidelijker, en wijzigt iemand anders tegelijk de standaardwaarden, dan gaat er niets verloren.",
+      "Calculatie: het paneel Versies toont eerdere opgeslagen versies van een offerte, met een knop om er een terug te zetten.",
+      "Het tabblad Geld heet nu Financiën. Het toont per project wat je nog kunt factureren (Facturatie verwacht) en heeft een Factuurplanning waarin je een maand kiest voor een termijn. Alleen zichtbaar met het recht voor geld.",
+      "Larry (de assistent) antwoordt eerlijker: hij zegt het als hij iets niet weet in plaats van iets te verzinnen. Verbeterpunten en feedback komen in een bouwwachtrij die voor iedereen hetzelfde is.",
+      "Na de update: herlaad de tool een keer op elk apparaat (ook als hij al openstaat)."
+    ]
+  },
+  {
     "versie": "2.20.0",
     "datum": "2026-10-23",
     "titel": "Offertes veiliger opgeslagen en een paneel per taak",
