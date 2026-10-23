@@ -17,7 +17,7 @@
   const WEERGAVEN = ['mijnwerk', 'capaciteit', 'bord', 'tijdlijn', 'grid', 'lijst', 'plan'];
   const ZOOMS = ['kwartaal', 'maand', 'week', '3d', 'dag'];
   const STATUSSEN = [['open', 'Open', 'todo'], ['bezig', 'Bezig', 'bezig'], ['wacht', 'Wacht', 'wacht'], ['klaar', 'Klaar', 'klaar']];   // [linkwaarde, label, taakstatus]
-  const BORDEN = ['status', 'stroom', 'fase'];   // de indeling van het Bord (P3)
+  const BORDEN = ['status', 'stroom', 'fase', 'week'];   // de indeling van het Bord (P3)
   const SLEUTELS = ['project', 'persoon', 'status', 'van', 'zoom', 'bord'];
   const LINK = { project: 'project', persoon: 'wie', status: 'status', van: 'van', zoom: 'zoom', bord: 'bord' };
   const S = { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', selectie: null, rev: 0, hashAchter: false };

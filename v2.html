@@ -54,17 +54,17 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planfilter.js?v=2026-10-23a"></script>
-<script src="mt-planning.js?v=2026-10-23i"></script>
+<script src="mt-planfilter.js?v=2026-10-23j"></script>
+<script src="mt-planning.js?v=2026-10-23j"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-23i"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
-<script src="mt-objectpaneel.js?v=2026-10-23g"></script>
+<script src="mt-objectpaneel.js?v=2026-10-23j"></script>
 <script src="mt-taakpaneel.js?v=2026-10-23i"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
 <script src="mt-planinrichting.js?v=2026-10-23g"></script>
-<script src="mt-bord.js?v=2026-10-23h"></script>
+<script src="mt-bord.js?v=2026-10-23k"></script>
 <script src="mt-tijdlijn.js?v=2026-10-23f"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
@@ -4034,8 +4034,8 @@ try{ MTBord.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, taken:()
   vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null),
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,project_id:p.project_id||'',label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   projectenVol:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code), bestel:()=>_blActief(), bestelVers:async()=>{ await _blVerseLees(); return _blActief(); },
-  mag:{ status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
-  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), nieuweTaak:bordNieuweTaak,
+  mag:{ status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar(), plannen:()=>capMagSlepen()&&projTakenKlaar() },   // plannen: dezelfde recht-controle als slepen in de Capaciteit
+  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), nieuweTaak:bordNieuweTaak, blokken:()=>agPlanActief(), datums:spec=>MTCapaciteitNieuw.drop(spec), naarCapaciteit:()=>{ try{ agendaZetView('capaciteit'); }catch(e){} },
   toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; },
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}),
   naWijziging:()=>{ try{ MTTaakPaneel.ververs(); }catch(e){} try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Bord init:',e); }
