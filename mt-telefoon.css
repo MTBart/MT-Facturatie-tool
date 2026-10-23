@@ -43,6 +43,8 @@
   .kb.kb-open,.kb,.afh-weg,.tl-week,.cn-zk,.mtg-knop.klein{min-height:44px}
   .afh-weg{min-width:44px}
   .tl-cel,button.mtg-knop.klein{min-height:44px}
+  /* het objectpaneel (taak, planblok, gegevens): velden en knoppen met een tikvlak van 44 px */
+  html #tp-paneel .tp-invoer,html #tp-paneel .tp-knop,html #tp-paneel .tp-stknop{min-height:44px;height:auto}
 }
 
 /* De takentabel van het project is breder dan de kaart op een gewone laptop: hij schuift binnen zijn eigen vlak in plaats van de pagina te verbreden (alle breedtes) */

@@ -135,6 +135,7 @@
   function bouw(code) {
     const kop = el('div', { klass: 'proj-kop', 'data-code': code, role: 'group', 'aria-label': 'Projectstand' });
     [faseDeel(code), leverDeel(code), urenDeel(code), volgendeDeel(code)].forEach(x => { if (x) kop.appendChild(x); });
+    if (D.openGegevens) kop.appendChild(el('button', { type: 'button', klass: 'pk-gegevens', title: 'Projectgegevens bewerken (adres, projectleider, leverdatum, aanhef)', klik: ev => { D.openGegevens(code, ev.currentTarget); }, tekst: 'Gegevens' }));
     kop.appendChild(menuDeel(code));
     return kop;
   }
@@ -162,11 +163,12 @@
     '.pk-faselabel{font-weight:600;color:var(--green,#2A4A38)}.pk-lever{white-space:nowrap}.pk-zacht{color:var(--text-faint,#8a8f8a)}.pk-laat{color:var(--gold-text,#7A6010);font-weight:600}',
     '.pk-uren,.pk-volgende{display:inline-flex;align-items:center;gap:8px;background:none;border:0;padding:0;margin:0;font:inherit;font-size:13px;color:inherit;cursor:pointer;min-height:32px;text-align:left}.pk-volgende{overflow-wrap:break-word;word-break:normal;flex:1 1 200px}.pk-volgende:hover,.pk-uren:hover{text-decoration:underline}.pk-let{color:var(--gold-text,#7A6010);font-weight:600}',
     '.pk-balk{display:inline-block;width:64px;height:6px;border-radius:3px;background:var(--surface-sunken,#efe9dd);overflow:hidden;flex:none}.pk-balk i{display:block;height:100%;background:var(--green,#2A4A38)}.pk-let .pk-balk i{background:var(--gold,#B8962E)}.pk-sub{font-size:11px;color:var(--text-faint,#8a8f8a);font-weight:400}',
+    '.pk-gegevens{margin-left:auto;font:inherit;font-size:13px;font-weight:600;min-height:32px;padding:2px 12px;border:1px solid var(--border,#dfd8cb);border-radius:6px;background:var(--surface,#fff);color:var(--ink,#1f2a24);cursor:pointer}.pk-gegevens:hover{background:var(--surface-sunken,#efe9dd)}.pk-gegevens:focus-visible{outline:2px solid var(--green,#2A4A38);outline-offset:1px}.pk-gegevens+.pk-menuwrap{margin-left:0}',
     '.pk-menuwrap{position:relative;margin-left:auto}.pk-meer{display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:32px;border:1px solid var(--border,#dfd8cb);border-radius:6px;background:var(--surface,#fff);color:var(--ink-3,#646a64);cursor:pointer}.pk-meer:hover{background:var(--surface-sunken,#efe9dd)}',
     '.pk-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:70;min-width:240px;max-width:calc(100vw - 24px);padding:4px;background:var(--surface-overlay,#fff);border:1px solid var(--border,#dfd8cb);border-radius:8px;box-shadow:var(--shadow-pop,0 6px 24px rgba(0,0,0,.18))}.pk-menu[hidden]{display:none}',
     '.pk-item{display:block;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:8px 10px;font:inherit;font-size:13px;color:inherit;cursor:pointer;min-height:36px}.pk-item:hover,.pk-item:focus-visible{background:var(--surface-sunken,#efe9dd);outline:none}.pk-gevaar{color:#8B1A1A;border-top:1px solid var(--border-hair,#ece6d9);border-radius:0 0 6px 6px;margin-top:2px}',
     '.pk-sel:focus-visible,.pk-uren:focus-visible,.pk-volgende:focus-visible,.pk-meer:focus-visible{outline:2px solid var(--green,#2A4A38);outline-offset:1px}',
-    '@media (max-width:760px){.proj-kop{gap:4px 10px}.pk-sel,.pk-uren,.pk-volgende,.pk-meer,.pk-item{min-height:44px}.pk-meer{min-width:44px}.pk-lever{white-space:normal}.pk-volgende{flex:1 1 100%}.pk-menuwrap{margin-left:0}.pk-menu{right:auto;left:0}.pk-sel{flex:1 1 auto}}'
+    '@media (max-width:760px){.proj-kop{gap:4px 10px}.pk-sel,.pk-uren,.pk-volgende,.pk-meer,.pk-item,.pk-gegevens{min-height:44px}.pk-gegevens{margin-left:0}.pk-meer{min-width:44px}.pk-lever{white-space:normal}.pk-volgende{flex:1 1 100%}.pk-menuwrap{margin-left:0}.pk-menu{right:auto;left:0}.pk-sel{flex:1 1 auto}}'
   ].join('\n');
   function stijl() { const d = dom(); if (!d || !d.head || d.getElementById('pk-stijl')) return; const s = d.createElement('style'); s.id = 'pk-stijl'; s.textContent = CSS; d.head.appendChild(s); }
 
