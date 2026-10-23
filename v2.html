@@ -553,6 +553,7 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .proj-secknop:hover{background:var(--surface-sunken);color:var(--text)}
 .proj-secknop:focus-visible{outline:none;box-shadow:var(--focus-ring)}
 .proj-secknop.actief{background:var(--green);color:var(--n-0)}
+.pr-bestanden{margin-top:14px;border-top:1px solid var(--border)}.pr-bestanden>summary{cursor:pointer;padding:10px 0;font-size:13px;font-weight:600;color:var(--text-dim);list-style:none;display:flex;align-items:center;gap:8px;min-height:36px}.pr-bestanden>summary::-webkit-details-marker{display:none}.pr-bestanden>summary::before{content:'';width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s}.pr-bestanden[open]>summary::before{transform:rotate(45deg)}.pr-bestanden>summary:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .proj-secn{font:600 10px var(--mono);opacity:.75;margin-left:2px}
 .proj-sectie{min-width:0;overflow-wrap:anywhere}
 /* Projectmeter (P1) */
@@ -6731,6 +6732,7 @@ function _projSecTeller(proj,k){
   try{
     if(k==='dossier'){ const n=(typeof mailLinksVoor==='function'?mailLinksVoor(proj.code).length:0); return n?`${n}✉`:''; }
     if(k==='planning'){ const n=(typeof projTaken==='function'?projTaken(proj.code).filter(t=>t.status!=='klaar').length:0); return n?String(n):''; }
+    if(k==='productie'){ const n=(typeof vgRegels==='function'?vgRegels(proj.code).filter(b=>MTPlanning.bestelStatus(b)!=='geleverd').length:0); return n?String(n):''; }   // regels die nog besteld of geleverd moeten worden
   }catch(e){}
   return '';
 }
@@ -6763,7 +6765,7 @@ function _projSectieRender(proj){
     try{ projPlanTijdlijn(tl,[proj.code],{key:'proj:'+proj.code}); }
     catch(e){ console.warn('tijdlijn:',e); if(tl) tl.innerHTML='<p class="dos-leeg">Tijdlijn kon niet laden: '+esc(e.message||String(e))+'</p>'; }
   }
-  if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
+  if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } try{ _prBestandenOpenBijGebruik(c); }catch(e){ console.warn('bestanden:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
   if(_projSectie==='planning'){ try{ MTPlanFilter.monteerProject(document.getElementById('pf-proj-'+String(proj.code).replace(/-/g,'')),'pt-tbl-'+String(proj.code).replace(/-/g,'')); }catch(e){ console.warn('Planningsfilter:',e); } planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} try{ MTTaakTabel.verrijk(proj.code,pan); }catch(e){ console.warn('Takentabel:',e); } }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='overzicht'){ try{ MTVoortgang.monteer(proj.code,pan); }catch(e){ console.warn('Voortgang:',e); } }   // het blok Voortgang: eerste onder de contextbalk
@@ -6907,8 +6909,18 @@ function projSecCalculatie(proj,c){
       </table></div>`:'<hr class="divider"><p style="color:var(--text-faint);font-size:13px">Nog geen materiaalinkoop geboekt voor dit project.</p>'}`;
 }
 // ── Productie: Vectorworks-CSV, NCR-import, bestellijst van dit project ──
-function projSecProductie(proj,c){
+// Productie: de importvakken (Vectorworks-kostenberekening, NCR) staan ingeklapt onder "Bestanden". Zodra je een bestand kiest of er een resultaat of status verschijnt, klapt het vak open.
+function _prBestandenOpenBijGebruik(c){
+  const det=document.getElementById('pr-bestanden-'+c.cid); if(!det) return;
+  det.addEventListener('change',()=>{ det.open=true; });
+  if(!window.MutationObserver) return;
+  const mo=new MutationObserver(()=>{ det.open=true; });
+  ['csv-resultaat-','ncr-resultaat-','csv-status-','ncr-status-'].forEach(p=>{ const e=document.getElementById(p+c.sid); if(e) mo.observe(e,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['class']}); });
+}function projSecProductie(proj,c){
   return `
+      <div id="proj-bestel-${esc(c.cid)}" class="pm-host"></div>
+      <details class="pr-bestanden" id="pr-bestanden-${esc(c.cid)}">
+      <summary>Bestanden: Vectorworks-kostenberekening en NCR-import</summary>
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
         <div class="card-title" style="margin:0">Kostenberekening — Vectorworks CSV / Excel</div>
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('csv-input-${esc(c.sid)}').click()">📊 CSV / Excel uploaden</button>
@@ -6925,8 +6937,7 @@ function projSecProductie(proj,c){
         <span id="ncr-status-${esc(c.sid)}" style="font-size:12px;color:var(--text-dim)"></span>
       </div>
       <div id="ncr-resultaat-${esc(c.sid)}" class="hidden"></div>
-      <hr class="divider">
-      <div id="proj-bestel-${esc(c.cid)}" class="pm-host"></div>`;
+      </details>`;
 }
 
 // ═══ PROJECTTIJDLIJN + KLANT-ROLL-UP (brok B10) ═══
