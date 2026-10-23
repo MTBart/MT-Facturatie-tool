@@ -36,6 +36,7 @@
     const fasenVolgorde = (o.fasen && o.fasen.length ? o.fasen : (() => { try { return (P.sjabloonStd().fases || []).map(x => x.naam); } catch (e) { return []; } })());
     let eerste = Infinity, laatste = -Infinity, aantalTaken = 0, aantalProjecten = 0;
     const matIdx = P.bestelIndexTaak(o.bestel);   // P5: de bestelregels die aan een taak hangen, één keer geïndexeerd
+    const kruisLijnen = [], rijSleutel = new Map();   // F2b: koppelingen tussen projecten worden na alle projecten getekend, als beide rijen in beeld staan
     const projecten = (o.projecten || []).filter(p => p && p.code && !p._vervallen).slice().sort((a, b) => String(a.label || a.code).localeCompare(String(b.label || b.code), 'nl', { numeric: true }));
     projecten.forEach(p => {
       if (f.project && !zelfde(f.project, p.code)) return;
@@ -61,8 +62,8 @@
       if (!open) return;
       // kritiek pad (alleen voor uitgeklapte projecten): de ketting die de leverdatum bepaalt, zoals MTPlanning.rooster hem berekent
       const dk = sleutelVan(o.afhank, k), deps = dk ? o.afhank[dk] : [];
-      let kritiek = new Set();
-      if (o.kritiek !== false && lijst.length) { try { const r = P.rooster(lijst, deps, { start: vandaag, leverdatum: lever, vrij: o.vrij }); r.pad.forEach(id => { const t = lijst.find(x => x.id === id); if (t && (t.status || 'todo') !== 'klaar') kritiek.add(String(id)); }); pr.tekort = r.tekort; pr.eindVroegst = r.eindVroegst; } catch (e) { kritiek = new Set(); } }
+      let kritiek = new Set(), rr = null;
+      if (o.kritiek !== false && lijst.length) { try { const r = rr = P.rooster(lijst, deps, { start: vandaag, leverdatum: lever, vrij: o.vrij, alle: taken, code: k }); r.pad.forEach(id => { const t = lijst.find(x => x.id === id); if (t && (t.status || 'todo') !== 'klaar') kritiek.add(String(id)); }); pr.tekort = r.tekort; pr.eindVroegst = r.eindVroegst; } catch (e) { kritiek = new Set(); } }
       // fasen in de volgorde van het sjabloon, daarna eigen fasen, daarna Geen fase
       const namen = []; const voeg = n => { const s = String(n || '').trim(); if (s && !namen.some(x => zelfde(x, s))) namen.push(s); };
       fasenVolgorde.forEach(voeg); sel.forEach(t => voeg(t.fase));
@@ -75,19 +76,29 @@
         g.ts.slice().sort((a, b) => ((ok(a.start) ? a.start : '9999') < (ok(b.start) ? b.start : '9999') ? -1 : 1)).forEach(t => {
           const s = ok(t.start) ? t.start : (ok(t.eind) ? t.eind : ''), e = ok(t.eind) ? t.eind : s, eerstePers = P.taakMensen(t)[0], lid = eerstePers ? team.find(m => m && P.zelfdePersoon(m.slug, eerstePers, team)) : null;
           const r = { soort: 'taak', code: k, id: t.id, label: t.naam || '(zonder naam)', start: s, eind: e, status: t.status || 'todo', mijlpaal: t.soort === 'mijlpaal', kritiek: kritiek.has(String(t.id)), persoon: lid ? lid.naam : (eerstePers || ''), wacht: (t.status || 'todo') === 'wacht' ? String(t.wacht_reden || '') : '', mat: (() => { const m = P.taakMateriaal(t, P.bestelVanTaakIdx(matIdx, t.id, { code: k, project_id: p.project_id }), { vandaag }); return m.wacht ? { open: m.open, laat: m.laat, tekst: m.tekst, laatste: m.laatste } : null; })(), i: rijen.length };
-          rijVan.set(String(t.id), r.i); rijen.push(r);
+          const bp = P.beperkingVan(t);   // F2b: niet vóór, uiterlijk op of vast op; de rij krijgt de sleutels alleen als de taak een beperking heeft
+          if (bp) { const bc = (() => { try { return P.beperkingConflicten([t], { vrij: o.vrij })[0] || null; } catch (e) { return null; } })(), rb = rr && rr.taken && rr.taken[t.id] && rr.taken[t.id].beperking; r.beperking = bp.soort; r.beperkingDatum = bp.datum; if (bc || (rb && rb.conflict)) r.beperkingConflict = bc ? bc.dagen : 1; if (ok(bp.datum)) { eerste = Math.min(eerste, dnr(bp.datum)); laatste = Math.max(laatste, dnr(bp.datum)); } }
+          rijVan.set(String(t.id), r.i); rijen.push(r); rijSleutel.set(String(k).toLowerCase() + '|' + t.id, r.i);
           if (s) { eerste = Math.min(eerste, dnr(s)); laatste = Math.max(laatste, dnr(e)); }
         });
       });
-      // afhankelijkheidslijnen: alleen einde-naar-begin tussen taken die in beeld staan en datums hebben
+      // afhankelijkheidslijnen tussen taken die in beeld staan en de datums hebben die het type nodig heeft (EB: eind en start, BB: start en start, EE: eind en eind, BE: start en eind)
       try {
         P.depsEffectief(sel, deps).forEach(e => {
           if (e.inactief) return;
           const a = rijVan.get(String(e.van)), b = rijVan.get(String(e.naar)); if (a === undefined || b === undefined) return;
-          if (!rijen[a].eind || !rijen[b].start) return;
-          lijnen.push({ van: a, naar: b, lag: e.lag || 0, kritiek: rijen[a].kritiek && rijen[b].kritiek });
+          const ty = e.type === 'SS' || e.type === 'FF' || e.type === 'SF' ? e.type : 'FS';
+          if (!(ty === 'SS' || ty === 'SF' ? rijen[a].start : rijen[a].eind) || !(ty === 'FF' || ty === 'SF' ? rijen[b].eind : rijen[b].start)) return;
+          lijnen.push(Object.assign({ van: a, naar: b, lag: e.lag || 0, kritiek: rijen[a].kritiek && rijen[b].kritiek }, ty === 'FS' ? {} : { type: ty }));
         });
       } catch (e) {}
+      deps.forEach(d => { if (d && typeof d === 'object' && d.van_project && !d._vervallen && d.status !== 'uit' && !zelfde(d.van_project, k) && rijVan.has(String(d.naar_taak))) kruisLijnen.push({ van: String(d.van_project).toLowerCase() + '|' + d.van_taak, naar: rijVan.get(String(d.naar_taak)), type: d.type, lag: Number(d.lag_dagen) || 0 }); });
+    });
+    kruisLijnen.forEach(q => {
+      const a = rijSleutel.get(q.van), b = q.naar; if (a === undefined) return;
+      const ty = q.type === 'SS' || q.type === 'FF' || q.type === 'SF' ? q.type : 'FS';
+      if (!(ty === 'SS' || ty === 'SF' ? rijen[a].start : rijen[a].eind) || !(ty === 'FF' || ty === 'SF' ? rijen[b].eind : rijen[b].start)) return;
+      lijnen.push(Object.assign({ van: a, naar: b, lag: q.lag, kritiek: false, ander: true }, ty === 'FS' ? {} : { type: ty }));
     });
     return { rijen, lijnen, eerste: eerste === Infinity ? '' : dymd(eerste), laatste: laatste === -Infinity ? '' : dymd(laatste), vandaag, aantalTaken, aantalProjecten };
   };
@@ -97,10 +108,14 @@
     const a = maandag(Math.min(m.eerste ? dnr(m.eerste) : nu, nu - 14)), b = Math.max(m.laatste ? dnr(m.laatste) : nu, nu + 28) + 7;
     return { van: a, dagen: b - a + 1, px, breedte: (b - a + 1) * px, off: off || 0, x: ymd => (off || 0) + (dnr(ymd) - a) * px };
   };
-  // Elke lijn: de coördinaten (in de tijdlijnruimte) van het einde van de voorganger naar het begin van de opvolger
-  Tl.lijnPad = function (as, a, b, hoogteRij) {
-    const px = as.px, x1 = as.x(a.eind) + px, y1 = a.i * hoogteRij + hoogteRij / 2, x2 = as.x(b.start), y2 = b.i * hoogteRij + hoogteRij / 2, xm = Math.max(x1 + 4, Math.min(x2 - 6, x1 + 8));
-    return { x1, y1, x2, y2, d: 'M' + x1 + ',' + y1 + ' H' + xm + ' V' + y2 + ' H' + x2, pijl: [x2, y2] };
+  // Elke lijn: de coördinaten (in de tijdlijnruimte) van het uiteinde van de voorganger naar het uiteinde van de opvolger dat het type bedoelt: EB (standaard) einde naar begin, BB begin naar begin,
+  // EE einde naar einde, BE begin naar einde. `pijl`: de punt van de pijl bij de opvolger; `links`: waar de pijlpunt naartoe wijst (naar links als de lijn van rechts komt).
+  Tl.lijnPad = function (as, a, b, hoogteRij, type) {
+    const px = as.px, ty = type === 'SS' || type === 'FF' || type === 'SF' ? type : 'FS';
+    const x1 = ty === 'SS' || ty === 'SF' ? as.x(a.start) : as.x(a.eind) + px, y1 = a.i * hoogteRij + hoogteRij / 2, x2 = ty === 'FF' || ty === 'SF' ? as.x(b.eind) + px : as.x(b.start), y2 = b.i * hoogteRij + hoogteRij / 2;
+    if (ty === 'FS') { const xm = Math.max(x1 + 4, Math.min(x2 - 6, x1 + 8)); return { x1, y1, x2, y2, d: 'M' + x1 + ',' + y1 + ' H' + xm + ' V' + y2 + ' H' + x2, pijl: [x2, y2], links: false }; }
+    const xm = ty === 'SS' ? Math.min(x1, x2) - 8 : ty === 'FF' ? Math.max(x1, x2) + 8 : x1 - 8;
+    return { x1, y1, x2, y2, d: 'M' + x1 + ',' + y1 + ' H' + xm + ' V' + y2 + ' H' + x2, pijl: [x2, y2], links: x2 < xm };
   };
 
   // ── tekenen ──
@@ -140,6 +155,7 @@
     + '#agenda-tijdlijn .tl-ruit{position:absolute;top:8px;width:14px;height:14px;margin-left:-7px;transform:rotate(45deg);background:var(--tl-balk);border:0;padding:0;cursor:pointer}#agenda-tijdlijn .tl-ruit.klaar{background:#c9d3dc;border:1px solid #8b9aa8}#agenda-tijdlijn .tl-ruit.kritiek{box-shadow:0 0 0 2px var(--tl-kritiek)}'
     + '#agenda-tijdlijn .tl-mat{display:inline-flex;align-items:center;gap:2px;color:var(--ink-2,#596059);font:500 11px/14px var(--mono,monospace)}#agenda-tijdlijn .tl-mat.laat{color:#b3261e;font-weight:600}'
     + '#agenda-tijdlijn .tl-vandaag{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--brass,#d19a1f);z-index:2;pointer-events:none}#agenda-tijdlijn .tl-vlag{position:absolute;top:6px;width:2px;height:18px;margin-left:-1px;background:var(--ink,#1f2a24)}'
+    + '#agenda-tijdlijn .tl-bep{position:absolute;top:4px;height:22px;width:0;border-left:2px solid #5a6b78;margin-left:-1px;pointer-events:none}#agenda-tijdlijn .tl-bep.tl-bep-uiterlijk{border-left:3px double var(--tl-kritiek)}#agenda-tijdlijn .tl-bep.tl-bep-vast_op{border-left:3px dotted var(--ink,#1f2a24)}#agenda-tijdlijn .tl-bep.laat{border-left-color:var(--tl-kritiek);box-shadow:0 0 0 1px #fbe3e0}'
     + '#agenda-tijdlijn .tl-lijnen{position:absolute;left:0;top:' + HEAD_H + 'px;pointer-events:none;z-index:1;overflow:visible}'
     + '#agenda-tijdlijn .tl-geen{position:absolute;font:400 12px/16px var(--sans,inherit);color:var(--ink-3,#8a8f89);top:7px;padding-left:8px}'
     + '#agenda-tijdlijn .tl-legenda{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin-top:10px;font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#596059)}#agenda-tijdlijn .tl-legenda .tl-balk{position:static;display:inline-block;width:26px;height:12px;vertical-align:middle;margin-right:6px}'
@@ -176,11 +192,15 @@
         rij.setAttribute('data-pf-code', r.code); rij.setAttribute('data-pf-taak', r.id);
         if (!r.start) rij.appendChild(el('span', { klass: 'tl-geen', stijl: 'left:' + (w.lw) + 'px', tekst: 'geen datums' }));
         else {
-          const x = as.x(r.start), b = (dnr(r.eind) - dnr(r.start) + 1) * as.px, beschr = r.label + ' · ' + statusLabel(r.status) + ' · ' + (r.start === r.eind ? kort(r.start) : kort(r.start) + ' – ' + kort(r.eind)) + (r.persoon ? ' · ' + r.persoon : '') + (r.kritiek ? ' · kritiek pad' : '') + (r.wacht ? ' · wacht: ' + r.wacht : '');
+          const x = as.x(r.start), b = (dnr(r.eind) - dnr(r.start) + 1) * as.px, beschr = r.label + ' · ' + statusLabel(r.status) + ' · ' + (r.start === r.eind ? kort(r.start) : kort(r.start) + ' – ' + kort(r.eind)) + (r.persoon ? ' · ' + r.persoon : '') + (r.kritiek ? ' · kritiek pad' : '') + (r.wacht ? ' · wacht: ' + r.wacht : '') + (r.beperking ? ' · ' + ({ niet_voor: 'niet v\u00f3\u00f3r ', uiterlijk: 'uiterlijk ', vast_op: 'vast op ' }[r.beperking]) + kort(r.beperkingDatum) + (r.beperkingConflict ? ' (klopt niet met de planning)' : '') : '');
           const klik = () => { if (D.openTaak) D.openTaak(r.code, r.id, bal); };
           const bal = r.mijlpaal ? el('button', { type: 'button', klass: 'tl-ruit ' + (r.status === 'klaar' ? 'klaar ' : '') + (r.kritiek ? 'kritiek' : ''), stijl: 'left:' + (x + as.px / 2) + 'px', title: beschr, 'aria-label': beschr, klik })
             : el('button', { type: 'button', klass: 'tl-balk ' + (r.status === 'todo' ? 'open' : r.status) + (r.kritiek ? ' kritiek' : ''), stijl: 'left:' + x + 'px;width:' + Math.max(4, b) + 'px', title: beschr, 'aria-label': beschr, klik });
           rij.appendChild(bal);
+        }
+        if (r.beperking) {   // F2b: een streepje op de datum (deadline, vaste afspraak of eerste mogelijke dag); rood als het niet klopt met de planning, de tekst staat in de titel en bij de taak
+          const naam = { niet_voor: 'Niet v\u00f3\u00f3r ', uiterlijk: 'Uiterlijk ', vast_op: 'Vast op ' }[r.beperking] + kort(r.beperkingDatum) + (r.beperkingConflict ? ' \u00b7 klopt niet met de planning' : '');
+          rij.appendChild(el('span', { klass: 'tl-bep tl-bep-' + r.beperking + (r.beperkingConflict ? ' laat' : ''), stijl: 'left:' + (as.x(r.beperkingDatum) + (r.beperking === 'uiterlijk' ? as.px : 0)) + 'px', title: naam, role: 'img', 'aria-label': naam }));
         }
       } else if (r.start) {
         const x = as.x(r.start), b = (dnr(r.eind) - dnr(r.start) + 1) * as.px, pct = r.n ? Math.round(r.klaar / r.n * 100) : 0;
@@ -194,10 +214,13 @@
     // de lijnen van de rijen in beeld (beide uiteinden tellen mee, zodat een lijn naar buiten het beeld doorloopt)
     m.lijnen.forEach(l => {
       if (Math.max(l.van, l.naar) < eerste || Math.min(l.van, l.naar) > laatst) return;
-      const a = m.rijen[l.van], b = m.rijen[l.naar], p = Tl.lijnPad(as, a, b, RH), kl = l.kritiek ? '#b3261e' : '#646a64';
+      const a = m.rijen[l.van], b = m.rijen[l.naar], p = Tl.lijnPad(as, a, b, RH, l.type), kl = l.kritiek ? '#b3261e' : '#646a64';
       const pad = svg('path', { d: p.d, fill: 'none', stroke: kl, 'stroke-width': l.kritiek ? '2' : '1.2', 'stroke-linejoin': 'round' });
+      if (l.ander) { pad.setAttribute('stroke-dasharray', '5 3'); const ti = svg('title'); ti.textContent = 'Koppeling met een ander project' + (l.type ? ' (' + P.DEP_TYPE_NAMEN[l.type] + ')' : ''); pad.appendChild(ti); }
+      if (l.type && !l.ander) { const ti = svg('title'); ti.textContent = P.DEP_TYPE_NAMEN[l.type] + (l.lag ? ', ' + (l.lag > 0 ? '+' : '') + l.lag + ' d' : ''); pad.appendChild(ti); }
       lijnenEl.appendChild(pad);
-      const [X, py] = p.pijl; lijnenEl.appendChild(svg('path', { d: 'M' + X + ',' + py + ' l-6,-3.5 v7 z', fill: kl }));
+      const [X, py] = p.pijl; lijnenEl.appendChild(svg('path', { d: p.links ? 'M' + X + ',' + py + ' l6,-3.5 v7 z' : 'M' + X + ',' + py + ' l-6,-3.5 v7 z', fill: kl }));
+      if (l.type) { const tk = svg('text', { x: String(p.links ? X + 9 : X - 9 - 12), y: String(py - 5), 'font-size': '9', 'font-family': 'monospace', fill: kl, class: 'tl-lijntype' }); tk.textContent = P.DEP_TYPEN[l.type]; lijnenEl.appendChild(tk); }   // het type bij de pijl (alleen als het niet EB is)
     });
   }
 
