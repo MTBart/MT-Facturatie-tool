@@ -132,7 +132,7 @@
     const s = el('select', { id: 'tp-v-' + veld, klass: 'tp-invoer tp-keuze', 'aria-label': o.label, disabled: kan ? null : true, title: kan ? (o.titel || null) : (o.waarom || GEEN_RECHT) },
       opties.map(([w, l]) => el('option', { value: w, tekst: l })));
     s.value = waarde;
-    s.addEventListener('change', () => { const velden = {}; velden[veld] = s.value; const gezien = {}; gezien[veld] = waarde; bewaar({ velden, gezien }, o.wat || veld); });
+    s.addEventListener('change', () => { const velden = {}; velden[veld] = s.value; const gezien = {}; gezien[veld] = o.gezien !== undefined ? o.gezien : waarde; bewaar({ velden, gezien }, o.wat || veld); });   // o.gezien: de ruwe opgeslagen waarde als die anders is dan de getoonde (fase: de naam op de taak, het label kan intussen anders heten)
     return s;
   }
   // Tags (meer waarden): een × per tag haalt hem weg, typen + Enter voegt toe (met suggesties). Slaat de hele lijst op, met de oude lijst als "gezien".

@@ -164,8 +164,15 @@
     ['spuiten', /\b(spuit|spuiten|lakken|lak|verf|schilder|afwerk|olie|oliën|beits)/i], ['werkvoorbereiding', /\b(wvb|werkvoorbereiding|stuklijst|nesten|nesting|cnc-?programma|productietekening)/i],
     ['tekenwerk', /\b(teken|tekenen|tekening|tekeningen|ontwerp|ontwerpen|schets|3d|render|opname)\b/i], ['werkplaats', /\b(zagen|cnc|frezen|kantenband|assemblage|samenbouwen|bankwerk|productie|werkplaats|slijpen|monteren in de werkplaats)\b/i],
     ['kantoor', /\b(offerte|calculatie|bestel|bestellen|inkoop|administratie|factuur|overleg|mail|afspraak|plannen|planning)\b/i]];
-  P.activiteitUitNaam = naam => { const s = String(naam || ''); for (const [k, re] of SLEUTELWOORDEN) if (re.test(s)) return k; return ''; };
-  P.activiteitUitUursoort = oms => { const s = String(oms || '').toLowerCase().trim(); return UURSOORT_ACT[s] || P.activiteitUitNaam(s); };
+  P.activiteitUitNaam = naam => {   // P3b: de ingebouwde woorden eerst (alleen voor een activiteit die bestaat), daarna de eigen "herken aan woorden" van activiteiten; leeg = geen voorstel
+    const s = String(naam || ''); for (const [k, re] of SLEUTELWOORDEN) if (re.test(s) && P.activiteit(k)) return k;
+    const l = s.toLowerCase(), a = P.ACTIVITEITEN.find(x => (x.woorden || []).some(w => l.includes(w)));
+    return a ? a.k : '';
+  };
+  P.activiteitUitUursoort = oms => {   // P3b: eerst de uursoort die bij een (eigen) activiteit is ingesteld, dan de vaste koppeling; alleen een activiteit die bestaat
+    const s = String(oms || '').toLowerCase().trim(), eigen = P.ACTIVITEITEN.find(a => a.uursoort && a.uursoort === s), vast = UURSOORT_ACT[s];
+    return (eigen && eigen.k) || (vast && P.activiteit(vast) ? vast : '') || P.activiteitUitNaam(s);
+  };
 
   // ── Stempelmodel: velden met een eigen stempel (zoals de projectvelden van L1) ───────────────────────────
   // Eén motor voor drie soorten records: taken, afhankelijkheden en bestelregels. Per record `_vs[veld]`, `_gewijzigd`
@@ -183,8 +190,8 @@
   // wacht_reden = waarom een taak op status 'wacht' staat (stap 2, mobiel: Bezig · Klaar · Wacht met een verplichte reden).
   // Alle drie zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
   // voorstel = de markering "door werkplaats" van een gemelde taak of bestelregel (wie, rol, wanneer); kantoor haalt hem er met Overnemen af.
-  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel']);
-  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel']);
+  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id']);   // fase_id (P3b): het id van de fase in de planning-inrichting; 'fase' blijft de naam, voor oude apps
+  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id']);
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
@@ -523,45 +530,54 @@
   // aan beide kanten wint het nieuwste record, en een veld zonder stempel telt voor de volgorde met de tijd van zijn record.
   const nieuwste = (l, r) => recTijd(l) !== recTijd(r) ? (recTijd(l) > recTijd(r) ? l : r) : (stabiel(l) >= stabiel(r) ? l : r);   // gelijke tijd: de inhoud beslist
   function recSamen(velden, opt, l, r) {
+    const rt = opt.rt || recTijd, ms = x => Math.max(rt(x), ...Object.values((x && x._vs) || {}).map(tijdVan)), nw = (a, b) => rt(a) !== rt(b) ? (rt(a) > rt(b) ? a : b) : (stabiel(a) >= stabiel(b) ? a : b);   // opt.rt: een eigen recordtijd (planblokken: ook de oude ts)
     if (l._vervallen || r._vervallen) {
       if (opt.verwijderWint) {   // verwijderen wint; twee verwijderingen: dezelfde totale volgorde (tijd, apparaat, teller)
         if (!(l._vervallen && r._vervallen)) return kopie(l._vervallen ? l : r);
-        const sl = l._ts || { t: recTijd(l) }, sr = r._ts || { t: recTijd(r) }, o = volgorde(sl, sr);
+        const sl = l._ts || { t: rt(l) }, sr = r._ts || { t: rt(r) }, o = volgorde(sl, sr);
         if (o !== 0) return kopie(o > 0 ? l : r);
         return kopie(stabiel(l) >= stabiel(r) ? l : r);   // exact gelijke stempels: de inhoud beslist (deterministisch, ongeacht de volgorde)
       }
-      return kopie(nieuwste(l, r));
+      return kopie(nw(l, r));
     }
-    if (opt.legacy && !Object.keys(l._vs || {}).length && !Object.keys(r._vs || {}).length) return kopie(nieuwste(l, r));
-    const nl = maxStempel(l), nr = maxStempel(r);
+    if (opt.legacy && !Object.keys(l._vs || {}).length && !Object.keys(r._vs || {}).length) return kopie(nw(l, r));
+    const nl = ms(l), nr = ms(r);
     const linksBasis = nl !== nr ? nl > nr : stabiel(l) > stabiel(r);   // gelijke stempels: een stabiele volgorde op de inhoud, nooit "rechts"
     const basis = kopie(linksBasis ? l : r);   // niet-getrackte velden (bron, project_id…) van de nieuwste kant
     const andere = linksBasis ? r : l;
     Object.keys(andere).forEach(k => { if (!(k in basis) && !k.startsWith('_')) basis[k] = kopie(andere[k]); });
     const w = basis; w._vs = {}; const conflicten = {};
     // legacy: een veld zonder stempel telt voor de volgorde (niet voor conflicten) met de tijd van het record; een veld dat er niet is, beslist niets
-    const eff = (x, f) => { const s = (x._vs || {})[f]; return s || (opt.legacy && x[f] !== undefined ? { t: recTijd(x) } : undefined); };
+    // opt.staleBoven (planblokken): een record dat NIEUWER is dan al zijn stempels is door een oude versie van de tool gewijzigd (die stempelt alleen het record): al zijn velden tellen dan met de tijd van dat record, met een nieuw stempel erbij
+    // Een gestempeld record dat niet verouderd is: een veld zonder stempel is ongemoeid sinds de migratie (tijd 1: wint van niets, nooit van een stempel); een record zonder stempels telt als geheel met zijn tijd.
+    const eff = (x, f) => {
+      const s = (x._vs || {})[f], gest = opt.staleBoven && Object.keys(x._vs || {}).length > 0;
+      if (gest && rt(x) > Math.max(...Object.values(x._vs).map(tijdVan))) return x[f] !== undefined ? { t: rt(x), dev: 'oud', rev: revVan(s) + 1, door: x._door || '', basis: tijdVan(s) } : s;
+      if (gest && !s) return x[f] !== undefined ? { t: 1 } : undefined;
+      if (opt.ongemoeid && opt.ongemoeid.has(f) && !s && Object.keys(x._vs || {}).length) return x[f] !== undefined ? { t: 1 } : undefined;
+      return s || (opt.legacy && x[f] !== undefined ? { t: rt(x) } : undefined);
+    };
     velden.forEach(f => {
       const sl = (l._vs || {})[f], sr = (r._vs || {})[f], c0 = volgorde(sl, sr), ord = opt.legacy ? volgorde(eff(l, f), eff(r, f)) : c0;
       let win, ander, sw, so;
-      const linksWint = ord > 0 || (ord === 0 && stabiel(norm(l[f])) > stabiel(norm(r[f])));   // identieke stempel: de waarde beslist (deterministisch)
+      const linksWint = ord > 0 || (ord === 0 && (stabiel(norm(l[f])) !== stabiel(norm(r[f])) ? stabiel(norm(l[f])) > stabiel(norm(r[f])) : stabiel(sl || null) > stabiel(sr || null)));   // identieke stempel: de waarde beslist, bij gelijke waarden de stempel zelf (door, basis): deterministisch in beide volgorden
       if (linksWint) { win = l; ander = r; sw = sl; so = sr; } else { win = r; ander = l; sw = sr; so = sl; }
       if (win[f] === undefined) delete w[f]; else w[f] = kopie(win[f]);
-      if (sw) w._vs[f] = kopie(sw);
+      const se = opt.staleBoven ? eff(win, f) : sw; if (se) w._vs[f] = kopie(se);
       const bt = tijdVan(sw), bb = Number(sw && sw.basis) || 0, ot = tijdVan(so), verschil = !gelijk(ander[f], win[f]);
       let c = null;
-      if (verschil && !ZONDER_CONFLICT.has(f) && !(f === 'tg_sync' && c0 !== 0 && !(ander[f] && (ander[f].status === 'fout' || ander[f].status === 'extern-verwijderd')))) {
+      if (verschil && !opt.geenConflict && !ZONDER_CONFLICT.has(f) && !(f === 'tg_sync' && c0 !== 0 && !(ander[f] && (ander[f].status === 'fout' || ander[f].status === 'extern-verwijderd')))) {
         const identiek = c0 === 0 && (!opt.legacy || !!(sl || sr)), ongestempeld = !ot && !!bt && !opt.legacy;
         if (identiek || (ot && ot > bb) || (ongestempeld && (f in ander))) c = { waarde: kopie(norm(ander[f])), door: (so && so.door) || '', t: ot || bt };
       }
-      [l, r].forEach(z => { const oc = z._veldconflict && z._veldconflict[f]; if (oc && Number(oc.t) > bb && !gelijk(oc.waarde, win[f]) && (!c || Number(oc.t) > c.t || (Number(oc.t) === c.t && stabiel(oc.waarde) > stabiel(c.waarde)))) c = kopie(oc); });   // gelijke tijd: deterministisch op de waarde
+      if (!opt.geenConflict) [l, r].forEach(z => { const oc = z._veldconflict && z._veldconflict[f]; if (oc && Number(oc.t) > bb && !gelijk(oc.waarde, win[f]) && (!c || Number(oc.t) > c.t || (Number(oc.t) === c.t && stabiel(oc.waarde) > stabiel(c.waarde)))) c = kopie(oc); });   // gelijke tijd: deterministisch op de waarde
       if (c) conflicten[f] = c;
     });
     if (opt.taak) { const ps = personenSamen(l.personen, r.personen); if (ps) w.personen = ps; else delete w.personen; }   // personen: per slug samenvoegen (nooit als geheel "nieuwste wint"); toegewezen is een gewoon veld
     if (opt.taak && !syncGeldig(w)) { delete w.tg_sync; delete w._vs.tg_sync; delete conflicten.tg_sync; }   // koppeltabel van een andere Toggl-taak vervalt
     if (Object.keys(conflicten).length) w._veldconflict = conflicten; else delete w._veldconflict;
     if (!Object.keys(w._vs).length) delete w._vs;
-    const m = Math.max(maxStempel(w), recTijd(l), recTijd(r)); if (m) w._gewijzigd = zetTijd(opt.iso, m);
+    const m = Math.max(ms(w), rt(l), rt(r)); if (m) w._gewijzigd = zetTijd(opt.iso, m);
     return w;
   }
   const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
@@ -1018,10 +1034,10 @@
   // Het aandeel is een percentage van de uren van de SOORT van de activiteit: de kantooruren (werkvoorbereiding, tekenwerk, kantoor)
   // en de werkplaatsuren (werkplaats, spuiten, montage, reizen) uit de calculatie worden elk apart over hun taken verdeeld.
   P.SJABLOON_STD_ID = 'std-interieur';
-  P.sjabloonStd = () => kopie({
+  P.sjabloonStd = () => sjabloonOpFases(kopie({
     id: P.SJABLOON_STD_ID, naam: 'Standaard interieurproject',
     omschrijving: 'Werkvoorbereiding, materiaal bestellen en leveren, zagen, CNC, afmonteren, spuiten, montage en oplevering. Start hiermee en pas aan wat in de praktijk anders loopt.',
-    fases: [{ k: 'voorbereiding', naam: 'Voorbereiding' }, { k: 'productie', naam: 'Productie' }, { k: 'montage', naam: 'Montage en oplevering' }],
+    fases: P.fasenLijst().map(f => ({ k: f.k, naam: f.label })),   // P3b: de bedrijfslijst van fases (Planning inrichten); een nieuw project krijgt die via dit sjabloon
     taken: [
       { k: 'wvb', naam: 'Werkvoorbereiding', fase: 'voorbereiding', activiteit: 'werkvoorbereiding', aandeel_pct: 80, mensen: 1 },
       { k: 'bestellen', naam: 'Materiaal bestellen', fase: 'voorbereiding', activiteit: 'kantoor', aandeel_pct: 20, mensen: 1 },
@@ -1036,7 +1052,9 @@
       { van: 'wvb', naar: 'bestellen', lag_dagen: 0 }, { van: 'bestellen', naar: 'materiaal_geleverd', lag_dagen: 10 },   // 10 = levertijd in werkdagen (standaard)
       { van: 'materiaal_geleverd', naar: 'zagen', lag_dagen: 0 }, { van: 'zagen', naar: 'cnc', lag_dagen: 0 }, { van: 'cnc', naar: 'afmonteren', lag_dagen: 0 },
       { van: 'afmonteren', naar: 'spuiten', lag_dagen: 0 }, { van: 'spuiten', naar: 'montage', lag_dagen: 0 }, { van: 'montage', naar: 'oplevering', lag_dagen: 0 }],
-  });
+  }));
+  // Een taak van het standaardsjabloon die naar een fase wijst die niet (meer) bestaat, komt zonder fase; de volgorde en de rest blijven.
+  function sjabloonOpFases(s) { const k = new Set(s.fases.map(f => f.k)); s.taken.forEach(t => { if (t.fase && !k.has(t.fase)) delete t.fase; }); return s; }
   // De sjablonen zoals de gebruiker ze ziet: de opgeslagen (zonder tombstones) plus de standaard als die er niet in staat.
   P.sjablonenEffectief = opgeslagen => {
     const l = (Array.isArray(opgeslagen) ? opgeslagen : []).filter(s => s && typeof s === 'object' && s.id && !s._vervallen);
@@ -1121,7 +1139,7 @@
       const x = { id: mk('taak', t.k), naam: t.naam, omschrijving: '', duur_uur: mijl ? 0 : P.minNaarUren(min), status: 'todo', tg_task_id: null, bron: 'sjabloon',
         soort: mijl ? 'mijlpaal' : 'taak', duur_dagen: dagen, sleutel: t.k, sjabloon_id: s.id };
       if (!mijl && t.activiteit) x.activiteit = t.activiteit;
-      if (t.fase && fase[t.fase]) x.fase = fase[t.fase];
+      if (t.fase && fase[t.fase]) { const fv = P.faseVelden(fase[t.fase]); x.fase = fv.fase; if (fv.fase_id) x.fase_id = fv.fase_id; }   // P3b: naam + id (een eigen fase van het sjabloon alleen de naam)
       if (projectId) x.project_id = projectId;
       idVan[t.k] = x.id; taken.push(x);
     });
@@ -1159,7 +1177,10 @@
   // BASIS = de velden van de overstap (de hashes en de vergelijking met het oude bestand blijven hierop rekenen); voorstel = de markering "door werkplaats" (stap 2):
   // een gestempeld veld, zodat "Overnemen" (de markering eraf) ook na samenvoegen blijft staan.
   P.BESTEL_BASIS_VELDEN = ['materiaal', 'omschrijving', 'artikel', 'artikelsleutel', 'aantal', 'eenheid', 'leverancier', 'status', 'besteld', 'project', 'project_id', 'bron'];
-  P.BESTEL_VELDEN = P.BESTEL_BASIS_VELDEN.concat(['voorstel']);
+  // P5 (materiaal als voorwaarde): taak_id = de taak waar de regel bij hoort (binnen hetzelfde project), verwacht_op = de verwachte leverdatum (ymd), verwacht_bron = waar die datum vandaan komt (nu: 'hand';
+  // later 'orderbevestiging': dan komt de datum als voorstel uit de bevestiging van de leverancier, die een mens overneemt; dat is nog niet gebouwd). Alle drie zijn gestempelde velden.
+  P.BESTEL_NIEUW_VELDEN = ['taak_id', 'verwacht_op', 'verwacht_bron'];
+  P.BESTEL_VELDEN = P.BESTEL_BASIS_VELDEN.concat(['voorstel'], P.BESTEL_NIEUW_VELDEN);
   const kleinNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/(\d)\s*(mm|cm|m|x)\b/g, '$1 $2').replace(/[^a-z0-9.,\u00d7]+/g, ' ').trim().replace(/\s+/g, ' ');
   const EENHEDEN = { plaat: 'plaat', platen: 'plaat', pl: 'plaat', stuk: 'stuk', stuks: 'stuk', st: 'stuk', stk: 'stuk', pcs: 'stuk', 'm2': 'm²', 'm²': 'm²', 'vierkante meter': 'm²', m: 'm', mtr: 'm', meter: 'm', strekkende: 'm', lm: 'm', set: 'set', sets: 'set', paar: 'paar', liter: 'liter', l: 'liter', kg: 'kg', doos: 'doos', dozen: 'doos', rol: 'rol', rollen: 'rol' };
   P.eenheidNorm = e => { const s = String(e == null ? '' : e).trim().toLowerCase().replace(/\.$/, ''); return s === '' ? '' : (EENHEDEN[s] || s); };
@@ -1222,10 +1243,42 @@
   const isMeta = x => !!x && typeof x === 'object' && x.id === '__migratie';
   P.bestelSamen = (lokaal, spData) => {
     const L = leesStrikt(lokaal, o => P.bestelBestandVorm(o), [], 'samenvoegen'), R = leesStrikt(spData, o => P.bestelBestandVorm(o), [], 'samenvoegen');
-    const uit = sorteerOpId(lijstSamenMet(P.BESTEL_VELDEN, { iso: true, legacy: true }, L.filter(x => !isMeta(x)), R.filter(x => !isMeta(x))));
+    // ongemoeid: de nieuwe velden (P5) kent een oude versie van de tool niet. In een record dat WEL gestempeld is, telt zo'n veld zonder stempel als ongemoeid (wint van niets, nooit van een stempel):
+    // een oude app die een bestelregel wijzigt zonder die velden te kennen, zet een nieuwere koppeling of leverdatum niet terug
+    const uit = sorteerOpId(lijstSamenMet(P.BESTEL_VELDEN, { iso: true, legacy: true, ongemoeid: new Set(P.BESTEL_NIEUW_VELDEN) }, L.filter(x => !isMeta(x)), R.filter(x => !isMeta(x))));
     const meta = metaSamen(L.find(isMeta), R.find(isMeta)); if (meta) { meta.id = '__migratie'; uit.push(canon(meta)); }
     return uit;
   };
+  // ── P5: materiaal als voorwaarde ──────────────────────────────────────────────────────────────────────
+  // Een bestelregel kan aan een taak hangen (taak_id, binnen hetzelfde project) en een verwachte leverdatum hebben (verwacht_op). Een taak met regels die nog niet geleverd zijn "wacht op N regels";
+  // valt de verwachte leverdatum na de geplande start van de taak, dan is dat rood. Alles hieronder is rekenwerk zonder opslag; het schrijven loopt via de bestaande bestelroutes (gestempelde velden).
+  P.bestelHoortBij = (b, project) => { const pid = String((b && b.project_id) || ''); return !!project && !!b && ((pid && project.project_id && pid === String(project.project_id)) || (!!b.project && zelfdeCode(b.project, project.code))); };
+  P.bestelVanTaak = (bestel, taakId, project) => (Array.isArray(bestel) ? bestel : []).filter(b => b && typeof b === 'object' && !b._vervallen && b.id !== '__migratie' && b.taak_id !== undefined && b.taak_id !== null && b.taak_id !== '' && String(b.taak_id) === String(taakId) && P.bestelHoortBij(b, project));
+  P.bestelVerwacht = b => P.isYmd(b && b.verwacht_op) ? b.verwacht_op : '';
+  // Voor lijsten met veel taken (bord, tijdlijn): de gekoppelde regels één keer per taak-id indexeren in plaats van per taak de hele lijst te doorlopen
+  P.bestelIndexTaak = bestel => { const m = new Map(); (Array.isArray(bestel) ? bestel : []).forEach(b => { if (!b || typeof b !== 'object' || b._vervallen || b.id === '__migratie' || b.taak_id === undefined || b.taak_id === null || b.taak_id === '') return; const k = String(b.taak_id); if (!m.has(k)) m.set(k, []); m.get(k).push(b); }); return m; };
+  P.bestelVanTaakIdx = (idx, taakId, project) => ((idx && idx.get(String(taakId))) || []).filter(b => P.bestelHoortBij(b, project));
+  // → { items: [{ id, oms, aantal, eenheid, status, verwacht, bron, open, laat, verlopen, zonderDatum }], n, open, nodig, besteld, geleverd, laat, verlopen, zonderDatum, laatste (de laatste verwachte datum van de open regels), wacht, tekst }
+  //   laat = de verwachte datum valt NA de geplande start van de taak (rood); verlopen = de verwachte datum is voorbij en de regel is nog niet geleverd; wacht = er is open materiaal en de taak is niet klaar.
+  P.taakMateriaal = function (taak, regels, { vandaag = '' } = {}) {
+    const nu = P.isYmd(vandaag) ? vandaag : P.vandaagYmd(), start = P.isYmd(taak && taak.start) ? taak.start : '';
+    const items = (Array.isArray(regels) ? regels : []).map(b => {
+      const status = P.bestelStatus(b), v = P.bestelVerwacht(b), open = status !== 'geleverd';
+      return { id: b.id, oms: P.bestelOms(b), aantal: b.aantal, eenheid: b.eenheid, status, verwacht: v, bron: String(b.verwacht_bron || ''), open, laat: open && !!v && !!start && v > start, verlopen: open && !!v && v < nu, zonderDatum: open && !v };
+    });
+    const open = items.filter(x => x.open), klaar = ((taak && taak.status) || 'todo') === 'klaar';
+    const tel = s => items.filter(x => x.status === s).length;
+    return { items, n: items.length, open: open.length, nodig: tel('nodig'), besteld: tel('besteld'), geleverd: tel('geleverd'), laat: open.filter(x => x.laat).length, verlopen: open.filter(x => x.verlopen).length, zonderDatum: open.filter(x => x.zonderDatum).length,
+      laatste: open.map(x => x.verwacht).filter(Boolean).sort().pop() || '', wacht: !klaar && open.length > 0, tekst: !klaar && open.length > 0 ? 'wacht op ' + open.length + ' regel' + (open.length === 1 ? '' : 's') : '' };
+  };
+  // De bevestiging voordat een taak met open materiaal op Bezig of Klaar gaat (nooit stil). datumTekst = de datumopmaak van de aanroeper.
+  P.materiaalBevestigTekst = function (naam, m, nieuweStatus, datumTekst) {
+    const d = datumTekst || (x => x), uit = nieuweStatus === 'klaar' ? 'op klaar zetten' : 'starten';
+    return '"' + naam + '" wacht op materiaal: ' + m.open + ' bestelregel' + (m.open === 1 ? '' : 's') + ' nog niet geleverd' + (m.laatste ? ' (verwacht uiterlijk ' + d(m.laatste) + (m.laat ? ', dat is na de geplande start' : '') + ')' : '') + '.\nToch ' + uit + '?';
+  };
+  // Mag deze taak stil naar die status? Alleen een wijziging naar Bezig of Klaar vanuit Open/Wacht met open materiaal vraagt eerst een bevestiging.
+  P.materiaalVraagBevestiging = (taak, m, nieuweStatus) => !!m && m.open > 0 && (nieuweStatus === 'bezig' || nieuweStatus === 'klaar') && ((taak && taak.status) || 'todo') !== 'bezig' && ((taak && taak.status) || 'todo') !== 'klaar';
+
   // ── Overstap naar mt_bestellijst_v2 (zelfde patroon als mt_project_taken_v2) ──────────────────────────
   // De nieuwe app leest en schrijft alleen mt_bestellijst_v2; het oude mt_bestellijst blijft van oude app-versies. De overstap gebeurt één keer
   // (de eerste nieuwe client die v2 niet vindt, aanmaken met If-None-Match: *; wie 412/409 krijgt leest dat bestand). Bestaande regel-id's
@@ -1460,7 +1513,7 @@
   // ── Schemaversie van de projecttaken ──
   // De laagste app-versie die mt_project_taken_v2 mag schrijven staat in de teller (GET /teller/status → schema_min). Is die hoger dan
   // de versie van déze app (v2.html: PROJ_SCHEMA), dan schrijft de app niet meer. Onbekend (nog niet gelezen) = geen blokkade.
-  P.SCHEMA = 5;
+  P.SCHEMA = 8;
   P.SCHEMA_TEKST = 'Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
   P.schemaGeblokkeerd = (schemaMin, eigen) => schemaMin !== null && schemaMin !== undefined && schemaMin !== '' && Number.isFinite(Number(schemaMin)) && Number(schemaMin) > (eigen == null ? P.SCHEMA : Number(eigen));
 
@@ -1979,12 +2032,127 @@
   // wvb, bestellen, materiaal_geleverd, zagen, cnc, afmonteren, spuiten, montage, oplevering) of anders zijn activiteit. Een station is: klaar (alles klaar), bezig (iets bezig),
   // wacht (iets wacht op een voorganger of staat op Wacht), open, of leeg (geen taken); materiaal zonder taken volgt de bestelregels van het project.
   P.STROOM_STATIONS = [['voorbereiding', 'Voorbereiding'], ['materiaal', 'Materiaal'], ['productie', 'Productie'], ['spuiten', 'Spuiten'], ['montage', 'Montage']];
-  const stationVan = t => {
-    const k = String((t && t.sleutel) || ''), a = String((t && t.activiteit) || '');
-    if (k === 'wvb') return 'voorbereiding'; if (k === 'bestellen' || k === 'materiaal_geleverd') return 'materiaal';
-    if (k === 'zagen' || k === 'cnc' || k === 'afmonteren') return 'productie'; if (k === 'spuiten') return 'spuiten'; if (k === 'montage' || k === 'oplevering') return 'montage';
-    return (a === 'tekenwerk' || a === 'werkvoorbereiding') ? 'voorbereiding' : a === 'werkplaats' ? 'productie' : a === 'spuiten' ? 'spuiten' : a === 'montage' ? 'montage' : '';
+  // ══ P3b: planning inrichten (stations, fases en activiteiten zijn zelf aan te maken, te hernoemen en te ordenen) ═══════════════
+  // Eén lijst records in mt_planinrichting: { id: 'station:montage', type: 'station'|'fase'|'activiteit', k (het vaste id waar taken naar verwijzen), label, volgorde,
+  //   activiteit: station, soort ('kantoor'|'wp'), uursoort (de uursoort van de calculatie); fase: namen (eerdere namen) }.
+  // Een hernoeming verandert alleen het label (de k blijft): taken verwijzen naar de k (activiteit; fase_id), dus er breekt niets.
+  // Zonder bestand (of zonder records van een soort) geldt de standaardlijst: dezelfde stations, fases en activiteiten als voor P3b, met "Spuiten" als station "Afwerken" (K4).
+  // Per veld een stempel (zoals bij de taken); verwijderen is een tombstone en terugzetten kan. Een fase wordt nog steeds ook bij NAAM op de taak gezet (voor oude apps);
+  // een taak met alleen een naam wordt via het label of een eerdere naam aan dezelfde fase gekoppeld.
+  const ACT_STD = P.ACTIVITEITEN.map(a => Object.assign({}, a));
+  const STD_ACT_STATION = { tekenwerk: 'voorbereiding', werkvoorbereiding: 'voorbereiding', werkplaats: 'productie', spuiten: 'spuiten', montage: 'montage' };
+  const STD_ACT_UURSOORT = {}; Object.keys(UURSOORT_ACT).forEach(u => { if (!(UURSOORT_ACT[u] in STD_ACT_UURSOORT)) STD_ACT_UURSOORT[UURSOORT_ACT[u]] = u; });
+  P.INRICHT_TYPEN = ['station', 'fase', 'activiteit'];
+  P.INRICHT_VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen', 'woorden'];
+  P.inrichtStandaard = () => {
+    const uit = [];
+    [['voorbereiding', 'Voorbereiding'], ['materiaal', 'Materiaal'], ['productie', 'Productie'], ['spuiten', 'Afwerken'], ['montage', 'Montage']].forEach(([k, l], i) => uit.push({ id: 'station:' + k, type: 'station', k, label: l, volgorde: i + 1 }));
+    [['voorbereiding', 'Voorbereiding'], ['productie', 'Productie'], ['montage', 'Montage en oplevering']].forEach(([k, l], i) => uit.push({ id: 'fase:' + k, type: 'fase', k, label: l, volgorde: i + 1, namen: [] }));
+    ACT_STD.forEach((a, i) => uit.push({ id: 'activiteit:' + a.k, type: 'activiteit', k: a.k, label: a.l, volgorde: i + 1, soort: a.soort, station: STD_ACT_STATION[a.k] || '', uursoort: STD_ACT_UURSOORT[a.k] || '' }));
+    return uit;
   };
+  const naamSleutel = s => String(s == null ? '' : s).trim().toLowerCase();
+  const volgordeSort = (a, b) => ((Number(a.volgorde) || 0) - (Number(b.volgorde) || 0)) || String(a.label || a.k).localeCompare(String(b.label || b.k), 'nl') || (String(a.k) < String(b.k) ? -1 : 1);
+  // Strikt: leeg is een lege lijst; een andere vorm dan een lijst is een FOUT (nooit stil tot leeg terugbrengen).
+  // Strikt ook per record: een element zonder id, soort of k is een fout (nooit stil weggelaten: een volgende wijziging zou het uit de opslag schrijven). Een onbekende soort blijft staan maar telt niet mee.
+  const inrichtVorm = o => { if (!Array.isArray(o)) return 'geen lijst'; const i = o.findIndex(x => !x || typeof x !== 'object' || Array.isArray(x) || !String(x.id || '').trim() || !String(x.type || '').trim() || x.k === undefined || x.k === null || !String(x.k).trim()); if (i >= 0) return 'record ' + (i + 1) + ' is ongeldig (id, type en k zijn verplicht)'; const gezien = new Set(); for (const x of o) { if (gezien.has(String(x.id))) return 'dubbel id ' + x.id; gezien.add(String(x.id)); } return ''; };
+  P.inrichtLees = v => leesStrikt(v, inrichtVorm, [], 'planinrichting');
+  // → { stations: [{ k, label }], fases: [{ k, label, namen (label + eerdere namen) }], activiteiten: [{ k, l, soort, station, uursoort }], standaard: bool }
+  P.inrichtModel = function (raw) {
+    const recs = P.inrichtLees(raw), std = P.inrichtStandaard(), heeft = {};
+    recs.forEach(r => { heeft[r.type] = true; });
+    const bron = ty => (heeft[ty] ? recs : std).filter(r => r.type === ty), actief = ty => bron(ty).filter(r => !r._vervallen && String(r.label || '').trim()).sort(volgordeSort);
+    const stations = actief('station').map(r => ({ k: String(r.k), label: String(r.label) }));
+    const heeftStation = k => stations.some(s => s.k === k);
+    return {
+      stations,
+      fases: actief('fase').map(r => ({ k: String(r.k), label: String(r.label), namen: [String(r.label)].concat(Array.isArray(r.namen) ? r.namen.map(String) : []) })),
+      activiteiten: actief('activiteit').map(r => ({ k: String(r.k), l: String(r.label), soort: r.soort === 'kantoor' ? 'kantoor' : 'wp', station: heeftStation(r.station) ? String(r.station) : '', uursoort: String(r.uursoort || ''), woorden: String(r.woorden || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean) })),
+      standaard: !recs.length };
+  };
+  let INR = null;
+  // De actieve inrichting. De lijsten P.ACTIVITEITEN en P.STROOM_STATIONS worden ter plekke bijgewerkt (de bestaande lezers houden dezelfde verwijzing).
+  P.inrichtZet = function (raw) {
+    const m = raw && Array.isArray(raw.stations) && Array.isArray(raw.fases) ? raw : P.inrichtModel(raw);
+    INR = m;
+    P.ACTIVITEITEN.length = 0; m.activiteiten.forEach(a => P.ACTIVITEITEN.push({ k: a.k, l: a.l, soort: a.soort, station: a.station, uursoort: a.uursoort, woorden: a.woorden }));
+    P.STROOM_STATIONS.length = 0; m.stations.forEach(s => P.STROOM_STATIONS.push([s.k, s.label]));
+    return m;
+  };
+  P.inrichting = () => INR;
+  P.fasenLijst = () => INR.fases.map(f => ({ k: f.k, label: f.label }));
+  P.faseVanNaam = naam => { const n = naamSleutel(naam); return n ? (INR.fases.find(f => naamSleutel(f.label) === n) || INR.fases.find(f => f.namen.some(x => naamSleutel(x) === n)) || null) : null; };   // eerst het huidige label, dan een eerdere naam
+  // De fase van een taak: het id als dat nog bij de naam past (een oude app die alleen de naam wijzigt wint daarmee van een oud id), anders de naam via het label of een eerdere naam.
+  P.faseVan = t => {
+    if (!t) return null;
+    const perId = t.fase_id ? INR.fases.find(f => f.k === String(t.fase_id)) : null;
+    if (perId && (!t.fase || perId.namen.some(x => naamSleutel(x) === naamSleutel(t.fase)))) return perId;
+    return P.faseVanNaam(t.fase);
+  };
+  P.faseLabel = t => { const f = P.faseVan(t); return f ? f.label : String((t && t.fase) || ''); };
+  P.faseSleutel = naam => { const f = P.faseVanNaam(naam); return f ? f.k : ''; };
+  // Een fase op een taak zetten: naam + id samen (naam voor oude apps, id voor hernoemen). Een eigen fase van het project (niet in de inrichting) heeft alleen een naam.
+  P.faseVelden = naam => { const f = P.faseVanNaam(naam), n = String(naam || '').trim(); return f ? { fase: f.label, fase_id: f.k } : (n ? { fase: n.slice(0, 80), fase_id: '' } : { fase: '', fase_id: '' }); };
+  P.stationLabel = k => { const s = INR.stations.find(x => x.k === k); return s ? s.label : ''; };
+  const stationVan = t => {
+    const a = t && t.activiteit ? INR.activiteiten.find(x => x.k === String(t.activiteit)) : null;
+    if (a && a.station) return a.station;
+    const k = String((t && t.sleutel) || ''), vast = { wvb: 'voorbereiding', bestellen: 'materiaal', materiaal_geleverd: 'materiaal', zagen: 'productie', cnc: 'productie', afmonteren: 'productie', spuiten: 'spuiten', montage: 'montage', oplevering: 'montage' }[k];   // de standaardketen als terugval
+    return vast && INR.stations.some(s => s.k === vast) ? vast : '';
+  };
+  P.stationVan = stationVan;
+  // Waar hangt dit aan? station: de activiteiten die er naartoe wijzen; fase/activiteit: de taken (over alle projecten) en, als meegegeven, de opgeslagen sjablonen.
+  P.inrichtGebruik = function (type, k, takenObj, sjablonen) {
+    k = String(k);
+    if (type === 'station') { const a = INR.activiteiten.filter(x => x.station === k); return { n: a.length, activiteiten: a.map(x => x.l), taken: [] }; }
+    const taken = [];
+    Object.keys(takenObj && typeof takenObj === 'object' ? takenObj : {}).forEach(code => {
+      if (code.startsWith('__') || !Array.isArray(takenObj[code])) return;
+      P.takenActief(takenObj[code]).forEach(t => { if (type === 'fase' ? (P.faseVan(t) || {}).k === k : String(t.activiteit || '') === k) taken.push({ code, id: t.id, naam: t.naam || '' }); });
+    });
+    const sj = (Array.isArray(sjablonen) ? sjablonen : []).filter(s => s && !s._vervallen && (type === 'fase' ? (s.fases || []).some(f => P.faseSleutel(f.naam) === k) : (s.taken || []).some(t => t.activiteit === k)));
+    return { n: taken.length, taken, sjablonen: sj.map(s => s.naam || s.id), activiteiten: [] };
+  };
+  // Een label controleren: niet leeg, en uniek binnen het soort (hoofdletters tellen niet).
+  P.inrichtLabelFout = function (type, label, k, model) {
+    const l = String(label == null ? '' : label).trim(); if (!l) return 'Geef een naam.'; if (l.length > 60) return 'Een naam is hoogstens 60 tekens.';
+    const m = model || INR, lijst = type === 'station' ? m.stations.map(x => [x.k, x.label]) : type === 'fase' ? m.fases.map(x => [x.k, x.label]) : m.activiteiten.map(x => [x.k, x.l]);
+    if (lijst.some(([kk, ll]) => kk !== k && naamSleutel(ll) === naamSleutel(l))) return 'Deze naam bestaat al.';
+    if (type === 'fase' && m.fases.some(f => f.k !== k && f.namen.some(x => naamSleutel(x) === naamSleutel(l)))) return 'Deze naam is eerder de naam van een andere fase geweest (taken van oude apps zouden er dan aan blijven hangen). Kies een andere naam.';
+    return '';
+  };
+  // Een nieuw vast id uit het label (zonder accenten, a-z0-9 en _) met een korte willekeurige staart, uniek over alle records van dat soort, ook de verwijderde. De staart voorkomt dat twee apparaten
+  // tegelijk hetzelfde id maken (bijvoorbeeld bij "A-B" en "A B") en samenvoegen er stil een record van maakt. rnd is voor tests.
+  P.inrichtNieuwK = function (type, label, records, rnd) {
+    const bezet = new Set((Array.isArray(records) ? records : []).filter(r => r && r.type === type).map(r => String(r.k)));
+    const b = String(label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24) || type, staart = () => (typeof rnd === 'function' ? rnd() : Math.random().toString(36).slice(2, 6));
+    let k = b + '_' + staart(); while (bezet.has(k)) k = b + '_' + staart();
+    return k;
+  };
+  // De records zoals ze nu gelden, om te bewerken: wat in het bestand staat, aangevuld met de standaard voor soorten die er nog niet in staan. Verwijderde records blijven buiten beeld.
+  P.inrichtBewerkbaar = function (raw) {
+    const recs = P.inrichtLees(raw), std = P.inrichtStandaard(), heeft = {}; recs.forEach(r => { heeft[r.type] = true; });
+    return recs.filter(r => !r._vervallen).concat(std.filter(r => !heeft[r.type])).map(kopie);
+  };
+  // Een nieuwe stand wegschrijven: oud = het bestand zoals het was, nieuw = de bedoelde actieve records (wat ontbreekt wordt een tombstone).
+  P.inrichtSchrijf = (oud, nieuw, { nu = Date.now(), door = '', dev = '' } = {}) => sorteerOpId(stempelMet(P.INRICHT_VELDEN, P.inrichtLees(oud), P.inrichtLees(nieuw), { nu, door, dev }));
+  P.inrichtSamen = (lokaal, remote) => sorteerOpId(lijstSamenMet(P.INRICHT_VELDEN, {}, P.inrichtLees(lokaal), P.inrichtLees(remote)));
+  // De migratie naar fase_id: een dry-run over alle taken. Een taak waarvan de fase bij een fase uit de inrichting hoort krijgt het id; een eigen fase van het project blijft op naam.
+  P.faseMigratiePlan = function (takenObj) {
+    const zet = [], eigen = [], klaar = []; let totaal = 0;
+    Object.keys(takenObj && typeof takenObj === 'object' ? takenObj : {}).forEach(code => {
+      if (code.startsWith('__') || !Array.isArray(takenObj[code])) return;
+      P.takenActief(takenObj[code]).forEach(t => {
+        totaal++; const f = P.faseVanNaam(t.fase);
+        if (!String(t.fase || '').trim()) return;
+        if (!f) { eigen.push({ code, id: t.id, fase: t.fase }); return; }
+        if (String(t.fase_id || '') === f.k && String(t.fase) === f.label) { klaar.push(t.id); return; }
+        zet.push({ code, id: t.id, naam: t.naam || '', fase: t.fase, nieuwFase: f.label, fase_id: f.k });
+      });
+    });
+    return { totaal, zet, eigen, klaar: klaar.length };
+  };
+  P.inrichtZet(null);
   const PROJECT_ACTIEF = ['werkvoorbereiding', 'inkoop', 'productie', 'klaar_levering'];
   const sleutelVan = (obj, code) => Object.keys(obj && typeof obj === 'object' ? obj : {}).find(k => !k.startsWith('__') && zelfdeCode(k, code));
   const takenVan = (obj, code) => { const k = sleutelVan(obj, code); return k && Array.isArray(obj[k]) ? P.takenActief(obj[k]) : []; };
@@ -2001,7 +2169,7 @@
         const ts = lijst.filter(t => stationVan(t) === k); let staat = 'leeg';
         if (ts.length) staat = ts.every(isKlaar) ? 'klaar' : ts.some(t => t.status === 'bezig') ? 'bezig' : ts.some(t => t.status === 'wacht' || ((t.status || 'todo') === 'todo' && wacht[t.id] && wacht[t.id].wacht)) ? 'wacht' : 'open';
         else if (k === 'materiaal' && regels.length) { const st = regels.map(P.bestelStatus); staat = st.every(s => s === 'geleverd') ? 'klaar' : st.some(s => s !== 'nodig') ? 'bezig' : 'open'; }
-        return { k, l, staat, n: ts.length, klaar: ts.filter(isKlaar).length };
+        return { k, l, staat, n: ts.length, klaar: ts.filter(isKlaar).length, taken: ts.map(t => ({ id: t.id, naam: t.naam || '', status: t.status || 'todo' })), regels: k === 'materiaal' ? regels.length : 0 };   // P3b: de taken van dit station (voor de klik op het vakje)
       });
       const lever = P.isYmd(p.gegevens && p.gegevens.leverdatum) ? p.gegevens.leverdatum : '';
       let tekort = 0, eindVroegst = '';
@@ -2126,6 +2294,206 @@
     return { ok: !!ok, gewijzigd: true, data: basis, reden: ok ? '' : 'schrijven' };
   };
 
+  // ══ F1: de veilige planblokwriter ═════════════════════════════════════════════════════════════════════
+  // mt_planblokken.json = een lijst planblokken { id, persoon, project_code, taak, taak_id, datum, start, duurMin, notitie, status, voorstel, ts, door, _gewijzigd, _door, _vs, _vervallen }.
+  // Dezelfde bouwstenen als de taken: per veld een stempel (_vs), vers lezen vóór schrijven, ETag/412 met dezelfde samenvoeger, tombstones die winnen, een controle achteraf en een eerlijke
+  // melding als een collega hetzelfde veld tegelijk wijzigde. Gedeeld door de cockpit (agPlanSave) en de telefoon (voorstellen).
+  // Migratie: er verandert niets aan bestaande blokken zolang niemand ze wijzigt. Een blok zonder stempels is "oud" en telt met zijn tijd (_gewijzigd, anders ts); het wint van niets maar
+  // nooit van een nieuwer gestempeld veld. Een oude versie van de tool (die alleen het record stempelt) wordt herkend aan een record dat nieuwer is dan al zijn stempels (staleBoven).
+  // Alleen wat een apparaat zelf wijzigde (het verschil met wat het eerder zag) krijgt een stempel: nooit het hele record, dus nooit andermans veld overschrijven.
+  P.BLOK_VELDEN = ['persoon', 'project_code', 'taak', 'taak_id', 'datum', 'start', 'duurMin', 'notitie', 'status', 'voorstel'];
+  const BLOK_RAND = ['ts', 'door', '_door'];   // metagegevens die meeverhuizen met een wijziging, zonder eigen stempel
+  const blokTijd = x => { const t = recTijd(x); if (t) return t; const ts = Date.parse((x && x.ts) || ''); return isNaN(ts) ? 0 : ts; };
+  const blokBesloten = x => !!(x && x.voorstel && (x.voorstel.goedgekeurd || x.voorstel.afgewezen));
+  const BLOK_OPT = { verwijderWint: true, legacy: true, staleBoven: true, geenConflict: true, rt: blokTijd };
+  const heeftId = x => !!x && typeof x === 'object' && x.id !== undefined && x.id !== null && x.id !== '';
+  P.blokBestandVorm = obj => Array.isArray(obj) ? '' : 'planblokken: geen lijst';
+  const geldigeDrempel = x => { const n = Number(x && x.schema_min); return Number.isInteger(n) && n >= 1 && n <= 999 ? n : 0; };   // een drempel is een geheel getal 1 t/m 999; alles anders telt niet (en blokkeert dus niemand)
+  const blokRec = (l, r) => {
+    if (String(l.id) === '__schema') return kopie(geldigeDrempel(l) > geldigeDrempel(r) ? l : geldigeDrempel(r) > geldigeDrempel(l) ? r : (stabiel(l) >= stabiel(r) ? l : r));   // de schemadrempel van het bestand: de hoogste geldige wint (gelijk: de inhoud beslist)
+    const w = recSamen(P.BLOK_VELDEN, BLOK_OPT, l, r);
+    if (blokBesloten(l) !== blokBesloten(r) && !blokBesloten(w)) {   // een besloten voorstel (goedgekeurd of afgewezen) wint van een nog open versie: een late intrekking of oude kopie zet een besluit niet terug
+      const b = blokBesloten(l) ? l : r;
+      w.voorstel = kopie(b.voorstel); if (b.status === undefined) delete w.status; else w.status = b.status;
+      w._vs = Object.assign({}, w._vs, ['voorstel', 'status'].reduce((o, k) => { if (b._vs && b._vs[k]) o[k] = kopie(b._vs[k]); return o; }, {}));
+    }
+    return w;
+  };
+  // Samenvoegen (strikt: een andere vorm dan een lijst is een fout, nooit stil een lege lijst). Volgorde: eerst die van SharePoint, dan wat alleen lokaal staat. Gelijke records blijven byte voor byte gelijk.
+  P.blokSamen = function (lokaal, remote) {
+    const L = leesStrikt(lokaal, P.blokBestandVorm, [], 'samenvoegen'), R = leesStrikt(remote, P.blokBestandVorm, [], 'samenvoegen');
+    const per = new Map(), volg = [], los = new Map();
+    // dubbele ids binnen één kant (een fout in de opslag) worden samengevoegd in plaats van overschreven: er gaat geen record stil verloren
+    R.forEach(x => { if (heeftId(x)) { const k = String(x.id), e = per.get(k); if (e) e.r = e.r ? blokRec(e.r, x) : x; else { per.set(k, { r: x, l: null }); volg.push(k); } } else if (x != null) los.set(JSON.stringify(x), x); });
+    L.forEach(x => { if (heeftId(x)) { const k = String(x.id), e = per.get(k); if (e) e.l = e.l ? blokRec(e.l, x) : x; else { per.set(k, { r: null, l: x }); volg.push(k); } } else if (x != null) los.set(JSON.stringify(x), x); });
+    return [...volg.map(k => { const e = per.get(k); return e.l && e.r ? (JSON.stringify(e.l) === JSON.stringify(e.r) ? kopie(e.r) : blokRec(e.l, e.r)) : kopie(e.l || e.r); }), ...[...los.values()].map(kopie)];
+  };
+  // De patches van een wijziging: het verschil tussen wat dit apparaat eerder zag (basis) en wat het nu heeft (nieuw). Alleen de velden die dit apparaat wijzigde.
+  //   → [{ id, nieuw?: record, velden?: { veld: waarde|undefined }, weg?: tombstone, rand?: {…}, t?: tijd van de wijziging }]
+  P.blokPatches = function (basis, nieuw) {
+    const b0 = new Map(); (Array.isArray(basis) ? basis : []).forEach(x => { if (heeftId(x)) b0.set(String(x.id), x); });
+    const uit = [];
+    (Array.isArray(nieuw) ? nieuw : []).forEach(m => {
+      if (!heeftId(m) || String(m.id) === '__schema') return;
+      const o = b0.get(String(m.id)), t = (recTijd(m) && (!o || recTijd(m) !== recTijd(o))) ? recTijd(m) : undefined;   // t: de stempeltijd die de aanroeper zelf al op het record zette (zodat zijn verwijzing ernaar klopt), anders nu
+      if (!o) { if (!m._vervallen) uit.push({ id: String(m.id), nieuw: kopie(m), t }); return; }
+      const velden = {}, gezien = {}; P.BLOK_VELDEN.forEach(f => { if (!gelijk(m[f], o[f])) { velden[f] = m[f] === undefined ? undefined : kopie(m[f]); gezien[f] = o[f] === undefined ? undefined : kopie(o[f]); } });   // gezien: de waarde die dit apparaat zag toen het begon
+      const weg = m._vervallen && !o._vervallen ? (m._vervallen === true ? true : kopie(m._vervallen)) : null;
+      if (!Object.keys(velden).length && !weg) return;
+      const rand = {}; BLOK_RAND.forEach(k => { if (m[k] !== undefined && !gelijk(m[k], o[k])) rand[k] = kopie(m[k]); });
+      uit.push({ id: String(m.id), velden, gezien, weg: weg || undefined, rand, t });
+    });
+    return uit;
+  };
+  // Een patch toepassen op de stand uit SharePoint; stempelt de gewijzigde velden. → { ok } of { skip: reden }
+  function blokPas(lijst, p, { nu, dev, door }) {
+    const i = lijst.findIndex(x => heeftId(x) && String(x.id) === p.id), stempel = (rec, f, tijd) => {
+      const vs = rec._vs = rec._vs || {}, vorig = tijdVan(vs[f]);
+      vs[f] = { t: Math.max(tijd, vorig + 1), dev, rev: revVan(vs[f]) + 1, door, basis: vorig };
+    };
+    const tijd = Number(p.t) || nu;
+    if (p.nieuw) {
+      if (i >= 0) return { skip: lijst[i]._vervallen ? 'verwijderd' : 'bestaat' };
+      const x = kopie(p.nieuw); delete x._vs; delete x._vervallen;
+      P.BLOK_VELDEN.forEach(f => { if (x[f] !== undefined) stempel(x, f, tijd); });
+      x._gewijzigd = Math.max(tijd, maxStempel(x)); if (door && !x._door) x._door = door;
+      lijst.push(x); return { ok: true };
+    }
+    if (i < 0) return { skip: 'ontbreekt' };
+    const rec = lijst[i];
+    if (rec._vervallen) return { skip: 'verwijderd' };
+    // Geen stil overschrijven (net als bij taken): staat er op de verse stand iets anders dan wat dit apparaat zag toen het begon (een collega was eerder), dan blijft zijn waarde staan en wordt dit veld niet gewijzigd
+    // (blokAfwijkend meldt het daarna). Staat er al precies wat ik wil, dan is er niets te doen.
+    Object.keys(p.velden || {}).forEach(f => {
+      if (gelijk(rec[f], p.velden[f])) return;
+      if (p.gezien && Object.prototype.hasOwnProperty.call(p.gezien, f) && !gelijk(rec[f], p.gezien[f])) return;
+      if (p.velden[f] === undefined) delete rec[f]; else rec[f] = kopie(p.velden[f]);
+      stempel(rec, f, tijd);
+    });
+    Object.keys(p.rand || {}).forEach(k => { rec[k] = kopie(p.rand[k]); });
+    if (p.weg) { rec._vervallen = p.weg; rec._ts = { t: Math.max(tijd, recTijd(rec) + 1), dev, rev: revVan(rec._ts) + 1, door }; }
+    rec._gewijzigd = Math.max(maxStempel(rec), rec._ts ? rec._ts.t : 0, tijd); if (door) rec._door = door;
+    return { ok: true };
+  }
+  // De wijzigingen alleen lokaal toepassen (met stempels per veld) op een stand: voor als er niet gelezen of geschreven kon worden. → nieuwe lijst
+  P.blokLokaalToepassen = function (basis, patches, { nu = Date.now(), dev = '', door = '' } = {}) {
+    const w = kopie(Array.isArray(basis) ? basis : []); (patches || []).forEach(p => blokPas(w, p, { nu, dev, door })); return w;
+  };
+  // Dezelfde wijzigingen (zonder stempels) opnieuw op een andere stand zetten: voor een wijziging die de gebruiker maakte terwijl er een lees- of deelactie liep; blokPatches(basis, resultaat) geeft daarna weer dezelfde patches.
+  P.blokOverzetten = function (doel, patches) {
+    const w = kopie(Array.isArray(doel) ? doel : []);
+    (patches || []).forEach(p => {
+      const i = w.findIndex(x => heeftId(x) && String(x.id) === p.id);
+      if (p.nieuw) { if (i < 0) w.push(kopie(p.nieuw)); return; }
+      if (i < 0 || w[i]._vervallen) return;
+      const r = w[i];
+      Object.keys(p.velden || {}).forEach(f => { if (p.velden[f] === undefined) delete r[f]; else r[f] = kopie(p.velden[f]); });
+      Object.keys(p.rand || {}).forEach(k => { r[k] = kopie(p.rand[k]); });
+      if (p.weg) r._vervallen = p.weg === true ? true : kopie(p.weg);
+      if (p.t) r._gewijzigd = p.t;
+    });
+    return w;
+  };
+  // De schemadrempel van het bestand: een record { id: '__schema', schema_min: N } (een oude versie van de tool houdt het als gewoon record en negeert het: het heeft geen datum).
+  P.blokSchemaMin = lijst => { const n = (Array.isArray(lijst) ? lijst : []).reduce((m, x) => x && x.id === '__schema' ? Math.max(m, geldigeDrempel(x)) : m, 0); return n || null; };   // alleen een geldige drempel telt; een kapot record blokkeert niemand (en blijft bewaard)
+  P.blokSchemaZet = function (lijst, min, { nu = Date.now(), door = '' } = {}) {   // → nieuwe lijst met de drempel (alleen verhogen)
+    const l = kopie(Array.isArray(lijst) ? lijst : []), i = l.findIndex(x => x && x.id === '__schema');
+    if (i >= 0) { if (Number(l[i].schema_min) >= min) return l; l[i] = Object.assign({}, l[i], { schema_min: min, _gewijzigd: nu, _door: door }); } else l.push({ id: '__schema', schema_min: min, _gewijzigd: nu, _door: door });
+    return l;
+  };
+  P.blokActief = lijst => (Array.isArray(lijst) ? lijst : []).filter(b => b && typeof b === 'object' && !b._vervallen && b.id !== '__schema');
+  // Wat staat er na het schrijven anders dan bedoeld? Per patch: de velden die nu een andere waarde hebben, of "weg"/"verwijderd" als een collega het blok verwijderde. wie = naam van de collega.
+  P.blokAfwijkend = function (data, patches, o) {
+    const per = new Map((Array.isArray(data) ? data : []).filter(heeftId).map(x => [String(x.id), x])), uit = [], naamVan = (o && o.naamVan) || (d => d);
+    (patches || []).forEach(p => {
+      const x = per.get(p.id);
+      if (!x) { uit.push({ id: p.id, soort: 'ontbreekt', velden: [], wie: '' }); return; }
+      if (x._vervallen && !p.weg) { uit.push({ id: p.id, soort: 'verwijderd', velden: [], wie: naamVan((x._ts && x._ts.door) || x._door || '') }); return; }
+      const velden = p.nieuw ? [] : Object.keys(p.velden || {}).filter(f => !gelijk(x[f], p.velden[f]));
+      if (p.nieuw) P.BLOK_VELDEN.forEach(f => { if (p.nieuw[f] !== undefined && !gelijk(x[f], p.nieuw[f])) velden.push(f); });
+      if (velden.length) { let beste = null; velden.forEach(f => { const s = x._vs && x._vs[f]; if (s && (!beste || tijdVan(s) > tijdVan(beste))) beste = s; }); uit.push({ id: p.id, soort: 'veld', velden, wie: naamVan((beste && beste.door) || x._door || '') }); }
+    });
+    return uit;
+  };
+  // De schrijfkern: leest vers (met de ETag), voegt de lokale kopie erbij, past de patches toe (stempel per veld), controleert het recht en de schemadrempel vlak vóór het schrijven en schrijft terug;
+  // een 412 wordt door de _SP opgelost met blokSamen. Maakt het bestand zo nodig aan (een lege lijst). Verwerpt NOOIT stil: wat niet kon staat in `overgeslagen`.
+  // o = { sp, patches, lokaal, nu, door, dev, schema (de eigen app-versie), voorWrite?, bestand? }
+  // → { ok, reden, fout?, data (de stand die er nu is), blokken (actief), overgeslagen: [{ id, reden }], afwijkend?: [...], geschreven: bool }
+  //   reden: lezen | vorm | geblokkeerd | schrijven | aanroep. Bij 'schrijven' staat `data` er nog (de samengevoegde stand mét de wijziging): de aanroeper bewaart die lokaal om later te delen.
+  P.blokSchrijf = async function (sp, o) {
+    o = o || {}; const bestand = o.bestand || 'mt_planblokken.json', nu = Number(o.nu) || Date.now(), patches = Array.isArray(o.patches) ? o.patches : null;
+    if (!sp || !patches) return { ok: false, reden: 'aanroep', fout: 'Onvolledige aanroep.', overgeslagen: [] };
+    let raw; try { raw = await sp.read(bestand); } catch (e) {   // niet kunnen lezen: de wijziging wordt wel lokaal gestempeld bewaard (per veld, geen record-niveau), zodat ze later correct gedeeld wordt
+      let lokaalStand; try { lokaalStand = P.blokLokaalToepassen(o.lokaal === undefined ? null : o.lokaal, patches, { nu, dev: o.dev || '', door: o.door || '' }); } catch (e2) { lokaalStand = null; }
+      return { ok: false, reden: 'lezen', fout: String((e && e.message) || e), overgeslagen: [], data: lokaalStand || undefined };
+    }
+    if (raw === null || raw === undefined) raw = [];
+    if (P.blokBestandVorm(raw)) return { ok: false, reden: 'vorm', fout: P.blokBestandVorm(raw), overgeslagen: [] };
+    const drempel = P.blokSchemaMin(raw), eigen = o.schema == null ? P.SCHEMA : Number(o.schema);
+    if (drempel !== null && drempel > eigen) return { ok: false, reden: 'geblokkeerd', fout: P.SCHEMA_TEKST, overgeslagen: [] };
+    let basis; try { basis = P.blokSamen(o.lokaal === undefined ? null : o.lokaal, raw); } catch (e) { return { ok: false, reden: 'vorm', fout: String((e && e.message) || e), overgeslagen: [] }; }
+    const werk = kopie(basis); let overgeslagen = []; const stand = { nu, dev: o.dev || '', door: o.door || '' };
+    patches.forEach(p => { const r = blokPas(werk, p, stand); if (r.skip) overgeslagen.push({ id: p.id, reden: r.skip }); });
+    const verandert = JSON.stringify(werk) !== JSON.stringify(basis), gelijkAanSp = JSON.stringify(werk) === JSON.stringify(raw);
+    if (!verandert && gelijkAanSp) return { ok: true, geschreven: false, noop: true, data: werk, blokken: P.blokActief(werk), overgeslagen, afwijkend: [] };
+    if (typeof o.voorWrite === 'function') { let toe; try { toe = await o.voorWrite(); } catch (e) { toe = false; } if (toe === false) return { ok: false, reden: 'geblokkeerd', fout: P.SCHEMA_TEKST, data: werk, overgeslagen }; }
+    let eind = werk, overgeslagen412 = null;
+    // een 412 (iemand schreef tussendoor): de patches opnieuw toepassen op de verse stand (niet de al gestempelde werkkopie blind samenvoegen): een nieuw blok met een bezet id of een intussen verwijderd blok wordt dan eerlijk overgeslagen
+    const opnieuw412 = remote => { try { const w2 = kopie(P.blokSamen(o.lokaal === undefined ? null : o.lokaal, remote)), sk = []; patches.forEach(p => { const r = blokPas(w2, p, stand); if (r.skip) sk.push({ id: p.id, reden: r.skip }); }); eind = w2; overgeslagen412 = sk; return w2; } catch (e) { return null; } };
+    let ok = false; try { ok = await sp.write(bestand, werk, remote => opnieuw412(remote)); } catch (e) { ok = false; }   // offline of een fout halverwege: de wijziging staat dan alleen lokaal (data)
+    if (!ok) return { ok: false, reden: 'schrijven', data: werk, blokken: P.blokActief(werk), overgeslagen };
+    if (overgeslagen412) overgeslagen = overgeslagen412;
+    return { ok: true, geschreven: true, data: eind, blokken: P.blokActief(eind), overgeslagen, afwijkend: P.blokAfwijkend(eind, patches.filter(p => !overgeslagen.some(s => s.id === p.id)), o) };
+  };
+  // Wijzigingen die lokaal bleven staan (schrijven mislukte eerder) alsnog delen: lokaal en SharePoint samenvoegen en alleen schrijven als dat iets toevoegt.
+  P.blokPush = async function (sp, o) {
+    o = o || {}; const bestand = o.bestand || 'mt_planblokken.json';
+    let raw; try { raw = await sp.read(bestand); } catch (e) { return { ok: false, gewijzigd: false, reden: 'lezen' }; }
+    if (raw === null || raw === undefined) raw = [];
+    if (P.blokBestandVorm(raw)) return { ok: false, gewijzigd: false, reden: 'vorm' };
+    let basis; try { basis = P.blokSamen(o.lokaal === undefined ? null : o.lokaal, raw); } catch (e) { return { ok: false, gewijzigd: false, reden: 'vorm' }; }
+    if (JSON.stringify(basis) === JSON.stringify(raw)) return { ok: true, gewijzigd: false, data: basis, afwijkend: P.blokVerloren(o.lokaal, raw, basis, o) };   // ook als er niets te schrijven valt: is lokaal werk niet overgenomen (een collega verwijderde het blok), dan hoort de gebruiker dat
+    const drempel = P.blokSchemaMin(raw), eigen = o.schema == null ? P.SCHEMA : Number(o.schema);
+    if (drempel !== null && drempel > eigen) return { ok: false, gewijzigd: true, data: basis, reden: 'geblokkeerd' };
+    let eind = basis; const ok = await sp.write(bestand, basis, (remote, lokaal) => { try { const s = P.blokSamen(lokaal, remote); eind = s; return s; } catch (e) { return null; } });
+    return { ok: !!ok, gewijzigd: true, data: eind, reden: ok ? '' : 'schrijven', afwijkend: ok ? P.blokVerloren(o.lokaal, raw, eind, o) : [] };
+  };
+  // Na een time-out op het schrijven: staat de wijziging er nu? Leest vers en vergelijkt met de patches. → { soort: 'opgeslagen' | 'niet' | 'tegelijk' | 'onbekend', afwijkend? }
+  P.blokVerifieer = async function (sp, patches, o) {
+    o = o || {}; let raw; try { raw = await sp.read(o.bestand || 'mt_planblokken.json'); } catch (e) { return { soort: 'onbekend' }; }
+    if (!Array.isArray(raw)) return { soort: 'onbekend' };
+    const af = P.blokAfwijkend(raw, patches, o);
+    if (!af.length) return { soort: 'opgeslagen' };
+    return { soort: af.some(a => a.wie) ? 'tegelijk' : 'niet', afwijkend: af };
+  };
+  // Wat van het lokaal bewaarde werk is bij het delen niet overgenomen? Een veld met een eigen (nog niet gedeeld) stempel dat na het samenvoegen een andere waarde of stempel heeft, of een blok dat intussen verwijderd is.
+  // → [{ id, soort: 'veld'|'verwijderd', velden, wie }] (zelfde vorm als blokAfwijkend: de cockpit toont er dezelfde melding bij)
+  P.blokVerloren = function (lokaal, remote, eind, o) {
+    const naamVan = (o && o.naamVan) || (d => d), uit = [];
+    let L; try { L = typeof lokaal === 'string' ? JSON.parse(lokaal) : lokaal; } catch (e) { L = null; }
+    const R = new Map((Array.isArray(remote) ? remote : []).filter(heeftId).map(x => [String(x.id), x])), E = new Map((Array.isArray(eind) ? eind : []).filter(heeftId).map(x => [String(x.id), x]));
+    (Array.isArray(L) ? L : []).filter(heeftId).forEach(l => {
+      if (String(l.id) === '__schema' || l._vervallen) return;
+      const r = R.get(String(l.id)), e = E.get(String(l.id)); if (!e) return;
+      const vsL = l._vs || {}; const eigen = P.BLOK_VELDEN.filter(f => vsL[f] && (!r || JSON.stringify(vsL[f]) !== JSON.stringify((r._vs || {})[f])));   // alleen wat dit apparaat nog niet gedeeld had
+      if (!eigen.length) return;
+      if (e._vervallen) { uit.push({ id: String(l.id), soort: 'verwijderd', velden: [], wie: naamVan((e._ts && e._ts.door) || e._door || '') }); return; }
+      const verloren = eigen.filter(f => !gelijk(e[f], l[f]));
+      if (verloren.length) { let beste = null; verloren.forEach(f => { const s = e._vs && e._vs[f]; if (s && (!beste || tijdVan(s) > tijdVan(beste))) beste = s; }); uit.push({ id: String(l.id), soort: 'veld', velden: verloren, wie: naamVan((beste && beste.door) || e._door || '') }); }
+    });
+    return uit;
+  };
+  // Dry-run voor de migratie (en het rapport): wat zou er met een bestaand bestand gebeuren als twee apparaten het samenvoegen? Verandert er iets aan de blokken? → { blokken, gestempeld, ongestempeld, gelijkNaSamenvoegen, wijzigingen: [{id, wat}] }
+  P.blokMigratieRapport = function (lijst) {
+    const l = Array.isArray(lijst) ? lijst : [], uit = { blokken: 0, gestempeld: 0, ongestempeld: 0, vervallen: 0, wijzigingen: [] };
+    l.forEach(b => { if (!b || b.id === '__schema') return; uit.blokken++; if (b._vervallen) uit.vervallen++; if (b._vs && Object.keys(b._vs).length) uit.gestempeld++; else uit.ongestempeld++; });
+    let na; try { na = P.blokSamen(l, l); } catch (e) { uit.fout = String((e && e.message) || e); return uit; }
+    uit.gelijkNaSamenvoegen = JSON.stringify(na) === JSON.stringify(l);
+    const per = new Map(l.filter(heeftId).map(x => [String(x.id), x])); na.filter(heeftId).forEach(x => { const o = per.get(String(x.id)); if (!o || JSON.stringify(o) !== JSON.stringify(x)) uit.wijzigingen.push({ id: String(x.id), wat: o ? 'record verandert' : 'nieuw record' }); });
+    per.forEach((o, id) => { if (!na.some(x => heeftId(x) && String(x.id) === id)) uit.wijzigingen.push({ id, wat: 'record verdwijnt' }); });
+    return uit;
+  };
+
   // ── Een nieuwe taak als melding (Taak melden / Probleem melden) ──
   // Komt meteen in het project, gemarkeerd als voorstel (`voorstel`: wie, welke rol, wanneer); kantoor ziet het en beslist. Een probleem krijgt prioriteit high.
   P.meldingTaak = function ({ naam = '', omschrijving = '', soort = 'taak', door = '', doorNaam = '', rol = '', nu = Date.now(), id = '' } = {}) {
@@ -2135,10 +2503,11 @@
       bron: 'melding', activiteit: P.activiteitUitNaam(n) || undefined, voorstel: { soort: probleem ? 'probleem' : 'taak', door, doorNaam, rol, ts: new Date(nu).toISOString() } };
   };
   // Een bestelvoorstel: een gewone bestelregel (status nodig) met de markering `voorstel`. project_id/project: zoals de cockpit (code en technische sleutel).
-  P.meldingBestel = function ({ omschrijving = '', aantal = 1, eenheid = '', project = '', project_id = '', opmerking = '', door = '', doorNaam = '', rol = '', nu = Date.now(), datum = '', id = '' } = {}) {
+  P.meldingBestel = function ({ omschrijving = '', aantal = 1, eenheid = '', project = '', project_id = '', taak_id = '', opmerking = '', door = '', doorNaam = '', rol = '', nu = Date.now(), datum = '', id = '' } = {}) {
     const oms = String(omschrijving).replace(/\s+/g, ' ').trim(); if (!oms) return null;
     const r = P.bestelRegelNieuw({ omschrijving: oms.slice(0, 200), aantal, eenheid, bron: 'hand', project, project_id, datum: P.isYmd(datum) ? datum : P.vandaagYmd(), id });
     if (opmerking && String(opmerking).trim()) r.opmerking = String(opmerking).trim().slice(0, 300);
+    if (taak_id !== undefined && taak_id !== null && String(taak_id) !== '') r.taak_id = String(taak_id);   // P5: een bestelvoorstel kan meteen aan een taak hangen
     r.voorstel = { soort: 'bestel', door, doorNaam, rol, ts: new Date(nu).toISOString() };
     return r;
   };

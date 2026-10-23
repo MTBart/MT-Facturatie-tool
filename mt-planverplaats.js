@@ -589,7 +589,7 @@
   const PRIO_OK = ['high', 'medium', 'low'];
   const veldNorm = (k, v) => k === 'duur_uur' ? String(Math.round((Number(String(v == null ? '' : v).replace(',', '.')) || 0) * 100) / 100) : String(v == null ? '' : v).trim();
   const veldVan = (t, k) => veldNorm(k, k === 'status' ? (t.status || 'todo') : t[k]);
-  const geraakt = velden => { const s = new Set(); Object.keys(velden).forEach(k => { s.add(k); if (k === 'status') { s.add('wacht_reden'); s.add('klaar_op'); } }); return [...s]; };
+  const geraakt = velden => { const s = new Set(); Object.keys(velden).forEach(k => { s.add(k); if (k === 'status') { s.add('wacht_reden'); s.add('klaar_op'); } if (k === 'fase') s.add('fase_id'); }); return [...s]; };
   // Eén veld toepassen (ter plekke). -> '' of de reden waarom het niet kan
   const zetVeld = (t, k, v, spec, opt, team) => {
     const P = root.MTPlanning, w = veldNorm(k, v);
@@ -597,7 +597,12 @@
     if (k === 'omschrijving') { if (w) t.omschrijving = String(v).replace(/\s+$/, '').slice(0, 4000); else delete t.omschrijving; return ''; }
     if (k === 'duur_uur') { const n = Number(w); if (!isFinite(n) || n < 0 || n > 10000) return 'Geen geldige raming.'; t.duur_uur = n; return ''; }
     if (k === 'activiteit') { if (w && !P.activiteit(w)) return 'Onbekende activiteit.'; if (w) t.activiteit = w; else delete t.activiteit; return ''; }
-    if (k === 'fase') { if (w) t.fase = w.slice(0, 80); else delete t.fase; return ''; }   // de bucket: de naam van de fase, zoals het sjabloon hem zet
+    if (k === 'fase') {   // de bucket: de naam van de fase (voor oude apps) en, als hij in de planning-inrichting staat, het id (P3b: hernoemen breekt niets)
+      const fv = w ? P.faseVelden(w) : { fase: '', fase_id: '' };
+      if (fv.fase) t.fase = fv.fase.slice(0, 80); else delete t.fase;
+      if (fv.fase_id) t.fase_id = fv.fase_id; else delete t.fase_id;
+      return '';
+    }
     if (k === 'prioriteit') { if (w && !PRIO_OK.includes(w)) return 'Onbekende prioriteit.'; if (w) t.prioriteit = w; else delete t.prioriteit; return ''; }
     if (k === 'toegewezen') { if (w && !(team || []).some(m => m && String(m.slug).toLowerCase() === w.toLowerCase())) return 'Onbekende persoon.'; if (w !== String(t.toegewezen || '')) P.toegewezenZet(t, w, opt); return ''; }
     if (k === 'status') { const r = P.statusZet(t, w, { reden: spec.reden || '' }); return r.ok ? '' : r.fout; }
@@ -640,7 +645,7 @@
         if (afw.length) { anders = veldWie(t, afw, o) + ' wijzigde ' + afw.map(k => VELD_LABEL[k] || k).join(' en ') + ' intussen; jouw wijziging is niet opgeslagen. Je ziet nu de nieuwe stand.'; return false; }
         ks = geraakt(velden);
         const zelfdeReden = velden.status !== 'wacht' || String(t.wacht_reden || '') === String(s.reden || '').replace(/\s+/g, ' ').trim();
-        if (Object.keys(velden).every(k => veldVan(t, k) === veldNorm(k, velden[k])) && zelfdeReden) { noop = true; return false; }
+        if (Object.keys(velden).every(k => veldVan(t, k) === veldNorm(k, velden[k]) && (k !== 'fase' || String(t.fase_id || '') === String(P.faseVelden(velden[k]).fase_id || ''))) && zelfdeReden) { noop = true; return false; }   // een fase met alleen een naam (zonder id) is niet hetzelfde als met id (P3b-migratie)
         oudTaak = JSON.parse(JSON.stringify(t));
         voorRuw = {}; ks.forEach(k => { voorRuw[k] = t[k] === undefined ? null : JSON.parse(JSON.stringify(t[k])); });
         voorN = {}; ks.forEach(k => { voorN[k] = veldVan(t, k); });
