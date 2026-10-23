@@ -1963,7 +1963,7 @@
     Object.keys(takenPer).sort().forEach(code => {
       if (code.startsWith('__') || !Array.isArray(takenPer[code]) || (o.project && !zelfdeCode(code, o.project))) return;
       const lijst = P.takenActief(takenPer[code]); if (!lijst.length) return;
-      const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag });
+      const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag: P.isYmd(o.wachtVandaag) ? o.wachtVandaag : vandaag });   // C2: wacht rekent met de echte vandaag (opt.wachtVandaag) en niet met het begin van het venster; zonder die optie als voorheen
       const naamAantal = new Map(); lijst.forEach(t => { const n = nrm(t.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
       lijst.forEach(t => {
         const st = t.status || 'todo'; if (st === 'klaar') return;
