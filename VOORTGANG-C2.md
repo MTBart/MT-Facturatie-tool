@@ -27,3 +27,12 @@ de raming van elke taak verdeeld over de echte werkdagen van die persoon (`taakV
 ## Tests (scratchpad)
 - `stap2-suite/b-cap-belasting-harness.js`: Barts voorbeeld, te veel, verlof, taak deels buiten de periode, zonder raming, planblok en taak, open voorstel, gelijk aan Mijn werk (met en zonder werktijden), taakVerdeling, banen, wacht-vandaag.
 - `c1/rook-c2.js`: 6 overlappende taken, +N meer, belasting en opbouw (hover, vast, Escape), rand slepen met opvolgers, tabel en paneel direct bijgewerkt, eerlijke melding, Ongedaan maken.
+
+## Codex-review (alleen gelezen, ruwe uitvoer in scratchpad) en wat ermee gedaan is
+| # | Bevinding | Ernst | Verwerkt |
+|---|---|---|---|
+| 1 | De rand-sleep (uren) en de bestaande weekgrepen stuurden niet mee wat je zag (`gezien`): een ander kon intussen de datum wijzigen en die werd stil overschreven. | kritiek | Ja: `gezien {start, eind}` bij elke taakrand-sleep; plaatsTaak weigert met de melding dat een ander dit wijzigde (rooktest). |
+| 2 | Slepen naar een verplichte vrije dag toonde die datum, maar sloeg een andere op. | belangrijk | Ja: de tooltip en de spec gebruiken de genormaliseerde datum (start vooruit, eind terug naar een werkdag). |
+| 3 | Een vastgezette belastingopbouw bleef na hertekenen in `body` staan (met document-listener). | belangrijk | Ja: één opruimfunctie, aangeroepen bij elke nieuwe tekening (rooktest). |
+| 4 | De weergave kon na middernacht oud blijven (vandaag zat niet in de tekensleutel). | klein | Ja. |
+Bevestigd door Codex: geen dubbeltelling in de belasting (Set per dag), de conflictmelding maskeert de write niet, geen verdwijnende items in de banen, geen verouderde cache direct na een wijziging.

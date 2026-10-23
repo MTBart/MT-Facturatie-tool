@@ -355,7 +355,7 @@
       if (S.zoom === 'week' && !mijlpaal) [['start', it.eerste, 'l', 'start'], ['eind', it.laatste, 'r', 'eind']].forEach(([kant, tonen, kl, woord]) => {
         if (!tonen) return;
         const g = el('span', { klass: 'cn-greep ' + kl, 'aria-hidden': 'true', title: 'Sleep om de ' + woord + ' te verplaatsen' });
-        sleepBron({ soort: 'taakrand', kant, taak: taakBron.taak, van: it.persoon || '' }, g, it.naam); g.addEventListener('dragstart', ev => ev.stopPropagation());   // de greep sleept alleen de rand, niet de hele balk
+        sleepBron({ soort: 'taakrand', kant, taak: taakBron.taak, van: it.persoon || '', gezien: { start: (it.taak && it.taak.start) || '', eind: (it.taak && it.taak.eind) || '' } }, g, it.naam); g.addEventListener('dragstart', ev => ev.stopPropagation());   // de greep sleept alleen de rand, niet de hele balk
         b.appendChild(g);
       });
       // het toetsenbord: pijltje = de balk een bedrijfswerkdag schuiven, Shift+pijltje = het eind, Alt+Shift+pijltje = de start
@@ -448,7 +448,7 @@
     let open = false, vast = false;
     const buiten = ev => { if (!badge.contains(ev.target) && !pop.contains(ev.target)) verberg(); };
     const toon = () => {
-      if (open) return; open = true; pop.hidden = false; D.doc.body.appendChild(pop);
+      if (open) return; if (S.popOpruim && S.popOpruim !== verberg) S.popOpruim(); S.popOpruim = verberg; open = true; pop.hidden = false; D.doc.body.appendChild(pop);
       const br = badge.getBoundingClientRect(), g = D.doc.defaultView, pw = pop.offsetWidth, ph = pop.offsetHeight;
       let y = br.bottom + 6; if (g && y + ph > g.innerHeight - 8) y = Math.max(8, br.top - ph - 6);
       pop.style.left = Math.max(8, Math.min(br.left, (g ? g.innerWidth : 1000) - pw - 8)) + 'px'; pop.style.top = y + 'px'; badge.setAttribute('aria-expanded', 'true');
@@ -476,7 +476,8 @@
       const x0 = ev.clientX, l0 = parseFloat(w.style.left), w0 = parseFloat(w.style.width), tip = el('span', { klass: 'cn-greep-tip' });
       let dd = 0; bl.setAttribute('draggable', 'false'); w.classList.add('uitrekt'); w.appendChild(tip); S.gebaar = Date.now();
       try { g.setPointerCapture(ev.pointerId); } catch (e) {}
-      const doel = () => datumVanWi(wiVan(ctx.datum) + dd);
+      const verplicht = (() => { try { return P.vrijSet(D.vrij ? D.vrij() : null); } catch (e) { return new Set(); } })();   // wat je ziet is wat er wordt opgeslagen: een weekend of verplichte vrije dag schuift naar de eerstvolgende (start) of vorige (eind) werkdag
+      const doel = () => { let wi = wiVan(ctx.datum) + dd, d = datumVanWi(wi); for (let i = 0; i < 30 && verplicht.has(d); i++) { wi += kant === 'eind' ? -1 : 1; d = datumVanWi(wi); } return d; };
       const mv = e => {
         dd = Math.round((e.clientX - x0) / ctx.ppd);
         if (kant === 'eind') w.style.width = Math.max(8, w0 + dd * ctx.ppd) + 'px'; else { const nw = Math.max(8, w0 - dd * ctx.ppd); w.style.left = (l0 + w0 - nw) + 'px'; w.style.width = nw + 'px'; }
@@ -488,7 +489,7 @@
         bl.setAttribute('draggable', 'true'); w.classList.remove('uitrekt'); S.gebaar = 0; if (tip.parentNode) tip.parentNode.removeChild(tip);
         if (e.type === 'pointercancel' || dd === 0) { w.style.left = l0 + 'px'; w.style.width = w0 + 'px'; gebaarKlaar(); return; }
         S.focusTaak = String(ctx.taak.id); S.focusCode = String(ctx.taak.code);
-        N.drop({ soort: 'taakrand', kant, taak: ctx.taak, van: ctx.van, datum: doel() });
+        N.drop({ soort: 'taakrand', kant, taak: ctx.taak, van: ctx.van, datum: doel(), gezien: ctx.gezien });   // gezien: wat je bij het tekenen zag; is het intussen anders, dan wordt er niets overschreven
       };
       g.addEventListener('pointermove', mv); g.addEventListener('pointerup', klaar); g.addEventListener('pointercancel', klaar);
     });
@@ -601,8 +602,9 @@
           w.classList.add('cn-alldag');
           if (bl && bl.hasAttribute('data-taak') && it.soort === 'taak' && !(it.taak && it.taak.soort === 'mijlpaal')) {   // de randen van een taakbalk: begin- en einddatum slepen (hele dagen)
             const taakB = { code: it.code, id: it.id, naam: it.naam, voorstel: false };
-            if (it.eerste) dagGreep(w, bl, 'start', { taak: taakB, van: it.persoon || '', datum: d.datum, ppd });
-            if (it.laatste) dagGreep(w, bl, 'eind', { taak: taakB, van: it.persoon || '', datum: d.datum, ppd });
+            const gezien = { start: (it.taak && it.taak.start) || '', eind: (it.taak && it.taak.eind) || '' };
+            if (it.eerste) dagGreep(w, bl, 'start', { taak: taakB, van: it.persoon || '', datum: d.datum, ppd, gezien });
+            if (it.laatste) dagGreep(w, bl, 'eind', { taak: taakB, van: it.persoon || '', datum: d.datum, ppd, gezien });
           }
           raster.appendChild(w);
         });
@@ -1003,8 +1005,9 @@
     const kind = weekendPad ? 'dag' : N.modus(S.ppd, Wv);
     if (S.vrij) { S.zoom = kind; S.anker = datumVanWi(Math.floor(S.pos)); }
     const n = Wv / S.ppd, d0 = Math.floor(S.pos + 1e-9), d1 = Math.max(d0 + 1, Math.ceil(S.pos + n - 1e-6)), snap = N.snapMin(S.ppd);
-    const sleutel = [weekendPad ? 'w' + S.anker : d0 + ':' + d1, S.ppd.toFixed(3), Wv, S.project, S.persoon, S.zoom, JSON.stringify(S.agenda), U0, U1].join('|');
+    const sleutel = [weekendPad ? 'w' + S.anker : d0 + ':' + d1, S.ppd.toFixed(3), Wv, S.project, S.persoon, S.zoom, JSON.stringify(S.agenda), U0, U1, today].join('|');
     if (!forceer && S.sleutel === sleutel && vlak.firstChild) { N.plaats(); return; }
+    if (S.popOpruim) { try { S.popOpruim(); } catch (e) {} S.popOpruim = null; }   // een open opbouw hoort bij de oude weergave
     let m;
     try { m = N.model(Object.assign({}, S, { zoom: S.zoom, ongepland: S.ong, d0: weekendPad ? undefined : d0, d1: weekendPad ? undefined : d1 })); }
     catch (e) { console.warn('Capaciteit (nieuw):', e); vlak.textContent = ''; vlak.appendChild(el('div', { klass: 'cn-melding', tekst: 'De planning kon niet worden berekend.' })); S.V = null; return; }
@@ -1041,7 +1044,7 @@
   N.teken = function () {
     const w = D && D.doc.getElementById('agenda-capaciteit'); if (!w) return;
     if (gebaarActief()) { S.nogTeken = true; return; }
-    N.cacheWis();
+    N.cacheWis(); if (S.popOpruim) { try { S.popOpruim(); } catch (e) {} S.popOpruim = null; }
     if (S.ro) { try { S.ro.disconnect(); } catch (e) {} S.ro = null; }
     w.textContent = '';
     trekFilter();
