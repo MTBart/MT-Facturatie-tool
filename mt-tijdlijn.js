@@ -24,7 +24,7 @@
   const sleutelVan = (obj, code) => Object.keys(obj && typeof obj === 'object' ? obj : {}).find(k => !k.startsWith('__') && zelfde(k, code));
   const dnr = s => Math.round(Date.parse(s + 'T00:00:00Z') / 864e5);
   const dymd = n => new Date(n * 864e5).toISOString().slice(0, 10);
-  const ok = s => !!(P && P.isYmd(s));
+  const ok = s => !!(P && P.isYmd(s)) && +String(s).slice(0, 4) >= 2000 && +String(s).slice(0, 4) <= 2099;   // een kapotte datum (jaar 0001 of 9999) mag de tijdas niet miljoenen dagen breed maken
   const maandag = n => n - ((((n + 4) % 7) + 6) % 7);   // dagnummer van de maandag van die week (1970-01-01 was een donderdag)
   const MND = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
