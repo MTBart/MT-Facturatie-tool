@@ -16,7 +16,7 @@
   'use strict';
   const TT = {};
   let D = {};
-  const S = { bezig: false, vorige: new Map() };
+  const S = { bezig: false, vorige: new Map(), focus: null };
   const P = () => root.MTPlanning;
 
   // ── specs: dezelfde vorm als in het taakpaneel (zetStatus en keuzeVeld/tekstVeld) en het Bord, zodat de stempels identiek zijn ──
@@ -175,6 +175,20 @@
     return i;
   }
 
+  // Het afvinkvakje als losse component (ook gebruikt door het blok Voortgang): met recht een vakje (aan = Klaar, uit = vorige status) via TT.afvinken, zonder recht alleen een teken.
+  TT.afvinkVak = function (code, t) {
+    const st = t.status || 'todo', id = t.id;
+    if (!mag('status')) return el('span', { klass: 'tt-klaar tt-klaar-uit', 'aria-label': st === 'klaar' ? 'Klaar' : 'Niet klaar', tekst: st === 'klaar' ? '✓' : '' });
+    const vak = el('input', { type: 'checkbox', klass: 'tt-klaar-in', 'aria-label': 'Klaar: ' + (t.naam || ''), checked: st === 'klaar', 'data-tt-sleutel': TT.sleutel(code, id) });
+    vak.addEventListener('change', async () => { vak.disabled = true; S.focus = TT.sleutel(code, id); const ok = await TT.afvinken(code, id); if (!ok) vak.checked = st === 'klaar'; vak.disabled = false; });
+    return el('label', { klass: 'tt-klaar', title: st === 'klaar' ? 'Klaar. Uitvinken zet de taak terug naar de vorige status' : 'Afvinken = Klaar' }, vak);
+  };
+  // Na het hertekenen staat de focus weer op het vakje waar het toetsenbord was
+  TT.herstelFocus = function (wortel) {
+    const k = S.focus; if (!k || !wortel || !wortel.querySelector) return false; S.focus = null;
+    const v = [...wortel.querySelectorAll('input.tt-klaar-in')].find(x => x.getAttribute('data-tt-sleutel') === k);
+    if (v) { try { v.focus(); } catch (e) {} return true; } return false;
+  };
   TT.verrijk = function (code, wortel) {
     if (!wortel || !code || !D.taken) return 0;
     const alle = D.taken() || {}, k = sleutelVan(alle, code); if (!k) return 0;
@@ -190,12 +204,8 @@
       tr.classList.add('tt-rij'); const tab = tr.closest ? tr.closest('table') : null; if (tab) tab.classList.add('pt-tabel');
       // 1) afvinkvakje + selectievakje (verwijderen) in de eerste cel
       const sel = c[0].querySelector('.pt-check');
-      if (kanSt) c[0].insertBefore(el('label', { klass: 'tt-klaar', title: st === 'klaar' ? 'Klaar. Uitvinken zet de taak terug naar de vorige status' : 'Afvinken = Klaar' },
-        el('input', { type: 'checkbox', klass: 'tt-klaar-in', 'aria-label': 'Klaar: ' + (t.naam || ''), checked: st === 'klaar' })), c[0].firstChild);
-      else c[0].insertBefore(el('span', { klass: 'tt-klaar tt-klaar-uit', 'aria-label': st === 'klaar' ? 'Klaar' : 'Niet klaar', tekst: st === 'klaar' ? '✓' : '' }), c[0].firstChild);
+      c[0].insertBefore(TT.afvinkVak(code, t), c[0].firstChild);
       if (sel && !kanAl) { sel.hidden = true; sel.disabled = true; }
-      const vak = c[0].querySelector('.tt-klaar-in');
-      if (vak) vak.addEventListener('change', async () => { vak.disabled = true; const ok = await TT.afvinken(code, id); if (!ok) vak.checked = st === 'klaar'; vak.disabled = false; });
       // 2) statuskiezer (vier zichtbare keuzes) in de tweede cel
       if (kanSt) {
         const w = D.wachtInfo ? D.wachtInfo(code, t) : null;
@@ -247,6 +257,7 @@
       const rond = [...tr.querySelectorAll('button')].find(b => /projTaakStatus\(/.test(b.getAttribute('onclick') || '')); if (rond) rond.remove();
       n++;
     });
+    TT.herstelFocus(wortel);
     if (n) stijl();
     return n;
   };
@@ -266,7 +277,7 @@
   ].join('\n');
   function stijl() { const d = dom(); if (!d || !d.head || d.getElementById('tt-stijl')) return; const s = d.createElement('style'); s.id = 'tt-stijl'; s.textContent = CSS; d.head.appendChild(s); }
 
-  TT.init = cfg => { D = cfg || {}; S.bezig = false; S.vorige = new Map(); return TT; };
+  TT.init = cfg => { D = cfg || {}; S.bezig = false; S.vorige = new Map(); S.focus = null; return TT; };
   TT._stijl = CSS;
   root.MTTaakTabel = TT;
   if (typeof module !== 'undefined' && module.exports) module.exports = TT;
