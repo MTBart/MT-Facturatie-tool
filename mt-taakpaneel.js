@@ -77,6 +77,7 @@
       kruisNa = kr.na.map(q => { const x = vind(q.project, q.taak); if (!x) return null; const r = kruisRij(x, q.project, q.dep, 'na'), dt = P.depToets({ van: t.id, naar: x.id, lag: r.lag, type: r.type, lagSoort: r.lagSoort }, t, x, { vrij }); r.vroegst = dt.vroegst; r.vroegstEind = dt.vroegstEind; r.botst = !r.inactief && (t.status || 'todo') !== 'klaar' && r.status !== 'klaar' && dt.botst; return r; }).filter(Boolean);
     } catch (e) { kruisVoor = []; kruisNa = []; }
     const andereProjecten = Object.keys(alle).filter(p => !p.startsWith('__') && Array.isArray(alle[p]) && !zelfde(p, k || code) && alle[p].some(y => y && !y._vervallen)).map(p => { const pp = (D.project && D.project(p)) || { code: p, naam: '', nummer: '' }; return { code: p, label: (pp.nummer ? pp.nummer + ' ' : '') + (pp.naam || p), taken: alle[p].filter(y => y && !y._vervallen).map(kort) }; }).sort((a, b) => String(a.label).localeCompare(String(b.label), 'nl'));
+    const aanbBewijs = t.poort === 'aanbetaling_binnen' && D.aanbetaling ? D.aanbetaling(k || code) : null, geld = !!(D.geldZien && D.geldZien());   // idee #72: de stand van de aanbetalingsfactuur in Moneybird (alleen lezen)
     let beperkingConflict = null; try { beperkingConflict = P.beperkingConflicten([t], { vrij })[0] || null; } catch (e) { beperkingConflict = null; }
     // Materiaal (P5): de regels die aan DEZE taak hangen (taak_id) met hun verwachte leverdatum, en de andere regels van het project (zelfde regel als MTPlanning.projectStroom).
     const VOLG = { nodig: 0, besteld: 1, geleverd: 2 };
@@ -90,7 +91,7 @@
     const materiaal = t.sleutel === 'bestellen' || t.sleutel === 'materiaal_geleverd' || (t.status === 'wacht' && /\b(materiaal|plaat|platen|beslag|bestel|besteld|bestelling|levering|leverancier|geleverd|order)/i.test(String(t.wacht_reden || '')));
     // Planblokken die (nog) aan deze taak hangen (oude tb:-blokken), voor de mini-tijdlijn
     let blokken = []; try { if (D.blokken && P.taakBlokkenVan) blokken = P.taakBlokkenVan(t, lijst, k, D.blokken() || [], alle).filter(b => b && ymdOk(b.datum)).map(b => ({ datum: b.datum, persoon: b.persoon || '', min: Number(b.duurMin) || 0, voorstel: b.status === 'voorstel' })); } catch (e) { blokken = []; }
-    return { ok: true, sleutel: { code: k || code, id: t.id }, depsRuw, takenLijst: lijst.map(kort), alleTaken: alle, afhStore: afh, kruisVoor, kruisNa, andereProjecten, beperkingConflict, code: k || code, taak: t, project: pr, voorgangers, opvolgers, wacht, bestel: { regels, tel, materiaal, anderen }, materiaalTaak, checklist: P.checklistActief(t), poortVoorstel: P.poortVoorstel(t, regels), mensen: P.taakMensen(t), raming: P.taakRamingMin(t), fasen: faseOpties(lijst, t.fase), blokken };
+    return { ok: true, sleutel: { code: k || code, id: t.id }, depsRuw, takenLijst: lijst.map(kort), alleTaken: alle, afhStore: afh, kruisVoor, kruisNa, andereProjecten, beperkingConflict, code: k || code, taak: t, project: pr, voorgangers, opvolgers, wacht, bestel: { regels, tel, materiaal, anderen }, materiaalTaak, checklist: P.checklistActief(t), poortVoorstel: P.poortVoorstel(t, regels), aanbetalingVoorstel: aanbBewijs ? P.aanbetalingVoorstel(t, aanbBewijs, { geld }) : null, aanbetalingInfo: aanbBewijs && t.poort === 'aanbetaling_binnen' ? P.aanbetalingInfo(aanbBewijs, { geld }) : '', mensen: P.taakMensen(t), raming: P.taakRamingMin(t), fasen: faseOpties(lijst, t.fase), blokken };
   };
 
   // De mini-tijdlijn (rekenwerk): een venster van hele weken rond de taak (minstens 4, hoogstens 12), met de balk en de planblokken als percentages
@@ -250,9 +251,15 @@
       kids.push(h.rij('Eigenaar', h.keuzeVeld('poort_eigenaar', t.poort_eigenaar || '', [['', 'Niemand']].concat(team.map(x => [String(x.slug), x.naam])), { kan, label: 'Eigenaar van de poort', wat: 'eigenaar', titel: 'Wie zorgt dat deze poort groen wordt?' })));
       kids.push(h.rij('Bewijs', h.tekstVeld('poort_bewijs', t.poort_bewijs || '', { kan, label: 'Bewijs-link', wat: 'bewijs', placeholder: 'https://...', lees: v => v === '' ? '' : (P.poortBewijsOk(v) ? v : null), fout: 'Geen geldige link: begin met http:// of https://. Er is niets gewijzigd.', titel: 'Link naar het bewijs: de getekende tekening, de betaling, het opleverformulier' }),
         P.poortBewijsOk(t.poort_bewijs) ? h.el('a', { klass: 'tp-link', href: t.poort_bewijs, target: '_blank', rel: 'noopener noreferrer', tekst: 'Open het bewijs' }) : null));
-      kids.push(h.rij('Bron', h.el('span', { klass: 'tp-tekstwaarde', tekst: P.POORT_BRONNEN[t.poort_bron || 'hand'] || 'Handmatig' })));
+      kids.push(h.rij('Bron', h.el('span', { klass: 'tp-tekstwaarde', tekst: P.POORT_BRONNEN[t.poort_bron || 'hand'] || 'Handmatig' }), t.poort_bewijs_tekst ? h.el('span', { klass: 'tp-sub', tekst: t.poort_bewijs_tekst }) : null));
       if (m.opvolgers.length) kids.push(h.el('p', { klass: 'tp-sub', tekst: (groen ? 'Dit gaf ' : 'Hierop wachten ') + m.opvolgers.length + (m.opvolgers.length === 1 ? ' taak' : ' taken') + ': ' + m.opvolgers.map(x => x.naam).join(', ') + '.' }));
       else kids.push(h.el('p', { klass: 'tp-sub', tekst: 'Er wacht nog geen taak op deze poort; koppel hem onder Afhankelijkheden aan de taak erna.' }));
+      if (t.poort === 'aanbetaling_binnen' && !groen) {   // idee #72: uit Moneybird, als voorstel (nooit stil); het bewijs (factuurnummer en betaaldatum) gaat mee naar de taak
+        if (D.aanbetalingLaad) { try { Promise.resolve(D.aanbetalingLaad(m.code)).then(veranderd => { if (veranderd) T.ververs(); }).catch(() => { }); } catch (e) { } }
+        if (m.aanbetalingVoorstel) kids.push(h.el('div', { klass: 'tp-melding tp-voorstel' }, h.el('span', { tekst: 'Voorstel uit Moneybird: ' + m.aanbetalingVoorstel.tekst + '. Poort op groen zetten?' }),
+          mag('alles') && D.poortMoneybird ? h.el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Op groen zetten', klik: async () => { let ok = false; try { ok = await D.poortMoneybird(m.code, t.id); } catch (e) { ok = false; } if (!ok) toast('Niet op groen gezet: de factuur is niet (meer) betaald of de wijziging is niet opgeslagen.'); T.ververs(); naWijziging(); } }) : h.el('span', { klass: 'tp-sub', tekst: ' (zetten mag kantoor)' })));
+        else if (m.aanbetalingInfo) kids.push(h.el('p', { klass: 'tp-sub', tekst: m.aanbetalingInfo }));
+      }
       if (m.poortVoorstel && !groen && mag('status')) kids.push(h.el('div', { klass: 'tp-melding tp-voorstel' }, h.el('span', { tekst: 'Voorstel: ' + m.poortVoorstel + '. Poort op groen zetten?' }),
         h.el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Op groen zetten', klik: () => zetStatus(m, 'klaar', h) })));
     }

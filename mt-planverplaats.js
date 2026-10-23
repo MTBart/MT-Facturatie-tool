@@ -584,8 +584,8 @@
   // spec = { code, id, naam, velden: { veld: nieuw }, gezien?: { veld: oud zoals getoond }, reden? (verplicht bij status 'wacht') }
   // -> { ok:false, reden } | { ok:false, bezet } | { ok:false, tegelijk:true, reden } | { ok:false, onzeker, reden } | { ok:true, noop:true }
   //    | { ok:true, opgeslagen:true, tegelijk:tekst, data, taken } | { ok:true, opgeslagen:true, behouden:true, data, taken, oudTaak, wijziging }
-  V.PANEEL_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'prioriteit', 'toegewezen', 'status', 'fase', 'poort', 'poort_eigenaar', 'poort_bewijs', 'beperking', 'beperking_datum'];
-  const VELD_LABEL = { naam: 'de naam', omschrijving: 'de notities', duur_uur: 'de raming', activiteit: 'de activiteit', prioriteit: 'de prioriteit', toegewezen: 'de persoon', status: 'de status', fase: 'de fase', poort: 'de poort', poort_eigenaar: 'de eigenaar van de poort', poort_bewijs: 'het bewijs van de poort', beperking: 'de beperking', beperking_datum: 'de datum van de beperking', wacht_reden: 'de wachtreden', klaar_op: 'de klaardatum' };
+  V.PANEEL_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'prioriteit', 'toegewezen', 'status', 'fase', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bewijs_tekst', 'poort_bron', 'beperking', 'beperking_datum'];
+  const VELD_LABEL = { naam: 'de naam', omschrijving: 'de notities', duur_uur: 'de raming', activiteit: 'de activiteit', prioriteit: 'de prioriteit', toegewezen: 'de persoon', status: 'de status', fase: 'de fase', poort: 'de poort', poort_eigenaar: 'de eigenaar van de poort', poort_bewijs: 'het bewijs van de poort', poort_bewijs_tekst: 'de bewijstekst van de poort', poort_bron: 'de bron van de poort', beperking: 'de beperking', beperking_datum: 'de datum van de beperking', wacht_reden: 'de wachtreden', klaar_op: 'de klaardatum' };
   const PRIO_OK = ['high', 'medium', 'low'];
   const veldNorm = (k, v) => k === 'duur_uur' ? String(Math.round((Number(String(v == null ? '' : v).replace(',', '.')) || 0) * 100) / 100) : String(v == null ? '' : v).trim();
   const veldVan = (t, k) => veldNorm(k, k === 'status' ? (t.status || 'todo') : t[k]);
@@ -613,6 +613,8 @@
     }
     if (k === 'poort_eigenaar') { if (w && !(team || []).some(m => m && String(m.slug).toLowerCase() === w.toLowerCase())) return 'Onbekende persoon.'; if (w) t.poort_eigenaar = w; else delete t.poort_eigenaar; return ''; }
     if (k === 'poort_bewijs') { if (w && !P.poortBewijsOk(w)) return 'Geen geldige link: begin met http:// of https://.'; if (w) t.poort_bewijs = w; else delete t.poort_bewijs; return ''; }
+    if (k === 'poort_bewijs_tekst') { if (w) t.poort_bewijs_tekst = w.slice(0, 160); else delete t.poort_bewijs_tekst; return ''; }   // idee #72: factuurnummer en datum van het Moneybird-bewijs (nooit een bedrag)
+    if (k === 'poort_bron') { if (w && !Object.prototype.hasOwnProperty.call(P.POORT_BRONNEN, w)) return 'Onbekende bron.'; if (!t.poort) return 'Deze taak heeft geen poort.'; if (w) t.poort_bron = w; else t.poort_bron = 'hand'; return ''; }
     if (k === 'prioriteit') { if (w && !PRIO_OK.includes(w)) return 'Onbekende prioriteit.'; if (w) t.prioriteit = w; else delete t.prioriteit; return ''; }
     if (k === 'toegewezen') { if (w && !(team || []).some(m => m && String(m.slug).toLowerCase() === w.toLowerCase())) return 'Onbekende persoon.'; if (w !== String(t.toegewezen || '')) P.toegewezenZet(t, w, opt); return ''; }
     if (k === 'status') { const r = P.statusZet(t, w, { reden: spec.reden || '' }); return r.ok ? '' : r.fout; }
@@ -652,6 +654,7 @@
     try {
       res = await P.takenSchrijf(tijdSp(o.sp, st), { code, lokaal: o.lokaal(), nu: o.nu(), door: o.door, dev: o.dev, projectId: o.projectId, mag: o.mag, muteer: werk => {
         const t = werk.find(x => x && String(x.id) === String(id)); if (!t) return { fout: 'Deze taak bestaat niet meer; er is niets gewijzigd.' };
+        if (s.eis && typeof s.eis === 'object' && Object.keys(s.eis).some(k => String(t[k] == null ? '' : t[k]) !== String(s.eis[k]))) return { fout: 'Deze taak is intussen veranderd (hij hoort niet meer bij dezelfde poort); er is niets opgeslagen.' };   // voorwaarden van de aanroeper (bv. de poortsoort bij een voorstel uit Moneybird) op de VERSE stand
         // iemand anders was eerder (op de verse stand staat iets anders dan wat de gebruiker zag): niets schrijven
         const alle = geraakt(velden), afw = Object.keys(s.gezien || {}).filter(k => alle.includes(k) && veldVan(t, k) !== veldNorm(k, s.gezien[k]));   // bij de status tellen de wachtreden en de klaardatum mee
         if (afw.length) { anders = veldWie(t, afw, o) + ' wijzigde ' + afw.map(k => VELD_LABEL[k] || k).join(' en ') + ' intussen; jouw wijziging is niet opgeslagen. Je ziet nu de nieuwe stand.'; return false; }

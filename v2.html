@@ -3936,6 +3936,7 @@ try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu
   toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; },
   // Schrijven: alleen via de bestaande taakroutes (zie tpWijzig; de datums via de sleeproute van de Capaciteit; verwijderen, Toggl, conflict en voorstel via de functies van de projecttabel)
   mag:{ alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar(), status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), bestel:()=>rolMag(ROL_BESTEL_ALLES)&&_blKlaar(), plannen:()=>capMagSlepen()&&rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
+  aanbetaling:code=>projAanbetaling(code), aanbetalingLaad:code=>projAanbetalingLaad(code), geldZien:()=>_aanbGeld(), poortMoneybird:(code,id)=>projPoortMoneybirdGroen(code,id),   // idee #72: poort Aanbetaling binnen uit Moneybird (alleen lezen, als voorstel)
   wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec), naamVan:x=>_capNaamVan(x), bestelKoppel:(id,taakId)=>bestelTaakZet(id,taakId), bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd),
   toonInTijdlijn:(code,id,datum)=>{ const k=document.querySelector('.tabs-wrap .tab-btn[onclick*="\'agenda\'"]'); _agenda.view='capaciteit'; showTab('agenda',k); try{ MTCapaciteitNieuw.toonTaak({code,id},datum); }catch(e){ console.warn('Toon in tijdlijn:',e); } },
   inplannen:t=>{ const k=document.querySelector('.tabs-wrap .tab-btn[onclick*="\'agenda\'"]'); _agenda.view='capaciteit'; showTab('agenda',k); try{ MTCapaciteitNieuw.inplannen(t); }catch(e){ console.warn('Inplannen (taakpaneel):',e); } },   // de bestaande route van Vandaag: Ongepland gemarkeerd + het keuzemenu
@@ -8201,8 +8202,9 @@ function _p2AfhBouw(code){
   const mig=MTPlanning.depMigratie(taken,ruw,{project_id:pid});
   if(mig.nieuw.length&&mag) meldingen.push(_p2El('div',{class:'pm-w pm-info',role:'status'},'🔄 '+mig.nieuw.length+' koppeling(en) uit de oude taaklijst staan nog niet als afhankelijkheid vast. ',
     _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projAfhMigreer(code)},'Bekijken en omzetten…')));
-  if(rolMag(ROL_TAAK_STATUS)){ MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:pid,codes:[code]}).forEach(v=>meldingen.push(_p2El('div',{class:'pm-w pm-info',role:'status'},'💡 '+v.reden.charAt(0).toUpperCase()+v.reden.slice(1)+': "'+v.naam+'" op klaar zetten? ',
-    _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projTaakStatusNaar(code,v.taak_id,'klaar')},'Op klaar zetten')))); }
+  if(taken.some(x=>x.poort==='aanbetaling_binnen'&&(x.status||'todo')!=='klaar')) projAanbetalingLaad(code).then(nieuw=>{ if(nieuw) _p2Na(code); });   // idee #72: de aanbetaling uit Moneybird (alleen lezen)
+  if(rolMag(ROL_TAAK_STATUS)){ MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:pid,codes:[code],aanbetaling:projAanbetaling(code),geld:_aanbGeld()}).forEach(v=>meldingen.push(_p2El('div',{class:'pm-w pm-info',role:'status'},'💡 '+v.reden.charAt(0).toUpperCase()+v.reden.slice(1)+': "'+v.naam+'" op '+(v.bron==='moneybird'?'groen':'klaar')+' zetten? ',
+    v.bron==='moneybird'?(rolMag(ROL_TAAK_ALLES)?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:async()=>{ const ok=await projPoortMoneybirdGroen(code,v.taak_id); if(!ok&&typeof planToast==='function') planToast('Niet op groen gezet: de factuur is niet (meer) betaald of de wijziging is niet opgeslagen.'); _p2Na(code); }},'Op groen zetten'):null):_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projTaakStatusNaar(code,v.taak_id,'klaar')},'Op klaar zetten')))); }
   const padTekst=r.padTaken.length?r.padTaken.map(x=>x.naam).join(' → '):'';
   let samen;
   if(!lever) samen=_p2El('div',{class:'pm-sync'},'Geen leverdatum bij de projectgegevens (Overzicht): het kritieke pad rekent tot de vroegst mogelijke einddatum ('+_p2D(r.eindVroegst)+').');
@@ -8803,7 +8805,8 @@ function _blProjBouw(code){
   const tel={nodig:0,besteld:0,geleverd:0}; regels.forEach(b=>{ tel[MTPlanning.bestelStatus(b)]++; });
   const zicht=regels.filter(b=>_blProjToonGeleverd||MTPlanning.bestelStatus(b)!=='geleverd');
   const magWijzig=rolMag(ROL_BESTEL_TOEV);
-  const magAlles=rolMag(ROL_BESTEL_ALLES), voorstellen=rolMag(ROL_TAAK_STATUS)?MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:proj.project_id||'',codes:[code]}):[];
+  if(taken.some(x=>x.poort==='aanbetaling_binnen'&&(x.status||'todo')!=='klaar')) projAanbetalingLaad(code).then(nieuw=>{ if(nieuw) projBestelTeken(code); });   // idee #72
+  const magAlles=rolMag(ROL_BESTEL_ALLES), voorstellen=rolMag(ROL_TAAK_STATUS)?MTPlanning.bestelTaakVoorstellen(taken,_blActief(),{project_id:proj.project_id||'',codes:[code],aanbetaling:projAanbetaling(code),geld:_aanbGeld()}):[];
   const rijen=zicht.map(b=>{
     const st=MTPlanning.bestelStatus(b), aantal=Number(b.aantal)>0?Number(b.aantal):1;
     return _p2El('tr',{style:st==='geleverd'?'opacity:.6':''},
@@ -8828,8 +8831,8 @@ function _blProjBouw(code){
       _p2El('span',{class:'pm-bron',tekst:regels.length?(tel.nodig+' nodig · '+tel.besteld+' besteld · '+tel.geleverd+' geleverd'):'nog niets'}),
       tel.geleverd?_p2El('label',{style:'font-size:12px;color:var(--text-dim);display:inline-flex;gap:4px;align-items:center;cursor:pointer'},_p2El('input',{type:'checkbox',aan:_blProjToonGeleverd,style:'width:auto',wijzig:ev=>{ _blProjToonGeleverd=ev.target.checked; projBestelTeken(code); }}),'Toon geleverd'):null,
       _p2El('button',{type:'button',class:'btn btn-secondary btn-sm',title:'De gebundelde lijst over alle projecten',klik:()=>tbDoTab('bestelling')},'🛒 Naar de gebundelde bestellijst')),
-    voorstellen.map(v=>_p2El('div',{class:'pm-w pm-info',role:'status'},'💡 '+v.reden.charAt(0).toUpperCase()+v.reden.slice(1)+': "'+v.naam+'" op klaar zetten? ',
-      _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projTaakStatusNaar(code,v.taak_id,'klaar')},'Op klaar zetten'))),
+    voorstellen.map(v=>_p2El('div',{class:'pm-w pm-info',role:'status'},'💡 '+v.reden.charAt(0).toUpperCase()+v.reden.slice(1)+': "'+v.naam+'" op '+(v.bron==='moneybird'?'groen':'klaar')+' zetten? ',
+      v.bron==='moneybird'?(rolMag(ROL_TAAK_ALLES)?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:async()=>{ const ok=await projPoortMoneybirdGroen(code,v.taak_id); if(!ok&&typeof planToast==='function') planToast('Niet op groen gezet: de factuur is niet (meer) betaald of de wijziging is niet opgeslagen.'); projBestelTeken(code); }},'Op groen zetten'):null):_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projTaakStatusNaar(code,v.taak_id,'klaar')},'Op klaar zetten'))),
     rijen.length?_p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'pm-tabel'},_p2El('thead',null,_p2El('tr',null,['Wat','Aantal','Leverancier','Bron','Taak','Verwacht','Status',''].map(k=>_p2El('th',{tekst:k})))),_p2El('tbody',null,rijen)))
       :_p2El('p',{style:'color:var(--text-faint);font-size:13px',tekst:regels.length?'Alles is geleverd.':'Nog niets te bestellen voor dit project. De VW-kostenberekening en de HHOS-NCR hierboven zetten regels op de lijst; je kunt ze ook met de hand toevoegen.'}),
     lezen?_blStatusEl():null,
@@ -9261,7 +9264,57 @@ async function projTaakStatus(code,id){
   return projTaakStatusNaar(code,id,order[(order.indexOf(t0.status==='wacht'?'todo':(t0.status||'todo'))+1)%3]);   // een wachtende taak (vanaf de telefoon) gaat bij de volgende klik naar Bezig
 }
 // Zet een taak op een status. Een taak die wacht (een voorganger is niet klaar) start pas na een bevestiging.
-async function projTaakStatusNaar(code,id,nieuwStatus){
+// ── Poort Aanbetaling binnen uit Moneybird (idee #72): alleen lezen (bestaande Moneybird-proxy, geen nieuwe worker-route), als voorstel, nooit stil ──
+// De aanbetalingsfactuur van het project (zie MTPlanning.aanbetalingBewijs) wordt per project 5 minuten onthouden. Geen antwoord of geen Moneybird-contact = geen voorstel (nooit raden).
+// Bedragen zijn alleen zichtbaar met het geld-recht; wat op de taak wordt bewaard (bron, factuurnummer, datum, link) bevat nooit een bedrag.
+const _aanbCache={};
+function _aanbGeld(){ try{ return !!(window.MTRol&&MTRol.magGeld&&MTRol.me&&MTRol.magGeld()); }catch(e){ return false; } }
+function projAanbetaling(code){ const c=_aanbCache[code]; return c&&c.bewijs||null; }
+// → true als er iets nieuws is om te tonen (dan tekent de aanroeper opnieuw), anders false
+// De Moneybird-gegevens zelf (altijd vers, nooit uit het geheugen): alle facturen van het contact (met paginering, hooguit 500), het offertebedrag, en daaruit het bewijs.
+// Gooit bij elke fout (403/429/netwerk/onvolledig): dan is er geen bewijs. Zonder geld-recht gaan de bedragen niet in het onthouden bewijs.
+async function _aanbHaal(p){
+  const mb=resolveMbContact(p); if(!mb) return null;
+  const admin=getAdmin(); let lijst=[];
+  for(let pagina=1;pagina<=5;pagina++){
+    const r=await mbGet(`${admin}/sales_invoices?filter=contact_id:${encodeURIComponent(mb)}&per_page=100&page=${pagina}`); if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json(), rij=Array.isArray(d)?d:[]; lijst=lijst.concat(rij);
+    if(rij.length<100) break;
+    if(pagina===5) throw new Error('meer dan 500 facturen: niet volledig opgehaald');
+    await new Promise(res=>setTimeout(res,150));
+  }
+  let offerteTotaal=null;
+  if(p.offertenr_mb_id){ try{ const re=await mbGet(`${admin}/estimates/${encodeURIComponent(p.offertenr_mb_id)}`); if(re.ok){ const e=await re.json(), v=parseFloat(e&&(e.total_price_incl_tax_base!=null?e.total_price_incl_tax_base:e.total_price_incl_tax)); if(isFinite(v)&&v>0) offerteTotaal=v; } }catch(e){} }
+  const ctx={estimateId:p.offertenr_mb_id||'',offertenr:projOfferteNr(p),admin,offerteTotaal};
+  let bewijs=MTPlanning.aanbetalingBewijs(lijst,ctx);
+  const kort=bewijs.factuur&&bewijs.status!=='onduidelijk'?lijst.find(f=>String(f.id)===bewijs.factuur.id):null;
+  if(kort&&!Array.isArray(kort.payments)){ const r2=await mbGet(`${admin}/sales_invoices/${encodeURIComponent(bewijs.factuur.id)}`); if(r2.ok){ const vol=await r2.json(); if(vol&&vol.id) bewijs=MTPlanning.aanbetalingBewijs(lijst.map(f=>String(f.id)===String(vol.id)?vol:f),ctx); } }
+  if(!_aanbGeld()){ bewijs.bedrag=null; bewijs.betaald=null; bewijs.onbetaald=null; }
+  return bewijs;
+}
+// Voor de weergave: per project 5 minuten onthouden; een mislukte poging wist het onthouden bewijs (nooit een oude stand laten staan). → true als er iets nieuws is om te tonen.
+async function projAanbetalingLaad(code,ververs){
+  const p=projVind(code); if(!p) return false;
+  const c=_aanbCache[code]=_aanbCache[code]||{t:0,bewijs:null,bezig:false};
+  if(c.bezig||(!ververs&&Date.now()-c.t<5*60*1000)) return false;
+  c.bezig=true; const oud=JSON.stringify(c.bewijs);
+  try{ c.bewijs=await _aanbHaal(p); c.fout=''; }
+  catch(e){ c.bewijs=null; c.fout=e.message||String(e); }
+  finally{ c.bezig=false; c.t=Date.now(); }
+  return JSON.stringify(c.bewijs)!==oud;
+}
+// Eén klik: eerst VERS bij Moneybird lezen (het voorstel moet nu nog kloppen; bij een fout wordt er niets geschreven), dan de poort op groen met bron Moneybird en het factuurnummer
+// en de datum als bewijs, via dezelfde schrijfroute als het taakpaneel (stempels, conflictbewaking, recht taken:alles). De taak moet op de verse stand nog dezelfde poort zijn (eis). → true bij opgeslagen
+async function projPoortMoneybirdGroen(code,id){
+  const t=projTaken(code).find(x=>x.id===id), p=projVind(code); if(!t||!p) return false;
+  let vers; try{ vers=await _aanbHaal(p); }catch(e){ return false; }
+  const c=_aanbCache[code]=_aanbCache[code]||{t:0,bewijs:null,bezig:false}; c.bewijs=vers; c.t=Date.now();
+  const v=MTPlanning.aanbetalingVoorstel(t,vers,{geld:false}); if(!v) return false;   // niet (meer) betaald, onduidelijk, of de poort is al groen
+  const velden={status:'klaar',poort_bron:'moneybird',poort_bewijs_tekst:v.bewijsTekst}; if(v.url) velden.poort_bewijs=v.url;
+  const gezien={status:t.status||'todo',wacht_reden:t.wacht_reden||'',klaar_op:t.klaar_op||'',poort_bron:t.poort_bron||'',poort_bewijs_tekst:t.poort_bewijs_tekst||''}; if(v.url) gezien.poort_bewijs=t.poort_bewijs||'';
+  const r=await tpWijzig({code,id,naam:t.naam,velden,gezien,eis:{soort:'mijlpaal',poort:'aanbetaling_binnen'}},{});
+  return !!(r&&r.ok&&!r.noop);
+}async function projTaakStatusNaar(code,id,nieuwStatus){
   // Het slot staat op het LOKALE taak-id, ook zolang er nog geen tg_task_id is (een aanmaak in Toggl loopt): een statuswijziging wacht niet, maar doet niets en meldt het.
   return _tgMetSlot(code,id,()=>_projTaakStatusNaar(code,id,nieuwStatus));
 }
