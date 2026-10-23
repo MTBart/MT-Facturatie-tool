@@ -65,7 +65,7 @@
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
 <script src="mt-planinrichting.js?v=2026-10-23g"></script>
 <script src="mt-bord.js?v=2026-10-23l"></script>
-<script src="mt-tijdlijn.js?v=2026-10-23m"></script>
+<script src="mt-tijdlijn.js?v=2026-10-23n"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -3907,7 +3907,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), opruimen:(spec,opt)=>capOpruimen(spec,opt), taakBezig:(code,id)=>MTPlanVerplaats.taakBezig(code,id), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
-  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openBlok:(id,el)=>MTPlanblokPaneel.open(id,{terug:el}), naHerstel:()=>MTTaakPaneel.ververs(),   // klik op een taak = het taakpaneel (mt-taakpaneel.js)
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openBlok:(id,el)=>MTPlanblokPaneel.open(id,{terug:el}), naHerstel:()=>{ MTTaakPaneel.ververs(); try{ if(_agenda.view==='tijdlijn'&&window.MTTijdlijn) MTTijdlijn.teken(); }catch(e){} },   // klik op een taak = het taakpaneel (mt-taakpaneel.js)
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
@@ -4044,6 +4044,9 @@ try{ MTBord.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, taken:()
 try{ MTTijdlijn.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), afhank:()=>projAfhRuw(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(),
   vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null),
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,project_id:p.project_id||'',label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code,gegevens:p.gegevens})), bestel:()=>_blActief(),
+  mag:{ alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar(), plannen:()=>capMagSlepen()&&projTakenKlaar() },   // P4b: bewerken met dezelfde rechten als slepen in de Capaciteit (plannen) en koppelen in het taakpaneel (alles)
+  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec), toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb),
+  naWijziging:()=>{ try{ MTTaakPaneel.ververs(); }catch(e){} },
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Tijdlijn init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.

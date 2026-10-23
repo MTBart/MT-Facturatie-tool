@@ -1,11 +1,13 @@
 /* ============================================================================
- * mt-tijdlijn.js: de team-tijdlijn (Gantt) over alle projecten, alleen lezen (planning brok P4a)
+ * mt-tijdlijn.js: de team-tijdlijn (Gantt) over alle projecten (planning brok P4a, bewerken P4b)
  * ----------------------------------------------------------------------------
  * Een rij per project (balk = van de eerste start tot het laatste eind van zijn taken, met voortgang), uitklapbaar naar fasen (ook berekend uit de taken: roll-up, met
  * voortgang "3/5 klaar", verbeterpunt 67) en taken (balk, of een ruit voor een mijlpaal). Afhankelijkheidslijnen tussen de taken, het kritieke pad als laag
  * (MTPlanning.rooster: dezelfde rekenregels als de rest van de tool), de leverdatum als vlag en Vandaag als lijn. De P0-filterbalk geldt (project, wie, status).
  * Wat er niet is, staat er eerlijk bij: alleen einde-naar-begin in werkdagen (met wachttijd); begin-naar-begin, einde-naar-einde en wachttijd in kalenderdagen komen later (F2).
- * Alleen lezen: een klik op een taakbalk opent het taakpaneel, op een projectbalk het project; er wordt niets geschreven.
+ * Standaard alleen lezen: een klik op een taakbalk opent het taakpaneel, op een projectbalk het project. In de stand Bewerken (knop, alleen met het recht om te plannen of af te hangen) kies je een balk en sleep je hem
+ * (verplaatsen, rekken met de randen, een afhankelijkheid trekken van het bolletje naar een andere balk) met een voorbeeld van de ketting, of gebruik je de knoppen Verplaatsen… en Koppelen… (op de telefoon alleen die).
+ * Alles wat wordt opgeslagen gaat via de bestaande veilige routes (datums: de planroute met de vraag over de opvolgers; koppelingen: de afhankelijkhedenroute) met Ongedaan maken.
  * Kleur: de status is nooit alleen kleur (Open = omlijnd, Bezig = gevuld, Wacht = gearceerd, Klaar = lichter met haak, Kritiek = rode rand); project en fase staan in de rijen, niet in kleur.
  * Snel bij veel taken: alleen de rijen in beeld worden getekend (vaste rijhoogte, tekenvenster) en alleen de lijnen van die rijen.
  * model() is rekenwerk zonder DOM (los te testen); tekent met DOM-calls, nooit met opgebouwde HTML. Alles van buiten via init(deps).
@@ -17,7 +19,7 @@
   const RH = 30, HEAD_H = 44, LABEL_W = 260, LABEL_W_KLEIN = 150;
   const ZOOMS = { week: 22, maand: 8, kwartaal: 3 };   // beeldpunten per dag
   const ZOOM_LABELS = [['week', 'Week'], ['maand', 'Maand'], ['kwartaal', 'Kwartaal']];
-  const S = { open: new Set(), alles: false, kritiek: true, verbergKlaar: false, vensterVan: -1, vensterTot: -1, laatste: null };
+  const S = { open: new Set(), alles: false, kritiek: true, verbergKlaar: false, vensterVan: -1, vensterTot: -1, laatste: null, bewerk: false, gekozen: null, paneel: '' };
   Tl.RH = RH; Tl.ZOOMS = ZOOMS;
 
   const zelfde = (a, b) => String(a == null ? '' : a).trim().toLowerCase() === String(b == null ? '' : b).trim().toLowerCase();
@@ -118,6 +120,54 @@
     return { x1, y1, x2, y2, d: 'M' + x1 + ',' + y1 + ' H' + xm + ' V' + y2 + ' H' + x2, pijl: [x2, y2], links: x2 < xm };
   };
 
+  // ── P4b: bewerken ──
+  const kanSleep = () => !!(D && D.datums && D.mag && D.mag.plannen && D.mag.plannen());
+  const kanKoppel = () => !!(D && D.wijzig && D.mag && D.mag.alles && D.mag.alles());
+  const lijstVan = code => { const t = D.taken() || {}, k = sleutelVan(t, code); return k && Array.isArray(t[k]) ? P.takenActief(t[k]) : []; };
+  const depsVan = code => { const a = D.afhank() || {}, k = sleutelVan(a, code); return k && Array.isArray(a[k]) ? a[k] : []; };
+  const nieuwId = () => 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const taakVan = (code, id) => lijstVan(code).find(t => String(t.id) === String(id)) || null;
+  const vrijDagen = () => (D && D.vrij ? D.vrij() : null);
+  const werkOp = (ymd, richting, vrij) => { let n = dnr(ymd), g = 0; while (g++ < 14 && !P.isWerkdag(dymd(n), vrij)) n += richting; return dymd(n); };
+  const TYPEN = [['FS', 'EB', 'einde naar begin'], ['SS', 'BB', 'begin naar begin'], ['FF', 'EE', 'einde naar einde'], ['SF', 'BE', 'begin naar einde']];
+  // De nieuwe datums bij slepen: kind 'verplaats' (beide randen, dezelfde werkdagen lang), 'start' of 'eind' (één rand); delta in kalenderdagen; altijd op een werkdag (de planroute weigert een weekend).
+  Tl.nieuweDatums = function (kind, start, eind, delta, vrij) {
+    if (!ok(start) || !ok(eind) || !delta) return null;
+    const richting = delta < 0 ? -1 : 1;
+    if (kind === 'verplaats') { const s = werkOp(dymd(dnr(start) + delta), richting, vrij), wd = P.werkdagenTussen(start, eind, vrij); return { start: s, eind: P.addWerkdagen(s, wd, vrij) }; }
+    if (kind === 'start') { let s = werkOp(dymd(dnr(start) + delta), richting, vrij); if (s > eind) s = eind; return s === start ? null : { start: s, eind }; }
+    if (kind === 'eind') { let e = werkOp(dymd(dnr(eind) + delta), richting, vrij); if (e < start) e = start; return e === eind ? null : { start, eind: e }; }
+    return null;
+  };
+  const meld = (t, lang) => { try { if (D.toast) D.toast(t, null, !!lang); } catch (e) {} };
+  const na = () => { try { if (D.naWijziging) D.naWijziging(); } catch (e) {} };
+  // Datums opslaan via de planroute (dezelfde als in het taakpaneel en de Capaciteit: vraagt of de opvolgers mee schuiven, meldt en geeft Ongedaan maken).
+  Tl.slaDatumsOp = async function (r, s, e) {
+    let res; try { res = await D.datums({ soort: 'taakdatums', taak: { code: r.code, id: r.id, naam: r.label }, startDatum: s, eindDatum: e, gezien: { start: r.start || '', eind: r.eind || '' } }); } catch (x) { res = { ok: false, reden: 'Opslaan mislukt: ' + ((x && x.message) || x) }; }
+    Tl.teken(); na(); return res;
+  };
+  // Mag deze koppeling? { ok, fout }: binnen één project de gewone controle, tussen projecten ook de kring over de projecten heen.
+  Tl.koppelToets = function (van, naar) {
+    if (zelfde(van.code, naar.code) && String(van.id) === String(naar.id)) return { ok: false, fout: 'Een taak kan niet van zichzelf afhangen.' };
+    if (zelfde(van.code, naar.code)) return P.depControle(lijstVan(naar.code), depsVan(naar.code), { van: van.id, naar: naar.id });
+    return P.depControleKruis(D.taken() || {}, D.afhank() || {}, { code: naar.code, naar: naar.id, vanProject: van.code, van: van.id });
+  };
+  // Een koppeling leggen: van (voorganger) en naar (opvolger) zijn { code, id }; het record staat bij het project van de opvolger.
+  Tl.legKoppeling = async function (van, naar, type, lag) {
+    const toets = Tl.koppelToets(van, naar); if (!toets.ok) { meld(toets.fout, true); return { ok: false, reden: toets.fout }; }
+    const op = Object.assign({ op: 'nieuw', id: nieuwId(), van: van.id, naar: naar.id, type: type || 'FS' }, zelfde(van.code, naar.code) ? {} : { van_project: van.code }, Number(lag) ? { lag_dagen: Number(lag) } : {});
+    let r; try { r = await D.wijzig({ code: naar.code, id: naar.id, naam: (taakVan(naar.code, naar.id) || {}).naam || 'de koppeling', afhOps: [op] }); } catch (x) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((x && x.message) || x) }; }
+    Tl.teken(); na();
+    if (!r || !r.ok) { meld((r && r.reden) || 'Niet opgeslagen.', true); return r || { ok: false }; }
+    if (r.noop) return r;
+    if (r.tegelijk) { meld(r.tegelijk, true); return r; }
+    const tekst = 'Koppeling gelegd: ' + ((taakVan(van.code, van.id) || {}).naam || '?') + ' \u2192 ' + ((taakVan(naar.code, naar.id) || {}).naam || '?') + ' (' + (TYPEN.find(x => x[0] === (type || 'FS')) || TYPEN[0])[1] + ')';
+    try { if (D.toast && r.wijziging && D.wijzigHerstel) D.toast(tekst, async () => { let h; try { h = await D.wijzigHerstel(r.wijziging); } catch (x) { h = { ok: false, reden: String((x && x.message) || x) }; } Tl.teken(); na(); meld(h && h.ok ? (h.tegelijk || 'Teruggezet.') : ((h && h.reden) || 'Terugzetten lukt niet.'), !!(h && (h.tegelijk || !h.ok))); }, false, 'Ongedaan maken'); else meld(tekst); } catch (e) {}
+    return r;
+  };
+  Tl.kies = function (code, id) { S.gekozen = S.gekozen && zelfde(S.gekozen.code, code) && String(S.gekozen.id) === String(id) ? null : { code, id }; S.paneel = ''; Tl.teken(); };
+  Tl.zetBewerk = function (aan) { S.bewerk = !!aan; if (!aan) { S.gekozen = null; S.paneel = ''; } Tl.teken(); };
+
   // ── tekenen ──
   function el(tag, props, ...kids) {
     const e = D.doc.createElement(tag);
@@ -156,6 +206,15 @@
     + '#agenda-tijdlijn .tl-mat{display:inline-flex;align-items:center;gap:2px;color:var(--ink-2,#596059);font:500 11px/14px var(--mono,monospace)}#agenda-tijdlijn .tl-mat.laat{color:#b3261e;font-weight:600}'
     + '#agenda-tijdlijn .tl-vandaag{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--brass,#d19a1f);z-index:2;pointer-events:none}#agenda-tijdlijn .tl-vlag{position:absolute;top:6px;width:2px;height:18px;margin-left:-1px;background:var(--ink,#1f2a24)}'
     + '#agenda-tijdlijn .tl-bep{position:absolute;top:4px;height:22px;width:0;border-left:2px solid #5a6b78;margin-left:-1px;pointer-events:none}#agenda-tijdlijn .tl-bep.tl-bep-uiterlijk{border-left:3px double var(--tl-kritiek)}#agenda-tijdlijn .tl-bep.tl-bep-vast_op{border-left:3px dotted var(--ink,#1f2a24)}#agenda-tijdlijn .tl-bep.laat{border-left-color:var(--tl-kritiek);box-shadow:0 0 0 1px #fbe3e0}'
+    + '#agenda-tijdlijn .tl-bewerk{margin:0 0 10px;padding:8px 10px;border:1px solid var(--line-strong,#c9d1cd);border-radius:6px;background:var(--surface-sunken,#f6f3ed);display:flex;flex-direction:column;gap:8px}#agenda-tijdlijn .tl-bewerk-rij{display:flex;flex-wrap:wrap;align-items:center;gap:8px}#agenda-tijdlijn .tl-bewerk-sub,#agenda-tijdlijn .tl-bewerk-tekst{font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#596059)}#agenda-tijdlijn .tl-bewerk-fout{flex-basis:100%;color:var(--tl-kritiek);font:500 12px/16px var(--sans,inherit)}#agenda-tijdlijn .tl-bewerk-fout:empty{display:none}'
+    + '#agenda-tijdlijn .tl-invoer{height:34px;padding:0 8px;border:1px solid var(--line-strong,#c9d1cd);border-radius:4px;background:var(--surface,#fff);font:400 13px/18px var(--sans,inherit);max-width:100%}#agenda-tijdlijn .tl-kort{width:70px}#agenda-tijdlijn .tl-knop.tl-primair{background:var(--primary,#2A4A38);color:#fff;border-color:var(--primary,#2A4A38)}'
+    + '#agenda-tijdlijn.bewerk .tl-balk:not(.rollup):not(.klaar),#agenda-tijdlijn.bewerk .tl-ruit:not(.klaar){cursor:grab;touch-action:none}#agenda-tijdlijn .tl-balk.gekozen,#agenda-tijdlijn .tl-ruit.gekozen{outline:3px solid var(--focus,#2A4A38);outline-offset:1px}'
+    + '#agenda-tijdlijn .tl-greep{position:absolute;top:0;bottom:0;width:min(7px,28%);cursor:ew-resize;background:rgba(255,255,255,.55);border:1px solid var(--tl-balk)}#agenda-tijdlijn .tl-greep.l{left:0;border-radius:3px 0 0 3px}#agenda-tijdlijn .tl-greep.r{right:0;border-radius:0 3px 3px 0}'
+    + '#agenda-tijdlijn .tl-koppel{position:absolute;top:10px;width:10px;height:10px;margin-left:-2px;border-radius:50%;background:var(--surface,#fff);border:2px solid var(--primary,#2A4A38);cursor:crosshair;touch-action:none;z-index:4}'
+    + '#agenda-tijdlijn .tl-spook{position:absolute;height:16px;border:2px dashed var(--primary,#2A4A38);border-radius:3px;box-sizing:border-box;background:rgba(42,74,56,.12);pointer-events:none;z-index:3}'
+    + '.tl-tip{position:fixed;z-index:9000;max-width:320px;padding:6px 10px;border-radius:4px;background:#1f2a24;color:#fff;font:500 12px/16px var(--sans,system-ui);pointer-events:none}'
+    + '.tl-typemenu{position:fixed;z-index:9001;width:260px;padding:8px;border:1px solid var(--line-strong,#c9d1cd);border-radius:6px;background:var(--surface,#fff);box-shadow:0 8px 24px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:4px;font:400 13px/18px var(--sans,system-ui)}.tl-typekop{font-weight:600;padding:2px 4px 6px}.tl-typefout{color:#b3261e;padding:2px 4px}'
+    + '.tl-typeknop{height:36px;text-align:left;padding:0 10px;border:1px solid var(--line-strong,#c9d1cd);border-radius:4px;background:var(--surface,#fff);cursor:pointer;font:400 13px/18px var(--sans,system-ui)}.tl-typeknop:hover,.tl-typeknop:focus-visible{background:var(--surface-sunken,#f1ede5)}.tl-typeknop.annuleer{color:var(--ink-2,#596059)}'
     + '#agenda-tijdlijn .tl-lijnen{position:absolute;left:0;top:' + HEAD_H + 'px;pointer-events:none;z-index:1;overflow:visible}'
     + '#agenda-tijdlijn .tl-geen{position:absolute;font:400 12px/16px var(--sans,inherit);color:var(--ink-3,#8a8f89);top:7px;padding-left:8px}'
     + '#agenda-tijdlijn .tl-legenda{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin-top:10px;font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#596059)}#agenda-tijdlijn .tl-legenda .tl-balk{position:static;display:inline-block;width:26px;height:12px;vertical-align:middle;margin-right:6px}'
@@ -173,6 +232,136 @@
     const tekst = m.tekst + (m.laatste ? ' (verwacht ' + P.datumKort(m.laatste) + (m.laat ? ', na de geplande start' : '') + ')' : '');
     return el('span', { klass: 'tl-mat' + (m.laat ? ' laat' : ''), title: tekst, 'aria-label': 'Wacht op materiaal: ' + tekst, role: 'img' }, s, el('span', { tekst: String(m.open) }));
   }
+  // P4b: slepen op de balk (alleen in de stand Bewerken, niet op de telefoon). Het midden verplaatst, de randen rekken, het bolletje rechts trekt een afhankelijkheid naar een andere balk.
+  // Tijdens het slepen staat er een voorbeeld: de nieuwe datums en welke opvolgers meeschuiven (MTPlanning.verschuifVoorstel, alleen kijken); pas bij loslaten gaat het via de planroute,
+  // die zelf nog vraagt of de opvolgers mee moeten. Esc breekt af.
+  function sleepbaar(bal, r, m, as, w, naKlik) {
+    const mijlpaal = r.mijlpaal, klaar = r.status === 'klaar', toon = kanSleep() && !klaar, rij = bal.parentNode;
+    if (toon && !mijlpaal) ['start', 'eind'].forEach(kant => { const g = el('span', { klass: 'tl-greep ' + (kant === 'start' ? 'l' : 'r'), 'aria-hidden': 'true', title: 'Sleep om de ' + kant + ' te verplaatsen' }); g.addEventListener('pointerdown', ev => begin(ev, kant)); bal.appendChild(g); });
+    if (toon) bal.addEventListener('pointerdown', ev => { if (ev.target === bal || ev.target.nodeType === 1 && !ev.target.classList.contains('tl-greep')) begin(ev, 'verplaats'); });
+    if (kanKoppel()) { const k = el('span', { klass: 'tl-koppel', 'aria-hidden': 'true', title: 'Sleep naar een andere balk om een afhankelijkheid te leggen' }); k.addEventListener('pointerdown', ev => begin(ev, 'koppel')); (rij || bal).appendChild(k); k.style.left = (as.x(r.eind || r.start) + as.px + 3) + 'px'; }
+    const tip = tekst => { let t = D.doc.getElementById('tl-tip'); if (!t) { t = el('div', { id: 'tl-tip', klass: 'tl-tip', role: 'status' }); D.doc.body.appendChild(t); } t.textContent = tekst; return t; };
+    const weg = () => { const t = D.doc.getElementById('tl-tip'); if (t && t.parentNode) t.parentNode.removeChild(t); w.vlak.querySelectorAll('.tl-spook,.tl-trek').forEach(x => x.parentNode && x.parentNode.removeChild(x)); w.lijnen.querySelectorAll('.tl-trekpad').forEach(x => x.parentNode && x.parentNode.removeChild(x)); };
+    function begin(ev, kind) {
+      if (ev.button !== undefined && ev.button !== 0) return;
+      ev.preventDefault(); ev.stopPropagation();
+      const x0 = ev.clientX, vrij = vrijDagen(), links0 = bal.style.left, breed0 = bal.style.width, lijst = lijstVan(r.code), deps = depsVan(r.code);
+      let nieuw = null, bewogen = false, pad = null, doel = null;
+      const rijTop = m.rijen.findIndex(x => x.soort === 'taak' && zelfde(x.code, r.code) && String(x.id) === String(r.id)) * RH + RH / 2;
+      try { bal.setPointerCapture(ev.pointerId); } catch (e) {}
+      const klaarMet = () => { bal.removeEventListener('pointermove', beweeg); bal.removeEventListener('pointerup', los); bal.removeEventListener('pointercancel', stop); D.doc.removeEventListener('keydown', toets, true); try { bal.releasePointerCapture(ev.pointerId); } catch (e) {} };
+      const stop = () => { klaarMet(); weg(); bal.style.left = links0; bal.style.width = breed0; };
+      const toets = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stop(); } };
+      D.doc.addEventListener('keydown', toets, true);
+      const rijOnder = e => { const x = D.doc.elementFromPoint(e.clientX, e.clientY), rr = x && x.closest ? x.closest('.tl-rij.taak') : null; return rr ? { code: rr.getAttribute('data-pf-code'), id: rr.getAttribute('data-pf-taak') } : null; };
+      function beweeg(e) {
+        if (!bewogen && Math.abs(e.clientX - x0) < 4 && (kind !== 'koppel' || Math.abs(e.clientY - ev.clientY) < 4)) return;
+        bewogen = true;
+        if (kind === 'koppel') {
+          const box = w.vlak.getBoundingClientRect(), px = e.clientX - box.left, py = e.clientY - box.top, sx = as.x(r.eind || r.start) + as.px;
+          if (!pad) { pad = svg('path', { class: 'tl-trekpad', fill: 'none', stroke: '#2A4A38', 'stroke-width': '2', 'stroke-dasharray': '4 3' }); w.lijnen.appendChild(pad); }
+          pad.setAttribute('d', 'M' + sx + ',' + rijTop + ' L' + px + ',' + py);
+          doel = rijOnder(e); const dt = doel && !(zelfde(doel.code, r.code) && String(doel.id) === String(r.id)) ? taakVan(doel.code, doel.id) : null;
+          const toets2 = dt ? Tl.koppelToets({ code: r.code, id: r.id }, doel) : null;
+          const tt = tip(dt ? (toets2.ok ? 'Loslaan om ' + r.label + ' vóór ' + (dt.naam || '?') + ' te zetten (type kies je daarna)' : toets2.fout) : 'Sleep naar de balk van de opvolger');
+          tt.style.left = (e.clientX + 14) + 'px'; tt.style.top = (e.clientY + 14) + 'px'; return;
+        }
+        const delta = Math.round((e.clientX - x0) / as.px);
+        nieuw = Tl.nieuweDatums(kind, r.start, r.eind, delta, vrij);
+        w.vlak.querySelectorAll('.tl-spook').forEach(x => x.parentNode && x.parentNode.removeChild(x));
+        const st = nieuw ? nieuw.start : r.start, ei = nieuw ? nieuw.eind : r.eind;
+        bal.style.left = as.x(st) + 'px'; bal.style.width = Math.max(4, (dnr(ei) - dnr(st) + 1) * as.px) + 'px';
+        let tekst = nieuw ? (nieuw.start === nieuw.eind ? kort(nieuw.start) : kort(nieuw.start) + ' \u2013 ' + kort(nieuw.eind)) : 'geen wijziging', n = 0;
+        if (nieuw) {
+          let vs = null; try { vs = P.verschuifVoorstel(lijst, deps, { id: r.id, start: nieuw.start, eind: nieuw.eind }, { modus: 'flexible', vrij, alle: D.taken(), code: r.code }); } catch (x) { vs = null; }
+          ((vs && vs.ok && vs.wijzigingen) || []).forEach(wj => {
+            const i = m.rijen.findIndex(x => x.soort === 'taak' && zelfde(x.code, r.code) && String(x.id) === String(wj.id)); if (i < 0) return; n++;
+            w.vlak.appendChild(el('span', { klass: 'tl-spook', stijl: 'top:' + (i * RH + 7) + 'px;left:' + as.x(wj.naar.start) + 'px;width:' + Math.max(4, (dnr(wj.naar.eind) - dnr(wj.naar.start) + 1) * as.px) + 'px', 'aria-hidden': 'true' }));
+          });
+          if (vs && vs.vastgezet && vs.vastgezet.length) tekst += ' \u00b7 ' + vs.vastgezet.length + ' blijft vast';
+          tekst += n ? ' \u00b7 ' + n + ' opvolger' + (n === 1 ? '' : 's') + ' schuift' + (n === 1 ? '' : 'en') + ' mee (je krijgt nog de vraag)' : (vs && vs.ok ? ' \u00b7 geen opvolgers' : '');
+        }
+        const tt = tip(tekst); tt.style.left = (e.clientX + 14) + 'px'; tt.style.top = (e.clientY + 14) + 'px';
+      }
+      async function los(e) {
+        klaarMet(); const wasKoppel = kind === 'koppel', d = doel; weg();
+        if (!bewogen) { return; }
+        if (naKlik) naKlik();
+        if (wasKoppel) { const dt = d && !(zelfde(d.code, r.code) && String(d.id) === String(r.id)) ? taakVan(d.code, d.id) : null; if (!dt) return; typeMenu(e.clientX, e.clientY, { code: r.code, id: r.id }, d); return; }
+        if (!nieuw) { bal.style.left = links0; bal.style.width = breed0; return; }
+        await Tl.slaDatumsOp(r, nieuw.start, nieuw.eind);
+      }
+      bal.addEventListener('pointermove', beweeg); bal.addEventListener('pointerup', los); bal.addEventListener('pointercancel', stop);
+    }
+  }
+  // Na het trekken van een afhankelijkheid: het type kiezen in een klein menu (EB, BB, EE, BE), met Annuleren.
+  function typeMenu(x, y, van, naar) {
+    const oud = D.doc.getElementById('tl-typemenu'); if (oud && oud.parentNode) oud.parentNode.removeChild(oud);
+    const toets = Tl.koppelToets(van, naar);
+    const vn = (taakVan(van.code, van.id) || {}).naam || '?', nn = (taakVan(naar.code, naar.id) || {}).naam || '?';
+    const menu = el('div', { id: 'tl-typemenu', klass: 'tl-typemenu', role: 'dialog', 'aria-label': 'Kies het type koppeling', stijl: 'left:' + Math.max(8, Math.min(x, (D.doc.defaultView ? D.doc.defaultView.innerWidth : 800) - 270)) + 'px;top:' + Math.max(8, y) + 'px' },
+      el('div', { klass: 'tl-typekop', tekst: vn + ' \u2192 ' + nn }));
+    if (!toets.ok) menu.appendChild(el('div', { klass: 'tl-typefout', role: 'alert', tekst: toets.fout }));
+    else TYPEN.forEach(([w, af, uitleg]) => menu.appendChild(el('button', { type: 'button', klass: 'tl-typeknop', title: uitleg, klik: () => { sluit(); Tl.legKoppeling(van, naar, w, 0); } }, el('b', { tekst: af }), ' ' + uitleg)));
+    menu.appendChild(el('button', { type: 'button', klass: 'tl-typeknop annuleer', tekst: 'Annuleren', klik: () => sluit() }));
+    const sluit = () => { if (menu.parentNode) menu.parentNode.removeChild(menu); D.doc.removeEventListener('keydown', esc, true); };
+    const esc = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sluit(); } };
+    D.doc.addEventListener('keydown', esc, true); D.doc.body.appendChild(menu);
+    const eerste = menu.querySelector('button'); if (eerste) eerste.focus();
+  }
+  // De bewerkbalk (stand Bewerken): wat er gekozen is, de knoppen Verplaatsen… en Koppelen… (de weg zonder slepen, ook op de telefoon) en de formulieren daarvoor.
+  function bewerkBalk(m) {
+    const r = S.gekozen ? m.rijen.find(x => x.soort === 'taak' && zelfde(x.code, S.gekozen.code) && String(x.id) === String(S.gekozen.id)) : null;
+    const balk = el('div', { klass: 'tl-bewerk', role: 'region', 'aria-label': 'Tijdlijn bewerken' });
+    if (!r) { balk.appendChild(el('div', { klass: 'tl-bewerk-tekst', tekst: 'Kies een taak (klik op de balk of de naam).' + (klein() ? ' Daarna kun je hem met de knoppen verplaatsen of koppelen.' : ' Sleep een balk om hem te verplaatsen, de randen om hem te rekken en het bolletje rechts naar een andere balk om te koppelen; of gebruik daarna de knoppen.') })); return balk; }
+    const tekst = r.start ? (r.start === r.eind ? kort(r.start) : kort(r.start) + ' \u2013 ' + kort(r.eind)) : 'nog niet ingepland';
+    const rij1 = el('div', { klass: 'tl-bewerk-rij' }, el('b', { tekst: r.label }), el('span', { klass: 'tl-bewerk-sub', tekst: ' ' + tekst }),
+      D.openTaak ? el('button', { type: 'button', klass: 'tl-knop', tekst: 'Open taak', klik: () => D.openTaak(r.code, r.id, null) }) : null,
+      kanSleep() && r.status !== 'klaar' ? el('button', { type: 'button', klass: 'tl-knop', 'aria-pressed': S.paneel === 'verplaats' ? 'true' : 'false', tekst: 'Verplaatsen\u2026', klik: () => { S.paneel = S.paneel === 'verplaats' ? '' : 'verplaats'; Tl.teken(); } }) : null,
+      kanKoppel() ? el('button', { type: 'button', klass: 'tl-knop', 'aria-pressed': S.paneel === 'koppel' ? 'true' : 'false', tekst: 'Koppelen\u2026', klik: () => { S.paneel = S.paneel === 'koppel' ? '' : 'koppel'; Tl.teken(); } }) : null,
+      el('button', { type: 'button', klass: 'tl-knop', tekst: 'Kies niets', klik: () => { S.gekozen = null; S.paneel = ''; Tl.teken(); } }));
+    balk.appendChild(rij1);
+    if (S.paneel === 'verplaats') {
+      const a = el('input', { type: 'date', klass: 'tl-invoer', id: 'tl-v-start', 'aria-label': r.mijlpaal ? 'Datum' : 'Nieuwe start', value: ok(r.start) ? r.start : '' });
+      const b = r.mijlpaal ? null : el('input', { type: 'date', klass: 'tl-invoer', id: 'tl-v-eind', 'aria-label': 'Nieuw eind', value: ok(r.eind) ? r.eind : '' });
+      const melding = el('div', { klass: 'tl-bewerk-fout', role: 'alert' });
+      const opslaan = el('button', { type: 'button', klass: 'tl-knop tl-primair', tekst: 'Opslaan', klik: async () => {
+        const s = a.value, e = b ? b.value : s;
+        if (!ok(s) || !ok(e)) { melding.textContent = 'Vul een geldige ' + (b ? 'start en eind' : 'datum') + ' in.'; return; }
+        if (e < s) { melding.textContent = 'Het eind ligt voor de start.'; return; }
+        if (s === r.start && e === r.eind) { melding.textContent = 'Er is niets veranderd.'; return; }
+        S.paneel = ''; await Tl.slaDatumsOp(r, s, e);
+      } });
+      balk.appendChild(el('div', { klass: 'tl-bewerk-rij' }, el('span', { klass: 'tl-bewerk-sub', tekst: r.mijlpaal ? 'Nieuwe datum' : 'Nieuwe start en eind' }), a, b ? el('span', { tekst: 't/m' }) : null, b, opslaan, el('span', { klass: 'tl-bewerk-sub', tekst: 'Hangen er opvolgers aan, dan vraag ik eerst of die mee schuiven.' }), melding));
+    }
+    if (S.paneel === 'koppel') {
+      const richting = el('select', { klass: 'tl-invoer', id: 'tl-k-richting', 'aria-label': 'Richting van de koppeling' }, el('option', { value: 'voor', tekst: 'Deze taak komt na\u2026 (voorganger)' }), el('option', { value: 'na', tekst: 'Deze taak komt v\u00f3\u00f3r\u2026 (opvolger)' }));
+      const projecten = m.rijen.filter(x => x.soort === 'project');
+      const proj = el('select', { klass: 'tl-invoer', id: 'tl-k-project', 'aria-label': 'Project van de andere taak' }, projecten.map(p => el('option', { value: p.code, tekst: p.label })));
+      proj.value = r.code;
+      const taak = el('select', { klass: 'tl-invoer', id: 'tl-k-taak', 'aria-label': 'De andere taak' });
+      const type = el('select', { klass: 'tl-invoer', id: 'tl-k-type', 'aria-label': 'Type koppeling' }, TYPEN.map(([w, af, u]) => el('option', { value: w, tekst: af + ': ' + u })));
+      const lag = el('input', { type: 'number', klass: 'tl-invoer tl-kort', id: 'tl-k-lag', min: '-365', max: '365', step: '1', value: '0', 'aria-label': 'Wachttijd in dagen (negatief is een voorsprong)' });
+      const vul = () => {
+        while (taak.firstChild) taak.removeChild(taak.firstChild);
+        taak.appendChild(el('option', { value: '', tekst: 'Kies de taak\u2026' }));
+        lijstVan(proj.value).filter(x => !(zelfde(proj.value, r.code) && String(x.id) === String(r.id))).forEach(x => {
+          const c = richting.value === 'voor' ? Tl.koppelToets({ code: proj.value, id: x.id }, { code: r.code, id: r.id }) : Tl.koppelToets({ code: r.code, id: r.id }, { code: proj.value, id: x.id });
+          taak.appendChild(el('option', { value: x.id, tekst: (x.naam || '(zonder naam)') + (c.ok ? '' : /bestaat al/.test(c.fout || '') ? ' (al gekoppeld)' : ' (maakt een kring)'), disabled: c.ok ? null : true }));
+        });
+      };
+      proj.addEventListener('change', vul); richting.addEventListener('change', vul); vul();
+      const melding = el('div', { klass: 'tl-bewerk-fout', role: 'alert' });
+      const voeg = el('button', { type: 'button', klass: 'tl-knop tl-primair', tekst: 'Toevoegen', klik: async () => {
+        if (!taak.value) { melding.textContent = 'Kies eerst de andere taak.'; return; }
+        const ander = { code: proj.value, id: taak.value }, me = { code: r.code, id: r.id };
+        S.paneel = ''; await Tl.legKoppeling(richting.value === 'voor' ? ander : me, richting.value === 'voor' ? me : ander, type.value, lag.value);
+      } });
+      balk.appendChild(el('div', { klass: 'tl-bewerk-rij' }, richting, proj, taak, type, lag, voeg, melding));
+    }
+    return balk;
+  }
+
   // De rijen in beeld tekenen (vensterTekenen), met hun lijnen
   function tekenVenster(w, m, as) {
     const sc = w.scroll, vlak = w.vlak, lijnenEl = w.lijnen, hoogte = sc.clientHeight || 500, top = Math.max(0, sc.scrollTop - HEAD_H);
@@ -185,7 +374,7 @@
       const open = r.soort === 'project' ? r.open : null;
       const sub = r.soort === 'taak' ? (r.persoon || '') : r.klaar + '/' + r.n;
       const lab = el('button', { type: 'button', klass: 'tl-label', 'aria-expanded': open === null ? null : String(open), title: r.label + (r.soort === 'taak' ? '' : ' · ' + r.klaar + ' van ' + r.n + ' taken klaar'),
-        klik: () => { if (r.soort === 'project') { const k = String(r.code).toLowerCase(); if (S.open.has(k)) S.open.delete(k); else S.open.add(k); Tl.teken(); } else if (r.soort === 'taak' && D.openTaak) D.openTaak(r.code, r.id, lab); } },
+        klik: () => { if (r.soort === 'project') { const k = String(r.code).toLowerCase(); if (S.open.has(k)) S.open.delete(k); else S.open.add(k); Tl.teken(); } else if (r.soort === 'taak' && S.bewerk) Tl.kies(r.code, r.id); else if (r.soort === 'taak' && D.openTaak) D.openTaak(r.code, r.id, lab); } },
         r.soort === 'project' ? el('span', { 'aria-hidden': 'true', tekst: r.open ? '▾' : '▸' }) : null, el('span', { tekst: r.label, stijl: 'overflow:hidden;text-overflow:ellipsis' }), r.mat ? matIcoon(r.mat) : null, el('span', { klass: 'tl-sub', tekst: sub }));
       rij.appendChild(lab);
       if (r.soort === 'taak') {
@@ -193,10 +382,12 @@
         if (!r.start) rij.appendChild(el('span', { klass: 'tl-geen', stijl: 'left:' + (w.lw) + 'px', tekst: 'geen datums' }));
         else {
           const x = as.x(r.start), b = (dnr(r.eind) - dnr(r.start) + 1) * as.px, beschr = r.label + ' · ' + statusLabel(r.status) + ' · ' + (r.start === r.eind ? kort(r.start) : kort(r.start) + ' – ' + kort(r.eind)) + (r.persoon ? ' · ' + r.persoon : '') + (r.kritiek ? ' · kritiek pad' : '') + (r.wacht ? ' · wacht: ' + r.wacht : '') + (r.beperking ? ' · ' + ({ niet_voor: 'niet v\u00f3\u00f3r ', uiterlijk: 'uiterlijk ', vast_op: 'vast op ' }[r.beperking]) + kort(r.beperkingDatum) + (r.beperkingConflict ? ' (klopt niet met de planning)' : '') : '');
-          const klik = () => { if (D.openTaak) D.openTaak(r.code, r.id, bal); };
-          const bal = r.mijlpaal ? el('button', { type: 'button', klass: 'tl-ruit ' + (r.status === 'klaar' ? 'klaar ' : '') + (r.kritiek ? 'kritiek' : ''), stijl: 'left:' + (x + as.px / 2) + 'px', title: beschr, 'aria-label': beschr, klik })
-            : el('button', { type: 'button', klass: 'tl-balk ' + (r.status === 'todo' ? 'open' : r.status) + (r.kritiek ? ' kritiek' : ''), stijl: 'left:' + x + 'px;width:' + Math.max(4, b) + 'px', title: beschr, 'aria-label': beschr, klik });
+          const klik = () => { if (S.bewerk) { if (!sleepte) Tl.kies(r.code, r.id); return; } if (D.openTaak) D.openTaak(r.code, r.id, bal); };
+          let sleepte = false; const gek = S.bewerk && S.gekozen && zelfde(S.gekozen.code, r.code) && String(S.gekozen.id) === String(r.id);
+          const bal = r.mijlpaal ? el('button', { type: 'button', klass: 'tl-ruit ' + (r.status === 'klaar' ? 'klaar ' : '') + (r.kritiek ? 'kritiek' : '') + (gek ? ' gekozen' : ''), stijl: 'left:' + (x + as.px / 2) + 'px', title: beschr, 'aria-label': beschr, klik })
+            : el('button', { type: 'button', klass: 'tl-balk ' + (r.status === 'todo' ? 'open' : r.status) + (r.kritiek ? ' kritiek' : '') + (gek ? ' gekozen' : ''), stijl: 'left:' + x + 'px;width:' + Math.max(4, b) + 'px', title: beschr, 'aria-label': beschr, klik });
           rij.appendChild(bal);
+          if (S.bewerk && !klein()) sleepbaar(bal, r, m, as, w, () => { sleepte = true; setTimeout(() => { sleepte = false; }, 0); });
         }
         if (r.beperking) {   // F2b: een streepje op de datum (deadline, vaste afspraak of eerste mogelijke dag); rood als het niet klopt met de planning, de tekst staat in de titel en bij de taak
           const naam = { niet_voor: 'Niet v\u00f3\u00f3r ', uiterlijk: 'Uiterlijk ', vast_op: 'Vast op ' }[r.beperking] + kort(r.beperkingDatum) + (r.beperkingConflict ? ' \u00b7 klopt niet met de planning' : '');
@@ -236,6 +427,7 @@
       el('button', { type: 'button', klass: 'tl-knop', 'aria-pressed': S.kritiek ? 'true' : 'false', title: 'De ketting taken die de leverdatum bepaalt (in uitgeklapte projecten)', tekst: 'Kritiek pad', klik: () => { S.kritiek = !S.kritiek; Tl.teken(); } }),
       el('button', { type: 'button', klass: 'tl-knop', 'aria-pressed': S.verbergKlaar ? 'true' : 'false', tekst: 'Verberg afgerond', klik: () => { S.verbergKlaar = !S.verbergKlaar; Tl.teken(); } }),
       el('button', { type: 'button', klass: 'tl-knop', tekst: S.alles ? 'Alles dicht' : 'Alles open', klik: () => { S.alles = !S.alles; if (!S.alles) S.open.clear(); Tl.teken(); } }),
+      kanSleep() || kanKoppel() ? el('button', { type: 'button', klass: 'tl-knop', id: 'tl-bewerk-knop', 'aria-pressed': S.bewerk ? 'true' : 'false', title: 'Balken verplaatsen, rekken en koppelen; alles met Ongedaan maken', tekst: 'Bewerken', klik: () => Tl.zetBewerk(!S.bewerk) }) : null,
       el('button', { type: 'button', klass: 'tl-knop', tekst: 'Vandaag', klik: () => { const sc = D.doc.querySelector('#agenda-tijdlijn .tl-scroll'), v = D.doc.querySelector('#agenda-tijdlijn .tl-vandaag'); if (sc && v) sc.scrollLeft = Math.max(0, v.offsetLeft - sc.clientWidth / 2 + (klein() ? LABEL_W_KLEIN : LABEL_W) / 2); } }));
     w0.appendChild(kop);
     if (D.takenKlaar && !D.takenKlaar()) w0.appendChild(el('div', { klass: 'mw-melding', role: 'status', tekst: D.takenStatusTekst() + ' Je ziet alleen wat er al staat.' }));
@@ -244,6 +436,8 @@
     try { m = Tl.model({ taken: D.taken(), afhank: D.afhank(), bestel: D.bestel ? D.bestel() : [], projecten: D.projecten(), team: D.team(), vrij: D.vrij ? D.vrij() : null, vandaag: P.vandaagYmd(), filter, open: S.open, alles: S.alles, kritiek: S.kritiek, verbergKlaar: S.verbergKlaar }); }
     catch (e) { console.warn('Tijdlijn:', e); w0.appendChild(el('div', { klass: 'tl-leeg', tekst: 'De tijdlijn kon niet worden berekend.' })); return; }
     S.laatste = m;
+    w0.classList.toggle('bewerk', !!S.bewerk);
+    if (S.bewerk) w0.appendChild(bewerkBalk(m));
     if (!m.rijen.length) { w0.appendChild(el('div', { klass: 'tl-leeg', tekst: 'Geen taken bij deze keuze.' })); }
     else {
       const lw = klein() ? LABEL_W_KLEIN : LABEL_W, as = Tl.as(m, zoom, lw);
@@ -277,7 +471,7 @@
       el('span', { role: 'listitem' }, el('span', { klass: 'tl-balk bezig kritiek' }), 'Kritiek pad'),
       el('span', { role: 'listitem', tekst: '◆ Mijlpaal' }), el('span', { role: 'listitem', tekst: '│ Leverdatum' }), el('span', { role: 'listitem', tekst: '↳ Afhankelijkheid' }));
     w0.appendChild(leg);
-    w0.appendChild(el('div', { klass: 'tl-noot', role: 'note', tekst: 'Alleen einde-naar-begin, in werkdagen (met wachttijd). Begin-naar-begin, einde-naar-einde en wachttijd in kalenderdagen bestaan nog niet. Deze tijdlijn is alleen-lezen: wijzig datums in het taakpaneel of in de Capaciteit.' }));
+    w0.appendChild(el('div', { klass: 'tl-noot', role: 'note', tekst: (S.bewerk ? 'Bewerken staat aan: een klik kiest een taak. ' : 'Een klik opent de taak. ') + 'Alle vier de typen koppeling staan erop (EB zonder label, de rest met de afkorting), een gestippelde lijn loopt naar een ander project. ' + (kanSleep() || kanKoppel() ? (S.bewerk ? 'Zet Bewerken uit om taken weer te openen.' : 'Met Bewerken verplaats of koppel je balken.') : 'Je kunt de tijdlijn alleen bekijken; wijzigen kan in het taakpaneel.') }));
   };
 
   Tl.init = function (deps) { D = deps; P = deps.planning || root.MTPlanning; return Tl; };
