@@ -7422,7 +7422,7 @@ async function sendFeedback() {
     _RQ.push({type: "feedback", entry});
     showToast(_demoMode ? "Bewaard — wordt verstuurd na inloggen" : "Geen verbinding? Bewaard — gaat automatisch alsnog weg");
   } else {
-    showToast("Feedback verstuurd — dank!");
+    showToast("Vastgelegd. Bart beoordeelt het.");
   }
   document.getElementById("fbText").value = "";
   btn.disabled = false; btn.textContent = "Versturen";

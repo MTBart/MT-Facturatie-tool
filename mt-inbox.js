@@ -1267,8 +1267,8 @@ async function inboxChat(){
   const tmp=document.createElement('div');tmp.className='b';tmp.textContent='…';log.appendChild(tmp);log.scrollTop=log.scrollHeight;
   try{
     const r=await claudeCall([
-      {role:'user',content:`Je bent Larry, de M&T-assistent. Antwoord kort en concreet in het Nederlands.\n\n${ctx}\n\nVraag: ${q}`}
-    ],700);
+      {role:'user',content:`${ctx}\n\nVraag: ${q}`}
+    ],700,{system:'Je bent Larry, de M&T-assistent. Antwoord kort en concreet in het Nederlands.'});
     const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
     tmp.textContent=txt;
     if(window._LOG)_LOG.add('inbox-chat','inbox',`[${m.subject||''}] ${q}`,txt);

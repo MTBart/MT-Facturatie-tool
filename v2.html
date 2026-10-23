@@ -41,6 +41,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
+<script src="mt-verbeter.js?v=2026-10-23a"></script>
 <script src="mt-toggl.js?v=2026-10-15z"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
@@ -1462,7 +1463,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div style="max-width:800px">
       <div class="card">
         <div class="card-title">&#128161; Verbeterpunt indienen</div>
-        <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Draag een verbetering aan voor de cockpit of app, spar er eventueel met Larry over, en stuur het als belangrijk punt naar Bart zodat jullie het samen kunnen oppakken.</p>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:1rem">Draag een verbetering aan voor de cockpit of app en spar er eventueel met Larry over. Larry kan niets toezeggen: Bart beoordeelt elk punt, en de status (te beoordelen, goedgekeurd, in bouw, live of afgewezen) zie je hieronder terug.</p>
         <div class="field">
           <label>Titel <span style="color:var(--gold)">*</span></label>
           <input type="text" id="vb-titel" placeholder="Kort en concreet — bv. 'Bestellijst exporteren naar Excel'" maxlength="120">
@@ -1506,7 +1507,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
       <!-- Lijst van ingediende verbeterpunten -->
       <div class="card">
-        <div class="card-title">Ingediende verbeterpunten</div>
+        <div class="card-title">Bouwwachtrij</div>
         <div id="vb-lijst"><div style="padding:.75rem;text-align:center;color:var(--text-faint);font-size:13px">Laden&#8230;</div></div>
       </div>
     </div>
@@ -3325,10 +3326,14 @@ function mbControleerHtml(res,soortNaam,opnieuwOnclick){
       :'. Nog geen concept gevonden; probeer het over een minuut opnieuw (dezelfde knop maakt hem niet dubbel aan).')
     +(opnieuwOnclick&&!k.length?' <button class="btn btn-xs btn-secondary" onclick="'+opnieuwOnclick+'">Echt niets in Moneybird? Toch aanmaken</button>':'');
 }
-async function claudeCall(messages,maxTokens=1800){
+// Elke Larry-aanroep krijgt de vaste eerlijkheidsregel (MTVerbeter.EERLIJK, mt-verbeter.js) als `system`; opts.system is de
+// rol-/taakprompt van de aanroeper. Ontbreekt de module, dan gaat er geen aanroep uit (liever geen Larry dan een Larry die iets belooft).
+async function claudeCall(messages,maxTokens=1800,opts){
+  if(!(window.MTVerbeter&&MTVerbeter.systeem)) throw new Error('Larry is nu niet beschikbaar (herlaad de pagina)');
+  const system=MTVerbeter.systeem(opts&&opts.system);
   const h=await authHeader();
   const resp=await fetch(`${WORKER}?target=claude`,{method:'POST',headers:{...h,'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTokens,messages})});
+    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTokens,system,messages})});
   const raw=await resp.text();
   // De Worker stuurt het Claude-antwoord als SSE-stream (text/event-stream).
   // Bouw daaruit het normale non-stream antwoord-object terug op, zodat alle
@@ -5386,8 +5391,8 @@ ${fact?`Gekoppelde factuur: ${fact.contact?.company_name||''} ${fact.date||''} (
   const tmp=document.createElement('div');tmp.style.cssText='align-self:flex-start;background:var(--surface);border:1px solid var(--border);padding:5px 9px;border-radius:9px;max-width:90%';tmp.textContent='…';log.appendChild(tmp);log.scrollTop=log.scrollHeight;
   try{
     const r=await claudeCall([
-      {role:'user',content:`Je bent Larry, de M&T-assistent. Bart bekijkt de voorraad en wil iets aan dit materiaal aanpassen of checken. Antwoord kort en concreet in het Nederlands. Als hij een wijziging vraagt (naam, prijs, aantal, categorie), zeg precies wat je zou aanpassen en waarom; hij past het zelf aan met de ✏-knop.\n\n${ctx}\n\nVraag: ${q}`}
-    ],600);
+      {role:'user',content:`${ctx}\n\nVraag: ${q}`}
+    ],600,{system:'Je bent Larry, de M&T-assistent. Bart bekijkt de voorraad en wil iets aan dit materiaal aanpassen of checken. Antwoord kort en concreet in het Nederlands. Als hij een wijziging vraagt (naam, prijs, aantal, categorie), zeg precies wat je zou aanpassen en waarom; hij past het zelf aan met de ✏-knop.'});
     const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
     tmp.textContent=txt;
     if(window._LOG)_LOG.add('voorraad-chat','voorraad',`[${mat}] ${q}`,txt);
@@ -13289,6 +13294,10 @@ const _SP = Object.assign(window.MTCore.makeSP({
       const per = new Map(); [...R, ...L].forEach(x => { if (x && x.id && !per.has(x.id)) per.set(x.id, x); });
       return [...per.values()].sort((a, b) => String(a.tijd).localeCompare(String(b.tijd))).slice(-2000);
     },
+    // Verbeterpunten en feedback (mt-verbeter.js): per id wint de nieuwste `_gewijzigd`; een record dat aan één kant bestaat blijft staan.
+    // Geschreven via vbSchrijfRecord (vers lezen → record vervangen → schrijven met ETag, bij 412 deze samenvoeger).
+    mt_verbeterpunten(lokaal, spData) { return MTVerbeter.samen(lokaal, spData); },
+    mt_feedback(lokaal, spData) { return MTVerbeter.samen(lokaal, spData); },
     // Taken-journaal: alleen toevoegen. Vereniging op id, gesorteerd op tijd, laatste 1000.
     mt_taken_journaal(lokaal, spData) { return MTPlanning.journaalSamen(lokaal, spData, 1000); },   // dezelfde samenvoeger als de telefoon (mt-planning.js)
     // Mail↔project-koppelingen: { code: [koppeling…] }. Per code en per mail
@@ -14914,10 +14923,10 @@ Beschikbare acties:
 - [[ACTIE:refresh]] herlaad de hele pagina.
 - [[ACTIE:nieuw-project]] open de projectaanmaker (nieuw project starten).
 Gebruik een actie ALLEEN als de gebruiker iets wil openen of doen. Benoem in gewone taal wat je doet; de directives zelf ziet de gebruiker niet.
-HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of mappen — geen facturen boeken, niets verwijderen, niets hernoemen. Je acties zijn uitsluitend navigatie/verversen plus het openen van de projectaanmaker (het aanmaken doet de gebruiker daar zelf). Als iemand iets anders vraagt: leg uit dat dat via Bart/Larry in de terminal loopt.`;
+HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of mappen — geen facturen boeken, niets verwijderen, niets hernoemen. Je acties zijn uitsluitend navigatie/verversen plus het openen van de projectaanmaker (het aanmaken doet de gebruiker daar zelf). Als iemand iets anders vraagt: leg uit dat je dat niet kunt; een wens voor de tool kan als verbeterpunt worden ingediend (tabblad Verbeterpunten), waarna Bart beslist.`;
   try{
     const conv=_tbHist.slice(-8).map(m=>(m.role==='user'?'Gebruiker: ':'Larry: ')+m.content).join('\n');
-    const r=await claudeCall([{role:'user',content:sys+'\n\n— Gesprek —\n'+conv+'\n\nLarry:'}],700);
+    const r=await claudeCall([{role:'user',content:'— Gesprek —\n'+conv+'\n\nLarry:'}],700,{system:sys});
     let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
     const acts=[...txt.matchAll(/\[\[ACTIE:([a-z-]+)(?:=([^\]]+))?\]\]/gi)];
     const clean=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim();
@@ -15974,12 +15983,13 @@ function helpOpen(){
     ov.innerHTML=`<div class="modal help-modal">
       <div class="help-modal-head"><span class="t" id="help-titel"></span><button class="tbchat-x" onclick="helpClose()">✕</button></div>
       <div class="help-modal-uitleg" id="help-uitleg"></div>
-      <div class="help-chat-label">Feedback of vraag — Larry legt het vast voor het verbeterplan</div>
+      <div class="help-chat-label">Feedback of vraag — Larry denkt mee; met "Leg vast voor Bart" komt het in de wachtrij van Bart</div>
       <div class="help-chatlog" id="help-chatlog"></div>
       <div class="help-chatin">
         <textarea id="help-chatq" rows="1" placeholder="Wat kan hier beter? Of stel een vraag…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();helpChatSend();}"></textarea>
         <button onclick="helpChatSend()">➤</button>
-      </div></div>`;
+      </div>
+      <div style="padding:0 14px 12px"><button class="btn btn-secondary btn-sm" id="help-legvast" onclick="helpLegVast()">Leg vast voor Bart</button></div></div>`;
     document.body.appendChild(ov);
   }
   document.getElementById('help-titel').textContent='ⓘ '+info.naam+' — wat is dit?';
@@ -15991,6 +16001,15 @@ function helpOpen(){
   try{ if(window.track) track('chat','help_open',{detail:tab}); }catch(e){}
 }
 function helpClose(){const ov=document.getElementById('help-overlay');if(ov)ov.style.display='none';}
+// Het ⓘ-gesprek als verbeterpunt in de wachtrij van Bart zetten (alleen wat de gebruiker zelf schreef; Larry's antwoorden niet).
+async function helpLegVast(){
+  const ov=document.getElementById('help-overlay');const tab=(ov&&ov.dataset.tab)||helpActieveTab();
+  const info=TAB_HELP[tab]||{naam:tab};
+  const eigen=_helpHist.filter(m=>m.role==='user').map(m=>m.content);
+  if(!eigen.length){ planToast('Schrijf eerst wat je kwijt wilt'); return; }
+  const r=await vbLegVast({titel:eigen[0].replace(/\s+/g,' ').slice(0,80),betreft:'Tabblad '+info.naam,omschrijving:eigen.join('\n\n'),bron:'help-chat'});
+  if(r&&r.ok){ _helpHist=[]; helpBubble('b',VB_BEVESTIGING.replace('hier terug','terug in het tabblad Verbeterpunten')); } else planToast('⚠ Vastleggen mislukte: '+((r&&r.reden)||'SharePoint niet bereikbaar')+'. Er is niets vastgelegd.');
+}
 function helpBubble(cls,txt){const log=document.getElementById('help-chatlog');const d=document.createElement('div');d.className=cls;d.textContent=txt;log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
 async function helpChatSend(){
   const inp=document.getElementById('help-chatq');const q=(inp.value||'').trim();if(!q)return;
@@ -16000,11 +16019,11 @@ async function helpChatSend(){
   const wait=helpBubble('b','…');
   const sys=`Je bent Larry in uitleg- en feedback-modus voor het tabblad "${info.naam}" van de M&T-cockpit. Antwoord kort en concreet in het Nederlands.
 Uitleg van dit tabblad: ${info.uitleg}
-Je taken: (1) vragen over dit tabblad beantwoorden, (2) feedback en verbeterwensen in ontvangst nemen — vat die kort samen en bevestig dat het is vastgelegd voor het verbeterplan.
-HARDE GRENS: je kunt hier NIETS uitvoeren of wijzigen — geen acties, geen data, geen bestanden of mappen. Wil de gebruiker een nieuw project? Verwijs naar de projectaanmaker (tabblad Projecten → "+ Nieuw project"). Al het andere doe-werk loopt via Larry in de terminal.`;
+Je taken: (1) vragen over dit tabblad beantwoorden, (2) feedback en verbeterwensen aanhoren en kort samenvatten. Je legt zelf niets vast: de gebruiker legt het gesprek vast met de knop "Leg vast voor Bart" onder het gesprek; zeg dat erbij en bevestig nooit dat het al vastgelegd is.
+HARDE GRENS: je kunt hier NIETS uitvoeren of wijzigen — geen acties, geen data, geen bestanden of mappen. Wil de gebruiker een nieuw project? Verwijs naar de projectaanmaker (tabblad Projecten → "+ Nieuw project"). Voor al het andere kan de gebruiker een verbeterpunt indienen; Bart beslist.`;
   try{
     const conv=_helpHist.slice(-8).map(m=>(m.role==='user'?'Gebruiker: ':'Larry: ')+m.content).join('\n');
-    const r=await claudeCall([{role:'user',content:sys+'\n\n— Gesprek —\n'+conv+'\n\nLarry:'}],600);
+    const r=await claudeCall([{role:'user',content:'— Gesprek —\n'+conv+'\n\nLarry:'}],600,{system:sys});
     let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
     txt=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim(); // dubbele borging: hier nooit acties
     wait.textContent=txt;_helpHist.push({role:'assistant',content:txt});
@@ -18638,7 +18657,7 @@ function activiteitOpen(force){
         +(instructie?('\n\nAanpassing gevraagd door Bart: '+instructie):'')
         +'\n\nGeef de verbeterde JSON.';
       try{
-        const r=await claudeCall([{role:'user',content:sys+'\n\n'+usr}],1500);
+        const r=await claudeCall([{role:'user',content:usr}],1500,{system:sys});
         const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||'';
         const m=txt.match(/\{[\s\S]*\}/);
         if(m){ const j=JSON.parse(m[0]); if(j.tekst) tekst=String(j.tekst).trim(); if(Array.isArray(j.regels)&&j.regels.length) regels=_normRegels(j.regels,total); }
@@ -19826,9 +19845,12 @@ function activiteitOpen(force){
 // → persisteer in mt_verbeterpunten.json via _SP-laag.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const VB_STATUS_LABEL = {nieuw:'Nieuw', opgepakt:'Opgepakt', afgerond:'Afgerond'};
-const VB_STATUS_KLEUR = {nieuw:'var(--gold)', opgepakt:'var(--green)', afgerond:'var(--text-faint)'};
+// Bouwwachtrij: fasen en statusmapping staan in mt-verbeter.js (nieuw = te beoordelen, opgepakt = goedgekeurd, afgerond = live).
+const VB_FASE_KLEUR = {'te-beoordelen':'var(--gold)', 'goedgekeurd':'var(--green)', 'in-bouw':'var(--green)', 'live':'var(--text-faint)', 'afgewezen':'var(--text-faint)'};
+const VB_BEVESTIGING = 'Vastgelegd. Bart beoordeelt het; je ziet de status hier terug.';
+const VB_SPAR_SYSTEEM = 'Je bent Larry, de bedrijfsassistent van Mortise & Tenon. Een teamlid wil een verbeterpunt indienen voor de interne cockpit-tool. Help het punt scherp en concreet te maken: stel maximaal 3 gerichte vragen (wat is de impact, hoe vaak speelt het, wat zou de ideale situatie zijn). Vat het daarna samen als "**Samenvatting:** probleem → voorgestelde verbetering → verwachte winst". Wees nuchter en meedenkend. Laat weten dat Bart het punt beoordeelt na het indienen; zeg niet dat het gebouwd of gepland wordt. Antwoord altijd in het Nederlands.';
 let _vbLijst = [];           // lokale cache van mt_verbeterpunten.json
+let _vbFeedback = [];        // lokale cache van mt_feedback.json (telefoon)
 let _vbChatGesprek = [];     // [{rol:'gebruiker'|'larry', tekst}]
 let _vbLarrySamenvatting = ''; // laatste tekst van Larry — kan worden overgenomen
 
@@ -19843,11 +19865,37 @@ function _vbIndiener() {
 
 // ── tab openen ──
 async function verbLaadTab() {
-  try {
-    const arr = await _SP.read('mt_verbeterpunten.json');
-    _vbLijst = Array.isArray(arr) ? arr : [];
-  } catch(e) { _vbLijst = []; }
+  try { _vbLijst = MTVerbeter.lijstUit(await _SP.read('mt_verbeterpunten.json')); } catch(e) { _vbLijst = []; }
+  try { _vbFeedback = MTVerbeter.lijstUit(await _SP.read('mt_feedback.json')); } catch(e) { _vbFeedback = []; }
   _vbRenderLijst();
+}
+
+// Mag deze gebruiker de status wijzigen? Alleen eigenaar/beheer (rol 'lezen' en de rest niet).
+function vbMagBeheren() { try { return !!(window.MTRol && MTRol.isBeheer && MTRol.isBeheer()); } catch(e) { return false; } }
+
+// Eén record veilig wegschrijven: vers lezen → record vervangen of toevoegen (nieuwste `_gewijzigd` wint) → schrijven met ETag;
+// bij een 412 voegt _SP het opnieuw samen met mergers.mt_verbeterpunten / mt_feedback. Leest SharePoint niet, dan wordt er niets geschreven.
+// → { ok, lijst } of { ok:false, reden }
+async function vbSchrijfRecord(bestand, recOfFn) {
+  const sleutel = bestand.replace(/\.json$/, '');
+  let huidig;
+  try { huidig = MTVerbeter.lijstUit(await _SP.read(bestand)); } catch(e) { return { ok: false, reden: 'SharePoint is niet bereikbaar' }; }
+  const rec = typeof recOfFn === 'function' ? recOfFn(huidig) : recOfFn;   // functie: bouwt het record uit de verse lijst (null = niets schrijven)
+  if (!rec) return { ok: false, reden: 'niets te schrijven' };
+  const samen = MTVerbeter.samen([rec], huidig);
+  const ok = await _SP.write(bestand, samen, (remote, local) => _SP.mergers[sleutel](typeof local === 'string' ? local : JSON.stringify(local), remote));
+  return ok ? { ok: true, lijst: samen } : { ok: false, reden: 'het opslaan lukte niet' };
+}
+
+// Een nieuw punt in de wachtrij zetten (status: te beoordelen). Gedeeld door het formulier en "Leg vast voor Bart" in de ⓘ-chat.
+async function vbLegVast(p) {
+  const indiener = _vbIndiener();
+  const rec = {id: admId(), titel: p.titel, betreft: p.betreft, omschrijving: p.omschrijving, larry_samenvatting: p.larry_samenvatting || '',
+    indiener: indiener.email, indiener_naam: indiener.naam, status: 'nieuw', fase: 'te-beoordelen', historie: [], aangemaakt_op: new Date().toISOString(), _gewijzigd: Date.now()};
+  if (p.bron) rec.bron = p.bron;
+  const r = await vbSchrijfRecord('mt_verbeterpunten.json', rec);
+  if (r.ok) { _vbLijst = r.lijst; _vbRenderLijst(); try { if (window.track) track('feature', 'verbeterpunt_aangemaakt', {detail: p.betreft, ok: true}); } catch(e) {} }
+  return r;
 }
 
 // ── spar-chat starten ──
@@ -19862,12 +19910,11 @@ async function _vbSparMetLarry() {
 
   // Alleen een eerste Larry-opening insturen als het gesprek nog leeg is.
   if (_vbChatGesprek.length === 0) {
-    const sys = 'Je bent Larry, de bedrijfsassistent van Mortise & Tenon. Een teamlid wil een verbeterpunt indienen voor de interne cockpit-tool. Help het punt scherp en concreet te maken: stel maximaal 3 gerichte vragen (wat is de impact, hoe vaak speelt het, wat zou de ideale situatie zijn). Vat het daarna samen als "**Samenvatting:** probleem → voorgestelde verbetering → verwachte winst". Wees nuchter en meedenkend. Antwoord altijd in het Nederlands.';
     const start = 'Titel: ' + titel + '\nBetreft: ' + betreft + '\nOmschrijving: ' + (omschrijving || '(nog niet ingevuld)');
     _vbChatToon('gebruiker', titel + (omschrijving ? '\n' + omschrijving : ''));
     _vbChatToon('larry', '…', true);
     try {
-      const r = await claudeCall([{role: 'user', content: sys + '\n\n' + start}], 700);
+      const r = await claudeCall([{role: 'user', content: start}], 700, {system: VB_SPAR_SYSTEEM});
       const tekst = r && r.content && r.content[0] && r.content[0].text || '(geen antwoord)';
       _vbChatGesprek = [{rol: 'gebruiker', tekst: start}, {rol: 'larry', tekst}];
       _vbVervangLaatsteLarry(tekst);
@@ -19890,7 +19937,7 @@ async function _vbChatStuur() {
   try {
     // Bouw het hele gesprek op als doorlopende tekst zodat het model context heeft.
     const conv = _vbChatGesprek.map(m => (m.rol === 'gebruiker' ? 'Teamlid' : 'Larry') + ': ' + m.tekst).join('\n\n');
-    const r = await claudeCall([{role: 'user', content: conv + '\n\nLarry:'}], 700);
+    const r = await claudeCall([{role: 'user', content: conv + '\n\nLarry:'}], 700, {system: VB_SPAR_SYSTEEM});
     const ant = r && r.content && r.content[0] && r.content[0].text || '(geen antwoord)';
     _vbChatGesprek.push({rol: 'larry', tekst: ant});
     _vbVervangLaatsteLarry(ant);
@@ -19974,7 +20021,7 @@ async function _vbVerstuur() {
     '<p style="margin:0;line-height:1.6">' + esc(omschrijving || '(geen omschrijving)').replace(/\n/g, '<br>') + '</p>' +
     (heeftSam ? '<h3 style="margin-top:20px;margin-bottom:6px">Larry&#8217;s samenvatting</h3><p style="margin:0;line-height:1.6;font-style:italic">' + esc(_vbLarrySamenvatting).replace(/\n/g, '<br>') + '</p>' : '') +
     '<hr style="margin-top:24px;border:none;border-top:1px solid #ddd">' +
-    '<p style="margin-top:12px;font-size:12px;color:#888">Ingediend via de Verbeterpunten-tab in de M&amp;T-cockpit. Kan samen opgepakt worden.</p>' +
+    '<p style="margin-top:12px;font-size:12px;color:#888">Ingediend via de Verbeterpunten-tab in de M&amp;T-cockpit. Het punt staat daar in de bouwwachtrij (te beoordelen).</p>' +
     '</div>';
   try {
     const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
@@ -20002,21 +20049,14 @@ async function _vbVerstuur() {
     return;
   }
 
-  // SP persisteren — dedup op id, nieuwste bovenaan.
-  const aangemaakt_op = new Date().toISOString();
-  const id = admId();
-  let arr = [];
-  try { arr = await _SP.read('mt_verbeterpunten.json') || []; } catch(e) { arr = []; }
-  const record = {id, titel, betreft, omschrijving, larry_samenvatting: _vbLarrySamenvatting || '', indiener: indiener.email, indiener_naam: indiener.naam, status: 'nieuw', aangemaakt_op};
-  arr = arr.filter(x => x.id !== id);
-  arr.unshift(record);
-  _vbLijst = arr;
-  await _SP.write('mt_verbeterpunten.json', arr);
-
-  try { if (window.track) track('feature', 'verbeterpunt_aangemaakt', {detail: betreft, ok: true}); } catch(e) {}
+  // In de bouwwachtrij zetten (vers lezen, per id samenvoegen, ETag) — status: te beoordelen.
+  const opgeslagen = await vbLegVast({titel, betreft, omschrijving, larry_samenvatting: _vbLarrySamenvatting || ''});
   try { if (window.track) track('feature', 'verbeterpunt_gemaild', {detail: betreft, ok: true}); } catch(e) {}
-
-  planToast('✓ Verbeterpunt verstuurd naar Bart');
+  if (!opgeslagen.ok) {
+    await mtDialog.alert({title: 'Mail verstuurd, wachtrij niet bijgewerkt', message: 'De mail naar Bart is verstuurd, maar het punt kon niet in de wachtrij worden gezet (' + opgeslagen.reden + '). Probeer het later opnieuw en verstuur het dan niet nog een keer per mail; meld het aan Bart.'});
+    return;
+  }
+  await mtDialog.alert({title: 'Vastgelegd', message: VB_BEVESTIGING});
 
   // Formulier leegmaken en spar-paneel verbergen.
   document.getElementById('vb-titel').value = '';
@@ -20033,42 +20073,76 @@ async function _vbVerstuur() {
   _vbRenderLijst();
 }
 
-// ── status doorschakelen (nieuw → opgepakt → afgerond → nieuw) ──
-async function _vbStatusWijzig(id, huidig) {
-  const volgorde = ['nieuw', 'opgepakt', 'afgerond'];
-  const volgende = volgorde[(volgorde.indexOf(huidig) + 1) % volgorde.length];
-  let arr;
-  try { arr = await _SP.read('mt_verbeterpunten.json') || []; }
-  catch(e) { planToast('SharePoint niet bereikbaar'); return; }
-  arr = arr.map(x => x.id === id ? {...x, status: volgende} : x);
-  _vbLijst = arr;
-  await _SP.write('mt_verbeterpunten.json', arr);
+// ── status wijzigen (alleen eigenaar/beheer): kies de nieuwe fase, noteer wat er gedaan is, schrijf dat ene record veilig weg ──
+async function _vbStatusWijzig(id) {
+  if (!vbMagBeheren()) { planToast('Alleen Bart (beheer) kan de status wijzigen.'); return; }
+  const bron = _vbLijst.some(x => String(x.id) === String(id)) ? 'verbeterpunt' : 'feedback';   // feedback van de telefoon heeft eigen ids (fb-…)
+  const bestand = bron === 'feedback' ? 'mt_feedback.json' : 'mt_verbeterpunten.json';
+  const rec = (bron === 'feedback' ? _vbFeedback : _vbLijst).find(x => String(x.id) === String(id));
+  if (!rec) { planToast('Dit punt is niet meer te vinden — herlaad het tabblad'); return; }
+  const huidig = MTVerbeter.fase(rec);
+  const opties = MTVerbeter.FASEN.filter(f => f !== huidig);
+  const titel = bron === 'feedback' ? MTVerbeter.item(rec, 'feedback').titel : rec.titel;
+  const i = await mtDialog.choose({title: 'Status wijzigen', message: titel + '\nNu: ' + MTVerbeter.LABEL[huidig], choices: opties.map(f => ({label: MTVerbeter.LABEL[f]}))});
+  if (i == null) return;
+  const nieuweFase = opties[i];
+  const notitie = await mtDialog.prompt({title: MTVerbeter.LABEL[nieuweFase], message: nieuweFase === 'afgewezen' ? 'Waarom wordt dit afgewezen? De indiener ziet deze reden.' : 'Korte notitie: wat er gedaan is en in welke versie (de indiener ziet dit). Mag leeg.', multiline: true, okLabel: 'Opslaan'});
+  if (notitie == null) return;
+  if (nieuweFase === 'afgewezen' && !String(notitie).trim()) { planToast('Geef een reden voor het afwijzen'); return; }
+  const door = _vbIndiener().email;
+  let reden = '';
+  const r = await vbSchrijfRecord(bestand, vers => {
+    const nu = vers.find(x => String(x.id) === String(id));
+    if (!nu) { reden = 'het punt bestaat niet meer'; return null; }
+    const w = MTVerbeter.wijzig(nu, nieuweFase, {notitie, door});
+    if (!w.ok) { reden = w.reden; return null; }
+    return w.rec;
+  });
+  if (!r.ok) { planToast('⚠ Status niet gewijzigd: ' + (reden || r.reden)); return; }
+  if (bron === 'feedback') _vbFeedback = r.lijst; else _vbLijst = r.lijst;
   _vbRenderLijst();
+  planToast('✓ Status: ' + MTVerbeter.LABEL[nieuweFase]);
 }
 
-// ── lijst renderen ──
+// ── wachtrij renderen: per fase gegroepeerd, beide bronnen (cockpit + telefoon) ──
+function _vbItemHtml(x, mag) {
+  const p = Object.assign({}, x, {status: x.fase});   // data-huidig = de huidige fase
+  const kleur = VB_FASE_KLEUR[x.fase] || 'var(--text-faint)', label = MTVerbeter.LABEL[x.fase];
+  const datum = x.aangemaakt ? x.aangemaakt.replace('T', ' ').slice(0, 16) : '';
+  const hist = x.historie.map(h => '<div style="font-size:12px;margin-top:4px;padding-left:8px;border-left:2px solid ' + esc(VB_FASE_KLEUR[h.fase] || 'var(--border)') + '">' +
+    '<strong>' + esc(MTVerbeter.LABEL[h.fase] || h.fase) + '</strong> &middot; ' + esc(String(h.tijd || '').replace('T', ' ').slice(0, 16)) + (h.notitie ? ' &mdash; ' + esc(h.notitie).replace(/\n/g, '<br>') : '') + '</div>').join('');
+  return '<div style="padding:.75rem 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px">' +
+    '<div style="flex:1;min-width:0">' +
+    '<div style="font-weight:600;font-size:13px">' + esc(x.titel) + '</div>' +
+    '<div style="font-size:12px;color:var(--text-dim);margin-top:2px">' + esc(x.betreft) + ' &middot; ' + esc(x.indiener_naam || x.indiener) + ' &middot; ' + esc(datum) + '</div>' +
+    (x.omschrijving && (x.bron === 'verbeterpunt' || x.omschrijving.length > x.titel.length) ? '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">' + esc(x.omschrijving).replace(/\n/g, '<br>') + '</div>' : '') +
+    hist + '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' +
+    '<span style="white-space:nowrap;font-size:12px;font-weight:600;color:' + esc(kleur) + '">' + esc(label) + '</span>' +
+    (mag ?
+    '<button class="btn btn-secondary btn-sm" style="white-space:nowrap;color:' + kleur + ';border-color:' + kleur + '" data-action="vb-status" data-id="' + esc(p.id) + '" data-huidig="' + esc(p.status) + '">' + label + '</button>'
+    : '') +
+    '</div></div>';
+}
 function _vbRenderLijst() {
   const el = document.getElementById('vb-lijst');
   if (!el) return;
-  if (!_vbLijst.length) {
+  const rij = MTVerbeter.wachtrij(_vbLijst, _vbFeedback);
+  const totaal = MTVerbeter.FASEN.reduce((n, f) => n + rij[f].length, 0);
+  if (!totaal) {
     el.innerHTML = '<div style="padding:.75rem;text-align:center;color:var(--text-faint);font-size:13px">Nog geen verbeterpunten ingediend.</div>';
     return;
   }
-  el.innerHTML = _vbLijst.map(p => {
-    const kleur = VB_STATUS_KLEUR[p.status] || 'var(--text-faint)';
-    const label = VB_STATUS_LABEL[p.status] || p.status;
-    const datum = p.aangemaakt_op ? p.aangemaakt_op.replace('T', ' ').slice(0, 16) : '';
-    return '<div style="padding:.75rem 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px">' +
-      '<div style="flex:1;min-width:0">' +
-      '<div style="font-weight:600;font-size:13px">' + esc(p.titel) + '</div>' +
-      '<div style="font-size:12px;color:var(--text-dim);margin-top:2px">' + esc(p.betreft) + ' &middot; ' + esc(p.indiener_naam || p.indiener) + ' &middot; ' + esc(datum) + '</div>' +
-      (p.omschrijving ? '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">' + esc(p.omschrijving).replace(/\n/g, '<br>') + '</div>' : '') +
-      '</div>' +
-      '<button class="btn btn-secondary btn-sm" style="white-space:nowrap;color:' + kleur + ';border-color:' + kleur + '" data-action="vb-status" data-id="' + esc(p.id) + '" data-huidig="' + esc(p.status) + '">' + label + '</button>' +
-      '</div>';
-  }).join('');
+  const mag = vbMagBeheren();
+  const groepen = MTVerbeter.FASEN.filter(f => rij[f].length).map(f => {
+    const kop = '<span style="color:' + esc(VB_FASE_KLEUR[f] || 'inherit') + '">' + esc(MTVerbeter.LABEL[f]) + '</span> (' + Number(rij[f].length) + ')';
+    const lijst = rij[f].map(x => _vbItemHtml(x, mag)).join('');   // _vbItemHtml escapet elke waarde zelf
+    return (f === 'live' || f === 'afgewezen')
+      ? ['<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600;font-size:13px">', kop, '</summary>', lijst, '</details>'].join('')
+      : ['<div style="margin-top:10px"><div style="font-weight:600;font-size:13px">', kop, '</div>', lijst, '</div>'].join('');
+  });
+  el.innerHTML = ['<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">Bart beoordeelt elk punt; de status hieronder is de enige waarheid over wat er met een punt gebeurt.</div>', ...groepen].join('');
 }
-
 // ── event-delegatie (S7-conventie — geen inline-onclick op nieuwe interactieve elementen) ──
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-action]');
@@ -20078,7 +20152,7 @@ document.addEventListener('click', e => {
     case 'vb-chat-stuur': _vbChatStuur(); break;
     case 'vb-verstuur':   _vbVerstuur(); break;
     case 'vb-neem-over':  _vbNeemOver(); break;
-    case 'vb-status':     _vbStatusWijzig(el.dataset.id, el.dataset.huidig); break;
+    case 'vb-status':     _vbStatusWijzig(el.dataset.id); break;
   }
 });
 </script>
