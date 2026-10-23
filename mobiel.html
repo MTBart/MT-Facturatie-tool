@@ -49,7 +49,7 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-17n"></script>
+<script src="mt-planning.js?v=2026-10-23e"></script>
 <script src="mt-vandaag.js?v=2026-10-17n"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
@@ -2386,16 +2386,22 @@ const _mijnEmail = () => String((_msAccount && _msAccount.username) || '').toLow
 const _pvMoetVoorstel = () => !!(window.MTRol && MTRol.afdwingen() && !MTRol.mag('projecten:wijzigen'));
 const _pvMagBeslissen = () => !window.MTRol || MTRol.mag('projecten:wijzigen');
 async function _pvLees() {
-  try { const r = await _SP.read('mt_planblokken.json'); _pvBlokken = MTPlanVoorstel.samen(_pvBlokken, Array.isArray(r) ? r : []); }
+  try { const r = await _SP.read('mt_planblokken.json'); _pvBlokken = MTPlanning.blokSamen(_pvBlokken, Array.isArray(r) ? r : []); }   // F1: dezelfde samenvoeger als de cockpit (per veld)
   catch (e) {}
   return _pvBlokken;
 }
 async function _pvSchrijf(wijzig) {
   const remote = await _SP.read('mt_planblokken.json').catch(() => null);
   if (!Array.isArray(remote)) { showToast('SharePoint niet bereikbaar — probeer het zo opnieuw'); return false; }
-  _pvBlokken = wijzig(MTPlanVoorstel.samen(_pvBlokken, remote));
+  // F1: via de gedeelde schrijfkern van de cockpit (MTPlanning.blokSchrijf): alleen wat deze telefoon wijzigde krijgt een stempel, vers lezen, ETag, een 412 wordt per veld samengevoegd.
+  let basis; try { basis = MTPlanning.blokSamen(_pvBlokken, remote); } catch (e) { showToast('De planning heeft een onverwachte vorm — er is niets gewijzigd'); return false; }
+  const nieuw = wijzig(JSON.parse(JSON.stringify(basis)));
+  const r = await MTPlanning.blokSchrijf(_SP, { patches: MTPlanning.blokPatches(basis, nieuw), lokaal: _pvBlokken, nu: Date.now(), door: _mijnEmail(), dev: _devIdM() });
   if (typeof AGENDA_CACHE !== "undefined") for (const k of Object.keys(AGENDA_CACHE)) delete AGENDA_CACHE[k];   // de agenda toont planblokken: opnieuw opbouwen
-  return await _SP.write('mt_planblokken.json', _pvBlokken, (r2, lokaal) => { _pvBlokken = MTPlanVoorstel.samen(lokaal, r2); return _pvBlokken; });
+  if (r.data) _pvBlokken = r.data;
+  if (!r.ok) { showToast(r.reden === 'geblokkeerd' ? MTPlanning.SCHEMA_TEKST : 'Niet opgeslagen — probeer het zo opnieuw'); return false; }
+  if (r.afwijkend && r.afwijkend.length) showToast('Iemand anders wijzigde dit blok tegelijk; je ziet nu de nieuwe stand.');
+  return true;
 }
 
 // ═══ VANDAAG (planning stap 2): de aansluiting tussen mt-vandaag.js en deze app ═══

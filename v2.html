@@ -55,7 +55,7 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planfilter.js?v=2026-10-23a"></script>
-<script src="mt-planning.js?v=2026-10-17n"></script>
+<script src="mt-planning.js?v=2026-10-23e"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-21v"></script>
@@ -3086,10 +3086,10 @@ function _projSamen(lokaal,spData){
 //   - nog niets bekend (eerste vraag mislukt) → geen blokkade (fail-open: anders legt een storing het werk stil);
 //   - eerder al "te oud" gebleken → blijft blokkeren tot herladen (fail-closed: een storing heft de blokkade niet op).
 // Een geslaagd antwoord vervangt de kennis; een blokkade die al getoond is (blockedKeys) geldt tot herladen.
-const PROJ_SCHEMA=5;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
+const PROJ_SCHEMA=6;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
 // De schema-controle geldt voor élke SharePoint-sleutel waarvan het formaat per schema verandert: de projecten én de projecttaken
 // (een oudere tab zou de taken zonder stempels/tombstones terugschrijven).
-const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2'];
+const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2','mt_planblokken','mt_bestellijst_v2'];   // 6 (F1): ook de planblokken en de bestellijst: een te oude app schrijft ze niet meer zodra de drempel op 6 staat
 function projSchemaSleutel(k){ return _PROJ_SCHEMA_SLEUTELS.includes(k); }
 let _projSchemaMin=null, _projSchemaTijd=0;
 function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
@@ -13316,8 +13316,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // Planvoorstel (F1e): een besloten voorstel (goedgekeurd/afgewezen) wint altijd van een nog
     // open versie — een late intrekking of oude kopie zet een besluit niet terug.
     mt_planblokken(lokaal, spData) {
-      const besloten = x => !!(x && x.voorstel && (x.voorstel.goedgekeurd || x.voorstel.afgewezen));
-      return _spSamenPerSleutel(lokaal, spData, x => x.id, x => (_spTijd(x) || (Date.parse(x && x.ts || '') || 0)) + (besloten(x) ? 1e15 : 0));
+      return MTPlanning.blokSamen(lokaal, spData);   // F1: per veld (stempels), tombstones winnen, een besloten voorstel wint van een open versie; strikt: een andere vorm dan een lijst blokkeert de sleutel
     },
     // Projecttaken (P1): per projectcode, per taak-id; per veld wint de nieuwste stempel, een wijziging die de winnaar niet
     // kende wordt als _veldconflict bewaard; verwijderen = tombstone (wint). Zie MTPlanning.takenSamen.
@@ -15484,35 +15483,79 @@ function agPlanBlokken(){if(_planblokken)return _planblokken;try{return JSON.par
 function agPlanActief(){return agPlanBlokken().filter(b=>b&&!b._vervallen);}
 function _agPlanSamen(lokaal,remote){return _SP.mergers.mt_planblokken(lokaal,remote);}
 
+// ── F1: de veilige planblokwriter (MTPlanning.blokSchrijf, mt-planning.js; ontwerp: FUNDAMENT-F1.md) ──
+// Elke schrijfactie op mt_planblokken gaat hierlangs: alleen wat dít apparaat wijzigde (het verschil met _planBasis, wat het eerder zag) krijgt een stempel per veld, vers lezen vóór schrijven
+// (ETag; een 412 wordt per veld samengevoegd), één schrijfactie tegelijk, een controle achteraf en een eerlijke melding als een collega hetzelfde veld tegelijk wijzigde of het blok verwijderde.
+// De aanroepers wijzigen _planblokken zoals voorheen en roepen agPlanSave() aan; _agPlanUitkomst zegt daarna wat er echt gebeurde (tegelijk, overgeslagen).
+let _planBasis=null, _agPlanUitkomst={}, _agPlanKeten=Promise.resolve();
+const AG_PLAN_SLOT=new Set();   // de blokken waarvan nu een schrijfactie loopt (slot per blok): voor wie een tweede actie op hetzelfde blok wil starten
+const AG_SCHRIJF_MAX=15000;
+function agPlanBlokBezig(id){ return AG_PLAN_SLOT.has(String(id)); }
+function _agPlanBasisZet(){ try{ _planBasis=JSON.parse(JSON.stringify(_planblokken||[])); }catch(e){ _planBasis=[]; } }
+function _agPlanLokaalBewaar(){ try{ localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken)); }catch(e){} }
 async function agPlanLoad(){
   let d; try{ d=await _SP.read('mt_planblokken.json'); }
-  catch(e){ _planblokken=agPlanBlokken(); return; }   // leesfout → lokale cache houden
+  catch(e){ _planblokken=agPlanBlokken(); _agPlanBasisZet(); return; }   // leesfout → lokale cache houden
   // Samenvoegen i.p.v. "SharePoint wint": een eerder alleen lokaal bewaarde wijziging blijft.
   const remote=Array.isArray(d)?d:[];
-  _planblokken=_agPlanSamen(localStorage.getItem('mt_planblokken'),remote);
-  try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
+  try{ _planblokken=_agPlanSamen(localStorage.getItem('mt_planblokken'),remote); }catch(e){ console.warn('Planblokken samenvoegen:',e); _planblokken=agPlanBlokken(); _agPlanBasisZet(); return; }
+  _agPlanLokaalBewaar(); _agPlanBasisZet();
   if(JSON.stringify(_planblokken)!==JSON.stringify(remote)) agPlanSchrijf();
 }
-// Schrijven met de samenvoeger als conflictoplossing (412 → per id samenvoegen).
+// Wat alleen lokaal staat (een eerdere schrijfactie mislukte) alsnog delen: samenvoegen en alleen schrijven als dat iets toevoegt. false = de PUT mislukte.
 async function agPlanSchrijf(){
-  return _SP.write('mt_planblokken.json',_planblokken,(remote,local)=>{
-    const s2=_agPlanSamen(local,remote); _planblokken=s2;
-    try{localStorage.setItem('mt_planblokken',JSON.stringify(s2));}catch(e){}
-    return s2;
+  const r=await MTPlanning.blokPush(_SP,{lokaal:_planblokken,schema:PROJ_SCHEMA});
+  if(r&&r.data){ _planblokken=r.data; _agPlanLokaalBewaar(); _agPlanBasisZet(); }
+  return !!(r&&r.ok);
+}
+// De melding in gewone taal bij een collega die tegelijk wijzigde of verwijderde (naam uit het team)
+const _AG_BLOKVELD={persoon:'de persoon',project_code:'het project',taak:'de taak',taak_id:'de taak',datum:'de dag',start:'de starttijd',duurMin:'de duur',notitie:'de notitie',status:'de status',voorstel:'het voorstel'};
+function _agPlanTegelijkTekst(r){
+  const delen=[];
+  (r.afwijkend||[]).forEach(a=>{
+    if(a.soort==='verwijderd') delen.push((a.wie||'Iemand anders')+' verwijderde dit planblok tegelijk; jouw wijziging is niet overgenomen.');
+    else if(a.soort==='ontbreekt') delen.push('Dit planblok bestaat niet meer; jouw wijziging is niet overgenomen.');
+    else delen.push((a.wie||'Iemand anders')+' wijzigde '+a.velden.map(v=>_AG_BLOKVELD[v]||v).join(' en ')+' van dit planblok tegelijk; jouw wijziging is daarvoor niet overgenomen. Je ziet nu de nieuwe stand.');
   });
+  (r.overgeslagen||[]).forEach(o=>{ if(o.reden==='verwijderd') delen.push('Een collega verwijderde dit planblok intussen; er is niets teruggezet.'); else if(o.reden==='ontbreekt') delen.push('Dit planblok bestaat niet meer; er is niets gewijzigd.'); });
+  return delen.filter((x,i,a)=>a.indexOf(x)===i).join(' ');
 }
-
 async function agPlanSave(){
-  try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
-  // read-merge-write per id (nieuwste stempel wint, verwijderen = tombstone); leesfout → NIET schrijven (anti-clobber)
-  let remote; try{ remote=(await _SP.read('mt_planblokken.json'))||[]; }
-  catch(e){ if(typeof planToast==='function')planToast('⚠ SharePoint niet bereikbaar — wijziging alleen lokaal bewaard'); return false; }
-  _planblokken=_agPlanSamen(_planblokken||[],remote);
-  try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
-  const geschreven=await agPlanSchrijf();   // false = de PUT mislukte (ook na een 412-samenvoeging): de wijziging staat dan alleen lokaal
-  if(geschreven===false){ if(typeof planToast==='function') planToast('⚠ Planning niet gedeeld met SharePoint — alleen lokaal bewaard'); return false; }
-  return true;
+  const vorige=_agPlanKeten; let klaar; _agPlanKeten=new Promise(res=>{ klaar=res; });
+  try{ await vorige; return await _agPlanSaveEen(); }
+  catch(e){ console.warn('Planblokken opslaan:',e); if(typeof planToast==='function') planToast('⚠ Opslaan van de planning mislukte; de wijziging staat alleen op deze pc'); return false; }
+  finally{ klaar(); }
 }
+async function _agPlanSaveEen(){
+  _agPlanUitkomst={};
+  _agPlanLokaalBewaar();
+  const patches=MTPlanning.blokPatches(_planBasis||[],_planblokken||[]);
+  patches.forEach(p=>AG_PLAN_SLOT.add(p.id));
+  try{
+    const opt={ patches, lokaal:_planBasis||[], nu:Date.now(), door:_spWie(), dev:_spDev(), schema:PROJ_SCHEMA, naamVan:_capNaamVan,
+      voorWrite:async()=>{ try{ return !(typeof projSchemaGeblokkeerd==='function'&&projSchemaGeblokkeerd()); }catch(e){ return true; } } };
+    let tijdOut=null; const tijd=new Promise(res=>{ tijdOut=setTimeout(()=>res({time:true}),AG_SCHRIJF_MAX); });
+    let r; try{ r=await Promise.race([MTPlanning.blokSchrijf(_SP,opt),tijd]); } finally{ clearTimeout(tijdOut); }
+    if(r&&r.time){   // SharePoint reageert niet: vers lezen en eerlijk zeggen of het is aangekomen
+      const v=await MTPlanning.blokVerifieer(_SP,patches,{naamVan:_capNaamVan}).catch(()=>({soort:'onbekend'}));
+      if(v.soort==='opgeslagen'){ try{ await agPlanLoad(); }catch(e){} _agPlanUitkomst={ok:true,verifieerd:true}; return true; }
+      const tekst=v.soort==='tegelijk'?_agPlanTegelijkTekst({afwijkend:v.afwijkend}):v.soort==='niet'?'⚠ Niet opgeslagen: SharePoint reageerde niet. Je wijziging staat alleen op deze pc.':'Ik kon niet vaststellen of het opslaan gelukt is. Open de planning opnieuw om te zien hoe het blok er nu bij staat.';
+      _agPlanUitkomst={ok:false,onzeker:true,tekst}; if(typeof planToast==='function') planToast(tekst); return false;
+    }
+    if(r.data){ _planblokken=r.data; _agPlanLokaalBewaar(); _agPlanBasisZet(); }   // ook bij een mislukte PUT: de stand mét de wijziging blijft lokaal staan en wordt later gedeeld
+    if(!r.ok){
+      const tekst=r.reden==='geblokkeerd'?MTPlanning.SCHEMA_TEKST:r.reden==='vorm'?'Het bestand met planblokken heeft een onverwachte vorm; er is niets gewijzigd.':r.reden==='lezen'?'⚠ SharePoint niet bereikbaar — wijziging alleen lokaal bewaard':'⚠ Planning niet gedeeld met SharePoint — alleen lokaal bewaard';
+      _agPlanUitkomst={ok:false,reden:r.reden,tekst}; if(typeof planToast==='function') planToast(tekst);
+      if(r.reden==='geblokkeerd'||r.reden==='vorm'){ _planblokken=JSON.parse(JSON.stringify(_planBasis||[])); _agPlanLokaalBewaar(); }   // niets lokaal laten staan dat nooit gedeeld mag worden
+      return false;
+    }
+    const tegelijk=_agPlanTegelijkTekst(r);
+    _agPlanUitkomst={ok:true,tegelijk,afwijkend:r.afwijkend||[],overgeslagen:r.overgeslagen||[]};
+    return true;
+  } finally { patches.forEach(p=>AG_PLAN_SLOT.delete(p.id)); }
+}
+// Na het opslaan: de gewone melding, of (als een collega tegelijk wijzigde) de eerlijke melding in plaats daarvan
+function _agPlanKlaarMelding(ok,tekst){ if(ok===false||typeof planToast!=='function') return; planToast(_agPlanUitkomst&&_agPlanUitkomst.tegelijk?_agPlanUitkomst.tegelijk:tekst); }
 
 // ── Render Planning-view ──
 async function agPlanRender(){
@@ -15751,7 +15794,7 @@ function agPlanNieuwFormulier(datum,start){
   const blok=voorstel?MTPlanVoorstel.nieuw(velden,mtMijEmail(),pvNaam())
     :_spStempel({id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),...velden,ts:new Date().toISOString(),door:mtMijEmail()});
   const arr=agPlanBlokken(); arr.push(blok); _planblokken=arr;
-  agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast(voorstel?'✓ Voorstel ingediend — wacht op goedkeuring':'✓ Planblok aangemaakt');});
+  agPlanSave().then(ok=>{agPlanRender();_agPlanKlaarMelding(ok,voorstel?'✓ Voorstel ingediend — wacht op goedkeuring':'✓ Planblok aangemaakt');});
 }
 
 // ── Blok-menu (bewerken / verwijderen) ──
@@ -15769,14 +15812,14 @@ function agPlanBlokMenu(evt,id){
         if(keuze===0) nieuw=PV.keurGoed(blok,mtMijEmail(),pvNaam());
         else{ const reden=await mtDialog.prompt({title:'Voorstel afwijzen',message:'Reden van afwijzen (de indiener ziet deze):',placeholder:'bv. die dag staat de CNC stil',okLabel:'Afwijzen',danger:true}); if(reden===null) return; nieuw=PV.wijsAf(blok,mtMijEmail(),pvNaam(),reden); }
         _planblokken=agPlanBlokken().map(x=>x.id===id?nieuw:x);
-        const ok=await agPlanSave(); agPlanRender(); if(ok!==false) planToast(keuze===0?'✓ Voorstel goedgekeurd':'✓ Voorstel afgewezen');
+        const ok=await agPlanSave(); agPlanRender(); _agPlanKlaarMelding(ok,keuze===0?'✓ Voorstel goedgekeurd':'✓ Voorstel afgewezen');
       });
     }
     if(eigen){
       return mtDialog.confirm({title:'Voorstel intrekken',message:kop+'\n\nJe voorstel intrekken?',okLabel:'Intrekken',danger:true}).then(async ja=>{
         if(!ja) return;
         _planblokken=agPlanBlokken().map(x=>x.id===id?PV.trekIn(x,mtMijEmail()):x);
-        const ok=await agPlanSave(); agPlanRender(); if(ok!==false) planToast('✓ Voorstel ingetrokken');
+        const ok=await agPlanSave(); agPlanRender(); _agPlanKlaarMelding(ok,'✓ Voorstel ingetrokken');
       });
     }
     planToast('Voorstel — wacht op goedkeuring door kantoor'); return;
@@ -15788,7 +15831,7 @@ function agPlanBlokMenu(evt,id){
     const arr=agPlanBlokken();
     // Tombstone i.p.v. weghalen: anders zet de volgende samenvoeging hem terug.
     _planblokken=arr.map(x=>x.id!==id?x:_spStempel({...x,_vervallen:{tijd:new Date().toISOString(),door:mtMijEmail()}},x));
-    agPlanSave().then(ok=>{agPlanRender();if(ok!==false)planToast('✓ Planblok verwijderd');});
+    agPlanSave().then(ok=>{agPlanRender();_agPlanKlaarMelding(ok,'✓ Planblok verwijderd');});
   }
 }
 
@@ -15853,7 +15896,7 @@ async function agPlanDrop(evt,datum){
     });
     const ok=await agPlanSave(); agPlanRender();
     const nu2=agPlanBlokken().find(b=>b&&b.id===id), behouden=!!(nu2&&nu2._gewijzigd===stempel);   // staat mijn versie er nog? (een ander kan tegelijk hetzelfde blok verplaatst hebben)
-    if(ok!==false) planToast(behouden?'✓ Planblok verplaatst':'Iemand anders verplaatste dit blok net; de planning is ververst.');
+    if(ok!==false) planToast(_agPlanUitkomst.tegelijk||(behouden?'✓ Planblok verplaatst':'Iemand anders verplaatste dit blok net; de planning is ververst.'));
     return;
   }
   planToast('De planning veranderde terwijl je bevestigde; er is niets gewijzigd. Probeer het opnieuw.'); agPlanRender();
@@ -15879,8 +15922,9 @@ async function _capVers(){
   if(!_planblokken) await agPlanLoad();
   let remote; try{ remote=await _SP.read('mt_planblokken.json'); }catch(e){ return { ok:true, online:false }; }
   if(remote!==null&&remote!==undefined&&!Array.isArray(remote)) return { ok:false, reden:'Het bestand met planblokken heeft een onverwachte vorm; er is niets gewijzigd.' };
-  _planblokken=_agPlanSamen(agPlanBlokken(),remote||[]);
+  try{ _planblokken=_agPlanSamen(agPlanBlokken(),remote||[]); }catch(e){ return { ok:false, reden:'Het bestand met planblokken kon niet worden samengevoegd; er is niets gewijzigd.' }; }
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
+  _agPlanBasisZet();   // wat dit apparaat nu ziet: alleen wat daarna verandert krijgt een stempel
   return { ok:true, online:true, remote:remote||[] };   // remote: wat er op SharePoint stond (voor het omzetten: staat de tombstone daar al?)
 }
 // ── Een taak slepen: de taakbalk (T4, keuzeplan 16-10; mt-planverplaats.js: plaatsTaak en taakHerstel) ──
