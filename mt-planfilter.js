@@ -1,7 +1,7 @@
 /* ============================================================================
  * mt-planfilter.js: één filterbalk voor alle planningsweergaven (planning brok P0, "weergave-schil")
  * ----------------------------------------------------------------------------
- * De schermstand die Mijn werk, de Capaciteit en de Planning van een project delen: project, persoon, status, periode (begindatum en zoom) en de geselecteerde taak.
+ * De schermstand die Mijn werk, de Capaciteit, het Bord en de Planning van een project delen: project, persoon, status, periode (begindatum en zoom) en de geselecteerde taak.
  * Eén bron, één balk: elke weergave tekent dezelfde balk (F.balk), leest dezelfde stand en laat het filter in de link staan, dus wisselen van weergave behoudt wat je
  * koos, een gekopieerde link toont dezelfde stand en de laatste keuze (project, persoon, status) wordt per gebruiker onthouden.
  * Alleen schermstand: niets hiervan gaat naar SharePoint; de enige opslag is localStorage (altijd in try/catch, het scherm werkt ook zonder).
@@ -14,12 +14,13 @@
   const F = {};
   let D = null;
   const LS = 'mt-planfilter';
-  const WEERGAVEN = ['mijnwerk', 'capaciteit', 'grid', 'lijst', 'plan'];
+  const WEERGAVEN = ['mijnwerk', 'capaciteit', 'bord', 'grid', 'lijst', 'plan'];
   const ZOOMS = ['kwartaal', 'maand', 'week', '3d', 'dag'];
   const STATUSSEN = [['open', 'Open', 'todo'], ['bezig', 'Bezig', 'bezig'], ['wacht', 'Wacht', 'wacht'], ['klaar', 'Klaar', 'klaar']];   // [linkwaarde, label, taakstatus]
-  const SLEUTELS = ['project', 'persoon', 'status', 'van', 'zoom'];
-  const LINK = { project: 'project', persoon: 'wie', status: 'status', van: 'van', zoom: 'zoom' };
-  const S = { project: '', persoon: '', status: '', van: '', zoom: '', selectie: null, rev: 0, hashAchter: false };
+  const BORDEN = ['status', 'stroom', 'fase'];   // de indeling van het Bord (P3)
+  const SLEUTELS = ['project', 'persoon', 'status', 'van', 'zoom', 'bord'];
+  const LINK = { project: 'project', persoon: 'wie', status: 'status', van: 'van', zoom: 'zoom', bord: 'bord' };
+  const S = { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', selectie: null, rev: 0, hashAchter: false };
   let geladen = false;
   const luisteraars = [];
 
@@ -31,7 +32,8 @@
     persoon: v => { const s = code(v); return s.toLowerCase() === 'ik' || s.toLowerCase() === 'iedereen' ? s.toLowerCase() : s; },
     status: v => STATUSSEN.some(x => x[0] === v) ? v : '',
     van: v => isYmd(v) ? v : '',
-    zoom: v => ZOOMS.includes(v) ? v : ''
+    zoom: v => ZOOMS.includes(v) ? v : '',
+    bord: v => BORDEN.includes(v) ? v : ''
   };
   F.WEERGAVEN = WEERGAVEN; F.ZOOMS = ZOOMS; F.STATUSSEN = STATUSSEN;
   F.isYmd = isYmd;
@@ -76,12 +78,12 @@
     geladen = true;
     try {
       const o = JSON.parse(D.storage.getItem(sl) || 'null');
-      if (o && typeof o === 'object') ['project', 'persoon', 'status'].forEach(k => { const w = GELDIG[k](o[k]); if (w) S[k] = w; });
+      if (o && typeof o === 'object') ['project', 'persoon', 'status', 'bord'].forEach(k => { const w = GELDIG[k](o[k]); if (w) S[k] = w; });
     } catch (e) {}
   }
   function bewaar() {
     const sl = sleutelLS(); if (!sl || !D || !D.storage) return;
-    try { D.storage.setItem(sl, JSON.stringify({ project: S.project, persoon: S.persoon, status: S.status })); } catch (e) {}
+    try { D.storage.setItem(sl, JSON.stringify({ project: S.project, persoon: S.persoon, status: S.status, bord: S.bord })); } catch (e) {}
   }
   function meld(wat) { luisteraars.slice().forEach(fn => { try { fn(wat); } catch (e) {} }); }
   F.aanWijziging = fn => { luisteraars.push(fn); return () => { const i = luisteraars.indexOf(fn); if (i >= 0) luisteraars.splice(i, 1); }; };
@@ -185,7 +187,7 @@
     let pw = F.persoonWaarde(std);
     if (!persoonOpties.some(x => x[0] === pw)) persoonOpties.push([pw, pw]);   // een persoon uit een link die niet (meer) in het team staat
     const wieOpties = persoonOpties.slice(); const std0 = wieOpties.findIndex(x => x[0] === std); if (std0 > 0) wieOpties.unshift(wieOpties.splice(std0, 1)[0]);
-    kind.push(keuze(pre + 'wie', 'Wie', wieOpties, pw, w => { F.zet({ persoon: w === std ? '' : w }); klaar(); }));
+    if (o.persoon !== false) kind.push(keuze(pre + 'wie', 'Wie', wieOpties, pw, w => { F.zet({ persoon: w === std ? '' : w }); klaar(); }));
     if (o.project !== false) {
       const pr = projLijst(), opties = [['', 'Project: alle']].concat(pr.map(p => [p.code, p.label || p.code]));
       if (S.project && !opties.some(x => x[0] === S.project)) opties.push([S.project, S.project]);
@@ -239,7 +241,7 @@
     } catch (e) {}
     return F;
   };
-  F._reset = function () { Object.assign(S, { project: '', persoon: '', status: '', van: '', zoom: '', selectie: null, rev: 0, hashAchter: false }); geladen = false; luisteraars.length = 0; };
+  F._reset = function () { Object.assign(S, { project: '', persoon: '', status: '', van: '', zoom: '', bord: '', selectie: null, rev: 0, hashAchter: false }); geladen = false; luisteraars.length = 0; };
   F.S = S;
   root.MTPlanFilter = F;
   if (typeof module !== 'undefined' && module.exports) module.exports = F;
