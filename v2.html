@@ -560,6 +560,12 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .proj-sectie{min-width:0;overflow-wrap:anywhere}
 /* Projectmeter (P1) */
 .pm-host{margin-bottom:var(--space-3)}
+.nieuw-menu{position:relative;margin:0 0 .75rem}.nieuw-menu>summary{list-style:none;display:inline-flex;align-items:center;cursor:pointer;min-height:36px}.nieuw-menu>summary::-webkit-details-marker{display:none}
+.nieuw-menu>summary::after{content:" ▾"}
+.nieuw-lijst{position:absolute;z-index:60;left:0;top:calc(100% + 4px);min-width:200px;display:flex;flex-direction:column;padding:4px;background:var(--surface-overlay,var(--surface));border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm)}
+.nieuw-lijst button{font:inherit;font-size:13px;text-align:left;min-height:36px;padding:4px 10px;border:0;border-radius:6px;background:transparent;color:var(--ink,#1f2a24);cursor:pointer}
+.nieuw-lijst button:hover{background:var(--surface-sunken)}
+.proj-terug{display:none}
 .pl-schakel{display:inline-flex;gap:0;margin:0 0 var(--space-3);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
 .pl-sch{font:inherit;font-size:13px;font-weight:600;min-height:36px;padding:4px 14px;border:0;background:var(--surface);color:var(--ink,#1f2a24);cursor:pointer}
 .pl-sch+.pl-sch{border-left:1px solid var(--border)}
@@ -1251,12 +1257,15 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <div>
         <div class="card proj-lijst-kaart" style="padding:1rem">
           <div class="card-title">Projecten</div>
-          <div class="flex" style="margin-bottom:0.75rem;gap:6px">
-            <button class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1" title="Project zonder lead of offerte (bv. vaste klant of regiewerk); begint in Werkvoorbereiding">+ Direct project</button>
-            <button class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" onclick="openLeadModal()" style="flex:1" title="Een nieuwe aanvraag: lead met een volgende actie">+ Lead</button>
-            <button class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" onclick="tgOvernemenOpen()" style="flex:1" title="Een Toggl-project dat nog bij geen project hoort in de tool zetten">Uit Toggl overnemen</button>
-            <button class="btn btn-secondary btn-sm" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" style="flex:1" title="Losse offerte-calculatie (voorcalculatie)">+ Nieuwe offerte</button>
-          </div>
+          <details class="nieuw-menu" id="proj-nieuw-menu">
+            <summary class="btn btn-primary btn-sm">+ Nieuw</summary>
+            <div class="nieuw-lijst" role="menu" onclick="document.getElementById('proj-nieuw-menu').open=false">
+              <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="openModal()" title="Project zonder lead of offerte (bv. vaste klant of regiewerk); begint in Werkvoorbereiding">Direct project</button>
+              <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="openLeadModal()" title="Een nieuwe aanvraag: lead met een volgende actie">Lead</button>
+              <button type="button" role="menuitem" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" title="Losse offerte-calculatie (voorcalculatie)">Offerte</button>
+              <button type="button" role="menuitem" data-recht="projecten:wijzigen" onclick="tgOvernemenOpen()" title="Een Toggl-project dat nog bij geen project hoort in de tool zetten">Uit Toggl overnemen</button>
+            </div>
+          </details>
           <input class="zoek-input" id="project-zoek" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
           <div id="vandaag-kaart" class="vandaag-kaart" hidden></div>
           <div id="mobiel-meldingen-container"></div>
@@ -1265,6 +1274,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         </div>
       </div>
       <!-- Project detail -->
+      <button type="button" class="proj-terug" onclick="projTerugNaarLijst()">‹ Projecten</button>
       <div id="project-detail">
         <div class="card" style="text-align:center;padding:3rem;color:var(--text-faint)">
           <div style="font-size:40px;margin-bottom:1rem">📁</div>
@@ -6473,6 +6483,15 @@ function openProject(code,{scroll=true,geschiedenis='push',sectie=null,filter=nu
   return proj;
 }
 function selecteerProject(code,el){ openProject(code,{scroll:!el}); }
+// Telefoon: lijst óf project. "‹ Projecten" sluit het project en toont de lijst weer (op de computer blijft de lijst altijd naast het project staan).
+function projTerugNaarLijst(){
+  huidigProject=null; window._calcMailPaneelActief=false;
+  const h=document.getElementById('project-detail');
+  if(h){ delete h.dataset.code; delete h.dataset.offerte; delete h.dataset.klant; h.innerHTML='<div class="card" style="text-align:center;padding:3rem;color:var(--text-faint)"><div style="font-family:var(--serif);font-size:18px;font-style:italic;font-weight:300">Selecteer een project</div><div style="font-size:12px;margin-top:0.5rem">of maak een nieuw project aan</div></div>'; }
+  try{ renderProjectLijst((document.getElementById('project-zoek')||{}).value||''); }catch(e){}
+  try{ mtRoute.zet({tab:'projecten'},true); }catch(e){}
+  window.scrollTo(0,0);
+}
 // ── Contextbalk: "waar ben ik?" — Klant › Locatie › CODE — naam, sticky onder de tabbalk ──
 // Klant/locatie zijn nog spans met data-attributen; de router (B3) maakt ze klikbaar.
 const _projStatus={};   // code → lopende aanmaakstatus (mappen/Toggl), getoond in de balk
