@@ -55,15 +55,16 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planfilter.js?v=2026-10-23a"></script>
-<script src="mt-planning.js?v=2026-10-23f"></script>
+<script src="mt-planning.js?v=2026-10-23g"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-21v"></script>
+<script src="mt-planverplaats.js?v=2026-10-23g"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
-<script src="mt-objectpaneel.js?v=2026-10-23a"></script>
-<script src="mt-taakpaneel.js?v=2026-10-23f"></script>
+<script src="mt-objectpaneel.js?v=2026-10-23g"></script>
+<script src="mt-taakpaneel.js?v=2026-10-23g"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
-<script src="mt-bord.js?v=2026-10-23f"></script>
+<script src="mt-planinrichting.js?v=2026-10-23g"></script>
+<script src="mt-bord.js?v=2026-10-23g"></script>
 <script src="mt-tijdlijn.js?v=2026-10-23f"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
@@ -1832,6 +1833,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
       <button class="adm-subtab" data-sub="beheer" style="display:none" onclick="admSub('beheer',this)">👥 Beheer</button>
       <button class="adm-subtab" data-sub="instellingen" style="display:none" onclick="admSub('instellingen',this)">🛠 Instellingen</button>
       <button class="adm-subtab" data-sub="activiteit" style="display:none" onclick="admSub('activiteit',this)">📊 Activiteit</button>
+      <button class="adm-subtab" data-sub="planning" style="display:none" onclick="admSub('planning',this)">Planning inrichten</button>
       <button class="adm-subtab" data-sub="logboek" style="display:none" onclick="admSub('logboek',this)">📒 Logboek</button>
       <button class="adm-subtab" data-sub="team" style="display:none" onclick="admSub('team',this)">⚙️ Team &amp; lock</button>
       <button class="adm-subtab" data-sub="verlof" style="display:none" onclick="admSub('verlof',this)">🏖 Verlof &amp; saldo</button>
@@ -1849,6 +1851,9 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 
     <!-- Instellingen: de bestaande kaarten uit #tab-instellingen worden hier ingehangen zodra Admin voor jou geldt (admSamenvoegen) -->
     <div id="adm-sub-instellingen" class="adm-subcontent"></div>
+
+    <!-- Planning inrichten (P3b): stations, fases en activiteiten; alleen de beheerder wijzigt (mt-planinrichting.js) -->
+    <div id="adm-sub-planning" class="adm-subcontent"><div id="planinricht-host"></div></div>
 
     <!-- Activiteit (verhuisd uit een eigen tabblad; usage-/presence-tracking, alleen Bart en beheer) -->
     <div id="adm-sub-activiteit" class="adm-subcontent">
@@ -3086,10 +3091,10 @@ function _projSamen(lokaal,spData){
 //   - nog niets bekend (eerste vraag mislukt) → geen blokkade (fail-open: anders legt een storing het werk stil);
 //   - eerder al "te oud" gebleken → blijft blokkeren tot herladen (fail-closed: een storing heft de blokkade niet op).
 // Een geslaagd antwoord vervangt de kennis; een blokkade die al getoond is (blockedKeys) geldt tot herladen.
-const PROJ_SCHEMA=7;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
+const PROJ_SCHEMA=8;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
 // De schema-controle geldt voor élke SharePoint-sleutel waarvan het formaat per schema verandert: de projecten én de projecttaken
 // (een oudere tab zou de taken zonder stempels/tombstones terugschrijven).
-const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2','mt_planblokken','mt_bestellijst_v2'];   // 7 (P5: bestelregels met taak_id, verwacht_op en verwacht_bron: een oudere app schrijft de bestellijst niet meer zodra de drempel op 7 staat); 6 (F1): ook de planblokken en de bestellijst: een te oude app schrijft ze niet meer zodra de drempel op 6 staat
+const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2','mt_planblokken','mt_bestellijst_v2'];   // 8 (P3b: taken met fase_id; planning-inrichting): een oudere app schrijft de projecttaken niet meer zodra de drempel op 8 staat; 7 (P5: bestelregels met taak_id, verwacht_op en verwacht_bron: een oudere app schrijft de bestellijst niet meer zodra de drempel op 7 staat); 6 (F1): ook de planblokken en de bestellijst: een te oude app schrijft ze niet meer zodra de drempel op 6 staat
 function projSchemaSleutel(k){ return _PROJ_SCHEMA_SLEUTELS.includes(k); }
 let _projSchemaMin=null, _projSchemaTijd=0;
 function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
@@ -3946,12 +3951,81 @@ try{ const _pbDag=(slug,datum)=>({tab:'agenda',weergave:'capaciteit',planfilter:
   href:{ project:(code,sectie)=>mtRoute.format({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.format({tab:'projecten',klant:kl,loc:loc||undefined}), dag:(slug,datum)=>mtRoute.format(_pbDag(slug,datum)) },
   ga:{ project:(code,sectie)=>mtRoute.go({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.go({tab:'projecten',klant:kl,loc:loc||undefined}), dag:(slug,datum)=>mtRoute.go(_pbDag(slug,datum)) },
   oudeActies:id=>agPlanBlokMenu(null,id) }); }catch(e){ console.warn('Planblokpaneel init:',e); }
+// ═══ PLANNING P3b: planning inrichten (stations, fases en activiteiten; mt-planinrichting.js) ═══
+// De inrichting staat in mt_planinrichting (een lijst records met een stempel per veld, zie MTPlanning.inrichtSchrijf). Zonder bestand geldt de standaard. Alleen de beheerder (Bart, beheer/eigenaar) wijzigt;
+// iedereen gebruikt. Het controleren van het recht gebeurt hier in de app; SharePoint zelf kent geen rechten per bestand.
+let _inrRaw=null, _inrT=0;
+function _inrichtVers(force){   // de actieve inrichting volgt het lokale bestand (de synchronisatie schrijft het daar); hooguit eens per 1,5 seconde kijken
+  const nu=Date.now(); if(!force&&nu-_inrT<1500) return; _inrT=nu;
+  let raw=null; try{ raw=localStorage.getItem('mt_planinrichting'); }catch(e){}
+  if(raw===_inrRaw) return; _inrRaw=raw;
+  try{ MTPlanning.inrichtZet(raw); }catch(e){ console.warn('Planning-inrichting onleesbaar; de vorige stand blijft gelden:',e); }
+}
+function planInrichtMag(){ return admMagActiviteit(); }
+function planInrichtRecords(){ _inrichtVers(true); try{ return MTPlanning.inrichtBewerkbaar(_inrRaw); }catch(e){ return MTPlanning.inrichtStandaard(); } }
+async function planInrichtOpslaan(nieuw){
+  if(!planInrichtMag()) return {ok:false,reden:'Alleen de beheerder richt de planning in.'};
+  if(typeof _SP==='undefined'||!_SP.ready||_SP.blockedKeys.has('mt_planinrichting')) return {ok:false,reden:'De synchronisatie is nog niet klaar of geblokkeerd: er is niets opgeslagen. Probeer het zo opnieuw (of herlaad de pagina).'};
+  let rec; try{ rec=MTPlanning.inrichtSchrijf(localStorage.getItem('mt_planinrichting'),nieuw,{door:_spWie(),dev:_spDev()}); }catch(e){ return {ok:false,reden:'Niet opgeslagen: '+(e.message||e)}; }
+  const zet=(typeof _lsSet==='function'?_lsSet:localStorage.setItem.bind(localStorage)), tekst=JSON.stringify(rec);
+  try{ zet('mt_planinrichting',tekst); }catch(e){ return {ok:false,reden:'Lokaal opslaan lukte niet: '+(e.message||e)}; }
+  _inrichtVers(true);
+  let ok=false;
+  try{ ok=(await _SP.write('mt_planinrichting.json',rec,(remote,local)=>{ const s=MTPlanning.inrichtSamen(typeof local==='string'?local:JSON.stringify(local),remote); zet('mt_planinrichting',JSON.stringify(s)); return s; }))===true; }catch(e){ ok=false; }
+  _inrichtVers(true);
+  if(!ok) return {ok:false,lokaal:true,reden:'SharePoint bevestigde het opslaan niet; de wijziging staat lokaal en de synchronisatie probeert het opnieuw.'};
+  try{ if(window.track) track('planning','inrichting',{ok:true}); }catch(e){}
+  return {ok:true};
+}
+// Taken van het ene fase/activiteit-id naar het andere verplaatsen (voor het verwijderen), taak voor taak via dezelfde route als het taakpaneel (vers lezen, ETag, stempels, controle achteraf).
+async function planInrichtVerplaats(type,van,naar,voortgang){
+  if(!planInrichtMag()) return {ok:false,reden:'Alleen de beheerder richt de planning in.',gelukt:0,mislukt:[],wijzigingen:[]};
+  const gebruik=MTPlanning.inrichtGebruik(type,van,projTakenAll()), doel=type==='fase'?MTPlanning.fasenLijst().find(f=>f.k===naar):MTPlanning.activiteit(naar);
+  if(type==='fase'&&!doel&&naar!=='') return {ok:false,reden:'Die fase bestaat niet (meer).',gelukt:0,mislukt:[],wijzigingen:[]};
+  const wijzigingen=[], mislukt=[]; let gelukt=0, i=0;
+  for(const t of gebruik.taken){
+    i++; if(typeof voortgang==='function') voortgang(i,gebruik.taken.length);
+    const taak=(projTaken(t.code)||[]).find(x=>String(x.id)===String(t.id)); if(!taak) continue;
+    const spec=type==='fase'?{code:t.code,id:t.id,naam:t.naam,velden:{fase:doel?doel.label:''},gezien:{fase:taak.fase||''}}:{code:t.code,id:t.id,naam:t.naam,velden:{activiteit:naar||''},gezien:{activiteit:taak.activiteit||''}};
+    let r; try{ r=await tpWijzig(spec); }catch(e){ r={ok:false,reden:String(e&&e.message||e)}; }
+    if(r&&r.ok){ gelukt++; if(r.wijziging) wijzigingen.push(r.wijziging); } else mislukt.push({code:t.code,id:t.id,naam:t.naam,reden:(r&&r.reden)||'Niet opgeslagen.'});
+  }
+  return {ok:!mislukt.length,gelukt,mislukt,wijzigingen};
+}
+async function planInrichtVerplaatsHerstel(wijzigingen){
+  let gelukt=0; const mislukt=[];
+  for(const w of (wijzigingen||[])){ let r; try{ r=await tpWijzigHerstel(w); }catch(e){ r={ok:false,reden:String(e&&e.message||e)}; } if(r&&r.ok) gelukt++; else mislukt.push({naam:w.naam,reden:(r&&r.reden)||''}); }
+  return {ok:!mislukt.length,gelukt,mislukt};
+}
+// De migratie naar fase_id: eerst een dry-run (wat zou er gebeuren), dan op verzoek schrijven en achteraf teruglezen. Nooit automatisch.
+function planFaseMigratiePlan(){ _inrichtVers(true); return MTPlanning.faseMigratiePlan(projTakenAll()); }
+async function planFaseMigratieUitvoer(voortgang){
+  if(!planInrichtMag()) return {ok:false,reden:'Alleen de beheerder richt de planning in.'};
+  const plan=planFaseMigratiePlan(), mislukt=[]; let gelukt=0, i=0;
+  for(const z of plan.zet){
+    i++; if(typeof voortgang==='function') voortgang(i,plan.zet.length);
+    let r; try{ r=await tpWijzig({code:z.code,id:z.id,naam:z.naam,velden:{fase:z.nieuwFase},gezien:{fase:z.fase}}); }catch(e){ r={ok:false,reden:String(e&&e.message||e)}; }
+    if(r&&r.ok) gelukt++; else mislukt.push({code:z.code,id:z.id,naam:z.naam,reden:(r&&r.reden)||'Niet opgeslagen.'});
+  }
+  const na=planFaseMigratiePlan();   // terugleescontrole op de lokale stand die de schrijfroute zojuist bijwerkte
+  return {ok:!mislukt.length&&!na.zet.length,gelukt,mislukt,over:na.zet.length,eigen:na.eigen.length,totaal:na.totaal};
+}
+function planInrichtTeken(){
+  const host=document.getElementById('planinricht-host'); if(!host||!window.MTPlanInrichting) return;
+  try{ MTPlanInrichting.beheerTeken(host); }catch(e){ console.warn('Planning inrichten:',e); }
+}
+try{ _inrichtVers(true); }catch(e){}
+try{ MTPlanInrichting.init({ doc:document, planning:MTPlanning, mag:()=>planInrichtMag(), records:()=>planInrichtRecords(), opslaan:r=>planInrichtOpslaan(r),
+  gebruik:(ty,k)=>MTPlanning.inrichtGebruik(ty,k,projTakenAll(),sjablonenRuw()), verplaats:(ty,van,naar,vg)=>planInrichtVerplaats(ty,van,naar,vg), verplaatsHerstel:w=>planInrichtVerplaatsHerstel(w),
+  migratiePlan:()=>planFaseMigratiePlan(), migratieUitvoer:vg=>planFaseMigratieUitvoer(vg), get dialoog(){ return window.mtDialog; },
+  toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb),
+  naWijziging:()=>{ _inrichtVers(true); try{ planInrichtTeken(); }catch(e){} try{ if(window.MTBord) MTBord.teken(); }catch(e){} try{ if(window.MTTijdlijn&&MTTijdlijn.teken) MTTijdlijn.teken(); }catch(e){} try{ MTTaakPaneel.ververs(); }catch(e){} } }); }catch(e){ console.warn('Planning inrichten init:',e); }
 // Het Bord (planning brok P3, mt-bord.js): kolommen op status, per fase, en de stroom van de projecten. Slepen schrijft via dezelfde route als het taakpaneel (tpWijzig: takenSchrijf met ETag, slot per taak, stempels) met Ongedaan maken.
 // Toggl wordt hier nooit aangeraakt (de bestaande knoppen in het taakpaneel en de takenlijst blijven de enige route). Een nieuwe taak komt als Open in de takenlijst, zoals "+ Taak" in het project.
 async function bordNieuweTaak(o){
   if(_ptBlok(o.code,ROL_TAAK_STATUS,'Een taak toevoegen')) return null;
   const arr=projTaken(o.code), t={id:_ptId(),naam:o.naam,omschrijving:'',duur_uur:0,prioriteit:'',afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'handmatig',activiteit:MTPlanning.activiteitUitNaam(o.naam)||undefined};
-  if(o.fase) t.fase=o.fase;
+  if(o.fase){ const fv=MTPlanning.faseVelden(o.fase); t.fase=fv.fase; if(fv.fase_id) t.fase_id=fv.fase_id; }   // P3b: naam + id
   arr.push(t); if(projTakenZet(o.code,arr)!==true) return null;   // niet opgeslagen: de melding staat er al
   try{ if(window.track) track('taken','taak_handmatig',{detail:o.code,ok:true}); }catch(e){}
   return t;
@@ -7774,9 +7848,9 @@ function projTakenVerweesdOpruimen(){
   try{ planToast('⚠ De nieuwe takenlijst ontbreekt op SharePoint; de lokale kopie is als back-up bewaard. Beheer moet de taken opnieuw overzetten.'); }catch(e){}
   return true;
 }
-function projTakenAll(){const r=projTakenRuw(), o={}; Object.keys(r).forEach(c=>{ if(!c.startsWith('__')) o[c]=MTPlanning.takenActief(r[c]); }); return o;}
+function projTakenAll(){if(typeof _inrichtVers==='function')_inrichtVers();const r=projTakenRuw(), o={}; Object.keys(r).forEach(c=>{ if(!c.startsWith('__')) o[c]=MTPlanning.takenActief(r[c]); }); return o;}
 function projTakenSave(o){localStorage.setItem('mt_project_taken_v2',JSON.stringify(o));}
-function projTaken(code){return MTPlanning.takenActief(projTakenRuw()[code]);}
+function projTaken(code){if(typeof _inrichtVers==='function')_inrichtVers();return MTPlanning.takenActief(projTakenRuw()[code]);}
 // Apparaat-id voor de stempels (volgorde bij gelijke tijd); per browser, blijft staan, gaat niet mee in de verhuizing.
 function _spDev(){ try{ let d=localStorage.getItem('mt_device_id'); if(!d){ d='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem('mt_device_id',d); } return d; }catch(e){ return 'd-onbekend'; } }
 function _ptUuid(){ return (typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,12)); }
@@ -13349,7 +13423,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
   // mt_calc_offertes/mt_calc_defaults synchroniseerden niet mee: de calculatiemodule
   // schreef er rechtstreeks naar SharePoint langs deze laag heen en slikte elke fout op.
   // Gevolg was werk dat alleen in één browser bestond en zonder melding verdween.
-  KEYS: new Set(['mt_voorraad','mt_bestellijst_v2','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken_v2','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_project_afhank','mt_project_sjablonen','mt_uurtarieven']),
+  KEYS: new Set(['mt_voorraad','mt_bestellijst_v2','mt_history','mt_history_archive','mt_projecten','mt_leveranciers','mt_toeslag_lak','mt_toeslag_spuit','mt_mail_links','mt_mail_oppak','mt_planning','mt_klant_codes','mt_offerte_keuze','mt_project_taken_v2','mt_supplier_map','mt_calc_offertes','mt_calc_defaults','mt_taken_journaal','mt_bijlage_index','mt_todo_sync','mt_bestellijst_journaal','mt_koppel_journaal','mt_contacten','mt_contacten_journaal','mt_project_controle','mt_project_afhank','mt_project_sjablonen','mt_uurtarieven','mt_planinrichting']),
 
   // Per key een samenvoeger. Zonder zo'n functie geldt bij hydrate "SharePoint wint
   // altijd" — voor offertes is dat verkeerd: dan wist de ene PC het werk van de andere.
@@ -13387,6 +13461,8 @@ const _SP = Object.assign(window.MTCore.makeSP({
     // Projectsjablonen (P2): per sjabloon-id de nieuwste stand; verwijderen = tombstone. Alleen eigenaar/beheer wijzigen ze.
     // Uurtarieven: per tarief de hoogste stempel; een ongestempelde of gelijktijdige afwijking blijft zichtbaar als conflict (zie uurtariefConflictTeken). Strikt: een verkeerde vorm blokkeert de sleutel.
     mt_uurtarieven(lokaal, spData) { return MTPlanning.tarievenSamen(lokaal, spData); },
+    // Planning-inrichting (P3b): per record (station, fase of activiteit) per veld de nieuwste stempel; verwijderen is een tombstone en terugzetten kan.
+    mt_planinrichting(lokaal, spData) { return MTPlanning.inrichtSamen(lokaal, spData); },
     mt_project_sjablonen(lokaal, spData) { return _spSamenPerSleutel(lokaal, spData, x => x && x.id, _spTijd); },
     // Bestellijst (brok L2): per regel (id; oude regels zonder id → inhoud-id) wint de
     // stand met de nieuwste `_gewijzigd`. Van de lijst halen is een tombstone
@@ -15278,11 +15354,12 @@ async function adminOpen(){
 }
 
 // Subtabs in vaste volgorde. Beheer, Instellingen en Activiteit zijn hier ingehangen (voorheen eigen plek); de rest is van de teamadmins.
-const ADM_SUBS=['beheer','instellingen','activiteit','logboek','team','verlof','vrijdagen','notificaties'];
+const ADM_SUBS=['beheer','instellingen','activiteit','planning','logboek','team','verlof','vrijdagen','notificaties'];
 function admSubMag(n){   // mag deze subtab voor mij? (zelfde voorwaarden als de losse plekken vroeger)
   if(n==='beheer') return !!(window.MTRol&&MTRol.isBeheer&&MTRol.isBeheer());
   if(n==='instellingen') return admSamen();
   if(n==='activiteit') return admMagActiviteit();
+  if(n==='planning') return typeof planInrichtMag==='function'&&planInrichtMag();
   return mtIsAdmin();
 }
 function admSubHuidig(){ const c=document.querySelector('#tab-admin .adm-subcontent.active'); return c?c.id.replace('adm-sub-',''):''; }
@@ -15297,6 +15374,7 @@ function admSub(name,btn){
   const b=btn||document.querySelector('#tab-admin .adm-subtab[data-sub="'+name+'"]'); if(b) b.classList.add('active');
   if(name==='beheer') beheerLaad();
   if(name==='activiteit') activiteitOpen();
+  if(name==='planning') planInrichtTeken();
   if(name==='team'){ try{ MTWerktijden.teken(); }catch(e){} }
   const at=document.getElementById('tab-admin');
   if(at&&at.classList.contains('active')&&typeof mtRoute!=='undefined') mtRoute.zet({tab:admRouteNaam()},false);

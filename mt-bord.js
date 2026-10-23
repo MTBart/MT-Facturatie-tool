@@ -50,7 +50,7 @@
         if (f.persoon && !P.taakMensen(t).some(m => P.zelfdePersoon(m, f.persoon, team))) return;
         if (f.status && st !== f.status) return;
         const w = wacht[t.id] || { wacht: false, op: [] }, eerste = P.taakMensen(t)[0], lid = eerste ? team.find(m => m && P.zelfdePersoon(m.slug, eerste, team)) : null;
-        uit.push({ code, id: t.id, naam: t.naam || '(zonder naam)', projectLabel: pr.label || pr.code, status: st, fase: t.fase || '', persoon: lid ? lid.slug : (eerste || ''), persoonNaam: lid ? lid.naam : (eerste || ''),
+        uit.push({ code, id: t.id, naam: t.naam || '(zonder naam)', projectLabel: pr.label || pr.code, status: st, fase: P.faseLabel(t), faseK: (P.faseVan(t) || {}).k || '', persoon: lid ? lid.slug : (eerste || ''), persoonNaam: lid ? lid.naam : (eerste || ''),
           eind: P.isYmd(t.eind) ? t.eind : '', teLaat: st !== 'klaar' && P.isYmd(t.eind) && t.eind < vandaag, wachtReden: st === 'wacht' ? String(t.wacht_reden || '') : '',
           wachtOp: st === 'todo' && w.wacht ? P.wachtOpTekst(w, P.datumKort) : '', project_id: pr.project_id || '', mat: matKaart(t, code, pr), klaarOp: P.isYmd(t.klaar_op) ? t.klaar_op : '', prio: t.prioriteit || '', taak: t });
       });
@@ -58,13 +58,14 @@
     const volg = (a, b) => ((PRIO_VOLGORDE[a.prio] === undefined ? 3 : PRIO_VOLGORDE[a.prio]) - (PRIO_VOLGORDE[b.prio] === undefined ? 3 : PRIO_VOLGORDE[b.prio])) || (a.eind && b.eind ? (a.eind < b.eind ? -1 : a.eind > b.eind ? 1 : 0) : (a.eind ? -1 : b.eind ? 1 : 0)) || (a.naam.toLowerCase() < b.naam.toLowerCase() ? -1 : 1);
     return uit.sort(volg);
   };
-  // Fasen (buckets): die van het standaardsjabloon in zijn volgorde, daarna wat er verder in de taken staat
+  // Fasen (buckets): de fases uit de planning-inrichting in hun volgorde (kolom-k = het vaste id), daarna de eigen fases van projecten die alleen als naam op taken staan
   Bd.fasen = function (kaarten) {
-    const namen = []; const voeg = n => { const s = String(n || '').trim(); if (s && !namen.some(x => zelfde(x, s))) namen.push(s); };
-    try { (P.sjabloonStd().fases || []).forEach(x => voeg(x.naam)); } catch (e) {}
-    kaarten.forEach(k => voeg(k.fase));
-    return namen;
+    const uit = P.fasenLijst().map(f => ({ k: f.k, label: f.label, cat: true })), eigen = [];
+    kaarten.forEach(c => { const n = String(c.fase || '').trim(); if (c.faseK || !n || eigen.some(x => zelfde(x, n))) return; eigen.push(n); });
+    return uit.concat(eigen.map(n => ({ k: n, label: n, cat: false })));
   };
+  const inKolom = (c, kolom) => kolom.cat ? c.faseK === kolom.k : (!c.faseK && zelfde(c.fase, kolom.k));   // een kaart hoort bij een fasekolom via het id; eigen fases via de naam
+  Bd.inKolom = inKolom;
   Bd.model = function (o) {
     const indeling = o.indeling === 'fase' ? 'fase' : 'status', vandaag = o.vandaag || P.vandaagYmd(), toonKlaar = !!o.toonKlaar;
     let kaarten = Bd.kaarten(o), verborgenKlaar = 0;
@@ -77,8 +78,8 @@
       return { indeling, kolommen: o.filter && o.filter.status ? kolommen.filter(c => c.k === o.filter.status) : kolommen, filtert, verborgenKlaar: klaar.verborgen };
     }
     if (!toonKlaar) { const alle = kaarten.length; kaarten = kaarten.filter(c => c.status !== 'klaar'); verborgenKlaar = alle - kaarten.length; }
-    const kolommen = Bd.fasen(kaarten).map(n => ({ k: n, label: n, kaarten: kaarten.filter(c => zelfde(c.fase, n)), verborgen: 0 }));
-    const geen = kaarten.filter(c => !c.fase); if (geen.length) kolommen.push({ k: '', label: 'Geen fase', kaarten: geen, verborgen: 0 });
+    const kolommen = Bd.fasen(kaarten).map(f => ({ k: f.k, label: f.label, cat: f.cat, kaarten: kaarten.filter(c => inKolom(c, f)), verborgen: 0 }));
+    const geen = kaarten.filter(c => !c.faseK && !String(c.fase || '').trim()); if (geen.length) kolommen.push({ k: '', label: 'Geen fase', kaarten: geen, verborgen: 0 });
     return { indeling, kolommen, filtert: !!(o.filter && (o.filter.project || o.filter.persoon || o.filter.status)), verborgenKlaar };
   };
   Bd.stroom = function (o) {
@@ -113,6 +114,9 @@
     + '#agenda-bord .bd-sub{font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#666)}'
     + '#agenda-bord .bd-voet{display:flex;align-items:center;gap:8px;font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#666)}'
     + '#agenda-bord .bd-mat{display:inline-flex;align-items:center;gap:3px;color:var(--ink-2,#666)}#agenda-bord .bd-mat.laat{color:#b3261e;font-weight:600}'
+    + '#agenda-bord .bd-sp{margin:10px 0;padding:10px 12px;border:1px solid var(--line,#dfd8cb);border-radius:8px;background:var(--surface,#fff)}#agenda-bord .bd-sp-kop{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}#agenda-bord .bd-sp-kop strong{flex:1 1 auto}'
+    + '#agenda-bord .bd-sp-lijst{list-style:none;margin:0;padding:0}#agenda-bord .bd-sp-taak{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:none;padding:8px 4px;min-height:36px;cursor:pointer;font:inherit;color:inherit;border-bottom:1px solid var(--line,#eee)}#agenda-bord .bd-sp-taak:hover{background:var(--surface-sunken,#f6f6f4)}'
+    + '#agenda-bord .bd-pluskol{margin-left:8px;min-height:32px;padding:0 10px;border:1px dashed var(--line,#bbb);border-radius:6px;background:none;cursor:pointer;font:inherit;align-self:flex-start}'
     + '#agenda-bord .bd-laat{color:#8B1A1A;font-weight:600}#agenda-bord .bd-wacht{font:400 12px/16px var(--sans,inherit);color:var(--ink,#1f2a24);border-left:2px solid var(--brass,#d19a1f);padding-left:6px}'
     + '#agenda-bord .bd-dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink-3,#8a8f89);margin-right:6px;vertical-align:middle}'
     + '#agenda-bord .bd-dot.bezig{background:var(--primary,#2A4A38);border-color:var(--primary,#2A4A38)}#agenda-bord .bd-dot.wacht{background:var(--brass,#d19a1f);border-color:var(--brass,#d19a1f)}#agenda-bord .bd-dot.klaar{background:var(--ink-3,#8a8f89)}'
@@ -177,20 +181,20 @@
   };
   Bd.naarFase = async function (kaart, fase) {
     const t = vindTaak(kaart.code, kaart.id); if (!t) { toast('Deze taak bestaat niet meer.', null, true); klaarMelden(); return false; }
-    if (zelfde(t.fase || '', fase || '')) return false;
+    const fv = P.faseVelden(fase || ''); if (zelfde(t.fase || '', fv.fase) && String(t.fase_id || '') === String(fv.fase_id || '')) return false;   // dezelfde fase, ook met id
     if (!mag('alles')) { toast(GEEN_RECHT, null, true); return false; }
     return schrijf(Bd.specFase(kaart.code, t, fase), 'fase ' + (fase ? '"' + fase + '"' : 'gewist'));
   };
   async function verplaats(kaart, kolom, indeling) {
     if (S.bezig) { toast('Even wachten: de vorige wijziging wordt nog opgeslagen.', null, true); return; }
     S.bezig = true;
-    try { if (indeling === 'fase') await Bd.naarFase(kaart, kolom.k); else await Bd.naarStatus(kaart, kolom.k); } finally { S.bezig = false; }
+    try { if (indeling === 'fase') await Bd.naarFase(kaart, kolom.cat ? kolom.label : kolom.k); else await Bd.naarStatus(kaart, kolom.k); } finally { S.bezig = false; }
   }
   async function kiesKolom(kaart, model) {
     const dlg = D.dialoog; if (!dlg || !dlg.choose) return;
     const kan = model.indeling === 'fase' ? mag('alles') : mag('status');
     if (!kan) { toast(GEEN_RECHT, null, true); return; }
-    const opties = model.kolommen.filter(c => model.indeling === 'fase' ? !zelfde(c.k, kaart.fase) : c.k !== kaart.status);
+    const opties = model.kolommen.filter(c => model.indeling === 'fase' ? !inKolom(kaart, c) : c.k !== kaart.status);
     const i = await dlg.choose({ title: 'Verplaats naar…', message: kaart.naam, choices: opties.map(c => ({ label: c.label })) });
     if (i === null || i === undefined || !opties[i]) return;
     await verplaats(kaart, opties[i], model.indeling);
@@ -208,7 +212,7 @@
     }
     const naam = await dlg.prompt({ title: 'Nieuwe taak', message: 'In "' + kolom.label + '"', placeholder: 'Taaknaam', okLabel: 'Toevoegen' });
     const n = String(naam == null ? '' : naam).replace(/\s+/g, ' ').trim(); if (!n) return;
-    const nieuw = await D.nieuweTaak({ code, naam: n, fase: model.indeling === 'fase' ? kolom.k : '' });
+    const nieuw = await D.nieuweTaak({ code, naam: n, fase: model.indeling === 'fase' ? (kolom.cat ? kolom.label : kolom.k) : '' });
     if (!nieuw) return;
     klaarMelden(); toast('Taak "' + n + '" toegevoegd.');
     if (model.indeling === 'status' && kolom.k !== 'todo') { const k = Bd.kaarten({ taken: D.taken(), afhank: D.afhank(), projecten: D.projecten(), team: D.team(), filter: { project: code } }).find(x => String(x.id) === String(nieuw.id)); if (k) await verplaats(k, kolom, 'status'); }
@@ -246,27 +250,38 @@
   function kolomEl(c, model, filter) {
     const kan = model.indeling === 'fase' ? mag('alles') : mag('status');
     const kol = el('div', { klass: 'bd-kol', 'data-kolom': c.k, role: 'group', 'aria-label': c.label });
-    kol.appendChild(el('div', { klass: 'bd-kolkop' }, el('span', { tekst: c.label }), el('span', { klass: 'bd-tel', tekst: String(c.kaarten.length) })));
+    const PI = root.MTPlanInrichting, bewerkbaar = model.indeling === 'fase' && c.cat && PI && PI.mag();   // P3b: alleen de beheerder hernoemt, versleept of verwijdert een fasekolom; voor anderen is de kop gewone tekst
+    const kolkop = el('div', { klass: 'bd-kolkop' }, bewerkbaar ? PI.labelEl('fase', c.k, c.label, { tag: 'span' }) : el('span', { tekst: c.label }), el('span', { klass: 'bd-tel', tekst: String(c.kaarten.length) }), bewerkbaar ? PI.kolomVerwijderEl('fase', c.k, c.label) : null);
+    if (bewerkbaar) PI.sleepKop(kolkop, 'fase', c.k);
+    kol.appendChild(kolkop);
     if (!c.kaarten.length) kol.appendChild(el('div', { klass: 'bd-leeg', tekst: 'Geen taken' }));
     c.kaarten.forEach(k => kol.appendChild(kaartEl(k, model)));
     if (c.verborgen && model.indeling === 'status') kol.appendChild(el('button', { type: 'button', klass: 'bd-meer-klaar', tekst: 'Toon alle afgeronde (' + (c.kaarten.length + c.verborgen) + ')', klik: () => { S.toonKlaar = true; Bd.teken(); } }));
     if (D.nieuweTaak && mag('status')) kol.appendChild(el('button', { type: 'button', klass: 'bd-nieuw', tekst: '+ taak', klik: () => nieuweTaak(c, model, filter) }));
     if (kan) {
-      kol.addEventListener('dragover', ev => { if (!S.sleep) return; const al = model.indeling === 'fase' ? zelfde(S.sleep.fase, c.k) : S.sleep.status === c.k; if (al) return; ev.preventDefault(); kol.classList.add('doel'); try { ev.dataTransfer.dropEffect = 'move'; } catch (e) {} });
+      kol.addEventListener('dragover', ev => { if (!S.sleep) return; const al = model.indeling === 'fase' ? inKolom(S.sleep, c) : S.sleep.status === c.k; if (al) return; ev.preventDefault(); kol.classList.add('doel'); try { ev.dataTransfer.dropEffect = 'move'; } catch (e) {} });
       kol.addEventListener('dragleave', ev => { if (!kol.contains(ev.relatedTarget)) kol.classList.remove('doel'); });
       kol.addEventListener('drop', ev => { ev.preventDefault(); kol.classList.remove('doel'); const k = S.sleep; S.sleep = null; if (k) verplaats(k, c, model.indeling); });
     }
     return kol;
   }
+  // De taken van een station voor een project (klik op een vakje in de stroom): een korte lijst, elke taak opent het taakpaneel
+  function stationPaneel(r, s) {
+    const lijst = s.taken || [], kop = el('div', { klass: 'bd-sp-kop' }, el('strong', { tekst: r.naam + ' - ' + s.l }), el('button', { type: 'button', klass: 'pf-knop', tekst: 'Sluit', klik: () => { S.stroomOpen = null; Bd.teken(); } }), el('button', { type: 'button', klass: 'pf-knop', tekst: 'Naar het project', klik: () => D.openProject && D.openProject(r.code) }));
+    const rijen = lijst.map(t => { const b = el('button', { type: 'button', klass: 'bd-sp-taak', title: 'Open de taak', klik: () => { if (D.openTaak) D.openTaak(r.code, t.id, b); } }, el('span', { klass: 'bd-dot ' + (t.status === 'todo' ? '' : t.status), title: statusLabel(t.status) }), t.naam || '(zonder naam)'); b.setAttribute('data-pf-code', r.code); b.setAttribute('data-pf-taak', t.id); return el('li', null, b); });
+    return el('section', { klass: 'bd-sp', role: 'region', 'aria-label': 'Taken van ' + s.l + ' in ' + r.naam }, kop, lijst.length ? el('ul', { klass: 'bd-sp-lijst' }, rijen) : el('p', { klass: 'bd-sub', tekst: s.k === 'materiaal' && s.regels ? 'Geen taken; dit station volgt ' + s.regels + ' bestelregel' + (s.regels === 1 ? '' : 's') + ' van het project.' : 'Geen taken in dit station.' }));
+  }
   function stroomEl(m) {
     if (!m.rijen.length) return el('div', { klass: 'bd-leeg', tekst: 'Geen actieve projecten.' });
-    const kop = el('tr', null, el('th', { tekst: 'Project' }), m.stations.map(([, l]) => el('th', { tekst: l })), el('th', { tekst: 'Klaar' }));
+    const PI = root.MTPlanInrichting, beheer = !!(PI && PI.mag());   // P3b: de beheerder hernoemt, versleept en verwijdert stations; voor anderen is de kop gewone tekst
+    const kop = el('tr', null, el('th', { tekst: 'Project' }), m.stations.map(([k, l]) => { const th = el('th', null, beheer ? PI.labelEl('station', k, l, { tag: 'span' }) : l, beheer ? PI.kolomVerwijderEl('station', k, l) : null); if (beheer) PI.sleepKop(th, 'station', k); return th; }), el('th', null, el('span', { tekst: 'Klaar' }), beheer ? PI.kolomToevoegEl('station', { klass: 'bd-pluskol' }) : null));
     const rijen = m.rijen.map(r => el('tr', null,
       el('td', null, el('button', { type: 'button', klass: 'bd-pr', tekst: r.naam, title: 'Naar het project', klik: () => D.openProject && D.openProject(r.code) }), r.vlag ? el('div', { klass: 'bd-wacht', tekst: r.reden }) : (r.lever ? el('div', { klass: 'bd-sub', tekst: 'levering ' + P.datumKort(r.lever) }) : null)),
-      r.stations.map(s => el('td', null, el('button', { type: 'button', klass: 'bd-st', title: s.l + ': ' + (s.staat === 'leeg' ? 'geen taken' : s.staat) + ' · naar het project', klik: () => D.openProject && D.openProject(r.code) },
+      r.stations.map(s => el('td', null, el('button', { type: 'button', klass: 'bd-st', title: s.l + ': ' + (s.staat === 'leeg' ? 'geen taken' : s.staat) + ' - toon de taken', 'aria-expanded': S.stroomOpen && S.stroomOpen.code === r.code && S.stroomOpen.k === s.k ? 'true' : 'false', klik: () => { S.stroomOpen = S.stroomOpen && S.stroomOpen.code === r.code && S.stroomOpen.k === s.k ? null : { code: r.code, k: s.k }; Bd.teken(); } },
         el('span', { klass: 'bd-dot ' + (s.staat === 'bezig' ? 'bezig' : s.staat === 'wacht' ? 'wacht' : s.staat === 'klaar' ? 'klaar' : '') }), s.n ? s.klaar + '/' + s.n : '—'))),
       el('td', null, el('span', { klass: 'bd-sub', tekst: r.klaar + '/' + r.totaal }))));
-    return el('table', { klass: 'bd-stroom' }, el('thead', null, kop), el('tbody', null, rijen));
+    const open = S.stroomOpen && m.rijen.find(r => r.code === S.stroomOpen.code), os = open && open.stations.find(s => s.k === S.stroomOpen.k);
+    return el('div', null, el('table', { klass: 'bd-stroom' }, el('thead', null, kop), el('tbody', null, rijen)), os ? stationPaneel(open, os) : null);
   }
 
   Bd.teken = function () {
@@ -285,7 +300,7 @@
     let m;
     try {
       if (indeling === 'stroom') { m = Bd.stroom(Object.assign({}, basis, { projectenVol: D.projectenVol ? D.projectenVol() : [], bestel: D.bestel ? D.bestel() : [], filter })); w.appendChild(stroomEl(m)); }
-      else { m = Bd.model(Object.assign({}, basis, { filter, indeling, toonKlaar: S.toonKlaar })); Bd.laatste = m; w.appendChild(el('div', { klass: 'bd-bord' }, m.kolommen.map(c => kolomEl(c, m, filter)))); }
+      else { m = Bd.model(Object.assign({}, basis, { filter, indeling, toonKlaar: S.toonKlaar })); Bd.laatste = m; const PI = root.MTPlanInrichting, plus = indeling === 'fase' && PI ? PI.kolomToevoegEl('fase', { klass: 'bd-pluskol' }) : null; w.appendChild(el('div', { klass: 'bd-bord' }, m.kolommen.map(c => kolomEl(c, m, filter)), plus)); }
     } catch (e) { console.warn('Bord:', e); w.appendChild(el('div', { klass: 'mw-melding', tekst: 'Het bord kon niet worden berekend.' })); }
     if (pf) pf.markeer(w);
   };

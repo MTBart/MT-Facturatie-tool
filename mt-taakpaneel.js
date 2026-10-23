@@ -31,8 +31,8 @@
   // De fasen (buckets) waarin taken van dit project staan, plus die van het standaardsjabloon; de taak bewaart de naam van de fase (zoals het sjabloon hem zet)
   const faseOpties = (lijst, huidig) => {
     const namen = []; const voeg = n => { const s = String(n || '').trim(); if (s && !namen.some(x => zelfde(x, s))) namen.push(s); };
-    try { (P.sjabloonStd().fases || []).forEach(f => voeg(f.naam)); } catch (e) {}
-    (lijst || []).forEach(t => voeg(t.fase)); voeg(huidig);
+    try { P.fasenLijst().forEach(f => voeg(f.label)); } catch (e) {}   // P3b: de fases uit Planning inrichten (met hun huidige namen), daarna eigen fases van het project
+    (lijst || []).forEach(t => voeg(P.faseLabel(t))); voeg(P.faseLabel({ fase: huidig }));
     return namen;
   };
 
@@ -231,7 +231,7 @@
     const faseKeuze = [['', 'Geen fase']].concat(m.fasen.map(f => [f, f]));
     return h.el('div', { klass: 'tp-velden' },
       h.rij('Wie', h.keuzeVeld('toegewezen', t.toegewezen || '', wieOpties, { kan, label: 'Wie', wat: 'persoon' }), extra.length ? h.el('span', { klass: 'tp-sub', tekst: 'ook: ' + extra.join(', ') }) : null),
-      h.rij('Fase', h.keuzeVeld('fase', t.fase || '', faseKeuze, { kan, label: 'Fase (bucket)', wat: 'fase', titel: 'De fase waarin de taak staat (zoals in de fasenplanning en het sjabloon)' })),
+      h.rij('Fase', h.keuzeVeld('fase', P.faseLabel(t), faseKeuze, { kan, label: 'Fase (bucket)', wat: 'fase', gezien: t.fase || '', titel: 'De fase waarin de taak staat (zoals in de fasenplanning en het sjabloon)' })),
       h.rij(t.soort === 'mijlpaal' ? 'Datum' : 'Datums', datumVelden(m, h), tijdlijn(m, h)),
       h.rij('Raming', t.soort === 'mijlpaal' ? h.el('span', { klass: 'tp-tekstwaarde', tekst: 'mijlpaal (telt niet mee)' })
         : h.el('div', { klass: 'tp-inline' }, h.tekstVeld('duur_uur', urenTekst(t.duur_uur), { kan, label: 'Raming in uren', klass: 'tp-kort', inputmode: 'decimal', placeholder: '0', lees: T.leesUren, fout: 'Geen geldige raming: typ bijvoorbeeld 6, 6,5 of 2u30. Er is niets gewijzigd.', gezien: String(t.duur_uur == null ? '' : t.duur_uur), wat: 'raming', titel: 'Uren: 6, 6,5, 2u30 of 90m' }), h.el('span', { klass: 'tp-sub', tekst: 'uur' + (m.raming ? ' · ' + P.fmtUurMin(m.raming) : '') }))),
