@@ -47,3 +47,12 @@ De rol "tv" is een aparte pagina (tv.html) zonder dit paneel; in de cockpit is d
 ## Open
 - Meervoudig filteren (vraag 2) en "Toon geklokt" blijven bij Bart / P13, zoals in de inventaris.
 - Go/no-go voor het definitief weghalen van de oude code (de release na dit vangnet): ook iedereen laten herladen (schemadrempel F1) en een controle op twee apparaten in de praktijk.
+
+## Codex-review (alleen gelezen, ruwe uitvoer in scratchpad) en wat ermee gedaan is
+| # | Bevinding | Ernst | Verwerkt |
+|---|---|---|---|
+| 1 | Een onzekere save van een nieuw blok kon bij "opnieuw" een dubbel blok maken (elke poging een nieuw nummer). | kritiek | Ja: één nummer per formulier (`B.pendingId`); hetzelfde blok onder dat nummer = al gedaan (noop), iets anders = geweigerd; staat het blok alleen lokaal, dan wordt het geopend met een eerlijke melding (geen tweede poging nodig). |
+| 2 | Een dubbelklik op Inplannen maakte twee blokken. | kritiek | Ja: slot (`B.bezig`) en knop tijdens het opslaan uit; rooktest met dubbelklik. |
+| 3 | Een id-conflict bij een nieuw blok (F1 sloeg het over) werd als gelukt gemeld. | belangrijk | Ja: `capBlokDoe` vertaalt "bestaat" naar niet gelukt (collega was eerder), het formulier blijft staan. |
+| 4 | Kantoor kon via blokTrekIn een eigen open voorstel intrekken. | belangrijk | Ja: intrekken alleen in de werkplaats-rol (ctx.voorstel) en alleen het eigen voorstel; kantoor keurt goed of wijst af (harness en paneel). |
+Bevestigd door Codex: Ongedaan maken stopt veilig als iemand anders het blok wijzigde; de klik op een lege plek sluit blokken, knoppen, popovers en de dagbalk uit; alles wordt met DOM-calls getekend (geen XSS-route); de periodieke verversing beschermt actieve invoer.

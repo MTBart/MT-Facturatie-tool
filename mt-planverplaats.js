@@ -198,7 +198,11 @@
       const v = c.velden;
       if (!spec.bevestigd) { const vraag = vraagVoor(v.persoon, v.datum); if (vraag) return { ok: true, vraag }; }
       const id = spec.id || (ctx.nieuwId ? ctx.nieuwId() : Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
-      if (lijst.some(b => b && String(b.id) === String(id))) return { ok: false, reden: 'Er bestaat al een planblok met dit nummer; probeer het opnieuw.' };
+      const bestaand = lijst.find(b => b && String(b.id) === String(id));
+      if (bestaand) {   // dezelfde actie nog eens (de eerste kwam misschien wel aan): hetzelfde blok = al gedaan, geen tweede blok; iets anders onder dit nummer = een ander blok
+        const gelijk = !bestaand._vervallen && bestaand.persoon === v.persoon && bestaand.datum === v.datum && bestaand.start === v.start && Math.round(Number(bestaand.duurMin)) === v.duurMin && String(bestaand.taak || '') === String(v.taak || '') && String(bestaand.project_code || '') === String(v.project_code || '');
+        return gelijk ? { ok: true, noop: true, bestaand: true, id: String(id) } : { ok: false, reden: 'Er bestaat al een planblok met dit nummer; probeer het opnieuw.' };
+      }
       const nieuw = ctx.mag ? stempel(Object.assign({ id }, v, { ts, door: wie }), null) : (PV ? PV.nieuw(Object.assign({}, v), wie, wieNaam) : null);
       if (!nieuw) return { ok: false, reden: 'Voorstellen zijn hier niet beschikbaar.' };
       if (!ctx.mag) nieuw.id = id;
@@ -207,7 +211,7 @@
     const b = V.blokVanId(lijst, spec.blokId);
     if (!b) return { ok: false, reden: 'Dit planblok bestaat niet meer; er is niets gewijzigd.' };
     if (spec.soort === 'blokTrekIn') {
-      if (!eigenVoorstel(b)) return { ok: false, reden: 'Je kunt alleen je eigen open voorstel intrekken.' };
+      if (!ctx.voorstel || !eigenVoorstel(b)) return { ok: false, reden: 'Je kunt alleen als werkplaats je eigen open voorstel intrekken (kantoor keurt goed of wijst af).' };
       if (!PV) return { ok: false, reden: 'Voorstellen zijn hier niet beschikbaar.' };
       const n = PV.trekIn(b, wie);
       return { ok: true, blokken: lijst.map(x => x === b ? n : x), wijziging: { soort: 'blokTrekIn', id: b.id, stempel: n._gewijzigd, naam: blokTekst(b) } };

@@ -16003,13 +16003,14 @@ async function capVerplaats(spec,opt){
 // verlofvraag, "gezien"), dan opslaan via de F1-writer (agPlanSave). Uitkomst zoals de andere routes: { ok, reden?, tegelijk?, vraag?, noop?, wijziging?, id? }; ok:false + vraag = eerst bevestigen.
 async function capBlokDoe(spec,opt){
   const soort=spec&&spec.soort;
-  if(soort==='blokNieuw'?!(capMagSlepen()||pvMoetVoorstel()):(soort==='blokTrekIn'?false:!capMagSlepen())) return { ok:false, reden:'Dit mag je niet met jouw rol: wijzigen en beslissen doet kantoor; de werkplaats dient een voorstel in.' };
+  if(soort==='blokNieuw'?!(capMagSlepen()||pvMoetVoorstel()):(soort==='blokTrekIn'?!pvMoetVoorstel():!capMagSlepen())) return { ok:false, reden:'Dit mag je niet met jouw rol: wijzigen en beslissen doet kantoor; de werkplaats dient een voorstel in.' };
   const vers=await _capVers(); if(!vers.ok) return vers;
   const r=MTPlanVerplaats.blokBewerk(spec,_capCtx()); if(!r.ok) return r; if(r.noop) return r; if(r.vraag) return { ok:true, vraag:r.vraag };
   _planblokken=r.blokken;
   const opgeslagen=await agPlanSave();   // false = SharePoint nam het niet aan: de wijziging staat dan alleen lokaal (agPlanSave meldt dat zelf)
   const uitk=_agPlanUitkomst||{};
   if(opgeslagen===false) return { ok:false, reden:uitk.tekst||'Niet gedeeld met SharePoint: de wijziging staat alleen op deze pc en wordt later gedeeld.', lokaal:true, id:r.wijziging.id };
+  if(soort==='blokNieuw'&&(uitk.overgeslagen||[]).some(o=>o&&String(o.id)===String(r.wijziging.id)&&o.reden==='bestaat')) return { ok:false, tegelijk:true, reden:'Er bestaat al een planblok met dit nummer (een collega was net eerder); jouw nieuwe blok is niet toegevoegd.' };   // F1 sloeg het over: niet als gelukt melden
   const nu=agPlanBlokken().find(b=>b&&String(b.id)===String(r.wijziging.id));
   return { ok:true, wijziging:r.wijziging, id:r.wijziging.id, naam:r.wijziging.naam, opgeslagen:true, behouden:!!(nu&&nu._gewijzigd===r.wijziging.stempel), tegelijk:uitk.tegelijk||'' };
 }

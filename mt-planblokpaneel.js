@@ -52,7 +52,7 @@
     const pr = code ? ((D.project && D.project(k || code)) || { code, naam: '', nummer: '' }) : null;
     const v = blok.status === 'voorstel' ? (blok.voorstel || {}) : null;
     const open = !!(v && !v.goedgekeurd && !v.afgewezen), eigen = !!(open && String(v.door || '').toLowerCase() === r.wie);
-    const kan = { wijzig: r.kantoor && !open, verwijder: r.kantoor && !open, beslis: r.kantoor && open, trekin: eigen,
+    const kan = { wijzig: r.kantoor && !open, verwijder: r.kantoor && !open, beslis: r.kantoor && open, trekin: eigen && r.voorstel,
       reden: open ? 'Een open voorstel beslis je eerst (goedkeuren of afwijzen).' : r.voorstel ? 'Wijzigen doet kantoor. Jij kunt een voorstel indienen: klik op een lege plek in de Capaciteit.' : 'Dit paneel is alleen-lezen voor jouw rol (kantoor wijzigt de planning).' };
     return { ok: true, sleutel: String(blok.id), id: String(blok.id), blok, code, project: pr, taak: taak ? { id: taak.id, naam: taak.naam } : null,
       persoon: lid ? lid.slug : String(blok.persoon || ''), persoonNaam: lid ? lid.naam : String(blok.persoon || ''), datum: P.isYmd(blok.datum) ? blok.datum : '',
@@ -161,23 +161,31 @@
     const nt = h.el('textarea', { id: 'tp-v-notitie', klass: 'tp-invoer tp-rand', 'aria-label': 'Notitie', rows: '3', placeholder: 'Notitie (optioneel)' }); nt.value = c.notitie; nt.addEventListener('input', () => zetC('notitie', nt.value));
     kids.push(h.sectie('pb-h-notitie', 'Notitie', null, nt));
     const verstuur = async () => {
+      if (B.bezig) return;   // een dubbelklik of een tweede klik tijdens het opslaan maakt geen tweede blok
       const x = Object.assign({}, B.concept || c), start = B.leesTijd(x.start), duur = typeof x.duurMin === 'number' ? x.duurMin : B.leesDuur(x.duurMin);
       if (!x.persoon) { h.opslagStatus('fout', 'Kies een persoon.'); return; }
       if (!P.isYmd(x.datum)) { h.opslagStatus('fout', 'Kies een dag.'); return; }
       if (start === null) { h.opslagStatus('fout', 'Vul een starttijd in, bijvoorbeeld 09:15.'); return; }
       if (duur === null) { h.opslagStatus('fout', 'Vul een duur in, bijvoorbeeld 1u30 of 90 min.'); return; }
+      if (!B.pendingId) B.pendingId = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);   // één nummer per formulier: opnieuw proberen maakt nooit een tweede blok
+      B.bezig = true; const knopEl = root.document && root.document.getElementById('pb-nieuw-ok'); if (knopEl) knopEl.disabled = true;
       h.opslagStatus('bezig', 'Opslaan…');
-      let r; try { r = await vraagEnDoe({ soort: 'blokNieuw', velden: { persoon: x.persoon, datum: x.datum, start, duurMin: duur, project_code: x.project_code, taak_id: x.taak_id, taak: x.taak, notitie: x.notitie } }, {}); } catch (e) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((e && e.message) || e) }; }
+      let r; try { r = await vraagEnDoe({ soort: 'blokNieuw', id: B.pendingId, velden: { persoon: x.persoon, datum: x.datum, start, duurMin: duur, project_code: x.project_code, taak_id: x.taak_id, taak: x.taak, notitie: x.notitie } }, {}); } catch (e) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((e && e.message) || e) }; }
+      B.bezig = false; const knopEl2 = root.document && root.document.getElementById('pb-nieuw-ok'); if (knopEl2) knopEl2.disabled = false;
       if (r && r.geannuleerd) { h.opslagStatus(null); return; }
-      if (!r || !r.ok) { h.opslagStatus(r && r.tegelijk ? 'let' : 'fout', (r && r.reden) || 'Niet opgeslagen.'); return; }
-      B.concept = null; h.naWijziging();
+      if (r && r.lokaal && r.id) {   // het blok staat op deze pc en wordt later gedeeld: niet nog eens maken, wel eerlijk zeggen
+        B.concept = null; B.pendingId = null; h.toast(r.reden, null, true); h.naWijziging(); h.open('planblok', String(r.id)); return;
+      }
+      if (r && r.ok && r.noop && r.bestaand) { B.concept = null; B.pendingId = null; h.toast('Dit planblok stond er al.'); h.naWijziging(); h.open('planblok', String(r.id)); return; }
+      if (!r || !r.ok) { h.opslagStatus(r && r.tegelijk ? 'let' : 'fout', (r && r.reden) || 'Niet opgeslagen.'); if (r && r.tegelijk) B.pendingId = null; return; }
+      B.concept = null; B.pendingId = null; h.naWijziging();
       const w = r.wijziging;
       h.toast(w && w.voorstel ? 'Voorstel ingediend: het wacht op goedkeuring.' : '"' + (r.naam || 'Planblok') + '" ingepland.', w && !w.voorstel ? async () => { let u; try { u = await herstel(w, {}); } catch (e) { u = { ok: false, reden: 'Terugzetten mislukt.' }; } h.naWijziging(); h.toast(u && u.ok ? 'Teruggezet.' : ((u && u.reden) || 'Terugzetten lukt niet.')); if (u && u.ok) h.sluit(); } : null);
       if (r.tegelijk) h.toast(r.tegelijk, null, true);
       h.open('planblok', String(r.id));
     };
     kids.push(h.el('div', { klass: 'tp-acties' }, h.el('button', { type: 'button', klass: 'tp-knop tp-prim', id: 'pb-nieuw-ok', tekst: voorstel ? 'Voorstel indienen' : 'Inplannen', klik: verstuur }),
-      h.el('button', { type: 'button', klass: 'tp-knop', id: 'pb-nieuw-annuleer', tekst: 'Annuleren', klik: () => { B.concept = null; h.sluit(); } })));
+      h.el('button', { type: 'button', klass: 'tp-knop', id: 'pb-nieuw-annuleer', tekst: 'Annuleren', klik: () => { B.concept = null; B.pendingId = null; h.sluit(); } })));
     return { aria: 'Nieuw planblok', titel: h.el('h2', { id: 'tp-titel', klass: 'tp-titel', tekst: voorstel ? 'Nieuw voorstel' : 'Nieuw planblok' }), body: kids };
   }
 
@@ -238,7 +246,7 @@
   B.nieuw = function (concept, o) {
     const r = rechten();
     if (!r.kantoor && !r.voorstel) { try { if (D.toast) D.toast('Je kunt hier alleen kijken: plannen doet kantoor.'); } catch (e) {} return false; }
-    B.concept = Object.assign({ persoon: '', datum: P.vandaagYmd(), start: '09:00', duurMin: 60, project_code: '', taak_id: '', taak: '', notitie: '' }, concept || {});
+    B.concept = Object.assign({ persoon: '', datum: P.vandaagYmd(), start: '09:00', duurMin: 60, project_code: '', taak_id: '', taak: '', notitie: '' }, concept || {}); B.pendingId = null;
     return O.open('planblok', B.NIEUW, Object.assign({ push: false }, o || {}));
   };
   B.sluit = o => O.sluit(o);
