@@ -84,6 +84,8 @@
   const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (e) { return null; } };
   const lijstUit = v => { const x = lees(v); return Array.isArray(x) ? x : (x && Array.isArray(x.items) ? x.items : []); };
   V.lijstUit = lijstUit;
+  // Geldige vorm voor schrijven: niets (nieuw bestand), een lijst of {items:[…]}. Iets anders = kapot bestand: dan nooit samenvoegen en terugschrijven.
+  V.geldigeVorm = v => { if (v == null) return true; const x = lees(v); return Array.isArray(x) || !!(x && Array.isArray(x.items)); };
   const aangemaakt = r => String((r && (r.aangemaakt_op || r.ts)) || '');
 
   // Nieuwe stand van één record na een besluit van Bart. Het oude record blijft ongemoeid (nieuw object).

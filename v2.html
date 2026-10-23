@@ -41,7 +41,7 @@
      blokkerende prompt()/confirm() — audit-actie S6. Cockpit-tokens, eigen bestand
      want mt-core is de data/auth-laag; zelfde ?v=-cachebust-patroon. -->
 <script src="mt-dialog.js?v=2026-10-11b"></script>
-<script src="mt-verbeter.js?v=2026-10-23a"></script>
+<script src="mt-verbeter.js?v=2026-10-23b"></script>
 <script src="mt-toggl.js?v=2026-10-15z"></script>
 <script src="mt-koppel.js?v=2026-10-13p"></script>
 <script src="mt-mailactie.js?v=2026-10-13c"></script>
@@ -20339,11 +20339,11 @@ function vbMagBeheren() { try { return !!(window.MTRol && MTRol.isBeheer && MTRo
 async function vbSchrijfRecord(bestand, recOfFn) {
   const sleutel = bestand.replace(/\.json$/, '');
   let huidig;
-  try { huidig = MTVerbeter.lijstUit(await _SP.read(bestand)); } catch(e) { return { ok: false, reden: 'SharePoint is niet bereikbaar' }; }
+  try { const rauw = await _SP.read(bestand); if (!MTVerbeter.geldigeVorm(rauw)) return { ok: false, reden: 'het bestand op SharePoint heeft een onverwachte vorm; niets overschreven' }; huidig = MTVerbeter.lijstUit(rauw); } catch(e) { return { ok: false, reden: 'SharePoint is niet bereikbaar' }; }
   const rec = typeof recOfFn === 'function' ? recOfFn(huidig) : recOfFn;   // functie: bouwt het record uit de verse lijst (null = niets schrijven)
   if (!rec) return { ok: false, reden: 'niets te schrijven' };
   const samen = MTVerbeter.samen([rec], huidig);
-  const ok = await _SP.write(bestand, samen, (remote, local) => _SP.mergers[sleutel](typeof local === 'string' ? local : JSON.stringify(local), remote));
+  const ok = await _SP.write(bestand, samen, (remote, local) => MTVerbeter.geldigeVorm(remote) ? _SP.mergers[sleutel](typeof local === 'string' ? local : JSON.stringify(local), remote) : null);
   return ok ? { ok: true, lijst: samen } : { ok: false, reden: 'het opslaan lukte niet' };
 }
 
