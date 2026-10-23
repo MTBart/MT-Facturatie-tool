@@ -55,12 +55,13 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planfilter.js?v=2026-10-23g1"></script>
-<script src="mt-planning.js?v=2026-10-23c2"></script>
+<script src="mt-planning.js?v=2026-10-23d0"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-23p1b"></script>
 <script src="mt-takenbak.js?v=2026-10-23c3"></script>
 <script src="mt-capagenda.js?v=2026-10-23d1"></script>
+<script src="mt-agenda-uit.js?v=2026-10-23d0"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-23d1"></script>
 <script src="mt-objectpaneel.js?v=2026-10-23p1b"></script>
 <script src="mt-taakpaneel.js?v=2026-10-21v"></script>
@@ -3918,6 +3919,9 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   openProject:code=>openProject(code,{sectie:'planning'}),
   laagHost:()=>document.getElementById('agenda-laag-host'), geklokt:()=>agEntries(), gkProject:c=>agProjLabel(c), gkSync:()=>{ try{ return localStorage.getItem('mt_toggl_last_sync')||''; }catch(e){ return ''; } } }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }   // G1: de laag Geklokt leest dezelfde uren als het oude Rooster (mt_uren_entries); er wordt niets opgehaald of geschreven
 // D1: de Outlook-afspraken van het team als "bezet" in de agenda-strook van de Capaciteit (mt-capagenda.js). Alleen lezen via de bestaande Graph-login (ibFetch) en de bestaande machtiging Calendars.ReadWrite; niets wordt bewaard of geschreven.
+// D0: het fundament om tijden uit de tool in Outlook te zetten (mt-agenda-uit.js). De vlag staat UIT en er is niets aan gekoppeld: D2 en D3 schakelen hem later in, na Barts antwoorden. Zonder vlag doet het niets (geen lezen, geen schrijven, geen aanroep).
+const AGENDA_SCHRIJVEN=false;
+try{ MTAgendaUit.init({ vlag:()=>AGENDA_SCHRIJVEN, nu:()=>Date.now(), team:()=>MT_TEAM, ik:()=>{ const e=String(mtMijEmail()||'').toLowerCase(), m=(MT_TEAM||[]).find(x=>String(x.email||'').toLowerCase()===e); return m?m.slug:''; }, graph:(u,o)=>ibFetch(u,o) }); }catch(e){ console.warn('Agenda uit init:',e); }
 try{ MTCapAgenda.init({ fetch:(u,o)=>ibFetch(u,o), nu:()=>Date.now(), team:()=>MT_TEAM, ik:()=>mtMijEmail() }); }catch(e){ console.warn('Agenda (Outlook) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).

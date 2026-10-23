@@ -2141,7 +2141,22 @@
   // Migratie: er verandert niets aan bestaande blokken zolang niemand ze wijzigt. Een blok zonder stempels is "oud" en telt met zijn tijd (_gewijzigd, anders ts); het wint van niets maar
   // nooit van een nieuwer gestempeld veld. Een oude versie van de tool (die alleen het record stempelt) wordt herkend aan een record dat nieuwer is dan al zijn stempels (staleBoven).
   // Alleen wat een apparaat zelf wijzigde (het verschil met wat het eerder zag) krijgt een stempel: nooit het hele record, dus nooit andermans veld overschrijven.
-  P.BLOK_VELDEN = ['persoon', 'project_code', 'taak', 'taak_id', 'datum', 'start', 'duurMin', 'notitie', 'status', 'voorstel'];
+  // D0: de agenda-velden van een planblok (voor de koppeling met Outlook). Drie aparte, elk gestempelde velden, zodat twee apparaten die tegelijk iets anders wijzigen elkaar niet kwijtraken:
+  //   agenda_instelling = wat de planner wil { in_agenda: bool, wie?: slug, herinnering?: null|minuten|'dag', toon_waarde?: bool },
+  //   agenda_koppeling  = de gekoppelde afspraak { mbx?, id, iCalUId?, changeKey?, etag?, op? } (de opdracht die hem maakte),
+  //   agenda_gezien     = de laatste terugleescontrole { ts, lastModified? }.
+  // Ze rijden mee op de schemadrempel van de planblokken (P.SCHEMA): een app die ze niet kent mag het bestand niet meer schrijven zodra de drempel staat. Nog geen enkele code zet ze (dat komt met D2 en D3).
+  P.AGENDA_VELDEN = ['agenda_instelling', 'agenda_koppeling', 'agenda_gezien'];
+  P.BLOK_VELDEN = ['persoon', 'project_code', 'taak', 'taak_id', 'datum', 'start', 'duurMin', 'notitie', 'status', 'voorstel'].concat(P.AGENDA_VELDEN);
+  const nuObj = x => !!x && typeof x === 'object' && !Array.isArray(x), nuStr = (x, max) => typeof x === 'string' && x.length <= (max || 300);
+  P.agendaVeldGeldig = function (veld, w) {   // een waarde van een agenda-veld: de vorm klopt (anders wordt het nooit geschreven)
+    if (w === undefined) return true;   // wissen mag
+    if (veld === 'agenda_instelling') return nuObj(w) && typeof w.in_agenda === 'boolean' && Object.keys(w).every(k => ['in_agenda', 'wie', 'herinnering', 'toon_waarde'].includes(k)) && (w.wie === undefined || nuStr(w.wie, 80)) && (w.herinnering === undefined || w.herinnering === null || w.herinnering === 'dag' || (Number.isFinite(w.herinnering) && w.herinnering >= 0 && w.herinnering <= 10080)) && (w.toon_waarde === undefined || typeof w.toon_waarde === 'boolean');
+    if (veld === 'agenda_koppeling') return nuObj(w) && nuStr(w.id, 500) && w.id.length > 0 && Object.keys(w).every(k => ['mbx', 'id', 'iCalUId', 'changeKey', 'etag', 'op'].includes(k)) && Object.values(w).every(v => nuStr(v, 500));
+    if (veld === 'agenda_gezien') return nuObj(w) && Number.isFinite(w.ts) && Object.keys(w).every(k => ['ts', 'lastModified'].includes(k)) && (w.lastModified === undefined || nuStr(w.lastModified, 80));
+    return true;
+  };
+  const agendaOngeldig = o => !!o && P.AGENDA_VELDEN.some(f => o[f] !== undefined && !P.agendaVeldGeldig(f, o[f]));
   const BLOK_RAND = ['ts', 'door', '_door'];   // metagegevens die meeverhuizen met een wijziging, zonder eigen stempel
   const blokTijd = x => { const t = recTijd(x); if (t) return t; const ts = Date.parse((x && x.ts) || ''); return isNaN(ts) ? 0 : ts; };
   const blokBesloten = x => !!(x && x.voorstel && (x.voorstel.goedgekeurd || x.voorstel.afgewezen));
@@ -2192,6 +2207,7 @@
       vs[f] = { t: Math.max(tijd, vorig + 1), dev, rev: revVan(vs[f]) + 1, door, basis: vorig };
     };
     const tijd = Number(p.t) || nu;
+    if (agendaOngeldig(p.nieuw) || agendaOngeldig(p.velden)) return { skip: 'ongeldig' };   // een agenda-veld met een verkeerde vorm wordt niet geschreven (en gemeld als overgeslagen)
     if (p.nieuw) {
       if (i >= 0) return { skip: lijst[i]._vervallen ? 'verwijderd' : 'bestaat' };
       const x = kopie(p.nieuw); delete x._vs; delete x._vervallen;
