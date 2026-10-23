@@ -2390,13 +2390,19 @@ async function _pvLees() {
   catch (e) {}
   return _pvBlokken;
 }
+async function _tellerSchemaMin() {   // GET /teller/status → schema_min (de app-versie die projecttaken, planblokken en bestellingen nog mag schrijven)
+  const h = await authHeader(); if (!h['X-Auth-Token']) return null;
+  const r = await fetch(WORKER + '/teller/status', { headers: h }); if (!r.ok) return null;
+  const j = await r.json().catch(() => null); return j && Number.isFinite(Number(j.schema_min)) ? Number(j.schema_min) : null;
+}
 async function _pvSchrijf(wijzig) {
   const remote = await _SP.read('mt_planblokken.json').catch(() => null);
   if (!Array.isArray(remote)) { showToast('SharePoint niet bereikbaar — probeer het zo opnieuw'); return false; }
   // F1: via de gedeelde schrijfkern van de cockpit (MTPlanning.blokSchrijf): alleen wat deze telefoon wijzigde krijgt een stempel, vers lezen, ETag, een 412 wordt per veld samengevoegd.
   let basis; try { basis = MTPlanning.blokSamen(_pvBlokken, remote); } catch (e) { showToast('De planning heeft een onverwachte vorm — er is niets gewijzigd'); return false; }
   const nieuw = wijzig(JSON.parse(JSON.stringify(basis)));
-  const r = await MTPlanning.blokSchrijf(_SP, { patches: MTPlanning.blokPatches(basis, nieuw), lokaal: _pvBlokken, nu: Date.now(), door: _mijnEmail(), dev: _devIdM() });
+  const r = await MTPlanning.blokSchrijf(_SP, { patches: MTPlanning.blokPatches(basis, nieuw), lokaal: _pvBlokken, nu: Date.now(), door: _mijnEmail(), dev: _devIdM(),
+    voorWrite: async () => { try { return !MTPlanning.schemaGeblokkeerd(await _tellerSchemaMin()); } catch (e) { return true; } } });   // dezelfde schemadrempel als de cockpit (de teller); onbekend = niet geblokkeerd
   if (typeof AGENDA_CACHE !== "undefined") for (const k of Object.keys(AGENDA_CACHE)) delete AGENDA_CACHE[k];   // de agenda toont planblokken: opnieuw opbouwen
   if (r.data) _pvBlokken = r.data;
   if (!r.ok) { showToast(r.reden === 'geblokkeerd' ? MTPlanning.SCHEMA_TEKST : 'Niet opgeslagen — probeer het zo opnieuw'); return false; }
@@ -2463,11 +2469,7 @@ if (window.MTVandaag) MTVandaag.init({
   account: () => _msAccount, demo: () => _demoMode, nu: () => Date.now(), dev: _devIdM,
   werktijdenAan: () => { try { return document.documentElement.getAttribute('data-stijl') === 'nieuw'; } catch (e) { return false; } },   // de werktijden tellen alleen mee in de nieuwe stijl (zoals op de desktop)
   toast: m => showToast(m), dialog: () => window.mtDialog,
-  schemaMin: async () => {   // GET /teller/status → schema_min (de app-versie die projecttaken nog mag schrijven)
-    const h = await authHeader(); if (!h['X-Auth-Token']) return null;
-    const r = await fetch(WORKER + '/teller/status', { headers: h }); if (!r.ok) return null;
-    const j = await r.json().catch(() => null); return j && Number.isFinite(Number(j.schema_min)) ? Number(j.schema_min) : null;
-  },
+  schemaMin: _tellerSchemaMin,
   pvLees: () => _pvLees(), pvBlokken: () => _pvBlokken,
   project: _vdProject, projectLijst: () => allProjects().filter(p => MT_PROJ_INFO[p.code]).map(p => _vdProject(p.code)),
   openProject: id => openProjectSheet(id),
