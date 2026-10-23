@@ -49,3 +49,9 @@
 
 /* De takentabel van het project is breder dan de kaart op een gewone laptop: hij schuift binnen zijn eigen vlak in plaats van de pagina te verbreden (alle breedtes) */
 .pt-tabel{display:block;width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* Op de telefoon blijft de projectkop niet plakken (die is ruim 290 px hoog en nam de halve pagina in); alleen de tabbalk plakt, direct onder de balk bovenin */
+@media (max-width:760px){
+  html .proj-ctx{position:static}
+  html .proj-secnav{top:var(--mt-kop,60px)!important}
+}
