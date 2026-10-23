@@ -56,6 +56,7 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planfilter.js?v=2026-10-23b"></script>
+<script src="mt-projfilter.js?v=2026-10-23a"></script>
 <script src="mt-planning.js?v=2026-10-17n"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
@@ -1246,6 +1247,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <input class="zoek-input" id="project-zoek" type="text" placeholder="🔍 Zoek project..." oninput="zoekProjecten(this.value)" style="margin-bottom:8px">
           <div id="vandaag-kaart" class="vandaag-kaart" hidden></div>
           <div id="mobiel-meldingen-container"></div>
+          <div id="project-filter" class="pf"></div>
           <div id="project-filterchip"></div>
           <div id="project-lijst"></div>
         </div>
@@ -3537,6 +3539,8 @@ const mtRoute={
       const r={tab:weg(m[1].toLowerCase())};
       // De Agenda kent een weergave en de gedeelde planningsfilters in de link (#tab=agenda&weergave=capaciteit&project=…&wie=…&status=…&van=…&zoom=…); zonder die delen is het de oude korte link
       if(r.tab==='agenda'&&typeof MTPlanFilter!=='undefined'){ const x=MTPlanFilter.leesLink(h); if(x){ if(x.weergave) r.weergave=x.weergave; if(x.filter) r.planfilter=x.filter; } }
+      // De projectlijst: #tab=projecten&pf=fase:a,b;klant:X;sort:naam;groep:fase (alleen wat afwijkt van de standaard)
+      if(r.tab==='projecten'){ const pm=h.match(/(?:^|&)pf=([^&]*)/); if(pm&&pm[1]){ const pf=dec(pm[1]); if(pf.length<=4000) r.pf=pf; } }
       return r;
     }
     const delen=h.split('/').filter(x=>x!=='').map(dec);
@@ -3577,6 +3581,7 @@ const mtRoute={
       return '#klant/'+enc(r.klant)+(r.loc?'/'+enc(r.loc):'')+(delen.length?'?'+delen.join('&'):'');
     }
     if(r.tab==='agenda'&&(r.weergave||r.planfilter)&&typeof MTPlanFilter!=='undefined') return '#tab=agenda'+MTPlanFilter.linkStaart(r.weergave,r.planfilter);
+    if(r.tab==='projecten'&&r.pf) return '#tab=projecten&pf='+enc(r.pf);
     return r.tab?'#tab='+r.tab:'';
   },
   // Alleen de URL bijwerken (push = nieuwe history-entry). Geen dubbele entry voor dezelfde route.
@@ -3637,6 +3642,7 @@ const mtRoute={
         return;
       }
       if(r.tab!=='projecten') return;
+      if(r.pf&&window.MTProjFilter){ _pfStart(); const x=MTProjFilter.decodeer(r.pf); if(x){ MTProjFilter.zetStand(x,true); renderProjectLijst((document.getElementById('project-zoek')||{}).value||''); } }   // de filterstand uit de link
       if(r.klant){
         projKlantFilterZet(r.klant,r.loc);
         // Klantpagina in het detailpaneel; zonder sectie in de URL = Overzicht.
@@ -6293,12 +6299,48 @@ function renderProjectLijst(filter=''){
   let gefilterd=filter?PROJECT_CODES.filter(p=>projZoekTekst(p).includes(filter.toLowerCase())):PROJECT_CODES;
   if(_projKlantFilter) gefilterd=gefilterd.filter(_projInKlantFilter);
   if(_projKlantFilter&&!gefilterd.length){ el.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-faint);font-style:italic">Geen projecten voor deze klant.</div>'; return; }
-  el.innerHTML=projSorteerNieuwst(gefilterd).map(p=>`
+  const PF=window.MTProjFilter;
+  // Filteren, sorteren en groeperen (mt-projfilter.js): standaard alle lopende fases; het open project blijft altijd in beeld.
+  const rij=p=>`
     <div class="factuur-item ${esc(huidigProject?.code===p.code?'actief':'')}" data-code="${esc(p.code)}" onclick="selecteerProject(${jsArg(p.code)},this)">
-      <div class="factuur-item-naam" title="${esc(projNaamVol(p))}">${esc(projNaamVol(p))}</div>
+      <div class="factuur-item-naam" title="${esc(projNaamVol(p))}">${PF&&PF.selectieModus?`<input type="checkbox" class="pf-rij-vink" ${PF.selectie.has(p.code)?'checked':''} onclick="event.stopPropagation()" onchange="MTProjFilter.selecteer(${jsArg(p.code)},this.checked)" aria-label="Selecteren">`:''}${esc(projNaamVol(p))}</div>
       <div class="factuur-item-sub"><span class="factuur-item-klant">${esc(projKlantNaam(p))}</span>${projTag(p)}${p.fase&&window.MTLead?` <span class="fase-chip fase-${esc(p.fase)}">${esc(MTLead.label(p.fase))}</span>`:''}</div>
-    </div>`).join('');
+    </div>`;
+  if(!PF){ el.innerHTML=projSorteerNieuwst(gefilterd).map(rij).join(''); if(typeof vandaagTeken==='function') vandaagTeken(); return; }
+  _pfStart();
+  const taken=_pfTaken(), r=PF.verwerk(gefilterd.map((p,i)=>_pfItem(p,i,taken)),huidigProject&&huidigProject.code), perCode=new Map(gefilterd.map(p=>[p.code,p]));
+  if(!r.lijst.length) el.innerHTML='<div class="pf-leeg">Geen projecten met deze filters.</div>';
+  else if(r.groepen){ const gk=PF.stand().groep;
+    el.innerHTML=r.groepen.map(g=>`<div class="pf-kop${PF.dicht(gk+':'+g.key)?' dicht':''}"><button type="button" aria-expanded="${esc(!PF.dicht(gk+':'+g.key))}" onclick="MTProjFilter.kopWissel(${jsArg(gk+':'+g.key)})">${esc(g.label)} <span class="n">(${esc(g.aantal)})</span></button></div>${PF.dicht(gk+':'+g.key)?'':g.items.map(x=>rij(perCode.get(x.code))).join('')}`).join(''); }
+  else el.innerHTML=r.lijst.map(x=>rij(perCode.get(x.code))).join('');
   if(typeof vandaagTeken==='function') vandaagTeken();
+}
+// ── Projectlijst filteren/sorteren/groeperen: koppeling met mt-projfilter.js ──
+var _pfGestart=false;
+function _pfStart(){
+  const PF=window.MTProjFilter; if(!PF||_pfGestart) return; _pfGestart=true;
+  let opslag=null; try{ opslag=localStorage; }catch(e){}
+  PF.init({doc:document,storage:opslag,wie:()=>mtMijEmail(),el:document.getElementById('project-filter'),
+    label:k=>(window.MTLead&&MTLead.label(k))||'',persNaam:s=>{ const m=MT_TEAM.find(x=>x.slug===s); return m?m.naam:s; },opStand:_pfOpStand});
+}
+// Open taken per project (alleen om te weten wie ermee bezig is); één keer per tekening van de lijst.
+function _pfTaken(){ try{ return typeof projTakenAll==='function'?projTakenAll():{}; }catch(e){ return {}; } }
+function _pfItem(p,i,taken){
+  let fase=p.fase==='gewonnen'?'werkvoorbereiding':p.fase;
+  const FASEN=window.MTProjFilter.FASEN, ST={offerte:'zf_offerte',lopend:'zf_lopend',opgeleverd:'zf_opgeleverd'};
+  const arch=!!p.gearchiveerd||(p.status==='archief'&&fase!=='afgerond'&&fase!=='verloren');
+  if(arch) fase='gearchiveerd';
+  else if(!FASEN.includes(fase)){ let s='offerte'; try{ s=projStatus(p).status; }catch(e){} fase=s==='archief'?'gearchiveerd':(ST[s]||'zf_offerte'); }
+  const pers=new Set();
+  (taken[p.code]||[]).forEach(t=>{ if(!t||t.status==='klaar') return;
+    const l=[t.toegewezen].concat(t.personen&&typeof t.personen==='object'?Object.keys(t.personen).filter(k=>t.personen[k]&&!t.personen[k].weg):[]);
+    l.forEach(x=>{ const sl=x?MTPlanning.persoonSlug(x,MT_TEAM):''; if(sl) pers.add(sl); }); });
+  return {code:p.code,naam:projNaamVol(p),klant:p.klant,klantNaam:projKlantNaam(p),fase,pers:[...pers],lever:_p2Lever(p),act:_spTijd(p),created:p.created,idx:i};
+}
+function _pfOpStand(stand,alleenLijst){
+  renderProjectLijst((document.getElementById('project-zoek')||{}).value||'');
+  if(alleenLijst) return;
+  try{ const r=mtRoute.parse(location.hash); if(r.code||r.klant) return; mtRoute.zet({tab:'projecten',pf:window.MTProjFilter.codeer(stand)},false); }catch(e){}
 }
 // Alleen weergave: nieuwste eerst op `created` (YYYY-MM-DD); zelfde dag → later toegevoegd
 // eerst; zonder created achteraan in de bestaande volgorde. PROJECT_CODES blijft onaangeroerd.
