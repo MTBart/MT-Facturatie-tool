@@ -24,9 +24,51 @@
     '- Weet je niet of de tool iets kan? Zeg dat je het niet weet en dat het als verbeterpunt vastgelegd kan worden. Verzin geen functies.'
   ].join('\n');
 
-  // De volledige systeemprompt voor één aanroep: altijd de eerlijkheidsregel, eventueel gevolgd door de rol-/taakprompt.
-  V.systeem = extra => V.EERLIJK + (extra ? '\n\n' + String(extra) : '');
+  // ── Model (één plek): Haiku 5.5, exacte id zonder datum. De worker (CLAUDE_MODEL_RE) staat haiku en sonnet toe. ──
+  V.MODEL = 'claude-haiku-5-5';
+  V.MAX_TOKENS = 4096;   // plafond van de worker; thinking telt mee, dus nooit krapper dan MIN_TOKENS
+  V.MIN_TOKENS = 2000;
+  V.EFFORT = 'low';
+  V.tokens = n => Math.min(V.MAX_TOKENS, Math.max((Number(n) || 0) + 1000, V.MIN_TOKENS));
+  // Het verzoek zoals het naar de worker gaat. Geen temperature en geen budget_tokens (geven een 400 bij Haiku 5.5).
+  V.verzoek = (messages, maxTokens, system, effort) => ({ model: V.MODEL, max_tokens: V.tokens(maxTokens), output_config: { effort: effort || V.EFFORT }, system, messages });
 
+  // ── Antwoord lezen: thinking-blokken kunnen voor de tekst staan, dus het eerste blok met type 'text' (nooit content[0]). ──
+  V.tekst = r => {
+    const b = r && Array.isArray(r.content) ? r.content.find(x => x && (x.type === 'text' || x.type === undefined) && typeof x.text === 'string') : null;
+    return b ? b.text : '';
+  };
+  V.MELDING_WEIGERING = 'Larry wil hier niet op antwoorden. Stel de vraag anders of leg het uit aan Bart.';
+  V.MELDING_AFGEKAPT = 'Het antwoord werd afgekapt omdat het te lang werd. Stel de vraag korter of specifieker.';
+  // Antwoord voor een gebruiker: een nette melding bij een weigering, een afgekapt antwoord of een fout.
+  V.antwoord = r => {
+    if (r && r.error && !V.tekst(r)) return 'fout: ' + (r.error.message || r.error);
+    if (r && r.stop_reason === 'refusal') return V.MELDING_WEIGERING;
+    const tx = V.tekst(r);
+    if (r && r.stop_reason === 'max_tokens') return tx ? tx + '\n\n(' + V.MELDING_AFGEKAPT + ')' : V.MELDING_AFGEKAPT;
+    return tx || '(geen antwoord)';
+  };
+
+  // ── Actuele stand: alleen hiernaar mag Larry verwijzen ("dat weet ik niet" in plaats van gokken). Klein en stabiel voor caching. ──
+  const kort = (s, n) => { s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+  V.STAND_MAX = 1200;
+  // updates: de lijst uit data/updates.json (nieuwste eerst); extra: regels over het record waar het over gaat.
+  V.stand = (updates, extra) => {
+    const live = (Array.isArray(updates) ? updates : []).filter(u => u && u.versie).slice(0, 5)
+      .map(u => '- v' + u.versie + (u.datum ? ' (' + u.datum + ')' : '') + ': ' + kort(u.titel, 90));
+    const delen = ['ACTUELE STAND (alleen hiernaar mag je verwijzen; wat hier niet staat weet je niet: zeg "dat weet ik niet"):'];
+    delen.push(live.length ? 'Live in de tool, nieuwste eerst:\n' + live.join('\n') : 'Over wat er live is, is nu niets bekend.');
+    if (extra) delen.push(String(extra));
+    const uit = delen.join('\n');
+    return uit.length > V.STAND_MAX ? uit.slice(0, V.STAND_MAX) : uit;
+  };
+  // Regels over records uit de wachtrij (titel, fase, laatste notitie); de status komt alleen hieruit.
+  V.recordStand = items => 'Status van recente verbeterpunten (uit de tool):\n' + ((items || []).slice(0, 5)
+    .map(x => '- ' + kort(x.titel, 60) + ': ' + (V.LABEL[x.fase] || x.fase) + (x.historie && x.historie.length && x.historie[x.historie.length - 1].notitie ? ' (' + kort(x.historie[x.historie.length - 1].notitie, 60) + ')' : '')).join('\n') || '- (geen)');
+
+  // De volledige systeemprompt voor één aanroep, vaste volgorde (stabiel voorop voor caching):
+  // eerlijkheidsregel, actuele stand, en als laatste de rol-/taakprompt.
+  V.systeem = (extra, stand) => V.EERLIJK + (stand ? '\n\n' + String(stand) : '') + (extra ? '\n\n' + String(extra) : '');
   V.FASEN = ['te-beoordelen', 'goedgekeurd', 'in-bouw', 'live', 'afgewezen'];
   V.LABEL = { 'te-beoordelen': 'Te beoordelen', 'goedgekeurd': 'Goedgekeurd', 'in-bouw': 'In bouw', 'live': 'Live', 'afgewezen': 'Afgewezen' };
   V.LEGACY = { 'te-beoordelen': 'nieuw', 'goedgekeurd': 'opgepakt', 'in-bouw': 'opgepakt', 'live': 'afgerond', 'afgewezen': 'afgewezen' };

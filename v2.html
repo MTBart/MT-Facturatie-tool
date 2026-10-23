@@ -3330,14 +3330,17 @@ function mbControleerHtml(res,soortNaam,opnieuwOnclick){
 // rol-/taakprompt van de aanroeper. Ontbreekt de module, dan gaat er geen aanroep uit (liever geen Larry dan een Larry die iets belooft).
 async function claudeCall(messages,maxTokens=1800,opts){
   if(!(window.MTVerbeter&&MTVerbeter.systeem)) throw new Error('Larry is nu niet beschikbaar (herlaad de pagina)');
-  const system=MTVerbeter.systeem(opts&&opts.system);
+  // Actuele stand (laatste 5 live-items uit data/updates.json, voor deze gebruiker zichtbaar) vooraan; lukt het laden niet, dan geen stand.
+  let stand=''; try{ const u=(await updLaad()).filter(_updVoorMij).sort((a,b)=>_updCmp(b.versie,a.versie)); stand=MTVerbeter.stand(u,opts&&opts.stand); }catch(e){ stand=MTVerbeter.stand([],opts&&opts.stand); }
+  const system=MTVerbeter.systeem(opts&&opts.system,stand);
   const h=await authHeader();
+  // Model, max_tokens (thinking telt mee) en effort komen uit MTVerbeter.verzoek; geen temperature of budget_tokens (400 bij Haiku 5.5).
   const resp=await fetch(`${WORKER}?target=claude`,{method:'POST',headers:{...h,'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTokens,system,messages})});
+    body:JSON.stringify(MTVerbeter.verzoek(messages,maxTokens,system,opts&&opts.effort))});
   const raw=await resp.text();
   // De Worker stuurt het Claude-antwoord als SSE-stream (text/event-stream).
   // Bouw daaruit het normale non-stream antwoord-object terug op, zodat alle
-  // callers gewoon r.content[0].text kunnen blijven lezen. Valt terug op JSON
+  // callers het antwoord met MTVerbeter.tekst(r) / MTVerbeter.antwoord(r) lezen (thinking-blokken staan soms voor de tekst). Valt terug op JSON
   // als de Worker ooit weer een gebufferd antwoord stuurt.
   if(raw.trimStart().startsWith('{')){ try{ return JSON.parse(raw); }catch(e){} }
   return _claudeFromSSE(raw);
@@ -4813,7 +4816,7 @@ Regels voor factuurregels:
 - Controleer: som van (aantal × stukprijs) per regel moet kloppen met totaal_excl_btw
 Projectcodes: ${PROJECT_CODES.map(p=>p.code).join(', ')}. BTW: 21, 9 of 0.`}
     ]}]);
-    const rawText=data.content?.[0]?.text||'{}';
+    const rawText=MTVerbeter.tekst(data)||'{}';
     const jsonMatch=rawText.match(/\{[\s\S]*\}/);
     const parsed=JSON.parse(jsonMatch?jsonMatch[0]:'{}');
     window._factuurTotalen={excl:parsed.totaal_excl_btw||null,btw:parsed.totaal_btw||null,incl:parsed.totaal_incl_btw||null};
@@ -5393,7 +5396,7 @@ ${fact?`Gekoppelde factuur: ${fact.contact?.company_name||''} ${fact.date||''} (
     const r=await claudeCall([
       {role:'user',content:`${ctx}\n\nVraag: ${q}`}
     ],600,{system:'Je bent Larry, de M&T-assistent. Bart bekijkt de voorraad en wil iets aan dit materiaal aanpassen of checken. Antwoord kort en concreet in het Nederlands. Als hij een wijziging vraagt (naam, prijs, aantal, categorie), zeg precies wat je zou aanpassen en waarom; hij past het zelf aan met de ✏-knop.'});
-    const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+    const txt=MTVerbeter.antwoord(r);
     tmp.textContent=txt;
     if(window._LOG)_LOG.add('voorraad-chat','voorraad',`[${mat}] ${q}`,txt);
   }catch(e){tmp.textContent='fout: '+e.message;}
@@ -9695,7 +9698,7 @@ Project: code ${mt.code}, naam "${mt.naam||''}", product "${mt.product_naam||mt.
   try{
     const r=await claudeCall([{role:'user',content:vraag}],1500);
     if(_ptBlok(code,ROL_TAAK_ALLES,'Een AI-takenlijst toevoegen')) return;   // na de AI-aanroep opnieuw
-    let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'';
+    let txt=MTVerbeter.tekst(r)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'';
     const m=txt.match(/\[[\s\S]*\]/);
     if(!m) throw new Error('geen bruikbaar AI-antwoord');
     const voorstel=JSON.parse(m[0]);
@@ -13025,7 +13028,7 @@ async function analyseerdControleFactuur(){
       messages=[{role:'user',content:`Analyseer deze inkoopfactuur van ${f.contact?.company_name||'onbekend'}:\n${rt}\n\n${jsonInstructie}`}];
     }
     const data=await claudeCall(messages,1800);
-    const rawText=data.content?.[0]?.text||'{}';
+    const rawText=MTVerbeter.tekst(data)||'{}';
     // Extraheer JSON uit de response (ook als er toch tekst omheen staat)
     const jsonMatch=rawText.match(/\{[\s\S]*\}/);
     const parsed=JSON.parse(jsonMatch?jsonMatch[0]:'{}');
@@ -14927,7 +14930,7 @@ HARDE GRENS: je kunt NIETS wijzigen aan de tool zelf, aan data, bestanden of map
   try{
     const conv=_tbHist.slice(-8).map(m=>(m.role==='user'?'Gebruiker: ':'Larry: ')+m.content).join('\n');
     const r=await claudeCall([{role:'user',content:'— Gesprek —\n'+conv+'\n\nLarry:'}],700,{system:sys});
-    let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+    let txt=MTVerbeter.antwoord(r);
     const acts=[...txt.matchAll(/\[\[ACTIE:([a-z-]+)(?:=([^\]]+))?\]\]/gi)];
     const clean=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim();
     wait.textContent=clean||'(klaar)';_tbHist.push({role:'assistant',content:clean});
@@ -16024,7 +16027,7 @@ HARDE GRENS: je kunt hier NIETS uitvoeren of wijzigen — geen acties, geen data
   try{
     const conv=_helpHist.slice(-8).map(m=>(m.role==='user'?'Gebruiker: ':'Larry: ')+m.content).join('\n');
     const r=await claudeCall([{role:'user',content:'— Gesprek —\n'+conv+'\n\nLarry:'}],600,{system:sys});
-    let txt=(r&&r.content&&r.content[0]&&r.content[0].text)||(r&&r.error&&('fout: '+(r.error.message||r.error)))||'(geen antwoord)';
+    let txt=MTVerbeter.antwoord(r);
     txt=txt.replace(/\[\[ACTIE:[^\]]*\]\]/gi,'').trim(); // dubbele borging: hier nooit acties
     wait.textContent=txt;_helpHist.push({role:'assistant',content:txt});
     _LOG.add('help-feedback',tab,q,txt);
@@ -18658,7 +18661,7 @@ function activiteitOpen(force){
         +'\n\nGeef de verbeterde JSON.';
       try{
         const r=await claudeCall([{role:'user',content:usr}],1500,{system:sys});
-        const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||'';
+        const txt=MTVerbeter.tekst(r);
         const m=txt.match(/\{[\s\S]*\}/);
         if(m){ const j=JSON.parse(m[0]); if(j.tekst) tekst=String(j.tekst).trim(); if(Array.isArray(j.regels)&&j.regels.length) regels=_normRegels(j.regels,total); }
       }catch(e){ /* val stil terug op de deterministische regels */ }
@@ -19870,6 +19873,14 @@ async function verbLaadTab() {
   _vbRenderLijst();
 }
 
+// Status van de 5 meest recente punten uit de wachtrij, als stand voor Larry in dit tabblad (de status komt alleen uit het record).
+function vbStandTekst() {
+  try {
+    const rij = MTVerbeter.wachtrij(_vbLijst, _vbFeedback);
+    const alle = MTVerbeter.FASEN.flatMap(f => rij[f]).sort((a, b) => b.aangemaakt.localeCompare(a.aangemaakt));
+    return MTVerbeter.recordStand(alle);
+  } catch(e) { return ''; }
+}
 // Mag deze gebruiker de status wijzigen? Alleen eigenaar/beheer (rol 'lezen' en de rest niet).
 function vbMagBeheren() { try { return !!(window.MTRol && MTRol.isBeheer && MTRol.isBeheer()); } catch(e) { return false; } }
 
@@ -19914,8 +19925,8 @@ async function _vbSparMetLarry() {
     _vbChatToon('gebruiker', titel + (omschrijving ? '\n' + omschrijving : ''));
     _vbChatToon('larry', '…', true);
     try {
-      const r = await claudeCall([{role: 'user', content: start}], 700, {system: VB_SPAR_SYSTEEM});
-      const tekst = r && r.content && r.content[0] && r.content[0].text || '(geen antwoord)';
+      const r = await claudeCall([{role: 'user', content: start}], 700, {system: VB_SPAR_SYSTEEM, stand: vbStandTekst()});
+      const tekst = MTVerbeter.antwoord(r);
       _vbChatGesprek = [{rol: 'gebruiker', tekst: start}, {rol: 'larry', tekst}];
       _vbVervangLaatsteLarry(tekst);
       _vbExtractSamenvatting(tekst);
@@ -19937,8 +19948,8 @@ async function _vbChatStuur() {
   try {
     // Bouw het hele gesprek op als doorlopende tekst zodat het model context heeft.
     const conv = _vbChatGesprek.map(m => (m.rol === 'gebruiker' ? 'Teamlid' : 'Larry') + ': ' + m.tekst).join('\n\n');
-    const r = await claudeCall([{role: 'user', content: conv + '\n\nLarry:'}], 700, {system: VB_SPAR_SYSTEEM});
-    const ant = r && r.content && r.content[0] && r.content[0].text || '(geen antwoord)';
+    const r = await claudeCall([{role: 'user', content: conv + '\n\nLarry:'}], 700, {system: VB_SPAR_SYSTEEM, stand: vbStandTekst()});
+    const ant = MTVerbeter.antwoord(r);
     _vbChatGesprek.push({rol: 'larry', tekst: ant});
     _vbVervangLaatsteLarry(ant);
     _vbExtractSamenvatting(ant);
