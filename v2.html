@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
@@ -866,6 +866,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
 <link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-23i">
+<link rel="stylesheet" href="mt-rust.css?v=2026-10-23r1">
 <link rel="stylesheet" href="mt-telefoon.css?v=2026-10-23a">
 </head>
 <body>
@@ -1243,7 +1244,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="card proj-lijst-kaart" style="padding:1rem">
           <div class="card-title">Projecten</div>
           <div class="flex" style="margin-bottom:0.75rem;gap:6px">
-            <button class="btn btn-gold btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1" title="Project zonder lead of offerte (bv. vaste klant of regiewerk); begint in Werkvoorbereiding">+ Direct project</button>
+            <button class="btn btn-gold ui-hoofd btn-sm" data-recht="projecten:wijzigen" onclick="openModal()" style="flex:1" title="Project zonder lead of offerte (bv. vaste klant of regiewerk); begint in Werkvoorbereiding">+ Direct project</button>
             <button class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" onclick="openLeadModal()" style="flex:1" title="Een nieuwe aanvraag: lead met een volgende actie">+ Lead</button>
             <button class="btn btn-secondary btn-sm" data-recht="projecten:wijzigen" onclick="tgOvernemenOpen()" style="flex:1" title="Een Toggl-project dat nog bij geen project hoort in de tool zetten">Uit Toggl overnemen</button>
             <button class="btn btn-secondary btn-sm" data-recht="offertes:wijzigen" onclick="nieuweOfferte()" style="flex:1" title="Losse offerte-calculatie (voorcalculatie)">+ Nieuwe offerte</button>
@@ -1408,7 +1409,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="card-subtitle">Bestellijst</div>
         <div class="flex">
           <button class="btn btn-secondary btn-sm" onclick="renderBestellijst()">↻ Vernieuwen</button>
-          <button class="btn btn-gold btn-sm" data-recht="bestellijst:toevoegen|alles" onclick="toggleHandmatigToevoegen()">+ Handmatig toevoegen</button>
+          <button class="btn btn-gold ui-hoofd btn-sm" data-recht="bestellijst:toevoegen|alles" onclick="toggleHandmatigToevoegen()">+ Handmatig toevoegen</button>
           <button class="btn btn-sm btn-secondary" onclick="exportBestellijst()">📋 Exporteren</button>
         </div>
       </div>
@@ -1940,13 +1941,13 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="card" id="adm-werkuren-kaart">
           <h4 style="margin-top:0">Werkuren per week</h4>
           <div id="adm-werkuren-form"></div>
-          <button class="btn btn-sm btn-gold" style="margin-top:10px" onclick="admSlaWerkurenOp()">Opslaan</button>
+          <button class="btn btn-sm btn-gold ui-hoofd" style="margin-top:10px" onclick="admSlaWerkurenOp()">Opslaan</button>
         </div>
         <div class="card">
           <h4 style="margin-top:0">Uren-lock</h4>
           <p style="font-size:12.5px;color:var(--text-dim)">Entries ouder dan N dagen zijn vergrendeld voor niet-admins. Admins moeten een reden opgeven.</p>
           <label style="font-size:12px">Lock-drempel (dagen): <input type="number" id="adm-lock-dagen" min="0" max="365" value="14" style="width:70px;margin-left:8px" class="adm-inp"></label>
-          <div style="margin-top:10px"><button class="btn btn-sm btn-gold" onclick="admSlaLockOp()">Opslaan</button></div>
+          <div style="margin-top:10px"><button class="btn btn-sm btn-gold ui-hoofd" onclick="admSlaLockOp()">Opslaan</button></div>
         </div>
       </div>
     </div>
@@ -1957,7 +1958,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
         <div class="card">
           <h4 style="margin-top:0">Jaarbudgetten (verlofdagen)</h4>
           <div id="adm-budgetten-form"></div>
-          <button class="btn btn-sm btn-gold" style="margin-top:10px" onclick="admSlaBudgettenOp()">Opslaan</button>
+          <button class="btn btn-sm btn-gold ui-hoofd" style="margin-top:10px" onclick="admSlaBudgettenOp()">Opslaan</button>
         </div>
         <div class="card">
           <h4 style="margin-top:0">Verlof boeken</h4>
@@ -1970,7 +1971,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <div class="adm-row-form">
             <div><label>Opmerking</label><input type="text" id="adm-verl-opm" class="adm-inp" placeholder="Bijv. vakantie Italië"></div>
           </div>
-          <button class="btn btn-sm btn-gold" onclick="admBoekVerlof()">Verlof boeken</button>
+          <button class="btn btn-sm btn-gold ui-hoofd" onclick="admBoekVerlof()">Verlof boeken</button>
         </div>
       </div>
       <div class="adm-grid2">
@@ -2002,7 +2003,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
               </select>
             </div>
           </div>
-          <button class="btn btn-sm btn-gold" onclick="admVoegVrijeDagToe()">Toevoegen</button>
+          <button class="btn btn-sm btn-gold ui-hoofd" onclick="admVoegVrijeDagToe()">Toevoegen</button>
         </div>
         <div class="card" style="padding:0">
           <div style="padding:10px 12px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Vrije dagen (gesorteerd)</div>
@@ -2040,7 +2041,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
             </div>
             <div><label>Deep-link item (optioneel)</label><input type="text" id="adm-notif-item" class="adm-inp" placeholder="ID of code"></div>
           </div>
-          <button class="btn btn-sm btn-gold" onclick="admVerstuurNotificatie()">Versturen</button>
+          <button class="btn btn-sm btn-gold ui-hoofd" onclick="admVerstuurNotificatie()">Versturen</button>
         </div>
         <div class="card" style="padding:0">
           <div style="padding:10px 12px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Verzonden notificaties</div>
@@ -3859,14 +3860,14 @@ function renderAgenda(){
   agBindOutside();
   const ko=document.getElementById('agenda-kleurop'); if(ko) ko.value=_agenda.kleurOp;
   const gb=document.getElementById('agenda-view-grid'), lb=document.getElementById('agenda-view-lijst'), pb=document.getElementById('agenda-view-plan');
-  if(gb) gb.classList.toggle('btn-gold',_agenda.view==='grid'), gb.classList.toggle('btn-secondary',_agenda.view!=='grid');
-  if(lb) lb.classList.toggle('btn-gold',_agenda.view==='lijst'), lb.classList.toggle('btn-secondary',_agenda.view!=='lijst');
-  if(pb) pb.classList.toggle('btn-gold',_agenda.view==='plan'), pb.classList.toggle('btn-secondary',_agenda.view!=='plan');
+  if(gb) gb.classList.toggle('btn-gold',_agenda.view==='grid'), gb.classList.toggle('ui-gekozen',_agenda.view==='grid'), gb.classList.toggle('btn-secondary',_agenda.view!=='grid');
+  if(lb) lb.classList.toggle('btn-gold',_agenda.view==='lijst'), lb.classList.toggle('ui-gekozen',_agenda.view==='lijst'), lb.classList.toggle('btn-secondary',_agenda.view!=='lijst');
+  if(pb) pb.classList.toggle('btn-gold',_agenda.view==='plan'), pb.classList.toggle('ui-gekozen',_agenda.view==='plan'), pb.classList.toggle('btn-secondary',_agenda.view!=='plan');
   const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
   if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
   if(capBalk) capBalk.style.display=_agenda.view==='plan'?'block':'none';
   { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', bd=_agenda.view==='bord', tj=_agenda.view==='tijdlijn', eigen=mw||cp||bd||tj;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
-    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp],['agenda-view-bord',bd],['agenda-view-tijdlijn',tj]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('btn-secondary',!aan); });
+    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp],['agenda-view-bord',bd],['agenda-view-tijdlijn',tj]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('ui-gekozen',aan), b.classList.toggle('btn-secondary',!aan); });
     const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), bdEl=document.getElementById('agenda-bord'), tjEl=document.getElementById('agenda-tijdlijn'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
     { const of=document.getElementById('ag-oudfilter'); if(of&&typeof MTPlanFilter!=='undefined') of.style.display=eigen?'none':''; }   // Mijn werk en Capaciteit hebben de gedeelde filterbalk in beeld; de oude Projecten/Personen-keuze hoort alleen bij Rooster, Lijst en Planning
     if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(bdEl) bdEl.style.display=bd?'block':'none'; if(tjEl) tjEl.style.display=tj?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
@@ -7600,7 +7601,7 @@ function openKlant(kl,loc,{sectie=null,filter=null}={}){
     +`<span class="proj-ctx-acties">${locSel}`
     +(info.telefoon?`<a class="btn btn-xs btn-secondary" href="tel:${esc(info.telefoon)}" title="Bellen: ${esc(info.telefoon)}" aria-label="Bellen">📞</a>`:'')
     +(info.email?`<a class="btn btn-xs btn-secondary" href="mailto:${esc(info.email)}" title="Mailen: ${esc(info.email)}" aria-label="Mailen">📧</a>`:'')
-    +`<button type="button" class="btn btn-xs btn-gold" onclick="klantNieuwProject()" title="Nieuw project voor deze klant${loc?' (deze locatie)':''}">+ Nieuw project</button>`
+    +`<button type="button" class="btn btn-xs btn-gold ui-hoofd" onclick="klantNieuwProject()" title="Nieuw project voor deze klant${loc?' (deze locatie)':''}">+ Nieuw project</button>`
     +(window.MTKoppelUI?MTKoppelUI.badge(info.mbId?{status:'gekoppeld',label:'Moneybird',titel:'Moneybird-contact '+info.mbId+' — klik om te openen',onclick:`window.open('https://moneybird.com/${getAdmin()}/contacts/${esc(info.mbId)}','_blank','noopener')`}:{status:'open',label:'Moneybird',titel:'Geen Moneybird-contact bekend voor deze klant — klik voor uitleg',onclick:'klantMbPop(this)'}):'')
     +`<button type="button" class="btn btn-xs btn-secondary" onclick="klantKopieerLink()" title="Kopieer de link naar deze klant">🔗 Kopieer link</button></span></div>`
     +`<nav class="proj-secnav" role="tablist" aria-label="Klantonderdelen">${KLANT_SECTIES.map(s=>`<button type="button" role="tab" class="proj-secknop${s.k===_klantSectie?' actief':''}" data-sectie="${esc(s.k)}" aria-selected="${esc(s.k===_klantSectie)}" onclick="klantSectieKies(${jsArg(s.k)})">${esc(s.l)}</button>`).join('')}</nav>`
@@ -10175,7 +10176,7 @@ function nacalcHtml(proj,totaalInkoop,effectiveMb){
       <hr class="divider">
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;flex-wrap:wrap">
         <div class="card-title" style="margin:0">Nacalculatie</div>
-        <button class="btn btn-gold btn-sm" onclick="nacalcMaakFactuur(${jsArg(proj.code)})">🧾 Maak factuur</button>
+        <button class="btn btn-gold ui-hoofd btn-sm" onclick="nacalcMaakFactuur(${jsArg(proj.code)})">🧾 Maak factuur</button>
         <button class="btn btn-sm btn-secondary" onclick="nacalcExportCsv(${jsArg(proj.code)})">⬇ CSV</button>
         <button class="btn btn-sm btn-secondary" onclick="nacalcExportPdf(${jsArg(proj.code)})">🖨 PDF</button>
         <span style="font-size:11px;color:var(--text-faint)">Altijd als concept in Moneybird — versturen doe je zelf</span>
@@ -14303,7 +14304,7 @@ function oplConceptRelinkForm(code){
     <input class="zoek-input" list="opl-concept-codes" id="opl-concept-target-${_escH(code)}"
       placeholder="Nieuwe projectcode…" style="flex:1;min-width:120px;margin:0">
     <datalist id="opl-concept-codes">${opts.map(c=>`<option value="${_escH(c)}">`).join('')}</datalist>
-    <button class="btn btn-gold btn-sm" onclick="oplConceptRelink(${jsArg(code)})">Opslaan</button>
+    <button class="btn btn-gold ui-hoofd btn-sm" onclick="oplConceptRelink(${jsArg(code)})">Opslaan</button>
     <button class="btn btn-secondary btn-sm" onclick="_oplConceptenRender()">Annuleer</button>
   </div>
   <div style="font-size:11px;color:var(--text-faint);margin-top:3px">Exacte code — gelijknamige projecten blijven apart.</div>`;
@@ -20211,7 +20212,7 @@ function activiteitOpen(force){
       <table class="calc-tbl" style="max-width:480px"><thead><tr><th>Vaste uren-regel</th><th class="calc-num">Uurtarief €</th><th class="calc-num">Marge ×</th><th></th></tr></thead><tbody>${rows}</tbody></table>
       <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center">
         <button class="btn btn-xs btn-secondary" onclick="calcAddDefUur(${jsArg(key)})">+ vaste regel</button>
-        <button class="btn btn-xs btn-gold" onclick="calcSaveDefaults(${jsArg(key)})">Opslaan als standaard</button>
+        <button class="btn btn-xs btn-gold ui-hoofd" onclick="calcSaveDefaults(${jsArg(key)})">Opslaan als standaard</button>
         <span class="calc-defstatus" style="font-size:11px;color:${esc(_defStatusTekst().kleur)}">${esc(_defStatusTekst().tekst)}</span>
       </div>
       <div class="calc-defconflict"></div>

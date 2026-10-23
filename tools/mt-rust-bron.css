@@ -1,0 +1,181 @@
+/* =====================================================================
+   Rust-pas R1: basiscomponenten. Bron van mt-rust.css (samen met de tokens, zie tools/bouw-rust-css.js).
+   Alles staat onder html[data-stijl="nieuw"]; zonder dat attribuut doet dit bestand niets en blijft de oude stijl
+   byte voor byte gelijk. Alleen opmaak: geen gedrag, teksten of gegevens.
+   Ontwerpregels (spec 2b): één primaire knopkleur (groen), goud nooit als knop, hoeken 2/4/8 px, geen schaduw behalve op
+   zoekpalet en zijpaneel, kopjes en labels in gewone letters, focusring 2px op elk bedienbaar element.
+   ===================================================================== */
+
+/* ── 2. Brug: de oude namen wijzen naar de tokens (alleen binnen de nieuwe stijl) ── */
+html[data-stijl="nieuw"]{
+  --green:var(--primary); --green-50:var(--primary-soft);
+  --gold:var(--brass); --gold-50:var(--brass-soft); --gold-text:var(--brass-ink);
+  --n-0:var(--surface); --n-100:var(--canvas); --n-150:var(--surface-2); --surface-sunken:var(--surface-2); --surface2:var(--surface-2);
+  --n-200:var(--line-soft); --border-hair:var(--line-soft); --n-300:var(--line); --border:var(--line); --border-strong:var(--line-strong);
+  --n-600:var(--ink-2); --n-900:var(--ink);
+  /* bewust niet naar het token (zie README van deze laag): --n-500 en --ink-3 worden in de tool als LEESBARE bijtekst gebruikt
+     (500+ plekken, onder meer --text-faint). Het token ink-3 (#8c918a) haalt geen 4.5:1; het staat als --ink-faint voor decoratie. */
+  --n-500:#646a64; --ink-3:#646a64;
+  --success:var(--ok); --success-50:var(--ok-bg); --warning:var(--warn); --warning-50:var(--warn-bg);
+  --error:var(--err); --error-50:var(--err-bg); --info-50:var(--info-bg);
+  --sans:var(--font-ui); --serif:var(--font-head); --mono:var(--font-mono);
+  --radius-sm:var(--radius-ctl); --radius:var(--radius-panel); --radius-lg:var(--radius-panel);
+  --shadow-sm:none; --shadow-card:none; --shadow:none;
+  --surface-overlay:var(--surface);
+  /* de oude schaduwringen bij focus worden vervangen door één outline (zie 3) */
+  --focus-ring:0 0 0 0 transparent; --focus-ring-gold:0 0 0 0 transparent;
+}
+
+/* ── 3. Basis: focus, beweging, getallen ── */
+html[data-stijl="nieuw"] :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+html[data-stijl="nieuw"] .btn:focus-visible,html[data-stijl="nieuw"] .btn-gold:focus-visible{box-shadow:none;outline:2px solid var(--focus);outline-offset:2px}
+html[data-stijl="nieuw"] input:focus,html[data-stijl="nieuw"] select:focus,html[data-stijl="nieuw"] textarea:focus{box-shadow:none;border-color:var(--primary)}
+html[data-stijl="nieuw"] .num,html[data-stijl="nieuw"] .mono,html[data-stijl="nieuw"] .data-table .num{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion: reduce){html[data-stijl="nieuw"] *{transition:none!important;animation-duration:.01ms!important}}
+
+/* Kopjes en labels in gewone letters (spec 2e). Eén regel voor alles; invoervelden die een code afdwingen (klantcode) en de
+   korte rubrieken in het dossier behouden hun hoofdletters. */
+html[data-stijl="nieuw"] *:not(input):not(textarea):not(.dos-groep){text-transform:none!important}
+html[data-stijl="nieuw"] :is(label,th,.card-title,.card-label,.section-head,.kpi-label,.cf-kpi-label,.cf-vrij-label,.grafiek-titel,.vandaag-soort,.dos-groep,.st-pill,.calc-dd-tag,.calc-rand-t,.opl-rap-sect,.regel-header span,.toolbar label,.mw-kop,.mw-dag,.hat-label,.zb-groep,.mtk-m .k,.mtc-sectie h4,.tp-kop-titel,.tp-sec h3,.cn-heel-kop,.vd-veld label,.day-name,.rapport-section){letter-spacing:0!important}
+
+/* ── Knoppen: primair (groen), secundair (rand), stil. Goud is nooit een knop. ── */
+html[data-stijl="nieuw"] .btn{
+  height:var(--control-h);padding:0 var(--space-3);gap:var(--space-2);border-radius:var(--radius-ctl);
+  border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);
+  font:500 13px/18px var(--font-ui);box-shadow:none;transform:none;
+}
+html[data-stijl="nieuw"] .btn:hover{background:var(--surface-2);color:var(--ink);box-shadow:none;transform:none}
+html[data-stijl="nieuw"] .btn:active,html[data-stijl="nieuw"] button:active{transform:none;filter:brightness(.96)}
+html[data-stijl="nieuw"] .btn:disabled,html[data-stijl="nieuw"] .btn[disabled]{opacity:.5;cursor:default;filter:none}
+html[data-stijl="nieuw"] .btn-sm{height:30px;padding:0 var(--space-2);font-size:13px}
+html[data-stijl="nieuw"] .btn-xs{height:auto;min-height:26px;padding:3px var(--space-2);font-size:12px;line-height:18px}
+html[data-stijl="nieuw"] .btn-primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+html[data-stijl="nieuw"] .btn-primary:hover{background:var(--primary);border-color:var(--primary);color:var(--on-primary);filter:brightness(.92)}
+html[data-stijl="nieuw"] .btn-secondary{background:var(--surface);border-color:var(--line-strong);color:var(--ink)}
+html[data-stijl="nieuw"] .btn-secondary:hover{background:var(--surface-2)}
+html[data-stijl="nieuw"] .btn-ghost,html[data-stijl="nieuw"] .btn-quiet,html[data-stijl="nieuw"] .ui-knop--stil{background:transparent;border-color:transparent;color:var(--ink-2)}
+html[data-stijl="nieuw"] .btn-ghost:hover,html[data-stijl="nieuw"] .btn-quiet:hover,html[data-stijl="nieuw"] .ui-knop--stil:hover{background:var(--surface-2);color:var(--ink)}
+/* goud: nooit een knopkleur. Wat nog btn-gold heet wordt een gewone secundaire knop; een gekozen weergave (ui-gekozen) krijgt de selectiestijl. */
+html[data-stijl="nieuw"] .btn-gold{background:var(--surface);border-color:var(--line-strong);color:var(--ink);box-shadow:none}
+html[data-stijl="nieuw"] .btn-gold:hover{background:var(--surface-2);color:var(--ink);box-shadow:none;transform:none}
+/* hoofdactie van een scherm: markup tn btn-gold ui-hoofd (in de oude stijl nog goud, in de nieuwe stijl primair groen) */
+html[data-stijl="nieuw"] .btn.ui-hoofd,html[data-stijl="nieuw"] .btn-gold.ui-hoofd{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+html[data-stijl="nieuw"] .btn.ui-hoofd:hover,html[data-stijl="nieuw"] .btn-gold.ui-hoofd:hover{background:var(--primary);border-color:var(--primary);color:var(--on-primary);filter:brightness(.92)}
+html[data-stijl="nieuw"] .ui-gekozen,html[data-stijl="nieuw"] .btn.ui-gekozen,html[data-stijl="nieuw"] .btn-gold.ui-gekozen{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-text);font-weight:500}
+html[data-stijl="nieuw"] .ui-gekozen:hover,html[data-stijl="nieuw"] .btn.ui-gekozen:hover,html[data-stijl="nieuw"] .btn-gold.ui-gekozen:hover{background:var(--primary-soft);color:var(--primary-text)}
+/* gevaar: geen rode knop in beeld; de rode tekst volstaat, de echte bevestiging staat in de dialoog */
+html[data-stijl="nieuw"] .btn-danger{background:var(--surface);border-color:var(--line-strong);color:var(--err)}
+html[data-stijl="nieuw"] .btn-danger:hover{background:var(--err-bg);color:var(--err)}
+html[data-stijl="nieuw"] .btn-info,html[data-stijl="nieuw"] .btn-purple{background:var(--surface);border-color:var(--line-strong);color:var(--ink)}
+html[data-stijl="nieuw"] .btn-info:hover,html[data-stijl="nieuw"] .btn-purple:hover{background:var(--surface-2)}
+/* componentklassen voor nieuw werk (zelfde uiterlijk als hierboven) */
+html[data-stijl="nieuw"] .ui-knop{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);height:var(--control-h);padding:0 var(--space-3);border-radius:var(--radius-ctl);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:500 13px/18px var(--font-ui);cursor:pointer;white-space:nowrap;text-decoration:none}
+html[data-stijl="nieuw"] .ui-knop:hover{background:var(--surface-2)}
+html[data-stijl="nieuw"] .ui-knop--primair{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+html[data-stijl="nieuw"] .ui-knop--primair:hover{background:var(--primary);filter:brightness(.92)}
+
+/* ── Velden ── */
+html[data-stijl="nieuw"] label{font:500 12px/16px var(--font-ui);color:var(--ink-2);margin-bottom:var(--space-1)}
+html[data-stijl="nieuw"] input,html[data-stijl="nieuw"] select,html[data-stijl="nieuw"] textarea{
+  border:1px solid var(--line-strong);border-radius:var(--radius-ctl);background:var(--surface);color:var(--ink);font-family:var(--font-ui);
+}
+html[data-stijl="nieuw"] input::placeholder,html[data-stijl="nieuw"] textarea::placeholder{color:var(--ink-faint)}
+html[data-stijl="nieuw"] input[type=checkbox],html[data-stijl="nieuw"] input[type=radio]{accent-color:var(--primary)}
+html[data-stijl="nieuw"] .ui-veld{height:var(--control-h);padding:0 var(--space-3);border:1px solid var(--line-strong);border-radius:var(--radius-ctl);background:var(--surface);color:var(--ink);font:400 14px/20px var(--font-ui);width:100%;min-width:0}
+
+/* ── Chips en filters: hoekig, gekozen = zacht groen; badges zonder pil ── */
+html[data-stijl="nieuw"] .chip,html[data-stijl="nieuw"] .ui-chip{height:28px;padding:0 var(--space-3);border-radius:var(--radius-ctl);background:var(--surface);border:1px solid var(--line);color:var(--ink-2);font:500 12px/16px var(--font-ui);display:inline-flex;align-items:center;gap:6px}
+html[data-stijl="nieuw"] .chip:hover,html[data-stijl="nieuw"] .ui-chip:hover{background:var(--surface-2);color:var(--ink)}
+html[data-stijl="nieuw"] .chip.is-active,html[data-stijl="nieuw"] .ui-chip.is-gekozen,html[data-stijl="nieuw"] .ui-chip.ui-gekozen{background:var(--primary-soft);color:var(--primary-text);border-color:var(--primary)}
+html[data-stijl="nieuw"] .badge{font:500 12px/16px var(--font-ui);letter-spacing:0;padding:3px var(--space-2);border-radius:var(--radius-ctl)}
+html[data-stijl="nieuw"] .badge-gold{background:var(--brass-soft);color:var(--brass-ink);border-color:transparent}
+/* alles wat een pil was (radius 10 tot 999 px) wordt hoekig; avatars en statusstippen blijven rond */
+html[data-stijl="nieuw"] :is(.opl-pill,.filter-btn,.bestellen-btn,.lev-chip,.project-code-badge,.proj-ctx-code,.pm-badge,.afh-chip,.dos-chip,.kb,.proj-filterchip,
+  .cf-horizon-btn,.cf-pipe-kans,.bk-pil,.fase-chip,.act-chip,.ib-fchip,.calc-mailchip,.calc-dd-tag,.calc-rand-t,.st-pill,.aw-st,.mtc-groep,.mtc-knop,.mtc-badge,
+  .mtc-chip,.mtc-mbtn,.mtc-voorstel,.mtg-knop,.mtg-chip,.mtr-horizon,.mtr-chip,.mtr-badge,.mtr-knop,.mw-chip,.pf-chip,.pf-chip button,.zb-tag,.cn-meer,.cn-bbadge,
+  .tab-help-btn,.tab-badge,.upd-stip){border-radius:var(--radius-ctl)}
+html[data-stijl="nieuw"] :is(.tbchat-panel,.tbchat-log .u,.tbchat-log .b,.help-chatlog .u,.help-chatlog .b,.opl-rap-paper,.login-box,.agenda-day,.plan-gantt,.plan-editor,
+  .mtc-kpi>div,.mtc-kaart,.mtc-sheet>div,.mtg-kaart,.mtg-k,.mtg-blad>div,.mtk,.mtk-och,.mtk-week,.mtr-kaart,.mtr-sec,.mtr-bericht,.mt-rol-kaart,.mtv-overlay>div,.sheet,.vd-plus,.cn-ongepland:not(.dicht)){border-radius:var(--radius-panel)}
+html[data-stijl="nieuw"] #tab-activiteit .act-stat,html[data-stijl="nieuw"] #tab-activiteit .act-chip,html[data-stijl="nieuw"] #tab-inbox .ib-fchip,html[data-stijl="nieuw"] #tab-inbox .agenda-day{border-radius:var(--radius-panel)}
+html[data-stijl="nieuw"] #tab-activiteit .act-chip,html[data-stijl="nieuw"] #tab-inbox .ib-fchip{border-radius:var(--radius-ctl)}
+html[data-stijl="nieuw"] .zb-veld{border-radius:var(--radius-ctl);box-shadow:none}
+
+/* ── Secties en kaarten: vlak, rand, geen schaduw, geen gekleurde linkerrand ── */
+html[data-stijl="nieuw"] .card,html[data-stijl="nieuw"] .ui-sectie{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-panel);box-shadow:none}
+html[data-stijl="nieuw"] .card:hover{border-color:var(--line);box-shadow:none}
+html[data-stijl="nieuw"] .card-title,html[data-stijl="nieuw"] .ui-sectie-kop{font:600 16px/22px var(--font-ui);letter-spacing:0;color:var(--ink)}
+html[data-stijl="nieuw"] .ui-sectie{padding:var(--space-6)}
+html[data-stijl="nieuw"] .ui-sectie-kop{display:flex;align-items:center;gap:var(--space-3);margin:0 0 var(--space-4)}
+html[data-stijl="nieuw"] .card-subtitle{font:400 13px/18px var(--font-ui);color:var(--ink-2)}
+html[data-stijl="nieuw"] :is(.project-kaart,.grafiek-wrap,.kpi-card,.cf-canvas-wrap,.cf-vrij-chip,.proj-secnav,.vd-kaart,.project-card,.agenda-cal-btn,.agenda-arrow,.tijd-grid){box-shadow:none}
+html[data-stijl="nieuw"] .status-bar{border-radius:var(--radius-ctl)}
+/* kaarten met een gekleurde linkerrand: de rand wordt een gewone rand (spec: geen accentkaarten) */
+html[data-stijl="nieuw"] :is(.ov-let,.bh-modus,.tl-detail,.kpi-card.gold,.kpi-card.green,.mtk-melding,.mts-kas,.mtg-kan){border-left:1px solid var(--line)}
+html[data-stijl="nieuw"] :is(.factuur-item.actief,.project-kaart.actief){border-left:1px solid var(--primary);border-color:var(--primary);background:var(--primary-soft)}
+html[data-stijl="nieuw"] .mt-row.is-active{box-shadow:none;background:var(--primary-soft)}
+html[data-stijl="nieuw"] .data-table tbody tr.is-selected td{background:var(--primary-soft)}
+html[data-stijl="nieuw"] .drop-zone:hover,html[data-stijl="nieuw"] .drop-zone.over{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-text)}
+
+/* ── Tabellen en lijsten: rijen ≥ 42 px, scheiding line-soft, kolomkop als label ── */
+html[data-stijl="nieuw"] th,html[data-stijl="nieuw"] .data-table thead th{font:500 12px/16px var(--font-ui);color:var(--ink-2);letter-spacing:0}
+html[data-stijl="nieuw"] .data-table thead th{background:var(--surface);border-bottom:1px solid var(--line)}
+html[data-stijl="nieuw"] .data-table tbody td{border-bottom:1px solid var(--line-soft);height:var(--row-h)}
+html[data-stijl="nieuw"] .data-table--compact tbody td{height:30px}
+html[data-stijl="nieuw"] .data-table tbody tr:hover td{background:var(--surface-2)}
+html[data-stijl="nieuw"] .data-table .num,html[data-stijl="nieuw"] .ui-tabel .num{text-align:right;font-family:var(--font-mono);font-size:13px;line-height:18px;font-weight:500}
+html[data-stijl="nieuw"] .ui-tabel{width:100%;border-collapse:separate;border-spacing:0;font:400 14px/20px var(--font-ui);color:var(--ink)}
+html[data-stijl="nieuw"] .ui-tabel td{padding:var(--space-2) var(--space-3);height:var(--row-h);border-bottom:1px solid var(--line-soft);vertical-align:middle}
+html[data-stijl="nieuw"] .ui-tabel th{text-align:left;padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--line)}
+html[data-stijl="nieuw"] .mt-row{border-bottom-color:var(--line-soft);min-height:var(--row-h)}
+
+/* ── Paneel (taak, planblok, project): rechts inschuivend, de enige plek naast het zoekpalet met schaduw ── */
+html[data-stijl="nieuw"] .ui-paneel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-panel) 0 0 var(--radius-panel);box-shadow:var(--shadow-pop)}
+html[data-stijl="nieuw"] #tp-paneel .tp-kop-titel,html[data-stijl="nieuw"] #tp-paneel .tp-sec h3{font:500 12px/16px var(--font-ui);letter-spacing:0;color:var(--ink-2)}
+html[data-stijl="nieuw"] #tp-paneel .tp-code,html[data-stijl="nieuw"] #tp-paneel .tp-teller{font-family:var(--font-mono)}
+
+/* ── Lege staat: één zin, hoogstens één knop ── */
+html[data-stijl="nieuw"] .empty-state,html[data-stijl="nieuw"] .ui-leeg{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);padding:var(--space-8) var(--space-4);text-align:center;color:var(--ink-2);font:400 14px/20px var(--font-ui)}
+html[data-stijl="nieuw"] .empty-state .empty-title{font:500 14px/20px var(--font-ui);color:var(--ink)}
+html[data-stijl="nieuw"] .empty-state .empty-sub{font:400 13px/18px var(--font-ui);color:var(--ink-2);max-width:360px}
+html[data-stijl="nieuw"] .detail-pane--empty,html[data-stijl="nieuw"] .card--empty{font-style:normal;color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-leeg,html[data-stijl="nieuw"] .dos-leeg{font-style:normal}
+
+/* ── Melding / toast: onderaan, vlak met rand, geen schaduw; fout in rood met woord ── */
+html[data-stijl="nieuw"] #plan-toast{background:var(--surface)!important;color:var(--ink)!important;border:1px solid var(--line)!important;border-radius:var(--radius-ctl)!important;box-shadow:none!important;font:500 13px/18px var(--font-ui)}
+html[data-stijl="nieuw"] .cn-toast{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:var(--radius-ctl);box-shadow:none}
+html[data-stijl="nieuw"] .cn-toast-knop{border-color:var(--line-strong);color:var(--ink);font-weight:500}
+html[data-stijl="nieuw"] :is(.mtg-toast,.mtr-toast,.toast,.ui-melding){background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:var(--radius-ctl);box-shadow:none}
+html[data-stijl="nieuw"] .ui-melding{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-3);font:500 13px/18px var(--font-ui)}
+html[data-stijl="nieuw"] .ui-melding--fout{color:var(--err);border-color:var(--err)}
+
+/* ── Statuschip (icoon volgt in R3): woord + kleur, 22 hoog, hoekig ── */
+html[data-stijl="nieuw"] .ui-st{display:inline-flex;align-items:center;gap:var(--space-1);height:22px;padding:0 6px;border-radius:var(--radius-ctl);font:500 12px/16px var(--font-ui);white-space:nowrap}
+html[data-stijl="nieuw"] .ui-st--open{color:var(--ink-2);background:var(--surface-2)}
+html[data-stijl="nieuw"] .ui-st--bezig{color:var(--primary-text);background:var(--primary-soft)}
+html[data-stijl="nieuw"] .ui-st--wacht{color:var(--warn);background:var(--warn-bg)}
+html[data-stijl="nieuw"] .ui-st--klaar{color:var(--ok);background:var(--ok-bg)}
+html[data-stijl="nieuw"] .ui-st--voorstel{color:var(--brass-ink);background:var(--brass-soft)}
+html[data-stijl="nieuw"] .ui-st--gepland{color:var(--info);background:var(--info-bg)}
+html[data-stijl="nieuw"] .ui-st--probleem{color:var(--err);background:var(--err-bg)}
+
+/* ── Dialogen (mtDialog en de oude modal): vlak, rand, hoekig; knoppen volgen de knopregels ── */
+html[data-stijl="nieuw"] dialog.mt-dialog{border:1px solid var(--line);border-radius:var(--radius-panel);box-shadow:none;background:var(--surface);color:var(--ink);font-family:var(--font-ui)}
+html[data-stijl="nieuw"] dialog.mt-dialog .mtd-head{font:600 16px/22px var(--font-ui);color:var(--ink)}
+html[data-stijl="nieuw"] dialog.mt-dialog .mtd-btn{border-radius:var(--radius-ctl);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:500 13px/18px var(--font-ui);height:var(--control-h)}
+html[data-stijl="nieuw"] dialog.mt-dialog .mtd-btn:hover{background:var(--surface-2)}
+html[data-stijl="nieuw"] dialog.mt-dialog .mtd-btn.mtd-ok{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+html[data-stijl="nieuw"] dialog.mt-dialog .mtd-btn.mtd-ok:hover{background:var(--primary);filter:brightness(.92)}
+html[data-stijl="nieuw"] dialog.mt-dialog .mtd-btn.mtd-ok.mtd-danger{background:var(--err);border-color:var(--err)}
+html[data-stijl="nieuw"] dialog.mt-dialog .mtd-field,html[data-stijl="nieuw"] dialog.mt-dialog .mtd-choice{border-radius:var(--radius-ctl);border-color:var(--line-strong)}
+html[data-stijl="nieuw"] .modal{box-shadow:none;border:1px solid var(--line);border-radius:var(--radius-panel)}
+html[data-stijl="nieuw"] .modal-head{background:var(--surface);border-bottom-color:var(--line)}
+html[data-stijl="nieuw"] .modal-head .modal-title{font:600 16px/22px var(--font-ui)}
+html[data-stijl="nieuw"] .login-box{box-shadow:none;border:1px solid var(--line)}
+
+/* de zoekbalk in de kop mag op de telefoon niet buiten het scherm schuiven (left:50% uit de bureaubladregel bleef actief) */
+@media (max-width:760px){ html[data-stijl="nieuw"] .header-center{position:static;left:auto;transform:none} }
+
+/* ── Telefoon: raakvlak 44 px op knoppen en velden (niet op de kleine xs-knoppen in tabellen) ── */
+@media (max-width:700px){
+  html[data-stijl="nieuw"] .btn:not(.btn-xs),html[data-stijl="nieuw"] input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]),html[data-stijl="nieuw"] select{min-height:var(--touch)}
+}
