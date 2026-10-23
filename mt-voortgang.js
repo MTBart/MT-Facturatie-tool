@@ -5,7 +5,7 @@
  *  - per fase een voortgangsbalk ("3/5 klaar") met dezelfde roll-up als de Tijdlijn (D.model = MTTijdlijn.model: geen tweede formule),
  *    daaronder de taken als afvinklijst (ingeklapt per fase, de eerste fase met open taken staat open);
  *  - het afvinkvakje is DEZELFDE component als in de takentabel (MTTaakTabel.afvinkVak): zelfde route, Ongedaan maken, materiaal- en wachtcontrole;
- *  - snelle updates: de projectfase (bestaande overgangen van MTLead, "Gewonnen → project" voor een geaccepteerde offerte) en de verwachte levertijd
+ *  - snelle updates: de verwachte levertijd
  *    van het materiaal (P5: verwacht_op per bestelregel, of voor alle open regels tegelijk, met een bevestiging en Ongedaan maken).
  * Rol zonder recht ziet de voortgang als tekst: geen vakje, kiezer of invoerveld. Geen innerHTML: alleen DOM-calls. Alles van buiten via init(deps).
  * ========================================================================== */
@@ -87,26 +87,6 @@
     }));
   }
 
-  // De projectfase: de bestaande overgangen (D.faseOpties); een geaccepteerde offerte = "Gewonnen → project" (de bestaande logica, met haar eigen bevestiging)
-  function faseRij(code) {
-    const o = D.faseOpties ? D.faseOpties(code) : null; if (!o) return null;
-    const rij = el('div', { klass: 'vg-rij' }, el('span', { klass: 'vg-lab' }, ico('flag'), 'Projectfase'));
-    if (!o.kan || !o.opties.length) { rij.appendChild(el('span', { klass: 'vg-waarde', tekst: o.huidig.l || 'Geen fase' })); return rij; }
-    const sel = el('select', { klass: 'vg-sel', 'aria-label': 'Projectfase wijzigen', title: 'Nu: ' + (o.huidig.l || 'geen fase') },
-      el('option', { value: '', tekst: (o.huidig.l || 'Geen fase') + ' (nu)' }), o.opties.map(x => el('option', { value: x.k, tekst: x.l })));
-    sel.addEventListener('change', async () => {
-      const naar = sel.value; if (!naar) return;
-      if (!mag('fase')) { toast(GEEN_RECHT, null, true); sel.value = ''; return; }
-      if (S.bezig) { toast('Even wachten: de vorige wijziging wordt nog opgeslagen.', null, true); sel.value = ''; return; }
-      S.bezig = true; sel.disabled = true;   // één wijziging tegelijk, ook over de dialogen heen (reden bij Verloren, bevestiging bij Gewonnen)
-      let r; try { r = await D.faseKies(code, naar, sel); } catch (e) { r = { ok: false, reden: 'Mislukt: ' + ((e && e.message) || e) }; } finally { S.bezig = false; sel.disabled = false; }
-      if (r && r.ok === false && r.reden) toast(r.reden, null, true);
-      if (r && r.ok && r.terug) toast('Projectfase: ' + r.label + '.', async () => { const h = await r.terug(); toast(h && h.ok ? 'Teruggezet.' : ((h && h.reden) || 'Terugzetten lukt niet.'), null, !(h && h.ok)); if (D.naWijziging) D.naWijziging(); });
-      if (D.naWijziging) D.naWijziging();
-    });
-    rij.appendChild(sel); return rij;
-  }
-
   // Levertijd van het materiaal: één datum voor alle open regels (met keuze en bevestiging), of per regel
   function materiaalRij(code) {
     const regels = D.regels ? D.regels(code) : [], m = V.materiaal(regels), kan = mag('bestel');
@@ -185,7 +165,7 @@
     const sec = el('section', { klass: 'vg', 'aria-labelledby': 'vg-kop-' + String(code).replace(/[^a-z0-9]/gi, ''), 'data-vg-code': code });
     sec.appendChild(el('div', { klass: 'vg-kop' }, el('h3', { id: 'vg-kop-' + String(code).replace(/[^a-z0-9]/gi, ''), tekst: 'Voortgang' }), m.n ? el('span', { klass: 'vg-tot', tekst: m.klaar + '/' + m.n + ' klaar' }) : null));
     if (m.n) sec.appendChild(balk(m.n, m.klaar, 'vg-groot'));
-    const snel = el('div', { klass: 'vg-snel' }, faseRij(code), materiaalRij(code)); sec.appendChild(snel);
+    const snel = el('div', { klass: 'vg-snel' }, materiaalRij(code)); sec.appendChild(snel);
     if (!m.n) { sec.appendChild(el('p', { klass: 'vg-leeg', tekst: 'Nog geen taken bij dit project. Voeg ze toe bij Planning & taken.' })); return sec; }
     const open = V.faseOpen(code, m.fasen);
     m.fasen.forEach((f, i) => {

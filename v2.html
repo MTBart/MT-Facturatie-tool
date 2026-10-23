@@ -64,6 +64,7 @@
 <script src="mt-taakpaneel.js?v=2026-10-23f"></script>
 <script src="mt-taaktabel.js?v=2026-10-23g"></script>
 <script src="mt-voortgang.js?v=2026-10-23h"></script>
+<script src="mt-projectkop.js?v=2026-10-23i"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
 <script src="mt-bord.js?v=2026-10-23f"></script>
 <script src="mt-tijdlijn.js?v=2026-10-23f"></script>
@@ -3950,7 +3951,8 @@ try{ MTTaakTabel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM,
   journaal:()=>{ try{ const j=JSON.parse(localStorage.getItem('mt_taken_journaal')||'[]'); return Array.isArray(j)?j:[]; }catch(e){ return []; } },
   naamVan:d=>_capNaamVan(d),   // de naam uit de personenlijst (MT_TEAM) bij een e-mailadres of slug
   leesUren:x=>MTTaakPaneel.leesUren(x),
-  naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _vgHerteken(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Takentabel init:',e); }// Het blok Voortgang bovenaan Project ▸ Overzicht (mt-voortgang.js): de roll-up komt van MTTijdlijn.model (geen tweede formule); het afvinkvakje is dat van de takentabel (MTTaakTabel.afvinkVak: zelfde route);
+  naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _vgHerteken(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Takentabel init:',e); }
+// Het blok Voortgang bovenaan Project ▸ Overzicht (mt-voortgang.js): de roll-up komt van MTTijdlijn.model (geen tweede formule); het afvinkvakje is dat van de takentabel (MTTaakTabel.afvinkVak: zelfde route);
 // de projectfase gaat via leadFaseKies/projFaseZet (de bestaande overgangen, "Gewonnen → project" met zijn bevestiging) en de levertijd via bestelVerwachtZet (P5), voor alle open regels via bestelVerwachtBulk met Ongedaan maken.
 function _vgHerteken(){ const y=window.scrollY; _ptHertekenen(); try{ window.scrollTo(0,y); }catch(e){} }   // het blok tekent mee met het project; de scrollpositie blijft staan
 function vgModel(code){
@@ -3960,7 +3962,7 @@ function vgModel(code){
 }
 function vgFaseOpties(code){
   const p=projVind(code); if(!p||!window.MTLead) return null;
-  return { huidig:{k:p.fase||'',l:MTLead.label(p.fase)||''}, kan:_leadMag(), opties:MTLead.opties(p.fase||'').map(k=>({k,l:k==='gewonnen'?'Offerte geaccepteerd → project':MTLead.label(k)})) };
+  return { huidig:{k:p.fase||'',l:MTLead.label(p.fase)||'',soort:((MTLead.FASES||[]).find(f=>f.k===p.fase)||{}).soort||''}, kan:_leadMag(), opties:MTLead.opties(p.fase||'').map(k=>({k,l:k==='gewonnen'?'Offerte geaccepteerd → project':MTLead.label(k)})) };
 }
 // Fase kiezen via de bestaande route (leadFaseKies: reden bij Verloren, datum bij Geparkeerd, bevestiging bij Gewonnen). Ongedaan maken alleen waar de overgang gewoon terug mag (geen Gewonnen, Verloren of Geparkeerd).
 async function vgFaseKies(code,naar,sel){
@@ -3996,8 +3998,21 @@ function bestelVerwachtHerstel(vorige){
   return {ok:n>0||!overgeslagen,n,overgeslagen};
 }
 try{ MTVoortgang.init({ doc:document, planning:MTPlanning, model:vgModel, openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),
-  faseOpties:vgFaseOpties, faseKies:vgFaseKies, regels:vgRegels, bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd), bestelBulk:bestelVerwachtBulk, bestelHerstel:bestelVerwachtHerstel, bestelVers:()=>_blVerseLees(),
-  mag:{ bestel:()=>rolMag(ROL_BESTEL_ALLES)&&_blKlaar(), fase:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; }, naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Voortgang init:',e); }// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
+  regels:vgRegels, bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd), bestelBulk:bestelVerwachtBulk, bestelHerstel:bestelVerwachtHerstel, bestelVers:()=>_blVerseLees(),
+  mag:{ bestel:()=>rolMag(ROL_BESTEL_ALLES)&&_blKlaar(), fase:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; }, naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Voortgang init:',e); }
+// De vaste projectkop (samenhang S1, mt-projectkop.js): fase (dezelfde route als de leads: leadFaseKies/projFaseZet), leverdatum, een compacte urenmeter die alleen leest en zelf laadt, volgende actie en het ⋯-menu (Kopieer link, Vectorworks, Verwijderen).
+function pkMeter(code){
+  const d=projMeterBereken(code), tt=d.m.totaal, sig=MTPlanning.signaal(d.m), st=_pmState[code]||{};
+  return { budget:tt.budget||0, geklokt:(tt.gekoppeld||0)+(tt.ongekoppeld||0), sig:sig?{niveau:sig.niveau,tekst:sig.tekst}:null, laden:!!st.bezig, fout:st.fout||'' };
+}
+try{ MTProjectKop.init({ doc:document, planning:MTPlanning,
+  faseOpties:vgFaseOpties, faseKies:vgFaseKies, lever:code=>{ const p=projVind(code)||{}; return { ymd:(p.gegevens||{}).leverdatum||'', fase:p.fase||'' }; },
+  week:ymd=>(window.MTVW&&MTVW.isoWeek?MTVW.isoWeek(ymd):null), vandaag:()=>MTPlanning.vandaagYmd(),
+  meter:pkMeter, meterLaad:code=>projMeterLaad(code), naarMeter:code=>projSectieKies('planning'),
+  volgende:code=>MTProjectKop.volgende(projTaken(code)), naamVan:d=>_capNaamVan(d), openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),
+  kopieerLink:code=>projKopieerLink(code), vwExport:code=>projVwExport(code), verwijder:code=>verwijderProject(code),
+  mag:{ fase:()=>_leadMag(), wijzig:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Projectkop init:',e); }
+// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
 try{ const _pbDag=(slug,datum)=>({tab:'agenda',weergave:'capaciteit',planfilter:Object.assign({van:datum,zoom:'dag'},slug?{persoon:slug}:{})});
   MTPlanblokPaneel.init({ planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), blokken:()=>agPlanActief(),
   blokkenKlaar:()=>{ if(_planblokken===null&&!window._pbLaadt){ window._pbLaadt=true; try{ agPlanLoad().catch(()=>{}); }catch(e){} } return _planblokken!==null; },
@@ -6590,7 +6605,6 @@ function projContextBalk(proj){
         +` role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="proj-wissel-lijst" aria-label="Wissel van project (zoek op code, naam, klant of locatie)"`
         +` oninput="projWisselZoek(this)" onkeydown="projWisselToets(event,this)" onfocus="projWisselZoek(this)" onblur="setTimeout(()=>projWisselSluit(this),150)">`
         +`<div class="proj-ctx-opties" id="proj-wissel-lijst" role="listbox" hidden></div></span>`
-      +`<button type="button" class="btn btn-xs btn-secondary" onclick="projKopieerLink(${jsArg(proj.code)})" title="Kopieer de link naar dit project">🔗 Kopieer link</button>`
     +`</span></div>`;
 }
 // ── Link kopiëren ──
@@ -6707,6 +6721,7 @@ function renderProjectDetail(proj){
   host.innerHTML=projContextBalk(proj)
     +`<nav class="proj-secnav" role="tablist" aria-label="Projectonderdelen">${nav}</nav>`
     +`<div class="card proj-sectie" id="proj-sectie-inhoud" role="tabpanel" data-sectie="${esc(_projSectie)}"></div>`;
+  try{ MTProjectKop.monteer(proj.code,host); }catch(e){ console.warn('Projectkop:',e); }   // de vaste kop: fase, lever, uren, volgende actie en het ⋯-menu
   _projSecNavTop();
   try{ if(window.ResizeObserver){ if(window._projRO) window._projRO.disconnect(); window._projRO=new ResizeObserver(()=>_projSecNavTop()); const cb=host.querySelector('.proj-ctx'); if(cb) window._projRO.observe(cb); } }catch(e){}
   _projSectieRender(proj);
@@ -6810,11 +6825,6 @@ function projSecOverzicht(proj,c){
   if(!proj.offertenr) let_.push(`${kb({status:'open',klein:true,label:'Offertenummer',titel:'Nog geen offertenummer — klik om toe te kennen',onclick:`t2OffertenummerToekennen(${jsLit(pc)})`})} Nog geen offertenummer`);
   if(!c.effectiveMb&&proj.klant) let_.push(`${kb({status:'open',klein:true,label:'Moneybird',titel:'Geen Moneybird-contact — klik om te koppelen',onclick:`bewerkProjectMbNr(${jsLit(pc)})`})} Geen Moneybird-contact`);
   return `
-      <div style="display:flex;justify-content:flex-end;align-items:start;margin-bottom:.75rem;gap:.5rem;flex-wrap:wrap">
-        <div class="flex">
-          <button class="btn btn-secondary btn-sm" onclick="verwijderProject(${jsArg(_jsCode(proj.code))})">Verwijderen</button>
-        </div>
-      </div>
       <div class="kpi-grid ov-kpi" style="margin-bottom:1rem">
         <div class="kpi-card green"><div class="kpi-label">Materiaalinkoop</div><div class="kpi-waarde" style="font-size:20px">${fmt(c.totaalInkoop)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Materiaalregels</div><div class="kpi-waarde" style="font-size:20px">${c.projItems.length}</div></div>
@@ -11853,7 +11863,7 @@ function projGegevensHtml(proj){
     ${w?`<div class="dos-meta">Levering in week ${esc(w.week)} van ${esc(w.jaar)}</div>`:''}
     <div class="lead-rij">${mag&&nieuw.length?`<button class="btn btn-xs btn-secondary" onclick="projGegevensVoorstelIn(${jsArg(pc)})" title="${esc('Alleen lege velden: '+nieuw.map(k=>(PROJ_GEGEVENS.find(x=>x[0]===k)||[])[1]).join(', '))}">Voorstellen invullen (${esc(nieuw.length)})</button>`:''}
       ${adres&&projNavUrl(adres)?`<a class="btn btn-xs btn-secondary" target="_blank" rel="noopener" href="${esc(veiligeUrl(MTProject.navUrl(adres,(typeof navigator!=='undefined'&&navigator.userAgent)||''),{hosts:['google.com','apple.com']}))}" title="${esc('Navigeer naar '+adres)}">🧭 ${esc(adres)}</a>`:''}
-      ${mag?`<button class="btn btn-xs btn-gold" onclick="projVwExport(${jsArg(pc)})" title="Maakt ${esc(MTVW.bestandsnaam(projNummer(proj)||proj.code))} in 03_Vectorworks (of als download)">Projectgegevens voor Vectorworks</button>`:''}</div>
+    </div>
     ${Object.entries(proj._veldconflict||{}).filter(([veld])=>veld.startsWith('gegevens.')).map(([veld,c])=>`<div class="lead-conflict" role="alert">⚠ <b>${esc((PROJ_GEGEVENS.find(x=>'gegevens.'+x[0]===veld)||[0,veld])[1])}</b> is tegelijk gewijzigd${c.door?' door '+esc(c.door):''}: nu „${esc(_vGet(proj,veld)||'—')}”, de andere waarde was „${esc(c.waarde||'—')}”.
       ${mag?`<button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},false)">Houden</button> <button class="btn btn-xs btn-secondary" onclick="leadConflictKies(${jsArg(pc)},${jsArg(veld)},true)">Andere waarde nemen</button>`:''}</div>`).join('')}</section>`;
 }
