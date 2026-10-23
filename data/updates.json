@@ -2,11 +2,12 @@
   {
     "versie": "2.21.0",
     "datum": "2026-10-23",
-    "titel": "Planning met bord en filters, Financiën, slimmere Larry en rustiger calculeren",
+    "titel": "Planning met bord, tijdlijn en filters, Financiën, slimmere Larry en rustiger calculeren",
     "voor": "iedereen",
     "punten": [
       "Planning: bovenin staat een filterbalk (persoon, klant, project, fase, status) die in Capaciteit, Mijn werk en het nieuwe Bord hetzelfde werkt. Klik op een blok op de planning en er opent een paneel met de taak erachter.",
       "Nieuw: het Bord. Taken staan in kolommen per status; sleep een taak naar een andere kolom om de status te wijzigen, of voeg met + taak meteen een taak toe.",
+      "Nieuw: de Tijdlijn (bij Agenda). Alle projecten op een tijdas, met fasen, afhankelijkheden en het kritieke pad. Alleen kijken: er wordt niets gewijzigd. Klik op een taakbalk voor het taakpaneel of op een projectbalk om het project te openen.",
       "Calculatie: je ziet vooraf een voorbeeld van wat er verandert voordat je standaardwaarden (zoals uurtarief en marge) toepast. Standaardwaarden en dialogen zijn duidelijker, en wijzigt iemand anders tegelijk de standaardwaarden, dan gaat er niets verloren.",
       "Calculatie: het paneel Versies toont eerdere opgeslagen versies van een offerte, met een knop om er een terug te zetten.",
       "Het tabblad Geld heet nu Financiën. Het toont per project wat je nog kunt factureren (Facturatie verwacht) en heeft een Factuurplanning waarin je een maand kiest voor een termijn. Alleen zichtbaar met het recht voor geld.",
