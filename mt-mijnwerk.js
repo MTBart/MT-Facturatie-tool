@@ -95,7 +95,8 @@
       el('span', { klass: 'mw-strook', style: 'background:' + P.projectKleur(item.code) }),
       el('div', { klass: 'mw-tekst' }, naam, el('div', { klass: 'mw-sub', tekst: [projLabel(item.code), wanneer(item, mw.vandaag), taak && item.gepland_min ? uren(item.gepland_min) + ' gepland' : '', (F.persoon === 'iedereen' && item.persoon) ? 'bij ' + persoonNaam(item.persoon) : (F.persoon === 'iedereen' && taak ? 'van niemand' : '')].filter(Boolean).join(' · ') }), extra),
       el('div', { klass: 'mw-chips' }, chips), acties || null);
-    const open = () => { markeerGezien(item); if (paneel) D.openTaak(item.code, item.id, rij); else D.openProject(item.code); };
+    const blokId = !taak && D.openBlok && item.blok && item.blok.id != null ? String(item.blok.id) : null;   // een planblok zonder taak: het planblokpaneel
+    const open = () => { markeerGezien(item); if (paneel) D.openTaak(item.code, item.id, rij); else if (blokId) D.openBlok(blokId, rij); else D.openProject(item.code); };
     rij.addEventListener('click', ev => { if (ev.target.closest && ev.target.closest('button')) return; open(); });
     rij.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === rij) { ev.preventDefault(); open(); } });
     return rij;

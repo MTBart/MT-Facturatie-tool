@@ -161,7 +161,11 @@
   const open = code => { if (code) D.openProject(code); };
   // Klikken op een taak opent het taakpaneel (mt-taakpaneel.js); zonder taak (een los planblok) of zonder paneel: het project. Een klik telt alleen als de muis minder dan 4 px bewoog
   // (slepen en uittrekken blijven precies zoals ze waren: de browser stuurt na een echte sleep geen klik, en een greep of knop op de balk opent niets).
-  const openItem = (it, bron) => { if (D.openTaak && it && it.soort === 'taak' && it.id != null && it.code) D.openTaak(it.code, it.id, bron); else open(it && it.code); };
+  const openItem = (it, bron) => {
+    const bid = it ? blokIdVan(it) : null;   // een planblok (los, of als blok van een taak): het planblokpaneel (alleen lezen); een taakbalk zonder blok: het taakpaneel
+    if (bid && D.openBlok) D.openBlok(bid, bron);
+    else if (D.openTaak && it && it.soort === 'taak' && it.id != null && it.code) D.openTaak(it.code, it.id, bron); else open(it && it.code);
+  };
   function klikOpen(node, it) {
     let p0 = null;
     node.addEventListener('pointerdown', ev => { p0 = [ev.clientX, ev.clientY]; });
