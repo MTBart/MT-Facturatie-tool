@@ -277,7 +277,7 @@
       el('span', { role: 'listitem' }, el('span', { klass: 'tl-balk bezig kritiek' }), 'Kritiek pad'),
       el('span', { role: 'listitem', tekst: '◆ Mijlpaal' }), el('span', { role: 'listitem', tekst: '│ Leverdatum' }), el('span', { role: 'listitem', tekst: '↳ Afhankelijkheid' }));
     w0.appendChild(leg);
-    w0.appendChild(el('div', { klass: 'tl-noot', role: 'note', tekst: 'Alleen einde-naar-begin, in werkdagen (met wachttijd). Begin-naar-begin, einde-naar-einde en wachttijd in kalenderdagen bestaan nog niet. Deze tijdlijn is alleen-lezen: wijzig datums in het taakpaneel of in de Capaciteit.' }));
+    w0.appendChild(el('div', { klass: 'tl-noot', role: 'note', tekst: 'Alle vier de typen koppeling staan erop (einde-naar-begin, begin-naar-begin, einde-naar-einde en begin-naar-einde), ook met een ander project; type en wachttijd wijzig je in het taakpaneel. Deze tijdlijn is alleen-lezen: wijzig datums in het taakpaneel of in de Capaciteit.' }));
   };
 
   Tl.init = function (deps) { D = deps; P = deps.planning || root.MTPlanning; return Tl; };
