@@ -271,8 +271,10 @@
       const ja = await dlg.confirm({ title: 'Deze taak wacht', message: '"' + t.naam + '" wacht op: ' + P.wachtOpTekst(m.wacht, P.datumKort) + '.\nToch ' + (nieuw === 'klaar' ? 'op klaar zetten' : 'starten') + '?', okLabel: 'Toch doorgaan' });
       if (!ja) return;
     }
-    if (nieuw !== 'wacht' && m.materiaalTaak && P.materiaalVraagBevestiging(t, m.materiaalTaak, nieuw) && dlg && dlg.confirm) {   // een taak met open materiaal gaat niet stil naar Bezig of Klaar (P5)
-      const ja = await dlg.confirm({ title: 'Het materiaal is nog niet binnen', message: P.materiaalBevestigTekst(t.naam, m.materiaalTaak, nieuw, P.datumKort), okLabel: 'Toch doorgaan' });
+    let matVers = m.materiaalTaak;   // vers: eerst de gezamenlijke bestellijst lezen, een collega kan intussen een regel aan de taak gekoppeld hebben
+    if (nieuw !== 'wacht' && D.bestelVers && matVers) { try { const vers = await D.bestelVers(); matVers = P.taakMateriaal(t, P.bestelVanTaak(vers || [], t.id, { code: m.code, project_id: m.project && m.project.project_id }), { vandaag: P.vandaagYmd() }); } catch (e) { } }
+    if (nieuw !== 'wacht' && matVers && P.materiaalVraagBevestiging(t, matVers, nieuw) && dlg && dlg.confirm) {   // een taak met open materiaal gaat niet stil naar Bezig of Klaar (P5)
+      const ja = await dlg.confirm({ title: 'Het materiaal is nog niet binnen', message: P.materiaalBevestigTekst(t.naam, matVers, nieuw, P.datumKort), okLabel: 'Toch doorgaan' });
       if (!ja) return;
     }
     await h.bewaar({ velden: { status: nieuw }, gezien: { status: huidig, wacht_reden: t.wacht_reden || '', klaar_op: t.klaar_op || '' }, reden }, 'status ' + (P.TAAK_STATUS_LABEL[nieuw] || nieuw).toLowerCase());

@@ -169,7 +169,8 @@
       if (!ja) return false;
     }
     if (nieuw !== 'wacht' && D.bestel && dlg && dlg.confirm) {   // een taak met open materiaal gaat niet stil naar Bezig of Klaar (P5): vers uit de bestellijst, niet uit de getekende kaart
-      const mat = P.taakMateriaal(t, P.bestelVanTaak(D.bestel() || [], t.id, { code: kaart.code, project_id: kaart.project_id }), { vandaag: P.vandaagYmd() });
+      let bl = D.bestel() || []; if (D.bestelVers) { try { bl = await D.bestelVers() || bl; } catch (e) { } }   // eerst de gezamenlijke bestellijst lezen
+      const mat = P.taakMateriaal(t, P.bestelVanTaak(bl, t.id, { code: kaart.code, project_id: kaart.project_id }), { vandaag: P.vandaagYmd() });
       if (P.materiaalVraagBevestiging(t, mat, nieuw)) { const ja = await dlg.confirm({ title: 'Het materiaal is nog niet binnen', message: P.materiaalBevestigTekst(t.naam, mat, nieuw, P.datumKort), okLabel: 'Toch doorgaan' }); if (!ja) return false; }
     }
     return schrijf(Bd.specStatus(kaart.code, vindTaak(kaart.code, kaart.id) || t, nieuw, reden), 'status ' + statusLabel(nieuw).toLowerCase());

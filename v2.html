@@ -3922,7 +3922,7 @@ try{ MTVandaagDesk.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, i
 // Het taakpaneel (mt-taakpaneel.js): één paneel per taak, met de herkomst (klant › locatie › project) als gewone links, de afhankelijkheden en de bestellingen van het project.
 // Dezelfde bronnen als Mijn werk en de Capaciteit; de links gaan via de bestaande router (mtRoute), dus Terug en Ctrl-klik werken.
 try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu:()=>Date.now(),
-  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), bestel:()=>_blActief(), vrij:()=>_p2Vrij(), blokken:()=>agPlanActief(),
+  taken:()=>projTakenAll(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(), afhank:()=>projAfhRuw(), bestel:()=>_blActief(), bestelVers:async()=>{ await _blVerseLees(); return _blActief(); }, vrij:()=>_p2Vrij(), blokken:()=>agPlanActief(),
   ruw:()=>['mt_project_taken_v2','mt_project_afhank','mt_bestellijst_v2','mt_planblokken'].map(k=>localStorage.getItem(k)||'').join('\u0001'),   // verandert er iets (ook via de sync), dan tekent het paneel opnieuw
   project:code=>{ const p=projVind(code); return p?{code:p.code,project_id:p.project_id||'',naam:projNaamVol(p),nummer:projLabelCode(p)||'',klant:String(p.klant||'').toUpperCase(),klantNaam:projKlantNaam(p),loc:String(p.loc||'').toUpperCase(),locNaam:projLocLabel(p)}:null; },
   href:{ project:(code,sectie)=>mtRoute.format({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.format({tab:'projecten',klant:kl,loc:loc||undefined}), bestellijst:()=>mtRoute.format({tab:'bestelling'}) },
@@ -3959,7 +3959,7 @@ async function bordNieuweTaak(o){
 try{ MTBord.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), afhank:()=>projAfhRuw(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(),
   vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null),
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,project_id:p.project_id||'',label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
-  projectenVol:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code), bestel:()=>_blActief(),
+  projectenVol:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code), bestel:()=>_blActief(), bestelVers:async()=>{ await _blVerseLees(); return _blActief(); },
   mag:{ status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
   wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), nieuweTaak:bordNieuweTaak,
   toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; },
@@ -9148,6 +9148,7 @@ async function _projTaakStatusNaar(code,id,nieuwStatus){
   if(!['todo','bezig','klaar'].includes(nieuwStatus)) return;
   const w=MTPlanning.taakWacht(t,arr,projAfhRuw()[code]||[]);
   if(w.wacht&&(t.status||'todo')==='todo'&&nieuwStatus!=='todo'&&!await mtDialog.confirm({title:'Deze taak wacht',message:'"'+t.naam+'" wacht op: '+MTPlanning.wachtOpTekst(w,_p2D)+'.\nToch '+(nieuwStatus==='klaar'?'op klaar zetten':'starten')+'?',okLabel:'Toch doorgaan'})) return;
+  if(nieuwStatus!=='todo'&&(t.status||'todo')!==nieuwStatus&&typeof _blVerseLees==='function') await _blVerseLees();   // P5: de materiaalcontrole leest eerst de gezamenlijke bestellijst (een collega kan intussen een regel gekoppeld hebben); lukt dat niet, dan geldt de lokale stand
   { const mat=MTPlanning.taakMateriaal(t,MTPlanning.bestelVanTaak(_blActief(),t.id,{code,project_id:(projVind(code)||{}).project_id}));   // P5: een taak met open materiaal gaat niet stil naar Bezig of Klaar
     if(MTPlanning.materiaalVraagBevestiging(t,mat,nieuwStatus)&&!await mtDialog.confirm({title:'Het materiaal is nog niet binnen',message:MTPlanning.materiaalBevestigTekst(t.naam,mat,nieuwStatus,_p2D),okLabel:'Toch doorgaan'})) return; }
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // de blokkade of het recht kan tijdens de bevestiging veranderd zijn
@@ -10747,6 +10748,12 @@ async function _planEditorOpslaan(code,faseId){
   if(_ptBlok(code)) return;   // takenlijst niet klaar: geen planning-save en geen Toggl-PATCH
   const plan=planVoor(code); if(!plan) return;
   const fa=plan.fases.find(x=>x.id===faseId); if(!fa) return;
+  if(fa.bronTaakId){   // P5: ook via de fase-editor gaat een taak met open materiaal niet stil naar Bezig of Klaar
+    const nieuwSt=document.getElementById('pe-status').value, bt0=projTaken(code).find(x=>x.id===fa.bronTaakId);
+    if(bt0&&nieuwSt!==(bt0.status||'todo')&&['bezig','klaar'].includes(nieuwSt)){ if(typeof _blVerseLees==='function') await _blVerseLees();
+      const mat=MTPlanning.taakMateriaal(bt0,MTPlanning.bestelVanTaak(_blActief(),bt0.id,{code,project_id:(projVind(code)||{}).project_id}));
+      if(MTPlanning.materiaalVraagBevestiging(bt0,mat,nieuwSt)&&!await mtDialog.confirm({title:'Het materiaal is nog niet binnen',message:MTPlanning.materiaalBevestigTekst(bt0.naam,mat,nieuwSt,_p2D),okLabel:'Toch doorgaan'})) return;
+      if(_ptBlok(code)) return; } }
   fa.naam=document.getElementById('pe-naam').value||fa.naam;
   fa.status=document.getElementById('pe-status').value;
   fa.duur=Math.max(0,parseInt(document.getElementById('pe-duur').value)||0);
