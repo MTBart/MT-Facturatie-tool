@@ -75,7 +75,7 @@
     const materiaal = t.sleutel === 'bestellen' || t.sleutel === 'materiaal_geleverd' || (t.status === 'wacht' && /\b(materiaal|plaat|platen|beslag|bestel|besteld|bestelling|levering|leverancier|geleverd|order)/i.test(String(t.wacht_reden || '')));
     // Planblokken die (nog) aan deze taak hangen (oude tb:-blokken), voor de mini-tijdlijn
     let blokken = []; try { if (D.blokken && P.taakBlokkenVan) blokken = P.taakBlokkenVan(t, lijst, k, D.blokken() || [], alle).filter(b => b && ymdOk(b.datum)).map(b => ({ datum: b.datum, persoon: b.persoon || '', min: Number(b.duurMin) || 0, voorstel: b.status === 'voorstel' })); } catch (e) { blokken = []; }
-    return { ok: true, sleutel: { code: k || code, id: t.id }, code: k || code, taak: t, project: pr, voorgangers, opvolgers, wacht, bestel: { regels, tel, materiaal, anderen }, materiaalTaak, mensen: P.taakMensen(t), raming: P.taakRamingMin(t), fasen: faseOpties(lijst, t.fase), blokken };
+    return { ok: true, sleutel: { code: k || code, id: t.id }, code: k || code, taak: t, project: pr, voorgangers, opvolgers, wacht, bestel: { regels, tel, materiaal, anderen }, materiaalTaak, checklist: P.checklistActief(t), poortVoorstel: P.poortVoorstel(t, regels), mensen: P.taakMensen(t), raming: P.taakRamingMin(t), fasen: faseOpties(lijst, t.fase), blokken };
   };
 
   // De mini-tijdlijn (rekenwerk): een venster van hele weken rond de taak (minstens 4, hoogstens 12), met de balk en de planblokken als percentages
@@ -130,7 +130,53 @@
     if ((t.status || 'todo') === 'todo' && m.wacht && m.wacht.wacht) kids.push(h.el('p', { klass: 'tp-sub', tekst: 'Wacht op: ' + P.wachtOpTekst(m.wacht, P.datumKort) }));
     return h.sectie('tp-h-afh', 'Afhankelijkheden', h.el('span', { klass: 'tp-teller', tekst: String(m.voorgangers.length + m.opvolgers.length) }), kids);
   }
-  // Materiaal (P5): de bestelregels van deze taak met hun verwachte leverdatum (rood als die na de geplande start valt), koppelen en loskoppelen, en de andere regels van het project.
+  // Checklist (P6a): afvinkpunten in de taak, met per punt wie het afvinkte en wanneer ("✓ door Mathijs · 22-10", dezelfde opmaak als bij een afgevinkte taak).
+  // Afvinken mag wie een status mag zetten; punten toevoegen, hernoemen en verwijderen is voor kantoor. Elke bewerking gaat als bewerking op de verse stand (D.wijzig met ops): twee mensen die tegelijk afvinken, bewaren allebei het hunne.
+  const nieuwClId = () => 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const wieNaam = x => { const n = D.naamVan ? D.naamVan(x) : ''; return n || persNaam(x); };
+  function checklistSectie(m, h) {
+    const t = m.taak, items = m.checklist || [], tel = P.checklistTel(t), kanVink = mag('status') && !!D.wijzig, kanBeheer = mag('alles') && !!D.wijzig;
+    const doe = (ops, wat) => h.bewaar({ ops }, wat);
+    const kids = [];
+    if (!items.length) kids.push(h.el('p', { klass: 'tp-leeg', tekst: 'Nog geen afvinkpunten.' }));
+    else kids.push(h.el('ul', { klass: 'tp-lijst tp-checklist', 'aria-label': 'Checklist' }, items.map(x => {
+      const vink = h.el('input', { type: 'checkbox', klass: 'tp-clvink', 'aria-label': (x.klaar ? 'Afgevinkt: ' : 'Afvinken: ') + x.tekst, checked: x.klaar ? true : null, disabled: kanVink ? null : true, title: kanVink ? null : h.GEEN_RECHT });
+      vink.addEventListener('change', () => doe([{ op: 'vink', id: x.id, klaar: vink.checked }], 'punt ' + (vink.checked ? 'afgevinkt' : 'teruggezet')));
+      const tekst = kanBeheer ? h.el('input', { type: 'text', klass: 'tp-invoer tp-cltekst', value: x.tekst, 'aria-label': 'Tekst van het punt: ' + x.tekst, maxlength: '200', autocomplete: 'off' }) : h.el('span', { klass: 'tp-cltekst' + (x.klaar ? ' klaar' : ''), tekst: x.tekst });
+      if (kanBeheer) { tekst.addEventListener('change', () => { const w = tekst.value.replace(/\s+/g, ' ').trim(); if (!w || w === x.tekst) { tekst.value = x.tekst; return; } try { tekst.blur(); } catch (e) { } doe([{ op: 'hernoem', id: x.id, tekst: w }], 'punt hernoemd'); }); tekst.addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.stopPropagation(); tekst.value = x.tekst; tekst.blur(); } }); }
+      return h.el('li', { klass: 'tp-clrij' }, vink, tekst,
+        x.klaar ? h.el('span', { klass: 'tp-sub tp-clwie', tekst: P.checklistKlaarTekst(x, wieNaam) }) : null,
+        kanBeheer ? h.el('button', { type: 'button', klass: 'tp-knop tp-klein tp-gevaar', 'aria-label': 'Verwijder punt: ' + x.tekst, title: 'Verwijderen (met Ongedaan maken)', tekst: '\u00d7', klik: () => doe([{ op: 'weg', id: x.id }], 'punt verwijderd') }) : null);
+    })));
+    if (kanBeheer) {
+      const inv = h.el('input', { type: 'text', klass: 'tp-invoer', placeholder: 'Nieuw punt', 'aria-label': 'Nieuw punt voor de checklist', maxlength: '200', autocomplete: 'off' });
+      const naarNieuw = () => { const n = D.doc.querySelector('#tp-paneel input[aria-label="Nieuw punt voor de checklist"]'); if (n) n.focus(); };   // na het hertekenen staat de cursor weer in het veld voor het volgende punt
+      const voeg = async () => { const w = inv.value.replace(/\s+/g, ' ').trim(); if (!w) { inv.focus(); return; } inv.value = ''; try { inv.blur(); } catch (e) { } await doe([{ op: 'nieuw', id: nieuwClId(), tekst: w }], 'punt toegevoegd'); naarNieuw(); };   // blur: een paneel dat nog een invoerveld in bewerking heeft tekent niet opnieuw
+      inv.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); voeg(); } });
+      const wvb = P.checklistUitTeksten(P.CHECKLIST_WVB, { bestaand: t.checklist || [] });
+      kids.push(h.el('div', { klass: 'tp-clnieuw' }, inv, h.el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Toevoegen', klik: voeg })),
+        wvb.length ? h.el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Werkvoorbereiding-checklist toevoegen', title: 'Voegt ' + wvb.length + ' standaardpunten toe die er nog niet in staan; daarna kun je ze aanpassen', klik: () => doe(wvb.map(x => ({ op: 'nieuw', id: nieuwClId() + x.vol, tekst: x.tekst })), wvb.length + ' punten toegevoegd') }) : null);
+    }
+    return h.sectie('tp-h-cl', 'Checklist', h.el('span', { klass: 'tp-teller', tekst: tel.n ? tel.klaar + '/' + tel.n : 'leeg' }), kids);
+  }
+  // Poort (P6b): voor een mijlpaal: welke poort het is, wie de eigenaar is, een bewijs-link en de bron. Groen = klaar. De taken erna wachten met "wacht op poort X". Materiaal binnen kan als voorstel op groen (één klik).
+  function poortSectie(m, h) {
+    const t = m.taak; if (t.soort !== 'mijlpaal') return null;
+    const kan = mag('alles') && !!D.wijzig, team = (D.team && D.team()) || [], p = t.poort ? P.poort(t.poort) : null, groen = (t.status || 'todo') === 'klaar';
+    const kids = [h.rij('Poort', h.keuzeVeld('poort', t.poort || '', [['', 'Geen poort']].concat(P.POORTEN.map(x => [x.k, x.l])), { kan, label: 'Soort poort', wat: 'poort', titel: 'Een poort is een mijlpaal die groen moet zijn voordat de taken erna kunnen starten' }))];
+    if (p) {
+      kids.push(h.rij('Status', h.el('span', { klass: 'tp-poortstatus ' + (groen ? 'groen' : 'rood') }, groen ? 'Groen: ' + p.l.toLowerCase() : 'Nog niet: ' + p.l.toLowerCase()), h.el('span', { klass: 'tp-sub', tekst: p.uitleg })));
+      kids.push(h.rij('Eigenaar', h.keuzeVeld('poort_eigenaar', t.poort_eigenaar || '', [['', 'Niemand']].concat(team.map(x => [String(x.slug), x.naam])), { kan, label: 'Eigenaar van de poort', wat: 'eigenaar', titel: 'Wie zorgt dat deze poort groen wordt?' })));
+      kids.push(h.rij('Bewijs', h.tekstVeld('poort_bewijs', t.poort_bewijs || '', { kan, label: 'Bewijs-link', wat: 'bewijs', placeholder: 'https://...', lees: v => v === '' ? '' : (P.poortBewijsOk(v) ? v : null), fout: 'Geen geldige link: begin met http:// of https://. Er is niets gewijzigd.', titel: 'Link naar het bewijs: de getekende tekening, de betaling, het opleverformulier' }),
+        P.poortBewijsOk(t.poort_bewijs) ? h.el('a', { klass: 'tp-link', href: t.poort_bewijs, target: '_blank', rel: 'noopener noreferrer', tekst: 'Open het bewijs' }) : null));
+      kids.push(h.rij('Bron', h.el('span', { klass: 'tp-tekstwaarde', tekst: P.POORT_BRONNEN[t.poort_bron || 'hand'] || 'Handmatig' })));
+      if (m.opvolgers.length) kids.push(h.el('p', { klass: 'tp-sub', tekst: (groen ? 'Dit gaf ' : 'Hierop wachten ') + m.opvolgers.length + (m.opvolgers.length === 1 ? ' taak' : ' taken') + ': ' + m.opvolgers.map(x => x.naam).join(', ') + '.' }));
+      else kids.push(h.el('p', { klass: 'tp-sub', tekst: 'Er wacht nog geen taak op deze poort; koppel hem onder Afhankelijkheden aan de taak erna.' }));
+      if (m.poortVoorstel && !groen && mag('status')) kids.push(h.el('div', { klass: 'tp-melding tp-voorstel' }, h.el('span', { tekst: 'Voorstel: ' + m.poortVoorstel + '. Poort op groen zetten?' }),
+        h.el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Op groen zetten', klik: () => zetStatus(m, 'klaar', h) })));
+    }
+    return h.sectie('tp-h-poort', 'Poort', h.el('span', { klass: 'tp-teller' + (p && !groen ? ' tp-rood-tekst' : ''), tekst: p ? (groen ? 'groen' : 'open') : 'geen' }), kids);
+  }  // Materiaal (P5): de bestelregels van deze taak met hun verwachte leverdatum (rood als die na de geplande start valt), koppelen en loskoppelen, en de andere regels van het project.
   // Schrijven via de bestaande bestelroute van de cockpit (gestempelde velden taak_id, verwacht_op; recht bestellijst:alles), nooit rechtstreeks.
   function materiaalSectie(m, h) {
     const b = m.bestel, mt = m.materiaalTaak, g = D.ga || {}, hr = D.href || {}, naarProject = () => { h.sluit({ stil: true }); g.project(m.code, 'productie'); }, t = m.taak;
@@ -322,12 +368,14 @@
       // De naam ziet eruit als een kop, maar is een veld: klikken = bewerken (bewerkbaar oogt = bewerkbaar)
       const titel = D.wijzig ? h.el('h2', { id: 'tp-titel', klass: 'tp-titel' }, h.tekstVeld('naam', m.taak.naam || '', { kan: mag('alles'), label: 'Taaknaam', klass: 'tp-titelinvoer', wat: 'naam', fout: 'Een taak heeft een naam nodig; er is niets gewijzigd.', lees: v => v ? v : null, titel: 'Klik om de naam te wijzigen · Enter = opslaan, Esc = annuleren' }))
         : h.el('h2', { id: 'tp-titel', klass: 'tp-titel', tekst: m.taak.naam || '(zonder naam)' });
-      return { aria: 'Taak: ' + (m.taak.naam || ''), boven: herkomst(m, h), titel, body: [statusRij(m, h), meldingen(m, h), velden(m, h), afhSectie(m, h), materiaalSectie(m, h), meta(m, h)] };
+      return { aria: 'Taak: ' + (m.taak.naam || ''), boven: herkomst(m, h), titel, body: [statusRij(m, h), meldingen(m, h), velden(m, h), poortSectie(m, h), checklistSectie(m, h), afhSectie(m, h), materiaalSectie(m, h), meta(m, h)] };
     }
   };
   // De stijl van wat alleen de taak heeft (de mini-tijdlijn)
   const STIJL_TAAK = [
-    '#tp-paneel .tp-matrij{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line,#dfd8cb)}#tp-paneel .tp-matrij .tp-tekst{flex:1 1 160px}#tp-paneel .tp-matdatum{display:inline-flex;align-items:center;gap:6px}#tp-paneel .tp-rood{border-color:#b3261e !important;color:#b3261e}#tp-paneel .tp-rood-tekst{color:#b3261e;font-weight:600}#tp-paneel .tp-tl{margin-top:8px}#tp-paneel .tp-tl-leeg{display:flex;flex-wrap:wrap;align-items:center;gap:8px}',
+    '#tp-paneel .tp-clrij{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line,#dfd8cb)}#tp-paneel .tp-clvink{width:22px;height:22px;flex:0 0 auto;accent-color:var(--green,#2A4A38)}#tp-paneel .tp-cltekst{flex:1 1 200px;min-width:0}#tp-paneel .tp-cltekst.klaar{text-decoration:line-through;color:var(--ink-2,#666)}#tp-paneel .tp-clwie{white-space:nowrap}#tp-paneel .tp-clnieuw{display:flex;gap:8px;margin:8px 0}#tp-paneel .tp-clnieuw .tp-invoer{flex:1 1 auto}',
+  '#tp-paneel .tp-poortstatus{display:inline-block;padding:2px 10px;border-radius:12px;font-weight:600;font-size:12.5px}#tp-paneel .tp-poortstatus.groen{background:#e3f1e6;color:#1d5b2f}#tp-paneel .tp-poortstatus.rood{background:#fbe9e7;color:#b3261e}',
+  '#tp-paneel .tp-matrij{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line,#dfd8cb)}#tp-paneel .tp-matrij .tp-tekst{flex:1 1 160px}#tp-paneel .tp-matdatum{display:inline-flex;align-items:center;gap:6px}#tp-paneel .tp-rood{border-color:#b3261e !important;color:#b3261e}#tp-paneel .tp-rood-tekst{color:#b3261e;font-weight:600}#tp-paneel .tp-tl{margin-top:8px}#tp-paneel .tp-tl-leeg{display:flex;flex-wrap:wrap;align-items:center;gap:8px}',
     '#tp-paneel .tp-tl-as{position:relative;height:46px;border:1px solid var(--line,#dfd8cb);border-radius:4px;background:var(--surface-sunken,#f1ede5);overflow:hidden}',
     '#tp-paneel .tp-tl-wk{position:absolute;top:0;bottom:0;padding:2px 0 0 3px;border-left:1px solid var(--line,#dfd8cb);font:500 10px/12px var(--mono,monospace);color:var(--ink-3,#646a64);white-space:nowrap}',
     '#tp-paneel .tp-tl-balk{position:absolute;top:18px;height:14px;border-radius:3px;background:var(--block-color,#3e5c76);opacity:.85}#tp-paneel .tp-tl-balk.tp-st-klaar{opacity:.45}',

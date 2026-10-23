@@ -55,16 +55,16 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planfilter.js?v=2026-10-23a"></script>
-<script src="mt-planning.js?v=2026-10-23g"></script>
+<script src="mt-planning.js?v=2026-10-23h"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-23g"></script>
+<script src="mt-planverplaats.js?v=2026-10-23h"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
 <script src="mt-objectpaneel.js?v=2026-10-23g"></script>
-<script src="mt-taakpaneel.js?v=2026-10-23g"></script>
+<script src="mt-taakpaneel.js?v=2026-10-23i"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
 <script src="mt-planinrichting.js?v=2026-10-23g"></script>
-<script src="mt-bord.js?v=2026-10-23g"></script>
+<script src="mt-bord.js?v=2026-10-23h"></script>
 <script src="mt-tijdlijn.js?v=2026-10-23f"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
@@ -3091,10 +3091,10 @@ function _projSamen(lokaal,spData){
 //   - nog niets bekend (eerste vraag mislukt) → geen blokkade (fail-open: anders legt een storing het werk stil);
 //   - eerder al "te oud" gebleken → blijft blokkeren tot herladen (fail-closed: een storing heft de blokkade niet op).
 // Een geslaagd antwoord vervangt de kennis; een blokkade die al getoond is (blockedKeys) geldt tot herladen.
-const PROJ_SCHEMA=8;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
+const PROJ_SCHEMA=9;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
 // De schema-controle geldt voor élke SharePoint-sleutel waarvan het formaat per schema verandert: de projecten én de projecttaken
 // (een oudere tab zou de taken zonder stempels/tombstones terugschrijven).
-const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2','mt_planblokken','mt_bestellijst_v2'];   // 8 (P3b: taken met fase_id; planning-inrichting): een oudere app schrijft de projecttaken niet meer zodra de drempel op 8 staat; 7 (P5: bestelregels met taak_id, verwacht_op en verwacht_bron: een oudere app schrijft de bestellijst niet meer zodra de drempel op 7 staat); 6 (F1): ook de planblokken en de bestellijst: een te oude app schrijft ze niet meer zodra de drempel op 6 staat
+const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2','mt_planblokken','mt_bestellijst_v2'];   // 9 (P6: checklist per punt samenvoegen, poorten): een oudere app schrijft de projecttaken niet meer zodra de drempel op 9 staat; 8 (P3b: taken met fase_id; planning-inrichting); 7 (P5: bestelregels met taak_id, verwacht_op en verwacht_bron: een oudere app schrijft de bestellijst niet meer zodra de drempel op 7 staat); 6 (F1): ook de planblokken en de bestellijst: een te oude app schrijft ze niet meer zodra de drempel op 6 staat
 function projSchemaSleutel(k){ return _PROJ_SCHEMA_SLEUTELS.includes(k); }
 let _projSchemaMin=null, _projSchemaTijd=0;
 function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
@@ -3935,7 +3935,7 @@ try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu
   toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; },
   // Schrijven: alleen via de bestaande taakroutes (zie tpWijzig; de datums via de sleeproute van de Capaciteit; verwijderen, Toggl, conflict en voorstel via de functies van de projecttabel)
   mag:{ alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar(), status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), bestel:()=>rolMag(ROL_BESTEL_ALLES)&&_blKlaar(), plannen:()=>capMagSlepen()&&rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
-  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec), bestelKoppel:(id,taakId)=>bestelTaakZet(id,taakId), bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd),
+  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec), naamVan:x=>_capNaamVan(x), bestelKoppel:(id,taakId)=>bestelTaakZet(id,taakId), bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd),
   toonInTijdlijn:(code,id,datum)=>{ const k=document.querySelector('.tabs-wrap .tab-btn[onclick*="\'agenda\'"]'); _agenda.view='capaciteit'; showTab('agenda',k); try{ MTCapaciteitNieuw.toonTaak({code,id},datum); }catch(e){ console.warn('Toon in tijdlijn:',e); } },
   inplannen:t=>{ const k=document.querySelector('.tabs-wrap .tab-btn[onclick*="\'agenda\'"]'); _agenda.view='capaciteit'; showTab('agenda',k); try{ MTCapaciteitNieuw.inplannen(t); }catch(e){ console.warn('Inplannen (taakpaneel):',e); } },   // de bestaande route van Vandaag: Ongepland gemarkeerd + het keuzemenu
   verwijder:(c,i)=>projTaakVerwijder(c,i), togglSync:(c,i)=>projTaakTogglSync(c,i), conflict:(c,i)=>projTaakConflict(c,i), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
@@ -8115,6 +8115,7 @@ function projectTakenHtml(proj){
       <button class="btn btn-gold btn-sm" onclick="aiTakenVoorstel(${jsArg(proj.code)})">✨ AI-taken voorstellen</button>
       <button class="btn btn-secondary btn-sm" onclick="projTaakTemplateKies(${jsArg(proj.code)})" title="Standaard takenketen invoegen (keuken, kast, wandpaneel, maatwerk)">📋 Template</button>
       <button class="btn btn-secondary btn-sm" onclick="nieuweProjectTaak(${jsArg(proj.code)})">+ Taak</button>
+      <button class="btn btn-secondary btn-sm" onclick="nieuwePoort(${jsArg(proj.code)})" title="Een poort is een mijlpaal die groen moet zijn voordat de taken erna kunnen: tekening akkoord, aanbetaling binnen, ...">+ Poort</button>
       ${arr.length?`<button class="btn btn-secondary btn-sm" onclick="takenNaarPlanning(${jsArg(proj.code)})" title="Zet deze taken om in de fasen-planning (Gantt) hierboven">📅 → Planning</button>`:''}
       ${onbesp&&arr.length?`<button class="btn btn-secondary btn-sm" onclick="projTakenSpiegelAlles(${jsArg(proj.code)})">→ Alles naar Toggl (${esc(onbesp)})</button>`:''}
       ${arr.length?`<label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" onclick="projTakenSelectAll(${jsArg(proj.code)},this.checked)" title="Alles aan/uit">alles</label>
@@ -9204,6 +9205,24 @@ function nieuweProjectTaak(code){
   arr.push(t); if(projTakenZet(code,arr)!==true) return;   // niet opgeslagen: de melding staat er al
   renderProjectDetail(huidigProject);
   try{ if(window.track) track('taken','taak_handmatig',{detail:code,ok:true}); }catch(e){}
+}
+// P6b: een poort toevoegen (een mijlpaal van een eigen soort: tekening akkoord, aanbetaling binnen, maten definitief, materiaal binnen, oplevering getekend) en zo nodig meteen kiezen welke taak erop wacht.
+// Eigenaar en bewijs-link vul je in het taakpaneel in. De bron is handmatig; later kan de aanbetaling als voorstel uit Moneybird komen.
+async function nieuwePoort(code){
+  if(_ptBlok(code,ROL_TAAK_STATUS,'Een poort toevoegen')) return;
+  const i=await mtDialog.choose({title:'Welke poort?',message:'Een poort is een mijlpaal die groen moet zijn voordat de taken erna kunnen starten.',choices:MTPlanning.POORTEN.map(p=>({label:p.l,sublabel:p.uitleg}))});
+  if(i===null||i===undefined||!MTPlanning.POORTEN[i]) return;
+  const p=MTPlanning.POORTEN[i], arr=projTaken(code);
+  const t={id:_ptId(),naam:p.l,omschrijving:'',duur_uur:0,duur_dagen:0,soort:'mijlpaal',poort:p.k,poort_bron:'hand',status:'todo',tg_task_id:null,bron:'handmatig',afhankelijk_van:[]};
+  const pid=(projVind(code)||{}).project_id; if(pid) t.project_id=pid;
+  arr.push(t); if(projTakenZet(code,arr)!==true) return;   // niet opgeslagen: de melding staat er al
+  const open=arr.filter(x=>x.id!==t.id&&(x.status||'todo')!=='klaar'&&x.soort!=='mijlpaal');
+  if(open.length){
+    const j=await mtDialog.choose({title:'Welke taak wacht op "'+p.l+'"?',message:'Kies de taak die pas mag starten als deze poort groen is (je kunt dit later in het taakpaneel aanpassen).',choices:open.map(x=>({label:x.naam})).concat([{label:'Geen: later kiezen'}])});
+    if(j!==null&&j!==undefined&&open[j]) projAfhVoeg(code,open[j].id,t.id);
+  }
+  renderProjectDetail(huidigProject);
+  try{ if(window.track) track('taken','poort_nieuw',{detail:code,ok:true}); }catch(e){}
 }
 async function projTaakStatus(code,id){
   if(_ptBlok(code,ROL_TAAK_STATUS,'De status van een taak wijzigen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
@@ -16129,7 +16148,7 @@ async function capTaakHerstel(w,opt){
 async function tpWijzig(spec,opt){
   if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
   const r=_capTaakKlaar(await MTPlanVerplaats.taakWijzig(spec,_capTaakOpties(spec&&spec.code,opt)));
-  if(r&&r.ok&&r.oudTaak) _ptJournaal('paneel: '+Object.keys(spec.velden||{}).join(', '),spec.code,r.oudTaak);
+  if(r&&r.ok&&r.oudTaak) _ptJournaal('paneel: '+(Array.isArray(spec.ops)?'checklist':Object.keys(spec.velden||{}).join(', ')),spec.code,r.oudTaak);
   if(r&&!r.ok&&r.tegelijk) await _tpVersLokaal();
   return r;
 }

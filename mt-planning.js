@@ -190,8 +190,8 @@
   // wacht_reden = waarom een taak op status 'wacht' staat (stap 2, mobiel: Bezig · Klaar · Wacht met een verplichte reden).
   // Alle drie zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
   // voorstel = de markering "door werkplaats" van een gemelde taak of bestelregel (wie, rol, wanneer); kantoor haalt hem er met Overnemen af.
-  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id']);   // fase_id (P3b): het id van de fase in de planning-inrichting; 'fase' blijft de naam, voor oude apps
-  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id']);
+  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bron']);   // P6: checklist (samenvoegen per punt) en poort (een mijlpaal van een eigen soort, met eigenaar, bewijs-link en bron)   // fase_id (P3b): het id van de fase in de planning-inrichting; 'fase' blijft de naam, voor oude apps
+  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bron']);
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
@@ -353,6 +353,7 @@
       for (const k of sleutels) {
         if (k.charAt(0) === '_') continue;
         if (stabiel(norm(t[k])) === stabiel(norm(v[k]))) continue;
+        if (k === 'checklist') { statusOfNieuw = true; continue; }   // P6a: afvinken mag wie een status mag zetten (werkplaats); het toevoegen en hernoemen van punten beperkt het paneel tot kantoor
         if (P.TAAK_STATUS_VELDEN.indexOf(k) < 0) return 'taken:alles';
         if (k === 'tg_pending' && [P.tgPendingOp(t[k]), P.tgPendingOp(v[k])].some(o => o && o !== 'status')) return 'taken:alles';
         statusOfNieuw = true;
@@ -573,6 +574,7 @@
       if (!opt.geenConflict) [l, r].forEach(z => { const oc = z._veldconflict && z._veldconflict[f]; if (oc && Number(oc.t) > bb && !gelijk(oc.waarde, win[f]) && (!c || Number(oc.t) > c.t || (Number(oc.t) === c.t && stabiel(oc.waarde) > stabiel(c.waarde)))) c = kopie(oc); });   // gelijke tijd: deterministisch op de waarde
       if (c) conflicten[f] = c;
     });
+    if (opt.taak && (l.checklist !== undefined || r.checklist !== undefined)) { const cm = P.checklistSamen(l.checklist, r.checklist); if (cm.length) w.checklist = cm; else delete w.checklist; delete conflicten.checklist; }   // P6: de checklist voegt per punt samen (twee mensen die tegelijk afvinken: beide blijven)
     if (opt.taak) { const ps = personenSamen(l.personen, r.personen); if (ps) w.personen = ps; else delete w.personen; }   // personen: per slug samenvoegen (nooit als geheel "nieuwste wint"); toegewezen is een gewoon veld
     if (opt.taak && !syncGeldig(w)) { delete w.tg_sync; delete w._vs.tg_sync; delete conflicten.tg_sync; }   // koppeltabel van een andere Toggl-taak vervalt
     if (Object.keys(conflicten).length) w._veldconflict = conflicten; else delete w._veldconflict;
@@ -890,11 +892,11 @@
     actieveKant(P.depsEffectief(T, depsRuw)).forEach(e => {
       const v = by.get(e.van), n = by.get(e.naar);
       if (!v || !n || n.status === 'klaar') return;
-      if (v.status !== 'klaar') { uit[n.id].wacht = true; uit[n.id].op.push({ id: v.id, naam: v.naam, lag: e.lag }); return; }
+      if (v.status !== 'klaar') { uit[n.id].wacht = true; uit[n.id].op.push(Object.assign({ id: v.id, naam: v.naam, lag: e.lag }, v.poort && P.poort(v.poort) ? { poort: P.poort(v.poort).l } : {})); return; }   // P6: een poort heet "poort X"
       const lag = Math.max(0, Math.round(getal(e.lag))); if (!lag) return;   // geen wachttijd: een klare voorganger geeft direct vrij
       const gemeld = P.isYmd(v.klaar_op), basis = gemeld ? v.klaar_op : (P.isYmd(v.eind) ? v.eind : ''); if (!basis) return;
       const tot = P.addWerkdagen(basis, lag, V);
-      if (vandaag < tot) { const w = uit[n.id]; w.wacht = true; w.op.push({ id: v.id, naam: v.naam, lag, tot, bron: gemeld ? 'klaar_op' : 'berekend' }); if (!w.tot || tot > w.tot) w.tot = tot; }
+      if (vandaag < tot) { const w = uit[n.id]; w.wacht = true; w.op.push(Object.assign({ id: v.id, naam: v.naam, lag, tot, bron: gemeld ? 'klaar_op' : 'berekend' }, v.poort && P.poort(v.poort) ? { poort: P.poort(v.poort).l } : {})); if (!w.tot || tot > w.tot) w.tot = tot; }
     });
     return uit;
   };
@@ -905,7 +907,7 @@
     return st === 'todo' && P.taakWacht(taak, taken, depsRuw, opts).wacht ? 'wachten' : st;
   };
   // Tekst voor "wacht op": de naam, bij een lopende wachttijd ook tot wanneer (de aanroeper geeft de datumopmaak mee).
-  P.wachtOpTekst = (w, datumTekst) => ((w && w.op) || []).map(x => x.naam + (x.tot ? ' (wachttijd ' + x.lag + ' werkdag' + (x.lag === 1 ? '' : 'en') + ', tot ' + (datumTekst ? datumTekst(x.tot) : x.tot) + ')' : '')).join(', ');
+  P.wachtOpTekst = (w, datumTekst) => ((w && w.op) || []).map(x => (x.poort ? 'poort ' + x.poort : x.naam) + (x.tot ? ' (wachttijd ' + x.lag + ' werkdag' + (x.lag === 1 ? '' : 'en') + ', tot ' + (datumTekst ? datumTekst(x.tot) : x.tot) + ')' : '')).join(', ');
 
   // ── Rooster: vroegste en laatste datums en het kritieke pad ──────────────────────────────────────────
   // Voorwaarts vanaf `start` (vroegste datums) en achterwaarts vanaf de leverdatum (laatste datums). Per koppeling
@@ -1139,6 +1141,7 @@
       const x = { id: mk('taak', t.k), naam: t.naam, omschrijving: '', duur_uur: mijl ? 0 : P.minNaarUren(min), status: 'todo', tg_task_id: null, bron: 'sjabloon',
         soort: mijl ? 'mijlpaal' : 'taak', duur_dagen: dagen, sleutel: t.k, sjabloon_id: s.id };
       if (!mijl && t.activiteit) x.activiteit = t.activiteit;
+      if (!mijl && Array.isArray(t.checklist) && t.checklist.length) { const cl = P.checklistUitTeksten(t.checklist, { nu: Date.now(), idVan: (i) => mk('taak', t.k + '#cl' + i) }); if (cl.length) x.checklist = cl; }   // P6: een sjabloontaak kan een checklist meegeven (teksten); stabiele id's per project
       if (t.fase && fase[t.fase]) { const fv = P.faseVelden(fase[t.fase]); x.fase = fv.fase; if (fv.fase_id) x.fase_id = fv.fase_id; }   // P3b: naam + id (een eigen fase van het sjabloon alleen de naam)
       if (projectId) x.project_id = projectId;
       idVan[t.k] = x.id; taken.push(x);
@@ -1483,6 +1486,7 @@
       if (t.status === 'klaar') return;
       if (t.sleutel === 'materiaal_geleverd' && alleGeleverd) uit.push({ taak_id: t.id, naam: t.naam, reden: 'alle ' + mijn.length + ' bestelregels zijn geleverd' });
       else if (t.sleutel === 'bestellen' && alleBesteld) uit.push({ taak_id: t.id, naam: t.naam, reden: 'alle ' + mijn.length + ' bestelregels zijn besteld of geleverd' });
+      else if (t.poort === 'materiaal_binnen') { const v = P.poortVoorstel(t, mijn); if (v) uit.push({ taak_id: t.id, naam: t.naam, reden: v, poort: true }); }   // P6: de poort Materiaal binnen als voorstel (één klik)
     });
     return uit;
   };
@@ -1513,7 +1517,7 @@
   // ── Schemaversie van de projecttaken ──
   // De laagste app-versie die mt_project_taken_v2 mag schrijven staat in de teller (GET /teller/status → schema_min). Is die hoger dan
   // de versie van déze app (v2.html: PROJ_SCHEMA), dan schrijft de app niet meer. Onbekend (nog niet gelezen) = geen blokkade.
-  P.SCHEMA = 8;
+  P.SCHEMA = 9;
   P.SCHEMA_TEKST = 'Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
   P.schemaGeblokkeerd = (schemaMin, eigen) => schemaMin !== null && schemaMin !== undefined && schemaMin !== '' && Number.isFinite(Number(schemaMin)) && Number(schemaMin) > (eigen == null ? P.SCHEMA : Number(eigen));
 
@@ -2032,6 +2036,98 @@
   // wvb, bestellen, materiaal_geleverd, zagen, cnc, afmonteren, spuiten, montage, oplevering) of anders zijn activiteit. Een station is: klaar (alles klaar), bezig (iets bezig),
   // wacht (iets wacht op een voorganger of staat op Wacht), open, of leeg (geen taken); materiaal zonder taken volgt de bestelregels van het project.
   P.STROOM_STATIONS = [['voorbereiding', 'Voorbereiding'], ['materiaal', 'Materiaal'], ['productie', 'Productie'], ['spuiten', 'Spuiten'], ['montage', 'Montage']];
+  // ══ P6a: checklist in een taak ═══════════════════════════════════════════════════════════════════════════════════════════
+  // Een taak kan afvinkpunten hebben: taak.checklist = [{ id, tekst, tekst_t, vol, klaar, klaar_t, door, op, weg, weg_t }]. Elk punt heeft per onderdeel een eigen tijd (tekst, klaar, weg):
+  // twee mensen die tegelijk verschillende punten afvinken, bewaren allebei het hunne (samenvoegen per punt en per onderdeel; bij dezelfde tijd beslist de inhoud, dus onafhankelijk van de volgorde).
+  // Verwijderen is een tombstone (weg), terugzetten kan. De schrijfroute (MTPlanVerplaats.taakChecklist) past bewerkingen toe op de VERSE stand, niet op wat het paneel liet zien.
+  const clGroepen = [['tekst', ['tekst', 'tekst_t', 'vol']], ['klaar', ['klaar', 'klaar_t', 'door', 'op']], ['weg', ['weg', 'weg_t']]];
+  const clTijd = (x, f) => Number(x && x[f + '_t']) || 0;
+  const clItemSamen = (a, b) => {
+    const uit = { id: a.id };
+    clGroepen.forEach(([naam, velden]) => {
+      const ta = clTijd(a, naam), tb = clTijd(b, naam), bron = ta !== tb ? (ta > tb ? a : b) : (stabiel(a) >= stabiel(b) ? a : b);
+      velden.forEach(f => { if (bron[f] !== undefined) uit[f] = kopie(bron[f]); });
+    });
+    return uit;
+  };
+  const clVolgorde = (a, b) => ((Number(a.vol) || 0) - (Number(b.vol) || 0)) || (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
+  P.checklistSamen = (a, b) => {
+    const per = new Map();
+    [a, b].forEach(l => (Array.isArray(l) ? l : []).forEach(x => { if (!x || typeof x !== 'object' || x.id === undefined || x.id === null || x.id === '') return; const id = String(x.id), e = per.get(id); per.set(id, e ? clItemSamen(e, x) : kopie(x)); }));
+    return [...per.values()].sort(clVolgorde);
+  };
+  P.checklistActief = t => (t && Array.isArray(t.checklist) ? t.checklist : []).filter(x => x && typeof x === 'object' && x.id !== undefined && !x.weg).sort(clVolgorde);
+  P.checklistTel = t => { const l = P.checklistActief(t); return { n: l.length, klaar: l.filter(x => x.klaar).length }; };
+  const ymdVanMs = ms => { const d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  P.CHECKLIST_MAX = 100;
+  // Bewerkingen toepassen op een lijst: [{ op: 'nieuw', id, tekst } | { op: 'vink', id, klaar } | { op: 'hernoem', id, tekst } | { op: 'weg', id } | { op: 'herstel', id }].
+  // → { lijst, tegen (de omgekeerde bewerkingen, voor Ongedaan maken), noop } of { fout }
+  P.checklistToepassen = function (lijst0, ops, { nu = Date.now(), door = '' } = {}) {
+    const lijst = (Array.isArray(lijst0) ? lijst0 : []).map(kopie), tegen = []; let veranderd = false;
+    const vind = id => lijst.find(x => x && String(x.id) === String(id)), na = (x, f) => Math.max(nu, clTijd(x, f) + 1);
+    for (const o of (Array.isArray(ops) ? ops : [])) {
+      if (!o || typeof o !== 'object' || o.id === undefined || o.id === null || o.id === '') return { fout: 'Onvolledige bewerking.' };
+      const x = vind(o.id), tekst = typeof o.tekst === 'string' ? o.tekst.replace(/\s+/g, ' ').trim() : '';
+      if (o.op === 'nieuw') {
+        if (!tekst) return { fout: 'Een punt heeft een tekst nodig.' }; if (tekst.length > 200) return { fout: 'Een punt is hoogstens 200 tekens.' };
+        if (x) return { fout: 'Dit punt bestaat al.' }; if (P.checklistActief({ checklist: lijst }).length >= P.CHECKLIST_MAX) return { fout: 'Een checklist heeft hoogstens ' + P.CHECKLIST_MAX + ' punten.' };
+        lijst.push({ id: String(o.id), tekst, tekst_t: nu, vol: lijst.reduce((m, y) => Math.max(m, Number(y.vol) || 0), 0) + 1, klaar: false, klaar_t: 0, weg: false, weg_t: 0 }); tegen.unshift({ op: 'weg', id: String(o.id) }); veranderd = true;
+      } else if (!x) return { fout: 'Dit punt bestaat niet meer.' };
+      else if (o.op === 'vink') {
+        const klaar = !!o.klaar; if (x.weg) return { fout: 'Dit punt is verwijderd.' }; if (!!x.klaar === klaar) continue;
+        tegen.unshift({ op: 'vink', id: x.id, klaar: !!x.klaar }); x.klaar = klaar; x.klaar_t = na(x, 'klaar'); x.door = door; x.op = klaar ? ymdVanMs(nu) : ''; veranderd = true;
+      } else if (o.op === 'hernoem') {
+        if (!tekst) return { fout: 'Een punt heeft een tekst nodig.' }; if (tekst.length > 200) return { fout: 'Een punt is hoogstens 200 tekens.' };
+        if (x.tekst === tekst) continue; tegen.unshift({ op: 'hernoem', id: x.id, tekst: x.tekst }); x.tekst = tekst; x.tekst_t = na(x, 'tekst'); veranderd = true;
+      } else if (o.op === 'weg') { if (x.weg) continue; tegen.unshift({ op: 'herstel', id: x.id }); x.weg = true; x.weg_t = na(x, 'weg'); veranderd = true; }
+      else if (o.op === 'herstel') { if (!x.weg) continue; tegen.unshift({ op: 'weg', id: x.id }); x.weg = false; x.weg_t = na(x, 'weg'); veranderd = true; }
+      else return { fout: 'Onbekende bewerking.' };
+    }
+    return veranderd ? { lijst: lijst.sort(clVolgorde), tegen } : { noop: true };
+  };
+  // "✓ door Mathijs · 22-10" (dezelfde opmaak als bij een afgevinkte taak); naamVan(slug of e-mail) → naam
+  P.checklistKlaarTekst = (x, naamVan) => {
+    if (!x || !x.klaar) return '';
+    const dd = P.isYmd(x.op) ? x.op.slice(8, 10) + '-' + x.op.slice(5, 7) : '', wie = x.door ? ((typeof naamVan === 'function' && naamVan(x.door)) || String(x.door)) : '';
+    return wie ? '✓ door ' + wie + (dd ? ' · ' + dd : '') : '✓' + (dd ? ' ' + dd : '');
+  };
+  // Een checklist uit losse teksten (sjabloon, werkvoorbereiding); met `bestaand` alleen wat er nog niet in staat (op tekst, hoofdletters tellen niet). idVan(i, tekst) geeft het id.
+  P.checklistUitTeksten = function (teksten, { nu = Date.now(), idVan = null, bestaand = [] } = {}) {
+    const heeft = new Set((Array.isArray(bestaand) ? bestaand : []).filter(x => x && !x.weg).map(x => String(x.tekst).trim().toLowerCase())), uit = [];
+    let vol = (Array.isArray(bestaand) ? bestaand : []).reduce((m, y) => Math.max(m, Number(y && y.vol) || 0), 0);
+    (Array.isArray(teksten) ? teksten : []).forEach((s, i) => {
+      const tekst = String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, 200); if (!tekst || heeft.has(tekst.toLowerCase())) return; heeft.add(tekst.toLowerCase());
+      uit.push({ id: idVan ? String(idVan(i, tekst)) : 'c' + nu.toString(36) + i, tekst, tekst_t: nu, vol: ++vol, klaar: false, klaar_t: 0, weg: false, weg_t: 0 });
+    });
+    return uit;
+  };
+  // Een voorstel voor de werkvoorbereiding (verbeterpunt 13); aan te passen per taak
+  P.CHECKLIST_WVB = ['Maten gecontroleerd op locatie', 'Tekening akkoord van de klant', 'Materiaallijst compleet', 'Beslag en scharnieren gekozen', 'Kleur en afwerking bevestigd', 'Plaatindeling (nesting) gemaakt', 'CNC-programma’s klaar', 'Levertijden gecontroleerd', 'Montagevolgorde bepaald'];
+
+  // ══ P6b: poorten ═════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // Een poort is een mijlpaal van een eigen soort (taak.soort 'mijlpaal' met taak.poort): groen = klaar. Met een eigenaar (team-slug), een bewijs-link en een bron ('hand' nu; later 'moneybird' voor
+  // de aanbetaling, idee #72, als voorstel). Een taak die op een poort wacht, wacht met de reden "wacht op poort X" (zie wachtOpTekst). De volgorde is die van het keuzeplan (K5).
+  P.POORTEN = [
+    { k: 'tekening_akkoord', l: 'Tekening akkoord', uitleg: 'De klant heeft de tekening goedgekeurd.' },
+    { k: 'aanbetaling_binnen', l: 'Aanbetaling binnen', uitleg: 'De aanbetaling is ontvangen (nu met de hand; later uit Moneybird als voorstel).' },
+    { k: 'maten_definitief', l: 'Maten definitief', uitleg: 'De maten zijn op locatie bevestigd.' },
+    { k: 'materiaal_binnen', l: 'Materiaal binnen', uitleg: 'Al het materiaal voor dit werk is geleverd.' },
+    { k: 'oplevering_getekend', l: 'Oplevering getekend', uitleg: 'De klant heeft de oplevering getekend.' }];
+  P.POORT_BRONNEN = { hand: 'Handmatig', moneybird: 'Moneybird (voorstel)', bestelling: 'Bestellijst (voorstel)' };
+  P.poort = k => P.POORTEN.find(p => p.k === k) || null;
+  P.poortLabel = k => { const p = P.poort(k); return p ? p.l : ''; };
+  P.poortBewijsOk = u => { const s = String(u == null ? '' : u).trim(); if (!s || s.length > 500) return false; try { const x = new URL(s); return x.protocol === 'https:' || x.protocol === 'http:'; } catch (e) { return false; } };
+  // Voorstel (nooit stil): de poort Materiaal binnen kan op groen als alle gekoppelde bestelregels (P5) geleverd zijn; zonder gekoppelde regels tellen alle regels van het project.
+  // regels = bestelregels (records of { status, taak_id }). → '' of de reden
+  P.poortVoorstel = function (taak, regels) {
+    if (!taak || taak.poort !== 'materiaal_binnen' || (taak.status || 'todo') === 'klaar') return '';
+    const alle = (Array.isArray(regels) ? regels : []).filter(b => b && typeof b === 'object' && !b._vervallen && b.id !== '__migratie');
+    const gekoppeld = alle.filter(b => b.taak_id !== undefined && b.taak_id !== null && b.taak_id !== '' && String(b.taak_id) === String(taak.id)), lijst = gekoppeld.length ? gekoppeld : alle;
+    if (!lijst.length) return '';
+    const st = b => (['nodig', 'besteld', 'geleverd'].includes(b.status) ? b.status : P.bestelStatus(b));
+    return lijst.every(b => st(b) === 'geleverd') ? 'alle ' + lijst.length + ' ' + (gekoppeld.length ? 'gekoppelde ' : '') + 'bestelregel' + (lijst.length === 1 ? ' is' : 's zijn') + ' geleverd' : '';
+  };
+
   // ══ P3b: planning inrichten (stations, fases en activiteiten zijn zelf aan te maken, te hernoemen en te ordenen) ═══════════════
   // Eén lijst records in mt_planinrichting: { id: 'station:montage', type: 'station'|'fase'|'activiteit', k (het vaste id waar taken naar verwijzen), label, volgorde,
   //   activiteit: station, soort ('kantoor'|'wp'), uursoort (de uursoort van de calculatie); fase: namen (eerdere namen) }.

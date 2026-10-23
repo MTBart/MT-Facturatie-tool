@@ -52,7 +52,7 @@
         const w = wacht[t.id] || { wacht: false, op: [] }, eerste = P.taakMensen(t)[0], lid = eerste ? team.find(m => m && P.zelfdePersoon(m.slug, eerste, team)) : null;
         uit.push({ code, id: t.id, naam: t.naam || '(zonder naam)', projectLabel: pr.label || pr.code, status: st, fase: P.faseLabel(t), faseK: (P.faseVan(t) || {}).k || '', persoon: lid ? lid.slug : (eerste || ''), persoonNaam: lid ? lid.naam : (eerste || ''),
           eind: P.isYmd(t.eind) ? t.eind : '', teLaat: st !== 'klaar' && P.isYmd(t.eind) && t.eind < vandaag, wachtReden: st === 'wacht' ? String(t.wacht_reden || '') : '',
-          wachtOp: st === 'todo' && w.wacht ? P.wachtOpTekst(w, P.datumKort) : '', project_id: pr.project_id || '', mat: matKaart(t, code, pr), klaarOp: P.isYmd(t.klaar_op) ? t.klaar_op : '', prio: t.prioriteit || '', taak: t });
+          wachtOp: st === 'todo' && w.wacht ? P.wachtOpTekst(w, P.datumKort) : '', project_id: pr.project_id || '', mat: matKaart(t, code, pr), klaarOp: P.isYmd(t.klaar_op) ? t.klaar_op : '', prio: t.prioriteit || '', cl: P.checklistTel(t), poort: t.poort ? P.poortLabel(t.poort) : '', taak: t });
       });
     });
     const volg = (a, b) => ((PRIO_VOLGORDE[a.prio] === undefined ? 3 : PRIO_VOLGORDE[a.prio]) - (PRIO_VOLGORDE[b.prio] === undefined ? 3 : PRIO_VOLGORDE[b.prio])) || (a.eind && b.eind ? (a.eind < b.eind ? -1 : a.eind > b.eind ? 1 : 0) : (a.eind ? -1 : b.eind ? 1 : 0)) || (a.naam.toLowerCase() < b.naam.toLowerCase() ? -1 : 1);
@@ -113,7 +113,7 @@
     + '#agenda-bord .bd-naam{font:600 13px/18px var(--sans,inherit);color:var(--ink,#1f2a24);padding-right:34px}'
     + '#agenda-bord .bd-sub{font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#666)}'
     + '#agenda-bord .bd-voet{display:flex;align-items:center;gap:8px;font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#666)}'
-    + '#agenda-bord .bd-mat{display:inline-flex;align-items:center;gap:3px;color:var(--ink-2,#666)}#agenda-bord .bd-mat.laat{color:#b3261e;font-weight:600}'
+    + '#agenda-bord .bd-mat{display:inline-flex;align-items:center;gap:3px;color:var(--ink-2,#666)}#agenda-bord .bd-mat.laat{color:#b3261e;font-weight:600}#agenda-bord .bd-cl{color:var(--ink-2,#666)}#agenda-bord .bd-cl.klaar{color:#1d5b2f;font-weight:600}#agenda-bord .bd-poort{border:1px solid var(--line,#bbb);border-radius:10px;padding:0 6px;font-size:11px;color:var(--ink-2,#666)}'
     + '#agenda-bord .bd-sp{margin:10px 0;padding:10px 12px;border:1px solid var(--line,#dfd8cb);border-radius:8px;background:var(--surface,#fff)}#agenda-bord .bd-sp-kop{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}#agenda-bord .bd-sp-kop strong{flex:1 1 auto}'
     + '#agenda-bord .bd-sp-lijst{list-style:none;margin:0;padding:0}#agenda-bord .bd-sp-taak{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:none;padding:8px 4px;min-height:36px;cursor:pointer;font:inherit;color:inherit;border-bottom:1px solid var(--line,#eee)}#agenda-bord .bd-sp-taak:hover{background:var(--surface-sunken,#f6f6f4)}'
     + '#agenda-bord .bd-pluskol{margin-left:8px;min-height:32px;padding:0 10px;border:1px dashed var(--line,#bbb);border-radius:6px;background:none;cursor:pointer;font:inherit;align-self:flex-start}'
@@ -231,6 +231,8 @@
     if (k.persoonNaam) meta.push(el('span', { tekst: k.persoonNaam }));
     if (k.eind) meta.push(el('span', { klass: k.teLaat ? 'bd-laat' : '', tekst: (k.teLaat ? 'te laat · ' : 'tot ') + P.datumKort(k.eind) }));
     if (k.mat && k.status !== 'klaar') meta.push(matIcoon(k.mat));
+    if (k.poort) meta.push(el('span', { klass: 'bd-poort', title: 'Poort: ' + k.poort, tekst: 'poort' }));   // P6b
+    if (k.cl && k.cl.n) meta.push(el('span', { klass: 'bd-cl' + (k.cl.klaar === k.cl.n ? ' klaar' : ''), title: 'Checklist: ' + k.cl.klaar + ' van ' + k.cl.n + ' afgevinkt', 'aria-label': 'Checklist: ' + k.cl.klaar + ' van ' + k.cl.n + ' afgevinkt', tekst: '\u2713 ' + k.cl.klaar + '/' + k.cl.n }));   // P6a
     const n = el('div', { klass: 'bd-kaart', role: 'button', tabindex: '0', title: 'Open de taak', 'data-pf-code': k.code, 'data-pf-taak': k.id, draggable: kan ? 'true' : null },
       el('div', { klass: 'bd-naam' }, model.indeling === 'fase' ? el('span', { klass: 'bd-dot ' + (k.status === 'todo' ? '' : k.status), title: statusLabel(k.status) }) : null, k.naam),
       el('div', { klass: 'bd-sub', tekst: k.projectLabel }),
