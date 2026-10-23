@@ -55,13 +55,16 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
+<script src="mt-planfilter.js?v=2026-10-23a"></script>
 <script src="mt-planning.js?v=2026-10-17n"></script>
-<script src="mt-mijnwerk.js?v=2026-10-21u"></script>
+<script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
 <script src="mt-planverplaats.js?v=2026-10-21v"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-21v"></script>
-<script src="mt-objectpaneel.js?v=2026-10-22a"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
+<script src="mt-objectpaneel.js?v=2026-10-23a"></script>
 <script src="mt-taakpaneel.js?v=2026-10-21v"></script>
+<script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
+<script src="mt-bord.js?v=2026-10-23c"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -1753,6 +1756,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <div class="ag-viewtog" style="display:inline-flex;border:1px solid var(--border,#ddd);border-radius:7px;overflow:hidden">
             <button class="btn btn-sm" id="agenda-view-mijnwerk" onclick="agendaZetView('mijnwerk')" title="Mijn werk: taken en planblokken per persoon in groepen (Nieuw, Te laat, Vandaag, …)" style="border:0;border-radius:0;padding:5px 10px">✅ Mijn werk</button>
             <button class="btn btn-sm" id="agenda-view-capaciteit" onclick="agendaZetView('capaciteit')" title="Capaciteitsplanning voor het team: per persoon per dag gepland tegenover beschikbaar, met vrije dagen en verlof" style="border:0;border-radius:0;padding:5px 10px">👥 Capaciteit</button>
+            <button class="btn btn-sm" id="agenda-view-bord" onclick="agendaZetView('bord')" title="Bord: de taken als kolommen op status, per fase, of de stroom van de projecten door de stations" style="border:0;border-radius:0;padding:5px 10px">▥ Bord</button>
             <button class="btn btn-sm" id="agenda-view-grid" onclick="agendaZetView('grid')" title="Week-rooster" style="border:0;border-radius:0;padding:5px 10px">▦ Rooster</button>
             <button class="btn btn-sm" id="agenda-view-lijst" onclick="agendaZetView('lijst')" title="Timer-lijst (zoals Toggl)" style="border:0;border-radius:0;padding:5px 10px">≣ Lijst</button>
             <button class="btn btn-sm" id="agenda-view-plan" onclick="agendaZetView('plan')" title="Planning-blokken" style="border:0;border-radius:0;padding:5px 10px">📋 Planning</button>
@@ -1766,7 +1770,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
           <button class="btn btn-sm btn-secondary" onclick="focusOpen()" title="Toggl Focus aansturen">🎯 Focus</button>
         </div>
       </div>
-      <div class="flex" style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+      <div class="flex" id="ag-oudfilter" style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
         <span style="font-size:11px;color:var(--text-faint)">Filter:</span>
         <div class="ag-drop" id="ag-drop-proj">
           <button class="btn btn-sm btn-secondary ag-dropbtn" onclick="agDrop('proj')"><span id="ag-drop-proj-lbl">Projecten (alle)</span> ▾</button>
@@ -1786,6 +1790,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
     <div id="agenda-totalen" style="margin-bottom:1rem"></div>
     <div id="agenda-mijnwerk" style="display:none"></div>
     <div id="agenda-capaciteit" style="display:none"></div>
+    <div id="agenda-bord" style="display:none"></div>
     <div class="card" id="agenda-gridkaart" style="padding:0;overflow:auto;max-height:74vh">
       <div id="agenda-grid"></div>
     </div>
@@ -3462,7 +3467,35 @@ function showTab(name,btn){
     const code=(name==='projecten'&&huidigProject&&pd&&pd.dataset.code===huidigProject.code)?huidigProject.code:null;
     const sec=(code&&typeof projSectieHuidig==='function')?projSectieHuidig():'overzicht';
     if(name==='projecten'&&pd&&pd.dataset.klant&&typeof _klantRoute==='function'&&_klantHuidig) mtRoute.zet(_klantRoute(),false);
-    else mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined}:{tab:name==='admin'?admRouteNaam():name},false);
+    else mtRoute.zet(code?{tab:'projecten',code,sectie:sec!=='overzicht'?sec:undefined,filter:planfilterProjLink(sec)}:(name==='agenda'?agendaRoute():{tab:name==='admin'?admRouteNaam():name}),false);
+  }
+}
+// De Agenda in de link: de weergave en (voor Mijn werk en Capaciteit) de gedeelde planningsfilters, zodat een gekopieerde link dezelfde stand toont (mt-planfilter.js)
+function agendaRoute(){
+  const r={tab:'agenda'};
+  let view; try{ view=_agenda.view; }catch(e){ return r; }   // _agenda staat verderop (let): vóór die regel geen weergave in de link
+  if(typeof MTPlanFilter==='undefined'||!view) return r;
+  r.weergave=view;
+  if(view==='mijnwerk'||view==='capaciteit'||view==='bord'){ const g=MTPlanFilter.get(); r.planfilter={project:g.project,persoon:g.persoon,status:g.status,van:g.van,zoom:g.zoom,bord:view==='bord'?g.bord:''}; }
+  return r;
+}
+// De sleutels wie en status van de planningsfilters in een projectlink (#projecten/<code>/planning?status=…&wie=…)
+function planfilterProjLink(sec){ try{ return (sec==='planning'&&typeof MTPlanFilter!=='undefined')?MTPlanFilter.projectFilter():undefined; }catch(e){ return undefined; } }
+// Een link met weergave/filters toepassen (mtRoute.toepassen): de stand overnemen en de Agenda zo nodig opnieuw tekenen
+function agendaRouteToepas(r){
+  let veranderd=false;
+  if(r.weergave&&r.weergave!==_agenda.view){ _agenda.view=r.weergave; veranderd=true; }
+  if(typeof MTPlanFilter!=='undefined'&&(r.weergave==='mijnwerk'||r.weergave==='capaciteit'||r.weergave==='bord'||(!r.weergave&&r.planfilter))) { if(MTPlanFilter.zetUitLink(r.planfilter||{})) veranderd=true; }
+  const t=document.getElementById('tab-agenda');
+  if(veranderd&&t&&t.classList.contains('active')) renderAgenda();
+}
+// Het filter is gewijzigd (balk of weergave): de link bijwerken voor wat nu in beeld is (de Agenda of de Planning van een project)
+function planfilterRoute(){
+  const a=document.getElementById('tab-agenda'), p=document.getElementById('tab-projecten');
+  if(a&&a.classList.contains('active')) mtRoute.zet(agendaRoute(),false);
+  else if(p&&p.classList.contains('active')&&huidigProject&&typeof projSectieHuidig==='function'&&projSectieHuidig()==='planning'){
+    const pd=document.getElementById('project-detail');
+    if(pd&&pd.dataset.code===huidigProject.code) mtRoute.zet({tab:'projecten',code:huidigProject.code,sectie:'planning',filter:planfilterProjLink('planning')},false);
   }
 }
 // Multi-monitor: open de (huidige) tab in een nieuw browservenster met dezelfde deeplink.
@@ -3497,7 +3530,12 @@ const mtRoute={
     // Gearchiveerde tabs (Geschiedenis): geen knop meer; een oude link/bladwijzer telt als "geen route" → de standaard-starttab.
     const weg=t=>mtRoute.GEARCHIVEERD.includes(t)?null:t;
     const m=h.match(/(?:^|&)tab=([a-z]+)/i);
-    if(m) return {tab:weg(m[1].toLowerCase())};
+    if(m){
+      const r={tab:weg(m[1].toLowerCase())};
+      // De Agenda kent een weergave en de gedeelde planningsfilters in de link (#tab=agenda&weergave=capaciteit&project=…&wie=…&status=…&van=…&zoom=…); zonder die delen is het de oude korte link
+      if(r.tab==='agenda'&&typeof MTPlanFilter!=='undefined'){ const x=MTPlanFilter.leesLink(h); if(x){ if(x.weergave) r.weergave=x.weergave; if(x.filter) r.planfilter=x.filter; } }
+      return r;
+    }
     const delen=h.split('/').filter(x=>x!=='').map(dec);
     if(!delen.length) return {tab:null};
     const eerste=delen[0].toLowerCase();
@@ -3535,6 +3573,7 @@ const mtRoute={
       const delen=(r.sectie?['sectie='+enc(r.sectie)]:[]).concat(r.sectie?ks.map(k=>enc(k)+'='+enc(f[k])):[]);
       return '#klant/'+enc(r.klant)+(r.loc?'/'+enc(r.loc):'')+(delen.length?'?'+delen.join('&'):'');
     }
+    if(r.tab==='agenda'&&(r.weergave||r.planfilter)&&typeof MTPlanFilter!=='undefined') return '#tab=agenda'+MTPlanFilter.linkStaart(r.weergave,r.planfilter);
     return r.tab?'#tab='+r.tab:'';
   },
   // Alleen de URL bijwerken (push = nieuwe history-entry). Geen dubbele entry voor dezelfde route.
@@ -3571,6 +3610,7 @@ const mtRoute={
         }
       }
       if(!document.getElementById('tab-'+r.tab)) return;
+      if(r.tab==='agenda'&&(r.weergave||r.planfilter)){ try{ agendaRouteToepas(r); }catch(e){ console.warn('Agenda-link:',e); } }   // de weergave en de planningsfilters uit de link, vóór de tab getekend wordt
       if(r.tab==='dashboard'&&!_oudDashboardAan()) return;   // oud dashboard is gearchiveerd: een oude link/bladwijzer laat de startpagina haar werk doen
       const tabEl=document.getElementById('tab-'+r.tab);
       if(!tabEl.classList.contains('active')){
@@ -3604,7 +3644,10 @@ const mtRoute={
         const p=projVind(r.code)||PROJECT_CODES.find(x=>String(x.code).toUpperCase()===String(r.code).toUpperCase());
         if(!p){ projNietGevonden(r.code); return; }
         // Zonder sectie in de URL = Overzicht (een gedeelde link toont dus altijd hetzelfde).
-        openProject(p.code,{sectie:r.sectie||'overzicht',filter:r.filter||null,onthoud:false});
+        // Planning: de sleutels wie en status zijn de gedeelde planningsfilters (geen dossierfilter)
+        let dosFilter=r.filter||null;
+        if(r.sectie==='planning'&&typeof MTPlanFilter!=='undefined'){ if(dosFilter) MTPlanFilter.zetUitLink(dosFilter,{alleen:['persoon','status']}); dosFilter=null; }
+        openProject(p.code,{sectie:r.sectie||'overzicht',filter:dosFilter,onthoud:false});
       } else if(_projKlantFilter){ projKlantFilterZet(null); }
     } finally { this._stil=false; }
   }
@@ -3810,16 +3853,27 @@ function renderAgenda(){
   const planBar=document.getElementById('agenda-plan-toolbar'), capBalk=document.getElementById('agenda-cap-balk');
   if(planBar) planBar.style.display=_agenda.view==='plan'?'block':'none';
   if(capBalk) capBalk.style.display=_agenda.view==='plan'?'block':'none';
-  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', eigen=mw||cp;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
-    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('btn-secondary',!aan); });
-    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
-    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
+  { const mw=_agenda.view==='mijnwerk', cp=_agenda.view==='capaciteit', bd=_agenda.view==='bord', eigen=mw||cp||bd;   // Mijn werk en Capaciteit (stap 2): een eigen vlak in plaats van het rooster
+    [['agenda-view-mijnwerk',mw],['agenda-view-capaciteit',cp],['agenda-view-bord',bd]].forEach(([id,aan])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('btn-gold',aan), b.classList.toggle('btn-secondary',!aan); });
+    const m=document.getElementById('agenda-mijnwerk'), c=document.getElementById('agenda-capaciteit'), bdEl=document.getElementById('agenda-bord'), gk=document.getElementById('agenda-gridkaart'), tot=document.getElementById('agenda-totalen');
+    { const of=document.getElementById('ag-oudfilter'); if(of&&typeof MTPlanFilter!=='undefined') of.style.display=eigen?'none':''; }   // Mijn werk en Capaciteit hebben de gedeelde filterbalk in beeld; de oude Projecten/Personen-keuze hoort alleen bij Rooster, Lijst en Planning
+    if(m) m.style.display=mw?'block':'none'; if(c) c.style.display=cp?'block':'none'; if(bdEl) bdEl.style.display=bd?'block':'none'; if(gk) gk.style.display=eigen?'none':''; if(tot&&eigen) tot.style.display='none'; else if(tot) tot.style.display='';
     if(mw){ agRenderFilters(); try{ MTMijnWerk.teken(); }catch(e){ console.warn('Mijn werk:',e); } return; }
-    if(cp){ agRenderFilters(); try{ MTCapaciteit.teken(); }catch(e){ console.warn('Capaciteit:',e); } return; } }
+    if(cp){ agRenderFilters(); try{ MTCapaciteit.teken(); }catch(e){ console.warn('Capaciteit:',e); } return; }
+    if(bd){ try{ MTBord.teken(); }catch(e){ console.warn('Bord:',e); } return; } }
   agRenderFilters();
   if(_agenda.view==='lijst') agRenderLijst(); else if(_agenda.view==='plan') agPlanRender(); else agRenderGrid();
 }
-function agendaZetView(v){_agenda.view=v;renderAgenda();}
+function agendaZetView(v){_agenda.view=v;renderAgenda();try{ if(window.MTPlanFilter) MTPlanFilter.routeZet(); }catch(e){}}   // de weergave staat in de link (niet zolang een paneel open staat: dat heeft de adresbalk)
+// De gedeelde filterbalk van alle planningsweergaven (planning brok P0, mt-planfilter.js): project, persoon, status, periode en de geselecteerde taak; staat in de link en wordt per gebruiker onthouden.
+// Alleen schermstand: niets hiervan gaat naar SharePoint.
+try{ MTPlanFilter.init({ doc:document, storage:localStorage, ik:()=>mtMijEmail(), team:()=>MT_TEAM,
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  taakNaam:(code,id)=>{ const t=(projTaken(code)||[]).find(x=>x&&String(x.id)===String(id)); return t?t.naam:''; },
+  paneelOpen:()=>!!(window.MTObjectPaneel&&MTObjectPaneel.isOpen()),
+  mijnSlug:()=>{ const ik=String(mtMijEmail()||'').toLowerCase(), m=(MT_TEAM||[]).find(x=>String(x.email||'').toLowerCase()===ik); return m?m.slug:ik.split('@')[0]; },
+  zelfdePersoon:(a,b)=>MTPlanning.zelfdePersoon(a,b,MT_TEAM),
+  route:()=>planfilterRoute() }); }catch(e){ console.warn('Planningsfilter init:',e); }
 // Mijn werk (stap 2c): de aansluiting tussen mt-mijnwerk.js en de cockpit (taken, afhankelijkheden, planblokken, team, projecten). De rekenregels staan in mt-planning.js.
 try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, team:()=>MT_TEAM, ik:()=>mtMijEmail(), nu:()=>Date.now(),
   werktijden:()=>werktijdenVoorWeergave(), voorstellen:true, magBeslissen:()=>rolMag(ROL_TAAK_ALLES), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
@@ -3828,6 +3882,7 @@ try{ MTMijnWerk.init({ doc:document, planning:MTPlanning, storage:localStorage, 
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),   // een taak = het taakpaneel (mt-taakpaneel.js)
+  openBlok:(id,el)=>MTPlanblokPaneel.open(id,{terug:el}),   // een planblok zonder taak = het planblokpaneel (mt-planblokpaneel.js)
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Mijn werk init:',e); }
 // Startvenster (stap 3): "X taken wachten op je" bij het openen van Agenda/Planning, alleen zonder lopende Toggl-timer en niet voor de rol "lezen" (zie mt-startvenster.js).
 try{ MTStartvenster.init({ doc:document, storage:(function(){ try{ return sessionStorage; }catch(e){ return null; } })(), dialog:()=>window.mtDialog, toast:m=>{ if(typeof planToast==='function') planToast(m); },
@@ -3850,7 +3905,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
   magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), opruimen:(spec,opt)=>capOpruimen(spec,opt), taakBezig:(code,id)=>MTPlanVerplaats.taakBezig(code,id), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
-  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), naHerstel:()=>MTTaakPaneel.ververs(),   // klik op een taak = het taakpaneel (mt-taakpaneel.js)
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openBlok:(id,el)=>MTPlanblokPaneel.open(id,{terug:el}), naHerstel:()=>MTTaakPaneel.ververs(),   // klik op een taak = het taakpaneel (mt-taakpaneel.js)
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
@@ -3885,6 +3940,35 @@ try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu
   verwijder:(c,i)=>projTaakVerwijder(c,i), togglSync:(c,i)=>projTaakTogglSync(c,i), conflict:(c,i)=>projTaakConflict(c,i), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
   bordKlik:true,
   naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _ptHertekenen(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Taakpaneel init:',e); }
+// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
+try{ const _pbDag=(slug,datum)=>({tab:'agenda',weergave:'capaciteit',planfilter:Object.assign({van:datum,zoom:'dag'},slug?{persoon:slug}:{})});
+  MTPlanblokPaneel.init({ planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), blokken:()=>agPlanActief(),
+  blokkenKlaar:()=>{ if(_planblokken===null&&!window._pbLaadt){ window._pbLaadt=true; try{ agPlanLoad().catch(()=>{}); }catch(e){} } return _planblokken!==null; },
+  ruw:()=>localStorage.getItem('mt_planblokken')||'',
+  project:code=>{ const p=projVind(code); return p?{code:p.code,project_id:p.project_id||'',naam:projNaamVol(p),nummer:projLabelCode(p)||'',klant:String(p.klant||'').toUpperCase(),klantNaam:projKlantNaam(p),loc:String(p.loc||'').toUpperCase(),locNaam:projLocLabel(p)}:null; },
+  taakHref:(code,id)=>MTTaakPaneel.href(code,id),
+  href:{ project:(code,sectie)=>mtRoute.format({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.format({tab:'projecten',klant:kl,loc:loc||undefined}), dag:(slug,datum)=>mtRoute.format(_pbDag(slug,datum)) },
+  ga:{ project:(code,sectie)=>mtRoute.go({tab:'projecten',code,sectie:sectie||'planning'}), klant:(kl,loc)=>mtRoute.go({tab:'projecten',klant:kl,loc:loc||undefined}), dag:(slug,datum)=>mtRoute.go(_pbDag(slug,datum)) },
+  oudeActies:id=>agPlanBlokMenu(null,id) }); }catch(e){ console.warn('Planblokpaneel init:',e); }
+// Het Bord (planning brok P3, mt-bord.js): kolommen op status, per fase, en de stroom van de projecten. Slepen schrijft via dezelfde route als het taakpaneel (tpWijzig: takenSchrijf met ETag, slot per taak, stempels) met Ongedaan maken.
+// Toggl wordt hier nooit aangeraakt (de bestaande knoppen in het taakpaneel en de takenlijst blijven de enige route). Een nieuwe taak komt als Open in de takenlijst, zoals "+ Taak" in het project.
+async function bordNieuweTaak(o){
+  if(_ptBlok(o.code,ROL_TAAK_STATUS,'Een taak toevoegen')) return null;
+  const arr=projTaken(o.code), t={id:_ptId(),naam:o.naam,omschrijving:'',duur_uur:0,prioriteit:'',afhankelijk_van:[],status:'todo',tg_task_id:null,bron:'handmatig',activiteit:MTPlanning.activiteitUitNaam(o.naam)||undefined};
+  if(o.fase) t.fase=o.fase;
+  arr.push(t); if(projTakenZet(o.code,arr)!==true) return null;   // niet opgeslagen: de melding staat er al
+  try{ if(window.track) track('taken','taak_handmatig',{detail:o.code,ok:true}); }catch(e){}
+  return t;
+}
+try{ MTBord.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), afhank:()=>projAfhRuw(), takenKlaar:()=>projTakenKlaar(), takenStatusTekst:()=>projTakenStatusTekst(),
+  vrij:()=>(typeof MTPlanning.vrijeDagenBron==='function'?MTPlanning.vrijeDagenBron():null),
+  projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
+  projectenVol:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code), bestel:()=>_blActief(),
+  mag:{ status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
+  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), nieuweTaak:bordNieuweTaak,
+  toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; },
+  openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}), openProject:code=>openProject(code,{sectie:'planning'}),
+  naWijziging:()=>{ try{ MTTaakPaneel.ververs(); }catch(e){} try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Bord init:',e); }
 // Werktijden per medewerker (restyling brok 9, Admin ▸ Team en werktijden): een gedeeld bestand mt_werktijden.json met een record per medewerker.
 // Wijzigen mag alleen een teamadmin (eigenaar/beheer) met een geladen rol (fail-closed); lezen iedereen: de planning van het hele team rekent ermee.
 // Zonder record van een persoon geldt alles als voorheen (werkuren per week / 5, ma-vr). Zie mt-werktijden.js en MTPlanning.werktijden*.
@@ -6240,6 +6324,7 @@ function openProject(code,{scroll=true,geschiedenis='push',sectie=null,filter=nu
   if(geschiedenis!=='geen'&&typeof mtRoute!=='undefined'){
     const sec=(typeof projSectieHuidig==='function')?projSectieHuidig():'overzicht', fl={};
     if(sec==='dossier'&&typeof _dosStand==='function'){ const f=_dosStand('proj:'+proj.code); Object.keys(f).forEach(k=>{ if(f[k]) fl[k]=f[k]; }); }
+    Object.assign(fl,planfilterProjLink(sec)||{});   // Planning: de gedeelde filters wie en status
     mtRoute.zet({tab:'projecten',code:proj.code,sectie:sec!=='overzicht'?sec:undefined,filter:fl},geschiedenis==='push');
   }
   setTimeout(()=>{ try{ projOfferteVerstuurdCheck(proj.code); }catch(e){ console.warn('offerte-check faalde:',e); } },400);
@@ -6554,7 +6639,7 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
-  if(_projSectie==='planning'){ planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='planning'){ try{ MTPlanFilter.monteerProject(document.getElementById('pf-proj-'+String(proj.code).replace(/-/g,'')),'pt-tbl-'+String(proj.code).replace(/-/g,'')); }catch(e){ console.warn('Planningsfilter:',e); } planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof window.calcProjectTonen==='function') window.calcProjectTonen(proj); else if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
@@ -6571,6 +6656,7 @@ function projSectieKies(s,{filter=null,geschiedenis='replace'}={}){
   if(geschiedenis!=='geen'&&typeof mtRoute!=='undefined'){
     const f=(_projSectie==='dossier')?_dosStand('proj:'+huidigProject.code):null, fl={};
     if(f) Object.keys(f).forEach(x=>{ if(f[x]) fl[x]=f[x]; });
+    Object.assign(fl,planfilterProjLink(_projSectie)||{});   // Planning: de gedeelde filters wie en status
     mtRoute.zet({tab:'projecten',code:huidigProject.code,sectie:_projSectie==='overzicht'?undefined:_projSectie,filter:fl},geschiedenis==='push');
   }
   // Ver naar beneden gescrold? Dan naar het begin van de sectie, net onder de sticky balken.
@@ -7869,7 +7955,7 @@ function projectTakenHtml(proj){
     const pr=_PT_PRIO[t.prioriteit], stt=MTPlanning.taakStatusEff(t,arr,ruwA)==='wachten'?{l:'Wacht',c:'#B8962E'}:(_PT_STAT[t.status]||_PT_STAT.todo);   // "Wacht" = een voorganger is nog niet klaar
     const deps=MTPlanning.depsEffectief(arr,ruwA).filter(e=>e.naar===t.id&&!e.inactief).map(e=>naamById[e.van]).filter(Boolean);
     const planLink=inPlan.has(t.id)?` <a href="#" onclick="event.preventDefault();taakNaarPlan(${jsArg(proj.code)},${jsArg(t.id)})" title="Toon in de planning hierboven" style="text-decoration:none">📅</a>`:'';
-    return `<tr id="pt-row-${esc(sid)}-${esc(t.id)}">
+    return `<tr id="pt-row-${esc(sid)}-${esc(t.id)}" data-pf-code="${esc(proj.code)}" data-pf-taak="${esc(t.id)}" data-pf-st="${esc(t.status||'todo')}" data-pf-wie="${esc(MTPlanning.taakMensen(t).join(' '))}">
       <td style="width:24px;text-align:center"><input type="checkbox" class="pt-check" value="${esc(t.id)}" title="Selecteer om in één keer te verwijderen"></td>
       <td><span class="badge" style="background:${esc(stt.c)}22;color:${esc(stt.c)}">${esc(stt.l)}</span></td>
       <td style="font-size:13px">${esc(t.naam)}${planLink}${t.omschrijving?`<div style="font-size:11px;color:var(--text-faint)">${esc(t.omschrijving)}</div>`:''}${deps.length?`<div style="font-size:11px;color:var(--gold-text)">⟶ na: ${deps.map(esc).join(', ')}</div>`:''}${t.bron==='ai'?' <span class="badge" style="font-size:9px;background:var(--gold-50);color:var(--gold-text)">AI</span>':''}</td>
@@ -7911,6 +7997,7 @@ function projectTakenHtml(proj){
       <button class="btn btn-danger btn-sm" onclick="projTakenVerwijderSelectie(${jsArg(proj.code)})" title="Aangevinkte taken verwijderen (ook in Toggl)">🗑 Verwijder selectie</button>`:''}
       <span id="pt-status-${esc(sid)}" style="font-size:12px;color:var(--text-dim)"></span>
     </div>
+    <div id="pf-proj-${esc(sid)}" style="margin:0 0 .6rem"></div>
     <table class="materiaal-lijst" id="pt-tbl-${esc(sid)}"><tbody>${rows}</tbody></table>`;
 }
 function _ptStatus(code,msg,kleur){const el=document.getElementById('pt-status-'+code.replace(/-/g,''));if(el){el.textContent=msg;el.style.color=kleur||'var(--text-dim)';}}
@@ -9089,7 +9176,7 @@ async function _projTaakVerwijder(code,id){
 async function projTakenVerwijderSelectie(code){
   if(_ptBlok(code,ROL_TAAK_ALLES,'Taken verwijderen')) return false;   // takenlijst niet klaar of geen recht: geen Toggl-actie en geen planningsmutatie
   const sid=code.replace(/-/g,'');
-  const ids=Array.from(document.querySelectorAll('#pt-tbl-'+sid+' .pt-check:checked')).map(b=>b.value);
+  const ids=Array.from(document.querySelectorAll('#pt-tbl-'+sid+' .pt-check:checked')).filter(b=>{ const tr=b.closest('tr'); return !(tr&&tr.hidden); }).map(b=>b.value);   // een door het planningsfilter verborgen taak wordt nooit mee-verwijderd
   if(!ids.length){ _ptStatus(code,'Geen taken aangevinkt.','#c0392b'); return; }
   const teVerw=projTaken(code).filter(t=>ids.includes(t.id));
   const inToggl=teVerw.filter(t=>t.tg_task_id).length;
@@ -9122,7 +9209,7 @@ async function projTakenVerwijderSelectie(code){
 }
 function projTakenSelectAll(code,on){
   const sid=code.replace(/-/g,'');
-  document.querySelectorAll('#pt-tbl-'+sid+' .pt-check').forEach(b=>{b.checked=on;});
+  document.querySelectorAll('#pt-tbl-'+sid+' .pt-check').forEach(b=>{ const tr=b.closest('tr'); b.checked=on&&!(tr&&tr.hidden); });   // alleen de zichtbare taken (het planningsfilter kan er verbergen)
 }
 // ── Standaard taak-templates (snelstart naast AI). na = 0-based index in eigen lijst. ──
 const _PT_TEMPLATES={
@@ -15525,7 +15612,7 @@ async function agPlanRender(){
       const isVs=blok.status==='voorstel';
       html+=`<div class="ag-blok${isVs?' pv-voorstel':''}" data-planid="${esc(blok.id)}"
         style="top:${esc(topPx)}px;height:${Math.max(hPx,18)}px;left:4px;right:4px;background:${esc(kleur)};z-index:6;cursor:pointer"
-        onclick="event.stopPropagation();agPlanBlokMenu(event,${jsArg(blok.id)})"
+        onclick="event.stopPropagation();agPlanBlokOpen(event,${jsArg(blok.id)})"
         ${isVs?`title="Voorstel van ${esc((blok.voorstel&&blok.voorstel.doorNaam)||'')} — nog niet goedgekeurd"`:''}
         draggable="${isVs?'false':'true'}" ondragstart="agPlanDragStart(event,${jsArg(blok.id)})"
         ondragend="agPlanDragEnd(event)">
@@ -15691,6 +15778,8 @@ function agPlanNieuwFormulier(datum,start){
 }
 
 // ── Blok-menu (bewerken / verwijderen) ──
+// Klik op een planblok in de Planning-weergave: het planblokpaneel (alleen lezen, mt-planblokpaneel.js); zonder paneel het oude menu. Het oude menu blijft bereikbaar via een knop in het paneel.
+function agPlanBlokOpen(evt,id){ try{ if(window.MTPlanblokPaneel&&MTPlanblokPaneel.open(id,{terug:evt&&evt.currentTarget})) return; }catch(e){ console.warn('Planblokpaneel:',e); } agPlanBlokMenu(evt,id); }
 function agPlanBlokMenu(evt,id){
   const blok=agPlanActief().find(b=>b.id===id), PV=window.MTPlanVoorstel;
   if(blok&&blok.status==='voorstel'&&PV){

@@ -15,7 +15,23 @@
   const LS_ZOOM = 'mt-cap-zoom';
   const ZOOM_UI = true;    // de zoomknoppen: kwartaal, maand, week, 3 dagen, dag (brok 7)
   const ZOOMS = [['kwartaal', 'Kwartaal'], ['maand', 'Maand'], ['week', 'Week'], ['3d', '3 dagen'], ['dag', 'Dag']];
-  const S = { zoom: 'week', anker: null, persoon: '', project: '', ongDicht: false };
+  const S = { zoom: 'week', anker: null, persoon: '', project: '', ongDicht: false, fRev: -1 };
+  // De gedeelde filterbalk (mt-planfilter.js): project, persoon en periode (begindatum en zoom) komen daar vandaan en staan in de link. Zonder die module (losse tests) werkt alles als voorheen.
+  const FF = () => root.MTPlanFilter || null;
+  function trekFilter() {   // de gedeelde stand overnemen zodra die veranderd is (de balk, een link, een andere weergave)
+    const f = FF(); if (!f || f.rev() === S.fRev) return;
+    const g = f.get();
+    S.project = g.project; S.persoon = f.persoonSlug('iedereen');
+    if (f.ZOOMS.includes(g.zoom)) S.zoom = g.zoom;
+    if (f.isYmd(g.van)) { S.anker = g.van; S.exactDag = false; } else if (S.fRev >= 0) S.anker = null;   // een link zonder datum = deze periode
+    S.fRev = f.rev();
+  }
+  function duwPeriode() {   // een eigen keuze van de periode (bladeren, zoom) naar de gedeelde stand en de link
+    const f = FF(); if (!f) return;
+    const nu = P.vandaagYmd();
+    f.zet({ van: S.anker && S.anker !== nu ? S.anker : '', zoom: S.zoom }); S.fRev = f.rev();
+  }
+  function duwFilter(patch) { const f = FF(); if (!f) return; f.zet(patch); S.fRev = f.rev(); }   // een sprong naar een taak of persoon zet de filters zelf
   const LS_ONG = 'mt-cap-ong';   // 'dicht' = de Ongepland-kolom is ingeklapt (per computer onthouden)
   const U0 = 420, U1 = 1020, KOL = 20;   // 07:00 tot 17:00 in halve uren (20 kolommen per dag)
 
@@ -145,7 +161,11 @@
   const open = code => { if (code) D.openProject(code); };
   // Klikken op een taak opent het taakpaneel (mt-taakpaneel.js); zonder taak (een los planblok) of zonder paneel: het project. Een klik telt alleen als de muis minder dan 4 px bewoog
   // (slepen en uittrekken blijven precies zoals ze waren: de browser stuurt na een echte sleep geen klik, en een greep of knop op de balk opent niets).
-  const openItem = (it, bron) => { if (D.openTaak && it && it.soort === 'taak' && it.id != null && it.code) D.openTaak(it.code, it.id, bron); else open(it && it.code); };
+  const openItem = (it, bron) => {
+    const bid = it ? blokIdVan(it) : null;   // een planblok (los, of als blok van een taak): het planblokpaneel (alleen lezen); een taakbalk zonder blok: het taakpaneel
+    if (bid && D.openBlok) D.openBlok(bid, bron);
+    else if (D.openTaak && it && it.soort === 'taak' && it.id != null && it.code) D.openTaak(it.code, it.id, bron); else open(it && it.code);
+  };
   function klikOpen(node, it) {
     let p0 = null;
     node.addEventListener('pointerdown', ev => { p0 = [ev.clientX, ev.clientY]; });
@@ -199,7 +219,7 @@
   function blok(it, uur, stijl) {
     const voorstel = N.isVoorstel(it), wacht = !!(it.wacht && it.status !== 'klaar'), sleep = N.sleepbaar(it), bid = blokIdVan(it), taakSleep = !sleep && N.taakSleepbaar(it), taakBron = { soort: 'taakbalk', taak: { code: it.code, id: it.id, naam: it.naam, voorstel: false }, van: it.persoon || '', vanDatum: it.datum || '' }, mijlpaal = !!(it.taak && it.taak.soort === 'mijlpaal');
     const sub = el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code), it.min && !uur ? ' · ' + uren(it.min) : '');
-    const b = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok' + (voorstel ? ' voorstel' : '') + (wacht ? ' wacht' : '') + (sleep || taakSleep ? ' sleepbaar' : ''), 'data-taak': taakSleep ? String(it.id) : null, 'data-code': taakSleep ? String(it.code) : null, 'aria-keyshortcuts': taakSleep ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : null, style: '--block-color:' + P.projectKleur(it.code), title: [it.naam, projNr(it.code) + ' ' + projNaam(it.code), it.min ? uren(it.min) : '', voorstel ? 'voorstel' : '', wacht ? ('wacht' + (it.wachtTekst ? ': ' + it.wachtTekst : '')) : '', it.waarschuwing || '', it.nietEenduidig ? 'niet eenduidig aan een taak gekoppeld (hetzelfde taak-id staat in meer dan één project)' : ''].filter(Boolean).join(' · ') },
+    const b = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok' + (voorstel ? ' voorstel' : '') + (wacht ? ' wacht' : '') + (sleep || taakSleep ? ' sleepbaar' : ''), 'data-taak': taakSleep ? String(it.id) : null, 'data-code': taakSleep ? String(it.code) : null, 'data-pf-taak': it.soort === 'taak' ? String(it.id) : null, 'data-pf-code': it.soort === 'taak' ? String(it.code) : null, 'aria-keyshortcuts': taakSleep ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight' : null, style: '--block-color:' + P.projectKleur(it.code), title: [it.naam, projNr(it.code) + ' ' + projNaam(it.code), it.min ? uren(it.min) : '', voorstel ? 'voorstel' : '', wacht ? ('wacht' + (it.wachtTekst ? ': ' + it.wachtTekst : '')) : '', it.waarschuwing || '', it.nietEenduidig ? 'niet eenduidig aan een taak gekoppeld (hetzelfde taak-id staat in meer dan één project)' : ''].filter(Boolean).join(' · ') },
       el('span', { klass: 'cn-blok-kop' }, el('span', { klass: 'cn-blok-titel', tekst: it.naam }), voorstel ? el('span', { klass: 'cn-chipje', tekst: 'voorstel' }) : null, wacht && !voorstel ? el('span', { klass: 'cn-chipje wacht', tekst: 'wacht' }) : null, D.taakBezig && it.soort === 'taak' && D.taakBezig(it.code, it.id) ? el('span', { klass: 'cn-chipje wacht', tekst: 'opslaan hangt', title: 'Opslaan hangt: wacht even of herlaad de pagina om opnieuw te proberen' }) : null, it.waarschuwing ? el('span', { klass: 'cn-chipje wacht', tekst: 'let op', title: it.waarschuwing }) : null), uur ? el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-tijd', tekst: uur }), ' · ', el('span', { klass: 'cn-code', tekst: projNr(it.code) }), ' ' + projNaam(it.code)) : sub);
     if (S.toon && it.soort === 'taak' && String(it.id) === S.toon.id && String(it.code).toLowerCase() === S.toon.code && D.nu() < S.toon.tot) b.classList.add('tp-gemarkeerd');   // "Toon in tijdlijn" vanuit het taakpaneel
     klikOpen(b, it);
@@ -349,7 +369,7 @@
   function ongItem(u) {
     const sleep = N.mag() && (!D.magTaken || !!D.magTaken()) && !u.voorstel, taak = { code: u.code, id: u.id, naam: u.naam, min: u.min, voorstel: u.voorstel };   // een taak uit Ongepland slepen past de taak aan: dat vraagt ook het recht om taken te wijzigen
     const gemarkeerd = !!S.markeer && String(S.markeer.id) === String(u.id) && (!S.markeer.code || String(S.markeer.code).toLowerCase() === String(u.code).toLowerCase()) && D.nu() < S.markeer.tot;   // net vanuit Vandaag gekozen om in te plannen
-    const knop = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok cn-ong' + (u.voorstel ? ' voorstel' : '') + (sleep ? ' sleepbaar' : '') + (gemarkeerd ? ' gemarkeerd' : ''), style: '--block-color:' + P.projectKleur(u.code), title: u.tekst || u.naam },
+    const knop = el('div', { role: 'button', tabindex: '0', klass: 'cn-blok cn-ong' + (u.voorstel ? ' voorstel' : '') + (sleep ? ' sleepbaar' : '') + (gemarkeerd ? ' gemarkeerd' : ''), 'data-pf-taak': String(u.id), 'data-pf-code': String(u.code), style: '--block-color:' + P.projectKleur(u.code), title: u.tekst || u.naam },
       el('span', { klass: 'cn-ong-rij' }, el('span', { klass: 'cn-blok-titel', tekst: u.naam }), u.min ? el('span', { klass: 'cn-num cn-sub', tekst: uren(u.min) }) : null),
       el('span', { klass: 'cn-blok-sub' }, el('span', { klass: 'cn-code', tekst: projNr(u.code) }), ' ' + projNaam(u.code), u.voorstel ? ' · voorstel werkplaats' : ''));
     const item = { soort: 'taak', id: u.id, code: u.code };
@@ -503,6 +523,7 @@
   }
   const HINT = { kwartaal: 'Elke balk is een project; de uren per week staan erboven', maand: 'Hoogte = belasting per dag · inzoomen naar week voor de blokken', week: 'Getinte blokken per project · gestippeld = open voorstel', '3d': 'Blokken in uren · twee banen = dubbel geboekt', dag: 'Blokken in uren · de messing lijn is nu' };
   function filterKnoppen() {
+    if (FF()) return FF().balk({ pre: 'cap', std: 'iedereen', status: false, klaar: () => N.teken() });   // dezelfde balk als Mijn werk en de Planning van een project (de status past hier niet: de Capaciteit telt uren, geen taakstatus)
     const team = D.team() || [];
     const wie = el('select', { id: 'cn-wie', 'aria-label': 'Wie', klass: 'cn-filter', wijzig: ev => { S.persoon = ev.target.value; N.teken(); } }, el('option', { value: '', tekst: 'Wie: iedereen' }), team.map(t => el('option', { value: t.slug, tekst: t.naam })));
     wie.value = S.persoon;
@@ -514,17 +535,18 @@
   N.stap = function (richting) {
     S.exactDag = false; const a = S.anker || P.vandaagYmd();
     S.anker = S.zoom === 'week' ? plusDagen(a, 7 * richting) : S.zoom === 'maand' ? plusDagen(a, 28 * richting) : S.zoom === 'kwartaal' ? plusDagen(a, 91 * richting) : S.zoom === '3d' ? plusWerkdagen(volgendeWerkdag(a, 1), 3 * richting) : plusWerkdagen(volgendeWerkdag(a, 1), richting);
-    N.teken();
+    duwPeriode(); N.teken();
   };
   N.zoom = function (z) {
     if (!ZOOM_UI || !ZOOMS.some(x => x[0] === z)) return;
     S.exactDag = false; S.zoom = z; try { D.storage && D.storage.setItem(LS_ZOOM, z); } catch (e) {}
-    N.teken();
+    duwPeriode(); N.teken();
   };
 
   N.teken = function () {
     const w = D && D.doc.getElementById('agenda-capaciteit'); if (!w) return;
     w.textContent = '';
+    trekFilter();
     if (!S.anker) S.anker = P.vandaagYmd();
     let m; try { m = N.model(); } catch (e) { console.warn('Capaciteit (nieuw):', e); w.appendChild(el('div', { klass: 'cn-melding', tekst: 'De planning kon niet worden berekend.' })); return; }
     N.laatste = m;
@@ -532,7 +554,7 @@
     const knop = (label, klik, kl) => el('button', { type: 'button', klass: 'cn-knop' + (kl ? ' ' + kl : ''), 'aria-label': label, klik });
     const vorige = knop('Vorige periode', () => N.stap(-1), 'icoon'), volgende = knop('Volgende periode', () => N.stap(1), 'icoon');
     vorige.appendChild(icoon('M15 6l-6 6l6 6')); volgende.appendChild(icoon('M9 6l6 6l-6 6'));
-    const vandaag = knop('Naar vandaag', () => { S.exactDag = false; S.anker = P.vandaagYmd(); N.teken(); }); vandaag.textContent = 'Vandaag';
+    const vandaag = knop('Naar vandaag', () => { S.exactDag = false; S.anker = P.vandaagYmd(); duwPeriode(); N.teken(); }); vandaag.textContent = 'Vandaag';
     const zoomGroep = el('div', { klass: 'cn-zoom', role: 'group', 'aria-label': 'Inzoomen' },
       (() => { const b = knop('Uitzoomen', () => N.zoom(ZOOMS[Math.max(0, zi - 1)][0]), 'zm'); b.appendChild(icoon('M5 12h14')); return b; })(),
       ZOOMS.map(z => { const b = el('button', { type: 'button', klass: 'cn-zk' + (z[0] === S.zoom ? ' aan' : ''), 'aria-pressed': z[0] === S.zoom ? 'true' : 'false', klik: () => N.zoom(z[0]), tekst: z[1] }); return b; }),
@@ -549,14 +571,16 @@
     vlak.appendChild(el('div', { klass: 'cn-legenda' }, el('span', null, el('i', { klass: 'cn-lg-balk' }), 'gepland t.o.v. beschikbaar'), el('span', { klass: 'over' }, el('i', { klass: 'cn-lg-over' }), 'meer gepland dan beschikbaar'), el('span', null, el('i', { klass: 'cn-lg-vrij' }), 'vrij of verlof'), el('span', null, el('i', { klass: 'cn-lg-voorstel' }), 'open voorstel'), el('span', { klass: 'cn-hint', tekst: HINT[S.zoom] + ((S.zoom === 'week' || S.zoom === '3d' || S.zoom === 'dag') ? (N.mag() ? ' · sleep een blok, of kies ⇄ voor het toetsenbord' : ' · verplaatsen is voor kantoor') : '') })));
     w.appendChild(el('div', { klass: 'cn-kader' }, el('div', { klass: 'cn-hoofd' }, vlak), zijkolom(m)));
     if (S.focusTaak) { const f = [...w.querySelectorAll('.cn-blok[data-taak]')].find(x => x.getAttribute('data-taak') === S.focusTaak && (!S.focusCode || x.getAttribute('data-code') === S.focusCode)); S.focusTaak = null; S.focusCode = null; if (f && f.focus) f.focus(); }   // de balk waarop met het toetsenbord gewerkt werd houdt de focus
+    if (FF()) FF().markeer(w);   // de geselecteerde taak (het laatst geopende taakpaneel) blijft gemarkeerd bij het wisselen van weergave
   };
 
   // Vanuit Vandaag ("Inplannen" bij een taak zonder datum): de taak in Ongepland markeren en het bestaande "Plan … in…"-keuzemenu (N.menu) openen. Er is geen eigen schrijfroute:
   // plannen loopt via N.drop, dus via D.verplaats met dezelfde controles als slepen. De aanroeper heeft de Agenda al op Capaciteit gezet. Zonder recht (N.mag) blijft het bij markeren.
   N.inplannen = function (taak) {
     if (!taak || taak.id === undefined || taak.id === null) return false;
-    S.exactDag = false; S.persoon = ''; S.project = ''; S.anker = P.vandaagYmd(); S.ongDicht = false;
+    duwFilter({ persoon: '', project: '' }); S.exactDag = false; S.persoon = ''; S.project = ''; S.anker = P.vandaagYmd(); S.ongDicht = false;
     if (S.zoom === 'maand' || S.zoom === 'kwartaal') S.zoom = 'week';   // een keuzemenu voor dag en moment heeft een week of dagweergave nodig (de bewaarde zoomkeuze verandert niet)
+    duwPeriode();
     S.markeer = { id: String(taak.id), code: String(taak.code == null ? '' : taak.code), tot: D.nu() + 60000 };
     N.teken();
     const m = N.laatste, staat = !!m && m.ongepland.items.some(x => String(x.id) === String(taak.id) && (!taak.code || String(x.code).toLowerCase() === String(taak.code).toLowerCase()) && !x.voorstel);
@@ -569,14 +593,15 @@
   // Vanuit het taakpaneel ("Toon in tijdlijn"): de week van de taak, zonder filters, en de balk(en) van die taak een minuut gemarkeerd (de aanroeper wisselt naar de Agenda ▸ Capaciteit).
   N.toonTaak = function (taak, datum) {
     if (!taak || taak.id == null) return false;
-    S.exactDag = false; S.persoon = ''; S.project = ''; S.anker = P.isYmd(datum) ? datum : P.vandaagYmd();
+    duwFilter({ persoon: '', project: '' }); S.exactDag = false; S.persoon = ''; S.project = ''; S.anker = P.isYmd(datum) ? datum : P.vandaagYmd();
     if (S.zoom === 'maand' || S.zoom === 'kwartaal') S.zoom = 'week';   // de balken zijn pas in een week- of dagweergave te zien (de bewaarde zoomkeuze verandert niet)
+    duwPeriode();
     S.toon = { id: String(taak.id), code: String(taak.code == null ? '' : taak.code).toLowerCase(), tot: D.nu() + 60000 };
     N.teken();
     const e = D.doc.querySelector('#agenda-capaciteit .cn-blok.tp-gemarkeerd'); if (e && e.scrollIntoView) e.scrollIntoView({ block: 'center', inline: 'center' });
     return !!e;
   };
-  N.gaNaar = function (datum, slug) { if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = P.isYmd(datum) ? 'dag' : 'week'; S.exactDag = P.isYmd(datum); };   // precies die dag (ook een weekenddag), met die persoon in beeld; de bewaarde zoomkeuze verandert niet
+  N.gaNaar = function (datum, slug) { if (P.isYmd(datum)) S.anker = datum; S.persoon = slug || ''; S.project = ''; S.zoom = P.isYmd(datum) ? 'dag' : 'week'; S.exactDag = P.isYmd(datum); duwFilter({ persoon: slug || '', project: '' }); duwPeriode(); };   // precies die dag (ook een weekenddag), met die persoon in beeld; de bewaarde zoomkeuze verandert niet
   N.init = function (deps) {
     D = deps; P = deps.planning || root.MTPlanning;
     try { const z = D.storage && D.storage.getItem(LS_ZOOM); if (ZOOM_UI && z && ZOOMS.some(x => x[0] === z)) S.zoom = z; S.ongDicht = !!(D.storage && D.storage.getItem(LS_ONG) === 'dicht'); } catch (e) {}
