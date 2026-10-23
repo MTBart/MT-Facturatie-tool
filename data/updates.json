@@ -1,5 +1,21 @@
 [
   {
+    "versie": "2.22.0",
+    "datum": "2026-10-23",
+    "titel": "Planning veiliger en flexibeler, materiaal bij taken en een tool die op de telefoon past",
+    "voor": "iedereen",
+    "punten": [
+      "Planblokken slepen of wijzigen gaat veiliger: wijzigen twee mensen tegelijk iets aan hetzelfde blok, dan blijven allebei de wijzigingen staan en krijg je een melding als jouw wijziging niet kon worden overgenomen.",
+      "Materiaal hoort nu bij een taak. Koppel een bestelregel aan een taak en geef een verwachte leverdatum; de taak toont dat hij wacht op materiaal, en je krijgt een vraag voordat je zo'n taak op Bezig of Klaar zet.",
+      "Admin > Planning inrichten: de beheerder past zelf de stations, fases en activiteiten van het Bord aan (hernoemen, ordenen, toevoegen, verwijderen). Een klik op een vakje in Bord > Stroom toont de taken van dat station.",
+      "Taken bewerk je nu ook in het project zelf (takenlijst), en een nieuw blok Voortgang laat zien hoe ver een project is. Bij afvinken staat wie en wanneer.",
+      "Capaciteit: soepel zoomen en schuiven, blokken stapelen onder elkaar als er meer is, een belastingoverzicht per persoon en een takenbak waarin je taken kiest, filtert en groepeert (op de telefoon als lade).",
+      "De tool past nu op een telefoon van 390 tot 430 pixels breed zonder zijwaarts scrollen.",
+      "Calculatie en inkoop: een verwijderde inkoopregel kun je terugzetten (Verwijderd, Terugzetten), en de keuze van de offerte bij de nacalculatie gaat niet meer verloren als twee mensen tegelijk kiezen; Ongedaan maken staat onder Nacalculatie.",
+      "Na de update: herlaad de tool een keer op elk apparaat (ook de telefoon en de tv), ook als hij al openstaat. Werk pas aan de planning als iedereen herladen heeft."
+    ]
+  },
+  {
     "versie": "2.21.0",
     "datum": "2026-10-23",
     "titel": "Planning met bord, tijdlijn en filters, Financiën, slimmere Larry en rustiger calculeren",
