@@ -73,10 +73,10 @@
 <script src="mt-koers.js?v=2026-10-12c"></script>
 <script src="mt-schulden.js?v=2026-10-12a"></script>
 <script src="mt-fotostore.js?v=2026-10-11a"></script>
-<script src="mt-verhuis.js?v=2026-10-21a"></script>
+<script src="mt-verhuis.js?v=2026-10-23a"></script>
 <script src="mt-cijfers.js?v=2026-10-09h"></script>
 <script src="mt-rapport.js?v=2026-10-09a"></script>
-<script src="mt-calcopslag.js?v=2026-10-22a"></script>
+<script src="mt-calcopslag.js?v=2026-10-23a"></script>
 <script src="calc-engine.js"></script>
 <!-- Fonts als <link> i.p.v. CSS-@import: @import blokkeert alle CSS erna tot de
      fonts-CSS binnen is; preconnect scheelt de dubbele DNS/TLS-roundtrip. -->
@@ -10037,7 +10037,7 @@ async function nacalcMaakFactuur(code,opts){
   const opnieuw=!!(opts&&opts.opnieuw), opnieuwKnop=`nacalcMaakFactuur('${_jsCode(code)}',{opnieuw:true})`;
   const st=document.getElementById('nacalc-status-'+code.replace(/-/g,''));
   const mbId=proj.mb_nr||resolveMbContact(proj);
-  if(!mbId){alert('Geen Moneybird-contact gekoppeld aan dit project.\nKoppel eerst een contact via ✏ bij "Moneybird-contact".');return;}
+  if(!mbId){await mtDialog.alert({title:'Nacalculatie',message:'Geen Moneybird-contact gekoppeld aan dit project.\nKoppel eerst een contact via ✏ bij "Moneybird-contact".'});return;}
   const off=_nacalcOfferte[code];
   if(off){
     const bev=await mbBevestig({wat:`Offerte ${off.estimate_id||off.id} (${off.state}) omzetten naar een CONCEPT-factuur`,contact:resolveKlantNaam(proj)||('Moneybird-contact '+mbId),ref:off.reference||code,
@@ -10055,10 +10055,10 @@ async function nacalcMaakFactuur(code,opts){
     return;
   }
   // Geen offerte → concept-factuur met de nacalculatieregels zelf
-  if(!uurtarievenMag('lezen')){ alert('Een nacalculatiefactuur maken kan alleen met het geld-recht (de tarieven).'); return; }
+  if(!uurtarievenMag('lezen')){ await mtDialog.alert({title:'Nacalculatie',message:'Een nacalculatiefactuur maken kan alleen met het geld-recht (de tarieven).'}); return; }
   const nc=nacalcData(proj);
   const mat=nacalcMatTotaal(code);
-  if(!nc.rijen.length&&!(mat>0)){alert('Geen uren en geen materiaal gevonden — niets om te factureren.');return;}
+  if(!nc.rijen.length&&!(mat>0)){await mtDialog.alert({title:'Nacalculatie',message:'Geen uren en geen materiaal gevonden — niets om te factureren.'});return;}
   const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
   const details=nc.rijen.filter(r=>r.uren>0.01).map(r=>({description:`Arbeid ${cap(r.naam)} — nacalculatie ${projKort(code)}`,amount:`${r.uren.toFixed(2)} x`,price:r.tarief.toFixed(2)}));
   if(mat>0)details.push({description:`Materiaal — nacalculatie ${projKort(code)}`,amount:'1 x',price:mat.toFixed(2)});
@@ -13310,6 +13310,22 @@ const _SP = Object.assign(window.MTCore.makeSP({
       for (const k of new Set([...Object.keys(R), ...Object.keys(L)])) { const l = L[k], r = R[k]; uit[k] = !isObj(l) ? r : !isObj(r) ? l : (((Number(l.gewijzigd) || 0) !== (Number(r.gewijzigd) || 0) ? (Number(l.gewijzigd) || 0) > (Number(r.gewijzigd) || 0) : String(l.door || '') !== String(r.door || '') ? String(l.door || '') > String(r.door || '') : JSON.stringify(l) >= JSON.stringify(r)) ? l : r); }
       return uit;
     },
+    // Standaardwaarden van de calculatie (uurregels, marge): één klein document, dus als geheel samenvoegen op de stempel
+    // `_gewijzigd` (gezet bij "Opslaan als standaard"). Nieuwste stempel wint; geen stempel aan beide kanten = SharePoint (zoals
+    // voorheen). De verliezende versie gaat nooit stil weg: _calcDefVerlies bewaart haar en meldt het (alleen als het ertoe doet).
+    mt_calc_defaults(lokaal, spData) {
+      const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
+      const isD = v => v && typeof v === 'object' && !Array.isArray(v) && (Array.isArray(v.uren) || v.materiaal_marge != null);
+      const L = lees(lokaal), R = lees(spData);
+      if (!isD(L)) return isD(R) ? R : L;
+      if (!isD(R)) return L;
+      const inh = d => JSON.stringify([d.materiaal_marge, d.marge_ondergrens, (d.uren || []).map(u => [u.omschrijving, u.uurtarief, u.marge])]);
+      const tl = Date.parse(L._gewijzigd || '') || 0, tr = Date.parse(R._gewijzigd || '') || 0;
+      if (inh(L) === inh(R)) return tl > tr ? L : R;
+      const lokaalWint = tl > tr, win = lokaalWint ? L : R, verlies = lokaalWint ? R : L;
+      try { if (typeof window._calcDefVerlies === 'function') window._calcDefVerlies(verlies, win, lokaalWint); } catch(e) {}
+      return win;
+    },
     mt_calc_offertes(lokaal, spData) {
       const lees = v => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch(e) { return null; } };
       const L = (lees(lokaal) || {}).offertes || {};
@@ -13391,6 +13407,7 @@ const _SP = Object.assign(window.MTCore.makeSP({
         // (per offerte wint de nieuwste _gewijzigd-stempel).
         try { if (key === 'mt_calc_offertes' && window.CALC && samen && samen.offertes)
           window.CALC.offertes = mg(JSON.stringify({ versie: 2, offertes: window.CALC.offertes }), samen).offertes; } catch(e) {}
+        try { if (key === 'mt_calc_defaults' && typeof window._calcDefToepassen === 'function') window._calcDefToepassen(samen); } catch(e) {}
         // Projecten: binnengekomen/bijgewerkte records meteen in PROJECT_CODES (en de lijst) zetten.
         if (key === 'mt_projecten') setTimeout(() => { try { slaProjectenOp();
           if (typeof renderProjectLijst === 'function' && !window._calcMailPaneelActief) renderProjectLijst(); } catch(e) {} }, 0);
@@ -14736,11 +14753,14 @@ window.initStorage = async function() {
         try { samen = merger(localStorage.getItem(key), spData); }
         catch(e) { console.error('samenvoegen faalde voor', key, e); _SP.blockedKeys.add(key); return; }
         _lsSet(key, JSON.stringify(samen));
+        try { if (key === 'mt_calc_defaults' && typeof window._calcDefToepassen === 'function') window._calcDefToepassen(samen); } catch(e) {}
         // Ook hier bij een 412 de samenvoeger gebruiken (de generieke merge kan geen
         // projecten/planning aan en zou de write overslaan).
         const opnieuw = (remote, local) => {
           if (projSchemaSleutel(key) && typeof projSchemaGeblokkeerd === 'function' && projSchemaGeblokkeerd()) { projSchemaBlok(); return null; }
-          const s2 = merger(JSON.stringify(local), remote); _lsSet(key, JSON.stringify(s2)); return s2;
+          const s2 = merger(JSON.stringify(local), remote); _lsSet(key, JSON.stringify(s2));
+          try { if (key === 'mt_calc_defaults' && typeof window._calcDefToepassen === 'function') window._calcDefToepassen(s2); } catch(e) {}
+          return s2;
         };
         try { await _SP.write(key + '.json', samen, opnieuw); }
         catch(e) { console.warn('terugschrijven na samenvoegen faalde voor', key, ':', e.message); }
@@ -17848,6 +17868,7 @@ function activiteitOpen(force){
     const mg=_SP.mergers&&_SP.mergers[key];
     const cm=mg?((remote,local)=>{ const samen=mg(typeof local==='string'?local:JSON.stringify(local),remote);
       lsSave(key,samen); if(which==='off'&&samen&&samen.offertes) CALC.offertes=mg(JSON.stringify({versie:2,offertes:CALC.offertes}),samen).offertes;
+      if(which==='def') _defToepassen(samen);
       return samen; }):undefined;
     try{ const ok=await _SP.write(SP[which],payloadFor(which),cm);
       if(ok===false){ const ls=_SP.lastSync; return {ok:false,reden:(ls&&ls.error)||'SharePoint weigerde de schrijfactie'}; }
@@ -17954,6 +17975,8 @@ function activiteitOpen(force){
     else regel('✓ Opgeslagen op SharePoint'+(s.tijd?' '+tijd(s.tijd):''),'ok');
     if(_calcLaterTekenen.has(basis)) regel('Er is een nieuwere versie van SharePoint binnen — die verschijnt zodra je het veld verlaat.','info');
     if(_calcSync.conflictOpen(basis)){ d=regel('⚠ Deze offerte is ook elders gewijzigd — controleer. De andere versie is bewaard.','conflict'); knop(d,'Bekijk',()=>calcConflictBekijk(basis)); }
+    // Altijd bereikbaar: eerdere versies van deze offerte bekijken, vergelijken en (met bevestiging) terugzetten.
+    d=document.createElement('div'); d.className='calc-opslag-r calc-opslag-versies'; knop(d,'Versies',()=>window.calcVersies(basis)); el.appendChild(d);
   }
   // Bewaarde versies bekijken: één terugzetten (de huidige stand gaat dan eerst zelf in de versies) of "gezien".
   async function calcConflictBekijk(basis){
@@ -17978,6 +18001,126 @@ function activiteitOpen(force){
     calcStatus(r.ok?'✓ Versie teruggezet en opgeslagen op SharePoint':'⚠ Teruggezet op deze pc, maar nog niet op SharePoint: '+(r.reden||'onbekend'),r.ok?'ok':'fout',basis);
   }
   window.calcConflictBekijk=calcConflictBekijk;
+
+  // ---- Versies van één offerte: herstelpunten van deze pc + bewaarde kopieën (_conflicten) + SharePoint-versiegeschiedenis ----
+  // Bekijken en vergelijken mag iedereen; terugzetten niet met de rol "lezen" (fail-closed: zonder geladen rol ook niet). Terugzetten
+  // vervangt alleen DEZE offerte, via de gewone schrijfrij (vers lezen, per offerte samenvoegen, ETag), nadat de huidige stand als
+  // kopie bewaard is; "Ongedaan maken" zet die kopie terug. De SharePoint-versies komen via _SP._driveBase (dezelfde token als de
+  // rest van de calculatie): /versions en /versions/<id>/content van mt_calc_offertes.json; alleen lezen.
+  const VERSIES_SP_MAX=15;
+  const REDEN_V={gelijktijdig:'tegelijk gewijzigd',ingekort:'daarna elders sterk ingekort','oudere versie':'elders terug naar een oudere versie','voor terugzetten':'stand vóór terugzetten','eerste keer':'oudere kopie van deze pc','ander tabblad':'ander tabblad'};
+  const _versieWanneer=t=>{ const d=new Date(t); return isNaN(d)?'onbekend moment':d.toLocaleString('nl-NL',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
+  function _versieTotaal(o){ try{ const t=_offRegels({meta:o.meta||{},materiaal:Array.isArray(o.materiaal)?o.materiaal:[],uren:Array.isArray(o.uren)?o.uren:[]}).total; return isFinite(t)?t:null; }catch(e){ return null; } }
+  function _calcMagTerugzetten(){ try{ return !!(window.MTRol&&MTRol.me)&&String(MTRol.me.rol||'').toLowerCase()!=='lezen'; }catch(e){ return false; } }
+  function _versiesLokaal(basis){
+    const uit=[];
+    (lsLoad(HERSTEL_KEY,[])||[]).forEach((p,i)=>{ try{ const o=((JSON.parse(p.data)||{}).offertes||{})[basis]; if(o&&typeof o==='object') uit.push({id:'h'+i+'|'+p.tijd,bron:'herstelpunt',soort:'Herstelpunt op deze pc',tijd:p.tijd,wie:'deze pc',offerte:o}); }catch(e){} });
+    if(_calcSync) _calcSync.conflicten(basis).forEach(c=>uit.push({id:'k|'+c.id,bron:'bewaard',soort:'Bewaarde versie'+(REDEN_V[c.reden]?' ('+REDEN_V[c.reden]+')':''),tijd:c.tijd,wie:c.door||(c.bron==='elders'?'elders':'deze pc'),offerte:c.offerte}));
+    return uit;
+  }
+  async function _versiesSp(basis,voortgang){
+    if(typeof _SP==='undefined'||typeof _SP._driveBase!=='function') throw new Error('niet ingelogd op SharePoint');
+    const {base,token}=await _SP._driveBase();
+    const pad=`${base}/root:/${_SP.FOLDER}/${SP.off}:/versions`, kop={'Authorization':`Bearer ${token}`};
+    const r=await _calcFetch(pad,{headers:kop,cache:'no-store'});
+    if(!r.ok) throw new Error('de versiegeschiedenis lezen lukte niet (HTTP '+r.status+')');
+    const lijst=(((await r.json())||{}).value||[]).slice(0,VERSIES_SP_MAX), uit=[]; let klaar=0, nietLeesbaar=0, zonder=0;
+    const werk=async v=>{
+      try{ const c=await _calcFetch(pad+'/'+encodeURIComponent(v.id)+'/content',{headers:kop,cache:'no-store'}); if(!c.ok) throw new Error('HTTP '+c.status);
+        const o=(((await c.json())||{}).offertes||{})[basis];
+        if(o&&typeof o==='object') uit.push({id:'s|'+v.id,bron:'sharepoint',soort:'SharePoint-versie',tijd:v.lastModifiedDateTime,wie:(v.lastModifiedBy&&v.lastModifiedBy.user&&v.lastModifiedBy.user.displayName)||'onbekend',offerte:o}); else zonder++;
+      }catch(e){ nietLeesbaar++; }
+      klaar++; voortgang(klaar,lijst.length);
+    };
+    const rij=lijst.slice();
+    await Promise.all([0,1,2].map(async()=>{ for(let v;(v=rij.shift());) await werk(v); }));
+    return {versies:uit,nietLeesbaar,zonder,totaal:lijst.length};
+  }
+  async function calcVersies(basis){
+    if(!CALC.loaded||!CALC.offertes[basis]){ calcStatus('De calculaties zijn nog niet geladen.','fout',basis); return; }
+    const oud=document.querySelector('dialog.calc-versies'); if(oud) oud.remove();
+    const mk=(tag,cls,tekst,stijl)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(tekst!=null) e.textContent=tekst; if(stijl) e.style.cssText=stijl; return e; };
+    const knop=(tekst,fn,uit)=>{ const b=mk('button','btn btn-xs btn-secondary',tekst); b.type='button'; if(uit) b.disabled=true; b.addEventListener('click',fn); return b; };
+    const dlg=mk('dialog','calc-versies',null,'border:none;border-radius:12px;padding:0;max-width:780px;width:calc(100vw - 40px);box-shadow:0 12px 40px rgba(0,0,0,.28);background:var(--surface-overlay,#fff);color:var(--text,#1a1a1a);font-size:13px');
+    const kopEl=mk('div',null,null,'padding:16px 20px 4px'), titel=mk('div',null,'Versies van deze offerte','font-size:16px;font-weight:600;color:var(--green,#2A4A38)'), nu=mk('div',null,null,'color:var(--text-dim);margin-top:2px');
+    const noot=mk('div','calc-versies-noot',null,'padding:0 20px;color:var(--text-dim)'), banner=mk('div','calc-versies-banner',null,'margin:6px 20px;font-weight:500'), lijstEl=mk('div',null,null,'padding:6px 20px;max-height:42vh;overflow:auto'), diffEl=mk('div',null,null,'padding:0 20px;max-height:24vh;overflow:auto');
+    const voet=mk('div',null,null,'display:flex;gap:8px;align-items:center;padding:12px 20px 16px'), spStatus=mk('span','calc-versies-sp','','flex:1;color:var(--text-dim);font-size:12px');
+    kopEl.append(titel,nu); dlg.append(kopEl,noot,banner,lijstEl,diffEl,voet);
+    const mag=_calcMagTerugzetten();
+    noot.textContent=mag?'Kies een versie om te vergelijken met de huidige. Terugzetten vervangt alleen deze offerte; de huidige stand wordt eerst bewaard en je kunt het ongedaan maken.'
+      :'Je kunt de versies bekijken en vergelijken. Terugzetten kan met jouw rol niet'+((window.MTRol&&MTRol.me)?'.':' (je rol is nog niet geladen).');
+    let sp=null, gekozen=null, spBezig=false;
+    const huidig=()=>CALC.offertes[basis];
+    const teken=()=>{
+      const h=huidig(), hh=MTCalcOpslag.hash(h), tot=_versieTotaal(h);
+      nu.textContent='Nu: '+MTCalcOpslag.gevuld(h)+' gevulde regels'+(tot!=null?' · '+eur(tot)+' ex btw':'');
+      const alle=_versiesLokaal(basis).concat(sp?sp.versies:[]).sort((a,b)=>String(b.tijd).localeCompare(String(a.tijd)));
+      const gezien=new Set(), lijst=[]; let gelijkNu=0;
+      alle.forEach(e=>{ const x=MTCalcOpslag.hash(e.offerte); if(x===hh){ gelijkNu++; return; } if(gezien.has(x)) return; gezien.add(x); lijst.push(e); });
+      lijstEl.textContent='';
+      if(!lijst.length) lijstEl.appendChild(mk('div',null,'Nog geen afwijkende eerdere versies gevonden op deze pc. Laad de SharePoint-geschiedenis voor meer.','padding:8px 0;color:var(--text-dim)'));
+      lijst.forEach(e=>{
+        const rij=mk('div','calc-versies-rij',null,'display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border,#ddd)'+(gekozen===e.id?';background:var(--gold-50,#FBF5E0)':''));
+        const tekst=mk('div',null,null,'flex:1;min-width:0'), t2=e.offerte&&_versieTotaal(e.offerte);
+        tekst.append(mk('div',null,_versieWanneer(e.tijd)+' · '+e.wie,'font-weight:600'),
+          mk('div',null,e.soort+' · '+MTCalcOpslag.gevuld(e.offerte)+' gevulde regels'+(t2!=null?' · '+eur(t2):''),'color:var(--text-dim);font-size:12px'));
+        const vk=knop('Vergelijk',()=>{ gekozen=(gekozen===e.id?null:e.id); teken(); }), tk=knop('Terugzetten',()=>terugzetten(e),!mag);
+        vk.classList.add('calc-versies-vergelijk'); tk.classList.add('calc-versies-terug');
+        rij.append(tekst,vk,tk);
+        lijstEl.appendChild(rij);
+      });
+      if(gelijkNu) lijstEl.appendChild(mk('div',null,gelijkNu+' versie(s) zijn gelijk aan de huidige en niet getoond.','padding:6px 0;color:var(--text-faint,#888);font-size:12px'));
+      diffEl.textContent='';
+      const e=lijst.find(x=>x.id===gekozen);
+      if(e){
+        const v=MTCalcOpslag.verschil(h,e.offerte), SOORT={materiaal:'Materiaal',uren:'Uren',kop:'Gegevens'};
+        diffEl.appendChild(mk('div',null,'Verschil met de versie van '+_versieWanneer(e.tijd)+' ('+v.length+')','font-weight:600;margin:8px 0 4px'));
+        if(!v.length) diffEl.appendChild(mk('div',null,'Geen verschil in de regels.'));
+        v.forEach(r=>{
+          const wat=r.soort==='kop'?'Gegevens · '+r.veld:SOORT[r.soort]+' "'+r.naam+'"';
+          const t=r.type==='alleen-nu'?wat+': staat nu wel, niet in deze versie (verdwijnt bij terugzetten)'
+            :r.type==='alleen-versie'?wat+': staat in deze versie, nu niet (komt terug bij terugzetten)'
+            :wat+(r.soort==='kop'?'':' · '+r.veld)+': nu "'+r.nu+'", in deze versie "'+r.versie+'"';
+          diffEl.appendChild(mk('div','calc-versies-verschil','• '+t,'padding:1px 0'));
+        });
+      }
+    };
+    const terugzetten=async e=>{
+      if(!_calcMagTerugzetten()){ banner.textContent='Terugzetten kan met jouw rol niet.'; banner.style.color='#c0392b'; return; }
+      const n=MTCalcOpslag.verschil(huidig(),e.offerte).length;
+      const ja=await mtDialog.confirm({title:'Deze versie terugzetten?',okLabel:'Terugzetten',
+        message:'Deze offerte wordt de versie van '+_versieWanneer(e.tijd)+' ('+MTCalcOpslag.gevuld(e.offerte)+' gevulde regels, '+n+' verschil'+(n===1?'':'len')+' met nu). De andere offertes veranderen niet. De huidige stand wordt eerst bewaard; je kunt het meteen ongedaan maken.'});
+      if(!ja||!_calcMagTerugzetten()||!_calcSync) return;
+      banner.textContent='Terugzetten…'; banner.style.color='var(--text-dim)';
+      const r=await _calcSync.zetTerugVan(basis,e.offerte,{bron:e.bron});
+      await window.renderOfferteCalc(basis);
+      const bleef=!!huidig()&&MTCalcOpslag.hash(huidig())===r.hash;
+      gekozen=null;
+      if(!bleef){ banner.textContent='⚠ De offerte was intussen ook elders gewijzigd; die stand is behouden en jouw teruggezette versie staat bij de bewaarde versies.'; banner.style.color='#c0392b'; }
+      else {
+        banner.textContent=r.ok?'✓ Teruggezet en opgeslagen op SharePoint. ':'⚠ Teruggezet op deze pc, maar nog niet op SharePoint ('+(r.reden||'onbekend')+'). ';
+        banner.style.color=r.ok?'var(--green)':'#c0392b';
+        if(r.ongedaanId){ const ub=knop('Ongedaan maken',async()=>{
+          banner.textContent='Ongedaan maken…'; const u=await _calcSync.zetTerug(basis,r.ongedaanId); await window.renderOfferteCalc(basis);
+          banner.textContent=u.ok?'✓ Teruggezet naar de stand van vóór het terugzetten.':'⚠ Ongedaan gemaakt op deze pc, maar nog niet op SharePoint ('+(u.reden||'onbekend')+').'; banner.style.color=u.ok?'var(--green)':'#c0392b'; teken();
+        }); ub.classList.add('calc-versies-ongedaan'); banner.appendChild(ub); }
+      }
+      teken();
+    };
+    const laad=knop('SharePoint-geschiedenis laden',async()=>{
+      if(spBezig) return; spBezig=true; laad.disabled=true; spStatus.textContent='Versies ophalen…';
+      try{ sp=await _versiesSp(basis,(k,t)=>{ spStatus.textContent='Versies lezen '+k+'/'+t+'…'; });
+        spStatus.textContent=sp.totaal+' SharePoint-versies bekeken'+(sp.nietLeesbaar?', '+sp.nietLeesbaar+' niet leesbaar':'')+(sp.zonder?', '+sp.zonder+' zonder deze offerte':'')+'.'; }
+      catch(e){ spStatus.textContent='⚠ SharePoint-versies niet beschikbaar: '+(e.message||e); laad.disabled=false; }
+      spBezig=false; teken();
+    });
+    laad.classList.add('calc-versies-laad');
+    const sluit=knop('Sluiten',()=>{ dlg.close(); });
+    voet.append(laad,spStatus,sluit);
+    dlg.addEventListener('close',()=>dlg.remove());
+    document.body.appendChild(dlg); teken(); dlg.showModal();
+  }
+  window.calcVersies=calcVersies;
 
   // ---- bewaren tijdens het typen: alleen geheugen + localStorage (geen SharePoint, geen hertekening) ----
   const _typT={};
@@ -18040,10 +18183,11 @@ function activiteitOpen(force){
       if(_calcSync){
         _calcSync.laad(localStorage.getItem(SYNC_KEY));
         if(typeof _SP!=='undefined'&&typeof _SP.read==='function'){
-          try{ const sd=await Promise.race([_SP.read(SP.def),new Promise((_,nee)=>setTimeout(()=>nee(new Error('time-out')),CALC_TIMEOUT))]);
-            if(sd){CALC.defaults=mergeDefaults(sd); lsSave(LS.def,CALC.defaults);} }
-          catch(e){ console.warn('standaardwaarden ophalen van SharePoint mislukt:',e); }
-        }
+          let sd=null;
+          try{ sd=await Promise.race([_SP.read(SP.def),new Promise((_,nee)=>setTimeout(()=>nee(new Error('time-out')),CALC_TIMEOUT))]); }
+          catch(e){ console.warn('standaardwaarden ophalen van SharePoint mislukt:',e); sd=null; }
+          _defHydrate(sd);
+        } else _defHydrate(null);
         // Vers lezen → samenvoegen met wat hier staat → zo nodig schrijven. Mislukt het lezen, dan staat de
         // calculatie op "alleen op deze pc" (vaste balk) en gaat er niets naar SharePoint tot een lezing lukt.
         const r=await _calcSync.schrijf();
@@ -18056,7 +18200,7 @@ function activiteitOpen(force){
       if(typeof _SP!=='undefined'&&typeof _SP.read==='function'){
         try{
           const [sd,so]=await Promise.all([_SP.read(SP.def),_SP.read(SP.off)]);
-          if(sd){CALC.defaults=mergeDefaults(sd); lsSave(LS.def,CALC.defaults);}
+          _defHydrate(sd);
           if(so&&so.offertes){
             // Samenvoegen, niet overschrijven. Hiervóór won de SharePoint-versie
             // altijd — waardoor de ene PC het werk van de andere kon wissen.
@@ -18079,8 +18223,119 @@ function activiteitOpen(force){
     if(d&&d.materiaal_marge!=null&&d.materiaal_marge!=='') out.materiaal_marge=d.materiaal_marge;
     if(d&&d.marge_ondergrens!=null&&d.marge_ondergrens!=='') out.marge_ondergrens=d.marge_ondergrens;
     if(d&&Array.isArray(d.uren)&&d.uren.length) out.uren=d.uren.map(u=>({omschrijving:u.omschrijving||'',uurtarief:u.uurtarief,marge:u.marge}));
+    if(d&&typeof d._gewijzigd==='string'&&d._gewijzigd) out._gewijzigd=d._gewijzigd;   // stempel van "Opslaan als standaard" (samenvoeger)
     return out;
   }
+
+  // ---- standaardwaarden: geen stil verlies, samenvoegen met SharePoint, eerlijke status ----
+  // Wijzigingen in het paneel staan meteen als concept in deze browser (DEF_CONCEPT) en komen na herladen terug met een
+  // melding; pas "Opslaan als standaard" zet ze in de echte standaardwaarden en schrijft ze (stempel, ETag-veilige samenvoeger
+  // _SP.mergers.mt_calc_defaults) naar SharePoint. Is dat niet gelukt, dan staat DEF_VUIL aan en probeert de tool het opnieuw.
+  const DEF_CONCEPT='mt_calc_defaults_concept', DEF_VUIL='mt_calc_defaults_vuil', DEF_CONFLICT='mt_calc_defaults_conflict';
+  let _defStaat={t:'schoon'};            // schoon | open | bezig | ok | fout
+  const _defInhoud=d=>{ const m=mergeDefaults(d); return JSON.stringify([m.materiaal_marge,m.marge_ondergrens,m.uren.map(u=>[u.omschrijving,u.uurtarief,u.marge])]); };
+  const _defTijd=()=>new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+  function _defLsLees(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function _defLsZet(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
+  function _defLsWis(k){ try{ localStorage.removeItem(k); }catch(e){} }
+  function _defStatusTekst(){
+    const s=_defStaat;
+    if(s.t==='open') return {tekst:'● Wijzigingen nog niet opgeslagen — klik op "Opslaan als standaard"',kleur:'var(--gold)'};
+    if(s.t==='bezig') return {tekst:'Opslaan…',kleur:'var(--text-dim)'};
+    if(s.t==='ok') return {tekst:'✓ Opgeslagen als standaard'+(s.tijd?' '+s.tijd:''),kleur:'var(--green)'};
+    if(s.t==='fout') return {tekst:'⚠ Staat veilig op deze pc, maar nog niet op SharePoint: '+(s.reden||'onbekende fout')+'. De tool probeert het elke minuut opnieuw.',kleur:'#c0392b'};
+    return {tekst:'',kleur:'var(--text-dim)'};
+  }
+  function _defStatusZet(s){
+    _defStaat=s; const t=_defStatusTekst();
+    document.querySelectorAll('.calc-defstatus').forEach(el=>{ el.textContent=t.tekst; el.style.color=t.kleur; });
+  }
+  function _defConceptBewaar(){
+    const ok=_defLsZet(DEF_CONCEPT,JSON.stringify({tijd:new Date().toISOString(),defaults:CALC.defaults}));
+    if(!ok) calcStatus('⚠ Je wijzigingen aan de standaardwaarden konden niet in deze browser bewaard worden (opslag vol of geblokkeerd). Klik direct op "Opslaan als standaard".','fout');
+    _defStatusZet({t:'open'});
+  }
+  // Na (her)laden: niet-opgeslagen wijzigingen uit een vorige sessie terugzetten in het paneel, met een melding.
+  function _defConceptHerstel(){
+    let c=null; try{ c=JSON.parse(_defLsLees(DEF_CONCEPT)||'null'); }catch(e){}
+    if(!c||!c.defaults) return;
+    const cd=mergeDefaults(c.defaults);
+    if(_defInhoud(cd)===_defInhoud(CALC.defaults)){ _defLsWis(DEF_CONCEPT); return; }
+    CALC.defaults=cd; _defStatusZet({t:'open'});
+    calcStatus('⚠ Je niet-opgeslagen wijzigingen aan de standaardwaarden zijn hersteld. Klik bij "Standaardwaarden" op "Opslaan als standaard" om ze te bewaren.','fout');
+  }
+  // Samengevoegd resultaat (van SharePoint of na een 412) overnemen — behalve als je zelf net iets aan het wijzigen bent.
+  function _defToepassen(samen){
+    if(!samen||_defStaat.t==='open') return;
+    const nieuw=mergeDefaults(samen);
+    if(_defInhoud(nieuw)===_defInhoud(CALC.defaults)) { if(nieuw._gewijzigd) CALC.defaults._gewijzigd=nieuw._gewijzigd; return; }
+    CALC.defaults=nieuw;
+    [..._calcOpen].forEach(k=>{ const host=document.getElementById('offerte-calc-'+cid(k)); if(!host) return; if(calcFocusBinnen(host)) _calcLaterTekenen.add(k); else _calcHerteken(k); });
+  }
+  window._calcDefToepassen=_defToepassen;
+  // De verliezer van een samenvoeging bewaren en melden: alleen als dat ertoe doet (jouw opslag ging voor, of jouw
+  // niet-gedeelde opslag moest wijken). Een verouderde, nooit gewijzigde kopie in deze browser is geen verlies.
+  window._calcDefVerlies=function(verlies,win,lokaalWint){
+    const vuil=!!_defLsLees(DEF_VUIL);
+    if(!lokaalWint&&!vuil) return;
+    try{ const lijst=JSON.parse(_defLsLees(DEF_CONFLICT)||'[]'); lijst.unshift({tijd:new Date().toISOString(),bron:lokaalWint?'sharepoint':'deze pc',defaults:verlies});
+      _defLsZet(DEF_CONFLICT,JSON.stringify(lijst.slice(0,5))); }catch(e){}
+    calcStatus(lokaalWint
+      ? '⚠ De standaardwaarden waren intussen ook elders gewijzigd. Jouw versie is opgeslagen; de andere versie is bewaard (bij Standaardwaarden: "Bekijk").'
+      : '⚠ De standaardwaarden zijn elders gewijzigd. Die versie is overgenomen; jouw eigen versie is bewaard (bij Standaardwaarden: "Bekijk").','fout');
+  };
+  // Na het tekenen van de calculatie: de melding "andere versie bewaard" in de lege plek van het paneel zetten (DOM, geen HTML-tekst).
+  function _defConflictTeken(host,key){
+    const plek=host&&host.querySelector('.calc-defconflict'); if(!plek) return;
+    let l=[]; try{ l=JSON.parse(_defLsLees(DEF_CONFLICT)||'[]'); }catch(e){}
+    plek.textContent=''; if(!Array.isArray(l)||!l.length) return;
+    plek.style.cssText='margin:0.4rem 0;padding:6px 10px;border:1px dashed var(--gold);border-radius:6px;font-size:12px';
+    plek.appendChild(document.createTextNode('⚠ Er is een andere versie van de standaardwaarden bewaard ('+l.length+'). '));
+    const b=document.createElement('button'); b.type='button'; b.className='btn btn-xs btn-secondary'; b.textContent='Bekijk';
+    b.addEventListener('click',()=>window.calcDefConflictBekijk(key)); plek.appendChild(b);
+  }
+  window.calcDefConflictBekijk=async function(key){
+    let l=[]; try{ l=JSON.parse(_defLsLees(DEF_CONFLICT)||'[]'); }catch(e){}
+    const c=Array.isArray(l)&&l[0]; if(!c||!c.defaults){ _defLsWis(DEF_CONFLICT); renderOfferteCalc(key); return; }
+    const d=mergeDefaults(c.defaults);
+    const tekst='Bewaard op '+new Date(c.tijd).toLocaleString('nl-NL')+' ('+(c.bron==='sharepoint'?'de versie van SharePoint':'jouw eigen versie')+'):\n\n'
+      +'Materiaal-marge ×'+inval(d.materiaal_marge)+'\n'+d.uren.map(u=>'• '+(u.omschrijving||'(zonder naam)')+': € '+inval(u.uurtarief)+', marge ×'+inval(u.marge)).join('\n');
+    const k=await mtDialog.choose({title:'Andere versie van de standaardwaarden',message:tekst,
+      choices:[{label:'Deze versie overnemen',sublabel:'Je huidige waarden gaan eerst zelf in de bewaarde versies; daarna klik je op "Opslaan als standaard".'},
+               {label:'Gezien — deze versie niet meer tonen'}]});
+    if(k===0){
+      const nu=mergeDefaults(CALC.defaults); nu._gewijzigd=undefined;
+      l.splice(0,1,{tijd:new Date().toISOString(),bron:'deze pc',defaults:nu});
+      _defLsZet(DEF_CONFLICT,JSON.stringify(l.slice(0,5)));
+      CALC.defaults=d; _defConceptBewaar(); renderOfferteCalc(key);
+    } else if(k===1){ l.shift(); if(l.length) _defLsZet(DEF_CONFLICT,JSON.stringify(l)); else _defLsWis(DEF_CONFLICT); renderOfferteCalc(key); }
+  };
+  // Na het lezen van SharePoint: samenvoegen met wat hier staat, concept terugzetten, en een eerder mislukte opslag opnieuw proberen.
+  function _defHydrate(sd){
+    if(sd){
+      let samen=sd;
+      try{ const lok=_defLsLees(LS.def); if(lok&&_SP.mergers&&_SP.mergers.mt_calc_defaults) samen=_SP.mergers.mt_calc_defaults(lok,sd)||sd; }
+      catch(e){ console.warn('standaardwaarden samenvoegen mislukt:',e); }
+      CALC.defaults=mergeDefaults(samen); lsSave(LS.def,CALC.defaults);
+    }
+    _defConceptHerstel();
+    _defOpnieuw();
+  }
+  function _defOpnieuw(){ if(_defLsLees(DEF_VUIL)&&_defStaat.t!=='bezig'&&_defStaat.t!=='open') _defSchrijf(null); }
+  async function _defSchrijf(key){
+    _defStatusZet({t:'bezig'});
+    let r; try{ r=await syncNu('def'); }catch(e){ r={ok:false,reden:e.message||String(e)}; }
+    if(r.ok){
+      _defLsWis(DEF_VUIL); _defLsWis(DEF_CONCEPT);
+      _defStatusZet({t:'ok',tijd:_defTijd()});
+      calcStatus('✓ Opgeslagen als standaard '+_defTijd()+' — nieuwe offertes starten hiermee','ok',key||undefined);
+    } else {
+      _defStatusZet({t:'fout',reden:r.reden});
+      calcStatus('⚠ Staat veilig op deze pc, maar niet op SharePoint: '+(r.reden||'onbekende fout')+'. De tool probeert het elke minuut opnieuw.','fout',key||undefined);
+    }
+    return r;
+  }
+  setInterval(()=>{ if(CALC.loaded) _defOpnieuw(); },60000);
 
   // ---- model ----------------------------------------------------------------
   function defMateriaalRows(){
@@ -18230,10 +18485,11 @@ function activiteitOpen(force){
   // Vectorworks/interiorcad materiaallijst → tabelregels voor-invullen + echte inkoop opzoeken.
   // Plak-import (geen vaste bestandslocatie): één regel per materiaal, "omschrijving" of
   // "omschrijving <tab/;/,> aantal". Per regel proberen we de echte voorraadprijs te vinden.
-  window.calcImportVW=function(key){
-    const o=getOfferte(key);
-    const raw=prompt('Plak hier de Vectorworks/interiorcad materiaallijst.\n\nEén regel per materiaal — "omschrijving" of "omschrijving <tab/;/,> aantal".\nIk vul de regels in en zoek meteen je echte inkoopprijs uit voorraad/facturen.');
+  window.calcImportVW=async function(key){
+    const raw=await mtDialog.prompt({title:'VW-lijst importeren',multiline:true,okLabel:'Importeren',
+      message:'Plak hier de Vectorworks/interiorcad materiaallijst.\n\nEén regel per materiaal — "omschrijving" of "omschrijving <tab/;/,> aantal".\nIk vul de regels in en zoek meteen je echte inkoopprijs uit voorraad/facturen.'});
     if(raw===null) return;
+    const o=getOfferte(key);   // pas na de dialoog: een samenvoeging van elders kan het object intussen vervangen hebben
     const lines=raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
     if(!lines.length){ flash(key,'geen regels geplakt'); return; }
     let added=0, prijsHits=0;
@@ -18622,6 +18878,7 @@ function activiteitOpen(force){
     let regels=getweakt
       ? _normRegels(o._mbPreview.regels.map(l=>({description:l.description,price:l.price})),total)
       : _normRegels(lijnen.map(l=>({description:l.description,price:l.price})),total);
+    let larryOk=false;
     if(typeof claudeCall==='function'){
       const wat=((o.meta&&o.meta.offerte_tekst)||'').trim();
       const matLijst=o.materiaal.filter(m=>(m.omschrijving||'').trim()).map(m=>'- '+m.omschrijving+(m.aantal?(' ×'+m.aantal):'')).join('\n');
@@ -18641,10 +18898,13 @@ function activiteitOpen(force){
         const r=await claudeCall([{role:'user',content:sys+'\n\n'+usr}],1500);
         const txt=(r&&r.content&&r.content[0]&&r.content[0].text)||'';
         const m=txt.match(/\{[\s\S]*\}/);
-        if(m){ const j=JSON.parse(m[0]); if(j.tekst) tekst=String(j.tekst).trim(); if(Array.isArray(j.regels)&&j.regels.length) regels=_normRegels(j.regels,total); }
+        if(m){ const j=JSON.parse(m[0]); if(j.tekst) tekst=String(j.tekst).trim(); if(Array.isArray(j.regels)&&j.regels.length){ regels=_normRegels(j.regels,total); larryOk=true; } }
       }catch(e){ /* val stil terug op de deterministische regels */ }
     }
-    o._mbPreview={tekst,regels,total};
+    // Na het wachten het actuele object nemen: een samenvoeging van elders kan o intussen vervangen hebben.
+    // Lukte Larry niet en waren de regels al met de hand aangepast, dan blijft het handwerk (en dus zijn bescherming) staan.
+    const o2=getOfferte(key)||o, vorig=o2._mbPreview;
+    o2._mbPreview={tekst,regels,total,handwerk:(!larryOk&&!!(vorig&&vorig.handwerk))};
     saveCalc('off',{key:key});
   }
   // delta/som-regel onderaan de preview (los renderbaar zodat typen niet de focus steelt)
@@ -18664,10 +18924,62 @@ function activiteitOpen(force){
     const se=document.getElementById('calc-prevsom-'+c); if(se) se.textContent=eur(som);
     const de=document.getElementById('calc-prevdelta-'+c); if(de) de.innerHTML=_prevDeltaHtml(key);
   }
+  // ── handwerk in de preview beschermen ───────────────────────────────────────────────────────────────
+  // Een met de hand aangepaste preview (p.handwerk) gaat nooit stil weg: elke actie die hem vervangt (opnieuw genereren,
+  // Sluiten) vraagt eerst; de aanpassingen staan daarnaast als concept in deze browser (mt_calc_prevconcept_<offerte>), zodat
+  // ook herladen of een gesloten preview ze terugbrengt. 'loading' is alleen echt als dít tabblad hem zelf zette (laadPagina):
+  // na herladen midden in een actie blijft er anders eeuwig een wachtscherm staan en kun je niets meer.
+  const PREV_LS='mt_calc_prevconcept_';
+  const _PREV_PAGINA=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  function _prevLaad(key,tekst){ const o=getOfferte(key); o._mbPreview=Object.assign(o._mbPreview||{},{loading:tekst,laadPagina:_PREV_PAGINA}); }
+  function _prevLaadt(key){ const p=(getOfferte(key)||{})._mbPreview; return !!(p&&p.loading&&p.laadPagina===_PREV_PAGINA); }
+  function _prevConceptBewaar(key){
+    try{ const p=(getOfferte(key)||{})._mbPreview;
+      if(p&&p.handwerk&&Array.isArray(p.regels)&&p.regels.length) localStorage.setItem(PREV_LS+basisKey(key),JSON.stringify({tijd:new Date().toISOString(),tekst:p.tekst||'',regels:p.regels,total:p.total||0}));
+    }catch(e){ console.warn('preview-concept bewaren mislukt:',e); }
+  }
+  function _prevConceptLees(key){ try{ const r=JSON.parse(localStorage.getItem(PREV_LS+basisKey(key))||'null'); return (r&&Array.isArray(r.regels)&&r.regels.length)?r:null; }catch(e){ return null; } }
+  function _prevConceptWis(key){ try{ localStorage.removeItem(PREV_LS+basisKey(key)); }catch(e){} }
+  // Handwerk bewaard + gevraagd vóór iets het vervangt. true = doorgaan, false = niets doen.
+  async function _prevBehoud(key,actie){
+    const p=(getOfferte(key)||{})._mbPreview;
+    if(!(p&&p.handwerk&&Array.isArray(p.regels)&&p.regels.length)) return true;
+    _prevConceptBewaar(key);
+    const k=await mtDialog.choose({title:'Je aanpassingen gaan verloren',
+      message:'Je hebt de preview met de hand aangepast. '+actie+' vervangt die aanpassingen.\n\nWat wil je doen?',
+      choices:[{label:'Mijn aanpassingen behouden',sublabel:'Er verandert niets.'},
+               {label:actie+' (mijn aanpassingen vervallen)',sublabel:'Een kopie blijft in deze browser bewaard; daarna kun je ze met "Eerdere aanpassingen terugzetten" terughalen.'}]});
+    return k===1;
+  }
+  window.calcPreviewHerstelConcept=function(key){
+    const c=_prevConceptLees(key); if(!c) return;
+    const o=getOfferte(key); o._mbPreview={tekst:c.tekst||'',regels:c.regels,total:c.total||0,handwerk:true};
+    saveCalc('off',{key:key}); _renderMbPrev(key);
+  };
+  window.calcPreviewWisConcept=async function(key){
+    if(!await mtDialog.confirm({title:'Eerdere aanpassingen weggooien',message:'De bewaarde kopie van je aanpassingen aan de preview wordt verwijderd. Dit kan niet ongedaan worden gemaakt.',okLabel:'Weggooien',danger:true})) return;
+    _prevConceptWis(key); _renderMbPrev(key);
+  };
+  function _prevHerstelBalk(key,p){
+    if(p&&p.handwerk) return '';
+    const c=_prevConceptLees(key); if(!c) return '';
+    const tijd=c.tijd?new Date(c.tijd).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+    return '<div class="calc-mbprev-herstel" style="margin:6px 0;padding:6px 10px;border:1px dashed var(--gold);border-radius:6px;font-size:12px">Je eerdere aanpassingen aan de preview staan nog bewaard'+(tijd?' ('+esc(tijd)+')':'')+'. '
+      +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewHerstelConcept('+jsArg(key)+')">Eerdere aanpassingen terugzetten</button> '
+      +'<button class="btn btn-xs btn-secondary" onclick="calcPreviewWisConcept('+jsArg(key)+')">Weggooien</button></div>';
+  }
+  const _PREV_ONDERBROKEN='<div style="margin:4px 0;padding:6px 10px;background:var(--gold-50,#FBF5E0);border-radius:6px;font-size:12px">⚠ Een vorige actie is onderbroken (de pagina werd herladen). Je preview staat hieronder nog zoals hij was. Zette je hem net door naar Moneybird? Kijk dan eerst in Moneybird of er al een concept staat.</div>';
   function _mbPreviewHtml(key){
+    const p=(getOfferte(key)||{})._mbPreview;
+    const bar=_prevHerstelBalk(key,p);
+    if(!p) return bar;
+    if(p.loading&&p.laadPagina===_PREV_PAGINA) return bar+_mbPreviewKern(key);
+    if(!(Array.isArray(p.regels)&&p.regels.length)&&!p.tekst) return bar;   // alleen een onderbroken wachtscherm: niets te tonen
+    return bar+(p.loading?_PREV_ONDERBROKEN:'')+_mbPreviewKern(key);
+  }
+  function _mbPreviewKern(key){
     const c=cid(key); const o=getOfferte(key); const p=o._mbPreview;
-    if(!p) return '';
-    if(p.loading) return '<div class="calc-mbprev"><div class="calc-mbprev-h">📄 Offerte-preview</div><div style="padding:10px;color:var(--text-dim)">⏳ '+esc(p.loading)+'</div></div>';
+    if(p.loading&&p.laadPagina===_PREV_PAGINA) return '<div class="calc-mbprev"><div class="calc-mbprev-h">📄 Offerte-preview</div><div style="padding:10px;color:var(--text-dim)">⏳ '+esc(p.loading)+'</div></div>';
     const regels=p.regels||[];
     const regelsH=regels.map((r,i)=>'<tr>'
       +'<td><input class="calc-inp calc-prev-desc" value="'+esc(r.description)+'" onchange="calcPrevSetRegel('+jsArg(key)+','+i+',\'description\',this.value)"></td>'
@@ -18697,25 +19009,26 @@ function activiteitOpen(force){
   }
   function _renderMbPrev(key){ const el=document.getElementById('calc-mbprev-'+cid(key)); if(el) el.innerHTML=_mbPreviewHtml(key); }
   // ── preview tweaken (regels/tekst handmatig bijschaven vóór Moneybird) ──────
-  window.calcPrevSetTekst=function(key,val){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.tekst=val; saveCalc('off',{key:key}); } };
+  // Elke handmatige aanpassing zet p.handwerk en bewaart meteen een lokaal concept (zie _prevBehoud).
+  window.calcPrevSetTekst=function(key,val){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.tekst=val; o._mbPreview.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); } };
   window.calcPrevSetRegel=function(key,idx,field,val){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels||!p.regels[idx]) return;
     if(field==='price'){ const g=getalInvoer(val); if(!g.ok){ calcStatus('⚠ '+g.melding,'fout',key); _renderMbPrev(key); return; } const x=n(val); p.regels[idx].price=(x==null?0:Math.max(0,x)); } else { p.regels[idx].description=val; }
-    saveCalc('off',{key:key}); _prevSumUpdate(key);
+    p.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); _prevSumUpdate(key);
   };
   window.calcPrevDelRegel=function(key,idx){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels) return;
     p.regels.splice(idx,1);
     if(!p.regels.length) p.regels.push({description:'Maatwerk conform offerte',price:Math.round((p.total||0)*100)/100});
-    saveCalc('off',{key:key}); _renderMbPrev(key);
+    p.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); _renderMbPrev(key);
   };
   window.calcPrevAddRegel=function(key){
     const o=getOfferte(key); const p=o._mbPreview; if(!p) return; p.regels=p.regels||[];
-    p.regels.push({description:'',price:0}); saveCalc('off',{key:key}); _renderMbPrev(key);
+    p.regels.push({description:'',price:0}); p.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); _renderMbPrev(key);
   };
   window.calcPrevHerschaal=function(key){
     const o=getOfferte(key); const p=o._mbPreview; if(!p||!p.regels||!p.regels.length) return;
-    p.regels=_normRegels(p.regels,p.total||0); saveCalc('off',{key:key}); _renderMbPrev(key);
+    p.regels=_normRegels(p.regels,p.total||0); p.handwerk=true; saveCalc('off',{key:key}); _prevConceptBewaar(key); _renderMbPrev(key);
   };
   // Knop "Offerte aanmaken in Moneybird" → bouwt EERST een preview die Bart kan bijsturen/hergenereren.
   window.calcMaakOfferteMB=async function(key){
@@ -18725,16 +19038,32 @@ function activiteitOpen(force){
     if(!ctx.mbId){ setSt('⚠ Geen Moneybird-klant gekoppeld. Koppel deze offerte aan een project mét klant (of maak eerst het project aan) — dan vul ik de klant automatisch in.',false); return; }
     const {total}=_offRegels(o);
     if(total<=0){ setSt('⚠ Niets om te offreren — vul eerst materiaal/uren in.',false); return; }
-    o._mbPreview={loading:'Larry stelt nette offerteregels op…'}; saveCalc('off',{key:key}); _renderMbPrev(key);
+    if(_prevLaadt(key)) return;   // er loopt al een generatie in dit tabblad
+    // Staat er al een preview met handwerk (tweede klik op "Preview voor Moneybird"), dan eerst vragen: nooit stil overschrijven.
+    if(!await _prevBehoud(key,'Opnieuw genereren')) return;
+    delete getOfferte(key)._mbPreview;   // een nieuwe preview bouwt altijd op uit de calculatie (zoals voorheen)
+    _prevLaad(key,'Larry stelt nette offerteregels op…');
+    saveCalc('off',{key:key}); _renderMbPrev(key);
     await _calcGenPreview(key); _renderMbPrev(key);
   };
-  window.calcPreviewRegen=async function(key){ const o=getOfferte(key); if(o._mbPreview){ o._mbPreview.loading='Hergenereren op basis van je aanpassingen…'; } else { o._mbPreview={loading:'Genereren…'}; } saveCalc('off',{key:key}); _renderMbPrev(key); await _calcGenPreview(key); _renderMbPrev(key); };
+  window.calcPreviewRegen=async function(key){
+    if(_prevLaadt(key)) return;
+    if(!await _prevBehoud(key,'Opnieuw genereren')) return;
+    const o=getOfferte(key); const hw=!!(o._mbPreview&&o._mbPreview.handwerk);
+    _prevLaad(key,o._mbPreview&&o._mbPreview.regels?'Hergenereren op basis van je aanpassingen…':'Genereren…');
+    if(hw){ const p=getOfferte(key)._mbPreview; delete p.regels; delete p.tekst; p.handwerk=false; }   // bewust weggegooid (bevestigd; kopie staat lokaal)
+    saveCalc('off',{key:key}); _renderMbPrev(key); await _calcGenPreview(key); _renderMbPrev(key);
+  };
   window.calcPreviewChat=async function(key){
-    const inp=document.getElementById('calc-prevchat-'+cid(key)); const instr=inp?inp.value.trim():''; if(!instr) return;
-    const o=getOfferte(key); o._mbPreview=Object.assign({},o._mbPreview||{},{loading:'Aanpassen: '+instr}); saveCalc('off',{key:key}); _renderMbPrev(key);
+    const inp=document.getElementById('calc-prevchat-'+cid(key)); const instr=inp?inp.value.trim():''; if(!instr||_prevLaadt(key)) return;
+    _prevConceptBewaar(key);   // Larry herschrijft de regels: je handwerk blijft als kopie terug te zetten
+    _prevLaad(key,'Aanpassen: '+instr); saveCalc('off',{key:key}); _renderMbPrev(key);
     await _calcGenPreview(key,instr); _renderMbPrev(key);
   };
-  window.calcPreviewSluit=function(key){ const o=getOfferte(key); delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key); };
+  window.calcPreviewSluit=async function(key){
+    if(!await _prevBehoud(key,'Sluiten')) return;
+    const o=getOfferte(key); delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
+  };
   // De ENIGE outward-actie: pas hier gaat de offerte echt als concept naar Moneybird.
   // Record vóór een Moneybird-actie direct lokaal + op SharePoint ('in-behandeling'), max 5 s wachten.
   const _calcOpslaanNu=key=>()=>{ if(saveCalc('off',{key:key})===false) return false; return Promise.race([syncNu('off').catch(()=>null),new Promise(r=>setTimeout(r,5000))]).then(()=>true); };
@@ -18747,7 +19076,7 @@ function activiteitOpen(force){
     const bev=await mbBevestig({wat:'CONCEPT-offerte aanmaken',contact:ctx.klant||('Moneybird-contact '+ctx.mbId),ref:ctx.ref,bedrag:som,gevaar:!!(opts&&opts.opnieuw),
       extra:(opts&&opts.opnieuw?_mbOpnieuwTekst:'')+'De offerte komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.'});
     if(!bev) return;
-    o._mbPreview.loading='Concept-offerte aanmaken in Moneybird…'; _renderMbPrev(key);
+    _prevLaad(key,'Concept-offerte aanmaken in Moneybird…'); _renderMbPrev(key);
     const details=[];
     if(p.tekst) details.push({description:p.tekst});                                  // begeleidende tekst als tekst-regel
     p.regels.forEach(r=>details.push({description:r.description,amount:'1 x',price:(+r.price).toFixed(2)}));
@@ -18757,7 +19086,7 @@ function activiteitOpen(force){
       if(res.controleren){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt(mbControleerHtml(res,'offerte',"calcPreviewDoorzetten('"+key+"',{opnieuw:true})"),false); return; }
       if(!res.ok) throw new Error(res.fout);
       const est=res.data;
-      o.mb_estimate_id=est.id; delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
+      o.mb_estimate_id=est.id; delete o._mbPreview; _prevConceptWis(key); saveCalc('off',{key:key}); _renderMbPrev(key);
       const url='https://moneybird.com/'+getAdmin()+'/estimates/'+est.id;
       setSt('✓ Concept-offerte aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);
       window.open(url,'_blank');
@@ -18773,7 +19102,7 @@ function activiteitOpen(force){
     const bev=await mbBevestig({wat:'CONCEPT-verkoopfactuur aanmaken (slaat de offerte-stap over)',contact:ctx.klant||('Moneybird-contact '+ctx.mbId),ref:ctx.ref,bedrag:som,gevaar:!!(opts&&opts.opnieuw),
       extra:(opts&&opts.opnieuw?_mbOpnieuwTekst:'')+'De factuur komt als CONCEPT in Moneybird; je controleert en verstuurt hem zelf.'});
     if(!bev) return;
-    o._mbPreview.loading='Concept-factuur aanmaken in Moneybird…'; _renderMbPrev(key);
+    _prevLaad(key,'Concept-factuur aanmaken in Moneybird…'); _renderMbPrev(key);
     const details=[];
     if(p.tekst) details.push({description:p.tekst});
     p.regels.forEach(r=>details.push({description:r.description,amount:'1 x',price:(+r.price).toFixed(2)}));
@@ -18783,7 +19112,7 @@ function activiteitOpen(force){
       if(res.controleren){ if(o._mbPreview)delete o._mbPreview.loading; _renderMbPrev(key); setSt(mbControleerHtml(res,'factuur',"calcPreviewNaarFactuur('"+key+"',{opnieuw:true})"),false); return; }
       if(!res.ok) throw new Error(res.fout);
       const inv=res.data;
-      o.mb_invoice_id=inv.id; delete o._mbPreview; saveCalc('off',{key:key}); _renderMbPrev(key);
+      o.mb_invoice_id=inv.id; delete o._mbPreview; _prevConceptWis(key); saveCalc('off',{key:key}); _renderMbPrev(key);
       const url='https://moneybird.com/'+getAdmin()+'/sales_invoices/'+inv.id;
       setSt('✓ Concept-factuur aangemaakt — <a href="'+url+'" target="_blank" style="color:var(--gold)">open in Moneybird ↗</a>',true);
       window.open(url,'_blank');
@@ -19064,14 +19393,25 @@ function activiteitOpen(force){
   window.calcDelUur=function(key,rid){const o=getOfferte(key);o.uren=o.uren.filter(u=>u.id!==rid);saveCalc('off',{key:key});renderOfferteCalc(key);};
 
   // standaardwaarden (leeg rekenblad)
-  window.calcSetDefMarge=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));};
-  window.calcSetDefMargeOndergrens=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));};
+  window.calcSetDefMarge=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}CALC.defaults.materiaal_marge=(n(val)==null?1.5:n(val));_defConceptBewaar();};
+  window.calcSetDefMargeOndergrens=function(val){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}const x=n(val);CALC.defaults.marge_ondergrens=(x==null?0.15:(x>1?x/100:x));_defConceptBewaar();};
   // Instellingen ▸ Uurtarieven: standaardregels op het standaardtarief zetten (alleen na bevestiging daar).
-  window.calcStdTarievenGelijk=async function(std){ if(!(window.MTRol&&MTRol.magGeld&&MTRol.me&&MTRol.magGeld('wijzigen'))) throw new Error('Je mag de uurtarieven niet wijzigen'); await hydrateCalc(); const n=MTPlanning.defaultsGelijkTrekken(CALC.defaults,std); if(n) saveCalc('def',{direct:true}); return n; };
-  window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;if(field!=='omschrijving'){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}}u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));};
-  window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:stdTarief(),marge:2});renderOfferteCalc(key);};
-  window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);renderOfferteCalc(key);};
-  window.calcSaveDefaults=function(key){saveCalc('def');flash(key,'✓ opgeslagen als standaard — nieuwe offertes starten hiermee',true);};
+  window.calcStdTarievenGelijk=async function(std){ if(!(window.MTRol&&MTRol.magGeld&&MTRol.me&&MTRol.magGeld('wijzigen'))) throw new Error('Je mag de uurtarieven niet wijzigen'); await hydrateCalc(); const n=MTPlanning.defaultsGelijkTrekken(CALC.defaults,std); if(n) await window.calcSaveDefaults(); return n; };
+  window.calcSetDefUur=function(idx,field,val){const u=CALC.defaults.uren[idx];if(!u)return;if(field!=='omschrijving'){const g=getalInvoer(val);if(!g.ok){calcStatus('⚠ '+g.melding,'fout');return;}}u[field]=(field==='omschrijving')?val:(n(val)==null?'':n(val));_defConceptBewaar();};
+  window.calcAddDefUur=function(key){CALC.defaults.uren.push({omschrijving:'',uurtarief:stdTarief(),marge:2});_defConceptBewaar();renderOfferteCalc(key);};
+  window.calcDelDefUur=function(key,idx){CALC.defaults.uren.splice(idx,1);_defConceptBewaar();renderOfferteCalc(key);};
+  // Opslaan als standaard: stempel, lokaal, dan SharePoint (samenvoeger + ETag). De status zegt eerlijk wat er gebeurd is.
+  window.calcSaveDefaults=async function(key){
+    if(_defStaat.t==='bezig') return {ok:false,reden:'er loopt al een opslag'};
+    CALC.defaults._gewijzigd=new Date().toISOString();
+    if(!lsSave(LS.def,CALC.defaults)){
+      _defStatusZet({t:'open'});
+      calcStatus('⚠ Opslaan mislukt — browseropslag vol of geblokkeerd. Je wijzigingen staan nog in het scherm.','fout',key||undefined);
+      return {ok:false,reden:'browseropslag vol of geblokkeerd'};
+    }
+    _defLsZet(DEF_VUIL,'1');
+    return _defSchrijf(key);
+  };
 
   // ---- van project naar calculatie (K-2): zoeken zonder iets aan te maken -----------------------------
   // Een calculatie kan onder de projectcode staan, maar ook onder een losse sleutel (OFF-…, uit de Inbox of via "Koppel aan
@@ -19186,7 +19526,7 @@ function activiteitOpen(force){
   // Vanuit een geopende mail (inbox) → nieuwe offerte-calculatie met die mail als context.
   // Klant wordt voor-ingevuld als de mail al aan een project gekoppeld is (of registry-match).
   window.inboxMaakOfferte=async function(){
-    if(typeof _inbox==='undefined' || !_inbox.cur){ alert('Open eerst een mail.'); return; }
+    if(typeof _inbox==='undefined' || !_inbox.cur){ await mtDialog.alert({title:'Offerte maken',message:'Open eerst een mail.'}); return; }
     const m=_inbox.cur;
     await hydrateCalc();
     const key='OFF-'+Date.now().toString(36).toUpperCase();
@@ -19303,7 +19643,9 @@ function activiteitOpen(force){
       <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center">
         <button class="btn btn-xs btn-secondary" onclick="calcAddDefUur(${jsArg(key)})">+ vaste regel</button>
         <button class="btn btn-xs btn-gold" onclick="calcSaveDefaults(${jsArg(key)})">Opslaan als standaard</button>
+        <span class="calc-defstatus" style="font-size:11px;color:${esc(_defStatusTekst().kleur)}">${esc(_defStatusTekst().tekst)}</span>
       </div>
+      <div class="calc-defconflict"></div>
       <p style="font-size:10px;color:var(--text-faint);margin:0.4rem 0 0">Nieuwe offertes starten met deze regels + ${esc(LEGE_MAT_REGELS)} lege materiaalregels. Bestaande offertes wijzigen niet.</p>
     </details>`;
   }
@@ -19732,7 +20074,7 @@ function activiteitOpen(force){
       ${defaultsPaneel(key)}
       <p style="font-size:10px;color:var(--text-faint);margin:0.5rem 0 0">Inkoopprijzen/marges staan privé op SharePoint — nooit in de publieke repo. "🔍 prijs" zoekt eerst je <b>echte inkoop</b> in voorraad/facturen (Drimensa, Ostermann, …) en zet die als inkoopprijs. Lukt dat niet, dan toont het hooguit een <span style="color:var(--gold)">indicatieve VW-richtprijs</span> (⚠ géén echte inkoop) of meldt het dat je handmatig moet zoeken. Leveranciers hebben geen open prijs-API (onderzoek 28-6) — de factuur-historie is de bron.</p>
     </div>`;
-    _opslagTeken(key); _markeerGetallen(host);
+    _opslagTeken(key); _markeerGetallen(host); _defConflictTeken(host,key);
   };
   // Een regel die intussen elders is verwijderd terwijl jij erin werkte: terugzetten uit wat er op je scherm staat
   // (je invoer gaat dus niet verloren) en dat duidelijk melden. Lukt dat niet, dan in elk geval eerlijk melden.

@@ -477,8 +477,25 @@
       return schrijf();
     }
 
+    // Een willekeurige oudere versie van één offerte terugzetten (uit een herstelpunt, een bewaarde kopie of de SharePoint-versies).
+    // Alleen deze offerte verandert (de rest van de lijst blijft staan) en gaat via dezelfde schrijfrij als elke wijziging: vers lezen,
+    // per offerte samenvoegen, ETag. De huidige stand wordt eerst als kopie bewaard; ongedaanId is die kopie (zetTerug(k, ongedaanId)).
+    function zetTerugVan(k, offerte, info) {
+      const live = cfg.offertes() || {}, o = live[k];
+      if (!o || !isObj(offerte)) return Promise.resolve({ ok: false, reden: 'versie niet gevonden' });
+      const nieuw = kloon(offerte); delete nieuw._conflicten; delete nieuw._verdrongen;
+      nieuw._teruggezet = iso(); nieuw._gewijzigd = iso();
+      if (o.mail_context && !nieuw.mail_context) nieuw.mail_context = o.mail_context;
+      const voor = Object.assign(kopie(o, { bron: 'deze pc', reden: 'voor terugzetten', tijd: iso(), door: cfg.door ? cfg.door() : '' }), { gezien: true });
+      nieuw._conflicten = lijstenSamen(Array.isArray(o._conflicten) ? o._conflicten : [], [voor]);
+      if (o._verdrongen) nieuw._verdrongen = o._verdrongen;
+      live[k] = nieuw; markeer(k); tik(cfg.bewaarOffertes);
+      const h = hash(nieuw);
+      return schrijf().then(r => Object.assign({}, r, { ongedaanId: voor.id, hash: h, bron: (info && info.bron) || '' }));
+    }
+
     return {
-      laad, markeer, schrijf, status: statusVan, conflicten: conflictenVan, gezien: gezienMarkeer, zetTerug,
+      laad, markeer, schrijf, status: statusVan, conflicten: conflictenVan, gezien: gezienMarkeer, zetTerug, zetTerugVan,
       conflictOpen: k => conflictenVan(k).some(c => !c.gezien),
       heeftOngedeeld: () => S.bezig || Object.keys(S.vuil).length > 0 || S.teSchrijven.size > 0,
       heeftOpenstaand: () => !!S.dicht || !!S.fout || Object.keys(S.vuil).length > 0 || S.teSchrijven.size > 0,
@@ -537,7 +554,36 @@
   // Zoals de calculatie een getal bewaart: Nederlandse schrijfwijze zonder duizendtallen ("1234,56"); ook oudere versies lezen dat goed.
   const getalTekst = x => String(x).replace('.', ',');
 
-  const API = { samen, maak, hash, canon, gevuld, instorting, lijstenSamen, kopie, getal, getalTekst, MAX_KOPIEEN, MAX_BYTES };
+  /* ── Verschil tussen de huidige offerte en een oudere versie ─────────────────────
+   * Per regel (op id, anders op volgorde): wat staat er nu anders dan in de versie. Alleen inhoud; stempels en kopieën tellen niet.
+   * → [{ soort: 'materiaal'|'uren'|'kop', naam, veld, nu, versie, type: 'gewijzigd'|'alleen-nu'|'alleen-versie' }] */
+  const VELDEN = { materiaal: ['omschrijving', 'artikel', 'aantal', 'inkoop_stuk', 'marge'], uren: ['omschrijving', 'uren', 'uurtarief', 'marge'] };
+  const waarde = v => (v === undefined || v === null) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+  function verschil(nu, versie) {
+    const uit = [];
+    nu = isObj(nu) ? nu : {}; versie = isObj(versie) ? versie : {};
+    const kop = o => { const r = { titel: o.titel, project_code: o.project_code }; if (isObj(o.meta)) Object.keys(o.meta).forEach(k => { r['meta.' + k] = o.meta[k]; }); return r; };
+    const kn = kop(nu), kv = kop(versie);
+    new Set([...Object.keys(kn), ...Object.keys(kv)]).forEach(v => {
+      if (waarde(kn[v]) !== waarde(kv[v])) uit.push({ soort: 'kop', naam: v, veld: v, nu: waarde(kn[v]), versie: waarde(kv[v]), type: 'gewijzigd' });
+    });
+    ['materiaal', 'uren'].forEach(soort => {
+      const ln = Array.isArray(nu[soort]) ? nu[soort] : [], lv = Array.isArray(versie[soort]) ? versie[soort] : [];
+      const sl = (r, i) => (r && r.id) ? String(r.id) : '#' + i;
+      const mv = new Map(lv.map((r, i) => [sl(r, i), r])), mn = new Map(ln.map((r, i) => [sl(r, i), r]));
+      const leeg = r => !VELDEN[soort].some(v => waarde(r && r[v]) !== '');
+      const naam = (r, w) => String((r && r.omschrijving) || '').trim() || String((w && w.omschrijving) || '').trim() || '(zonder omschrijving)';
+      mn.forEach((r, k) => {
+        if (!mv.has(k)) { if (!leeg(r)) uit.push({ soort, naam: naam(r), veld: '', nu: '', versie: '', type: 'alleen-nu' }); return; }
+        const w = mv.get(k);
+        VELDEN[soort].forEach(v => { if (waarde(r && r[v]) !== waarde(w && w[v])) uit.push({ soort, naam: naam(r, w), veld: v, nu: waarde(r && r[v]), versie: waarde(w && w[v]), type: 'gewijzigd' }); });
+      });
+      mv.forEach((r, k) => { if (!mn.has(k) && !leeg(r)) uit.push({ soort, naam: naam(r), veld: '', nu: '', versie: '', type: 'alleen-versie' }); });
+    });
+    return uit;
+  }
+
+  const API = { samen, maak, hash, verschil, canon, gevuld, instorting, lijstenSamen, kopie, getal, getalTekst, MAX_KOPIEEN, MAX_BYTES };
   root.MTCalcOpslag = API;
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof window !== 'undefined' ? window : globalThis);
