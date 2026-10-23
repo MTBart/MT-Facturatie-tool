@@ -62,6 +62,7 @@
 <script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
 <script src="mt-objectpaneel.js?v=2026-10-23a"></script>
 <script src="mt-taakpaneel.js?v=2026-10-23f"></script>
+<script src="mt-taaktabel.js?v=2026-10-23g"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
 <script src="mt-bord.js?v=2026-10-23f"></script>
 <script src="mt-tijdlijn.js?v=2026-10-23f"></script>
@@ -3936,7 +3937,17 @@ try{ MTTaakPaneel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM, nu
   verwijder:(c,i)=>projTaakVerwijder(c,i), togglSync:(c,i)=>projTaakTogglSync(c,i), conflict:(c,i)=>projTaakConflict(c,i), neemOver:(c,i)=>voorstelTaakOvernemen(c,i), wijsAf:(c,i)=>voorstelTaakAfwijzen(c,i),
   bordKlik:true,
   naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _ptHertekenen(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Taakpaneel init:',e); }
-// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
+// De takentabel van Project ▸ Planning bewerken (planning brok P2p, mt-taaktabel.js): afvinken, statuskiezer en inline velden via DEZELFDE route als het taakpaneel (tpWijzig/tpWijzigHerstel, datums via de sleeproute), met Ongedaan maken.
+// Toggl wordt hier nooit aangeraakt: de bestaande knoppen in de rij blijven de enige route.
+try{ MTTaakTabel.init({ doc:document, planning:MTPlanning, team:()=>MT_TEAM,
+  taken:()=>projTakenAll(), toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; },
+  mag:{ alles:()=>rolMag(ROL_TAAK_ALLES)&&projTakenKlaar(), status:()=>rolMag(ROL_TAAK_STATUS)&&projTakenKlaar(), plannen:()=>capMagSlepen()&&rolMag(ROL_TAAK_ALLES)&&projTakenKlaar() },
+  wijzig:(s,o)=>tpWijzig(s,o), wijzigHerstel:(w,o)=>tpWijzigHerstel(w,o), datums:spec=>MTCapaciteitNieuw.drop(spec),
+  bestel:()=>_blActief(), bestelVers:async()=>{ await _blVerseLees(); return _blActief(); }, projectId:code=>(projVind(code)||{}).project_id||'',
+  wachtInfo:(code,t)=>{ const w=MTPlanning.taakWacht(t,projTaken(code),projAfhRuw()[code]||[]); return { wacht:!!w.wacht, tekst:w.wacht?MTPlanning.wachtOpTekst(w,_p2D):'' }; },
+  journaal:()=>{ try{ const j=JSON.parse(localStorage.getItem('mt_taken_journaal')||'[]'); return Array.isArray(j)?j:[]; }catch(e){ return []; } },
+  leesUren:x=>MTTaakPaneel.leesUren(x),
+  naWijziging:()=>{ try{ const a=document.getElementById('tab-agenda'); if(a&&a.classList.contains('active')) renderAgenda(); }catch(e){} _ptHertekenen(); try{ if(window.MTVandaagDesk) MTVandaagDesk.teken(); }catch(e){} } }); }catch(e){ console.warn('Takentabel init:',e); }// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
 try{ const _pbDag=(slug,datum)=>({tab:'agenda',weergave:'capaciteit',planfilter:Object.assign({van:datum,zoom:'dag'},slug?{persoon:slug}:{})});
   MTPlanblokPaneel.init({ planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), blokken:()=>agPlanActief(),
   blokkenKlaar:()=>{ if(_planblokken===null&&!window._pbLaadt){ window._pbLaadt=true; try{ agPlanLoad().catch(()=>{}); }catch(e){} } return _planblokken!==null; },
@@ -6689,7 +6700,7 @@ function _projSectieRender(proj){
   }
   if(_projSectie==='productie'){ try{ projBestelTeken(proj.code); }catch(e){ console.warn('te bestellen:',e); } }
   _p2RolPas(pan);   // ronde 8: knoppen en velden die de rol niet toestaat
-  if(_projSectie==='planning'){ try{ MTPlanFilter.monteerProject(document.getElementById('pf-proj-'+String(proj.code).replace(/-/g,'')),'pt-tbl-'+String(proj.code).replace(/-/g,'')); }catch(e){ console.warn('Planningsfilter:',e); } planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
+  if(_projSectie==='planning'){ try{ MTPlanFilter.monteerProject(document.getElementById('pf-proj-'+String(proj.code).replace(/-/g,'')),'pt-tbl-'+String(proj.code).replace(/-/g,'')); }catch(e){ console.warn('Planningsfilter:',e); } planVandaagLijnen(pan); _ptOnafgerondTeken(proj.code); _ptVerweesdKnopTeken(pan); _voorstelTekenTaken(proj.code); try{ MTTaakPaneel.verrijkTaken(proj.code,pan); }catch(e){} try{ MTTaakTabel.verrijk(proj.code,pan); }catch(e){ console.warn('Takentabel:',e); } }   // de taaknaam opent het taakpaneel   // ronde 8: een Toggl-actie die niet is afgerond; de export van een verweesde kopie
   if(_projSectie==='calculatie'){
     nacalcLaadOfferte(proj.code,c.effectiveMb);
     if(typeof window.calcProjectTonen==='function') window.calcProjectTonen(proj); else if(typeof renderOfferteCalc==='function') renderOfferteCalc(proj.code);
