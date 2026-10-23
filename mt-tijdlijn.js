@@ -79,13 +79,14 @@
           if (s) { eerste = Math.min(eerste, dnr(s)); laatste = Math.max(laatste, dnr(e)); }
         });
       });
-      // afhankelijkheidslijnen: alleen einde-naar-begin tussen taken die in beeld staan en datums hebben
+      // afhankelijkheidslijnen tussen taken die in beeld staan en de datums hebben die het type nodig heeft (EB: eind en start, BB: start en start, EE: eind en eind, BE: start en eind)
       try {
         P.depsEffectief(sel, deps).forEach(e => {
           if (e.inactief) return;
           const a = rijVan.get(String(e.van)), b = rijVan.get(String(e.naar)); if (a === undefined || b === undefined) return;
-          if (!rijen[a].eind || !rijen[b].start) return;
-          lijnen.push({ van: a, naar: b, lag: e.lag || 0, kritiek: rijen[a].kritiek && rijen[b].kritiek });
+          const ty = e.type === 'SS' || e.type === 'FF' || e.type === 'SF' ? e.type : 'FS';
+          if (!(ty === 'SS' || ty === 'SF' ? rijen[a].start : rijen[a].eind) || !(ty === 'FF' || ty === 'SF' ? rijen[b].eind : rijen[b].start)) return;
+          lijnen.push(Object.assign({ van: a, naar: b, lag: e.lag || 0, kritiek: rijen[a].kritiek && rijen[b].kritiek }, ty === 'FS' ? {} : { type: ty }));
         });
       } catch (e) {}
     });
@@ -97,10 +98,14 @@
     const a = maandag(Math.min(m.eerste ? dnr(m.eerste) : nu, nu - 14)), b = Math.max(m.laatste ? dnr(m.laatste) : nu, nu + 28) + 7;
     return { van: a, dagen: b - a + 1, px, breedte: (b - a + 1) * px, off: off || 0, x: ymd => (off || 0) + (dnr(ymd) - a) * px };
   };
-  // Elke lijn: de coördinaten (in de tijdlijnruimte) van het einde van de voorganger naar het begin van de opvolger
-  Tl.lijnPad = function (as, a, b, hoogteRij) {
-    const px = as.px, x1 = as.x(a.eind) + px, y1 = a.i * hoogteRij + hoogteRij / 2, x2 = as.x(b.start), y2 = b.i * hoogteRij + hoogteRij / 2, xm = Math.max(x1 + 4, Math.min(x2 - 6, x1 + 8));
-    return { x1, y1, x2, y2, d: 'M' + x1 + ',' + y1 + ' H' + xm + ' V' + y2 + ' H' + x2, pijl: [x2, y2] };
+  // Elke lijn: de coördinaten (in de tijdlijnruimte) van het uiteinde van de voorganger naar het uiteinde van de opvolger dat het type bedoelt: EB (standaard) einde naar begin, BB begin naar begin,
+  // EE einde naar einde, BE begin naar einde. `pijl`: de punt van de pijl bij de opvolger; `links`: waar de pijlpunt naartoe wijst (naar links als de lijn van rechts komt).
+  Tl.lijnPad = function (as, a, b, hoogteRij, type) {
+    const px = as.px, ty = type === 'SS' || type === 'FF' || type === 'SF' ? type : 'FS';
+    const x1 = ty === 'SS' || ty === 'SF' ? as.x(a.start) : as.x(a.eind) + px, y1 = a.i * hoogteRij + hoogteRij / 2, x2 = ty === 'FF' || ty === 'SF' ? as.x(b.eind) + px : as.x(b.start), y2 = b.i * hoogteRij + hoogteRij / 2;
+    if (ty === 'FS') { const xm = Math.max(x1 + 4, Math.min(x2 - 6, x1 + 8)); return { x1, y1, x2, y2, d: 'M' + x1 + ',' + y1 + ' H' + xm + ' V' + y2 + ' H' + x2, pijl: [x2, y2], links: false }; }
+    const xm = ty === 'SS' ? Math.min(x1, x2) - 8 : ty === 'FF' ? Math.max(x1, x2) + 8 : x1 - 8;
+    return { x1, y1, x2, y2, d: 'M' + x1 + ',' + y1 + ' H' + xm + ' V' + y2 + ' H' + x2, pijl: [x2, y2], links: x2 < xm };
   };
 
   // ── tekenen ──
@@ -194,10 +199,12 @@
     // de lijnen van de rijen in beeld (beide uiteinden tellen mee, zodat een lijn naar buiten het beeld doorloopt)
     m.lijnen.forEach(l => {
       if (Math.max(l.van, l.naar) < eerste || Math.min(l.van, l.naar) > laatst) return;
-      const a = m.rijen[l.van], b = m.rijen[l.naar], p = Tl.lijnPad(as, a, b, RH), kl = l.kritiek ? '#b3261e' : '#646a64';
+      const a = m.rijen[l.van], b = m.rijen[l.naar], p = Tl.lijnPad(as, a, b, RH, l.type), kl = l.kritiek ? '#b3261e' : '#646a64';
       const pad = svg('path', { d: p.d, fill: 'none', stroke: kl, 'stroke-width': l.kritiek ? '2' : '1.2', 'stroke-linejoin': 'round' });
+      if (l.type) { const ti = svg('title'); ti.textContent = P.DEP_TYPE_NAMEN[l.type] + (l.lag ? ', ' + (l.lag > 0 ? '+' : '') + l.lag + ' d' : ''); pad.appendChild(ti); }
       lijnenEl.appendChild(pad);
-      const [X, py] = p.pijl; lijnenEl.appendChild(svg('path', { d: 'M' + X + ',' + py + ' l-6,-3.5 v7 z', fill: kl }));
+      const [X, py] = p.pijl; lijnenEl.appendChild(svg('path', { d: p.links ? 'M' + X + ',' + py + ' l6,-3.5 v7 z' : 'M' + X + ',' + py + ' l-6,-3.5 v7 z', fill: kl }));
+      if (l.type) { const tk = svg('text', { x: String(p.links ? X + 9 : X - 9 - 12), y: String(py - 5), 'font-size': '9', 'font-family': 'monospace', fill: kl, class: 'tl-lijntype' }); tk.textContent = P.DEP_TYPEN[l.type]; lijnenEl.appendChild(tk); }   // het type bij de pijl (alleen als het niet EB is)
     });
   }
 

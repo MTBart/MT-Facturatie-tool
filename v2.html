@@ -55,17 +55,17 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planfilter.js?v=2026-10-23j"></script>
-<script src="mt-planning.js?v=2026-10-23j"></script>
+<script src="mt-planning.js?v=2026-10-23l"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-23i"></script>
+<script src="mt-planverplaats.js?v=2026-10-23l"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
-<script src="mt-objectpaneel.js?v=2026-10-23j"></script>
-<script src="mt-taakpaneel.js?v=2026-10-23i"></script>
+<script src="mt-objectpaneel.js?v=2026-10-23l"></script>
+<script src="mt-taakpaneel.js?v=2026-10-23m"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
 <script src="mt-planinrichting.js?v=2026-10-23g"></script>
 <script src="mt-bord.js?v=2026-10-23k"></script>
-<script src="mt-tijdlijn.js?v=2026-10-23f"></script>
+<script src="mt-tijdlijn.js?v=2026-10-23l"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -576,6 +576,7 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .afh-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:20px;padding:1px 4px 1px 9px;font-size:11.5px;margin:2px 4px 2px 0;background:var(--surface-sunken)}
 .afh-chip.afh-uit{opacity:.55;text-decoration:line-through}
 .afh-lag{width:46px;font:11px var(--mono);padding:1px 3px;text-align:right}
+.afh-type,.afh-soort{width:auto;font:11px var(--mono);padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:var(--surface)}.afh-typetekst{font:600 11px var(--mono)}.afh-lag{width:54px}
 .afh-weg{border:0;background:transparent;cursor:pointer;color:var(--text-faint);font-size:14px;line-height:1;padding:0 3px}
 .afh-datum{font-size:12px;padding:2px 4px;width:132px}
 .afh-tabel td{vertical-align:top}
@@ -3091,10 +3092,10 @@ function _projSamen(lokaal,spData){
 //   - nog niets bekend (eerste vraag mislukt) → geen blokkade (fail-open: anders legt een storing het werk stil);
 //   - eerder al "te oud" gebleken → blijft blokkeren tot herladen (fail-closed: een storing heft de blokkade niet op).
 // Een geslaagd antwoord vervangt de kennis; een blokkade die al getoond is (blockedKeys) geldt tot herladen.
-const PROJ_SCHEMA=9;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
+const PROJ_SCHEMA=10;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
 // De schema-controle geldt voor élke SharePoint-sleutel waarvan het formaat per schema verandert: de projecten én de projecttaken
 // (een oudere tab zou de taken zonder stempels/tombstones terugschrijven).
-const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2','mt_planblokken','mt_bestellijst_v2'];   // 9 (P6: checklist per punt samenvoegen, poorten): een oudere app schrijft de projecttaken niet meer zodra de drempel op 9 staat; 8 (P3b: taken met fase_id; planning-inrichting); 7 (P5: bestelregels met taak_id, verwacht_op en verwacht_bron: een oudere app schrijft de bestellijst niet meer zodra de drempel op 7 staat); 6 (F1): ook de planblokken en de bestellijst: een te oude app schrijft ze niet meer zodra de drempel op 6 staat
+const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2','mt_planblokken','mt_bestellijst_v2','mt_project_afhank'];   // 10 (F2a: afhankelijkheden met type EB/BB/EE/BE, voorsprong en levertijd): een oudere app schrijft de afhankelijkheden en taken niet meer zodra de drempel op 10 staat; 9 (P6: checklist per punt samenvoegen, poorten): een oudere app schrijft de projecttaken niet meer zodra de drempel op 9 staat; 8 (P3b: taken met fase_id; planning-inrichting); 7 (P5: bestelregels met taak_id, verwacht_op en verwacht_bron: een oudere app schrijft de bestellijst niet meer zodra de drempel op 7 staat); 6 (F1): ook de planblokken en de bestellijst: een te oude app schrijft ze niet meer zodra de drempel op 6 staat
 function projSchemaSleutel(k){ return _PROJ_SCHEMA_SLEUTELS.includes(k); }
 let _projSchemaMin=null, _projSchemaTijd=0;
 function projSchemaGeblokkeerd(){ return _projSchemaMin!=null&&_projSchemaMin>PROJ_SCHEMA; }
@@ -8209,7 +8210,9 @@ function _p2AfhBouw(code){
     const voor=eff.filter(e=>e.naar===t.id);
     const chips=voor.map(e=>_p2El('span',{class:'afh-chip'+(e.inactief?' afh-uit':''),title:e.bron==='oud'?'Uit de oude taaklijst: zet eerst de oude koppelingen om om dit aan te passen':'Opvolger start pas na afloop van de voorganger plus de wachttijd'},
       naam(e.van),
-      e.bron==='dep'&&mag?_p2El('input',{type:'number',min:'0',max:'365',step:'1',class:'afh-lag',waarde:e.lag,title:'Wachttijd na afloop van de voorganger, in werkdagen (bv. de levertijd)','aria-label':'Wachttijd in werkdagen',wijzig:ev=>projAfhLag(code,e.id,ev.target.value)}):(e.lag?(' +'+e.lag+' d'):null),
+      e.bron==='dep'&&mag?_p2Sel(MTPlanning.afhTypeOpties(),e.type||'FS',v=>projAfhVeld(code,e.id,'type',v),{class:'afh-type','aria-label':'Type van de koppeling met '+naam(e.van),title:'EB: einde-naar-begin, BB: begin-naar-begin, EE: einde-naar-einde, BE: begin-naar-einde'}):(e.type&&e.type!=='FS'?_p2El('span',{class:'afh-typetekst',tekst:' '+MTPlanning.DEP_TYPEN[e.type]}):null),
+      e.bron==='dep'&&mag?_p2El('input',{type:'number',min:'-365',max:'365',step:'1',class:'afh-lag',waarde:e.lag,title:'Wachttijd in dagen na de voorganger (bv. de levertijd); negatief is een voorsprong','aria-label':'Wachttijd in dagen',wijzig:ev=>projAfhLag(code,e.id,ev.target.value)}):(e.lag?(' '+(e.lag>0?'+':'')+e.lag+' d'):null),
+      e.bron==='dep'&&mag?_p2Sel([['proces','werkdagen'],['levertijd','kalenderdagen (levertijd)']],e.lagSoort||'proces',v=>projAfhVeld(code,e.id,'lag_soort',v),{class:'afh-soort','aria-label':'Soort wachttijd met '+naam(e.van),title:'Werkdagen (procestijd) of kalenderdagen (levertijd van materiaal)'}):null,
       e.bron==='dep'&&mag?_p2El('button',{type:'button',class:'afh-weg',title:'Afhankelijkheid weghalen','aria-label':'Afhankelijkheid weghalen',klik:()=>projAfhWeg(code,e.id)},'×'):null));
     const opties=[['','+ afhankelijk van…']].concat(taken.filter(o=>o.id!==t.id&&!voor.some(e=>e.van===o.id)).map(o=>{ const c=taken.length>80?{ok:true}:MTPlanning.depControle(taken,ruw,{van:o.id,naar:t.id}); return [o.id,o.naam+(c.ok?'':' (maakt een kring)'),!c.ok]; }));   // bij heel veel taken wordt de kring pas bij het kiezen gecontroleerd
     const datum=(veld,waarde)=>_p2El('input',{type:'date',class:'afh-datum',waarde:waarde||'',disabled:mag?null:'disabled','aria-label':(veld==='start'?'Start':'Eind')+' van '+t.naam,wijzig:ev=>projAfhDatum(code,t.id,veld,ev.target.value)});
@@ -8240,8 +8243,16 @@ function projAfhVoeg(code,naarId,vanId){
 function projAfhLag(code,depId,waarde){
   if(!_p2Mag()) return;
   const arr=projAfhActief(code).map(d=>Object.assign({},d)), d=arr.find(x=>x.id===depId); if(!d) return;
-  d.lag_dagen=Math.max(0,Math.min(365,Math.round(parseFloat(String(waarde).replace(',','.'))||0)));
-  projAfhZet(code,arr); _p2Na(code);
+  const r=MTPlanning.depWijzig(arr,depId,{lag_dagen:waarde});   // type en soort blijven; een voorsprong (negatief) mag bij procestijd
+  if(!r.ok){ mtDialog.alert({title:'Wachttijd',message:r.fout}); _p2Na(code); return; }
+  projAfhZet(code,arr.map(x=>x.id===depId?r.dep:x)); _p2Na(code);
+}
+// Type of soort van een afhankelijkheid in de projecttabel wijzigen (het paar blijft, dus nooit een nieuwe kring)
+function projAfhVeld(code,depId,veld,waarde){
+  if(!_p2Mag()) return;
+  const arr=projAfhActief(code).map(d=>Object.assign({},d)), r=MTPlanning.depWijzig(arr,depId,{[veld]:waarde});
+  if(!r.ok){ mtDialog.alert({title:'Afhankelijkheid',message:r.fout}); _p2Na(code); return; }
+  projAfhZet(code,arr.map(x=>x.id===depId?r.dep:x)); _p2Na(code);
 }
 async function projAfhWeg(code,depId){
   if(!_p2Mag()) return;
@@ -16122,7 +16133,7 @@ async function _capOpvolgersVraag(v){
 function _capNaamVan(door){ const d=String(door||'').toLowerCase(); if(!d) return ''; const m=(MT_TEAM||[]).find(x=>x&&[x.email,x.slug,x.naam].some(v=>String(v||'').toLowerCase()===d)); return m?m.naam:''; }
 function _capTaakOpties(code,opt){
   const pr=projVind(code);
-  return { traag:opt&&opt.traag, naamVan:_capNaamVan, sp:{read:n=>_SP.read(n),write:(n,d,m)=>_SP.write(n,d,m)}, lokaal:()=>localStorage.getItem('mt_project_taken_v2'), ctx:()=>_capTaakCtx(code), nu:()=>Date.now(), door:_spWie(), dev:_spDev(), projectId:(pr&&pr.project_id)||'', mag:s=>rolMag(s),
+  return { traag:opt&&opt.traag, naamVan:_capNaamVan, sp:{read:n=>_SP.read(n),write:(n,d,m)=>_SP.write(n,d,m)}, lokaal:()=>localStorage.getItem('mt_project_taken_v2'), lokaalAfh:()=>localStorage.getItem('mt_project_afhank'), ctx:()=>_capTaakCtx(code), nu:()=>Date.now(), door:_spWie(), dev:_spDev(), projectId:(pr&&pr.project_id)||'', mag:s=>rolMag(s),
     verschuif:(taken,w)=>MTPlanning.verschuifVoorstel(taken,projAfhRuw()[code]||[],w,{modus:MTPlanning.depModus(pr),vrij:_p2Vrij()}), vraagOpvolgers:v=>_capOpvolgersVraag(v) };
 }
 function _capTaakKlaar(r){
@@ -16148,6 +16159,7 @@ async function capTaakHerstel(w,opt){
 async function tpWijzig(spec,opt){
   if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
   const r=_capTaakKlaar(await MTPlanVerplaats.taakWijzig(spec,_capTaakOpties(spec&&spec.code,opt)));
+  if(r&&r.afhData){ try{ _lsSet('mt_project_afhank',JSON.stringify(r.afhData)); }catch(e){} try{ _p2Na(spec.code); }catch(e){} }   // F2a: de afhankelijkheden hebben een eigen bestand (afhData, niet data)
   if(r&&r.ok&&r.oudTaak) _ptJournaal('paneel: '+(Array.isArray(spec.ops)?'checklist':Object.keys(spec.velden||{}).join(', ')),spec.code,r.oudTaak);
   if(r&&!r.ok&&r.tegelijk) await _tpVersLokaal();
   return r;
@@ -16157,7 +16169,9 @@ async function _tpVersLokaal(){   // er is niets geschreven omdat iemand anders 
 }
 async function tpWijzigHerstel(w,opt){
   if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
-  return _capTaakKlaar(await MTPlanVerplaats.taakWijzigHerstel(w,_capTaakOpties(w&&w.code,opt)));
+  const r=_capTaakKlaar(await MTPlanVerplaats.taakWijzigHerstel(w,_capTaakOpties(w&&w.code,opt)));
+  if(r&&r.afhData){ try{ _lsSet('mt_project_afhank',JSON.stringify(r.afhData)); }catch(e){} try{ _p2Na(w.code); }catch(e){} }
+  return r;
 }
 // ── Een oud tb:-planblok omzetten naar een taakbalk (T6; mt-planverplaats.js: omzetten) ──
 // Eerst de taak (toegewezen = de persoon van het blok, start/eind = de dag van het blok; een taak met eigen datums houdt die) via takenSchrijf, daarna pas het blok weg (tombstone via de planblok-route: vers lezen,

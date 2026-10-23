@@ -47,7 +47,7 @@
   const relatieLijst = items => el('ul', { klass: 'tp-lijst' }, items.map(x => el('li', null, link(x.href, x.ga, [
     x.dot ? el('span', { klass: 'tp-dot ' + x.dot, 'aria-hidden': 'true' }) : null,
     el('span', { klass: 'tp-tekst' }, el('span', { klass: 'tp-naam', tekst: x.naam }), x.sub ? el('span', { klass: 'tp-sub', tekst: x.sub }) : null),
-    x.chips || null, icoon(IC.pijl)], 'tp-link tp-taakrij', { title: x.titel || null }))));
+    x.chips || null, icoon(IC.pijl)], 'tp-link tp-taakrij', { title: x.titel || null }), x.na || null)));   // x.na: een node onder de rij (F2a: type en wachttijd van de koppeling)
 
   // ── opslaan: eerlijke status, ongedaan maken, geen stil verlies ──
   const toast = (tekst, ongedaan, lang, label) => { try { if (D.toast) D.toast(tekst, ongedaan, lang, label); } catch (e) {} };

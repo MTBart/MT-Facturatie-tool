@@ -50,16 +50,18 @@
     // FS met wachttijd: de opvolger begint op zijn vroegst `lag` werkdagen + 1 na het eind van de voorganger (een mijlpaal: `lag` werkdagen erna, zoals P.rooster)
     const vroegst = (voor, lag, na) => ymdOk(voor.eind) ? P.addWerkdagen(voor.eind, (Number(lag) || 0) + (na && na.soort === 'mijlpaal' ? 0 : 1), vrij) : '';
     let edges = []; try { edges = P.depsEffectief(lijst, depsRuw); } catch (e) { edges = []; }
+    // F2a: het type (EB/BB/EE/BE), de wachttijd (of voorsprong) en de soort (werkdagen of levertijd) per koppeling; `botst` volgt het type (P.depToets)
+    const depKoppel = e => ({ lag: e.lag || 0, type: e.type || 'FS', lagSoort: e.lagSoort || 'proces', depId: e.id, bron: e.bron, inactief: !!e.inactief });
     const voorgangers = edges.filter(e => String(e.naar) === String(t.id)).map(e => {
       const v = perId.get(String(e.van)); if (!v) return null;
-      const r = Object.assign(kort(v), { lag: e.lag || 0, inactief: !!e.inactief, vroegst: vroegst(v, e.lag, t) });
-      r.botst = !r.inactief && r.status !== 'klaar' && ymdOk(t.start) && !!r.vroegst && t.start < r.vroegst;
+      const dt = P.depToets(e, v, t, { vrij }), r = Object.assign(kort(v), depKoppel(e), { vroegst: dt.vroegst, vroegstEind: dt.vroegstEind });
+      r.botst = !r.inactief && r.status !== 'klaar' && dt.botst;
       return r;
     }).filter(Boolean);
     const opvolgers = edges.filter(e => String(e.van) === String(t.id)).map(e => {
       const n = perId.get(String(e.naar)); if (!n) return null;
-      const r = Object.assign(kort(n), { lag: e.lag || 0, inactief: !!e.inactief, vroegst: vroegst(t, e.lag, n) });
-      r.botst = !r.inactief && (t.status || 'todo') !== 'klaar' && r.status !== 'klaar' && !!r.start && !!r.vroegst && r.start < r.vroegst;
+      const dt = P.depToets(e, t, n, { vrij }), r = Object.assign(kort(n), depKoppel(e), { vroegst: dt.vroegst, vroegstEind: dt.vroegstEind });
+      r.botst = !r.inactief && (t.status || 'todo') !== 'klaar' && r.status !== 'klaar' && dt.botst;
       return r;
     }).filter(Boolean);
     let wacht = { wacht: false, op: [] }; try { wacht = P.taakWacht(t, lijst, depsRuw, { vrij, vandaag }); } catch (e) {}
@@ -75,7 +77,7 @@
     const materiaal = t.sleutel === 'bestellen' || t.sleutel === 'materiaal_geleverd' || (t.status === 'wacht' && /\b(materiaal|plaat|platen|beslag|bestel|besteld|bestelling|levering|leverancier|geleverd|order)/i.test(String(t.wacht_reden || '')));
     // Planblokken die (nog) aan deze taak hangen (oude tb:-blokken), voor de mini-tijdlijn
     let blokken = []; try { if (D.blokken && P.taakBlokkenVan) blokken = P.taakBlokkenVan(t, lijst, k, D.blokken() || [], alle).filter(b => b && ymdOk(b.datum)).map(b => ({ datum: b.datum, persoon: b.persoon || '', min: Number(b.duurMin) || 0, voorstel: b.status === 'voorstel' })); } catch (e) { blokken = []; }
-    return { ok: true, sleutel: { code: k || code, id: t.id }, code: k || code, taak: t, project: pr, voorgangers, opvolgers, wacht, bestel: { regels, tel, materiaal, anderen }, materiaalTaak, checklist: P.checklistActief(t), poortVoorstel: P.poortVoorstel(t, regels), mensen: P.taakMensen(t), raming: P.taakRamingMin(t), fasen: faseOpties(lijst, t.fase), blokken };
+    return { ok: true, sleutel: { code: k || code, id: t.id }, depsRuw, takenLijst: lijst.map(kort), code: k || code, taak: t, project: pr, voorgangers, opvolgers, wacht, bestel: { regels, tel, materiaal, anderen }, materiaalTaak, checklist: P.checklistActief(t), poortVoorstel: P.poortVoorstel(t, regels), mensen: P.taakMensen(t), raming: P.taakRamingMin(t), fasen: faseOpties(lijst, t.fase), blokken };
   };
 
   // De mini-tijdlijn (rekenwerk): een venster van hele weken rond de taak (minstens 4, hoogstens 12), met de balk en de planblokken als percentages
@@ -114,23 +116,64 @@
       pr.klant && pr.loc ? { kids: pr.locNaam || pr.loc, href: hr.klant ? hr.klant(pr.klant, pr.loc) : '#', ga: () => g.klant(pr.klant, pr.loc), titel: 'Naar de locatie' } : null,
       { kids: [pr.nummer ? h.el('span', { klass: 'tp-code', tekst: pr.nummer }) : null, pr.nummer ? ' ' : '', pr.naam || m.code], href: hr.project ? hr.project(m.code) : '#', ga: () => g.project(m.code, 'planning'), titel: 'Naar het project (Planning & taken)', klass: 'tp-kruim-project' }]);
   }
+  // Afhankelijkheden (F2a): per koppeling het type (EB, BB, EE, BE) en de wachttijd of voorsprong, te bewerken door kantoor (taken:alles) via de veilige route voor afhankelijkheden: vers lezen, kringcontrole,
+  // "gezien" (niet stil overschrijven), stempel per veld, Ongedaan maken. Voor wie niet mag bewerken staat de koppeling als tekst.
+  const TYPE_OPTIES = [['FS', 'EB: einde-naar-begin'], ['SS', 'BB: begin-naar-begin'], ['FF', 'EE: einde-naar-einde'], ['SF', 'BE: begin-naar-einde']];
+  const SOORT_OPTIES = [['proces', 'werkdagen'], ['levertijd', 'kalenderdagen (levertijd)']];
+  const nieuwDepId = () => 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const kanAfh = () => mag('alles') && !!D.wijzig;
+  const afhBedien = (m, x, h) => {
+    if (!kanAfh()) return null;
+    if (x.bron !== 'dep') return h.el('div', { klass: 'tp-sub tp-afh-bed', tekst: 'Uit de oude taaklijst: zet de oude koppelingen in het project om, dan kun je hier type en wachttijd kiezen.' });
+    const gezien = { type: x.type, lag_dagen: x.lag, lag_soort: x.lagSoort, status: x.inactief ? 'uit' : 'actief' };
+    const wijzig = (velden, wat) => h.bewaar({ afhOps: [{ op: 'wijzig', id: x.depId, velden, gezien }] }, wat || 'afhankelijkheid');
+    const type = h.el('select', { klass: 'tp-invoer tp-keuze tp-afh-type', 'aria-label': 'Type van de koppeling met ' + x.naam, title: 'Het type koppeling: ' + P.DEP_TYPE_UITLEG[x.type] }, TYPE_OPTIES.map(([w, l]) => h.el('option', { value: w, tekst: l, title: P.DEP_TYPE_UITLEG[w] })));
+    type.value = x.type; type.addEventListener('change', () => wijzig({ type: type.value }, 'type van de afhankelijkheid'));
+    const lag = h.el('input', { type: 'number', klass: 'tp-invoer tp-kort tp-afh-lag', min: String(-P.DEP_LAG_MAX), max: String(P.DEP_LAG_MAX), step: '1', value: String(x.lag), 'aria-label': 'Wachttijd met ' + x.naam + ' in dagen (negatief is een voorsprong)', title: 'Wachttijd in dagen; negatief is een voorsprong (de opvolger mag al beginnen voordat de voorganger klaar is)' });
+    lag.addEventListener('change', () => { try { lag.blur(); } catch (e) { } wijzig({ lag_dagen: lag.value }, 'wachttijd'); });
+    lag.addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.stopPropagation(); lag.value = String(x.lag); lag.blur(); } });
+    const soort = h.el('select', { klass: 'tp-invoer tp-keuze tp-afh-soort', 'aria-label': 'Soort wachttijd met ' + x.naam, title: 'Werkdagen (procestijd) of kalenderdagen (levertijd van materiaal)' }, SOORT_OPTIES.map(([w, l]) => h.el('option', { value: w, tekst: l })));
+    soort.value = x.lagSoort; soort.addEventListener('change', () => wijzig({ lag_soort: soort.value }, 'soort wachttijd'));
+    return h.el('div', { klass: 'tp-afh-bed' }, type, lag, soort, h.el('button', { type: 'button', klass: 'tp-knop tp-klein tp-gevaar', 'aria-label': 'Haal de koppeling met ' + x.naam + ' weg', title: 'De koppeling weghalen (met Ongedaan maken)', tekst: '\u00d7', klik: () => h.bewaar({ afhOps: [{ op: 'weg', id: x.depId }] }, 'afhankelijkheid weggehaald') }));
+  };
+  const afhToevoegen = (m, richting, h) => {
+    if (!kanAfh()) return null;
+    const t = m.taak, bezet = new Set(m.voorgangers.concat(m.opvolgers).map(r => String(r.id)));
+    const kans = (m.takenLijst || []).filter(x => String(x.id) !== String(t.id) && !bezet.has(String(x.id)));
+    if (!kans.length) return null;
+    const sel = h.el('select', { klass: 'tp-invoer tp-keuze', 'aria-label': richting === 'voor' ? 'Voorganger kiezen' : 'Opvolger kiezen' }, [h.el('option', { value: '', tekst: richting === 'voor' ? 'Kies de voorganger...' : 'Kies de opvolger...' })].concat(kans.map(x => {
+      const c = P.depControle(m.takenLijst, m.depsRuw || [], richting === 'voor' ? { van: x.id, naar: t.id } : { van: t.id, naar: x.id });
+      return h.el('option', { value: x.id, tekst: x.naam + (c.ok ? '' : ' (maakt een kring)'), disabled: c.ok ? null : true });
+    })));
+    const type = h.el('select', { klass: 'tp-invoer tp-keuze', 'aria-label': 'Type van de nieuwe koppeling' }, TYPE_OPTIES.map(([w, l]) => h.el('option', { value: w, tekst: l })));
+    const lag = h.el('input', { type: 'number', klass: 'tp-invoer tp-kort', min: String(-P.DEP_LAG_MAX), max: String(P.DEP_LAG_MAX), step: '1', value: '0', 'aria-label': 'Wachttijd van de nieuwe koppeling in dagen (negatief is een voorsprong)' });
+    const soort = h.el('select', { klass: 'tp-invoer tp-keuze', 'aria-label': 'Soort wachttijd van de nieuwe koppeling' }, SOORT_OPTIES.map(([w, l]) => h.el('option', { value: w, tekst: l })));
+    const voeg = h.el('button', { type: 'button', klass: 'tp-knop tp-klein', tekst: 'Toevoegen', klik: () => {
+      if (!sel.value) { sel.focus(); return; }
+      try { lag.blur(); } catch (e) { }
+      h.bewaar({ afhOps: [Object.assign({ op: 'nieuw', id: nieuwDepId(), type: type.value, lag_dagen: lag.value, lag_soort: soort.value }, richting === 'voor' ? { van: sel.value, naar: t.id } : { van: t.id, naar: sel.value })] }, 'afhankelijkheid toegevoegd');
+    } });
+    return h.el('details', { klass: 'tp-afh-nieuw' }, h.el('summary', { tekst: richting === 'voor' ? '+ Voorganger toevoegen' : '+ Opvolger toevoegen' }), h.el('div', { klass: 'tp-afh-bed' }, sel, type, lag, soort, voeg));
+  };
   function taakItems(m, lijst, wat, h) {
     return lijst.map(x => ({ href: T.href(m.code, x.id), ga: () => T.open(m.code, x.id), naam: x.naam, dot: 'tp-st-' + (STATUS_KL[x.status] || 'open'), titel: 'Open ' + x.naam,
-      sub: [P.TAAK_STATUS_LABEL[x.status] || x.status, x.start ? (x.eind && x.eind !== x.start ? datum(x.start) + ' – ' + datum(x.eind) : datum(x.start)) : 'zonder datum', x.lag ? 'wachttijd ' + x.lag + ' werkdag' + (x.lag === 1 ? '' : 'en') : '', x.inactief ? 'koppeling staat uit' : ''].filter(Boolean).join(' · '),
-      chips: x.botst ? [h.chip('let op', 'tp-chip-let', wat === 'voor' ? 'Eindigt te laat voor de start van deze taak' : 'Begint te vroeg na het eind van deze taak')] : null }));
+      sub: [P.TAAK_STATUS_LABEL[x.status] || x.status, x.start ? (x.eind && x.eind !== x.start ? datum(x.start) + ' \u2013 ' + datum(x.eind) : datum(x.start)) : 'zonder datum', (x.type !== 'FS' || x.lag || x.lagSoort === 'levertijd') ? P.depTekst(x) : '', x.inactief ? 'koppeling staat uit' : ''].filter(Boolean).join(' \u00b7 '),
+      chips: x.botst ? [h.chip('let op', 'tp-chip-let', wat === 'voor' ? 'Eindigt te laat voor de start van deze taak' : 'Begint te vroeg na het eind van deze taak')] : null, na: afhBedien(m, x, h) }));
   }
   function afhSectie(m, h) {
     const kids = [], t = m.taak;
     if (!m.voorgangers.length && !m.opvolgers.length) kids.push(h.el('p', { klass: 'tp-leeg', tekst: 'Geen voorgangers of opvolgers.' }));
     if (m.voorgangers.length) kids.push(h.el('div', { klass: 'tp-subkop', tekst: 'Eerst (voorgangers)' }), h.relatieLijst(taakItems(m, m.voorgangers, 'voor', h)));
+    kids.push(afhToevoegen(m, 'voor', h));
     if (m.opvolgers.length) kids.push(h.el('div', { klass: 'tp-subkop', tekst: 'Daarna (opvolgers)' }), h.relatieLijst(taakItems(m, m.opvolgers, 'na', h)));
-    const waarsch = m.voorgangers.filter(x => x.botst).map(x => x.naam + ' eindigt ' + datum(x.eind) + '; deze taak kan op zijn vroegst ' + datum(x.vroegst) + ' beginnen (nu ' + datum(t.start) + ').')
-      .concat(m.opvolgers.filter(x => x.botst).map(x => x.naam + ' begint al ' + datum(x.start) + '; dat kan op zijn vroegst ' + datum(x.vroegst) + ' (na het eind van deze taak).'));
+    kids.push(afhToevoegen(m, 'na', h));
+    const waarsch = m.voorgangers.filter(x => x.botst).map(x => x.naam + (x.type === 'FF' || x.type === 'SF' ? ' ' + P.DEP_TYPEN[x.type] + ': deze taak kan op zijn vroegst ' + datum(x.vroegst) + ' beginnen en moet op zijn vroegst ' + datum(x.vroegstEind) + ' eindigen (nu ' + datum(t.start) + ' t/m ' + datum(t.eind) + ').' : (x.type === 'SS' ? ' begint ' + datum(x.start) + '; ' : ' eindigt ' + datum(x.eind) + '; ') + (x.type === 'SS' ? 'deze taak kan op zijn vroegst ' : 'deze taak kan op zijn vroegst ') + datum(x.vroegst) + ' beginnen (nu ' + datum(t.start) + ').'))
+      .concat(m.opvolgers.filter(x => x.botst).map(x => x.naam + (x.type === 'FF' || x.type === 'SF' ? ' ' + P.DEP_TYPEN[x.type] + ': eindigt ' + datum(x.eind) + '; dat kan op zijn vroegst ' + datum(x.vroegstEind) + '.' : ' begint al ' + datum(x.start) + '; dat kan op zijn vroegst ' + datum(x.vroegst) + (x.type === 'SS' ? ' (na het begin van deze taak).' : ' (na het eind van deze taak).'))));
     if (waarsch.length) kids.push(h.el('div', { klass: 'tp-waarsch', role: 'note' }, h.icoon(h.IC.let), h.el('div', null, waarsch.map(w => h.el('div', { tekst: w })), h.el('div', { klass: 'tp-sub', tekst: 'Er wordt niets vanzelf verschoven.' }))));
     if ((t.status || 'todo') === 'todo' && m.wacht && m.wacht.wacht) kids.push(h.el('p', { klass: 'tp-sub', tekst: 'Wacht op: ' + P.wachtOpTekst(m.wacht, P.datumKort) }));
+    if ((t.status || 'todo') !== 'klaar' && m.wacht && m.wacht.eindOp && m.wacht.eindOp.length) kids.push(h.el('p', { klass: 'tp-sub', tekst: 'Deze taak ' + P.eindOpTekst(m.wacht) + '.' }));
     return h.sectie('tp-h-afh', 'Afhankelijkheden', h.el('span', { klass: 'tp-teller', tekst: String(m.voorgangers.length + m.opvolgers.length) }), kids);
-  }
-  // Checklist (P6a): afvinkpunten in de taak, met per punt wie het afvinkte en wanneer ("✓ door Mathijs · 22-10", dezelfde opmaak als bij een afgevinkte taak).
+  }  // Checklist (P6a): afvinkpunten in de taak, met per punt wie het afvinkte en wanneer ("✓ door Mathijs · 22-10", dezelfde opmaak als bij een afgevinkte taak).
   // Afvinken mag wie een status mag zetten; punten toevoegen, hernoemen en verwijderen is voor kantoor. Elke bewerking gaat als bewerking op de verse stand (D.wijzig met ops): twee mensen die tegelijk afvinken, bewaren allebei het hunne.
   const nieuwClId = () => 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const wieNaam = x => { const n = D.naamVan ? D.naamVan(x) : ''; return n || persNaam(x); };
@@ -375,6 +418,7 @@
   const STIJL_TAAK = [
     '#tp-paneel .tp-clrij{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line,#dfd8cb)}#tp-paneel .tp-clvink{width:22px;height:22px;flex:0 0 auto;accent-color:var(--green,#2A4A38)}#tp-paneel .tp-cltekst{flex:1 1 200px;min-width:0}#tp-paneel .tp-cltekst.klaar{text-decoration:line-through;color:var(--ink-2,#666)}#tp-paneel .tp-clwie{white-space:nowrap}#tp-paneel .tp-clnieuw{display:flex;gap:8px;margin:8px 0}#tp-paneel .tp-clnieuw .tp-invoer{flex:1 1 auto}',
   '#tp-paneel .tp-poortstatus{display:inline-block;padding:2px 10px;border-radius:12px;font-weight:600;font-size:12.5px}#tp-paneel .tp-poortstatus.groen{background:#e3f1e6;color:#1d5b2f}#tp-paneel .tp-poortstatus.rood{background:#fbe9e7;color:#b3261e}',
+  '#tp-paneel .tp-afh-bed{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:4px 0 8px 22px}#tp-paneel .tp-afh-bed .tp-invoer{width:auto;min-width:0;flex:0 1 auto}#tp-paneel .tp-afh-bed .tp-afh-lag{width:70px;flex:0 0 70px}#tp-paneel .tp-afh-nieuw{margin:6px 0}#tp-paneel .tp-afh-nieuw summary{cursor:pointer;font-size:13px;color:var(--green,#2A4A38)}',
   '#tp-paneel .tp-matrij{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line,#dfd8cb)}#tp-paneel .tp-matrij .tp-tekst{flex:1 1 160px}#tp-paneel .tp-matdatum{display:inline-flex;align-items:center;gap:6px}#tp-paneel .tp-rood{border-color:#b3261e !important;color:#b3261e}#tp-paneel .tp-rood-tekst{color:#b3261e;font-weight:600}#tp-paneel .tp-tl{margin-top:8px}#tp-paneel .tp-tl-leeg{display:flex;flex-wrap:wrap;align-items:center;gap:8px}',
     '#tp-paneel .tp-tl-as{position:relative;height:46px;border:1px solid var(--line,#dfd8cb);border-radius:4px;background:var(--surface-sunken,#f1ede5);overflow:hidden}',
     '#tp-paneel .tp-tl-wk{position:absolute;top:0;bottom:0;padding:2px 0 0 3px;border-left:1px solid var(--line,#dfd8cb);font:500 10px/12px var(--mono,monospace);color:var(--ink-3,#646a64);white-space:nowrap}',
