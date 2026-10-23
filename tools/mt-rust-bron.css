@@ -189,3 +189,12 @@ html[data-stijl="nieuw"] .btn .ui-ico,html[data-stijl="nieuw"] button .ui-ico{ma
 html[data-stijl="nieuw"] .btn-xs .ui-ico{width:14px;height:14px;margin-right:4px}
 html[data-stijl="nieuw"] .status-bar{align-items:center}
 html[data-stijl="nieuw"] .badge .ui-ico-st{margin-right:3px}
+/* ── S0 op de telefoon (<= 760 px): geen horizontale pagina-scroll. Brede rijen krijgen een eigen scrollvlak, tweekolomsindelingen worden één kolom ── */
+@media (max-width:760px){
+  html[data-stijl="nieuw"] .voorraad-tabs{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;max-width:100%;scrollbar-width:thin}
+  html[data-stijl="nieuw"] .voorraad-tabs .vtab-btn{flex:none;white-space:nowrap}
+  html[data-stijl="nieuw"] .controle-layout{grid-template-columns:minmax(0,1fr)}
+  html[data-stijl="nieuw"] #tab-oplevering div[style*="grid-template-columns:300px 1fr"]{grid-template-columns:minmax(0,1fr)!important}
+  html[data-stijl="nieuw"] #tab-oplevering div[style*="grid-template-columns:300px 1fr"]>*,html[data-stijl="nieuw"] .controle-layout>*,html[data-stijl="nieuw"] #opl-detail{min-width:0;max-width:100%}
+  html[data-stijl="nieuw"] #opl-detail .card,html[data-stijl="nieuw"] #opl-detail table{max-width:100%}
+}
