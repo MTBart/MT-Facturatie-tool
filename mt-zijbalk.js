@@ -12,27 +12,8 @@
   'use strict';
   var K = 'mt-zijbalk', KM = 'mt-zijbalk-meer', MIN_BREED = 1100, MIN_ZIJBALK = 700, NS = 'http://www.w3.org/2000/svg';
   // Lijn-iconen (24x24, stroke): de eerste acht komen uit het canvas (Sidebar.dc.html), de rest in dezelfde stijl.
-  var IC = {
-    vandaag: 'M3 10.5L12 3l9 7.5M5 9.5V20h14V9.5M10 20v-6h4v6',
-    dash: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
-    oudDash: 'M3 3v18h18M7 14l4-4l3 3l5-6',
-    inbox: 'M22 12h-6l-2 3h-4l-2-3H2M5.5 5h13l3.5 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z',
-    projecten: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
-    planning: 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4',
-    uren: 'M12 7v5l3 2M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0',
-    bestellijst: 'M3 4h2l2.4 11h10.2L20 8H6.2M9 20a1 1 0 1 0 0.01 0M17 20a1 1 0 1 0 0.01 0',
-    voorraad: 'M21 8l-9-5l-9 5v8l9 5l9-5zM3 8l9 5l9-5M12 13v8',
-    meer: 'M5 12h.01M12 12h.01M19 12h.01',
-    rapporten: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h6',
-    oplevering: 'M21 12a9 9 0 1 1-18 0a9 9 0 0 1 18 0M8 12l3 3l5-6',
-    klanten: 'M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7a3.5 3.5 0 0 0 0 7M21 20v-1a4 4 0 0 0-3-3.9M16 4.1a3.5 3.5 0 0 1 0 6.8',
-    verbeter: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3',
-    instellingen: 'M12 15a3 3 0 1 0 0-6a3 3 0 0 0 0 6M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3a1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8a1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1',
-    admin: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
-    paneel: 'M4 5h16v14H4zM9 5v14',
-    stijl: 'M12 3a9 9 0 1 0 0 18c1.5 0 2-1 1.5-2.2c-.5-1.3.3-2.8 1.8-2.8H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3M7.5 11.5h.01M10 7.5h.01M14.5 7.5h.01',
-    chevron: 'M6 9l6 6 6-6'
-  };
+  // De lijn-iconen staan sinds de rust-pas in mt-iconen.js (één bron voor zijbalk en interface); dat bestand laadt eerst.
+  var IC = (window.MTIconen && window.MTIconen.PAD) || {};
   // tabnaam (uit onclick="showTab('naam')") -> label, icoon, volgorde (CSS order) en of hij onder "Meer" valt
   var DEF = {
     attentie: { l: 'Vandaag', i: 'vandaag', o: 10 },

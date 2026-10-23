@@ -243,3 +243,13 @@ html[data-stijl="nieuw"] .login-box{box-shadow:none;border:1px solid var(--line)
 @media (max-width:700px){
   html[data-stijl="nieuw"] .btn:not(.btn-xs),html[data-stijl="nieuw"] input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]),html[data-stijl="nieuw"] select{min-height:var(--touch)}
 }
+
+/* ── R2/R3: iconen en statuschips (mt-iconen.js bouwt ze; alleen in de nieuwe stijl) ── */
+html[data-stijl="nieuw"] .ui-ico{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px;margin-right:6px}
+html[data-stijl="nieuw"] .ui-ico:last-child{margin-right:0}
+html[data-stijl="nieuw"] .ui-ico:only-child{margin:0}
+html[data-stijl="nieuw"] .ui-ico-st{width:14px;height:14px;margin-right:4px;vertical-align:-2px}
+html[data-stijl="nieuw"] .btn .ui-ico,html[data-stijl="nieuw"] button .ui-ico{margin-right:6px}
+html[data-stijl="nieuw"] .btn-xs .ui-ico{width:14px;height:14px;margin-right:4px}
+html[data-stijl="nieuw"] .status-bar{align-items:center}
+html[data-stijl="nieuw"] .badge .ui-ico-st{margin-right:3px}
