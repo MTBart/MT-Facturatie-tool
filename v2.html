@@ -572,6 +572,8 @@ a.proj-ctx-klant:hover,a.proj-ctx-loc:hover,a.proj-ctx-klant:focus-visible,a.pro
 .nieuw-lijst button{font:inherit;font-size:13px;text-align:left;min-height:36px;padding:4px 10px;border:0;border-radius:6px;background:transparent;color:var(--ink,#1f2a24);cursor:pointer}
 .nieuw-lijst button:hover{background:var(--surface-sunken)}
 .proj-terug{display:none}
+.po-rij{cursor:pointer}.po-rij:hover,.po-rij:focus-visible{background:var(--surface-sunken)}.po-naam{font-weight:600;font-size:13px}
+.po-tabel td,.po-tabel th{padding:6px 8px;vertical-align:top}
 .pl-schakel{display:inline-flex;gap:0;margin:0 0 var(--space-3);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
 .pl-sch{font:inherit;font-size:13px;font-weight:600;min-height:36px;padding:4px 14px;border:0;background:var(--surface);color:var(--ink,#1f2a24);cursor:pointer}
 .pl-sch+.pl-sch{border-left:1px solid var(--border)}
@@ -6562,7 +6564,38 @@ function renderProjectLijst(filter=''){
   else if(r.groepen){ const gk=PF.stand().groep;
     el.innerHTML=r.groepen.map(g=>`<div class="pf-kop${PF.dicht(gk+':'+g.key)?' dicht':''}"><button type="button" aria-expanded="${esc(!PF.dicht(gk+':'+g.key))}" onclick="MTProjFilter.kopWissel(${jsArg(gk+':'+g.key)})">${esc(g.label)} <span class="n">(${esc(g.aantal)})</span></button></div>${PF.dicht(gk+':'+g.key)?'':g.items.map(x=>rij(perCode.get(x.code))).join('')}`).join(''); }
   else el.innerHTML=r.lijst.map(x=>rij(perCode.get(x.code))).join('');
+  window._pfZichtbaar=r.lijst.map(x=>x.code);
+  try{ projOverzichtTeken(); }catch(e){ console.warn('Projectenoverzicht:',e); }
   if(typeof vandaagTeken==='function') vandaagTeken();
+}
+// Zonder gekozen project toont de rechterkant het overzicht van de projecten die links in de lijst staan (dezelfde filters): fase, lever en de urenmeter. Een rij openen = het project. Alleen lezen; marge staat er niet in (die is er nog niet).
+function projOverzichtTeken(){
+  const h=document.getElementById('project-detail'); if(!h||huidigProject||h.dataset.code||h.dataset.klant||h.dataset.offerte) return;
+  if(!h.querySelector('.po-kaart')&&!/Selecteer een project/.test(h.textContent)) return;   // er staat iets anders (bv. "niet gevonden")
+  const codes=(window._pfZichtbaar||[]).slice(0,100), el=_p2El;
+  if(!codes.length){ h.replaceChildren(el('div',{class:'card po-kaart'},el('div',{class:'dos-leeg',tekst:'Geen projecten met deze filters.'}))); return; }
+  const rijen=codes.map(code=>{
+    const p=projVind(code); if(!p) return null;
+    let m=null; try{ m=projMeterBereken(code).m.totaal; }catch(e){}
+    const u=x=>(m&&x!=null)?_pmU(x):'—', geklokt=m?(m.gekoppeld||0)+(m.ongekoppeld||0):null;
+    const lever=(p.gegevens&&p.gegevens.leverdatum)||'';
+    const rest=m&&m.budget?_pmU(m.resterend):'—';
+    const tr=el('tr',{class:'po-rij',tabindex:'0',role:'link','aria-label':'Open '+projNaamVol(p),klik:()=>selecteerProject(code)},
+      el('td',null,el('div',{class:'po-naam',tekst:projNaamVol(p)}),el('div',{class:'pm-dim',style:'font-size:11px',tekst:projKlantNaam(p)})),
+      el('td',null,p.fase&&window.MTLead?el('span',{class:'fase-chip fase-'+p.fase,tekst:MTLead.label(p.fase)}):null),
+      el('td',{tekst:lever&&MTPlanning.isYmd(lever)?_p2D(lever):'—'}),
+      el('td',{class:'pm-num',tekst:u(m&&m.budget)}),el('td',{class:'pm-num',tekst:u(m&&m.gepland)}),el('td',{class:'pm-num',tekst:geklokt==null?'—':_pmU(geklokt)}),
+      el('td',{class:'pm-num'+(m&&m.budget&&m.resterend<0?' ov-over':''),tekst:rest}));
+    tr.addEventListener('keydown',ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); selecteerProject(code); } });
+    return tr;
+  }).filter(Boolean);
+  const totaal=(window._pfZichtbaar||[]).length;
+  h.replaceChildren(el('div',{class:'card po-kaart'},
+    el('div',{class:'card-title',tekst:'Projecten ('+totaal+')'}),
+    el('div',{class:'tabel-scroll'},el('table',{class:'pm-tabel po-tabel'},
+      el('thead',null,el('tr',null,['Project','Fase','Lever','Budget','Gepland','Geklokt','Rest'].map((k,i)=>el('th',{class:i>2?'pm-num':null,tekst:k,title:k==='Geklokt'?'Uren uit de lokaal gesynchroniseerde Toggl-gegevens; open het project voor de volledige stand':null})))),
+      el('tbody',null,rijen))),
+    totaal>codes.length?el('div',{class:'pm-dim',style:'margin-top:6px',tekst:'De eerste '+codes.length+' van '+totaal+' projecten; verfijn het filter voor de rest.'}):null));
 }
 // ── Projectlijst filteren/sorteren/groeperen: koppeling met mt-projfilter.js ──
 var _pfGestart=false;

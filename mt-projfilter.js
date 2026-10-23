@@ -42,6 +42,16 @@
   };
   const zelfde = (a, b) => a.length === b.length && a.every(x => b.includes(x));
   const standaardFase = () => FASEN.filter(k => !UIT_STANDAARD.includes(k));
+  // Snelkeuzes boven de lijst: dezelfde stand als het filter "Fase", met één klik (S7). 'open' is de standaardstand.
+  const TABS = [
+    { k: 'open', t: 'Open', fase: null },
+    { k: 'lopend', t: 'Lopend', fase: ['werkvoorbereiding', 'inkoop', 'productie', 'klaar_levering', 'factureren', 'zf_lopend'] },
+    { k: 'leads', t: 'Leads', fase: ['nieuw', 'opname', 'offerte_maken', 'verstuurd', 'geparkeerd', 'zf_offerte'] },
+    { k: 'nacalculatie', t: 'Te nacalculeren', fase: ['nacalculatie'] },
+    { k: 'afgerond', t: 'Afgerond', fase: ['afgerond', 'verloren', 'gearchiveerd', 'zf_opgeleverd'] }];
+  F.TABS = TABS;
+  const tabFasen = x => x.fase || standaardFase();
+  F.tabActief = s => { const x = TABS.find(q => (!s.fase && !q.fase) || (s.fase && (q.fase ? zelfde(s.fase, q.fase) : zelfde(s.fase, standaardFase())))); return x ? x.k : ''; };
   F.faseAan = (s, k) => s.fase ? s.fase.includes(k) : !UIT_STANDAARD.includes(k);
   F.afwijkend = s => (s.fase && !zelfde(s.fase, standaardFase()) ? 1 : 0) + (s.klant ? 1 : 0) + (s.pers ? 1 : 0);
   F.isStandaard = s => !F.afwijkend(s) && s.sort === 'nieuwste' && !s.groep;
@@ -126,6 +136,11 @@
 .pf .pf-optie .c{color:var(--text-faint,#8a8a80);font-size:12px}
 .pf input[type=checkbox]{accent-color:var(--green,#2A4A38)}
 .pf .pf-sel{width:auto;flex:1 1 110px;min-width:0}
+.pf-tabs{display:flex;flex-wrap:wrap;gap:0 4px;margin:0 0 8px}
+.pf-tab{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;border:0;border-bottom:2px solid transparent;background:transparent;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer;min-height:36px;color:var(--text-dim,#5c665f)}
+.pf-tab .c{font-weight:400;color:var(--text-faint,#8a8f88)}
+.pf-tab.aan{color:var(--green,#2A4A38);border-bottom-color:var(--green,#2A4A38)}
+@media (max-width:760px){.pf-tab{min-height:44px}}
 .pf-balk{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .pf-knop{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border,#ddd);background:var(--card,#fff);border-radius:16px;padding:5px 11px;font-size:13px;cursor:pointer;min-height:32px;color:inherit}
 .pf-knop svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
@@ -193,7 +208,8 @@
     (s.pers || []).forEach(p => { if (p !== GEEN && !ps.has(p)) ps.set(p, (D.persNaam && D.persNaam(p)) || p); });
     const personen = [...ps.entries()].sort((a, b) => NL(a[1], b[1]));
     const open = g => (S.details[g] ? ' open' : '');
-    return `<div class="pf-balk"><button type="button" class="pf-knop${S.open || n ? ' aan' : ''}" data-pf="open" aria-expanded="${S.open ? 'true' : 'false'}" aria-controls="pf-paneel">${ICOON}Filter${n ? ' (' + esc(n) + ')' : ''}</button>
+    const tabs = `<div class="pf-tabs" role="group" aria-label="Snelkeuze">${TABS.map(x => { const n = items.filter(r => slaagt(r, s, 'fase') && tabFasen(x).includes(r.fase)).length; return `<button type="button" class="pf-tab${F.tabActief(s) === x.k ? ' aan' : ''}" data-pf-tab="${esc(x.k)}" aria-pressed="${F.tabActief(s) === x.k ? 'true' : 'false'}">${esc(x.t)} <span class="c">${esc(n)}</span></button>`; }).join('')}</div>`;
+    return tabs + `<div class="pf-balk"><button type="button" class="pf-knop${S.open || n ? ' aan' : ''}" data-pf="open" aria-expanded="${S.open ? 'true' : 'false'}" aria-controls="pf-paneel">${ICOON}Filter${n ? ' (' + esc(n) + ')' : ''}</button>
       <select class="pf-sel" data-pf-sort aria-label="Sorteren">${SORTEER.map(x => `<option value="${esc(x[0])}"${s.sort === x[0] ? ' selected' : ''}>${esc(x[1])}</option>`).join('')}</select>
       <select class="pf-sel" data-pf-groep aria-label="Groeperen">${GROEPEER.map(x => `<option value="${esc(x[0])}"${s.groep === x[0] ? ' selected' : ''}>${esc(x[1])}</option>`).join('')}</select>
       ${D.magSelecteren && D.magSelecteren() ? `<button type="button" class="pf-knop${F.selectieModus ? ' aan' : ''}" data-pf="sel" aria-pressed="${F.selectieModus ? 'true' : 'false'}">Selecteren</button>` : ''}
@@ -221,12 +237,13 @@
   function wijzig(fn) { fn(S.stand); bewaar(); if (D.opStand) D.opStand(S.stand); else F.teken(); }
   F.zetStand = (s, stil) => { S.stand = F.schoon(s); if (!stil) wijzig(() => { }); };
   function klik(e) {
-    const t = e.target.closest ? e.target.closest('[data-pf],[data-pf-alles],[data-pf-niets],[data-pf-reset],[data-pf-selalles],[data-pf-selniets],[data-pf-actie]') : null; if (!t) return;
+    const t = e.target.closest ? e.target.closest('[data-pf],[data-pf-tab],[data-pf-alles],[data-pf-niets],[data-pf-reset],[data-pf-selalles],[data-pf-selniets],[data-pf-actie]') : null; if (!t) return;
     const d = t.dataset;
     if (d.pf === 'sel') { F.zetSelectieModus(!F.selectieModus); return D.opStand ? D.opStand(S.stand, true) : F.teken(); }
     if (d.pfSelalles) { ((S.res && S.res.lijst) || []).forEach(r => F.selectie.add(r.code)); return D.opStand ? D.opStand(S.stand, true) : F.teken(); }
     if (d.pfSelniets) { F.selectie.clear(); return D.opStand ? D.opStand(S.stand, true) : F.teken(); }
     if (d.pfActie) { if (t.disabled) return; if (d.pfActie === 'voorstel') { if (D.opVoorstel) D.opVoorstel(); return; } if (D.opActie && F.selectie.size) D.opActie(d.pfActie, [...F.selectie]); return; }
+    if (d.pfTab) { const x = TABS.find(q => q.k === d.pfTab); if (x) wijzig(s => { s.fase = x.fase ? x.fase.slice() : null; }); return; }
     if (d.pf === 'open') { S.open = !S.open; return F.teken(); }
     if (d.pf === 'sluit') { S.open = false; return F.teken(); }
     if (d.pfReset) return wijzig(s => Object.assign(s, nieuweStand()));
