@@ -925,3 +925,35 @@ html[data-stijl="nieuw"] .cn-ag-blok:focus-visible{outline:2px solid var(--focus
 html[data-stijl="nieuw"] .cn-ag-meer{position:absolute;font:500 10px/12px var(--mono);color:var(--ink-2)}
 html[data-stijl="nieuw"] .cn-hoek .cn-agenda-knop.alle{margin-top:4px}
 html[data-stijl="nieuw"] .cn-hoek .cn-agenda-knop.alle[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+/* ── P7b/P7c: totaalrijen, rollen zonder naam, de heatmap van de bezetting en de beschikbaarheidsbalk ── */
+html[data-stijl="nieuw"] .cn-rolchip{display:inline-block;align-self:flex-start;margin-top:2px;padding:0 6px;border:1px solid var(--line-strong);border-radius:10px;font:500 10px/16px var(--sans);color:var(--ink-2)}
+html[data-stijl="nieuw"] .cn-rolchip.rol{border-style:dashed}
+html[data-stijl="nieuw"] .cn-avatar.rol{border:1px dashed var(--ink-2);background:transparent}
+html[data-stijl="nieuw"] .cn-avatar.totaal{border-radius:4px;background:var(--surface-sunken);font-size:10px}
+html[data-stijl="nieuw"] .cn-persoon[data-totaal]{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .cn-rij.cn-eerste-totaal{border-top:2px solid var(--line-strong)}
+html[data-stijl="nieuw"] .cn-rolknop{align-self:flex-start;margin-top:4px;height:22px;padding:0 6px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--ink-2);font:500 11px/16px var(--sans);cursor:pointer}
+html[data-stijl="nieuw"] .cn-rolknop:hover{background:var(--surface-sunken)}
+html[data-stijl="nieuw"] .cn-hm-knop{display:inline-flex;align-items:center;gap:6px}
+html[data-stijl="nieuw"] .cn-hm-knop .cn-ic{width:16px;height:16px}
+/* één kleurschaal: één tint (het groen van de tool) van licht naar donker voor 0 tot 100%, en de foutkleur met arcering voor overboekt (niet alleen kleur) */
+html[data-stijl="nieuw"] .hm.hm0{background:var(--surface)}
+html[data-stijl="nieuw"] .hm.hm1{background:color-mix(in srgb,var(--primary) 10%,var(--surface))}
+html[data-stijl="nieuw"] .hm.hm2{background:color-mix(in srgb,var(--primary) 20%,var(--surface))}
+html[data-stijl="nieuw"] .hm.hm3{background:color-mix(in srgb,var(--primary) 32%,var(--surface))}
+html[data-stijl="nieuw"] .hm.hm4{background:color-mix(in srgb,var(--primary) 46%,var(--surface))}
+html[data-stijl="nieuw"] .hm.hm5{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--error) 38%,var(--surface)) 0 5px,color-mix(in srgb,var(--error) 22%,var(--surface)) 5px 10px)}
+html[data-stijl="nieuw"] .cn-cel.hm.nu,html[data-stijl="nieuw"] .cn-mdag.hm.nu{box-shadow:inset 0 0 0 2px var(--brass)}
+html[data-stijl="nieuw"] .cn-hm-streep{position:absolute;top:0;height:5px;z-index:0;pointer-events:none}
+html[data-stijl="nieuw"] .cn-hm-leg{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+html[data-stijl="nieuw"] .cn-hm-lg{display:flex;align-items:center;gap:4px;font-size:11px}
+html[data-stijl="nieuw"] .cn-hm-sw{display:block;width:14px;height:10px;border:1px solid var(--line-strong);border-radius:2px}
+html[data-stijl="nieuw"] .cn-kw-laad.hm{border-radius:3px}
+html[data-stijl="nieuw"] .cn-beschik{position:fixed;z-index:310;width:230px;padding:8px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-pop);font:400 12px/16px var(--sans);display:flex;flex-direction:column;gap:4px;pointer-events:none}
+html[data-stijl="nieuw"] .cn-beschik[hidden]{display:none}
+html[data-stijl="nieuw"] .cn-beschik b{font:600 12px/16px var(--sans)}
+html[data-stijl="nieuw"] .cn-beschik-balk{display:block;height:8px;border-radius:4px;background:var(--surface-sunken);overflow:hidden}
+html[data-stijl="nieuw"] .cn-beschik-balk>span{display:block;height:100%;background:color-mix(in srgb,var(--primary) 55%,var(--surface))}
+html[data-stijl="nieuw"] .cn-beschik.over .cn-beschik-balk>span{background:var(--error)}
+html[data-stijl="nieuw"] .cn-beschik.over .cn-beschik-tekst{color:var(--error);font-weight:600}
+@media (max-width:640px){html[data-stijl="nieuw"] .cn-hm-knop{min-height:44px}}

@@ -1693,7 +1693,7 @@
   // ── Schemaversie van de projecttaken ──
   // De laagste app-versie die mt_project_taken_v2 mag schrijven staat in de teller (GET /teller/status → schema_min). Is die hoger dan
   // de versie van déze app (v2.html: PROJ_SCHEMA), dan schrijft de app niet meer. Onbekend (nog niet gelezen) = geen blokkade.
-  P.SCHEMA = 11;
+  P.SCHEMA = 12;
   P.SCHEMA_TEKST = 'Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
   P.schemaGeblokkeerd = (schemaMin, eigen) => schemaMin !== null && schemaMin !== undefined && schemaMin !== '' && Number.isFinite(Number(schemaMin)) && Number(schemaMin) > (eigen == null ? P.SCHEMA : Number(eigen));
 
@@ -2321,8 +2321,12 @@
   const ACT_STD = P.ACTIVITEITEN.map(a => Object.assign({}, a));
   const STD_ACT_STATION = { tekenwerk: 'voorbereiding', werkvoorbereiding: 'voorbereiding', werkplaats: 'productie', spuiten: 'spuiten', montage: 'montage' };
   const STD_ACT_UURSOORT = {}; Object.keys(UURSOORT_ACT).forEach(u => { if (!(UURSOORT_ACT[u] in STD_ACT_UURSOORT)) STD_ACT_UURSOORT[UURSOORT_ACT[u]] = u; });
-  P.INRICHT_TYPEN = ['station', 'fase', 'activiteit'];
-  P.INRICHT_VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen', 'woorden'];
+  // P7b/P7c: inzetbaarheid per persoon en rollen zonder naam staan in dezelfde lijst (er zijn geen machine- of ploegbanen: de werkplaatsploeg doet alles).
+  //   inzet: { k: de teamslug, label: de naam, soorten[] ('kantoor' en/of 'wp': welke soort werk iemand doet), voorkeur ('kantoor'|'wp'|'': waar iemand vast voor is), activiteiten[] (de activiteiten die iemand doet; leeg = alle van zijn soorten) }
+  //   rol:   { uren (per dag), vrij, en dezelfde soorten, voorkeur en activiteiten }: een rol zonder naam, bv. "inhuur monteur", wordt in de Capaciteit een rij zonder echte persoon (slug 'rol-<k>').
+  // Alle velden hebben een stempel zoals de rest van deze lijst; de schemadrempel (P.SCHEMA) beschermt het bestand tegen een app die ze niet kent. Een oude soort 'baan' in het bestand blijft ongemoeid staan en wordt niet meer gelezen.
+  P.INRICHT_TYPEN = ['station', 'fase', 'activiteit', 'rol', 'inzet'];
+  P.INRICHT_VELDEN = ['label', 'volgorde', 'station', 'soort', 'uursoort', 'namen', 'woorden', 'uren', 'stations', 'activiteiten', 'sleutels', 'vrij', 'soorten', 'voorkeur'];
   P.inrichtStandaard = () => {
     const uit = [];
     [['voorbereiding', 'Voorbereiding'], ['materiaal', 'Materiaal'], ['productie', 'Productie'], ['spuiten', 'Afwerken'], ['montage', 'Montage']].forEach(([k, l], i) => uit.push({ id: 'station:' + k, type: 'station', k, label: l, volgorde: i + 1 }));
@@ -2330,6 +2334,11 @@
     ACT_STD.forEach((a, i) => uit.push({ id: 'activiteit:' + a.k, type: 'activiteit', k: a.k, label: a.l, volgorde: i + 1, soort: a.soort, station: STD_ACT_STATION[a.k] || '', uursoort: STD_ACT_UURSOORT[a.k] || '' }));
     return uit;
   };
+  const SOORTEN_WERK = ['kantoor', 'wp'];
+  const inzetNorm = r => { let s = [...new Set((Array.isArray(r.soorten) ? r.soorten : []).map(x => String(x == null ? '' : x).trim()).filter(x => SOORTEN_WERK.includes(x)))]; if (!s.length) s = SOORTEN_WERK.slice(); return { soorten: s, voorkeur: s.includes(r.voorkeur) ? r.voorkeur : '', activiteiten: [...new Set((Array.isArray(r.activiteiten) ? r.activiteiten : []).map(x => String(x == null ? '' : x).trim()).filter(Boolean))] }; };   // zonder keuze doet iemand beide soorten
+  const lijstTekst = v => (Array.isArray(v) ? v : []).map(x => String(x == null ? '' : x).trim()).filter(Boolean);
+  const urenGeldig = (v, std) => { const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= 24 ? Math.round(n * 4) / 4 : std; };   // uren per dag, op een kwartier
+  const vrijLijst = v => (Array.isArray(v) ? v : []).filter(x => x && P.isYmd(x.van) && P.isYmd(x.tot || x.van) && (x.tot || x.van) >= x.van).map(x => ({ van: x.van, tot: x.tot || x.van, reden: String(x.reden || '').slice(0, 80) }));
   const naamSleutel = s => String(s == null ? '' : s).trim().toLowerCase();
   const volgordeSort = (a, b) => ((Number(a.volgorde) || 0) - (Number(b.volgorde) || 0)) || String(a.label || a.k).localeCompare(String(b.label || b.k), 'nl') || (String(a.k) < String(b.k) ? -1 : 1);
   // Strikt: leeg is een lege lijst; een andere vorm dan een lijst is een FOUT (nooit stil tot leeg terugbrengen).
@@ -2345,6 +2354,8 @@
     const heeftStation = k => stations.some(s => s.k === k);
     return {
       stations,
+      rollen: recs.filter(r => r.type === 'rol' && !r._vervallen && String(r.label || '').trim()).sort(volgordeSort).map(r => Object.assign({ k: String(r.k), label: String(r.label), slug: 'rol-' + String(r.k), uren: urenGeldig(r.uren, 8), vrij: vrijLijst(r.vrij) }, inzetNorm(r))),
+      inzet: recs.filter(r => r.type === 'inzet' && !r._vervallen).map(r => Object.assign({ slug: String(r.k).toLowerCase(), label: String(r.label || r.k) }, inzetNorm(r))),
       fases: actief('fase').map(r => ({ k: String(r.k), label: String(r.label), namen: [String(r.label)].concat(Array.isArray(r.namen) ? r.namen.map(String) : []) })),
       activiteiten: actief('activiteit').map(r => ({ k: String(r.k), l: String(r.label), soort: r.soort === 'kantoor' ? 'kantoor' : 'wp', station: heeftStation(r.station) ? String(r.station) : '', uursoort: String(r.uursoort || ''), woorden: String(r.woorden || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean) })),
       standaard: !recs.length };
@@ -2359,6 +2370,66 @@
     return m;
   };
   P.inrichting = () => INR;
+  // ── P7c: inzetbaarheid per persoon, de totaalrijen Werkplaats en Kantoor ──
+  const actSoort = k => { const a = P.ACTIVITEITEN.find(x => x.k === String(k)); return a ? (a.soort === 'kantoor' ? 'kantoor' : 'wp') : ''; };
+  P.actSoort = actSoort;
+  // De inzetbaarheid van een persoon (of rol): zonder gegevens doet iemand beide soorten werk, zonder voorkeur en zonder beperking tot activiteiten.
+  P.inzetVan = function (slug, model) {
+    const m = model || INR, s = String(slug || '').toLowerCase(), r = m && ((m.inzet || []).find(x => x.slug === s) || (m.rollen || []).find(x => x.slug === s));
+    return r ? { soorten: r.soorten.slice(), voorkeur: r.voorkeur, activiteiten: r.activiteiten.filter(a => actSoort(a)) } : { soorten: SOORTEN_WERK.slice(), voorkeur: '', activiteiten: [] };   // een activiteit die niet meer bestaat telt niet mee (anders zou iemand op slot staan)
+  };
+  // Kan deze persoon werk van deze soort doen? (de soort moet erbij horen, en als er activiteiten gekozen zijn moet er één van die soort bij zitten)
+  P.kanSoort = function (slug, soort, model) { const iz = P.inzetVan(slug, model); return iz.soorten.includes(soort) && (!iz.activiteiten.length || iz.activiteiten.some(a => actSoort(a) === soort)); };
+  // Waar is deze persoon vast voor? Eén soort mogelijk = die; anders de voorkeur; zonder voorkeur is iemand voor geen van beide "vast" (hij kan inspringen).
+  P.vastSoort = function (slug, model) { const e = SOORTEN_WERK.filter(s => P.kanSoort(slug, s, model)); if (e.length === 1) return e[0]; const iz = P.inzetVan(slug, model); return iz.voorkeur && e.includes(iz.voorkeur) ? iz.voorkeur : ''; };
+  // Doet deze persoon dit werk? Zonder activiteit (een blok zonder taak): ja. Met gekozen activiteiten: alleen die; anders alles van zijn soorten.
+  P.kanDoen = function (slug, activiteit, model) {
+    if (!activiteit) return true; const iz = P.inzetVan(slug, model), k = String(activiteit);
+    if (iz.activiteiten.length) return iz.activiteiten.includes(k);
+    const s = actSoort(k); return !s || iz.soorten.includes(s);
+  };
+  // De twee totaalrijen "Werkplaats" en "Kantoor": per dag de vraag (de uren van taken met een activiteit van die soort, uit dezelfde items als de personen) tegenover het aanbod.
+  // Aanbod = van iedereen die deze soort kan doen de capaciteit van die dag min het werk van de andere soort dat hij al heeft; "vast" voor wie hiervoor vast is, "inspringers" voor wie hier niet vast voor is
+  // (bijvoorbeeld kantoor-mensen die soms in de werkplaats staan). Een persoon telt in beide totalen met wat hij er nog voor over heeft, nooit meer dan zijn capaciteit.
+  P.soortRijen = function (rooster, model) {
+    const m = model || INR, dagen = rooster.dagen || [], alle = rooster.rijen || [], personen = alle.filter(r => r.slug && r.heeftCap && !r.totaal), uit = [];
+    [['wp', 'Werkplaats'], ['kantoor', 'Kantoor']].forEach(([soort, naam]) => {
+      const weken = []; dagen.forEach(d => { const w = d.week || 0; while (weken.length <= w) weken.push({ cap_min: 0, gepland_min: 0, vrij_min: 0, over_min: 0, vast_min: 0, inspring_min: 0 }); });
+      const cellen = dagen.map((d, i) => {
+        const sleutel = it => [it.soort, it.code, it.id, it.blokId || '', it.persoon || '', it.datum || '', it.min || 0].join('|'), kop = new Map(), sl = [new Set(), new Set()];
+        const kopieer = it => { const k = sleutel(it); if (!kop.has(k)) kop.set(k, Object.assign({}, it, { afgeleid: true })); return kop.get(k); };
+        const van = it => it.taak && actSoort(it.taak.activiteit) === soort;
+        alle.forEach(r => {
+          if (r.totaal) return; const c = r.dagen && r.dagen[i]; (c && c.items || []).forEach(it => { if (van(it)) kopieer(it); });
+          const s = r.slots && r.slots[i]; if (s) [0, 1].forEach(dl => (s[dl] || []).forEach(it => { if (van(it)) sl[dl].add(kopieer(it)); }));
+        });
+        const items = [...kop.values()], vraag = Math.round(items.reduce((s, it) => s + (it.planvoorstel ? 0 : (it.min || 0)), 0));
+        let vast = 0, inspring = 0;
+        personen.forEach(r => {
+          if (!P.kanSoort(r.slug, soort, m)) return; const c = r.dagen && r.dagen[i]; if (!c) return;
+          const ander = (c.items || []).reduce((s, it) => s + (it.planvoorstel ? 0 : (van(it) ? 0 : (it.min || 0))), 0), beschik = Math.max(0, (c.cap_min || 0) - ander);
+          if (P.vastSoort(r.slug, m) === soort) vast += beschik; else inspring += beschik;
+        });
+        vast = Math.round(vast); inspring = Math.round(inspring);
+        const cap = vast + inspring, over = Math.max(0, vraag - cap), vrij = Math.max(0, cap - vraag), w = weken[d.week || 0];
+        w.cap_min += cap; w.gepland_min += vraag; w.vrij_min += vrij; w.over_min += over; w.vast_min += vast; w.inspring_min += inspring;
+        const dag = { datum: d.datum, werkdag: d.werkdag, verlof: false, cap_min: cap, gepland_min: vraag, vast_min: vast, inspring_min: inspring, dagdelen: cap > 0 ? Math.min(2, Math.ceil(vraag / (cap / 2) - 1e-9)) : 0, vrij_min: vrij, over_min: over, items };
+        return { dag, slots: [0, 1].map(dl => [...sl[dl]]) };
+      });
+      uit.push({ slug: 'soort:' + soort, naam, heeftCap: true, totaal: true, soortK: soort, dagen: cellen.map(c => c.dag), slots: cellen.map(c => c.slots), weken: weken.map(w => ({ cap_min: Math.round(w.cap_min), gepland_min: Math.round(w.gepland_min), vrij_min: Math.round(w.vrij_min), over_min: Math.round(w.over_min), vast_min: Math.round(w.vast_min), inspring_min: Math.round(w.inspring_min) })) });
+    });
+    return uit;
+  };
+  // De rollen zonder naam als pseudo-teamleden (alleen voor de Capaciteit): { slug: 'rol-<k>', naam, label, email: '', placeholder: true } en hun uren per week voor de capaciteit (uren per dag × 5)
+  P.rolTeam = model => ((model || INR).rollen || []).map(r => ({ slug: r.slug, naam: r.label, label: r.label, email: '', placeholder: true, rolK: r.k }));
+  P.rolWerkuren = model => { const o = {}; ((model || INR).rollen || []).forEach(r => { o[r.slug] = r.uren * 5; }); return o; };
+  // Het bezettingsniveau voor de heatmap, uit dezelfde getallen als de belasting: -1 = geen capaciteit en niets gepland, 0 = niets gepland, 1 = tot 25%, 2 = tot 50%, 3 = tot 75%, 4 = tot 100%, 5 = overboekt (ook: gepland zonder capaciteit)
+  P.bezettingNiveau = function (gepland_min, cap_min) {
+    const g = Math.round(Number(gepland_min) || 0), c = Math.round(Number(cap_min) || 0);
+    if (c <= 0) return g > 0 ? 5 : -1;
+    if (g <= 0) return 0; if (g > c) return 5;
+    const p = g / c; return p <= 0.25 ? 1 : p <= 0.5 ? 2 : p <= 0.75 ? 3 : 4;
+  };
   P.fasenLijst = () => INR.fases.map(f => ({ k: f.k, label: f.label }));
   P.faseVanNaam = naam => { const n = naamSleutel(naam); return n ? (INR.fases.find(f => naamSleutel(f.label) === n) || INR.fases.find(f => f.namen.some(x => naamSleutel(x) === n)) || null) : null; };   // eerst het huidige label, dan een eerdere naam
   // De fase van een taak: het id als dat nog bij de naam past (een oude app die alleen de naam wijzigt wint daarmee van een oud id), anders de naam via het label of een eerdere naam.
@@ -2384,6 +2455,12 @@
   P.inrichtGebruik = function (type, k, takenObj, sjablonen) {
     k = String(k);
     if (type === 'station') { const a = INR.activiteiten.filter(x => x.station === k); return { n: a.length, activiteiten: a.map(x => x.l), taken: [] }; }
+    if (type === 'inzet') return { n: 0, taken: [], sjablonen: [], activiteiten: [] };   // inzetbaarheid is een instelling per persoon: er hangt niets aan
+    if (type === 'rol') {   // taken en planblokken van een rol zonder naam: eerst omzetten naar een echte persoon voordat je hem verwijdert
+      const slug = 'rol-' + k, taken = [];
+      Object.keys(takenObj && typeof takenObj === 'object' ? takenObj : {}).forEach(code => { if (code.startsWith('__') || !Array.isArray(takenObj[code])) return; P.takenActief(takenObj[code]).forEach(t => { if (P.taakMensen(t).includes(slug)) taken.push({ code, id: t.id, naam: t.naam || '' }); }); });
+      return { n: taken.length, taken, sjablonen: [], activiteiten: [] };
+    }
     const taken = [];
     Object.keys(takenObj && typeof takenObj === 'object' ? takenObj : {}).forEach(code => {
       if (code.startsWith('__') || !Array.isArray(takenObj[code])) return;
@@ -2395,7 +2472,7 @@
   // Een label controleren: niet leeg, en uniek binnen het soort (hoofdletters tellen niet).
   P.inrichtLabelFout = function (type, label, k, model) {
     const l = String(label == null ? '' : label).trim(); if (!l) return 'Geef een naam.'; if (l.length > 60) return 'Een naam is hoogstens 60 tekens.';
-    const m = model || INR, lijst = type === 'station' ? m.stations.map(x => [x.k, x.label]) : type === 'fase' ? m.fases.map(x => [x.k, x.label]) : m.activiteiten.map(x => [x.k, x.l]);
+    const m = model || INR, lijst = type === 'station' ? m.stations.map(x => [x.k, x.label]) : type === 'fase' ? m.fases.map(x => [x.k, x.label]) : type === 'rol' ? (m.rollen || []).map(x => [x.k, x.label]) : m.activiteiten.map(x => [x.k, x.l]);
     if (lijst.some(([kk, ll]) => kk !== k && naamSleutel(ll) === naamSleutel(l))) return 'Deze naam bestaat al.';
     if (type === 'fase' && m.fases.some(f => f.k !== k && f.namen.some(x => naamSleutel(x) === naamSleutel(l)))) return 'Deze naam is eerder de naam van een andere fase geweest (taken van oude apps zouden er dan aan blijven hangen). Kies een andere naam.';
     return '';
@@ -2684,7 +2761,22 @@
   // Migratie: er verandert niets aan bestaande blokken zolang niemand ze wijzigt. Een blok zonder stempels is "oud" en telt met zijn tijd (_gewijzigd, anders ts); het wint van niets maar
   // nooit van een nieuwer gestempeld veld. Een oude versie van de tool (die alleen het record stempelt) wordt herkend aan een record dat nieuwer is dan al zijn stempels (staleBoven).
   // Alleen wat een apparaat zelf wijzigde (het verschil met wat het eerder zag) krijgt een stempel: nooit het hele record, dus nooit andermans veld overschrijven.
-  P.BLOK_VELDEN = ['persoon', 'project_code', 'taak', 'taak_id', 'datum', 'start', 'duurMin', 'notitie', 'status', 'voorstel'];
+  // D0: de agenda-velden van een planblok (voor de koppeling met Outlook). Drie aparte, elk gestempelde velden, zodat twee apparaten die tegelijk iets anders wijzigen elkaar niet kwijtraken:
+  //   agenda_instelling = wat de planner wil { in_agenda: bool, wie?: slug, herinnering?: null|minuten|'dag', toon_waarde?: bool },
+  //   agenda_koppeling  = de gekoppelde afspraak { mbx?, id, iCalUId?, changeKey?, etag?, op? } (de opdracht die hem maakte),
+  //   agenda_gezien     = de laatste terugleescontrole { ts, lastModified? }.
+  // Ze rijden mee op de schemadrempel van de planblokken (P.SCHEMA): een app die ze niet kent mag het bestand niet meer schrijven zodra de drempel staat. Nog geen enkele code zet ze (dat komt met D2 en D3).
+  P.AGENDA_VELDEN = ['agenda_instelling', 'agenda_koppeling', 'agenda_gezien'];
+  P.BLOK_VELDEN = ['persoon', 'project_code', 'taak', 'taak_id', 'datum', 'start', 'duurMin', 'notitie', 'status', 'voorstel'].concat(P.AGENDA_VELDEN);
+  const nuObj = x => !!x && typeof x === 'object' && !Array.isArray(x), nuStr = (x, max) => typeof x === 'string' && x.length <= (max || 300);
+  P.agendaVeldGeldig = function (veld, w) {   // een waarde van een agenda-veld: de vorm klopt (anders wordt het nooit geschreven)
+    if (w === undefined) return true;   // wissen mag
+    if (veld === 'agenda_instelling') return nuObj(w) && typeof w.in_agenda === 'boolean' && Object.keys(w).every(k => ['in_agenda', 'wie', 'herinnering', 'toon_waarde'].includes(k)) && (w.wie === undefined || nuStr(w.wie, 80)) && (w.herinnering === undefined || w.herinnering === null || w.herinnering === 'dag' || (Number.isFinite(w.herinnering) && w.herinnering >= 0 && w.herinnering <= 10080)) && (w.toon_waarde === undefined || typeof w.toon_waarde === 'boolean');
+    if (veld === 'agenda_koppeling') return nuObj(w) && nuStr(w.id, 500) && w.id.length > 0 && Object.keys(w).every(k => ['mbx', 'id', 'iCalUId', 'changeKey', 'etag', 'op'].includes(k)) && Object.values(w).every(v => nuStr(v, 500));
+    if (veld === 'agenda_gezien') return nuObj(w) && Number.isFinite(w.ts) && Object.keys(w).every(k => ['ts', 'lastModified'].includes(k)) && (w.lastModified === undefined || nuStr(w.lastModified, 80));
+    return true;
+  };
+  const agendaOngeldig = o => !!o && P.AGENDA_VELDEN.some(f => o[f] !== undefined && !P.agendaVeldGeldig(f, o[f]));
   const BLOK_RAND = ['ts', 'door', '_door'];   // metagegevens die meeverhuizen met een wijziging, zonder eigen stempel
   const blokTijd = x => { const t = recTijd(x); if (t) return t; const ts = Date.parse((x && x.ts) || ''); return isNaN(ts) ? 0 : ts; };
   const blokBesloten = x => !!(x && x.voorstel && (x.voorstel.goedgekeurd || x.voorstel.afgewezen));
@@ -2735,6 +2827,7 @@
       vs[f] = { t: Math.max(tijd, vorig + 1), dev, rev: revVan(vs[f]) + 1, door, basis: vorig };
     };
     const tijd = Number(p.t) || nu;
+    if (agendaOngeldig(p.nieuw) || agendaOngeldig(p.velden)) return { skip: 'ongeldig' };   // een agenda-veld met een verkeerde vorm wordt niet geschreven (en gemeld als overgeslagen)
     if (p.nieuw) {
       if (i >= 0) return { skip: lijst[i]._vervallen ? 'verwijderd' : 'bestaat' };
       const x = kopie(p.nieuw); delete x._vs; delete x._vervallen;
