@@ -45,7 +45,7 @@
       const pr = bekend.get(String(code).toLowerCase()); if (!pr) return;   // alleen taken van projecten die in de lijst staan (niet van verwijderde of onbekende)
       if (f.project && !zelfde(f.project, code)) return;
       const lijst = P.takenActief(Array.isArray(taken[code]) ? taken[code] : []);
-      const dk = sleutelVan(o.afhank, code), deps = dk ? o.afhank[dk] : [], wacht = P.wachtOverzicht(lijst, deps, { vrij: o.vrij, vandaag });
+      const dk = sleutelVan(o.afhank, code), deps = dk ? o.afhank[dk] : [], wacht = P.wachtOverzicht(lijst, deps, { vrij: o.vrij, vandaag, alle: taken, code });
       lijst.forEach(t => {
         const st = t.status || 'todo';
         if (f.persoon && !P.taakMensen(t).some(m => P.zelfdePersoon(m, f.persoon, team))) return;

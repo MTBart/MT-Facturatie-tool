@@ -55,17 +55,17 @@
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
 <script src="mt-planfilter.js?v=2026-10-23j"></script>
-<script src="mt-planning.js?v=2026-10-23n"></script>
+<script src="mt-planning.js?v=2026-10-23o"></script>
 <script src="mt-mijnwerk.js?v=2026-10-23b"></script>
 <script src="mt-capaciteit.js?v=2026-10-17c"></script>
-<script src="mt-planverplaats.js?v=2026-10-23n"></script>
+<script src="mt-planverplaats.js?v=2026-10-23o"></script>
 <script src="mt-capaciteit-nieuw.js?v=2026-10-23b"></script>
 <script src="mt-objectpaneel.js?v=2026-10-23l"></script>
-<script src="mt-taakpaneel.js?v=2026-10-23n"></script>
+<script src="mt-taakpaneel.js?v=2026-10-23o"></script>
 <script src="mt-planblokpaneel.js?v=2026-10-23b"></script>
 <script src="mt-planinrichting.js?v=2026-10-23g"></script>
-<script src="mt-bord.js?v=2026-10-23k"></script>
-<script src="mt-tijdlijn.js?v=2026-10-23l"></script>
+<script src="mt-bord.js?v=2026-10-23l"></script>
+<script src="mt-tijdlijn.js?v=2026-10-23m"></script>
 <script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
@@ -3092,7 +3092,7 @@ function _projSamen(lokaal,spData){
 //   - nog niets bekend (eerste vraag mislukt) → geen blokkade (fail-open: anders legt een storing het werk stil);
 //   - eerder al "te oud" gebleken → blijft blokkeren tot herladen (fail-closed: een storing heft de blokkade niet op).
 // Een geslaagd antwoord vervangt de kennis; een blokkade die al getoond is (blockedKeys) geldt tot herladen.
-const PROJ_SCHEMA=10;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
+const PROJ_SCHEMA=11;   // 3 (brok C): projectnummers; 4 (L1a): velden met eigen stempel (fase, volgende actie, …) en delete-wins; 5 (planning P1): projecttaken met stempel per veld en tombstones
 // De schema-controle geldt voor élke SharePoint-sleutel waarvan het formaat per schema verandert: de projecten én de projecttaken
 // (een oudere tab zou de taken zonder stempels/tombstones terugschrijven).
 const _PROJ_SCHEMA_SLEUTELS=['mt_projecten','mt_project_taken_v2','mt_planblokken','mt_bestellijst_v2','mt_project_afhank'];   // 10 (F2a: afhankelijkheden met type EB/BB/EE/BE, voorsprong en levertijd): een oudere app schrijft de afhankelijkheden en taken niet meer zodra de drempel op 10 staat; 9 (P6: checklist per punt samenvoegen, poorten): een oudere app schrijft de projecttaken niet meer zodra de drempel op 9 staat; 8 (P3b: taken met fase_id; planning-inrichting); 7 (P5: bestelregels met taak_id, verwacht_op en verwacht_bron: een oudere app schrijft de bestellijst niet meer zodra de drempel op 7 staat); 6 (F1): ook de planblokken en de bestellijst: een te oude app schrijft ze niet meer zodra de drempel op 6 staat
@@ -8182,8 +8182,9 @@ function _p2AfhBouw(code){
   const kop=_p2El('div',{class:'pm-kop'},_p2El('div',{class:'card-title',style:'margin:0',tekst:'🔗 Planning en afhankelijkheden'}));
   if(mag) kop.appendChild(_p2El('button',{type:'button',class:'btn btn-xs btn-gold',title:'Zet een standaardketen van taken met afhankelijkheden en datums klaar (eerst een voorstel; niets gebeurt zonder bevestiging)',klik:()=>projSjabloonDialoog(code)},'📐 Sjabloon toepassen'));
   if(!taken.length) return _p2El('section',{class:'pm','aria-label':'Planning en afhankelijkheden'},kop,_p2El('p',{class:'dos-leeg',tekst:'Nog geen taken. Pas een sjabloon toe of voeg taken toe; daarna zeg je hier welke taak van welke afhangt.'}));
-  const r=MTPlanning.rooster(taken,ruw,{start:MTPlanning.vandaagYmd(),leverdatum:lever,vrij});
-  const wacht=MTPlanning.wachtOverzicht(taken,ruw), eff=MTPlanning.depsEffectief(taken,ruw), conf=MTPlanning.planConflicten(taken,ruw,{vrij}), kringen=MTPlanning.depKringen(taken,ruw);
+  const ALLE=projTakenAll(), kruisOpts={alle:ALLE,code};   // F2b: voorgangers uit andere projecten tellen mee in rooster, wachten en conflicten
+  const r=MTPlanning.rooster(taken,ruw,{start:MTPlanning.vandaagYmd(),leverdatum:lever,vrij,alle:ALLE,code});
+  const wacht=MTPlanning.wachtOverzicht(taken,ruw,kruisOpts), eff=MTPlanning.depsEffectief(taken,ruw), conf=MTPlanning.planConflicten(taken,ruw,{vrij,alle:ALLE,code}), kringen=MTPlanning.depKringen(taken,ruw);
   const naam=id=>(taken.find(t=>t.id===id)||{}).naam||'?';
   if(mag&&(!(window.MTRol&&MTRol.mag)||MTRol.mag('projecten:wijzigen'))) kop.appendChild(_p2El('label',{class:'afh-modus',title:'Flexibel: een verschoven taak geeft alleen een voorstel voor de opvolgers, je mag ook alleen de taak verzetten. Strikt: de taak kan alleen samen met zijn opvolgers verschoven worden. In beide gevallen gebeurt niets zonder jouw bevestiging.'},'Verschuiven ',
     _p2Sel([['flexible','Flexibel (voorstel)'],['strict','Strikt (opvolgers mee)']],modus,w=>projAfhModusZet(code,w))));
@@ -8192,6 +8193,11 @@ function _p2AfhBouw(code){
   conf.slice(0,6).forEach(c=>meldingen.push(_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ "'+c.naarNaam+'" staat '+Math.max(1,c.dagen)+' werkdag(en) te vroeg: het kan op zijn vroegst op '+_p2D(c.vroegst)+' (na "'+c.vanNaam+'"). ',
     mag?_p2El('button',{type:'button',class:'btn btn-xs btn-secondary',title:'Berekent waar de opvolgers heen moeten; je bevestigt eerst',klik:()=>projAfhHerplan(code,c.van)},'Opvolgers herplannen…'):null)));
   if(conf.length>6) meldingen.push(_p2El('div',{class:'pm-w pm-let-op'},'… en nog '+(conf.length-6)+' conflict(en).'));
+  // F2b: beperkingen die niet kloppen met de planning (niet vóór, uiterlijk, vast op); er wordt niets vanzelf verschoven
+  { const bc=MTPlanning.beperkingConflicten(taken,{vrij}), getoond=new Set(bc.map(x=>x.id));
+    (r.beperkingConflicten||[]).filter(x=>!getoond.has(x.id)).forEach(x=>bc.push({id:x.id,naam:x.naam,soort:x.soort,datum:x.datum,dagen:x.dagen,vroegst:x.vroegst,vroegstEind:x.vroegstEind,rooster:true}));
+    bc.slice(0,6).forEach(x=>meldingen.push(_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ "'+x.naam+'": '+(x.soort==='niet_voor'?'staat v\u00f3\u00f3r de datum waarvoor hij niet mag beginnen ('+_p2D(x.datum)+').':x.soort==='uiterlijk'?(x.rooster?'is op zijn vroegst klaar op '+_p2D(x.vroegstEind)+', '+x.dagen+' werkdag(en) na de uiterste datum ('+_p2D(x.datum)+').':'eindigt '+_p2D(x.eind)+', '+x.dagen+' werkdag(en) na de uiterste datum ('+_p2D(x.datum)+').'):(x.rooster?'kan op zijn vroegst op '+_p2D(x.vroegst)+' beginnen, na de vaste datum ('+_p2D(x.datum)+').':'staat niet op de vaste datum ('+_p2D(x.datum)+').')))));
+    if(bc.length>6) meldingen.push(_p2El('div',{class:'pm-w pm-let-op'},'… en nog '+(bc.length-6)+' beperking(en) die niet kloppen.')); }
   const mig=MTPlanning.depMigratie(taken,ruw,{project_id:pid});
   if(mig.nieuw.length&&mag) meldingen.push(_p2El('div',{class:'pm-w pm-info',role:'status'},'🔄 '+mig.nieuw.length+' koppeling(en) uit de oude taaklijst staan nog niet als afhankelijkheid vast. ',
     _p2El('button',{type:'button',class:'btn btn-xs btn-secondary',klik:()=>projAfhMigreer(code)},'Bekijken en omzetten…')));
@@ -8206,8 +8212,9 @@ function _p2AfhBouw(code){
   if(lever&&geplandEind&&geplandEind>lever) meldingen.push(_p2El('div',{class:'pm-w pm-let-op',role:'status'},'⚠ De laatste geplande taak eindigt op '+_p2D(geplandEind)+', na de leverdatum ('+_p2D(lever)+').'));
   const rijen=taken.map(t=>{
     const info=r.taken[t.id]||{}, w=wacht[t.id]||{wacht:false,op:[]}, mijl=t.soort==='mijlpaal';
-    const st=MTPlanning.taakStatusEff(t,taken,ruw), stl=st==='wachten'?{l:'Wacht',c:'#B8962E'}:(_PT_STAT[st]||_PT_STAT.todo);
-    const voor=eff.filter(e=>e.naar===t.id);
+    const st=MTPlanning.taakStatusEff(t,taken,ruw,kruisOpts), stl=st==='wachten'?{l:'Wacht',c:'#B8962E'}:(_PT_STAT[st]||_PT_STAT.todo);
+    const voor=eff.filter(e=>e.naar===t.id), kruisVoor=MTPlanning.depsKruis(projAfhRuw(),code,t.id).voor;
+    const kruisChips=kruisVoor.map(q=>{ const pk=Object.keys(ALLE).find(k=>String(k).toLowerCase()===String(q.project).toLowerCase())||q.project, vt=((ALLE[pk]||[]).find(y=>y&&!y._vervallen&&String(y.id)===String(q.taak)))||{}; return _p2El('span',{class:'afh-chip'+(q.dep.status==='uit'?' afh-uit':''),title:'Voorganger in een ander project. Wijzigen of weghalen kan in het taakpaneel van deze taak.'},pk+': '+(vt.naam||'(taak bestaat niet meer)'),(q.dep.type&&q.dep.type!=='FS'?_p2El('span',{class:'afh-typetekst',tekst:' '+MTPlanning.DEP_TYPEN[q.dep.type]}):null),(Number(q.dep.lag_dagen)?(' '+(q.dep.lag_dagen>0?'+':'')+q.dep.lag_dagen+' d'):null)); });
     const chips=voor.map(e=>_p2El('span',{class:'afh-chip'+(e.inactief?' afh-uit':''),title:e.bron==='oud'?'Uit de oude taaklijst: zet eerst de oude koppelingen om om dit aan te passen':'Opvolger start pas na afloop van de voorganger plus de wachttijd'},
       naam(e.van),
       e.bron==='dep'&&mag?_p2Sel(MTPlanning.afhTypeOpties(),e.type||'FS',v=>projAfhVeld(code,e.id,'type',v),{class:'afh-type','aria-label':'Type van de koppeling met '+naam(e.van),title:'EB: einde-naar-begin, BB: begin-naar-begin, EE: einde-naar-einde, BE: begin-naar-einde'}):(e.type&&e.type!=='FS'?_p2El('span',{class:'afh-typetekst',tekst:' '+MTPlanning.DEP_TYPEN[e.type]}):null),
@@ -8216,12 +8223,13 @@ function _p2AfhBouw(code){
       e.bron==='dep'&&mag?_p2El('button',{type:'button',class:'afh-weg',title:'Afhankelijkheid weghalen','aria-label':'Afhankelijkheid weghalen',klik:()=>projAfhWeg(code,e.id)},'×'):null));
     const opties=[['','+ afhankelijk van…']].concat(taken.filter(o=>o.id!==t.id&&!voor.some(e=>e.van===o.id)).map(o=>{ const c=taken.length>80?{ok:true}:MTPlanning.depControle(taken,ruw,{van:o.id,naar:t.id}); return [o.id,o.naam+(c.ok?'':' (maakt een kring)'),!c.ok]; }));   // bij heel veel taken wordt de kring pas bij het kiezen gecontroleerd
     const datum=(veld,waarde)=>_p2El('input',{type:'date',class:'afh-datum',waarde:waarde||'',disabled:mag?null:'disabled','aria-label':(veld==='start'?'Start':'Eind')+' van '+t.naam,wijzig:ev=>projAfhDatum(code,t.id,veld,ev.target.value)});
+    const bepTekst=MTPlanning.beperkingTekst(t,_p2D);
     return _p2El('tr',{id:'afh-row-'+code.replace(/[^A-Za-z0-9]/g,'')+'-'+t.id},
       _p2El('td',null,_p2El('span',{class:'badge',style:'background:'+stl.c+'22;color:'+stl.c,title:w.wacht?('Wacht op: '+MTPlanning.wachtOpTekst(w,_p2D)):''},stl.l)),
-      _p2El('td',{style:'white-space:normal;min-width:160px'},(mijl?'◆ ':'')+t.naam,t.fase?_p2El('div',{class:'pm-dim',style:'font-size:11px'},t.fase):null),
+      _p2El('td',{style:'white-space:normal;min-width:160px'},(mijl?'◆ ':'')+t.naam,t.fase?_p2El('div',{class:'pm-dim',style:'font-size:11px'},t.fase):null,bepTekst?_p2El('div',{class:'pm-dim',style:'font-size:11px',title:'Beperking van deze taak (instellen in het taakpaneel)'},'📌 '+bepTekst):null),
       _p2El('td',null,datum('start',t.start)),
       _p2El('td',null,mijl?_p2El('span',{class:'pm-dim',tekst:'mijlpaal'}):datum('eind',t.eind)),
-      _p2El('td',{style:'white-space:normal'},chips,mag&&opties.length>1?_p2Sel(opties,'',v=>{ if(v) projAfhVoeg(code,t.id,v); },{class:'pt-sel','aria-label':'Afhankelijk van'}):null),
+      _p2El('td',{style:'white-space:normal'},chips,kruisChips,mag&&opties.length>1?_p2Sel(opties,'',v=>{ if(v) projAfhVoeg(code,t.id,v); },{class:'pt-sel','aria-label':'Afhankelijk van'}):null),
       _p2El('td',null,info.kritiek&&!info.kring&&(voor.length||eff.some(e=>e.van===t.id))?_p2El('span',{class:'pm-badge pm-let-op',title:'Op het kritieke pad: uitloop raakt de leverdatum direct'},'kritiek'):(info.kring?_p2El('span',{class:'pm-badge pm-fout',title:'Maakt deel uit van een kring'},'kring'):_p2El('span',{class:'pm-dim',tekst:'speling '+info.slack+' d'}))));
   });
   const tabel=_p2El('div',{class:'tabel-scroll'},_p2El('table',{class:'pm-tabel afh-tabel'},

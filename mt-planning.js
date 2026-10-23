@@ -190,8 +190,8 @@
   // wacht_reden = waarom een taak op status 'wacht' staat (stap 2, mobiel: Bezig · Klaar · Wacht met een verplichte reden).
   // Alle drie zijn gestempelde velden, maar zonder conflictmelding: de nieuwste stempel wint (ZONDER_CONFLICT).
   // voorstel = de markering "door werkplaats" van een gemelde taak of bestelregel (wie, rol, wanneer); kantoor haalt hem er met Overnemen af.
-  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bron']);   // P6: checklist (samenvoegen per punt) en poort (een mijlpaal van een eigen soort, met eigenaar, bewijs-link en bron)   // fase_id (P3b): het id van de fase in de planning-inrichting; 'fase' blijft de naam, voor oude apps
-  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bron']);
+  P.TAAK_VELDEN = P.TAAK_BASIS_VELDEN.concat(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bron', 'beperking', 'beperking_datum']);   // F2b: een beperking op de planning van een taak (niet v\u00f3\u00f3r, uiterlijk op, vast op)   // P6: checklist (samenvoegen per punt) en poort (een mijlpaal van een eigen soort, met eigenaar, bewijs-link en bron)   // fase_id (P3b): het id van de fase in de planning-inrichting; 'fase' blijft de naam, voor oude apps
+  const ZONDER_CONFLICT = new Set(['klaar_op', 'tg_pending', 'wacht_reden', 'voorstel', 'fase_id', 'checklist', 'poort', 'poort_eigenaar', 'poort_bewijs', 'poort_bron', 'beperking', 'beperking_datum']);
   const kopie = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   const norm = v => v === undefined ? null : v;
   const gelijk = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
@@ -811,6 +811,7 @@
     const T = P.takenActief(taken), ids = new Set(T.map(t => t.id)), uit = [], paren = new Set();
     (Array.isArray(depsRuw) ? depsRuw : []).forEach(d => {
       if (!d || typeof d !== 'object') return;
+      if (d.van_project) return;   // F2b: een voorganger uit een ander project telt alleen mee na P.metExtern (anders zou zijn id met een lokale taak kunnen botsen)
       paren.add(d.van_taak + '>' + d.naar_taak);
       if (d._vervallen) return;
       if (!ids.has(d.van_taak) || !ids.has(d.naar_taak) || d.van_taak === d.naar_taak) return;
@@ -862,7 +863,66 @@
     if (k) return { ok: false, kring: k, fout: 'Dit maakt een kring: ' + k.map(i => naamVan(T, i)).join(' → ') + '.' };
     return { ok: true };
   };
-  // F2a: de eigenschappen van een afhankelijkheid controleren en normaliseren: type (FS, SS, FF, SF), wachttijd in hele dagen (negatief = voorsprong, alleen bij procestijd; hoogstens 365 dagen) en soort
+  // ── F2b: afhankelijkheden tussen projecten ──
+  // Een koppeling in het project van de opvolger met `van_project` (de code van het andere project) en `van_taak` (een taak daar). Taak-id's zijn alleen binnen één project uniek, dus project + taak.
+  // P.metExtern(taken, deps, alle, code): zet zulke voorgangers als vaste "schaduwtaken" (met de datums, de status en de duur uit het andere project) in de lijst, zodat rooster, wachten, conflicten en
+  // verschuiven er gewoon mee rekenen. De planning van de schaduwtaak zelf hoort bij het andere project: hij staat vast (vast op zijn start) en telt niet mee voor de einddatum, de speling of de conflicten.
+  const ckey = (code, id) => String(code == null ? '' : code).trim().toLowerCase() + '|' + String(id);
+  const vindTaakIn = (alle, code, id) => { const k = sleutelVan(alle, code), l = k && Array.isArray(alle[k]) ? alle[k] : []; return P.takenActief(l).find(x => String(x.id) === String(id)) || null; };
+  P.metExtern = function (taken, depsRuw, alle, code) {
+    const T = P.takenActief(taken), deps = Array.isArray(depsRuw) ? depsRuw : [];
+    if (!alle || typeof alle !== 'object' || !deps.some(d => d && typeof d === 'object' && d.van_project && !d._vervallen)) return { taken: T, deps, schaduw: [] };
+    const schaduw = [], nieuw = deps.map(d => {
+      if (!d || typeof d !== 'object' || !d.van_project || d._vervallen) return d;
+      if (zelfdeCode(d.van_project, code)) { const x = Object.assign({}, d); delete x.van_project; return x; }
+      const ext = vindTaakIn(alle, d.van_project, d.van_taak); if (!ext) return Object.assign({}, d, { _vervallen: true });   // de voorganger bestaat niet meer: de koppeling doet niet mee
+      const sid = '@' + d.van_project + '/' + d.van_taak;
+      if (!schaduw.some(s => s.id === sid)) schaduw.push(Object.assign({ id: sid, naam: d.van_project + ': ' + (ext.naam || '(zonder naam)'), status: ext.status || 'todo', soort: ext.soort, _extern: true, extern: { project: d.van_project, id: d.van_taak } },
+        ext.start ? { start: ext.start } : {}, ext.eind ? { eind: ext.eind } : {}, ext.klaar_op ? { klaar_op: ext.klaar_op } : {}, ext.duur_dagen !== undefined ? { duur_dagen: ext.duur_dagen } : {}, P.isYmd(ext.start) ? { beperking: 'vast_op', beperking_datum: ext.start } : {}));
+      const x = Object.assign({}, d, { van_taak: sid }); delete x.van_project; return x;
+    });
+    return { taken: T.concat(schaduw), deps: nieuw, schaduw };
+  };
+  // De koppelingen met andere projecten van één taak: { voor: [{ dep, project (het andere), taak }], na: [{ dep, project (van de opvolger), taak (de opvolger) }] }
+  P.depsKruis = function (depsStore, code, id) {
+    const uit = { voor: [], na: [] }; if (!depsStore || typeof depsStore !== 'object') return uit;
+    Object.keys(depsStore).forEach(k => {
+      if (k.startsWith('__') || !Array.isArray(depsStore[k])) return;
+      depsStore[k].forEach(d => {
+        if (!d || typeof d !== 'object' || d._vervallen || !d.van_project || zelfdeCode(d.van_project, k)) return;
+        if (zelfdeCode(k, code) && String(d.naar_taak) === String(id)) uit.voor.push({ dep: d, project: d.van_project, taak: d.van_taak });
+        if (zelfdeCode(d.van_project, code) && String(d.van_taak) === String(id)) uit.na.push({ dep: d, project: k, taak: d.naar_taak });
+      });
+    });
+    return uit;
+  };
+  // Kringen over alle projecten heen: de knopen (project|taak) die in een kring zitten
+  P.depKringenGlobaal = function (takenStore, depsStore) {
+    const ts = takenStore && typeof takenStore === 'object' ? takenStore : {}, ds = depsStore && typeof depsStore === 'object' ? depsStore : {};
+    const ids = [], edges = [];
+    Object.keys(ts).forEach(k => { if (k.startsWith('__') || !Array.isArray(ts[k])) return; P.takenActief(ts[k]).forEach(t => ids.push(ckey(k, t.id))); });
+    const idset = new Set(ids);
+    Object.keys(ds).forEach(k => {
+      if (k.startsWith('__') || !Array.isArray(ds[k])) return;
+      const tk = sleutelVan(ts, k), T = tk && Array.isArray(ts[tk]) ? P.takenActief(ts[tk]) : [];
+      P.depsEffectief(T, ds[k]).forEach(e => { if (!e.inactief) edges.push({ van: ckey(k, e.van), naar: ckey(k, e.naar) }); });
+      ds[k].forEach(d => { if (!d || typeof d !== 'object' || d._vervallen || d.status === 'uit' || !d.van_project || zelfdeCode(d.van_project, k)) return; const a = ckey(d.van_project, d.van_taak), b = ckey(k, d.naar_taak); if (idset.has(a) && idset.has(b)) edges.push({ van: a, naar: b }); });
+    });
+    return topo(ids, edges.filter(e => idset.has(e.van) && idset.has(e.naar))).kring;
+  };
+  const naamKnoop = (ts, key) => { const [c, ...r] = key.split('|'), id = r.join('|'), k = sleutelVan(ts, c), t = k ? P.takenActief(ts[k]).find(x => String(x.id) === id) : null; return (k || c) + ': ' + (t ? t.naam : id); };
+  // Mag een koppeling met een taak uit een ander project? { ok, fout } (de taken bestaan, niet binnen één project, niet dubbel, geen kring over de projecten heen)
+  P.depControleKruis = function (takenStore, depsStore, { code, naar, vanProject, van }) {
+    if (zelfdeCode(vanProject, code)) return { ok: false, fout: 'Dit is een koppeling binnen één project.' };
+    if (!vindTaakIn(takenStore, vanProject, van)) return { ok: false, fout: 'De voorganger bestaat niet (meer) in het andere project.' };
+    if (!vindTaakIn(takenStore, code, naar)) return { ok: false, fout: 'De opvolger bestaat niet (meer).' };
+    const dk = sleutelVan(depsStore, code), lijst = dk && Array.isArray(depsStore[dk]) ? depsStore[dk] : [];
+    if (lijst.some(d => d && !d._vervallen && d.van_project && zelfdeCode(d.van_project, vanProject) && String(d.van_taak) === String(van) && String(d.naar_taak) === String(naar))) return { ok: false, fout: 'Deze afhankelijkheid bestaat al.' };
+    const voor = new Set(P.depKringenGlobaal(takenStore, depsStore)), sim = Object.assign({}, depsStore); sim[dk || code] = lijst.concat([{ id: '#nieuw', van_taak: van, van_project: vanProject, naar_taak: naar, status: 'actief' }]);
+    const nieuw = P.depKringenGlobaal(takenStore, sim).filter(k => !voor.has(k));
+    if (nieuw.length) return { ok: false, kring: nieuw, fout: 'Dit maakt een kring over de projecten heen: ' + nieuw.map(k => naamKnoop(takenStore, k)).join(' \u2192 ') + '.' };
+    return { ok: true };
+  };  // F2a: de eigenschappen van een afhankelijkheid controleren en normaliseren: type (FS, SS, FF, SF), wachttijd in hele dagen (negatief = voorsprong, alleen bij procestijd; hoogstens 365 dagen) en soort
   // (proces = werkdagen, levertijd = kalenderdagen). → { ok, type, lag_dagen, lag_soort } | { ok: false, fout }
   P.depSpec = function ({ type, lag_dagen, lag_soort } = {}) {
     const ty = String(type === undefined || type === null || type === '' ? 'FS' : type).toUpperCase();
@@ -921,7 +981,9 @@
   // → per taak { wacht, op: [{id, naam, lag, tot?, bron?}], tot? }: een voorganger die nog niet klaar is heeft geen "tot"; een lopende wachttijd wel (ymd, bron 'klaar_op' | 'berekend').
   P.vrijeDagenBron = null;
   P.wachtOverzicht = function (taken, depsRuw, opts) {
-    const o = opts || {}, T = P.takenActief(taken), by = new Map(T.map(t => [t.id, t])), uit = {};
+    const o = opts || {};
+    if (o.alle && o.code) { const x = P.metExtern(taken, depsRuw, o.alle, o.code); taken = x.taken; depsRuw = x.deps; }   // F2b: voorgangers uit andere projecten (opts.alle = alle taken, opts.code = dit project)
+    const T = P.takenActief(taken), by = new Map(T.map(t => [t.id, t])), uit = {};
     const V = P.vrijSet(o.vrij !== undefined && o.vrij !== null ? o.vrij : (typeof P.vrijeDagenBron === 'function' ? P.vrijeDagenBron() : null)), vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd();
     T.forEach(t => { uit[t.id] = { wacht: false, op: [] }; });
     actieveKant(P.depsEffectief(T, depsRuw)).forEach(e => {
@@ -951,6 +1013,12 @@
       const tot = e.lagSoort === 'levertijd' ? dymd(naarW(dnr(basis) + lag, true, V)) : P.addWerkdagen(basis, lag, V);
       if (vandaag < tot) { const w = uit[n.id]; w.wacht = true; w.op.push(Object.assign({ id: v.id, naam: v.naam, lag, tot, bron: gemeld ? 'klaar_op' : 'berekend' }, extra)); if (!w.tot || tot > w.tot) w.tot = tot; }
     });
+    T.forEach(n => {   // F2b: een taak met 'niet vóór' of 'vast op' een datum wacht tot die datum
+      if (n.status === 'klaar') return; const bp = beperkingVan(n); if (!bp || (bp.soort !== 'niet_voor' && bp.soort !== 'vast_op')) return;
+      const tot = dymd(naarW(bp.nr, true, V)); if (!(vandaag < tot)) return;
+      const w = uit[n.id]; w.wacht = true; w.op.push({ id: n.id + '#beperking', naam: bp.soort === 'vast_op' ? 'de vaste datum' : 'de datum', lag: 0, tot, bron: 'beperking', beperking: bp.soort }); if (!w.tot || tot > w.tot) w.tot = tot;
+    });
+    Object.keys(uit).forEach(k => { if (k.charAt(0) === '@') delete uit[k]; });   // de schaduwtaken van andere projecten horen niet in de uitkomst
     return uit;
   };
   P.taakWacht = (taak, taken, depsRuw, opts) => (taak && P.wachtOverzicht(taken, depsRuw, opts)[taak.id]) || { wacht: false, op: [] };
@@ -960,7 +1028,7 @@
     return st === 'todo' && P.taakWacht(taak, taken, depsRuw, opts).wacht ? 'wachten' : st;
   };
   // Tekst voor "wacht op": de naam, bij een lopende wachttijd ook tot wanneer (de aanroeper geeft de datumopmaak mee).
-  P.wachtOpTekst = (w, datumTekst) => ((w && w.op) || []).map(x => (x.poort ? 'poort ' + x.poort : x.naam) + (x.type === 'SS' && !x.tot ? ' (moet eerst beginnen)' : '') + (x.tot ? (x.lagSoort === 'levertijd' ? ' (levertijd ' + x.lag + (x.lag === 1 ? ' dag' : ' dagen') : ' (wachttijd ' + x.lag + ' werkdag' + (x.lag === 1 ? '' : 'en')) + ', tot ' + (datumTekst ? datumTekst(x.tot) : x.tot) + ')' : '')).join(', ');
+  P.wachtOpTekst = (w, datumTekst) => ((w && w.op) || []).map(x => x.beperking ? (x.beperking === 'vast_op' ? 'vaste start op ' : 'niet vóór ') + (datumTekst ? datumTekst(x.tot) : x.tot) : (x.poort ? 'poort ' + x.poort : x.naam) + (x.type === 'SS' && !x.tot ? ' (moet eerst beginnen)' : '') + (x.tot ? (x.lagSoort === 'levertijd' ? ' (levertijd ' + x.lag + (x.lag === 1 ? ' dag' : ' dagen') : ' (wachttijd ' + x.lag + ' werkdag' + (x.lag === 1 ? '' : 'en')) + ', tot ' + (datumTekst ? datumTekst(x.tot) : x.tot) + ')' : '')).join(', ');
   // F2a: waar wacht het einde van een taak op (EE en BE)? Tekst voor het paneel; leeg als er niets is.
   P.eindOpTekst = (w, datumTekst) => ((w && w.eindOp) || []).map(x => (x.type === 'FF' ? 'kan pas klaar na het einde van ' : 'kan pas klaar na het begin van ') + x.naam + (x.tot ? ' (wachttijd tot ' + (datumTekst ? datumTekst(x.tot) : x.tot) + ')' : (x.lag > 0 ? ' en dan ' + (x.lagSoort === 'levertijd' ? x.lag + (x.lag === 1 ? ' dag' : ' dagen') : x.lag + (x.lag === 1 ? ' werkdag' : ' werkdagen')) + ' wachttijd' : ''))).join(', ');
 
@@ -991,8 +1059,14 @@
     if (e.type === 'SF') return eindVanNr(lev ? naarW(lfN - Lk, false, V) : plusW(lfN, -L, V), dV, V);
     return lev ? naarW(lsN - Math.max(dN === 0 ? 0 : 1, Lk), false, V) : plusW(lsN, -((dN === 0 ? 0 : 1) + L), V);
   };
+  // F2b: een beperking op een taak: 'niet_voor' (de taak start niet vóór de datum), 'uiterlijk' (een deadline: de taak moet op die datum klaar zijn; de planning verschuift er niet voor, maar de keten wordt rood als hij
+  // erover gaat en de speling rekent ermee) en 'vast_op' (een afspraak: de taak start op die datum; kan de keten dat niet halen, dan meldt het rooster een conflict en blokkeert het niet). Zonder beperking: zo snel mogelijk.
+  P.BEPERKINGEN = { niet_voor: 'Niet vóór', uiterlijk: 'Uiterlijk op', vast_op: 'Vast op' };
+  const beperkingVan = t => { const s = t && t.beperking, d = t && t.beperking_datum; return (s === 'niet_voor' || s === 'uiterlijk' || s === 'vast_op') && P.isYmd(d) ? { soort: s, nr: dnr(d), datum: d } : null; };
+  P.beperkingVan = beperkingVan;
   P.startEisTest = (e, es, ef, dN, vrij) => dymd(startEis(e, dnr(es), dnr(ef), dN, P.vrijSet(vrij)));   // alleen voor tests
-  P.rooster = function (taken, depsRuw, { start = '', leverdatum = '', vrij = null, dagMin = 0 } = {}) {
+  P.rooster = function (taken, depsRuw, { start = '', leverdatum = '', vrij = null, dagMin = 0, alle = null, code = '' } = {}) {
+    if (alle && code) { const x = P.metExtern(taken, depsRuw, alle, code); taken = x.taken; depsRuw = x.deps; }   // F2b: voorgangers uit andere projecten (vaste schaduwtaken)
     const V = P.vrijSet(vrij), T = P.takenActief(taken), by = new Map(T.map(t => [t.id, t]));
     const edges = actieveKant(P.depsEffectief(T, depsRuw)).filter(e => by.has(e.van) && by.has(e.naar));
     const s0 = naarW(dnr(P.isYmd(start) ? start : P.vandaagYmd()), true, V);
@@ -1000,29 +1074,41 @@
     const dag = {}; T.forEach(t => { dag[t.id] = datumDagen(t, dagMin, V); });
     const inn = new Map(), uitg = new Map(); ids.forEach(i => { inn.set(i, []); uitg.set(i, []); });
     edges.forEach(e => { inn.get(e.naar).push(e); uitg.get(e.van).push(e); });
-    const es = {}, ef = {};
+    const es = {}, ef = {}, beperkingConflicten = [];
     const eindVan = (s, d) => d >= 1 ? plusW(s, d - 1, V) : s;
     volgorde.forEach(i => {
       let s = s0; inn.get(i).forEach(e => { if (ef[e.van] !== undefined) s = Math.max(s, startEis(e, es[e.van], ef[e.van], dag[i], V)); });
+      const bp = beperkingVan(by.get(i));
+      if (bp && bp.soort === 'niet_voor') s = Math.max(s, bp.nr);
+      else if (bp && bp.soort === 'vast_op') { const keten = naarW(s, true, V), vast = naarW(bp.nr, true, V); if (keten > vast && !by.get(i)._extern) beperkingConflicten.push({ id: i, naam: by.get(i).naam, soort: 'vast_op', datum: bp.datum, vroegst: dymd(keten), dagen: tussenW(vast, keten, V) }); s = bp.nr; }
       es[i] = naarW(s, true, V); ef[i] = eindVan(es[i], dag[i]);
     });
     kring.forEach(i => { es[i] = s0; ef[i] = eindVan(s0, dag[i]); });
-    const eindVroegst = ids.length ? Math.max(...ids.map(i => ef[i])) : s0;
+    const eigen = ids.filter(i => !by.get(i)._extern), eindVroegst = eigen.length ? Math.max(...eigen.map(i => ef[i])) : s0;   // een voorganger uit een ander project telt niet mee voor onze einddatum, speling en kritiek pad
     const D = P.isYmd(leverdatum) ? naarW(dnr(leverdatum), false, V) : eindVroegst;
     const lf = {}, ls = {};
     const begin = (e, d) => d >= 1 ? plusW(e, -(d - 1), V) : e;
     volgorde.slice().reverse().forEach(i => {
       let l = D; uitg.get(i).forEach(e => { if (ls[e.naar] !== undefined) l = Math.min(l, eindEis(e, ls[e.naar], lf[e.naar], dag[e.naar], dag[i], V)); });
+      const bp = beperkingVan(by.get(i));
+      if (bp && bp.soort === 'uiterlijk') l = Math.min(l, naarW(bp.nr, false, V));
+      else if (bp && bp.soort === 'vast_op') l = Math.min(l, eindVan(naarW(bp.nr, true, V), dag[i]));
       lf[i] = l; ls[i] = begin(l, dag[i]);
     });
     kring.forEach(i => { lf[i] = D; ls[i] = begin(D, dag[i]); });
     const uit = {}; let min = Infinity;
-    ids.forEach(i => { const sp = tussenW(es[i], ls[i], V); if (sp < min) min = sp; uit[i] = { es: dymd(es[i]), ef: dymd(ef[i]), ls: dymd(ls[i]), lf: dymd(lf[i]), slack: sp, dagen: dag[i], kring: kring.includes(i), kritiek: false }; });
+    ids.forEach(i => { const sp = tussenW(es[i], ls[i], V); if (sp < min && !by.get(i)._extern) min = sp; uit[i] = { es: dymd(es[i]), ef: dymd(ef[i]), ls: dymd(ls[i]), lf: dymd(lf[i]), slack: sp, dagen: dag[i], kring: kring.includes(i), kritiek: false }; });
     const metKoppeling = new Set(); edges.forEach(e => { metKoppeling.add(e.van); metKoppeling.add(e.naar); });
     ids.forEach(i => { if (uit[i].slack === min && !uit[i].kring) uit[i].kritiek = true; });
     const pad = volgorde.filter(i => uit[i].kritiek && metKoppeling.has(i));
-    return { taken: uit, volgorde, kring, start: dymd(s0), eindVroegst: dymd(eindVroegst), leverdatum: dymd(D), tekort: Math.max(0, tussenW(D, eindVroegst, V)),
-      minSlack: ids.length ? min : 0, pad, padTaken: pad.map(i => ({ id: i, naam: by.get(i).naam })) };
+    ids.forEach(i => {   // F2b: een deadline die de keten haalt of niet; per beperkte taak staat de beperking in de uitkomst (alleen bij taken die er een hebben)
+      const bp = beperkingVan(by.get(i)); if (!bp || kring.includes(i)) return;
+      const over = bp.soort === 'uiterlijk' && ef[i] > naarW(bp.nr, false, V);
+      if (over) beperkingConflicten.push({ id: i, naam: by.get(i).naam, soort: 'uiterlijk', datum: bp.datum, vroegstEind: dymd(ef[i]), dagen: tussenW(naarW(bp.nr, false, V), ef[i], V) });
+      uit[i].beperking = { soort: bp.soort, datum: bp.datum, conflict: over || beperkingConflicten.some(c => c.id === i && c.soort === 'vast_op') };
+    });
+    return Object.assign({ taken: uit, volgorde, kring, start: dymd(s0), eindVroegst: dymd(eindVroegst), leverdatum: dymd(D), tekort: Math.max(0, tussenW(D, eindVroegst, V)),
+      minSlack: eigen.length ? min : 0, pad, padTaken: pad.map(i => ({ id: i, naam: by.get(i).naam })) }, beperkingConflicten.length ? { beperkingConflicten } : {});
   };
   // Het kritieke pad alleen: de ketting taken (in volgorde) die de leverdatum bepaalt.
   P.kritiekPad = (taken, depsRuw, opts) => { const r = P.rooster(taken, depsRuw, opts); return { pad: r.padTaken, tekort: r.tekort, eindVroegst: r.eindVroegst, leverdatum: r.leverdatum, kring: r.kring }; };
@@ -1042,7 +1128,8 @@
     return { datums, eind: r.eindVroegst, start: r.start, kring: r.kring };
   };
   // Staat een opvolger vóór zijn vroegste mogelijke start (voorganger + lag)? Alleen taken met datums.
-  P.planConflicten = function (taken, depsRuw, { vrij = null, dagMin = 0 } = {}) {
+  P.planConflicten = function (taken, depsRuw, { vrij = null, dagMin = 0, alle = null, code = '' } = {}) {
+    if (alle && code) { const x = P.metExtern(taken, depsRuw, alle, code); taken = x.taken; depsRuw = x.deps; }   // F2b
     const V = P.vrijSet(vrij), T = P.takenActief(taken), by = new Map(T.map(t => [t.id, t])), uit = [];
     actieveKant(P.depsEffectief(T, depsRuw)).forEach(e => {
       const v = by.get(e.van), n = by.get(e.naar);
@@ -1063,7 +1150,8 @@
   // opvolgers (`blokkerend`), nog steeds pas na bevestiging. `gelijk`: opvolgers schuiven ook mee als ze er niet voor in de weg
   // staan (dezelfde verschuiving in werkdagen). Taken zonder datums blijven buiten beeld.
   P.depModus = proj => (proj && proj.gegevens && proj.gegevens.afhankelijkheid_modus === 'strict') ? 'strict' : 'flexible';
-  P.verschuifVoorstel = function (taken, depsRuw, { id, start = '', eind = '' } = {}, { modus = 'flexible', vrij = null, gelijk = false, dagMin = 0 } = {}) {
+  P.verschuifVoorstel = function (taken, depsRuw, { id, start = '', eind = '' } = {}, { modus = 'flexible', vrij = null, gelijk = false, dagMin = 0, alle = null, code = '' } = {}) {
+    if (alle && code) { const x = P.metExtern(taken, depsRuw, alle, code); taken = x.taken; depsRuw = x.deps; }   // F2b
     const V = P.vrijSet(vrij), T = P.takenActief(taken).map(kopie), by = new Map(T.map(t => [t.id, t]));
     const m = by.get(id); if (!m) return { ok: false, fout: 'Taak niet gevonden.' };
     const dur = {}; T.forEach(t => { dur[t.id] = datumDagen(t, dagMin, V); });
@@ -1081,7 +1169,7 @@
     const afstammelingen = new Set(), rij = [id];
     while (rij.length) { const x = rij.shift(); uitg.get(x).forEach(e => { if (!afstammelingen.has(e.naar)) { afstammelingen.add(e.naar); rij.push(e.naar); } }); }
     const delta = P.isYmd(oud.eind) ? tussenW(dnr(oud.eind), ne, V) : 0;
-    const wijz = [];
+    const wijz = [], vastgezet = [];
     topo(T.map(t => t.id), edges).volgorde.forEach(i => {
       if (i === id || !afstammelingen.has(i)) return;
       const t = by.get(i); if (!P.isYmd(t.start) || !P.isYmd(t.eind)) return;
@@ -1096,11 +1184,16 @@
       const huidig = dnr(t.start); let nieuwS = huidig, reden = '';
       if (eis !== null && huidig < eis) { nieuwS = eis; reden = 'komt na ' + door; }
       else if (gelijk && delta !== 0) { nieuwS = Math.max(eis === null ? -Infinity : eis, plusW(huidig, delta, V)); reden = 'schuift mee'; }
+      const bpS = beperkingVan(t);
+      if (bpS && nieuwS !== huidig) {   // F2b: 'niet vóór' begrenst waarheen de opvolger mag; 'vast op' blijft staan (en wordt als conflict gemeld, niet geblokkeerd)
+        if (bpS.soort === 'niet_voor') nieuwS = Math.max(nieuwS, bpS.nr);
+        else if (bpS.soort === 'vast_op') { vastgezet.push({ id: i, naam: t.naam, datum: bpS.datum, vroegst: dymd(naarW(nieuwS, true, V)) }); nieuwS = huidig; }
+      }
       if (nieuwS !== huidig) { const s = naarW(nieuwS, true, V); nieuw.set(i, { start: dymd(s), eind: dymd(eindVan(s, dur[i])) }); wijz.push({ id: i, naam: t.naam, van: { start: t.start, eind: t.eind }, naar: nieuw.get(i), reden }); }
     });
     const alleEinden = T.map(t => (nieuw.get(t.id) || t).eind).filter(P.isYmd).sort();
-    return { ok: true, modus: modus === 'strict' ? 'strict' : 'flexible', taak: { id, naam: m.naam, van: oud, naar: nieuw.get(id) }, wijzigingen: wijz,
-      blokkerend: modus === 'strict' && wijz.length > 0, laatsteEind: alleEinden[alleEinden.length - 1] || '' };
+    return Object.assign({ ok: true, modus: modus === 'strict' ? 'strict' : 'flexible', taak: { id, naam: m.naam, van: oud, naar: nieuw.get(id) }, wijzigingen: wijz,
+      blokkerend: modus === 'strict' && wijz.length > 0, laatsteEind: alleEinden[alleEinden.length - 1] || '' }, vastgezet.length ? { vastgezet } : {});
   };
   // Een voorstel toepassen op een lijst taken (kopie). metOpvolgers=false: alleen de verzette taak zelf.
   P.voorstelToepassen = function (taken, voorstel, { metOpvolgers = true } = {}) {
@@ -1599,7 +1692,7 @@
   // ── Schemaversie van de projecttaken ──
   // De laagste app-versie die mt_project_taken_v2 mag schrijven staat in de teller (GET /teller/status → schema_min). Is die hoger dan
   // de versie van déze app (v2.html: PROJ_SCHEMA), dan schrijft de app niet meer. Onbekend (nog niet gelezen) = geen blokkade.
-  P.SCHEMA = 10;
+  P.SCHEMA = 11;
   P.SCHEMA_TEKST = 'Er is een nieuwere versie van de tool in gebruik — herlaad de pagina. Wijzigingen aan projecten en taken worden tot dan niet opgeslagen in SharePoint.';
   P.schemaGeblokkeerd = (schemaMin, eigen) => schemaMin !== null && schemaMin !== undefined && schemaMin !== '' && Number.isFinite(Number(schemaMin)) && Number(schemaMin) > (eigen == null ? P.SCHEMA : Number(eigen));
 
@@ -1747,7 +1840,7 @@
       const lijst = P.takenActief(takenPer[code]);
       const mijnL = lijst.filter(t => (alle || P.taakMensen(t).some(p => P.zelfdePersoon(p, mijn, team))) && (t.status || 'todo') !== 'klaar');
       if (!mijnL.length) return;
-      const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag });
+      const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag, alle: takenPer, code });
       const naamAantal = new Map(); lijst.forEach(t => { const n = nrm(t.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
       mijnL.forEach(t => {
         const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] }, n = nrm(t.naam);
@@ -2049,7 +2142,7 @@
     Object.keys(takenPer).sort().forEach(code => {
       if (code.startsWith('__') || !Array.isArray(takenPer[code]) || (o.project && !zelfdeCode(code, o.project))) return;
       const lijst = P.takenActief(takenPer[code]); if (!lijst.length) return;
-      const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag });
+      const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag, alle: takenPer, code });
       const naamAantal = new Map(); lijst.forEach(t => { const n = nrm(t.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
       lijst.forEach(t => {
         const st = t.status || 'todo'; if (st === 'klaar') return;
@@ -2349,7 +2442,7 @@
       if (!p || typeof p !== 'object' || p._vervallen || !p.code) return;
       const lijst = takenVan(takenObj, p.code), open = lijst.filter(t => !isKlaar(t));
       if (!(PROJECT_ACTIEF.includes(p.fase) || (!p.fase && open.length))) return;
-      const dk = sleutelVan(depsObj, p.code), deps = dk ? depsObj[dk] : [], wacht = P.wachtOverzicht(lijst, deps, { vrij: o.vrij, vandaag }), regels = bestelVan(o.bestel, p);
+      const dk = sleutelVan(depsObj, p.code), deps = dk ? depsObj[dk] : [], wacht = P.wachtOverzicht(lijst, deps, { vrij: o.vrij, vandaag, alle: takenObj, code: p.code }), regels = bestelVan(o.bestel, p);
       const stations = P.STROOM_STATIONS.map(([k, l]) => {
         const ts = lijst.filter(t => stationVan(t) === k); let staat = 'leeg';
         if (ts.length) staat = ts.every(isKlaar) ? 'klaar' : ts.some(t => t.status === 'bezig') ? 'bezig' : ts.some(t => t.status === 'wacht' || ((t.status || 'todo') === 'todo' && wacht[t.id] && wacht[t.id].wacht)) ? 'wacht' : 'open';
@@ -2379,7 +2472,7 @@
     const projVan = (code, pid) => (Array.isArray(projecten) ? projecten : []).find(p => p && !p._vervallen && ((code && zelfdeCode(p.code, code)) || (pid && p.project_id && p.project_id === pid))) || null;
     Object.keys(takenObj && typeof takenObj === 'object' ? takenObj : {}).sort().forEach(code => {
       const lijst = takenVan(takenObj, code); if (!lijst.length) return;
-      const dk = sleutelVan(depsObj, code), wacht = P.wachtOverzicht(lijst, dk ? depsObj[dk] : [], { vrij: o.vrij, vandaag });
+      const dk = sleutelVan(depsObj, code), wacht = P.wachtOverzicht(lijst, dk ? depsObj[dk] : [], { vrij: o.vrij, vandaag, alle: takenObj, code });
       lijst.forEach(t => {
         if (isKlaar(t)) return;
         const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] };
@@ -2495,11 +2588,14 @@
     const afh0 = rawA === null || rawA === undefined ? {} : rawA, vorm = P.takenBestandVorm(afh0) || P.takenBestandVorm(rawT); if (vorm) return { ok: false, reden: 'vorm', fout: vorm };
     let basis, alleTaken; try { basis = P.afhSamen(o.lokaal === undefined ? null : o.lokaal, afh0); alleTaken = P.takenSamen(o.lokaalTaken === undefined ? null : o.lokaalTaken, rawT); } catch (e) { return { ok: false, reden: 'vorm', fout: String((e && e.message) || e) }; }
     const taken = P.takenActief(Array.isArray(alleTaken[code]) ? alleTaken[code] : []), oud = Array.isArray(basis[code]) ? basis[code] : [], actiefOud = P.afhActief(oud), werk = kopie(actiefOud);
-    const r = o.muteer(werk, taken);
+    const r = o.muteer(werk, taken, { alleTaken, depsStore: basis, code });
     if (r === false || r === null || (r && !Array.isArray(r) && r.fout)) return { ok: false, reden: 'weigering', fout: (r && r.fout) || '' };
     const nieuw = Array.isArray(r) ? r : werk;
     const kringOud = new Set(P.depKringen(taken, actiefOud)), kringNieuw = P.depKringen(taken, nieuw).filter(i => !kringOud.has(i));
     if (kringNieuw.length) return { ok: false, reden: 'weigering', fout: 'Dit maakt een kring: ' + kringNieuw.map(i => naamVan(taken, i)).join(' \u2192 ') + '.' };
+    const dkLijst = sleutelVan(basis, code) || code, simStore = Object.assign({}, basis); simStore[dkLijst] = nieuw;
+    const gKringOud = new Set(P.depKringenGlobaal(alleTaken, basis)), gKringNieuw = P.depKringenGlobaal(alleTaken, simStore).filter(k => !gKringOud.has(k));   // F2b: ook over de projecten heen
+    if (gKringNieuw.length) return { ok: false, reden: 'weigering', fout: 'Dit maakt een kring over de projecten heen: ' + gKringNieuw.map(k => naamKnoop(alleTaken, k)).join(' \u2192 ') + '.' };
     const recht = 'taken:alles', toegestaan = () => typeof o.mag !== 'function' || !!o.mag(recht);
     if (!toegestaan()) return { ok: false, reden: 'recht', recht };
     const gestempeld = P.afhStempel(oud, nieuw, { nu, door: o.door || '', dev: o.dev || '', projectId: o.projectId || '' });
@@ -2507,8 +2603,23 @@
     if (typeof o.voorWrite === 'function') { let toe; try { toe = await o.voorWrite(); } catch (e) { toe = false; } if (toe === false) return { ok: false, reden: 'geblokkeerd' }; }
     if (!toegestaan()) return { ok: false, reden: 'recht', recht };
     const ok = await sp.write(bestand, data, (remote, lokaal) => { try { return P.afhSamen(lokaal, remote); } catch (e) { return null; } });
-    return { ok: !!ok, reden: ok ? '' : 'schrijven', data, deps: P.afhActief(gestempeld), oud: actiefOud, nieuw, taken, kringOud: [...kringOud] };
+    return { ok: !!ok, reden: ok ? '' : 'schrijven', data, deps: P.afhActief(gestempeld), oud: actiefOud, nieuw, taken, alleTaken, kringOud: [...kringOud], gKringOud: [...gKringOud] };
   };
+  // F2b: staat een taak (met datums) tegen zijn beperking in? niet vóór: start voor de datum; vast op: start op een andere dag; uiterlijk op: het eind ligt na de datum (alleen open taken).
+  // → [{ id, naam, soort, datum, start, eind, dagen }]; meldt alleen, blokkeert niets.
+  P.beperkingConflicten = function (taken, { vrij = null } = {}) {
+    const V = P.vrijSet(vrij), uit = [];
+    P.takenActief(taken).forEach(t => {
+      const bp = beperkingVan(t); if (!bp || t._extern || t.status === 'klaar') return;
+      const s = P.isYmd(t.start) ? dnr(t.start) : null, e = P.isYmd(t.eind) ? dnr(t.eind) : s;
+      if (bp.soort === 'niet_voor' && s !== null && s < naarW(bp.nr, true, V)) uit.push({ id: t.id, naam: t.naam, soort: 'niet_voor', datum: bp.datum, start: t.start, eind: t.eind || '', dagen: tussenW(s, naarW(bp.nr, true, V), V) });
+      else if (bp.soort === 'vast_op' && s !== null && s !== naarW(bp.nr, true, V)) uit.push({ id: t.id, naam: t.naam, soort: 'vast_op', datum: bp.datum, start: t.start, eind: t.eind || '', dagen: tussenW(s, naarW(bp.nr, true, V), V) });
+      else if (bp.soort === 'uiterlijk' && e !== null && e > naarW(bp.nr, false, V)) uit.push({ id: t.id, naam: t.naam, soort: 'uiterlijk', datum: bp.datum, start: t.start || '', eind: t.eind, dagen: tussenW(naarW(bp.nr, false, V), e, V) });
+    });
+    return uit;
+  };
+  // Een korte tekst bij een beperking: "Niet vóór vr 23 okt"
+  P.beperkingTekst = (t, datumTekst) => { const bp = beperkingVan(t); return bp ? P.BEPERKINGEN[bp.soort] + ' ' + (datumTekst ? datumTekst(bp.datum) : bp.datum) : ''; };
   // F2a: staat een opvolger te vroeg voor deze koppeling (en vanaf wanneer mag hij)? e = een koppeling van depsEffectief, v = voorganger, n = opvolger (met datums). → { vroegst (ymd, vroegste start), vroegstEind (bij EE en BE), botst }
   P.depToets = (e, v, n, { vrij = null, dagMin = 0 } = {}) => {
     const V = P.vrijSet(vrij), vE = P.isYmd(v.eind) ? dnr(v.eind) : null, vS = P.isYmd(v.start) ? dnr(v.start) : null, metEind = e.type === 'FF' || e.type === 'SF';
@@ -2527,10 +2638,18 @@
   const depStand = d => ({ type: depType(d.type), lag_dagen: lagDagen(d), lag_soort: depSoort(d), status: d.status === 'uit' ? 'uit' : 'actief' });
   P.depStandVan = depStand;
   P.afhTypeOpties = () => Object.keys(P.DEP_TYPEN).map(k => [k, P.DEP_TYPEN[k] + ' (' + P.DEP_TYPE_NAMEN[k].split(' (')[0] + ')']);   // [["FS", "EB (einde-naar-begin)"], ...] voor keuzelijsten
-  P.afhToepassen = function (deps0, taken, ops, { project_id = '' } = {}) {
+  P.afhToepassen = function (deps0, taken, ops, { project_id = '', ctx = null } = {}) {   // ctx = { alleTaken, depsStore, code }: nodig voor een koppeling met een taak uit een ander project (F2b)
     let lijst = kopie(Array.isArray(deps0) ? deps0 : []).filter(d => d && !d._vervallen); const tegen = [], verwacht = []; let veranderd = false;
     for (const o of (Array.isArray(ops) ? ops : [])) {
       if (!o || typeof o !== 'object') return { fout: 'Onvolledige bewerking.' };
+      if (o.op === 'nieuw' && o.van_project && ctx && !zelfdeCode(o.van_project, ctx.code)) {   // F2b: een voorganger uit een ander project
+        const sp = P.depSpec({ type: o.type, lag_dagen: o.lag_dagen, lag_soort: o.lag_soort }); if (!sp.ok) return { fout: sp.fout };
+        const sim = Object.assign({}, ctx.depsStore || {}), dk = sleutelVan(sim, ctx.code) || ctx.code; sim[dk] = lijst.slice();
+        const c = P.depControleKruis(ctx.alleTaken, sim, { code: ctx.code, naar: o.naar, vanProject: o.van_project, van: o.van }); if (!c.ok) return { fout: c.fout };
+        const d = { id: o.id || ('d' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)), van_taak: o.van, van_project: o.van_project, naar_taak: o.naar, type: sp.type, lag_dagen: sp.lag_dagen, status: 'actief' };
+        if (sp.lag_soort === 'levertijd') d.lag_soort = 'levertijd'; if (project_id) d.project_id = project_id;
+        lijst.push(d); tegen.unshift({ op: 'weg', id: d.id, gezien: depStand(d) }); verwacht.push({ id: d.id, bestaat: true, velden: depStand(d) }); veranderd = true; continue;
+      }
       if (o.op === 'nieuw') {
         const r = P.depNieuw(taken, lijst, { van: o.van, naar: o.naar, type: o.type, lag_dagen: o.lag_dagen, lag_soort: o.lag_soort, id: o.id || '', project_id });
         if (!r.ok) return { fout: r.fout }; lijst.push(r.dep); tegen.unshift({ op: 'weg', id: r.dep.id, gezien: depStand(r.dep) }); verwacht.push({ id: r.dep.id, bestaat: true, velden: depStand(r.dep) }); veranderd = true;   // de omgekeerde bewerking weet hoe de koppeling er na deze actie uitzag (niet verwijderen als een ander hem intussen wijzigde)
@@ -2551,7 +2670,7 @@
       } else if (o.op === 'herstel') {
         const d = o.dep; if (!d || !d.id || !d.van_taak || !d.naar_taak) return { fout: 'Onvolledige bewerking.' };
         if (lijst.some(x => String(x.id) === String(d.id))) continue;
-        const c = P.depControle(taken, lijst, { van: d.van_taak, naar: d.naar_taak }); if (!c.ok) return { fout: 'Terugzetten kan niet meer: ' + c.fout };
+        const c = d.van_project && ctx && ctx.alleTaken ? P.depControleKruis(ctx.alleTaken, Object.assign({}, ctx.depsStore || {}, { [ctx.code]: lijst }), { code: ctx.code, naar: d.naar_taak, vanProject: d.van_project, van: d.van_taak }) : P.depControle(taken, lijst, { van: d.van_taak, naar: d.naar_taak }); if (!c.ok) return { fout: 'Terugzetten kan niet meer: ' + c.fout };
         lijst.push(kopie(d)); tegen.unshift({ op: 'weg', id: d.id, gezien: depStand(d) }); verwacht.push({ id: d.id, bestaat: true, velden: depStand(d) }); veranderd = true;
       } else return { fout: 'Onbekende bewerking.' };
     }

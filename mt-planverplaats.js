@@ -584,12 +584,12 @@
   // spec = { code, id, naam, velden: { veld: nieuw }, gezien?: { veld: oud zoals getoond }, reden? (verplicht bij status 'wacht') }
   // -> { ok:false, reden } | { ok:false, bezet } | { ok:false, tegelijk:true, reden } | { ok:false, onzeker, reden } | { ok:true, noop:true }
   //    | { ok:true, opgeslagen:true, tegelijk:tekst, data, taken } | { ok:true, opgeslagen:true, behouden:true, data, taken, oudTaak, wijziging }
-  V.PANEEL_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'prioriteit', 'toegewezen', 'status', 'fase', 'poort', 'poort_eigenaar', 'poort_bewijs'];
-  const VELD_LABEL = { naam: 'de naam', omschrijving: 'de notities', duur_uur: 'de raming', activiteit: 'de activiteit', prioriteit: 'de prioriteit', toegewezen: 'de persoon', status: 'de status', fase: 'de fase', poort: 'de poort', poort_eigenaar: 'de eigenaar van de poort', poort_bewijs: 'het bewijs van de poort', wacht_reden: 'de wachtreden', klaar_op: 'de klaardatum' };
+  V.PANEEL_VELDEN = ['naam', 'omschrijving', 'duur_uur', 'activiteit', 'prioriteit', 'toegewezen', 'status', 'fase', 'poort', 'poort_eigenaar', 'poort_bewijs', 'beperking', 'beperking_datum'];
+  const VELD_LABEL = { naam: 'de naam', omschrijving: 'de notities', duur_uur: 'de raming', activiteit: 'de activiteit', prioriteit: 'de prioriteit', toegewezen: 'de persoon', status: 'de status', fase: 'de fase', poort: 'de poort', poort_eigenaar: 'de eigenaar van de poort', poort_bewijs: 'het bewijs van de poort', beperking: 'de beperking', beperking_datum: 'de datum van de beperking', wacht_reden: 'de wachtreden', klaar_op: 'de klaardatum' };
   const PRIO_OK = ['high', 'medium', 'low'];
   const veldNorm = (k, v) => k === 'duur_uur' ? String(Math.round((Number(String(v == null ? '' : v).replace(',', '.')) || 0) * 100) / 100) : String(v == null ? '' : v).trim();
   const veldVan = (t, k) => veldNorm(k, k === 'status' ? (t.status || 'todo') : t[k]);
-  const geraakt = velden => { const s = new Set(); Object.keys(velden).forEach(k => { s.add(k); if (k === 'status') { s.add('wacht_reden'); s.add('klaar_op'); } if (k === 'fase') s.add('fase_id'); if (k === 'poort') s.add('poort_bron'); }); return [...s]; };
+  const geraakt = velden => { const s = new Set(); Object.keys(velden).forEach(k => { s.add(k); if (k === 'status') { s.add('wacht_reden'); s.add('klaar_op'); } if (k === 'fase') s.add('fase_id'); if (k === 'poort') s.add('poort_bron'); if (k === 'beperking') s.add('beperking_datum'); if (k === 'beperking_datum') s.add('beperking'); }); return [...s]; };
   // Eén veld toepassen (ter plekke). -> '' of de reden waarom het niet kan
   const zetVeld = (t, k, v, spec, opt, team) => {
     const P = root.MTPlanning, w = veldNorm(k, v);
@@ -603,6 +603,8 @@
       if (fv.fase_id) t.fase_id = fv.fase_id; else delete t.fase_id;
       return '';
     }
+    if (k === 'beperking') { if (w && !P.BEPERKINGEN[w]) return 'Onbekende beperking.'; if (w) t.beperking = w; else { delete t.beperking; delete t.beperking_datum; } return ''; }   // F2b: zo snel mogelijk (leeg), niet vóór, uiterlijk op of vast op
+    if (k === 'beperking_datum') { if (w && !P.isYmd(w)) return 'Geen geldige datum.'; if (w) t.beperking_datum = w; else delete t.beperking_datum; return ''; }
     if (k === 'poort') {   // P6b: een poort is een mijlpaal van een eigen soort; de bron is nu altijd handmatig (later Moneybird of de bestellijst, als voorstel)
       if (w && !P.poort(w)) return 'Onbekende poort.';
       if (w && t.soort !== 'mijlpaal') return 'Een poort is een mijlpaal; deze taak is dat niet.';
@@ -660,6 +662,7 @@
         voorRuw = {}; ks.forEach(k => { voorRuw[k] = t[k] === undefined ? null : JSON.parse(JSON.stringify(t[k])); });
         voorN = {}; ks.forEach(k => { voorN[k] = veldVan(t, k); });
         for (const k of Object.keys(velden)) { const f = zetVeld(t, k, velden[k], s, { nu: o.nu(), door: o.door, team }, team); if (f) return { fout: f }; }
+        if ('beperking' in velden || 'beperking_datum' in velden) { if (t.beperking && !P.isYmd(t.beperking_datum)) return { fout: 'Kies ook een datum bij de beperking; er is niets gewijzigd.' }; if (!t.beperking) delete t.beperking_datum; }   // F2b
         bedoeld = {}; ks.forEach(k => { bedoeld[k] = veldVan(t, k); });   // ook de meebewegende velden (wachtreden, klaardatum) worden achteraf gecontroleerd
         return werk;
       } });
@@ -688,8 +691,8 @@
     // Eén schrijfpoging met deze bewerkingen. → { fout, tegelijkFout, noop, tegen, verwacht, res }
     const voer = async bewerkingen => {
       const u = { fout: '', tegelijkFout: false, noop: false, tegen: null, verwacht: null, res: null };
-      u.res = await P.afhSchrijf(tijdSp(o.sp, st), { code, lokaal: o.lokaalAfh ? o.lokaalAfh() : null, lokaalTaken: o.lokaal(), nu: o.nu(), door: o.door, dev: o.dev, projectId: o.projectId, mag: o.mag, muteer: (deps, taken) => {
-        const r = P.afhToepassen(deps, taken, bewerkingen, { project_id: o.projectId });
+      u.res = await P.afhSchrijf(tijdSp(o.sp, st), { code, lokaal: o.lokaalAfh ? o.lokaalAfh() : null, lokaalTaken: o.lokaal(), nu: o.nu(), door: o.door, dev: o.dev, projectId: o.projectId, mag: o.mag, muteer: (deps, taken, ctx) => {
+        const r = P.afhToepassen(deps, taken, bewerkingen, { project_id: o.projectId, ctx });
         if (r.fout) { u.fout = r.fout; u.tegelijkFout = !!r.tegelijk; return false; }
         if (r.noop) { u.noop = true; return false; }
         u.tegen = r.tegen; u.verwacht = r.verwacht; return r.lijst;
@@ -706,10 +709,10 @@
     if (!u.res.ok) return { ok: false, reden: schrijfFout(u.res) };
     const res = u.res, afhData = st.samen && typeof st.samen === 'object' ? st.samen : res.data, nu = P.afhActief(Array.isArray(afhData[code]) ? afhData[code] : []);
     // Heeft een gelijktijdige wijziging van een ander (de tegengestelde koppeling) er samen met de mijne een KRING van gemaakt? Dan draai ik de mijne meteen terug en zeg dat eerlijk.
-    const kringNu = P.depKringen(res.taken, nu).filter(i => !(res.kringOud || []).includes(i));
-    if (kringNu.length) {
+    const dkN = Object.keys(afhData).find(k => !k.startsWith('__') && String(k).toLowerCase() === String(code).toLowerCase()) || code, kringNu = P.depKringen(res.taken, nu).filter(i => !(res.kringOud || []).includes(i)), gKringNu = P.depKringenGlobaal(res.alleTaken, Object.assign({}, afhData, { [dkN]: afhData[dkN] || [] })).filter(k => !(res.gKringOud || []).includes(k));
+    if (kringNu.length || gKringNu.length) {
       let terug = null; try { terug = await voer(u.tegen); } catch (e) { terug = null; }
-      const namen = kringNu.map(i => { const x = res.taken.find(y => y.id === i); return x ? x.naam : i; }).join(', ');
+      const namen = kringNu.map(i => { const x = res.taken.find(y => y.id === i); return x ? x.naam : i; }).concat(gKringNu.map(k => k.split('|').slice(1).join('|') + ' (' + k.split('|')[0] + ')')).join(', ');
       if (terug && terug.res && terug.res.ok) { const d2 = st.samen && typeof st.samen === 'object' ? st.samen : terug.res.data; return { ok: false, tegelijk: true, reden: 'Iemand anders maakte tegelijk de omgekeerde koppeling; samen vormden ze een kring (' + namen + '). Jouw wijziging is teruggedraaid.', afhData: d2, deps: P.afhActief(Array.isArray(d2[code]) ? d2[code] : []) }; }
       return { ok: true, opgeslagen: true, behouden: false, afhData, deps: nu, wijziging: { soort: 'afh', code, naam, tegen: u.tegen }, tegelijk: 'Let op: door een gelijktijdige wijziging van iemand anders zit er nu een kring in de afhankelijkheden (' + namen + '). Haal een van de koppelingen weg.' };
     }
