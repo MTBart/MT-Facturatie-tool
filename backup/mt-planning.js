@@ -195,6 +195,80 @@
   // <0: a is ouder dan b; 0: identiek (of beide zonder stempel)
   const volgorde = (a, b) => (tijdVan(a) - tijdVan(b)) || (devVan(a) < devVan(b) ? -1 : devVan(a) > devVan(b) ? 1 : 0) || (revVan(a) - revVan(b));
   P.taakBudgetMin = t => (t && t.budget_min != null && isFinite(Number(t.budget_min)) && Number(t.budget_min) > 0) ? Math.round(Number(t.budget_min)) : P.urenNaarMin(t && t.duur_uur);
+  // De raming die in de capaciteit telt (contract T0, punt b): een mijlpaal telt 0 minuten, ook met een raming erop; een taak zonder raming (duur_uur en budget_min leeg of 0) ook. Geen terugval naar 4 uur meer.
+  P.taakRamingMin = t => (t && t.soort === 'mijlpaal') ? 0 : P.taakBudgetMin(t);
+  // ── Meerdere personen op één taak (T3c, keuzeplan 16-10) ─────────────────────────────────────────────────────────────
+  // De eerste persoon is `toegewezen`: een gewoon taakveld met zijn eigen stempel en het bestaande veldconflict, precies zoals vóór meerdere personen. Er is geen tweede plek voor de eerste persoon en
+  // dus ook geen afleiding, normalisatie of wissel-detectie bij het samenvoegen.
+  // t.personen = { <slug>: { min?: minuten, volg: getal, _ts: ISO, door: slug, weg?: true } } is alleen voor wat erbij komt: de extra personen (volg 1, 2, ...) en de eigen uren per persoon
+  // (een entry voor de eerste persoon, volg 0, bestaat alleen om zijn min vast te leggen). Een persoon weghalen = een tombstone (weg: true met een nieuwe _ts), de sleutel verdwijnt nooit: een oude kopie
+  // zet hem anders terug. Samenvoegen gaat per slug (personenSamen, in recSamen): de nieuwste _ts wint, een slug aan één kant blijft staan, een nieuwere tombstone wint van een actieve entry.
+  // Zonder P.MEERDERE_PERSONEN wordt `personen` nooit geschreven (P.toegewezenZet schrijft dan alleen toegewezen): het opslaggedrag is dan identiek aan vroeger. Een oud apparaat dat toegewezen wijzigt, wijzigt
+  // gewoon dat veld (met het bestaande conflict); `personen` blijft bij hem staan (een oude samenvoeger neemt `personen` wel als geheel van het nieuwste record: alleen een risico met de vlag aan).
+  P.MEERDERE_PERSONEN = false;   // de bediening voor meer dan één persoon staat pas een week na de release aan
+  const tsMs = e => { const v = e && e._ts; if (typeof v === 'number') return isFinite(v) ? v : 0; const m = Date.parse(v); return isNaN(m) ? 0 : m; };
+  const persSleutels = t => { const p = t && t.personen; return p && typeof p === 'object' && !Array.isArray(p) ? Object.keys(p).filter(k => p[k] && typeof p[k] === 'object') : []; };
+  const persActief = t => persSleutels(t).filter(k => !t.personen[k].weg).sort((a, b) => (Number(t.personen[a].volg) || 0) - (Number(t.personen[b].volg) || 0) || (a < b ? -1 : a > b ? 1 : 0));
+  const persMaxTs = t => persSleutels(t).reduce((m, k) => Math.max(m, tsMs(t.personen[k])), 0);
+  const tgTrim = t => t && typeof t.toegewezen === 'string' ? t.toegewezen.trim() : '';
+  // De personen van een taak (contract T0, punt f): alle lezers van "wie heeft deze taak" gaan hierlangs. De eerste persoon is altijd toegewezen, daarna de actieve extra personen op volgorde
+  // (volg, dan slug), zonder dubbelen en zonder lege waarden. Bestaat toegewezen niet, dan alleen de actieve personen.
+  P.taakMensen = t => {
+    const lijst = []; const voeg = s => { if (s && !lijst.includes(s)) lijst.push(s); };
+    voeg(tgTrim(t)); persActief(t).forEach(voeg);
+    return lijst;
+  };
+  // De toewijzing van één persoon: wanneer hij erbij kwam en door wie (voor "Nieuw voor mij"). De eerste persoon: de stempel van toegewezen; een extra persoon: zijn eigen _ts. -> { t (ms), door } of null
+  P.toewijzing = function (t, slug, team) {
+    const s = String(P.persoonSlug(slug, team) || slug || '').toLowerCase(), eerste = String(P.persoonSlug(tgTrim(t), team) || tgTrim(t)).toLowerCase();
+    const e = s && t && t.personen && t.personen[s];
+    if (s !== eerste && e && typeof e === 'object' && !e.weg) return { t: tsMs(e), door: e.door || '' };
+    const tg = t && t._vs && t._vs.toegewezen; return tg ? { t: Number(tg.t) || 0, door: tg.door || '' } : null;
+  };
+  // Per slug samenvoegen: de nieuwste _ts wint; gelijke _ts: een tombstone wint, daarna de inhoud (deterministisch, ongeacht de volgorde). Wat aan één kant staat blijft staan.
+  function personenSamen(a, b) {
+    const ok = x => x && typeof x === 'object' && !Array.isArray(x), A = ok(a) ? a : {}, B = ok(b) ? b : {}, uit = {};
+    new Set([...Object.keys(A), ...Object.keys(B)]).forEach(k => {
+      const x = ok(A[k]) ? A[k] : null, y = ok(B[k]) ? B[k] : null;
+      if (!x || !y) { uit[k] = kopie(x || y); return; }
+      const tx = tsMs(x), ty = tsMs(y);
+      uit[k] = kopie(tx !== ty ? (tx > ty ? x : y) : (!!x.weg !== !!y.weg ? (x.weg ? x : y) : (stabiel(x) >= stabiel(y) ? x : y)));
+    });
+    return Object.keys(uit).length ? uit : undefined;
+  }
+  // De personen van een taak zetten (ter plekke op t; alleen met P.MEERDERE_PERSONEN, voor het venster en P.toegewezenZet): lijst = slugs, de eerste is toegewezen. opt: { nu, door, team, mins: { slug: minuten } }
+  // (mins: de eigen raming per persoon; zonder mins blijven de bestaande mins staan). De eerste persoon wordt het veld toegewezen (stempelt de takenmotor); iedereen in lijst[1..] heeft een actieve entry in
+  // personen (volg 1, 2, ...), als die er nog niet is of anders was. Een tombstone betekent alleen "van de taak verwijderd", nooit "gepromoveerd": een extra persoon die de eerste wordt houdt zijn actieve entry
+  // (taakMensen ontdubbelt) en een oude eerste die in de lijst blijft krijgt een actieve extra entry. Wie niet meer in de lijst staat en een entry had, krijgt een tombstone (had hij er geen, dan is het overschrijven
+  // van toegewezen genoeg). Alleen wat verandert wordt geschreven en krijgt een nieuwe _ts. -> true als er iets veranderde.
+  P.personenZet = function (t, lijst, opt) {
+    const o = opt || {}, nu = Number(o.nu) || Date.now(), team = o.team || null, norm1 = s => String(P.persoonSlug(s, team) || s || '').trim().toLowerCase();
+    const door = norm1(o.door) || String(o.door || '');
+    const gewenst = []; (Array.isArray(lijst) ? lijst : []).forEach(s => { const x = norm1(s); if (x && !gewenst.includes(x)) gewenst.push(x); });
+    const oud = t.personen && typeof t.personen === 'object' && !Array.isArray(t.personen) ? t.personen : {}, mins = o.mins && typeof o.mins === 'object' ? o.mins : null;
+    const minVan = s => { const e = oud[s]; return e && !e.weg && Number(e.min) > 0 ? Math.round(Number(e.min)) : 0; };
+    const wensMin = s => mins ? (Number(mins[s]) > 0 ? Math.round(Number(mins[s])) : 0) : minVan(s);
+    if (JSON.stringify(gewenst) === JSON.stringify(P.taakMensen(t)) && gewenst.every(s => wensMin(s) === minVan(s))) return false;
+    const iso = new Date(Math.max(nu, persMaxTs(t) + 1)).toISOString(), nieuw = kopie(oud) || {}, eerste = gewenst[0] || '';
+    if (eerste !== tgTrim(t)) { if (eerste) t.toegewezen = eerste; else delete t.toegewezen; }
+    // de eerste persoon: een bestaande actieve entry blijft staan (ook na een promotie; alleen zijn min wordt bijgewerkt); alleen een gewenste min maakt een nieuwe entry (volg 0)
+    if (eerste) {
+      const e = nieuw[eerste], w = wensMin(eerste);
+      if (e && !e.weg) { if (minVan(eerste) !== w) { const n = Object.assign({}, e, { _ts: iso, door }); if (w > 0) n.min = w; else delete n.min; nieuw[eerste] = n; } }
+      else if (w > 0) nieuw[eerste] = { volg: 0, min: w, _ts: iso, door };
+    }
+    gewenst.slice(1).forEach((s, i) => { const e = nieuw[s], volg = i + 1, w = wensMin(s); if (e && !e.weg && (Number(e.volg) || 0) === volg && minVan(s) === w) return; nieuw[s] = Object.assign({ volg }, w > 0 ? { min: w } : {}, { _ts: iso, door }); });
+    Object.keys(nieuw).forEach(s => { if (!gewenst.includes(s) && !nieuw[s].weg) nieuw[s] = { volg: Number(nieuw[s].volg) || 0, weg: true, _ts: iso, door }; });   // alleen wie van de taak af is
+    if (Object.keys(nieuw).length) t.personen = nieuw; else delete t.personen;
+    return true;
+  };
+  // De oude bediening ("Toegewezen aan" kiezen): zet de eerste persoon. Zonder P.MEERDERE_PERSONEN schrijft dit alleen toegewezen (precies als vóór T3; personen wordt nooit geschreven). Met de vlag: de eerste
+  // persoon wordt vervangen (de oude eerste is weg) en de anderen blijven; haal je de eerste weg, dan schuift de volgende op (zijn entry blijft actief en taakMensen ontdubbelt).
+  P.toegewezenZet = function (t, slug, opt) {
+    const s = String(slug == null ? '' : slug).trim();
+    if (!P.MEERDERE_PERSONEN) { if (s) t.toegewezen = s; else delete t.toegewezen; return true; }
+    return P.personenZet(t, (s ? [s] : []).concat(P.taakMensen(t).slice(1).filter(p => p !== s)), opt);
+  };
   // `_gewijzigd` is bij taken en afhankelijkheden een getal (ms) en bij bestelregels een ISO-tekst (oude opslag): één lezer.
   const recTijd = x => {
     const v = x && x._gewijzigd;
@@ -483,6 +557,7 @@
       [l, r].forEach(z => { const oc = z._veldconflict && z._veldconflict[f]; if (oc && Number(oc.t) > bb && !gelijk(oc.waarde, win[f]) && (!c || Number(oc.t) > c.t || (Number(oc.t) === c.t && stabiel(oc.waarde) > stabiel(c.waarde)))) c = kopie(oc); });   // gelijke tijd: deterministisch op de waarde
       if (c) conflicten[f] = c;
     });
+    if (opt.taak) { const ps = personenSamen(l.personen, r.personen); if (ps) w.personen = ps; else delete w.personen; }   // personen: per slug samenvoegen (nooit als geheel "nieuwste wint"); toegewezen is een gewoon veld
     if (opt.taak && !syncGeldig(w)) { delete w.tg_sync; delete w._vs.tg_sync; delete conflicten.tg_sync; }   // koppeltabel van een andere Toggl-taak vervalt
     if (Object.keys(conflicten).length) w._veldconflict = conflicten; else delete w._veldconflict;
     if (!Object.keys(w._vs).length) delete w._vs;
@@ -1486,7 +1561,7 @@
 
   // ── Mijn werk: de taken van één persoon in groepen, plus de planblokken ──
   // takenObj = { projectcode: [taak…] } (mt_project_taken_v2), depsObj = { projectcode: [afhankelijkheid…] } (mt_project_afhank), blokken = mt_planblokken.
-  // opties: mijn (team-slug of e-mailadres), team, vandaag (ymd), nu (ms), vrij (vrije dagen), gezien ({taak-id: stempel van de toewijzing die je al zag}),
+  // opties: mijn (team-slug of e-mailadres), team, vandaag (ymd), nu (ms), vrij (vrije dagen), gezien ({'projectcode:taak-id': stempel van de toewijzing die je al zag}; een oude sleutel met alleen het taak-id geldt nog),
   //         nieuwDagen (een toewijzing die je nog nooit zag telt 7 dagen als nieuw).
   //         Voor kantoor (desktop): iedereen (alle taken en blokken, ook van niemand), project (alleen die projectcode), nieuw:false (geen "nieuw voor mij"),
   //         voorstellen (taken met een voorstel-markering komen apart in groepen.voorstel, ook als ze al van iemand zijn). Bij iedereen geldt de weekbalk niet (null).
@@ -1498,44 +1573,62 @@
   const blokGeldig = (b, mijn, team, alle) => !!b && typeof b === 'object' && !b._vervallen && P.isYmd(b.datum) && !(b.voorstel && b.voorstel.afgewezen) && (alle || P.zelfdePersoon(b.persoon, mijn, team));
   const blokStartTekst = b => { const m = /^(\d{1,2}):(\d{2})/.exec(String(b && b.start || '')); return m ? String(m[1]).padStart(2, '0') + ':' + m[2] : ''; };
   // De planblokken van een taak: op taak-id, of (zonder id) op exact dezelfde, unieke naam binnen hetzelfde project.
-  const taakBlokken = (t, code, naamAantal, blokken) => { const n = nrm(t.naam); return blokken.filter(b => (b.taak_id != null && b.taak_id !== '') ? String(b.taak_id) === String(t.id) : (zelfdeCode(b.project_code, code) && !!n && nrm(b.taak) === n && naamAantal.get(n) === 1)); };
+  // De projectcode van een blok: het veld, of (zonder) die uit het id tb:<code>:<taakId>. Een taak_id telt alleen binnen hetzelfde project (twee projecten kunnen dezelfde taak_id hebben).
+  // Een blok MET een projectcode koppelt alleen aan de taak met die code én dat id. Een blok zonder code (oude blokken): alleen als dat taak_id in precies één project voorkomt (idMap: taak_id -> de projectcodes
+  // waarin het staat); in nul of meer projecten koppelt het niet: dan geen aftrek van de raming (regel a) en geen omzetknop, en het blok telt in de Capaciteit gewoon als los blok.
+  const blokCode = b => { const pc = String(b.project_code == null ? '' : b.project_code).trim(); if (pc) return pc; const m = /^tb:([^:]+):/.exec(String(b.id == null ? '' : b.id)); return m ? m[1].trim() : ''; };
+  const idProjecten = takenPer => { const m = new Map(); Object.keys(takenPer || {}).forEach(c => { if (c.startsWith('__') || !Array.isArray(takenPer[c])) return; P.takenActief(takenPer[c]).forEach(x => { const k = String(x.id); if (!m.has(k)) m.set(k, new Set()); m.get(k).add(String(c).trim().toLowerCase()); }); }); return m; };
+  const taakBlokken = (t, code, naamAantal, blokken, idMap) => { const n = nrm(t.naam); return blokken.filter(b => (b.taak_id != null && b.taak_id !== '') ? (String(b.taak_id) === String(t.id) && (blokCode(b) ? zelfdeCode(blokCode(b), code) : (() => { const s = idMap && idMap.get(String(t.id)); return !!s && s.size === 1 && s.has(String(code).trim().toLowerCase()); })())) : (zelfdeCode(b.project_code, code) && !!n && nrm(b.taak) === n && naamAantal.get(n) === 1)); };
+  // Wat van de raming nog over is voor de verdeling over de datums van een taak (contract T0, punt a): alle planblokken die aan de taak hangen tellen mee met hun eigen minuten, ongeacht het getoonde
+  // venster en de persoon. De rest is max(0, raming - geplande minuten); die gaat over de werkdagen van start tot eind waarop geen blok van die taak staat. Een open voorstel telt niet mee (zoals overal).
+  // De sleutel van een taak over projecten heen: projectcode + taak_id (twee projecten kunnen hetzelfde taak_id hebben).
+  const planSleutel = (code, id) => String(code == null ? '' : code).trim().toLowerCase() + '\u0001' + String(id);
+  const planVan = (bl, raming) => { const tel = bl.filter(b => b.status !== 'voorstel'), gepland = tel.reduce((s, b) => s + Math.max(0, Math.round(getal(b.duurMin))), 0); return { gepland, rest: Math.max(0, raming - gepland), dagen: new Set(tel.map(b => b.datum)), geteld: tel.length, voorstel: bl.some(b => b.status === 'voorstel') }; };   // voorstel: er hangt een open planvoorstel aan (besluit Bart: dat telt niet mee en de taak dus ook niet via zijn datums, tot het is overgenomen)
+  // De actieve planblokken die bij taak t horen (taak_id, of zonder taak_id een unieke naam in het project): dezelfde koppeling als overal. takenLijst = de taken van dat project (voor de eenduidigheid van de naam).
+  // alleTaken (optioneel) = { projectcode: [taken] } van alle projecten: nodig om een blok zonder projectcode eenduidig te koppelen; zonder koppelt zo'n blok niet.
+  P.taakBlokkenVan = function (t, takenLijst, code, blokken, alleTaken) {
+    const naamAantal = new Map(); P.takenActief(Array.isArray(takenLijst) ? takenLijst : []).forEach(x => { const n = nrm(x.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
+    const idMap = alleTaken && typeof alleTaken === 'object' ? idProjecten(Object.assign({}, alleTaken, { [code]: takenLijst })) : null;
+    return taakBlokken(t, code, naamAantal, (Array.isArray(blokken) ? blokken : []).filter(b => b && typeof b === 'object' && !b._vervallen), idMap);
+  };
   P.mijnWerk = function (takenObj, depsObj, blokken, opt) {
     const o = opt || {}, mijn = o.mijn || '', team = o.team || null, alle = !!o.iedereen, metNieuw = o.nieuw !== false && !alle;
-    const projF = o.project ? String(o.project).trim().toLowerCase() : '';
+    const projF = o.project ? String(o.project).trim().toLowerCase() : '', slugMij = String(P.persoonSlug(mijn, team) || mijn || '').toLowerCase();
     const vandaag = P.isYmd(o.vandaag) ? o.vandaag : P.vandaagYmd(), nu = Number(o.nu) || Date.now();
     const nieuwMs = (o.nieuwDagen == null ? 7 : Number(o.nieuwDagen)) * 864e5, gezien = o.gezien && typeof o.gezien === 'object' ? o.gezien : {};
     const wk = maandagVan(vandaag), zo = wk.zo;
     const groepVan = (s, e) => { s = s || e; e = e || s; if (!s) return 'zonderDatum'; if (e < vandaag) return 'teLaat'; if (s <= vandaag) return 'vandaag'; if (s <= zo) return 'week'; return 'later'; };
     const groepen = { voorstel: [], nieuw: [], teLaat: [], vandaag: [], week: [], later: [], zonderDatum: [], nietVrij: [] };
     const alleBlokken = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, mijn, team, alle) && (!projF || zelfdeCode(b.project_code, projF)));
-    const gekoppeld = new Set(), mijnTaken = [], dekt = new Set(), PRIO = { high: 0, medium: 1, low: 2 };
-    const takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {};
+    const gekoppeld = new Set(), mijnTaken = [], plan = new Map(), PRIO = { high: 0, medium: 1, low: 2 };
+    const alleGeldig = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, mijn, team, true) && (!projF || zelfdeCode(b.project_code, projF)));   // alle blokken van iedereen: voor wat er van de raming nog te verdelen is
+    const takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {}, idMap = idProjecten(takenPer);
     Object.keys(takenPer).sort().forEach(code => {
       if (code.startsWith('__') || !Array.isArray(takenPer[code]) || (projF && !zelfdeCode(code, projF))) return;
       const lijst = P.takenActief(takenPer[code]);
-      const mijnL = lijst.filter(t => (alle || (t.toegewezen && P.zelfdePersoon(t.toegewezen, mijn, team))) && (t.status || 'todo') !== 'klaar');
+      const mijnL = lijst.filter(t => (alle || P.taakMensen(t).some(p => P.zelfdePersoon(p, mijn, team))) && (t.status || 'todo') !== 'klaar');
       if (!mijnL.length) return;
       const wacht = P.wachtOverzicht(lijst, depsObj && depsObj[code], { vrij: o.vrij, vandaag });
       const naamAantal = new Map(); lijst.forEach(t => { const n = nrm(t.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
       mijnL.forEach(t => {
         const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] }, n = nrm(t.naam);
-        const bl = taakBlokken(t, code, naamAantal, alleBlokken);
+        const bl = taakBlokken(t, code, naamAantal, alleBlokken, idMap);
         bl.forEach(b => gekoppeld.add(String(b.id)));
-        if (bl.length) dekt.add(t.id);
+        if (!alle) { const pl = planVan(taakBlokken(t, code, naamAantal, alleGeldig, idMap), P.taakRamingMin(t)), vd = P.taakVerdeling(t, o.werktijden, o.verlof, o.vrij, team, { rest: pl.rest, sla: pl.dagen }); plan.set(planSleutel(code, t.id), Object.assign(pl, { verdeel: vd.perPersoon[slugMij] || {}, waarschuwingen: vd.waarschuwingen })); }   // wat deze persoon van de rest per dag krijgt (dezelfde verdeling als in de Capaciteit)
         const komend = bl.filter(b => b.datum >= vandaag).sort((a, b) => (a.datum + blokStartTekst(a)) < (b.datum + blokStartTekst(b)) ? -1 : 1);
         const eerste = komend[0] || null;
         const gD = groepVan(P.isYmd(t.start) ? t.start : '', P.isYmd(t.eind) ? t.eind : ''), gB = eerste ? groepVan(eerste.datum, eerste.datum) : '';
         let groep = gD;
         if (gB && (gD === 'zonderDatum' || (gD !== 'teLaat' && MIJN_RANG[gB] < MIJN_RANG[gD]))) groep = gB;
-        const ts = t.toegewezen && t._vs && t._vs.toegewezen ? t._vs.toegewezen : null, stempelT = ts ? Number(ts.t) || 0 : 0;
-        const doorMij = !!(ts && ts.door && P.zelfdePersoon(ts.door, mijn, team)), g = gezien[t.id];
+        const eerste1 = P.taakMensen(t)[0] || '', ts = eerste1 ? (alle ? (t._vs && t._vs.toegewezen) : P.toewijzing(t, slugMij, team)) || null : null, stempelT = ts ? Number(ts.t) || 0 : 0;   // elke persoon ziet zijn eigen toewijzing (zijn eigen _ts) als nieuw
+        const doorMij = !!(ts && ts.door && P.zelfdePersoon(ts.door, mijn, team)), g = gezien[code + ':' + t.id] !== undefined ? gezien[code + ':' + t.id] : gezien[t.id];   // de sleutel is projectcode:taak_id; een oude bewaarde sleutel (alleen het taak_id) geldt nog
         const isNieuw = metNieuw && st === 'todo' && stempelT > 0 && !doorMij && (g === undefined || g === null ? (nu - stempelT) <= nieuwMs : stempelT > Number(g));
         const nietVrij = st === 'todo' && w.wacht;
         const eindGroep = (o.voorstellen && t.voorstel) ? 'voorstel' : nietVrij ? 'nietVrij' : (isNieuw ? 'nieuw' : groep);
         mijnTaken.push(Object.assign({ _code: code }, t));
         groepen[eindGroep].push({
-          soort: 'taak', id: t.id, code, taak: t, persoon: P.persoonSlug(t.toegewezen, team) || String(t.toegewezen || ''), status: st, wacht: w, wachtTekst: P.wachtOpTekst(w), nieuw: isNieuw, groep: eindGroep, stempelToegewezen: stempelT,
-          gepland_min: P.taakBudgetMin(t), start: P.isYmd(t.start) ? t.start : '', eind: P.isYmd(t.eind) ? t.eind : '',
+          soort: 'taak', id: t.id, code, taak: t, persoon: P.persoonSlug(eerste1, team) || eerste1, status: st, wacht: w, wachtTekst: P.wachtOpTekst(w), nieuw: isNieuw, groep: eindGroep, stempelToegewezen: stempelT,
+          gepland_min: P.taakRamingMin(t), start: P.isYmd(t.start) ? t.start : '', eind: P.isYmd(t.eind) ? t.eind : '',
           blokken: bl.map(b => ({ id: b.id, datum: b.datum, start: blokStartTekst(b), duurMin: Math.max(0, Math.round(getal(b.duurMin))), voorstel: b.status === 'voorstel' })),
           sleutel: (eerste ? eerste.datum + ' ' + (blokStartTekst(eerste) || '99:99') : (P.isYmd(t.start) ? t.start : (P.isYmd(t.eind) ? t.eind : '9999-99-99')) + ' ~') + '|' + (PRIO[t.prioriteit] !== undefined ? PRIO[t.prioriteit] : 3) + '|' + String(t.naam || '').toLowerCase()
         });
@@ -1548,9 +1641,15 @@
         voorstel: b.status === 'voorstel', groep, sleutel: b.datum + ' ' + (s || '99:99') + '|0|' + String(b.taak || '').toLowerCase() });
     });
     Object.keys(groepen).forEach(k => groepen[k].sort((a, b) => a.sleutel < b.sleutel ? -1 : a.sleutel > b.sleutel ? 1 : 0));
-    const week = alle ? null : P.weekBezetting(mijnTaken, alleBlokken, { vandaag, vrij: o.vrij, dagMin: o.dagMin, gedekt: dekt, verlof: P.verlofDagen(o.verlof, mijn, team), capPerDag: typeof o.capPerDag === 'function' ? o.capPerDag : null });
+    const week = alle ? null : P.weekBezetting(mijnTaken, alleBlokken, { vandaag, vrij: o.vrij, dagMin: o.dagMin, plan, verlof: P.verlofDagen(o.verlof, mijn, team), capPerDag: typeof o.capPerDag === 'function' ? o.capPerDag : null });
     return { vandaag, weekgrens: { van: wk.ma, tot: zo }, groepen, week, aantal: Object.keys(groepen).reduce((s, k) => s + groepen[k].length, 0) };
   };
+
+  // Een item uit mijnWerk() dat nog geen plek heeft: een taak zonder start, eind en planblok (groep zonderDatum), of een wachtende of nieuwe taak zonder enige datum of blok.
+  // P.nogInTePlannen is daarvan wat echt nog ingepland moet worden: een open voorstel (taak met voorstel-markering) telt pas na akkoord. Dit is de ene bron voor "Nog in te plannen"
+  // op de desktop-Vandaag en voor "Zonder datum" op de telefoon, zodat beide dezelfde taken tonen.
+  P.zonderPlek = it => !!it && it.soort === 'taak' && !!it.taak && (it.groep === 'zonderDatum' || ((it.groep === 'nietVrij' || it.groep === 'nieuw') && !it.start && !it.eind && !(it.blokken && it.blokken.length)));
+  P.nogInTePlannen = it => P.zonderPlek(it) && !it.taak.voorstel;
 
   // ── Verlof (Beheer ▸ mt_verlof): [{persoon (slug), van, tm}] → de dagen waarop die persoon vrij is (als Set van ymd) ──
   P.verlofDagen = function (verlof, persoon, team) {
@@ -1693,27 +1792,85 @@
       vrij: { verlofDagen: Math.round(verlofD * 100) / 100, verlofMin: Math.round(verlofMin), perioden, verplichtDagen: verplichtLijst.length, verplichtMin: verplichtLijst.reduce((s, x) => s + x.min, 0), verplichtLijst } };
   };
 
+  // ── De verdeling van de raming van een taak over de dagen: de ene rekenbasis (contract T0, punten c, d, e en g) ──
+  // Capaciteit, tv, Mijn werk, Vandaag en de telefoon rekenen allemaal met deze functie; er is geen tweede spreidlogica.
+  // P.taakVerdeling(t, werktijden, verlof, vrijedagen, team, opt) -> { perPersoon: { <slug>: { 'jjjj-mm-dd': minuten } }, waarschuwingen: [{ persoon, reden }] }
+  //  - werktijden: de records uit mt_werktijden (of null: ma-vr); verlof: [{persoon, van, tm}]; vrijedagen: lijst ymd of { datum, type } (een optionele vrije dag telt als werkdag)
+  //  - de personen komen uit P.taakMensen(t); zonder datums (start en eind leeg) is de verdeling leeg; met alleen een start of alleen een eind is het die ene dag
+  //  - werkbare dag van een persoon = ma-vr volgens zijn werktijden, niet op zijn verlof, niet op een verplichte vrije dag
+  //  - de raming wordt in hele minuten verdeeld (restverdeling: de rest naar de eerste dagen); een eigen min van een persoon (t.personen[slug].min) gaat eerst, de rest gelijk over de anderen;
+  //    zijn de eigen minuten samen meer dan wat er te verdelen is (de raming min de blokken), dan worden ze naar verhouding verkleind tot precies dat (restverdeling) en komt er de waarschuwing 'personen-meer-dan-raming'
+  //  - heeft een persoon geen enkele werkbare dag tussen start en eind, dan staan zijn minuten op de startdag en komt er een waarschuwing (reden 'geen-werkbare-dag')
+  //  - opt.rest: wat van de raming nog te verdelen is (anders de hele raming; zie planVan); opt.sla: dagen waarop al een blok van de taak staat (die krijgen niets); opt.anoniem: een taak van niemand toch verdelen (sleutel '')
+  P.VERDELING_TEKST = { 'geen-werkbare-dag': 'Geen werkbare dag tussen start en eind (verlof, vrije dag of werktijden): de uren staan op de startdag.', 'personen-meer-dan-raming': 'De vaste uren van de personen zijn samen meer dan de raming: ze zijn naar verhouding verkleind.' };
+  P.verdelingTekst = w => (w && P.VERDELING_TEKST[w.reden]) || '';
+  const vrijVerplicht = x => new Set((x instanceof Set ? [...x] : Array.isArray(x) ? x : []).map(v => typeof v === 'string' ? v : (v && v.type !== 'optioneel' ? v.datum : null)).filter(P.isYmd));
+  // Is deze dag een werkbare dag voor deze persoon (contract T0 punt d)? ma-vr volgens zijn werktijden (zonder record: ma-vr), niet op zijn verlof, niet op een verplichte vrije dag.
+  // o = { werktijden, verlof, vrijedagen, team }. Dezelfde regel als in taakVerdeling; het slepen van een taak (MTPlanVerplaats.taakPlan) gebruikt hem om de eerstvolgende werkbare dag te vinden.
+  P.werkbaarVoor = function (slug, ymd, o) {
+    o = o || {}; if (!P.isYmd(ymd)) return false;
+    const n = dnr(ymd), idx = ((((n + 4) % 7 + 7) % 7) + 6) % 7; if (idx > 4) return false;   // idx: 0 = ma ... 6 = zo
+    if (vrijVerplicht(o.vrijedagen).has(ymd)) return false;
+    if (P.verlofDagen(o.verlof, slug, o.team).has(ymd)) return false;
+    const rec = P.werktijdenMap(o.werktijden)[String(slug || '').toLowerCase()]; if (rec && P.werktijdDagMin(rec, idx) <= 0) return false;
+    return true;
+  };
+  P.taakVerdeling = function (t, werktijden, verlof, vrijedagen, team, opt) {
+    const o = opt || {}, uit = { perPersoon: {}, waarschuwingen: [] };
+    const s = P.isYmd(t && t.start) ? t.start : (P.isYmd(t && t.eind) ? t.eind : ''); if (!s) return uit;
+    const mensen = [], gezien = new Set();
+    P.taakMensen(t).forEach(p => { const slug = String(P.persoonSlug(p, team) || p).toLowerCase(); if (!gezien.has(slug)) { gezien.add(slug); mensen.push({ p, slug }); } });
+    if (!mensen.length && o.anoniem) mensen.push({ p: '', slug: '' });
+    if (!mensen.length) return uit;
+    const e = P.isYmd(t.eind) ? t.eind : s, a = dnr(s), z = Math.max(a, dnr(e)), VV = vrijVerplicht(vrijedagen), wt = P.werktijdenMap(werktijden);
+    const raming = typeof o.rest === 'number' ? Math.max(0, Math.round(o.rest)) : P.taakRamingMin(t);
+    const sla = o.sla instanceof Set ? o.sla : new Set(Array.isArray(o.sla) ? o.sla : []);
+    // het deel per persoon (contract e): eerst de eigen min, dan de rest gelijk met restverdeling
+    const eigen = mensen.map(m => { const x = t && t.personen && t.personen[m.slug]; return x && !x.weg && !x._vervallen && getal(x.min) > 0 ? Math.round(getal(x.min)) : 0; });
+    const vast = eigen.reduce((s0, x) => s0 + x, 0), pool = Math.max(0, raming - vast), nVrij = eigen.filter(x => !x).length;
+    let k = 0, delen;
+    if (vast > raming) {   // samen meer dan er te verdelen is: naar verhouding verkleinen tot precies de raming (largest remainder: de grootste breukrest krijgt de rest, bij gelijke rest de eerste)
+      delen = eigen.map(x => Math.floor(x * raming / vast));
+      let over = raming - delen.reduce((s0, x) => s0 + x, 0);
+      eigen.map((x, i) => ({ i, f: x * raming / vast - delen[i] })).filter(e => eigen[e.i]).sort((p, q) => (q.f - p.f) || (p.i - q.i)).forEach(e => { if (over > 0) { delen[e.i] += 1; over -= 1; } });
+      mensen.forEach((m, i) => { if (eigen[i]) uit.waarschuwingen.push({ persoon: m.slug, reden: 'personen-meer-dan-raming' }); });
+    } else delen = eigen.map(x => { if (x) return x; const basis = Math.floor(pool / nVrij), r = pool - basis * nVrij; return basis + (k++ < r ? 1 : 0); });
+    mensen.forEach((m, i) => {
+      const vl = m.slug ? P.verlofDagen(verlof, m.p, team) : new Set(), rec = m.slug ? wt[m.slug] || null : null, dagen = [];
+      for (let n = a; n <= z && n - a < 1100; n++) {   // maximaal drie jaar (een langer traject wordt bij het slepen geweigerd, zie MTPlanVerplaats)
+        const idx = ((((n + 4) % 7 + 7) % 7) + 6) % 7, ymd = dymd(n);   // idx: 0 = ma ... 6 = zo
+        if (idx > 4 || VV.has(ymd) || vl.has(ymd) || (rec && P.werktijdDagMin(rec, idx) <= 0)) continue;
+        dagen.push(ymd);
+      }
+      const min = delen[i], res = {};
+      if (!dagen.length) { res[s] = min; if (min > 0) uit.waarschuwingen.push({ persoon: m.slug, reden: 'geen-werkbare-dag' }); }
+      else {
+        const vrij = dagen.filter(d => !sla.has(d));   // een dag met een blok van deze taak slaat de verdeling over; zijn alle dagen bezet, dan zijn de blokken het plan
+        if (vrij.length) { const basis = Math.floor(min / vrij.length), r = min - basis * vrij.length; vrij.forEach((d, j) => { res[d] = basis + (j < r ? 1 : 0); }); }
+      }
+      uit.perPersoon[m.slug] = res;
+    });
+    return uit;
+  };
+
   // ── Capaciteit van de week: 8 uur per werkdag, geplande uren in dagdelen ──
   // Gepland = de planblokken van de persoon (geen open voorstellen) plus de taken met een start/eind in die week die geen planblok hebben (de uren
   // verdeeld over hun werkdagen). Per dag telt een begonnen dagdeel (4 uur) voor een heel dagdeel: de werkplaats plant in dagdelen.
   // → { van, tot, dagen: [{datum, werkdag, cap_min, gepland_min, dagdelen}], cap_min, gepland_min (in dagdelen), vrij_min, over_min, dagdelen, dagdelenTotaal }
   // capPerDag (optioneel, ymd -> minuten): de beschikbare minuten per dag uit de werktijden van die persoon (P.dagCapMin); zonder is het 8 uur (dagMin) per werkdag, zoals altijd.
-  P.weekBezetting = function (taken, blokken, { vandaag = '', vrij = null, dagMin = 0, gedekt = null, verlof = null, capPerDag = null } = {}) {
+  // plan (van mijnWerk): per taak-id { verdeel: { ymd: minuten }, voorstel } = de verdeling van P.taakVerdeling voor deze persoon; zonder plan tellen alleen de blokken (de taken worden hier niet zelf verdeeld).
+  P.weekBezetting = function (taken, blokken, { vandaag = '', vrij = null, dagMin = 0, plan = null, verlof = null, capPerDag = null } = {}) {
     const dm = dagMin > 0 ? dagMin : P.DAG_MIN, V = P.vrijSet(vrij), wk = maandagVan(P.isYmd(vandaag) ? vandaag : P.vandaagYmd()), VL = verlof instanceof Set ? verlof : new Set(Array.isArray(verlof) ? verlof : []);   // verlof = de dagen waarop deze persoon vrij is (zie verlofDagen): geen capaciteit
     const dagen = []; for (let i = 0; i < 5; i++) { const nr = wk.maNr + i, cd = capPerDag ? Math.max(0, Math.round(getal(capPerDag(dymd(nr))))) : dm, w = isWerk(nr, V) && !VL.has(dymd(nr)) && cd > 0; dagen.push({ datum: dymd(nr), nr, werkdag: w, cap_min: w ? cd : 0, gepland_min: 0 }); }
-    const per = new Map(dagen.map(d => [d.datum, d])), dekt = gedekt instanceof Set ? gedekt : new Set();
+    const per = new Map(dagen.map(d => [d.datum, d]));
     (blokken || []).forEach(b => {
       if (!b || b._vervallen || b.status === 'voorstel' || (b.voorstel && b.voorstel.afgewezen)) return;
       const d = per.get(b.datum); if (d) d.gepland_min += Math.max(0, Math.round(getal(b.duurMin)));
     });
     (taken || []).forEach(t => {
-      if (!t || dekt.has(t.id) || t.voorstel || (t.status || 'todo') === 'klaar') return;   // een taak met een open voorstel-markering telt niet mee (zie weekRooster)
-      const min = P.taakBudgetMin(t); if (min <= 0) return;
-      const s = P.isYmd(t.start) ? t.start : (P.isYmd(t.eind) ? t.eind : ''); if (!s) return;
-      const e = P.isYmd(t.eind) ? t.eind : s, a = dnr(s), z = Math.max(a, dnr(e)); let n = 0;
-      for (let i = a; i <= z && i - a < 400; i++) if (isWerk(i, V)) n++;
-      if (!n) return;
-      for (let i = a; i <= z && i - a < 400; i++) { if (!isWerk(i, V)) continue; const d = per.get(dymd(i)); if (d) d.gepland_min += min / n; }
+      if (!t || t.voorstel || (t.status || 'todo') === 'klaar') return;   // een taak met een open voorstel-markering telt niet mee (zie weekRooster)
+      const pl = plan && plan.get(planSleutel(t._code, t.id)); if (!pl || pl.voorstel) return;   // een open planvoorstel erbij telt niet mee (besluit Bart)
+      Object.keys(pl.verdeel || {}).forEach(ymd => { const d = per.get(ymd); if (d) d.gepland_min += pl.verdeel[ymd]; });
     });
     const half = dm / 2; let cap = 0, gepl = 0, over = 0, dd = 0, ddTot = 0;
     dagen.forEach(d => {
@@ -1748,7 +1905,8 @@
     const rijVan = x => { const s = P.persoonSlug(x, team); return (s && rijen.find(r => r.slug === s)) || rest; };
     const kies = (r, i) => r.cellen[i][0].length <= r.cellen[i][1].length ? 0 : 1;
     const geldig = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, '', null, true) && idx.has(b.datum) && (!o.project || zelfdeCode(b.project_code, o.project)));
-    const koppel = new Map(), takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {};
+    const alleGeldig = (Array.isArray(blokken) ? blokken : []).filter(b => blokGeldig(b, '', null, true) && (!o.project || zelfdeCode(b.project_code, o.project)));   // alle blokken, ook buiten het venster: wat ervan de raming afgaat
+    const koppel = new Map(), takenPer = takenObj && typeof takenObj === 'object' && !Array.isArray(takenObj) ? takenObj : {}, idMap = idProjecten(takenPer);
     Object.keys(takenPer).sort().forEach(code => {
       if (code.startsWith('__') || !Array.isArray(takenPer[code]) || (o.project && !zelfdeCode(code, o.project))) return;
       const lijst = P.takenActief(takenPer[code]); if (!lijst.length) return;
@@ -1756,29 +1914,30 @@
       const naamAantal = new Map(); lijst.forEach(t => { const n = nrm(t.naam); if (n) naamAantal.set(n, (naamAantal.get(n) || 0) + 1); });
       lijst.forEach(t => {
         const st = t.status || 'todo'; if (st === 'klaar') return;
-        const w = wacht[t.id] || { wacht: false, op: [] };
-        const basis = { soort: 'taak', id: t.id, code, naam: t.naam, status: st, wacht: st === 'wacht' || (st === 'todo' && !!w.wacht), wachtTekst: P.wachtOpTekst(w), voorstel: !!t.voorstel, taak: t, persoon: P.persoonSlug(t.toegewezen, team) || '' };
-        const bl = taakBlokken(t, code, naamAantal, geldig);
-        if (bl.length) { bl.forEach(b => koppel.set(String(b.id), basis)); return; }
-        const s = P.isYmd(t.start) ? t.start : (P.isYmd(t.eind) ? t.eind : ''); if (!s) return;
-        const e = P.isYmd(t.eind) ? t.eind : s, a = dnr(s), z = Math.max(a, dnr(e)); let n = 0;
-        for (let i = a; i <= z && i - a < 400; i++) if (isWerk(i, V)) n++;
-        if (!n) return;
-        const bud = P.taakBudgetMin(t), per = bud > 0 ? bud / n : half, r = t.toegewezen ? rijVan(t.toegewezen) : rest;
-        for (let i = a; i <= z && i - a < 400; i++) {
-          if (!isWerk(i, V)) continue;
-          const di = idx.get(dymd(i)); if (di === undefined) continue;
-          // Een taak met een open voorstel-markering (door de werkplaats gemeld, nog niet overgenomen) blijft zichtbaar maar telt niet mee, net als een voorstel-planblok.
-          const item = Object.assign({}, basis, { min: Math.round(per), datum: dymd(i) }, t.voorstel ? { planvoorstel: true } : {});
-          (per > half ? [0, 1] : [kies(r, di)]).forEach(dl => r.cellen[di][dl].push(item));
-        }
+        const w = wacht[t.id] || { wacht: false, op: [] }, mensen = P.taakMensen(t);
+        const basis = { soort: 'taak', id: t.id, code, naam: t.naam, status: st, wacht: st === 'wacht' || (st === 'todo' && !!w.wacht), wachtTekst: P.wachtOpTekst(w), voorstel: !!t.voorstel, taak: t, persoon: P.persoonSlug(mensen[0], team) || '' };
+        // Alle blokken van de taak, ook buiten het getoonde venster en van andere personen, tellen mee met hun eigen minuten; de rest van de raming gaat over de dagen zonder blok (contract T0, punt a)
+        const blAlle = taakBlokken(t, code, naamAantal, alleGeldig, idMap); blAlle.forEach(b => koppel.set(String(b.id), basis));
+        const pl = planVan(blAlle, P.taakRamingMin(t)); if (pl.voorstel || (pl.geteld > 0 && pl.rest <= 0)) return;   // een open planvoorstel erbij (telt nog niet mee) of helemaal ingepland met blokken
+        // De verdeling van wat er van de raming nog over is (P.taakVerdeling, de ene rekenbasis): verlof, werktijden en vrije dagen van die persoon worden overgeslagen; een taak van niemand komt in "Niet toegewezen".
+        const vd = P.taakVerdeling(t, o.werktijden, o.verlof, o.vrij, team, { rest: pl.rest, sla: pl.dagen, anoniem: true });   // een taak zonder raming of een mijlpaal blijft zichtbaar, met 0 minuten
+        Object.keys(vd.perPersoon).forEach(slug => {
+          const r = slug ? rijVan(slug) : rest, waarsch = vd.waarschuwingen.filter(x => x.persoon === slug).map(P.verdelingTekst).join(' ');
+          const dagenP = Object.keys(vd.perPersoon[slug]).sort(), eersteDag = dagenP[0], laatsteDag = dagenP[dagenP.length - 1];   // de eerste en laatste dag van de balk van deze persoon: daar zitten de grepen om uit te trekken
+          dagenP.forEach(ymd => {
+            const di = idx.get(ymd), min = vd.perPersoon[slug][ymd]; if (di === undefined) return;
+            // Een taak met een open voorstel-markering (door de werkplaats gemeld, nog niet overgenomen) blijft zichtbaar maar telt niet mee, net als een voorstel-planblok.
+            const item = Object.assign({}, basis, { min, datum: ymd, persoon: P.persoonSlug(slug, team) || '', eerste: ymd === eersteDag, laatste: ymd === laatsteDag }, waarsch ? { waarschuwing: waarsch } : {}, t.voorstel ? { planvoorstel: true } : {});
+            (min > half ? [0, 1] : [kies(r, di)]).forEach(dl => r.cellen[di][dl].push(item));
+          });
+        });
       });
     });
     geldig.forEach(b => {
       const k = koppel.get(String(b.id)), s = blokStartTekst(b);
       // Een open voorstel (status voorstel) telt nooit mee in de capaciteit, ook niet als het aan een taak hangt: pas na Overnemen (status niet meer voorstel). Het blijft wel zichtbaar.
       const item = k ? Object.assign({}, k, { start: s, blokId: b.id, datum: b.datum, min: Math.max(0, Math.round(getal(b.duurMin))) }, b.status === 'voorstel' ? { planvoorstel: true } : {})
-        : { soort: 'blok', id: 'blok:' + b.id, datum: b.datum, code: b.project_code || '', naam: b.taak || b.project_code || 'Planblok', status: '', wacht: false, voorstel: false, planvoorstel: b.status === 'voorstel', start: s, min: Math.max(0, Math.round(getal(b.duurMin))), persoon: P.persoonSlug(b.persoon, team) || '' };
+        : { soort: 'blok', id: 'blok:' + b.id, datum: b.datum, code: b.project_code || '', naam: b.taak || b.project_code || 'Planblok', status: '', wacht: false, voorstel: false, planvoorstel: b.status === 'voorstel', start: s, min: Math.max(0, Math.round(getal(b.duurMin))), persoon: P.persoonSlug(b.persoon, team) || '', ...(b.taak_id != null && b.taak_id !== '' && !blokCode(b) && (idMap.get(String(b.taak_id)) || { size: 0 }).size > 1 ? { nietEenduidig: true } : {}) };
       const r = rijVan(b.persoon), di = idx.get(b.datum);
       dagdeelVanBlok(b).forEach(dl => r.cellen[di][dl].push(item));
     });
@@ -1871,7 +2030,7 @@
       lijst.forEach(t => {
         if (isKlaar(t)) return;
         const st = t.status || 'todo', w = wacht[t.id] || { wacht: false, op: [] };
-        const item = { soort: 'taak', id: t.id, code, naam: t.naam, status: st, wacht: st === 'wacht' || (st === 'todo' && !!w.wacht), wachtTekst: P.wachtOpTekst(w, P.datumKort), taak: t, voorstel: t.voorstel || null, persoon: P.persoonSlug(t.toegewezen, team) || '' };
+        const item = { soort: 'taak', id: t.id, code, naam: t.naam, status: st, wacht: st === 'wacht' || (st === 'todo' && !!w.wacht), wachtTekst: P.wachtOpTekst(w, P.datumKort), taak: t, voorstel: t.voorstel || null, persoon: P.persoonSlug(P.taakMensen(t)[0], team) || '' };
         if (t.voorstel) uit.nieuwGemeld.push(item);
         if (st === 'wacht') (MATERIAAL_RE.test(String(t.wacht_reden || '')) ? uit.wachtMateriaal : uit.wachtAnders).push(Object.assign({ reden: String(t.wacht_reden || '') }, item));
         else if (st === 'todo' && w.wacht) uit.wachtVoorganger.push(item);

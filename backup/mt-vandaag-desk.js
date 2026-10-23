@@ -36,7 +36,7 @@
     const taken = D.taken(), afh = D.afhank(), blokken = D.blokken(), me = mijnSlug();
     const m = { vandaag, week: isoWeek(vandaag), takenKlaar: D.takenKlaar ? !!D.takenKlaar() : true, takenStatus: D.takenStatusTekst ? D.takenStatusTekst() : '' };
     // 1. Mijn werk vandaag: precies mijnWerk() zoals Vandaag op de telefoon en het startvenster (eigen werk, zonder "nieuw voor mij"), de groepen te laat en vandaag
-    const wtl = D.werktijden ? D.werktijden() : null, mw = P.mijnWerk(taken, afh, blokken, { team, vandaag, nu: D.nu(), mijn: me, nieuw: false, vrij, verlof, capPerDag: P.capPerDagVoor(me, wtl) });
+    const wtl = D.werktijden ? D.werktijden() : null, mw = P.mijnWerk(taken, afh, blokken, { team, vandaag, nu: D.nu(), mijn: me, nieuw: false, vrij, verlof, werktijden: wtl, capPerDag: P.capPerDagVoor(me, wtl) });
     m.mijn = mw.groepen.teLaat.concat(mw.groepen.vandaag).map(it => {
       const taak = it.soort === 'taak';
       const status = taak ? (it.status === 'todo' ? (it.wacht && it.wacht.wacht ? 'wacht' : 'open') : it.status) : 'gepland';
@@ -47,7 +47,7 @@
     // en blijft er dus buiten; een taak die alleen een voorstel-planblok heeft wacht op akkoord en staat al in een datumgroep. Een taak die op een voorganger wacht en geen datum heeft hoort er ook bij
     // (precies de indeling van de Ongepland-kolom in de Capaciteit, waar "Inplannen" naartoe gaat).
     const RANG = { high: 0, medium: 1, low: 2 }, nrm = c => (D.nummer ? D.nummer(c) : c) || '';
-    const zonder = mw.groepen.zonderDatum.concat(mw.groepen.nietVrij.filter(it => !it.start && !it.eind && !(it.blokken && it.blokken.length))).filter(it => it.soort === 'taak' && !it.taak.voorstel);
+    const zonder = mw.groepen.zonderDatum.concat(mw.groepen.nietVrij).filter(P.nogInTePlannen);   // dezelfde regel als de telefoon (P.nogInTePlannen)
     m.inplannen = zonder.map(it => ({ id: it.id, code: it.code, naam: it.taak.naam, min: it.gepland_min || 0, rang: RANG[it.taak.prioriteit] !== undefined ? RANG[it.taak.prioriteit] : 3, stempel: it.stempelToegewezen || 0, wacht: it.status === 'todo' && !!(it.wacht && it.wacht.wacht), wachtTekst: it.wachtTekst || '' }))
       .sort((a, b) => String(nrm(a.code)).localeCompare(String(nrm(b.code)), 'nl', { numeric: true }) || (a.rang - b.rang) || ((a.stempel || Infinity) - (b.stempel || Infinity) || 0) || String(a.naam).localeCompare(String(b.naam), 'nl'));
     m.magInplannen = D.magInplannen ? !!D.magInplannen() : false;

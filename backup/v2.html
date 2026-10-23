@@ -21,7 +21,7 @@
 </script>
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BACKUP v2.18.0 — M&T Bedrijfstool v2 bèta</title>
+<title>BACKUP v2.19.0 — M&T Bedrijfstool v2 bèta</title>
 <!-- msal-browser lokaal gevendord (was jsdelivr @2 = 2.39.0, laatste v2-release).
      Bron: https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js
      sha256: c933092555a52d4ded0196d16578406dcb5d25dfdf987bf3e27606653e99f1d6
@@ -55,15 +55,16 @@
 <script src="mt-toggl-koppel.js?v=2026-10-07a"></script>
 <script src="mt-planvoorstel.js?v=2026-10-07a"></script>
 <script src="mt-aanwezig.js?v=2026-10-07a"></script>
-<script src="mt-planning.js?v=2026-10-16a"></script>
-<script src="mt-mijnwerk.js?v=2026-10-15s"></script>
-<script src="mt-capaciteit.js?v=2026-10-15s"></script>
-<script src="mt-planverplaats.js?v=2026-10-15s"></script>
-<script src="mt-capaciteit-nieuw.js?v=2026-10-16d"></script>
+<script src="mt-planning.js?v=2026-10-17n"></script>
+<script src="mt-mijnwerk.js?v=2026-10-17n"></script>
+<script src="mt-capaciteit.js?v=2026-10-17c"></script>
+<script src="mt-planverplaats.js?v=2026-10-17n"></script>
+<script src="mt-capaciteit-nieuw.js?v=2026-10-17n"></script>
+<script src="mt-personen.js?v=2026-10-17e"></script>
 <script src="mt-werktijden.js?v=2026-10-15t"></script>
 <script src="mt-uren-nieuw.js?v=2026-10-15z"></script>
 <script src="mt-dagvraag.js?v=2026-10-15z"></script>
-<script src="mt-vandaag-desk.js?v=2026-10-16d"></script>
+<script src="mt-vandaag-desk.js?v=2026-10-17c"></script>
 <script src="mt-startvenster.js?v=2026-10-15b"></script>
 <!-- Zijbalk van de nieuwe stijl (alleen actief met data-stijl="nieuw"); bouwt op de bestaande .tab-btn-knoppen -->
 <script src="mt-zijbalk.js?v=2026-10-16c" defer></script>
@@ -853,10 +854,10 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 .proj-gegevens .gegevens-grid label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 </style>
 <!-- Nieuwe stijl: alle regels onder html[data-stijl="nieuw"]; ?v= = cachebuster (bump bij elke wijziging) -->
-<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-16d">
+<link rel="stylesheet" href="mt-stijl-nieuw.css?v=2026-10-17k">
 </head>
 <body>
-<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.18.0, 2026-10-16). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
+<div id="mt-backup-balk" style="position:sticky;top:0;z-index:99999;background:#b42318;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:8px 14px;text-align:center">⚠ BACKUP — vorige versie (v2.19.0, 2026-10-23). Alleen gebruiken als de nieuwe versie niet werkt; niet tegelijk met de nieuwe versie gebruiken. <a href="../v2.html" style="color:#fff;text-decoration:underline">Naar de normale tool →</a></div>
 
 <!-- ═══ LOGIN SCHERM ═══ -->
 <div id="login-screen">
@@ -877,7 +878,7 @@ details.ntk .ntk-dom{font:400 11px var(--sans);color:var(--text-faint);margin-le
 <header>
   <div class="header-left">
     <h1>Mortise <span>&amp;</span> Tenon</h1>
-    <span class="header-version">v2.18.0</span>
+    <span class="header-version">v2.19.0</span>
     <button id="upd-stip" class="upd-stip" hidden onclick="updNieuwToon()" title="Nieuw in deze versie" aria-label="Wat is er nieuw?">nieuw</button>
     <span class="header-badge">bèta</span>
   </div>
@@ -3838,7 +3839,7 @@ try{ MTCapaciteitNieuw.init({ doc:document, planning:MTPlanning, storage:localSt
   project:code=>{ const p=projVind(code); return p?{code:p.code,naam:projNaamVol(p),label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code}:null; },
   nummer:code=>{ const p=projVind(code); return p?(projLabelCode(p)||code):String(code||''); },
   projecten:()=>(PROJECT_CODES||[]).filter(p=>p&&!p._vervallen&&p.code).map(p=>({code:p.code,label:((projLabelCode(p)+' '+projNaamVol(p)).trim())||p.code})),
-  magSlepen:()=>capMagSlepen(), verplaats:spec=>capVerplaats(spec), herstel:w=>capHerstel(w), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
+  magSlepen:()=>capMagSlepen(), magTaken:()=>rolMag(ROL_TAAK_ALLES), verplaats:(spec,opt)=>capVerplaats(spec,opt), herstel:(w,opt)=>capHerstel(w,opt), omzetten:(spec,opt)=>capOmzetten(spec,opt), opruimen:(spec,opt)=>capOpruimen(spec,opt), taakBezig:(code,id)=>MTPlanVerplaats.taakBezig(code,id), controleer:spec=>MTPlanVerplaats.controle(spec,_capCtx()), get dialoog(){ return window.mtDialog; },
   openProject:code=>openProject(code,{sectie:'planning'}) }); }catch(e){ console.warn('Capaciteit (nieuw) init:',e); }
 window.addEventListener('mt-stijl',()=>{ try{ const u=document.getElementById('tab-toggl'); if(u&&u.classList.contains('active')&&window.MTUrenNieuw){ if(MTUrenNieuw.actief()) MTUrenNieuw.laad(); else MTUrenNieuw.teken(); } }catch(e){} const t=document.getElementById('tab-agenda'); if(t&&t.classList.contains('active')&&typeof renderAgenda==='function') renderAgenda(); });   // de weergave volgt de stijlwissel
 // Vandaag op de desktop (restyling brok 5, alleen in de nieuwe stijl): dezelfde bronnen als Mijn werk en Capaciteit, alleen lezen (zie mt-vandaag-desk.js).
@@ -3884,7 +3885,7 @@ function urenKlaarTaken(){
   const slug=(MT_TEAM.find(m=>String(m.email||'').toLowerCase()===String(mtMijEmail()||'').toLowerCase())||{}).slug||'', nu=MTPlanning.vandaagYmd(), tot=projTakenAll(), uit=[], weekGeleden=_planYmd(new Date(new Date(nu+'T00:00:00').getTime()-7*864e5));
   if(!slug) return uit;
   Object.keys(tot).forEach(code=>{ (tot[code]||[]).forEach(t=>{
-    if(!t||(t.status||'')!=='klaar'||MTPlanning.persoonSlug(t.toegewezen,MT_TEAM)!==slug||!MTPlanning.isYmd(t.klaar_op)) return;
+    if(!t||(t.status||'')!=='klaar'||!MTPlanning.taakMensen(t).some(p=>MTPlanning.persoonSlug(p,MT_TEAM)===slug)||!MTPlanning.isYmd(t.klaar_op)) return;
     if(t.klaar_op<weekGeleden) return;   // alleen de laatste week
     const p=projVind(code); uit.push({id:t.id,naam:t.naam,code,projLabel:p?[projLabelCode(p),projNaamKort(p)].filter(Boolean).join(' '):code,wie:(MT_TEAM.find(m=>m.slug===slug)||{}).naam||'',klaarOp:t.klaar_op,budgetMin:MTPlanning.taakBudgetMin(t),tgProjectId:p&&p.tg_project_id!=null?p.tg_project_id:null}); }); });
   return uit;
@@ -7840,6 +7841,7 @@ function projectTakenHtml(proj){
       <td style="white-space:nowrap">
         <select class="pt-sel" aria-label="Activiteit" title="Activiteit. Kantooruren: tekenwerk, werkvoorbereiding, kantoor. Werkplaatsuren: werkplaats, spuiten, montage en (aanname, voorlopig) reizen." onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'activiteit',this.value)">${[['','— activiteit —']].concat(MTPlanning.ACTIVITEITEN.map(a=>[a.k,a.l])).map(([k,l])=>`<option value="${esc(k)}"${(t.activiteit||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
         <select class="pt-sel" aria-label="Toegewezen aan" title="Toegewezen aan (optioneel)" onchange="projTaakVeldZet(${jsArg(proj.code)},${jsArg(t.id)},'toegewezen',this.value)">${[['','— wie —']].concat(MT_TEAM.map(m=>[m.slug,m.naam])).map(([k,l])=>`<option value="${esc(k)}"${(t.toegewezen||'')===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
+        ${MTPlanning.MEERDERE_PERSONEN?`<button class="btn btn-xs btn-secondary" title="Personen van deze taak, met een eigen aantal uren per persoon" onclick="projPersonenOpen(${jsArg(proj.code)},${jsArg(t.id)})">${esc(MTPlanning.taakMensen(t).length>1?MTPlanning.taakMensen(t).length+' personen':'Personen')}</button>`:''}
         ${t._veldconflict&&Object.keys(t._veldconflict).length?`<button class="btn btn-xs btn-secondary" style="color:#c0392b" title="Twee gelijktijdige wijzigingen — klik om te kiezen" onclick="projTaakConflict(${jsArg(proj.code)},${jsArg(t.id)})">⚠ conflict</button>`:''}
       </td>
       <td>${pr?`<span class="badge" style="background:${esc(pr.c)}22;color:${esc(pr.c)}">${esc(pr.l)}</span>`:''}</td>
@@ -8736,10 +8738,23 @@ function projTaakVeldZet(code,id,veld,waarde){
   const arr=projTaken(code), t=arr.find(x=>x.id===id); if(!t) return;
   if(veld==='activiteit'&&waarde&&!MTPlanning.activiteit(waarde)) return;
   if(veld==='toegewezen'&&waarde&&!MT_TEAM.some(m=>m.slug===waarde)) return;
-  if(!waarde) delete t[veld]; else t[veld]=waarde;
+  if(veld==='toegewezen') MTPlanning.toegewezenZet(t,waarde,{door:_spWie(),dev:_spDev(),team:MT_TEAM});   // zonder MTPlanning.MEERDERE_PERSONEN alleen het veld toegewezen (zoals vóór T3); met de vlag ook personen (T3c)
+  else if(!waarde) delete t[veld]; else t[veld]=waarde;
   projTakenZet(code,arr);
   try{ if(window.track) track('taken','veld_'+veld,{detail:code}); }catch(e){}
   _rerenderDetailKeepScroll();
+}
+// Meerdere personen op een taak (T3, alleen met MTPlanning.MEERDERE_PERSONEN): het venster uit mt-personen.js; opslaan schrijft personen, toegewezen en de stempels in één keer (MTPlanning.personenZet).
+function projPersonenOpen(code,id){
+  if(_ptBlok(code,ROL_TAAK_ALLES,'De personen van een taak wijzigen')) return false;   // geen recht (lezen) of de takenlijst is niet klaar: niets wijzigen
+  const t=projTaken(code).find(x=>x.id===id); if(!t||!window.MTPersonen) return;
+  const mins={}; Object.keys(t.personen||{}).forEach(s=>{ const e=t.personen[s]; if(e&&!e.weg&&Number(e.min)>0) mins[s]=Number(e.min); });
+  MTPersonen.open({doc:document,naam:t.naam,raming:MTPlanning.taakRamingMin(t),team:MT_TEAM,mensen:MTPlanning.taakMensen(t),mins,opslaan:(lijst,uit)=>{
+    if(_ptBlok(code,ROL_TAAK_ALLES,'De personen van een taak wijzigen')) return;
+    const arr=projTaken(code), x=arr.find(y=>y.id===id); if(!x) return;
+    if(MTPlanning.personenZet(x,lijst,{door:_spWie(),team:MT_TEAM,mins:uit})) projTakenZet(code,arr);
+    try{ if(window.track) track('taken','personen',{detail:code}); }catch(e){}
+    _rerenderDetailKeepScroll(); }});
 }
 const _PT_VELDLABEL={klaar_op:'Klaar op',tg_pending:'Toggl-actie',naam:'Naam',omschrijving:'Omschrijving',duur_uur:'Raming (uren)',activiteit:'Activiteit',status:'Status',toegewezen:'Toegewezen',prioriteit:'Prioriteit',afhankelijk_van:'Afhankelijk van',tg_task_id:'Toggl-taak',tg_sync:'Toggl-koppeling'};
 function _ptWaardeTekst(veld,w){
@@ -15733,9 +15748,82 @@ async function _capVers(){
   if(remote!==null&&remote!==undefined&&!Array.isArray(remote)) return { ok:false, reden:'Het bestand met planblokken heeft een onverwachte vorm; er is niets gewijzigd.' };
   _planblokken=_agPlanSamen(agPlanBlokken(),remote||[]);
   try{localStorage.setItem('mt_planblokken',JSON.stringify(_planblokken));}catch(e){}
-  return { ok:true, online:true };
+  return { ok:true, online:true, remote:remote||[] };   // remote: wat er op SharePoint stond (voor het omzetten: staat de tombstone daar al?)
 }
-async function capVerplaats(spec){
+// ── Een taak slepen: de taakbalk (T4, keuzeplan 16-10; mt-planverplaats.js: plaatsTaak en taakHerstel) ──
+// Slepen uit Ongepland, en een taakbalk naar een andere persoon, maakt geen planblok meer: de taak zelf wordt aangepast (toegewezen en start/eind) via MTPlanning.takenSchrijf, de schrijfkern van de takenlijst:
+// vers lezen van SharePoint (ETag), de lokale kopie erbij, het plan opnieuw op de verse stand rekenen, stempelen en schrijven; een 412 wordt door _SP.write samengevoegd en opnieuw geprobeerd (drie keer).
+// Lukt dat niet, dan een eerlijke melding en niets gewijzigd (ook lokaal niet). Hangen er opvolgers aan en veranderen de datums, dan eerst de bestaande vraag "Opvolgers verschuiven?" (verschuifVoorstel).
+// Recht: hetzelfde als slepen (capMagSlepen: kantoor, rol geladen; de werkplaats en "lezen" kunnen niet slepen) plus het recht om taken te wijzigen. Oude tb:-planblokken blijven werken en worden niet aangeraakt.
+function _capTaakCtx(code){ return { alleTaken:projTakenAll(), taken:projTaken(code), team:MT_TEAM, verlof:admVerlof(), vrijedagen:admVrijdagen(), werktijden:werktijdenVoorWeergave(), werkuren:(admCfg()||{}).werkuren||null, mag:capMagSlepen() }; }
+async function _capOpvolgersVraag(v){
+  const regels=v.wijzigingen.slice(0,12).map(w=>'• '+w.naam+': '+_p2D(w.van.start)+' → '+_p2D(w.naar.start)+(w.reden?' ('+w.reden+')':'')).join('\n')+(v.wijzigingen.length>12?'\n… en '+(v.wijzigingen.length-12)+' meer':'');
+  const choices=[{label:'Opvolgers mee verschuiven ('+v.wijzigingen.length+')',sublabel:'zelfde duur; geen weekend of vrije dag'}];
+  if(!v.blokkerend) choices.push({label:'Alleen deze taak verzetten',sublabel:'de opvolgers blijven staan; het conflict blijft zichtbaar'});
+  return mtDialog.choose({title:'Opvolgers verschuiven?',message:'"'+v.taak.naam+'" komt op '+_p2D(v.taak.naar.start)+(v.taak.naar.eind!==v.taak.naar.start?' t/m '+_p2D(v.taak.naar.eind):'')+'. Daardoor komen deze taken te vroeg te staan:\n'+regels+(v.blokkerend?'\n\nStrikte planning: een taak kan alleen samen met zijn opvolgers verschoven worden.':''),choices});
+}
+function _capNaamVan(door){ const d=String(door||'').toLowerCase(); if(!d) return ''; const m=(MT_TEAM||[]).find(x=>x&&[x.email,x.slug,x.naam].some(v=>String(v||'').toLowerCase()===d)); return m?m.naam:''; }
+function _capTaakOpties(code,opt){
+  const pr=projVind(code);
+  return { traag:opt&&opt.traag, naamVan:_capNaamVan, sp:{read:n=>_SP.read(n),write:(n,d,m)=>_SP.write(n,d,m)}, lokaal:()=>localStorage.getItem('mt_project_taken_v2'), ctx:()=>_capTaakCtx(code), nu:()=>Date.now(), door:_spWie(), dev:_spDev(), projectId:(pr&&pr.project_id)||'', mag:s=>rolMag(s),
+    verschuif:(taken,w)=>MTPlanning.verschuifVoorstel(taken,projAfhRuw()[code]||[],w,{modus:MTPlanning.depModus(pr),vrij:_p2Vrij()}), vraagOpvolgers:v=>_capOpvolgersVraag(v) };
+}
+function _capTaakKlaar(r){
+  if(r&&r.ok&&!r.noop&&r.data){ try{ _lsSet('mt_project_taken_v2',JSON.stringify(r.data)); }catch(e){} }   // bij een tegelijke wijziging is dit de samengevoegde stand, niet onze eigen data
+  if(r&&r.onzeker){ const p=r.onzeker; r.onzeker=p.then(u=>{ if(u&&u.data&&(u.soort==='opgeslagen'||u.soort==='tegelijk')){ try{ _lsSet('mt_project_taken_v2',JSON.stringify(u.data)); }catch(e){} } return u; }); }   // een opslag die lang hing: de uitkomst komt later, de lokale kopie volgt dan de verse stand
+  return r;
+}   // de stand staat al op SharePoint: alleen de lokale kopie bijwerken
+async function capTaakPlan(spec,opt){
+  if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'De planning van een taak wijzigen')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  const code=spec&&spec.taak&&spec.taak.code; if(!code) return { ok:false, reden:'Onbekende taak.' };
+  if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
+  const reden=MTPlanVerplaats.controle(spec,_capCtx()); if(reden) return { ok:false, reden };   // o.a. een taak met een tb:-planblok versleep je als blok
+  return _capTaakKlaar(await MTPlanVerplaats.plaatsTaak(spec,_capTaakOpties(code,opt)));
+}
+async function capTaakHerstel(w,opt){
+  if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'De planning van een taak wijzigen')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  return _capTaakKlaar(await MTPlanVerplaats.taakHerstel(w,_capTaakOpties(w.code,opt)));
+}
+// ── Een oud tb:-planblok omzetten naar een taakbalk (T6; mt-planverplaats.js: omzetten) ──
+// Eerst de taak (toegewezen = de persoon van het blok, start/eind = de dag van het blok; een taak met eigen datums houdt die) via takenSchrijf, daarna pas het blok weg (tombstone via de planblok-route: vers lezen,
+// samenvoegen, agPlanSave). Lukt het verwijderen niet, dan staat de taak goed en telt het blok nog mee: niets dubbel, opnieuw proberen kan. Is het blok al weg, dan "al omgezet".
+async function _capWegBevestig(blokId,alWeg){   // na het delen vers lezen: staat de tombstone er echt? (na een 412 kan een nieuwere actieve versie gewonnen hebben, terwijl agPlanSave true geeft)
+  let na; try{ na=await _SP.read('mt_planblokken.json'); }catch(e){ return { ok:false, reden:'Ik kon niet bevestigen dat het planblok is verwijderd: SharePoint antwoordt niet. Zet opnieuw om om het te controleren.' }; }
+  const rb=(Array.isArray(na)?na:[]).find(b=>b&&String(b.id)===String(blokId));
+  if(rb&&!rb._vervallen) return { ok:false, gewijzigd:true, reden:'Niet omgezet: iemand wijzigde het blok tegelijk; het staat er nog.' };
+  return { ok:true, alWeg:!!alWeg };
+}
+async function capBlokWeg(blokId,o2){
+  const snap=o2&&o2.snap;   // wat we eerder lazen: is het blok sindsdien veranderd (bv. door een oud apparaat verplaatst), dan geen tombstone
+  const vers=await _capVers(); if(!vers.ok) return { ok:false, reden:vers.reden };
+  if(!vers.online) return { ok:false, reden:'SharePoint is niet bereikbaar; het planblok is niet verwijderd.' };
+  const r=MTPlanVerplaats.blokWeg(blokId,_capCtx(),snap); if(!r.ok) return { ok:false, gewijzigd:!!r.gewijzigd, reden:r.reden };
+  const rb=(vers.remote||[]).find(b=>b&&String(b.id)===String(blokId)), opSpWeg=!rb||!!rb._vervallen;
+  if(r.alWeg){ if(opSpWeg) return { ok:true, alWeg:true }; const gedeeld=await agPlanSave(); if(gedeeld===false) return { ok:false, reden:'Het planblok kon niet worden verwijderd.' }; return _capWegBevestig(blokId,true); }   // lokaal al weg maar nog niet gedeeld: alsnog delen
+  _planblokken=r.blokken;
+  const opgeslagen=await agPlanSave();   // false = SharePoint nam het niet aan (agPlanSave meldt dat zelf): de tombstone staat dan alleen lokaal
+  if(opgeslagen===false) return { ok:false, reden:'Het planblok kon niet worden verwijderd.' };
+  return _capWegBevestig(blokId,false);
+}
+async function capOmzetten(spec,opt){
+  if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'Een planblok omzetten naar een taakbalk')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  const code=spec&&spec.taak&&spec.taak.code; if(!code) return { ok:false, reden:'Onbekende taak.' };
+  if(!projTakenKlaar()) return { ok:false, reden:projTakenStatusTekst() };
+  const o=_capTaakOpties(code,opt);
+  o.blokken=async()=>{ const v=await _capVers(); return v.ok?{ ok:true, online:v.online, blokken:agPlanBlokken() }:v; };
+  o.blokWeg=(id,o2)=>capBlokWeg(id,o2);
+  return _capTaakKlaar(await MTPlanVerplaats.omzetten(spec,o));
+}
+async function capOpruimen(spec,opt){   // de retry na een gedeeltelijk mislukt omzetten: alleen de resterende blokken (met hun snapshots), geen takenSchrijf
+  if(!capMagSlepen()||rolGeweigerd(ROL_TAAK_ALLES,'Een planblok omzetten naar een taakbalk')) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
+  const code=spec&&spec.taak&&spec.taak.code; if(!code) return { ok:false, reden:'Onbekende taak.' };
+  const o=_capTaakOpties(code,opt);
+  o.blokken=async()=>{ const v=await _capVers(); return v.ok?{ ok:true, online:v.online, blokken:agPlanBlokken() }:v; };
+  o.blokWeg=(id,o2)=>capBlokWeg(id,o2);
+  return await MTPlanVerplaats.opruimen(spec,o);
+}
+async function capVerplaats(spec,opt){
+  if(spec&&((spec.soort==='nieuw'&&!spec.alsBlok)||spec.soort==='taakbalk'||spec.soort==='taakrand'||spec.soort==='taakdatums')) return capTaakPlan(spec,opt);   // uit Ongepland en een taakbalk naar een andere persoon: de taak zelf (T4); alsBlok (alleen tests) maakt nog een tb:-planblok
   if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
   const vers=await _capVers(); if(!vers.ok) return vers;
   const r=MTPlanVerplaats.pas(spec,_capCtx()); if(!r.ok||r.noop) return r;
@@ -15744,7 +15832,8 @@ async function capVerplaats(spec){
   const nu=agPlanBlokken().find(b=>b&&String(b.id)===String(r.wijziging.id));
   return { ok:true, wijziging:r.wijziging, opgeslagen:opgeslagen!==false, behouden:!!(nu&&nu._gewijzigd===r.wijziging.stempel) };   // behouden=false: iemand anders was net sneller met dit blok
 }
-async function capHerstel(w){
+async function capHerstel(w,opt){
+  if(w&&w.soort==='taak') return capTaakHerstel(w,opt);
   if(!capMagSlepen()) return { ok:false, reden:'Dit mag je niet met jouw rol.' };
   const vers=await _capVers(); if(!vers.ok) return vers;
   if(!vers.online) return { ok:false, reden:'SharePoint is niet bereikbaar: niets teruggezet, want het blok kan intussen door iemand anders zijn gewijzigd.' };   // ongedaan maken alleen op een verse stand
