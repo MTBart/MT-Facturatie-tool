@@ -691,6 +691,7 @@
     // Eén schrijfpoging met deze bewerkingen. → { fout, tegelijkFout, noop, tegen, verwacht, res }
     const voer = async bewerkingen => {
       const u = { fout: '', tegelijkFout: false, noop: false, tegen: null, verwacht: null, res: null };
+      st.samen = null;   // elke poging begint zonder de samengevoegde stand van een vorige (bij de terugdraaiing telt alleen wat deze poging schreef)
       u.res = await P.afhSchrijf(tijdSp(o.sp, st), { code, lokaal: o.lokaalAfh ? o.lokaalAfh() : null, lokaalTaken: o.lokaal(), nu: o.nu(), door: o.door, dev: o.dev, projectId: o.projectId, mag: o.mag, muteer: (deps, taken, ctx) => {
         const r = P.afhToepassen(deps, taken, bewerkingen, { project_id: o.projectId, ctx });
         if (r.fout) { u.fout = r.fout; u.tegelijkFout = !!r.tegelijk; return false; }

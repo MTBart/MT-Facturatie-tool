@@ -8314,7 +8314,7 @@ async function projAfhHerplan(code,vanId){
 async function _p2VerschuifFlow(code,id,wijziging){
   if(rolGeweigerd(ROL_TAAK_ALLES,'De planning verschuiven')) return false;
   const proj=projVind(code), taken=projTaken(code), ruw=projAfhRuw()[code]||[], vrij=_p2Vrij(), modus=MTPlanning.depModus(proj);
-  const v=MTPlanning.verschuifVoorstel(taken,ruw,Object.assign({id},wijziging),{modus,vrij});
+  const v=MTPlanning.verschuifVoorstel(taken,ruw,Object.assign({id},wijziging),{modus,vrij,alle:projTakenAll(),code});
   if(!v.ok){ await mtDialog.alert({title:'Planning',message:v.fout}); return false; }
   let mee=true;
   if(v.wijzigingen.length){
@@ -16153,7 +16153,7 @@ function _capNaamVan(door){ const d=String(door||'').toLowerCase(); if(!d) retur
 function _capTaakOpties(code,opt){
   const pr=projVind(code);
   return { traag:opt&&opt.traag, naamVan:_capNaamVan, sp:{read:n=>_SP.read(n),write:(n,d,m)=>_SP.write(n,d,m)}, lokaal:()=>localStorage.getItem('mt_project_taken_v2'), lokaalAfh:()=>localStorage.getItem('mt_project_afhank'), ctx:()=>_capTaakCtx(code), nu:()=>Date.now(), door:_spWie(), dev:_spDev(), projectId:(pr&&pr.project_id)||'', mag:s=>rolMag(s),
-    verschuif:(taken,w)=>MTPlanning.verschuifVoorstel(taken,projAfhRuw()[code]||[],w,{modus:MTPlanning.depModus(pr),vrij:_p2Vrij()}), vraagOpvolgers:v=>_capOpvolgersVraag(v) };
+    verschuif:(taken,w)=>MTPlanning.verschuifVoorstel(taken,projAfhRuw()[code]||[],w,{modus:MTPlanning.depModus(pr),vrij:_p2Vrij(),alle:projTakenAll(),code}), vraagOpvolgers:v=>_capOpvolgersVraag(v) };
 }
 function _capTaakKlaar(r){
   if(r&&r.ok&&!r.noop&&r.data){ try{ _lsSet('mt_project_taken_v2',JSON.stringify(r.data)); }catch(e){} }   // bij een tegelijke wijziging is dit de samengevoegde stand, niet onze eigen data

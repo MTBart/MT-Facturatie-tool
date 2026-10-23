@@ -793,7 +793,7 @@
   // Zonder lag_soort of met type FS en lag >= 0 rekent alles precies zoals voor F2a.
   // Opslag per project (mt_project_afhank: { projectcode: [dep…] }) met hetzelfde merge-model als de taken: stempel per veld,
   // tombstone, conflict.
-  P.DEP_VELDEN = ['van_taak', 'naar_taak', 'type', 'lag_dagen', 'status', 'lag_soort'];
+  P.DEP_VELDEN = ['van_taak', 'naar_taak', 'type', 'lag_dagen', 'status', 'lag_soort', 'van_project'];
   P.DEP_TYPEN = { FS: 'EB', SS: 'BB', FF: 'EE', SF: 'BE' };   // de Nederlandse afkortingen
   P.DEP_TYPE_NAMEN = { FS: 'einde-naar-begin (EB)', SS: 'begin-naar-begin (BB)', FF: 'einde-naar-einde (EE)', SF: 'begin-naar-einde (BE)' };
   P.DEP_TYPE_UITLEG = { FS: 'De opvolger start pas als de voorganger klaar is.', SS: 'De opvolger start pas als de voorganger is begonnen.', FF: 'De opvolger is niet eerder klaar dan de voorganger.', SF: 'De opvolger is niet eerder klaar dan dat de voorganger begon.' };
@@ -867,6 +867,7 @@
   // Een koppeling in het project van de opvolger met `van_project` (de code van het andere project) en `van_taak` (een taak daar). Taak-id's zijn alleen binnen één project uniek, dus project + taak.
   // P.metExtern(taken, deps, alle, code): zet zulke voorgangers als vaste "schaduwtaken" (met de datums, de status en de duur uit het andere project) in de lijst, zodat rooster, wachten, conflicten en
   // verschuiven er gewoon mee rekenen. De planning van de schaduwtaak zelf hoort bij het andere project: hij staat vast (vast op zijn start) en telt niet mee voor de einddatum, de speling of de conflicten.
+  const SCHADUW = '\u0001';   // het eerste teken van het id van een schaduwtaak (een voorganger uit een ander project): een echt taak-id begint er nooit mee
   const ckey = (code, id) => String(code == null ? '' : code).trim().toLowerCase() + '|' + String(id);
   const vindTaakIn = (alle, code, id) => { const k = sleutelVan(alle, code), l = k && Array.isArray(alle[k]) ? alle[k] : []; return P.takenActief(l).find(x => String(x.id) === String(id)) || null; };
   P.metExtern = function (taken, depsRuw, alle, code) {
@@ -876,7 +877,7 @@
       if (!d || typeof d !== 'object' || !d.van_project || d._vervallen) return d;
       if (zelfdeCode(d.van_project, code)) { const x = Object.assign({}, d); delete x.van_project; return x; }
       const ext = vindTaakIn(alle, d.van_project, d.van_taak); if (!ext) return Object.assign({}, d, { _vervallen: true });   // de voorganger bestaat niet meer: de koppeling doet niet mee
-      const sid = '@' + d.van_project + '/' + d.van_taak;
+      const sid = SCHADUW + d.van_project + '|' + d.van_taak;
       if (!schaduw.some(s => s.id === sid)) schaduw.push(Object.assign({ id: sid, naam: d.van_project + ': ' + (ext.naam || '(zonder naam)'), status: ext.status || 'todo', soort: ext.soort, _extern: true, extern: { project: d.van_project, id: d.van_taak } },
         ext.start ? { start: ext.start } : {}, ext.eind ? { eind: ext.eind } : {}, ext.klaar_op ? { klaar_op: ext.klaar_op } : {}, ext.duur_dagen !== undefined ? { duur_dagen: ext.duur_dagen } : {}, P.isYmd(ext.start) ? { beperking: 'vast_op', beperking_datum: ext.start } : {}));
       const x = Object.assign({}, d, { van_taak: sid }); delete x.van_project; return x;
@@ -1018,7 +1019,7 @@
       const tot = dymd(naarW(bp.nr, true, V)); if (!(vandaag < tot)) return;
       const w = uit[n.id]; w.wacht = true; w.op.push({ id: n.id + '#beperking', naam: bp.soort === 'vast_op' ? 'de vaste datum' : 'de datum', lag: 0, tot, bron: 'beperking', beperking: bp.soort }); if (!w.tot || tot > w.tot) w.tot = tot;
     });
-    Object.keys(uit).forEach(k => { if (k.charAt(0) === '@') delete uit[k]; });   // de schaduwtaken van andere projecten horen niet in de uitkomst
+    Object.keys(uit).forEach(k => { if (k.charAt(0) === SCHADUW) delete uit[k]; });   // de schaduwtaken van andere projecten horen niet in de uitkomst
     return uit;
   };
   P.taakWacht = (taak, taken, depsRuw, opts) => (taak && P.wachtOverzicht(taken, depsRuw, opts)[taak.id]) || { wacht: false, op: [] };
@@ -1099,7 +1100,7 @@
     const uit = {}; let min = Infinity;
     ids.forEach(i => { const sp = tussenW(es[i], ls[i], V); if (sp < min && !by.get(i)._extern) min = sp; uit[i] = { es: dymd(es[i]), ef: dymd(ef[i]), ls: dymd(ls[i]), lf: dymd(lf[i]), slack: sp, dagen: dag[i], kring: kring.includes(i), kritiek: false }; });
     const metKoppeling = new Set(); edges.forEach(e => { metKoppeling.add(e.van); metKoppeling.add(e.naar); });
-    ids.forEach(i => { if (uit[i].slack === min && !uit[i].kring) uit[i].kritiek = true; });
+    ids.forEach(i => { if (uit[i].slack === min && !uit[i].kring && !by.get(i)._extern) uit[i].kritiek = true; });
     const pad = volgorde.filter(i => uit[i].kritiek && metKoppeling.has(i));
     ids.forEach(i => {   // F2b: een deadline die de keten haalt of niet; per beperkte taak staat de beperking in de uitkomst (alleen bij taken die er een hebben)
       const bp = beperkingVan(by.get(i)); if (!bp || kring.includes(i)) return;
@@ -1191,7 +1192,7 @@
       }
       if (nieuwS !== huidig) { const s = naarW(nieuwS, true, V); nieuw.set(i, { start: dymd(s), eind: dymd(eindVan(s, dur[i])) }); wijz.push({ id: i, naam: t.naam, van: { start: t.start, eind: t.eind }, naar: nieuw.get(i), reden }); }
     });
-    const alleEinden = T.map(t => (nieuw.get(t.id) || t).eind).filter(P.isYmd).sort();
+    const alleEinden = T.filter(t => !t._extern).map(t => (nieuw.get(t.id) || t).eind).filter(P.isYmd).sort();
     return Object.assign({ ok: true, modus: modus === 'strict' ? 'strict' : 'flexible', taak: { id, naam: m.naam, van: oud, naar: nieuw.get(id) }, wijzigingen: wijz,
       blokkerend: modus === 'strict' && wijz.length > 0, laatsteEind: alleEinden[alleEinden.length - 1] || '' }, vastgezet.length ? { vastgezet } : {});
   };
@@ -2451,7 +2452,7 @@
       });
       const lever = P.isYmd(p.gegevens && p.gegevens.leverdatum) ? p.gegevens.leverdatum : '';
       let tekort = 0, eindVroegst = '';
-      if (lever && lijst.length) { try { const r = P.rooster(lijst, deps, { start: vandaag, leverdatum: lever, vrij: o.vrij }); tekort = r.tekort; eindVroegst = r.eindVroegst; } catch (e) { tekort = 0; } }
+      if (lever && lijst.length) { try { const r = P.rooster(lijst, deps, { start: vandaag, leverdatum: lever, vrij: o.vrij, alle: takenObj, code: p.code }); tekort = r.tekort; eindVroegst = r.eindVroegst; } catch (e) { tekort = 0; } }
       const teLaat = open.filter(t => P.isYmd(t.eind) && t.eind < vandaag).length;
       let reden = '';
       if (lever && tekort > 0) reden = 'Op zijn vroegst klaar op ' + P.datumKort(eindVroegst) + ': ' + tekort + ' werkdag' + (tekort === 1 ? '' : 'en') + ' na de leverdatum';
