@@ -37,6 +37,8 @@
   #tab-agenda .ag-viewtog .btn{flex:0 0 auto;white-space:nowrap;min-height:44px}
   /* knoppen en velden: tikvlak van 44 px */
   .btn,.btn-sm,button.btn-xs,select,input[type=text],input[type=date],input[type=number],input[type=search]{min-height:44px}
+  /* mt-rust.css (nieuwe stijl) geeft .btn-xs en .btn-sm een lagere min-height met een hogere specificiteit; op de telefoon blijft 44 px gelden */
+  html[data-stijl="nieuw"] .btn,html[data-stijl="nieuw"] .btn-sm,html[data-stijl="nieuw"] .btn-xs{min-height:44px}
   /* losse knoppen en keuzelijsten die een eigen klasse hebben (zij vallen buiten .btn) */
   .mobiel-bell-btn,.tab-help-btn,.stijl-melding-knop,.stijl-melding-x,.dos-chip,.cn-knop,.mtg-knop,.vg-naam,.pt-sel,select.pt-sel{min-height:44px}
   .mobiel-bell-btn,.stijl-melding-x,.cn-knop.icoon{min-width:44px}
