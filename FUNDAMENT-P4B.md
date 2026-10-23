@@ -15,8 +15,13 @@ Branch `planning-p4b` (op `planning-f2b`). Dit document beschrijft het ontwerp, 
 - Rechten: `D.mag.plannen` (zoals slepen in de Capaciteit) voor datums, `D.mag.alles` voor koppelen. Zonder recht staat de knop Bewerken er niet.
 - `mt-tijdlijn.js` heeft zelf geen opslag of netwerk (b-tl-harness bewaakt dat).
 
+## Veiligheid van de bediening
+- Eén interactie tegelijk (S.actief) en één opslag tegelijk (S.bezig): een tweede sleepactie of opslag tijdens een lopende opslag wordt met een melding afgewezen. Het formulier (Verplaatsen/Koppelen) gaat pas dicht als het opslaan gelukt is.
+- Het typemenu is modaal (ria-modal, Tab blijft erbinnen, klik buiten of Escape sluit) en sluit ook bij het opnieuw tekenen of het uitzetten van Bewerken.
+- Valt het recht weg, dan keert de tijdlijn bij de volgende tekenbeurt terug naar alleen lezen; de grab-cursor staat alleen aan met het recht om te plannen.
+
 ## Rekenregels van het slepen (`Tl.nieuweDatums`)
-Delta in kalenderdagen (beeldpunten per dag volgen de zoom). Een nieuwe start of eind landt altijd op een werkdag (richting van het slepen; weekend en vrije dagen tellen niet). Verplaatsen behoudt de duur in **werkdagen** (`werkdagenTussen` / `addWerkdagen`). Rekken: het eind komt niet voor de start, de start niet na het eind; een rand die op zijn plaats blijft geeft niets.
+Delta in kalenderdagen (beeldpunten per dag volgen de zoom). Een nieuwe start of eind landt altijd op een werkdag (richting van het slepen; weekend en vrije dagen tellen niet); is er binnen een half jaar geen werkdag, dan doet het slepen niets. Verplaatsen behoudt de duur in **werkdagen** (`werkdagenTussen` / `addWerkdagen`). Rekken: het eind komt niet voor de start, de start niet na het eind; een rand die op zijn plaats blijft geeft niets.
 
 ## Bekende beperkingen
 - Het voorbeeld rekent met de planning zoals de tijdlijn die kent; de uitkomst van de planroute (inclusief de vraag over de opvolgers) is bepalend.

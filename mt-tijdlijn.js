@@ -19,7 +19,7 @@
   const RH = 30, HEAD_H = 44, LABEL_W = 260, LABEL_W_KLEIN = 150;
   const ZOOMS = { week: 22, maand: 8, kwartaal: 3 };   // beeldpunten per dag
   const ZOOM_LABELS = [['week', 'Week'], ['maand', 'Maand'], ['kwartaal', 'Kwartaal']];
-  const S = { open: new Set(), alles: false, kritiek: true, verbergKlaar: false, vensterVan: -1, vensterTot: -1, laatste: null, bewerk: false, gekozen: null, paneel: '' };
+  const S = { open: new Set(), alles: false, kritiek: true, verbergKlaar: false, vensterVan: -1, vensterTot: -1, laatste: null, bewerk: false, gekozen: null, paneel: '', bezig: false, actief: false, menuSluit: null };
   Tl.RH = RH; Tl.ZOOMS = ZOOMS;
 
   const zelfde = (a, b) => String(a == null ? '' : a).trim().toLowerCase() === String(b == null ? '' : b).trim().toLowerCase();
@@ -128,22 +128,27 @@
   const nieuwId = () => 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const taakVan = (code, id) => lijstVan(code).find(t => String(t.id) === String(id)) || null;
   const vrijDagen = () => (D && D.vrij ? D.vrij() : null);
-  const werkOp = (ymd, richting, vrij) => { let n = dnr(ymd), g = 0; while (g++ < 14 && !P.isWerkdag(dymd(n), vrij)) n += richting; return dymd(n); };
+  const werkOp = (ymd, richting, vrij) => { let n = dnr(ymd), g = 0; while (g++ < 180 && !P.isWerkdag(dymd(n), vrij)) n += richting; return P.isWerkdag(dymd(n), vrij) ? dymd(n) : null; };   // null als er binnen een half jaar geen werkdag is: dan doet het slepen niets
   const TYPEN = [['FS', 'EB', 'einde naar begin'], ['SS', 'BB', 'begin naar begin'], ['FF', 'EE', 'einde naar einde'], ['SF', 'BE', 'begin naar einde']];
   // De nieuwe datums bij slepen: kind 'verplaats' (beide randen, dezelfde werkdagen lang), 'start' of 'eind' (één rand); delta in kalenderdagen; altijd op een werkdag (de planroute weigert een weekend).
   Tl.nieuweDatums = function (kind, start, eind, delta, vrij) {
     if (!ok(start) || !ok(eind) || !delta) return null;
     const richting = delta < 0 ? -1 : 1;
-    if (kind === 'verplaats') { const s = werkOp(dymd(dnr(start) + delta), richting, vrij), wd = P.werkdagenTussen(start, eind, vrij); return { start: s, eind: P.addWerkdagen(s, wd, vrij) }; }
-    if (kind === 'start') { let s = werkOp(dymd(dnr(start) + delta), richting, vrij); if (s > eind) s = eind; return s === start ? null : { start: s, eind }; }
-    if (kind === 'eind') { let e = werkOp(dymd(dnr(eind) + delta), richting, vrij); if (e < start) e = start; return e === eind ? null : { start, eind: e }; }
+    if (kind === 'verplaats') { const s = werkOp(dymd(dnr(start) + delta), richting, vrij), wd = P.werkdagenTussen(start, eind, vrij); return s ? { start: s, eind: P.addWerkdagen(s, wd, vrij) } : null; }
+    if (kind === 'start') { let s = werkOp(dymd(dnr(start) + delta), richting, vrij); if (!s) return null; if (s > eind) s = eind; return s === start ? null : { start: s, eind }; }
+    if (kind === 'eind') { let e = werkOp(dymd(dnr(eind) + delta), richting, vrij); if (!e) return null; if (e < start) e = start; return e === eind ? null : { start, eind: e }; }
     return null;
   };
   const meld = (t, lang) => { try { if (D.toast) D.toast(t, null, !!lang); } catch (e) {} };
   const na = () => { try { if (D.naWijziging) D.naWijziging(); } catch (e) {} };
   // Datums opslaan via de planroute (dezelfde als in het taakpaneel en de Capaciteit: vraagt of de opvolgers mee schuiven, meldt en geeft Ongedaan maken).
   Tl.slaDatumsOp = async function (r, s, e) {
-    let res; try { res = await D.datums({ soort: 'taakdatums', taak: { code: r.code, id: r.id, naam: r.label }, startDatum: s, eindDatum: e, gezien: { start: r.start || '', eind: r.eind || '' } }); } catch (x) { res = { ok: false, reden: 'Opslaan mislukt: ' + ((x && x.message) || x) }; }
+    if (S.bezig) { meld('Er loopt nog een opslag; probeer het zo opnieuw.', true); return { ok: false, bezet: true }; }
+    S.bezig = true; let res;
+    try { res = await D.datums({ soort: 'taakdatums', taak: { code: r.code, id: r.id, naam: r.label }, startDatum: s, eindDatum: e, gezien: { start: r.start || '', eind: r.eind || '' } }); } catch (x) { res = { ok: false, reden: 'Opslaan mislukt: ' + ((x && x.message) || x) }; }
+    finally { S.bezig = false; }
+    if (res && res.ok) S.paneel = '';   // het formulier gaat pas dicht als het gelukt is; bij een weigering blijft het staan en meldt de planroute waarom
+    if (res && res.bezet) meld(res.reden || 'Er loopt nog een opslag; probeer het zo opnieuw.', true);
     Tl.teken(); na(); return res;
   };
   // Mag deze koppeling? { ok, fout }: binnen één project de gewone controle, tussen projecten ook de kring over de projecten heen.
@@ -154,9 +159,13 @@
   };
   // Een koppeling leggen: van (voorganger) en naar (opvolger) zijn { code, id }; het record staat bij het project van de opvolger.
   Tl.legKoppeling = async function (van, naar, type, lag) {
+    if (S.bezig) { meld('Er loopt nog een opslag; probeer het zo opnieuw.', true); return { ok: false, bezet: true }; }
     const toets = Tl.koppelToets(van, naar); if (!toets.ok) { meld(toets.fout, true); return { ok: false, reden: toets.fout }; }
+    S.bezig = true;
     const op = Object.assign({ op: 'nieuw', id: nieuwId(), van: van.id, naar: naar.id, type: type || 'FS' }, zelfde(van.code, naar.code) ? {} : { van_project: van.code }, Number(lag) ? { lag_dagen: Number(lag) } : {});
     let r; try { r = await D.wijzig({ code: naar.code, id: naar.id, naam: (taakVan(naar.code, naar.id) || {}).naam || 'de koppeling', afhOps: [op] }); } catch (x) { r = { ok: false, reden: 'Opslaan mislukt: ' + ((x && x.message) || x) }; }
+    finally { S.bezig = false; }
+    if (r && r.ok) S.paneel = '';
     Tl.teken(); na();
     if (!r || !r.ok) { meld((r && r.reden) || 'Niet opgeslagen.', true); return r || { ok: false }; }
     if (r.noop) return r;
@@ -166,7 +175,7 @@
     return r;
   };
   Tl.kies = function (code, id) { S.gekozen = S.gekozen && zelfde(S.gekozen.code, code) && String(S.gekozen.id) === String(id) ? null : { code, id }; S.paneel = ''; Tl.teken(); };
-  Tl.zetBewerk = function (aan) { S.bewerk = !!aan; if (!aan) { S.gekozen = null; S.paneel = ''; } Tl.teken(); };
+  Tl.zetBewerk = function (aan) { if (!aan && S.menuSluit) S.menuSluit(); S.bewerk = !!aan; if (!aan) { S.gekozen = null; S.paneel = ''; } Tl.teken(); };
 
   // ── tekenen ──
   function el(tag, props, ...kids) {
@@ -208,7 +217,7 @@
     + '#agenda-tijdlijn .tl-bep{position:absolute;top:4px;height:22px;width:0;border-left:2px solid #5a6b78;margin-left:-1px;pointer-events:none}#agenda-tijdlijn .tl-bep.tl-bep-uiterlijk{border-left:3px double var(--tl-kritiek)}#agenda-tijdlijn .tl-bep.tl-bep-vast_op{border-left:3px dotted var(--ink,#1f2a24)}#agenda-tijdlijn .tl-bep.laat{border-left-color:var(--tl-kritiek);box-shadow:0 0 0 1px #fbe3e0}'
     + '#agenda-tijdlijn .tl-bewerk{margin:0 0 10px;padding:8px 10px;border:1px solid var(--line-strong,#c9d1cd);border-radius:6px;background:var(--surface-sunken,#f6f3ed);display:flex;flex-direction:column;gap:8px}#agenda-tijdlijn .tl-bewerk-rij{display:flex;flex-wrap:wrap;align-items:center;gap:8px}#agenda-tijdlijn .tl-bewerk-sub,#agenda-tijdlijn .tl-bewerk-tekst{font:400 12px/16px var(--sans,inherit);color:var(--ink-2,#596059)}#agenda-tijdlijn .tl-bewerk-fout{flex-basis:100%;color:var(--tl-kritiek);font:500 12px/16px var(--sans,inherit)}#agenda-tijdlijn .tl-bewerk-fout:empty{display:none}'
     + '#agenda-tijdlijn .tl-invoer{height:34px;padding:0 8px;border:1px solid var(--line-strong,#c9d1cd);border-radius:4px;background:var(--surface,#fff);font:400 13px/18px var(--sans,inherit);max-width:100%}#agenda-tijdlijn .tl-kort{width:70px}#agenda-tijdlijn .tl-knop.tl-primair{background:var(--primary,#2A4A38);color:#fff;border-color:var(--primary,#2A4A38)}'
-    + '#agenda-tijdlijn.bewerk .tl-balk:not(.rollup):not(.klaar),#agenda-tijdlijn.bewerk .tl-ruit:not(.klaar){cursor:grab;touch-action:none}#agenda-tijdlijn .tl-balk.gekozen,#agenda-tijdlijn .tl-ruit.gekozen{outline:3px solid var(--focus,#2A4A38);outline-offset:1px}'
+    + '#agenda-tijdlijn.sleep .tl-balk:not(.rollup):not(.klaar),#agenda-tijdlijn.sleep .tl-ruit:not(.klaar){cursor:grab;touch-action:none}#agenda-tijdlijn .tl-balk.gekozen,#agenda-tijdlijn .tl-ruit.gekozen{outline:3px solid var(--focus,#2A4A38);outline-offset:1px}'
     + '#agenda-tijdlijn .tl-greep{position:absolute;top:0;bottom:0;width:min(7px,28%);cursor:ew-resize;background:rgba(255,255,255,.55);border:1px solid var(--tl-balk)}#agenda-tijdlijn .tl-greep.l{left:0;border-radius:3px 0 0 3px}#agenda-tijdlijn .tl-greep.r{right:0;border-radius:0 3px 3px 0}'
     + '#agenda-tijdlijn .tl-koppel{position:absolute;top:10px;width:10px;height:10px;margin-left:-2px;border-radius:50%;background:var(--surface,#fff);border:2px solid var(--primary,#2A4A38);cursor:crosshair;touch-action:none;z-index:4}'
     + '#agenda-tijdlijn .tl-spook{position:absolute;height:16px;border:2px dashed var(--primary,#2A4A38);border-radius:3px;box-sizing:border-box;background:rgba(42,74,56,.12);pointer-events:none;z-index:3}'
@@ -244,12 +253,14 @@
     const weg = () => { const t = D.doc.getElementById('tl-tip'); if (t && t.parentNode) t.parentNode.removeChild(t); w.vlak.querySelectorAll('.tl-spook,.tl-trek').forEach(x => x.parentNode && x.parentNode.removeChild(x)); w.lijnen.querySelectorAll('.tl-trekpad').forEach(x => x.parentNode && x.parentNode.removeChild(x)); };
     function begin(ev, kind) {
       if (ev.button !== undefined && ev.button !== 0) return;
+      if (S.actief || S.bezig) { ev.preventDefault(); ev.stopPropagation(); if (S.bezig) meld('Er loopt nog een opslag; probeer het zo opnieuw.', true); return; }   // één interactie tegelijk
+      S.actief = true;
       ev.preventDefault(); ev.stopPropagation();
       const x0 = ev.clientX, vrij = vrijDagen(), links0 = bal.style.left, breed0 = bal.style.width, lijst = lijstVan(r.code), deps = depsVan(r.code);
       let nieuw = null, bewogen = false, pad = null, doel = null;
       const rijTop = m.rijen.findIndex(x => x.soort === 'taak' && zelfde(x.code, r.code) && String(x.id) === String(r.id)) * RH + RH / 2;
       try { bal.setPointerCapture(ev.pointerId); } catch (e) {}
-      const klaarMet = () => { bal.removeEventListener('pointermove', beweeg); bal.removeEventListener('pointerup', los); bal.removeEventListener('pointercancel', stop); D.doc.removeEventListener('keydown', toets, true); try { bal.releasePointerCapture(ev.pointerId); } catch (e) {} };
+      const klaarMet = () => { S.actief = false; bal.removeEventListener('pointermove', beweeg); bal.removeEventListener('pointerup', los); bal.removeEventListener('pointercancel', stop); D.doc.removeEventListener('keydown', toets, true); try { bal.releasePointerCapture(ev.pointerId); } catch (e) {} };
       const stop = () => { klaarMet(); weg(); bal.style.left = links0; bal.style.width = breed0; };
       const toets = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stop(); } };
       D.doc.addEventListener('keydown', toets, true);
@@ -296,17 +307,22 @@
   }
   // Na het trekken van een afhankelijkheid: het type kiezen in een klein menu (EB, BB, EE, BE), met Annuleren.
   function typeMenu(x, y, van, naar) {
-    const oud = D.doc.getElementById('tl-typemenu'); if (oud && oud.parentNode) oud.parentNode.removeChild(oud);
+    if (S.menuSluit) S.menuSluit();
     const toets = Tl.koppelToets(van, naar);
     const vn = (taakVan(van.code, van.id) || {}).naam || '?', nn = (taakVan(naar.code, naar.id) || {}).naam || '?';
-    const menu = el('div', { id: 'tl-typemenu', klass: 'tl-typemenu', role: 'dialog', 'aria-label': 'Kies het type koppeling', stijl: 'left:' + Math.max(8, Math.min(x, (D.doc.defaultView ? D.doc.defaultView.innerWidth : 800) - 270)) + 'px;top:' + Math.max(8, y) + 'px' },
+    const menu = el('div', { id: 'tl-typemenu', klass: 'tl-typemenu', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Kies het type koppeling', stijl: 'left:' + Math.max(8, Math.min(x, (D.doc.defaultView ? D.doc.defaultView.innerWidth : 800) - 270)) + 'px;top:' + Math.max(8, y) + 'px' },
       el('div', { klass: 'tl-typekop', tekst: vn + ' \u2192 ' + nn }));
     if (!toets.ok) menu.appendChild(el('div', { klass: 'tl-typefout', role: 'alert', tekst: toets.fout }));
     else TYPEN.forEach(([w, af, uitleg]) => menu.appendChild(el('button', { type: 'button', klass: 'tl-typeknop', title: uitleg, klik: () => { sluit(); Tl.legKoppeling(van, naar, w, 0); } }, el('b', { tekst: af }), ' ' + uitleg)));
     menu.appendChild(el('button', { type: 'button', klass: 'tl-typeknop annuleer', tekst: 'Annuleren', klik: () => sluit() }));
-    const sluit = () => { if (menu.parentNode) menu.parentNode.removeChild(menu); D.doc.removeEventListener('keydown', esc, true); };
-    const esc = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sluit(); } };
-    D.doc.addEventListener('keydown', esc, true); D.doc.body.appendChild(menu);
+    const sluit = () => { if (menu.parentNode) menu.parentNode.removeChild(menu); D.doc.removeEventListener('keydown', esc, true); D.doc.removeEventListener('pointerdown', buiten, true); if (S.menuSluit === sluit) S.menuSluit = null; };
+    const esc = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sluit(); }
+      else if (e.key === 'Tab') { const kn = [...menu.querySelectorAll('button')]; if (!kn.length) return; const i = kn.indexOf(D.doc.activeElement); e.preventDefault(); kn[(i + (e.shiftKey ? -1 : 1) + kn.length) % kn.length].focus(); }   // het menu is modaal: Tab blijft erbinnen
+    };
+    const buiten = e => { if (!menu.contains(e.target)) sluit(); };
+    S.menuSluit = sluit;
+    D.doc.addEventListener('keydown', esc, true); D.doc.addEventListener('pointerdown', buiten, true); D.doc.body.appendChild(menu);
     const eerste = menu.querySelector('button'); if (eerste) eerste.focus();
   }
   // De bewerkbalk (stand Bewerken): wat er gekozen is, de knoppen Verplaatsen… en Koppelen… (de weg zonder slepen, ook op de telefoon) en de formulieren daarvoor.
@@ -330,7 +346,7 @@
         if (!ok(s) || !ok(e)) { melding.textContent = 'Vul een geldige ' + (b ? 'start en eind' : 'datum') + ' in.'; return; }
         if (e < s) { melding.textContent = 'Het eind ligt voor de start.'; return; }
         if (s === r.start && e === r.eind) { melding.textContent = 'Er is niets veranderd.'; return; }
-        S.paneel = ''; await Tl.slaDatumsOp(r, s, e);
+        await Tl.slaDatumsOp(r, s, e);
       } });
       balk.appendChild(el('div', { klass: 'tl-bewerk-rij' }, el('span', { klass: 'tl-bewerk-sub', tekst: r.mijlpaal ? 'Nieuwe datum' : 'Nieuwe start en eind' }), a, b ? el('span', { tekst: 't/m' }) : null, b, opslaan, el('span', { klass: 'tl-bewerk-sub', tekst: 'Hangen er opvolgers aan, dan vraag ik eerst of die mee schuiven.' }), melding));
     }
@@ -355,7 +371,7 @@
       const voeg = el('button', { type: 'button', klass: 'tl-knop tl-primair', tekst: 'Toevoegen', klik: async () => {
         if (!taak.value) { melding.textContent = 'Kies eerst de andere taak.'; return; }
         const ander = { code: proj.value, id: taak.value }, me = { code: r.code, id: r.id };
-        S.paneel = ''; await Tl.legKoppeling(richting.value === 'voor' ? ander : me, richting.value === 'voor' ? me : ander, type.value, lag.value);
+        await Tl.legKoppeling(richting.value === 'voor' ? ander : me, richting.value === 'voor' ? me : ander, type.value, lag.value);
       } });
       balk.appendChild(el('div', { klass: 'tl-bewerk-rij' }, richting, proj, taak, type, lag, voeg, melding));
     }
@@ -417,6 +433,8 @@
 
   Tl.teken = function () {
     const w0 = D && D.doc.getElementById('agenda-tijdlijn'); if (!w0) return;
+    S.actief = false; if (S.menuSluit) S.menuSluit();
+    if (S.bewerk && !kanSleep() && !kanKoppel()) { S.bewerk = false; S.gekozen = null; S.paneel = ''; }   // het recht (of de laadstatus) is weggevallen: terug naar alleen lezen
     const oud = w0.querySelector('.tl-scroll'), sl = oud ? oud.scrollLeft : null, st = oud ? oud.scrollTop : 0;
     w0.textContent = '';
     if (!D.doc.getElementById('tl-stijl')) { const s = el('style', { id: 'tl-stijl' }); s.textContent = STIJL; D.doc.head.appendChild(s); }
@@ -436,7 +454,7 @@
     try { m = Tl.model({ taken: D.taken(), afhank: D.afhank(), bestel: D.bestel ? D.bestel() : [], projecten: D.projecten(), team: D.team(), vrij: D.vrij ? D.vrij() : null, vandaag: P.vandaagYmd(), filter, open: S.open, alles: S.alles, kritiek: S.kritiek, verbergKlaar: S.verbergKlaar }); }
     catch (e) { console.warn('Tijdlijn:', e); w0.appendChild(el('div', { klass: 'tl-leeg', tekst: 'De tijdlijn kon niet worden berekend.' })); return; }
     S.laatste = m;
-    w0.classList.toggle('bewerk', !!S.bewerk);
+    w0.classList.toggle('bewerk', !!S.bewerk); w0.classList.toggle('sleep', !!S.bewerk && kanSleep() && !klein());
     if (S.bewerk) w0.appendChild(bewerkBalk(m));
     if (!m.rijen.length) { w0.appendChild(el('div', { klass: 'tl-leeg', tekst: 'Geen taken bij deze keuze.' })); }
     else {
