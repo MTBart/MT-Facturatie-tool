@@ -3965,7 +3965,8 @@ async function vgFaseKies(code,naar,sel){
   const p=projVind(code); if(!p) return {ok:false,reden:'Onbekend project'};
   const oud=p.fase||''; await leadFaseKies(code,naar,sel);
   const nu=(projVind(code)||{}).fase||''; if(!nu||nu===oud) return {ok:false};   // geannuleerd of geweigerd (leadFaseKies meldt dat zelf)
-  const terug=(oud&&!['gewonnen','verloren','geparkeerd'].includes(nu)&&!['verloren','geparkeerd'].includes(oud)&&MTLead.magNaar(nu,oud))?async()=>{ const r=projFaseZet(code,oud,{}); return {ok:r.ok,reden:r.fout}; }:null;
+  // Ongedaan maken alleen als de fase nog precies is wat wij zetten: heeft een collega hem intussen verzet, dan blijft die stand staan.
+  const terug=(oud&&!['gewonnen','verloren','geparkeerd'].includes(nu)&&!['verloren','geparkeerd'].includes(oud)&&MTLead.magNaar(nu,oud))?async()=>{ if(((projVind(code)||{}).fase||'')!==nu) return {ok:false,reden:'De fase is intussen door iemand anders gewijzigd; er is niets teruggezet.'}; const r=projFaseZet(code,oud,{}); return {ok:r.ok,reden:r.fout}; }:null;
   return {ok:true,label:MTLead.label(nu),terug};
 }
 function vgRegels(code){ return _blActief().filter(b=>b&&b.id!=='__migratie'&&String(_blProjectCodeVan(b)).toLowerCase()===String(code).toLowerCase()); }
@@ -3975,7 +3976,7 @@ function bestelVerwachtBulk(ids,ymd){
   const vorige=[]; let n=0,mislukt=0;
   for(const id of ids){
     const b=_blAlle().find(x=>x&&typeof x==='object'&&String(x.id)===String(id)); if(!b||b._vervallen){ mislukt++; continue; }
-    const voor={id:b.id,verwacht_op:b.verwacht_op||'',verwacht_bron:b.verwacht_bron||'',gezet:ymd};
+    const voor={id:b.id,verwacht_op:b.verwacht_op||'',verwacht_bron:b.verwacht_bron||'',gezet:ymd,gezetBron:'hand'};   // bestelVerwachtZet zet de bron altijd op 'hand'
     if(bestelVerwachtZet(id,ymd)){ n++; vorige.push(voor); } else mislukt++;
   }
   return {n,mislukt,vorige};
@@ -3986,14 +3987,14 @@ function bestelVerwachtHerstel(vorige){
   let n=0,overgeslagen=0;
   for(const v of (vorige||[])){
     const b=_blAlle().find(x=>x&&typeof x==='object'&&String(x.id)===String(v.id)); if(!b||b._vervallen){ overgeslagen++; continue; }
-    if(v.gezet!==undefined&&String(b.verwacht_op||'')!==String(v.gezet)){ overgeslagen++; continue; }
+    if(v.gezet!==undefined&&(String(b.verwacht_op||'')!==String(v.gezet)||(v.gezetBron!==undefined&&String(b.verwacht_bron||'')!==String(v.gezetBron)))){ overgeslagen++; continue; }
     if(String(b.verwacht_op||'')===String(v.verwacht_op||'')){ n++; continue; }
     if(_blWijzig(v.id,v.verwacht_op?'verwachte leverdatum teruggezet':'verwachte leverdatum gewist',x=>{ if(v.verwacht_op){ x.verwacht_op=v.verwacht_op; x.verwacht_bron=v.verwacht_bron||'hand'; } else { delete x.verwacht_op; delete x.verwacht_bron; } })) n++; else overgeslagen++;
   }
   return {ok:n>0||!overgeslagen,n,overgeslagen};
 }
 try{ MTVoortgang.init({ doc:document, planning:MTPlanning, model:vgModel, openTaak:(code,id,el)=>MTTaakPaneel.open(code,id,{terug:el}),
-  faseOpties:vgFaseOpties, faseKies:vgFaseKies, regels:vgRegels, bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd), bestelBulk:bestelVerwachtBulk, bestelHerstel:bestelVerwachtHerstel, bestelVers:async()=>{ await _blVerseLees(); },
+  faseOpties:vgFaseOpties, faseKies:vgFaseKies, regels:vgRegels, bestelVerwacht:(id,ymd)=>bestelVerwachtZet(id,ymd), bestelBulk:bestelVerwachtBulk, bestelHerstel:bestelVerwachtHerstel, bestelVers:()=>_blVerseLees(),
   mag:{ bestel:()=>rolMag(ROL_BESTEL_ALLES)&&_blKlaar(), fase:()=>_leadMag() }, toast:(t,o,l,lb)=>MTCapaciteitNieuw.toast(t,o,l,lb), get dialoog(){ return window.mtDialog; }, naWijziging:()=>_vgHerteken() }); }catch(e){ console.warn('Voortgang init:',e); }// Het planblokpaneel (planning brok P1a, mt-planblokpaneel.js): een klik op een planblok toont persoon, dag, tijd, duur, taak en project als links. Alleen lezen; het oude menu (verwijderen, voorstel beslissen) staat als knop in het paneel.
 try{ const _pbDag=(slug,datum)=>({tab:'agenda',weergave:'capaciteit',planfilter:Object.assign({van:datum,zoom:'dag'},slug?{persoon:slug}:{})});
   MTPlanblokPaneel.init({ planning:MTPlanning, team:()=>MT_TEAM, taken:()=>projTakenAll(), blokken:()=>agPlanActief(),

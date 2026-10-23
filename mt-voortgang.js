@@ -13,7 +13,7 @@
   'use strict';
   const V = {};
   let D = {};
-  const S = { open: new Map(), bezig: false };
+  const S = { open: new Map(), bezig: false, concept: new Map() };
   const P = () => root.MTPlanning;
   const dom = () => D.doc || root.document;
 
@@ -96,7 +96,9 @@
     sel.addEventListener('change', async () => {
       const naar = sel.value; if (!naar) return;
       if (!mag('fase')) { toast(GEEN_RECHT, null, true); sel.value = ''; return; }
-      let r; try { r = await D.faseKies(code, naar, sel); } catch (e) { r = { ok: false, reden: 'Mislukt: ' + ((e && e.message) || e) }; }
+      if (S.bezig) { toast('Even wachten: de vorige wijziging wordt nog opgeslagen.', null, true); sel.value = ''; return; }
+      S.bezig = true; sel.disabled = true;   // één wijziging tegelijk, ook over de dialogen heen (reden bij Verloren, bevestiging bij Gewonnen)
+      let r; try { r = await D.faseKies(code, naar, sel); } catch (e) { r = { ok: false, reden: 'Mislukt: ' + ((e && e.message) || e) }; } finally { S.bezig = false; sel.disabled = false; }
       if (r && r.ok === false && r.reden) toast(r.reden, null, true);
       if (r && r.ok && r.terug) toast('Projectfase: ' + r.label + '.', async () => { const h = await r.terug(); toast(h && h.ok ? 'Teruggezet.' : ((h && h.reden) || 'Terugzetten lukt niet.'), null, !(h && h.ok)); if (D.naWijziging) D.naWijziging(); });
       if (D.naWijziging) D.naWijziging();
@@ -112,7 +114,8 @@
     if (!m.open.length) { rij.appendChild(el('span', { klass: 'vg-waarde', tekst: 'Alles geleverd' })); return rij; }
     rij.appendChild(el('span', { klass: 'vg-waarde', tekst: m.open.length + ' regel' + (m.open.length === 1 ? '' : 's') + ' niet binnen' + (m.met.length ? ', ' + m.met.length + ' met datum' + (m.vroegste ? ' (' + kort(m.vroegste) + (m.laatste !== m.vroegste ? ' t/m ' + kort(m.laatste) : '') + ')' : '') : ', nog geen datum') }));
     if (!kan) return rij;
-    const inv = el('input', { type: 'date', klass: 'vg-in', 'aria-label': 'Verwachte leverdatum voor alle open regels', title: 'Verwachte leverdatum voor alle open regels' });
+    const inv = el('input', { type: 'date', klass: 'vg-in', 'aria-label': 'Verwachte leverdatum voor alle open regels', title: 'Verwachte leverdatum voor alle open regels', value: S.concept.get(String(code).toLowerCase()) || '' });   // een getypte maar nog niet gezette datum blijft staan als het blok opnieuw tekent
+    inv.addEventListener('input', () => { S.concept.set(String(code).toLowerCase(), inv.value); });
     const knop = el('button', { type: 'button', klass: 'btn btn-primary btn-sm vg-knop', title: 'Zet deze datum bij de open bestelregels (met bevestiging)', klik: () => V.bulk(code, inv.value) }, 'Zet levertijd…');
     rij.appendChild(el('span', { klass: 'vg-invoer' }, inv, knop));
     const det = el('details', { klass: 'vg-regels' }, el('summary', { tekst: 'Per regel' }),
@@ -145,7 +148,8 @@
       if (!mag('bestel')) { toast(GEEN_RECHT, null, true); return false; }
       if (!ymd || !P().isYmd(ymd)) { toast('Kies eerst een geldige datum.', null, true); return false; }
       const dlg = D.dialoog; if (!dlg || !dlg.confirm) return false;
-      if (D.bestelVers) { try { await D.bestelVers(); } catch (e) { } }   // eerst de gezamenlijke bestellijst lezen: een collega kan intussen een datum hebben gezet of een regel hebben geleverd
+      // eerst de gezamenlijke bestellijst lezen: een collega kan intussen een datum hebben gezet of een regel hebben geleverd. Lukt dat niet, dan geen bulk op een mogelijk verouderde lijst.
+      if (D.bestelVers) { let vers = false; try { vers = await D.bestelVers(); } catch (e) { vers = false; } if (vers === false) { toast('Ik kon de gezamenlijke bestellijst niet lezen (SharePoint antwoordt niet). Er is niets gewijzigd; probeer het zo opnieuw.', null, true); return false; } }
       const regels = D.regels(code), m = V.materiaal(regels);
       if (!m.open.length) { toast('Er zijn geen open regels meer.', null, true); V.teken(code); return false; }
       let alleenZonder = false;
@@ -159,11 +163,17 @@
       const ja = await dlg.confirm({ title: 'Levertijd zetten?', message: 'De verwachte leverdatum wordt ' + kort(ymd) + ' voor ' + keuze.length + ' bestelregel' + (keuze.length === 1 ? '' : 's') + ':\n' + namen + '\n\nJe kunt dit direct ongedaan maken.', okLabel: 'Zet levertijd' });
       if (!ja) return false;
       if (!mag('bestel')) { toast(GEEN_RECHT, null, true); return false; }   // het recht kan tijdens de bevestiging veranderd zijn
+      // vlak voor het schrijven nog eens vers lezen: is de bevestigde keuze intussen veranderd (een collega zette een datum of leverde een regel), dan niets doen
+      const sig = l => l.map(b => b.id + '=' + (P().bestelVerwacht(b) || '') + '/' + P().bestelStatus(b)).sort().join('|');
+      const voor = sig(keuze);
+      if (D.bestelVers) { let vers = false; try { vers = await D.bestelVers(); } catch (e) { vers = false; } if (vers === false) { toast('Ik kon de bestellijst niet opnieuw lezen. Er is niets gewijzigd; probeer het zo opnieuw.', null, true); return false; } }
+      if (sig(V.bulkKeuze(D.regels(code), ymd, alleenZonder)) !== voor) { toast('De bestellijst is intussen gewijzigd door een collega. Er is niets gewijzigd; kijk even opnieuw en probeer het nog eens.', null, true); V.teken(code); return false; }
       const r = D.bestelBulk(keuze.map(b => b.id), ymd);
       if (D.naWijziging) D.naWijziging(); else V.teken(code);
       if (!r || !r.n) { toast('Er is niets gewijzigd' + (r && r.reden ? ': ' + r.reden : '.'), null, true); return false; }
       const tekst = 'Levertijd ' + kort(ymd) + ' gezet voor ' + r.n + ' regel' + (r.n === 1 ? '' : 's') + (r.mislukt ? '; ' + r.mislukt + ' niet gelukt' : '') + '.';
       toast(tekst, async () => { const h = D.bestelHerstel(r.vorige); toast(h && h.ok ? 'Teruggezet' + (h.overgeslagen ? ' (' + h.overgeslagen + ' regel(s) overgeslagen: intussen door een collega gewijzigd)' : '.') : 'Terugzetten lukt niet.', null, !!(h && h.overgeslagen) || !(h && h.ok)); if (D.naWijziging) D.naWijziging(); }, !!r.mislukt);
+      S.concept.delete(String(code).toLowerCase());
       return true;
     } finally { S.bezig = false; }
   };
@@ -220,7 +230,7 @@
   ].join('\n');
   function stijl() { const d = dom(); if (!d || !d.head || d.getElementById('vg-stijl')) return; const s = d.createElement('style'); s.id = 'vg-stijl'; s.textContent = CSS; d.head.appendChild(s); }
 
-  V.init = cfg => { D = cfg || {}; S.open = new Map(); S.bezig = false; return V; };
+  V.init = cfg => { D = cfg || {}; S.open = new Map(); S.bezig = false; S.concept = new Map(); return V; };
   V._stijl = CSS;
   root.MTVoortgang = V;
   if (typeof module !== 'undefined' && module.exports) module.exports = V;
