@@ -2055,7 +2055,7 @@
   const volgordeSort = (a, b) => ((Number(a.volgorde) || 0) - (Number(b.volgorde) || 0)) || String(a.label || a.k).localeCompare(String(b.label || b.k), 'nl') || (String(a.k) < String(b.k) ? -1 : 1);
   // Strikt: leeg is een lege lijst; een andere vorm dan een lijst is een FOUT (nooit stil tot leeg terugbrengen).
   // Strikt ook per record: een element zonder id, soort of k is een fout (nooit stil weggelaten: een volgende wijziging zou het uit de opslag schrijven). Een onbekende soort blijft staan maar telt niet mee.
-  const inrichtVorm = o => { if (!Array.isArray(o)) return 'geen lijst'; const i = o.findIndex(x => !x || typeof x !== 'object' || Array.isArray(x) || !String(x.id || '').trim() || !String(x.type || '').trim() || x.k === undefined || x.k === null || !String(x.k).trim()); return i < 0 ? '' : 'record ' + (i + 1) + ' is ongeldig (id, type en k zijn verplicht)'; };
+  const inrichtVorm = o => { if (!Array.isArray(o)) return 'geen lijst'; const i = o.findIndex(x => !x || typeof x !== 'object' || Array.isArray(x) || !String(x.id || '').trim() || !String(x.type || '').trim() || x.k === undefined || x.k === null || !String(x.k).trim()); if (i >= 0) return 'record ' + (i + 1) + ' is ongeldig (id, type en k zijn verplicht)'; const gezien = new Set(); for (const x of o) { if (gezien.has(String(x.id))) return 'dubbel id ' + x.id; gezien.add(String(x.id)); } return ''; };
   P.inrichtLees = v => leesStrikt(v, inrichtVorm, [], 'planinrichting');
   // → { stations: [{ k, label }], fases: [{ k, label, namen (label + eerdere namen) }], activiteiten: [{ k, l, soort, station, uursoort }], standaard: bool }
   P.inrichtModel = function (raw) {

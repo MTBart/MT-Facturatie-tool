@@ -145,6 +145,7 @@
         if (!v.ok) { const extra = await terugdraaien(); toast((v.mislukt && v.mislukt.length ? v.mislukt.length + ' taak/taken konden niet verplaatst worden (' + v.mislukt[0].reden + ')' : (v.reden || 'Niet verplaatst')) + '; er is niets verwijderd.' + extra, null, null, true); return { ok: false }; }
         await vers(); gebruik = D.gebruik(type, k);
       }
+      if (gebruik.n === 0 && (gebruik.sjablonen || []).length) { const extra = await terugdraaien(); toast('Intussen staat "' + item[1] + '" in een projectsjabloon (' + gebruik.sjablonen.join(', ') + '); er is niets verwijderd.' + extra, null, null, true); return { ok: false }; }
       if (gebruik.n > 0) { const extra = await terugdraaien(); toast('Er hangen steeds weer nieuwe taken aan "' + item[1] + '"; er is niets verwijderd.' + extra, null, null, true); return { ok: false }; }
     }
     const res = await bewerk((recs) => {
@@ -152,7 +153,8 @@
       if (type === 'station') recs.forEach(a => { if (a.type === 'activiteit' && !a._vervallen && String(a.station) === String(k)) a.station = doel ? doel.k : ''; });
       recs.splice(recs.indexOf(r), 1); hernummer(recs, type);
     }, '"' + item[1] + '" is verwijderd', herstel.length ? async () => { const h = await D.verplaatsHerstel(herstel); if (!h.ok) toast(h.mislukt.length + ' taak/taken konden niet terug (iemand wijzigde ze intussen).', null, null, true); } : null);
-    if (!res.ok && herstel.length) { const extra = await terugdraaien(); if (extra) toast('Het verwijderen is niet gelukt.' + extra, null, null, true); }
+    if (!res.ok && !res.lokaal && herstel.length) { const extra = await terugdraaien();   // lokaal: het staat wel lokaal (de tombstone synchroniseert later); dan blijven de taken bij het doel, anders zouden ze naar het verdwenen item wijzen
+      if (extra) toast('Het verwijderen is niet gelukt.' + extra, null, null, true); }
     return res;
   };
   // ── het bord: koppen en knoppen die alleen de beheerder ziet ──
